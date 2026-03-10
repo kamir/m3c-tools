@@ -175,6 +175,7 @@ func TestTranslateTranslatable(t *testing.T) {
 // TestTranscriptFetchTranslatedDE is a network test that fetches a transcript
 // translated to German. Requires internet access.
 func TestTranscriptFetchTranslatedDE(t *testing.T) {
+	SkipIfNoYTCalls(t)
 	api := transcript.New()
 	fetched, err := api.FetchTranslated(testVideoID, []string{"en"}, "de")
 	if err != nil {

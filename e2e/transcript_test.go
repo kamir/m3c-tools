@@ -14,6 +14,7 @@ import (
 const testVideoID = "dQw4w9WgXcQ" // Rick Astley — always available
 
 func TestTranscriptList(t *testing.T) {
+	SkipIfNoYTCalls(t)
 	api := transcript.New()
 	list, err := api.List(testVideoID)
 	if err != nil {
@@ -57,6 +58,7 @@ func TestTranscriptFetch(t *testing.T) {
 }
 
 func TestTranscriptFetchGerman(t *testing.T) {
+	SkipIfNoYTCalls(t)
 	api := transcript.New()
 	fetched, err := api.Fetch(testVideoID, []string{"de-DE"}, false)
 	if err != nil {
@@ -69,6 +71,7 @@ func TestTranscriptFetchGerman(t *testing.T) {
 }
 
 func TestTranscriptFormatters(t *testing.T) {
+	SkipIfNoYTCalls(t)
 	api := transcript.New()
 	fetched, err := api.Fetch(testVideoID, []string{"en"}, false)
 	if err != nil {
@@ -232,6 +235,7 @@ func TestTranscriptFilterAllSameType(t *testing.T) {
 }
 
 func TestTranscriptInvalidVideoID(t *testing.T) {
+	SkipIfNoYTCalls(t)
 	api := transcript.New()
 	_, err := api.List("invalid")
 	if err == nil {
@@ -241,6 +245,7 @@ func TestTranscriptInvalidVideoID(t *testing.T) {
 }
 
 func TestTranscriptFetchNMSHcSq8nMs(t *testing.T) {
+	SkipIfNoYTCalls(t)
 	api := transcript.New()
 	fetched, err := api.Fetch("NMSHcSq8nMs", []string{"en"}, false)
 	if err != nil {

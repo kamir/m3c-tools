@@ -1,0 +1,29 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - staticcheck
+    - unused
+    - errcheck
+
+  exclusions:
+    # Don't lint test files with errcheck — tests intentionally skip error checks.
+    rules:
+      - linters: [errcheck]
+        path: _test\.go$
+      # Ignore unchecked Close/Remove/cleanup in defer statements.
+      - linters: [errcheck]
+        source: "defer "
+      # Ignore unchecked os.MkdirAll / os.WriteFile / os.Setenv (fire-and-forget).
+      - linters: [errcheck]
+        source: "os\\.(MkdirAll|WriteFile|Remove|RemoveAll|Setenv|Unsetenv)\\("
+      # Ignore CopyToClipboard (best-effort UI operation).
+      - linters: [errcheck]
+        source: "CopyToClipboard\\("
+      # Ignore exec.Command().Run() in fire-and-forget UI code.
+      - linters: [errcheck]
+        source: "exec\\.Command\\("
+      # Ignore process signal/kill in cleanup.
+      - linters: [errcheck]
+        source: "\\.(Signal|Kill)\\("
