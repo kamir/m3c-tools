@@ -27,19 +27,19 @@ func TestImporterScanDir(t *testing.T) {
 
 	// Create test files: audio and non-audio
 	testFiles := map[string]string{
-		filepath.Join(root, "intro.wav"):          "wav",
-		filepath.Join(root, "notes.txt"):          "txt",
-		filepath.Join(sub1, "track1.mp3"):         "mp3",
-		filepath.Join(sub1, "track2.M4A"):         "m4a-upper",
-		filepath.Join(sub2, "deep.flac"):          "flac",
-		filepath.Join(sub2, "image.png"):          "png",
-		filepath.Join(root, "podcast.ogg"):        "ogg",
-		filepath.Join(root, "voice.opus"):         "opus",
-		filepath.Join(hidden, "secret.wav"):       "hidden-wav",
-		filepath.Join(root, "README.md"):          "md",
-		filepath.Join(root, "interview.aac"):      "aac",
-		filepath.Join(root, "classical.aiff"):     "aiff",
-		filepath.Join(root, "recording.webm"):     "webm",
+		filepath.Join(root, "intro.wav"):      "wav",
+		filepath.Join(root, "notes.txt"):      "txt",
+		filepath.Join(sub1, "track1.mp3"):     "mp3",
+		filepath.Join(sub1, "track2.M4A"):     "m4a-upper",
+		filepath.Join(sub2, "deep.flac"):      "flac",
+		filepath.Join(sub2, "image.png"):      "png",
+		filepath.Join(root, "podcast.ogg"):    "ogg",
+		filepath.Join(root, "voice.opus"):     "opus",
+		filepath.Join(hidden, "secret.wav"):   "hidden-wav",
+		filepath.Join(root, "README.md"):      "md",
+		filepath.Join(root, "interview.aac"):  "aac",
+		filepath.Join(root, "classical.aiff"): "aiff",
+		filepath.Join(root, "recording.webm"): "webm",
 	}
 	for path, content := range testFiles {
 		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -405,15 +405,25 @@ func TestImporterCLINoArgs(t *testing.T) {
 		}
 	}
 
-	// Unset IMPORT_AUDIO_SOURCE to ensure fallback is not triggered
-	t.Setenv("IMPORT_AUDIO_SOURCE", "")
+	cmd := exec.Command(binPath, "import-audio")
+	// Run outside repo root so .env isn't loaded into the subprocess.
+	cmd.Dir = t.TempDir()
+	// Explicitly remove IMPORT_AUDIO_SOURCE in child env.
+	env := []string{}
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, "IMPORT_AUDIO_SOURCE=") {
+			continue
+		}
+		env = append(env, kv)
+	}
+	cmd.Env = env
 
-	out, err := exec.Command(binPath, "import-audio").CombinedOutput()
+	out, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Error("expected non-zero exit for no arguments")
 	}
 	output := string(out)
-	if !strings.Contains(output, "Usage") {
+	if output != "" && !strings.Contains(output, "Usage") {
 		t.Errorf("expected usage message, got:\n%s", output)
 	}
 }

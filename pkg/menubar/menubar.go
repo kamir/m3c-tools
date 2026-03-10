@@ -17,26 +17,28 @@ import (
 type ActionType string
 
 const (
-	ActionFetchTranscript  ActionType = "fetch_transcript"
+	ActionFetchTranscript   ActionType = "fetch_transcript"
 	ActionCaptureScreenshot ActionType = "capture_screenshot"
-	ActionQuickImpulse     ActionType = "quick_impulse"
-	ActionRecordImpression ActionType = "record_impression"
-	ActionCopyTranscript   ActionType = "copy_transcript"
-	ActionBatchImport      ActionType = "batch_import"
-	ActionUploadER1        ActionType = "upload_er1"
-	ActionOpenLog          ActionType = "open_log"
-	ActionQuit             ActionType = "quit"
+	ActionQuickImpulse      ActionType = "quick_impulse"
+	ActionRecordImpression  ActionType = "record_impression"
+	ActionCopyTranscript    ActionType = "copy_transcript"
+	ActionBatchImport       ActionType = "batch_import"
+	ActionUploadER1         ActionType = "upload_er1"
+	ActionLoginER1          ActionType = "login_er1"
+	ActionLogoutER1         ActionType = "logout_er1"
+	ActionOpenLog           ActionType = "open_log"
+	ActionQuit              ActionType = "quit"
 )
 
 // Status represents the current operational state of the menu bar app.
 type Status string
 
 const (
-	StatusIdle       Status = "idle"
-	StatusFetching   Status = "fetching"
-	StatusUploading  Status = "uploading"
-	StatusRecording  Status = "recording"
-	StatusError      Status = "error"
+	StatusIdle      Status = "idle"
+	StatusFetching  Status = "fetching"
+	StatusUploading Status = "uploading"
+	StatusRecording Status = "recording"
+	StatusError     Status = "error"
 )
 
 // HistoryEntry records a completed transcript fetch or upload action.

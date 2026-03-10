@@ -18,14 +18,19 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"net"
+	"net/http"
+	neturl "net/url"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -156,6 +161,123 @@ Commands:
     --title <text>         Menu bar title (default: M3C)
     --icon <path>          Menu bar icon PNG path
     --log <path>           Log file path (default: /tmp/m3c-tools.log)`)
+}
+
+type er1SessionState struct {
+	mu        sync.RWMutex
+	contextID string
+	loggedIn  bool
+}
+
+type persistedER1Session struct {
+	ContextID string    `json:"context_id"`
+	SavedAt   time.Time `json:"saved_at"`
+}
+
+var runtimeER1Session er1SessionState
+
+func setRuntimeER1Login(contextID string) {
+	runtimeER1Session.mu.Lock()
+	defer runtimeER1Session.mu.Unlock()
+	runtimeER1Session.contextID = strings.TrimSpace(contextID)
+	runtimeER1Session.loggedIn = runtimeER1Session.contextID != ""
+}
+
+func clearRuntimeER1Login() {
+	runtimeER1Session.mu.Lock()
+	defer runtimeER1Session.mu.Unlock()
+	runtimeER1Session.contextID = ""
+	runtimeER1Session.loggedIn = false
+}
+
+func runtimeER1ContextID() string {
+	runtimeER1Session.mu.RLock()
+	defer runtimeER1Session.mu.RUnlock()
+	return runtimeER1Session.contextID
+}
+
+func applyRuntimeER1Context(cfg *er1.Config) {
+	if ctx := runtimeER1ContextID(); ctx != "" {
+		cfg.ContextID = ctx
+	}
+}
+
+func er1SessionPersistenceEnabled() bool {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv("M3C_ER1_SESSION_PERSIST")))
+	switch v {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+func er1SessionFilePath() string {
+	if p := strings.TrimSpace(os.Getenv("M3C_ER1_SESSION_FILE")); p != "" {
+		return p
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		return ""
+	}
+	return filepath.Join(home, ".m3c-tools", "er1_session.json")
+}
+
+func savePersistedER1Session(contextID string) error {
+	if !er1SessionPersistenceEnabled() {
+		return nil
+	}
+	p := er1SessionFilePath()
+	if p == "" {
+		return fmt.Errorf("session file path is empty")
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return fmt.Errorf("create session dir: %w", err)
+	}
+	data, err := json.MarshalIndent(persistedER1Session{
+		ContextID: strings.TrimSpace(contextID),
+		SavedAt:   time.Now(),
+	}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode session json: %w", err)
+	}
+	if err := os.WriteFile(p, data, 0o600); err != nil {
+		return fmt.Errorf("write session file: %w", err)
+	}
+	return nil
+}
+
+func loadPersistedER1Session() (string, error) {
+	if !er1SessionPersistenceEnabled() {
+		return "", nil
+	}
+	p := er1SessionFilePath()
+	if p == "" {
+		return "", fmt.Errorf("session file path is empty")
+	}
+	data, err := os.ReadFile(p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("read session file: %w", err)
+	}
+	var s persistedER1Session
+	if err := json.Unmarshal(data, &s); err != nil {
+		return "", fmt.Errorf("parse session json: %w", err)
+	}
+	return strings.TrimSpace(s.ContextID), nil
+}
+
+func clearPersistedER1Session() error {
+	p := er1SessionFilePath()
+	if p == "" {
+		return nil
+	}
+	if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove session file: %w", err)
+	}
+	return nil
 }
 
 // -- transcript command --
@@ -1082,6 +1204,14 @@ func cmdMenubar(args []string) {
 	app := menubar.NewAppWithConfig(cfg, menubar.Handlers{
 		OnUploadER1: menubarUploadER1,
 	})
+	app.SetAuthSession(menubar.AuthSession{})
+	if ctxID, err := loadPersistedER1Session(); err != nil {
+		log.Printf("[auth] persisted session load failed: %v", err)
+	} else if ctxID != "" {
+		setRuntimeER1Login(ctxID)
+		app.SetAuthSession(menubar.AuthSession{LoggedIn: true, UserID: ctxID})
+		log.Printf("[auth] restored persisted session context_id=%s", ctxID)
+	}
 	menubar.StartFrontmostAppTracker()
 	if exe, err := os.Executable(); err == nil {
 		log.Printf("[diag] pid=%d exe=%q screen_access=%v screenshot_mode=%s", os.Getpid(), exe, menubar.HasScreenCaptureAccess(), screenshotCaptureMode())
@@ -1103,11 +1233,148 @@ func cmdMenubar(args []string) {
 			go menubarRecordImpression(app, data)
 		case menubar.ActionQuickImpulse:
 			go menubarQuickImpulse(app)
+		case menubar.ActionLoginER1:
+			go menubarLoginER1(app)
+		case menubar.ActionLogoutER1:
+			go menubarLogoutER1(app)
 		}
 	}
 
 	log.Printf("Launching menu bar app (title=%q, icon=%q, log=%q)", cfg.Title, cfg.IconPath, cfg.LogPath)
 	app.Run()
+}
+
+func menubarLoginER1(app *menubar.App) {
+	cfg := er1.LoadConfig()
+	baseURL := er1BaseURL(cfg.APIURL)
+	if baseURL == "" {
+		app.Notify("ER1 Login", "Could not derive ER1 base URL from ER1_API_URL.")
+		return
+	}
+
+	callbackServer, callbackURL, resultCh, closeFn, err := startER1LoginCallbackServer()
+	if err != nil {
+		log.Printf("[auth] login callback server start failed: %v", err)
+		app.Notify("ER1 Login", "Could not start login callback listener.")
+		return
+	}
+	defer closeFn()
+
+	loginURL := fmt.Sprintf("%s/login/multi?next=%s", baseURL, neturl.QueryEscape(callbackURL))
+	log.Printf("[auth] login start base=%s callback=%s", baseURL, callbackURL)
+	if err := openURL(loginURL); err != nil {
+		log.Printf("[auth] failed to open login URL: %v", err)
+		app.Notify("ER1 Login", "Failed to open login page in browser.")
+		return
+	}
+	app.Notify("ER1 Login", "Browser opened. Complete login to link account.")
+
+	select {
+	case result := <-resultCh:
+		if result.Err != nil {
+			log.Printf("[auth] callback received error: %v", result.Err)
+			app.Notify("ER1 Login", "Login callback failed.")
+			return
+		}
+		ctxID := strings.TrimSpace(result.ContextID)
+		if ctxID == "" {
+			// Fallback: inspect Chrome tabs for memory URLs on ER1 host.
+			ctxID = menubar.SuggestedServiceContextID(baseURL)
+		}
+		if ctxID == "" {
+			log.Printf("[auth] login callback completed but no context_id detected")
+			app.Notify("ER1 Login", "Login succeeded, but context_id could not be detected.")
+			return
+		}
+		setRuntimeER1Login(ctxID)
+		app.SetAuthSession(menubar.AuthSession{LoggedIn: true, UserID: ctxID})
+		if err := savePersistedER1Session(ctxID); err != nil {
+			log.Printf("[auth] persist session failed: %v", err)
+		}
+		log.Printf("[auth] login success context_id=%s", ctxID)
+		app.Notify("ER1 Login", fmt.Sprintf("Linked account: %s", ctxID))
+	case <-time.After(2 * time.Minute):
+		log.Printf("[auth] login timed out waiting for callback; addr=%s", callbackServer.Addr)
+		app.Notify("ER1 Login", "Timed out waiting for login confirmation.")
+	}
+}
+
+func menubarLogoutER1(app *menubar.App) {
+	clearRuntimeER1Login()
+	app.SetAuthSession(menubar.AuthSession{})
+	if err := clearPersistedER1Session(); err != nil {
+		log.Printf("[auth] persisted session clear failed: %v", err)
+	}
+	app.Notify("ER1 Logout", "Session cleared. Uploads use ER1_CONTEXT_ID until you login again.")
+	log.Printf("[auth] logout complete; runtime session cleared")
+}
+
+type loginCallbackResult struct {
+	ContextID string
+	Err       error
+}
+
+func startER1LoginCallbackServer() (*http.Server, string, <-chan loginCallbackResult, func(), error) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, "", nil, nil, err
+	}
+	addr := ln.Addr().String()
+	callbackURL := "http://" + addr + "/m3c-login-success"
+	resultCh := make(chan loginCallbackResult, 1)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/m3c-login-success", func(w http.ResponseWriter, r *http.Request) {
+		ctxID := strings.TrimSpace(r.URL.Query().Get("context_id"))
+		if ctxID == "" {
+			ctxID = strings.TrimSpace(r.URL.Query().Get("user_id"))
+		}
+		if ctxID == "" {
+			ctxID = strings.TrimSpace(r.URL.Query().Get("uid"))
+		}
+		select {
+		case resultCh <- loginCallbackResult{ContextID: ctxID}:
+		default:
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = fmt.Fprint(w, "<html><body><h3>Login captured.</h3><p>You can return to M3C Tools.</p></body></html>")
+	})
+
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: mux,
+	}
+	go func() {
+		if serveErr := srv.Serve(ln); serveErr != nil && serveErr != http.ErrServerClosed {
+			log.Printf("[auth] callback server error: %v", serveErr)
+			select {
+			case resultCh <- loginCallbackResult{Err: serveErr}:
+			default:
+			}
+		}
+	}()
+	closeFn := func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(ctx)
+	}
+	return srv, callbackURL, resultCh, closeFn, nil
+}
+
+func er1BaseURL(apiURL string) string {
+	raw := strings.TrimSpace(apiURL)
+	if raw == "" {
+		return ""
+	}
+	u, err := neturl.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	p := strings.TrimSuffix(u.Path, "/upload_2")
+	p = strings.TrimSuffix(p, "/")
+	u.Path = p
+	u.RawQuery = ""
+	u.Fragment = ""
+	return strings.TrimSuffix(u.String(), "/")
 }
 
 // menubarFetchTranscriptAndTrack fetches YouTube transcript context, opens a
@@ -1229,6 +1496,7 @@ func menubarUploadER1(videoID string) (*menubar.ER1UploadResult, error) {
 
 	// Upload
 	cfg := er1.LoadConfig()
+	applyRuntimeER1Context(cfg)
 	resp, err := er1.Upload(cfg, payload)
 	if err != nil {
 		// Queue for retry on failure
@@ -1530,6 +1798,7 @@ func mergeCaptureMemoAndNotes(memo, notes string) string {
 // On success, opens the uploaded item in the default browser.
 func menubarUploadPayload(app *menubar.App, label string, payload *er1.UploadPayload, tags string) {
 	cfg := er1.LoadConfig()
+	applyRuntimeER1Context(cfg)
 	resp, err := er1.Upload(cfg, payload)
 	if err != nil {
 		log.Printf("[%s] ER1 upload failed (queuing): %v", label, err)

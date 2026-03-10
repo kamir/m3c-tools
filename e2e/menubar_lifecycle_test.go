@@ -514,16 +514,17 @@ func TestAppBundleExecPermissions(t *testing.T) {
 // Info.plist has LSUIElement set to true (agent app, no dock icon).
 func TestAppBundleInfoPlistLSUIElement(t *testing.T) {
 	repoRoot := findRepoRootE2E(t)
+	buildDir := t.TempDir()
 
 	// Build the app bundle
-	cmd := exec.Command("make", "build-app")
+	cmd := exec.Command("make", "build-app", "BUILD_DIR="+buildDir)
 	cmd.Dir = repoRoot
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=1")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("make build-app failed: %v\n%s", err, out)
 	}
 
-	plistPath := filepath.Join(repoRoot, "build", "M3C-Tools.app", "Contents", "Info.plist")
+	plistPath := filepath.Join(buildDir, "M3C-Tools.app", "Contents", "Info.plist")
 	data, err := os.ReadFile(plistPath)
 	if err != nil {
 		t.Fatalf("read plist: %v", err)
