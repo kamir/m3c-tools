@@ -171,6 +171,11 @@ uninstall:
 run: build
 	$(BUILD_DIR)/$(BINARY) $(ARGS)
 
+# Run the menu bar app
+.PHONY: menubar
+menubar: build
+	$(BUILD_DIR)/$(BINARY) menubar $(ARGS)
+
 # Clean build artifacts
 .PHONY: clean
 clean:
@@ -230,6 +235,7 @@ help:
 	@echo "  release-patch  Release with patch version bump"
 	@echo "  release-minor  Release with minor version bump"
 	@echo "  release-major  Release with major version bump"
+	@echo "  menubar        Build and launch the menu bar app"
 	@echo "  ci             Run full CI locally (vet + lint + test + build)"
 	@echo "  lint           Run golangci-lint"
 	@echo "  help           Show this help"

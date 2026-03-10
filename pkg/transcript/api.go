@@ -185,6 +185,13 @@ func (a *API) FetchTranslated(videoID string, sourceLanguages []string, targetLa
 	}, nil
 }
 
+// FetchThumbnail downloads the best available thumbnail for the given video ID.
+// It tries sizes from largest (1280×720) to smallest (120×90), returning the
+// first available image larger than 1 KB. This delegates to Fetcher.FetchThumbnail.
+func (a *API) FetchThumbnail(videoID string) ([]byte, error) {
+	return a.fetcher.FetchThumbnail(videoID)
+}
+
 // fetchFromInfo fetches the actual caption content from a TranscriptInfo.
 func (a *API) fetchFromInfo(videoID string, info *TranscriptInfo) (*FetchedTranscript, error) {
 	// Check for PoToken requirement (YouTube anti-bot measure)
