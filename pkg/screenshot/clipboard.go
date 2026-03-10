@@ -122,7 +122,7 @@ func ExtractClipboardImageWith(cmd Commander, outPath string) (string, error) {
 		return "", fmt.Errorf("clipboard image not written: %w", err)
 	}
 	if info.Size() == 0 {
-		os.Remove(outPath)
+		_ = os.Remove(outPath)
 		return "", fmt.Errorf("clipboard image file is empty")
 	}
 
@@ -154,7 +154,7 @@ end try`, outPath)
 func extractClipboardTIFF(cmd Commander, outPath string) error {
 	// Write TIFF to a temp file first.
 	tiffPath := outPath + ".tiff"
-	defer os.Remove(tiffPath)
+	defer func() { _ = os.Remove(tiffPath) }()
 
 	script := fmt.Sprintf(`
 set outFile to POSIX file %q

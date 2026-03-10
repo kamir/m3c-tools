@@ -72,7 +72,7 @@ func StartBackgroundRetry(queuePath string, cfg *Config, interval time.Duration,
 	go func() {
 		defer bg.wg.Done()
 		defer close(bg.done)
-		bg.runner.Run(ctx, interval)
+		_ = bg.runner.Run(ctx, interval)
 	}()
 
 	return bg
@@ -92,7 +92,7 @@ func StartBackgroundRetryWithRunner(runner *RetryRunner, interval time.Duration)
 	go func() {
 		defer bg.wg.Done()
 		defer close(bg.done)
-		bg.runner.Run(ctx, interval)
+		_ = bg.runner.Run(ctx, interval)
 	}()
 
 	return bg

@@ -19,6 +19,21 @@ static int registerImageFromFile(const char *name, const char *path) {
 	[image setName:nsName];
 	return 1;
 }
+
+// setApplicationIconFromFile loads an image and applies it as the NSApp icon
+// used in Cmd+Tab and Dock when activation policy is regular.
+// Returns 1 on success, 0 on failure.
+static int setApplicationIconFromFile(const char *path) {
+	NSString *nsPath = [NSString stringWithUTF8String:path];
+	NSImage *image = [[NSImage alloc] initWithContentsOfFile:nsPath];
+	if (image == nil) {
+		return 0;
+	}
+	dispatch_async(dispatch_get_main_queue(), ^{
+		[NSApp setApplicationIconImage:image];
+	});
+	return 1;
+}
 */
 import "C"
 import "unsafe"
@@ -32,4 +47,12 @@ func RegisterImage(name, filePath string) bool {
 	defer C.free(unsafe.Pointer(cName))
 	defer C.free(unsafe.Pointer(cPath))
 	return C.registerImageFromFile(cName, cPath) == 1
+}
+
+// SetApplicationIcon sets the app icon used in Cmd+Tab/Dock while the app is
+// visible as a regular macOS app (e.g. during Observation window display).
+func SetApplicationIcon(filePath string) bool {
+	cPath := C.CString(filePath)
+	defer C.free(unsafe.Pointer(cPath))
+	return C.setApplicationIconFromFile(cPath) == 1
 }

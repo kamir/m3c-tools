@@ -65,7 +65,7 @@ func OpenExportsDB(dbPath string) (*ExportsDB, error) {
 	}
 
 	if _, err := db.Exec(createTableSQL); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("create table: %w", err)
 	}
 
@@ -150,7 +150,7 @@ func (e *ExportsDB) ListExports(limit int) ([]ExportRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var records []ExportRecord
 	for rows.Next() {

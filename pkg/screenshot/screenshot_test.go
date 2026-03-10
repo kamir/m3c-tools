@@ -35,8 +35,8 @@ func (m *captureMock) Run(name string, args ...string) ([]byte, error) {
 	// If screencapture and createFiles, write a fake PNG at the last arg path.
 	if name == "screencapture" && m.createFiles && len(args) > 0 {
 		outPath := args[len(args)-1]
-		os.MkdirAll(filepath.Dir(outPath), 0o755)
-		os.WriteFile(outPath, []byte("FAKE-PNG-DATA"), 0o644)
+		_ = os.MkdirAll(filepath.Dir(outPath), 0o755)
+		_ = os.WriteFile(outPath, []byte("FAKE-PNG-DATA"), 0o644)
 	}
 
 	return nil, nil
@@ -428,8 +428,8 @@ func TestModeValues(t *testing.T) {
 
 func TestCaptureOutputDir(t *testing.T) {
 	tmpDir := filepath.Join(os.TempDir(), "m3c-screenshot-test-dir")
-	os.RemoveAll(tmpDir)
-	defer os.RemoveAll(tmpDir)
+	_ = os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	_, err := Capture(Options{
 		OutputDir: tmpDir,

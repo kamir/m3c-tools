@@ -104,7 +104,7 @@ func OpenRetryQueueDB(dbPath string, opts ...RetryQueueOption) (*RetryQueueDB, e
 	}
 
 	if _, err := db.Exec(createRetryQueueTableSQL); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("create er1_retry_queue table: %w", err)
 	}
 

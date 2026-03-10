@@ -24,8 +24,16 @@ profile.cov
 go.work
 go.work.sum
 
-# env file
+# Build output
+build/
+/m3c-tools
+
+# env file (keep .env.example tracked)
 .env
+.env.samples
+
+# macOS
+.DS_Store
 
 # Editor/IDE
 # .idea/

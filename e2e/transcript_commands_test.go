@@ -511,6 +511,7 @@ func TestTranscriptListStringEmpty(t *testing.T) {
 // TestTranscriptCLIImport builds and runs "m3c-tools transcript <video_id>"
 // to verify the import command outputs transcript text.
 func TestTranscriptCLIImport(t *testing.T) {
+	SkipIfNoYTCalls(t)
 	binary := buildTestBinary(t)
 
 	cmd := exec.Command(binary, "transcript", testVideoID, "--lang", "en", "--format", "text")
@@ -534,6 +535,7 @@ func TestTranscriptCLIImport(t *testing.T) {
 // TestTranscriptCLIList builds and runs "m3c-tools transcript <video_id> --list"
 // to verify the list command shows available transcripts.
 func TestTranscriptCLIList(t *testing.T) {
+	SkipIfNoYTCalls(t)
 	binary := buildTestBinary(t)
 
 	cmd := exec.Command(binary, "transcript", testVideoID, "--list")
@@ -556,6 +558,7 @@ func TestTranscriptCLIList(t *testing.T) {
 
 // TestTranscriptCLIExportSRT builds and runs with --format srt.
 func TestTranscriptCLIExportSRT(t *testing.T) {
+	SkipIfNoYTCalls(t)
 	binary := buildTestBinary(t)
 
 	cmd := exec.Command(binary, "transcript", testVideoID, "--lang", "en", "--format", "srt")
@@ -576,6 +579,7 @@ func TestTranscriptCLIExportSRT(t *testing.T) {
 
 // TestTranscriptCLIExportJSON builds and runs with --format json.
 func TestTranscriptCLIExportJSON(t *testing.T) {
+	SkipIfNoYTCalls(t)
 	binary := buildTestBinary(t)
 
 	cmd := exec.Command(binary, "transcript", testVideoID, "--lang", "en", "--format", "json")

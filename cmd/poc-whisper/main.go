@@ -147,7 +147,7 @@ func transcribe(whisperPath string, audioFile string, model string) ([]WhisperSe
 	if err != nil {
 		return nil, "", fmt.Errorf("create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Run whisper with JSON output format
 	cmd := exec.Command(whisperPath,

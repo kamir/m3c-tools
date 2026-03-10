@@ -29,12 +29,12 @@ build-all: build
 	go build -o $(BUILD_DIR)/poc-whisper ./cmd/poc-whisper
 	go build -o $(BUILD_DIR)/poc-recorder ./cmd/poc-recorder
 
-# Run all e2e tests (verbose)
+# Run all e2e tests (verbose, enables YT API calls)
 .PHONY: e2e
 e2e:
 	@echo "Running e2e tests..."
-	go test -v -count=1 ./e2e/ -run TestTranscript
-	go test -v -count=1 ./e2e/ -run TestThumbnail
+	M3C_YT_CALLS_ENFORCE_ALL=1 go test -v -count=1 ./e2e/ -run TestTranscript
+	M3C_YT_CALLS_ENFORCE_ALL=1 go test -v -count=1 ./e2e/ -run TestThumbnail
 	go test -v -count=1 ./e2e/ -run TestComposite
 	go test -v -count=1 ./e2e/ -run TestBuild
 	go test -v -count=1 ./e2e/ -run TestParseTagLine
@@ -58,10 +58,10 @@ test-unit:
 test-network:
 ifdef M3C_TEST_FULL_NETWORK
 	@echo "Running full network tests (transcript + thumbnail + translate)..."
-	go test -v -count=1 ./e2e/ -run "TestTranscript|TestThumbnail|TestTranscriptFetchTranslated"
+	M3C_YT_CALLS_ENFORCE_ALL=1 go test -v -count=1 ./e2e/ -run "TestTranscript|TestThumbnail|TestTranscriptFetchTranslated"
 else
 	@echo "Running network tests (transcript only — set M3C_TEST_FULL_NETWORK=1 for all)..."
-	go test -v -count=1 ./e2e/ -run "TestTranscriptList|TestTranscriptFetch|TestTranscriptFormatters|TestTranscriptInvalidVideoID"
+	M3C_YT_CALLS_ENFORCE_ALL=1 go test -v -count=1 ./e2e/ -run "TestTranscriptList|TestTranscriptFetch|TestTranscriptFormatters|TestTranscriptInvalidVideoID"
 endif
 
 # ER1 tests — require running ER1 server
@@ -156,6 +156,47 @@ install: build-app
 	@echo "  CLI:  /usr/local/bin/$(BINARY)"
 	@echo "  App:  /Applications/$(APP_NAME).app"
 	@echo "  Data: ~/.m3c-tools/"
+	@echo ""
+	@echo "Configuring macOS permissions..."
+	@$(MAKE) --no-print-directory permissions
+
+# Grant macOS privacy permissions for Screen Recording, Microphone,
+# Accessibility, and Input Monitoring. Opens System Settings panes
+# one at a time — waits for user to press Enter before opening the next.
+.PHONY: permissions
+permissions:
+	@echo "=== macOS Permissions for $(APP_NAME) ($(APP_ID)) ==="
+	@echo ""
+	@echo "The app requires these permissions:"
+	@echo "  1. Screen Recording  — screenshot capture"
+	@echo "  2. Microphone        — voice recording"
+	@echo "  3. Accessibility     — window/app interaction"
+	@echo "  4. Input Monitoring  — keystroke capture"
+	@echo ""
+	@echo "Toggle ON '$(APP_NAME)' in each pane (add with '+' if not listed)."
+	@echo "Close System Settings before pressing Enter for the next step."
+	@echo ""
+	@bash -c '\
+		panes=( \
+			"Privacy_ScreenCapture:Screen Recording" \
+			"Privacy_Microphone:Microphone" \
+			"Privacy_Accessibility:Accessibility" \
+			"Privacy_ListenEvent:Input Monitoring" \
+		); \
+		for i in $${!panes[@]}; do \
+			IFS=":" read -r pane label <<< "$${panes[$$i]}"; \
+			step=$$((i+1)); \
+			echo "[$$step/4] $$label"; \
+			open "x-apple.systempreferences:com.apple.preference.security?$$pane" 2>/dev/null || \
+				open "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?$$pane" 2>/dev/null || true; \
+			if [ $$step -lt 4 ]; then \
+				read -p "  Press Enter after enabling $$label... " dummy; \
+			fi; \
+		done; \
+		echo ""; \
+		echo "All permissions configured. Restart $(APP_NAME):"; \
+		echo "  open /Applications/$(APP_NAME).app"; \
+	'
 
 # Uninstall CLI and .app
 .PHONY: uninstall
@@ -170,6 +211,11 @@ uninstall:
 .PHONY: run
 run: build
 	$(BUILD_DIR)/$(BINARY) $(ARGS)
+
+# Run the menu bar app
+.PHONY: menubar
+menubar: build
+	$(BUILD_DIR)/$(BINARY) menubar $(ARGS)
 
 # Clean build artifacts
 .PHONY: clean
@@ -194,6 +240,18 @@ release-minor:
 release-major:
 	@./scripts/release.sh major
 
+# Run CI checks locally (mirrors .github/workflows/ci.yml)
+.PHONY: ci
+ci: vet lint test-unit build
+	@echo ""
+	@echo "CI passed: vet ✓  lint ✓  test ✓  build ✓"
+
+# Run golangci-lint
+.PHONY: lint
+lint:
+	@echo "Running golangci-lint..."
+	golangci-lint run --timeout=5m
+
 # Show help
 .PHONY: help
 help:
@@ -211,6 +269,7 @@ help:
 	@echo "  test-whisper   Run tests requiring whisper binary"
 	@echo "  test-recorder  Run tests requiring microphone"
 	@echo "  install        Install CLI to /usr/local/bin and .app to /Applications"
+	@echo "  permissions    Open macOS Privacy settings to grant Screen/Mic/Accessibility"
 	@echo "  uninstall      Remove installed CLI and .app"
 	@echo "  vet            Run go vet on all packages"
 	@echo "  clean          Remove build artifacts"
@@ -218,4 +277,7 @@ help:
 	@echo "  release-patch  Release with patch version bump"
 	@echo "  release-minor  Release with minor version bump"
 	@echo "  release-major  Release with major version bump"
+	@echo "  menubar        Build and launch the menu bar app"
+	@echo "  ci             Run full CI locally (vet + lint + test + build)"
+	@echo "  lint           Run golangci-lint"
 	@echo "  help           Show this help"
