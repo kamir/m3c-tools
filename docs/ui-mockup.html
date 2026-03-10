@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>YT Multimodal Memory Manager — UI Mockup</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    padding: 40px;
+    min-height: 100vh;
+  }
+  h1 { color: #fff; font-size: 24px; margin-bottom: 8px; }
+  h2 { color: #aaa; font-size: 14px; font-weight: 400; margin-bottom: 30px; }
+  h3 { color: #fff; font-size: 16px; margin: 30px 0 12px; }
+  .mockup-row { display: flex; gap: 40px; flex-wrap: wrap; margin-bottom: 40px; }
+  .mockup-card {
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 12px;
+    padding: 20px;
+    max-width: 400px;
+    flex: 1 1 340px;
+  }
+  .card-title { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+
+  /* macOS Menu Bar */
+  .menubar {
+    background: linear-gradient(180deg, #3a3a3c 0%, #2c2c2e 100%);
+    border-radius: 6px;
+    padding: 0;
+    font-size: 13px;
+    width: 280px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    overflow: hidden;
+  }
+  .menubar-header {
+    background: #1c1c1e;
+    padding: 6px 12px;
+    font-size: 11px;
+    color: #888;
+    border-bottom: 1px solid #444;
+  }
+  .menu-item {
+    padding: 6px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: default;
+    transition: background 0.1s;
+  }
+  .menu-item:hover { background: #0a84ff; color: #fff; }
+  .menu-item.disabled { color: #666; }
+  .menu-item.disabled:hover { background: transparent; color: #666; }
+  .menu-sep { height: 1px; background: #444; margin: 3px 12px; }
+  .menu-item .shortcut { margin-left: auto; color: #888; font-size: 11px; }
+  .menu-item .badge {
+    margin-left: auto;
+    background: #ff453a;
+    color: #fff;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-weight: 600;
+  }
+  .menu-item .badge.green { background: #30d158; }
+  .menu-item .badge.blue { background: #0a84ff; }
+  .menu-item .arrow { margin-left: auto; color: #888; }
+  .status-text { color: #30d158; font-size: 11px; }
+
+  /* Submenu */
+  .submenu {
+    background: linear-gradient(180deg, #3a3a3c 0%, #2c2c2e 100%);
+    border-radius: 6px;
+    width: 320px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    overflow: hidden;
+    margin-left: 20px;
+  }
+  .submenu .menu-item { font-size: 12px; padding: 5px 14px; }
+
+  /* Dialog */
+  .dialog {
+    background: linear-gradient(180deg, #3a3a3c 0%, #2c2c2e 100%);
+    border-radius: 12px;
+    padding: 20px;
+    width: 340px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+    text-align: center;
+  }
+  .dialog-icon { font-size: 48px; margin-bottom: 12px; }
+  .dialog-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+  .dialog-text { font-size: 12px; color: #aaa; margin-bottom: 16px; line-height: 1.5; }
+  .dialog-input {
+    width: 100%;
+    padding: 6px 10px;
+    background: #1c1c1e;
+    border: 1px solid #555;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 13px;
+    margin-bottom: 16px;
+    outline: none;
+  }
+  .dialog-input:focus { border-color: #0a84ff; }
+  .dialog-buttons { display: flex; gap: 8px; justify-content: center; }
+  .btn {
+    padding: 6px 20px;
+    border-radius: 6px;
+    border: none;
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .btn-primary { background: #0a84ff; color: #fff; }
+  .btn-secondary { background: #3a3a3c; color: #ddd; border: 1px solid #555; }
+  .btn-danger { background: #ff453a; color: #fff; }
+
+  /* Data flow diagram */
+  .flow-diagram {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 24px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 12px;
+    color: #c9d1d9;
+    line-height: 1.7;
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .flow-diagram .hl-blue { color: #58a6ff; }
+  .flow-diagram .hl-green { color: #3fb950; }
+  .flow-diagram .hl-orange { color: #d29922; }
+  .flow-diagram .hl-red { color: #f85149; }
+  .flow-diagram .hl-purple { color: #bc8cff; }
+  .flow-diagram .hl-dim { color: #6e7681; }
+
+  /* Modality cards */
+  .modality-grid { display: flex; gap: 16px; flex-wrap: wrap; margin: 16px 0; }
+  .modality-card {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 16px;
+    flex: 1 1 200px;
+    text-align: center;
+  }
+  .modality-card .icon { font-size: 36px; margin-bottom: 8px; }
+  .modality-card .label { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .modality-card .detail { font-size: 11px; color: #888; }
+  .modality-card.active { border-color: #30d158; }
+
+  /* Architecture */
+  .arch-box {
+    background: #0d1117;
+    border: 2px solid #30363d;
+    border-radius: 10px;
+    padding: 12px 16px;
+    text-align: center;
+    font-size: 12px;
+    margin: 4px;
+    display: inline-block;
+  }
+  .arch-box.primary { border-color: #0a84ff; background: #0a84ff22; }
+  .arch-box.green { border-color: #30d158; background: #30d15822; }
+  .arch-box.orange { border-color: #ff9f0a; background: #ff9f0a22; }
+  .arch-box.red { border-color: #ff453a; background: #ff453a22; }
+  .arch-arrow { color: #58a6ff; font-size: 20px; margin: 0 6px; }
+
+  .section { margin-bottom: 50px; }
+</style>
+</head>
+<body>
+
+<h1>M3C — Multi-Modal-Memory Tools</h1>
+<h2>macOS Menu Bar App — Go Rewrite UI Design (m3c-tools)</h2>
+
+<!-- ========== CONCEPT ========== -->
+<div class="section">
+<h3>What is "Multimodal Memory Capturing"?</h3>
+<p style="color:#aaa; font-size:13px; line-height:1.6; max-width:800px; margin-bottom:20px;">
+  A desktop-native system that captures <strong>observations</strong> about digital content through multiple sensory channels
+  and feeds them into an <strong>ER1 knowledge server</strong> for persistent, searchable, AI-augmented memory.
+  Each capture combines up to three modalities into a single memory entry.
+</p>
+
+<div class="modality-grid">
+  <div class="modality-card active">
+    <div class="icon">📝</div>
+    <div class="label">Text / Transcript</div>
+    <div class="detail">YouTube captions, composite documents,<br>user annotations. Always present.</div>
+  </div>
+  <div class="modality-card active">
+    <div class="icon">🎙️</div>
+    <div class="label">Voice Impression</div>
+    <div class="detail">16kHz mono WAV, transcribed via Whisper.<br>Captures subjective reaction &amp; context.</div>
+  </div>
+  <div class="modality-card active">
+    <div class="icon">📸</div>
+    <div class="label">Screenshot</div>
+    <div class="detail">PNG screen capture or clipboard image.<br>Visual context for the observation.</div>
+  </div>
+</div>
+
+<div style="text-align:center; margin:20px 0;">
+  <div class="arch-box primary">Desktop Capture</div>
+  <span class="arch-arrow">→</span>
+  <div class="arch-box green">MEMORY Folder</div>
+  <span class="arch-arrow">→</span>
+  <div class="arch-box orange">ER1 Upload</div>
+  <span class="arch-arrow">→</span>
+  <div class="arch-box red">GCS + Firestore</div>
+</div>
+</div>
+
+<!-- ========== MENU BAR ========== -->
+<div class="section">
+<h3>Main Menu (Menu Bar Dropdown)</h3>
+<div class="mockup-row">
+
+<div class="mockup-card">
+  <div class="card-title">Main Menu — Idle State</div>
+  <div class="menubar">
+    <div class="menubar-header">📺 YT Multimodal Memory</div>
+    <div class="menu-item">📋 Fetch Transcript...</div>
+    <div class="menu-item">📷 Capture Screenshot...</div>
+    <div class="menu-item">⚡ Quick Impulse</div>
+    <div class="menu-item disabled">🎤 Record Impression...</div>
+    <div class="menu-sep"></div>
+    <div class="menu-item">🎵 Audio Import <span class="badge">7 new</span></div>
+    <div class="menu-sep"></div>
+    <div class="menu-item disabled"><span class="status-text">Status: idle</span></div>
+    <div class="menu-sep"></div>
+    <div class="menu-item">📜 History (12) <span class="arrow">▶</span></div>
+    <div class="menu-item">📡 Retry Queue <span class="badge green">0</span></div>
+    <div class="menu-sep"></div>
+    <div class="menu-item">📄 Open Log File</div>
+    <div class="menu-item" style="color:#ff453a;">Quit</div>
+  </div>
+</div>
+
+<div class="mockup-card">
+  <div class="card-title">Main Menu — After Fetch</div>
+  <div class="menubar">
+    <div class="menubar-header">📋 YT Multimodal Memory</div>
+    <div class="menu-item">📋 Fetch Transcript...</div>
+    <div class="menu-item">📷 Capture Screenshot...</div>
+    <div class="menu-item">⚡ Quick Impulse</div>
+    <div class="menu-item">🎤 Record Impression...</div>
+    <div class="menu-sep"></div>
+    <div class="menu-item">🎵 Audio Import <span class="badge">7 new</span></div>
+    <div class="menu-sep"></div>
+    <div class="menu-item disabled"><span class="status-text">✅ Done: dQw4w9WgXcQ (61 snippets) 🇬🇧</span></div>
+    <div class="menu-sep"></div>
+    <div class="menu-item">📜 History (13) <span class="arrow">▶</span></div>
+    <div class="menu-item">📡 Retry Queue <span class="badge green">0</span></div>
+    <div class="menu-sep"></div>
+    <div class="menu-item">📄 Open Log File</div>
+    <div class="menu-item" style="color:#ff453a;">Quit</div>
+  </div>
+</div>
+
+</div>
+</div>
+
+<!-- ========== SUBMENUS ========== -->
+<div class="section">
+<h3>Submenus</h3>
+<div class="mockup-row">
+
+<div class="mockup-card">
+  <div class="card-title">History Submenu</div>
+  <div class="submenu">
+    <div class="menu-item">🇬🇧 dQw4w9WgXcQ — 2026-03-09 21:30</div>
+    <div class="menu-item">🇩🇪 eJg0k5qWLKs — 2026-03-09 18:15</div>
+    <div class="menu-item">🇯🇵 abc123def45 — 2026-03-08 14:20</div>
+    <div class="menu-item">🇬🇧 xyz789uvw12 — 2026-03-07 09:45</div>
+    <div class="menu-sep"></div>
+    <div class="menu-item disabled" style="font-size:11px; color:#666;">Each entry expands to:</div>
+    <div class="menu-item" style="padding-left:28px;">📋 Copy Transcript</div>
+    <div class="menu-item" style="padding-left:28px;">🎤 Record Impression</div>
+  </div>
+</div>
+
+<div class="mockup-card">
+  <div class="card-title">Audio Import Submenu</div>
+  <div class="submenu">
+    <div class="menu-item" style="color:#0a84ff;">🔄 Import All (7)</div>
+    <div class="menu-item">🔄 Refresh List</div>
+    <div class="menu-sep"></div>
+    <div class="menu-item">🎵 Braindump (2026-02-20 13:06)</div>
+    <div class="menu-item">🎵 Allianz, CFLTsync (2026-03-06 10:36)</div>
+    <div class="menu-item">🎵 kun (2026-02-26 15:00)</div>
+    <div class="menu-item">🎵 lernreiseinspiration (2026-02-25 13:22)</div>
+    <div class="menu-sep"></div>
+    <div class="menu-item disabled" style="font-size:11px; color:#666;">Each file expands to:</div>
+    <div class="menu-item" style="padding-left:28px;">📥 Import This File</div>
+    <div class="menu-item" style="padding-left:28px;">⏭ Skip (mark tracked)</div>
+  </div>
+</div>
+
+<div class="mockup-card">
+  <div class="card-title">Retry Queue Submenu</div>
+  <div class="submenu">
+    <div class="menu-item" style="color:#0a84ff;">🔄 Retry All Now</div>
+    <div class="menu-item" style="color:#ff453a;">🗑 Clear All</div>
+    <div class="menu-sep"></div>
+    <div class="menu-item">📡 eJg0k5qWLKs — attempt 2/10 — network</div>
+    <div class="menu-item" style="padding-left:28px; font-size:11px; color:#888;">Queued: 2026-03-09 18:15</div>
+    <div class="menu-item" style="padding-left:28px; font-size:11px; color:#888;">Error: Connection refused</div>
+    <div class="menu-item" style="padding-left:28px;">🔄 Retry Now</div>
+    <div class="menu-item" style="padding-left:28px; color:#ff453a;">🗑 Dismiss</div>
+  </div>
+</div>
+
+</div>
+</div>
+
+<!-- ========== DIALOGS ========== -->
+<div class="section">
+<h3>Dialogs</h3>
+<div class="mockup-row">
+
+<div class="mockup-card">
+  <div class="card-title">Fetch Transcript Dialog</div>
+  <div class="dialog">
+    <div class="dialog-icon">📺</div>
+    <div class="dialog-title">YouTube Transcript Grabber</div>
+    <div class="dialog-text">Enter a YouTube video ID or URL:</div>
+    <input class="dialog-input" type="text" placeholder="dQw4w9WgXcQ or https://youtu.be/..." value="dQw4w9WgXcQ">
+    <div class="dialog-buttons">
+      <button class="btn btn-primary">Fetch</button>
+      <button class="btn btn-secondary">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="mockup-card">
+  <div class="card-title">Clipboard Confirmation</div>
+  <div class="dialog">
+    <div class="dialog-icon">📋</div>
+    <div class="dialog-title">Transcript in Clipboard</div>
+    <div class="dialog-text">
+      Video: dQw4w9WgXcQ 🇬🇧 English<br>
+      61 snippets, 2336 chars<br><br>
+      Close to keep clipboard content,<br>
+      or trash to clear it.
+    </div>
+    <div class="dialog-buttons">
+      <button class="btn btn-primary">Close</button>
+      <button class="btn btn-danger">🗑 Trash</button>
+    </div>
+  </div>
+</div>
+
+<div class="mockup-card">
+  <div class="card-title">Record Impression Offer</div>
+  <div class="dialog">
+    <div class="dialog-icon">🎤</div>
+    <div class="dialog-title">Record Impression?</div>
+    <div class="dialog-text">
+      Transcript fetched for dQw4w9WgXcQ.<br><br>
+      Would you like to record a voice impression?<br>
+      Your note will be transcribed and saved with the transcript.
+    </div>
+    <div class="dialog-buttons">
+      <button class="btn btn-primary">🎙 Record</button>
+      <button class="btn btn-secondary">Skip</button>
+    </div>
+  </div>
+</div>
+
+</div>
+</div>
+
+<!-- ========== DATA FLOW ========== -->
+<div class="section">
+<h3>Data Flow: Desktop → ER1</h3>
+<div class="flow-diagram"><span class="hl-blue">┌─────────────────────────────────────────────────────────────────┐</span>
+<span class="hl-blue">│</span>  <span class="hl-green">DESKTOP CAPTURE LAYER</span> (macOS Menu Bar App — Go/menuet)       <span class="hl-blue">│</span>
+<span class="hl-blue">│</span>                                                                 <span class="hl-blue">│</span>
+<span class="hl-blue">│</span>  <span class="hl-orange">[Fetch Transcript]</span>  →  YouTube InnerTube API  →  Caption XML   <span class="hl-blue">│</span>
+<span class="hl-blue">│</span>  <span class="hl-orange">[Record Impression]</span> →  PortAudio mic capture  →  WAV (16kHz)   <span class="hl-blue">│</span>
+<span class="hl-blue">│</span>  <span class="hl-orange">[Screenshot]</span>        →  screencapture CLI      →  PNG           <span class="hl-blue">│</span>
+<span class="hl-blue">│</span>  <span class="hl-orange">[Audio Import]</span>      →  Scan GDrive folder     →  MP3/WAV       <span class="hl-blue">│</span>
+<span class="hl-blue">│</span>                                                                 <span class="hl-blue">│</span>
+<span class="hl-blue">│</span>  <span class="hl-purple">Whisper STT</span>: audio → text transcription (subprocess)          <span class="hl-blue">│</span>
+<span class="hl-blue">└────────────────────────────┬────────────────────────────────────┘</span>
+                             │
+                             ▼
+<span class="hl-green">┌─────────────────────────────────────────────────────────────────┐</span>
+<span class="hl-green">│</span>  <span class="hl-green">LOCAL MEMORY LAYER</span>  ~/Library/Application Support/YTTranscript <span class="hl-green">│</span>
+<span class="hl-green">│</span>                                                                 <span class="hl-green">│</span>
+<span class="hl-green">│</span>  MEMORY/MEMORY-{timestamp}/                                    <span class="hl-green">│</span>
+<span class="hl-green">│</span>    ├── transcript_{ts}.txt    <span class="hl-dim"># composite document (always)</span>     <span class="hl-green">│</span>
+<span class="hl-green">│</span>    ├── impression_{ts}.wav    <span class="hl-dim"># voice recording (optional)</span>     <span class="hl-green">│</span>
+<span class="hl-green">│</span>    ├── screenshot_{ts}.png    <span class="hl-dim"># screen capture (optional)</span>      <span class="hl-green">│</span>
+<span class="hl-green">│</span>    ├── tag.txt                <span class="hl-dim"># tags, one per line</span>             <span class="hl-green">│</span>
+<span class="hl-green">│</span>    └── metadata.json          <span class="hl-dim"># structured metadata</span>            <span class="hl-green">│</span>
+<span class="hl-green">│</span>  er1_retry_queue.json         <span class="hl-dim"># persistent retry state</span>         <span class="hl-green">│</span>
+<span class="hl-green">│</span>  audio_tracker.txt            <span class="hl-dim"># batch import tracker</span>           <span class="hl-green">│</span>
+<span class="hl-green">└────────────────────────────┬────────────────────────────────────┘</span>
+                             │
+                             ▼
+<span class="hl-orange">┌─────────────────────────────────────────────────────────────────┐</span>
+<span class="hl-orange">│</span>  <span class="hl-orange">ER1 UPLOAD LAYER</span>  (offline-first, retry with backoff)         <span class="hl-orange">│</span>
+<span class="hl-orange">│</span>                                                                 <span class="hl-orange">│</span>
+<span class="hl-orange">│</span>  POST /upload_2  (multipart/form-data)                          <span class="hl-orange">│</span>
+<span class="hl-orange">│</span>    Headers:  X-API-KEY: {api_key}                               <span class="hl-orange">│</span>
+<span class="hl-orange">│</span>    Files:    transcript_file_ext  (.txt)   <span class="hl-dim">← always</span>              <span class="hl-orange">│</span>
+<span class="hl-orange">│</span>              audio_data_ext       (.wav)   <span class="hl-dim">← optional</span>            <span class="hl-orange">│</span>
+<span class="hl-orange">│</span>              image_data            (.png)   <span class="hl-dim">← optional</span>            <span class="hl-orange">│</span>
+<span class="hl-orange">│</span>    Data:     context_id, content_type, tags                     <span class="hl-orange">│</span>
+<span class="hl-orange">│</span>                                                                 <span class="hl-orange">│</span>
+<span class="hl-orange">│</span>  Retry: exponential backoff (30s → 1h), max 10 attempts         <span class="hl-orange">│</span>
+<span class="hl-orange">│</span>  Queue: persistent JSON file, survives app restart               <span class="hl-orange">│</span>
+<span class="hl-orange">└────────────────────────────┬────────────────────────────────────┘</span>
+                             │
+                             ▼
+<span class="hl-red">┌─────────────────────────────────────────────────────────────────┐</span>
+<span class="hl-red">│</span>  <span class="hl-red">ER1 SERVER</span>  (Flask + GCS + Firestore)                          <span class="hl-red">│</span>
+<span class="hl-red">│</span>                                                                 <span class="hl-red">│</span>
+<span class="hl-red">│</span>  → Audio  →  gs://er1-stage/uploads/{context}_{ts}.mp3          <span class="hl-red">│</span>
+<span class="hl-red">│</span>  → Image  →  gs://er1-stage/uploads/{context}_{ts}.jpeg         <span class="hl-red">│</span>
+<span class="hl-red">│</span>  → Text   →  Firestore: smart-audio-transcriptions/{doc_id}     <span class="hl-red">│</span>
+<span class="hl-red">│</span>  → Tags   →  Firestore document fields                         <span class="hl-red">│</span>
+<span class="hl-red">└─────────────────────────────────────────────────────────────────┘</span>
+</div>
+</div>
+
+<!-- ========== OBSERVATION TYPES ========== -->
+<div class="section">
+<h3>Observation Types</h3>
+<div class="mockup-row">
+  <div class="mockup-card">
+    <div class="card-title">📺 Progress — YouTube Impression</div>
+    <table style="font-size:12px; width:100%; border-collapse:collapse;">
+      <tr><td style="color:#888; padding:3px 8px;">Trigger</td><td style="padding:3px 0;">Fetch Transcript → Record Impression</td></tr>
+      <tr><td style="color:#888; padding:3px 8px;">Text</td><td style="padding:3px 0;">✅ YouTube captions + user impression</td></tr>
+      <tr><td style="color:#888; padding:3px 8px;">Audio</td><td style="padding:3px 0;">✅ Voice recording (WAV 16kHz)</td></tr>
+      <tr><td style="color:#888; padding:3px 8px;">Image</td><td style="padding:3px 0;">❌ None</td></tr>
+      <tr><td style="color:#888; padding:3px 8px;">Tags</td><td style="padding:3px 0;">youtube, video_id:xxx, channel:xxx</td></tr>
+    </table>
+  </div>
+  <div class="mockup-card">
+    <div class="card-title">💡 Idea — Screenshot Observation</div>
+    <table style="font-size:12px; width:100%; border-collapse:collapse;">
+      <tr><td style="color:#888; padding:3px 8px;">Trigger</td><td style="padding:3px 0;">Capture Screenshot</td></tr>
+      <tr><td style="color:#888; padding:3px 8px;">Text</td><td style="padding:3px 0;">✅ User annotation + whisper transcription</td></tr>
+      <tr><td style="color:#888; padding:3px 8px;">Audio</td><td style="padding:3px 0;">✅ Voice note</td></tr>
+      <tr><td style="color:#888; padding:3px 8px;">Image</td><td style="padding:3px 0;">✅ Screenshot (PNG)</td></tr>
+      <tr><td style="color:#888; padding:3px 8px;">Tags</td><td style="padding:3px 0;">screenshot, idea, user-defined</td></tr>
+    </table>
+  </div>
+  <div class="mockup-card">
+    <div class="card-title">⚡ Impulse — Quick Capture</div>
+    <table style="font-size:12px; width:100%; border-collapse:collapse;">
+      <tr><td style="color:#888; padding:3px 8px;">Trigger</td><td style="padding:3px 0;">Quick Impulse (one-click)</td></tr>
+      <tr><td style="color:#888; padding:3px 8px;">Text</td><td style="padding:3px 0;">✅ Auto-generated from voice/context</td></tr>
+      <tr><td style="color:#888; padding:3px 8px;">Audio</td><td style="padding:3px 0;">⚙️ Optional voice note</td></tr>
+      <tr><td style="color:#888; padding:3px 8px;">Image</td><td style="padding:3px 0;">⚙️ Optional clipboard/screenshot</td></tr>
+      <tr><td style="color:#888; padding:3px 8px;">Tags</td><td style="padding:3px 0;">impulse, modality markers</td></tr>
+    </table>
+  </div>
+</div>
+<div class="mockup-row">
+  <div class="mockup-card">
+    <div class="card-title">🎵 Audio Import — Batch Processing</div>
+    <table style="font-size:12px; width:100%; border-collapse:collapse;">
+      <tr><td style="color:#888; padding:3px 8px;">Trigger</td><td style="padding:3px 0;">Audio Import menu → file or batch</td></tr>
+      <tr><td style="color:#888; padding:3px 8px;">Text</td><td style="padding:3px 0;">✅ Whisper transcription of audio</td></tr>
+      <tr><td style="color:#888; padding:3px 8px;">Audio</td><td style="padding:3px 0;">✅ Original recording (MP3/WAV/M4A)</td></tr>
+      <tr><td style="color:#888; padding:3px 8px;">Image</td><td style="padding:3px 0;">❌ None</td></tr>
+      <tr><td style="color:#888; padding:3px 8px;">Tags</td><td style="padding:3px 0;">audio-import, parsed from filename</td></tr>
+      <tr><td style="color:#888; padding:3px 8px;">Source</td><td style="padding:3px 0;">~/GDMirror/GCP-AUDIO-TRANSCRIPT-SERVICE/</td></tr>
+    </table>
+  </div>
+</div>
+</div>
+
+<!-- ========== ER1 API ========== -->
+<div class="section">
+<h3>ER1 API Contract</h3>
+<div class="flow-diagram"><span class="hl-green">POST</span> <span class="hl-blue">https://127.0.0.1:8081/upload_2</span>
+<span class="hl-dim">Content-Type: multipart/form-data</span>
+<span class="hl-dim">X-API-KEY: {er1_api_key}</span>
+
+<span class="hl-orange">── Form Fields ──</span>
+context_id    = <span class="hl-purple">"107677460544181387647___mft"</span>
+content_type  = <span class="hl-purple">"YouTube-Video-Impression"</span>
+tags          = <span class="hl-purple">"youtube,video_id:dQw4w9WgXcQ,progress"</span>
+
+<span class="hl-orange">── File Fields ──</span>
+transcript_file_ext  = <span class="hl-green">(filename.txt, data, "text/plain")</span>      <span class="hl-dim">← required</span>
+audio_data_ext       = <span class="hl-green">(filename.wav, data, "audio/wav")</span>       <span class="hl-dim">← required*</span>
+image_data           = <span class="hl-green">(filename.png, data, "image/png")</span>       <span class="hl-dim">← required*</span>
+
+<span class="hl-red">* ER1 server bug: crashes if image_data not sent.</span>
+<span class="hl-red">  Workaround: send 1x1 transparent PNG placeholder.</span>
+
+<span class="hl-orange">── Response (200) ──</span>
+{
+  "doc_id":          <span class="hl-purple">"hdadDimjhDjMqygIkBmD"</span>,
+  "collection_name": <span class="hl-purple">"smart-audio-transcriptions"</span>,
+  "gcs_uri":         <span class="hl-purple">"gs://er1-stage/uploads/...mp3"</span>,
+  "gcs_uri_img":     <span class="hl-purple">"gs://er1-stage/uploads/...jpeg"</span>,
+  "transcript":      <span class="hl-purple">"(transcript text)"</span>,
+  "time":            <span class="hl-purple">"2026-03-09 21:30:01"</span>
+}
+</div>
+</div>
+
+<!-- ========== TECH STACK ========== -->
+<div class="section">
+<h3>Go Rewrite Tech Stack</h3>
+<div style="display:flex; gap:16px; flex-wrap:wrap;">
+  <div class="arch-box primary">menuet<br><span style="font-size:10px;color:#888;">macOS Menu Bar</span></div>
+  <div class="arch-box green">pkg/transcript<br><span style="font-size:10px;color:#888;">YouTube API</span></div>
+  <div class="arch-box orange">portaudio<br><span style="font-size:10px;color:#888;">Mic Recording</span></div>
+  <div class="arch-box red">whisper CLI<br><span style="font-size:10px;color:#888;">Speech-to-Text</span></div>
+  <div class="arch-box">net/http<br><span style="font-size:10px;color:#888;">ER1 Upload</span></div>
+  <div class="arch-box">encoding/xml<br><span style="font-size:10px;color:#888;">Caption Parse</span></div>
+</div>
+</div>
+
+</body>
+</html>
