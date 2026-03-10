@@ -26,13 +26,7 @@ func (e *execCommander) Run(name string, args ...string) ([]byte, error) {
 }
 
 // defaultCmd is the package-level commander used by the free functions.
-// Tests override this via setCommander.
 var defaultCmd Commander = &execCommander{}
-
-// setCommander replaces the default commander (for testing).
-func setCommander(c Commander) {
-	defaultCmd = c
-}
 
 // Mode specifies the type of screen capture.
 type Mode int

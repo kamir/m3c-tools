@@ -185,8 +185,8 @@ func TestExtractClipboardImageWithPNG(t *testing.T) {
 			return []byte(`«class PNGf», 42318`), nil
 		}
 		// Extract call: simulate writing the PNG file.
-		os.MkdirAll(filepath.Dir(outPath), 0o755)
-		os.WriteFile(outPath, []byte("FAKE-PNG-DATA"), 0o644)
+		_ = os.MkdirAll(filepath.Dir(outPath), 0o755)
+		_ = os.WriteFile(outPath, []byte("FAKE-PNG-DATA"), 0o644)
 		return nil, nil
 	}}
 
@@ -285,8 +285,8 @@ func TestExtractClipboardImageDefaultPath(t *testing.T) {
 						end := strings.LastIndex(line, `"`)
 						if start >= 0 && end > start {
 							createdPath = line[start+1 : end]
-							os.MkdirAll(filepath.Dir(createdPath), 0o755)
-							os.WriteFile(createdPath, []byte("FAKE-PNG"), 0o644)
+							_ = os.MkdirAll(filepath.Dir(createdPath), 0o755)
+							_ = os.WriteFile(createdPath, []byte("FAKE-PNG"), 0o644)
 						}
 					}
 				}
@@ -306,5 +306,5 @@ func TestExtractClipboardImageDefaultPath(t *testing.T) {
 		t.Errorf("expected .png suffix, got %s", got)
 	}
 	// Clean up.
-	os.Remove(got)
+	_ = os.Remove(got)
 }

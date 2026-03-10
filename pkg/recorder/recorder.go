@@ -5,6 +5,7 @@ package recorder
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
 	"os"
 	"time"
 
@@ -30,7 +31,7 @@ func ListInputDevices() ([]DeviceInfo, error) {
 	if err := portaudio.Initialize(); err != nil {
 		return nil, fmt.Errorf("portaudio init: %w", err)
 	}
-	defer portaudio.Terminate()
+	defer func() { _ = portaudio.Terminate() }()
 
 	defaultDev, _ := portaudio.DefaultInputDevice()
 	defaultName := ""
@@ -62,7 +63,7 @@ func Record(seconds int) ([]int16, error) {
 	if err := portaudio.Initialize(); err != nil {
 		return nil, fmt.Errorf("portaudio init: %w", err)
 	}
-	defer portaudio.Terminate()
+	defer func() { _ = portaudio.Terminate() }()
 
 	totalSamples := SampleRate * seconds
 	buffer := make([]int16, totalSamples)
@@ -73,7 +74,7 @@ func Record(seconds int) ([]int16, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open stream: %w", err)
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	if err := stream.Start(); err != nil {
 		return nil, fmt.Errorf("start stream: %w", err)
@@ -93,7 +94,7 @@ func Record(seconds int) ([]int16, error) {
 		samplesRead += copyLen
 	}
 
-	stream.Stop()
+	_ = stream.Stop()
 	return buffer[:samplesRead], nil
 }
 
@@ -113,7 +114,7 @@ func RecordUntilStop(stop <-chan struct{}, maxSeconds int) ([]int16, error) {
 	if err := portaudio.Initialize(); err != nil {
 		return nil, fmt.Errorf("portaudio init: %w", err)
 	}
-	defer portaudio.Terminate()
+	defer func() { _ = portaudio.Terminate() }()
 
 	maxSamples := SampleRate * maxSeconds
 	buffer := make([]int16, 0, SampleRate*10) // pre-alloc ~10s
@@ -124,7 +125,7 @@ func RecordUntilStop(stop <-chan struct{}, maxSeconds int) ([]int16, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open stream: %w", err)
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	if err := stream.Start(); err != nil {
 		return nil, fmt.Errorf("start stream: %w", err)
@@ -134,7 +135,7 @@ func RecordUntilStop(stop <-chan struct{}, maxSeconds int) ([]int16, error) {
 		// Check if stop was signaled
 		select {
 		case <-stop:
-			stream.Stop()
+			_ = stream.Stop()
 			return buffer, nil
 		default:
 		}
@@ -150,7 +151,7 @@ func RecordUntilStop(stop <-chan struct{}, maxSeconds int) ([]int16, error) {
 		buffer = append(buffer, frameBuffer[:copyLen]...)
 	}
 
-	stream.Stop()
+	_ = stream.Stop()
 	return buffer, nil
 }
 
@@ -199,6 +200,132 @@ func EncodeWAV(samples []int16) []byte {
 	}
 
 	return buf
+}
+
+// AudioLevel represents real-time audio input levels for a single frame.
+type AudioLevel struct {
+	RMS     float64 // Root mean square amplitude (0.0–1.0 normalized)
+	Peak    float64 // Peak amplitude in the frame (0.0–1.0 normalized)
+	RMSdB   float64 // RMS level in decibels (−∞ to 0)
+	PeakdB  float64 // Peak level in decibels (−∞ to 0)
+	Clipped bool    // True if any sample hit ±32767
+}
+
+// LevelCallback is invoked with real-time audio levels during recording.
+// It is called approximately SampleRate/framesPerBuffer times per second
+// (e.g., ~15 Hz with 1024-sample frames at 16 kHz).
+type LevelCallback func(level AudioLevel)
+
+// CalcRMS computes the root-mean-square of int16 samples, normalized to 0.0–1.0.
+func CalcRMS(samples []int16) float64 {
+	if len(samples) == 0 {
+		return 0
+	}
+	var sumSq float64
+	for _, s := range samples {
+		v := float64(s) / 32768.0
+		sumSq += v * v
+	}
+	return math.Sqrt(sumSq / float64(len(samples)))
+}
+
+// CalcPeak returns the peak absolute amplitude of int16 samples, normalized to 0.0–1.0.
+func CalcPeak(samples []int16) float64 {
+	var maxAbs int16
+	for _, s := range samples {
+		if s < 0 {
+			s = -s
+		}
+		if s > maxAbs {
+			maxAbs = s
+		}
+	}
+	return float64(maxAbs) / 32768.0
+}
+
+// AmplitudeToDb converts a linear amplitude (0.0–1.0) to decibels.
+// Returns -96 for zero or negative input (silence floor).
+func AmplitudeToDb(amplitude float64) float64 {
+	if amplitude <= 0 {
+		return -96.0
+	}
+	db := 20 * math.Log10(amplitude)
+	if db < -96.0 {
+		return -96.0
+	}
+	return db
+}
+
+// computeLevel calculates an AudioLevel from a frame of samples.
+func computeLevel(frame []int16) AudioLevel {
+	rms := CalcRMS(frame)
+	peak := CalcPeak(frame)
+	clipped := false
+	for _, s := range frame {
+		if s == 32767 || s == -32768 {
+			clipped = true
+			break
+		}
+	}
+	return AudioLevel{
+		RMS:     rms,
+		Peak:    peak,
+		RMSdB:   AmplitudeToDb(rms),
+		PeakdB:  AmplitudeToDb(peak),
+		Clipped: clipped,
+	}
+}
+
+// RecordWithLevels captures audio until the stop channel is closed or
+// maxSeconds is reached, calling onLevel after each frame with real-time
+// RMS and peak levels. The callback is invoked from the recording goroutine.
+func RecordWithLevels(stop <-chan struct{}, maxSeconds int, onLevel LevelCallback) ([]int16, error) {
+	if err := portaudio.Initialize(); err != nil {
+		return nil, fmt.Errorf("portaudio init: %w", err)
+	}
+	defer func() { _ = portaudio.Terminate() }()
+
+	maxSamples := SampleRate * maxSeconds
+	buffer := make([]int16, 0, SampleRate*10)
+	framesPerBuffer := 1024
+	frameBuffer := make([]int16, framesPerBuffer)
+
+	stream, err := portaudio.OpenDefaultStream(Channels, 0, float64(SampleRate), framesPerBuffer, frameBuffer)
+	if err != nil {
+		return nil, fmt.Errorf("open stream: %w", err)
+	}
+	defer func() { _ = stream.Close() }()
+
+	if err := stream.Start(); err != nil {
+		return nil, fmt.Errorf("start stream: %w", err)
+	}
+
+	for len(buffer) < maxSamples {
+		select {
+		case <-stop:
+			_ = stream.Stop()
+			return buffer, nil
+		default:
+		}
+
+		if err := stream.Read(); err != nil {
+			break
+		}
+
+		remaining := maxSamples - len(buffer)
+		copyLen := len(frameBuffer)
+		if copyLen > remaining {
+			copyLen = remaining
+		}
+		buffer = append(buffer, frameBuffer[:copyLen]...)
+
+		if onLevel != nil {
+			onLevel(computeLevel(frameBuffer[:copyLen]))
+		}
+	}
+
+	_ = stream.Stop()
+	return buffer, nil
 }
 
 // AudioStats returns basic statistics about audio samples.

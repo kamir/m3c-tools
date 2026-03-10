@@ -57,7 +57,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error initializing PortAudio: %v\n", err)
 		os.Exit(1)
 	}
-	defer portaudio.Terminate()
+	defer func() { _ = portaudio.Terminate() }()
 
 	// Step 2: Show default input device
 	defaultInput, err := portaudio.DefaultInputDevice()
@@ -103,7 +103,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error opening stream: %v\n", err)
 		os.Exit(1)
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	if err := stream.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting stream: %v\n", err)
@@ -131,7 +131,7 @@ func main() {
 
 		// Print progress dots
 		elapsed := time.Since(startTime)
-		if int(elapsed.Seconds())%1 == 0 && elapsed.Milliseconds()%1000 < 100 {
+		if elapsed.Milliseconds()%1000 < 100 {
 			fmt.Print(".")
 		}
 	}
@@ -183,32 +183,32 @@ func writeWAV(path string, samples []int16) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	dataSize := uint32(len(samples) * 2) // 2 bytes per int16
 	fileSize := 36 + dataSize
 
 	// RIFF header
-	f.Write([]byte("RIFF"))
-	binary.Write(f, binary.LittleEndian, fileSize)
-	f.Write([]byte("WAVE"))
+	_, _ = f.Write([]byte("RIFF"))
+	_ = binary.Write(f, binary.LittleEndian, fileSize)
+	_, _ = f.Write([]byte("WAVE"))
 
 	// fmt subchunk
-	f.Write([]byte("fmt "))
-	binary.Write(f, binary.LittleEndian, uint32(16))      // subchunk size
-	binary.Write(f, binary.LittleEndian, uint16(1))        // PCM format
-	binary.Write(f, binary.LittleEndian, uint16(channels)) // channels
-	binary.Write(f, binary.LittleEndian, uint32(sampleRate))
+	_, _ = f.Write([]byte("fmt "))
+	_ = binary.Write(f, binary.LittleEndian, uint32(16))      // subchunk size
+	_ = binary.Write(f, binary.LittleEndian, uint16(1))        // PCM format
+	_ = binary.Write(f, binary.LittleEndian, uint16(channels)) // channels
+	_ = binary.Write(f, binary.LittleEndian, uint32(sampleRate))
 	byteRate := uint32(sampleRate * channels * bitsPerSample / 8)
-	binary.Write(f, binary.LittleEndian, byteRate)
+	_ = binary.Write(f, binary.LittleEndian, byteRate)
 	blockAlign := uint16(channels * bitsPerSample / 8)
-	binary.Write(f, binary.LittleEndian, blockAlign)
-	binary.Write(f, binary.LittleEndian, uint16(bitsPerSample))
+	_ = binary.Write(f, binary.LittleEndian, blockAlign)
+	_ = binary.Write(f, binary.LittleEndian, uint16(bitsPerSample))
 
 	// data subchunk
-	f.Write([]byte("data"))
-	binary.Write(f, binary.LittleEndian, dataSize)
-	binary.Write(f, binary.LittleEndian, samples)
+	_, _ = f.Write([]byte("data"))
+	_ = binary.Write(f, binary.LittleEndian, dataSize)
+	_ = binary.Write(f, binary.LittleEndian, samples)
 
 	return nil
 }

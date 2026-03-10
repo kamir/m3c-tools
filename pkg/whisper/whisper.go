@@ -54,7 +54,7 @@ func Transcribe(audioPath string, model string, language string) (*Result, error
 	if err != nil {
 		return nil, fmt.Errorf("create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	args := []string{
 		audioPath,

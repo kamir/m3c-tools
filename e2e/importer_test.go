@@ -334,8 +334,8 @@ func TestImporterCLIScanDir(t *testing.T) {
 	output := string(out)
 
 	// Verify output mentions found files
-	if !strings.Contains(output, "Found 3 audio files") {
-		t.Errorf("expected 'Found 3 audio files', got:\n%s", output)
+	if !strings.Contains(output, "Found 3 audio file") {
+		t.Errorf("expected 'Found 3 audio file(s)', got:\n%s", output)
 	}
 	if !strings.Contains(output, "track1.wav") {
 		t.Error("expected track1.wav in output")
@@ -405,6 +405,9 @@ func TestImporterCLINoArgs(t *testing.T) {
 		}
 	}
 
+	// Unset IMPORT_AUDIO_SOURCE to ensure fallback is not triggered
+	t.Setenv("IMPORT_AUDIO_SOURCE", "")
+
 	out, err := exec.Command(binPath, "import-audio").CombinedOutput()
 	if err == nil {
 		t.Error("expected non-zero exit for no arguments")
@@ -412,5 +415,165 @@ func TestImporterCLINoArgs(t *testing.T) {
 	output := string(out)
 	if !strings.Contains(output, "Usage") {
 		t.Errorf("expected usage message, got:\n%s", output)
+	}
+}
+
+func TestImporterScanFromEnvNotSet(t *testing.T) {
+	t.Setenv("IMPORT_AUDIO_SOURCE", "")
+	_, err := importer.ScanFromEnv(nil)
+	if err == nil {
+		t.Error("expected error when IMPORT_AUDIO_SOURCE is not set")
+	}
+	if !strings.Contains(err.Error(), "IMPORT_AUDIO_SOURCE") {
+		t.Errorf("expected error to mention IMPORT_AUDIO_SOURCE, got: %v", err)
+	}
+}
+
+func TestImporterScanFromEnvAllFormats(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("IMPORT_AUDIO_SOURCE", root)
+
+	// Create files of various types
+	for _, name := range []string{"a.mp3", "b.wav", "c.flac", "d.ogg", "e.txt", "f.png"} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte("data"), 0o644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+	}
+
+	result, err := importer.ScanFromEnv(nil)
+	if err != nil {
+		t.Fatalf("ScanFromEnv error: %v", err)
+	}
+
+	// Should find 4 audio files (mp3, wav, flac, ogg) but not txt or png
+	if result.TotalFound != 4 {
+		t.Errorf("expected 4 audio files, got %d", result.TotalFound)
+		for _, f := range result.Files {
+			t.Logf("  found: %s", f.Name)
+		}
+	}
+}
+
+func TestImporterScanFromEnvFiltered(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("IMPORT_AUDIO_SOURCE", root)
+
+	// Create files of various audio types
+	for _, name := range []string{"a.mp3", "b.wav", "c.flac", "d.ogg"} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte("data"), 0o644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+	}
+
+	result, err := importer.ScanFromEnv([]string{".mp3", ".wav"})
+	if err != nil {
+		t.Fatalf("ScanFromEnv error: %v", err)
+	}
+
+	// Should find only mp3 and wav
+	if result.TotalFound != 2 {
+		t.Errorf("expected 2 filtered files, got %d", result.TotalFound)
+		for _, f := range result.Files {
+			t.Logf("  found: %s (ext=%s)", f.Name, f.Ext)
+		}
+	}
+
+	for _, f := range result.Files {
+		if f.Ext != ".mp3" && f.Ext != ".wav" {
+			t.Errorf("unexpected extension in filtered result: %s", f.Ext)
+		}
+	}
+}
+
+func TestImporterScanFromEnvFilterNoDot(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("IMPORT_AUDIO_SOURCE", root)
+
+	for _, name := range []string{"a.mp3", "b.wav", "c.flac"} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte("data"), 0o644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+	}
+
+	// Filter with extensions without leading dot — should still work
+	result, err := importer.ScanFromEnv([]string{"mp3", "wav"})
+	if err != nil {
+		t.Fatalf("ScanFromEnv error: %v", err)
+	}
+	if result.TotalFound != 2 {
+		t.Errorf("expected 2 files with dot-less filter, got %d", result.TotalFound)
+	}
+}
+
+func TestImporterScanMP3WAV(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("IMPORT_AUDIO_SOURCE", root)
+
+	// Create mixed audio files
+	for _, name := range []string{"a.mp3", "b.wav", "c.flac", "d.ogg", "e.mp3"} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte("data"), 0o644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+	}
+
+	result, err := importer.ScanMP3WAV()
+	if err != nil {
+		t.Fatalf("ScanMP3WAV error: %v", err)
+	}
+
+	// Should find only mp3 and wav: a.mp3, b.wav, e.mp3
+	if result.TotalFound != 3 {
+		t.Errorf("expected 3 mp3/wav files, got %d", result.TotalFound)
+		for _, f := range result.Files {
+			t.Logf("  found: %s (ext=%s)", f.Name, f.Ext)
+		}
+	}
+
+	for _, f := range result.Files {
+		if f.Ext != ".mp3" && f.Ext != ".wav" {
+			t.Errorf("ScanMP3WAV returned non mp3/wav file: %s (ext=%s)", f.Name, f.Ext)
+		}
+	}
+}
+
+func TestImporterScanMP3WAVRecursive(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("IMPORT_AUDIO_SOURCE", root)
+
+	// Create nested directory structure
+	sub := filepath.Join(root, "subdir", "deep")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	for _, name := range []string{
+		filepath.Join(root, "top.mp3"),
+		filepath.Join(root, "subdir", "mid.wav"),
+		filepath.Join(sub, "deep.mp3"),
+		filepath.Join(sub, "deep.flac"), // should be excluded by mp3/wav filter
+	} {
+		if err := os.WriteFile(name, []byte("data"), 0o644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+	}
+
+	result, err := importer.ScanMP3WAV()
+	if err != nil {
+		t.Fatalf("ScanMP3WAV error: %v", err)
+	}
+
+	if result.TotalFound != 3 {
+		t.Errorf("expected 3 mp3/wav files recursively, got %d", result.TotalFound)
+		for _, f := range result.Files {
+			t.Logf("  found: %s", f.Path)
+		}
+	}
+}
+
+func TestImporterScanFromEnvNonexistent(t *testing.T) {
+	t.Setenv("IMPORT_AUDIO_SOURCE", "/nonexistent/path/12345")
+	_, err := importer.ScanFromEnv(nil)
+	if err == nil {
+		t.Error("expected error for nonexistent IMPORT_AUDIO_SOURCE directory")
 	}
 }

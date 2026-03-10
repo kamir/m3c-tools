@@ -199,10 +199,7 @@ func TestScreenshotCLIHelpOutput(t *testing.T) {
 		}
 	}
 
-	out, err := exec.Command(binPath, "help").CombinedOutput()
-	if err != nil {
-		// help may exit 0 or 1 depending on impl
-	}
+	out, _ := exec.Command(binPath, "help").CombinedOutput()
 	output := string(out)
 	if !strings.Contains(output, "screenshot") {
 		t.Error("help output does not mention 'screenshot' command")

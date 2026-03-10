@@ -12,10 +12,10 @@ func init() {
 func TestYTCallsAllowed_DefaultFalse(t *testing.T) {
 	// Ensure env var is not set
 	old, existed := os.LookupEnv("M3C_YT_CALLS_ENFORCE_ALL")
-	os.Unsetenv("M3C_YT_CALLS_ENFORCE_ALL")
+	_ = os.Unsetenv("M3C_YT_CALLS_ENFORCE_ALL")
 	defer func() {
 		if existed {
-			os.Setenv("M3C_YT_CALLS_ENFORCE_ALL", old)
+			_ = os.Setenv("M3C_YT_CALLS_ENFORCE_ALL", old)
 		}
 	}()
 
@@ -27,12 +27,12 @@ func TestYTCallsAllowed_DefaultFalse(t *testing.T) {
 
 func TestYTCallsAllowed_EnvVarOverride(t *testing.T) {
 	old, existed := os.LookupEnv("M3C_YT_CALLS_ENFORCE_ALL")
-	os.Setenv("M3C_YT_CALLS_ENFORCE_ALL", "1")
+	_ = os.Setenv("M3C_YT_CALLS_ENFORCE_ALL", "1")
 	defer func() {
 		if existed {
-			os.Setenv("M3C_YT_CALLS_ENFORCE_ALL", old)
+			_ = os.Setenv("M3C_YT_CALLS_ENFORCE_ALL", old)
 		} else {
-			os.Unsetenv("M3C_YT_CALLS_ENFORCE_ALL")
+			_ = os.Unsetenv("M3C_YT_CALLS_ENFORCE_ALL")
 		}
 	}()
 
@@ -44,10 +44,10 @@ func TestYTCallsAllowed_EnvVarOverride(t *testing.T) {
 func TestSkipIfNoYTCalls_Skips(t *testing.T) {
 	// Ensure env var is not set
 	old, existed := os.LookupEnv("M3C_YT_CALLS_ENFORCE_ALL")
-	os.Unsetenv("M3C_YT_CALLS_ENFORCE_ALL")
+	_ = os.Unsetenv("M3C_YT_CALLS_ENFORCE_ALL")
 	defer func() {
 		if existed {
-			os.Setenv("M3C_YT_CALLS_ENFORCE_ALL", old)
+			_ = os.Setenv("M3C_YT_CALLS_ENFORCE_ALL", old)
 		}
 	}()
 

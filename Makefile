@@ -29,12 +29,12 @@ build-all: build
 	go build -o $(BUILD_DIR)/poc-whisper ./cmd/poc-whisper
 	go build -o $(BUILD_DIR)/poc-recorder ./cmd/poc-recorder
 
-# Run all e2e tests (verbose)
+# Run all e2e tests (verbose, enables YT API calls)
 .PHONY: e2e
 e2e:
 	@echo "Running e2e tests..."
-	go test -v -count=1 ./e2e/ -run TestTranscript
-	go test -v -count=1 ./e2e/ -run TestThumbnail
+	M3C_YT_CALLS_ENFORCE_ALL=1 go test -v -count=1 ./e2e/ -run TestTranscript
+	M3C_YT_CALLS_ENFORCE_ALL=1 go test -v -count=1 ./e2e/ -run TestThumbnail
 	go test -v -count=1 ./e2e/ -run TestComposite
 	go test -v -count=1 ./e2e/ -run TestBuild
 	go test -v -count=1 ./e2e/ -run TestParseTagLine
@@ -58,10 +58,10 @@ test-unit:
 test-network:
 ifdef M3C_TEST_FULL_NETWORK
 	@echo "Running full network tests (transcript + thumbnail + translate)..."
-	go test -v -count=1 ./e2e/ -run "TestTranscript|TestThumbnail|TestTranscriptFetchTranslated"
+	M3C_YT_CALLS_ENFORCE_ALL=1 go test -v -count=1 ./e2e/ -run "TestTranscript|TestThumbnail|TestTranscriptFetchTranslated"
 else
 	@echo "Running network tests (transcript only — set M3C_TEST_FULL_NETWORK=1 for all)..."
-	go test -v -count=1 ./e2e/ -run "TestTranscriptList|TestTranscriptFetch|TestTranscriptFormatters|TestTranscriptInvalidVideoID"
+	M3C_YT_CALLS_ENFORCE_ALL=1 go test -v -count=1 ./e2e/ -run "TestTranscriptList|TestTranscriptFetch|TestTranscriptFormatters|TestTranscriptInvalidVideoID"
 endif
 
 # ER1 tests — require running ER1 server
@@ -194,6 +194,18 @@ release-minor:
 release-major:
 	@./scripts/release.sh major
 
+# Run CI checks locally (mirrors .github/workflows/ci.yml)
+.PHONY: ci
+ci: vet lint test-unit build
+	@echo ""
+	@echo "CI passed: vet ✓  lint ✓  test ✓  build ✓"
+
+# Run golangci-lint
+.PHONY: lint
+lint:
+	@echo "Running golangci-lint..."
+	golangci-lint run --timeout=5m
+
 # Show help
 .PHONY: help
 help:
@@ -218,4 +230,6 @@ help:
 	@echo "  release-patch  Release with patch version bump"
 	@echo "  release-minor  Release with minor version bump"
 	@echo "  release-major  Release with major version bump"
+	@echo "  ci             Run full CI locally (vet + lint + test + build)"
+	@echo "  lint           Run golangci-lint"
 	@echo "  help           Show this help"

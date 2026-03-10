@@ -46,7 +46,7 @@ func main() {
 
 	// Load .env if present
 	for _, p := range []string{".env", filepath.Join(os.Getenv("HOME"), ".m3c-tools.env")} {
-		er1.LoadDotenv(p)
+		_ = er1.LoadDotenv(p)
 	}
 
 	switch os.Args[1] {
@@ -147,6 +147,8 @@ Commands:
 
   import-audio <dir>     Scan directory for audio files
     --extensions           List supported audio extensions
+    --compact              Machine-readable output (TSV: status, path, size, tags)
+    --db <path>            Tracking DB path (default: ~/.m3c-tools/tracking.db)
 
   menubar                Launch macOS menu bar app
     --title <text>         Menu bar title (default: M3C)
@@ -919,12 +921,21 @@ func cmdScreenshot(args []string) {
 
 func cmdImportAudio(args []string) {
 	showExtensions := false
+	compact := false
+	dbPath := defaultFilesDBPath()
 	dir := ""
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--extensions":
 			showExtensions = true
+		case "--compact":
+			compact = true
+		case "--db":
+			if i+1 < len(args) {
+				dbPath = args[i+1]
+				i++
+			}
 		default:
 			if !strings.HasPrefix(args[i], "--") {
 				dir = args[i]
@@ -941,9 +952,23 @@ func cmdImportAudio(args []string) {
 		return
 	}
 
+	// If no directory argument, fall back to IMPORT_AUDIO_SOURCE env var
 	if dir == "" {
-		fmt.Fprintln(os.Stderr, "Usage: m3c-tools import-audio <directory> [--extensions]")
-		os.Exit(1)
+		envDir := os.Getenv("IMPORT_AUDIO_SOURCE")
+		if envDir == "" {
+			fmt.Fprintln(os.Stderr, "Usage: m3c-tools import-audio <directory> [--extensions] [--compact] [--db <path>]")
+			fmt.Fprintln(os.Stderr, "  Or set IMPORT_AUDIO_SOURCE environment variable")
+			os.Exit(1)
+		}
+		dir = envDir
+		fmt.Printf("Using IMPORT_AUDIO_SOURCE=%s\n", dir)
+	}
+
+	// Expand ~ in directory path
+	if strings.HasPrefix(dir, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			dir = filepath.Join(home, dir[2:])
+		}
 	}
 
 	fmt.Printf("Scanning %s for audio files...\n", dir)
@@ -958,11 +983,33 @@ func cmdImportAudio(args []string) {
 		return
 	}
 
-	fmt.Printf("Found %d audio files:\n", result.TotalFound)
-	for _, f := range result.Files {
-		fmt.Printf("  %s  (%s, %d bytes)\n", f.Name, f.Ext, f.Size)
+	// Build status checker using tracking DB (best-effort: if DB unavailable, all files show as "new").
+	// StatusCheckerFromDB handles nil DB gracefully (returns StatusNew for all files).
+	filesDB, dbErr := tracking.OpenFilesDB(dbPath)
+	if dbErr != nil {
+		filesDB = nil // graceful degradation: all files appear as "new"
+	} else {
+		defer filesDB.Close()
 	}
-	fmt.Printf("\nScanned: %s\n", result.ScannedDir)
+	checker := importer.StatusCheckerFromDB(filesDB, "audio")
+
+	entries, err := importer.BuildFileEntries(result, checker)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error checking file status: %v\n", err)
+		os.Exit(1)
+	}
+
+	if compact {
+		fmt.Print(importer.FormatScanOutputCompact(entries))
+	} else {
+		fmt.Print(importer.FormatScanOutput(entries, result.ScannedDir))
+	}
+}
+
+func defaultFilesDBPath() string {
+	dir := filepath.Join(os.Getenv("HOME"), ".m3c-tools")
+	os.MkdirAll(dir, 0755)
+	return filepath.Join(dir, "tracking.db")
 }
 
 // -- menubar command --

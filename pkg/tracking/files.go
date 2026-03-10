@@ -61,7 +61,7 @@ func OpenFilesDB(dbPath string) (*FilesDB, error) {
 	}
 
 	if _, err := db.Exec(createFilesTableSQL); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("create processed_files table: %w", err)
 	}
 
@@ -79,7 +79,7 @@ func HashFile(path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("open file for hashing: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, file); err != nil {
@@ -183,7 +183,7 @@ func (f *FilesDB) ListFiles(limit int) ([]ProcessedFile, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var records []ProcessedFile
 	for rows.Next() {
@@ -208,7 +208,7 @@ func (f *FilesDB) ListByStatus(status string, limit int) ([]ProcessedFile, error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var records []ProcessedFile
 	for rows.Next() {
