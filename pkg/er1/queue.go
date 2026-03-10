@@ -151,7 +151,9 @@ func (q *Queue) load() {
 	if err != nil {
 		return // file doesn't exist yet
 	}
-	json.Unmarshal(data, &q.entries)
+	if err := json.Unmarshal(data, &q.entries); err != nil {
+		return
+	}
 }
 
 func (q *Queue) save() {

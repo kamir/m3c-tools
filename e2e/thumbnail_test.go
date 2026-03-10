@@ -7,6 +7,7 @@ import (
 )
 
 func TestThumbnailFetch(t *testing.T) {
+	SkipIfNoYTCalls(t)
 	fetcher, _ := transcript.NewFetcher(nil)
 	data, err := fetcher.FetchThumbnail(testVideoID)
 	if err != nil {
@@ -23,6 +24,7 @@ func TestThumbnailFetch(t *testing.T) {
 }
 
 func TestThumbnailNMSHcSq8nMs(t *testing.T) {
+	SkipIfNoYTCalls(t)
 	fetcher, _ := transcript.NewFetcher(nil)
 	data, err := fetcher.FetchThumbnail("NMSHcSq8nMs")
 	if err != nil {

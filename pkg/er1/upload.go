@@ -39,16 +39,16 @@ func Upload(cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
 	writer := multipart.NewWriter(&body)
 
 	// Form fields
-	writer.WriteField("context_id", cfg.ContextID)
-	writer.WriteField("content_type", cfg.ContentType)
-	writer.WriteField("tags", payload.Tags)
+	_ = writer.WriteField("context_id", cfg.ContextID)
+	_ = writer.WriteField("content_type", cfg.ContentType)
+	_ = writer.WriteField("tags", payload.Tags)
 
 	// Transcript (always required)
 	txPart, err := writer.CreateFormFile("transcript_file_ext", payload.TranscriptFilename)
 	if err != nil {
 		return nil, fmt.Errorf("create transcript part: %w", err)
 	}
-	txPart.Write(payload.TranscriptData)
+	_, _ = txPart.Write(payload.TranscriptData)
 
 	// Audio (required by ER1 server)
 	audioData := payload.AudioData
@@ -61,7 +61,7 @@ func Upload(cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create audio part: %w", err)
 	}
-	audioPart.Write(audioData)
+	_, _ = audioPart.Write(audioData)
 
 	// Image (required by ER1 server — crashes without it)
 	imgData := payload.ImageData
@@ -74,9 +74,9 @@ func Upload(cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create image part: %w", err)
 	}
-	imgPart.Write(imgData)
+	_, _ = imgPart.Write(imgData)
 
-	writer.Close()
+	_ = writer.Close()
 
 	// Build request
 	req, err := http.NewRequest("POST", cfg.APIURL, &body)
@@ -142,7 +142,7 @@ func IsReachable(cfg *Config) bool {
 	if err != nil {
 		return false
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	return true // any response = reachable
 }
 

@@ -102,6 +102,68 @@ func IsAudioFile(path string) bool {
 	return SupportedExtensions[ext]
 }
 
+// ScanFromEnv reads the IMPORT_AUDIO_SOURCE environment variable and scans
+// that directory for audio files. If the env var is empty, it returns an error.
+// If filterExts is non-empty, only files matching those extensions are returned
+// (e.g. []string{".mp3", ".wav"}). Otherwise all supported audio extensions
+// are matched.
+func ScanFromEnv(filterExts []string) (*ScanResult, error) {
+	src := os.Getenv("IMPORT_AUDIO_SOURCE")
+	if src == "" {
+		return nil, fmt.Errorf("IMPORT_AUDIO_SOURCE environment variable is not set")
+	}
+
+	// Expand ~ to home directory
+	if strings.HasPrefix(src, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("cannot expand ~: %w", err)
+		}
+		src = filepath.Join(home, src[2:])
+	}
+
+	result, err := ScanDir(src)
+	if err != nil {
+		return nil, err
+	}
+
+	// If no filter extensions specified, return all audio files
+	if len(filterExts) == 0 {
+		return result, nil
+	}
+
+	// Build filter set (normalize to lowercase with leading dot)
+	filterSet := make(map[string]bool, len(filterExts))
+	for _, ext := range filterExts {
+		ext = strings.ToLower(ext)
+		if !strings.HasPrefix(ext, ".") {
+			ext = "." + ext
+		}
+		filterSet[ext] = true
+	}
+
+	// Filter files
+	var filtered []AudioFile
+	for _, f := range result.Files {
+		if filterSet[f.Ext] {
+			filtered = append(filtered, f)
+		}
+	}
+
+	return &ScanResult{
+		Files:      filtered,
+		ScannedDir: result.ScannedDir,
+		TotalFound: len(filtered),
+	}, nil
+}
+
+// ScanMP3WAV is a convenience function that reads IMPORT_AUDIO_SOURCE and
+// returns only .mp3 and .wav files. This is the primary entry point for the
+// unified capture pipeline's Import channel.
+func ScanMP3WAV() (*ScanResult, error) {
+	return ScanFromEnv([]string{".mp3", ".wav"})
+}
+
 // ExtensionList returns the sorted list of supported extensions.
 func ExtensionList() []string {
 	exts := make([]string, 0, len(SupportedExtensions))
