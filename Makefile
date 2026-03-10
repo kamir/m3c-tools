@@ -1,0 +1,212 @@
+# m3c-tools — Multi-Modal-Memory Tools
+# Makefile for building, testing, and running e2e tests
+
+BINARY   = m3c-tools
+CMD_DIR  = ./cmd/m3c-tools
+BUILD_DIR = ./build
+APP_NAME = M3C-Tools
+APP_BUNDLE = $(BUILD_DIR)/$(APP_NAME).app
+APP_ID   = com.kamir.m3c-tools
+APP_VERSION = 0.1.0
+ICON_SRC = maindset_icon.png
+
+# Default: build the CLI
+.PHONY: all
+all: build
+
+# Build the main CLI binary
+.PHONY: build
+build:
+	@echo "Building $(BINARY)..."
+	go build -o $(BUILD_DIR)/$(BINARY) $(CMD_DIR)
+
+# Build all commands (including POCs)
+.PHONY: build-all
+build-all: build
+	@echo "Building POCs..."
+	go build -o $(BUILD_DIR)/poc-transcript ./cmd/poc-transcript
+	go build -o $(BUILD_DIR)/poc-menubar ./cmd/poc-menubar
+	go build -o $(BUILD_DIR)/poc-whisper ./cmd/poc-whisper
+	go build -o $(BUILD_DIR)/poc-recorder ./cmd/poc-recorder
+
+# Run all e2e tests (verbose)
+.PHONY: e2e
+e2e:
+	@echo "Running e2e tests..."
+	go test -v -count=1 ./e2e/ -run TestTranscript
+	go test -v -count=1 ./e2e/ -run TestThumbnail
+	go test -v -count=1 ./e2e/ -run TestComposite
+	go test -v -count=1 ./e2e/ -run TestBuild
+	go test -v -count=1 ./e2e/ -run TestParseTagLine
+	go test -v -count=1 ./e2e/ -run TestER1Config
+	go test -v -count=1 ./e2e/ -run TestER1Queue
+	go test -v -count=1 ./e2e/ -run TestWhisper
+	go test -v -count=1 ./e2e/ -run TestRecorderEncodeWAV
+	go test -v -count=1 ./e2e/ -run TestRecorderStats
+
+# Fast tests — no network, no hardware, no server
+.PHONY: test-unit
+test-unit:
+	@echo "Running unit tests (offline)..."
+	go test -v -count=1 ./e2e/ -run "TestComposite|TestBuild|TestParseTagLine|TestER1Config|TestER1Queue|TestER1EnqueueFailure|TestUploadFailure|TestRecorderEncodeWAV|TestRecorderStats|TestExportsDB|TestFilesDB|TestHashFile|TestFormatterLoader|TestPrettyPrint|TestFormatTranscript|TestFormatSnippet|TestFormatKeyValue|TestFormatTable|TestFormatSection|TestFormatStatusLine|TestBuildApp|TestTranslateFlagParsing|TestTranslateNotTranslatable|TestTranslateTranslatable|TestRetryQueue|TestRetryBackoffTiming|TestRetryBackoffCustomBase|TestRetryProcessingOrder|TestRetryPartialFailure|TestRetryMaxRetriesDropsEntry|TestRetryDropCallback|TestRetryRespectsBackoffDelay|TestRetryProcessesAfterBackoffElapsed|TestRetryGracefulShutdownOnCancel|TestRetryRunStopsOnContextCancel|TestRetryRunProcessesMultipleCycles|TestRetryEmptyQueue|TestRetryOnRetryCallback|TestTranscriptFilterExcludeGenerated|TestTranscriptFilterExcludeManuallyCreated|TestTranscriptFilterBothExcludes|TestTranscriptFilterEmptyList|TestTranscriptFilterAllSameType|TestProxyBuildURL|TestProxyGetTransport|TestProxyNewWithProxy|TestProxyHTTPIntegration|TestProxyWebshare|TestProxySocks5URL|TestRetryRunnerProcessOnce|TestRetryRunnerDropExceedMaxRetries|TestRetryRunnerBackoff|TestRetryRunnerRunLoop|TestRetryRunnerBackoffSkip|TestBackgroundRetryStartsAndProcesses|TestBackgroundRetryStopsGracefully|TestBackgroundRetryHandlesFailures|TestBackgroundRetryEmptyQueue|TestBackgroundRetryLogging|TestTranscriptImportFromSnippets|TestTranscriptImportPreservesMetadata|TestTranscriptListSearchByLanguage|TestTranscriptListSearchGenerated|TestTranscriptListSearchManual|TestTranscriptSearchNotFound|TestTranscriptExportText|TestTranscriptExportSRT|TestTranscriptExportJSON|TestTranscriptExportWebVTT|TestTranscriptExportPretty|TestTranscriptExportAllFormats|TestTranscriptExportToFile|TestTranscriptListString|TestTranscriptListStringEmpty|TestMenubarIntegrationFullLifecycle|TestMenubarIntegrationTranscriptFetcherWired|TestMenubarIntegrationStatusDuringFetch|TestMenubarIntegrationMenuItemsComplete|TestMenubarIntegrationConcurrentStatusUpdates|TestMenubarIntegrationHistoryInMenuUpdates|TestAppBundleLaunchHelp|TestAppBundleLaunchUnknownCommand|TestAppBundleLaunchNoArgs|TestAppBundleRetryGracefulShutdown|TestAppBundleRetryExitsOnSIGINT|TestAppBundleMenubarFlagParsing|TestAppBundleExecPermissions|TestAppBundleInfoPlistLSUIElement|TestScheduleCommand|TestScheduleCommandDuplicate|TestScheduleCommandMissingTranscript|TestStatusCommand|TestStatusCommandEntryNotFound|TestCancelCommand|TestCancelCommandNotFound|TestScheduleStatusCancelWorkflow|TestCLIHelp|TestCLIUnknownCommand|TestCLINoArgs|TestRepoRoot|TestWriteFixture|TestWriteFixtureBytes|TestFixtureDir|TestTempDataDir|TestWithEnv|TestCLIResultAssertions|TestRunCLIWithEnv|TestScreenshotModeConstants|TestScreenshotClipboardImageTypes|TestScreenshotCLIHelpOutput|TestImporterScanDir|TestImporterScanDirEmpty|TestImporterScanDirNotExist|TestImporterScanDirNotDirectory|TestImporterIsAudioFile|TestImporterExtensionList|TestImporterScanDirHiddenSkip|TestImporterScanDirCaseInsensitive|TestImporterScanDirAbsPath|TestImporterScanDirDeepNesting|TestImporterExtensionCoverage|TestImporterCLIExtensions|TestImporterCLIScanDir|TestImporterCLIEmptyDir|TestImporterCLINonexistentDir|TestImporterCLINoArgs"
+
+# Network tests — require internet
+.PHONY: test-network
+test-network:
+	@echo "Running network tests..."
+	go test -v -count=1 ./e2e/ -run "TestTranscript|TestThumbnail"
+
+# ER1 tests — require running ER1 server
+.PHONY: test-er1
+test-er1:
+	@echo "Running ER1 tests..."
+	go test -v -count=1 ./e2e/ -run "TestER1Reachable|TestER1Upload"
+
+# Whisper tests — require whisper binary
+.PHONY: test-whisper
+test-whisper:
+	@echo "Running whisper tests..."
+	go test -v -count=1 ./e2e/ -run TestWhisper
+
+# Recorder tests — require PortAudio + microphone
+.PHONY: test-recorder
+test-recorder:
+	@echo "Running recorder tests..."
+	go test -v -count=1 ./e2e/ -run TestRecorder
+
+# Build macOS .app bundle
+.PHONY: build-app
+build-app: build
+	@echo "Building $(APP_NAME).app bundle..."
+	@rm -rf $(APP_BUNDLE)
+	@mkdir -p $(APP_BUNDLE)/Contents/MacOS
+	@mkdir -p $(APP_BUNDLE)/Contents/Resources
+	@cp $(BUILD_DIR)/$(BINARY) $(APP_BUNDLE)/Contents/MacOS/$(BINARY)
+	@if [ -f "$(ICON_SRC)" ]; then \
+		cp $(ICON_SRC) $(APP_BUNDLE)/Contents/Resources/icon.png; \
+		if command -v sips >/dev/null 2>&1 && command -v iconutil >/dev/null 2>&1; then \
+			ICONSET=$$(mktemp -d)/icon.iconset && \
+			mkdir -p "$$ICONSET" && \
+			sips -z 16 16     $(ICON_SRC) --out "$$ICONSET/icon_16x16.png"      >/dev/null 2>&1; \
+			sips -z 32 32     $(ICON_SRC) --out "$$ICONSET/icon_16x16@2x.png"   >/dev/null 2>&1; \
+			sips -z 32 32     $(ICON_SRC) --out "$$ICONSET/icon_32x32.png"      >/dev/null 2>&1; \
+			sips -z 64 64     $(ICON_SRC) --out "$$ICONSET/icon_32x32@2x.png"   >/dev/null 2>&1; \
+			sips -z 128 128   $(ICON_SRC) --out "$$ICONSET/icon_128x128.png"    >/dev/null 2>&1; \
+			sips -z 256 256   $(ICON_SRC) --out "$$ICONSET/icon_128x128@2x.png" >/dev/null 2>&1; \
+			sips -z 256 256   $(ICON_SRC) --out "$$ICONSET/icon_256x256.png"    >/dev/null 2>&1; \
+			sips -z 512 512   $(ICON_SRC) --out "$$ICONSET/icon_256x256@2x.png" >/dev/null 2>&1; \
+			sips -z 512 512   $(ICON_SRC) --out "$$ICONSET/icon_512x512.png"    >/dev/null 2>&1; \
+			sips -z 1024 1024 $(ICON_SRC) --out "$$ICONSET/icon_512x512@2x.png" >/dev/null 2>&1; \
+			iconutil -c icns "$$ICONSET" -o $(APP_BUNDLE)/Contents/Resources/icon.icns 2>/dev/null \
+				&& echo "  Generated icon.icns" || true; \
+			rm -rf "$$(dirname $$ICONSET)"; \
+		fi; \
+	fi
+	@printf '<?xml version="1.0" encoding="UTF-8"?>\n\
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n\
+<plist version="1.0">\n\
+<dict>\n\
+	<key>CFBundleName</key>\n\
+	<string>$(APP_NAME)</string>\n\
+	<key>CFBundleIdentifier</key>\n\
+	<string>$(APP_ID)</string>\n\
+	<key>CFBundleVersion</key>\n\
+	<string>$(APP_VERSION)</string>\n\
+	<key>CFBundleShortVersionString</key>\n\
+	<string>$(APP_VERSION)</string>\n\
+	<key>CFBundleExecutable</key>\n\
+	<string>$(BINARY)</string>\n\
+	<key>CFBundleDisplayName</key>\n\
+	<string>$(APP_NAME)</string>\n\
+	<key>CFBundleIconFile</key>\n\
+	<string>icon</string>\n\
+	<key>CFBundlePackageType</key>\n\
+	<string>APPL</string>\n\
+	<key>LSUIElement</key>\n\
+	<true/>\n\
+	<key>NSHighResolutionCapable</key>\n\
+	<true/>\n\
+	<key>NSMicrophoneUsageDescription</key>\n\
+	<string>M3C Tools needs microphone access to record voice impressions.</string>\n\
+	<key>NSScreenCaptureUsageDescription</key>\n\
+	<string>M3C Tools needs screen capture access for screenshot observations.</string>\n\
+</dict>\n\
+</plist>\n' > $(APP_BUNDLE)/Contents/Info.plist
+	@echo "Built $(APP_BUNDLE)"
+
+# Install CLI to /usr/local/bin and .app to /Applications
+.PHONY: install
+install: build-app
+	@echo "Installing $(BINARY) to /usr/local/bin/$(BINARY)..."
+	@cp $(BUILD_DIR)/$(BINARY) /usr/local/bin/$(BINARY)
+	@chmod 755 /usr/local/bin/$(BINARY)
+	@echo "Installing $(APP_NAME).app to /Applications/..."
+	@rm -rf /Applications/$(APP_NAME).app
+	@cp -r $(APP_BUNDLE) /Applications/$(APP_NAME).app
+	@mkdir -p $(HOME)/.m3c-tools
+	@echo "Installed:"
+	@echo "  CLI:  /usr/local/bin/$(BINARY)"
+	@echo "  App:  /Applications/$(APP_NAME).app"
+	@echo "  Data: ~/.m3c-tools/"
+
+# Uninstall CLI and .app
+.PHONY: uninstall
+uninstall:
+	@echo "Uninstalling $(BINARY)..."
+	@rm -f /usr/local/bin/$(BINARY)
+	@rm -rf /Applications/$(APP_NAME).app
+	@echo "Removed /usr/local/bin/$(BINARY) and /Applications/$(APP_NAME).app"
+	@echo "Note: ~/.m3c-tools/ data directory preserved. Remove manually if desired."
+
+# Run the CLI
+.PHONY: run
+run: build
+	$(BUILD_DIR)/$(BINARY) $(ARGS)
+
+# Clean build artifacts
+.PHONY: clean
+clean:
+	rm -rf $(BUILD_DIR)
+
+# Check all packages compile
+.PHONY: vet
+vet:
+	go vet ./...
+
+# Release targets — bump version, build, tag, push, create GitHub release
+.PHONY: release release-patch release-minor release-major
+release: release-patch
+
+release-patch:
+	@./scripts/release.sh patch
+
+release-minor:
+	@./scripts/release.sh minor
+
+release-major:
+	@./scripts/release.sh major
+
+# Show help
+.PHONY: help
+help:
+	@echo "m3c-tools — Multi-Modal-Memory Tools"
+	@echo ""
+	@echo "Targets:"
+	@echo "  build          Build the main CLI binary"
+	@echo "  build-all      Build all binaries (CLI + POCs)"
+	@echo "  build-app      Build macOS .app bundle"
+	@echo "  e2e            Run all e2e tests"
+	@echo "  test-unit      Run offline unit tests only"
+	@echo "  test-network   Run tests requiring internet"
+	@echo "  test-er1       Run tests requiring ER1 server"
+	@echo "  test-whisper   Run tests requiring whisper binary"
+	@echo "  test-recorder  Run tests requiring microphone"
+	@echo "  install        Install CLI to /usr/local/bin and .app to /Applications"
+	@echo "  uninstall      Remove installed CLI and .app"
+	@echo "  vet            Run go vet on all packages"
+	@echo "  clean          Remove build artifacts"
+	@echo "  release        Release with patch bump (default)"
+	@echo "  release-patch  Release with patch version bump"
+	@echo "  release-minor  Release with minor version bump"
+	@echo "  release-major  Release with major version bump"
+	@echo "  help           Show this help"
