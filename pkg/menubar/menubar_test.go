@@ -437,6 +437,7 @@ func TestUploadER1StatusTransition(t *testing.T) {
 
 func TestUploadER1MenuItemPresent(t *testing.T) {
 	app := NewApp()
+	app.SetAuthSession(AuthSession{LoggedIn: true, UserID: "ctx-1"})
 	items := app.BuildMenuItems()
 
 	found := false
@@ -448,6 +449,17 @@ func TestUploadER1MenuItemPresent(t *testing.T) {
 	}
 	if !found {
 		t.Error("Expected '🚀 Upload to ER1...' menu item in BuildMenuItems()")
+	}
+}
+
+func TestLoggedOutMenuShowsOnlyLogin(t *testing.T) {
+	app := NewApp()
+	items := app.BuildMenuItems()
+	if len(items) != 1 {
+		t.Fatalf("logged-out menu len=%d, want 1", len(items))
+	}
+	if items[0].Text != "🔐 Login to ER1..." {
+		t.Fatalf("logged-out first menu item=%q, want login", items[0].Text)
 	}
 }
 

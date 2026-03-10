@@ -291,6 +291,7 @@ func TestMenubarER1UploadStatusTransitions(t *testing.T) {
 // appears in the menu item list.
 func TestMenubarER1UploadMenuItem(t *testing.T) {
 	app := menubar.NewApp()
+	app.SetAuthSession(menubar.AuthSession{LoggedIn: true, UserID: "ctx-test"})
 	items := app.BuildMenuItems()
 
 	found := false

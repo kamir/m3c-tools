@@ -7,8 +7,10 @@ package menubar
 import (
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/caseymrm/menuet"
 )
@@ -23,12 +25,29 @@ type App struct {
 	mu          sync.Mutex
 	status      Status
 	authSession AuthSession
+	importState AudioImportState
 }
 
 // AuthSession captures runtime ER1 login state used by the menu.
 type AuthSession struct {
 	LoggedIn bool
 	UserID   string
+}
+
+// AudioImportItem represents one source audio file shown in the menubar list.
+type AudioImportItem struct {
+	Path   string
+	Name   string
+	Status string
+	Size   int64
+	Tags   string
+}
+
+// AudioImportState holds the current import-list snapshot for menu rendering.
+type AudioImportState struct {
+	Items     []AudioImportItem
+	UpdatedAt time.Time
+	Error     string
 }
 
 // NewApp creates an App with the default config and idle status.
@@ -74,6 +93,26 @@ func (a *App) GetAuthSession() AuthSession {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.authSession
+}
+
+// SetAudioImportState updates the current import-list snapshot for the menu.
+func (a *App) SetAudioImportState(s AudioImportState) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.importState = s
+}
+
+// GetAudioImportState returns the current import-list snapshot.
+func (a *App) GetAudioImportState() AudioImportState {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	out := a.importState
+	if len(out.Items) > 0 {
+		items := make([]AudioImportItem, len(out.Items))
+		copy(items, out.Items)
+		out.Items = items
+	}
+	return out
 }
 
 // AddHistory appends an entry to the transcript history.
@@ -130,12 +169,26 @@ func (a *App) BuildMenuItems() []menuet.MenuItem {
 // time the user opens the dropdown.
 func (a *App) buildMenuItems() []menuet.MenuItem {
 	auth := a.GetAuthSession()
-	accountText := "Account: not logged in"
-	if auth.LoggedIn {
-		accountText = fmt.Sprintf("Account: %s", auth.UserID)
+	if !auth.LoggedIn {
+		return []menuet.MenuItem{
+			{
+				Text: "🔐 Login to ER1...",
+				Clicked: func() {
+					a.fireAction(ActionLoginER1, "")
+				},
+			},
+		}
 	}
+	accountText := fmt.Sprintf("Account: %s", auth.UserID)
 
 	items := []menuet.MenuItem{
+		{
+			Text: "🔓 Logout from ER1",
+			Clicked: func() {
+				a.fireAction(ActionLogoutER1, "")
+			},
+		},
+		{Type: menuet.Separator},
 		{
 			Text:    "▶️ Fetch Transcript...",
 			Clicked: a.handleFetchTranscript,
@@ -156,18 +209,7 @@ func (a *App) buildMenuItems() []menuet.MenuItem {
 			Text:    "🚀 Upload to ER1...",
 			Clicked: a.handleUploadER1,
 		},
-		{
-			Text: "🔐 Login to ER1...",
-			Clicked: func() {
-				a.fireAction(ActionLoginER1, "")
-			},
-		},
-		{
-			Text: "🔓 Logout from ER1",
-			Clicked: func() {
-				a.fireAction(ActionLogoutER1, "")
-			},
-		},
+		a.buildAudioImportMenu(),
 		{Type: menuet.Separator},
 		{Text: fmt.Sprintf("Status: %s", a.GetStatus())},
 		{Text: accountText},
@@ -190,6 +232,100 @@ func (a *App) buildMenuItems() []menuet.MenuItem {
 	)
 
 	return items
+}
+
+func (a *App) buildAudioImportMenu() menuet.MenuItem {
+	state := a.GetAudioImportState()
+	newCount := 0
+	for _, it := range state.Items {
+		if strings.EqualFold(strings.TrimSpace(it.Status), "new") {
+			newCount++
+		}
+	}
+	title := "🎵 Audio Import"
+	if newCount > 0 {
+		title = fmt.Sprintf("🎵 Audio Import (%d new)", newCount)
+	}
+	return menuet.MenuItem{
+		Text: title,
+		Children: func() []menuet.MenuItem {
+			items := []menuet.MenuItem{
+				{
+					Text: "▶️ Run Import Pipeline",
+					Clicked: func() {
+						a.fireAction(ActionBatchImport, "__run_all__")
+					},
+				},
+				{
+					Text: "🔄 Refresh list",
+					Clicked: func() {
+						a.fireAction(ActionBatchImport, "__refresh__")
+					},
+				},
+				{Type: menuet.Separator},
+			}
+
+			if state.UpdatedAt.IsZero() {
+				items = append(items, menuet.MenuItem{Text: "Updated: (not yet)"})
+			} else {
+				items = append(items, menuet.MenuItem{Text: "Updated: " + state.UpdatedAt.Format("15:04:05")})
+			}
+			if state.Error != "" {
+				items = append(items, menuet.MenuItem{Text: "⚠️ " + state.Error})
+			}
+			items = append(items, menuet.MenuItem{Type: menuet.Separator})
+
+			if len(state.Items) == 0 {
+				items = append(items, menuet.MenuItem{Text: "(no audio files)"})
+				return items
+			}
+
+			limit := len(state.Items)
+			if limit > 25 {
+				limit = 25
+			}
+			for i := 0; i < limit; i++ {
+				it := state.Items[i]
+				label := fmt.Sprintf("%s %s [%s]", statusIcon(it.Status), filepath.Base(it.Name), it.Status)
+				if it.Path == "" {
+					items = append(items, menuet.MenuItem{Text: label})
+					continue
+				}
+				if !strings.EqualFold(strings.TrimSpace(it.Status), "new") {
+					items = append(items, menuet.MenuItem{Text: label})
+					continue
+				}
+				filePath := it.Path
+				items = append(items, menuet.MenuItem{
+					Text: label,
+					Clicked: func() {
+						a.fireAction(ActionBatchImport, filePath)
+					},
+				})
+			}
+			if len(state.Items) > limit {
+				items = append(items, menuet.MenuItem{Text: fmt.Sprintf("… %d more files", len(state.Items)-limit)})
+			}
+			return items
+		},
+	}
+}
+
+func statusIcon(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "new":
+		return "+"
+	case "imported":
+		return "✓"
+	case "uploaded":
+		return "↑"
+	case "failed":
+		return "✗"
+	case "duplicate":
+		return "="
+	default:
+		return "•"
+	}
 }
 
 // buildHistoryMenu creates the expandable "History (N)" submenu with
