@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -72,8 +73,18 @@ func Upload(cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
 	imgData := payload.ImageData
 	imgName := payload.ImageFilename
 	if imgData == nil {
-		imgData = PlaceholderPNG()
-		imgName = "placeholder.png"
+		if isAudioImportPayload(contentType, payload.Tags) {
+			if logo := PlaceholderLogoPNG(); len(logo) > 0 {
+				imgData = logo
+				imgName = "placeholder-logo.png"
+			} else {
+				imgData = PlaceholderPNG()
+				imgName = "placeholder.png"
+			}
+		} else {
+			imgData = PlaceholderPNG()
+			imgName = "placeholder.png"
+		}
 	}
 	imgPart, err := writer.CreateFormFile("image_data", imgName)
 	if err != nil {
@@ -156,4 +167,12 @@ func truncate(s string, n int) string {
 		return s[:n] + "..."
 	}
 	return s
+}
+
+func isAudioImportPayload(contentType, tags string) bool {
+	ct := strings.ToLower(strings.TrimSpace(contentType))
+	tg := strings.ToLower(strings.TrimSpace(tags))
+	return strings.Contains(tg, "audio-import") ||
+		strings.Contains(ct, "audio-import") ||
+		strings.Contains(ct, "audio-track")
 }
