@@ -1,0 +1,175 @@
+# Ouroboros Seed — M3C Tools Observation Window & Unified Flow
+# Generated from interview session 2026-03-10 (Path B: agent-based)
+
+goal: >
+  Implement the unified 4-step capture pipeline for M3C Tools with a native
+  macOS Observation Window (NSWindow via cgo) featuring 3 tabs (Record, Review,
+  Tags), plus test rate-limit protection and improved logging. The Observation
+  Window replaces the current menuet.Alert-based dialogs and serves all 4
+  capture channels (YouTube, Screenshot, Impulse, Audio Import).
+
+constraints:
+  - Go 1.21+ with cgo enabled, macOS (darwin) only for Cocoa UI
+  - Observation Window built as NSWindow via Objective-C cgo (same pattern as image_darwin.go)
+  - Must work with existing menuet-based menu bar app (pkg/menubar)
+  - All ER1 properties configurable via .env (already in .env.example)
+  - Implementation order: REQ-3+4 first, then REQ-1, then REQ-5, then Channel A, then REQ-2
+  - Channel B (Screenshot) is the reference implementation for the unified flow
+  - No external GUI frameworks — pure Cocoa via cgo
+  - Graceful degradation: recording/whisper failures must not block the pipeline
+  - Drafts saved to ~/.m3c-tools/drafts/ on Cancel (not discarded)
+
+acceptance_criteria:
+  # Phase 1: Quick wins
+  - id: AC-01
+    description: >
+      YT API rate limit protection: only TestTranscript runs by default in
+      make test-network. All other YT API tests require --yt-calls-enforce-all flag.
+    verification: >
+      Run `make test-network` — only 1 YT API call. Run with flag — all YT tests execute.
+
+  - id: AC-02
+    description: >
+      Transcript fetch logging shows START with video ID and language, DONE with
+      snippet count, char count, language name, generated flag, and elapsed time.
+      On failure, shows precise error with HTTP status or rate limit context.
+    verification: >
+      Fetch a transcript via menubar, check /tmp/m3c-tools.log for structured
+      START/DONE or FAILED log lines with all required fields.
+
+  # Phase 2: Observation Window — Record Tab
+  - id: AC-03
+    description: >
+      pkg/menubar/observation_darwin.go exposes ShowObservationWindow() that
+      creates a native NSWindow with 3 tabs (Record, Review, Tags). Record tab
+      displays an image via NSImageView scaled to max 50% screen width/height.
+    verification: >
+      Call ShowObservationWindow with a test image. Window appears with image
+      correctly scaled. Tab bar shows Record/Review/Tags.
+
+  - id: AC-04
+    description: >
+      Record tab shows a live VU meter (NSProgressIndicator or custom bar)
+      updating from microphone audio levels during recording, plus an elapsed
+      timer label updating every second.
+    verification: >
+      Start recording in Observation Window. VU meter animates with voice input.
+      Timer counts up (0:00, 0:01, ...). Silent input shows low/zero VU level.
+
+  - id: AC-05
+    description: >
+      Record tab has a Stop Recording button. Clicking it stops the recording
+      and transitions to Review tab. Closing the window (red X) stops recording
+      and shows a confirmation dialog "Keep this recording?" with Keep/Discard.
+    verification: >
+      Click Stop — recording stops, Review tab activates. Close window during
+      recording — confirmation dialog appears. Keep proceeds to Review, Discard
+      returns to idle.
+
+  # Phase 3: Observation Window — Review + Tags Tabs
+  - id: AC-06
+    description: >
+      Review tab shows metadata header (source, language, snippet count, char
+      count, recording duration, file size) and a scrollable NSTextView with
+      the full transcript/transcription text.
+    verification: >
+      After recording+whisper, Review tab shows metadata and scrollable text.
+      Long transcripts (28K+ chars) are scrollable without UI freeze.
+
+  - id: AC-07
+    description: >
+      Tags tab shows pre-filled tags based on channel type (Screenshot: "idea",
+      timestamp; YouTube: video ID, "youtube"; etc.) in an editable NSTextField.
+      Store button uploads to ER1 (queues on failure). Cancel button saves all
+      captured data to ~/.m3c-tools/drafts/<timestamp>/ and returns to idle.
+    verification: >
+      Screenshot channel shows "idea" tag pre-filled. Edit tags, click Store —
+      ER1 upload fires. Click Cancel — files saved to drafts dir, menu returns
+      to idle status.
+
+  # Phase 4: Wire Channel A (YouTube)
+  - id: AC-08
+    description: >
+      YouTube transcript fetch (Channel A) opens the Observation Window after
+      fetch. Record tab shows video thumbnail. Review tab shows transcript with
+      metadata. Tags tab pre-fills video ID + "youtube".
+    verification: >
+      Fetch transcript via menubar. Observation Window opens with thumbnail.
+      Record voice note describing video. Review shows transcript. Tags show
+      video ID + youtube. Store uploads composite to ER1.
+
+  # Phase 5: Audio Import (Channel D)
+  - id: AC-09
+    description: >
+      import-audio CLI and menubar "Batch Import" scan IMPORT_AUDIO_SOURCE for
+      mp3/wav files, show tracked/untracked status, parse filename tags using
+      pattern "<tags> YYYY-MM-DD HH-MM-SS.ext". Each file flows through the
+      unified pipeline (Observation Window steps 2-4).
+    verification: >
+      Place test audio files in source folder. Run import — files listed with
+      tracked/untracked status. Select file — Observation Window opens.
+      Tags pre-filled from filename. Store uploads to ER1 with correct
+      content_type and context_id from env config.
+
+  - id: AC-10
+    description: >
+      All audio import properties are configurable via .env: IMPORT_AUDIO_SOURCE,
+      IMPORT_AUDIO_DEST, IMPORT_CONTENT_TYPE, IMPORT_TRACKER_FILE. The tracker
+      file records processed filenames to prevent re-import.
+    verification: >
+      Set custom values in .env. Import uses configured paths. Re-run import —
+      previously processed files shown as "tracked" and skipped.
+
+ontology_schema:
+  name: ObservationPipeline
+  description: Unified capture pipeline with Observation Window UI
+  fields:
+    - name: observation_window
+      type: object
+      description: Native NSWindow with 3 tabs for the capture flow
+      fields:
+        - name: record_tab
+          type: object
+          description: Image preview + VU meter + timer + Stop button
+        - name: review_tab
+          type: object
+          description: Metadata header + scrollable transcript
+        - name: tags_tab
+          type: object
+          description: Pre-filled editable tags + Store/Cancel
+    - name: capture_channels
+      type: array
+      description: "4 channels: YouTube, Screenshot, Impulse, AudioImport"
+    - name: drafts_store
+      type: object
+      description: "~/.m3c-tools/drafts/ for cancelled observations"
+
+evaluation_principles:
+  - principle: Native UX quality
+    weight: 0.3
+    description: Cocoa window feels native, responsive, correct image scaling
+  - principle: Pipeline completeness
+    weight: 0.25
+    description: All 4 steps work end-to-end for Channel B (Screenshot)
+  - principle: Graceful degradation
+    weight: 0.2
+    description: Recording/whisper/ER1 failures handled without crashes
+  - principle: Configurability
+    weight: 0.15
+    description: All properties in .env, no hardcoded values
+  - principle: Test safety
+    weight: 0.1
+    description: No accidental YT API rate limiting in test runs
+
+exit_conditions:
+  - All 10 acceptance criteria pass verification
+  - Channel B (Screenshot) works end-to-end through Observation Window
+  - make build succeeds with no compilation errors
+  - make test-unit passes (existing tests not broken)
+
+metadata:
+  version: "1.0"
+  timestamp: "2026-03-10T07:30:00Z"
+  ambiguity_score: 0.12
+  interview_source: "agent-based (Path B), 9 questions"
+  implementation_phases: 5
