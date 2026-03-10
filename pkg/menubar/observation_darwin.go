@@ -374,6 +374,48 @@ extern void goObservationCancelCallback(char *tags, char *notes,
                                          char *contentType, char *imagePath);
 extern void goObservationStoreCallback(char *tags, char *notes,
                                         char *contentType, char *imagePath);
+extern void goObservationStopCallback(int elapsedSeconds);
+
+// ---------- Tab Switching ----------
+
+// switchToTab switches the NSTabView to the given tab index (0=Record, 1=Review, 2=Tags).
+// Safe to call from any thread — dispatches to the main thread.
+static void switchToTab(int tabIndex) {
+	dispatch_async(dispatch_get_main_queue(), ^{
+		if (g_obsTabView != nil) {
+			NSInteger count = [g_obsTabView numberOfTabViewItems];
+			if (tabIndex >= 0 && tabIndex < count) {
+				[g_obsTabView selectTabViewItemAtIndex:tabIndex];
+			}
+		}
+	});
+}
+
+// ---------- Tags Field Update ----------
+
+// setObservationTags updates the tags text field in the Tags tab.
+// Thread-safe: dispatches to the main thread.
+static void setObservationTags(const char *tags) {
+	if (tags == NULL) return;
+	NSString *nsTags = [NSString stringWithUTF8String:tags];
+	dispatch_async(dispatch_get_main_queue(), ^{
+		if (g_obsTagsField != nil) {
+			[g_obsTagsField setStringValue:nsTags];
+		}
+	});
+}
+
+// setObservationTitle updates the title text field in the Tags tab.
+// Thread-safe: dispatches to the main thread.
+static void setObservationTitle(const char *title) {
+	if (title == NULL) return;
+	NSString *nsTitle = [NSString stringWithUTF8String:title];
+	dispatch_async(dispatch_get_main_queue(), ^{
+		if (g_obsTitleField != nil) {
+			[g_obsTitleField setStringValue:nsTitle];
+		}
+	});
+}
 
 // ---------- Helper: read UI fields ----------
 
@@ -443,6 +485,18 @@ static void cancelClickedIMP(id self, SEL _cmd, id sender) {
 	closeObsWindow();
 }
 
+// stopClickedIMP is the IMP for the Stop Recording button's action method.
+// Stops the elapsed timer, resets the VU meter, switches to the Review tab,
+// and notifies Go via goObservationStopCallback with the elapsed seconds.
+static void stopClickedIMP(id self, SEL _cmd, id sender) {
+	(void)self; (void)_cmd; (void)sender;
+	int elapsed = getElapsedSeconds();
+	stopRecordingTimer();
+	resetVUMeter();
+	switchToTab(1); // Switch to Review tab
+	goObservationStopCallback(elapsed);
+}
+
 // storeClickedIMP is the IMP for the Store button's action method.
 static void storeClickedIMP(id self, SEL _cmd, id sender) {
 	(void)self; (void)_cmd; (void)sender;
@@ -458,12 +512,56 @@ static void storeClickedIMP(id self, SEL _cmd, id sender) {
 	closeObsWindow();
 }
 
-// Singleton handler instances for buttons (dynamically registered classes).
-static id g_cancelHandler = nil;
-static id g_storeHandler  = nil;
+// Singleton handler instances for buttons and window delegate (dynamically registered).
+static id g_cancelHandler   = nil;
+static id g_storeHandler    = nil;
+static id g_stopHandler     = nil;
+static id g_windowDelegate  = nil;
 
-// ensureHandlerClasses registers the ObsCancelHandler and ObsStoreHandler
-// classes with the ObjC runtime if they haven't been registered yet.
+// ---------- Window Delegate: close (red X) interception ----------
+
+// windowShouldCloseIMP intercepts the window close button (red X).
+// It stops any active recording, then shows a Keep/Discard confirmation dialog.
+// Keep  → saves draft via goObservationCancelCallback, then closes.
+// Discard → closes the window without saving.
+// Returns NO to prevent immediate close; the handler closes the window itself.
+static BOOL windowShouldCloseIMP(id self, SEL _cmd, id sender) {
+	(void)self; (void)_cmd; (void)sender;
+
+	// Stop any active recording timer and VU meter first.
+	stopRecordingTimer();
+	resetVUMeter();
+
+	// Build a Keep/Discard confirmation alert.
+	NSAlert *alert = [[NSAlert alloc] init];
+	[alert setMessageText:@"Close Observation Window?"];
+	[alert setInformativeText:@"Would you like to keep your work as a draft, or discard it?"];
+	[alert setAlertStyle:NSAlertStyleWarning];
+	[alert addButtonWithTitle:@"Keep as Draft"];   // NSAlertFirstButtonReturn
+	[alert addButtonWithTitle:@"Discard"];          // NSAlertSecondButtonReturn
+
+	NSModalResponse response = [alert runModal];
+
+	if (response == NSAlertFirstButtonReturn) {
+		// Keep: read fields, save draft via the cancel callback, then close.
+		NSString *tags, *notes, *contentType, *imgPath;
+		readObsFields(&tags, &notes, &contentType, &imgPath);
+
+		goObservationCancelCallback(
+			(char *)[tags UTF8String],
+			(char *)[notes UTF8String],
+			(char *)[contentType UTF8String],
+			(char *)[imgPath UTF8String]
+		);
+	}
+	// Both Keep and Discard: close the window and clean up.
+	closeObsWindow();
+	return NO; // We already closed it; prevent double-close.
+}
+
+// ensureHandlerClasses registers ObsCancelHandler, ObsStoreHandler,
+// ObsStopHandler, and ObsWindowDelegate classes with the ObjC runtime
+// if they haven't been registered yet.
 static void ensureHandlerClasses(void) {
 	static BOOL registered = NO;
 	if (registered) return;
@@ -483,6 +581,27 @@ static void ensureHandlerClasses(void) {
 		class_addMethod(storeCls, @selector(storeClicked:),
 			(IMP)storeClickedIMP, "v@:@");
 		objc_registerClassPair(storeCls);
+	}
+
+	// Register ObsStopHandler class with stopClicked: method.
+	Class stopCls = objc_allocateClassPair([NSObject class], "ObsStopHandler", 0);
+	if (stopCls != Nil) {
+		class_addMethod(stopCls, @selector(stopClicked:),
+			(IMP)stopClickedIMP, "v@:@");
+		objc_registerClassPair(stopCls);
+	}
+
+	// Register ObsWindowDelegate class implementing NSWindowDelegate's
+	// windowShouldClose: to intercept the red X close button.
+	Class delegateCls = objc_allocateClassPair([NSObject class], "ObsWindowDelegate", 0);
+	if (delegateCls != Nil) {
+		Protocol *winDelegateProto = @protocol(NSWindowDelegate);
+		if (winDelegateProto != nil) {
+			class_addProtocol(delegateCls, winDelegateProto);
+		}
+		class_addMethod(delegateCls, @selector(windowShouldClose:),
+			(IMP)windowShouldCloseIMP, "c@:@");
+		objc_registerClassPair(delegateCls);
 	}
 }
 
@@ -504,6 +623,26 @@ static id getOrCreateStoreHandler(void) {
 		g_storeHandler = [[cls alloc] init];
 	}
 	return g_storeHandler;
+}
+
+// getOrCreateStopHandler returns the singleton stop handler instance.
+static id getOrCreateStopHandler(void) {
+	ensureHandlerClasses();
+	if (g_stopHandler == nil) {
+		Class cls = objc_getClass("ObsStopHandler");
+		g_stopHandler = [[cls alloc] init];
+	}
+	return g_stopHandler;
+}
+
+// getOrCreateWindowDelegate returns the singleton window delegate instance.
+static id getOrCreateWindowDelegate(void) {
+	ensureHandlerClasses();
+	if (g_windowDelegate == nil) {
+		Class cls = objc_getClass("ObsWindowDelegate");
+		g_windowDelegate = [[cls alloc] init];
+	}
+	return g_windowDelegate;
 }
 
 // ---------- Observation Window (Cocoa) ----------
@@ -544,6 +683,9 @@ static int showObservationWindow(const char *title, const char *imagePath, const
 								  : @"Observation Window";
 		[window setTitle:nsTitle];
 		[window setReleasedWhenClosed:NO];
+
+		// Set window delegate to intercept close (red X) button.
+		[window setDelegate:getOrCreateWindowDelegate()];
 
 		// Store global window reference.
 		g_obsWindow = window;
@@ -668,13 +810,13 @@ static int showObservationWindow(const char *title, const char *imagePath, const
 		g_timerLabel = timerLabel;
 		g_elapsedSeconds = 0;
 
-		// -- Stop Recording button (initially hidden, placeholder) --
-		NSButton *stopBtn = [NSButton buttonWithTitle:@"🛑 Stop Recording"
-											   target:nil
-											   action:nil];
+		// -- Stop Recording button (wired to ObsStopHandler) --
+		NSButton *stopBtn = [NSButton buttonWithTitle:@"⏹ Stop Recording"
+											   target:getOrCreateStopHandler()
+											   action:@selector(stopClicked:)];
 		[stopBtn setFrame:NSMakeRect(winW - 170, 10, 150, 30)];
 		[stopBtn setAutoresizingMask:(NSViewMinXMargin | NSViewMaxYMargin)];
-		[stopBtn setEnabled:NO]; // placeholder — enabled when recording starts
+		[stopBtn setEnabled:YES];
 		[recordView addSubview:stopBtn];
 
 		[recordTab setView:recordView];
@@ -1023,11 +1165,19 @@ type CancelCallback func(draftPath string)
 // image path from the Tags tab fields.
 type StoreCallback func(tags, notes, contentType, imagePath string)
 
+// StopRecordingCallback is called when the user clicks "Stop Recording" in
+// the Record tab. It receives the elapsed recording time in seconds. The
+// callback should stop any active audio recording and initiate whisper
+// transcription. The UI has already switched to the Review tab.
+type StopRecordingCallback func(elapsedSeconds int)
+
 var (
 	cancelMu       sync.Mutex
 	cancelCallback CancelCallback
 	storeMu        sync.Mutex
 	storeCallback  StoreCallback
+	stopMu         sync.Mutex
+	stopCallback   StopRecordingCallback
 )
 
 // SetObservationCancelCallback registers a function that is called after
@@ -1046,6 +1196,17 @@ func SetObservationStoreCallback(cb StoreCallback) {
 	storeMu.Lock()
 	defer storeMu.Unlock()
 	storeCallback = cb
+}
+
+// SetStopRecordingCallback registers a function that is called when the
+// user clicks "Stop Recording" in the Record tab. The callback receives
+// the elapsed recording time in seconds and should stop the active
+// recording, then start whisper transcription. The UI has already
+// switched to the Review tab when this callback fires.
+func SetStopRecordingCallback(cb StopRecordingCallback) {
+	stopMu.Lock()
+	defer stopMu.Unlock()
+	stopCallback = cb
 }
 
 //export goObservationCancelCallback
@@ -1097,6 +1258,23 @@ func goObservationCancelCallback(cTags, cNotes, cContentType, cImagePath *C.char
 	cancelMu.Unlock()
 	if cb != nil {
 		cb(path)
+	}
+}
+
+//export goObservationStopCallback
+func goObservationStopCallback(cElapsedSeconds C.int) {
+	elapsed := int(cElapsedSeconds)
+	log.Printf("[observation] stop recording: elapsed=%ds", elapsed)
+
+	stopMu.Lock()
+	cb := stopCallback
+	stopMu.Unlock()
+	if cb != nil {
+		// Run in a goroutine so the Cocoa UI thread is not blocked during
+		// recording finalization and whisper transcription.
+		go cb(elapsed)
+	} else {
+		log.Printf("[observation] WARNING: no stop callback registered — recording not processed")
 	}
 }
 
@@ -1280,9 +1458,10 @@ func ShowObservationWindowForProgress(imagePath string) bool {
 }
 
 // ShowObservationWindowForImpulse is a convenience wrapper for Channel C
-// (Quick capture). Tags are pre-filled with "impulse".
-func ShowObservationWindowForImpulse() bool {
-	return ShowObservationWindow("Observation — Impulse", "", ChannelTypeImpulse)
+// (Quick capture). Tags are pre-filled with "impulse". If imagePath is
+// non-empty, the region screenshot is displayed in the Record tab.
+func ShowObservationWindowForImpulse(imagePath string) bool {
+	return ShowObservationWindow("Observation — Impulse", imagePath, ChannelTypeImpulse)
 }
 
 // ShowObservationWindowForImport is a convenience wrapper for Channel D
@@ -1345,6 +1524,20 @@ func ResetVUMeter() {
 	C.resetVUMeter()
 }
 
+// SwitchToTab switches the Observation Window to the specified tab.
+// Safe to call from any goroutine — dispatches to the main thread internally.
+// This is a no-op if the Observation Window has not been shown yet.
+func SwitchToTab(tab ObservationTab) {
+	C.switchToTab(C.int(tab))
+}
+
+// SwitchToReviewTab is a convenience function that switches the Observation
+// Window to the Review tab (tab index 1). Typically called after stopping
+// a recording to show the transcript processing status.
+func SwitchToReviewTab() {
+	SwitchToTab(TabReview)
+}
+
 // LargeTranscriptThreshold is the character count above which transcript text
 // is loaded incrementally in chunks to avoid UI freeze. Exported for testing.
 const LargeTranscriptThreshold = 28000
@@ -1374,4 +1567,65 @@ func SetReviewTranscript(text, statusText string) {
 	}
 
 	C.setReviewTranscript(cText, cStatus)
+}
+
+// SetObservationTags updates the tags field in the Tags tab of the
+// Observation Window. This allows programmatic tag override after
+// the window has been created (e.g., to include a YouTube video ID).
+// Thread-safe: dispatches to the main thread internally.
+// This is a no-op if the Observation Window has not been shown yet.
+func SetObservationTags(tags string) {
+	if tags == "" {
+		return
+	}
+	cTags := C.CString(tags)
+	defer C.free(unsafe.Pointer(cTags))
+	C.setObservationTags(cTags)
+}
+
+// SetObservationTitle updates the title field in the Tags tab of the
+// Observation Window. Thread-safe: dispatches to the main thread internally.
+// This is a no-op if the Observation Window has not been shown yet.
+func SetObservationTitle(title string) {
+	if title == "" {
+		return
+	}
+	cTitle := C.CString(title)
+	defer C.free(unsafe.Pointer(cTitle))
+	C.setObservationTitle(cTitle)
+}
+
+// ShowObservationWindowForYouTube opens the Observation Window for a YouTube
+// transcript fetch. It displays the video thumbnail in the Record tab,
+// populates Review metadata, sets the transcript in the Review tab, and
+// pre-fills tags with "progress, youtube, <videoID>" in the Tags tab.
+//
+// Parameters:
+//   - thumbnailPath: path to the saved thumbnail image (displayed in Record tab)
+//   - videoID: the YouTube video ID (added to tags and title)
+//   - meta: review metadata (language, snippet count, char count, etc.)
+//   - transcriptText: the formatted transcript text for the Review tab
+func ShowObservationWindowForYouTube(thumbnailPath, videoID string, meta *ReviewMetadata, transcriptText string) bool {
+	title := fmt.Sprintf("Observation — YouTube [%s]", videoID)
+	ok := ShowObservationWindowWithMeta(title, thumbnailPath, ChannelTypeProgress, meta)
+	if !ok {
+		return false
+	}
+
+	// Pre-fill tags with video ID + youtube
+	tags := fmt.Sprintf("progress, youtube, %s", videoID)
+	SetObservationTags(tags)
+
+	// Set the video ID as the observation title
+	SetObservationTitle(videoID)
+
+	// Set transcript text in the Review tab
+	if transcriptText != "" {
+		statusText := fmt.Sprintf("Transcript loaded — %d chars", len(transcriptText))
+		SetReviewTranscript(transcriptText, statusText)
+		// Switch to the Review tab to show the transcript
+		SwitchToReviewTab()
+	}
+
+	return true
 }

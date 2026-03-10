@@ -1134,14 +1134,10 @@ func menubarUploadER1(videoID string) (*menubar.ER1UploadResult, error) {
 	}, nil
 }
 
-// menubarCaptureScreenshot performs the full Idea observation flow:
-// 1. Clipboard-first screenshot capture
-// 2. Record voice note (5s via microphone)
-// 3. Transcribe voice note via whisper
-// 4. Build composite doc (screenshot + transcription)
-// 5. Upload to ER1
+// menubarCaptureScreenshot performs the Idea observation flow via the
+// Observation Window: capture screenshot → show in Record tab → record
+// voice note with VU meter → whisper transcribe → Review tab → Store/Cancel.
 func menubarCaptureScreenshot(app *menubar.App) {
-	// Step 1: Capture screenshot
 	app.SetStatus(menubar.StatusRecording)
 	imgPath, err := screenshot.CaptureClipboardFirst(os.TempDir())
 	if err != nil {
@@ -1158,42 +1154,15 @@ func menubarCaptureScreenshot(app *menubar.App) {
 		return
 	}
 
-	// Step 2: Record voice note
-	audioData, transcribedText := menubarRecordAndTranscribe(app, "screenshot")
-
-	// Step 3: Build composite doc
-	now := time.Now()
-	ts := now.Format("20060102_150405")
-	doc := &impression.CompositeDoc{
-		ImpressionText: transcribedText,
-		ObsType:        impression.Idea,
-		Timestamp:      now,
-	}
-	composite := doc.Build()
-
-	// Step 4: Upload to ER1
-	app.SetStatus(menubar.StatusUploading)
-	tags := impression.BuildTags(impression.Idea)
-	payload := &er1.UploadPayload{
-		TranscriptData:     []byte(composite),
-		TranscriptFilename: fmt.Sprintf("idea_%s.txt", ts),
-		AudioData:          audioData,
-		AudioFilename:      fmt.Sprintf("idea_%s.wav", ts),
-		ImageData:          imgData,
-		ImageFilename:      filepath.Base(imgPath),
-		Tags:               tags,
-	}
-	menubarUploadPayload(app, "screenshot", payload, tags)
+	menubar.ShowObservationWindowForScreenshot(imgPath)
+	menubar.StartRecordingTimer()
+	observationRecordAndUpload(app, "screenshot", imgPath, imgData, impression.Idea)
 }
 
-// menubarQuickImpulse performs the full Impulse observation flow:
-// 1. Interactive region screenshot
-// 2. Record voice note (5s via microphone)
-// 3. Transcribe voice note via whisper
-// 4. Build composite doc (screenshot + transcription)
-// 5. Upload to ER1
+// menubarQuickImpulse performs the Impulse observation flow via the
+// Observation Window: region screenshot → show in Record tab → record
+// voice note with VU meter → whisper transcribe → Review tab → Store/Cancel.
 func menubarQuickImpulse(app *menubar.App) {
-	// Step 1: Region screenshot
 	app.SetStatus(menubar.StatusRecording)
 	imgPath, err := screenshot.Capture(screenshot.Options{
 		Mode:   screenshot.Region,
@@ -1208,134 +1177,131 @@ func menubarQuickImpulse(app *menubar.App) {
 
 	imgData, _ := os.ReadFile(imgPath)
 
-	// Step 2: Record voice note
-	audioData, transcribedText := menubarRecordAndTranscribe(app, "impulse")
-
-	// Step 3: Build composite doc
-	now := time.Now()
-	ts := now.Format("20060102_150405")
-	doc := &impression.CompositeDoc{
-		ImpressionText: transcribedText,
-		ObsType:        impression.Impulse,
-		Timestamp:      now,
-	}
-	composite := doc.Build()
-
-	// Step 4: Upload to ER1
-	app.SetStatus(menubar.StatusUploading)
-	tags := impression.BuildTags(impression.Impulse)
-	payload := &er1.UploadPayload{
-		TranscriptData:     []byte(composite),
-		TranscriptFilename: fmt.Sprintf("impulse_%s.txt", ts),
-		AudioData:          audioData,
-		AudioFilename:      fmt.Sprintf("impulse_%s.wav", ts),
-		ImageData:          imgData,
-		ImageFilename:      filepath.Base(imgPath),
-		Tags:               tags,
-	}
-	menubarUploadPayload(app, "impulse", payload, tags)
+	menubar.ShowObservationWindowForImpulse(imgPath)
+	menubar.StartRecordingTimer()
+	observationRecordAndUpload(app, "impulse", imgPath, imgData, impression.Impulse)
 }
 
-// menubarRecordAndTranscribe shows a recording confirmation dialog, records
-// a voice note from the microphone (user-controlled stop), and transcribes
-// it via whisper. Returns audio WAV bytes and transcribed text.
-// On any failure or if the user skips, returns nil/empty (non-fatal).
-func menubarRecordAndTranscribe(app *menubar.App, label string) ([]byte, string) {
-	const maxRecordSeconds = 120 // safety cap
+// observationRecordAndUpload starts background recording with VU meter and
+// registers the Stop/Store/Cancel callbacks for the Observation Window pipeline.
+// The Observation Window must already be shown before calling this function.
+func observationRecordAndUpload(app *menubar.App, label string, imgPath string, imgData []byte, obsType impression.ObservationType) {
+	const maxRecordSeconds = 120
 
-	// Show recording confirmation dialog
-	if !app.ConfirmRecording() {
-		log.Printf("[%s] user skipped voice recording", label)
-		return nil, ""
-	}
-
-	// Start recording in a goroutine with a stop channel
-	app.SetStatus(menubar.StatusRecording)
-	log.Printf("[%s] recording voice note (user-controlled stop, max %ds)...", label, maxRecordSeconds)
-
-	stopCh := make(chan struct{})
+	// Shared state written by stop callback, read by store callback.
 	var audioData []byte
-	var recErr error
-	done := make(chan struct{})
+	var transcribedText string
 
+	// Context for cancelling the recording from any callback.
+	ctx, cancel := context.WithCancel(context.Background())
+	recDone := make(chan struct{})
+
+	// Start recording in background with VU meter updates.
 	go func() {
-		audioData, recErr = recorder.RecordTimedWithStop(stopCh, maxRecordSeconds)
-		close(done)
+		defer close(recDone)
+		samples, recErr := recorder.RecordWithLevels(ctx.Done(), maxRecordSeconds, func(level recorder.AudioLevel) {
+			menubar.UpdateVUMeterLevel(float32(level.RMS))
+		})
+		if recErr != nil {
+			log.Printf("[%s] recording failed: %v", label, recErr)
+			return
+		}
+		audioData = recorder.EncodeWAV(samples)
 	}()
 
-	// Show blocking "Stop Recording" dialog — returns when user clicks Stop
-	app.ShowStopRecording()
+	// Stop callback: stop recording → whisper transcribe → update Review tab.
+	menubar.SetStopRecordingCallback(func(elapsed int) {
+		cancel()
+		<-recDone
 
-	// Signal the recorder to stop
-	close(stopCh)
-	<-done // wait for recorder goroutine to finish
+		if len(audioData) == 0 {
+			menubar.SetReviewTranscript("No audio recorded.", "Recording failed")
+			return
+		}
 
-	if recErr != nil {
-		log.Printf("[%s] recording failed: %v (continuing without audio)", label, recErr)
-		app.Notify("Recording Failed", fmt.Sprintf("Error: %v", recErr))
-		return nil, ""
-	}
+		// Log recording details
+		wavSize := len(audioData)
+		pcmBytes := wavSize - 44
+		if pcmBytes < 0 {
+			pcmBytes = 0
+		}
+		sampleCount := pcmBytes / (recorder.BitsPerSample / 8)
+		duration := float64(sampleCount) / float64(recorder.SampleRate)
+		samples := recorder.DecodePCM16(audioData[44:])
+		stats := recorder.Stats(samples)
+		log.Printf("[%s] recorded %.1fs (%d bytes, peak=%d)", label, duration, wavSize, stats.PeakAmplitude)
 
-	// Compute recording details from WAV data (44-byte header + PCM)
-	wavSize := len(audioData)
-	pcmBytes := wavSize - 44 // WAV header is 44 bytes
-	if pcmBytes < 0 {
-		pcmBytes = 0
-	}
-	sampleCount := pcmBytes / (recorder.BitsPerSample / 8)
-	duration := float64(sampleCount) / float64(recorder.SampleRate)
+		// Write WAV to temp file for whisper
+		wavPath := filepath.Join(os.TempDir(), fmt.Sprintf("m3c-%s-%d.wav", label, time.Now().UnixNano()))
+		if err := os.WriteFile(wavPath, audioData, 0644); err != nil {
+			log.Printf("[%s] write WAV failed: %v", label, err)
+			menubar.SetReviewTranscript("Could not save audio for transcription.", "Error")
+			return
+		}
+		defer os.Remove(wavPath)
 
-	// Decode samples for peak amplitude
-	samples := recorder.DecodePCM16(audioData[44:])
-	stats := recorder.Stats(samples)
+		// Transcribe via whisper
+		menubar.SetReviewTranscript("Transcribing...", "Whisper processing")
+		model := os.Getenv("YT_WHISPER_MODEL")
+		if model == "" {
+			model = "base"
+		}
+		language := os.Getenv("YT_WHISPER_LANGUAGE")
 
-	log.Printf("[%s] recorded %.1fs (%d bytes, peak=%d)", label, duration, wavSize, stats.PeakAmplitude)
+		log.Printf("[%s] whisper START: file=%s model=%s language=%q", label, wavPath, model, language)
+		whisperStart := time.Now()
+		text, whisperErr := whisper.TranscribeText(wavPath, model, language)
+		whisperElapsed := time.Since(whisperStart)
 
-	// Show recording details dialog
-	sizeKB := float64(wavSize) / 1024.0
-	peakPct := float64(stats.PeakAmplitude) / 32768.0 * 100
-	details := fmt.Sprintf(
-		"Duration: %.1f seconds\nFile size: %.1f KB\nSample rate: %d Hz\nBit depth: %d-bit\nChannels: %d (mono)\nSamples: %d\nPeak amplitude: %d (%.1f%%)",
-		duration, sizeKB, recorder.SampleRate, recorder.BitsPerSample, recorder.Channels,
-		sampleCount, stats.PeakAmplitude, peakPct,
-	)
-	if stats.PeakAmplitude < 100 {
-		details += "\n\n⚠️ Very low audio levels — check microphone permissions"
-	}
-	app.ShowRecordingDetails(details)
+		if whisperErr != nil {
+			log.Printf("[%s] whisper FAILED after %s: %v", label, whisperElapsed, whisperErr)
+			menubar.SetReviewTranscript("Transcription failed: "+whisperErr.Error(), "Failed")
+			return
+		}
 
-	// Write WAV to temp file for whisper
-	wavPath := filepath.Join(os.TempDir(), fmt.Sprintf("m3c-%s-%d.wav", label, time.Now().UnixNano()))
-	if err := os.WriteFile(wavPath, audioData, 0644); err != nil {
-		log.Printf("[%s] write WAV failed: %v", label, err)
-		return audioData, ""
-	}
-	defer os.Remove(wavPath)
+		transcribedText = text
+		log.Printf("[%s] whisper DONE in %s: %d chars", label, whisperElapsed, len(text))
+		log.Printf("[%s] transcription: %q", label, text)
+		statusText := fmt.Sprintf("Transcription — %d chars in %s", len(text), whisperElapsed.Round(time.Millisecond))
+		menubar.SetReviewTranscript(text, statusText)
+	})
 
-	// Transcribe via whisper
-	app.SetStatus(menubar.StatusFetching)
-	model := os.Getenv("YT_WHISPER_MODEL")
-	if model == "" {
-		model = "base"
-	}
-	language := os.Getenv("YT_WHISPER_LANGUAGE")
+	// Store callback: build composite doc + upload to ER1.
+	menubar.SetObservationStoreCallback(func(tags, notes, contentType, imagePath string) {
+		app.SetStatus(menubar.StatusUploading)
+		now := time.Now()
+		ts := now.Format("20060102_150405")
 
-	log.Printf("[%s] whisper START: file=%s model=%s language=%q", label, wavPath, model, language)
-	whisperStart := time.Now()
+		doc := &impression.CompositeDoc{
+			ImpressionText: transcribedText,
+			ObsType:        obsType,
+			Timestamp:      now,
+		}
+		composite := doc.Build()
 
-	text, err := whisper.TranscribeText(wavPath, model, language)
-	whisperElapsed := time.Since(whisperStart)
+		prefix := "idea"
+		if obsType == impression.Impulse {
+			prefix = "impulse"
+		}
 
-	if err != nil {
-		log.Printf("[%s] whisper FAILED after %s: %v (continuing without transcription)", label, whisperElapsed, err)
-		app.Notify("Whisper Failed", fmt.Sprintf("Error: %v", err))
-		return audioData, ""
-	}
-	log.Printf("[%s] whisper DONE in %s: %d chars transcribed", label, whisperElapsed, len(text))
-	log.Printf("[%s] transcription: %q", label, text)
-	app.Notify("✅ Transcription Complete", fmt.Sprintf("%d characters in %s", len(text), whisperElapsed.Round(time.Millisecond)))
+		payload := &er1.UploadPayload{
+			TranscriptData:     []byte(composite),
+			TranscriptFilename: fmt.Sprintf("%s_%s.txt", prefix, ts),
+			AudioData:          audioData,
+			AudioFilename:      fmt.Sprintf("%s_%s.wav", prefix, ts),
+			ImageData:          imgData,
+			ImageFilename:      filepath.Base(imgPath),
+			Tags:               tags,
+		}
+		menubarUploadPayload(app, label, payload, tags)
+	})
 
-	return audioData, text
+	// Cancel callback: stop recording if still running, set idle.
+	menubar.SetObservationCancelCallback(func(draftPath string) {
+		cancel() // safe to call multiple times
+		log.Printf("[%s] draft saved: %s", label, draftPath)
+		app.SetStatus(menubar.StatusIdle)
+	})
 }
 
 // menubarUploadPayload uploads a payload to ER1, queuing on failure.

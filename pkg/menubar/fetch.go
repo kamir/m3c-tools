@@ -9,6 +9,8 @@ package menubar
 import (
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -99,8 +101,10 @@ func (tf *TranscriptFetcher) Fetch(videoID string) (*FetchResult, error) {
 	}, nil
 }
 
-// FetchAndDisplay fetches a transcript, copies it to the clipboard,
-// updates the App status and history, and sends notifications.
+// FetchAndDisplay fetches a transcript, fetches the video thumbnail, opens
+// the Observation Window with the thumbnail and pre-filled tags (video ID +
+// youtube), copies the transcript to the clipboard, updates the App status
+// and history, and sends notifications.
 // This is the main entry point called from the menu bar action handler.
 func (tf *TranscriptFetcher) FetchAndDisplay(app *App, videoID string) {
 	app.SetStatus(StatusFetching)
@@ -123,6 +127,20 @@ func (tf *TranscriptFetcher) FetchAndDisplay(app *App, videoID string) {
 	// Add to history
 	app.AddHistory(NewHistoryEntry(result.VideoID, result.Flag))
 
+	// Fetch thumbnail and open Observation Window
+	thumbnailPath := tf.fetchAndSaveThumbnail(result.VideoID)
+
+	meta := &ReviewMetadata{
+		Source:       "YouTube",
+		Language:     result.Language,
+		SnippetCount: result.SnippetCount,
+		CharCount:    result.CharCount,
+		Date:         time.Now().Format("2006-01-02 15:04:05"),
+	}
+
+	log.Printf("[menubar] opening observation window video=%s thumbnail=%s", result.VideoID, thumbnailPath)
+	ShowObservationWindowForYouTube(thumbnailPath, result.VideoID, meta, result.Text)
+
 	// Update status
 	app.SetStatus(StatusIdle)
 
@@ -130,6 +148,29 @@ func (tf *TranscriptFetcher) FetchAndDisplay(app *App, videoID string) {
 	app.notify("Transcript Ready",
 		fmt.Sprintf("%s %s — %d snippets, %d chars copied to clipboard",
 			result.Flag, result.VideoID, result.SnippetCount, result.CharCount))
+}
+
+// fetchAndSaveThumbnail downloads the YouTube video thumbnail and saves it
+// to a temporary file. Returns the file path, or empty string if the
+// thumbnail could not be fetched (non-fatal — the window opens without image).
+func (tf *TranscriptFetcher) fetchAndSaveThumbnail(videoID string) string {
+	log.Printf("[menubar] fetching thumbnail for video=%s", videoID)
+	data, err := tf.api.FetchThumbnail(videoID)
+	if err != nil {
+		log.Printf("[menubar] thumbnail fetch failed video=%s error=%v (non-fatal)", videoID, err)
+		return ""
+	}
+
+	// Save to temp file
+	tmpDir := os.TempDir()
+	thumbPath := filepath.Join(tmpDir, fmt.Sprintf("m3c-thumb-%s.jpg", videoID))
+	if err := os.WriteFile(thumbPath, data, 0644); err != nil {
+		log.Printf("[menubar] thumbnail save failed path=%s error=%v (non-fatal)", thumbPath, err)
+		return ""
+	}
+
+	log.Printf("[menubar] thumbnail saved path=%s size=%d bytes", thumbPath, len(data))
+	return thumbPath
 }
 
 // WireToApp returns a Handlers.OnAction callback that dispatches
