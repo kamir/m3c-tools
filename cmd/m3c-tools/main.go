@@ -152,7 +152,8 @@ Commands:
     --silent               Suppress capture sound
     --hide-cursor          Hide cursor in capture
 
-  import-audio <dir>     Scan directory for audio files
+  import-audio <dir>     Scan/import audio files
+    --run                  Import, transcribe, upload, and tag end-to-end
     --extensions           List supported audio extensions
     --compact              Machine-readable output (TSV: status, path, size, tags)
     --db <path>            Tracking DB path (default: ~/.m3c-tools/tracking.db)
@@ -1074,11 +1075,14 @@ func cmdScreenshot(args []string) {
 func cmdImportAudio(args []string) {
 	showExtensions := false
 	compact := false
+	runPipeline := false
 	dbPath := defaultFilesDBPath()
 	dir := ""
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
+		case "--run":
+			runPipeline = true
 		case "--extensions":
 			showExtensions = true
 		case "--compact":
@@ -1108,7 +1112,7 @@ func cmdImportAudio(args []string) {
 	if dir == "" {
 		envDir := os.Getenv("IMPORT_AUDIO_SOURCE")
 		if envDir == "" {
-			fmt.Fprintln(os.Stderr, "Usage: m3c-tools import-audio <directory> [--extensions] [--compact] [--db <path>]")
+			fmt.Fprintln(os.Stderr, "Usage: m3c-tools import-audio <directory> [--run] [--extensions] [--compact] [--db <path>]")
 			fmt.Fprintln(os.Stderr, "  Or set IMPORT_AUDIO_SOURCE environment variable")
 			os.Exit(1)
 		}
@@ -1121,6 +1125,17 @@ func cmdImportAudio(args []string) {
 		if home, err := os.UserHomeDir(); err == nil {
 			dir = filepath.Join(home, dir[2:])
 		}
+	}
+
+	if runPipeline {
+		summary, err := runAudioImportPipeline(dir, dbPath, "", nil)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Import pipeline failed: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Import pipeline complete: imported=%d uploaded=%d failed=%d\n",
+			summary.Imported, summary.Uploaded, summary.Failed)
+		return
 	}
 
 	fmt.Printf("Scanning %s for audio files...\n", dir)
@@ -1156,6 +1171,122 @@ func cmdImportAudio(args []string) {
 	} else {
 		fmt.Print(importer.FormatScanOutput(entries, result.ScannedDir))
 	}
+}
+
+type audioImportRunSummary struct {
+	Scanned  int
+	Imported int
+	Uploaded int
+	Failed   int
+}
+
+func runAudioImportPipeline(sourceDir, dbPath, onlySourcePath string, app *menubar.App) (*audioImportRunSummary, error) {
+	cfg, err := importer.LoadImportConfig()
+	if err != nil {
+		return nil, fmt.Errorf("load import config: %w", err)
+	}
+	if sourceDir != "" {
+		cfg.AudioSource = sourceDir
+	}
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+
+	filesDB, err := tracking.OpenFilesDB(dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("open tracking db: %w", err)
+	}
+	defer filesDB.Close()
+
+	result, err := importer.ImportAudio(cfg, filesDB, nil)
+	if err != nil {
+		return nil, fmt.Errorf("import audio: %w", err)
+	}
+
+	summary := &audioImportRunSummary{
+		Scanned:  result.TotalScanned,
+		Imported: len(result.Imported),
+		Failed:   len(result.Failed),
+	}
+	if len(result.Imported) == 0 {
+		return summary, nil
+	}
+
+	normalizedOnly := strings.TrimSpace(onlySourcePath)
+	er1Cfg := er1.LoadConfig()
+	applyRuntimeER1Context(er1Cfg)
+
+	for _, imp := range result.Imported {
+		if normalizedOnly != "" && !samePath(imp.Source, normalizedOnly) {
+			continue
+		}
+		if app != nil {
+			app.SetStatus(menubar.StatusUploading)
+		}
+
+		audioData, readErr := os.ReadFile(imp.Dest)
+		if readErr != nil {
+			summary.Failed++
+			_ = filesDB.UpdateStatus(imp.Hash, "audio", "failed")
+			log.Printf("[import] failed reading imported audio: %s error=%v", imp.Dest, readErr)
+			continue
+		}
+
+		model := menubarWhisperModel()
+		lang := menubarWhisperLanguage()
+		timeout := menubarWhisperTimeout()
+		log.Printf("[import] whisper START source=%s model=%s language=%s", imp.Source, model, lang)
+		text, txErr := whisper.TranscribeTextWithTimeout(imp.Dest, model, lang, timeout)
+		if txErr != nil {
+			text = fmt.Sprintf("[Transcription failed: %v]", txErr)
+			log.Printf("[import] whisper FAIL source=%s error=%v", imp.Source, txErr)
+		} else {
+			log.Printf("[import] whisper DONE source=%s chars=%d", imp.Source, len(text))
+		}
+
+		now := time.Now()
+		doc := (&impression.CompositeDoc{
+			ObsType:        impression.Import,
+			Timestamp:      now,
+			TranscriptText: strings.TrimSpace(text),
+			ImpressionText: fmt.Sprintf("Imported audio file: %s\nSource: %s\nTags: %s", filepath.Base(imp.Dest), imp.Source, imp.Tags),
+		}).Build()
+
+		payload := &er1.UploadPayload{
+			TranscriptData:     []byte(strings.TrimSpace(doc) + "\n"),
+			TranscriptFilename: fmt.Sprintf("import_%s.txt", now.Format("20060102_150405")),
+			AudioData:          audioData,
+			AudioFilename:      filepath.Base(imp.Dest),
+			ImageData:          nil, // Upload layer injects app-logo placeholder for audio-import.
+			ImageFilename:      "placeholder-logo.png",
+			Tags:               imp.Tags,
+			ContentType:        cfg.ContentType,
+		}
+
+		resp, upErr := er1.Upload(er1Cfg, payload)
+		if upErr != nil {
+			summary.Failed++
+			_ = filesDB.UpdateStatus(imp.Hash, "audio", "failed")
+			_, _ = er1.HandleUploadFailure(er1.DefaultQueuePath(), er1.DefaultMemoryPath(), imp.MemoryID, payload, imp.Tags, upErr)
+			log.Printf("[import] upload FAIL source=%s error=%v", imp.Source, upErr)
+			continue
+		}
+
+		summary.Uploaded++
+		_ = filesDB.UpdateMemoryID(imp.Hash, "audio", resp.DocID)
+		log.Printf("[import] upload DONE source=%s doc_id=%s", imp.Source, resp.DocID)
+	}
+
+	if app != nil {
+		app.SetStatus(menubar.StatusIdle)
+	}
+	return summary, nil
+}
+
+func samePath(a, b string) bool {
+	aa, _ := filepath.Abs(strings.TrimSpace(a))
+	bb, _ := filepath.Abs(strings.TrimSpace(b))
+	return aa != "" && bb != "" && aa == bb
 }
 
 func defaultFilesDBPath() string {
@@ -1205,6 +1336,7 @@ func cmdMenubar(args []string) {
 		OnUploadER1: menubarUploadER1,
 	})
 	app.SetAuthSession(menubar.AuthSession{})
+	startAudioImportListRefresher(app)
 	if ctxID, err := loadPersistedER1Session(); err != nil {
 		log.Printf("[auth] persisted session load failed: %v", err)
 	} else if ctxID != "" {
@@ -1233,6 +1365,8 @@ func cmdMenubar(args []string) {
 			go menubarRecordImpression(app, data)
 		case menubar.ActionQuickImpulse:
 			go menubarQuickImpulse(app)
+		case menubar.ActionBatchImport:
+			go menubarHandleBatchImportAction(app, data)
 		case menubar.ActionLoginER1:
 			go menubarLoginER1(app)
 		case menubar.ActionLogoutER1:
@@ -1242,6 +1376,103 @@ func cmdMenubar(args []string) {
 
 	log.Printf("Launching menu bar app (title=%q, icon=%q, log=%q)", cfg.Title, cfg.IconPath, cfg.LogPath)
 	app.Run()
+}
+
+func startAudioImportListRefresher(app *menubar.App) {
+	refresh := func() {
+		state := buildAudioImportState()
+		app.SetAudioImportState(state)
+	}
+	refresh()
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			refresh()
+		}
+	}()
+}
+
+func buildAudioImportState() menubar.AudioImportState {
+	state := menubar.AudioImportState{
+		UpdatedAt: time.Now(),
+	}
+	cfg, err := importer.LoadImportConfig()
+	if err != nil {
+		state.Error = "import config error"
+		log.Printf("[import] menu refresh config error: %v", err)
+		return state
+	}
+	if strings.TrimSpace(cfg.AudioSource) == "" {
+		state.Error = "IMPORT_AUDIO_SOURCE not set"
+		return state
+	}
+
+	filesDB, dbErr := tracking.OpenFilesDB(defaultFilesDBPath())
+	if dbErr != nil {
+		log.Printf("[import] menu refresh tracking db unavailable: %v", dbErr)
+	}
+	if filesDB != nil {
+		defer filesDB.Close()
+	}
+
+	scan, scanErr := importer.ScanDir(cfg.AudioSource)
+	if scanErr != nil {
+		state.Error = "scan failed"
+		log.Printf("[import] menu refresh scan error: %v", scanErr)
+		return state
+	}
+	entries, entriesErr := importer.BuildFileEntries(scan, importer.StatusCheckerFromDB(filesDB, "audio"))
+	if entriesErr != nil {
+		state.Error = "status build failed"
+		log.Printf("[import] menu refresh status error: %v", entriesErr)
+		return state
+	}
+
+	for _, e := range entries {
+		state.Items = append(state.Items, menubar.AudioImportItem{
+			Path:   e.File.Path,
+			Name:   e.File.Name,
+			Status: string(e.Status),
+			Size:   e.File.Size,
+			Tags:   strings.Join(e.Tags, ","),
+		})
+	}
+	return state
+}
+
+func menubarHandleBatchImportAction(app *menubar.App, data string) {
+	switch strings.TrimSpace(data) {
+	case "__refresh__":
+		app.SetAudioImportState(buildAudioImportState())
+		app.Notify("Audio Import", "List refreshed.")
+		return
+	case "__run_all__", "":
+		app.SetStatus(menubar.StatusUploading)
+		summary, err := runAudioImportPipeline("", defaultFilesDBPath(), "", app)
+		if err != nil {
+			app.SetStatus(menubar.StatusError)
+			app.Notify("Audio Import Failed", err.Error())
+			app.SetAudioImportState(buildAudioImportState())
+			return
+		}
+		app.SetStatus(menubar.StatusIdle)
+		app.Notify("Audio Import", fmt.Sprintf("Imported=%d Uploaded=%d Failed=%d", summary.Imported, summary.Uploaded, summary.Failed))
+		app.SetAudioImportState(buildAudioImportState())
+		return
+	default:
+		app.SetStatus(menubar.StatusUploading)
+		summary, err := runAudioImportPipeline("", defaultFilesDBPath(), data, app)
+		if err != nil {
+			app.SetStatus(menubar.StatusError)
+			app.Notify("Audio Import Failed", err.Error())
+			app.SetAudioImportState(buildAudioImportState())
+			return
+		}
+		app.SetStatus(menubar.StatusIdle)
+		app.Notify("Audio Import", fmt.Sprintf("Imported=%d Uploaded=%d Failed=%d", summary.Imported, summary.Uploaded, summary.Failed))
+		app.SetAudioImportState(buildAudioImportState())
+	}
 }
 
 func menubarLoginER1(app *menubar.App) {
@@ -1268,35 +1499,54 @@ func menubarLoginER1(app *menubar.App) {
 		return
 	}
 	app.Notify("ER1 Login", "Browser opened. Complete login to link account.")
+	deadline := time.NewTimer(2 * time.Minute)
+	defer deadline.Stop()
+	poll := time.NewTicker(1500 * time.Millisecond)
+	defer poll.Stop()
 
-	select {
-	case result := <-resultCh:
-		if result.Err != nil {
-			log.Printf("[auth] callback received error: %v", result.Err)
-			app.Notify("ER1 Login", "Login callback failed.")
+	for {
+		select {
+		case result := <-resultCh:
+			if result.Err != nil {
+				log.Printf("[auth] callback received error: %v", result.Err)
+				app.Notify("ER1 Login", "Login callback failed.")
+				return
+			}
+			ctxID := strings.TrimSpace(result.ContextID)
+			if ctxID == "" {
+				// Fallback: inspect Chrome tabs for memory URLs on ER1 host.
+				ctxID = menubar.SuggestedServiceContextID(baseURL)
+			}
+			if completeER1Login(app, ctxID) {
+				return
+			}
+			log.Printf("[auth] callback received but no context_id yet; continuing tab polling")
+		case <-poll.C:
+			ctxID := menubar.SuggestedServiceContextID(baseURL)
+			if completeER1Login(app, ctxID) {
+				return
+			}
+		case <-deadline.C:
+			log.Printf("[auth] login timed out waiting for callback/context; addr=%s", callbackServer.Addr)
+			app.Notify("ER1 Login", "Timed out waiting for login confirmation.")
 			return
 		}
-		ctxID := strings.TrimSpace(result.ContextID)
-		if ctxID == "" {
-			// Fallback: inspect Chrome tabs for memory URLs on ER1 host.
-			ctxID = menubar.SuggestedServiceContextID(baseURL)
-		}
-		if ctxID == "" {
-			log.Printf("[auth] login callback completed but no context_id detected")
-			app.Notify("ER1 Login", "Login succeeded, but context_id could not be detected.")
-			return
-		}
-		setRuntimeER1Login(ctxID)
-		app.SetAuthSession(menubar.AuthSession{LoggedIn: true, UserID: ctxID})
-		if err := savePersistedER1Session(ctxID); err != nil {
-			log.Printf("[auth] persist session failed: %v", err)
-		}
-		log.Printf("[auth] login success context_id=%s", ctxID)
-		app.Notify("ER1 Login", fmt.Sprintf("Linked account: %s", ctxID))
-	case <-time.After(2 * time.Minute):
-		log.Printf("[auth] login timed out waiting for callback; addr=%s", callbackServer.Addr)
-		app.Notify("ER1 Login", "Timed out waiting for login confirmation.")
 	}
+}
+
+func completeER1Login(app *menubar.App, contextID string) bool {
+	ctxID := strings.TrimSpace(contextID)
+	if ctxID == "" {
+		return false
+	}
+	setRuntimeER1Login(ctxID)
+	app.SetAuthSession(menubar.AuthSession{LoggedIn: true, UserID: ctxID})
+	if err := savePersistedER1Session(ctxID); err != nil {
+		log.Printf("[auth] persist session failed: %v", err)
+	}
+	log.Printf("[auth] login success context_id=%s", ctxID)
+	app.Notify("ER1 Login", fmt.Sprintf("Linked account: %s", ctxID))
+	return true
 }
 
 func menubarLogoutER1(app *menubar.App) {

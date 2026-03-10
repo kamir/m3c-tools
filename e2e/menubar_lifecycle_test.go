@@ -48,6 +48,7 @@ func TestMenubarIntegrationFullLifecycle(t *testing.T) {
 			}, nil
 		},
 	})
+	app.SetAuthSession(menubar.AuthSession{LoggedIn: true, UserID: "ctx-test"})
 
 	// 1. Initial state
 	if app.GetStatus() != menubar.StatusIdle {
@@ -129,6 +130,7 @@ func TestMenubarIntegrationTranscriptFetcherWired(t *testing.T) {
 	app := menubar.NewAppWithConfig(menubar.DefaultConfig(), menubar.Handlers{
 		Notify: func(title, message string) {},
 	})
+	app.SetAuthSession(menubar.AuthSession{LoggedIn: true, UserID: "ctx-test"})
 	tf := menubar.NewTranscriptFetcher()
 
 	var fallbackCalls []menubar.ActionType
@@ -184,11 +186,13 @@ func TestMenubarIntegrationStatusDuringFetch(t *testing.T) {
 // items are present in the built menu.
 func TestMenubarIntegrationMenuItemsComplete(t *testing.T) {
 	app := menubar.NewApp()
+	app.SetAuthSession(menubar.AuthSession{LoggedIn: true, UserID: "ctx-test"})
 	items := app.BuildMenuItems()
 
 	// Note: "Quit" is not listed here because menuet automatically
 	// appends "Start at Login" and "Quit" to root menus at runtime.
 	expectedTexts := []string{
+		"Logout from ER1",
 		"Fetch Transcript...",
 		"Capture Screenshot",
 		"Quick Impulse",
@@ -263,6 +267,7 @@ func TestMenubarIntegrationConcurrentStatusUpdates(t *testing.T) {
 // reflect the correct history count as entries are added.
 func TestMenubarIntegrationHistoryInMenuUpdates(t *testing.T) {
 	app := menubar.NewApp()
+	app.SetAuthSession(menubar.AuthSession{LoggedIn: true, UserID: "ctx-test"})
 
 	// Empty history
 	items := app.BuildMenuItems()
