@@ -90,6 +90,9 @@ func (a *App) Run() {
 		if RegisterImage(iconName, a.Config.IconPath) {
 			state.Image = iconName
 		}
+		// Also set the NSApp icon for Cmd+Tab/Dock when we temporarily switch
+		// to regular app mode while showing the Observation window.
+		_ = SetApplicationIcon(a.Config.IconPath)
 	}
 	mApp.SetMenuState(state)
 
@@ -193,18 +196,28 @@ func (a *App) buildHistoryMenu() menuet.MenuItem {
 // and delegates to the OnAction handler. If no handler is set, it shows
 // a notification and adds a placeholder history entry.
 func (a *App) handleFetchTranscript() {
+	suggested := SuggestedYouTubeVideoID()
+	input := "Paste YouTube video ID or URL"
+	info := "Enter a YouTube video ID or URL:"
+	if suggested != "" {
+		info = fmt.Sprintf("Enter a YouTube video ID or URL:\n\nDetected from Chrome: %s\nLeave field empty to use detected ID.", suggested)
+	}
+
 	response := menuet.App().Alert(menuet.Alert{
 		MessageText:     "YouTube Transcript Grabber",
-		InformativeText: "Enter a YouTube video ID or URL:",
+		InformativeText: info,
 		Buttons:         []string{"Fetch", "Cancel"},
-		Inputs:          []string{"Video ID or URL"},
+		Inputs:          []string{input},
 	})
 
 	if response.Button != 0 { // Cancel
 		return
 	}
 
-	videoID := strings.TrimSpace(response.Inputs[0])
+	videoID := strings.TrimSpace(firstInput(response.Inputs))
+	if videoID == "" && suggested != "" {
+		videoID = suggested
+	}
 	if videoID == "" {
 		menuet.App().Alert(menuet.Alert{
 			MessageText: "No video ID entered.",
@@ -234,18 +247,28 @@ func (a *App) handleUploadER1() {
 		return
 	}
 
+	suggested := SuggestedYouTubeVideoID()
+	input := "Paste YouTube video ID or URL"
+	info := "Enter a YouTube video ID or URL to fetch transcript and upload:"
+	if suggested != "" {
+		info = fmt.Sprintf("Enter a YouTube video ID or URL to fetch transcript and upload:\n\nDetected from Chrome: %s\nLeave field empty to use detected ID.", suggested)
+	}
+
 	response := menuet.App().Alert(menuet.Alert{
 		MessageText:     "Upload to ER1",
-		InformativeText: "Enter a YouTube video ID or URL to fetch transcript and upload:",
+		InformativeText: info,
 		Buttons:         []string{"Upload", "Cancel"},
-		Inputs:          []string{"Video ID or URL"},
+		Inputs:          []string{input},
 	})
 
 	if response.Button != 0 { // Cancel
 		return
 	}
 
-	videoID := strings.TrimSpace(response.Inputs[0])
+	videoID := strings.TrimSpace(firstInput(response.Inputs))
+	if videoID == "" && suggested != "" {
+		videoID = suggested
+	}
 	if videoID == "" {
 		menuet.App().Alert(menuet.Alert{
 			MessageText: "No video ID entered.",
@@ -276,6 +299,13 @@ func (a *App) handleUploadER1() {
 		}
 		a.AddHistory(NewHistoryEntry(result.VideoID, "🚀"))
 	}()
+}
+
+func firstInput(inputs []string) string {
+	if len(inputs) == 0 {
+		return ""
+	}
+	return inputs[0]
 }
 
 // ShowTranscriptResult displays a post-fetch confirmation alert. Returns

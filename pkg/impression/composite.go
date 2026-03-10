@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // ObservationType categorizes the kind of observation.
@@ -86,5 +87,18 @@ func (d *CompositeDoc) Build() string {
 		fmt.Fprintf(&b, "\n=== END IMPORT ===\n")
 	}
 
-	return b.String()
+	return normalizeSectionHeaderIndent(b.String())
+}
+
+// normalizeSectionHeaderIndent removes accidental leading spaces/tabs before
+// section header lines (e.g. "=== SCREENSHOT OBSERVATION ===").
+func normalizeSectionHeaderIndent(doc string) string {
+	lines := strings.Split(doc, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimLeftFunc(line, unicode.IsSpace)
+		if strings.HasPrefix(trimmed, "===") {
+			lines[i] = trimmed
+		}
+	}
+	return strings.Join(lines, "\n")
 }

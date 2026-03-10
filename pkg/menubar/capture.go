@@ -222,20 +222,22 @@ func DefaultCaptureData(channel impression.ObservationType) *CaptureData {
 		Timestamp: time.Now(),
 	}
 
-	// Pre-fill tags based on channel.
+	// Pre-fill tags and content type based on channel.
+	// Each channel has its own content type — ER1_CONTENT_TYPE is only used
+	// for Progress (YouTube) uploads to stay backward-compatible.
 	switch channel {
 	case impression.Idea:
 		data.Tags = impression.BuildTags(impression.Idea)
-		data.ContentType = envOrDefault("ER1_CONTENT_TYPE", "Screenshot-Observation")
+		data.ContentType = "Screenshot-Observation"
 	case impression.Progress:
 		data.Tags = impression.BuildTags(impression.Progress)
 		data.ContentType = envOrDefault("ER1_CONTENT_TYPE", "YouTube-Video-Impression")
 	case impression.Impulse:
 		data.Tags = impression.BuildTags(impression.Impulse)
-		data.ContentType = envOrDefault("ER1_CONTENT_TYPE", "Quick-Impulse")
+		data.ContentType = "Quick-Impulse"
 	case impression.Import:
 		data.Tags = impression.BuildTags(impression.Import)
-		data.ContentType = envOrDefault("ER1_CONTENT_TYPE", "Audio-Import")
+		data.ContentType = envOrDefault("IMPORT_CONTENT_TYPE", "Audio-Import")
 	}
 
 	return data

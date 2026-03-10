@@ -20,6 +20,7 @@ type UploadPayload struct {
 	ImageData          []byte // JPEG/PNG image data (optional — placeholder if nil)
 	ImageFilename      string // e.g. "videoID_thumbnail.jpg"
 	Tags               string // comma-separated tags
+	ContentType        string // per-observation content type (overrides cfg.ContentType if set)
 }
 
 // UploadResponse is the parsed response from ER1 on success.
@@ -40,7 +41,11 @@ func Upload(cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
 
 	// Form fields
 	_ = writer.WriteField("context_id", cfg.ContextID)
-	_ = writer.WriteField("content_type", cfg.ContentType)
+	contentType := cfg.ContentType
+	if payload.ContentType != "" {
+		contentType = payload.ContentType
+	}
+	_ = writer.WriteField("content_type", contentType)
 	_ = writer.WriteField("tags", payload.Tags)
 
 	// Transcript (always required)
