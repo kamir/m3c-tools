@@ -2,8 +2,10 @@ package transcript
 
 import (
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
+	"time"
 )
 
 var videoIDRE = regexp.MustCompile(`^[a-zA-Z0-9_-]{11}$`)
@@ -96,33 +98,59 @@ func checkPlayabilityFromJSON(resp map[string]any, videoID string) error {
 // Fetch fetches a transcript for a video in one of the preferred languages.
 // If preserveFormatting is true, HTML formatting tags are kept in the text.
 func (a *API) Fetch(videoID string, languages []string, preserveFormatting bool) (*FetchedTranscript, error) {
+	log.Printf("[transcript] START video=%s languages=%v", videoID, languages)
+	start := time.Now()
+
 	list, err := a.List(videoID)
 	if err != nil {
+		log.Printf("[transcript] FAIL video=%s error=%v elapsed=%s", videoID, err, time.Since(start))
 		return nil, err
 	}
 
 	info, err := list.FindTranscript(languages)
 	if err != nil {
+		log.Printf("[transcript] FAIL video=%s error=%v elapsed=%s", videoID, err, time.Since(start))
 		return nil, err
 	}
 
-	return a.fetchFromInfo(videoID, info)
+	result, err := a.fetchFromInfo(videoID, info)
+	if err != nil {
+		log.Printf("[transcript] FAIL video=%s language=%s error=%v elapsed=%s",
+			videoID, info.LanguageCode, err, time.Since(start))
+		return nil, err
+	}
+
+	charCount := 0
+	for _, s := range result.Snippets {
+		charCount += len(s.Text)
+	}
+	log.Printf("[transcript] DONE video=%s snippets=%d chars=%d language=%s generated=%v elapsed=%s",
+		result.VideoID, len(result.Snippets), charCount, result.LanguageCode, result.IsGenerated, time.Since(start))
+
+	return result, nil
 }
 
 // FetchTranslated fetches a transcript and translates it to the target language.
 func (a *API) FetchTranslated(videoID string, sourceLanguages []string, targetLanguage string) (*FetchedTranscript, error) {
+	log.Printf("[transcript] START video=%s languages=%v target=%s", videoID, sourceLanguages, targetLanguage)
+	start := time.Now()
+
 	list, err := a.List(videoID)
 	if err != nil {
+		log.Printf("[transcript] FAIL video=%s error=%v elapsed=%s", videoID, err, time.Since(start))
 		return nil, err
 	}
 
 	info, err := list.FindTranscript(sourceLanguages)
 	if err != nil {
+		log.Printf("[transcript] FAIL video=%s error=%v elapsed=%s", videoID, err, time.Since(start))
 		return nil, err
 	}
 
 	if !info.IsTranslatable {
-		return nil, fmt.Errorf("[%s] transcript in %s is not translatable", videoID, info.LanguageCode)
+		err := fmt.Errorf("[%s] transcript in %s is not translatable", videoID, info.LanguageCode)
+		log.Printf("[transcript] FAIL video=%s error=%v elapsed=%s", videoID, err, time.Since(start))
+		return nil, err
 	}
 
 	// Add translation language parameter to the URL
@@ -130,13 +158,23 @@ func (a *API) FetchTranslated(videoID string, sourceLanguages []string, targetLa
 
 	xmlData, err := a.fetcher.FetchCaptionXML(translatedURL, videoID)
 	if err != nil {
+		log.Printf("[transcript] FAIL video=%s language=%s error=%v elapsed=%s",
+			videoID, targetLanguage, err, time.Since(start))
 		return nil, err
 	}
 
 	snippets, err := ParseCaptionXML(xmlData)
 	if err != nil {
+		log.Printf("[transcript] FAIL video=%s error=%v elapsed=%s", videoID, err, time.Since(start))
 		return nil, err
 	}
+
+	charCount := 0
+	for _, s := range snippets {
+		charCount += len(s.Text)
+	}
+	log.Printf("[transcript] DONE video=%s snippets=%d chars=%d language=%s generated=%v elapsed=%s",
+		videoID, len(snippets), charCount, targetLanguage, info.IsGenerated, time.Since(start))
 
 	return &FetchedTranscript{
 		VideoID:      videoID,

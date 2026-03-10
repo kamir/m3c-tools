@@ -19,7 +19,8 @@ make vet                # go vet ./...
 
 # Tests (all in e2e/ directory, no pkg-level unit tests)
 make test-unit          # Offline-only tests (composites, tags, queue, WAV encoding)
-make test-network       # Requires internet (transcript fetch, thumbnails)
+make test-network       # Requires internet (transcript only by default)
+make test-network M3C_TEST_FULL_NETWORK=1  # Include thumbnail + translate tests
 make test-er1           # Requires running ER1 server
 make test-whisper       # Requires whisper binary in PATH
 make test-recorder      # Requires PortAudio + microphone

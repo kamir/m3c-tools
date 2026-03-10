@@ -12,7 +12,17 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/kamir/m3c-tools/pkg/testutil"
 )
+
+// ---------------------------------------------------------------------------
+// YT API rate-limit protection — register flag early
+// ---------------------------------------------------------------------------
+
+func init() {
+	testutil.RegisterYTFlag()
+}
 
 // ---------------------------------------------------------------------------
 // Binary builder — builds once per test run, reused across all tests
@@ -316,4 +326,12 @@ func SkipIfNoMicrophone(t *testing.T) {
 	if os.Getenv("M3C_SKIP_AUDIO") != "" {
 		t.Skip("Skipping: M3C_SKIP_AUDIO is set")
 	}
+}
+
+// SkipIfNoYTCalls skips the test unless YouTube API calls are explicitly
+// enabled via the -yt-calls-enforce-all flag or M3C_YT_CALLS_ENFORCE_ALL env var.
+// This prevents accidental YouTube API rate limiting during routine test runs.
+func SkipIfNoYTCalls(t *testing.T) {
+	t.Helper()
+	testutil.SkipIfNoYTCalls(t)
 }

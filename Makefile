@@ -51,10 +51,18 @@ test-unit:
 	go test -v -count=1 ./e2e/ -run "TestComposite|TestBuild|TestParseTagLine|TestER1Config|TestER1Queue|TestER1EnqueueFailure|TestUploadFailure|TestRecorderEncodeWAV|TestRecorderStats|TestExportsDB|TestFilesDB|TestHashFile|TestFormatterLoader|TestPrettyPrint|TestFormatTranscript|TestFormatSnippet|TestFormatKeyValue|TestFormatTable|TestFormatSection|TestFormatStatusLine|TestBuildApp|TestTranslateFlagParsing|TestTranslateNotTranslatable|TestTranslateTranslatable|TestRetryQueue|TestRetryBackoffTiming|TestRetryBackoffCustomBase|TestRetryProcessingOrder|TestRetryPartialFailure|TestRetryMaxRetriesDropsEntry|TestRetryDropCallback|TestRetryRespectsBackoffDelay|TestRetryProcessesAfterBackoffElapsed|TestRetryGracefulShutdownOnCancel|TestRetryRunStopsOnContextCancel|TestRetryRunProcessesMultipleCycles|TestRetryEmptyQueue|TestRetryOnRetryCallback|TestTranscriptFilterExcludeGenerated|TestTranscriptFilterExcludeManuallyCreated|TestTranscriptFilterBothExcludes|TestTranscriptFilterEmptyList|TestTranscriptFilterAllSameType|TestProxyBuildURL|TestProxyGetTransport|TestProxyNewWithProxy|TestProxyHTTPIntegration|TestProxyWebshare|TestProxySocks5URL|TestRetryRunnerProcessOnce|TestRetryRunnerDropExceedMaxRetries|TestRetryRunnerBackoff|TestRetryRunnerRunLoop|TestRetryRunnerBackoffSkip|TestBackgroundRetryStartsAndProcesses|TestBackgroundRetryStopsGracefully|TestBackgroundRetryHandlesFailures|TestBackgroundRetryEmptyQueue|TestBackgroundRetryLogging|TestTranscriptImportFromSnippets|TestTranscriptImportPreservesMetadata|TestTranscriptListSearchByLanguage|TestTranscriptListSearchGenerated|TestTranscriptListSearchManual|TestTranscriptSearchNotFound|TestTranscriptExportText|TestTranscriptExportSRT|TestTranscriptExportJSON|TestTranscriptExportWebVTT|TestTranscriptExportPretty|TestTranscriptExportAllFormats|TestTranscriptExportToFile|TestTranscriptListString|TestTranscriptListStringEmpty|TestMenubarIntegrationFullLifecycle|TestMenubarIntegrationTranscriptFetcherWired|TestMenubarIntegrationStatusDuringFetch|TestMenubarIntegrationMenuItemsComplete|TestMenubarIntegrationConcurrentStatusUpdates|TestMenubarIntegrationHistoryInMenuUpdates|TestAppBundleLaunchHelp|TestAppBundleLaunchUnknownCommand|TestAppBundleLaunchNoArgs|TestAppBundleRetryGracefulShutdown|TestAppBundleRetryExitsOnSIGINT|TestAppBundleMenubarFlagParsing|TestAppBundleExecPermissions|TestAppBundleInfoPlistLSUIElement|TestScheduleCommand|TestScheduleCommandDuplicate|TestScheduleCommandMissingTranscript|TestStatusCommand|TestStatusCommandEntryNotFound|TestCancelCommand|TestCancelCommandNotFound|TestScheduleStatusCancelWorkflow|TestCLIHelp|TestCLIUnknownCommand|TestCLINoArgs|TestRepoRoot|TestWriteFixture|TestWriteFixtureBytes|TestFixtureDir|TestTempDataDir|TestWithEnv|TestCLIResultAssertions|TestRunCLIWithEnv|TestScreenshotModeConstants|TestScreenshotClipboardImageTypes|TestScreenshotCLIHelpOutput|TestImporterScanDir|TestImporterScanDirEmpty|TestImporterScanDirNotExist|TestImporterScanDirNotDirectory|TestImporterIsAudioFile|TestImporterExtensionList|TestImporterScanDirHiddenSkip|TestImporterScanDirCaseInsensitive|TestImporterScanDirAbsPath|TestImporterScanDirDeepNesting|TestImporterExtensionCoverage|TestImporterCLIExtensions|TestImporterCLIScanDir|TestImporterCLIEmptyDir|TestImporterCLINonexistentDir|TestImporterCLINoArgs"
 
 # Network tests — require internet
+# By default only runs TestTranscript (lightweight, no thumbnail API calls).
+# To include thumbnail + translated transcript tests (higher API load):
+#   make test-network M3C_TEST_FULL_NETWORK=1
 .PHONY: test-network
 test-network:
-	@echo "Running network tests..."
-	go test -v -count=1 ./e2e/ -run "TestTranscript|TestThumbnail"
+ifdef M3C_TEST_FULL_NETWORK
+	@echo "Running full network tests (transcript + thumbnail + translate)..."
+	go test -v -count=1 ./e2e/ -run "TestTranscript|TestThumbnail|TestTranscriptFetchTranslated"
+else
+	@echo "Running network tests (transcript only — set M3C_TEST_FULL_NETWORK=1 for all)..."
+	go test -v -count=1 ./e2e/ -run "TestTranscriptList|TestTranscriptFetch|TestTranscriptFormatters|TestTranscriptInvalidVideoID"
+endif
 
 # ER1 tests — require running ER1 server
 .PHONY: test-er1
@@ -197,7 +205,8 @@ help:
 	@echo "  build-app      Build macOS .app bundle"
 	@echo "  e2e            Run all e2e tests"
 	@echo "  test-unit      Run offline unit tests only"
-	@echo "  test-network   Run tests requiring internet"
+	@echo "  test-network   Run transcript tests requiring internet"
+	@echo "                   M3C_TEST_FULL_NETWORK=1 to include thumbnail + translate tests"
 	@echo "  test-er1       Run tests requiring ER1 server"
 	@echo "  test-whisper   Run tests requiring whisper binary"
 	@echo "  test-recorder  Run tests requiring microphone"

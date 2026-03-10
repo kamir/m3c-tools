@@ -8,7 +8,9 @@ package menubar
 
 import (
 	"fmt"
+	"log"
 	"strings"
+	"time"
 
 	"github.com/kamir/m3c-tools/pkg/transcript"
 )
@@ -69,8 +71,12 @@ func (tf *TranscriptFetcher) Fetch(videoID string) (*FetchResult, error) {
 		return nil, fmt.Errorf("empty video ID")
 	}
 
+	log.Printf("[menubar] transcript fetch START video=%s languages=%v", videoID, tf.languages)
+	start := time.Now()
+
 	fetched, err := tf.api.Fetch(videoID, tf.languages, false)
 	if err != nil {
+		log.Printf("[menubar] transcript fetch FAIL video=%s error=%v elapsed=%s", videoID, err, time.Since(start))
 		return nil, fmt.Errorf("fetch transcript: %w", err)
 	}
 
@@ -78,6 +84,9 @@ func (tf *TranscriptFetcher) Fetch(videoID string) (*FetchResult, error) {
 	charCount := len(strings.TrimSpace(text))
 
 	flag := transcript.FlagForLanguage(fetched.LanguageCode)
+
+	log.Printf("[menubar] transcript fetch DONE video=%s snippets=%d chars=%d language=%s generated=%v elapsed=%s",
+		videoID, len(fetched.Snippets), charCount, fetched.LanguageCode, fetched.IsGenerated, time.Since(start))
 
 	return &FetchResult{
 		VideoID:      videoID,
