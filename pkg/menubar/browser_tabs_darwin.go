@@ -4,7 +4,9 @@ package menubar
 
 import (
 	"log"
+	"net/url"
 	"os/exec"
+	"path"
 	"strings"
 )
 
@@ -37,6 +39,56 @@ func SuggestedYouTubeVideoID() string {
 }
 
 func youTubeURLsFromChrome() []string {
+	urls := chromeTabURLs()
+	if len(urls) == 0 {
+		return nil
+	}
+	var matches []string
+	for _, u := range urls {
+		if strings.Contains(u, "youtube.com/watch") || strings.Contains(u, "youtu.be/") {
+			matches = append(matches, u)
+		}
+	}
+	if len(matches) == 0 {
+		log.Printf("[tabs] browser=Google Chrome no youtube tabs")
+		return nil
+	}
+	return matches
+}
+
+// SuggestedServiceContextID inspects open Chrome tabs for URLs on the same
+// ER1 host and extracts the first context ID from /memory/<context>/... URLs.
+func SuggestedServiceContextID(serviceBase string) string {
+	baseHost := hostForURL(serviceBase)
+	if baseHost == "" {
+		log.Printf("[auth] could not parse ER1 service host from %q", serviceBase)
+		return ""
+	}
+	urls := chromeTabURLs()
+	if len(urls) == 0 {
+		log.Printf("[auth] no Chrome tabs available for ER1 context detection")
+		return ""
+	}
+	log.Printf("[auth] inspecting %d Chrome tab URLs for ER1 host=%s", len(urls), baseHost)
+	for _, raw := range urls {
+		u, err := url.Parse(raw)
+		if err != nil || u.Host == "" {
+			continue
+		}
+		if !sameHost(baseHost, u.Host) {
+			continue
+		}
+		log.Printf("[auth] matched ER1 host URL: %s", raw)
+		if ctx := contextIDFromServiceURL(u); ctx != "" {
+			log.Printf("[auth] selected context_id=%s from URL=%s", ctx, raw)
+			return ctx
+		}
+	}
+	log.Printf("[auth] no context_id found in Chrome tabs for ER1 host=%s", baseHost)
+	return ""
+}
+
+func chromeTabURLs() []string {
 	script := `
 function run() {
 	try {
@@ -53,9 +105,7 @@ function run() {
 				if (!u) {
 					continue;
 				}
-				if (u.indexOf("youtube.com/watch") !== -1 || u.indexOf("youtu.be/") !== -1) {
-					matches.push(u);
-				}
+				matches.push(u);
 			}
 		}
 		return matches.join("\n");
@@ -77,7 +127,7 @@ function run() {
 		return nil
 	}
 	if raw == "" {
-		log.Printf("[tabs] browser=%s no youtube tabs", appName)
+		log.Printf("[tabs] browser=%s no tabs", appName)
 		return nil
 	}
 	lines := strings.Split(raw, "\n")
@@ -90,7 +140,37 @@ function run() {
 		urls = append(urls, u)
 	}
 	if len(urls) == 0 {
-		log.Printf("[tabs] browser=%s no youtube tabs", appName)
+		log.Printf("[tabs] browser=%s no tabs", appName)
 	}
 	return urls
+}
+
+func hostForURL(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Host)
+}
+
+func sameHost(a, b string) bool {
+	return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b))
+}
+
+func contextIDFromServiceURL(u *url.URL) string {
+	if q := strings.TrimSpace(u.Query().Get("context_id")); q != "" {
+		return q
+	}
+	p := path.Clean(u.Path)
+	parts := strings.Split(p, "/")
+	// Expect /memory/<context>/<doc_id>
+	for i := 0; i+2 < len(parts); i++ {
+		if parts[i] == "memory" {
+			ctx := strings.TrimSpace(parts[i+1])
+			if ctx != "" {
+				return ctx
+			}
+		}
+	}
+	return ""
 }

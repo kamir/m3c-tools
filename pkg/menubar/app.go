@@ -20,8 +20,15 @@ type App struct {
 	Handlers Handlers
 	history  HistoryStore
 
-	mu     sync.Mutex
-	status Status
+	mu          sync.Mutex
+	status      Status
+	authSession AuthSession
+}
+
+// AuthSession captures runtime ER1 login state used by the menu.
+type AuthSession struct {
+	LoggedIn bool
+	UserID   string
 }
 
 // NewApp creates an App with the default config and idle status.
@@ -53,6 +60,20 @@ func (a *App) GetStatus() Status {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.status
+}
+
+// SetAuthSession updates the runtime ER1 auth session displayed in the menu.
+func (a *App) SetAuthSession(s AuthSession) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.authSession = s
+}
+
+// GetAuthSession returns the current ER1 auth session snapshot.
+func (a *App) GetAuthSession() AuthSession {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.authSession
 }
 
 // AddHistory appends an entry to the transcript history.
@@ -108,6 +129,12 @@ func (a *App) BuildMenuItems() []menuet.MenuItem {
 // buildMenuItems constructs the dropdown menu. menuet calls this every
 // time the user opens the dropdown.
 func (a *App) buildMenuItems() []menuet.MenuItem {
+	auth := a.GetAuthSession()
+	accountText := "Account: not logged in"
+	if auth.LoggedIn {
+		accountText = fmt.Sprintf("Account: %s", auth.UserID)
+	}
+
 	items := []menuet.MenuItem{
 		{
 			Text:    "▶️ Fetch Transcript...",
@@ -129,8 +156,21 @@ func (a *App) buildMenuItems() []menuet.MenuItem {
 			Text:    "🚀 Upload to ER1...",
 			Clicked: a.handleUploadER1,
 		},
+		{
+			Text: "🔐 Login to ER1...",
+			Clicked: func() {
+				a.fireAction(ActionLoginER1, "")
+			},
+		},
+		{
+			Text: "🔓 Logout from ER1",
+			Clicked: func() {
+				a.fireAction(ActionLogoutER1, "")
+			},
+		},
 		{Type: menuet.Separator},
 		{Text: fmt.Sprintf("Status: %s", a.GetStatus())},
+		{Text: accountText},
 		{Type: menuet.Separator},
 	}
 

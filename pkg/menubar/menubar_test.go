@@ -77,6 +77,8 @@ func TestActionTypes(t *testing.T) {
 		ActionCopyTranscript,
 		ActionBatchImport,
 		ActionUploadER1,
+		ActionLoginER1,
+		ActionLogoutER1,
 		ActionOpenLog,
 		ActionQuit,
 	}
@@ -373,6 +375,12 @@ func TestUploadER1ActionType(t *testing.T) {
 	if ActionUploadER1 != "upload_er1" {
 		t.Errorf("ActionUploadER1 = %q, want upload_er1", ActionUploadER1)
 	}
+	if ActionLoginER1 != "login_er1" {
+		t.Errorf("ActionLoginER1 = %q, want login_er1", ActionLoginER1)
+	}
+	if ActionLogoutER1 != "logout_er1" {
+		t.Errorf("ActionLogoutER1 = %q, want logout_er1", ActionLogoutER1)
+	}
 }
 
 func TestHandlerOnUploadER1(t *testing.T) {
@@ -463,6 +471,22 @@ func TestUploadER1WithoutHandler(t *testing.T) {
 	app.Handlers.OnAction(ActionUploadER1, "test-vid")
 	if capturedAction != ActionUploadER1 {
 		t.Errorf("expected upload_er1 action, got %q", capturedAction)
+	}
+}
+
+func TestAuthSessionState(t *testing.T) {
+	app := NewApp()
+	if got := app.GetAuthSession(); got.LoggedIn || got.UserID != "" {
+		t.Fatalf("initial auth session = %+v, want logged out", got)
+	}
+
+	app.SetAuthSession(AuthSession{LoggedIn: true, UserID: "107677460544181387647___mft"})
+	got := app.GetAuthSession()
+	if !got.LoggedIn {
+		t.Fatal("expected logged-in session")
+	}
+	if got.UserID != "107677460544181387647___mft" {
+		t.Fatalf("UserID = %q, want context id", got.UserID)
 	}
 }
 
