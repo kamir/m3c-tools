@@ -11,9 +11,11 @@ package menubar
 
 /*
 #cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework Cocoa
+#cgo LDFLAGS: -framework Cocoa -framework ApplicationServices
 
 #import <Cocoa/Cocoa.h>
+#import <ApplicationServices/ApplicationServices.h>
+#import <CoreGraphics/CoreGraphics.h>
 #import <float.h>
 
 // ---------- Review Tab State ----------
@@ -301,6 +303,303 @@ static void setReviewTranscript(const char *text, const char *statusText) {
 	});
 }
 
+// Forward declarations (defined in Global Window State section below).
+static NSTextField *g_recordSourceLabel;
+static NSProgressIndicator *g_whisperProgress;
+static NSPanel *g_captureHintPanel;
+static NSTextField *g_captureHintTitleLabel;
+static NSTextField *g_captureHintDetailLabel;
+static NSTextField *g_recordStatusLabel;
+static NSButton *g_recordStopButton;
+static id getOrCreateCaptureHintHandler(void);
+static volatile int g_captureHintCancelled = 0;
+
+// ---------- Whisper Progress Bar ----------
+
+// showWhisperProgress shows and starts animating the indeterminate progress bar
+// in the Review tab. Call when whisper transcription begins.
+static void showWhisperProgress(void) {
+	dispatch_async(dispatch_get_main_queue(), ^{
+		if (g_whisperProgress != nil) {
+			[g_whisperProgress setHidden:NO];
+			[g_whisperProgress startAnimation:nil];
+		}
+	});
+}
+
+// hideWhisperProgress stops and hides the progress bar. Call when whisper finishes.
+static void hideWhisperProgress(void) {
+	dispatch_async(dispatch_get_main_queue(), ^{
+		if (g_whisperProgress != nil) {
+			[g_whisperProgress stopAnimation:nil];
+			[g_whisperProgress setHidden:YES];
+		}
+	});
+}
+
+// ---------- Capture Hint Panel ----------
+
+// showCaptureHintWindow displays a small non-activating floating panel with
+// instructions while waiting for clipboard-based screenshot capture.
+static void showCaptureHintWindow(const char *title, const char *detail) {
+	NSString *nsTitle = (title != NULL && strlen(title) > 0)
+		? [NSString stringWithUTF8String:title]
+		: @"Waiting for screenshot…";
+	NSString *nsDetail = (detail != NULL && strlen(detail) > 0)
+		? [NSString stringWithUTF8String:detail]
+		: @"Press Cmd+Ctrl+Shift+4";
+
+	dispatch_async(dispatch_get_main_queue(), ^{
+		g_captureHintCancelled = 0;
+		if (g_captureHintPanel == nil) {
+			NSScreen *screen = [NSScreen mainScreen];
+			NSRect visible = [screen visibleFrame];
+			CGFloat w = 480;
+			CGFloat h = 118;
+			NSRect rect = NSMakeRect(
+				visible.origin.x + (visible.size.width - w) / 2.0,
+				visible.origin.y + visible.size.height * 0.72,
+				w,
+				h
+			);
+
+			NSPanel *panel = [[NSPanel alloc]
+				initWithContentRect:rect
+				styleMask:(NSWindowStyleMaskTitled |
+						   NSWindowStyleMaskNonactivatingPanel)
+				backing:NSBackingStoreBuffered
+				defer:NO];
+			[panel setReleasedWhenClosed:NO];
+			[panel setFloatingPanel:YES];
+			[panel setHidesOnDeactivate:NO];
+			[panel setLevel:NSFloatingWindowLevel];
+			[panel setCollectionBehavior:(NSWindowCollectionBehaviorCanJoinAllSpaces |
+										  NSWindowCollectionBehaviorTransient)];
+			[panel setTitle:@"M3C Screenshot"];
+
+			NSView *content = [panel contentView];
+
+			NSTextField *titleLabel = [[NSTextField alloc]
+				initWithFrame:NSMakeRect(16, 62, w - 32, 28)];
+			[titleLabel setBezeled:NO];
+			[titleLabel setDrawsBackground:NO];
+			[titleLabel setEditable:NO];
+			[titleLabel setSelectable:NO];
+			[titleLabel setFont:[NSFont systemFontOfSize:18 weight:NSFontWeightSemibold]];
+			[titleLabel setAlignment:NSTextAlignmentCenter];
+			[content addSubview:titleLabel];
+
+			NSTextField *detailLabel = [[NSTextField alloc]
+				initWithFrame:NSMakeRect(16, 28, w - 32, 24)];
+			[detailLabel setBezeled:NO];
+			[detailLabel setDrawsBackground:NO];
+			[detailLabel setEditable:NO];
+			[detailLabel setSelectable:NO];
+			[detailLabel setFont:[NSFont systemFontOfSize:13 weight:NSFontWeightRegular]];
+			[detailLabel setTextColor:[NSColor secondaryLabelColor]];
+			[detailLabel setAlignment:NSTextAlignmentCenter];
+			[content addSubview:detailLabel];
+
+			NSButton *cancelBtn = [NSButton buttonWithTitle:@"Cancel"
+													 target:getOrCreateCaptureHintHandler()
+													 action:@selector(captureHintCancelClicked:)];
+			[cancelBtn setFrame:NSMakeRect((w / 2.0) + 8, 6, 88, 24)];
+			[cancelBtn setBezelStyle:NSBezelStyleRounded];
+			[cancelBtn setAutoresizingMask:(NSViewMinXMargin | NSViewMaxXMargin | NSViewMaxYMargin)];
+			[content addSubview:cancelBtn];
+
+			NSButton *captureBtn = [NSButton buttonWithTitle:@"Capture"
+													  target:getOrCreateCaptureHintHandler()
+													  action:@selector(captureHintContinueClicked:)];
+			[captureBtn setFrame:NSMakeRect((w / 2.0) - 96, 6, 88, 24)];
+			[captureBtn setBezelStyle:NSBezelStyleRounded];
+			[captureBtn setAutoresizingMask:(NSViewMinXMargin | NSViewMaxXMargin | NSViewMaxYMargin)];
+			[content addSubview:captureBtn];
+
+			g_captureHintPanel = panel;
+			g_captureHintTitleLabel = titleLabel;
+			g_captureHintDetailLabel = detailLabel;
+		}
+
+		[g_captureHintTitleLabel setStringValue:nsTitle];
+		[g_captureHintDetailLabel setStringValue:nsDetail];
+		[g_captureHintPanel orderFrontRegardless];
+	});
+}
+
+// hideCaptureHintWindow hides the floating screenshot hint panel.
+static void hideCaptureHintWindow(void) {
+	dispatch_async(dispatch_get_main_queue(), ^{
+		if (g_captureHintPanel != nil) {
+			[g_captureHintPanel orderOut:nil];
+		}
+	});
+}
+
+// triggerClipboardRegionScreenshotHotkey posts Cmd+Ctrl+Shift+4 via CGEvent.
+// Returns 1 on posted events, 0 on failure.
+static int triggerClipboardRegionScreenshotHotkey(void) {
+	CGEventSourceRef src = CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
+	if (src == NULL) return 0;
+
+	// ANSI keycode for "4" on macOS US layout.
+	CGKeyCode key4 = (CGKeyCode)21;
+	CGEventRef down = CGEventCreateKeyboardEvent(src, key4, true);
+	CGEventRef up = CGEventCreateKeyboardEvent(src, key4, false);
+	if (down == NULL || up == NULL) {
+		if (down != NULL) CFRelease(down);
+		if (up != NULL) CFRelease(up);
+		CFRelease(src);
+		return 0;
+	}
+
+	CGEventFlags flags = kCGEventFlagMaskCommand |
+		kCGEventFlagMaskControl |
+		kCGEventFlagMaskShift;
+	CGEventSetFlags(down, flags);
+	CGEventSetFlags(up, flags);
+
+	CGEventPost(kCGHIDEventTap, down);
+	CGEventPost(kCGHIDEventTap, up);
+
+	CFRelease(down);
+	CFRelease(up);
+	CFRelease(src);
+	return 1;
+}
+
+// captureHintWasCancelled returns 1 if user clicked Cancel on the hint panel.
+static int captureHintWasCancelled(void) {
+	return g_captureHintCancelled ? 1 : 0;
+}
+
+// resetCaptureHintCancelled clears the hint-panel cancel state.
+static void resetCaptureHintCancelled(void) {
+	g_captureHintCancelled = 0;
+}
+
+// ---------- Record Tab Source Label ----------
+
+// setRecordSourceLabel sets a label over the image in the Record tab
+// (e.g. "from clipboard" or "snapshot at 08:15:30").
+static void setRecordSourceLabel(const char *text) {
+	if (text == NULL) return;
+	NSString *nsText = [NSString stringWithUTF8String:text];
+	dispatch_async(dispatch_get_main_queue(), ^{
+		if (g_recordSourceLabel != nil) {
+			[g_recordSourceLabel setStringValue:nsText];
+			[g_recordSourceLabel setHidden:NO];
+			// Size to fit the text content.
+			[g_recordSourceLabel sizeToFit];
+			// Add horizontal padding.
+			NSRect f = [g_recordSourceLabel frame];
+			f.size.width += 12;
+			f.origin.x = 15;
+			f.origin.y = 82;
+			[g_recordSourceLabel setFrame:f];
+		}
+	});
+}
+
+// ---------- Frontmost App Tracking ----------
+
+// Track the last active non-M3C app so we can restore it before screencapture.
+static NSRunningApplication *g_lastNonSelfActiveApp = nil;
+static id g_appActivateObserver = nil;
+
+// initFrontmostAppTracker installs a workspace activation observer once.
+// Must run on main thread.
+static void initFrontmostAppTracker(void) {
+	if (g_appActivateObserver != nil) return;
+
+	NSWorkspace *ws = [NSWorkspace sharedWorkspace];
+	NSRunningApplication *selfApp = [NSRunningApplication currentApplication];
+	NSRunningApplication *front = [ws frontmostApplication];
+	if (front != nil && [front processIdentifier] != [selfApp processIdentifier]) {
+		g_lastNonSelfActiveApp = front;
+	}
+
+	g_appActivateObserver = [[ws notificationCenter]
+		addObserverForName:NSWorkspaceDidActivateApplicationNotification
+					object:nil
+					 queue:[NSOperationQueue mainQueue]
+				usingBlock:^(NSNotification *note) {
+		NSRunningApplication *app = note.userInfo[NSWorkspaceApplicationKey];
+		if (app == nil) return;
+		if ([app processIdentifier] == [[NSRunningApplication currentApplication] processIdentifier]) {
+			return;
+		}
+		g_lastNonSelfActiveApp = app;
+	}];
+}
+
+// startFrontmostAppTracker initializes workspace activation tracking so the
+// last active non-self app is known before screenshot menu actions run.
+static void startFrontmostAppTracker(void) {
+	if ([NSThread isMainThread]) {
+		initFrontmostAppTracker();
+	} else {
+		dispatch_sync(dispatch_get_main_queue(), ^{
+			initFrontmostAppTracker();
+		});
+	}
+}
+
+// hasScreenCaptureAccess returns 1 if Screen Recording permission is granted.
+static int hasScreenCaptureAccess(void) {
+	return CGPreflightScreenCaptureAccess() ? 1 : 0;
+}
+
+// requestScreenCaptureAccess requests Screen Recording permission from macOS.
+// Returns 1 if already granted or granted by the user, else 0.
+static int requestScreenCaptureAccess(void) {
+	return CGRequestScreenCaptureAccess() ? 1 : 0;
+}
+
+// clipboardChangeCount returns NSPasteboard.generalPasteboard.changeCount.
+// Useful for low-overhead clipboard-change monitoring loops.
+static int clipboardChangeCount(void) {
+	NSPasteboard *pb = [NSPasteboard generalPasteboard];
+	if (pb == nil) return 0;
+	return (int)[pb changeCount];
+}
+
+// prepareForInteractiveCapture hides/deactivates the menu-bar app so the
+// previously frontmost app can be visible again before screencapture starts.
+// Safe to call from any goroutine.
+static void prepareForInteractiveCapture(void) {
+	void (^handoff)(void) = ^{
+		if (NSApp == nil) return;
+		initFrontmostAppTracker();
+		[NSApp hide:nil];
+		[NSApp deactivate];
+		if (g_lastNonSelfActiveApp != nil && ![g_lastNonSelfActiveApp isTerminated]) {
+			[g_lastNonSelfActiveApp activateWithOptions:NSApplicationActivateAllWindows];
+		}
+	};
+	if ([NSThread isMainThread]) {
+		handoff();
+	} else {
+		dispatch_sync(dispatch_get_main_queue(), handoff);
+	}
+}
+
+// ---------- Memo Text Retrieval ----------
+
+// getReviewMemoText returns a copy of the current text in the Review tab's
+// editable text view. The caller must free() the returned string.
+// Returns NULL if the text view does not exist.
+static char *getReviewMemoText(void) {
+	__block char *result = NULL;
+	dispatch_sync(dispatch_get_main_queue(), ^{
+		if (g_reviewTextView != nil) {
+			NSString *text = [[g_reviewTextView string] copy];
+			result = strdup([text UTF8String]);
+		}
+	});
+	return result;
+}
+
 // ---------- Channel Type Helpers for Tags Tab ----------
 
 // Channel type constants (must match Go ChannelType iota).
@@ -314,7 +613,7 @@ enum ObsChannelType {
 // defaultTagsForChannel returns the pre-filled comma-separated tags for the given channel.
 static NSString* defaultTagsForChannel(int channelType) {
 	switch (channelType) {
-		case ObsChannelProgress: return @"progress, youtube";
+		case ObsChannelProgress: return @"youtube";
 		case ObsChannelIdea:     return @"idea, screenshot";
 		case ObsChannelImpulse:  return @"impulse";
 		case ObsChannelImport:   return @"import, audio-import";
@@ -326,9 +625,9 @@ static NSString* defaultTagsForChannel(int channelType) {
 static NSString* contentTypeLabelForChannel(int channelType) {
 	switch (channelType) {
 		case ObsChannelProgress: return @"YouTube-Video-Impression";
-		case ObsChannelIdea:     return @"Screenshot";
-		case ObsChannelImpulse:  return @"Impulse";
-		case ObsChannelImport:   return @"Audio-Track";
+		case ObsChannelIdea:     return @"Screenshot-Observation";
+		case ObsChannelImpulse:  return @"Quick-Impulse";
+		case ObsChannelImport:   return @"Audio-Import";
 		default:                 return @"Observation";
 	}
 }
@@ -367,6 +666,9 @@ static NSTextView  *g_obsSummaryText = nil;  // Summary/notes text view in Tags 
 static NSTextField *g_obsCtValue     = nil;  // Content type label in Tags tab.
 static NSTabView   *g_obsTabView     = nil;  // The tab view for switching tabs.
 static char        *g_obsImagePath   = NULL; // Screenshot path stored for draft saving.
+static NSTextField *g_recordSourceLabel = nil; // "from clipboard" / "snapshot at ..." label.
+static NSTextField *g_recordStatusLabel = nil; // Record tab status label.
+static NSButton    *g_recordStopButton = nil;  // Record tab stop button.
 
 // Forward declaration of the Go callbacks (exported from Go via //export).
 // Note: Go's cgo exports use char* (not const char*).
@@ -445,6 +747,8 @@ static void closeObsWindow(void) {
 		[g_obsWindow close];
 		g_obsWindow = nil;
 	}
+	// Revert to menu-bar-only mode (hide from Cmd+Tab and dock).
+	[NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
 	g_obsTagsField = nil;
 	g_obsExtraField = nil;
 	g_obsTitleField = nil;
@@ -452,6 +756,10 @@ static void closeObsWindow(void) {
 	g_obsCtValue = nil;
 	g_obsTabView = nil;
 	g_reviewTextView = nil;
+	g_recordSourceLabel = nil;
+	g_recordStatusLabel = nil;
+	g_recordStopButton = nil;
+	g_whisperProgress = nil;
 	if (g_obsImagePath != NULL) {
 		free(g_obsImagePath);
 		g_obsImagePath = NULL;
@@ -493,6 +801,13 @@ static void stopClickedIMP(id self, SEL _cmd, id sender) {
 	int elapsed = getElapsedSeconds();
 	stopRecordingTimer();
 	resetVUMeter();
+	if (g_recordStatusLabel != nil) {
+		[g_recordStatusLabel setStringValue:@"● Stopped"];
+	}
+	if (g_recordStopButton != nil) {
+		[g_recordStopButton setTitle:@"⏹ Stopped"];
+		[g_recordStopButton setEnabled:NO];
+	}
 	switchToTab(1); // Switch to Review tab
 	goObservationStopCallback(elapsed);
 }
@@ -512,11 +827,32 @@ static void storeClickedIMP(id self, SEL _cmd, id sender) {
 	closeObsWindow();
 }
 
+// captureHintCancelClickedIMP is the IMP for the screenshot hint panel's
+// Cancel button. It marks capture cancelled and hides the hint panel.
+static void captureHintCancelClickedIMP(id self, SEL _cmd, id sender) {
+	(void)self; (void)_cmd; (void)sender;
+	g_captureHintCancelled = 1;
+	if (g_captureHintPanel != nil) {
+		[g_captureHintPanel orderOut:nil];
+	}
+}
+
+// captureHintContinueClickedIMP is the IMP for the screenshot hint panel's
+// Capture button. It hides the hint panel and keeps capture flow active.
+static void captureHintContinueClickedIMP(id self, SEL _cmd, id sender) {
+	(void)self; (void)_cmd; (void)sender;
+	if (g_captureHintPanel != nil) {
+		[g_captureHintPanel orderOut:nil];
+	}
+	(void)triggerClipboardRegionScreenshotHotkey();
+}
+
 // Singleton handler instances for buttons and window delegate (dynamically registered).
 static id g_cancelHandler   = nil;
 static id g_storeHandler    = nil;
 static id g_stopHandler     = nil;
 static id g_windowDelegate  = nil;
+static id g_captureHintHandler = nil;
 
 // ---------- Window Delegate: close (red X) interception ----------
 
@@ -603,6 +939,16 @@ static void ensureHandlerClasses(void) {
 			(IMP)windowShouldCloseIMP, "c@:@");
 		objc_registerClassPair(delegateCls);
 	}
+
+	// Register ObsCaptureHintHandler class with captureHintCancelClicked: method.
+	Class captureHintCls = objc_allocateClassPair([NSObject class], "ObsCaptureHintHandler", 0);
+	if (captureHintCls != Nil) {
+		class_addMethod(captureHintCls, @selector(captureHintContinueClicked:),
+			(IMP)captureHintContinueClickedIMP, "v@:@");
+		class_addMethod(captureHintCls, @selector(captureHintCancelClicked:),
+			(IMP)captureHintCancelClickedIMP, "v@:@");
+		objc_registerClassPair(captureHintCls);
+	}
 }
 
 // getOrCreateCancelHandler returns the singleton cancel handler instance.
@@ -645,6 +991,16 @@ static id getOrCreateWindowDelegate(void) {
 	return g_windowDelegate;
 }
 
+// getOrCreateCaptureHintHandler returns the singleton hint cancel handler.
+static id getOrCreateCaptureHintHandler(void) {
+	ensureHandlerClasses();
+	if (g_captureHintHandler == nil) {
+		Class cls = objc_getClass("ObsCaptureHintHandler");
+		g_captureHintHandler = [[cls alloc] init];
+	}
+	return g_captureHintHandler;
+}
+
 // ---------- Observation Window (Cocoa) ----------
 
 // showObservationWindow creates and shows a native NSWindow with 3 tabs.
@@ -653,7 +1009,9 @@ static id getOrCreateWindowDelegate(void) {
 // Returns 1 on success, 0 on failure.
 static int showObservationWindow(const char *title, const char *imagePath, const ReviewMeta *meta, int channelType) {
 	// Must run on main thread for Cocoa UI.
-	dispatch_async(dispatch_get_main_queue(), ^{
+	// dispatch_sync (not async) because the Go caller uses defer C.free()
+	// on the string arguments — async would use-after-free the pointers.
+	dispatch_sync(dispatch_get_main_queue(), ^{
 		// ---- Screen geometry for sizing ----
 		NSScreen *screen = [NSScreen mainScreen];
 		NSRect screenFrame = [screen visibleFrame];
@@ -683,6 +1041,10 @@ static int showObservationWindow(const char *title, const char *imagePath, const
 								  : @"Observation Window";
 		[window setTitle:nsTitle];
 		[window setReleasedWhenClosed:NO];
+		[window setHidesOnDeactivate:NO];
+
+		// Make the app appear in Cmd+Tab while the observation window is open.
+		[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 
 		// Set window delegate to intercept close (red X) button.
 		[window setDelegate:getOrCreateWindowDelegate()];
@@ -715,10 +1077,12 @@ static int showObservationWindow(const char *title, const char *imagePath, const
 		// -- Image view (scaled to max 50% screen w/h) --
 		NSImageView *imageView = [[NSImageView alloc]
 			initWithFrame:NSMakeRect(10, 80, winW - 20, winH - 160)];
-		[imageView setImageScaling:NSImageScaleProportionallyUpOrDown];
+		[imageView setImageScaling:NSImageScaleProportionallyDown];
 		[imageView setImageAlignment:NSImageAlignCenter];
 		[imageView setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
-		[imageView setImageFrameStyle:NSImageFrameGrayBezel];
+		[imageView setImageFrameStyle:NSImageFrameNone];
+		[imageView setWantsLayer:YES];
+		[[imageView layer] setBackgroundColor:[[NSColor clearColor] CGColor]];
 
 		if (imagePath != NULL && strlen(imagePath) > 0) {
 			NSString *nsPath = [NSString stringWithUTF8String:imagePath];
@@ -740,6 +1104,22 @@ static int showObservationWindow(const char *title, const char *imagePath, const
 			}
 		}
 		[recordView addSubview:imageView];
+
+		// -- Source label overlaid on bottom-left of image --
+		NSTextField *sourceLabel = [[NSTextField alloc]
+			initWithFrame:NSMakeRect(15, 82, 300, 22)];
+		[sourceLabel setStringValue:@""];
+		[sourceLabel setBezeled:NO];
+		[sourceLabel setDrawsBackground:YES];
+		[sourceLabel setBackgroundColor:[NSColor colorWithCalibratedWhite:0.0 alpha:0.55]];
+		[sourceLabel setTextColor:[NSColor whiteColor]];
+		[sourceLabel setEditable:NO];
+		[sourceLabel setSelectable:NO];
+		[sourceLabel setFont:[NSFont systemFontOfSize:11 weight:NSFontWeightMedium]];
+		[sourceLabel setAutoresizingMask:(NSViewMaxXMargin | NSViewMaxYMargin)];
+		[sourceLabel setHidden:YES]; // shown when source text is set
+		[recordView addSubview:sourceLabel];
+		g_recordSourceLabel = sourceLabel;
 
 		// -- VU Meter (track + fill + dB label) --
 		// Track: dark background container with rounded corners.
@@ -791,6 +1171,7 @@ static int showObservationWindow(const char *title, const char *imagePath, const
 		[statusLabel setFont:[NSFont systemFontOfSize:13]];
 		[statusLabel setAutoresizingMask:(NSViewWidthSizable | NSViewMaxYMargin)];
 		[recordView addSubview:statusLabel];
+		g_recordStatusLabel = statusLabel;
 
 		// -- Elapsed timer label (MM:SS) --
 		NSTextField *timerLabel = [[NSTextField alloc]
@@ -818,6 +1199,7 @@ static int showObservationWindow(const char *title, const char *imagePath, const
 		[stopBtn setAutoresizingMask:(NSViewMinXMargin | NSViewMaxYMargin)];
 		[stopBtn setEnabled:YES];
 		[recordView addSubview:stopBtn];
+		g_recordStopButton = stopBtn;
 
 		[recordTab setView:recordView];
 		[tabView addTabViewItem:recordTab];
@@ -936,12 +1318,12 @@ static int showObservationWindow(const char *title, const char *imagePath, const
 		// Text inset for comfortable reading margin.
 		[textView setTextContainerInset:NSMakeSize(4, 6)];
 
-		// Appearance.
-		[textView setEditable:NO];
+		// Appearance — editable so user can refine the memo text.
+		[textView setEditable:YES];
 		[textView setSelectable:YES];
 		[textView setRichText:NO];
 		[textView setFont:[NSFont monospacedSystemFontOfSize:12 weight:NSFontWeightRegular]];
-		[textView setString:@"Transcript will appear here after recording is processed..."];
+		[textView setString:@"Memo text will appear here after recording is processed..."];
 		[textView setBackgroundColor:[NSColor textBackgroundColor]];
 		[textView setTextColor:[NSColor textColor]];
 
@@ -962,18 +1344,16 @@ static int showObservationWindow(const char *title, const char *imagePath, const
 		// Store global reference for setReviewTranscript().
 		g_reviewTextView = textView;
 
-		// Metadata label at top.
-		NSTextField *metaLabel = [[NSTextField alloc]
-			initWithFrame:NSMakeRect(10, winH - 90, winW - 20, 20)];
-		[metaLabel setStringValue:@"Channel: — | Duration: — | Snippets: —"];
-		[metaLabel setBezeled:NO];
-		[metaLabel setDrawsBackground:NO];
-		[metaLabel setEditable:NO];
-		[metaLabel setSelectable:NO];
-		[metaLabel setFont:[NSFont systemFontOfSize:11]];
-		[metaLabel setTextColor:[NSColor secondaryLabelColor]];
-		[metaLabel setAutoresizingMask:(NSViewWidthSizable | NSViewMinYMargin)];
-		[reviewView addSubview:metaLabel];
+		// -- Whisper progress bar (indeterminate, hidden initially) --
+		NSProgressIndicator *whisperBar = [[NSProgressIndicator alloc]
+			initWithFrame:NSMakeRect(10, 35, winW - 20, 10)];
+		[whisperBar setStyle:NSProgressIndicatorStyleBar];
+		[whisperBar setIndeterminate:YES];
+		[whisperBar setDisplayedWhenStopped:NO];
+		[whisperBar setHidden:YES];
+		[whisperBar setAutoresizingMask:(NSViewWidthSizable | NSViewMaxYMargin)];
+		[reviewView addSubview:whisperBar];
+		g_whisperProgress = whisperBar;
 
 		// Status bar at bottom.
 		NSTextField *reviewStatus = [[NSTextField alloc]
@@ -1366,7 +1746,7 @@ func FormatFileSize(bytes int64) string {
 // displays the image scaled to fit within 50% of the screen width/height.
 //
 // The channelType parameter controls pre-filled tags and labels in the Tags tab:
-//   - ChannelTypeProgress: "progress, youtube" with type "YouTube-Video-Impression"
+//   - ChannelTypeProgress: "youtube" with type "YouTube-Video-Impression"
 //   - ChannelTypeIdea:     "idea, screenshot" with type "Screenshot"
 //   - ChannelTypeImpulse:  "impulse" with type "Impulse"
 //   - ChannelTypeImport:   "import, audio-import" with type "Audio-Track"
@@ -1452,7 +1832,7 @@ func ShowObservationWindowForScreenshot(screenshotPath string) bool {
 }
 
 // ShowObservationWindowForProgress is a convenience wrapper for Channel A
-// (YouTube video). Tags are pre-filled with "progress, youtube".
+// (YouTube video). Tags are pre-filled with "youtube".
 func ShowObservationWindowForProgress(imagePath string) bool {
 	return ShowObservationWindow("Observation — YouTube", imagePath, ChannelTypeProgress)
 }
@@ -1522,6 +1902,97 @@ func UpdateVUMeterLevel(level float32) {
 // Useful when stopping a recording or preparing for a new session.
 func ResetVUMeter() {
 	C.resetVUMeter()
+}
+
+// SetRecordSourceLabel sets a label overlaid on the image in the Record tab,
+// e.g. "from clipboard" or "snapshot at 08:15:30".
+func SetRecordSourceLabel(text string) {
+	if text == "" {
+		return
+	}
+	cText := C.CString(text)
+	defer C.free(unsafe.Pointer(cText))
+	C.setRecordSourceLabel(cText)
+}
+
+// PrepareForInteractiveCapture hands app focus back to the previously active
+// application before running interactive screencapture from the menu bar app.
+func PrepareForInteractiveCapture() {
+	C.prepareForInteractiveCapture()
+}
+
+// StartFrontmostAppTracker begins tracking frontmost non-M3C applications.
+// Call once during menubar startup so screenshot handoff can restore focus.
+func StartFrontmostAppTracker() {
+	C.startFrontmostAppTracker()
+}
+
+// HasScreenCaptureAccess reports whether macOS Screen Recording access is granted.
+func HasScreenCaptureAccess() bool {
+	return C.hasScreenCaptureAccess() == 1
+}
+
+// RequestScreenCaptureAccess asks macOS for Screen Recording permission.
+func RequestScreenCaptureAccess() bool {
+	return C.requestScreenCaptureAccess() == 1
+}
+
+// ClipboardChangeCount returns NSPasteboard.generalPasteboard.changeCount.
+func ClipboardChangeCount() int {
+	return int(C.clipboardChangeCount())
+}
+
+// ShowCaptureHintWindow shows a small non-blocking panel instructing the user
+// to take a screenshot via system shortcut in clipboard-first mode.
+func ShowCaptureHintWindow(title, detail string) {
+	var cTitle, cDetail *C.char
+	if title != "" {
+		cTitle = C.CString(title)
+		defer C.free(unsafe.Pointer(cTitle))
+	}
+	if detail != "" {
+		cDetail = C.CString(detail)
+		defer C.free(unsafe.Pointer(cDetail))
+	}
+	C.showCaptureHintWindow(cTitle, cDetail)
+}
+
+// HideCaptureHintWindow hides the non-blocking screenshot instruction panel.
+func HideCaptureHintWindow() {
+	C.hideCaptureHintWindow()
+}
+
+// CaptureHintWasCancelled reports whether the hint window cancel button was clicked.
+func CaptureHintWasCancelled() bool {
+	return C.captureHintWasCancelled() == 1
+}
+
+// ResetCaptureHintCancelled clears the hint window cancel state.
+func ResetCaptureHintCancelled() {
+	C.resetCaptureHintCancelled()
+}
+
+// GetReviewMemoText returns the current (possibly user-edited) text from the
+// Review tab's editable text view. Returns empty string if unavailable.
+func GetReviewMemoText() string {
+	cText := C.getReviewMemoText()
+	if cText == nil {
+		return ""
+	}
+	defer C.free(unsafe.Pointer(cText))
+	return C.GoString(cText)
+}
+
+// ShowWhisperProgress shows and starts animating the indeterminate progress
+// bar in the Review tab. Call when whisper transcription begins.
+func ShowWhisperProgress() {
+	C.showWhisperProgress()
+}
+
+// HideWhisperProgress stops and hides the progress bar in the Review tab.
+// Call when whisper transcription finishes (success or failure).
+func HideWhisperProgress() {
+	C.hideWhisperProgress()
 }
 
 // SwitchToTab switches the Observation Window to the specified tab.
@@ -1598,7 +2069,7 @@ func SetObservationTitle(title string) {
 // ShowObservationWindowForYouTube opens the Observation Window for a YouTube
 // transcript fetch. It displays the video thumbnail in the Record tab,
 // populates Review metadata, sets the transcript in the Review tab, and
-// pre-fills tags with "progress, youtube, <videoID>" in the Tags tab.
+// pre-fills tags with "youtube, <videoID>" in the Tags tab.
 //
 // Parameters:
 //   - thumbnailPath: path to the saved thumbnail image (displayed in Record tab)
@@ -1612,8 +2083,8 @@ func ShowObservationWindowForYouTube(thumbnailPath, videoID string, meta *Review
 		return false
 	}
 
-	// Pre-fill tags with video ID + youtube
-	tags := fmt.Sprintf("progress, youtube, %s", videoID)
+	// Pre-fill tags with video ID
+	tags := fmt.Sprintf("youtube, %s", videoID)
 	SetObservationTags(tags)
 
 	// Set the video ID as the observation title

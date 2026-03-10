@@ -2,12 +2,14 @@
 package whisper
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Segment represents a single transcription segment with timing.
@@ -45,6 +47,11 @@ func FindBinary() (string, error) {
 
 // Transcribe runs whisper on an audio file and returns the parsed result.
 func Transcribe(audioPath string, model string, language string) (*Result, error) {
+	return TranscribeWithContext(context.Background(), audioPath, model, language)
+}
+
+// TranscribeWithContext runs whisper with cancellation/timeout support.
+func TranscribeWithContext(ctx context.Context, audioPath string, model string, language string) (*Result, error) {
 	whisperPath, err := FindBinary()
 	if err != nil {
 		return nil, err
@@ -66,9 +73,15 @@ func Transcribe(audioPath string, model string, language string) (*Result, error
 		args = append(args, "--language", language)
 	}
 
-	cmd := exec.Command(whisperPath, args...)
+	cmd := exec.CommandContext(ctx, whisperPath, args...)
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, fmt.Errorf("whisper timed out: %w", err)
+		}
+		if ctx.Err() == context.Canceled {
+			return nil, fmt.Errorf("whisper canceled: %w", err)
+		}
 		return nil, fmt.Errorf("whisper failed: %w", err)
 	}
 
@@ -91,6 +104,21 @@ func Transcribe(audioPath string, model string, language string) (*Result, error
 // TranscribeText is a convenience function that returns just the text.
 func TranscribeText(audioPath string, model string, language string) (string, error) {
 	result, err := Transcribe(audioPath, model, language)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(result.Text), nil
+}
+
+// TranscribeTextWithTimeout transcribes with a hard timeout.
+func TranscribeTextWithTimeout(audioPath string, model string, language string, timeout time.Duration) (string, error) {
+	if timeout <= 0 {
+		return TranscribeText(audioPath, model, language)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	result, err := TranscribeWithContext(ctx, audioPath, model, language)
 	if err != nil {
 		return "", err
 	}

@@ -87,13 +87,15 @@ func CaptureWith(cmd Commander, opts Options) (string, error) {
 
 	args := buildArgs(opts, outPath)
 
-	_, err := cmd.Run("screencapture", args...)
-	if err != nil {
-		return "", fmt.Errorf("screencapture failed: %w", err)
-	}
+	_, runErr := cmd.Run("screencapture", args...)
 
-	// Verify the file was created (user may cancel interactive modes).
+	// Check if the output file was actually created — screencapture may
+	// return a non-zero exit code on some macOS versions even on success.
+	// The file existing is the definitive success signal.
 	if _, err := os.Stat(outPath); err != nil {
+		if runErr != nil {
+			return "", fmt.Errorf("screencapture failed: %w", runErr)
+		}
 		return "", fmt.Errorf("screenshot not created (capture may have been cancelled): %w", err)
 	}
 

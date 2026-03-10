@@ -4,15 +4,16 @@
 // and ER1 upload. Also serves as the menu bar app when run with --menubar.
 //
 // Usage:
-//   m3c-tools transcript <video_id> [--lang en] [--format text|srt|json|webvtt] [--translate de]
-//   m3c-tools upload <video_id> [--audio file.wav] [--image file.jpg]
-//   m3c-tools record [output.wav] [--duration 5]
-//   m3c-tools whisper <audio_file> [--model base] [--language en]
-//   m3c-tools devices
-//   m3c-tools thumbnail <video_id> [--output file.jpg]
-//   m3c-tools retry [--interval 30] [--max-retries 10]
-//   m3c-tools check-er1
-//   m3c-tools menubar [--title M3C] [--icon path.png] [--log /tmp/m3c-tools.log]
+//
+//	m3c-tools transcript <video_id> [--lang en] [--format text|srt|json|webvtt] [--translate de]
+//	m3c-tools upload <video_id> [--audio file.wav] [--image file.jpg]
+//	m3c-tools record [output.wav] [--duration 5]
+//	m3c-tools whisper <audio_file> [--model base] [--language en]
+//	m3c-tools devices
+//	m3c-tools thumbnail <video_id> [--output file.jpg]
+//	m3c-tools retry [--interval 30] [--max-retries 10]
+//	m3c-tools check-er1
+//	m3c-tools menubar [--title M3C] [--icon path.png] [--log /tmp/m3c-tools.log]
 package main
 
 import (
@@ -20,6 +21,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
@@ -28,8 +30,8 @@ import (
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/er1"
-	"github.com/kamir/m3c-tools/pkg/impression"
 	"github.com/kamir/m3c-tools/pkg/importer"
+	"github.com/kamir/m3c-tools/pkg/impression"
 	"github.com/kamir/m3c-tools/pkg/menubar"
 	"github.com/kamir/m3c-tools/pkg/recorder"
 	"github.com/kamir/m3c-tools/pkg/screenshot"
@@ -176,11 +178,20 @@ func cmdTranscript(args []string) {
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--lang":
-			if i+1 < len(args) { lang = args[i+1]; i++ }
+			if i+1 < len(args) {
+				lang = args[i+1]
+				i++
+			}
 		case "--format":
-			if i+1 < len(args) { format = args[i+1]; i++ }
+			if i+1 < len(args) {
+				format = args[i+1]
+				i++
+			}
 		case "--translate":
-			if i+1 < len(args) { translateLang = args[i+1]; i++ }
+			if i+1 < len(args) {
+				translateLang = args[i+1]
+				i++
+			}
 		case "--list":
 			listOnly = true
 		case "--exclude-generated":
@@ -188,9 +199,15 @@ func cmdTranscript(args []string) {
 		case "--exclude-manually-created":
 			excludeManuallyCreated = true
 		case "--proxy-url":
-			if i+1 < len(args) { proxyURL = args[i+1]; i++ }
+			if i+1 < len(args) {
+				proxyURL = args[i+1]
+				i++
+			}
 		case "--proxy-auth":
-			if i+1 < len(args) { proxyAuth = args[i+1]; i++ }
+			if i+1 < len(args) {
+				proxyAuth = args[i+1]
+				i++
+			}
 		}
 	}
 
@@ -274,9 +291,15 @@ func cmdUpload(args []string) {
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--audio":
-			if i+1 < len(args) { audioPath = args[i+1]; i++ }
+			if i+1 < len(args) {
+				audioPath = args[i+1]
+				i++
+			}
 		case "--impression":
-			if i+1 < len(args) { impressionText = args[i+1]; i++ }
+			if i+1 < len(args) {
+				impressionText = args[i+1]
+				i++
+			}
 		}
 	}
 
@@ -384,9 +407,15 @@ func cmdWhisper(args []string) {
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--model":
-			if i+1 < len(args) { model = args[i+1]; i++ }
+			if i+1 < len(args) {
+				model = args[i+1]
+				i++
+			}
 		case "--language":
-			if i+1 < len(args) { language = args[i+1]; i++ }
+			if i+1 < len(args) {
+				language = args[i+1]
+				i++
+			}
 		}
 	}
 
@@ -415,7 +444,8 @@ func cmdThumbnail(args []string) {
 
 	for i := 1; i < len(args); i++ {
 		if args[i] == "--output" && i+1 < len(args) {
-			output = args[i+1]; i++
+			output = args[i+1]
+			i++
 		}
 	}
 
@@ -1052,18 +1082,25 @@ func cmdMenubar(args []string) {
 	app := menubar.NewAppWithConfig(cfg, menubar.Handlers{
 		OnUploadER1: menubarUploadER1,
 	})
+	menubar.StartFrontmostAppTracker()
+	if exe, err := os.Executable(); err == nil {
+		log.Printf("[diag] pid=%d exe=%q screen_access=%v screenshot_mode=%s", os.Getpid(), exe, menubar.HasScreenCaptureAccess(), screenshotCaptureMode())
+	}
+	maybePreloadWhisper()
 
 	// Wire OnAction to dispatch menu actions to real implementations.
 	app.Handlers.OnAction = func(action menubar.ActionType, data string) {
 		log.Printf("[menubar] action=%s data=%q", action, data)
 		switch action {
 		case menubar.ActionFetchTranscript:
-			go fetcher.FetchAndDisplay(app, data)
+			go menubarFetchTranscriptAndTrack(app, fetcher, data)
 		case menubar.ActionCaptureScreenshot:
 			go menubarCaptureScreenshot(app)
 		case menubar.ActionCopyTranscript:
 			// data is the video ID; re-fetch and copy
 			go fetcher.FetchAndDisplay(app, data)
+		case menubar.ActionRecordImpression:
+			go menubarRecordImpression(app, data)
 		case menubar.ActionQuickImpulse:
 			go menubarQuickImpulse(app)
 		}
@@ -1071,6 +1108,83 @@ func cmdMenubar(args []string) {
 
 	log.Printf("Launching menu bar app (title=%q, icon=%q, log=%q)", cfg.Title, cfg.IconPath, cfg.LogPath)
 	app.Run()
+}
+
+// menubarFetchTranscriptAndTrack fetches YouTube transcript context, opens a
+// record-capable Observation Window, and starts voice tracking regardless of
+// transcript availability. On transcript fetch rate limit/failure, tags include
+// "transcript-pull-needed" so the item can be revisited later.
+func menubarFetchTranscriptAndTrack(app *menubar.App, fetcher *menubar.TranscriptFetcher, videoID string) {
+	app.SetStatus(menubar.StatusFetching)
+	app.Notify("Fetching...", fmt.Sprintf("Fetching transcript for %s", videoID))
+
+	result, err := fetcher.Fetch(videoID)
+	if err != nil {
+		app.SetStatus(menubar.StatusError)
+		app.Notify("Error", fmt.Sprintf("Failed to fetch transcript: %s", err))
+		return
+	}
+
+	if result.Text != "" {
+		_ = menubar.CopyToClipboard(result.Text)
+	}
+	app.AddHistory(menubar.NewHistoryEntry(result.VideoID, result.Flag))
+
+	thumbnailPath := fetcher.FetchAndSaveThumbnail(result.VideoID)
+	var imgData []byte
+	if thumbnailPath != "" {
+		if data, readErr := os.ReadFile(thumbnailPath); readErr == nil {
+			imgData = data
+		}
+	}
+
+	meta := &menubar.ReviewMetadata{
+		Source:       "YouTube",
+		Language:     result.Language,
+		SnippetCount: result.SnippetCount,
+		CharCount:    result.CharCount,
+		Date:         time.Now().Format("2006-01-02 15:04:05"),
+	}
+	if result.FromCache {
+		meta.Source = "YouTube (cached)"
+	}
+
+	title := fmt.Sprintf("Observation — YouTube [%s]", result.VideoID)
+	ok := menubar.ShowObservationWindowWithMeta(title, thumbnailPath, menubar.ChannelTypeProgress, meta)
+	if !ok {
+		app.SetStatus(menubar.StatusError)
+		app.Notify("Error", "Failed to open observation window.")
+		return
+	}
+
+	tags := fmt.Sprintf("progress, youtube, %s", result.VideoID)
+	if result.RateLimited {
+		tags += ", transcript-pull-needed"
+	}
+	menubar.SetObservationTags(tags)
+	menubar.SetObservationTitle(result.VideoID)
+
+	if result.Text != "" {
+		statusText := fmt.Sprintf("Transcript loaded — %d chars", len(result.Text))
+		menubar.SetReviewTranscript(result.Text, statusText)
+	} else if result.RateLimited {
+		menubar.SetReviewTranscript("[Transcript unavailable — YouTube rate limit (429). Voice note recording is still available.]", "Transcript pull needed")
+	}
+
+	app.SetStatus(menubar.StatusRecording)
+	menubar.StartRecordingTimer()
+	menubar.SetRecordSourceLabel("  video " + result.VideoID + "  ")
+	observationRecordAndUpload(app, "progress", thumbnailPath, imgData, impression.Progress)
+
+	if result.RateLimited {
+		app.Notify("Observation Ready", fmt.Sprintf("⚠️ %s — transcript-pull-needed, voice tracker active", result.VideoID))
+		return
+	}
+	if result.FromCache {
+		app.Notify("Observation Ready", fmt.Sprintf("%s %s (cached) — voice tracker active", result.Flag, result.VideoID))
+		return
+	}
+	app.Notify("Observation Ready", fmt.Sprintf("%s %s — transcript loaded, voice tracker active", result.Flag, result.VideoID))
 }
 
 // menubarUploadER1 performs the full ER1 upload workflow for a video ID:
@@ -1139,7 +1253,8 @@ func menubarUploadER1(videoID string) (*menubar.ER1UploadResult, error) {
 // voice note with VU meter → whisper transcribe → Review tab → Store/Cancel.
 func menubarCaptureScreenshot(app *menubar.App) {
 	app.SetStatus(menubar.StatusRecording)
-	imgPath, err := screenshot.CaptureClipboardFirst(os.TempDir())
+
+	imgPath, sourceLabel, err := captureScreenshotForMenu(app, "screenshot")
 	if err != nil {
 		app.SetStatus(menubar.StatusIdle)
 		log.Printf("[screenshot] capture failed: %v", err)
@@ -1156,6 +1271,7 @@ func menubarCaptureScreenshot(app *menubar.App) {
 
 	menubar.ShowObservationWindowForScreenshot(imgPath)
 	menubar.StartRecordingTimer()
+	menubar.SetRecordSourceLabel(sourceLabel)
 	observationRecordAndUpload(app, "screenshot", imgPath, imgData, impression.Idea)
 }
 
@@ -1164,10 +1280,8 @@ func menubarCaptureScreenshot(app *menubar.App) {
 // voice note with VU meter → whisper transcribe → Review tab → Store/Cancel.
 func menubarQuickImpulse(app *menubar.App) {
 	app.SetStatus(menubar.StatusRecording)
-	imgPath, err := screenshot.Capture(screenshot.Options{
-		Mode:   screenshot.Region,
-		Silent: true,
-	})
+
+	imgPath, sourceLabel, err := captureScreenshotForMenu(app, "impulse")
 	if err != nil {
 		app.SetStatus(menubar.StatusIdle)
 		log.Printf("[impulse] screenshot cancelled or failed: %v", err)
@@ -1179,7 +1293,46 @@ func menubarQuickImpulse(app *menubar.App) {
 
 	menubar.ShowObservationWindowForImpulse(imgPath)
 	menubar.StartRecordingTimer()
+	menubar.SetRecordSourceLabel(sourceLabel)
 	observationRecordAndUpload(app, "impulse", imgPath, imgData, impression.Impulse)
+}
+
+// menubarRecordImpression starts an audio-record impression flow for a YouTube
+// item, including thumbnail context when available.
+func menubarRecordImpression(app *menubar.App, videoID string) {
+	videoID = strings.TrimSpace(videoID)
+	if videoID == "" {
+		app.Notify("Record Impression", "Missing video ID.")
+		return
+	}
+
+	app.SetStatus(menubar.StatusRecording)
+
+	// Best-effort thumbnail fetch; recording still works if unavailable.
+	var (
+		imgPath string
+		imgData []byte
+	)
+	fetcher, _ := transcript.NewFetcher(nil)
+	if data, err := fetcher.FetchThumbnail(videoID); err == nil && len(data) > 0 {
+		imgData = data
+		imgPath = filepath.Join(os.TempDir(), fmt.Sprintf("m3c-thumb-%s.jpg", videoID))
+		if writeErr := os.WriteFile(imgPath, data, 0o644); writeErr != nil {
+			log.Printf("[record] thumbnail write failed video=%s error=%v", videoID, writeErr)
+			imgPath = ""
+		}
+	} else if err != nil {
+		log.Printf("[record] thumbnail fetch failed video=%s error=%v (non-fatal)", videoID, err)
+	}
+
+	title := fmt.Sprintf("Observation — YouTube [%s]", videoID)
+	_ = menubar.ShowObservationWindow(title, imgPath, menubar.ChannelTypeProgress)
+	menubar.SetObservationTags(fmt.Sprintf("progress, youtube, %s", videoID))
+	menubar.SetObservationTitle(videoID)
+	menubar.StartRecordingTimer()
+	menubar.SetRecordSourceLabel("  video " + videoID + "  ")
+
+	observationRecordAndUpload(app, "progress", imgPath, imgData, impression.Progress)
 }
 
 // observationRecordAndUpload starts background recording with VU meter and
@@ -1190,6 +1343,8 @@ func observationRecordAndUpload(app *menubar.App, label string, imgPath string, 
 
 	// Shared state written by stop callback, read by store callback.
 	var audioData []byte
+	var uploadAudioData []byte
+	var recordingStopped bool
 	var transcribedText string
 
 	// Context for cancelling the recording from any callback.
@@ -1200,7 +1355,17 @@ func observationRecordAndUpload(app *menubar.App, label string, imgPath string, 
 	go func() {
 		defer close(recDone)
 		samples, recErr := recorder.RecordWithLevels(ctx.Done(), maxRecordSeconds, func(level recorder.AudioLevel) {
-			menubar.UpdateVUMeterLevel(float32(level.RMS))
+			// Map RMS dB to 0.0–1.0 visual range: -60 dB → 0%, 0 dB → 100%.
+			// Raw RMS is too low for a useful linear meter (speech ≈ 0.01–0.05).
+			dbLevel := recorder.AmplitudeToDb(level.RMS)
+			visualLevel := float32((dbLevel + 60.0) / 60.0)
+			if visualLevel < 0 {
+				visualLevel = 0
+			}
+			if visualLevel > 1 {
+				visualLevel = 1
+			}
+			menubar.UpdateVUMeterLevel(visualLevel)
 		})
 		if recErr != nil {
 			log.Printf("[%s] recording failed: %v", label, recErr)
@@ -1213,45 +1378,48 @@ func observationRecordAndUpload(app *menubar.App, label string, imgPath string, 
 	menubar.SetStopRecordingCallback(func(elapsed int) {
 		cancel()
 		<-recDone
+		recordingStopped = true
 
 		if len(audioData) == 0 {
 			menubar.SetReviewTranscript("No audio recorded.", "Recording failed")
 			return
 		}
+		// Freeze audio bytes for Store upload.
+		uploadAudioData = append([]byte(nil), audioData...)
 
 		// Log recording details
-		wavSize := len(audioData)
+		wavSize := len(uploadAudioData)
 		pcmBytes := wavSize - 44
 		if pcmBytes < 0 {
 			pcmBytes = 0
 		}
 		sampleCount := pcmBytes / (recorder.BitsPerSample / 8)
 		duration := float64(sampleCount) / float64(recorder.SampleRate)
-		samples := recorder.DecodePCM16(audioData[44:])
+		samples := recorder.DecodePCM16(uploadAudioData[44:])
 		stats := recorder.Stats(samples)
 		log.Printf("[%s] recorded %.1fs (%d bytes, peak=%d)", label, duration, wavSize, stats.PeakAmplitude)
 
 		// Write WAV to temp file for whisper
 		wavPath := filepath.Join(os.TempDir(), fmt.Sprintf("m3c-%s-%d.wav", label, time.Now().UnixNano()))
-		if err := os.WriteFile(wavPath, audioData, 0644); err != nil {
+		if err := os.WriteFile(wavPath, uploadAudioData, 0644); err != nil {
 			log.Printf("[%s] write WAV failed: %v", label, err)
 			menubar.SetReviewTranscript("Could not save audio for transcription.", "Error")
 			return
 		}
 		defer os.Remove(wavPath)
 
-		// Transcribe via whisper
+		// Transcribe via whisper — show animated progress bar
 		menubar.SetReviewTranscript("Transcribing...", "Whisper processing")
-		model := os.Getenv("YT_WHISPER_MODEL")
-		if model == "" {
-			model = "base"
-		}
-		language := os.Getenv("YT_WHISPER_LANGUAGE")
+		menubar.ShowWhisperProgress()
+		model := menubarWhisperModel()
+		language := menubarWhisperLanguage()
+		timeout := menubarWhisperTimeout()
 
-		log.Printf("[%s] whisper START: file=%s model=%s language=%q", label, wavPath, model, language)
+		log.Printf("[%s] whisper START: file=%s model=%s language=%q timeout=%s", label, wavPath, model, language, timeout)
 		whisperStart := time.Now()
-		text, whisperErr := whisper.TranscribeText(wavPath, model, language)
+		text, whisperErr := whisper.TranscribeTextWithTimeout(wavPath, model, language, timeout)
 		whisperElapsed := time.Since(whisperStart)
+		menubar.HideWhisperProgress()
 
 		if whisperErr != nil {
 			log.Printf("[%s] whisper FAILED after %s: %v", label, whisperElapsed, whisperErr)
@@ -1262,37 +1430,76 @@ func observationRecordAndUpload(app *menubar.App, label string, imgPath string, 
 		transcribedText = text
 		log.Printf("[%s] whisper DONE in %s: %d chars", label, whisperElapsed, len(text))
 		log.Printf("[%s] transcription: %q", label, text)
-		statusText := fmt.Sprintf("Transcription — %d chars in %s", len(text), whisperElapsed.Round(time.Millisecond))
-		menubar.SetReviewTranscript(text, statusText)
+
+		// Build structured memo text with metadata + transcript + notes section.
+		sizeKB := float64(wavSize) / 1024.0
+		peakPct := float64(stats.PeakAmplitude) / 32768.0 * 100
+		memo := fmt.Sprintf(
+			"--- Metadata ---\nChannel: %s\nDate: %s\nRecording: %.1fs, %.1f KB, peak %.0f%%\nWhisper: %s model, %d chars in %s\n\n--- Transcript ---\n%s\n\n--- Notes ---\n",
+			label,
+			time.Now().Format("2006-01-02 15:04:05"),
+			duration, sizeKB, peakPct,
+			model, len(text), whisperElapsed.Round(time.Millisecond),
+			text,
+		)
+		statusText := fmt.Sprintf("Memo — %d chars (editable)", len(memo))
+		menubar.SetReviewTranscript(memo, statusText)
 	})
 
 	// Store callback: build composite doc + upload to ER1.
+	// Reads the (possibly user-edited) memo text from the Review tab.
 	menubar.SetObservationStoreCallback(func(tags, notes, contentType, imagePath string) {
 		app.SetStatus(menubar.StatusUploading)
+		if !recordingStopped {
+			log.Printf("[%s] store requested before recording was stopped", label)
+			app.Notify("Recording Still Running", "Click Stop Recording first.")
+			app.SetStatus(menubar.StatusRecording)
+			return
+		}
+		if len(uploadAudioData) == 0 {
+			log.Printf("[%s] store requested but upload audio is empty", label)
+			app.Notify("No Audio Available", "Please record again before storing.")
+			app.SetStatus(menubar.StatusError)
+			return
+		}
+
 		now := time.Now()
 		ts := now.Format("20060102_150405")
 
+		// Read the final memo text (user may have edited it).
+		memoText := menubar.GetReviewMemoText()
+		if memoText == "" {
+			memoText = transcribedText
+		}
+		memoText = mergeCaptureMemoAndNotes(memoText, notes)
+
 		doc := &impression.CompositeDoc{
-			ImpressionText: transcribedText,
+			ImpressionText: memoText,
 			ObsType:        obsType,
 			Timestamp:      now,
 		}
-		composite := doc.Build()
+		composite := strings.TrimSpace(doc.Build()) + "\n"
 
 		prefix := "idea"
-		if obsType == impression.Impulse {
+		switch obsType {
+		case impression.Progress:
+			prefix = "progress"
+		case impression.Impulse:
 			prefix = "impulse"
 		}
 
 		payload := &er1.UploadPayload{
 			TranscriptData:     []byte(composite),
 			TranscriptFilename: fmt.Sprintf("%s_%s.txt", prefix, ts),
-			AudioData:          audioData,
+			AudioData:          uploadAudioData,
 			AudioFilename:      fmt.Sprintf("%s_%s.wav", prefix, ts),
 			ImageData:          imgData,
 			ImageFilename:      filepath.Base(imgPath),
 			Tags:               tags,
+			ContentType:        contentType,
 		}
+		log.Printf("[%s] upload payload sizes: transcript=%d audio=%d image=%d",
+			label, len(payload.TranscriptData), len(payload.AudioData), len(payload.ImageData))
 		menubarUploadPayload(app, label, payload, tags)
 	})
 
@@ -1304,7 +1511,23 @@ func observationRecordAndUpload(app *menubar.App, label string, imgPath string, 
 	})
 }
 
+func mergeCaptureMemoAndNotes(memo, notes string) string {
+	m := strings.TrimSpace(memo)
+	n := strings.TrimSpace(notes)
+	if n == "" {
+		return m
+	}
+	if m == "" {
+		return "Additional Comment:\n" + n
+	}
+	if strings.Contains(m, n) {
+		return m
+	}
+	return m + "\n\n--- Additional Comment ---\n" + n
+}
+
 // menubarUploadPayload uploads a payload to ER1, queuing on failure.
+// On success, opens the uploaded item in the default browser.
 func menubarUploadPayload(app *menubar.App, label string, payload *er1.UploadPayload, tags string) {
 	cfg := er1.LoadConfig()
 	resp, err := er1.Upload(cfg, payload)
@@ -1315,6 +1538,274 @@ func menubarUploadPayload(app *menubar.App, label string, payload *er1.UploadPay
 		app.SetStatus(menubar.StatusIdle)
 		return
 	}
-	log.Printf("[%s] uploaded to ER1: doc_id=%s", label, resp.DocID)
+
+	// Build item URL: <service_base>/memory/<context_id>/<doc_id>
+	baseURL := strings.TrimSuffix(cfg.APIURL, "/upload_2")
+	baseURL = strings.TrimSuffix(baseURL, "/")
+	itemURL := fmt.Sprintf("%s/memory/%s/%s", baseURL, cfg.ContextID, resp.DocID)
+
+	log.Printf("[%s] uploaded to ER1: doc_id=%s url=%s", label, resp.DocID, itemURL)
+	app.Notify("Upload Done", fmt.Sprintf("doc_id: %s", resp.DocID))
 	app.SetStatus(menubar.StatusIdle)
+
+	// Open the item in the default browser.
+	_ = openURL(itemURL)
+}
+
+// openURL opens a URL in the default browser (macOS only).
+func openURL(url string) error {
+	// Prefer Chrome to keep auth/session in the same browser used for ER1.
+	if err := exec.Command("open", "-a", "Google Chrome", url).Start(); err == nil {
+		return nil
+	}
+	// Fallback to system default browser if Chrome is unavailable.
+	return exec.Command("open", url).Start()
+}
+
+func captureScreenshotForMenu(app *menubar.App, flow string) (string, string, error) {
+	mode := screenshotCaptureMode()
+	switch mode {
+	case "clipboard-first":
+		timeout := clipboardCaptureTimeout()
+		app.Notify("Take Screenshot", fmt.Sprintf("Press Cmd+Ctrl+Shift+4 (waiting %ds)", int(timeout/time.Second)))
+		menubar.ResetCaptureHintCancelled()
+		menubar.ShowCaptureHintWindow(
+			"Waiting for screenshot…",
+			fmt.Sprintf("Press Cmd+Ctrl+Shift+4 (timeout %ds)", int(timeout/time.Second)),
+		)
+		defer menubar.HideCaptureHintWindow()
+		log.Printf("[%s] screenshot mode=clipboard-first timeout=%s", flow, timeout)
+
+		imgPath, err := waitForClipboardImageChange(timeout)
+		if err != nil {
+			return "", "", err
+		}
+		return imgPath, "  from clipboard  ", nil
+
+	case "interactive":
+		log.Printf("[%s] screenshot mode=interactive", flow)
+
+		if !menubar.HasScreenCaptureAccess() {
+			app.Notify("Screen Recording Permission Needed", "Enable m3c-tools in Screen Recording and restart the app. Falling back to clipboard mode.")
+			_ = openURL("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+			return captureScreenshotForMenuClipboardFallback(app)
+		}
+
+		menubar.PrepareForInteractiveCapture()
+		delay := interactiveCaptureFocusDelay()
+		log.Printf("[%s] focus handoff delay=%s", flow, delay)
+		time.Sleep(delay)
+
+		imgPath, err := screenshot.Capture(screenshot.Options{
+			Mode:   screenshot.Region,
+			Silent: true,
+		})
+		if err != nil {
+			log.Printf("[%s] interactive capture failed: %v; trying clipboard fallback", flow, err)
+			imgPath, err = screenshot.CaptureClipboardFirst(os.TempDir())
+			if err != nil {
+				return "", "", err
+			}
+			return imgPath, "  from clipboard  ", nil
+		}
+		return imgPath, "  capture at " + time.Now().Format("15:04:05") + "  ", nil
+
+	default:
+		log.Printf("[%s] unknown screenshot mode %q; using clipboard-first", flow, mode)
+		return captureScreenshotForMenuClipboardFallback(app)
+	}
+}
+
+func captureScreenshotForMenuClipboardFallback(app *menubar.App) (string, string, error) {
+	timeout := clipboardCaptureTimeout()
+	menubar.ResetCaptureHintCancelled()
+	menubar.ShowCaptureHintWindow(
+		"Waiting for screenshot…",
+		fmt.Sprintf("Press Cmd+Ctrl+Shift+4 (timeout %ds)", int(timeout/time.Second)),
+	)
+	defer menubar.HideCaptureHintWindow()
+	if app != nil {
+		app.Notify("Take Screenshot", fmt.Sprintf("Press Cmd+Ctrl+Shift+4 (waiting %ds)", int(timeout/time.Second)))
+	}
+	imgPath, err := waitForClipboardImageChange(timeout)
+	if err != nil {
+		return "", "", err
+	}
+	return imgPath, "  from clipboard  ", nil
+}
+
+func waitForClipboardImageChange(timeout time.Duration) (string, error) {
+	startCount := menubar.ClipboardChangeCount()
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		if menubar.CaptureHintWasCancelled() {
+			return "", fmt.Errorf("screenshot capture cancelled by user")
+		}
+		currentCount := menubar.ClipboardChangeCount()
+		if currentCount != startCount {
+			startCount = currentCount
+			imgType, err := screenshot.DetectClipboardImage()
+			if err != nil {
+				log.Printf("[screenshot] clipboard check failed after change_count=%d: %v", currentCount, err)
+				time.Sleep(120 * time.Millisecond)
+				continue
+			}
+			if imgType == screenshot.ClipboardNoImage {
+				time.Sleep(120 * time.Millisecond)
+				continue
+			}
+
+			outPath := filepath.Join(
+				os.TempDir(),
+				fmt.Sprintf("m3c-clipboard-%s.png", time.Now().Format("20060102-150405")),
+			)
+			return screenshot.ExtractClipboardImage(outPath)
+		}
+		time.Sleep(120 * time.Millisecond)
+	}
+
+	return "", fmt.Errorf("timed out waiting for clipboard screenshot after %s", timeout)
+}
+
+func screenshotCaptureMode() string {
+	raw := strings.TrimSpace(strings.ToLower(os.Getenv("M3C_SCREENSHOT_MODE")))
+	switch raw {
+	case "", "clipboard-first", "clipboard", "hotkey":
+		return "clipboard-first"
+	case "interactive", "screencapture-legacy", "legacy":
+		return "interactive"
+	default:
+		return raw
+	}
+}
+
+func clipboardCaptureTimeout() time.Duration {
+	const (
+		defaultTimeout = 20 * time.Second
+		maxTimeout     = 5 * time.Minute
+	)
+
+	raw := strings.TrimSpace(os.Getenv("M3C_SCREENSHOT_CLIPBOARD_TIMEOUT_SEC"))
+	if raw == "" {
+		return defaultTimeout
+	}
+
+	secs, err := strconv.Atoi(raw)
+	if err != nil {
+		log.Printf("[screenshot] invalid M3C_SCREENSHOT_CLIPBOARD_TIMEOUT_SEC=%q; using default %ds", raw, int(defaultTimeout/time.Second))
+		return defaultTimeout
+	}
+	if secs < 1 {
+		log.Printf("[screenshot] M3C_SCREENSHOT_CLIPBOARD_TIMEOUT_SEC=%d is too low; using 1s", secs)
+		return time.Second
+	}
+
+	timeout := time.Duration(secs) * time.Second
+	if timeout > maxTimeout {
+		log.Printf("[screenshot] M3C_SCREENSHOT_CLIPBOARD_TIMEOUT_SEC=%d is too high; clamping to %ds", secs, int(maxTimeout/time.Second))
+		return maxTimeout
+	}
+	return timeout
+}
+
+func interactiveCaptureFocusDelay() time.Duration {
+	const (
+		defaultDelay = 700 * time.Millisecond
+		maxDelay     = 5 * time.Second
+	)
+
+	raw := strings.TrimSpace(os.Getenv("M3C_SCREENSHOT_FOCUS_DELAY_MS"))
+	if raw == "" {
+		return defaultDelay
+	}
+
+	ms, err := strconv.Atoi(raw)
+	if err != nil {
+		log.Printf("[screenshot] invalid M3C_SCREENSHOT_FOCUS_DELAY_MS=%q; using default %dms", raw, defaultDelay/time.Millisecond)
+		return defaultDelay
+	}
+	if ms < 0 {
+		log.Printf("[screenshot] M3C_SCREENSHOT_FOCUS_DELAY_MS=%d is negative; using 0ms", ms)
+		return 0
+	}
+
+	delay := time.Duration(ms) * time.Millisecond
+	if delay > maxDelay {
+		log.Printf("[screenshot] M3C_SCREENSHOT_FOCUS_DELAY_MS=%d is too high; clamping to %dms", ms, maxDelay/time.Millisecond)
+		return maxDelay
+	}
+	return delay
+}
+
+func maybePreloadWhisper() {
+	raw := strings.TrimSpace(strings.ToLower(os.Getenv("M3C_WHISPER_PRELOAD")))
+	if raw == "0" || raw == "false" || raw == "off" || raw == "no" {
+		log.Printf("[whisper] preload disabled by M3C_WHISPER_PRELOAD=%q", raw)
+		return
+	}
+
+	model := menubarWhisperModel()
+	language := menubarWhisperLanguage()
+
+	go func() {
+		start := time.Now()
+		tmpPath := filepath.Join(os.TempDir(), fmt.Sprintf("m3c-whisper-preload-%d.wav", time.Now().UnixNano()))
+		samples := make([]int16, recorder.SampleRate) // 1s silence
+		if err := os.WriteFile(tmpPath, recorder.EncodeWAV(samples), 0644); err != nil {
+			log.Printf("[whisper] preload skipped: write temp wav failed: %v", err)
+			return
+		}
+		defer os.Remove(tmpPath)
+
+		log.Printf("[whisper] preload start model=%s language=%s", model, language)
+		_, err := whisper.TranscribeTextWithTimeout(tmpPath, model, language, menubarWhisperTimeout())
+		if err != nil {
+			log.Printf("[whisper] preload failed after %s: %v", time.Since(start).Round(time.Millisecond), err)
+			return
+		}
+		log.Printf("[whisper] preload done in %s", time.Since(start).Round(time.Millisecond))
+	}()
+}
+
+func menubarWhisperModel() string {
+	model := strings.TrimSpace(os.Getenv("M3C_WHISPER_MODEL"))
+	if model != "" {
+		return model
+	}
+	model = strings.TrimSpace(os.Getenv("YT_WHISPER_MODEL"))
+	if model != "" {
+		return model
+	}
+	return "base"
+}
+
+func menubarWhisperLanguage() string {
+	language := strings.TrimSpace(os.Getenv("YT_WHISPER_LANGUAGE"))
+	if language != "" {
+		return language
+	}
+	return "de"
+}
+
+func menubarWhisperTimeout() time.Duration {
+	const defaultTimeout = 120 * time.Second
+
+	raw := strings.TrimSpace(os.Getenv("M3C_WHISPER_TIMEOUT"))
+	if raw == "" {
+		raw = strings.TrimSpace(os.Getenv("YT_WHISPER_TIMEOUT"))
+	}
+	if raw == "" {
+		return defaultTimeout
+	}
+
+	secs, err := strconv.Atoi(raw)
+	if err != nil {
+		log.Printf("[whisper] invalid timeout %q; using default %s", raw, defaultTimeout)
+		return defaultTimeout
+	}
+	if secs <= 0 {
+		return 0
+	}
+	return time.Duration(secs) * time.Second
 }
