@@ -303,6 +303,20 @@ static void setReviewTranscript(const char *text, const char *statusText) {
 	});
 }
 
+// Forward declaration — defined in Global Window State section below.
+static NSTextView *g_obsSummaryText;
+
+// setObsNotes sets the text content of the Notes field in the Tags tab.
+static void setObsNotes(const char *text) {
+	if (text == NULL) return;
+	NSString *s = [NSString stringWithUTF8String:text];
+	dispatch_async(dispatch_get_main_queue(), ^{
+		if (g_obsSummaryText != nil) {
+			[g_obsSummaryText setString:s];
+		}
+	});
+}
+
 // Forward declarations (defined in Global Window State section below).
 static NSTextField *g_recordSourceLabel;
 static NSProgressIndicator *g_whisperProgress;
@@ -2064,6 +2078,17 @@ func SetObservationTitle(title string) {
 	cTitle := C.CString(title)
 	defer C.free(unsafe.Pointer(cTitle))
 	C.setObservationTitle(cTitle)
+}
+
+// SetObservationNotes sets the text content of the Notes field in the Tags tab.
+// Thread-safe: dispatches to the main thread internally.
+func SetObservationNotes(text string) {
+	if text == "" {
+		return
+	}
+	cText := C.CString(text)
+	defer C.free(unsafe.Pointer(cText))
+	C.setObsNotes(cText)
 }
 
 // ShowObservationWindowForYouTube opens the Observation Window for a YouTube
