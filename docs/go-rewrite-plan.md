@@ -1,8 +1,10 @@
-# YT Tools — Go Rewrite Plan
+# M3C Tools — Go Rewrite Plan (COMPLETED)
+
+> **Status: COMPLETE (v1.4.4)**. This document is preserved as historical reference for the Python-to-Go migration. All phases are implemented and in production. See [Roadmap](roadmap) for current status.
 
 ## 0. Full youtube-transcript-api Library Port
 
-The Go module must include a **complete port** of the forked
+The Go module includes a **complete port** of the forked
 [youtube-transcript-api](https://github.com/jdepoix/youtube-transcript-api)
 library (6 source files, ~1,500 lines). Every public type, method, and error
 must have a Go equivalent.

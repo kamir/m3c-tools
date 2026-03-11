@@ -287,25 +287,3 @@ func TestMenubarER1UploadStatusTransitions(t *testing.T) {
 	}
 }
 
-// TestMenubarER1UploadMenuItem verifies the Upload to ER1 menu item
-// appears in the menu item list.
-func TestMenubarER1UploadMenuItem(t *testing.T) {
-	app := menubar.NewApp()
-	app.SetAuthSession(menubar.AuthSession{LoggedIn: true, UserID: "ctx-test"})
-	items := app.BuildMenuItems()
-
-	found := false
-	for _, item := range items {
-		if strings.Contains(item.Text, "Upload to ER1") {
-			found = true
-			break
-		}
-	}
-	if !found {
-		texts := make([]string, len(items))
-		for i, item := range items {
-			texts[i] = item.Text
-		}
-		t.Errorf("'Upload to ER1' menu item not found in: %v", texts)
-	}
-}

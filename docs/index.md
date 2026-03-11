@@ -3,62 +3,65 @@ layout: default
 title: Home
 ---
 
-# YT Tools
+# M3C Tools — Multi-Modal Memory Capture
 
-A growing toolkit for working with YouTube transcripts — from quick one-off fetches to full watch-history analysis.
+A native macOS toolkit for capturing multimodal observations (text + audio + image) and uploading them to an ER1 personal knowledge server. Built in Go with native Cocoa UI via cgo.
 
 ## What's in the box?
 
-| Tool | What it does | API Key? |
-|------|-------------|----------|
-| **youtube-transcript-api** | Python library & CLI to fetch any video's transcript | No |
-| **do_fetch.py** | Quick script — fetch a transcript and copy to clipboard | No |
-| **YT Transcript (Menu Bar App)** | macOS menu bar app for instant transcript access | No |
-| **YT History Inspector** | Web app to analyze your YouTube watch history | Yes — Google OAuth |
-| **Demo App** | Flask reference app combining all tools | Yes — Google OAuth |
+| Component | What it does |
+|-----------|-------------|
+| **Menu Bar App** | macOS menu bar app with 4 capture channels, Observation Window, ER1 upload |
+| **CLI** | `m3c-tools transcript` — fetch YouTube transcripts, manage imports, retry queue |
+| **Transcript Library** | Pure Go port of youtube-transcript-api (no API key needed) |
+| **Whisper Integration** | Local speech-to-text via whisper CLI subprocess |
+| **ER1 Client** | Multipart upload to ER1 knowledge server with offline retry queue |
 
 ## Quick start
+
+### Build from source
+
+```bash
+git clone https://github.com/kamir/m3c-tools.git
+cd m3c-tools
+make build
+```
+
+### Install (CLI + macOS .app bundle)
+
+```bash
+make install
+```
+
+This builds the binary, creates `M3C-Tools.app`, installs both, and walks you through macOS permission setup.
 
 ### Fetch a transcript (no key needed)
 
 ```bash
-pip install youtube-transcript-api
+./build/m3c-tools transcript dQw4w9WgXcQ
 ```
 
-```python
-from youtube_transcript_api import YouTubeTranscriptApi
-
-api = YouTubeTranscriptApi()
-transcript = api.fetch("dQw4w9WgXcQ")
-
-for snippet in transcript:
-    print(snippet.text)
-```
-
-Or from the CLI:
+### Run the menu bar app
 
 ```bash
-youtube_transcript_api dQw4w9WgXcQ
+make menubar
 ```
 
-### Install the macOS menu bar app (no key needed)
-
-```bash
-curl -fsSL https://api.github.com/repos/kamir/youtube-transcript-api/contents/tools/install.sh?ref=kamir/m3c-tools -H 'Accept: application/vnd.github.raw' | bash
-```
-
-### Run the History Inspector (OAuth key required)
-
-See the [Authentication Guide](authentication) first, then:
-
-```bash
-# with Docker
-docker compose up
-
-# or directly
-cd demo_app && python app.py
-```
+Or launch the installed app from `/Applications/M3C-Tools.app`.
 
 ---
 
-Next: [Getting Started](getting-started) | [Authentication Guide](authentication)
+## Capture Channels
+
+| Channel | Trigger | Captures |
+|---------|---------|----------|
+| **A — YouTube** | Paste video URL/ID | Transcript + thumbnail + voice impression |
+| **B — Screenshot** | Menu item | Screenshot + voice impression |
+| **C — Impulse** | Menu item | Interactive region screenshot + voice impression |
+| **D — Audio Import** | Menu item | Batch audio files from preconfigured folder |
+
+All channels flow through the unified **Observation Window** pipeline: Capture → Record → Review → Tags → Store/Cancel.
+
+---
+
+Next: [Getting Started](getting-started) | [Menu Bar App](menubar-app)

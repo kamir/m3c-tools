@@ -11,34 +11,58 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
 const createFilesTableSQL = `
 CREATE TABLE IF NOT EXISTS processed_files (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    file_path    TEXT NOT NULL,
-    file_hash    TEXT NOT NULL,
-    file_size    INTEGER NOT NULL,
-    import_type  TEXT NOT NULL DEFAULT 'audio',
-    status       TEXT NOT NULL DEFAULT 'imported',
-    memory_id    TEXT,
-    processed_at TEXT NOT NULL,
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_path       TEXT NOT NULL,
+    file_hash       TEXT NOT NULL,
+    file_size       INTEGER NOT NULL,
+    import_type     TEXT NOT NULL DEFAULT 'audio',
+    status          TEXT NOT NULL DEFAULT 'imported',
+    memory_id       TEXT,
+    processed_at    TEXT NOT NULL,
+    transcript_text TEXT,
+    transcript_lang TEXT,
+    transcript_len  INTEGER DEFAULT 0,
+    upload_doc_id   TEXT,
+    upload_error    TEXT,
+    uploaded_at     TEXT,
     UNIQUE(file_hash, import_type)
 );
 CREATE INDEX IF NOT EXISTS idx_processed_files_path ON processed_files(file_path);
 CREATE INDEX IF NOT EXISTS idx_processed_files_hash ON processed_files(file_hash);`
 
+// migrateFilesTable adds columns introduced after the initial schema.
+// Each ALTER TABLE is idempotent (fails silently if column already exists).
+const migrateFilesTableSQL = `
+ALTER TABLE processed_files ADD COLUMN transcript_text TEXT;
+ALTER TABLE processed_files ADD COLUMN transcript_lang TEXT;
+ALTER TABLE processed_files ADD COLUMN transcript_len  INTEGER DEFAULT 0;
+ALTER TABLE processed_files ADD COLUMN upload_doc_id   TEXT;
+ALTER TABLE processed_files ADD COLUMN upload_error    TEXT;
+ALTER TABLE processed_files ADD COLUMN uploaded_at     TEXT;
+`
+
 // ProcessedFile represents a row in the processed_files table.
 type ProcessedFile struct {
-	ID          int64
-	FilePath    string
-	FileHash    string
-	FileSize    int64
-	ImportType  string
-	Status      string
-	MemoryID    string
-	ProcessedAt time.Time
+	ID             int64
+	FilePath       string
+	FileHash       string
+	FileSize       int64
+	ImportType     string
+	Status         string
+	MemoryID       string
+	ProcessedAt    time.Time
+	TranscriptText string
+	TranscriptLang string
+	TranscriptLen  int
+	UploadDocID    string
+	UploadError    string
+	UploadedAt     string
 }
 
 // FilesDB manages the processed_files SQLite table.
@@ -63,6 +87,11 @@ func OpenFilesDB(dbPath string) (*FilesDB, error) {
 	if _, err := db.Exec(createFilesTableSQL); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("create processed_files table: %w", err)
+	}
+
+	// Run migrations for existing DBs — each ALTER is idempotent.
+	for _, stmt := range splitStatements(migrateFilesTableSQL) {
+		_, _ = db.Exec(stmt) // ignore "duplicate column" errors
 	}
 
 	return &FilesDB{db: db}, nil
@@ -140,7 +169,7 @@ func (f *FilesDB) IsPathProcessed(filePath, importType string) (bool, error) {
 // GetByHash returns the processed file record for a given (file_hash, import_type).
 func (f *FilesDB) GetByHash(fileHash, importType string) (*ProcessedFile, error) {
 	row := f.db.QueryRow(`
-		SELECT id, file_path, file_hash, file_size, import_type, status, memory_id, processed_at
+		SELECT ` + allColumns + `
 		FROM processed_files WHERE file_hash = ? AND import_type = ?
 	`, fileHash, importType)
 	return scanFileRecord(row)
@@ -149,7 +178,7 @@ func (f *FilesDB) GetByHash(fileHash, importType string) (*ProcessedFile, error)
 // GetByPath returns the first processed file record matching the given path.
 func (f *FilesDB) GetByPath(filePath string) (*ProcessedFile, error) {
 	row := f.db.QueryRow(`
-		SELECT id, file_path, file_hash, file_size, import_type, status, memory_id, processed_at
+		SELECT ` + allColumns + `
 		FROM processed_files WHERE file_path = ? LIMIT 1
 	`, filePath)
 	return scanFileRecord(row)
@@ -177,7 +206,7 @@ func (f *FilesDB) ListFiles(limit int) ([]ProcessedFile, error) {
 		limit = 100
 	}
 	rows, err := f.db.Query(`
-		SELECT id, file_path, file_hash, file_size, import_type, status, memory_id, processed_at
+		SELECT ` + allColumns + `
 		FROM processed_files ORDER BY processed_at DESC LIMIT ?
 	`, limit)
 	if err != nil {
@@ -202,7 +231,7 @@ func (f *FilesDB) ListByStatus(status string, limit int) ([]ProcessedFile, error
 		limit = 100
 	}
 	rows, err := f.db.Query(`
-		SELECT id, file_path, file_hash, file_size, import_type, status, memory_id, processed_at
+		SELECT ` + allColumns + `
 		FROM processed_files WHERE status = ? ORDER BY processed_at DESC LIMIT ?
 	`, status, limit)
 	if err != nil {
@@ -235,6 +264,38 @@ func (f *FilesDB) CountFilesByStatus(status string) (int, error) {
 	return count, err
 }
 
+// RecordTranscript stores the transcript text and language for an imported file.
+func (f *FilesDB) RecordTranscript(fileHash, importType, text, lang string) error {
+	tLen := len(strings.TrimSpace(text))
+	_, err := f.db.Exec(`
+		UPDATE processed_files
+		SET transcript_text = ?, transcript_lang = ?, transcript_len = ?
+		WHERE file_hash = ? AND import_type = ?
+	`, text, lang, tLen, fileHash, importType)
+	return err
+}
+
+// RecordUploadSuccess stores the ER1 doc ID and marks the file as uploaded.
+func (f *FilesDB) RecordUploadSuccess(fileHash, importType, docID string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := f.db.Exec(`
+		UPDATE processed_files
+		SET status = 'uploaded', upload_doc_id = ?, upload_error = NULL, uploaded_at = ?, memory_id = ?
+		WHERE file_hash = ? AND import_type = ?
+	`, docID, now, docID, fileHash, importType)
+	return err
+}
+
+// RecordUploadError stores the upload error message for a failed upload.
+func (f *FilesDB) RecordUploadError(fileHash, importType, errMsg string) error {
+	_, err := f.db.Exec(`
+		UPDATE processed_files
+		SET status = 'failed', upload_error = ?
+		WHERE file_hash = ? AND import_type = ?
+	`, errMsg, fileHash, importType)
+	return err
+}
+
 // RemoveByHash removes a processed file record by its content hash and import type.
 func (f *FilesDB) RemoveByHash(fileHash, importType string) error {
 	_, err := f.db.Exec(`
@@ -243,11 +304,18 @@ func (f *FilesDB) RemoveByHash(fileHash, importType string) error {
 	return err
 }
 
+// allColumns is the column list used in SELECT queries.
+const allColumns = `id, file_path, file_hash, file_size, import_type, status, memory_id, processed_at,
+	COALESCE(transcript_text,''), COALESCE(transcript_lang,''), COALESCE(transcript_len,0),
+	COALESCE(upload_doc_id,''), COALESCE(upload_error,''), COALESCE(uploaded_at,'')`
+
 func scanFileRecord(row *sql.Row) (*ProcessedFile, error) {
 	var r ProcessedFile
 	var processedAt string
 	var memoryID sql.NullString
-	err := row.Scan(&r.ID, &r.FilePath, &r.FileHash, &r.FileSize, &r.ImportType, &r.Status, &memoryID, &processedAt)
+	err := row.Scan(&r.ID, &r.FilePath, &r.FileHash, &r.FileSize, &r.ImportType, &r.Status, &memoryID, &processedAt,
+		&r.TranscriptText, &r.TranscriptLang, &r.TranscriptLen,
+		&r.UploadDocID, &r.UploadError, &r.UploadedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -265,7 +333,9 @@ func scanFileRows(rows *sql.Rows) (*ProcessedFile, error) {
 	var r ProcessedFile
 	var processedAt string
 	var memoryID sql.NullString
-	if err := rows.Scan(&r.ID, &r.FilePath, &r.FileHash, &r.FileSize, &r.ImportType, &r.Status, &memoryID, &processedAt); err != nil {
+	if err := rows.Scan(&r.ID, &r.FilePath, &r.FileHash, &r.FileSize, &r.ImportType, &r.Status, &memoryID, &processedAt,
+		&r.TranscriptText, &r.TranscriptLang, &r.TranscriptLen,
+		&r.UploadDocID, &r.UploadError, &r.UploadedAt); err != nil {
 		return nil, err
 	}
 	r.ProcessedAt, _ = time.Parse(time.RFC3339, processedAt)
@@ -273,4 +343,18 @@ func scanFileRows(rows *sql.Rows) (*ProcessedFile, error) {
 		r.MemoryID = memoryID.String
 	}
 	return &r, nil
+}
+
+// splitStatements splits a multi-statement SQL string by semicolons,
+// returning non-empty trimmed statements.
+func splitStatements(sql string) []string {
+	parts := strings.Split(sql, ";")
+	var result []string
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
 }

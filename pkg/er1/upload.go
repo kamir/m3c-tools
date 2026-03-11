@@ -22,6 +22,7 @@ type UploadPayload struct {
 	ImageFilename      string // e.g. "videoID_thumbnail.jpg"
 	Tags               string // comma-separated tags
 	ContentType        string // per-observation content type (overrides cfg.ContentType if set)
+	DocID              string // if set, request ER1 to overwrite this existing document
 }
 
 // UploadResponse is the parsed response from ER1 on success.
@@ -48,6 +49,9 @@ func Upload(cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
 	}
 	_ = writer.WriteField("content_type", contentType)
 	_ = writer.WriteField("tags", payload.Tags)
+	if payload.DocID != "" {
+		_ = writer.WriteField("doc_id", payload.DocID)
+	}
 
 	// Transcript (always required)
 	txPart, err := writer.CreateFormFile("transcript_file_ext", payload.TranscriptFilename)

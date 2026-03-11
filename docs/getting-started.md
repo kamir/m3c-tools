@@ -7,81 +7,92 @@ title: Getting Started
 
 ## Prerequisites
 
-- Python 3.8 or later
-- macOS (for the menu bar app)
-- A Google Cloud project (only if you want to use the History Inspector)
+- **Go 1.25+** (build from source)
+- **macOS** (menu bar app uses native Cocoa via cgo)
+- **PortAudio** — for microphone recording: `brew install portaudio`
+- **Whisper** — for speech-to-text: `brew install openai-whisper` or install from [github.com/openai/whisper](https://github.com/openai/whisper)
+- **ER1 server** (optional) — for uploading observations
 
 ## Installation
 
-### Core library
+### From source
 
 ```bash
-pip install youtube-transcript-api
+git clone https://github.com/kamir/m3c-tools.git
+cd m3c-tools
+make install
 ```
 
-### From source (all tools)
+This will:
+1. Build the `m3c-tools` binary
+2. Create `M3C-Tools.app` bundle with icon and Info.plist
+3. Install CLI to `/usr/local/bin/m3c-tools`
+4. Install app to `/Applications/M3C-Tools.app`
+5. Walk you through macOS privacy permissions (Screen Recording, Microphone, Accessibility, Input Monitoring)
+
+### Configuration
+
+Copy `.env.example` to `.env` and fill in your settings:
 
 ```bash
-git clone https://github.com/kamir/youtube-transcript-api.git
-cd youtube-transcript-api
-git checkout kamir/m3c-tools
-pip install -e ".[dev]"
+cp .env.example .env
 ```
 
-## Usage overview
+Key variables:
 
-### 1. Fetch a single transcript
+| Variable | Purpose | Required |
+|----------|---------|----------|
+| `ER1_API_URL` | ER1 upload endpoint | For uploads |
+| `ER1_API_KEY` | ER1 authentication key | For uploads |
+| `ER1_CONTEXT_ID` | ER1 user/org context | For uploads |
+| `M3C_WHISPER_MODEL` | Whisper model (tiny/base/small/medium/large) | No (default: base) |
+| `IMPORT_AUDIO_SOURCE` | Audio import source folder | For Channel D |
+| `YT_PROXY_URL` | YouTube proxy URL (rate limit mitigation) | No |
 
-No API key needed. Works out of the box.
+## Usage
 
-```python
-from youtube_transcript_api import YouTubeTranscriptApi
-
-api = YouTubeTranscriptApi()
-transcript = api.fetch("VIDEO_ID", languages=["en"])
-
-full_text = "\n".join(snippet.text for snippet in transcript)
-print(full_text)
-```
-
-**Language selection:** Pass a list of preferred languages. The API will try each in order and fall back automatically.
-
-```python
-# Prefer German, fall back to English
-transcript = api.fetch("VIDEO_ID", languages=["de", "en"])
-```
-
-### 2. CLI usage
+### 1. Fetch a transcript (CLI)
 
 ```bash
-# Fetch transcript as plain text
-youtube_transcript_api VIDEO_ID
+# Plain text
+m3c-tools transcript dQw4w9WgXcQ
 
-# Fetch in JSON format
-youtube_transcript_api VIDEO_ID --format json
+# JSON format
+m3c-tools transcript dQw4w9WgXcQ --format json
+
+# List available languages
+m3c-tools transcript dQw4w9WgXcQ --list
 
 # Specify language
-youtube_transcript_api VIDEO_ID --languages en de
+m3c-tools transcript dQw4w9WgXcQ --lang de
 ```
 
-### 3. Quick clipboard copy (macOS)
-
-Edit the `video_id` in `do_fetch.py` and run:
+### 2. Menu bar app
 
 ```bash
-python3 do_fetch.py
+make menubar
+# or
+m3c-tools menubar
 ```
 
-The transcript is printed and copied to your clipboard.
+See the [Menu Bar App](menubar-app) page for full details.
 
-### 4. Menu bar app
+### 3. Run tests
 
-See the [Menu Bar App](menubar-app) page.
+```bash
+# Offline unit tests (no network, no hardware)
+make test-unit
 
-### 5. History Inspector
+# Full CI (vet + lint + test + build)
+make ci
 
-Requires a Google OAuth client secret. See [Authentication](authentication), then [History Inspector](history-inspector).
+# Network tests (YouTube API)
+make test-network
+
+# ER1 integration tests
+make test-er1
+```
 
 ---
 
-Next: [Authentication Guide](authentication)
+Next: [Menu Bar App](menubar-app)
