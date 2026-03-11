@@ -7,7 +7,7 @@ BUILD_DIR = ./build
 APP_NAME = M3C-Tools
 APP_BUNDLE = $(BUILD_DIR)/$(APP_NAME).app
 APP_ID   = com.kamir.m3c-tools
-APP_VERSION = 0.1.0
+APP_VERSION = 1.4.4
 ICON_SRC = maindset_icon.png
 
 # Default: build the CLI
@@ -157,8 +157,7 @@ install: build-app
 	@echo "  App:  /Applications/$(APP_NAME).app"
 	@echo "  Data: ~/.m3c-tools/"
 	@echo ""
-	@echo "Configuring macOS permissions..."
-	@$(MAKE) --no-print-directory permissions
+	@echo "Run 'make permissions' to configure macOS privacy settings."
 
 # Grant macOS privacy permissions for Screen Recording, Microphone,
 # Accessibility, and Input Monitoring. Opens System Settings panes
@@ -227,17 +226,27 @@ clean:
 vet:
 	go vet ./...
 
-# Release targets — bump version, build, tag, push, create GitHub release
+# Pre-release code review (build, vet, tests, secrets, dead code, deps)
+.PHONY: code-review
+code-review:
+	@./scripts/code-review.sh
+
+# Check documentation consistency with implementation
+.PHONY: check-docs
+check-docs:
+	@./scripts/check-docs.sh
+
+# Release targets — code review + docs check run before release
 .PHONY: release release-patch release-minor release-major
-release: release-patch
+release: code-review check-docs release-patch
 
 release-patch:
 	@./scripts/release.sh patch
 
-release-minor:
+release-minor: code-review check-docs
 	@./scripts/release.sh minor
 
-release-major:
+release-major: code-review check-docs
 	@./scripts/release.sh major
 
 # Run CI checks locally (mirrors .github/workflows/ci.yml)
@@ -273,7 +282,9 @@ help:
 	@echo "  uninstall      Remove installed CLI and .app"
 	@echo "  vet            Run go vet on all packages"
 	@echo "  clean          Remove build artifacts"
-	@echo "  release        Release with patch bump (default)"
+	@echo "  code-review    Run pre-release code review checks"
+	@echo "  check-docs     Check documentation consistency with implementation"
+	@echo "  release        Release with patch bump (runs code-review + check-docs first)"
 	@echo "  release-patch  Release with patch version bump"
 	@echo "  release-minor  Release with minor version bump"
 	@echo "  release-major  Release with major version bump"

@@ -48,6 +48,7 @@ func TestMenubarIntegrationFullLifecycle(t *testing.T) {
 			}, nil
 		},
 	})
+	app.SetAuthSession(menubar.AuthSession{LoggedIn: true, UserID: "ctx-test"})
 
 	// 1. Initial state
 	if app.GetStatus() != menubar.StatusIdle {
@@ -129,6 +130,7 @@ func TestMenubarIntegrationTranscriptFetcherWired(t *testing.T) {
 	app := menubar.NewAppWithConfig(menubar.DefaultConfig(), menubar.Handlers{
 		Notify: func(title, message string) {},
 	})
+	app.SetAuthSession(menubar.AuthSession{LoggedIn: true, UserID: "ctx-test"})
 	tf := menubar.NewTranscriptFetcher()
 
 	var fallbackCalls []menubar.ActionType
@@ -184,15 +186,16 @@ func TestMenubarIntegrationStatusDuringFetch(t *testing.T) {
 // items are present in the built menu.
 func TestMenubarIntegrationMenuItemsComplete(t *testing.T) {
 	app := menubar.NewApp()
+	app.SetAuthSession(menubar.AuthSession{LoggedIn: true, UserID: "ctx-test"})
 	items := app.BuildMenuItems()
 
 	// Note: "Quit" is not listed here because menuet automatically
 	// appends "Start at Login" and "Quit" to root menus at runtime.
 	expectedTexts := []string{
+		"Logout from ER1",
 		"Fetch Transcript...",
 		"Capture Screenshot",
 		"Quick Impulse",
-		"Upload to ER1",
 		"Status:",
 		"History",
 		"Open Log File",
@@ -263,6 +266,7 @@ func TestMenubarIntegrationConcurrentStatusUpdates(t *testing.T) {
 // reflect the correct history count as entries are added.
 func TestMenubarIntegrationHistoryInMenuUpdates(t *testing.T) {
 	app := menubar.NewApp()
+	app.SetAuthSession(menubar.AuthSession{LoggedIn: true, UserID: "ctx-test"})
 
 	// Empty history
 	items := app.BuildMenuItems()
@@ -514,16 +518,17 @@ func TestAppBundleExecPermissions(t *testing.T) {
 // Info.plist has LSUIElement set to true (agent app, no dock icon).
 func TestAppBundleInfoPlistLSUIElement(t *testing.T) {
 	repoRoot := findRepoRootE2E(t)
+	buildDir := t.TempDir()
 
 	// Build the app bundle
-	cmd := exec.Command("make", "build-app")
+	cmd := exec.Command("make", "build-app", "BUILD_DIR="+buildDir)
 	cmd.Dir = repoRoot
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=1")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("make build-app failed: %v\n%s", err, out)
 	}
 
-	plistPath := filepath.Join(repoRoot, "build", "M3C-Tools.app", "Contents", "Info.plist")
+	plistPath := filepath.Join(buildDir, "M3C-Tools.app", "Contents", "Info.plist")
 	data, err := os.ReadFile(plistPath)
 	if err != nil {
 		t.Fatalf("read plist: %v", err)

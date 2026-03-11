@@ -7,10 +7,13 @@ package menubar
 import (
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/caseymrm/menuet"
+	"github.com/kamir/m3c-tools/pkg/er1"
 )
 
 // App holds the runtime state of the menu bar application with
@@ -20,8 +23,45 @@ type App struct {
 	Handlers Handlers
 	history  HistoryStore
 
-	mu     sync.Mutex
-	status Status
+	mu            sync.Mutex
+	status        Status
+	authSession   AuthSession
+	importState   AudioImportState
+	lastImportMsg string
+	bulkRunState  BulkRunState
+}
+
+// AuthSession captures runtime ER1 login state used by the menu.
+type AuthSession struct {
+	LoggedIn bool
+	UserID   string
+}
+
+// AudioImportItem represents one source audio file shown in the menubar list.
+type AudioImportItem struct {
+	Path   string
+	Name   string
+	Status string
+	Size   int64
+	Tags   string
+}
+
+// TrackingRecord is a lightweight view of a processed_files row for menu display.
+type TrackingRecord struct {
+	FileName       string
+	Status         string
+	TranscriptLen  int
+	TranscriptLang string
+	UploadDocID    string
+	UploadError    string
+	ProcessedAt    string
+}
+
+// AudioImportState holds the current import-list snapshot for menu rendering.
+type AudioImportState struct {
+	Items     []AudioImportItem
+	UpdatedAt time.Time
+	Error     string
 }
 
 // NewApp creates an App with the default config and idle status.
@@ -53,6 +93,68 @@ func (a *App) GetStatus() Status {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.status
+}
+
+// SetAuthSession updates the runtime ER1 auth session displayed in the menu.
+func (a *App) SetAuthSession(s AuthSession) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.authSession = s
+}
+
+// GetAuthSession returns the current ER1 auth session snapshot.
+func (a *App) GetAuthSession() AuthSession {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.authSession
+}
+
+// SetAudioImportState updates the current import-list snapshot for the menu.
+func (a *App) SetAudioImportState(s AudioImportState) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.importState = s
+}
+
+// GetAudioImportState returns the current import-list snapshot.
+func (a *App) GetAudioImportState() AudioImportState {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	out := a.importState
+	if len(out.Items) > 0 {
+		items := make([]AudioImportItem, len(out.Items))
+		copy(items, out.Items)
+		out.Items = items
+	}
+	return out
+}
+
+// SetLastImportMessage stores a short status message shown in the import menu.
+func (a *App) SetLastImportMessage(msg string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.lastImportMsg = msg
+}
+
+// GetLastImportMessage returns the last import status message.
+func (a *App) GetLastImportMessage() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.lastImportMsg
+}
+
+// SetBulkRunState updates the current live bulk-run state for UI rendering.
+func (a *App) SetBulkRunState(s BulkRunState) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.bulkRunState = s
+}
+
+// GetBulkRunState returns the current bulk-run state snapshot.
+func (a *App) GetBulkRunState() BulkRunState {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.bulkRunState
 }
 
 // AddHistory appends an entry to the transcript history.
@@ -108,7 +210,27 @@ func (a *App) BuildMenuItems() []menuet.MenuItem {
 // buildMenuItems constructs the dropdown menu. menuet calls this every
 // time the user opens the dropdown.
 func (a *App) buildMenuItems() []menuet.MenuItem {
+	auth := a.GetAuthSession()
+	if !auth.LoggedIn {
+		return []menuet.MenuItem{
+			{
+				Text: "🔐 Login to ER1...",
+				Clicked: func() {
+					a.fireAction(ActionLoginER1, "")
+				},
+			},
+		}
+	}
+	accountText := fmt.Sprintf("Account: %s", auth.UserID)
+
 	items := []menuet.MenuItem{
+		{
+			Text: "🔓 Logout from ER1",
+			Clicked: func() {
+				a.fireAction(ActionLogoutER1, "")
+			},
+		},
+		{Type: menuet.Separator},
 		{
 			Text:    "▶️ Fetch Transcript...",
 			Clicked: a.handleFetchTranscript,
@@ -125,12 +247,16 @@ func (a *App) buildMenuItems() []menuet.MenuItem {
 				a.fireAction(ActionQuickImpulse, "")
 			},
 		},
+		a.buildAudioImportMenu(),
 		{
-			Text:    "🚀 Upload to ER1...",
-			Clicked: a.handleUploadER1,
+			Text: "📋 Tracking DB",
+			Clicked: func() {
+				a.fireAction(ActionShowTrackingDB, "")
+			},
 		},
 		{Type: menuet.Separator},
 		{Text: fmt.Sprintf("Status: %s", a.GetStatus())},
+		{Text: accountText},
 		{Type: menuet.Separator},
 	}
 
@@ -138,6 +264,7 @@ func (a *App) buildMenuItems() []menuet.MenuItem {
 
 	// menuet automatically appends "Start at Login" and "Quit" items,
 	// so we do not add our own Quit here.
+	profURL := profileURL()
 	items = append(items,
 		menuet.MenuItem{Type: menuet.Separator},
 		menuet.MenuItem{
@@ -147,9 +274,118 @@ func (a *App) buildMenuItems() []menuet.MenuItem {
 				a.fireAction(ActionOpenLog, a.Config.LogPath)
 			},
 		},
+		menuet.MenuItem{Type: menuet.Separator},
+		menuet.MenuItem{
+			Text: "Mein Nutzerkonto",
+			Clicked: func() {
+				_ = exec.Command("open", "-a", "Google Chrome", profURL).Start()
+			},
+		},
+		menuet.MenuItem{Type: menuet.Separator},
 	)
 
 	return items
+}
+
+func (a *App) buildAudioImportMenu() menuet.MenuItem {
+	state := a.GetAudioImportState()
+	bulk := a.GetBulkRunState()
+	newCount := 0
+	for _, it := range state.Items {
+		if strings.EqualFold(strings.TrimSpace(it.Status), "new") {
+			newCount++
+		}
+	}
+	title := "🎵 Audio Import"
+	if newCount > 0 {
+		title = fmt.Sprintf("🎵 Audio Import (%d new)", newCount)
+	}
+	return menuet.MenuItem{
+		Text: title,
+		Children: func() []menuet.MenuItem {
+			var items []menuet.MenuItem
+			if bulk.Active {
+				elapsed := time.Since(bulk.StartedAt).Round(time.Second)
+				runLine := fmt.Sprintf("⏳ Running %d/%d (ok=%d fail=%d) [%s]",
+					bulk.Done, bulk.Total, bulk.Success, bulk.Failed, elapsed)
+				items = append(items, menuet.MenuItem{Text: runLine})
+				if bulk.CurrentFile != "" {
+					items = append(items, menuet.MenuItem{Text: "File: " + filepath.Base(bulk.CurrentFile)})
+				}
+				if bulk.Phase != "" {
+					items = append(items, menuet.MenuItem{Text: "Phase: " + string(bulk.Phase)})
+				}
+				if bulk.LastError != "" {
+					items = append(items, menuet.MenuItem{Text: "⚠️ " + bulk.LastError})
+				}
+				items = append(items, menuet.MenuItem{Type: menuet.Separator})
+			}
+			items = append(items, []menuet.MenuItem{
+				{
+					Text: "▶️ Run Import Pipeline",
+					Clicked: func() {
+						a.fireAction(ActionBatchImport, "__run_all__")
+					},
+				},
+				{
+					Text: "🔄 Refresh list",
+					Clicked: func() {
+						a.fireAction(ActionBatchImport, "__refresh__")
+					},
+				},
+				{Type: menuet.Separator},
+			}...)
+
+			if state.UpdatedAt.IsZero() {
+				items = append(items, menuet.MenuItem{Text: "Updated: (not yet)"})
+			} else {
+				items = append(items, menuet.MenuItem{Text: "Updated: " + state.UpdatedAt.Format("15:04:05")})
+			}
+			if state.Error != "" {
+				items = append(items, menuet.MenuItem{Text: "⚠️ " + state.Error})
+			}
+			if msg := a.GetLastImportMessage(); msg != "" {
+				items = append(items, menuet.MenuItem{Text: msg})
+			}
+			items = append(items, menuet.MenuItem{Type: menuet.Separator})
+
+			// Show only untracked ("new") files — already imported files are hidden.
+			var newItems []AudioImportItem
+			for _, it := range state.Items {
+				if strings.EqualFold(strings.TrimSpace(it.Status), "new") {
+					newItems = append(newItems, it)
+				}
+			}
+
+			if len(newItems) == 0 {
+				items = append(items, menuet.MenuItem{Text: "(no new audio files)"})
+				return items
+			}
+
+			limit := len(newItems)
+			if limit > 25 {
+				limit = 25
+			}
+			for i := 0; i < limit; i++ {
+				it := newItems[i]
+				filePath := it.Path
+				label := filepath.Base(it.Name)
+				if bulk.Active {
+					label = "🔒 " + label
+				}
+				items = append(items, menuet.MenuItem{
+					Text: label,
+					Clicked: func() {
+						a.fireAction(ActionBatchImport, filePath)
+					},
+				})
+			}
+			if len(newItems) > limit {
+				items = append(items, menuet.MenuItem{Text: fmt.Sprintf("… %d more files", len(newItems)-limit)})
+			}
+			return items
+		},
+	}
 }
 
 // buildHistoryMenu creates the expandable "History (N)" submenu with
@@ -238,69 +474,6 @@ func (a *App) handleFetchTranscript() {
 	a.AddHistory(NewHistoryEntry(videoID, "🇬🇧"))
 }
 
-// handleUploadER1 prompts for a video ID and triggers the ER1 upload workflow.
-// The upload runs in a goroutine so the menu remains responsive.
-func (a *App) handleUploadER1() {
-	if a.Handlers.OnUploadER1 == nil {
-		a.notify("ER1 Upload", "Upload handler not configured")
-		a.fireAction(ActionUploadER1, "")
-		return
-	}
-
-	suggested := SuggestedYouTubeVideoID()
-	input := "Paste YouTube video ID or URL"
-	info := "Enter a YouTube video ID or URL to fetch transcript and upload:"
-	if suggested != "" {
-		info = fmt.Sprintf("Enter a YouTube video ID or URL to fetch transcript and upload:\n\nDetected from Chrome: %s\nLeave field empty to use detected ID.", suggested)
-	}
-
-	response := menuet.App().Alert(menuet.Alert{
-		MessageText:     "Upload to ER1",
-		InformativeText: info,
-		Buttons:         []string{"Upload", "Cancel"},
-		Inputs:          []string{input},
-	})
-
-	if response.Button != 0 { // Cancel
-		return
-	}
-
-	videoID := strings.TrimSpace(firstInput(response.Inputs))
-	if videoID == "" && suggested != "" {
-		videoID = suggested
-	}
-	if videoID == "" {
-		menuet.App().Alert(menuet.Alert{
-			MessageText: "No video ID entered.",
-			Buttons:     []string{"OK"},
-		})
-		return
-	}
-
-	videoID = CleanVideoID(videoID)
-	a.SetStatus(StatusUploading)
-	a.notify("ER1 Upload", fmt.Sprintf("Uploading %s to ER1...", videoID))
-	a.fireAction(ActionUploadER1, videoID)
-
-	go func() {
-		result, err := a.Handlers.OnUploadER1(videoID)
-		if err != nil {
-			a.SetStatus(StatusError)
-			a.notify("ER1 Upload Failed", fmt.Sprintf("Error: %v", err))
-			return
-		}
-
-		if result.Queued {
-			a.SetStatus(StatusIdle)
-			a.notify("ER1 Queued", result.Message)
-		} else {
-			a.SetStatus(StatusIdle)
-			a.notify("ER1 Upload Complete", result.Message)
-		}
-		a.AddHistory(NewHistoryEntry(result.VideoID, "🚀"))
-	}()
-}
-
 func firstInput(inputs []string) string {
 	if len(inputs) == 0 {
 		return ""
@@ -373,6 +546,18 @@ func (a *App) notify(title, message string) {
 		return
 	}
 	ShowNotification(title, message)
+}
+
+// profileURL returns the ER1 user profile URL derived from the API URL.
+// Pattern: <base>/v2/profile (e.g. https://127.0.0.1:8081/v2/profile).
+func profileURL() string {
+	cfg := er1.LoadConfig()
+	base := strings.TrimSuffix(cfg.APIURL, "/upload_2")
+	base = strings.TrimSuffix(base, "/")
+	if base == "" {
+		return "https://127.0.0.1:8081/v2/profile"
+	}
+	return base + "/v2/profile"
 }
 
 // fireAction invokes the OnAction handler if set.

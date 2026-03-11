@@ -13,9 +13,10 @@ import (
 func TestBuildAppBundle(t *testing.T) {
 	// Find the repo root (where the Makefile lives)
 	repoRoot := findRepoRoot(t)
+	buildDir := t.TempDir()
 
 	// Run make build-app
-	cmd := exec.Command("make", "build-app")
+	cmd := exec.Command("make", "build-app", "BUILD_DIR="+buildDir)
 	cmd.Dir = repoRoot
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=1")
 	out, err := cmd.CombinedOutput()
@@ -24,7 +25,7 @@ func TestBuildAppBundle(t *testing.T) {
 	}
 	t.Logf("make build-app output:\n%s", out)
 
-	appBundle := filepath.Join(repoRoot, "build", "M3C-Tools.app")
+	appBundle := filepath.Join(buildDir, "M3C-Tools.app")
 
 	// 1. Verify .app bundle directory exists
 	info, err := os.Stat(appBundle)
