@@ -160,6 +160,77 @@ func ImportAudio(cfg *ImportConfig, db *tracking.FilesDB, filterExts []string) (
 	return result, nil
 }
 
+// ImportAudioFiltered works like ImportAudio but when onlySourcePath is
+// non-empty, only the file matching that path is imported. All other files
+// are skipped. When onlySourcePath is empty, it behaves identically to
+// ImportAudio (imports all new files).
+func ImportAudioFiltered(cfg *ImportConfig, db *tracking.FilesDB, filterExts []string, onlySourcePath string) (*ImportResult, error) {
+	onlySourcePath = strings.TrimSpace(onlySourcePath)
+	if onlySourcePath == "" {
+		return ImportAudio(cfg, db, filterExts)
+	}
+
+	if cfg == nil {
+		return nil, fmt.Errorf("import config is nil")
+	}
+
+	srcDir, err := cfg.SourceDir()
+	if err != nil {
+		return nil, fmt.Errorf("resolve source: %w", err)
+	}
+	destDir, err := cfg.DestDir()
+	if err != nil {
+		return nil, fmt.Errorf("resolve dest: %w", err)
+	}
+
+	// Resolve the target path.
+	absOnly, _ := filepath.Abs(onlySourcePath)
+	info, statErr := os.Stat(absOnly)
+	if statErr != nil {
+		return nil, fmt.Errorf("file not found: %s", onlySourcePath)
+	}
+
+	af := AudioFile{
+		Path: absOnly,
+		Name: info.Name(),
+		Size: info.Size(),
+		Ext:  normalizeExt(filepath.Ext(info.Name())),
+	}
+
+	log.Printf("[import] START single-file src=%s dest=%s", af.Path, destDir)
+
+	result := &ImportResult{TotalScanned: 1}
+
+	// Check DB status.
+	checker := StatusCheckerFromDB(db, "audio")
+	status, checkErr := checker(af.Path)
+	if checkErr != nil {
+		log.Printf("[import] WARN status check failed for %s: %v", af.Name, checkErr)
+		status = StatusNew
+	}
+	if status != StatusNew {
+		result.Skipped = append(result.Skipped, SkippedFile{Path: af.Path, Status: status})
+		log.Printf("[import] SKIP %s status=%s (already tracked)", af.Name, status)
+		return result, nil
+	}
+
+	_ = srcDir // validated above
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return nil, fmt.Errorf("create dest dir %s: %w", destDir, err)
+	}
+
+	imported, importErr := importSingleFile(af, destDir, cfg.ContentType, db)
+	if importErr != nil {
+		result.Failed = append(result.Failed, FailedFile{Path: af.Path, Error: importErr})
+		log.Printf("[import] FAIL %s error=%v", af.Name, importErr)
+		return result, nil
+	}
+
+	result.Imported = append(result.Imported, *imported)
+	log.Printf("[import] OK %s → %s hash=%s", af.Name, imported.MemoryID, imported.Hash[:12])
+	return result, nil
+}
+
 // importSingleFile handles the import of one audio file:
 //  1. Compute SHA-256 hash
 //  2. Check for content-duplicate via hash (if DB available)
