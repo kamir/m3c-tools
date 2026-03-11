@@ -2446,10 +2446,24 @@ func menubarFetchTranscriptAndTrack(app *menubar.App, fetcher *menubar.Transcrip
 		menubar.SetReviewTranscript("[Transcript unavailable — YouTube rate limit (429). Voice note recording is still available.]", "Transcript pull needed")
 	}
 
+	// Load transcript into the Notes field so it's visible in the Tags tab.
+	if result.Text != "" {
+		menubar.SetObservationNotes(result.Text)
+	}
+
 	app.SetStatus(menubar.StatusRecording)
 	menubar.StartRecordingTimer()
 	menubar.SetRecordSourceLabel("  video " + result.VideoID + "  ")
-	observationRecordAndUpload(app, "progress", thumbnailPath, imgData, impression.Progress)
+
+	obsCtx := ObservationContext{
+		TranscriptText: result.Text,
+		VideoID:        result.VideoID,
+		VideoURL:       "https://www.youtube.com/watch?v=" + result.VideoID,
+		Language:        result.Language,
+		LanguageCode:    result.LanguageCode,
+		SnippetCount:    result.SnippetCount,
+	}
+	observationRecordAndUpload(app, "progress", thumbnailPath, imgData, impression.Progress, obsCtx)
 
 	if result.RateLimited {
 		app.Notify("Observation Ready", fmt.Sprintf("⚠️ %s — transcript-pull-needed, voice tracker active", result.VideoID))
@@ -2611,10 +2625,29 @@ func menubarRecordImpression(app *menubar.App, videoID string) {
 	observationRecordAndUpload(app, "progress", imgPath, imgData, impression.Progress)
 }
 
+// ObservationContext carries optional pre-existing data into the recording
+// pipeline so that e.g. a YouTube transcript is not lost when whisper runs.
+type ObservationContext struct {
+	// Pre-existing transcript text (e.g. YouTube transcript).
+	// Preserved in the Review tab and included in the uploaded composite doc.
+	TranscriptText string
+	// Video metadata for Progress observations.
+	VideoID      string
+	VideoURL     string
+	Language     string
+	LanguageCode string
+	IsGenerated  bool
+	SnippetCount int
+}
+
 // observationRecordAndUpload starts background recording with VU meter and
 // registers the Stop/Store/Cancel callbacks for the Observation Window pipeline.
 // The Observation Window must already be shown before calling this function.
-func observationRecordAndUpload(app *menubar.App, label string, imgPath string, imgData []byte, obsType impression.ObservationType) {
+func observationRecordAndUpload(app *menubar.App, label string, imgPath string, imgData []byte, obsType impression.ObservationType, ctxData ...ObservationContext) {
+	var obsCtx ObservationContext
+	if len(ctxData) > 0 {
+		obsCtx = ctxData[0]
+	}
 	const maxRecordSeconds = 120
 
 	// Shared state written by stop callback, read by store callback.
@@ -2719,17 +2752,32 @@ func observationRecordAndUpload(app *menubar.App, label string, imgPath string, 
 		log.Printf("[%s] whisper DONE in %s: %d chars", label, whisperElapsed, len(text))
 		log.Printf("[%s] transcription: %q", label, text)
 
-		// Build structured memo text with metadata + transcript + notes section.
+		// Build structured memo text with metadata + voice comment + original transcript.
 		sizeKB := float64(wavSize) / 1024.0
 		peakPct := float64(stats.PeakAmplitude) / 32768.0 * 100
-		memo := fmt.Sprintf(
-			"--- Metadata ---\nChannel: %s\nDate: %s\nRecording: %.1fs, %.1f KB, peak %.0f%%\nWhisper: %s model, %d chars in %s\n\n--- Transcript ---\n%s\n\n--- Notes ---\n",
-			label,
-			time.Now().Format("2006-01-02 15:04:05"),
-			duration, sizeKB, peakPct,
-			model, len(text), whisperElapsed.Round(time.Millisecond),
-			text,
-		)
+		var memo string
+		if obsCtx.TranscriptText != "" {
+			// Preserve the original transcript (e.g. YouTube) and add the
+			// voice comment as a separate section — do NOT overwrite.
+			memo = fmt.Sprintf(
+				"--- Metadata ---\nChannel: %s\nDate: %s\nRecording: %.1fs, %.1f KB, peak %.0f%%\nWhisper: %s model, %d chars in %s\n\n--- Voice Comment ---\n%s\n\n--- Original Transcript ---\n%s\n\n--- Notes ---\n",
+				label,
+				time.Now().Format("2006-01-02 15:04:05"),
+				duration, sizeKB, peakPct,
+				model, len(text), whisperElapsed.Round(time.Millisecond),
+				text,
+				obsCtx.TranscriptText,
+			)
+		} else {
+			memo = fmt.Sprintf(
+				"--- Metadata ---\nChannel: %s\nDate: %s\nRecording: %.1fs, %.1f KB, peak %.0f%%\nWhisper: %s model, %d chars in %s\n\n--- Transcript ---\n%s\n\n--- Notes ---\n",
+				label,
+				time.Now().Format("2006-01-02 15:04:05"),
+				duration, sizeKB, peakPct,
+				model, len(text), whisperElapsed.Round(time.Millisecond),
+				text,
+			)
+		}
 		statusText := fmt.Sprintf("Memo — %d chars (editable)", len(memo))
 		menubar.SetReviewTranscript(memo, statusText)
 	})
@@ -2744,12 +2792,7 @@ func observationRecordAndUpload(app *menubar.App, label string, imgPath string, 
 			app.SetStatus(menubar.StatusRecording)
 			return
 		}
-		if len(uploadAudioData) == 0 {
-			log.Printf("[%s] store requested but upload audio is empty", label)
-			app.Notify("No Audio Available", "Please record again before storing.")
-			app.SetStatus(menubar.StatusError)
-			return
-		}
+		// Allow storing without audio — ER1 Upload sends a placeholder WAV automatically.
 
 		now := time.Now()
 		ts := now.Format("20060102_150405")
@@ -2762,6 +2805,13 @@ func observationRecordAndUpload(app *menubar.App, label string, imgPath string, 
 		memoText = mergeCaptureMemoAndNotes(memoText, notes)
 
 		doc := &impression.CompositeDoc{
+			VideoID:        obsCtx.VideoID,
+			VideoURL:       obsCtx.VideoURL,
+			Language:        obsCtx.Language,
+			LanguageCode:    obsCtx.LanguageCode,
+			IsGenerated:     obsCtx.IsGenerated,
+			SnippetCount:    obsCtx.SnippetCount,
+			TranscriptText:  obsCtx.TranscriptText,
 			ImpressionText: memoText,
 			ObsType:        obsType,
 			Timestamp:      now,
@@ -2867,6 +2917,20 @@ func captureScreenshotForMenu(app *menubar.App, flow string) (string, string, er
 	mode := screenshotCaptureMode()
 	switch mode {
 	case "clipboard-first":
+		// Check if there's already an image on the clipboard — use it directly.
+		if imgType, _ := screenshot.DetectClipboardImage(); imgType != screenshot.ClipboardNoImage {
+			outPath := filepath.Join(
+				os.TempDir(),
+				fmt.Sprintf("m3c-clipboard-%s.png", time.Now().Format("20060102-150405")),
+			)
+			imgPath, err := screenshot.ExtractClipboardImage(outPath)
+			if err == nil {
+				log.Printf("[%s] using existing clipboard image: %s", flow, imgPath)
+				return imgPath, "  from clipboard  ", nil
+			}
+			log.Printf("[%s] clipboard image extraction failed: %v; falling back to capture", flow, err)
+		}
+
 		timeout := clipboardCaptureTimeout()
 		app.Notify("Take Screenshot", fmt.Sprintf("Press Cmd+Ctrl+Shift+4 (waiting %ds)", int(timeout/time.Second)))
 		menubar.ResetCaptureHintCancelled()
