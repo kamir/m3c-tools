@@ -121,13 +121,83 @@ Settings are loaded from `.env` in the project root or `~/.m3c-tools.env`. See [
 
 ---
 
+## macOS App Bundle
+
+m3c-tools ships as a native macOS `.app` bundle (`M3C-Tools.app`) that runs as a menu bar agent. The bundle includes:
+
+- Go binary compiled with cgo (native Cocoa UI)
+- App icon (`.icns` generated from `maindset_icon.png`)
+- `Info.plist` with microphone and screen capture usage descriptions
+- `LSUIElement = true` (menu bar agent — no Dock icon)
+
+### Build the app bundle only
+
+```bash
+make build-app
+# Result: build/M3C-Tools.app
+```
+
+### Install to /Applications
+
+```bash
+make install
+```
+
+This runs `build-app` and then:
+1. Copies the CLI binary to `/usr/local/bin/m3c-tools`
+2. Copies `M3C-Tools.app` to `/Applications/`
+3. Creates `~/.m3c-tools/` data directory
+
+### Grant macOS permissions
+
+After installing, run:
+
+```bash
+make permissions
+```
+
+This opens each System Settings pane one at a time:
+
+| Permission | Why |
+|------------|-----|
+| **Screen Recording** | Screenshot capture (Channels B & C) |
+| **Microphone** | Voice recording for observations |
+| **Accessibility** | Clipboard monitoring for screenshot detection |
+| **Input Monitoring** | Keystroke capture for hotkey support |
+
+Toggle **M3C-Tools** ON in each pane (click `+` to add if not listed).
+
+### Launch
+
+Double-click `/Applications/M3C-Tools.app`, or:
+
+```bash
+open /Applications/M3C-Tools.app
+```
+
+Or for development:
+
+```bash
+make menubar    # builds + launches directly (no install needed)
+```
+
+### Uninstall
+
+```bash
+make uninstall
+```
+
+Removes `/usr/local/bin/m3c-tools` and `/Applications/M3C-Tools.app`. Data at `~/.m3c-tools/` is preserved.
+
+---
+
 ## Build & Test
 
 ```bash
 make build          # Build CLI binary → ./build/m3c-tools
-make build-app      # Build macOS .app bundle
-make menubar        # Build + launch menu bar app
-make install        # Full install (CLI + .app + permissions)
+make build-app      # Build macOS .app bundle → ./build/M3C-Tools.app
+make menubar        # Build + launch menu bar app (dev mode)
+make install        # Full install: CLI + .app + data dir
 
 make test-unit      # Offline unit tests
 make ci             # Full CI: vet + lint + test + build

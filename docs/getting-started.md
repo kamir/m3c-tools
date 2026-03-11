@@ -22,11 +22,17 @@ make install
 ```
 
 This will:
-1. Build the `m3c-tools` binary
-2. Create `M3C-Tools.app` bundle with icon and Info.plist
+1. Compile the Go binary with cgo (native Cocoa UI)
+2. Create the `M3C-Tools.app` bundle with icon and `Info.plist`
 3. Install CLI to `/usr/local/bin/m3c-tools`
-4. Install app to `/Applications/M3C-Tools.app`
-5. Walk you through macOS privacy permissions (Screen Recording, Microphone, Accessibility, Input Monitoring)
+4. Install `M3C-Tools.app` to `/Applications/`
+5. Create the `~/.m3c-tools/` data directory
+
+Then grant macOS permissions:
+
+```bash
+make permissions
+```
 
 ### Build without installing
 
@@ -34,6 +40,22 @@ This will:
 make build       # CLI only → ./build/m3c-tools
 make build-app   # CLI + .app bundle → ./build/M3C-Tools.app
 ```
+
+### What's inside the .app bundle?
+
+```
+M3C-Tools.app/
+  Contents/
+    MacOS/m3c-tools          ← Go binary (with cgo Cocoa UI)
+    Resources/icon.icns      ← App icon (generated from maindset_icon.png)
+    Info.plist               ← Bundle metadata + usage descriptions
+```
+
+Key `Info.plist` settings:
+- `LSUIElement = true` — runs as a menu bar agent (no Dock icon)
+- `NSMicrophoneUsageDescription` — microphone permission prompt
+- `NSScreenCaptureUsageDescription` — screen capture permission prompt
+- Bundle ID: `com.kamir.m3c-tools`
 
 ## Configuration
 
@@ -104,15 +126,16 @@ make test-er1       # ER1 integration tests (requires running server)
 
 ## macOS Permissions
 
-m3c-tools needs the following macOS permissions:
+After installation, run `make permissions` to open each System Settings pane:
 
-| Permission | Why | When prompted |
-|------------|-----|---------------|
-| **Microphone** | Voice recording for observations | First recording |
-| **Screen Recording** | Interactive screenshot capture | First screenshot (interactive mode) |
-| **Accessibility** | Clipboard monitoring for screenshot detection | First clipboard-first capture |
+| Permission | Why | Required for |
+|------------|-----|-------------|
+| **Screen Recording** | Screenshot capture | Channels B & C |
+| **Microphone** | Voice recording | All channels |
+| **Accessibility** | Clipboard monitoring | Clipboard-first screenshot mode |
+| **Input Monitoring** | Keystroke capture | Hotkey support |
 
-Grant these in **System Preferences → Privacy & Security**. The `make install` target walks you through this.
+In each pane, toggle **M3C-Tools** ON (click `+` to add if not listed). The `make permissions` target opens panes one at a time and waits for you to confirm each.
 
 ## Uninstalling
 
