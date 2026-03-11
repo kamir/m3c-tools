@@ -28,7 +28,7 @@ func LoadConfig() *Config {
 		APIKey:        os.Getenv("ER1_API_KEY"),
 		ContextID:     envOr("ER1_CONTEXT_ID", "107677460544181387647___mft"),
 		ContentType:   envOr("ER1_CONTENT_TYPE", "YouTube-Video-Impression"),
-		UploadTimeout: envInt("ER1_UPLOAD_TIMEOUT", 10),
+		UploadTimeout: envInt("ER1_UPLOAD_TIMEOUT", 600),
 		VerifySSL:     envBool("ER1_VERIFY_SSL", false),
 		RetryInterval: envInt("ER1_RETRY_INTERVAL", 300),
 		MaxRetries:    envInt("ER1_MAX_RETRIES", 10),

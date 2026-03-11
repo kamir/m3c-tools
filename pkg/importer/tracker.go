@@ -21,11 +21,14 @@ package importer
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/tracking"
 )
 
 const trackerHeader = `# M3C Import Tracker
@@ -265,4 +268,56 @@ func StatusCheckerFromTracker(tracker *Tracker) StatusChecker {
 		}
 		return StatusNew, nil
 	}
+}
+
+// MigrateTrackerToDB reads all entries from the markdown tracker and inserts
+// them into the SQLite DB as "imported" audio files. This is a one-time
+// migration that unifies the two tracking systems into the DB as the single
+// source of truth. Entries already in the DB (by path) are skipped.
+// sourceDir is the audio source directory used to resolve full file paths.
+func MigrateTrackerToDB(tracker *Tracker, db *tracking.FilesDB, sourceDir string) (migrated int, err error) {
+	if tracker == nil || db == nil {
+		return 0, nil
+	}
+
+	entries, err := tracker.Entries()
+	if err != nil {
+		return 0, fmt.Errorf("read tracker entries: %w", err)
+	}
+	if len(entries) == 0 {
+		return 0, nil
+	}
+
+	for _, basename := range entries {
+		// Resolve full path in source directory.
+		fullPath := filepath.Join(sourceDir, basename)
+
+		// Skip if already in DB (by path).
+		existing, _ := db.GetByPath(fullPath)
+		if existing != nil {
+			continue
+		}
+
+		// Use a synthetic hash so we don't need to read the file.
+		// Real imports will use the actual SHA256 hash; this prefix
+		// ensures no collision with real hashes.
+		syntheticHash := "tracker_migrated:" + basename
+
+		var fileSize int64
+		if info, statErr := os.Stat(fullPath); statErr == nil {
+			fileSize = info.Size()
+		}
+
+		_, recErr := db.RecordFile(fullPath, syntheticHash, fileSize, "audio", "")
+		if recErr != nil {
+			log.Printf("[import] tracker migration: skip %s: %v", basename, recErr)
+			continue
+		}
+		migrated++
+	}
+
+	if migrated > 0 {
+		log.Printf("[import] migrated %d tracker entries → SQLite DB", migrated)
+	}
+	return migrated, nil
 }

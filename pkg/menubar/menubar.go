@@ -26,6 +26,7 @@ const (
 	ActionUploadER1         ActionType = "upload_er1"
 	ActionLoginER1          ActionType = "login_er1"
 	ActionLogoutER1         ActionType = "logout_er1"
+	ActionShowTrackingDB    ActionType = "show_tracking_db"
 	ActionOpenLog           ActionType = "open_log"
 	ActionQuit              ActionType = "quit"
 )
@@ -40,6 +41,53 @@ const (
 	StatusRecording Status = "recording"
 	StatusError     Status = "error"
 )
+
+// BulkRunPhase represents the current step for an audio bulk operation item.
+type BulkRunPhase string
+
+const (
+	BulkPhaseQueued      BulkRunPhase = "queued"
+	BulkPhaseImport      BulkRunPhase = "import"
+	BulkPhaseTranscribe  BulkRunPhase = "transcribe"
+	BulkPhaseUpload      BulkRunPhase = "upload"
+	BulkPhaseDone        BulkRunPhase = "done"
+	BulkPhaseFailed      BulkRunPhase = "failed"
+	BulkPhaseReprocess   BulkRunPhase = "reprocess"
+	BulkPhaseUnavailable BulkRunPhase = "unavailable"
+)
+
+// BulkRunState holds live state for a currently running bulk audio operation.
+type BulkRunState struct {
+	Active      bool
+	RunID       string
+	Action      string
+	Total       int
+	Done        int
+	Success     int
+	Failed      int
+	CurrentFile string
+	Phase       BulkRunPhase
+	StartedAt   time.Time
+	LastError   string
+}
+
+// BulkProgressEvent is emitted by the bulk runner to synchronize logs + UI.
+type BulkProgressEvent struct {
+	RunID       string
+	Action      string
+	Event       string // RUN_START | ITEM_START | ITEM_PHASE | ITEM_DONE | RUN_DONE
+	Item        string
+	Index       int // 1-based item index when relevant
+	Total       int
+	Phase       BulkRunPhase
+	Outcome     string // ok | failed | skipped
+	Done        int
+	Success     int
+	Failed      int
+	Elapsed     time.Duration
+	Error       string
+	CurrentFile string
+}
 
 // HistoryEntry records a completed transcript fetch or upload action.
 type HistoryEntry struct {
@@ -74,7 +122,7 @@ func DefaultConfig() MenuConfig {
 	return MenuConfig{
 		AppName:  "M3C Tools",
 		AppLabel: "com.kamir.m3c-tools",
-		Title:    "M3C",
+		Title:    "",
 		IconPath: FindIcon("maindset_icon.png"),
 		LogPath:  "/tmp/m3c-tools.log",
 	}
@@ -113,6 +161,10 @@ type Handlers struct {
 	// OnUploadER1 performs an ER1 upload for a given video ID. If set,
 	// the "Upload to ER1" menu item becomes active.
 	OnUploadER1 ER1UploadFunc
+
+	// ListTrackingRecords returns recent tracking DB records for display
+	// in the "Tracking DB" submenu. Returns up to limit records.
+	ListTrackingRecords func(limit int) ([]TrackingRecord, error)
 }
 
 // ER1UploadFunc is a callback that performs an ER1 upload for the given video ID.

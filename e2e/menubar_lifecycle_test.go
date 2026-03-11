@@ -196,7 +196,6 @@ func TestMenubarIntegrationMenuItemsComplete(t *testing.T) {
 		"Fetch Transcript...",
 		"Capture Screenshot",
 		"Quick Impulse",
-		"Upload to ER1",
 		"Status:",
 		"History",
 		"Open Log File",

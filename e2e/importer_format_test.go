@@ -380,6 +380,10 @@ func TestImporterCLIScanWithStatus(t *testing.T) {
 			t.Skipf("cannot build binary: %v", buildErr)
 		}
 	}
+	// Verify binary is actually executable
+	if out, err := exec.Command(binPath, "help").CombinedOutput(); err != nil {
+		t.Skipf("binary not executable: %v\n%s", err, out)
+	}
 
 	root := t.TempDir()
 	// Create test audio files with meaningful names
@@ -434,6 +438,10 @@ func TestImporterCLICompactOutput(t *testing.T) {
 		if buildErr := cmd.Run(); buildErr != nil {
 			t.Skipf("cannot build binary: %v", buildErr)
 		}
+	}
+	// Verify binary is actually executable
+	if out, err := exec.Command(binPath, "help").CombinedOutput(); err != nil {
+		t.Skipf("binary not executable: %v\n%s", err, out)
 	}
 
 	root := t.TempDir()

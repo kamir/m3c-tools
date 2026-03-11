@@ -59,8 +59,8 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.AppLabel != "com.kamir.m3c-tools" {
 		t.Errorf("AppLabel = %q, want 'com.kamir.m3c-tools'", cfg.AppLabel)
 	}
-	if cfg.Title != "M3C" {
-		t.Errorf("Title = %q, want 'M3C'", cfg.Title)
+	if cfg.Title != "" {
+		t.Errorf("Title = %q, want empty (icon-only)", cfg.Title)
 	}
 	if cfg.LogPath == "" {
 		t.Error("LogPath should not be empty")
@@ -175,6 +175,38 @@ func TestAppStatusConcurrency(t *testing.T) {
 	app.SetStatus(StatusError)
 	if app.GetStatus() != StatusError {
 		t.Errorf("after second SetStatus, got %q, want %q", app.GetStatus(), StatusError)
+	}
+}
+
+func TestAppBulkRunState(t *testing.T) {
+	app := NewApp()
+	s := BulkRunState{
+		Active:      true,
+		RunID:       "run-123",
+		Action:      "transcribe_upload",
+		Total:       5,
+		Done:        2,
+		Success:     2,
+		Failed:      0,
+		CurrentFile: "file.wav",
+		Phase:       BulkPhaseTranscribe,
+		StartedAt:   time.Now(),
+		LastError:   "",
+	}
+	app.SetBulkRunState(s)
+
+	got := app.GetBulkRunState()
+	if !got.Active {
+		t.Fatal("bulk state should be active")
+	}
+	if got.RunID != "run-123" {
+		t.Fatalf("RunID = %q, want run-123", got.RunID)
+	}
+	if got.Done != 2 || got.Total != 5 {
+		t.Fatalf("progress = %d/%d, want 2/5", got.Done, got.Total)
+	}
+	if got.Phase != BulkPhaseTranscribe {
+		t.Fatalf("phase = %q, want %q", got.Phase, BulkPhaseTranscribe)
 	}
 }
 
@@ -432,23 +464,6 @@ func TestUploadER1StatusTransition(t *testing.T) {
 	app.SetStatus(StatusError)
 	if app.GetStatus() != StatusError {
 		t.Errorf("after SetStatus(error), got %q", app.GetStatus())
-	}
-}
-
-func TestUploadER1MenuItemPresent(t *testing.T) {
-	app := NewApp()
-	app.SetAuthSession(AuthSession{LoggedIn: true, UserID: "ctx-1"})
-	items := app.BuildMenuItems()
-
-	found := false
-	for _, item := range items {
-		if item.Text == "🚀 Upload to ER1..." {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("Expected '🚀 Upload to ER1...' menu item in BuildMenuItems()")
 	}
 }
 

@@ -40,4 +40,4 @@ Replace manual `ER1_CONTEXT_ID` entry in menu-bar workflows with account-based l
 1. Add explicit callback signature/token validation.
 2. Add optional encrypted-at-rest session file.
 3. Add integration tests for callback parsing and URL/context extraction.
-4. Add explicit menu command to open ER1 profile page for session verification.
+4. ~~Add explicit menu command to open ER1 profile page for session verification.~~ **DONE** — "Mein Nutzerkonto" menu item opens ER1 profile in Chrome.

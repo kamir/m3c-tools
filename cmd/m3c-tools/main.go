@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -28,6 +29,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -44,6 +46,13 @@ import (
 	"github.com/kamir/m3c-tools/pkg/transcript"
 	"github.com/kamir/m3c-tools/pkg/whisper"
 )
+
+func init() {
+	// macOS AppKit requires all UI operations on the main OS thread (thread 1).
+	// Go 1.26+ no longer guarantees the main goroutine runs on thread 1,
+	// so we must lock it explicitly.
+	runtime.LockOSThread()
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -176,6 +185,7 @@ type persistedER1Session struct {
 }
 
 var runtimeER1Session er1SessionState
+var ingestionOps = newIngestionCoordinator()
 
 func setRuntimeER1Login(contextID string) {
 	runtimeER1Session.mu.Lock()
@@ -1128,7 +1138,7 @@ func cmdImportAudio(args []string) {
 	}
 
 	if runPipeline {
-		summary, err := runAudioImportPipeline(dir, dbPath, "", nil)
+		summary, err := runAudioImportPipeline(dir, dbPath, "", nil, nil)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Import pipeline failed: %v\n", err)
 			os.Exit(1)
@@ -1180,7 +1190,7 @@ type audioImportRunSummary struct {
 	Failed   int
 }
 
-func runAudioImportPipeline(sourceDir, dbPath, onlySourcePath string, app *menubar.App) (*audioImportRunSummary, error) {
+func runAudioImportPipeline(sourceDir, dbPath, onlySourcePath string, app *menubar.App, onProgress func(menubar.BulkProgressEvent)) (*audioImportRunSummary, error) {
 	cfg, err := importer.LoadImportConfig()
 	if err != nil {
 		return nil, fmt.Errorf("load import config: %w", err)
@@ -1198,7 +1208,9 @@ func runAudioImportPipeline(sourceDir, dbPath, onlySourcePath string, app *menub
 	}
 	defer filesDB.Close()
 
-	result, err := importer.ImportAudio(cfg, filesDB, nil)
+	normalizedOnly := strings.TrimSpace(onlySourcePath)
+
+	result, err := importer.ImportAudioFiltered(cfg, filesDB, nil, normalizedOnly)
 	if err != nil {
 		return nil, fmt.Errorf("import audio: %w", err)
 	}
@@ -1212,13 +1224,32 @@ func runAudioImportPipeline(sourceDir, dbPath, onlySourcePath string, app *menub
 		return summary, nil
 	}
 
-	normalizedOnly := strings.TrimSpace(onlySourcePath)
 	er1Cfg := er1.LoadConfig()
 	applyRuntimeER1Context(er1Cfg)
+	totalItems := len(result.Imported)
+	processedItems := 0
 
 	for _, imp := range result.Imported {
-		if normalizedOnly != "" && !samePath(imp.Source, normalizedOnly) {
-			continue
+		processedItems++
+		if onProgress != nil {
+			onProgress(menubar.BulkProgressEvent{
+				Event:       "ITEM_START",
+				Item:        filepath.Base(imp.Source),
+				Index:       processedItems,
+				Total:       totalItems,
+				CurrentFile: filepath.Base(imp.Source),
+				Phase:       menubar.BulkPhaseQueued,
+			})
+		}
+		if onProgress != nil {
+			onProgress(menubar.BulkProgressEvent{
+				Event:       "ITEM_PHASE",
+				Item:        filepath.Base(imp.Source),
+				Index:       processedItems,
+				Total:       totalItems,
+				Phase:       menubar.BulkPhaseImport,
+				CurrentFile: filepath.Base(imp.Source),
+			})
 		}
 		if app != nil {
 			app.SetStatus(menubar.StatusUploading)
@@ -1229,12 +1260,37 @@ func runAudioImportPipeline(sourceDir, dbPath, onlySourcePath string, app *menub
 			summary.Failed++
 			_ = filesDB.UpdateStatus(imp.Hash, "audio", "failed")
 			log.Printf("[import] failed reading imported audio: %s error=%v", imp.Dest, readErr)
+			if onProgress != nil {
+				onProgress(menubar.BulkProgressEvent{
+					Event:       "ITEM_DONE",
+					Item:        filepath.Base(imp.Source),
+					Index:       processedItems,
+					Total:       totalItems,
+					Outcome:     "failed",
+					Error:       readErr.Error(),
+					Done:        processedItems,
+					Success:     summary.Uploaded,
+					Failed:      summary.Failed,
+					CurrentFile: filepath.Base(imp.Source),
+					Phase:       menubar.BulkPhaseFailed,
+				})
+			}
 			continue
 		}
 
 		model := menubarWhisperModel()
 		lang := menubarWhisperLanguage()
 		timeout := menubarWhisperTimeout()
+		if onProgress != nil {
+			onProgress(menubar.BulkProgressEvent{
+				Event:       "ITEM_PHASE",
+				Item:        filepath.Base(imp.Source),
+				Index:       processedItems,
+				Total:       totalItems,
+				Phase:       menubar.BulkPhaseTranscribe,
+				CurrentFile: filepath.Base(imp.Source),
+			})
+		}
 		log.Printf("[import] whisper START source=%s model=%s language=%s", imp.Source, model, lang)
 		text, txErr := whisper.TranscribeTextWithTimeout(imp.Dest, model, lang, timeout)
 		if txErr != nil {
@@ -1243,6 +1299,9 @@ func runAudioImportPipeline(sourceDir, dbPath, onlySourcePath string, app *menub
 		} else {
 			log.Printf("[import] whisper DONE source=%s chars=%d", imp.Source, len(text))
 		}
+
+		// Record transcript details in DB.
+		_ = filesDB.RecordTranscript(imp.Hash, "audio", strings.TrimSpace(text), lang)
 
 		now := time.Now()
 		doc := (&impression.CompositeDoc{
@@ -1263,18 +1322,57 @@ func runAudioImportPipeline(sourceDir, dbPath, onlySourcePath string, app *menub
 			ContentType:        cfg.ContentType,
 		}
 
+		if onProgress != nil {
+			onProgress(menubar.BulkProgressEvent{
+				Event:       "ITEM_PHASE",
+				Item:        filepath.Base(imp.Source),
+				Index:       processedItems,
+				Total:       totalItems,
+				Phase:       menubar.BulkPhaseUpload,
+				CurrentFile: filepath.Base(imp.Source),
+			})
+		}
 		resp, upErr := er1.Upload(er1Cfg, payload)
 		if upErr != nil {
 			summary.Failed++
-			_ = filesDB.UpdateStatus(imp.Hash, "audio", "failed")
+			_ = filesDB.RecordUploadError(imp.Hash, "audio", upErr.Error())
 			_, _ = er1.HandleUploadFailure(er1.DefaultQueuePath(), er1.DefaultMemoryPath(), imp.MemoryID, payload, imp.Tags, upErr)
 			log.Printf("[import] upload FAIL source=%s error=%v", imp.Source, upErr)
+			if onProgress != nil {
+				onProgress(menubar.BulkProgressEvent{
+					Event:       "ITEM_DONE",
+					Item:        filepath.Base(imp.Source),
+					Index:       processedItems,
+					Total:       totalItems,
+					Outcome:     "failed",
+					Error:       upErr.Error(),
+					Done:        processedItems,
+					Success:     summary.Uploaded,
+					Failed:      summary.Failed,
+					CurrentFile: filepath.Base(imp.Source),
+					Phase:       menubar.BulkPhaseFailed,
+				})
+			}
 			continue
 		}
 
 		summary.Uploaded++
-		_ = filesDB.UpdateMemoryID(imp.Hash, "audio", resp.DocID)
+		_ = filesDB.RecordUploadSuccess(imp.Hash, "audio", resp.DocID)
 		log.Printf("[import] upload DONE source=%s doc_id=%s", imp.Source, resp.DocID)
+		if onProgress != nil {
+			onProgress(menubar.BulkProgressEvent{
+				Event:       "ITEM_DONE",
+				Item:        filepath.Base(imp.Source),
+				Index:       processedItems,
+				Total:       totalItems,
+				Outcome:     "ok",
+				Done:        processedItems,
+				Success:     summary.Uploaded,
+				Failed:      summary.Failed,
+				CurrentFile: filepath.Base(imp.Source),
+				Phase:       menubar.BulkPhaseDone,
+			})
+		}
 	}
 
 	if app != nil {
@@ -1283,10 +1381,198 @@ func runAudioImportPipeline(sourceDir, dbPath, onlySourcePath string, app *menub
 	return summary, nil
 }
 
-func samePath(a, b string) bool {
-	aa, _ := filepath.Abs(strings.TrimSpace(a))
-	bb, _ := filepath.Abs(strings.TrimSpace(b))
-	return aa != "" && bb != "" && aa == bb
+// reprocessAudioFile re-transcribes and re-uploads an already-tracked file.
+// If the file has an existing doc_id, it passes it to ER1 for overwrite;
+// otherwise a fresh document is created. The DB record is updated in place.
+func reprocessAudioFile(srcPath, dbPath string, app *menubar.App, onProgress func(menubar.BulkProgressEvent)) error {
+	cfg, err := importer.LoadImportConfig()
+	if err != nil {
+		return fmt.Errorf("load import config: %w", err)
+	}
+
+	filesDB, err := tracking.OpenFilesDB(dbPath)
+	if err != nil {
+		return fmt.Errorf("open tracking db: %w", err)
+	}
+	defer filesDB.Close()
+
+	absPath, _ := filepath.Abs(strings.TrimSpace(srcPath))
+	info, err := os.Stat(absPath)
+	if err != nil {
+		return fmt.Errorf("file not found: %s", srcPath)
+	}
+	if onProgress != nil {
+		onProgress(menubar.BulkProgressEvent{
+			Event:       "ITEM_PHASE",
+			Item:        info.Name(),
+			Phase:       menubar.BulkPhaseReprocess,
+			CurrentFile: info.Name(),
+		})
+	}
+
+	// Look up existing DB record by path.
+	existing, _ := filesDB.GetByPath(absPath)
+	existingDocID := ""
+	existingHash := ""
+	if existing != nil {
+		existingDocID = existing.UploadDocID
+		existingHash = existing.FileHash
+		log.Printf("[reprocess] found existing record: hash=%s doc_id=%q status=%s",
+			existingHash[:min(12, len(existingHash))], existingDocID, existing.Status)
+	}
+
+	// Compute hash of source file.
+	hash, err := tracking.HashFile(absPath)
+	if err != nil {
+		return fmt.Errorf("hash file: %w", err)
+	}
+
+	// Resolve destination directory.
+	destDir, err := cfg.DestDir()
+	if err != nil {
+		return fmt.Errorf("resolve dest: %w", err)
+	}
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return fmt.Errorf("create dest dir: %w", err)
+	}
+
+	// Create a new MEMORY folder and copy the file.
+	now := time.Now()
+	memoryID := fmt.Sprintf("MEMORY-%s", now.Format("20060102-150405"))
+	memoryPath := filepath.Join(destDir, memoryID)
+	for i := 1; ; i++ {
+		if _, statErr := os.Stat(memoryPath); os.IsNotExist(statErr) {
+			break
+		}
+		memoryID = fmt.Sprintf("MEMORY-%s-%d", now.Format("20060102-150405"), i)
+		memoryPath = filepath.Join(destDir, memoryID)
+		if i > 100 {
+			return fmt.Errorf("could not create unique MEMORY folder")
+		}
+	}
+	if err := os.MkdirAll(memoryPath, 0755); err != nil {
+		return fmt.Errorf("create memory folder: %w", err)
+	}
+
+	destFile := filepath.Join(memoryPath, info.Name())
+	srcF, err := os.Open(absPath)
+	if err != nil {
+		return fmt.Errorf("open source: %w", err)
+	}
+	dstF, err := os.Create(destFile)
+	if err != nil {
+		_ = srcF.Close()
+		return fmt.Errorf("create dest: %w", err)
+	}
+	_, cpErr := io.Copy(dstF, srcF)
+	_ = srcF.Close()
+	_ = dstF.Close()
+	if cpErr != nil {
+		return fmt.Errorf("copy file: %w", cpErr)
+	}
+
+	// Ensure a DB record exists for this file (upsert).
+	if existing == nil {
+		// No existing record — create one.
+		if _, recErr := filesDB.RecordFile(absPath, hash, info.Size(), "audio", memoryID); recErr != nil {
+			return fmt.Errorf("record file: %w", recErr)
+		}
+		existingHash = hash
+	}
+
+	// Update status to indicate re-processing.
+	_ = filesDB.UpdateStatus(existingHash, "audio", "imported")
+
+	if app != nil {
+		app.SetStatus(menubar.StatusUploading)
+	}
+
+	// Read the copied file for whisper + upload.
+	audioData, err := os.ReadFile(destFile)
+	if err != nil {
+		return fmt.Errorf("read audio: %w", err)
+	}
+
+	// Transcribe via whisper.
+	model := menubarWhisperModel()
+	lang := menubarWhisperLanguage()
+	timeout := menubarWhisperTimeout()
+	if onProgress != nil {
+		onProgress(menubar.BulkProgressEvent{
+			Event:       "ITEM_PHASE",
+			Item:        info.Name(),
+			Phase:       menubar.BulkPhaseTranscribe,
+			CurrentFile: info.Name(),
+		})
+	}
+	log.Printf("[reprocess] whisper START source=%s model=%s language=%s", info.Name(), model, lang)
+	text, txErr := whisper.TranscribeTextWithTimeout(destFile, model, lang, timeout)
+	if txErr != nil {
+		log.Printf("[reprocess] whisper FAIL source=%s error=%v", info.Name(), txErr)
+		_ = filesDB.UpdateStatus(existingHash, "audio", "whisper-error")
+		if app != nil {
+			app.SetStatus(menubar.StatusIdle)
+		}
+		return fmt.Errorf("whisper: %w", txErr)
+	}
+	log.Printf("[reprocess] whisper DONE source=%s chars=%d", info.Name(), len(text))
+
+	_ = filesDB.RecordTranscript(existingHash, "audio", strings.TrimSpace(text), lang)
+
+	// Build upload payload.
+	parsedInfo := impression.ParseFilename(info.Name())
+	tags := impression.BuildImportTags(parsedInfo.Tags)
+
+	doc := (&impression.CompositeDoc{
+		ObsType:        impression.Import,
+		Timestamp:      now,
+		TranscriptText: strings.TrimSpace(text),
+		ImpressionText: fmt.Sprintf("Re-processed audio file: %s\nSource: %s\nTags: %s", info.Name(), absPath, tags),
+	}).Build()
+
+	er1Cfg := er1.LoadConfig()
+	applyRuntimeER1Context(er1Cfg)
+
+	payload := &er1.UploadPayload{
+		TranscriptData:     []byte(strings.TrimSpace(doc) + "\n"),
+		TranscriptFilename: fmt.Sprintf("reprocess_%s.txt", now.Format("20060102_150405")),
+		AudioData:          audioData,
+		AudioFilename:      info.Name(),
+		Tags:               tags,
+		ContentType:        cfg.ContentType,
+		DocID:              existingDocID, // Reuse existing doc_id if available.
+	}
+
+	if existingDocID != "" {
+		log.Printf("[reprocess] upload START reusing doc_id=%s", existingDocID)
+	} else {
+		log.Printf("[reprocess] upload START (new document)")
+	}
+	if onProgress != nil {
+		onProgress(menubar.BulkProgressEvent{
+			Event:       "ITEM_PHASE",
+			Item:        info.Name(),
+			Phase:       menubar.BulkPhaseUpload,
+			CurrentFile: info.Name(),
+		})
+	}
+
+	resp, upErr := er1.Upload(er1Cfg, payload)
+	if upErr != nil {
+		_ = filesDB.RecordUploadError(existingHash, "audio", upErr.Error())
+		if app != nil {
+			app.SetStatus(menubar.StatusIdle)
+		}
+		return fmt.Errorf("upload: %w", upErr)
+	}
+
+	_ = filesDB.RecordUploadSuccess(existingHash, "audio", resp.DocID)
+	log.Printf("[reprocess] upload DONE source=%s doc_id=%s", info.Name(), resp.DocID)
+
+	if app != nil {
+		app.SetStatus(menubar.StatusIdle)
+	}
+	return nil
 }
 
 func defaultFilesDBPath() string {
@@ -1334,6 +1620,30 @@ func cmdMenubar(args []string) {
 
 	app := menubar.NewAppWithConfig(cfg, menubar.Handlers{
 		OnUploadER1: menubarUploadER1,
+		ListTrackingRecords: func(limit int) ([]menubar.TrackingRecord, error) {
+			db, err := tracking.OpenFilesDB(defaultFilesDBPath())
+			if err != nil {
+				return nil, err
+			}
+			defer db.Close()
+			files, err := db.ListFiles(limit)
+			if err != nil {
+				return nil, err
+			}
+			records := make([]menubar.TrackingRecord, len(files))
+			for i, f := range files {
+				records[i] = menubar.TrackingRecord{
+					FileName:       filepath.Base(f.FilePath),
+					Status:         f.Status,
+					TranscriptLen:  f.TranscriptLen,
+					TranscriptLang: f.TranscriptLang,
+					UploadDocID:    f.UploadDocID,
+					UploadError:    f.UploadError,
+					ProcessedAt:    f.ProcessedAt.Format("2006-01-02 15:04"),
+				}
+			}
+			return records, nil
+		},
 	})
 	app.SetAuthSession(menubar.AuthSession{})
 	startAudioImportListRefresher(app)
@@ -1353,6 +1663,18 @@ func cmdMenubar(args []string) {
 	// Wire OnAction to dispatch menu actions to real implementations.
 	app.Handlers.OnAction = func(action menubar.ActionType, data string) {
 		log.Printf("[menubar] action=%s data=%q", action, data)
+		if actionBlockedDuringBulk(action) {
+			if busy, state := ingestionOps.IsBusy(); busy {
+				remaining := state.Total - state.Done
+				if remaining < 0 {
+					remaining = 0
+				}
+				msg := fmt.Sprintf("Bulk run active (%d/%d, %d remaining). Please wait.", state.Done, state.Total, remaining)
+				app.Notify("Ingestion Busy", msg)
+				app.SetLastImportMessage("⏳ " + msg)
+				return
+			}
+		}
 		switch action {
 		case menubar.ActionFetchTranscript:
 			go menubarFetchTranscriptAndTrack(app, fetcher, data)
@@ -1371,8 +1693,26 @@ func cmdMenubar(args []string) {
 			go menubarLoginER1(app)
 		case menubar.ActionLogoutER1:
 			go menubarLogoutER1(app)
+		case menubar.ActionShowTrackingDB:
+			go menubarShowTrackingDB()
 		}
 	}
+
+	// Register bulk-action callback for tracking window buttons.
+	menubar.SetTrackingBulkCallback(func(action string, filenames []string, statuses []string) {
+		if busy, state := ingestionOps.IsBusy(); busy {
+			remaining := state.Total - state.Done
+			if remaining < 0 {
+				remaining = 0
+			}
+			app.Notify("Ingestion Busy",
+				fmt.Sprintf("Bulk run active (%d/%d, %d remaining). Please wait.", state.Done, state.Total, remaining))
+			return
+		}
+		go runTrackingBulkAction(app, action, filenames, statuses)
+		// Refresh the tracking window data after bulk ops.
+		go menubarShowTrackingDB()
+	})
 
 	log.Printf("Launching menu bar app (title=%q, icon=%q, log=%q)", cfg.Title, cfg.IconPath, cfg.LogPath)
 	app.Run()
@@ -1422,7 +1762,9 @@ func buildAudioImportState() menubar.AudioImportState {
 		log.Printf("[import] menu refresh scan error: %v", scanErr)
 		return state
 	}
-	entries, entriesErr := importer.BuildFileEntries(scan, importer.StatusCheckerFromDB(filesDB, "audio"))
+
+	checker := importer.StatusCheckerFromDB(filesDB, "audio")
+	entries, entriesErr := importer.BuildFileEntries(scan, checker)
 	if entriesErr != nil {
 		state.Error = "status build failed"
 		log.Printf("[import] menu refresh status error: %v", entriesErr)
@@ -1442,37 +1784,453 @@ func buildAudioImportState() menubar.AudioImportState {
 }
 
 func menubarHandleBatchImportAction(app *menubar.App, data string) {
+	if busy, state := ingestionOps.IsBusy(); busy {
+		remaining := state.Total - state.Done
+		if remaining < 0 {
+			remaining = 0
+		}
+		msg := fmt.Sprintf("Bulk run active (%d/%d, %d remaining). Please wait.", state.Done, state.Total, remaining)
+		app.Notify("Ingestion Busy", msg)
+		app.SetLastImportMessage("⏳ " + msg)
+		return
+	}
+
 	switch strings.TrimSpace(data) {
 	case "__refresh__":
+		log.Printf("[import] refreshing audio import list...")
 		app.SetAudioImportState(buildAudioImportState())
+		log.Printf("[import] list refreshed")
 		app.Notify("Audio Import", "List refreshed.")
 		return
 	case "__run_all__", "":
+		log.Printf("[import] starting batch import (all new files)...")
+		totalNew := 0
+		for _, it := range app.GetAudioImportState().Items {
+			if strings.EqualFold(strings.TrimSpace(it.Status), "new") {
+				totalNew++
+			}
+		}
+		startedAt := time.Now()
+		runID := startedAt.Format("20060102-150405.000")
+		startState := menubar.BulkRunState{
+			Active:    true,
+			RunID:     runID,
+			Action:    "menu_import_all",
+			Total:     totalNew,
+			StartedAt: startedAt,
+			Phase:     menubar.BulkPhaseQueued,
+		}
+		if !ingestionOps.TryStart("menu_import_all", startState) {
+			if busy, state := ingestionOps.IsBusy(); busy {
+				remaining := state.Total - state.Done
+				if remaining < 0 {
+					remaining = 0
+				}
+				msg := fmt.Sprintf("Bulk run active (%d/%d, %d remaining). Please wait.", state.Done, state.Total, remaining)
+				app.Notify("Ingestion Busy", msg)
+				app.SetLastImportMessage("⏳ " + msg)
+			}
+			return
+		}
+		app.SetBulkRunState(startState)
+		menubar.SetTrackingBulkProgress(startState)
+		app.SetLastImportMessage("⏳ Importing…")
 		app.SetStatus(menubar.StatusUploading)
-		summary, err := runAudioImportPipeline("", defaultFilesDBPath(), "", app)
+
+		onProgress := func(evt menubar.BulkProgressEvent) {
+			state := app.GetBulkRunState()
+			if state.RunID != runID {
+				state = startState
+			}
+			if evt.Total > 0 {
+				state.Total = evt.Total
+			}
+			if evt.CurrentFile != "" {
+				state.CurrentFile = evt.CurrentFile
+			}
+			if evt.Phase != "" {
+				state.Phase = evt.Phase
+			}
+			if evt.Event == "ITEM_DONE" {
+				state.Done = evt.Done
+				state.Success = evt.Success
+				state.Failed = evt.Failed
+				if evt.Error != "" {
+					state.LastError = evt.Error
+				}
+			}
+			state.Active = true
+			ingestionOps.Update(state)
+			app.SetBulkRunState(state)
+			menubar.SetTrackingBulkProgress(state)
+		}
+
+		summary, err := runAudioImportPipeline("", defaultFilesDBPath(), "", app, onProgress)
 		if err != nil {
+			log.Printf("[import] batch import FAILED: %v", err)
+			final := app.GetBulkRunState()
+			final.Active = false
+			final.Phase = menubar.BulkPhaseFailed
+			final.LastError = err.Error()
+			ingestionOps.Finish(final)
+			app.SetBulkRunState(final)
+			menubar.SetTrackingBulkProgress(final)
+			app.SetLastImportMessage("❌ " + err.Error())
 			app.SetStatus(menubar.StatusError)
 			app.Notify("Audio Import Failed", err.Error())
 			app.SetAudioImportState(buildAudioImportState())
 			return
 		}
+		final := app.GetBulkRunState()
+		final.Active = false
+		final.Done = summary.Imported
+		final.Success = summary.Uploaded
+		final.Failed = summary.Failed
+		if final.Total == 0 {
+			final.Total = summary.Imported
+		}
+		if final.Failed > 0 {
+			final.Phase = menubar.BulkPhaseFailed
+		} else {
+			final.Phase = menubar.BulkPhaseDone
+		}
+		ingestionOps.Finish(final)
+		app.SetBulkRunState(final)
+		menubar.SetTrackingBulkProgress(final)
+		msg := fmt.Sprintf("✅ Imported=%d Uploaded=%d Failed=%d", summary.Imported, summary.Uploaded, summary.Failed)
+		log.Printf("[import] batch import DONE: %s", msg)
+		app.SetLastImportMessage(msg)
 		app.SetStatus(menubar.StatusIdle)
-		app.Notify("Audio Import", fmt.Sprintf("Imported=%d Uploaded=%d Failed=%d", summary.Imported, summary.Uploaded, summary.Failed))
+		app.Notify("Audio Import", msg)
 		app.SetAudioImportState(buildAudioImportState())
 		return
 	default:
+		log.Printf("[import] single-file import START: %s", data)
+		app.SetLastImportMessage("⏳ Importing " + filepath.Base(data) + "…")
 		app.SetStatus(menubar.StatusUploading)
-		summary, err := runAudioImportPipeline("", defaultFilesDBPath(), data, app)
+		summary, err := runAudioImportPipeline("", defaultFilesDBPath(), data, app, nil)
 		if err != nil {
+			log.Printf("[import] single-file import FAILED: %s error=%v", data, err)
+			app.SetLastImportMessage("❌ " + filepath.Base(data) + ": " + err.Error())
 			app.SetStatus(menubar.StatusError)
 			app.Notify("Audio Import Failed", err.Error())
 			app.SetAudioImportState(buildAudioImportState())
 			return
 		}
+		msg := fmt.Sprintf("✅ %s: Imported=%d Uploaded=%d Failed=%d", filepath.Base(data), summary.Imported, summary.Uploaded, summary.Failed)
+		log.Printf("[import] single-file import DONE: %s", msg)
+		app.SetLastImportMessage(msg)
 		app.SetStatus(menubar.StatusIdle)
-		app.Notify("Audio Import", fmt.Sprintf("Imported=%d Uploaded=%d Failed=%d", summary.Imported, summary.Uploaded, summary.Failed))
+		app.Notify("Audio Import", msg)
 		app.SetAudioImportState(buildAudioImportState())
 	}
+}
+
+func menubarShowTrackingDB() {
+	// Tab 1: load all tracked records from DB.
+	db, err := tracking.OpenFilesDB(defaultFilesDBPath())
+	if err != nil {
+		log.Printf("[tracking] open db for window: %v", err)
+		return
+	}
+	defer db.Close()
+
+	records, err := db.ListFiles(500)
+	if err != nil {
+		log.Printf("[tracking] list files for window: %v", err)
+		return
+	}
+
+	var tracked []menubar.TrackingRecord
+	// Build a set of tracked basenames for cross-reference with source files.
+	trackedNames := make(map[string]string) // basename → status
+	for _, r := range records {
+		basename := filepath.Base(r.FilePath)
+		tracked = append(tracked, menubar.TrackingRecord{
+			FileName:       basename,
+			Status:         r.Status,
+			TranscriptLen:  r.TranscriptLen,
+			TranscriptLang: r.TranscriptLang,
+			UploadDocID:    r.UploadDocID,
+			UploadError:    r.UploadError,
+			ProcessedAt:    r.ProcessedAt.Format("2006-01-02 15:04"),
+		})
+		trackedNames[basename] = r.Status
+	}
+
+	// Tab 2: scan source folder and cross-reference with DB.
+	cfg, cfgErr := importer.LoadImportConfig()
+	if cfgErr != nil || strings.TrimSpace(cfg.AudioSource) == "" {
+		log.Printf("[tracking] source folder not configured: %v", cfgErr)
+		menubar.ShowTrackingWindow(tracked, nil, "")
+		return
+	}
+
+	folderPath := cfg.AudioSource
+	scan, scanErr := importer.ScanDir(folderPath)
+	if scanErr != nil {
+		log.Printf("[tracking] scan source folder: %v", scanErr)
+		menubar.ShowTrackingWindow(tracked, nil, folderPath)
+		return
+	}
+
+	var source []menubar.SourceFileRecord
+	for _, f := range scan.Files {
+		status := "new"
+		if st, ok := trackedNames[f.Name]; ok {
+			status = st
+		}
+		source = append(source, menubar.SourceFileRecord{
+			FileName:  f.Name,
+			Status:    status,
+			Size:      fmtFileSize(f.Size),
+			SizeBytes: f.Size,
+			CreatedAt: fileCreationTime(f.Path),
+		})
+	}
+
+	menubar.ShowTrackingWindow(tracked, source, folderPath)
+}
+
+func runTrackingBulkAction(app *menubar.App, action string, filenames []string, statuses []string) {
+	action = strings.TrimSpace(action)
+	if len(filenames) == 0 {
+		return
+	}
+	startedAt := time.Now()
+	runID := startedAt.Format("20060102-150405.000")
+	opType := "bulk_" + action
+	startState := menubar.BulkRunState{
+		Active:    true,
+		RunID:     runID,
+		Action:    action,
+		Total:     len(filenames),
+		Phase:     menubar.BulkPhaseQueued,
+		StartedAt: startedAt,
+	}
+	if !ingestionOps.TryStart(opType, startState) {
+		if busy, state := ingestionOps.IsBusy(); busy {
+			remaining := state.Total - state.Done
+			if remaining < 0 {
+				remaining = 0
+			}
+			app.Notify("Ingestion Busy",
+				fmt.Sprintf("Bulk run active (%d/%d, %d remaining). Please wait.", state.Done, state.Total, remaining))
+		}
+		return
+	}
+
+	app.SetBulkRunState(startState)
+	menubar.SetTrackingBulkProgress(startState)
+	app.SetStatus(menubar.StatusUploading)
+	app.SetLastImportMessage(fmt.Sprintf("⏳ Bulk %s started (%d files)", action, len(filenames)))
+	for _, name := range filenames {
+		menubar.SetTrackingSourceStatus(name, "queued")
+	}
+
+	emit := func(evt menubar.BulkProgressEvent) {
+		if evt.RunID == "" {
+			evt.RunID = runID
+		}
+		if evt.Action == "" {
+			evt.Action = action
+		}
+		if evt.Total == 0 {
+			evt.Total = len(filenames)
+		}
+
+		state := app.GetBulkRunState()
+		if state.RunID != runID {
+			state = startState
+		}
+		switch evt.Event {
+		case "RUN_START":
+			log.Print(formatBulkLog(evt))
+			state.Phase = menubar.BulkPhaseQueued
+		case "ITEM_START":
+			log.Print(formatBulkLog(evt))
+			state.CurrentFile = evt.Item
+			state.Phase = menubar.BulkPhaseQueued
+			menubar.SetTrackingSourceStatus(baseName(evt.Item), "queued")
+		case "ITEM_PHASE":
+			log.Print(formatBulkLog(evt))
+			state.CurrentFile = evt.Item
+			state.Phase = evt.Phase
+			menubar.SetTrackingSourceStatus(baseName(evt.Item), trackingStatusForPhase(evt.Phase))
+		case "ITEM_DONE":
+			log.Print(formatBulkLog(evt))
+			state.Done = evt.Done
+			state.Success = evt.Success
+			state.Failed = evt.Failed
+			state.CurrentFile = evt.Item
+			state.Phase = itemDonePhase(evt.Outcome, boolErr(evt.Error))
+			if evt.Error != "" {
+				state.LastError = evt.Error
+			}
+			menubar.SetTrackingSourceStatus(baseName(evt.Item), trackingStatusForOutcome(evt.Outcome, evt.Error))
+		case "RUN_DONE":
+			log.Print(formatBulkLog(evt))
+			state.Done = evt.Done
+			state.Success = evt.Success
+			state.Failed = evt.Failed
+			state.CurrentFile = ""
+			state.Phase = menubar.BulkPhaseDone
+		}
+		state.Active = true
+		ingestionOps.Update(state)
+		app.SetBulkRunState(state)
+		menubar.SetTrackingBulkProgress(state)
+	}
+
+	handler := func(index, total int, filename, status string, emitFn func(menubar.BulkProgressEvent)) (string, error) {
+		srcPath := filepath.Join(importAudioSourceDir(), filename)
+		switch action {
+		case "transcribe_upload":
+			summary, err := runAudioImportPipeline("", defaultFilesDBPath(), srcPath, app, func(evt menubar.BulkProgressEvent) {
+				evt.RunID = runID
+				evt.Action = action
+				evt.Index = index
+				evt.Total = total
+				if evt.Item == "" {
+					evt.Item = filename
+				}
+				emitFn(evt)
+			})
+			if err != nil {
+				return "failed", err
+			}
+			if summary.Imported == 0 && summary.Uploaded == 0 && summary.Failed == 0 && strings.EqualFold(strings.TrimSpace(status), "uploaded") {
+				return "skipped", nil
+			}
+			if summary.Failed > 0 {
+				return "failed", fmt.Errorf("item failed: imported=%d uploaded=%d failed=%d", summary.Imported, summary.Uploaded, summary.Failed)
+			}
+			if summary.Uploaded == 0 && summary.Imported == 0 {
+				return "skipped", nil
+			}
+			return "ok", nil
+		case "retranscribe_reupload":
+			err := reprocessAudioFile(srcPath, defaultFilesDBPath(), app, func(evt menubar.BulkProgressEvent) {
+				evt.RunID = runID
+				evt.Action = action
+				evt.Index = index
+				evt.Total = total
+				if evt.Item == "" {
+					evt.Item = filename
+				}
+				emitFn(evt)
+			})
+			if err != nil {
+				return "failed", err
+			}
+			return "ok", nil
+		default:
+			return "failed", fmt.Errorf("unsupported action: %s", action)
+		}
+	}
+
+	result := runBulkSession(runID, action, filenames, statuses, handler, emit)
+	finalState := app.GetBulkRunState()
+	finalState.Active = false
+	finalState.Done = result.Done
+	finalState.Success = result.Success
+	finalState.Failed = result.Failed
+	if finalState.Failed > 0 {
+		finalState.Phase = menubar.BulkPhaseFailed
+	} else {
+		finalState.Phase = menubar.BulkPhaseDone
+	}
+	ingestionOps.Finish(finalState)
+	app.SetBulkRunState(finalState)
+	menubar.SetTrackingBulkProgress(finalState)
+	app.SetStatus(menubar.StatusIdle)
+	msg := fmt.Sprintf("Bulk %s done: %d/%d ok, %d failed", action, result.Success, result.Total, result.Failed)
+	app.SetLastImportMessage("✅ " + msg)
+	app.Notify("Bulk Operation", msg)
+	go menubarShowTrackingDB()
+}
+
+func boolErr(text string) error {
+	if strings.TrimSpace(text) == "" {
+		return nil
+	}
+	return fmt.Errorf("%s", text)
+}
+
+func trackingStatusForPhase(phase menubar.BulkRunPhase) string {
+	switch phase {
+	case menubar.BulkPhaseQueued:
+		return "queued"
+	case menubar.BulkPhaseImport:
+		return "importing"
+	case menubar.BulkPhaseTranscribe:
+		return "transcribing"
+	case menubar.BulkPhaseUpload:
+		return "uploading"
+	case menubar.BulkPhaseReprocess:
+		return "reprocessing"
+	case menubar.BulkPhaseDone:
+		return "done"
+	case menubar.BulkPhaseFailed:
+		return "failed"
+	default:
+		return "processing"
+	}
+}
+
+func trackingStatusForOutcome(outcome, errText string) string {
+	switch strings.ToLower(strings.TrimSpace(outcome)) {
+	case "ok":
+		return "done"
+	case "skipped":
+		return "skipped"
+	default:
+		if strings.TrimSpace(errText) != "" {
+			return "failed"
+		}
+		return "failed"
+	}
+}
+
+func phaseLogToken(phase menubar.BulkRunPhase) string {
+	switch phase {
+	case menubar.BulkPhaseTranscribe:
+		return "whisper"
+	default:
+		return string(phase)
+	}
+}
+
+func fmtFileSize(bytes int64) string {
+	switch {
+	case bytes >= 1024*1024*1024:
+		return fmt.Sprintf("%.1f GB", float64(bytes)/(1024*1024*1024))
+	case bytes >= 1024*1024:
+		return fmt.Sprintf("%.1f MB", float64(bytes)/(1024*1024))
+	case bytes >= 1024:
+		return fmt.Sprintf("%.1f KB", float64(bytes)/1024)
+	default:
+		return fmt.Sprintf("%d B", bytes)
+	}
+}
+
+func importAudioSourceDir() string {
+	cfg, err := importer.LoadImportConfig()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(cfg.AudioSource)
+}
+
+func fileCreationTime(path string) string {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return ""
+	}
+	if sys, ok := fi.Sys().(*syscall.Stat_t); ok && sys.Birthtimespec.Sec > 0 {
+		return time.Unix(sys.Birthtimespec.Sec, sys.Birthtimespec.Nsec).Format("2006-01-02 15:04")
+	}
+	return fi.ModTime().Format("2006-01-02 15:04")
 }
 
 func menubarLoginER1(app *menubar.App) {
@@ -1894,6 +2652,18 @@ func observationRecordAndUpload(app *menubar.App, label string, imgPath string, 
 
 	// Stop callback: stop recording → whisper transcribe → update Review tab.
 	menubar.SetStopRecordingCallback(func(elapsed int) {
+		if busy, state := ingestionOps.IsBusy(); busy {
+			remaining := state.Total - state.Done
+			if remaining < 0 {
+				remaining = 0
+			}
+			menubar.SetReviewTranscript(
+				fmt.Sprintf("Bulk audio processing is active (%d/%d, %d remaining). Please wait and retry.",
+					state.Done, state.Total, remaining),
+				"Ingestion blocked",
+			)
+			return
+		}
 		cancel()
 		<-recDone
 		recordingStopped = true
@@ -2047,6 +2817,18 @@ func mergeCaptureMemoAndNotes(memo, notes string) string {
 // menubarUploadPayload uploads a payload to ER1, queuing on failure.
 // On success, opens the uploaded item in the default browser.
 func menubarUploadPayload(app *menubar.App, label string, payload *er1.UploadPayload, tags string) {
+	if busy, state := ingestionOps.IsBusy(); busy {
+		remaining := state.Total - state.Done
+		if remaining < 0 {
+			remaining = 0
+		}
+		msg := fmt.Sprintf("Bulk run active (%d/%d, %d remaining). Upload blocked.", state.Done, state.Total, remaining)
+		log.Printf("[%s] upload blocked: %s", label, msg)
+		app.Notify("Ingestion Busy", msg)
+		app.SetStatus(menubar.StatusIdle)
+		return
+	}
+
 	cfg := er1.LoadConfig()
 	applyRuntimeER1Context(cfg)
 	resp, err := er1.Upload(cfg, payload)
@@ -2308,7 +3090,7 @@ func menubarWhisperLanguage() string {
 }
 
 func menubarWhisperTimeout() time.Duration {
-	const defaultTimeout = 120 * time.Second
+	const defaultTimeout = 7200 * time.Second // 2 hours — large audio files need time
 
 	raw := strings.TrimSpace(os.Getenv("M3C_WHISPER_TIMEOUT"))
 	if raw == "" {
