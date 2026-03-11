@@ -59,8 +59,8 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.AppLabel != "com.kamir.m3c-tools" {
 		t.Errorf("AppLabel = %q, want 'com.kamir.m3c-tools'", cfg.AppLabel)
 	}
-	if cfg.Title != "M3C" {
-		t.Errorf("Title = %q, want 'M3C'", cfg.Title)
+	if cfg.Title != "" {
+		t.Errorf("Title = %q, want empty (icon-only)", cfg.Title)
 	}
 	if cfg.LogPath == "" {
 		t.Error("LogPath should not be empty")
@@ -77,6 +77,8 @@ func TestActionTypes(t *testing.T) {
 		ActionCopyTranscript,
 		ActionBatchImport,
 		ActionUploadER1,
+		ActionLoginER1,
+		ActionLogoutER1,
 		ActionOpenLog,
 		ActionQuit,
 	}
@@ -173,6 +175,38 @@ func TestAppStatusConcurrency(t *testing.T) {
 	app.SetStatus(StatusError)
 	if app.GetStatus() != StatusError {
 		t.Errorf("after second SetStatus, got %q, want %q", app.GetStatus(), StatusError)
+	}
+}
+
+func TestAppBulkRunState(t *testing.T) {
+	app := NewApp()
+	s := BulkRunState{
+		Active:      true,
+		RunID:       "run-123",
+		Action:      "transcribe_upload",
+		Total:       5,
+		Done:        2,
+		Success:     2,
+		Failed:      0,
+		CurrentFile: "file.wav",
+		Phase:       BulkPhaseTranscribe,
+		StartedAt:   time.Now(),
+		LastError:   "",
+	}
+	app.SetBulkRunState(s)
+
+	got := app.GetBulkRunState()
+	if !got.Active {
+		t.Fatal("bulk state should be active")
+	}
+	if got.RunID != "run-123" {
+		t.Fatalf("RunID = %q, want run-123", got.RunID)
+	}
+	if got.Done != 2 || got.Total != 5 {
+		t.Fatalf("progress = %d/%d, want 2/5", got.Done, got.Total)
+	}
+	if got.Phase != BulkPhaseTranscribe {
+		t.Fatalf("phase = %q, want %q", got.Phase, BulkPhaseTranscribe)
 	}
 }
 
@@ -373,6 +407,12 @@ func TestUploadER1ActionType(t *testing.T) {
 	if ActionUploadER1 != "upload_er1" {
 		t.Errorf("ActionUploadER1 = %q, want upload_er1", ActionUploadER1)
 	}
+	if ActionLoginER1 != "login_er1" {
+		t.Errorf("ActionLoginER1 = %q, want login_er1", ActionLoginER1)
+	}
+	if ActionLogoutER1 != "logout_er1" {
+		t.Errorf("ActionLogoutER1 = %q, want logout_er1", ActionLogoutER1)
+	}
 }
 
 func TestHandlerOnUploadER1(t *testing.T) {
@@ -427,19 +467,14 @@ func TestUploadER1StatusTransition(t *testing.T) {
 	}
 }
 
-func TestUploadER1MenuItemPresent(t *testing.T) {
+func TestLoggedOutMenuShowsOnlyLogin(t *testing.T) {
 	app := NewApp()
 	items := app.BuildMenuItems()
-
-	found := false
-	for _, item := range items {
-		if item.Text == "🚀 Upload to ER1..." {
-			found = true
-			break
-		}
+	if len(items) != 1 {
+		t.Fatalf("logged-out menu len=%d, want 1", len(items))
 	}
-	if !found {
-		t.Error("Expected '🚀 Upload to ER1...' menu item in BuildMenuItems()")
+	if items[0].Text != "🔐 Login to ER1..." {
+		t.Fatalf("logged-out first menu item=%q, want login", items[0].Text)
 	}
 }
 
@@ -463,6 +498,22 @@ func TestUploadER1WithoutHandler(t *testing.T) {
 	app.Handlers.OnAction(ActionUploadER1, "test-vid")
 	if capturedAction != ActionUploadER1 {
 		t.Errorf("expected upload_er1 action, got %q", capturedAction)
+	}
+}
+
+func TestAuthSessionState(t *testing.T) {
+	app := NewApp()
+	if got := app.GetAuthSession(); got.LoggedIn || got.UserID != "" {
+		t.Fatalf("initial auth session = %+v, want logged out", got)
+	}
+
+	app.SetAuthSession(AuthSession{LoggedIn: true, UserID: "107677460544181387647___mft"})
+	got := app.GetAuthSession()
+	if !got.LoggedIn {
+		t.Fatal("expected logged-in session")
+	}
+	if got.UserID != "107677460544181387647___mft" {
+		t.Fatalf("UserID = %q, want context id", got.UserID)
 	}
 }
 
