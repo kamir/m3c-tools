@@ -14,10 +14,10 @@ nav:
     url: /getting-started
   - title: Menu Bar App
     url: /menubar-app
+  - title: Audio Import
+    url: /audio-import-tracking
   - title: Roadmap
     url: /roadmap
-  - title: Architecture
-    url: /architecture
 
 # Build settings
 markdown: kramdown
@@ -29,3 +29,6 @@ exclude:
   - seed-observation-window.yaml
   - ui-mockup.html
   - go-rewrite-plan.md
+  - recording-window-requirements.md
+  - requirements-er1-integration.md
+  - feature-er1-login.md
