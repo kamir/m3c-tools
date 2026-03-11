@@ -7,15 +7,13 @@ title: Getting Started
 
 ## Prerequisites
 
-- **Go 1.25+** (build from source)
 - **macOS** (menu bar app uses native Cocoa via cgo)
+- **Go 1.25+** (build from source)
 - **PortAudio** — for microphone recording: `brew install portaudio`
-- **Whisper** — for speech-to-text: `brew install openai-whisper` or install from [github.com/openai/whisper](https://github.com/openai/whisper)
-- **ER1 server** (optional) — for uploading observations
+- **Whisper** — for speech-to-text: `pip install openai-whisper` or `brew install openai-whisper`
+- **ER1 server** (optional) — for uploading observations to your knowledge base
 
 ## Installation
-
-### From source
 
 ```bash
 git clone https://github.com/kamir/m3c-tools.git
@@ -30,35 +28,63 @@ This will:
 4. Install app to `/Applications/M3C-Tools.app`
 5. Walk you through macOS privacy permissions (Screen Recording, Microphone, Accessibility, Input Monitoring)
 
-### Configuration
-
-Copy `.env.example` to `.env` and fill in your settings:
+### Build without installing
 
 ```bash
-cp .env.example .env
+make build       # CLI only → ./build/m3c-tools
+make build-app   # CLI + .app bundle → ./build/M3C-Tools.app
 ```
 
-Key variables:
+## Configuration
 
-| Variable | Purpose | Required |
-|----------|---------|----------|
-| `ER1_API_URL` | ER1 upload endpoint | For uploads |
-| `ER1_API_KEY` | ER1 authentication key | For uploads |
-| `ER1_CONTEXT_ID` | ER1 user/org context | For uploads |
-| `M3C_WHISPER_MODEL` | Whisper model (tiny/base/small/medium/large) | No (default: base) |
-| `IMPORT_AUDIO_SOURCE` | Audio import source folder | For Channel D |
-| `YT_PROXY_URL` | YouTube proxy URL (rate limit mitigation) | No |
+Copy `.env.example` to your home directory:
 
-## Usage
+```bash
+cp .env.example ~/.m3c-tools.env
+```
 
-### 1. Fetch a transcript (CLI)
+### Required settings (for ER1 upload)
+
+| Variable | Purpose |
+|----------|---------|
+| `ER1_API_URL` | ER1 upload endpoint (e.g. `https://127.0.0.1:8081/upload_2`) |
+| `ER1_API_KEY` | ER1 authentication key (sent as `X-API-KEY` header) |
+| `ER1_CONTEXT_ID` | ER1 user/org context identifier |
+
+### Optional settings
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `M3C_WHISPER_MODEL` | `base` | Whisper model (tiny/base/small/medium/large) |
+| `M3C_WHISPER_TIMEOUT` | `7200` | Transcription timeout in seconds |
+| `YT_WHISPER_LANGUAGE` | `de` | Transcription language (ISO 639-1) |
+| `M3C_SCREENSHOT_MODE` | `clipboard-first` | Screenshot mode (`clipboard-first` or `interactive`) |
+| `IMPORT_AUDIO_SOURCE` | — | Audio import source folder (for Channel D) |
+| `IMPORT_AUDIO_DEST` | `~/ER1` | Audio import destination folder |
+| `YT_PROXY_URL` | — | HTTP/SOCKS5 proxy for YouTube (rate limit mitigation) |
+
+See [`.env.example`](https://github.com/kamir/m3c-tools/blob/main/.env.example) for the complete list with descriptions.
+
+## First use
+
+### Launch the menu bar app
+
+```bash
+make menubar
+```
+
+Or open `/Applications/M3C-Tools.app`.
+
+A menu bar icon appears. Click it to see the available actions.
+
+### Fetch a transcript (CLI)
 
 ```bash
 # Plain text
 m3c-tools transcript dQw4w9WgXcQ
 
-# JSON format
-m3c-tools transcript dQw4w9WgXcQ --format json
+# SRT format
+m3c-tools transcript dQw4w9WgXcQ --format srt
 
 # List available languages
 m3c-tools transcript dQw4w9WgXcQ --list
@@ -67,32 +93,40 @@ m3c-tools transcript dQw4w9WgXcQ --list
 m3c-tools transcript dQw4w9WgXcQ --lang de
 ```
 
-### 2. Menu bar app
+### Run tests
 
 ```bash
-make menubar
-# or
-m3c-tools menubar
+make test-unit      # Offline unit tests (no network, no hardware)
+make ci             # Full CI (vet + lint + test + build)
+make test-network   # YouTube API tests (requires internet)
+make test-er1       # ER1 integration tests (requires running server)
 ```
 
-See the [Menu Bar App](menubar-app) page for full details.
+## macOS Permissions
 
-### 3. Run tests
+m3c-tools needs the following macOS permissions:
+
+| Permission | Why | When prompted |
+|------------|-----|---------------|
+| **Microphone** | Voice recording for observations | First recording |
+| **Screen Recording** | Interactive screenshot capture | First screenshot (interactive mode) |
+| **Accessibility** | Clipboard monitoring for screenshot detection | First clipboard-first capture |
+
+Grant these in **System Preferences → Privacy & Security**. The `make install` target walks you through this.
+
+## Uninstalling
 
 ```bash
-# Offline unit tests (no network, no hardware)
-make test-unit
+make uninstall
+```
 
-# Full CI (vet + lint + test + build)
-make ci
-
-# Network tests (YouTube API)
-make test-network
-
-# ER1 integration tests
-make test-er1
+Or manually:
+```bash
+rm -f /usr/local/bin/m3c-tools
+rm -rf /Applications/M3C-Tools.app
+# Data preserved at ~/.m3c-tools/ — remove manually if desired
 ```
 
 ---
 
-Next: [Menu Bar App](menubar-app)
+Next: [Menu Bar App](menubar-app) | [Home](/)

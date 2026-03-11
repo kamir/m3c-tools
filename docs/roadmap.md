@@ -7,7 +7,7 @@ title: Roadmap & Ideas
 
 This project is designed to grow. Below is the living roadmap — a place to track ideas, capture impulses, and plan next steps.
 
-## Current state (v1.4.4)
+## Current state (v1.5)
 
 - [x] Full Go rewrite (from Python) — native macOS binary
 - [x] Pure Go transcript library (port of youtube-transcript-api)
@@ -26,6 +26,14 @@ This project is designed to grow. Below is the living roadmap — a place to tra
 - [x] macOS .app bundle with icon + Info.plist
 - [x] CI pipeline (vet + lint + test + build)
 - [x] Draft saving on cancel (~/.m3c-tools/drafts/)
+- [x] Tracking DB window with 2 tabs (Tracked Items + Source Files)
+- [x] Source Files: checkbox selection, sortable columns, folder path, creation date
+- [x] Bulk operations: Transcribe+Upload and Re-process Selected with progress bar
+- [x] Re-processing with doc_id reuse for ER1 document overwrite
+- [x] YouTube transcript preserved through voice recording (not overwritten by whisper)
+- [x] Clipboard-first screenshot: uses existing clipboard image without re-capture
+- [x] Optional audio: Store without recording (ER1 gets placeholder audio)
+- [x] Configurable timeouts: whisper up to 2h, ER1 upload up to 10min
 
 ---
 

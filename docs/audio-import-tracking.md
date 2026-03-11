@@ -1,3 +1,8 @@
+---
+layout: default
+title: Audio Import & Tracking
+---
+
 # Audio Import & Upload Tracking
 
 This document describes the audio import pipeline, the tracking database, and the
