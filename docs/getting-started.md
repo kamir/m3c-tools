@@ -7,81 +7,126 @@ title: Getting Started
 
 ## Prerequisites
 
-- Python 3.8 or later
-- macOS (for the menu bar app)
-- A Google Cloud project (only if you want to use the History Inspector)
+- **macOS** (menu bar app uses native Cocoa via cgo)
+- **Go 1.25+** (build from source)
+- **PortAudio** — for microphone recording: `brew install portaudio`
+- **Whisper** — for speech-to-text: `pip install openai-whisper` or `brew install openai-whisper`
+- **ER1 server** (optional) — for uploading observations to your knowledge base
 
 ## Installation
 
-### Core library
+```bash
+git clone https://github.com/kamir/m3c-tools.git
+cd m3c-tools
+make install
+```
+
+This will:
+1. Build the `m3c-tools` binary
+2. Create `M3C-Tools.app` bundle with icon and Info.plist
+3. Install CLI to `/usr/local/bin/m3c-tools`
+4. Install app to `/Applications/M3C-Tools.app`
+5. Walk you through macOS privacy permissions (Screen Recording, Microphone, Accessibility, Input Monitoring)
+
+### Build without installing
 
 ```bash
-pip install youtube-transcript-api
+make build       # CLI only → ./build/m3c-tools
+make build-app   # CLI + .app bundle → ./build/M3C-Tools.app
 ```
 
-### From source (all tools)
+## Configuration
+
+Copy `.env.example` to your home directory:
 
 ```bash
-git clone https://github.com/kamir/youtube-transcript-api.git
-cd youtube-transcript-api
-git checkout kamir/m3c-tools
-pip install -e ".[dev]"
+cp .env.example ~/.m3c-tools.env
 ```
 
-## Usage overview
+### Required settings (for ER1 upload)
 
-### 1. Fetch a single transcript
+| Variable | Purpose |
+|----------|---------|
+| `ER1_API_URL` | ER1 upload endpoint (e.g. `https://127.0.0.1:8081/upload_2`) |
+| `ER1_API_KEY` | ER1 authentication key (sent as `X-API-KEY` header) |
+| `ER1_CONTEXT_ID` | ER1 user/org context identifier |
 
-No API key needed. Works out of the box.
+### Optional settings
 
-```python
-from youtube_transcript_api import YouTubeTranscriptApi
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `M3C_WHISPER_MODEL` | `base` | Whisper model (tiny/base/small/medium/large) |
+| `M3C_WHISPER_TIMEOUT` | `7200` | Transcription timeout in seconds |
+| `YT_WHISPER_LANGUAGE` | `de` | Transcription language (ISO 639-1) |
+| `M3C_SCREENSHOT_MODE` | `clipboard-first` | Screenshot mode (`clipboard-first` or `interactive`) |
+| `IMPORT_AUDIO_SOURCE` | — | Audio import source folder (for Channel D) |
+| `IMPORT_AUDIO_DEST` | `~/ER1` | Audio import destination folder |
+| `YT_PROXY_URL` | — | HTTP/SOCKS5 proxy for YouTube (rate limit mitigation) |
 
-api = YouTubeTranscriptApi()
-transcript = api.fetch("VIDEO_ID", languages=["en"])
+See [`.env.example`](https://github.com/kamir/m3c-tools/blob/main/.env.example) for the complete list with descriptions.
 
-full_text = "\n".join(snippet.text for snippet in transcript)
-print(full_text)
-```
+## First use
 
-**Language selection:** Pass a list of preferred languages. The API will try each in order and fall back automatically.
-
-```python
-# Prefer German, fall back to English
-transcript = api.fetch("VIDEO_ID", languages=["de", "en"])
-```
-
-### 2. CLI usage
+### Launch the menu bar app
 
 ```bash
-# Fetch transcript as plain text
-youtube_transcript_api VIDEO_ID
+make menubar
+```
 
-# Fetch in JSON format
-youtube_transcript_api VIDEO_ID --format json
+Or open `/Applications/M3C-Tools.app`.
+
+A menu bar icon appears. Click it to see the available actions.
+
+### Fetch a transcript (CLI)
+
+```bash
+# Plain text
+m3c-tools transcript dQw4w9WgXcQ
+
+# SRT format
+m3c-tools transcript dQw4w9WgXcQ --format srt
+
+# List available languages
+m3c-tools transcript dQw4w9WgXcQ --list
 
 # Specify language
-youtube_transcript_api VIDEO_ID --languages en de
+m3c-tools transcript dQw4w9WgXcQ --lang de
 ```
 
-### 3. Quick clipboard copy (macOS)
-
-Edit the `video_id` in `do_fetch.py` and run:
+### Run tests
 
 ```bash
-python3 do_fetch.py
+make test-unit      # Offline unit tests (no network, no hardware)
+make ci             # Full CI (vet + lint + test + build)
+make test-network   # YouTube API tests (requires internet)
+make test-er1       # ER1 integration tests (requires running server)
 ```
 
-The transcript is printed and copied to your clipboard.
+## macOS Permissions
 
-### 4. Menu bar app
+m3c-tools needs the following macOS permissions:
 
-See the [Menu Bar App](menubar-app) page.
+| Permission | Why | When prompted |
+|------------|-----|---------------|
+| **Microphone** | Voice recording for observations | First recording |
+| **Screen Recording** | Interactive screenshot capture | First screenshot (interactive mode) |
+| **Accessibility** | Clipboard monitoring for screenshot detection | First clipboard-first capture |
 
-### 5. History Inspector
+Grant these in **System Preferences → Privacy & Security**. The `make install` target walks you through this.
 
-Requires a Google OAuth client secret. See [Authentication](authentication), then [History Inspector](history-inspector).
+## Uninstalling
+
+```bash
+make uninstall
+```
+
+Or manually:
+```bash
+rm -f /usr/local/bin/m3c-tools
+rm -rf /Applications/M3C-Tools.app
+# Data preserved at ~/.m3c-tools/ — remove manually if desired
+```
 
 ---
 
-Next: [Authentication Guide](authentication)
+Next: [Menu Bar App](menubar-app) | [Home](/)
