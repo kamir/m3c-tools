@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -79,7 +80,12 @@ func buildAPI() *transcript.API {
 			log.Printf("[fetch] proxy setup failed (falling back to direct): %v", err)
 			return transcript.New()
 		}
-		log.Printf("[fetch] using proxy: %s", proxyURL)
+		redacted := proxyURL
+		if u, pErr := url.Parse(proxyURL); pErr == nil && u.User != nil {
+			u.User = nil
+			redacted = u.String()
+		}
+		log.Printf("[fetch] using proxy: %s", redacted)
 		return api
 	}
 	return transcript.New()

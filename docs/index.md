@@ -10,8 +10,8 @@ A native macOS toolkit for capturing multimodal observations (text + audio + ima
 ## Quickstart
 
 ```bash
-brew install portaudio
-pip install openai-whisper
+brew install pkg-config portaudio ffmpeg
+python3 -m pip install openai-whisper
 git clone https://github.com/kamir/m3c-tools.git && cd m3c-tools
 make install
 cp .env.example ~/.m3c-tools.env   # edit with your ER1 credentials
@@ -64,5 +64,4 @@ See the [Getting Started](getting-started) guide for the full configuration refe
 
 - [Getting Started](getting-started) — install, configure, first use
 - [Menu Bar App](menubar-app) — channels, Observation Window, menu items
-- [Audio Import & Tracking](audio-import-tracking) — batch import, tracking DB, seed procedure
 - [Roadmap](roadmap) — current state, future work, ideas

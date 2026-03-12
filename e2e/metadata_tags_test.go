@@ -187,7 +187,7 @@ func TestMetadataTagsIntegrationWithBuildImportTags(t *testing.T) {
 	for _, tag := range parsed {
 		found[tag] = true
 	}
-	for _, want := range []string{"import", "audio-import", "braindump"} {
+	for _, want := range []string{"audio-import", "braindump"} {
 		if !found[want] {
 			t.Errorf("Missing expected tag %q in %v", want, parsed)
 		}

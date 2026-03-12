@@ -68,12 +68,20 @@ if [ -n "$(git status --porcelain)" ]; then
     git commit -m "Release ${NEW_TAG}"
 fi
 
-# --- Build ---
+# --- Build binary ---
 echo ""
 echo "Building ${BINARY}..."
 mkdir -p "${BUILD_DIR}"
 go build -ldflags "-X main.Version=${NEW_VERSION}" -o "${BUILD_DIR}/${BINARY}" ./cmd/m3c-tools
 echo "Built ${BUILD_DIR}/${BINARY}"
+
+# --- Build app bundle + DMG ---
+echo ""
+echo "Building app bundle..."
+APP_VERSION="${NEW_VERSION}" make build-app
+echo "Building DMG..."
+./scripts/make-dmg.sh "${NEW_VERSION}"
+DMG_PATH="${BUILD_DIR}/M3C-Tools-${NEW_VERSION}.dmg"
 
 # --- Push commits to origin ---
 echo ""
@@ -93,13 +101,34 @@ git push origin "${NEW_TAG}"
 # --- Create GitHub release ---
 echo ""
 echo "Creating GitHub release ${NEW_TAG}..."
+# Build release assets list
+RELEASE_ASSETS=("${BUILD_DIR}/${BINARY}")
+if [ -f "$DMG_PATH" ]; then
+    RELEASE_ASSETS+=("$DMG_PATH")
+    DMG_SHA=$(shasum -a 256 "$DMG_PATH" | awk '{print $1}')
+    DMG_SIZE=$(du -h "$DMG_PATH" | awk '{print $1}')
+    DMG_NOTES="
+### macOS Installer
+- **${DMG_PATH##*/}** (${DMG_SIZE})
+- SHA-256: \`${DMG_SHA}\`
+
+### First-time setup
+\`\`\`bash
+# After dragging to /Applications:
+/Applications/M3C-Tools.app/Contents/MacOS/m3c-tools setup
+\`\`\`"
+else
+    DMG_NOTES=""
+fi
+
 gh release create "${NEW_TAG}" \
-    "${BUILD_DIR}/${BINARY}" \
+    "${RELEASE_ASSETS[@]}" \
     --title "Release ${NEW_TAG}" \
     --notes "## ${BINARY} ${NEW_TAG}
 
 ### Changes since ${LATEST_TAG:-initial}
 $(git log ${LATEST_TAG:+${LATEST_TAG}..}HEAD --oneline --no-decorate 2>/dev/null || echo "- Initial release")
+${DMG_NOTES}
 " \
     --latest
 

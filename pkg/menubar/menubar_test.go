@@ -17,8 +17,9 @@ func TestCleanVideoID(t *testing.T) {
 		{"https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42s", "dQw4w9WgXcQ"},
 		{"https://youtu.be/dQw4w9WgXcQ", "dQw4w9WgXcQ"},
 		{"https://youtu.be/dQw4w9WgXcQ?si=abc123", "dQw4w9WgXcQ"},
-		{"https://www.youtube.com/watch?v=abc&list=PLxyz", "abc"},
+		{"https://www.youtube.com/watch?v=abc&list=PLxyz", ""},  // "abc" is not a valid 11-char video ID
 		{"", ""},
+		{"not-a-video-id!!", ""},                                // invalid characters
 	}
 	for _, tt := range tests {
 		got := CleanVideoID(tt.input)
@@ -80,6 +81,7 @@ func TestActionTypes(t *testing.T) {
 		ActionLoginER1,
 		ActionLogoutER1,
 		ActionOpenLog,
+		ActionStarGitHub,
 		ActionQuit,
 	}
 	seen := make(map[ActionType]bool)
@@ -467,14 +469,17 @@ func TestUploadER1StatusTransition(t *testing.T) {
 	}
 }
 
-func TestLoggedOutMenuShowsOnlyLogin(t *testing.T) {
+func TestLoggedOutMenuShowsLoginAndStar(t *testing.T) {
 	app := NewApp()
 	items := app.BuildMenuItems()
-	if len(items) != 1 {
-		t.Fatalf("logged-out menu len=%d, want 1", len(items))
+	if len(items) != 3 {
+		t.Fatalf("logged-out menu len=%d, want 3 (login, separator, star)", len(items))
 	}
 	if items[0].Text != "🔐 Login to ER1..." {
 		t.Fatalf("logged-out first menu item=%q, want login", items[0].Text)
+	}
+	if items[2].Text != "⭐ Star on GitHub" {
+		t.Fatalf("logged-out third menu item=%q, want '⭐ Star on GitHub'", items[2].Text)
 	}
 }
 

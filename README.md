@@ -9,11 +9,15 @@
 ### 1. Install prerequisites
 
 ```bash
-brew install portaudio           # microphone recording
-pip install openai-whisper       # speech-to-text (or: brew install openai-whisper)
+brew install pkg-config portaudio ffmpeg    # build tools + audio
+python3 -m pip install openai-whisper       # speech-to-text
 ```
 
+Or: `make deps` (after cloning) to install everything at once.
+
 Requires **Go 1.25+** and **macOS** (Cocoa UI via cgo).
+
+> **First-run note:** Whisper downloads its language model on first use (~150 MB for `base`, ~1.5 GB for `medium`). This requires internet access.
 
 ### 2. Build and install
 
@@ -37,6 +41,12 @@ Edit `~/.m3c-tools.env` — the three required settings for ER1 upload:
 ER1_API_URL=https://your-er1-server:8081/upload_2
 ER1_API_KEY=your-api-key
 ER1_CONTEXT_ID=your-context-id
+```
+
+**No local ER1 server?** Use the public instance for testing:
+
+```
+ER1_API_URL=https://onboarding.guide/upload_2
 ```
 
 ### 4. Launch
@@ -236,7 +246,6 @@ Full documentation: **[kamir.github.io/m3c-tools](https://kamir.github.io/m3c-to
 
 - [Getting Started](https://kamir.github.io/m3c-tools/getting-started)
 - [Menu Bar App](https://kamir.github.io/m3c-tools/menubar-app)
-- [Audio Import & Tracking](https://kamir.github.io/m3c-tools/audio-import-tracking)
 - [Roadmap](https://kamir.github.io/m3c-tools/roadmap)
 
 ## Uninstalling

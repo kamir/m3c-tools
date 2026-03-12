@@ -38,3 +38,6 @@ build/
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Deployment state (machine-specific)
+.deploy/gcp-state.json
