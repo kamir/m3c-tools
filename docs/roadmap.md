@@ -39,7 +39,7 @@ This project is designed to grow. Below is the living roadmap — a place to tra
 
 ## Completed: Go Rewrite
 
-The full Python-to-Go rewrite is **complete**. See [Go Rewrite Plan](go-rewrite-plan) for the original migration plan and POC validation results.
+The full Python-to-Go rewrite is **complete**. The original migration plan and POC validation results are archived in the maintenance repository (`PLAN/go-rewrite-plan.md`).
 
 Key wins over Python version:
 - Single static binary (no Python/pip/virtualenv)
@@ -62,7 +62,7 @@ The ER1 integration is **fully implemented** in Go packages:
 - [x] ER1 browser login linking with session persistence
 - [x] Offline retry queue with exponential backoff
 
-Full requirements: **[ER1 Integration Requirements](requirements-er1-integration)**.
+Full requirements are archived in the maintenance repository (`SPEC/requirements-er1-integration.md`).
 
 ---
 

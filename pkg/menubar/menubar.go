@@ -8,10 +8,19 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 )
+
+func defaultLogPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "/tmp/m3c-tools.log"
+	}
+	return filepath.Join(home, ".m3c-tools", "m3c-tools.log")
+}
 
 // ActionType identifies the kind of menu action triggered by the user.
 type ActionType string
@@ -28,8 +37,12 @@ const (
 	ActionLogoutER1         ActionType = "logout_er1"
 	ActionShowTrackingDB    ActionType = "show_tracking_db"
 	ActionOpenLog           ActionType = "open_log"
+	ActionStarGitHub        ActionType = "star_github"
 	ActionQuit              ActionType = "quit"
 )
+
+// GitHubRepoURL is the project's GitHub repository URL.
+const GitHubRepoURL = "https://github.com/kamir/m3c-tools"
 
 // Status represents the current operational state of the menu bar app.
 type Status string
@@ -124,7 +137,7 @@ func DefaultConfig() MenuConfig {
 		AppLabel: "com.kamir.m3c-tools",
 		Title:    "",
 		IconPath: FindIcon("maindset_icon.png"),
-		LogPath:  "/tmp/m3c-tools.log",
+		LogPath:  defaultLogPath(),
 	}
 }
 
@@ -180,8 +193,12 @@ type ER1UploadResult struct {
 	Queued  bool   // true if the upload was queued for retry (offline)
 }
 
+// videoIDRegexp matches a valid YouTube video ID (11 alphanumeric, hyphen, or underscore chars).
+var videoIDRegexp = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
+
 // CleanVideoID extracts a bare YouTube video ID from a URL or raw string.
 // It handles youtube.com/watch?v=..., youtu.be/..., and strips query params.
+// Returns empty string if the result is not a valid 11-character video ID.
 func CleanVideoID(raw string) string {
 	if strings.Contains(raw, "youtube.com") || strings.Contains(raw, "youtu.be") {
 		if strings.Contains(raw, "v=") {
@@ -194,6 +211,9 @@ func CleanVideoID(raw string) string {
 	}
 	raw = strings.Split(raw, "&")[0]
 	raw = strings.Split(raw, "?")[0]
+	if !videoIDRegexp.MatchString(raw) {
+		return ""
+	}
 	return raw
 }
 

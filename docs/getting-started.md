@@ -9,15 +9,28 @@ title: Getting Started
 
 - **macOS** (menu bar app uses native Cocoa via cgo)
 - **Go 1.25+** (build from source)
-- **PortAudio** — for microphone recording: `brew install portaudio`
-- **Whisper** — for speech-to-text: `pip install openai-whisper` or `brew install openai-whisper`
+- **Homebrew dependencies** — install all at once:
+  ```bash
+  brew install pkg-config portaudio ffmpeg
+  ```
+  - `pkg-config` — required by cgo to locate PortAudio headers
+  - `portaudio` — microphone recording
+  - `ffmpeg` — audio decoding (required by Whisper at runtime)
+- **Whisper** — for speech-to-text:
+  ```bash
+  python3 -m pip install openai-whisper
+  ```
+  > **Note:** On first use, Whisper downloads its language model automatically. The default `base` model is ~150 MB; the `medium` model is ~1.5 GB. Ensure you have internet access on first launch. You can pre-download with: `whisper --model base /dev/null`
 - **ER1 server** (optional) — for uploading observations to your knowledge base
+
+Or install everything at once with `make deps` (see below).
 
 ## Installation
 
 ```bash
 git clone https://github.com/kamir/m3c-tools.git
 cd m3c-tools
+make deps       # install Homebrew + pip dependencies (first time only)
 make install
 ```
 
@@ -69,9 +82,16 @@ cp .env.example ~/.m3c-tools.env
 
 | Variable | Purpose |
 |----------|---------|
-| `ER1_API_URL` | ER1 upload endpoint (e.g. `https://127.0.0.1:8081/upload_2`) |
+| `ER1_API_URL` | ER1 upload endpoint |
 | `ER1_API_KEY` | ER1 authentication key (sent as `X-API-KEY` header) |
 | `ER1_CONTEXT_ID` | ER1 user/org context identifier |
+
+**ER1 endpoint options:**
+
+| Instance | URL | When to use |
+|----------|-----|-------------|
+| Local dev | `https://127.0.0.1:8081/upload_2` | Running ER1 locally (set `ER1_VERIFY_SSL=false` for self-signed certs) |
+| Public | `https://onboarding.guide/upload_2` | Testing without a local server |
 
 ### Optional settings
 

@@ -29,7 +29,7 @@ func LoadConfig() *Config {
 		ContextID:     envOr("ER1_CONTEXT_ID", "107677460544181387647___mft"),
 		ContentType:   envOr("ER1_CONTENT_TYPE", "YouTube-Video-Impression"),
 		UploadTimeout: envInt("ER1_UPLOAD_TIMEOUT", 600),
-		VerifySSL:     envBool("ER1_VERIFY_SSL", false),
+		VerifySSL:     envBool("ER1_VERIFY_SSL", true),
 		RetryInterval: envInt("ER1_RETRY_INTERVAL", 300),
 		MaxRetries:    envInt("ER1_MAX_RETRIES", 10),
 	}
@@ -47,15 +47,24 @@ func (c *Config) AuthHeaders() map[string]string {
 // Summary returns a human-readable one-liner for logging.
 func (c *Config) Summary() string {
 	masked := "(none)"
-	if len(c.APIKey) > 4 {
-		masked = c.APIKey[:4] + "..."
+	if c.APIKey != "" {
+		masked = fmt.Sprintf("****(%d chars)", len(c.APIKey))
 	}
-	return fmt.Sprintf("ER1 -> %s key=%s ctx=%s timeout=%ds",
-		c.APIURL, masked, c.ContextID, c.UploadTimeout)
+	return fmt.Sprintf("ER1 -> %s key=%s ctx=%s timeout=%ds ssl=%v",
+		c.APIURL, masked, c.ContextID, c.UploadTimeout, c.VerifySSL)
 }
 
 // LoadDotenv loads a .env file into os.Environ (does not override existing vars).
 func LoadDotenv(path string) error {
+	info, statErr := os.Stat(path)
+	if statErr != nil {
+		return statErr
+	}
+	if info.Mode().Perm()&0077 != 0 {
+		fmt.Fprintf(os.Stderr, "Warning: %s has permissive permissions (%04o). Consider: chmod 600 %s\n",
+			path, info.Mode().Perm(), path)
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -71,6 +80,10 @@ func LoadDotenv(path string) error {
 		}
 		k = strings.TrimSpace(k)
 		v = strings.TrimSpace(v)
+		// Strip surrounding quotes
+		if len(v) >= 2 && ((v[0] == '"' && v[len(v)-1] == '"') || (v[0] == '\'' && v[len(v)-1] == '\'')) {
+			v = v[1 : len(v)-1]
+		}
 		if os.Getenv(k) == "" {
 			os.Setenv(k, v)
 		}

@@ -7,16 +7,47 @@ BUILD_DIR = ./build
 APP_NAME = M3C-Tools
 APP_BUNDLE = $(BUILD_DIR)/$(APP_NAME).app
 APP_ID   = com.kamir.m3c-tools
-APP_VERSION = 1.4.4
+APP_VERSION ?= $(shell git tag --list 'v*' --sort=-v:refname | head -1 | sed 's/^v//' 2>/dev/null || echo "0.0.0")
 ICON_SRC = maindset_icon.png
 
 # Default: build the CLI
 .PHONY: all
 all: build
 
+# Install all system dependencies (Homebrew + Python)
+.PHONY: deps
+deps:
+	@echo "Installing system dependencies via Homebrew..."
+	brew install pkg-config portaudio ffmpeg
+	@echo ""
+	@echo "Installing Whisper via pip..."
+	python3 -m pip install openai-whisper
+	@echo ""
+	@echo "All dependencies installed. Run 'make install' to build and install m3c-tools."
+
+# Check that required build/runtime dependencies are available
+.PHONY: check-deps
+check-deps:
+	@missing=""; \
+	command -v pkg-config >/dev/null 2>&1 || missing="$$missing pkg-config"; \
+	command -v ffmpeg >/dev/null 2>&1     || missing="$$missing ffmpeg"; \
+	command -v whisper >/dev/null 2>&1    || missing="$$missing whisper"; \
+	if [ -n "$$missing" ]; then \
+		echo "ERROR: Missing required dependencies:$$missing"; \
+		echo ""; \
+		echo "Install them with:"; \
+		echo "  make deps"; \
+		echo ""; \
+		echo "Or manually:"; \
+		echo "  brew install pkg-config portaudio ffmpeg"; \
+		echo "  python3 -m pip install openai-whisper"; \
+		exit 1; \
+	fi; \
+	echo "All dependencies found."
+
 # Build the main CLI binary
 .PHONY: build
-build:
+build: check-deps
 	@echo "Building $(BINARY)..."
 	go build -o $(BUILD_DIR)/$(BINARY) $(CMD_DIR)
 
@@ -141,6 +172,21 @@ build-app: build
 </dict>\n\
 </plist>\n' > $(APP_BUNDLE)/Contents/Info.plist
 	@echo "Built $(APP_BUNDLE)"
+
+# Create Python venv and install whisper
+.PHONY: setup-venv
+setup-venv:
+	@./scripts/setup-venv.sh
+
+# Recreate Python venv from scratch
+.PHONY: setup-venv-force
+setup-venv-force:
+	@./scripts/setup-venv.sh --force
+
+# Build macOS DMG installer
+.PHONY: dmg
+dmg: build-app
+	@./scripts/make-dmg.sh $(APP_VERSION)
 
 # Install CLI to /usr/local/bin and .app to /Applications
 .PHONY: install
@@ -267,9 +313,13 @@ help:
 	@echo "m3c-tools — Multi-Modal-Memory Tools"
 	@echo ""
 	@echo "Targets:"
+	@echo "  deps           Install all system dependencies (Homebrew + pip)"
+	@echo "  check-deps     Verify required dependencies are installed"
 	@echo "  build          Build the main CLI binary"
 	@echo "  build-all      Build all binaries (CLI + POCs)"
 	@echo "  build-app      Build macOS .app bundle"
+	@echo "  dmg            Build macOS DMG installer"
+	@echo "  setup-venv     Create Python venv and install whisper"
 	@echo "  e2e            Run all e2e tests"
 	@echo "  test-unit      Run offline unit tests only"
 	@echo "  test-network   Run transcript tests requiring internet"

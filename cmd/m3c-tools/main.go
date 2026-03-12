@@ -13,11 +13,13 @@
 //	m3c-tools thumbnail <video_id> [--output file.jpg]
 //	m3c-tools retry [--interval 30] [--max-retries 10]
 //	m3c-tools check-er1
-//	m3c-tools menubar [--title M3C] [--icon path.png] [--log /tmp/m3c-tools.log]
+//	m3c-tools menubar [--title M3C] [--icon path.png] [--log ~/.m3c-tools/m3c-tools.log]
 package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -30,6 +32,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -42,6 +45,7 @@ import (
 	"github.com/kamir/m3c-tools/pkg/menubar"
 	"github.com/kamir/m3c-tools/pkg/recorder"
 	"github.com/kamir/m3c-tools/pkg/screenshot"
+	"github.com/kamir/m3c-tools/pkg/timetracking"
 	"github.com/kamir/m3c-tools/pkg/tracking"
 	"github.com/kamir/m3c-tools/pkg/transcript"
 	"github.com/kamir/m3c-tools/pkg/whisper"
@@ -92,6 +96,8 @@ func main() {
 		cmdScreenshot(os.Args[2:])
 	case "import-audio":
 		cmdImportAudio(os.Args[2:])
+	case "setup":
+		cmdSetup(os.Args[2:])
 	case "menubar":
 		cmdMenubar(os.Args[2:])
 	case "help", "--help", "-h":
@@ -167,10 +173,16 @@ Commands:
     --compact              Machine-readable output (TSV: status, path, size, tags)
     --db <path>            Tracking DB path (default: ~/.m3c-tools/tracking.db)
 
+  setup                  Set up Python venv and install whisper
+    --force                Recreate venv from scratch
+    --check                Check setup status without installing
+
   menubar                Launch macOS menu bar app
     --title <text>         Menu bar title (default: M3C)
     --icon <path>          Menu bar icon PNG path
-    --log <path>           Log file path (default: /tmp/m3c-tools.log)`)
+    --log <path>           Log file path (default: ~/.m3c-tools/m3c-tools.log)
+
+Like m3c-tools? Star us on GitHub: https://github.com/kamir/m3c-tools`)
 }
 
 type er1SessionState struct {
@@ -186,6 +198,7 @@ type persistedER1Session struct {
 
 var runtimeER1Session er1SessionState
 var ingestionOps = newIngestionCoordinator()
+var reverseTracker *timetracking.ReverseTracker
 
 func setRuntimeER1Login(contextID string) {
 	runtimeER1Session.mu.Lock()
@@ -341,6 +354,10 @@ func cmdTranscript(args []string) {
 				proxyAuth = args[i+1]
 				i++
 			}
+		default:
+			if strings.HasPrefix(args[i], "--") {
+				fmt.Fprintf(os.Stderr, "Warning: unknown flag %q (ignored)\n", args[i])
+			}
 		}
 	}
 
@@ -432,6 +449,10 @@ func cmdUpload(args []string) {
 			if i+1 < len(args) {
 				impressionText = args[i+1]
 				i++
+			}
+		default:
+			if strings.HasPrefix(args[i], "--") {
+				fmt.Fprintf(os.Stderr, "Warning: unknown flag %q (ignored)\n", args[i])
 			}
 		}
 	}
@@ -593,6 +614,152 @@ func cmdThumbnail(args []string) {
 }
 
 // -- check-er1 command --
+
+func cmdSetup(args []string) {
+	force := false
+	checkOnly := false
+	for _, arg := range args {
+		switch arg {
+		case "--force":
+			force = true
+		case "--check":
+			checkOnly = true
+		}
+	}
+
+	home := os.Getenv("HOME")
+	dataDir := filepath.Join(home, ".m3c-tools")
+	venvDir := whisper.VenvDir()
+	whisperPath := whisper.VenvWhisperPath()
+
+	fmt.Println("m3c-tools setup")
+	fmt.Println("===============")
+	fmt.Println()
+
+	// Check data directory
+	if fi, err := os.Stat(dataDir); err == nil && fi.IsDir() {
+		fmt.Printf("  Data dir:    %s (exists)\n", dataDir)
+	} else {
+		fmt.Printf("  Data dir:    %s (will be created)\n", dataDir)
+	}
+
+	// Check Python
+	pythonPath, err := exec.LookPath("python3")
+	if err != nil {
+		pythonPath = "(not found)"
+	}
+	fmt.Printf("  Python3:     %s\n", pythonPath)
+
+	// Check venv
+	venvExists := false
+	if fi, err := os.Stat(filepath.Join(venvDir, "bin", "python")); err == nil && !fi.IsDir() {
+		venvExists = true
+		fmt.Printf("  Venv:        %s (exists)\n", venvDir)
+	} else {
+		fmt.Printf("  Venv:        %s (not installed)\n", venvDir)
+	}
+
+	// Check whisper in venv
+	whisperFound := false
+	if fi, err := os.Stat(whisperPath); err == nil && !fi.IsDir() {
+		whisperFound = true
+		fmt.Printf("  Whisper:     %s (installed)\n", whisperPath)
+	} else {
+		fmt.Printf("  Whisper:     (not installed)\n")
+	}
+
+	// Check system whisper as fallback
+	if sysWhisper, err := exec.LookPath("whisper"); err == nil && !whisperFound {
+		fmt.Printf("  Whisper:     %s (system, fallback)\n", sysWhisper)
+	}
+
+	// Check ffmpeg
+	if ffmpegPath, err := exec.LookPath("ffmpeg"); err == nil {
+		fmt.Printf("  ffmpeg:      %s\n", ffmpegPath)
+	} else {
+		fmt.Printf("  ffmpeg:      (not found — install with: brew install ffmpeg)\n")
+	}
+
+	// Check ER1 config
+	er1Cfg := er1.LoadConfig()
+	fmt.Printf("  ER1 API:     %s\n", er1Cfg.APIURL)
+
+	// Check .env
+	envPath := filepath.Join(home, ".m3c-tools.env")
+	if _, err := os.Stat(envPath); err == nil {
+		fmt.Printf("  Config:      %s\n", envPath)
+	} else if _, err := os.Stat(".env"); err == nil {
+		fmt.Printf("  Config:      .env (local)\n")
+	} else {
+		fmt.Printf("  Config:      (no .env found)\n")
+	}
+
+	fmt.Println()
+
+	if checkOnly {
+		if venvExists && whisperFound {
+			fmt.Println("Status: ready")
+		} else {
+			fmt.Println("Status: setup needed — run 'm3c-tools setup'")
+			os.Exit(1)
+		}
+		return
+	}
+
+	if venvExists && whisperFound && !force {
+		fmt.Println("Setup is already complete. Use --force to reinstall.")
+		return
+	}
+
+	// Create data directory
+	if err := os.MkdirAll(dataDir, 0700); err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating %s: %v\n", dataDir, err)
+		os.Exit(1)
+	}
+
+	// Run setup-venv.sh
+	setupScript := findSetupScript()
+	if setupScript == "" {
+		fmt.Fprintf(os.Stderr, "Error: setup-venv.sh not found.\n")
+		fmt.Fprintf(os.Stderr, "Expected at: scripts/setup-venv.sh (relative to repo root)\n")
+		os.Exit(1)
+	}
+
+	setupArgs := []string{setupScript}
+	if force {
+		setupArgs = append(setupArgs, "--force")
+	}
+	cmd := exec.Command("bash", setupArgs...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "\nSetup failed: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// findSetupScript locates scripts/setup-venv.sh relative to the binary or CWD.
+func findSetupScript() string {
+	// Check relative to working directory
+	if _, err := os.Stat("scripts/setup-venv.sh"); err == nil {
+		return "scripts/setup-venv.sh"
+	}
+	// Check relative to binary location
+	if exePath, err := os.Executable(); err == nil {
+		candidate := filepath.Join(filepath.Dir(exePath), "..", "scripts", "setup-venv.sh")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	// Check in app bundle Resources
+	if exePath, err := os.Executable(); err == nil {
+		candidate := filepath.Join(filepath.Dir(exePath), "..", "Resources", "setup-venv.sh")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return ""
+}
 
 func cmdCheckER1() {
 	cfg := er1.LoadConfig()
@@ -1359,6 +1526,13 @@ func runAudioImportPipeline(sourceDir, dbPath, onlySourcePath string, app *menub
 		summary.Uploaded++
 		_ = filesDB.RecordUploadSuccess(imp.Hash, "audio", resp.DocID)
 		log.Printf("[import] upload DONE source=%s doc_id=%s", imp.Source, resp.DocID)
+
+		// Reverse time tracking: record observation and create inferred time block (REQ-9/10).
+		if reverseTracker != nil && imp.Tags != "" {
+			if rtErr := reverseTracker.RecordAndProcess(now, imp.Tags, resp.DocID, "import"); rtErr != nil {
+				log.Printf("[reverse-tracking] import observation failed: %v", rtErr)
+			}
+		}
 		if onProgress != nil {
 			onProgress(menubar.BulkProgressEvent{
 				Event:       "ITEM_DONE",
@@ -1569,6 +1743,13 @@ func reprocessAudioFile(srcPath, dbPath string, app *menubar.App, onProgress fun
 	_ = filesDB.RecordUploadSuccess(existingHash, "audio", resp.DocID)
 	log.Printf("[reprocess] upload DONE source=%s doc_id=%s", info.Name(), resp.DocID)
 
+	// Reverse time tracking: record observation and create inferred time block (REQ-9/10).
+	if reverseTracker != nil && tags != "" {
+		if rtErr := reverseTracker.RecordAndProcess(now, tags, resp.DocID, "import"); rtErr != nil {
+			log.Printf("[reverse-tracking] reprocess observation failed: %v", rtErr)
+		}
+	}
+
 	if app != nil {
 		app.SetStatus(menubar.StatusIdle)
 	}
@@ -1585,6 +1766,7 @@ func defaultFilesDBPath() string {
 
 func cmdMenubar(args []string) {
 	cfg := menubar.DefaultConfig()
+	verbose := true // default ON during hardening (BUG-0003)
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -1603,16 +1785,44 @@ func cmdMenubar(args []string) {
 				cfg.LogPath = args[i+1]
 				i++
 			}
+		case "--verbose":
+			verbose = true
+		case "--quiet":
+			verbose = false
+		default:
+			if strings.HasPrefix(args[i], "--") {
+				fmt.Fprintf(os.Stderr, "Warning: unknown flag %q (ignored)\n", args[i])
+			}
 		}
 	}
 
 	// Open log file for writing so "Open Log File" has something to show.
-	logFile, err := os.OpenFile(cfg.LogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	// Ensure log directory exists
+	if logDir := filepath.Dir(cfg.LogPath); logDir != "" && logDir != "." {
+		os.MkdirAll(logDir, 0700)
+	}
+	logFile, err := os.OpenFile(cfg.LogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: cannot open log file %s: %v\n", cfg.LogPath, err)
 	} else {
-		log.SetOutput(logFile)
+		if verbose {
+			log.SetOutput(io.MultiWriter(logFile, os.Stderr))
+		} else {
+			log.SetOutput(logFile)
+		}
 		log.SetFlags(log.Ldate | log.Ltime)
+	}
+
+	// Fix 3 (BUG-0003): Print log file path on startup so user knows where to look.
+	fmt.Fprintf(os.Stderr, "m3c-tools menubar started. Logs: %s\n", cfg.LogPath)
+
+	// Check whisper availability at startup.
+	if whisperPath, err := whisper.FindBinary(); err != nil {
+		log.Printf("[startup] WARNING: whisper not found — voice transcription unavailable")
+		log.Printf("[startup] Run 'm3c-tools setup' to install whisper in a dedicated venv")
+		fmt.Fprintf(os.Stderr, "Warning: whisper not found. Run 'm3c-tools setup' to install.\n")
+	} else {
+		log.Printf("[startup] whisper found: %s", whisperPath)
 	}
 
 	// Create transcript fetcher for the Fetch Transcript menu item.
@@ -1652,13 +1862,199 @@ func cmdMenubar(args []string) {
 	} else if ctxID != "" {
 		setRuntimeER1Login(ctxID)
 		app.SetAuthSession(menubar.AuthSession{LoggedIn: true, UserID: ctxID})
-		log.Printf("[auth] restored persisted session context_id=%s", ctxID)
+		log.Printf("[auth] restored persisted session context_id=%s", truncateForLog(ctxID, 64))
 	}
 	menubar.StartFrontmostAppTracker()
 	if exe, err := os.Executable(); err == nil {
 		log.Printf("[diag] pid=%d exe=%q screen_access=%v screenshot_mode=%s", os.Getpid(), exe, menubar.HasScreenCaptureAccess(), screenshotCaptureMode())
 	}
 	maybePreloadWhisper()
+
+	// --- Time Tracking Engine ---
+	ttStore, ttErr := timetracking.OpenStore(timetracking.DefaultDBPath())
+	var ttEngine *timetracking.Engine
+	var ttSyncer *timetracking.Syncer
+	if ttErr != nil {
+		log.Printf("[timetracking] store open failed: %v — time tracking disabled", ttErr)
+	} else {
+		ttEngine = timetracking.NewEngine(ttStore, func(title, msg string) {
+			app.Notify(title, msg)
+		})
+		app.SetTimeEngine(ttEngine)
+
+		// Recover orphaned contexts from any prior crash.
+		if err := ttEngine.RecoverOrphanedContexts(); err != nil {
+			log.Printf("[timetracking] crash recovery: %v", err)
+		}
+
+		// Start ER1 sync if API key is configured.
+		// M3C_PLM_BASE_URL overrides the base derived from ER1_API_URL,
+		// allowing uploads to go to a local server while PLM queries hit production.
+		er1Cfg := er1.LoadConfig()
+		plmBase := os.Getenv("M3C_PLM_BASE_URL")
+		if plmBase == "" {
+			plmBase = er1BaseURL(er1Cfg.APIURL)
+		}
+		if plmBase != "" && er1Cfg.APIKey != "" {
+			log.Printf("[timetracking] PLM connection: base=%s context=%s ssl=%v",
+				plmBase, truncateForLog(er1Cfg.ContextID, 32), er1Cfg.VerifySSL)
+			// Strip ___mft suffix from context ID — PLM uses the raw Google UID.
+			plmContextID := er1Cfg.ContextID
+			if idx := strings.Index(plmContextID, "___"); idx > 0 {
+				plmContextID = plmContextID[:idx]
+			}
+			plmClient := timetracking.NewPLMClient(timetracking.PLMConfig{
+				BaseURL:   plmBase,
+				APIKey:    er1Cfg.APIKey,
+				ContextID: plmContextID,
+				VerifySSL: er1Cfg.VerifySSL,
+			})
+			ttSyncer = timetracking.NewSyncer(ttStore, plmClient, 30*time.Second)
+			ttSyncer.Start()
+			log.Printf("[timetracking] syncer started (interval=30s)")
+
+			// Start project list refresher.
+			startTimeTrackingProjectRefresher(plmClient, ttStore)
+		} else {
+			log.Printf("[timetracking] PLM sync disabled (base=%q key_set=%v)", plmBase, er1Cfg.APIKey != "")
+		}
+
+		log.Printf("[timetracking] engine ready db=%s", timetracking.DefaultDBPath())
+
+		// Create reverse tracker for observation-inferred time blocks (REQ-9).
+		reverseTracker = timetracking.NewReverseTracker(ttStore)
+		log.Printf("[timetracking] reverse tracker ready (enabled=%v)", reverseTracker != nil)
+
+		// Wire Gantt chart Time Tracker window.
+		var ganttViewMode int // 0=week, 1=month
+		var ganttOffset int
+
+		showGantt := func(viewMode, offset int) {
+			ganttViewMode = viewMode
+			ganttOffset = offset
+
+			now := time.Now()
+			var from, to time.Time
+			if viewMode == 0 {
+				from, to = timetracking.WeekBounds(now, offset)
+			} else {
+				from, to = timetracking.MonthBounds(now, offset)
+			}
+
+			// Backfill reverse tracking for the viewed period (REQ-10).
+			if reverseTracker != nil {
+				if n, bfErr := reverseTracker.BackfillPeriod(from, to); bfErr != nil {
+					log.Printf("[reverse-tracking] gantt backfill failed: %v", bfErr)
+				} else if n > 0 {
+					log.Printf("[reverse-tracking] gantt backfill: processed %d observations", n)
+				}
+			}
+
+			events, err := ttStore.ListAllEvents(from, to)
+			if err != nil {
+				log.Printf("[timetracking] gantt: fetch events failed: %v", err)
+				return
+			}
+
+			sessions := timetracking.ComputeSessions(events)
+
+			// Build unique project list.
+			type projInfo struct {
+				name  string
+				id    string
+				total time.Duration
+			}
+			projMap := make(map[string]*projInfo)
+			var projOrder []string
+
+			for _, s := range sessions {
+				if _, ok := projMap[s.ProjectID]; !ok {
+					projMap[s.ProjectID] = &projInfo{name: s.ProjectName, id: s.ProjectID}
+					projOrder = append(projOrder, s.ProjectID)
+				}
+				projMap[s.ProjectID].total += time.Duration(s.DurationSec) * time.Second
+			}
+
+			var data menubar.GanttData
+			data.PeriodStart = float64(from.Unix())
+			data.PeriodEnd = float64(to.Unix())
+			data.ViewMode = viewMode
+
+			if viewMode == 0 {
+				_, cw := from.ISOWeek()
+				data.PeriodLabel = fmt.Sprintf("CW %d: %s – %s",
+					cw, from.Format("Jan 2"), to.AddDate(0, 0, -1).Format("Jan 2, 2006"))
+			} else {
+				data.PeriodLabel = from.Format("January 2006")
+			}
+
+			if viewMode == 0 {
+				for d := 0; d < 7; d++ {
+					day := from.AddDate(0, 0, d)
+					data.DayLabels = append(data.DayLabels, day.Format("Mon 2"))
+				}
+			} else {
+				daysInMonth := to.AddDate(0, 0, -1).Day()
+				for d := 1; d <= daysInMonth; d++ {
+					data.DayLabels = append(data.DayLabels, fmt.Sprintf("%d", d))
+				}
+			}
+
+			projIdx := make(map[string]int)
+			for i, pid := range projOrder {
+				p := projMap[pid]
+				r, g, b := timetracking.ProjectColor(pid)
+				data.Projects = append(data.Projects, menubar.GanttProject{
+					Name:   p.name,
+					Total:  ganttFormatDuration(p.total),
+					ColorR: r,
+					ColorG: g,
+					ColorB: b,
+				})
+				projIdx[pid] = i
+			}
+
+			for _, s := range sessions {
+				idx, ok := projIdx[s.ProjectID]
+				if !ok {
+					continue
+				}
+				data.Sessions = append(data.Sessions, menubar.GanttSession{
+					ProjectIndex: idx,
+					Start:        float64(s.Start.Unix()),
+					End:          float64(s.End.Unix()),
+					IsActive:     s.IsActive,
+					IsInferred:   s.Trigger == "observation_inferred",
+				})
+			}
+
+			log.Printf("[timetracking] gantt: mode=%d offset=%d projects=%d sessions=%d period=%s",
+				viewMode, offset, len(data.Projects), len(data.Sessions), data.PeriodLabel)
+			menubar.ShowTimeTrackerWindow(data)
+		}
+
+		app.SetShowTimeTrackerFunc(func() {
+			showGantt(ganttViewMode, ganttOffset)
+		})
+
+		menubar.SetGanttNavigateCallback(func(viewMode, offset int) {
+			showGantt(viewMode, offset)
+		})
+	}
+
+	// safeGo launches a goroutine with panic recovery (BUG-0003 Fix 2).
+	// Any panic is logged and shown in the menu bar instead of crashing the process.
+	safeGo := func(name string, fn func()) {
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[PANIC] %s: %v\n%s", name, r, debug.Stack())
+					app.Notify("Internal Error", fmt.Sprintf("%s crashed: %v", name, r))
+				}
+			}()
+			fn()
+		}()
+	}
 
 	// Wire OnAction to dispatch menu actions to real implementations.
 	app.Handlers.OnAction = func(action menubar.ActionType, data string) {
@@ -1677,24 +2073,25 @@ func cmdMenubar(args []string) {
 		}
 		switch action {
 		case menubar.ActionFetchTranscript:
-			go menubarFetchTranscriptAndTrack(app, fetcher, data)
+			safeGo("FetchTranscript", func() { menubarFetchTranscriptAndTrack(app, fetcher, data) })
 		case menubar.ActionCaptureScreenshot:
-			go menubarCaptureScreenshot(app)
+			safeGo("CaptureScreenshot", func() { menubarCaptureScreenshot(app) })
 		case menubar.ActionCopyTranscript:
-			// data is the video ID; re-fetch and copy
-			go fetcher.FetchAndDisplay(app, data)
+			safeGo("CopyTranscript", func() { fetcher.FetchAndDisplay(app, data) })
 		case menubar.ActionRecordImpression:
-			go menubarRecordImpression(app, data)
+			safeGo("RecordImpression", func() { menubarRecordImpression(app, data) })
 		case menubar.ActionQuickImpulse:
-			go menubarQuickImpulse(app)
+			safeGo("QuickImpulse", func() { menubarQuickImpulse(app) })
 		case menubar.ActionBatchImport:
-			go menubarHandleBatchImportAction(app, data)
+			safeGo("BatchImport", func() { menubarHandleBatchImportAction(app, data) })
 		case menubar.ActionLoginER1:
-			go menubarLoginER1(app)
+			safeGo("LoginER1", func() { menubarLoginER1(app) })
 		case menubar.ActionLogoutER1:
-			go menubarLogoutER1(app)
+			safeGo("LogoutER1", func() { menubarLogoutER1(app) })
 		case menubar.ActionShowTrackingDB:
-			go menubarShowTrackingDB()
+			safeGo("ShowTrackingDB", func() { menubarShowTrackingDB() })
+		case menubar.ActionStarGitHub:
+			safeGo("StarGitHub", func() { openURL(menubar.GitHubRepoURL) })
 		}
 	}
 
@@ -1714,8 +2111,110 @@ func cmdMenubar(args []string) {
 		go menubarShowTrackingDB()
 	})
 
+	// Start background retry scheduler to auto-retry failed ER1 uploads every 5 minutes.
+	bgRetryCfg := er1.LoadConfig()
+	bgRetry := er1.StartBackgroundRetry(
+		er1.DefaultQueuePath(), bgRetryCfg,
+		5*time.Minute,
+		bgRetryCfg.MaxRetries,
+	)
+	bgRetry.OnLog = func(msg string) {
+		log.Printf("%s", msg)
+	}
+	log.Printf("[bg-retry] background retry scheduler started (interval=5m, max-retries=%d)", bgRetryCfg.MaxRetries)
+
+	// Shutdown hook: stop retry scheduler, deactivate projects, stop syncer.
+	app.OnShutdown(func() {
+		bgRetry.Stop(5 * time.Second)
+		log.Printf("[bg-retry] stopped")
+		if ttEngine != nil {
+			ttEngine.ShutdownAll()
+		}
+		if ttSyncer != nil {
+			ttSyncer.Stop(5 * time.Second)
+		}
+		if ttStore != nil {
+			ttStore.Close()
+		}
+		log.Printf("[timetracking] shutdown complete")
+	})
+
+	// Handle SIGINT/SIGTERM to run shutdown callbacks before exit.
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		<-sigCh
+		log.Printf("[menubar] signal received, running shutdown hooks")
+		app.RunShutdown()
+		os.Exit(0)
+	}()
+
 	log.Printf("Launching menu bar app (title=%q, icon=%q, log=%q)", cfg.Title, cfg.IconPath, cfg.LogPath)
 	app.Run()
+}
+
+// startTimeTrackingProjectRefresher fetches the PLM project list periodically
+// and updates the menubar cache and time tracking store (for reverse tracking tag matching).
+func startTimeTrackingProjectRefresher(plmClient *timetracking.PLMClient, ttStore *timetracking.Store) {
+	refresh := func() {
+		projects, err := plmClient.FetchProjects()
+		if err != nil {
+			log.Printf("[timetracking] project refresh failed: %v", err)
+			return
+		}
+		var ttProjects []menubar.TimeTrackingProject
+		var cacheProjects []timetracking.CachedProject
+		for _, p := range projects {
+			ttProjects = append(ttProjects, menubar.TimeTrackingProject{
+				ID:     p.ID,
+				Name:   p.Name,
+				Client: p.Client,
+			})
+			updatedAt, _ := time.Parse(time.RFC3339, p.UpdatedAt)
+			cacheProjects = append(cacheProjects, timetracking.CachedProject{
+				ProjectID: p.ID,
+				Name:      p.Name,
+				Client:    p.Client,
+				Status:    p.Status,
+				Tags:      strings.Join(p.Tags, ","),
+				UpdatedAt: updatedAt,
+			})
+		}
+		menubar.SetTimeTrackingProjects(ttProjects)
+		if err := ttStore.UpsertProjects(cacheProjects); err != nil {
+			log.Printf("[timetracking] project cache update failed: %v", err)
+		}
+		for i, p := range ttProjects {
+			client := ""
+			if p.Client != "" {
+				client = " (" + p.Client + ")"
+			}
+			log.Printf("[timetracking]   [%d] %s%s id=%s", i+1, p.Name, client, p.ID)
+		}
+		log.Printf("[timetracking] refreshed %d projects (cached with tags)", len(ttProjects))
+	}
+	go func() {
+		refresh()
+
+		// Backfill reverse tracking for current month after first project cache (REQ-10).
+		if reverseTracker != nil {
+			now := time.Now()
+			monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+			monthEnd := monthStart.AddDate(0, 1, 0)
+			n, err := reverseTracker.BackfillPeriod(monthStart, monthEnd)
+			if err != nil {
+				log.Printf("[reverse-tracking] startup backfill failed: %v", err)
+			} else if n > 0 {
+				log.Printf("[reverse-tracking] startup backfill: processed %d observations for %s", n, now.Format("January 2006"))
+			}
+		}
+
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			refresh()
+		}
+	}()
 }
 
 func startAudioImportListRefresher(app *menubar.App) {
@@ -2262,6 +2761,22 @@ func menubarLoginER1(app *menubar.App) {
 	poll := time.NewTicker(1500 * time.Millisecond)
 	defer poll.Stop()
 
+	// configFallback uses ER1_CONTEXT_ID from .env when the user is on the
+	// ER1 site (Chrome tabs match the host) but no context_id can be extracted
+	// from URLs. This handles ER1 servers that don't redirect to the callback
+	// or don't expose context_id in page URLs. See BUG-0003.
+	configFallback := func() string {
+		if !menubar.HasServiceHostTabs(baseURL) {
+			return ""
+		}
+		fallbackID := strings.TrimSpace(cfg.ContextID)
+		if fallbackID == "" {
+			return ""
+		}
+		log.Printf("[auth] ER1 host tabs detected but no context_id in URLs; using ER1_CONTEXT_ID=%s from config", fallbackID)
+		return fallbackID
+	}
+
 	for {
 		select {
 		case result := <-resultCh:
@@ -2272,8 +2787,12 @@ func menubarLoginER1(app *menubar.App) {
 			}
 			ctxID := strings.TrimSpace(result.ContextID)
 			if ctxID == "" {
-				// Fallback: inspect Chrome tabs for memory URLs on ER1 host.
+				// Fallback 1: inspect Chrome tabs for memory URLs on ER1 host.
 				ctxID = menubar.SuggestedServiceContextID(baseURL)
+			}
+			if ctxID == "" {
+				// Fallback 2: use ER1_CONTEXT_ID from config if ER1 tabs are open.
+				ctxID = configFallback()
 			}
 			if completeER1Login(app, ctxID) {
 				return
@@ -2281,12 +2800,22 @@ func menubarLoginER1(app *menubar.App) {
 			log.Printf("[auth] callback received but no context_id yet; continuing tab polling")
 		case <-poll.C:
 			ctxID := menubar.SuggestedServiceContextID(baseURL)
+			if ctxID == "" {
+				ctxID = configFallback()
+			}
 			if completeER1Login(app, ctxID) {
 				return
 			}
 		case <-deadline.C:
+			// Final attempt: try config fallback before giving up.
+			if ctxID := configFallback(); ctxID != "" {
+				if completeER1Login(app, ctxID) {
+					return
+				}
+			}
 			log.Printf("[auth] login timed out waiting for callback/context; addr=%s", callbackServer.Addr)
-			app.Notify("ER1 Login", "Timed out waiting for login confirmation.")
+			app.SetStatus(menubar.StatusError)
+			app.Notify("ER1 Login", "Timed out waiting for login confirmation. Check logs for details.")
 			return
 		}
 	}
@@ -2302,7 +2831,7 @@ func completeER1Login(app *menubar.App, contextID string) bool {
 	if err := savePersistedER1Session(ctxID); err != nil {
 		log.Printf("[auth] persist session failed: %v", err)
 	}
-	log.Printf("[auth] login success context_id=%s", ctxID)
+	log.Printf("[auth] login success context_id=%s", truncateForLog(ctxID, 64))
 	app.Notify("ER1 Login", fmt.Sprintf("Linked account: %s", ctxID))
 	return true
 }
@@ -2327,11 +2856,18 @@ func startER1LoginCallbackServer() (*http.Server, string, <-chan loginCallbackRe
 	if err != nil {
 		return nil, "", nil, nil, err
 	}
+	// Generate a random nonce so only the legitimate ER1 redirect can hit the callback.
+	nonce := make([]byte, 16)
+	if _, err := rand.Read(nonce); err != nil {
+		ln.Close()
+		return nil, "", nil, nil, fmt.Errorf("generate callback nonce: %w", err)
+	}
+	callbackPath := "/m3c-login-" + hex.EncodeToString(nonce)
 	addr := ln.Addr().String()
-	callbackURL := "http://" + addr + "/m3c-login-success"
+	callbackURL := "http://" + addr + callbackPath
 	resultCh := make(chan loginCallbackResult, 1)
 	mux := http.NewServeMux()
-	mux.HandleFunc("/m3c-login-success", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(callbackPath, func(w http.ResponseWriter, r *http.Request) {
 		ctxID := strings.TrimSpace(r.URL.Query().Get("context_id"))
 		if ctxID == "" {
 			ctxID = strings.TrimSpace(r.URL.Query().Get("user_id"))
@@ -2366,6 +2902,24 @@ func startER1LoginCallbackServer() (*http.Server, string, <-chan loginCallbackRe
 		_ = srv.Shutdown(ctx)
 	}
 	return srv, callbackURL, resultCh, closeFn, nil
+}
+
+// truncateForLog truncates a string for safe log output, preventing
+// excessively long values from flooding logs.
+func truncateForLog(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
+func ganttFormatDuration(d time.Duration) string {
+	h := int(d.Hours())
+	m := int(d.Minutes()) % 60
+	if h > 0 {
+		return fmt.Sprintf("%dh %02dm", h, m)
+	}
+	return fmt.Sprintf("%dm", m)
 }
 
 func er1BaseURL(apiURL string) string {
@@ -2432,7 +2986,7 @@ func menubarFetchTranscriptAndTrack(app *menubar.App, fetcher *menubar.Transcrip
 		return
 	}
 
-	tags := fmt.Sprintf("progress, youtube, %s", result.VideoID)
+	tags := fmt.Sprintf("youtube, %s", result.VideoID)
 	if result.RateLimited {
 		tags += ", transcript-pull-needed"
 	}
@@ -2446,13 +3000,11 @@ func menubarFetchTranscriptAndTrack(app *menubar.App, fetcher *menubar.Transcrip
 		menubar.SetReviewTranscript("[Transcript unavailable — YouTube rate limit (429). Voice note recording is still available.]", "Transcript pull needed")
 	}
 
-	// Load transcript into the Notes field so it's visible in the Tags tab.
-	if result.Text != "" {
-		menubar.SetObservationNotes(result.Text)
-	}
+	// NOTE: Do NOT load transcript into the Notes field. The Notes field is
+	// editable and gets merged into ImpressionText on Store, which would
+	// duplicate the transcript. The transcript is visible in the Review tab.
+	// See BUG-0004.
 
-	app.SetStatus(menubar.StatusRecording)
-	menubar.StartRecordingTimer()
 	menubar.SetRecordSourceLabel("  video " + result.VideoID + "  ")
 
 	obsCtx := ObservationContext{
@@ -2463,7 +3015,56 @@ func menubarFetchTranscriptAndTrack(app *menubar.App, fetcher *menubar.Transcrip
 		LanguageCode:    result.LanguageCode,
 		SnippetCount:    result.SnippetCount,
 	}
-	observationRecordAndUpload(app, "progress", thumbnailPath, imgData, impression.Progress, obsCtx)
+
+	// Channel A (YouTube): defer recording until user clicks "Start Recording".
+	// The user needs time to review the transcript before narrating. See BUG-0005.
+	//
+	// Register Store/Cancel callbacks immediately so the user can store the
+	// transcript observation without recording audio (transcript-only mode).
+	// If the user clicks Start Recording, observationRecordAndUpload will
+	// overwrite these with recording-aware versions.
+	menubar.SetObservationStoreCallback(func(tags, notes, contentType, imagePath string) {
+		app.SetStatus(menubar.StatusUploading)
+		now := time.Now()
+		ts := now.Format("20060102_150405")
+
+		memoText := mergeCaptureMemoAndNotes(menubar.GetReviewMemoText(), notes)
+		doc := &impression.CompositeDoc{
+			VideoID:        obsCtx.VideoID,
+			VideoURL:       obsCtx.VideoURL,
+			Language:        obsCtx.Language,
+			LanguageCode:    obsCtx.LanguageCode,
+			IsGenerated:     obsCtx.IsGenerated,
+			SnippetCount:    obsCtx.SnippetCount,
+			TranscriptText:  obsCtx.TranscriptText,
+			ImpressionText: memoText,
+			ObsType:        impression.Progress,
+			Timestamp:      now,
+		}
+		composite := strings.TrimSpace(doc.Build()) + "\n"
+
+		payload := &er1.UploadPayload{
+			TranscriptData:     []byte(composite),
+			TranscriptFilename: fmt.Sprintf("progress_%s.txt", ts),
+			ImageData:          imgData,
+			ImageFilename:      filepath.Base(thumbnailPath),
+			Tags:               tags,
+			ContentType:        contentType,
+		}
+		log.Printf("[progress] transcript-only upload: transcript=%d image=%d",
+			len(payload.TranscriptData), len(payload.ImageData))
+		menubarUploadPayload(app, "progress", payload, tags)
+	})
+
+	menubar.SetObservationCancelCallback(func(draftPath string) {
+		log.Printf("[progress] draft saved: %s", draftPath)
+		app.SetStatus(menubar.StatusIdle)
+	})
+
+	menubar.SetStartRecordingCallback(func() {
+		app.SetStatus(menubar.StatusRecording)
+		observationRecordAndUpload(app, "progress", thumbnailPath, imgData, impression.Progress, obsCtx)
+	})
 
 	if result.RateLimited {
 		app.Notify("Observation Ready", fmt.Sprintf("⚠️ %s — transcript-pull-needed, voice tracker active", result.VideoID))
@@ -2898,6 +3499,13 @@ func menubarUploadPayload(app *menubar.App, label string, payload *er1.UploadPay
 	log.Printf("[%s] uploaded to ER1: doc_id=%s url=%s", label, resp.DocID, itemURL)
 	app.Notify("Upload Done", fmt.Sprintf("doc_id: %s", resp.DocID))
 	app.SetStatus(menubar.StatusIdle)
+
+	// Reverse time tracking: record observation and create inferred time block (REQ-9/10).
+	if reverseTracker != nil && tags != "" {
+		if err := reverseTracker.RecordAndProcess(time.Now(), tags, resp.DocID, label); err != nil {
+			log.Printf("[reverse-tracking] process observation failed: %v", err)
+		}
+	}
 
 	// Open the item in the default browser.
 	_ = openURL(itemURL)

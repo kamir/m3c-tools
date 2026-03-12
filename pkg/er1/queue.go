@@ -13,7 +13,7 @@ import (
 // It creates the ~/.m3c-tools/ directory if it doesn't exist.
 func DefaultQueuePath() string {
 	dir := filepath.Join(os.Getenv("HOME"), ".m3c-tools")
-	os.MkdirAll(dir, 0755)
+	os.MkdirAll(dir, 0700)
 	return filepath.Join(dir, "queue.json")
 }
 
@@ -117,7 +117,7 @@ func EnqueueFailure(queuePath string, videoID string, payload *UploadPayload, ta
 
 	// Ensure parent directory exists
 	dir := filepath.Dir(queuePath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		fmt.Fprintf(os.Stderr, "enqueue failure: create dir %s: %v\n", dir, err)
 		return nil
 	}
@@ -165,7 +165,7 @@ func (q *Queue) save() {
 	// Ensure parent directory exists
 	dir := filepath.Dir(q.path)
 	if dir != "" && dir != "." {
-		os.MkdirAll(dir, 0755)
+		os.MkdirAll(dir, 0700)
 	}
-	os.WriteFile(q.path, data, 0644)
+	os.WriteFile(q.path, data, 0600)
 }
