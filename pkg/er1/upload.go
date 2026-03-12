@@ -124,7 +124,7 @@ func Upload(cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}

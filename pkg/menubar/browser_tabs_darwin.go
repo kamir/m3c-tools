@@ -88,6 +88,26 @@ func SuggestedServiceContextID(serviceBase string) string {
 	return ""
 }
 
+// HasServiceHostTabs returns true if any open Chrome tab matches the given
+// ER1 service host. This indicates the user has the ER1 site open (likely
+// logged in) even when no context_id can be extracted from the URL.
+func HasServiceHostTabs(serviceBase string) bool {
+	baseHost := hostForURL(serviceBase)
+	if baseHost == "" {
+		return false
+	}
+	for _, raw := range chromeTabURLs() {
+		u, err := url.Parse(raw)
+		if err != nil || u.Host == "" {
+			continue
+		}
+		if sameHost(baseHost, u.Host) {
+			return true
+		}
+	}
+	return false
+}
+
 func chromeTabURLs() []string {
 	script := `
 function run() {

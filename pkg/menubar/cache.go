@@ -63,7 +63,7 @@ func (c *transcriptCache) Get(videoID string) *FetchResult {
 
 // Put stores a FetchResult in the cache.
 func (c *transcriptCache) Put(videoID string, result *FetchResult) {
-	if err := os.MkdirAll(c.dir, 0755); err != nil {
+	if err := os.MkdirAll(c.dir, 0700); err != nil {
 		log.Printf("[cache] mkdir failed: %v", err)
 		return
 	}
@@ -79,7 +79,7 @@ func (c *transcriptCache) Put(videoID string, result *FetchResult) {
 	}
 
 	path := c.path(videoID)
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0600); err != nil {
 		log.Printf("[cache] write failed path=%s: %v", path, err)
 		return
 	}

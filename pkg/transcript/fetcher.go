@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 )
 
 var (
@@ -30,7 +31,7 @@ func NewFetcher(proxy ProxyConfig) (*Fetcher, error) {
 		{Name: "CONSENT", Value: "YES+cb", Path: "/", Domain: ".youtube.com"},
 	})
 
-	client := &http.Client{Jar: jar}
+	client := &http.Client{Jar: jar, Timeout: 30 * time.Second}
 	if proxy != nil {
 		transport, err := proxy.GetTransport()
 		if err != nil {
@@ -63,7 +64,7 @@ func (f *Fetcher) FetchVideoPage(videoID string) (string, error) {
 		return "", NewRequestFailedError(videoID, resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
 		return "", fmt.Errorf("read video page: %w", err)
 	}
@@ -100,7 +101,7 @@ func (f *Fetcher) FetchCaptionXML(captionURL string, videoID string) (string, er
 		return "", NewRequestFailedError(videoID, resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
 		return "", fmt.Errorf("read caption XML: %w", err)
 	}
@@ -140,7 +141,7 @@ func (f *Fetcher) FetchTranscriptViaInnerTube(videoID string, apiKey string) (ma
 		return nil, NewRequestFailedError(videoID, resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
 		return nil, fmt.Errorf("read innertube response: %w", err)
 	}

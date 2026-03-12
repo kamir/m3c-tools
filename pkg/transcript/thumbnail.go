@@ -35,7 +35,7 @@ func (f *Fetcher) FetchThumbnail(videoID string) ([]byte, error) {
 			continue
 		}
 
-		data, err := io.ReadAll(resp.Body)
+		data, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 		if err != nil {
 			continue
 		}
@@ -62,7 +62,7 @@ func (f *Fetcher) FetchThumbnailSize(videoID string, size ThumbnailSize) ([]byte
 		return nil, fmt.Errorf("thumbnail not available at size %s (status %d)", size, resp.StatusCode)
 	}
 
-	return io.ReadAll(resp.Body)
+	return io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 }
 
 // ThumbnailURL returns the direct URL for a video's thumbnail at the given size.

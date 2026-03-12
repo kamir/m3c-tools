@@ -139,15 +139,15 @@ func TestParseFilenameIntegrationWithBuildImportTags(t *testing.T) {
 	tags := impression.BuildImportTags(info.Tags)
 	parsed := impression.ParseTagLine(tags)
 
-	// Should contain: import, audio-import, braindump, standup
-	if len(parsed) < 4 {
-		t.Errorf("Expected at least 4 tags, got %d: %v", len(parsed), parsed)
+	// Should contain: audio-import, braindump, standup (no bare "import" — see BUG-0004)
+	if len(parsed) < 3 {
+		t.Errorf("Expected at least 3 tags, got %d: %v", len(parsed), parsed)
 	}
 	found := map[string]bool{}
 	for _, tag := range parsed {
 		found[tag] = true
 	}
-	for _, want := range []string{"import", "audio-import", "braindump", "standup"} {
+	for _, want := range []string{"audio-import", "braindump", "standup"} {
 		if !found[want] {
 			t.Errorf("Missing expected tag %q in %v", want, parsed)
 		}

@@ -29,6 +29,13 @@ type App struct {
 	importState   AudioImportState
 	lastImportMsg string
 	bulkRunState  BulkRunState
+
+	// Time tracking (set via SetTimeEngine after login).
+	timeEngine      TimeTrackingEngine
+	showTimeTracker func()
+
+	// Shutdown callbacks run on app termination.
+	shutdownFns []func()
 }
 
 // AuthSession captures runtime ER1 login state used by the menu.
@@ -177,6 +184,39 @@ func (a *App) ClearHistory() {
 	a.history.Clear()
 }
 
+// SetShowTimeTrackerFunc registers the callback invoked when the user
+// clicks "Show Time Tracker..." in the Projects menu.
+func (a *App) SetShowTimeTrackerFunc(fn func()) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.showTimeTracker = fn
+}
+
+// getShowTimeTracker returns the registered show-time-tracker callback.
+func (a *App) getShowTimeTracker() func() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.showTimeTracker
+}
+
+// OnShutdown registers a callback to be run when the app terminates.
+func (a *App) OnShutdown(fn func()) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.shutdownFns = append(a.shutdownFns, fn)
+}
+
+// RunShutdown executes all registered shutdown callbacks.
+func (a *App) RunShutdown() {
+	a.mu.Lock()
+	fns := a.shutdownFns
+	a.shutdownFns = nil
+	a.mu.Unlock()
+	for _, fn := range fns {
+		fn()
+	}
+}
+
 // Run configures the menuet application and starts the macOS run loop.
 // This function blocks forever and must be called from the main goroutine.
 func (a *App) Run() {
@@ -219,6 +259,14 @@ func (a *App) buildMenuItems() []menuet.MenuItem {
 					a.fireAction(ActionLoginER1, "")
 				},
 			},
+			{Type: menuet.Separator},
+			{
+				Text: "⭐ Star on GitHub",
+				Clicked: func() {
+					_ = exec.Command("open", GitHubRepoURL).Start()
+					a.fireAction(ActionStarGitHub, GitHubRepoURL)
+				},
+			},
 		}
 	}
 	accountText := fmt.Sprintf("Account: %s", auth.UserID)
@@ -249,11 +297,13 @@ func (a *App) buildMenuItems() []menuet.MenuItem {
 		},
 		a.buildAudioImportMenu(),
 		{
-			Text: "📋 Tracking DB",
+			Text: "📋 Audio Recording Tracking DB",
 			Clicked: func() {
 				a.fireAction(ActionShowTrackingDB, "")
 			},
 		},
+		{Type: menuet.Separator},
+		a.buildProjectsMenu(),
 		{Type: menuet.Separator},
 		{Text: fmt.Sprintf("Status: %s", a.GetStatus())},
 		{Text: accountText},
@@ -276,9 +326,16 @@ func (a *App) buildMenuItems() []menuet.MenuItem {
 		},
 		menuet.MenuItem{Type: menuet.Separator},
 		menuet.MenuItem{
-			Text: "Mein Nutzerkonto",
+			Text: "👤 Mein Nutzerkonto",
 			Clicked: func() {
 				_ = exec.Command("open", "-a", "Google Chrome", profURL).Start()
+			},
+		},
+		menuet.MenuItem{
+			Text: "⭐ Star on GitHub",
+			Clicked: func() {
+				_ = exec.Command("open", GitHubRepoURL).Start()
+				a.fireAction(ActionStarGitHub, GitHubRepoURL)
 			},
 		},
 		menuet.MenuItem{Type: menuet.Separator},
