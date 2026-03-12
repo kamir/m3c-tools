@@ -6,14 +6,17 @@ import (
 )
 
 // BuildTags creates a comma-separated tag string for an observation.
+// Tags are semantic content descriptors per SPEC-0001 REQ-9.
+// The observation type (progress, idea, impulse, import) is internal
+// metadata, NOT a user-visible tag. See BUG-0004.
 func BuildTags(obsType ObservationType, extra ...string) string {
-	tags := []string{string(obsType)}
+	var tags []string
 
 	switch obsType {
 	case Progress:
 		tags = append(tags, "youtube")
 	case Idea:
-		tags = append(tags, "screenshot")
+		tags = append(tags, "idea")
 	case Impulse:
 		tags = append(tags, "impulse")
 	case Import:

@@ -683,6 +683,7 @@ static char        *g_obsImagePath   = NULL; // Screenshot path stored for draft
 static NSTextField *g_recordSourceLabel = nil; // "from clipboard" / "snapshot at ..." label.
 static NSTextField *g_recordStatusLabel = nil; // Record tab status label.
 static NSButton    *g_recordStopButton = nil;  // Record tab stop button.
+static NSButton    *g_recordStartButton = nil; // Record tab start button (Channel A only).
 
 // Forward declaration of the Go callbacks (exported from Go via //export).
 // Note: Go's cgo exports use char* (not const char*).
@@ -691,6 +692,7 @@ extern void goObservationCancelCallback(char *tags, char *notes,
 extern void goObservationStoreCallback(char *tags, char *notes,
                                         char *contentType, char *imagePath);
 extern void goObservationStopCallback(int elapsedSeconds);
+extern void goObservationStartCallback(void);
 
 // ---------- Tab Switching ----------
 
@@ -773,6 +775,7 @@ static void closeObsWindow(void) {
 	g_recordSourceLabel = nil;
 	g_recordStatusLabel = nil;
 	g_recordStopButton = nil;
+	g_recordStartButton = nil;
 	g_whisperProgress = nil;
 	if (g_obsImagePath != NULL) {
 		free(g_obsImagePath);
@@ -826,6 +829,25 @@ static void stopClickedIMP(id self, SEL _cmd, id sender) {
 	goObservationStopCallback(elapsed);
 }
 
+// startClickedIMP is the IMP for the Start Recording button's action method.
+// Hides the Start button, shows the Stop button, starts the timer, and
+// notifies Go to begin audio recording via goObservationStartCallback.
+static void startClickedIMP(id self, SEL _cmd, id sender) {
+	(void)self; (void)_cmd; (void)sender;
+	if (g_recordStartButton != nil) {
+		[g_recordStartButton setHidden:YES];
+	}
+	if (g_recordStopButton != nil) {
+		[g_recordStopButton setHidden:NO];
+		[g_recordStopButton setEnabled:YES];
+	}
+	if (g_recordStatusLabel != nil) {
+		[g_recordStatusLabel setStringValue:@"● Recording..."];
+	}
+	startRecordingTimer();
+	goObservationStartCallback();
+}
+
 // storeClickedIMP is the IMP for the Store button's action method.
 static void storeClickedIMP(id self, SEL _cmd, id sender) {
 	(void)self; (void)_cmd; (void)sender;
@@ -865,6 +887,7 @@ static void captureHintContinueClickedIMP(id self, SEL _cmd, id sender) {
 static id g_cancelHandler   = nil;
 static id g_storeHandler    = nil;
 static id g_stopHandler     = nil;
+static id g_startHandler    = nil;
 static id g_windowDelegate  = nil;
 static id g_captureHintHandler = nil;
 
@@ -941,6 +964,14 @@ static void ensureHandlerClasses(void) {
 		objc_registerClassPair(stopCls);
 	}
 
+	// Register ObsStartHandler class with startClicked: method.
+	Class startCls = objc_allocateClassPair([NSObject class], "ObsStartHandler", 0);
+	if (startCls != Nil) {
+		class_addMethod(startCls, @selector(startClicked:),
+			(IMP)startClickedIMP, "v@:@");
+		objc_registerClassPair(startCls);
+	}
+
 	// Register ObsWindowDelegate class implementing NSWindowDelegate's
 	// windowShouldClose: to intercept the red X close button.
 	Class delegateCls = objc_allocateClassPair([NSObject class], "ObsWindowDelegate", 0);
@@ -993,6 +1024,16 @@ static id getOrCreateStopHandler(void) {
 		g_stopHandler = [[cls alloc] init];
 	}
 	return g_stopHandler;
+}
+
+// getOrCreateStartHandler returns the singleton start handler instance.
+static id getOrCreateStartHandler(void) {
+	ensureHandlerClasses();
+	if (g_startHandler == nil) {
+		Class cls = objc_getClass("ObsStartHandler");
+		g_startHandler = [[cls alloc] init];
+	}
+	return g_startHandler;
 }
 
 // getOrCreateWindowDelegate returns the singleton window delegate instance.
@@ -1214,6 +1255,27 @@ static int showObservationWindow(const char *title, const char *imagePath, const
 		[stopBtn setEnabled:YES];
 		[recordView addSubview:stopBtn];
 		g_recordStopButton = stopBtn;
+
+		// -- Start Recording button (Channel A / YouTube only) --
+		// For YouTube observations, recording is deferred until the user
+		// explicitly clicks Start. Other channels auto-start. See BUG-0005.
+		NSButton *startBtn = [NSButton buttonWithTitle:@"🎙 Start Recording"
+												target:getOrCreateStartHandler()
+												action:@selector(startClicked:)];
+		[startBtn setFrame:NSMakeRect(winW - 170, 10, 150, 30)];
+		[startBtn setAutoresizingMask:(NSViewMinXMargin | NSViewMaxYMargin)];
+		[startBtn setEnabled:YES];
+		[startBtn setHidden:YES]; // Hidden by default; shown for Channel A.
+		[recordView addSubview:startBtn];
+		g_recordStartButton = startBtn;
+
+		// Channel A (Progress/YouTube): show Start button, hide Stop button.
+		// The user reviews the transcript first, then clicks Start Recording.
+		if (channelType == 0) { // 0 = ChannelTypeProgress
+			[startBtn setHidden:NO];
+			[stopBtn setHidden:YES];
+			[statusLabel setStringValue:@"● Ready — click Start Recording"];
+		}
 
 		[recordTab setView:recordView];
 		[tabView addTabViewItem:recordTab];
@@ -1565,6 +1627,11 @@ type StoreCallback func(tags, notes, contentType, imagePath string)
 // transcription. The UI has already switched to the Review tab.
 type StopRecordingCallback func(elapsedSeconds int)
 
+// StartRecordingCallback is called when the user clicks "Start Recording" in
+// the Record tab (Channel A / YouTube only). The callback should begin audio
+// recording and timer updates. See BUG-0005.
+type StartRecordingCallback func()
+
 var (
 	cancelMu       sync.Mutex
 	cancelCallback CancelCallback
@@ -1572,6 +1639,8 @@ var (
 	storeCallback  StoreCallback
 	stopMu         sync.Mutex
 	stopCallback   StopRecordingCallback
+	startMu        sync.Mutex
+	startCallback  StartRecordingCallback
 )
 
 // SetObservationCancelCallback registers a function that is called after
@@ -1601,6 +1670,16 @@ func SetStopRecordingCallback(cb StopRecordingCallback) {
 	stopMu.Lock()
 	defer stopMu.Unlock()
 	stopCallback = cb
+}
+
+// SetStartRecordingCallback registers a function that is called when the
+// user clicks "Start Recording" in the Record tab (Channel A / YouTube).
+// The callback should begin audio recording. The UI has already started
+// the elapsed timer and switched the button to "Stop Recording".
+func SetStartRecordingCallback(cb StartRecordingCallback) {
+	startMu.Lock()
+	defer startMu.Unlock()
+	startCallback = cb
 }
 
 //export goObservationCancelCallback
@@ -1652,6 +1731,20 @@ func goObservationCancelCallback(cTags, cNotes, cContentType, cImagePath *C.char
 	cancelMu.Unlock()
 	if cb != nil {
 		cb(path)
+	}
+}
+
+//export goObservationStartCallback
+func goObservationStartCallback() {
+	log.Printf("[observation] start recording requested by user")
+
+	startMu.Lock()
+	cb := startCallback
+	startMu.Unlock()
+	if cb != nil {
+		go cb()
+	} else {
+		log.Printf("[observation] WARNING: no start callback registered")
 	}
 }
 

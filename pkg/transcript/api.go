@@ -3,6 +3,7 @@ package transcript
 import (
 	"fmt"
 	"log"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -153,8 +154,8 @@ func (a *API) FetchTranslated(videoID string, sourceLanguages []string, targetLa
 		return nil, err
 	}
 
-	// Add translation language parameter to the URL
-	translatedURL := info.BaseURL + "&tlang=" + targetLanguage
+	// Add translation language parameter to the URL (URL-encode to prevent injection).
+	translatedURL := info.BaseURL + "&tlang=" + url.QueryEscape(targetLanguage)
 
 	xmlData, err := a.fetcher.FetchCaptionXML(translatedURL, videoID)
 	if err != nil {

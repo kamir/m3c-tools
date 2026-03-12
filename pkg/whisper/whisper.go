@@ -27,22 +27,44 @@ type Result struct {
 	Language string    `json:"language"`
 }
 
-// FindBinary looks for the whisper binary in PATH and common locations.
+// VenvDir returns the path to the m3c-tools Python virtual environment.
+func VenvDir() string {
+	return filepath.Join(os.Getenv("HOME"), ".m3c-tools", "venv")
+}
+
+// VenvWhisperPath returns the path to the whisper binary in the m3c-tools venv.
+func VenvWhisperPath() string {
+	return filepath.Join(VenvDir(), "bin", "whisper")
+}
+
+// FindBinary looks for the whisper binary in the m3c-tools venv first,
+// then falls back to PATH and common system locations.
 func FindBinary() (string, error) {
+	// Priority 1: m3c-tools dedicated venv (created by `m3c-tools setup`)
+	if venvPath := VenvWhisperPath(); fileExists(venvPath) {
+		return venvPath, nil
+	}
+	// Priority 2: system PATH
 	if path, err := exec.LookPath("whisper"); err == nil {
 		return path, nil
 	}
+	// Priority 3: common install locations
 	candidates := []string{
 		"/opt/homebrew/bin/whisper",
 		"/usr/local/bin/whisper",
 		filepath.Join(os.Getenv("HOME"), ".local/bin/whisper"),
 	}
 	for _, c := range candidates {
-		if _, err := os.Stat(c); err == nil {
+		if fileExists(c) {
 			return c, nil
 		}
 	}
-	return "", fmt.Errorf("whisper binary not found")
+	return "", fmt.Errorf("whisper binary not found (run 'm3c-tools setup' to install)")
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // Transcribe runs whisper on an audio file and returns the parsed result.
