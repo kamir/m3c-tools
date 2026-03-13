@@ -1,6 +1,6 @@
 # Stop Staging Environment
 
-Stop the aims-core staging service on Cloud Run to save costs.
+Manage the aims-core staging service lifecycle on Cloud Run.
 
 ## When to use
 
@@ -8,67 +8,64 @@ When the user says "stop stage", "stop staging", "shut down staging", "disable s
 
 ## How to execute
 
-### Step 1: Verify current state
+### Step 1: Explain Cloud Run scaling
 
+Cloud Run with `min-instances=0` (our current config) automatically scales to zero when there's no traffic. There are **no compute costs when idle**. The only ongoing costs are:
+- GCR image storage (~$0.30/month)
+- Secret Manager (negligible)
+
+Tell the user this and ask what level of "stop" they want.
+
+### Step 2: Ask what action to take
+
+Use AskUserQuestion:
+
+| Option | What it does | Restart effort |
+|--------|-------------|----------------|
+| **Leave as-is** | Service stays deployed but scales to zero. No compute cost when idle. | None — already running |
+| **Delete service** | Fully removes Cloud Run service. Zero cost. | Must redeploy from scratch (~5 min) |
+| **Delete service + images** | Removes service AND GCR images. Saves ~$0.30/month storage. | Must rebuild + redeploy (~15 min) |
+
+### Step 3: Execute chosen action
+
+**If "Leave as-is":**
+```
+No action needed. The service is configured with min-instances=0
+and will scale to zero automatically when idle.
+```
+
+**If "Delete service":**
 ```bash
-gcloud config set project semanpix 2>&1 | grep -v WARNING
-MAX=$(gcloud run services describe aims-core-v4 \
-  --region=europe-north1 \
-  --format="value(spec.template.metadata.annotations['autoscaling.knative.dev/maxScale'])" 2>&1)
-echo "Current max-instances: ${MAX}"
-```
-
-If max-instances is already 0, tell the user "Staging is already stopped" and exit.
-
-### Step 2: Confirm with user
-
-Use AskUserQuestion to confirm:
-```
-Stop the aims-core staging service?
-
-This will set max-instances=0, preventing any new instances from starting.
-The service URL will return errors until restarted with /start-stage.
-Active revision and configuration are preserved.
-
-Proceed? (yes/no)
-```
-
-### Step 3: Stop the service
-
-```bash
-gcloud run services update aims-core-v4 \
+# Confirm first!
+gcloud run services delete aims-core-v4 \
   --region=europe-north1 \
   --project=semanpix \
-  --max-instances=0 \
-  2>&1
+  --quiet
 ```
 
-### Step 4: Verify
-
+**If "Delete service + images":**
 ```bash
-# Confirm max-instances is now 0
-gcloud run services describe aims-core-v4 \
+# Delete service
+gcloud run services delete aims-core-v4 \
   --region=europe-north1 \
-  --format="value(spec.template.metadata.annotations['autoscaling.knative.dev/maxScale'])" 2>&1
+  --project=semanpix \
+  --quiet
+
+# Delete images (keep base images for faster rebuild)
+gcloud container images delete gcr.io/semanpix/aims-core-final:latest --quiet --force-delete-tags
+gcloud container images delete gcr.io/semanpix/aims-core:latest --quiet --force-delete-tags
 ```
 
-### Step 5: Report
+### Step 4: Report
 
-Tell the user:
-```
-Staging is STOPPED
-Service: aims-core-v4 (semanpix / europe-north1)
-Max instances: 0 — no new instances will start
-Config preserved — restart with /start-stage
-
-Estimated savings: ~$0 compute while stopped
-(GCR storage costs continue: ~$0.10/GB/month)
-```
+Show the user what was done and how to restart:
+- Leave as-is: "Service scales to zero. Use /start-stage to verify."
+- Deleted: "Service removed. Use /release-aims deploy staging to redeploy."
+- Deleted + images: "Service and images removed. Use /release-aims deploy staging for full rebuild."
 
 ## Important notes
 
-- Setting max-instances=0 prevents Cloud Run from creating any instances
-- The service revision and all configuration is preserved
-- Restart anytime with `/start-stage` (no rebuild needed)
-- GCR storage costs (~$0.10/GB/month for ~3GB) continue regardless
-- Secret Manager costs are negligible
+- Cloud Run min-instances=0 means NO compute cost when idle — this is already the default
+- The only way to fully "stop" Cloud Run is to delete the service
+- Deleting is safe: all config is captured in gcp-state.json and the deploy skill
+- Base images (baseimage1-3) should be kept — they take 15+ min to rebuild

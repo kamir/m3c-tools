@@ -1,6 +1,6 @@
 # Start Staging Environment
 
-Start the aims-core staging service on Cloud Run to accept traffic.
+Verify or deploy the aims-core staging service on Cloud Run.
 
 ## When to use
 
@@ -8,55 +8,42 @@ When the user says "start stage", "start staging", "wake up staging", "enable st
 
 ## How to execute
 
-### Step 1: Verify current state
+### Step 1: Check if service exists
 
 ```bash
 gcloud config set project semanpix 2>&1 | grep -v WARNING
 gcloud run services describe aims-core-v4 \
   --region=europe-north1 \
-  --format="value(spec.template.metadata.annotations['autoscaling.knative.dev/maxScale'])" 2>&1
+  --format="table(status.url,spec.template.metadata.annotations['autoscaling.knative.dev/maxScale'],spec.template.spec.containers[0].image)" 2>&1
 ```
 
-If max-instances is already > 0, tell the user "Staging is already running" and show the URL.
+**If the service exists:** It's already deployed and will auto-start on the next request (cold start ~30-60s). Proceed to health check.
 
-### Step 2: Enable the service
+**If the service doesn't exist** (was deleted via /stop-stage): Tell the user to run `/release-aims deploy staging` to redeploy from scratch.
 
-```bash
-gcloud run services update aims-core-v4 \
-  --region=europe-north1 \
-  --project=semanpix \
-  --min-instances=0 \
-  --max-instances=10 \
-  2>&1
-```
-
-### Step 3: Verify and health check
+### Step 2: Health check
 
 ```bash
-# Wait for the update to propagate
-sleep 5
-
-# Get the service URL
 SERVICE_URL=$(gcloud run services describe aims-core-v4 \
   --region=europe-north1 \
   --format='value(status.url)' 2>/dev/null)
 
-# Health check — first request triggers cold start, may take 30-60s
+# First request triggers cold start
 curl -sk "${SERVICE_URL}/" --max-time 60 -o /dev/null -w "HTTP %{http_code} in %{time_total}s\n"
 ```
 
-### Step 4: Report
+### Step 3: Report
 
-Tell the user:
 ```
-Staging is STARTED
-URL: https://aims-core-v4-377906833940.europe-north1.run.app
-Max instances: 10, Min instances: 0 (scales to zero when idle)
-First request may take 30-60s (cold start).
+Staging is RUNNING
+URL: <service URL>
+Image: gcr.io/semanpix/aims-core-final:latest
+Config: 2 vCPU, 4Gi, min=0, max=10
+Scales to zero when idle (no cost).
 ```
 
 ## Important notes
 
-- The service scales to zero when idle, so just "starting" it doesn't cost money until traffic arrives
-- Cold starts take 30-60 seconds for the first request
-- If the service was stopped with max-instances=0, this restores it to max-instances=10
+- Cloud Run with min-instances=0 scales to zero automatically — "starting" just means sending a request
+- Cold starts take 30-60 seconds for the first request after idle
+- If the service was deleted, a full redeploy is needed via /release-aims deploy staging
