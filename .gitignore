@@ -27,6 +27,7 @@ go.work.sum
 # Build output
 build/
 /m3c-tools
+/m3c-tools-*
 
 # env file (keep .env.example tracked)
 .env
