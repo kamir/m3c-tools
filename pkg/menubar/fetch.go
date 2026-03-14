@@ -1,3 +1,5 @@
+//go:build darwin
+
 // fetch.go — Transcript fetch integration for the menu bar app.
 //
 // TranscriptFetcher bridges pkg/transcript with the menu bar, providing

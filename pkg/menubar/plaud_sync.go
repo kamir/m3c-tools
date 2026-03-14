@@ -4,6 +4,26 @@
 
 package menubar
 
+import "time"
+
+// BulkRunPhase describes the current phase of a bulk operation.
+type BulkRunPhase string
+
+// BulkRunState holds live state for a currently running bulk audio operation.
+type BulkRunState struct {
+	Active      bool
+	RunID       string
+	Action      string
+	Total       int
+	Done        int
+	Success     int
+	Failed      int
+	CurrentFile string
+	Phase       BulkRunPhase
+	StartedAt   time.Time
+	LastError   string
+}
+
 // PlaudSyncRecord holds one recording row for the Plaud Sync window.
 type PlaudSyncRecord struct {
 	Title       string

@@ -1,3 +1,5 @@
+//go:build darwin
+
 // m3c-tools — Multi-Modal-Memory Tools
 //
 // CLI entry point for transcript fetching, voice recording,
