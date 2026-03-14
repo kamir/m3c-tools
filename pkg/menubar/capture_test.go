@@ -1,3 +1,5 @@
+//go:build darwin
+
 package menubar
 
 import (
@@ -20,8 +22,8 @@ func TestDefaultCaptureData_Screenshot(t *testing.T) {
 	if !strings.Contains(data.Tags, "idea") {
 		t.Errorf("tags = %q, want to contain 'idea'", data.Tags)
 	}
-	if !strings.Contains(data.Tags, "screenshot") {
-		t.Errorf("tags = %q, want to contain 'screenshot'", data.Tags)
+	if data.ContentType != "Screenshot-Observation" {
+		t.Errorf("content type = %q, want %q", data.ContentType, "Screenshot-Observation")
 	}
 	if data.Timestamp.IsZero() {
 		t.Error("timestamp should not be zero")
@@ -34,11 +36,11 @@ func TestDefaultCaptureData_YouTube(t *testing.T) {
 	if data.Channel != impression.Progress {
 		t.Errorf("channel = %q, want %q", data.Channel, impression.Progress)
 	}
-	if !strings.Contains(data.Tags, "progress") {
-		t.Errorf("tags = %q, want to contain 'progress'", data.Tags)
-	}
 	if !strings.Contains(data.Tags, "youtube") {
 		t.Errorf("tags = %q, want to contain 'youtube'", data.Tags)
+	}
+	if data.ContentType != "YouTube-Video-Impression" {
+		t.Errorf("content type = %q, want %q", data.ContentType, "YouTube-Video-Impression")
 	}
 }
 

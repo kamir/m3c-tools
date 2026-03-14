@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/kamir/m3c-tools/internal/dbdriver"
 )
 
 // DefaultDBPath returns the default path for the time tracking database.
@@ -39,7 +39,7 @@ func OpenStore(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("create db dir: %w", err)
 	}
 
-	db, err := sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
+	db, err := sql.Open(dbdriver.DriverName(), dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}

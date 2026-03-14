@@ -4,9 +4,54 @@
 
 ---
 
+## Install (one-liner)
+
+**macOS (Apple Silicon):**
+```bash
+curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-darwin-arm64.tar.gz | tar xz && sudo mv m3c-tools-darwin-arm64 /usr/local/bin/m3c-tools
+```
+
+**macOS (Intel):**
+```bash
+curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-darwin-amd64.tar.gz | tar xz && sudo mv m3c-tools-darwin-amd64 /usr/local/bin/m3c-tools
+```
+
+**Linux (Ubuntu/Debian):**
+```bash
+curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-linux-amd64.tar.gz | tar xz && sudo mv m3c-tools-linux-amd64 /usr/local/bin/m3c-tools
+```
+
+**Windows (PowerShell — run as Administrator):**
+```powershell
+# Download and install to C:\m3c-tools
+New-Item -ItemType Directory -Force -Path C:\m3c-tools
+Invoke-WebRequest -Uri https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-windows-amd64.zip -OutFile "$env:TEMP\m3c-tools.zip"
+Expand-Archive -Path "$env:TEMP\m3c-tools.zip" -DestinationPath C:\m3c-tools -Force
+Rename-Item C:\m3c-tools\m3c-tools-windows-amd64.exe C:\m3c-tools\m3c-tools.exe -Force
+
+# Add to system PATH (requires restart of terminal)
+$oldPath = [Environment]::GetEnvironmentVariable("PATH", "Machine")
+if ($oldPath -notlike "*C:\m3c-tools*") {
+    [Environment]::SetEnvironmentVariable("PATH", "$oldPath;C:\m3c-tools", "Machine")
+}
+```
+
+After installation, **open a new PowerShell window** and verify: `m3c-tools help`
+
+### Platform support
+
+| Platform | Install | CLI | Menu Bar | Audio Recording |
+|----------|---------|-----|----------|-----------------|
+| macOS arm64 (Apple Silicon) | one-liner | full | full GUI | full |
+| macOS amd64 (Intel) | one-liner | full | full GUI | full |
+| Linux amd64 (Ubuntu) | one-liner | full | — | — |
+| Windows amd64 | one-liner | full | — | — |
+
+---
+
 ## Quickstart (5 minutes)
 
-### 1. Install prerequisites
+### 1. Install prerequisites (macOS full build from source)
 
 ```bash
 brew install pkg-config portaudio ffmpeg    # build tools + audio
@@ -18,6 +63,8 @@ Or: `make deps` (after cloning) to install everything at once.
 Requires **Go 1.25+** and **macOS** (Cocoa UI via cgo).
 
 > **First-run note:** Whisper downloads its language model on first use (~150 MB for `base`, ~1.5 GB for `medium`). This requires internet access.
+
+> **Windows/Linux users:** Use the one-liner install above — no build from source needed.
 
 ### 2. Build and install
 

@@ -1,3 +1,5 @@
+//go:build darwin
+
 // capture.go — Unified capture pipeline data and Store/Draft actions.
 //
 // CaptureData holds all observation data collected across the 4-step pipeline

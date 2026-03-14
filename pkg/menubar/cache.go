@@ -1,3 +1,5 @@
+//go:build darwin
+
 // cache.go — Local transcript cache to avoid redundant YouTube API calls.
 //
 // Transcripts are stored as JSON files in ~/.m3c-tools/cache/transcripts/<videoID>.json.
