@@ -21,12 +21,22 @@ curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-d
 curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-linux-amd64.tar.gz | tar xz && sudo mv m3c-tools-linux-amd64 /usr/local/bin/m3c-tools
 ```
 
-**Windows (PowerShell):**
+**Windows (PowerShell — run as Administrator):**
 ```powershell
-Invoke-WebRequest -Uri https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-windows-amd64.zip -OutFile m3c-tools.zip; Expand-Archive m3c-tools.zip -DestinationPath "$env:LOCALAPPDATA\m3c-tools" -Force; [Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";$env:LOCALAPPDATA\m3c-tools", "User")
+# Download and install to C:\m3c-tools
+New-Item -ItemType Directory -Force -Path C:\m3c-tools
+Invoke-WebRequest -Uri https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-windows-amd64.zip -OutFile "$env:TEMP\m3c-tools.zip"
+Expand-Archive -Path "$env:TEMP\m3c-tools.zip" -DestinationPath C:\m3c-tools -Force
+Rename-Item C:\m3c-tools\m3c-tools-windows-amd64.exe C:\m3c-tools\m3c-tools.exe -Force
+
+# Add to system PATH (requires restart of terminal)
+$oldPath = [Environment]::GetEnvironmentVariable("PATH", "Machine")
+if ($oldPath -notlike "*C:\m3c-tools*") {
+    [Environment]::SetEnvironmentVariable("PATH", "$oldPath;C:\m3c-tools", "Machine")
+}
 ```
 
-Verify: `m3c-tools help`
+After installation, **open a new PowerShell window** and verify: `m3c-tools help`
 
 ### Platform support
 
