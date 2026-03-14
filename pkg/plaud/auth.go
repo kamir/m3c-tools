@@ -156,7 +156,11 @@ func extractTokenWithAutoLaunch() (string, error) {
 		"Make sure you are fully logged in to app.plaud.ai and the page has loaded.", lastErr)
 }
 
-// findChrome locates the Chrome executable on the current platform.
+// FindChrome locates the Chrome executable on the current platform.
+func FindChrome() string {
+	return findChrome()
+}
+
 func findChrome() string {
 	switch runtime.GOOS {
 	case "windows":
@@ -409,7 +413,11 @@ func cdpUnframe(frame []byte) string {
 
 // OpenPlaudLogin opens web.plaud.ai/login in the default browser.
 func OpenPlaudLogin() error {
-	url := "https://web.plaud.ai/login"
+	return OpenBrowser("https://web.plaud.ai/login")
+}
+
+// OpenBrowser opens a URL in the platform's default browser.
+func OpenBrowser(url string) error {
 	switch runtime.GOOS {
 	case "darwin":
 		return exec.Command("open", url).Start()
@@ -420,4 +428,33 @@ func OpenPlaudLogin() error {
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}
+}
+
+// CDPEvaluateOnFirstTab connects to Chrome CDP on localhost:9222 and
+// evaluates a JS expression on the first available tab.
+func CDPEvaluateOnFirstTab(expression string) (string, error) {
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get("http://localhost:9222/json")
+	if err != nil {
+		return "", fmt.Errorf("cannot connect to Chrome DevTools: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var targets []struct {
+		WebSocketURL string `json:"webSocketDebuggerUrl"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&targets); err != nil {
+		return "", fmt.Errorf("parse targets: %w", err)
+	}
+
+	for _, t := range targets {
+		if t.WebSocketURL == "" {
+			continue
+		}
+		val, err := cdpEvaluate(t.WebSocketURL, expression)
+		if err == nil && val != "" && val != "null" {
+			return val, nil
+		}
+	}
+	return "", fmt.Errorf("no result from CDP evaluation")
 }

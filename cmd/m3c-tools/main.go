@@ -747,6 +747,22 @@ func cmdSetup(args []string) {
 		fmt.Fprintf(os.Stderr, "\nSetup failed: %v\n", err)
 		os.Exit(1)
 	}
+
+	// ER1 onboarding: check if ER1 config is already set.
+	fmt.Println()
+	envPath = filepath.Join(home, ".m3c-tools.env")
+	if _, statErr := os.Stat(envPath); statErr == nil && !force {
+		fmt.Printf("  ER1 config found at %s\n", envPath)
+		er1Cfg := er1.LoadConfig()
+		if er1.IsReachable(er1Cfg) {
+			fmt.Println("  ER1 server: REACHABLE")
+		} else {
+			fmt.Println("  ER1 server: UNREACHABLE (run 'm3c-tools setup --force' to reconfigure)")
+		}
+	} else {
+		fmt.Println("  ER1 not configured. Run 'm3c-tools setup --force' to set up ER1 onboarding.")
+		fmt.Println("  Or configure manually: cp .env.example ~/.m3c-tools.env")
+	}
 }
 
 // findSetupScript locates scripts/setup-venv.sh relative to the binary or CWD.
@@ -4142,6 +4158,10 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 		}).Build()
 
 		tags := impression.BuildFieldnoteTags(rec.Title)
+		// Prepend default tags from config if set.
+		if cfg.DefaultTags != "" {
+			tags = cfg.DefaultTags + "," + tags
+		}
 
 		// 5. Upload to ER1.
 		if onProgress != nil {
@@ -4155,8 +4175,8 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 			TranscriptFilename: fmt.Sprintf("fieldnote_%s.txt", now.Format("20060102_150405")),
 			AudioData:          audioData,
 			AudioFilename:      fmt.Sprintf("plaud_%s.%s", recID, audioFmt),
-			ImageData:          nil, // placeholder injected by upload layer
-			ImageFilename:      "placeholder-logo.png",
+			ImageData:          er1.PlaudLogoPNG(),
+			ImageFilename:      "plaud-logo.png",
 			Tags:               tags,
 			ContentType:        cfg.ContentType,
 		}
