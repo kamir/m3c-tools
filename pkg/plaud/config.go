@@ -10,6 +10,7 @@ type Config struct {
 	APIURL      string // Plaud API base URL
 	TokenPath   string // path to session token JSON file
 	ContentType string // ER1 content-type label for Plaud uploads
+	DefaultTags string // default tags prepended to every plaud sync upload
 }
 
 // LoadConfig reads Plaud settings from environment variables with defaults.
@@ -18,6 +19,7 @@ func LoadConfig() *Config {
 		APIURL:      envOr("PLAUD_API_URL", "https://api.plaud.ai"),
 		TokenPath:   envOr("PLAUD_TOKEN_FILE", defaultTokenPath()),
 		ContentType: envOr("PLAUD_CONTENT_TYPE", "Plaud-Fieldnote"),
+		DefaultTags: os.Getenv("PLAUD_DEFAULT_TAGS"),
 	}
 }
 

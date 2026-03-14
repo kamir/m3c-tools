@@ -47,8 +47,10 @@ func PlaceholderPNG() []byte {
 }
 
 var (
-	logoOnce sync.Once
-	logoData []byte
+	logoOnce     sync.Once
+	logoData     []byte
+	plaudLogoOnce sync.Once
+	plaudLogoData []byte
 )
 
 // PlaceholderLogoPNG returns the app logo image bytes when available.
@@ -83,6 +85,48 @@ func PlaceholderLogoPNG() []byte {
 		}
 	})
 	return logoData
+}
+
+// PlaudLogoPNG returns the Plaud.ai logo image bytes for use as the default
+// image in plaud sync uploads. Checks PLAUD_LOGO_PATH env, then looks for
+// plaud_logo.png near the binary. Falls back to the app logo or placeholder.
+func PlaudLogoPNG() []byte {
+	plaudLogoOnce.Do(func() {
+		candidates := make([]string, 0, 6)
+		if p := strings.TrimSpace(os.Getenv("PLAUD_LOGO_PATH")); p != "" {
+			candidates = append(candidates, p)
+		}
+		candidates = append(candidates, "plaud_logo.png")
+
+		if exe, err := os.Executable(); err == nil && exe != "" {
+			exeDir := filepath.Dir(exe)
+			candidates = append(candidates,
+				filepath.Join(exeDir, "plaud_logo.png"),
+				filepath.Join(exeDir, "..", "Resources", "plaud_logo.png"),
+			)
+		}
+
+		for _, p := range candidates {
+			ext := strings.ToLower(filepath.Ext(p))
+			if ext != ".png" && ext != ".jpg" && ext != ".jpeg" {
+				continue
+			}
+			data, err := os.ReadFile(p)
+			if err != nil || len(data) == 0 {
+				continue
+			}
+			plaudLogoData = data
+			return
+		}
+
+		// Fall back to app logo, then generic placeholder.
+		if logo := PlaceholderLogoPNG(); len(logo) > 0 {
+			plaudLogoData = logo
+			return
+		}
+		plaudLogoData = PlaceholderPNG()
+	})
+	return plaudLogoData
 }
 
 func writeLE16(buf *bytes.Buffer, v uint16) {
