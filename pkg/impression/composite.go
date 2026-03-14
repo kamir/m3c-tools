@@ -16,7 +16,8 @@ const (
 	Progress ObservationType = "progress" // YouTube video impression
 	Idea     ObservationType = "idea"     // Screenshot observation
 	Impulse  ObservationType = "impulse"  // Quick capture
-	Import   ObservationType = "import"   // Batch audio import
+	Import    ObservationType = "import"    // Batch audio import
+	Fieldnote ObservationType = "fieldnote" // Plaud field recording
 )
 
 // CompositeDoc builds a composite text document for ER1 upload.
@@ -27,10 +28,12 @@ type CompositeDoc struct {
 	LanguageCode   string
 	IsGenerated    bool
 	SnippetCount   int
-	TranscriptText string
-	ImpressionText string
-	ObsType        ObservationType
-	Timestamp      time.Time
+	TranscriptText    string
+	ImpressionText    string
+	ObsType           ObservationType
+	Timestamp         time.Time
+	RecordingTitle    string
+	RecordingDuration string
 }
 
 // Build creates the composite document string.
@@ -85,6 +88,19 @@ func (d *CompositeDoc) Build() string {
 		fmt.Fprintf(&b, "Date: %s\n\n", ts)
 		b.WriteString(d.TranscriptText)
 		fmt.Fprintf(&b, "\n=== END IMPORT ===\n")
+
+	case Fieldnote:
+		fmt.Fprintf(&b, "=== PLAUD FIELDNOTE ===\n")
+		fmt.Fprintf(&b, "Recording: %s\n", d.RecordingTitle)
+		fmt.Fprintf(&b, "Duration: %s\n", d.RecordingDuration)
+		fmt.Fprintf(&b, "Date: %s\n\n", ts)
+		b.WriteString(d.TranscriptText)
+		if d.ImpressionText != "" {
+			fmt.Fprintf(&b, "\n=== USER NOTES ===\n")
+			b.WriteString(d.ImpressionText)
+			b.WriteByte('\n')
+		}
+		fmt.Fprintf(&b, "\n=== END FIELDNOTE ===\n")
 	}
 
 	return normalizeSectionHeaderIndent(b.String())

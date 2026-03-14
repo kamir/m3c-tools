@@ -19,6 +19,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -42,6 +43,7 @@ import (
 	"github.com/kamir/m3c-tools/pkg/er1"
 	"github.com/kamir/m3c-tools/pkg/importer"
 	"github.com/kamir/m3c-tools/pkg/impression"
+	"github.com/kamir/m3c-tools/pkg/plaud"
 	"github.com/kamir/m3c-tools/pkg/menubar"
 	"github.com/kamir/m3c-tools/pkg/recorder"
 	"github.com/kamir/m3c-tools/pkg/screenshot"
@@ -96,6 +98,8 @@ func main() {
 		cmdScreenshot(os.Args[2:])
 	case "import-audio":
 		cmdImportAudio(os.Args[2:])
+	case "plaud":
+		cmdPlaud(os.Args[2:])
 	case "setup":
 		cmdSetup(os.Args[2:])
 	case "menubar":
@@ -172,6 +176,11 @@ Commands:
     --extensions           List supported audio extensions
     --compact              Machine-readable output (TSV: status, path, size, tags)
     --db <path>            Tracking DB path (default: ~/.m3c-tools/tracking.db)
+
+  plaud list             List Plaud recordings with sync status
+  plaud sync <id>        Sync a Plaud recording to ER1
+  plaud auth login       Extract token from Chrome (web.plaud.ai)
+  plaud auth <token>     Save Plaud API token manually
 
   setup                  Set up Python venv and install whisper
     --force                Recreate venv from scratch
@@ -2090,6 +2099,8 @@ func cmdMenubar(args []string) {
 			safeGo("LogoutER1", func() { menubarLogoutER1(app) })
 		case menubar.ActionShowTrackingDB:
 			safeGo("ShowTrackingDB", func() { menubarShowTrackingDB() })
+		case menubar.ActionPlaudSync:
+			safeGo("PlaudSync", func() { menubarHandlePlaudSync(app) })
 		case menubar.ActionStarGitHub:
 			safeGo("StarGitHub", func() { openURL(menubar.GitHubRepoURL) })
 		}
@@ -3781,4 +3792,615 @@ func menubarWhisperTimeout() time.Duration {
 		return 0
 	}
 	return time.Duration(secs) * time.Second
+}
+
+// ---------- Plaud integration ----------
+
+func cmdPlaud(args []string) {
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud <list|sync|auth> [args]")
+		os.Exit(1)
+	}
+	switch args[0] {
+	case "list":
+		cmdPlaudList()
+	case "sync":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud sync <recording_id>")
+			os.Exit(1)
+		}
+		cmdPlaudSync(args[1])
+	case "auth":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud auth <token>")
+			fmt.Fprintln(os.Stderr, "       m3c-tools plaud auth login   (extract from Chrome)")
+			os.Exit(1)
+		}
+		if args[1] == "login" {
+			cmdPlaudAuthLogin()
+		} else {
+			cmdPlaudAuth(args[1])
+		}
+	case "debug":
+		cmdPlaudDebugAPI()
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown plaud subcommand: %s\n", args[0])
+		os.Exit(1)
+	}
+}
+
+func cmdPlaudAuthLogin() {
+	cfg := plaud.LoadConfig()
+
+	// Try to extract token from an already-open Chrome tab.
+	fmt.Println("Checking Chrome for open Plaud tab...")
+	token, err := plaud.ExtractTokenFromChrome()
+	if err != nil {
+		fmt.Printf("Could not extract token: %v\n", err)
+		fmt.Println("\nOpening web.plaud.ai — please log in, then run this command again.")
+		_ = plaud.OpenPlaudLogin()
+		os.Exit(1)
+	}
+
+	session := &plaud.TokenSession{Token: token}
+	if err := plaud.SaveToken(cfg.TokenPath, session); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving token: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Token extracted from Chrome and saved to %s\n", cfg.TokenPath)
+
+	// Verify the token works.
+	client := plaud.NewClient(cfg, token)
+	recordings, err := client.ListRecordings()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: token saved but API test failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Authenticated. Found %d recordings.\n", len(recordings))
+}
+
+func cmdPlaudAuth(token string) {
+	cfg := plaud.LoadConfig()
+	session := &plaud.TokenSession{Token: token}
+	if err := plaud.SaveToken(cfg.TokenPath, session); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving token: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Token saved to %s\n", cfg.TokenPath)
+}
+
+func cmdPlaudDebugAPI() {
+	cfg := plaud.LoadConfig()
+	session, err := plaud.LoadToken(cfg.TokenPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "No token: %v\n", err)
+		os.Exit(1)
+	}
+	client := plaud.NewClient(cfg, session.Token)
+
+	// Get the full list and find sample IDs.
+	body, listErr := client.DebugGet("/file/simple/web?skip=0&limit=100&is_trash=2&is_desc=true")
+	if listErr != nil {
+		fmt.Fprintf(os.Stderr, "List failed: %v\n", listErr)
+		os.Exit(1)
+	}
+	var listResp struct {
+		DataFileList []struct {
+			ID      string `json:"id"`
+			Name    string `json:"filename"`
+			IsTrans bool   `json:"is_trans"`
+			IsSumm  bool   `json:"is_summary"`
+			Dur     int64  `json:"duration"`
+		} `json:"data_file_list"`
+	}
+	json.Unmarshal(body, &listResp)
+	fmt.Printf("Total recordings in list: %d\n", len(listResp.DataFileList))
+
+	// Find one untranscribed and one transcribed recording.
+	var sampleID, transID string
+	for _, f := range listResp.DataFileList {
+		fmt.Printf("  %s  %-30s  dur=%ds  trans=%v  summ=%v\n",
+			f.ID[:8], f.Name, f.Dur/1000, f.IsTrans, f.IsSumm)
+		if sampleID == "" {
+			sampleID = f.ID
+		}
+		if transID == "" && f.IsTrans {
+			transID = f.ID
+		}
+	}
+
+	// Try detail endpoint for the sample recording.
+	endpoints := []string{}
+	if sampleID != "" {
+		fmt.Printf("\n=== Sample recording: %s ===\n", sampleID)
+		endpoints = append(endpoints,
+			"/file/detail/"+sampleID,
+			"/file/download/"+sampleID,
+			"/file/ori/download/"+sampleID,
+			"/file/audio/"+sampleID,
+		)
+	}
+	if transID != "" && transID != sampleID {
+		fmt.Printf("\n=== Transcribed recording: %s ===\n", transID)
+		endpoints = append(endpoints, "/file/detail/"+transID)
+	}
+	for _, ep := range endpoints {
+		fmt.Printf("\n--- GET %s ---\n", ep)
+		body, apiErr := client.DebugGet(ep)
+		if apiErr != nil {
+			fmt.Printf("ERROR: %v\n", apiErr)
+			continue
+		}
+		s := string(body)
+		if len(s) > 2000 {
+			s = s[:2000] + "..."
+		}
+		// Pretty-print JSON if possible.
+		var pretty json.RawMessage
+		if json.Unmarshal(body, &pretty) == nil {
+			if pp, ppErr := json.MarshalIndent(pretty, "", "  "); ppErr == nil {
+				s = string(pp)
+				if len(s) > 3000 {
+					s = s[:3000] + "..."
+				}
+			}
+		}
+		fmt.Println(s)
+	}
+}
+
+func cmdPlaudList() {
+	cfg := plaud.LoadConfig()
+	session, err := plaud.LoadToken(cfg.TokenPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading token: %v\nRun: m3c-tools plaud auth <token>\n", err)
+		os.Exit(1)
+	}
+	client := plaud.NewClient(cfg, session.Token)
+	recordings, err := client.ListRecordings()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error listing recordings: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Check tracking DB for sync status.
+	dbPath := defaultFilesDBPath()
+	filesDB, dbErr := tracking.OpenFilesDB(dbPath)
+	if dbErr != nil {
+		log.Printf("[plaud] warning: cannot open tracking DB: %v", dbErr)
+	}
+	defer func() {
+		if filesDB != nil {
+			filesDB.Close()
+		}
+	}()
+
+	fmt.Printf("Plaud recordings (%d):\n\n", len(recordings))
+	for i, rec := range recordings {
+		status := "new"
+		if filesDB != nil {
+			plaudPath := "plaud://" + rec.ID
+			if tracked, lookupErr := filesDB.GetByPath(plaudPath); lookupErr == nil && tracked != nil {
+				status = tracked.Status
+			}
+		}
+		fmt.Printf("  %3d  %-40s  %6s  %s  [%s]\n",
+			i+1,
+			truncate(rec.Title, 40),
+			plaud.FormatDuration(rec.Duration),
+			rec.CreatedAt.Format("2006-01-02"),
+			status,
+		)
+	}
+}
+
+func cmdPlaudSync(recordingID string) {
+	cfg := plaud.LoadConfig()
+	session, err := plaud.LoadToken(cfg.TokenPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading token: %v\nRun: m3c-tools plaud auth <token>\n", err)
+		os.Exit(1)
+	}
+	client := plaud.NewClient(cfg, session.Token)
+
+	var ids []string
+	if recordingID == "all" {
+		// Sync all recordings that haven't been synced yet.
+		recordings, listErr := client.ListRecordings()
+		if listErr != nil {
+			fmt.Fprintf(os.Stderr, "Error listing recordings: %v\n", listErr)
+			os.Exit(1)
+		}
+		// Check tracking DB to skip already-synced.
+		dbPath := defaultFilesDBPath()
+		filesDB, dbErr := tracking.OpenFilesDB(dbPath)
+		if dbErr != nil {
+			log.Printf("[plaud] warning: cannot open tracking DB: %v", dbErr)
+		}
+		for _, rec := range recordings {
+			skip := false
+			if filesDB != nil {
+				if tracked, lookupErr := filesDB.GetByPath("plaud://" + rec.ID); lookupErr == nil && tracked != nil {
+					skip = true
+				}
+			}
+			if !skip {
+				ids = append(ids, rec.ID)
+			}
+		}
+		if filesDB != nil {
+			filesDB.Close()
+		}
+		fmt.Printf("Syncing %d new recordings (of %d total)...\n", len(ids), len(recordings))
+		if len(ids) == 0 {
+			fmt.Println("All recordings already synced.")
+			return
+		}
+	} else {
+		ids = []string{recordingID}
+	}
+
+	summary, err := runPlaudSyncPipeline(client, cfg, ids, defaultFilesDBPath(), nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Sync failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Sync complete: %d synced, %d failed\n", summary.Success, summary.Failed)
+}
+
+type plaudSyncSummary struct {
+	Total   int
+	Success int
+	Failed  int
+}
+
+func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs []string, dbPath string, onProgress func(menubar.BulkProgressEvent)) (*plaudSyncSummary, error) {
+	filesDB, err := tracking.OpenFilesDB(dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("open tracking db: %w", err)
+	}
+	defer filesDB.Close()
+
+	er1Cfg := er1.LoadConfig()
+	applyRuntimeER1Context(er1Cfg)
+	er1Cfg.ContentType = cfg.ContentType
+
+	summary := &plaudSyncSummary{Total: len(recordingIDs)}
+
+	for i, recID := range recordingIDs {
+		itemName := recID
+
+		// ITEM_START
+		if onProgress != nil {
+			onProgress(menubar.BulkProgressEvent{
+				Event:       "ITEM_START",
+				Item:        itemName,
+				Index:       i + 1,
+				Total:       summary.Total,
+				CurrentFile: itemName,
+				Phase:       menubar.BulkPhaseQueued,
+			})
+		}
+
+		// 1. Get recording metadata.
+		rec, recErr := client.GetRecording(recID)
+		if recErr != nil {
+			log.Printf("[plaud] get recording %s FAIL: %v", recID, recErr)
+			summary.Failed++
+			emitPlaudItemDone(onProgress, itemName, i+1, summary, recErr.Error())
+			continue
+		}
+		itemName = rec.Title
+
+		// 2. Download audio.
+		if onProgress != nil {
+			onProgress(menubar.BulkProgressEvent{
+				Event: "ITEM_PHASE", Item: itemName, Index: i + 1,
+				Total: summary.Total, Phase: menubar.BulkPhaseImport, CurrentFile: itemName,
+			})
+		}
+		log.Printf("[plaud] downloading audio for %s (%s)...", recID, rec.Title)
+		audioData, audioFmt, dlErr := client.DownloadAudio(recID)
+		if dlErr != nil {
+			log.Printf("[plaud] download %s FAIL: %v", recID, dlErr)
+			summary.Failed++
+			emitPlaudItemDone(onProgress, itemName, i+1, summary, dlErr.Error())
+			continue
+		}
+		log.Printf("[plaud] downloaded %d bytes (%s)", len(audioData), audioFmt)
+
+		// 3. Get transcript (Plaud-side).
+		if onProgress != nil {
+			onProgress(menubar.BulkProgressEvent{
+				Event: "ITEM_PHASE", Item: itemName, Index: i + 1,
+				Total: summary.Total, Phase: menubar.BulkPhaseTranscribe, CurrentFile: itemName,
+			})
+		}
+		var transcriptText string
+		tx, txErr := client.GetTranscript(recID)
+		if txErr != nil {
+			log.Printf("[plaud] no Plaud transcript for %s: %v — saving audio only", recID, txErr)
+			transcriptText = "[No transcript available — audio only]"
+		} else {
+			transcriptText = tx.Text
+			if tx.Summary != "" {
+				transcriptText = transcriptText + "\n\n=== SUMMARY ===\n" + tx.Summary
+			}
+			log.Printf("[plaud] got Plaud transcript for %s (%d chars, summary %d chars)", recID, len(tx.Text), len(tx.Summary))
+		}
+
+		// 4. Build composite document.
+		now := time.Now()
+		doc := (&impression.CompositeDoc{
+			ObsType:           impression.Fieldnote,
+			Timestamp:         now,
+			RecordingTitle:    rec.Title,
+			RecordingDuration: plaud.FormatDuration(rec.Duration),
+			TranscriptText:    strings.TrimSpace(transcriptText),
+		}).Build()
+
+		tags := impression.BuildFieldnoteTags(rec.Title)
+
+		// 5. Upload to ER1.
+		if onProgress != nil {
+			onProgress(menubar.BulkProgressEvent{
+				Event: "ITEM_PHASE", Item: itemName, Index: i + 1,
+				Total: summary.Total, Phase: menubar.BulkPhaseUpload, CurrentFile: itemName,
+			})
+		}
+		payload := &er1.UploadPayload{
+			TranscriptData:     []byte(strings.TrimSpace(doc) + "\n"),
+			TranscriptFilename: fmt.Sprintf("fieldnote_%s.txt", now.Format("20060102_150405")),
+			AudioData:          audioData,
+			AudioFilename:      fmt.Sprintf("plaud_%s.%s", recID, audioFmt),
+			ImageData:          nil, // placeholder injected by upload layer
+			ImageFilename:      "placeholder-logo.png",
+			Tags:               tags,
+			ContentType:        cfg.ContentType,
+		}
+
+		resp, upErr := er1.Upload(er1Cfg, payload)
+		if upErr != nil {
+			log.Printf("[plaud] upload %s FAIL: %v — saving locally", recID, upErr)
+			// Fallback: save to ~/plaud-sync/<recID>/ for later re-upload.
+			localErr := savePlaudLocally(recID, rec, audioData, audioFmt, doc, transcriptText, tags)
+			if localErr != nil {
+				log.Printf("[plaud] local save also FAIL: %v", localErr)
+				summary.Failed++
+				emitPlaudItemDone(onProgress, itemName, i+1, summary, upErr.Error())
+				continue
+			}
+			log.Printf("[plaud] saved locally to ~/plaud-sync/%s/", recID[:8])
+			// Record in tracking DB as locally saved.
+			audioHash := fmt.Sprintf("%x", sha256.Sum256(audioData))
+			plaudPath := "plaud://" + recID
+			_, _ = filesDB.RecordFile(plaudPath, audioHash, int64(len(audioData)), "plaud", "")
+			_ = filesDB.RecordTranscript(audioHash, "plaud", strings.TrimSpace(transcriptText), "")
+			summary.Success++
+			if onProgress != nil {
+				onProgress(menubar.BulkProgressEvent{
+					Event: "ITEM_DONE", Item: itemName, Index: i + 1,
+					Total: summary.Total, Outcome: "ok",
+					Done: i + 1, Success: summary.Success, Failed: summary.Failed,
+					CurrentFile: itemName, Phase: menubar.BulkPhaseDone,
+				})
+			}
+			continue
+		}
+		log.Printf("[plaud] upload %s DONE doc_id=%s", recID, resp.DocID)
+
+		// 6. Record in tracking DB.
+		audioHash := fmt.Sprintf("%x", sha256.Sum256(audioData))
+		plaudPath := "plaud://" + recID
+		_, _ = filesDB.RecordFile(plaudPath, audioHash, int64(len(audioData)), "plaud", "")
+		_ = filesDB.RecordTranscript(audioHash, "plaud", strings.TrimSpace(transcriptText), "")
+		_ = filesDB.RecordUploadSuccess(audioHash, "plaud", resp.DocID)
+
+		summary.Success++
+		if onProgress != nil {
+			onProgress(menubar.BulkProgressEvent{
+				Event: "ITEM_DONE", Item: itemName, Index: i + 1,
+				Total: summary.Total, Outcome: "ok",
+				Done: i + 1, Success: summary.Success, Failed: summary.Failed,
+				CurrentFile: itemName, Phase: menubar.BulkPhaseDone,
+			})
+		}
+	}
+
+	return summary, nil
+}
+
+// savePlaudLocally saves all captured data for a Plaud recording to ~/plaud-sync/<recID>/
+// so it can be re-uploaded to ER1 later.
+func savePlaudLocally(recID string, rec *plaud.Recording, audioData []byte, audioFmt string, compositeDoc string, transcriptText string, tags string) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("get home dir: %w", err)
+	}
+	dir := filepath.Join(home, "plaud-sync", recID)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create dir: %w", err)
+	}
+
+	// Save audio.
+	audioPath := filepath.Join(dir, fmt.Sprintf("audio.%s", audioFmt))
+	if err := os.WriteFile(audioPath, audioData, 0644); err != nil {
+		return fmt.Errorf("write audio: %w", err)
+	}
+
+	// Save composite document.
+	docPath := filepath.Join(dir, "fieldnote.txt")
+	if err := os.WriteFile(docPath, []byte(compositeDoc), 0644); err != nil {
+		return fmt.Errorf("write doc: %w", err)
+	}
+
+	// Save raw transcript.
+	if transcriptText != "" {
+		txPath := filepath.Join(dir, "transcript.txt")
+		if err := os.WriteFile(txPath, []byte(transcriptText), 0644); err != nil {
+			return fmt.Errorf("write transcript: %w", err)
+		}
+	}
+
+	// Save metadata.
+	meta := map[string]interface{}{
+		"recording_id": recID,
+		"title":        rec.Title,
+		"duration":     rec.Duration,
+		"created_at":   rec.CreatedAt.Format(time.RFC3339),
+		"synced_at":    time.Now().Format(time.RFC3339),
+		"tags":         tags,
+		"audio_file":   filepath.Base(audioPath),
+		"audio_format": audioFmt,
+		"audio_size":   len(audioData),
+	}
+	metaJSON, _ := json.MarshalIndent(meta, "", "  ")
+	metaPath := filepath.Join(dir, "metadata.json")
+	if err := os.WriteFile(metaPath, metaJSON, 0644); err != nil {
+		return fmt.Errorf("write metadata: %w", err)
+	}
+
+	return nil
+}
+
+func emitPlaudItemDone(onProgress func(menubar.BulkProgressEvent), item string, index int, summary *plaudSyncSummary, errMsg string) {
+	if onProgress != nil {
+		onProgress(menubar.BulkProgressEvent{
+			Event: "ITEM_DONE", Item: item, Index: index,
+			Total: summary.Total, Outcome: "failed", Error: errMsg,
+			Done: index, Success: summary.Success, Failed: summary.Failed,
+			CurrentFile: item, Phase: menubar.BulkPhaseFailed,
+		})
+	}
+}
+
+// menubarHandlePlaudSync handles the Plaud Sync menu action.
+func menubarHandlePlaudSync(app *menubar.App) {
+	cfg := plaud.LoadConfig()
+	session, err := plaud.LoadToken(cfg.TokenPath)
+	if err != nil {
+		log.Printf("[plaud] no saved token, trying Chrome extraction...")
+		token, chromeErr := plaud.ExtractTokenFromChrome()
+		if chromeErr != nil {
+			log.Printf("[plaud] Chrome extraction failed: %v", chromeErr)
+			log.Printf("[plaud] opening web.plaud.ai for login...")
+			_ = plaud.OpenPlaudLogin()
+			app.Notify("Plaud Sync", "Please log in to web.plaud.ai in Chrome, then try again.")
+			return
+		}
+		// Save the extracted token.
+		session = &plaud.TokenSession{Token: token}
+		if saveErr := plaud.SaveToken(cfg.TokenPath, session); saveErr != nil {
+			log.Printf("[plaud] warning: could not save token: %v", saveErr)
+		} else {
+			log.Printf("[plaud] token extracted from Chrome and saved")
+		}
+	}
+	client := plaud.NewClient(cfg, session.Token)
+
+	log.Printf("[plaud] fetching recordings...")
+	recordings, err := client.ListRecordings()
+	if err != nil {
+		log.Printf("[plaud] list recordings FAILED: %v", err)
+		app.Notify("Plaud Sync Error", err.Error())
+		return
+	}
+	log.Printf("[plaud] found %d recordings", len(recordings))
+
+	// Check each recording against tracking DB.
+	dbPath := defaultFilesDBPath()
+	filesDB, dbErr := tracking.OpenFilesDB(dbPath)
+	if dbErr != nil {
+		log.Printf("[plaud] warning: cannot open tracking DB: %v", dbErr)
+	}
+	defer func() {
+		if filesDB != nil {
+			filesDB.Close()
+		}
+	}()
+
+	var records []menubar.PlaudSyncRecord
+	for _, rec := range recordings {
+		status := "new"
+		if filesDB != nil {
+			plaudPath := "plaud://" + rec.ID
+			if tracked, lookupErr := filesDB.GetByPath(plaudPath); lookupErr == nil && tracked != nil {
+				status = tracked.Status
+			}
+		}
+		records = append(records, menubar.PlaudSyncRecord{
+			Title:       rec.Title,
+			Duration:    plaud.FormatDuration(rec.Duration),
+			Date:        rec.CreatedAt.Format("2006-01-02 15:04"),
+			Status:      status,
+			RecordingID: rec.ID,
+		})
+	}
+
+	accountInfo := fmt.Sprintf("Plaud — %d recordings", len(recordings))
+	menubar.ShowPlaudSyncWindow(records, accountInfo)
+
+	// Register sync callback.
+	menubar.SetPlaudSyncCallback(func(action string, recordingIDs []string) {
+		if action != "sync" || len(recordingIDs) == 0 {
+			return
+		}
+		log.Printf("[plaud] sync starting for %d recordings", len(recordingIDs))
+
+		// Mark syncing in UI.
+		for _, id := range recordingIDs {
+			menubar.SetPlaudSyncStatus(id, "syncing")
+		}
+		menubar.SetPlaudSyncProgress(menubar.BulkRunState{
+			Active: true, Total: len(recordingIDs),
+		})
+
+		onProgress := func(evt menubar.BulkProgressEvent) {
+			state := menubar.BulkRunState{
+				Active:      true,
+				Total:       evt.Total,
+				Done:        evt.Done,
+				Success:     evt.Success,
+				Failed:      evt.Failed,
+				CurrentFile: evt.CurrentFile,
+				Phase:       evt.Phase,
+			}
+			menubar.SetPlaudSyncProgress(state)
+
+			if evt.Event == "ITEM_DONE" {
+				status := "synced"
+				if evt.Outcome == "failed" {
+					status = "failed"
+				}
+				// Find the recording ID for this item.
+				for _, id := range recordingIDs {
+					if evt.Item != "" {
+						menubar.SetPlaudSyncStatus(id, status)
+					}
+				}
+			}
+		}
+
+		summary, syncErr := runPlaudSyncPipeline(client, cfg, recordingIDs, dbPath, onProgress)
+		if syncErr != nil {
+			log.Printf("[plaud] sync FAILED: %v", syncErr)
+			app.Notify("Plaud Sync Failed", syncErr.Error())
+		} else {
+			log.Printf("[plaud] sync DONE: %d synced, %d failed", summary.Success, summary.Failed)
+			app.Notify("Plaud Sync", fmt.Sprintf("Done: %d synced, %d failed", summary.Success, summary.Failed))
+		}
+
+		menubar.SetPlaudSyncProgress(menubar.BulkRunState{
+			Active: false,
+			Total:  summary.Total, Done: summary.Total,
+			Success: summary.Success, Failed: summary.Failed,
+		})
+	})
+}
+
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
 }
