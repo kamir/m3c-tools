@@ -1,10 +1,11 @@
 package plaud
 
 import (
+	"bufio"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -57,6 +58,10 @@ func SaveToken(path string, session *TokenSession) error {
 // ExtractTokenFromChrome extracts the Plaud auth token from a running Chrome
 // browser. On macOS, uses osascript/JXA. On all platforms, falls back to
 // reading Chrome's remote debugging protocol (CDP) on localhost:9222.
+//
+// If CDP is not available (Chrome not started with debug port), the function
+// will automatically launch Chrome with the debug port, open plaud.ai, and
+// prompt the user to log in before retrying.
 func ExtractTokenFromChrome() (string, error) {
 	// On macOS, try osascript/JXA first (no special Chrome launch flags needed).
 	if runtime.GOOS == "darwin" {
@@ -67,8 +72,140 @@ func ExtractTokenFromChrome() (string, error) {
 		// Fall through to CDP if osascript fails.
 	}
 
-	// Cross-platform fallback: Chrome DevTools Protocol.
-	return extractTokenCDP()
+	// Try CDP first — Chrome may already be running with debug port.
+	token, err := extractTokenCDP()
+	if err == nil {
+		return token, nil
+	}
+
+	// CDP failed — try to launch Chrome automatically.
+	return extractTokenWithAutoLaunch()
+}
+
+// extractTokenWithAutoLaunch launches Chrome with the debug port, opens
+// plaud.ai, waits for the user to log in, then extracts the token via CDP.
+func extractTokenWithAutoLaunch() (string, error) {
+	chromePath := findChrome()
+	if chromePath == "" {
+		return "", fmt.Errorf("Chrome not found.\n" +
+			"Please install Google Chrome, or start it manually with:\n" +
+			"  chrome --remote-debugging-port=9222\n" +
+			"Then run this command again.")
+	}
+
+	fmt.Printf("Chrome found: %s\n", chromePath)
+	fmt.Println("Launching Chrome with remote debugging enabled...")
+
+	// Launch Chrome with debug port. Use a separate user-data-dir to avoid
+	// conflicts with an already-running Chrome instance.
+	debugDir := filepath.Join(os.TempDir(), "m3c-tools-chrome-debug")
+	cmd := exec.Command(chromePath,
+		"--remote-debugging-port=9222",
+		"--user-data-dir="+debugDir,
+		"https://app.plaud.ai",
+	)
+	if err := cmd.Start(); err != nil {
+		return "", fmt.Errorf("failed to launch Chrome: %w\n"+
+			"Try starting Chrome manually with --remote-debugging-port=9222", err)
+	}
+
+	// Give Chrome a moment to start.
+	fmt.Println()
+	fmt.Println("  A Chrome window should open with app.plaud.ai.")
+	fmt.Println("  Please log in to your Plaud account.")
+	fmt.Println()
+
+	// Wait for CDP to become available (up to 15 seconds).
+	cdpReady := false
+	for i := 0; i < 15; i++ {
+		time.Sleep(1 * time.Second)
+		client := &http.Client{Timeout: 2 * time.Second}
+		resp, err := client.Get("http://localhost:9222/json")
+		if err == nil {
+			resp.Body.Close()
+			cdpReady = true
+			break
+		}
+	}
+	if !cdpReady {
+		return "", fmt.Errorf("Chrome started but CDP port 9222 is not responding.\n" +
+			"Check your firewall settings and try again.")
+	}
+
+	// Prompt the user to confirm they've logged in.
+	fmt.Print("  Press Enter after you have logged in to Plaud... ")
+	reader := bufio.NewReader(os.Stdin)
+	_, _ = reader.ReadString('\n')
+	fmt.Println()
+
+	// Retry CDP extraction with a few attempts (page may still be loading).
+	var lastErr error
+	for attempt := 0; attempt < 5; attempt++ {
+		token, err := extractTokenCDP()
+		if err == nil {
+			return token, nil
+		}
+		lastErr = err
+		if attempt < 4 {
+			fmt.Printf("  Waiting for token... (attempt %d/5)\n", attempt+2)
+			time.Sleep(2 * time.Second)
+		}
+	}
+
+	return "", fmt.Errorf("could not extract token after login: %w\n"+
+		"Make sure you are fully logged in to app.plaud.ai and the page has loaded.", lastErr)
+}
+
+// findChrome locates the Chrome executable on the current platform.
+func findChrome() string {
+	switch runtime.GOOS {
+	case "windows":
+		candidates := []string{
+			filepath.Join(os.Getenv("ProgramFiles"), "Google", "Chrome", "Application", "chrome.exe"),
+			filepath.Join(os.Getenv("ProgramFiles(x86)"), "Google", "Chrome", "Application", "chrome.exe"),
+			filepath.Join(os.Getenv("LOCALAPPDATA"), "Google", "Chrome", "Application", "chrome.exe"),
+		}
+		for _, p := range candidates {
+			if _, err := os.Stat(p); err == nil {
+				return p
+			}
+		}
+	case "darwin":
+		candidates := []string{
+			"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+			filepath.Join(os.Getenv("HOME"), "Applications", "Google Chrome.app", "Contents", "MacOS", "Google Chrome"),
+		}
+		for _, p := range candidates {
+			if _, err := os.Stat(p); err == nil {
+				return p
+			}
+		}
+	case "linux":
+		candidates := []string{
+			"/usr/bin/google-chrome",
+			"/usr/bin/google-chrome-stable",
+			"/usr/bin/chromium-browser",
+			"/usr/bin/chromium",
+			"/snap/bin/chromium",
+		}
+		for _, p := range candidates {
+			if _, err := os.Stat(p); err == nil {
+				return p
+			}
+		}
+	}
+
+	// Last resort: check PATH.
+	if p, err := exec.LookPath("chrome"); err == nil {
+		return p
+	}
+	if p, err := exec.LookPath("google-chrome"); err == nil {
+		return p
+	}
+	if p, err := exec.LookPath("chromium"); err == nil {
+		return p
+	}
+	return ""
 }
 
 // extractTokenOsascript uses macOS osascript/JXA to read localStorage from Chrome.
@@ -119,8 +256,7 @@ func extractTokenCDP() (string, error) {
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get("http://localhost:9222/json")
 	if err != nil {
-		return "", fmt.Errorf("cannot connect to Chrome DevTools on localhost:9222: %w\n"+
-			"Hint: start Chrome with --remote-debugging-port=9222, or use 'plaud auth <token>' to set the token manually", err)
+		return "", fmt.Errorf("cannot connect to Chrome DevTools on localhost:9222: %w", err)
 	}
 	defer resp.Body.Close()
 
