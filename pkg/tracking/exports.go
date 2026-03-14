@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/kamir/m3c-tools/internal/dbdriver"
 )
 
 const createTableSQL = `
@@ -59,17 +59,17 @@ func OpenExportsDB(dbPath string) (*ExportsDB, error) {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
 
-	db, err := sql.Open("sqlite3", dbPath+"?_journal_mode=WAL")
+	sqlDB, err := sql.Open(dbdriver.DriverName(), dbPath+"?_journal_mode=WAL")
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
 
-	if _, err := db.Exec(createTableSQL); err != nil {
-		_ = db.Close()
+	if _, err := sqlDB.Exec(createTableSQL); err != nil {
+		_ = sqlDB.Close()
 		return nil, fmt.Errorf("create table: %w", err)
 	}
 
-	return &ExportsDB{db: db}, nil
+	return &ExportsDB{db: sqlDB}, nil
 }
 
 // Close closes the underlying database connection.
