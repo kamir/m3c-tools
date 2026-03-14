@@ -210,24 +210,24 @@ func cdpDial(wsURL string) (net.Conn, error) {
 	handshake := fmt.Sprintf("GET %s HTTP/1.1\r\nHost: %s\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n\r\n",
 		path, host, key)
 	if _, err := conn.Write([]byte(handshake)); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, err
 	}
 
 	// Read upgrade response.
 	buf := make([]byte, 4096)
-	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	n, err := conn.Read(buf)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("read handshake: %w", err)
 	}
 	if !strings.Contains(string(buf[:n]), "101") {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("WebSocket upgrade failed: %s", string(buf[:n]))
 	}
 
-	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 	return conn, nil
 }
 
