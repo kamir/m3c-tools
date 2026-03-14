@@ -38,6 +38,7 @@ const (
 	ActionShowTrackingDB    ActionType = "show_tracking_db"
 	ActionOpenLog           ActionType = "open_log"
 	ActionStarGitHub        ActionType = "star_github"
+	ActionPlaudSync         ActionType = "plaud_sync"
 	ActionQuit              ActionType = "quit"
 )
 

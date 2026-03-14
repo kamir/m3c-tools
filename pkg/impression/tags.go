@@ -21,6 +21,8 @@ func BuildTags(obsType ObservationType, extra ...string) string {
 		tags = append(tags, "impulse")
 	case Import:
 		tags = append(tags, "audio-import")
+	case Fieldnote:
+		tags = append(tags, "plaud", "fieldnote")
 	}
 
 	tags = append(tags, extra...)
@@ -41,6 +43,16 @@ func BuildVideoTags(videoID string, channelTitle string, obsType ObservationType
 // BuildImportTags creates tags for a batch audio import.
 func BuildImportTags(filenameTags []string) string {
 	return BuildTags(Import, filenameTags...)
+}
+
+// BuildFieldnoteTags creates tags for a Plaud fieldnote recording.
+func BuildFieldnoteTags(title string, extra ...string) string {
+	tags := []string{}
+	if title != "" {
+		tags = append(tags, fmt.Sprintf("recording:%s", title))
+	}
+	tags = append(tags, extra...)
+	return BuildTags(Fieldnote, tags...)
 }
 
 // ParseTagLine parses a tag string back to a slice.

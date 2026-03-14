@@ -23,12 +23,13 @@ type App struct {
 	Handlers Handlers
 	history  HistoryStore
 
-	mu            sync.Mutex
-	status        Status
-	authSession   AuthSession
-	importState   AudioImportState
-	lastImportMsg string
-	bulkRunState  BulkRunState
+	mu             sync.Mutex
+	status         Status
+	authSession    AuthSession
+	importState    AudioImportState
+	lastImportMsg  string
+	bulkRunState   BulkRunState
+	plaudSyncState PlaudSyncState
 
 	// Time tracking (set via SetTimeEngine after login).
 	timeEngine      TimeTrackingEngine
@@ -42,6 +43,13 @@ type App struct {
 type AuthSession struct {
 	LoggedIn bool
 	UserID   string
+}
+
+// PlaudSyncState holds the current Plaud sync snapshot for menu rendering.
+type PlaudSyncState struct {
+	Items     []PlaudSyncRecord
+	UpdatedAt time.Time
+	Error     string
 }
 
 // AudioImportItem represents one source audio file shown in the menubar list.
@@ -148,6 +156,26 @@ func (a *App) GetLastImportMessage() string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.lastImportMsg
+}
+
+// SetPlaudSyncState updates the current Plaud sync snapshot for the menu.
+func (a *App) SetPlaudSyncState(s PlaudSyncState) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.plaudSyncState = s
+}
+
+// GetPlaudSyncState returns the current Plaud sync snapshot.
+func (a *App) GetPlaudSyncState() PlaudSyncState {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	out := a.plaudSyncState
+	if len(out.Items) > 0 {
+		items := make([]PlaudSyncRecord, len(out.Items))
+		copy(items, out.Items)
+		out.Items = items
+	}
+	return out
 }
 
 // SetBulkRunState updates the current live bulk-run state for UI rendering.
@@ -300,6 +328,12 @@ func (a *App) buildMenuItems() []menuet.MenuItem {
 			Text: "📋 Audio Recording Tracking DB",
 			Clicked: func() {
 				a.fireAction(ActionShowTrackingDB, "")
+			},
+		},
+		{
+			Text: "📝 Plaud Sync",
+			Clicked: func() {
+				a.fireAction(ActionPlaudSync, "")
 			},
 		},
 		{Type: menuet.Separator},
