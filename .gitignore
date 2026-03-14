@@ -29,6 +29,9 @@ build/
 /m3c-tools
 /m3c-tools-*
 
+# Local PortAudio universal library (built by scripts/build-portaudio-universal.sh)
+lib/portaudio/
+
 # env file (keep .env.example tracked)
 .env
 .env.samples
