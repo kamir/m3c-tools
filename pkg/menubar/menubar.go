@@ -1,3 +1,5 @@
+//go:build darwin
+
 // Package menubar provides types, configuration, and callback interfaces for
 // building macOS menu bar applications using the menuet library. It extracts
 // reusable patterns from cmd/poc-menubar into a proper library package.

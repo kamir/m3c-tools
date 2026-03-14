@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/kamir/m3c-tools/internal/dbdriver"
 )
 
 const createRetryQueueTableSQL = `
@@ -98,7 +100,7 @@ func OpenRetryQueueDB(dbPath string, opts ...RetryQueueOption) (*RetryQueueDB, e
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
 
-	db, err := sql.Open("sqlite3", dbPath+"?_journal_mode=WAL")
+	db, err := sql.Open(dbdriver.DriverName(), dbPath+"?_journal_mode=WAL")
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}

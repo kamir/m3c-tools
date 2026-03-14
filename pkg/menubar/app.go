@@ -1,3 +1,5 @@
+//go:build darwin
+
 // app.go — menuet-based macOS menu bar application runner.
 //
 // This file depends on github.com/caseymrm/menuet and must be built
