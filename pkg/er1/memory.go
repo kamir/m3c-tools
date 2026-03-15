@@ -1,12 +1,23 @@
 package er1
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 )
+
+// memoryMeta holds metadata fields that aren't part of the file content
+// but must be preserved for lossless retry.
+type memoryMeta struct {
+	ContentType        string `json:"content_type,omitempty"`
+	DocID              string `json:"doc_id,omitempty"`
+	TranscriptFilename string `json:"transcript_filename,omitempty"`
+	AudioFilename      string `json:"audio_filename,omitempty"`
+	ImageFilename      string `json:"image_filename,omitempty"`
+}
 
 // MemoryFolder represents a local MEMORY directory created on ER1 upload failure.
 // It stores the payload files locally so they can be retried later.
@@ -84,7 +95,7 @@ func (m *MemoryFolder) WriteTags(tags []string) error {
 }
 
 // SavePayload persists an entire UploadPayload into the MEMORY folder,
-// writing transcript, audio, image, and tags files.
+// writing transcript, audio, image, tags, and metadata files.
 func (m *MemoryFolder) SavePayload(payload *UploadPayload) error {
 	if err := m.WriteTranscript(payload.TranscriptData, payload.TranscriptFilename); err != nil {
 		return fmt.Errorf("write transcript: %w", err)
@@ -109,7 +120,168 @@ func (m *MemoryFolder) SavePayload(payload *UploadPayload) error {
 		}
 	}
 
+	// Save metadata for lossless retry (content_type, doc_id, filenames).
+	meta := memoryMeta{
+		ContentType:        payload.ContentType,
+		DocID:              payload.DocID,
+		TranscriptFilename: payload.TranscriptFilename,
+		AudioFilename:      payload.AudioFilename,
+		ImageFilename:      payload.ImageFilename,
+	}
+	metaBytes, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal metadata: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(m.Path, "metadata.json"), metaBytes, 0644); err != nil {
+		return fmt.Errorf("write metadata: %w", err)
+	}
+
 	return nil
+}
+
+// LoadPayload reads the saved files from a MEMORY folder and reconstructs an UploadPayload.
+// It first checks for metadata.json (written by SavePayload) to identify exact filenames
+// and restore ContentType/DocID. For legacy MEMORY folders without metadata.json, it falls
+// back to scanning by file extension.
+func (m *MemoryFolder) LoadPayload() (*UploadPayload, error) {
+	entries, err := os.ReadDir(m.Path)
+	if err != nil {
+		return nil, fmt.Errorf("read memory folder: %w", err)
+	}
+
+	// Try to load metadata.json first for exact file matching.
+	var meta memoryMeta
+	metaPath := filepath.Join(m.Path, "metadata.json")
+	if metaBytes, err := os.ReadFile(metaPath); err == nil {
+		_ = json.Unmarshal(metaBytes, &meta)
+	}
+
+	payload := &UploadPayload{
+		ContentType: meta.ContentType,
+		DocID:       meta.DocID,
+	}
+
+	// If metadata knows the exact filenames, load them directly.
+	if meta.TranscriptFilename != "" {
+		data, err := os.ReadFile(filepath.Join(m.Path, meta.TranscriptFilename))
+		if err != nil {
+			return nil, fmt.Errorf("read transcript %s: %w", meta.TranscriptFilename, err)
+		}
+		payload.TranscriptData = data
+		payload.TranscriptFilename = meta.TranscriptFilename
+	}
+	if meta.AudioFilename != "" {
+		data, err := os.ReadFile(filepath.Join(m.Path, meta.AudioFilename))
+		if err != nil {
+			return nil, fmt.Errorf("read audio %s: %w", meta.AudioFilename, err)
+		}
+		payload.AudioData = data
+		payload.AudioFilename = meta.AudioFilename
+	}
+	if meta.ImageFilename != "" {
+		data, err := os.ReadFile(filepath.Join(m.Path, meta.ImageFilename))
+		if err != nil {
+			return nil, fmt.Errorf("read image %s: %w", meta.ImageFilename, err)
+		}
+		payload.ImageData = data
+		payload.ImageFilename = meta.ImageFilename
+	}
+
+	// Scan remaining files for tags and any fields not already set by metadata.
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		fpath := filepath.Join(m.Path, name)
+
+		switch {
+		case name == "tag.txt":
+			data, err := os.ReadFile(fpath)
+			if err != nil {
+				return nil, fmt.Errorf("read tags: %w", err)
+			}
+			var tags []string
+			for _, line := range strings.Split(string(data), "\n") {
+				t := strings.TrimSpace(line)
+				if t != "" {
+					tags = append(tags, t)
+				}
+			}
+			payload.Tags = strings.Join(tags, ",")
+
+		case name == "metadata.json":
+			continue // already handled
+
+		case strings.HasSuffix(name, ".txt"):
+			if payload.TranscriptData != nil {
+				continue // already loaded from metadata
+			}
+			data, err := os.ReadFile(fpath)
+			if err != nil {
+				return nil, fmt.Errorf("read transcript: %w", err)
+			}
+			payload.TranscriptData = data
+			payload.TranscriptFilename = name
+
+		case strings.HasSuffix(name, ".mp3"),
+			strings.HasSuffix(name, ".wav"),
+			strings.HasSuffix(name, ".ogg"),
+			strings.HasSuffix(name, ".m4a"):
+			if payload.AudioData != nil {
+				continue // already loaded from metadata
+			}
+			data, err := os.ReadFile(fpath)
+			if err != nil {
+				return nil, fmt.Errorf("read audio: %w", err)
+			}
+			payload.AudioData = data
+			payload.AudioFilename = name
+
+		case strings.HasSuffix(name, ".png"),
+			strings.HasSuffix(name, ".jpg"),
+			strings.HasSuffix(name, ".jpeg"):
+			if payload.ImageData != nil {
+				continue // already loaded from metadata
+			}
+			data, err := os.ReadFile(fpath)
+			if err != nil {
+				return nil, fmt.Errorf("read image: %w", err)
+			}
+			payload.ImageData = data
+			payload.ImageFilename = name
+		}
+	}
+
+	if payload.TranscriptData == nil {
+		return nil, fmt.Errorf("no transcript file found in %s", m.Path)
+	}
+
+	return payload, nil
+}
+
+// ListMemoryFolders returns all MEMORY-* folders in the given root directory.
+func ListMemoryFolders(rootDir string) ([]*MemoryFolder, error) {
+	if rootDir == "" {
+		rootDir = DefaultMemoryPath()
+	}
+	entries, err := os.ReadDir(rootDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var folders []*MemoryFolder
+	for _, e := range entries {
+		if e.IsDir() && strings.HasPrefix(e.Name(), "MEMORY-") {
+			folders = append(folders, &MemoryFolder{
+				Path:     filepath.Join(rootDir, e.Name()),
+				MemoryID: e.Name(),
+			})
+		}
+	}
+	return folders, nil
 }
 
 // splitTagsMemory splits a comma-separated tag string into trimmed, non-empty tags.

@@ -77,6 +77,28 @@ func (c *PLMClient) doRequest(method, path string, body io.Reader) (*http.Respon
 	return c.client.Do(req)
 }
 
+// HealthCheck validates the API key by calling GET /api/plm/projects.
+// Returns nil if the key is valid, or an error describing the auth failure.
+func (c *PLMClient) HealthCheck() error {
+	resp, err := c.doRequest("GET", "/api/plm/projects", nil)
+	if err != nil {
+		return fmt.Errorf("health check request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return nil
+	case http.StatusUnauthorized:
+		return fmt.Errorf("ER1 API key is invalid or expired (HTTP 401)")
+	case http.StatusForbidden:
+		return fmt.Errorf("ER1 API key is rejected (HTTP 403)")
+	default:
+		return fmt.Errorf("ER1 health check returned HTTP %d", resp.StatusCode)
+	}
+}
+
 // FetchProjects retrieves the project list from GET /api/plm/projects.
 // Returns only projects with status "active" or "validating".
 func (c *PLMClient) FetchProjects() ([]PLMProject, error) {

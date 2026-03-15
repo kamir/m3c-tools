@@ -2,6 +2,7 @@ package impression
 
 import (
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -53,6 +54,19 @@ func BuildFieldnoteTags(title string, extra ...string) string {
 	}
 	tags = append(tags, extra...)
 	return BuildTags(Fieldnote, tags...)
+}
+
+// OriginTags returns tags identifying where this observation was captured:
+// host:<hostname> and optionally source:<path>.
+func OriginTags(sourcePath string) []string {
+	var tags []string
+	if h, err := os.Hostname(); err == nil && h != "" {
+		tags = append(tags, fmt.Sprintf("host:%s", h))
+	}
+	if sourcePath != "" {
+		tags = append(tags, fmt.Sprintf("source:%s", sourcePath))
+	}
+	return tags
 }
 
 // ParseTagLine parses a tag string back to a slice.

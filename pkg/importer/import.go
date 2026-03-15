@@ -285,7 +285,7 @@ func importSingleFile(af AudioFile, destDir, contentType string, db *tracking.Fi
 
 	// Step 5: Parse filename for tags and write tag.txt.
 	info := impression.ParseFilename(af.Name)
-	tags := impression.BuildImportTags(info.Tags)
+	tags := impression.BuildImportTags(append(info.Tags, impression.OriginTags(af.Path)...))
 
 	tagFilePath := filepath.Join(memoryPath, "tag.txt")
 	tagContent := tags + "\n"

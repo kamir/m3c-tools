@@ -533,7 +533,7 @@ func cmdUpload(args []string) {
 	// Upload to ER1
 	fmt.Printf("Uploading to %s...\n", cfg.APIURL)
 
-	tags := impression.BuildVideoTags(videoID, "", impression.Progress)
+	tags := impression.BuildVideoTags(videoID, "", impression.Progress) + "," + strings.Join(impression.OriginTags(""), ",")
 	payload := &er1.UploadPayload{
 		TranscriptData:     []byte(composite),
 		TranscriptFilename: fmt.Sprintf("%s_transcript.txt", videoID),
@@ -797,6 +797,13 @@ func cmdCheckER1() {
 		fmt.Println("ER1 server: UNREACHABLE")
 		os.Exit(1)
 	}
+
+	// Validate API key.
+	if err := cfg.HealthCheck(); err != nil {
+		fmt.Printf("API key check: FAILED — %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("API key check: OK")
 }
 
 // -- devices command --
@@ -1277,6 +1284,17 @@ func cmdScreenshot(args []string) {
 // -- import-audio command --
 
 func cmdImportAudio(args []string) {
+	// Sub-dispatch: "import-audio retry" re-uploads failed items from MEMORY folders.
+	if len(args) > 0 && args[0] == "retry" {
+		cmdImportRetry()
+		return
+	}
+	// Sub-dispatch: "import-audio reset" removes tracking records to allow re-import.
+	if len(args) > 0 && args[0] == "reset" {
+		cmdImportReset(args[1:])
+		return
+	}
+
 	showExtensions := false
 	compact := false
 	runPipeline := false
@@ -1485,7 +1503,8 @@ func runAudioImportPipeline(sourceDir, dbPath, onlySourcePath string, app *menub
 				CurrentFile: filepath.Base(imp.Source),
 			})
 		}
-		log.Printf("[import] whisper START source=%s model=%s language=%s", imp.Source, model, lang)
+		srcSize := imp.Size
+		log.Printf("[import] whisper START source=%s model=%s language=%s size=%.1fMB", imp.Source, model, lang, float64(srcSize)/(1024*1024))
 		text, txErr := whisper.TranscribeTextWithTimeout(imp.Dest, model, lang, timeout)
 		if txErr != nil {
 			text = fmt.Sprintf("[Transcription failed: %v]", txErr)
@@ -1706,7 +1725,7 @@ func reprocessAudioFile(srcPath, dbPath string, app *menubar.App, onProgress fun
 			CurrentFile: info.Name(),
 		})
 	}
-	log.Printf("[reprocess] whisper START source=%s model=%s language=%s", info.Name(), model, lang)
+	log.Printf("[reprocess] whisper START source=%s model=%s language=%s size=%.1fMB", info.Name(), model, lang, float64(info.Size())/(1024*1024))
 	text, txErr := whisper.TranscribeTextWithTimeout(destFile, model, lang, timeout)
 	if txErr != nil {
 		log.Printf("[reprocess] whisper FAIL source=%s error=%v", info.Name(), txErr)
@@ -1722,7 +1741,7 @@ func reprocessAudioFile(srcPath, dbPath string, app *menubar.App, onProgress fun
 
 	// Build upload payload.
 	parsedInfo := impression.ParseFilename(info.Name())
-	tags := impression.BuildImportTags(parsedInfo.Tags)
+	tags := impression.BuildImportTags(append(parsedInfo.Tags, impression.OriginTags(absPath)...))
 
 	doc := (&impression.CompositeDoc{
 		ObsType:        impression.Import,
@@ -1781,6 +1800,192 @@ func reprocessAudioFile(srcPath, dbPath string, app *menubar.App, onProgress fun
 		app.SetStatus(menubar.StatusIdle)
 	}
 	return nil
+}
+
+// cmdImportRetry re-uploads failed imports from MEMORY folders.
+// It scans ~/.m3c-tools/MEMORY/ for saved payloads and re-attempts ER1 upload.
+func cmdImportRetry() {
+	er1Cfg := er1.LoadConfig()
+
+	// Health check first.
+	if err := er1Cfg.HealthCheck(); err != nil {
+		fmt.Fprintf(os.Stderr, "ER1 health check failed: %v\nFix the API key before retrying.\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("ER1 API key: OK")
+
+	folders, err := er1.ListMemoryFolders("")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error listing MEMORY folders: %v\n", err)
+		os.Exit(1)
+	}
+	if len(folders) == 0 {
+		fmt.Println("No MEMORY folders found — nothing to retry.")
+		return
+	}
+
+	filesDB, dbErr := tracking.OpenFilesDB(defaultFilesDBPath())
+	if dbErr != nil {
+		log.Printf("[retry] warning: cannot open tracking DB: %v", dbErr)
+	}
+	defer func() {
+		if filesDB != nil {
+			filesDB.Close()
+		}
+	}()
+
+	fmt.Printf("Found %d MEMORY folder(s). Retrying uploads...\n\n", len(folders))
+	var uploaded, failed, skipped int
+
+	for _, mf := range folders {
+		payload, loadErr := mf.LoadPayload()
+		if loadErr != nil {
+			fmt.Printf("  SKIP %s — %v\n", mf.MemoryID, loadErr)
+			skipped++
+			continue
+		}
+
+		fmt.Printf("  RETRY %s — transcript=%s audio=%s tags=%s\n",
+			mf.MemoryID, payload.TranscriptFilename, payload.AudioFilename, payload.Tags)
+
+		resp, upErr := er1.Upload(er1Cfg, payload)
+		if upErr != nil {
+			fmt.Printf("  FAIL %s — %v\n", mf.MemoryID, upErr)
+			failed++
+			continue
+		}
+
+		fmt.Printf("  OK   %s — doc_id=%s\n", mf.MemoryID, resp.DocID)
+		uploaded++
+
+		// Update tracking DB if possible.
+		if filesDB != nil {
+			// Find the matching record by looking for failed entries.
+			records, _ := filesDB.ListByStatus("failed", 1000)
+			for _, r := range records {
+				// Match by comparing audio filename or transcript filename.
+				if r.ImportType == "audio" && strings.Contains(payload.AudioFilename, filepath.Base(r.FilePath)) {
+					_ = filesDB.RecordUploadSuccess(r.FileHash, r.ImportType, resp.DocID)
+					fmt.Printf("         DB updated: %s → uploaded\n", filepath.Base(r.FilePath))
+					break
+				}
+			}
+		}
+
+		// Clean up MEMORY folder on success.
+		if rmErr := os.RemoveAll(mf.Path); rmErr != nil {
+			log.Printf("[retry] warning: cannot remove %s: %v", mf.Path, rmErr)
+		}
+	}
+
+	fmt.Printf("\nRetry complete: uploaded=%d failed=%d skipped=%d\n", uploaded, failed, skipped)
+}
+
+// cmdImportReset removes tracking records so items can be re-imported.
+// Usage:
+//
+//	import-audio reset --status failed          # remove all failed entries
+//	import-audio reset --status imported         # remove all imported (not uploaded) entries
+//	import-audio reset --status failed --type plaud  # remove failed plaud entries only
+//	import-audio reset --all                     # remove ALL entries (full reset)
+//	import-audio reset --file <path>             # remove one entry by file path
+func cmdImportReset(args []string) {
+	dbPath := defaultFilesDBPath()
+	status := ""
+	importType := ""
+	filePath := ""
+	resetAll := false
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--status":
+			if i+1 < len(args) {
+				status = args[i+1]
+				i++
+			}
+		case "--type":
+			if i+1 < len(args) {
+				importType = args[i+1]
+				i++
+			}
+		case "--file":
+			if i+1 < len(args) {
+				filePath = args[i+1]
+				i++
+			}
+		case "--all":
+			resetAll = true
+		case "--db":
+			if i+1 < len(args) {
+				dbPath = args[i+1]
+				i++
+			}
+		}
+	}
+
+	if status == "" && filePath == "" && !resetAll {
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools import-audio reset [--status <status>] [--type <import_type>] [--file <path>] [--all]")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Examples:")
+		fmt.Fprintln(os.Stderr, "  import-audio reset --status failed           # Reset all failed imports")
+		fmt.Fprintln(os.Stderr, "  import-audio reset --status imported          # Reset all imported-but-not-uploaded")
+		fmt.Fprintln(os.Stderr, "  import-audio reset --status failed --type plaud  # Reset failed plaud entries")
+		fmt.Fprintln(os.Stderr, "  import-audio reset --file '/path/to/file.mp3'   # Reset one specific file")
+		fmt.Fprintln(os.Stderr, "  import-audio reset --all                       # Remove ALL tracking records")
+
+		// Show current status counts.
+		filesDB, err := tracking.OpenFilesDB(dbPath)
+		if err == nil {
+			defer filesDB.Close()
+			fmt.Fprintln(os.Stderr, "\nCurrent tracking DB status:")
+			for _, s := range []string{"imported", "uploaded", "failed", "whisper-error"} {
+				count, _ := filesDB.CountFilesByStatus(s)
+				if count > 0 {
+					fmt.Fprintf(os.Stderr, "  %-15s %d\n", s, count)
+				}
+			}
+			total, _ := filesDB.CountFiles()
+			fmt.Fprintf(os.Stderr, "  %-15s %d\n", "TOTAL", total)
+		}
+		os.Exit(1)
+	}
+
+	filesDB, err := tracking.OpenFilesDB(dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error opening tracking DB: %v\n", err)
+		os.Exit(1)
+	}
+	defer filesDB.Close()
+
+	if filePath != "" {
+		if err := filesDB.RemoveByPath(filePath); err != nil {
+			fmt.Fprintf(os.Stderr, "Error removing %s: %v\n", filePath, err)
+			os.Exit(1)
+		}
+		fmt.Printf("Removed tracking record for: %s\n", filePath)
+		return
+	}
+
+	if resetAll {
+		n, err := filesDB.RemoveByStatus("", "")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error resetting all: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Removed all %d tracking records.\n", n)
+		return
+	}
+
+	n, err := filesDB.RemoveByStatus(status, importType)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error resetting status=%q type=%q: %v\n", status, importType, err)
+		os.Exit(1)
+	}
+	typeLabel := "all types"
+	if importType != "" {
+		typeLabel = importType
+	}
+	fmt.Printf("Removed %d records with status=%q (%s).\n", n, status, typeLabel)
 }
 
 func defaultFilesDBPath() string {
@@ -1936,12 +2141,23 @@ func cmdMenubar(args []string) {
 				ContextID: plmContextID,
 				VerifySSL: er1Cfg.VerifySSL,
 			})
-			ttSyncer = timetracking.NewSyncer(ttStore, plmClient, 30*time.Second)
-			ttSyncer.Start()
-			log.Printf("[timetracking] syncer started (interval=30s)")
 
-			// Start project list refresher.
-			startTimeTrackingProjectRefresher(plmClient, ttStore)
+			// Health check: validate API key before starting background services.
+			if err := plmClient.HealthCheck(); err != nil {
+				log.Printf("[healthcheck] ER1 API key check FAILED: %v", err)
+				log.Printf("[healthcheck] PLM sync and time tracking will be disabled until key is fixed")
+				if app != nil {
+					app.SetStatus(menubar.StatusError)
+				}
+			} else {
+				log.Printf("[healthcheck] ER1 API key OK")
+				ttSyncer = timetracking.NewSyncer(ttStore, plmClient, 30*time.Second)
+				ttSyncer.Start()
+				log.Printf("[timetracking] syncer started (interval=30s)")
+
+				// Start project list refresher.
+				startTimeTrackingProjectRefresher(plmClient, ttStore)
+			}
 		} else {
 			log.Printf("[timetracking] PLM sync disabled (base=%q key_set=%v)", plmBase, er1Cfg.APIKey != "")
 		}
@@ -3053,6 +3269,10 @@ func menubarFetchTranscriptAndTrack(app *menubar.App, fetcher *menubar.Transcrip
 	// If the user clicks Start Recording, observationRecordAndUpload will
 	// overwrite these with recording-aware versions.
 	menubar.SetObservationStoreCallback(func(tags, notes, contentType, imagePath string) {
+		// Append origin tags (hostname) to user-provided tags.
+		if origin := strings.Join(impression.OriginTags(""), ","); origin != "" {
+			tags = tags + "," + origin
+		}
 		app.SetStatus(menubar.StatusUploading)
 		now := time.Now()
 		ts := now.Format("20060102_150405")
@@ -3137,7 +3357,7 @@ func menubarUploadER1(videoID string) (*menubar.ER1UploadResult, error) {
 	thumbData, _ := fetcher.FetchThumbnail(videoID)
 
 	// Build payload
-	tags := impression.BuildVideoTags(videoID, "", impression.Progress)
+	tags := impression.BuildVideoTags(videoID, "", impression.Progress) + "," + strings.Join(impression.OriginTags(""), ",")
 	payload := &er1.UploadPayload{
 		TranscriptData:     []byte(composite),
 		TranscriptFilename: fmt.Sprintf("%s_transcript.txt", videoID),
@@ -3415,6 +3635,10 @@ func observationRecordAndUpload(app *menubar.App, label string, imgPath string, 
 	// Store callback: build composite doc + upload to ER1.
 	// Reads the (possibly user-edited) memo text from the Review tab.
 	menubar.SetObservationStoreCallback(func(tags, notes, contentType, imagePath string) {
+		// Append origin tags (hostname) to user-provided tags.
+		if origin := strings.Join(impression.OriginTags(""), ","); origin != "" {
+			tags = tags + "," + origin
+		}
 		app.SetStatus(menubar.StatusUploading)
 		if !recordingStopped {
 			log.Printf("[%s] store requested before recording was stopped", label)
@@ -3748,25 +3972,45 @@ func maybePreloadWhisper() {
 	}
 
 	model := menubarWhisperModel()
-	language := menubarWhisperLanguage()
 
 	go func() {
 		start := time.Now()
-		tmpPath := filepath.Join(os.TempDir(), fmt.Sprintf("m3c-whisper-preload-%d.wav", time.Now().UnixNano()))
-		samples := make([]int16, recorder.SampleRate) // 1s silence
-		if err := os.WriteFile(tmpPath, recorder.EncodeWAV(samples), 0644); err != nil {
-			log.Printf("[whisper] preload skipped: write temp wav failed: %v", err)
-			return
-		}
-		defer os.Remove(tmpPath)
 
-		log.Printf("[whisper] preload start model=%s language=%s", model, language)
-		_, err := whisper.TranscribeTextWithTimeout(tmpPath, model, language, menubarWhisperTimeout())
+		// Warm the OS disk cache by reading the model file into memory.
+		// Each whisper subprocess loads the model from scratch — the old approach
+		// of running full inference on a silent WAV took 3+ minutes on CPU and
+		// the in-process model cache was discarded when the subprocess exited.
+		// Reading the file is enough to populate the OS page cache.
+		modelPath := filepath.Join(os.Getenv("HOME"), ".cache", "whisper", model+".pt")
+		// Try versioned names (large-v3.pt, large-v2.pt, large-v1.pt).
+		if _, err := os.Stat(modelPath); os.IsNotExist(err) {
+			for _, suffix := range []string{"-v3.pt", "-v2.pt", "-v1.pt"} {
+				candidate := filepath.Join(os.Getenv("HOME"), ".cache", "whisper", model+suffix)
+				if _, serr := os.Stat(candidate); serr == nil {
+					modelPath = candidate
+					break
+				}
+			}
+		}
+
+		info, err := os.Stat(modelPath)
 		if err != nil {
-			log.Printf("[whisper] preload failed after %s: %v", time.Since(start).Round(time.Millisecond), err)
+			log.Printf("[whisper] preload skipped: model file not found at %s", modelPath)
 			return
 		}
-		log.Printf("[whisper] preload done in %s", time.Since(start).Round(time.Millisecond))
+		sizeMB := float64(info.Size()) / (1024 * 1024)
+		log.Printf("[whisper] preload start model=%s size=%.0fMB path=%s", model, sizeMB, modelPath)
+
+		f, err := os.Open(modelPath)
+		if err != nil {
+			log.Printf("[whisper] preload failed: %v", err)
+			return
+		}
+		n, _ := io.Copy(io.Discard, f)
+		f.Close()
+
+		log.Printf("[whisper] preload done in %s (read %.0fMB into OS cache)",
+			time.Since(start).Round(time.Millisecond), float64(n)/(1024*1024))
 	}()
 }
 
@@ -3783,7 +4027,12 @@ func menubarWhisperModel() string {
 }
 
 func menubarWhisperLanguage() string {
-	language := strings.TrimSpace(os.Getenv("YT_WHISPER_LANGUAGE"))
+	language := strings.TrimSpace(os.Getenv("M3C_WHISPER_LANGUAGE"))
+	if language != "" {
+		return language
+	}
+	// Deprecated fallback — use M3C_WHISPER_LANGUAGE instead.
+	language = strings.TrimSpace(os.Getenv("YT_WHISPER_LANGUAGE"))
 	if language != "" {
 		return language
 	}
@@ -3791,7 +4040,7 @@ func menubarWhisperLanguage() string {
 }
 
 func menubarWhisperTimeout() time.Duration {
-	const defaultTimeout = 7200 * time.Second // 2 hours — large audio files need time
+	const defaultTimeout = 18000 * time.Second // 5 hours — large model on CPU needs time for long recordings
 
 	raw := strings.TrimSpace(os.Getenv("M3C_WHISPER_TIMEOUT"))
 	if raw == "" {
@@ -4157,7 +4406,7 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 			TranscriptText:    strings.TrimSpace(transcriptText),
 		}).Build()
 
-		tags := impression.BuildFieldnoteTags(rec.Title)
+		tags := impression.BuildFieldnoteTags(rec.Title, impression.OriginTags("plaud://"+recID)...)
 		// Prepend default tags from config if set.
 		if cfg.DefaultTags != "" {
 			tags = cfg.DefaultTags + "," + tags

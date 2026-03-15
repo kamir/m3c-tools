@@ -3,7 +3,10 @@
 package er1
 
 import (
+	"crypto/tls"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -37,13 +40,62 @@ func LoadConfig() *Config {
 	}
 }
 
-// AuthHeaders returns HTTP headers with X-API-KEY if configured.
+// AuthHeaders returns HTTP headers with X-API-KEY and X-Context-ID if configured.
 func (c *Config) AuthHeaders() map[string]string {
 	h := map[string]string{}
 	if c.APIKey != "" {
 		h["X-API-KEY"] = c.APIKey
 	}
+	if c.ContextID != "" {
+		h["X-Context-ID"] = c.ContextID
+	}
 	return h
+}
+
+// HealthCheck validates ER1 connectivity and API key by sending a small GET request
+// to the ER1 base URL. Returns nil if the server is reachable and the key is accepted.
+func (c *Config) HealthCheck() error {
+	if c.APIKey == "" {
+		return fmt.Errorf("ER1_API_KEY is not set")
+	}
+	// Derive base URL from upload URL (strip /upload_2 suffix).
+	baseURL := c.APIURL
+	if idx := strings.LastIndex(baseURL, "/upload"); idx > 0 {
+		baseURL = baseURL[:idx]
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	if !c.VerifySSL {
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
+
+	req, err := http.NewRequest("GET", baseURL+"/api/plm/projects", nil)
+	if err != nil {
+		return fmt.Errorf("health check: %w", err)
+	}
+	for k, v := range c.AuthHeaders() {
+		req.Header.Set(k, v)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("ER1 server unreachable: %w", err)
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return nil
+	case http.StatusUnauthorized:
+		return fmt.Errorf("ER1 API key is invalid or expired (HTTP 401)")
+	case http.StatusForbidden:
+		return fmt.Errorf("ER1 API key is rejected (HTTP 403)")
+	default:
+		return fmt.Errorf("ER1 health check returned HTTP %d", resp.StatusCode)
+	}
 }
 
 // Summary returns a human-readable one-liner for logging.

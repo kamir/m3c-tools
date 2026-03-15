@@ -306,6 +306,33 @@ func (f *FilesDB) RemoveByHash(fileHash, importType string) error {
 	return err
 }
 
+// RemoveByStatus deletes all records with the given status and optional import type.
+// If status is empty, deletes ALL records. Returns the number of rows deleted.
+func (f *FilesDB) RemoveByStatus(status, importType string) (int64, error) {
+	var result sql.Result
+	var err error
+	switch {
+	case status == "" && importType == "":
+		result, err = f.db.Exec(`DELETE FROM processed_files`)
+	case status != "" && importType != "":
+		result, err = f.db.Exec(`DELETE FROM processed_files WHERE status = ? AND import_type = ?`, status, importType)
+	case status != "":
+		result, err = f.db.Exec(`DELETE FROM processed_files WHERE status = ?`, status)
+	default:
+		result, err = f.db.Exec(`DELETE FROM processed_files WHERE import_type = ?`, importType)
+	}
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+// RemoveByPath removes a processed file record by its file path.
+func (f *FilesDB) RemoveByPath(filePath string) error {
+	_, err := f.db.Exec(`DELETE FROM processed_files WHERE file_path = ?`, filePath)
+	return err
+}
+
 // allColumns is the column list used in SELECT queries.
 const allColumns = `id, file_path, file_hash, file_size, import_type, status, memory_id, processed_at,
 	COALESCE(transcript_text,''), COALESCE(transcript_lang,''), COALESCE(transcript_len,0),

@@ -79,6 +79,7 @@ func ExtractTokenFromChrome() (string, error) {
 	}
 
 	// CDP failed — try to launch Chrome automatically.
+	fmt.Printf("  Chrome debug port not available: %v\n", err)
 	return extractTokenWithAutoLaunch()
 }
 
@@ -105,8 +106,11 @@ func extractTokenWithAutoLaunch() (string, error) {
 		"https://app.plaud.ai",
 	)
 	if err := cmd.Start(); err != nil {
-		return "", fmt.Errorf("failed to launch Chrome: %w\n"+
-			"Try starting Chrome manually with --remote-debugging-port=9222", err)
+		hint := "Try starting Chrome manually with --remote-debugging-port=9222"
+		if runtime.GOOS == "windows" {
+			hint = fmt.Sprintf("Try running in PowerShell:\n  & \"%s\" --remote-debugging-port=9222", chromePath)
+		}
+		return "", fmt.Errorf("failed to launch Chrome: %w\n%s", err, hint)
 	}
 
 	// Give Chrome a moment to start.
@@ -115,12 +119,17 @@ func extractTokenWithAutoLaunch() (string, error) {
 	fmt.Println("  Please log in to your Plaud account.")
 	fmt.Println()
 
-	// Wait for CDP to become available (up to 15 seconds).
+	// Wait for CDP to become available (up to 30 seconds).
+	// Use 127.0.0.1 explicitly to avoid IPv6 resolution issues on Windows
+	// where Chrome binds to IPv4 but Go's HTTP client tries IPv6 ([::1]) first.
 	cdpReady := false
-	for i := 0; i < 15; i++ {
+	for i := 0; i < 30; i++ {
 		time.Sleep(1 * time.Second)
+		if i > 0 && i%5 == 0 {
+			fmt.Printf("  Waiting for Chrome to start... (%ds)\n", i)
+		}
 		client := &http.Client{Timeout: 2 * time.Second}
-		resp, err := client.Get("http://localhost:9222/json")
+		resp, err := client.Get("http://127.0.0.1:9222/json")
 		if err == nil {
 			resp.Body.Close()
 			cdpReady = true
@@ -128,8 +137,13 @@ func extractTokenWithAutoLaunch() (string, error) {
 		}
 	}
 	if !cdpReady {
-		return "", fmt.Errorf("Chrome started but CDP port 9222 is not responding.\n" +
-			"Check your firewall settings and try again.")
+		hint := "Check your firewall settings and try again."
+		if runtime.GOOS == "windows" {
+			hint = "On Windows, check that Windows Firewall / Defender is not blocking port 9222.\n" +
+				"You can also try starting Chrome manually in PowerShell:\n" +
+				fmt.Sprintf("  & \"%s\" --remote-debugging-port=9222", chromePath)
+		}
+		return "", fmt.Errorf("Chrome started but CDP port 9222 is not responding.\n%s", hint)
 	}
 
 	// Prompt the user to confirm they've logged in.
@@ -168,8 +182,14 @@ func findChrome() string {
 			filepath.Join(os.Getenv("ProgramFiles"), "Google", "Chrome", "Application", "chrome.exe"),
 			filepath.Join(os.Getenv("ProgramFiles(x86)"), "Google", "Chrome", "Application", "chrome.exe"),
 			filepath.Join(os.Getenv("LOCALAPPDATA"), "Google", "Chrome", "Application", "chrome.exe"),
+			// Edge as fallback — supports CDP with the same flags.
+			filepath.Join(os.Getenv("ProgramFiles"), "Microsoft", "Edge", "Application", "msedge.exe"),
+			filepath.Join(os.Getenv("ProgramFiles(x86)"), "Microsoft", "Edge", "Application", "msedge.exe"),
 		}
 		for _, p := range candidates {
+			if p == "" {
+				continue // env var was empty
+			}
 			if _, err := os.Stat(p); err == nil {
 				return p
 			}
@@ -200,14 +220,14 @@ func findChrome() string {
 	}
 
 	// Last resort: check PATH.
-	if p, err := exec.LookPath("chrome"); err == nil {
-		return p
-	}
-	if p, err := exec.LookPath("google-chrome"); err == nil {
-		return p
-	}
-	if p, err := exec.LookPath("chromium"); err == nil {
-		return p
+	for _, name := range []string{
+		"chrome", "google-chrome", "google-chrome-stable",
+		"chromium", "chromium-browser",
+		"msedge", // Edge supports CDP with the same flags
+	} {
+		if p, err := exec.LookPath(name); err == nil {
+			return p
+		}
 	}
 	return ""
 }
@@ -257,10 +277,12 @@ function run() {
 // Chrome must be started with --remote-debugging-port=9222 for this to work.
 func extractTokenCDP() (string, error) {
 	// 1. Discover available tabs via /json endpoint.
+	// Use 127.0.0.1 explicitly — on Windows, "localhost" may resolve to IPv6 [::1]
+	// while Chrome's debug port binds to IPv4 only, causing "connection refused".
 	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get("http://localhost:9222/json")
+	resp, err := client.Get("http://127.0.0.1:9222/json")
 	if err != nil {
-		return "", fmt.Errorf("cannot connect to Chrome DevTools on localhost:9222: %w", err)
+		return "", fmt.Errorf("cannot connect to Chrome DevTools on 127.0.0.1:9222: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -434,7 +456,7 @@ func OpenBrowser(url string) error {
 // evaluates a JS expression on the first available tab.
 func CDPEvaluateOnFirstTab(expression string) (string, error) {
 	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get("http://localhost:9222/json")
+	resp, err := client.Get("http://127.0.0.1:9222/json")
 	if err != nil {
 		return "", fmt.Errorf("cannot connect to Chrome DevTools: %w", err)
 	}
