@@ -100,6 +100,7 @@ func extractTokenWithAutoLaunch() (string, error) {
 	// Launch Chrome with debug port. Use a separate user-data-dir to avoid
 	// conflicts with an already-running Chrome instance.
 	debugDir := filepath.Join(os.TempDir(), "m3c-tools-chrome-debug")
+	defer os.RemoveAll(debugDir) // Clean up debug profile after use (contains cookies, localStorage)
 	cmd := exec.Command(chromePath,
 		"--remote-debugging-port=9222",
 		"--user-data-dir="+debugDir,
@@ -444,7 +445,7 @@ func OpenBrowser(url string) error {
 	case "darwin":
 		return exec.Command("open", url).Start()
 	case "windows":
-		return exec.Command("cmd", "/c", "start", url).Start()
+		return exec.Command("cmd", "/c", "start", "", url).Start() // empty title prevents injection via & in URL
 	case "linux":
 		return exec.Command("xdg-open", url).Start()
 	default:

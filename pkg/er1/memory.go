@@ -72,17 +72,17 @@ func CreateMemoryFolder(rootDir string, t time.Time) (*MemoryFolder, error) {
 
 // WriteTranscript writes transcript content to the MEMORY folder.
 func (m *MemoryFolder) WriteTranscript(data []byte, filename string) error {
-	return os.WriteFile(filepath.Join(m.Path, filename), data, 0644)
+	return os.WriteFile(filepath.Join(m.Path, filename), data, 0600)
 }
 
 // WriteAudio writes audio data to the MEMORY folder.
 func (m *MemoryFolder) WriteAudio(data []byte, filename string) error {
-	return os.WriteFile(filepath.Join(m.Path, filename), data, 0644)
+	return os.WriteFile(filepath.Join(m.Path, filename), data, 0600)
 }
 
 // WriteImage writes image data to the MEMORY folder.
 func (m *MemoryFolder) WriteImage(data []byte, filename string) error {
-	return os.WriteFile(filepath.Join(m.Path, filename), data, 0644)
+	return os.WriteFile(filepath.Join(m.Path, filename), data, 0600)
 }
 
 // WriteTags writes tags (one per line) to tag.txt in the MEMORY folder.
@@ -91,7 +91,7 @@ func (m *MemoryFolder) WriteTags(tags []string) error {
 	for _, tag := range tags {
 		content = append(content, []byte(tag+"\n")...)
 	}
-	return os.WriteFile(filepath.Join(m.Path, "tag.txt"), content, 0644)
+	return os.WriteFile(filepath.Join(m.Path, "tag.txt"), content, 0600)
 }
 
 // SavePayload persists an entire UploadPayload into the MEMORY folder,
@@ -132,7 +132,7 @@ func (m *MemoryFolder) SavePayload(payload *UploadPayload) error {
 	if err != nil {
 		return fmt.Errorf("marshal metadata: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(m.Path, "metadata.json"), metaBytes, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(m.Path, "metadata.json"), metaBytes, 0600); err != nil {
 		return fmt.Errorf("write metadata: %w", err)
 	}
 

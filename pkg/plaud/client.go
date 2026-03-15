@@ -277,7 +277,7 @@ func (c *Client) fetchS3Content(url string) ([]byte, error) {
 		reader = gz
 	}
 
-	return io.ReadAll(reader)
+	return io.ReadAll(io.LimitReader(reader, 50<<20)) // 50 MB limit (gzip bomb protection)
 }
 
 // extractTranscriptText parses the Plaud transcript JSON and extracts speaker-diarized text.
@@ -412,7 +412,7 @@ func (c *Client) doGet(url string) ([]byte, error) {
 		return nil, err
 	}
 
-	return io.ReadAll(resp.Body)
+	return io.ReadAll(io.LimitReader(resp.Body, 50<<20)) // 50 MB limit
 }
 
 // DebugGet exposes the raw GET method for API exploration.

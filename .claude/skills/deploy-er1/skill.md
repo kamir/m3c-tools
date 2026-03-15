@@ -53,8 +53,8 @@ After the container starts (wait ~5s for Flask to initialize), verify:
 curl -sk https://127.0.0.1:8081/api/plm/health
 
 # PLM projects (with API key auth)
-curl -sk -H "X-API-KEY: REDACTED_ER1_API_KEY" \
-         -H "X-Context-ID: 107677460544181387647___mft" \
+curl -sk -H "X-API-KEY: $ER1_API_KEY" \
+         -H "X-Context-ID: $ER1_CONTEXT_ID" \
          https://127.0.0.1:8081/api/plm/projects
 ```
 
