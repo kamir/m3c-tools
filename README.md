@@ -40,12 +40,13 @@ After installation, **open a new PowerShell window** and verify: `m3c-tools help
 
 ### Platform support
 
-| Platform | Install | CLI | Menu Bar | Audio Recording |
-|----------|---------|-----|----------|-----------------|
-| macOS arm64 (Apple Silicon) | one-liner | full | full GUI | full |
-| macOS amd64 (Intel) | one-liner | full | full GUI | full |
-| Linux amd64 (Ubuntu) | one-liner | full | — | — |
-| Windows amd64 | one-liner | full | — | — |
+| Platform | Install | CLI | Menu Bar | Audio Recording | Bridge Mode |
+|----------|---------|-----|----------|-----------------|-------------|
+| macOS arm64 (Apple Silicon) | one-liner | full | full GUI | full | yes |
+| macOS amd64 (Intel/iMac) | one-liner | full | full GUI | full | yes |
+| Linux amd64 (Ubuntu) | one-liner | full | — | — | yes |
+| Linux arm64 (Jetson) | one-liner | full | — | — | yes (relay) |
+| Windows amd64 | one-liner | full | — | — | — |
 
 ---
 
@@ -301,24 +302,21 @@ m3c-tools check-er1              # Verify ER1 connectivity
 
 `plaud auth login` auto-launches Chrome (or Edge) with remote debugging, opens `app.plaud.ai`, and extracts the auth token after you log in. No manual Chrome flags needed.
 
-### Context Processor Bridge
+### Context Processor Bridge (macOS / Ubuntu only)
 
-An iMac, Linux box, or Jetson can serve as a dedicated batch processing node:
+An iMac or Ubuntu box can serve as a dedicated batch processing node for transcription and bulk ingestion. Windows is **desktop interaction mode only** — no bridge mode.
 
 ```bash
-# Batch-transcribe a folder of audio files
-m3c-tools import-audio ~/m3c-inbox/ --run
+# One-command bridge setup (macOS or Ubuntu):
+curl -sL https://raw.githubusercontent.com/kamir/m3c-tools-maintenance/master/scripts/setup-bridge.sh | bash
 
-# Retry failed uploads
-m3c-tools import-audio retry
-
-# Sync all Plaud recordings to ER1
-m3c-tools plaud sync all
+# Then:
+m3c-tools import-audio ~/m3c-inbox/ --run    # Batch-transcribe
+m3c-tools import-audio retry                  # Retry failed uploads
+m3c-tools plaud sync all                      # Sync all Plaud recordings
 ```
 
-Setup scripts are in [m3c-tools-maintenance/scripts/](https://github.com/kamir/m3c-tools-maintenance/tree/master/scripts):
-- `setup-bridge-imac.sh` — iMac 32GB as CPU transcription bridge
-- Hardware planning: see [SPEC-0018](https://github.com/kamir/m3c-tools-maintenance/blob/master/SPEC/SPEC-0018-jetson-nano-whisper.md)
+Setup details: [scripts/setup-bridge.sh](https://github.com/kamir/m3c-tools-maintenance/blob/master/scripts/setup-bridge.sh) | Hardware planning: [SPEC-0018](https://github.com/kamir/m3c-tools-maintenance/blob/master/SPEC/SPEC-0018-jetson-nano-whisper.md)
 
 ---
 
