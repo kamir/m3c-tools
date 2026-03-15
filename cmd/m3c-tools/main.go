@@ -4040,7 +4040,7 @@ func menubarWhisperLanguage() string {
 }
 
 func menubarWhisperTimeout() time.Duration {
-	const defaultTimeout = 18000 * time.Second // 5 hours — large model on CPU needs time for long recordings
+	const defaultTimeout = 86400 * time.Second // 24 hours — large model on CPU needs time for long recordings
 
 	raw := strings.TrimSpace(os.Getenv("M3C_WHISPER_TIMEOUT"))
 	if raw == "" {
