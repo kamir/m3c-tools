@@ -78,23 +78,35 @@ This builds the binary, creates `M3C-Tools.app`, installs both to `/usr/local/bi
 
 ### 3. Configure
 
+**Guided setup (recommended):**
+
+```bash
+m3c-tools setup
+```
+
+The wizard walks you through:
+1. ER1 server URL (defaults to `https://onboarding.guide/upload_2`)
+2. Browser login — opens Chrome, captures your User ID automatically
+3. API key — you'll need an ER1 API key (get one from your ER1 admin)
+4. Default tags for Plaud sync
+
+This writes `~/.m3c-tools.env` with all required settings.
+
+**Manual setup** (if you prefer):
+
 ```bash
 cp .env.example ~/.m3c-tools.env
 ```
 
-Edit `~/.m3c-tools.env` — the three required settings for ER1 upload:
+Edit `~/.m3c-tools.env`:
 
 ```
-ER1_API_URL=https://your-er1-server:8081/upload_2
+ER1_API_URL=https://onboarding.guide/upload_2
 ER1_API_KEY=your-api-key
 ER1_CONTEXT_ID=your-context-id
 ```
 
-**No local ER1 server?** Use the public instance for testing:
-
-```
-ER1_API_URL=https://onboarding.guide/upload_2
-```
+> **Note:** An API key is required for uploads. The browser login flow captures your User ID (context), but all API calls (upload, project list) authenticate via `X-API-KEY` header. You cannot use Google login alone — ask your ER1 admin for an API key.
 
 ### 4. Launch
 
@@ -272,19 +284,61 @@ go test -v -count=1 ./e2e/ -run TestTranscriptFetch
 
 ---
 
+## Cross-Platform CLI (Windows, Linux, Jetson)
+
+On non-macOS platforms, m3c-tools runs in CLI-only mode (no menu bar GUI):
+
+```bash
+m3c-tools setup                  # Interactive onboarding wizard
+m3c-tools plaud auth login       # Authenticate with Plaud (auto-launches Chrome)
+m3c-tools plaud list             # List all Plaud recordings
+m3c-tools plaud sync all         # Sync all recordings to ER1
+m3c-tools transcript <video_id>  # Fetch YouTube transcript
+m3c-tools check-er1              # Verify ER1 connectivity
+```
+
+### Plaud auth on Windows/Linux
+
+`plaud auth login` auto-launches Chrome (or Edge) with remote debugging, opens `app.plaud.ai`, and extracts the auth token after you log in. No manual Chrome flags needed.
+
+### Context Processor Bridge
+
+An iMac, Linux box, or Jetson can serve as a dedicated batch processing node:
+
+```bash
+# Batch-transcribe a folder of audio files
+m3c-tools import-audio ~/m3c-inbox/ --run
+
+# Retry failed uploads
+m3c-tools import-audio retry
+
+# Sync all Plaud recordings to ER1
+m3c-tools plaud sync all
+```
+
+Setup scripts are in [m3c-tools-maintenance/scripts/](https://github.com/kamir/m3c-tools-maintenance/tree/master/scripts):
+- `setup-bridge-imac.sh` — iMac 32GB as CPU transcription bridge
+- Hardware planning: see [SPEC-0018](https://github.com/kamir/m3c-tools-maintenance/blob/master/SPEC/SPEC-0018-jetson-nano-whisper.md)
+
+---
+
 ## Architecture
 
 ```
 cmd/m3c-tools/       CLI + menu bar app entry point
+  main.go            macOS: full GUI + CLI
+  main_other.go      Windows/Linux: CLI only
 pkg/transcript/      YouTube InnerTube API client (pure Go, no API key)
-pkg/er1/             ER1 upload client + retry queue
+pkg/er1/             ER1 upload client + retry queue + health check
 pkg/impression/      Composite document builder + tag system
-pkg/whisper/         Whisper CLI subprocess wrapper
-pkg/recorder/        PortAudio microphone recording (cgo)
+pkg/whisper/         Whisper CLI subprocess wrapper (heartbeat, progress)
+pkg/recorder/        PortAudio microphone recording (cgo, macOS only)
 pkg/screenshot/      macOS screenshot capture + clipboard detection
 pkg/menubar/         Native Cocoa UI via cgo (NSWindow, NSTabView, etc.)
 pkg/importer/        Batch audio import pipeline
 pkg/tracking/        SQLite tracking database
+pkg/plaud/           Plaud.ai client + Chrome CDP auth
+pkg/timetracking/    Project time tracking + Gantt chart
 ```
 
 ## Documentation
