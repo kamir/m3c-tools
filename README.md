@@ -298,9 +298,9 @@ m3c-tools transcript <video_id>  # Fetch YouTube transcript
 m3c-tools check-er1              # Verify ER1 connectivity
 ```
 
-### Plaud auth on Windows/Linux
+### Plaud auth (all platforms)
 
-`plaud auth login` auto-launches Chrome (or Edge) with remote debugging, opens `app.plaud.ai`, and extracts the auth token after you log in. No manual Chrome flags needed.
+`plaud auth login` works on macOS, Windows, and Linux. It auto-launches Chrome (or Edge) with remote debugging, opens `app.plaud.ai`, and extracts the auth token after you log in. No manual Chrome flags needed. On macOS, it can also extract the token directly from a running Chrome via AppleScript (no debug port needed).
 
 ### Context Processor Bridge (macOS / Ubuntu only)
 
