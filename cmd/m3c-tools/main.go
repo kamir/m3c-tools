@@ -34,6 +34,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"runtime/debug"
 	"strconv"
@@ -315,6 +316,16 @@ func clearPersistedER1Session() error {
 	return nil
 }
 
+// FIX-18: Validate YouTube video IDs at CLI entry to prevent path traversal and injection.
+var videoIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{11}$`)
+
+func validateVideoID(id string) error {
+	if !videoIDPattern.MatchString(id) {
+		return fmt.Errorf("invalid video ID: %q (must be exactly 11 alphanumeric/dash/underscore chars)", id)
+	}
+	return nil
+}
+
 // -- transcript command --
 
 func cmdTranscript(args []string) {
@@ -323,6 +334,10 @@ func cmdTranscript(args []string) {
 		os.Exit(1)
 	}
 	videoID := args[0]
+	if err := validateVideoID(videoID); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
 	lang := "en"
 	format := "text"
 	translateLang := ""
@@ -446,6 +461,10 @@ func cmdUpload(args []string) {
 		os.Exit(1)
 	}
 	videoID := args[0]
+	if err := validateVideoID(videoID); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
 	audioPath := ""
 	impressionText := ""
 
@@ -605,6 +624,10 @@ func cmdThumbnail(args []string) {
 		os.Exit(1)
 	}
 	videoID := args[0]
+	if err := validateVideoID(videoID); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
 	output := videoID + "_thumbnail.jpg"
 
 	for i := 1; i < len(args); i++ {
@@ -620,7 +643,7 @@ func cmdThumbnail(args []string) {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-	os.WriteFile(output, data, 0644)
+	os.WriteFile(output, data, 0600)
 	fmt.Printf("Saved %s (%d bytes)\n", output, len(data))
 }
 
@@ -985,7 +1008,7 @@ func cmdRetry(args []string) {
 
 func defaultExportsDBPath() string {
 	dir := filepath.Join(os.Getenv("HOME"), ".m3c-tools")
-	os.MkdirAll(dir, 0755)
+	os.MkdirAll(dir, 0700)
 	return filepath.Join(dir, "exports.db")
 }
 
@@ -1652,7 +1675,7 @@ func reprocessAudioFile(srcPath, dbPath string, app *menubar.App, onProgress fun
 	if err != nil {
 		return fmt.Errorf("resolve dest: %w", err)
 	}
-	if err := os.MkdirAll(destDir, 0755); err != nil {
+	if err := os.MkdirAll(destDir, 0700); err != nil {
 		return fmt.Errorf("create dest dir: %w", err)
 	}
 
@@ -1670,7 +1693,7 @@ func reprocessAudioFile(srcPath, dbPath string, app *menubar.App, onProgress fun
 			return fmt.Errorf("could not create unique MEMORY folder")
 		}
 	}
-	if err := os.MkdirAll(memoryPath, 0755); err != nil {
+	if err := os.MkdirAll(memoryPath, 0700); err != nil {
 		return fmt.Errorf("create memory folder: %w", err)
 	}
 
@@ -1990,7 +2013,7 @@ func cmdImportReset(args []string) {
 
 func defaultFilesDBPath() string {
 	dir := filepath.Join(os.Getenv("HOME"), ".m3c-tools")
-	os.MkdirAll(dir, 0755)
+	os.MkdirAll(dir, 0700)
 	return filepath.Join(dir, "tracking.db")
 }
 
@@ -3572,7 +3595,7 @@ func observationRecordAndUpload(app *menubar.App, label string, imgPath string, 
 
 		// Write WAV to temp file for whisper
 		wavPath := filepath.Join(os.TempDir(), fmt.Sprintf("m3c-%s-%d.wav", label, time.Now().UnixNano()))
-		if err := os.WriteFile(wavPath, uploadAudioData, 0644); err != nil {
+		if err := os.WriteFile(wavPath, uploadAudioData, 0600); err != nil {
 			log.Printf("[%s] write WAV failed: %v", label, err)
 			menubar.SetReviewTranscript("Could not save audio for transcription.", "Error")
 			return
@@ -4489,26 +4512,26 @@ func savePlaudLocally(recID string, rec *plaud.Recording, audioData []byte, audi
 		return fmt.Errorf("get home dir: %w", err)
 	}
 	dir := filepath.Join(home, "plaud-sync", recID)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("create dir: %w", err)
 	}
 
 	// Save audio.
 	audioPath := filepath.Join(dir, fmt.Sprintf("audio.%s", audioFmt))
-	if err := os.WriteFile(audioPath, audioData, 0644); err != nil {
+	if err := os.WriteFile(audioPath, audioData, 0600); err != nil {
 		return fmt.Errorf("write audio: %w", err)
 	}
 
 	// Save composite document.
 	docPath := filepath.Join(dir, "fieldnote.txt")
-	if err := os.WriteFile(docPath, []byte(compositeDoc), 0644); err != nil {
+	if err := os.WriteFile(docPath, []byte(compositeDoc), 0600); err != nil {
 		return fmt.Errorf("write doc: %w", err)
 	}
 
 	// Save raw transcript.
 	if transcriptText != "" {
 		txPath := filepath.Join(dir, "transcript.txt")
-		if err := os.WriteFile(txPath, []byte(transcriptText), 0644); err != nil {
+		if err := os.WriteFile(txPath, []byte(transcriptText), 0600); err != nil {
 			return fmt.Errorf("write transcript: %w", err)
 		}
 	}
@@ -4527,7 +4550,7 @@ func savePlaudLocally(recID string, rec *plaud.Recording, audioData []byte, audi
 	}
 	metaJSON, _ := json.MarshalIndent(meta, "", "  ")
 	metaPath := filepath.Join(dir, "metadata.json")
-	if err := os.WriteFile(metaPath, metaJSON, 0644); err != nil {
+	if err := os.WriteFile(metaPath, metaJSON, 0600); err != nil {
 		return fmt.Errorf("write metadata: %w", err)
 	}
 

@@ -153,7 +153,7 @@ func SaveDraft(data *CaptureData) (string, error) {
 	ts := data.Timestamp.Format("20060102_150405")
 	draftDir := filepath.Join(home, ".m3c-tools", "drafts", ts)
 
-	if err := os.MkdirAll(draftDir, 0755); err != nil {
+	if err := os.MkdirAll(draftDir, 0700); err != nil { // FIX-17: restrictive perms for user data
 		return "", fmt.Errorf("create draft dir: %w", err)
 	}
 
@@ -163,7 +163,7 @@ func SaveDraft(data *CaptureData) (string, error) {
 	doc := buildCompositeDoc(data)
 	composite := doc.Build()
 	transcriptPath := filepath.Join(draftDir, fmt.Sprintf("%s_transcript.txt", prefix))
-	if err := os.WriteFile(transcriptPath, []byte(composite), 0644); err != nil {
+	if err := os.WriteFile(transcriptPath, []byte(composite), 0600); err != nil {
 		return draftDir, fmt.Errorf("write transcript: %w", err)
 	}
 
@@ -171,7 +171,7 @@ func SaveDraft(data *CaptureData) (string, error) {
 	if len(data.ImageData) > 0 {
 		imgName := imageFilename(data, prefix, ts)
 		imgPath := filepath.Join(draftDir, imgName)
-		if err := os.WriteFile(imgPath, data.ImageData, 0644); err != nil {
+		if err := os.WriteFile(imgPath, data.ImageData, 0600); err != nil {
 			return draftDir, fmt.Errorf("write image: %w", err)
 		}
 	}
@@ -179,7 +179,7 @@ func SaveDraft(data *CaptureData) (string, error) {
 	// Save audio if present.
 	if len(data.AudioData) > 0 {
 		audioPath := filepath.Join(draftDir, fmt.Sprintf("%s_audio.wav", prefix))
-		if err := os.WriteFile(audioPath, data.AudioData, 0644); err != nil {
+		if err := os.WriteFile(audioPath, data.AudioData, 0600); err != nil {
 			return draftDir, fmt.Errorf("write audio: %w", err)
 		}
 	}
@@ -198,7 +198,7 @@ func SaveDraft(data *CaptureData) (string, error) {
 		return draftDir, fmt.Errorf("marshal metadata: %w", err)
 	}
 	metaPath := filepath.Join(draftDir, "draft.json")
-	if err := os.WriteFile(metaPath, metaJSON, 0644); err != nil {
+	if err := os.WriteFile(metaPath, metaJSON, 0600); err != nil {
 		return draftDir, fmt.Errorf("write metadata: %w", err)
 	}
 

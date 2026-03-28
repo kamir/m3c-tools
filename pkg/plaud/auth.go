@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -14,13 +15,26 @@ import (
 	"time"
 )
 
+// DefaultMaxTokenAge is the default maximum age before a token triggers a warning.
+// FIX-14: Tokens older than this prompt re-authentication.
+const DefaultMaxTokenAge = 7 * 24 * time.Hour
+
 // TokenSession holds the Plaud API authentication token.
 type TokenSession struct {
 	Token   string    `json:"token"`
 	SavedAt time.Time `json:"saved_at"`
 }
 
+// IsExpired returns true if the token is older than maxAge.
+func (s *TokenSession) IsExpired(maxAge time.Duration) bool {
+	if s.SavedAt.IsZero() {
+		return true // No saved timestamp — treat as expired
+	}
+	return time.Since(s.SavedAt) > maxAge
+}
+
 // LoadToken reads a token session from a JSON file.
+// FIX-14: Warns if token is older than DefaultMaxTokenAge.
 func LoadToken(path string) (*TokenSession, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -32,6 +46,10 @@ func LoadToken(path string) (*TokenSession, error) {
 	}
 	if s.Token == "" {
 		return nil, fmt.Errorf("plaud: token file is empty")
+	}
+	if s.IsExpired(DefaultMaxTokenAge) {
+		age := time.Since(s.SavedAt).Round(time.Hour)
+		log.Printf("[SECURITY WARNING] plaud token is %s old (saved %s) — consider re-running 'plaud auth login'", age, s.SavedAt.Format(time.RFC3339))
 	}
 	return &s, nil
 }
@@ -99,7 +117,11 @@ func extractTokenWithAutoLaunch() (string, error) {
 
 	// Launch Chrome with debug port. Use a separate user-data-dir to avoid
 	// conflicts with an already-running Chrome instance.
-	debugDir := filepath.Join(os.TempDir(), "m3c-tools-chrome-debug")
+	// FIX-13: Use unpredictable temp dir to prevent symlink attacks on shared systems
+	debugDir, err := os.MkdirTemp("", "m3c-chrome-debug-*")
+	if err != nil {
+		return "", fmt.Errorf("create temp dir: %w", err)
+	}
 	defer os.RemoveAll(debugDir) // Clean up debug profile after use (contains cookies, localStorage)
 	cmd := exec.Command(chromePath,
 		"--remote-debugging-port=9222",

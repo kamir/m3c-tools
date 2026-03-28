@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -18,6 +19,17 @@ var (
 	ErrNotFound     = errors.New("plaud: not found (404)")
 	ErrRateLimited  = errors.New("plaud: rate limited (429)")
 )
+
+// isAllowedPlaudDomain validates that a redirect URL points to a *.plaud.ai domain.
+// FIX-12: Prevents SSRF via malicious region redirect responses.
+func isAllowedPlaudDomain(rawURL string) bool {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	host := parsed.Hostname()
+	return host == "plaud.ai" || strings.HasSuffix(host, ".plaud.ai")
+}
 
 // Client communicates with the Plaud cloud API.
 type Client struct {
@@ -383,6 +395,10 @@ func (c *Client) get(path string) ([]byte, error) {
 	}
 	if json.Unmarshal(body, &regionResp) == nil && regionResp.Status == -302 && regionResp.Data.Domains.API != "" {
 		newBase := regionResp.Data.Domains.API
+		// FIX-12: Validate redirect domain to prevent SSRF / token exfiltration
+		if !isAllowedPlaudDomain(newBase) {
+			return nil, fmt.Errorf("plaud: region redirect to untrusted domain: %s", newBase)
+		}
 		log.Printf("[plaud] region redirect: %s -> %s", c.cfg.APIURL, newBase)
 		c.cfg.APIURL = newBase
 		return c.doGet(newBase + path)

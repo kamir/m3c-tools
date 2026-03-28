@@ -562,18 +562,18 @@ func savePlaudLocally(recID string, rec *plaud.Recording, audioData []byte, audi
 		return fmt.Errorf("get home dir: %w", err)
 	}
 	dir := filepath.Join(home, "plaud-sync", recID)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0700); err != nil { // FIX-17: restrictive perms for user data
 		return fmt.Errorf("create dir: %w", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("audio.%s", audioFmt)), audioData, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("audio.%s", audioFmt)), audioData, 0600); err != nil {
 		return fmt.Errorf("write audio: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "fieldnote.txt"), []byte(compositeDoc), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "fieldnote.txt"), []byte(compositeDoc), 0600); err != nil {
 		return fmt.Errorf("write doc: %w", err)
 	}
 	if transcriptText != "" {
-		if err := os.WriteFile(filepath.Join(dir, "transcript.txt"), []byte(transcriptText), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, "transcript.txt"), []byte(transcriptText), 0600); err != nil {
 			return fmt.Errorf("write transcript: %w", err)
 		}
 	}
@@ -589,7 +589,7 @@ func savePlaudLocally(recID string, rec *plaud.Recording, audioData []byte, audi
 		"audio_size":   len(audioData),
 	}
 	metaJSON, _ := json.MarshalIndent(meta, "", "  ")
-	return os.WriteFile(filepath.Join(dir, "metadata.json"), metaJSON, 0644)
+	return os.WriteFile(filepath.Join(dir, "metadata.json"), metaJSON, 0600)
 }
 
 func defaultFilesDBPath() string {

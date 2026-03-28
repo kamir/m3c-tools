@@ -77,7 +77,7 @@ type FilesDB struct {
 // and ensures the processed_files table exists.
 func OpenFilesDB(dbPath string) (*FilesDB, error) {
 	dir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0700); err != nil { // FIX-17: restrictive perms
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
 
