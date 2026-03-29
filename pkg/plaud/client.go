@@ -9,9 +9,20 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 )
+
+// validRecordingID validates a Plaud recording ID to prevent path traversal (FIX C-H03).
+var validRecordingID = regexp.MustCompile(`^[a-zA-Z0-9_-]{8,64}$`)
+
+func validateRecordingID(id string) error {
+	if !validRecordingID.MatchString(id) {
+		return fmt.Errorf("invalid recording ID: %q", id)
+	}
+	return nil
+}
 
 // Sentinel errors for Plaud API responses.
 var (
@@ -151,6 +162,9 @@ type detailResponse struct {
 
 // GetRecording fetches a single recording by ID from the detail endpoint.
 func (c *Client) GetRecording(id string) (*Recording, error) {
+	if err := validateRecordingID(id); err != nil {
+		return nil, err
+	}
 	body, err := c.get("/file/detail/" + id)
 	if err != nil {
 		return nil, fmt.Errorf("get recording %s: %w", id, err)
@@ -192,6 +206,9 @@ func (c *Client) GetRecording(id string) (*Recording, error) {
 // DownloadAudio downloads the audio bytes for a recording.
 // Uses the /file/download/<id> endpoint which returns raw OGG audio.
 func (c *Client) DownloadAudio(id string) ([]byte, string, error) {
+	if err := validateRecordingID(id); err != nil {
+		return nil, "", err
+	}
 	body, err := c.get("/file/download/" + id)
 	if err != nil {
 		return nil, "", fmt.Errorf("download audio %s: %w", id, err)
@@ -203,6 +220,9 @@ func (c *Client) DownloadAudio(id string) ([]byte, string, error) {
 // GetTranscript fetches the transcript for a recording from its detail endpoint.
 // The transcript is stored as a gzipped JSON file on S3, referenced in content_list.
 func (c *Client) GetTranscript(id string) (*Transcript, error) {
+	if err := validateRecordingID(id); err != nil {
+		return nil, err
+	}
 	body, err := c.get("/file/detail/" + id)
 	if err != nil {
 		return nil, fmt.Errorf("get transcript %s: %w", id, err)
@@ -261,9 +281,38 @@ func (c *Client) GetTranscript(id string) (*Transcript, error) {
 	return result, nil
 }
 
+// allowedS3Hosts are the expected CDN/S3 domains for Plaud recordings.
+// FIX C-M03: Validate URL domain to prevent SSRF via malicious API response.
+var allowedS3Hosts = map[string]bool{
+	"s3.amazonaws.com":           true,
+	"s3.us-east-1.amazonaws.com": true,
+	"s3.us-west-2.amazonaws.com": true,
+	"s3.ap-east-1.amazonaws.com": true,
+	"d2mzb0q2lbfnv7.cloudfront.net": true,
+}
+
+func isAllowedS3URL(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") {
+		return false
+	}
+	host := u.Hostname()
+	if allowedS3Hosts[host] {
+		return true
+	}
+	// Allow any *.s3.amazonaws.com or *.s3.*.amazonaws.com pattern
+	if strings.HasSuffix(host, ".amazonaws.com") || strings.HasSuffix(host, ".cloudfront.net") {
+		return true
+	}
+	return false
+}
+
 // fetchS3Content downloads and decompresses a gzipped JSON file from a signed S3 URL.
-func (c *Client) fetchS3Content(url string) ([]byte, error) {
-	req, err := http.NewRequest("GET", url, nil)
+func (c *Client) fetchS3Content(rawURL string) ([]byte, error) {
+	if !isAllowedS3URL(rawURL) {
+		return nil, fmt.Errorf("S3 URL domain not in allowlist: %s", rawURL)
+	}
+	req, err := http.NewRequest("GET", rawURL, nil)
 	if err != nil {
 		return nil, err
 	}

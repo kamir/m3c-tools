@@ -49,7 +49,8 @@ func LoadToken(path string) (*TokenSession, error) {
 	}
 	if s.IsExpired(DefaultMaxTokenAge) {
 		age := time.Since(s.SavedAt).Round(time.Hour)
-		log.Printf("[SECURITY WARNING] plaud token is %s old (saved %s) — consider re-running 'plaud auth login'", age, s.SavedAt.Format(time.RFC3339))
+		// FIX C-H02: Refuse expired tokens instead of just warning.
+		return nil, fmt.Errorf("plaud: token expired (%s old, saved %s) — run 'plaud auth login' to re-authenticate", age, s.SavedAt.Format(time.RFC3339))
 	}
 	return &s, nil
 }

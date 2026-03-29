@@ -181,7 +181,15 @@ func captureER1ContextID(reader *bufio.Reader, er1URL string) string {
 	}
 
 	// Launch Chrome with debug port.
-	debugDir := filepath.Join(os.TempDir(), "m3c-tools-er1-setup")
+	// FIX C-H01: Use random temp dir instead of predictable path to prevent symlink attacks.
+	debugDir, err := os.MkdirTemp("", "m3c-tools-er1-setup-*")
+	if err != nil {
+		fmt.Printf("  Could not create temp dir: %v\n", err)
+		fmt.Print("  Enter your User ID manually: ")
+		line, _ := reader.ReadString('\n')
+		return strings.TrimSpace(line)
+	}
+	defer os.RemoveAll(debugDir)
 	cmd := cmdExec(chromePath,
 		"--remote-debugging-port=9222",
 		"--user-data-dir="+debugDir,

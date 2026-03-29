@@ -389,6 +389,10 @@ func cmdTranscript(args []string) {
 
 	var api *transcript.API
 	if proxyURL != "" {
+		// FIX C-M02: Support env var to avoid exposing credentials in process list.
+		if proxyAuth == "" {
+			proxyAuth = os.Getenv("M3C_PROXY_AUTH")
+		}
 		proxyCfg := &transcript.GenericProxyConfig{
 			ProxyURL:  proxyURL,
 			ProxyAuth: proxyAuth,
