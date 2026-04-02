@@ -31,7 +31,7 @@ func healthCheckER1(apiURL, verifySSLStr string) error {
 		}
 	}
 
-	req, err := http.NewRequest("GET", baseURL+"/api/plm/projects", nil)
+	req, err := http.NewRequest("GET", baseURL+"/health", nil) // BUG-0086: was /api/plm/projects (requires auth)
 	if err != nil {
 		return fmt.Errorf("health check: %w", err)
 	}

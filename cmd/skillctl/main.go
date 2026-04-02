@@ -927,6 +927,7 @@ func truncate(s string, n int) string {
 func cmdImport(args []string) {
 	target := ""
 	apiKey := ""
+	userID := "" // BUG-0084: Required for aims-core auth
 	input := ""
 	var paths []string
 	recursive := false
@@ -944,6 +945,11 @@ func cmdImport(args []string) {
 			if i+1 < len(args) {
 				i++
 				apiKey = args[i]
+			}
+		case "--user-id":
+			if i+1 < len(args) {
+				i++
+				userID = args[i]
 			}
 		case "--input":
 			if i+1 < len(args) {
@@ -986,6 +992,11 @@ func cmdImport(args []string) {
 		apiKey = readAPIKeyFromSession()
 	}
 
+	// BUG-0084: Resolve user ID: flag > env var.
+	if userID == "" {
+		userID = os.Getenv("ER1_CONTEXT_ID")
+	}
+
 	// Load inventory from --input or run live scan.
 	var inv *model.Inventory
 	var err error
@@ -1019,7 +1030,7 @@ func cmdImport(args []string) {
 	}
 
 	// Create API client.
-	client, err := importer.NewClient(target, apiKey)
+	client, err := importer.NewClient(target, apiKey, userID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

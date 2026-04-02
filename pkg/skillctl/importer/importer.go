@@ -21,6 +21,7 @@ import (
 type Client struct {
 	BaseURL    string
 	APIKey     string
+	UserID     string // BUG-0084: Required by aims-core auth (X-User-ID header)
 	HTTPClient *http.Client
 }
 
@@ -34,7 +35,8 @@ type ImportResponse struct {
 
 // NewClient creates a Client with a 30-second timeout.
 // It validates that baseURL is a well-formed HTTP(S) URL.
-func NewClient(baseURL, apiKey string) (*Client, error) {
+// BUG-0084: userID is required for aims-core auth (X-User-ID header).
+func NewClient(baseURL, apiKey, userID string) (*Client, error) {
 	u, err := url.Parse(baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid target URL: %w", err)
@@ -52,20 +54,24 @@ func NewClient(baseURL, apiKey string) (*Client, error) {
 	return &Client{
 		BaseURL: baseURL,
 		APIKey:  apiKey,
+		UserID:  userID,
 		HTTPClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
 	}, nil
 }
 
-// HealthCheck verifies connectivity by calling GET /api/health on the target.
+// HealthCheck verifies connectivity by calling GET /health on the target.
 func (c *Client) HealthCheck() error {
-	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/api/health", nil)
+	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/health", nil) // BUG-0085: was /api/health (404)
 	if err != nil {
 		return fmt.Errorf("creating health check request: %w", err)
 	}
 	if c.APIKey != "" {
 		req.Header.Set("X-API-KEY", c.APIKey)
+	}
+	if c.UserID != "" {
+		req.Header.Set("X-User-ID", c.UserID) // BUG-0084
 	}
 
 	resp, err := c.HTTPClient.Do(req)
@@ -103,6 +109,9 @@ func (c *Client) Import(inv *model.Inventory) (*ImportResponse, error) {
 	req.Header.Set("Content-Type", "application/json")
 	if c.APIKey != "" {
 		req.Header.Set("X-API-KEY", c.APIKey)
+	}
+	if c.UserID != "" {
+		req.Header.Set("X-User-ID", c.UserID) // BUG-0084
 	}
 
 	resp, err := c.HTTPClient.Do(req)
