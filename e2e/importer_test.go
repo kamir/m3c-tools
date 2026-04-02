@@ -279,10 +279,11 @@ func TestImporterExtensionCoverage(t *testing.T) {
 }
 
 func TestImporterCLIExtensions(t *testing.T) {
-	binPath := filepath.Join("..", "build", "m3c-tools")
+	binPath, _ := filepath.Abs(filepath.Join("..", "build", "m3c-tools"))
 	if _, err := os.Stat(binPath); err != nil {
+		repoRoot, _ := filepath.Abs("..")
 		cmd := exec.Command("go", "build", "-o", binPath, "./cmd/m3c-tools/")
-		cmd.Dir = filepath.Join("..")
+		cmd.Dir = repoRoot
 		if buildErr := cmd.Run(); buildErr != nil {
 			t.Skipf("cannot build binary: %v", buildErr)
 		}
@@ -318,10 +319,11 @@ func TestImporterCLIScanDir(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	binPath := filepath.Join("..", "build", "m3c-tools")
+	binPath, _ := filepath.Abs(filepath.Join("..", "build", "m3c-tools"))
 	if _, err := os.Stat(binPath); err != nil {
+		repoRoot, _ := filepath.Abs("..")
 		cmd := exec.Command("go", "build", "-o", binPath, "./cmd/m3c-tools/")
-		cmd.Dir = filepath.Join("..")
+		cmd.Dir = repoRoot
 		if buildErr := cmd.Run(); buildErr != nil {
 			t.Skipf("cannot build binary: %v", buildErr)
 		}
@@ -356,10 +358,11 @@ func TestImporterCLIScanDir(t *testing.T) {
 func TestImporterCLIEmptyDir(t *testing.T) {
 	root := t.TempDir()
 
-	binPath := filepath.Join("..", "build", "m3c-tools")
+	binPath, _ := filepath.Abs(filepath.Join("..", "build", "m3c-tools"))
 	if _, err := os.Stat(binPath); err != nil {
+		repoRoot, _ := filepath.Abs("..")
 		cmd := exec.Command("go", "build", "-o", binPath, "./cmd/m3c-tools/")
-		cmd.Dir = filepath.Join("..")
+		cmd.Dir = repoRoot
 		if buildErr := cmd.Run(); buildErr != nil {
 			t.Skipf("cannot build binary: %v", buildErr)
 		}
@@ -376,10 +379,11 @@ func TestImporterCLIEmptyDir(t *testing.T) {
 }
 
 func TestImporterCLINonexistentDir(t *testing.T) {
-	binPath := filepath.Join("..", "build", "m3c-tools")
+	binPath, _ := filepath.Abs(filepath.Join("..", "build", "m3c-tools"))
 	if _, err := os.Stat(binPath); err != nil {
+		repoRoot, _ := filepath.Abs("..")
 		cmd := exec.Command("go", "build", "-o", binPath, "./cmd/m3c-tools/")
-		cmd.Dir = filepath.Join("..")
+		cmd.Dir = repoRoot
 		if buildErr := cmd.Run(); buildErr != nil {
 			t.Skipf("cannot build binary: %v", buildErr)
 		}
@@ -396,10 +400,11 @@ func TestImporterCLINonexistentDir(t *testing.T) {
 }
 
 func TestImporterCLINoArgs(t *testing.T) {
-	binPath := filepath.Join("..", "build", "m3c-tools")
+	binPath, _ := filepath.Abs(filepath.Join("..", "build", "m3c-tools"))
 	if _, err := os.Stat(binPath); err != nil {
+		repoRoot, _ := filepath.Abs("..")
 		cmd := exec.Command("go", "build", "-o", binPath, "./cmd/m3c-tools/")
-		cmd.Dir = filepath.Join("..")
+		cmd.Dir = repoRoot
 		if buildErr := cmd.Run(); buildErr != nil {
 			t.Skipf("cannot build binary: %v", buildErr)
 		}
