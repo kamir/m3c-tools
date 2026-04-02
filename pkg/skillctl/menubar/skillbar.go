@@ -1,4 +1,4 @@
-//go:build darwin
+//go:build darwin && cgo
 
 // Package menubar provides a macOS menu bar application for monitoring
 // the Claude Code skill inventory. It runs periodic scans, computes
@@ -518,14 +518,14 @@ func (sb *SkillBar) handleReviewPage(w http.ResponseWriter, r *http.Request) {
 	buf.WriteString("<h1>\u26A1 Skill Monitor - Review Changes</h1>\n")
 
 	if inv != nil {
-		buf.WriteString(fmt.Sprintf("<p class=\"meta\">Last scan: %s | Total skills: %d</p>\n",
-			scanTime.Format("2006-01-02 15:04:05"), inv.TotalCount))
+		fmt.Fprintf(&buf, "<p class=\"meta\">Last scan: %s | Total skills: %d</p>\n",
+			scanTime.Format("2006-01-02 15:04:05"), inv.TotalCount)
 	}
 
 	if pendingDelta == nil {
 		buf.WriteString("<p>No changes detected.</p>\n")
 	} else {
-		buf.WriteString(fmt.Sprintf("<h2>Summary: %d changes</h2>\n", pendingDelta.Summary.Total))
+		fmt.Fprintf(&buf, "<h2>Summary: %d changes</h2>\n", pendingDelta.Summary.Total)
 
 		// Group entries by delta type for display.
 		var added, removed, modified []delta.DeltaEntry
@@ -543,8 +543,8 @@ func (sb *SkillBar) handleReviewPage(w http.ResponseWriter, r *http.Request) {
 		if len(added) > 0 {
 			buf.WriteString("<h2 class=\"added\">Added Skills</h2>\n<table><tr><th>ID</th><th>Name</th><th>Path</th></tr>\n")
 			for _, e := range added {
-				buf.WriteString(fmt.Sprintf("<tr><td><span class=\"badge badge-add\">%s</span></td><td>%s</td><td>%s</td></tr>\n",
-					e.SkillID, e.SkillName, e.CurrentPath))
+				fmt.Fprintf(&buf, "<tr><td><span class=\"badge badge-add\">%s</span></td><td>%s</td><td>%s</td></tr>\n",
+					e.SkillID, e.SkillName, e.CurrentPath)
 			}
 			buf.WriteString("</table>\n")
 		}

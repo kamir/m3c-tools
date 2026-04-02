@@ -190,9 +190,9 @@ func (pm *ProfileManager) CreateProfile(name, description string, vars map[strin
 	path := filepath.Join(pm.profilesDir(), name+".env")
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("# M3C Profile: %s\n", name))
-	b.WriteString(fmt.Sprintf("# Description: %s\n", description))
-	b.WriteString(fmt.Sprintf("# Created: %s\n", time.Now().Format("2006-01-02")))
+	fmt.Fprintf(&b, "# M3C Profile: %s\n", name)
+	fmt.Fprintf(&b, "# Description: %s\n", description)
+	fmt.Fprintf(&b, "# Created: %s\n", time.Now().Format("2006-01-02"))
 	b.WriteString("\n")
 
 	// Write vars in a stable order: known ER1 keys first, then any extras.

@@ -216,8 +216,8 @@ func GenerateUnifiedDiff(oldContent, newContent, oldLabel, newLabel string) stri
 	newLines := splitLines(newContent)
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("--- %s\n", oldLabel))
-	b.WriteString(fmt.Sprintf("+++ %s\n", newLabel))
+	fmt.Fprintf(&b, "--- %s\n", oldLabel)
+	fmt.Fprintf(&b, "+++ %s\n", newLabel)
 
 	// Use a simple LCS-based diff to produce +/- hunks.
 	lcs := computeLCS(oldLines, newLines)
@@ -227,19 +227,19 @@ func GenerateUnifiedDiff(oldContent, newContent, oldLabel, newLabel string) stri
 		if li < len(lcs) && oi < len(oldLines) && ni < len(newLines) &&
 			oldLines[oi] == lcs[li] && newLines[ni] == lcs[li] {
 			// Common line.
-			b.WriteString(fmt.Sprintf(" %s\n", oldLines[oi]))
+			fmt.Fprintf(&b, " %s\n", oldLines[oi])
 			oi++
 			ni++
 			li++
 		} else {
 			// Output removed lines from old until we hit the next LCS line.
 			for oi < len(oldLines) && (li >= len(lcs) || oldLines[oi] != lcs[li]) {
-				b.WriteString(fmt.Sprintf("-%s\n", oldLines[oi]))
+				fmt.Fprintf(&b, "-%s\n", oldLines[oi])
 				oi++
 			}
 			// Output added lines from new until we hit the next LCS line.
 			for ni < len(newLines) && (li >= len(lcs) || newLines[ni] != lcs[li]) {
-				b.WriteString(fmt.Sprintf("+%s\n", newLines[ni]))
+				fmt.Fprintf(&b, "+%s\n", newLines[ni])
 				ni++
 			}
 		}
@@ -305,14 +305,14 @@ func computeLCS(a, b []string) []string {
 // FormatSummary returns a human-readable summary string for a delta report.
 func FormatSummary(r *DeltaReport) string {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Delta Report  %s\n", r.ComputedAt))
-	b.WriteString(fmt.Sprintf("  Baseline: %s\n", r.BaselinePath))
-	b.WriteString(fmt.Sprintf("  Current:  %s\n", r.CurrentPath))
-	b.WriteString(fmt.Sprintf("  Changes:  %d total\n", r.Summary.Total))
-	b.WriteString(fmt.Sprintf("    Added:    %d\n", r.Summary.Added))
-	b.WriteString(fmt.Sprintf("    Modified: %d\n", r.Summary.Modified))
-	b.WriteString(fmt.Sprintf("    Removed:  %d\n", r.Summary.Removed))
-	b.WriteString(fmt.Sprintf("    Moved:    %d\n", r.Summary.Moved))
+	fmt.Fprintf(&b, "Delta Report  %s\n", r.ComputedAt)
+	fmt.Fprintf(&b, "  Baseline: %s\n", r.BaselinePath)
+	fmt.Fprintf(&b, "  Current:  %s\n", r.CurrentPath)
+	fmt.Fprintf(&b, "  Changes:  %d total\n", r.Summary.Total)
+	fmt.Fprintf(&b, "    Added:    %d\n", r.Summary.Added)
+	fmt.Fprintf(&b, "    Modified: %d\n", r.Summary.Modified)
+	fmt.Fprintf(&b, "    Removed:  %d\n", r.Summary.Removed)
+	fmt.Fprintf(&b, "    Moved:    %d\n", r.Summary.Moved)
 	return b.String()
 }
 

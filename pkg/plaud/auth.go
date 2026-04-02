@@ -106,10 +106,10 @@ func ExtractTokenFromChrome() (string, error) {
 func extractTokenWithAutoLaunch() (string, error) {
 	chromePath := findChrome()
 	if chromePath == "" {
-		return "", fmt.Errorf("Chrome not found.\n" +
+		return "", fmt.Errorf("chrome not found\n" +
 			"Please install Google Chrome, or start it manually with:\n" +
 			"  chrome --remote-debugging-port=9222\n" +
-			"Then run this command again.")
+			"Then run this command again")
 	}
 
 	fmt.Printf("Chrome found: %s\n", chromePath)
@@ -166,7 +166,7 @@ func extractTokenWithAutoLaunch() (string, error) {
 				"You can also try starting Chrome manually in PowerShell:\n" +
 				fmt.Sprintf("  & \"%s\" --remote-debugging-port=9222", chromePath)
 		}
-		return "", fmt.Errorf("Chrome started but CDP port 9222 is not responding.\n%s", hint)
+		return "", fmt.Errorf("chrome started but CDP port 9222 is not responding\n%s", hint)
 	}
 
 	// Prompt the user to confirm they've logged in.
@@ -189,8 +189,8 @@ func extractTokenWithAutoLaunch() (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("could not extract token after login: %w\n"+
-		"Make sure you are fully logged in to app.plaud.ai and the page has loaded.", lastErr)
+	return "", fmt.Errorf("could not extract token after login: %w — "+
+		"make sure you are fully logged in to app.plaud.ai and the page has loaded", lastErr)
 }
 
 // FindChrome locates the Chrome executable on the current platform.

@@ -30,6 +30,8 @@ var funcMap = template.FuncMap{
 // badgeClass returns a CSS class name for a skill type string.
 func badgeClass(t string) string {
 	switch {
+	case strings.Contains(t, "index"):
+		return "badge-index"
 	case strings.Contains(t, "skill"):
 		return "badge-skill"
 	case strings.Contains(t, "command"):
@@ -132,13 +134,13 @@ func formatDiffHTML(diff string) template.HTML {
 		}
 		switch {
 		case strings.HasPrefix(line, "---") || strings.HasPrefix(line, "+++"):
-			b.WriteString(fmt.Sprintf(`<span class="line-hdr">%s</span>`+"\n", template.HTMLEscapeString(line)))
+			fmt.Fprintf(&b, "<span class=\"line-hdr\">%s</span>\n", template.HTMLEscapeString(line))
 		case strings.HasPrefix(line, "+"):
-			b.WriteString(fmt.Sprintf(`<span class="line-add">%s</span>`+"\n", template.HTMLEscapeString(line)))
+			fmt.Fprintf(&b, "<span class=\"line-add\">%s</span>\n", template.HTMLEscapeString(line))
 		case strings.HasPrefix(line, "-"):
-			b.WriteString(fmt.Sprintf(`<span class="line-del">%s</span>`+"\n", template.HTMLEscapeString(line)))
+			fmt.Fprintf(&b, "<span class=\"line-del\">%s</span>\n", template.HTMLEscapeString(line))
 		default:
-			b.WriteString(fmt.Sprintf(`<span class="line-ctx">%s</span>`+"\n", template.HTMLEscapeString(line)))
+			fmt.Fprintf(&b, "<span class=\"line-ctx\">%s</span>\n", template.HTMLEscapeString(line))
 		}
 	}
 	return template.HTML(b.String())

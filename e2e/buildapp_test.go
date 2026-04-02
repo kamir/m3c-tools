@@ -11,6 +11,13 @@ import (
 // TestBuildAppBundle verifies that `make build-app` produces a valid macOS .app
 // bundle with the expected directory structure, Info.plist, executable, and icon.
 func TestBuildAppBundle(t *testing.T) {
+	// Skip in CI — requires ffmpeg and whisper which aren't installed.
+	for _, dep := range []string{"ffmpeg", "whisper"} {
+		if _, err := exec.LookPath(dep); err != nil {
+			t.Skipf("skipping: %s not found in PATH", dep)
+		}
+	}
+
 	// Find the repo root (where the Makefile lives)
 	repoRoot := findRepoRoot(t)
 	buildDir := t.TempDir()

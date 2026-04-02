@@ -1,4 +1,4 @@
-//go:build !darwin
+//go:build !darwin || !cgo
 
 // Package menubar provides a macOS menu bar application for monitoring
 // the Claude Code skill inventory.

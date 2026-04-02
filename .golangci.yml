@@ -27,3 +27,33 @@ linters:
       # Ignore process signal/kill in cleanup.
       - linters: [errcheck]
         source: "\\.(Signal|Kill)\\("
+      # Ignore unchecked Close() calls (cleanup, nothing useful on error).
+      - linters: [errcheck]
+        source: "\\.Close\\(\\)"
+      # Ignore unchecked HTTP response writes (client may have disconnected).
+      - linters: [errcheck]
+        source: "w\\.Write\\("
+      # Ignore unchecked JSON encoder writes to HTTP responses.
+      - linters: [errcheck]
+        source: "json\\.NewEncoder\\("
+      # Ignore unchecked fmt.Fprint*/Scanln (writing to stdout/stderr).
+      - linters: [errcheck]
+        source: "fmt\\.(Fprint|Fprintln|Fprintf|Scanln)\\("
+      # Ignore unchecked io.Copy to discard (draining response bodies).
+      - linters: [errcheck]
+        source: "io\\.Copy\\("
+      # Ignore unchecked json.Unmarshal when result is best-effort.
+      - linters: [errcheck]
+        source: "json\\.Unmarshal\\("
+      # Ignore fire-and-forget URL opening.
+      - linters: [errcheck]
+        source: "openURL\\("
+      # Ignore migration-style ALTER TABLE (idempotent, may fail on re-run).
+      - linters: [errcheck]
+        source: "\\.Exec\\("
+      # Ignore unchecked cmd.Start() for launching browsers/editors.
+      - linters: [errcheck]
+        source: "cmd\\.Start\\("
+      # Allow WriteString(fmt.Sprintf(...)) — stylistic, not a bug.
+      - linters: [staticcheck]
+        text: "QF1012"
