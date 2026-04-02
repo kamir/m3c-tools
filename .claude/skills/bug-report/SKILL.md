@@ -1,8 +1,11 @@
 ---
 name: bug-report
 description: Process field observations into structured bug reports. Use when the user shares logs, error messages, or behavior descriptions from testing m3c-tools.
-argument-hint: <paste logs, error output, or describe the observed behavior>
-allowed-tools: Read, Grep, Glob, Bash(ls *), Bash(cat *), Write, Edit, Agent
+argument-hint: "<paste logs, error output, or describe the observed behavior>"
+metadata:
+  version: 1.0.0
+  category: development
+  tags: [bug-report, triage, m3c-tools]
 ---
 
 # Bug Report from Field Observation

@@ -5,11 +5,23 @@ package browse
 type NodeKind string
 
 const (
-	NodeSkill    NodeKind = "skill"
-	NodeProject  NodeKind = "project"
-	NodeCategory NodeKind = "category"
-	NodeTag      NodeKind = "tag"
+	NodeSkill      NodeKind = "skill"
+	NodeAgent      NodeKind = "agent"
+	NodeSkillIndex NodeKind = "skill_index"
+	NodeCommand    NodeKind = "command"
+	NodeProject    NodeKind = "project"
+	NodeCategory   NodeKind = "category"
+	NodeTag        NodeKind = "tag"
 )
+
+// IsContentNode returns true for skill-like nodes (skills, agents, commands, skill indexes).
+func (k NodeKind) IsContentNode() bool {
+	switch k {
+	case NodeSkill, NodeAgent, NodeSkillIndex, NodeCommand:
+		return true
+	}
+	return false
+}
 
 // EdgeKind classifies relationships between nodes.
 type EdgeKind string
@@ -51,12 +63,15 @@ type Edge struct {
 
 // GraphStats provides summary metrics.
 type GraphStats struct {
-	TotalNodes    int `json:"total_nodes"`
-	SkillNodes    int `json:"skill_nodes"`
-	ProjectNodes  int `json:"project_nodes"`
-	CategoryNodes int `json:"category_nodes"`
-	TagNodes      int `json:"tag_nodes"`
-	TotalEdges    int `json:"total_edges"`
+	TotalNodes      int `json:"total_nodes"`
+	SkillNodes      int `json:"skill_nodes"`
+	AgentNodes      int `json:"agent_nodes"`
+	SkillIndexNodes int `json:"skill_index_nodes"`
+	CommandNodes    int `json:"command_nodes"`
+	ProjectNodes    int `json:"project_nodes"`
+	CategoryNodes   int `json:"category_nodes"`
+	TagNodes        int `json:"tag_nodes"`
+	TotalEdges      int `json:"total_edges"`
 }
 
 // SkillGraph is the complete graph sent to the frontend.

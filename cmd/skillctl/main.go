@@ -10,20 +10,33 @@
 //	skillctl seal --list
 //	skillctl seal --latest
 //	skillctl seal --status
+//	skillctl consolidate [--input <file>] [--path <dir>] [--recursive] [--include-home] [--report-only] [--fix] [--output text|md|json] [--out <file>]
 //	skillctl import --target <url> --api-key <key>
+//	skillctl sync-usage [--target <url>] [--api-key <key>]
 //	skillctl audit <skill-id>
 //	skillctl version
 //	skillctl help
 package main
 
 import (
+	"bytes"
+	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/user"
+	"path/filepath"
+	"strings"
+	"time"
 
+	"github.com/kamir/m3c-tools/internal/dbdriver"
 	"github.com/kamir/m3c-tools/pkg/skillctl/browse"
+	"github.com/kamir/m3c-tools/pkg/skillctl/consolidate"
 	"github.com/kamir/m3c-tools/pkg/skillctl/delta"
+	"github.com/kamir/m3c-tools/pkg/skillctl/hasher"
+	"github.com/kamir/m3c-tools/pkg/skillctl/importer"
 	"github.com/kamir/m3c-tools/pkg/skillctl/model"
 	"github.com/kamir/m3c-tools/pkg/skillctl/report"
 	"github.com/kamir/m3c-tools/pkg/skillctl/review"
@@ -60,8 +73,12 @@ func main() {
 		cmdReview(os.Args[2:])
 	case "browse":
 		cmdBrowse(os.Args[2:])
+	case "consolidate":
+		cmdConsolidate(os.Args[2:])
 	case "menubar":
 		cmdMenubar(os.Args[2:])
+	case "sync-usage":
+		cmdSyncUsage(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Printf("skillctl %s (commit=%s, built=%s)\n", version, commit, date)
 	case "help", "--help", "-h":
@@ -384,13 +401,203 @@ func cmdBrowse(args []string) {
 		fmt.Fprintf(os.Stderr, "Scanned %d skills across %d projects\n", inv.TotalCount, len(inv.ByProject))
 	}
 
+	// Compute inventory hash for cache staleness detection.
+	invJSON, err := json.Marshal(inv)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error marshaling inventory for hash: %v\n", err)
+		os.Exit(1)
+	}
+	invHash := hasher.ContentHash(invJSON)
+
+	// Open graph store.
+	store, err := browse.OpenGraphStore(browse.DefaultGraphDBPath())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not open graph store: %v (building without cache)\n", err)
+		// Fall back to uncached path.
+		addr := ":" + port
+		srv := browse.NewServer(addr, inv)
+		srv.NoBrowser = noBrowser
+		if err := srv.Start(); err != nil {
+			fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+	defer store.Close()
+
+	var graph *browse.SkillGraph
+
+	if !store.IsStale(invHash) {
+		// Cache hit — load graph from SQLite.
+		fmt.Fprintf(os.Stderr, "Loading cached graph...\n")
+		graph, err = store.LoadGraph()
+		if err != nil || graph == nil {
+			// Fallback: rebuild if load fails.
+			fmt.Fprintf(os.Stderr, "Cache load failed, rebuilding graph...\n")
+			graph = browse.BuildGraph(inv)
+			if err := store.SaveGraphWithHash(graph, invHash); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not save graph to cache: %v\n", err)
+			}
+		}
+	} else {
+		// Cache miss — build and persist.
+		fmt.Fprintf(os.Stderr, "Building graph...\n")
+		graph = browse.BuildGraph(inv)
+		if err := store.SaveGraphWithHash(graph, invHash); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not save graph to cache: %v\n", err)
+		}
+	}
+
 	addr := ":" + port
-	srv := browse.NewServer(addr, inv)
+	srv := browse.NewServerWithCache(addr, inv, graph, store, invHash)
 	srv.NoBrowser = noBrowser
 
 	if err := srv.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
 		os.Exit(1)
+	}
+}
+
+// cmdConsolidate analyzes skill sprawl across scanned directories and suggests
+// consolidation actions (duplicates, annotation gaps, naming issues).
+func cmdConsolidate(args []string) {
+	input := ""
+	var paths []string
+	recursive := false
+	includeHome := false
+	reportOnly := false
+	fix := false
+	output := "text"
+	outFile := ""
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--input":
+			if i+1 < len(args) {
+				i++
+				input = args[i]
+			}
+		case "--path":
+			if i+1 < len(args) {
+				i++
+				paths = append(paths, args[i])
+			}
+		case "--recursive":
+			recursive = true
+		case "--include-home":
+			includeHome = true
+		case "--report-only":
+			reportOnly = true
+		case "--fix":
+			fix = true
+		case "--output":
+			if i+1 < len(args) {
+				i++
+				output = args[i]
+			}
+		case "--out":
+			if i+1 < len(args) {
+				i++
+				outFile = args[i]
+			}
+		default:
+			if args[i] != "" && args[i][0] != '-' {
+				input = args[i]
+			} else {
+				fmt.Fprintf(os.Stderr, "Unknown flag: %s\n", args[i])
+				os.Exit(1)
+			}
+		}
+	}
+
+	// Load inventory from --input or run live scan.
+	var inv *model.Inventory
+	var err error
+
+	if input != "" {
+		inv, err = loadInventory(input)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading inventory: %v\n", err)
+			os.Exit(1)
+		}
+	} else {
+		if len(paths) == 0 {
+			cwd, err := os.Getwd()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error getting working directory: %v\n", err)
+				os.Exit(1)
+			}
+			paths = []string{cwd}
+		}
+		sc := &scanner.Scanner{
+			Paths:       paths,
+			Recursive:   recursive,
+			IncludeHome: includeHome,
+		}
+		inv, err = sc.Scan()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Scan error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Fprintf(os.Stderr, "Scanned %d skills across %d projects\n", inv.TotalCount, len(inv.ByProject))
+	}
+
+	// Analyze the inventory for consolidation opportunities.
+	rpt := consolidate.Analyze(inv)
+
+	// Determine output writer.
+	w := os.Stdout
+	if outFile != "" {
+		f, err := os.Create(outFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating output file: %v\n", err)
+			os.Exit(1)
+		}
+		defer f.Close()
+		w = f
+	}
+
+	// Render output based on format.
+	switch output {
+	case "text":
+		fmt.Fprint(w, consolidate.FormatTerminal(rpt))
+	case "md":
+		fmt.Fprint(w, consolidate.FormatMarkdown(rpt))
+	case "json":
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(rpt); err != nil {
+			fmt.Fprintf(os.Stderr, "Error encoding JSON: %v\n", err)
+			os.Exit(1)
+		}
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown output format: %s (use text, md, or json)\n", output)
+		os.Exit(1)
+	}
+
+	if outFile != "" {
+		fmt.Fprintf(os.Stderr, "Consolidation report written to %s\n", outFile)
+	}
+
+	// If --fix is set and --report-only is NOT set, offer to fix annotation gaps.
+	if fix && !reportOnly {
+		if len(rpt.AnnotationGaps) == 0 {
+			fmt.Fprintln(os.Stderr, "No annotation gaps to fix.")
+			return
+		}
+		fmt.Fprintf(os.Stderr, "\nFound %d annotation gaps. Apply frontmatter fixes? [y/N] ", len(rpt.AnnotationGaps))
+		var answer string
+		fmt.Scanln(&answer)
+		if answer == "y" || answer == "Y" || answer == "yes" {
+			fixed, skipped, err := consolidate.FixAnnotationGaps(rpt.AnnotationGaps)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error fixing annotation gaps: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Fprintf(os.Stderr, "Fixed %d skills, skipped %d\n", fixed, skipped)
+		} else {
+			fmt.Fprintln(os.Stderr, "Skipped. Re-run with --fix to apply later.")
+		}
 	}
 }
 
@@ -716,11 +923,158 @@ func truncate(s string, n int) string {
 	return s
 }
 
-// cmdImport pushes skills to a remote registry (Phase 3 stub).
+// cmdImport pushes a skill inventory to the aims-core skill profile API.
 func cmdImport(args []string) {
-	// TODO: Phase 3 — push skill descriptors to a remote registry API.
-	fmt.Fprintln(os.Stderr, "import: not yet implemented (Phase 3)")
-	os.Exit(0)
+	target := ""
+	apiKey := ""
+	input := ""
+	var paths []string
+	recursive := false
+	includeHome := false
+	dryRun := false
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--target":
+			if i+1 < len(args) {
+				i++
+				target = args[i]
+			}
+		case "--api-key":
+			if i+1 < len(args) {
+				i++
+				apiKey = args[i]
+			}
+		case "--input":
+			if i+1 < len(args) {
+				i++
+				input = args[i]
+			}
+		case "--path":
+			if i+1 < len(args) {
+				i++
+				paths = append(paths, args[i])
+			}
+		case "--recursive":
+			recursive = true
+		case "--include-home":
+			includeHome = true
+		case "--dry-run":
+			dryRun = true
+		default:
+			if args[i] != "" && args[i][0] != '-' {
+				input = args[i]
+			} else {
+				fmt.Fprintf(os.Stderr, "Unknown flag: %s\n", args[i])
+				os.Exit(1)
+			}
+		}
+	}
+
+	// --target is required.
+	if target == "" {
+		fmt.Fprintln(os.Stderr, "Error: --target <url> is required")
+		fmt.Fprintln(os.Stderr, "Usage: skillctl import --target <url> [--api-key <key>] [--input <scan.json>] [--dry-run]")
+		os.Exit(1)
+	}
+
+	// Resolve API key: flag > env var > session file.
+	if apiKey == "" {
+		apiKey = os.Getenv("M3C_API_KEY")
+	}
+	if apiKey == "" {
+		apiKey = readAPIKeyFromSession()
+	}
+
+	// Load inventory from --input or run live scan.
+	var inv *model.Inventory
+	var err error
+
+	if input != "" {
+		inv, err = loadInventory(input)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading inventory: %v\n", err)
+			os.Exit(1)
+		}
+	} else {
+		if len(paths) == 0 {
+			cwd, err := os.Getwd()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error getting working directory: %v\n", err)
+				os.Exit(1)
+			}
+			paths = []string{cwd}
+		}
+		sc := &scanner.Scanner{
+			Paths:       paths,
+			Recursive:   recursive,
+			IncludeHome: includeHome,
+		}
+		inv, err = sc.Scan()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Scan error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Fprintf(os.Stderr, "Scanned %d skills across %d projects\n", inv.TotalCount, len(inv.ByProject))
+	}
+
+	// Create API client.
+	client, err := importer.NewClient(target, apiKey)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Dry-run mode: print summary and exit.
+	if dryRun {
+		fmt.Print(client.DryRun(inv))
+		return
+	}
+
+	// Health check before import.
+	fmt.Fprintf(os.Stderr, "Checking connectivity to %s ...\n", target)
+	if err := client.HealthCheck(); err != nil {
+		fmt.Fprintf(os.Stderr, "Health check failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Fprintln(os.Stderr, "Health check OK")
+
+	// Import.
+	fmt.Fprintf(os.Stderr, "Importing %d skills ...\n", len(inv.Skills))
+	resp, err := client.Import(inv)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Import failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Print result summary.
+	fmt.Printf("Import complete:\n")
+	fmt.Printf("  Imported:       %d\n", resp.Imported)
+	fmt.Printf("  New candidates: %d\n", resp.NewCandidates)
+	fmt.Printf("  Already known:  %d\n", resp.AlreadyKnown)
+	if resp.Message != "" {
+		fmt.Printf("  Message:        %s\n", resp.Message)
+	}
+}
+
+// readAPIKeyFromSession attempts to read the api_key field from
+// ~/.m3c-tools/er1_session.json. Returns empty string on any error.
+func readAPIKeyFromSession() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".m3c-tools", "er1_session.json"))
+	if err != nil {
+		return ""
+	}
+	var session struct {
+		APIKey string `json:"api_key"`
+	}
+	if err := json.Unmarshal(data, &session); err != nil {
+		return ""
+	}
+	return session.APIKey
 }
 
 // cmdAudit inspects a single skill in detail (Phase 2 stub).
@@ -735,6 +1089,155 @@ func cmdAudit(args []string) {
 	os.Exit(0)
 }
 
+// cmdSyncUsage reads unsynced skill usage events from the local SQLite database
+// and POSTs each to aims-core /api/v2/skills/usage. Successfully synced rows are
+// marked synced=1 so they are not re-sent.
+func cmdSyncUsage(args []string) {
+	target := ""
+	apiKey := ""
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--target":
+			if i+1 < len(args) {
+				i++
+				target = args[i]
+			}
+		case "--api-key":
+			if i+1 < len(args) {
+				i++
+				apiKey = args[i]
+			}
+		default:
+			fmt.Fprintf(os.Stderr, "Unknown flag: %s\n", args[i])
+			os.Exit(1)
+		}
+	}
+
+	// Resolve target URL: flag > env var > default.
+	if target == "" {
+		target = os.Getenv("M3C_API_URL")
+	}
+	if target == "" {
+		target = "https://onboarding.guide"
+	}
+	target = strings.TrimRight(target, "/")
+
+	// Resolve API key: flag > env var > session file.
+	if apiKey == "" {
+		apiKey = os.Getenv("M3C_API_KEY")
+	}
+	if apiKey == "" {
+		apiKey = readAPIKeyFromSession()
+	}
+	if apiKey == "" {
+		fmt.Fprintln(os.Stderr, "Error: no API key found (use --api-key, M3C_API_KEY, or ~/.m3c-tools/er1_session.json)")
+		os.Exit(1)
+	}
+
+	// Open the local usage database.
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting home directory: %v\n", err)
+		os.Exit(1)
+	}
+	dbPath := filepath.Join(home, ".m3c-tools", "skill-usage.db")
+
+	db, err := sql.Open(dbdriver.DriverName(), dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error opening usage database: %v\n", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+
+	// Read all unsynced rows.
+	rows, err := db.Query("SELECT id, skill_id, user_id, timestamp, project, session_id FROM skill_usage WHERE synced = 0 ORDER BY id")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error querying unsynced events: %v\n", err)
+		os.Exit(1)
+	}
+
+	type usageRow struct {
+		ID        int64
+		SkillID   string
+		UserID    string
+		Timestamp string
+		Project   string
+		SessionID string
+	}
+
+	var pending []usageRow
+	for rows.Next() {
+		var r usageRow
+		if err := rows.Scan(&r.ID, &r.SkillID, &r.UserID, &r.Timestamp, &r.Project, &r.SessionID); err != nil {
+			fmt.Fprintf(os.Stderr, "Error scanning row: %v\n", err)
+			continue
+		}
+		pending = append(pending, r)
+	}
+	rows.Close()
+
+	if len(pending) == 0 {
+		fmt.Println("No unsynced usage events.")
+		return
+	}
+
+	fmt.Fprintf(os.Stderr, "Found %d unsynced usage events. Syncing to %s ...\n", len(pending), target)
+
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	synced := 0
+
+	for _, r := range pending {
+		event := map[string]interface{}{
+			"skill_id":  r.SkillID,
+			"user_id":   r.UserID,
+			"timestamp": r.Timestamp,
+			"context": map[string]string{
+				"project":    r.Project,
+				"session_id": r.SessionID,
+				"source":     "claude_code_hook",
+			},
+		}
+
+		body, err := json.Marshal(event)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  [SKIP] id=%d: marshal error: %v\n", r.ID, err)
+			continue
+		}
+
+		url := target + "/api/v2/skills/usage"
+		req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  [SKIP] id=%d: request error: %v\n", r.ID, err)
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-API-KEY", apiKey)
+		req.Header.Set("X-User-ID", r.UserID)
+
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  [FAIL] id=%d (%s): %v\n", r.ID, r.SkillID, err)
+			continue
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			now := time.Now().UTC().Format(time.RFC3339)
+			_, err := db.Exec("UPDATE skill_usage SET synced = 1, synced_at = ? WHERE id = ?", now, r.ID)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "  [WARN] id=%d: synced but failed to update local DB: %v\n", r.ID, err)
+			}
+			synced++
+		} else {
+			fmt.Fprintf(os.Stderr, "  [FAIL] id=%d (%s): HTTP %d\n", r.ID, r.SkillID, resp.StatusCode)
+		}
+	}
+
+	fmt.Printf("Synced %d/%d usage events\n", synced, len(pending))
+}
+
 func printUsage() {
 	fmt.Print(`skillctl — Claude Code skill inventory scanner
 
@@ -744,9 +1247,11 @@ Usage:
   skillctl review [options]        Review skill deltas in a local web UI
   skillctl diff <a.json> <b.json>  Compare two scan snapshots
   skillctl seal [options]          Seal current inventory as baseline
-  skillctl import [options]        Push skills to remote registry
+  skillctl import [options]        Import skills to aims-core profile API
   skillctl audit <skill-id>        Deep-inspect a single skill
   skillctl browse [options]        Launch interactive skill graph browser
+  skillctl consolidate [options]   Analyze skill sprawl and suggest fixes
+  skillctl sync-usage [options]    Sync local skill usage events to aims-core
   skillctl menubar [options]       Launch macOS menu bar skill monitor
   skillctl version                 Show version
   skillctl help                    Show this help
@@ -787,6 +1292,29 @@ Browse options:
   --port <port>      HTTP server port (default: 9116)
   --no-browser       Do not open browser automatically
 
+Consolidate options:
+  --input <file>     Use existing scan JSON (default: run live scan)
+  --path <dir>       Directory to scan (can be repeated; default: cwd)
+  --recursive        Walk directories recursively
+  --include-home     Also scan ~/.claude/ for user-global skills
+  --report-only      Analysis only, do not apply any fixes
+  --fix              Auto-add frontmatter to unannotated skills
+  --output <format>  Output format: text (default), md, json
+  --out <file>       Write output to file instead of stdout
+
+Import options:
+  --target <url>     Target aims-core URL (required)
+  --api-key <key>    API key (or set M3C_API_KEY, or ~/.m3c-tools/er1_session.json)
+  --input <file>     Use existing scan JSON (default: run live scan)
+  --path <dir>       Directory to scan (can be repeated; default: cwd)
+  --recursive        Walk directories recursively
+  --include-home     Also scan ~/.claude/ for user-global skills
+  --dry-run          Print import summary without sending data
+
+Sync-usage options:
+  --target <url>     Target aims-core URL (default: M3C_API_URL or https://onboarding.guide)
+  --api-key <key>    API key (or set M3C_API_KEY, or ~/.m3c-tools/er1_session.json)
+
 Menubar options (macOS only):
   --path <dir>       Directory to watch (can be repeated; default: cwd)
   --interval <dur>   Scan interval (default: 30m)
@@ -804,6 +1332,12 @@ Examples:
   skillctl review --input delta.json --port 9115
   skillctl browse --input scan.json
   skillctl browse --path ~/projects --recursive --include-home
+  skillctl consolidate --path /Users/kamir --recursive --include-home --fix
+  skillctl consolidate --input scan.json --output md --out sprawl-report.md
+  skillctl import --target https://onboarding.guide --api-key $KEY --input scan.json
+  skillctl import --target https://onboarding.guide --dry-run --recursive --include-home
   skillctl menubar --path ~/projects --interval 15m --include-home
+  skillctl sync-usage
+  skillctl sync-usage --target https://onboarding.guide --api-key $KEY
 `)
 }

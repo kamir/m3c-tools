@@ -26,6 +26,8 @@ type Server struct {
 	mu    sync.RWMutex
 	graph *SkillGraph
 	inv   *model.Inventory
+	store *GraphStore
+	hash  string // current inventory hash for rebuild staleness check
 }
 
 // NewServer creates a browse server from a pre-built inventory.
@@ -41,6 +43,22 @@ func NewServer(addr string, inv *model.Inventory) *Server {
 	}
 }
 
+// NewServerWithCache creates a browse server using a pre-loaded graph and
+// an open GraphStore. The store is used by the /api/graph/rebuild endpoint
+// to persist refreshed graphs.
+func NewServerWithCache(addr string, inv *model.Inventory, graph *SkillGraph, store *GraphStore, inventoryHash string) *Server {
+	if addr == "" {
+		addr = ":9116"
+	}
+	return &Server{
+		Addr:  addr,
+		graph: graph,
+		inv:   inv,
+		store: store,
+		hash:  inventoryHash,
+	}
+}
+
 // Start registers routes and starts the HTTP server. Blocks until shutdown.
 func (s *Server) Start() error {
 	mux := http.NewServeMux()
@@ -48,6 +66,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/graph", s.handleGraph)
 	mux.HandleFunc("/api/graph/filter", s.handleFilter)
 	mux.HandleFunc("/api/graph/search", s.handleSearch)
+	mux.HandleFunc("/api/graph/rebuild", s.handleRebuild)
 	mux.HandleFunc("/api/health", s.handleHealth)
 
 	host := s.Addr
@@ -148,16 +167,52 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(`{"status":"ok","service":"skillctl-browse"}`))
 }
 
+func (s *Server) handleRebuild(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	s.mu.RLock()
+	inv := s.inv
+	s.mu.RUnlock()
+
+	if inv == nil {
+		http.Error(w, "no inventory loaded", http.StatusInternalServerError)
+		return
+	}
+
+	graph := BuildGraph(inv)
+
+	s.mu.Lock()
+	s.graph = graph
+	s.mu.Unlock()
+
+	// Persist to SQLite if a store is available.
+	if s.store != nil && s.hash != "" {
+		if err := s.store.SaveGraphWithHash(graph, s.hash); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to persist rebuilt graph: %v\n", err)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":     "rebuilt",
+		"node_count": len(graph.Nodes),
+		"edge_count": len(graph.Edges),
+	})
+}
+
 // filterGraph returns a subgraph with only matching skill nodes and their connections.
 func filterGraph(g *SkillGraph, projects, types, categories, tags []string) *SkillGraph {
 	if len(projects) == 0 && len(types) == 0 && len(categories) == 0 && len(tags) == 0 {
 		return g
 	}
 
-	// Determine which skill nodes pass the filter.
+	// Determine which content nodes pass the filter.
 	keepSkills := make(map[string]bool)
 	for _, n := range g.Nodes {
-		if n.Kind != NodeSkill {
+		if !n.Kind.IsContentNode() {
 			continue
 		}
 		if len(projects) > 0 && !contains(projects, n.Project) {

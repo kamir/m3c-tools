@@ -6,7 +6,7 @@ type SkillType string
 
 const (
 	SkillTypeClaudeCodeSkill  SkillType = "claude_code_skill"
-	SkillTypeClaudeMD         SkillType = "claude_md"
+	SkillTypeSkillIndex       SkillType = "skill_index"
 	SkillTypeCommand          SkillType = "command"
 	SkillTypeMCPServer        SkillType = "mcp_server"
 	SkillTypeAgent            SkillType = "agent"
@@ -55,5 +55,5 @@ type Inventory struct {
 	ByProject      map[string]int    `json:"by_project"`
 	Duplicates     int               `json:"duplicates"`
 	NoFrontmatter  int               `json:"no_frontmatter"`
-	ClaudeMDCount  int               `json:"claude_md_count"`
+	SkillIndexCount int              `json:"skill_index_count"`
 }

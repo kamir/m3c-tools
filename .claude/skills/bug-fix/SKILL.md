@@ -1,8 +1,11 @@
 ---
 name: bug-fix
 description: Fix a reported bug and update SPECs with lessons learned. Use after /bug-report has created a structured bug report.
-argument-hint: BUG-NNNN (e.g. BUG-0001)
-allowed-tools: Read, Grep, Glob, Bash, Write, Edit, Agent
+argument-hint: "BUG-NNNN (e.g. BUG-0001)"
+metadata:
+  version: 1.0.0
+  category: development
+  tags: [bug-fix, spec, m3c-tools]
 ---
 
 # Bug Fix & Learning

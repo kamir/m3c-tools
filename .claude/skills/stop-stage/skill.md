@@ -1,3 +1,15 @@
+---
+name: stop-stage
+description: |
+  Manage the aims-core staging service lifecycle on Cloud Run.
+  Options: leave as-is (scale to zero), delete service, delete service + images.
+  Usage: /stop-stage
+metadata:
+  version: 1.0.0
+  category: ops
+  tags: [cloud-run, staging, gcp, cleanup]
+---
+
 # Stop Staging Environment
 
 Manage the aims-core staging service lifecycle on Cloud Run.

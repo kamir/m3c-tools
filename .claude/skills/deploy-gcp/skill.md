@@ -1,3 +1,15 @@
+---
+name: deploy-gcp
+description: |
+  Build the aims-core Docker image and deploy to Google Cloud Run.
+  Supports stage-legacy, stage-new, and production environments.
+  Usage: /deploy-gcp
+metadata:
+  version: 1.0.0
+  category: ops
+  tags: [gcp, cloud-run, deploy, docker]
+---
+
 # Deploy to GCP (Cloud Run)
 
 Build the aims-core Docker image and deploy to Google Cloud Run.

@@ -1,3 +1,15 @@
+---
+name: start-stage
+description: |
+  Verify or deploy the aims-core staging service on Cloud Run.
+  Checks service status and triggers cold start if needed.
+  Usage: /start-stage
+metadata:
+  version: 1.0.0
+  category: ops
+  tags: [cloud-run, staging, gcp]
+---
+
 # Start Staging Environment
 
 Verify or deploy the aims-core staging service on Cloud Run.

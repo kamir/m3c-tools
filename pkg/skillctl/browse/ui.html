@@ -63,6 +63,7 @@
     white-space: nowrap;
   }
   .chip strong { color: var(--accent-light); margin-right: 0.3rem; }
+  .chip.ref-chip strong { color: var(--red); }
   .search-box {
     margin-left: auto;
     position: relative;
@@ -123,6 +124,21 @@
   .filter-btn:hover { border-color: var(--accent); color: var(--text); }
   .filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
+  /* Edge toggle buttons */
+  .edge-toggle {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text-muted);
+    padding: 0.1rem 0.4rem;
+    font-size: 0.65rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .edge-toggle:hover { border-color: var(--accent); color: var(--text); }
+  .edge-toggle.active { background: rgba(124, 58, 237, 0.3); color: var(--accent-light); border-color: var(--accent); }
+  .edge-toggle[data-edge="references"].active { background: rgba(248, 81, 73, 0.3); color: var(--red); border-color: var(--red); }
+
   /* Graph canvas */
   #graph-container {
     width: 100%;
@@ -142,13 +158,16 @@
     pointer-events: none;
     opacity: 0;
     transition: opacity 0.15s;
-    max-width: 300px;
+    max-width: 320px;
     z-index: 20;
   }
   .tooltip.visible { opacity: 1; }
   .tooltip .tt-name { font-weight: 700; color: var(--accent-light); }
   .tooltip .tt-kind { color: var(--text-muted); font-size: 0.7rem; }
   .tooltip .tt-desc { margin-top: 0.3rem; color: var(--text-muted); font-size: 0.75rem; line-height: 1.4; }
+  .tooltip .tt-edges { margin-top: 0.3rem; font-size: 0.7rem; color: var(--text-muted); }
+  .tooltip .tt-edges span { color: var(--accent-light); }
+  .tooltip .tt-edges .ref-count { color: var(--red); }
 
   /* Detail panel */
   .detail-panel {
@@ -241,9 +260,17 @@
   }
   .legend-item { display: flex; align-items: center; gap: 0.4rem; color: var(--text-muted); }
   .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .legend-star { width: 12px; height: 12px; clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); }
+  .legend-square { width: 10px; height: 10px; border-radius: 2px; }
+  .legend-triangle { width: 12px; height: 10px; clip-path: polygon(50% 0%, 100% 100%, 0% 100%); }
+  .legend-pentagon { width: 12px; height: 12px; clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%); }
+  .legend-octagon { width: 12px; height: 12px; clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%); }
   .legend-hex { width: 12px; height: 10px; clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%); }
   .legend-diamond { width: 10px; height: 10px; transform: rotate(45deg); border-radius: 1px; }
   .legend-rect { width: 14px; height: 8px; border-radius: 2px; }
+  .legend-line { width: 20px; height: 0; border-top: 2px solid; }
+  .legend-line.dashed { border-top-style: dashed; }
+  .legend-line.dotted { border-top-style: dotted; }
 
   /* Node shapes in SVG */
   .node-label {
@@ -253,10 +280,89 @@
     pointer-events: none;
     user-select: none;
   }
+  .node-label-small {
+    fill: var(--text-muted);
+    font-size: 7px;
+    text-anchor: middle;
+    pointer-events: none;
+    user-select: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
   .edge-line {
     stroke: var(--border);
     stroke-opacity: 0.3;
     fill: none;
+  }
+  .edge-hit-area {
+    stroke: transparent;
+    stroke-width: 10;
+    fill: none;
+    pointer-events: stroke;
+    cursor: pointer;
+  }
+
+  /* Edge tooltip */
+  .edge-tooltip {
+    position: absolute;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.75rem;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    max-width: 280px;
+    z-index: 21;
+  }
+  .edge-tooltip.visible { opacity: 1; }
+  .edge-tooltip .et-kind { font-weight: 700; color: var(--accent-light); }
+  .edge-tooltip .et-weight { color: var(--text-muted); margin-left: 0.5rem; }
+  .edge-tooltip .et-evidence { margin-top: 0.25rem; color: var(--text-muted); font-size: 0.7rem; line-height: 1.3; }
+
+  /* Help overlay */
+  .help-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .help-overlay.hidden { display: none; }
+  .help-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.5rem 2rem;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.85rem;
+    color: var(--text);
+    min-width: 300px;
+  }
+  .help-box h3 {
+    color: var(--accent-light);
+    font-size: 1rem;
+    margin-bottom: 0.3rem;
+  }
+  .help-box .help-divider {
+    color: var(--border);
+    margin-bottom: 0.6rem;
+  }
+  .help-box .help-row {
+    display: flex;
+    gap: 1.5rem;
+    padding: 0.2rem 0;
+  }
+  .help-box .help-key {
+    color: var(--accent-light);
+    min-width: 40px;
+    text-align: right;
+  }
+  .help-box .help-desc {
+    color: var(--text-muted);
   }
 </style>
 </head>
@@ -268,6 +374,7 @@
   <div class="search-box">
     <input type="text" id="search" placeholder="Search skills..." />
   </div>
+  <button id="export-png" class="filter-btn" title="Export as PNG">PNG</button>
 </div>
 
 <div class="filter-bar" id="filter-bar">
@@ -281,11 +388,33 @@
   <select id="f-project"><option value="">all</option></select>
   <label>Type</label>
   <select id="f-type"><option value="">all</option></select>
+  <span style="margin-left:0.5rem">|</span>
+  <label>Edges</label>
+  <button class="edge-toggle active" data-edge="belongs_to">belongs_to</button>
+  <button class="edge-toggle active" data-edge="in_category">category</button>
+  <button class="edge-toggle active" data-edge="tagged_with">tags</button>
+  <button class="edge-toggle active" data-edge="references">references</button>
+  <button class="edge-toggle active" data-edge="similar_to">similar</button>
+  <button class="edge-toggle" data-edge="colocated">colocated</button>
+</div>
+
+<div class="help-overlay hidden" id="help-overlay">
+  <div class="help-box">
+    <h3>Keyboard Shortcuts</h3>
+    <div class="help-divider">─────────────────</div>
+    <div class="help-row"><span class="help-key">/</span><span class="help-desc">Search</span></div>
+    <div class="help-row"><span class="help-key">Esc</span><span class="help-desc">Close panel</span></div>
+    <div class="help-row"><span class="help-key">r</span><span class="help-desc">Reset zoom</span></div>
+    <div class="help-row"><span class="help-key">e</span><span class="help-desc">Cycle edge presets</span></div>
+    <div class="help-row"><span class="help-key">1-5</span><span class="help-desc">Filter by kind</span></div>
+    <div class="help-row"><span class="help-key">?</span><span class="help-desc">Toggle this help</span></div>
+  </div>
 </div>
 
 <div id="graph-container">
   <svg id="graph-svg"></svg>
   <div class="tooltip" id="tooltip"></div>
+  <div class="edge-tooltip" id="edge-tooltip"></div>
   <div class="detail-panel" id="detail-panel">
     <button class="close-btn" id="close-detail">&times;</button>
     <div id="detail-content"></div>
@@ -296,11 +425,21 @@
 <script>
 const TYPE_COLORS = {
   claude_code_skill: '#7c3aed',
-  claude_md: '#58a6ff',
+  skill_index: '#ffd93d',
   command: '#3fb950',
-  agent: '#d29922',
+  agent: '#58a6ff',
   mcp_server: '#f85149',
   synthesis_template: '#39d2c0',
+};
+const TYPE_SHAPES = {
+  claude_code_skill: 'circle',
+  skill_index: 'star',
+  command: 'square',
+  agent: 'triangle',
+  mcp_server: 'pentagon',
+  synthesis_template: 'octagon',
+  // Also match by node kind (for agent/command/skill_index kinds)
+  skill: 'circle',
 };
 const KIND_COLORS = {
   project: '#a78bfa',
@@ -308,29 +447,50 @@ const KIND_COLORS = {
   tag: '#656d76',
 };
 
+// Edge type visual configuration
+const EDGE_STYLES = {
+  belongs_to:  { dash: null,    opacity: 0.2,  width: 1,   color: null },
+  tagged_with: { dash: '4 2',   opacity: 0.15, width: 0.8, color: null },
+  in_category: { dash: null,    opacity: 0.25, width: 1.5, color: null },
+  references:  { dash: null,    opacity: 0.4,  width: 1.5, color: '#f85149' },
+  similar_to:  { dash: '2 2',   opacity: 0.2,  width: 0.8, color: null },
+  colocated:   { dash: null,    opacity: 0.08, width: 0.5, color: null },
+};
+
 let graphData = null;
 let simulation = null;
 let activeFilter = 'all';
+let currentZoomScale = 1;
+
+// Track which edge types are visible
+let visibleEdgeTypes = new Set(['belongs_to', 'in_category', 'tagged_with', 'references', 'similar_to']);
+// Note: colocated is OFF by default
 
 async function init() {
   const resp = await fetch('/api/graph');
   graphData = await resp.json();
-  renderStats(graphData.stats);
+  renderStats(graphData);
   populateFilters(graphData);
   renderLegend();
   renderGraph(graphData);
   setupSearch();
   setupFilterButtons();
   setupDropdowns();
+  setupEdgeToggles();
   setupKeyboard();
 }
 
-function renderStats(s) {
+function renderStats(data) {
+  const s = data.stats;
+  // Count references edges
+  const refCount = (data.edges || []).filter(e => e.kind === 'references').length;
   document.getElementById('stats').innerHTML = `
     <span class="chip"><strong>${s.total_nodes}</strong> nodes</span>
     <span class="chip"><strong>${s.skill_nodes}</strong> skills</span>
+    <span class="chip"><strong>${s.agent_nodes || 0}</strong> agents</span>
     <span class="chip"><strong>${s.project_nodes}</strong> projects</span>
     <span class="chip"><strong>${s.total_edges}</strong> edges</span>
+    <span class="chip ref-chip"><strong>${refCount}</strong> references</span>
   `;
 }
 
@@ -342,24 +502,49 @@ function populateFilters(g) {
 }
 
 function renderLegend() {
-  const items = [
+  const nodeItems = [
     { shape: 'dot', color: TYPE_COLORS.claude_code_skill, label: 'Skill' },
-    { shape: 'dot', color: TYPE_COLORS.command, label: 'Command' },
-    { shape: 'dot', color: TYPE_COLORS.agent, label: 'Agent' },
-    { shape: 'dot', color: TYPE_COLORS.claude_md, label: 'CLAUDE.md' },
+    { shape: 'star', color: TYPE_COLORS.skill_index, label: 'Skill Index' },
+    { shape: 'square', color: TYPE_COLORS.command, label: 'Command' },
+    { shape: 'triangle', color: TYPE_COLORS.agent, label: 'Agent' },
+    { shape: 'pentagon', color: TYPE_COLORS.mcp_server, label: 'MCP Server' },
+    { shape: 'octagon', color: TYPE_COLORS.synthesis_template, label: 'Synthesis' },
     { shape: 'hex', color: KIND_COLORS.project, label: 'Project' },
     { shape: 'rect', color: KIND_COLORS.category, label: 'Category' },
     { shape: 'diamond', color: KIND_COLORS.tag, label: 'Tag' },
   ];
-  document.getElementById('legend').innerHTML = items.map(i => `
+  const edgeItems = [
+    { style: 'solid', color: 'var(--border)', label: 'belongs_to' },
+    { style: 'solid', color: 'var(--border)', label: 'in_category', thick: true },
+    { style: 'dashed', color: 'var(--border)', label: 'tagged_with' },
+    { style: 'solid', color: '#f85149', label: 'references' },
+    { style: 'dotted', color: 'var(--border)', label: 'similar_to' },
+  ];
+
+  let html = nodeItems.map(i => `
     <div class="legend-item">
       <div class="legend-${i.shape}" style="background:${i.color}"></div>
       <span>${i.label}</span>
     </div>
   `).join('');
+
+  html += '<div style="height:4px"></div>';
+
+  html += edgeItems.map(i => `
+    <div class="legend-item">
+      <div class="legend-line ${i.style === 'dashed' ? 'dashed' : i.style === 'dotted' ? 'dotted' : ''}" style="border-color:${i.color};${i.thick ? 'border-top-width:3px;' : ''}"></div>
+      <span>${i.label}</span>
+    </div>
+  `).join('');
+
+  document.getElementById('legend').innerHTML = html;
 }
 
 function nodeColor(d) {
+  // Content node kinds map directly to their type color.
+  if (d.kind === 'agent') return TYPE_COLORS.agent;
+  if (d.kind === 'skill_index') return TYPE_COLORS.skill_index;
+  if (d.kind === 'command') return TYPE_COLORS.command;
   if (d.kind === 'skill') return TYPE_COLORS[d.skill_type] || '#7c3aed';
   return KIND_COLORS[d.kind] || '#656d76';
 }
@@ -368,7 +553,22 @@ function nodeRadius(d) {
   if (d.kind === 'project') return 16 + Math.min(d.degree, 30) * 0.3;
   if (d.kind === 'category') return 10;
   if (d.kind === 'tag') return 6;
+  if (d.kind === 'agent') return Math.max(7, 4 + Math.sqrt(d.degree) * 2);
+  if (d.kind === 'skill_index') return Math.max(8, 5 + Math.sqrt(d.degree) * 2);
   return Math.max(5, 3 + Math.sqrt(d.degree) * 2);
+}
+
+// Get edge breakdown for a node
+function getEdgeBreakdown(nodeId, edges) {
+  const counts = {};
+  edges.forEach(e => {
+    const s = typeof e.source === 'object' ? e.source.id : e.source;
+    const t = typeof e.target === 'object' ? e.target.id : e.target;
+    if (s === nodeId || t === nodeId) {
+      counts[e.kind] = (counts[e.kind] || 0) + 1;
+    }
+  });
+  return counts;
 }
 
 function renderGraph(data) {
@@ -378,21 +578,85 @@ function renderGraph(data) {
   const svg = d3.select('#graph-svg');
   svg.selectAll('*').remove();
 
+  // SVG defs: glow filter for cluster highlighting
+  const defs = svg.append('defs');
+  const glowFilter = defs.append('filter').attr('id', 'glow');
+  glowFilter.append('feGaussianBlur').attr('stdDeviation', '3').attr('result', 'blur');
+  const glowMerge = glowFilter.append('feMerge');
+  glowMerge.append('feMergeNode').attr('in', 'blur');
+  glowMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+
   const g = svg.append('g');
 
   // Zoom
   const zoom = d3.zoom()
     .scaleExtent([0.1, 6])
-    .on('zoom', (e) => g.attr('transform', e.transform));
+    .on('zoom', (e) => {
+      g.attr('transform', e.transform);
+      currentZoomScale = e.transform.k;
+      // Fade in small labels when zoomed in past 1.5
+      g.selectAll('.node-label-small')
+        .attr('opacity', currentZoomScale >= 1.5 ? Math.min(1, (currentZoomScale - 1.5) / 0.5) : 0);
+    });
   svg.call(zoom);
+
+  // Apply edge style based on kind
+  function applyEdgeStyle(selection) {
+    selection
+      .attr('stroke', d => {
+        const style = EDGE_STYLES[d.kind];
+        return style && style.color ? style.color : null;
+      })
+      .attr('stroke-dasharray', d => {
+        const style = EDGE_STYLES[d.kind];
+        return style && style.dash ? style.dash : null;
+      })
+      .attr('stroke-opacity', d => {
+        const style = EDGE_STYLES[d.kind];
+        return style ? style.opacity : 0.2;
+      })
+      .attr('stroke-width', d => {
+        const style = EDGE_STYLES[d.kind];
+        const base = style ? style.width : 1;
+        return Math.max(base, d.weight * base);
+      })
+      .style('display', d => visibleEdgeTypes.has(d.kind) ? null : 'none');
+  }
 
   // Edges
   const link = g.append('g')
     .selectAll('line')
     .data(data.edges)
     .join('line')
-    .attr('class', 'edge-line')
-    .attr('stroke-width', d => Math.max(0.5, d.weight * 1.5));
+    .attr('class', 'edge-line');
+
+  applyEdgeStyle(link);
+
+  // Edge hit areas (invisible wide lines for hover detection)
+  const edgeTooltip = document.getElementById('edge-tooltip');
+  const linkHitArea = g.append('g')
+    .selectAll('line')
+    .data(data.edges)
+    .join('line')
+    .attr('class', 'edge-hit-area')
+    .style('display', d => visibleEdgeTypes.has(d.kind) ? null : 'none')
+    .on('mouseover', (e, d) => {
+      let html = `<span class="et-kind">${d.kind}</span><span class="et-weight">weight: ${d.weight}</span>`;
+      if (d.evidence) {
+        html += `<div class="et-evidence">${truncate(d.evidence, 150)}</div>`;
+      }
+      edgeTooltip.innerHTML = html;
+      edgeTooltip.classList.add('visible');
+      edgeTooltip.style.left = (e.pageX + 12) + 'px';
+      edgeTooltip.style.top = (e.pageY - 12) + 'px';
+    })
+    .on('mousemove', (e) => {
+      edgeTooltip.style.left = (e.pageX + 12) + 'px';
+      edgeTooltip.style.top = (e.pageY - 12) + 'px';
+    })
+    .on('mouseout', () => {
+      edgeTooltip.classList.remove('visible');
+    });
 
   // Nodes
   const node = g.append('g')
@@ -405,42 +669,76 @@ function renderGraph(data) {
       .on('drag', dragging)
       .on('end', dragEnd));
 
-  // Draw shapes per kind
+  // Draw shapes per kind and type
   node.each(function(d) {
     const el = d3.select(this);
     const r = nodeRadius(d);
     const color = nodeColor(d);
 
     if (d.kind === 'project') {
-      // Hexagon
-      const hex = hexPath(r);
-      el.append('path').attr('d', hex).attr('fill', color).attr('fill-opacity', 0.7).attr('stroke', color).attr('stroke-width', 1.5);
+      el.append('path').attr('d', polyPath(r, 6, Math.PI/6)).attr('fill', color).attr('fill-opacity', 0.7).attr('stroke', color).attr('stroke-width', 1.5);
     } else if (d.kind === 'category') {
-      // Rounded rect
       el.append('rect').attr('x', -r).attr('y', -r*0.6).attr('width', r*2).attr('height', r*1.2).attr('rx', 3).attr('fill', color).attr('fill-opacity', 0.6).attr('stroke', color).attr('stroke-width', 1);
     } else if (d.kind === 'tag') {
-      // Diamond
       el.append('rect').attr('x', -r).attr('y', -r).attr('width', r*2).attr('height', r*2).attr('rx', 1).attr('fill', color).attr('fill-opacity', 0.5).attr('stroke', color).attr('stroke-width', 0.5).attr('transform', 'rotate(45)');
     } else {
-      // Circle for skills
-      el.append('circle').attr('r', r).attr('fill', color).attr('fill-opacity', 0.7).attr('stroke', color).attr('stroke-width', 1.5);
+      // Content nodes (skill, agent, command, skill_index): shape by type
+      const shape = TYPE_SHAPES[d.skill_type] || TYPE_SHAPES[d.kind] || 'circle';
+      switch (shape) {
+        case 'star':
+          el.append('path').attr('d', starPath(r)).attr('fill', color).attr('fill-opacity', 0.7).attr('stroke', color).attr('stroke-width', 1.5);
+          break;
+        case 'square':
+          el.append('rect').attr('x', -r).attr('y', -r).attr('width', r*2).attr('height', r*2).attr('rx', 2).attr('fill', color).attr('fill-opacity', 0.7).attr('stroke', color).attr('stroke-width', 1.5);
+          break;
+        case 'triangle':
+          el.append('path').attr('d', polyPath(r, 3, -Math.PI/2)).attr('fill', color).attr('fill-opacity', 0.7).attr('stroke', color).attr('stroke-width', 1.5);
+          break;
+        case 'pentagon':
+          el.append('path').attr('d', polyPath(r, 5, -Math.PI/2)).attr('fill', color).attr('fill-opacity', 0.7).attr('stroke', color).attr('stroke-width', 1.5);
+          break;
+        case 'octagon':
+          el.append('path').attr('d', polyPath(r, 8, Math.PI/8)).attr('fill', color).attr('fill-opacity', 0.7).attr('stroke', color).attr('stroke-width', 1.5);
+          break;
+        default:
+          el.append('circle').attr('r', r).attr('fill', color).attr('fill-opacity', 0.7).attr('stroke', color).attr('stroke-width', 1.5);
+      }
     }
   });
 
-  // Labels (only for project, category, and large skill nodes)
+  // Labels: always-visible for project, category, and high-degree skills
   node.filter(d => d.kind === 'project' || d.kind === 'category' || d.degree > 3)
     .append('text')
     .attr('class', 'node-label')
     .attr('dy', d => nodeRadius(d) + 12)
     .text(d => d.label.length > 20 ? d.label.slice(0, 18) + '...' : d.label);
 
+  // Small labels for ALL skill nodes (fade in on zoom > 1.5)
+  node.filter(d => d.kind === 'skill' && d.degree <= 3)
+    .append('text')
+    .attr('class', 'node-label-small')
+    .attr('dy', d => nodeRadius(d) + 10)
+    .attr('opacity', 0)
+    .text(d => d.label.length > 22 ? d.label.slice(0, 20) + '...' : d.label);
+
   // Tooltip
   const tooltip = document.getElementById('tooltip');
   node.on('mouseover', (e, d) => {
+    // Get edge breakdown for this node
+    const breakdown = getEdgeBreakdown(d.id, data.edges);
+    const breakdownParts = Object.entries(breakdown).map(([kind, count]) => {
+      if (kind === 'references') return `<span class="ref-count">${count} ${kind}</span>`;
+      return `<span>${count} ${kind}</span>`;
+    });
+    const edgeInfo = breakdownParts.length > 0
+      ? `<div class="tt-edges">&rarr; ${breakdownParts.join(' | ')}</div>`
+      : '';
+
     tooltip.innerHTML = `
       <div class="tt-name">${d.label}</div>
-      <div class="tt-kind">${d.kind}${d.skill_type ? ' · ' + d.skill_type : ''}</div>
+      <div class="tt-kind">${d.kind}${d.skill_type ? ' &middot; ' + d.skill_type : ''}</div>
       ${d.description ? '<div class="tt-desc">' + truncate(d.description, 120) + '</div>' : ''}
+      ${edgeInfo}
     `;
     tooltip.classList.add('visible');
     tooltip.style.left = (e.pageX + 12) + 'px';
@@ -457,7 +755,11 @@ function renderGraph(data) {
     link.style('stroke-opacity', l => {
       const s = typeof l.source === 'object' ? l.source.id : l.source;
       const t = typeof l.target === 'object' ? l.target.id : l.target;
-      return (s === d.id || t === d.id) ? 0.6 : 0.03;
+      if (s === d.id || t === d.id) {
+        const style = EDGE_STYLES[l.kind];
+        return style ? Math.min(0.8, style.opacity * 2.5) : 0.6;
+      }
+      return 0.03;
     });
   })
   .on('mousemove', (e) => {
@@ -467,15 +769,43 @@ function renderGraph(data) {
   .on('mouseout', () => {
     tooltip.classList.remove('visible');
     node.style('opacity', 1);
-    link.style('stroke-opacity', 0.3);
+    // Restore edge opacities based on their styles
+    link.each(function(d) {
+      const style = EDGE_STYLES[d.kind];
+      d3.select(this).style('stroke-opacity', style ? style.opacity : 0.2);
+    });
   })
   .on('click', (e, d) => {
     e.stopPropagation();
     showDetail(d, data);
+
+    // Cluster glow: when clicking a project node, highlight its skills
+    node.style('filter', null); // clear previous glow
+    if (d.kind === 'project') {
+      const clusterIds = new Set();
+      clusterIds.add(d.id);
+      data.edges.forEach(edge => {
+        const s = typeof edge.source === 'object' ? edge.source.id : edge.source;
+        const t = typeof edge.target === 'object' ? edge.target.id : edge.target;
+        if (edge.kind === 'belongs_to') {
+          if (t === d.id) clusterIds.add(s);
+          if (s === d.id) clusterIds.add(t);
+        }
+      });
+      node.style('filter', n => clusterIds.has(n.id) ? 'url(#glow)' : null);
+    }
   });
 
-  // Click background to close panel
-  svg.on('click', () => closeDetail());
+  // Click background to close panel and remove glow
+  svg.on('click', () => {
+    closeDetail();
+    node.style('filter', null);
+  });
+
+  // Store references on data for edge toggle and export access
+  data._link = link;
+  data._linkHitArea = linkHitArea;
+  data._applyEdgeStyle = applyEdgeStyle;
 
   // Simulation
   simulation = d3.forceSimulation(data.nodes)
@@ -494,6 +824,11 @@ function renderGraph(data) {
     .force('collide', d3.forceCollide().radius(d => nodeRadius(d) + 3))
     .on('tick', () => {
       link
+        .attr('x1', d => d.source.x)
+        .attr('y1', d => d.source.y)
+        .attr('x2', d => d.target.x)
+        .attr('y2', d => d.target.y);
+      linkHitArea
         .attr('x1', d => d.source.x)
         .attr('y1', d => d.source.y)
         .attr('x2', d => d.target.x)
@@ -525,11 +860,22 @@ function renderGraph(data) {
   }
 }
 
-function hexPath(r) {
-  const a = Math.PI / 3;
+function polyPath(r, sides, offset) {
+  const a = (2 * Math.PI) / sides;
   let pts = [];
+  for (let i = 0; i < sides; i++) {
+    pts.push([r * Math.cos(a * i + (offset || 0)), r * Math.sin(a * i + (offset || 0))]);
+  }
+  return 'M' + pts.map(p => p.join(',')).join('L') + 'Z';
+}
+
+function starPath(r) {
+  const pts = [];
   for (let i = 0; i < 6; i++) {
-    pts.push([r * Math.cos(a * i - Math.PI / 6), r * Math.sin(a * i - Math.PI / 6)]);
+    const angle = (Math.PI / 3) * i - Math.PI / 2;
+    pts.push([r * Math.cos(angle), r * Math.sin(angle)]);
+    const inner = angle + Math.PI / 6;
+    pts.push([r * 0.5 * Math.cos(inner), r * 0.5 * Math.sin(inner)]);
   }
   return 'M' + pts.map(p => p.join(',')).join('L') + 'Z';
 }
@@ -663,6 +1009,34 @@ function applyVisibilityFilter() {
   });
 }
 
+// Edge toggle buttons
+function setupEdgeToggles() {
+  document.querySelectorAll('.edge-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const edgeType = btn.dataset.edge;
+      btn.classList.toggle('active');
+      if (btn.classList.contains('active')) {
+        visibleEdgeTypes.add(edgeType);
+      } else {
+        visibleEdgeTypes.delete(edgeType);
+      }
+      // Update edge visibility
+      updateEdgeVisibility();
+    });
+  });
+}
+
+function updateEdgeVisibility() {
+  d3.selectAll('#graph-svg .edge-line').each(function(d) {
+    const visible = visibleEdgeTypes.has(d.kind);
+    d3.select(this).style('display', visible ? null : 'none');
+  });
+  d3.selectAll('#graph-svg .edge-hit-area').each(function(d) {
+    const visible = visibleEdgeTypes.has(d.kind);
+    d3.select(this).style('display', visible ? null : 'none');
+  });
+}
+
 // Dropdown filters
 function setupDropdowns() {
   document.getElementById('f-project').addEventListener('change', applyDropdownFilter);
@@ -675,6 +1049,7 @@ async function applyDropdownFilter() {
 
   if (!project && !type) {
     // Reset to full graph
+    renderStats(graphData);
     renderGraph(graphData);
     return;
   }
@@ -685,13 +1060,51 @@ async function applyDropdownFilter() {
 
   const resp = await fetch(url);
   const filtered = await resp.json();
-  renderStats(filtered.stats);
+  renderStats(filtered);
   renderGraph(filtered);
+}
+
+// Edge preset cycling
+const EDGE_PRESETS = [
+  { label: 'all on', types: ['belongs_to', 'in_category', 'tagged_with', 'references', 'similar_to', 'colocated'] },
+  { label: 'structural only', types: ['belongs_to', 'in_category'] },
+  { label: 'references only', types: ['references'] },
+  { label: 'all off', types: [] },
+];
+let edgePresetIndex = -1; // -1 means custom/manual state
+
+function cycleEdgePreset() {
+  edgePresetIndex = (edgePresetIndex + 1) % EDGE_PRESETS.length;
+  const preset = EDGE_PRESETS[edgePresetIndex];
+  visibleEdgeTypes = new Set(preset.types);
+  // Sync toggle buttons to match preset
+  document.querySelectorAll('.edge-toggle').forEach(btn => {
+    const edgeType = btn.dataset.edge;
+    if (visibleEdgeTypes.has(edgeType)) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+  updateEdgeVisibility();
+}
+
+// Help overlay
+function toggleHelp() {
+  const overlay = document.getElementById('help-overlay');
+  overlay.classList.toggle('hidden');
 }
 
 // Keyboard shortcuts
 function setupKeyboard() {
   document.addEventListener('keydown', (e) => {
+    // Close help overlay on any key if open
+    const helpOverlay = document.getElementById('help-overlay');
+    if (!helpOverlay.classList.contains('hidden') && e.key !== '?') {
+      helpOverlay.classList.add('hidden');
+      if (e.key === 'Escape') return;
+    }
+
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') {
       if (e.key === 'Escape') { e.target.blur(); closeDetail(); }
       return;
@@ -711,11 +1124,89 @@ function setupKeyboard() {
           d3.zoom().transform, d3.zoomIdentity
         );
         break;
+      case '?':
+        e.preventDefault();
+        toggleHelp();
+        break;
+      case 'e':
+        cycleEdgePreset();
+        break;
+      case '1': case '2': case '3': case '4': case '5': {
+        const kindMap = { '1': 'all', '2': 'skill', '3': 'project', '4': 'category', '5': 'tag' };
+        const kind = kindMap[e.key];
+        const btn = document.querySelector(`.filter-btn[data-kind="${kind}"]`);
+        if (btn) btn.click();
+        break;
+      }
     }
   });
 }
 
 document.getElementById('close-detail').addEventListener('click', closeDetail);
+
+// PNG export
+document.getElementById('export-png').addEventListener('click', () => {
+  const svgEl = document.getElementById('graph-svg');
+  const serializer = new XMLSerializer();
+  let svgString = serializer.serializeToString(svgEl);
+
+  // Inject computed styles for self-contained rendering
+  const styleString = `<style>
+    .edge-line { stroke: #30363d; fill: none; }
+    .edge-hit-area { display: none; }
+    .node-label { fill: #8b949e; font-size: 9px; text-anchor: middle; font-family: sans-serif; }
+    .node-label-small { fill: #8b949e; font-size: 7px; text-anchor: middle; font-family: sans-serif; }
+  </style>`;
+  svgString = svgString.replace('</svg>', styleString + '</svg>');
+
+  // Ensure SVG has width/height for rendering
+  const rect = svgEl.getBoundingClientRect();
+  const w = rect.width * 2;  // 2x for retina
+  const h = rect.height * 2;
+
+  if (!svgString.match(/xmlns="http:\/\/www\.w3\.org\/2000\/svg"/)) {
+    svgString = svgString.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+  }
+
+  const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+
+    // Fill background
+    ctx.fillStyle = '#0d1117';
+    ctx.fillRect(0, 0, w, h);
+
+    // Draw SVG
+    ctx.drawImage(img, 0, 0, w, h);
+    URL.revokeObjectURL(url);
+
+    // Trigger download
+    canvas.toBlob((pngBlob) => {
+      const pngUrl = URL.createObjectURL(pngBlob);
+      const a = document.createElement('a');
+      const date = new Date().toISOString().slice(0, 10);
+      a.download = `skill-graph-${date}.png`;
+      a.href = pngUrl;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(pngUrl);
+    }, 'image/png');
+  };
+
+  img.src = url;
+});
+
+// Close help overlay on background click
+document.getElementById('help-overlay').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) toggleHelp();
+});
 
 init();
 </script>

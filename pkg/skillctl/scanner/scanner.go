@@ -84,8 +84,8 @@ func (s *Scanner) Scan() (*model.Inventory, error) {
 		if sk.DuplicateOf != nil {
 			inv.Duplicates++
 		}
-		if sk.Type == model.SkillTypeClaudeMD {
-			inv.ClaudeMDCount++
+		if sk.Type == model.SkillTypeSkillIndex {
+			inv.SkillIndexCount++
 		} else if !sk.HasYAMLFrontmatter {
 			inv.NoFrontmatter++
 		}
@@ -141,7 +141,7 @@ func (s *Scanner) scanDir(root string, inv *model.Inventory) error {
 			s.addSkill(path, model.SkillTypeClaudeCodeSkill, inv)
 
 		case d.Name() == "CLAUDE.md":
-			s.addSkill(path, model.SkillTypeClaudeMD, inv)
+			s.addSkill(path, model.SkillTypeSkillIndex, inv)
 
 		case s.matchCommand(parts, d.Name()):
 			s.addSkill(path, model.SkillTypeCommand, inv)

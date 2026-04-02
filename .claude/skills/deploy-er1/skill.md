@@ -1,3 +1,15 @@
+---
+name: deploy-er1
+description: |
+  Rebuild the aims-core Docker image and restart the local ER1 container.
+  Use when deploying, rebuilding backend, or restarting the local ER1 instance.
+  Usage: /deploy-er1
+metadata:
+  version: 1.0.0
+  category: ops
+  tags: [docker, deploy, er1, local]
+---
+
 # Deploy ER1 Backend (Local Docker)
 
 Rebuild the aims-core Docker image and restart the local ER1 container.

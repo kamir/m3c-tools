@@ -91,7 +91,7 @@ func TestScanFindsAllTypes(t *testing.T) {
 	// Check we found each type.
 	wantTypes := map[model.SkillType]bool{
 		model.SkillTypeClaudeCodeSkill: false,
-		model.SkillTypeClaudeMD:        false,
+		model.SkillTypeSkillIndex:        false,
 		model.SkillTypeCommand:         false,
 		model.SkillTypeMCPServer:       false,
 		model.SkillTypeAgent:           false,

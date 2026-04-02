@@ -107,6 +107,7 @@
   .badge-mcp { background: #d2992233; color: var(--orange); }
   .badge-agent { background: #3fb95033; color: var(--green); }
   .badge-claude { background: #f8514933; color: var(--red); }
+  .badge-index { background: #d2992233; color: var(--orange); }
   .badge-synth { background: #8b949e33; color: var(--text-muted); }
   .badge-yes { background: #3fb95033; color: var(--green); }
   .badge-no { background: #f8514933; color: var(--red); }
@@ -156,8 +157,8 @@
     <div class="value{{if gt .NoFrontmatter 0}} warn{{end}}">{{.NoFrontmatter}}</div>
   </div>
   <div class="stat-card">
-    <div class="label">CLAUDE.md</div>
-    <div class="value">{{.ClaudeMDCount}}</div>
+    <div class="label">Skill Indexes</div>
+    <div class="value">{{.SkillIndexCount}}</div>
   </div>
 </div>
 
@@ -229,14 +230,14 @@
 </table>
 {{end}}
 
-{{if gt .ClaudeMDCount 0}}
-<h2>Project Instructions (CLAUDE.md)</h2>
+{{if gt .SkillIndexCount 0}}
+<h2>Skill Indexes (CLAUDE.md)</h2>
 <table>
   <thead>
     <tr><th>Project</th><th>Path</th><th>Size</th></tr>
   </thead>
   <tbody>
-  {{range .Skills}}{{if eq (string .Type) "claude_md"}}
+  {{range .Skills}}{{if eq (string .Type) "skill_index"}}
     <tr>
       <td><strong>{{.SourceProject}}</strong></td>
       <td style="font-size:0.8rem;color:var(--text-muted);">{{.SourcePath}}</td>
@@ -254,7 +255,7 @@
     <tr><th>Name</th><th>Type</th><th>Path</th></tr>
   </thead>
   <tbody>
-  {{range .Skills}}{{if and (not .HasYAMLFrontmatter) (ne (string .Type) "claude_md")}}
+  {{range .Skills}}{{if and (not .HasYAMLFrontmatter) (ne (string .Type) "skill_index")}}
     <tr>
       <td>{{.Name}}</td>
       <td><span class="badge {{badgeClass (string .Type)}}">{{.Type}}</span></td>

@@ -1,3 +1,15 @@
+---
+name: renew-cert
+description: |
+  Renew a Let's Encrypt SSL certificate and update the GCP HTTPS load balancer.
+  Supports onboarding.guide and maindset.academy deployments.
+  Usage: /renew-cert
+metadata:
+  version: 1.0.0
+  category: ops
+  tags: [ssl, certificate, letsencrypt, gcp, load-balancer]
+---
+
 # Renew SSL Certificate (GCP Load Balancer)
 
 Renew a Let's Encrypt SSL certificate and update the GCP HTTPS load balancer.

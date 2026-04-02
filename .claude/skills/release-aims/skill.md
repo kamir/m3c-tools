@@ -1,3 +1,16 @@
+---
+name: release-aims
+description: |
+  Manage the aims-core release lifecycle: commit, PR, tag, deploy.
+  Subcommands: status, commit, pr, tag, deploy, full.
+  Usage: /release-aims [status|commit|pr|tag|deploy|full]
+argument-hint: "[status|commit|pr|tag <version>|deploy staging|full]"
+metadata:
+  version: 1.0.0
+  category: ops
+  tags: [release, aims-core, git, deploy]
+---
+
 # Release AIMS-Core
 
 Manage the aims-core release lifecycle: commit, PR, tag, deploy.
