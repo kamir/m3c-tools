@@ -43,6 +43,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/config"
 	"github.com/kamir/m3c-tools/pkg/er1"
 	"github.com/kamir/m3c-tools/pkg/importer"
 	"github.com/kamir/m3c-tools/pkg/impression"
@@ -69,9 +70,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Load .env if present
-	for _, p := range []string{".env", filepath.Join(os.Getenv("HOME"), ".m3c-tools.env")} {
-		_ = er1.LoadDotenv(p)
+	// Load config: try profile system first, fall back to legacy .env files.
+	pm := config.NewProfileManager()
+	if activeProfile, err := pm.ActiveProfile(); err == nil {
+		_ = pm.ApplyProfile(activeProfile)
+		log.Printf("[config] profile: %s", activeProfile.Name)
+	} else {
+		// Fallback to legacy .env loading for pre-profile installations.
+		for _, p := range []string{".env", filepath.Join(os.Getenv("HOME"), ".m3c-tools.env")} {
+			_ = er1.LoadDotenv(p)
+		}
 	}
 
 	switch os.Args[1] {
@@ -103,10 +111,16 @@ func main() {
 		cmdImportAudio(os.Args[2:])
 	case "plaud":
 		cmdPlaud(os.Args[2:])
+	case "config":
+		cmdConfig(os.Args[2:])
 	case "setup":
 		cmdSetup(os.Args[2:])
+	case "settings":
+		cmdSettings()
 	case "menubar":
 		cmdMenubar(os.Args[2:])
+	case "version", "--version", "-v":
+		printVersion()
 	case "help", "--help", "-h":
 		printUsage()
 	default:
@@ -184,6 +198,11 @@ Commands:
   plaud sync <id>        Sync a Plaud recording to ER1
   plaud auth login       Extract token from Chrome (web.plaud.ai)
   plaud auth <token>     Save Plaud API token manually
+
+  config list|show|switch|create|test|import
+                         Configuration profile management
+
+  settings               Open profile settings editor in browser
 
   setup                  Set up Python venv and install whisper
     --force                Recreate venv from scratch
@@ -649,6 +668,15 @@ func cmdThumbnail(args []string) {
 	}
 	os.WriteFile(output, data, 0600)
 	fmt.Printf("Saved %s (%d bytes)\n", output, len(data))
+}
+
+// -- settings command --
+
+func cmdSettings() {
+	srv := config.NewEditorServer(":9116")
+	if err := srv.Start(); err != nil {
+		log.Fatalf("[settings] editor error: %v", err)
+	}
 }
 
 // -- check-er1 command --
@@ -2112,6 +2140,93 @@ func cmdMenubar(args []string) {
 				}
 			}
 			return records, nil
+		},
+		ListRecentObservations: func(limit int) ([]menubar.Observation, error) {
+			db, err := tracking.OpenFilesDB(defaultFilesDBPath())
+			if err != nil {
+				return nil, err
+			}
+			defer db.Close()
+			files, err := db.ListFiles(limit)
+			if err != nil {
+				return nil, err
+			}
+			observations := make([]menubar.Observation, 0, len(files))
+			for _, f := range files {
+				title := filepath.Base(f.FilePath)
+				// Clean up plaud:// paths to show just the ID prefix.
+				if strings.HasPrefix(f.FilePath, "plaud://") {
+					id := strings.TrimPrefix(f.FilePath, "plaud://")
+					if len(id) > 8 {
+						id = id[:8]
+					}
+					title = "Plaud " + id
+				}
+				// Use transcript text first line as title if available.
+				if f.TranscriptText != "" {
+					lines := strings.SplitN(f.TranscriptText, "\n", 2)
+					firstLine := strings.TrimSpace(lines[0])
+					// Skip composite doc headers, look for actual content.
+					if strings.HasPrefix(firstLine, "=") || strings.HasPrefix(firstLine, "#") {
+						for _, line := range strings.Split(f.TranscriptText, "\n") {
+							line = strings.TrimSpace(line)
+							if line != "" && !strings.HasPrefix(line, "=") && !strings.HasPrefix(line, "#") && !strings.HasPrefix(line, "---") {
+								firstLine = line
+								break
+							}
+						}
+					}
+					if len(firstLine) > 60 {
+						firstLine = firstLine[:57] + "..."
+					}
+					if firstLine != "" {
+						title = firstLine
+					}
+				}
+				observations = append(observations, menubar.Observation{
+					Title:         title,
+					Type:          f.ImportType,
+					Status:        f.Status,
+					DocID:         f.UploadDocID,
+					ProcessedAt:   f.ProcessedAt,
+					HasTranscript: f.TranscriptLen > 0,
+				})
+			}
+			return observations, nil
+		},
+		ListProfiles: func() ([]menubar.ConfigProfile, string, error) {
+			pm := config.NewProfileManager()
+			profiles, err := pm.ListProfiles()
+			if err != nil {
+				return nil, "", err
+			}
+			active := pm.ActiveProfileName()
+			result := make([]menubar.ConfigProfile, len(profiles))
+			for i, p := range profiles {
+				result[i] = menubar.ConfigProfile{
+					Name:        p.Name,
+					Description: p.Description,
+					ER1URL:      p.Vars["ER1_API_URL"],
+					IsActive:    p.Name == active,
+				}
+			}
+			return result, active, nil
+		},
+		SwitchProfile: func(name string) error {
+			pm := config.NewProfileManager()
+			if err := pm.SwitchProfile(name); err != nil {
+				return err
+			}
+			log.Printf("[config] switched to profile: %s", name)
+			return nil
+		},
+		OpenProfileEditor: func() {
+			go func() {
+				srv := config.NewEditorServer(":9116")
+				if err := srv.Start(); err != nil {
+					log.Printf("[config] editor error: %v", err)
+				}
+			}()
 		},
 	})
 	app.SetAuthSession(menubar.AuthSession{})
@@ -4334,7 +4449,7 @@ func cmdPlaudSync(recordingID string) {
 		ids = []string{recordingID}
 	}
 
-	summary, err := runPlaudSyncPipeline(client, cfg, ids, defaultFilesDBPath(), nil)
+	summary, err := runPlaudSyncPipeline(client, cfg, ids, defaultFilesDBPath(), session.Token, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Sync failed: %v\n", err)
 		os.Exit(1)
@@ -4348,7 +4463,7 @@ type plaudSyncSummary struct {
 	Failed  int
 }
 
-func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs []string, dbPath string, onProgress func(menubar.BulkProgressEvent)) (*plaudSyncSummary, error) {
+func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs []string, dbPath string, plaudToken string, onProgress func(menubar.BulkProgressEvent), customTags ...string) (*plaudSyncSummary, error) {
 	filesDB, err := tracking.OpenFilesDB(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("open tracking db: %w", err)
@@ -4358,6 +4473,35 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 	er1Cfg := er1.LoadConfig()
 	applyRuntimeER1Context(er1Cfg)
 	er1Cfg.ContentType = cfg.ContentType
+
+	// Server-side dedup check (SPEC-0117)
+	var syncAPI *plaud.SyncAPIClient
+	var plaudAccountID string
+	serverSyncAvailable := false
+
+	if er1Cfg.APIKey != "" && plaudToken != "" {
+		syncAPI = plaud.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, er1Cfg.ContextID, !er1Cfg.VerifySSL)
+		plaudAccountID = plaud.DeriveAccountID(plaudToken)
+
+		checkResult, checkErr := syncAPI.CheckRecordings(plaudAccountID, recordingIDs)
+		if checkErr == nil && checkResult != nil {
+			serverSyncAvailable = true
+			serverSynced := len(checkResult.Synced)
+			if serverSynced > 0 {
+				log.Printf("[plaud] server check: %d/%d already synced remotely", serverSynced, len(recordingIDs))
+				// Filter out server-synced IDs (in addition to local DB filter)
+				var filtered []string
+				for _, id := range recordingIDs {
+					if _, alreadySynced := checkResult.Synced[id]; !alreadySynced {
+						filtered = append(filtered, id)
+					}
+				}
+				recordingIDs = filtered
+			}
+		} else {
+			log.Printf("[plaud] server sync unavailable, using local tracking only")
+		}
+	}
 
 	summary := &plaudSyncSummary{Total: len(recordingIDs)}
 
@@ -4438,6 +4582,10 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 		if cfg.DefaultTags != "" {
 			tags = cfg.DefaultTags + "," + tags
 		}
+		// Prepend custom tags from UI if provided.
+		if len(customTags) > 0 && customTags[0] != "" {
+			tags = strings.TrimSpace(customTags[0]) + "," + tags
+		}
 
 		// 5. Upload to ER1.
 		if onProgress != nil {
@@ -4493,6 +4641,24 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 		_, _ = filesDB.RecordFile(plaudPath, audioHash, int64(len(audioData)), "plaud", "")
 		_ = filesDB.RecordTranscript(audioHash, "plaud", strings.TrimSpace(transcriptText), "")
 		_ = filesDB.RecordUploadSuccess(audioHash, "plaud", resp.DocID)
+
+		// Register mapping on server (SPEC-0117)
+		if syncAPI != nil && serverSyncAvailable {
+			mapErr := syncAPI.RegisterMapping(plaud.SyncMapping{
+				PlaudAccountID:    plaudAccountID,
+				PlaudRecordingID:  recID,
+				ER1DocID:          resp.DocID,
+				ER1ContextID:      er1Cfg.ContextID,
+				RecordingTitle:    rec.Title,
+				RecordingDuration: rec.Duration,
+				AudioFormat:       audioFmt,
+				AudioSizeBytes:    len(audioData),
+				TranscriptLength:  len(transcriptText),
+			})
+			if mapErr != nil {
+				log.Printf("[plaud] server mapping failed (non-fatal): %v", mapErr)
+			}
+		}
 
 		summary.Success++
 		if onProgress != nil {
@@ -4617,6 +4783,25 @@ func menubarHandlePlaudSync(app *menubar.App) {
 		}
 	}()
 
+	// Server-side sync check for status display (SPEC-0117)
+	var serverSynced map[string]plaud.SyncedInfo
+	er1Cfg := er1.LoadConfig()
+	if er1Cfg.APIKey != "" {
+		syncAPI := plaud.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, er1Cfg.ContextID, !er1Cfg.VerifySSL)
+		plaudAccountID := plaud.DeriveAccountID(session.Token)
+		allIDs := make([]string, len(recordings))
+		for i, rec := range recordings {
+			allIDs[i] = rec.ID
+		}
+		checkResult, checkErr := syncAPI.CheckRecordings(plaudAccountID, allIDs)
+		if checkErr == nil && checkResult != nil {
+			serverSynced = checkResult.Synced
+			if len(serverSynced) > 0 {
+				log.Printf("[plaud] server knows %d/%d recordings as synced", len(serverSynced), len(recordings))
+			}
+		}
+	}
+
 	var records []menubar.PlaudSyncRecord
 	for _, rec := range recordings {
 		status := "new"
@@ -4624,6 +4809,12 @@ func menubarHandlePlaudSync(app *menubar.App) {
 			plaudPath := "plaud://" + rec.ID
 			if tracked, lookupErr := filesDB.GetByPath(plaudPath); lookupErr == nil && tracked != nil {
 				status = tracked.Status
+			}
+		}
+		// Server-side check: mark as synced if server knows about it even when local DB doesn't (SPEC-0117)
+		if status == "new" && serverSynced != nil {
+			if _, ok := serverSynced[rec.ID]; ok {
+				status = "synced"
 			}
 		}
 		records = append(records, menubar.PlaudSyncRecord{
@@ -4636,10 +4827,10 @@ func menubarHandlePlaudSync(app *menubar.App) {
 	}
 
 	accountInfo := fmt.Sprintf("Plaud — %d recordings", len(recordings))
-	menubar.ShowPlaudSyncWindow(records, accountInfo)
+	menubar.ShowPlaudSyncWindow(records, accountInfo, cfg.DefaultTags)
 
 	// Register sync callback.
-	menubar.SetPlaudSyncCallback(func(action string, recordingIDs []string) {
+	menubar.SetPlaudSyncCallback(func(action string, recordingIDs []string, customTags string) {
 		if action != "sync" || len(recordingIDs) == 0 {
 			return
 		}
@@ -4679,7 +4870,7 @@ func menubarHandlePlaudSync(app *menubar.App) {
 			}
 		}
 
-		summary, syncErr := runPlaudSyncPipeline(client, cfg, recordingIDs, dbPath, onProgress)
+		summary, syncErr := runPlaudSyncPipeline(client, cfg, recordingIDs, dbPath, session.Token, onProgress, customTags)
 		if syncErr != nil {
 			log.Printf("[plaud] sync FAILED: %v", syncErr)
 			app.Notify("Plaud Sync Failed", syncErr.Error())

@@ -1,5 +1,6 @@
-// main_other.go — CLI-only entry point for non-macOS platforms.
-// GUI features (menu bar, observation window, recording) are not available.
+// main_other.go — CLI + system tray entry point for non-macOS platforms.
+// The system tray (menubar command) uses fyne.io/systray via pkg/tray.
+// GUI features that require macOS (observation window, recording) are not available.
 //
 //go:build !darwin
 
@@ -10,18 +11,22 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/config"
 	"github.com/kamir/m3c-tools/pkg/er1"
 	"github.com/kamir/m3c-tools/pkg/impression"
 	"github.com/kamir/m3c-tools/pkg/plaud"
 	"github.com/kamir/m3c-tools/pkg/tracking"
 	"github.com/kamir/m3c-tools/pkg/transcript"
+	"github.com/kamir/m3c-tools/pkg/tray"
 )
 
 func main() {
@@ -30,13 +35,22 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Load .env files: CWD first, then home dir (config precedence).
+	// Load config: try profile system first, fall back to legacy .env files.
 	home, _ := os.UserHomeDir()
-	for _, p := range []string{".env", filepath.Join(home, ".m3c-tools.env")} {
-		_ = er1.LoadDotenv(p)
+	pm := config.NewProfileManager()
+	if activeProfile, err := pm.ActiveProfile(); err == nil {
+		_ = pm.ApplyProfile(activeProfile)
+		log.Printf("[config] profile: %s", activeProfile.Name)
+	} else {
+		// Fallback to legacy .env loading for pre-profile installations.
+		for _, p := range []string{".env", filepath.Join(home, ".m3c-tools.env")} {
+			_ = er1.LoadDotenv(p)
+		}
 	}
 
 	switch os.Args[1] {
+	case "config":
+		cmdConfig(os.Args[2:])
 	case "transcript":
 		cmdTranscript(os.Args[2:])
 	case "plaud":
@@ -46,14 +60,15 @@ func main() {
 	case "check-er1":
 		cmdCheckER1()
 	case "menubar":
-		fmt.Fprintln(os.Stderr, "Error: menu bar is only available on macOS")
-		os.Exit(1)
+		cmdTrayApp(os.Args[2:])
 	case "record", "devices":
 		fmt.Fprintln(os.Stderr, "Error: audio recording requires macOS with PortAudio")
 		os.Exit(1)
 	case "screenshot":
 		fmt.Fprintln(os.Stderr, "Error: screenshot capture requires macOS")
 		os.Exit(1)
+	case "version", "--version", "-v":
+		printVersion()
 	case "help", "--help", "-h":
 		printUsage()
 	default:
@@ -628,6 +643,8 @@ Available commands (cross-platform):
     --er1-url <url>       ER1 upload endpoint (default: onboarding.guide)
     --tags <tags>         Default tags for plaud sync
     --no-browser          Skip browser login, enter User ID manually
+  config list|show|switch|create|test|import
+                         Configuration profile management
   transcript <video_id>  Fetch YouTube transcript
     --lang <code>         Language code (default: en)
     --format <fmt>        Output format: text, json, srt, webvtt (default: text)
@@ -641,8 +658,10 @@ Available commands (cross-platform):
   check-er1              Check ER1 server connectivity
   help                   Show this help
 
+Cross-platform commands:
+  menubar                Launch system tray app
+
 macOS-only commands (not available on this platform):
-  menubar                Launch menu bar app
   record                 Record audio
   devices                List audio devices
   screenshot             Capture screenshot
@@ -655,4 +674,157 @@ func openURL(url string) error {
 
 func cmdExec(name string, args ...string) *exec.Cmd {
 	return exec.Command(name, args...)
+}
+
+// cmdTrayApp launches the cross-platform system tray app using fyne.io/systray.
+// This mirrors the macOS cmdMenubar function from main.go with the handlers
+// that work cross-platform (profiles, transcript fetch, plaud/pocket sync, log).
+func cmdTrayApp(args []string) {
+	home, _ := os.UserHomeDir()
+	logPath := filepath.Join(home, ".m3c-tools", "m3c-tools.log")
+	verbose := true
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--log":
+			if i+1 < len(args) {
+				logPath = args[i+1]
+				i++
+			}
+		case "--verbose":
+			verbose = true
+		case "--quiet":
+			verbose = false
+		default:
+			if strings.HasPrefix(args[i], "--") {
+				fmt.Fprintf(os.Stderr, "Warning: unknown flag %q (ignored)\n", args[i])
+			}
+		}
+	}
+
+	// Set up log file.
+	if logDir := filepath.Dir(logPath); logDir != "" && logDir != "." {
+		os.MkdirAll(logDir, 0700)
+	}
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: cannot open log file %s: %v\n", logPath, err)
+	} else {
+		if verbose {
+			log.SetOutput(io.MultiWriter(logFile, os.Stderr))
+		} else {
+			log.SetOutput(logFile)
+		}
+		log.SetFlags(log.Ldate | log.Ltime)
+	}
+	fmt.Fprintf(os.Stderr, "m3c-tools tray started. Logs: %s\n", logPath)
+
+	app := tray.New(tray.TrayHandlers{
+		OnAction: func(action tray.ActionType, data string) {
+			log.Printf("[tray] action: %s data=%q", action, data)
+			switch action {
+			case tray.ActionFetchTranscript:
+				// Open the YouTube transcript fetch page in the default browser.
+				url := "https://onboarding.guide/v2/transcripts"
+				openBrowserURL(url)
+			case tray.ActionPlaudSync:
+				log.Println("[tray] starting plaud sync all...")
+				go cmdPlaudSync("all")
+			case tray.ActionPocketSync:
+				log.Println("[tray] pocket sync triggered (not yet implemented)")
+			case tray.ActionOpenLog:
+				log.Printf("[tray] opening log file: %s", data)
+			case tray.ActionStarGitHub:
+				log.Printf("[tray] star on GitHub: %s", data)
+			case tray.ActionQuickImpulse:
+				log.Println("[tray] quick impulse triggered")
+			case tray.ActionQuit:
+				log.Println("[tray] quit requested")
+				os.Exit(0)
+			}
+		},
+		ListProfiles: func() ([]tray.Profile, string, error) {
+			pm := config.NewProfileManager()
+			profiles, err := pm.ListProfiles()
+			if err != nil {
+				return nil, "", err
+			}
+			active := pm.ActiveProfileName()
+			result := make([]tray.Profile, len(profiles))
+			for i, p := range profiles {
+				result[i] = tray.Profile{
+					Name:        p.Name,
+					Description: p.Description,
+					IsActive:    p.Name == active,
+				}
+			}
+			return result, active, nil
+		},
+		SwitchProfile: func(name string) error {
+			pm := config.NewProfileManager()
+			if err := pm.SwitchProfile(name); err != nil {
+				return err
+			}
+			log.Printf("[config] switched to profile: %s", name)
+			return nil
+		},
+		OpenProfileEditor: func() {
+			go func() {
+				srv := config.NewEditorServer(":9116")
+				if err := srv.Start(); err != nil {
+					log.Printf("[config] editor error: %v", err)
+				}
+			}()
+		},
+		ListRecentObs: func(limit int) ([]tray.Observation, error) {
+			dbPath := defaultFilesDBPath()
+			db, err := tracking.OpenFilesDB(dbPath)
+			if err != nil {
+				return nil, err
+			}
+			defer db.Close()
+			files, err := db.ListFiles(limit)
+			if err != nil {
+				return nil, err
+			}
+			observations := make([]tray.Observation, 0, len(files))
+			for _, f := range files {
+				title := filepath.Base(f.FilePath)
+				if strings.HasPrefix(f.FilePath, "plaud://") {
+					id := strings.TrimPrefix(f.FilePath, "plaud://")
+					if len(id) > 8 {
+						id = id[:8]
+					}
+					title = "Plaud " + id
+				}
+				observations = append(observations, tray.Observation{
+					Title:       title,
+					Type:        f.ImportType,
+					ProcessedAt: f.ProcessedAt.Format("2006-01-02 15:04"),
+				})
+			}
+			return observations, nil
+		},
+	})
+
+	app.SetLogPath(logPath)
+
+	// systray.Run() blocks — this must be the last call.
+	app.Run()
+}
+
+// openBrowserURL opens a URL in the platform default browser.
+func openBrowserURL(url string) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	case "linux":
+		cmd = exec.Command("xdg-open", url)
+	default:
+		cmd = exec.Command("open", url)
+	}
+	if err := cmd.Start(); err != nil {
+		log.Printf("[tray] failed to open browser: %v", err)
+	}
 }

@@ -41,6 +41,7 @@ const (
 	ActionOpenLog           ActionType = "open_log"
 	ActionStarGitHub        ActionType = "star_github"
 	ActionPlaudSync         ActionType = "plaud_sync"
+	ActionPocketSync        ActionType = "pocket_sync"
 	ActionQuit              ActionType = "quit"
 )
 
@@ -105,6 +106,16 @@ type BulkProgressEvent struct {
 	CurrentFile string
 }
 
+// Observation represents a unified timeline entry from the tracking DB.
+type Observation struct {
+	Title       string    // display title (recording title, video ID, filename)
+	Type        string    // "plaud", "audio", "transcript", "screenshot", "impulse"
+	Status      string    // "imported", "uploaded", "failed"
+	DocID       string    // ER1 document ID (for deep-linking)
+	ProcessedAt time.Time // when it was processed
+	HasTranscript bool
+}
+
 // HistoryEntry records a completed transcript fetch or upload action.
 type HistoryEntry struct {
 	VideoID   string
@@ -135,11 +146,16 @@ type MenuConfig struct {
 
 // DefaultConfig returns a MenuConfig with sensible defaults for m3c-tools.
 func DefaultConfig() MenuConfig {
+	// Prefer the new design-system template icon; fall back to the legacy icon.
+	icon := FindIcon("menubar-icon.png")
+	if icon == "" {
+		icon = FindIcon("maindset_icon.png")
+	}
 	return MenuConfig{
 		AppName:  "M3C Tools",
 		AppLabel: "com.kamir.m3c-tools",
 		Title:    "",
-		IconPath: FindIcon("maindset_icon.png"),
+		IconPath: icon,
 		LogPath:  defaultLogPath(),
 	}
 }
@@ -181,6 +197,28 @@ type Handlers struct {
 	// ListTrackingRecords returns recent tracking DB records for display
 	// in the "Tracking DB" submenu. Returns up to limit records.
 	ListTrackingRecords func(limit int) ([]TrackingRecord, error)
+
+	// ListRecentObservations returns recent observations across all types
+	// for the unified History timeline. Returns up to limit records.
+	ListRecentObservations func(limit int) ([]Observation, error)
+
+	// ListProfiles returns available config profiles for the Profile submenu.
+	// Returns profiles, active profile name, and any error.
+	ListProfiles func() ([]ConfigProfile, string, error)
+
+	// SwitchProfile switches to the named profile and reloads config.
+	SwitchProfile func(name string) error
+
+	// OpenProfileEditor launches the local web-based profile settings editor.
+	OpenProfileEditor func()
+}
+
+// ConfigProfile represents a configuration profile shown in the menubar submenu.
+type ConfigProfile struct {
+	Name        string
+	Description string
+	ER1URL      string
+	IsActive    bool
 }
 
 // ER1UploadFunc is a callback that performs an ER1 upload for the given video ID.
@@ -265,16 +303,22 @@ func CopyToClipboard(text string) error {
 }
 
 // FindIcon searches for an icon file by name in common locations:
-// the current directory, two levels up (repo root), and next to the executable.
-// Returns the absolute path if found, or empty string.
+// the current directory, design/icons/, two levels up (repo root),
+// and next to the executable. Returns the absolute path if found, or empty string.
 func FindIcon(name string) string {
 	candidates := []string{
 		name,
+		filepath.Join("design", "icons", name),
 		filepath.Join("..", "..", name),
+		filepath.Join("..", "..", "design", "icons", name),
 	}
 	exe, err := os.Executable()
 	if err == nil {
-		candidates = append(candidates, filepath.Join(filepath.Dir(exe), name))
+		exeDir := filepath.Dir(exe)
+		candidates = append(candidates,
+			filepath.Join(exeDir, name),
+			filepath.Join(exeDir, "..", "..", "design", "icons", name),
+		)
 	}
 	for _, c := range candidates {
 		if abs, err := filepath.Abs(c); err == nil {

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skill Inventory Report</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #7c3aed;
+    --accent-light: #a78bfa;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --cyan: #39d2c0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 2rem;
+  }
+  h1 {
+    font-size: 1.8rem;
+    margin-bottom: 0.5rem;
+    color: var(--accent-light);
+  }
+  h2 {
+    font-size: 1.3rem;
+    margin: 2rem 0 1rem;
+    color: var(--accent-light);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+  }
+  .meta {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 2rem;
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+  }
+  .stat-card .label {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .stat-card .value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--accent-light);
+  }
+  .stat-card .value.warn { color: var(--orange); }
+  .stat-card .value.danger { color: var(--red); }
+  .stat-card .value.good { color: var(--green); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 2rem;
+    font-size: 0.9rem;
+  }
+  th {
+    background: var(--bg);
+    text-align: left;
+    padding: 0.6rem 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  td {
+    padding: 0.5rem 0.8rem;
+    border-top: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tr:hover td { background: rgba(124, 58, 237, 0.05); }
+  .badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .badge-skill { background: #7c3aed33; color: var(--accent-light); }
+  .badge-cmd { background: #39d2c033; color: var(--cyan); }
+  .badge-mcp { background: #d2992233; color: var(--orange); }
+  .badge-agent { background: #3fb95033; color: var(--green); }
+  .badge-claude { background: #f8514933; color: var(--red); }
+  .badge-synth { background: #8b949e33; color: var(--text-muted); }
+  .badge-yes { background: #3fb95033; color: var(--green); }
+  .badge-no { background: #f8514933; color: var(--red); }
+  .dup-marker { color: var(--orange); font-weight: 600; }
+  .type-breakdown { margin-bottom: 1rem; }
+  .type-breakdown li {
+    list-style: none;
+    padding: 0.3rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .bar {
+    height: 6px;
+    background: var(--accent);
+    border-radius: 3px;
+    min-width: 4px;
+  }
+  footer {
+    margin-top: 3rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 0.8rem;
+  }
+</style>
+</head>
+<body>
+<h1>Skill Inventory Report</h1>
+<div class="meta">Scanned at: {{.ScannedAt}} | Paths: {{range $i, $p := .ScanPaths}}{{if $i}}, {{end}}{{$p}}{{end}}</div>
+
+<div class="stats">
+  <div class="stat-card">
+    <div class="label">Total Skills</div>
+    <div class="value">{{.TotalCount}}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Projects</div>
+    <div class="value">{{len .ByProject}}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Duplicates</div>
+    <div class="value{{if gt .Duplicates 0}} warn{{end}}">{{.Duplicates}}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">No Frontmatter</div>
+    <div class="value{{if gt .NoFrontmatter 0}} warn{{end}}">{{.NoFrontmatter}}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">CLAUDE.md</div>
+    <div class="value">{{.ClaudeMDCount}}</div>
+  </div>
+</div>
+
+<h2>By Type</h2>
+<ul class="type-breakdown">
+{{range $type, $count := .ByType}}
+  <li>
+    <span class="badge {{badgeClass $type}}">{{$type}}</span>
+    <div class="bar" style="width: {{barWidth $count $.TotalCount}}px;"></div>
+    <span>{{$count}}</span>
+  </li>
+{{end}}
+</ul>
+
+<h2>By Project</h2>
+<ul class="type-breakdown">
+{{range $proj, $count := .ByProject}}
+  <li>
+    <span style="min-width:120px;display:inline-block;">{{$proj}}</span>
+    <div class="bar" style="width: {{barWidth $count $.TotalCount}}px;"></div>
+    <span>{{$count}}</span>
+  </li>
+{{end}}
+</ul>
+
+<h2>All Skills</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Project</th>
+      <th>Category</th>
+      <th>Frontmatter</th>
+      <th>Size</th>
+      <th>Duplicate</th>
+    </tr>
+  </thead>
+  <tbody>
+  {{range .Skills}}
+    <tr>
+      <td><strong>{{.Name}}</strong></td>
+      <td><span class="badge {{badgeClass (string .Type)}}">{{.Type}}</span></td>
+      <td>{{.SourceProject}}</td>
+      <td>{{if .Frontmatter}}{{.Frontmatter.Category}}{{else}}-{{end}}</td>
+      <td>{{if .HasYAMLFrontmatter}}<span class="badge badge-yes">yes</span>{{else}}<span class="badge badge-no">no</span>{{end}}</td>
+      <td>{{formatBytes .ContentSizeBytes}}</td>
+      <td>{{if .DuplicateOf}}<span class="dup-marker">dup of {{deref .DuplicateOf}}</span>{{else}}-{{end}}</td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+
+{{if gt .Duplicates 0}}
+<h2>Duplicates</h2>
+<table>
+  <thead>
+    <tr><th>Skill</th><th>Duplicate Of</th><th>Path</th></tr>
+  </thead>
+  <tbody>
+  {{range .Skills}}{{if .DuplicateOf}}
+    <tr>
+      <td>{{.Name}}</td>
+      <td>{{deref .DuplicateOf}}</td>
+      <td style="font-size:0.8rem;color:var(--text-muted);">{{.SourcePath}}</td>
+    </tr>
+  {{end}}{{end}}
+  </tbody>
+</table>
+{{end}}
+
+{{if gt .ClaudeMDCount 0}}
+<h2>Project Instructions (CLAUDE.md)</h2>
+<table>
+  <thead>
+    <tr><th>Project</th><th>Path</th><th>Size</th></tr>
+  </thead>
+  <tbody>
+  {{range .Skills}}{{if eq (string .Type) "claude_md"}}
+    <tr>
+      <td><strong>{{.SourceProject}}</strong></td>
+      <td style="font-size:0.8rem;color:var(--text-muted);">{{.SourcePath}}</td>
+      <td>{{formatBytes .ContentSizeBytes}}</td>
+    </tr>
+  {{end}}{{end}}
+  </tbody>
+</table>
+{{end}}
+
+{{if gt .NoFrontmatter 0}}
+<h2>Skills Without Frontmatter</h2>
+<table>
+  <thead>
+    <tr><th>Name</th><th>Type</th><th>Path</th></tr>
+  </thead>
+  <tbody>
+  {{range .Skills}}{{if and (not .HasYAMLFrontmatter) (ne (string .Type) "claude_md")}}
+    <tr>
+      <td>{{.Name}}</td>
+      <td><span class="badge {{badgeClass (string .Type)}}">{{.Type}}</span></td>
+      <td style="font-size:0.8rem;color:var(--text-muted);">{{.SourcePath}}</td>
+    </tr>
+  {{end}}{{end}}
+  </tbody>
+</table>
+{{end}}
+
+<footer>
+  Generated by skillctl v0.1.0 | github.com/kamir/m3c-tools
+</footer>
+</body>
+</html>

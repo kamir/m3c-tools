@@ -329,7 +329,7 @@ func (c *Client) fetchS3Content(rawURL string) ([]byte, error) {
 
 	// Try gzip decompression; if it fails, read raw.
 	var reader io.Reader = resp.Body
-	if strings.HasSuffix(url, ".gz") || resp.Header.Get("Content-Encoding") == "gzip" {
+	if strings.HasSuffix(rawURL, ".gz") || resp.Header.Get("Content-Encoding") == "gzip" {
 		gz, gzErr := gzip.NewReader(resp.Body)
 		if gzErr != nil {
 			return nil, fmt.Errorf("gzip: %w", gzErr)

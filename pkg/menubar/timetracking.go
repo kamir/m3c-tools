@@ -71,17 +71,18 @@ func SetTimeTrackingSummary(summary map[string]time.Duration) {
 func (a *App) buildProjectsMenu() menuet.MenuItem {
 	engine := a.GetTimeEngine()
 
-	title := "📂 Projects"
+	title := "Projects"
 	activeCount := 0
 	if engine != nil {
 		activeCount = len(engine.ActiveProjects())
 	}
 	if activeCount > 0 {
-		title = fmt.Sprintf("📂 Projects (%d active)", activeCount)
+		title = fmt.Sprintf("Projects (%d active)", activeCount)
 	}
 
 	return menuet.MenuItem{
-		Text: title,
+		Text:  title,
+		Image: iconProjects,
 		Children: func() []menuet.MenuItem {
 			if engine == nil {
 				return []menuet.MenuItem{

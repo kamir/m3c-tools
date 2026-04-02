@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+  <!-- Thick C: center(12,12) r=7, opens at right -->
+  <path d="M16.73 8 A7 7 0 1 0 16.73 16"
+        stroke="currentColor" stroke-width="3.5" stroke-linecap="butt" fill="none"/>
+  <!-- Hollow hexagon at gap center (19,12), r=3, pointy-top -->
+  <polygon points="19,9 21.6,10.5 21.6,13.5 19,15 16.4,13.5 16.4,10.5"
+           stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/>
+</svg>

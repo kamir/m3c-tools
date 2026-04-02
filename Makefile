@@ -51,9 +51,15 @@ build: check-deps
 	@echo "Building $(BINARY)..."
 	go build -o $(BUILD_DIR)/$(BINARY) $(CMD_DIR)
 
+# Build skillctl scanner
+.PHONY: build-skillctl
+build-skillctl:
+	@echo "Building skillctl..."
+	go build -o $(BUILD_DIR)/skillctl ./cmd/skillctl
+
 # Build all commands (including POCs)
 .PHONY: build-all
-build-all: build
+build-all: build build-skillctl
 	@echo "Building POCs..."
 	go build -o $(BUILD_DIR)/poc-transcript ./cmd/poc-transcript
 	go build -o $(BUILD_DIR)/poc-menubar ./cmd/poc-menubar
@@ -295,6 +301,18 @@ release-minor: code-review check-docs
 release-major: code-review check-docs
 	@./scripts/release.sh major
 
+# Build with GoReleaser (snapshot, no publish — for local testing)
+.PHONY: snapshot
+snapshot:
+	goreleaser release --snapshot --clean
+
+# Generate checksums for local builds
+.PHONY: checksums
+checksums:
+	@cd $(BUILD_DIR) && shasum -a 256 * > checksums.txt
+	@echo "Checksums written to $(BUILD_DIR)/checksums.txt"
+	@cat $(BUILD_DIR)/checksums.txt
+
 # Run CI checks locally (mirrors .github/workflows/ci.yml)
 .PHONY: ci
 ci: vet lint test-unit build
@@ -307,6 +325,23 @@ lint:
 	@echo "Running golangci-lint..."
 	golangci-lint run --timeout=5m
 
+# Cross-compile for Windows (amd64, no CGO)
+.PHONY: build-windows
+build-windows:
+	@echo "Cross-compiling for Windows (amd64)..."
+	@mkdir -p $(BUILD_DIR)/windows
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o $(BUILD_DIR)/windows/m3c-tools.exe $(CMD_DIR)
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o $(BUILD_DIR)/windows/skillctl.exe ./cmd/skillctl
+	cp design/icons/menubar-icon.png $(BUILD_DIR)/windows/
+	@echo "Windows binaries in $(BUILD_DIR)/windows/"
+
+# Build NSIS installer for Windows (requires: brew install nsis)
+.PHONY: installer-windows
+installer-windows: build-windows
+	@echo "Building NSIS installer..."
+	makensis scripts/installer.nsi
+	@echo "Installer: $(BUILD_DIR)/M3C-Tools-Setup.exe"
+
 # Show help
 .PHONY: help
 help:
@@ -316,7 +351,8 @@ help:
 	@echo "  deps           Install all system dependencies (Homebrew + pip)"
 	@echo "  check-deps     Verify required dependencies are installed"
 	@echo "  build          Build the main CLI binary"
-	@echo "  build-all      Build all binaries (CLI + POCs)"
+	@echo "  build-skillctl Build skillctl skill inventory scanner"
+	@echo "  build-all      Build all binaries (CLI + POCs + skillctl)"
 	@echo "  build-app      Build macOS .app bundle"
 	@echo "  dmg            Build macOS DMG installer"
 	@echo "  setup-venv     Create Python venv and install whisper"
@@ -339,6 +375,10 @@ help:
 	@echo "  release-minor  Release with minor version bump"
 	@echo "  release-major  Release with major version bump"
 	@echo "  menubar        Build and launch the menu bar app"
+	@echo "  build-windows  Cross-compile CLI + tray for Windows (amd64)"
+	@echo "  installer-windows  Build NSIS installer (requires nsis)"
+	@echo "  snapshot       Build with GoReleaser (local snapshot, no publish)"
+	@echo "  checksums      Generate SHA-256 checksums for build/ artifacts"
 	@echo "  ci             Run full CI locally (vet + lint + test + build)"
 	@echo "  lint           Run golangci-lint"
 	@echo "  help           Show this help"

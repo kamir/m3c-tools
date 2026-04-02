@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skill Delta Report</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #7c3aed;
+    --accent-light: #a78bfa;
+    --green: #3fb950;
+    --green-bg: rgba(63, 185, 80, 0.1);
+    --orange: #d29922;
+    --orange-bg: rgba(210, 153, 34, 0.1);
+    --red: #f85149;
+    --red-bg: rgba(248, 81, 73, 0.1);
+    --cyan: #39d2c0;
+    --cyan-bg: rgba(57, 210, 192, 0.1);
+    --blue: #58a6ff;
+    --blue-bg: rgba(88, 166, 255, 0.1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 2rem;
+  }
+  h1 {
+    font-size: 1.8rem;
+    margin-bottom: 0.5rem;
+    color: var(--accent-light);
+  }
+  h2 {
+    font-size: 1.3rem;
+    margin: 2rem 0 1rem;
+    color: var(--accent-light);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+  }
+  .meta {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 2rem;
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+  }
+  .stat-card .label {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .stat-card .value {
+    font-size: 1.8rem;
+    font-weight: 700;
+  }
+  .stat-card .value.added { color: var(--green); }
+  .stat-card .value.modified { color: var(--orange); }
+  .stat-card .value.removed { color: var(--red); }
+  .stat-card .value.moved { color: var(--blue); }
+  .stat-card .value.total { color: var(--accent-light); }
+  .stat-card .value.zero { color: var(--text-muted); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 2rem;
+    font-size: 0.9rem;
+  }
+  th {
+    background: var(--bg);
+    text-align: left;
+    padding: 0.6rem 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  td {
+    padding: 0.5rem 0.8rem;
+    border-top: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tr:hover td { background: rgba(124, 58, 237, 0.05); }
+  .badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .badge-added { background: var(--green-bg); color: var(--green); }
+  .badge-modified { background: var(--orange-bg); color: var(--orange); }
+  .badge-removed { background: var(--red-bg); color: var(--red); }
+  .badge-moved { background: var(--blue-bg); color: var(--blue); }
+  .badge-pending { background: rgba(139, 148, 158, 0.2); color: var(--text-muted); }
+  .badge-approved { background: var(--green-bg); color: var(--green); }
+  .badge-rejected { background: var(--red-bg); color: var(--red); }
+  .badge-deferred { background: var(--orange-bg); color: var(--orange); }
+  .diff-block {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.8rem;
+    margin: 0.5rem 0;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.8rem;
+    white-space: pre-wrap;
+    overflow-x: auto;
+  }
+  .diff-block .line-add { color: var(--green); }
+  .diff-block .line-del { color: var(--red); }
+  .diff-block .line-ctx { color: var(--text-muted); }
+  .diff-block .line-hdr { color: var(--cyan); font-weight: 600; }
+  .entry-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    margin-bottom: 1rem;
+  }
+  .entry-card.type-added { border-left: 3px solid var(--green); }
+  .entry-card.type-modified { border-left: 3px solid var(--orange); }
+  .entry-card.type-removed { border-left: 3px solid var(--red); }
+  .entry-card.type-moved { border-left: 3px solid var(--blue); }
+  .entry-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+  }
+  .entry-header h3 {
+    font-size: 1rem;
+    margin: 0;
+  }
+  .entry-meta {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    margin-bottom: 0.5rem;
+  }
+  .fm-diff {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+  }
+  .fm-col { padding: 0.5rem; background: var(--bg); border-radius: 4px; }
+  .fm-col h4 { color: var(--text-muted); margin-bottom: 0.3rem; font-size: 0.75rem; }
+  .fm-field { margin: 0.2rem 0; }
+  .fm-label { color: var(--text-muted); }
+  .fm-value { color: var(--text); }
+  .no-changes {
+    text-align: center;
+    padding: 3rem;
+    color: var(--green);
+    font-size: 1.2rem;
+  }
+  footer {
+    margin-top: 3rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 0.8rem;
+  }
+</style>
+</head>
+<body>
+<h1>Skill Delta Report</h1>
+<div class="meta">
+  Computed at: {{.ComputedAt}}<br>
+  Baseline: {{.BaselinePath}}<br>
+  Current: {{.CurrentPath}}
+</div>
+
+<div class="stats">
+  <div class="stat-card">
+    <div class="label">Added</div>
+    <div class="value {{if gt .Summary.Added 0}}added{{else}}zero{{end}}">{{.Summary.Added}}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Modified</div>
+    <div class="value {{if gt .Summary.Modified 0}}modified{{else}}zero{{end}}">{{.Summary.Modified}}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Removed</div>
+    <div class="value {{if gt .Summary.Removed 0}}removed{{else}}zero{{end}}">{{.Summary.Removed}}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Moved</div>
+    <div class="value {{if gt .Summary.Moved 0}}moved{{else}}zero{{end}}">{{.Summary.Moved}}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Total</div>
+    <div class="value total">{{.Summary.Total}}</div>
+  </div>
+</div>
+
+{{if eq .Summary.Total 0}}
+<div class="no-changes">No changes detected between baseline and current inventory.</div>
+{{else}}
+
+{{if gt .Summary.Total 0}}
+<h2>Change Summary</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Skill</th>
+      <th>Change</th>
+      <th>Baseline Hash</th>
+      <th>Current Hash</th>
+      <th>Review</th>
+    </tr>
+  </thead>
+  <tbody>
+  {{range .Entries}}
+    <tr>
+      <td><strong>{{.SkillName}}</strong><br><span style="font-size:0.8rem;color:var(--text-muted);">{{.SkillID}}</span></td>
+      <td><span class="badge badge-{{deltaClass .DeltaType}}">{{.DeltaType}}</span></td>
+      <td style="font-family:monospace;font-size:0.8rem;">{{truncHash .BaselineHash}}</td>
+      <td style="font-family:monospace;font-size:0.8rem;">{{truncHash .CurrentHash}}</td>
+      <td><span class="badge badge-{{reviewClass .ReviewStatus}}">{{.ReviewStatus}}</span></td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+
+<h2>Change Details</h2>
+{{range .Entries}}
+<div class="entry-card type-{{deltaClass .DeltaType}}">
+  <div class="entry-header">
+    <h3>{{.SkillName}}</h3>
+    <span class="badge badge-{{deltaClass .DeltaType}}">{{.DeltaType}}</span>
+  </div>
+  <div class="entry-meta">
+    ID: {{.SkillID}}
+    {{if .BaselinePath}} | Baseline: {{.BaselinePath}}{{end}}
+    {{if .CurrentPath}} | Current: {{.CurrentPath}}{{end}}
+  </div>
+
+  {{if and .BaselineFrontmatter .CurrentFrontmatter}}
+  <div class="fm-diff">
+    <div class="fm-col">
+      <h4>Baseline Frontmatter</h4>
+      {{if .BaselineFrontmatter.Name}}<div class="fm-field"><span class="fm-label">name:</span> <span class="fm-value">{{.BaselineFrontmatter.Name}}</span></div>{{end}}
+      {{if .BaselineFrontmatter.Version}}<div class="fm-field"><span class="fm-label">version:</span> <span class="fm-value">{{.BaselineFrontmatter.Version}}</span></div>{{end}}
+      {{if .BaselineFrontmatter.Category}}<div class="fm-field"><span class="fm-label">category:</span> <span class="fm-value">{{.BaselineFrontmatter.Category}}</span></div>{{end}}
+      {{if .BaselineFrontmatter.Description}}<div class="fm-field"><span class="fm-label">description:</span> <span class="fm-value">{{.BaselineFrontmatter.Description}}</span></div>{{end}}
+    </div>
+    <div class="fm-col">
+      <h4>Current Frontmatter</h4>
+      {{if .CurrentFrontmatter.Name}}<div class="fm-field"><span class="fm-label">name:</span> <span class="fm-value">{{.CurrentFrontmatter.Name}}</span></div>{{end}}
+      {{if .CurrentFrontmatter.Version}}<div class="fm-field"><span class="fm-label">version:</span> <span class="fm-value">{{.CurrentFrontmatter.Version}}</span></div>{{end}}
+      {{if .CurrentFrontmatter.Category}}<div class="fm-field"><span class="fm-label">category:</span> <span class="fm-value">{{.CurrentFrontmatter.Category}}</span></div>{{end}}
+      {{if .CurrentFrontmatter.Description}}<div class="fm-field"><span class="fm-label">description:</span> <span class="fm-value">{{.CurrentFrontmatter.Description}}</span></div>{{end}}
+    </div>
+  </div>
+  {{end}}
+
+  {{if .ContentDiff}}
+  <div class="diff-block">{{formatDiff .ContentDiff}}</div>
+  {{end}}
+</div>
+{{end}}
+
+{{end}}
+
+<footer>
+  Generated by skillctl v0.2.0 | github.com/kamir/m3c-tools
+</footer>
+</body>
+</html>

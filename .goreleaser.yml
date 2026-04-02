@@ -1,0 +1,111 @@
+# .goreleaser.yml — GoReleaser configuration for m3c-tools + skillctl
+#
+# NOTE: m3c-tools macOS builds require CGO (portaudio/menubar) and are handled
+# by a separate CI job. GoReleaser builds Linux, Windows, and all skillctl targets.
+#
+# Usage:
+#   goreleaser release --snapshot --clean   # local test
+#   goreleaser release --skip=publish       # CI (artifacts only, release step handles publishing)
+
+version: 2
+
+project_name: m3c-tools
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  # --- m3c-tools: Linux + Windows only (CGO_ENABLED=0, CLI-only mode via main_other.go) ---
+  - id: m3c-tools
+    binary: m3c-tools
+    main: ./cmd/m3c-tools
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    goos:
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      # No Windows arm64 build
+      - goos: windows
+        goarch: arm64
+
+  # --- skillctl: Linux + Windows (CGO_ENABLED=0). macOS builds handled in CI macOS job. ---
+  - id: skillctl
+    binary: skillctl
+    main: ./cmd/skillctl
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    goos:
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      # No Windows arm64 build
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - id: m3c-tools-archive
+    builds:
+      - m3c-tools
+    name_template: "m3c-tools-{{ .Os }}-{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+  - id: skillctl-archive
+    builds:
+      - skillctl
+    name_template: "skillctl-{{ .Os }}-{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+      - "Merge pull request"
+
+# Homebrew tap — uncomment when kamir/homebrew-tap is created
+# brews:
+#   - repository:
+#       owner: kamir
+#       name: homebrew-tap
+#     name: m3c-tools
+#     homepage: https://github.com/kamir/m3c-tools
+#     description: Multi-Modal-Memory Tools CLI
+#     install: |
+#       bin.install "m3c-tools"
+#   - repository:
+#       owner: kamir
+#       name: homebrew-tap
+#     name: skillctl
+#     homepage: https://github.com/kamir/m3c-tools
+#     description: Claude Code skill inventory scanner
+#     install: |
+#       bin.install "skillctl"

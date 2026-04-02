@@ -9,6 +9,7 @@ package menubar
 import (
 	"fmt"
 	"os/exec"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -268,7 +269,50 @@ func (a *App) Run() {
 	}
 	mApp.SetMenuState(state)
 
+	// Register menu item icons from design system.
+	a.registerMenuIcons()
+
 	mApp.RunApplication()
+}
+
+// Menu item icon names (registered with NSImage).
+const (
+	iconLogout      = "m3c-logout"
+	iconTranscript  = "m3c-transcript"
+	iconScreenshot  = "m3c-screenshot"
+	iconImpulse     = "m3c-quick-impulse"
+	iconAudioImport = "m3c-audio-import"
+	iconTrackingDB  = "m3c-tracking-db"
+	iconSync        = "m3c-sync"
+	iconProjects    = "m3c-projects"
+	iconHistory     = "m3c-history"
+	iconLogFile     = "m3c-log-file"
+	iconUser        = "m3c-user-account"
+	iconStar        = "m3c-star"
+)
+
+// registerMenuIcons loads design-system PNGs as NSImage template images.
+func (a *App) registerMenuIcons() {
+	icons := map[string]string{
+		iconLogout:      "menu-logout.png",
+		iconTranscript:  "menu-transcript.png",
+		iconScreenshot:  "menu-screenshot.png",
+		iconImpulse:     "menu-quick-impulse.png",
+		iconAudioImport: "menu-audio-import.png",
+		iconTrackingDB:  "menu-tracking-db.png",
+		iconSync:        "menu-sync.png",
+		iconProjects:    "menu-projects.png",
+		iconHistory:     "menu-history.png",
+		iconLogFile:     "menu-log-file.png",
+		iconUser:        "menu-user-account.png",
+		iconStar:        "menu-star.png",
+	}
+	for name, file := range icons {
+		path := FindIcon(file)
+		if path != "" {
+			RegisterImage(name, path)
+		}
+	}
 }
 
 // BuildMenuItems returns the current menu item tree. Exported for testing
@@ -283,15 +327,12 @@ func (a *App) buildMenuItems() []menuet.MenuItem {
 	auth := a.GetAuthSession()
 	if !auth.LoggedIn {
 		return []menuet.MenuItem{
-			{
-				Text: "🔐 Login to ER1...",
-				Clicked: func() {
-					a.fireAction(ActionLoginER1, "")
-				},
-			},
+			a.buildSignInMenu(),
+			a.buildProfileMenu(),
 			{Type: menuet.Separator},
 			{
-				Text: "⭐ Star on GitHub",
+				Text:  "Star on GitHub",
+				Image: iconStar,
 				Clicked: func() {
 					_ = exec.Command("open", GitHubRepoURL).Start()
 					a.fireAction(ActionStarGitHub, GitHubRepoURL)
@@ -303,46 +344,60 @@ func (a *App) buildMenuItems() []menuet.MenuItem {
 
 	items := []menuet.MenuItem{
 		{
-			Text: "🔓 Logout from ER1",
+			Text:  "Sign Out",
+			Image: iconLogout,
 			Clicked: func() {
 				a.fireAction(ActionLogoutER1, "")
 			},
 		},
+		a.buildProfileMenu(),
 		{Type: menuet.Separator},
 		{
-			Text:    "▶️ Fetch Transcript...",
+			Text:    "Fetch Transcript...",
+			Image:   iconTranscript,
 			Clicked: a.handleFetchTranscript,
 		},
+		{Type: menuet.Separator},
 		{
-			Text: "📷 Capture Screenshot...",
+			Text:  "Capture Screenshot...",
+			Image: iconScreenshot,
 			Clicked: func() {
 				a.fireAction(ActionCaptureScreenshot, "")
 			},
 		},
 		{
-			Text: "⚡ Quick Impulse",
+			Text:  "Quick Impulse",
+			Image: iconImpulse,
 			Clicked: func() {
 				a.fireAction(ActionQuickImpulse, "")
 			},
 		},
+		{Type: menuet.Separator},
 		a.buildAudioImportMenu(),
 		{
-			Text: "📋 Audio Recording Tracking DB",
+			Text:  "Audio Recording Tracking DB",
+			Image: iconTrackingDB,
 			Clicked: func() {
 				a.fireAction(ActionShowTrackingDB, "")
 			},
 		},
+		{Type: menuet.Separator},
 		{
-			Text: "📝 Plaud Sync",
+			Text:  "Plaud Sync",
+			Image: iconSync,
 			Clicked: func() {
 				a.fireAction(ActionPlaudSync, "")
 			},
 		},
+		{
+			Text:  "Pocket Sync",
+			Image: iconAudioImport,
+			Clicked: func() {
+				a.fireAction(ActionPocketSync, "")
+			},
+		},
 		{Type: menuet.Separator},
 		a.buildProjectsMenu(),
-		{Type: menuet.Separator},
-		{Text: fmt.Sprintf("Status: %s", a.GetStatus())},
-		{Text: accountText},
 		{Type: menuet.Separator},
 	}
 
@@ -354,7 +409,8 @@ func (a *App) buildMenuItems() []menuet.MenuItem {
 	items = append(items,
 		menuet.MenuItem{Type: menuet.Separator},
 		menuet.MenuItem{
-			Text: "Open Log File",
+			Text:  "Open Log File",
+			Image: iconLogFile,
 			Clicked: func() {
 				exec.Command("open", a.Config.LogPath).Run()
 				a.fireAction(ActionOpenLog, a.Config.LogPath)
@@ -362,13 +418,25 @@ func (a *App) buildMenuItems() []menuet.MenuItem {
 		},
 		menuet.MenuItem{Type: menuet.Separator},
 		menuet.MenuItem{
-			Text: "👤 Mein Nutzerkonto",
-			Clicked: func() {
-				_ = exec.Command("open", "-a", "Google Chrome", profURL).Start()
+			Text:  "Mein Nutzerkonto",
+			Image: iconUser,
+			Children: func() []menuet.MenuItem {
+				return []menuet.MenuItem{
+					{Text: accountText},
+					{Text: fmt.Sprintf("Status: %s", a.GetStatus())},
+					{Type: menuet.Separator},
+					{
+						Text: "Open Profile",
+						Clicked: func() {
+							_ = exec.Command("open", "-a", "Google Chrome", profURL).Start()
+						},
+					},
+				}
 			},
 		},
 		menuet.MenuItem{
-			Text: "⭐ Star on GitHub",
+			Text:  "Star on GitHub",
+			Image: iconStar,
 			Clicked: func() {
 				_ = exec.Command("open", GitHubRepoURL).Start()
 				a.fireAction(ActionStarGitHub, GitHubRepoURL)
@@ -389,12 +457,13 @@ func (a *App) buildAudioImportMenu() menuet.MenuItem {
 			newCount++
 		}
 	}
-	title := "🎵 Audio Import"
+	title := "Audio Import"
 	if newCount > 0 {
-		title = fmt.Sprintf("🎵 Audio Import (%d new)", newCount)
+		title = fmt.Sprintf("Audio Import (%d new)", newCount)
 	}
 	return menuet.MenuItem{
-		Text: title,
+		Text:  title,
+		Image: iconAudioImport,
 		Children: func() []menuet.MenuItem {
 			var items []menuet.MenuItem
 			if bulk.Active {
@@ -415,13 +484,13 @@ func (a *App) buildAudioImportMenu() menuet.MenuItem {
 			}
 			items = append(items, []menuet.MenuItem{
 				{
-					Text: "▶️ Run Import Pipeline",
+					Text: "Run Import Pipeline",
 					Clicked: func() {
 						a.fireAction(ActionBatchImport, "__run_all__")
 					},
 				},
 				{
-					Text: "🔄 Refresh list",
+					Text: "Refresh list",
 					Clicked: func() {
 						a.fireAction(ActionBatchImport, "__refresh__")
 					},
@@ -464,7 +533,7 @@ func (a *App) buildAudioImportMenu() menuet.MenuItem {
 				filePath := it.Path
 				label := filepath.Base(it.Name)
 				if bulk.Active {
-					label = "🔒 " + label
+					label = "[locked] " + label
 				}
 				items = append(items, menuet.MenuItem{
 					Text: label,
@@ -481,41 +550,177 @@ func (a *App) buildAudioImportMenu() menuet.MenuItem {
 	}
 }
 
-// buildHistoryMenu creates the expandable "History (N)" submenu with
-// per-entry actions for copying transcripts and recording impressions.
+// observationIcon returns the menu icon constant for an observation type.
+func observationIcon(obsType string) string {
+	switch obsType {
+	case "plaud":
+		return iconSync
+	case "audio":
+		return iconAudioImport
+	case "transcript":
+		return iconTranscript
+	case "screenshot":
+		return iconScreenshot
+	case "impulse":
+		return iconImpulse
+	default:
+		return iconTrackingDB
+	}
+}
+
+// observationLabel returns a human-readable type label.
+func observationLabel(obsType string) string {
+	switch obsType {
+	case "plaud":
+		return "Plaud"
+	case "audio":
+		return "Audio"
+	case "transcript":
+		return "Transcript"
+	case "screenshot":
+		return "Screenshot"
+	case "impulse":
+		return "Impulse"
+	default:
+		return obsType
+	}
+}
+
+// dateGroup returns a relative date label for grouping.
+func dateGroup(t time.Time) string {
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	yesterday := today.AddDate(0, 0, -1)
+	day := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+
+	switch {
+	case day.Equal(today):
+		return "Today"
+	case day.Equal(yesterday):
+		return "Yesterday"
+	case day.After(today.AddDate(0, 0, -7)):
+		return t.Weekday().String()
+	default:
+		return t.Format("Jan 2")
+	}
+}
+
+// buildHistoryMenu creates the unified "History (N)" submenu from the
+// tracking DB, showing recent observations across all types grouped by date.
 func (a *App) buildHistoryMenu() menuet.MenuItem {
+	// Try persistent observations first, fall back to in-memory history.
+	if a.Handlers.ListRecentObservations != nil {
+		observations, err := a.Handlers.ListRecentObservations(20)
+		if err == nil && len(observations) > 0 {
+			return a.buildObservationHistoryMenu(observations)
+		}
+	}
+
+	// Fallback: in-memory session history (transcript fetches only).
 	entries := a.GetHistory()
 	return menuet.MenuItem{
-		Text: fmt.Sprintf("History (%d)", len(entries)),
+		Text:  fmt.Sprintf("History (%d)", len(entries)),
+		Image: iconHistory,
 		Children: func() []menuet.MenuItem {
 			if len(entries) == 0 {
 				return []menuet.MenuItem{{Text: "(empty)"}}
 			}
 			var items []menuet.MenuItem
 			for _, h := range entries {
-				entry := h // capture for closure
+				entry := h
 				items = append(items, menuet.MenuItem{
 					Text: entry.Label,
 					Children: func() []menuet.MenuItem {
 						return []menuet.MenuItem{
 							{
-								Text: "📋 Copy Transcript",
+								Text: "Copy Transcript",
 								Clicked: func() {
 									CopyToClipboard("Transcript for " + entry.VideoID)
 									a.fireAction(ActionCopyTranscript, entry.VideoID)
-								},
-							},
-							{
-								Text: "🎤 Record Impression",
-								Clicked: func() {
-									a.notify("Record", "Would record impression for "+entry.VideoID)
-									a.fireAction(ActionRecordImpression, entry.VideoID)
 								},
 							},
 						}
 					},
 				})
 			}
+			return items
+		},
+	}
+}
+
+// buildObservationHistoryMenu builds the history menu from persistent observations.
+func (a *App) buildObservationHistoryMenu(observations []Observation) menuet.MenuItem {
+	return menuet.MenuItem{
+		Text:  fmt.Sprintf("History (%d)", len(observations)),
+		Image: iconHistory,
+		Children: func() []menuet.MenuItem {
+			var items []menuet.MenuItem
+			lastGroup := ""
+
+			er1Cfg := er1.LoadConfig()
+			baseURL := strings.TrimSuffix(er1Cfg.APIURL, "/upload_2")
+			contextID := er1Cfg.ContextID
+
+			for _, obs := range observations {
+				o := obs // capture
+
+				// Date group header.
+				group := dateGroup(o.ProcessedAt)
+				if group != lastGroup {
+					if lastGroup != "" {
+						items = append(items, menuet.MenuItem{Type: menuet.Separator})
+					}
+					items = append(items, menuet.MenuItem{Text: group})
+					lastGroup = group
+				}
+
+				// Truncate title for menu display.
+				title := o.Title
+				if len(title) > 45 {
+					title = title[:42] + "..."
+				}
+				label := fmt.Sprintf("%s  %s", title, o.ProcessedAt.Format("15:04"))
+				typeLabel := observationLabel(o.Type)
+
+				// Build per-entry submenu.
+				entry := menuet.MenuItem{
+					Text:  label,
+					Image: observationIcon(o.Type),
+				}
+
+				if o.DocID != "" {
+					docURL := baseURL + "/memory/" + contextID + "/" + o.DocID + "/view"
+					entry.Children = func() []menuet.MenuItem {
+						sub := []menuet.MenuItem{
+							{Text: fmt.Sprintf("Type: %s", typeLabel)},
+							{Text: fmt.Sprintf("Status: %s", o.Status)},
+							{Type: menuet.Separator},
+							{
+								Text: "Open in Browser",
+								Clicked: func() {
+									_ = exec.Command("open", docURL).Start()
+								},
+							},
+						}
+						return sub
+					}
+				}
+
+				items = append(items, entry)
+			}
+
+			// Footer: link to full dashboard.
+			items = append(items,
+				menuet.MenuItem{Type: menuet.Separator},
+				menuet.MenuItem{
+					Text: "Open Dashboard...",
+					Clicked: func() {
+						url := baseURL + "/v2/my-personal-assistant"
+						_ = exec.Command("open", url).Start()
+					},
+				},
+			)
+
 			return items
 		},
 	}
@@ -578,7 +783,7 @@ func firstInput(inputs []string) string {
 // true if the user chose "Close" (keep clipboard), false for "Trash".
 func (a *App) ShowTranscriptResult(videoID string, snippets, chars int) bool {
 	result := menuet.App().Alert(menuet.Alert{
-		MessageText: "📋 Transcript in Clipboard",
+		MessageText: "Transcript in Clipboard",
 		InformativeText: fmt.Sprintf(
 			"Video: %s\n%d snippets, %d chars\n\nClose to keep clipboard content,\nor trash to clear it.",
 			videoID, snippets, chars,
@@ -657,6 +862,130 @@ func profileURL() string {
 func (a *App) fireAction(action ActionType, data string) {
 	if a.Handlers.OnAction != nil {
 		a.Handlers.OnAction(action, data)
+	}
+}
+
+// buildSignInMenu creates the Sign In menu item. If multiple profiles exist,
+// shows a submenu letting the user pick which profile to sign into.
+func (a *App) buildSignInMenu() menuet.MenuItem {
+	// Check if we have multiple profiles to offer a choice.
+	if a.Handlers.ListProfiles != nil {
+		profiles, _, err := a.Handlers.ListProfiles()
+		if err == nil && len(profiles) > 1 {
+			return menuet.MenuItem{
+				Text:  "Sign In...",
+				Image: iconUser,
+				Children: func() []menuet.MenuItem {
+					var items []menuet.MenuItem
+					for _, p := range profiles {
+						prof := p
+						label := prof.Name
+						if prof.Description != "" {
+							label = fmt.Sprintf("%s (%s)", prof.Name, prof.Description)
+						}
+						if prof.IsActive {
+							label = "* " + label
+						}
+						items = append(items, menuet.MenuItem{
+							Text: label,
+							Clicked: func() {
+								// Switch profile first, then trigger login.
+								if !prof.IsActive && a.Handlers.SwitchProfile != nil {
+									_ = a.Handlers.SwitchProfile(prof.Name)
+								}
+								a.fireAction(ActionLoginER1, "")
+							},
+						})
+					}
+					return items
+				},
+			}
+		}
+	}
+
+	// Single profile or no profiles — simple Sign In button.
+	return menuet.MenuItem{
+		Text:  "Sign In...",
+		Image: iconUser,
+		Clicked: func() {
+			a.fireAction(ActionLoginER1, "")
+		},
+	}
+}
+
+// buildProfileMenu constructs the "Profile Settings" submenu for config profile switching.
+func (a *App) buildProfileMenu() menuet.MenuItem {
+	if a.Handlers.ListProfiles == nil {
+		return menuet.MenuItem{
+			Text: "Profile Settings",
+		}
+	}
+
+	profiles, activeName, err := a.Handlers.ListProfiles()
+	if err != nil || len(profiles) == 0 {
+		return menuet.MenuItem{
+			Text: "Profile Settings",
+		}
+	}
+
+	return menuet.MenuItem{
+		Text: "Profile Settings",
+		Children: func() []menuet.MenuItem {
+			items := []menuet.MenuItem{
+				{Text: fmt.Sprintf("Active: %s", activeName)},
+				{Type: menuet.Separator},
+			}
+			for _, p := range profiles {
+				prof := p // capture
+				label := prof.Name
+				if prof.Description != "" {
+					label = fmt.Sprintf("%s — %s", prof.Name, prof.Description)
+				}
+				if prof.IsActive {
+					label = "* " + label
+				}
+				items = append(items, menuet.MenuItem{
+					Text: label,
+					Clicked: func() {
+						if a.Handlers.SwitchProfile != nil && !prof.IsActive {
+							if switchErr := a.Handlers.SwitchProfile(prof.Name); switchErr != nil {
+								a.notify("Profile Error", fmt.Sprintf("Failed to switch: %v", switchErr))
+							} else {
+								a.notify("Profile Switched", fmt.Sprintf("Now using: %s", prof.Name))
+							}
+						}
+					},
+				})
+			}
+			items = append(items,
+				menuet.MenuItem{Type: menuet.Separator},
+				menuet.MenuItem{
+					Text: "Edit Profiles...",
+					Clicked: func() {
+						if a.Handlers.OpenProfileEditor != nil {
+							a.Handlers.OpenProfileEditor()
+						} else {
+							// Fallback: open profiles directory in Finder.
+							home, _ := os.UserHomeDir()
+							_ = exec.Command("open", filepath.Join(home, ".m3c-tools", "profiles")).Start()
+						}
+					},
+				},
+				menuet.MenuItem{
+					Text: "Reload Config",
+					Clicked: func() {
+						if a.Handlers.SwitchProfile != nil && activeName != "" {
+							if switchErr := a.Handlers.SwitchProfile(activeName); switchErr != nil {
+								a.notify("Config Reload Error", fmt.Sprintf("Failed: %v", switchErr))
+							} else {
+								a.notify("Config Reloaded", fmt.Sprintf("Profile: %s", activeName))
+							}
+						}
+					},
+				},
+			)
+			return items
+		},
 	}
 }
 

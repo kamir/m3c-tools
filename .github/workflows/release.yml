@@ -8,7 +8,13 @@ on:
 permissions:
   contents: write
 
+env:
+  GO_VERSION: "1.25"
+
 jobs:
+  # -----------------------------------------------------------------------
+  # macOS: m3c-tools (CGO_ENABLED=1, needs portaudio) + skillctl
+  # -----------------------------------------------------------------------
   build-macos:
     name: Build macOS (arm64 + amd64)
     runs-on: macos-latest
@@ -17,7 +23,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: ${{ env.GO_VERSION }}
 
       - name: Install PortAudio (Homebrew, for native arm64 build)
         run: brew install portaudio pkg-config
@@ -25,22 +31,58 @@ jobs:
       - name: Build universal PortAudio (for amd64 cross-compile)
         run: bash scripts/build-portaudio-universal.sh
 
-      - name: Build darwin/arm64 (native)
+      # --- m3c-tools darwin/arm64 (native CGO) ---
+      - name: Build m3c-tools darwin/arm64
         run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          COMMIT="${GITHUB_SHA:0:8}"
+          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 \
-            go build -ldflags="-s -w" -o m3c-tools-darwin-arm64 ./cmd/m3c-tools
+            go build \
+              -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" \
+              -o m3c-tools-darwin-arm64 ./cmd/m3c-tools
 
-      - name: Build darwin/amd64 (cross-compile with universal PortAudio)
+      # --- m3c-tools darwin/amd64 (cross-compile with universal PortAudio) ---
+      - name: Build m3c-tools darwin/amd64
         run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          COMMIT="${GITHUB_SHA:0:8}"
+          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 \
             CGO_CFLAGS="-I$(pwd)/lib/portaudio" \
             CGO_LDFLAGS="-L$(pwd)/lib/portaudio -framework CoreAudio -framework AudioToolbox -framework AudioUnit -framework CoreFoundation -framework CoreServices" \
-            go build -ldflags="-s -w" -o m3c-tools-darwin-amd64 ./cmd/m3c-tools
+            go build \
+              -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" \
+              -o m3c-tools-darwin-amd64 ./cmd/m3c-tools
 
+      # --- skillctl darwin (pure Go, no CGO) ---
+      - name: Build skillctl darwin/arm64
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          COMMIT="${GITHUB_SHA:0:8}"
+          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 \
+            go build \
+              -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" \
+              -o skillctl-darwin-arm64 ./cmd/skillctl
+
+      - name: Build skillctl darwin/amd64
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          COMMIT="${GITHUB_SHA:0:8}"
+          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 \
+            go build \
+              -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" \
+              -o skillctl-darwin-amd64 ./cmd/skillctl
+
+      # --- Package ---
       - name: Package macOS binaries
         run: |
           tar czf m3c-tools-darwin-arm64.tar.gz m3c-tools-darwin-arm64
           tar czf m3c-tools-darwin-amd64.tar.gz m3c-tools-darwin-amd64
+          tar czf skillctl-darwin-arm64.tar.gz skillctl-darwin-arm64
+          tar czf skillctl-darwin-amd64.tar.gz skillctl-darwin-amd64
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
@@ -49,59 +91,91 @@ jobs:
           path: |
             m3c-tools-darwin-arm64.tar.gz
             m3c-tools-darwin-amd64.tar.gz
+            skillctl-darwin-arm64.tar.gz
+            skillctl-darwin-amd64.tar.gz
 
-  build-linux:
-    name: Build Linux (amd64)
+  # -----------------------------------------------------------------------
+  # Linux + Windows: m3c-tools (CGO_ENABLED=0) + skillctl via GoReleaser
+  # -----------------------------------------------------------------------
+  build-linux-windows:
+    name: Build Linux + Windows (GoReleaser)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: ${{ env.GO_VERSION }}
 
-      - name: Build linux/amd64
-        run: |
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-            go build -ldflags="-s -w" -o m3c-tools-linux-amd64 ./cmd/m3c-tools
+      - name: Install GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          install-only: true
+          version: "~> v2"
 
-      - name: Package Linux binary
-        run: tar czf m3c-tools-linux-amd64.tar.gz m3c-tools-linux-amd64
+      - name: Run GoReleaser (snapshot, no publish)
+        run: goreleaser release --skip=publish --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Linux artifact
+      - name: Upload GoReleaser artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: linux-binaries
-          path: m3c-tools-linux-amd64.tar.gz
+          name: goreleaser-binaries
+          path: |
+            dist/m3c-tools-linux-*.tar.gz
+            dist/skillctl-linux-*.tar.gz
+            dist/m3c-tools-windows-*.zip
+            dist/skillctl-windows-*.zip
 
-  build-windows:
-    name: Build Windows (amd64)
+  # -----------------------------------------------------------------------
+  # Windows NSIS installer
+  # -----------------------------------------------------------------------
+  build-windows-installer:
+    name: Build Windows Installer (NSIS)
     runs-on: ubuntu-latest
+    needs: [build-linux-windows]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: ${{ env.GO_VERSION }}
 
-      - name: Build windows/amd64
+      - name: Install NSIS
+        run: sudo apt-get update && sudo apt-get install -y nsis
+
+      - name: Cross-compile Windows binaries
         run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          COMMIT="${GITHUB_SHA:0:8}"
+          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          LDFLAGS="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}"
+          mkdir -p build/windows
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
-            go build -ldflags="-s -w" -o m3c-tools-windows-amd64.exe ./cmd/m3c-tools
+            go build -ldflags="${LDFLAGS}" -o build/windows/m3c-tools.exe ./cmd/m3c-tools
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
+            go build -ldflags="${LDFLAGS}" -o build/windows/skillctl.exe ./cmd/skillctl
+          cp design/icons/menubar-icon.png build/windows/
 
-      - name: Package Windows binary
-        run: zip m3c-tools-windows-amd64.zip m3c-tools-windows-amd64.exe
+      - name: Build NSIS installer
+        run: makensis scripts/installer.nsi
 
-      - name: Upload Windows artifact
+      - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: windows-binaries
-          path: m3c-tools-windows-amd64.zip
+          name: windows-installer
+          path: build/M3C-Tools-Setup.exe
 
+  # -----------------------------------------------------------------------
+  # Release: merge all artifacts, generate checksums, create GitHub Release
+  # -----------------------------------------------------------------------
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    needs: [build-macos, build-linux, build-windows]
+    needs: [build-macos, build-linux-windows, build-windows-installer]
     steps:
       - uses: actions/checkout@v4
 
@@ -112,7 +186,14 @@ jobs:
           merge-multiple: true
 
       - name: List artifacts
-        run: ls -lh artifacts/
+        run: ls -lhR artifacts/
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          sha256sum *.tar.gz *.zip *.exe > checksums.txt
+          echo "=== checksums.txt ==="
+          cat checksums.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -122,4 +203,12 @@ jobs:
             artifacts/m3c-tools-darwin-arm64.tar.gz
             artifacts/m3c-tools-darwin-amd64.tar.gz
             artifacts/m3c-tools-linux-amd64.tar.gz
+            artifacts/m3c-tools-linux-arm64.tar.gz
             artifacts/m3c-tools-windows-amd64.zip
+            artifacts/skillctl-darwin-arm64.tar.gz
+            artifacts/skillctl-darwin-amd64.tar.gz
+            artifacts/skillctl-linux-amd64.tar.gz
+            artifacts/skillctl-linux-arm64.tar.gz
+            artifacts/skillctl-windows-amd64.zip
+            artifacts/M3C-Tools-Setup.exe
+            artifacts/checksums.txt

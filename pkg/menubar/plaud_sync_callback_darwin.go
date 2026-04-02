@@ -8,14 +8,16 @@ package menubar
 extern int plaudSyncRowCount(void);
 extern int plaudSyncIsSelected(int row);
 extern const char* plaudSyncRecordingID(int row);
+extern const char* getPlaudCustomTags(void);
 */
 import "C"
 
-var plaudSyncCallback func(action string, recordingIDs []string)
+var plaudSyncCallback func(action string, recordingIDs []string, customTags string)
 
 // SetPlaudSyncCallback registers a handler for sync actions triggered
 // from the Plaud Sync window's "Sync Selected" button.
-func SetPlaudSyncCallback(cb func(action string, recordingIDs []string)) {
+// The customTags parameter contains the comma-separated tags from the UI field.
+func SetPlaudSyncCallback(cb func(action string, recordingIDs []string, customTags string)) {
 	plaudSyncCallback = cb
 }
 
@@ -25,6 +27,7 @@ func goPlaudSyncAction(cAction *C.char) {
 		return
 	}
 	action := C.GoString(cAction)
+	customTags := C.GoString(C.getPlaudCustomTags())
 	n := int(C.plaudSyncRowCount())
 	var ids []string
 	for i := 0; i < n; i++ {
@@ -38,5 +41,5 @@ func goPlaudSyncAction(cAction *C.char) {
 	if len(ids) == 0 {
 		return
 	}
-	go plaudSyncCallback(action, ids)
+	go plaudSyncCallback(action, ids, customTags)
 }

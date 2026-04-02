@@ -34,7 +34,10 @@ type PlaudSyncRecord struct {
 }
 
 // ShowPlaudSyncWindow is a no-op on non-darwin platforms.
-func ShowPlaudSyncWindow(records []PlaudSyncRecord, accountInfo string) {}
+func ShowPlaudSyncWindow(records []PlaudSyncRecord, accountInfo string, defaultTags ...string) {}
+
+// GetPlaudCustomTags returns empty on non-darwin platforms.
+func GetPlaudCustomTags() string { return "" }
 
 // SetPlaudSyncStatus is a no-op on non-darwin platforms.
 func SetPlaudSyncStatus(recordingID, status string) {}
@@ -49,4 +52,4 @@ func IsPlaudSyncWindowOpen() bool { return false }
 func ReloadPlaudSyncTable() {}
 
 // SetPlaudSyncCallback is a no-op on non-darwin platforms.
-func SetPlaudSyncCallback(cb func(action string, recordingIDs []string)) {}
+func SetPlaudSyncCallback(cb func(action string, recordingIDs []string, customTags string)) {}

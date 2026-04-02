@@ -72,7 +72,9 @@ fi
 echo ""
 echo "Building ${BINARY}..."
 mkdir -p "${BUILD_DIR}"
-go build -ldflags "-X main.Version=${NEW_VERSION}" -o "${BUILD_DIR}/${BINARY}" ./cmd/m3c-tools
+COMMIT=$(git rev-parse --short HEAD)
+BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+go build -ldflags "-s -w -X main.version=${NEW_VERSION} -X main.commit=${COMMIT} -X main.date=${BUILD_DATE}" -o "${BUILD_DIR}/${BINARY}" ./cmd/m3c-tools
 echo "Built ${BUILD_DIR}/${BINARY}"
 
 # --- Build app bundle + DMG ---

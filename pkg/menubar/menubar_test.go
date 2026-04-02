@@ -477,11 +477,11 @@ func TestLoggedOutMenuShowsLoginAndStar(t *testing.T) {
 	if len(items) != 3 {
 		t.Fatalf("logged-out menu len=%d, want 3 (login, separator, star)", len(items))
 	}
-	if items[0].Text != "🔐 Login to ER1..." {
+	if items[0].Text != "Sign In..." {
 		t.Fatalf("logged-out first menu item=%q, want login", items[0].Text)
 	}
-	if items[2].Text != "⭐ Star on GitHub" {
-		t.Fatalf("logged-out third menu item=%q, want '⭐ Star on GitHub'", items[2].Text)
+	if items[2].Text != "Star on GitHub" {
+		t.Fatalf("logged-out third menu item=%q, want 'Star on GitHub'", items[2].Text)
 	}
 }
 

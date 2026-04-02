@@ -23,6 +23,7 @@ static NSTextField  *g_plaudSelectLabel = nil;
 static NSProgressIndicator *g_plaudProgressBar = nil;
 static NSTextField  *g_plaudAccountLabel = nil;
 static NSButton     *g_btnPlaudSync   = nil;
+static NSTextField  *g_plaudTagsField = nil;
 static BOOL          g_plaudBulkActive = NO;
 
 // ---------- Row Data Storage ----------
@@ -155,6 +156,21 @@ const char* plaudSyncRecordingID(int row) {
 		? g_plaudRecordingIDs[row] : "";
 }
 
+static void setPlaudDefaultTags(const char *tags) {
+	dispatch_async(dispatch_get_main_queue(), ^{
+		if (g_plaudTagsField && tags) {
+			NSString *str = [NSString stringWithUTF8String:tags];
+			if (str) [g_plaudTagsField setStringValue:str];
+		}
+	});
+}
+
+const char* getPlaudCustomTags(void) {
+	if (!g_plaudTagsField) return "";
+	NSString *val = [g_plaudTagsField stringValue];
+	return val ? [val UTF8String] : "";
+}
+
 // ---------- Forward declaration of Go callback ----------
 
 extern void goPlaudSyncAction(char* action);
@@ -209,7 +225,8 @@ extern void goPlaudSyncAction(char* action);
 		else if ([identifier isEqualToString:@"date"])     col = 3;
 		else if ([identifier isEqualToString:@"status"])   col = 4;
 		if (col >= 0 && g_plaudData[row][col]) {
-			value = [NSString stringWithUTF8String:g_plaudData[row][col]];
+			NSString *parsed = [NSString stringWithUTF8String:g_plaudData[row][col]];
+			if (parsed) value = parsed;  // guard against invalid UTF-8 returning nil
 		}
 
 		// Right-align # and duration columns.
@@ -279,10 +296,14 @@ static PlaudSyncTableDataSource *g_plaudDS = nil;
 // ---------- Window Creation ----------
 
 static void showPlaudSyncWindow(const char *accountInfo) {
+	// FIX: Copy accountInfo before dispatch_async — the Go caller frees the
+	// original pointer (via defer) before this block executes on the main queue.
+	char *accountCopy = accountInfo ? strdup(accountInfo) : NULL;
 	dispatch_async(dispatch_get_main_queue(), ^{
 		if (g_plaudWindow != nil) {
 			[g_plaudWindow makeKeyAndOrderFront:nil];
 			[NSApp activateIgnoringOtherApps:YES];
+			if (accountCopy) free(accountCopy);
 			return;
 		}
 
@@ -307,8 +328,10 @@ static void showPlaudSyncWindow(const char *accountInfo) {
 		[g_plaudAccountLabel setEditable:NO];
 		[g_plaudAccountLabel setFont:[NSFont systemFontOfSize:11]];
 		[g_plaudAccountLabel setTextColor:[NSColor secondaryLabelColor]];
-		if (accountInfo) {
-			[g_plaudAccountLabel setStringValue:[NSString stringWithUTF8String:accountInfo]];
+		if (accountCopy) {
+			NSString *acctStr = [NSString stringWithUTF8String:accountCopy];
+			[g_plaudAccountLabel setStringValue:acctStr ? acctStr : @""];
+			free(accountCopy);
 		}
 		[g_plaudAccountLabel setAutoresizingMask:NSViewWidthSizable | NSViewMinYMargin];
 		[content addSubview:g_plaudAccountLabel];
@@ -336,6 +359,22 @@ static void showPlaudSyncWindow(const char *accountInfo) {
 		[g_plaudSelectLabel setStringValue:@"0 selected"];
 		[g_plaudSelectLabel setAutoresizingMask:NSViewMaxXMargin | NSViewMinYMargin];
 		[content addSubview:g_plaudSelectLabel];
+
+		// Tags label + editable field
+		NSTextField *tagsLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(300, btnY + 2, 40, 18)];
+		[tagsLabel setBezeled:NO];
+		[tagsLabel setDrawsBackground:NO];
+		[tagsLabel setEditable:NO];
+		[tagsLabel setFont:[NSFont systemFontOfSize:11]];
+		[tagsLabel setStringValue:@"Tags:"];
+		[tagsLabel setAutoresizingMask:NSViewMaxXMargin | NSViewMinYMargin];
+		[content addSubview:tagsLabel];
+
+		g_plaudTagsField = [[NSTextField alloc] initWithFrame:NSMakeRect(340, btnY, frame.size.width - 490, 24)];
+		[g_plaudTagsField setFont:[NSFont systemFontOfSize:11]];
+		[g_plaudTagsField setPlaceholderString:@"custom,tags"];
+		[g_plaudTagsField setAutoresizingMask:NSViewWidthSizable | NSViewMinYMargin];
+		[content addSubview:g_plaudTagsField];
 
 		g_btnPlaudSync = [[NSButton alloc] initWithFrame:NSMakeRect(frame.size.width - 140, btnY, 130, 24)];
 		[g_btnPlaudSync setTitle:@"Sync Selected"];
@@ -446,7 +485,8 @@ type PlaudSyncRecord struct {
 }
 
 // ShowPlaudSyncWindow populates and displays the Plaud Sync window.
-func ShowPlaudSyncWindow(records []PlaudSyncRecord, accountInfo string) {
+// defaultTags pre-fills the custom tags field (from config).
+func ShowPlaudSyncWindow(records []PlaudSyncRecord, accountInfo string, defaultTags ...string) {
 	C.clearPlaudData()
 
 	for i, rec := range records {
@@ -471,6 +511,18 @@ func ShowPlaudSyncWindow(records []PlaudSyncRecord, accountInfo string) {
 		defer C.free(unsafe.Pointer(cAccount))
 	}
 	C.showPlaudSyncWindow(cAccount)
+
+	// Pre-fill custom tags field from config.
+	if len(defaultTags) > 0 && defaultTags[0] != "" {
+		cTags := C.CString(defaultTags[0])
+		C.setPlaudDefaultTags(cTags)
+		C.free(unsafe.Pointer(cTags))
+	}
+}
+
+// GetPlaudCustomTags returns the current value of the custom tags field.
+func GetPlaudCustomTags() string {
+	return C.GoString(C.getPlaudCustomTags())
 }
 
 // SetPlaudSyncStatus updates the status text of a specific recording by ID.
