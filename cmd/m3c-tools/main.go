@@ -48,6 +48,7 @@ import (
 	"github.com/kamir/m3c-tools/pkg/importer"
 	"github.com/kamir/m3c-tools/pkg/impression"
 	"github.com/kamir/m3c-tools/pkg/plaud"
+	"github.com/kamir/m3c-tools/pkg/pocket"
 	"github.com/kamir/m3c-tools/pkg/menubar"
 	"github.com/kamir/m3c-tools/pkg/recorder"
 	"github.com/kamir/m3c-tools/pkg/screenshot"
@@ -71,13 +72,22 @@ func main() {
 	}
 
 	// Load config: try profile system first, fall back to legacy .env files.
+	// BUG-0093: After profile loading, also load legacy .env to fill gaps.
+	// The setup wizard writes ER1_API_KEY to ~/.m3c-tools.env, but profile
+	// templates may have it empty. LoadDotenv only sets vars that are not
+	// already set, so profile values take precedence.
+	home := os.Getenv("HOME")
 	pm := config.NewProfileManager()
 	if activeProfile, err := pm.ActiveProfile(); err == nil {
 		_ = pm.ApplyProfile(activeProfile)
 		log.Printf("[config] profile: %s", activeProfile.Name)
+		// Fill gaps from legacy config (e.g. ER1_API_KEY from setup wizard).
+		for _, p := range []string{filepath.Join(home, ".m3c-tools.env"), ".env"} {
+			_ = er1.LoadDotenv(p)
+		}
 	} else {
 		// Fallback to legacy .env loading for pre-profile installations.
-		for _, p := range []string{".env", filepath.Join(os.Getenv("HOME"), ".m3c-tools.env")} {
+		for _, p := range []string{".env", filepath.Join(home, ".m3c-tools.env")} {
 			_ = er1.LoadDotenv(p)
 		}
 	}
@@ -111,6 +121,8 @@ func main() {
 		cmdImportAudio(os.Args[2:])
 	case "plaud":
 		cmdPlaud(os.Args[2:])
+	case "pocket":
+		cmdPocket(os.Args[2:])
 	case "config":
 		cmdConfig(os.Args[2:])
 	case "setup":
@@ -199,6 +211,11 @@ Commands:
   plaud auth login       Extract token from Chrome (web.plaud.ai)
   plaud auth <token>     Save Plaud API token manually
 
+  pocket list            List Pocket recordings with sync status
+    --path <dir>           Override device recording path
+  pocket sync --all      Sync all new Pocket recordings to ER1
+    --path <dir>           Override device recording path
+
   config list|show|switch|create|test|import
                          Configuration profile management
 
@@ -260,10 +277,10 @@ func applyRuntimeER1Context(cfg *er1.Config) {
 func er1SessionPersistenceEnabled() bool {
 	v := strings.TrimSpace(strings.ToLower(os.Getenv("M3C_ER1_SESSION_PERSIST")))
 	switch v {
-	case "1", "true", "yes", "on":
-		return true
-	default:
+	case "0", "false", "no", "off":
 		return false
+	default:
+		return true // persist by default — login survives restart until explicit logout
 	}
 }
 
@@ -2213,11 +2230,13 @@ func cmdMenubar(args []string) {
 			return result, active, nil
 		},
 		SwitchProfile: func(name string) error {
+			log.Printf("[config] switch requested: %s", name)
 			pm := config.NewProfileManager()
 			if err := pm.SwitchProfile(name); err != nil {
+				log.Printf("[config] switch FAILED for %q: %v", name, err)
 				return err
 			}
-			log.Printf("[config] switched to profile: %s", name)
+			log.Printf("[config] switch confirmed: %s", name)
 			return nil
 		},
 		OpenProfileEditor: func() {
@@ -2243,6 +2262,34 @@ func cmdMenubar(args []string) {
 		log.Printf("[diag] pid=%d exe=%q screen_access=%v screenshot_mode=%s", os.Getpid(), exe, menubar.HasScreenCaptureAccess(), screenshotCaptureMode())
 	}
 	maybePreloadWhisper()
+
+	// Register dynamic Pocket Sync menu label (SPEC-0119 Feature 3).
+	menubar.SetPocketLabelFunc(func() string {
+		cfg := pocket.LoadConfig()
+		if !cfg.IsDeviceConnected() {
+			return "Pocket Sync (not connected)"
+		}
+		recordings, err := pocket.Scan(cfg.RecordPath)
+		if err != nil || len(recordings) == 0 {
+			return "Pocket Sync"
+		}
+		staged, _ := pocket.ListStaged(cfg)
+		stagedKeys := make(map[string]bool)
+		for _, s := range staged {
+			stagedKeys[s.DedupeKey()] = true
+		}
+		groupState := pocket.LoadGroupState(cfg)
+		newCount := 0
+		for _, r := range recordings {
+			if !stagedKeys[r.DedupeKey()] && pocket.FindGroupByFilePath(r.FilePath, cfg) == nil && pocket.FindGroupByStagedPath(r, cfg, groupState) == nil {
+				newCount++
+			}
+		}
+		if newCount > 0 {
+			return fmt.Sprintf("Pocket Sync (%d new)", newCount)
+		}
+		return "Pocket Sync (all synced)"
+	})
 
 	// --- Time Tracking Engine ---
 	ttStore, ttErr := timetracking.OpenStore(timetracking.DefaultDBPath())
@@ -2477,6 +2524,8 @@ func cmdMenubar(args []string) {
 			safeGo("ShowTrackingDB", func() { menubarShowTrackingDB() })
 		case menubar.ActionPlaudSync:
 			safeGo("PlaudSync", func() { menubarHandlePlaudSync(app) })
+		case menubar.ActionPocketSync:
+			safeGo("PocketSync", func() { menubarHandlePocketSync(app) })
 		case menubar.ActionStarGitHub:
 			safeGo("StarGitHub", func() { openURL(menubar.GitHubRepoURL) })
 		}
@@ -3135,7 +3184,7 @@ func menubarLoginER1(app *menubar.App) {
 	}
 	defer closeFn()
 
-	loginURL := fmt.Sprintf("%s/login/multi?next=%s", baseURL, neturl.QueryEscape(callbackURL))
+	loginURL := fmt.Sprintf("%s/v2/signin?next=%s", baseURL, neturl.QueryEscape(callbackURL))
 	log.Printf("[auth] login start base=%s callback=%s", baseURL, callbackURL)
 	if err := openURL(loginURL); err != nil {
 		log.Printf("[auth] failed to open login URL: %v", err)
@@ -3267,7 +3316,7 @@ func startER1LoginCallbackServer() (*http.Server, string, <-chan loginCallbackRe
 		default:
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = fmt.Fprint(w, "<html><body><h3>Login captured.</h3><p>You can return to M3C Tools.</p></body></html>")
+		_, _ = fmt.Fprint(w, buildDeviceHubHTML(ctxID, er1BaseURL(er1.LoadConfig().APIURL)))
 	})
 
 	srv := &http.Server{
@@ -3289,6 +3338,131 @@ func startER1LoginCallbackServer() (*http.Server, string, <-chan loginCallbackRe
 		_ = srv.Shutdown(ctx)
 	}
 	return srv, callbackURL, resultCh, closeFn, nil
+}
+
+// buildDeviceHubHTML generates the Personal Device Hub page shown after m3c-tools login (SPEC-0124).
+func buildDeviceHubHTML(contextID, baseURL string) string {
+	cfg := pocket.LoadConfig()
+	pocketStatus := "not connected"
+	pocketCount := 0
+	if cfg.IsDeviceConnected() {
+		if recs, err := pocket.Scan(cfg.RecordPath); err == nil {
+			pocketCount = len(recs)
+			pocketStatus = fmt.Sprintf("%d recordings on device", pocketCount)
+		}
+	}
+
+	apiStatus := ""
+	if cfg.APIKey != "" {
+		apiStatus = "API key configured"
+	}
+
+	ts := time.Now().Format("2006-01-02 15:04")
+	userID := contextID
+	if i := strings.Index(userID, "___"); i > 0 {
+		userID = userID[:i]
+	}
+
+	return fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>m3c Device Hub</title>
+<style>
+  :root { --bg: #0f1117; --surface: #1a1d27; --border: #2d3040; --text: #e6e8f0; --muted: #8b8fa3; --accent: #7c3aed; --cyan: #22d3ee; --green: #34d399; --orange: #fb923c; --red: #f87171; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem; }
+  .hub { max-width: 680px; margin: 0 auto; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem; }
+  .card h2 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 1rem; }
+  .success { border-left: 4px solid var(--green); }
+  .success h1 { color: var(--green); font-size: 1.1rem; margin-bottom: 0.5rem; }
+  .success .meta { color: var(--muted); font-size: 0.85rem; line-height: 1.6; }
+  .channel { display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
+  .channel:last-child { border-bottom: none; }
+  .channel .name { font-size: 0.9rem; }
+  .channel .count { color: var(--muted); font-size: 0.85rem; }
+  .channel a { color: var(--cyan); text-decoration: none; font-size: 0.8rem; }
+  .channel a:hover { text-decoration: underline; }
+  .vendor { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0 0.4rem 1.5rem; }
+  .vendor a { color: var(--muted); font-size: 0.75rem; text-decoration: none; }
+  .vendor a:hover { color: var(--cyan); }
+  .shortcut { display: flex; justify-content: space-between; padding: 0.4rem 0; }
+  .shortcut kbd { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font-size: 0.8rem; font-family: monospace; }
+  .shortcut .desc { color: var(--muted); font-size: 0.85rem; }
+  .status-row { display: flex; justify-content: space-between; padding: 0.3rem 0; font-size: 0.85rem; }
+  .status-row .label { color: var(--muted); }
+  .status-row .ok { color: var(--green); }
+  .status-row .warn { color: var(--orange); }
+  .close-hint { text-align: center; color: var(--muted); font-size: 0.8rem; margin-top: 1.5rem; }
+</style>
+</head>
+<body>
+<div class="hub">
+  <div class="card success">
+    <h1>&#10003; Device Connected</h1>
+    <div class="meta">
+      m3c-tools linked to your account<br>
+      User: %s<br>
+      Connected: %s
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Capture Channels</h2>
+    <div class="channel"><span class="name">&#128248; Screenshots</span><a href="%s/v2/my-personal-assistant" target="_blank">View in Memory</a></div>
+    <div class="channel"><span class="name">&#127908; Audio Journal</span><a href="%s/v2/audio-journal" target="_blank">Open Audio Journal</a></div>
+    <div class="channel"><span class="name">&#128250; YouTube Transcripts</span><a href="%s/v2/transcripts" target="_blank">View Transcripts</a></div>
+    <div class="channel">
+      <span class="name">&#127908; Plaud Sync</span>
+      <a href="%s/v2/my-personal-assistant" target="_blank">View Synced</a>
+    </div>
+    <div class="vendor"><a href="https://web.plaud.ai" target="_blank">&#8599; Open Plaud App (web.plaud.ai)</a></div>
+    <div class="channel">
+      <span class="name">&#128308; Pocket Sync</span>
+      <span class="count">%s</span>
+    </div>
+    <div class="vendor"><a href="https://app.heypocket.com/app" target="_blank">&#8599; Open Pocket App (heypocket.com)</a></div>
+    <div class="channel"><span class="name">&#128161; Quick Impulse</span><a href="%s/v2/my-personal-assistant" target="_blank">View</a></div>
+  </div>
+
+  <div class="card">
+    <h2>Keyboard Shortcuts</h2>
+    <div class="shortcut"><kbd>Ctrl+Shift+S</kbd><span class="desc">Screenshot capture</span></div>
+    <div class="shortcut"><kbd>Ctrl+Shift+I</kbd><span class="desc">Quick impulse</span></div>
+    <div class="shortcut"><kbd>Ctrl+Shift+Y</kbd><span class="desc">YouTube transcript</span></div>
+  </div>
+
+  <div class="card">
+    <h2>Device Status</h2>
+    <div class="status-row"><span class="label">ER1 Connection</span><span class="ok">&#10003; connected</span></div>
+    <div class="status-row"><span class="label">API Key</span><span class="ok">&#10003; valid</span></div>
+    <div class="status-row"><span class="label">Pocket Device</span><span class="%s">%s</span></div>
+    <div class="status-row"><span class="label">Pocket API</span><span class="%s">%s</span></div>
+  </div>
+
+  <div class="card">
+    <h2>Quick Links</h2>
+    <div class="channel"><span class="name">Dashboard</span><a href="%s/v2/my-personal-assistant" target="_blank">Open &#8599;</a></div>
+    <div class="channel"><span class="name">Profile</span><a href="%s/v2/profile" target="_blank">Open &#8599;</a></div>
+    <div class="channel"><span class="name">Memory</span><a href="%s/v2/my-personal-assistant" target="_blank">Open &#8599;</a></div>
+  </div>
+
+  <p class="close-hint">You can close this tab and return to m3c-tools in the menu bar.</p>
+</div>
+</body>
+</html>`,
+		userID, ts,
+		baseURL, baseURL, baseURL, baseURL,
+		pocketStatus,
+		baseURL,
+		func() string { if cfg.IsDeviceConnected() { return "ok" }; return "warn" }(),
+		func() string { if cfg.IsDeviceConnected() { return fmt.Sprintf("&#10003; %s", pocketStatus) }; return "not connected" }(),
+		func() string { if apiStatus != "" { return "ok" }; return "muted" }(),
+		func() string { if apiStatus != "" { return "&#10003; " + apiStatus }; return "not configured" }(),
+		baseURL, baseURL, baseURL,
+	)
 }
 
 // truncateForLog truncates a string for safe log output, preventing
@@ -4892,4 +5066,854 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen-3] + "..."
+}
+
+// menubarHandlePocketSync handles the Pocket Sync menu action (SPEC-0119).
+func menubarHandlePocketSync(app *menubar.App) {
+	cfg := pocket.LoadConfig()
+
+	if !cfg.IsDeviceConnected() {
+		log.Printf("[pocket] device not connected at %s", cfg.RecordPath)
+		return
+	}
+
+	log.Printf("[pocket] scanning %s...", cfg.RecordPath)
+
+	recordings, err := pocket.Scan(cfg.RecordPath)
+	if err != nil {
+		log.Printf("[pocket] scan error: %v", err)
+		return
+	}
+
+	if len(recordings) == 0 {
+		log.Printf("[pocket] no recordings found")
+		return
+	}
+
+	// Check which are already staged or grouped
+	staged, _ := pocket.ListStaged(cfg)
+	stagedKeys := make(map[string]bool)
+	for _, s := range staged {
+		stagedKeys[s.DedupeKey()] = true
+	}
+	groupState := pocket.LoadGroupState(cfg)
+	for i := range recordings {
+		if stagedKeys[recordings[i].DedupeKey()] {
+			recordings[i].Status = "staged"
+		}
+		if pocket.FindGroupByFilePath(recordings[i].FilePath, cfg) != nil || pocket.FindGroupByStagedPath(recordings[i], cfg, groupState) != nil {
+			recordings[i].Status = "grouped"
+		}
+	}
+
+	newCount := 0
+	for _, r := range recordings {
+		if r.Status == "new" {
+			newCount++
+		}
+	}
+
+	log.Printf("[pocket] found %d recordings (%d new)", len(recordings), newCount)
+
+	// Suggest session groups
+	groups := pocket.SuggestGroups(recordings, 5)
+	if len(groups) > 0 {
+		log.Printf("[pocket] suggested %d session groups", len(groups))
+	}
+
+	// Build raw window records
+	var rawRecords []menubar.PocketSyncRecord
+	for i, rec := range recordings {
+		rawRecords = append(rawRecords, menubar.PocketSyncRecord{
+			Num:      fmt.Sprintf("%d", i+1),
+			Date:     rec.Date + "  " + rec.Time,
+			Time:     "",
+			Duration: menubar.FormatPocketDuration(rec.DurationSec),
+			Size:     menubar.FormatPocketSize(rec.SizeBytes),
+			Status:   rec.Status,
+			FilePath: rec.FilePath,
+		})
+	}
+
+	// Build group info from state for pre-collapsing
+	var groupInfos []menubar.PocketGroupInfo
+	for _, gm := range groupState.Groups {
+		var memberPaths []string
+		for _, rec := range recordings {
+			for _, gfp := range gm.FilePaths {
+				if gfp == rec.FilePath || gfp == pocket.StagedPath(rec, cfg) {
+					memberPaths = append(memberPaths, rec.FilePath)
+					break
+				}
+			}
+		}
+		if len(memberPaths) > 0 {
+			// Compute total duration and size from actual recordings
+			var totalDur float64
+			var totalSize int64
+			for _, rec := range recordings {
+				for _, mp := range memberPaths {
+					if rec.FilePath == mp {
+						totalDur += rec.DurationSec
+						totalSize += rec.SizeBytes
+					}
+				}
+			}
+			groupInfos = append(groupInfos, menubar.PocketGroupInfo{
+				GroupID:     gm.GroupID,
+				DocID:       gm.DocID,
+				Title:       gm.Title,
+				Duration:    menubar.FormatPocketDuration(totalDur),
+				Size:        menubar.FormatPocketSize(totalSize),
+				Segments:    gm.Segments,
+				MemberPaths: memberPaths,
+			})
+		}
+	}
+
+	// Apply grouping — collapsed by default
+	windowRecords := menubar.BuildGroupedRecords(rawRecords, groupInfos, nil)
+
+	deviceInfo := fmt.Sprintf("Pocket: %d recordings (%d new)", len(recordings), newCount)
+	tags := strings.Join(cfg.DefaultTags, ",")
+	expandedGroupIDs := make(map[string]bool)
+	menubar.ShowPocketSyncWindow(windowRecords, deviceInfo, tags)
+
+	// Show auto-grouping hint if session groups were detected (SPEC-0119 Phase 3)
+	ungroupedNewCount := 0
+	for _, r := range recordings {
+		if r.Status == "new" {
+			ungroupedNewCount++
+		}
+	}
+	if len(groups) > 0 && ungroupedNewCount > 0 {
+		hint := fmt.Sprintf("%d session groups detected - select recordings and click 'Group Selected'", len(groups))
+		menubar.SetPocketStatusText(hint)
+	}
+
+	log.Printf("[pocket] sync window opened with %d recordings", len(windowRecords))
+
+	// Wire sync/group callbacks
+	menubar.SetPocketSyncCallback(func(action string, filePaths []string, customTags string) {
+		log.Printf("[pocket] callback action=%s files=%d tags=%q", action, len(filePaths), customTags)
+
+		// Handle toggle_group FIRST — no selection needed
+		if strings.HasPrefix(action, "toggle_group:group:") {
+			gid := strings.TrimPrefix(action, "toggle_group:group:")
+			expandedGroupIDs[gid] = !expandedGroupIDs[gid]
+			log.Printf("[pocket] toggle group %s expanded=%v", gid, expandedGroupIDs[gid])
+			newRecords := menubar.BuildGroupedRecords(rawRecords, groupInfos, expandedGroupIDs)
+			menubar.ShowPocketSyncWindow(newRecords, deviceInfo, tags)
+			return
+		}
+
+		// Find matching Recording objects for selected file paths
+		selectedPaths := make(map[string]bool, len(filePaths))
+		for _, p := range filePaths {
+			selectedPaths[p] = true
+		}
+		var selected []pocket.Recording
+		for _, rec := range recordings {
+			if selectedPaths[rec.FilePath] {
+				selected = append(selected, rec)
+			}
+		}
+		if len(selected) == 0 {
+			log.Printf("[pocket] no matching recordings found")
+			return
+		}
+
+		parsedTags := menubar.ParsePocketTags(customTags, cfg.DefaultTags)
+
+		switch action {
+		case "sync":
+			go pocketSyncSelected(selected, parsedTags, cfg)
+		case "group":
+			go pocketGroupAndSync(selected, parsedTags, cfg, groups)
+		default:
+			log.Printf("[pocket] unknown action: %s", action)
+		}
+	})
+}
+
+// pocketSyncSelected stages and uploads individual recordings to ER1.
+func pocketSyncSelected(selected []pocket.Recording, tags []string, cfg *pocket.Config) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[pocket] PANIC in pocketSyncSelected: %v", r)
+			menubar.SetPocketStatusText(fmt.Sprintf("Error: %v", r))
+			menubar.SetPocketSyncProgress(menubar.BulkRunState{Active: false})
+		}
+	}()
+
+	if err := cfg.EnsureDirs(); err != nil {
+		log.Printf("[pocket] dir error: %v", err)
+		menubar.SetPocketStatusText(fmt.Sprintf("Dir error: %v", err))
+		return
+	}
+
+	total := len(selected)
+	menubar.SetPocketSyncProgress(menubar.BulkRunState{Active: true, Total: total})
+
+	// Open tracking DB for dedup + import history (SPEC-0119 Phase 3)
+	filesDB, dbErr := tracking.OpenFilesDB(defaultFilesDBPath())
+	if dbErr != nil {
+		log.Printf("[pocket] tracking DB warning (non-fatal): %v", dbErr)
+	}
+	defer func() {
+		if filesDB != nil {
+			_ = filesDB.Close()
+		}
+	}()
+
+	success, failed := 0, 0
+	er1Cfg := er1.LoadConfig()
+
+	for i := range selected {
+		// Stage locally first
+		menubar.SetPocketSyncStatus(selected[i].FilePath, "Staging...")
+		if err := pocket.StageRecording(&selected[i], cfg); err != nil {
+			log.Printf("[pocket] stage error: %v", err)
+			menubar.SetPocketSyncStatus(selected[i].FilePath, "Failed")
+			failed++
+			continue
+		}
+
+		// Upload to ER1
+		menubar.SetPocketSyncStatus(selected[i].FilePath, "Uploading...")
+		stagedPath := pocket.StagedPath(selected[i], cfg)
+
+		audioBytes, readErr := os.ReadFile(stagedPath)
+		if readErr != nil {
+			log.Printf("[pocket] read staged file error: %v", readErr)
+			menubar.SetPocketSyncStatus(selected[i].FilePath, "Failed")
+			failed++
+			continue
+		}
+
+		// Record in tracking DB after staging (SPEC-0119 Phase 3)
+		var fileHash string
+		if filesDB != nil {
+			if h, hashErr := tracking.HashFile(stagedPath); hashErr == nil {
+				fileHash = h
+				dedupeKey := selected[i].DedupeKey()
+				_, _ = filesDB.RecordFile(dedupeKey, fileHash, selected[i].SizeBytes, "pocket", "")
+			}
+		}
+
+		// Build composite document with file metadata
+		doc := &impression.CompositeDoc{
+			ObsType:           impression.PocketFieldnote,
+			RecordingTitle:    fmt.Sprintf("Pocket %s %s", selected[i].Date, selected[i].Time),
+			RecordingDuration: menubar.FormatPocketDuration(selected[i].DurationSec),
+			Timestamp:         selected[i].Timestamp,
+			VideoURL:          selected[i].FilePath, // source file path
+		}
+		docText := doc.Build()
+
+		payload := &er1.UploadPayload{
+			TranscriptData:     []byte(docText),
+			TranscriptFilename: fmt.Sprintf("pocket_%s_%s.txt", selected[i].Date, strings.ReplaceAll(selected[i].Time, ":", "")),
+			AudioData:          audioBytes,
+			AudioFilename:      filepath.Base(stagedPath),
+			ContentType:        cfg.ContentType,
+			Tags:               strings.Join(tags, ","),
+		}
+		resp, uploadErr := er1.Upload(er1Cfg, payload)
+		if uploadErr != nil {
+			log.Printf("[pocket] upload error: %v", uploadErr)
+			menubar.SetPocketSyncStatus(selected[i].FilePath, "Failed")
+			failed++
+			// Record upload failure in tracking DB
+			if filesDB != nil && fileHash != "" {
+				_ = filesDB.RecordUploadError(fileHash, "pocket", uploadErr.Error())
+			}
+		} else {
+			menubar.SetPocketSyncStatus(selected[i].FilePath, "Synced")
+			success++
+			if resp != nil && resp.DocID != "" {
+				menubar.SetPocketSyncStatus(selected[i].FilePath, fmt.Sprintf("Synced → %s", resp.DocID[:8]))
+				log.Printf("[pocket] synced: %s → %s", filepath.Base(selected[i].FilePath), resp.DocID)
+				// Record upload success in tracking DB
+				if filesDB != nil && fileHash != "" {
+					_ = filesDB.RecordUploadSuccess(fileHash, "pocket", resp.DocID)
+				}
+
+				// Register sync mapping on server (SPEC-0117 / SPEC-0119 Phase 4)
+				if er1Cfg.APIKey != "" {
+					syncAPI := plaud.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, er1Cfg.ContextID, !er1Cfg.VerifySSL)
+					pocketRecID := fmt.Sprintf("pocket://%s/%s", selected[i].Date, filepath.Base(selected[i].FilePath))
+					mapErr := syncAPI.RegisterMapping(plaud.SyncMapping{
+						PlaudAccountID:   "pocket-device",
+						PlaudRecordingID: pocketRecID,
+						ER1DocID:         resp.DocID,
+						ER1ContextID:     er1Cfg.ContextID,
+						RecordingTitle:   fmt.Sprintf("Pocket %s %s", selected[i].Date, selected[i].Time),
+						AudioFormat:      "mp3",
+						AudioSizeBytes:   len(audioBytes),
+					})
+					if mapErr != nil {
+						log.Printf("[pocket] server mapping failed (non-fatal): %v", mapErr)
+					} else {
+						log.Printf("[pocket] server mapping registered: %s -> %s", pocketRecID, resp.DocID)
+					}
+				}
+			}
+		}
+
+		menubar.SetPocketSyncProgress(menubar.BulkRunState{
+			Active: true, Total: total, Done: i + 1,
+			Success: success, Failed: failed,
+		})
+	}
+
+	menubar.SetPocketSyncProgress(menubar.BulkRunState{
+		Active: false, Total: total, Done: total,
+		Success: success, Failed: failed,
+	})
+	log.Printf("[pocket] sync done: %d success, %d failed", success, failed)
+}
+
+// pocketGroupAndSync merges selected recordings into a group, then uploads.
+func pocketGroupAndSync(selected []pocket.Recording, tags []string, cfg *pocket.Config, suggestedGroups []pocket.RecordingGroup) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[pocket] PANIC in pocketGroupAndSync: %v", r)
+			menubar.SetPocketStatusText(fmt.Sprintf("Error: %v", r))
+			menubar.SetPocketSyncProgress(menubar.BulkRunState{Active: false})
+		}
+	}()
+
+	if err := cfg.EnsureDirs(); err != nil {
+		log.Printf("[pocket] dir error: %v", err)
+		menubar.SetPocketStatusText(fmt.Sprintf("Dir error: %v", err))
+		return
+	}
+
+	// Open tracking DB for import history (SPEC-0119 Phase 3)
+	filesDB, dbErr := tracking.OpenFilesDB(defaultFilesDBPath())
+	if dbErr != nil {
+		log.Printf("[pocket] tracking DB warning (non-fatal): %v", dbErr)
+	}
+	defer func() {
+		if filesDB != nil {
+			_ = filesDB.Close()
+		}
+	}()
+
+	// Mark all selected as "Grouping..."
+	for _, rec := range selected {
+		menubar.SetPocketSyncStatus(rec.FilePath, "Grouping...")
+	}
+
+	// Create the group
+	title := fmt.Sprintf("Session %s %s", selected[0].Date, selected[0].Time)
+	group := pocket.CreateGroup(title, selected, tags)
+	log.Printf("[pocket] created group %q with %d recordings", group.Title, len(group.Recordings))
+
+	// Stage all recordings locally first
+	for i := range selected {
+		if err := pocket.StageRecording(&selected[i], cfg); err != nil {
+			log.Printf("[pocket] stage error for group member: %v", err)
+		}
+	}
+
+	// Update file paths to staged versions for merge
+	for i := range group.Recordings {
+		group.Recordings[i].FilePath = pocket.StagedPath(group.Recordings[i], cfg)
+	}
+
+	// Merge via ffmpeg
+	menubar.SetPocketStatusText(fmt.Sprintf("Merging %d recordings...", len(selected)))
+	mergedPath, err := pocket.MergeGroup(group, cfg.MergedDir)
+	if err != nil {
+		log.Printf("[pocket] merge failed: %v", err)
+		for _, rec := range selected {
+			menubar.SetPocketSyncStatus(rec.FilePath, "Merge Failed")
+		}
+		menubar.SetPocketStatusText(fmt.Sprintf("Merge failed: %v", err))
+		return
+	}
+	log.Printf("[pocket] merged → %s", mergedPath)
+
+	// Upload merged file to ER1
+	for _, rec := range selected {
+		menubar.SetPocketSyncStatus(rec.FilePath, "Uploading group...")
+	}
+	menubar.SetPocketSyncProgress(menubar.BulkRunState{Active: true, Total: 1})
+
+	er1Cfg := er1.LoadConfig()
+	log.Printf("[pocket] ER1 config: url=%s ctx=%s key_len=%d", er1Cfg.APIURL, er1Cfg.ContextID, len(er1Cfg.APIKey))
+
+	mergedBytes, readErr := os.ReadFile(mergedPath)
+	if readErr != nil {
+		log.Printf("[pocket] read merged file error: %v", readErr)
+		menubar.SetPocketStatusText(fmt.Sprintf("Read error: %v", readErr))
+		for _, rec := range selected {
+			menubar.SetPocketSyncStatus(rec.FilePath, "Failed")
+		}
+		return
+	}
+	log.Printf("[pocket] merged file read: %d bytes", len(mergedBytes))
+
+	// Build grouped composite document with file manifest
+	var fileManifest strings.Builder
+	for i, rec := range selected {
+		fmt.Fprintf(&fileManifest, "Segment %d: %s %s (%s, %s)\n",
+			i+1, rec.Date, rec.Time,
+			menubar.FormatPocketDuration(rec.DurationSec),
+			menubar.FormatPocketSize(rec.SizeBytes))
+		fmt.Fprintf(&fileManifest, "  Source: %s\n", rec.FilePath)
+		fmt.Fprintf(&fileManifest, "  Staged: %s\n\n", pocket.StagedPath(rec, cfg))
+	}
+
+	doc := &impression.CompositeDoc{
+		ObsType:           impression.PocketGrouped,
+		RecordingTitle:    group.Title,
+		RecordingDuration: menubar.FormatPocketDuration(group.TotalDuration),
+		SnippetCount:      len(selected),
+		Timestamp:         selected[0].Timestamp,
+		ImpressionText:    fileManifest.String(), // raw file manifest
+	}
+	docText := doc.Build()
+
+	allTags := append(tags, "session", "grouped")
+	payload := &er1.UploadPayload{
+		TranscriptData:     []byte(docText),
+		TranscriptFilename: fmt.Sprintf("pocket_session_%s.txt", selected[0].Date),
+		AudioData:          mergedBytes,
+		AudioFilename:      filepath.Base(mergedPath),
+		ContentType:        cfg.ContentType,
+		Tags:               strings.Join(allTags, ","),
+	}
+	log.Printf("[pocket] uploading: audio=%d bytes, doc=%d bytes, tags=%q", len(mergedBytes), len(docText), payload.Tags)
+	menubar.SetPocketStatusText("Uploading to ER1...")
+	resp, uploadErr := er1.Upload(er1Cfg, payload)
+	log.Printf("[pocket] upload result: err=%v resp=%+v", uploadErr, resp)
+
+	// Hash the merged file for tracking DB (SPEC-0119 Phase 3)
+	var mergedHash string
+	if filesDB != nil {
+		if h, hashErr := tracking.HashFile(mergedPath); hashErr == nil {
+			mergedHash = h
+		}
+	}
+
+	if uploadErr != nil {
+		log.Printf("[pocket] group upload failed: %v", uploadErr)
+		menubar.SetPocketStatusText(fmt.Sprintf("Upload failed: %v", uploadErr))
+		for _, rec := range selected {
+			menubar.SetPocketSyncStatus(rec.FilePath, "Failed")
+		}
+		menubar.SetPocketSyncProgress(menubar.BulkRunState{Active: false, Total: 1, Done: 1, Failed: 1})
+		// Record failure in tracking DB for merged file
+		if filesDB != nil && mergedHash != "" {
+			mergedSize := int64(len(mergedBytes))
+			_, _ = filesDB.RecordFile(fmt.Sprintf("pocket-group://%s", group.ID), mergedHash, mergedSize, "pocket", "")
+			_ = filesDB.RecordUploadError(mergedHash, "pocket", uploadErr.Error())
+		}
+	} else {
+		docID := ""
+		if resp != nil {
+			docID = resp.DocID
+		}
+		statusText := "Grouped"
+		if docID != "" {
+			statusText = fmt.Sprintf("Grouped → %s", docID[:8])
+		}
+		for _, rec := range selected {
+			menubar.SetPocketSyncStatus(rec.FilePath, statusText)
+		}
+		menubar.SetPocketSyncProgress(menubar.BulkRunState{Active: false, Total: 1, Done: 1, Success: 1})
+		menubar.SetPocketStatusText(fmt.Sprintf("Grouped %d recordings → %s", len(selected), docID))
+		log.Printf("[pocket] group uploaded: doc_id=%s", docID)
+
+		// Record grouped upload in tracking DB (SPEC-0119 Phase 3)
+		if filesDB != nil && docID != "" {
+			// Record merged file as uploaded
+			if mergedHash != "" {
+				mergedSize := int64(len(mergedBytes))
+				_, _ = filesDB.RecordFile(fmt.Sprintf("pocket-group://%s", group.ID), mergedHash, mergedSize, "pocket", docID)
+				_ = filesDB.RecordUploadSuccess(mergedHash, "pocket", docID)
+			}
+			// Record each member recording as grouped
+			for _, rec := range selected {
+				stagedPath := pocket.StagedPath(rec, cfg)
+				if h, hashErr := tracking.HashFile(stagedPath); hashErr == nil {
+					dedupeKey := rec.DedupeKey()
+					_, _ = filesDB.RecordFile(dedupeKey, h, rec.SizeBytes, "pocket", docID)
+					_ = filesDB.RecordUploadSuccess(h, "pocket", docID)
+				}
+			}
+		}
+
+		// Store group→item mapping for later retrieval
+		if docID != "" {
+			pocket.SaveGroupMapping(group, docID, cfg)
+		}
+
+		// Register sync mapping on server for each grouped recording (SPEC-0117 / SPEC-0119 Phase 4)
+		if docID != "" && er1Cfg.APIKey != "" {
+			syncAPI := plaud.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, er1Cfg.ContextID, !er1Cfg.VerifySSL)
+			for _, rec := range selected {
+				pocketRecID := fmt.Sprintf("pocket://%s/%s", rec.Date, filepath.Base(rec.FilePath))
+				mapErr := syncAPI.RegisterMapping(plaud.SyncMapping{
+					PlaudAccountID:   "pocket-device",
+					PlaudRecordingID: pocketRecID,
+					ER1DocID:         docID,
+					ER1ContextID:     er1Cfg.ContextID,
+					RecordingTitle:   group.Title,
+					AudioFormat:      "mp3",
+					AudioSizeBytes:   int(rec.SizeBytes),
+				})
+				if mapErr != nil {
+					log.Printf("[pocket] server mapping failed for %s (non-fatal): %v", pocketRecID, mapErr)
+				}
+			}
+			log.Printf("[pocket] server mappings registered for %d grouped recordings -> %s", len(selected), docID)
+		}
+
+		// Collapse individual rows into a group header (pivot table style)
+		var memberPaths []string
+		for _, rec := range selected {
+			memberPaths = append(memberPaths, rec.FilePath)
+		}
+		menubar.CollapseGroupInTable(
+			memberPaths,
+			group.Title,
+			menubar.FormatPocketDuration(group.TotalDuration),
+			menubar.FormatPocketSize(group.TotalSize),
+			statusText,
+			docID,
+		)
+
+		// Show the item URL in status
+		if docID != "" {
+			baseURL := er1BaseURL(er1Cfg.APIURL)
+			itemURL := fmt.Sprintf("%s/memory/%s/%s/view", baseURL, er1Cfg.ContextID, docID)
+			log.Printf("[pocket] grouped item ready: %s", itemURL)
+			menubar.SetPocketStatusText(fmt.Sprintf("Done! View: %s", itemURL))
+		}
+	}
+}
+
+// ---------- Pocket CLI subcommands ----------
+
+func cmdPocket(args []string) {
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools pocket <list|sync> [args]")
+		os.Exit(1)
+	}
+
+	switch args[0] {
+	case "list":
+		cmdPocketList(args[1:])
+	case "sync":
+		cmdPocketSync(args[1:])
+	case "api":
+		cmdPocketAPI(args[1:])
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown pocket subcommand: %s\nUsage: m3c-tools pocket <list|sync|api> [args]\n", args[0])
+		os.Exit(1)
+	}
+}
+
+// cmdPocketAPI handles Pocket Cloud API subcommands (Phase 2).
+func cmdPocketAPI(args []string) {
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools pocket api <list|get|search|health>")
+		os.Exit(1)
+	}
+
+	client := pocket.NewAPIClient()
+	if !client.IsConfigured() {
+		fmt.Fprintln(os.Stderr, "Error: POCKET_API_KEY not set")
+		fmt.Fprintln(os.Stderr, "Get your key: Pocket app → Settings → Developer → API Keys")
+		fmt.Fprintln(os.Stderr, "Then: export POCKET_API_KEY=pk_xxx")
+		os.Exit(1)
+	}
+
+	switch args[0] {
+	case "health":
+		if err := client.HealthCheck(); err != nil {
+			fmt.Fprintf(os.Stderr, "Pocket API health check failed: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Pocket Cloud API: OK")
+
+	case "list":
+		limit := 20
+		page := 1
+		recordings, pagination, err := client.ListRecordings(page, limit)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		if len(recordings) == 0 {
+			fmt.Println("No cloud recordings found.")
+			if pagination != nil {
+				fmt.Printf("Total: %d\n", pagination.Total)
+			}
+			return
+		}
+		fmt.Printf("%-4s %-20s %-8s %-40s\n", "#", "Date", "Duration", "Title")
+		fmt.Println(strings.Repeat("-", 76))
+		for i, rec := range recordings {
+			dur := fmt.Sprintf("%.0fs", rec.Duration)
+			title := rec.Title
+			if len(title) > 40 {
+				title = title[:37] + "..."
+			}
+			fmt.Printf("%-4d %-20s %-8s %-40s\n", i+1, rec.CreatedAt.Format("2006-01-02 15:04"), dur, title)
+		}
+		if pagination != nil {
+			fmt.Printf("\nPage %d/%d (total: %d)\n", pagination.Page, pagination.TotalPages, pagination.Total)
+		}
+
+	case "get":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "Usage: m3c-tools pocket api get <recording-id>")
+			os.Exit(1)
+		}
+		rec, err := client.GetRecording(args[1])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Title:    %s\n", rec.Title)
+		fmt.Printf("Date:     %s\n", rec.CreatedAt.Format("2006-01-02 15:04:05"))
+		fmt.Printf("Duration: %.0fs\n", rec.Duration)
+		fmt.Printf("Language: %s\n", rec.Language)
+		fmt.Printf("Speakers: %d\n", rec.SpeakerCount)
+		fmt.Printf("Words:    %d\n", rec.WordCount)
+		if rec.Summary != "" {
+			fmt.Printf("\nSummary:\n%s\n", rec.Summary)
+		}
+		if rec.TranscriptText != "" {
+			fmt.Printf("\nTranscript:\n%s\n", rec.TranscriptText)
+		}
+
+	case "search":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "Usage: m3c-tools pocket api search <query>")
+			os.Exit(1)
+		}
+		query := strings.Join(args[1:], " ")
+		results, err := client.Search(query, 10)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		if len(results) == 0 {
+			fmt.Printf("No results for %q\n", query)
+			return
+		}
+		fmt.Printf("Search results for %q:\n\n", query)
+		for i, rec := range results {
+			fmt.Printf("%d. %s (%s, %.0fs)\n", i+1, rec.Title, rec.CreatedAt.Format("2006-01-02"), rec.Duration)
+			if rec.Summary != "" {
+				fmt.Printf("   %s\n", rec.Summary)
+			}
+		}
+
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown pocket api subcommand: %s\n", args[0])
+		os.Exit(1)
+	}
+}
+
+func cmdPocketList(args []string) {
+	cfg := pocket.LoadConfig()
+
+	// Parse optional --path flag
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--path" && i+1 < len(args) {
+			cfg.RecordPath = args[i+1]
+			i++
+		}
+	}
+
+	if !cfg.IsDeviceConnected() {
+		fmt.Fprintf(os.Stderr, "Pocket not connected at %s\n", cfg.RecordPath)
+		os.Exit(1)
+	}
+
+	recordings, err := pocket.Scan(cfg.RecordPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error scanning: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(recordings) == 0 {
+		fmt.Println("No recordings found.")
+		return
+	}
+
+	// Check staged and grouped status
+	staged, _ := pocket.ListStaged(cfg)
+	stagedKeys := make(map[string]bool)
+	for _, s := range staged {
+		stagedKeys[s.DedupeKey()] = true
+	}
+	groupState := pocket.LoadGroupState(cfg)
+
+	fmt.Printf("Pocket recordings (%d):\n\n", len(recordings))
+	fmt.Printf("  %3s  %-12s  %-10s  %8s  %8s  %s\n", "#", "Date", "Time", "Duration", "Size", "Status")
+	fmt.Printf("  %3s  %-12s  %-10s  %8s  %8s  %s\n", "---", "----------", "--------", "--------", "--------", "--------")
+
+	newCount := 0
+	for i, rec := range recordings {
+		status := "new"
+		if stagedKeys[rec.DedupeKey()] {
+			status = "staged"
+		}
+		if pocket.FindGroupByFilePath(rec.FilePath, cfg) != nil || pocket.FindGroupByStagedPath(rec, cfg, groupState) != nil {
+			status = "grouped"
+		}
+		if status == "new" {
+			newCount++
+		}
+		fmt.Printf("  %3d  %-12s  %-10s  %8s  %8s  %s\n",
+			i+1,
+			rec.Date,
+			rec.Time,
+			menubar.FormatPocketDuration(rec.DurationSec),
+			menubar.FormatPocketSize(rec.SizeBytes),
+			status,
+		)
+	}
+	fmt.Printf("\nTotal: %d recordings (%d new)\n", len(recordings), newCount)
+}
+
+func cmdPocketSync(args []string) {
+	cfg := pocket.LoadConfig()
+	syncAll := false
+
+	// Parse flags
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--all":
+			syncAll = true
+		case "--path":
+			if i+1 < len(args) {
+				cfg.RecordPath = args[i+1]
+				i++
+			}
+		}
+	}
+
+	if !syncAll {
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools pocket sync --all [--path <dir>]")
+		os.Exit(1)
+	}
+
+	if !cfg.IsDeviceConnected() {
+		fmt.Fprintf(os.Stderr, "Pocket not connected at %s\n", cfg.RecordPath)
+		os.Exit(1)
+	}
+
+	recordings, err := pocket.Scan(cfg.RecordPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error scanning: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(recordings) == 0 {
+		fmt.Println("No recordings found.")
+		return
+	}
+
+	// Determine which are new (not staged, not grouped)
+	staged, _ := pocket.ListStaged(cfg)
+	stagedKeys := make(map[string]bool)
+	for _, s := range staged {
+		stagedKeys[s.DedupeKey()] = true
+	}
+	groupState := pocket.LoadGroupState(cfg)
+
+	var newRecordings []pocket.Recording
+	for _, rec := range recordings {
+		if stagedKeys[rec.DedupeKey()] {
+			continue
+		}
+		if pocket.FindGroupByFilePath(rec.FilePath, cfg) != nil || pocket.FindGroupByStagedPath(rec, cfg, groupState) != nil {
+			continue
+		}
+		newRecordings = append(newRecordings, rec)
+	}
+
+	if len(newRecordings) == 0 {
+		fmt.Printf("All %d recordings already synced.\n", len(recordings))
+		return
+	}
+
+	fmt.Printf("Found %d recordings, %d new. Syncing...\n", len(recordings), len(newRecordings))
+
+	if err := cfg.EnsureDirs(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating dirs: %v\n", err)
+		os.Exit(1)
+	}
+
+	er1Cfg := er1.LoadConfig()
+	tags := strings.Join(cfg.DefaultTags, ",")
+	success, failed := 0, 0
+
+	for i := range newRecordings {
+		rec := &newRecordings[i]
+		fmt.Printf("  [%d/%d] %s %s (%s)... ",
+			i+1, len(newRecordings), rec.Date, rec.Time,
+			menubar.FormatPocketDuration(rec.DurationSec))
+
+		// Stage locally
+		if err := pocket.StageRecording(rec, cfg); err != nil {
+			fmt.Printf("STAGE FAILED: %v\n", err)
+			failed++
+			continue
+		}
+
+		// Upload to ER1
+		stagedPath := pocket.StagedPath(*rec, cfg)
+		audioBytes, readErr := os.ReadFile(stagedPath)
+		if readErr != nil {
+			fmt.Printf("READ FAILED: %v\n", readErr)
+			failed++
+			continue
+		}
+
+		doc := &impression.CompositeDoc{
+			ObsType:           impression.PocketFieldnote,
+			RecordingTitle:    fmt.Sprintf("Pocket %s %s", rec.Date, rec.Time),
+			RecordingDuration: menubar.FormatPocketDuration(rec.DurationSec),
+			Timestamp:         rec.Timestamp,
+			VideoURL:          rec.FilePath,
+		}
+		docText := doc.Build()
+
+		payload := &er1.UploadPayload{
+			TranscriptData:     []byte(docText),
+			TranscriptFilename: fmt.Sprintf("pocket_%s_%s.txt", rec.Date, strings.ReplaceAll(rec.Time, ":", "")),
+			AudioData:          audioBytes,
+			AudioFilename:      filepath.Base(stagedPath),
+			ContentType:        cfg.ContentType,
+			Tags:               tags,
+		}
+		resp, uploadErr := er1.Upload(er1Cfg, payload)
+		if uploadErr != nil {
+			fmt.Printf("UPLOAD FAILED: %v\n", uploadErr)
+			failed++
+		} else {
+			docID := ""
+			if resp != nil {
+				docID = resp.DocID
+			}
+			if docID != "" {
+				fmt.Printf("OK → %s\n", docID[:min(8, len(docID))])
+			} else {
+				fmt.Println("OK")
+			}
+			success++
+		}
+	}
+
+	fmt.Printf("\nDone. %d synced, %d failed.\n", success, failed)
 }

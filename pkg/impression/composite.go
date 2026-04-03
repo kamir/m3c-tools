@@ -17,7 +17,9 @@ const (
 	Idea     ObservationType = "idea"     // Screenshot observation
 	Impulse  ObservationType = "impulse"  // Quick capture
 	Import    ObservationType = "import"    // Batch audio import
-	Fieldnote ObservationType = "fieldnote" // Plaud field recording
+	Fieldnote       ObservationType = "fieldnote"        // Plaud field recording
+	PocketFieldnote ObservationType = "pocket_fieldnote" // Pocket USB recorder
+	PocketGrouped   ObservationType = "pocket_grouped"   // Pocket grouped session
 )
 
 // CompositeDoc builds a composite text document for ER1 upload.
@@ -101,6 +103,41 @@ func (d *CompositeDoc) Build() string {
 			b.WriteByte('\n')
 		}
 		fmt.Fprintf(&b, "\n=== END FIELDNOTE ===\n")
+
+	case PocketFieldnote:
+		fmt.Fprintf(&b, "=== POCKET FIELDNOTE ===\n")
+		fmt.Fprintf(&b, "Device: Pocket Audio Tracker\n")
+		fmt.Fprintf(&b, "Recording: %s\n", d.RecordingTitle)
+		fmt.Fprintf(&b, "Duration: %s\n", d.RecordingDuration)
+		fmt.Fprintf(&b, "Date: %s\n", ts)
+		fmt.Fprintf(&b, "Source: %s\n\n", d.VideoURL) // reuse VideoURL for source file path
+		if d.TranscriptText != "" {
+			fmt.Fprintf(&b, "--- Transcript ---\n")
+			b.WriteString(d.TranscriptText)
+			b.WriteByte('\n')
+		} else {
+			fmt.Fprintf(&b, "[Transcription pending — audio queued for processing]\n\n")
+		}
+		fmt.Fprintf(&b, "\n=== END POCKET FIELDNOTE ===\n")
+
+	case PocketGrouped:
+		fmt.Fprintf(&b, "=== POCKET SESSION (GROUPED) ===\n")
+		fmt.Fprintf(&b, "Device: Pocket Audio Tracker\n")
+		fmt.Fprintf(&b, "Session: %s\n", d.RecordingTitle)
+		fmt.Fprintf(&b, "Total Duration: %s\n", d.RecordingDuration)
+		fmt.Fprintf(&b, "Segments: %d\n", d.SnippetCount) // reuse SnippetCount for segment count
+		fmt.Fprintf(&b, "Date: %s\n\n", ts)
+		if d.TranscriptText != "" {
+			b.WriteString(d.TranscriptText)
+		} else {
+			fmt.Fprintf(&b, "[Transcription pending — merged audio queued for processing]\n\n")
+		}
+		if d.ImpressionText != "" {
+			fmt.Fprintf(&b, "\n--- Raw File Manifest ---\n")
+			b.WriteString(d.ImpressionText) // reuse for file listing
+			b.WriteByte('\n')
+		}
+		fmt.Fprintf(&b, "\n=== END POCKET SESSION ===\n")
 	}
 
 	return normalizeSectionHeaderIndent(b.String())

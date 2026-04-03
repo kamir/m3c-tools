@@ -390,7 +390,7 @@ func (a *App) buildMenuItems() []menuet.MenuItem {
 			},
 		},
 		{
-			Text:  "Pocket Sync",
+			Text:  pocketMenuLabel(),
 			Image: iconAudioImport,
 			Clicked: func() {
 				a.fireAction(ActionPocketSync, "")
