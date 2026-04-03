@@ -3182,7 +3182,16 @@ func menubarLoginER1(app *menubar.App) {
 		app.Notify("ER1 Login", "Could not start login callback listener.")
 		return
 	}
-	defer closeFn()
+	// Keep callback server alive for 30s after login completes so the browser
+	// redirect can reach the Device Hub page.
+	defer func() {
+		go func() {
+			time.Sleep(30 * time.Second)
+			closeFn()
+			log.Printf("[auth] callback server closed (30s grace period)")
+		}()
+	}()
+	_ = callbackServer
 
 	loginURL := fmt.Sprintf("%s/v2/signin?next=%s", baseURL, neturl.QueryEscape(callbackURL))
 	log.Printf("[auth] login start base=%s callback=%s", baseURL, callbackURL)
@@ -3446,7 +3455,7 @@ func buildDeviceHubHTML(contextID, baseURL string) string {
     <h2>Quick Links</h2>
     <div class="channel"><span class="name">Dashboard</span><a href="%s/v2/my-personal-assistant" target="_blank">Open &#8599;</a></div>
     <div class="channel"><span class="name">Profile</span><a href="%s/v2/profile" target="_blank">Open &#8599;</a></div>
-    <div class="channel"><span class="name">Memory</span><a href="%s/v2/my-personal-assistant" target="_blank">Open &#8599;</a></div>
+    <div class="channel"><span class="name">Memory Review</span><a href="%s/v2/memory-review" target="_blank">Open &#8599;</a></div>
   </div>
 
   <p class="close-hint">You can close this tab and return to m3c-tools in the menu bar.</p>
