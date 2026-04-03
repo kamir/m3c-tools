@@ -8,11 +8,17 @@ package main
 
 import (
 	"bufio"
+	"context"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"net"
+	"net/http"
+	neturl "net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1092,51 +1098,20 @@ func cmdTrayApp(args []string) {
 				}()
 			case tray.ActionPocketSync:
 				log.Println("[tray] pocket sync triggered (not yet implemented)")
-			case tray.ActionPlaudAuth:
-				// Happy Maker 1: Dedicated "Connect Plaud" menu action.
-				// Runs CDP auto-auth without triggering a full sync.
-				log.Println("[tray] Connect Plaud clicked — starting CDP auth...")
-				app.UpdateTooltip("M3C Tools — Connecting to Plaud via Chrome...")
-				go func() {
-					token, authErr := trayExtractPlaudToken(app)
-					if authErr != nil {
-						log.Printf("[tray] Plaud auth failed: %v", authErr)
-						app.Notify("Plaud Auth Failed", "Open web.plaud.ai in Chrome, log in, then try again")
-						app.UpdateTooltip(fmt.Sprintf("M3C Tools — Plaud auth failed: %v", authErr))
-						go func() {
-							time.Sleep(10 * time.Second)
-							app.ResetTooltip()
-						}()
-						return
-					}
-					cfg := plaud.LoadConfig()
-					session := &plaud.TokenSession{Token: token, SavedAt: time.Now()}
-					if saveErr := plaud.SaveToken(cfg.TokenPath, session); saveErr != nil {
-						log.Printf("[tray] token save failed: %v", saveErr)
-						app.Notify("Plaud Auth", "Token extracted but could not save")
-					} else {
-						log.Println("[tray] Plaud token saved via Connect Plaud")
-						app.Notify("Plaud Connected", "Token saved — you can now use Plaud Sync")
-					}
-					app.UpdateTooltip("M3C Tools — Plaud connected")
-					go func() {
-						time.Sleep(10 * time.Second)
-						app.ResetTooltip()
-					}()
-				}()
+			// FEAT-0014: ActionPlaudAuth removed — folded into ActionPlaudSync (auto-auth fallback).
 			case tray.ActionSignIn:
-				// BUG-0088: Open the sign-in page in the default browser.
-				signInURL := "https://onboarding.guide/login"
-				log.Printf("[tray] opening sign-in: %s", signInURL)
-				openBrowserURL(signInURL)
-			case tray.ActionOpenLog:
-				// BUG-0091: Open the log file in the system default viewer.
-				log.Printf("[tray] opening log file: %s", data)
-				openFileWithDefault(data)
-			case tray.ActionStarGitHub:
-				log.Printf("[tray] star on GitHub: %s", data)
-			case tray.ActionQuickImpulse:
-				log.Println("[tray] quick impulse triggered")
+				// BUG-0088 fix: Use proper ER1 callback flow (same as macOS).
+				go trayLoginER1(app)
+			case tray.ActionSignOut:
+				// FEAT-0014: Sign out — clear runtime state.
+				log.Println("[tray] sign out")
+				os.Setenv("ER1_CONTEXT_ID", "")
+				app.UpdateLoginState(false, "")
+				app.UpdateTooltip("M3C Tools — Signed out")
+				go func() {
+					time.Sleep(5 * time.Second)
+					app.ResetTooltip()
+				}()
 			case tray.ActionSetup:
 				log.Printf("[tray] setup action: %s", data)
 			case tray.ActionQuit:
@@ -1275,4 +1250,186 @@ func openBrowserURL(url string) {
 	if err := cmd.Start(); err != nil {
 		log.Printf("[tray] failed to open browser for %s: %v", url, err)
 	}
+}
+
+// --- ER1 Login Flow (BUG-0088, BUG-0096, BUG-0098 fix) ---
+
+// trayLoginER1 runs the full ER1 login flow: starts a local callback server,
+// opens the browser to /v2/signin, waits for the callback with context_id.
+// Same flow as macOS menubarLoginER1 in main.go.
+func trayLoginER1(app *tray.TrayApp) {
+	cfg := er1.LoadConfig()
+	baseURL := trayER1BaseURL(cfg.APIURL)
+	if baseURL == "" {
+		log.Println("[auth] cannot derive ER1 base URL from ER1_API_URL")
+		app.UpdateTooltip("M3C Tools — Login failed (no ER1 URL)")
+		return
+	}
+
+	// Start local callback server on a random port.
+	srv, callbackURL, resultCh, closeFn, err := startTrayLoginCallbackServer()
+	if err != nil {
+		log.Printf("[auth] login callback server start failed: %v", err)
+		app.UpdateTooltip("M3C Tools — Login failed (callback)")
+		return
+	}
+	defer func() {
+		// Keep callback server alive for 30s so browser redirect can complete.
+		go func() {
+			time.Sleep(30 * time.Second)
+			closeFn()
+			log.Printf("[auth] callback server closed (30s grace period)")
+		}()
+	}()
+	_ = srv
+
+	loginURL := fmt.Sprintf("%s/v2/signin?next=%s", baseURL, neturl.QueryEscape(callbackURL))
+	log.Printf("[auth] login start base=%s callback=%s", baseURL, callbackURL)
+	openBrowserURL(loginURL)
+	app.UpdateTooltip("M3C Tools — Waiting for login...")
+
+	// BUG-0096: 5-minute timeout (Google OAuth + Passkey can take time).
+	deadline := time.NewTimer(5 * time.Minute)
+	defer deadline.Stop()
+
+	for {
+		select {
+		case result := <-resultCh:
+			if result.Err != nil {
+				log.Printf("[auth] callback received error: %v", result.Err)
+				app.UpdateTooltip("M3C Tools — Login failed")
+				return
+			}
+			ctxID := strings.TrimSpace(result.ContextID)
+			if ctxID == "" {
+				log.Printf("[auth] callback received but no context_id")
+				continue
+			}
+			completeTrayLogin(app, ctxID)
+			return
+		case <-deadline.C:
+			log.Printf("[auth] login timed out (5m) waiting for callback; addr=%s", srv.Addr)
+			app.UpdateTooltip("M3C Tools — Login timed out")
+			go func() {
+				time.Sleep(10 * time.Second)
+				app.ResetTooltip()
+			}()
+			return
+		}
+	}
+}
+
+// completeTrayLogin finalizes a successful login.
+func completeTrayLogin(app *tray.TrayApp, contextID string) {
+	log.Printf("[auth] login success context_id=%s", contextID)
+
+	// Persist context_id to the active profile.
+	pm := config.NewProfileManager()
+	active := pm.ActiveProfileName()
+	if active != "" {
+		if profile, err := pm.GetProfile(active); err == nil {
+			profile.Vars["ER1_CONTEXT_ID"] = contextID
+			if saveErr := pm.CreateProfile(active, profile.Description, profile.Vars); saveErr != nil {
+				log.Printf("[auth] failed to persist context_id to profile %s: %v", active, saveErr)
+			} else {
+				log.Printf("[auth] context_id saved to profile %s", active)
+			}
+		}
+	}
+
+	// Update runtime state and menu.
+	os.Setenv("ER1_CONTEXT_ID", contextID)
+	app.UpdateLoginState(true, contextID)
+	app.UpdateTooltip(fmt.Sprintf("M3C Tools — Signed in (%s...)", contextID[:min(8, len(contextID))]))
+	go func() {
+		time.Sleep(15 * time.Second)
+		app.ResetTooltip()
+	}()
+}
+
+type trayLoginResult struct {
+	ContextID string
+	Err       error
+}
+
+// startTrayLoginCallbackServer creates a local HTTP server that waits for
+// the OAuth redirect with context_id. Same pattern as macOS startER1LoginCallbackServer.
+func startTrayLoginCallbackServer() (*http.Server, string, <-chan trayLoginResult, func(), error) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, "", nil, nil, err
+	}
+	nonce := make([]byte, 16)
+	if _, err := rand.Read(nonce); err != nil {
+		ln.Close()
+		return nil, "", nil, nil, fmt.Errorf("generate callback nonce: %w", err)
+	}
+	callbackPath := "/m3c-login-" + hex.EncodeToString(nonce)
+	addr := ln.Addr().String()
+	callbackURL := "http://" + addr + callbackPath
+	resultCh := make(chan trayLoginResult, 1)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(callbackPath, func(w http.ResponseWriter, r *http.Request) {
+		ctxID := strings.TrimSpace(r.URL.Query().Get("context_id"))
+		if ctxID == "" {
+			ctxID = strings.TrimSpace(r.URL.Query().Get("user_id"))
+		}
+		if ctxID == "" {
+			ctxID = strings.TrimSpace(r.URL.Query().Get("uid"))
+		}
+		select {
+		case resultCh <- trayLoginResult{ContextID: ctxID}:
+		default:
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprintf(w, `<!DOCTYPE html>
+<html><head><title>Login Successful</title>
+<style>body{font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#1a1a2e;color:#fff}
+.card{text-align:center;padding:2rem;border-radius:12px;background:#16213e;box-shadow:0 4px 20px rgba(0,0,0,0.3)}
+h2{color:#7c3aed}p{color:#94a3b8}</style></head>
+<body><div class="card"><h2>&#10003; Device Connected</h2>
+<p>m3c-tools is now linked to your account.</p>
+<p>You can close this tab and return to the app.</p></div></body></html>`)
+	})
+
+	srv := &http.Server{Addr: addr, Handler: mux}
+	go func() {
+		if serveErr := srv.Serve(ln); serveErr != nil && serveErr != http.ErrServerClosed {
+			log.Printf("[auth] callback server error: %v", serveErr)
+			select {
+			case resultCh <- trayLoginResult{Err: serveErr}:
+			default:
+			}
+		}
+	}()
+	closeFn := func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(ctx)
+	}
+	return srv, callbackURL, resultCh, closeFn, nil
+}
+
+// trayER1BaseURL extracts the base URL from the ER1 API URL.
+// e.g., "https://onboarding.guide/upload_2" -> "https://onboarding.guide"
+func trayER1BaseURL(apiURL string) string {
+	raw := strings.TrimSpace(apiURL)
+	if raw == "" {
+		return ""
+	}
+	u, err := neturl.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	p := strings.TrimSuffix(u.Path, "/upload_2")
+	p = strings.TrimSuffix(p, "/")
+	return fmt.Sprintf("%s://%s%s", u.Scheme, u.Host, p)
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

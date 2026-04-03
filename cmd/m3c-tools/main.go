@@ -3201,7 +3201,7 @@ func menubarLoginER1(app *menubar.App) {
 		return
 	}
 	app.Notify("ER1 Login", "Browser opened. Complete login to link account.")
-	deadline := time.NewTimer(2 * time.Minute)
+	deadline := time.NewTimer(5 * time.Minute) // BUG-0096: 5m for Google OAuth + Passkey
 	defer deadline.Stop()
 	poll := time.NewTicker(1500 * time.Millisecond)
 	defer poll.Stop()

@@ -42,13 +42,11 @@ type ActionType string
 
 const (
 	ActionSignIn          ActionType = "sign_in"
+	ActionSignOut         ActionType = "sign_out"
 	ActionFetchTranscript ActionType = "fetch_transcript"
-	ActionQuickImpulse    ActionType = "quick_impulse"
 	ActionPlaudSync       ActionType = "plaud_sync"
-	ActionPlaudAuth       ActionType = "plaud_auth"
 	ActionPocketSync      ActionType = "pocket_sync"
 	ActionOpenLog         ActionType = "open_log"
-	ActionStarGitHub      ActionType = "star_github"
 	ActionSetup           ActionType = "setup"
 	ActionQuit            ActionType = "quit"
 )
@@ -109,6 +107,14 @@ type TrayApp struct {
 	// SetupIssues holds first-run problems detected at startup.
 	// Empty slice means setup is complete.
 	SetupIssues []SetupIssue
+
+	// FEAT-0014: Dynamic menu items for state updates.
+	mIdentity   *systray.MenuItem
+	mLastSync   *systray.MenuItem
+	mSignIn     *systray.MenuItem
+	mSignOut    *systray.MenuItem
+	mSyncPlaud  *systray.MenuItem
+	mSyncPocket *systray.MenuItem
 }
 
 // New creates a TrayApp with the given handlers.
@@ -152,6 +158,67 @@ func (t *TrayApp) ResetTooltip() {
 	systray.SetTooltip("M3C Tools — Multi-Modal-Memory Capture")
 }
 
+// UpdateLoginState toggles the menu between signed-in and signed-out views.
+// FEAT-0014: Dynamic state feedback in the tray menu.
+func (t *TrayApp) UpdateLoginState(loggedIn bool, email string) {
+	t.loggedIn = loggedIn
+	t.userName = email
+	if loggedIn {
+		if t.mIdentity != nil {
+			truncated := email
+			if len(truncated) > 30 {
+				truncated = truncated[:27] + "..."
+			}
+			t.mIdentity.SetTitle(truncated)
+			t.mIdentity.Show()
+		}
+		if t.mLastSync != nil {
+			t.mLastSync.Show()
+		}
+		if t.mSignIn != nil {
+			t.mSignIn.Hide()
+		}
+		if t.mSignOut != nil {
+			t.mSignOut.Show()
+		}
+	} else {
+		if t.mIdentity != nil {
+			t.mIdentity.SetTitle("Not connected")
+			t.mIdentity.Hide()
+		}
+		if t.mLastSync != nil {
+			t.mLastSync.Hide()
+		}
+		if t.mSignIn != nil {
+			t.mSignIn.Show()
+		}
+		if t.mSignOut != nil {
+			t.mSignOut.Hide()
+		}
+	}
+}
+
+// UpdateSyncStatus updates a device's status in the Sync Now submenu.
+func (t *TrayApp) UpdateSyncStatus(source string, status string) {
+	switch source {
+	case "plaud":
+		if t.mSyncPlaud != nil {
+			t.mSyncPlaud.SetTitle(fmt.Sprintf("Plaud: %s", status))
+		}
+	case "pocket":
+		if t.mSyncPocket != nil {
+			t.mSyncPocket.SetTitle(fmt.Sprintf("Pocket: %s", status))
+		}
+	}
+}
+
+// UpdateLastSync updates the "Last sync" status line.
+func (t *TrayApp) UpdateLastSync(timeStr string) {
+	if t.mLastSync != nil {
+		t.mLastSync.SetTitle(fmt.Sprintf("Last sync: %s", timeStr))
+	}
+}
+
 // Notify is defined in notify.go (beeep-based native OS notifications for
 // Windows toast and Linux libnotify). The darwin stub is in notify_darwin.go.
 
@@ -185,11 +252,9 @@ func (t *TrayApp) Run() {
 }
 
 // onReady is called by systray.Run when the tray is initialized.
-// All menu items must be created here.
+// FEAT-0014: Streamlined menu — 7 items signed-in, 3 signed-out.
 func (t *TrayApp) onReady() {
-	// BUG-0087: fyne.io/systray v1.12 on Windows requires ICO format for
-	// the system tray icon. PNG works on Linux but silently fails on Windows
-	// because LoadImage(IMAGE_ICON) cannot parse PNG data.
+	// BUG-0087: fyne.io/systray v1.12 on Windows requires ICO format.
 	if runtime.GOOS == "windows" {
 		systray.SetIcon(iconICO)
 	} else {
@@ -198,154 +263,106 @@ func (t *TrayApp) onReady() {
 	systray.SetTitle("M3C Tools")
 	systray.SetTooltip("M3C Tools — Multi-Modal-Memory Capture")
 
-	// --- First-run setup banner (only visible when setup is incomplete) ---
-	var mSetup *systray.MenuItem
-	if !t.IsSetupComplete() {
-		label := fmt.Sprintf("!! Setup Required (%d issue", len(t.SetupIssues))
-		if len(t.SetupIssues) > 1 {
-			label += "s"
-		}
-		label += ") !!"
-		mSetup = systray.AddMenuItem(label, t.SetupIssues[0].Message)
-		systray.AddSeparator()
-	}
-
-	// --- Sign In / Sign Out ---
-	mSignIn := systray.AddMenuItem("Sign In...", "Connect to workspace")
+	// --- Status lines (disabled info rows, dynamic) ---
+	t.mIdentity = systray.AddMenuItem("Not connected", "")
+	t.mIdentity.Disable()
+	t.mLastSync = systray.AddMenuItem("Never synced", "")
+	t.mLastSync.Disable()
 
 	systray.AddSeparator()
 
-	// --- Profile Settings (submenu) ---
-	mProfile := systray.AddMenuItem("Profile Settings", "Configuration profiles")
-	var profileItems []*systray.MenuItem
-	t.rebuildProfileMenu(mProfile, &profileItems)
+	// --- Sign In (shown when signed out) ---
+	t.mSignIn = systray.AddMenuItem("Sign In with Google...", "Connect to workspace")
+
+	// --- Sync Now (shown when signed in) ---
+	mSyncNow := systray.AddMenuItem("Sync Now", "Sync all connected devices")
+	t.mSyncPlaud = mSyncNow.AddSubMenuItem("Plaud: not configured", "Sync Plaud recordings")
+	t.mSyncPocket = mSyncNow.AddSubMenuItem("Pocket: not connected", "Sync Pocket recordings")
+
+	// --- Fetch YouTube Transcript ---
+	mFetch := systray.AddMenuItem("Fetch YouTube Transcript...", "Fetch a YouTube transcript")
 
 	systray.AddSeparator()
 
-	// --- Fetch Transcript ---
-	mFetch := systray.AddMenuItem("Fetch Transcript...", "Fetch a YouTube transcript")
-
-	systray.AddSeparator()
-
-	// --- Quick Impulse ---
-	mImpulse := systray.AddMenuItem("Quick Impulse", "Record a quick thought")
-
-	systray.AddSeparator()
-
-	// --- Plaud Sync / Connect Plaud / Pocket Sync ---
-	mPlaud := systray.AddMenuItem("Plaud Sync", "Sync Plaud recordings")
-	mPlaudAuth := systray.AddMenuItem("Connect Plaud", "Authenticate with Plaud via Chrome")
-	mPocket := systray.AddMenuItem("Pocket Sync", "Sync Pocket articles")
-
-	systray.AddSeparator()
-
-	// --- History (submenu) ---
-	mHistory := systray.AddMenuItem("History", "Recent observations")
+	// --- Recent (submenu) ---
+	mRecent := systray.AddMenuItem("Recent", "Recent observations")
 	var historyItems []*systray.MenuItem
-	t.rebuildHistoryMenu(mHistory, &historyItems)
+	t.rebuildHistoryMenu(mRecent, &historyItems)
 
-	systray.AddSeparator()
-
-	// --- Open Log File ---
-	mLog := systray.AddMenuItem("Open Log File", "Open the application log")
-	// --- Settings (profile editor) ---
-	settingsLabel := "Settings..."
+	// --- Preferences ---
+	prefsLabel := "Preferences..."
 	if !t.IsSetupComplete() {
-		settingsLabel = "Settings... (setup needed)"
+		prefsLabel = "Preferences... (!)"
 	}
-	mSettings := systray.AddMenuItem(settingsLabel, "Edit configuration profiles")
+	mPrefs := systray.AddMenuItem(prefsLabel, "Settings and configuration")
 
-	systray.AddSeparator()
-
-	// --- Star on GitHub ---
-	mStar := systray.AddMenuItem("Star on GitHub", "Open the project on GitHub")
+	// --- Sign Out (shown when signed in) ---
+	t.mSignOut = systray.AddMenuItem("Sign Out", "Disconnect from workspace")
 
 	systray.AddSeparator()
 
 	// --- Quit ---
 	mQuit := systray.AddMenuItem("Quit", "Exit M3C Tools")
 
-	// --- Click handlers (goroutines reading from ClickedCh) ---
+	// --- Set initial visibility based on login state ---
+	if t.loggedIn {
+		t.mIdentity.Show()
+		t.mLastSync.Show()
+		t.mSignIn.Hide()
+		t.mSignOut.Show()
+		mSyncNow.Show()
+	} else {
+		t.mIdentity.Hide()
+		t.mLastSync.Hide()
+		t.mSignIn.Show()
+		t.mSignOut.Hide()
+		mSyncNow.Hide()
+	}
+
+	// --- Click handlers ---
 
 	go func() {
-		for range mSignIn.ClickedCh {
+		for range t.mSignIn.ClickedCh {
 			log.Println("[tray] Sign In clicked")
-			// BUG-0088: Fire sign-in action so the handler opens the browser.
 			t.fireAction(ActionSignIn, "")
 		}
 	}()
 
 	go func() {
-		for range mFetch.ClickedCh {
-			log.Println("[tray] Fetch Transcript clicked")
-			t.fireAction(ActionFetchTranscript, "")
+		for range t.mSignOut.ClickedCh {
+			log.Println("[tray] Sign Out clicked")
+			t.fireAction(ActionSignOut, "")
 		}
 	}()
 
 	go func() {
-		for range mImpulse.ClickedCh {
-			log.Println("[tray] Quick Impulse clicked")
-			t.fireAction(ActionQuickImpulse, "")
-		}
-	}()
-
-	go func() {
-		for range mPlaud.ClickedCh {
+		for range t.mSyncPlaud.ClickedCh {
 			log.Println("[tray] Plaud Sync clicked")
 			t.fireAction(ActionPlaudSync, "")
 		}
 	}()
 
 	go func() {
-		for range mPlaudAuth.ClickedCh {
-			log.Println("[tray] Connect Plaud clicked")
-			t.fireAction(ActionPlaudAuth, "")
-		}
-	}()
-
-	go func() {
-		for range mPocket.ClickedCh {
+		for range t.mSyncPocket.ClickedCh {
 			log.Println("[tray] Pocket Sync clicked")
 			t.fireAction(ActionPocketSync, "")
 		}
 	}()
 
 	go func() {
-		for range mLog.ClickedCh {
-			log.Println("[tray] Open Log File clicked")
-			t.openFile(t.logPath)
-			t.fireAction(ActionOpenLog, t.logPath)
+		for range mFetch.ClickedCh {
+			log.Println("[tray] Fetch YouTube Transcript clicked")
+			t.fireAction(ActionFetchTranscript, "")
 		}
 	}()
 
 	go func() {
-		for range mSettings.ClickedCh {
-			log.Println("[tray] Settings clicked")
+		for range mPrefs.ClickedCh {
+			log.Println("[tray] Preferences clicked")
 			if t.Handlers.OpenProfileEditor != nil {
 				t.Handlers.OpenProfileEditor()
 			}
 			t.fireAction(ActionSetup, "settings")
-		}
-	}()
-
-	// Setup banner click handler (opens the same settings editor).
-	if mSetup != nil {
-		go func() {
-			for range mSetup.ClickedCh {
-				log.Println("[tray] Setup Required clicked")
-				if t.Handlers.OpenProfileEditor != nil {
-					t.Handlers.OpenProfileEditor()
-				}
-				t.fireAction(ActionSetup, "first_run")
-			}
-		}()
-	}
-
-	go func() {
-		for range mStar.ClickedCh {
-			log.Println("[tray] Star on GitHub clicked")
-			t.openURL(GitHubRepoURL)
-			t.fireAction(ActionStarGitHub, GitHubRepoURL)
 		}
 	}()
 
@@ -357,15 +374,12 @@ func (t *TrayApp) onReady() {
 		}
 	}()
 
-	// Profile sub-menu item click handlers.
-	go t.handleProfileClicks(profileItems)
-
-	// First-run tooltip and deferred notification.
+	// First-run notification (toast, not menu banner).
 	if !t.IsSetupComplete() {
 		t.UpdateTooltip(fmt.Sprintf("M3C Tools — Setup needed: %s", t.SetupIssues[0].Message))
 		go func() {
 			time.Sleep(3 * time.Second)
-			t.Notify("M3C Tools", fmt.Sprintf("Setup incomplete: %s — open Settings to configure", t.SetupIssues[0].Message))
+			t.Notify("M3C Tools", fmt.Sprintf("Setup incomplete: %s — open Preferences to configure", t.SetupIssues[0].Message))
 		}()
 	}
 

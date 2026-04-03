@@ -13,13 +13,11 @@ type ActionType string
 
 const (
 	ActionSignIn          ActionType = "sign_in"
+	ActionSignOut         ActionType = "sign_out"
 	ActionFetchTranscript ActionType = "fetch_transcript"
-	ActionQuickImpulse    ActionType = "quick_impulse"
 	ActionPlaudSync       ActionType = "plaud_sync"
-	ActionPlaudAuth       ActionType = "plaud_auth"
 	ActionPocketSync      ActionType = "pocket_sync"
 	ActionOpenLog         ActionType = "open_log"
-	ActionStarGitHub      ActionType = "star_github"
 	ActionSetup           ActionType = "setup"
 	ActionQuit            ActionType = "quit"
 )
@@ -92,3 +90,8 @@ func (t *TrayApp) ClaimPlaudSync() bool { return true }
 
 // ReleasePlaudSync is a no-op on macOS.
 func (t *TrayApp) ReleasePlaudSync() {}
+
+// FEAT-0014: Dynamic state methods (no-op on macOS).
+func (t *TrayApp) UpdateLoginState(loggedIn bool, email string) {}
+func (t *TrayApp) UpdateSyncStatus(source string, status string) {}
+func (t *TrayApp) UpdateLastSync(timeStr string)                 {}
