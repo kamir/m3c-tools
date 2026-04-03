@@ -1034,10 +1034,7 @@ func cmdTrayApp(args []string) {
 		OnAction: func(action tray.ActionType, data string) {
 			log.Printf("[tray] action: %s data=%q", action, data)
 			switch action {
-			case tray.ActionFetchTranscript:
-				// Open the YouTube transcript fetch page in the default browser.
-				url := "https://onboarding.guide/v2/transcripts"
-				openBrowserURL(url)
+			// Windows MVP: only PlaudSync, SignIn, SignOut, Quit actions.
 			case tray.ActionPlaudSync:
 				// First-run guard: give specific guidance instead of a cryptic error.
 				if !app.IsSetupComplete() {
@@ -1096,9 +1093,7 @@ func cmdTrayApp(args []string) {
 						app.ResetTooltip()
 					}()
 				}()
-			case tray.ActionPocketSync:
-				log.Println("[tray] pocket sync triggered (not yet implemented)")
-			// FEAT-0014: ActionPlaudAuth removed — folded into ActionPlaudSync (auto-auth fallback).
+			// Pocket sync and Plaud auth removed for Windows MVP.
 			case tray.ActionSignIn:
 				// BUG-0088 fix: Use proper ER1 callback flow (same as macOS).
 				go trayLoginER1(app)
@@ -1112,85 +1107,12 @@ func cmdTrayApp(args []string) {
 					time.Sleep(5 * time.Second)
 					app.ResetTooltip()
 				}()
-			case tray.ActionSetup:
-				log.Printf("[tray] setup action: %s", data)
 			case tray.ActionQuit:
 				log.Println("[tray] quit requested")
 				os.Exit(0)
 			}
 		},
-		ListProfiles: func() ([]tray.Profile, string, error) {
-			pm := config.NewProfileManager()
-			profiles, err := pm.ListProfiles()
-			if err != nil {
-				return nil, "", err
-			}
-			active := pm.ActiveProfileName()
-			result := make([]tray.Profile, len(profiles))
-			for i, p := range profiles {
-				result[i] = tray.Profile{
-					Name:        p.Name,
-					Description: p.Description,
-					IsActive:    p.Name == active,
-				}
-			}
-			return result, active, nil
-		},
-		SwitchProfile: func(name string) error {
-			log.Printf("[config] switch requested: %s", name)
-			pm := config.NewProfileManager()
-			log.Printf("[config] profile base dir: %s", pm.BaseDir)
-			if err := pm.SwitchProfile(name); err != nil {
-				log.Printf("[config] switch FAILED for %q: %v", name, err)
-				return err
-			}
-			// Verify from a fresh manager to confirm persistence.
-			verify := config.NewProfileManager()
-			actual := verify.ActiveProfileName()
-			if actual != name {
-				log.Printf("[config] WARNING: switch wrote %q but fresh read got %q", name, actual)
-			} else {
-				log.Printf("[config] switch confirmed: %s (active-profile file verified)", name)
-			}
-			return nil
-		},
-		OpenProfileEditor: func() {
-			go func() {
-				srv := config.NewEditorServer(":9116")
-				if err := srv.Start(); err != nil {
-					log.Printf("[config] editor error: %v", err)
-				}
-			}()
-		},
-		ListRecentObs: func(limit int) ([]tray.Observation, error) {
-			dbPath := defaultFilesDBPath()
-			db, err := tracking.OpenFilesDB(dbPath)
-			if err != nil {
-				return nil, err
-			}
-			defer db.Close()
-			files, err := db.ListFiles(limit)
-			if err != nil {
-				return nil, err
-			}
-			observations := make([]tray.Observation, 0, len(files))
-			for _, f := range files {
-				title := filepath.Base(f.FilePath)
-				if strings.HasPrefix(f.FilePath, "plaud://") {
-					id := strings.TrimPrefix(f.FilePath, "plaud://")
-					if len(id) > 8 {
-						id = id[:8]
-					}
-					title = "Plaud " + id
-				}
-				observations = append(observations, tray.Observation{
-					Title:       title,
-					Type:        f.ImportType,
-					ProcessedAt: f.ProcessedAt.Format("2006-01-02 15:04"),
-				})
-			}
-			return observations, nil
-		},
+		// Windows MVP: Plaud sync only — no profile/history/preferences handlers.
 	})
 
 	app.SetLogPath(logPath)

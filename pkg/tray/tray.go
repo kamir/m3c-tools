@@ -41,14 +41,10 @@ const GitHubRepoURL = "https://github.com/kamir/m3c-tools"
 type ActionType string
 
 const (
-	ActionSignIn          ActionType = "sign_in"
-	ActionSignOut         ActionType = "sign_out"
-	ActionFetchTranscript ActionType = "fetch_transcript"
-	ActionPlaudSync       ActionType = "plaud_sync"
-	ActionPocketSync      ActionType = "pocket_sync"
-	ActionOpenLog         ActionType = "open_log"
-	ActionSetup           ActionType = "setup"
-	ActionQuit            ActionType = "quit"
+	ActionSignIn    ActionType = "sign_in"
+	ActionSignOut   ActionType = "sign_out"
+	ActionPlaudSync ActionType = "plaud_sync"
+	ActionQuit      ActionType = "quit"
 )
 
 // Profile represents a configuration profile shown in the tray submenu.
@@ -65,25 +61,10 @@ type Observation struct {
 	ProcessedAt string
 }
 
-// TrayHandlers groups the callback functions that the tray app invokes
-// in response to user interactions. Each field is optional; nil callbacks
-// are treated as no-ops.
+// TrayHandlers groups the callback functions that the tray app invokes.
 type TrayHandlers struct {
 	// OnAction is called for every menu action.
 	OnAction func(action ActionType, data string)
-
-	// ListProfiles returns available config profiles for the Profile submenu.
-	// Returns profiles, active profile name, and any error.
-	ListProfiles func() ([]Profile, string, error)
-
-	// SwitchProfile switches to the named profile and reloads config.
-	SwitchProfile func(name string) error
-
-	// OpenProfileEditor launches the local web-based profile settings editor.
-	OpenProfileEditor func()
-
-	// ListRecentObs returns recent observations for the History submenu.
-	ListRecentObs func(limit int) ([]Observation, error)
 }
 
 // SetupIssue describes a single first-run configuration problem.
@@ -109,12 +90,11 @@ type TrayApp struct {
 	SetupIssues []SetupIssue
 
 	// FEAT-0014: Dynamic menu items for state updates.
-	mIdentity   *systray.MenuItem
-	mLastSync   *systray.MenuItem
-	mSignIn     *systray.MenuItem
-	mSignOut    *systray.MenuItem
-	mSyncPlaud  *systray.MenuItem
-	mSyncPocket *systray.MenuItem
+	mIdentity  *systray.MenuItem
+	mLastSync  *systray.MenuItem
+	mSignIn    *systray.MenuItem
+	mSignOut   *systray.MenuItem
+	mSyncPlaud *systray.MenuItem
 }
 
 // New creates a TrayApp with the given handlers.
@@ -198,20 +178,6 @@ func (t *TrayApp) UpdateLoginState(loggedIn bool, email string) {
 	}
 }
 
-// UpdateSyncStatus updates a device's status in the Sync Now submenu.
-func (t *TrayApp) UpdateSyncStatus(source string, status string) {
-	switch source {
-	case "plaud":
-		if t.mSyncPlaud != nil {
-			t.mSyncPlaud.SetTitle(fmt.Sprintf("Plaud: %s", status))
-		}
-	case "pocket":
-		if t.mSyncPocket != nil {
-			t.mSyncPocket.SetTitle(fmt.Sprintf("Pocket: %s", status))
-		}
-	}
-}
-
 // UpdateLastSync updates the "Last sync" status line.
 func (t *TrayApp) UpdateLastSync(timeStr string) {
 	if t.mLastSync != nil {
@@ -252,18 +218,17 @@ func (t *TrayApp) Run() {
 }
 
 // onReady is called by systray.Run when the tray is initialized.
-// FEAT-0014: Streamlined menu — 7 items signed-in, 3 signed-out.
+// Windows MVP: Plaud sync only — 5 items signed-in, 2 signed-out.
 func (t *TrayApp) onReady() {
-	// BUG-0087: fyne.io/systray v1.12 on Windows requires ICO format.
 	if runtime.GOOS == "windows" {
 		systray.SetIcon(iconICO)
 	} else {
 		systray.SetIcon(iconPNG)
 	}
 	systray.SetTitle("M3C Tools")
-	systray.SetTooltip("M3C Tools — Multi-Modal-Memory Capture")
+	systray.SetTooltip("M3C Tools — Plaud Sync")
 
-	// --- Status lines (disabled info rows, dynamic) ---
+	// --- Status lines (disabled, dynamic) ---
 	t.mIdentity = systray.AddMenuItem("Not connected", "")
 	t.mIdentity.Disable()
 	t.mLastSync = systray.AddMenuItem("Never synced", "")
@@ -274,49 +239,30 @@ func (t *TrayApp) onReady() {
 	// --- Sign In (shown when signed out) ---
 	t.mSignIn = systray.AddMenuItem("Sign In with Google...", "Connect to workspace")
 
-	// --- Sync Now (shown when signed in) ---
-	mSyncNow := systray.AddMenuItem("Sync Now", "Sync all connected devices")
-	t.mSyncPlaud = mSyncNow.AddSubMenuItem("Plaud: not configured", "Sync Plaud recordings")
-	t.mSyncPocket = mSyncNow.AddSubMenuItem("Pocket: not connected", "Sync Pocket recordings")
-
-	// --- Fetch YouTube Transcript ---
-	mFetch := systray.AddMenuItem("Fetch YouTube Transcript...", "Fetch a YouTube transcript")
+	// --- Sync Plaud (shown when signed in, flat item) ---
+	t.mSyncPlaud = systray.AddMenuItem("Sync Plaud Recordings", "Sync Plaud recordings to workspace")
 
 	systray.AddSeparator()
-
-	// --- Recent (submenu) ---
-	mRecent := systray.AddMenuItem("Recent", "Recent observations")
-	var historyItems []*systray.MenuItem
-	t.rebuildHistoryMenu(mRecent, &historyItems)
-
-	// --- Preferences ---
-	prefsLabel := "Preferences..."
-	if !t.IsSetupComplete() {
-		prefsLabel = "Preferences... (!)"
-	}
-	mPrefs := systray.AddMenuItem(prefsLabel, "Settings and configuration")
 
 	// --- Sign Out (shown when signed in) ---
 	t.mSignOut = systray.AddMenuItem("Sign Out", "Disconnect from workspace")
 
-	systray.AddSeparator()
-
 	// --- Quit ---
 	mQuit := systray.AddMenuItem("Quit", "Exit M3C Tools")
 
-	// --- Set initial visibility based on login state ---
+	// --- Initial visibility ---
 	if t.loggedIn {
 		t.mIdentity.Show()
 		t.mLastSync.Show()
 		t.mSignIn.Hide()
+		t.mSyncPlaud.Show()
 		t.mSignOut.Show()
-		mSyncNow.Show()
 	} else {
 		t.mIdentity.Hide()
 		t.mLastSync.Hide()
 		t.mSignIn.Show()
+		t.mSyncPlaud.Hide()
 		t.mSignOut.Hide()
-		mSyncNow.Hide()
 	}
 
 	// --- Click handlers ---
@@ -337,32 +283,8 @@ func (t *TrayApp) onReady() {
 
 	go func() {
 		for range t.mSyncPlaud.ClickedCh {
-			log.Println("[tray] Plaud Sync clicked")
+			log.Println("[tray] Sync Plaud clicked")
 			t.fireAction(ActionPlaudSync, "")
-		}
-	}()
-
-	go func() {
-		for range t.mSyncPocket.ClickedCh {
-			log.Println("[tray] Pocket Sync clicked")
-			t.fireAction(ActionPocketSync, "")
-		}
-	}()
-
-	go func() {
-		for range mFetch.ClickedCh {
-			log.Println("[tray] Fetch YouTube Transcript clicked")
-			t.fireAction(ActionFetchTranscript, "")
-		}
-	}()
-
-	go func() {
-		for range mPrefs.ClickedCh {
-			log.Println("[tray] Preferences clicked")
-			if t.Handlers.OpenProfileEditor != nil {
-				t.Handlers.OpenProfileEditor()
-			}
-			t.fireAction(ActionSetup, "settings")
 		}
 	}()
 
@@ -374,12 +296,12 @@ func (t *TrayApp) onReady() {
 		}
 	}()
 
-	// First-run notification (toast, not menu banner).
+	// First-run toast notification.
 	if !t.IsSetupComplete() {
 		t.UpdateTooltip(fmt.Sprintf("M3C Tools — Setup needed: %s", t.SetupIssues[0].Message))
 		go func() {
 			time.Sleep(3 * time.Second)
-			t.Notify("M3C Tools", fmt.Sprintf("Setup incomplete: %s — open Preferences to configure", t.SetupIssues[0].Message))
+			t.Notify("M3C Tools", fmt.Sprintf("Run 'm3c-tools setup' to configure: %s", t.SetupIssues[0].Message))
 		}()
 	}
 
@@ -398,96 +320,7 @@ func (t *TrayApp) fireAction(action ActionType, data string) {
 	}
 }
 
-// rebuildProfileMenu populates the Profile Settings submenu with profiles.
-func (t *TrayApp) rebuildProfileMenu(parent *systray.MenuItem, items *[]*systray.MenuItem) {
-	if t.Handlers.ListProfiles == nil {
-		parent.AddSubMenuItem("(no profiles)", "")
-		return
-	}
-
-	profiles, activeName, err := t.Handlers.ListProfiles()
-	if err != nil || len(profiles) == 0 {
-		parent.AddSubMenuItem("(no profiles)", "")
-		return
-	}
-
-	header := parent.AddSubMenuItem(fmt.Sprintf("Active: %s", activeName), "")
-	header.Disable()
-	*items = nil
-
-	for _, p := range profiles {
-		label := p.Name
-		if p.Description != "" {
-			label = fmt.Sprintf("%s - %s", p.Name, p.Description)
-		}
-		if p.IsActive {
-			label = "* " + label
-		}
-		item := parent.AddSubMenuItem(label, fmt.Sprintf("Switch to %s", p.Name))
-		*items = append(*items, item)
-	}
-}
-
-// handleProfileClicks listens for clicks on profile submenu items and switches profile.
-// BUG-0089: Removed stale IsActive guard that prevented switching after the first
-// menu build. The profile name is captured directly from the snapshot, and each
-// click always calls SwitchProfile (the function itself is idempotent if the
-// profile is already active). After switching, the tray's profileName is updated.
-func (t *TrayApp) handleProfileClicks(items []*systray.MenuItem) {
-	if t.Handlers.ListProfiles == nil || t.Handlers.SwitchProfile == nil {
-		return
-	}
-
-	profiles, _, err := t.Handlers.ListProfiles()
-	if err != nil {
-		return
-	}
-
-	// Create a goroutine per item to listen on its ClickedCh.
-	for i, item := range items {
-		if i >= len(profiles) {
-			break
-		}
-		go func(mi *systray.MenuItem, profName string) {
-			for range mi.ClickedCh {
-				log.Printf("[tray] profile click: %s", profName)
-				if switchErr := t.Handlers.SwitchProfile(profName); switchErr != nil {
-					log.Printf("[tray] profile switch error for %q: %v", profName, switchErr)
-					t.Notify("Profile Switch Failed", fmt.Sprintf("Could not switch to %s: %v", profName, switchErr))
-				} else {
-					log.Printf("[tray] switched to profile: %s", profName)
-					t.profileName = profName
-					t.Notify("Profile Switched", fmt.Sprintf("Active: %s", profName))
-				}
-			}
-		}(item, profiles[i].Name)
-	}
-}
-
-// rebuildHistoryMenu populates the History submenu with recent observations.
-func (t *TrayApp) rebuildHistoryMenu(parent *systray.MenuItem, items *[]*systray.MenuItem) {
-	if t.Handlers.ListRecentObs == nil {
-		parent.AddSubMenuItem("(empty)", "")
-		return
-	}
-
-	observations, err := t.Handlers.ListRecentObs(20)
-	if err != nil || len(observations) == 0 {
-		parent.AddSubMenuItem("(empty)", "")
-		return
-	}
-
-	*items = nil
-	for _, obs := range observations {
-		title := obs.Title
-		if len(title) > 50 {
-			title = title[:47] + "..."
-		}
-		label := fmt.Sprintf("[%s] %s  %s", obs.Type, title, obs.ProcessedAt)
-		item := parent.AddSubMenuItem(label, "")
-		*items = append(*items, item)
-	}
-}
+// (Profile menu and history submenu removed for Windows MVP — Plaud sync only)
 
 // openURL opens a URL in the default browser.
 // BUG-0088: Windows uses "cmd /c start" instead of rundll32 which silently fails.

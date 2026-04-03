@@ -12,14 +12,10 @@ package tray
 type ActionType string
 
 const (
-	ActionSignIn          ActionType = "sign_in"
-	ActionSignOut         ActionType = "sign_out"
-	ActionFetchTranscript ActionType = "fetch_transcript"
-	ActionPlaudSync       ActionType = "plaud_sync"
-	ActionPocketSync      ActionType = "pocket_sync"
-	ActionOpenLog         ActionType = "open_log"
-	ActionSetup           ActionType = "setup"
-	ActionQuit            ActionType = "quit"
+	ActionSignIn    ActionType = "sign_in"
+	ActionSignOut   ActionType = "sign_out"
+	ActionPlaudSync ActionType = "plaud_sync"
+	ActionQuit      ActionType = "quit"
 )
 
 // Profile represents a configuration profile shown in the tray submenu.
@@ -44,11 +40,7 @@ type SetupIssue struct {
 
 // TrayHandlers groups the callback functions (stub — unused on macOS).
 type TrayHandlers struct {
-	OnAction          func(action ActionType, data string)
-	ListProfiles      func() ([]Profile, string, error)
-	SwitchProfile     func(name string) error
-	OpenProfileEditor func()
-	ListRecentObs     func(limit int) ([]Observation, error)
+	OnAction func(action ActionType, data string)
 }
 
 // TrayApp is a no-op stub on macOS.
@@ -93,5 +85,4 @@ func (t *TrayApp) ReleasePlaudSync() {}
 
 // FEAT-0014: Dynamic state methods (no-op on macOS).
 func (t *TrayApp) UpdateLoginState(loggedIn bool, email string) {}
-func (t *TrayApp) UpdateSyncStatus(source string, status string) {}
 func (t *TrayApp) UpdateLastSync(timeStr string)                 {}
