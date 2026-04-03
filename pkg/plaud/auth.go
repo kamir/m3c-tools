@@ -193,6 +193,92 @@ func extractTokenWithAutoLaunch() (string, error) {
 		"make sure you are fully logged in to app.plaud.ai and the page has loaded", lastErr)
 }
 
+// ProgressFunc is a callback for reporting progress to callers (e.g. tray tooltip).
+type ProgressFunc func(msg string)
+
+// LaunchChromeForPlaud launches Chrome with the remote debugging port and
+// opens plaud.ai. It returns a cleanup function that removes the temp profile
+// directory. The caller is responsible for calling cleanup when done.
+// This is separated from token extraction so tray apps can launch Chrome
+// and then poll for the token independently.
+func LaunchChromeForPlaud() (cleanup func(), err error) {
+	chromePath := findChrome()
+	if chromePath == "" {
+		return nil, fmt.Errorf("chrome not found — please install Google Chrome")
+	}
+
+	debugDir, err := os.MkdirTemp("", "m3c-chrome-debug-*")
+	if err != nil {
+		return nil, fmt.Errorf("create temp dir: %w", err)
+	}
+
+	cmd := exec.Command(chromePath,
+		"--remote-debugging-port=9222",
+		"--user-data-dir="+debugDir,
+		"https://app.plaud.ai",
+	)
+	if err := cmd.Start(); err != nil {
+		os.RemoveAll(debugDir)
+		return nil, fmt.Errorf("failed to launch Chrome: %w", err)
+	}
+
+	cleanup = func() {
+		// Kill Chrome process if still running.
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+		os.RemoveAll(debugDir)
+	}
+	return cleanup, nil
+}
+
+// WaitForCDPReady polls the CDP endpoint until Chrome is ready or timeout.
+// Returns true if CDP is available, false on timeout.
+func WaitForCDPReady(timeout time.Duration, progress ProgressFunc) bool {
+	deadline := time.Now().Add(timeout)
+	attempt := 0
+	for time.Now().Before(deadline) {
+		time.Sleep(1 * time.Second)
+		attempt++
+		if attempt%5 == 0 && progress != nil {
+			remaining := time.Until(deadline).Round(time.Second)
+			progress(fmt.Sprintf("Waiting for Chrome to start... (%s remaining)", remaining))
+		}
+		client := &http.Client{Timeout: 2 * time.Second}
+		resp, err := client.Get("http://127.0.0.1:9222/json")
+		if err == nil {
+			resp.Body.Close()
+			return true
+		}
+	}
+	return false
+}
+
+// PollForPlaudToken polls CDP every pollInterval for up to timeout, trying to
+// extract the Plaud token. Calls progress (if non-nil) with status updates.
+// This is the tray-friendly alternative to extractTokenWithAutoLaunch which
+// blocks on stdin — here we just poll until the user logs in.
+func PollForPlaudToken(timeout, pollInterval time.Duration, progress ProgressFunc) (string, error) {
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+
+	for time.Now().Before(deadline) {
+		token, err := extractTokenCDP()
+		if err == nil {
+			return token, nil
+		}
+		lastErr = err
+
+		remaining := time.Until(deadline).Round(time.Second)
+		if progress != nil {
+			progress(fmt.Sprintf("Waiting for Plaud login in Chrome... (%s remaining)", remaining))
+		}
+		time.Sleep(pollInterval)
+	}
+
+	return "", fmt.Errorf("timed out waiting for Plaud token: %w", lastErr)
+}
+
 // FindChrome locates the Chrome executable on the current platform.
 func FindChrome() string {
 	return findChrome()
@@ -295,9 +381,15 @@ function run() {
 	return result, nil
 }
 
-// extractTokenCDP connects to Chrome's DevTools Protocol on localhost:9222
+// ExtractTokenCDP connects to Chrome's DevTools Protocol on localhost:9222
 // and extracts the Plaud token from any open plaud.ai tab.
 // Chrome must be started with --remote-debugging-port=9222 for this to work.
+// Exported so tray apps can call it directly for non-interactive polling.
+func ExtractTokenCDP() (string, error) {
+	return extractTokenCDP()
+}
+
+// extractTokenCDP is the internal implementation of ExtractTokenCDP.
 func extractTokenCDP() (string, error) {
 	// 1. Discover available tabs via /json endpoint.
 	// Use 127.0.0.1 explicitly — on Windows, "localhost" may resolve to IPv6 [::1]

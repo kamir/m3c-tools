@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -28,7 +29,7 @@ type Config struct {
 
 // LoadConfig reads ER1 settings from environment variables.
 func LoadConfig() *Config {
-	return &Config{
+	cfg := &Config{
 		APIURL:        envOr("ER1_API_URL", "https://127.0.0.1:8081/upload_2"),
 		APIKey:        os.Getenv("ER1_API_KEY"),
 		ContextID:     envOr("ER1_CONTEXT_ID", "107677460544181387647___mft"),
@@ -38,6 +39,12 @@ func LoadConfig() *Config {
 		RetryInterval: envInt("ER1_RETRY_INTERVAL", 300),
 		MaxRetries:    envInt("ER1_MAX_RETRIES", 10),
 	}
+	// BUG-0093: Warn early when API key is missing — uploads will fail with
+	// a cryptic CSRF error if X-API-KEY is not sent.
+	if cfg.APIKey == "" {
+		log.Println("[er1] WARNING: ER1_API_KEY is not set — uploads will fail. Run 'm3c-tools setup' or set ER1_API_KEY in your profile.")
+	}
+	return cfg
 }
 
 // AuthHeaders returns HTTP headers with X-API-KEY and X-Context-ID if configured.

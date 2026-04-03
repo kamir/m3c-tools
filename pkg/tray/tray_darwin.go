@@ -12,12 +12,15 @@ package tray
 type ActionType string
 
 const (
+	ActionSignIn          ActionType = "sign_in"
 	ActionFetchTranscript ActionType = "fetch_transcript"
 	ActionQuickImpulse    ActionType = "quick_impulse"
 	ActionPlaudSync       ActionType = "plaud_sync"
+	ActionPlaudAuth       ActionType = "plaud_auth"
 	ActionPocketSync      ActionType = "pocket_sync"
 	ActionOpenLog         ActionType = "open_log"
 	ActionStarGitHub      ActionType = "star_github"
+	ActionSetup           ActionType = "setup"
 	ActionQuit            ActionType = "quit"
 )
 
@@ -33,6 +36,12 @@ type Observation struct {
 	Title       string
 	Type        string
 	ProcessedAt string
+}
+
+// SetupIssue describes a single first-run configuration problem.
+type SetupIssue struct {
+	Key     string
+	Message string
 }
 
 // TrayHandlers groups the callback functions (stub — unused on macOS).
@@ -61,3 +70,25 @@ func (t *TrayApp) SetProfile(name string) {}
 
 // SetLogPath is a no-op on macOS.
 func (t *TrayApp) SetLogPath(path string) {}
+
+// UpdateTooltip is a no-op on macOS.
+// BUG-0092: Stub so the package compiles on darwin.
+func (t *TrayApp) UpdateTooltip(msg string) {}
+
+// ResetTooltip is a no-op on macOS.
+func (t *TrayApp) ResetTooltip() {}
+
+// Notify is a no-op on macOS (pkg/menubar handles notifications).
+func (t *TrayApp) Notify(title, message string) {}
+
+// SetSetupIssues is a no-op on macOS.
+func (t *TrayApp) SetSetupIssues(issues []SetupIssue) {}
+
+// IsSetupComplete always returns true on macOS (stub).
+func (t *TrayApp) IsSetupComplete() bool { return true }
+
+// ClaimPlaudSync always returns true on macOS (no systray sync guard needed).
+func (t *TrayApp) ClaimPlaudSync() bool { return true }
+
+// ReleasePlaudSync is a no-op on macOS.
+func (t *TrayApp) ReleasePlaudSync() {}

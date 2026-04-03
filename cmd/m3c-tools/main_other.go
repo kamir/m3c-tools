@@ -36,11 +36,19 @@ func main() {
 	}
 
 	// Load config: try profile system first, fall back to legacy .env files.
+	// BUG-0093: After profile loading, also load legacy .env to fill gaps.
+	// The setup wizard writes ER1_API_KEY to ~/.m3c-tools.env, but profile
+	// templates may have it empty. LoadDotenv only sets vars that are not
+	// already set, so profile values take precedence.
 	home, _ := os.UserHomeDir()
 	pm := config.NewProfileManager()
 	if activeProfile, err := pm.ActiveProfile(); err == nil {
 		_ = pm.ApplyProfile(activeProfile)
 		log.Printf("[config] profile: %s", activeProfile.Name)
+		// Fill gaps from legacy config (e.g. ER1_API_KEY from setup wizard).
+		for _, p := range []string{filepath.Join(home, ".m3c-tools.env"), ".env"} {
+			_ = er1.LoadDotenv(p)
+		}
 	} else {
 		// Fallback to legacy .env loading for pre-profile installations.
 		for _, p := range []string{".env", filepath.Join(home, ".m3c-tools.env")} {
@@ -154,12 +162,29 @@ func cmdSetup(args []string) {
 	apiKeyLine, _ := reader.ReadString('\n')
 	apiKey := strings.TrimSpace(apiKeyLine)
 
-	// 5. Write config
+	// 5. Write config (legacy path for backward compat).
 	if err := er1.WriteConfig(er1URL, apiKey, contextID, true, tags); err != nil {
 		fmt.Fprintf(os.Stderr, "Error writing config: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("\n  Configuration saved to %s\n\n", er1.ConfigPath())
+
+	// BUG-0093: Also update the active profile if the profile system is in use.
+	// Without this, the profile's empty ER1_API_KEY overrides the setup values.
+	setupPM := config.NewProfileManager()
+	if activeP, pmErr := setupPM.ActiveProfile(); pmErr == nil {
+		activeP.Vars["ER1_API_URL"] = er1URL
+		if apiKey != "" {
+			activeP.Vars["ER1_API_KEY"] = apiKey
+		}
+		activeP.Vars["ER1_CONTEXT_ID"] = contextID
+		activeP.Vars["PLAUD_DEFAULT_TAGS"] = tags
+		if createErr := setupPM.CreateProfile(activeP.Name, activeP.Description, activeP.Vars); createErr != nil {
+			fmt.Fprintf(os.Stderr, "  Warning: could not update profile %q: %v\n", activeP.Name, createErr)
+		} else {
+			fmt.Printf("  Profile %q updated with new settings.\n", activeP.Name)
+		}
+	}
 
 	// 6. Reload config and check connectivity
 	_ = er1.LoadDotenv(er1.ConfigPath())
@@ -406,7 +431,8 @@ func cmdPlaudList() {
 	fmt.Printf("\nTotal: %d recordings\n", len(recordings))
 }
 
-// cmdPlaudSync syncs a recording (or all) to ER1.
+// cmdPlaudSync syncs a recording (or all) to ER1 with detailed statistics (FR-0009),
+// two-layer duplicate prevention (FR-0010), and a summary for tray notifications (FR-0011).
 func cmdPlaudSync(recordingID string) {
 	cfg := plaud.LoadConfig()
 	session, err := plaud.LoadToken(cfg.TokenPath)
@@ -416,10 +442,9 @@ func cmdPlaudSync(recordingID string) {
 	}
 
 	client := plaud.NewClient(cfg, session.Token)
-	er1Cfg := er1.LoadConfig()
-	er1Cfg.ContentType = cfg.ContentType
-
 	dbPath := defaultFilesDBPath()
+
+	stats := plaud.NewSyncStats()
 
 	var ids []string
 	if recordingID == "all" {
@@ -428,7 +453,9 @@ func cmdPlaudSync(recordingID string) {
 			fmt.Fprintf(os.Stderr, "Error listing recordings: %v\n", listErr)
 			os.Exit(1)
 		}
-		// Check tracking DB to skip already-synced.
+		stats.LocalTotal = len(recordings)
+
+		// FR-0010 Layer 1: Local DB dedup check (runs FIRST).
 		filesDB, dbErr := tracking.OpenFilesDB(dbPath)
 		if dbErr != nil {
 			log.Printf("[plaud] warning: cannot open tracking DB: %v", dbErr)
@@ -438,6 +465,7 @@ func cmdPlaudSync(recordingID string) {
 			if filesDB != nil {
 				if tracked, lookupErr := filesDB.GetByPath("plaud://" + rec.ID); lookupErr == nil && tracked != nil {
 					skip = true
+					stats.LocalExisting++
 				}
 			}
 			if !skip {
@@ -447,14 +475,56 @@ func cmdPlaudSync(recordingID string) {
 		if filesDB != nil {
 			filesDB.Close()
 		}
-		fmt.Printf("Found %d recordings, %d already synced.\n", len(recordings), len(recordings)-len(ids))
+		stats.LocalNew = len(ids)
+
+		fmt.Printf("Found %d recordings, %d already in local DB.\n", stats.LocalTotal, stats.LocalExisting)
+
+		// FR-0010 Layer 2: Server-side dedup check (runs SECOND, catches cross-device dupes).
+		er1Cfg := er1.LoadConfig()
+		if er1Cfg.APIKey != "" && session.Token != "" && len(ids) > 0 {
+			syncAPI := plaud.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, er1Cfg.ContextID, !er1Cfg.VerifySSL)
+			plaudAccountID := plaud.DeriveAccountID(session.Token)
+			checkResult, checkErr := syncAPI.CheckRecordings(plaudAccountID, ids)
+			if checkErr == nil && checkResult != nil && len(checkResult.Synced) > 0 {
+				stats.AlreadyInER1 = len(checkResult.Synced)
+				var filtered []string
+				for _, id := range ids {
+					if _, alreadySynced := checkResult.Synced[id]; alreadySynced {
+						log.Printf("[plaud] [skip] %s already in ER1 (cross-device)", id)
+					} else {
+						filtered = append(filtered, id)
+					}
+				}
+				ids = filtered
+				fmt.Printf("Server check: %d already in ER1 (cross-device dedup).\n", stats.AlreadyInER1)
+			}
+		}
+
 		if len(ids) == 0 {
 			fmt.Println("All recordings already synced.")
+			fmt.Print(stats.FormatSummary())
 			return
 		}
-		fmt.Printf("Syncing %d recordings...\n", len(ids))
+		fmt.Printf("Syncing %d new recordings...\n", len(ids))
 	} else {
 		ids = []string{recordingID}
+		stats.LocalTotal = 1
+		stats.LocalNew = 1
+	}
+
+	// Run the sync pipeline and get stats back (FR-0011).
+	pipelineStats := runPlaudSyncPipeline(client, cfg, ids, dbPath, session.Token, stats)
+
+	// Print summary (FR-0009).
+	fmt.Print(pipelineStats.FormatSummary())
+}
+
+// runPlaudSyncPipeline processes a list of recording IDs through the full
+// download -> build -> upload pipeline. It populates the provided SyncStats
+// and returns it for use in tray notifications (FR-0011).
+func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs []string, dbPath string, plaudToken string, stats *plaud.SyncStats) *plaud.SyncStats {
+	if stats == nil {
+		stats = plaud.NewSyncStats()
 	}
 
 	filesDB, dbErr := tracking.OpenFilesDB(dbPath)
@@ -467,45 +537,53 @@ func cmdPlaudSync(recordingID string) {
 		}
 	}()
 
-	success, failed := 0, 0
-	for i, recID := range ids {
-		if len(ids) > 1 {
-			fmt.Printf("  [%d/%d] ", i+1, len(ids))
-		}
+	er1Cfg := er1.LoadConfig()
+	er1Cfg.ContentType = cfg.ContentType
+
+	// Set up server-side sync API for mapping registration (SPEC-0117).
+	var syncAPI *plaud.SyncAPIClient
+	var plaudAccountID string
+	if er1Cfg.APIKey != "" && plaudToken != "" {
+		syncAPI = plaud.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, er1Cfg.ContextID, !er1Cfg.VerifySSL)
+		plaudAccountID = plaud.DeriveAccountID(plaudToken)
+	}
+
+	total := len(recordingIDs)
+	for i, recID := range recordingIDs {
+		prefix := fmt.Sprintf("[%d/%d]", i+1, total)
 
 		// 1. Get recording metadata.
-		fmt.Printf("Fetching recording %s...\n", recID)
+		fmt.Printf("%s %s -> fetching metadata...\n", prefix, recID)
 		rec, recErr := client.GetRecording(recID)
 		if recErr != nil {
-			fmt.Fprintf(os.Stderr, "  Error: %v\n", recErr)
-			failed++
+			fmt.Fprintf(os.Stderr, "%s %s -> FAILED (metadata): %v\n", prefix, recID, recErr)
+			stats.RecordUploadError(recErr)
 			continue
 		}
-		fmt.Printf("  Title: %s\n  Duration: %ds\n", rec.Title, rec.Duration)
+		fmt.Printf("%s %s -> %s (%ds)\n", prefix, recID, rec.Title, rec.Duration)
 
 		// 2. Download audio.
-		fmt.Print("Downloading audio... ")
+		fmt.Printf("%s %s -> downloading audio...\n", prefix, recID)
 		audioData, audioFmt, dlErr := client.DownloadAudio(recID)
 		if dlErr != nil {
-			fmt.Fprintf(os.Stderr, "FAILED: %v\n", dlErr)
-			failed++
+			fmt.Fprintf(os.Stderr, "%s %s -> FAILED (download): %v\n", prefix, recID, dlErr)
+			stats.RecordUploadError(dlErr)
 			continue
 		}
-		fmt.Printf("(%d KB)\n", len(audioData)/1024)
+		fmt.Printf("%s %s -> downloaded %d KB\n", prefix, recID, len(audioData)/1024)
 
 		// 3. Get transcript.
-		fmt.Print("Fetching transcript... ")
 		var transcriptText string
 		tx, txErr := client.GetTranscript(recID)
 		if txErr != nil {
-			fmt.Println("(not available)")
+			fmt.Printf("%s %s -> transcript not available (audio only)\n", prefix, recID)
 			transcriptText = "[No transcript available — audio only]"
 		} else {
-			fmt.Println("OK")
 			transcriptText = tx.Text
 			if tx.Summary != "" {
 				transcriptText = transcriptText + "\n\n=== SUMMARY ===\n" + tx.Summary
 			}
+			fmt.Printf("%s %s -> transcript OK (%d chars)\n", prefix, recID, len(transcriptText))
 		}
 
 		// 4. Build composite document.
@@ -524,8 +602,7 @@ func cmdPlaudSync(recordingID string) {
 		}
 
 		// 5. Upload to ER1.
-		fmt.Printf("Uploading to ER1 (%s)...\n", er1Cfg.APIURL)
-		fmt.Printf("  Context: %s\n  Tags: %s\n", er1Cfg.ContextID, tags)
+		fmt.Printf("%s %s -> uploading to ER1...\n", prefix, recID)
 
 		payload := &er1.UploadPayload{
 			TranscriptData:     []byte(strings.TrimSpace(doc) + "\n"),
@@ -540,26 +617,26 @@ func cmdPlaudSync(recordingID string) {
 
 		resp, upErr := er1.Upload(er1Cfg, payload)
 		if upErr != nil {
-			fmt.Fprintf(os.Stderr, "  Upload FAILED: %v\n", upErr)
+			fmt.Fprintf(os.Stderr, "%s %s -> upload FAILED: %v\n", prefix, recID, upErr)
 			// Save locally as fallback.
 			localErr := savePlaudLocally(recID, rec, audioData, audioFmt, doc, transcriptText, tags)
 			if localErr != nil {
-				fmt.Fprintf(os.Stderr, "  Local save also FAILED: %v\n", localErr)
-				failed++
+				fmt.Fprintf(os.Stderr, "%s %s -> local save also FAILED: %v\n", prefix, recID, localErr)
+				stats.RecordUploadError(upErr)
 				continue
 			}
-			fmt.Printf("  Saved locally to ~/plaud-sync/%s/\n", recID[:min(8, len(recID))])
+			fmt.Printf("%s %s -> saved locally to ~/plaud-sync/%s/\n", prefix, recID, recID[:min(8, len(recID))])
 			// Track as locally saved.
 			if filesDB != nil {
 				audioHash := fmt.Sprintf("%x", sha256.Sum256(audioData))
 				_, _ = filesDB.RecordFile("plaud://"+recID, audioHash, int64(len(audioData)), "plaud", "")
 				_ = filesDB.RecordTranscript(audioHash, "plaud", strings.TrimSpace(transcriptText), "")
 			}
-			success++
+			stats.SavedLocally++
 			continue
 		}
 
-		fmt.Printf("  Uploaded. Doc ID: %s\n", resp.DocID)
+		fmt.Printf("%s %s -> uploaded OK (doc_id: %s)\n", prefix, recID, resp.DocID)
 
 		// 6. Record in tracking DB.
 		if filesDB != nil {
@@ -568,14 +645,29 @@ func cmdPlaudSync(recordingID string) {
 			_ = filesDB.RecordTranscript(audioHash, "plaud", strings.TrimSpace(transcriptText), "")
 			_ = filesDB.RecordUploadSuccess(audioHash, "plaud", resp.DocID)
 		}
-		success++
+
+		// 7. Register mapping on server (SPEC-0117).
+		if syncAPI != nil {
+			mapErr := syncAPI.RegisterMapping(plaud.SyncMapping{
+				PlaudAccountID:    plaudAccountID,
+				PlaudRecordingID:  recID,
+				ER1DocID:          resp.DocID,
+				ER1ContextID:      er1Cfg.ContextID,
+				RecordingTitle:    rec.Title,
+				RecordingDuration: rec.Duration,
+				AudioFormat:       audioFmt,
+				AudioSizeBytes:    len(audioData),
+				TranscriptLength:  len(transcriptText),
+			})
+			if mapErr != nil {
+				log.Printf("[plaud] server mapping failed (non-fatal): %v", mapErr)
+			}
+		}
+
+		stats.UploadedNew++
 	}
 
-	if len(ids) > 1 {
-		fmt.Printf("Done. %d synced, %d failed.\n", success, failed)
-	} else {
-		fmt.Println("Done.")
-	}
+	return stats
 }
 
 // savePlaudLocally saves recording data to ~/plaud-sync/<recID>/ for later re-upload.
@@ -676,6 +768,215 @@ func cmdExec(name string, args ...string) *exec.Cmd {
 	return exec.Command(name, args...)
 }
 
+
+// trayExtractPlaudToken attempts to extract a Plaud token from Chrome via CDP.
+// This is the tray-friendly version that never blocks on stdin:
+//   1. First tries ExtractTokenCDP() — instant, works if Chrome is already
+//      running with plaud.ai open and --remote-debugging-port=9222.
+//   2. If that fails, launches Chrome with the debug port, opens plaud.ai,
+//      and polls for the token every 3 seconds for 60 seconds while the user
+//      logs in. Tooltip is updated with a countdown.
+//
+// Happy Maker 1: Eliminates the terminal requirement for Plaud authentication.
+func trayExtractPlaudToken(app *tray.TrayApp) (string, error) {
+	// Step 1: Try instant CDP extraction (Chrome already running with plaud.ai).
+	log.Println("[plaud-tray-auth] trying instant CDP extraction...")
+	token, err := plaud.ExtractTokenCDP()
+	if err == nil {
+		log.Println("[plaud-tray-auth] instant CDP extraction succeeded")
+		return token, nil
+	}
+	log.Printf("[plaud-tray-auth] instant CDP failed: %v — launching Chrome...", err)
+
+	// Step 2: Launch Chrome with debug port + plaud.ai.
+	app.UpdateTooltip("M3C Tools — Launching Chrome for Plaud login...")
+	cleanup, launchErr := plaud.LaunchChromeForPlaud()
+	if launchErr != nil {
+		return "", fmt.Errorf("cannot launch Chrome: %w", launchErr)
+	}
+	defer cleanup()
+
+	// Step 3: Wait for CDP to become ready (Chrome startup takes a few seconds).
+	cdpReady := plaud.WaitForCDPReady(30*time.Second, func(msg string) {
+		app.UpdateTooltip("M3C Tools — " + msg)
+	})
+	if !cdpReady {
+		return "", fmt.Errorf("Chrome started but CDP port 9222 is not responding")
+	}
+
+	// Step 4: Poll for token while user logs in (60s timeout, 3s interval).
+	log.Println("[plaud-tray-auth] CDP ready, polling for Plaud token...")
+	token, pollErr := plaud.PollForPlaudToken(60*time.Second, 3*time.Second, func(msg string) {
+		app.UpdateTooltip("M3C Tools — " + msg)
+	})
+	if pollErr != nil {
+		return "", pollErr
+	}
+
+	log.Printf("[plaud-tray-auth] token extracted (%d chars)", len(token))
+	return token, nil
+}
+
+// trayPlaudSync runs Plaud sync in a tray-safe manner. Unlike cmdPlaudSync,
+// it never calls os.Exit and returns structured results for user feedback.
+// BUG-0092: This replaces the direct cmdPlaudSync("all") call that would
+// silently kill the tray app on any error (token missing, network failure, etc).
+// FR-0011: Returns *plaud.SyncStats for detailed tray notification formatting.
+func trayPlaudSync(app *tray.TrayApp) (*plaud.SyncStats, error) {
+	cfg := plaud.LoadConfig()
+	session, loadErr := plaud.LoadToken(cfg.TokenPath)
+	if loadErr != nil {
+		// Happy Maker 1: Auto-auth via CDP instead of failing with "use terminal".
+		log.Printf("[plaud-tray] no saved token, attempting CDP auto-auth: %v", loadErr)
+		app.UpdateTooltip("M3C Tools — No Plaud token, attempting Chrome auto-auth...")
+
+		token, authErr := trayExtractPlaudToken(app)
+		if authErr != nil {
+			return nil, fmt.Errorf("Plaud auto-auth failed: %w — open web.plaud.ai in Chrome, log in, then try again", authErr)
+		}
+
+		// Save the extracted token for future use.
+		session = &plaud.TokenSession{Token: token, SavedAt: time.Now()}
+		if saveErr := plaud.SaveToken(cfg.TokenPath, session); saveErr != nil {
+			log.Printf("[plaud-tray] warning: token extracted but save failed: %v", saveErr)
+		} else {
+			log.Println("[plaud-tray] token extracted and saved via CDP auto-auth")
+		}
+		app.UpdateTooltip("M3C Tools — Plaud authenticated, syncing...")
+	}
+
+	client := plaud.NewClient(cfg, session.Token)
+	dbPath := defaultFilesDBPath()
+
+	stats := plaud.NewSyncStats()
+
+	recordings, listErr := client.ListRecordings()
+	if listErr != nil {
+		return nil, fmt.Errorf("cannot list recordings: %w", listErr)
+	}
+	stats.LocalTotal = len(recordings)
+
+	// FR-0010 Layer 1: Local DB dedup check (runs FIRST).
+	filesDB, dbErr := tracking.OpenFilesDB(dbPath)
+	if dbErr != nil {
+		log.Printf("[plaud] warning: cannot open tracking DB: %v", dbErr)
+	}
+
+	var ids []string
+	for _, rec := range recordings {
+		skip := false
+		if filesDB != nil {
+			if tracked, lookupErr := filesDB.GetByPath("plaud://" + rec.ID); lookupErr == nil && tracked != nil {
+				skip = true
+				stats.LocalExisting++
+			}
+		}
+		if !skip {
+			ids = append(ids, rec.ID)
+		}
+	}
+	if filesDB != nil {
+		filesDB.Close()
+	}
+	stats.LocalNew = len(ids)
+
+	log.Printf("[plaud-tray] found %d recordings, %d already in local DB", stats.LocalTotal, stats.LocalExisting)
+
+	// FR-0010 Layer 2: Server-side dedup check (runs SECOND, catches cross-device dupes).
+	er1Cfg := er1.LoadConfig()
+	if er1Cfg.APIKey != "" && session.Token != "" && len(ids) > 0 {
+		syncAPI := plaud.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, er1Cfg.ContextID, !er1Cfg.VerifySSL)
+		plaudAccountID := plaud.DeriveAccountID(session.Token)
+		checkResult, checkErr := syncAPI.CheckRecordings(plaudAccountID, ids)
+		if checkErr == nil && checkResult != nil && len(checkResult.Synced) > 0 {
+			stats.AlreadyInER1 = len(checkResult.Synced)
+			var filtered []string
+			for _, id := range ids {
+				if _, alreadySynced := checkResult.Synced[id]; alreadySynced {
+					log.Printf("[plaud-tray] [skip] %s already in ER1 (cross-device)", id)
+				} else {
+					filtered = append(filtered, id)
+				}
+			}
+			ids = filtered
+			log.Printf("[plaud-tray] server check: %d already in ER1", stats.AlreadyInER1)
+		}
+	}
+
+	if len(ids) == 0 {
+		return stats, nil // all synced, no error
+	}
+
+	// Run the shared pipeline (FR-0009/FR-0011).
+	stats = runPlaudSyncPipeline(client, cfg, ids, dbPath, session.Token, stats)
+
+	return stats, nil
+}
+
+// checkFirstRun inspects the setup state and returns actionable guidance.
+// It checks config profiles, API key, Plaud token, and ER1 URL to detect
+// whether the user needs to complete initial setup before features will work.
+func checkFirstRun() []tray.SetupIssue {
+	var issues []tray.SetupIssue
+	home, err := os.UserHomeDir()
+	if err != nil {
+		issues = append(issues, tray.SetupIssue{
+			Key: "no_home", Message: "Cannot detect home directory",
+		})
+		return issues
+	}
+
+	// 1. Check if profiles directory exists and has at least one profile.
+	profileDir := filepath.Join(home, ".m3c-tools", "profiles")
+	entries, statErr := os.ReadDir(profileDir)
+	if statErr != nil || len(entries) == 0 {
+		issues = append(issues, tray.SetupIssue{
+			Key: "no_profiles", Message: "No configuration profiles found",
+		})
+	}
+
+	// 2. Check if ER1 API key is configured (either from env or active profile).
+	apiKey := os.Getenv("ER1_API_KEY")
+	if apiKey == "" {
+		// Also peek at the active profile's vars in case it was set there
+		// but not yet applied to env (e.g., first launch after profile edit).
+		pm := config.NewProfileManager()
+		if ap, apErr := pm.ActiveProfile(); apErr == nil {
+			apiKey = ap.Vars["ER1_API_KEY"]
+		}
+	}
+	if apiKey == "" {
+		issues = append(issues, tray.SetupIssue{
+			Key: "no_api_key", Message: "ER1 API key not configured",
+		})
+	}
+
+	// 3. Check if Plaud session token exists.
+	tokenPath := filepath.Join(home, ".m3c-tools", "plaud-session.json")
+	if _, tokenErr := os.Stat(tokenPath); os.IsNotExist(tokenErr) {
+		issues = append(issues, tray.SetupIssue{
+			Key: "no_plaud_token", Message: "Plaud account not connected",
+		})
+	}
+
+	// 4. Check if ER1 API URL looks intentionally configured (not just the
+	// localhost default that ships with the dev profile template).
+	apiURL := os.Getenv("ER1_API_URL")
+	if apiURL == "" {
+		pm := config.NewProfileManager()
+		if ap, apErr := pm.ActiveProfile(); apErr == nil {
+			apiURL = ap.Vars["ER1_API_URL"]
+		}
+	}
+	if apiURL == "" {
+		issues = append(issues, tray.SetupIssue{
+			Key: "no_api_url", Message: "ER1 server URL not configured",
+		})
+	}
+
+	return issues
+}
+
 // cmdTrayApp launches the cross-platform system tray app using fyne.io/systray.
 // This mirrors the macOS cmdMenubar function from main.go with the handlers
 // that work cross-platform (profiles, transcript fetch, plaud/pocket sync, log).
@@ -719,7 +1020,11 @@ func cmdTrayApp(args []string) {
 	}
 	fmt.Fprintf(os.Stderr, "m3c-tools tray started. Logs: %s\n", logPath)
 
-	app := tray.New(tray.TrayHandlers{
+	// BUG-0092: Declare app before constructing so the OnAction closure can
+	// capture it for tooltip feedback. Safe because clicks only fire after Run().
+	var app *tray.TrayApp
+
+	app = tray.New(tray.TrayHandlers{
 		OnAction: func(action tray.ActionType, data string) {
 			log.Printf("[tray] action: %s data=%q", action, data)
 			switch action {
@@ -728,16 +1033,112 @@ func cmdTrayApp(args []string) {
 				url := "https://onboarding.guide/v2/transcripts"
 				openBrowserURL(url)
 			case tray.ActionPlaudSync:
-				log.Println("[tray] starting plaud sync all...")
-				go cmdPlaudSync("all")
+				// First-run guard: give specific guidance instead of a cryptic error.
+				if !app.IsSetupComplete() {
+					for _, issue := range app.SetupIssues {
+						if issue.Key == "no_api_key" {
+							app.Notify("Setup Required", "ER1 API key missing — open Settings in tray menu")
+							return
+						}
+						if issue.Key == "no_plaud_token" {
+							app.Notify("Setup Required", "Plaud not connected — open Settings in tray menu")
+							return
+						}
+					}
+					app.Notify("Setup Required", "Configuration incomplete — open Settings in tray menu")
+					return
+				}
+				// BUG-0092: Use tray-safe sync with feedback instead of
+				// cmdPlaudSync which calls os.Exit on errors, killing the tray.
+				if !app.ClaimPlaudSync() {
+					log.Println("[tray] plaud sync already running, ignoring click")
+					app.UpdateTooltip("M3C Tools — Plaud sync already running...")
+					return
+				}
+				// Tooltip for immediate in-progress feedback (no notification spam).
+				app.UpdateTooltip("M3C Tools — Syncing Plaud recordings...")
+				log.Println("[tray] starting plaud sync (tray-safe)...")
+				go func() {
+					defer app.ReleasePlaudSync()
+					// FR-0011: trayPlaudSync returns *plaud.SyncStats for detailed notification.
+					stats, err := trayPlaudSync(app)
+					if err != nil {
+						log.Printf("[tray] plaud sync error: %v", err)
+						errMsg := err.Error()
+						// Detect auth/token issues and show setup guidance.
+						if strings.Contains(errMsg, "no Plaud token") {
+							app.Notify("Plaud Setup Required", "Please open web.plaud.ai in Chrome and log in")
+						} else {
+							app.Notify("Plaud Sync Failed", errMsg)
+						}
+						app.UpdateTooltip(fmt.Sprintf("M3C Tools — Plaud sync failed: %v", err))
+						go func() {
+							time.Sleep(10 * time.Second)
+							app.ResetTooltip()
+						}()
+						return
+					}
+					// Use the stats notification formatter for compact feedback.
+					notification := stats.FormatNotification()
+					log.Printf("[tray] plaud sync done: %s", notification)
+					// Native OS notification for completion (visible even if tray is hidden).
+					app.Notify("Plaud Sync Complete", notification)
+					app.UpdateTooltip("M3C Tools — " + notification)
+					// Reset tooltip after 10 seconds.
+					go func() {
+						time.Sleep(10 * time.Second)
+						app.ResetTooltip()
+					}()
+				}()
 			case tray.ActionPocketSync:
 				log.Println("[tray] pocket sync triggered (not yet implemented)")
+			case tray.ActionPlaudAuth:
+				// Happy Maker 1: Dedicated "Connect Plaud" menu action.
+				// Runs CDP auto-auth without triggering a full sync.
+				log.Println("[tray] Connect Plaud clicked — starting CDP auth...")
+				app.UpdateTooltip("M3C Tools — Connecting to Plaud via Chrome...")
+				go func() {
+					token, authErr := trayExtractPlaudToken(app)
+					if authErr != nil {
+						log.Printf("[tray] Plaud auth failed: %v", authErr)
+						app.Notify("Plaud Auth Failed", "Open web.plaud.ai in Chrome, log in, then try again")
+						app.UpdateTooltip(fmt.Sprintf("M3C Tools — Plaud auth failed: %v", authErr))
+						go func() {
+							time.Sleep(10 * time.Second)
+							app.ResetTooltip()
+						}()
+						return
+					}
+					cfg := plaud.LoadConfig()
+					session := &plaud.TokenSession{Token: token, SavedAt: time.Now()}
+					if saveErr := plaud.SaveToken(cfg.TokenPath, session); saveErr != nil {
+						log.Printf("[tray] token save failed: %v", saveErr)
+						app.Notify("Plaud Auth", "Token extracted but could not save")
+					} else {
+						log.Println("[tray] Plaud token saved via Connect Plaud")
+						app.Notify("Plaud Connected", "Token saved — you can now use Plaud Sync")
+					}
+					app.UpdateTooltip("M3C Tools — Plaud connected")
+					go func() {
+						time.Sleep(10 * time.Second)
+						app.ResetTooltip()
+					}()
+				}()
+			case tray.ActionSignIn:
+				// BUG-0088: Open the sign-in page in the default browser.
+				signInURL := "https://onboarding.guide/login"
+				log.Printf("[tray] opening sign-in: %s", signInURL)
+				openBrowserURL(signInURL)
 			case tray.ActionOpenLog:
+				// BUG-0091: Open the log file in the system default viewer.
 				log.Printf("[tray] opening log file: %s", data)
+				openFileWithDefault(data)
 			case tray.ActionStarGitHub:
 				log.Printf("[tray] star on GitHub: %s", data)
 			case tray.ActionQuickImpulse:
 				log.Println("[tray] quick impulse triggered")
+			case tray.ActionSetup:
+				log.Printf("[tray] setup action: %s", data)
 			case tray.ActionQuit:
 				log.Println("[tray] quit requested")
 				os.Exit(0)
@@ -761,11 +1162,21 @@ func cmdTrayApp(args []string) {
 			return result, active, nil
 		},
 		SwitchProfile: func(name string) error {
+			log.Printf("[config] switch requested: %s", name)
 			pm := config.NewProfileManager()
+			log.Printf("[config] profile base dir: %s", pm.BaseDir)
 			if err := pm.SwitchProfile(name); err != nil {
+				log.Printf("[config] switch FAILED for %q: %v", name, err)
 				return err
 			}
-			log.Printf("[config] switched to profile: %s", name)
+			// Verify from a fresh manager to confirm persistence.
+			verify := config.NewProfileManager()
+			actual := verify.ActiveProfileName()
+			if actual != name {
+				log.Printf("[config] WARNING: switch wrote %q but fresh read got %q", name, actual)
+			} else {
+				log.Printf("[config] switch confirmed: %s (active-profile file verified)", name)
+			}
 			return nil
 		},
 		OpenProfileEditor: func() {
@@ -809,22 +1220,59 @@ func cmdTrayApp(args []string) {
 
 	app.SetLogPath(logPath)
 
+	// First-run detection: check setup state before launching the tray.
+	// This populates SetupIssues which onReady() uses to show the setup
+	// banner, tooltip, and deferred notification.
+	setupIssues := checkFirstRun()
+	if len(setupIssues) > 0 {
+		log.Printf("[setup] first-run detection: %d issue(s) found", len(setupIssues))
+		for _, issue := range setupIssues {
+			log.Printf("[setup]   - %s: %s", issue.Key, issue.Message)
+		}
+		app.SetSetupIssues(setupIssues)
+	} else {
+		log.Println("[setup] first-run check passed — setup is complete")
+	}
+
 	// systray.Run() blocks — this must be the last call.
 	app.Run()
 }
 
+// openFileWithDefault opens a file with the system default application.
+// BUG-0091: Ensures log file viewer works on all platforms.
+func openFileWithDefault(path string) {
+	if path == "" {
+		log.Printf("[tray] openFileWithDefault called with empty path")
+		return
+	}
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", "", path)
+	case "linux":
+		cmd = exec.Command("xdg-open", path)
+	default:
+		cmd = exec.Command("open", path)
+	}
+	if err := cmd.Start(); err != nil {
+		log.Printf("[tray] failed to open file %s: %v", path, err)
+	}
+}
+
 // openBrowserURL opens a URL in the platform default browser.
+// BUG-0088: Windows uses "cmd /c start" instead of rundll32 which silently fails.
 func openBrowserURL(url string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+		// Empty title arg ("") prevents cmd from misinterpreting URLs with & as title.
+		cmd = exec.Command("cmd", "/c", "start", "", url)
 	case "linux":
 		cmd = exec.Command("xdg-open", url)
 	default:
 		cmd = exec.Command("open", url)
 	}
 	if err := cmd.Start(); err != nil {
-		log.Printf("[tray] failed to open browser: %v", err)
+		log.Printf("[tray] failed to open browser for %s: %v", url, err)
 	}
 }

@@ -37,7 +37,15 @@ type UploadResponse struct {
 }
 
 // Upload sends a multimodal payload to the ER1 server.
+// BUG-0093: Requires a valid API key to bypass server-side CSRF protection.
+// Without X-API-KEY, the server treats the request as a browser submission
+// and rejects it with "CSRF session expired" (Forbidden Request).
 func Upload(cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
+	if cfg.APIKey == "" {
+		return nil, fmt.Errorf("ER1_API_KEY is not set — upload requires an API key to authenticate. " +
+			"Run 'm3c-tools setup' or 'm3c-tools config show' to configure your API key")
+	}
+
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 

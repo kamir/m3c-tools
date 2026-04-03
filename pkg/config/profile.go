@@ -156,13 +156,23 @@ func (pm *ProfileManager) ActiveProfile() (*Profile, error) {
 
 // SwitchProfile writes the given name to the active-profile file and applies
 // the profile's environment variables to the current process.
+// BUG-0089: Added round-trip verification and detailed error logging to
+// diagnose silent failures on Windows where file writes may not persist.
 func (pm *ProfileManager) SwitchProfile(name string) error {
 	p, err := pm.GetProfile(name)
 	if err != nil {
 		return fmt.Errorf("profile %q not found: %w", name, err)
 	}
 	if err := pm.writeActiveProfile(name); err != nil {
-		return err
+		return fmt.Errorf("persist profile switch to %q: %w", name, err)
+	}
+	// Round-trip verification: read back the active-profile file to confirm
+	// the write actually landed on disk. This catches Windows NTFS deferred
+	// writes and permission issues that os.WriteFile silently swallows.
+	readBack := pm.ActiveProfileName()
+	if readBack != name {
+		return fmt.Errorf("profile switch verification failed: wrote %q but read back %q (path: %s)",
+			name, readBack, pm.activeProfilePath())
 	}
 	return pm.ApplyProfile(p)
 }
@@ -300,11 +310,29 @@ func (pm *ProfileManager) TestConnection(p *Profile) error {
 }
 
 // writeActiveProfile persists the active profile name to disk.
+// BUG-0089: Uses explicit file open + sync to ensure data is flushed
+// to disk on Windows, where os.WriteFile may not persist immediately.
 func (pm *ProfileManager) writeActiveProfile(name string) error {
 	if err := os.MkdirAll(pm.BaseDir, 0700); err != nil {
 		return fmt.Errorf("create base dir: %w", err)
 	}
-	return os.WriteFile(pm.activeProfilePath(), []byte(name+"\n"), 0600)
+	path := pm.activeProfilePath()
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return fmt.Errorf("open active-profile file: %w", err)
+	}
+	if _, err := f.WriteString(name + "\n"); err != nil {
+		f.Close()
+		return fmt.Errorf("write active-profile: %w", err)
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return fmt.Errorf("sync active-profile: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close active-profile: %w", err)
+	}
+	return nil
 }
 
 // ParseEnvFile reads a .env file and extracts the profile metadata and

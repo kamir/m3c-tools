@@ -16,12 +16,23 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"fyne.io/systray"
 )
 
+// iconPNG is used on Linux where systray accepts PNG bytes directly.
+//
 //go:embed icon.png
-var iconBytes []byte
+var iconPNG []byte
+
+// iconICO is used on Windows where fyne.io/systray v1.12 requires ICO format.
+// The ICO contains 16x16, 32x32, and 48x48 BGRA entries generated from the
+// app-icon-128 source (see BUG-0087).
+//
+//go:embed icon.ico
+var iconICO []byte
 
 // GitHubRepoURL is the project's GitHub repository URL.
 const GitHubRepoURL = "https://github.com/kamir/m3c-tools"
@@ -30,12 +41,15 @@ const GitHubRepoURL = "https://github.com/kamir/m3c-tools"
 type ActionType string
 
 const (
+	ActionSignIn          ActionType = "sign_in"
 	ActionFetchTranscript ActionType = "fetch_transcript"
 	ActionQuickImpulse    ActionType = "quick_impulse"
 	ActionPlaudSync       ActionType = "plaud_sync"
+	ActionPlaudAuth       ActionType = "plaud_auth"
 	ActionPocketSync      ActionType = "pocket_sync"
 	ActionOpenLog         ActionType = "open_log"
 	ActionStarGitHub      ActionType = "star_github"
+	ActionSetup           ActionType = "setup"
 	ActionQuit            ActionType = "quit"
 )
 
@@ -74,6 +88,12 @@ type TrayHandlers struct {
 	ListRecentObs func(limit int) ([]Observation, error)
 }
 
+// SetupIssue describes a single first-run configuration problem.
+type SetupIssue struct {
+	Key     string // short identifier, e.g. "no_profiles"
+	Message string // human-readable description
+}
+
 // TrayApp holds the runtime state of the system tray application.
 type TrayApp struct {
 	Handlers    TrayHandlers
@@ -81,6 +101,14 @@ type TrayApp struct {
 	userName    string
 	profileName string
 	logPath     string
+
+	// plaudSyncing guards against concurrent Plaud Sync invocations.
+	// 0 = idle, 1 = syncing. Use atomic CAS to claim.
+	plaudSyncing int32
+
+	// SetupIssues holds first-run problems detected at startup.
+	// Empty slice means setup is complete.
+	SetupIssues []SetupIssue
 }
 
 // New creates a TrayApp with the given handlers.
@@ -108,6 +136,48 @@ func (t *TrayApp) SetLogPath(path string) {
 	t.logPath = path
 }
 
+// UpdateTooltip changes the system tray tooltip text.
+// BUG-0092: Provides visible feedback for background operations like Plaud Sync.
+func (t *TrayApp) UpdateTooltip(msg string) {
+	systray.SetTooltip(msg)
+}
+
+// ResetTooltip restores the default tooltip, or shows the first setup issue
+// if the setup is incomplete.
+func (t *TrayApp) ResetTooltip() {
+	if len(t.SetupIssues) > 0 {
+		systray.SetTooltip(fmt.Sprintf("M3C Tools — Setup needed: %s", t.SetupIssues[0].Message))
+		return
+	}
+	systray.SetTooltip("M3C Tools — Multi-Modal-Memory Capture")
+}
+
+// Notify is defined in notify.go (beeep-based native OS notifications for
+// Windows toast and Linux libnotify). The darwin stub is in notify_darwin.go.
+
+// SetSetupIssues records the first-run detection results. Call this before
+// Run() so the tray menu reflects the setup state from the start.
+func (t *TrayApp) SetSetupIssues(issues []SetupIssue) {
+	t.SetupIssues = issues
+}
+
+// IsSetupComplete returns true if no first-run issues were detected.
+func (t *TrayApp) IsSetupComplete() bool {
+	return len(t.SetupIssues) == 0
+}
+
+// ClaimPlaudSync attempts to acquire the Plaud Sync lock.
+// Returns true if acquired (caller must call ReleasePlaudSync when done).
+// Returns false if a sync is already running.
+func (t *TrayApp) ClaimPlaudSync() bool {
+	return atomic.CompareAndSwapInt32(&t.plaudSyncing, 0, 1)
+}
+
+// ReleasePlaudSync releases the Plaud Sync lock.
+func (t *TrayApp) ReleasePlaudSync() {
+	atomic.StoreInt32(&t.plaudSyncing, 0)
+}
+
 // Run starts the system tray application. This function blocks forever
 // and must be called from the main goroutine.
 func (t *TrayApp) Run() {
@@ -117,9 +187,28 @@ func (t *TrayApp) Run() {
 // onReady is called by systray.Run when the tray is initialized.
 // All menu items must be created here.
 func (t *TrayApp) onReady() {
-	systray.SetIcon(iconBytes)
+	// BUG-0087: fyne.io/systray v1.12 on Windows requires ICO format for
+	// the system tray icon. PNG works on Linux but silently fails on Windows
+	// because LoadImage(IMAGE_ICON) cannot parse PNG data.
+	if runtime.GOOS == "windows" {
+		systray.SetIcon(iconICO)
+	} else {
+		systray.SetIcon(iconPNG)
+	}
 	systray.SetTitle("M3C Tools")
 	systray.SetTooltip("M3C Tools — Multi-Modal-Memory Capture")
+
+	// --- First-run setup banner (only visible when setup is incomplete) ---
+	var mSetup *systray.MenuItem
+	if !t.IsSetupComplete() {
+		label := fmt.Sprintf("!! Setup Required (%d issue", len(t.SetupIssues))
+		if len(t.SetupIssues) > 1 {
+			label += "s"
+		}
+		label += ") !!"
+		mSetup = systray.AddMenuItem(label, t.SetupIssues[0].Message)
+		systray.AddSeparator()
+	}
 
 	// --- Sign In / Sign Out ---
 	mSignIn := systray.AddMenuItem("Sign In...", "Connect to workspace")
@@ -143,8 +232,9 @@ func (t *TrayApp) onReady() {
 
 	systray.AddSeparator()
 
-	// --- Plaud Sync / Pocket Sync ---
+	// --- Plaud Sync / Connect Plaud / Pocket Sync ---
 	mPlaud := systray.AddMenuItem("Plaud Sync", "Sync Plaud recordings")
+	mPlaudAuth := systray.AddMenuItem("Connect Plaud", "Authenticate with Plaud via Chrome")
 	mPocket := systray.AddMenuItem("Pocket Sync", "Sync Pocket articles")
 
 	systray.AddSeparator()
@@ -159,7 +249,11 @@ func (t *TrayApp) onReady() {
 	// --- Open Log File ---
 	mLog := systray.AddMenuItem("Open Log File", "Open the application log")
 	// --- Settings (profile editor) ---
-	mSettings := systray.AddMenuItem("Settings...", "Edit configuration profiles")
+	settingsLabel := "Settings..."
+	if !t.IsSetupComplete() {
+		settingsLabel = "Settings... (setup needed)"
+	}
+	mSettings := systray.AddMenuItem(settingsLabel, "Edit configuration profiles")
 
 	systray.AddSeparator()
 
@@ -176,7 +270,8 @@ func (t *TrayApp) onReady() {
 	go func() {
 		for range mSignIn.ClickedCh {
 			log.Println("[tray] Sign In clicked")
-			// TODO: implement sign-in flow for Windows
+			// BUG-0088: Fire sign-in action so the handler opens the browser.
+			t.fireAction(ActionSignIn, "")
 		}
 	}()
 
@@ -202,6 +297,13 @@ func (t *TrayApp) onReady() {
 	}()
 
 	go func() {
+		for range mPlaudAuth.ClickedCh {
+			log.Println("[tray] Connect Plaud clicked")
+			t.fireAction(ActionPlaudAuth, "")
+		}
+	}()
+
+	go func() {
 		for range mPocket.ClickedCh {
 			log.Println("[tray] Pocket Sync clicked")
 			t.fireAction(ActionPocketSync, "")
@@ -222,8 +324,22 @@ func (t *TrayApp) onReady() {
 			if t.Handlers.OpenProfileEditor != nil {
 				t.Handlers.OpenProfileEditor()
 			}
+			t.fireAction(ActionSetup, "settings")
 		}
 	}()
+
+	// Setup banner click handler (opens the same settings editor).
+	if mSetup != nil {
+		go func() {
+			for range mSetup.ClickedCh {
+				log.Println("[tray] Setup Required clicked")
+				if t.Handlers.OpenProfileEditor != nil {
+					t.Handlers.OpenProfileEditor()
+				}
+				t.fireAction(ActionSetup, "first_run")
+			}
+		}()
+	}
 
 	go func() {
 		for range mStar.ClickedCh {
@@ -243,6 +359,15 @@ func (t *TrayApp) onReady() {
 
 	// Profile sub-menu item click handlers.
 	go t.handleProfileClicks(profileItems)
+
+	// First-run tooltip and deferred notification.
+	if !t.IsSetupComplete() {
+		t.UpdateTooltip(fmt.Sprintf("M3C Tools — Setup needed: %s", t.SetupIssues[0].Message))
+		go func() {
+			time.Sleep(3 * time.Second)
+			t.Notify("M3C Tools", fmt.Sprintf("Setup incomplete: %s — open Settings to configure", t.SetupIssues[0].Message))
+		}()
+	}
 
 	log.Println("[tray] system tray ready")
 }
@@ -290,6 +415,10 @@ func (t *TrayApp) rebuildProfileMenu(parent *systray.MenuItem, items *[]*systray
 }
 
 // handleProfileClicks listens for clicks on profile submenu items and switches profile.
+// BUG-0089: Removed stale IsActive guard that prevented switching after the first
+// menu build. The profile name is captured directly from the snapshot, and each
+// click always calls SwitchProfile (the function itself is idempotent if the
+// profile is already active). After switching, the tray's profileName is updated.
 func (t *TrayApp) handleProfileClicks(items []*systray.MenuItem) {
 	if t.Handlers.ListProfiles == nil || t.Handlers.SwitchProfile == nil {
 		return
@@ -305,17 +434,19 @@ func (t *TrayApp) handleProfileClicks(items []*systray.MenuItem) {
 		if i >= len(profiles) {
 			break
 		}
-		go func(mi *systray.MenuItem, prof Profile) {
+		go func(mi *systray.MenuItem, profName string) {
 			for range mi.ClickedCh {
-				if !prof.IsActive {
-					if switchErr := t.Handlers.SwitchProfile(prof.Name); switchErr != nil {
-						log.Printf("[tray] profile switch error: %v", switchErr)
-					} else {
-						log.Printf("[tray] switched to profile: %s", prof.Name)
-					}
+				log.Printf("[tray] profile click: %s", profName)
+				if switchErr := t.Handlers.SwitchProfile(profName); switchErr != nil {
+					log.Printf("[tray] profile switch error for %q: %v", profName, switchErr)
+					t.Notify("Profile Switch Failed", fmt.Sprintf("Could not switch to %s: %v", profName, switchErr))
+				} else {
+					log.Printf("[tray] switched to profile: %s", profName)
+					t.profileName = profName
+					t.Notify("Profile Switched", fmt.Sprintf("Active: %s", profName))
 				}
 			}
-		}(item, profiles[i])
+		}(item, profiles[i].Name)
 	}
 }
 
@@ -345,11 +476,13 @@ func (t *TrayApp) rebuildHistoryMenu(parent *systray.MenuItem, items *[]*systray
 }
 
 // openURL opens a URL in the default browser.
+// BUG-0088: Windows uses "cmd /c start" instead of rundll32 which silently fails.
 func (t *TrayApp) openURL(url string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+		// Empty title arg ("") prevents cmd from misinterpreting URLs with & as title.
+		cmd = exec.Command("cmd", "/c", "start", "", url)
 	case "linux":
 		cmd = exec.Command("xdg-open", url)
 	default:
