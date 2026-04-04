@@ -1102,7 +1102,48 @@ func cmdTrayApp(args []string) {
 						app.ResetTooltip()
 					}()
 				}()
-			// Pocket sync and Plaud auth removed for Windows MVP.
+			case tray.ActionPlaudAuth:
+				// Login to Plaud.ai via Chrome CDP
+				log.Println("[tray] Login Plaud.ai clicked — starting CDP auth...")
+				app.UpdateTooltip("M3C Tools — Connecting to Plaud via Chrome...")
+				go func() {
+					token, authErr := trayExtractPlaudToken(app)
+					if authErr != nil {
+						log.Printf("[tray] Plaud auth failed: %v", authErr)
+						app.Notify("Plaud Auth Failed", "Open web.plaud.ai in Chrome, log in, then try again")
+						app.UpdatePlaudStatus(false, "auth failed")
+						app.UpdateTooltip(fmt.Sprintf("M3C Tools — Plaud auth failed"))
+						go func() {
+							time.Sleep(10 * time.Second)
+							app.ResetTooltip()
+						}()
+						return
+					}
+					cfg := plaud.LoadConfig()
+					session := &plaud.TokenSession{Token: token, SavedAt: time.Now()}
+					if saveErr := plaud.SaveToken(cfg.TokenPath, session); saveErr != nil {
+						log.Printf("[tray] token save failed: %v", saveErr)
+						app.Notify("Plaud Auth", "Token extracted but could not save")
+					} else {
+						log.Println("[tray] Plaud token saved")
+						app.Notify("Plaud Connected", "Token saved — you can now sync")
+						app.UpdatePlaudStatus(true, "token OK")
+					}
+					app.UpdateTooltip("M3C Tools — Plaud connected")
+					go func() {
+						time.Sleep(10 * time.Second)
+						app.ResetTooltip()
+					}()
+				}()
+			case tray.ActionEditConfig:
+				// Open the profile settings editor
+				log.Println("[tray] Edit Configuration clicked")
+				go func() {
+					srv := config.NewEditorServer(":9116")
+					if err := srv.Start(); err != nil {
+						log.Printf("[config] editor error: %v", err)
+					}
+				}()
 			case tray.ActionSignIn:
 				// BUG-0088 fix: Use proper ER1 callback flow (same as macOS).
 				go trayLoginER1(app)
@@ -1138,6 +1179,16 @@ func cmdTrayApp(args []string) {
 		app.SetSetupIssues(setupIssues)
 	} else {
 		log.Println("[setup] first-run check passed — setup is complete")
+	}
+
+	// Check Plaud token status on startup
+	plaudCfg := plaud.LoadConfig()
+	if session, err := plaud.LoadToken(plaudCfg.TokenPath); err == nil && session != nil {
+		if session.IsExpired(plaud.DefaultMaxTokenAge) {
+			app.UpdatePlaudStatus(false, "token expired")
+		} else {
+			app.UpdatePlaudStatus(true, "token OK")
+		}
 	}
 
 	// systray.Run() blocks — this must be the last call.

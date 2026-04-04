@@ -44,6 +44,8 @@ const (
 	ActionSignIn    ActionType = "sign_in"
 	ActionSignOut   ActionType = "sign_out"
 	ActionPlaudSync ActionType = "plaud_sync"
+	ActionPlaudAuth ActionType = "plaud_auth"
+	ActionEditConfig ActionType = "edit_config"
 	ActionQuit      ActionType = "quit"
 )
 
@@ -90,11 +92,13 @@ type TrayApp struct {
 	SetupIssues []SetupIssue
 
 	// FEAT-0014: Dynamic menu items for state updates.
-	mIdentity  *systray.MenuItem
-	mLastSync  *systray.MenuItem
-	mSignIn    *systray.MenuItem
-	mSignOut   *systray.MenuItem
-	mSyncPlaud *systray.MenuItem
+	mIdentity   *systray.MenuItem
+	mLastSync   *systray.MenuItem
+	mSignIn     *systray.MenuItem
+	mSignOut    *systray.MenuItem
+	mSyncPlaud  *systray.MenuItem
+	mPlaudAuth  *systray.MenuItem
+	mPlaudToken *systray.MenuItem
 }
 
 // New creates a TrayApp with the given handlers.
@@ -161,6 +165,15 @@ func (t *TrayApp) UpdateLoginState(loggedIn bool, email string) {
 		if t.mSignOut != nil {
 			t.mSignOut.Show()
 		}
+		if t.mPlaudToken != nil {
+			t.mPlaudToken.Show()
+		}
+		if t.mPlaudAuth != nil {
+			t.mPlaudAuth.Show()
+		}
+		if t.mSyncPlaud != nil {
+			t.mSyncPlaud.Show()
+		}
 	} else {
 		if t.mIdentity != nil {
 			t.mIdentity.SetTitle("Not connected")
@@ -174,6 +187,33 @@ func (t *TrayApp) UpdateLoginState(loggedIn bool, email string) {
 		}
 		if t.mSignOut != nil {
 			t.mSignOut.Hide()
+		}
+		if t.mPlaudToken != nil {
+			t.mPlaudToken.Hide()
+		}
+		if t.mPlaudAuth != nil {
+			t.mPlaudAuth.Hide()
+		}
+		if t.mSyncPlaud != nil {
+			t.mSyncPlaud.Hide()
+		}
+	}
+}
+
+// UpdatePlaudStatus updates the Plaud token status display.
+func (t *TrayApp) UpdatePlaudStatus(hasToken bool, info string) {
+	if t.mPlaudToken != nil {
+		if hasToken {
+			t.mPlaudToken.SetTitle(fmt.Sprintf("Plaud: %s", info))
+		} else {
+			t.mPlaudToken.SetTitle("Plaud: not connected")
+		}
+	}
+	if t.mPlaudAuth != nil {
+		if hasToken {
+			t.mPlaudAuth.Hide()
+		} else {
+			t.mPlaudAuth.Show()
 		}
 	}
 }
@@ -239,13 +279,21 @@ func (t *TrayApp) onReady() {
 	// --- Sign In (shown when signed out) ---
 	t.mSignIn = systray.AddMenuItem("Sign In with Google...", "Connect to workspace")
 
-	// --- Sync Plaud (shown when signed in, flat item) ---
+	// --- Plaud section (shown when signed in) ---
+	t.mPlaudToken = systray.AddMenuItem("Plaud: not connected", "Plaud.ai connection status")
+	t.mPlaudToken.Disable()
+	t.mPlaudAuth = systray.AddMenuItem("Login Plaud.ai...", "Connect to Plaud.ai via Chrome")
 	t.mSyncPlaud = systray.AddMenuItem("Sync Plaud Recordings", "Sync Plaud recordings to workspace")
 
 	systray.AddSeparator()
 
+	// --- Edit Configuration ---
+	mEditConfig := systray.AddMenuItem("Edit Configuration...", "Open profile settings editor")
+
 	// --- Sign Out (shown when signed in) ---
 	t.mSignOut = systray.AddMenuItem("Sign Out", "Disconnect from workspace")
+
+	systray.AddSeparator()
 
 	// --- Quit ---
 	mQuit := systray.AddMenuItem("Quit", "Exit M3C Tools")
@@ -255,14 +303,19 @@ func (t *TrayApp) onReady() {
 		t.mIdentity.Show()
 		t.mLastSync.Show()
 		t.mSignIn.Hide()
+		t.mPlaudToken.Show()
+		t.mPlaudAuth.Show()
 		t.mSyncPlaud.Show()
 		t.mSignOut.Show()
 	} else {
 		t.mIdentity.Hide()
 		t.mLastSync.Hide()
 		t.mSignIn.Show()
+		t.mPlaudToken.Hide()
+		t.mPlaudAuth.Hide()
 		t.mSyncPlaud.Hide()
 		t.mSignOut.Hide()
+		mEditConfig.Show() // always visible
 	}
 
 	// --- Click handlers ---
@@ -282,9 +335,23 @@ func (t *TrayApp) onReady() {
 	}()
 
 	go func() {
+		for range t.mPlaudAuth.ClickedCh {
+			log.Println("[tray] Login Plaud.ai clicked")
+			t.fireAction(ActionPlaudAuth, "")
+		}
+	}()
+
+	go func() {
 		for range t.mSyncPlaud.ClickedCh {
 			log.Println("[tray] Sync Plaud clicked")
 			t.fireAction(ActionPlaudSync, "")
+		}
+	}()
+
+	go func() {
+		for range mEditConfig.ClickedCh {
+			log.Println("[tray] Edit Configuration clicked")
+			t.fireAction(ActionEditConfig, "")
 		}
 	}()
 

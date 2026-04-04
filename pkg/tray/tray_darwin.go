@@ -15,6 +15,8 @@ const (
 	ActionSignIn    ActionType = "sign_in"
 	ActionSignOut   ActionType = "sign_out"
 	ActionPlaudSync ActionType = "plaud_sync"
+	ActionPlaudAuth ActionType = "plaud_auth"
+	ActionEditConfig ActionType = "edit_config"
 	ActionQuit      ActionType = "quit"
 )
 
@@ -84,5 +86,6 @@ func (t *TrayApp) ClaimPlaudSync() bool { return true }
 func (t *TrayApp) ReleasePlaudSync() {}
 
 // FEAT-0014: Dynamic state methods (no-op on macOS).
-func (t *TrayApp) UpdateLoginState(loggedIn bool, email string) {}
+func (t *TrayApp) UpdateLoginState(loggedIn bool, email string)  {}
 func (t *TrayApp) UpdateLastSync(timeStr string)                 {}
+func (t *TrayApp) UpdatePlaudStatus(hasToken bool, info string)  {}
