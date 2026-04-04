@@ -34,7 +34,14 @@ lib/portaudio/
 
 # env file (keep .env.example tracked)
 .env
-.env.samples
+.env.*
+!.env.example
+
+# Python cache
+__pycache__/
+
+# Built binaries (root level)
+/skillctl
 
 # macOS
 .DS_Store
