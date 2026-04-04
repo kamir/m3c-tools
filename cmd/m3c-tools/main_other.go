@@ -1026,6 +1026,15 @@ func cmdTrayApp(args []string) {
 	}
 	fmt.Fprintf(os.Stderr, "m3c-tools tray started. Logs: %s\n", logPath)
 
+	// Auto-configure from ~/m3c-tools.init.cfg if present (zero-touch onboarding).
+	initResult := config.CheckAndApplyInitCfg()
+	if initResult.Found && initResult.Imported {
+		log.Printf("[config] auto-configured from init file: profile=%s", initResult.ProfileName)
+		fmt.Fprintf(os.Stderr, "Auto-configured from init file (profile: %s)\n", initResult.ProfileName)
+	} else if initResult.Found && initResult.Error != nil {
+		log.Printf("[config] init config found but failed: %v", initResult.Error)
+	}
+
 	// BUG-0092: Declare app before constructing so the OnAction closure can
 	// capture it for tooltip feedback. Safe because clicks only fire after Run().
 	var app *tray.TrayApp
