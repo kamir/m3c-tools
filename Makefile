@@ -325,6 +325,16 @@ lint:
 	@echo "Running golangci-lint..."
 	golangci-lint run --timeout=5m
 
+# Windows dev test gate (SPEC-0128): vet + cross-compile + Windows-safe tests + smoke
+.PHONY: test-gate-windows
+test-gate-windows:
+	@./scripts/test-gate-windows.sh
+
+# Same as above but skip the test phase (just compile check)
+.PHONY: test-gate-windows-quick
+test-gate-windows-quick:
+	@./scripts/test-gate-windows.sh --quick
+
 # Cross-compile for Windows (amd64, no CGO)
 .PHONY: build-windows
 build-windows:
@@ -381,4 +391,6 @@ help:
 	@echo "  checksums      Generate SHA-256 checksums for build/ artifacts"
 	@echo "  ci             Run full CI locally (vet + lint + test + build)"
 	@echo "  lint           Run golangci-lint"
+	@echo "  test-gate-windows  Windows dev test gate: vet + cross-compile + tests (SPEC-0128)"
+	@echo "  test-gate-windows-quick  Same but skip test phase (compile check only)"
 	@echo "  help           Show this help"
