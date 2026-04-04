@@ -1,0 +1,9 @@
+M3C Tools - End User License Agreement
+
+Copyright (c) 2026 maindset. All rights reserved.
+
+This software is provided for authorized users only.
+By installing this software, you agree to use it solely
+for syncing your personal recordings to your workspace.
+
+Your API key is personal and must not be shared with others.
