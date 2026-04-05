@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/config"
@@ -775,6 +776,12 @@ func cmdExec(name string, args ...string) *exec.Cmd {
 }
 
 
+// plaudChromeActive prevents concurrent Chrome launches for Plaud auth.
+// BUG-0102: Without this guard, ActionPlaudAuth and ActionPlaudSync can both
+// call trayExtractPlaudToken simultaneously, launching two debug Chrome windows.
+// 0 = idle, 1 = Chrome running for Plaud auth.
+var plaudChromeActive int32
+
 // trayExtractPlaudToken attempts to extract a Plaud token from Chrome via CDP.
 // This is the tray-friendly version that never blocks on stdin:
 //   1. First tries ExtractTokenCDP() — instant, works if Chrome is already
@@ -785,6 +792,14 @@ func cmdExec(name string, args ...string) *exec.Cmd {
 //
 // Happy Maker 1: Eliminates the terminal requirement for Plaud authentication.
 func trayExtractPlaudToken(app *tray.TrayApp) (string, error) {
+	// BUG-0102: Guard against concurrent Chrome launches from ActionPlaudAuth
+	// and ActionPlaudSync both calling this function simultaneously.
+	if !atomic.CompareAndSwapInt32(&plaudChromeActive, 0, 1) {
+		log.Println("[plaud-tray-auth] Chrome auth already in progress, skipping duplicate launch")
+		return "", fmt.Errorf("Plaud Chrome auth already in progress — please wait")
+	}
+	defer atomic.StoreInt32(&plaudChromeActive, 0)
+
 	// Step 1: Try instant CDP extraction (Chrome already running with plaud.ai).
 	log.Println("[plaud-tray-auth] trying instant CDP extraction...")
 	token, err := plaud.ExtractTokenCDP()

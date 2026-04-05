@@ -477,6 +477,11 @@ func cdpDial(wsURL string) (net.Conn, error) {
 		path = "/" + parts[1]
 	}
 
+	// BUG-0102: Chrome CDP returns ws://localhost:9222/... but on Windows,
+	// "localhost" may resolve to IPv6 [::1] while Chrome binds to IPv4 127.0.0.1
+	// only — causing "connection refused". Force IPv4 to match the /json endpoint.
+	host = strings.ReplaceAll(host, "localhost", "127.0.0.1")
+
 	conn, err := net.DialTimeout("tcp", host, 5*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("connect to %s: %w", host, err)
