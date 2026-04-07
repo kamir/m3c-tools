@@ -62,8 +62,10 @@ func NewClient(cfg *Config, token string) *Client {
 
 // ListRecordings fetches all recordings from the Plaud cloud.
 // Paginates through /file/simple/web until all recordings are retrieved.
+// Note: The Plaud API may cap data_file_total at the limit value,
+// so we request a large page and paginate if needed.
 func (c *Client) ListRecordings() ([]Recording, error) {
-	const pageSize = 100
+	const pageSize = 500
 	var allRecordings []Recording
 	skip := 0
 
