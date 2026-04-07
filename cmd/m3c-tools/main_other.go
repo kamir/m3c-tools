@@ -464,14 +464,38 @@ func cmdPlaudList() {
 		return
 	}
 
-	fmt.Printf("  %3s  %-32s  %-6s  %-10s  %s\n", "#", "ID", "Dur", "Status", "Title")
-	fmt.Println("  ---  --------------------------------  ------  ----------  -----")
+	// Check tracking DB for sync status + ER1 doc IDs.
+	dbPath := defaultFilesDBPath()
+	filesDB, dbErr := tracking.OpenFilesDB(dbPath)
+	if dbErr != nil {
+		log.Printf("[plaud] warning: cannot open tracking DB: %v", dbErr)
+	}
+	defer func() {
+		if filesDB != nil {
+			filesDB.Close()
+		}
+	}()
+
+	fmt.Printf("  %3s  %-32s  %-40s  %6s  %s  %-10s  %s\n", "#", "ID", "Title", "Dur", "Date", "Status", "ER1 Doc")
+	fmt.Println("  ---  --------------------------------  ----------------------------------------  ------  ----------  ----------  --------")
 	for i, r := range recordings {
 		id := r.ID
 		if len(id) > 32 {
 			id = id[:32]
 		}
-		fmt.Printf("  %3d  %-32s  %6d  %-10s  %s\n", i+1, id, r.Duration, r.Status, r.Title)
+		status := "new"
+		docID := ""
+		if filesDB != nil {
+			if tracked, lookupErr := filesDB.GetByPath("plaud://" + r.ID); lookupErr == nil && tracked != nil {
+				status = tracked.Status
+				docID = tracked.UploadDocID
+			}
+		}
+		title := r.Title
+		if len(title) > 40 {
+			title = title[:37] + "..."
+		}
+		fmt.Printf("  %3d  %-32s  %-40s  %6d  %s  [%-8s]  %s\n", i+1, id, title, r.Duration, r.CreatedAt.Format("2006-01-02"), status, docID)
 	}
 	fmt.Printf("\nTotal: %d recordings\n", len(recordings))
 	fmt.Println("Use: m3c-tools plaud sync <#>   or   m3c-tools plaud sync <ID>")

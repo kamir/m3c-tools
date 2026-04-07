@@ -4772,23 +4772,26 @@ func cmdPlaudList() {
 	}()
 
 	fmt.Printf("Plaud recordings (%d):\n\n", len(recordings))
-	fmt.Printf("  %3s  %-32s  %-40s  %6s  %s  %s\n", "#", "ID", "Title", "Dur", "Date", "Status")
-	fmt.Println("  ---  --------------------------------  ----------------------------------------  ------  ----------  ------")
+	fmt.Printf("  %3s  %-32s  %-40s  %6s  %s  %-10s  %s\n", "#", "ID", "Title", "Dur", "Date", "Status", "ER1 Doc")
+	fmt.Println("  ---  --------------------------------  ----------------------------------------  ------  ----------  ----------  --------")
 	for i, rec := range recordings {
 		status := "new"
+		docID := ""
 		if filesDB != nil {
 			plaudPath := "plaud://" + rec.ID
 			if tracked, lookupErr := filesDB.GetByPath(plaudPath); lookupErr == nil && tracked != nil {
 				status = tracked.Status
+				docID = tracked.UploadDocID
 			}
 		}
-		fmt.Printf("  %3d  %-32s  %-40s  %6s  %s  [%s]\n",
+		fmt.Printf("  %3d  %-32s  %-40s  %6s  %s  [%-8s]  %s\n",
 			i+1,
 			truncate(rec.ID, 32),
 			truncate(rec.Title, 40),
 			plaud.FormatDuration(rec.Duration),
 			rec.CreatedAt.Format("2006-01-02"),
 			status,
+			docID,
 		)
 	}
 	fmt.Println()
