@@ -116,10 +116,11 @@ func findWhisper() (string, error) {
 	}
 
 	// Try common homebrew/pip locations
+	pocHome, _ := os.UserHomeDir()
 	candidates := []string{
 		"/opt/homebrew/bin/whisper",
 		"/usr/local/bin/whisper",
-		filepath.Join(os.Getenv("HOME"), ".local/bin/whisper"),
+		filepath.Join(pocHome, ".local", "bin", "whisper"),
 	}
 	for _, c := range candidates {
 		if _, err := os.Stat(c); err == nil {

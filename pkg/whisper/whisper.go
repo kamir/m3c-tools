@@ -64,7 +64,11 @@ func parseTimestamp(s string) float64 {
 
 // VenvDir returns the path to the m3c-tools Python virtual environment.
 func VenvDir() string {
-	return filepath.Join(os.Getenv("HOME"), ".m3c-tools", "venv")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "."
+	}
+	return filepath.Join(home, ".m3c-tools", "venv")
 }
 
 // VenvWhisperPath returns the path to the whisper binary in the m3c-tools venv.
@@ -84,10 +88,11 @@ func FindBinary() (string, error) {
 		return path, nil
 	}
 	// Priority 3: common install locations
+	home, _ := os.UserHomeDir()
 	candidates := []string{
 		"/opt/homebrew/bin/whisper",
 		"/usr/local/bin/whisper",
-		filepath.Join(os.Getenv("HOME"), ".local/bin/whisper"),
+		filepath.Join(home, ".local", "bin", "whisper"),
 	}
 	for _, c := range candidates {
 		if fileExists(c) {

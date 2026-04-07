@@ -19,7 +19,7 @@ import (
 func defaultLogPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "/tmp/m3c-tools.log"
+		return filepath.Join(os.TempDir(), "m3c-tools.log")
 	}
 	return filepath.Join(home, ".m3c-tools", "m3c-tools.log")
 }

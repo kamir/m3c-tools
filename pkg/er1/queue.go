@@ -12,7 +12,11 @@ import (
 // DefaultQueuePath returns the default path for the retry queue file (~/.m3c-tools/queue.json).
 // It creates the ~/.m3c-tools/ directory if it doesn't exist.
 func DefaultQueuePath() string {
-	dir := filepath.Join(os.Getenv("HOME"), ".m3c-tools")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "."
+	}
+	dir := filepath.Join(home, ".m3c-tools")
 	os.MkdirAll(dir, 0700)
 	return filepath.Join(dir, "queue.json")
 }

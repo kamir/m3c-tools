@@ -26,7 +26,7 @@ func LoadConfig() *Config {
 func defaultTokenPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "/tmp/plaud-session.json"
+		return filepath.Join(os.TempDir(), "plaud-session.json")
 	}
 	return filepath.Join(home, ".m3c-tools", "plaud-session.json")
 }

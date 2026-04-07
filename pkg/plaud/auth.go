@@ -304,9 +304,10 @@ func findChrome() string {
 			}
 		}
 	case "darwin":
+		darwinHome, _ := os.UserHomeDir()
 		candidates := []string{
 			"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-			filepath.Join(os.Getenv("HOME"), "Applications", "Google Chrome.app", "Contents", "MacOS", "Google Chrome"),
+			filepath.Join(darwinHome, "Applications", "Google Chrome.app", "Contents", "MacOS", "Google Chrome"),
 		}
 		for _, p := range candidates {
 			if _, err := os.Stat(p); err == nil {

@@ -76,7 +76,7 @@ func main() {
 	// The setup wizard writes ER1_API_KEY to ~/.m3c-tools.env, but profile
 	// templates may have it empty. LoadDotenv only sets vars that are not
 	// already set, so profile values take precedence.
-	home := os.Getenv("HOME")
+	home, _ := os.UserHomeDir()
 	pm := config.NewProfileManager()
 	if activeProfile, err := pm.ActiveProfile(); err == nil {
 		_ = pm.ApplyProfile(activeProfile)
@@ -710,7 +710,7 @@ func cmdSetup(args []string) {
 		}
 	}
 
-	home := os.Getenv("HOME")
+	home, _ := os.UserHomeDir()
 	dataDir := filepath.Join(home, ".m3c-tools")
 	venvDir := whisper.VenvDir()
 	whisperPath := whisper.VenvWhisperPath()
@@ -1056,7 +1056,8 @@ func cmdRetry(args []string) {
 // -- schedule command --
 
 func defaultExportsDBPath() string {
-	dir := filepath.Join(os.Getenv("HOME"), ".m3c-tools")
+	home, _ := os.UserHomeDir()
+	dir := filepath.Join(home, ".m3c-tools")
 	os.MkdirAll(dir, 0700)
 	return filepath.Join(dir, "exports.db")
 }
@@ -2061,7 +2062,8 @@ func cmdImportReset(args []string) {
 }
 
 func defaultFilesDBPath() string {
-	dir := filepath.Join(os.Getenv("HOME"), ".m3c-tools")
+	home, _ := os.UserHomeDir()
+	dir := filepath.Join(home, ".m3c-tools")
 	os.MkdirAll(dir, 0700)
 	return filepath.Join(dir, "tracking.db")
 }
@@ -4306,11 +4308,12 @@ func maybePreloadWhisper() {
 		// of running full inference on a silent WAV took 3+ minutes on CPU and
 		// the in-process model cache was discarded when the subprocess exited.
 		// Reading the file is enough to populate the OS page cache.
-		modelPath := filepath.Join(os.Getenv("HOME"), ".cache", "whisper", model+".pt")
+		whisperHome, _ := os.UserHomeDir()
+		modelPath := filepath.Join(whisperHome, ".cache", "whisper", model+".pt")
 		// Try versioned names (large-v3.pt, large-v2.pt, large-v1.pt).
 		if _, err := os.Stat(modelPath); os.IsNotExist(err) {
 			for _, suffix := range []string{"-v3.pt", "-v2.pt", "-v1.pt"} {
-				candidate := filepath.Join(os.Getenv("HOME"), ".cache", "whisper", model+suffix)
+				candidate := filepath.Join(whisperHome, ".cache", "whisper", model+suffix)
 				if _, serr := os.Stat(candidate); serr == nil {
 					modelPath = candidate
 					break
