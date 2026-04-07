@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 )
 
@@ -280,5 +282,215 @@ func TestCheckRecordings_NetworkError(t *testing.T) {
 	}
 	if result != nil {
 		t.Errorf("expected nil result on network failure, got: %+v", result)
+	}
+}
+
+func TestCheckRecordings_AuthUsesBearer(t *testing.T) {
+	// When ER1_DEVICE_TOKEN is set, ApplyAuth should use Bearer instead of X-API-KEY.
+	t.Setenv("ER1_DEVICE_TOKEN", "test-device-token-xyz")
+	defer os.Unsetenv("ER1_DEVICE_TOKEN")
+
+	var gotAuthHeader string
+	var gotAPIKeyHeader string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuthHeader = r.Header.Get("Authorization")
+		gotAPIKeyHeader = r.Header.Get("X-API-KEY")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(SyncCheckResult{
+			Synced:   map[string]SyncedInfo{},
+			Unsynced: []string{"rec-001"},
+		})
+	}))
+	defer srv.Close()
+
+	client := &SyncAPIClient{
+		baseURL:    srv.URL,
+		apiKey:     "fallback-api-key",
+		userID:     "test-user",
+		deviceName: "test-device",
+		client:     srv.Client(),
+	}
+
+	result, err := client.CheckRecordings("plaud-abc", []string{"rec-001"})
+	if err != nil {
+		t.Fatalf("CheckRecordings returned error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("CheckRecordings returned nil result")
+	}
+
+	// Bearer token should take priority over API key.
+	if gotAuthHeader != "Bearer test-device-token-xyz" {
+		t.Errorf("Authorization header = %q, want 'Bearer test-device-token-xyz'", gotAuthHeader)
+	}
+	// X-API-KEY should NOT be set when device token is available.
+	if gotAPIKeyHeader != "" {
+		t.Errorf("X-API-KEY header = %q, want empty (Bearer takes priority)", gotAPIKeyHeader)
+	}
+}
+
+func TestRegisterMapping_AuthUsesBearer(t *testing.T) {
+	// Verify RegisterMapping also uses Bearer auth when device token is set.
+	t.Setenv("ER1_DEVICE_TOKEN", "mapping-bearer-token")
+	defer os.Unsetenv("ER1_DEVICE_TOKEN")
+
+	var gotAuthHeader string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuthHeader = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer srv.Close()
+
+	client := &SyncAPIClient{
+		baseURL:    srv.URL,
+		apiKey:     "fallback-key",
+		userID:     "user",
+		deviceName: "dev",
+		client:     srv.Client(),
+	}
+
+	err := client.RegisterMapping(SyncMapping{
+		PlaudAccountID:   "plaud-abc",
+		PlaudRecordingID: "rec-001",
+		ER1DocID:         "doc-001",
+	})
+	if err != nil {
+		t.Fatalf("RegisterMapping returned error: %v", err)
+	}
+	if gotAuthHeader != "Bearer mapping-bearer-token" {
+		t.Errorf("Authorization = %q, want 'Bearer mapping-bearer-token'", gotAuthHeader)
+	}
+}
+
+func TestRegisterMapping_NetworkError(t *testing.T) {
+	// Point at an invalid URL to simulate network error.
+	client := &SyncAPIClient{
+		baseURL:    "http://127.0.0.1:1", // port 1 is almost certainly closed
+		apiKey:     "key",
+		userID:     "user",
+		deviceName: "dev",
+		client:     &http.Client{},
+	}
+
+	err := client.RegisterMapping(SyncMapping{PlaudRecordingID: "rec-001"})
+	// RegisterMapping should return an error on network failure (not panic).
+	if err == nil {
+		t.Error("expected error on network failure, got nil")
+	}
+	if !strings.Contains(err.Error(), "unreachable") {
+		t.Errorf("error should mention 'unreachable', got: %v", err)
+	}
+}
+
+func TestCheckRecordings_VerifiesQueryParams(t *testing.T) {
+	// Verify that the correct endpoint and query parameters are used.
+	var gotPath string
+	var gotAccountID string
+	var gotRecordingIDs string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotAccountID = r.URL.Query().Get("plaud_account_id")
+		gotRecordingIDs = r.URL.Query().Get("recording_ids")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(SyncCheckResult{
+			Synced:   map[string]SyncedInfo{},
+			Unsynced: []string{"a", "b"},
+		})
+	}))
+	defer srv.Close()
+
+	client := &SyncAPIClient{
+		baseURL:    srv.URL,
+		apiKey:     "key",
+		userID:     "user",
+		deviceName: "dev",
+		client:     srv.Client(),
+	}
+
+	_, err := client.CheckRecordings("plaud-test-account", []string{"a", "b"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotPath != "/api/plaud-sync/check" {
+		t.Errorf("path = %q, want /api/plaud-sync/check", gotPath)
+	}
+	if gotAccountID != "plaud-test-account" {
+		t.Errorf("plaud_account_id = %q, want 'plaud-test-account'", gotAccountID)
+	}
+	if gotRecordingIDs != "a,b" {
+		t.Errorf("recording_ids = %q, want 'a,b'", gotRecordingIDs)
+	}
+}
+
+func TestRegisterMapping_VerifiesPOSTBody(t *testing.T) {
+	// Verify RegisterMapping sends correct JSON fields in the POST body.
+	var received SyncMapping
+	var gotMethod string
+	var gotContentType string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotContentType = r.Header.Get("Content-Type")
+		json.NewDecoder(r.Body).Decode(&received)
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer srv.Close()
+
+	client := &SyncAPIClient{
+		baseURL:    srv.URL,
+		apiKey:     "key",
+		userID:     "user",
+		deviceName: "dev",
+		client:     srv.Client(),
+	}
+
+	mapping := SyncMapping{
+		PlaudAccountID:    "plaud-xyz",
+		PlaudRecordingID:  "rec-999",
+		ER1DocID:          "doc-456",
+		ER1ContextID:      "ctx-789",
+		RecordingTitle:    "Important Meeting",
+		RecordingDuration: 3600,
+		AudioFormat:       "ogg",
+		AudioSizeBytes:    2048000,
+		TranscriptLength:  15000,
+	}
+
+	err := client.RegisterMapping(mapping)
+	if err != nil {
+		t.Fatalf("RegisterMapping returned error: %v", err)
+	}
+
+	if gotMethod != "POST" {
+		t.Errorf("method = %q, want POST", gotMethod)
+	}
+	if gotContentType != "application/json" {
+		t.Errorf("Content-Type = %q, want application/json", gotContentType)
+	}
+	if received.PlaudAccountID != "plaud-xyz" {
+		t.Errorf("PlaudAccountID = %q, want 'plaud-xyz'", received.PlaudAccountID)
+	}
+	if received.PlaudRecordingID != "rec-999" {
+		t.Errorf("PlaudRecordingID = %q, want 'rec-999'", received.PlaudRecordingID)
+	}
+	if received.ER1DocID != "doc-456" {
+		t.Errorf("ER1DocID = %q, want 'doc-456'", received.ER1DocID)
+	}
+	if received.ER1ContextID != "ctx-789" {
+		t.Errorf("ER1ContextID = %q, want 'ctx-789'", received.ER1ContextID)
+	}
+	if received.RecordingTitle != "Important Meeting" {
+		t.Errorf("RecordingTitle = %q, want 'Important Meeting'", received.RecordingTitle)
+	}
+	if received.RecordingDuration != 3600 {
+		t.Errorf("RecordingDuration = %d, want 3600", received.RecordingDuration)
+	}
+	if received.AudioFormat != "ogg" {
+		t.Errorf("AudioFormat = %q, want 'ogg'", received.AudioFormat)
+	}
+	if received.AudioSizeBytes != 2048000 {
+		t.Errorf("AudioSizeBytes = %d, want 2048000", received.AudioSizeBytes)
+	}
+	if received.TranscriptLength != 15000 {
+		t.Errorf("TranscriptLength = %d, want 15000", received.TranscriptLength)
 	}
 }

@@ -144,6 +144,8 @@ func main() {
 		cmdSettings()
 	case "menubar":
 		cmdMenubar(os.Args[2:])
+	case "login":
+		cmdLogin()
 	case "version", "--version", "-v":
 		printVersion()
 	case "help", "--help", "-h":
@@ -184,6 +186,7 @@ Commands:
     --duration <secs>      Recording duration (default: 5)
 
   devices                List audio input devices
+  login                  Login via browser and link device
   doctor                 Run connectivity & config diagnostics
   check-er1              Test ER1 server connectivity (use 'doctor' for full check)
 
@@ -3316,6 +3319,27 @@ func completeER1Login(app *menubar.App, contextID string, result *loginCallbackR
 
 	log.Printf("[auth] login success context_id=%s", truncateForLog(ctxID, 64))
 	app.Notify("ER1 Login", fmt.Sprintf("Linked account: %s", ctxID))
+
+	// Auto-pair desktop device (SPEC-0126).
+	go func() {
+		pairCfg := er1.LoadConfig()
+		pairBaseURL := er1BaseURL(pairCfg.APIURL)
+		if pairBaseURL == "" {
+			return
+		}
+		hostname, _ := os.Hostname()
+		if pairErr := er1.PairDevice(context.Background(), pairBaseURL, pairCfg.APIKey, er1.PairRequest{
+			DeviceType:    "m3c-desktop",
+			DeviceID:      hostname,
+			DeviceName:    hostname + " (m3c-tools)",
+			ClientVersion: version,
+		}); pairErr != nil {
+			log.Printf("[device] auto-pair failed (non-fatal): %v", pairErr)
+		} else {
+			log.Printf("[device] desktop paired: %s", hostname)
+		}
+	}()
+
 	return true
 }
 
@@ -3336,6 +3360,118 @@ type loginCallbackResult struct {
 	UserName    string
 	UserEmail   string
 	Err         error
+}
+
+// cmdLogin provides a CLI-only login flow (no menubar required).
+// Reuses the callback server pattern from menubarLoginER1 but prints to stdout.
+func cmdLogin() {
+	cfg := er1.LoadConfig()
+	baseURL := er1BaseURL(cfg.APIURL)
+	if baseURL == "" {
+		fmt.Fprintln(os.Stderr, "Error: cannot derive ER1 base URL from ER1_API_URL")
+		fmt.Fprintln(os.Stderr, "Run 'm3c-tools setup' first or set ER1_API_URL in your profile.")
+		os.Exit(1)
+	}
+
+	callbackServer, callbackURL, resultCh, closeFn, err := startER1LoginCallbackServer()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: could not start callback server: %v\n", err)
+		os.Exit(1)
+	}
+	_ = callbackServer
+	defer func() {
+		go func() {
+			time.Sleep(5 * time.Second)
+			closeFn()
+		}()
+	}()
+
+	loginURL := fmt.Sprintf("%s/v2/signin?next=%s", baseURL, neturl.QueryEscape(callbackURL))
+	fmt.Printf("Opening browser for login...\n")
+	fmt.Printf("If the browser does not open, visit:\n  %s\n\n", loginURL)
+	if err := openURL(loginURL); err != nil {
+		log.Printf("[auth] failed to open browser: %v", err)
+	}
+	fmt.Println("Waiting for login (5 min timeout)...")
+
+	deadline := time.NewTimer(5 * time.Minute)
+	defer deadline.Stop()
+
+	for {
+		select {
+		case result := <-resultCh:
+			if result.Err != nil {
+				fmt.Fprintf(os.Stderr, "Login error: %v\n", result.Err)
+				os.Exit(1)
+			}
+			ctxID := strings.TrimSpace(result.ContextID)
+			if ctxID == "" {
+				continue
+			}
+
+			// Persist context_id.
+			setRuntimeER1Login(ctxID)
+			if err := savePersistedER1Session(ctxID); err != nil {
+				log.Printf("[auth] persist session failed: %v", err)
+			}
+			os.Setenv("ER1_CONTEXT_ID", ctxID)
+
+			// Also save to active profile.
+			pm := config.NewProfileManager()
+			active := pm.ActiveProfileName()
+			if active != "" {
+				if profile, pErr := pm.GetProfile(active); pErr == nil {
+					profile.Vars["ER1_CONTEXT_ID"] = ctxID
+					if saveErr := pm.CreateProfile(active, profile.Description, profile.Vars); saveErr != nil {
+						log.Printf("[auth] failed to persist context_id to profile %s: %v", active, saveErr)
+					} else {
+						fmt.Printf("Context ID saved to profile %q.\n", active)
+					}
+				}
+			}
+
+			// Save device token if received (SPEC-0127).
+			if result.DeviceToken != "" {
+				dt := &auth.DeviceToken{
+					Token:     result.DeviceToken,
+					UserID:    result.UserID,
+					ContextID: ctxID,
+					UserName:  result.UserName,
+					UserEmail: result.UserEmail,
+					DeviceID:  auth.DeviceID(),
+					SavedAt:   time.Now().UTC().Format(time.RFC3339),
+				}
+				if err := auth.Save(dt); err != nil {
+					log.Printf("[auth] save device token failed: %v", err)
+				} else {
+					os.Setenv("ER1_DEVICE_TOKEN", result.DeviceToken)
+					fmt.Printf("Device token saved for user=%s device=%s\n", truncateForLog(result.UserID, 20), auth.DeviceID())
+				}
+			}
+
+			// Auto-pair desktop device (SPEC-0126).
+			go func() {
+				hostname, _ := os.Hostname()
+				if pairErr := er1.PairDevice(context.Background(), baseURL, cfg.APIKey, er1.PairRequest{
+					DeviceType:    "m3c-desktop",
+					DeviceID:      hostname,
+					DeviceName:    hostname + " (m3c-tools)",
+					ClientVersion: version,
+				}); pairErr != nil {
+					log.Printf("[device] auto-pair failed (non-fatal): %v", pairErr)
+				} else {
+					log.Printf("[device] desktop paired: %s", hostname)
+				}
+			}()
+
+			fmt.Printf("\nLogin successful! Context: %s\n", ctxID)
+			return
+
+		case <-deadline.C:
+			fmt.Fprintln(os.Stderr, "Login timed out (5 minutes). Please try again.")
+			os.Exit(1)
+		}
+	}
 }
 
 func startER1LoginCallbackServer() (*http.Server, string, <-chan loginCallbackResult, func(), error) {
@@ -4906,6 +5042,30 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 				Done: i + 1, Success: summary.Success, Failed: summary.Failed,
 				CurrentFile: itemName, Phase: menubar.BulkPhaseDone,
 			})
+		}
+	}
+
+	// Device pairing + heartbeat (SPEC-0126).
+	if summary.Success > 0 {
+		pairBaseURL := er1BaseURL(er1Cfg.APIURL)
+		if pairBaseURL != "" {
+			hostname, _ := os.Hostname()
+			// Pair Plaud device on first sync.
+			_ = er1.PairDevice(context.Background(), pairBaseURL, er1Cfg.APIKey, er1.PairRequest{
+				DeviceType:    "plaud",
+				DeviceID:      hostname,
+				DeviceName:    "Plaud.ai Recorder",
+				ClientVersion: version,
+			})
+			// Heartbeat with sync count.
+			if hbErr := er1.DeviceHeartbeat(context.Background(), pairBaseURL, er1Cfg.APIKey, er1.HeartbeatRequest{
+				DeviceType:       "plaud",
+				DeviceID:         hostname,
+				ItemsSyncedDelta: summary.Success,
+				ClientVersion:    version,
+			}); hbErr != nil {
+				log.Printf("[device] plaud heartbeat failed (non-fatal): %v", hbErr)
+			}
 		}
 	}
 

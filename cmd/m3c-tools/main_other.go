@@ -27,6 +27,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/auth"
 	"github.com/kamir/m3c-tools/pkg/config"
 	"github.com/kamir/m3c-tools/pkg/er1"
 	"github.com/kamir/m3c-tools/pkg/impression"
@@ -63,6 +64,16 @@ func main() {
 		}
 	}
 
+	// Load saved device token if available (SPEC-0127).
+	// This enables uploads via Bearer auth without API key.
+	if cfg := er1.LoadConfig(); cfg.ContextID != "" {
+		if dt, err := auth.Load(auth.DeviceID(), strings.SplitN(cfg.ContextID, "___", 2)[0]); err == nil && dt != nil && !dt.IsExpired() {
+			os.Setenv("ER1_DEVICE_TOKEN", dt.Token)
+			os.Setenv("ER1_CONTEXT_ID", dt.ContextID)
+			log.Printf("[auth] device token loaded for user=%s", truncateForLog(dt.UserID, 20))
+		}
+	}
+
 	switch os.Args[1] {
 	case "config":
 		cmdConfig(os.Args[2:])
@@ -74,6 +85,10 @@ func main() {
 		cmdSetup(os.Args[2:])
 	case "check-er1":
 		cmdCheckER1()
+	case "doctor":
+		cmdDoctor()
+	case "login":
+		cmdLogin()
 	case "menubar":
 		cmdTrayApp(os.Args[2:])
 	case "record", "devices":
@@ -522,6 +537,31 @@ func cmdPlaudSync(recordingID string) {
 	// Run the sync pipeline and get stats back (FR-0011).
 	pipelineStats := runPlaudSyncPipeline(client, cfg, ids, dbPath, session.Token, stats)
 
+	// Device pairing + heartbeat (SPEC-0126).
+	if pipelineStats.UploadedNew > 0 {
+		er1Cfg := er1.LoadConfig()
+		pairBaseURL := trayER1BaseURL(er1Cfg.APIURL)
+		if pairBaseURL != "" {
+			hostname, _ := os.Hostname()
+			// Pair Plaud device on first sync.
+			_ = er1.PairDevice(context.Background(), pairBaseURL, er1Cfg.APIKey, er1.PairRequest{
+				DeviceType:    "plaud",
+				DeviceID:      hostname,
+				DeviceName:    "Plaud.ai Recorder",
+				ClientVersion: version,
+			})
+			// Heartbeat with sync count.
+			if hbErr := er1.DeviceHeartbeat(context.Background(), pairBaseURL, er1Cfg.APIKey, er1.HeartbeatRequest{
+				DeviceType:       "plaud",
+				DeviceID:         hostname,
+				ItemsSyncedDelta: pipelineStats.UploadedNew,
+				ClientVersion:    version,
+			}); hbErr != nil {
+				log.Printf("[device] plaud heartbeat failed (non-fatal): %v", hbErr)
+			}
+		}
+	}
+
 	// Print summary (FR-0009).
 	fmt.Print(pipelineStats.FormatSummary())
 }
@@ -734,6 +774,184 @@ func cmdCheckER1() {
 	}
 }
 
+// cmdLogin runs the CLI login flow: starts a local callback server,
+// opens the browser to /v2/signin, waits for the callback with context_id
+// and device token. Same flow as the tray menubar login but for headless CLI use.
+func cmdLogin() {
+	cfg := er1.LoadConfig()
+	baseURL := trayER1BaseURL(cfg.APIURL)
+	if baseURL == "" {
+		fmt.Fprintln(os.Stderr, "Error: cannot derive ER1 base URL from ER1_API_URL")
+		fmt.Fprintln(os.Stderr, "Run 'm3c-tools setup' first or set ER1_API_URL in your profile.")
+		os.Exit(1)
+	}
+
+	// Start local callback server on a random port.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: could not start callback server: %v\n", err)
+		os.Exit(1)
+	}
+	nonce := make([]byte, 16)
+	if _, err := rand.Read(nonce); err != nil {
+		ln.Close()
+		fmt.Fprintf(os.Stderr, "Error: could not generate callback nonce: %v\n", err)
+		os.Exit(1)
+	}
+	callbackPath := "/m3c-login-" + hex.EncodeToString(nonce)
+	addr := ln.Addr().String()
+	callbackURL := "http://" + addr + callbackPath
+
+	type loginResult struct {
+		ContextID   string
+		DeviceToken string
+		UserID      string
+		UserName    string
+		UserEmail   string
+		Err         error
+	}
+	resultCh := make(chan loginResult, 1)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(callbackPath, func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		ctxID := strings.TrimSpace(q.Get("context_id"))
+		if ctxID == "" {
+			ctxID = strings.TrimSpace(q.Get("user_id"))
+		}
+		if ctxID == "" {
+			ctxID = strings.TrimSpace(q.Get("uid"))
+		}
+		select {
+		case resultCh <- loginResult{
+			ContextID:   ctxID,
+			DeviceToken: strings.TrimSpace(q.Get("device_token")),
+			UserID:      strings.TrimSpace(q.Get("user_id")),
+			UserName:    strings.TrimSpace(q.Get("user_name")),
+			UserEmail:   strings.TrimSpace(q.Get("user_email")),
+		}:
+		default:
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprintf(w, `<!DOCTYPE html>
+<html><head><title>Login Successful</title>
+<style>body{font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#1a1a2e;color:#fff}
+.card{text-align:center;padding:2rem;border-radius:12px;background:#16213e;box-shadow:0 4px 20px rgba(0,0,0,0.3)}
+h2{color:#7c3aed}p{color:#94a3b8}</style></head>
+<body><div class="card"><h2>&#10003; Device Connected</h2>
+<p>m3c-tools is now linked to your account.</p>
+<p>You can close this tab and return to the terminal.</p></div></body></html>`)
+	})
+
+	srv := &http.Server{Addr: addr, Handler: mux}
+	go func() {
+		if serveErr := srv.Serve(ln); serveErr != nil && serveErr != http.ErrServerClosed {
+			log.Printf("[auth] callback server error: %v", serveErr)
+			select {
+			case resultCh <- loginResult{Err: serveErr}:
+			default:
+			}
+		}
+	}()
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(ctx)
+	}()
+
+	loginURL := fmt.Sprintf("%s/v2/signin?next=%s", baseURL, neturl.QueryEscape(callbackURL))
+	fmt.Printf("Opening browser for login...\n")
+	fmt.Printf("If the browser does not open, visit:\n  %s\n\n", loginURL)
+	openBrowserURL(loginURL)
+	fmt.Println("Waiting for login (5 min timeout)...")
+
+	deadline := time.NewTimer(5 * time.Minute)
+	defer deadline.Stop()
+
+	for {
+		select {
+		case result := <-resultCh:
+			if result.Err != nil {
+				fmt.Fprintf(os.Stderr, "Login error: %v\n", result.Err)
+				os.Exit(1)
+			}
+			ctxID := strings.TrimSpace(result.ContextID)
+			if ctxID == "" {
+				continue
+			}
+
+			// Persist context_id to the active profile.
+			pm := config.NewProfileManager()
+			active := pm.ActiveProfileName()
+			if active != "" {
+				if profile, pErr := pm.GetProfile(active); pErr == nil {
+					profile.Vars["ER1_CONTEXT_ID"] = ctxID
+					if saveErr := pm.CreateProfile(active, profile.Description, profile.Vars); saveErr != nil {
+						log.Printf("[auth] failed to persist context_id to profile %s: %v", active, saveErr)
+					} else {
+						fmt.Printf("Context ID saved to profile %q.\n", active)
+					}
+				}
+			}
+			os.Setenv("ER1_CONTEXT_ID", ctxID)
+
+			// Save device token if received from aims-core callback (SPEC-0127).
+			if result.DeviceToken != "" {
+				dt := &auth.DeviceToken{
+					Token:     result.DeviceToken,
+					UserID:    result.UserID,
+					ContextID: ctxID,
+					UserName:  result.UserName,
+					UserEmail: result.UserEmail,
+					DeviceID:  auth.DeviceID(),
+					SavedAt:   time.Now().UTC().Format(time.RFC3339),
+				}
+				if err := auth.Save(dt); err != nil {
+					log.Printf("[auth] save device token failed: %v", err)
+				} else {
+					os.Setenv("ER1_DEVICE_TOKEN", result.DeviceToken)
+					fmt.Printf("Device token saved for user=%s device=%s\n", truncateForLog(result.UserID, 20), auth.DeviceID())
+				}
+			}
+
+			// Auto-pair desktop device (SPEC-0126).
+			go func() {
+				pairBaseURL := trayER1BaseURL(cfg.APIURL)
+				if pairBaseURL == "" {
+					return
+				}
+				hostname, _ := os.Hostname()
+				if pairErr := er1.PairDevice(context.Background(), pairBaseURL, cfg.APIKey, er1.PairRequest{
+					DeviceType:    "m3c-desktop",
+					DeviceID:      hostname,
+					DeviceName:    hostname + " (m3c-tools)",
+					ClientVersion: version,
+				}); pairErr != nil {
+					log.Printf("[device] auto-pair failed (non-fatal): %v", pairErr)
+				} else {
+					log.Printf("[device] desktop paired: %s", hostname)
+				}
+			}()
+
+			fmt.Printf("\nLogin successful! Context: %s\n", ctxID)
+			return
+
+		case <-deadline.C:
+			fmt.Fprintln(os.Stderr, "Login timed out (5 minutes). Please try again.")
+			os.Exit(1)
+		}
+	}
+}
+
+// truncateForLog truncates a string for safe log output, preventing
+// excessively long values from flooding logs.
+func truncateForLog(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
 func printUsage() {
 	fmt.Println(`m3c-tools — Multi-Modal-Memory Tools (CLI mode)
 
@@ -754,7 +972,9 @@ Available commands (cross-platform):
     list                  List all recordings
     sync <id>             Download + upload to ER1
     sync all              Sync all unsynced recordings
-  check-er1              Check ER1 server connectivity
+  login                  Sign in to ER1 via browser (device token auth)
+  doctor                 Run connectivity & config diagnostics
+  check-er1              Check ER1 server connectivity (use 'doctor' for full check)
   help                   Show this help
 
 Cross-platform commands:
@@ -1341,6 +1561,26 @@ func completeTrayLogin(app *tray.TrayApp, contextID string) {
 	go func() {
 		time.Sleep(15 * time.Second)
 		app.ResetTooltip()
+	}()
+
+	// Auto-pair desktop device (SPEC-0126).
+	go func() {
+		cfg := er1.LoadConfig()
+		pairBaseURL := trayER1BaseURL(cfg.APIURL)
+		if pairBaseURL == "" {
+			return
+		}
+		hostname, _ := os.Hostname()
+		if pairErr := er1.PairDevice(context.Background(), pairBaseURL, cfg.APIKey, er1.PairRequest{
+			DeviceType:    "m3c-desktop",
+			DeviceID:      hostname,
+			DeviceName:    hostname + " (m3c-tools)",
+			ClientVersion: version,
+		}); pairErr != nil {
+			log.Printf("[device] auto-pair failed (non-fatal): %v", pairErr)
+		} else {
+			log.Printf("[device] desktop paired: %s", hostname)
+		}
 	}()
 }
 

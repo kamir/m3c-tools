@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -18,6 +19,7 @@ import (
 	"github.com/kamir/m3c-tools/pkg/config"
 	"github.com/kamir/m3c-tools/pkg/diag"
 	"github.com/kamir/m3c-tools/pkg/er1"
+	"github.com/kamir/m3c-tools/pkg/plaud"
 )
 
 func cmdDoctor() {
@@ -27,6 +29,8 @@ func cmdDoctor() {
 	report.Sections = append(report.Sections, doctorAuth())
 	report.Sections = append(report.Sections, doctorConfigConsistency())
 	report.Sections = append(report.Sections, doctorConnectivity())
+	report.Sections = append(report.Sections, doctorPlaud())
+	report.Sections = append(report.Sections, doctorDevices())
 
 	report.Print()
 
@@ -488,4 +492,143 @@ func maskID(id string) string {
 		return id
 	}
 	return id[:5] + "..." + id[len(id)-3:]
+}
+
+// doctorPlaud checks Plaud token file and plaud-sync API reachability.
+func doctorPlaud() diag.Section {
+	s := diag.Section{Title: "Plaud"}
+
+	// Check Plaud token file.
+	plaudCfg := plaud.LoadConfig()
+	tokenPath := plaudCfg.TokenPath
+	if _, err := os.Stat(tokenPath); os.IsNotExist(err) {
+		s.Checks = append(s.Checks, diag.Check{
+			Name: "Plaud token", Status: diag.Skipped,
+			Detail: "not configured — run 'm3c-tools plaud auth login'",
+		})
+	} else {
+		// Try to load and validate the token.
+		ts, err := plaud.LoadToken(tokenPath)
+		if err != nil {
+			s.Checks = append(s.Checks, diag.Check{
+				Name: "Plaud token", Status: diag.Fail,
+				Detail: err.Error(),
+			})
+		} else {
+			age := time.Since(ts.SavedAt).Truncate(time.Hour)
+			s.Checks = append(s.Checks, diag.Check{
+				Name: "Plaud token", Status: diag.OK,
+				Detail: fmt.Sprintf("valid (%s old, saved %s)", age, ts.SavedAt.Format("2006-01-02")),
+			})
+		}
+	}
+
+	// Check plaud-sync API reachability (uses ER1 base URL).
+	cfg := er1.LoadConfig()
+	baseURL := er1.BaseURLFromConfig(cfg)
+	if baseURL == "" || !auth.HasAuth(cfg.APIKey) {
+		s.Checks = append(s.Checks, diag.Check{
+			Name: "Plaud sync API", Status: diag.Skipped,
+			Detail: "no ER1 auth — cannot check sync endpoint",
+		})
+	} else {
+		client := &http.Client{Timeout: 10 * time.Second}
+		if !cfg.VerifySSL {
+			client.Transport = &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			}
+		}
+		req, err := http.NewRequest("GET", baseURL+"/api/plaud-sync/check", nil)
+		if err != nil {
+			s.Checks = append(s.Checks, diag.Check{
+				Name: "Plaud sync API", Status: diag.Fail,
+				Detail: fmt.Sprintf("request error: %v", err),
+			})
+		} else {
+			auth.ApplyAuth(req, cfg.APIKey)
+			start := time.Now()
+			resp, err := client.Do(req)
+			elapsed := time.Since(start)
+			if err != nil {
+				s.Checks = append(s.Checks, diag.Check{
+					Name: "Plaud sync API", Status: diag.Warn,
+					Detail: fmt.Sprintf("unreachable (%v)", err),
+				})
+			} else {
+				io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+				resp.Body.Close()
+				if resp.StatusCode >= 200 && resp.StatusCode < 400 {
+					s.Checks = append(s.Checks, diag.Check{
+						Name: "Plaud sync API", Status: diag.OK,
+						Detail: fmt.Sprintf("HTTP %d (%s)", resp.StatusCode, elapsed.Round(time.Millisecond)),
+					})
+				} else {
+					s.Checks = append(s.Checks, diag.Check{
+						Name: "Plaud sync API", Status: diag.Warn,
+						Detail: fmt.Sprintf("HTTP %d (%s)", resp.StatusCode, elapsed.Round(time.Millisecond)),
+					})
+				}
+			}
+		}
+	}
+
+	return s
+}
+
+// doctorDevices checks device pairing status via the ER1 devices API.
+func doctorDevices() diag.Section {
+	s := diag.Section{Title: "Device Pairing"}
+
+	cfg := er1.LoadConfig()
+	baseURL := er1.BaseURLFromConfig(cfg)
+
+	if !auth.HasAuth(cfg.APIKey) {
+		s.Checks = append(s.Checks, diag.Check{
+			Name: "Paired devices", Status: diag.Skipped,
+			Detail: "no auth — run 'm3c-tools login' first",
+		})
+		return s
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	devices, err := er1.ListDevices(ctx, baseURL, cfg.APIKey)
+	if err != nil {
+		s.Checks = append(s.Checks, diag.Check{
+			Name: "Paired devices", Status: diag.Warn,
+			Detail: fmt.Sprintf("cannot list: %v", err),
+		})
+		return s
+	}
+
+	if len(devices) == 0 {
+		s.Checks = append(s.Checks, diag.Check{
+			Name: "Paired devices", Status: diag.Warn,
+			Detail: "none — run 'm3c-tools login' to pair this device",
+		})
+	} else {
+		s.Checks = append(s.Checks, diag.Check{
+			Name: "Paired devices", Status: diag.OK,
+			Detail: fmt.Sprintf("%d device(s)", len(devices)),
+		})
+		for _, d := range devices {
+			detail := d.DeviceType
+			if d.DeviceName != "" {
+				detail = d.DeviceName + " (" + d.DeviceType + ")"
+			}
+			if d.LastSyncAt != "" {
+				detail += fmt.Sprintf(" last sync: %s", d.LastSyncAt)
+			}
+			status := diag.OK
+			if d.Status == "inactive" {
+				status = diag.Warn
+			}
+			s.Checks = append(s.Checks, diag.Check{
+				Name: "  " + d.DeviceType, Status: status, Detail: detail,
+			})
+		}
+	}
+
+	return s
 }
