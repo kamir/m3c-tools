@@ -372,10 +372,28 @@ func cmdPlaud(args []string) {
 		cmdPlaudList()
 	case "sync":
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud sync <recording_id|all>")
+			fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud sync <#|ID|--all> [-f]")
+			fmt.Fprintln(os.Stderr, "  -f    Force re-sync: re-download and re-upload (overwrite)")
 			os.Exit(1)
 		}
-		cmdPlaudSync(args[1])
+		syncArg := args[1]
+		force := false
+		for _, a := range args[1:] {
+			if a == "-f" || a == "--force" {
+				force = true
+			}
+		}
+		if syncArg == "-f" || syncArg == "--force" {
+			if len(args) < 3 {
+				fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud sync <#|ID|--all> -f")
+				os.Exit(1)
+			}
+			syncArg = args[2]
+		}
+		if syncArg == "--all" {
+			syncArg = "all"
+		}
+		cmdPlaudSync(syncArg, force)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown plaud subcommand: %s\n", args[0])
 		os.Exit(1)
@@ -461,7 +479,7 @@ func cmdPlaudList() {
 
 // cmdPlaudSync syncs a recording (or all) to ER1 with detailed statistics (FR-0009),
 // two-layer duplicate prevention (FR-0010), and a summary for tray notifications (FR-0011).
-func cmdPlaudSync(recordingID string) {
+func cmdPlaudSync(recordingID string, force bool) {
 	cfg := plaud.LoadConfig()
 	session, err := plaud.LoadToken(cfg.TokenPath)
 	if err != nil {
@@ -486,6 +504,10 @@ func cmdPlaudSync(recordingID string) {
 		fmt.Printf("Resolved #%d → %s\n", idx, recordingID)
 	}
 
+	if force {
+		fmt.Println("Force mode: re-downloading and re-uploading (overwriting existing)")
+	}
+
 	dbPath := defaultFilesDBPath()
 
 	stats := plaud.NewSyncStats()
@@ -499,57 +521,66 @@ func cmdPlaudSync(recordingID string) {
 		}
 		stats.LocalTotal = len(recordings)
 
-		// FR-0010 Layer 1: Local DB dedup check (runs FIRST).
-		filesDB, dbErr := tracking.OpenFilesDB(dbPath)
-		if dbErr != nil {
-			log.Printf("[plaud] warning: cannot open tracking DB: %v", dbErr)
-		}
-		for _, rec := range recordings {
-			skip := false
-			if filesDB != nil {
-				if tracked, lookupErr := filesDB.GetByPath("plaud://" + rec.ID); lookupErr == nil && tracked != nil {
-					skip = true
-					stats.LocalExisting++
-				}
-			}
-			if !skip {
+		if force {
+			// Force: sync ALL, skip dedup
+			for _, rec := range recordings {
 				ids = append(ids, rec.ID)
 			}
-		}
-		if filesDB != nil {
-			filesDB.Close()
-		}
-		stats.LocalNew = len(ids)
-
-		fmt.Printf("Found %d recordings, %d already in local DB.\n", stats.LocalTotal, stats.LocalExisting)
-
-		// FR-0010 Layer 2: Server-side dedup check (runs SECOND, catches cross-device dupes).
-		er1Cfg := er1.LoadConfig()
-		if er1Cfg.APIKey != "" && session.Token != "" && len(ids) > 0 {
-			syncAPI := plaud.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, er1Cfg.ContextID, !er1Cfg.VerifySSL)
-			plaudAccountID := plaud.DeriveAccountID(session.Token)
-			checkResult, checkErr := syncAPI.CheckRecordings(plaudAccountID, ids)
-			if checkErr == nil && checkResult != nil && len(checkResult.Synced) > 0 {
-				stats.AlreadyInER1 = len(checkResult.Synced)
-				var filtered []string
-				for _, id := range ids {
-					if _, alreadySynced := checkResult.Synced[id]; alreadySynced {
-						log.Printf("[plaud] [skip] %s already in ER1 (cross-device)", id)
-					} else {
-						filtered = append(filtered, id)
+			stats.LocalNew = len(ids)
+			fmt.Printf("Force syncing all %d recordings...\n", len(ids))
+		} else {
+			// FR-0010 Layer 1: Local DB dedup check.
+			filesDB, dbErr := tracking.OpenFilesDB(dbPath)
+			if dbErr != nil {
+				log.Printf("[plaud] warning: cannot open tracking DB: %v", dbErr)
+			}
+			for _, rec := range recordings {
+				skip := false
+				if filesDB != nil {
+					if tracked, lookupErr := filesDB.GetByPath("plaud://" + rec.ID); lookupErr == nil && tracked != nil {
+						skip = true
+						stats.LocalExisting++
 					}
 				}
-				ids = filtered
-				fmt.Printf("Server check: %d already in ER1 (cross-device dedup).\n", stats.AlreadyInER1)
+				if !skip {
+					ids = append(ids, rec.ID)
+				}
 			}
-		}
+			if filesDB != nil {
+				filesDB.Close()
+			}
+			stats.LocalNew = len(ids)
 
-		if len(ids) == 0 {
-			fmt.Println("All recordings already synced.")
-			fmt.Print(stats.FormatSummary())
-			return
+			fmt.Printf("Found %d recordings, %d already in local DB.\n", stats.LocalTotal, stats.LocalExisting)
+
+			// FR-0010 Layer 2: Server-side dedup check.
+			er1Cfg := er1.LoadConfig()
+			if er1Cfg.APIKey != "" && session.Token != "" && len(ids) > 0 {
+				syncAPI := plaud.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, er1Cfg.ContextID, !er1Cfg.VerifySSL)
+				plaudAccountID := plaud.DeriveAccountID(session.Token)
+				checkResult, checkErr := syncAPI.CheckRecordings(plaudAccountID, ids)
+				if checkErr == nil && checkResult != nil && len(checkResult.Synced) > 0 {
+					stats.AlreadyInER1 = len(checkResult.Synced)
+					var filtered []string
+					for _, id := range ids {
+						if _, alreadySynced := checkResult.Synced[id]; alreadySynced {
+							log.Printf("[plaud] [skip] %s already in ER1 (cross-device)", id)
+						} else {
+							filtered = append(filtered, id)
+						}
+					}
+					ids = filtered
+					fmt.Printf("Server check: %d already in ER1 (cross-device dedup).\n", stats.AlreadyInER1)
+				}
+			}
+
+			if len(ids) == 0 {
+				fmt.Println("All recordings already synced.")
+				fmt.Print(stats.FormatSummary())
+				return
+			}
+			fmt.Printf("Syncing %d new recordings...\n", len(ids))
 		}
-		fmt.Printf("Syncing %d new recordings...\n", len(ids))
 	} else {
 		ids = []string{recordingID}
 		stats.LocalTotal = 1

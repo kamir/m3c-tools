@@ -4584,15 +4584,28 @@ func cmdPlaud(args []string) {
 		cmdPlaudList()
 	case "sync":
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud sync <recording_id>")
-			fmt.Fprintln(os.Stderr, "       m3c-tools plaud sync --all   (sync all new recordings)")
+			fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud sync <#|ID|--all> [-f]")
+			fmt.Fprintln(os.Stderr, "  -f    Force re-sync: re-download from Plaud and re-upload to ER1")
 			os.Exit(1)
 		}
 		syncArg := args[1]
+		force := false
+		for _, a := range args[1:] {
+			if a == "-f" || a == "--force" {
+				force = true
+			}
+		}
+		if syncArg == "-f" || syncArg == "--force" {
+			if len(args) < 3 {
+				fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud sync <#|ID|--all> -f")
+				os.Exit(1)
+			}
+			syncArg = args[2]
+		}
 		if syncArg == "--all" {
 			syncArg = "all"
 		}
-		cmdPlaudSync(syncArg)
+		cmdPlaudSync(syncArg, force)
 	case "auth":
 		if len(args) < 2 {
 			fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud auth <token>")
@@ -4782,7 +4795,7 @@ func cmdPlaudList() {
 	fmt.Println("  Use: m3c-tools plaud sync <#>   or   m3c-tools plaud sync <ID>")
 }
 
-func cmdPlaudSync(recordingID string) {
+func cmdPlaudSync(recordingID string, force bool) {
 	cfg := plaud.LoadConfig()
 	session, err := plaud.LoadToken(cfg.TokenPath)
 	if err != nil {
@@ -4806,44 +4819,55 @@ func cmdPlaudSync(recordingID string) {
 		fmt.Printf("Resolved #%d → %s\n", idx, recordingID)
 	}
 
+	if force {
+		fmt.Println("Force mode: re-downloading and re-uploading (overwriting existing)")
+	}
+
 	var ids []string
 	if recordingID == "all" {
-		// Sync all recordings that haven't been synced yet.
 		recordings, listErr := client.ListRecordings()
 		if listErr != nil {
 			fmt.Fprintf(os.Stderr, "Error listing recordings: %v\n", listErr)
 			os.Exit(1)
 		}
-		// Check tracking DB to skip already-synced.
-		dbPath := defaultFilesDBPath()
-		filesDB, dbErr := tracking.OpenFilesDB(dbPath)
-		if dbErr != nil {
-			log.Printf("[plaud] warning: cannot open tracking DB: %v", dbErr)
-		}
-		for _, rec := range recordings {
-			skip := false
-			if filesDB != nil {
-				if tracked, lookupErr := filesDB.GetByPath("plaud://" + rec.ID); lookupErr == nil && tracked != nil {
-					skip = true
-				}
-			}
-			if !skip {
+		if force {
+			// Force: sync ALL recordings, ignoring tracking DB
+			for _, rec := range recordings {
 				ids = append(ids, rec.ID)
 			}
-		}
-		if filesDB != nil {
-			filesDB.Close()
-		}
-		fmt.Printf("Syncing %d new recordings (of %d total)...\n", len(ids), len(recordings))
-		if len(ids) == 0 {
-			fmt.Println("All recordings already synced.")
-			return
+			fmt.Printf("Force syncing all %d recordings...\n", len(ids))
+		} else {
+			// Normal: skip already-synced
+			dbPath := defaultFilesDBPath()
+			filesDB, dbErr := tracking.OpenFilesDB(dbPath)
+			if dbErr != nil {
+				log.Printf("[plaud] warning: cannot open tracking DB: %v", dbErr)
+			}
+			for _, rec := range recordings {
+				skip := false
+				if filesDB != nil {
+					if tracked, lookupErr := filesDB.GetByPath("plaud://" + rec.ID); lookupErr == nil && tracked != nil {
+						skip = true
+					}
+				}
+				if !skip {
+					ids = append(ids, rec.ID)
+				}
+			}
+			if filesDB != nil {
+				filesDB.Close()
+			}
+			fmt.Printf("Syncing %d new recordings (of %d total)...\n", len(ids), len(recordings))
+			if len(ids) == 0 {
+				fmt.Println("All recordings already synced.")
+				return
+			}
 		}
 	} else {
 		ids = []string{recordingID}
 	}
 
-	summary, err := runPlaudSyncPipeline(client, cfg, ids, defaultFilesDBPath(), session.Token, nil)
+	summary, err := runPlaudSyncPipeline(client, cfg, ids, defaultFilesDBPath(), session.Token, nil, force, "")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Sync failed: %v\n", err)
 		os.Exit(1)
@@ -4857,7 +4881,7 @@ type plaudSyncSummary struct {
 	Failed  int
 }
 
-func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs []string, dbPath string, plaudToken string, onProgress func(menubar.BulkProgressEvent), customTags ...string) (*plaudSyncSummary, error) {
+func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs []string, dbPath string, plaudToken string, onProgress func(menubar.BulkProgressEvent), force bool, customTags ...string) (*plaudSyncSummary, error) {
 	filesDB, err := tracking.OpenFilesDB(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("open tracking db: %w", err)
@@ -4868,22 +4892,24 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 	applyRuntimeER1Context(er1Cfg)
 	er1Cfg.ContentType = cfg.ContentType
 
-	// Server-side dedup check (SPEC-0117)
+	// Server-side dedup check (SPEC-0117) — skipped in force mode
 	var syncAPI *plaud.SyncAPIClient
 	var plaudAccountID string
 	serverSyncAvailable := false
+	// Map plaud recording ID → existing ER1 doc_id (for force overwrite)
+	existingDocIDs := map[string]string{}
 
 	if er1Cfg.APIKey != "" && plaudToken != "" {
 		syncAPI = plaud.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, er1Cfg.ContextID, !er1Cfg.VerifySSL)
 		plaudAccountID = plaud.DeriveAccountID(plaudToken)
-
+	}
+	if syncAPI != nil && !force {
 		checkResult, checkErr := syncAPI.CheckRecordings(plaudAccountID, recordingIDs)
 		if checkErr == nil && checkResult != nil {
 			serverSyncAvailable = true
 			serverSynced := len(checkResult.Synced)
 			if serverSynced > 0 {
 				log.Printf("[plaud] server check: %d/%d already synced remotely", serverSynced, len(recordingIDs))
-				// Filter out server-synced IDs (in addition to local DB filter)
 				var filtered []string
 				for _, id := range recordingIDs {
 					if _, alreadySynced := checkResult.Synced[id]; !alreadySynced {
@@ -4895,6 +4921,19 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 		} else {
 			log.Printf("[plaud] server sync unavailable, using local tracking only")
 		}
+	} else if syncAPI != nil && force {
+		// Force mode: look up existing doc_ids so we can overwrite
+		checkResult, checkErr := syncAPI.CheckRecordings(plaudAccountID, recordingIDs)
+		if checkErr == nil && checkResult != nil {
+			serverSyncAvailable = true
+			for recID, info := range checkResult.Synced {
+				if info.ER1DocID != "" {
+					existingDocIDs[recID] = info.ER1DocID
+					log.Printf("[plaud] force: will overwrite %s → %s", recID, info.ER1DocID)
+				}
+			}
+		}
+		log.Printf("[plaud] force mode: skipping dedup, %d existing docs to overwrite", len(existingDocIDs))
 	}
 
 	summary := &plaudSyncSummary{Total: len(recordingIDs)}
@@ -4997,6 +5036,13 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 			ImageFilename:      "plaud-logo.png",
 			Tags:               tags,
 			ContentType:        cfg.ContentType,
+		}
+		// Force mode: overwrite existing ER1 document if known.
+		if force {
+			if docID, ok := existingDocIDs[recID]; ok {
+				payload.DocID = docID
+				log.Printf("[plaud] force: overwriting doc_id=%s", docID)
+			}
 		}
 
 		resp, upErr := er1.Upload(er1Cfg, payload)
@@ -5288,7 +5334,7 @@ func menubarHandlePlaudSync(app *menubar.App) {
 			}
 		}
 
-		summary, syncErr := runPlaudSyncPipeline(client, cfg, recordingIDs, dbPath, session.Token, onProgress, customTags)
+		summary, syncErr := runPlaudSyncPipeline(client, cfg, recordingIDs, dbPath, session.Token, onProgress, false, customTags)
 		if syncErr != nil {
 			log.Printf("[plaud] sync FAILED: %v", syncErr)
 			app.Notify("Plaud Sync Failed", syncErr.Error())
