@@ -60,42 +60,53 @@ func NewClient(cfg *Config, token string) *Client {
 	}
 }
 
-// ListRecordings fetches recordings from the Plaud cloud.
-// Uses the /file/simple/web endpoint with pagination.
+// ListRecordings fetches all recordings from the Plaud cloud.
+// Paginates through /file/simple/web until all recordings are retrieved.
 func (c *Client) ListRecordings() ([]Recording, error) {
-	// Fetch up to 100 recordings. is_trash=2 = non-trashed files.
-	body, err := c.get("/file/simple/web?skip=0&limit=100&is_trash=2&is_desc=true")
-	if err != nil {
-		return nil, fmt.Errorf("list recordings: %w", err)
-	}
+	const pageSize = 100
+	var allRecordings []Recording
+	skip := 0
 
-	log.Printf("[plaud] list response: %d bytes", len(body))
-
-	// Parse the Plaud response: {"status":0,"data_file_total":N,"data_file_list":[...]}
-	var resp struct {
-		Status        int       `json:"status"`
-		Msg           string    `json:"msg"`
-		DataFileTotal int       `json:"data_file_total"`
-		DataFileList  []rawFile `json:"data_file_list"`
-	}
-	if err := json.Unmarshal(body, &resp); err != nil {
-		snippet := string(body)
-		if len(snippet) > 500 {
-			snippet = snippet[:500] + "..."
+	for {
+		body, err := c.get(fmt.Sprintf("/file/simple/web?skip=%d&limit=%d&is_trash=2&is_desc=true", skip, pageSize))
+		if err != nil {
+			return nil, fmt.Errorf("list recordings: %w", err)
 		}
-		return nil, fmt.Errorf("list recordings: parse error: %w (body: %s)", err, snippet)
+
+		log.Printf("[plaud] list response: %d bytes (skip=%d)", len(body), skip)
+
+		var resp struct {
+			Status        int       `json:"status"`
+			Msg           string    `json:"msg"`
+			DataFileTotal int       `json:"data_file_total"`
+			DataFileList  []rawFile `json:"data_file_list"`
+		}
+		if err := json.Unmarshal(body, &resp); err != nil {
+			snippet := string(body)
+			if len(snippet) > 500 {
+				snippet = snippet[:500] + "..."
+			}
+			return nil, fmt.Errorf("list recordings: parse error: %w (body: %s)", err, snippet)
+		}
+
+		if resp.Status != 0 {
+			return nil, fmt.Errorf("list recordings: API error status=%d msg=%s", resp.Status, resp.Msg)
+		}
+
+		for _, f := range resp.DataFileList {
+			allRecordings = append(allRecordings, f.toRecording())
+		}
+
+		// Stop when we've fetched all recordings or this page was incomplete.
+		if len(resp.DataFileList) < pageSize || len(allRecordings) >= resp.DataFileTotal {
+			log.Printf("[plaud] found %d recordings (total=%d)", len(allRecordings), resp.DataFileTotal)
+			break
+		}
+
+		skip += pageSize
 	}
 
-	if resp.Status != 0 {
-		return nil, fmt.Errorf("list recordings: API error status=%d msg=%s", resp.Status, resp.Msg)
-	}
-
-	var recordings []Recording
-	for _, f := range resp.DataFileList {
-		recordings = append(recordings, f.toRecording())
-	}
-	log.Printf("[plaud] found %d recordings (total=%d)", len(recordings), resp.DataFileTotal)
-	return recordings, nil
+	return allRecordings, nil
 }
 
 // rawFile represents a file object from the Plaud API.
