@@ -28,12 +28,8 @@ InstallDirRegKey HKLM "${PRODUCT_UNINST_KEY}" "InstallLocation"
 RequestExecutionLevel admin
 SetCompressor /SOLID lzma
 
-; --- Variables for API key page ---
-Var ApiKeyValue
-
 ; --- MUI pages ---
 !insertmacro MUI_PAGE_WELCOME
-Page custom ApiKeyPage ApiKeyPageLeave  ; Custom API key input page
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_INSTFILES
@@ -47,36 +43,6 @@ Page custom ApiKeyPage ApiKeyPageLeave  ; Custom API key input page
 
 !insertmacro MUI_LANGUAGE "English"
 
-; --- API Key Input Page ---
-!include "nsDialogs.nsh"
-
-Function ApiKeyPage
-    nsDialogs::Create 1018
-    Pop $0
-    ${If} $0 == error
-        Abort
-    ${EndIf}
-
-    ${NSD_CreateLabel} 0 0 100% 30u "Enter the API key from your invitation email.$\r$\nYour administrator sent this to you."
-    Pop $0
-
-    ${NSD_CreateText} 0 36u 100% 14u ""
-    Pop $ApiKeyValue
-
-    ${NSD_CreateLabel} 0 60u 100% 20u "This key connects M3C Tools to your personal workspace."
-    Pop $0
-
-    nsDialogs::Show
-FunctionEnd
-
-Function ApiKeyPageLeave
-    ${NSD_GetText} $ApiKeyValue $ApiKeyValue
-    ${If} $ApiKeyValue == ""
-        MessageBox MB_OK|MB_ICONEXCLAMATION "Please enter your API key from the invitation email."
-        Abort
-    ${EndIf}
-FunctionEnd
-
 ; --- Installation sections ---
 
 Section "Core Files (required)" SecCore
@@ -87,12 +53,12 @@ Section "Core Files (required)" SecCore
     File "..\build\windows\skillctl.exe"
     File "..\build\windows\menubar-icon.png"
 
-    ; Write init config with API key to user's home directory
+    ; Write init config (SPEC-0127: no API key — login issues device token)
     FileOpen $0 "$PROFILE\m3c-tools.init.cfg" w
     FileWrite $0 "# m3c-tools configuration — created by installer$\r$\n"
+    FileWrite $0 "# Run 'm3c-tools login' after install to authenticate.$\r$\n"
     FileWrite $0 "PROFILE_NAME=cloud$\r$\n"
     FileWrite $0 "ER1_API_URL=https://onboarding.guide/upload_2$\r$\n"
-    FileWrite $0 "ER1_API_KEY=$ApiKeyValue$\r$\n"
     FileWrite $0 "ER1_CONTENT_TYPE=YouTube-Video-Impression$\r$\n"
     FileWrite $0 "ER1_UPLOAD_TIMEOUT=600$\r$\n"
     FileWrite $0 "ER1_VERIFY_SSL=true$\r$\n"
