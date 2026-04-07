@@ -47,10 +47,13 @@ func LoadConfig() *Config {
 	return cfg
 }
 
-// AuthHeaders returns HTTP headers with X-API-KEY and X-Context-ID if configured.
+// AuthHeaders returns HTTP headers for ER1 authentication.
+// Prefers device token (Bearer) over API key (SPEC-0127).
 func (c *Config) AuthHeaders() map[string]string {
 	h := map[string]string{}
-	if c.APIKey != "" {
+	if token := os.Getenv("ER1_DEVICE_TOKEN"); token != "" {
+		h["Authorization"] = "Bearer " + token
+	} else if c.APIKey != "" {
 		h["X-API-KEY"] = c.APIKey
 	}
 	if c.ContextID != "" {

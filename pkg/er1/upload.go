@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"os"
 	"net/http"
 	"strings"
 	"time"
@@ -37,13 +38,13 @@ type UploadResponse struct {
 }
 
 // Upload sends a multimodal payload to the ER1 server.
-// BUG-0093: Requires a valid API key to bypass server-side CSRF protection.
-// Without X-API-KEY, the server treats the request as a browser submission
-// and rejects it with "CSRF session expired" (Forbidden Request).
+// Upload sends a multipart upload to the ER1 server.
+// Authenticates via device token (Bearer, preferred) or API key (X-API-KEY, fallback).
 func Upload(cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
-	if cfg.APIKey == "" {
-		return nil, fmt.Errorf("ER1_API_KEY is not set — upload requires an API key to authenticate. " +
-			"Run 'm3c-tools setup' or 'm3c-tools config show' to configure your API key")
+	hasToken := os.Getenv("ER1_DEVICE_TOKEN") != ""
+	if cfg.APIKey == "" && !hasToken {
+		return nil, fmt.Errorf("no authentication configured — log in with 'Sign In' or set ER1_API_KEY. " +
+			"Run 'm3c-tools setup' to configure")
 	}
 
 	var body bytes.Buffer

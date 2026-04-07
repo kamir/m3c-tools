@@ -43,6 +43,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/auth"
 	"github.com/kamir/m3c-tools/pkg/config"
 	"github.com/kamir/m3c-tools/pkg/er1"
 	"github.com/kamir/m3c-tools/pkg/importer"
@@ -89,6 +90,16 @@ func main() {
 		// Fallback to legacy .env loading for pre-profile installations.
 		for _, p := range []string{".env", filepath.Join(home, ".m3c-tools.env")} {
 			_ = er1.LoadDotenv(p)
+		}
+	}
+
+	// Load saved device token if available (SPEC-0127).
+	// This enables uploads via Bearer auth without API key.
+	if cfg := er1.LoadConfig(); cfg.ContextID != "" {
+		if dt, err := auth.Load(auth.DeviceID(), strings.SplitN(cfg.ContextID, "___", 2)[0]); err == nil && dt != nil && !dt.IsExpired() {
+			os.Setenv("ER1_DEVICE_TOKEN", dt.Token)
+			os.Setenv("ER1_CONTEXT_ID", dt.ContextID)
+			log.Printf("[auth] device token loaded for user=%s", truncateForLog(dt.UserID, 20))
 		}
 	}
 
@@ -3241,7 +3252,7 @@ func menubarLoginER1(app *menubar.App) {
 				// Fallback 2: use ER1_CONTEXT_ID from config if ER1 tabs are open.
 				ctxID = configFallback()
 			}
-			if completeER1Login(app, ctxID) {
+			if completeER1Login(app, ctxID, &result) {
 				return
 			}
 			log.Printf("[auth] callback received but no context_id yet; continuing tab polling")
@@ -3250,13 +3261,13 @@ func menubarLoginER1(app *menubar.App) {
 			if ctxID == "" {
 				ctxID = configFallback()
 			}
-			if completeER1Login(app, ctxID) {
+			if completeER1Login(app, ctxID, nil) {
 				return
 			}
 		case <-deadline.C:
 			// Final attempt: try config fallback before giving up.
 			if ctxID := configFallback(); ctxID != "" {
-				if completeER1Login(app, ctxID) {
+				if completeER1Login(app, ctxID, nil) {
 					return
 				}
 			}
@@ -3268,7 +3279,7 @@ func menubarLoginER1(app *menubar.App) {
 	}
 }
 
-func completeER1Login(app *menubar.App, contextID string) bool {
+func completeER1Login(app *menubar.App, contextID string, result *loginCallbackResult) bool {
 	ctxID := strings.TrimSpace(contextID)
 	if ctxID == "" {
 		return false
@@ -3278,6 +3289,27 @@ func completeER1Login(app *menubar.App, contextID string) bool {
 	if err := savePersistedER1Session(ctxID); err != nil {
 		log.Printf("[auth] persist session failed: %v", err)
 	}
+
+	// Save device token if received from aims-core callback (SPEC-0127).
+	if result != nil && result.DeviceToken != "" {
+		dt := &auth.DeviceToken{
+			Token:     result.DeviceToken,
+			UserID:    result.UserID,
+			ContextID: ctxID,
+			UserName:  result.UserName,
+			UserEmail: result.UserEmail,
+			DeviceID:  auth.DeviceID(),
+			SavedAt:   time.Now().UTC().Format(time.RFC3339),
+		}
+		if err := auth.Save(dt); err != nil {
+			log.Printf("[auth] save device token failed: %v", err)
+		} else {
+			log.Printf("[auth] device token saved for user=%s device=%s", truncateForLog(result.UserID, 20), auth.DeviceID())
+			// Set the token as the active API key so uploads use Bearer auth.
+			os.Setenv("ER1_DEVICE_TOKEN", result.DeviceToken)
+		}
+	}
+
 	log.Printf("[auth] login success context_id=%s", truncateForLog(ctxID, 64))
 	app.Notify("ER1 Login", fmt.Sprintf("Linked account: %s", ctxID))
 	return true
@@ -3294,8 +3326,12 @@ func menubarLogoutER1(app *menubar.App) {
 }
 
 type loginCallbackResult struct {
-	ContextID string
-	Err       error
+	ContextID   string
+	DeviceToken string
+	UserID      string
+	UserName    string
+	UserEmail   string
+	Err         error
 }
 
 func startER1LoginCallbackServer() (*http.Server, string, <-chan loginCallbackResult, func(), error) {
@@ -3315,15 +3351,22 @@ func startER1LoginCallbackServer() (*http.Server, string, <-chan loginCallbackRe
 	resultCh := make(chan loginCallbackResult, 1)
 	mux := http.NewServeMux()
 	mux.HandleFunc(callbackPath, func(w http.ResponseWriter, r *http.Request) {
-		ctxID := strings.TrimSpace(r.URL.Query().Get("context_id"))
+		q := r.URL.Query()
+		ctxID := strings.TrimSpace(q.Get("context_id"))
 		if ctxID == "" {
-			ctxID = strings.TrimSpace(r.URL.Query().Get("user_id"))
+			ctxID = strings.TrimSpace(q.Get("user_id"))
 		}
 		if ctxID == "" {
-			ctxID = strings.TrimSpace(r.URL.Query().Get("uid"))
+			ctxID = strings.TrimSpace(q.Get("uid"))
 		}
 		select {
-		case resultCh <- loginCallbackResult{ContextID: ctxID}:
+		case resultCh <- loginCallbackResult{
+			ContextID:   ctxID,
+			DeviceToken: strings.TrimSpace(q.Get("device_token")),
+			UserID:      strings.TrimSpace(q.Get("user_id")),
+			UserName:    strings.TrimSpace(q.Get("user_name")),
+			UserEmail:   strings.TrimSpace(q.Get("user_email")),
+		}:
 		default:
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
