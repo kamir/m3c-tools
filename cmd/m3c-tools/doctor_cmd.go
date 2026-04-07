@@ -85,12 +85,11 @@ func doctorAuth() diag.Section {
 					Detail: fmt.Sprintf("expired (%s) — run 'm3c-tools login' to refresh", dt.ExpiresAt),
 				})
 			} else {
-				detail := "valid"
 				if dt.ExpiresAt != "" {
 					exp, err := time.Parse(time.RFC3339, dt.ExpiresAt)
 					if err == nil {
 						remaining := time.Until(exp).Truncate(time.Hour * 24)
-						detail = fmt.Sprintf("valid (expires %s, %s remaining)", dt.ExpiresAt[:10], remaining)
+						detail := fmt.Sprintf("valid (expires %s, %s remaining)", dt.ExpiresAt[:10], remaining)
 						if remaining < 7*24*time.Hour {
 							s.Checks = append(s.Checks, diag.Check{
 								Name: "Device token", Status: diag.Warn,
