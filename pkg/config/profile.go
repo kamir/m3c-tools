@@ -292,20 +292,16 @@ func (pm *ProfileManager) TestConnection(p *Profile) error {
 		os.Setenv(k, v)
 	}
 
-	// Import er1 config from the env vars we just set.
-	// We call HealthCheck indirectly by building a minimal HTTP check.
+	// SPEC-0143: Device token (loaded at startup) provides auth without API key.
+	// We only need the URL to test connectivity; auth is handled by the loaded token
+	// or the profile's API key if present.
 	apiURL := p.Vars["ER1_API_URL"]
-	apiKey := p.Vars["ER1_API_KEY"]
 	if apiURL == "" {
 		return fmt.Errorf("profile %q has no ER1_API_URL", p.Name)
 	}
-	if apiKey == "" {
-		return fmt.Errorf("profile %q has no ER1_API_KEY — connection test requires an API key", p.Name)
-	}
 
-	// Use the er1 package's built-in health check.
-	// We need to import it, but since this package should not depend on er1
-	// (to avoid circular dependencies), we do a basic HTTP GET here.
+	// Lightweight health check — tests server reachability via /health endpoint.
+	// Auth validation happens separately in the doctor/check-er1 commands.
 	return healthCheckER1(apiURL, p.Vars["ER1_VERIFY_SSL"])
 }
 

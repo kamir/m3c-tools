@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/auth"
 	"github.com/kamir/m3c-tools/pkg/skillctl/model"
 )
 
@@ -67,9 +68,7 @@ func (c *Client) HealthCheck() error {
 	if err != nil {
 		return fmt.Errorf("creating health check request: %w", err)
 	}
-	if c.APIKey != "" {
-		req.Header.Set("X-API-KEY", c.APIKey)
-	}
+	auth.ApplyAuth(req, c.APIKey)
 	if c.UserID != "" {
 		req.Header.Set("X-User-ID", c.UserID) // BUG-0084
 	}
@@ -107,9 +106,7 @@ func (c *Client) Import(inv *model.Inventory) (*ImportResponse, error) {
 		return nil, fmt.Errorf("creating import request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if c.APIKey != "" {
-		req.Header.Set("X-API-KEY", c.APIKey)
-	}
+	auth.ApplyAuth(req, c.APIKey)
 	if c.UserID != "" {
 		req.Header.Set("X-User-ID", c.UserID) // BUG-0084
 	}

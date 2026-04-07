@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/auth"
 )
 
 // PLMConfig holds connection settings for the PLM API.
@@ -67,9 +69,7 @@ func (c *PLMClient) doRequest(method, path string, body io.Reader) (*http.Respon
 	if err != nil {
 		return nil, err
 	}
-	if c.cfg.APIKey != "" {
-		req.Header.Set("X-API-KEY", c.cfg.APIKey)
-	}
+	auth.ApplyAuth(req, c.cfg.APIKey)
 	if c.cfg.ContextID != "" {
 		req.Header.Set("X-Context-ID", c.cfg.ContextID)
 	}

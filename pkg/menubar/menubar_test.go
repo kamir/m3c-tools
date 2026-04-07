@@ -474,14 +474,17 @@ func TestUploadER1StatusTransition(t *testing.T) {
 func TestLoggedOutMenuShowsLoginAndStar(t *testing.T) {
 	app := NewApp()
 	items := app.BuildMenuItems()
-	if len(items) != 3 {
-		t.Fatalf("logged-out menu len=%d, want 3 (login, separator, star)", len(items))
+	if len(items) != 4 {
+		t.Fatalf("logged-out menu len=%d, want 4 (login, profile, separator, star)", len(items))
 	}
 	if items[0].Text != "Sign In..." {
 		t.Fatalf("logged-out first menu item=%q, want login", items[0].Text)
 	}
-	if items[2].Text != "Star on GitHub" {
-		t.Fatalf("logged-out third menu item=%q, want 'Star on GitHub'", items[2].Text)
+	if items[1].Text != "Profile Settings" {
+		t.Fatalf("logged-out second menu item=%q, want 'Profile Settings'", items[1].Text)
+	}
+	if items[3].Text != "Star on GitHub" {
+		t.Fatalf("logged-out fourth menu item=%q, want 'Star on GitHub'", items[3].Text)
 	}
 }
 

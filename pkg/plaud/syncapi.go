@@ -12,6 +12,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/auth"
 )
 
 // SyncAPIClient talks to the aims-core plaud-sync API for cross-device dedup.
@@ -176,11 +178,10 @@ func (s *SyncAPIClient) RegisterMapping(mapping SyncMapping) error {
 	return fmt.Errorf("sync API mapping HTTP %d", resp.StatusCode)
 }
 
-// setHeaders applies the standard authentication headers.
+// setHeaders applies authentication and identity headers.
+// SPEC-0143: Uses shared auth helper — prefers device token over API key.
 func (s *SyncAPIClient) setHeaders(req *http.Request) {
-	if s.apiKey != "" {
-		req.Header.Set("X-API-KEY", s.apiKey)
-	}
+	auth.ApplyAuth(req, s.apiKey)
 	if s.userID != "" {
 		req.Header.Set("X-User-ID", s.userID)
 	}

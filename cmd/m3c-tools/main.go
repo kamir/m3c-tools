@@ -114,6 +114,8 @@ func main() {
 		cmdThumbnail(os.Args[2:])
 	case "check-er1":
 		cmdCheckER1()
+	case "doctor":
+		cmdDoctor()
 	case "devices":
 		cmdDevices()
 	case "record":
@@ -182,7 +184,8 @@ Commands:
     --duration <secs>      Recording duration (default: 5)
 
   devices                List audio input devices
-  check-er1              Test ER1 server connectivity
+  doctor                 Run connectivity & config diagnostics
+  check-er1              Test ER1 server connectivity (use 'doctor' for full check)
 
   retry                  Run ER1 retry loop for queued uploads
     --interval <secs>      Poll interval in seconds (default: 30)
@@ -881,12 +884,12 @@ func cmdCheckER1() {
 		os.Exit(1)
 	}
 
-	// Validate API key.
+	// SPEC-0143: Validate authentication (device token or API key).
 	if err := cfg.HealthCheck(); err != nil {
-		fmt.Printf("API key check: FAILED — %v\n", err)
+		fmt.Printf("Auth check: FAILED — %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("API key check: OK")
+	fmt.Printf("Auth check: OK (%s)\n", auth.AuthMethod())
 }
 
 // -- devices command --

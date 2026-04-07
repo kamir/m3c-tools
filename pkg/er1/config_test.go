@@ -59,3 +59,83 @@ func TestAuthHeaders_Empty(t *testing.T) {
 		t.Error("X-API-KEY should not be set when APIKey is empty")
 	}
 }
+
+// SPEC-0143: Device token tests
+
+func TestAuthHeaders_PrefersDeviceToken(t *testing.T) {
+	t.Setenv("ER1_DEVICE_TOKEN", "test-bearer-token")
+	cfg := &Config{APIKey: "some-api-key", ContextID: "ctx"}
+	h := cfg.AuthHeaders()
+	if h["Authorization"] != "Bearer test-bearer-token" {
+		t.Errorf("Authorization = %q, want Bearer token", h["Authorization"])
+	}
+	if _, ok := h["X-API-KEY"]; ok {
+		t.Error("X-API-KEY should not be set when device token is active")
+	}
+}
+
+func TestHealthCheck_AcceptsDeviceToken(t *testing.T) {
+	t.Setenv("ER1_DEVICE_TOKEN", "test-token")
+	cfg := &Config{APIKey: "", APIURL: "https://127.0.0.1:9999/upload_2"}
+	// HealthCheck should NOT return "no authentication configured" when token exists.
+	err := cfg.HealthCheck()
+	if err != nil && err.Error() == "no authentication configured (no device token, no API key)" {
+		t.Error("HealthCheck should accept device token as valid auth")
+	}
+	// It may fail with "unreachable" (no server) — that's OK, the auth gate passed.
+}
+
+func TestHealthCheck_RejectsNoAuth(t *testing.T) {
+	t.Setenv("ER1_DEVICE_TOKEN", "")
+	os.Unsetenv("ER1_DEVICE_TOKEN")
+	cfg := &Config{APIKey: ""}
+	err := cfg.HealthCheck()
+	if err == nil {
+		t.Error("HealthCheck should fail when no auth is configured")
+	}
+	if err.Error() != "no authentication configured (no device token, no API key)" {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestSummary_ShowsTokenAuth(t *testing.T) {
+	t.Setenv("ER1_DEVICE_TOKEN", "test-token")
+	cfg := &Config{APIURL: "https://example.com/upload_2", ContextID: "ctx"}
+	s := cfg.Summary()
+	if !contains(s, "device-token") {
+		t.Errorf("Summary should show device-token auth, got: %s", s)
+	}
+}
+
+func TestSummary_ShowsAPIKeyAuth(t *testing.T) {
+	t.Setenv("ER1_DEVICE_TOKEN", "")
+	os.Unsetenv("ER1_DEVICE_TOKEN")
+	cfg := &Config{APIURL: "https://example.com/upload_2", APIKey: "abc123", ContextID: "ctx"}
+	s := cfg.Summary()
+	if !contains(s, "api-key") {
+		t.Errorf("Summary should show api-key auth, got: %s", s)
+	}
+}
+
+func TestSummary_ShowsNoAuth(t *testing.T) {
+	t.Setenv("ER1_DEVICE_TOKEN", "")
+	os.Unsetenv("ER1_DEVICE_TOKEN")
+	cfg := &Config{APIURL: "https://example.com/upload_2", ContextID: "ctx"}
+	s := cfg.Summary()
+	if !contains(s, "(none)") {
+		t.Errorf("Summary should show (none) auth, got: %s", s)
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsStr(s, substr))
+}
+
+func containsStr(s, sub string) bool {
+	for i := 0; i <= len(s)-len(sub); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}

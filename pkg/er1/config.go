@@ -39,10 +39,10 @@ func LoadConfig() *Config {
 		RetryInterval: envInt("ER1_RETRY_INTERVAL", 300),
 		MaxRetries:    envInt("ER1_MAX_RETRIES", 10),
 	}
-	// BUG-0093: Warn early when API key is missing — uploads will fail with
-	// a cryptic CSRF error if X-API-KEY is not sent.
-	if cfg.APIKey == "" {
-		log.Println("[er1] WARNING: ER1_API_KEY is not set — uploads will fail. Run 'm3c-tools setup' or set ER1_API_KEY in your profile.")
+	// BUG-0093 + SPEC-0143: Only warn when NO auth is available.
+	// Device token (SPEC-0127) is the primary auth method; API key is fallback for dev/CI.
+	if cfg.APIKey == "" && os.Getenv("ER1_DEVICE_TOKEN") == "" {
+		log.Println("[er1] WARNING: No authentication configured — log in with 'm3c-tools login' or set ER1_API_KEY in your profile.")
 	}
 	return cfg
 }
@@ -62,11 +62,12 @@ func (c *Config) AuthHeaders() map[string]string {
 	return h
 }
 
-// HealthCheck validates ER1 connectivity and API key by sending a small GET request
-// to the ER1 base URL. Returns nil if the server is reachable and the key is accepted.
+// HealthCheck validates ER1 connectivity and authentication by sending a GET request
+// to the ER1 base URL. Accepts device token (Bearer) or API key (X-API-KEY).
+// Returns nil if the server is reachable and the credentials are accepted.
 func (c *Config) HealthCheck() error {
-	if c.APIKey == "" {
-		return fmt.Errorf("ER1_API_KEY is not set")
+	if c.APIKey == "" && os.Getenv("ER1_DEVICE_TOKEN") == "" {
+		return fmt.Errorf("no authentication configured (no device token, no API key)")
 	}
 	// Derive base URL from upload URL (strip /upload_2 suffix).
 	baseURL := c.APIURL
@@ -110,12 +111,14 @@ func (c *Config) HealthCheck() error {
 
 // Summary returns a human-readable one-liner for logging.
 func (c *Config) Summary() string {
-	masked := "(none)"
-	if c.APIKey != "" {
-		masked = fmt.Sprintf("****(%d chars)", len(c.APIKey))
+	authInfo := "(none)"
+	if token := os.Getenv("ER1_DEVICE_TOKEN"); token != "" {
+		authInfo = "device-token"
+	} else if c.APIKey != "" {
+		authInfo = fmt.Sprintf("api-key(%d chars)", len(c.APIKey))
 	}
-	return fmt.Sprintf("ER1 -> %s key=%s ctx=%s timeout=%ds ssl=%v",
-		c.APIURL, masked, c.ContextID, c.UploadTimeout, c.VerifySSL)
+	return fmt.Sprintf("ER1 -> %s auth=%s ctx=%s timeout=%ds ssl=%v",
+		c.APIURL, authInfo, c.ContextID, c.UploadTimeout, c.VerifySSL)
 }
 
 // LoadDotenv loads a .env file into os.Environ (does not override existing vars).
