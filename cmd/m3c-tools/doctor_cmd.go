@@ -298,15 +298,18 @@ func doctorConnectivity() diag.Section {
 		baseURL = baseURL[:idx]
 	}
 
-	// Parse host from URL.
-	host := baseURL
-	host = strings.TrimPrefix(host, "https://")
-	host = strings.TrimPrefix(host, "http://")
-	if idx := strings.Index(host, "/"); idx > 0 {
-		host = host[:idx]
+	// Parse host and port from URL.
+	hostPort := baseURL
+	hostPort = strings.TrimPrefix(hostPort, "https://")
+	hostPort = strings.TrimPrefix(hostPort, "http://")
+	if idx := strings.Index(hostPort, "/"); idx > 0 {
+		hostPort = hostPort[:idx]
 	}
-	if idx := strings.Index(host, ":"); idx > 0 {
-		host = host[:idx]
+	host := hostPort
+	port := "443"
+	if idx := strings.Index(hostPort, ":"); idx > 0 {
+		host = hostPort[:idx]
+		port = hostPort[idx+1:]
 	}
 
 	// DNS resolve.
@@ -326,20 +329,21 @@ func doctorConnectivity() diag.Section {
 
 	// TLS handshake (if HTTPS).
 	if strings.HasPrefix(cfg.APIURL, "https://") {
+		tlsAddr := host + ":" + port
 		start = time.Now()
-		conn, err := tls.DialWithDialer(&net.Dialer{Timeout: 5 * time.Second}, "tcp", host+":443", &tls.Config{
+		conn, err := tls.DialWithDialer(&net.Dialer{Timeout: 5 * time.Second}, "tcp", tlsAddr, &tls.Config{
 			InsecureSkipVerify: !cfg.VerifySSL,
 		})
 		elapsed = time.Since(start)
 		if err != nil {
 			s.Checks = append(s.Checks, diag.Check{
-				Name: "TLS handshake", Status: diag.Fail, Detail: fmt.Sprintf("%v", err),
+				Name: "TLS handshake", Status: diag.Fail, Detail: fmt.Sprintf("%s — %v", tlsAddr, err),
 			})
 		} else {
 			conn.Close()
 			s.Checks = append(s.Checks, diag.Check{
 				Name: "TLS handshake", Status: diag.OK,
-				Detail: fmt.Sprintf("%s:443 (%s)", host, elapsed.Round(time.Millisecond)),
+				Detail: fmt.Sprintf("%s (%s)", tlsAddr, elapsed.Round(time.Millisecond)),
 			})
 		}
 	}
