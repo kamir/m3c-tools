@@ -222,6 +222,7 @@ Commands:
 
   plaud list             List Plaud recordings with sync status
   plaud sync <id>        Sync a Plaud recording to ER1
+  plaud sync --all       Sync all new Plaud recordings to ER1
   plaud auth login       Extract token from Chrome (web.plaud.ai)
   plaud auth <token>     Save Plaud API token manually
 
@@ -4448,9 +4449,14 @@ func cmdPlaud(args []string) {
 	case "sync":
 		if len(args) < 2 {
 			fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud sync <recording_id>")
+			fmt.Fprintln(os.Stderr, "       m3c-tools plaud sync --all   (sync all new recordings)")
 			os.Exit(1)
 		}
-		cmdPlaudSync(args[1])
+		syncArg := args[1]
+		if syncArg == "--all" {
+			syncArg = "all"
+		}
+		cmdPlaudSync(syncArg)
 	case "auth":
 		if len(args) < 2 {
 			fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud auth <token>")
