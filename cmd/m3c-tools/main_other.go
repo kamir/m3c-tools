@@ -23,6 +23,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -445,12 +446,17 @@ func cmdPlaudList() {
 		return
 	}
 
-	fmt.Printf("%-36s  %-6s  %-10s  %s\n", "ID", "Secs", "Status", "Title")
-	fmt.Println("------------------------------------  ------  ----------  -----")
-	for _, r := range recordings {
-		fmt.Printf("%-36s  %6d  %-10s  %s\n", r.ID, r.Duration, r.Status, r.Title)
+	fmt.Printf("  %3s  %-32s  %-6s  %-10s  %s\n", "#", "ID", "Dur", "Status", "Title")
+	fmt.Println("  ---  --------------------------------  ------  ----------  -----")
+	for i, r := range recordings {
+		id := r.ID
+		if len(id) > 32 {
+			id = id[:32]
+		}
+		fmt.Printf("  %3d  %-32s  %6d  %-10s  %s\n", i+1, id, r.Duration, r.Status, r.Title)
 	}
 	fmt.Printf("\nTotal: %d recordings\n", len(recordings))
+	fmt.Println("Use: m3c-tools plaud sync <#>   or   m3c-tools plaud sync <ID>")
 }
 
 // cmdPlaudSync syncs a recording (or all) to ER1 with detailed statistics (FR-0009),
@@ -464,6 +470,22 @@ func cmdPlaudSync(recordingID string) {
 	}
 
 	client := plaud.NewClient(cfg, session.Token)
+
+	// Resolve numeric display index (e.g. "33") to real Plaud recording ID.
+	if idx, numErr := strconv.Atoi(recordingID); numErr == nil && idx > 0 {
+		recordings, listErr := client.ListRecordings()
+		if listErr != nil {
+			fmt.Fprintf(os.Stderr, "Error listing recordings: %v\n", listErr)
+			os.Exit(1)
+		}
+		if idx > len(recordings) {
+			fmt.Fprintf(os.Stderr, "Recording #%d not found (have %d recordings)\n", idx, len(recordings))
+			os.Exit(1)
+		}
+		recordingID = recordings[idx-1].ID
+		fmt.Printf("Resolved #%d → %s\n", idx, recordingID)
+	}
+
 	dbPath := defaultFilesDBPath()
 
 	stats := plaud.NewSyncStats()

@@ -4759,6 +4759,8 @@ func cmdPlaudList() {
 	}()
 
 	fmt.Printf("Plaud recordings (%d):\n\n", len(recordings))
+	fmt.Printf("  %3s  %-32s  %-40s  %6s  %s  %s\n", "#", "ID", "Title", "Dur", "Date", "Status")
+	fmt.Println("  ---  --------------------------------  ----------------------------------------  ------  ----------  ------")
 	for i, rec := range recordings {
 		status := "new"
 		if filesDB != nil {
@@ -4767,14 +4769,17 @@ func cmdPlaudList() {
 				status = tracked.Status
 			}
 		}
-		fmt.Printf("  %3d  %-40s  %6s  %s  [%s]\n",
+		fmt.Printf("  %3d  %-32s  %-40s  %6s  %s  [%s]\n",
 			i+1,
+			truncate(rec.ID, 32),
 			truncate(rec.Title, 40),
 			plaud.FormatDuration(rec.Duration),
 			rec.CreatedAt.Format("2006-01-02"),
 			status,
 		)
 	}
+	fmt.Println()
+	fmt.Println("  Use: m3c-tools plaud sync <#>   or   m3c-tools plaud sync <ID>")
 }
 
 func cmdPlaudSync(recordingID string) {
@@ -4785,6 +4790,21 @@ func cmdPlaudSync(recordingID string) {
 		os.Exit(1)
 	}
 	client := plaud.NewClient(cfg, session.Token)
+
+	// Resolve numeric display index (e.g. "33") to real Plaud recording ID.
+	if idx, numErr := strconv.Atoi(recordingID); numErr == nil && idx > 0 {
+		recordings, listErr := client.ListRecordings()
+		if listErr != nil {
+			fmt.Fprintf(os.Stderr, "Error listing recordings: %v\n", listErr)
+			os.Exit(1)
+		}
+		if idx > len(recordings) {
+			fmt.Fprintf(os.Stderr, "Recording #%d not found (have %d recordings)\n", idx, len(recordings))
+			os.Exit(1)
+		}
+		recordingID = recordings[idx-1].ID
+		fmt.Printf("Resolved #%d → %s\n", idx, recordingID)
+	}
 
 	var ids []string
 	if recordingID == "all" {
