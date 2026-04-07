@@ -4840,22 +4840,29 @@ func cmdPlaudSync(recordingID string, force bool) {
 			}
 			fmt.Printf("Force syncing all %d recordings...\n", len(ids))
 		} else {
-			// Normal: skip already-synced
+			// Normal: skip already-synced, but retry items without ER1 doc_id
 			dbPath := defaultFilesDBPath()
 			filesDB, dbErr := tracking.OpenFilesDB(dbPath)
 			if dbErr != nil {
 				log.Printf("[plaud] warning: cannot open tracking DB: %v", dbErr)
 			}
+			retryCount := 0
 			for _, rec := range recordings {
-				skip := false
 				if filesDB != nil {
 					if tracked, lookupErr := filesDB.GetByPath("plaud://" + rec.ID); lookupErr == nil && tracked != nil {
-						skip = true
+						if tracked.UploadDocID == "" {
+							// Tracked but no doc_id — upload failed previously, retry
+							ids = append(ids, rec.ID)
+							retryCount++
+							continue
+						}
+						continue // fully synced, skip
 					}
 				}
-				if !skip {
-					ids = append(ids, rec.ID)
-				}
+				ids = append(ids, rec.ID)
+			}
+			if retryCount > 0 {
+				fmt.Printf("Retrying %d recordings with missing ER1 doc_id.\n", retryCount)
 			}
 			if filesDB != nil {
 				filesDB.Close()
