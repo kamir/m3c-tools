@@ -41,8 +41,13 @@ func LoadConfig() *Config {
 	}
 	// BUG-0093 + SPEC-0143: Only warn when NO auth is available.
 	// Device token (SPEC-0127) is the primary auth method; API key is fallback for dev/CI.
+	// Check both env var AND token file — env var may not be set yet at startup.
 	if cfg.APIKey == "" && os.Getenv("ER1_DEVICE_TOKEN") == "" {
-		log.Println("[er1] WARNING: No authentication configured — log in with 'm3c-tools login' or set ER1_API_KEY in your profile.")
+		home, _ := os.UserHomeDir()
+		tokenPath := filepath.Join(home, ".m3c-tools", "device-token.enc")
+		if _, err := os.Stat(tokenPath); os.IsNotExist(err) {
+			log.Println("[er1] WARNING: No authentication configured — log in with 'm3c-tools login' or set ER1_API_KEY in your profile.")
+		}
 	}
 	return cfg
 }

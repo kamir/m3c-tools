@@ -1271,9 +1271,15 @@ func checkFirstRun() []tray.SetupIssue {
 			apiKey = ap.Vars["ER1_API_KEY"]
 		}
 	}
-	if apiKey == "" {
+	// SPEC-0127: device token replaces API key — only warn if neither exists.
+	deviceTokenPath := filepath.Join(home, ".m3c-tools", "device-token.enc")
+	hasDeviceToken := false
+	if _, dtErr := os.Stat(deviceTokenPath); dtErr == nil {
+		hasDeviceToken = true
+	}
+	if apiKey == "" && !hasDeviceToken {
 		issues = append(issues, tray.SetupIssue{
-			Key: "no_api_key", Message: "ER1 API key not configured",
+			Key: "no_auth", Message: "Not authenticated — run 'm3c-tools login'",
 		})
 	}
 
@@ -1368,7 +1374,7 @@ func cmdTrayApp(args []string) {
 				// First-run guard: give specific guidance instead of a cryptic error.
 				if !app.IsSetupComplete() {
 					for _, issue := range app.SetupIssues {
-						if issue.Key == "no_api_key" {
+						if issue.Key == "no_auth" || issue.Key == "no_api_key" {
 							app.Notify("Setup Required", "ER1 API key missing — open Settings in tray menu")
 							return
 						}
