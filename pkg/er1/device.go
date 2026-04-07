@@ -132,6 +132,13 @@ func ListDevices(ctx context.Context, baseURL, apiKey string) ([]PairedDevice, e
 		return nil, fmt.Errorf("list devices failed (HTTP %d): %s", resp.StatusCode, truncate(string(respBody), 200))
 	}
 
+	// Server may return {"devices": [...]} or a bare array.
+	var wrapper struct {
+		Devices []PairedDevice `json:"devices"`
+	}
+	if err := json.Unmarshal(respBody, &wrapper); err == nil && wrapper.Devices != nil {
+		return wrapper.Devices, nil
+	}
 	var devices []PairedDevice
 	if err := json.Unmarshal(respBody, &devices); err != nil {
 		return nil, fmt.Errorf("parse devices response: %w", err)

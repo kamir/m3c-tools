@@ -390,7 +390,8 @@ func doctorConnectivity() diag.Section {
 		return s
 	}
 
-	req, err := http.NewRequest("GET", baseURL+"/api/plm/projects", nil)
+	// Use /api/v2/devices which supports all auth methods including Bearer tokens (SPEC-0127).
+	req, err := http.NewRequest("GET", baseURL+"/api/v2/devices", nil)
 	if err != nil {
 		s.Checks = append(s.Checks, diag.Check{
 			Name: "Auth endpoint", Status: diag.Fail, Detail: fmt.Sprintf("request error: %v", err),
@@ -399,6 +400,12 @@ func doctorConnectivity() diag.Section {
 	}
 	for k, v := range cfg.AuthHeaders() {
 		req.Header.Set(k, v)
+	}
+	auth.ApplyAuth(req, cfg.APIKey)
+	if ctxID := os.Getenv("ER1_CONTEXT_ID"); ctxID != "" {
+		if parts := strings.SplitN(ctxID, "___", 2); parts[0] != "" {
+			req.Header.Set("X-User-ID", parts[0])
+		}
 	}
 
 	start = time.Now()
@@ -417,7 +424,7 @@ func doctorConnectivity() diag.Section {
 	case http.StatusOK:
 		s.Checks = append(s.Checks, diag.Check{
 			Name: "Auth endpoint", Status: diag.OK,
-			Detail: fmt.Sprintf("/api/plm/projects HTTP %d (%s) [%s]", resp.StatusCode, elapsed.Round(time.Millisecond), auth.AuthMethod()),
+			Detail: fmt.Sprintf("HTTP %d (%s) [%s]", resp.StatusCode, elapsed.Round(time.Millisecond), auth.AuthMethod()),
 		})
 	case http.StatusUnauthorized:
 		s.Checks = append(s.Checks, diag.Check{
