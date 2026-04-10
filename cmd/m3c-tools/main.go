@@ -4998,11 +4998,12 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 			})
 		}
 		var transcriptText string
+		hasPlaudTranscript := false
 		tx, txErr := client.GetTranscript(recID)
 		if txErr != nil {
-			log.Printf("[plaud] no Plaud transcript for %s: %v — saving audio only", recID, txErr)
-			transcriptText = "[No transcript available — audio only]"
+			log.Printf("[plaud] no Plaud transcript for %s: %v — transcribe_mode=%s", recID, txErr, cfg.TranscribeMode)
 		} else {
+			hasPlaudTranscript = true
 			transcriptText = tx.Text
 			if tx.Summary != "" {
 				transcriptText = transcriptText + "\n\n=== SUMMARY ===\n" + tx.Summary
@@ -5010,15 +5011,18 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 			log.Printf("[plaud] got Plaud transcript for %s (%d chars, summary %d chars)", recID, len(tx.Text), len(tx.Summary))
 		}
 
-		// 4. Build composite document.
+		// 4. Build composite document (only when Plaud has a transcript).
 		now := time.Now()
-		doc := (&impression.CompositeDoc{
-			ObsType:           impression.Fieldnote,
-			Timestamp:         now,
-			RecordingTitle:    rec.Title,
-			RecordingDuration: plaud.FormatDuration(rec.Duration),
-			TranscriptText:    strings.TrimSpace(transcriptText),
-		}).Build()
+		var compositeDoc string
+		if hasPlaudTranscript {
+			compositeDoc = (&impression.CompositeDoc{
+				ObsType:           impression.Fieldnote,
+				Timestamp:         now,
+				RecordingTitle:    rec.Title,
+				RecordingDuration: plaud.FormatDuration(rec.Duration),
+				TranscriptText:    strings.TrimSpace(transcriptText),
+			}).Build()
+		}
 
 		tags := impression.BuildFieldnoteTags(rec.Title, impression.OriginTags("plaud://"+recID)...)
 		// Prepend default tags from config if set.
@@ -5030,6 +5034,21 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 			tags = strings.TrimSpace(customTags[0]) + "," + tags
 		}
 
+		// Transcription decision: when Plaud has no transcript, use config mode.
+		doTranscribe := false
+		if !hasPlaudTranscript {
+			switch cfg.TranscribeMode {
+			case plaud.TranscribeModeQueue:
+				doTranscribe = true
+				log.Printf("[plaud] %s: no transcript — requesting server transcription (queue mode)", recID)
+			case plaud.TranscribeModeLazy:
+				tags = "todo.transcribe," + tags
+				log.Printf("[plaud] %s: no transcript — tagged todo.transcribe (lazy mode)", recID)
+			case plaud.TranscribeModeOff:
+				log.Printf("[plaud] %s: no transcript — transcription off, audio only", recID)
+			}
+		}
+
 		// 5. Upload to ER1.
 		if onProgress != nil {
 			onProgress(menubar.BulkProgressEvent{
@@ -5038,14 +5057,18 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 			})
 		}
 		payload := &er1.UploadPayload{
-			TranscriptData:     []byte(strings.TrimSpace(doc) + "\n"),
-			TranscriptFilename: fmt.Sprintf("fieldnote_%s.txt", now.Format("20060102_150405")),
-			AudioData:          audioData,
-			AudioFilename:      fmt.Sprintf("plaud_%s.%s", recID, audioFmt),
-			ImageData:          er1.PlaudLogoPNG(),
-			ImageFilename:      "plaud-logo.png",
-			Tags:               tags,
-			ContentType:        cfg.ContentType,
+			AudioData:     audioData,
+			AudioFilename: fmt.Sprintf("plaud_%s.%s", recID, audioFmt),
+			ImageData:     er1.PlaudLogoPNG(),
+			ImageFilename: "plaud-logo.png",
+			Tags:          tags,
+			ContentType:   cfg.ContentType,
+			DoTranscribe:  doTranscribe,
+		}
+		// Only send transcript when Plaud provided one.
+		if hasPlaudTranscript {
+			payload.TranscriptData = []byte(strings.TrimSpace(compositeDoc) + "\n")
+			payload.TranscriptFilename = fmt.Sprintf("fieldnote_%s.txt", now.Format("20060102_150405"))
 		}
 		// Force mode: overwrite existing ER1 document if known.
 		if force {
@@ -5059,7 +5082,7 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 		if upErr != nil {
 			log.Printf("[plaud] upload %s FAIL: %v — saving locally", recID, upErr)
 			// Fallback: save to ~/plaud-sync/<recID>/ for later re-upload.
-			localErr := savePlaudLocally(recID, rec, audioData, audioFmt, doc, transcriptText, tags)
+			localErr := savePlaudLocally(recID, rec, audioData, audioFmt, compositeDoc, transcriptText, tags)
 			if localErr != nil {
 				log.Printf("[plaud] local save also FAIL: %v", localErr)
 				summary.Failed++

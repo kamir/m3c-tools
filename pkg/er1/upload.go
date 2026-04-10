@@ -15,7 +15,7 @@ import (
 
 // UploadPayload describes the multipart data to send to ER1.
 type UploadPayload struct {
-	TranscriptData     []byte // composite document content
+	TranscriptData     []byte // composite document content (nil = no transcript provided)
 	TranscriptFilename string // e.g. "videoID_transcript.txt"
 	AudioData          []byte // WAV audio data (optional — placeholder if nil)
 	AudioFilename      string // e.g. "videoID_audio.wav"
@@ -24,6 +24,7 @@ type UploadPayload struct {
 	Tags               string // comma-separated tags
 	ContentType        string // per-observation content type (overrides cfg.ContentType if set)
 	DocID              string // if set, request ER1 to overwrite this existing document
+	DoTranscribe       bool   // if true, send DO_TRANSCRIBE=true — server transcribes audio
 }
 
 // UploadResponse is the parsed response from ER1 on success.
@@ -61,13 +62,18 @@ func Upload(cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
 	if payload.DocID != "" {
 		_ = writer.WriteField("doc_id", payload.DocID)
 	}
-
-	// Transcript (always required)
-	txPart, err := writer.CreateFormFile("transcript_file_ext", payload.TranscriptFilename)
-	if err != nil {
-		return nil, fmt.Errorf("create transcript part: %w", err)
+	if payload.DoTranscribe {
+		_ = writer.WriteField("DO_TRANSCRIBE", "true")
 	}
-	_, _ = txPart.Write(payload.TranscriptData)
+
+	// Transcript (optional — omit to let server handle transcription)
+	if payload.TranscriptData != nil {
+		txPart, err := writer.CreateFormFile("transcript_file_ext", payload.TranscriptFilename)
+		if err != nil {
+			return nil, fmt.Errorf("create transcript part: %w", err)
+		}
+		_, _ = txPart.Write(payload.TranscriptData)
+	}
 
 	// Audio (required by ER1 server)
 	audioData := payload.AudioData
