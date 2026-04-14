@@ -4584,28 +4584,61 @@ func cmdPlaud(args []string) {
 		cmdPlaudList()
 	case "sync":
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud sync <#|ID|--all> [-f]")
-			fmt.Fprintln(os.Stderr, "  -f    Force re-sync: re-download from Plaud and re-upload to ER1")
+			fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud sync <#|ID|--all> [flags]")
+			fmt.Fprintln(os.Stderr, "  -f, --force         Force re-sync: re-download from Plaud and re-upload to ER1")
+			fmt.Fprintln(os.Stderr, "      --tags <list>   Comma-separated tags to apply to every synced item")
+			fmt.Fprintln(os.Stderr, "      --filter <re>   Only sync items whose title matches this regex")
+			fmt.Fprintln(os.Stderr, "      --dry-run       Print the items that WOULD be synced; do not download or upload")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Examples:")
+			fmt.Fprintln(os.Stderr, "  m3c-tools plaud sync 17")
+			fmt.Fprintln(os.Stderr, "  m3c-tools plaud sync --all")
+			fmt.Fprintln(os.Stderr, "  m3c-tools plaud sync --all --filter '^(02-04|02-10|02-11|03-12)' --tags 'Denny,DV,test 2' --dry-run")
 			os.Exit(1)
 		}
-		syncArg := args[1]
+		syncArg := ""
 		force := false
-		for _, a := range args[1:] {
-			if a == "-f" || a == "--force" {
+		customTags := ""
+		filter := ""
+		dryRun := false
+		for i := 1; i < len(args); i++ {
+			a := args[i]
+			switch {
+			case a == "-f" || a == "--force":
 				force = true
+			case a == "--dry-run":
+				dryRun = true
+			case a == "--tags":
+				if i+1 < len(args) {
+					customTags = args[i+1]
+					i++
+				} else {
+					fmt.Fprintln(os.Stderr, "--tags requires a value")
+					os.Exit(1)
+				}
+			case strings.HasPrefix(a, "--tags="):
+				customTags = strings.TrimPrefix(a, "--tags=")
+			case a == "--filter":
+				if i+1 < len(args) {
+					filter = args[i+1]
+					i++
+				} else {
+					fmt.Fprintln(os.Stderr, "--filter requires a value")
+					os.Exit(1)
+				}
+			case strings.HasPrefix(a, "--filter="):
+				filter = strings.TrimPrefix(a, "--filter=")
+			case a == "--all":
+				syncArg = "all"
+			case syncArg == "" && !strings.HasPrefix(a, "-"):
+				syncArg = a
 			}
 		}
-		if syncArg == "-f" || syncArg == "--force" {
-			if len(args) < 3 {
-				fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud sync <#|ID|--all> -f")
-				os.Exit(1)
-			}
-			syncArg = args[2]
+		if syncArg == "" {
+			fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud sync <#|ID|--all> [flags]")
+			os.Exit(1)
 		}
-		if syncArg == "--all" {
-			syncArg = "all"
-		}
-		cmdPlaudSync(syncArg, force)
+		cmdPlaudSync(syncArg, force, customTags, filter, dryRun)
 	case "auth":
 		if len(args) < 2 {
 			fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud auth <token>")
@@ -4798,7 +4831,7 @@ func cmdPlaudList() {
 	fmt.Println("  Use: m3c-tools plaud sync <#>   or   m3c-tools plaud sync <ID>")
 }
 
-func cmdPlaudSync(recordingID string, force bool) {
+func cmdPlaudSync(recordingID string, force bool, customTags string, filter string, dryRun bool) {
 	cfg := plaud.LoadConfig()
 	session, err := plaud.LoadToken(cfg.TokenPath)
 	if err != nil {
@@ -4806,6 +4839,17 @@ func cmdPlaudSync(recordingID string, force bool) {
 		os.Exit(1)
 	}
 	client := plaud.NewClient(cfg, session.Token)
+
+	// Compile filter regex up-front so we fail fast on invalid input.
+	var filterRe *regexp.Regexp
+	if filter != "" {
+		var reErr error
+		filterRe, reErr = regexp.Compile(filter)
+		if reErr != nil {
+			fmt.Fprintf(os.Stderr, "Invalid --filter regex %q: %v\n", filter, reErr)
+			os.Exit(1)
+		}
+	}
 
 	// Resolve numeric display index (e.g. "33") to real Plaud recording ID.
 	if idx, numErr := strconv.Atoi(recordingID); numErr == nil && idx > 0 {
@@ -4825,20 +4869,46 @@ func cmdPlaudSync(recordingID string, force bool) {
 	if force {
 		fmt.Println("Force mode: re-downloading and re-uploading (overwriting existing)")
 	}
+	if customTags != "" {
+		fmt.Printf("Custom tags: %s\n", customTags)
+	}
+	if filter != "" {
+		fmt.Printf("Filter regex: %s\n", filter)
+	}
+	if dryRun {
+		fmt.Println("DRY RUN: items will be listed but NOT downloaded or uploaded")
+	}
 
 	var ids []string
+	// Track titles so dry-run output is informative.
+	titleByID := map[string]string{}
+
 	if recordingID == "all" {
 		recordings, listErr := client.ListRecordings()
 		if listErr != nil {
 			fmt.Fprintf(os.Stderr, "Error listing recordings: %v\n", listErr)
 			os.Exit(1)
 		}
+
+		// Apply title filter first (if any).
+		if filterRe != nil {
+			filtered := recordings[:0:0]
+			for _, rec := range recordings {
+				if filterRe.MatchString(rec.Title) {
+					filtered = append(filtered, rec)
+				}
+			}
+			fmt.Printf("Filter matched %d / %d recordings.\n", len(filtered), len(recordings))
+			recordings = filtered
+		}
+
 		if force {
-			// Force: sync ALL recordings, ignoring tracking DB
+			// Force: sync ALL (matched) recordings, ignoring tracking DB
 			for _, rec := range recordings {
 				ids = append(ids, rec.ID)
+				titleByID[rec.ID] = rec.Title
 			}
-			fmt.Printf("Force syncing all %d recordings...\n", len(ids))
+			fmt.Printf("Force syncing %d recordings...\n", len(ids))
 		} else {
 			// Normal: skip already-synced, but retry items without ER1 doc_id
 			dbPath := defaultFilesDBPath()
@@ -4853,6 +4923,7 @@ func cmdPlaudSync(recordingID string, force bool) {
 						if tracked.UploadDocID == "" {
 							// Tracked but no doc_id — upload failed previously, retry
 							ids = append(ids, rec.ID)
+							titleByID[rec.ID] = rec.Title
 							retryCount++
 							continue
 						}
@@ -4860,6 +4931,7 @@ func cmdPlaudSync(recordingID string, force bool) {
 					}
 				}
 				ids = append(ids, rec.ID)
+				titleByID[rec.ID] = rec.Title
 			}
 			if retryCount > 0 {
 				fmt.Printf("Retrying %d recordings with missing ER1 doc_id.\n", retryCount)
@@ -4867,9 +4939,9 @@ func cmdPlaudSync(recordingID string, force bool) {
 			if filesDB != nil {
 				filesDB.Close()
 			}
-			fmt.Printf("Syncing %d new recordings (of %d total)...\n", len(ids), len(recordings))
+			fmt.Printf("Syncing %d new recordings (of %d after filter).\n", len(ids), len(recordings))
 			if len(ids) == 0 {
-				fmt.Println("All recordings already synced.")
+				fmt.Println("Nothing to sync (all matched items already synced).")
 				return
 			}
 		}
@@ -4877,7 +4949,23 @@ func cmdPlaudSync(recordingID string, force bool) {
 		ids = []string{recordingID}
 	}
 
-	summary, err := runPlaudSyncPipeline(client, cfg, ids, defaultFilesDBPath(), session.Token, nil, force, "")
+	if dryRun {
+		fmt.Println()
+		fmt.Println("=== Items that WOULD be synced ===")
+		for i, id := range ids {
+			title := titleByID[id]
+			if title == "" {
+				title = "(title unknown — single-ID mode)"
+			}
+			fmt.Printf("  %3d. %s\n       %s\n", i+1, id, title)
+		}
+		fmt.Println()
+		fmt.Printf("Total: %d items would be synced with tags=%q\n", len(ids), customTags)
+		fmt.Println("Re-run without --dry-run to execute.")
+		return
+	}
+
+	summary, err := runPlaudSyncPipeline(client, cfg, ids, defaultFilesDBPath(), session.Token, nil, force, customTags)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Sync failed: %v\n", err)
 		os.Exit(1)
