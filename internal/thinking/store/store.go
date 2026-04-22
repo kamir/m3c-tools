@@ -50,10 +50,18 @@ type Store struct {
 // Open initializes (and migrates) a store at path. Path can be
 // ":memory:" for tests. Uses the project's dbdriver package so cgo
 // and nocgo builds both work.
+//
+// When path is the bare ":memory:" sentinel we pin MaxOpenConns=1
+// because SQLite allocates a *fresh* anonymous database per connection
+// in that mode; a pool would hand consumers an empty DB missing the
+// migration schema.
 func Open(path string) (*Store, error) {
 	db, err := sql.Open(dbdriver.DriverName(), path)
 	if err != nil {
 		return nil, fmt.Errorf("store: open: %w", err)
+	}
+	if path == ":memory:" {
+		db.SetMaxOpenConns(1)
 	}
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("store: ping: %w", err)
