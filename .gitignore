@@ -52,3 +52,6 @@ __pycache__/
 
 # Deployment state (machine-specific)
 .deploy/gcp-state.json
+
+# Local git worktrees for parallel dev (SPEC-0167 lesson: see feedback_parallel_agents_worktree)
+.worktrees/
