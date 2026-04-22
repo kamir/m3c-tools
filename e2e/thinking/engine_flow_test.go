@@ -1,26 +1,40 @@
-// engine_flow_test.go — end-to-end smoke test for the Thinking
-// Engine control API.
+// engine_flow_test.go — end-to-end test for the Thinking Engine.
 //
-// Stubbed for Phase 1 Week 1: uses the in-memory Kafka bus (no
-// broker). Skips under `go test -short` as the task spec requires;
-// `make thinking-test` (unit-only) passes -short to exclude this.
+// Week 2 (Stream 2a): runs a linear ProcessSpec with real prompts
+// (resolved from a test-local in-memory registry) and a mock LLM
+// adapter. Asserts:
+//
+//   1. process state reaches "completed"
+//   2. the artifact appears on the artifacts.created topic with the
+//      expected format/audience and a structured content shape
+//   3. every message published during the run passes schema validation
+//   4. the listing endpoints (/v1/thoughts, /v1/reflections, …) serve
+//      the live data from the consumer-side cache
+//   5. contradictory insights emit a follow-up T of type=question
+//      onto thoughts.raw
+//
+// Skipped in -short mode so the smoke subset of `go test` stays fast.
 
 package thinking_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/kamir/m3c-tools/internal/thinking/api"
+	"github.com/kamir/m3c-tools/internal/thinking/budget"
 	mctx "github.com/kamir/m3c-tools/internal/thinking/ctx"
 	tkafka "github.com/kamir/m3c-tools/internal/thinking/kafka"
+	"github.com/kamir/m3c-tools/internal/thinking/llm"
 	"github.com/kamir/m3c-tools/internal/thinking/orchestrator"
 	procA "github.com/kamir/m3c-tools/internal/thinking/processors/a"
 	procI "github.com/kamir/m3c-tools/internal/thinking/processors/i"
@@ -42,6 +56,55 @@ func newLogger(t *testing.T) *log.Logger {
 	return log.New(testWriter{t: t}, "[test] ", log.LstdFlags)
 }
 
+// testRegistry satisfies prompts.Registry with Week-2 prompt ids
+// seeded in-process so the test doesn't need a Flask bridge.
+type testRegistry struct{ byID map[string]prompts.Prompt }
+
+func (r *testRegistry) Get(ctx context.Context, id string) (prompts.Prompt, error) {
+	p, ok := r.byID[id]
+	if !ok {
+		return prompts.Prompt{}, &missErr{id: id}
+	}
+	return p, nil
+}
+
+type missErr struct{ id string }
+
+func (e *missErr) Error() string { return "unknown prompt: " + e.id }
+
+func seedRegistry() prompts.Registry {
+	return &testRegistry{byID: map[string]prompts.Prompt{
+		prompts.StrategyPromptID("r", "compare"):       {ID: prompts.StrategyPromptID("r", "compare"), Version: 1, Body: "compare-template", Model: "mock-llm"},
+		prompts.StrategyPromptID("r", "classify"):      {ID: prompts.StrategyPromptID("r", "classify"), Version: 1, Body: "classify-template", Model: "mock-llm"},
+		prompts.StrategyPromptID("i", "pattern"):       {ID: prompts.StrategyPromptID("i", "pattern"), Version: 1, Body: "pattern-template", Model: "mock-llm"},
+		prompts.StrategyPromptID("i", "contradiction"): {ID: prompts.StrategyPromptID("i", "contradiction"), Version: 1, Body: "contradiction-template", Model: "mock-llm"},
+		prompts.DefaultStrategyPromptID("a", "report"): {ID: prompts.DefaultStrategyPromptID("a", "report"), Version: 1, Body: "report-template", Model: "mock-llm"},
+	}}
+}
+
+// mockRouter returns a fixed JSON body for each layer's LLM call.
+// Looks at the system prompt template to decide which shape to emit.
+func mockRouter(req llm.Request) string {
+	sys := ""
+	for _, m := range req.Messages {
+		if m.Role == "system" {
+			sys = m.Content
+			break
+		}
+	}
+	switch {
+	case strings.Contains(sys, "compare-template"):
+		return `{"similarities":["alpha","beta"],"differences":["gamma"]}`
+	case strings.Contains(sys, "classify-template"):
+		return `{"classification":"risk","confidence":0.83,"rationale":"evidence points to risk"}`
+	case strings.Contains(sys, "pattern-template"):
+		return `{"pattern":"deadlines slip on low-staffing sprints","occurrences":[{"week":1},{"week":3}],"confidence":0.74}`
+	case strings.Contains(sys, "contradiction-template"):
+		return `{"claim_a":"Timeline is tight","claim_b":"Staffing is light","evidence_refs":["t-1"],"severity":"high"}`
+	}
+	return "unexpected-prompt"
+}
+
 func TestLinearProcessEndToEnd(t *testing.T) {
 	if testing.Short() {
 		t.Skip("thinking e2e: skipped in -short mode")
@@ -56,12 +119,49 @@ func TestLinearProcessEndToEnd(t *testing.T) {
 	}
 	defer st.Close()
 
-	bus := tkafka.NewMemBus(hash)
-	orc := orchestrator.New(hash, bus, st)
-	reg := prompts.NewMemoryRegistry()
-	deps := processors.Deps{
-		Hash: hash, Bus: bus, Orc: orc, Prompts: reg, Log: newLogger(t),
+	innerBus := tkafka.NewMemBus(hash)
+	bus, err := tkafka.NewValidatingBus(innerBus, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
+	orc := orchestrator.New(hash, bus, st)
+
+	// Subscribe early so we capture every produced message for
+	// post-run assertions.
+	artifactCh := make(chan []byte, 4)
+	reflectionCh := make(chan []byte, 4)
+	_, _ = bus.Subscribe(tkafka.TopicName(hash, tkafka.TopicArtifactsCreated), func(ctx context.Context, m tkafka.Message) error {
+		artifactCh <- append([]byte(nil), m.Value...)
+		return nil
+	})
+	_, _ = bus.Subscribe(tkafka.TopicName(hash, tkafka.TopicReflectionsGenerated), func(ctx context.Context, m tkafka.Message) error {
+		reflectionCh <- append([]byte(nil), m.Value...)
+		return nil
+	})
+
+	reg := seedRegistry()
+	mockLLM := &llm.MockAdapter{Responder: mockRouter, ModelName: "mock-llm"}
+
+	budgetFactory := func(processID string, spec schema.ProcessSpec) *budget.Controller {
+		return budget.New(processID, spec.EffectiveMaxTokens(), 100.0, st, budget.StubEstimator{})
+	}
+
+	deps := processors.Deps{
+		Hash: hash, Bus: bus, Orc: orc, Prompts: reg,
+		Log: newLogger(t), LLM: mockLLM, Budgets: budgetFactory,
+	}
+
+	// Start the consumer-side cache so /v1/* listings return data.
+	cache, err := store.NewCache(store.CacheConfig{
+		Store: st, Bus: bus, Hash: hash, Logger: newLogger(t),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cache.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer cache.Stop()
 
 	ctx := t.Context()
 	for _, p := range []processors.Processor{procR.New(deps), procI.New(deps), procA.New(deps)} {
@@ -78,6 +178,7 @@ func TestLinearProcessEndToEnd(t *testing.T) {
 		Orc:       orc,
 		Store:     st,
 		BuildInfo: "test",
+		Cache:     cache,
 	})
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
@@ -89,7 +190,7 @@ func TestLinearProcessEndToEnd(t *testing.T) {
 	spec := schema.ProcessSpec{
 		SchemaVer: schema.CurrentSchemaVer,
 		ProcessID: uuid.NewString(),
-		Intent:    "smoke test",
+		Intent:    "e2e linear",
 		Mode:      schema.ModeLinear,
 		Depth:     1,
 		Steps: []schema.Step{
@@ -113,6 +214,7 @@ func TestLinearProcessEndToEnd(t *testing.T) {
 	}
 	resp.Body.Close()
 
+	// 1. Wait for completion.
 	deadline := time.Now().Add(3 * time.Second)
 	var last map[string]interface{}
 	for time.Now().Before(deadline) {
@@ -132,6 +234,176 @@ func TestLinearProcessEndToEnd(t *testing.T) {
 	if last["state"] != "completed" {
 		t.Fatalf("process did not complete: %+v", last)
 	}
+
+	// 2. Capture and assert Artifact shape.
+	select {
+	case raw := <-artifactCh:
+		var a schema.Artifact
+		if err := json.Unmarshal(raw, &a); err != nil {
+			t.Fatal(err)
+		}
+		if a.Format == "" {
+			t.Errorf("artifact.format empty: %+v", a)
+		}
+		if a.Audience == "" {
+			t.Errorf("artifact.audience empty: %+v", a)
+		}
+		if a.Version < 1 {
+			t.Errorf("artifact.version < 1")
+		}
+		if a.Provenance.IIDs == nil {
+			t.Errorf("artifact.provenance.i_ids missing")
+		}
+		if a.Content == nil || len(a.Content) == 0 {
+			t.Errorf("artifact.content empty")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no artifact emitted")
+	}
+
+	// 3. Capture Reflection — the LLM mock's structured output should
+	// have propagated into the published R payload.
+	select {
+	case raw := <-reflectionCh:
+		var r schema.Reflection
+		if err := json.Unmarshal(raw, &r); err != nil {
+			t.Fatal(err)
+		}
+		if r.Strategy != schema.StrategyCompare {
+			t.Errorf("reflection strategy = %s", r.Strategy)
+		}
+		sims, _ := r.Content["similarities"].([]interface{})
+		diffs, _ := r.Content["differences"].([]interface{})
+		if len(sims) != 2 || len(diffs) != 1 {
+			t.Errorf("compare content shape unexpected: %+v", r.Content)
+		}
+		if r.Trace.PromptID == "" || r.Trace.Model == "" {
+			t.Errorf("trace fields empty: %+v", r.Trace)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no reflection emitted")
+	}
+
+	// 4. Listing endpoints served from cache — should include our data.
+	listURL := ts.URL + "/v1/artifacts"
+	lr, _ := http.NewRequest("GET", listURL, nil)
+	lr.Header.Set("Authorization", "Bearer "+tok)
+	lresp, err := http.DefaultClient.Do(lr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lresp.Body.Close()
+	var listed []json.RawMessage
+	if err := json.NewDecoder(lresp.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode /v1/artifacts: %v", err)
+	}
+	if len(listed) == 0 {
+		t.Errorf("GET /v1/artifacts returned empty — cache not populated")
+	}
+
+	// Snapshot LLM mock: every R/I step must have called it.
+	if len(mockLLM.Calls) < 2 {
+		t.Errorf("expected at least 2 LLM calls (R + I), got %d", len(mockLLM.Calls))
+	}
+}
+
+func TestMalformedThoughtRejectedByValidator(t *testing.T) {
+	if testing.Short() {
+		t.Skip("thinking e2e: skipped in -short mode")
+	}
+	raw, _ := mctx.NewRaw("validator-user")
+	hash := raw.Hash()
+
+	innerBus := tkafka.NewMemBus(hash)
+	bus, err := tkafka.NewValidatingBus(innerBus, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Producer-side: malformed Thought must be rejected before dispatch.
+	bad := map[string]interface{}{
+		"thought_id": "t-bad",
+		"type":       "not-a-valid-enum",
+		"content":    "x",
+	}
+	err = bus.Produce(context.Background(), tkafka.TopicName(hash, tkafka.TopicThoughtsRaw), "k", bad)
+	if err == nil {
+		t.Fatalf("expected producer to reject invalid T")
+	}
+	if !tkafka.IsSchemaValidationError(err) {
+		t.Errorf("expected *SchemaValidationError, got %T: %v", err, err)
+	}
+	if !strings.Contains(err.Error(), "schema validation failed") {
+		t.Errorf("error message missing expected prefix: %v", err)
+	}
+}
+
+func TestContradictionEmitsFollowupQuestion(t *testing.T) {
+	if testing.Short() {
+		t.Skip("thinking e2e: skipped in -short mode")
+	}
+	raw, _ := mctx.NewRaw("fb-user")
+	hash := raw.Hash()
+
+	st, _ := store.Open(":memory:")
+	defer st.Close()
+
+	innerBus := tkafka.NewMemBus(hash)
+	bus, err := tkafka.NewValidatingBus(innerBus, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	orc := orchestrator.New(hash, bus, st)
+
+	thoughtCh := make(chan []byte, 4)
+	_, _ = bus.Subscribe(tkafka.TopicName(hash, tkafka.TopicThoughtsRaw), func(ctx context.Context, m tkafka.Message) error {
+		thoughtCh <- append([]byte(nil), m.Value...)
+		return nil
+	})
+
+	mockLLM := &llm.MockAdapter{
+		Responder: func(req llm.Request) string {
+			return `{"claim_a":"A","claim_b":"B","evidence_refs":["t-1"],"severity":"high"}`
+		},
+		ModelName: "mock-llm",
+	}
+	reg := &testRegistry{byID: map[string]prompts.Prompt{
+		prompts.StrategyPromptID("i", "contradiction"): {ID: prompts.StrategyPromptID("i", "contradiction"), Version: 1, Body: "contradiction-template", Model: "mock-llm"},
+	}}
+	deps := processors.Deps{
+		Hash: hash, Bus: bus, Orc: orc, Prompts: reg, Log: newLogger(t),
+		LLM: mockLLM,
+	}
+	iProc := procI.New(deps)
+	if err := iProc.Start(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	defer iProc.Stop()
+
+	// Fire a command through the command topic.
+	spec := schema.ProcessSpec{
+		SchemaVer: schema.CurrentSchemaVer, ProcessID: "p-fb",
+		Intent: "find contradictions", Mode: schema.ModeLinear, Depth: 1,
+		Steps: []schema.Step{{Layer: schema.LayerI, Strategy: "contradiction"}},
+	}
+	if err := orc.Submit(t.Context(), spec); err != nil {
+		t.Fatal(err)
+	}
+
+	// Expect one follow-up T of type=question on thoughts.raw.
+	select {
+	case raw := <-thoughtCh:
+		var th schema.Thought
+		_ = json.Unmarshal(raw, &th)
+		if th.Type != schema.ThoughtQuestion {
+			t.Errorf("follow-up type = %s, want question", th.Type)
+		}
+		if !strings.Contains(th.Source.Ref, "i-proc/contradiction") {
+			t.Errorf("follow-up source.ref = %s", th.Source.Ref)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no follow-up question thought")
+	}
 }
 
 func TestHealthNoAuth(t *testing.T) {
@@ -142,7 +414,8 @@ func TestHealthNoAuth(t *testing.T) {
 	hash := raw.Hash()
 	st, _ := store.Open(":memory:")
 	defer st.Close()
-	bus := tkafka.NewMemBus(hash)
+	innerBus := tkafka.NewMemBus(hash)
+	bus, _ := tkafka.NewValidatingBus(innerBus, nil)
 	orc := orchestrator.New(hash, bus, st)
 	srv := api.New(api.Config{
 		OwnerRaw: raw, Hash: hash, Secret: []byte("x"),

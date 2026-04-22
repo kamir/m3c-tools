@@ -29,13 +29,18 @@ import (
 
 // Config wires the API server.
 type Config struct {
-	OwnerRaw    mctx.Raw
-	Hash        mctx.Hash
-	Secret      []byte
-	Bus         tkafka.Bus
-	Orc         *orchestrator.Orchestrator
-	Store       *store.Store
-	BuildInfo   string
+	OwnerRaw  mctx.Raw
+	Hash      mctx.Hash
+	Secret    []byte
+	Bus       tkafka.Bus
+	Orc       *orchestrator.Orchestrator
+	Store     *store.Store
+	BuildInfo string
+
+	// Cache serves listings when non-nil. The Week 2 real cache
+	// subscribes to T/R/I/A topics and maintains a windowed index;
+	// tests can pass nil to fall back to empty-list behaviour.
+	Cache *store.Cache
 }
 
 // Server is the HTTP surface.
@@ -86,10 +91,10 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/v1/health", s.health)
 	s.mux.HandleFunc("/v1/process", s.createProcess)
 	s.mux.HandleFunc("/v1/process/", s.processDispatch)
-	s.mux.HandleFunc("/v1/thoughts", s.listEmpty)
-	s.mux.HandleFunc("/v1/reflections", s.listEmpty)
-	s.mux.HandleFunc("/v1/insights", s.listEmpty)
-	s.mux.HandleFunc("/v1/artifacts", s.listEmpty)
+	s.mux.HandleFunc("/v1/thoughts", s.listThoughts)
+	s.mux.HandleFunc("/v1/reflections", s.listReflections)
+	s.mux.HandleFunc("/v1/insights", s.listInsights)
+	s.mux.HandleFunc("/v1/artifacts", s.listArtifacts)
 	s.mux.HandleFunc("/v1/trace/", s.trace)
 	s.mux.HandleFunc("/v1/compile", s.compile)
 	s.mux.HandleFunc("/v1/rebuild", s.rebuild)
@@ -267,10 +272,69 @@ func (s *Server) replay(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "replay not implemented in Phase 1", http.StatusNotImplemented)
 }
 
-func (s *Server) listEmpty(w http.ResponseWriter, r *http.Request) {
-	// Week 1 stub — browse endpoints return empty arrays until the
-	// consumer-side cache lands.
-	writeJSON(w, http.StatusOK, []interface{}{})
+// ----- listing endpoints (Week 2) -----
+
+func (s *Server) listThoughts(w http.ResponseWriter, r *http.Request) {
+	s.listLayer(w, r, "T", "")
+}
+
+func (s *Server) listReflections(w http.ResponseWriter, r *http.Request) {
+	// thought_id filter maps to the R.thought_ids parent index.
+	parent := r.URL.Query().Get("thought_id")
+	s.listLayer(w, r, "R", parent)
+}
+
+func (s *Server) listInsights(w http.ResponseWriter, r *http.Request) {
+	// reflection_id or thought_id filter maps to I.input_ids.
+	parent := r.URL.Query().Get("reflection_id")
+	if parent == "" {
+		parent = r.URL.Query().Get("thought_id")
+	}
+	s.listLayer(w, r, "I", parent)
+}
+
+func (s *Server) listArtifacts(w http.ResponseWriter, r *http.Request) {
+	// insight_id filter maps to A.insight_ids.
+	parent := r.URL.Query().Get("insight_id")
+	s.listLayer(w, r, "A", parent)
+}
+
+func (s *Server) listLayer(w http.ResponseWriter, r *http.Request, layer, parentID string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.cfg.Cache == nil {
+		writeJSON(w, http.StatusOK, []interface{}{})
+		return
+	}
+	var since time.Time
+	if s := r.URL.Query().Get("since"); s != "" {
+		if t, err := time.Parse(time.RFC3339, s); err == nil {
+			since = t
+		}
+	}
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		// best-effort parse; invalid values fall back to default
+		var n int
+		_, err := fmt.Sscanf(l, "%d", &n)
+		if err == nil && n > 0 && n <= 500 {
+			limit = n
+		}
+	}
+	rows := s.cfg.Cache.List(layer, since, parentID, limit)
+	// Respond as a JSON array of raw objects.
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("["))
+	for i, row := range rows {
+		if i > 0 {
+			_, _ = w.Write([]byte(","))
+		}
+		_, _ = w.Write(row)
+	}
+	_, _ = w.Write([]byte("]"))
 }
 
 // ----- SSE fanout -----

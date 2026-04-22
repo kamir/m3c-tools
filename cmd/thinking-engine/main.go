@@ -19,9 +19,11 @@ import (
 	"time"
 
 	"github.com/kamir/m3c-tools/internal/thinking/api"
+	"github.com/kamir/m3c-tools/internal/thinking/budget"
 	mctx "github.com/kamir/m3c-tools/internal/thinking/ctx"
 	"github.com/kamir/m3c-tools/internal/thinking/er1"
 	tkafka "github.com/kamir/m3c-tools/internal/thinking/kafka"
+	"github.com/kamir/m3c-tools/internal/thinking/llm"
 	"github.com/kamir/m3c-tools/internal/thinking/orchestrator"
 	procA "github.com/kamir/m3c-tools/internal/thinking/processors/a"
 	procC "github.com/kamir/m3c-tools/internal/thinking/processors/c"
@@ -29,6 +31,7 @@ import (
 	procR "github.com/kamir/m3c-tools/internal/thinking/processors/r"
 	"github.com/kamir/m3c-tools/internal/thinking/processors"
 	"github.com/kamir/m3c-tools/internal/thinking/prompts"
+	"github.com/kamir/m3c-tools/internal/thinking/schema"
 	"github.com/kamir/m3c-tools/internal/thinking/store"
 )
 
@@ -86,22 +89,80 @@ func main() {
 	}
 	defer st.Close()
 
-	// Kafka bus — in-memory for Week 1.
-	bus := tkafka.NewMemBus(hash)
+	// Kafka bus — in-memory default, wrapped in a schema validator so
+	// every produce + every consume goes through the SPEC-0167 gate.
+	innerBus := tkafka.NewMemBus(hash)
+	bus, err := tkafka.NewValidatingBus(innerBus, nil)
+	if err != nil {
+		logger.Fatalf("validating bus: %v", err)
+	}
 	defer func() { _ = bus.Close() }()
 
 	// ER1 stub client.
 	_ = er1.New(rawCtx) // constructed here only to prove ctx-guard wiring
 
-	// Orchestrator + processors.
+	// Orchestrator.
 	orc := orchestrator.New(hash, bus, st)
-	promptReg := prompts.NewMemoryRegistry()
+
+	// Prompt registry — prefer HTTP if configured, fall back to the
+	// in-memory stub so local dev still works without a Flask bridge.
+	var promptReg prompts.Registry
+	if baseURL := os.Getenv("THINKING_PROMPT_REGISTRY_URL"); baseURL != "" {
+		reg, err := prompts.NewHTTPRegistry(prompts.HTTPConfig{
+			BaseURL: baseURL,
+			Store:   st,
+			Logger:  logger,
+		})
+		if err != nil {
+			logger.Fatalf("prompt registry: %v", err)
+		}
+		promptReg = reg
+		logger.Printf("prompts: HTTP registry at %s", baseURL)
+	} else {
+		promptReg = prompts.NewMemoryRegistry()
+		logger.Printf("prompts: in-memory stub registry (set THINKING_PROMPT_REGISTRY_URL to use Flask)")
+	}
+
+	// LLM adapter — OpenAI if OPENAI_API_KEY is set; otherwise
+	// processors that need LLM will error cleanly.
+	var llmAdapter llm.Adapter
+	if adapter, err := llm.NewOpenAI(); err == nil {
+		llmAdapter = adapter
+		logger.Printf("llm: openai adapter initialised")
+	} else {
+		logger.Printf("llm: not configured (%v) — R/I handlers will fail until configured", err)
+	}
+
+	// Budget factory: one controller per process, reusing the shared
+	// store for the daily USD counter.
+	budgetFactory := func(processID string, spec schema.ProcessSpec) *budget.Controller {
+		return budget.New(processID, spec.EffectiveMaxTokens(), 0, st, budget.StubEstimator{})
+	}
+	_ = budgetFactory // referenced below via deps
+
+	// Consumer-side read cache for listing endpoints (Week 2).
+	cache, err := store.NewCache(store.CacheConfig{
+		Store:  st,
+		Bus:    bus,
+		Hash:   hash,
+		Logger: logger,
+	})
+	if err != nil {
+		logger.Fatalf("cache: %v", err)
+	}
+	if err := cache.Start(); err != nil {
+		logger.Fatalf("cache start: %v", err)
+	}
+	defer cache.Stop()
+
 	deps := processors.Deps{
 		Hash:    hash,
 		Bus:     bus,
 		Orc:     orc,
 		Prompts: promptReg,
 		Log:     logger,
+		LLM:     llmAdapter,
+		Budgets: budgetFactory,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -127,6 +188,7 @@ func main() {
 		Orc:       orc,
 		Store:     st,
 		BuildInfo: version,
+		Cache:     cache,
 	})
 	httpSrv := &http.Server{
 		Addr:              *listen,

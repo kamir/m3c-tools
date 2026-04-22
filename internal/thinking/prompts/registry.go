@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 )
 
 // Prompt is the minimum Week 1 record.
@@ -77,28 +76,31 @@ func (r *memRegistry) Get(ctx context.Context, id string) (Prompt, error) {
 	return p, nil
 }
 
-// ----- HTTP registry (Phase 2 placeholder) -----
-
-// HTTPConfig configures the Flask-backed registry client.
-type HTTPConfig struct {
-	BaseURL string
-	Token   string
-	TTL     time.Duration
-}
-
-// NewHTTPRegistry will return an ETag-cached HTTP Registry client.
-// Week 1 stub; real implementation lands Week 2 per PLAN-0167.
-// Kept as a function rather than a struct so swapping drivers in
-// main.go is a one-line change.
-func NewHTTPRegistry(cfg HTTPConfig) (Registry, error) {
-	_ = cfg
-	return nil, fmt.Errorf("prompts: HTTP registry not yet implemented (Week 2)")
-}
-
 // DefaultStrategyPromptID returns the stub prompt id the Week 1
 // processors use for a given (layer, strategy) pair. Keeps all
 // prompt ids in one place so the seed list above is the single
 // source of truth.
 func DefaultStrategyPromptID(layer, strategy string) string {
 	return fmt.Sprintf("thinking.%s.%s.stub", layer, strategy)
+}
+
+// StrategyPromptID returns the production prompt id for a given
+// (layer, strategy) pair as used by the Flask registry. Mirrors
+// PLAN-0167 §Stream 2b seed names.
+func StrategyPromptID(layer, strategy string) string {
+	return fmt.Sprintf("tmpl.%s.%s.v1", longLayerName(layer), strategy)
+}
+
+func longLayerName(short string) string {
+	switch short {
+	case "r":
+		return "reflect"
+	case "i":
+		return "insight"
+	case "a":
+		return "artifact"
+	case "c":
+		return "compile"
+	}
+	return short
 }
