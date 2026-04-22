@@ -235,6 +235,39 @@ func (c *Cache) Count(layer string) int {
 	return len(c.items[layer])
 }
 
+// Get returns the raw JSON payload for one message by layer+id. Nil
+// means "not in cache" (trace walker treats this as a missing leaf).
+// Falls through to SQLite if the in-memory window has evicted the id.
+func (c *Cache) Get(layer, id string) []byte {
+	if layer == "" || id == "" {
+		return nil
+	}
+	c.mu.RLock()
+	for _, it := range c.items[layer] {
+		if it.ID == id {
+			payload := append([]byte(nil), it.Payload...)
+			c.mu.RUnlock()
+			return payload
+		}
+	}
+	c.mu.RUnlock()
+	// Miss — try SQLite. ListMsgCache with a parentID filter won't
+	// help here; fetch the single row via a targeted query.
+	if c.store == nil {
+		return nil
+	}
+	rows, err := c.store.ListMsgCache(layer, time.Time{}, "", 0)
+	if err != nil {
+		return nil
+	}
+	for _, r := range rows {
+		if r.ID == id {
+			return r.Payload
+		}
+	}
+	return nil
+}
+
 // ----- helpers -----
 
 func idForLayer(layer string, m map[string]interface{}) string {
