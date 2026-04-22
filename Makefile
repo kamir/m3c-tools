@@ -356,9 +356,12 @@ installer-windows: build-windows
 # Thinking Engine (SPEC-0167) — Phase 1 Week 1 scaffold
 # -----------------------------------------------------------------------------
 
-THINKING_BIN      = thinking-engine
-THINKING_CMD_DIR  = ./cmd/thinking-engine
-THINKING_COMPOSE  = deploy/thinking-engine/docker-compose.yml
+THINKING_BIN        = thinking-engine
+THINKING_CMD_DIR    = ./cmd/thinking-engine
+THINKING_COMPOSE    = deploy/thinking-engine/docker-compose.yml
+THINKING_DOCKERFILE = deploy/thinking-engine/Dockerfile
+THINKING_IMAGE      = m3c/thinking-engine
+ENGINE_TAG         ?= dev
 
 # Build the thinking-engine binary. Pure Go, no CGO.
 .PHONY: thinking-build
@@ -372,6 +375,43 @@ thinking-build:
 thinking-test:
 	@echo "Running thinking-engine unit tests (offline, -short)..."
 	go test -short -count=1 ./internal/thinking/...
+
+# Run the tagged unit tests for the franz-go driver. These still do
+# NOT need a broker — they exercise the isolation guard and
+# consumer-group naming logic with no network I/O.
+.PHONY: thinking-test-tagged
+thinking-test-tagged:
+	@echo "Running thinking-engine tagged unit tests (thinking_kafka, no broker needed)..."
+	go test -tags thinking_kafka -count=1 ./internal/thinking/kafka/...
+
+# Run the real-broker integration test. Requires M3C_KAFKA_URL.
+# Automatically skipped in the test file if the env var is empty.
+.PHONY: thinking-test-integration
+thinking-test-integration:
+	@if [ -z "$$M3C_KAFKA_URL" ]; then \
+		echo "thinking-test-integration: M3C_KAFKA_URL not set — skipping."; \
+		echo "To run against a local broker:"; \
+		echo "  make thinking-up CTX_HASH=<hash>"; \
+		echo "  M3C_KAFKA_URL=localhost:9092 make thinking-test-integration"; \
+		exit 0; \
+	fi
+	go test -tags thinking_kafka -count=1 -v ./e2e/thinking/...
+
+# Build the Thinking Engine Docker image locally. Tag defaults to
+# ENGINE_TAG=dev; override for versioned builds. Compose's
+# `profiles: [engine]` slot picks up this image once it exists.
+.PHONY: thinking-image
+thinking-image:
+	@echo "Building $(THINKING_IMAGE):$(ENGINE_TAG) ..."
+	docker build \
+		-f $(THINKING_DOCKERFILE) \
+		-t $(THINKING_IMAGE):$(ENGINE_TAG) \
+		--build-arg VERSION=$(ENGINE_TAG) \
+		.
+	@echo ""
+	@echo "Image built. To run via compose:"
+	@echo "  CTX_HASH=<hash> M3C_USER_CONTEXT_ID=<id> THINKING_ENGINE_SECRET=<s> \\"
+	@echo "    docker compose -f $(THINKING_COMPOSE) --profile engine up -d"
 
 # Bring up the per-user cp-all-in-one stack. CTX_HASH must be set
 # (or sourced from deploy/thinking-engine/.env).
@@ -436,11 +476,14 @@ help:
 	@echo "  test-gate-windows-quick  Same but skip test phase (compile check only)"
 	@echo ""
 	@echo "Thinking Engine (SPEC-0167):"
-	@echo "  thinking-build  Build ./build/thinking-engine"
-	@echo "  thinking-test   Run internal/thinking unit tests (-short)"
-	@echo "  thinking-up     docker compose up for cp-all-in-one stack (needs CTX_HASH)"
-	@echo "  thinking-down   docker compose down"
-	@echo "  thinking-logs   docker compose logs -f"
-	@echo "  thinking-topics Create 8 topics for CTX_HASH"
+	@echo "  thinking-build            Build ./build/thinking-engine"
+	@echo "  thinking-image            Build local Docker image m3c/thinking-engine:\$$ENGINE_TAG"
+	@echo "  thinking-test             Run internal/thinking unit tests (-short)"
+	@echo "  thinking-test-tagged      Run franz-go driver unit tests (-tags thinking_kafka)"
+	@echo "  thinking-test-integration Run e2e tests against real broker (needs M3C_KAFKA_URL)"
+	@echo "  thinking-up               docker compose up for cp-all-in-one stack (needs CTX_HASH)"
+	@echo "  thinking-down             docker compose down"
+	@echo "  thinking-logs             docker compose logs -f"
+	@echo "  thinking-topics           Create 8 topics for CTX_HASH"
 	@echo ""
 	@echo "  help           Show this help"

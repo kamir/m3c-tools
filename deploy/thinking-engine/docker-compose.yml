@@ -71,11 +71,22 @@ services:
       PORT: 9021
 
   engine:
-    # The engine image is built out-of-band from this compose file —
-    # see the Makefile `thinking-build` target. For Week 1 we only
-    # run the binary natively; the compose file includes a container
-    # slot so Week 2+ can flip to container-runtime trivially.
+    # The engine image can be built locally via `make thinking-image`
+    # OR on-demand by this compose stanza. The `profiles: [engine]`
+    # gate means this service only starts when the engine profile is
+    # requested — the broker/registry/control-center subset keeps
+    # working without it (Week 1 behaviour).
+    #
+    # Stream 2c (SPEC-0167) wires the real franz-go driver behind the
+    # `thinking_kafka` build tag; see deploy/thinking-engine/Dockerfile.
     image: m3c/thinking-engine:${ENGINE_TAG:-dev}
+    build:
+      # Two levels up == repo root, which is the build context
+      # the Makefile `thinking-image` target uses.
+      context: ../../
+      dockerfile: deploy/thinking-engine/Dockerfile
+      args:
+        VERSION: "${ENGINE_TAG:-dev}"
     container_name: "m3c-engine-${CTX_HASH:?CTX_HASH required}"
     depends_on:
       - broker
@@ -85,8 +96,12 @@ services:
       THINKING_ENGINE_SECRET: "${THINKING_ENGINE_SECRET:?secret required}"
       M3C_USER_CONTEXT_ID: "${M3C_USER_CONTEXT_ID:?user_context_id required}"
       M3C_KAFKA_ADDR: "broker:29092"
+    command:
+      - "--user-context-id=${M3C_USER_CONTEXT_ID}"
+      - "--kafka=broker:29092"
+      - "--listen=:7140"
     profiles:
-      - engine # disabled by default until an image tag exists
+      - engine # disabled by default; opt in with `--profile engine`
 
 volumes:
   zk-data:
