@@ -162,6 +162,97 @@ func (a *openaiAdapter) EstimateCost(req Request) (int, float64) {
 	return inTok + outTok, cost
 }
 
+// ----- Factory -----
+
+// NewAdapterFromEnv picks an Adapter based on process environment.
+//
+// Precedence (documented in PLAN-0167 §Stream 3c):
+//
+//  1. If OPENAI_API_KEY is set → OpenAI adapter.
+//     - If OLLAMA_URL is also set AND M3C_LLM_FALLBACK=ollama, the
+//       returned adapter wraps OpenAI as primary and Ollama as
+//       fallback on 5xx responses. Lets a prod-configured engine
+//       degrade to local inference during transient outages.
+//  2. Else if OLLAMA_URL is set → Ollama adapter (local, zero cost).
+//  3. Else → error. The engine refuses to start without a configured
+//     LLM path rather than silently no-op. Matches the Week-1
+//     invariant that NewOpenAI errors on missing OPENAI_API_KEY.
+//
+// This is the single entry point the engine's main() should use;
+// tests continue to construct MockAdapter directly.
+func NewAdapterFromEnv() (Adapter, error) {
+	haveOpenAI := strings.TrimSpace(os.Getenv("OPENAI_API_KEY")) != ""
+	haveOllama := strings.TrimSpace(os.Getenv("OLLAMA_URL")) != ""
+	fallback := strings.EqualFold(strings.TrimSpace(os.Getenv("M3C_LLM_FALLBACK")), "ollama")
+
+	switch {
+	case haveOpenAI && haveOllama && fallback:
+		primary, err := NewOpenAI()
+		if err != nil {
+			return nil, fmt.Errorf("llm: factory primary (openai): %w", err)
+		}
+		secondary, err := NewOllama()
+		if err != nil {
+			return nil, fmt.Errorf("llm: factory fallback (ollama): %w", err)
+		}
+		return &fallbackAdapter{primary: primary, secondary: secondary}, nil
+	case haveOpenAI:
+		return NewOpenAI()
+	case haveOllama:
+		return NewOllama()
+	default:
+		return nil, errors.New("llm: no LLM configured — set OPENAI_API_KEY or OLLAMA_URL")
+	}
+}
+
+// fallbackAdapter tries primary.Complete first; on a 5xx-style error
+// from the primary it retries once against the secondary. Used when
+// OpenAI is configured as primary with Ollama as a local fallback for
+// transient provider outages.
+type fallbackAdapter struct {
+	primary   Adapter
+	secondary Adapter
+}
+
+func (f *fallbackAdapter) Name() string {
+	return f.primary.Name() + "+fallback:" + f.secondary.Name()
+}
+
+func (f *fallbackAdapter) Complete(ctx context.Context, req Request) (Response, error) {
+	resp, err := f.primary.Complete(ctx, req)
+	if err == nil {
+		return resp, nil
+	}
+	if !isTransientLLMError(err) {
+		return Response{}, err
+	}
+	return f.secondary.Complete(ctx, req)
+}
+
+func (f *fallbackAdapter) EstimateCost(req Request) (int, float64) {
+	return f.primary.EstimateCost(req)
+}
+
+// isTransientLLMError heuristically detects 5xx-class upstream errors
+// from provider adapters. The go-openai client returns errors whose
+// String form includes "status code: 5" on 5xx; our ollama adapter
+// returns "status <code>:" on any >= 500. We keep this loose rather
+// than typed because the OpenAI SDK's error type isn't stable across
+// versions and this gate only decides whether to try the fallback.
+func isTransientLLMError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	if strings.Contains(s, "status code: 5") {
+		return true
+	}
+	if strings.Contains(s, "status 5") {
+		return true
+	}
+	return false
+}
+
 // EstimateOpenAICost returns USD cost for (model, promptTokens, completionTokens)
 // using a conservative fixed-rate card. Real production numbers are
 // whatever the API bills; this is an internal estimator for budget
