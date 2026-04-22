@@ -81,3 +81,37 @@ unchanged.
 Consumer groups are named `m3c-<ctx_hash>-<role>` (dots in the topic
 suffix become dashes, e.g. `thoughts.raw` → `thoughts-raw`). Two
 users' engines pointed at the same broker still cannot share a group.
+
+## Dev-Cycle Recipes
+
+See `SPEC-0167-m3c-thinking-engine.md` and `PLAN-0167-week3-kickoff.md`
+(in the sibling `m3c-tools-maintenance` repo) §Stream 3c for detail.
+`NewAdapterFromEnv()` picks an LLM by env:
+`OPENAI_API_KEY` → OpenAI; else `OLLAMA_URL` → Ollama (zero-cost local);
+both + `M3C_LLM_FALLBACK=ollama` → OpenAI primary with Ollama fallback on 5xx.
+
+Local zero-cost dev (in-memory bus + Ollama):
+
+```bash
+ollama pull llama3.1:8b
+export THINKING_ENGINE_SECRET=dev-secret-please-change
+export OLLAMA_URL=http://localhost:11434   # OLLAMA_MODEL defaults to llama3.1:8b
+make thinking-build
+./build/thinking-engine --user-context-id=demo --listen=:7140
+```
+
+Real broker + OpenAI (tagged build, production-shaped):
+
+```bash
+go build -tags thinking_kafka -o build/thinking-engine ./cmd/thinking-engine
+export THINKING_ENGINE_SECRET=dev-secret-please-change OPENAI_API_KEY=sk-...
+export M3C_KAFKA_URL=localhost:9092
+./build/thinking-engine --user-context-id=demo --kafka=$M3C_KAFKA_URL --listen=:7140
+```
+
+Run the tests:
+
+```bash
+make thinking-test                                          # unit, in-memory bus
+M3C_KAFKA_URL=localhost:9092 make thinking-test-integration # e2e against a real broker
+```
