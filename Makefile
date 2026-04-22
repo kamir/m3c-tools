@@ -352,6 +352,47 @@ installer-windows: build-windows
 	makensis scripts/installer.nsi
 	@echo "Installer: $(BUILD_DIR)/M3C-Tools-Setup.exe"
 
+# -----------------------------------------------------------------------------
+# Thinking Engine (SPEC-0167) — Phase 1 Week 1 scaffold
+# -----------------------------------------------------------------------------
+
+THINKING_BIN      = thinking-engine
+THINKING_CMD_DIR  = ./cmd/thinking-engine
+THINKING_COMPOSE  = deploy/thinking-engine/docker-compose.yml
+
+# Build the thinking-engine binary. Pure Go, no CGO.
+.PHONY: thinking-build
+thinking-build:
+	@echo "Building $(THINKING_BIN)..."
+	@mkdir -p $(BUILD_DIR)
+	CGO_ENABLED=0 go build -o $(BUILD_DIR)/$(THINKING_BIN) $(THINKING_CMD_DIR)
+
+# Run unit tests for the thinking packages only (no Kafka required).
+.PHONY: thinking-test
+thinking-test:
+	@echo "Running thinking-engine unit tests (offline, -short)..."
+	go test -short -count=1 ./internal/thinking/...
+
+# Bring up the per-user cp-all-in-one stack. CTX_HASH must be set
+# (or sourced from deploy/thinking-engine/.env).
+.PHONY: thinking-up
+thinking-up:
+	@echo "Bringing up cp-all-in-one for CTX_HASH=$${CTX_HASH:?set CTX_HASH}..."
+	docker compose -f $(THINKING_COMPOSE) up -d zookeeper broker schema-registry control-center
+
+.PHONY: thinking-down
+thinking-down:
+	docker compose -f $(THINKING_COMPOSE) down
+
+.PHONY: thinking-logs
+thinking-logs:
+	docker compose -f $(THINKING_COMPOSE) logs -f --tail=200
+
+# Create all 8 topics for the current CTX_HASH.
+.PHONY: thinking-topics
+thinking-topics:
+	@bash deploy/thinking-engine/topic-bootstrap.sh --ctx-hash $${CTX_HASH:?set CTX_HASH}
+
 # Show help
 .PHONY: help
 help:
@@ -393,4 +434,13 @@ help:
 	@echo "  lint           Run golangci-lint"
 	@echo "  test-gate-windows  Windows dev test gate: vet + cross-compile + tests (SPEC-0128)"
 	@echo "  test-gate-windows-quick  Same but skip test phase (compile check only)"
+	@echo ""
+	@echo "Thinking Engine (SPEC-0167):"
+	@echo "  thinking-build  Build ./build/thinking-engine"
+	@echo "  thinking-test   Run internal/thinking unit tests (-short)"
+	@echo "  thinking-up     docker compose up for cp-all-in-one stack (needs CTX_HASH)"
+	@echo "  thinking-down   docker compose down"
+	@echo "  thinking-logs   docker compose logs -f"
+	@echo "  thinking-topics Create 8 topics for CTX_HASH"
+	@echo ""
 	@echo "  help           Show this help"
