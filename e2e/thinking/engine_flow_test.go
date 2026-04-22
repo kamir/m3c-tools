@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -33,6 +34,7 @@ import (
 	"github.com/kamir/m3c-tools/internal/thinking/api"
 	"github.com/kamir/m3c-tools/internal/thinking/budget"
 	mctx "github.com/kamir/m3c-tools/internal/thinking/ctx"
+	"github.com/kamir/m3c-tools/internal/thinking/feedback"
 	tkafka "github.com/kamir/m3c-tools/internal/thinking/kafka"
 	"github.com/kamir/m3c-tools/internal/thinking/llm"
 	"github.com/kamir/m3c-tools/internal/thinking/orchestrator"
@@ -76,9 +78,12 @@ func seedRegistry() prompts.Registry {
 	return &testRegistry{byID: map[string]prompts.Prompt{
 		prompts.StrategyPromptID("r", "compare"):       {ID: prompts.StrategyPromptID("r", "compare"), Version: 1, Body: "compare-template", Model: "mock-llm"},
 		prompts.StrategyPromptID("r", "classify"):      {ID: prompts.StrategyPromptID("r", "classify"), Version: 1, Body: "classify-template", Model: "mock-llm"},
+		prompts.StrategyPromptID("r", "clarify"):       {ID: prompts.StrategyPromptID("r", "clarify"), Version: 1, Body: "clarify-template", Model: "mock-llm"},
 		prompts.StrategyPromptID("i", "pattern"):       {ID: prompts.StrategyPromptID("i", "pattern"), Version: 1, Body: "pattern-template", Model: "mock-llm"},
 		prompts.StrategyPromptID("i", "contradiction"): {ID: prompts.StrategyPromptID("i", "contradiction"), Version: 1, Body: "contradiction-template", Model: "mock-llm"},
-		prompts.DefaultStrategyPromptID("a", "report"): {ID: prompts.DefaultStrategyPromptID("a", "report"), Version: 1, Body: "report-template", Model: "mock-llm"},
+		prompts.StrategyPromptID("i", "decision"):      {ID: prompts.StrategyPromptID("i", "decision"), Version: 1, Body: "decision-template", Model: "mock-llm"},
+		prompts.StrategyPromptID("a", "report"):        {ID: prompts.StrategyPromptID("a", "report"), Version: 1, Body: "report-template", Model: "mock-llm"},
+		prompts.StrategyPromptID("a", "summary"):       {ID: prompts.StrategyPromptID("a", "summary"), Version: 1, Body: "summary-template", Model: "mock-llm"},
 	}}
 }
 
@@ -97,10 +102,18 @@ func mockRouter(req llm.Request) string {
 		return `{"similarities":["alpha","beta"],"differences":["gamma"]}`
 	case strings.Contains(sys, "classify-template"):
 		return `{"classification":"risk","confidence":0.83,"rationale":"evidence points to risk"}`
+	case strings.Contains(sys, "clarify-template"):
+		return `{"question":"Which claim is true?","sub_questions":["a","b"],"context":"x"}`
 	case strings.Contains(sys, "pattern-template"):
 		return `{"pattern":"deadlines slip on low-staffing sprints","occurrences":[{"week":1},{"week":3}],"confidence":0.74}`
 	case strings.Contains(sys, "contradiction-template"):
 		return `{"claim_a":"Timeline is tight","claim_b":"Staffing is light","evidence_refs":["t-1"],"severity":"high"}`
+	case strings.Contains(sys, "decision-template"):
+		return `{"decision":"Ship","rationale":"Evidence favors shipping","confidence":0.7}`
+	case strings.Contains(sys, "report-template"):
+		return `{"title":"Project risks","sections":[{"heading":"Timeline","body":"Timeline is tight; staffing is light. See I-01 and I-02."}],"key_points":["Timeline tight","Staffing light"]}`
+	case strings.Contains(sys, "summary-template"):
+		return `{"tl_dr":"Tight timeline, light staffing.","bullets":["Tight schedule","Few engineers"],"sources":["i-01","i-02"]}`
 	}
 	return "unexpected-prompt"
 }
@@ -436,5 +449,264 @@ func TestHealthNoAuth(t *testing.T) {
 	_ = json.NewDecoder(resp.Body).Decode(&h)
 	if h["ctx"] != hash.Hex() {
 		t.Errorf("health ctx = %v, want %s", h["ctx"], hash.Hex())
+	}
+}
+
+// TestSemiLinearHaltsOnStepFailure exercises the Week-3 step barrier.
+// A 3-step semi_linear spec deliberately fails in step 2 (the I-proc
+// receives a malformed JSON completion). Step 3 (A-proc) must NEVER
+// fire — if it did, the orchestrator's barrier is broken.
+func TestSemiLinearHaltsOnStepFailure(t *testing.T) {
+	if testing.Short() {
+		t.Skip("thinking e2e: skipped in -short mode")
+	}
+	raw, _ := mctx.NewRaw("e2e-semi")
+	hash := raw.Hash()
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	innerBus := tkafka.NewMemBus(hash)
+	bus, err := tkafka.NewValidatingBus(innerBus, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	orc := orchestrator.New(hash, bus, st)
+	if err := orc.Start(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	defer orc.Stop()
+
+	// Mock LLM: R gets valid JSON, I gets garbage so it fails, A should
+	// never be called because the barrier halts.
+	var aCalls atomic.Int32
+	mockLLM := &llm.MockAdapter{
+		Responder: func(req llm.Request) string {
+			sys := ""
+			for _, m := range req.Messages {
+				if m.Role == "system" {
+					sys = m.Content
+					break
+				}
+			}
+			switch {
+			case strings.Contains(sys, "compare-template"):
+				return `{"similarities":["x"],"differences":["y"]}`
+			case strings.Contains(sys, "pattern-template"):
+				// Deliberately malformed — I-proc parses this and fails.
+				return `garbage not json`
+			case strings.Contains(sys, "report-template"):
+				aCalls.Add(1)
+				return `{"title":"x","sections":[{"heading":"h","body":"b"}],"key_points":[]}`
+			}
+			return ""
+		},
+		ModelName: "mock-llm",
+	}
+
+	reg := seedRegistry()
+	deps := processors.Deps{
+		Hash: hash, Bus: bus, Orc: orc, Prompts: reg, Log: newLogger(t),
+		LLM: mockLLM,
+		Budgets: func(pid string, s schema.ProcessSpec) *budget.Controller {
+			return budget.New(pid, s.EffectiveMaxTokens(), 100.0, st, budget.StubEstimator{})
+		},
+	}
+	for _, p := range []processors.Processor{procR.New(deps), procI.New(deps), procA.New(deps)} {
+		if err := p.Start(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Track events so we can assert state transitions.
+	evtCh := make(chan schema.ProcessEvent, 32)
+	_, _ = bus.Subscribe(tkafka.TopicName(hash, tkafka.TopicProcessEvents), func(ctx context.Context, m tkafka.Message) error {
+		var ev schema.ProcessEvent
+		if err := json.Unmarshal(m.Value, &ev); err == nil {
+			evtCh <- ev
+		}
+		return nil
+	})
+
+	spec := schema.ProcessSpec{
+		SchemaVer: schema.CurrentSchemaVer,
+		ProcessID: uuid.NewString(),
+		Intent:    "semi-linear halt test",
+		Mode:      schema.ModeSemiLinear,
+		Depth:     1,
+		Steps: []schema.Step{
+			{Layer: schema.LayerR, Strategy: "compare"},
+			{Layer: schema.LayerI, Strategy: "pattern"},
+			{Layer: schema.LayerA, Strategy: "report"},
+		},
+	}
+	if err := orc.Submit(t.Context(), spec); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for ProcessFailed.
+	deadline := time.Now().Add(3 * time.Second)
+	failed := false
+	for time.Now().Before(deadline) && !failed {
+		select {
+		case ev := <-evtCh:
+			if ev.Event == schema.EventProcessFailed {
+				failed = true
+			}
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+	if !failed {
+		t.Fatal("process did not fail; step-barrier halt was not triggered")
+	}
+
+	// Give the bus a moment to ensure no stray A dispatch happens.
+	time.Sleep(250 * time.Millisecond)
+	if n := aCalls.Load(); n != 0 {
+		t.Errorf("A-proc fired %d times despite step-2 failure; barrier broken", n)
+	}
+
+	// Process state should be failed.
+	row, err := st.GetProcess(spec.ProcessID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.State != store.StateFailed {
+		t.Errorf("process state = %s, want failed", row.State)
+	}
+}
+
+// TestContradictionFeedbackLoopProducesFollowupArtifact exercises the
+// Week-3 feedback loop end-to-end:
+//
+//   1. An initial I/contradiction step emits a follow-up Thought
+//      with provenance.parent_artifact_id set.
+//   2. The feedback consumer picks that T off thoughts.raw, filters,
+//      rate-limits, and posts a default linear spec
+//      (R.clarify → I.decision → A.summary) back to the orchestrator.
+//   3. The downstream process produces a second Artifact —
+//      closing the cognitive loop.
+func TestContradictionFeedbackLoopProducesFollowupArtifact(t *testing.T) {
+	if testing.Short() {
+		t.Skip("thinking e2e: skipped in -short mode")
+	}
+	raw, _ := mctx.NewRaw("e2e-feedback")
+	hash := raw.Hash()
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	innerBus := tkafka.NewMemBus(hash)
+	bus, err := tkafka.NewValidatingBus(innerBus, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	orc := orchestrator.New(hash, bus, st)
+	if err := orc.Start(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	defer orc.Stop()
+
+	mockLLM := &llm.MockAdapter{Responder: mockRouter, ModelName: "mock-llm"}
+	reg := seedRegistry()
+
+	deps := processors.Deps{
+		Hash: hash, Bus: bus, Orc: orc, Prompts: reg, Log: newLogger(t),
+		LLM: mockLLM,
+		Budgets: func(pid string, s schema.ProcessSpec) *budget.Controller {
+			return budget.New(pid, s.EffectiveMaxTokens(), 100.0, st, budget.StubEstimator{})
+		},
+	}
+	for _, p := range []processors.Processor{procR.New(deps), procI.New(deps), procA.New(deps)} {
+		if err := p.Start(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Capture artifacts so we can see the follow-up one.
+	artifactCh := make(chan []byte, 8)
+	_, _ = bus.Subscribe(tkafka.TopicName(hash, tkafka.TopicArtifactsCreated), func(ctx context.Context, m tkafka.Message) error {
+		artifactCh <- append([]byte(nil), m.Value...)
+		return nil
+	})
+
+	// Capture follow-up thoughts so we can assert the loop input shape.
+	thoughtCh := make(chan []byte, 8)
+	_, _ = bus.Subscribe(tkafka.TopicName(hash, tkafka.TopicThoughtsRaw), func(ctx context.Context, m tkafka.Message) error {
+		thoughtCh <- append([]byte(nil), m.Value...)
+		return nil
+	})
+
+	// Start the feedback consumer.
+	fb, err := feedback.New(feedback.Config{
+		Hash: hash, Bus: bus, Orchestrator: orc, Store: st,
+		Logger: log.New(testWriter{t: t}, "[fb] ", 0),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := fb.Start(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	defer fb.Stop()
+
+	// Kick off the initial contradiction step.
+	spec := schema.ProcessSpec{
+		SchemaVer: schema.CurrentSchemaVer,
+		ProcessID: uuid.NewString(),
+		Intent:    "find contradictions, let feedback loop close",
+		Mode:      schema.ModeLinear,
+		Depth:     1,
+		Steps: []schema.Step{
+			{Layer: schema.LayerI, Strategy: "contradiction"},
+		},
+	}
+	if err := orc.Submit(t.Context(), spec); err != nil {
+		t.Fatal(err)
+	}
+
+	// Expect a follow-up question thought with parent_artifact_id set.
+	foundFollowup := false
+	deadline := time.Now().Add(2 * time.Second)
+	for !foundFollowup && time.Now().Before(deadline) {
+		select {
+		case body := <-thoughtCh:
+			var th schema.Thought
+			if err := json.Unmarshal(body, &th); err != nil {
+				continue
+			}
+			if th.Type == schema.ThoughtQuestion && th.Provenance != nil && th.Provenance.ParentArtifactID != nil {
+				foundFollowup = true
+			}
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+	if !foundFollowup {
+		t.Fatal("no follow-up question with parent_artifact_id seen — i-proc wiring regression")
+	}
+
+	// Expect an Artifact emitted by the feedback-driven process
+	// (A.summary at the end of the default feedback spec).
+	var gotSummary bool
+	deadline = time.Now().Add(3 * time.Second)
+	for !gotSummary && time.Now().Before(deadline) {
+		select {
+		case body := <-artifactCh:
+			var art schema.Artifact
+			if err := json.Unmarshal(body, &art); err != nil {
+				continue
+			}
+			if art.Format == schema.FormatSummary {
+				gotSummary = true
+			}
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+	if !gotSummary {
+		t.Fatal("feedback loop did not produce a summary artifact — loop is broken")
 	}
 }

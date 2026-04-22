@@ -48,15 +48,24 @@ type memRegistry struct {
 func NewMemoryRegistry() Registry {
 	r := &memRegistry{prompts: map[string]Prompt{}}
 	seed := []Prompt{
-		// R-proc strategies (Week 1: compare, classify)
+		// R-proc strategies (Week 1: compare, classify; Week 3: clarify)
 		{ID: "thinking.r.compare.stub", Version: 1, Model: "stub", Body: "Compare the given thoughts pairwise and list points of agreement and disagreement."},
 		{ID: "thinking.r.classify.stub", Version: 1, Model: "stub", Body: "Classify each thought into {fact, observation, question, idea, signal}."},
-		// I-proc strategies (Week 1: pattern, contradiction)
+		{ID: "thinking.r.clarify.stub", Version: 1, Model: "stub", Body: "Reformulate the input question and break it into atomic sub-questions."},
+		// I-proc strategies (Week 1: pattern, contradiction; Week 3: decision)
 		{ID: "thinking.i.pattern.stub", Version: 1, Model: "stub", Body: "From the input reflections, identify recurring patterns and name them."},
 		{ID: "thinking.i.contradiction.stub", Version: 1, Model: "stub", Body: "From the input reflections, surface contradictions and frame each as an open question."},
+		{ID: "thinking.i.decision.stub", Version: 1, Model: "stub", Body: "Recommend a decision given the clarified question, with rationale and confidence."},
 		// A-proc strategies (Week 1: report, summary)
 		{ID: "thinking.a.report.stub", Version: 1, Model: "stub", Body: "Render the insights as a short markdown report for a human audience."},
 		{ID: "thinking.a.summary.stub", Version: 1, Model: "stub", Body: "Produce a one-paragraph summary of the insights."},
+		// Production ids consumed by the real handlers (A-proc uses
+		// StrategyPromptID, not DefaultStrategyPromptID). Seed them too
+		// so local dev with the memory registry works out of the box.
+		{ID: "tmpl.artifact.report.v1", Version: 1, Model: "stub", Body: "Produce a JSON object {\"title\":\"...\",\"sections\":[{\"heading\":\"...\",\"body\":\"...\"}],\"key_points\":[]} for a human reader."},
+		{ID: "tmpl.artifact.summary.v1", Version: 1, Model: "stub", Body: "Produce a JSON object {\"tl_dr\":\"...\",\"bullets\":[],\"sources\":[]} — keep it compact."},
+		{ID: "tmpl.reflect.clarify.v1", Version: 1, Model: "stub", Body: "Reformulate the question and list sub-questions as JSON {\"question\":\"...\",\"sub_questions\":[],\"context\":\"\"}."},
+		{ID: "tmpl.insight.decision.v1", Version: 1, Model: "stub", Body: "Recommend a decision as JSON {\"decision\":\"...\",\"rationale\":\"...\",\"confidence\":0.5}."},
 		// C-proc strategies (Week 1: summarize)
 		{ID: "thinking.c.summarize.stub", Version: 1, Model: "stub", Body: "Compile a periodic rollup across the supplied artifacts."},
 	}
