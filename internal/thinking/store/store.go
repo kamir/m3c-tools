@@ -32,13 +32,15 @@ const (
 
 // ProcessRow is the persistent projection of an in-flight process.
 type ProcessRow struct {
-	ProcessID   string
-	State       ProcessState
-	CurrentStep string
-	ArtifactIDs []string
-	SpecJSON    []byte
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ProcessID    string
+	State        ProcessState
+	CurrentStep  string
+	StepIndex    int // last step known to have completed; -1 means "none yet"
+	IterationIdx int // loop-mode iteration counter (D6 — Week 3 loop cap)
+	ArtifactIDs  []string
+	SpecJSON     []byte
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 // Store is a small facade over the SQLite tables. Concurrency-safe
@@ -83,9 +85,19 @@ func (s *Store) migrate() error {
 			process_id    TEXT PRIMARY KEY,
 			state         TEXT NOT NULL,
 			current_step  TEXT NOT NULL DEFAULT '',
+			step_index    INTEGER NOT NULL DEFAULT -1,
+			iteration_idx INTEGER NOT NULL DEFAULT 0,
 			artifact_ids  TEXT NOT NULL DEFAULT '[]',
 			spec_json     BLOB NOT NULL,
 			created_at    TIMESTAMP NOT NULL,
+			updated_at    TIMESTAMP NOT NULL
+		)`,
+		// Week 3 — feedback loop rate limiting (10/hour per user).
+		// Keyed by hour bucket (UTC RFC3339 truncated to hour) so the
+		// table stays small and we can reset counters by age.
+		`CREATE TABLE IF NOT EXISTS feedback_counters (
+			hour_utc      TEXT PRIMARY KEY,
+			count         INTEGER NOT NULL DEFAULT 0,
 			updated_at    TIMESTAMP NOT NULL
 		)`,
 		`CREATE TABLE IF NOT EXISTS sse_subscribers (
@@ -138,8 +150,8 @@ func (s *Store) InsertProcess(spec schema.ProcessSpec) error {
 	}
 	now := time.Now().UTC()
 	_, err = s.db.Exec(
-		`INSERT INTO processes(process_id, state, current_step, artifact_ids, spec_json, created_at, updated_at)
-		 VALUES (?, ?, '', '[]', ?, ?, ?)`,
+		`INSERT INTO processes(process_id, state, current_step, step_index, iteration_idx, artifact_ids, spec_json, created_at, updated_at)
+		 VALUES (?, ?, '', -1, 0, '[]', ?, ?, ?)`,
 		spec.ProcessID, string(StatePending), b, now, now,
 	)
 	return err
@@ -177,17 +189,124 @@ func (s *Store) AppendArtifact(processID, artifactID string) error {
 // GetProcess returns the current row for a process.
 func (s *Store) GetProcess(processID string) (ProcessRow, error) {
 	row := s.db.QueryRow(
-		`SELECT process_id, state, current_step, artifact_ids, spec_json, created_at, updated_at
+		`SELECT process_id, state, current_step, step_index, iteration_idx, artifact_ids, spec_json, created_at, updated_at
 		 FROM processes WHERE process_id=?`, processID,
 	)
 	var r ProcessRow
 	var state, blob string
-	if err := row.Scan(&r.ProcessID, &state, &r.CurrentStep, &blob, &r.SpecJSON, &r.CreatedAt, &r.UpdatedAt); err != nil {
+	if err := row.Scan(&r.ProcessID, &state, &r.CurrentStep, &r.StepIndex, &r.IterationIdx, &blob, &r.SpecJSON, &r.CreatedAt, &r.UpdatedAt); err != nil {
 		return ProcessRow{}, err
 	}
 	r.State = ProcessState(state)
 	_ = json.Unmarshal([]byte(blob), &r.ArtifactIDs)
 	return r, nil
+}
+
+// AdvanceStepIndex atomically bumps the highest-completed step index
+// only when newIdx is strictly greater than the stored value. Returns
+// the effective index after the update (which may equal the existing
+// value if newIdx did not advance).
+//
+// Used by the semi_linear orchestrator to guard against out-of-order
+// StepCompleted events racing each other. Returns an error only on DB
+// failure.
+func (s *Store) AdvanceStepIndex(processID string, newIdx int) (int, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var cur int
+	if err := tx.QueryRow(`SELECT step_index FROM processes WHERE process_id=?`, processID).Scan(&cur); err != nil {
+		return 0, err
+	}
+	if newIdx <= cur {
+		// Nothing to do; still commit the read-only tx for cleanliness.
+		_ = tx.Commit()
+		return cur, nil
+	}
+	if _, err := tx.Exec(
+		`UPDATE processes SET step_index=?, updated_at=? WHERE process_id=?`,
+		newIdx, time.Now().UTC(), processID,
+	); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return newIdx, nil
+}
+
+// IncrementIteration bumps loop-mode iteration counter and returns the
+// new value. Used by the orchestrator's loop mode to enforce
+// max_iterations (Week 3, SPEC-0167 §ProcessSpec.mode=loop).
+func (s *Store) IncrementIteration(processID string) (int, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var cur int
+	if err := tx.QueryRow(`SELECT iteration_idx FROM processes WHERE process_id=?`, processID).Scan(&cur); err != nil {
+		return 0, err
+	}
+	cur++
+	if _, err := tx.Exec(
+		`UPDATE processes SET iteration_idx=?, updated_at=? WHERE process_id=?`,
+		cur, time.Now().UTC(), processID,
+	); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return cur, nil
+}
+
+// IncrementFeedbackCounter atomically increments the feedback
+// rate-limit counter for the current UTC hour bucket. Returns the
+// post-increment value so the caller can compare against the cap
+// (SPEC-0167 §Stream 3a — 10/hour).
+func (s *Store) IncrementFeedbackCounter() (int, error) {
+	hour := time.Now().UTC().Format("2006-01-02T15")
+	now := time.Now().UTC()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(
+		`INSERT INTO feedback_counters(hour_utc, count, updated_at)
+		 VALUES(?, 1, ?)
+		 ON CONFLICT(hour_utc) DO UPDATE SET
+		   count = count + 1,
+		   updated_at = excluded.updated_at`,
+		hour, now,
+	); err != nil {
+		return 0, err
+	}
+	var count int
+	if err := tx.QueryRow(`SELECT count FROM feedback_counters WHERE hour_utc=?`, hour).Scan(&count); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// GetFeedbackCounter returns the current count for the UTC hour bucket.
+func (s *Store) GetFeedbackCounter() (int, error) {
+	hour := time.Now().UTC().Format("2006-01-02T15")
+	row := s.db.QueryRow(`SELECT count FROM feedback_counters WHERE hour_utc=?`, hour)
+	var count int
+	if err := row.Scan(&count); err != nil {
+		if err == sql.ErrNoRows {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return count, nil
 }
 
 // AddBudgetSpend increments today's counters atomically.

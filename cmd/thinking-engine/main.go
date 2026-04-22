@@ -22,6 +22,7 @@ import (
 	"github.com/kamir/m3c-tools/internal/thinking/budget"
 	mctx "github.com/kamir/m3c-tools/internal/thinking/ctx"
 	"github.com/kamir/m3c-tools/internal/thinking/er1"
+	"github.com/kamir/m3c-tools/internal/thinking/feedback"
 	tkafka "github.com/kamir/m3c-tools/internal/thinking/kafka"
 	"github.com/kamir/m3c-tools/internal/thinking/llm"
 	"github.com/kamir/m3c-tools/internal/thinking/orchestrator"
@@ -101,7 +102,9 @@ func main() {
 	// ER1 stub client.
 	_ = er1.New(rawCtx) // constructed here only to prove ctx-guard wiring
 
-	// Orchestrator.
+	// Orchestrator. Start() subscribes it to its own process.events
+	// topic so semi_linear + loop modes can advance step-by-step
+	// (SPEC-0167 §Stream 3a).
 	orc := orchestrator.New(hash, bus, st)
 
 	// Prompt registry — prefer HTTP if configured, fall back to the
@@ -179,6 +182,28 @@ func main() {
 		}
 	}
 
+	// Orchestrator's own events subscription (semi_linear + loop).
+	if err := orc.Start(ctx); err != nil {
+		logger.Fatalf("start orchestrator: %v", err)
+	}
+
+	// Feedback consumer — closes the contradiction → new process loop
+	// (SPEC-0167 §Stream 3a). Rate-limited at 10/hour.
+	fbConsumer, err := feedback.New(feedback.Config{
+		Hash:         hash,
+		Bus:          bus,
+		Orchestrator: orc,
+		Store:        st,
+		Logger:       logger,
+	})
+	if err != nil {
+		logger.Fatalf("feedback consumer: %v", err)
+	}
+	if err := fbConsumer.Start(ctx); err != nil {
+		logger.Fatalf("start feedback consumer: %v", err)
+	}
+	defer fbConsumer.Stop()
+
 	// HTTP server.
 	srv := api.New(api.Config{
 		OwnerRaw:  rawCtx,
@@ -211,6 +236,7 @@ func main() {
 	for _, p := range procs {
 		p.Stop()
 	}
+	orc.Stop()
 	shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutCancel()
 	if err := httpSrv.Shutdown(shutCtx); err != nil {

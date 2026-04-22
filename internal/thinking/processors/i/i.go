@@ -40,6 +40,7 @@ func New(deps processors.Deps) *Processor {
 var strategies = map[string]processors.Handler{
 	"pattern":       handlePattern,
 	"contradiction": handleContradiction,
+	"decision":      handleDecision,
 }
 
 func (p *Processor) Start(ctx context.Context) error {
@@ -63,7 +64,7 @@ func (p *Processor) Start(ctx context.Context) error {
 		return err
 	}
 	p.stop = stop
-	p.deps.Log.Printf("i-proc: subscribed (strategies: pattern, contradiction)")
+	p.deps.Log.Printf("i-proc: subscribed (strategies: pattern, contradiction, decision)")
 	return nil
 }
 
@@ -81,6 +82,18 @@ func handlePattern(ctx context.Context, deps processors.Deps, cmd schema.Process
 		return nil, err
 	}
 	return emitInsight(ctx, deps, cmd, schema.SynthesisPattern, inputs, content, trace, "pattern", contentConfidence(content))
+}
+
+// handleDecision is the Week-3 feedback-loop strategy. It takes the
+// clarified question + its sub-questions and produces a recommended
+// decision: which claim to prefer, why, with a confidence score.
+// Output shape: {"decision": "...", "rationale": "...", "confidence": float}
+func handleDecision(ctx context.Context, deps processors.Deps, cmd schema.ProcessCommand) (map[string]interface{}, error) {
+	content, trace, inputs, err := runInsight(ctx, deps, cmd, "decision", parseDecisionContent)
+	if err != nil {
+		return nil, err
+	}
+	return emitInsight(ctx, deps, cmd, schema.SynthesisDecision, inputs, content, trace, "decision", contentConfidence(content))
 }
 
 func handleContradiction(ctx context.Context, deps processors.Deps, cmd schema.ProcessCommand) (map[string]interface{}, error) {
@@ -158,11 +171,22 @@ func emitInsight(ctx context.Context, deps processors.Deps, cmd schema.ProcessCo
 }
 
 // emitFollowupQuestion publishes a new Thought onto thoughts.raw of
-// type=question, carrying the two contradicting claims.
+// type=question, carrying the two contradicting claims. Week 3 sets
+// provenance.parent_artifact_id so the feedback consumer can
+// distinguish machine-generated questions from raw user questions
+// (SPEC-0167 §Stream 3a — "T messages with type=question AND
+// parent_artifact_id != null").
+//
+// The parent reference is synthesized from the process id because the
+// i-proc doesn't have an artifact id at this point — the artifact is
+// produced downstream by A-proc. What matters for the filter is that
+// the field is non-nil and traceable back to the engine run that
+// emitted the contradiction.
 func emitFollowupQuestion(ctx context.Context, deps processors.Deps, cmd schema.ProcessCommand, insightContent map[string]interface{}) error {
 	claimA, _ := insightContent["claim_a"].(string)
 	claimB, _ := insightContent["claim_b"].(string)
 	text := "Which of these is true? \n  A: " + claimA + "\n  B: " + claimB
+	parentRef := "proc://" + cmd.ProcessID
 	t := schema.Thought{
 		SchemaVer: schema.CurrentSchemaVer,
 		ThoughtID: uuid.NewString(),
@@ -175,7 +199,8 @@ func emitFollowupQuestion(ctx context.Context, deps processors.Deps, cmd schema.
 		Tags:      []string{"feedback", "contradiction"},
 		Timestamp: time.Now().UTC(),
 		Provenance: &schema.Provenance{
-			CapturedBy: "thinking-engine/i-proc",
+			CapturedBy:       "thinking-engine/i-proc",
+			ParentArtifactID: &parentRef,
 		},
 	}
 	topic := tkafka.TopicName(deps.Hash, tkafka.TopicThoughtsRaw)
@@ -239,6 +264,26 @@ func parsePatternContent(raw string) (map[string]interface{}, error) {
 		"pattern":     obj.Pattern,
 		"occurrences": obj.Occurrences,
 		"confidence":  obj.Confidence,
+	}, nil
+}
+
+func parseDecisionContent(raw string) (map[string]interface{}, error) {
+	var obj struct {
+		Decision   string  `json:"decision"`
+		Rationale  string  `json:"rationale"`
+		Confidence float64 `json:"confidence"`
+	}
+	clean := stripCodeFence(raw)
+	if err := json.Unmarshal([]byte(clean), &obj); err != nil {
+		return nil, fmt.Errorf("decision: non-json output: %w", err)
+	}
+	if strings.TrimSpace(obj.Decision) == "" {
+		return nil, fmt.Errorf("decision: missing decision field")
+	}
+	return map[string]interface{}{
+		"decision":   obj.Decision,
+		"rationale":  obj.Rationale,
+		"confidence": obj.Confidence,
 	}, nil
 }
 

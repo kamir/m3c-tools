@@ -40,10 +40,11 @@ func New(deps processors.Deps) *Processor {
 	}
 }
 
-// Strategies exposed by Week 2.
+// Strategies exposed by Week 2 (compare, classify) + Week 3 (clarify).
 var strategies = map[string]processors.Handler{
 	"compare":  handleCompare,
 	"classify": handleClassify,
+	"clarify":  handleClarify,
 }
 
 // Start subscribes to the orchestrator's command topic.
@@ -68,7 +69,7 @@ func (p *Processor) Start(ctx context.Context) error {
 		return err
 	}
 	p.stop = stop
-	p.deps.Log.Printf("r-proc: subscribed (strategies: compare, classify)")
+	p.deps.Log.Printf("r-proc: subscribed (strategies: compare, classify, clarify)")
 	return nil
 }
 
@@ -87,6 +88,15 @@ func handleCompare(ctx context.Context, deps processors.Deps, cmd schema.Process
 
 func handleClassify(ctx context.Context, deps processors.Deps, cmd schema.ProcessCommand) (map[string]interface{}, error) {
 	return runReflection(ctx, deps, cmd, schema.StrategyClassify, "classify", parseClassifyContent)
+}
+
+// handleClarify is the Week-3 feedback-loop strategy. It takes the
+// triggering question thought and expands it into an explicit
+// reformulation + list of sub-questions. Output shape:
+//
+//	{"question": "...", "sub_questions": [...], "context": "..."}
+func handleClarify(ctx context.Context, deps processors.Deps, cmd schema.ProcessCommand) (map[string]interface{}, error) {
+	return runReflection(ctx, deps, cmd, schema.StrategyClarify, "clarify", parseClarifyContent)
 }
 
 type contentParser func(raw string) (map[string]interface{}, error)
@@ -199,6 +209,29 @@ func parseCompareContent(raw string) (map[string]interface{}, error) {
 	return map[string]interface{}{
 		"similarities": obj.Similarities,
 		"differences":  obj.Differences,
+	}, nil
+}
+
+func parseClarifyContent(raw string) (map[string]interface{}, error) {
+	var obj struct {
+		Question     string   `json:"question"`
+		SubQuestions []string `json:"sub_questions"`
+		Context      string   `json:"context"`
+	}
+	clean := stripCodeFence(raw)
+	if err := json.Unmarshal([]byte(clean), &obj); err != nil {
+		return nil, fmt.Errorf("clarify: non-json output: %w", err)
+	}
+	if strings.TrimSpace(obj.Question) == "" {
+		return nil, fmt.Errorf("clarify: missing question field")
+	}
+	if obj.SubQuestions == nil {
+		obj.SubQuestions = []string{}
+	}
+	return map[string]interface{}{
+		"question":      obj.Question,
+		"sub_questions": obj.SubQuestions,
+		"context":       obj.Context,
 	}, nil
 }
 
