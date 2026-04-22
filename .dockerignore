@@ -1,0 +1,40 @@
+# .dockerignore — trims the build context used by
+# deploy/thinking-engine/Dockerfile (SPEC-0167 Stream 2c).
+#
+# The thinking-engine image only needs Go sources + go.mod/go.sum.
+# Keeping this file narrow so other potential Dockerfiles in the
+# repo still see what they need.
+
+# Git + editor state
+.git
+.github
+.claude
+.stream-2a-sidecar
+
+# Build outputs (committed binaries at repo root + build/ dir)
+build/
+dist/
+m3c-tools
+m3c-tools-darwin*
+m3c-tools-linux*
+m3c-tools.exe
+
+# macOS noise
+.DS_Store
+**/.DS_Store
+
+# Environment + secrets (never ship into images)
+.env
+.env.*
+
+# Installer assets, docs, design — not needed in the thinking-engine image.
+installer/
+docs/
+design/
+
+# Python venv + node artifacts if they ever appear
+venv/
+node_modules/
+
+# Sidecar from the parallel Stream 2a worktree; never part of a build.
+.stream-2a-sidecar/
