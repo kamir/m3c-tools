@@ -23,6 +23,7 @@ import (
 	mctx "github.com/kamir/m3c-tools/internal/thinking/ctx"
 	tkafka "github.com/kamir/m3c-tools/internal/thinking/kafka"
 	"github.com/kamir/m3c-tools/internal/thinking/orchestrator"
+	"github.com/kamir/m3c-tools/internal/thinking/rebuild"
 	"github.com/kamir/m3c-tools/internal/thinking/schema"
 	"github.com/kamir/m3c-tools/internal/thinking/store"
 )
@@ -41,6 +42,10 @@ type Config struct {
 	// subscribes to T/R/I/A topics and maintains a windowed index;
 	// tests can pass nil to fall back to empty-list behaviour.
 	Cache *store.Cache
+
+	// Rebuild wires the /v1/rebuild admin endpoint. Optional; when
+	// nil the handler returns 501.
+	Rebuild *rebuild.Service
 }
 
 // Server is the HTTP surface.
@@ -236,17 +241,21 @@ func (s *Server) sseEvents(w http.ResponseWriter, r *http.Request, id string) {
 
 func (s *Server) trace(w http.ResponseWriter, r *http.Request) {
 	artifactID := strings.TrimPrefix(r.URL.Path, "/v1/trace/")
+	artifactID = strings.Trim(artifactID, "/")
 	if artifactID == "" {
 		http.NotFound(w, r)
 		return
 	}
-	// Week 1 stub: return a one-node tree so the UI shape is right.
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"layer":    "A",
-		"id":       artifactID,
-		"summary":  "[stub trace — real walker lands Week 2]",
-		"children": []interface{}{},
-	})
+	if s.cfg.Cache == nil {
+		http.Error(w, "trace unavailable — cache not wired", http.StatusServiceUnavailable)
+		return
+	}
+	tree, ok := buildTrace(s.cfg.Cache, artifactID)
+	if !ok {
+		http.Error(w, "artifact not found", http.StatusNotFound)
+		return
+	}
+	writeJSON(w, http.StatusOK, tree)
 }
 
 func (s *Server) compile(w http.ResponseWriter, r *http.Request) {
@@ -264,7 +273,22 @@ func (s *Server) rebuild(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	w.WriteHeader(http.StatusAccepted)
+	if s.cfg.Rebuild == nil {
+		http.Error(w, "rebuild service not configured", http.StatusNotImplemented)
+		return
+	}
+	if !rebuild.TryBegin(s.cfg.Rebuild) {
+		http.Error(w, "rebuild already in progress", http.StatusTooManyRequests)
+		return
+	}
+	defer rebuild.End(s.cfg.Rebuild)
+
+	res, err := s.cfg.Rebuild.Run(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, res)
 }
 
 func (s *Server) replay(w http.ResponseWriter, r *http.Request) {
