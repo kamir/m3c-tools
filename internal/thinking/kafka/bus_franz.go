@@ -17,20 +17,21 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/twmb/franz-go/pkg/kgo"
+
 	mctx "github.com/kamir/m3c-tools/internal/thinking/ctx"
 )
 
 // NewFranzBus will return a franz-go-backed Bus bound to owner.
-// The implementation is intentionally stubbed until the dependency
-// is added to go.mod; callers opting into this build tag are
-// expected to wire franz-go themselves. See SPEC-0167 Phase 2 plan.
+// The implementation is intentionally stubbed until the Week 2
+// work lands; callers opting into this build tag get a clear
+// Phase-2 error instead of a partial driver. See SPEC-0167.
 func NewFranzBus(owner mctx.Hash, brokers []string) (Bus, error) {
 	_ = owner
 	_ = brokers
+	var _ *kgo.Client
 	return nil, errors.New("thinking/kafka: franz-go driver is Phase 2; see SPEC-0167")
 }
 
-// compile-only placeholder to keep json import referenced if the
-// stub is expanded.
 var _ = json.Marshal
 var _ context.Context
