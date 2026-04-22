@@ -92,6 +92,27 @@ func (s *Store) migrate() error {
 			cost_usd      REAL    NOT NULL DEFAULT 0.0,
 			updated_at    TIMESTAMP NOT NULL
 		)`,
+		// D1 — ETag-mirrored prompt cache. Survives engine restarts.
+		`CREATE TABLE IF NOT EXISTS prompt_cache (
+			prompt_id    TEXT PRIMARY KEY,
+			version      INTEGER NOT NULL DEFAULT 0,
+			body         TEXT NOT NULL DEFAULT '',
+			model        TEXT NOT NULL DEFAULT '',
+			etag         TEXT NOT NULL DEFAULT '',
+			fetched_at   TIMESTAMP NOT NULL
+		)`,
+		// Consumer-side read cache mirror. Lets /v1/{thoughts,reflections,
+		// insights,artifacts} serve data after a cold start without
+		// re-consuming the full Kafka log. "layer" ∈ {T, R, I, A}.
+		`CREATE TABLE IF NOT EXISTS msg_cache (
+			id           TEXT NOT NULL,
+			layer        TEXT NOT NULL,
+			payload      BLOB NOT NULL,
+			timestamp    TIMESTAMP NOT NULL,
+			parent_ids   TEXT NOT NULL DEFAULT '[]',
+			PRIMARY KEY (layer, id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_msg_cache_layer_ts ON msg_cache(layer, timestamp DESC)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.Exec(stmt); err != nil {
@@ -188,4 +209,118 @@ func (s *Store) GetBudgetSpend() (tokens int, costUSD float64, err error) {
 		return 0, 0, err
 	}
 	return tokens, costUSD, nil
+}
+
+// PromptCacheRow mirrors one row of the prompt_cache table.
+type PromptCacheRow struct {
+	ID        string
+	Version   int
+	Body      string
+	Model     string
+	ETag      string
+	FetchedAt time.Time
+}
+
+// UpsertPromptCache writes one prompt entry (insert-or-update).
+func (s *Store) UpsertPromptCache(row PromptCacheRow) error {
+	_, err := s.db.Exec(
+		`INSERT INTO prompt_cache(prompt_id, version, body, model, etag, fetched_at)
+		 VALUES(?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(prompt_id) DO UPDATE SET
+		   version=excluded.version,
+		   body=excluded.body,
+		   model=excluded.model,
+		   etag=excluded.etag,
+		   fetched_at=excluded.fetched_at`,
+		row.ID, row.Version, row.Body, row.Model, row.ETag, row.FetchedAt,
+	)
+	return err
+}
+
+// LoadPromptCache returns all cached prompt rows (used to warm the
+// in-memory registry cache on startup).
+func (s *Store) LoadPromptCache() ([]PromptCacheRow, error) {
+	rows, err := s.db.Query(
+		`SELECT prompt_id, version, body, model, etag, fetched_at FROM prompt_cache`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []PromptCacheRow
+	for rows.Next() {
+		var r PromptCacheRow
+		if err := rows.Scan(&r.ID, &r.Version, &r.Body, &r.Model, &r.ETag, &r.FetchedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// MsgCacheRow is one mirrored message (T/R/I/A).
+type MsgCacheRow struct {
+	ID        string
+	Layer     string // "T" | "R" | "I" | "A"
+	Payload   []byte // raw JSON
+	Timestamp time.Time
+	ParentIDs []string // denormalized for fast filter queries (e.g. R.thought_ids, I.input_ids)
+}
+
+// UpsertMsgCache inserts or updates a mirrored message.
+func (s *Store) UpsertMsgCache(row MsgCacheRow) error {
+	parents, _ := json.Marshal(row.ParentIDs)
+	if parents == nil {
+		parents = []byte("[]")
+	}
+	_, err := s.db.Exec(
+		`INSERT INTO msg_cache(id, layer, payload, timestamp, parent_ids)
+		 VALUES(?, ?, ?, ?, ?)
+		 ON CONFLICT(layer, id) DO UPDATE SET
+		   payload=excluded.payload,
+		   timestamp=excluded.timestamp,
+		   parent_ids=excluded.parent_ids`,
+		row.ID, row.Layer, row.Payload, row.Timestamp, string(parents),
+	)
+	return err
+}
+
+// ListMsgCache returns messages for one layer, newest first, optionally
+// filtered by minTimestamp and parent id (e.g. thought_id to get Rs).
+// limit 0 means "no limit"; we cap implicitly at 1000 to prevent
+// runaway queries.
+func (s *Store) ListMsgCache(layer string, since time.Time, parentID string, limit int) ([]MsgCacheRow, error) {
+	if limit <= 0 || limit > 1000 {
+		limit = 1000
+	}
+	q := `SELECT id, layer, payload, timestamp, parent_ids FROM msg_cache WHERE layer=?`
+	args := []interface{}{layer}
+	if !since.IsZero() {
+		q += ` AND timestamp >= ?`
+		args = append(args, since)
+	}
+	if parentID != "" {
+		// parent_ids is a JSON array; LIKE is cheap + good enough here.
+		q += ` AND parent_ids LIKE ?`
+		args = append(args, "%\""+parentID+"\"%")
+	}
+	q += ` ORDER BY timestamp DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []MsgCacheRow
+	for rows.Next() {
+		var r MsgCacheRow
+		var parents string
+		if err := rows.Scan(&r.ID, &r.Layer, &r.Payload, &r.Timestamp, &parents); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal([]byte(parents), &r.ParentIDs)
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
