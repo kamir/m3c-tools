@@ -31,7 +31,9 @@ import (
 	procR "github.com/kamir/m3c-tools/internal/thinking/processors/r"
 	"github.com/kamir/m3c-tools/internal/thinking/processors"
 	"github.com/kamir/m3c-tools/internal/thinking/prompts"
+	"github.com/kamir/m3c-tools/internal/thinking/rebuild"
 	"github.com/kamir/m3c-tools/internal/thinking/schema"
+	"github.com/kamir/m3c-tools/internal/thinking/sink"
 	"github.com/kamir/m3c-tools/internal/thinking/store"
 )
 
@@ -98,8 +100,15 @@ func main() {
 	}
 	defer func() { _ = bus.Close() }()
 
-	// ER1 stub client.
-	_ = er1.New(rawCtx) // constructed here only to prove ctx-guard wiring
+	// ER1 HTTP client. ER1_BASE_URL (default http://localhost:5000) is
+	// the aims-core Flask bridge; HMAC secret matches
+	// `flask/modules/thinking_bridge/auth.py`.
+	er1Client, err := er1.NewWithConfig(rawCtx, er1.Config{
+		HMACSecret: secret,
+	})
+	if err != nil {
+		logger.Fatalf("er1: %v", err)
+	}
 
 	// Orchestrator.
 	orc := orchestrator.New(hash, bus, st)
@@ -179,6 +188,28 @@ func main() {
 		}
 	}
 
+	// Rebuild service for POST /v1/rebuild.
+	rebuildSvc := &rebuild.Service{
+		Hash: hash, OwnerID: rawCtx.Value(),
+		Bus: bus, ER1: er1Client, Orc: orc, Cache: cache, Logger: logger,
+	}
+
+	// ER1 sinker (D2). Opt-in via ENABLE_ER1_SINK=1. Default ON in
+	// deployments; tests leave it OFF.
+	var sinker *sink.Sinker
+	if sink.Enabled(os.Getenv) {
+		sinker = sink.New(sink.Config{
+			Hash: hash, OwnerID: rawCtx.Value(),
+			Bus: bus, ER1: er1Client, Logger: logger,
+		})
+		if err := sinker.Start(ctx); err != nil {
+			logger.Fatalf("sink: %v", err)
+		}
+		logger.Printf("sink: ER1 projection active")
+	} else {
+		logger.Printf("sink: disabled (ENABLE_ER1_SINK not set)")
+	}
+
 	// HTTP server.
 	srv := api.New(api.Config{
 		OwnerRaw:  rawCtx,
@@ -189,6 +220,7 @@ func main() {
 		Store:     st,
 		BuildInfo: version,
 		Cache:     cache,
+		Rebuild:   rebuildSvc,
 	})
 	httpSrv := &http.Server{
 		Addr:              *listen,
@@ -210,6 +242,9 @@ func main() {
 
 	for _, p := range procs {
 		p.Stop()
+	}
+	if sinker != nil {
+		sinker.Stop()
 	}
 	shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutCancel()
