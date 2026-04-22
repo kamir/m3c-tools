@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://m3c.onboarding.guide/schemas/I.schema.json",
+  "title": "Insight",
+  "description": "I-layer message. Synthesis across R and/or T. Contradiction insights are first-class and drive the feedback loop.",
+  "type": "object",
+  "required": ["insight_id", "input_ids", "synthesis_mode", "content", "confidence", "timestamp", "trace", "schema_ver"],
+  "properties": {
+    "schema_ver": { "type": "integer", "const": 1 },
+    "insight_id": { "type": "string" },
+    "input_ids": { "type": "array", "items": { "type": "string" }, "minItems": 1, "description": "T ids or R ids" },
+    "synthesis_mode": { "enum": ["pattern", "contradiction", "decision", "abstraction"] },
+    "content": { "type": "object" },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "supporting": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ref", "weight"],
+        "properties": {
+          "ref": { "type": "string", "description": "T/R id or external ref" },
+          "weight": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "trace": {
+      "type": "object",
+      "required": ["prompt_id", "model"],
+      "properties": {
+        "prompt_id": { "type": "string" },
+        "prompt_version": { "type": "integer" },
+        "model": { "type": "string" },
+        "tokens": { "type": "object", "properties": { "in": { "type": "integer" }, "out": { "type": "integer" } } },
+        "duration_ms": { "type": "integer" },
+        "cost_usd": { "type": "number" }
+      }
+    },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "process_id": { "type": "string" }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://m3c.onboarding.guide/schemas/A.schema.json",
+  "title": "Artifact",
+  "description": "A-layer message. Externalization. Views, never truth. The artifacts.created topic IS the record of truth for the artifact (D2); ER1 is a projection.",
+  "type": "object",
+  "required": ["artifact_id", "insight_ids", "format", "audience", "content", "version", "provenance", "timestamp", "schema_ver"],
+  "properties": {
+    "schema_ver": { "type": "integer", "const": 1 },
+    "artifact_id": { "type": "string" },
+    "insight_ids": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "format": { "enum": ["report", "summary", "dashboard", "content", "api_payload"] },
+    "audience": { "enum": ["human", "agent", "system"] },
+    "content": { "type": "object", "description": "structured output, format-specific" },
+    "version": { "type": "integer", "minimum": 1 },
+    "provenance": {
+      "type": "object",
+      "required": ["t_ids", "r_ids", "i_ids"],
+      "properties": {
+        "t_ids": { "type": "array", "items": { "type": "string" } },
+        "r_ids": { "type": "array", "items": { "type": "string" } },
+        "i_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "process_id": { "type": "string" },
+    "er1_ref": {
+      "type": ["string", "null"],
+      "description": "populated by the async sinker once persisted to ER1; null until sinker runs"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://m3c.onboarding.guide/schemas/R.schema.json",
+  "title": "Reflection",
+  "description": "R-layer message. Atomic interpretation of a bounded set of thoughts using one strategy. Synthesis across reflections belongs in I.",
+  "type": "object",
+  "required": ["reflection_id", "thought_ids", "strategy", "content", "timestamp", "trace", "schema_ver"],
+  "properties": {
+    "schema_ver": { "type": "integer", "const": 1 },
+    "reflection_id": { "type": "string" },
+    "thought_ids": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "strategy": { "enum": ["compare", "classify", "explain", "challenge", "clarify"] },
+    "objective": { "type": "string" },
+    "content": { "type": "object" },
+    "trace": {
+      "type": "object",
+      "required": ["prompt_id", "model"],
+      "properties": {
+        "prompt_id": { "type": "string", "description": "reference into prompt registry (AP-06)" },
+        "prompt_version": { "type": "integer" },
+        "model": { "type": "string" },
+        "tokens": {
+          "type": "object",
+          "properties": { "in": { "type": "integer" }, "out": { "type": "integer" } }
+        },
+        "duration_ms": { "type": "integer" },
+        "cost_usd": { "type": "number" }
+      }
+    },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "process_id": { "type": "string", "description": "owning ProcessSpec" }
+  },
+  "additionalProperties": false
+}

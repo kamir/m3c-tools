@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://m3c.onboarding.guide/schemas/ProcessSpec.schema.json",
+  "title": "ProcessSpec",
+  "description": "The delegation contract. Encodes intent, strategy, and execution across 3 delegation depths. The UI edits this; the engine executes it.",
+  "type": "object",
+  "required": ["process_id", "intent", "mode", "depth", "steps", "schema_ver"],
+  "properties": {
+    "schema_ver": { "type": "integer", "const": 1 },
+    "process_id": { "type": "string" },
+    "intent": { "type": "string", "description": "depth 1 — what the user wants" },
+    "mode": { "enum": ["linear", "semi_linear", "guided", "loop"] },
+    "depth": { "enum": [1, 2, 3], "description": "highest delegation depth the user touched" },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["layer", "strategy"],
+        "properties": {
+          "layer": { "enum": ["T", "R", "I", "A", "C"] },
+          "strategy": { "type": "string" },
+          "agent": { "type": ["string", "null"] },
+          "prompt_id": { "type": ["string", "null"], "description": "depth 3 override" },
+          "model": { "type": ["string", "null"], "description": "depth 3 override" },
+          "context": {
+            "type": "object",
+            "properties": {
+              "scope": {
+                "type": "object",
+                "properties": {
+                  "time_range": { "type": "array", "items": { "type": "string", "format": "date-time" }, "maxItems": 2 },
+                  "entities": { "type": "array", "items": { "type": "string" } },
+                  "topics": { "type": "array", "items": { "type": "string" } },
+                  "projects": { "type": "array", "items": { "type": "string" } }
+                }
+              },
+              "filters": {
+                "type": "object",
+                "properties": {
+                  "tags": { "type": "array", "items": { "type": "string" } },
+                  "confidence": { "type": "number" }
+                }
+              },
+              "constraints": {
+                "type": "object",
+                "properties": {
+                  "max_items": { "type": "integer" },
+                  "freshness_days": { "type": "integer" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "triggers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": { "enum": ["manual", "event", "schedule"] },
+          "cron": { "type": ["string", "null"] },
+          "event": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "callbacks": {
+      "type": "object",
+      "properties": {
+        "on_complete": { "type": ["string", "null"], "format": "uri" },
+        "on_error": { "type": ["string", "null"], "format": "uri" }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "description": "D4 per-process hard cap",
+      "properties": {
+        "max_tokens": { "type": "integer", "default": 50000 },
+        "max_cost_usd": { "type": "number" }
+      }
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "created_by": { "type": "string", "description": "user_context_id that owns the process" }
+  },
+  "additionalProperties": false
+}

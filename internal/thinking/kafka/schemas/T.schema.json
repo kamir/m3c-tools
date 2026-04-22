@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://m3c.onboarding.guide/schemas/T.schema.json",
+  "title": "Thought",
+  "description": "T-layer message. Raw or lightly-structured input captured from any source. The only layer that accepts unstructured content.",
+  "type": "object",
+  "required": ["thought_id", "type", "content", "source", "timestamp", "schema_ver"],
+  "properties": {
+    "schema_ver": { "type": "integer", "const": 1 },
+    "thought_id": { "type": "string", "description": "UUIDv7, time-ordered" },
+    "type": { "enum": ["fact", "observation", "question", "idea", "signal", "feedback"] },
+    "content": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "object", "required": ["ref"], "properties": { "ref": { "type": "string", "pattern": "^(er1|gcs|https?)://" } } }
+      ]
+    },
+    "source": {
+      "type": "object",
+      "required": ["kind", "ref"],
+      "properties": {
+        "kind": { "enum": ["ocr", "audio", "typed", "import", "feedback", "agent"] },
+        "ref": { "type": "string" }
+      }
+    },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "context": {
+      "type": "object",
+      "properties": {
+        "project_id": { "type": ["string", "null"] },
+        "domain": { "type": ["string", "null"] },
+        "location": {
+          "type": ["object", "null"],
+          "properties": { "lat": { "type": "number" }, "lon": { "type": "number" } }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["captured_by"],
+      "properties": {
+        "captured_by": { "type": "string" },
+        "parent_artifact_id": { "type": ["string", "null"], "description": "set when T is a feedback-loop artifact" }
+      }
+    }
+  },
+  "additionalProperties": false
+}
