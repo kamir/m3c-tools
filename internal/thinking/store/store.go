@@ -100,6 +100,27 @@ func (s *Store) migrate() error {
 			count         INTEGER NOT NULL DEFAULT 0,
 			updated_at    TIMESTAMP NOT NULL
 		)`,
+		// Generic keyed hourly rate limiter table used by the
+		// autoreflect consumer (internal/thinking/ratelimit). Shape
+		// is the feedback_counters table plus a "key" column so a
+		// single table can host many named limiters.
+		`CREATE TABLE IF NOT EXISTS hourly_rate_counters (
+			key           TEXT NOT NULL,
+			hour_utc      TEXT NOT NULL,
+			count         INTEGER NOT NULL DEFAULT 0,
+			updated_at    TIMESTAMP NOT NULL,
+			PRIMARY KEY (key, hour_utc)
+		)`,
+		// Auto-reflect dedup ledger. See
+		// internal/thinking/autoreflect for semantics.
+		`CREATE TABLE IF NOT EXISTS autoreflect_fires (
+			hash             TEXT PRIMARY KEY,
+			window_start_ms  INTEGER NOT NULL,
+			window_end_ms    INTEGER NOT NULL,
+			process_id       TEXT NOT NULL,
+			fired_at_ms      INTEGER NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_autoreflect_fires_fired_at ON autoreflect_fires(fired_at_ms)`,
 		`CREATE TABLE IF NOT EXISTS sse_subscribers (
 			subscriber_id TEXT PRIMARY KEY,
 			process_id    TEXT NOT NULL,
@@ -450,4 +471,90 @@ func (s *Store) ListMsgCache(layer string, since time.Time, parentID string, lim
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// ----- Generic hourly rate limiter (internal/thinking/ratelimit) -----
+
+// IncrementHourlyCounter atomically bumps the counter for (key,
+// current UTC hour) and returns the post-increment value. Used by
+// the generic ratelimit package so multiple features can share one
+// SQLite table without trampling feedback_counters.
+func (s *Store) IncrementHourlyCounter(key string) (int, error) {
+	hour := time.Now().UTC().Format("2006-01-02T15")
+	now := time.Now().UTC()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(
+		`INSERT INTO hourly_rate_counters(key, hour_utc, count, updated_at)
+		 VALUES(?, ?, 1, ?)
+		 ON CONFLICT(key, hour_utc) DO UPDATE SET
+		   count = count + 1,
+		   updated_at = excluded.updated_at`,
+		key, hour, now,
+	); err != nil {
+		return 0, err
+	}
+	var count int
+	if err := tx.QueryRow(
+		`SELECT count FROM hourly_rate_counters WHERE key=? AND hour_utc=?`, key, hour,
+	).Scan(&count); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// ----- Auto-reflect dedup ledger -----
+
+// AutoReflectFireRow mirrors one row of autoreflect_fires.
+type AutoReflectFireRow struct {
+	Hash          string
+	WindowStartMs int64
+	WindowEndMs   int64
+	ProcessID     string
+	FiredAtMs     int64
+}
+
+// RecordAutoReflectFire upserts a dedup ledger entry.
+func (s *Store) RecordAutoReflectFire(row AutoReflectFireRow) error {
+	_, err := s.db.Exec(
+		`INSERT OR REPLACE INTO autoreflect_fires(hash, window_start_ms, window_end_ms, process_id, fired_at_ms)
+		 VALUES(?, ?, ?, ?, ?)`,
+		row.Hash, row.WindowStartMs, row.WindowEndMs, row.ProcessID, row.FiredAtMs,
+	)
+	return err
+}
+
+// RecentAutoReflectFire returns the fired_at_ms of the most recent
+// row with the given hash whose fired_at_ms is ≥ sinceMs. The
+// boolean is false iff no such row exists.
+func (s *Store) RecentAutoReflectFire(hash string, sinceMs int64) (int64, bool, error) {
+	row := s.db.QueryRow(
+		`SELECT fired_at_ms FROM autoreflect_fires WHERE hash=? AND fired_at_ms >= ?`,
+		hash, sinceMs,
+	)
+	var firedAt int64
+	if err := row.Scan(&firedAt); err != nil {
+		if err == sql.ErrNoRows {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+	return firedAt, true, nil
+}
+
+// CleanAutoReflectFires deletes rows older than cutoffMs. Returns the
+// number of rows removed.
+func (s *Store) CleanAutoReflectFires(cutoffMs int64) (int64, error) {
+	res, err := s.db.Exec(`DELETE FROM autoreflect_fires WHERE fired_at_ms < ?`, cutoffMs)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
 }
