@@ -26,6 +26,7 @@ import (
 	mctx "github.com/kamir/m3c-tools/internal/thinking/ctx"
 	"github.com/kamir/m3c-tools/internal/thinking/er1"
 	tkafka "github.com/kamir/m3c-tools/internal/thinking/kafka"
+	"github.com/kamir/m3c-tools/internal/thinking/observability"
 	"github.com/kamir/m3c-tools/internal/thinking/schema"
 )
 
@@ -43,6 +44,10 @@ type Config struct {
 	BaseBackoff time.Duration
 	// MaxBackoff caps any single sleep. Zero → DefaultMaxBackoff.
 	MaxBackoff time.Duration
+
+	// Metrics is the optional observability surface. nil disables
+	// counter updates; ER1 persistence still proceeds unchanged.
+	Metrics observability.Metrics
 }
 
 // Defaults.
@@ -179,12 +184,16 @@ func (s *Sinker) emitPersisted(ctx context.Context, art schema.Artifact, ref str
 		Detail: map[string]interface{}{
 			"artifact_id": art.ArtifactID,
 			"er1_ref":     ref,
+			"format":      string(art.Format),
 		},
 		Timestamp: time.Now().UTC(),
 	}
 	topic := tkafka.TopicName(s.cfg.Hash, tkafka.TopicProcessEvents)
 	if err := s.cfg.Bus.Produce(ctx, topic, art.ProcessID, ev); err != nil {
 		s.cfg.Logger.Printf("sink: emit ArtifactPersisted: %v", err)
+	}
+	if s.cfg.Metrics != nil {
+		s.cfg.Metrics.RecordArtifactCreated(string(art.Format))
 	}
 }
 
@@ -202,6 +211,9 @@ func (s *Sinker) emitFailed(ctx context.Context, art schema.Artifact, cause erro
 	topic := tkafka.TopicName(s.cfg.Hash, tkafka.TopicProcessEvents)
 	if err := s.cfg.Bus.Produce(ctx, topic, art.ProcessID, ev); err != nil {
 		s.cfg.Logger.Printf("sink: emit ArtifactPersistenceFailed: %v", err)
+	}
+	if s.cfg.Metrics != nil {
+		s.cfg.Metrics.RecordER1SinkFailure()
 	}
 }
 

@@ -39,6 +39,7 @@ import (
 	"github.com/google/uuid"
 	mctx "github.com/kamir/m3c-tools/internal/thinking/ctx"
 	tkafka "github.com/kamir/m3c-tools/internal/thinking/kafka"
+	"github.com/kamir/m3c-tools/internal/thinking/observability"
 	"github.com/kamir/m3c-tools/internal/thinking/ratelimit"
 	"github.com/kamir/m3c-tools/internal/thinking/schema"
 	"github.com/kamir/m3c-tools/internal/thinking/store"
@@ -123,6 +124,11 @@ type Config struct {
 	// HardTokenCap: value populated onto ProcessSpec.Budget.MaxTokens
 	// for every auto-fired process. 0 → DefaultHardTokenCap.
 	HardTokenCap int
+
+	// Metrics is the optional observability surface. nil is safe —
+	// each call site guards on nil so existing unit tests keep
+	// working without constructing a real registry.
+	Metrics observability.Metrics
 
 	// now is overridable for tests. Production uses time.Now.
 	now func() time.Time
@@ -504,6 +510,9 @@ func (c *Consumer) emitTriggered(ctx context.Context, processID, hash, reason st
 		"origin":          CreatedByAutoReflect,
 	}
 	c.emit(ctx, processID, EventAutoReflectTriggered, detail)
+	if c.cfg.Metrics != nil {
+		c.cfg.Metrics.RecordAutoReflectFire(reason)
+	}
 }
 
 func (c *Consumer) emitSkipped(ctx context.Context, hash, why, reason string, tCount int, start, end time.Time) {
@@ -520,6 +529,9 @@ func (c *Consumer) emitSkipped(ctx context.Context, hash, why, reason string, tC
 		detail["window_end_ms"] = end.UnixMilli()
 	}
 	c.emit(ctx, "", EventAutoReflectSkipped, detail)
+	if c.cfg.Metrics != nil {
+		c.cfg.Metrics.RecordAutoReflectSkip(why)
+	}
 }
 
 func (c *Consumer) emitBudgetPaused(ctx context.Context, hash, reason string, tCount int, remaining float64, start, end time.Time) {
@@ -542,6 +554,10 @@ func (c *Consumer) emitBudgetPaused(ctx context.Context, hash, reason string, tC
 	// telemetry.
 	c.emit(ctx, "", EventAutoReflectSkipped, detail)
 	c.emit(ctx, "", EventAutoReflectBudgetPaused, detail)
+	if c.cfg.Metrics != nil {
+		c.cfg.Metrics.RecordAutoReflectSkip("budget")
+		c.cfg.Metrics.RecordBudgetPause()
+	}
 }
 
 func (c *Consumer) emit(ctx context.Context, processID string, name schema.ProcessEventName, detail map[string]interface{}) {

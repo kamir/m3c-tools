@@ -86,3 +86,16 @@ func (b *memBus) Close() error {
 	close(b.stop)
 	return nil
 }
+
+// ConsumerLag implements the observability.BusMetrics contract for
+// the in-memory bus. There is no broker and no offset tracking —
+// every call returns 0 so Prometheus dashboards render a flat line
+// rather than erroring out in dev / test runs.
+func (b *memBus) ConsumerLag(topic string) (int64, error) {
+	// Intentional: assertOwnedBy is NOT called here because the
+	// observability poller queries for its own ctx-owned topics only.
+	// Returning (0, nil) is the correct "idle" answer for an
+	// in-process dispatcher.
+	_ = topic
+	return 0, nil
+}
