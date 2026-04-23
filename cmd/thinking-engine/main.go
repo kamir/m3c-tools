@@ -15,10 +15,13 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/kamir/m3c-tools/internal/thinking/api"
+	"github.com/kamir/m3c-tools/internal/thinking/autoreflect"
 	"github.com/kamir/m3c-tools/internal/thinking/budget"
 	mctx "github.com/kamir/m3c-tools/internal/thinking/ctx"
 	"github.com/kamir/m3c-tools/internal/thinking/er1"
@@ -213,6 +216,41 @@ func main() {
 	}
 	defer fbConsumer.Stop()
 
+	// Auto-reflect consumer — opt-in via ENABLE_AUTO_REFLECT=1. Fires a
+	// default semi_linear T→R→I→A ProcessSpec on window-count OR
+	// heartbeat triggers (SPEC-0167 Week 3 Phase 2 scaffolding). Gated
+	// by its own 10/hour rate limit, dedup ledger, and the D4 daily
+	// budget via budget.Ledger. Unset ENABLE_AUTO_REFLECT → zero side
+	// effects.
+	var autoRef *autoreflect.Consumer
+	if autoReflectEnabled(os.Getenv) {
+		ledger := budget.NewLedger(st, 0) // 0 → DefaultDailyUSD
+		autoRef, err = autoreflect.New(autoreflect.Config{
+			Hash:             hash,
+			Bus:              bus,
+			Orchestrator:     orc,
+			Store:            st,
+			Ledger:           ledger,
+			Logger:           logger,
+			WindowN:          intFromEnv("AUTO_REFLECT_WINDOW_N", autoreflect.DefaultWindowN),
+			HeartbeatMin:     intFromEnv("AUTO_REFLECT_HEARTBEAT_MIN", autoreflect.DefaultHeartbeatMin),
+			RateLimitPerHour: intFromEnv("AUTO_REFLECT_RATE_LIMIT_PER_HOUR", autoreflect.DefaultRateLimitPerHour),
+			SkipPlaceholder:  boolFromEnv("AUTO_REFLECT_SKIP_PLACEHOLDER", true),
+			Patterns:         listFromEnv("AUTO_REFLECT_PLACEHOLDER_PATTERNS", []string{autoreflect.DefaultPlaceholderPattern}),
+			HardTokenCap:     intFromEnv("AUTO_REFLECT_HARD_TOKEN_CAP", autoreflect.DefaultHardTokenCap),
+		})
+		if err != nil {
+			logger.Fatalf("auto-reflect: %v", err)
+		}
+		if err := autoRef.Start(ctx); err != nil {
+			logger.Fatalf("start auto-reflect: %v", err)
+		}
+		logger.Printf("auto-reflect: enabled (ENABLE_AUTO_REFLECT=1)")
+		defer autoRef.Stop()
+	} else {
+		logger.Printf("auto-reflect: disabled (ENABLE_AUTO_REFLECT not set)")
+	}
+
 	// Rebuild service for POST /v1/rebuild (Stream 3b).
 	rebuildSvc := &rebuild.Service{
 		Hash: hash, OwnerID: rawCtx.Value(),
@@ -279,4 +317,66 @@ func main() {
 	}
 	cancel()
 	logger.Printf("bye")
+}
+
+// autoReflectEnabled reports whether the auto-reflect consumer
+// should run. Mirrors sink.Enabled. Accepts "1", "true", "TRUE" as on.
+func autoReflectEnabled(getenv func(string) string) bool {
+	if getenv == nil {
+		return false
+	}
+	v := getenv("ENABLE_AUTO_REFLECT")
+	return v == "1" || v == "true" || v == "TRUE"
+}
+
+// intFromEnv returns the integer value of the named env var, or def
+// if unset or unparseable.
+func intFromEnv(name string, def int) int {
+	v := os.Getenv(name)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return def
+	}
+	return n
+}
+
+// boolFromEnv returns the bool value of the named env var, or def
+// if unset. Accepts "1", "true", "TRUE", "yes", "YES" as true; the
+// symmetric strings "0", "false", "FALSE", "no", "NO" as false.
+func boolFromEnv(name string, def bool) bool {
+	v := os.Getenv(name)
+	switch v {
+	case "":
+		return def
+	case "1", "true", "TRUE", "yes", "YES":
+		return true
+	case "0", "false", "FALSE", "no", "NO":
+		return false
+	}
+	return def
+}
+
+// listFromEnv returns a comma-separated list from an env var, or def
+// if unset. Empty entries are dropped; whitespace around entries is
+// preserved (regex patterns may legitimately start/end with spaces).
+func listFromEnv(name string, def []string) []string {
+	v := os.Getenv(name)
+	if v == "" {
+		return def
+	}
+	parts := strings.Split(v, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p == "" {
+			continue
+		}
+		out = append(out, p)
+	}
+	if len(out) == 0 {
+		return def
+	}
+	return out
 }
