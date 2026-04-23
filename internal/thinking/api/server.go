@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kamir/m3c-tools/internal/thinking/budget"
 	mctx "github.com/kamir/m3c-tools/internal/thinking/ctx"
 	tkafka "github.com/kamir/m3c-tools/internal/thinking/kafka"
 	"github.com/kamir/m3c-tools/internal/thinking/orchestrator"
@@ -46,6 +47,11 @@ type Config struct {
 	// Rebuild wires the /v1/rebuild admin endpoint. Optional; when
 	// nil the handler returns 501.
 	Rebuild *rebuild.Service
+
+	// Ledger serves the /v1/budget/today + /v1/budget/history
+	// endpoints (SPEC-0167 P1 — PLAN-0168). When nil, both endpoints
+	// return 503 so the handler is safe to register unconditionally.
+	Ledger *budget.Ledger
 }
 
 // Server is the HTTP surface.
@@ -56,6 +62,11 @@ type Server struct {
 
 	sseMu   sync.Mutex
 	sseSubs map[string][]chan schema.ProcessEvent // processID → subscribers
+
+	// nowFn is an injectable clock used only by the /v1/budget/* handlers
+	// to exercise UTC day rollover in tests. Production code leaves it
+	// nil; see (*Server).now().
+	nowFn budgetClock
 }
 
 // New builds the server. Call Handler() to mount it.
@@ -104,6 +115,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/v1/compile", s.compile)
 	s.mux.HandleFunc("/v1/rebuild", s.rebuild)
 	s.mux.HandleFunc("/v1/replay", s.replay) // 501
+	s.mux.HandleFunc("/v1/budget/today", s.budgetToday)
+	s.mux.HandleFunc("/v1/budget/history", s.budgetHistory)
 }
 
 // ----- handlers -----
