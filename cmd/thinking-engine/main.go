@@ -50,8 +50,8 @@ func main() {
 		listen      = flag.String("listen", ":7140", "address to listen on")
 		secretEnv   = flag.String("secret-env", "THINKING_ENGINE_SECRET", "env var holding the HMAC secret")
 		statePath   = flag.String("state-path", "", "SQLite path (default: ~/.m3c-tools/thinking/<hash>/state.db)")
-		kafkaAddr   = flag.String("kafka", "", "Kafka bootstrap address (ignored Week 1 — in-memory bus)")
-		er1CredPath = flag.String("er1-credentials", "", "path to ER1 service-account key (ignored Week 1 — stub client)")
+		kafkaAddr   = flag.String("kafka", "", "Kafka bootstrap address (comma-separated). Empty = in-memory bus. Requires -tags thinking_kafka build to actually connect.")
+		er1CredPath = flag.String("er1-credentials", "", "path to ER1 service-account key (Phase 1: unused — HMAC to Flask bridge)")
 	)
 	flag.Parse()
 
@@ -95,9 +95,23 @@ func main() {
 	}
 	defer st.Close()
 
-	// Kafka bus — in-memory default, wrapped in a schema validator so
-	// every produce + every consume goes through the SPEC-0167 gate.
-	innerBus := tkafka.NewMemBus(hash)
+	// Kafka bus — in-memory when no brokers given OR when built without
+	// `-tags thinking_kafka`; real franz-go driver when both conditions
+	// are met. Wrapped in a schema validator so every produce and every
+	// consume goes through the SPEC-0167 gate.
+	var brokers []string
+	if *kafkaAddr != "" {
+		brokers = strings.Split(*kafkaAddr, ",")
+	}
+	innerBus, err := tkafka.NewBus(hash, brokers)
+	if err != nil {
+		logger.Fatalf("bus: %v", err)
+	}
+	if len(brokers) == 0 {
+		logger.Printf("bus: in-memory (no -kafka given)")
+	} else {
+		logger.Printf("bus: connected brokers=%v", brokers)
+	}
 	bus, err := tkafka.NewValidatingBus(innerBus, nil)
 	if err != nil {
 		logger.Fatalf("validating bus: %v", err)
