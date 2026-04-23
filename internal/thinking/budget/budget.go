@@ -114,3 +114,60 @@ func (c *Controller) Used() int {
 	defer c.mu.Unlock()
 	return c.processUsedTok
 }
+
+// Ledger exposes read-only views of the D4 daily cap for callers
+// (e.g. internal/thinking/autoreflect) that want to gate decisions
+// on how much of today's budget is still available without taking a
+// per-process Controller.
+//
+// Ledger is safe for concurrent use.
+type Ledger struct {
+	store   *store.Store
+	dailyUSD float64
+}
+
+// NewLedger wraps the store with a read view. dailyCapUSD defaults
+// to DefaultDailyUSD when ≤ 0 so callers can pass 0 in config and
+// get the documented default.
+func NewLedger(s *store.Store, dailyCapUSD float64) *Ledger {
+	if dailyCapUSD <= 0 {
+		dailyCapUSD = DefaultDailyUSD
+	}
+	return &Ledger{store: s, dailyUSD: dailyCapUSD}
+}
+
+// DailyCapUSD returns the configured daily USD ceiling.
+func (l *Ledger) DailyCapUSD() float64 { return l.dailyUSD }
+
+// SpentUSD returns today's USD spend (UTC day bucket).
+func (l *Ledger) SpentUSD() (float64, error) {
+	if l == nil || l.store == nil {
+		return 0, nil
+	}
+	_, cost, err := l.store.GetBudgetSpend()
+	return cost, err
+}
+
+// RemainingFraction returns (cap - spent) / cap in [0, 1]. An
+// overspent day clamps to 0 — callers interpret "0 remaining" as
+// "skip".
+func (l *Ledger) RemainingFraction() (float64, error) {
+	if l == nil || l.store == nil {
+		return 1.0, nil
+	}
+	spent, err := l.SpentUSD()
+	if err != nil {
+		return 0, err
+	}
+	if l.dailyUSD <= 0 {
+		return 1.0, nil
+	}
+	r := (l.dailyUSD - spent) / l.dailyUSD
+	if r < 0 {
+		return 0, nil
+	}
+	if r > 1.0 {
+		return 1.0, nil
+	}
+	return r, nil
+}
