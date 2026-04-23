@@ -217,6 +217,20 @@ func NewMetrics(cfg Config) *Registry {
 	// hmacRotations) are always emitted by promhttp even at 0, so they
 	// don't need explicit seeding.
 
+	// Gauge families without a sample are omitted from /metrics
+	// entirely, which breaks dashboards that grep for the series
+	// name. Seed one sample per configured topic at 0 so the series
+	// exists from the first scrape. If no BusMetrics is configured,
+	// we still emit a single empty-topic sample so the family name
+	// appears in # TYPE lines.
+	if len(cfg.Topics) == 0 {
+		m.busConsumerLag.WithLabelValues("").Set(0)
+	} else {
+		for _, topic := range cfg.Topics {
+			m.busConsumerLag.WithLabelValues(topic).Set(0)
+		}
+	}
+
 	if cfg.BusMetrics != nil && len(cfg.Topics) > 0 {
 		m.stop = make(chan struct{})
 		m.done = make(chan struct{})
