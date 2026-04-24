@@ -324,3 +324,18 @@ func (b *ValidatingBus) Metrics() *ValidatorMetrics { return b.v.metrics }
 
 // Inner returns the wrapped Bus. Used by tests.
 func (b *ValidatingBus) Inner() Bus { return b.inner }
+
+// ConsumerLag forwards to the inner bus when it implements the
+// observability.BusMetrics contract (ConsumerLag(string) (int64, error)).
+// Both memBus and franzBus satisfy it. Returns (0, nil) when the inner
+// bus doesn't implement it so callers can treat the forwarder as
+// always-present.
+func (b *ValidatingBus) ConsumerLag(topic string) (int64, error) {
+	type lagProvider interface {
+		ConsumerLag(topic string) (int64, error)
+	}
+	if lp, ok := b.inner.(lagProvider); ok {
+		return lp.ConsumerLag(topic)
+	}
+	return 0, nil
+}

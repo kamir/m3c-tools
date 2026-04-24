@@ -18,6 +18,7 @@ import (
 	mctx "github.com/kamir/m3c-tools/internal/thinking/ctx"
 	tkafka "github.com/kamir/m3c-tools/internal/thinking/kafka"
 	"github.com/kamir/m3c-tools/internal/thinking/llm"
+	"github.com/kamir/m3c-tools/internal/thinking/observability"
 	"github.com/kamir/m3c-tools/internal/thinking/orchestrator"
 	"github.com/kamir/m3c-tools/internal/thinking/prompts"
 	"github.com/kamir/m3c-tools/internal/thinking/schema"
@@ -39,6 +40,11 @@ type Deps struct {
 	// will fail cleanly if unset.
 	LLM     llm.Adapter
 	Budgets func(processID string, spec schema.ProcessSpec) *budget.Controller
+
+	// Metrics is the optional observability surface. Nil is safe —
+	// every call site guards on nil so processors remain usable in
+	// tests without an active Prometheus registry.
+	Metrics observability.Metrics
 }
 
 // Processor is the common interface: subscribe to the command topic
@@ -82,12 +88,51 @@ func RunStep(ctx context.Context, deps Deps, cmd schema.ProcessCommand, h Handle
 	if err != nil {
 		deps.Log.Printf("processors: step %d (%s/%s) failed: %v",
 			cmd.StepIndex, cmd.Step.Layer, cmd.Step.Strategy, err)
+		if deps.Metrics != nil {
+			deps.Metrics.RecordStepFailure(string(cmd.Step.Layer), cmd.Step.Strategy, classifyErrReason(err))
+			deps.Metrics.RecordProcessFailure(string(cmd.Spec.Mode))
+		}
 		_ = deps.Orc.EmitProcessFailed(ctx, cmd.ProcessID, err.Error())
 		return
 	}
 	if err := deps.Orc.EmitStepCompleted(ctx, cmd.ProcessID, cmd.StepIndex, cmd.Step.Layer, detail); err != nil {
 		deps.Log.Printf("processors: emit StepCompleted: %v", err)
 	}
+}
+
+// classifyErrReason maps a handler error to a short, low-cardinality
+// reason tag for the step_failures_total counter. Arbitrary error
+// messages carry unbounded cardinality and would blow up Prometheus
+// storage; we collapse them to a handful of stable bucket labels.
+func classifyErrReason(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	switch {
+	case containsAny(msg, "budget"):
+		return "budget"
+	case containsAny(msg, "llm:", "llm/"):
+		return "llm"
+	case containsAny(msg, "unknown strategy"):
+		return "unknown_strategy"
+	case containsAny(msg, "prompt"):
+		return "prompt"
+	case containsAny(msg, "parse completion", "non-json output"):
+		return "parse"
+	case containsAny(msg, "schema"):
+		return "schema"
+	}
+	return "other"
+}
+
+func containsAny(s string, needles ...string) bool {
+	for _, n := range needles {
+		if indexOfSub(s, n) >= 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // UnknownStrategyError returns a uniform error when a processor
@@ -157,6 +202,17 @@ func RunLLMStep(ctx context.Context, deps Deps, cmd schema.ProcessCommand, opts 
 	resp, err := deps.LLM.Complete(ctx, req)
 	if err != nil {
 		return "", schema.Trace{}, fmt.Errorf("processors: llm: %w", err)
+	}
+
+	if deps.Metrics != nil {
+		deps.Metrics.RecordLLMCall(
+			resp.Model,
+			string(cmd.Step.Layer),
+			cmd.Step.Strategy,
+			resp.TokensIn,
+			resp.TokensOut,
+			time.Duration(resp.DurationMS)*time.Millisecond,
+		)
 	}
 
 	trace := schema.Trace{

@@ -28,6 +28,7 @@ import (
 	"github.com/kamir/m3c-tools/internal/thinking/feedback"
 	tkafka "github.com/kamir/m3c-tools/internal/thinking/kafka"
 	"github.com/kamir/m3c-tools/internal/thinking/llm"
+	"github.com/kamir/m3c-tools/internal/thinking/observability"
 	"github.com/kamir/m3c-tools/internal/thinking/orchestrator"
 	procA "github.com/kamir/m3c-tools/internal/thinking/processors/a"
 	procC "github.com/kamir/m3c-tools/internal/thinking/processors/c"
@@ -184,6 +185,37 @@ func main() {
 	}
 	defer cache.Stop()
 
+	// Observability (PLAN-0168 §P0). Two independent surfaces, both
+	// opt-out via env so tests can suppress them:
+	//   DISABLE_METRICS=1      → skip Prometheus registry + /metrics
+	//   DISABLE_EVENTS_SINK=1  → skip process.events → stdout logger
+	// The Metrics surface is also passed into processors, autoreflect,
+	// and sink so their hooks populate counters at the source — the
+	// events sink is an independent second path.
+	var metricsReg observability.Metrics
+	var metricsCloser func()
+	var metricsHandler http.Handler
+	if os.Getenv("DISABLE_METRICS") != "1" {
+		m := observability.NewMetrics(observability.Config{
+			CtxHash:       hash.Hex(),
+			EngineVersion: version,
+			BusMetrics:    bus, // ValidatingBus forwards to inner driver
+			Topics: []string{
+				tkafka.TopicName(hash, tkafka.TopicThoughtsRaw),
+				tkafka.TopicName(hash, tkafka.TopicProcessCommands),
+				tkafka.TopicName(hash, tkafka.TopicProcessEvents),
+				tkafka.TopicName(hash, tkafka.TopicArtifactsCreated),
+			},
+		})
+		metricsReg = m
+		metricsCloser = m.Close
+		metricsHandler = m.Handler()
+		logger.Printf("metrics: Prometheus registry active")
+	} else {
+		metricsReg = observability.NoopMetrics{}
+		logger.Printf("metrics: disabled (DISABLE_METRICS=1)")
+	}
+
 	deps := processors.Deps{
 		Hash:    hash,
 		Bus:     bus,
@@ -192,6 +224,7 @@ func main() {
 		Log:     logger,
 		LLM:     llmAdapter,
 		Budgets: budgetFactory,
+		Metrics: metricsReg,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -252,6 +285,7 @@ func main() {
 			SkipPlaceholder:  boolFromEnv("AUTO_REFLECT_SKIP_PLACEHOLDER", true),
 			Patterns:         listFromEnv("AUTO_REFLECT_PLACEHOLDER_PATTERNS", []string{autoreflect.DefaultPlaceholderPattern}),
 			HardTokenCap:     intFromEnv("AUTO_REFLECT_HARD_TOKEN_CAP", autoreflect.DefaultHardTokenCap),
+			Metrics:          metricsReg,
 		})
 		if err != nil {
 			logger.Fatalf("auto-reflect: %v", err)
@@ -278,6 +312,7 @@ func main() {
 		sinker = sink.New(sink.Config{
 			Hash: hash, OwnerID: rawCtx.Value(),
 			Bus: bus, ER1: er1Client, Logger: logger,
+			Metrics: metricsReg,
 		})
 		if err := sinker.Start(ctx); err != nil {
 			logger.Fatalf("sink: %v", err)
@@ -287,17 +322,43 @@ func main() {
 		logger.Printf("sink: disabled (ENABLE_ER1_SINK not set)")
 	}
 
+	// Events sink (PLAN-0168 §P0). Subscribes to process.events and
+	// projects operational events to stdout (structured JSON) +
+	// Prometheus counters. Opt-out via DISABLE_EVENTS_SINK=1.
+	var eventsSink *observability.EventsSink
+	if os.Getenv("DISABLE_EVENTS_SINK") != "1" {
+		es, err := observability.NewEventsSink(observability.SinkConfig{
+			Hash:    hash,
+			Bus:     bus,
+			Logger:  logger,
+			Metrics: metricsReg,
+		})
+		if err != nil {
+			logger.Fatalf("events sink: %v", err)
+		}
+		if err := es.Start(ctx); err != nil {
+			logger.Fatalf("events sink: %v", err)
+		}
+		defer es.Stop()
+		eventsSink = es
+		logger.Printf("events sink: subscribed to process.events (errors → stdout)")
+	} else {
+		logger.Printf("events sink: disabled (DISABLE_EVENTS_SINK=1)")
+	}
+	_ = eventsSink // retained for future wiring
+
 	// HTTP server.
 	srv := api.New(api.Config{
-		OwnerRaw:  rawCtx,
-		Hash:      hash,
-		Secret:    secret,
-		Bus:       bus,
-		Orc:       orc,
-		Store:     st,
-		BuildInfo: version,
-		Cache:     cache,
-		Rebuild:   rebuildSvc,
+		OwnerRaw:       rawCtx,
+		Hash:           hash,
+		Secret:         secret,
+		Bus:            bus,
+		Orc:            orc,
+		Store:          st,
+		BuildInfo:      version,
+		Cache:          cache,
+		Rebuild:        rebuildSvc,
+		MetricsHandler: metricsHandler, // nil when DISABLE_METRICS=1
 	})
 	httpSrv := &http.Server{
 		Addr:              *listen,
@@ -323,6 +384,9 @@ func main() {
 	orc.Stop()
 	if sinker != nil {
 		sinker.Stop()
+	}
+	if metricsCloser != nil {
+		metricsCloser()
 	}
 	shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutCancel()

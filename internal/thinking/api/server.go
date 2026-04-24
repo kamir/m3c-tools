@@ -46,6 +46,11 @@ type Config struct {
 	// Rebuild wires the /v1/rebuild admin endpoint. Optional; when
 	// nil the handler returns 501.
 	Rebuild *rebuild.Service
+
+	// MetricsHandler, if non-nil, is mounted at /metrics WITHOUT
+	// HMAC auth so Prometheus can scrape it. Defaults to unset,
+	// in which case /metrics returns 404 via the standard mux.
+	MetricsHandler http.Handler
 }
 
 // Server is the HTTP surface.
@@ -84,6 +89,14 @@ func New(cfg Config) *Server {
 	}
 
 	bypass := map[string]bool{"/v1/health": true}
+	if cfg.MetricsHandler != nil {
+		// Mount /metrics BEFORE the auth middleware wraps mux — we
+		// want Prometheus scrapes to succeed without HMAC. Bypass
+		// list keeps the door ajar; the handler registration is what
+		// actually serves it.
+		s.mux.Handle("/metrics", cfg.MetricsHandler)
+		bypass["/metrics"] = true
+	}
 	auth := AuthMiddleware(cfg.Secret, cfg.OwnerRaw, bypass)
 	s.handler = auth(s.mux)
 	return s

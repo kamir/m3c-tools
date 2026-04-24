@@ -221,6 +221,24 @@ func (b *franzBus) Subscribe(topic string, h Handler) (func(), error) {
 	return stop, nil
 }
 
+// ConsumerLag returns the aggregate per-partition lag for topic under
+// this bus's consumer group. Implementation note: franz-go's kgo.Client
+// does not expose admin queries directly; a full implementation needs
+// the optional kadm package (separate module) to call ListCommittedOffsets
+// + ListEndOffsets. For now this returns (0, nil) — the interface and
+// the polling infrastructure are in place, and an operator can swap
+// the impl in without touching the observability package.
+//
+// This is explicitly a stub that satisfies the BusMetrics contract;
+// see PLAN-0168 §P0 "Gauge: bus_consumer_lag — polled every 10 s from
+// franz-go admin client" for the target behaviour. Shipping the gauge
+// at 0 is preferable to skipping the metric entirely because it gives
+// dashboard authors a stable series name to build on.
+func (b *franzBus) ConsumerLag(topic string) (int64, error) {
+	_ = topic
+	return 0, nil
+}
+
 // Close tears down the shared producer and every active subscription.
 // After Close, Produce and Subscribe will fail; calling Close twice
 // is a no-op.
