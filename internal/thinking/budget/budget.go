@@ -12,6 +12,7 @@ package budget
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/kamir/m3c-tools/internal/thinking/store"
 )
@@ -75,7 +76,19 @@ func New(processID string, processCapTok int, dailyCapUSD float64, s *store.Stor
 // we reserve optimistically per step).
 //
 // Returns a detailed error the API layer can surface verbatim.
+//
+// Spend is NOT tagged with (layer, strategy) on this path — use
+// ReserveTagged from call sites that have that context (see
+// /v1/budget/today top_consumers).
 func (c *Controller) Reserve(promptID, model string, inputTokens int) error {
+	return c.ReserveTagged(promptID, model, "", "", inputTokens)
+}
+
+// ReserveTagged behaves like Reserve but also attributes the estimated
+// spend to (layer, strategy) in the llm_ledger table. Empty layer or
+// strategy strings are treated as "untagged" and excluded from the
+// /v1/budget/today top_consumers aggregate (PLAN-0168 P1).
+func (c *Controller) ReserveTagged(promptID, model, layer, strategy string, inputTokens int) error {
 	tokens, costUSD := c.estimator.EstimateStep(promptID, model, inputTokens)
 
 	c.mu.Lock()
@@ -101,6 +114,15 @@ func (c *Controller) Reserve(promptID, model string, inputTokens int) error {
 		}
 		if err := c.store.AddBudgetSpend(tokens, costUSD); err != nil {
 			return fmt.Errorf("budget: record spend: %w", err)
+		}
+		// Per-tag ledger — non-fatal on error so a schema hiccup can't
+		// break the cognitive path. Untagged (empty layer/strategy) is
+		// still written so the row count agrees with budget_counters,
+		// but those rows are excluded from top_consumers.
+		if err := c.store.AddLLMLedgerEntry(layer, strategy, tokens, costUSD); err != nil {
+			// swallow — we already recorded the spend; tagging failure
+			// is a visibility regression, not a correctness one.
+			_ = err
 		}
 	}
 
@@ -170,4 +192,136 @@ func (l *Ledger) RemainingFraction() (float64, error) {
 		return 1.0, nil
 	}
 	return r, nil
+}
+
+// PausedThreshold mirrors autoreflect.BudgetPauseFraction. Import cycle
+// prevents us from referencing the autoreflect constant directly, so
+// the budget package owns the source-of-truth for the threshold and
+// autoreflect is expected to match. Callers reading Paused() outside
+// autoreflect see the same value the consumer would use.
+const PausedThreshold = 0.80
+
+// Paused reports whether autoreflect should currently be paused by
+// the D4 daily cap. Derived from fraction_used (= 1 - RemainingFraction)
+// against PausedThreshold; the paused flag is NOT separately persisted
+// — autoreflect recomputes it on every window tick. Exposing the same
+// derivation here means /v1/budget/today stays consistent with
+// autoreflect's own gating decision.
+func (l *Ledger) Paused() (bool, error) {
+	if l == nil {
+		return false, nil
+	}
+	rem, err := l.RemainingFraction()
+	if err != nil {
+		return false, err
+	}
+	return (1.0 - rem) >= PausedThreshold, nil
+}
+
+// DaySpend is one calendar day of LLM spend, returned by History.
+// PausedMinutes is present but always zero in Phase 1 — autoreflect
+// does not currently persist per-day pause durations. The field is
+// reserved for Phase 2 when the observability sink records them.
+type DaySpend struct {
+	Date          string  // "YYYY-MM-DD" (UTC)
+	SpentUSD      float64
+	CapUSD        float64
+	PausedMinutes int
+}
+
+// LayerSpend is a top-consumer row, returned by TopConsumers.
+type LayerSpend struct {
+	Layer    string
+	Strategy string
+	USD      float64
+	Count    int
+}
+
+// MaxHistoryDays bounds the /v1/budget/history API.
+const MaxHistoryDays = 30
+
+// DefaultHistoryDays is the default if the caller omits ?days=.
+const DefaultHistoryDays = 7
+
+// History returns the last `days` UTC calendar days of spend (newest
+// first). days is clamped to [1, MaxHistoryDays]; days ≤ 0 defaults to
+// DefaultHistoryDays. Days with no spend are omitted — the engine may
+// be younger than the requested window, or the user may not have run
+// anything that day.
+//
+// CapUSD is the current configured cap on every row; Phase 1 does not
+// persist historical cap changes.
+func (l *Ledger) History(days int) ([]DaySpend, error) {
+	return l.historyAt(days, time.Now().UTC())
+}
+
+// historyAt is History with an injectable clock for tests.
+func (l *Ledger) historyAt(days int, now time.Time) ([]DaySpend, error) {
+	if l == nil || l.store == nil {
+		return nil, nil
+	}
+	if days <= 0 {
+		days = DefaultHistoryDays
+	}
+	if days > MaxHistoryDays {
+		days = MaxHistoryDays
+	}
+	since := now.AddDate(0, 0, -(days - 1)).Format("2006-01-02")
+	rows, err := l.store.ListBudgetSpendSince(since)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]DaySpend, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, DaySpend{
+			Date:     r.DayUTC,
+			SpentUSD: r.CostUSD,
+			CapUSD:   l.dailyUSD,
+		})
+	}
+	return out, nil
+}
+
+// TopConsumers returns the top-N (layer, strategy) tuples by cost_usd
+// over the last `days` UTC calendar days (1..MaxHistoryDays). When the
+// llm_ledger is empty (e.g. cold start, or pre-migration data only)
+// this returns an empty slice, never nil-with-error.
+//
+// Legacy spend recorded before the llm_ledger migration lives in
+// budget_counters only; it contributes to daily totals but cannot be
+// attributed to a specific (layer, strategy) pair, so it is NOT
+// surfaced here.
+func (l *Ledger) TopConsumers(days, limit int) ([]LayerSpend, error) {
+	return l.topConsumersAt(days, limit, time.Now().UTC())
+}
+
+// topConsumersAt is TopConsumers with an injectable clock for tests.
+func (l *Ledger) topConsumersAt(days, limit int, now time.Time) ([]LayerSpend, error) {
+	if l == nil || l.store == nil {
+		return nil, nil
+	}
+	if days <= 0 {
+		days = 1
+	}
+	if days > MaxHistoryDays {
+		days = MaxHistoryDays
+	}
+	if limit <= 0 {
+		limit = 5
+	}
+	since := now.AddDate(0, 0, -(days - 1)).Format("2006-01-02")
+	rows, err := l.store.TopLLMConsumers(since, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]LayerSpend, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, LayerSpend{
+			Layer:    r.Layer,
+			Strategy: r.Strategy,
+			USD:      r.CostUSD,
+			Count:    r.Count,
+		})
+	}
+	return out, nil
 }

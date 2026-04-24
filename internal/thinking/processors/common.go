@@ -188,12 +188,18 @@ func RunLLMStep(ctx context.Context, deps Deps, cmd schema.ProcessCommand, opts 
 		Format:      opts.Format,
 	}
 
-	// D4 budget enforcement — estimate before dispatch.
+	// D4 budget enforcement — estimate before dispatch. Tag the spend
+	// with (layer, strategy) so /v1/budget/today can surface top
+	// consumers (PLAN-0168 P1).
 	if deps.Budgets != nil {
 		ctrl := deps.Budgets(cmd.ProcessID, cmd.Spec)
 		if ctrl != nil {
 			tokens, _ := deps.LLM.EstimateCost(req)
-			if err := ctrl.Reserve(p.ID, model, tokens/2); err != nil {
+			if err := ctrl.ReserveTagged(
+				p.ID, model,
+				string(cmd.Step.Layer), cmd.Step.Strategy,
+				tokens/2,
+			); err != nil {
 				return "", schema.Trace{}, fmt.Errorf("processors: budget: %w", err)
 			}
 		}

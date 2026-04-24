@@ -170,6 +170,11 @@ func main() {
 	}
 	_ = budgetFactory // referenced below via deps
 
+	// D4 budget read-view — shared by autoreflect (when enabled) and
+	// the /v1/budget/* HTTP endpoints (PLAN-0168 P1). Always non-nil so
+	// the API can surface spend even when autoreflect is off.
+	budgetLedger := budget.NewLedger(st, 0) // 0 → DefaultDailyUSD
+
 	// Consumer-side read cache for listing endpoints (Week 2).
 	cache, err := store.NewCache(store.CacheConfig{
 		Store:  st,
@@ -271,13 +276,12 @@ func main() {
 	// effects.
 	var autoRef *autoreflect.Consumer
 	if autoReflectEnabled(os.Getenv) {
-		ledger := budget.NewLedger(st, 0) // 0 → DefaultDailyUSD
 		autoRef, err = autoreflect.New(autoreflect.Config{
 			Hash:             hash,
 			Bus:              bus,
 			Orchestrator:     orc,
 			Store:            st,
-			Ledger:           ledger,
+			Ledger:           budgetLedger,
 			Logger:           logger,
 			WindowN:          intFromEnv("AUTO_REFLECT_WINDOW_N", autoreflect.DefaultWindowN),
 			HeartbeatMin:     intFromEnv("AUTO_REFLECT_HEARTBEAT_MIN", autoreflect.DefaultHeartbeatMin),
@@ -358,7 +362,8 @@ func main() {
 		BuildInfo:      version,
 		Cache:          cache,
 		Rebuild:        rebuildSvc,
-		MetricsHandler: metricsHandler, // nil when DISABLE_METRICS=1
+		Ledger:         budgetLedger,   // PLAN-0168 §P1
+		MetricsHandler: metricsHandler, // PLAN-0168 §P0, nil when DISABLE_METRICS=1
 	})
 	httpSrv := &http.Server{
 		Addr:              *listen,

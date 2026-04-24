@@ -133,6 +133,32 @@ func (s *Store) migrate() error {
 			cost_usd      REAL    NOT NULL DEFAULT 0.0,
 			updated_at    TIMESTAMP NOT NULL
 		)`,
+		// llm_ledger (SPEC-0167 P1 — PLAN-0168) disaggregates the daily
+		// spend recorded in budget_counters by (layer, strategy) so the
+		// /v1/budget/today top_consumers field can be populated without
+		// re-walking the R/I/A Kafka topics. Empty-string layer/strategy
+		// rows represent untagged or historical (pre-migration) spend;
+		// they are summed into totals but skipped in top_consumers.
+		//
+		// day_utc is the UTC YYYY-MM-DD bucket matching budget_counters.
+		// count is the number of Reserve() calls that landed here — used
+		// by top_consumers to display per-strategy call frequency.
+		//
+		// NOTE on the PK: SQLite treats NULL as non-unique in composite
+		// primary keys (multiple NULLs tolerated), which would defeat
+		// the ON CONFLICT upsert. We therefore store "" for the untagged
+		// path rather than NULL.
+		`CREATE TABLE IF NOT EXISTS llm_ledger (
+			day_utc       TEXT NOT NULL,
+			layer         TEXT NOT NULL DEFAULT '',
+			strategy      TEXT NOT NULL DEFAULT '',
+			tokens_total  INTEGER NOT NULL DEFAULT 0,
+			cost_usd      REAL    NOT NULL DEFAULT 0.0,
+			count         INTEGER NOT NULL DEFAULT 0,
+			updated_at    TIMESTAMP NOT NULL,
+			PRIMARY KEY (day_utc, layer, strategy)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_llm_ledger_day ON llm_ledger(day_utc)`,
 		// D1 — ETag-mirrored prompt cache. Survives engine restarts.
 		`CREATE TABLE IF NOT EXISTS prompt_cache (
 			prompt_id    TEXT PRIMARY KEY,
@@ -357,6 +383,126 @@ func (s *Store) GetBudgetSpend() (tokens int, costUSD float64, err error) {
 		return 0, 0, err
 	}
 	return tokens, costUSD, nil
+}
+
+// BudgetDayRow is one row of the per-day budget ledger exposed to the
+// /v1/budget/history API (PLAN-0168 P1).
+type BudgetDayRow struct {
+	DayUTC   string // "YYYY-MM-DD"
+	Tokens   int
+	CostUSD  float64
+	Updated  time.Time
+}
+
+// ListBudgetSpendSince returns per-day aggregates from budget_counters
+// for days in [sinceDay, today], newest first. sinceDay is an inclusive
+// UTC "YYYY-MM-DD" lower bound. Empty sinceDay means "no lower bound".
+// Rows are returned in descending day order.
+func (s *Store) ListBudgetSpendSince(sinceDay string) ([]BudgetDayRow, error) {
+	q := `SELECT day_utc, tokens_total, cost_usd, updated_at FROM budget_counters`
+	args := []interface{}{}
+	if sinceDay != "" {
+		q += ` WHERE day_utc >= ?`
+		args = append(args, sinceDay)
+	}
+	q += ` ORDER BY day_utc DESC`
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []BudgetDayRow
+	for rows.Next() {
+		var r BudgetDayRow
+		if err := rows.Scan(&r.DayUTC, &r.Tokens, &r.CostUSD, &r.Updated); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// InsertBudgetDayForTest writes a budget_counters row for an arbitrary
+// UTC day. TEST-ONLY — production code must go through AddBudgetSpend
+// which pins the day bucket to time.Now().UTC(). Exported (with the
+// _ForTest suffix) so package-external tests can seed historical days
+// when exercising Ledger.History without monkey-patching the clock.
+func (s *Store) InsertBudgetDayForTest(dayUTC string, tokens int, costUSD float64) error {
+	_, err := s.db.Exec(
+		`INSERT INTO budget_counters(day_utc, tokens_total, cost_usd, updated_at)
+		 VALUES (?, ?, ?, ?)
+		 ON CONFLICT(day_utc) DO UPDATE SET
+		   tokens_total = excluded.tokens_total,
+		   cost_usd     = excluded.cost_usd,
+		   updated_at   = excluded.updated_at`,
+		dayUTC, tokens, costUSD, time.Now().UTC(),
+	)
+	return err
+}
+
+// AddLLMLedgerEntry upserts one (day, layer, strategy) row in
+// llm_ledger. Callers pass empty strings for layer/strategy when the
+// spend cannot be attributed (e.g. legacy paths that only call
+// AddBudgetSpend); those rows contribute to the daily total but are
+// filtered out of /v1/budget/today top_consumers. (PLAN-0168 P1.)
+func (s *Store) AddLLMLedgerEntry(layer, strategy string, tokens int, costUSD float64) error {
+	day := time.Now().UTC().Format("2006-01-02")
+	now := time.Now().UTC()
+	_, err := s.db.Exec(
+		`INSERT INTO llm_ledger(day_utc, layer, strategy, tokens_total, cost_usd, count, updated_at)
+		 VALUES (?, ?, ?, ?, ?, 1, ?)
+		 ON CONFLICT(day_utc, layer, strategy) DO UPDATE SET
+		   tokens_total = tokens_total + excluded.tokens_total,
+		   cost_usd     = cost_usd     + excluded.cost_usd,
+		   count        = count        + 1,
+		   updated_at   = excluded.updated_at`,
+		day, layer, strategy, tokens, costUSD, now,
+	)
+	return err
+}
+
+// LayerSpendRow is one (layer, strategy) aggregate over a day range.
+type LayerSpendRow struct {
+	Layer    string
+	Strategy string
+	CostUSD  float64
+	Tokens   int
+	Count    int
+}
+
+// TopLLMConsumers returns the top-N (layer, strategy) tuples ordered
+// by descending cost_usd over the UTC day range [sinceDay, today].
+// sinceDay is "YYYY-MM-DD" inclusive. Rows with empty layer+strategy
+// (untagged legacy spend) are excluded — their cost still appears in
+// budget_counters, just not as a named consumer.
+func (s *Store) TopLLMConsumers(sinceDay string, limit int) ([]LayerSpendRow, error) {
+	if limit <= 0 {
+		limit = 5
+	}
+	q := `SELECT layer, strategy, SUM(cost_usd), SUM(tokens_total), SUM(count)
+	      FROM llm_ledger
+	      WHERE layer <> '' AND strategy <> ''`
+	args := []interface{}{}
+	if sinceDay != "" {
+		q += ` AND day_utc >= ?`
+		args = append(args, sinceDay)
+	}
+	q += ` GROUP BY layer, strategy ORDER BY SUM(cost_usd) DESC LIMIT ?`
+	args = append(args, limit)
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []LayerSpendRow
+	for rows.Next() {
+		var r LayerSpendRow
+		if err := rows.Scan(&r.Layer, &r.Strategy, &r.CostUSD, &r.Tokens, &r.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 // PromptCacheRow mirrors one row of the prompt_cache table.
