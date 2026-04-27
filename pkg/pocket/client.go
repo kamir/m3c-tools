@@ -1,20 +1,26 @@
-// client.go — Pocket Cloud API client (Phase 2, SPEC-0119).
+// Package pocket — Pocket Cloud API client (Phase 2 / SPEC-0173).
 //
 // REST client for https://public.heypocketai.com/api/v1
-// Used in --mode api for cloud transcripts, metadata, and search.
+// Verified 2026-04-27 against the live API (see Pocket-PoC api-probe).
+//
+// Endpoints honored: list + get + tags + auth probe.
+// Endpoints REMOVED (404 on personal pk_ keys): /audio, /recordings/search.
+// MCP server: https://public.heypocketai.com/mcp — out of scope here.
 package pocket
 
 import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
+
+const DefaultAPIBaseURL = "https://public.heypocketai.com/api/v1"
 
 // APIClient communicates with the Pocket Cloud API.
 type APIClient struct {
@@ -23,226 +29,148 @@ type APIClient struct {
 	HTTPClient *http.Client
 }
 
-// APIRecording represents a recording from the Pocket Cloud API.
-type APIRecording struct {
-	ID              string    `json:"id"`
-	Title           string    `json:"title"`
-	Duration        float64   `json:"duration"` // seconds
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
-	TranscriptText  string    `json:"transcript_text"`
-	Summary         string    `json:"summary"`
-	Tags            []string  `json:"tags"`
-	AudioURL        string    `json:"audio_url"` // signed download URL
-	Language        string    `json:"language"`
-	SpeakerCount    int       `json:"speaker_count"`
-	WordCount       int       `json:"word_count"`
+// RateLimit captures the X-RateLimit-* response headers.
+type RateLimit struct {
+	Limit     int
+	Remaining int
+	Reset     time.Time
 }
 
-// APIResponse wraps the standard Pocket API response envelope.
-type APIResponse struct {
-	Success    bool            `json:"success"`
-	Data       json.RawMessage `json:"data"`
-	Error      string          `json:"error,omitempty"`
-	Pagination *APIPagination  `json:"pagination,omitempty"`
-}
-
-// APIPagination holds pagination metadata.
-type APIPagination struct {
-	Page       int  `json:"page"`
-	Limit      int  `json:"limit"`
-	Total      int  `json:"total"`
-	TotalPages int  `json:"total_pages"`
-	HasMore    bool `json:"has_more"`
-}
-
-// SearchRequest is the body for POST /public/recordings/search.
-type SearchRequest struct {
-	Query     string `json:"query"`
-	Limit     int    `json:"limit,omitempty"`
-	Page      int    `json:"page,omitempty"`
-}
-
-// NewAPIClient creates a Pocket API client from config.
+// NewAPIClient creates an APIClient from POCKET_API_KEY / POCKET_API_URL env vars.
 func NewAPIClient() *APIClient {
 	apiKey := os.Getenv("POCKET_API_KEY")
 	baseURL := os.Getenv("POCKET_API_URL")
 	if baseURL == "" {
-		baseURL = "https://public.heypocketai.com/api/v1"
+		baseURL = DefaultAPIBaseURL
 	}
-
 	return &APIClient{
-		BaseURL: strings.TrimRight(baseURL, "/"),
-		APIKey:  apiKey,
-		HTTPClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		BaseURL:    strings.TrimRight(baseURL, "/"),
+		APIKey:     apiKey,
+		HTTPClient: &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
 // IsConfigured returns true if the API key is set.
-func (c *APIClient) IsConfigured() bool {
-	return c.APIKey != ""
-}
+func (c *APIClient) IsConfigured() bool { return c.APIKey != "" }
 
-// ListRecordings fetches recordings with optional pagination.
-func (c *APIClient) ListRecordings(page, limit int) ([]APIRecording, *APIPagination, error) {
-	params := url.Values{}
-	if page > 0 {
-		params.Set("page", fmt.Sprintf("%d", page))
+// ListRecordings fetches one page (server caps limit at 20).
+func (c *APIClient) ListRecordings(page, limit int) ([]APIRecording, *Pagination, error) {
+	if limit <= 0 || limit > 20 {
+		limit = 20
 	}
-	if limit > 0 {
-		params.Set("limit", fmt.Sprintf("%d", limit))
+	if page <= 0 {
+		page = 1
 	}
-
-	body, pagination, err := c.get("/public/recordings", params)
+	q := url.Values{
+		"page":  {strconv.Itoa(page)},
+		"limit": {strconv.Itoa(limit)},
+	}
+	raw, pag, _, err := c.get("/public/recordings", q)
 	if err != nil {
 		return nil, nil, err
 	}
-
-	var recordings []APIRecording
-	if err := json.Unmarshal(body, &recordings); err != nil {
-		return nil, nil, fmt.Errorf("parse recordings: %w", err)
+	var recs []APIRecording
+	if err := json.Unmarshal(raw, &recs); err != nil {
+		return nil, nil, fmt.Errorf("decode list: %w", err)
 	}
-
-	return recordings, pagination, nil
+	return recs, pag, nil
 }
 
-// GetRecording fetches a single recording by ID.
+// ListRecordingsAll paginates through every recording on the account.
+// Filters server-side params are silently ignored by Pocket; do client-side filtering.
+func (c *APIClient) ListRecordingsAll() ([]APIRecording, error) {
+	var all []APIRecording
+	for page := 1; ; page++ {
+		recs, pag, err := c.ListRecordings(page, 20)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, recs...)
+		if pag == nil || !pag.HasMore {
+			break
+		}
+	}
+	return all, nil
+}
+
+// GetRecording fetches the full recording detail (transcript + summarizations).
 func (c *APIClient) GetRecording(id string) (*APIRecording, error) {
-	body, _, err := c.get("/public/recordings/"+id, nil)
+	raw, _, _, err := c.get("/public/recordings/"+url.PathEscape(id), nil)
 	if err != nil {
 		return nil, err
 	}
-
-	var rec APIRecording
-	if err := json.Unmarshal(body, &rec); err != nil {
-		return nil, fmt.Errorf("parse recording: %w", err)
+	var r APIRecording
+	if err := json.Unmarshal(raw, &r); err != nil {
+		return nil, fmt.Errorf("decode detail: %w", err)
 	}
-
-	return &rec, nil
+	return &r, nil
 }
 
-// GetAudioURL fetches a signed download URL for a recording's audio.
-func (c *APIClient) GetAudioURL(id string) (string, error) {
-	body, _, err := c.get("/public/recordings/"+id+"/audio", nil)
-	if err != nil {
-		return "", err
-	}
-
-	var result struct {
-		URL string `json:"url"`
-	}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return "", fmt.Errorf("parse audio URL: %w", err)
-	}
-
-	return result.URL, nil
-}
-
-// Search performs semantic search across recordings.
-func (c *APIClient) Search(query string, limit int) ([]APIRecording, error) {
-	reqBody := SearchRequest{Query: query, Limit: limit}
-	data, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, err
-	}
-
-	respBody, _, err := c.post("/public/recordings/search", data)
-	if err != nil {
-		return nil, err
-	}
-
-	var recordings []APIRecording
-	if err := json.Unmarshal(respBody, &recordings); err != nil {
-		return nil, fmt.Errorf("parse search results: %w", err)
-	}
-
-	return recordings, nil
-}
-
-// ListTags fetches all tags.
-func (c *APIClient) ListTags() ([]string, error) {
-	body, _, err := c.get("/public/tags", nil)
-	if err != nil {
-		return nil, err
-	}
-
-	var tags []string
-	if err := json.Unmarshal(body, &tags); err != nil {
-		return nil, fmt.Errorf("parse tags: %w", err)
-	}
-
-	return tags, nil
-}
-
-// HealthCheck verifies API connectivity.
+// HealthCheck verifies API connectivity by hitting list with limit=1.
 func (c *APIClient) HealthCheck() error {
-	_, _, err := c.get("/public/recordings", url.Values{"limit": {"1"}})
+	_, _, _, err := c.get("/public/recordings", url.Values{"limit": {"1"}})
 	return err
 }
 
-// --- HTTP helpers ---
+// --- Internal HTTP helpers ---
 
-func (c *APIClient) get(path string, params url.Values) (json.RawMessage, *APIPagination, error) {
+func (c *APIClient) get(path string, q url.Values) (json.RawMessage, *Pagination, *RateLimit, error) {
 	u := c.BaseURL + path
-	if len(params) > 0 {
-		u += "?" + params.Encode()
+	if len(q) > 0 {
+		u += "?" + q.Encode()
 	}
-
 	req, err := http.NewRequest("GET", u, nil)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return c.do(req)
-}
-
-func (c *APIClient) post(path string, body []byte) (json.RawMessage, *APIPagination, error) {
-	req, err := http.NewRequest("POST", c.BaseURL+path, strings.NewReader(string(body)))
-	if err != nil {
-		return nil, nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	return c.do(req)
-}
-
-func (c *APIClient) do(req *http.Request) (json.RawMessage, *APIPagination, error) {
 	req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return nil, nil, fmt.Errorf("pocket API request: %w", err)
+		return nil, nil, nil, fmt.Errorf("pocket request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024)) // 10MB max
+	rl := parseRateLimit(resp.Header)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 16*1024*1024))
 	if err != nil {
-		return nil, nil, fmt.Errorf("read response: %w", err)
+		return nil, nil, rl, err
 	}
 
 	if resp.StatusCode == 429 {
-		return nil, nil, fmt.Errorf("pocket API rate limited (429)")
+		return nil, nil, rl, fmt.Errorf("rate limited (429); reset at %s", rl.Reset.Format(time.RFC3339))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, nil, fmt.Errorf("pocket API HTTP %d: %s", resp.StatusCode, string(respBody[:min(200, len(respBody))]))
+		snippet := string(body)
+		if len(snippet) > 200 {
+			snippet = snippet[:200]
+		}
+		return nil, nil, rl, fmt.Errorf("HTTP %d %s: %s", resp.StatusCode, path, snippet)
 	}
 
-	var apiResp APIResponse
-	if err := json.Unmarshal(respBody, &apiResp); err != nil {
-		return nil, nil, fmt.Errorf("parse API response: %w", err)
+	var env Envelope
+	if err := json.Unmarshal(body, &env); err != nil {
+		return nil, nil, rl, fmt.Errorf("decode envelope: %w", err)
 	}
-
-	if !apiResp.Success {
-		return nil, nil, fmt.Errorf("pocket API error: %s", apiResp.Error)
+	if !env.Success {
+		return nil, nil, rl, fmt.Errorf("api error: %s", env.Error)
 	}
-
-	log.Printf("[pocket-api] %s %s → %d", req.Method, req.URL.Path, resp.StatusCode)
-	return apiResp.Data, apiResp.Pagination, nil
+	return env.Data, env.Pagination, rl, nil
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
+func parseRateLimit(h http.Header) *RateLimit {
+	rl := &RateLimit{}
+	if v := h.Get("X-RateLimit-Limit"); v != "" {
+		rl.Limit, _ = strconv.Atoi(v)
 	}
-	return b
+	if v := h.Get("X-RateLimit-Remaining"); v != "" {
+		rl.Remaining, _ = strconv.Atoi(v)
+	}
+	if v := h.Get("X-RateLimit-Reset"); v != "" {
+		if epoch, err := strconv.ParseInt(v, 10, 64); err == nil {
+			rl.Reset = time.Unix(epoch, 0)
+		}
+	}
+	return rl
 }

@@ -2283,9 +2283,13 @@ func cmdMenubar(args []string) {
 	}
 	maybePreloadWhisper()
 
-	// Register dynamic Pocket Sync menu label (SPEC-0119 Feature 3).
+	// Register dynamic Pocket Sync menu label (SPEC-0119 USB / SPEC-0173 Cloud).
 	menubar.SetPocketLabelFunc(func() string {
 		cfg := pocket.LoadConfig()
+		// Cloud-API mode (SPEC-0173 / Path B) — no USB device required.
+		if cfg.IsAPIMode() {
+			return "Pocket Sync (Cloud)"
+		}
 		if !cfg.IsDeviceConnected() {
 			return "Pocket Sync (not connected)"
 		}
@@ -3539,7 +3543,9 @@ func buildDeviceHubHTML(contextID, baseURL string) string {
 	cfg := pocket.LoadConfig()
 	pocketStatus := "not connected"
 	pocketCount := 0
-	if cfg.IsDeviceConnected() {
+	if cfg.IsAPIMode() {
+		pocketStatus = "Cloud-API mode (SPEC-0173)"
+	} else if cfg.IsDeviceConnected() {
 		if recs, err := pocket.Scan(cfg.RecordPath); err == nil {
 			pocketCount = len(recs)
 			pocketStatus = fmt.Sprintf("%d recordings on device", pocketCount)
@@ -3651,8 +3657,18 @@ func buildDeviceHubHTML(contextID, baseURL string) string {
 		baseURL, baseURL, baseURL, baseURL,
 		pocketStatus,
 		baseURL,
-		func() string { if cfg.IsDeviceConnected() { return "ok" }; return "warn" }(),
-		func() string { if cfg.IsDeviceConnected() { return fmt.Sprintf("&#10003; %s", pocketStatus) }; return "not connected" }(),
+		func() string {
+			if cfg.IsAPIMode() || cfg.IsDeviceConnected() {
+				return "ok"
+			}
+			return "warn"
+		}(),
+		func() string {
+			if cfg.IsAPIMode() || cfg.IsDeviceConnected() {
+				return fmt.Sprintf("&#10003; %s", pocketStatus)
+			}
+			return "not connected"
+		}(),
 		func() string { if apiStatus != "" { return "ok" }; return "muted" }(),
 		func() string { if apiStatus != "" { return "&#10003; " + apiStatus }; return "not configured" }(),
 		baseURL, baseURL, baseURL,
@@ -5479,9 +5495,29 @@ func truncate(s string, maxLen int) string {
 	return s[:maxLen-3] + "..."
 }
 
-// menubarHandlePocketSync handles the Pocket Sync menu action (SPEC-0119).
+// menubarHandlePocketSync handles the Pocket Sync menu action.
+// SPEC-0119 (USB mode) and SPEC-0173 (Cloud-API mode) — dispatch by config.
 func menubarHandlePocketSync(app *menubar.App) {
 	cfg := pocket.LoadConfig()
+
+	// Path B (SPEC-0173): if Cloud-API mode is active, run the cloud sync
+	// flow without requiring the USB device to be mounted.
+	if cfg.IsAPIMode() {
+		log.Printf("[pocket] cloud-sync mode (POCKET_SYNC_MODE=api) — starting")
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[pocket] PANIC in cloud-sync: %v", r)
+				}
+			}()
+			if err := runPocketCloudSync(false); err != nil {
+				log.Printf("[pocket] cloud-sync error: %v", err)
+				return
+			}
+			log.Printf("[pocket] cloud-sync done")
+		}()
+		return
+	}
 
 	if !cfg.IsDeviceConnected() {
 		log.Printf("[pocket] device not connected at %s", cfg.RecordPath)
@@ -6023,8 +6059,10 @@ func cmdPocket(args []string) {
 		cmdPocketSync(args[1:])
 	case "api":
 		cmdPocketAPI(args[1:])
+	case "cloud-sync":
+		cmdPocketCloudSync(args[1:])
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown pocket subcommand: %s\nUsage: m3c-tools pocket <list|sync|api> [args]\n", args[0])
+		fmt.Fprintf(os.Stderr, "Unknown pocket subcommand: %s\nUsage: m3c-tools pocket <list|sync|api|cloud-sync> [args]\n", args[0])
 		os.Exit(1)
 	}
 }
@@ -6094,43 +6132,242 @@ func cmdPocketAPI(args []string) {
 		fmt.Printf("Title:    %s\n", rec.Title)
 		fmt.Printf("Date:     %s\n", rec.CreatedAt.Format("2006-01-02 15:04:05"))
 		fmt.Printf("Duration: %.0fs\n", rec.Duration)
-		fmt.Printf("Language: %s\n", rec.Language)
-		fmt.Printf("Speakers: %d\n", rec.SpeakerCount)
-		fmt.Printf("Words:    %d\n", rec.WordCount)
-		if rec.Summary != "" {
-			fmt.Printf("\nSummary:\n%s\n", rec.Summary)
+		fmt.Printf("State:    %s\n", rec.State)
+		fmt.Printf("Language: %s\n", rec.LanguageOrEmpty())
+		if md := rec.SummaryMarkdown(); md != "" {
+			fmt.Printf("\nSummary:\n%s\n", md)
 		}
-		if rec.TranscriptText != "" {
-			fmt.Printf("\nTranscript:\n%s\n", rec.TranscriptText)
+		if rec.Transcript.Text != "" {
+			fmt.Printf("\nTranscript:\n%s\n", rec.Transcript.Text)
 		}
 
 	case "search":
-		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "Usage: m3c-tools pocket api search <query>")
-			os.Exit(1)
-		}
-		query := strings.Join(args[1:], " ")
-		results, err := client.Search(query, 10)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		if len(results) == 0 {
-			fmt.Printf("No results for %q\n", query)
-			return
-		}
-		fmt.Printf("Search results for %q:\n\n", query)
-		for i, rec := range results {
-			fmt.Printf("%d. %s (%s, %.0fs)\n", i+1, rec.Title, rec.CreatedAt.Format("2006-01-02"), rec.Duration)
-			if rec.Summary != "" {
-				fmt.Printf("   %s\n", rec.Summary)
-			}
-		}
+		fmt.Fprintln(os.Stderr, "Error: 'search' subcommand removed — Pocket REST search endpoint returns 404 on personal API keys.")
+		fmt.Fprintln(os.Stderr, "Use the Pocket MCP server instead: claude mcp add pocket --transport http https://public.heypocketai.com/mcp --header \"Authorization: Bearer $POCKET_API_KEY\"")
+		os.Exit(1)
 
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown pocket api subcommand: %s\n", args[0])
 		os.Exit(1)
 	}
+}
+
+// cmdPocketCloudSync is the CLI wrapper around runPocketCloudSync.
+// Exits non-zero on error; safe for shell scripting.
+func cmdPocketCloudSync(args []string) {
+	dryRun := false
+	for _, a := range args {
+		if a == "--dry-run" || a == "-n" {
+			dryRun = true
+		}
+	}
+	if err := runPocketCloudSync(dryRun); err != nil {
+		fmt.Fprintf(os.Stderr, "pocket cloud-sync: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// runPocketCloudSync is the Path-B (SPEC-0173) trigger for ingesting Pocket
+// Cloud recordings into ER1. Mirrors the Plaud sync flow:
+//
+//  1. List all recordings via the Pocket Cloud API (paginated client-side)
+//  2. Filter to state=="completed" && duration >= POLL_MIN_DURATION (default 10s)
+//  3. Cross-device dedup via /api/pocket-sync/check
+//  4. For each unsynced recording: GetRecording → build composite doc →
+//     er1.Upload (placeholder audio + image, real transcript+summary) →
+//     /api/pocket-sync/map register
+//
+// Returns an error instead of os.Exit so it's safe to call from the menubar.
+func runPocketCloudSync(dryRun bool) error {
+	pcfg := pocket.LoadConfig()
+	if pcfg.APIKey == "" {
+		return fmt.Errorf("POCKET_API_KEY not set — get your key from the Pocket app: Settings → Developer → API Keys")
+	}
+
+	er1Cfg := er1.LoadConfig()
+	if er1Cfg.ContextID == "" {
+		return fmt.Errorf("ER1_CONTEXT_ID not set (or no active sign-in)")
+	}
+	if er1Cfg.APIKey == "" && os.Getenv("ER1_DEVICE_TOKEN") == "" {
+		return fmt.Errorf("no ER1 authentication configured — run 'm3c-tools setup' or sign in via the menubar")
+	}
+
+	minDuration := 10.0
+	if v := os.Getenv("POLL_MIN_DURATION"); v != "" {
+		if n, err := strconv.ParseFloat(v, 64); err == nil && n > 0 {
+			minDuration = n
+		}
+	}
+
+	apiClient := pocket.NewAPIClient()
+	apiClient.BaseURL = strings.TrimRight(pcfg.APIURL, "/")
+	if !apiClient.IsConfigured() {
+		return fmt.Errorf("Pocket API client not configured")
+	}
+
+	syncClient := pocket.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, "", !er1Cfg.VerifySSL)
+	accountID := pocket.DeriveAccountID(pcfg.APIKey)
+
+	fmt.Printf("Pocket Cloud Sync — account=%s\n", accountID)
+	fmt.Printf("ER1 base URL:    %s\n", syncClient.BaseURL())
+	fmt.Printf("Min duration:    %.0fs\n", minDuration)
+	if dryRun {
+		fmt.Println("MODE: dry-run (no uploads, no mapping writes)")
+	}
+	fmt.Println(strings.Repeat("-", 60))
+
+	all, err := apiClient.ListRecordingsAll()
+	if err != nil {
+		return fmt.Errorf("list recordings: %w", err)
+	}
+	fmt.Printf("Total recordings on account: %d\n", len(all))
+
+	var eligible []pocket.APIRecording
+	skippedShort := 0
+	skippedPending := 0
+	for _, r := range all {
+		if !r.IsCompleted() {
+			skippedPending++
+			continue
+		}
+		if r.Duration < minDuration {
+			skippedShort++
+			continue
+		}
+		eligible = append(eligible, r)
+	}
+	fmt.Printf("Eligible (completed >= %.0fs): %d  (skipped: %d pending, %d too-short)\n",
+		minDuration, len(eligible), skippedPending, skippedShort)
+
+	if len(eligible) == 0 {
+		fmt.Println("Nothing to sync.")
+		return nil
+	}
+
+	ids := make([]string, 0, len(eligible))
+	for _, r := range eligible {
+		ids = append(ids, r.ID)
+	}
+	check, err := syncClient.CheckRecordings(accountID, ids)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[warn] sync API check failed: %v\n", err)
+	}
+	already := map[string]bool{}
+	if check != nil {
+		for rid := range check.Synced {
+			already[rid] = true
+		}
+	}
+
+	var todo []pocket.APIRecording
+	for _, r := range eligible {
+		if !already[r.ID] {
+			todo = append(todo, r)
+		}
+	}
+	fmt.Printf("Already synced server-side: %d\nTo sync now: %d\n", len(already), len(todo))
+	fmt.Println(strings.Repeat("-", 60))
+
+	if dryRun {
+		for _, r := range todo {
+			fmt.Printf("[dry-run] would sync %s  %q  (%.0fs)\n", r.ID, r.Title, r.Duration)
+		}
+		return nil
+	}
+
+	hostname, _ := os.Hostname()
+	synced := 0
+	failed := 0
+
+	for _, summary := range todo {
+		rec, err := apiClient.GetRecording(summary.ID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[fail] get %s: %v\n", summary.ID, err)
+			failed++
+			continue
+		}
+
+		composite := buildPocketCompositeDoc(rec)
+		extra := []string{
+			fmt.Sprintf("source:%s", rec.DedupKey()),
+		}
+		if hostname != "" {
+			extra = append(extra, "host:"+hostname)
+		}
+		for _, t := range rec.Tags {
+			t = strings.TrimSpace(t)
+			if t != "" && !strings.Contains(t, ",") {
+				extra = append(extra, t)
+			}
+		}
+		tags := impression.BuildPocketFieldnoteTags(rec.Title, extra...)
+
+		payload := &er1.UploadPayload{
+			TranscriptData:     []byte(strings.TrimSpace(composite) + "\n"),
+			TranscriptFilename: fmt.Sprintf("pocket_%s.txt", rec.ID),
+			AudioFilename:      fmt.Sprintf("pocket_%s.wav", rec.ID),
+			ImageFilename:      "pocket-placeholder.png",
+			Tags:               tags,
+			ContentType:        pcfg.ContentType,
+			DoTranscribe:       false,
+		}
+		resp, err := er1.Upload(er1Cfg, payload)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[fail] upload %s: %v\n", rec.ID, err)
+			failed++
+			continue
+		}
+
+		mapErr := syncClient.RegisterMapping(pocket.SyncMapping{
+			PocketAccountID:   accountID,
+			PocketRecordingID: rec.ID,
+			ER1DocID:          resp.DocID,
+			ER1ContextID:      er1Cfg.ContextID,
+			RecordingTitle:    rec.Title,
+			RecordingDuration: int(rec.Duration),
+			TranscriptLength:  len(rec.Transcript.Text),
+		})
+		if mapErr != nil {
+			fmt.Fprintf(os.Stderr, "[warn] mapping for %s: %v (item is uploaded; dedup may double-fire)\n", rec.ID, mapErr)
+		}
+
+		fmt.Printf("[ok]   %s  %q  (%.0fs)  → %s\n", rec.ID, rec.Title, rec.Duration, resp.DocID)
+		synced++
+	}
+
+	fmt.Println(strings.Repeat("-", 60))
+	fmt.Printf("Done. synced=%d  failed=%d  account=%s\n", synced, failed, accountID)
+	if failed > 0 {
+		return fmt.Errorf("%d recording(s) failed to sync", failed)
+	}
+	return nil
+}
+
+// buildPocketCompositeDoc assembles the transcript+summary text uploaded to ER1
+// as transcript_file_ext. Mirrors the Plaud composite-doc convention.
+func buildPocketCompositeDoc(rec *pocket.APIRecording) string {
+	var b strings.Builder
+	b.WriteString("=== POCKET FIELDNOTE ===\n")
+	b.WriteString("Title: " + rec.Title + "\n")
+	b.WriteString(fmt.Sprintf("Recorded: %s\n", rec.RecordingAt.Format(time.RFC3339)))
+	b.WriteString(fmt.Sprintf("Duration: %.0fs\n", rec.Duration))
+	b.WriteString("Source: " + rec.DedupKey() + "\n")
+	if lang := rec.LanguageOrEmpty(); lang != "" {
+		b.WriteString("Language: " + lang + "\n")
+	}
+	b.WriteString("\n=== TRANSCRIPT ===\n")
+	if rec.Transcript.Text != "" {
+		b.WriteString(rec.Transcript.Text)
+		b.WriteString("\n")
+	} else {
+		b.WriteString("[no transcript]\n")
+	}
+	if md := rec.SummaryMarkdown(); md != "" {
+		b.WriteString("\n=== SUMMARY ===\n")
+		b.WriteString(md)
+		b.WriteString("\n")
+	}
+	return b.String()
 }
 
 func cmdPocketList(args []string) {

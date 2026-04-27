@@ -24,6 +24,8 @@ func BuildTags(obsType ObservationType, extra ...string) string {
 		tags = append(tags, "audio-import")
 	case Fieldnote:
 		tags = append(tags, "plaud", "fieldnote")
+	case PocketFieldnote, PocketGrouped:
+		tags = append(tags, "pocket", "fieldnote")
 	}
 
 	tags = append(tags, extra...)
@@ -54,6 +56,17 @@ func BuildFieldnoteTags(title string, extra ...string) string {
 	}
 	tags = append(tags, extra...)
 	return BuildTags(Fieldnote, tags...)
+}
+
+// BuildPocketFieldnoteTags creates tags for a Pocket cloud-API fieldnote.
+// Mirrors BuildFieldnoteTags but emits the "pocket" source tag instead of "plaud".
+func BuildPocketFieldnoteTags(title string, extra ...string) string {
+	tags := []string{}
+	if title != "" {
+		tags = append(tags, fmt.Sprintf("recording:%s", title))
+	}
+	tags = append(tags, extra...)
+	return BuildTags(PocketFieldnote, tags...)
 }
 
 // OriginTags returns tags identifying where this observation was captured:
