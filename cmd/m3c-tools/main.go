@@ -22,6 +22,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -6061,10 +6062,91 @@ func cmdPocket(args []string) {
 		cmdPocketAPI(args[1:])
 	case "cloud-sync":
 		cmdPocketCloudSync(args[1:])
+	case "backfill":
+		cmdPocketBackfill(args[1:])
+	case "mappings":
+		cmdPocketMappings(args[1:])
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown pocket subcommand: %s\nUsage: m3c-tools pocket <list|sync|api|cloud-sync> [args]\n", args[0])
+		fmt.Fprintf(os.Stderr, "Unknown pocket subcommand: %s\nUsage: m3c-tools pocket <list|sync|api|cloud-sync|backfill|mappings> [args]\n", args[0])
 		os.Exit(1)
 	}
+}
+
+// cmdPocketBackfill registers a pocket-sync mapping for a recording that was
+// already uploaded to ER1 outside the normal sync flow (e.g. when /map was
+// returning 4xx because the server module wasn't deployed yet).
+//
+// Usage: m3c-tools pocket backfill <recording_id> <er1_doc_id> <title> <duration_seconds>
+func cmdPocketBackfill(args []string) {
+	if len(args) < 4 {
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools pocket backfill <recording_id> <er1_doc_id> <title> <duration_seconds>")
+		os.Exit(2)
+	}
+	rid := args[0]
+	docID := args[1]
+	title := args[2]
+	duration, err := strconv.Atoi(args[3])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "duration must be an integer (seconds): %v\n", err)
+		os.Exit(2)
+	}
+
+	pcfg := pocket.LoadConfig()
+	if pcfg.APIKey == "" {
+		fmt.Fprintln(os.Stderr, "Error: POCKET_API_KEY not set")
+		os.Exit(1)
+	}
+	er1Cfg := er1.LoadConfig()
+	if er1Cfg.ContextID == "" {
+		fmt.Fprintln(os.Stderr, "Error: ER1_CONTEXT_ID not set")
+		os.Exit(1)
+	}
+
+	accountID := pocket.DeriveAccountID(pcfg.APIKey)
+	syncClient := pocket.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, "", !er1Cfg.VerifySSL)
+
+	if err := syncClient.RegisterMapping(pocket.SyncMapping{
+		PocketAccountID:   accountID,
+		PocketRecordingID: rid,
+		ER1DocID:          docID,
+		ER1ContextID:      er1Cfg.ContextID,
+		RecordingTitle:    title,
+		RecordingDuration: duration,
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "backfill failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("OK — registered pocket://%s → %s (account=%s)\n", rid, docID, accountID)
+}
+
+// cmdPocketMappings dumps the current contents of _pocket_sync_map for the
+// active user + Pocket account. Useful for debugging dedup state.
+func cmdPocketMappings(_ []string) {
+	pcfg := pocket.LoadConfig()
+	er1Cfg := er1.LoadConfig()
+	if pcfg.APIKey == "" {
+		fmt.Fprintln(os.Stderr, "Error: POCKET_API_KEY not set")
+		os.Exit(1)
+	}
+	accountID := pocket.DeriveAccountID(pcfg.APIKey)
+	base := strings.TrimSuffix(strings.TrimSuffix(er1Cfg.APIURL, "/upload_2"), "/upload")
+	u := base + "/api/pocket-sync/mappings?pocket_account_id=" + accountID
+	req, _ := http.NewRequest("GET", u, nil)
+	auth.ApplyAuth(req, er1Cfg.APIKey)
+	transport := &http.Transport{}
+	if !er1Cfg.VerifySSL {
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	}
+	client := &http.Client{Transport: transport}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "request failed: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	fmt.Printf("URL: %s\nHTTP %d\nAccount: %s\n\n", u, resp.StatusCode, accountID)
+	fmt.Println(string(body))
 }
 
 // cmdPocketAPI handles Pocket Cloud API subcommands (Phase 2).
