@@ -44,23 +44,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Load config: try profile system first, fall back to legacy .env files.
-	// BUG-0093: After profile loading, also load legacy .env to fill gaps.
-	// The setup wizard writes ER1_API_KEY to ~/.m3c-tools.env, but profile
-	// templates may have it empty. LoadDotenv only sets vars that are not
-	// already set, so profile values take precedence.
-	home, _ := os.UserHomeDir()
+	// Load config: layered per SPEC-0175 (mirrors darwin main.go).
+	//   1. Active profile (account-scoped)
+	//   2. Global preferences (~/.m3c-tools/preferences.env, legacy fallback)
+	//   3. Project-local .env
+	if _, migErr := config.MigrateLegacyPreferences(); migErr != nil {
+		log.Printf("[config] preferences migration warning: %v", migErr)
+	}
 	pm := config.NewProfileManager()
 	if activeProfile, err := pm.ActiveProfile(); err == nil {
 		_ = pm.ApplyProfile(activeProfile)
 		log.Printf("[config] profile: %s", activeProfile.Name)
-		// Fill gaps from legacy config (e.g. ER1_API_KEY from setup wizard).
-		for _, p := range []string{filepath.Join(home, ".m3c-tools.env"), ".env"} {
-			_ = er1.LoadDotenv(p)
-		}
-	} else {
-		// Fallback to legacy .env loading for pre-profile installations.
-		for _, p := range []string{".env", filepath.Join(home, ".m3c-tools.env")} {
+	}
+	for _, p := range []string{config.PreferencesPath(), config.LegacyPreferencesPath(), ".env"} {
+		if p != "" {
 			_ = er1.LoadDotenv(p)
 		}
 	}
