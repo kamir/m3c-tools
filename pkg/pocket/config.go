@@ -35,7 +35,9 @@ func LoadConfig() *Config {
 		WhisperModel: envOrDefault("POCKET_WHISPER_MODEL", os.Getenv("M3C_WHISPER_MODEL")),
 		APIKey:       os.Getenv("POCKET_API_KEY"),
 		APIURL:       envOrDefault("POCKET_API_URL", "https://public.heypocketai.com/api/v1"),
-		SyncMode:     envOrDefault("POCKET_SYNC_MODE", "usb"),
+		// SPEC-0174 §3.1: empty = auto-detect via Mode().
+		// Honoured values: "usb" (force USB-only opt-out), unset/"" (auto).
+		SyncMode:     os.Getenv("POCKET_SYNC_MODE"),
 	}
 
 	tagsStr := envOrDefault("POCKET_DEFAULT_TAGS", "pocket,fieldnote,Pocket Audio-Tracker")
@@ -60,9 +62,51 @@ func (c *Config) IsDeviceConnected() bool {
 	return err == nil && info.IsDir()
 }
 
-// IsAPIMode returns true if sync mode is "api" and API key is configured.
+// IsAPIMode returns true if API mode is active per Mode().
 func (c *Config) IsAPIMode() bool {
-	return c.SyncMode == "api" && c.APIKey != ""
+	m := c.Mode()
+	return m == ModeAPI || m == ModeBoth
+}
+
+// SyncModeKind enumerates the runtime-resolved Pocket sync modes (SPEC-0174 §3.1).
+type SyncModeKind string
+
+const (
+	// ModeOff means neither cloud credentials nor a USB device are present.
+	ModeOff SyncModeKind = "off"
+	// ModeAPI means the cloud-API path is active (POCKET_API_KEY is set).
+	ModeAPI SyncModeKind = "api"
+	// ModeUSB means a Pocket USB volume is mounted and no cloud key is set.
+	ModeUSB SyncModeKind = "usb"
+	// ModeBoth means cloud credentials AND a USB volume are present — both
+	// paths are offered to the user via the menubar (SPEC-0174 §3.4).
+	ModeBoth SyncModeKind = "both"
+)
+
+// Mode resolves the active Pocket sync mode at call time. SPEC-0174 §3.1:
+// drop the POCKET_SYNC_MODE env var as a hard switch; auto-detect from
+// credentials + device presence. POCKET_SYNC_MODE=usb is still honoured as
+// an explicit opt-out of cloud mode for users who want USB-only behaviour.
+func (c *Config) Mode() SyncModeKind {
+	hasKey := c.APIKey != ""
+	hasUSB := c.IsDeviceConnected()
+	// Explicit opt-out: POCKET_SYNC_MODE=usb forces USB even if a key is set.
+	if c.SyncMode == "usb" {
+		if hasUSB {
+			return ModeUSB
+		}
+		return ModeOff
+	}
+	switch {
+	case hasKey && hasUSB:
+		return ModeBoth
+	case hasKey:
+		return ModeAPI
+	case hasUSB:
+		return ModeUSB
+	default:
+		return ModeOff
+	}
 }
 
 // EnsureDirs creates the staging, raw, and merged directories if they don't exist.

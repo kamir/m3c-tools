@@ -2284,16 +2284,22 @@ func cmdMenubar(args []string) {
 	}
 	maybePreloadWhisper()
 
-	// Register dynamic Pocket Sync menu label (SPEC-0119 USB / SPEC-0173 Cloud).
+	// Register dynamic Pocket Sync menu label.
+	// SPEC-0174 §3.1: auto-detected mode (api / usb / both / off) — no env-var dance.
 	menubar.SetPocketLabelFunc(func() string {
 		cfg := pocket.LoadConfig()
-		// Cloud-API mode (SPEC-0173 / Path B) — no USB device required.
-		if cfg.IsAPIMode() {
-			return "Pocket Sync (Cloud)"
+		switch cfg.Mode() {
+		case pocket.ModeOff:
+			return "Pocket Sync (no source)"
+		case pocket.ModeAPI:
+			return "Pocket Sync"
+		case pocket.ModeBoth:
+			// Both paths active. Indicate both are available; clicking
+			// runs Cloud sync (preferred). USB is reachable via CLI
+			// `m3c-tools pocket usb-sync` until the submenu lands (§3.4).
+			return "Pocket Sync (Cloud + USB)"
 		}
-		if !cfg.IsDeviceConnected() {
-			return "Pocket Sync (not connected)"
-		}
+		// ModeUSB — fall through to scan-based count for the existing window.
 		recordings, err := pocket.Scan(cfg.RecordPath)
 		if err != nil || len(recordings) == 0 {
 			return "Pocket Sync"
@@ -3542,11 +3548,14 @@ func startER1LoginCallbackServer() (*http.Server, string, <-chan loginCallbackRe
 // buildDeviceHubHTML generates the Personal Device Hub page shown after m3c-tools login (SPEC-0124).
 func buildDeviceHubHTML(contextID, baseURL string) string {
 	cfg := pocket.LoadConfig()
-	pocketStatus := "not connected"
+	pocketStatus := "no source"
 	pocketCount := 0
-	if cfg.IsAPIMode() {
-		pocketStatus = "Cloud-API mode (SPEC-0173)"
-	} else if cfg.IsDeviceConnected() {
+	switch cfg.Mode() {
+	case pocket.ModeAPI:
+		pocketStatus = "Cloud-API mode"
+	case pocket.ModeBoth:
+		pocketStatus = "Cloud + USB"
+	case pocket.ModeUSB:
 		if recs, err := pocket.Scan(cfg.RecordPath); err == nil {
 			pocketCount = len(recs)
 			pocketStatus = fmt.Sprintf("%d recordings on device", pocketCount)
@@ -3659,16 +3668,16 @@ func buildDeviceHubHTML(contextID, baseURL string) string {
 		pocketStatus,
 		baseURL,
 		func() string {
-			if cfg.IsAPIMode() || cfg.IsDeviceConnected() {
+			if cfg.Mode() != pocket.ModeOff {
 				return "ok"
 			}
 			return "warn"
 		}(),
 		func() string {
-			if cfg.IsAPIMode() || cfg.IsDeviceConnected() {
+			if cfg.Mode() != pocket.ModeOff {
 				return fmt.Sprintf("&#10003; %s", pocketStatus)
 			}
-			return "not connected"
+			return "no source"
 		}(),
 		func() string { if apiStatus != "" { return "ok" }; return "muted" }(),
 		func() string { if apiStatus != "" { return "&#10003; " + apiStatus }; return "not configured" }(),
@@ -5497,14 +5506,22 @@ func truncate(s string, maxLen int) string {
 }
 
 // menubarHandlePocketSync handles the Pocket Sync menu action.
-// SPEC-0119 (USB mode) and SPEC-0173 (Cloud-API mode) — dispatch by config.
+// SPEC-0119 (USB) + SPEC-0173 (Cloud) + SPEC-0174 §3.1 (auto-detect dispatch).
 func menubarHandlePocketSync(app *menubar.App) {
 	cfg := pocket.LoadConfig()
 
-	// Path B (SPEC-0173): if Cloud-API mode is active, run the cloud sync
-	// flow without requiring the USB device to be mounted.
-	if cfg.IsAPIMode() {
-		log.Printf("[pocket] cloud-sync mode (POCKET_SYNC_MODE=api) — starting")
+	switch cfg.Mode() {
+	case pocket.ModeOff:
+		log.Printf("[pocket] no source configured — set POCKET_API_KEY in your profile or plug in a Pocket USB device")
+		return
+	case pocket.ModeAPI, pocket.ModeBoth:
+		// Cloud is the canonical path when both are present (§3.4).
+		// USB is still reachable via `m3c-tools pocket usb-sync` CLI.
+		if cfg.Mode() == pocket.ModeBoth {
+			log.Printf("[pocket] cloud + USB both available; running cloud sync. Use 'm3c-tools pocket usb-sync' for the device.")
+		} else {
+			log.Printf("[pocket] cloud-sync mode — starting")
+		}
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
@@ -5520,6 +5537,7 @@ func menubarHandlePocketSync(app *menubar.App) {
 		return
 	}
 
+	// ModeUSB falls through to the existing USB window.
 	if !cfg.IsDeviceConnected() {
 		log.Printf("[pocket] device not connected at %s", cfg.RecordPath)
 		return
