@@ -2,6 +2,7 @@
 package pocket
 
 import (
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,10 +35,19 @@ func LoadConfig() *Config {
 		ContentType:  envOrDefault("POCKET_CONTENT_TYPE", "Pocket-Fieldnote"),
 		WhisperModel: envOrDefault("POCKET_WHISPER_MODEL", os.Getenv("M3C_WHISPER_MODEL")),
 		APIKey:       os.Getenv("POCKET_API_KEY"),
-		APIURL:       envOrDefault("POCKET_API_URL", "https://public.heypocketai.com/api/v1"),
+		// SPEC-0175 P1: single source of truth — DefaultAPIBaseURL is the
+		// canonical default (was duplicated in 3 files until this commit).
+		APIURL:       envOrDefault("POCKET_API_URL", DefaultAPIBaseURL),
 		// SPEC-0174 §3.1: empty = auto-detect via Mode().
 		// Honoured values: "usb" (force USB-only opt-out), unset/"" (auto).
 		SyncMode:     os.Getenv("POCKET_SYNC_MODE"),
+	}
+
+	// SPEC-0175 P1: warn when POCKET_SYNC_MODE is set to "api" — that value
+	// is now a no-op (auto-detect supersedes it). The user likely copied
+	// this from old docs / .env.example. Tell them once and move on.
+	if rawMode := os.Getenv("POCKET_SYNC_MODE"); rawMode == "api" {
+		log.Printf("[pocket] POCKET_SYNC_MODE=api is deprecated and ignored — auto-detect from POCKET_API_KEY presence (SPEC-0174 §3.1). Remove the env var to silence this warning.")
 	}
 
 	tagsStr := envOrDefault("POCKET_DEFAULT_TAGS", "pocket,fieldnote,Pocket Audio-Tracker")
