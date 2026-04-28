@@ -82,20 +82,27 @@ func TestMenubarIntegrationFullLifecycle(t *testing.T) {
 		t.Errorf("after 2 adds, history = %d, want 2", app.HistoryLen())
 	}
 
-	// 4. Verify menu items reflect current state
+	// 4. Verify menu items reflect current state.
+	//
+	// History stays top-level. The identity row is the green-dot label
+	// when idle ("🟢 …"); idle does NOT emit a status sentence in the
+	// submenu — that contract is unit-tested in
+	// TestStatusMessage_OnlySpeaksWhenSomethingToSay. Here we just
+	// assert the closed-state row carries the green dot and history
+	// reflects the inserted entries.
 	items := app.BuildMenuItems()
-	foundStatus := false
+	foundIdleDot := false
 	foundHistory := false
 	for _, item := range items {
-		if strings.Contains(item.Text, "idle") {
-			foundStatus = true
-		}
 		if strings.Contains(item.Text, "History (2)") {
 			foundHistory = true
 		}
+		if strings.Contains(item.Text, "🟢") {
+			foundIdleDot = true
+		}
 	}
-	if !foundStatus {
-		t.Error("menu items should show 'idle' status")
+	if !foundIdleDot {
+		t.Error("identity row should carry the green-dot 🟢 when idle")
 	}
 	if !foundHistory {
 		t.Error("menu items should show 'History (2)'")
@@ -182,23 +189,30 @@ func TestMenubarIntegrationStatusDuringFetch(t *testing.T) {
 	}
 }
 
-// TestMenubarIntegrationMenuItemsComplete verifies all expected menu
-// items are present in the built menu.
+// TestMenubarIntegrationMenuItemsComplete verifies the Mac-style top-level
+// menu shape: identity row, primary capture actions, grouped cabinets for
+// Recordings/Sync, Projects+History, and a Settings/Help tail. Sign Out,
+// Open Log File and the Tracking DB no longer live at the top level —
+// they're inside the identity / Help / Recordings submenus respectively.
+// Submenu contents are exercised by the per-builder unit tests in
+// pkg/menubar.
 func TestMenubarIntegrationMenuItemsComplete(t *testing.T) {
 	app := menubar.NewApp()
 	app.SetAuthSession(menubar.AuthSession{LoggedIn: true, UserID: "ctx-test"})
 	items := app.BuildMenuItems()
 
-	// Note: "Quit" is not listed here because menuet automatically
-	// appends "Start at Login" and "Quit" to root menus at runtime.
+	// Note: "Start at Login" and "Quit" are not asserted because menuet
+	// auto-appends them at runtime, not via BuildMenuItems().
 	expectedTexts := []string{
-		"Logout from ER1",
 		"Fetch Transcript...",
 		"Capture Screenshot",
 		"Quick Impulse",
-		"Status:",
+		"Recordings",
+		"Sync",
+		"Projects",
 		"History",
-		"Open Log File",
+		"Settings",
+		"Help",
 	}
 
 	for _, exp := range expectedTexts {

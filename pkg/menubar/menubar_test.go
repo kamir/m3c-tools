@@ -3,6 +3,7 @@
 package menubar
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -508,6 +509,114 @@ func TestUploadER1WithoutHandler(t *testing.T) {
 	app.Handlers.OnAction(ActionUploadER1, "test-vid")
 	if capturedAction != ActionUploadER1 {
 		t.Errorf("expected upload_er1 action, got %q", capturedAction)
+	}
+}
+
+// TestLoggedInMenuPreservesAllFeatures locks in the post-redesign invariant
+// that no feature was dropped during the Mac-Like menu cleanup. Each item
+// has a known reachable location — either at the top level, or inside a
+// known submenu — and the mapping is asserted by walking one level deep.
+func TestLoggedInMenuPreservesAllFeatures(t *testing.T) {
+	app := NewAppWithConfig(DefaultConfig(), Handlers{
+		ListProfiles: func() ([]ConfigProfile, string, error) {
+			return []ConfigProfile{{Name: "cloud", IsActive: true}}, "cloud", nil
+		},
+	})
+	app.SetAuthSession(AuthSession{LoggedIn: true, UserID: "107677460544181387647___mft"})
+
+	items := app.BuildMenuItems()
+
+	// Collect every visible label (top-level + one level of children).
+	all := map[string]bool{}
+	for _, it := range items {
+		if it.Text != "" {
+			all[it.Text] = true
+		}
+		if it.Children != nil {
+			for _, ch := range it.Children() {
+				if ch.Text != "" {
+					all[ch.Text] = true
+				}
+			}
+		}
+	}
+
+	// Every legacy feature must be reachable somewhere in the first two
+	// menu levels. Substring match because dynamic labels carry counts /
+	// state suffixes (e.g. "Recordings (35 new)", "History (20)").
+	mustReach := []string{
+		"Fetch Transcript",          // top-level capture
+		"Capture Screenshot",        // top-level capture
+		"Quick Impulse",             // top-level capture
+		"Recordings",                // cabinet — folds Audio Import + Tracking DB
+		"Tracking database",         // inside Recordings
+		"Sync",                      // cabinet
+		"Plaud Sync",                // inside Sync
+		"Pocket",                    // inside Sync (pocketMenuLabel may add state)
+		"Projects",                  // top-level
+		"History",                   // top-level
+		"Settings",                  // tail
+		"Help",                      // tail
+		"Open Log File",             // inside Help
+		"Star on GitHub",            // inside Help
+		"Sign Out",                  // inside identity submenu
+	}
+	for _, label := range mustReach {
+		found := false
+		for k := range all {
+			if strings.Contains(k, label) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			seen := make([]string, 0, len(all))
+			for k := range all {
+				seen = append(seen, k)
+			}
+			t.Errorf("feature %q not reachable in menu; saw: %v", label, seen)
+		}
+	}
+}
+
+// TestIdentityLabel_Format pins the closed-state label to traffic-light +
+// profile name. No truncated user id, no status word — the dot is the
+// status, and "idle" is jargon noise.
+func TestIdentityLabel_Format(t *testing.T) {
+	cases := []struct {
+		name    string
+		profile string
+		status  Status
+		want    string
+	}{
+		{"idle", "cloud", StatusIdle, "🟢  cloud"},
+		{"fetching", "cloud", StatusFetching, "🟡  cloud"},
+		{"uploading", "cloud", StatusUploading, "🟡  cloud"},
+		{"error", "cloud", StatusError, "🔴  cloud"},
+		{"no-profile", "", StatusIdle, "🟢  (no profile)"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := identityLabel(tc.profile, tc.status)
+			if got != tc.want {
+				t.Errorf("identityLabel = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestStatusMessage_OnlySpeaksWhenSomethingToSay verifies that the idle
+// state produces no status row in the submenu — that's the whole point
+// of the "why 'idle'?" complaint.
+func TestStatusMessage_OnlySpeaksWhenSomethingToSay(t *testing.T) {
+	if got := statusMessage(StatusIdle); got != "" {
+		t.Errorf("idle should produce no message, got %q", got)
+	}
+	if got := statusMessage(StatusFetching); got == "" {
+		t.Error("fetching should produce a message")
+	}
+	if got := statusMessage(StatusError); got == "" {
+		t.Error("error must produce a message")
 	}
 }
 

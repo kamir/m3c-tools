@@ -340,24 +340,24 @@ func (a *App) buildMenuItems() []menuet.MenuItem {
 			},
 		}
 	}
-	accountText := fmt.Sprintf("Account: %s", auth.UserID)
-
+	// Mac-style layout (BUG-0124 follow-up, Mac-Like menu redesign):
+	//   1. Identity row (account · profile · status) with submenu containing
+	//      Account / Status / Open Profile / Sign Out — destructive action
+	//      tucked inside, not at top level.
+	//   2. Primary capture actions, no internal separators.
+	//   3. Recordings (folds Audio Import + Tracking DB).
+	//   4. Sync (folds Plaud + Pocket).
+	//   5. Projects, History — top-level because they're the daily glance.
+	//   6. Settings, Help — secondary.
+	//   menuet auto-appends "Start at Login" + "Quit" at the very bottom.
 	items := []menuet.MenuItem{
-		{
-			Text:  "Sign Out",
-			Image: iconLogout,
-			Clicked: func() {
-				a.fireAction(ActionLogoutER1, "")
-			},
-		},
-		a.buildProfileMenu(),
+		a.buildIdentityMenu(auth),
 		{Type: menuet.Separator},
 		{
 			Text:    "Fetch Transcript...",
 			Image:   iconTranscript,
 			Clicked: a.handleFetchTranscript,
 		},
-		{Type: menuet.Separator},
 		{
 			Text:  "Capture Screenshot...",
 			Image: iconScreenshot,
@@ -373,79 +373,218 @@ func (a *App) buildMenuItems() []menuet.MenuItem {
 			},
 		},
 		{Type: menuet.Separator},
-		a.buildAudioImportMenu(),
-		{
-			Text:  "Audio Recording Tracking DB",
-			Image: iconTrackingDB,
-			Clicked: func() {
-				a.fireAction(ActionShowTrackingDB, "")
-			},
-		},
-		{Type: menuet.Separator},
-		{
-			Text:  "Plaud Sync",
-			Image: iconSync,
-			Clicked: func() {
-				a.fireAction(ActionPlaudSync, "")
-			},
-		},
-		{
-			Text:  pocketMenuLabel(),
-			Image: iconAudioImport,
-			Clicked: func() {
-				a.fireAction(ActionPocketSync, "")
-			},
-		},
+		a.buildRecordingsMenu(),
+		a.buildSyncMenu(),
 		{Type: menuet.Separator},
 		a.buildProjectsMenu(),
+		a.buildHistoryMenu(),
 		{Type: menuet.Separator},
+		a.buildSettingsMenu(),
+		a.buildHelpMenu(),
 	}
 
-	items = append(items, a.buildHistoryMenu())
-
-	// menuet automatically appends "Start at Login" and "Quit" items,
-	// so we do not add our own Quit here.
-	profURL := profileURL()
-	items = append(items,
-		menuet.MenuItem{Type: menuet.Separator},
-		menuet.MenuItem{
-			Text:  "Open Log File",
-			Image: iconLogFile,
-			Clicked: func() {
-				exec.Command("open", a.Config.LogPath).Run()
-				a.fireAction(ActionOpenLog, a.Config.LogPath)
-			},
-		},
-		menuet.MenuItem{Type: menuet.Separator},
-		menuet.MenuItem{
-			Text:  "Mein Nutzerkonto",
-			Image: iconUser,
-			Children: func() []menuet.MenuItem {
-				return []menuet.MenuItem{
-					{Text: accountText},
-					{Text: fmt.Sprintf("Status: %s", a.GetStatus())},
-					{Type: menuet.Separator},
-					{
-						Text: "Open Profile",
-						Clicked: func() {
-							_ = exec.Command("open", "-a", "Google Chrome", profURL).Start()
-						},
-					},
-				}
-			},
-		},
-		menuet.MenuItem{
-			Text:  "Star on GitHub",
-			Image: iconStar,
-			Clicked: func() {
-				_ = exec.Command("open", GitHubRepoURL).Start()
-				a.fireAction(ActionStarGitHub, GitHubRepoURL)
-			},
-		},
-		menuet.MenuItem{Type: menuet.Separator},
-	)
-
 	return items
+}
+
+// buildIdentityMenu renders the top-of-menu identity row.
+//
+// Closed-state label is intentionally minimal: a traffic-light dot +
+// profile name. A truncated user id at the top is noise — the user
+// already knows who they are, and the dot conveys all the runtime state
+// you need to glance at. Detail (full context id, descriptive status,
+// destructive actions) lives one level deeper, only paid for on open.
+func (a *App) buildIdentityMenu(auth AuthSession) menuet.MenuItem {
+	profileLabel := identityLabel(a.activeProfileName(), a.GetStatus())
+	profURL := profileURL()
+
+	return menuet.MenuItem{
+		Text: profileLabel,
+		Children: func() []menuet.MenuItem {
+			items := []menuet.MenuItem{
+				// Full, untruncated context id — Cmd-C-friendly when the
+				// user actually opens the menu to grab it.
+				{Text: auth.UserID},
+			}
+			// Only emit a status row when there is something worth saying.
+			// "idle" is jargon for "no problem"; the green dot above
+			// already communicates that.
+			if msg := statusMessage(a.GetStatus()); msg != "" {
+				items = append(items, menuet.MenuItem{Text: msg})
+			}
+			items = append(items,
+				menuet.MenuItem{Type: menuet.Separator},
+				menuet.MenuItem{
+					Text: "Open Profile",
+					Clicked: func() {
+						_ = exec.Command("open", "-a", "Google Chrome", profURL).Start()
+					},
+				},
+				menuet.MenuItem{Type: menuet.Separator},
+				menuet.MenuItem{
+					Text:  "Sign Out",
+					Image: iconLogout,
+					Clicked: func() {
+						a.fireAction(ActionLogoutER1, "")
+					},
+				},
+			)
+			return items
+		},
+	}
+}
+
+// buildRecordingsMenu folds the Audio Import flow and the Tracking DB into
+// one Recordings cabinet so the top level is not split between two related
+// concepts.
+func (a *App) buildRecordingsMenu() menuet.MenuItem {
+	importItem := a.buildAudioImportMenu()
+	title := "Recordings"
+	// Surface the "(N new)" badge from the import sub-menu on the parent
+	// so the top-level glance still tells the user there's pending work.
+	if idx := strings.Index(importItem.Text, "("); idx > 0 {
+		title = "Recordings " + importItem.Text[idx:]
+	}
+	return menuet.MenuItem{
+		Text:  title,
+		Image: iconAudioImport,
+		Children: func() []menuet.MenuItem {
+			return []menuet.MenuItem{
+				importItem,
+				{
+					Text:  "Tracking database…",
+					Image: iconTrackingDB,
+					Clicked: func() {
+						a.fireAction(ActionShowTrackingDB, "")
+					},
+				},
+			}
+		},
+	}
+}
+
+// buildSyncMenu groups Plaud and Pocket sync under a single cabinet.
+// Pocket's dynamic state label (e.g. "(no source)") rides on the inner
+// item rather than the top level so the menu stays quiet when idle.
+func (a *App) buildSyncMenu() menuet.MenuItem {
+	return menuet.MenuItem{
+		Text:  "Sync",
+		Image: iconSync,
+		Children: func() []menuet.MenuItem {
+			return []menuet.MenuItem{
+				{
+					Text:  "Plaud Sync",
+					Image: iconSync,
+					Clicked: func() {
+						a.fireAction(ActionPlaudSync, "")
+					},
+				},
+				{
+					Text:  pocketMenuLabel(),
+					Image: iconAudioImport,
+					Clicked: func() {
+						a.fireAction(ActionPocketSync, "")
+					},
+				},
+			}
+		},
+	}
+}
+
+// buildSettingsMenu is the existing Profile Settings submenu, renamed to
+// the Mac-conventional "Settings…". Functionality identical.
+func (a *App) buildSettingsMenu() menuet.MenuItem {
+	m := a.buildProfileMenu()
+	m.Text = "Settings…"
+	return m
+}
+
+// buildHelpMenu hosts diagnostic and out-of-band actions: log access and
+// the GitHub link. Keeps the primary surface clean.
+func (a *App) buildHelpMenu() menuet.MenuItem {
+	return menuet.MenuItem{
+		Text:  "Help",
+		Image: iconLogFile,
+		Children: func() []menuet.MenuItem {
+			return []menuet.MenuItem{
+				{
+					Text:  "Open Log File",
+					Image: iconLogFile,
+					Clicked: func() {
+						exec.Command("open", a.Config.LogPath).Run()
+						a.fireAction(ActionOpenLog, a.Config.LogPath)
+					},
+				},
+				{Type: menuet.Separator},
+				{
+					Text:  "Star on GitHub",
+					Image: iconStar,
+					Clicked: func() {
+						_ = exec.Command("open", GitHubRepoURL).Start()
+						a.fireAction(ActionStarGitHub, GitHubRepoURL)
+					},
+				},
+			}
+		},
+	}
+}
+
+// activeProfileName looks up the currently-active profile via the
+// Handlers.ListProfiles callback. Returns "" when no callback is wired or
+// no profiles exist — the identity row degrades gracefully in that case.
+func (a *App) activeProfileName() string {
+	if a.Handlers.ListProfiles == nil {
+		return ""
+	}
+	_, name, err := a.Handlers.ListProfiles()
+	if err != nil {
+		return ""
+	}
+	return name
+}
+
+// identityLabel renders the closed-state identity row.
+//
+// Format: "<dot> <profile>". The dot encodes runtime state (green = OK,
+// yellow = working, red = error); the profile name tells the user which
+// account they're signed in to. No truncated context id at the top — the
+// user already knows who they are, and a 4+4 char hash of their UID adds
+// noise without information. Detail moves into the submenu.
+func identityLabel(profile string, status Status) string {
+	if profile == "" {
+		profile = "(no profile)"
+	}
+	return statusDot(status) + "  " + profile
+}
+
+// statusDot returns the traffic-light glyph for the closed-state row.
+// Emoji circles render in colour even inside template-image menus.
+func statusDot(s Status) string {
+	switch s {
+	case StatusError:
+		return "🔴"
+	case StatusFetching, StatusUploading:
+		return "🟡"
+	default:
+		return "🟢"
+	}
+}
+
+// statusMessage returns a human-readable status line for the identity
+// submenu, or "" when the state is "everything's fine and there is
+// nothing to say". The green dot at the top already communicates the
+// healthy state — repeating it as the literal word "idle" is jargon
+// noise.
+func statusMessage(s Status) string {
+	switch s {
+	case StatusFetching:
+		return "Fetching transcript…"
+	case StatusUploading:
+		return "Uploading…"
+	case StatusError:
+		return "Connection error — see log"
+	default:
+		return ""
+	}
 }
 
 func (a *App) buildAudioImportMenu() menuet.MenuItem {
