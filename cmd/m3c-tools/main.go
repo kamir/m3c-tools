@@ -2420,12 +2420,28 @@ func cmdMenubar(args []string) {
 	})
 	app.SetAuthSession(menubar.AuthSession{})
 	startAudioImportListRefresher(app)
+	signedIn := false
 	if ctxID, err := loadPersistedER1Session(); err != nil {
 		log.Printf("[auth] persisted session load failed: %v", err)
 	} else if ctxID != "" {
 		setRuntimeER1Login(ctxID)
 		app.SetAuthSession(menubar.AuthSession{LoggedIn: true, UserID: ctxID})
 		log.Printf("[auth] restored persisted session context_id=%s", truncateForLog(ctxID, 64))
+		signedIn = true
+	}
+	// SPEC-0175 P0 §3.1: first-launch detection. If the user has no
+	// persisted session AND no API key configured, the menubar is in a
+	// "useless until set up" state. Open the Settings editor automatically
+	// so they don't have to discover it under "Edit Profiles…".
+	if !signedIn && er1.LoadConfig().APIKey == "" {
+		log.Printf("[onboarding] no auth configured — opening Settings editor (first-launch detection)")
+		go func() {
+			// Brief delay so the menubar finishes initialising before we
+			// pop the browser. Without this, the user sees the editor open
+			// before the icon appears, which is jarring.
+			time.Sleep(1500 * time.Millisecond)
+			openProfileEditor()
+		}()
 	}
 	menubar.StartFrontmostAppTracker()
 	if exe, err := os.Executable(); err == nil {
