@@ -593,6 +593,12 @@ body {
             </div>
           </div>
           <div class="field">
+            <div class="field-label">Default Tags</div>
+            <div class="field-input">
+              <input type="text" id="f_POCKET_DEFAULT_TAGS" data-key="POCKET_DEFAULT_TAGS" placeholder="pocket,fieldnote">
+            </div>
+          </div>
+          <div class="field">
             <div class="field-label" style="font-size:11px;color:#86868b;line-height:1.5">Get your key</div>
             <div class="field-input">
               <a href="https://app.heypocket.com/app/settings/api-keys" target="_blank" style="font-size:12px;color:#007aff;text-decoration:none">app.heypocket.com → Settings → API Keys ↗</a>
@@ -680,12 +686,6 @@ body {
               <input type="text" id="f_IMPORT_CONTENT_TYPE" data-key="IMPORT_CONTENT_TYPE" placeholder="Audio-Track vom Diktiergeraet">
             </div>
           </div>
-          <div class="field">
-            <div class="field-label">Default Tags</div>
-            <div class="field-input">
-              <input type="text" id="f_POCKET_DEFAULT_TAGS" data-key="POCKET_DEFAULT_TAGS" placeholder="plaud,fieldnote">
-            </div>
-          </div>
         </div>
       </div>
 
@@ -725,20 +725,8 @@ body {
               <input type="number" id="f_ER1_MAX_RETRIES" data-key="ER1_MAX_RETRIES" placeholder="10">
             </div>
           </div>
-          <div class="field">
-            <div class="field-label">Base Delay</div>
-            <div class="field-input">
-              <input type="number" id="f_ER1_RETRY_BASE_DELAY" data-key="ER1_RETRY_BASE_DELAY" placeholder="1">
-              <span style="color:#86868b;font-size:12px">seconds</span>
-            </div>
-          </div>
-          <div class="field">
-            <div class="field-label">Max Delay</div>
-            <div class="field-input">
-              <input type="number" id="f_ER1_RETRY_MAX_DELAY" data-key="ER1_RETRY_MAX_DELAY" placeholder="60">
-              <span style="color:#86868b;font-size:12px">seconds</span>
-            </div>
-          </div>
+          <!-- Removed ER1_RETRY_BASE_DELAY / ER1_RETRY_MAX_DELAY: form fields
+               with no Go consumer (SPEC-0175 P0 cleanup, 2026-04-28). -->
         </div>
       </div>
 
