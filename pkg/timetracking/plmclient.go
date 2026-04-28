@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/kamir/m3c-tools/pkg/auth"
 )
 
 // PLMConfig holds connection settings for the PLM API.
@@ -69,7 +67,14 @@ func (c *PLMClient) doRequest(method, path string, body io.Reader) (*http.Respon
 	if err != nil {
 		return nil, err
 	}
-	auth.ApplyAuth(req, c.cfg.APIKey)
+	// BUG-0124: /api/plm/* on onboarding.guide rejects device-token Bearer
+	// auth (HTTP 401) and only accepts X-API-KEY. The general auth.ApplyAuth
+	// helper prefers Bearer, which silently breaks PLM whenever a device
+	// token is present. Send the API key directly until the server-side
+	// gains Bearer support for the PLM routes.
+	if c.cfg.APIKey != "" {
+		req.Header.Set("X-API-KEY", c.cfg.APIKey)
+	}
 	if c.cfg.ContextID != "" {
 		req.Header.Set("X-Context-ID", c.cfg.ContextID)
 	}
