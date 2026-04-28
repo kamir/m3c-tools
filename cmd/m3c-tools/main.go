@@ -54,6 +54,7 @@ import (
 	"github.com/kamir/m3c-tools/pkg/menubar"
 	"github.com/kamir/m3c-tools/pkg/recorder"
 	"github.com/kamir/m3c-tools/pkg/screenshot"
+	"github.com/kamir/m3c-tools/pkg/setup"
 	"github.com/kamir/m3c-tools/pkg/timetracking"
 	"github.com/kamir/m3c-tools/pkg/tracking"
 	"github.com/kamir/m3c-tools/pkg/transcript"
@@ -717,7 +718,119 @@ func cmdSettings() {
 
 // -- check-er1 command --
 
+// cmdSetupPocketKey validates a Pocket API key live against
+// https://public.heypocketai.com/api/v1 and writes it to the active profile
+// on success. SPEC-0175 §3.3: this is the foundation the eventual Cocoa
+// wizard will wrap with green/red marker UI.
+//
+// Usage:
+//   m3c-tools setup pocket-key pk_3aa72a536d28c3fde2f9a08c514697fe8f9e55590e178bd82d6a26e415fe70ae
+//   m3c-tools setup pocket-key pk_xxx --no-write   (validate only, don't write)
+//   m3c-tools setup pocket-key pk_xxx --profile dev  (target a non-active profile)
+func cmdSetupPocketKey(args []string) {
+	noWrite := false
+	profileName := ""
+	var key string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--no-write":
+			noWrite = true
+		case a == "--profile" && i+1 < len(args):
+			profileName = args[i+1]
+			i++
+		case strings.HasPrefix(a, "--"):
+			fmt.Fprintf(os.Stderr, "unknown flag: %s\n", a)
+			os.Exit(2)
+		default:
+			if key == "" {
+				key = a
+			}
+		}
+	}
+	if key == "" {
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools setup pocket-key <pk_…> [--no-write] [--profile <name>]")
+		os.Exit(2)
+	}
+
+	baseURL := os.Getenv("POCKET_API_URL")
+	verdict := setup.ValidatePocketKey(nil, baseURL, key)
+
+	switch verdict.State {
+	case "valid":
+		fmt.Printf("✓ %s\n", verdict.HumanMessage)
+	case "unauthorized":
+		fmt.Fprintf(os.Stderr, "✗ %s\n  (%s)\n", verdict.HumanMessage, verdict.Detail)
+		os.Exit(1)
+	case "unreachable":
+		fmt.Fprintf(os.Stderr, "⚠ %s\n  (%s)\n", verdict.HumanMessage, verdict.Detail)
+		// Unreachable is non-fatal — we save the key anyway (per SPEC-0175 §3.3).
+	}
+
+	if noWrite {
+		fmt.Println("(--no-write set; key not saved)")
+		return
+	}
+
+	pm := config.NewProfileManager()
+	if profileName == "" {
+		profileName = pm.ActiveProfileName()
+	}
+	if profileName == "" {
+		fmt.Fprintln(os.Stderr, "No active profile. Create one first: m3c-tools config create <name>")
+		os.Exit(1)
+	}
+
+	prof, err := pm.GetProfile(profileName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Profile %q not found: %v\n", profileName, err)
+		os.Exit(1)
+	}
+
+	// Build merged var map: existing profile vars + the new POCKET_API_KEY.
+	vars := map[string]string{}
+	for k, v := range prof.Vars {
+		vars[k] = v
+	}
+	vars["POCKET_API_KEY"] = strings.TrimSpace(key)
+	if vars["POCKET_API_URL"] == "" {
+		vars["POCKET_API_URL"] = setup.DefaultPocketBaseURL
+	}
+
+	// CreateProfile is idempotent — overwrites if name exists.
+	if err := pm.CreateProfile(profileName, prof.Description, vars); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to write profile %q: %v\n", profileName, err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Saved POCKET_API_KEY to profile %q.\n", profileName)
+	if verdict.IsValid() && verdict.RecordingCount > 0 {
+		fmt.Printf("Click 'Pocket Sync' in the menubar to import your %d recording%s.\n",
+			verdict.RecordingCount, plural(verdict.RecordingCount))
+	}
+}
+
+// plural is a tiny helper that mirrors setup.plural; kept inline so we don't
+// export it from pkg/setup.
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}
+
 func cmdSetup(args []string) {
+	// SPEC-0175 §3.1+§3.3: subcommand routing for the onboarding flow.
+	// `setup pocket-key <key>` validates a Pocket API key live and writes
+	// it to the active profile on success.
+	if len(args) > 0 && !strings.HasPrefix(args[0], "--") {
+		switch args[0] {
+		case "pocket-key":
+			cmdSetupPocketKey(args[1:])
+			return
+		}
+	}
+
 	force := false
 	checkOnly := false
 	for _, arg := range args {
