@@ -28,6 +28,10 @@ type MemoryFolder struct {
 
 // DefaultMemoryPath returns the default root directory for MEMORY folders.
 // Uses ER1_MEMORY_PATH env var, falling back to ~/.m3c-tools/MEMORY.
+//
+// SPEC-0175 P2 alias-pair note: ER1_MEMORY_PATH is canonical;
+// YT_MEMORY_DIR was a pre-rename alias that no live code reads anymore
+// (only appears in stale .env.bak files). Don't reintroduce.
 func DefaultMemoryPath() string {
 	if v := os.Getenv("ER1_MEMORY_PATH"); v != "" {
 		return v
