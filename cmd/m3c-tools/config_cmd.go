@@ -57,6 +57,8 @@ func cmdConfig(args []string) {
 			os.Exit(1)
 		}
 		cmdConfigDelete(args[1])
+	case "doctor":
+		cmdConfigDoctor(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown config subcommand: %s\n", args[0])
 		printConfigUsage()
@@ -74,7 +76,9 @@ Subcommands:
   create <name>        Create a new profile from template
   test [name]          Test ER1 connectivity for a profile
   import <file.env>    Import a .env file as a new profile
-  delete <name>        Delete a profile (cannot delete active)`)
+  delete <name>        Delete a profile (cannot delete active)
+  doctor [name|--all]  Validate profile consistency (placeholders, missing keys,
+                       URL shape, file perms, duplicates). Defaults to --all.`)
 }
 
 func cmdConfigList() {
@@ -293,4 +297,96 @@ func cmdConfigDelete(name string) {
 		os.Exit(1)
 	}
 	fmt.Printf("Deleted profile: %s\n", name)
+}
+
+// cmdConfigDoctor runs the profile-consistency validator against either a
+// single profile or all profiles in ~/.m3c-tools/profiles. It exits non-zero
+// if any FAIL-severity issue is found, so it is safe to use in scripts.
+func cmdConfigDoctor(args []string) {
+	pm := config.NewProfileManager()
+	all, err := pm.ListProfiles()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error listing profiles: %v\n", err)
+		os.Exit(1)
+	}
+	active := pm.ActiveProfileName()
+
+	target := "--all"
+	if len(args) > 0 && args[0] != "" {
+		target = args[0]
+	}
+
+	var profiles []config.Profile
+	if target == "--all" || target == "all" {
+		profiles = all
+	} else {
+		var found *config.Profile
+		for i := range all {
+			if all[i].Name == target {
+				found = &all[i]
+				break
+			}
+		}
+		if found == nil {
+			fmt.Fprintf(os.Stderr, "Profile %q not found.\n", target)
+			os.Exit(1)
+		}
+		profiles = []config.Profile{*found}
+	}
+
+	rep := config.ValidateAll(profiles, active)
+	printDoctorReport(rep)
+
+	if rep.HasFail() {
+		os.Exit(1)
+	}
+}
+
+func printDoctorReport(rep config.DoctorReport) {
+	fmt.Println("m3c-tools profile doctor")
+	fmt.Println()
+	if rep.ActiveProfile == "" {
+		fmt.Println("Active profile: (none)")
+	} else {
+		fmt.Printf("Active profile: %s\n", rep.ActiveProfile)
+	}
+	fmt.Println()
+
+	for _, pr := range rep.Profiles {
+		marker := "  "
+		if pr.Profile != nil && pr.Profile.Name == rep.ActiveProfile {
+			marker = "* "
+		}
+		name := "(unknown)"
+		if pr.Profile != nil {
+			name = pr.Profile.Name
+		}
+		fmt.Printf("%sProfile: %s\n", marker, name)
+		if len(pr.Issues) == 0 {
+			fmt.Println("    OK")
+			continue
+		}
+		for _, i := range pr.Issues {
+			loc := i.Key
+			if loc == "" {
+				loc = "-"
+			}
+			fmt.Printf("    [%s] %-20s %s\n", i.Severity, loc, i.Message)
+		}
+	}
+
+	if len(rep.CrossIssues) > 0 {
+		fmt.Println()
+		fmt.Println("Cross-profile checks:")
+		for _, i := range rep.CrossIssues {
+			fmt.Printf("    [%s] %s\n", i.Severity, i.Message)
+		}
+	}
+
+	fmt.Println()
+	if rep.HasFail() {
+		fmt.Println("Result: FAIL")
+	} else {
+		fmt.Println("Result: OK")
+	}
 }
