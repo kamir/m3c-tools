@@ -718,6 +718,44 @@ func cmdSettings() {
 
 // -- check-er1 command --
 
+// SPEC-0175 §3.2: settings editor lifecycle. The server is started on demand
+// (first click) and stays running; later clicks just reopen the browser tab.
+var (
+	editorMu      sync.Mutex
+	editorRunning bool
+)
+
+const editorAddr = ":9116"
+
+func openProfileEditor() {
+	const url = "http://localhost:9116"
+
+	editorMu.Lock()
+	alreadyRunning := editorRunning
+	if !alreadyRunning {
+		editorRunning = true
+	}
+	editorMu.Unlock()
+
+	if alreadyRunning {
+		// Just reopen the browser; server is already serving.
+		log.Printf("[config] editor already running at %s — reopening browser", url)
+		_ = exec.Command("open", url).Start()
+		return
+	}
+
+	go func() {
+		srv := config.NewEditorServer(editorAddr)
+		// srv.Start() handles its own browser-open; no need to call open twice.
+		if err := srv.Start(); err != nil {
+			log.Printf("[config] editor error: %v", err)
+			editorMu.Lock()
+			editorRunning = false
+			editorMu.Unlock()
+		}
+	}()
+}
+
 // cmdSetupPocketKey validates a Pocket API key live against
 // https://public.heypocketai.com/api/v1 and writes it to the active profile
 // on success. SPEC-0175 §3.3: this is the foundation the eventual Cocoa
@@ -2374,12 +2412,10 @@ func cmdMenubar(args []string) {
 			return nil
 		},
 		OpenProfileEditor: func() {
-			go func() {
-				srv := config.NewEditorServer(":9116")
-				if err := srv.Start(); err != nil {
-					log.Printf("[config] editor error: %v", err)
-				}
-			}()
+			// SPEC-0175 §3.2: idempotent — first click starts the server +
+			// auto-opens the browser; subsequent clicks just re-open the
+			// browser tab (server is already listening on :9116).
+			openProfileEditor()
 		},
 	})
 	app.SetAuthSession(menubar.AuthSession{})

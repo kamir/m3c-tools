@@ -252,3 +252,44 @@ func TestNotFoundRoute(t *testing.T) {
 		t.Fatalf("GET /nonexistent = %d, want 404", w.Code)
 	}
 }
+
+// SPEC-0175 §3.3: live Pocket key validation endpoint.
+func TestValidatePocketKey_EmptyBody(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest("POST", "/api/validate/pocket-key", strings.NewReader(`{"key":""}`))
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("POST validate = %d, want 200 (verdict, not http error)", w.Code)
+	}
+	var v map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &v); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if v["state"] != "unauthorized" {
+		t.Errorf("empty key state = %v, want unauthorized", v["state"])
+	}
+}
+
+func TestValidatePocketKey_MethodNotAllowed(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest("GET", "/api/validate/pocket-key", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != 405 {
+		t.Fatalf("GET validate = %d, want 405", w.Code)
+	}
+}
+
+func TestValidatePocketKey_BadJSON(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest("POST", "/api/validate/pocket-key", strings.NewReader(`<<not json>>`))
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != 400 {
+		t.Fatalf("malformed body = %d, want 400", w.Code)
+	}
+}

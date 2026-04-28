@@ -568,6 +568,39 @@ body {
         </div>
       </div>
 
+      <!-- Pocket Cloud Sync (SPEC-0175 §3.3) -->
+      <div class="section">
+        <div class="section-label">Pocket Cloud Sync</div>
+        <div class="card">
+          <div class="field">
+            <div class="field-label">API Key</div>
+            <div class="field-input">
+              <input type="password" id="f_POCKET_API_KEY" data-key="POCKET_API_KEY" placeholder="pk_…">
+              <button class="small-btn" id="showPocketKeyBtn" onclick="togglePocketKeyVisibility()">Show</button>
+              <button class="small-btn test-btn" onclick="validatePocketKey()">Validate</button>
+            </div>
+          </div>
+          <div class="field">
+            <div class="field-label">Status</div>
+            <div class="field-input">
+              <span id="pocketStatus" style="font-size:12px;color:#86868b">— click Validate to check the key against Pocket</span>
+            </div>
+          </div>
+          <div class="field">
+            <div class="field-label">API URL</div>
+            <div class="field-input">
+              <input type="text" id="f_POCKET_API_URL" data-key="POCKET_API_URL" placeholder="https://public.heypocketai.com/api/v1">
+            </div>
+          </div>
+          <div class="field">
+            <div class="field-label" style="font-size:11px;color:#86868b;line-height:1.5">Get your key</div>
+            <div class="field-input">
+              <a href="https://app.heypocket.com/app/settings/api-keys" target="_blank" style="font-size:12px;color:#007aff;text-decoration:none">app.heypocket.com → Settings → API Keys ↗</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Transcription -->
       <div class="section">
         <div class="section-label">Transcription</div>
@@ -968,6 +1001,58 @@ body {
     keyVisible = !keyVisible;
     input.type = keyVisible ? 'text' : 'password';
     btn.textContent = keyVisible ? 'Hide' : 'Show';
+  };
+
+  let pocketKeyVisible = false;
+  window.togglePocketKeyVisibility = function() {
+    const input = document.getElementById('f_POCKET_API_KEY');
+    const btn = document.getElementById('showPocketKeyBtn');
+    pocketKeyVisible = !pocketKeyVisible;
+    input.type = pocketKeyVisible ? 'text' : 'password';
+    btn.textContent = pocketKeyVisible ? 'Hide' : 'Show';
+  };
+
+  // SPEC-0175 §3.3: live Pocket API key validation.
+  // Calls POST /api/validate/pocket-key, renders the verdict next to the field.
+  window.validatePocketKey = async function() {
+    const keyInput = document.getElementById('f_POCKET_API_KEY');
+    const urlInput = document.getElementById('f_POCKET_API_URL');
+    const status = document.getElementById('pocketStatus');
+    const key = (keyInput.value || '').trim();
+    if (!key) {
+      status.style.color = '#ff3b30';
+      status.textContent = '✗ Empty key — paste the pk_… value from the Pocket app.';
+      return;
+    }
+    status.style.color = '#86868b';
+    status.textContent = '… checking against Pocket';
+    try {
+      const verdict = await api('POST', '/validate/pocket-key', {
+        key: key,
+        base_url: (urlInput.value || '').trim(),
+      });
+      switch (verdict.state) {
+        case 'valid':
+          status.style.color = '#34c759';
+          status.textContent = '✓ ' + verdict.human_message;
+          showToast('Pocket key valid — ' + verdict.recording_count + ' recording(s)', 'success');
+          break;
+        case 'unauthorized':
+          status.style.color = '#ff3b30';
+          status.textContent = '✗ ' + verdict.human_message;
+          showToast('Pocket rejected this key', 'error');
+          break;
+        case 'unreachable':
+        default:
+          status.style.color = '#ff9500';
+          status.textContent = '⚠ ' + verdict.human_message;
+          showToast('Pocket unreachable — saving key anyway', 'info');
+          break;
+      }
+    } catch (e) {
+      status.style.color = '#ff3b30';
+      status.textContent = '✗ Validation request failed: ' + e.message;
+    }
   };
 
   async function deleteProfile(name) {

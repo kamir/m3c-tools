@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/setup"
 )
 
 //go:embed editor.html
@@ -40,6 +42,7 @@ func (s *EditorServer) Start() error {
 	mux.HandleFunc("/", s.handleUI)
 	mux.HandleFunc("/api/profiles", s.handleProfiles)
 	mux.HandleFunc("/api/profiles/", s.handleProfileByName)
+	mux.HandleFunc("/api/validate/pocket-key", s.handleValidatePocketKey) // SPEC-0175 §3.3
 	mux.HandleFunc("/api/health", s.handleHealth)
 
 	host := s.Addr
@@ -66,8 +69,40 @@ func (s *EditorServer) Handler() http.Handler {
 	mux.HandleFunc("/", s.handleUI)
 	mux.HandleFunc("/api/profiles", s.handleProfiles)
 	mux.HandleFunc("/api/profiles/", s.handleProfileByName)
+	mux.HandleFunc("/api/validate/pocket-key", s.handleValidatePocketKey)
 	mux.HandleFunc("/api/health", s.handleHealth)
 	return mux
+}
+
+// handleValidatePocketKey delegates to setup.ValidatePocketKey and returns
+// the structured verdict as JSON. SPEC-0175 §3.3: the UI renders the
+// verdict as a green/red/yellow marker.
+//
+// Request:  {"key": "pk_...", "base_url": ""}
+// Response: {"state": "valid|unauthorized|unreachable", "recording_count": N,
+//            "human_message": "...", "detail": "..."}
+func (s *EditorServer) handleValidatePocketKey(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Key     string `json:"key"`
+		BaseURL string `json:"base_url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	verdict := setup.ValidatePocketKey(nil, req.BaseURL, req.Key)
+	resp := map[string]any{
+		"state":           verdict.State,
+		"recording_count": verdict.RecordingCount,
+		"human_message":   verdict.HumanMessage,
+		"detail":          verdict.Detail,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // handleUI serves the embedded HTML page.
