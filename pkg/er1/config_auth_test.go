@@ -35,6 +35,11 @@ func TestLoadConfig_WarnsWhenNoAuth(t *testing.T) {
 	os.Unsetenv("ER1_DEVICE_TOKEN")
 	t.Setenv("ER1_API_KEY", "")
 	os.Unsetenv("ER1_API_KEY")
+	// LoadConfig also suppresses the warning when ~/.m3c-tools/device-token.enc
+	// exists on disk (the user has signed in). On a developer machine that file
+	// usually exists, so the test must isolate $HOME to a clean temp dir to
+	// reliably observe the warning.
+	t.Setenv("HOME", t.TempDir())
 
 	// Capture log output to verify warning is emitted.
 	var buf bytes.Buffer

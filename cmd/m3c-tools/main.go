@@ -5505,8 +5505,222 @@ func truncate(s string, maxLen int) string {
 	return s[:maxLen-3] + "..."
 }
 
+// menubarHandlePocketCloudSync opens the Pocket cloud-mode sync window
+// (SPEC-0174 §3.2) — same NSTableView UX as the USB window, backed by
+// the heypocketai REST API + the SPEC-0173 mapping endpoints.
+//
+// Reuses pkg/menubar's existing PocketSync* surface (ShowPocketSyncWindow,
+// SetPocketSyncCallback, SetPocketSyncStatus, SetPocketSyncProgress) so
+// the Cocoa code is unchanged. The "FilePath" row key becomes the
+// `pocket://<id>` dedup URI.
+func menubarHandlePocketCloudSync(app *menubar.App) {
+	pcfg := pocket.LoadConfig()
+	if pcfg.APIKey == "" {
+		log.Printf("[pocket-cloud] POCKET_API_KEY not set")
+		return
+	}
+	er1Cfg := er1.LoadConfig()
+	if er1Cfg.ContextID == "" {
+		log.Printf("[pocket-cloud] ER1_CONTEXT_ID not set — sign in via the menubar first")
+		return
+	}
+
+	apiClient := pocket.NewAPIClient()
+	apiClient.BaseURL = strings.TrimRight(pcfg.APIURL, "/")
+
+	log.Printf("[pocket-cloud] listing recordings…")
+	all, err := apiClient.ListRecordingsAll()
+	if err != nil {
+		log.Printf("[pocket-cloud] list failed: %v", err)
+		return
+	}
+
+	minDuration := 10.0
+	if v := os.Getenv("POLL_MIN_DURATION"); v != "" {
+		if n, parseErr := strconv.ParseFloat(v, 64); parseErr == nil && n > 0 {
+			minDuration = n
+		}
+	}
+
+	var eligible []pocket.APIRecording
+	for _, r := range all {
+		if r.IsCompleted() && r.Duration >= minDuration {
+			eligible = append(eligible, r)
+		}
+	}
+	if len(eligible) == 0 {
+		log.Printf("[pocket-cloud] no eligible recordings (completed >= %.0fs)", minDuration)
+		menubar.ShowPocketSyncWindow(nil, "Pocket Cloud: 0 eligible recordings", strings.Join(pcfg.DefaultTags, ","))
+		return
+	}
+
+	syncClient := pocket.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, "", !er1Cfg.VerifySSL)
+	accountID := pocket.DeriveAccountID(pcfg.APIKey)
+	ids := make([]string, 0, len(eligible))
+	for _, r := range eligible {
+		ids = append(ids, r.ID)
+	}
+	syncedSet := map[string]string{} // recording_id -> doc_id
+	if check, checkErr := syncClient.CheckRecordings(accountID, ids); checkErr == nil && check != nil {
+		for rid, info := range check.Synced {
+			syncedSet[rid] = info.ER1DocID
+		}
+	}
+
+	// Build window rows. FilePath = pocket://<id> serves as the row key.
+	var records []menubar.PocketSyncRecord
+	byKey := map[string]pocket.APIRecording{}
+	for i, r := range eligible {
+		key := r.DedupKey()
+		byKey[key] = r
+		status := "new"
+		if doc, ok := syncedSet[r.ID]; ok {
+			short := doc
+			if len(short) > 8 {
+				short = short[:8]
+			}
+			status = "synced → " + short
+		}
+		records = append(records, menubar.PocketSyncRecord{
+			Num:      fmt.Sprintf("%d", i+1),
+			Date:     r.RecordingAt.Format("2006-01-02 15:04"),
+			Time:     "",
+			Duration: menubar.FormatPocketDuration(r.Duration),
+			Size:     "—",
+			Status:   status,
+			FilePath: key,
+		})
+	}
+
+	deviceInfo := fmt.Sprintf("Pocket Cloud: %d recordings (%d already synced)", len(eligible), len(syncedSet))
+	defaultTags := strings.Join(pcfg.DefaultTags, ",")
+	menubar.ShowPocketSyncWindow(records, deviceInfo, defaultTags)
+	log.Printf("[pocket-cloud] window opened: %d eligible, %d already synced", len(eligible), len(syncedSet))
+
+	menubar.SetPocketSyncCallback(func(action string, filePaths []string, customTags string) {
+		log.Printf("[pocket-cloud] callback action=%s files=%d", action, len(filePaths))
+		if action != "sync" {
+			log.Printf("[pocket-cloud] action %q not supported in cloud mode", action)
+			return
+		}
+		if len(filePaths) == 0 {
+			menubar.SetPocketStatusText("Select recordings first.")
+			return
+		}
+		go pocketCloudSyncSelected(filePaths, customTags, pcfg, er1Cfg, apiClient, syncClient, accountID, byKey)
+	})
+}
+
+// pocketCloudSyncSelected runs the upload + dedup-register flow for the
+// recordings the user picked in the Pocket Cloud sync window.
+func pocketCloudSyncSelected(
+	filePaths []string,
+	customTags string,
+	pcfg *pocket.Config,
+	er1Cfg *er1.Config,
+	apiClient *pocket.APIClient,
+	syncClient *pocket.SyncAPIClient,
+	accountID string,
+	byKey map[string]pocket.APIRecording,
+) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[pocket-cloud] PANIC: %v", r)
+			menubar.SetPocketStatusText(fmt.Sprintf("Error: %v", r))
+		}
+		menubar.SetPocketSyncProgress(menubar.BulkRunState{Active: false})
+	}()
+
+	parsedTags := menubar.ParsePocketTags(customTags, pcfg.DefaultTags)
+
+	total := len(filePaths)
+	menubar.SetPocketSyncProgress(menubar.BulkRunState{Active: true, Total: total})
+	hostname, _ := os.Hostname()
+
+	synced, failed := 0, 0
+	for i, fp := range filePaths {
+		rec, ok := byKey[fp]
+		if !ok {
+			log.Printf("[pocket-cloud] unknown filepath: %s", fp)
+			menubar.SetPocketSyncStatus(fp, "Failed: unknown")
+			failed++
+			continue
+		}
+
+		menubar.SetPocketSyncStatus(fp, "Fetching...")
+		menubar.SetPocketSyncProgress(menubar.BulkRunState{
+			Active: true, Total: total, Done: i, CurrentFile: rec.Title,
+		})
+
+		full, err := apiClient.GetRecording(rec.ID)
+		if err != nil {
+			log.Printf("[pocket-cloud] get %s: %v", rec.ID, err)
+			menubar.SetPocketSyncStatus(fp, "Failed: fetch")
+			failed++
+			continue
+		}
+
+		menubar.SetPocketSyncStatus(fp, "Uploading...")
+
+		composite := buildPocketCompositeDoc(full)
+		extra := []string{fmt.Sprintf("source:%s", full.DedupKey())}
+		if hostname != "" {
+			extra = append(extra, "host:"+hostname)
+		}
+		for _, t := range full.Tags {
+			t = strings.TrimSpace(t)
+			if t != "" && !strings.Contains(t, ",") {
+				extra = append(extra, t)
+			}
+		}
+		extra = append(extra, parsedTags...)
+		tagsStr := impression.BuildPocketFieldnoteTags(full.Title, extra...)
+
+		payload := &er1.UploadPayload{
+			TranscriptData:     []byte(strings.TrimSpace(composite) + "\n"),
+			TranscriptFilename: fmt.Sprintf("pocket_%s.txt", full.ID),
+			AudioFilename:      fmt.Sprintf("pocket_%s.wav", full.ID),
+			ImageFilename:      "pocket-placeholder.png",
+			Tags:               tagsStr,
+			ContentType:        pcfg.ContentType,
+			DoTranscribe:       false,
+		}
+		resp, err := er1.Upload(er1Cfg, payload)
+		if err != nil {
+			log.Printf("[pocket-cloud] upload %s: %v", full.ID, err)
+			menubar.SetPocketSyncStatus(fp, "Failed: upload")
+			failed++
+			continue
+		}
+
+		if mapErr := syncClient.RegisterMapping(pocket.SyncMapping{
+			PocketAccountID:   accountID,
+			PocketRecordingID: full.ID,
+			ER1DocID:          resp.DocID,
+			ER1ContextID:      er1Cfg.ContextID,
+			RecordingTitle:    full.Title,
+			RecordingDuration: int(full.Duration),
+			TranscriptLength:  len(full.Transcript.Text),
+		}); mapErr != nil {
+			log.Printf("[pocket-cloud] map %s: %v (uploaded ok)", full.ID, mapErr)
+		}
+
+		short := resp.DocID
+		if len(short) > 8 {
+			short = short[:8]
+		}
+		menubar.SetPocketSyncStatus(fp, "Synced → "+short)
+		synced++
+	}
+
+	menubar.SetPocketSyncProgress(menubar.BulkRunState{
+		Active: false, Total: total, Done: synced + failed,
+	})
+	menubar.SetPocketStatusText(fmt.Sprintf("Done: %d synced, %d failed", synced, failed))
+}
+
 // menubarHandlePocketSync handles the Pocket Sync menu action.
-// SPEC-0119 (USB) + SPEC-0173 (Cloud) + SPEC-0174 §3.1 (auto-detect dispatch).
+// SPEC-0119 (USB) + SPEC-0173 (Cloud) + SPEC-0174 §3.1/§3.2 (auto-detect dispatch + native cloud window).
 func menubarHandlePocketSync(app *menubar.App) {
 	cfg := pocket.LoadConfig()
 
@@ -5515,25 +5729,13 @@ func menubarHandlePocketSync(app *menubar.App) {
 		log.Printf("[pocket] no source configured — set POCKET_API_KEY in your profile or plug in a Pocket USB device")
 		return
 	case pocket.ModeAPI, pocket.ModeBoth:
-		// Cloud is the canonical path when both are present (§3.4).
-		// USB is still reachable via `m3c-tools pocket usb-sync` CLI.
+		// SPEC-0174 §3.2: open a native window for cloud-mode recordings.
+		// Cloud is the canonical path when both are present (§3.4); USB is
+		// still reachable via `m3c-tools pocket usb-sync` CLI.
 		if cfg.Mode() == pocket.ModeBoth {
-			log.Printf("[pocket] cloud + USB both available; running cloud sync. Use 'm3c-tools pocket usb-sync' for the device.")
-		} else {
-			log.Printf("[pocket] cloud-sync mode — starting")
+			log.Printf("[pocket] cloud + USB both available; opening cloud window. Use 'm3c-tools pocket usb-sync' for the device.")
 		}
-		go func() {
-			defer func() {
-				if r := recover(); r != nil {
-					log.Printf("[pocket] PANIC in cloud-sync: %v", r)
-				}
-			}()
-			if err := runPocketCloudSync(false); err != nil {
-				log.Printf("[pocket] cloud-sync error: %v", err)
-				return
-			}
-			log.Printf("[pocket] cloud-sync done")
-		}()
+		menubarHandlePocketCloudSync(app)
 		return
 	}
 
