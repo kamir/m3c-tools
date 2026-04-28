@@ -33,6 +33,10 @@ func LoadConfig() *Config {
 		RawDir:       envOrDefault("POCKET_RAW_DIR", filepath.Join(dataRoot, "raw")),
 		MergedDir:    envOrDefault("POCKET_MERGED_DIR", filepath.Join(dataRoot, "merged")),
 		ContentType:  envOrDefault("POCKET_CONTENT_TYPE", "Pocket-Fieldnote"),
+		// SPEC-0175 P2: POCKET_WHISPER_MODEL overrides M3C_WHISPER_MODEL for
+		// Pocket recordings only. The fallback to M3C_WHISPER_MODEL is
+		// intentional — it lets a user configure Whisper once globally
+		// (in preferences.env) and have it apply to all sources.
 		WhisperModel: envOrDefault("POCKET_WHISPER_MODEL", os.Getenv("M3C_WHISPER_MODEL")),
 		APIKey:       os.Getenv("POCKET_API_KEY"),
 		// SPEC-0175 P1: single source of truth — DefaultAPIBaseURL is the

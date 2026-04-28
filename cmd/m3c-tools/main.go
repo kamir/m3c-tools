@@ -4718,11 +4718,18 @@ func maybePreloadWhisper() {
 	}()
 }
 
+// SPEC-0175 P2 alias-pair note: M3C_WHISPER_* is the canonical env var
+// triple; YT_WHISPER_* is the deprecated legacy alias kept for back-compat
+// with users who set up before the rename. The Settings UI exposes only
+// the canonical name. Remove the YT_* fallback in a future minor release
+// once the user base has migrated.
+
 func menubarWhisperModel() string {
 	model := strings.TrimSpace(os.Getenv("M3C_WHISPER_MODEL"))
 	if model != "" {
 		return model
 	}
+	// Deprecated fallback — use M3C_WHISPER_MODEL instead.
 	model = strings.TrimSpace(os.Getenv("YT_WHISPER_MODEL"))
 	if model != "" {
 		return model
@@ -4748,6 +4755,7 @@ func menubarWhisperTimeout() time.Duration {
 
 	raw := strings.TrimSpace(os.Getenv("M3C_WHISPER_TIMEOUT"))
 	if raw == "" {
+		// Deprecated fallback — use M3C_WHISPER_TIMEOUT instead.
 		raw = strings.TrimSpace(os.Getenv("YT_WHISPER_TIMEOUT"))
 	}
 	if raw == "" {
