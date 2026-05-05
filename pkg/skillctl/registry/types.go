@@ -67,7 +67,8 @@ type BundleVersion struct {
 // signature_b64, etc.).
 type BundleMeta struct {
 	// Bundle is the raw BundleRecord JSON document. Includes
-	// `bundle_digest`, `name`, `version`, `manifest_ref`, etc.
+	// `bundle_digest`, `name`, `version`, `manifest_ref`, `status`
+	// ("admitted"|"revoked"), etc.
 	Bundle map[string]any `json:"bundle"`
 
 	// Signatures is the list of signature documents attached to this
@@ -79,6 +80,73 @@ type BundleMeta struct {
 	// `depends_on`, `prompts`, etc. Optional; some servers may omit it
 	// to save bandwidth and require a separate /manifest fetch.
 	Manifest map[string]any `json:"manifest,omitempty"`
+
+	// Attestations is the list of governance attestations attached to the
+	// bundle, newest-first per the S5 contract. Stream S8 (verifier) uses
+	// these for forensic logging / chain summaries; the binding governance
+	// verdict the verifier gates on lives in CurrentGovernance, computed
+	// server-side from the same data so the client doesn't reimplement
+	// "newest by reviewer role" tie-breaking.
+	//
+	// Optional on the wire. Older / stub registries may omit it; in that
+	// case verifier code falls back to CurrentGovernance == "" → red
+	// (fail-closed, see SPEC-0188 §7 step 6).
+	Attestations []AttestationRow `json:"attestations,omitempty"`
+
+	// CurrentGovernance is the binding 🟢/🟡/🔴 verdict for this bundle
+	// per SPEC-0188 §4.3 ("the most-recent signed governance attestation
+	// by a reviewer with the required role"). One of "green" | "yellow" |
+	// "red"; empty string means the registry didn't compute it (treat as
+	// "red" / below-minimum — fail-closed).
+	//
+	// The verifier MUST gate on this field (and NOT on Manifest's
+	// `author_governance_intent` per SPEC-0188 §3.2 + §7 step 6).
+	CurrentGovernance string `json:"current_governance,omitempty"`
+}
+
+// AttestationRow is one entry in BundleMeta.Attestations. Mirrors the
+// `_skill_attestations` Firestore document shape in compact form.
+//
+// In v1 the verifier does NOT independently re-verify each governance
+// signature — it gates on BundleMeta.CurrentGovernance, which the registry
+// computed by validating attestations server-side. Attestations are kept
+// here so verbose chain summaries can show "which reviewer signed which
+// level when." A future tightening could drop the trust in the registry
+// and re-verify each attestation against the reviewer's identity pubkey;
+// SPEC-0188 §7 step 6 explicitly leaves room for that.
+type AttestationRow struct {
+	// AttestationID is the registry-assigned id of this attestation,
+	// e.g. `att:01H…`. Surface only — used in chain summaries / audit
+	// trails, never matched against signature material.
+	AttestationID string `json:"attestation_id,omitempty"`
+
+	// Level is the governance verdict: "green" | "yellow" | "red".
+	Level string `json:"level"`
+
+	// ReviewerID is the identity that signed the attestation, e.g.
+	// `id:reviewer@m3c`. Resolves to a public key via GetIdentity if a
+	// future verifier mode wants to re-check signatures.
+	ReviewerID string `json:"reviewer_id"`
+
+	// AttestedAt is the RFC3339 UTC timestamp the reviewer signed at.
+	// Carried verbatim from the registry; "newest-first" ordering is
+	// the registry's responsibility.
+	AttestedAt string `json:"attested_at,omitempty"`
+
+	// Rationale is the reviewer's free-text justification (advisory;
+	// never folded into the signed bytes per SPEC §4.3).
+	Rationale string `json:"rationale,omitempty"`
+
+	// SignatureB64 is base64 of the raw 64-byte ed25519 signature over
+	// the canonical attestation message (see `signing.CanonicalizeAttestationMessage`).
+	// Optional in v1; empty means the registry didn't surface it (we
+	// gate on CurrentGovernance, so we don't refuse-on-empty here).
+	SignatureB64 string `json:"signature_b64,omitempty"`
+
+	// Status is "active" | "revoked". A revoked attestation is kept in
+	// the registry for audit; the registry's CurrentGovernance computation
+	// already excludes revoked rows, so this is informational.
+	Status string `json:"status,omitempty"`
 }
 
 // SignatureRow is one entry in BundleMeta.Signatures. Mirrors the
