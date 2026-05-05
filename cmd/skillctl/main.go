@@ -23,6 +23,10 @@ func main() {
 		os.Exit(2)
 	}
 	switch os.Args[1] {
+	// === SPEC-0188 Phase 1 PoC: pack ===
+	case "pack":
+		cmdPack(os.Args[2:])
+	// === END Phase 1 PoC ===
 	case "keygen":
 		os.Exit(runKeygen(os.Args[2:], os.Stdout, os.Stderr))
 	case "sign":
