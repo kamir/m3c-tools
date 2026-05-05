@@ -29,6 +29,10 @@ func main() {
 		os.Exit(runSign(os.Args[2:], os.Stdout, os.Stderr))
 	case "verify-sig":
 		os.Exit(runVerifySig(os.Args[2:], os.Stdout, os.Stderr))
+	// === SPEC-0188 S9-cli: attest subcommand ===
+	case "attest":
+		os.Exit(runAttest(os.Args[2:], os.Stdout, os.Stderr))
+	// === end SPEC-0188 S9-cli ===
 	case "help", "--help", "-h":
 		printUsage(os.Stdout)
 		os.Exit(0)
@@ -46,6 +50,7 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "  keygen       Generate an ed25519 keypair (PEM, PKCS#8 / SPKI).")
 	fmt.Fprintln(w, "  sign         Sign a .skb bundle with an ed25519 private key.")
 	fmt.Fprintln(w, "  verify-sig   Verify a detached author signature locally.")
+	fmt.Fprintln(w, "  attest       POST a signed governance attestation to the registry.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Run any command with --help for its flags.")
 }
