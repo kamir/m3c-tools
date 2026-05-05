@@ -9,7 +9,10 @@ Registration: ~/.claude/mcp.json
 """
 import asyncio
 import json
+import logging
 import os
+import re
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -19,6 +22,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
+
+logger = logging.getLogger("skill-server")
 
 # ── Configuration ──────────────────────────────────────────────────────
 
@@ -516,6 +521,486 @@ def _save_usage_local(event: dict):
         conn.close()
     except Exception:
         pass
+
+
+# === SPEC-0188 S11-mcp: skill_install / skill_verify / skill_attest ===
+#
+# Three MCP tools that expose the SPEC-0188 trust-chain CLI surface
+# (skillctl install / verify / attest) over the Model Context Protocol so
+# Claude Code can drive end-to-end verified skill installs.
+#
+# Design notes:
+#   - All three exec the skillctl Go binary via subprocess (no shell=True;
+#     args are passed as a list so user-supplied strings can never spawn
+#     extra commands). The binary is resolved via SKILLCTL_BIN env var,
+#     falling back to a PATH lookup, falling back to the historical
+#     SKILLCTL constant defined above. Each helper emits a structured
+#     error dict if the binary cannot be located.
+#   - Inputs are validated BEFORE exec'ing (defense in depth): digests
+#     must match sha256:[0-9a-f]{64}; governance levels must be one of
+#     {green, yellow, red}; names/reviewer IDs must be free of newlines
+#     and null bytes.
+#   - Exit codes are mapped to error_class strings per SPEC-0188 §11.
+#   - stdout is parsed with simple line-oriented regexes so the JSON
+#     response shape stays stable even as the CLI evolves its
+#     human-readable output (the chain summary is a deterministic
+#     "<digest>: signed by <author>, admitted by <key>, attested <level>").
+
+# Exit code → error_class mapping (SPEC-0188 §11). Any code not in this
+# table maps to "generic_error" so callers always get a machine-checkable
+# class string.
+_EXIT_CODE_TO_CLASS = {
+    0: None,
+    1: "generic_error",
+    2: "usage_error",
+    10: "digest_mismatch",
+    11: "author_sig_invalid",
+    12: "registry_not_trusted",
+    13: "governance_below_min",
+    14: "deps_unsatisfied",
+    15: "blob_missing",
+}
+
+# Human-readable remediation strings, indexed by error_class.
+_REMEDIATION = {
+    "digest_mismatch": "Bundle blob differs from advertised digest. Re-fetch or contact the registry operator.",
+    "author_sig_invalid": "Author signature does not verify against the bound identity public key. The bundle has been tampered with or the identity record is wrong.",
+    "registry_not_trusted": "Registry signing key is not pinned in ~/.claude/skill-trust-roots.yaml. Run `skillctl trust add --registry <url> --pubkey <path>` to pin it, or refuse the install.",
+    "governance_below_min": "Bundle governance level is below the trust-root minimum. Review the bundle's attestations or pass --allow-yellow if your policy allows it.",
+    "deps_unsatisfied": "One or more depends_on entries cannot be satisfied. Install the missing skill/package, or pass --ignore-deps to override (audited).",
+    "blob_missing": "Registry has metadata for the digest but the blob storage is unreachable. Try again or contact the registry operator.",
+    "usage_error": "skillctl rejected the invocation. Check the stderr message for the specific flag/argument issue.",
+    "generic_error": "skillctl exited with a non-zero status that does not map to a SPEC-0188 §11 sentinel. See stderr.",
+}
+
+# Regexes for input validation (cheap, non-allocating, called per-invocation).
+_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+_VALID_LEVELS = frozenset({"green", "yellow", "red"})
+
+# stdout parsers. The CLI prints a deterministic chain-summary one-liner
+# of the form "<digest>: signed by <author>, admitted by <reg-key>,
+# attested <level>" — see pkg/skillctl/verify/verify.go:201. We parse it
+# back out so the MCP tool response is structured rather than free-text.
+_CHAIN_SUMMARY_RE = re.compile(
+    r"^(?P<digest>sha256:[0-9a-f]{64}):\s+"
+    r"signed by (?P<author>\S+),\s+"
+    r"admitted by (?P<key>\S+),\s+"
+    r"attested (?P<level>green|yellow|red)\s*$"
+)
+# install: "installed: <abs path>"
+_INSTALLED_PATH_RE = re.compile(r"^installed:\s+(?P<path>.+)$")
+# attest: line-oriented "key: value" output
+_ATTEST_FIELD_RE = re.compile(r"^(?P<key>attestation_id|bundle_digest|level|attested_at):\s+(?P<value>.+)$")
+
+
+def _resolve_skillctl_bin() -> tuple[str | None, str | None]:
+    """Locate the skillctl binary.
+
+    Resolution order: SKILLCTL_BIN env var → PATH lookup → the historical
+    SKILLCTL fallback (build/skillctl in the repo).
+
+    Returns (path, error). On success, path is set and error is None. On
+    failure, path is None and error is a human-readable message with a
+    remediation hint that the MCP caller can surface to the user.
+    """
+    env_path = os.environ.get("SKILLCTL_BIN")
+    if env_path:
+        if os.path.isfile(env_path) and os.access(env_path, os.X_OK):
+            return env_path, None
+        return None, (
+            f"SKILLCTL_BIN={env_path!r} is set but not an executable file. "
+            "Point it at a built skillctl binary (e.g. `go build -o /usr/local/bin/skillctl ./cmd/skillctl`)."
+        )
+    # PATH lookup.
+    on_path = shutil.which("skillctl")
+    if on_path:
+        return on_path, None
+    # Historical fallback so existing installs keep working.
+    if os.path.isfile(SKILLCTL) and os.access(SKILLCTL, os.X_OK):
+        return SKILLCTL, None
+    return None, (
+        "skillctl not found. Set SKILLCTL_BIN=<path> or place skillctl on PATH "
+        f"(searched env, $PATH, and {SKILLCTL})."
+    )
+
+
+def _validate_safe_token(value: str, label: str) -> str | None:
+    """Return an error message if value contains newline or NUL; else None.
+
+    Defense-in-depth: subprocess argv-list already prevents shell
+    injection, but newlines/NULs in CLI args can confuse log parsers and
+    audit trails downstream. We refuse them at the MCP boundary.
+    """
+    if value is None:
+        return f"{label} must not be empty"
+    if not isinstance(value, str):
+        return f"{label} must be a string"
+    if not value:
+        return f"{label} must not be empty"
+    if "\n" in value or "\r" in value or "\x00" in value:
+        return f"{label} must not contain newlines or null bytes"
+    return None
+
+
+def _run_skillctl_blocking(argv: list[str], timeout: int = 120) -> dict:
+    """Synchronous subprocess.run wrapper that returns a normalized dict.
+
+    Returns:
+        {
+          "exit_code": int,
+          "stdout": str,
+          "stderr": str,
+          "error": str | None,   # set if exec itself failed (timeout, missing binary)
+        }
+
+    We use subprocess.run (not asyncio) here because the existing async
+    helpers in this file are oriented around streaming long-running graph
+    builds; install/verify/attest are short, blocking calls and the test
+    surface mocks subprocess.run directly.
+    """
+    try:
+        completed = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        return {
+            "exit_code": -1,
+            "stdout": exc.stdout or "",
+            "stderr": exc.stderr or "",
+            "error": f"skillctl timed out after {timeout}s",
+        }
+    except FileNotFoundError as exc:
+        return {
+            "exit_code": -1,
+            "stdout": "",
+            "stderr": "",
+            "error": f"skillctl binary not found: {exc}",
+        }
+    except OSError as exc:
+        return {
+            "exit_code": -1,
+            "stdout": "",
+            "stderr": "",
+            "error": f"skillctl exec failed: {exc}",
+        }
+    return {
+        "exit_code": completed.returncode,
+        "stdout": completed.stdout or "",
+        "stderr": completed.stderr or "",
+        "error": None,
+    }
+
+
+def _parse_chain_summary(stdout: str) -> dict:
+    """Pull the structured fields out of the CLI's chain-summary line.
+
+    Returns a dict with keys digest, author_identity, registry_key_id,
+    governance_level, chain_summary. Empty-string values for any field
+    not present (e.g. malformed CLI output) so callers always get a
+    stable shape.
+    """
+    out = {
+        "digest": "",
+        "author_identity": "",
+        "registry_key_id": "",
+        "governance_level": "",
+        "chain_summary": "",
+    }
+    for line in stdout.splitlines():
+        m = _CHAIN_SUMMARY_RE.match(line.strip())
+        if m:
+            out["chain_summary"] = line.strip()
+            out["digest"] = m.group("digest")
+            out["author_identity"] = m.group("author")
+            out["registry_key_id"] = m.group("key")
+            out["governance_level"] = m.group("level")
+            break
+    return out
+
+
+def _parse_installed_path(stdout: str) -> str:
+    """Pull the absolute install path printed by `skillctl install`."""
+    for line in stdout.splitlines():
+        m = _INSTALLED_PATH_RE.match(line.strip())
+        if m:
+            return m.group("path").strip()
+    return ""
+
+
+def _parse_attest_output(stdout: str) -> dict:
+    """Pull attestation_id / bundle_digest / level / attested_at from
+    `skillctl attest` stdout."""
+    out = {
+        "attestation_id": "",
+        "bundle_digest": "",
+        "governance_level": "",
+        "attested_at": "",
+    }
+    for line in stdout.splitlines():
+        m = _ATTEST_FIELD_RE.match(line.strip())
+        if not m:
+            continue
+        key = m.group("key")
+        value = m.group("value").strip()
+        if key == "attestation_id":
+            out["attestation_id"] = value
+        elif key == "bundle_digest":
+            out["bundle_digest"] = value
+        elif key == "level":
+            out["governance_level"] = value
+        elif key == "attested_at":
+            out["attested_at"] = value
+    return out
+
+
+def _classify_failure(exit_code: int, stderr: str) -> dict:
+    """Build the failure-shaped response dict for a non-zero exit."""
+    error_class = _EXIT_CODE_TO_CLASS.get(exit_code, "generic_error")
+    if error_class is None:
+        # Defensive: caller passed a 0 exit by mistake.
+        error_class = "generic_error"
+    remediation = _REMEDIATION.get(error_class, _REMEDIATION["generic_error"])
+    # Stream non-zero stderr to the server log at WARN so operators can
+    # correlate MCP-tool failures with the underlying CLI error.
+    if stderr.strip():
+        logger.warning("skillctl failure (exit=%d, class=%s): %s", exit_code, error_class, stderr.strip())
+    return {
+        "ok": False,
+        "exit_code": exit_code,
+        "error_class": error_class,
+        "stderr": stderr.strip(),
+        "remediation": remediation,
+    }
+
+
+def _do_install_or_verify(argv_tail: list[str], timeout: int) -> dict:
+    """Shared exec + parse path for install and verify (same response shape
+    minus install_path)."""
+    skillctl, err = _resolve_skillctl_bin()
+    if err:
+        return {
+            "ok": False,
+            "exit_code": -1,
+            "error_class": "skillctl_not_found",
+            "stderr": err,
+            "remediation": "Install / build skillctl, or set SKILLCTL_BIN to its absolute path.",
+        }
+
+    argv = [skillctl] + argv_tail
+    result = _run_skillctl_blocking(argv, timeout=timeout)
+
+    if result["error"]:
+        # Exec itself failed (timeout, missing binary). Surface as
+        # generic_error with the OS-level message.
+        logger.warning("skillctl exec error: %s", result["error"])
+        return {
+            "ok": False,
+            "exit_code": result["exit_code"],
+            "error_class": "exec_error",
+            "stderr": result["error"],
+            "remediation": "Check the server log; the skillctl process did not run to completion.",
+        }
+
+    if result["exit_code"] != 0:
+        return _classify_failure(result["exit_code"], result["stderr"])
+
+    parsed = _parse_chain_summary(result["stdout"])
+    return {
+        "ok": True,
+        "exit_code": 0,
+        **parsed,
+    }
+
+
+@mcp.tool()
+async def skill_install(
+    name: str,
+    version: str = "",
+    registry: str = "",
+    governance_min: str = "",
+    allow_yellow: bool = False,
+    ignore_deps: bool = False,
+    timeout: int = 120,
+) -> dict:
+    """Install a signed skill bundle from the registry, running the SPEC-0188
+    §7 verifier (digest, author signature, registry signature, governance
+    gate, depends_on resolution) before atomic install.
+
+    Args:
+        name: Bundle name (e.g. "fetch-contract"). Required.
+        version: Optional version string ("1.0.0") or digest pin
+            ("sha256:..."). Empty = newest admitted.
+        registry: Optional registry URL override; required only when the
+            trust-roots file pins multiple registries.
+        governance_min: Optional override for the trust-root's
+            governance_minimum ("green" | "yellow").
+        allow_yellow: Lower the gate from green to yellow for this install
+            (audited).
+        ignore_deps: Skip depends_on resolution (audited).
+        timeout: Per-call timeout in seconds (default 120).
+
+    Returns a JSON-serializable dict. On success: ok=True with digest,
+    author_identity, registry_key_id, governance_level, chain_summary,
+    install_path. On failure: ok=False with exit_code, error_class
+    (per SPEC-0188 §11), stderr, remediation.
+    """
+    # ----- input validation (before any exec) -----
+    err = _validate_safe_token(name, "name")
+    if err:
+        return {"ok": False, "exit_code": 2, "error_class": "validation_error", "stderr": err, "remediation": "Pass a non-empty name without newlines or null bytes."}
+    if version:
+        err = _validate_safe_token(version, "version")
+        if err:
+            return {"ok": False, "exit_code": 2, "error_class": "validation_error", "stderr": err, "remediation": "Pass a clean version string."}
+    if governance_min and governance_min not in _VALID_LEVELS:
+        return {"ok": False, "exit_code": 2, "error_class": "validation_error", "stderr": f"governance_min must be one of {sorted(_VALID_LEVELS)}", "remediation": "Use 'green', 'yellow', or 'red'."}
+
+    # ----- assemble argv -----
+    spec_arg = f"{name}@{version}" if version else name
+    argv: list[str] = ["install", spec_arg]
+    if registry:
+        argv += ["--registry", registry]
+    if governance_min:
+        argv += ["--governance-min", governance_min]
+    if allow_yellow:
+        argv.append("--allow-yellow")
+    if ignore_deps:
+        argv.append("--ignore-deps")
+
+    skillctl, bin_err = _resolve_skillctl_bin()
+    if bin_err:
+        return {"ok": False, "exit_code": -1, "error_class": "skillctl_not_found", "stderr": bin_err, "remediation": "Install / build skillctl, or set SKILLCTL_BIN to its absolute path."}
+
+    result = _run_skillctl_blocking([skillctl] + argv, timeout=timeout)
+    if result["error"]:
+        logger.warning("skillctl install exec error: %s", result["error"])
+        return {"ok": False, "exit_code": result["exit_code"], "error_class": "exec_error", "stderr": result["error"], "remediation": "Check the server log; the skillctl process did not run to completion."}
+    if result["exit_code"] != 0:
+        return _classify_failure(result["exit_code"], result["stderr"])
+
+    parsed = _parse_chain_summary(result["stdout"])
+    install_path = _parse_installed_path(result["stdout"])
+    return {
+        "ok": True,
+        "exit_code": 0,
+        **parsed,
+        "install_path": install_path,
+    }
+
+
+@mcp.tool()
+async def skill_verify(
+    name: str,
+    registry: str = "",
+    governance_min: str = "",
+    allow_yellow: bool = False,
+    timeout: int = 120,
+) -> dict:
+    """Re-run the SPEC-0188 §7 trust-chain check against an already-installed
+    skill. No filesystem mutation — useful for catching post-install
+    registry revocations or trust-root rotations.
+
+    Same response shape as skill_install minus install_path.
+    """
+    err = _validate_safe_token(name, "name")
+    if err:
+        return {"ok": False, "exit_code": 2, "error_class": "validation_error", "stderr": err, "remediation": "Pass a non-empty name without newlines or null bytes."}
+    if "@" in name:
+        return {"ok": False, "exit_code": 2, "error_class": "validation_error", "stderr": "name must not contain @<version> for verify (verify checks whatever is installed)", "remediation": "Pass just the bundle name, no @version pin."}
+    if governance_min and governance_min not in _VALID_LEVELS:
+        return {"ok": False, "exit_code": 2, "error_class": "validation_error", "stderr": f"governance_min must be one of {sorted(_VALID_LEVELS)}", "remediation": "Use 'green', 'yellow', or 'red'."}
+
+    argv: list[str] = ["verify", name]
+    if registry:
+        argv += ["--registry", registry]
+    if governance_min:
+        argv += ["--governance-min", governance_min]
+    if allow_yellow:
+        argv.append("--allow-yellow")
+
+    return _do_install_or_verify(argv, timeout=timeout)
+
+
+@mcp.tool()
+async def skill_attest(
+    digest: str,
+    level: str,
+    rationale: str,
+    reviewer_id: str,
+    key: str,
+    registry: str = "",
+    timeout: int = 120,
+) -> dict:
+    """Sign and POST a governance attestation for a bundle digest.
+
+    Args:
+        digest: Bundle digest, must match sha256:[0-9a-f]{64}.
+        level: Governance verdict, one of "green" | "yellow" | "red".
+        rationale: Free-text rationale for the audit log.
+        reviewer_id: Reviewer identity ID (e.g. "id:reviewer@m3c").
+        key: Absolute path to the reviewer's PEM PKCS#8 ed25519 private
+            key (mode 0600). Required.
+        registry: Optional registry base URL; defaults to
+            http://localhost:8080/api/skills.
+        timeout: Per-call timeout in seconds (default 120).
+
+    Returns ok=True with attestation_id, bundle_digest, governance_level,
+    reviewer_id on success; ok=False with exit_code/error_class/stderr/
+    remediation on failure.
+    """
+    # ----- input validation BEFORE exec -----
+    if not isinstance(digest, str) or not _DIGEST_RE.match(digest or ""):
+        return {"ok": False, "exit_code": 2, "error_class": "validation_error", "stderr": "digest must match sha256:[0-9a-f]{64}", "remediation": "Pass a canonical 'sha256:<64-hex-chars>' digest string."}
+    if level not in _VALID_LEVELS:
+        return {"ok": False, "exit_code": 2, "error_class": "validation_error", "stderr": f"level must be one of {sorted(_VALID_LEVELS)}", "remediation": "Use 'green', 'yellow', or 'red'."}
+    err = _validate_safe_token(rationale, "rationale")
+    if err:
+        return {"ok": False, "exit_code": 2, "error_class": "validation_error", "stderr": err, "remediation": "Pass a non-empty rationale without newlines or null bytes."}
+    err = _validate_safe_token(reviewer_id, "reviewer_id")
+    if err:
+        return {"ok": False, "exit_code": 2, "error_class": "validation_error", "stderr": err, "remediation": "Pass a non-empty reviewer_id without newlines or null bytes."}
+    err = _validate_safe_token(key, "key")
+    if err:
+        return {"ok": False, "exit_code": 2, "error_class": "validation_error", "stderr": err, "remediation": "Pass a non-empty private-key path."}
+
+    skillctl, bin_err = _resolve_skillctl_bin()
+    if bin_err:
+        return {"ok": False, "exit_code": -1, "error_class": "skillctl_not_found", "stderr": bin_err, "remediation": "Install / build skillctl, or set SKILLCTL_BIN to its absolute path."}
+
+    argv = [
+        skillctl, "attest", digest,
+        "--level", level,
+        "--rationale", rationale,
+        "--reviewer-id", reviewer_id,
+        "--key", key,
+    ]
+    if registry:
+        argv += ["--registry", registry]
+
+    result = _run_skillctl_blocking(argv, timeout=timeout)
+    if result["error"]:
+        logger.warning("skillctl attest exec error: %s", result["error"])
+        return {"ok": False, "exit_code": result["exit_code"], "error_class": "exec_error", "stderr": result["error"], "remediation": "Check the server log; the skillctl process did not run to completion."}
+    if result["exit_code"] != 0:
+        return _classify_failure(result["exit_code"], result["stderr"])
+
+    parsed = _parse_attest_output(result["stdout"])
+    return {
+        "ok": True,
+        "exit_code": 0,
+        "attestation_id": parsed["attestation_id"],
+        "bundle_digest": parsed["bundle_digest"] or digest,
+        "governance_level": parsed["governance_level"] or level,
+        "reviewer_id": reviewer_id,
+        "attested_at": parsed["attested_at"],
+    }
+
+
+# === end SPEC-0188 S11-mcp ===
 
 
 # ── Entry point ────────────────────────────────────────────────────────
