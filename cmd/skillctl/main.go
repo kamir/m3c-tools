@@ -37,6 +37,12 @@ func main() {
 	case "attest":
 		os.Exit(runAttest(os.Args[2:], os.Stdout, os.Stderr))
 	// === end SPEC-0188 S9-cli ===
+	// === SPEC-0188 S8: install/verify subcommands ===
+	case "install":
+		os.Exit(runInstall(os.Args[2:], os.Stdout, os.Stderr))
+	case "verify":
+		os.Exit(runVerify(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0188 S8 ===
 	case "help", "--help", "-h":
 		printUsage(os.Stdout)
 		os.Exit(0)
@@ -58,6 +64,10 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Commands (Stream S7 / SPEC-0188 Phase 4):")
 	fmt.Fprintln(w, "  trust        Manage ~/.claude/skill-trust-roots.yaml (list/add/remove).")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Commands (Stream S8 / SPEC-0188 Phase 4):")
+	fmt.Fprintln(w, "  install      Pull, verify, and install a signed skill bundle.")
+	fmt.Fprintln(w, "  verify       Re-run the trust-chain check on an installed skill.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Run any command with --help for its flags.")
 }
