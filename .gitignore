@@ -38,3 +38,8 @@ build/
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Python (mcp-skill-server)
+__pycache__/
+*.pyc
+.pytest_cache/

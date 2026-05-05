@@ -1,0 +1,25 @@
+# gitleaks configuration for m3c-tools
+# https://github.com/gitleaks/gitleaks
+
+title = "m3c-tools secret scanning"
+
+[allowlist]
+  description = "Known safe patterns"
+  paths = [
+    '''\.env\.example$''',
+    '''\.env\.samples$''',
+    '''go\.sum$''',
+  ]
+
+# Custom rules for project-specific secrets
+[[rules]]
+  id = "er1-api-key"
+  description = "ER1 API Key (UUID format)"
+  regex = '''ER1_API_KEY\s*=\s*[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}'''
+  tags = ["key", "er1"]
+
+[[rules]]
+  id = "plaud-token"
+  description = "Plaud auth token (long alphanumeric)"
+  regex = '''tokenstr.*[A-Za-z0-9]{40,}'''
+  tags = ["token", "plaud"]
