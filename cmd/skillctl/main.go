@@ -77,6 +77,8 @@ func main() {
 		cmdConsolidate(os.Args[2:])
 	case "menubar":
 		cmdMenubar(os.Args[2:])
+	case "pack":
+		cmdPack(os.Args[2:])
 	case "sync-usage":
 		cmdSyncUsage(os.Args[2:])
 	case "version", "--version", "-v":
@@ -1264,6 +1266,7 @@ Usage:
   skillctl consolidate [options]   Analyze skill sprawl and suggest fixes
   skillctl sync-usage [options]    Sync local skill usage events to aims-core
   skillctl menubar [options]       Launch macOS menu bar skill monitor
+  skillctl pack [options]          Pack a skill dir into a deterministic .skb (SPEC-0188)
   skillctl version                 Show version
   skillctl help                    Show this help
 
