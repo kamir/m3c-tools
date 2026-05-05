@@ -33,6 +33,10 @@ func main() {
 	case "trust":
 		os.Exit(runTrust(os.Args[2:], os.Stdout, os.Stderr))
 	// === END SPEC-0188 S7 ===
+	// === SPEC-0188 S9-cli: attest subcommand ===
+	case "attest":
+		os.Exit(runAttest(os.Args[2:], os.Stdout, os.Stderr))
+	// === end SPEC-0188 S9-cli ===
 	case "help", "--help", "-h":
 		printUsage(os.Stdout)
 		os.Exit(0)
@@ -50,6 +54,7 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "  keygen       Generate an ed25519 keypair (PEM, PKCS#8 / SPKI).")
 	fmt.Fprintln(w, "  sign         Sign a .skb bundle with an ed25519 private key.")
 	fmt.Fprintln(w, "  verify-sig   Verify a detached author signature locally.")
+	fmt.Fprintln(w, "  attest       POST a signed governance attestation to the registry.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Commands (Stream S7 / SPEC-0188 Phase 4):")
 	fmt.Fprintln(w, "  trust        Manage ~/.claude/skill-trust-roots.yaml (list/add/remove).")
