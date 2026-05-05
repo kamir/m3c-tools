@@ -17,7 +17,7 @@ var fixedTime = time.Date(2026, 5, 5, 19, 30, 0, 0, time.UTC)
 // goldenDigest pins the expected digest for the fixture skill + fixtureManifest +
 // fixedTime + BuiltBy="skillctl/test". Recompute by running with
 // SKILLBUNDLE_EXPECTED_DIGEST=any once and pasting the actual digest back.
-const goldenDigest = "sha256:e5fa4dcba4c3b078dffd80aaf4bbc65d706321944ca3ab3e910c6ba7fdaedec6"
+const goldenDigest = "sha256:15fd20c2141d63d218cebe10e768a236f725756b1bc0c56f08eafeecf07882c1"
 
 func fixtureManifest() BundleManifest {
 	return BundleManifest{
@@ -27,8 +27,8 @@ func fixtureManifest() BundleManifest {
 		SourceRepo:          "kamir/m3c-tools-maintenance",
 		SourceCommit:        "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
 		SourcePath:          ".claude/skills/fetch-contract",
-		GovernanceLevel:     "green",
-		GovernanceRationale: "Read-only ER1 query; no writes; failure non-destructive.",
+		AuthorGovernanceIntent:    "green",
+		AuthorGovernanceRationale: "Read-only ER1 query; no writes; failure non-destructive.",
 		DependsOn: []Dependency{
 			{Kind: "python", Name: "requests", Constraint: ">=2.31"},
 			{Kind: "python", Name: "pyyaml", Constraint: ">=6.0"},

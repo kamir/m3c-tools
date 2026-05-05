@@ -50,12 +50,12 @@ func cmdPack(args []string) {
 		case "--source-path":
 			i++
 			m.SourcePath = take(args, i, "--source-path")
-		case "--governance-level":
+		case "--author-intent":
 			i++
-			m.GovernanceLevel = take(args, i, "--governance-level")
-		case "--governance-rationale":
+			m.AuthorGovernanceIntent = take(args, i, "--author-intent")
+		case "--author-intent-rationale":
 			i++
-			m.GovernanceRationale = take(args, i, "--governance-rationale")
+			m.AuthorGovernanceRationale = take(args, i, "--author-intent-rationale")
 		case "--compatibility":
 			i++
 			m.Compatibility = take(args, i, "--compatibility")
@@ -134,8 +134,8 @@ Optional manifest fields:
   --source-repo <s>        e.g. kamir/m3c-tools-maintenance
   --source-commit <sha>
   --source-path <s>
-  --governance-level <s>   green | yellow | red
-  --governance-rationale <s>
+  --author-intent <s>      green | yellow | red (advisory only — verifier ignores; signed attestations bind)
+  --author-intent-rationale <s>
   --compatibility <s>
   --depends-on kind:name:constraint   Repeatable, e.g. python:requests:>=2.31`)
 }

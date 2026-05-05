@@ -30,8 +30,12 @@ type BundleManifest struct {
 	SourceRepo          string       `json:"source_repo"`
 	SourceCommit        string       `json:"source_commit"`
 	SourcePath          string       `json:"source_path"`
-	GovernanceLevel     string       `json:"governance_level"`
-	GovernanceRationale string       `json:"governance_rationale"`
+	// AuthorGovernanceIntent is advisory metadata only — verifiers MUST NOT
+	// use it for trust decisions. The binding governance verdict comes from
+	// signed attestations (SPEC-0188 §4.3). See SPEC-0188 §3.2 "Author intent
+	// vs binding governance verdict".
+	AuthorGovernanceIntent     string       `json:"author_governance_intent"`
+	AuthorGovernanceRationale  string       `json:"author_governance_rationale"`
 	DependsOn           []Dependency `json:"depends_on"`
 	Supersedes          *string      `json:"supersedes"`
 	DerivedFrom         *string      `json:"derived_from"`
