@@ -74,6 +74,24 @@ func main() {
 	case "sync-usage":
 		cmdSyncUsage(os.Args[2:])
 	// === END SPEC-0189 S0a ===
+	// === SPEC-0195 S2 / Stream M2: intent + awareness reset ===
+	//
+	// `intent` dispatches to runIntent in intent_cmds.go (today only the
+	// `declare` subcommand is implemented; runIntent is the extension
+	// point for future intent verbs).
+	//
+	// `awareness` is a sub-router: this stream owns `reset` only; Stream
+	// M1 will add `sync` and `verify` cases to the inner switch in
+	// awareness_cmds.go (preserving the same routing shape).
+	//
+	// Both subcommands surface SPEC-0188 §11-style numbered exit codes
+	// via runWithExit, including the new 18 (intent_inconsistent) and
+	// 19 (identity_mismatch) reserved here.
+	case "intent":
+		runWithExit(func() int { return runIntent(os.Args[2:], os.Stdout, os.Stderr) })
+	case "awareness":
+		runWithExit(func() int { return runAwareness(os.Args[2:], os.Stdout, os.Stderr) })
+	// === END SPEC-0195 S2 ===
 	case "help", "--help", "-h":
 		printUsage(os.Stdout)
 		os.Exit(0)
