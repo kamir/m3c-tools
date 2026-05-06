@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>skillctl - Delta Review</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-hover: #1c2333;
+    --border: #30363d;
+    --border-light: #3d444d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --text-dim: #656d76;
+    --accent: #7c3aed;
+    --accent-light: #a78bfa;
+    --green: #3fb950;
+    --green-bg: rgba(46, 204, 113, 0.15);
+    --green-border: rgba(46, 204, 113, 0.4);
+    --yellow: #d29922;
+    --yellow-bg: rgba(243, 156, 18, 0.15);
+    --yellow-border: rgba(243, 156, 18, 0.4);
+    --red: #f85149;
+    --red-bg: rgba(231, 76, 60, 0.15);
+    --red-border: rgba(231, 76, 60, 0.4);
+    --blue: #58a6ff;
+    --blue-bg: rgba(52, 152, 219, 0.15);
+    --blue-border: rgba(52, 152, 219, 0.4);
+    --grey: #8b949e;
+    --grey-bg: rgba(149, 165, 166, 0.15);
+    --grey-border: rgba(149, 165, 166, 0.4);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* Header */
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 1rem 2rem;
+  }
+  .header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+  }
+  .header h1 {
+    font-size: 1.4rem;
+    color: var(--accent-light);
+    font-weight: 600;
+  }
+  .header h1 span {
+    color: var(--text-muted);
+    font-weight: 400;
+    font-size: 0.85rem;
+    margin-left: 0.5rem;
+  }
+  .header-meta {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+  }
+
+  /* Stats bar */
+  .stats-bar {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .stat-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 16px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+  .stat-chip.added { background: var(--green-bg); color: var(--green); }
+  .stat-chip.modified { background: var(--yellow-bg); color: var(--yellow); }
+  .stat-chip.removed { background: var(--red-bg); color: var(--red); }
+  .stat-chip.moved { background: var(--blue-bg); color: var(--blue); }
+
+  /* Filter bar */
+  .filter-bar {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.75rem 2rem;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    position: sticky;
+    top: 90px;
+    z-index: 99;
+  }
+  .filter-btn {
+    padding: 0.3rem 0.7rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .filter-btn:hover {
+    border-color: var(--border-light);
+    color: var(--text);
+    background: var(--surface);
+  }
+  .filter-btn.active {
+    border-color: var(--accent);
+    color: var(--accent-light);
+    background: rgba(124, 58, 237, 0.15);
+  }
+  .filter-btn .count {
+    display: inline-block;
+    min-width: 1.2em;
+    text-align: center;
+    margin-left: 0.3rem;
+    padding: 0 0.3rem;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.08);
+    font-size: 0.75rem;
+  }
+  .filter-sep {
+    width: 1px;
+    background: var(--border);
+    margin: 0 0.25rem;
+    align-self: stretch;
+  }
+
+  /* Main content */
+  .content {
+    padding: 1.5rem 2rem;
+    padding-bottom: 6rem;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    overflow: hidden;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .card.selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  .card.status-approved { border-left: 3px solid var(--green); }
+  .card.status-rejected { border-left: 3px solid var(--red); }
+  .card.status-deferred { border-left: 3px solid var(--grey); }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    user-select: none;
+  }
+  .card-header:hover { background: var(--surface-hover); }
+  .card-header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+  .card-header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+  }
+  .delta-badge {
+    display: inline-block;
+    padding: 0.15rem 0.55rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+  }
+  .delta-badge.added { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+  .delta-badge.modified { background: var(--yellow-bg); color: var(--yellow); border: 1px solid var(--yellow-border); }
+  .delta-badge.removed { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
+  .delta-badge.moved { background: var(--blue-bg); color: var(--blue); border: 1px solid var(--blue-border); }
+  .skill-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .skill-meta {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    padding: 0 1rem 0.5rem;
+  }
+  .review-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid var(--border-light);
+    flex-shrink: 0;
+  }
+  .review-indicator.approved { background: var(--green); border-color: var(--green); }
+  .review-indicator.rejected { background: var(--red); border-color: var(--red); }
+  .review-indicator.deferred { background: var(--grey); border-color: var(--grey); }
+  .expand-arrow {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    transition: transform 0.2s;
+  }
+  .card.expanded .expand-arrow { transform: rotate(90deg); }
+
+  /* Card body (collapsible) */
+  .card-body {
+    display: none;
+    border-top: 1px solid var(--border);
+  }
+  .card.expanded .card-body { display: block; }
+
+  /* Sections inside card */
+  .card-section {
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--border);
+  }
+  .card-section:first-child { border-top: none; }
+  .card-section-title {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+  }
+
+  /* Frontmatter changes */
+  .fm-change {
+    display: flex;
+    gap: 0.5rem;
+    align-items: baseline;
+    padding: 0.2rem 0;
+    font-size: 0.85rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+  .fm-field {
+    color: var(--accent-light);
+    min-width: 100px;
+  }
+  .fm-old {
+    color: var(--red);
+    text-decoration: line-through;
+  }
+  .fm-arrow { color: var(--text-dim); }
+  .fm-new { color: var(--green); }
+  .fm-added::before {
+    content: '+';
+    color: var(--green);
+    margin-right: 0.25rem;
+  }
+  .fm-removed::before {
+    content: '-';
+    color: var(--red);
+    margin-right: 0.25rem;
+  }
+
+  /* Diff view */
+  .diff-view {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    overflow-x: auto;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  .diff-line {
+    padding: 0.1rem 0.75rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .diff-line.add {
+    background: var(--green-bg);
+    color: var(--green);
+  }
+  .diff-line.add::before {
+    content: '+ ';
+    font-weight: 700;
+  }
+  .diff-line.del {
+    background: var(--red-bg);
+    color: var(--red);
+  }
+  .diff-line.del::before {
+    content: '- ';
+    font-weight: 700;
+  }
+  .diff-line.ctx {
+    color: var(--text-muted);
+  }
+  .diff-line.ctx::before {
+    content: '  ';
+  }
+  .diff-line.hunk {
+    color: var(--blue);
+    background: var(--blue-bg);
+    font-weight: 600;
+  }
+
+  /* Full content view (for added/removed) */
+  .full-content {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    padding: 0.75rem;
+    border-radius: 4px;
+    overflow-x: auto;
+    max-height: 400px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .full-content.added-bg {
+    background: var(--green-bg);
+    color: var(--green);
+  }
+  .full-content.removed-bg {
+    background: var(--red-bg);
+    color: var(--red);
+    text-decoration: line-through;
+    text-decoration-color: rgba(231, 76, 60, 0.4);
+  }
+
+  /* Move path */
+  .move-path {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.85rem;
+    padding: 0.5rem 0;
+  }
+  .move-path .old-path {
+    color: var(--red);
+    text-decoration: line-through;
+  }
+  .move-path .arrow {
+    color: var(--text-muted);
+    margin: 0 0.5rem;
+  }
+  .move-path .new-path {
+    color: var(--green);
+  }
+
+  /* Action buttons */
+  .card-actions {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--border);
+    background: rgba(0,0,0,0.15);
+  }
+  .action-btn {
+    padding: 0.35rem 0.8rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-weight: 500;
+  }
+  .action-btn:hover { filter: brightness(1.2); }
+  .action-btn.approve {
+    border-color: var(--green-border);
+    color: var(--green);
+  }
+  .action-btn.approve:hover {
+    background: var(--green-bg);
+  }
+  .action-btn.approve.active {
+    background: var(--green);
+    color: #000;
+    border-color: var(--green);
+  }
+  .action-btn.reject {
+    border-color: var(--red-border);
+    color: var(--red);
+  }
+  .action-btn.reject:hover {
+    background: var(--red-bg);
+  }
+  .action-btn.reject.active {
+    background: var(--red);
+    color: #000;
+    border-color: var(--red);
+  }
+  .action-btn.defer {
+    border-color: var(--grey-border);
+    color: var(--grey);
+  }
+  .action-btn.defer:hover {
+    background: var(--grey-bg);
+  }
+  .action-btn.defer.active {
+    background: var(--grey);
+    color: #000;
+    border-color: var(--grey);
+  }
+
+  /* Bottom action bar */
+  .bottom-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 0.75rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 100;
+  }
+  .progress-section {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .progress-text {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+  .progress-text strong {
+    color: var(--text);
+  }
+  .progress-bar-wrapper {
+    width: 200px;
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.3s;
+  }
+  .seal-btn {
+    padding: 0.5rem 1.2rem;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: white;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .seal-btn:hover:not(:disabled) {
+    background: var(--accent-light);
+    color: #000;
+  }
+  .seal-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* Keyboard shortcuts help */
+  .shortcuts-hint {
+    color: var(--text-dim);
+    font-size: 0.75rem;
+  }
+  kbd {
+    display: inline-block;
+    padding: 0.1rem 0.35rem;
+    font-family: 'SF Mono', monospace;
+    font-size: 0.7rem;
+    background: var(--border);
+    border-radius: 3px;
+    color: var(--text-muted);
+  }
+
+  /* Modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 200;
+    justify-content: center;
+    align-items: center;
+  }
+  .modal-overlay.visible { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    max-width: 480px;
+    width: 90%;
+  }
+  .modal h2 {
+    color: var(--accent-light);
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+  }
+  .modal p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+  }
+  .modal-stats {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .modal-stat {
+    text-align: center;
+  }
+  .modal-stat .num {
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+  .modal-stat .lbl {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+  .modal-stat .num.green { color: var(--green); }
+  .modal-stat .num.red { color: var(--red); }
+  .modal-stat .num.grey { color: var(--grey); }
+  .modal-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+  }
+  .modal-btn {
+    padding: 0.45rem 1rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    transition: all 0.15s;
+  }
+  .modal-btn:hover { background: var(--surface-hover); }
+  .modal-btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+  .modal-btn.primary:hover { background: var(--accent-light); color: #000; }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--text-muted);
+  }
+  .empty-state h2 {
+    font-size: 1.2rem;
+    color: var(--text);
+    margin-bottom: 0.5rem;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 5rem;
+    right: 2rem;
+    padding: 0.6rem 1rem;
+    border-radius: 8px;
+    background: var(--green);
+    color: #000;
+    font-size: 0.85rem;
+    font-weight: 600;
+    z-index: 300;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s;
+    pointer-events: none;
+  }
+  .toast.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .toast.error {
+    background: var(--red);
+    color: white;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <h1>skillctl <span>Delta Review</span></h1>
+    <div class="shortcuts-hint">
+      <kbd>j</kbd>/<kbd>k</kbd> navigate
+      <kbd>a</kbd> approve
+      <kbd>r</kbd> reject
+      <kbd>d</kbd> defer
+      <kbd>Enter</kbd> expand
+    </div>
+  </div>
+  <div class="stats-bar" id="statsBar"></div>
+</div>
+
+<div class="filter-bar" id="filterBar"></div>
+
+<div class="content" id="content"></div>
+
+<div class="bottom-bar">
+  <div class="progress-section">
+    <span class="progress-text" id="progressText">0/0 reviewed</span>
+    <div class="progress-bar-wrapper">
+      <div class="progress-bar-fill" id="progressBar" style="width: 0%"></div>
+    </div>
+  </div>
+  <button class="seal-btn" id="sealBtn" disabled>Seal &amp; Sign Off</button>
+</div>
+
+<div class="modal-overlay" id="sealModal">
+  <div class="modal">
+    <h2>Seal &amp; Sign Off</h2>
+    <p>This will create an immutable seal record from your review decisions. Approved changes become the new baseline.</p>
+    <div class="modal-stats" id="modalStats"></div>
+    <div class="modal-actions">
+      <button class="modal-btn" id="modalCancel">Cancel</button>
+      <button class="modal-btn primary" id="modalConfirm">Confirm Seal</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function() {
+  'use strict';
+
+  let deltaReport = null;
+  let selectedIndex = -1;
+  let activeFilter = 'all';
+  let refreshTimer = null;
+
+  // ---- API calls ----
+  async function fetchDelta() {
+    const resp = await fetch('/api/delta');
+    if (!resp.ok) throw new Error('Failed to fetch delta');
+    return resp.json();
+  }
+
+  async function updateReview(index, status) {
+    const resp = await fetch('/api/delta/' + index + '/review', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: status })
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(text);
+    }
+    return resp.json();
+  }
+
+  async function createSeal() {
+    const resp = await fetch('/api/seal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(text);
+    }
+    return resp.json();
+  }
+
+  // ---- Toast ----
+  function showToast(msg, isError) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast visible' + (isError ? ' error' : '');
+    setTimeout(function() { t.className = 'toast'; }, 2500);
+  }
+
+  // ---- Render ----
+  function getFilteredEntries() {
+    if (!deltaReport || !deltaReport.entries) return [];
+    return deltaReport.entries.filter(function(e) {
+      if (activeFilter === 'all') return true;
+      if (activeFilter === 'pending') return e.review_status === 'pending';
+      if (activeFilter === 'approved') return e.review_status === 'approved';
+      if (activeFilter === 'rejected') return e.review_status === 'rejected';
+      return e.delta_type === activeFilter;
+    });
+  }
+
+  function renderStats() {
+    const bar = document.getElementById('statsBar');
+    if (!deltaReport) { bar.innerHTML = ''; return; }
+    const d = deltaReport;
+    let html = '';
+    if (d.total_added > 0) html += '<span class="stat-chip added">' + d.total_added + ' Added</span>';
+    if (d.total_modified > 0) html += '<span class="stat-chip modified">' + d.total_modified + ' Modified</span>';
+    if (d.total_removed > 0) html += '<span class="stat-chip removed">' + d.total_removed + ' Removed</span>';
+    if (d.total_moved > 0) html += '<span class="stat-chip moved">' + d.total_moved + ' Moved</span>';
+    if (!html) html = '<span class="stat-chip" style="color:var(--text-muted);">No changes detected</span>';
+    bar.innerHTML = html;
+  }
+
+  function renderFilters() {
+    const bar = document.getElementById('filterBar');
+    if (!deltaReport || !deltaReport.entries) { bar.innerHTML = ''; return; }
+    const entries = deltaReport.entries;
+    const counts = { all: entries.length, added: 0, modified: 0, removed: 0, moved: 0, pending: 0, approved: 0, rejected: 0 };
+    entries.forEach(function(e) {
+      counts[e.delta_type] = (counts[e.delta_type] || 0) + 1;
+      counts[e.review_status] = (counts[e.review_status] || 0) + 1;
+    });
+
+    const typeFilters = [
+      { key: 'all', label: 'All' },
+      { key: 'added', label: 'Added' },
+      { key: 'modified', label: 'Modified' },
+      { key: 'removed', label: 'Removed' },
+      { key: 'moved', label: 'Moved' }
+    ];
+    const statusFilters = [
+      { key: 'pending', label: 'Pending' },
+      { key: 'approved', label: 'Approved' },
+      { key: 'rejected', label: 'Rejected' }
+    ];
+
+    let html = '';
+    typeFilters.forEach(function(f) {
+      if (f.key !== 'all' && !counts[f.key]) return;
+      html += '<button class="filter-btn' + (activeFilter === f.key ? ' active' : '') + '" data-filter="' + f.key + '">';
+      html += f.label + '<span class="count">' + (counts[f.key] || 0) + '</span></button>';
+    });
+    html += '<div class="filter-sep"></div>';
+    statusFilters.forEach(function(f) {
+      if (!counts[f.key]) return;
+      html += '<button class="filter-btn' + (activeFilter === f.key ? ' active' : '') + '" data-filter="' + f.key + '">';
+      html += f.label + '<span class="count">' + (counts[f.key] || 0) + '</span></button>';
+    });
+    bar.innerHTML = html;
+
+    bar.querySelectorAll('.filter-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        activeFilter = btn.dataset.filter;
+        renderFilters();
+        renderCards();
+      });
+    });
+  }
+
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  function renderDiffLines(diffText) {
+    if (!diffText) return '<div class="diff-line ctx">(no diff available)</div>';
+    var lines = diffText.split('\n');
+    var html = '';
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      var cls = 'ctx';
+      if (line.indexOf('@@') === 0) cls = 'hunk';
+      else if (line.indexOf('+') === 0 && line.indexOf('+++') !== 0) cls = 'add';
+      else if (line.indexOf('-') === 0 && line.indexOf('---') !== 0) cls = 'del';
+      html += '<div class="diff-line ' + cls + '">' + escapeHtml(line) + '</div>';
+    }
+    return html;
+  }
+
+  // Extract project from skill_id (format: "project/name")
+  function extractProject(entry) {
+    if (entry.skill_id && entry.skill_id.indexOf('/') !== -1) {
+      return entry.skill_id.substring(0, entry.skill_id.indexOf('/'));
+    }
+    return '';
+  }
+
+  // Compute frontmatter changes by comparing baseline and current frontmatter objects
+  function computeFrontmatterChanges(entry) {
+    var base = entry.baseline_frontmatter || {};
+    var curr = entry.current_frontmatter || {};
+    if (!entry.baseline_frontmatter && !entry.current_frontmatter) return [];
+    var changes = [];
+    var fields = ['name', 'version', 'description', 'category', 'intent', 'input_type', 'output_format', 'model'];
+    fields.forEach(function(f) {
+      var bv = base[f] || '';
+      var cv = curr[f] || '';
+      if (bv !== cv) {
+        changes.push({ field: f, old_value: bv, new_value: cv });
+      }
+    });
+    // Compare array fields
+    var arrayFields = ['allowed_tools', 'tags'];
+    arrayFields.forEach(function(f) {
+      var bv = (base[f] || []).join(', ');
+      var cv = (curr[f] || []).join(', ');
+      if (bv !== cv) {
+        changes.push({ field: f, old_value: bv, new_value: cv });
+      }
+    });
+    return changes;
+  }
+
+  function renderFrontmatterChanges(changes) {
+    if (!changes || changes.length === 0) return '';
+    var html = '<div class="card-section"><div class="card-section-title">Frontmatter Changes</div>';
+    changes.forEach(function(ch) {
+      html += '<div class="fm-change">';
+      html += '<span class="fm-field">' + escapeHtml(ch.field) + ':</span> ';
+      if (ch.old_value && ch.new_value) {
+        html += '<span class="fm-old">' + escapeHtml(ch.old_value) + '</span>';
+        html += '<span class="fm-arrow"> &rarr; </span>';
+        html += '<span class="fm-new">' + escapeHtml(ch.new_value) + '</span>';
+      } else if (ch.new_value) {
+        html += '<span class="fm-added">' + escapeHtml(ch.new_value) + '</span>';
+      } else if (ch.old_value) {
+        html += '<span class="fm-removed">' + escapeHtml(ch.old_value) + '</span>';
+      }
+      html += '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  function renderCardBody(entry) {
+    var html = '';
+
+    // Frontmatter changes (computed from baseline/current frontmatter)
+    var fmChanges = computeFrontmatterChanges(entry);
+    html += renderFrontmatterChanges(fmChanges);
+
+    // Content section varies by delta type
+    if (entry.delta_type === 'added') {
+      html += '<div class="card-section">';
+      html += '<div class="card-section-title">New Skill Content</div>';
+      html += '<div class="full-content added-bg">' + escapeHtml(entry.content_diff || '(content not available)') + '</div>';
+      html += '</div>';
+    } else if (entry.delta_type === 'removed') {
+      html += '<div class="card-section">';
+      html += '<div class="card-section-title">Removed Skill Content</div>';
+      html += '<div class="full-content removed-bg">' + escapeHtml(entry.content_diff || '(content not available)') + '</div>';
+      html += '</div>';
+    } else if (entry.delta_type === 'moved') {
+      html += '<div class="card-section">';
+      html += '<div class="card-section-title">Path Change</div>';
+      html += '<div class="move-path">';
+      html += '<span class="old-path">' + escapeHtml(entry.baseline_path || '?') + '</span>';
+      html += '<span class="arrow">&rarr;</span>';
+      html += '<span class="new-path">' + escapeHtml(entry.current_path || '?') + '</span>';
+      html += '</div></div>';
+    } else if (entry.delta_type === 'modified') {
+      html += '<div class="card-section">';
+      html += '<div class="card-section-title">Content Diff</div>';
+      html += '<div class="diff-view">' + renderDiffLines(entry.content_diff) + '</div>';
+      html += '</div>';
+    }
+
+    // Hash info
+    html += '<div class="card-section" style="display:flex;gap:2rem;font-size:0.75rem;color:var(--text-dim);">';
+    if (entry.baseline_hash) html += '<span>Baseline: ' + escapeHtml(entry.baseline_hash.substring(0, 12)) + '</span>';
+    if (entry.current_hash) html += '<span>Current: ' + escapeHtml(entry.current_hash.substring(0, 12)) + '</span>';
+    html += '</div>';
+
+    return html;
+  }
+
+  function renderCards() {
+    var container = document.getElementById('content');
+    var entries = getFilteredEntries();
+
+    if (entries.length === 0) {
+      container.innerHTML = '<div class="empty-state"><h2>No entries match the current filter</h2><p>Try selecting a different filter above.</p></div>';
+      return;
+    }
+
+    var html = '';
+    entries.forEach(function(entry, idx) {
+      var statusClass = entry.review_status !== 'pending' ? ' status-' + entry.review_status : '';
+      var expandedClass = '';
+      var selectedClass = (selectedIndex === entry.index) ? ' selected' : '';
+
+      html += '<div class="card' + statusClass + selectedClass + expandedClass + '" data-index="' + entry.index + '" id="card-' + entry.index + '">';
+
+      // Header
+      html += '<div class="card-header" data-index="' + entry.index + '">';
+      html += '<div class="card-header-left">';
+      html += '<span class="delta-badge ' + entry.delta_type + '">' + entry.delta_type + '</span>';
+      html += '<span class="skill-name">' + escapeHtml(entry.skill_name) + '</span>';
+      html += '</div>';
+      html += '<div class="card-header-right">';
+      html += '<span class="review-indicator ' + entry.review_status + '"></span>';
+      html += '<span class="expand-arrow">&#9654;</span>';
+      html += '</div>';
+      html += '</div>';
+
+      // Meta
+      html += '<div class="skill-meta">';
+      var project = extractProject(entry);
+      if (project) html += escapeHtml(project);
+      var path = entry.current_path || entry.baseline_path || '';
+      if (path) html += ' &bull; <span style="font-family:monospace;font-size:0.75rem;">' + escapeHtml(path) + '</span>';
+      html += '</div>';
+
+      // Body (hidden until expanded)
+      html += '<div class="card-body">';
+      html += renderCardBody(entry);
+
+      // Actions
+      html += '<div class="card-actions">';
+      html += '<button class="action-btn approve' + (entry.review_status === 'approved' ? ' active' : '') + '" data-index="' + entry.index + '" data-action="approved">&#10003; Approve</button>';
+      html += '<button class="action-btn reject' + (entry.review_status === 'rejected' ? ' active' : '') + '" data-index="' + entry.index + '" data-action="rejected">&#10007; Reject</button>';
+      html += '<button class="action-btn defer' + (entry.review_status === 'deferred' ? ' active' : '') + '" data-index="' + entry.index + '" data-action="deferred">&#9719; Defer</button>';
+      html += '</div>';
+
+      html += '</div>'; // card-body
+      html += '</div>'; // card
+    });
+
+    container.innerHTML = html;
+
+    // Wire up click handlers
+    container.querySelectorAll('.card-header').forEach(function(hdr) {
+      hdr.addEventListener('click', function() {
+        var idx = parseInt(hdr.dataset.index);
+        toggleCard(idx);
+      });
+    });
+
+    container.querySelectorAll('.action-btn').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var idx = parseInt(btn.dataset.index);
+        var action = btn.dataset.action;
+        doReview(idx, action);
+      });
+    });
+  }
+
+  function toggleCard(index) {
+    var card = document.getElementById('card-' + index);
+    if (!card) return;
+    selectedIndex = index;
+    // Remove selected from all
+    document.querySelectorAll('.card.selected').forEach(function(c) { c.classList.remove('selected'); });
+    card.classList.add('selected');
+    card.classList.toggle('expanded');
+  }
+
+  function selectCard(index) {
+    var entries = getFilteredEntries();
+    if (index < 0 || index >= entries.length) return;
+    var entry = entries[index];
+    selectedIndex = entry.index;
+    // Remove old selection
+    document.querySelectorAll('.card.selected').forEach(function(c) { c.classList.remove('selected'); });
+    var card = document.getElementById('card-' + entry.index);
+    if (card) {
+      card.classList.add('selected');
+      card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+  function getSelectedFilterIndex() {
+    var entries = getFilteredEntries();
+    for (var i = 0; i < entries.length; i++) {
+      if (entries[i].index === selectedIndex) return i;
+    }
+    return -1;
+  }
+
+  async function doReview(index, status) {
+    try {
+      var updated = await updateReview(index, status);
+      // Update local state
+      for (var i = 0; i < deltaReport.entries.length; i++) {
+        if (deltaReport.entries[i].index === index) {
+          deltaReport.entries[i].review_status = updated.review_status;
+          deltaReport.entries[i].reviewed_at = updated.reviewed_at;
+          break;
+        }
+      }
+      renderCards();
+      renderFilters();
+      updateProgress();
+      showToast(status.charAt(0).toUpperCase() + status.slice(1) + ': ' + (updated.skill_name || '#' + index));
+    } catch (err) {
+      showToast('Error: ' + err.message, true);
+    }
+  }
+
+  function updateProgress() {
+    if (!deltaReport || !deltaReport.entries) return;
+    var total = deltaReport.entries.length;
+    var reviewed = 0;
+    deltaReport.entries.forEach(function(e) {
+      if (e.review_status !== 'pending') reviewed++;
+    });
+
+    document.getElementById('progressText').innerHTML = '<strong>' + reviewed + '/' + total + '</strong> reviewed';
+    var pct = total > 0 ? (reviewed / total * 100) : 0;
+    document.getElementById('progressBar').style.width = pct + '%';
+    document.getElementById('sealBtn').disabled = (reviewed < total || total === 0);
+  }
+
+  // ---- Seal modal ----
+  function showSealModal() {
+    if (!deltaReport) return;
+    var approved = 0, rejected = 0, deferred = 0;
+    deltaReport.entries.forEach(function(e) {
+      if (e.review_status === 'approved') approved++;
+      else if (e.review_status === 'rejected') rejected++;
+      else if (e.review_status === 'deferred') deferred++;
+    });
+    document.getElementById('modalStats').innerHTML =
+      '<div class="modal-stat"><div class="num green">' + approved + '</div><div class="lbl">Approved</div></div>' +
+      '<div class="modal-stat"><div class="num red">' + rejected + '</div><div class="lbl">Rejected</div></div>' +
+      '<div class="modal-stat"><div class="num grey">' + deferred + '</div><div class="lbl">Deferred</div></div>';
+    document.getElementById('sealModal').classList.add('visible');
+  }
+
+  function hideSealModal() {
+    document.getElementById('sealModal').classList.remove('visible');
+  }
+
+  async function doSeal() {
+    try {
+      var seal = await createSeal();
+      hideSealModal();
+      showToast('Sealed: ' + seal.seal_id);
+      document.getElementById('sealBtn').disabled = true;
+    } catch (err) {
+      hideSealModal();
+      showToast('Seal failed: ' + err.message, true);
+    }
+  }
+
+  // ---- Keyboard shortcuts ----
+  document.addEventListener('keydown', function(e) {
+    // Ignore if modal is open
+    if (document.getElementById('sealModal').classList.contains('visible')) {
+      if (e.key === 'Escape') hideSealModal();
+      return;
+    }
+    // Ignore if typing in an input
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    var entries = getFilteredEntries();
+    var fi = getSelectedFilterIndex();
+
+    switch(e.key) {
+      case 'j':
+        e.preventDefault();
+        selectCard(fi + 1);
+        break;
+      case 'k':
+        e.preventDefault();
+        selectCard(fi - 1);
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (selectedIndex >= 0) toggleCard(selectedIndex);
+        break;
+      case 'a':
+        e.preventDefault();
+        if (selectedIndex >= 0) doReview(selectedIndex, 'approved');
+        break;
+      case 'r':
+        e.preventDefault();
+        if (selectedIndex >= 0) doReview(selectedIndex, 'rejected');
+        break;
+      case 'd':
+        e.preventDefault();
+        if (selectedIndex >= 0) doReview(selectedIndex, 'deferred');
+        break;
+      case 'Escape':
+        // Collapse all
+        document.querySelectorAll('.card.expanded').forEach(function(c) { c.classList.remove('expanded'); });
+        break;
+    }
+  });
+
+  // ---- Seal button ----
+  document.getElementById('sealBtn').addEventListener('click', showSealModal);
+  document.getElementById('modalCancel').addEventListener('click', hideSealModal);
+  document.getElementById('modalConfirm').addEventListener('click', doSeal);
+  document.getElementById('sealModal').addEventListener('click', function(e) {
+    if (e.target === document.getElementById('sealModal')) hideSealModal();
+  });
+
+  // ---- Init ----
+  async function init() {
+    try {
+      deltaReport = await fetchDelta();
+      renderStats();
+      renderFilters();
+      renderCards();
+      updateProgress();
+      // Select first entry
+      if (deltaReport.entries && deltaReport.entries.length > 0) {
+        selectCard(0);
+      }
+    } catch (err) {
+      document.getElementById('content').innerHTML =
+        '<div class="empty-state"><h2>Failed to load delta report</h2><p>' + escapeHtml(err.message) + '</p></div>';
+    }
+  }
+
+  // Auto-refresh every 30 seconds
+  refreshTimer = setInterval(async function() {
+    try {
+      var newData = await fetchDelta();
+      // Only update if entries changed (avoid losing selection)
+      if (JSON.stringify(newData) !== JSON.stringify(deltaReport)) {
+        deltaReport = newData;
+        renderStats();
+        renderFilters();
+        renderCards();
+        updateProgress();
+      }
+    } catch(err) { /* silent */ }
+  }, 30000);
+
+  init();
+})();
+</script>
+</body>
+</html>
