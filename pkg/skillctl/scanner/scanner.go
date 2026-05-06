@@ -41,6 +41,7 @@ type Scanner struct {
 	// SPEC-0189 tier-aware fields.
 	Roots           []ScanRoot
 	IncludeShadowed bool
+	WithTrust       bool // SPEC-0189 §6: annotate each skill with sibling-.skb trust state
 
 	// Legacy SPEC-0115 fields.
 	Paths       []string
@@ -107,6 +108,11 @@ func (s *Scanner) Scan() (*model.Inventory, error) {
 	}
 
 	// Run duplicate detection (shared by both modes).
+	// SPEC-0189 §6: cross-reference each skill with sibling-.skb trust state.
+	if s.WithTrust {
+		_ = AnnotateTrust(inv)
+	}
+
 	hasher.DetectDuplicates(inv.Skills)
 
 	// Compute summary stats.
