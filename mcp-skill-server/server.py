@@ -63,21 +63,44 @@ mcp = FastMCP(
 
 @mcp.tool()
 async def skill_scan(
-    path: str = "",
-    recursive: bool = True,
-    include_home: bool = True,
+    source: str = "claude",
+    path: list[str] | None = None,
+    with_trust: bool = False,
+    include_shadowed: bool = False,
+    # Legacy SPEC-0115 args (preserved for backwards compat).
+    recursive: bool = False,
+    include_home: bool = False,
 ) -> str:
-    """Scan directories for Claude Code skills, commands, agents, and skill indexes.
-    Returns a summary of discovered skills by type and project."""
-    args = [SKILLCTL, "scan", "--output", "json"]
-    if path:
-        args += ["--path", path]
-    else:
-        args += ["--path", str(Path.home())]
-    if recursive:
-        args.append("--recursive")
-    if include_home:
-        args.append("--include-home")
+    """Scan Claude Code skill surfaces (user, project, plugin) per SPEC-0189.
+
+    Args:
+        source: One of "claude" (default — user + plugin tiers, matches what
+            Claude Code resolves at runtime), "user" (user tier only),
+            "projects" (legacy SPEC-0115 mode — requires path), "plugins"
+            (plugin tier only), or "all" (union).
+        path: Additional roots to scan as project tier (repeatable).
+        with_trust: If True, cross-reference each skill against SPEC-0188
+            install state via the sibling .skb. Adds Bundle{TrustChain}
+            block per skill.
+        include_shadowed: If True, emit ALL occurrences across tiers
+            (default emits winners only — project > user > plugin).
+
+    Returns a summary by type/project + tier breakdown. JSON output is
+    available via the `skillctl scan --format json` CLI directly.
+    """
+    args = [SKILLCTL, "scan", "--source", source, "--format", "json"]
+    if with_trust:
+        args.append("--with-trust")
+    if include_shadowed:
+        args.append("--include-shadowed")
+    for p in path or []:
+        args += ["--path", p]
+    # Legacy flags only emitted if explicitly set + source=projects.
+    if source == "projects":
+        if recursive:
+            args.append("--recursive")
+        if include_home:
+            args.append("--include-home")
 
     result = await _run_skillctl(args)
     if result.get("error"):
@@ -88,10 +111,29 @@ async def skill_scan(
     by_type = inv.get("by_type", {})
     by_project = inv.get("by_project", {})
 
-    lines = [f"Scanned {total} skills across {len(by_project)} projects\n"]
+    # SPEC-0189 tier breakdown.
+    by_tier: dict[str, int] = {}
+    trust_breakdown: dict[str, int] = {}
+    for sk in inv.get("skills", []):
+        tier = sk.get("tier") or "untiered"
+        by_tier[tier] = by_tier.get(tier, 0) + 1
+        if with_trust and sk.get("bundle"):
+            tc = sk["bundle"].get("trust_chain", "unknown")
+            trust_breakdown[tc] = trust_breakdown.get(tc, 0) + 1
+
+    lines = [f"Scanned {total} skills across {len(by_project)} projects (source={source})\n"]
+    if by_tier:
+        lines.append("By tier:")
+        for t, c in sorted(by_tier.items(), key=lambda x: -x[1]):
+            lines.append(f"  {t}: {c}")
+        lines.append("")
     lines.append("By type:")
     for t, c in sorted(by_type.items(), key=lambda x: -x[1]):
         lines.append(f"  {t}: {c}")
+    if with_trust and trust_breakdown:
+        lines.append("\nTrust chain (SPEC-0188 cross-ref):")
+        for tc, c in sorted(trust_breakdown.items(), key=lambda x: -x[1]):
+            lines.append(f"  {tc}: {c}")
     lines.append("\nBy project:")
     for p, c in sorted(by_project.items(), key=lambda x: -x[1])[:15]:
         lines.append(f"  {p}: {c}")
