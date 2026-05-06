@@ -390,3 +390,44 @@ func buildSkillBundleTGZ(t *testing.T) []byte {
 	_ = gw.Close()
 	return gzBuf.Bytes()
 }
+
+// ----- SPEC-0188 §7 step 5.5: --tenant resolution precedence -----
+
+// TestResolveTenant_CLIBeatsTrustRoots locks the SPEC-0188 §4.4 G-18
+// precedence rule: --tenant <id> wins over the trust-roots tenant_scope:
+// value. Both empty → empty (verifier treats as untenanted).
+func TestResolveTenant_CLIBeatsTrustRoots(t *testing.T) {
+	cases := []struct {
+		name    string
+		cli     string
+		yaml    string
+		want    string
+	}{
+		{"both-empty", "", "", ""},
+		{"cli-only", "kup-berlin", "", "kup-berlin"},
+		{"yaml-only", "", "kup-berlin", "kup-berlin"},
+		{"cli-wins", "cflt", "kup-berlin", "cflt"},
+		{"cli-trim", "  kup-berlin  ", "ignored", "kup-berlin"},
+		{"yaml-trim", "", "  kup-berlin  ", "kup-berlin"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			tr := &verify.TrustRoots{TenantScope: c.yaml}
+			if got := resolveTenant(c.cli, tr); got != c.want {
+				t.Errorf("resolveTenant(%q, yaml=%q) = %q, want %q", c.cli, c.yaml, got, c.want)
+			}
+		})
+	}
+}
+
+// TestResolveTenant_NilTrustRoots: defensive — if the CLI ever calls
+// resolveTenant before loadAndPickRoot returns a valid TrustRoots, the
+// helper must not panic.
+func TestResolveTenant_NilTrustRoots(t *testing.T) {
+	if got := resolveTenant("kup-berlin", nil); got != "kup-berlin" {
+		t.Errorf("resolveTenant with nil TrustRoots = %q, want kup-berlin", got)
+	}
+	if got := resolveTenant("", nil); got != "" {
+		t.Errorf("resolveTenant nil/empty = %q, want empty", got)
+	}
+}

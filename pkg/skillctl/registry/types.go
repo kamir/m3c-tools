@@ -147,6 +147,15 @@ type AttestationRow struct {
 	// the registry for audit; the registry's CurrentGovernance computation
 	// already excludes revoked rows, so this is informational.
 	Status string `json:"status,omitempty"`
+
+	// TenantScope, when non-empty, scopes this attestation to a specific
+	// tenant id (e.g. "kup-berlin"). Per SPEC-0188 §7 step 5.5 (G-18 closure,
+	// 2026-05-06) the verifier consults tenant-scoped attestations to allow
+	// a tenant CISO to block an otherwise-trusted bundle for THAT tenant
+	// without affecting other tenants. An empty TenantScope means the
+	// attestation is global / untenanted; the tenant-block step ignores
+	// global rows.
+	TenantScope string `json:"tenant_scope,omitempty"`
 }
 
 // SignatureRow is one entry in BundleMeta.Signatures. Mirrors the

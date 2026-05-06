@@ -95,6 +95,15 @@ type Opts struct {
 	AllowYellow bool
 	IgnoreDeps  bool
 
+	// Tenant is the resolved tenant scope for this install/verify call
+	// (SPEC-0188 §7 step 5.5, G-18 closure 2026-05-06). The CLI resolves
+	// this from `--tenant <id>` with fallback to TrustRoots.TenantScope.
+	// Empty = untenanted; the verifier's tenant-block check is a no-op.
+	// Non-empty triggers a scan of BundleMeta.Attestations for tenant-
+	// scoped red verdicts; any match fails closed with verify.ErrTenantBlocked
+	// (exit code 16).
+	Tenant string
+
 	// AuditPoster, if non-nil, is called when AllowYellow or IgnoreDeps
 	// is set so the override is durably logged before the install
 	// proceeds. Production wires this to PostAuditEntry (overrides.go);
@@ -238,6 +247,7 @@ func Install(opts Opts) (*Result, error) {
 		GovernanceMin:   opts.GovernanceMin,
 		AllowYellow:     opts.AllowYellow,
 		IgnoreDeps:      opts.IgnoreDeps,
+		Tenant:          opts.Tenant,
 		Logger:          opts.Logger,
 	}
 	verRes, err := verify.Verify(verifyOpts)
@@ -370,6 +380,7 @@ func VerifyInstalled(opts Opts) (*verify.VerifyResult, error) {
 		GovernanceMin:   opts.GovernanceMin,
 		AllowYellow:     opts.AllowYellow,
 		IgnoreDeps:      opts.IgnoreDeps,
+		Tenant:          opts.Tenant,
 		Logger:          opts.Logger,
 	}
 	return verify.Verify(verifyOpts)

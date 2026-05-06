@@ -148,6 +148,17 @@ type TrustRoots struct {
 	// Roots is the list of pinned registries. Order matches file order.
 	Roots []TrustRoot `yaml:"trust_roots"`
 
+	// TenantScope, if non-empty, pins this consumer machine to a tenant id
+	// for the §7 step 5.5 tenant-block check (SPEC-0188 §4.4 G-18 closure,
+	// 2026-05-06). The CLI's `--tenant <id>` flag overrides this for the
+	// current invocation; an empty value means "untenanted / global" and
+	// step 5.5 is skipped.
+	//
+	// The field is intentionally top-level (not per-TrustRoot): a
+	// machine's tenant identity is a property of the consumer, not of the
+	// registry it talks to.
+	TenantScope string `yaml:"tenant_scope,omitempty"`
+
 	// Path is the resolved absolute file path used by Load (and by
 	// Save() on round-trip). Not serialized to YAML.
 	Path string `yaml:"-"`

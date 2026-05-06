@@ -45,6 +45,12 @@ const (
 	// ExitBlobMissing — the registry has metadata for a digest but
 	// the actual blob is unreachable.
 	ExitBlobMissing = 15
+	// ExitTenantBlocked — at least one tenant-scoped governance attestation
+	// (SPEC-0188 §7 step 5.5, G-18 closure 2026-05-06) carries
+	// governance_level=red for the consumer's pinned tenant. The bundle is
+	// admitted globally but the tenant CISO has blocked it; the verifier
+	// fails closed.
+	ExitTenantBlocked = 16
 )
 
 // Sentinel errors so callers can `errors.Is(err, verify.ErrDigestMismatch)`
@@ -82,6 +88,14 @@ var (
 	// ErrBlobMissing — registry metadata exists but the blob storage
 	// returned 404 / unreachable. Exit code 15.
 	ErrBlobMissing = errors.New("blob missing")
+
+	// ErrTenantBlocked — a tenant-scoped governance attestation set
+	// governance_level=red for this bundle in the consumer's pinned
+	// tenant. SPEC-0188 §7 step 5.5 (G-18 closure, 2026-05-06).
+	// Exit code 16. The verifier MUST refuse the install/verify even
+	// when the global chain validates; the tenant CISO's block decision
+	// supersedes for THIS tenant only.
+	ErrTenantBlocked = errors.New("tenant blocked by tenant-scoped attestation")
 )
 
 // ExitCode maps a verifier error to its numeric process exit code.
@@ -93,6 +107,7 @@ var (
 //	wrapped ErrGovernanceBelowMin        → 13
 //	wrapped ErrDepsUnsatisfied           → 14
 //	wrapped ErrBlobMissing               → 15
+//	wrapped ErrTenantBlocked             → 16
 //	any other non-nil error              → 1 (generic)
 //
 // We deliberately do NOT return 2 (usage) here — that's the CLI's concern,
@@ -120,6 +135,8 @@ func ExitCode(err error) int {
 		return ExitDepsUnsatisfied
 	case errors.Is(err, ErrBlobMissing):
 		return ExitBlobMissing
+	case errors.Is(err, ErrTenantBlocked):
+		return ExitTenantBlocked
 	default:
 		return 1
 	}
