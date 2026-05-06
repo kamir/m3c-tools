@@ -26,30 +26,64 @@ import "errors"
 // in this package to avoid a duplicate-symbol drift across packages. (See
 // ExitCode for how nil and unknown errors map.)
 const (
-	// ExitDigestMismatch — recomputed bundle digest did not match the
-	// digest the registry signed.
+	// ExitDigestMismatch (10) — "Bundle modified after signing."
+	// (SPEC-0188 §11 row 1)
+	//
+	// Returned when the recomputed bundle digest does not match the
+	// digest the registry signed. UX: show expected vs actual digest;
+	// refuse install. User remediation: re-fetch the bundle; do not
+	// install a tampered artefact.
 	ExitDigestMismatch = 10
-	// ExitAuthorSigInvalid — the author's ed25519 signature did not
-	// verify against the identity's public key.
+	// ExitAuthorSigInvalid (11) — "Wrong public key, or modified after
+	// signing." (SPEC-0188 §11 row 2)
+	//
+	// Returned when the author's ed25519 signature did not verify
+	// against the identity's public key. UX: show author identity from
+	// manifest vs registry; refuse. User remediation: confirm with the
+	// author that their identity_id + pubkey on the registry are correct
+	// and current; refuse install.
 	ExitAuthorSigInvalid = 11
-	// ExitRegistryNotTrusted — the bundle came from a registry whose
-	// public key isn't in ~/.claude/skill-trust-roots.yaml (or the key
-	// that signed is retired).
+	// ExitRegistryNotTrusted (12) — "Bundle came from an unknown
+	// registry." (SPEC-0188 §11 row 3)
+	//
+	// Returned when the bundle came from a registry whose public key
+	// isn't in ~/.claude/skill-trust-roots.yaml (or the key that signed
+	// is retired). UX: show registry key fingerprint; suggest
+	// `skillctl trust add`.
 	ExitRegistryNotTrusted = 12
-	// ExitGovernanceBelowMin — the bundle's current governance level
-	// is below trust-roots.yaml's `governance_minimum`.
+	// ExitGovernanceBelowMin (13) — "Skill is 🟡 but trust-roots
+	// requires 🟢." (SPEC-0188 §11 row 4)
+	//
+	// Returned when the bundle's current governance level is below
+	// trust-roots.yaml's `governance_minimum`. UX: show current
+	// attestations; suggest `skillctl install --allow-yellow` for an
+	// explicit (audited) override.
 	ExitGovernanceBelowMin = 13
-	// ExitDepsUnsatisfied — depends_on resolution failed (missing
-	// Python wheel, system tool, or a depended-on skill version).
+	// ExitDepsUnsatisfied (14) — "Missing Python pkg or version
+	// mismatch." (SPEC-0188 §11 row 5)
+	//
+	// Returned when depends_on resolution failed (missing Python wheel,
+	// system tool, or a depended-on skill version). UX: show resolution
+	// failure; suggest `pip install` or `--ignore-deps` for an explicit
+	// (audited) override.
 	ExitDepsUnsatisfied = 14
-	// ExitBlobMissing — the registry has metadata for a digest but
-	// the actual blob is unreachable.
+	// ExitBlobMissing (15) — registry advertised metadata for a digest
+	// but the actual blob is unreachable, or the bundle's status is no
+	// longer "admitted". (SPEC-0188 §11 — extension of the §11 table
+	// for the §7 step-7 status check; covers blob 404, meta 404, and
+	// status=revoked.)
+	//
+	// User remediation: refresh the registry view; if the bundle was
+	// revoked the operator must contact the publisher.
 	ExitBlobMissing = 15
-	// ExitTenantBlocked — at least one tenant-scoped governance attestation
-	// (SPEC-0188 §7 step 5.5, G-18 closure 2026-05-06) carries
-	// governance_level=red for the consumer's pinned tenant. The bundle is
-	// admitted globally but the tenant CISO has blocked it; the verifier
-	// fails closed.
+	// ExitTenantBlocked (16) — at least one tenant-scoped governance
+	// attestation (SPEC-0188 §7 step 5.5, G-18 closure 2026-05-06)
+	// carries governance_level=red for the consumer's pinned tenant.
+	//
+	// The bundle is admitted globally but the tenant CISO has blocked
+	// it; the verifier fails closed. UX: surface attestation_id +
+	// reviewer_id so the operator can trace the block back to the
+	// SPEC-0192 CISO console verdict.
 	ExitTenantBlocked = 16
 )
 

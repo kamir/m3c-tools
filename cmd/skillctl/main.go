@@ -42,10 +42,14 @@ func main() {
 		os.Exit(runAttest(os.Args[2:], os.Stdout, os.Stderr))
 	// === end SPEC-0188 S9-cli ===
 	// === SPEC-0188 S8: install/verify subcommands ===
+	//
+	// Both routed through runWithExit so the SPEC-0188 §11 numbered exit
+	// codes (10..16) surface verbatim to the parent process — see
+	// cmd/skillctl/exit.go for the single audit point.
 	case "install":
-		os.Exit(runInstall(os.Args[2:], os.Stdout, os.Stderr))
+		runWithExit(func() int { return runInstall(os.Args[2:], os.Stdout, os.Stderr) })
 	case "verify":
-		os.Exit(runVerify(os.Args[2:], os.Stdout, os.Stderr))
+		runWithExit(func() int { return runVerify(os.Args[2:], os.Stdout, os.Stderr) })
 	// === END SPEC-0188 S8 ===
 	// === SPEC-0189 S0a: scanner family dispatchers (imported from
 	// feature/thinking-engine-phase1; pre-SPEC-0189 behaviour preserved). ===
