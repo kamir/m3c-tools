@@ -26,7 +26,23 @@ var skipDirs = map[string]bool{
 }
 
 // Scanner walks filesystem paths to discover skill sources.
+//
+// Two modes:
+//   - SPEC-0189 tier-aware mode: populate Roots (via ResolveDefaults or
+//     explicit ScanRoot list). Discovery is anchored on SKILL.md and
+//     descriptors get Tier + SkillMDPath. Shadow resolution applied at
+//     the end (project > user > plugin).
+//   - Legacy SPEC-0115 mode (used by `skillctl scan --source projects`):
+//     populate Paths/Recursive/IncludeHome. Discovery uses the original
+//     glob-on-*.md path. No tier annotation, no shadow resolution.
+//
+// Both modes share the duplicate-detection + summary-stat tail.
 type Scanner struct {
+	// SPEC-0189 tier-aware fields.
+	Roots           []ScanRoot
+	IncludeShadowed bool
+
+	// Legacy SPEC-0115 fields.
 	Paths       []string
 	Recursive   bool
 	IncludeHome bool
@@ -36,6 +52,9 @@ type Scanner struct {
 }
 
 // Scan walks all configured paths and returns a complete Inventory.
+//
+// If Roots is non-empty, runs the SPEC-0189 tier-aware scan. Otherwise
+// falls back to the legacy SPEC-0115 paths/home-dir glob.
 func (s *Scanner) Scan() (*model.Inventory, error) {
 	s.visited = make(map[string]bool)
 
@@ -48,32 +67,46 @@ func (s *Scanner) Scan() (*model.Inventory, error) {
 		ByProject: make(map[string]int),
 	}
 
-	// Scan provided paths.
-	for _, p := range s.Paths {
-		abs, err := filepath.Abs(p)
-		if err != nil {
-			return nil, fmt.Errorf("resolving path %s: %w", p, err)
+	if len(s.Roots) > 0 {
+		// Tier-aware mode (SPEC-0189). Anchor on SKILL.md.
+		for _, r := range s.Roots {
+			abs, err := filepath.Abs(r.Path)
+			if err != nil {
+				return nil, fmt.Errorf("resolving root %s: %w", r.Path, err)
+			}
+			inv.ScanPaths = append(inv.ScanPaths, abs)
+			rooted := ScanRoot{Path: abs, Tier: r.Tier}
+			if err := s.scanTierRoot(rooted, inv); err != nil {
+				return nil, err
+			}
 		}
-		inv.ScanPaths = append(inv.ScanPaths, abs)
-		if err := s.scanDir(abs, inv); err != nil {
-			return nil, err
+		applyShadowing(inv, s.IncludeShadowed)
+	} else {
+		// Legacy SPEC-0115 mode — preserved for `--source projects`.
+		for _, p := range s.Paths {
+			abs, err := filepath.Abs(p)
+			if err != nil {
+				return nil, fmt.Errorf("resolving path %s: %w", p, err)
+			}
+			inv.ScanPaths = append(inv.ScanPaths, abs)
+			if err := s.scanDir(abs, inv); err != nil {
+				return nil, err
+			}
 		}
-	}
-
-	// Scan home directory if requested.
-	if s.IncludeHome {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			claudeHome := filepath.Join(home, ".claude")
-			inv.ScanPaths = append(inv.ScanPaths, claudeHome)
-			if err := s.scanHomeDir(claudeHome, inv); err != nil {
-				// Non-fatal: home dir may not have .claude
-				_ = err
+		if s.IncludeHome {
+			home, err := os.UserHomeDir()
+			if err == nil {
+				claudeHome := filepath.Join(home, ".claude")
+				inv.ScanPaths = append(inv.ScanPaths, claudeHome)
+				if err := s.scanHomeDir(claudeHome, inv); err != nil {
+					// Non-fatal: home dir may not have .claude
+					_ = err
+				}
 			}
 		}
 	}
 
-	// Run duplicate detection.
+	// Run duplicate detection (shared by both modes).
 	hasher.DetectDuplicates(inv.Skills)
 
 	// Compute summary stats.
