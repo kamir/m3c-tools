@@ -89,6 +89,17 @@ type VerifyOpts struct {
 	// future Python-wheel resolution.
 	IgnoreDeps bool
 
+	// Tenant is the resolved tenant scope for this verification (SPEC-0188
+	// §7 step 5.5, G-18 closure 2026-05-06). Empty means "untenanted /
+	// global" and step 5.5 is a no-op. The CLI resolves this from the
+	// `--tenant <id>` flag with fallback to TrustRoots.TenantScope from
+	// `~/.claude/skill-trust-roots.yaml`.
+	//
+	// When non-empty, the verifier scans BundleMeta.Attestations for any
+	// row with TenantScope == Tenant and Level == "red" and fails closed
+	// with ErrTenantBlocked.
+	Tenant string
+
 	// Logger receives one structured-log line per step when non-nil.
 	// `--verbose` in the CLI wires this to stderr; tests capture into a
 	// strings.Builder. Failure messages are returned as errors regardless.
@@ -174,6 +185,26 @@ func Verify(opts VerifyOpts) (*VerifyResult, error) {
 		return nil, err
 	}
 	logStep(opts.Logger, "registry_sig_ok", "key=%s", regKeyID)
+
+	// Step 5.5 — tenant-block check (SPEC-0188 §7 step 5.5, G-18 closure
+	// 2026-05-06). When a tenant scope is in effect, look for any tenant-
+	// scoped attestation with governance_level=red for this bundle. If
+	// present, fail closed with ErrTenantBlocked (exit 16). This is how
+	// SPEC-0192 CISO-console block verdicts propagate to the client
+	// verifier; the global chain may validate but the tenant CISO has
+	// withdrawn admission for THIS tenant.
+	//
+	// Order: AFTER registry signature verification (we don't want to
+	// surface tenant-block errors to a chain that didn't even pass the
+	// registry signature gate) and BEFORE the governance-minimum check
+	// (so a global yellow + tenant red still surfaces as tenant_blocked,
+	// which is the more actionable diagnostic for an operator).
+	if err := stepTenantBlockCheck(opts.BundleMeta, opts.Tenant); err != nil {
+		return nil, err
+	}
+	if opts.Tenant != "" {
+		logStep(opts.Logger, "tenant_block_ok", "tenant=%s", opts.Tenant)
+	}
 
 	// Step 5 — governance gate.
 	govLevel, err := stepCheckGovernance(opts.BundleMeta, opts.TrustRoot, opts.GovernanceMin, opts.AllowYellow)
@@ -424,6 +455,71 @@ func stepCheckGovernance(meta *registry.BundleMeta, root *TrustRoot, override st
 		return "", fmt.Errorf("verify: bundle governance %q below minimum %q: %w", level, min, ErrGovernanceBelowMin)
 	}
 	return level, nil
+}
+
+// stepTenantBlockCheck implements SPEC-0188 §7 step 5.5: when the consumer
+// is pinned to a tenant (via --tenant <id> or TrustRoots.TenantScope), scan
+// BundleMeta.Attestations for any active row whose tenant_scope matches the
+// consumer's tenant AND whose governance_level is "red". If found, fail
+// closed with ErrTenantBlocked (exit code 16).
+//
+// Behavior contract:
+//   - tenant == "" → no-op, returns nil. Untenanted installs never see this
+//     gate.
+//   - rows with empty tenant_scope are GLOBAL and ignored here; the global
+//     gate is stepCheckGovernance via CurrentGovernance.
+//   - rows with status=="revoked" are skipped (revocation supersedes the
+//     verdict).
+//   - rows with tenant_scope != tenant are ignored (that's another tenant's
+//     CISO's decision).
+//   - any matching row with level=="red" fails closed; the error message
+//     cites attestation_id, reviewer_id, attested_at so an operator can
+//     trace the block back to a specific verdict in the SPEC-0192 console.
+//
+// We surface the FIRST matching red row in the error message; if a tenant
+// has multiple red verdicts on the same bundle the first one is enough to
+// identify the policy lineage. The verifier short-circuits on the first
+// failure either way.
+func stepTenantBlockCheck(meta *registry.BundleMeta, tenant string) error {
+	tenant = strings.TrimSpace(tenant)
+	if tenant == "" {
+		// No tenant pinned — step 5.5 is a no-op per SPEC §7.
+		return nil
+	}
+	for _, att := range meta.Attestations {
+		if att.Status == "revoked" {
+			continue
+		}
+		// Trim both sides: registry-supplied JSON might include surrounding
+		// whitespace from a hand-edited document. The CLI flag is trimmed
+		// in install_cmds.go's resolution helper.
+		if strings.TrimSpace(att.TenantScope) != tenant {
+			continue
+		}
+		if strings.ToLower(strings.TrimSpace(att.Level)) != "red" {
+			// Tenant-scoped green / yellow attestations are advisory at
+			// this gate — they document approval, they don't block.
+			continue
+		}
+		return fmt.Errorf(
+			"verify: tenant %q is blocked by attestation %s (signed_by=%s, signed_at=%s): %w",
+			tenant,
+			nonEmpty(att.AttestationID, "<unknown>"),
+			nonEmpty(att.ReviewerID, "<unknown>"),
+			nonEmpty(att.AttestedAt, "<unknown>"),
+			ErrTenantBlocked,
+		)
+	}
+	return nil
+}
+
+// nonEmpty returns s when s != "", else fallback. Used to keep error
+// messages readable when a registry omits an optional attestation field.
+func nonEmpty(s, fallback string) string {
+	if s == "" {
+		return fallback
+	}
+	return s
 }
 
 // stepResolveDeps checks the manifest's `depends_on` field for obvious

@@ -46,6 +46,7 @@ func runInstall(args []string, stdout, stderr io.Writer) int {
 	governanceMin := fs.String("governance-min", "", "Override the trust-root's governance_minimum (green | yellow). Empty = use trust-root.")
 	allowYellow := fs.Bool("allow-yellow", false, "Lower the gate from green to yellow for this install (audited).")
 	ignoreDeps := fs.Bool("ignore-deps", false, "Skip depends_on resolution (audited).")
+	tenantFlag := fs.String("tenant", "", "Pin this install to a tenant scope (SPEC-0188 §7 step 5.5). Overrides trust-roots tenant_scope. Empty = use trust-roots value or run untenanted.")
 	timeout := fs.Duration("timeout", registry.DefaultTimeout, "HTTP timeout for registry calls.")
 	verboseFlag := fs.Bool("verbose", false, "Print structured per-step log lines to stderr.")
 	homeOverride := fs.String("home", "", "Override the install root (advanced; defaults to $HOME).")
@@ -70,6 +71,7 @@ func runInstall(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "  13  governance below minimum")
 		fmt.Fprintln(stderr, "  14  depends_on unsatisfied")
 		fmt.Fprintln(stderr, "  15  blob missing")
+		fmt.Fprintln(stderr, "  16  tenant blocked (CISO console verdict)")
 		fs.PrintDefaults()
 	}
 
@@ -92,7 +94,12 @@ func runInstall(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return exitGeneric
 	}
-	_ = tr // tr is the parent struct; we only need the matched root below
+
+	// Tenant resolution (SPEC-0188 §7 step 5.5, G-18 closure 2026-05-06):
+	// the CLI flag wins over the trust-roots `tenant_scope:` value. Empty
+	// after this resolution = untenanted; the verifier's step 5.5 is a
+	// no-op.
+	tenant := resolveTenant(*tenantFlag, tr)
 
 	// Build a registry HTTP client targeting the matched trust root.
 	httpClient := install.HTTPClientOf(*timeout)
@@ -116,6 +123,7 @@ func runInstall(args []string, stdout, stderr io.Writer) int {
 		GovernanceMin: *governanceMin,
 		AllowYellow:   *allowYellow,
 		IgnoreDeps:    *ignoreDeps,
+		Tenant:        tenant,
 		AuditPoster:   auditPoster,
 		Logger:        logger,
 		Now:           time.Now,
@@ -148,6 +156,7 @@ func runVerify(args []string, stdout, stderr io.Writer) int {
 	registryURL := fs.String("registry", "", "Registry base URL. Required only when trust-roots has multiple registries pinned.")
 	governanceMin := fs.String("governance-min", "", "Override the trust-root's governance_minimum (green | yellow).")
 	allowYellow := fs.Bool("allow-yellow", false, "Permit yellow result against a green-required trust root (does NOT re-audit; --allow-yellow is per-install).")
+	tenantFlag := fs.String("tenant", "", "Pin this verify to a tenant scope (SPEC-0188 §7 step 5.5). Overrides trust-roots tenant_scope.")
 	timeout := fs.Duration("timeout", registry.DefaultTimeout, "HTTP timeout for registry calls.")
 	verboseFlag := fs.Bool("verbose", false, "Print structured per-step log lines to stderr.")
 	homeOverride := fs.String("home", "", "Override the install root.")
@@ -182,7 +191,10 @@ func runVerify(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return exitGeneric
 	}
-	_ = tr
+
+	// Same precedence as runInstall: --tenant wins over trust-roots
+	// tenant_scope; empty = untenanted (step 5.5 no-op).
+	tenant := resolveTenant(*tenantFlag, tr)
 
 	httpClient := install.HTTPClientOf(*timeout)
 	c := registry.New(root.RegistryURL, httpClient)
@@ -199,6 +211,7 @@ func runVerify(args []string, stdout, stderr io.Writer) int {
 		HomeDir:       *homeOverride,
 		GovernanceMin: *governanceMin,
 		AllowYellow:   *allowYellow,
+		Tenant:        tenant,
 		Logger:        logger,
 		Ctx:           context.Background(),
 	})
@@ -265,4 +278,22 @@ func loadAndPickRoot(registryFlag string) (*verify.TrustRoots, *verify.TrustRoot
 		return tr, &tr.Roots[0], nil
 	}
 	return nil, nil, fmt.Errorf("trust roots file %s pins multiple registries; pass --registry <url> to disambiguate", tr.Path)
+}
+
+// resolveTenant implements the SPEC-0188 §7 step 5.5 precedence rule:
+// `--tenant <id>` (cliFlag) wins over the trust-roots `tenant_scope:`
+// value (G-18 closure, 2026-05-06). Both empty → empty result, which the
+// verifier treats as "untenanted" and skips the tenant-block check.
+//
+// Whitespace is trimmed on both sides so a stray space in the YAML or on
+// the command line doesn't surprise an operator.
+func resolveTenant(cliFlag string, tr *verify.TrustRoots) string {
+	cliFlag = strings.TrimSpace(cliFlag)
+	if cliFlag != "" {
+		return cliFlag
+	}
+	if tr == nil {
+		return ""
+	}
+	return strings.TrimSpace(tr.TenantScope)
 }
