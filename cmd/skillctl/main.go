@@ -47,6 +47,29 @@ func main() {
 	case "verify":
 		os.Exit(runVerify(os.Args[2:], os.Stdout, os.Stderr))
 	// === END SPEC-0188 S8 ===
+	// === SPEC-0189 S0a: scanner family dispatchers (imported from
+	// feature/thinking-engine-phase1; pre-SPEC-0189 behaviour preserved). ===
+	case "scan":
+		cmdScan(os.Args[2:])
+	case "report":
+		cmdReport(os.Args[2:])
+	case "diff":
+		cmdDiff(os.Args[2:])
+	case "seal":
+		cmdSeal(os.Args[2:])
+	case "import":
+		cmdImport(os.Args[2:])
+	case "audit":
+		cmdAudit(os.Args[2:])
+	case "review":
+		cmdReview(os.Args[2:])
+	case "browse":
+		cmdBrowse(os.Args[2:])
+	case "consolidate":
+		cmdConsolidate(os.Args[2:])
+	case "sync-usage":
+		cmdSyncUsage(os.Args[2:])
+	// === END SPEC-0189 S0a ===
 	case "help", "--help", "-h":
 		printUsage(os.Stdout)
 		os.Exit(0)
