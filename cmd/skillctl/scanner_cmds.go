@@ -29,14 +29,39 @@ import (
 )
 
 func cmdScan(args []string) {
-	var paths []string
-	recursive := false
-	includeHome := false
-	output := "json"
-	outFile := ""
+	// SPEC-0189 §4 flag set + SPEC-0115 legacy flags.
+	var (
+		paths           []string
+		sources         []string
+		recursive       = false
+		includeHome     = false
+		includeShadowed = false
+		withTrust       = false
+		verbose         = false
+		output          = ""
+		outFile         = ""
+	)
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
+		// SPEC-0189 flags.
+		case "--source":
+			if i+1 < len(args) {
+				i++
+				sources = append(sources, args[i])
+			}
+		case "--include-shadowed":
+			includeShadowed = true
+		case "--with-trust":
+			withTrust = true
+		case "--verbose":
+			verbose = true
+		case "--format":
+			if i+1 < len(args) {
+				i++
+				output = args[i]
+			}
+		// Legacy SPEC-0115 flags.
 		case "--path":
 			if i+1 < len(args) {
 				i++
@@ -57,7 +82,6 @@ func cmdScan(args []string) {
 				outFile = args[i]
 			}
 		default:
-			// Treat bare arguments as paths.
 			if args[i] != "" && args[i][0] != '-' {
 				paths = append(paths, args[i])
 			} else {
@@ -67,20 +91,48 @@ func cmdScan(args []string) {
 		}
 	}
 
-	// Default to current directory if no paths given.
-	if len(paths) == 0 {
-		cwd, err := os.Getwd()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error getting working directory: %v\n", err)
-			os.Exit(1)
-		}
-		paths = []string{cwd}
+	// SPEC-0189 §4: default --source claude when no flags supplied.
+	// Legacy SPEC-0115 paths (--path / cwd) is implicitly --source projects.
+	useTierAware := len(sources) > 0 && !containsString(sources, string(scanner.SourceProjects))
+	if len(sources) == 0 && len(paths) == 0 && !includeHome {
+		// True default invocation: scan Claude Code surfaces.
+		sources = []string{string(scanner.SourceClaude)}
+		useTierAware = true
 	}
 
-	sc := &scanner.Scanner{
-		Paths:       paths,
-		Recursive:   recursive,
-		IncludeHome: includeHome,
+	var sc *scanner.Scanner
+	if useTierAware {
+		// SPEC-0189 tier-aware mode.
+		var srcs []scanner.Source
+		for _, s := range sources {
+			srcs = append(srcs, scanner.Source(s))
+		}
+		roots := scanner.ResolveDefaults(srcs)
+		// Append explicit --path roots as TierProject.
+		for _, p := range paths {
+			abs, _ := filepath.Abs(p)
+			roots = append(roots, scanner.ScanRoot{Path: abs, Tier: scanner.TierProject})
+		}
+		sc = &scanner.Scanner{
+			Roots:           roots,
+			IncludeShadowed: includeShadowed,
+			WithTrust:       withTrust,
+		}
+	} else {
+		// Legacy SPEC-0115 mode.
+		if len(paths) == 0 {
+			cwd, err := os.Getwd()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error getting working directory: %v\n", err)
+				os.Exit(1)
+			}
+			paths = []string{cwd}
+		}
+		sc = &scanner.Scanner{
+			Paths:       paths,
+			Recursive:   recursive,
+			IncludeHome: includeHome,
+		}
 	}
 
 	inv, err := sc.Scan()
@@ -89,7 +141,15 @@ func cmdScan(args []string) {
 		os.Exit(1)
 	}
 
-	// Determine output writer.
+	// Determine output format default per SPEC-0189 §4: table on TTY, json on pipe.
+	if output == "" {
+		if isTerminal(os.Stdout) {
+			output = "table"
+		} else {
+			output = "json"
+		}
+	}
+
 	w := os.Stdout
 	if outFile != "" {
 		f, err := os.Create(outFile)
@@ -109,6 +169,16 @@ func cmdScan(args []string) {
 			fmt.Fprintf(os.Stderr, "Error encoding JSON: %v\n", err)
 			os.Exit(1)
 		}
+	case "table":
+		if err := renderScanTable(w, inv, withTrust); err != nil {
+			fmt.Fprintf(os.Stderr, "Error rendering table: %v\n", err)
+			os.Exit(1)
+		}
+	case "tsv":
+		if err := renderScanTSV(w, inv, withTrust); err != nil {
+			fmt.Fprintf(os.Stderr, "Error rendering TSV: %v\n", err)
+			os.Exit(1)
+		}
 	case "html":
 		if err := report.GenerateHTML(w, inv); err != nil {
 			fmt.Fprintf(os.Stderr, "Error generating HTML: %v\n", err)
@@ -120,15 +190,27 @@ func cmdScan(args []string) {
 			os.Exit(1)
 		}
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown output format: %s (use json, html, or md)\n", output)
+		fmt.Fprintf(os.Stderr, "Unknown output format: %s (use json, table, tsv, html, or md)\n", output)
 		os.Exit(1)
 	}
 
-	// Print summary to stderr when writing to file.
 	if outFile != "" {
 		fmt.Fprintf(os.Stderr, "Scanned %d skills across %d projects. Output written to %s\n",
 			inv.TotalCount, len(inv.ByProject), outFile)
 	}
+	if verbose {
+		fmt.Fprintf(os.Stderr, "Scan paths: %v\n", inv.ScanPaths)
+	}
+}
+
+// containsString returns true if s contains x.
+func containsString(s []string, x string) bool {
+	for _, v := range s {
+		if v == x {
+			return true
+		}
+	}
+	return false
 }
 
 // cmdReport generates a report from a previously saved scan JSON.
