@@ -13,7 +13,7 @@ package main
 //     `client_identity != admitted_by_identity`; the CLI surfaces this as
 //     exit code 19 (`identity_mismatch`).
 //   - G-23 symmetry: `--dry-run` produces an affected-list + a 5-min TTL
-//     signature token; `--confirm-reset --dry-run-token <sig>` actually
+//     signature token; `--confirm-reset --dry-run-reset-token <sig>` actually
 //     deletes. Both flags are required for the destructive path so a
 //     confused operator cannot reset by accident.
 //
@@ -79,17 +79,17 @@ func runAwarenessReset(args []string, stdout, stderr io.Writer) int {
 
 	registryURL := fs.String("registry", "", "Registry base URL.")
 	session := fs.String("session", "", "Session tag to reset (required). Only docs whose session_tag matches are affected.")
-	dryRun := fs.Bool("dry-run", false, "Preview affected docs and produce a 5-min token; no deletion.")
-	dryRunToken := fs.String("dry-run-token", "", "Token from a prior --dry-run; required to confirm the destructive call.")
-	confirmReset := fs.Bool("confirm-reset", false, "Required (alongside --dry-run-token) to actually DELETE.")
+	dryRun := fs.Bool("dry-run-reset", false, "Preview affected docs and produce a 5-min token; no deletion.")
+	dryRunToken := fs.String("dry-run-reset-token", "", "Token from a prior --dry-run-reset; required to confirm the destructive call.")
+	confirmReset := fs.Bool("confirm-reset", false, "Required (alongside --dry-run-reset-token) to actually DELETE.")
 	timeout := fs.Duration("timeout", registry.DefaultTimeout, "HTTP timeout.")
 
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: skillctl awareness reset --session TAG [--dry-run | --confirm-reset --dry-run-token <sig>]")
+		fmt.Fprintln(stderr, "Usage: skillctl awareness reset --session TAG [--dry-run-reset | --confirm-reset --dry-run-reset-token <sig>]")
 		fmt.Fprintln(stderr, "")
-		fmt.Fprintln(stderr, "Two-step destructive workflow (SPEC-0195 §7, G-23 symmetry):")
-		fmt.Fprintln(stderr, "  1. --dry-run          → list affected docs, print signature token (5-min TTL)")
-		fmt.Fprintln(stderr, "  2. --confirm-reset    → DELETE; requires --dry-run-token from step 1")
+		fmt.Fprintln(stderr, "Two-step destructive workflow (SPEC-0195 §4.1 / SPEC-0188 §11b, G-23 symmetry):")
+		fmt.Fprintln(stderr, "  1. --dry-run-reset       → list affected docs, print signature token (5-min TTL)")
+		fmt.Fprintln(stderr, "  2. --confirm-reset       → DELETE; requires --dry-run-reset-token from step 1")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "The reset is scoped to --session TAG and refuses to cross identities (the")
 		fmt.Fprintln(stderr, "registry returns 403 if client_identity != admitted_by_identity).")
@@ -114,15 +114,15 @@ func runAwarenessReset(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 	if !*dryRun && !*confirmReset {
-		fmt.Fprintln(stderr, "skillctl awareness reset: pass --dry-run to preview, then --confirm-reset --dry-run-token <sig> to delete.")
+		fmt.Fprintln(stderr, "skillctl awareness reset: pass --dry-run-reset to preview, then --confirm-reset --dry-run-reset-token <sig> to delete.")
 		return exitUsage
 	}
 	if *dryRun && *confirmReset {
-		fmt.Fprintln(stderr, "skillctl awareness reset: --dry-run and --confirm-reset are mutually exclusive.")
+		fmt.Fprintln(stderr, "skillctl awareness reset: --dry-run-reset and --confirm-reset are mutually exclusive.")
 		return exitUsage
 	}
 	if *confirmReset && *dryRunToken == "" {
-		fmt.Fprintln(stderr, "skillctl awareness reset: --confirm-reset requires --dry-run-token <sig> from a prior --dry-run.")
+		fmt.Fprintln(stderr, "skillctl awareness reset: --confirm-reset requires --dry-run-reset-token <sig> from a prior --dry-run-reset.")
 		return exitUsage
 	}
 	if *registryURL == "" {
@@ -213,7 +213,7 @@ func runAwarenessResetWithClient(opts awarenessResetOpts, stdout, stderr io.Writ
 		fmt.Fprintf(stdout, "issued_at: %s\n", dr.IssuedAt)
 		fmt.Fprintf(stdout, "expires_at: %s\n", dr.ExpiresAt)
 		fmt.Fprintln(stdout, "")
-		fmt.Fprintln(stdout, "Re-run with --confirm-reset --dry-run-token <token> within 5 min to delete.")
+		fmt.Fprintln(stdout, "Re-run with --confirm-reset --dry-run-reset-token <token> within 5 min to delete.")
 		return exitOK
 	}
 
@@ -226,10 +226,10 @@ func runAwarenessResetWithClient(opts awarenessResetOpts, stdout, stderr io.Writ
 	// "<issued_at_unix_seconds>.<hmac_b64url>" (Stream A's choice). We
 	// only need to parse the prefix for the staleness check.
 	if expired, err := isAwarenessResetTokenExpired(opts.dryRunToken, opts.now()); err != nil {
-		fmt.Fprintf(stderr, "skillctl awareness reset: dry-run-token: %v\n", err)
+		fmt.Fprintf(stderr, "skillctl awareness reset: dry-run-reset-token: %v\n", err)
 		return exitUsage
 	} else if expired {
-		fmt.Fprintln(stderr, "skillctl awareness reset: dry-run-token is older than 5 minutes; re-run --dry-run.")
+		fmt.Fprintln(stderr, "skillctl awareness reset: dry-run-reset-token is older than 5 minutes; re-run --dry-run-reset.")
 		return exitGeneric
 	}
 

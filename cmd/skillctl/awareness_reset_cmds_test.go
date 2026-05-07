@@ -25,7 +25,7 @@ import (
 )
 
 func TestAwarenessReset_RequiresConfirmReset(t *testing.T) {
-	// Goal: invoking `awareness reset` with neither --dry-run nor
+	// Goal: invoking `awareness reset` with neither --dry-run-reset nor
 	// --confirm-reset is a usage error (exit 2). Drives the flag-parser
 	// path, so this also exercises the precedence rules.
 	args := []string{
@@ -37,13 +37,13 @@ func TestAwarenessReset_RequiresConfirmReset(t *testing.T) {
 	if code != exitUsage {
 		t.Fatalf("exit = %d, want %d; stderr=%q", code, exitUsage, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "--dry-run") {
-		t.Errorf("stderr should mention --dry-run; got: %q", stderr.String())
+	if !strings.Contains(stderr.String(), "--dry-run-reset") {
+		t.Errorf("stderr should mention --dry-run-reset; got: %q", stderr.String())
 	}
 }
 
 func TestAwarenessReset_DryRunProducesToken(t *testing.T) {
-	// Goal: --dry-run hits GET ?dry_run=1, and the returned token + TTL
+	// Goal: --dry-run-reset hits GET ?dry_run=1, and the returned token + TTL
 	// land on stdout for the operator to inspect.
 	hits := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
