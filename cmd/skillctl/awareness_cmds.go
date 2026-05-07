@@ -42,6 +42,8 @@ func runAwareness(args []string, stdout, stderr io.Writer) int {
 		return runAwarenessSync(args[1:], stdout, stderr)
 	case "verify":
 		return runAwarenessVerify(args[1:], stdout, stderr)
+	case "reset":
+		return runAwarenessReset(args[1:], stdout, stderr)
 	case "help", "--help", "-h":
 		printAwarenessUsage(stdout)
 		return exitOK
@@ -58,6 +60,7 @@ func printAwarenessUsage(w io.Writer) {
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  sync     Admit local skills to a registry (SPEC-0195 §5.1).")
 	fmt.Fprintln(w, "  verify   Read back per-session admissions (SPEC-0195 §4).")
+	fmt.Fprintln(w, "  reset    Delete admit-from-scan docs scoped to a session_tag (G-23 two-step).")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Run any subcommand with --help for its flags.")
 }

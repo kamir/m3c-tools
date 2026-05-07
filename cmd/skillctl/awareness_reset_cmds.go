@@ -353,41 +353,6 @@ var _ = context.Background
 // "not yet implemented in this stream" message and exit 2 (usage). This
 // shape gives M1 a one-line edit to wire their commands in without
 // touching this file or main.go.
-func runAwareness(args []string, stdout, stderr io.Writer) int {
-	if len(args) < 1 {
-		printAwarenessUsage(stderr)
-		return exitUsage
-	}
-	switch args[0] {
-	case "reset":
-		return runAwarenessReset(args[1:], stdout, stderr)
-	case "sync", "verify":
-		// Stream M1 owns these; this branch will be replaced by their
-		// runner dispatch when their PR lands. Keeping a non-zero exit
-		// here so a CI run against the M2-only branch doesn't appear to
-		// silently succeed on an unimplemented command.
-		fmt.Fprintf(stderr, "skillctl awareness %s: not implemented in this build (Stream M1 work-in-progress)\n", args[0])
-		return exitUsage
-	case "help", "--help", "-h":
-		printAwarenessUsage(stdout)
-		return exitOK
-	default:
-		fmt.Fprintf(stderr, "skillctl awareness: unknown subcommand %q\n", args[0])
-		printAwarenessUsage(stderr)
-		return exitUsage
-	}
-}
-
-// printAwarenessUsage is the help text for `skillctl awareness`. Mirrors
-// the SPEC-0195 §4 CLI surface; M1 may extend with sync/verify-specific
-// notes when their commands land.
-func printAwarenessUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: skillctl awareness <subcommand> [flags]")
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Subcommands:")
-	fmt.Fprintln(w, "  sync     Push the local skill inventory to the registry. (Stream M1)")
-	fmt.Fprintln(w, "  verify   Diff registry awareness records against local scan. (Stream M1)")
-	fmt.Fprintln(w, "  reset    Delete admit-from-scan docs scoped to a session_tag.")
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Run any subcommand with --help for its flags.")
-}
+// (M1's `runAwareness` + `printAwarenessUsage` in awareness_cmds.go now
+// dispatches all three subcommands — sync, verify, reset. The M2 stub
+// versions that lived here were removed during the master merge.)
