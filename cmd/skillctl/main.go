@@ -41,6 +41,18 @@ func main() {
 	case "attest":
 		os.Exit(runAttest(os.Args[2:], os.Stdout, os.Stderr))
 	// === end SPEC-0188 S9-cli ===
+	// === SPEC-0188 §4.5 (S3.6 closure 2026-05-06): revoke subcommand ===
+	case "revoke":
+		os.Exit(runRevoke(os.Args[2:], os.Stdout, os.Stderr))
+	// === end SPEC-0188 §4.5 ===
+	// === SPEC-0189 §14 (S3.3 + S3.4 closure 2026-05-06): audit subcommand ===
+	case "audit":
+		os.Exit(runAudit(os.Args[2:], os.Stdout, os.Stderr))
+	// === end SPEC-0189 §14 ===
+	// === SPEC-0194 (S3.1 closure 2026-05-06): propose subcommand ===
+	case "propose":
+		os.Exit(runPropose(os.Args[2:], os.Stdout, os.Stderr))
+	// === end SPEC-0194 ===
 	// === SPEC-0188 S8: install/verify subcommands ===
 	//
 	// Both routed through runWithExit so the SPEC-0188 §11 numbered exit
@@ -63,8 +75,9 @@ func main() {
 		cmdSeal(os.Args[2:])
 	case "import":
 		cmdImport(os.Args[2:])
-	case "audit":
-		cmdAudit(os.Args[2:])
+	// `audit` is now SPEC-0189 §14 antivirus UX (S3.3, dispatched above);
+	// the legacy SPEC-0115 cmdAudit was a Phase-2 stub and has been
+	// superseded — see runAudit in audit_cmds.go.
 	case "review":
 		cmdReview(os.Args[2:])
 	case "browse":

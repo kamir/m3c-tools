@@ -117,6 +117,18 @@ const (
 	// standalone procedure (SKILLOR-WORK/s1) which is explicit about
 	// the broader destructive intent.
 	ExitIdentityMismatch = 19
+
+	// ExitDataSourceDenied (17) — `skillctl install` refused because at
+	// least one of the bundle's data_dependencies[].id is in the
+	// `denied_skills[]` list of its `_data_sources` registry record for
+	// the consumer's pinned tenant. SPEC-0196 §10 AC#5 (S5.3 closure
+	// 2026-05-07).
+	//
+	// The CISO console (SPEC-0192 §5.2) writes the deny via
+	// POST /api/skills/data-sources/<id>/authorize ; the verifier reads
+	// it on every install. Distinct from ExitTenantBlocked (16, whole
+	// bundle blocked) — 17 is per-data-source granularity.
+	ExitDataSourceDenied = 17
 )
 
 // Sentinel errors so callers can `errors.Is(err, verify.ErrDigestMismatch)`
@@ -180,6 +192,16 @@ var (
 	// registries; use the standalone broader-destructive procedure if
 	// you really mean it.
 	ErrIdentityMismatch = errors.New("identity mismatch on awareness reset")
+
+	// ErrDataSourceDenied — at least one declared data_dependency was
+	// denied for this skill in the consumer's pinned tenant. Exit code
+	// 17. SPEC-0196 §10 AC#5 (S5.3 closure 2026-05-07). Wrap with the
+	// offending `ds:...` id so the operator can correlate with the
+	// CISO console chip:
+	//
+	//   fmt.Errorf("data_source %s denied for this tenant: %w",
+	//       dsID, verify.ErrDataSourceDenied)
+	ErrDataSourceDenied = errors.New("data_source denied for this tenant")
 )
 
 // ExitCode maps a verifier error to its numeric process exit code.
@@ -225,6 +247,8 @@ func ExitCode(err error) int {
 		return ExitIntentInconsistent
 	case errors.Is(err, ErrIdentityMismatch):
 		return ExitIdentityMismatch
+	case errors.Is(err, ErrDataSourceDenied):
+		return ExitDataSourceDenied
 	default:
 		return 1
 	}

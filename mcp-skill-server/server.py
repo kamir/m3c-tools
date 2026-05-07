@@ -16,6 +16,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import urllib.parse
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone
@@ -1043,6 +1044,333 @@ async def skill_attest(
 
 
 # === end SPEC-0188 S11-mcp ===
+
+
+# === SPEC-0122 v1.2 (S6.3 closure 2026-05-07): MCP coverage for every CLI ===
+#
+# Five new tools wrap the CLI surfaces shipped in S2/S3/S5:
+#   skill_awareness_sync     — SPEC-0195 awareness sync
+#   skill_audit              — SPEC-0189 §14 audit antivirus mode
+#   skill_propose            — SPEC-0194 propose + 10-check gate
+#   skill_revoke             — SPEC-0188 §4.5 bundle revocation
+#   skill_data_source_query  — SPEC-0196 §4.2 chip state lookup
+#
+# All five follow the existing pattern: validate args → exec skillctl
+# (or REST GET) → classify by exit code → return structured dict.
+
+
+@mcp.tool()
+async def skill_awareness_sync(
+    source: str = "claude",
+    registry: str = "",
+    default_attest: str = "none",
+    default_intent: str = "",
+    require_intent: bool = False,
+    dry_run: bool = True,
+    confirm: bool = False,
+    inventory: str = "",
+    timeout: int = 180,
+) -> dict:
+    """Run `skillctl awareness sync` per SPEC-0195. Default is dry-run; pass
+    confirm=true to actually POST.
+
+    Returns a structured outcome from the JSON-shape stderr lines the CLI
+    emits (one envelope per skill in dry-run, one admit summary in confirm).
+    """
+    if source not in {"claude", "user", "plugins", "all"}:
+        return {"ok": False, "exit_code": 2, "error_class": "validation_error",
+                "stderr": f"source must be claude|user|plugins|all; got {source!r}",
+                "remediation": "Pass a known --source value."}
+    if default_attest not in {"none", "green", "yellow"}:
+        return {"ok": False, "exit_code": 2, "error_class": "validation_error",
+                "stderr": "default_attest must be none|green|yellow",
+                "remediation": "Use 'green', 'yellow', or 'none'."}
+
+    argv: list[str] = ["awareness", "sync", "--source", source]
+    if registry:
+        argv += ["--registry", registry]
+    if default_attest != "none":
+        argv += ["--default-attest", default_attest]
+    if default_intent:
+        argv += ["--default-intent", default_intent]
+    if require_intent:
+        argv.append("--require-intent")
+    if dry_run:
+        argv.append("--dry-run")
+    if confirm:
+        argv.append("--confirm")
+    if inventory:
+        argv += ["--inventory", inventory]
+
+    skillctl, bin_err = _resolve_skillctl_bin()
+    if bin_err:
+        return {"ok": False, "exit_code": -1, "error_class": "skillctl_not_found",
+                "stderr": bin_err,
+                "remediation": "Install / build skillctl, or set SKILLCTL_BIN."}
+
+    result = _run_skillctl_blocking([skillctl] + argv, timeout=timeout)
+    if result["error"]:
+        return {"ok": False, "exit_code": result["exit_code"],
+                "error_class": "exec_error", "stderr": result["error"],
+                "remediation": "Check server log; skillctl did not run to completion."}
+    if result["exit_code"] != 0:
+        return _classify_failure(result["exit_code"], result["stderr"])
+
+    return {
+        "ok": True,
+        "exit_code": 0,
+        "stdout": result["stdout"],
+        "stderr": result["stderr"],
+        "mode": "dry-run" if dry_run else "confirm",
+    }
+
+
+@mcp.tool()
+async def skill_audit(
+    source: str = "claude",
+    minimum_governance: str = "",
+    cleanup: bool = False,
+    dry_run_cleanup: bool = False,
+    timeout: int = 120,
+) -> dict:
+    """Run `skillctl audit` per SPEC-0189 §14 (antivirus UX).
+
+    Default mode: read-only audit; returns the verdict counts and
+    exit code (0 = clean, 2 = unverified/below_min, 3 = broken).
+
+    Cleanup mode requires either dry_run_cleanup=true (Step 1: produces
+    a token; no deletion) — confirming the deletion via MCP is NOT
+    supported (the second step requires a live `--dry-run-cleanup-token`
+    that only the operator's terminal session has).
+    """
+    if source not in {"claude", "user", "plugins", "all"}:
+        return {"ok": False, "exit_code": 2, "error_class": "validation_error",
+                "stderr": f"source must be claude|user|plugins|all",
+                "remediation": "Use a known --source value."}
+    if minimum_governance and minimum_governance not in _VALID_LEVELS:
+        return {"ok": False, "exit_code": 2, "error_class": "validation_error",
+                "stderr": f"minimum_governance must be one of {sorted(_VALID_LEVELS)}",
+                "remediation": "Use 'green', 'yellow', or 'red'."}
+
+    argv: list[str] = ["audit", "--source", source, "--format", "json"]
+    if minimum_governance:
+        argv += ["--minimum-governance", minimum_governance]
+    if cleanup:
+        argv.append("--cleanup")
+        if dry_run_cleanup:
+            argv.append("--dry-run-cleanup")
+        else:
+            return {"ok": False, "exit_code": 2,
+                    "error_class": "validation_error",
+                    "stderr": "MCP wrapper supports cleanup only with dry_run_cleanup=true",
+                    "remediation": "Run --confirm-delete --dry-run-cleanup-token interactively from a terminal."}
+
+    skillctl, bin_err = _resolve_skillctl_bin()
+    if bin_err:
+        return {"ok": False, "exit_code": -1, "error_class": "skillctl_not_found",
+                "stderr": bin_err,
+                "remediation": "Install / build skillctl, or set SKILLCTL_BIN."}
+
+    result = _run_skillctl_blocking([skillctl] + argv, timeout=timeout)
+    if result["error"]:
+        return {"ok": False, "exit_code": result["exit_code"],
+                "error_class": "exec_error", "stderr": result["error"],
+                "remediation": "Check the server log."}
+    # exit codes 0/2/3 are all "ran successfully, here's the verdict"
+    parsed: dict = {}
+    try:
+        parsed = json.loads(result["stdout"]) if result["stdout"] else {}
+    except json.JSONDecodeError:
+        pass
+    return {
+        "ok": result["exit_code"] in (0, 2, 3),
+        "exit_code": result["exit_code"],
+        "verdict": (
+            "clean" if result["exit_code"] == 0
+            else ("flagged" if result["exit_code"] == 2
+                  else ("broken" if result["exit_code"] == 3 else "error"))
+        ),
+        "report": parsed,
+        "stderr": result["stderr"][:2000],
+    }
+
+
+@mcp.tool()
+async def skill_propose(
+    skill_name: str,
+    source: str = "",
+    intent: str = "",
+    rationale: str = "",
+    skip_smoke: bool = False,
+    dry_run: bool = True,
+    registry: str = "",
+    timeout: int = 60,
+) -> dict:
+    """Run `skillctl propose <skill_name>` per SPEC-0194 (10-check gate).
+
+    Default dry_run=true so the trainer sees the gate report without a
+    proposal record being created. Set dry_run=false to register a
+    proposal in `_skill_proposals` (state=pending).
+    """
+    err = _validate_safe_token(skill_name, "skill_name")
+    if err:
+        return {"ok": False, "exit_code": 2, "error_class": "validation_error",
+                "stderr": err, "remediation": "Pass a clean skill name."}
+    if intent and intent not in _VALID_LEVELS:
+        return {"ok": False, "exit_code": 2, "error_class": "validation_error",
+                "stderr": f"intent must be one of {sorted(_VALID_LEVELS)}",
+                "remediation": "Use 'green', 'yellow', or 'red'."}
+
+    argv: list[str] = ["propose", skill_name]
+    if source:
+        argv += ["--source", source]
+    if intent:
+        argv += ["--intent", intent]
+    if rationale:
+        argv += ["--rationale", rationale]
+    if skip_smoke:
+        argv.append("--skip-smoke")
+    if dry_run:
+        argv.append("--dry-run")
+    if registry:
+        argv += ["--registry", registry]
+
+    skillctl, bin_err = _resolve_skillctl_bin()
+    if bin_err:
+        return {"ok": False, "exit_code": -1, "error_class": "skillctl_not_found",
+                "stderr": bin_err, "remediation": "Install / build skillctl."}
+    result = _run_skillctl_blocking([skillctl] + argv, timeout=timeout)
+    if result["error"]:
+        return {"ok": False, "exit_code": result["exit_code"],
+                "error_class": "exec_error", "stderr": result["error"],
+                "remediation": "Check server log."}
+    return {
+        "ok": result["exit_code"] == 0,
+        "exit_code": result["exit_code"],
+        "stdout": result["stdout"],
+        "stderr": result["stderr"][:2000],
+        "mode": "dry-run" if dry_run else "register-proposal",
+    }
+
+
+@mcp.tool()
+async def skill_revoke(
+    digest: str,
+    reason: str,
+    role: str = "original_author",
+    actor_identity: str = "",
+    registry: str = "",
+    timeout: int = 60,
+) -> dict:
+    """Run `skillctl revoke <digest>` per SPEC-0188 §4.5.
+
+    Three actor roles per S3.6 Q1=A:
+      - original_author (default): signs with ~/.claude/skillctl-keys/author.key
+      - governance_reviewer: requires actor_identity
+      - registry_operator: unsigned; HTTP-layer admin auth at the registry
+    """
+    if not digest or not digest.startswith("sha256:"):
+        return {"ok": False, "exit_code": 2, "error_class": "validation_error",
+                "stderr": "digest must be 'sha256:<64 hex>'",
+                "remediation": "Pass a canonical bundle digest."}
+    if reason not in {"key_compromise", "vulnerability", "governance_retraction",
+                      "author_request", "duplicate"}:
+        return {"ok": False, "exit_code": 2, "error_class": "validation_error",
+                "stderr": "invalid reason",
+                "remediation": "Use a SPEC-0188 §4.5 reason enum value."}
+    if role not in {"original_author", "governance_reviewer", "registry_operator"}:
+        return {"ok": False, "exit_code": 2, "error_class": "validation_error",
+                "stderr": "invalid role",
+                "remediation": "Use original_author | governance_reviewer | registry_operator."}
+
+    argv: list[str] = ["revoke", digest, "--reason", reason, "--role", role]
+    if actor_identity:
+        argv += ["--actor-identity", actor_identity]
+    if registry:
+        argv += ["--registry", registry]
+
+    skillctl, bin_err = _resolve_skillctl_bin()
+    if bin_err:
+        return {"ok": False, "exit_code": -1, "error_class": "skillctl_not_found",
+                "stderr": bin_err, "remediation": "Install / build skillctl."}
+    result = _run_skillctl_blocking([skillctl] + argv, timeout=timeout)
+    if result["error"]:
+        return {"ok": False, "exit_code": result["exit_code"],
+                "error_class": "exec_error", "stderr": result["error"],
+                "remediation": "Check server log."}
+    if result["exit_code"] not in (0, 15):
+        return _classify_failure(result["exit_code"], result["stderr"])
+    return {
+        "ok": result["exit_code"] == 0,
+        "exit_code": result["exit_code"],
+        "stdout": result["stdout"],
+        "stderr": result["stderr"][:1000],
+    }
+
+
+@mcp.tool()
+async def skill_data_source_query(
+    data_source_id: str,
+    bundle_digest: str = "",
+    registry_url: str = "",
+    timeout: int = 30,
+) -> dict:
+    """Query `_data_sources` for a chip state per SPEC-0196 §4.2.
+
+    Returns the DataSource doc plus, when bundle_digest is set, the
+    chip state (authorized | denied | pending | unknown) for that
+    (skill, data_source) pair.
+    """
+    if not data_source_id or not data_source_id.startswith("ds:"):
+        return {"ok": False, "exit_code": 2, "error_class": "validation_error",
+                "stderr": "data_source_id must start with 'ds:'",
+                "remediation": "Pass a canonical ds:... id."}
+
+    base = (registry_url or API_URL).rstrip("/")
+    # ds:... ids contain ':' and '/' — both URL-safe in path segments per
+    # RFC 3986 §3.3, but we still pass via path-component-encode to be safe
+    # against future schemes that introduce reserved characters.
+    encoded_id = urllib.parse.quote(data_source_id, safe=":/.{}")
+    url = f"{base}/api/skills/data-sources/{encoded_id}"
+    headers = {"Accept": "application/json"}
+    if API_KEY:
+        headers["X-API-KEY"] = API_KEY
+        headers["X-User-ID"] = os.environ.get("M3C_USER_ID", "")
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            doc = json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return {"ok": False, "exit_code": 2, "error_class": "not_found",
+                    "stderr": f"data_source not registered: {data_source_id}",
+                    "remediation": "Register it via POST /api/skills/data-sources (admin)."}
+        return {"ok": False, "exit_code": 1, "error_class": "http_error",
+                "stderr": f"HTTP {e.code} {e.reason}",
+                "remediation": "Check registry URL + API key."}
+    except Exception as exc:
+        return {"ok": False, "exit_code": 1, "error_class": "network",
+                "stderr": str(exc), "remediation": "Check connectivity."}
+
+    state = "n/a"
+    if bundle_digest:
+        if bundle_digest in (doc.get("authorized_skills") or []):
+            state = "authorized"
+        elif bundle_digest in (doc.get("denied_skills") or []):
+            state = "denied"
+        else:
+            state = "pending"
+
+    return {
+        "ok": True,
+        "exit_code": 0,
+        "data_source": doc,
+        "chip_state": state,
+        "bundle_digest": bundle_digest or None,
+    }
+
+
+# === end SPEC-0122 v1.2 (S6.3) ===
 
 
 # ── Entry point ────────────────────────────────────────────────────────
