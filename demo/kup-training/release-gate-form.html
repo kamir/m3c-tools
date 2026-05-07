@@ -216,7 +216,7 @@
   <div class="stat"><span class="dot yellow"></span> <span class="count" data-stat="yellow">0</span> <span class="label">yellow</span></div>
   <div class="stat"><span class="dot red"></span>    <span class="count" data-stat="red">0</span>    <span class="label">red</span></div>
   <div class="stat"><span class="dot na"></span>     <span class="count" data-stat="na">0</span>     <span class="label">n/a</span></div>
-  <div class="stat"><span class="dot empty"></span>  <span class="count" data-stat="empty">12</span> <span class="label">unanswered</span></div>
+  <div class="stat"><span class="dot empty"></span>  <span class="count" data-stat="empty">14</span> <span class="label">unanswered</span></div>
 </div>
 
 <div id="steps-container"></div>
@@ -395,6 +395,24 @@ const STEPS = [
       "bash artifacts/release/gh-release-create.sh"
     ],
     expected: "10 files in artifacts/release/. SHA256SUMS verified. install.sh works as `curl ... | bash` (auto-detects OS/arch, verifies checksum)."
+  },
+  {
+    id: "G3", title: "Gate 3 — Skill transfer Mirko → Eric via aims", category: "release-gate", isGate: true,
+    intent: "End-to-end synthesis verdict: did the chain (steps 01–05) deliver a usable skill from author to consumer through the aims registry path? This is the integration verdict on top of the per-step pass/fail.",
+    commands: [
+      "# Synthesizes results from steps 01–05 (no separate script).",
+      "# Pass criterion: each of 01–05 is GREEN AND artifacts/eric-home/output/hello.txt exists with the canonical greeting."
+    ],
+    expected: "Chain proof completed end-to-end. Eric ran a skill that Mirko authored, signed, and (online or offline) delivered through the trust + governance pipeline. README §Release-gate G3 contractual output."
+  },
+  {
+    id: "G4", title: "Gate 4 — Valid works AND invalid fails", category: "release-gate", isGate: true,
+    intent: "Synthesis verdict on the security half: the chain accepts a valid bundle (step 05) AND refuses each of the four invalid scenarios (steps 06/07/08/09). Either half failing breaks the contractual security claim.",
+    commands: [
+      "# Synthesizes results from steps 05 (valid) + 06/07/08/09 (invalid).",
+      "# Pass criterion: 05 is GREEN AND each of 06/07/08/09 is GREEN (verifier exited non-zero as expected — failing safely is the success state)."
+    ],
+    expected: "Valid path produces hello.txt. Each invalid path is refused with the expected non-zero exit (signature_invalid / wrong_key / missing_sig / install_modified). README §Release-gate G4 contractual output."
   }
 ];
 
