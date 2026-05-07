@@ -159,6 +159,43 @@ type TrustRoots struct {
 	// registry it talks to.
 	TenantScope string `yaml:"tenant_scope,omitempty"`
 
+	// DefaultRegistry, if non-empty, names the registry URL that
+	// commands which take an optional `--registry` flag (e.g.
+	// `skillctl awareness sync`) fall back to when neither the flag
+	// nor `$M3C_REGISTRY_URL` is set. SPEC-0195 §10 D2 / §12 question 3
+	// closure, 2026-05-06: pin the default registry next to the trust
+	// keys it's already pinning.
+	//
+	// Resolution precedence (consumer-side):
+	//
+	//	1. explicit --registry flag
+	//	2. trust-roots `default_registry`
+	//	3. $M3C_REGISTRY_URL
+	//	4. error
+	//
+	// An empty value means "no default" — callers must require the flag.
+	DefaultRegistry string `yaml:"default_registry,omitempty"`
+
+	// Environment, if non-empty, names the deployment environment of
+	// the registry pinned by `default_registry` (or the only registry,
+	// in single-pin home-lab setups). SPEC-0195 §6.1 (G-21 closure
+	// 2026-05-06) defines the canonical values:
+	//
+	//	prod  — production registry; refuses dev-seed identities.
+	//	dev   — development registry; permissive.
+	//	local — loopback / home-lab registry; permissive.
+	//	stage — pre-prod; permissive but distinct from `dev`.
+	//
+	// The client uses this for the §6.1 short-circuit: if Environment
+	// is "prod" and the envelope's client_identity is the SKILLCTL_DEV_SEED
+	// synthetic identity, the request is refused before any HTTP call.
+	// The registry remains the authoritative gate (server-side check is
+	// still enforced); this is just a fast-fail for the obvious case.
+	//
+	// Spelled with a leading underscore in the YAML to mark it as a
+	// metadata / tooling field rather than a trust-policy knob.
+	Environment string `yaml:"_environment,omitempty"`
+
 	// Path is the resolved absolute file path used by Load (and by
 	// Save() on round-trip). Not serialized to YAML.
 	Path string `yaml:"-"`

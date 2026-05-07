@@ -74,6 +74,10 @@ func main() {
 	case "sync-usage":
 		cmdSyncUsage(os.Args[2:])
 	// === END SPEC-0189 S0a ===
+	// === SPEC-0195 / Sprint 2 / Stream M1: awareness subcommand ===
+	case "awareness":
+		runWithExit(func() int { return runAwareness(os.Args[2:], os.Stdout, os.Stderr) })
+	// === END SPEC-0195 ===
 	case "help", "--help", "-h":
 		printUsage(os.Stdout)
 		os.Exit(0)
@@ -99,6 +103,10 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "Commands (Stream S8 / SPEC-0188 Phase 4):")
 	fmt.Fprintln(w, "  install      Pull, verify, and install a signed skill bundle.")
 	fmt.Fprintln(w, "  verify       Re-run the trust-chain check on an installed skill.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Commands (SPEC-0195 / awareness bridge):")
+	fmt.Fprintln(w, "  awareness sync     Admit local skills to a registry.")
+	fmt.Fprintln(w, "  awareness verify   Read back per-session admissions.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Run any command with --help for its flags.")
 }
