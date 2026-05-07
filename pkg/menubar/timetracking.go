@@ -54,17 +54,37 @@ var (
 	ttProjects    []TimeTrackingProject
 	ttSummary     map[string]time.Duration
 	ttLastRefresh time.Time
+	// ttError carries a user-facing diagnostic when project loading fails
+	// (e.g. "ER1 key invalid (401) — open Settings"). Empty string means
+	// no error. BUG-0124 Layer 3 — distinguishes auth-failure from no-data.
+	ttError string
 )
 
 // SetTimeTrackingProjects updates the cached project list for menu rendering.
+// Calling this with a non-empty list implicitly clears any prior error.
 func SetTimeTrackingProjects(projects []TimeTrackingProject) {
 	ttProjects = projects
 	ttLastRefresh = time.Now()
+	if len(projects) > 0 {
+		ttError = ""
+	}
 }
 
 // SetTimeTrackingSummary updates the cached today summary for menu rendering.
 func SetTimeTrackingSummary(summary map[string]time.Duration) {
 	ttSummary = summary
+}
+
+// SetTimeTrackingError sets a user-facing diagnostic to surface in the
+// Projects submenu when project loading fails. Pass "" to clear.
+// BUG-0124 Layer 3.
+func SetTimeTrackingError(msg string) {
+	ttError = msg
+}
+
+// GetTimeTrackingError returns the current diagnostic (test helper).
+func GetTimeTrackingError() string {
+	return ttError
 }
 
 // buildProjectsMenu constructs the "Projects" submenu for time tracking.
@@ -93,9 +113,15 @@ func (a *App) buildProjectsMenu() menuet.MenuItem {
 			var items []menuet.MenuItem
 
 			if len(ttProjects) == 0 {
-				items = append(items, menuet.MenuItem{Text: "No projects loaded"})
-				if ttLastRefresh.IsZero() {
-					items = append(items, menuet.MenuItem{Text: "Waiting for project list..."})
+				// BUG-0124 Layer 3: distinguish auth-failure from no-data.
+				switch {
+				case ttError != "":
+					items = append(items, menuet.MenuItem{Text: ttError})
+					items = append(items, menuet.MenuItem{Text: "See ~/.m3c-tools/m3c-tools.log for details"})
+				case ttLastRefresh.IsZero():
+					items = append(items, menuet.MenuItem{Text: "Loading projects..."})
+				default:
+					items = append(items, menuet.MenuItem{Text: "No projects in this account"})
 				}
 				return items
 			}

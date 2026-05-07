@@ -2531,13 +2531,18 @@ func cmdMenubar(args []string) {
 
 			// Health check: validate API key before starting background services.
 			if err := plmClient.HealthCheck(); err != nil {
-				log.Printf("[healthcheck] ER1 API key check FAILED: %v", err)
+				log.Printf("[healthcheck] PLM auth check FAILED: %v", err)
 				log.Printf("[healthcheck] PLM sync and time tracking will be disabled until key is fixed")
+				// BUG-0124 Layer 3: surface a categorized diagnostic in the
+				// Projects submenu so the user sees the cause, not just an
+				// empty list.
+				menubar.SetTimeTrackingError(classifyPLMHealthCheckError(err))
 				if app != nil {
 					app.SetStatus(menubar.StatusError)
 				}
 			} else {
 				log.Printf("[healthcheck] ER1 API key OK")
+				menubar.SetTimeTrackingError("") // clear any prior error
 				ttSyncer = timetracking.NewSyncer(ttStore, plmClient, 30*time.Second)
 				ttSyncer.Start()
 				log.Printf("[timetracking] syncer started (interval=30s)")
@@ -2785,6 +2790,39 @@ func cmdMenubar(args []string) {
 
 	log.Printf("Launching menu bar app (title=%q, icon=%q, log=%q)", cfg.Title, cfg.IconPath, cfg.LogPath)
 	app.Run()
+}
+
+// classifyPLMHealthCheckError converts a PLM HealthCheck error into a short,
+// user-facing diagnostic to surface in the menubar Projects submenu.
+// BUG-0124 Layer 3: distinguishes auth-failure / network / generic errors so
+// the user is not left staring at "No projects loaded" while the log says 401.
+//
+// Match strings come from pkg/timetracking/plmclient.go HealthCheck() — keep
+// in sync if those error formats change.
+func classifyPLMHealthCheckError(err error) string {
+	if err == nil {
+		return ""
+	}
+	s := err.Error()
+	switch {
+	case strings.Contains(s, "HTTP 401"):
+		return "ER1 key invalid (401) — open Settings to update"
+	case strings.Contains(s, "HTTP 403"):
+		return "ER1 key rejected (403) — check permissions"
+	case strings.Contains(s, "no such host"),
+		strings.Contains(s, "connection refused"),
+		strings.Contains(s, "network is unreachable"):
+		return "Server unreachable — check network"
+	case strings.Contains(s, "timeout"),
+		strings.Contains(s, "deadline exceeded"),
+		strings.Contains(s, "i/o timeout"):
+		return "Server timeout — try again"
+	case strings.Contains(s, "x509"),
+		strings.Contains(s, "certificate"):
+		return "TLS certificate error — check ER1_VERIFY_SSL"
+	default:
+		return "PLM auth check failed — see log"
+	}
 }
 
 // startTimeTrackingProjectRefresher fetches the PLM project list periodically
