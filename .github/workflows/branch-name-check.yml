@@ -1,0 +1,48 @@
+name: Branch name check
+
+# Enforces the branch-naming convention from README §"Branch & worktree workflow".
+# Runs on PR open/reopen/edit; fails the check if the head ref doesn't match the regex.
+# Stage 3 deliverable from incident 2026-05-07 (m3c-tools master-drift).
+
+on:
+  pull_request:
+    types: [opened, reopened, edited, synchronize]
+
+jobs:
+  check-branch-name:
+    name: Validate branch name
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check head ref matches convention
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          # Allowed prefixes — keep in sync with README.md and Makefile.
+          # Any addition here must come with a README update in the same PR.
+          regex='^(feat|feature|fix|chore|docs|test|refactor|spec-[0-9]+|s[0-9]+-m[0-9]+|r-[0-9]+|archive|rescue)\/[A-Za-z0-9._-]+$'
+          if [[ "$HEAD_REF" =~ $regex ]]; then
+            echo "✓ branch name '$HEAD_REF' matches convention"
+            exit 0
+          fi
+          cat <<EOF >&2
+          ✗ branch name '$HEAD_REF' does not match convention
+
+          Required pattern: $regex
+
+          Examples that pass:
+            feat/spec-0188-bundle-pack
+            fix/bug-0124-time-tracking-auth
+            s2-m1/awareness-sync
+            r-01/tenant-aware-verifier
+            chore/branch-hygiene-stage3
+            docs/updated-readme-clarification
+
+          Rename your branch:
+            git branch -m <new-name>
+            git push origin :<old-name> && git push -u origin <new-name>
+            (then update the PR head ref via the GitHub UI or `gh pr edit`)
+
+          Reasoning + full convention: README.md §"Branch & worktree workflow".
+          EOF
+          exit 1

@@ -1,0 +1,103 @@
+name: Archive merged branches
+
+# Weekly cleanup: any branch (other than reserved ones) whose linked PR is
+# merged gets:
+#   1. an immutable tag `archive/<branch>` pointing at the branch tip
+#   2. the branch deleted from origin
+# Local checkouts can be cleaned up afterwards with `git fetch --prune` plus
+# `git branch --merged origin/master | xargs git branch -D`.
+#
+# Stage 3 deliverable from incident 2026-05-07 (m3c-tools master-drift).
+# Runs Sundays 04:00 UTC; manual run via workflow_dispatch.
+
+on:
+  schedule:
+    - cron: "0 4 * * 0"   # Sunday 04:00 UTC
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print actions without executing (true/false)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write   # to push tags + delete branches
+  pull-requests: read
+
+jobs:
+  archive:
+    name: Archive merged branches
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history needed to tag any commit
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Find merged branches
+        id: scan
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        run: |
+          set -euo pipefail
+          # Reserved refs that are NEVER deleted, even if a PR mentions them.
+          reserved='^(master|main|gh-pages|pre-release-.*|archive/.*|HEAD)$'
+
+          to_archive=()
+          # All remote branches except reserved ones
+          while read -r branch; do
+            branch="${branch#origin/}"
+            [ -z "$branch" ] && continue
+            if [[ "$branch" =~ $reserved ]]; then
+              continue
+            fi
+            # Find the most recent PR for this branch (any state)
+            pr_state=$(gh pr list --head "$branch" --state all --json state \
+                       --jq '.[0].state // ""' 2>/dev/null || echo "")
+            if [ "$pr_state" = "MERGED" ]; then
+              to_archive+=("$branch")
+            fi
+          done < <(git for-each-ref --format='%(refname:short)' refs/remotes/origin/ \
+                   | grep -v '^origin/HEAD$')
+
+          echo "Found ${#to_archive[@]} branch(es) to archive:"
+          printf '  - %s\n' "${to_archive[@]}"
+
+          if [ "${#to_archive[@]}" -eq 0 ]; then
+            echo "Nothing to do."
+            exit 0
+          fi
+
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "DRY RUN — no tags pushed, no branches deleted."
+            exit 0
+          fi
+
+          for branch in "${to_archive[@]}"; do
+            tag="archive/$branch"
+            echo "::group::archive $branch"
+            sha=$(git rev-parse "origin/$branch")
+            # Skip if tag already exists (idempotent)
+            if git rev-parse --verify --quiet "refs/tags/$tag" >/dev/null; then
+              echo "  tag $tag already exists, skipping tag step"
+            else
+              git tag -a "$tag" "$sha" \
+                -m "Archived merged branch $branch on $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              git push origin "refs/tags/$tag"
+              echo "  ✓ tagged $sha as $tag"
+            fi
+            git push origin --delete "$branch" || \
+              echo "  warning: delete of $branch failed (already deleted?)"
+            echo "  ✓ deleted origin/$branch"
+            echo "::endgroup::"
+          done
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "Archive run complete on $(date -u +%Y-%m-%dT%H:%M:%SZ)"
