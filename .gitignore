@@ -55,3 +55,6 @@ __pycache__/
 
 # Local git worktrees for parallel dev (SPEC-0167 lesson: see feedback_parallel_agents_worktree)
 .worktrees/
+
+# Local-built thinking-engine binary (output of cmd/thinking-engine)
+/thinking-engine

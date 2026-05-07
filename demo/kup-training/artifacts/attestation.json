@@ -1,0 +1,9 @@
+{
+  "schema": "m3c-skill-attestation/v1",
+  "bundle_digest": "sha256:1d468b0ac9ba47137c2f9e047e0204a854d2322a99486aa678df343b088eec3b",
+  "level": "green",
+  "rationale": "KuP training demo — Activation Gate satisfied.",
+  "reviewer_id": "id:reviewer@m3c",
+  "reviewer_pubkey_path": "/Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training/artifacts/keys/reviewer.pub",
+  "attested_at": "2026-05-07T08:22:56Z"
+}

@@ -1,0 +1,67 @@
+bundle_digest: sha256:670965fefb7369534010075ac6af2cb6b33ed04edd21a35830d2eedb47ec2ce7
+output:        /Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training/artifacts/bundles/kup-hello-0.1.0.repack.skb
+digest: 1d468b0ac9ba47137c2f9e047e0204a854d2322a99486aa678df343b088eec3b
+signature: /Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training/artifacts/bundles/kup-hello-0.1.0.skb.1d468b0ac9ba47137c2f9e047e0204a854d2322a99486aa678df343b088eec3b.author.sig
+OK: signature verified
+HTTP 403
+HTTP 400
+wrote /Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training/artifacts/keys/reviewer.priv (mode 0600)
+wrote /Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training/artifacts/keys/reviewer.pub (mode 0644)
+skillctl attest: POST https://127.0.0.1:8081/api/skills/attestations: Post "https://127.0.0.1:8081/api/skills/attestations": tls: failed to verify certificate: x509: certificate signed by unknown authority
+added registry https://127.0.0.1:8081 to /Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training/artifacts/eric-home/.claude/skill-trust-roots.yaml
+trust roots: /Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training/artifacts/eric-home/.claude/skill-trust-roots.yaml
+
+registry: https://127.0.0.1:8081
+  identity_keys_authorized: from-registry
+  governance_minimum:       green
+  registry_keys:
+    - id: mirko-author-key   issued: 2026-05-07
+      pubkey (b64): Kr+/ZHs+dJX96HPPl4tCF62Z6ZxxhCE00CiHtpXI/TA=
+Usage: skillctl install <name>[@<version>] [flags]
+
+Pulls a skill bundle from the registry, runs the SPEC-0188 §7 verifier,
+and atomically installs it under ~/.claude/skills/<name>/. Refuses if any
+trust-chain step fails.
+
+<version> may be a human version string (e.g. 1.0.0) or a digest pin
+(sha256:<hex>). Omit to install the newest admitted version.
+
+Numbered exit codes (SPEC-0188 §11):
+   0  ok
+   1  generic error
+   2  usage / flag error
+  10  digest mismatch
+  11  author signature invalid
+  12  registry not in trust roots
+  13  governance below minimum
+  14  depends_on unsatisfied
+  15  blob missing
+  16  tenant blocked (CISO console verdict)
+  -allow-yellow
+    	Lower the gate from green to yellow for this install (audited).
+  -governance-min string
+    	Override the trust-root's governance_minimum (green | yellow). Empty = use trust-root.
+  -home string
+    	Override the install root (advanced; defaults to $HOME).
+  -ignore-deps
+    	Skip depends_on resolution (audited).
+  -registry string
+    	Registry base URL. Required only when trust-roots has multiple registries pinned.
+  -tenant string
+    	Pin this install to a tenant scope (SPEC-0188 §7 step 5.5). Overrides trust-roots tenant_scope. Empty = use trust-roots value or run untenanted.
+  -timeout duration
+    	HTTP timeout for registry calls. (default 30s)
+  -verbose
+    	Print structured per-step log lines to stderr.
+OK: signature verified
+wrote /Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training/artifacts/eric-home/output/hello.txt
+verify-sig: signature is invalid (digest=7e377e4c1ca1bee27f568ff10e3db9e36d9df6eace86b814aa39f780e9c22ca3, sig=/Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training/artifacts/bundles/tampered.skb.7e377e4c1ca1bee27f568ff10e3db9e36d9df6eace86b814aa39f780e9c22ca3.author.sig, pubkey=/Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training/artifacts/keys/mirko.pub)
+wrote /Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training/artifacts/keys/attacker.priv (mode 0600)
+wrote /Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training/artifacts/keys/attacker.pub (mode 0644)
+bundle_digest: sha256:3cebcd23c99912338fd69d10d4026a10971155916cc32b47dcf4fcb43c65bd47
+output:        /Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training/artifacts/bundles/attacker-kup-hello-0.1.0.skb
+digest: fc8d67c4d24edeedd51f3f6b014b42ccd4be236f18578cf08a64317343052987
+signature: /Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training/artifacts/bundles/attacker-kup-hello-0.1.0.skb.fc8d67c4d24edeedd51f3f6b014b42ccd4be236f18578cf08a64317343052987.author.sig
+verify-sig: signature is invalid (digest=fc8d67c4d24edeedd51f3f6b014b42ccd4be236f18578cf08a64317343052987, sig=/Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training/artifacts/bundles/attacker-kup-hello-0.1.0.skb.fc8d67c4d24edeedd51f3f6b014b42ccd4be236f18578cf08a64317343052987.author.sig, pubkey=/Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training/artifacts/keys/mirko.pub)
+OK: signature verified
+verify-sig: signature file not found at /Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training/artifacts/bundles/no-sig/kup-hello-0.1.0.skb.1d468b0ac9ba47137c2f9e047e0204a854d2322a99486aa678df343b088eec3b.author.sig (digest 1d468b0ac9ba47137c2f9e047e0204a854d2322a99486aa678df343b088eec3b)

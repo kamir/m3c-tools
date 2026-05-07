@@ -1,0 +1,8 @@
+trust_roots:
+  - registry_url: https://127.0.0.1:8081
+    registry_keys:
+      - id: mirko-author-key
+        pubkey: Kr+/ZHs+dJX96HPPl4tCF62Z6ZxxhCE00CiHtpXI/TA=
+        issued: "2026-05-07"
+    identity_keys_authorized: from-registry
+    governance_minimum: green

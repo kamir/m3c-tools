@@ -1,0 +1,43 @@
+{
+  "schema": "m3c-skill-bundle/v1",
+  "name": "kup-hello",
+  "version": "0.1.0",
+  "summary": "KuP training demo skill — writes a hello.txt.",
+
+  "source_repo": "kamir/m3c-tools",
+  "source_commit": "",
+  "source_path": "demo/kup-training/fixtures/valid-skill",
+
+  "author_governance_intent": "yellow",
+  "author_governance_rationale": "Writes one local file under ./output/. No network. No subprocess.",
+
+  "depends_on": [],
+  "supersedes": null,
+  "derived_from": null,
+
+  "intent": {
+    "summary": "Writes a hello.txt under <cwd>/output/.",
+    "side_effects": ["fs:write"],
+    "destructive": false,
+    "network": false,
+    "subprocess": [],
+    "claims": ["skill:document-generation"]
+  },
+  "data_dependencies": [
+    {
+      "id": "ds:filesystem/cwd",
+      "kind": "local_fs",
+      "access": "write",
+      "scope": "<cwd>/output/**",
+      "payload_class": "non-PII",
+      "retention": "ephemeral",
+      "reason": "Write hello.txt for the KuP training demo."
+    }
+  ],
+
+  "runtime_envelope_required": true,
+  "imported_from": null,
+
+  "built_at": "1970-01-01T00:00:00Z",
+  "built_by": "skillctl/demo"
+}

@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KuP Release-Gate — Capture Form</title>
+<style>
+  :root {
+    --ma-dark-bg:      #0f1117;
+    --ma-dark-surface: #1a1d27;
+    --ma-dark-border:  #2a2f3d;
+    --ma-light-text:   #e8eaed;
+    --ma-muted:        #9aa3b2;
+    --ma-accent:       #b07cff;
+    --ma-accent-warm:  #ff8a3d;
+    --ma-accent-cyan:  #56d6c2;
+    --ma-accent-green: #8de86c;
+    --ma-accent-gold:  #ffc857;
+    --ma-accent-red:   #ff6b8b;
+    --ma-mono:         "Menlo", "SFMono-Regular", monospace;
+    --ma-sans:         "Outfit", "Helvetica Neue", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--ma-dark-bg); color: var(--ma-light-text); font-family: var(--ma-sans); font-size: 14px; line-height: 1.5; }
+  header.top {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--ma-dark-surface); border-bottom: 1px solid var(--ma-dark-border);
+    padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
+  }
+  header.top h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header.top h1 .accent { color: var(--ma-accent); }
+  .actions { display: flex; gap: 8px; }
+  button {
+    background: var(--ma-dark-border); color: var(--ma-light-text);
+    border: 1px solid transparent; border-radius: 6px;
+    padding: 7px 14px; font-family: inherit; font-size: 13px; cursor: pointer;
+    transition: background 0.1s ease;
+  }
+  button:hover { background: #353b4d; }
+  button.primary { background: var(--ma-accent); color: #1a0f2b; font-weight: 600; }
+  button.primary:hover { background: #c596ff; }
+  button.danger { background: var(--ma-accent-red); color: #2b0f1a; font-weight: 500; }
+  main { max-width: 1100px; margin: 24px auto; padding: 0 24px 96px; }
+  section.meta {
+    background: var(--ma-dark-surface); border: 1px solid var(--ma-dark-border);
+    border-radius: 10px; padding: 18px 22px; margin-bottom: 24px;
+  }
+  section.meta h2 { margin: 0 0 12px; font-size: 14px; font-weight: 600; color: var(--ma-accent-cyan); text-transform: uppercase; letter-spacing: 0.05em; }
+  .meta-grid { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; align-items: center; }
+  .meta-grid label { color: var(--ma-muted); font-size: 12px; }
+  .meta-grid input, .meta-grid select {
+    background: var(--ma-dark-bg); color: var(--ma-light-text);
+    border: 1px solid var(--ma-dark-border); border-radius: 4px;
+    padding: 6px 10px; font-family: inherit; font-size: 13px; width: 100%;
+  }
+  .meta-grid input:focus, .meta-grid select:focus { border-color: var(--ma-accent); outline: none; }
+
+  article.step {
+    background: var(--ma-dark-surface); border: 1px solid var(--ma-dark-border);
+    border-radius: 10px; padding: 18px 22px; margin-bottom: 18px;
+    transition: border-color 0.2s ease;
+  }
+  article.step.green  { border-left: 4px solid var(--ma-accent-green); }
+  article.step.yellow { border-left: 4px solid var(--ma-accent-gold); }
+  article.step.red    { border-left: 4px solid var(--ma-accent-red); }
+  article.step.gate {
+    background: linear-gradient(180deg, var(--ma-dark-surface) 0%, #1f2330 100%);
+    border-color: var(--ma-accent-warm);
+  }
+
+  .step-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
+  .step-head h3 { margin: 0; font-size: 16px; font-weight: 600; }
+  .step-head .id { color: var(--ma-muted); font-family: var(--ma-mono); font-size: 12px; margin-right: 8px; }
+  .step-head .tag {
+    font-size: 11px; padding: 2px 8px; border-radius: 999px;
+    background: var(--ma-dark-bg); border: 1px solid var(--ma-dark-border);
+    color: var(--ma-muted); font-family: var(--ma-mono);
+  }
+  .step-head .tag.gate-tag { color: var(--ma-accent-warm); border-color: var(--ma-accent-warm); }
+
+  .intent, .expected { color: var(--ma-muted); font-size: 13px; margin-bottom: 6px; }
+  .intent .label, .expected .label {
+    color: var(--ma-accent-cyan); text-transform: uppercase; letter-spacing: 0.05em;
+    font-size: 11px; font-weight: 600; margin-right: 6px;
+  }
+
+  .commands {
+    background: #0a0c12; border: 1px solid var(--ma-dark-border); border-radius: 6px;
+    padding: 10px 14px; margin: 8px 0; font-family: var(--ma-mono); font-size: 12.5px;
+    color: var(--ma-light-text);
+  }
+  .commands .cmd { display: flex; align-items: flex-start; gap: 8px; margin: 3px 0; }
+  .commands .cmd code {
+    flex: 1; white-space: pre-wrap; word-break: break-word;
+    color: var(--ma-light-text); user-select: text;
+  }
+  .commands .cmd code .prompt { color: var(--ma-accent-cyan); user-select: none; }
+  .commands .cmd .copy-btn {
+    flex: 0 0 auto; padding: 2px 8px; font-size: 11px;
+    background: transparent; border: 1px solid var(--ma-dark-border); color: var(--ma-muted);
+  }
+  .commands .cmd .copy-btn:hover { color: var(--ma-light-text); border-color: var(--ma-accent); }
+  .commands .cmd .copy-btn.copied { color: var(--ma-accent-green); border-color: var(--ma-accent-green); }
+
+  .verdict-row { display: flex; align-items: center; gap: 6px; margin: 12px 0 8px; }
+  .verdict-row > .label {
+    color: var(--ma-accent-cyan); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+    font-weight: 600; margin-right: 6px;
+  }
+  .verdict-row label.pill {
+    cursor: pointer; padding: 4px 12px; border-radius: 999px;
+    border: 1px solid var(--ma-dark-border); font-size: 12px;
+    user-select: none; transition: all 0.1s ease;
+  }
+  .verdict-row label.pill input { display: none; }
+  .verdict-row label.pill[data-v="green"]:hover  { color: var(--ma-accent-green); border-color: var(--ma-accent-green); }
+  .verdict-row label.pill[data-v="yellow"]:hover { color: var(--ma-accent-gold);  border-color: var(--ma-accent-gold); }
+  .verdict-row label.pill[data-v="red"]:hover    { color: var(--ma-accent-red);   border-color: var(--ma-accent-red); }
+  .verdict-row label.pill.selected[data-v="green"]  { background: rgba(141,232,108,0.2); color: var(--ma-accent-green); border-color: var(--ma-accent-green); }
+  .verdict-row label.pill.selected[data-v="yellow"] { background: rgba(255,200,87,0.2);  color: var(--ma-accent-gold);  border-color: var(--ma-accent-gold); }
+  .verdict-row label.pill.selected[data-v="red"]    { background: rgba(255,107,139,0.2); color: var(--ma-accent-red);   border-color: var(--ma-accent-red); }
+  .verdict-row label.pill.selected[data-v="na"]     { background: rgba(154,163,178,0.2); color: var(--ma-muted); border-color: var(--ma-muted); }
+
+  textarea.feedback {
+    width: 100%; min-height: 80px;
+    background: var(--ma-dark-bg); color: var(--ma-light-text);
+    border: 1px solid var(--ma-dark-border); border-radius: 6px;
+    padding: 10px 12px; font-family: inherit; font-size: 13px; line-height: 1.5;
+    resize: vertical;
+  }
+  textarea.feedback:focus { outline: none; border-color: var(--ma-accent); }
+
+  .timestamp { color: var(--ma-muted); font-size: 11px; font-family: var(--ma-mono); margin-top: 6px; }
+
+  .stats {
+    background: var(--ma-dark-surface); border: 1px solid var(--ma-dark-border);
+    border-radius: 10px; padding: 14px 22px; margin: 24px 0; display: flex; gap: 24px;
+    font-size: 13px;
+  }
+  .stats .stat { display: flex; align-items: center; gap: 8px; }
+  .stats .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .stats .dot.green  { background: var(--ma-accent-green); }
+  .stats .dot.yellow { background: var(--ma-accent-gold); }
+  .stats .dot.red    { background: var(--ma-accent-red); }
+  .stats .dot.na     { background: var(--ma-muted); }
+  .stats .dot.empty  { background: var(--ma-dark-border); }
+  .stats .count { font-weight: 600; }
+  .stats .label { color: var(--ma-muted); }
+
+  footer.architecture {
+    margin-top: 48px; background: var(--ma-dark-surface); border: 1px solid var(--ma-dark-border);
+    border-left: 4px solid var(--ma-accent); border-radius: 10px; padding: 22px 28px;
+  }
+  footer.architecture h2 { margin-top: 0; font-size: 15px; color: var(--ma-accent); text-transform: uppercase; letter-spacing: 0.05em; }
+  footer.architecture h3 { margin: 18px 0 6px; font-size: 14px; }
+  footer.architecture pre {
+    background: #0a0c12; padding: 10px 14px; border-radius: 6px;
+    overflow-x: auto; font-family: var(--ma-mono); font-size: 12px;
+  }
+  footer.architecture code { font-family: var(--ma-mono); font-size: 12.5px; color: var(--ma-accent-cyan); }
+  footer.architecture .tag-chip {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    background: var(--ma-dark-bg); border: 1px solid var(--ma-dark-border);
+    font-size: 11px; font-family: var(--ma-mono); margin: 2px 4px 2px 0;
+  }
+  footer.architecture .tag-chip.system { color: var(--ma-accent-warm); border-color: var(--ma-accent-warm); }
+  footer.architecture .tag-chip.personal { color: var(--ma-accent-green); border-color: var(--ma-accent-green); }
+  footer.architecture .tag-chip.auto { color: var(--ma-muted); }
+
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--ma-accent-green); color: #0a0c12;
+    padding: 10px 20px; border-radius: 8px; font-weight: 500; font-size: 13px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
+    z-index: 100;
+  }
+  .toast.show { opacity: 1; }
+  .toast.warn { background: var(--ma-accent-gold); }
+  .toast.err  { background: var(--ma-accent-red); }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>KuP Release-Gate &nbsp;<span class="accent">Capture Form</span></h1>
+  <div class="actions">
+    <button id="btn-save"     title="Save current state to localStorage">Save draft</button>
+    <button id="btn-download-json" class="primary">Download JSON</button>
+    <button id="btn-download-md">Download Markdown</button>
+    <button id="btn-er1-recipe">ER1 push recipe</button>
+    <button id="btn-clear"    class="danger">Clear all</button>
+  </div>
+</header>
+
+<main>
+
+<section class="meta">
+  <h2>Session metadata</h2>
+  <div class="meta-grid">
+    <label for="m-session">Session ID</label>          <input id="m-session"  type="text">
+    <label for="m-by">Captured by</label>              <input id="m-by"       type="text" placeholder="id:mirko@m3c">
+    <label for="m-cohort">Cohort / context</label>     <input id="m-cohort"   type="text" placeholder="kup-berlin-001">
+    <label for="m-mode">Mode</label>
+    <select id="m-mode">
+      <option value="offline">Offline (chain proof only)</option>
+      <option value="online">Online (full aims round-trip)</option>
+      <option value="mixed" selected>Mixed (online attempted, offline-fallback)</option>
+    </select>
+    <label for="m-host">Host / platform</label>        <input id="m-host"     type="text" placeholder="darwin-arm64">
+  </div>
+</section>
+
+<div class="stats" id="stats">
+  <div class="stat"><span class="dot green"></span>  <span class="count" data-stat="green">0</span>  <span class="label">green</span></div>
+  <div class="stat"><span class="dot yellow"></span> <span class="count" data-stat="yellow">0</span> <span class="label">yellow</span></div>
+  <div class="stat"><span class="dot red"></span>    <span class="count" data-stat="red">0</span>    <span class="label">red</span></div>
+  <div class="stat"><span class="dot na"></span>     <span class="count" data-stat="na">0</span>     <span class="label">n/a</span></div>
+  <div class="stat"><span class="dot empty"></span>  <span class="count" data-stat="empty">12</span> <span class="label">unanswered</span></div>
+</div>
+
+<div id="steps-container"></div>
+
+<footer class="architecture">
+  <h2>Architectural intent — system insights as an integration space</h2>
+
+  <p>This form is not just a checklist. The output is an <strong>ER1 insight document</strong> that
+  closes the loop between system events and the personal memory layer:</p>
+
+  <ol>
+    <li><strong>Capture-side:</strong> the trainer/operator runs the gate, observes outcomes,
+    types feedback, and submits. The form emits one <code>m3c-system-insight/v1</code>
+    item per step plus one summary item for the gate as a whole.</li>
+
+    <li><strong>Storage-side:</strong> these items live in ER1 with the same shape as personal
+    memos — the integration space &mdash; but tagged so they can be filtered.</li>
+
+    <li><strong>View-side:</strong> the thinker's main view (memory landing page, dashboard)
+    filters out <code>auto:generated</code> + <code>system:insight</code> by default. Toggling
+    "Show system insights" surfaces them when the thinker explicitly wants the bird's-eye
+    cross-system view. The thinker is never overloaded with strangers' thoughts, but the
+    system's voice is reachable inside the thinker's space.</li>
+  </ol>
+
+  <h3>Tag convention</h3>
+  <p>Every insight item carries <em>at least one</em> dimension tag from each axis:</p>
+
+  <p><strong>Origin axis:</strong>
+    <span class="tag-chip personal">personal:thought</span>
+    <span class="tag-chip system">system:insight</span>
+    <span class="tag-chip system">system:decision</span>
+    <span class="tag-chip auto">auto:generated</span>
+  </p>
+  <p><strong>Source axis (for system items):</strong>
+    <span class="tag-chip">release-gate</span>
+    <span class="tag-chip">retro</span>
+    <span class="tag-chip">drift-check</span>
+    <span class="tag-chip">manifest-audit</span>
+    <span class="tag-chip">security-scan</span>
+    <span class="tag-chip">audit-replay</span>
+  </p>
+  <p><strong>Subject axis:</strong>
+    <span class="tag-chip">skill-manager</span>
+    <span class="tag-chip">aims-core</span>
+    <span class="tag-chip">m3c-tools</span>
+    <span class="tag-chip">kup-berlin</span>
+    &hellip;
+  </p>
+
+  <h3>Filter rule (for the thinker's main view)</h3>
+  <pre>visible_by_default = NOT (tags ∋ "auto:generated"
+                          OR tags ∋ "system:insight")
+override = explicit "Show system insights" toggle</pre>
+
+  <h3>Wiring it back</h3>
+  <p>The form's <em>Download JSON</em> output matches the <code>m3c-system-insight/v1</code>
+  schema. Push it via:</p>
+  <pre>./push-to-er1.sh release-gate-2026-05-07.json</pre>
+  <p>The companion script (next to this form) takes the JSON, splits it into one ER1 item per
+  step, applies the right tags, and posts to the existing <code>/api/v2/memory/items</code>
+  endpoint. Each step is an item; the verdict + rationale survive as searchable text. The
+  cross-step relationship survives via a shared <code>session_id</code> tag, so the thinker can
+  pull the whole gate's worth of insights back as one bundle when they want it.</p>
+
+  <p style="color: var(--ma-muted); font-size: 12px; margin-top: 16px;">
+  This pattern is documented in <code>PROJECTS/Skill-Manager/SYSTEM-INSIGHTS-PATTERN.md</code>
+  &mdash; pending promotion to a numbered SPEC.
+  </p>
+</footer>
+
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script>
+// =========================================================================
+// Data: the gate steps. Edit here to adjust what the form prompts for.
+// =========================================================================
+const STEPS = [
+  {
+    id: "00", title: "Preflight", category: "setup", isGate: false,
+    intent: "Build skillctl from s2/integration. Verify host tools (go, curl, shasum, tar, gzip). Probe online registry. Reset workspace under artifacts/ only — never touch host ~/.claude.",
+    commands: [ "bash 00-preflight.sh" ],
+    expected: "skillctl binary at artifacts/bin/skillctl, clean workspace, online status reported."
+  },
+  {
+    id: "01", title: "Mirko authors and signs", category: "valid-path", isGate: false,
+    intent: "Prove the cryptographic signing chain end-to-end locally. keygen → pack (deterministic) → sign → verify-sig with no network. This is the load-bearing offline proof.",
+    commands: [
+      "bash 01-mirko-author.sh",
+      "# under the hood:",
+      "$SKILLCTL keygen --out artifacts/keys/mirko",
+      "$SKILLCTL pack --skill artifacts/bundles/src/kup-hello -o BUNDLE.skb --name kup-hello --version 0.1.0 ...",
+      "$SKILLCTL sign --key artifacts/keys/mirko.priv --identity-id id:mirko@m3c BUNDLE.skb",
+      "$SKILLCTL verify-sig --pubkey artifacts/keys/mirko.pub BUNDLE.skb"
+    ],
+    expected: "mirko.{priv,pub} keypair, BUNDLE.skb (deterministic — two packs are byte-identical), sha256:<hex>.author.sig, digest.txt written. verify-sig exits 0."
+  },
+  {
+    id: "02", title: "Mirko publishes to aims", category: "online-stretch", isGate: false,
+    intent: "Round-trip via aims-core registry. Best-effort: the chain proof does not depend on this. Surfaces real online-mode gaps (admin-gated identity registration, multipart field name).",
+    commands: [
+      "export ER1_API_KEY=<your-er1-api-key>   # see ~/.config/m3c/er1.env or your team's vault",
+      "bash 02-mirko-publish.sh"
+    ],
+    expected: "HTTP 200/201/409 for both /api/skills/identities and /api/skills/bundles. v1 known-gap: identity registration may return 403 (admin required) — fall through is acceptable."
+  },
+  {
+    id: "03", title: "Reviewer attests", category: "valid-path", isGate: false,
+    intent: "Sign a 🟢 governance verdict on the bundle digest. Online: POST /api/skills/attestations. Offline fallback: write a local attestation.json (the install path consumes either).",
+    commands: [
+      "bash 03-reviewer-attest.sh",
+      "# online command form:",
+      "$SKILLCTL attest <digest> --level green --rationale '...' --reviewer-id id:reviewer@m3c --key reviewer.priv --registry $REGISTRY/api/skills"
+    ],
+    expected: "reviewer.{priv,pub} keypair + attestation.json with level=green. Online: registry returns 200/201; v1 known-gap: TLS verify may refuse self-signed local cert."
+  },
+  {
+    id: "04", title: "Eric pins trust root", category: "valid-path", isGate: false,
+    intent: "Eric's $HOME has the trust-roots file with Mirko's pubkey. The demo uses an isolated fake $HOME so the real ~/.claude is untouched.",
+    commands: [
+      "bash 04-eric-trust-root.sh",
+      "# under the hood:",
+      "HOME=$INSTALL_HOME $SKILLCTL trust add --registry $REGISTRY --pubkey artifacts/keys/mirko.pub --id mirko-author-key",
+      "HOME=$INSTALL_HOME $SKILLCTL trust list"
+    ],
+    expected: "artifacts/eric-home/.claude/skill-trust-roots.yaml contains the registry + pinned pubkey; trust list shows mirko-author-key."
+  },
+  {
+    id: "05", title: "Eric installs and runs (VALID)", category: "valid-path", isGate: false,
+    intent: "Full chain check passes: digest → author sig → registry sig (online) → governance ≥ minimum → atomic-extract → run. Eric produces a file ONLY producible if the chain accepted the bundle.",
+    commands: [
+      "bash 05-eric-install-and-run.sh",
+      "# online attempt: $SKILLCTL install kup-hello@0.1.0 --registry $REGISTRY/api/skills --allow-yellow",
+      "# offline core: $SKILLCTL verify-sig --pubkey mirko.pub BUNDLE.skb && tar -xzf BUNDLE.skb -C ~/.claude/skills/kup-hello/"
+    ],
+    expected: "artifacts/eric-home/output/hello.txt exists with the canonical greeting. THIS IS THE LOAD-BEARING VALID-PATH PROOF."
+  },
+  {
+    id: "06", title: "INVALID — tampered bytes", category: "invalid-path", isGate: false,
+    intent: "One byte flipped inside the bundle, signature renamed to match the new digest (the worst-case attack: signature exists, but cryptographic verify fails). Proves the chain catches lying signatures.",
+    commands: [ "bash 06-invalid-tampered.sh" ],
+    expected: "verify-sig exits 11 (signature_invalid). Without exit 11, the chain is broken — this MUST fail."
+  },
+  {
+    id: "07", title: "INVALID — wrong key (impersonation)", category: "invalid-path", isGate: false,
+    intent: "Attacker generates their own keypair, packs an identical-looking bundle, signs it with the attacker key but claims --identity-id id:mirko@m3c. Eric's pinned pubkey is Mirko's; verify must refuse.",
+    commands: [ "bash 07-invalid-wrong-key.sh" ],
+    expected: "verify-sig with mirko.pub: exit 11. Control: same bundle verifies fine against attacker.pub (proves the bundle is structurally valid and the failure is specifically the wrong-key signal)."
+  },
+  {
+    id: "08", title: "INVALID — no signature delivered", category: "invalid-path", isGate: false,
+    intent: "Bundle staged without its sidecar .author.sig file (someone rsync'd the .skb but not the sig). The verifier MUST fail closed — no fail-open fallback.",
+    commands: [ "bash 08-invalid-no-signature.sh" ],
+    expected: "verify-sig non-zero exit (1 or 11). If verify-sig accepts, that's a CRITICAL bug — file BUG-NNNN immediately."
+  },
+  {
+    id: "09", title: "INVALID — post-install edit", category: "invalid-path", isGate: false,
+    intent: "After install, someone 'fixes' a script in place. Truth-at-install-time lives in CHECKSUMS inside the bundle — recompute and compare. This is what skillctl audit will land as a first-class verdict.",
+    commands: [ "bash 09-invalid-edited-install.sh" ],
+    expected: "shasum mismatch detected; repair (re-extract from signed bundle) restores the recorded hash."
+  },
+  {
+    id: "G1", title: "Gate 1 — Print user guide as PDF", category: "release-gate", isGate: true,
+    intent: "Produce the printable handbook for KuP attendees. Three PDFs: USER-MANUAL, SKILLCTL-MANUAL, combined handbook.",
+    commands: [ "bash make-pdf.sh" ],
+    expected: "artifacts/{USER-MANUAL,SKILLCTL-MANUAL,KuP-skill-manager-handbook}.pdf — all rendered cleanly (emoji/arrows preprocessed to ASCII for print)."
+  },
+  {
+    id: "G2", title: "Gate 2 — Cross-platform release of skillctl", category: "release-gate", isGate: true,
+    intent: "Build skillctl for darwin/linux/windows × amd64/arm64 (5 binaries) with reproducible checksums + a curl|sh installer + draft RELEASE_NOTES.md + gh-release recipe (NOT auto-published).",
+    commands: [
+      "bash build-release.sh",
+      "# manual step (only when ready to ship):",
+      "bash artifacts/release/gh-release-create.sh"
+    ],
+    expected: "10 files in artifacts/release/. SHA256SUMS verified. install.sh works as `curl ... | bash` (auto-detects OS/arch, verifies checksum)."
+  }
+];
+
+// =========================================================================
+// State + persistence
+// =========================================================================
+const LS_KEY = "kup-release-gate-state-v1";
+let state = loadState();
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return { meta: defaultMeta(), steps: STEPS.map(s => ({ id: s.id, verdict: null, feedback: "", captured_at: null })) };
+}
+function saveState() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
+}
+function defaultMeta() {
+  return {
+    session_id: "kup-release-gate-" + new Date().toISOString().slice(0,10),
+    captured_by: "id:mirko@m3c",
+    cohort: "kup-berlin-001",
+    mode: "mixed",
+    host: navigator.platform.toLowerCase() + "-" + (navigator.userAgent.match(/(arm|x86_64|amd64|aarch64)/i)?.[1] || "unknown")
+  };
+}
+
+// =========================================================================
+// Render
+// =========================================================================
+function render() {
+  document.getElementById("m-session").value = state.meta.session_id;
+  document.getElementById("m-by").value      = state.meta.captured_by;
+  document.getElementById("m-cohort").value  = state.meta.cohort;
+  document.getElementById("m-mode").value    = state.meta.mode;
+  document.getElementById("m-host").value    = state.meta.host;
+
+  const c = document.getElementById("steps-container");
+  c.innerHTML = "";
+  STEPS.forEach((step, idx) => {
+    const stepState = state.steps[idx];
+    const article = document.createElement("article");
+    article.className = "step" + (stepState.verdict ? " " + stepState.verdict : "") + (step.isGate ? " gate" : "");
+    article.dataset.id = step.id;
+
+    const tagText = step.isGate ? "release-gate" : step.category;
+    article.innerHTML = `
+      <div class="step-head">
+        <h3><span class="id">${step.id}</span>${escapeHtml(step.title)}</h3>
+        <span class="tag ${step.isGate ? "gate-tag" : ""}">${escapeHtml(tagText)}</span>
+      </div>
+      <div class="intent"><span class="label">Intent</span>${escapeHtml(step.intent)}</div>
+      <div class="commands">
+        ${step.commands.map(cmd => {
+          const isComment = cmd.trim().startsWith("#");
+          const promptChar = isComment ? "" : "$ ";
+          return `<div class="cmd">
+            <code>${promptChar ? '<span class="prompt">$&nbsp;</span>' : ''}${escapeHtml(cmd.replace(/^#\s?/, ""))}</code>
+            <button class="copy-btn" data-cmd="${escapeAttr(cmd)}">copy</button>
+          </div>`;
+        }).join("")}
+      </div>
+      <div class="expected"><span class="label">Expected</span>${escapeHtml(step.expected)}</div>
+      <div class="verdict-row">
+        <span class="label">Verdict</span>
+        ${["green","yellow","red","na"].map(v => `
+          <label class="pill${stepState.verdict === v ? " selected" : ""}" data-v="${v}">
+            <input type="radio" name="v-${step.id}" value="${v}" ${stepState.verdict === v ? "checked" : ""}>
+            ${v === "na" ? "n/a" : v}
+          </label>
+        `).join("")}
+      </div>
+      <textarea class="feedback" data-id="${step.id}" placeholder="What you observed. What surprised you. What needs follow-up. (Free text — saved as the insight body.)">${escapeHtml(stepState.feedback || "")}</textarea>
+      ${stepState.captured_at ? `<div class="timestamp">captured at ${escapeHtml(stepState.captured_at)}</div>` : ""}
+    `;
+
+    // Wire copy buttons
+    article.querySelectorAll(".copy-btn").forEach(btn => {
+      btn.addEventListener("click", e => {
+        const cmd = btn.dataset.cmd.replace(/^\$\s?/, "");
+        navigator.clipboard.writeText(cmd).then(() => {
+          btn.classList.add("copied"); btn.textContent = "copied!";
+          setTimeout(() => { btn.classList.remove("copied"); btn.textContent = "copy"; }, 1200);
+        });
+      });
+    });
+
+    // Wire verdict pills
+    article.querySelectorAll(".pill").forEach(pill => {
+      pill.addEventListener("click", e => {
+        e.preventDefault();
+        const v = pill.dataset.v;
+        stepState.verdict = stepState.verdict === v ? null : v;
+        if (!stepState.captured_at) stepState.captured_at = new Date().toISOString();
+        saveState(); render(); updateStats();
+      });
+    });
+
+    // Wire feedback textarea
+    article.querySelector(".feedback").addEventListener("input", e => {
+      stepState.feedback = e.target.value;
+      if (!stepState.captured_at) stepState.captured_at = new Date().toISOString();
+      saveState();
+    });
+
+    c.appendChild(article);
+  });
+  updateStats();
+}
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+}
+function escapeAttr(s) { return escapeHtml(s); }
+
+function updateStats() {
+  const counts = { green: 0, yellow: 0, red: 0, na: 0, empty: 0 };
+  state.steps.forEach(s => { counts[s.verdict || "empty"] = (counts[s.verdict || "empty"] || 0) + 1; });
+  Object.keys(counts).forEach(k => {
+    const el = document.querySelector(`#stats [data-stat="${k}"]`);
+    if (el) el.textContent = counts[k];
+  });
+}
+
+// =========================================================================
+// Meta wiring
+// =========================================================================
+["session","by","cohort","mode","host"].forEach(field => {
+  const el = document.getElementById("m-" + field);
+  el.addEventListener("input", () => {
+    const key = field === "session" ? "session_id" : field === "by" ? "captured_by" : field;
+    state.meta[key] = el.value;
+    saveState();
+  });
+});
+
+// =========================================================================
+// Toast
+// =========================================================================
+function toast(msg, kind="ok") {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "toast show " + (kind === "ok" ? "" : kind);
+  setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+// =========================================================================
+// Export — JSON (m3c-system-insight/v1)
+// =========================================================================
+function buildExport() {
+  const now = new Date().toISOString();
+  const items = STEPS.map((step, idx) => {
+    const s = state.steps[idx];
+    return {
+      schema: "m3c-system-insight/v1",
+      step_id: step.id,
+      title: step.title,
+      category: step.category,
+      is_gate: step.isGate,
+      intent: step.intent,
+      commands: step.commands,
+      expected: step.expected,
+      verdict: s.verdict,
+      feedback: s.feedback,
+      captured_at: s.captured_at,
+      tags: [
+        "system:insight",
+        "auto:generated",
+        "release-gate",
+        "skill-manager",
+        state.meta.cohort || "kup-berlin",
+        `step:${step.id}`,
+        ...(step.isGate ? ["gate"] : []),
+        s.verdict ? `verdict:${s.verdict}` : "verdict:unset"
+      ]
+    };
+  });
+
+  const counts = { green: 0, yellow: 0, red: 0, na: 0, empty: 0 };
+  state.steps.forEach(s => { counts[s.verdict || "empty"] = (counts[s.verdict || "empty"] || 0) + 1; });
+  const overall = counts.red > 0 ? "red"
+                : counts.empty > 0 ? "incomplete"
+                : counts.yellow > 0 ? "yellow"
+                : "green";
+
+  return {
+    schema: "m3c-system-insight-document/v1",
+    session_id: state.meta.session_id,
+    cohort: state.meta.cohort,
+    captured_by: state.meta.captured_by,
+    captured_at_first: state.steps.find(s => s.captured_at)?.captured_at || null,
+    captured_at_export: now,
+    mode: state.meta.mode,
+    host: state.meta.host,
+    overall_verdict: overall,
+    counts: counts,
+    items: items,
+    summary_tags: [
+      "system:insight",
+      "auto:generated",
+      "release-gate",
+      "skill-manager",
+      state.meta.cohort || "kup-berlin",
+      `verdict:${overall}`,
+      "session:" + state.meta.session_id
+    ]
+  };
+}
+
+function downloadBlob(content, filename, mime="application/octet-stream") {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+}
+
+document.getElementById("btn-download-json").addEventListener("click", () => {
+  const doc = buildExport();
+  downloadBlob(JSON.stringify(doc, null, 2),
+               (state.meta.session_id || "release-gate") + ".json",
+               "application/json");
+  toast("JSON downloaded — push via ./push-to-er1.sh");
+});
+
+document.getElementById("btn-download-md").addEventListener("click", () => {
+  const doc = buildExport();
+  let md = `# ${doc.session_id}\n\n`;
+  md += `- **Captured by:** ${doc.captured_by}\n`;
+  md += `- **Cohort:** ${doc.cohort}\n`;
+  md += `- **Mode:** ${doc.mode}\n`;
+  md += `- **Host:** ${doc.host}\n`;
+  md += `- **Overall verdict:** \`${doc.overall_verdict}\` `;
+  md += `(green=${doc.counts.green}, yellow=${doc.counts.yellow}, red=${doc.counts.red}, n/a=${doc.counts.na}, unanswered=${doc.counts.empty})\n\n`;
+  md += `**Tags:** ${doc.summary_tags.map(t => `\`${t}\``).join(" ")}\n\n---\n\n`;
+
+  doc.items.forEach(it => {
+    md += `## ${it.step_id} — ${it.title}\n\n`;
+    md += `**Verdict:** \`${it.verdict || "(unset)"}\`  \n`;
+    md += `**Captured at:** ${it.captured_at || "(not yet)"}\n\n`;
+    md += `### Intent\n${it.intent}\n\n`;
+    md += `### Commands\n\n\`\`\`bash\n${it.commands.join("\n")}\n\`\`\`\n\n`;
+    md += `### Expected\n${it.expected}\n\n`;
+    md += `### Observation\n${it.feedback || "_no feedback recorded_"}\n\n`;
+    md += `**Tags:** ${it.tags.map(t => `\`${t}\``).join(" ")}\n\n---\n\n`;
+  });
+  downloadBlob(md, (state.meta.session_id || "release-gate") + ".md", "text/markdown");
+  toast("Markdown downloaded");
+});
+
+document.getElementById("btn-er1-recipe").addEventListener("click", () => {
+  const filename = (state.meta.session_id || "release-gate") + ".json";
+  const recipe = `# 1) Click "Download JSON" first → saves ${filename} to your Downloads folder
+# 2) Push to ER1 (one item per step):
+cd /Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training
+mv ~/Downloads/${filename} ./
+./push-to-er1.sh ./${filename}
+
+# What this does:
+#   - splits the JSON into one item per step
+#   - applies tags: system:insight, auto:generated, release-gate, kup-berlin, step:<id>, verdict:<v>
+#   - POSTs each to /api/v2/memory/items via the ER1 dual-auth (X-API-KEY + X-User-ID)
+#   - the items are visible in the thinker's space ONLY when "Show system insights" is toggled on`;
+  navigator.clipboard.writeText(recipe).then(() => toast("ER1 push recipe copied to clipboard"));
+});
+
+document.getElementById("btn-save").addEventListener("click", () => { saveState(); toast("Draft saved to localStorage"); });
+
+document.getElementById("btn-clear").addEventListener("click", () => {
+  if (!confirm("Clear all captured verdicts and feedback?")) return;
+  localStorage.removeItem(LS_KEY);
+  state = loadState();
+  render();
+  toast("Cleared", "warn");
+});
+
+// =========================================================================
+// Boot
+// =========================================================================
+render();
+</script>
+
+</body>
+</html>
