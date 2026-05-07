@@ -74,10 +74,17 @@ func main() {
 	case "sync-usage":
 		cmdSyncUsage(os.Args[2:])
 	// === END SPEC-0189 S0a ===
-	// === SPEC-0195 / Sprint 2 / Stream M1: awareness subcommand ===
+	// === SPEC-0195 S2 / Streams M1+M2: awareness + intent ===
+	// `awareness` (M1) dispatches to runAwareness with sub-routes
+	// {sync, verify, reset}. `intent` (M2) dispatches to runIntent
+	// (today only `declare`). Both surface SPEC-0188 §11-style numbered
+	// exit codes via runWithExit, including new 18 (intent_inconsistent)
+	// and 19 (identity_mismatch).
 	case "awareness":
 		runWithExit(func() int { return runAwareness(os.Args[2:], os.Stdout, os.Stderr) })
-	// === END SPEC-0195 ===
+	case "intent":
+		runWithExit(func() int { return runIntent(os.Args[2:], os.Stdout, os.Stderr) })
+	// === END SPEC-0195 S2 ===
 	case "help", "--help", "-h":
 		printUsage(os.Stdout)
 		os.Exit(0)

@@ -24,6 +24,8 @@ func TestExitCode_Sentinels(t *testing.T) {
 		{"governance below min", ErrGovernanceBelowMin, ExitGovernanceBelowMin},
 		{"deps unsatisfied", ErrDepsUnsatisfied, ExitDepsUnsatisfied},
 		{"blob missing", ErrBlobMissing, ExitBlobMissing},
+		{"intent inconsistent", ErrIntentInconsistent, ExitIntentInconsistent},
+		{"identity mismatch", ErrIdentityMismatch, ExitIdentityMismatch},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

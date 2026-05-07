@@ -85,6 +85,38 @@ const (
 	// reviewer_id so the operator can trace the block back to the
 	// SPEC-0192 CISO console verdict.
 	ExitTenantBlocked = 16
+
+	// ExitIntentInconsistent (18) — SPEC-0196 §3.3 cross-rule fired
+	// during a `skillctl intent declare` PATCH (S2.4).
+	//
+	// The PATCH endpoint validates the proposed `intent` block against
+	// the bundle's existing `data_dependencies` using the same three
+	// rules as the awareness admission path:
+	//
+	//   - destructive_green
+	//   - network_false_http_dep
+	//   - write_access_non_destructive
+	//
+	// On failure the registry returns HTTP 400 with
+	//   {"reason": "intent_data_inconsistent", "failed_rule": "..."}.
+	// The CLI surfaces this verbatim and exits 18 so CI can branch on
+	// "the declaration was rejected by policy" without parsing stderr.
+	//
+	// Distinct from generic 1 (network/parse) and 2 (usage) — 18 means
+	// "the SERVER said the declaration is internally inconsistent."
+	ExitIntentInconsistent = 18
+
+	// ExitIdentityMismatch (19) — `skillctl awareness reset` refused
+	// because the calling client's identity does not match the identity
+	// that admitted the session-tagged docs (SPEC-0195 §7, S2.2 Q3).
+	//
+	// The registry returns HTTP 403 with
+	//   {"reason": "identity_mismatch", ...}
+	// when `client_identity != admitted_by_identity`. The CLI surfaces
+	// the conflict and exits 19. Operators with that need use the
+	// standalone procedure (SKILLOR-WORK/s1) which is explicit about
+	// the broader destructive intent.
+	ExitIdentityMismatch = 19
 )
 
 // Sentinel errors so callers can `errors.Is(err, verify.ErrDigestMismatch)`
@@ -130,6 +162,24 @@ var (
 	// when the global chain validates; the tenant CISO's block decision
 	// supersedes for THIS tenant only.
 	ErrTenantBlocked = errors.New("tenant blocked by tenant-scoped attestation")
+
+	// ErrIntentInconsistent — `skillctl intent declare` PATCH failed
+	// SPEC-0196 §3.3 cross-rule validation server-side. Exit code 18.
+	//
+	// The wrapped error message MUST include the `failed_rule` token
+	// returned by the registry (one of "destructive_green",
+	// "network_false_http_dep", "write_access_non_destructive") so the
+	// operator can correlate the rejection with the canonical rule
+	// catalogue.
+	ErrIntentInconsistent = errors.New("intent declaration inconsistent with data_dependencies")
+
+	// ErrIdentityMismatch — `skillctl awareness reset` refused because
+	// the registry detected `client_identity != admitted_by_identity`
+	// for the targeted session_tag. Exit code 19. SPEC-0195 §7 (S2.2 Q3
+	// closure 2026-05-06): cross-identity reset is forbidden on shared
+	// registries; use the standalone broader-destructive procedure if
+	// you really mean it.
+	ErrIdentityMismatch = errors.New("identity mismatch on awareness reset")
 )
 
 // ExitCode maps a verifier error to its numeric process exit code.
@@ -171,6 +221,10 @@ func ExitCode(err error) int {
 		return ExitBlobMissing
 	case errors.Is(err, ErrTenantBlocked):
 		return ExitTenantBlocked
+	case errors.Is(err, ErrIntentInconsistent):
+		return ExitIntentInconsistent
+	case errors.Is(err, ErrIdentityMismatch):
+		return ExitIdentityMismatch
 	default:
 		return 1
 	}
