@@ -18,6 +18,28 @@ type Dependency struct {
 	Constraint string `json:"constraint"` // e.g. ">=2.31"
 }
 
+// Intent declares the skill's self-asserted behaviors and constraints.
+// Mirrors SPEC-0196 §3 `intent` block. Cross-checked against
+// DataDependencies and AuthorGovernanceIntent via
+// ValidateIntentDataCrossRules.
+type Intent struct {
+	Summary             string   `json:"summary,omitempty"`
+	Claims              []string `json:"claims,omitempty"`
+	SideEffects         []string `json:"side_effects,omitempty"` // ["UNKNOWN"] = awareness sentinel
+	Destructive         bool     `json:"destructive,omitempty"`
+	Network             *bool    `json:"network,omitempty"` // pointer so we can distinguish "false" from "unset"
+	HumanReviewRequired bool     `json:"human_review_required,omitempty"`
+	Subprocess          []string `json:"subprocess,omitempty"`
+}
+
+// DataDependency declares one data source the skill reads or writes.
+// Mirrors SPEC-0196 §3 `data_dependencies[]`.
+type DataDependency struct {
+	Kind   string `json:"kind"`             // er1 | firestore_collection | http_endpoint | filesystem | kafka_topic
+	Ref    string `json:"ref,omitempty"`    // identifier within Kind
+	Access string `json:"access,omitempty"` // read | write | passthrough | transform
+}
+
 // BundleManifest is the on-disk `bundle.json` document inside an `.skb` archive.
 // Field order in this struct is preserved by encoding/json's struct-tag emission,
 // which matters for canonicalization: BundleDigest is positioned last among
@@ -36,6 +58,10 @@ type BundleManifest struct {
 	// vs binding governance verdict".
 	AuthorGovernanceIntent     string       `json:"author_governance_intent"`
 	AuthorGovernanceRationale  string       `json:"author_governance_rationale"`
+	// Intent and DataDependencies (SPEC-0196 §3). Optional in v1; pack-time
+	// validator enforces cross-rule consistency via ValidateIntentDataCrossRules.
+	Intent              *Intent          `json:"intent,omitempty"`
+	DataDependencies    []DataDependency `json:"data_dependencies,omitempty"`
 	DependsOn           []Dependency `json:"depends_on"`
 	Supersedes          *string      `json:"supersedes"`
 	DerivedFrom         *string      `json:"derived_from"`
