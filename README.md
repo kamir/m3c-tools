@@ -177,6 +177,76 @@ make uninstall
 
 Data at `~/.m3c-tools/` is preserved — remove manually if desired.
 
+## Branch & worktree workflow
+
+The repo uses a strict feature-branch + worktree workflow. Following these
+rules prevents the "uncommitted overnight work disappears in branch chaos"
+class of incident (post-mortem: `m3c-tools-maintenance/PLAN/incident-2026-05-07-m3c-tools-master-drift.md`).
+
+### Naming
+
+Branch names match `^(feat|feature|fix|chore|docs|test|refactor|spec-\d+|s\d+-m\d+|r-\d+|archive|rescue)/.+$`.
+This is enforced on PR open by the `branch-name-check` GH Action.
+
+Examples:
+- `feat/spec-0188-bundle-pack` — feature for a SPEC.
+- `fix/bug-0124-time-tracking-auth` — bug fix.
+- `s2-m1/awareness-sync` — sprint 2, milestone 1.
+- `r-01/tenant-aware-verifier` — release-blocker R-01.
+- `archive/<name>` — historical refs preserved as branches (typically also tagged).
+
+`master`, `main`, `gh-pages`, and `pre-release-*` are reserved.
+
+### Worktrees
+
+Each active branch gets one worktree under `../wt/<spec>/<short-name>`.
+Create with the canonical entry-point:
+
+```bash
+make worktree SPEC=spec-0195 STEP=awareness-S2.1 BRANCH=s2-m1/awareness-sync
+# creates ../wt/spec-0195/awareness-S2.1, attaches to (or creates) the branch
+```
+
+Optional `BASE=<ref>` (default `origin/master`) controls where new branches start.
+
+### Audit
+
+```bash
+git wta              # global alias — works from any repo
+make branches-audit  # in-repo equivalent
+```
+
+Both print path / branch / age / dirty-file count. Use them at session start
+and end. A nightly launchd job runs `~/.config/m3c/end-of-day-audit.sh` at
+23:30 and posts a macOS notification if any worktree is dirty.
+
+### Don't
+
+- **Don't `git checkout master`** to "clean up" — local `master` is a tracking
+  ref that follows `origin/master`; only update it via `git land` (alias)
+  or by going through PR merge. Direct work on master is an anti-pattern.
+- **Don't leave merged feature branches around.** A weekly GH Action
+  (`archive-merged-branches.yml`) auto-tags merged PR branches as
+  `archive/<branch>` and deletes them on origin; pull + prune to keep your
+  local view tidy:
+  ```bash
+  git fetch origin --prune
+  git branch --merged origin/master | grep -v master | xargs -n1 git branch -D
+  ```
+- **Don't share a worktree across two branches.** One branch, one worktree.
+  Switch by creating a second worktree, not by `git checkout` inside the
+  existing one.
+
+### Recovery
+
+If you lose track:
+- `git reflog --date=iso` — every HEAD movement, with timestamps. Reflog
+  entries live 90 days. If a branch tip got lost, it's recoverable here.
+- `archive/<name>` tags on origin — every merged-and-deleted branch lives
+  on as a tag.
+- `m3c-tools-maintenance/PLAN/incident-2026-05-07-m3c-tools-master-drift.md`
+  — full recovery worked example (master → wrong line → fix).
+
 ## License
 
 See [LICENSE](LICENSE).

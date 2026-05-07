@@ -221,6 +221,47 @@ menubar: build
 clean:
 	rm -rf $(BUILD_DIR)
 
+# Create a new git worktree under wt/ following the project convention.
+# Usage: make worktree SPEC=spec-0195 STEP=awareness-S2.1 BRANCH=s2-m1/awareness-sync [BASE=origin/master]
+#
+# Convention enforced:
+#   - directory:  ../wt/<SPEC>/<STEP>
+#   - branch:     <BRANCH> (created from BASE if it doesn't exist)
+#   - one branch per worktree, one worktree per active branch
+#
+# After creation, run `git wta` from any worktree to see the full inventory.
+.PHONY: worktree
+worktree:
+	@if [ -z "$(SPEC)" ] || [ -z "$(STEP)" ] || [ -z "$(BRANCH)" ]; then \
+		echo "Usage: make worktree SPEC=spec-XXXX STEP=name BRANCH=feat/name [BASE=origin/master]"; \
+		exit 2; \
+	fi
+	@base=$${BASE:-origin/master}; \
+	wtpath="../wt/$(SPEC)/$(STEP)"; \
+	if [ -e "$$wtpath" ]; then echo "$$wtpath already exists"; exit 2; fi; \
+	if git show-ref --verify --quiet "refs/heads/$(BRANCH)"; then \
+		echo "Branch $(BRANCH) exists — attaching worktree to it"; \
+		git worktree add "$$wtpath" "$(BRANCH)"; \
+	else \
+		echo "Creating branch $(BRANCH) from $$base"; \
+		git worktree add -b "$(BRANCH)" "$$wtpath" "$$base"; \
+	fi
+	@echo "✓ worktree created at $$wtpath on branch $(BRANCH)"
+
+# Audit all worktrees: which branch, how old, how dirty.
+# Mirrors the `git wta` global alias for users who haven't installed it.
+.PHONY: branches-audit
+branches-audit:
+	@printf "%-50s %-30s %-15s %s\n" "PATH" "BRANCH" "AGE" "DIRTY"
+	@git worktree list --porcelain | awk '/^worktree/{print $$2}' | while read -r wt; do \
+		cd "$$wt" 2>/dev/null || continue; \
+		branch=$$(git branch --show-current 2>/dev/null); \
+		age=$$(git log -1 --format='%cr' HEAD 2>/dev/null); \
+		dirty=$$(git status --porcelain 2>/dev/null | wc -l | tr -d ' '); \
+		flag=""; [ "$$dirty" -gt 0 ] && flag=" ⚠"; \
+		printf "%-50s %-30s %-15s %s%s\n" "$$wt" "$$branch" "$$age" "$$dirty" "$$flag"; \
+	done
+
 # Check all packages compile
 .PHONY: vet
 vet:
