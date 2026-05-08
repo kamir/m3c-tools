@@ -367,7 +367,7 @@ const STEPS = [
     id: "02", title: "Mirko publishes to aims", category: "online-stretch", isGate: false,
     intent: "Round-trip via aims-core registry. Best-effort: the chain proof does not depend on this. Surfaces real online-mode gaps (admin-gated identity registration, multipart field name).",
     commands: [
-      "export ER1_API_KEY=<your-er1-api-key>   # see ~/.config/m3c/er1.env or your team's vault",
+      "export ER1_API_KEY=$(security find-generic-password -s aims-core-er1 -a \"$USER\" -w)",
       "bash 02-mirko-publish.sh"
     ],
     expected: "HTTP 200/201/409 for both /api/skills/identities and /api/skills/bundles. v1 known-gap: identity registration may return 403 (admin required) — fall through is acceptable."
