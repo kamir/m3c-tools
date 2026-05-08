@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/config"
 )
 
 // Config holds ER1 server connection settings, loaded from environment variables.
@@ -38,6 +40,17 @@ func LoadConfig() *Config {
 		VerifySSL:     envBool("ER1_VERIFY_SSL", true),
 		RetryInterval: envInt("ER1_RETRY_INTERVAL", 300),
 		MaxRetries:    envInt("ER1_MAX_RETRIES", 10),
+	}
+	// BUG-0137: refuse to use a placeholder API key against a non-local URL.
+	// The active profile may have shipped with a template value (`minimal-key`,
+	// `once-only`, …) that production rejects. Clearing APIKey here converts
+	// "silent 401 from the server, item queued forever" into the existing
+	// "no authentication configured" warning path below — visible at startup,
+	// and the upload code skips the request entirely (BUG-0093 fallthrough).
+	if config.IsBlockingPlaceholder(cfg.APIKey, cfg.APIURL) {
+		log.Printf("[er1] FATAL: ER1_API_KEY is a placeholder (%q) targeting %q — refusing to upload. Run 'm3c-tools doctor' or fix the active profile.",
+			cfg.APIKey, cfg.APIURL)
+		cfg.APIKey = ""
 	}
 	// BUG-0093 + SPEC-0143: Only warn when NO auth is available.
 	// Device token (SPEC-0127) is the primary auth method; API key is fallback for dev/CI.

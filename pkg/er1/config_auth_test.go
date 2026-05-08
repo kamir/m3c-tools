@@ -73,3 +73,48 @@ func TestHealthCheck_AcceptsDeviceTokenAuth(t *testing.T) {
 	// The error may be "unreachable" (no server running) -- that's expected and OK.
 	// The important thing is that the auth gate did not block.
 }
+
+// BUG-0137: a placeholder API key targeting prod must be wiped at LoadConfig
+// time so the request is never sent (no silent server-side 401).
+func TestLoadConfig_PlaceholderKeyOnProdIsCleared(t *testing.T) {
+	t.Setenv("ER1_DEVICE_TOKEN", "")
+	os.Unsetenv("ER1_DEVICE_TOKEN")
+	t.Setenv("ER1_API_KEY", "minimal-key")
+	t.Setenv("ER1_API_URL", "https://onboarding.guide/upload_2")
+	t.Setenv("HOME", t.TempDir()) // suppress device-token.enc presence noise
+
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
+	cfg := LoadConfig()
+	if cfg == nil {
+		t.Fatal("LoadConfig returned nil")
+	}
+	if cfg.APIKey != "" {
+		t.Errorf("placeholder key against prod must be cleared; got APIKey = %q", cfg.APIKey)
+	}
+	if !bytes.Contains(buf.Bytes(), []byte("FATAL")) {
+		t.Errorf("expected FATAL log line for placeholder key, got: %q", buf.String())
+	}
+	if !bytes.Contains(buf.Bytes(), []byte("minimal-key")) {
+		t.Errorf("FATAL log line must name the offending placeholder, got: %q", buf.String())
+	}
+}
+
+// BUG-0137: the dev-credential against localhost is a legitimate pairing
+// (the local Docker container accepts it). LoadConfig must not clear it.
+func TestLoadConfig_DevCredentialOnLocalhostIsKept(t *testing.T) {
+	t.Setenv("ER1_DEVICE_TOKEN", "")
+	os.Unsetenv("ER1_DEVICE_TOKEN")
+	t.Setenv("ER1_API_KEY", "democredential-er1-api-key")
+	t.Setenv("ER1_API_URL", "https://127.0.0.1:8081/upload_2")
+
+	cfg := LoadConfig()
+	if cfg == nil {
+		t.Fatal("LoadConfig returned nil")
+	}
+	if cfg.APIKey != "democredential-er1-api-key" {
+		t.Errorf("dev credential against localhost must be kept; got APIKey = %q", cfg.APIKey)
+	}
+}

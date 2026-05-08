@@ -98,6 +98,52 @@ var placeholderKeys = map[string]struct{}{
 	"":                          {},
 }
 
+// IsPlaceholderKey reports whether the given API key matches a known
+// placeholder / template value that will never authenticate.
+//
+// BUG-0137: this list previously lived only inside ValidateProfile.
+// Exposed here so activation gates (SwitchProfile) and runtime auth loaders
+// (pkg/er1.LoadConfig) can refuse the same set without reimplementing it.
+func IsPlaceholderKey(key string) bool {
+	_, ok := placeholderKeys[strings.TrimSpace(key)]
+	return ok
+}
+
+// IsBlockingPlaceholder reports whether a placeholder key in `key` should
+// block activation/upload **for the given target URL**.
+//
+// BUG-0137 carve-out: the dev profile ships with key="democredential-er1-api-key"
+// because the local Docker container at 127.0.0.1:8081 accepts that exact value
+// as its hardcoded test credential. Sending it to localhost is the happy path;
+// sending the same key to onboarding.guide is the footgun. So we only block
+// when the URL is non-local.
+//
+// Pure (no network). Localhost detection is literal: 127.x, ::1, localhost.
+// We deliberately do not treat *.local as localhost — that's mDNS and may
+// resolve to a real LAN host.
+func IsBlockingPlaceholder(key, apiURL string) bool {
+	if !IsPlaceholderKey(key) {
+		return false
+	}
+	if key == "democredential-er1-api-key" && isLocalhostURL(apiURL) {
+		return false
+	}
+	return true
+}
+
+func isLocalhostURL(s string) bool {
+	parsed, err := neturl.Parse(strings.TrimSpace(s))
+	if err != nil || parsed == nil {
+		return false
+	}
+	host := parsed.Hostname()
+	switch host {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	}
+	return strings.HasPrefix(host, "127.")
+}
+
 // ValidateProfile inspects a single profile and returns its issues.
 //
 // Pure (no network) — wires up against ValidateAll, which adds cross-profile

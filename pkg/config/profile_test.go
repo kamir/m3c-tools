@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -178,8 +179,15 @@ func TestSwitchProfile(t *testing.T) {
 	dir := t.TempDir()
 	pm := &ProfileManager{BaseDir: dir}
 
-	_ = pm.CreateProfile("one", "First", map[string]string{"ER1_API_URL": "https://one"})
-	_ = pm.CreateProfile("two", "Second", map[string]string{"ER1_API_URL": "https://two"})
+	// BUG-0137: SwitchProfile now gates against placeholder keys → use real-looking ones.
+	_ = pm.CreateProfile("one", "First", map[string]string{
+		"ER1_API_URL": "https://one/upload_2",
+		"ER1_API_KEY": "real-looking-key-1234567890",
+	})
+	_ = pm.CreateProfile("two", "Second", map[string]string{
+		"ER1_API_URL": "https://two/upload_2",
+		"ER1_API_KEY": "real-looking-key-0987654321",
+	})
 	_ = pm.writeActiveProfile("one")
 
 	if err := pm.SwitchProfile("two"); err != nil {
@@ -192,8 +200,80 @@ func TestSwitchProfile(t *testing.T) {
 	}
 
 	// Environment should reflect the switched profile.
-	if got := os.Getenv("ER1_API_URL"); got != "https://two" {
-		t.Errorf("ER1_API_URL = %q, want %q", got, "https://two")
+	if got := os.Getenv("ER1_API_URL"); got != "https://two/upload_2" {
+		t.Errorf("ER1_API_URL = %q, want %q", got, "https://two/upload_2")
+	}
+}
+
+// BUG-0137: SwitchProfile must refuse to activate a profile whose API key
+// is a known placeholder targeting a non-local URL.
+func TestSwitchProfile_RefusesPlaceholderOnProd(t *testing.T) {
+	dir := t.TempDir()
+	pm := &ProfileManager{BaseDir: dir}
+
+	_ = pm.CreateProfile("safe", "Safe baseline", map[string]string{
+		"ER1_API_URL": "https://example.com/upload_2",
+		"ER1_API_KEY": "real-looking-key-1234567890",
+	})
+	_ = pm.CreateProfile("broken", "Placeholder-key prod target", map[string]string{
+		"ER1_API_URL": "https://onboarding.guide/upload_2",
+		"ER1_API_KEY": "minimal-key",
+	})
+	_ = pm.writeActiveProfile("safe")
+
+	err := pm.SwitchProfile("broken")
+	if err == nil {
+		t.Fatalf("SwitchProfile(broken) succeeded; expected refusal because of placeholder key on prod")
+	}
+	// The error must name the offending key so the operator can fix it.
+	if !strings.Contains(err.Error(), "minimal-key") {
+		t.Errorf("error must mention the offending key value, got: %v", err)
+	}
+
+	// Critical: the active-profile pointer must NOT have flipped to broken.
+	if got := pm.ActiveProfileName(); got != "safe" {
+		t.Errorf("active-profile flipped to %q despite gate; want %q", got, "safe")
+	}
+
+	// Environment must NOT have absorbed the broken profile's vars.
+	if got := os.Getenv("ER1_API_URL"); got == "https://onboarding.guide/upload_2" {
+		t.Errorf("ER1_API_URL was applied from broken profile; gate failed to short-circuit")
+	}
+}
+
+// BUG-0137: A placeholder key used against localhost is the legitimate
+// happy path for the seeded `dev` profile. Activation must succeed.
+func TestSwitchProfile_AllowsDevCredentialOnLocalhost(t *testing.T) {
+	dir := t.TempDir()
+	pm := &ProfileManager{BaseDir: dir}
+
+	_ = pm.CreateProfile("dev", "Local Docker", map[string]string{
+		"ER1_API_URL": "https://127.0.0.1:8081/upload_2",
+		"ER1_API_KEY": "democredential-er1-api-key",
+	})
+	if err := pm.SwitchProfile("dev"); err != nil {
+		t.Fatalf("SwitchProfile(dev/localhost) refused (gate is too strict): %v", err)
+	}
+	if got := pm.ActiveProfileName(); got != "dev" {
+		t.Errorf("active = %q, want %q", got, "dev")
+	}
+}
+
+// BUG-0137: ForceSwitchProfile bypasses the gate (recovery / seeding only).
+func TestForceSwitchProfile_BypassesGate(t *testing.T) {
+	dir := t.TempDir()
+	pm := &ProfileManager{BaseDir: dir}
+
+	_ = pm.CreateProfile("broken", "Placeholder-key prod target", map[string]string{
+		"ER1_API_URL": "https://onboarding.guide/upload_2",
+		"ER1_API_KEY": "minimal-key",
+	})
+
+	if err := pm.ForceSwitchProfile("broken"); err != nil {
+		t.Fatalf("ForceSwitchProfile must bypass the gate, got error: %v", err)
+	}
+	if got := pm.ActiveProfileName(); got != "broken" {
+		t.Errorf("active = %q, want %q", got, "broken")
 	}
 }
 

@@ -156,13 +156,41 @@ func (pm *ProfileManager) ActiveProfile() (*Profile, error) {
 
 // SwitchProfile writes the given name to the active-profile file and applies
 // the profile's environment variables to the current process.
+//
 // BUG-0089: Added round-trip verification and detailed error logging to
 // diagnose silent failures on Windows where file writes may not persist.
+//
+// BUG-0137: Refuses to activate a profile that carries a placeholder API key
+// against a non-local target URL — that combination silently breaks every
+// upload with a server-side 401 and is the single most common menubar outage.
+// Use ForceSwitchProfile to bypass (e.g. seeding scripts or recovery flows).
 func (pm *ProfileManager) SwitchProfile(name string) error {
 	p, err := pm.GetProfile(name)
 	if err != nil {
 		return fmt.Errorf("profile %q not found: %w", name, err)
 	}
+	if IsBlockingPlaceholder(p.Vars["ER1_API_KEY"], p.Vars["ER1_API_URL"]) {
+		return fmt.Errorf(
+			"profile %q has a placeholder ER1_API_KEY (%q) targeting %q — refusing to activate. "+
+				"Edit the profile to set a real key, or run 'm3c-tools doctor' for details. "+
+				"To override (recovery only) use ForceSwitchProfile.",
+			name, p.Vars["ER1_API_KEY"], p.Vars["ER1_API_URL"])
+	}
+	return pm.forceSwitchProfileLocked(name, p)
+}
+
+// ForceSwitchProfile activates the named profile without running the
+// BUG-0137 placeholder gate. Reserved for seeding (EnsureDefaults) and
+// recovery scripts; production code paths should call SwitchProfile.
+func (pm *ProfileManager) ForceSwitchProfile(name string) error {
+	p, err := pm.GetProfile(name)
+	if err != nil {
+		return fmt.Errorf("profile %q not found: %w", name, err)
+	}
+	return pm.forceSwitchProfileLocked(name, p)
+}
+
+func (pm *ProfileManager) forceSwitchProfileLocked(name string, p *Profile) error {
 	if err := pm.writeActiveProfile(name); err != nil {
 		return fmt.Errorf("persist profile switch to %q: %w", name, err)
 	}
