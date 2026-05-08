@@ -56,6 +56,7 @@ declare -a RESULTS=()         # "<id>|<verdict>|<msg>"
 declare -i CHECKS_TOTAL=0
 declare -i CHECKS_PASS=0
 declare -i CHECKS_FAIL=0
+declare -i CHECKS_WARN=0
 LOG="$LOG_DIR/run-and-prove.log"
 
 mkdir -p "$LOG_DIR"
@@ -66,10 +67,10 @@ record() {
   RESULTS+=("${id}|${verdict}|${msg}")
   CHECKS_TOTAL=$((CHECKS_TOTAL+1))
   case "$verdict" in
-    green) CHECKS_PASS=$((CHECKS_PASS+1)); c_green  "  ✓ [$id] $msg" ;;
-    red)   CHECKS_FAIL=$((CHECKS_FAIL+1)); c_red    "  ✗ [$id] $msg" ;;
-    yellow) c_yellow "  ! [$id] $msg" ;;
-    *) c_dim "  ? [$id] $msg" ;;
+    green)  CHECKS_PASS=$((CHECKS_PASS+1)); c_green  "  ✓ [$id] $msg" ;;
+    red)    CHECKS_FAIL=$((CHECKS_FAIL+1)); c_red    "  ✗ [$id] $msg" ;;
+    yellow) CHECKS_WARN=$((CHECKS_WARN+1)); c_yellow "  ! [$id] $msg" ;;
+    *)      c_dim "  ? [$id] $msg" ;;
   esac
 }
 
@@ -166,10 +167,20 @@ summary() {
   c_bold "═══════════════════════════════════════"
   printf "  Checks total: %d\n" "$CHECKS_TOTAL"
   c_green "  Pass:  $CHECKS_PASS"
+  if [ "$CHECKS_WARN" -gt 0 ]; then
+    c_yellow "  Warn:  $CHECKS_WARN"
+  else
+    printf "  Warn:  %d\n" "$CHECKS_WARN"
+  fi
   if [ "$CHECKS_FAIL" -gt 0 ]; then
     c_red "  Fail:  $CHECKS_FAIL"
   else
     printf "  Fail:  %d\n" "$CHECKS_FAIL"
+  fi
+  # Sanity: pass + warn + fail must equal total. If not, the loop drifted.
+  local sum=$((CHECKS_PASS + CHECKS_WARN + CHECKS_FAIL))
+  if [ "$sum" -ne "$CHECKS_TOTAL" ]; then
+    c_red "  ⚠ accounting drift: $sum (pass+warn+fail) != $CHECKS_TOTAL (total)"
   fi
   echo ""
   if [ -n "$JSON_OUT" ]; then
@@ -194,8 +205,8 @@ write_json() {
     printf '  "host": "%s",\n' "$(uname -sm | tr ' ' '-' | tr '[:upper:]' '[:lower:]')"
     printf '  "start_dir": "%s",\n' "$SCRIPT_DIR"
     printf '  "overall_verdict": "%s",\n' "$overall"
-    printf '  "counts": { "total": %d, "green": %d, "red": %d },\n' \
-      "$CHECKS_TOTAL" "$CHECKS_PASS" "$CHECKS_FAIL"
+    printf '  "counts": { "total": %d, "green": %d, "yellow": %d, "red": %d },\n' \
+      "$CHECKS_TOTAL" "$CHECKS_PASS" "$CHECKS_WARN" "$CHECKS_FAIL"
     printf '  "checks": [\n'
     local first=1
     for line in "${RESULTS[@]}"; do
