@@ -219,7 +219,9 @@
 <body>
 
 <header class="top">
-  <h1>KuP Release-Gate &nbsp;<span class="accent">Capture Form</span></h1>
+  <h1>KuP Release-Gate &nbsp;<span class="accent">Capture Form</span>
+    <span id="form-version" style="font-size:11px;color:var(--ma-muted);font-family:var(--ma-mono);margin-left:12px;font-weight:400;"></span>
+  </h1>
   <div class="actions">
     <button id="btn-save"     title="Save current state to localStorage">Save draft</button>
     <button id="btn-download-json" class="primary">Download JSON</button>
@@ -464,6 +466,15 @@ const STEPS = [
 ];
 
 // =========================================================================
+// Form version — bump when STEPS or commands change. Surfaced in the
+// header + included in the JSON export so a stale-cache run is identifiable
+// in the captured artifact (BUG: 2026-05-08 KuP run had cached step-02
+// commands showing the placeholder ER1_API_KEY even though the operator ran
+// the keychain command).
+// =========================================================================
+const FORM_VERSION = "2026-05-08-kup-rg-v3";
+
+// =========================================================================
 // State + persistence
 // =========================================================================
 const LS_KEY = "kup-release-gate-state-v1";
@@ -502,6 +513,10 @@ function render() {
   // Start-directory banner
   const sdEl = document.getElementById("start-dir-cmd");
   if (sdEl) sdEl.textContent = `cd ${START_DIR}`;
+
+  // Form version (cache-staleness signal)
+  const fvEl = document.getElementById("form-version");
+  if (fvEl) fvEl.textContent = FORM_VERSION;
 
   const c = document.getElementById("steps-container");
   c.innerHTML = "";
@@ -659,6 +674,7 @@ function buildExport() {
 
   return {
     schema: "m3c-system-insight-document/v1",
+    form_version: FORM_VERSION,
     session_id: state.meta.session_id,
     cohort: state.meta.cohort,
     captured_by: state.meta.captured_by,

@@ -28,14 +28,22 @@ auth_curl "$MIRKO_ID" -- -X POST "$REGISTRY_URL/api/skills/identities" \
     -o "$LOG_DIR/identity-mirko.json" -w "HTTP %{http_code}\n" \
   | tee -a "$LOG_DIR/full.log"
 
-# 2) POST the bundle (multipart: blob + author signature)
+# 2) POST the bundle (multipart: blob + raw 64-byte signature + identity_id)
+# Field names per server contract — flask/modules/skill_registry/api.py:458
+# admit_bundle() reads:
+#   - bundle      (file)  — the .skb tarball
+#   - signature   (file)  — raw 64-byte ed25519 signature over the bundle digest
+#   - identity_id (form)  — author identity (e.g. id:mirko@m3c)
+# An earlier version of this script sent author_sig + author_identity, which
+# the server rejected with HTTP 400 "Missing required field: signature (file)"
+# during the 2026-05-08 KuP release-gate run.
 log "POST $REGISTRY_URL/api/skills/bundles"
 HTTP=$(curl -sk \
   -H "X-API-KEY: ${ER1_API_KEY}" \
   -H "X-User-ID: $MIRKO_ID" \
   -F "bundle=@$BUNDLE" \
-  -F "author_sig=@$SIG" \
-  -F "author_identity=$MIRKO_ID" \
+  -F "signature=@$SIG" \
+  -F "identity_id=$MIRKO_ID" \
   -o "$LOG_DIR/admit.json" -w "%{http_code}" \
   "$REGISTRY_URL/api/skills/bundles") || true
 echo "HTTP $HTTP" | tee -a "$LOG_DIR/full.log"
