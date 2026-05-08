@@ -293,10 +293,25 @@ if [ "$SKIP_ONLINE" -eq 0 ]; then
   run_step 02 "Mirko publishes to aims" bash 02-mirko-publish.sh
   assert_file 02 "$LOG_DIR/admit.json"           "admit.json written"
   if [ -f "$LOG_DIR/admit.json" ]; then
-    if grep -qE '"code"\s*:\s*"(already_exists|admitted|signature_invalid)"|"digest"' "$LOG_DIR/admit.json"; then
-      record 02 green "registry responded (admitted, dup, or specific failure code)"
+    # Each known response is reported with its semantic verdict.
+    # See flask/modules/skill_registry/api.py admit_bundle for the full
+    # error-code catalog.
+    if grep -qE '"digest"\s*:' "$LOG_DIR/admit.json"; then
+      record 02 green "registry admitted bundle fresh (200/201 with digest)"
+    elif grep -qE '"code"\s*:\s*"already_admitted"' "$LOG_DIR/admit.json"; then
+      record 02 green "registry returned 'already_admitted' (idempotent re-run — normal)"
+    elif grep -qE '"code"\s*:\s*"already_exists"' "$LOG_DIR/admit.json"; then
+      record 02 green "registry returned 'already_exists' (HTTP 409 — idempotent)"
+    elif grep -qE '"code"\s*:\s*"signature_invalid"' "$LOG_DIR/admit.json"; then
+      record 02 red "signature_invalid — registered Mirko pubkey doesn't match local key (ran P0 with the right keypair?)"
+    elif grep -qE '"code"\s*:\s*"storage_failed"' "$LOG_DIR/admit.json"; then
+      record 02 yellow "storage_failed — server-side SKILL_REGISTRY_KEY not configured (chain proof in 05 doesn't depend on this)"
+    elif grep -qE '"code"\s*:\s*"identity_not_found"' "$LOG_DIR/admit.json"; then
+      record 02 red "identity_not_found — register Mirko first via P0 (./register-identity.sh id:mirko@m3c …)"
+    elif grep -qE '"code"\s*:\s*"VALIDATION_ERROR"' "$LOG_DIR/admit.json"; then
+      record 02 red "VALIDATION_ERROR — script may have wrong multipart field names (expected: bundle/signature/identity_id)"
     else
-      record 02 yellow "registry response shape unexpected (best-effort step — continuing)"
+      record 02 yellow "registry response shape unrecognized: $(head -c 200 "$LOG_DIR/admit.json" | tr -d '\n')"
     fi
   fi
 fi
