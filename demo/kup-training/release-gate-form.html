@@ -369,11 +369,8 @@ const STEPS = [
   },
   {
     id: "02", title: "Mirko publishes to aims", category: "online-stretch", isGate: false,
-    intent: "Round-trip via aims-core registry. Requires P0 (Mirko registered). Identity-registration leg returns 403 by design (auth_curl uses id:mirko@m3c, not the admin user); bundle admit returns 200/201/409.",
-    commands: [
-      "export ER1_API_KEY=$(security find-generic-password -s aims-core-er1 -a \"$USER\" -w)",
-      "bash 02-mirko-publish.sh"
-    ],
+    intent: "Round-trip via aims-core registry. Requires P0 (Mirko registered). Identity-registration leg returns 403 by design (auth_curl uses id:mirko@m3c, not the admin user); bundle admit returns 200/201/409. ER1_API_KEY is auto-resolved from the macOS keychain by lib/common.sh on first call — no manual export needed.",
+    commands: [ "bash 02-mirko-publish.sh" ],
     expected: "Bundle admit HTTP 200/201/409. Without P0: signature_invalid (registered pubkey doesn't match local). Without SKILL_REGISTRY_KEY env: 500 storage_failed (acceptable per spec — chain proof in 05 doesn't depend on this)."
   },
   {
@@ -461,14 +458,14 @@ const STEPS = [
 // commands showing the placeholder ER1_API_KEY even though the operator ran
 // the keychain command).
 // =========================================================================
-const FORM_VERSION = "2026-05-08-kup-rg-v4";
+const FORM_VERSION = "2026-05-08-kup-rg-v5";
 
 // =========================================================================
 // State + persistence
 // =========================================================================
 // Bump on every STEPS schema change so stale drafts don't mismap onto a
 // new step array (P0 was inserted at index 0 in v4).
-const LS_KEY = "kup-release-gate-state-v4";
+const LS_KEY = "kup-release-gate-state-v5";
 let state = loadState();
 
 function loadState() {

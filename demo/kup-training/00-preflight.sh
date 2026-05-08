@@ -44,12 +44,30 @@ ok "built $(file "$SKILLCTL" | sed 's/.*: //')"
 "$SKILLCTL" --help >>"$LOG_DIR/full.log" 2>&1
 ok "skillctl --help works"
 
-# 5) Online-mode probe (informational only)
+# 5) Online-mode probe — auto-resolve ER1_API_KEY from macOS keychain if unset.
+# Same convention used by register-identity.sh and push-to-er1.sh:
+#   service = aims-core-er1 ,  account = $USER
+if [[ -z "${ER1_API_KEY:-}" ]] && command -v security >/dev/null 2>&1; then
+  _kc_key=$(security find-generic-password -s aims-core-er1 -a "$USER" -w 2>/dev/null || true)
+  if [[ -n "$_kc_key" ]]; then
+    export ER1_API_KEY="$_kc_key"
+    ok "ER1_API_KEY auto-resolved from macOS keychain (service=aims-core-er1, account=$USER)"
+  fi
+fi
+
 if online_mode_available; then
   ok "registry reachable at $REGISTRY_URL — online stretch goal will run"
 else
-  warn "registry not reachable or ER1_API_KEY not set — online stretch goal will be skipped"
-  note "to enable: export ER1_API_KEY=... and ensure $REGISTRY_URL/api/skills/health returns 200"
+  warn "online stretch goal will be skipped"
+  if [[ -z "${ER1_API_KEY:-}" ]]; then
+    note "ER1_API_KEY not set and not in keychain. Add it once with:"
+    note "  security add-generic-password -s aims-core-er1 -a \"\$USER\" -w"
+    note "Or export it inline:"
+    note "  export ER1_API_KEY=\$(security find-generic-password -s aims-core-er1 -a \"\$USER\" -w)"
+  else
+    note "ER1_API_KEY is set but $REGISTRY_URL/api/skills/health did not return 200."
+    note "Check the local stack: docker ps | grep aims-core-local"
+  fi
 fi
 
 # 6) Clean previous demo state (artifacts/ only — we never touch the host)

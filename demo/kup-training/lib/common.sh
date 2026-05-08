@@ -105,8 +105,25 @@ require_skillctl() {
   fi
 }
 
+# Resolve ER1_API_KEY from macOS keychain if it's not already in env.
+# Same convention used by register-identity.sh and push-to-er1.sh:
+#   service = aims-core-er1 ,  account = $USER
+# Returns 0 whether or not the key was resolved (caller checks $ER1_API_KEY).
+ensure_er1_api_key_from_keychain() {
+  if [[ -n "${ER1_API_KEY:-}" ]]; then return 0; fi
+  if ! command -v security >/dev/null 2>&1; then return 0; fi
+  local _kc_key
+  _kc_key=$(security find-generic-password -s aims-core-er1 -a "$USER" -w 2>/dev/null || true)
+  if [[ -n "$_kc_key" ]]; then
+    export ER1_API_KEY="$_kc_key"
+  fi
+}
+
 # Online-mode probe: returns 0 if registry is reachable AND creds are set.
+# Auto-resolves ER1_API_KEY from the macOS keychain on first call so users
+# don't have to remember to export it before running each step script.
 online_mode_available() {
+  ensure_er1_api_key_from_keychain
   [[ -n "${ER1_API_KEY:-}" ]] || return 1
   curl -sk -m 3 -o /dev/null -w "%{http_code}" "$REGISTRY_URL/api/skills/health" 2>/dev/null \
     | grep -q "^200$" || return 1
