@@ -8,12 +8,26 @@ require_skillctl
 
 header "01 — Mirko authors and signs the skill"
 
-# 1) Generate Mirko's signing key (idempotent: remove leftovers from prior runs)
-rm -f "$KEYS_DIR/mirko.priv" "$KEYS_DIR/mirko.pub"
-log "Mirko: skillctl keygen --out $KEYS_DIR/mirko"
-run_ok "$SKILLCTL" keygen --out "$KEYS_DIR/mirko" >/dev/null
-test -f "$KEYS_DIR/mirko.priv" && test -f "$KEYS_DIR/mirko.pub"
-ok "wrote mirko.priv (mode 0600) and mirko.pub (mode 0644)"
+# 1) Generate Mirko's signing key (idempotent across runs)
+# Reuse existing keys if present — the registry persists Mirko's identity
+# tied to a specific pubkey, so generating a new keypair every run would
+# produce signature_invalid on subsequent online publish attempts. Pass
+# --new-key to force regen (you'd then need to re-register the identity).
+NEW_KEY=0
+for arg in "$@"; do
+  case "$arg" in
+    --new-key|--regen-keys) NEW_KEY=1 ;;
+  esac
+done
+if [ "$NEW_KEY" -eq 1 ] || [ ! -f "$KEYS_DIR/mirko.priv" ] || [ ! -f "$KEYS_DIR/mirko.pub" ]; then
+  rm -f "$KEYS_DIR/mirko.priv" "$KEYS_DIR/mirko.pub"
+  log "Mirko: skillctl keygen --out $KEYS_DIR/mirko"
+  run_ok "$SKILLCTL" keygen --out "$KEYS_DIR/mirko" >/dev/null
+  test -f "$KEYS_DIR/mirko.priv" && test -f "$KEYS_DIR/mirko.pub"
+  ok "wrote mirko.priv (mode 0600) and mirko.pub (mode 0644)"
+else
+  ok "reusing existing mirko keypair (--new-key to force regen)"
+fi
 
 # 2) Stage the skill source as a clean copy under bundles/src/
 SRC="$BUNDLES_DIR/src/$SKILL_NAME"

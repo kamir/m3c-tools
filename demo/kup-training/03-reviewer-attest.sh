@@ -11,10 +11,20 @@ header "03 — Reviewer attests 🟢 (governance verdict)"
 
 DIGEST=$(cat "$ARTIFACTS_DIR/digest.txt")
 
-# 1) Reviewer keypair (idempotent)
-rm -f "$KEYS_DIR/reviewer.priv" "$KEYS_DIR/reviewer.pub"
-"$SKILLCTL" keygen --out "$KEYS_DIR/reviewer" >>"$LOG_DIR/full.log" 2>&1
-ok "reviewer keypair: $KEYS_DIR/reviewer.{priv,pub}"
+# 1) Reviewer keypair (idempotent across runs — same rationale as 01)
+NEW_KEY=0
+for arg in "$@"; do
+  case "$arg" in
+    --new-key|--regen-keys) NEW_KEY=1 ;;
+  esac
+done
+if [ "$NEW_KEY" -eq 1 ] || [ ! -f "$KEYS_DIR/reviewer.priv" ] || [ ! -f "$KEYS_DIR/reviewer.pub" ]; then
+  rm -f "$KEYS_DIR/reviewer.priv" "$KEYS_DIR/reviewer.pub"
+  "$SKILLCTL" keygen --out "$KEYS_DIR/reviewer" >>"$LOG_DIR/full.log" 2>&1
+  ok "reviewer keypair: $KEYS_DIR/reviewer.{priv,pub}"
+else
+  ok "reusing existing reviewer keypair (--new-key to force regen)"
+fi
 
 # 2) Online path: skillctl attest
 if online_mode_available; then

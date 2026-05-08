@@ -263,7 +263,7 @@
   <div class="stat"><span class="dot yellow"></span> <span class="count" data-stat="yellow">0</span> <span class="label">yellow</span></div>
   <div class="stat"><span class="dot red"></span>    <span class="count" data-stat="red">0</span>    <span class="label">red</span></div>
   <div class="stat"><span class="dot na"></span>     <span class="count" data-stat="na">0</span>     <span class="label">n/a</span></div>
-  <div class="stat"><span class="dot empty"></span>  <span class="count" data-stat="empty">14</span> <span class="label">unanswered</span></div>
+  <div class="stat"><span class="dot empty"></span>  <span class="count" data-stat="empty">15</span> <span class="label">unanswered</span></div>
 </div>
 
 <div id="steps-container"></div>
@@ -347,63 +347,52 @@ const START_DIR = "/Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training";
 
 const STEPS = [
   {
+    id: "P0", title: "Prerequisite — register identities (one-time)", category: "setup", isGate: false,
+    intent: "Register id:mirko@m3c and id:reviewer@m3c in the local registry once. After 01 and 03 generate the keypairs, this is the missing setup step that unlocks fully-green online runs of 02 and 03. Idempotent (HTTP 409 on re-run).",
+    commands: [
+      "./register-identity.sh id:mirko@m3c    artifacts/keys/mirko.pub    'Mirko (KuP demo author)'",
+      "./register-identity.sh id:reviewer@m3c artifacts/keys/reviewer.pub 'Reviewer (KuP demo)'"
+    ],
+    expected: "HTTP 201 first time, HTTP 409 (already_exists) on re-run. The script auto-resolves ER1_API_KEY from macOS keychain, X-User-ID from ~/.m3c-tools.env, and pubkey_b64 from the PEM file."
+  },
+  {
     id: "00", title: "Preflight", category: "setup", isGate: false,
-    intent: "Build skillctl from s2/integration. Verify host tools (go, curl, shasum, tar, gzip). Probe online registry. Reset workspace under artifacts/ only — never touch host ~/.claude.",
+    intent: "Build skillctl from s2/integration. Verify host tools. Probe online registry. Reset workspace under artifacts/ only (keys preserved by default — pass --reset-all to wipe).",
     commands: [ "bash 00-preflight.sh" ],
     expected: "skillctl binary at artifacts/bin/skillctl, clean workspace, online status reported."
   },
   {
     id: "01", title: "Mirko authors and signs", category: "valid-path", isGate: false,
-    intent: "Prove the cryptographic signing chain end-to-end locally. keygen → pack (deterministic) → sign → verify-sig with no network. This is the load-bearing offline proof.",
-    commands: [
-      "bash 01-mirko-author.sh",
-      "# under the hood:",
-      "$SKILLCTL keygen --out artifacts/keys/mirko",
-      "$SKILLCTL pack --skill artifacts/bundles/src/kup-hello -o BUNDLE.skb --name kup-hello --version 0.1.0 ...",
-      "$SKILLCTL sign --key artifacts/keys/mirko.priv --identity-id id:mirko@m3c BUNDLE.skb",
-      "$SKILLCTL verify-sig --pubkey artifacts/keys/mirko.pub BUNDLE.skb"
-    ],
-    expected: "mirko.{priv,pub} keypair, BUNDLE.skb (deterministic — two packs are byte-identical), sha256:<hex>.author.sig, digest.txt written. verify-sig exits 0."
+    intent: "Prove the cryptographic signing chain end-to-end locally. keygen (idempotent — reuses existing key) → pack (deterministic) → sign → verify-sig. Load-bearing offline proof.",
+    commands: [ "bash 01-mirko-author.sh" ],
+    expected: "mirko.{priv,pub} keypair, BUNDLE.skb (deterministic — two packs are byte-identical), .author.sig, digest.txt written. verify-sig exits 0."
   },
   {
     id: "02", title: "Mirko publishes to aims", category: "online-stretch", isGate: false,
-    intent: "Round-trip via aims-core registry. Best-effort: the chain proof does not depend on this. Surfaces real online-mode gaps (admin-gated identity registration, multipart field name).",
+    intent: "Round-trip via aims-core registry. Requires P0 (Mirko registered). Identity-registration leg returns 403 by design (auth_curl uses id:mirko@m3c, not the admin user); bundle admit returns 200/201/409.",
     commands: [
       "export ER1_API_KEY=$(security find-generic-password -s aims-core-er1 -a \"$USER\" -w)",
       "bash 02-mirko-publish.sh"
     ],
-    expected: "HTTP 200/201/409 for both /api/skills/identities and /api/skills/bundles. v1 known-gap: identity registration may return 403 (admin required) — fall through is acceptable."
+    expected: "Bundle admit HTTP 200/201/409. Without P0: signature_invalid (registered pubkey doesn't match local). Without SKILL_REGISTRY_KEY env: 500 storage_failed (acceptable per spec — chain proof in 05 doesn't depend on this)."
   },
   {
     id: "03", title: "Reviewer attests", category: "valid-path", isGate: false,
-    intent: "Sign a 🟢 governance verdict on the bundle digest. Online: POST /api/skills/attestations. Offline fallback: write a local attestation.json (the install path consumes either).",
-    commands: [
-      "bash 03-reviewer-attest.sh",
-      "# online command form:",
-      "$SKILLCTL attest <digest> --level green --rationale '...' --reviewer-id id:reviewer@m3c --key reviewer.priv --registry $REGISTRY/api/skills"
-    ],
-    expected: "reviewer.{priv,pub} keypair + attestation.json with level=green. Online: registry returns 200/201; v1 known-gap: TLS verify may refuse self-signed local cert."
+    intent: "Sign a 🟢 governance verdict on the bundle digest. Online: POST /api/skills/attestations (requires P0 reviewer registration). Offline fallback: write attestation.json (chain consumes either).",
+    commands: [ "bash 03-reviewer-attest.sh" ],
+    expected: "reviewer.{priv,pub} keypair + attestation.json with level=green. Online with P0: registry returns 200/201."
   },
   {
     id: "04", title: "Eric pins trust root", category: "valid-path", isGate: false,
-    intent: "Eric's $HOME has the trust-roots file with Mirko's pubkey. The demo uses an isolated fake $HOME so the real ~/.claude is untouched.",
-    commands: [
-      "bash 04-eric-trust-root.sh",
-      "# under the hood:",
-      "HOME=$INSTALL_HOME $SKILLCTL trust add --registry $REGISTRY --pubkey artifacts/keys/mirko.pub --id mirko-author-key",
-      "HOME=$INSTALL_HOME $SKILLCTL trust list"
-    ],
+    intent: "Eric's $HOME has the trust-roots file with Mirko's pubkey. Demo uses an isolated fake $HOME so real ~/.claude is untouched.",
+    commands: [ "bash 04-eric-trust-root.sh" ],
     expected: "artifacts/eric-home/.claude/skill-trust-roots.yaml contains the registry + pinned pubkey; trust list shows mirko-author-key."
   },
   {
     id: "05", title: "Eric installs and runs (VALID)", category: "valid-path", isGate: false,
     intent: "Full chain check passes: digest → author sig → registry sig (online) → governance ≥ minimum → atomic-extract → run. Eric produces a file ONLY producible if the chain accepted the bundle.",
-    commands: [
-      "bash 05-eric-install-and-run.sh",
-      "# online attempt: $SKILLCTL install kup-hello@0.1.0 --registry $REGISTRY/api/skills --allow-yellow",
-      "# offline core: $SKILLCTL verify-sig --pubkey mirko.pub BUNDLE.skb && tar -xzf BUNDLE.skb -C ~/.claude/skills/kup-hello/"
-    ],
-    expected: "artifacts/eric-home/output/hello.txt exists with the canonical greeting. THIS IS THE LOAD-BEARING VALID-PATH PROOF."
+    commands: [ "bash 05-eric-install-and-run.sh" ],
+    expected: "artifacts/eric-home/output/hello.txt with the canonical greeting. **LOAD-BEARING VALID-PATH PROOF.**"
   },
   {
     id: "06", title: "INVALID — tampered bytes", category: "invalid-path", isGate: false,
@@ -472,12 +461,14 @@ const STEPS = [
 // commands showing the placeholder ER1_API_KEY even though the operator ran
 // the keychain command).
 // =========================================================================
-const FORM_VERSION = "2026-05-08-kup-rg-v3";
+const FORM_VERSION = "2026-05-08-kup-rg-v4";
 
 // =========================================================================
 // State + persistence
 // =========================================================================
-const LS_KEY = "kup-release-gate-state-v1";
+// Bump on every STEPS schema change so stale drafts don't mismap onto a
+// new step array (P0 was inserted at index 0 in v4).
+const LS_KEY = "kup-release-gate-state-v4";
 let state = loadState();
 
 function loadState() {

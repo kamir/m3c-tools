@@ -53,11 +53,25 @@ else
 fi
 
 # 6) Clean previous demo state (artifacts/ only — we never touch the host)
-log "resetting demo workspace under $ARTIFACTS_DIR (keeping bin/)"
-rm -rf "$KEYS_DIR" "$BUNDLES_DIR" "$TRUST_DIR" "$INSTALL_HOME"
+# Keys are preserved by default so registered identities (Mirko, reviewer)
+# stay valid across runs. The registry persists identities forever; if the
+# local key changes, signature_invalid is the resulting error class.
+# Pass --reset-all to wipe keys too (for first-run-from-scratch test).
+KEEP_KEYS=1
+for arg in "$@"; do
+  case "$arg" in
+    --reset-all|--wipe-keys) KEEP_KEYS=0 ;;
+  esac
+done
+log "resetting demo workspace under $ARTIFACTS_DIR (keeping bin/$([ "$KEEP_KEYS" -eq 1 ] && echo ' + keys/'))"
+if [ "$KEEP_KEYS" -eq 0 ]; then
+  rm -rf "$KEYS_DIR"
+  mkdir -p "$KEYS_DIR"
+fi
+rm -rf "$BUNDLES_DIR" "$TRUST_DIR" "$INSTALL_HOME"
 mkdir -p "$KEYS_DIR" "$BUNDLES_DIR" "$TRUST_DIR" "$INSTALL_HOME/.claude"
 : > "$LOG_DIR/full.log"
-ok "workspace clean"
+ok "workspace clean$([ "$KEEP_KEYS" -eq 1 ] && [ -f "$KEYS_DIR/mirko.priv" ] && echo " (kept $(ls "$KEYS_DIR" | wc -l | tr -d ' ') existing key files)")"
 
 header "Preflight complete"
 note "Source:   $SOURCE_DIR"
