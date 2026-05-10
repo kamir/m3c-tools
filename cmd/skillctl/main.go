@@ -85,6 +85,8 @@ func main() {
 		os.Exit(runRun(os.Args[2:]))
 	case "invoke-replay":
 		os.Exit(runReplay(os.Args[2:]))
+	case "import-public":
+		os.Exit(runImportPublic(os.Args[2:]))
 	case "version", "--version", "-v":
 		fmt.Printf("skillctl %s (commit=%s, built=%s)\n", version, commit, date)
 	case "help", "--help", "-h":
@@ -1273,6 +1275,7 @@ Usage:
   skillctl pack [options]          Pack a skill dir into a deterministic .skb (SPEC-0188)
   skillctl run [options] -- <cmd>  Cooperative SPEC-0202 invocation wrapper
   skillctl invoke-replay [options] Replay invocation events from aims-core
+  skillctl import-public <ref>     SPEC-0201 untrusted-upstream import airlock
   skillctl version                 Show version
   skillctl help                    Show this help
 

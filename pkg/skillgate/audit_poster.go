@@ -20,7 +20,7 @@ import (
 // is expected to ignore it — see Gate.audit().
 type HTTPInvocationPoster struct {
 	AuditURL string        // e.g. https://aims-core/api/skills/runtime/invocations
-	APIKey   string        // optional bearer token; sent as `Authorization: Bearer <key>`
+	APIKey   string        // optional API key; sent as `X-API-KEY: <key>` to match the rest of the skill-registry API surface
 	Client   *http.Client  // optional; default: 2s-timeout client
 	Timeout  time.Duration // optional; default: 2 * time.Second
 }
@@ -61,7 +61,11 @@ func (p *HTTPInvocationPoster) PostInvocation(ev InvocationEvent) error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "m3c-skillgate/1.0")
 	if p.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+p.APIKey)
+		// Use X-API-KEY to match the rest of the skill-registry API surface
+		// (api_auth_required reads request.headers['X-API-KEY']). The previous
+		// `Authorization: Bearer …` form was a Phase-4 stub that the runtime
+		// invocation endpoint never accepted.
+		req.Header.Set("X-API-KEY", p.APIKey)
 	}
 
 	client := p.Client

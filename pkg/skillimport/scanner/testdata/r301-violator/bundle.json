@@ -1,0 +1,9 @@
+{
+  "intent": {
+    "side_effects": []
+  },
+  "data_dependencies": [
+    {"name": "private_data", "source": "ghost_source"}
+  ],
+  "registered_sources": ["only_known_source"]
+}

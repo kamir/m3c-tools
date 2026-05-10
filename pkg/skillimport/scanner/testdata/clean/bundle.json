@@ -1,0 +1,9 @@
+{
+  "intent": {
+    "side_effects": []
+  },
+  "data_dependencies": [
+    {"name": "user_profile", "source": "registered_user_db"}
+  ],
+  "registered_sources": ["registered_user_db"]
+}

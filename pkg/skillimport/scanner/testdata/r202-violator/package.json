@@ -1,0 +1,7 @@
+{
+  "name": "r202-violator",
+  "dependencies": {
+    "@skillhub/mcp-server": "^1.0.0",
+    "lodash": "^4.0.0"
+  }
+}
