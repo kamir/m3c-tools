@@ -1,0 +1,88 @@
+{
+  "canonical_b64": "Y2FwYWJpbGl0eV92MQpzY2hlbWE9bTNjLXNraWxsLWNhcGFiaWxpdHkvdjEKdG9rZW5faWQ9Y3Q6MDFIWlRFU1RURVNUVEVTVFRFU1RURVNUVEUKaXNzdWVkX2F0PTIwMjYtMDUtMTBUMDA6MDA6MDBaCmV4cGlyZXNfYXQ9MjAyNi0wNS0xMFQwMDowNTowMFoKYnVuZGxlX2RpZ2VzdD1zaGEyNTY6YWJjMTIzNDU2Nzg5MGFiY2RlZgpza2lsbF9uYW1lPWRlbW8tc2tpbGwKc2tpbGxfdmVyc2lvbj0wLjEuMAp0ZW5hbnRfc2NvcGU9a3VwLWJlcmxpbgpjYWxsZXJfaWRlbnRpdHk9aWQ6YWxpY2UKY2FsbGVyX3Nlc3Npb249c2VzczowMUhaU0VTU0lPTlNFU1NJT05TRVNTSU8KZW52ZWxvcGVfY2FwYWJpbGl0aWVzPWVncmVzcyxmczpyZWFkLHN1YnByb2Nlc3NfcnVuCmVudmVsb3BlX2VncmVzc19hbGxvd2xpc3Q9YWkucHJveHkuY29tLGFwaS5leGFtcGxlLmNvbTo0NDMKZW52ZWxvcGVfc3VicHJvY2Vzc19hbGxvd2xpc3Q9YmFzaCxnaXQKZW52ZWxvcGVfc3VicHJvY2Vzc19kZW55bGlzdD1ybQplbnZlbG9wZV9kZXN0cnVjdGl2ZT1mYWxzZQplbnZlbG9wZV9tYXhfaW52b2NhdGlvbnM9MTAKZW52ZWxvcGVfbWF4X3J1bnRpbWVfc2Vjb25kcz0zMDAKZW52ZWxvcGVfbWF4X2VncmVzc19ieXRlcz0xMDQ4NTc2CnJlZ2lzdHJ5X2tleV9pZD1haW1zLWNvcmUtZGV2LTIwMjYtMDUKcGFyZW50X3Rva2VuX2lkPWN0OjAxSFpQQVJFTlRQQVJFTlRQQVJFTlRQQVIKYXR0ZW51YXRpb25fY291bnQ9MQphdHRlbnVhdGlvblswXS5hcHBsaWVkX2F0PTIwMjYtMDUtMTBUMDA6MDE6MDBaCmF0dGVudWF0aW9uWzBdLmFwcGxpZWRfYnk9aWQ6Ym9iCmF0dGVudWF0aW9uWzBdLnJ1bGU9c2hyaW5rX2VncmVzc19hbGxvd2xpc3QKYXR0ZW51YXRpb25bMF0udmFsdWU9eyJlZ3Jlc3NfYWxsb3dsaXN0IjpbImFwaS5leGFtcGxlLmNvbTo0NDMiXX0KYXR0ZW51YXRpb25bMF0ucmF0aW9uYWxlPVJlc3RyaWN0aW5nIGVncmVzcyBwZXIgQ0lTTyByZXZpZXcgKE3DvGxsZXIgwqcgwqcpCg==",
+  "canonical_lines": [
+    "capability_v1",
+    "schema=m3c-skill-capability/v1",
+    "token_id=ct:01HZTESTTESTTESTTESTTESTTE",
+    "issued_at=2026-05-10T00:00:00Z",
+    "expires_at=2026-05-10T00:05:00Z",
+    "bundle_digest=sha256:abc1234567890abcdef",
+    "skill_name=demo-skill",
+    "skill_version=0.1.0",
+    "tenant_scope=kup-berlin",
+    "caller_identity=id:alice",
+    "caller_session=sess:01HZSESSIONSESSIONSESSIO",
+    "envelope_capabilities=egress,fs:read,subprocess_run",
+    "envelope_egress_allowlist=ai.proxy.com,api.example.com:443",
+    "envelope_subprocess_allowlist=bash,git",
+    "envelope_subprocess_denylist=rm",
+    "envelope_destructive=false",
+    "envelope_max_invocations=10",
+    "envelope_max_runtime_seconds=300",
+    "envelope_max_egress_bytes=1048576",
+    "registry_key_id=aims-core-dev-2026-05",
+    "parent_token_id=ct:01HZPARENTPARENTPARENTPAR",
+    "attenuation_count=1",
+    "attenuation[0].applied_at=2026-05-10T00:01:00Z",
+    "attenuation[0].applied_by=id:bob",
+    "attenuation[0].rule=shrink_egress_allowlist",
+    "attenuation[0].value={\"egress_allowlist\":[\"api.example.com:443\"]}",
+    "attenuation[0].rationale=Restricting egress per CISO review (Müller § §)",
+    ""
+  ],
+  "canonical_sha256": "589b3b9d6aff4fc4313a87060a0229e5644db6a632f491313b6fc9e6c9f5eaa3",
+  "token": {
+    "attenuations": [
+      {
+        "applied_at": "2026-05-10T00:01:00Z",
+        "applied_by": "id:bob",
+        "rationale": "Restricting egress per CISO review (Müller § §)",
+        "rule": "shrink_egress_allowlist",
+        "value": {
+          "egress_allowlist": [
+            "api.example.com:443"
+          ]
+        }
+      }
+    ],
+    "bundle_digest": "sha256:abc1234567890abcdef",
+    "caller_identity": "id:alice",
+    "caller_session": "sess:01HZSESSIONSESSIONSESSIO",
+    "envelope": {
+      "capabilities": [
+        "egress",
+        "fs:read",
+        "subprocess_run"
+      ],
+      "data_sources": [],
+      "destructive": false,
+      "egress_allowlist": [
+        "api.example.com:443",
+        "ai.proxy.com"
+      ],
+      "max_egress_bytes": 1048576,
+      "max_invocations": 10,
+      "max_runtime_seconds": 300,
+      "subprocess_allowlist": [
+        "bash",
+        "git"
+      ],
+      "subprocess_denylist": [
+        "rm"
+      ]
+    },
+    "expires_at": "2026-05-10T00:05:00Z",
+    "federation_chain": [],
+    "imported_from": null,
+    "issued_at": "2026-05-10T00:00:00Z",
+    "parent_token_id": "ct:01HZPARENTPARENTPARENTPAR",
+    "registry_key_id": "aims-core-dev-2026-05",
+    "registry_signature_b64": "",
+    "schema": "m3c-skill-capability/v1",
+    "skill_name": "demo-skill",
+    "skill_version": "0.1.0",
+    "tenant_scope": "kup-berlin",
+    "third_party_caveats": [],
+    "token_id": "ct:01HZTESTTESTTESTTESTTESTTE"
+  }
+}
