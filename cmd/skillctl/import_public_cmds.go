@@ -46,12 +46,37 @@ import (
 )
 
 // SPEC-0201 §11 exit codes (the five this surface needs).
+//
+// These numeric codes are the same as the install/pack/awareness-reset codes
+// 17/18/19 in pkg/skillctl/verify/errors.go (ExitDataSourceDenied,
+// ExitIntentInconsistent, ExitIdentityMismatch). The themes are intentionally
+// shared — "17 = data-source / source-policy", "18 = intent contradiction",
+// "19 = identity / source-block" — but the import-public surface needs to
+// surface SLIGHTLY different reason strings ("no_source_policy", "intent_capped",
+// "source_blocked") so the operator gets the airlock-specific message.
+//
+// Cross-reference: PROJECTS/Skill-Manager/SKILLCTL-MANUAL.md §"Exit-code
+// table" enumerates the polysemy per command. Future audit may canonicalize
+// to a single ExitCode type — until then, the numeric agreement is the
+// cross-command guarantee, and the per-surface labels are the local UX.
 const (
-	exitImportPinRequired      = 4
-	exitImportScannerRefuse    = 5
-	exitImportNoSourcePolicy   = 17
-	exitImportIntentCapped     = 18
-	exitImportSourceBlocked    = 19
+	exitImportPinRequired   = 4
+	exitImportScannerRefuse = 5
+
+	// Numerically equal to verify.ExitDataSourceDenied (17). Surfaces as
+	// "no_source_policy" in the airlock; the install/verify path surfaces
+	// the same code as "data_source_denied" / "identity_revoked" (SPEC-0198).
+	exitImportNoSourcePolicy = 17
+
+	// Numerically equal to verify.ExitIntentInconsistent (18). Surfaces as
+	// "intent_capped" in the airlock; pack uses the same code for
+	// "intent_inconsistent" cross-field validation refusals.
+	exitImportIntentCapped = 18
+
+	// Numerically equal to verify.ExitIdentityMismatch (19). Surfaces as
+	// "source_blocked" in the airlock; install uses the same code for
+	// "identity_mismatch" and awareness reset uses it for the same theme.
+	exitImportSourceBlocked = 19
 )
 
 // HTTPClient is the http.Client used for upstream fetches. Overridable in tests.
