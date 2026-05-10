@@ -25,7 +25,10 @@ type Frontmatter struct {
 	OutputFormat string                 `json:"output_format,omitempty" yaml:"output_format"`
 	Tags         []string               `json:"tags,omitempty" yaml:"tags"`
 	Model        string                 `json:"model,omitempty" yaml:"model"`
-	Metadata     map[string]interface{} `json:"metadata,omitempty" yaml:"metadata"`
+	// GovernanceLevel is the SPEC-0130 Ampel verdict (green | yellow | red).
+	// Promoted from Metadata to a typed field per SPEC-0189 §10 D2.
+	GovernanceLevel string `json:"governance_level,omitempty" yaml:"governance_level"`
+	Metadata        map[string]interface{} `json:"metadata,omitempty" yaml:"metadata"`
 }
 
 // SkillDescriptor represents a single discovered skill source.
@@ -43,6 +46,24 @@ type SkillDescriptor struct {
 	Dependencies       []string     `json:"dependencies"`
 	ConflictsWith      []string     `json:"conflicts_with"`
 	DuplicateOf        *string      `json:"duplicate_of"`
+	// SPEC-0189 additions (all omitempty for wire-compat).
+	Tier        string             `json:"tier,omitempty"`           // project | user | plugin
+	SkillMDPath string             `json:"skill_md_path,omitempty"`  // path to the SKILL.md anchor file
+	Shadows     []string           `json:"shadows,omitempty"`        // ids of lower-tier skills shadowed by this one
+	ShadowedBy  []string           `json:"shadowed_by,omitempty"`    // id of the higher-tier winner that shadows this
+	Bundle      *BundleAttestation `json:"bundle,omitempty"`         // SPEC-0189 §6 trust cross-ref
+}
+
+// BundleAttestation is the SPEC-0189 §6 trust cross-reference block.
+// Populated by scanner.AnnotateTrust when --with-trust is requested.
+type BundleAttestation struct {
+	SKBPath                string `json:"skb_path,omitempty"`
+	BundleDigest           string `json:"bundle_digest,omitempty"`
+	Signed                 bool   `json:"signed"`
+	RegisteredInLocalTrust bool   `json:"registered_in_local_registry"`
+	TrustChain             string `json:"trust_chain"`
+	VerifierExitCode       int    `json:"verifier_exit_code,omitempty"`
+	VerifierError          string `json:"verifier_error,omitempty"`
 }
 
 // Inventory holds the complete results of a skill scan.

@@ -70,3 +70,11 @@ func SetApplicationIcon(filePath string) bool {
 	defer C.free(unsafe.Pointer(cPath))
 	return C.setApplicationIconFromFile(cPath) == 1
 }
+
+// SetApplicationIcon sets the app icon used in Cmd+Tab/Dock while the app is
+// visible as a regular macOS app (e.g. during Observation window display).
+func SetApplicationIcon(filePath string) bool {
+	cPath := C.CString(filePath)
+	defer C.free(unsafe.Pointer(cPath))
+	return C.setApplicationIconFromFile(cPath) == 1
+}
