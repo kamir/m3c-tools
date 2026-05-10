@@ -19,20 +19,41 @@ import (
 // (network down, 5xx, timeout) is returned to the caller but the caller
 // is expected to ignore it — see Gate.audit().
 type HTTPInvocationPoster struct {
-	AuditURL string        // e.g. https://aims-core/api/skills/runtime/invocations
-	APIKey   string        // optional API key; sent as `X-API-KEY: <key>` to match the rest of the skill-registry API surface
-	Client   *http.Client  // optional; default: 2s-timeout client
+	AuditURL string       // e.g. https://aims-core/api/skills/runtime/invocations
+	APIKey   string       // optional API key; sent as `X-API-KEY: <key>` to match the rest of the skill-registry API surface
+	UserID   string       // optional user id; sent as `X-User-ID: <id>` (api_auth_required requires both)
+	Client   *http.Client // optional; default: 2s-timeout client
 	Timeout  time.Duration // optional; default: 2 * time.Second
 }
 
-// NewHTTPInvocationPoster constructs a poster with sensible defaults.
+// NewHTTPInvocationPoster constructs a poster with sensible defaults. UserID
+// defaults to the gateway host identity ("m3c-skillgate-host"); callers that
+// need a different X-User-ID should set the field explicitly after construction
+// or use NewHTTPInvocationPosterAs.
 func NewHTTPInvocationPoster(url, apiKey string) *HTTPInvocationPoster {
 	return &HTTPInvocationPoster{
 		AuditURL: url,
 		APIKey:   apiKey,
-		Client:   &http.Client{Timeout: 2 * time.Second},
-		Timeout:  2 * time.Second,
+		// SPEC-0202 §17 AC-11: api_auth_required (skill_registry/api.py)
+		// rejects requests that lack X-User-ID even when the API key is
+		// correct. Without this default the cooperative gate.refused
+		// post returned 401 silently and the audit row never landed —
+		// the E2E saw count=0 and failed.
+		UserID:  "m3c-skillgate-host",
+		Client:  &http.Client{Timeout: 2 * time.Second},
+		Timeout: 2 * time.Second,
 	}
+}
+
+// NewHTTPInvocationPosterAs constructs a poster bound to a specific operator
+// user_id. Operators that surface as a real human (e.g. CISO Console probes)
+// should use this form so the audit row records who took the action.
+func NewHTTPInvocationPosterAs(url, apiKey, userID string) *HTTPInvocationPoster {
+	p := NewHTTPInvocationPoster(url, apiKey)
+	if userID != "" {
+		p.UserID = userID
+	}
+	return p
 }
 
 // PostInvocation marshals ev to JSON and POSTs it. Returns the first non-2xx
@@ -66,6 +87,14 @@ func (p *HTTPInvocationPoster) PostInvocation(ev InvocationEvent) error {
 		// `Authorization: Bearer …` form was a Phase-4 stub that the runtime
 		// invocation endpoint never accepted.
 		req.Header.Set("X-API-KEY", p.APIKey)
+	}
+	if p.UserID != "" {
+		// SPEC-0202 §17 AC-11: api_auth_required requires X-User-ID
+		// alongside X-API-KEY. Without it the registry returns 401 and
+		// the audit row never lands — the cooperative-refusal flow
+		// looks like it succeeded (probe still exits 33 from gate.Allow)
+		// but the operator has no record of why a refusal occurred.
+		req.Header.Set("X-User-ID", p.UserID)
 	}
 
 	client := p.Client
