@@ -81,6 +81,10 @@ func main() {
 		cmdPack(os.Args[2:])
 	case "sync-usage":
 		cmdSyncUsage(os.Args[2:])
+	case "run":
+		os.Exit(runRun(os.Args[2:]))
+	case "invoke-replay":
+		os.Exit(runReplay(os.Args[2:]))
 	case "version", "--version", "-v":
 		fmt.Printf("skillctl %s (commit=%s, built=%s)\n", version, commit, date)
 	case "help", "--help", "-h":
@@ -1267,6 +1271,8 @@ Usage:
   skillctl sync-usage [options]    Sync local skill usage events to aims-core
   skillctl menubar [options]       Launch macOS menu bar skill monitor
   skillctl pack [options]          Pack a skill dir into a deterministic .skb (SPEC-0188)
+  skillctl run [options] -- <cmd>  Cooperative SPEC-0202 invocation wrapper
+  skillctl invoke-replay [options] Replay invocation events from aims-core
   skillctl version                 Show version
   skillctl help                    Show this help
 
