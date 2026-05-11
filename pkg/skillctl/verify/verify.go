@@ -341,7 +341,11 @@ func stepVerifyAuthor(ctx context.Context, digest [sha256.Size]byte, meta *regis
 		return "", fmt.Errorf("verify: identity %s: nil response: %w", row.IdentityID, ErrAuthorSigInvalid)
 	}
 	if ident.IsRevoked() {
-		return "", fmt.Errorf("verify: author identity %s revoked at %s: %w", ident.ID, ident.RevokedAt, ErrAuthorSigInvalid)
+		// BUG-0144 / SPEC-0198 §3 — explicit revoke maps to ErrIdentityRevoked
+		// (exit 17, theme "data-source / source-policy") so operators can
+		// distinguish "your key was revoked by the registry" from "your
+		// signature is mathematically invalid" (ErrAuthorSigInvalid, exit 11).
+		return "", fmt.Errorf("verify: author identity %s revoked at %s: %w", ident.ID, ident.RevokedAt, ErrIdentityRevoked)
 	}
 	if ident.AuthSource == "" {
 		// auth_source is a binding contract once OIDC ships (SPEC §D4).

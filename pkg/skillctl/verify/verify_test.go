@@ -296,12 +296,24 @@ func TestVerify_AuthorSig_WrongPubkey(t *testing.T) {
 }
 
 func TestVerify_AuthorSig_RevokedIdentity(t *testing.T) {
+	// SPEC-0198 §3 / BUG-0144 — revoked identity now surfaces as
+	// ErrIdentityRevoked (exit 17) instead of ErrAuthorSigInvalid (exit 11).
+	// Operators must be able to distinguish "key was revoked" from
+	// "signature is invalid".
 	opts, _ := happyOpts(t)
 	ident := opts.IdentityFetcher.(*fakeFetcher).identities["id:author@m3c"]
 	ident.RevokedAt = "2026-05-01T00:00:00Z"
 	_, err := Verify(opts)
-	if !errors.Is(err, ErrAuthorSigInvalid) {
-		t.Errorf("revoked identity: want ErrAuthorSigInvalid, got %v", err)
+	if !errors.Is(err, ErrIdentityRevoked) {
+		t.Errorf("revoked identity: want ErrIdentityRevoked, got %v", err)
+	}
+	// Make sure we did NOT also map to ErrAuthorSigInvalid (the
+	// pre-BUG-0144 behavior). The two sentinels are distinct.
+	if errors.Is(err, ErrAuthorSigInvalid) {
+		t.Errorf("revoked identity: should NOT also be ErrAuthorSigInvalid, got %v", err)
+	}
+	if got := ExitCode(err); got != 17 {
+		t.Errorf("ExitCode(ErrIdentityRevoked) = %d, want 17", got)
 	}
 }
 

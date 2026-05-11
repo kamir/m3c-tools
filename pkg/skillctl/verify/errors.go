@@ -202,6 +202,20 @@ var (
 	//   fmt.Errorf("data_source %s denied for this tenant: %w",
 	//       dsID, verify.ErrDataSourceDenied)
 	ErrDataSourceDenied = errors.New("data_source denied for this tenant")
+
+	// ErrIdentityRevoked — author identity has been revoked via
+	// SPEC-0198 §3. Exit code 17 (same numeric as DataSourceDenied; the
+	// theme is "data-source / source-policy" per exitcode registry
+	// RevokeIdentityRevoked). Before BUG-0144 this path mapped to
+	// ErrAuthorSigInvalid (exit 11) which conflated "key was tampered"
+	// with "key was revoked" — operators couldn't distinguish.
+	//
+	// Wrap with the offending identity id so the operator timeline
+	// shows the audit chain:
+	//
+	//   fmt.Errorf("identity %s revoked at %s: %w",
+	//       ident.ID, ident.RevokedAt, verify.ErrIdentityRevoked)
+	ErrIdentityRevoked = errors.New("author identity revoked")
 )
 
 // ExitCode maps a verifier error to its numeric process exit code.
@@ -247,6 +261,13 @@ func ExitCode(err error) int {
 		return ExitIntentInconsistent
 	case errors.Is(err, ErrIdentityMismatch):
 		return ExitIdentityMismatch
+	case errors.Is(err, ErrIdentityRevoked):
+		// SPEC-0198 §3 / BUG-0144 — identity-revoked maps to 17, same
+		// theme as DataSourceDenied ("data-source / source-policy"
+		// per pkg/skillctl/exitcode RevokeIdentityRevoked). Checked
+		// BEFORE DataSourceDenied so an explicit revoke wins over a
+		// downstream data-source denial.
+		return 17
 	case errors.Is(err, ErrDataSourceDenied):
 		return ExitDataSourceDenied
 	default:
