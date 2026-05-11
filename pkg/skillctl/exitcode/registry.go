@@ -1,0 +1,102 @@
+// Package exitcode is the canonical registry of skillctl process exit codes.
+//
+// FR-0023 (2026-05-11): exit codes 17/18/19 are intentionally numerically
+// shared across four skillctl surfaces (install/verify, pack, awareness
+// reset, import-public) because their THEMES align. The pre-FR-0023
+// world had each surface defining its own const with the same numeric
+// value but different mnemonic names, and the cross-reference lived
+// only in SKILLCTL-MANUAL.md.
+//
+// The CI test in this package (TestCodes_NumberTheme) asserts the
+// invariant: any two Codes that share a Number MUST share a Theme.
+// A new surface trying to land `= 17` for a non-data-source theme
+// breaks `go test ./pkg/skillctl/exitcode/`.
+//
+// Migration strategy:
+//   - Phase 1 (this commit): registry + invariant test. Existing
+//     constants in pkg/skillctl/verify/errors.go and
+//     cmd/skillctl/import_public_cmds.go reference the registry's
+//     Number field via short type aliases. No call-site changes yet.
+//   - Phase 2 (later): go:generate the SKILLCTL-MANUAL.md exit-code
+//     table from this file.
+//   - Phase 3 (later): migrate all `os.Exit(<int>)` call sites to
+//     `os.Exit(exitcode.X.Number)` so the registry is the only source
+//     of truth.
+package exitcode
+
+// Code carries a numeric exit code with the per-surface metadata that
+// SKILLCTL-MANUAL.md's exit-code table documents.
+type Code struct {
+	// Number is the numeric exit value passed to os.Exit / process exit.
+	Number int
+	// Theme is the cross-surface category. Codes sharing a Number MUST
+	// share a Theme. Operators rely on the theme being a stable
+	// "what kind of failure is this" signal across surfaces.
+	Theme string
+	// Family is the skillctl surface emitting the code
+	// ("verify", "install", "pack", "import-public", "awareness-reset",
+	// "audit", "propose", "revoke", ...).
+	Family string
+	// Label is the surface-specific mnemonic the operator sees
+	// (e.g. "data_source_denied" vs "no_source_policy" — same Number,
+	// same Theme, different per-surface label).
+	Label string
+}
+
+// ---------------------------------------------------------------------------
+// Tier 1 — verifier exit codes (pkg/skillctl/verify/errors.go).
+// SPEC-0188 §11. These are the canonical "trust chain failed at step N"
+// signals that propagate up from install/verify.
+// ---------------------------------------------------------------------------
+
+var (
+	VerifyDigestMismatch      = Code{10, "trust-chain digest", "verify", "digest_mismatch"}
+	VerifyAuthorSigInvalid    = Code{11, "trust-chain signature", "verify", "author_sig_invalid"}
+	VerifyRegistryNotTrusted  = Code{12, "trust-chain registry-root", "verify", "registry_not_trusted"}
+	VerifyGovernanceBelowMin  = Code{13, "policy governance", "verify", "governance_below_min"}
+	VerifyDepsUnsatisfied     = Code{14, "policy dependency", "verify", "deps_unsatisfied"}
+	VerifyBlobMissing         = Code{15, "trust-chain blob", "verify", "blob_missing"}
+	VerifyTenantBlocked       = Code{16, "policy tenant", "verify", "tenant_blocked"}
+	VerifyDataSourceDenied    = Code{17, "data-source / source-policy", "verify", "data_source_denied"}
+	VerifyIntentInconsistent  = Code{18, "intent contradiction", "verify", "intent_inconsistent"}
+	VerifyIdentityMismatch    = Code{19, "identity / source-block", "verify", "identity_mismatch"}
+)
+
+// ---------------------------------------------------------------------------
+// Tier 2 — import-public surface (SPEC-0201 §11; cmd/skillctl/import_public_cmds.go).
+// Numerically shares 17/18/19 with verify; theme intentionally identical.
+// ---------------------------------------------------------------------------
+
+var (
+	ImportPinRequired      = Code{4, "input validation", "import-public", "pin_required"}
+	ImportScannerRefuse    = Code{5, "scanner / policy", "import-public", "scanner_refuse"}
+	ImportNoSourcePolicy   = Code{17, "data-source / source-policy", "import-public", "no_source_policy"}
+	ImportIntentCapped     = Code{18, "intent contradiction", "import-public", "intent_capped"}
+	ImportSourceBlocked    = Code{19, "identity / source-block", "import-public", "source_blocked"}
+)
+
+// ---------------------------------------------------------------------------
+// Tier 3 — signing surface (cmd/skillctl/signing_cmds.go).
+// ---------------------------------------------------------------------------
+
+var (
+	SignInvalid = Code{11, "trust-chain signature", "signing", "sig_invalid"}
+)
+
+// AllCodes returns every Code currently registered. Used by the
+// CI invariant test (TestCodes_NumberTheme) and by the generator
+// that emits the SKILLCTL-MANUAL.md exit-code table.
+func AllCodes() []Code {
+	return []Code{
+		// Tier 1 — verify
+		VerifyDigestMismatch, VerifyAuthorSigInvalid, VerifyRegistryNotTrusted,
+		VerifyGovernanceBelowMin, VerifyDepsUnsatisfied, VerifyBlobMissing,
+		VerifyTenantBlocked, VerifyDataSourceDenied, VerifyIntentInconsistent,
+		VerifyIdentityMismatch,
+		// Tier 2 — import-public
+		ImportPinRequired, ImportScannerRefuse, ImportNoSourcePolicy,
+		ImportIntentCapped, ImportSourceBlocked,
+		// Tier 3 — signing
+		SignInvalid,
+	}
+}
