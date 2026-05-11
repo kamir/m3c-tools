@@ -12,10 +12,34 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/config"
 )
+
+// placeholderFatalOnce ensures the FATAL log for a placeholder ER1_API_KEY
+// fires at most once per process, even when LoadConfig() is called from
+// multiple startup paths (PLM sync, retry scheduler, menubar init, …).
+var placeholderFatalOnce sync.Once
+
+// hasDeviceTokenAuth reports whether device-token (Bearer) auth is available
+// either via the ER1_DEVICE_TOKEN env var or the persisted token file. When
+// a device token is available, the X-API-KEY fallback path is never used
+// (see AuthHeaders) — so any ER1_API_KEY value, including placeholders, is
+// irrelevant and must NOT produce a FATAL warning.
+func hasDeviceTokenAuth() bool {
+	if os.Getenv("ER1_DEVICE_TOKEN") != "" {
+		return true
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	tokenPath := filepath.Join(home, ".m3c-tools", "device-token.enc")
+	_, statErr := os.Stat(tokenPath)
+	return statErr == nil
+}
 
 // Config holds ER1 server connection settings, loaded from environment variables.
 type Config struct {
@@ -41,26 +65,27 @@ func LoadConfig() *Config {
 		RetryInterval: envInt("ER1_RETRY_INTERVAL", 300),
 		MaxRetries:    envInt("ER1_MAX_RETRIES", 10),
 	}
-	// BUG-0137: refuse to use a placeholder API key against a non-local URL.
-	// The active profile may have shipped with a template value (`minimal-key`,
-	// `once-only`, …) that production rejects. Clearing APIKey here converts
-	// "silent 401 from the server, item queued forever" into the existing
-	// "no authentication configured" warning path below — visible at startup,
-	// and the upload code skips the request entirely (BUG-0093 fallthrough).
+	// BUG-0137 + BUG-0163: refuse to use a placeholder API key against a
+	// non-local URL — but only when the API key would actually be sent.
+	// Device token (SPEC-0127) is the primary auth method and takes
+	// precedence in AuthHeaders(). When a device token is available, the
+	// X-API-KEY fallback path is dead-code, so any value (placeholder,
+	// real, empty) in ER1_API_KEY is irrelevant: clear it silently. The
+	// FATAL warning is only meaningful when the API key WOULD be the
+	// active auth mechanism (i.e., no device token available).
+	deviceToken := hasDeviceTokenAuth()
 	if config.IsBlockingPlaceholder(cfg.APIKey, cfg.APIURL) {
-		log.Printf("[er1] FATAL: ER1_API_KEY is a placeholder (%q) targeting %q — refusing to upload. Run 'm3c-tools doctor' or fix the active profile.",
-			cfg.APIKey, cfg.APIURL)
+		if !deviceToken {
+			placeholderFatalOnce.Do(func() {
+				log.Printf("[er1] FATAL: ER1_API_KEY is a placeholder (%q) targeting %q — refusing to upload. Run 'm3c-tools doctor' or fix the active profile.",
+					cfg.APIKey, cfg.APIURL)
+			})
+		}
 		cfg.APIKey = ""
 	}
-	// BUG-0093 + SPEC-0143: Only warn when NO auth is available.
-	// Device token (SPEC-0127) is the primary auth method; API key is fallback for dev/CI.
-	// Check both env var AND token file — env var may not be set yet at startup.
-	if cfg.APIKey == "" && os.Getenv("ER1_DEVICE_TOKEN") == "" {
-		home, _ := os.UserHomeDir()
-		tokenPath := filepath.Join(home, ".m3c-tools", "device-token.enc")
-		if _, err := os.Stat(tokenPath); os.IsNotExist(err) {
-			log.Println("[er1] WARNING: No authentication configured — log in with 'm3c-tools login' or set ER1_API_KEY in your profile.")
-		}
+	// BUG-0093 + SPEC-0143: Only warn when NO auth is available at all.
+	if cfg.APIKey == "" && !deviceToken {
+		log.Println("[er1] WARNING: No authentication configured — log in with 'm3c-tools login' or set ER1_API_KEY in your profile.")
 	}
 	return cfg
 }
