@@ -83,6 +83,19 @@ var (
 	SignInvalid = Code{11, "trust-chain signature", "signing", "sig_invalid"}
 )
 
+// ---------------------------------------------------------------------------
+// Tier 4 — revoke surface (SPEC-0198).
+// SPEC-0198 §11 reserves exit 17 for the verifier's "author key revoked"
+// signal. The theme is intentionally "data-source / source-policy" because
+// a revoked author identity behaves at the trust boundary the same way as
+// a denied data source — the verifier refuses to trust the bundle's
+// provenance chain.
+// ---------------------------------------------------------------------------
+
+var (
+	RevokeIdentityRevoked = Code{17, "data-source / source-policy", "revoke", "identity_revoked"}
+)
+
 // AllCodes returns every Code currently registered. Used by the
 // CI invariant test (TestCodes_NumberTheme) and by the generator
 // that emits the SKILLCTL-MANUAL.md exit-code table.
@@ -98,5 +111,7 @@ func AllCodes() []Code {
 		ImportIntentCapped, ImportSourceBlocked,
 		// Tier 3 — signing
 		SignInvalid,
+		// Tier 4 — revoke
+		RevokeIdentityRevoked,
 	}
 }
