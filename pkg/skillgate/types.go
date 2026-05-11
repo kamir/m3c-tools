@@ -36,12 +36,27 @@ type TokenEnvelope struct {
 
 // Attenuation records one Macaroon-pattern attenuation step. The chain is
 // stored in token.Attenuations in oldest-to-newest order.
+//
+// `Value` is typed `any` (BUG-0143, 2026-05-11) because the Python registry
+// preserves whatever scalar/list/dict the operator passed to attenuate.
+// SPEC-0202 §6 wire shapes seen on the wire:
+//   - dict   `value: {egress: [...]}`     (envelope-shape deltas)
+//   - list   `value: ["api.anthropic.com"]` (shrink_egress_allowlist)
+//   - scalar `value: 60`                    (shrink_max_runtime_seconds)
+//   - scalar `value: "2026-..."`            (shrink_expires_at)
+//   - bool   `value: false`                 (force_destructive_false)
+//
+// Before BUG-0143 this was `map[string]any` which rejected scalar/list
+// wire values at json.Unmarshal time. Pre-BUG-0143 Go callers that
+// constructed Attenuation in-code worked around this by wrapping the
+// raw value under a sentinel `_value` key. That convention is kept
+// (canonicalAttenuationValue recognises it) but is no longer required.
 type Attenuation struct {
-	AppliedAt string         `json:"applied_at"`
-	AppliedBy string         `json:"applied_by"`
-	Rule      string         `json:"rule"`
-	Value     map[string]any `json:"value"`
-	Rationale string         `json:"rationale,omitempty"`
+	AppliedAt string `json:"applied_at"`
+	AppliedBy string `json:"applied_by"`
+	Rule      string `json:"rule"`
+	Value     any    `json:"value"`
+	Rationale string `json:"rationale,omitempty"`
 }
 
 // Token is the on-wire representation of a SPEC-0202 capability token (v1).

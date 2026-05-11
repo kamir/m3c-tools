@@ -197,22 +197,34 @@ func verifyAttenuationChain(t *Token) (bool, string) {
 }
 
 // ---------------------------------------------------------------------------
-// helpers — extract typed values out of a generic Attenuation.Value map.
-// The wire shape uses the "_value" sentinel key for non-dict rule values
-// (see canonical.go); we mirror that here for verification.
+// helpers — extract typed values out of an `any` Attenuation.Value.
+//
+// BUG-0143: Attenuation.Value is `any` since 2026-05-11. Wire shapes:
+//   - direct scalar/list (canonical, what Python emits)
+//   - {"_value": <inner>} wrapper (legacy in-code Go callers)
+// `unwrapValue` normalises both into the inner. The typed accessors
+// below operate on the unwrapped value.
 // ---------------------------------------------------------------------------
 
-func stringSliceFromValue(v map[string]any) ([]string, bool) {
-	raw, ok := v["_value"]
-	if !ok {
+func unwrapValue(v any) any {
+	if m, ok := v.(map[string]any); ok {
+		if inner, has := m["_value"]; has && len(m) == 1 {
+			return inner
+		}
+	}
+	return v
+}
+
+func stringSliceFromValue(v any) ([]string, bool) {
+	raw := unwrapValue(v)
+	if raw == nil {
 		return nil, false
+	}
+	if ss, isSS := raw.([]string); isSS {
+		return ss, true
 	}
 	sl, ok := raw.([]any)
 	if !ok {
-		// Allow []string directly too.
-		if ss, isSS := raw.([]string); isSS {
-			return ss, true
-		}
 		return nil, false
 	}
 	out := make([]string, 0, len(sl))
@@ -227,13 +239,16 @@ func stringSliceFromValue(v map[string]any) ([]string, bool) {
 }
 
 // stringSliceFromValueLoose accepts a single string OR a []any/[]string.
-func stringSliceFromValueLoose(v map[string]any) ([]string, bool) {
-	raw, ok := v["_value"]
-	if !ok {
+func stringSliceFromValueLoose(v any) ([]string, bool) {
+	raw := unwrapValue(v)
+	if raw == nil {
 		return nil, false
 	}
 	if s, isStr := raw.(string); isStr {
 		return []string{s}, true
+	}
+	if ss, isSS := raw.([]string); isSS {
+		return ss, true
 	}
 	if sl, isSlice := raw.([]any); isSlice {
 		out := make([]string, 0, len(sl))
@@ -246,15 +261,12 @@ func stringSliceFromValueLoose(v map[string]any) ([]string, bool) {
 		}
 		return out, true
 	}
-	if ss, isSS := raw.([]string); isSS {
-		return ss, true
-	}
 	return nil, false
 }
 
-func intFromValue(v map[string]any) (int, bool) {
-	raw, ok := v["_value"]
-	if !ok {
+func intFromValue(v any) (int, bool) {
+	raw := unwrapValue(v)
+	if raw == nil {
 		return 0, false
 	}
 	switch n := raw.(type) {
@@ -272,9 +284,9 @@ func intFromValue(v map[string]any) (int, bool) {
 	return 0, false
 }
 
-func int64FromValue(v map[string]any) (int64, bool) {
-	raw, ok := v["_value"]
-	if !ok {
+func int64FromValue(v any) (int64, bool) {
+	raw := unwrapValue(v)
+	if raw == nil {
 		return 0, false
 	}
 	switch n := raw.(type) {
@@ -292,9 +304,9 @@ func int64FromValue(v map[string]any) (int64, bool) {
 	return 0, false
 }
 
-func stringFromValue(v map[string]any) (string, bool) {
-	raw, ok := v["_value"]
-	if !ok {
+func stringFromValue(v any) (string, bool) {
+	raw := unwrapValue(v)
+	if raw == nil {
 		return "", false
 	}
 	s, isStr := raw.(string)
