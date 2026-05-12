@@ -98,6 +98,13 @@ func main() {
 	case "intent":
 		runWithExit(func() int { return runIntent(os.Args[2:], os.Stdout, os.Stderr) })
 	// === END SPEC-0195 S2 ===
+	// === SPEC-0214 (PLM v2 / SPEC-0216): project-context resolution ===
+	// Reads `.m3c/project.yaml` (a committed projection of the PLM project
+	// object) to resolve project id + ER1 target/context for the cwd, with a
+	// dir-slug fallback. Consumed by /session-state (SPEC-0213).
+	case "project":
+		os.Exit(runProject(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0214 ===
 	case "help", "--help", "-h":
 		printUsage(os.Stdout)
 		os.Exit(0)
@@ -127,6 +134,11 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "Commands (SPEC-0195 / awareness bridge):")
 	fmt.Fprintln(w, "  awareness sync     Admit local skills to a registry.")
 	fmt.Fprintln(w, "  awareness verify   Read back per-session admissions.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Commands (SPEC-0214 / PLM project context):")
+	fmt.Fprintln(w, "  project show       Resolve the PLM project context for this dir (.m3c/project.yaml).")
+	fmt.Fprintln(w, "  project resolve    Print one field (--field project_id|er1-target|er1-context|...).")
+	fmt.Fprintln(w, "  project path       Print the descriptor file path, or (none).")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Run any command with --help for its flags.")
 }
