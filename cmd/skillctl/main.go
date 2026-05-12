@@ -105,6 +105,11 @@ func main() {
 	case "project":
 		os.Exit(runProject(os.Args[2:], os.Stdout, os.Stderr))
 	// === END SPEC-0214 ===
+	// === SPEC-0213: session-state in ER1 — the Go mirror of the /session-state
+	// skill (open/checkpoint/close/resume/list/show) for CI/menubar/scripts. ===
+	case "session":
+		os.Exit(runSession(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0213 ===
 	case "help", "--help", "-h":
 		printUsage(os.Stdout)
 		os.Exit(0)
@@ -137,8 +142,17 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Commands (SPEC-0214 / PLM project context):")
 	fmt.Fprintln(w, "  project show       Resolve the PLM project context for this dir (.m3c/project.yaml).")
-	fmt.Fprintln(w, "  project resolve    Print one field (--field project_id|er1-target|er1-context|...).")
+	fmt.Fprintln(w, "  project resolve    Print one field (--field project_id|er1-target|er1-context|channel:<kind>|...).")
+	fmt.Fprintln(w, "  project channels   List the v2 `channels:` block (--kind to filter).")
 	fmt.Fprintln(w, "  project path       Print the descriptor file path, or (none).")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Commands (SPEC-0213 / session-state in ER1):")
+	fmt.Fprintln(w, "  session open       Create the session-state ER1 item for this session (idempotent).")
+	fmt.Fprintln(w, "  session checkpoint Append a checkpoint child item (--auto for a git/todo snapshot).")
+	fmt.Fprintln(w, "  session close      Write a final close-checkpoint (--summary | --distill).")
+	fmt.Fprintln(w, "  session list       List session-state items (--project / --host / --open-only).")
+	fmt.Fprintln(w, "  session show       Show a session-state item by session_id or doc_id.")
+	fmt.Fprintln(w, "  session resume     Print a resume hint for a prior session.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Run any command with --help for its flags.")
 }
