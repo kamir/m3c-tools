@@ -29,8 +29,32 @@ import (
 // DescriptorPath is the descriptor's location relative to the repo root.
 const DescriptorPath = ".m3c/project.yaml"
 
-// SchemaV1 is the schema string of the R0 descriptor.
+// SchemaV1 is the schema string of the R0 descriptor (SPEC-0214).
+// SchemaV2 (SPEC-0217 R1.3) adds the `channels:` block; everything else is
+// unchanged, so a v1 reader handles a v2 file fine (it just ignores `channels:`).
 const SchemaV1 = "m3c.project-descriptor/v1"
+const SchemaV2 = "m3c.project-descriptor/v2"
+
+// KnownSchema reports whether s is a descriptor schema this binary understands.
+func KnownSchema(s string) bool {
+	switch strings.TrimSpace(s) {
+	case SchemaV1, SchemaV2:
+		return true
+	}
+	return false
+}
+
+// DescriptorChannel is one entry of the v2 `channels:` block — the shallow,
+// committed projection of a PLM channel (SPEC-0217). Extra keys the server may
+// emit (target_path, folder_id, last_commit_sha, …) are ignored here.
+type DescriptorChannel struct {
+	ID    string `yaml:"id"`
+	Kind  string `yaml:"kind"`
+	Ref   string `yaml:"ref"`
+	Label string `yaml:"label"`
+	Role  string `yaml:"role"`
+	Mode  string `yaml:"mode"`
+}
 
 // Source describes where ProjectID came from.
 type Source string
@@ -41,8 +65,9 @@ const (
 	SourceOverride   Source = "override"
 )
 
-// Descriptor mirrors `.m3c/project.yaml` (SPEC-0214 §3). Unknown future fields
-// (e.g. SPEC-0217's `channels:`) are ignored on parse — forward compatible.
+// Descriptor mirrors `.m3c/project.yaml` (SPEC-0214 §3 + SPEC-0217 §7's
+// `channels:` block in v2). Unknown future fields are ignored on parse —
+// forward compatible.
 type Descriptor struct {
 	Schema string `yaml:"schema"`
 	Spec   string `yaml:"spec"`
@@ -70,6 +95,10 @@ type Descriptor struct {
 		URL     string `yaml:"url"`
 		Context string `yaml:"context"`
 	} `yaml:"er1"`
+
+	// SPEC-0217 v2: the channel registry projection (non-retired only). nil/empty
+	// on a v1 descriptor or a project with no registered channels.
+	Channels []DescriptorChannel `yaml:"channels"`
 
 	Source struct {
 		PLMDocUpdatedAt string `yaml:"plm_doc_updated_at"`
@@ -216,10 +245,11 @@ func Load(workingDir string) (*Descriptor, error) {
 	if err := yaml.Unmarshal(data, &d); err != nil {
 		return nil, err
 	}
-	if d.Schema != SchemaV1 {
+	if !KnownSchema(d.Schema) {
 		// Unknown schema — treat as present-but-not-understood. We still return
 		// it (with whatever parsed) but mark the id source as descriptor so the
 		// caller knows a file exists; a stricter caller can reject on schema.
+		// v1 and v2 are both known (v2 just adds `channels:`).
 	}
 	if strings.TrimSpace(d.Plm.ProjectID) == "" {
 		// Malformed: fall back to dir-slug rather than an empty id.
