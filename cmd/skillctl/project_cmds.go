@@ -11,7 +11,11 @@ package main
 //                                         F ∈ project_id|name|client|status|
 //                                              er1-target|er1-context|er1-url|
 //                                              github-repo|source|descriptor-path|
-//                                              commit-sha
+//                                              commit-sha|channel:<kind>  (the ref
+//                                              of the primary channel of <kind>)
+//   skillctl project channels [--kind K]  list the v2 `channels:` block — one
+//                                         "kind  role  ref  [label]" per line
+//                                         (SPEC-0217); --kind filters by kind
 //   skillctl project path                 print the descriptor path, or "(none)"
 //
 // Optional: -C <dir> resolves relative to <dir> instead of $PWD.
@@ -27,7 +31,7 @@ import (
 
 func runProject(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: skillctl project <show|resolve|path> [-C dir] [--field name]")
+		fmt.Fprintln(stderr, "usage: skillctl project <show|resolve|channels|path> [-C dir] [--field name] [--kind kind]")
 		return 2
 	}
 	sub := args[0]
@@ -35,6 +39,7 @@ func runProject(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	dir := fs.String("C", "", "resolve relative to this directory instead of the current one")
 	field := fs.String("field", "project_id", "field to print (resolve only)")
+	kind := fs.String("kind", "", "channel kind filter (channels only)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return 2
 	}
@@ -56,6 +61,18 @@ func runProject(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stdout, d.FoundPath)
 		}
 		return 0
+	case "channels":
+		for _, ch := range d.Channels {
+			if *kind != "" && !strings.EqualFold(ch.Kind, *kind) {
+				continue
+			}
+			line := fmt.Sprintf("%-14s %-9s %s", ch.Kind, ch.Role, ch.Ref)
+			if ch.Label != "" {
+				line += "   # " + ch.Label
+			}
+			fmt.Fprintln(stdout, line)
+		}
+		return 0
 	case "resolve":
 		val, ok := projectField(d, *field)
 		if !ok {
@@ -68,6 +85,24 @@ func runProject(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "skillctl project: unknown subcommand %q\n", sub)
 		return 2
 	}
+}
+
+// primaryChannelRef returns the `ref` of the primary channel of `kind` (or the
+// first channel of that kind if none is marked primary), or "".
+func primaryChannelRef(d *m3cproject.Descriptor, kind string) string {
+	var first string
+	for _, ch := range d.Channels {
+		if !strings.EqualFold(ch.Kind, kind) {
+			continue
+		}
+		if strings.EqualFold(ch.Role, "primary") {
+			return ch.Ref
+		}
+		if first == "" {
+			first = ch.Ref
+		}
+	}
+	return first
 }
 
 func projectField(d *m3cproject.Descriptor, name string) (string, bool) {
@@ -99,6 +134,11 @@ func projectField(d *m3cproject.Descriptor, name string) (string, bool) {
 	case "repo-root", "repo_root":
 		return d.RepoRoot, true
 	}
+	// channel:<kind> — the ref of the primary channel of that kind (SPEC-0217 v2).
+	if strings.HasPrefix(strings.ToLower(name), "channel:") {
+		k := name[len("channel:"):]
+		return primaryChannelRef(d, k), true
+	}
 	return "", false
 }
 
@@ -120,6 +160,16 @@ func printProjectContext(w io.Writer, d *m3cproject.Descriptor) {
 	}
 	if len(d.Memory.TagFilter) > 0 || d.Memory.DisableFilter {
 		fmt.Fprintf(w, "memory.tag_filter %v   disable_filter: %t\n", d.Memory.TagFilter, d.Memory.DisableFilter)
+	}
+	if len(d.Channels) > 0 {
+		fmt.Fprintf(w, "channels          %d  (SPEC-0217 — `skillctl project channels` for the list):\n", len(d.Channels))
+		for _, ch := range d.Channels {
+			lbl := ""
+			if ch.Label != "" {
+				lbl = "  # " + ch.Label
+			}
+			fmt.Fprintf(w, "  - %-14s %-9s %s%s\n", ch.Kind, ch.Role, ch.Ref, lbl)
+		}
 	}
 	if d.FoundPath != "" {
 		fmt.Fprintf(w, "descriptor        %s\n", d.FoundPath)
