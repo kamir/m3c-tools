@@ -280,6 +280,9 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 	res := &PullResult{}
 	for _, item := range admits {
 		docID, _ := item["doc_id"].(string)
+		if docID == "" {
+			docID, _ = item["id"].(string) // maindrec list responses
+		}
 		body := itemBody(item)
 		event, err := extractEvent(body)
 		if err != nil {

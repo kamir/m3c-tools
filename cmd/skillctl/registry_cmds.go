@@ -51,7 +51,7 @@ func runRegistryLs(args []string, stdout, stderr io.Writer) int {
 	skillName := fs.String("skill", "", "Filter: only this skill.")
 	er1Target := fs.String("er1-target", envOr("ER1_TARGET", "prod"), "ER1 target.")
 	er1Context := fs.String("er1-context", envOr("ER1_CONTEXT", "skills"), "ER1 context.")
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderFlagArgs(fs, args)); err != nil {
 		return 2
 	}
 	cfg, err := resolveER1Config(*er1Target)
@@ -88,7 +88,7 @@ func runRegistryShow(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	er1Target := fs.String("er1-target", envOr("ER1_TARGET", "prod"), "ER1 target.")
 	er1Context := fs.String("er1-context", envOr("ER1_CONTEXT", "skills"), "ER1 context.")
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderFlagArgs(fs, args)); err != nil {
 		return 2
 	}
 	if fs.NArg() < 1 {

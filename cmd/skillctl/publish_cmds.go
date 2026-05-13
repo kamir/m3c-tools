@@ -110,7 +110,10 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "       skillctl publish --attest <name[@ver]> --level green --rationale '<why>' [flags]")
 		fs.PrintDefaults()
 	}
-	if err := fs.Parse(args); err != nil {
+	// stdlib flag.Parse stops at the first non-flag arg, so flags after the
+	// positional skill name are silently dropped (the --dry-run bug surfaced
+	// during the P5 run). Reorder: flag-tokens first, positionals last.
+	if err := fs.Parse(reorderFlagArgs(fs, args)); err != nil {
 		return 2
 	}
 
@@ -788,6 +791,63 @@ func promptYesNo(stdout io.Writer, prompt string) bool {
 	}
 	ans = strings.ToLower(strings.TrimSpace(ans))
 	return ans == "y" || ans == "yes"
+}
+
+// reorderFlagArgs walks `args` and returns a permutation that puts every
+// flag (with its value, if it takes one) first, followed by the positionals.
+// This works around Go stdlib flag.Parse() stopping at the first non-flag
+// arg — a problem when a user writes e.g. `skillctl publish pdf --dry-run`
+// (the `--dry-run` gets silently dropped). The reordering is conservative:
+// only tokens that match a flag in `fs` are treated as flags; unknown
+// `-foo` tokens fall through as positionals so Parse can report them.
+func reorderFlagArgs(fs *flag.FlagSet, args []string) []string {
+	var flagToks, positional []string
+	i := 0
+	for i < len(args) {
+		t := args[i]
+		// Stop at "--": everything after is positional (standard Go convention).
+		if t == "--" {
+			positional = append(positional, args[i+1:]...)
+			break
+		}
+		if len(t) > 1 && t[0] == '-' {
+			// Strip leading dashes and any =value suffix to look up the flag.
+			name := strings.TrimLeft(t, "-")
+			if eq := strings.IndexByte(name, '='); eq >= 0 {
+				name = name[:eq]
+			}
+			if fl := fs.Lookup(name); fl != nil {
+				flagToks = append(flagToks, t)
+				// Bool flags don't consume the next arg; string/int/etc do
+				// (unless we already used the "=value" form).
+				if !strings.Contains(t, "=") && !isBoolFlag(fl) && i+1 < len(args) {
+					flagToks = append(flagToks, args[i+1])
+					i += 2
+					continue
+				}
+				i++
+				continue
+			}
+			// Unknown flag — let fs.Parse error on it; leave in place.
+			flagToks = append(flagToks, t)
+			i++
+			continue
+		}
+		positional = append(positional, t)
+		i++
+	}
+	return append(flagToks, positional...)
+}
+
+// isBoolFlag reports whether a flag is a bool (consumes no arg). The
+// FlagSet doesn't expose this directly; we detect via the Getter interface
+// the bool flag implements.
+func isBoolFlag(fl *flag.Flag) bool {
+	type boolFlag interface{ IsBoolFlag() bool }
+	if bf, ok := fl.Value.(boolFlag); ok {
+		return bf.IsBoolFlag()
+	}
+	return false
 }
 
 // reference-the-imports-we-need to keep linters happy across partial builds.

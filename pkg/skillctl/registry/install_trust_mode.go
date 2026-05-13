@@ -314,9 +314,14 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 		PulledAt:              time.Now().UTC().Format(time.RFC3339),
 		PulledOnHost:          hostnameShort(),
 		TrustRootsFingerprint: opts.TrustRootsFingerprint,
+		// For the `self` tenant the author and registry roles share the
+		// single K-self key, so both pubkey_fingerprints equal the
+		// trust-roots fingerprint that just verified the bundle. (A
+		// future multi-key registry will record per-signature
+		// fingerprints from the bundle event's signatures[] array.)
 		Signatures: []SignatureSidecar{
-			{Role: "author", IdentityID: b.AuthorIdentity},
-			{Role: "registry", IdentityID: b.AuthorIdentity},
+			{Role: "author", IdentityID: b.AuthorIdentity, PubKeyFingerprint: opts.TrustRootsFingerprint},
+			{Role: "registry", IdentityID: b.AuthorIdentity, PubKeyFingerprint: opts.TrustRootsFingerprint},
 		},
 		GovernanceLevel: b.Governance,
 	}

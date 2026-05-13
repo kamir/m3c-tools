@@ -59,7 +59,7 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "Usage: skillctl pull [flags]")
 		fs.PrintDefaults()
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderFlagArgs(fs, args)); err != nil {
 		return 2
 	}
 	if !registry.IsER1Registry(*registryName) {
