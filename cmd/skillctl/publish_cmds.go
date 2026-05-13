@@ -43,10 +43,25 @@ import (
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/er1"
+	"github.com/kamir/m3c-tools/pkg/session"
 	"github.com/kamir/m3c-tools/pkg/skillbundle"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
 )
+
+// sessionCheckpoint is a thin wrapper around pkg/session.Checkpoint with the
+// CLAUDE_SESSION_ID-derived session id + the publish-supplied note.
+func sessionCheckpoint(sessionID, er1Target, er1Context, note string) (*session.CheckpointResult, error) {
+	wd, _ := os.Getwd()
+	return session.Checkpoint(session.CheckpointOpts{
+		WorkingDir: wd,
+		SessionID:  sessionID,
+		ER1Target:  er1Target,
+		ER1Context: er1Context,
+		Note:       note,
+		Auto:       false,
+	})
+}
 
 // runPublish is the main.go entry point for the `publish` subcommand.
 func runPublish(args []string, stdout, stderr io.Writer) int {
@@ -77,6 +92,13 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 		rationale = fs.String("rationale", "", "[--attest] One-line rationale for the verdict.")
 		digestArg = fs.String("digest", "", "[--attest] Existing bundle digest (sha256:<hex>). If empty, derived from --bundle.")
 
+		// Batch (P1.4)
+		all      = fs.Bool("all", false, "Publish every entry in --manifest (admit + attest as one batch).")
+		manifest = fs.String("manifest", "INFRA/skill-registry/self/publish-manifest.txt", "Path to the publish manifest (only used with --all).")
+
+		// Session hook (P1.5)
+		noCheckpoint = fs.Bool("no-checkpoint", false, "Do not append a checkpoint to the open SPEC-0213 session (default: on if a session is open).")
+
 		// UX
 		yes    = fs.Bool("yes", false, "Skip the 🟡 confirm pause (scripted runs).")
 		dryRun = fs.Bool("dry-run", false, "Print the plan + the rendered item body; do not POST or pack.")
@@ -89,6 +111,21 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+
+	if *all {
+		return runPublishAll(stdout, stderr, publishAllArgs{
+			manifestPath: *manifest,
+			identity:     *identity,
+			keyPath:      *keyPath,
+			er1Target:    *er1Target,
+			er1Context:   *er1Context,
+			inlineMax:    *inlineMax,
+			yes:          *yes,
+			dryRun:       *dryRun,
+			noCheckpoint: *noCheckpoint,
+		})
+	}
+
 	if fs.NArg() < 1 {
 		fs.Usage()
 		return 2
@@ -110,32 +147,34 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 
 	if *attest {
 		return runPublishAttest(stdout, stderr, publishAttestArgs{
-			name:       name,
-			version:    ver,
-			level:      *level,
-			rationale:  *rationale,
-			digestArg:  *digestArg,
-			bundlePath: *bundle,
-			identity:   *identity,
-			keyPath:    *keyPath,
-			er1Target:  *er1Target,
-			er1Context: *er1Context,
-			yes:        *yes,
-			dryRun:     *dryRun,
+			name:         name,
+			version:      ver,
+			level:        *level,
+			rationale:    *rationale,
+			digestArg:    *digestArg,
+			bundlePath:   *bundle,
+			identity:     *identity,
+			keyPath:      *keyPath,
+			er1Target:    *er1Target,
+			er1Context:   *er1Context,
+			yes:          *yes,
+			dryRun:       *dryRun,
+			noCheckpoint: *noCheckpoint,
 		})
 	}
 	return runPublishAdmit(stdout, stderr, publishAdmitArgs{
-		name:       name,
-		version:    ver,
-		skillDir:   *skillDir,
-		bundlePath: *bundle,
-		identity:   *identity,
-		keyPath:    *keyPath,
-		er1Target:  *er1Target,
-		er1Context: *er1Context,
-		inlineMax:  *inlineMax,
-		yes:        *yes,
-		dryRun:     *dryRun,
+		name:         name,
+		version:      ver,
+		skillDir:     *skillDir,
+		bundlePath:   *bundle,
+		identity:     *identity,
+		keyPath:      *keyPath,
+		er1Target:    *er1Target,
+		er1Context:   *er1Context,
+		inlineMax:    *inlineMax,
+		yes:          *yes,
+		dryRun:       *dryRun,
+		noCheckpoint: *noCheckpoint,
 	})
 }
 
@@ -145,7 +184,7 @@ type publishAdmitArgs struct {
 	name, version, skillDir, bundlePath, identity, keyPath string
 	er1Target, er1Context                                  string
 	inlineMax                                              int
-	yes, dryRun                                            bool
+	yes, dryRun, noCheckpoint                              bool
 }
 
 func runPublishAdmit(stdout, stderr io.Writer, a publishAdmitArgs) int {
@@ -256,6 +295,7 @@ func runPublishAdmit(stdout, stderr io.Writer, a publishAdmitArgs) int {
 		return 1
 	}
 	fmt.Fprintf(stdout, "==> admitted: doc_id=%s  transport=%s  body_bytes=%d\n", res.DocID, res.Transport, res.ItemBodySize)
+	maybeCheckpoint(stdout, a.noCheckpoint, a.er1Target, a.er1Context, fmt.Sprintf("published (admit) %s@%s digest=%s doc=%s", a.name, ver, digest, res.DocID))
 	return 0
 }
 
@@ -264,7 +304,7 @@ func runPublishAdmit(stdout, stderr io.Writer, a publishAdmitArgs) int {
 type publishAttestArgs struct {
 	name, version, level, rationale, digestArg, bundlePath, identity, keyPath string
 	er1Target, er1Context                                                     string
-	yes, dryRun                                                               bool
+	yes, dryRun, noCheckpoint                                                 bool
 }
 
 func runPublishAttest(stdout, stderr io.Writer, a publishAttestArgs) int {
@@ -344,7 +384,127 @@ func runPublishAttest(stdout, stderr io.Writer, a publishAttestArgs) int {
 		return 1
 	}
 	fmt.Fprintf(stdout, "==> attested: doc_id=%s\n", docID)
+	maybeCheckpoint(stdout, a.noCheckpoint, a.er1Target, a.er1Context, fmt.Sprintf("attested %s@%s level=%s digest=%s doc=%s", a.name, a.version, a.level, digest, docID))
 	return 0
+}
+
+// ─── --all batch mode (P1.4) ──────────────────────────────────────────────
+
+type publishAllArgs struct {
+	manifestPath, identity, keyPath, er1Target, er1Context string
+	inlineMax                                              int
+	yes, dryRun, noCheckpoint                              bool
+}
+
+func runPublishAll(stdout, stderr io.Writer, a publishAllArgs) int {
+	entries, err := LoadManifestFile(a.manifestPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "publish --all: %v\n", err)
+		return 1
+	}
+	if len(entries) == 0 {
+		fmt.Fprintln(stderr, "publish --all: manifest is empty")
+		return 1
+	}
+
+	// Batch-level 🟡 plan + confirm.
+	fmt.Fprintf(stdout, "==> publish --all  (manifest: %s, %d entries)\n", a.manifestPath, len(entries))
+	fmt.Fprintf(stdout, "    target: %s  context: %s  identity: %s\n", a.er1Target, a.er1Context, a.identity)
+	for _, e := range entries {
+		v := e.Version
+		if v == "" {
+			v = "(auto)"
+		}
+		lvl := e.Level
+		if lvl == "" {
+			lvl = "—"
+		}
+		fmt.Fprintf(stdout, "    %2d  admit + attest(%s)  %s@%s  %s\n", e.Line, lvl, e.Name, v, e.Rationale)
+	}
+	if a.dryRun {
+		fmt.Fprintln(stdout, "    (dry-run; skipping POSTs)")
+		return 0
+	}
+	if !a.yes && !promptYesNo(stdout, "Proceed with batch publish? [y/N]: ") {
+		fmt.Fprintln(stdout, "    aborted by operator")
+		return 0
+	}
+
+	// Run each entry (admit then attest) NON-interactively (the batch
+	// confirm covers them all).
+	okCount, failCount := 0, 0
+	for _, e := range entries {
+		fmt.Fprintf(stdout, "\n----  %s@%s  ----\n", e.Name, e.Version)
+		rcA := runPublishAdmit(stdout, stderr, publishAdmitArgs{
+			name:         e.Name,
+			version:      e.Version,
+			identity:     a.identity,
+			keyPath:      a.keyPath,
+			er1Target:    a.er1Target,
+			er1Context:   a.er1Context,
+			inlineMax:    a.inlineMax,
+			yes:          true, // batch confirm covers this
+			noCheckpoint: a.noCheckpoint,
+		})
+		if rcA != 0 {
+			failCount++
+			fmt.Fprintf(stderr, "    admit failed (rc=%d)\n", rcA)
+			continue
+		}
+		if e.Level != "" {
+			rcT := runPublishAttest(stdout, stderr, publishAttestArgs{
+				name:         e.Name,
+				version:      e.Version,
+				level:        e.Level,
+				rationale:    e.Rationale,
+				identity:     a.identity,
+				keyPath:      a.keyPath,
+				er1Target:    a.er1Target,
+				er1Context:   a.er1Context,
+				yes:          true,
+				noCheckpoint: a.noCheckpoint,
+			})
+			if rcT != 0 {
+				failCount++
+				fmt.Fprintf(stderr, "    attest failed (rc=%d)\n", rcT)
+				continue
+			}
+		}
+		okCount++
+	}
+	fmt.Fprintf(stdout, "\n==> batch done: ok=%d fail=%d total=%d\n", okCount, failCount, len(entries))
+	if failCount > 0 {
+		return 1
+	}
+	return 0
+}
+
+// ─── Auto-checkpoint (P1.5) ───────────────────────────────────────────────
+
+// maybeCheckpoint appends a checkpoint child item to the open SPEC-0213
+// session, if any. Silently skips when --no-checkpoint is set or no session
+// is detected. Detection: CLAUDE_SESSION_ID env var (set by the harness for
+// every hook payload; also set by `skillctl session open --export` flows).
+//
+// We deliberately do NOT search ER1 for an open session-state item — the env
+// var is the authoritative "session is open here, right now" signal; searching
+// ER1 would introduce ambiguity (multiple open sessions across hosts).
+func maybeCheckpoint(stdout io.Writer, noCheckpoint bool, er1Target, er1Context, note string) {
+	if noCheckpoint {
+		return
+	}
+	sid := os.Getenv("CLAUDE_SESSION_ID")
+	if sid == "" {
+		return // no open session → silently skip
+	}
+	res, err := sessionCheckpoint(sid, er1Target, er1Context, note)
+	if err != nil {
+		fmt.Fprintf(stdout, "    (checkpoint skipped: %v)\n", err)
+		return
+	}
+	if res != nil && res.DocID != "" {
+		fmt.Fprintf(stdout, "    (checkpoint appended: doc=%s)\n", res.DocID)
+	}
 }
 
 // ─── helpers ────────────────────────────────────────────────────────────────
