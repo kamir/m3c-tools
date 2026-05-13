@@ -110,6 +110,13 @@ func main() {
 	case "session":
 		os.Exit(runSession(os.Args[2:], os.Stdout, os.Stderr))
 	// === END SPEC-0213 ===
+	// === SPEC-0225 P1: personal skill registry — ER1 bundle transport ===
+	// `publish` admits a new bundle to the `self` tenant (or posts an
+	// AttestationPublishedEvent with --attest). `pull` / `registry` / `revoke`
+	// land in P2/P3.
+	case "publish":
+		os.Exit(runPublish(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0225 P1 ===
 	case "help", "--help", "-h":
 		printUsage(os.Stdout)
 		os.Exit(0)
@@ -145,6 +152,10 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "  project resolve    Print one field (--field project_id|er1-target|er1-context|channel:<kind>|...).")
 	fmt.Fprintln(w, "  project channels   List the v2 `channels:` block (--kind to filter).")
 	fmt.Fprintln(w, "  project path       Print the descriptor file path, or (none).")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Commands (SPEC-0225 / personal skill registry via ER1):")
+	fmt.Fprintln(w, "  publish <name[@ver]>          Admit a bundle to the `self` ER1 registry (--bundle <path>|--skill-dir <dir>).")
+	fmt.Fprintln(w, "  publish --attest <name>       Post a governance attestation for an admitted digest (--level --rationale).")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Commands (SPEC-0213 / session-state in ER1):")
 	fmt.Fprintln(w, "  session open       Create the session-state ER1 item for this session (idempotent).")

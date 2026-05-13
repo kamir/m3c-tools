@@ -1,0 +1,516 @@
+package main
+
+// `skillctl publish` — SPEC-0225 P1.3.
+//
+// Two modes:
+//   skillctl publish <name[@ver]> [--registry self] [--bundle <path>] [--skill-dir <dir>]
+//                                 [--key <path>] [--identity <id>] [--inline-max <bytes>]
+//                                 [--er1-target prod|stage|local] [--er1-context <ctx>]
+//                                 [--yes] [--dry-run]
+//      Builds (or reuses) a .skb, signs it, builds a SPEC-0190 BundleAdmittedEvent,
+//      envelope-signs it with the same key, and POSTs the ER1 item via /upload_2.
+//      Idempotent on bundle digest (re-runs are no-ops).
+//
+//   skillctl publish --attest <name[@ver]> --level green|yellow|red --rationale <text>
+//                    [--digest sha256:<hex> | --bundle <path>] [--registry self] [...]
+//      Posts an AttestationPublishedEvent item — the governance verdict for an
+//      already-admitted digest.
+//
+// Default registry is "self" (the personal ER1-mediated tenant, SPEC-0225). The
+// ER1 target/context default to env (ER1_TARGET / ER1_CONTEXT) → prod / "skills"
+// when unset, matching INFRA/skill-registry/env/self.env.
+//
+// What's deliberately not here yet (next P1 commits): --all manifest loop (P1.4);
+// auto-checkpoint on the open SPEC-0213 session (P1.5); MinIO claim-check
+// overflow (deferred — keep bundles inline for v1).
+
+import (
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"os"
+	"os/exec"
+	"os/user"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/kamir/m3c-tools/pkg/er1"
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
+	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
+	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
+)
+
+// runPublish is the main.go entry point for the `publish` subcommand.
+func runPublish(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("publish", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+
+	var (
+		// Selection
+		registryName = fs.String("registry", "self", "Registry spec. \"self\" (recommended) or \"er1://...\". HTTP registries route through the existing admission client, not this transport.")
+		skillDir     = fs.String("skill-dir", "", "Path to the skill directory. Default: ~/.claude/skills/<name>.")
+		bundle       = fs.String("bundle", "", "Path to a pre-built .skb. If empty, the skill dir is packed in-place to ./<name>@<version>.skb.")
+		version      = fs.String("version", "", "Skill version (overrides the SKILL.md frontmatter). Required for admit; inferred from --bundle filename for attest.")
+		identity     = fs.String("identity", "id:kamir@m3c", "Author/registry identity id stamped into the event and tags.")
+
+		// Key
+		keyPath = fs.String("key", defaultSelfKeyPath(), "Path to the ed25519 private key (PEM PKCS#8). Default: $SIGNING_KEY_LOCATION or ~/.config/m3c/skill-registry-self.key.")
+
+		// ER1 target
+		er1Target  = fs.String("er1-target", envOr("ER1_TARGET", "prod"), "ER1 target: prod | stage | local.")
+		er1Context = fs.String("er1-context", envOr("ER1_CONTEXT", "skills"), "ER1 context to POST into.")
+
+		// Tiering
+		inlineMax = fs.Int("inline-max", envOrInt("ER1_INLINE_MAX_BYTES", 262144), "Inline base64 cap; bundles above this need a claim-check (not implemented v1).")
+
+		// Modes
+		attest    = fs.Bool("attest", false, "Mode: publish a governance attestation (AttestationPublishedEvent) rather than admitting a new bundle.")
+		level     = fs.String("level", "green", "[--attest] Governance level: green | yellow | red.")
+		rationale = fs.String("rationale", "", "[--attest] One-line rationale for the verdict.")
+		digestArg = fs.String("digest", "", "[--attest] Existing bundle digest (sha256:<hex>). If empty, derived from --bundle.")
+
+		// UX
+		yes    = fs.Bool("yes", false, "Skip the 🟡 confirm pause (scripted runs).")
+		dryRun = fs.Bool("dry-run", false, "Print the plan + the rendered item body; do not POST or pack.")
+	)
+	fs.Usage = func() {
+		fmt.Fprintln(stderr, "Usage: skillctl publish <name[@ver]> [flags]")
+		fmt.Fprintln(stderr, "       skillctl publish --attest <name[@ver]> --level green --rationale '<why>' [flags]")
+		fs.PrintDefaults()
+	}
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() < 1 {
+		fs.Usage()
+		return 2
+	}
+
+	if !registry.IsER1Registry(*registryName) {
+		fmt.Fprintf(stderr, "publish: only ER1 registries (\"self\" or \"er1://...\") are supported by this command — use `skillctl install` for HTTP admission registries; got %q\n", *registryName)
+		return 2
+	}
+
+	name, ver := splitNameVersion(fs.Arg(0))
+	if *version != "" {
+		ver = *version
+	}
+	if name == "" {
+		fmt.Fprintln(stderr, "publish: skill name required (positional arg 1)")
+		return 2
+	}
+
+	if *attest {
+		return runPublishAttest(stdout, stderr, publishAttestArgs{
+			name:       name,
+			version:    ver,
+			level:      *level,
+			rationale:  *rationale,
+			digestArg:  *digestArg,
+			bundlePath: *bundle,
+			identity:   *identity,
+			keyPath:    *keyPath,
+			er1Target:  *er1Target,
+			er1Context: *er1Context,
+			yes:        *yes,
+			dryRun:     *dryRun,
+		})
+	}
+	return runPublishAdmit(stdout, stderr, publishAdmitArgs{
+		name:       name,
+		version:    ver,
+		skillDir:   *skillDir,
+		bundlePath: *bundle,
+		identity:   *identity,
+		keyPath:    *keyPath,
+		er1Target:  *er1Target,
+		er1Context: *er1Context,
+		inlineMax:  *inlineMax,
+		yes:        *yes,
+		dryRun:     *dryRun,
+	})
+}
+
+// ─── admit mode ────────────────────────────────────────────────────────────
+
+type publishAdmitArgs struct {
+	name, version, skillDir, bundlePath, identity, keyPath string
+	er1Target, er1Context                                  string
+	inlineMax                                              int
+	yes, dryRun                                            bool
+}
+
+func runPublishAdmit(stdout, stderr io.Writer, a publishAdmitArgs) int {
+	// 1. Locate or build the .skb.
+	skbPath, ver, err := ensureBundle(a, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "publish: %v\n", err)
+		return 1
+	}
+	if ver == "" {
+		ver = "0.0.0"
+	}
+
+	// 2. Read the .skb bytes + compute the digest (the signing pkg also
+	// computes it, but we need the bytes anyway for the inline body).
+	skb, err := os.ReadFile(skbPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "publish: read %s: %v\n", skbPath, err)
+		return 1
+	}
+	digestHex, digestBytes := sha256Hex(skb)
+	digest := "sha256:" + digestHex
+
+	// 3. Load the key and produce the author+registry sigs. The personal
+	// tenant uses one key playing both roles — same sig bytes, two records.
+	priv, err := signing.LoadPrivateKey(a.keyPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "publish: load key: %v\n", err)
+		return 1
+	}
+	defer wipe(priv)
+	sigBytes := ed25519.Sign(priv, digestBytes[:])
+	sigB64 := base64.StdEncoding.EncodeToString(sigBytes)
+	pubFP := pubkeyFingerprint(priv.Public().(ed25519.PublicKey))
+
+	sigs := []registry.SignatureRef{
+		{Role: "author", IdentityID: a.identity, SignatureB64: sigB64, PubKeyFingerprint: pubFP},
+		{Role: "registry", IdentityID: a.identity, SignatureB64: sigB64, PubKeyFingerprint: pubFP},
+	}
+
+	// 4. Build the BundleAdmittedEvent and sign its envelope.
+	now := time.Now().UTC()
+	ev, err := registry.BuildBundleAdmittedEvent(registry.AdmittedEventInput{
+		BundleDigest:       digest,
+		Name:               a.name,
+		Version:            ver,
+		AuthorIntent:       "green", // declared author intent; attestation verdict is separate
+		AdmittedByIdentity: a.identity,
+		AdmittedAt:         now,
+		Signatures:         sigs,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "publish: build event: %v\n", err)
+		return 1
+	}
+	if _, err := registry.SignEnvelopeSignature(priv, ev); err != nil {
+		fmt.Fprintf(stderr, "publish: sign envelope: %v\n", err)
+		return 1
+	}
+
+	skill := registry.SkillMeta{
+		Name:            a.name,
+		Version:         ver,
+		BundleDigest:    digest,
+		AuthorIdentity:  a.identity,
+		GovernanceLevel: "green",
+		PackedOnHost:    shortHostname(),
+	}
+
+	// 5. Plan + 🟡 confirm pause.
+	fmt.Fprintf(stdout, "==> publish (admit) %s@%s\n", a.name, ver)
+	fmt.Fprintf(stdout, "    digest:    %s\n", digest)
+	fmt.Fprintf(stdout, "    bytes:     %d\n", len(skb))
+	fmt.Fprintf(stdout, "    transport: %s\n", chooseTransport(len(skb), a.inlineMax))
+	fmt.Fprintf(stdout, "    host:      %s\n", skill.PackedOnHost)
+	fmt.Fprintf(stdout, "    identity:  %s\n", a.identity)
+	fmt.Fprintf(stdout, "    target:    %s  context: %s\n", a.er1Target, a.er1Context)
+	if a.dryRun {
+		fmt.Fprintln(stdout, "    (dry-run; skipping POST)")
+		return 0
+	}
+	if !a.yes && !promptYesNo(stdout, "Proceed with publish? [y/N]: ") {
+		fmt.Fprintln(stdout, "    aborted by operator")
+		return 0
+	}
+
+	// 6. POST.
+	cfg, err := resolveER1Config(a.er1Target)
+	if err != nil {
+		fmt.Fprintf(stderr, "publish: %v\n", err)
+		return 1
+	}
+	res, err := registry.PublishAdmitted(registry.PublishAdmittedOpts{
+		ER1Cfg:         cfg,
+		ContextID:      a.er1Context,
+		Event:          ev,
+		Skill:          skill,
+		SkbBytes:       skb,
+		InlineMaxBytes: a.inlineMax,
+		Now:            now,
+	})
+	if errors.Is(err, registry.ErrAlreadyPublished) {
+		fmt.Fprintf(stdout, "==> already published: doc_id=%s (idempotent no-op)\n", res.DocID)
+		return 0
+	}
+	if err != nil {
+		fmt.Fprintf(stderr, "publish: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "==> admitted: doc_id=%s  transport=%s  body_bytes=%d\n", res.DocID, res.Transport, res.ItemBodySize)
+	return 0
+}
+
+// ─── attest mode ───────────────────────────────────────────────────────────
+
+type publishAttestArgs struct {
+	name, version, level, rationale, digestArg, bundlePath, identity, keyPath string
+	er1Target, er1Context                                                     string
+	yes, dryRun                                                               bool
+}
+
+func runPublishAttest(stdout, stderr io.Writer, a publishAttestArgs) int {
+	digest := a.digestArg
+	if digest == "" {
+		if a.bundlePath == "" {
+			fmt.Fprintln(stderr, "publish --attest: need --digest sha256:<hex> or --bundle <path>")
+			return 2
+		}
+		skb, err := os.ReadFile(a.bundlePath)
+		if err != nil {
+			fmt.Fprintf(stderr, "publish --attest: read bundle: %v\n", err)
+			return 1
+		}
+		d, _ := sha256Hex(skb)
+		digest = "sha256:" + d
+	}
+
+	priv, err := signing.LoadPrivateKey(a.keyPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "publish --attest: load key: %v\n", err)
+		return 1
+	}
+	defer wipe(priv)
+
+	now := time.Now().UTC()
+	ev, err := registry.BuildAttestationPublishedEvent(registry.AttestedEventInput{
+		BundleDigest:    digest,
+		ReviewerID:      a.identity,
+		GovernanceLevel: a.level,
+		Rationale:       a.rationale,
+		OccurredAt:      now,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "publish --attest: build event: %v\n", err)
+		return 1
+	}
+	if _, err := registry.SignEnvelopeSignature(priv, ev); err != nil {
+		fmt.Fprintf(stderr, "publish --attest: sign envelope: %v\n", err)
+		return 1
+	}
+
+	skill := registry.SkillMeta{
+		Name:           a.name,
+		Version:        a.version,
+		BundleDigest:   digest,
+		AuthorIdentity: a.identity,
+	}
+
+	fmt.Fprintf(stdout, "==> publish --attest %s@%s\n", a.name, a.version)
+	fmt.Fprintf(stdout, "    digest:    %s\n", digest)
+	fmt.Fprintf(stdout, "    level:     %s\n", a.level)
+	fmt.Fprintf(stdout, "    rationale: %s\n", a.rationale)
+	if a.dryRun {
+		fmt.Fprintln(stdout, "    (dry-run; skipping POST)")
+		return 0
+	}
+	if !a.yes && !promptYesNo(stdout, "Proceed with attestation? [y/N]: ") {
+		fmt.Fprintln(stdout, "    aborted by operator")
+		return 0
+	}
+
+	cfg, err := resolveER1Config(a.er1Target)
+	if err != nil {
+		fmt.Fprintf(stderr, "publish --attest: %v\n", err)
+		return 1
+	}
+	docID, err := registry.PublishAttested(registry.PublishAttestedOpts{
+		ER1Cfg:    cfg,
+		ContextID: a.er1Context,
+		Event:     ev,
+		Skill:     skill,
+		Now:       now,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "publish --attest: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "==> attested: doc_id=%s\n", docID)
+	return 0
+}
+
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+func ensureBundle(a publishAdmitArgs, stderr io.Writer) (string, string, error) {
+	if a.bundlePath != "" {
+		// Reuse a pre-built .skb. Infer version from filename if not given.
+		v := a.version
+		if v == "" {
+			v = versionFromBundleFilename(a.bundlePath)
+		}
+		return a.bundlePath, v, nil
+	}
+	dir := a.skillDir
+	if dir == "" {
+		home, _ := os.UserHomeDir()
+		dir = filepath.Join(home, ".claude", "skills", a.name)
+	}
+	if _, err := os.Stat(dir); err != nil {
+		return "", "", fmt.Errorf("skill dir not found: %s (try --skill-dir)", dir)
+	}
+	v := a.version
+	if v == "" {
+		v = "0.0.0"
+	}
+	out := filepath.Join(".", a.name+"@"+v+".skb")
+	if _, err := skillbundle.Pack(dir, out, skillbundle.PackOptions{}); err != nil {
+		return "", "", fmt.Errorf("pack %s: %w", dir, err)
+	}
+	fmt.Fprintf(stderr, "    packed: %s\n", out)
+	return out, v, nil
+}
+
+func resolveER1Config(target string) (*er1.Config, error) {
+	base, verify := er1Endpoint(target)
+	cfg := er1.LoadConfig()
+	cfg.APIURL = base + "/upload_2"
+	cfg.VerifySSL = verify
+	if cfg.APIKey == "" {
+		cfg.APIKey = resolveAPIKeyFromKeychain()
+	}
+	if cfg.APIKey == "" && os.Getenv("ER1_DEVICE_TOKEN") == "" {
+		return nil, fmt.Errorf("no ER1 credential — set ER1_API_KEY or add the `aims-core-er1` Keychain item (ADR-0003)")
+	}
+	return cfg, nil
+}
+
+// er1Endpoint mirrors pkg/session.ER1Endpoint without taking a dependency on
+// that package. (Same matrix; if it drifts, sync explicitly.)
+func er1Endpoint(target string) (string, bool) {
+	switch strings.ToLower(target) {
+	case "prod":
+		return "https://onboarding.guide", true
+	case "local":
+		return "https://127.0.0.1:8081", false
+	}
+	if strings.HasPrefix(target, "http") {
+		return strings.TrimRight(target, "/"), !strings.Contains(target, "127.0.0.1") && !strings.Contains(target, "localhost")
+	}
+	if u := os.Getenv("ER1_API_URL"); u != "" {
+		b := strings.TrimSuffix(u, "/upload_2")
+		return strings.TrimRight(b, "/"), os.Getenv("ER1_VERIFY_SSL") != "false"
+	}
+	return "https://onboarding.guide", true
+}
+
+func resolveAPIKeyFromKeychain() string {
+	if k := os.Getenv("ER1_API_KEY"); k != "" {
+		return k
+	}
+	u, _ := user.Current()
+	uname := "kamir"
+	if u != nil && u.Username != "" {
+		uname = u.Username
+	}
+	out, err := exec.Command("security", "find-generic-password", "-s", "aims-core-er1", "-a", uname, "-w").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func defaultSelfKeyPath() string {
+	if v := os.Getenv("SIGNING_KEY_LOCATION"); v != "" {
+		return v
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".config", "m3c", "skill-registry-self.key")
+}
+
+func envOr(name, fallback string) string {
+	if v := os.Getenv(name); v != "" {
+		return v
+	}
+	return fallback
+}
+
+func envOrInt(name string, fallback int) int {
+	if v := os.Getenv(name); v != "" {
+		var n int
+		_, err := fmt.Sscanf(v, "%d", &n)
+		if err == nil {
+			return n
+		}
+	}
+	return fallback
+}
+
+func splitNameVersion(s string) (name, version string) {
+	if i := strings.Index(s, "@"); i > 0 {
+		return s[:i], s[i+1:]
+	}
+	return s, ""
+}
+
+func versionFromBundleFilename(p string) string {
+	base := strings.TrimSuffix(filepath.Base(p), ".skb")
+	if i := strings.LastIndex(base, "@"); i > 0 {
+		return base[i+1:]
+	}
+	return ""
+}
+
+func sha256Hex(b []byte) (string, [sha256.Size]byte) {
+	d := sha256.Sum256(b)
+	return hex.EncodeToString(d[:]), d
+}
+
+func pubkeyFingerprint(pub ed25519.PublicKey) string {
+	d := sha256.Sum256(pub)
+	return "sha256:" + hex.EncodeToString(d[:])
+}
+
+func wipe(b []byte) {
+	for i := range b {
+		b[i] = 0
+	}
+}
+
+func shortHostname() string {
+	if h, err := os.Hostname(); err == nil {
+		if i := strings.IndexByte(h, '.'); i > 0 {
+			return h[:i]
+		}
+		return h
+	}
+	return "unknown"
+}
+
+func chooseTransport(size, max int) string {
+	if max > 0 && size > max {
+		return "er1-claimcheck"
+	}
+	return "er1-inline"
+}
+
+func promptYesNo(stdout io.Writer, prompt string) bool {
+	fmt.Fprint(stdout, prompt)
+	var ans string
+	if _, err := fmt.Fscanln(os.Stdin, &ans); err != nil {
+		return false
+	}
+	ans = strings.ToLower(strings.TrimSpace(ans))
+	return ans == "y" || ans == "yes"
+}
+
+// reference-the-imports-we-need to keep linters happy across partial builds.
+var _ = http.MethodGet
+var _ = url.Values{}
