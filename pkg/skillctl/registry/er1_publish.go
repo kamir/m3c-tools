@@ -207,6 +207,49 @@ type PublishRevokedOpts struct {
 	Now       time.Time
 }
 
+// PublishInstalledOpts captures the inputs for the install-event publish path.
+type PublishInstalledOpts struct {
+	ER1Cfg            *er1.Config
+	ContextID         string
+	Event             map[string]any // signed BundleInstalledEvent
+	Skill             SkillMeta
+	InstalledOnHost   string
+	Now               time.Time
+}
+
+// PublishInstalled POSTs a BundleInstalledEvent item with the install-event
+// tag set (skill-event:installed, host:<installed-on>). Called by
+// `pull --install --emit-installed` so the other machine sees the install.
+func PublishInstalled(opts PublishInstalledOpts) (string, error) {
+	if opts.ER1Cfg == nil || opts.Event == nil {
+		return "", errors.New("PublishInstalled: ER1Cfg + Event required")
+	}
+	if _, ok := opts.Event[EnvelopeSignatureField].(string); !ok {
+		return "", errors.New("PublishInstalled: Event missing envelope_signature")
+	}
+	if opts.ContextID == "" {
+		opts.ContextID = "skills"
+	}
+	envBytes, err := json.MarshalIndent(opts.Event, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("marshal event: %w", err)
+	}
+	now := opts.Now
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "# skill %s@%s — installed on %s\n\n", opts.Skill.Name, opts.Skill.Version, opts.InstalledOnHost)
+	fmt.Fprintf(&b, "| | |\n|---|---|\n| digest | `%s` |\n| installed_on | `%s` |\n| installed_at | `%s` |\n| registry | `self` |\n\n",
+		opts.Skill.BundleDigest, opts.InstalledOnHost, now.UTC().Format(time.RFC3339))
+	b.WriteString("```json\n")
+	b.Write(envBytes)
+	b.WriteString("\n```\n")
+
+	tags := BuildInstalledTags(opts.Skill, opts.InstalledOnHost)
+	return uploadText(opts.ER1Cfg, b.String(), fmt.Sprintf("skill-%s-%s.installed-%s.md", opts.Skill.Name, opts.Skill.Version, opts.InstalledOnHost), strings.Join(tags, ","), "application/m3c-skill-bundle-event")
+}
+
 // PublishRevoked POSTs a BundleRevokedEvent item.
 func PublishRevoked(opts PublishRevokedOpts) (string, error) {
 	if opts.ER1Cfg == nil || opts.Event == nil {

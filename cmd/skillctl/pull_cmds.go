@@ -22,8 +22,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
+	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
 )
 
 func runPull(args []string, stdout, stderr io.Writer) int {
@@ -39,6 +41,19 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		trustPath    = fs.String("trust-roots", envOr("M3C_TRUST_ROOTS", ""), "Path to the SPEC-0225 trust-roots YAML. Default: ~/.claude/trust-roots.yaml.")
 		since        = fs.String("since", "", "Best-effort lower bound on occurred_at (RFC3339).")
 		verbose      = fs.Bool("verbose", false, "Print one line per per-gate decision.")
+
+		// P3 — install (G-23 two-step + provenance + --emit-installed)
+		install         = fs.Bool("install", false, "Install verified bundles into ~/.claude/skills/<name>/ with a provenance sidecar.")
+		trustMode       = fs.Bool("trust-mode", false, "Required for --install: re-affirm that you want the trust-mode path (writes a .m3c-provenance.json sidecar).")
+		dryRunInstall   = fs.Bool("dry-run-install", false, "G-23 step 1: print the create/overwrite plan + a token; do NOT write.")
+		confirmInstall  = fs.Bool("confirm-install", false, "G-23 step 2: consume --dry-run-install-token and write.")
+		installToken    = fs.String("dry-run-install-token", "", "Token returned by --dry-run-install; required if any skill would be overwritten.")
+		allowDowngrade  = fs.Bool("allow-downgrade", false, "Allow installing an older version over a newer one.")
+		emitInstalled   = fs.Bool("emit-installed", false, "After install, POST a BundleInstalledEvent so the other machine sees the install.")
+		installSkillsDir = fs.String("skills-dir", "", "Where to install skills. Default: ~/.claude/skills.")
+		keyPath         = fs.String("key", defaultSelfKeyPath(), "[--emit-installed] Signing key for the BundleInstalledEvent envelope.")
+		identity        = fs.String("identity", "id:kamir@m3c", "[--emit-installed] Author/registry identity stamped into the install event.")
+		noCheckpoint    = fs.Bool("no-checkpoint", false, "Do not append a SPEC-0213 session checkpoint after install.")
 	)
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: skillctl pull [flags]")
@@ -96,9 +111,125 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		// proceeding to --install (P3).
 		return 1
 	}
-	_ = errors.Is // keep the import
+
+	// ── P3 install path ──────────────────────────────────────────────────
+	if !*install && !*dryRunInstall && !*confirmInstall {
+		return 0
+	}
+	if *install && !*trustMode {
+		fmt.Fprintln(stderr, "pull --install: requires --trust-mode (the only install mode for the `self` registry)")
+		return 2
+	}
+	if len(res.Staged) == 0 {
+		fmt.Fprintln(stdout, "    (nothing to install)")
+		return 0
+	}
+
+	plan, err := registry.PlanInstall(res.Staged, *installSkillsDir)
+	if err != nil {
+		fmt.Fprintf(stderr, "pull: plan install: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "\n==> install plan: %d create, %d overwrite\n", len(plan.Creates), len(plan.Overwrites))
+	for _, r := range plan.Creates {
+		fmt.Fprintf(stdout, "    + %s@%s  →  %s   (digest %s)\n", r.Name, r.Version, r.SkillPath, r.NewDigest)
+	}
+	for _, r := range plan.Overwrites {
+		fmt.Fprintf(stdout, "    ! %s@%s  →  %s   %s → %s\n", r.Name, r.Version, r.SkillPath, strOr(r.OldDigest, "(untracked)"), r.NewDigest)
+	}
+
+	if *dryRunInstall {
+		// Emit the token for the operator to feed back via --confirm-install.
+		fmt.Fprintf(stdout, "\n==> dry-run-install token (5-minute TTL): %s\n", plan.Token)
+		fmt.Fprintln(stdout, "    re-run with: --confirm-install --dry-run-install-token <above>")
+		return 0
+	}
+
+	// Confirm-install OR a --install with zero overwrites: actually write.
+	results, err := registry.ConfirmInstall(res.Staged, *installToken, registry.InstallOpts{
+		SkillsDir:             *installSkillsDir,
+		TrustRootsFingerprint: tr.Fingerprint,
+		ContextID:             *er1Context,
+		AllowDowngrade:        *allowDowngrade,
+	})
+	if err != nil {
+		if errors.Is(err, registry.ErrTokenRequired) {
+			fmt.Fprintln(stderr, "pull --install: overwrite detected — first run --dry-run-install to get a token,")
+			fmt.Fprintln(stderr, "                  then re-run with --confirm-install --dry-run-install-token <sig>.")
+			return 2
+		}
+		fmt.Fprintf(stderr, "pull --install: %v\n", err)
+		return 1
+	}
+	for _, r := range results {
+		marker := "+"
+		if r.OverwroteOld {
+			marker = "↻"
+		}
+		fmt.Fprintf(stdout, "    %s  installed at %s  (provenance: %s)\n", marker, r.SkillPath, r.ProvenancePath)
+	}
+
+	if *emitInstalled {
+		emitInstalledEvents(stdout, stderr, results, res.Staged, *keyPath, *identity, *er1Target, *er1Context, tr.Fingerprint)
+	}
+	maybeCheckpoint(stdout, *noCheckpoint, *er1Target, *er1Context, fmt.Sprintf("installed %d bundle(s) under %s (trust-mode)", len(results), strOr(*installSkillsDir, "~/.claude/skills")))
 	return 0
 }
+
+// emitInstalledEvents posts one BundleInstalledEvent per installed bundle so
+// the OTHER machine sees the install (the cross-machine visibility hook §10).
+func emitInstalledEvents(stdout, stderr io.Writer, results []*registry.InstallResult, staged []*registry.StagedBundle, keyPath, identity, er1Target, er1Context, trustRootsFP string) {
+	priv, err := signing.LoadPrivateKey(keyPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "    (emit-installed skipped: load key: %v)\n", err)
+		return
+	}
+	defer wipe(priv)
+	host := shortHostname()
+	cfg, err := resolveER1Config(er1Target)
+	if err != nil {
+		fmt.Fprintf(stderr, "    (emit-installed skipped: %v)\n", err)
+		return
+	}
+	for _, b := range staged {
+		ev, err := registry.BuildBundleInstalledEvent(registry.InstalledEventInput{
+			BundleDigest:          b.Digest,
+			Name:                  b.Name,
+			Version:               b.Version,
+			InstalledOnHost:       host,
+			InstalledAt:           time.Now().UTC(),
+			TrustRootsFingerprint: trustRootsFP,
+			Registry:              "self",
+		})
+		if err != nil {
+			fmt.Fprintf(stderr, "    (emit-installed %s: build event: %v)\n", b.Name, err)
+			continue
+		}
+		if _, err := registry.SignEnvelopeSignature(priv, ev); err != nil {
+			fmt.Fprintf(stderr, "    (emit-installed %s: sign envelope: %v)\n", b.Name, err)
+			continue
+		}
+		docID, err := registry.PublishInstalled(registry.PublishInstalledOpts{
+			ER1Cfg:          cfg,
+			ContextID:       er1Context,
+			Event:           ev,
+			Skill: registry.SkillMeta{
+				Name:           b.Name,
+				Version:        b.Version,
+				BundleDigest:   b.Digest,
+				AuthorIdentity: identity,
+			},
+			InstalledOnHost: host,
+		})
+		if err != nil {
+			fmt.Fprintf(stderr, "    (emit-installed %s: %v)\n", b.Name, err)
+			continue
+		}
+		fmt.Fprintf(stdout, "    ✉ emitted installed event: %s@%s on host=%s doc=%s\n", b.Name, b.Version, host, docID)
+	}
+	_ = results // referenced for symmetry; not directly used here
+}
+
 
 func strOr(s, fb string) string {
 	if s == "" {
