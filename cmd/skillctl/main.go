@@ -117,6 +117,12 @@ func main() {
 	case "publish":
 		os.Exit(runPublish(os.Args[2:], os.Stdout, os.Stderr))
 	// === END SPEC-0225 P1 ===
+	// === SPEC-0225 P2: pull + registry view ===
+	case "pull":
+		os.Exit(runPull(os.Args[2:], os.Stdout, os.Stderr))
+	case "registry":
+		os.Exit(runRegistry(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0225 P2 ===
 	case "help", "--help", "-h":
 		printUsage(os.Stdout)
 		os.Exit(0)
@@ -156,6 +162,11 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "Commands (SPEC-0225 / personal skill registry via ER1):")
 	fmt.Fprintln(w, "  publish <name[@ver]>          Admit a bundle to the `self` ER1 registry (--bundle <path>|--skill-dir <dir>).")
 	fmt.Fprintln(w, "  publish --attest <name>       Post a governance attestation for an admitted digest (--level --rationale).")
+	fmt.Fprintln(w, "  publish --revoke <name>       Post a BundleRevokedEvent for an admitted digest (--digest sha256:… --reason …).")
+	fmt.Fprintln(w, "  publish --all                 Iterate INFRA/skill-registry/self/publish-manifest.txt: admit + attest each.")
+	fmt.Fprintln(w, "  pull                          Run the 5-gate gauntlet against the `self` registry; stage verified bundles.")
+	fmt.Fprintln(w, "  registry ls [--latest]        List bundles in the `self` registry.")
+	fmt.Fprintln(w, "  registry show <name|sha256:…> Show full timeline (admit/attest/revoke/install) for one bundle.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Commands (SPEC-0213 / session-state in ER1):")
 	fmt.Fprintln(w, "  session open       Create the session-state ER1 item for this session (idempotent).")

@@ -88,9 +88,11 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 
 		// Modes
 		attest    = fs.Bool("attest", false, "Mode: publish a governance attestation (AttestationPublishedEvent) rather than admitting a new bundle.")
+		revoke    = fs.Bool("revoke", false, "Mode: publish a BundleRevokedEvent for an admitted digest. Requires --digest and --reason.")
 		level     = fs.String("level", "green", "[--attest] Governance level: green | yellow | red.")
-		rationale = fs.String("rationale", "", "[--attest] One-line rationale for the verdict.")
-		digestArg = fs.String("digest", "", "[--attest] Existing bundle digest (sha256:<hex>). If empty, derived from --bundle.")
+		rationale = fs.String("rationale", "", "[--attest|--revoke] One-line rationale.")
+		reason    = fs.String("reason", "", "[--revoke] Short reason code (e.g. key-compromise, deprecated).")
+		digestArg = fs.String("digest", "", "[--attest|--revoke] Existing bundle digest (sha256:<hex>). If empty, derived from --bundle.")
 
 		// Batch (P1.4)
 		all      = fs.Bool("all", false, "Publish every entry in --manifest (admit + attest as one batch).")
@@ -150,6 +152,23 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 			name:         name,
 			version:      ver,
 			level:        *level,
+			rationale:    *rationale,
+			digestArg:    *digestArg,
+			bundlePath:   *bundle,
+			identity:     *identity,
+			keyPath:      *keyPath,
+			er1Target:    *er1Target,
+			er1Context:   *er1Context,
+			yes:          *yes,
+			dryRun:       *dryRun,
+			noCheckpoint: *noCheckpoint,
+		})
+	}
+	if *revoke {
+		return runPublishRevoke(stdout, stderr, publishRevokeArgs{
+			name:         name,
+			version:      ver,
+			reason:       *reason,
 			rationale:    *rationale,
 			digestArg:    *digestArg,
 			bundlePath:   *bundle,
@@ -385,6 +404,98 @@ func runPublishAttest(stdout, stderr io.Writer, a publishAttestArgs) int {
 	}
 	fmt.Fprintf(stdout, "==> attested: doc_id=%s\n", docID)
 	maybeCheckpoint(stdout, a.noCheckpoint, a.er1Target, a.er1Context, fmt.Sprintf("attested %s@%s level=%s digest=%s doc=%s", a.name, a.version, a.level, digest, docID))
+	return 0
+}
+
+// ─── revoke mode (P2.3) ───────────────────────────────────────────────────
+
+type publishRevokeArgs struct {
+	name, version, reason, rationale, digestArg, bundlePath, identity, keyPath string
+	er1Target, er1Context                                                       string
+	yes, dryRun, noCheckpoint                                                   bool
+}
+
+func runPublishRevoke(stdout, stderr io.Writer, a publishRevokeArgs) int {
+	digest := a.digestArg
+	if digest == "" {
+		if a.bundlePath == "" {
+			fmt.Fprintln(stderr, "publish --revoke: need --digest sha256:<hex> or --bundle <path>")
+			return 2
+		}
+		skb, err := os.ReadFile(a.bundlePath)
+		if err != nil {
+			fmt.Fprintf(stderr, "publish --revoke: read bundle: %v\n", err)
+			return 1
+		}
+		d, _ := sha256Hex(skb)
+		digest = "sha256:" + d
+	}
+	if a.reason == "" {
+		fmt.Fprintln(stderr, "publish --revoke: --reason required (short code, e.g. key-compromise, deprecated)")
+		return 2
+	}
+
+	priv, err := signing.LoadPrivateKey(a.keyPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "publish --revoke: load key: %v\n", err)
+		return 1
+	}
+	defer wipe(priv)
+
+	now := time.Now().UTC()
+	ev, err := registry.BuildBundleRevokedEvent(registry.RevokedEventInput{
+		BundleDigest: digest,
+		ReasonCode:   a.reason,
+		Rationale:    a.rationale,
+		RevokedBy:    a.identity,
+		OccurredAt:   now,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "publish --revoke: build event: %v\n", err)
+		return 1
+	}
+	if _, err := registry.SignEnvelopeSignature(priv, ev); err != nil {
+		fmt.Fprintf(stderr, "publish --revoke: sign envelope: %v\n", err)
+		return 1
+	}
+
+	skill := registry.SkillMeta{
+		Name:           a.name,
+		Version:        a.version,
+		BundleDigest:   digest,
+		AuthorIdentity: a.identity,
+	}
+
+	fmt.Fprintf(stdout, "==> publish --revoke %s@%s\n", a.name, a.version)
+	fmt.Fprintf(stdout, "    digest:    %s\n", digest)
+	fmt.Fprintf(stdout, "    reason:    %s\n", a.reason)
+	fmt.Fprintf(stdout, "    rationale: %s\n", a.rationale)
+	if a.dryRun {
+		fmt.Fprintln(stdout, "    (dry-run; skipping POST)")
+		return 0
+	}
+	if !a.yes && !promptYesNo(stdout, "Proceed with revocation? [y/N]: ") {
+		fmt.Fprintln(stdout, "    aborted by operator")
+		return 0
+	}
+	cfg, err := resolveER1Config(a.er1Target)
+	if err != nil {
+		fmt.Fprintf(stderr, "publish --revoke: %v\n", err)
+		return 1
+	}
+	docID, err := registry.PublishRevoked(registry.PublishRevokedOpts{
+		ER1Cfg:    cfg,
+		ContextID: a.er1Context,
+		Event:     ev,
+		Skill:     skill,
+		Now:       now,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "publish --revoke: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "==> revoked: doc_id=%s\n", docID)
+	maybeCheckpoint(stdout, a.noCheckpoint, a.er1Target, a.er1Context, fmt.Sprintf("revoked %s@%s digest=%s reason=%s doc=%s", a.name, a.version, digest, a.reason, docID))
 	return 0
 }
 
