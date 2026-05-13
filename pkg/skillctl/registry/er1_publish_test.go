@@ -62,20 +62,20 @@ func newFakeER1(t *testing.T) *fakeER1 {
 		f.mu.Unlock()
 		_ = json.NewEncoder(w).Encode(map[string]any{"doc_id": docID, "message": "ok"})
 	})
-	// Search: match by any seeded tag substring in the tags query param.
-	// Simpler than reconstructing the exact URL encoding the client uses.
+	// List: SPEC-0225 P5 path. The client uses `/memory/<ctx>?limit=…&range=year`
+	// (maindrec dual-auth) and filters client-side; the legacy /search query
+	// param is ignored if present. Return every seeded item as a flat list;
+	// items must carry a `tags` field (string or list) so the client's
+	// itemMatchesAllTags filter does the work.
 	mux.HandleFunc("/memory/", func(w http.ResponseWriter, r *http.Request) {
-		tagsQ := r.URL.Query().Get("tags")
 		f.mu.Lock()
-		var hits []map[string]any
+		var all []map[string]any
 		for needle, items := range f.searchHits {
-			if strings.Contains(tagsQ, needle) {
-				hits = append(hits, items...)
-				break
-			}
+			_ = needle
+			all = append(all, items...)
 		}
 		f.mu.Unlock()
-		out := map[string]any{"items": hitsToAny(hits)}
+		out := map[string]any{"memories": hitsToAny(all)}
 		_ = json.NewEncoder(w).Encode(out)
 	})
 	f.srv = httptest.NewServer(mux)
@@ -210,10 +210,18 @@ func TestPublishAdmitted_InlineHappyPath(t *testing.T) {
 func TestPublishAdmitted_IdempotentOnDigest(t *testing.T) {
 	f := newFakeER1(t)
 	digest := "sha256:" + strings.Repeat("b", 64)
-	// Pre-seed an existing admitted item for this digest. The fake matches
-	// any seeded substring against the tags query param.
-	f.seedSearchHit("skill-digest:"+digest, []map[string]any{
-		{"doc_id": "doc-pre-existing"},
+	// Pre-seed an existing admitted item carrying the digest tag set the
+	// client's filter expects.
+	f.seedSearchHit("any-key", []map[string]any{
+		{
+			"doc_id": "doc-pre-existing",
+			"tags": strings.Join([]string{
+				"m3c-skill-bundle",
+				"skill-registry:self",
+				"skill-event:admitted",
+				"skill-digest:" + digest,
+			}, ","),
+		},
 	})
 	ev, _ := newSignedAdmitted(t, digest)
 	res, err := PublishAdmitted(PublishAdmittedOpts{

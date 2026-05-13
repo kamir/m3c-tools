@@ -654,6 +654,14 @@ func resolveER1Config(target string) (*er1.Config, error) {
 	cfg := er1.LoadConfig()
 	cfg.APIURL = base + "/upload_2"
 	cfg.VerifySSL = verify
+	// SPEC-0225 P5 fix: er1.LoadConfig hard-defaults ContextID to the user's
+	// personal context (ER1_CONTEXT_ID env). The publish path must POST into
+	// the registry's own ER1 context (the `--er1-context` flag value the
+	// caller already passed in). We surface this by clearing the LoadConfig
+	// default; runPublishAdmit / runPublishAttest / runPublishRevoke then set
+	// cfg.ContextID explicitly to the resolved registry context just before
+	// the POST.
+	cfg.ContextID = ""
 	if cfg.APIKey == "" {
 		cfg.APIKey = resolveAPIKeyFromKeychain()
 	}

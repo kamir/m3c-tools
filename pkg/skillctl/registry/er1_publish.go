@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -156,7 +155,7 @@ func PublishAdmitted(opts PublishAdmittedOpts) (*PublishAdmittedResult, error) {
 	// Tag set per SPEC-0225 §6.1 / WIRE-FORMAT.md §1.
 	tags := buildAdmittedTags(opts.Skill, transport, opts.ContextID)
 
-	docID, err := uploadText(opts.ER1Cfg, body, fmt.Sprintf("skill-%s-%s.admitted.md", opts.Skill.Name, opts.Skill.Version), strings.Join(tags, ","), "application/m3c-skill-bundle-event")
+	docID, err := uploadText(opts.ER1Cfg, body, fmt.Sprintf("skill-%s-%s.admitted.md", opts.Skill.Name, opts.Skill.Version), strings.Join(tags, ","), "application/m3c-skill-bundle-event", opts.ContextID)
 	if err != nil {
 		return nil, fmt.Errorf("upload: %w", err)
 	}
@@ -195,7 +194,7 @@ func PublishAttested(opts PublishAttestedOpts) (string, error) {
 		return "", err
 	}
 	tags := buildAttestedTags(opts.Skill, opts.Event, opts.ContextID)
-	return uploadText(opts.ER1Cfg, body, fmt.Sprintf("skill-%s-%s.attested.md", opts.Skill.Name, opts.Skill.Version), strings.Join(tags, ","), "application/m3c-skill-bundle-event")
+	return uploadText(opts.ER1Cfg, body, fmt.Sprintf("skill-%s-%s.attested.md", opts.Skill.Name, opts.Skill.Version), strings.Join(tags, ","), "application/m3c-skill-bundle-event", opts.ContextID)
 }
 
 // PublishRevokedOpts captures the inputs for the revoked-event publish path.
@@ -247,7 +246,7 @@ func PublishInstalled(opts PublishInstalledOpts) (string, error) {
 	b.WriteString("\n```\n")
 
 	tags := BuildInstalledTags(opts.Skill, opts.InstalledOnHost)
-	return uploadText(opts.ER1Cfg, b.String(), fmt.Sprintf("skill-%s-%s.installed-%s.md", opts.Skill.Name, opts.Skill.Version, opts.InstalledOnHost), strings.Join(tags, ","), "application/m3c-skill-bundle-event")
+	return uploadText(opts.ER1Cfg, b.String(), fmt.Sprintf("skill-%s-%s.installed-%s.md", opts.Skill.Name, opts.Skill.Version, opts.InstalledOnHost), strings.Join(tags, ","), "application/m3c-skill-bundle-event", opts.ContextID)
 }
 
 // PublishRevoked POSTs a BundleRevokedEvent item.
@@ -266,7 +265,7 @@ func PublishRevoked(opts PublishRevokedOpts) (string, error) {
 		return "", err
 	}
 	tags := buildRevokedTags(opts.Skill, opts.ContextID)
-	return uploadText(opts.ER1Cfg, body, fmt.Sprintf("skill-%s-%s.revoked.md", opts.Skill.Name, opts.Skill.Version), strings.Join(tags, ","), "application/m3c-skill-bundle-event")
+	return uploadText(opts.ER1Cfg, body, fmt.Sprintf("skill-%s-%s.revoked.md", opts.Skill.Name, opts.Skill.Version), strings.Join(tags, ","), "application/m3c-skill-bundle-event", opts.ContextID)
 }
 
 // ─── Tag-set builders ──────────────────────────────────────────────────────
@@ -440,8 +439,20 @@ func base64Wrapped(b []byte, cols int) string {
 
 // uploadText POSTs a text item to /upload_2 with the given tags. Mirrors the
 // pattern in pkg/session.uploadItem (text-only, audio+image placeholders).
-func uploadText(cfg *er1.Config, body, filename, tags, contentType string) (string, error) {
-	resp, err := er1.Upload(cfg, &er1.UploadPayload{
+//
+// IMPORTANT: er1.Upload reads cfg.ContextID for the multipart context_id form
+// field. The cmd-level resolveER1Config deliberately clears that field so
+// the publish path doesn't accidentally inherit the user's personal default
+// from ER1_CONTEXT_ID. Callers (PublishAdmitted/Attested/Revoked/Installed)
+// MUST have set opts.ContextID by here; we copy it onto a shallow Config copy
+// so the original (shared) pointer isn't mutated mid-batch.
+func uploadText(cfg *er1.Config, body, filename, tags, contentType, ctxID string) (string, error) {
+	if ctxID == "" {
+		return "", fmt.Errorf("uploadText: ContextID required (the publish path forbids implicit personal-default)")
+	}
+	cfgCopy := *cfg
+	cfgCopy.ContextID = ctxID
+	resp, err := er1.Upload(&cfgCopy, &er1.UploadPayload{
 		TranscriptData:     []byte(body),
 		TranscriptFilename: filename,
 		Tags:               tags,
@@ -454,24 +465,27 @@ func uploadText(cfg *er1.Config, body, filename, tags, contentType string) (stri
 }
 
 // findAdmittedByDigest queries ER1 for an existing `admitted` item with this
-// digest. Returns the DocID if found, "" if not. Best-effort: a transport
-// error is returned to the caller (the cmd handler can choose to soft-fail
-// idempotency).
+// digest. Returns the DocID if found, "" if not.
+//
+// Implementation note (SPEC-0225 P5): prod ER1 doesn't have a tag-filtered
+// `/memory/<ctx>/search` route that accepts X-API-KEY (the /api/memory/<ctx>/search
+// route from SPEC-0222 is session-cookie-only). We fall back to maindrec's
+// dual-auth `GET /memory/<ctx>?limit=…&range=year` and filter client-side by
+// the required tag set. At personal scale (tens-to-hundreds of skill events)
+// this is fine; if the registry ever has thousands of events a paginated
+// fetch is the follow-up.
 func findAdmittedByDigest(cfg *er1.Config, ctxID, digest string) (string, error) {
-	base := strings.TrimSuffix(cfg.APIURL, "/upload_2")
-	q := url.Values{}
-	q.Set("tags", strings.Join([]string{
+	want := []string{
 		"m3c-skill-bundle",
 		"skill-registry:self",
 		"skill-event:" + EventKindAdmitted,
 		"skill-digest:" + digest,
-	}, ","))
-	path := "/memory/" + url.PathEscape(ctxID) + "/search?" + q.Encode()
-	v, err := er1Get(base, cfg, path)
+	}
+	items, err := searchByTagsRaw(cfg, ctxID, want)
 	if err != nil {
 		return "", err
 	}
-	for _, item := range coerceItems(v) {
+	for _, item := range items {
 		if id, _ := item["doc_id"].(string); id != "" {
 			return id, nil
 		}
@@ -499,7 +513,20 @@ func er1Get(base string, cfg *er1.Config, path string) (any, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	b, _ := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
+	// SPEC-0225 P5: the maindrec GET /memory/<ctx>?limit=500&range=year
+	// response can hit 13+ MiB on contexts with a year of activity. Cap at
+	// 64 MiB — enough headroom for personal scale, still bounded against an
+	// adversarial server pumping unbounded bytes at us.
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
+	// 404 = the search endpoint exists but has no matches OR the endpoint
+	// itself is absent. Either way, "no items" is the safe semantic for the
+	// idempotency and list paths — fail open (return empty list, no error).
+	// The publish path treats this as "no prior item, proceed"; the registry
+	// view treats it as "registry empty under this filter".
+	if resp.StatusCode == 404 {
+		// fail open: "no items found" rather than transport error
+		return []any{}, nil
+	}
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("GET %s -> HTTP %d", path, resp.StatusCode)
 	}

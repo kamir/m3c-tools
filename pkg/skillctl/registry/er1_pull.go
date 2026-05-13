@@ -524,6 +524,10 @@ func parseRowFromItem(item map[string]any) (EventRow, string, string, string, er
 		return EventRow{}, "", "", "", err
 	}
 	docID, _ := item["doc_id"].(string)
+	if docID == "" {
+		// maindrec list responses carry the doc id under `id`, not `doc_id`.
+		docID, _ = item["id"].(string)
+	}
 	digest, _ := ev["bundle_digest"].(string)
 	name, _ := ev["name"].(string)
 	version, _ := ev["version"].(string)
@@ -593,16 +597,58 @@ func sha256Sum(b []byte) []byte {
 // searchByTagsRaw is the shared "give me all items with this set of tags"
 // query path. Returns a list of raw item maps (whatever shape the server
 // gives) — callers do the field extraction.
+//
+// SPEC-0225 P5: prod ER1 doesn't expose a tag-filtered list endpoint that
+// accepts X-API-KEY (the SPEC-0222 `/api/memory/<ctx>/search` is session-
+// cookie-only). We use maindrec's dual-auth `GET /memory/<ctx>?limit=…
+// &range=year` and filter client-side. The `limit` is large by design (500)
+// since the personal registry is tens-to-hundreds of events, not thousands.
+// Tag matching is "all of `tags` are in the item's `tags` field" — same
+// semantics the (non-existent) /search route would have had.
 func searchByTagsRaw(cfg *er1.Config, ctxID string, tags []string) ([]map[string]any, error) {
 	base := strings.TrimSuffix(cfg.APIURL, "/upload_2")
 	q := url.Values{}
-	q.Set("tags", strings.Join(tags, ","))
-	path := "/memory/" + url.PathEscape(ctxID) + "/search?" + q.Encode()
+	q.Set("limit", "500")
+	q.Set("range", "year")
+	path := "/memory/" + url.PathEscape(ctxID) + "?" + q.Encode()
 	v, err := er1Get(base, cfg, path)
 	if err != nil {
 		return nil, err
 	}
-	return coerceItems(v), nil
+	all := coerceItems(v)
+	var out []map[string]any
+	for _, item := range all {
+		if itemMatchesAllTags(item, tags) {
+			out = append(out, item)
+		}
+	}
+	return out, nil
+}
+
+// itemMatchesAllTags returns true iff every tag in `want` appears in the
+// item's `tags` field. The tags field can be a comma-separated string OR a
+// list — both are handled. Matching is exact string equality on the tag
+// token (no prefix-match, no substring-match).
+func itemMatchesAllTags(item map[string]any, want []string) bool {
+	have := make(map[string]struct{}, 32)
+	switch tags := item["tags"].(type) {
+	case string:
+		for _, t := range strings.Split(tags, ",") {
+			have[strings.TrimSpace(t)] = struct{}{}
+		}
+	case []any:
+		for _, x := range tags {
+			if s, ok := x.(string); ok {
+				have[s] = struct{}{}
+			}
+		}
+	}
+	for _, w := range want {
+		if _, ok := have[w]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func defaultCacheRoot() string {
