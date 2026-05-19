@@ -238,8 +238,9 @@ type ER1UploadResult struct {
 var videoIDRegexp = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 
 // CleanVideoID extracts a bare YouTube video ID from a URL or raw string.
-// It handles youtube.com/watch?v=..., youtu.be/..., and strips query params.
-// Returns empty string if the result is not a valid 11-character video ID.
+// It handles youtube.com/watch?v=..., youtu.be/..., youtube.com/shorts/...,
+// and strips query params. Returns empty string if the result is not a
+// valid 11-character video ID.
 func CleanVideoID(raw string) string {
 	if strings.Contains(raw, "youtube.com") || strings.Contains(raw, "youtu.be") {
 		if strings.Contains(raw, "v=") {
@@ -247,6 +248,12 @@ func CleanVideoID(raw string) string {
 			raw = parts[len(parts)-1]
 		} else if strings.Contains(raw, "youtu.be/") {
 			parts := strings.Split(raw, "youtu.be/")
+			raw = parts[len(parts)-1]
+		} else if strings.Contains(raw, "/shorts/") {
+			// FR-0037: Shorts carry the same 11-char ID as a path segment
+			// (youtube.com/shorts/<id>). Mirror the youtu.be/ handling;
+			// the trailing &/? strip + videoIDRegexp below validate it.
+			parts := strings.Split(raw, "/shorts/")
 			raw = parts[len(parts)-1]
 		}
 	}
