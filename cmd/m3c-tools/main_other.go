@@ -606,6 +606,7 @@ func cmdPlaudSync(recordingID string, force bool) {
 			if len(ids) == 0 {
 				fmt.Println("All recordings already synced.")
 				fmt.Print(stats.FormatSummary())
+				fmt.Print(stats.CoverageReport())
 				return
 			}
 			fmt.Printf("Syncing %d new recordings...\n", len(ids))

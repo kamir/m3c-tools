@@ -170,3 +170,39 @@ func TestCategorizeError(t *testing.T) {
 		}
 	}
 }
+
+func TestCoverageReport_Complete(t *testing.T) {
+	s := NewSyncStats()
+	s.LocalTotal = 30
+	s.LocalExisting = 18
+	s.AlreadyInER1 = 2
+	s.UploadedNew = 10
+	out := s.CoverageReport()
+	if !strings.Contains(out, "coverage:          30/30") {
+		t.Errorf("expected full coverage 30/30, got:\n%s", out)
+	}
+	if !strings.Contains(out, "complete:          true") {
+		t.Errorf("expected complete=true, got:\n%s", out)
+	}
+	if !strings.Contains(out, "remaining_missing:    0") {
+		t.Errorf("expected remaining_missing 0, got:\n%s", out)
+	}
+}
+
+func TestCoverageReport_Incomplete(t *testing.T) {
+	s := NewSyncStats()
+	s.LocalTotal = 30
+	s.LocalExisting = 5
+	s.UploadedNew = 20
+	s.UploadFailed = 5
+	out := s.CoverageReport()
+	if !strings.Contains(out, "coverage:          25/30") {
+		t.Errorf("expected coverage 25/30, got:\n%s", out)
+	}
+	if !strings.Contains(out, "remaining_missing:    5") {
+		t.Errorf("expected remaining_missing 5, got:\n%s", out)
+	}
+	if !strings.Contains(out, "complete:          false") {
+		t.Errorf("expected complete=false (failures present), got:\n%s", out)
+	}
+}
