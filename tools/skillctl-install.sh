@@ -53,7 +53,9 @@ if ! openssl pkeyutl -verify -pubin -inkey "$tmp/skillctl-release.pub" -rawin \
   echo "SIGNATURE VERIFICATION FAILED — refusing to install" >&2
   exit 1
 fi
-fp=$(openssl pkey -pubin -in "$tmp/skillctl-release.pub" -outform DER 2>/dev/null | sha256 | awk '{print "sha256:"$1}')
+# Fingerprint = sha256 of the raw 32-byte ed25519 key (DER SPKI tail) — the
+# same derivation used for trust-roots + the published K-release fingerprint.
+fp=$(openssl pkey -pubin -in "$tmp/skillctl-release.pub" -outform DER 2>/dev/null | tail -c 32 | sha256 | awk '{print "sha256:"$1}')
 echo "OK: signed by the skillctl release key ($fp)"
 
 echo "Fetching $asset"
