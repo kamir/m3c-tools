@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/auth"
 	"github.com/kamir/m3c-tools/pkg/config"
 )
 
@@ -24,21 +25,15 @@ import (
 var placeholderFatalOnce sync.Once
 
 // hasDeviceTokenAuth reports whether device-token (Bearer) auth is available
-// either via the ER1_DEVICE_TOKEN env var or the persisted token file. When
-// a device token is available, the X-API-KEY fallback path is never used
-// (see AuthHeaders) — so any ER1_API_KEY value, including placeholders, is
-// irrelevant and must NOT produce a FATAL warning.
+// either via the ER1_DEVICE_TOKEN env var or a persisted token (OS keychain or
+// the encrypted fallback file). When a device token is available, the X-API-KEY
+// fallback path is never used (see AuthHeaders) — so any ER1_API_KEY value,
+// including placeholders, is irrelevant and must NOT produce a FATAL warning.
 func hasDeviceTokenAuth() bool {
 	if os.Getenv("ER1_DEVICE_TOKEN") != "" {
 		return true
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return false
-	}
-	tokenPath := filepath.Join(home, ".m3c-tools", "device-token.enc")
-	_, statErr := os.Stat(tokenPath)
-	return statErr == nil
+	return auth.HasStoredToken()
 }
 
 // Config holds ER1 server connection settings, loaded from environment variables.

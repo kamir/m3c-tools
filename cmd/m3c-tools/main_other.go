@@ -1270,11 +1270,8 @@ func checkFirstRun() []tray.SetupIssue {
 		}
 	}
 	// SPEC-0127: device token replaces API key — only warn if neither exists.
-	deviceTokenPath := filepath.Join(home, ".m3c-tools", "device-token.enc")
-	hasDeviceToken := false
-	if _, dtErr := os.Stat(deviceTokenPath); dtErr == nil {
-		hasDeviceToken = true
-	}
+	// Token may live in the OS keychain or the encrypted fallback file.
+	hasDeviceToken := auth.HasStoredToken()
 	if apiKey == "" && !hasDeviceToken {
 		issues = append(issues, tray.SetupIssue{
 			Key: "no_auth", Message: "Not authenticated — run 'm3c-tools login'",
