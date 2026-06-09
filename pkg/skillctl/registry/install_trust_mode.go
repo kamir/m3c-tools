@@ -243,24 +243,35 @@ func planSummary(p *InstallPlan) string {
 	return b.String()
 }
 
-// installTokenKey returns the HMAC key the install path uses. It's
-// process-stable (per-user) and never persisted — the token only needs to be
-// valid for the current process's 5-minute window. We derive it from a small
-// piece of host-stable state (the OS-provided machine random, falling back to
-// /dev/urandom-on-first-use).
-//
-// Persistence-across-processes would let an attacker capture a token, kill
-// the process, restart it, and replay; the TTL bound + the in-process key
-// closes both paths.
+// installTokenKey returns the HMAC key the install path uses to sign the
+// G-23 dry-run-install token. The two-step is intentionally cross-process —
+// `--dry-run-install` mints the token in one CLI invocation and prints it, and
+// a SEPARATE `--confirm-install` invocation verifies it. A per-process random
+// key therefore made the token impossible to validate across the two calls
+// (ErrPlanDrift on every overwrite). We instead persist a per-user key (0600)
+// so both invocations share it. Replay is bounded by the 5-minute TTL AND by
+// the token binding to the exact plan rows (planSummary): a captured token
+// only re-validates for an identical install plan inside the window.
 var installTokenKeyValue []byte
 
 func installTokenKey() []byte {
-	if installTokenKeyValue == nil {
-		installTokenKeyValue = make([]byte, 32)
-		if _, err := io.ReadFull(rand.Reader, installTokenKeyValue); err != nil {
-			// Fallback: a fixed (less secure) sentinel rather than panic.
-			installTokenKeyValue = []byte("skb-install-token-fallback-key-v1")
-		}
+	if installTokenKeyValue != nil {
+		return installTokenKeyValue
+	}
+	home, _ := os.UserHomeDir()
+	dir := filepath.Join(home, ".cache", "m3c")
+	keyPath := filepath.Join(dir, "install-token.key")
+	if b, err := os.ReadFile(keyPath); err == nil && len(b) == 32 {
+		installTokenKeyValue = b
+		return installTokenKeyValue
+	}
+	installTokenKeyValue = make([]byte, 32)
+	if _, err := io.ReadFull(rand.Reader, installTokenKeyValue); err != nil {
+		// Fallback: a fixed (less secure) sentinel rather than panic.
+		installTokenKeyValue = []byte("skb-install-token-fallback-key-v1")
+	} else {
+		_ = os.MkdirAll(dir, 0o700)
+		_ = os.WriteFile(keyPath, installTokenKeyValue, 0o600)
 	}
 	return installTokenKeyValue
 }
