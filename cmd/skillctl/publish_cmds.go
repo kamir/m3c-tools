@@ -105,6 +105,10 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 		yes    = fs.Bool("yes", false, "Skip the 🟡 confirm pause (scripted runs).")
 		dryRun = fs.Bool("dry-run", false, "Print the plan + the rendered item body; do not POST or pack.")
 	)
+	// SPEC-0096 room mapping (SPEC-0246 §7). Repeatable; each value is a room's
+	// room_label, stamped as a bare tag so room members can read the bundle.
+	var shareRooms stringSliceFlag
+	fs.Var(&shareRooms, "share-room", "Map the bundle into a SPEC-0096 co-learning room by its room_label, e.g. --share-room aims-basics. Repeatable. Default: $SKILL_SHARE_ROOMS (comma-separated).")
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: skillctl publish <name[@ver]> [flags]")
 		fmt.Fprintln(stderr, "       skillctl publish --attest <name[@ver]> --level green --rationale '<why>' [flags]")
@@ -115,6 +119,17 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 	// during the P5 run). Reorder: flag-tokens first, positionals last.
 	if err := fs.Parse(reorderFlagArgs(fs, args)); err != nil {
 		return 2
+	}
+	// Seed from $SKILL_SHARE_ROOMS when no --share-room was passed.
+	rooms := []string(shareRooms)
+	if len(rooms) == 0 {
+		if env := strings.TrimSpace(os.Getenv("SKILL_SHARE_ROOMS")); env != "" {
+			for _, r := range strings.Split(env, ",") {
+				if r = strings.TrimSpace(r); r != "" {
+					rooms = append(rooms, r)
+				}
+			}
+		}
 	}
 
 	if *all {
@@ -128,6 +143,7 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 			yes:          *yes,
 			dryRun:       *dryRun,
 			noCheckpoint: *noCheckpoint,
+			shareRooms:   rooms,
 		})
 	}
 
@@ -165,6 +181,7 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 			yes:          *yes,
 			dryRun:       *dryRun,
 			noCheckpoint: *noCheckpoint,
+			shareRooms:   rooms,
 		})
 	}
 	if *revoke {
@@ -182,6 +199,7 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 			yes:          *yes,
 			dryRun:       *dryRun,
 			noCheckpoint: *noCheckpoint,
+			shareRooms:   rooms,
 		})
 	}
 	return runPublishAdmit(stdout, stderr, publishAdmitArgs{
@@ -197,6 +215,7 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 		yes:          *yes,
 		dryRun:       *dryRun,
 		noCheckpoint: *noCheckpoint,
+		shareRooms:   rooms,
 	})
 }
 
@@ -207,6 +226,7 @@ type publishAdmitArgs struct {
 	er1Target, er1Context                                  string
 	inlineMax                                              int
 	yes, dryRun, noCheckpoint                              bool
+	shareRooms                                             []string
 }
 
 func runPublishAdmit(stdout, stderr io.Writer, a publishAdmitArgs) int {
@@ -274,6 +294,7 @@ func runPublishAdmit(stdout, stderr io.Writer, a publishAdmitArgs) int {
 		AuthorIdentity:  a.identity,
 		GovernanceLevel: "green",
 		PackedOnHost:    shortHostname(),
+		ShareRooms:      a.shareRooms,
 	}
 
 	// 5. Plan + 🟡 confirm pause.
@@ -327,6 +348,7 @@ type publishAttestArgs struct {
 	name, version, level, rationale, digestArg, bundlePath, identity, keyPath string
 	er1Target, er1Context                                                     string
 	yes, dryRun, noCheckpoint                                                 bool
+	shareRooms                                                                []string
 }
 
 func runPublishAttest(stdout, stderr io.Writer, a publishAttestArgs) int {
@@ -374,6 +396,7 @@ func runPublishAttest(stdout, stderr io.Writer, a publishAttestArgs) int {
 		Version:        a.version,
 		BundleDigest:   digest,
 		AuthorIdentity: a.identity,
+		ShareRooms:     a.shareRooms,
 	}
 
 	fmt.Fprintf(stdout, "==> publish --attest %s@%s\n", a.name, a.version)
@@ -416,6 +439,7 @@ type publishRevokeArgs struct {
 	name, version, reason, rationale, digestArg, bundlePath, identity, keyPath string
 	er1Target, er1Context                                                       string
 	yes, dryRun, noCheckpoint                                                   bool
+	shareRooms                                                                  []string
 }
 
 func runPublishRevoke(stdout, stderr io.Writer, a publishRevokeArgs) int {
@@ -467,6 +491,7 @@ func runPublishRevoke(stdout, stderr io.Writer, a publishRevokeArgs) int {
 		Version:        a.version,
 		BundleDigest:   digest,
 		AuthorIdentity: a.identity,
+		ShareRooms:     a.shareRooms,
 	}
 
 	fmt.Fprintf(stdout, "==> publish --revoke %s@%s\n", a.name, a.version)
@@ -508,6 +533,7 @@ type publishAllArgs struct {
 	manifestPath, identity, keyPath, er1Target, er1Context string
 	inlineMax                                              int
 	yes, dryRun, noCheckpoint                              bool
+	shareRooms                                             []string
 }
 
 func runPublishAll(stdout, stderr io.Writer, a publishAllArgs) int {
@@ -559,6 +585,7 @@ func runPublishAll(stdout, stderr io.Writer, a publishAllArgs) int {
 			inlineMax:    a.inlineMax,
 			yes:          true, // batch confirm covers this
 			noCheckpoint: a.noCheckpoint,
+			shareRooms:   a.shareRooms,
 		})
 		if rcA != 0 {
 			failCount++
@@ -577,6 +604,7 @@ func runPublishAll(stdout, stderr io.Writer, a publishAllArgs) int {
 				er1Context:   a.er1Context,
 				yes:          true,
 				noCheckpoint: a.noCheckpoint,
+				shareRooms:   a.shareRooms,
 			})
 			if rcT != 0 {
 				failCount++

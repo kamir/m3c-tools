@@ -17,12 +17,18 @@ import (
 	"os"
 )
 
+// version is stamped at build time via -ldflags "-X main.version=skillctl/vX.Y.Z".
+var version = "dev"
+
 func main() {
 	if len(os.Args) < 2 {
 		printUsage(os.Stderr)
 		os.Exit(2)
 	}
 	switch os.Args[1] {
+	case "version", "--version", "-v":
+		fmt.Println(version)
+		os.Exit(0)
 	// === SPEC-0188 Phase 1 PoC: pack ===
 	case "pack":
 		cmdPack(os.Args[2:])
@@ -123,6 +129,9 @@ func main() {
 	case "registry":
 		os.Exit(runRegistry(os.Args[2:], os.Stdout, os.Stderr))
 	// === END SPEC-0225 P2 ===
+	// === SPEC-0246 §7: room mapping (share published bundles into a co-learning room) ===
+	case "room":
+		os.Exit(runRoom(os.Args[2:], os.Stdout, os.Stderr))
 	case "help", "--help", "-h":
 		printUsage(os.Stdout)
 		os.Exit(0)

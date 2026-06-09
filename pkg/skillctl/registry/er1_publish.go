@@ -50,6 +50,13 @@ type SkillMeta struct {
 	GovernanceLevel   string // "green"|"yellow"|"red", used in `governance:` tag
 	PackedOnHost      string // short hostname, used in `host:` tag
 	ProjectID         string // optional; if set, stamps `project:<id>` for provenance
+
+	// ShareRooms maps the bundle into one or more SPEC-0096 co-learning rooms.
+	// Each entry is a room's *room_label* (e.g. "aims-basics") and is stamped as
+	// a BARE tag on every event item, so room members can read the bundle via
+	// the room tier (room_access.can_view_item: room_label ∈ item.tags). Bare,
+	// not `room:<label>` — the ACL matches the label verbatim.
+	ShareRooms []string
 }
 
 // PublishAdmittedOpts captures the inputs PublishAdmitted needs.
@@ -283,6 +290,13 @@ func tagPrefixCommon(s SkillMeta, ctxID string) []string {
 	}
 	if s.ProjectID != "" {
 		t = append(t, "project:"+s.ProjectID)
+	}
+	// SPEC-0096 room mapping: each room_label is stamped as a bare tag so room
+	// members can read the bundle (room_access matches room_label ∈ item.tags).
+	for _, room := range s.ShareRooms {
+		if r := strings.TrimSpace(room); r != "" {
+			t = append(t, r)
+		}
 	}
 	return t
 }

@@ -58,3 +58,6 @@ __pycache__/
 
 # Local-built thinking-engine binary (output of cmd/thinking-engine)
 /thinking-engine
+
+# skillctl release build artifacts (published to GitHub Releases, not git)
+/release/
