@@ -358,15 +358,74 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 	return res, nil
 }
 
-// extractSkb extracts a SPEC-0188 §3.1-shaped bundle (gzip + tar, with one
-// top-level dir whose contents are the skill files) directly into `target`,
-// stripping the top-level dir. Refuses tar entries that escape via "..".
+// skbWrapperPrefix returns "<dir>/" if EVERY regular-file entry in the archive
+// lives under one single top-level directory (a wrapped bundle), else "". Used
+// so extractSkb handles both the canonical FLAT layout (pack.go) and wrapped
+// archives without mangling either. Reads the archive bytes independently of
+// the extraction pass.
+func skbWrapperPrefix(skb []byte) (string, error) {
+	gzr, err := gzip.NewReader(bytes.NewReader(skb))
+	if err != nil {
+		return "", fmt.Errorf("gunzip: %w", err)
+	}
+	defer gzr.Close()
+	tr := tar.NewReader(gzr)
+	seg := ""
+	any := false
+	for {
+		hdr, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return "", fmt.Errorf("tar next: %w", err)
+		}
+		if hdr.Typeflag != tar.TypeReg {
+			continue
+		}
+		name := strings.TrimPrefix(filepath.Clean("/"+hdr.Name), "/")
+		i := strings.Index(name, "/")
+		if i < 0 {
+			return "", nil // a root-level file → not wrapped → flat
+		}
+		first := name[:i]
+		if !any {
+			seg, any = first, true
+		} else if first != seg {
+			return "", nil // more than one top-level segment → flat
+		}
+	}
+	if any && seg != "" {
+		return seg + "/", nil
+	}
+	return "", nil
+}
+
+// extractSkb extracts a SPEC-0188 §3.1-shaped bundle (gzip + tar) into
+// `target`. Per pkg/skillbundle/pack.go the archive is FLAT — SKILL.md,
+// bundle.json, CHECKSUMS, scripts/…, references/… live at the archive root
+// (no wrapping top-level dir). Refuses tar entries that escape `target`, and
+// normalizes the skill anchor to the canonical "SKILL.md" so Claude Code and
+// the scanner (which match the name exactly, and Linux is case-sensitive) load
+// the skill even when a bundle stored a lower/mixed-case "skill.md" (a
+// case-insensitive-filesystem publish artifact). Normalizing only the written
+// filename leaves the verified bundle bytes/digest untouched.
 func extractSkb(skb []byte, target string) error {
 	gzr, err := gzip.NewReader(bytes.NewReader(skb))
 	if err != nil {
 		return fmt.Errorf("gunzip: %w", err)
 	}
 	defer gzr.Close()
+	cleanTarget := filepath.Clean(target)
+
+	// The canonical format (pkg/skillbundle/pack.go) is FLAT, but some
+	// producers/fixtures wrap everything in a single top-level dir. Detect a
+	// common wrapper in a first pass and strip it; otherwise extract flat.
+	wrapper, err := skbWrapperPrefix(skb)
+	if err != nil {
+		return err
+	}
+
 	tr := tar.NewReader(gzr)
 	for {
 		hdr, err := tr.Next()
@@ -376,17 +435,22 @@ func extractSkb(skb []byte, target string) error {
 		if err != nil {
 			return fmt.Errorf("tar next: %w", err)
 		}
-		// Strip the top-level dir, keep everything else.
-		parts := strings.SplitN(hdr.Name, "/", 2)
-		if len(parts) < 2 {
-			// A bare top-level dir entry — create target if not exists, skip.
+		// Sanitize the entry path (strip any leading "/", collapse "..").
+		rel := strings.TrimPrefix(filepath.Clean("/"+hdr.Name), "/")
+		if wrapper != "" {
+			rel = strings.TrimPrefix(rel, wrapper)
+		}
+		if rel == "" || rel == "." {
 			continue
 		}
-		rel := parts[1]
-		if strings.Contains(rel, "..") {
+		// Canonicalize the skill anchor regardless of stored case.
+		if strings.EqualFold(rel, "skill.md") {
+			rel = "SKILL.md"
+		}
+		dst := filepath.Join(cleanTarget, rel)
+		if dst != cleanTarget && !strings.HasPrefix(dst, cleanTarget+string(os.PathSeparator)) {
 			return fmt.Errorf("tar escape attempt: %q", hdr.Name)
 		}
-		dst := filepath.Join(target, rel)
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			if err := os.MkdirAll(dst, 0o755); err != nil {

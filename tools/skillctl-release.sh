@@ -25,6 +25,12 @@ OUT="${REPO_ROOT}/release/${TAG}"
 [ -f "${RELEASE_KEY}" ] || { echo "release key not found: ${RELEASE_KEY}" >&2; exit 1; }
 mkdir -p "${OUT}"
 
+# Portable sha256 (Linux sha256sum / macOS shasum).
+sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$@"
+  else shasum -a 256 "$@"; fi
+}
+
 echo "==> building skillctl ${TAG} (5 targets, -trimpath, version-stamped)"
 build() {
   local os="$1" arch="$2" ext="${3:-}"
@@ -42,7 +48,7 @@ build() {
   build windows amd64 .exe )
 
 echo "==> SHA256SUMS"
-( cd "${OUT}" && shasum -a 256 skillctl-* > SHA256SUMS && cat SHA256SUMS )
+( cd "${OUT}" && sha256 skillctl-* > SHA256SUMS && cat SHA256SUMS )
 
 echo "==> sign SHA256SUMS with K-release (ed25519)"
 openssl pkeyutl -sign -inkey "${RELEASE_KEY}" -rawin \
@@ -55,7 +61,7 @@ openssl pkeyutl -verify -pubin -inkey "${OUT}/skillctl-release.pub" -rawin \
   || { echo "SIGNATURE VERIFY FAILED" >&2; exit 1; }
 
 cp "${REPO_ROOT}/tools/skillctl-install.sh" "${OUT}/install.sh"
-FP="sha256:$(openssl pkey -in "${RELEASE_KEY}" -pubout -outform DER 2>/dev/null | tail -c 32 | shasum -a 256 | awk '{print $1}')"
+FP="sha256:$(openssl pkey -in "${RELEASE_KEY}" -pubout -outform DER 2>/dev/null | tail -c 32 | sha256 | awk '{print $1}')"
 
 cat > "${OUT}/RELEASE_NOTES.md" <<EOF
 # skillctl ${VERSION}
