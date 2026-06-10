@@ -8,7 +8,7 @@
 //	1. SKILL.md exists at the source path
 //	2. Frontmatter is valid YAML
 //	3. `name` is set AND matches the directory name
-//	4. `version` is set AND parses as semver (M.m.p[-pre][+build])
+//	4. `version` is set AND parses as semver (M.m.p[-pre][+meta])
 //	5. `description` ≥ 20 chars
 //	6. `governance_level` ∈ {green, yellow, red}
 //	7. If yellow/red: rationale provided (via flag or frontmatter)

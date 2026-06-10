@@ -1,3 +1,5 @@
+//go:build darwin
+
 // healthcheck_classifier_test.go — BUG-0124 Layer 3.
 //
 // Tests for classifyPLMHealthCheckError, which converts a PLM HealthCheck
