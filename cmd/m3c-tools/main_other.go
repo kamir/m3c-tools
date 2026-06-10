@@ -1038,7 +1038,7 @@ func truncateForLog(s string, maxLen int) string {
 func printUsage() {
 	fmt.Println(`m3c-tools — Multi-Modal-Memory Tools (CLI mode)
 
-Available commands (cross-platform):
+Commands:
   setup                  Interactive ER1 onboarding wizard
     --er1-url <url>       ER1 upload endpoint (default: onboarding.guide)
     --tags <tags>         Default tags for plaud sync
