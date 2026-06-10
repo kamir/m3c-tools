@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -1 /Users/kamir/GITHUB.kamir/m3c-tools-maintenance/SPEC/SPEC-*.md | sed 's/.*SPEC-//; s/-.*//; s/\\\\.md//' | sort -n | tail -5)",
+      "Read(//Users/kamir/GITHUB.kamir/m3c-tools-maintenance/SPEC/**)",
+      "Bash(ls -1 /Users/kamir/GITHUB.kamir/m3c-tools-maintenance/FEATURES/FEAT-*.md 2>/dev/null | sed 's/.*FEAT-//; s/-.*//; s/\\\\.md//' | sort -n | tail -5)",
+      "Read(//Users/kamir/GITHUB.kamir/m3c-tools-maintenance/FEATURES/**)",
+      "Bash(ls -1 /Users/kamir/GITHUB.kamir/m3c-tools-maintenance/ADR/ADR-*.md | sed 's/.*ADR-//; s/-.*//; s/\\\\.md//' | sort -n | tail -5)",
+      "Read(//Users/kamir/GITHUB.kamir/m3c-tools-maintenance/ADR/**)",
+      "Bash(ls -1 /Users/kamir/GITHUB.kamir/m3c-tools-maintenance/ARCH-DOCS/)",
+      "Read(//Users/kamir/GITHUB.kamir/m3c-tools-maintenance/ARCH-DOCS/**)",
+      "Read(//Users/kamir/GITHUB.kamir/m3c-tools-maintenance/PLAN/**)",
+      "Read(//Users/kamir/GITHUB.active/my-ai-X/aims-core/flask/modules/memory/**)",
+      "Bash(cd /Users/kamir/GITHUB.active/my-ai-X/aims-core/flask *)",
+      "Read(//Users/kamir/GITHUB.active/my-ai-X/aims-core/flask/**)",
+      "Bash(./skillctl-darwin-arm64 version *)",
+      "Bash(./skillctl-darwin-arm64 room *)",
+      "Bash(./skillctl-darwin-arm64 publish *)",
+      "Bash(openssl pkeyutl *)",
+      "Read(//Users/kamir/GITHUB.kamir/m3c-tools-maintenance/**)",
+      "Bash(sed -i '' 's#skillctl/v0.2.0#skillctl/v0.2.1#g; s#>v0.2.0<#>v0.2.1<#g' ONBOARDING/eric-skillctl-onboarding.html)",
+      "Bash(shasum -a 256)",
+      "Bash(awk '{print \"computed fp: sha256:\"$1}')"
+    ],
+    "additionalDirectories": [
+      "/Users/kamir/GITHUB.kamir/m3c-tools-maintenance/PLAN",
+      "/Users/kamir/GITHUB.kamir/m3c-tools-maintenance/CISO-WORK",
+      "/tmp",
+      "/private/tmp",
+      "/Users/kamir/GITHUB.kamir/m3c-tools-maintenance/SPEC",
+      "/Users/kamir/GITHUB.active/my-ai-X/aims-core/flask/modules/memory",
+      "/Users/kamir/GITHUB.active/my-ai-X/aims-core/flask/modules/maindrec",
+      "/Users/kamir/GITHUB.kamir/m3c-tools-maintenance/ONBOARDING"
+    ]
+  }
+}
