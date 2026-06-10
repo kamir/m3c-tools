@@ -44,31 +44,39 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Load config: layered per SPEC-0175 (mirrors darwin main.go).
-	//   1. Active profile (account-scoped)
-	//   2. Global preferences (~/.m3c-tools/preferences.env, legacy fallback)
-	//   3. Project-local .env
-	if _, migErr := config.MigrateLegacyPreferences(); migErr != nil {
-		log.Printf("[config] preferences migration warning: %v", migErr)
-	}
-	pm := config.NewProfileManager()
-	if activeProfile, err := pm.ActiveProfile(); err == nil {
-		_ = pm.ApplyProfile(activeProfile)
-		log.Printf("[config] profile: %s", activeProfile.Name)
-	}
-	for _, p := range []string{config.PreferencesPath(), config.LegacyPreferencesPath(), ".env"} {
-		if p != "" {
-			_ = er1.LoadDotenv(p)
+	// help/version need no config — handle them WITHOUT loading the profile or
+	// ER1 config, so they never emit the ER1 placeholder FATAL (which would
+	// pollute clean help output, e.g. on a fresh machine or CI runner).
+	switch os.Args[1] {
+	case "help", "--help", "-h", "version", "--version", "-v":
+		// fall through to the dispatch switch below (no config load)
+	default:
+		// Load config: layered per SPEC-0175 (mirrors darwin main.go).
+		//   1. Active profile (account-scoped)
+		//   2. Global preferences (~/.m3c-tools/preferences.env, legacy fallback)
+		//   3. Project-local .env
+		if _, migErr := config.MigrateLegacyPreferences(); migErr != nil {
+			log.Printf("[config] preferences migration warning: %v", migErr)
 		}
-	}
+		pm := config.NewProfileManager()
+		if activeProfile, err := pm.ActiveProfile(); err == nil {
+			_ = pm.ApplyProfile(activeProfile)
+			log.Printf("[config] profile: %s", activeProfile.Name)
+		}
+		for _, p := range []string{config.PreferencesPath(), config.LegacyPreferencesPath(), ".env"} {
+			if p != "" {
+				_ = er1.LoadDotenv(p)
+			}
+		}
 
-	// Load saved device token if available (SPEC-0127).
-	// This enables uploads via Bearer auth without API key.
-	if cfg := er1.LoadConfig(); cfg.ContextID != "" {
-		if dt, err := auth.Load(auth.DeviceID(), strings.SplitN(cfg.ContextID, "___", 2)[0]); err == nil && dt != nil && !dt.IsExpired() {
-			os.Setenv("ER1_DEVICE_TOKEN", dt.Token)
-			os.Setenv("ER1_CONTEXT_ID", dt.ContextID)
-			log.Printf("[auth] device token loaded for user=%s", truncateForLog(dt.UserID, 20))
+		// Load saved device token if available (SPEC-0127).
+		// This enables uploads via Bearer auth without API key.
+		if cfg := er1.LoadConfig(); cfg.ContextID != "" {
+			if dt, err := auth.Load(auth.DeviceID(), strings.SplitN(cfg.ContextID, "___", 2)[0]); err == nil && dt != nil && !dt.IsExpired() {
+				os.Setenv("ER1_DEVICE_TOKEN", dt.Token)
+				os.Setenv("ER1_CONTEXT_ID", dt.ContextID)
+				log.Printf("[auth] device token loaded for user=%s", truncateForLog(dt.UserID, 20))
+			}
 		}
 	}
 
