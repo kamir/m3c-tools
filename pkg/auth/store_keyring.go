@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -54,6 +55,12 @@ func (keyringStore) Save(t *DeviceToken) error {
 		return fmt.Errorf("marshal token: %w", err)
 	}
 	if err := keyring.Set(keyringService, keyringAccount, string(blob)); err != nil {
+		// Make the security downgrade observable: an oversized secret falls
+		// back to the weaker file backend (orchestration in store.go), which
+		// would otherwise be silent.
+		if errors.Is(err, keyring.ErrSetDataTooBig) {
+			log.Printf("[auth] WARNING: device token too large for the OS keychain — storing in the encrypted file backend instead")
+		}
 		return fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}
 	return nil

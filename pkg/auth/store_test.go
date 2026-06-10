@@ -122,6 +122,47 @@ func TestClear_RemovesFromBothBackends(t *testing.T) {
 	}
 }
 
+// Regression (security review, MEDIUM): a token saved to the keychain must not
+// shadow a newer token written to the file backend while the kill-switch was on.
+// After re-enabling the keychain, Load must return the newer (file) token.
+func TestSave_FileBackendClearsStaleKeychainEntry(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	keyring.MockInit()
+
+	// 1) Normal save -> keychain holds the OLD token.
+	old := sampleToken()
+	old.Token = "OLD-keychain-token"
+	t.Setenv("M3C_TOKEN_STORE", "") // keychain-first
+	if err := Save(old); err != nil {
+		t.Fatalf("save old: %v", err)
+	}
+	if !(keyringStore{}).Has() {
+		t.Fatalf("precondition: keychain should hold the old token")
+	}
+
+	// 2) Re-login while forced to the file backend -> writes NEW token to file
+	//    and must drop the stale keychain entry.
+	fresh := sampleToken()
+	fresh.Token = "NEW-file-token"
+	t.Setenv("M3C_TOKEN_STORE", "file")
+	if err := Save(fresh); err != nil {
+		t.Fatalf("save fresh: %v", err)
+	}
+	if (keyringStore{}).Has() {
+		t.Errorf("stale keychain entry must be cleared after a file-backend save")
+	}
+
+	// 3) Keychain re-enabled: Load must NOT return the stale keychain token.
+	t.Setenv("M3C_TOKEN_STORE", "")
+	got, err := Load("test-host", "107677460544181387647")
+	if err != nil || got == nil {
+		t.Fatalf("load after re-enable: got=%+v err=%v", got, err)
+	}
+	if got.Token != "NEW-file-token" {
+		t.Errorf("Load returned %q, want NEW-file-token (stale keychain shadowed the file)", got.Token)
+	}
+}
+
 func TestLoad_NoTokenAnywhere(t *testing.T) {
 	isolate(t)
 	got, err := Load("test-host", "107677460544181387647")

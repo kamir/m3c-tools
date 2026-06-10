@@ -38,6 +38,12 @@ func Save(t *DeviceToken) error {
 	primary, fallback := stores()
 	if err := primary.Save(t); err != nil {
 		if errors.Is(err, ErrUnavailable) {
+			// Writing to the file backend (kill-switch on, or no keychain).
+			// Proactively drop any stale entry from the *real* keychain — we
+			// bypass newKeyringStore() (which honours M3C_TOKEN_STORE=file) on
+			// purpose, so an old keychain token cannot shadow this newer file
+			// token on a later run with the keychain re-enabled.
+			_ = keyringStore{}.Clear()
 			return fallback.Save(t)
 		}
 		return err
