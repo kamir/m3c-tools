@@ -153,7 +153,7 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) int {
 	// Managed skill → offline fast path first: a fresh, digest-matching PASS
 	// in the verdict cache (written by the SessionStart sweep or a prior hook)
 	// lets us allow without touching the network (SPEC-0247 §8 / P1.1).
-	home, _ := os.UserHomeDir()
+	home, _ := userHome()
 	now := time.Now()
 	if home != "" && cachedAllow(home, skill, ev.SessionID, now) {
 		return emitAllow()
@@ -319,7 +319,7 @@ func isManagedSkill(name string) (bool, string) {
 	if strings.Contains(name, ":") {
 		return false, "namespaced/plugin skill"
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHome()
 	if err != nil {
 		return false, "cannot resolve home dir"
 	}
@@ -363,7 +363,7 @@ func defaultGatePolicy() gatePolicy { return gatePolicy{Unmanaged: "allow"} }
 // SKILLCTL_GATE_UNMANAGED overrides the unmanaged disposition.
 func loadGatePolicy() gatePolicy {
 	p := defaultGatePolicy()
-	if home, err := os.UserHomeDir(); err == nil {
+	if home, err := userHome(); err == nil {
 		path := filepath.Join(home, ".claude", "skillctl", "gate-policy.yaml")
 		if data, err := os.ReadFile(path); err == nil {
 			var loaded gatePolicy

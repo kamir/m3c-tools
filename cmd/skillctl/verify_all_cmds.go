@@ -103,7 +103,7 @@ func runVerifyAll(args []string, stdout, stderr io.Writer) int {
 
 	home := *homeOverride
 	if home == "" {
-		h, err := os.UserHomeDir()
+		h, err := userHome()
 		if err != nil {
 			fmt.Fprintf(stderr, "verify --all: resolve home dir: %v\n", err)
 			return exitGeneric
