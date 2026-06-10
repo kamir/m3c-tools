@@ -437,9 +437,9 @@ func runPublishAttest(stdout, stderr io.Writer, a publishAttestArgs) int {
 
 type publishRevokeArgs struct {
 	name, version, reason, rationale, digestArg, bundlePath, identity, keyPath string
-	er1Target, er1Context                                                       string
-	yes, dryRun, noCheckpoint                                                   bool
-	shareRooms                                                                  []string
+	er1Target, er1Context                                                      string
+	yes, dryRun, noCheckpoint                                                  bool
+	shareRooms                                                                 []string
 }
 
 func runPublishRevoke(stdout, stderr io.Writer, a publishRevokeArgs) int {
@@ -715,8 +715,15 @@ func er1Endpoint(target string) (string, bool) {
 		return strings.TrimRight(target, "/"), !strings.Contains(target, "127.0.0.1") && !strings.Contains(target, "localhost")
 	}
 	if u := os.Getenv("ER1_API_URL"); u != "" {
-		b := strings.TrimSuffix(u, "/upload_2")
-		return strings.TrimRight(b, "/"), os.Getenv("ER1_VERIFY_SSL") != "false"
+		base := strings.TrimRight(strings.TrimSuffix(u, "/upload_2"), "/")
+		verify := os.Getenv("ER1_VERIFY_SSL") != "false"
+		// SEC-M7: only honour ER1_VERIFY_SSL=false for a loopback host; force
+		// verification ON for any remote host so a stage/unknown target cannot
+		// silently disable TLS on a public endpoint.
+		if !verify && !strings.Contains(base, "127.0.0.1") && !strings.Contains(base, "localhost") {
+			verify = true
+		}
+		return base, verify
 	}
 	return "https://onboarding.guide", true
 }

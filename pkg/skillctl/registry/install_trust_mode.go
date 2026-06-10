@@ -157,7 +157,13 @@ func PlanInstall(bundles []*StagedBundle, skillsDir string) (*InstallPlan, error
 			row.NewSize = st.Size()
 		}
 	}
-	plan.Token = mintInstallToken(plan)
+	tok, err := mintInstallToken(plan)
+	if err != nil {
+		// SEC-L6: no usable HMAC key ⇒ no token ⇒ the G-23 overwrite cannot be
+		// confirmed. Fail closed rather than emitting an unsigned/forgeable plan.
+		return nil, err
+	}
+	plan.Token = tok
 	return plan, nil
 }
 
@@ -219,11 +225,15 @@ var (
 // `planSummary` deliberately excludes NewSize (unstable across stat races) —
 // we sign over the set of (name, version, new_digest, old_digest, skill_path)
 // rows, sorted by skill_path for determinism.
-func mintInstallToken(plan *InstallPlan) string {
-	mac := hmac.New(sha256.New, installTokenKey())
+func mintInstallToken(plan *InstallPlan) (string, error) {
+	key, err := installTokenKey()
+	if err != nil {
+		return "", err
+	}
+	mac := hmac.New(sha256.New, key)
 	mac.Write([]byte(planSummary(plan)))
 	sig := mac.Sum(nil)
-	return fmt.Sprintf("%d.%s", plan.IssuedAt, base64.RawURLEncoding.EncodeToString(sig))
+	return fmt.Sprintf("%d.%s", plan.IssuedAt, base64.RawURLEncoding.EncodeToString(sig)), nil
 }
 
 func verifyInstallToken(plan *InstallPlan, provided string) error {
@@ -240,7 +250,12 @@ func verifyInstallToken(plan *InstallPlan, provided string) error {
 	}
 	expectedPlan := *plan
 	expectedPlan.IssuedAt = issued // verify against the issued_at the client carries
-	mac := hmac.New(sha256.New, installTokenKey())
+	key, err := installTokenKey()
+	if err != nil {
+		// SEC-L6: no usable key ⇒ we cannot verify ⇒ refuse (fail closed).
+		return err
+	}
+	mac := hmac.New(sha256.New, key)
 	mac.Write([]byte(planSummary(&expectedPlan)))
 	wantSig := mac.Sum(nil)
 	gotSig, err := base64.RawURLEncoding.DecodeString(parts[1])
@@ -274,28 +289,52 @@ func planSummary(p *InstallPlan) string {
 // so both invocations share it. Replay is bounded by the 5-minute TTL AND by
 // the token binding to the exact plan rows (planSummary): a captured token
 // only re-validates for an identical install plan inside the window.
+//
+// SEC-L6: minting a fresh key requires real entropy. If crypto/rand fails we
+// FAIL CLOSED (return ErrInstallTokenKey) instead of degrading to a hardcoded,
+// world-known fallback key — a known key would let an attacker forge the
+// overwrite token and defeat the destructive-op guard. With no usable key the
+// token cannot be minted/verified, so the overwrite is refused.
 var installTokenKeyValue []byte
 
-func installTokenKey() []byte {
+// installTokenRand is the entropy source for minting a fresh install-token key.
+// It is a package var (defaulting to the OS CSPRNG) so the SEC-L6 fail-closed
+// path can be exercised by a test that injects a failing reader. Production
+// always uses crypto/rand.Reader.
+var installTokenRand io.Reader = rand.Reader
+
+// ErrInstallTokenKey is returned when the install-token HMAC key cannot be
+// established — specifically when the OS CSPRNG (crypto/rand) fails while
+// minting a fresh per-user key. SEC-L6: we FAIL CLOSED here. The install token
+// guards a DESTRUCTIVE overwrite (G-23 two-step); if we cannot mint a key with
+// real entropy we must NOT fall back to a hardcoded, world-known sentinel —
+// that would let any attacker forge a valid token and defeat the overwrite
+// guard. With no usable key the token cannot be minted or verified, so the
+// overwrite is refused.
+var ErrInstallTokenKey = errors.New("install: cannot establish install-token HMAC key (crypto/rand failed) — refusing to mint/verify a token (overwrite is refused; fail-closed)")
+
+func installTokenKey() ([]byte, error) {
 	if installTokenKeyValue != nil {
-		return installTokenKeyValue
+		return installTokenKeyValue, nil
 	}
 	home, _ := os.UserHomeDir()
 	dir := filepath.Join(home, ".cache", "m3c")
 	keyPath := filepath.Join(dir, "install-token.key")
 	if b, err := os.ReadFile(keyPath); err == nil && len(b) == 32 {
 		installTokenKeyValue = b
-		return installTokenKeyValue
+		return installTokenKeyValue, nil
 	}
-	installTokenKeyValue = make([]byte, 32)
-	if _, err := io.ReadFull(rand.Reader, installTokenKeyValue); err != nil {
-		// Fallback: a fixed (less secure) sentinel rather than panic.
-		installTokenKeyValue = []byte("skb-install-token-fallback-key-v1")
-	} else {
-		_ = os.MkdirAll(dir, 0o700)
-		_ = os.WriteFile(keyPath, installTokenKeyValue, 0o600)
+	key := make([]byte, 32)
+	if _, err := io.ReadFull(installTokenRand, key); err != nil {
+		// SEC-L6: fail closed. NO hardcoded fallback key — a world-known key
+		// would let anyone forge the overwrite token. Propagate the error so
+		// the destructive overwrite is refused.
+		return nil, fmt.Errorf("%w: %v", ErrInstallTokenKey, err)
 	}
-	return installTokenKeyValue
+	installTokenKeyValue = key
+	_ = os.MkdirAll(dir, 0o700)
+	_ = os.WriteFile(keyPath, installTokenKeyValue, 0o600)
+	return installTokenKeyValue, nil
 }
 
 // ErrUnsafeBundleName is returned when a staged bundle's Name would escape the

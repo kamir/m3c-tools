@@ -224,8 +224,13 @@ func ER1Endpoint(target string) (baseURL string, verifySSL bool) {
 	}
 	// stage / unknown: fall back to whatever ER1_API_URL says, else prod
 	if u := os.Getenv("ER1_API_URL"); u != "" {
-		b := strings.TrimSuffix(u, "/upload_2")
-		return strings.TrimRight(b, "/"), os.Getenv("ER1_VERIFY_SSL") != "false"
+		base := strings.TrimRight(strings.TrimSuffix(u, "/upload_2"), "/")
+		verify := os.Getenv("ER1_VERIFY_SSL") != "false"
+		// SEC-M7: only honour insecure for loopback; force verification on for remote.
+		if !verify && !strings.Contains(base, "127.0.0.1") && !strings.Contains(base, "localhost") {
+			verify = true
+		}
+		return base, verify
 	}
 	return "https://onboarding.guide", true
 }
@@ -521,11 +526,11 @@ type CheckpointOpts struct {
 
 // CheckpointResult is what Checkpoint returns.
 type CheckpointResult struct {
-	DocID         string
-	SessionDocID  string
-	Skipped       bool
-	SkipReason    string
-	Ident         *Ident
+	DocID        string
+	SessionDocID string
+	Skipped      bool
+	SkipReason   string
+	Ident        *Ident
 }
 
 // Checkpoint appends a checkpoint child item to the session-state item. Requires
@@ -580,10 +585,10 @@ type ListOpts struct {
 
 // SessionRow is a row in the list output.
 type SessionRow struct {
-	DocID     string
-	Tags      []string
-	Title     string
-	Item      map[string]any
+	DocID string
+	Tags  []string
+	Title string
+	Item  map[string]any
 }
 
 // List returns the session-state items matching the filter. Best-effort over the

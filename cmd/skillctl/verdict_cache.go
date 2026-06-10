@@ -67,7 +67,7 @@ type verdictCache struct {
 	Entries []verdictEntry `json:"entries"`
 }
 
-func verdictDir(home string) string  { return filepath.Join(home, ".claude", "skillctl") }
+func verdictDir(home string) string       { return filepath.Join(home, ".claude", "skillctl") }
 func verdictCachePath(home string) string { return filepath.Join(verdictDir(home), "verdicts.json") }
 func verdictKeyPath(home string) string   { return filepath.Join(verdictDir(home), "verdict.key") }
 
@@ -100,7 +100,8 @@ func loadVerdictCache(home string) verdictCache {
 }
 
 func saveVerdictCache(home string, c verdictCache) {
-	if err := os.MkdirAll(verdictDir(home), 0o700); err != nil {
+	dir := verdictDir(home)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return
 	}
 	c.Version = 1
@@ -108,10 +109,31 @@ func saveVerdictCache(home string, c verdictCache) {
 	if err != nil {
 		return
 	}
-	tmp := verdictCachePath(home) + ".tmp"
-	if os.WriteFile(tmp, b, 0o600) == nil {
-		_ = os.Rename(tmp, verdictCachePath(home)) // atomic
+	// Use a UNIQUE temp file per write (SPEC-0251 VERDICT-CACHE TMP RACE): a
+	// fixed "verdicts.json.tmp" lets two concurrent gate invocations (a
+	// SessionStart sweep and a PreToolUse hook, say) write the SAME temp path and
+	// rename it out from under each other, corrupting the cache. os.CreateTemp
+	// gives each writer its own file in the same dir (so the rename stays atomic
+	// on one filesystem); last-writer-wins on the final rename is fine — a lost
+	// race just yields a future cache miss → re-verify.
+	f, err := os.CreateTemp(dir, "verdicts-*.json")
+	if err != nil {
+		return
 	}
+	tmp := f.Name()
+	defer os.Remove(tmp) // no-op after a successful rename; cleans up on any error
+	if err := f.Chmod(0o600); err != nil {
+		_ = f.Close()
+		return
+	}
+	if _, err := f.Write(b); err != nil {
+		_ = f.Close()
+		return
+	}
+	if err := f.Close(); err != nil {
+		return
+	}
+	_ = os.Rename(tmp, verdictCachePath(home)) // atomic publish
 }
 
 // signVerdict / validVerdict bind a row to the HMAC key over its canonical

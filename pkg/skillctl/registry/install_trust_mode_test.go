@@ -337,6 +337,80 @@ func TestSanitizeBundleName(t *testing.T) {
 	}
 }
 
+// failingReader is an io.Reader that always errors — used to simulate a
+// crypto/rand (OS CSPRNG) failure on the install-token key-mint path.
+type failingReader struct{}
+
+func (failingReader) Read([]byte) (int, error) {
+	return 0, errors.New("simulated CSPRNG failure")
+}
+
+// SEC-L6: when the OS CSPRNG fails while minting the install-token HMAC key,
+// the code must FAIL CLOSED — it must NOT fall back to a hardcoded world-known
+// key (which an attacker could use to forge the overwrite token). Concretely:
+//   - PlanInstall must return ErrInstallTokenKey and NOT emit a usable token;
+//   - ConfirmInstall of an overwrite must be refused (no token can be minted
+//     or verified), so the destructive overwrite never happens.
+func TestInstallTokenKey_RNGFailureFailsClosed(t *testing.T) {
+	// Isolate HOME so no pre-existing ~/.cache/m3c/install-token.key is read
+	// (that would short-circuit the RNG path).
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	// Reset the in-process key cache and inject a failing CSPRNG; restore both.
+	prevKey := installTokenKeyValue
+	prevRand := installTokenRand
+	installTokenKeyValue = nil
+	installTokenRand = failingReader{}
+	t.Cleanup(func() {
+		installTokenKeyValue = prevKey
+		installTokenRand = prevRand
+	})
+
+	// Sanity: the key mint itself must fail closed.
+	if _, err := installTokenKey(); !errors.Is(err, ErrInstallTokenKey) {
+		t.Fatalf("installTokenKey() err = %v, want ErrInstallTokenKey", err)
+	}
+
+	// A fresh-create plan must NOT silently produce a (forgeable) token.
+	skillsDir := t.TempDir()
+	b := stagedFor(t, "x", "1.0.0", makeSkbTGZ("x", "body"))
+	plan, err := PlanInstall([]*StagedBundle{b}, skillsDir)
+	if !errors.Is(err, ErrInstallTokenKey) {
+		t.Fatalf("PlanInstall err = %v, want ErrInstallTokenKey", err)
+	}
+	if plan != nil && plan.Token != "" {
+		t.Fatalf("expected no usable token on RNG failure, got token %q", plan.Token)
+	}
+
+	// And an overwrite confirm must be refused (cannot mint/verify a token).
+	// First, install v1 with a WORKING RNG so an existing skill is present.
+	installTokenRand = prevRand
+	installTokenKeyValue = nil
+	b1 := stagedFor(t, "x", "1.0.0", makeSkbTGZ("x", "v1"))
+	if _, err := ConfirmInstall([]*StagedBundle{b1}, "", InstallOpts{SkillsDir: skillsDir}); err != nil {
+		t.Fatalf("seed install v1: %v", err)
+	}
+	// Now break the RNG again and attempt an overwrite confirm. Remove any
+	// persisted key file the seed install wrote so the mint path is forced to
+	// reach the (failing) CSPRNG rather than reading the cached key.
+	_ = os.Remove(filepath.Join(tmpHome, ".cache", "m3c", "install-token.key"))
+	installTokenRand = failingReader{}
+	installTokenKeyValue = nil
+	b2 := stagedFor(t, "x", "2.0.0", makeSkbTGZ("x", "v2"))
+	if _, err := ConfirmInstall([]*StagedBundle{b2}, "any-token", InstallOpts{SkillsDir: skillsDir}); !errors.Is(err, ErrInstallTokenKey) {
+		t.Fatalf("ConfirmInstall overwrite on RNG failure err = %v, want ErrInstallTokenKey", err)
+	}
+	// The on-disk skill must still be v1 (overwrite refused, fail-closed).
+	body, err := os.ReadFile(filepath.Join(skillsDir, "x", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read installed skill: %v", err)
+	}
+	if string(body) != "v1" {
+		t.Fatalf("skill body = %q, want %q (overwrite must have been refused)", string(body), "v1")
+	}
+}
+
 // contains is the same as strings.Contains; spelled out to avoid an import.
 func contains(s, needle string) bool {
 	for i := 0; i+len(needle) <= len(s); i++ {

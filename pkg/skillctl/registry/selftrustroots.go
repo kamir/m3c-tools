@@ -11,13 +11,16 @@ package registry
 //   registry: self
 //   pubkey_b64: BASE64-OF-RAW-ED25519-PUBLIC-KEY
 //   fingerprint: sha256:<lowercase-hex>      # optional — recomputed on load if absent
-//   governance_minimum: green                # green | yellow | red
+//   governance_minimum: green                # green | yellow  ("red" is NOT a
+//                                            # valid floor — it would admit
+//                                            # everything; rejected on load)
 //
 // `10-keygen-and-trustroots.sh` writes this file on machine 1 and prints the
 // fingerprint; the operator carries the file to machine 2 out-of-band and
 // verifies the fingerprint by eye before any `pull` runs.
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/base64"
@@ -30,6 +33,18 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
+
+// validSelfGovernanceMinima is the closed set of accepted values for
+// `governance_minimum`. SPEC-0188 §4.4 (mirrored from verify/trustroots.go)
+// lists "green" and "yellow"; "red" is omitted intentionally — pinning the
+// floor to "red" would silently permit EVERYTHING (it is the most-permissive
+// rung, not a meaningful floor), so we refuse to spell it. Unknown/typo'd
+// values are likewise rejected so a config error fails loudly rather than
+// silently disabling the governance gate.
+var validSelfGovernanceMinima = map[string]struct{}{
+	"green":  {},
+	"yellow": {},
+}
 
 // SelfTrustRoots is the loaded form of the file.
 type SelfTrustRoots struct {
@@ -61,7 +76,13 @@ func LoadSelfTrustRoots(path string) (*SelfTrustRoots, error) {
 		return nil, fmt.Errorf("trust-roots: open %s: %w", path, err)
 	}
 	var tr SelfTrustRoots
-	if err := yaml.Unmarshal(raw, &tr); err != nil {
+	// Strict mode: unknown/typo'd YAML fields are rejected. A misspelled key
+	// (e.g. `governance_minumum:`) would otherwise be silently ignored, leaving
+	// the floor at its default and masking an operator error. Matches the
+	// SPEC-0188 strict loader in verify/trustroots.go.
+	dec := yaml.NewDecoder(bytes.NewReader(raw))
+	dec.KnownFields(true) // strict: unknown fields → error
+	if err := dec.Decode(&tr); err != nil {
 		return nil, fmt.Errorf("trust-roots: parse %s: %w", path, err)
 	}
 	tr.Path = path
@@ -71,6 +92,17 @@ func LoadSelfTrustRoots(path string) (*SelfTrustRoots, error) {
 	if tr.GovernanceMinimum == "" {
 		tr.GovernanceMinimum = "green"
 	}
+	// Reject an invalid governance floor. In particular "red" is NOT a valid
+	// floor: as the most-permissive rung it would silently admit every
+	// attestation (even un-attested bundles below), defeating the gate. Only
+	// "green" and "yellow" are meaningful floors.
+	if _, ok := validSelfGovernanceMinima[strings.ToLower(strings.TrimSpace(tr.GovernanceMinimum))]; !ok {
+		return nil, fmt.Errorf("trust-roots: governance_minimum %q is not one of [green, yellow] in %s", tr.GovernanceMinimum, path)
+	}
+	// SEC-L1: store the floor normalized (lowercase) so MeetsFloor's lowercase
+	// rank map ranks it correctly — otherwise "GREEN" ranks 0 and the floor
+	// silently collapses to nothing, admitting red.
+	tr.GovernanceMinimum = strings.ToLower(strings.TrimSpace(tr.GovernanceMinimum))
 	if tr.PubKeyB64 == "" {
 		return nil, fmt.Errorf("trust-roots: pubkey_b64 missing in %s", path)
 	}
@@ -107,12 +139,15 @@ func (t *SelfTrustRoots) PubKey() ed25519.PublicKey {
 //	green (strictest)  >  yellow  >  red (most permissive)
 //
 // So a minimum of "green" admits only green attestations; "yellow" admits
-// green or yellow; "red" admits everything (in v1 we still reject the empty
-// string — "no attestation yet" — at a higher layer).
+// green or yellow. A loaded floor is always "green" or "yellow" — LoadSelfTrustRoots
+// rejects "red" (and any other value) because "red" as a floor would admit
+// everything. The rank for "red" below remains, but only as a ranking of an
+// incoming attestation level, never as a configured minimum. (We still reject
+// the empty string — "no attestation yet" — at a higher layer.)
 func (t *SelfTrustRoots) MeetsFloor(level string) bool {
 	rank := map[string]int{"green": 3, "yellow": 2, "red": 1}
-	have := rank[level]
-	want := rank[t.GovernanceMinimum]
+	have := rank[strings.ToLower(strings.TrimSpace(level))]
+	want := rank[strings.ToLower(strings.TrimSpace(t.GovernanceMinimum))]
 	return have >= want && have > 0
 }
 

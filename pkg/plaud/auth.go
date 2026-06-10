@@ -403,8 +403,8 @@ func extractTokenCDP() (string, error) {
 	defer resp.Body.Close()
 
 	var targets []struct {
-		ID          string `json:"id"`
-		URL         string `json:"url"`
+		ID           string `json:"id"`
+		URL          string `json:"url"`
 		WebSocketURL string `json:"webSocketDebuggerUrl"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&targets); err != nil {
@@ -560,12 +560,18 @@ func OpenPlaudLogin() error {
 }
 
 // OpenBrowser opens a URL in the platform's default browser.
+//
+// SEC-M11: On Windows we use rundll32 url.dll,FileProtocolHandler instead of
+// "cmd /c start". The URL passed here may be server-/profile-controlled, and
+// routing it through cmd.exe exposes a shell-metacharacter surface (&, |, ^, %)
+// even with an empty title. rundll32's FileProtocolHandler hands the URL
+// straight to the registered protocol handler with no shell interpretation.
 func OpenBrowser(url string) error {
 	switch runtime.GOOS {
 	case "darwin":
 		return exec.Command("open", url).Start()
 	case "windows":
-		return exec.Command("cmd", "/c", "start", "", url).Start() // empty title prevents injection via & in URL
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
 	case "linux":
 		return exec.Command("xdg-open", url).Start()
 	default:

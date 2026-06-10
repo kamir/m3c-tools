@@ -100,9 +100,35 @@ type hookSpecificOutput struct {
 // decision logic can be exercised without a network or a real trust-roots file.
 var verifyManagedFn = verifyManagedSkill
 
+// hookPreflight is a no-op seam at the very top of the gate body. Production
+// leaves it nil (zero cost). The panic-safety regression test sets it to a
+// function that panics, proving the deferred recover converts ANY panic in the
+// gate into a fail-closed DENY rather than crashing the process.
+var hookPreflight func()
+
 // runVerifyHook is the entrypoint for `skillctl verify-hook`. It returns the
 // process exit code: 0 = allow, 2 = deny/block.
-func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) int {
+//
+// Panic-safety by design (SPEC-0251 P1): this gate sits on the PreToolUse path,
+// so a panic anywhere below (a malformed cache row, a nil seam in a future
+// refactor, a registry client that dereferences nil) must NOT crash the process
+// — a crash exits non-2 and the harness may interpret a non-block exit as
+// "allow", silently opening the very hole the gate exists to close. The deferred
+// recover therefore converts any panic into the canonical three-way DENY (exit
+// 2 + decision JSON + stderr), failing closed. The named return `code` is what
+// the recover overwrites.
+func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
+	defer func() {
+		if r := recover(); r != nil {
+			code = emitDeny(stdout, stderr,
+				fmt.Sprintf("skillctl verify-hook: internal error (%v) — failing closed (DENY)", r))
+		}
+	}()
+
+	if hookPreflight != nil {
+		hookPreflight()
+	}
+
 	raw, err := io.ReadAll(io.LimitReader(stdin, 1<<20))
 	if err != nil || len(bytes.TrimSpace(raw)) == 0 {
 		return emitDeny(stdout, stderr, "skillctl verify-hook: unreadable hook event on stdin (fail-closed)")
@@ -130,7 +156,7 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) int {
 			fmt.Sprintf("skillctl: BLOCKED %q — suspicious skill name (path traversal); refusing (fail-closed)", skill))
 	}
 
-	pol := loadGatePolicy()
+	pol := loadGatePolicyW(stderr)
 
 	if pol.isAllowlisted(skill) {
 		return emitAllow() // explicit operator escape hatch (§9.4)
@@ -163,7 +189,10 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) int {
 	// it binds the on-disk body to the signed .skb so an edited SKILL.md is
 	// caught). Fall back to the online chain only for legacy installs that have
 	// no stashed offline metadata.
-	var code int
+	//
+	// NB: `code` is the function's named return (declared in the signature so the
+	// deferred recover can overwrite it on panic); we reuse it here rather than
+	// shadowing it with a fresh `var code int`.
 	var reason string
 	if home != "" {
 		if c, r, ok := verifyManagedOfflineFn(skill, pol, home); ok {
@@ -356,18 +385,51 @@ type gatePolicy struct {
 
 func defaultGatePolicy() gatePolicy { return gatePolicy{Unmanaged: "allow"} }
 
-// loadGatePolicy reads ~/.claude/skillctl/gate-policy.yaml. A missing or
-// malformed file yields safe defaults (unmanaged=allow, managed still verified)
-// — a typo in the policy must not silently disable verification of managed
-// skills, but it also must not brick every session. The env var
-// SKILLCTL_GATE_UNMANAGED overrides the unmanaged disposition.
+// loadGatePolicy reads ~/.claude/skillctl/gate-policy.yaml.
+//
+// A MISSING file yields safe defaults (unmanaged=allow, managed still verified)
+// — the gate must not brick a fresh machine that never wrote a policy.
+//
+// A PRESENT-BUT-BROKEN file (malformed YAML, or an unknown/misspelled field)
+// fails CLOSED (SPEC-0251 SEC-L2, mirroring the SPEC-0188 strict trust-roots
+// loader): the operator clearly INTENDED a policy, so silently discarding it and
+// falling back to unmanaged=allow would turn a typo — e.g. `unmanaged_skils:
+// deny` — into an allow-all, defeating the gate. Instead we treat the unmanaged
+// disposition as `deny` and log a clear warning to stderr. Parsing is strict
+// (yaml.Decoder + KnownFields(true)) so an unknown field is an error, not a
+// silently-ignored line.
+//
+// The env var SKILLCTL_GATE_UNMANAGED still overrides the final disposition, so
+// an operator who knows what they are doing can recover without editing the file.
+//
+// loadGatePolicy is the zero-arg convenience form (callers that have no captured
+// stderr — e.g. the sweep in verify_all_cmds.go, and direct unit tests). It logs
+// the fail-closed WARN to the process os.Stderr. The verify-hook gate uses
+// loadGatePolicyW so the WARN lands on the SAME stderr writer the harness
+// captures (otherwise the operator never sees the "failing closed" signal on the
+// hook's stderr stream, only the BLOCKED reason).
 func loadGatePolicy() gatePolicy {
+	return loadGatePolicyW(os.Stderr)
+}
+
+// loadGatePolicyW is loadGatePolicy with an explicit warn sink so the fail-closed
+// WARN can be routed to the gate's captured stderr.
+func loadGatePolicyW(warn io.Writer) gatePolicy {
 	p := defaultGatePolicy()
 	if home, err := userHome(); err == nil {
 		path := filepath.Join(home, ".claude", "skillctl", "gate-policy.yaml")
 		if data, err := os.ReadFile(path); err == nil {
 			var loaded gatePolicy
-			if yaml.Unmarshal(data, &loaded) == nil {
+			dec := yaml.NewDecoder(bytes.NewReader(data))
+			dec.KnownFields(true) // strict: unknown/misspelled fields → error
+			if derr := dec.Decode(&loaded); derr != nil {
+				// Present but unparseable → fail closed for the unmanaged
+				// disposition rather than silently reverting to allow-all.
+				fmt.Fprintf(warn,
+					"skillctl verify-hook: WARN gate-policy.yaml at %s is invalid (%v) — failing closed: treating unmanaged_skills as deny. Fix the policy or set SKILLCTL_GATE_UNMANAGED.\n",
+					path, derr)
+				p.Unmanaged = "deny"
+			} else {
 				if loaded.Unmanaged != "" {
 					p.Unmanaged = loaded.Unmanaged
 				}
@@ -375,6 +437,7 @@ func loadGatePolicy() gatePolicy {
 				p.ManagedMinGovernance = loaded.ManagedMinGovernance
 			}
 		}
+		// A missing file (os.ReadFile error) keeps the safe default — see doc.
 	}
 	if e := strings.TrimSpace(os.Getenv("SKILLCTL_GATE_UNMANAGED")); e != "" {
 		p.Unmanaged = e

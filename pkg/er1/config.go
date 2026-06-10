@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -23,6 +25,56 @@ import (
 // fires at most once per process, even when LoadConfig() is called from
 // multiple startup paths (PLM sync, retry scheduler, menubar init, …).
 var placeholderFatalOnce sync.Once
+
+// insecureTLSWarnOnce ensures the SEC-M7 warning about disabled TLS
+// verification fires at most once per process, even though LoadConfig() is
+// called from many startup paths.
+var insecureTLSWarnOnce sync.Once
+
+// isLoopbackURL reports whether the host component of rawURL is a loopback
+// address (127.0.0.0/8, ::1, or the literal "localhost"). Self-contained so
+// the SEC-M7 fail-closed gate does not depend on helpers in sibling packages.
+//
+// Pure (no DNS): a hostname that merely *resolves* to loopback is NOT treated
+// as loopback — only literal loopback hosts are allowed to skip verification.
+func isLoopbackURL(rawURL string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || parsed == nil {
+		return false
+	}
+	host := parsed.Hostname()
+	if host == "localhost" {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
+}
+
+// applyTLSVerificationPolicy enforces the SEC-M7 fail-closed rule on a freshly
+// loaded Config: when TLS verification is disabled (ER1_VERIFY_SSL=false) it is
+// only honoured for a loopback target. For any non-loopback host the request to
+// skip verification is REFUSED — verification is forced back on so every
+// downstream HTTP client (10+ call sites all derive from cfg.VerifySSL) stays
+// fail-closed. A loud one-time warning is emitted whenever verification is
+// (or was about to be) disabled.
+func applyTLSVerificationPolicy(cfg *Config) {
+	if cfg.VerifySSL {
+		return // verification on — nothing to police
+	}
+	if isLoopbackURL(cfg.APIURL) {
+		insecureTLSWarnOnce.Do(func() {
+			log.Printf("[er1] WARNING: TLS verification is DISABLED (ER1_VERIFY_SSL=false) for loopback target %q. This is only safe for local development with self-signed certs.", cfg.APIURL)
+		})
+		return
+	}
+	// Non-loopback host with verification disabled: refuse (fail-closed).
+	insecureTLSWarnOnce.Do(func() {
+		log.Printf("[er1] SECURITY: REFUSING to disable TLS verification (ER1_VERIFY_SSL=false) for NON-loopback host %q — re-enabling certificate verification. ER1_VERIFY_SSL=false is only honoured for 127.0.0.1/localhost.", cfg.APIURL)
+	})
+	cfg.VerifySSL = true
+}
 
 // hasDeviceTokenAuth reports whether device-token (Bearer) auth is available
 // either via the ER1_DEVICE_TOKEN env var or a persisted token (OS keychain or
@@ -60,6 +112,12 @@ func LoadConfig() *Config {
 		RetryInterval: envInt("ER1_RETRY_INTERVAL", 300),
 		MaxRetries:    envInt("ER1_MAX_RETRIES", 10),
 	}
+	// SEC-M7: ER1_VERIFY_SSL=false silently disabled TLS verification for any
+	// host. Warn once when it is disabled, and refuse (fail-closed: force
+	// verification back on) for non-loopback hosts. Allowed only for
+	// 127.0.0.1/localhost. Applied here so all downstream clients inherit the
+	// vetted cfg.VerifySSL value.
+	applyTLSVerificationPolicy(cfg)
 	// BUG-0137 + BUG-0163: refuse to use a placeholder API key against a
 	// non-local URL — but only when the API key would actually be sent.
 	// Device token (SPEC-0127) is the primary auth method and takes

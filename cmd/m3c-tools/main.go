@@ -49,9 +49,9 @@ import (
 	"github.com/kamir/m3c-tools/pkg/er1"
 	"github.com/kamir/m3c-tools/pkg/importer"
 	"github.com/kamir/m3c-tools/pkg/impression"
+	"github.com/kamir/m3c-tools/pkg/menubar"
 	"github.com/kamir/m3c-tools/pkg/plaud"
 	"github.com/kamir/m3c-tools/pkg/pocket"
-	"github.com/kamir/m3c-tools/pkg/menubar"
 	"github.com/kamir/m3c-tools/pkg/recorder"
 	"github.com/kamir/m3c-tools/pkg/screenshot"
 	"github.com/kamir/m3c-tools/pkg/setup"
@@ -231,7 +231,9 @@ Commands:
   plaud sync <id>        Sync a Plaud recording to ER1
   plaud sync --all       Sync all new Plaud recordings to ER1
   plaud auth login       Extract token from Chrome (web.plaud.ai)
-  plaud auth <token>     Save Plaud API token manually
+  plaud auth --token-file <path>  Save Plaud API token from a file (secure)
+  plaud auth             Save token from $M3C_PLAUD_TOKEN env var (secure)
+  plaud auth <token>     Save Plaud API token from argv (DEPRECATED: leaks via ps)
 
   pocket list            List Pocket recordings with sync status
     --path <dir>           Override device recording path
@@ -764,9 +766,10 @@ func openProfileEditor() {
 // wizard will wrap with green/red marker UI.
 //
 // Usage:
-//   m3c-tools setup pocket-key pk_3aa72a536d28c3fde2f9a08c514697fe8f9e55590e178bd82d6a26e415fe70ae
-//   m3c-tools setup pocket-key pk_xxx --no-write   (validate only, don't write)
-//   m3c-tools setup pocket-key pk_xxx --profile dev  (target a non-active profile)
+//
+//	m3c-tools setup pocket-key pk_3aa72a536d28c3fde2f9a08c514697fe8f9e55590e178bd82d6a26e415fe70ae
+//	m3c-tools setup pocket-key pk_xxx --no-write   (validate only, don't write)
+//	m3c-tools setup pocket-key pk_xxx --profile dev  (target a non-active profile)
 func cmdSetupPocketKey(args []string) {
 	noWrite := false
 	profileName := ""
@@ -976,7 +979,7 @@ func cmdSetup(args []string) {
 	setupScript := findSetupScript()
 	if setupScript == "" {
 		fmt.Fprintf(os.Stderr, "Error: setup-venv.sh not found.\n")
-		fmt.Fprintf(os.Stderr, "Expected at: scripts/setup-venv.sh (relative to repo root)\n")
+		fmt.Fprintf(os.Stderr, "Expected next to the m3c-tools binary (e.g. <install-dir>/scripts/setup-venv.sh).\n")
 		os.Exit(1)
 	}
 
@@ -1009,24 +1012,41 @@ func cmdSetup(args []string) {
 	}
 }
 
-// findSetupScript locates scripts/setup-venv.sh relative to the binary or CWD.
+// findSetupScript locates setup-venv.sh anchored to the running binary's
+// install location.
+//
+// SEC-M12: it deliberately does NOT consult a cwd-relative "scripts/..." path.
+// The result is passed to `bash <script>`, so a cwd-relative lookup would let
+// anyone who can choose the working directory drop a malicious setup-venv.sh and
+// have it executed (working-dir hijack). All candidates are resolved against
+// os.Executable()'s directory (and its parent), then symlinks are resolved so
+// the returned path is absolute and stable.
 func findSetupScript() string {
-	// Check relative to working directory
-	if _, err := os.Stat("scripts/setup-venv.sh"); err == nil {
-		return "scripts/setup-venv.sh"
+	exePath, err := os.Executable()
+	if err != nil {
+		return ""
 	}
-	// Check relative to binary location
-	if exePath, err := os.Executable(); err == nil {
-		candidate := filepath.Join(filepath.Dir(exePath), "..", "scripts", "setup-venv.sh")
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
-		}
+	// Resolve symlinks so a symlinked binary still anchors to its real install dir.
+	if resolved, rErr := filepath.EvalSymlinks(exePath); rErr == nil {
+		exePath = resolved
 	}
-	// Check in app bundle Resources
-	if exePath, err := os.Executable(); err == nil {
-		candidate := filepath.Join(filepath.Dir(exePath), "..", "Resources", "setup-venv.sh")
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
+	exeDir := filepath.Dir(exePath)
+
+	candidates := []string{
+		// Alongside the binary (e.g. release tarball layout).
+		filepath.Join(exeDir, "scripts", "setup-venv.sh"),
+		filepath.Join(exeDir, "setup-venv.sh"),
+		// One level up (e.g. <prefix>/bin/m3c-tools -> <prefix>/scripts/...).
+		filepath.Join(exeDir, "..", "scripts", "setup-venv.sh"),
+		// macOS app bundle Resources.
+		filepath.Join(exeDir, "..", "Resources", "setup-venv.sh"),
+	}
+	for _, c := range candidates {
+		if _, statErr := os.Stat(c); statErr == nil {
+			if abs, aErr := filepath.Abs(c); aErr == nil {
+				return abs
+			}
+			return c
 		}
 	}
 	return ""
@@ -3884,8 +3904,18 @@ func buildDeviceHubHTML(contextID, baseURL string) string {
 			}
 			return "no source"
 		}(),
-		func() string { if apiStatus != "" { return "ok" }; return "muted" }(),
-		func() string { if apiStatus != "" { return "&#10003; " + apiStatus }; return "not configured" }(),
+		func() string {
+			if apiStatus != "" {
+				return "ok"
+			}
+			return "muted"
+		}(),
+		func() string {
+			if apiStatus != "" {
+				return "&#10003; " + apiStatus
+			}
+			return "not configured"
+		}(),
 		baseURL, baseURL, baseURL,
 	)
 }
@@ -3997,9 +4027,9 @@ func menubarFetchTranscriptAndTrack(app *menubar.App, fetcher *menubar.Transcrip
 		TranscriptText: result.Text,
 		VideoID:        result.VideoID,
 		VideoURL:       "https://www.youtube.com/watch?v=" + result.VideoID,
-		Language:        result.Language,
-		LanguageCode:    result.LanguageCode,
-		SnippetCount:    result.SnippetCount,
+		Language:       result.Language,
+		LanguageCode:   result.LanguageCode,
+		SnippetCount:   result.SnippetCount,
 	}
 
 	// Channel A (YouTube): defer recording until user clicks "Start Recording".
@@ -4022,11 +4052,11 @@ func menubarFetchTranscriptAndTrack(app *menubar.App, fetcher *menubar.Transcrip
 		doc := &impression.CompositeDoc{
 			VideoID:        obsCtx.VideoID,
 			VideoURL:       obsCtx.VideoURL,
-			Language:        obsCtx.Language,
-			LanguageCode:    obsCtx.LanguageCode,
-			IsGenerated:     obsCtx.IsGenerated,
-			SnippetCount:    obsCtx.SnippetCount,
-			TranscriptText:  obsCtx.TranscriptText,
+			Language:       obsCtx.Language,
+			LanguageCode:   obsCtx.LanguageCode,
+			IsGenerated:    obsCtx.IsGenerated,
+			SnippetCount:   obsCtx.SnippetCount,
+			TranscriptText: obsCtx.TranscriptText,
 			ImpressionText: memoText,
 			ObsType:        impression.Progress,
 			Timestamp:      now,
@@ -4402,11 +4432,11 @@ func observationRecordAndUpload(app *menubar.App, label string, imgPath string, 
 		doc := &impression.CompositeDoc{
 			VideoID:        obsCtx.VideoID,
 			VideoURL:       obsCtx.VideoURL,
-			Language:        obsCtx.Language,
-			LanguageCode:    obsCtx.LanguageCode,
-			IsGenerated:     obsCtx.IsGenerated,
-			SnippetCount:    obsCtx.SnippetCount,
-			TranscriptText:  obsCtx.TranscriptText,
+			Language:       obsCtx.Language,
+			LanguageCode:   obsCtx.LanguageCode,
+			IsGenerated:    obsCtx.IsGenerated,
+			SnippetCount:   obsCtx.SnippetCount,
+			TranscriptText: obsCtx.TranscriptText,
 			ImpressionText: memoText,
 			ObsType:        obsType,
 			Timestamp:      now,
@@ -4506,14 +4536,17 @@ func menubarUploadPayload(app *menubar.App, label string, payload *er1.UploadPay
 }
 
 // openURL opens a URL in the default browser. Cross-platform (mirrors the
-// menubar's openBrowserURL, BUG-0088): Windows → `cmd /c start`, Linux →
+// menubar's openBrowserURL): Windows → rundll32 FileProtocolHandler, Linux →
 // xdg-open, macOS → `open` (Chrome-preferred to keep the ER1 auth session in
 // the same browser). Used by `m3c-tools login`, so it MUST work off-macOS.
+//
+// SEC-M11: Windows uses rundll32 url.dll,FileProtocolHandler instead of
+// "cmd /c start" so server-/profile-controlled URLs are never routed through
+// cmd.exe (no shell-metacharacter surface from &, |, ^, % in the URL).
 func openURL(url string) error {
 	switch runtime.GOOS {
 	case "windows":
-		// Empty title arg ("") so cmd doesn't treat a URL containing & as the title.
-		return exec.Command("cmd", "/c", "start", "", url).Start()
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
 	case "linux":
 		return exec.Command("xdg-open", url).Start()
 	default: // darwin
@@ -4888,16 +4921,7 @@ func cmdPlaud(args []string) {
 		}
 		cmdPlaudSync(syncArg, force, customTags, filter, dryRun)
 	case "auth":
-		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud auth <token>")
-			fmt.Fprintln(os.Stderr, "       m3c-tools plaud auth login   (extract from Chrome)")
-			os.Exit(1)
-		}
-		if args[1] == "login" {
-			cmdPlaudAuthLogin()
-		} else {
-			cmdPlaudAuth(args[1])
-		}
+		cmdPlaudAuthDispatch(args[1:])
 	case "debug":
 		cmdPlaudDebugAPI()
 	default:
@@ -4934,6 +4958,57 @@ func cmdPlaudAuthLogin() {
 		os.Exit(1)
 	}
 	fmt.Printf("Authenticated. Found %d recordings.\n", len(recordings))
+}
+
+// cmdPlaudAuthDispatch parses `plaud auth` arguments and routes to the right
+// handler. Supported forms:
+//
+//	plaud auth login                     extract token from Chrome (CDP)
+//	plaud auth --token-file <path>       read token from a file (secure)
+//	plaud auth                           read token from $M3C_PLAUD_TOKEN (secure)
+//	plaud auth <token>                   bare argv token (DEPRECATED — leaks via ps)
+//
+// SEC-M8: the bare-argv form is kept for backward compatibility but emits a
+// loud deprecation warning, because command-line arguments are visible to other
+// users via ps/argv.
+func cmdPlaudAuthDispatch(args []string) {
+	if len(args) > 0 && args[0] == "login" {
+		cmdPlaudAuthLogin()
+		return
+	}
+
+	tokenFile := ""
+	bareToken := ""
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--token-file":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "--token-file requires a path")
+				os.Exit(1)
+			}
+			tokenFile = args[i+1]
+			i++
+		case strings.HasPrefix(a, "--token-file="):
+			tokenFile = strings.TrimPrefix(a, "--token-file=")
+		case !strings.HasPrefix(a, "-") && bareToken == "":
+			bareToken = a
+		}
+	}
+
+	token, argvLeaked, err := plaud.ResolveAuthToken(tokenFile, bareToken)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud auth login            (extract from Chrome)")
+		fmt.Fprintln(os.Stderr, "       m3c-tools plaud auth --token-file <path>")
+		fmt.Fprintf(os.Stderr, "       %s=<token> m3c-tools plaud auth\n", plaud.PlaudTokenEnvVar)
+		os.Exit(1)
+	}
+	if argvLeaked {
+		fmt.Fprintf(os.Stderr, "WARNING: passing the Plaud token as a command-line argument leaks it to other users via ps/argv.\n")
+		fmt.Fprintf(os.Stderr, "         Prefer: %s=<token> m3c-tools plaud auth   (or --token-file <path>)\n", plaud.PlaudTokenEnvVar)
+	}
+	cmdPlaudAuth(token)
 }
 
 func cmdPlaudAuth(token string) {
@@ -5112,6 +5187,15 @@ func cmdPlaudSync(recordingID string, force bool, customTags string, filter stri
 		}
 		recordingID = recordings[idx-1].ID
 		fmt.Printf("Resolved #%d → %s\n", idx, recordingID)
+	}
+
+	// SEC-L9: validate a directly-supplied DocID before it is used in any
+	// request path. "all" is the bulk sentinel and is handled separately below.
+	if recordingID != "all" {
+		if vErr := plaud.ValidateDocID(recordingID); vErr != nil {
+			fmt.Fprintf(os.Stderr, "Invalid Plaud recording ID: %v\n", vErr)
+			os.Exit(1)
+		}
 	}
 
 	if force {

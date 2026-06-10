@@ -406,6 +406,16 @@ func cmdPlaud(args []string) {
 }
 
 // cmdPlaudAuth handles token authentication.
+//
+// Supported forms:
+//
+//	plaud auth login                  extract token from Chrome (CDP)
+//	plaud auth --token-file <path>    read token from a file (secure)
+//	plaud auth                        read token from $M3C_PLAUD_TOKEN (secure)
+//	plaud auth <token>                bare argv token (DEPRECATED — leaks via ps)
+//
+// SEC-M8: the bare-argv form is retained for backward compatibility but emits a
+// loud deprecation warning, because argv is visible to other users via ps.
 func cmdPlaudAuth(args []string) {
 	cfg := plaud.LoadConfig()
 
@@ -433,19 +443,43 @@ func cmdPlaudAuth(args []string) {
 		return
 	}
 
-	if len(args) > 0 {
-		// Direct token
-		session := &plaud.TokenSession{Token: args[0], SavedAt: time.Now()}
-		if err := plaud.SaveToken(cfg.TokenPath, session); err != nil {
-			fmt.Fprintf(os.Stderr, "Error saving token: %v\n", err)
-			os.Exit(1)
+	tokenFile := ""
+	bareToken := ""
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--token-file":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "--token-file requires a path")
+				os.Exit(1)
+			}
+			tokenFile = args[i+1]
+			i++
+		case strings.HasPrefix(a, "--token-file="):
+			tokenFile = strings.TrimPrefix(a, "--token-file=")
+		case !strings.HasPrefix(a, "-") && bareToken == "":
+			bareToken = a
 		}
-		fmt.Println("Token saved.")
-		return
 	}
 
-	fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud auth <login|TOKEN>")
-	os.Exit(1)
+	token, argvLeaked, err := plaud.ResolveAuthToken(tokenFile, bareToken)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud auth login            (extract from Chrome)")
+		fmt.Fprintln(os.Stderr, "       m3c-tools plaud auth --token-file <path>")
+		fmt.Fprintf(os.Stderr, "       %s=<token> m3c-tools plaud auth\n", plaud.PlaudTokenEnvVar)
+		os.Exit(1)
+	}
+	if argvLeaked {
+		fmt.Fprintf(os.Stderr, "WARNING: passing the Plaud token as a command-line argument leaks it to other users via ps/argv.\n")
+		fmt.Fprintf(os.Stderr, "         Prefer: %s=<token> m3c-tools plaud auth   (or --token-file <path>)\n", plaud.PlaudTokenEnvVar)
+	}
+	session := &plaud.TokenSession{Token: token, SavedAt: time.Now()}
+	if err := plaud.SaveToken(cfg.TokenPath, session); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving token: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("Token saved.")
 }
 
 // cmdPlaudList lists all Plaud recordings.
@@ -531,6 +565,15 @@ func cmdPlaudSync(recordingID string, force bool) {
 		}
 		recordingID = recordings[idx-1].ID
 		fmt.Printf("Resolved #%d → %s\n", idx, recordingID)
+	}
+
+	// SEC-L9: validate a directly-supplied DocID before it is used in any
+	// request path. "all" is the bulk sentinel and is handled separately below.
+	if recordingID != "all" {
+		if vErr := plaud.ValidateDocID(recordingID); vErr != nil {
+			fmt.Fprintf(os.Stderr, "Invalid Plaud recording ID: %v\n", vErr)
+			os.Exit(1)
+		}
 	}
 
 	if force {
@@ -1086,7 +1129,6 @@ func cmdExec(name string, args ...string) *exec.Cmd {
 	return exec.Command(name, args...)
 }
 
-
 // plaudChromeActive prevents concurrent Chrome launches for Plaud auth.
 // BUG-0102: Without this guard, ActionPlaudAuth and ActionPlaudSync can both
 // call trayExtractPlaudToken simultaneously, launching two debug Chrome windows.
@@ -1095,11 +1137,11 @@ var plaudChromeActive int32
 
 // trayExtractPlaudToken attempts to extract a Plaud token from Chrome via CDP.
 // This is the tray-friendly version that never blocks on stdin:
-//   1. First tries ExtractTokenCDP() — instant, works if Chrome is already
-//      running with plaud.ai open and --remote-debugging-port=9222.
-//   2. If that fails, launches Chrome with the debug port, opens plaud.ai,
-//      and polls for the token every 3 seconds for 60 seconds while the user
-//      logs in. Tooltip is updated with a countdown.
+//  1. First tries ExtractTokenCDP() — instant, works if Chrome is already
+//     running with plaud.ai open and --remote-debugging-port=9222.
+//  2. If that fails, launches Chrome with the debug port, opens plaud.ai,
+//     and polls for the token every 3 seconds for 60 seconds while the user
+//     logs in. Tooltip is updated with a countdown.
 //
 // Happy Maker 1: Eliminates the terminal requirement for Plaud authentication.
 func trayExtractPlaudToken(app *tray.TrayApp) (string, error) {
@@ -1534,7 +1576,9 @@ func openFileWithDefault(path string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", "", path)
+		// SEC-M11: avoid "cmd /c start" — route through rundll32's
+		// FileProtocolHandler so the path is never shell-interpreted.
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
 	case "linux":
 		cmd = exec.Command("xdg-open", path)
 	default:
@@ -1546,13 +1590,16 @@ func openFileWithDefault(path string) {
 }
 
 // openBrowserURL opens a URL in the platform default browser.
-// BUG-0088: Windows uses "cmd /c start" instead of rundll32 which silently fails.
+//
+// SEC-M11: Windows uses rundll32 url.dll,FileProtocolHandler instead of
+// "cmd /c start". The URL can be server-/profile-controlled; rundll32 hands it
+// straight to the registered protocol handler with no shell interpretation,
+// removing the cmd.exe metacharacter surface (&, |, ^, %).
 func openBrowserURL(url string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		// Empty title arg ("") prevents cmd from misinterpreting URLs with & as title.
-		cmd = exec.Command("cmd", "/c", "start", "", url)
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
 	case "linux":
 		cmd = exec.Command("xdg-open", url)
 	default:

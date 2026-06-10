@@ -270,6 +270,95 @@ func TestVerifyHook_OnlinePath_EditedBody_Denies(t *testing.T) {
 	}
 }
 
+// SPEC-0251 P1 (GATE PANIC-SAFETY): a panic anywhere in the gate body must be
+// converted into the canonical three-way DENY (decision JSON + stderr + exit 2),
+// never a process crash. A crash would exit non-2 and the harness could read a
+// non-block exit as "allow", silently opening the hole the gate exists to close.
+// We inject the panic through the hookPreflight seam.
+func TestVerifyHook_PanicInGate_FailsClosedDeny(t *testing.T) {
+	orig := hookPreflight
+	hookPreflight = func() { panic("boom: simulated internal gate failure") }
+	t.Cleanup(func() { hookPreflight = orig })
+
+	// A perfectly valid allow-shaped event — without the recover this would have
+	// returned exit 0; the injected panic must instead force a DENY.
+	code, out, errb := feed(t, `{"tool_name":"Skill","tool_input":{"skill":"anything"}}`)
+	assertDeny(t, code, out, "internal error")
+	if !strings.Contains(errb, "failing closed") {
+		t.Fatalf("stderr should announce the fail-closed deny, got %q", errb)
+	}
+}
+
+// SPEC-0251 SEC-L2: a PRESENT gate-policy.yaml with an unknown/misspelled field
+// must NOT be silently discarded (which would revert to unmanaged=allow and let
+// an unmanaged skill through). Strict parsing fails closed: the unmanaged
+// disposition becomes deny.
+func TestVerifyHook_UnknownPolicyField_FailsClosed(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SKILLCTL_GATE_UNMANAGED", "") // do not let the env override mask the fix
+	pdir := filepath.Join(home, ".claude", "skillctl")
+	if err := os.MkdirAll(pdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// `unmanaged_skils` is a typo of `unmanaged_skills`. The operator clearly
+	// meant deny; a non-strict parser would ignore the line and allow-all.
+	policy := "unmanaged_skils: deny\n"
+	if err := os.WriteFile(filepath.Join(pdir, "gate-policy.yaml"), []byte(policy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// An unmanaged (namespaced) skill must now be DENIED, not allowed.
+	code, out, errb := feed(t, `{"tool_name":"Skill","tool_input":{"skill":"some-plugin:thing"}}`)
+	assertDeny(t, code, out, "not skillctl-managed")
+	if !strings.Contains(errb, "failing closed") {
+		t.Fatalf("a broken policy should warn about failing closed, got stderr=%q", errb)
+	}
+}
+
+// A MALFORMED (unparseable) policy file also fails closed.
+func TestVerifyHook_MalformedPolicy_FailsClosed(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SKILLCTL_GATE_UNMANAGED", "")
+	pdir := filepath.Join(home, ".claude", "skillctl")
+	if err := os.MkdirAll(pdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Broken YAML (unterminated/garbled mapping).
+	if err := os.WriteFile(filepath.Join(pdir, "gate-policy.yaml"), []byte("unmanaged_skills: [deny\n  : : :"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out, _ := feed(t, `{"tool_name":"Skill","tool_input":{"skill":"some-plugin:thing"}}`)
+	assertDeny(t, code, out, "not skillctl-managed")
+}
+
+// Guard the load directly: a MISSING policy keeps the safe default (allow), a
+// broken one fails closed (deny). This pins the asymmetry SEC-L2 introduces.
+func TestLoadGatePolicy_MissingVsBroken(t *testing.T) {
+	t.Setenv("SKILLCTL_GATE_UNMANAGED", "")
+
+	// Missing file → default allow.
+	home1 := t.TempDir()
+	t.Setenv("HOME", home1)
+	if got := loadGatePolicy().Unmanaged; got != "allow" {
+		t.Fatalf("missing policy: Unmanaged=%q, want allow (safe default)", got)
+	}
+
+	// Present-but-unknown-field file → deny (fail closed).
+	home2 := t.TempDir()
+	t.Setenv("HOME", home2)
+	pdir := filepath.Join(home2, ".claude", "skillctl")
+	if err := os.MkdirAll(pdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pdir, "gate-policy.yaml"), []byte("bogus_field: 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadGatePolicy().Unmanaged; got != "deny" {
+		t.Fatalf("broken policy: Unmanaged=%q, want deny (fail closed)", got)
+	}
+}
+
 func TestSkillID_FallbackOrder(t *testing.T) {
 	cases := []struct {
 		in   hookToolInput

@@ -51,6 +51,29 @@ jobs:
       - name: Run e2e tests (allow-list)
         run: go test -v -count=1 ./e2e/ -run "TestComposite|TestBuild|TestParseTagLine|TestER1Config|TestER1Queue|TestER1EnqueueFailure|TestUploadFailure|TestRecorderEncodeWAV|TestRecorderStats|TestExportsDB|TestFilesDB|TestHashFile|TestFormatterLoader|TestPrettyPrint|TestFormatTranscript|TestFormatSnippet|TestFormatKeyValue|TestFormatTable|TestFormatSection|TestFormatStatusLine|TestTranslateFlagParsing|TestTranslateNotTranslatable|TestTranslateTranslatable|TestRetryQueue|TestRetryBackoffTiming|TestRetryBackoffCustomBase|TestRetryProcessingOrder|TestRetryPartialFailure|TestRetryMaxRetriesDropsEntry|TestRetryDropCallback|TestRetryRespectsBackoffDelay|TestRetryProcessesAfterBackoffElapsed|TestRetryGracefulShutdownOnCancel|TestRetryRunStopsOnContextCancel|TestRetryRunProcessesMultipleCycles|TestRetryEmptyQueue|TestRetryOnRetryCallback|TestTranscriptFilter|TestProxy|TestRetryRunner|TestBackgroundRetry|TestTranscriptImport|TestTranscriptList|TestTranscriptExport|TestScheduleCommand|TestStatusCommand|TestCancelCommand|TestScheduleStatusCancelWorkflow|TestCLI|TestRepoRoot|TestWriteFixture|TestFixtureDir|TestTempDataDir|TestWithEnv|TestRunCLIWithEnv|TestImporter"
 
+  skillctl-race:
+    name: skillctl Security Tests (-race)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Install PortAudio
+        run: brew install portaudio
+
+      # SPEC-0251 (P1, LOT D-ci): the skillctl trust layer is the highest-value
+      # security surface (install verification, signing/revocation, two-step
+      # install tokens) and also the largest concurrency surface (install-token
+      # HMAC key persistence, run/awareness state). The general unit-test job
+      # already runs ./pkg/... under -race, but ./cmd/skillctl/... — where the
+      # security-critical command wiring and e2e install tests live — was never
+      # exercised with the race detector. Run both explicitly, green-or-fail.
+      - name: Run skillctl security tests (-race)
+        run: go test -race -count=1 ./cmd/skillctl/... ./pkg/skillctl/...
+
   build-macos:
     name: Build macOS (arm64 + amd64)
     runs-on: macos-latest
