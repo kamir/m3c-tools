@@ -230,6 +230,113 @@ func TestSidecarRoundtrip(t *testing.T) {
 	}
 }
 
+// makeOversizedSkb builds a gzip+tar whose single entry decompresses to
+// `size` bytes of zeros. Zeros compress to a tiny .skb, so the on-disk fixture
+// stays small while the decompressed stream exceeds the extractor's ceiling.
+func makeOversizedSkb(name string, size int64) []byte {
+	var gz bytes.Buffer
+	gw := gzip.NewWriter(&gz)
+	tw := tar.NewWriter(gw)
+	_ = tw.WriteHeader(&tar.Header{Name: name + "/big.bin", Mode: 0644, Size: size, Typeflag: tar.TypeReg})
+	zeros := make([]byte, 1<<20) // 1 MiB chunk of zeros
+	for written := int64(0); written < size; {
+		n := int64(len(zeros))
+		if size-written < n {
+			n = size - written
+		}
+		_, _ = tw.Write(zeros[:n])
+		written += n
+	}
+	_ = tw.Close()
+	_ = gw.Close()
+	return gz.Bytes()
+}
+
+// makeSymlinkSkb builds a gzip+tar containing a symlink entry — extractSkb must
+// refuse it (SEC-M1).
+func makeSymlinkSkb(name string) []byte {
+	var gz bytes.Buffer
+	gw := gzip.NewWriter(&gz)
+	tw := tar.NewWriter(gw)
+	_ = tw.WriteHeader(&tar.Header{Name: name + "/evil", Mode: 0777, Typeflag: tar.TypeSymlink, Linkname: "/etc/passwd"})
+	_ = tw.Close()
+	_ = gw.Close()
+	return gz.Bytes()
+}
+
+// SEC-M1: an oversized .skb (decompresses past the byte ceiling) must abort
+// extraction rather than fill the disk.
+func TestExtractSkb_OversizedAborts(t *testing.T) {
+	skb := makeOversizedSkb("x", MaxExtractedBytes+(1<<20)) // 1 MiB over the cap
+	dst := t.TempDir()
+	err := extractSkb(skb, filepath.Join(dst, "out"))
+	if err == nil {
+		t.Fatal("expected extractSkb to abort on an oversized bundle")
+	}
+	if !contains(err.Error(), "exceeds") {
+		t.Fatalf("expected a size-ceiling error, got %v", err)
+	}
+}
+
+// SEC-M1: too many entries (tar bomb shape) must abort.
+func TestExtractSkb_TooManyFilesAborts(t *testing.T) {
+	var gz bytes.Buffer
+	gw := gzip.NewWriter(&gz)
+	tw := tar.NewWriter(gw)
+	for i := 0; i < MaxExtractedFiles+5; i++ {
+		b := []byte("x")
+		_ = tw.WriteHeader(&tar.Header{Name: fmt.Sprintf("pkg/f%d.txt", i), Mode: 0644, Size: int64(len(b)), Typeflag: tar.TypeReg})
+		_, _ = tw.Write(b)
+	}
+	_ = tw.Close()
+	_ = gw.Close()
+	err := extractSkb(gz.Bytes(), filepath.Join(t.TempDir(), "out"))
+	if err == nil || !contains(err.Error(), "entry count") {
+		t.Fatalf("expected an entry-count abort, got %v", err)
+	}
+}
+
+// SEC-M1: a symlink/hardlink entry must be refused.
+func TestExtractSkb_SymlinkRefused(t *testing.T) {
+	skb := makeSymlinkSkb("x")
+	err := extractSkb(skb, filepath.Join(t.TempDir(), "out"))
+	if err == nil || !contains(err.Error(), "symlink") {
+		t.Fatalf("expected symlink refusal, got %v", err)
+	}
+}
+
+// SEC-M9: a staged bundle whose Name is a path-traversal segment must be
+// refused before any write — installOne (via ConfirmInstall) must not escape
+// the skills dir.
+func TestInstall_TraversalNameRefused(t *testing.T) {
+	skillsDir := t.TempDir()
+	for _, bad := range []string{"../evil", "..", "a/b", "/abs", "a\\b", "../../etc/cron.d/x"} {
+		b := stagedFor(t, bad, "1.0.0", makeSkbTGZ("evil", "pwned"))
+		_, err := ConfirmInstall([]*StagedBundle{b}, "", InstallOpts{SkillsDir: skillsDir})
+		if err == nil || !errors.Is(err, ErrUnsafeBundleName) {
+			t.Fatalf("name %q: expected ErrUnsafeBundleName, got %v", bad, err)
+		}
+	}
+	// Nothing should have been written outside the skills dir.
+	if _, err := os.Stat(filepath.Join(filepath.Dir(skillsDir), "evil")); err == nil {
+		t.Fatal("traversal write escaped the skills dir")
+	}
+}
+
+// sanitizeBundleName unit coverage: safe names pass, unsafe ones fail.
+func TestSanitizeBundleName(t *testing.T) {
+	for _, ok := range []string{"fetch-contract", "my_skill", "a.b.c", "skill1"} {
+		if err := sanitizeBundleName(ok); err != nil {
+			t.Errorf("name %q should be allowed, got %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"", "..", ".", "../x", "a/b", "a\\b", "/abs", "x\x00y"} {
+		if err := sanitizeBundleName(bad); !errors.Is(err, ErrUnsafeBundleName) {
+			t.Errorf("name %q should be refused, got %v", bad, err)
+		}
+	}
+}
+
 // contains is the same as strings.Contains; spelled out to avoid an import.
 func contains(s, needle string) bool {
 	for i := 0; i+len(needle) <= len(s); i++ {

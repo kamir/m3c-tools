@@ -35,6 +35,17 @@ import (
 	"time"
 )
 
+// MaxExtractedBytes caps the total uncompressed size of an extracted bundle.
+// 100 MiB is wildly above any plausible skill (typical bundles are kilobytes);
+// the cap exists to defend against gzip / tar bombs that expand to many GB on
+// disk and exhaust the user's home volume before any audit can fire. Mirrors
+// pkg/skillctl/install.MaxExtractedBytes (SEC-M1).
+const MaxExtractedBytes int64 = 100 << 20
+
+// MaxExtractedFiles caps the number of entries we'll write before refusing — a
+// tarball with a million tiny files is also a bomb shape (SEC-M1).
+const MaxExtractedFiles = 10000
+
 // ProvenanceSchemaVersion is the schema_version stamped into .m3c-provenance.json.
 const ProvenanceSchemaVersion = "1.0.0"
 
@@ -79,11 +90,11 @@ type InstallOpts struct {
 
 // InstallResult reports what changed.
 type InstallResult struct {
-	SkillPath     string // ~/.claude/skills/<name>
+	SkillPath      string // ~/.claude/skills/<name>
 	ProvenancePath string
-	CreatedFresh  bool   // true if no <name>/ existed before
-	OverwroteOld  bool   // true if an existing <name>/ was replaced
-	OldDigest     string // if OverwroteOld, the previous sidecar's bundle_digest (or "" if unknown)
+	CreatedFresh   bool   // true if no <name>/ existed before
+	OverwroteOld   bool   // true if an existing <name>/ was replaced
+	OldDigest      string // if OverwroteOld, the previous sidecar's bundle_digest (or "" if unknown)
 }
 
 // G-23 destructive-op convention: overwriting an existing skill requires a
@@ -92,10 +103,10 @@ type InstallResult struct {
 
 // InstallPlan is the dry-run-install output.
 type InstallPlan struct {
-	Creates   []PlanRow `json:"creates"`
+	Creates    []PlanRow `json:"creates"`
 	Overwrites []PlanRow `json:"overwrites"`
-	IssuedAt  int64     `json:"issued_at"` // unix seconds; the token TTL anchor
-	Token     string    `json:"token"`     // opaque base64; clients pass it verbatim to ConfirmInstall
+	IssuedAt   int64     `json:"issued_at"` // unix seconds; the token TTL anchor
+	Token      string    `json:"token"`     // opaque base64; clients pass it verbatim to ConfirmInstall
 }
 
 // PlanRow is one skill entry in the plan.
@@ -154,6 +165,17 @@ func PlanInstall(bundles []*StagedBundle, skillsDir string) (*InstallPlan, error
 // caller's token matches, and only then writes. Drift in the create/overwrite
 // set ⇒ refuse with ErrPlanDrift. Stale token ⇒ refuse with ErrTokenExpired.
 func ConfirmInstall(bundles []*StagedBundle, providedToken string, opts InstallOpts) ([]*InstallResult, error) {
+	// SEC-M9: reject path-traversal / unsafe bundle names BEFORE the G-23
+	// overwrite/token gate. PlanInstall joins each name onto the skills dir, so a
+	// traversal name (e.g. "..") resolves to an existing parent dir and lands in
+	// plan.Overwrites — which would otherwise trip ErrTokenRequired and mask the
+	// real ErrUnsafeBundleName. Sanitizing first makes the name guard fail closed
+	// the instant a crafted name is seen, regardless of token state.
+	for _, b := range bundles {
+		if err := sanitizeBundleName(b.Name); err != nil {
+			return nil, err
+		}
+	}
 	plan, err := PlanInstall(bundles, opts.SkillsDir)
 	if err != nil {
 		return nil, err
@@ -276,8 +298,47 @@ func installTokenKey() []byte {
 	return installTokenKeyValue
 }
 
+// ErrUnsafeBundleName is returned when a staged bundle's Name would escape the
+// skills directory if joined into a path (SEC-M9 path-traversal guard).
+var ErrUnsafeBundleName = errors.New("install: bundle name is unsafe (path separators, traversal, or absolute path)")
+
+// sanitizeBundleName fail-closed-rejects a bundle name that could escape the
+// skills directory when passed to filepath.Join. Mirrors the gate's name guard
+// (registry.validateNameSafe): no '/', '\\', NUL, '..' segments, no absolute
+// path, no leading dot-dot. The name must be a single safe path component.
+func sanitizeBundleName(name string) error {
+	if name == "" {
+		return fmt.Errorf("%w: empty name", ErrUnsafeBundleName)
+	}
+	if strings.ContainsAny(name, "/\\\x00") {
+		return fmt.Errorf("%w: %q contains a path separator or NUL", ErrUnsafeBundleName, name)
+	}
+	for _, r := range name {
+		if r < 0x20 || r == 0x7f {
+			return fmt.Errorf("%w: %q contains control characters", ErrUnsafeBundleName, name)
+		}
+	}
+	if name == ".." || name == "." || strings.HasPrefix(name, "..") {
+		return fmt.Errorf("%w: %q is a traversal segment", ErrUnsafeBundleName, name)
+	}
+	if filepath.IsAbs(name) {
+		return fmt.Errorf("%w: %q is an absolute path", ErrUnsafeBundleName, name)
+	}
+	// Defense in depth: a cleaned name must remain a single component that does
+	// not climb out of a directory.
+	if clean := filepath.Clean(name); clean != name || strings.Contains(clean, string(filepath.Separator)) {
+		return fmt.Errorf("%w: %q does not clean to a single safe component", ErrUnsafeBundleName, name)
+	}
+	return nil
+}
+
 // installOne does the actual unpack + sidecar write for one staged bundle.
 func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
+	// SEC-M9: refuse an unsanitized bundle name before any filepath.Join so a
+	// crafted name (e.g. "../../etc") cannot write outside the skills dir.
+	if err := sanitizeBundleName(b.Name); err != nil {
+		return nil, err
+	}
 	skillsDir := opts.SkillsDir
 	if skillsDir == "" {
 		skillsDir = defaultSkillsDir()
@@ -379,47 +440,12 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 	return res, nil
 }
 
-// skbWrapperPrefix returns "<dir>/" if EVERY regular-file entry in the archive
-// lives under one single top-level directory (a wrapped bundle), else "". Used
-// so extractSkb handles both the canonical FLAT layout (pack.go) and wrapped
-// archives without mangling either. Reads the archive bytes independently of
-// the extraction pass.
-func skbWrapperPrefix(skb []byte) (string, error) {
-	gzr, err := gzip.NewReader(bytes.NewReader(skb))
-	if err != nil {
-		return "", fmt.Errorf("gunzip: %w", err)
-	}
-	defer gzr.Close()
-	tr := tar.NewReader(gzr)
-	seg := ""
-	any := false
-	for {
-		hdr, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return "", fmt.Errorf("tar next: %w", err)
-		}
-		if hdr.Typeflag != tar.TypeReg {
-			continue
-		}
-		name := strings.TrimPrefix(filepath.Clean("/"+hdr.Name), "/")
-		i := strings.Index(name, "/")
-		if i < 0 {
-			return "", nil // a root-level file → not wrapped → flat
-		}
-		first := name[:i]
-		if !any {
-			seg, any = first, true
-		} else if first != seg {
-			return "", nil // more than one top-level segment → flat
-		}
-	}
-	if any && seg != "" {
-		return seg + "/", nil
-	}
-	return "", nil
+// skbEntry is one in-memory tar entry collected during the single
+// decompression pass extractSkb performs.
+type skbEntry struct {
+	rel     string // sanitized, wrapper-relative path
+	isDir   bool
+	content []byte // file body (regular files only)
 }
 
 // extractSkb extracts a SPEC-0188 §3.1-shaped bundle (gzip + tar) into
@@ -431,6 +457,16 @@ func skbWrapperPrefix(skb []byte) (string, error) {
 // the skill even when a bundle stored a lower/mixed-case "skill.md" (a
 // case-insensitive-filesystem publish artifact). Normalizing only the written
 // filename leaves the verified bundle bytes/digest untouched.
+//
+// SEC-M1 hardening (mirrors pkg/skillctl/install.extractTGZ):
+//   - decompresses the archive exactly ONCE — wrapper detection reads the
+//     in-memory entry list, not a second gzip pass;
+//   - enforces a running uncompressed-byte ceiling (MaxExtractedBytes) and a
+//     file-count cap (MaxExtractedFiles) to defeat gzip/tar bombs;
+//   - per-entry io.LimitReader so a single lying header can't blow the budget;
+//   - refuses symlinks and hardlinks (a post-rename escape vector);
+//   - opens files with O_EXCL (no O_TRUNC) so a duplicate/colliding entry
+//     fails closed instead of silently overwriting.
 func extractSkb(skb []byte, target string) error {
 	gzr, err := gzip.NewReader(bytes.NewReader(skb))
 	if err != nil {
@@ -439,25 +475,65 @@ func extractSkb(skb []byte, target string) error {
 	defer gzr.Close()
 	cleanTarget := filepath.Clean(target)
 
-	// The canonical format (pkg/skillbundle/pack.go) is FLAT, but some
-	// producers/fixtures wrap everything in a single top-level dir. Detect a
-	// common wrapper in a first pass and strip it; otherwise extract flat.
-	wrapper, err := skbWrapperPrefix(skb)
-	if err != nil {
-		return err
-	}
-
+	// Single decompression pass: collect bounded entries into memory. The byte
+	// ceiling bounds total memory; the file-count cap bounds entry count.
 	tr := tar.NewReader(gzr)
+	var entries []skbEntry
+	var written int64
+	var count int
 	for {
 		hdr, err := tr.Next()
 		if errors.Is(err, io.EOF) {
-			return nil
+			break
 		}
 		if err != nil {
 			return fmt.Errorf("tar next: %w", err)
 		}
+		count++
+		if count > MaxExtractedFiles {
+			return fmt.Errorf("tar entry count exceeds %d (likely a tar bomb)", MaxExtractedFiles)
+		}
 		// Sanitize the entry path (strip any leading "/", collapse "..").
 		rel := strings.TrimPrefix(filepath.Clean("/"+hdr.Name), "/")
+		if rel == "" || rel == "." {
+			continue
+		}
+		switch hdr.Typeflag {
+		case tar.TypeDir:
+			entries = append(entries, skbEntry{rel: rel, isDir: true})
+		case tar.TypeReg:
+			remaining := MaxExtractedBytes - written
+			if remaining <= 0 {
+				return fmt.Errorf("extracted size exceeds %d bytes (likely a gzip bomb)", MaxExtractedBytes)
+			}
+			var buf bytes.Buffer
+			// LimitReader to remaining+1 so an over-budget entry is detected.
+			n, err := io.Copy(&buf, io.LimitReader(tr, remaining+1))
+			if err != nil {
+				return fmt.Errorf("tar read %q: %w", hdr.Name, err)
+			}
+			if n > remaining {
+				return fmt.Errorf("extracted size exceeds %d bytes (likely a gzip bomb)", MaxExtractedBytes)
+			}
+			written += n
+			entries = append(entries, skbEntry{rel: rel, content: buf.Bytes()})
+		case tar.TypeSymlink, tar.TypeLink:
+			// SPEC-0188 v1: refuse symlinks/hardlinks — they point into / out of
+			// the install dir post-rename.
+			return fmt.Errorf("tar entry %q is a symlink/hardlink (refused)", hdr.Name)
+		default:
+			// Devices, fifos, etc. — refuse.
+			return fmt.Errorf("tar entry %q has unsupported type 0x%x", hdr.Name, hdr.Typeflag)
+		}
+	}
+
+	// Determine a common single top-level wrapper dir from the collected names
+	// (no second decompression). The canonical format is FLAT; some producers
+	// wrap everything in one dir.
+	wrapper := wrapperPrefixFromEntries(entries)
+
+	for _, e := range entries {
+		rel := e.rel
 		if wrapper != "" {
 			rel = strings.TrimPrefix(rel, wrapper)
 		}
@@ -470,28 +546,59 @@ func extractSkb(skb []byte, target string) error {
 		}
 		dst := filepath.Join(cleanTarget, rel)
 		if dst != cleanTarget && !strings.HasPrefix(dst, cleanTarget+string(os.PathSeparator)) {
-			return fmt.Errorf("tar escape attempt: %q", hdr.Name)
+			return fmt.Errorf("tar escape attempt: %q", e.rel)
 		}
-		switch hdr.Typeflag {
-		case tar.TypeDir:
+		if e.isDir {
 			if err := os.MkdirAll(dst, 0o755); err != nil {
 				return err
 			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-				return err
-			}
-			out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
-			if err != nil {
-				return err
-			}
-			if _, err := io.Copy(out, tr); err != nil {
-				_ = out.Close()
-				return err
-			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return err
+		}
+		// O_EXCL: a colliding/duplicate entry fails closed instead of silently
+		// truncating a prior write.
+		out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o644)
+		if err != nil {
+			return err
+		}
+		if _, err := out.Write(e.content); err != nil {
 			_ = out.Close()
+			return err
+		}
+		if err := out.Close(); err != nil {
+			return err
 		}
 	}
+	return nil
+}
+
+// wrapperPrefixFromEntries returns "<dir>/" if EVERY regular-file entry lives
+// under one single top-level directory (a wrapped bundle), else "". Operates on
+// the already-decompressed entry list so extractSkb decompresses only once.
+func wrapperPrefixFromEntries(entries []skbEntry) string {
+	seg := ""
+	any := false
+	for _, e := range entries {
+		if e.isDir {
+			continue
+		}
+		i := strings.Index(e.rel, "/")
+		if i < 0 {
+			return "" // a root-level file → flat
+		}
+		first := e.rel[:i]
+		if !any {
+			seg, any = first, true
+		} else if first != seg {
+			return "" // more than one top-level segment → flat
+		}
+	}
+	if any && seg != "" {
+		return seg + "/"
+	}
+	return ""
 }
 
 func defaultSkillsDir() string {

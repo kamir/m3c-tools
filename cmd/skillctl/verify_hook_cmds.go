@@ -349,8 +349,8 @@ func isManagedSkill(name string) (bool, string) {
 // --- gate policy (SPEC-0247 §9) ---
 
 type gatePolicy struct {
-	Unmanaged            string   `yaml:"unmanaged_skills"`      // allow | warn | deny
-	Allowlist            []string `yaml:"allowlist"`             // names always allowed
+	Unmanaged            string   `yaml:"unmanaged_skills"`       // allow | warn | deny
+	Allowlist            []string `yaml:"allowlist"`              // names always allowed
 	ManagedMinGovernance string   `yaml:"managed_min_governance"` // green | yellow
 }
 

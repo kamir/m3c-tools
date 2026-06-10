@@ -428,6 +428,159 @@ func TestShowSkill_RendersTimeline(t *testing.T) {
 	}
 }
 
+// mintForgedAttestItem builds an attestation ER1 item whose envelope_signature
+// does NOT verify against the trust-roots key: it signs the event normally and
+// then rewrites governance_level (modelling an attacker upgrading a yellow
+// verdict to green). The canonical bytes no longer match the signature, so a
+// correct verifier (SEC-H1) must drop this verdict.
+func mintForgedAttestItem(t *testing.T, priv ed25519.PrivateKey, name, version, digest, signedLevel, forgedLevel, rationale string) map[string]any {
+	t.Helper()
+	ev, err := BuildAttestationPublishedEvent(AttestedEventInput{
+		BundleDigest:    digest,
+		ReviewerID:      "id:test@m3c",
+		GovernanceLevel: signedLevel,
+		Rationale:       rationale,
+		OccurredAt:      testTime(),
+	})
+	if err != nil {
+		t.Fatalf("Build attest: %v", err)
+	}
+	if _, err := SignEnvelopeSignature(priv, ev); err != nil {
+		t.Fatalf("Sign attest: %v", err)
+	}
+	// Tamper AFTER signing — the envelope_signature now covers signedLevel, not
+	// forgedLevel.
+	ev["governance_level"] = forgedLevel
+	body := renderTestEventBody(ev, "attested")
+	tags := strings.Join([]string{
+		"m3c-skill-bundle",
+		"skill:" + name,
+		"skill-version:" + name + "@" + version,
+		"skill-digest:" + digest,
+		"skill-event:" + EventKindAttested,
+		"skill-registry:self",
+		"governance:" + forgedLevel,
+	}, ",")
+	return map[string]any{
+		"doc_id":     "attest-forged-" + version,
+		"tags":       tags,
+		"transcript": body,
+	}
+}
+
+// mintUnsignedRevokeItem builds a revoke ER1 item with NO envelope_signature
+// (an attacker fabricating a revocation to suppress a legit bundle). SEC-H1
+// must drop it.
+func mintUnsignedRevokeItem(t *testing.T, name, version, digest, reason string) map[string]any {
+	t.Helper()
+	ev, err := BuildBundleRevokedEvent(RevokedEventInput{
+		BundleDigest: digest,
+		ReasonCode:   reason,
+		RevokedBy:    "id:attacker@evil",
+		OccurredAt:   testTime(),
+	})
+	if err != nil {
+		t.Fatalf("Build revoke: %v", err)
+	}
+	// Deliberately do NOT sign the envelope.
+	body := renderTestEventBody(ev, "revoked")
+	tags := strings.Join([]string{
+		"m3c-skill-bundle",
+		"skill:" + name,
+		"skill-version:" + name + "@" + version,
+		"skill-digest:" + digest,
+		"skill-event:" + EventKindRevoked,
+		"skill-registry:self",
+	}, ",")
+	return map[string]any{
+		"doc_id":     "revoke-unsigned-" + version,
+		"tags":       tags,
+		"transcript": body,
+	}
+}
+
+// SEC-H1: a forged green attestation (envelope_signature does not verify) over
+// a bundle must NOT satisfy the governance floor — the verdict is dropped and
+// the bundle is rejected at Gate 4.
+func TestPullBundles_ForgedGreenAttestation_RejectedAtGate4(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	f := newPullFake(t)
+	admit, digest := mintAdmitItem(t, priv, "x", "1.0.0", "skb")
+	// Attacker rewrites a yellow verdict to green AFTER signing.
+	forged := mintForgedAttestItem(t, priv, "x", "1.0.0", digest, "yellow", "green", "forged")
+	f.addItem(admit)
+	f.addItem(forged)
+
+	trPath := writeTrustRoots(t, pub) // governance_minimum: green
+	tr, _ := LoadSelfTrustRoots(trPath)
+	t.Setenv("M3C_SKILL_CACHE_DIR", t.TempDir())
+
+	res, err := PullBundles(f.cfg(), "skills", tr, PullOpts{})
+	if err != nil {
+		t.Fatalf("PullBundles: %v", err)
+	}
+	if len(res.Staged) != 0 {
+		t.Fatalf("forged attestation must not stage a bundle; staged=%+v", res.Staged)
+	}
+	if len(res.Skipped) != 1 || !errors.Is(res.Skipped[0].Gate, ErrGateGovernance) {
+		t.Fatalf("expected ErrGateGovernance (forged verdict dropped), got %+v", res.Skipped)
+	}
+}
+
+// SEC-H1: a forged green attestation must not even shadow a real, lower-rank
+// signed attestation — only signed verdicts count toward the floor.
+func TestPullBundles_OnlySignedAttestationsCountTowardFloor(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	f := newPullFake(t)
+	admit, digest := mintAdmitItem(t, priv, "x", "1.0.0", "skb")
+	// Real signed verdict is yellow; attacker also publishes a forged green.
+	realYellow := mintAttestItem(t, priv, "x", "1.0.0", digest, "yellow", "ok")
+	forgedGreen := mintForgedAttestItem(t, priv, "x", "1.0.0", digest, "yellow", "green", "forged")
+	f.addItem(admit)
+	f.addItem(realYellow)
+	f.addItem(forgedGreen)
+
+	trPath := writeTrustRoots(t, pub) // floor is green; only the real yellow survives → fails floor
+	tr, _ := LoadSelfTrustRoots(trPath)
+	t.Setenv("M3C_SKILL_CACHE_DIR", t.TempDir())
+
+	res, err := PullBundles(f.cfg(), "skills", tr, PullOpts{})
+	if err != nil {
+		t.Fatalf("PullBundles: %v", err)
+	}
+	if len(res.Staged) != 0 {
+		t.Fatalf("forged green must not lift a yellow bundle over the green floor; staged=%+v", res.Staged)
+	}
+	if len(res.Skipped) != 1 || !errors.Is(res.Skipped[0].Gate, ErrGateGovernance) {
+		t.Fatalf("expected ErrGateGovernance, got %+v", res.Skipped)
+	}
+}
+
+// SEC-H1 (revoke side): an UNSIGNED revocation must not suppress a legitimately
+// attested bundle — the forged revoke is dropped and the bundle still stages.
+func TestPullBundles_UnsignedRevoke_DoesNotSuppress(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	f := newPullFake(t)
+	admit, digest := mintAdmitItem(t, priv, "x", "1.0.0", "skb")
+	attest := mintAttestItem(t, priv, "x", "1.0.0", digest, "green", "ok")
+	forgedRevoke := mintUnsignedRevokeItem(t, "x", "1.0.0", digest, "malicious")
+	f.addItem(admit)
+	f.addItem(attest)
+	f.addItem(forgedRevoke)
+
+	trPath := writeTrustRoots(t, pub)
+	tr, _ := LoadSelfTrustRoots(trPath)
+	t.Setenv("M3C_SKILL_CACHE_DIR", t.TempDir())
+
+	res, err := PullBundles(f.cfg(), "skills", tr, PullOpts{})
+	if err != nil {
+		t.Fatalf("PullBundles: %v", err)
+	}
+	if len(res.Staged) != 1 {
+		t.Fatalf("an unsigned revoke must NOT suppress a valid bundle; staged=%d skipped=%+v", len(res.Staged), res.Skipped)
+	}
+}
+
 // keep the io import nominally referenced (used implicitly via the test
 // helpers and the httptest server elsewhere).
 var _ = io.Discard

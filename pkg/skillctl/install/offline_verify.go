@@ -8,12 +8,15 @@ package install
 // network by stashing the registry's metadata at install time and reading it
 // back from disk.
 //
-// It also closes a gap the online verifier shares: verify.Verify checks the
-// .skb's OWN signature + digest, but NOT that the extracted on-disk files (the
-// SKILL.md Claude actually loads) still match that signed .skb. So editing the
-// body post-install would pass verify. verifyExtractedMatchesBlob re-reads the
-// signature-verified .skb and asserts every on-disk file byte-matches it —
-// making "edited body → exit 10" (SPEC-0247 AC-1) actually hold.
+// It also defines the content-binding shared by EVERY managed-verify path:
+// verify.Verify checks the .skb's OWN signature + digest, but NOT that the
+// extracted on-disk files (the SKILL.md Claude actually loads) still match that
+// signed .skb. So editing the body post-install would pass verify alone.
+// verifyExtractedMatchesBlob re-reads the signature-verified .skb and asserts
+// every on-disk file byte-matches it — making "edited body → exit 10"
+// (SPEC-0247 AC-1) actually hold. SEC-M4: install.VerifyInstalled (the ONLINE
+// path) now calls it unconditionally too, so the binding is enforced online +
+// offline + sidecar.
 //
 // Offline tradeoff: a revocation or governance change posted AFTER install is
 // not seen (the stashed identity's RevokedAt is frozen at install). The online
@@ -168,14 +171,15 @@ func VerifyInstalledOffline(opts Opts) (*verify.VerifyResult, error) {
 // SPEC-0188 registry envelope. With no signature bytes on hand (the sidecar
 // stores only fingerprints), the offline checks available are:
 //
-//   - content-binding: if the .skb was stashed (pull path post-SPEC-0247), the
-//     extracted on-disk body MUST byte-match it → catches tampering (exit 10);
+//   - content-binding: the stashed .skb is the canonical body, and the
+//     extracted on-disk files MUST byte-match it → catches tampering (exit 10).
+//     This is MANDATORY: a sidecar with NO stashed .skb has a fully unverified
+//     body, so it FAILS CLOSED (exit 10) rather than passing on governance +
+//     fingerprint alone (SEC-M5);
 //   - governance floor: the attested level MUST meet the trust-root minimum
 //     (exit 13).
 //
 // Returns registry.ErrNoSidecar when there is no sidecar (caller falls back).
-// The trust-roots-fingerprint match (registry-trust gate) is a follow-up — it
-// needs the SPEC-0225 pull trust-roots loader.
 func VerifyInstalledSidecar(opts Opts) error {
 	if opts.Name == "" {
 		return errors.New("verify-sidecar: Name is required")
@@ -198,11 +202,17 @@ func VerifyInstalledSidecar(opts Opts) error {
 		return fmt.Errorf("verify-sidecar: parse provenance: %w", err)
 	}
 
-	// Content-binding when a .skb is present (always, for pulls post-SPEC-0247).
-	if skbPath, err := findStashedSkb(target); err == nil {
-		if err := verifyExtractedMatchesBlob(skbPath, target); err != nil {
-			return err // verify.ErrDigestMismatch
-		}
+	// SEC-M5: content-binding is MANDATORY for any sidecar PASS. Without a
+	// stashed .skb the on-disk body is fully unverified — there is no canonical
+	// blob to compare against — so we FAIL CLOSED (exit 10) instead of trusting
+	// governance + fingerprint alone. A present .skb is byte-matched against the
+	// extraction; any mismatch is verify.ErrDigestMismatch.
+	skbPath, err := findStashedSkb(target)
+	if err != nil {
+		return fmt.Errorf("verify-sidecar: no stashed .skb to bind the on-disk body to (body unverified, refusing): %w", verify.ErrDigestMismatch)
+	}
+	if err := verifyExtractedMatchesBlob(skbPath, target); err != nil {
+		return err // verify.ErrDigestMismatch
 	}
 
 	// Registry-trust gate (SPEC-0247 OQ-5): the provenance records the
@@ -276,6 +286,13 @@ func findStashedSkb(target string) (string, error) {
 // byte-matches the on-disk extraction, and that no unexpected regular file was
 // added. Any mismatch / missing / extra maps to verify.ErrDigestMismatch (exit
 // 10) — i.e. "the body Claude would load is not what was signed."
+//
+// SEC-M1/M6: this runs on the HOT per-invocation gate path (every skill use),
+// so the gzip+tar walk MUST be bounded against a decompression bomb. Each entry
+// is read through an io.LimitReader against a running total with a 100 MiB
+// ceiling (MaxExtractedBytes) plus a file-count cap (MaxExtractedFiles), the
+// same caps install.go's extractTGZ enforces. An overrun aborts with
+// verify.ErrDigestMismatch (the body cannot be what was signed).
 func verifyExtractedMatchesBlob(skbPath, target string) error {
 	blob, err := os.ReadFile(skbPath)
 	if err != nil {
@@ -288,7 +305,14 @@ func verifyExtractedMatchesBlob(skbPath, target string) error {
 	defer gz.Close()
 	tr := tar.NewReader(gz)
 
-	expected := map[string]bool{}
+	// Pass 1: stream every regular bundle entry through a capped reader, hashing
+	// it. We key the resulting digests by the cleaned tar path; the on-disk
+	// reconciliation (and any top-level-dir stripping) happens after, once we
+	// know all entries. Hashes are 32 bytes each, so the map is bounded by the
+	// file-count cap — the byte ceiling guards the per-entry reads themselves.
+	var read int64
+	var entries int
+	bundleDigests := map[string][]byte{}
 	for {
 		hdr, err := tr.Next()
 		if errors.Is(err, io.EOF) {
@@ -300,22 +324,52 @@ func verifyExtractedMatchesBlob(skbPath, target string) error {
 		if hdr.Typeflag != tar.TypeReg && hdr.Typeflag != tar.TypeRegA {
 			continue
 		}
+		entries++
+		if entries > MaxExtractedFiles {
+			return fmt.Errorf("%w: bundle entry count exceeds %d (likely a tar bomb)", verify.ErrDigestMismatch, MaxExtractedFiles)
+		}
 		clean := filepath.Clean(hdr.Name)
 		if strings.HasPrefix(clean, "..") || filepath.IsAbs(clean) {
 			return fmt.Errorf("%w: bundle entry %q escapes", verify.ErrDigestMismatch, hdr.Name)
 		}
-		expected[clean] = true
 
+		// Cap this entry's read against the remaining global budget. LimitReader
+		// to remaining+1 so we can detect (n > remaining) → overrun, exactly as
+		// install.go's extractTGZ does.
+		remaining := MaxExtractedBytes - read
+		if remaining <= 0 {
+			return fmt.Errorf("%w: extracted size exceeds %d bytes (likely a gzip bomb)", verify.ErrDigestMismatch, MaxExtractedBytes)
+		}
 		want := sha256.New()
-		if _, err := io.Copy(want, tr); err != nil {
+		n, err := io.Copy(want, io.LimitReader(tr, remaining+1))
+		if err != nil {
 			return fmt.Errorf("%w: read bundle entry %q: %v", verify.ErrDigestMismatch, clean, err)
 		}
-		got, err := fileSHA(filepath.Join(target, clean))
-		if err != nil {
-			return fmt.Errorf("%w: installed file %q missing/unreadable: %v", verify.ErrDigestMismatch, clean, err)
+		if n > remaining {
+			return fmt.Errorf("%w: extracted size exceeds %d bytes (likely a gzip bomb)", verify.ErrDigestMismatch, MaxExtractedBytes)
 		}
-		if !bytes.Equal(want.Sum(nil), got) {
-			return fmt.Errorf("%w: installed file %q does not match the signed bundle", verify.ErrDigestMismatch, clean)
+		read += n
+		bundleDigests[clean] = want.Sum(nil)
+	}
+
+	// SPEC §3.1 tars carry a single top-level <name>-<version>/ dir, which the
+	// installer strips when it renames the bundle into place (resolveBundleTopLevel).
+	// Mirror that here so the bundle paths line up with the flat on-disk layout;
+	// flat bundles (no common top-level dir) are left untouched.
+	prefix := commonTopLevelDir(bundleDigests)
+	expected := make(map[string]bool, len(bundleDigests))
+	for name, want := range bundleDigests {
+		rel := name
+		if prefix != "" {
+			rel = filepath.Clean(strings.TrimPrefix(name, prefix+string(filepath.Separator)))
+		}
+		expected[rel] = true
+		got, err := fileSHA(filepath.Join(target, rel))
+		if err != nil {
+			return fmt.Errorf("%w: installed file %q missing/unreadable: %v", verify.ErrDigestMismatch, rel, err)
+		}
+		if !bytes.Equal(want, got) {
+			return fmt.Errorf("%w: installed file %q does not match the signed bundle", verify.ErrDigestMismatch, rel)
 		}
 	}
 
@@ -338,6 +392,32 @@ func verifyExtractedMatchesBlob(skbPath, target string) error {
 		}
 		return nil
 	})
+}
+
+// commonTopLevelDir returns the single top-level directory component shared by
+// every bundle path, or "" when there is none (a flat bundle, or entries spread
+// across multiple top-level dirs). This mirrors install.go's resolveBundleTopLevel
+// so content-binding compares against the same flat layout the installer wrote.
+func commonTopLevelDir(paths map[string][]byte) string {
+	if len(paths) == 0 {
+		return ""
+	}
+	prefix := ""
+	for name := range paths {
+		first := name
+		if i := strings.IndexRune(name, filepath.Separator); i >= 0 {
+			first = name[:i]
+		} else {
+			// A file sitting at the bundle root → no shared top-level dir.
+			return ""
+		}
+		if prefix == "" {
+			prefix = first
+		} else if prefix != first {
+			return ""
+		}
+	}
+	return prefix
 }
 
 func fileSHA(p string) ([]byte, error) {

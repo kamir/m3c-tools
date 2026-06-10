@@ -38,6 +38,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 // pemTypePrivate is the PEM block type written for ed25519 private keys.
@@ -150,9 +151,17 @@ func LoadPrivateKey(path string) (ed25519.PrivateKey, error) {
 	if err != nil {
 		return nil, fmt.Errorf("private key: stat %s: %w", path, err)
 	}
-	// Mask off the type bits; we only care about the permission bits.
-	if mode := st.Mode().Perm(); mode&0o077 != 0 {
-		return nil, fmt.Errorf("private key %s has insecure mode %#o; expected 0600 — fix with `chmod 600 %s`", path, mode, path)
+	// POSIX permission bits are not meaningful on Windows: Go's os package
+	// synthesizes a mode (typically 0666/0444 from the read-only attribute)
+	// that does not reflect ACL-based access control, so a key written with
+	// 0600 reads back as 0666 and would spuriously trip this check —
+	// breaking publish/attest/revoke/pull --install. Skip the strict 0077
+	// check there; on POSIX it stays fail-closed. Mask off the type bits; we
+	// only care about the permission bits.
+	if runtime.GOOS != "windows" {
+		if mode := st.Mode().Perm(); mode&0o077 != 0 {
+			return nil, fmt.Errorf("private key %s has insecure mode %#o; expected 0600 — fix with `chmod 600 %s`", path, mode, path)
+		}
 	}
 
 	data, err := os.ReadFile(path)

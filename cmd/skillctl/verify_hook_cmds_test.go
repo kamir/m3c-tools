@@ -230,6 +230,46 @@ func TestVerifyHook_SidecarSkill_IsManaged(t *testing.T) {
 	assertDeny(t, code, out, "governance below required minimum")
 }
 
+// SEC-M4: when the offline tier is unavailable (legacy install, no stash) the
+// hook falls back to the ONLINE chain (install.VerifyInstalled). That chain now
+// runs content-binding unconditionally, so an edited body surfaces as exit 10.
+// Here we drive that wiring through the seam: offline unavailable + online
+// returns the digest-mismatch verdict → the hook must DENY (exit 2) and cite it.
+func TestVerifyHook_OnlinePath_EditedBody_Denies(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, ".claude", "skills", "online-edited")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "online-edited.skb"), []byte("blob"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Offline tier reports "not available" → force the online fallback.
+	origOff := verifyManagedOfflineFn
+	verifyManagedOfflineFn = func(string, gatePolicy, string) (int, string, bool) { return 0, "", false }
+	t.Cleanup(func() { verifyManagedOfflineFn = origOff })
+
+	// Online chain returns the SEC-M4 content-binding verdict.
+	onlineCalls := 0
+	origOn := verifyManagedFn
+	verifyManagedFn = func(string, gatePolicy) (int, string) {
+		onlineCalls++
+		return 10, "bundle modified after signing (digest mismatch)"
+	}
+	t.Cleanup(func() { verifyManagedFn = origOn })
+
+	code, out, _ := feed(t, `{"tool_name":"Skill","tool_input":{"skill":"online-edited"}}`)
+	assertDeny(t, code, out, "digest mismatch")
+	if onlineCalls != 1 {
+		t.Fatalf("online chain must be consulted once on offline-unavailable, got %d", onlineCalls)
+	}
+	if !strings.Contains(out, "exit 10") {
+		t.Fatalf("deny reason must cite exit 10, got %q", out)
+	}
+}
+
 func TestSkillID_FallbackOrder(t *testing.T) {
 	cases := []struct {
 		in   hookToolInput

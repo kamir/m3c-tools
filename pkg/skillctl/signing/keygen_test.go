@@ -54,6 +54,46 @@ func TestGenerate_HappyPath(t *testing.T) {
 	}
 }
 
+// TestKeygenRoundTrip exercises the full Generate → LoadPrivateKey →
+// LoadPublicKey → Sign → Verify cycle on the CURRENT GOOS. On Windows this is
+// the regression guard for SEC-WIN: Go reports a 0600-written key back as
+// 0666, so before the runtime.GOOS guard LoadPrivateKey rejected every key on
+// Windows as "insecure mode" and publish/attest/revoke/pull --install all
+// failed. The test name matches the windows-gate `-run 'RoundTrip'` filter so
+// it runs on the real windows-latest runner.
+func TestKeygenRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "rt-key")
+
+	if err := Generate(out); err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+
+	loadedPriv, err := LoadPrivateKey(out + ".priv")
+	if err != nil {
+		// On Windows the os mode bits do not reflect ACLs; LoadPrivateKey
+		// must not reject the freshly generated key on that ground.
+		t.Fatalf("LoadPrivateKey on GOOS=%s: %v", runtime.GOOS, err)
+	}
+	loadedPub, err := LoadPublicKey(out + ".pub")
+	if err != nil {
+		t.Fatalf("LoadPublicKey: %v", err)
+	}
+
+	msg := make([]byte, 64)
+	if _, err := rand.Read(msg); err != nil {
+		t.Fatal(err)
+	}
+	sig := ed25519.Sign(loadedPriv, msg)
+	if !ed25519.Verify(loadedPub, msg, sig) {
+		t.Fatal("ed25519.Verify failed on round-tripped keypair")
+	}
+	// The loaded public key must match the private key's embedded public half.
+	if !loadedPub.Equal(loadedPriv.Public()) {
+		t.Fatal("loaded public key does not match private key's public half")
+	}
+}
+
 func TestGenerate_RefusesOverwrite(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "key")

@@ -13,6 +13,14 @@ set -euo pipefail
 RELEASE_BASE="${RELEASE_BASE:-https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.2.1}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 
+# SEC-M2: pin the release-key fingerprint. The signature alone proves only that
+# SHA256SUMS was signed by WHATEVER key sits next to it at the same origin — an
+# origin compromise can swap key + sig + binaries together and still "verify".
+# Pinning the expected fingerprint here (and preferring the in-repo key below)
+# closes that hole: the fetched key must match this exact value or we refuse.
+# Fingerprint = sha256 of the raw 32-byte ed25519 key (DER SPKI tail).
+EXPECTED_FP="sha256:5f8f39cb0454dcd8ac04c6729af2fa4b71a13a5e125e56924701d9e38187a9c2"
+
 # sha256: prefer sha256sum (Linux/coreutils), fall back to shasum -a 256 (macOS).
 sha256() {
   if command -v sha256sum >/dev/null 2>&1; then sha256sum "$@"
@@ -47,16 +55,41 @@ fetch SHA256SUMS
 fetch SHA256SUMS.sig
 fetch skillctl-release.pub
 
+# SEC-M2: prefer the in-repo, version-controlled release key when this script
+# runs from a checkout — it is reviewed and cannot be swapped by an origin
+# compromise. Search a few likely roots relative to the script location.
+script_dir=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" && pwd 2>/dev/null || echo "")
+pubkey="$tmp/skillctl-release.pub"
+for cand in \
+  "$script_dir/../INFRA/skillctl-release.pub" \
+  "$script_dir/INFRA/skillctl-release.pub" \
+  "$script_dir/skillctl-release.pub"; do
+  if [ -f "$cand" ]; then
+    echo "Using in-repo release key: $cand"
+    pubkey="$cand"
+    break
+  fi
+done
+
 echo "Verifying ed25519 signature over SHA256SUMS (provenance)"
-if ! openssl pkeyutl -verify -pubin -inkey "$tmp/skillctl-release.pub" -rawin \
+if ! openssl pkeyutl -verify -pubin -inkey "$pubkey" -rawin \
        -in "$tmp/SHA256SUMS" -sigfile "$tmp/SHA256SUMS.sig" >/dev/null 2>&1; then
   echo "SIGNATURE VERIFICATION FAILED — refusing to install" >&2
   exit 1
 fi
 # Fingerprint = sha256 of the raw 32-byte ed25519 key (DER SPKI tail) — the
 # same derivation used for trust-roots + the published K-release fingerprint.
-fp=$(openssl pkey -pubin -in "$tmp/skillctl-release.pub" -outform DER 2>/dev/null | tail -c 32 | sha256 | awk '{print "sha256:"$1}')
-echo "OK: signed by the skillctl release key ($fp)"
+fp=$(openssl pkey -pubin -in "$pubkey" -outform DER 2>/dev/null | tail -c 32 | sha256 | awk '{print "sha256:"$1}')
+# SEC-M2: fail closed unless the key's fingerprint matches the pinned value.
+# Without this, a signature that merely verifies against a co-located key would
+# pass — defeating the point of signing.
+if [ "$fp" != "$EXPECTED_FP" ]; then
+  echo "RELEASE KEY FINGERPRINT MISMATCH — refusing to install" >&2
+  echo "  expected: $EXPECTED_FP" >&2
+  echo "  got:      $fp" >&2
+  exit 1
+fi
+echo "OK: signed by the pinned skillctl release key ($fp)"
 
 echo "Fetching $asset"
 fetch "$asset"

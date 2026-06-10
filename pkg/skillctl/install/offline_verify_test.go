@@ -15,6 +15,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -124,7 +125,7 @@ func TestContentBinding_IgnoresSkbAndStash(t *testing.T) {
 func TestStashRoundTrip_AndNoMeta(t *testing.T) {
 	target := t.TempDir()
 	meta := &registry.BundleMeta{
-		Signatures: []registry.SignatureRow{{Role: "author", IdentityID: "id:alice@m3c", SignatureB64: "sig"}},
+		Signatures:        []registry.SignatureRow{{Role: "author", IdentityID: "id:alice@m3c", SignatureB64: "sig"}},
 		CurrentGovernance: "green",
 	}
 	resolver := stubResolver{m: map[string]*registry.Identity{
@@ -222,6 +223,85 @@ func TestSidecar_GovernanceBelowFloor(t *testing.T) {
 	err := VerifyInstalledSidecar(Opts{Name: "yel", HomeDir: home, GovernanceMin: "green"})
 	if !errors.Is(err, verify.ErrGovernanceBelowMin) {
 		t.Fatalf("yellow under green floor must be ErrGovernanceBelowMin, got %v", err)
+	}
+}
+
+// SEC-M5: a sidecar skill with NO stashed .skb has a fully unverified body.
+// Governance + fingerprint alone must NOT pass it — it FAILS CLOSED with
+// ErrDigestMismatch (exit 10), and content-binding is never skipped.
+func TestSidecar_NoSkb_FailsClosed(t *testing.T) {
+	home := t.TempDir()
+	target := filepath.Join(home, ".claude", "skills", "nobody")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Write the body Claude would load + a green sidecar, but NO .skb to bind to.
+	if err := os.WriteFile(filepath.Join(target, "SKILL.md"), []byte("# anything"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeSidecar(t, target, "green") // green would otherwise satisfy the floor
+	err := VerifyInstalledSidecar(Opts{Name: "nobody", HomeDir: home, GovernanceMin: "green"})
+	if !errors.Is(err, verify.ErrDigestMismatch) {
+		t.Fatalf("sidecar with no .skb must FAIL CLOSED with ErrDigestMismatch, got %v", err)
+	}
+	if verify.ExitCode(err) != verify.ExitDigestMismatch {
+		t.Fatalf("exit code = %d, want %d", verify.ExitCode(err), verify.ExitDigestMismatch)
+	}
+}
+
+// makeOversizedSkb writes a .skb whose single entry decompresses to far more
+// than MaxExtractedBytes (a gzip bomb shape). The on-disk extraction is NOT
+// written — content-binding should abort on the size cap before any compare.
+func makeOversizedSkb(t *testing.T, target string, oversizeBytes int64) string {
+	t.Helper()
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	if err := tw.WriteHeader(&tar.Header{Name: "BIG.bin", Mode: 0o644, Size: oversizeBytes, Typeflag: tar.TypeReg}); err != nil {
+		t.Fatal(err)
+	}
+	// Highly compressible zero-fill so the .skb stays tiny while the entry is huge.
+	if _, err := io.CopyN(tw, zeroReader{}, oversizeBytes); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	skb := filepath.Join(target, "bomb.skb")
+	if err := os.WriteFile(skb, buf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return skb
+}
+
+type zeroReader struct{}
+
+func (zeroReader) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 0
+	}
+	return len(p), nil
+}
+
+// SEC-M1/M6: a single entry larger than the 100 MiB ceiling must abort the
+// content-binding walk with ErrDigestMismatch — the per-entry io.Copy is now
+// capped via io.LimitReader against the running total, so the gzip bomb never
+// gets fully buffered/hashed.
+func TestContentBinding_OversizedEntry_Mismatch(t *testing.T) {
+	dir := t.TempDir()
+	skb := makeOversizedSkb(t, dir, MaxExtractedBytes+1)
+	err := verifyExtractedMatchesBlob(skb, dir)
+	if !errors.Is(err, verify.ErrDigestMismatch) {
+		t.Fatalf("oversized entry must abort with ErrDigestMismatch, got %v", err)
+	}
+	if verify.ExitCode(err) != verify.ExitDigestMismatch {
+		t.Fatalf("exit code = %d, want %d", verify.ExitCode(err), verify.ExitDigestMismatch)
 	}
 }
 

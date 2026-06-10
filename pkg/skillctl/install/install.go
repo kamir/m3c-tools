@@ -176,14 +176,14 @@ func Install(opts Opts) (*Result, error) {
 			return nil, errors.New("install: --allow-yellow / --ignore-deps require an AuditPoster (refusing to override silently)")
 		}
 		entry := AuditEntry{
-			Action:       overrideAction(opts),
-			Name:         opts.Name,
-			Version:      opts.Version,
-			AllowYellow:  opts.AllowYellow,
-			IgnoreDeps:   opts.IgnoreDeps,
-			RecordedAt:   now().UTC().Format(time.RFC3339),
-			Origin:       "skillctl",
-			RegistryURL:  opts.TrustRoot.RegistryURL,
+			Action:      overrideAction(opts),
+			Name:        opts.Name,
+			Version:     opts.Version,
+			AllowYellow: opts.AllowYellow,
+			IgnoreDeps:  opts.IgnoreDeps,
+			RecordedAt:  now().UTC().Format(time.RFC3339),
+			Origin:      "skillctl",
+			RegistryURL: opts.TrustRoot.RegistryURL,
 		}
 		if err := opts.AuditPoster(ctx, entry); err != nil {
 			return nil, fmt.Errorf("install: audit POST failed (refusing to honor override): %w", err)
@@ -395,7 +395,20 @@ func VerifyInstalled(opts Opts) (*verify.VerifyResult, error) {
 		Tenant:          opts.Tenant,
 		Logger:          opts.Logger,
 	}
-	return verify.Verify(verifyOpts)
+	res, err := verify.Verify(verifyOpts)
+	if err != nil {
+		return nil, err
+	}
+	// SEC-M4: content-binding is UNCONDITIONAL on EVERY managed-verify path.
+	// verify.Verify proved the .skb's own signature + digest, but NOT that the
+	// extracted on-disk files (the SKILL.md Claude actually loads) still match
+	// that signed .skb. Re-assert the binding here so an edited body on the
+	// ONLINE path is caught as verify.ErrDigestMismatch (exit 10) — the same
+	// guarantee the offline / sidecar tiers already enforce.
+	if err := verifyExtractedMatchesBlob(skbPath, target); err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 // ----- helpers -----

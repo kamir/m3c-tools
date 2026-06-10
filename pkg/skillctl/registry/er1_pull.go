@@ -59,15 +59,15 @@ var (
 
 // EventRow is one row of the per-skill timeline.
 type EventRow struct {
-	Kind         string         // "admitted" | "attested" | "revoked" | "installed"
-	DocID        string         // ER1 doc_id
-	OccurredAt   string         // RFC3339 from the event's occurred_at
-	Governance   string         // attested events: the level; admitted: the author_intent; else ""
-	Host         string         // admit packed-on host; installed-on host; else ""
-	Transport    string         // admit only
-	Rationale    string         // attest / revoke
-	Event        map[string]any // parsed event JSON
-	RawBody      string         // the markdown body (for ShowSkill rendering)
+	Kind       string         // "admitted" | "attested" | "revoked" | "installed"
+	DocID      string         // ER1 doc_id
+	OccurredAt string         // RFC3339 from the event's occurred_at
+	Governance string         // attested events: the level; admitted: the author_intent; else ""
+	Host       string         // admit packed-on host; installed-on host; else ""
+	Transport  string         // admit only
+	Rationale  string         // attest / revoke
+	Event      map[string]any // parsed event JSON
+	RawBody    string         // the markdown body (for ShowSkill rendering)
 }
 
 // SkillView is the registry-view entry for one skill.
@@ -87,9 +87,9 @@ type RegistryListing struct {
 
 // ListOpts bounds the query.
 type ListOpts struct {
-	OnlySkill string // empty → all skills
-	OnlyLatest bool  // collapse to newest non-revoked digest per skill
-	Since     string // RFC3339 lower bound (matched against occurred_at) — optional
+	OnlySkill  string // empty → all skills
+	OnlyLatest bool   // collapse to newest non-revoked digest per skill
+	Since      string // RFC3339 lower bound (matched against occurred_at) — optional
 }
 
 // ListRegistry queries ER1 for m3c-skill-bundle items, groups by skill, dedupes
@@ -212,39 +212,39 @@ func ShowSkill(cfg *er1.Config, ctxID, nameOrDigest string) (*SkillView, error) 
 // StagedBundle is one verified bundle, with the .skb bytes (decoded inline or
 // fetched from MinIO) cached on disk under ~/.cache/m3c/skill-bundles/<digest>/.
 type StagedBundle struct {
-	Name            string
-	Version         string
-	Digest          string // sha256:<hex>
-	Governance      string // attested level (≥ governance_minimum)
-	PackedOnHost    string
-	AdmittedAt      string
-	StagedSkbPath   string // <cache>/<digest>/bundle.skb
-	ProvenancePath  string // <cache>/<digest>/.m3c-provenance.json  (P3 will copy these into ~/.claude/skills/...)
-	SourceDocID     string // ER1 doc_id of the admit item
-	AuthorIdentity  string
+	Name           string
+	Version        string
+	Digest         string // sha256:<hex>
+	Governance     string // attested level (≥ governance_minimum)
+	PackedOnHost   string
+	AdmittedAt     string
+	StagedSkbPath  string // <cache>/<digest>/bundle.skb
+	ProvenancePath string // <cache>/<digest>/.m3c-provenance.json  (P3 will copy these into ~/.claude/skills/...)
+	SourceDocID    string // ER1 doc_id of the admit item
+	AuthorIdentity string
 }
 
 // PullOpts bounds the pull.
 type PullOpts struct {
-	OnlySkill string // empty → all skills
+	OnlySkill  string // empty → all skills
 	OnlyDigest string // empty → all admit items in scope
-	Since     string // RFC3339; pass to the search query (best-effort filter)
+	Since      string // RFC3339; pass to the search query (best-effort filter)
 }
 
 // PullResult reports the outcome of a pull.
 type PullResult struct {
-	Staged   []*StagedBundle
-	Skipped  []*PullSkip   // bundles rejected by one of the 5 gates
+	Staged  []*StagedBundle
+	Skipped []*PullSkip // bundles rejected by one of the 5 gates
 }
 
 // PullSkip is a per-bundle rejection.
 type PullSkip struct {
-	Name       string
-	Version    string
-	Digest     string
-	DocID      string
-	Gate       error  // one of ErrGateEnvelope/Digest/BundleSigs/Governance/Revoked
-	Detail     string
+	Name    string
+	Version string
+	Digest  string
+	DocID   string
+	Gate    error // one of ErrGateEnvelope/Digest/BundleSigs/Governance/Revoked
+	Detail  string
 }
 
 // PullBundles runs the 5-gate gauntlet over every admit item in scope and
@@ -266,8 +266,12 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 		return nil, err
 	}
 	// Pre-build a map of digest → highest attestation level + revocation flag
-	// from a single secondary query.
-	attestByDigest, revokedDigests, err := loadAttestRevoke(cfg, ctxID, opts.OnlySkill)
+	// from a single secondary query. SEC-H1: the trust-roots public key is
+	// passed in so loadAttestRevoke verifies the envelope_signature of EVERY
+	// attest/revoke event before trusting its governance_level / revoked status
+	// — mirroring Gate 1's admit-envelope verification (~:297). An unsigned or
+	// forged governance verdict is otherwise free to forge.
+	attestByDigest, revokedDigests, err := loadAttestRevoke(cfg, ctxID, opts.OnlySkill, tr.PubKey())
 	if err != nil {
 		return nil, err
 	}
@@ -403,8 +407,17 @@ func verifyBundleSignatures(event map[string]any, pub ed25519.PublicKey) error {
 // loadAttestRevoke fetches the attest + revoke items for the registry (optionally
 // scoped to one skill) and returns:
 //   - the latest governance_level per digest (newest occurred_at wins)
-//   - the set of digests that carry any BundleRevokedEvent
-func loadAttestRevoke(cfg *er1.Config, ctxID, onlySkill string) (map[string]string, map[string]struct{}, error) {
+//   - the set of digests that carry any (verified) BundleRevokedEvent
+//
+// SEC-H1: a governance verdict (attestation green/yellow/red, or a revocation)
+// is only trusted if its event ENVELOPE signature verifies against the
+// trust-roots public key `pub` — exactly like Gate 1 verifies the admit
+// envelope. Unsigned/invalid events are skipped (fail-closed): a forged green
+// attestation over a yellow bundle never reaches the governance floor, and a
+// forged revocation can't suppress a legitimately-attested bundle. (Skipping
+// an invalid revoke is also fail-closed: a bundle still must clear the
+// governance floor on a *valid* attestation to be staged.)
+func loadAttestRevoke(cfg *er1.Config, ctxID, onlySkill string, pub ed25519.PublicKey) (map[string]string, map[string]struct{}, error) {
 	attestByDigest := map[string]string{}
 	attestTS := map[string]string{}
 	revokedDigests := map[string]struct{}{}
@@ -426,6 +439,12 @@ func loadAttestRevoke(cfg *er1.Config, ctxID, onlySkill string) (map[string]stri
 			}
 			digest, _ := ev["bundle_digest"].(string)
 			if digest == "" {
+				continue
+			}
+			// SEC-H1: verify the event envelope signature before trusting its
+			// governance_level / revoked status. Skip (and effectively log via
+			// the dropped event) unsigned or forged verdicts.
+			if err := VerifyEnvelopeSignature(pub, ev); err != nil {
 				continue
 			}
 			if kind == EventKindRevoked {
