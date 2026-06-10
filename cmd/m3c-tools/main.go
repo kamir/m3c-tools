@@ -4505,14 +4505,23 @@ func menubarUploadPayload(app *menubar.App, label string, payload *er1.UploadPay
 	_ = openURL(itemURL)
 }
 
-// openURL opens a URL in the default browser (macOS only).
+// openURL opens a URL in the default browser. Cross-platform (mirrors the
+// menubar's openBrowserURL, BUG-0088): Windows → `cmd /c start`, Linux →
+// xdg-open, macOS → `open` (Chrome-preferred to keep the ER1 auth session in
+// the same browser). Used by `m3c-tools login`, so it MUST work off-macOS.
 func openURL(url string) error {
-	// Prefer Chrome to keep auth/session in the same browser used for ER1.
-	if err := exec.Command("open", "-a", "Google Chrome", url).Start(); err == nil {
-		return nil
+	switch runtime.GOOS {
+	case "windows":
+		// Empty title arg ("") so cmd doesn't treat a URL containing & as the title.
+		return exec.Command("cmd", "/c", "start", "", url).Start()
+	case "linux":
+		return exec.Command("xdg-open", url).Start()
+	default: // darwin
+		if err := exec.Command("open", "-a", "Google Chrome", url).Start(); err == nil {
+			return nil
+		}
+		return exec.Command("open", url).Start()
 	}
-	// Fallback to system default browser if Chrome is unavailable.
-	return exec.Command("open", url).Start()
 }
 
 func captureScreenshotForMenu(app *menubar.App, flow string) (string, string, error) {
