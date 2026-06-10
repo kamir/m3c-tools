@@ -69,6 +69,13 @@ func main() {
 	case "verify":
 		runWithExit(func() int { return runVerify(os.Args[2:], os.Stdout, os.Stderr) })
 	// === END SPEC-0188 S8 ===
+	// === SPEC-0247 P0.1: Claude Code PreToolUse(Skill) trust gate ===
+	// Reads the hook event on stdin, re-runs the §7 chain against the
+	// installed skill, and emits an allow/deny decision. Fail-closed:
+	// deny exits 2 (Claude Code "block") AND emits the decision JSON.
+	case "verify-hook":
+		runWithExit(func() int { return runVerifyHook(os.Stdin, os.Stdout, os.Stderr) })
+	// === END SPEC-0247 P0.1 ===
 	// === SPEC-0189 S0a: scanner family dispatchers (imported from
 	// feature/thinking-engine-phase1; pre-SPEC-0189 behaviour preserved). ===
 	case "scan":
@@ -157,6 +164,10 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "Commands (Stream S8 / SPEC-0188 Phase 4):")
 	fmt.Fprintln(w, "  install      Pull, verify, and install a signed skill bundle.")
 	fmt.Fprintln(w, "  verify       Re-run the trust-chain check on an installed skill.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Commands (SPEC-0247 / Claude Code trust gate):")
+	fmt.Fprintln(w, "  verify-hook  PreToolUse(Skill) gate: reads a hook event on stdin, verifies the")
+	fmt.Fprintln(w, "               §7 chain, and emits allow/deny. Fail-closed. Wire as a hook, not by hand.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Commands (SPEC-0195 / awareness bridge):")
 	fmt.Fprintln(w, "  awareness sync     Admit local skills to a registry.")

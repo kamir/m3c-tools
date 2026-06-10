@@ -341,6 +341,16 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 		return nil, fmt.Errorf("install: write provenance: %w", err)
 	}
 
+	// Stash the verified .skb alongside the extracted content so the SPEC-0247
+	// gate recognises this pull-installed skill as managed and can byte-bind the
+	// on-disk body to the signed bundle (catches post-install tampering). The
+	// gate finds any top-level *.skb; the name is cosmetic.
+	skbName := strings.ReplaceAll(b.Name, string(filepath.Separator), "_") + ".skb"
+	if err := os.WriteFile(filepath.Join(tmp, skbName), skb, 0o644); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("install: stash .skb: %w", err)
+	}
+
 	res := &InstallResult{
 		SkillPath:      target,
 		ProvenancePath: filepath.Join(target, ProvenanceSidecarName),

@@ -84,6 +84,11 @@ type Opts struct {
 	// empty. Tests pass a temp dir.
 	HomeDir string
 
+	// SelfTrustRootsPath overrides the SPEC-0225 self trust-roots location
+	// (default ~/.claude/trust-roots.yaml) used by VerifyInstalledSidecar's
+	// registry-trust check (SPEC-0247 OQ-5). Empty = default. Tests inject one.
+	SelfTrustRootsPath string
+
 	// MaxExtractedBytes overrides the gzip-bomb cap. 0 = use default.
 	MaxExtractedBytes int64
 
@@ -288,6 +293,13 @@ func Install(opts Opts) (*Result, error) {
 	stashedSkb := filepath.Join(target, filepath.Base(blobPath))
 	if err := os.WriteFile(stashedSkb, blob, 0o644); err != nil {
 		return nil, fmt.Errorf("install: stash .skb in target: %w", err)
+	}
+
+	// Stash BundleMeta + author identity for network-free re-verification
+	// (SPEC-0247). Best-effort: a failure here just means offline verify
+	// falls back to the online path; the install itself still succeeded.
+	if err := StashOfflineMeta(ctx, opts.Client, target, meta, now); err != nil {
+		logStep(opts.Logger, "offline_meta_warn", "offline verify will fall back to online: %v", err)
 	}
 
 	cleanedUp = true

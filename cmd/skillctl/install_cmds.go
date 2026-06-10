@@ -149,7 +149,20 @@ func runInstall(args []string, stdout, stderr io.Writer) int {
 // Re-runs the §7 algorithm against an already-installed skill. Reads the
 // stashed .skb from ~/.claude/skills/<name>/, fetches fresh metadata
 // from the registry, and validates. No filesystem mutation.
+//
+// `--all` switches to the SPEC-0247 P0.2 sweep (runVerifyAll): verify every
+// installed skill, optionally quarantining trust-failures. Detected before
+// flag parsing because the sweep takes a different flag set.
 func runVerify(args []string, stdout, stderr io.Writer) int {
+	for _, a := range args {
+		if a == "--" {
+			break
+		}
+		if a == "--all" || a == "-all" {
+			return runVerifyAll(args, stdout, stderr)
+		}
+	}
+
 	fs := flag.NewFlagSet("verify", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
@@ -160,13 +173,14 @@ func runVerify(args []string, stdout, stderr io.Writer) int {
 	timeout := fs.Duration("timeout", registry.DefaultTimeout, "HTTP timeout for registry calls.")
 	verboseFlag := fs.Bool("verbose", false, "Print structured per-step log lines to stderr.")
 	homeOverride := fs.String("home", "", "Override the install root.")
+	offline := fs.Bool("offline", false, "Network-free verify: use the stashed metadata + bind the extracted on-disk content to the signed .skb. No registry calls (revocations posted after install are not seen).")
 
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: skillctl verify <name> [flags]")
+		fmt.Fprintln(stderr, "Usage: skillctl verify <name> [flags]   (or: skillctl verify --all [--quarantine])")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Re-runs the SPEC-0188 §7 trust-chain check against an already-installed")
 		fmt.Fprintln(stderr, "skill (~/.claude/skills/<name>/). Useful for catching post-install registry")
-		fmt.Fprintln(stderr, "revocations or trust-root rotations.")
+		fmt.Fprintln(stderr, "revocations or trust-root rotations. --offline skips the registry.")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Exit codes are the same as `install` (see SPEC-0188 §11).")
 		fs.PrintDefaults()
@@ -196,13 +210,33 @@ func runVerify(args []string, stdout, stderr io.Writer) int {
 	// tenant_scope; empty = untenanted (step 5.5 no-op).
 	tenant := resolveTenant(*tenantFlag, tr)
 
-	httpClient := install.HTTPClientOf(*timeout)
-	c := registry.New(root.RegistryURL, httpClient)
-
 	var logger io.Writer
 	if *verboseFlag {
 		logger = stderr
 	}
+
+	// --offline: network-free §7 + extracted-content binding (SPEC-0247).
+	if *offline {
+		res, err := install.VerifyInstalledOffline(install.Opts{
+			Name:          name,
+			TrustRoot:     root,
+			HomeDir:       *homeOverride,
+			GovernanceMin: *governanceMin,
+			AllowYellow:   *allowYellow,
+			Tenant:        tenant,
+			Logger:        logger,
+			Ctx:           context.Background(),
+		})
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return verify.ExitCode(err)
+		}
+		fmt.Fprintln(stdout, res.ChainSummary+" (offline)")
+		return exitOK
+	}
+
+	httpClient := install.HTTPClientOf(*timeout)
+	c := registry.New(root.RegistryURL, httpClient)
 
 	res, err := install.VerifyInstalled(install.Opts{
 		Name:          name,
