@@ -93,12 +93,22 @@ jobs:
           go test -v -count=1 -timeout=120s ./e2e/ -run "TestComposite|TestBuild$|TestParseTagLine|TestER1Config|TestER1Queue|TestER1EnqueueFailure|TestUploadFailure|TestExportsDB|TestFilesDB|TestHashFile|TestFormatterLoader|TestPrettyPrint|TestFormatTranscript|TestFormatSnippet|TestFormatKeyValue|TestFormatTable|TestFormatSection|TestFormatStatusLine|TestTranslateFlagParsing|TestTranslateNotTranslatable|TestTranslateTranslatable|TestRetryQueue|TestRetryBackoffTiming|TestRetryBackoffCustomBase|TestRetryProcessingOrder|TestRetryPartialFailure|TestRetryMaxRetriesDropsEntry|TestRetryDropCallback|TestRetryRespectsBackoffDelay|TestRetryProcessesAfterBackoffElapsed|TestRetryGracefulShutdownOnCancel|TestRetryRunStopsOnContextCancel|TestRetryRunProcessesMultipleCycles|TestRetryEmptyQueue|TestRetryOnRetryCallback|TestTranscriptFilterExclude|TestTranscriptFilterBoth|TestTranscriptFilterEmpty|TestTranscriptFilterAll|TestProxyBuildURL|TestProxyGetTransport|TestProxyNewWithProxy|TestProxyHTTPIntegration|TestProxyWebshare|TestProxySocks5URL|TestRetryRunnerProcessOnce|TestRetryRunnerDropExceed|TestRetryRunnerBackoff|TestRetryRunnerRunLoop|TestRetryRunnerBackoffSkip|TestBackgroundRetryStarts|TestBackgroundRetryStops|TestBackgroundRetryHandles|TestBackgroundRetryEmpty|TestBackgroundRetryLogging|TestTranscriptImport|TestTranscriptListSearch|TestTranscriptSearch|TestTranscriptExport|TestScheduleCommand|TestStatusCommand|TestCancelCommand|TestScheduleStatusCancelWorkflow|TestCLIHelp|TestCLIUnknownCommand|TestCLINoArgs|TestRepoRoot|TestWriteFixture|TestFixtureDir|TestTempDataDir|TestWithEnv|TestRunCLIWithEnv|TestImporter|TestFieldnote|TestPlaudConfig|TestPlaudToken|TestPlaudFormatDuration|TestScreenshotMode|TestScreenshotCLI"
         shell: bash
 
-      - name: Run SPEC-0247 trust-gate tests (windows-latest)
-        # The gate resolves home via cmd/skillctl/home.go (userHome: $HOME-first,
-        # then os.UserHomeDir), so these temp-dir tests run cross-platform on the
-        # real Windows runner — closing SPEC-0128 Gap B for the gate. Behavioural
-        # validation of verify-hook / sweep / offline+sidecar verify / content-
-        # binding / verdict cache, beyond the cross-compile build check.
+  # ── SPEC-0247 trust-gate tests on real Windows (SPEC-0128 Gap B) ──────────
+  # Isolated job so the gate's behavioural validation reports independently of
+  # pre-existing e2e/smoke Windows debt (TestImporterCLI* exec a built binary;
+  # TestPlaudTokenRoundTrip asserts Unix 0600 perms — tracked separately). The
+  # gate resolves home via cmd/skillctl/home.go (userHome: $HOME-first, then
+  # os.UserHomeDir), so these temp-dir tests run cross-platform.
+  gate-tests:
+    name: SPEC-0247 Gate Tests (windows-latest)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+      - name: Run SPEC-0247 trust-gate tests
         run: |
           go test -v -count=1 -timeout=120s ./cmd/skillctl/ -run "TestSweep|TestVerifyHook|TestSkillID|TestDigest|TestVerdict|TestHook_UsesCache"
           go test -v -count=1 -timeout=120s ./pkg/skillctl/install/ -run "TestContentBinding|TestStash|TestStaticFetcher|TestSidecar"
