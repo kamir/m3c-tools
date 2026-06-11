@@ -76,6 +76,10 @@ func main() {
 	case "verify-hook":
 		runWithExit(func() int { return runVerifyHook(os.Stdin, os.Stdout, os.Stderr) })
 	// === END SPEC-0247 P0.1 ===
+	// === SPEC-0255: gate observability — summarise the append-only audit log. ===
+	case "gate-stats":
+		os.Exit(runGateStats(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0255 ===
 	// === SPEC-0189 S0a: scanner family dispatchers (imported from
 	// feature/thinking-engine-phase1; pre-SPEC-0189 behaviour preserved). ===
 	case "scan":
@@ -170,6 +174,8 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "Commands (SPEC-0247 / Claude Code trust gate):")
 	fmt.Fprintln(w, "  verify-hook  PreToolUse(Skill) gate: reads a hook event on stdin, verifies the")
 	fmt.Fprintln(w, "               §7 chain, and emits allow/deny. Fail-closed. Wire as a hook, not by hand.")
+	fmt.Fprintln(w, "  gate-stats   Summarise the gate-audit.jsonl (decisions, top blocks, cache-hit rate).")
+	fmt.Fprintln(w, "               Flags: --since <168h|YYYY-MM-DD>, --json.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Commands (SPEC-0195 / awareness bridge):")
 	fmt.Fprintln(w, "  awareness sync     Admit local skills to a registry.")

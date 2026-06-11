@@ -220,6 +220,16 @@ func runVerifyAll(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
+	// SPEC-0255 gate observability: emit one advisory audit event per swept skill
+	// (best-effort; appendGateEvent swallows all errors so it never affects the
+	// sweep result). online/cache_hit are hook-path signals — left false here.
+	for _, e := range rep.Entries {
+		appendGateEvent(home, gateEvent{
+			Source: "sweep", Skill: e.Skill, Decision: decisionForSweepState(e.State),
+			Reason: e.Reason, ExitCode: e.Exit, SessionID: *sessionID,
+		})
+	}
+
 	if *jsonOut {
 		emitSweepJSON(stdout, rep)
 	} else {

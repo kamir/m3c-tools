@@ -118,10 +118,26 @@ var hookPreflight func()
 // 2 + decision JSON + stderr), failing closed. The named return `code` is what
 // the recover overwrites.
 func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
+	// SPEC-0255 gate-audit context: populated as the decision is made; the
+	// deferred logger emits exactly ONE advisory event per gated skill, AFTER the
+	// decision is final (best-effort, never alters code). audActive gates logging
+	// to real skills — pre-skill input-validation denies are not logged.
+	var (
+		audSkill, audReason, audSession, audHome string
+		audOnline, audCache, audActive           bool
+	)
 	defer func() {
 		if r := recover(); r != nil {
 			code = emitDeny(stdout, stderr,
 				fmt.Sprintf("skillctl verify-hook: internal error (%v) — failing closed (DENY)", r))
+			audReason = fmt.Sprintf("internal error: %v", r)
+		}
+		if audActive {
+			appendGateEvent(audHome, gateEvent{
+				Source: "hook", Skill: audSkill, Decision: decisionForExit(code),
+				Reason: audReason, ExitCode: code,
+				Online: audOnline, CacheHit: audCache, SessionID: audSession,
+			})
 		}
 	}()
 
@@ -149,9 +165,15 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	if skill == "" {
 		return emitAllow() // nothing to gate
 	}
+	// From here we are gating a real skill → record the outcome. Resolve home up
+	// front so every skill decision (not just the verify path) can be logged.
+	home, _ := userHome()
+	now := time.Now()
+	audActive, audSkill, audSession, audHome = true, skill, ev.SessionID, home
 
 	// A skill name that could escape ~/.claude/skills/ is itself a red flag.
 	if strings.ContainsAny(skill, "/\\") || strings.Contains(skill, "..") {
+		audReason = "suspicious skill name (path traversal)"
 		return emitDeny(stdout, stderr,
 			fmt.Sprintf("skillctl: BLOCKED %q — suspicious skill name (path traversal); refusing (fail-closed)", skill))
 	}
@@ -159,6 +181,7 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	pol := loadGatePolicyW(stderr)
 
 	if pol.isAllowlisted(skill) {
+		audReason = "allowlisted"
 		return emitAllow() // explicit operator escape hatch (§9.4)
 	}
 
@@ -166,12 +189,15 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	if !managed {
 		switch pol.Unmanaged {
 		case "deny":
+			audReason = fmt.Sprintf("unmanaged (%s) + policy deny", why)
 			return emitDeny(stdout, stderr,
 				fmt.Sprintf("skillctl: BLOCKED '%s' — not skillctl-managed (%s) and policy unmanaged_skills=deny. Import it with `skillctl import` or allowlist it.", skill, why))
 		case "warn":
+			audReason = fmt.Sprintf("unmanaged (%s) + policy warn", why)
 			fmt.Fprintf(stderr, "skillctl verify-hook: WARN unverified skill '%s' (%s) — allowed by policy unmanaged_skills=warn\n", skill, why)
 			return emitAllow()
 		default: // "allow"
+			audReason = fmt.Sprintf("unmanaged (%s) + policy allow", why)
 			return emitAllow()
 		}
 	}
@@ -179,9 +205,8 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	// Managed skill → offline fast path first: a fresh, digest-matching PASS
 	// in the verdict cache (written by the SessionStart sweep or a prior hook)
 	// lets us allow without touching the network (SPEC-0247 §8 / P1.1).
-	home, _ := userHome()
-	now := time.Now()
 	if home != "" && cachedAllow(home, skill, ev.SessionID, now) {
+		audCache, audReason = true, "verdict-cache hit"
 		return emitAllow()
 	}
 
@@ -199,11 +224,14 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 			code, reason = c, r
 		} else {
 			code, reason = verifyManagedFn(skill, pol)
+			audOnline = true
 		}
 		recordVerdict(home, skill, ev.SessionID, code, "", now)
 	} else {
 		code, reason = verifyManagedFn(skill, pol)
+		audOnline = true
 	}
+	audReason = reason
 	if code == exitOK {
 		return emitAllow()
 	}
