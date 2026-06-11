@@ -24,9 +24,7 @@ package install
 // fast per-invocation gate + the offline-resilience fallback.
 
 import (
-	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -39,6 +37,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 )
@@ -287,94 +286,47 @@ func findStashedSkb(target string) (string, error) {
 // added. Any mismatch / missing / extra maps to verify.ErrDigestMismatch (exit
 // 10) — i.e. "the body Claude would load is not what was signed."
 //
-// SEC-M1/M6: this runs on the HOT per-invocation gate path (every skill use),
-// so the gzip+tar walk MUST be bounded against a decompression bomb. Each entry
-// is read through an io.LimitReader against a running total with a 100 MiB
-// ceiling (MaxExtractedBytes) plus a file-count cap (MaxExtractedFiles), the
-// same caps install.go's extractTGZ enforces. An overrun aborts with
-// verify.ErrDigestMismatch (the body cannot be what was signed).
+// SPEC-0252 C3: this runs on the HOT per-invocation gate path (every skill
+// use), and the gzip/tar walk, the decompression-bomb caps, the path-escape
+// proof, and the wrapper-strip are all skillbundle.Unpack's now. The payoff is
+// not just dedup: the integrity check and the installer (registry.extractSkb /
+// install.extractTGZ) that wrote these files now share ONE wrapper rule and ONE
+// sanitiser, so they can no longer disagree on which files belong to the
+// bundle. StripWrapper mirrors the flat on-disk layout the installer renames
+// into place; any walk/cap/escape failure maps to ErrDigestMismatch.
 func verifyExtractedMatchesBlob(skbPath, target string) error {
 	blob, err := os.ReadFile(skbPath)
 	if err != nil {
 		return err
 	}
-	gz, err := gzip.NewReader(bytes.NewReader(blob))
+	entries, err := skillbundle.Unpack(blob, skillbundle.UnpackOptions{StripWrapper: true})
 	if err != nil {
-		return fmt.Errorf("%w: gzip: %v", verify.ErrDigestMismatch, err)
+		return fmt.Errorf("%w: %v", verify.ErrDigestMismatch, err)
 	}
-	defer gz.Close()
-	tr := tar.NewReader(gz)
 
-	// Pass 1: stream every regular bundle entry through a capped reader, hashing
-	// it. We key the resulting digests by the cleaned tar path; the on-disk
-	// reconciliation (and any top-level-dir stripping) happens after, once we
-	// know all entries. Hashes are 32 bytes each, so the map is bounded by the
-	// file-count cap — the byte ceiling guards the per-entry reads themselves.
-	var read int64
-	var entries int
-	bundleDigests := map[string][]byte{}
-	for {
-		hdr, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("%w: tar: %v", verify.ErrDigestMismatch, err)
-		}
-		if hdr.Typeflag != tar.TypeReg && hdr.Typeflag != tar.TypeRegA {
+	expected := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		if e.IsDir {
 			continue
 		}
-		entries++
-		if entries > MaxExtractedFiles {
-			return fmt.Errorf("%w: bundle entry count exceeds %d (likely a tar bomb)", verify.ErrDigestMismatch, MaxExtractedFiles)
-		}
-		clean := filepath.Clean(hdr.Name)
-		if strings.HasPrefix(clean, "..") || filepath.IsAbs(clean) {
-			return fmt.Errorf("%w: bundle entry %q escapes", verify.ErrDigestMismatch, hdr.Name)
-		}
-
-		// Cap this entry's read against the remaining global budget. LimitReader
-		// to remaining+1 so we can detect (n > remaining) → overrun, exactly as
-		// install.go's extractTGZ does.
-		remaining := MaxExtractedBytes - read
-		if remaining <= 0 {
-			return fmt.Errorf("%w: extracted size exceeds %d bytes (likely a gzip bomb)", verify.ErrDigestMismatch, MaxExtractedBytes)
-		}
-		want := sha256.New()
-		n, err := io.Copy(want, io.LimitReader(tr, remaining+1))
+		expected[e.Rel] = true
+		want := sha256.Sum256(e.Content)
+		onDisk, err := skillbundle.SafeJoin(target, e.Rel)
 		if err != nil {
-			return fmt.Errorf("%w: read bundle entry %q: %v", verify.ErrDigestMismatch, clean, err)
+			return fmt.Errorf("%w: bundle entry %q: %v", verify.ErrDigestMismatch, e.Rel, err)
 		}
-		if n > remaining {
-			return fmt.Errorf("%w: extracted size exceeds %d bytes (likely a gzip bomb)", verify.ErrDigestMismatch, MaxExtractedBytes)
-		}
-		read += n
-		bundleDigests[clean] = want.Sum(nil)
-	}
-
-	// SPEC §3.1 tars carry a single top-level <name>-<version>/ dir, which the
-	// installer strips when it renames the bundle into place (resolveBundleTopLevel).
-	// Mirror that here so the bundle paths line up with the flat on-disk layout;
-	// flat bundles (no common top-level dir) are left untouched.
-	prefix := commonTopLevelDir(bundleDigests)
-	expected := make(map[string]bool, len(bundleDigests))
-	for name, want := range bundleDigests {
-		rel := name
-		if prefix != "" {
-			rel = filepath.Clean(strings.TrimPrefix(name, prefix+string(filepath.Separator)))
-		}
-		expected[rel] = true
-		got, err := fileSHA(filepath.Join(target, rel))
+		got, err := fileSHA(onDisk)
 		if err != nil {
-			return fmt.Errorf("%w: installed file %q missing/unreadable: %v", verify.ErrDigestMismatch, rel, err)
+			return fmt.Errorf("%w: installed file %q missing/unreadable: %v", verify.ErrDigestMismatch, e.Rel, err)
 		}
-		if !bytes.Equal(want, got) {
-			return fmt.Errorf("%w: installed file %q does not match the signed bundle", verify.ErrDigestMismatch, rel)
+		if !bytes.Equal(want[:], got) {
+			return fmt.Errorf("%w: installed file %q does not match the signed bundle", verify.ErrDigestMismatch, e.Rel)
 		}
 	}
 
 	// Extra-file check: a regular file on disk that is NOT in the bundle (and
-	// is not the .skb or the offline stash) is tampering.
+	// is not the .skb or the offline stash) is tampering. expected keys are
+	// slash-form (Unpack's Rel), so normalise the walked path before lookup.
 	return filepath.WalkDir(target, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -387,37 +339,11 @@ func verifyExtractedMatchesBlob(skbPath, target string) error {
 			return nil
 		}
 		rel, _ := filepath.Rel(target, p)
-		if !expected[filepath.Clean(rel)] {
+		if !expected[filepath.ToSlash(filepath.Clean(rel))] {
 			return fmt.Errorf("%w: unexpected installed file %q not in the signed bundle", verify.ErrDigestMismatch, rel)
 		}
 		return nil
 	})
-}
-
-// commonTopLevelDir returns the single top-level directory component shared by
-// every bundle path, or "" when there is none (a flat bundle, or entries spread
-// across multiple top-level dirs). This mirrors install.go's resolveBundleTopLevel
-// so content-binding compares against the same flat layout the installer wrote.
-func commonTopLevelDir(paths map[string][]byte) string {
-	if len(paths) == 0 {
-		return ""
-	}
-	prefix := ""
-	for name := range paths {
-		first := name
-		if i := strings.IndexRune(name, filepath.Separator); i >= 0 {
-			first = name[:i]
-		} else {
-			// A file sitting at the bundle root → no shared top-level dir.
-			return ""
-		}
-		if prefix == "" {
-			prefix = first
-		} else if prefix != first {
-			return ""
-		}
-	}
-	return prefix
 }
 
 func fileSHA(p string) ([]byte, error) {
