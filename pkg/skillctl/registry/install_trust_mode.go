@@ -15,9 +15,7 @@ package registry
 // §11b; reference impls: `skillctl awareness reset`, `skillctl audit --cleanup`.
 
 import (
-	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -33,18 +31,19 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 )
 
-// MaxExtractedBytes caps the total uncompressed size of an extracted bundle.
-// 100 MiB is wildly above any plausible skill (typical bundles are kilobytes);
-// the cap exists to defend against gzip / tar bombs that expand to many GB on
-// disk and exhaust the user's home volume before any audit can fire. Mirrors
-// pkg/skillctl/install.MaxExtractedBytes (SEC-M1).
-const MaxExtractedBytes int64 = 100 << 20
-
-// MaxExtractedFiles caps the number of entries we'll write before refusing — a
-// tarball with a million tiny files is also a bomb shape (SEC-M1).
-const MaxExtractedFiles = 10000
+// MaxExtractedBytes / MaxExtractedFiles are the registry-package spelling of the
+// canonical extraction caps, which now live in pkg/skillbundle (SPEC-0252 §3.3 —
+// one source of truth). They are aliases, not duplicate literals: the value is
+// defined once in skillbundle and the gzip/tar-bomb guards in skillbundle.Unpack
+// enforce it. Retained so existing call sites and tests read the same number.
+const (
+	MaxExtractedBytes int64 = skillbundle.DefaultMaxExtractedBytes
+	MaxExtractedFiles       = skillbundle.DefaultMaxExtractedFiles
+)
 
 // ProvenanceSchemaVersion is the schema_version stamped into .m3c-provenance.json.
 const ProvenanceSchemaVersion = "1.0.0"
@@ -479,165 +478,32 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 	return res, nil
 }
 
-// skbEntry is one in-memory tar entry collected during the single
-// decompression pass extractSkb performs.
-type skbEntry struct {
-	rel     string // sanitized, wrapper-relative path
-	isDir   bool
-	content []byte // file body (regular files only)
-}
-
-// extractSkb extracts a SPEC-0188 §3.1-shaped bundle (gzip + tar) into
-// `target`. Per pkg/skillbundle/pack.go the archive is FLAT — SKILL.md,
-// bundle.json, CHECKSUMS, scripts/…, references/… live at the archive root
-// (no wrapping top-level dir). Refuses tar entries that escape `target`, and
-// normalizes the skill anchor to the canonical "SKILL.md" so Claude Code and
-// the scanner (which match the name exactly, and Linux is case-sensitive) load
-// the skill even when a bundle stored a lower/mixed-case "skill.md" (a
-// case-insensitive-filesystem publish artifact). Normalizing only the written
-// filename leaves the verified bundle bytes/digest untouched.
+// extractSkb extracts a SPEC-0188 §3.1-shaped bundle (gzip + tar) into `target`.
+// Per pkg/skillbundle/pack.go the archive is FLAT — SKILL.md, bundle.json,
+// CHECKSUMS, scripts/…, references/… live at the archive root — but some
+// producers wrap everything in one top-level dir; StripWrapper collapses that.
+// CanonicalizeMD normalizes a stored "skill.md" to the canonical "SKILL.md" so
+// Claude Code and the scanner (exact-match, case-sensitive on Linux) load the
+// skill; normalizing only the written filename leaves the verified bundle
+// bytes/digest untouched.
 //
-// SEC-M1 hardening (mirrors pkg/skillctl/install.extractTGZ):
-//   - decompresses the archive exactly ONCE — wrapper detection reads the
-//     in-memory entry list, not a second gzip pass;
-//   - enforces a running uncompressed-byte ceiling (MaxExtractedBytes) and a
-//     file-count cap (MaxExtractedFiles) to defeat gzip/tar bombs;
-//   - per-entry io.LimitReader so a single lying header can't blow the budget;
-//   - refuses symlinks and hardlinks (a post-rename escape vector);
-//   - opens files with O_EXCL (no O_TRUNC) so a duplicate/colliding entry
-//     fails closed instead of silently overwriting.
+// SPEC-0252 C2: the gzip/tar walk, the bomb caps (one decompression pass,
+// running byte ceiling + file-count cap, per-entry io.LimitReader), the
+// symlink/hardlink/device refusal, the path-containment proof, and the O_EXCL
+// fail-closed write all live in the ONE hardened core now — this is a thin
+// adapter over skillbundle.Unpack + ExtractTo. (Convergence note: scripts/* are
+// now written 0755 to match the producer's canonical mode and the HTTP install
+// path, where the old self/ER1 walk dropped them to 0644 — a fix, not a
+// weakening; content-binding compares bytes, not mode.)
 func extractSkb(skb []byte, target string) error {
-	gzr, err := gzip.NewReader(bytes.NewReader(skb))
+	entries, err := skillbundle.Unpack(skb, skillbundle.UnpackOptions{
+		StripWrapper:   true,
+		CanonicalizeMD: true,
+	})
 	if err != nil {
-		return fmt.Errorf("gunzip: %w", err)
+		return err
 	}
-	defer gzr.Close()
-	cleanTarget := filepath.Clean(target)
-
-	// Single decompression pass: collect bounded entries into memory. The byte
-	// ceiling bounds total memory; the file-count cap bounds entry count.
-	tr := tar.NewReader(gzr)
-	var entries []skbEntry
-	var written int64
-	var count int
-	for {
-		hdr, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("tar next: %w", err)
-		}
-		count++
-		if count > MaxExtractedFiles {
-			return fmt.Errorf("tar entry count exceeds %d (likely a tar bomb)", MaxExtractedFiles)
-		}
-		// Sanitize the entry path (strip any leading "/", collapse "..").
-		rel := strings.TrimPrefix(filepath.Clean("/"+hdr.Name), "/")
-		if rel == "" || rel == "." {
-			continue
-		}
-		switch hdr.Typeflag {
-		case tar.TypeDir:
-			entries = append(entries, skbEntry{rel: rel, isDir: true})
-		case tar.TypeReg:
-			remaining := MaxExtractedBytes - written
-			if remaining <= 0 {
-				return fmt.Errorf("extracted size exceeds %d bytes (likely a gzip bomb)", MaxExtractedBytes)
-			}
-			var buf bytes.Buffer
-			// LimitReader to remaining+1 so an over-budget entry is detected.
-			n, err := io.Copy(&buf, io.LimitReader(tr, remaining+1))
-			if err != nil {
-				return fmt.Errorf("tar read %q: %w", hdr.Name, err)
-			}
-			if n > remaining {
-				return fmt.Errorf("extracted size exceeds %d bytes (likely a gzip bomb)", MaxExtractedBytes)
-			}
-			written += n
-			entries = append(entries, skbEntry{rel: rel, content: buf.Bytes()})
-		case tar.TypeSymlink, tar.TypeLink:
-			// SPEC-0188 v1: refuse symlinks/hardlinks — they point into / out of
-			// the install dir post-rename.
-			return fmt.Errorf("tar entry %q is a symlink/hardlink (refused)", hdr.Name)
-		default:
-			// Devices, fifos, etc. — refuse.
-			return fmt.Errorf("tar entry %q has unsupported type 0x%x", hdr.Name, hdr.Typeflag)
-		}
-	}
-
-	// Determine a common single top-level wrapper dir from the collected names
-	// (no second decompression). The canonical format is FLAT; some producers
-	// wrap everything in one dir.
-	wrapper := wrapperPrefixFromEntries(entries)
-
-	for _, e := range entries {
-		rel := e.rel
-		if wrapper != "" {
-			rel = strings.TrimPrefix(rel, wrapper)
-		}
-		if rel == "" || rel == "." {
-			continue
-		}
-		// Canonicalize the skill anchor regardless of stored case.
-		if strings.EqualFold(rel, "skill.md") {
-			rel = "SKILL.md"
-		}
-		dst := filepath.Join(cleanTarget, rel)
-		if dst != cleanTarget && !strings.HasPrefix(dst, cleanTarget+string(os.PathSeparator)) {
-			return fmt.Errorf("tar escape attempt: %q", e.rel)
-		}
-		if e.isDir {
-			if err := os.MkdirAll(dst, 0o755); err != nil {
-				return err
-			}
-			continue
-		}
-		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-			return err
-		}
-		// O_EXCL: a colliding/duplicate entry fails closed instead of silently
-		// truncating a prior write.
-		out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o644)
-		if err != nil {
-			return err
-		}
-		if _, err := out.Write(e.content); err != nil {
-			_ = out.Close()
-			return err
-		}
-		if err := out.Close(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// wrapperPrefixFromEntries returns "<dir>/" if EVERY regular-file entry lives
-// under one single top-level directory (a wrapped bundle), else "". Operates on
-// the already-decompressed entry list so extractSkb decompresses only once.
-func wrapperPrefixFromEntries(entries []skbEntry) string {
-	seg := ""
-	any := false
-	for _, e := range entries {
-		if e.isDir {
-			continue
-		}
-		i := strings.Index(e.rel, "/")
-		if i < 0 {
-			return "" // a root-level file → flat
-		}
-		first := e.rel[:i]
-		if !any {
-			seg, any = first, true
-		} else if first != seg {
-			return "" // more than one top-level segment → flat
-		}
-	}
-	if any && seg != "" {
-		return seg + "/"
-	}
-	return ""
+	return skillbundle.ExtractTo(entries, target)
 }
 
 func defaultSkillsDir() string {
