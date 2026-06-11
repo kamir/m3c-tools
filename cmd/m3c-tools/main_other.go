@@ -103,6 +103,16 @@ func main() {
 	case "screenshot":
 		fmt.Fprintln(os.Stderr, "Error: screenshot capture requires macOS")
 		os.Exit(1)
+	// SPEC-0251 §5 multi-platform parity: portable commands promoted out of the
+	// darwin-only main.go into commands_shared.go now route here too.
+	case "retry":
+		cmdRetry(os.Args[2:])
+	case "schedule":
+		cmdSchedule(os.Args[2:])
+	case "status":
+		cmdStatus(os.Args[2:])
+	case "cancel":
+		cmdCancel(os.Args[2:])
 	case "version", "--version", "-v":
 		printVersion()
 	case "help", "--help", "-h":
