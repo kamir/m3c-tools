@@ -88,6 +88,8 @@ func main() {
 		cmdSeal(os.Args[2:])
 	case "import":
 		cmdImport(os.Args[2:])
+	case "menubar":
+		cmdMenubar(os.Args[2:])
 	// `audit` is now SPEC-0189 §14 antivirus UX (S3.3, dispatched above);
 	// the legacy SPEC-0115 cmdAudit was a Phase-2 stub and has been
 	// superseded — see runAudit in audit_cmds.go.

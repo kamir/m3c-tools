@@ -51,7 +51,7 @@ func runWithExit(fn func() int) {
 // Not currently wired into main.go — the existing runners return int
 // directly — but kept here as the canonical shape for future runners that
 // want to defer exit-code translation entirely.
-func runWithExitErr(fn func() error, stderr io.Writer) {
+func runWithExitErr(fn func() error, stderr io.Writer) { //nolint:unused // documented canonical error-shaped variant, kept for future runners (see doc above)
 	err := fn()
 	if err == nil {
 		os.Exit(exitOK)

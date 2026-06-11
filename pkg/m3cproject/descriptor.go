@@ -245,12 +245,10 @@ func Load(workingDir string) (*Descriptor, error) {
 	if err := yaml.Unmarshal(data, &d); err != nil {
 		return nil, err
 	}
-	if !KnownSchema(d.Schema) {
-		// Unknown schema — treat as present-but-not-understood. We still return
-		// it (with whatever parsed) but mark the id source as descriptor so the
-		// caller knows a file exists; a stricter caller can reject on schema.
-		// v1 and v2 are both known (v2 just adds `channels:`).
-	}
+	// An unknown schema is tolerated, not rejected here: we still return whatever
+	// parsed (with the id source marked as descriptor) so the caller knows a file
+	// exists; a stricter caller can reject on schema. v1 and v2 are both known
+	// (v2 just adds `channels:`).
 	if strings.TrimSpace(d.Plm.ProjectID) == "" {
 		// Malformed: fall back to dir-slug rather than an empty id.
 		d.Plm.ProjectID = DirSlug(root)

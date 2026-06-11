@@ -347,11 +347,13 @@ func appendNotifyQueue(proposalID, skillName, intent string) error {
 // extractFirstPositional pulls the first non-flag arg before any flags.
 // Mirrors extractDigestPositional but returns a generic name string.
 func extractFirstPositional(args []string) (first string, rest []string) {
-	for i, a := range args {
-		if strings.HasPrefix(a, "-") {
-			return "", args[i:]
-		}
-		return a, args[i+1:]
+	// The first positional must come before any flag: if args[0] is a flag (or
+	// args is empty) there is no leading positional and the whole slice is rest.
+	if len(args) == 0 {
+		return "", nil
 	}
-	return "", nil
+	if strings.HasPrefix(args[0], "-") {
+		return "", args
+	}
+	return args[0], args[1:]
 }

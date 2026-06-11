@@ -78,7 +78,7 @@ func TestGetItemRoundTrip(t *testing.T) {
 		// HMAC must verify.
 		if err := verifyFakeSig(r, hash.Hex(), secret, nil); err != nil {
 			t.Errorf("hmac: %v", err)
-			http.Error(w, "bad sig", 401)
+			http.Error(w, "bad sig", http.StatusUnauthorized)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -115,7 +115,7 @@ func TestCreateArtifactRoundTrip(t *testing.T) {
 		gotBody, _ = io.ReadAll(r.Body)
 		if err := verifyFakeSig(r, hash.Hex(), secret, gotBody); err != nil {
 			t.Errorf("hmac: %v", err)
-			http.Error(w, "bad sig", 401)
+			http.Error(w, "bad sig", http.StatusUnauthorized)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -212,7 +212,7 @@ func TestRetriesOn5xxOnce(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		if calls == 1 {
-			http.Error(w, "boom", 503)
+			http.Error(w, "boom", http.StatusServiceUnavailable)
 			return
 		}
 		_, _ = w.Write([]byte(`{"id":"doc-1","context_id":"user-A"}`))

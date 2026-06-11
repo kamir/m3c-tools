@@ -6810,7 +6810,7 @@ func runPocketCloudSync(dryRun bool) error {
 	apiClient := pocket.NewAPIClient()
 	apiClient.BaseURL = strings.TrimRight(pcfg.APIURL, "/")
 	if !apiClient.IsConfigured() {
-		return fmt.Errorf("Pocket API client not configured")
+		return fmt.Errorf("pocket API client not configured")
 	}
 
 	syncClient := pocket.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, "", !er1Cfg.VerifySSL)

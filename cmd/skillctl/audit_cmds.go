@@ -168,7 +168,7 @@ func emitReportTable(r audit.Report, w io.Writer) {
 			v.Name, v.Tier, v.State, gov, v.Reason)
 	}
 	fmt.Fprintln(tw, "-----\t----\t-----\t---\t------")
-	tw.Flush()
+	_ = tw.Flush()
 	// Aggregate summary line — the human form of the exit code (S3.3 Q3).
 	fmt.Fprintln(w, summaryLine(r))
 }
@@ -249,7 +249,7 @@ func runCleanupDryRun(targets []audit.Verdict, outFormat string, stdout, stderr 
 	for _, v := range targets {
 		fmt.Fprintf(tw, "%s\t%s\t%s\n", v.Name, v.State, v.SourcePath)
 	}
-	tw.Flush()
+	_ = tw.Flush()
 	fmt.Fprintf(stdout, "\n%d skill(s) eligible for cleanup.\n", len(targets))
 	fmt.Fprintf(stdout, "Token (valid 5 min):\n  %s\n", token)
 	fmt.Fprintln(stdout, "")

@@ -39,7 +39,7 @@ func newFakeER1(t *testing.T) *fakeER1 {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/upload_2", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			http.Error(w, "method", 405)
+			http.Error(w, "method", http.StatusMethodNotAllowed)
 			return
 		}
 		if err := r.ParseMultipartForm(64 << 20); err != nil {

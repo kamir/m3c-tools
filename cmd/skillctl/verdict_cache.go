@@ -192,7 +192,7 @@ func computeInstalledDigest(dir string) (string, error) {
 	h := sha256.New()
 	for _, f := range files {
 		rel, _ := filepath.Rel(dir, f)
-		io.WriteString(h, rel)
+		_, _ = io.WriteString(h, rel)
 		h.Write([]byte{0})
 		b, err := os.ReadFile(f)
 		if err != nil {

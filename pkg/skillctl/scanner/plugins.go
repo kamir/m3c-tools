@@ -115,7 +115,7 @@ func marketplaceRoots(pluginsDir string) []ScanRoot {
 // installedPluginRecord is the relevant subset of an entry in
 // installed_plugins.json. The file is best-effort: if absent or malformed,
 // we proceed with empty annotation data.
-type installedPluginRecord struct {
+type installedPluginRecord struct { //nolint:unused // installed-plugins annotation model; loader built, scanner wiring pending
 	Owner   string `json:"owner"`
 	Plugin  string `json:"plugin"`
 	Version string `json:"version"`
@@ -125,7 +125,7 @@ type installedPluginRecord struct {
 // loadInstalledPlugins reads ~/.claude/plugins/installed_plugins.json if
 // present. Returns nil on any error (missing file, bad JSON, etc.) — the
 // caller should treat that as "no annotation data available".
-func loadInstalledPlugins(configDir string) []installedPluginRecord {
+func loadInstalledPlugins(configDir string) []installedPluginRecord { //nolint:unused // built for scanner annotation, not yet wired (see installedPluginRecord)
 	path := filepath.Join(configDir, "plugins", "installed_plugins.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
