@@ -229,6 +229,27 @@ func writeTrustRoots(t *testing.T, pub ed25519.PublicKey) string {
 	return path
 }
 
+// SPEC-0252 §6: the shared govlevel.ValidFloor guard rejects a "red" floor
+// case/whitespace-insensitively. Prove the self loader refuses RED / Red /
+// " red " / rEd identically — the SEC-L1 class (a mixed-case floor must never
+// slip through and silently admit everything).
+func TestLoadSelfTrustRoots_RejectsRedFloorAnyCase(t *testing.T) {
+	pub, _, _ := ed25519.GenerateKey(nil)
+	fp := selfFingerprint(pub)
+	for _, floor := range []string{"RED", "Red", " red ", "rEd"} {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "trust-roots.yaml")
+		body := fmt.Sprintf("registry: self\npubkey_b64: %s\nfingerprint: %s\ngovernance_minimum: %q\n",
+			base64.StdEncoding.EncodeToString(pub), fp, floor)
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := LoadSelfTrustRoots(path); err == nil {
+			t.Errorf("governance_minimum %q must be rejected (red is not a valid floor, any case)", floor)
+		}
+	}
+}
+
 func TestLoadSelfTrustRoots_FingerprintRecomputedWhenAbsent(t *testing.T) {
 	pub, _, _ := ed25519.GenerateKey(nil)
 	dir := t.TempDir()

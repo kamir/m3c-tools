@@ -34,6 +34,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/kamir/m3c-tools/pkg/skillctl/govlevel"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
 )
@@ -424,7 +425,7 @@ func stepVerifyRegistry(digest [sha256.Size]byte, meta *registry.BundleMeta, roo
 // the trust-root says green. Red bundles are NEVER admitted, regardless
 // of override.
 func stepCheckGovernance(meta *registry.BundleMeta, root *TrustRoot, override string, allowYellow bool) (string, error) {
-	level := strings.ToLower(strings.TrimSpace(meta.CurrentGovernance))
+	level := govlevel.Normalize(meta.CurrentGovernance)
 	if level == "" {
 		// Fail-closed: a registry that didn't compute a verdict is
 		// treated as red.
@@ -435,7 +436,7 @@ func stepCheckGovernance(meta *registry.BundleMeta, root *TrustRoot, override st
 	if min == "" {
 		min = root.GovernanceMinimum
 	}
-	min = strings.ToLower(strings.TrimSpace(min))
+	min = govlevel.Normalize(min)
 	if min == "" {
 		// Defensive — Load already enforces this; surface clearly
 		// rather than panic.

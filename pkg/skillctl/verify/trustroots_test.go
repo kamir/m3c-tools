@@ -231,6 +231,34 @@ func TestLoad_RejectsInvalidGovernance(t *testing.T) {
 	}
 }
 
+// SPEC-0252 §6: the SAME shared govlevel.ValidFloor guard the self loader uses
+// rejects a "red" floor case/whitespace-insensitively in the SPEC-0188 loader
+// too — proving both loaders reject RED / Red / " red " identically from ONE
+// helper (closes the SEC-L1 case-collapse class in both, not just registry).
+func TestLoad_RejectsRedFloorAnyCase(t *testing.T) {
+	for _, floor := range []string{"RED", "Red", " red ", "rEd"} {
+		path := trustRootsTempPath(t)
+		dir := filepath.Dir(path)
+		_, rawPub := writePubkeyPEM(t, dir, "k.pub")
+		b64 := base64.StdEncoding.EncodeToString(rawPub)
+		yaml := `trust_roots:
+  - registry_url: https://aims.example.com/api/skills
+    registry_keys:
+      - id: k
+        pubkey: ` + b64 + `
+        issued: 2026-05-05
+    identity_keys_authorized: from-registry
+    governance_minimum: "` + floor + `"
+`
+		if err := os.WriteFile(path, []byte(yaml), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Load(path); err == nil {
+			t.Errorf("governance_minimum %q must be rejected (red is not a valid floor, any case)", floor)
+		}
+	}
+}
+
 func TestLoad_RejectsInvalidIdentityMode(t *testing.T) {
 	path := trustRootsTempPath(t)
 	dir := filepath.Dir(path)

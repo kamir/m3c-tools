@@ -28,6 +28,7 @@ import (
 
 	"crypto/ed25519"
 
+	"github.com/kamir/m3c-tools/pkg/skillctl/govlevel"
 	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
 	"gopkg.in/yaml.v3"
 )
@@ -41,15 +42,6 @@ const DefaultTrustRootsPath = ".claude/skill-trust-roots.yaml"
 // decodes to a different length is rejected — there is no useful "lenient
 // mode" for a key length check.
 const pubkeyRawSize = ed25519.PublicKeySize // 32
-
-// validGovernanceMinima is the closed set of accepted values for
-// `governance_minimum`. SPEC-0188 §4.4 lists "green" and "yellow"; "red"
-// is omitted intentionally — pinning to red would mean accepting anything,
-// which is a footgun we refuse to spell.
-var validGovernanceMinima = map[string]struct{}{
-	"green":  {},
-	"yellow": {},
-}
 
 // validIdentityModes is the closed set of accepted values for
 // `identity_keys_authorized`. Today only "from-registry" is meaningful;
@@ -496,9 +488,15 @@ func (t *TrustRoots) validate() error {
 		if root.GovernanceMinimum == "" {
 			return fmt.Errorf("trust_roots[%d] %s: governance_minimum is required", i, root.RegistryURL)
 		}
-		if _, ok := validGovernanceMinima[strings.ToLower(root.GovernanceMinimum)]; !ok {
+		// One shared floor guard (SPEC-0252 §6) — same {green,yellow}, red-and-
+		// unknown-rejected check the self loader uses. Store the normalized form
+		// back into the loaded root so the governance comparison can't depend on
+		// re-normalising mixed case (matches registry.LoadSelfTrustRoots).
+		norm, ok := govlevel.ValidFloor(root.GovernanceMinimum)
+		if !ok {
 			return fmt.Errorf("trust_roots[%d] %s: governance_minimum %q is not one of [green, yellow]", i, root.RegistryURL, root.GovernanceMinimum)
 		}
+		t.Roots[i].GovernanceMinimum = norm
 	}
 	return nil
 }

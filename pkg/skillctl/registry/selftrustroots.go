@@ -31,20 +31,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/kamir/m3c-tools/pkg/skillctl/govlevel"
 	"gopkg.in/yaml.v3"
 )
-
-// validSelfGovernanceMinima is the closed set of accepted values for
-// `governance_minimum`. SPEC-0188 §4.4 (mirrored from verify/trustroots.go)
-// lists "green" and "yellow"; "red" is omitted intentionally — pinning the
-// floor to "red" would silently permit EVERYTHING (it is the most-permissive
-// rung, not a meaningful floor), so we refuse to spell it. Unknown/typo'd
-// values are likewise rejected so a config error fails loudly rather than
-// silently disabling the governance gate.
-var validSelfGovernanceMinima = map[string]struct{}{
-	"green":  {},
-	"yellow": {},
-}
 
 // SelfTrustRoots is the loaded form of the file.
 type SelfTrustRoots struct {
@@ -92,17 +81,16 @@ func LoadSelfTrustRoots(path string) (*SelfTrustRoots, error) {
 	if tr.GovernanceMinimum == "" {
 		tr.GovernanceMinimum = "green"
 	}
-	// Reject an invalid governance floor. In particular "red" is NOT a valid
-	// floor: as the most-permissive rung it would silently admit every
-	// attestation (even un-attested bundles below), defeating the gate. Only
-	// "green" and "yellow" are meaningful floors.
-	if _, ok := validSelfGovernanceMinima[strings.ToLower(strings.TrimSpace(tr.GovernanceMinimum))]; !ok {
+	// Reject an invalid governance floor via the ONE shared guard (SPEC-0252
+	// §6): "red" is NOT a valid floor (the most-permissive rung would admit
+	// every attestation, defeating the gate) and unknown/typo'd values fail
+	// loudly. ValidFloor returns the normalized form; storing it (SEC-L1) keeps
+	// MeetsFloor's rank from collapsing on a mixed-case floor.
+	norm, ok := govlevel.ValidFloor(tr.GovernanceMinimum)
+	if !ok {
 		return nil, fmt.Errorf("trust-roots: governance_minimum %q is not one of [green, yellow] in %s", tr.GovernanceMinimum, path)
 	}
-	// SEC-L1: store the floor normalized (lowercase) so MeetsFloor's lowercase
-	// rank map ranks it correctly — otherwise "GREEN" ranks 0 and the floor
-	// silently collapses to nothing, admitting red.
-	tr.GovernanceMinimum = strings.ToLower(strings.TrimSpace(tr.GovernanceMinimum))
+	tr.GovernanceMinimum = norm
 	if tr.PubKeyB64 == "" {
 		return nil, fmt.Errorf("trust-roots: pubkey_b64 missing in %s", path)
 	}
@@ -146,8 +134,8 @@ func (t *SelfTrustRoots) PubKey() ed25519.PublicKey {
 // the empty string — "no attestation yet" — at a higher layer.)
 func (t *SelfTrustRoots) MeetsFloor(level string) bool {
 	rank := map[string]int{"green": 3, "yellow": 2, "red": 1}
-	have := rank[strings.ToLower(strings.TrimSpace(level))]
-	want := rank[strings.ToLower(strings.TrimSpace(t.GovernanceMinimum))]
+	have := rank[govlevel.Normalize(level)]
+	want := rank[govlevel.Normalize(t.GovernanceMinimum)]
 	return have >= want && have > 0
 }
 
