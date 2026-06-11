@@ -10,7 +10,7 @@
 #   curl -fsSL .../install.sh | INSTALL_DIR=$HOME/.local/bin bash
 set -euo pipefail
 
-RELEASE_BASE="${RELEASE_BASE:-https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.2.1}"
+RELEASE_BASE="${RELEASE_BASE:-https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.2.7}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 
 # SEC-M2: pin the release-key fingerprint. The signature alone proves only that
@@ -50,46 +50,80 @@ command -v openssl >/dev/null 2>&1 || { echo "openssl required for signature ver
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 fetch() { curl -fsSL -o "$tmp/$1" "$RELEASE_BASE/$1"; }
 
-echo "Fetching manifest + signature + key"
+echo "Fetching manifest"
 fetch SHA256SUMS
-fetch SHA256SUMS.sig
-fetch skillctl-release.pub
 
-# SEC-M2: prefer the in-repo, version-controlled release key when this script
-# runs from a checkout — it is reviewed and cannot be swapped by an origin
-# compromise. Search a few likely roots relative to the script location.
-script_dir=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" && pwd 2>/dev/null || echo "")
-pubkey="$tmp/skillctl-release.pub"
-for cand in \
-  "$script_dir/../INFRA/skillctl-release.pub" \
-  "$script_dir/INFRA/skillctl-release.pub" \
-  "$script_dir/skillctl-release.pub"; do
-  if [ -f "$cand" ]; then
-    echo "Using in-repo release key: $cand"
-    pubkey="$cand"
-    break
+# === Provenance track 1 (preferred): keyless cosign / GitHub OIDC (SPEC-0253). ===
+# When cosign is installed AND the release carries a cosign bundle, verify
+# SHA256SUMS against the EXPECTED workflow OIDC identity (no key to trust — the
+# signer is the release workflow itself). A present-but-invalid bundle is a HARD
+# FAIL (an attacker must not be able to strip it to force a downgrade); a fully
+# ABSENT bundle/cosign falls through to the pinned-ed25519 track below, so every
+# existing release (which has no cosign bundle) keeps installing unchanged.
+COSIGN_ID_REGEX="${SKILLCTL_COSIGN_IDENTITY:-^https://github.com/kamir/m3c-tools/\.github/workflows/skillctl-release\.yml@refs/tags/skillctl/v}"
+COSIGN_ISSUER="https://token.actions.githubusercontent.com"
+verified=0
+if command -v cosign >/dev/null 2>&1 && curl -fsSL -o "$tmp/SHA256SUMS.cosign.bundle" "$RELEASE_BASE/SHA256SUMS.cosign.bundle" 2>/dev/null; then
+  echo "Verifying cosign keyless provenance over SHA256SUMS (GitHub OIDC)"
+  if cosign verify-blob "$tmp/SHA256SUMS" \
+       --bundle "$tmp/SHA256SUMS.cosign.bundle" \
+       --certificate-identity-regexp "$COSIGN_ID_REGEX" \
+       --certificate-oidc-issuer "$COSIGN_ISSUER" >/dev/null 2>&1; then
+    echo "OK: cosign keyless provenance verified (signed by the release workflow)"
+    verified=1
+  else
+    echo "COSIGN VERIFICATION FAILED — a bundle is present but did not verify against the" >&2
+    echo "expected workflow identity; refusing to install (no silent downgrade to ed25519)." >&2
+    exit 1
   fi
-done
+fi
+if [ "${SKILLCTL_REQUIRE_COSIGN:-0}" = "1" ] && [ "$verified" != "1" ]; then
+  echo "SKILLCTL_REQUIRE_COSIGN=1 but no verifiable cosign provenance was found — refusing." >&2
+  exit 1
+fi
 
-echo "Verifying ed25519 signature over SHA256SUMS (provenance)"
-if ! openssl pkeyutl -verify -pubin -inkey "$pubkey" -rawin \
-       -in "$tmp/SHA256SUMS" -sigfile "$tmp/SHA256SUMS.sig" >/dev/null 2>&1; then
-  echo "SIGNATURE VERIFICATION FAILED — refusing to install" >&2
-  exit 1
+# === Provenance track 2 (fallback / current default): pinned ed25519 (SEC-M2). ===
+# Reached when cosign is absent or the release carries no cosign bundle.
+if [ "$verified" != "1" ]; then
+  fetch SHA256SUMS.sig
+  fetch skillctl-release.pub
+
+  # SEC-M2: prefer the in-repo, version-controlled release key when this script
+  # runs from a checkout — it is reviewed and cannot be swapped by an origin
+  # compromise. Search a few likely roots relative to the script location.
+  script_dir=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" && pwd 2>/dev/null || echo "")
+  pubkey="$tmp/skillctl-release.pub"
+  for cand in \
+    "$script_dir/../INFRA/skillctl-release.pub" \
+    "$script_dir/INFRA/skillctl-release.pub" \
+    "$script_dir/skillctl-release.pub"; do
+    if [ -f "$cand" ]; then
+      echo "Using in-repo release key: $cand"
+      pubkey="$cand"
+      break
+    fi
+  done
+
+  echo "Verifying ed25519 signature over SHA256SUMS (provenance)"
+  if ! openssl pkeyutl -verify -pubin -inkey "$pubkey" -rawin \
+         -in "$tmp/SHA256SUMS" -sigfile "$tmp/SHA256SUMS.sig" >/dev/null 2>&1; then
+    echo "SIGNATURE VERIFICATION FAILED — refusing to install" >&2
+    exit 1
+  fi
+  # Fingerprint = sha256 of the raw 32-byte ed25519 key (DER SPKI tail) — the
+  # same derivation used for trust-roots + the published K-release fingerprint.
+  fp=$(openssl pkey -pubin -in "$pubkey" -outform DER 2>/dev/null | tail -c 32 | sha256 | awk '{print "sha256:"$1}')
+  # SEC-M2: fail closed unless the key's fingerprint matches the pinned value.
+  # Without this, a signature that merely verifies against a co-located key would
+  # pass — defeating the point of signing.
+  if [ "$fp" != "$EXPECTED_FP" ]; then
+    echo "RELEASE KEY FINGERPRINT MISMATCH — refusing to install" >&2
+    echo "  expected: $EXPECTED_FP" >&2
+    echo "  got:      $fp" >&2
+    exit 1
+  fi
+  echo "OK: signed by the pinned skillctl release key ($fp)"
 fi
-# Fingerprint = sha256 of the raw 32-byte ed25519 key (DER SPKI tail) — the
-# same derivation used for trust-roots + the published K-release fingerprint.
-fp=$(openssl pkey -pubin -in "$pubkey" -outform DER 2>/dev/null | tail -c 32 | sha256 | awk '{print "sha256:"$1}')
-# SEC-M2: fail closed unless the key's fingerprint matches the pinned value.
-# Without this, a signature that merely verifies against a co-located key would
-# pass — defeating the point of signing.
-if [ "$fp" != "$EXPECTED_FP" ]; then
-  echo "RELEASE KEY FINGERPRINT MISMATCH — refusing to install" >&2
-  echo "  expected: $EXPECTED_FP" >&2
-  echo "  got:      $fp" >&2
-  exit 1
-fi
-echo "OK: signed by the pinned skillctl release key ($fp)"
 
 echo "Fetching $asset"
 fetch "$asset"

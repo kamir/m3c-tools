@@ -1,0 +1,125 @@
+name: skillctl Release (keyless provenance)
+
+# SPEC-0253: build + sign skillctl releases in a clean CI runner with KEYLESS
+# Sigstore/cosign + GitHub OIDC — no long-lived private key in the repo or in
+# workflow secrets. Triggered ONLY on skillctl/v* tags (disjoint from the `v*`
+# product-release workflow in release.yml, which this does not touch).
+#
+# Output format mirrors tools/skillctl-release.sh exactly (raw per-arch binaries
+# + SHA256SUMS) so the published install.sh keeps working; this adds a cosign
+# bundle + SLSA build provenance.
+#
+# Creates a DRAFT release. The operator reviews it and promotes it — and, DURING
+# THE ED25519→COSIGN TRANSITION, also attaches the ed25519 SHA256SUMS.sig (cut
+# locally with tools/skillctl-release.sh, whose deterministic build produces a
+# byte-identical SHA256SUMS) so users WITHOUT cosign still verify via the pinned
+# ed25519 fallback in install.sh. Once cosign is the only track, that step drops.
+
+on:
+  push:
+    tags:
+      - 'skillctl/v*'
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Build · cosign-sign · draft
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the (draft) release
+      id-token: write # OIDC for keyless cosign + build provenance
+      attestations: write # SLSA build-provenance attestation
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.4" # patched toolchain (SPEC-0251 §5) — CVE-free binaries
+
+      # 5-arch matrix, pure Go (skillctl needs no CGO), version-stamped with the
+      # full skillctl/vX.Y.Z tag — exactly tools/skillctl-release.sh's set.
+      - name: Build skillctl (5 arches)
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          build() {
+            CGO_ENABLED=0 GOOS="$1" GOARCH="$2" \
+              go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" \
+              -o "dist/skillctl-$1-$2${3:-}" ./cmd/skillctl
+          }
+          build darwin arm64
+          build darwin amd64
+          build linux amd64
+          build linux arm64
+          build windows amd64 .exe
+
+      - name: SHA256SUMS
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          sha256sum skillctl-darwin-amd64 skillctl-darwin-arm64 \
+                    skillctl-linux-amd64 skillctl-linux-arm64 \
+                    skillctl-windows-amd64.exe > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Keyless-sign SHA256SUMS (GitHub OIDC)
+        working-directory: dist
+        run: cosign sign-blob --yes SHA256SUMS --bundle SHA256SUMS.cosign.bundle
+
+      # Gate: the build fails if the bundle doesn't verify against THIS workflow's
+      # OIDC identity — the same identity install.sh pins.
+      - name: Verify the cosign signature in-job (gate)
+        working-directory: dist
+        run: |
+          cosign verify-blob SHA256SUMS \
+            --bundle SHA256SUMS.cosign.bundle \
+            --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/\.github/workflows/skillctl-release\.yml@refs/tags/skillctl/v" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+
+      - name: SLSA build provenance (binaries + manifest)
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/skillctl-darwin-arm64
+            dist/skillctl-darwin-amd64
+            dist/skillctl-linux-amd64
+            dist/skillctl-linux-arm64
+            dist/skillctl-windows-amd64.exe
+            dist/SHA256SUMS
+
+      - name: Stage installer, notes, pinned pubkey
+        run: |
+          set -euo pipefail
+          cp tools/skillctl-install.sh dist/install.sh
+          [ -f INFRA/skillctl-release.pub ] && cp INFRA/skillctl-release.pub dist/ || true
+          NOTES="release/${GITHUB_REF_NAME}/RELEASE_NOTES.md"
+          if [ -f "$NOTES" ]; then cp "$NOTES" dist/RELEASE_NOTES.md; \
+          else printf '# skillctl %s\n\nKeyless (cosign/OIDC) provenance release.\n' "${GITHUB_REF_NAME}" > dist/RELEASE_NOTES.md; fi
+
+      # DRAFT — the operator reviews, (transition) attaches the ed25519
+      # SHA256SUMS.sig, and promotes. A broken cosign flow yields a draft, never
+      # a published release.
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          make_latest: false
+          name: "skillctl ${{ github.ref_name }}"
+          body_path: dist/RELEASE_NOTES.md
+          files: |
+            dist/skillctl-darwin-arm64
+            dist/skillctl-darwin-amd64
+            dist/skillctl-linux-amd64
+            dist/skillctl-linux-arm64
+            dist/skillctl-windows-amd64.exe
+            dist/SHA256SUMS
+            dist/SHA256SUMS.cosign.bundle
+            dist/install.sh
+            dist/skillctl-release.pub
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
