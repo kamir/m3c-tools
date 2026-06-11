@@ -1,0 +1,23 @@
+# SPEC-0251 §5 supply-chain hygiene — automated dependency + action updates.
+# Dependabot opens PRs only (never merges); each PR is validated by the same CI
+# hardened in this change (lint, unit, skillctl-race, govulncheck, gitleaks).
+version: 2
+updates:
+  # Go module dependencies (module mode, no vendor dir).
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      # Collapse routine minor+patch bumps into one PR to cut noise; majors
+      # still open individually so they get a deliberate review.
+      go-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # GitHub Actions used by the workflows (checkout, setup-go, gh-release, …).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5

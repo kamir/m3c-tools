@@ -2,6 +2,8 @@ module github.com/kamir/m3c-tools
 
 go 1.25.0
 
+toolchain go1.26.4
+
 require (
 	fyne.io/systray v1.12.0
 	github.com/caseymrm/menuet v1.0.3

@@ -15,7 +15,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.26.4"
 
       - name: Install PortAudio
         run: brew install portaudio
@@ -37,7 +37,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.26.4"
 
       - name: Install PortAudio
         run: brew install portaudio
@@ -59,7 +59,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.26.4"
 
       - name: Install PortAudio
         run: brew install portaudio
@@ -74,6 +74,51 @@ jobs:
       - name: Run skillctl security tests (-race)
         run: go test -race -count=1 ./cmd/skillctl/... ./pkg/skillctl/...
 
+  # SPEC-0251 §5 supply-chain hygiene ─────────────────────────────────────────
+  govulncheck:
+    name: govulncheck (reachable CVEs)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.4"
+
+      # The cgo packages (recorder/menubar) need PortAudio to typecheck, so run
+      # on macOS like the other jobs rather than a pure-Go ubuntu runner.
+      - name: Install PortAudio
+        run: brew install portaudio
+
+      # govulncheck fails ONLY on vulns reachable from our code. The toolchain is
+      # pinned to a patched Go (go1.26.4, via go.mod `toolchain` + setup-go) so the
+      # stdlib CVEs older toolchains carried are gone; this job keeps them from
+      # regressing. Standalone (not in any build job's `needs`) so a fresh upstream
+      # CVE blocks merge but never the release builds.
+      - name: govulncheck ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  gitleaks:
+    name: gitleaks (secret scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history for a complete secret scan
+
+      # .gitleaks.toml already drives the local pre-commit hook, but the hook is
+      # opt-in per clone. Enforce it in CI over full history. Pinned to the same
+      # gitleaks version validated locally; exits non-zero on any finding (blocks).
+      - name: Install gitleaks
+        run: |
+          curl -fsSL -o /tmp/gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.0/gitleaks_8.30.0_linux_x64.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          sudo install /tmp/gitleaks /usr/local/bin/gitleaks
+
+      - name: Scan full history (config-aware)
+        run: gitleaks git . --config .gitleaks.toml --no-banner --redact
+
   build-macos:
     name: Build macOS (arm64 + amd64)
     runs-on: macos-latest
@@ -83,7 +128,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.26.4"
 
       - name: Install PortAudio (Homebrew, for native arm64 build)
         run: brew install portaudio pkg-config
@@ -132,7 +177,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.26.4"
 
       - name: Build linux/amd64
         run: |
