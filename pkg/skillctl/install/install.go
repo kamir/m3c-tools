@@ -20,10 +20,7 @@
 package install
 
 import (
-	"archive/tar"
 	"bufio"
-	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -36,22 +33,21 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 )
 
-// MaxExtractedBytes caps the total uncompressed size of an extracted
-// bundle. 100 MiB is wildly above any plausible skill (typical bundles are
-// kilobytes); the cap exists to defend against gzip / tar bombs that
-// expand to many GB on disk and exhaust the user's home volume before any
-// audit can fire.
-//
-// Configurable via Opts.MaxExtractedBytes; 0 means use this default.
-const MaxExtractedBytes int64 = 100 << 20
-
-// MaxExtractedFiles caps the number of entries we'll write before
-// refusing — a tarball with a million tiny files is also a bomb shape.
-const MaxExtractedFiles = 10000
+// MaxExtractedBytes / MaxExtractedFiles are the install-package spelling of the
+// canonical extraction caps, which now live in pkg/skillbundle (SPEC-0252 §3.3 —
+// one source of truth). Aliases, not duplicate literals; the gzip/tar-bomb
+// guards in skillbundle.Unpack enforce them. MaxExtractedBytes stays the default
+// for Opts.MaxExtractedBytes (0 → this); kept so existing call sites and tests
+// read the same number.
+const (
+	MaxExtractedBytes int64 = skillbundle.DefaultMaxExtractedBytes
+	MaxExtractedFiles       = skillbundle.DefaultMaxExtractedFiles
+)
 
 // installRoot is the user's skills install dir, relative to $HOME. The
 // per-machine state lives at <home>/<installRoot>; the helpers below all
@@ -537,118 +533,25 @@ func sanitizeDigest(d string) string {
 	return sanitizeFilename(d)
 }
 
-// extractTGZ decompresses + untars data into destDir, with hardened path
-// validation (no traversal, no symlinks) and a total-size cap.
+// extractTGZ decompresses + untars blob into destDir via the ONE hardened core
+// (skillbundle.Unpack + ExtractTo): a single decompression pass, the byte
+// ceiling + file-count cap, the path-escape proof, symlink/hardlink/device
+// refusal, O_EXCL fail-closed writes, and the single scripts/*-0755-else-0644
+// mode policy.
 //
-// The blob bytes are passed in directly so we don't have to re-read the
-// staged file (the verifier already touched it for digest computation).
+// SPEC-0252 C4: StripWrapper is FALSE here on purpose. The HTTP install path
+// extracts WITH any single top-level wrapper dir and relocates the bundle
+// afterwards via resolveBundleTopLevel + the atomic rename into place — unlike
+// registry.extractSkb, which strips the wrapper inline. Keeping StripWrapper
+// off preserves that flow exactly. maxBytes is the caller's per-install override
+// (0 → the core default); the blob bytes are passed directly so we don't re-read
+// the staged file.
 func extractTGZ(blob []byte, destDir string, maxBytes int64) error {
-	absDest, err := filepath.Abs(destDir)
+	entries, err := skillbundle.Unpack(blob, skillbundle.UnpackOptions{MaxBytes: maxBytes})
 	if err != nil {
-		return fmt.Errorf("install: abs(destDir): %w", err)
+		return fmt.Errorf("install: %w", err)
 	}
-
-	gz, err := gzip.NewReader(bytes.NewReader(blob))
-	if err != nil {
-		return fmt.Errorf("install: gzip reader: %w", err)
-	}
-	defer gz.Close()
-
-	tr := tar.NewReader(gz)
-	var written int64
-	var entries int
-
-	for {
-		hdr, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("install: read tar header: %w", err)
-		}
-		entries++
-		if entries > MaxExtractedFiles {
-			return fmt.Errorf("install: tar entry count exceeds %d (likely a tar bomb)", MaxExtractedFiles)
-		}
-
-		// Path-traversal guard: clean the name, refuse absolute or
-		// dot-dot entries, and require the resolved abs path to live
-		// inside destDir.
-		if hdr.Name == "" {
-			continue
-		}
-		clean := filepath.Clean(hdr.Name)
-		if strings.HasPrefix(clean, "..") || strings.HasPrefix(clean, "/") || strings.HasPrefix(clean, string(filepath.Separator)) {
-			return fmt.Errorf("install: tar entry %q escapes destination", hdr.Name)
-		}
-		full := filepath.Join(absDest, clean)
-		absFull, err := filepath.Abs(full)
-		if err != nil {
-			return fmt.Errorf("install: abs(%s): %w", full, err)
-		}
-		// Trailing-separator trick to ensure prefix match is on a path
-		// component boundary (so /tmp/foo doesn't match /tmp/foobar).
-		if !strings.HasPrefix(absFull+string(filepath.Separator), absDest+string(filepath.Separator)) && absFull != absDest {
-			return fmt.Errorf("install: tar entry %q resolves outside destination (%s)", hdr.Name, absFull)
-		}
-
-		switch hdr.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(absFull, 0o755); err != nil {
-				return fmt.Errorf("install: mkdir %s: %w", absFull, err)
-			}
-		case tar.TypeReg, tar.TypeRegA:
-			if err := os.MkdirAll(filepath.Dir(absFull), 0o755); err != nil {
-				return fmt.Errorf("install: mkdir parent %s: %w", absFull, err)
-			}
-			f, err := os.OpenFile(absFull, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-			if err != nil {
-				return fmt.Errorf("install: open %s: %w", absFull, err)
-			}
-			// Cap reads at the remaining budget.
-			remaining := maxBytes - written
-			if remaining <= 0 {
-				_ = f.Close()
-				_ = os.Remove(absFull)
-				return fmt.Errorf("install: extracted size exceeds %d bytes (likely a gzip bomb)", maxBytes)
-			}
-			n, err := io.Copy(f, io.LimitReader(tr, remaining+1))
-			if err != nil {
-				_ = f.Close()
-				_ = os.Remove(absFull)
-				return fmt.Errorf("install: write %s: %w", absFull, err)
-			}
-			if n > remaining {
-				_ = f.Close()
-				_ = os.Remove(absFull)
-				return fmt.Errorf("install: extracted size exceeds %d bytes (likely a gzip bomb)", maxBytes)
-			}
-			written += n
-			// Apply sane mode bits: 0644 for files, 0755 if the
-			// path lives under scripts/.
-			mode := os.FileMode(0o644)
-			if strings.HasPrefix(clean, "scripts"+string(filepath.Separator)) || clean == "scripts" {
-				mode = 0o755
-			}
-			if err := f.Chmod(mode); err != nil {
-				_ = f.Close()
-				_ = os.Remove(absFull)
-				return fmt.Errorf("install: chmod %s: %w", absFull, err)
-			}
-			if err := f.Close(); err != nil {
-				_ = os.Remove(absFull)
-				return fmt.Errorf("install: close %s: %w", absFull, err)
-			}
-		case tar.TypeSymlink, tar.TypeLink:
-			// SPEC-0188 v1: refuse symlinks. They're a vector for
-			// pointing into / out of the install dir post-rename.
-			return fmt.Errorf("install: tar entry %q is a symlink/hardlink (refused in v1)", hdr.Name)
-		default:
-			// Devices, fifos, etc. — refuse.
-			return fmt.Errorf("install: tar entry %q has unsupported type 0x%x", hdr.Name, hdr.Typeflag)
-		}
-	}
-	return nil
+	return skillbundle.ExtractTo(entries, destDir)
 }
 
 // validateChecksumsIfPresent reads the bundle's CHECKSUMS file (if it
