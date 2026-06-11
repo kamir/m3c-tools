@@ -117,7 +117,10 @@ func Unpack(archive []byte, opts UnpackOptions) ([]Entry, error) {
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			entries = append(entries, Entry{Rel: rel, IsDir: true})
-		case tar.TypeReg, tar.TypeRegA:
+		case tar.TypeReg:
+			// tar.Reader.next() already normalises the deprecated TypeRegA
+			// ('\x00') to TypeReg (or TypeDir for a trailing-slash name) before
+			// we see the header, so matching TypeRegA here would be dead code.
 			// Cap this entry against the remaining global budget. LimitReader to
 			// remaining+1 so a lying header (n > remaining) is detected.
 			remaining := maxBytes - written
