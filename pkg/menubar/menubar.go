@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/bulkprogress"
 )
 
 func defaultLogPath() string {
@@ -60,17 +62,20 @@ const (
 )
 
 // BulkRunPhase represents the current step for an audio bulk operation item.
-type BulkRunPhase string
+// Aliased to the portable pkg/bulkprogress.Phase (SPEC-0251 §5) so the
+// platform-neutral audio-import pipeline can share the type without importing
+// this darwin-only package. The BulkPhase* names + values are unchanged.
+type BulkRunPhase = bulkprogress.Phase
 
 const (
-	BulkPhaseQueued      BulkRunPhase = "queued"
-	BulkPhaseImport      BulkRunPhase = "import"
-	BulkPhaseTranscribe  BulkRunPhase = "transcribe"
-	BulkPhaseUpload      BulkRunPhase = "upload"
-	BulkPhaseDone        BulkRunPhase = "done"
-	BulkPhaseFailed      BulkRunPhase = "failed"
-	BulkPhaseReprocess   BulkRunPhase = "reprocess"
-	BulkPhaseUnavailable BulkRunPhase = "unavailable"
+	BulkPhaseQueued      = bulkprogress.PhaseQueued
+	BulkPhaseImport      = bulkprogress.PhaseImport
+	BulkPhaseTranscribe  = bulkprogress.PhaseTranscribe
+	BulkPhaseUpload      = bulkprogress.PhaseUpload
+	BulkPhaseDone        = bulkprogress.PhaseDone
+	BulkPhaseFailed      = bulkprogress.PhaseFailed
+	BulkPhaseReprocess   = bulkprogress.PhaseReprocess
+	BulkPhaseUnavailable = bulkprogress.PhaseUnavailable
 )
 
 // BulkRunState holds live state for a currently running bulk audio operation.
@@ -89,22 +94,9 @@ type BulkRunState struct {
 }
 
 // BulkProgressEvent is emitted by the bulk runner to synchronize logs + UI.
-type BulkProgressEvent struct {
-	RunID       string
-	Action      string
-	Event       string // RUN_START | ITEM_START | ITEM_PHASE | ITEM_DONE | RUN_DONE
-	Item        string
-	Index       int // 1-based item index when relevant
-	Total       int
-	Phase       BulkRunPhase
-	Outcome     string // ok | failed | skipped
-	Done        int
-	Success     int
-	Failed      int
-	Elapsed     time.Duration
-	Error       string
-	CurrentFile string
-}
+// Aliased to the portable pkg/bulkprogress.Event (SPEC-0251 §5) — same fields,
+// shared with the platform-neutral audio-import pipeline.
+type BulkProgressEvent = bulkprogress.Event
 
 // Observation represents a unified timeline entry from the tracking DB.
 type Observation struct {
