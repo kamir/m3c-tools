@@ -150,7 +150,6 @@ type Consumer struct {
 	mu           sync.Mutex
 	eligibleIDs  []string  // thought_ids accumulated this window
 	lastFireAt   time.Time // UTC, zero at boot
-	heartbeatDue bool      //nolint:unused // latched-heartbeat field reserved for the ticker path (not yet wired)
 	stopBG       chan struct{}
 }
 
