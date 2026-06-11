@@ -105,6 +105,14 @@ func main() {
 		os.Exit(1)
 	// SPEC-0251 §5 multi-platform parity: portable commands promoted out of the
 	// darwin-only main.go into commands_shared.go now route here too.
+	case "upload":
+		cmdUpload(os.Args[2:])
+	case "whisper":
+		cmdWhisper(os.Args[2:])
+	case "thumbnail":
+		cmdThumbnail(os.Args[2:])
+	case "settings":
+		cmdSettings()
 	case "retry":
 		cmdRetry(os.Args[2:])
 	case "schedule":
