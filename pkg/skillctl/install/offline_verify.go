@@ -318,12 +318,23 @@ func findStashedSkb(target string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// SEC F5: collect ALL top-level .skb. Exactly one is the canonical stash; a
+	// second top-level .skb is ambiguous (which body is content-bound?) and is
+	// refused fail-closed rather than silently picking the first.
+	var found []string
 	for _, e := range entries {
 		if !e.IsDir() && strings.HasSuffix(e.Name(), ".skb") {
-			return filepath.Join(target, e.Name()), nil
+			found = append(found, e.Name())
 		}
 	}
-	return "", fmt.Errorf("verify-offline: no .skb in %s", target)
+	switch len(found) {
+	case 0:
+		return "", fmt.Errorf("verify-offline: no .skb in %s", target)
+	case 1:
+		return filepath.Join(target, found[0]), nil
+	default:
+		return "", fmt.Errorf("verify-offline: %d top-level .skb files in %s (ambiguous stash) — refusing: %w", len(found), target, verify.ErrDigestMismatch)
+	}
 }
 
 // verifyExtractedMatchesBlob asserts every regular file in the signed .skb
@@ -379,12 +390,23 @@ func verifyExtractedMatchesBlob(skbPath, target string) error {
 		if d.IsDir() {
 			return nil
 		}
-		base := d.Name()
-		if base == offlineMetaFile || base == registry.ProvenanceSidecarName || base == registry.AttestationStashName || base == ".DS_Store" || strings.HasSuffix(base, ".skb") {
+		rel, _ := filepath.Rel(target, p)
+		relSlash := filepath.ToSlash(filepath.Clean(rel))
+		// SEC F5: skip the stash/metadata files only at the EXACT top-level
+		// relpath — NOT by basename anywhere in the tree. A nested file named
+		// `.m3c-provenance.json`, `.skillctl-offline.json`, `.skillctl-attest.json`
+		// or `*.skb` (e.g. `scripts/payload.skb`) must still be flagged as
+		// unexpected; the old basename skip let an attacker plant such files
+		// undetected. `.DS_Store` stays skipped anywhere (benign macOS noise).
+		topLevel := !strings.Contains(relSlash, "/")
+		if filepath.Base(relSlash) == ".DS_Store" {
 			return nil
 		}
-		rel, _ := filepath.Rel(target, p)
-		if !expected[filepath.ToSlash(filepath.Clean(rel))] {
+		if topLevel && (relSlash == offlineMetaFile || relSlash == registry.ProvenanceSidecarName ||
+			relSlash == registry.AttestationStashName || strings.HasSuffix(relSlash, ".skb")) {
+			return nil
+		}
+		if !expected[relSlash] {
 			return fmt.Errorf("%w: unexpected installed file %q not in the signed bundle", verify.ErrDigestMismatch, rel)
 		}
 		return nil

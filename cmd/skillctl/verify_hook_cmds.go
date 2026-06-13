@@ -493,6 +493,20 @@ func loadGatePolicyW(warn io.Writer) gatePolicy {
 	if e := strings.TrimSpace(os.Getenv("SKILLCTL_GATE_UNMANAGED")); e != "" {
 		p.Unmanaged = e
 	}
+	// SEC F-ENV: the unmanaged disposition (from gate-policy.yaml OR the
+	// SKILLCTL_GATE_UNMANAGED env override) MUST be one of deny|warn|allow. The
+	// gate's switch routes any OTHER value through `default: emitAllow`, so an
+	// attacker who can set a bogus env value (or a typo'd policy) would silently
+	// neuter the unmanaged-skill deny. Validate in one place — unknown → FAIL
+	// CLOSED to deny with a loud WARN.
+	switch p.Unmanaged {
+	case "deny", "warn", "allow":
+	default:
+		fmt.Fprintf(warn,
+			"skillctl verify-hook: WARN unmanaged_skills=%q is not deny|warn|allow (from gate-policy.yaml or SKILLCTL_GATE_UNMANAGED) — failing closed (treating as deny).\n",
+			p.Unmanaged)
+		p.Unmanaged = "deny"
+	}
 	return p
 }
 

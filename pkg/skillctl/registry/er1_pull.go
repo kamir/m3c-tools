@@ -334,7 +334,7 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 			continue
 		}
 		// Gate 3: bundle author + registry signatures from the event verify against trust-roots.
-		if err := verifyBundleSignatures(event, tr.PubKey()); err != nil {
+		if err := verifyBundleSignatures(event, tr.PubKey(), gotDigest); err != nil {
 			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, DocID: docID, Gate: ErrGateBundleSigs, Detail: err.Error()})
 			continue
 		}
@@ -379,12 +379,26 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 // verifyBundleSignatures verifies each entry in event["signatures"] against
 // the trust-roots public key. The author and registry refs both signed over
 // the raw 32-byte digest (per SPEC-0188 §4.1).
-func verifyBundleSignatures(event map[string]any, pub ed25519.PublicKey) error {
+func verifyBundleSignatures(event map[string]any, pub ed25519.PublicKey, recomputedDigest string) error {
 	digestStr, _ := event["bundle_digest"].(string)
 	if !strings.HasPrefix(digestStr, "sha256:") {
 		return errors.New("bundle_digest not in sha256:<hex> form")
 	}
-	digestBytes, err := hex.DecodeString(strings.TrimPrefix(digestStr, "sha256:"))
+	// SEC F4/F9: bind the signatures to the RECOMPUTED digest, not just the
+	// declared one. The author/registry refs signed over the bundle's true
+	// 32-byte digest; verifying over the caller's recomputed digest (and
+	// asserting the event's declared digest equals it) makes this check
+	// intrinsically sound rather than safe only because a separate digest-match
+	// gate happened to run first — so a future reorder / new caller can't
+	// silently regress to verifying over an attacker-declared digest.
+	if recomputedDigest != "" && digestStr != recomputedDigest {
+		return fmt.Errorf("bundle_digest %s does not match recomputed %s", digestStr, recomputedDigest)
+	}
+	verifyOver := digestStr
+	if recomputedDigest != "" {
+		verifyOver = recomputedDigest
+	}
+	digestBytes, err := hex.DecodeString(strings.TrimPrefix(verifyOver, "sha256:"))
 	if err != nil {
 		return fmt.Errorf("bundle_digest not valid hex: %w", err)
 	}

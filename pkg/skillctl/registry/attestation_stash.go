@@ -112,8 +112,9 @@ func (c *AttestationContext) Reverify(pub ed25519.PublicKey, stashedSkb []byte) 
 	if got != signedDigest {
 		return "", fmt.Errorf("%w: stashed .skb digest %s != signed %s (repacked bundle)", ErrAttestationReanchor, got, signedDigest)
 	}
-	// G3: author + registry signatures over the digest.
-	if err := verifyBundleSignatures(c.AdmitEvent, pub); err != nil {
+	// G3: author + registry signatures over the RECOMPUTED digest (F4/F9 — `got`
+	// is sha256(stashedSkb), already asserted == signedDigest at G2).
+	if err := verifyBundleSignatures(c.AdmitEvent, pub, got); err != nil {
 		return "", fmt.Errorf("%w: bundle signatures: %v", ErrAttestationReanchor, err)
 	}
 	// G4: governance from the SIGNED attestation (F19) — never the sidecar.
