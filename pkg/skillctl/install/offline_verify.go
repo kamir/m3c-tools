@@ -222,27 +222,64 @@ func VerifyInstalledSidecar(opts Opts) error {
 		return err // verify.ErrDigestMismatch
 	}
 
-	// Registry-trust gate (SPEC-0247 OQ-5): the provenance records the
-	// trust-roots fingerprint the bundle was pulled under; it MUST match a
-	// currently-pinned self trust-root. A mismatch means the skill was pulled
-	// under a root that is no longer the trusted one (rotation / different
-	// machine) → ErrRegistryNotTrusted. If the local self trust-roots are
-	// absent/unreadable we cannot compare → skip (content-binding still guards
-	// integrity); we never fail merely because the config isn't where expected.
-	if side.TrustRootsFingerprint != "" {
-		trPath := opts.SelfTrustRootsPath
-		if trPath == "" {
-			trPath = filepath.Join(homeDir, ".claude", "trust-roots.yaml")
-		}
-		if str, lerr := registry.LoadSelfTrustRoots(trPath); lerr == nil && str.Fingerprint != "" {
-			if str.Fingerprint != side.TrustRootsFingerprint {
-				return fmt.Errorf("verify-sidecar: provenance trust-roots fp %s does not match pinned %s: %w",
-					side.TrustRootsFingerprint, str.Fingerprint, verify.ErrRegistryNotTrusted)
-			}
-		}
+	trPath := opts.SelfTrustRootsPath
+	if trPath == "" {
+		trPath = filepath.Join(homeDir, ".claude", "trust-roots.yaml")
 	}
 
-	// Governance floor.
+	// SPEC-0266 F2/F19: re-anchor to the PINNED key. Content-binding above proves
+	// the on-disk body matches the stashed .skb, but NOT that that .skb is the one
+	// a pinned key signed — a local-write attacker can repack a self-consistent
+	// .skb + sidecar (and flip governance). When the SIGNED attestation stash is
+	// present we replay the pull gates against the pinned self trust-root: a
+	// repacked .skb fails (no valid signature over its bytes) and governance is
+	// taken from the SIGNED attestation, never the attacker-writable sidecar.
+	//
+	// governanceLevel defaults to the (unsigned) sidecar value only on the LEGACY
+	// path (installs predating the re-anchor) — those WARN + reinstall-to-anchor.
+	governanceLevel := side.GovernanceLevel
+	if ac, aerr := registry.ReadAttestationStash(target); aerr == nil {
+		// Trust-roots are MANDATORY to re-anchor (policy: parity with the HTTP
+		// path, which errors when the root is nil). Fail closed if absent.
+		str, lerr := registry.LoadSelfTrustRoots(trPath)
+		if lerr != nil || str == nil || len(str.PubKey()) == 0 {
+			return fmt.Errorf("verify-sidecar: self trust-roots required to re-anchor %q but unavailable (%v): %w",
+				opts.Name, lerr, verify.ErrRegistryNotTrusted)
+		}
+		skbBytes, rerr := os.ReadFile(skbPath)
+		if rerr != nil {
+			return fmt.Errorf("verify-sidecar: read stashed .skb: %w", rerr)
+		}
+		level, verr := ac.Reverify(str.PubKey(), skbBytes)
+		if verr != nil {
+			// Repacked .skb or forged governance → the body Claude would load is
+			// not what the pinned key signed. Map to a digest mismatch (exit 10).
+			return fmt.Errorf("%w: re-anchor: %v", verify.ErrDigestMismatch, verr)
+		}
+		governanceLevel = level // SIGNED governance level (F19)
+	} else if errors.Is(aerr, registry.ErrNoAttestationStash) {
+		// Legacy install (predates the re-anchor): WARN + content-binding only,
+		// and keep the optional fingerprint check below. Reinstall re-anchors it.
+		if opts.Logger != nil {
+			fmt.Fprintf(opts.Logger, "verify-sidecar: WARN %q is not re-anchored (no signed attestation stash) — verified by content-binding only; run `skillctl install %s` to re-anchor (SPEC-0266)\n", opts.Name, opts.Name)
+		}
+		// Registry-trust gate (SPEC-0247 OQ-5), legacy path: if the provenance
+		// records a fingerprint and local self trust-roots exist, they MUST match
+		// (rotation / wrong-machine guard). Absent trust-roots → skip (legacy
+		// installs predate the mandatory requirement; content-binding still guards).
+		if side.TrustRootsFingerprint != "" {
+			if str, lerr := registry.LoadSelfTrustRoots(trPath); lerr == nil && str.Fingerprint != "" {
+				if str.Fingerprint != side.TrustRootsFingerprint {
+					return fmt.Errorf("verify-sidecar: provenance trust-roots fp %s does not match pinned %s: %w",
+						side.TrustRootsFingerprint, str.Fingerprint, verify.ErrRegistryNotTrusted)
+				}
+			}
+		}
+	} else {
+		return fmt.Errorf("verify-sidecar: read attestation stash: %w", aerr)
+	}
+
+	// Governance floor — checked against the SIGNED level when re-anchored.
 	floor := opts.GovernanceMin
 	if floor == "" && opts.TrustRoot != nil {
 		floor = opts.TrustRoot.GovernanceMinimum
@@ -250,9 +287,9 @@ func VerifyInstalledSidecar(opts Opts) error {
 	if floor == "" {
 		floor = "green"
 	}
-	if govRank(side.GovernanceLevel) < govRank(floor) {
+	if govRank(governanceLevel) < govRank(floor) {
 		return fmt.Errorf("verify-sidecar: governance %q below floor %q: %w",
-			side.GovernanceLevel, floor, verify.ErrGovernanceBelowMin)
+			governanceLevel, floor, verify.ErrGovernanceBelowMin)
 	}
 	return nil
 }
@@ -343,7 +380,7 @@ func verifyExtractedMatchesBlob(skbPath, target string) error {
 			return nil
 		}
 		base := d.Name()
-		if base == offlineMetaFile || base == registry.ProvenanceSidecarName || base == ".DS_Store" || strings.HasSuffix(base, ".skb") {
+		if base == offlineMetaFile || base == registry.ProvenanceSidecarName || base == registry.AttestationStashName || base == ".DS_Store" || strings.HasSuffix(base, ".skb") {
 			return nil
 		}
 		rel, _ := filepath.Rel(target, p)

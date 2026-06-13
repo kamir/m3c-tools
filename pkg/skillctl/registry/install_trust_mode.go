@@ -450,6 +450,18 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 		return nil, fmt.Errorf("install: stash .skb: %w", err)
 	}
 
+	// SPEC-0266 F2/F19: stash the SIGNED attestation context so the runtime gate
+	// can re-verify the bundle against the PINNED key (envelope + bundle sigs +
+	// digest) and read governance from the SIGNED attestation — not the
+	// attacker-writable sidecar. Best-effort: a legacy/dry-run path with no
+	// attestation still installs; the gate then WARNs + content-binds.
+	if b.Attestation != nil && b.Attestation.AdmitEvent != nil {
+		if err := WriteAttestationStash(tmp, b.Attestation); err != nil {
+			cleanup()
+			return nil, fmt.Errorf("install: stash attestation: %w", err)
+		}
+	}
+
 	res := &InstallResult{
 		SkillPath:      target,
 		ProvenancePath: filepath.Join(target, ProvenanceSidecarName),

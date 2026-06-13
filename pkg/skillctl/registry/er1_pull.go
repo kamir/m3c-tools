@@ -222,6 +222,10 @@ type StagedBundle struct {
 	ProvenancePath string // <cache>/<digest>/.m3c-provenance.json  (P3 will copy these into ~/.claude/skills/...)
 	SourceDocID    string // ER1 doc_id of the admit item
 	AuthorIdentity string
+	// Attestation is the SIGNED context (admit event + governance attestation)
+	// that just passed the pull gates. installOne stashes it so the runtime
+	// gate can re-verify against the pinned key with no network (SPEC-0266 F2/F19).
+	Attestation *AttestationContext
 }
 
 // PullOpts bounds the pull.
@@ -271,7 +275,7 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 	// attest/revoke event before trusting its governance_level / revoked status
 	// — mirroring Gate 1's admit-envelope verification (~:297). An unsigned or
 	// forged governance verdict is otherwise free to forge.
-	attestByDigest, revokedDigests, err := loadAttestRevoke(cfg, ctxID, opts.OnlySkill, tr.PubKey())
+	attestByDigest, revokedDigests, attestEventByDigest, err := loadAttestRevoke(cfg, ctxID, opts.OnlySkill, tr.PubKey())
 	if err != nil {
 		return nil, err
 	}
@@ -360,6 +364,13 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 			StagedSkbPath:  skbPath,
 			SourceDocID:    docID,
 			AuthorIdentity: authorIdentity,
+			// SPEC-0266 F2/F19: carry the SIGNED context (this admit event +
+			// the signed governance attestation for the same digest) so the
+			// installer can stash it and the runtime gate can re-verify it.
+			Attestation: &AttestationContext{
+				AdmitEvent:            event,
+				GovernanceAttestation: attestEventByDigest[digest],
+			},
 		})
 	}
 	return res, nil
@@ -417,9 +428,10 @@ func verifyBundleSignatures(event map[string]any, pub ed25519.PublicKey) error {
 // forged revocation can't suppress a legitimately-attested bundle. (Skipping
 // an invalid revoke is also fail-closed: a bundle still must clear the
 // governance floor on a *valid* attestation to be staged.)
-func loadAttestRevoke(cfg *er1.Config, ctxID, onlySkill string, pub ed25519.PublicKey) (map[string]string, map[string]struct{}, error) {
+func loadAttestRevoke(cfg *er1.Config, ctxID, onlySkill string, pub ed25519.PublicKey) (map[string]string, map[string]struct{}, map[string]map[string]any, error) {
 	attestByDigest := map[string]string{}
 	attestTS := map[string]string{}
+	attestEventByDigest := map[string]map[string]any{} // SPEC-0266 F19: raw signed attestation event (latest) per digest
 	revokedDigests := map[string]struct{}{}
 
 	for _, kind := range []string{EventKindAttested, EventKindRevoked} {
@@ -429,7 +441,7 @@ func loadAttestRevoke(cfg *er1.Config, ctxID, onlySkill string, pub ed25519.Publ
 		}
 		items, err := searchByTagsRaw(cfg, ctxID, tags)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		for _, item := range items {
 			body := itemBody(item)
@@ -456,10 +468,11 @@ func loadAttestRevoke(cfg *er1.Config, ctxID, onlySkill string, pub ed25519.Publ
 			if prev, ok := attestTS[digest]; !ok || ts > prev {
 				attestByDigest[digest] = level
 				attestTS[digest] = ts
+				attestEventByDigest[digest] = ev // keep the SIGNED event for the install-time stash
 			}
 		}
 	}
-	return attestByDigest, revokedDigests, nil
+	return attestByDigest, revokedDigests, attestEventByDigest, nil
 }
 
 // ─── ER1 item body parsing ─────────────────────────────────────────────────
