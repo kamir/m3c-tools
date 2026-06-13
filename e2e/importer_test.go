@@ -413,14 +413,20 @@ func TestImporterCLINoArgs(t *testing.T) {
 	cmd := exec.Command(binPath, "import-audio")
 	// Run outside repo root so .env isn't loaded into the subprocess.
 	cmd.Dir = t.TempDir()
-	// Explicitly remove IMPORT_AUDIO_SOURCE in child env.
+	// Isolate from the operator's machine config: strip IMPORT_AUDIO_SOURCE from
+	// the env AND point HOME at an empty temp dir so the subprocess can't pick up
+	// a real source from ~/.m3c-tools.env (or ~/.m3c-tools/preferences.env). Both
+	// home-config paths resolve via os.UserHomeDir() → $HOME. Without this the
+	// test fails on any developer machine that has a configured source.
+	isoHome := t.TempDir()
 	env := []string{}
 	for _, kv := range os.Environ() {
-		if strings.HasPrefix(kv, "IMPORT_AUDIO_SOURCE=") {
+		if strings.HasPrefix(kv, "IMPORT_AUDIO_SOURCE=") || strings.HasPrefix(kv, "HOME=") {
 			continue
 		}
 		env = append(env, kv)
 	}
+	env = append(env, "HOME="+isoHome)
 	cmd.Env = env
 
 	out, err := cmd.CombinedOutput()

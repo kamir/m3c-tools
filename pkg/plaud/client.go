@@ -318,15 +318,22 @@ var allowedS3Hosts = map[string]bool{
 
 func isAllowedS3URL(rawURL string) bool {
 	u, err := url.Parse(rawURL)
-	if err != nil || (u.Scheme != "https" && u.Scheme != "http") {
+	// SEC L7: require https — a compromised/MITM'd Plaud API response must not be
+	// able to downgrade a content fetch to cleartext http.
+	if err != nil || u.Scheme != "https" {
 		return false
 	}
 	host := u.Hostname()
 	if allowedS3Hosts[host] {
 		return true
 	}
-	// Allow any *.s3.amazonaws.com or *.s3.*.amazonaws.com pattern
-	if strings.HasSuffix(host, ".amazonaws.com") || strings.HasSuffix(host, ".cloudfront.net") {
+	// SEC L7: only accept S3 *bucket-style* hosts (`<bucket>.s3.amazonaws.com`,
+	// `<bucket>.s3.<region>.amazonaws.com`, `<bucket>.s3-<region>.amazonaws.com`).
+	// The previous `*.amazonaws.com` / `*.cloudfront.net` wildcards accepted any
+	// AWS subdomain (and any CloudFront distribution) — content-poisoning surface.
+	// CloudFront is pinned to the explicit distribution in allowedS3Hosts.
+	if strings.HasSuffix(host, ".amazonaws.com") &&
+		(strings.Contains(host, ".s3.") || strings.Contains(host, ".s3-")) {
 		return true
 	}
 	return false
@@ -363,7 +370,7 @@ func (c *Client) fetchS3Content(rawURL string) ([]byte, error) {
 		reader = gz
 	}
 
-	return io.ReadAll(io.LimitReader(reader, 50<<20)) // 50 MB limit (gzip bomb protection)
+	return io.ReadAll(io.LimitReader(reader, 16<<20)) // SEC L7: 16 MB cap — transcript/summary JSON is small; tighter gzip-bomb ceiling
 }
 
 // extractTranscriptText parses the Plaud transcript JSON and extracts speaker-diarized text.
@@ -502,7 +509,7 @@ func (c *Client) doGet(url string) ([]byte, error) {
 		return nil, err
 	}
 
-	return io.ReadAll(io.LimitReader(resp.Body, 50<<20)) // 50 MB limit
+	return io.ReadAll(io.LimitReader(resp.Body, 16<<20)) // SEC L7: 16 MB cap (API JSON listings are small)
 }
 
 // DebugGet exposes the raw GET method for API exploration.

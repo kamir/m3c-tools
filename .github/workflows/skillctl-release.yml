@@ -64,6 +64,20 @@ jobs:
                     skillctl-windows-amd64.exe > SHA256SUMS
           cat SHA256SUMS
 
+      # SPEC-0253 follow-up: emit a CycloneDX SBOM of the Go build inputs. All 5
+      # arches build from the same go.mod with no CGO and an identical import set
+      # (only GOOS/GOARCH differ), so one source-level SBOM represents the supply
+      # chain of every published binary. WARN-only: a transient syft failure must
+      # never block a release cut.
+      - name: Generate SBOM (CycloneDX)
+        continue-on-error: true
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: dist/skillctl.sbom.cdx.json
+          artifact-name: skillctl.sbom.cdx.json
+
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
 
@@ -121,5 +135,6 @@ jobs:
             dist/SHA256SUMS.cosign.bundle
             dist/install.sh
             dist/skillctl-release.pub
+            dist/skillctl.sbom.cdx.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -61,3 +61,6 @@ __pycache__/
 
 # skillctl release build artifacts (published to GitHub Releases, not git)
 /release/
+
+# Packed skill bundles (build artifacts from `skillctl pack`; never source)
+*.skb

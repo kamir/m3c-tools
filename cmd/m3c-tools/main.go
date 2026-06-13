@@ -26,6 +26,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net"
@@ -3190,6 +3191,12 @@ func startER1LoginCallbackServer() (*http.Server, string, <-chan loginCallbackRe
 		default:
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		// SEC M10: lock the throwaway callback page down — no scripts, no remote
+		// fetches; only the page's own inline <style> is allowed. Defends the
+		// (now-escaped) reflected query params against any residual injection.
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "no-referrer")
 		_, _ = fmt.Fprint(w, buildDeviceHubHTML(ctxID, er1BaseURL(er1.LoadConfig().APIURL)))
 	})
 
@@ -3241,6 +3248,12 @@ func buildDeviceHubHTML(contextID, baseURL string) string {
 	if i := strings.Index(userID, "___"); i > 0 {
 		userID = userID[:i]
 	}
+	// SEC M10: contextID arrives raw from the login-callback query string and is
+	// interpolated into HTML below — escape it (and baseURL, which lands in href
+	// attributes) so a malicious/MITM'd ER1 redirect can't inject markup. Paired
+	// with the restrictive CSP set on the response.
+	userID = html.EscapeString(userID)
+	baseURL = html.EscapeString(baseURL)
 
 	return fmt.Sprintf(`<!DOCTYPE html>
 <html lang="en">
