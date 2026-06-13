@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 )
 
 // UploadPayload describes the multipart data to send to ER1.
@@ -125,7 +127,8 @@ func Upload(cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
 
 	// Send
 	client := &http.Client{
-		Timeout: time.Duration(cfg.UploadTimeout) * time.Second,
+		Timeout:       time.Duration(cfg.UploadTimeout) * time.Second,
+		CheckRedirect: httpsafe.NoCredentialRedirect, // SEC F25: don't leak X-API-KEY cross-host
 	}
 	if !cfg.VerifySSL {
 		client.Transport = &http.Transport{
@@ -159,7 +162,8 @@ func Upload(cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
 // IsReachable checks if the ER1 server is reachable via HEAD request.
 func IsReachable(cfg *Config) bool {
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout:       5 * time.Second,
+		CheckRedirect: httpsafe.NoCredentialRedirect, // SEC F25
 	}
 	if !cfg.VerifySSL {
 		client.Transport = &http.Transport{

@@ -19,6 +19,7 @@ import (
 
 	"github.com/kamir/m3c-tools/pkg/auth"
 	"github.com/kamir/m3c-tools/pkg/config"
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 )
 
 // placeholderFatalOnce ensures the FATAL log for a placeholder ER1_API_KEY
@@ -171,7 +172,7 @@ func (c *Config) HealthCheck() error {
 		baseURL = baseURL[:idx]
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect} // SEC F25
 	if !c.VerifySSL {
 		client.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},

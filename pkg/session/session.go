@@ -26,6 +26,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kamir/m3c-tools/pkg/er1"
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 	"github.com/kamir/m3c-tools/pkg/m3cproject"
 )
 
@@ -286,7 +287,7 @@ func uploadItem(cfg *er1.Config, body, filename, tags, contentType string) (stri
 func httpGetJSON(target, path string) (any, error) {
 	base, verify := ER1Endpoint(target)
 	apiKey := resolveAPIKey()
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := &http.Client{Timeout: 15 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect} // SEC F25
 	if !verify {
 		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
 	}

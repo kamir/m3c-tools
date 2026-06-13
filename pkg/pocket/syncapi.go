@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/auth"
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 )
 
 // SyncAPIClient talks to the aims-core pocket-sync API for cross-device dedup.
@@ -74,8 +75,9 @@ func NewSyncAPIClient(er1APIURL, apiKey, userID string, skipTLSVerify bool) *Syn
 		userID:     userID,
 		deviceName: deviceName,
 		client: &http.Client{
-			Timeout:   15 * time.Second,
-			Transport: transport,
+			Timeout:       15 * time.Second,
+			Transport:     transport,
+			CheckRedirect: httpsafe.NoCredentialRedirect, // SEC F25
 		},
 	}
 }

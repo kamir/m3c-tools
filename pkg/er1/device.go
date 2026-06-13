@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/auth"
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 )
 
 // PairRequest is sent to POST /api/v2/devices/pair.
@@ -49,7 +50,7 @@ type PairedDevice struct {
 }
 
 // deviceHTTPClient is the shared HTTP client for device API calls.
-var deviceHTTPClient = &http.Client{Timeout: 30 * time.Second}
+var deviceHTTPClient = &http.Client{Timeout: 30 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect} // SEC F25
 
 // PairDevice registers or updates a device pairing. Idempotent — returns nil
 // on both 200 (already paired) and 201 (new pairing).
