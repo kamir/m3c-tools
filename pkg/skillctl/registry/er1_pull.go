@@ -428,6 +428,21 @@ func verifyBundleSignatures(event map[string]any, pub ed25519.PublicKey) error {
 // forged revocation can't suppress a legitimately-attested bundle. (Skipping
 // an invalid revoke is also fail-closed: a bundle still must clear the
 // governance floor on a *valid* attestation to be staged.)
+// FetchRevokedDigests returns the set of bundle digests carrying a verified
+// BundleRevokedEvent for the registry (SPEC-0266 F1). It is the online
+// "revocation authority" the per-invocation offline gate cannot be: the
+// SessionStart sweep calls this to quarantine installed skills whose bundle was
+// revoked AFTER install. Each revoke event's envelope signature MUST verify
+// against `pub` (a forged revoke can't be used to suppress, and — more to the
+// point here — a forged revoke can't be used to quarantine a good bundle).
+func FetchRevokedDigests(cfg *er1.Config, ctxID string, pub ed25519.PublicKey) (map[string]struct{}, error) {
+	_, revoked, _, err := loadAttestRevoke(cfg, ctxID, "", pub)
+	if err != nil {
+		return nil, err
+	}
+	return revoked, nil
+}
+
 func loadAttestRevoke(cfg *er1.Config, ctxID, onlySkill string, pub ed25519.PublicKey) (map[string]string, map[string]struct{}, map[string]map[string]any, error) {
 	attestByDigest := map[string]string{}
 	attestTS := map[string]string{}

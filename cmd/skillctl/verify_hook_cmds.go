@@ -210,6 +210,21 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		}
 	}
 
+	// SPEC-0266 F1: a bundle revoked AFTER install is denied by the offline gate
+	// too, via the sweep-maintained revoked-digest cache (consulted only while
+	// fresh — the sweep is the authority that refreshes it online).
+	if home != "" {
+		if revset, fresh := readRevokedCache(home, revokedCacheTTL); fresh {
+			if dig := installedSkillDigest(home, skill); dig != "" {
+				if _, bad := revset[dig]; bad {
+					audReason = "revoked (BundleRevokedEvent; offline cache)"
+					return emitDeny(stdout, stderr,
+						fmt.Sprintf("skillctl: BLOCKED '%s' — bundle revoked (exit %d); a BundleRevokedEvent was published for this digest. Run `skillctl verify --all` to refresh + quarantine.", skill, exitBundleRevoked))
+				}
+			}
+		}
+	}
+
 	// Managed skill → offline fast path first: a fresh, digest-matching PASS
 	// in the verdict cache (written by the SessionStart sweep or a prior hook)
 	// lets us allow without touching the network (SPEC-0247 §8 / P1.1).

@@ -143,6 +143,13 @@ func runVerifyAll(args []string, stdout, stderr io.Writer) int {
 	pol := loadGatePolicy()
 	start := sweepClockFn()
 
+	// SPEC-0266 F1: fetch the live revoked-digest set once (fail-open — a fetch
+	// failure yields the cached/empty set, never a false quarantine). The sweep
+	// is the revocation authority: a managed skill whose bundle digest is revoked
+	// is quarantined regardless of its §7 result, and the set is cached so the
+	// per-invocation offline gate denies it too until the next sweep.
+	revoked, _ := sweepRevokedFn(home)
+
 	for _, e := range entries {
 		name := e.Name()
 		dir := filepath.Join(skillsDir, name)
@@ -167,6 +174,18 @@ func runVerifyAll(args []string, stdout, stderr io.Writer) int {
 				rep.Entries = append(rep.Entries, sweepEntry{Skill: name, State: "skipped", Reason: "unmanaged (no .skb) — not skillctl-installed"})
 			}
 			continue
+		}
+
+		// SPEC-0266 F1: revoked bundle → quarantine, no matter what §7 says.
+		// Checked before verification so a revoked-but-still-signature-valid
+		// bundle is removed (the post-install revocation case).
+		if dig := installedSkillDigest(home, name); dig != "" {
+			if _, isRevoked := revoked[dig]; isRevoked {
+				rep.Entries = append(rep.Entries, quarantineOrReport(home, name, *quarantine,
+					"revoked: a BundleRevokedEvent was published for this bundle digest", exitBundleRevoked, &rep))
+				recordVerdict(home, name, *sessionID, exitBundleRevoked, "", sweepClockFn())
+				continue
+			}
 		}
 
 		// Managed, but no SPEC-0188 trust roots. The online chain needs them;
