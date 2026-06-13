@@ -15,6 +15,40 @@ version is ldflags-stamped (`skillctl version`). Release tags: `skillctl/vX.Y.Z`
   a verbatim move ships half-extracted shared state, so it needs a dedicated
   refactor pass, not a release-eve edit.
 
+## [skillctl/v0.2.10] — 2026-06-13 — security review remediation (SPEC-0266)
+Closes the adversarial security review (`CISO-WORK/SECURITY-REVIEW-skillctl-m3c-tools-2026-06-13.md`).
+### Security — P0
+- **F2 + F19 — self/ER1 sidecar gate re-anchored to the pinned key.** The runtime
+  gate now re-verifies a stashed SIGNED attestation (`.skillctl-attest.json`)
+  against the pinned (off-machine) trust-root: a repacked self-consistent `.skb`
+  is denied (`ErrDigestMismatch`), and governance is read from the SIGNED
+  attestation, never the attacker-writable sidecar. Trust-roots MANDATORY when
+  re-anchoring; legacy installs WARN + content-bind + flag-for-reinstall.
+- **F1 — post-install bundle revocation.** The SessionStart sweep is the
+  revocation authority (fail-open fetch → quarantines revoked installs + writes a
+  12h cache); the offline gate denies revoked skills from that cache. A forged
+  (unsigned) revoke is ignored.
+- **F12 — gate↔verifier canonicalization fixed point** (`CanonicalSkillName`):
+  a name is rejected or used verbatim, so a clean sibling can't be verified while
+  a malicious dir loads.
+- **F25 — credential-redirect leak**: ER1/session/plaud/pocket clients no longer
+  re-emit `X-API-KEY`/`X-Context-ID` on a cross-host redirect (`NoCredentialRedirect`).
+### Security — P1
+- **M7 (third path)**: the `pkg/config` TestConnection healthcheck honours
+  `ER1_VERIFY_SSL=false` only for loopback; remote hosts force verification on.
+- **ffmpeg concat-list injection**: Pocket merge rejects `\n`/`\r`/NUL in a
+  recording path before building the `-safe 0` concat list.
+- **F-ENV**: `unmanaged_skills` / `SKILLCTL_GATE_UNMANAGED` validated against
+  {deny,warn,allow}; unknown → fail-closed deny.
+- **F5**: content-binding flags planted nested stash-named files; `findStashedSkb`
+  refuses >1 top-level `.skb`.
+- **F4/F9**: bundle signatures verified over the recomputed digest (intrinsic binding).
+### Notes
+~28 new regression tests; full skillctl suite + `go vet` + linux/windows + golangci
+green on every commit. The `m3c-tools` product-binary fixes (device-hub, F25 device
+client, ffmpeg) also ride the next `v*` product cut. Operational follow-up: reinstall
+the green skill set on consumer boxes so they carry the attestation stash (SPEC-0266).
+
 ## [skillctl/v0.2.9] — 2026-06-13 — lifecycle validation harness + constrained-low closure
 ### Added
 - **Lifecycle tamper-detection harness** (SPEC-0265, derived from

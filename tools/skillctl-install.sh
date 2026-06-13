@@ -10,7 +10,7 @@
 #   curl -fsSL .../install.sh | INSTALL_DIR=$HOME/.local/bin bash
 set -euo pipefail
 
-RELEASE_BASE="${RELEASE_BASE:-https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.2.9}"
+RELEASE_BASE="${RELEASE_BASE:-https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.2.10}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 
 # SEC-M2: pin the release-key fingerprint. The signature alone proves only that
