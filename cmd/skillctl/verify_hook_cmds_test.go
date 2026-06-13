@@ -92,7 +92,10 @@ func TestVerifyHook_NoSkillField_Allows(t *testing.T) {
 
 func TestVerifyHook_PathTraversalName_Denies(t *testing.T) {
 	code, out, _ := feed(t, `{"tool_name":"Skill","tool_input":{"skill":"../../etc/passwd"}}`)
-	assertDeny(t, code, out, "path traversal")
+	// SEC F12: the name now fails the canonical fixed point; the deny reason
+	// announces an unsafe name (was "path traversal") — the behavior (deny,
+	// exit 2) is unchanged; the wording converged on the shared validator.
+	assertDeny(t, code, out, "unsafe skill name")
 }
 
 func TestVerifyHook_UnmanagedNamespaced_DefaultAllow(t *testing.T) {

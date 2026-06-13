@@ -133,7 +133,11 @@ func VerifyInstalledOffline(opts Opts) (*verify.VerifyResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	target := filepath.Join(homeDir, installRoot, sanitizeFilename(opts.Name))
+	canon, err := CanonicalSkillName(opts.Name) // SEC F12: same fixed point the gate/loader use
+	if err != nil {
+		return nil, err
+	}
+	target := filepath.Join(homeDir, installRoot, canon)
 	skbPath, err := findStashedSkb(target)
 	if err != nil {
 		return nil, err
@@ -187,7 +191,11 @@ func VerifyInstalledSidecar(opts Opts) error {
 	if err != nil {
 		return err
 	}
-	target := filepath.Join(homeDir, installRoot, sanitizeFilename(opts.Name))
+	canon, err := CanonicalSkillName(opts.Name) // SEC F12: same fixed point the gate/loader use
+	if err != nil {
+		return err
+	}
+	target := filepath.Join(homeDir, installRoot, canon)
 
 	b, err := os.ReadFile(filepath.Join(target, registry.ProvenanceSidecarName))
 	if errors.Is(err, os.ErrNotExist) {

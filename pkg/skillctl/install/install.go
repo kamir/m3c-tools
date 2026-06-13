@@ -276,8 +276,12 @@ func Install(opts Opts) (*Result, error) {
 	}
 
 	// ----- atomic install + archive prior version if any -----
-	target := filepath.Join(homeDir, installRoot, sanitizeFilename(opts.Name))
-	archivedPath, err := atomicInstall(extractDir, target, homeDir, opts.Name, digest)
+	canonName, err := CanonicalSkillName(opts.Name) // SEC F12: one fixed point — install writes the same dir the gate/verifier resolve
+	if err != nil {
+		return nil, err
+	}
+	target := filepath.Join(homeDir, installRoot, canonName)
+	archivedPath, err := atomicInstall(extractDir, target, homeDir, canonName, digest)
 	if err != nil {
 		return nil, err
 	}
@@ -338,7 +342,11 @@ func VerifyInstalled(opts Opts) (*verify.VerifyResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	target := filepath.Join(homeDir, installRoot, sanitizeFilename(opts.Name))
+	canon, err := CanonicalSkillName(opts.Name) // SEC F12: same fixed point the gate/loader use
+	if err != nil {
+		return nil, err
+	}
+	target := filepath.Join(homeDir, installRoot, canon)
 	st, err := os.Stat(target)
 	if err != nil {
 		return nil, fmt.Errorf("verify-installed: %s: %w", target, err)
@@ -492,13 +500,53 @@ func makeStagingDir(homeDir, name, digest string) (string, error) {
 	return stage, nil
 }
 
+// ErrUnsafeSkillName is returned by CanonicalSkillName for a name that is not a
+// single safe path component.
+var ErrUnsafeSkillName = errors.New("skill name is unsafe (path separator, traversal, control char, or not a single component)")
+
+// CanonicalSkillName is the ONE skill-name fixed point shared by the load-time
+// gate (classification + verdict-cache key) and the verifier (on-disk dir
+// resolution). SEC F12: the gate classifies/caches/loads by the RAW invoked
+// name while the verifier resolved sanitizeFilename(name) — a LOSSY transform
+// that DROPS unsafe chars. So an attacker who created both a malicious dir `X`
+// and a clean sibling `Y == sanitizeFilename(X)` could get the gate to verify
+// the clean `Y` and PASS while Claude loaded the malicious `X`.
+//
+// CanonicalSkillName closes that by REJECTING any name that is not already a
+// single safe component (it never silently rewrites): a valid name is returned
+// verbatim, so the gate and the verifier resolve the SAME directory — the one
+// Claude actually loads. Mirrors registry.sanitizeBundleName's strictness.
+func CanonicalSkillName(name string) (string, error) {
+	if name == "" {
+		return "", fmt.Errorf("%w: empty", ErrUnsafeSkillName)
+	}
+	if strings.ContainsAny(name, "/\\\x00") {
+		return "", fmt.Errorf("%w: %q has a path separator or NUL", ErrUnsafeSkillName, name)
+	}
+	for _, r := range name {
+		if r < 0x20 || r == 0x7f {
+			return "", fmt.Errorf("%w: %q has a control character", ErrUnsafeSkillName, name)
+		}
+	}
+	if name == "." || name == ".." || strings.HasPrefix(name, "..") {
+		return "", fmt.Errorf("%w: %q is a traversal segment", ErrUnsafeSkillName, name)
+	}
+	if filepath.IsAbs(name) {
+		return "", fmt.Errorf("%w: %q is an absolute path", ErrUnsafeSkillName, name)
+	}
+	if clean := filepath.Clean(name); clean != name || strings.ContainsRune(clean, filepath.Separator) {
+		return "", fmt.Errorf("%w: %q does not clean to a single safe component", ErrUnsafeSkillName, name)
+	}
+	return name, nil
+}
+
 // sanitizeFilename strips path-traversal-shaped characters from a string
 // before using it as a single path segment. Conservative: anything that
 // isn't alnum / dash / underscore / dot is dropped.
 //
-// We never derive paths from registry-supplied names without going through
-// this — the Name field comes from the registry, which we DON'T trust to
-// have validated it (defense-in-depth).
+// Retained for non-skill-name paths (staging blob filenames, digest dirs).
+// For SKILL-NAME→dir resolution use CanonicalSkillName (the fixed point) so the
+// gate and verifier cannot diverge.
 func sanitizeFilename(s string) string {
 	var b strings.Builder
 	for _, r := range s {

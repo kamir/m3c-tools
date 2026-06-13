@@ -171,12 +171,20 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	now := time.Now()
 	audActive, audSkill, audSession, audHome = true, skill, ev.SessionID, home
 
-	// A skill name that could escape ~/.claude/skills/ is itself a red flag.
-	if strings.ContainsAny(skill, "/\\") || strings.Contains(skill, "..") {
-		audReason = "suspicious skill name (path traversal)"
+	// SEC F12: validate the name through the ONE canonical fixed point the
+	// verifier + loader use, so the gate cannot classify/cache/key a DIFFERENT
+	// directory than the one actually verified and loaded. (The old check only
+	// rejected '/','\\','..'; the verifier then resolved a lossy
+	// sanitizeFilename(name), so a clean sibling could be verified while the
+	// malicious raw-name dir loaded.) A name that is not a single safe component
+	// is itself a red flag → fail closed.
+	canon, nameErr := install.CanonicalSkillName(skill)
+	if nameErr != nil {
+		audReason = "suspicious skill name (not a single safe component)"
 		return emitDeny(stdout, stderr,
-			fmt.Sprintf("skillctl: BLOCKED %q — suspicious skill name (path traversal); refusing (fail-closed)", skill))
+			fmt.Sprintf("skillctl: BLOCKED %q — unsafe skill name (%v); refusing (fail-closed)", skill, nameErr))
 	}
+	skill = canon
 
 	pol := loadGatePolicyW(stderr)
 
