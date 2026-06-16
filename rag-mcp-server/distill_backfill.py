@@ -407,6 +407,83 @@ def cmd_er1_sync(a):
                           "remaining": len(pending) - posted}, indent=2))
 
 
+def cmd_export_gephi(a):
+    """Export the distilled knowledge graph to Gephi-native GEXF (+ GraphML).
+
+    Nodes colored by type (article/entity/topic/claim), sized by degree; edges
+    carry their relation type (builds_on/contradicts/…) + weight.
+    """
+    from xml.sax.saxutils import quoteattr
+    ws = Path(a.workspace).resolve()
+    ua = _ua(ws)
+    g = json.loads((ua / "knowledge-graph.json").read_text())
+    nodes, edges = g["nodes"], g["edges"]
+    deg = {}
+    for e in edges:
+        deg[e["source"]] = deg.get(e["source"], 0) + 1
+        deg[e["target"]] = deg.get(e["target"], 0) + 1
+    COLORS = {"article": (79, 120, 200), "entity": (224, 104, 60),
+              "claim": (52, 168, 83), "topic": (168, 85, 247)}
+
+    def q(s):
+        return quoteattr("" if s is None else str(s))
+
+    out = []
+    if a.format in ("gexf", "both"):
+        L = ['<?xml version="1.0" encoding="UTF-8"?>',
+             '<gexf xmlns="http://gexf.net/1.3" xmlns:viz="http://gexf.net/1.3/viz" version="1.3">',
+             '<meta><creator>m3c distill_backfill (SPEC-0269)</creator>'
+             '<description>mirkos-braindump distilled knowledge graph</description></meta>',
+             '<graph defaultedgetype="directed" mode="static">',
+             '<attributes class="node"><attribute id="0" title="type" type="string"/>'
+             '<attribute id="1" title="path" type="string"/>'
+             '<attribute id="2" title="summary" type="string"/></attributes>',
+             '<attributes class="edge"><attribute id="0" title="reltype" type="string"/></attributes>',
+             '<nodes>']
+        for n in nodes:
+            nid = n["id"]
+            t = n.get("type", "")
+            r, gg, b = COLORS.get(t, (150, 150, 150))
+            size = 5 + (deg.get(nid, 0) ** 0.5) * 4
+            L.append(f'<node id={q(nid)} label={q(n.get("name") or nid)}>')
+            L.append(f'<attvalues><attvalue for="0" value={q(t)}/>'
+                     f'<attvalue for="1" value={q(n.get("filePath", ""))}/>'
+                     f'<attvalue for="2" value={q((n.get("summary") or "")[:240])}/></attvalues>')
+            L.append(f'<viz:color r="{r}" g="{gg}" b="{b}"/><viz:size value="{size:.1f}"/>')
+            L.append('</node>')
+        L.append('</nodes><edges>')
+        for i, e in enumerate(edges):
+            L.append(f'<edge id="{i}" source={q(e["source"])} target={q(e["target"])} '
+                     f'weight="{e.get("weight", 1)}" label={q(e.get("type", ""))}>'
+                     f'<attvalues><attvalue for="0" value={q(e.get("type", ""))}/></attvalues></edge>')
+        L.append('</edges></graph></gexf>')
+        p = ua / "braindump.gexf"
+        p.write_text("\n".join(L), encoding="utf-8")
+        out.append(str(p))
+    if a.format in ("graphml", "both"):
+        L = ['<?xml version="1.0" encoding="UTF-8"?>',
+             '<graphml xmlns="http://graphml.graphdrawing.org/xmlns">',
+             '<key id="label" for="node" attr.name="label" attr.type="string"/>',
+             '<key id="ntype" for="node" attr.name="type" attr.type="string"/>',
+             '<key id="summary" for="node" attr.name="summary" attr.type="string"/>',
+             '<key id="reltype" for="edge" attr.name="reltype" attr.type="string"/>',
+             '<key id="weight" for="edge" attr.name="weight" attr.type="double"/>',
+             '<graph edgedefault="directed">']
+        for n in nodes:
+            L.append(f'<node id={q(n["id"])}><data key="label">{q(n.get("name") or n["id"])[1:-1]}</data>'
+                     f'<data key="ntype">{q(n.get("type", ""))[1:-1]}</data>'
+                     f'<data key="summary">{q((n.get("summary") or "")[:240])[1:-1]}</data></node>')
+        for i, e in enumerate(edges):
+            L.append(f'<edge id="e{i}" source={q(e["source"])} target={q(e["target"])}>'
+                     f'<data key="reltype">{q(e.get("type", ""))[1:-1]}</data>'
+                     f'<data key="weight">{e.get("weight", 1)}</data></edge>')
+        L.append('</graph></graphml>')
+        p = ua / "braindump.graphml"
+        p.write_text("\n".join(L), encoding="utf-8")
+        out.append(str(p))
+    print(json.dumps({"nodes": len(nodes), "edges": len(edges), "files": out}, indent=2))
+
+
 def main():
     ap = argparse.ArgumentParser(prog="distill_backfill")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -421,10 +498,12 @@ def main():
     es.add_argument("--confirm", action="store_true", help="actually POST (default: dry-run)")
     es.add_argument("--limit", type=int, default=0)
     es.add_argument("--ctx", default="107677460544181387647___mft")
+    eg = sub.add_parser("export-gephi"); eg.add_argument("-w", "--workspace", required=True)
+    eg.add_argument("--format", choices=["gexf", "graphml", "both"], default="both")
     a = ap.parse_args()
     {"manifest": cmd_manifest, "prepare-wave": cmd_prepare_wave,
      "merge-wave": cmd_merge_wave, "status": cmd_status,
-     "er1-sync": cmd_er1_sync}[a.cmd](a)
+     "er1-sync": cmd_er1_sync, "export-gephi": cmd_export_gephi}[a.cmd](a)
 
 
 if __name__ == "__main__":
