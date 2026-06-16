@@ -183,13 +183,32 @@ def cmd_prepare_wave(a):
                       "out_dir": str(wdir), "plan": plan}, indent=2))
 
 
-def _load_graph(ua):
+def _load_graph(ua, ws):
+    import subprocess
     f = ua / "knowledge-graph.json"
-    if f.exists():
-        return json.loads(f.read_text())
-    return {"version": "1.0.0", "kind": "knowledge",
-            "project": {"name": "mirkos-braindump", "gitCommitHash": ""},
-            "nodes": [], "edges": [], "layers": [], "tour": []}
+    g = json.loads(f.read_text()) if f.exists() else {
+        "version": "1.0.0", "kind": "knowledge", "project": {},
+        "nodes": [], "edges": [], "layers": [], "tour": []}
+    pm = g.get("project") or {}
+    try:
+        commit = subprocess.run(["git", "-C", str(ws), "rev-parse", "HEAD"],
+                                capture_output=True, text=True, timeout=5).stdout.strip()
+    except Exception:  # noqa: BLE001
+        commit = ""
+    # Understand-Anything's ProjectMetaSchema requires all six fields (string / string[]).
+    g["project"] = {
+        "name": pm.get("name") or ws.name,
+        "languages": pm.get("languages") or ["Markdown", "German", "English"],
+        "frameworks": pm.get("frameworks") or [],
+        "description": pm.get("description")
+        or "Distilled knowledge layer (SPEC-0269): ER1 notes distilled into articles, entities, and claims.",
+        "analyzedAt": _now_iso(),
+        "gitCommitHash": commit or pm.get("gitCommitHash", ""),
+    }
+    g.setdefault("kind", "knowledge")
+    g.setdefault("layers", [])
+    g.setdefault("tour", [])
+    return g
 
 
 def cmd_merge_wave(a):
@@ -200,7 +219,7 @@ def cmd_merge_wave(a):
     wdir = ua / "waves" / f"w{a.wave}" / "out"
     wiki = ws / "WIKI"
     wiki.mkdir(exist_ok=True)
-    graph = _load_graph(ua)
+    graph = _load_graph(ua, ws)
     nodes = {n["id"]: n for n in graph["nodes"]}
     edges = {(e["source"], e["target"], e.get("type")): e for e in graph["edges"]}
     ledger = (ua / "distill-ledger.jsonl").open("a")
