@@ -1,0 +1,5 @@
+turbovec
+sentence-transformers
+mcp
+PyYAML
+numpy
