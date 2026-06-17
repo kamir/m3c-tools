@@ -25,7 +25,17 @@ func main() {
 		printUsage(os.Stderr)
 		os.Exit(2)
 	}
+	// FR-0043: for ER1-bound commands, auto-load the device token persisted by
+	// `skillctl login` / `m3c-tools login` so users need not export it by hand.
+	// Gated to networkCommands so offline commands never touch the OS keychain.
+	if networkCommands[os.Args[1]] {
+		autoloadDeviceToken(os.Stderr)
+	}
 	switch os.Args[1] {
+	// === FR-0043: device login (browser pairing) + token autoload ===
+	case "login":
+		os.Exit(runLogin(os.Args[2:], os.Stdout, os.Stderr))
+	// === END FR-0043 ===
 	case "version", "--version", "-v":
 		fmt.Println(version)
 		os.Exit(0)
@@ -163,6 +173,10 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "  sign         Sign a .skb bundle with an ed25519 private key.")
 	fmt.Fprintln(w, "  verify-sig   Verify a detached author signature locally.")
 	fmt.Fprintln(w, "  attest       POST a signed governance attestation to the registry.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Commands (FR-0043 / device login):")
+	fmt.Fprintln(w, "  login        Browser device-pairing against ER1; saves a token skillctl uses automatically.")
+	fmt.Fprintln(w, "               Flags: --no-browser, --timeout 5m, --base-url URL, --status, --logout.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Commands (Stream S7 / SPEC-0188 Phase 4):")
 	fmt.Fprintln(w, "  trust        Manage ~/.claude/skill-trust-roots.yaml (list/add/remove).")
