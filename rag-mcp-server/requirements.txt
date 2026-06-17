@@ -3,3 +3,4 @@ sentence-transformers
 mcp
 PyYAML
 numpy
+networkx

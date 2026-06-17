@@ -297,9 +297,16 @@ def cmd_merge_wave(a):
     graph["nodes"] = list(nodes.values())
     graph["edges"] = clean
     (ua / "knowledge-graph.json").write_text(json.dumps(graph, ensure_ascii=False, indent=1))
+    # Precompute clusters on every recreate (writes node.cluster + clusters.json + cluster-viewer.html)
+    clusters = None
+    try:
+        import cluster_graph
+        clusters = cluster_graph.run(str(ws)).get("communities")
+    except Exception as e:  # noqa: BLE001
+        print(f"[merge] cluster precalc skipped: {e}", file=sys.stderr)
     print(json.dumps({"wave": a.wave, "distilled_now": n_dist, "entities_added": n_ent,
                       "claims_added": n_claim, "graph_nodes": len(nodes), "graph_edges": len(clean),
-                      "wiki_dir": str(wiki)}, indent=2))
+                      "clusters": clusters, "wiki_dir": str(wiki)}, indent=2))
 
 
 def cmd_status(a):

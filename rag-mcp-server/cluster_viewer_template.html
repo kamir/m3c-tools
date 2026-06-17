@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Braindump — Cluster Explorer (SPEC-0269)</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  :root{--bg:#0b0f14;--panel:#121a24;--line:#1e2b3a;--ink:#e6f1f7;--muted:#7d97a8;--accent:#22d3ee}
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font:13px/1.4 system-ui,Segoe UI,Roboto,sans-serif;overflow:hidden}
+  #panel{position:fixed;left:0;top:0;width:280px;height:100%;background:var(--panel);
+    border-right:1px solid var(--line);display:flex;flex-direction:column;z-index:5}
+  #panel h1{font-size:15px;margin:14px 16px 2px;font-weight:800}
+  #panel .sub{margin:0 16px 10px;color:var(--muted);font-size:11.5px}
+  #btns{display:flex;gap:6px;padding:0 12px 10px;flex-wrap:wrap}
+  #btns button{flex:1;min-width:72px;background:#0d1722;color:var(--ink);border:1px solid var(--line);
+    border-radius:7px;padding:7px 6px;font-size:11.5px;cursor:pointer}
+  #btns button:hover{border-color:var(--accent);color:var(--accent)}
+  #clist{overflow:auto;flex:1;padding:4px 8px 16px}
+  .crow{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px;cursor:pointer}
+  .crow:hover{background:#0d1722}
+  .crow input{accent-color:var(--accent);cursor:pointer}
+  .sw{width:11px;height:11px;border-radius:3px;flex:0 0 auto}
+  .lab{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ct{color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+  #foot{padding:8px 16px;border-top:1px solid var(--line);color:var(--muted);font-size:11px}
+  #c{position:fixed;top:0;left:280px}
+  #tip{position:fixed;display:none;max-width:320px;background:#06101a;border:1px solid var(--line);
+    border-radius:8px;padding:9px 11px;pointer-events:none;z-index:10;box-shadow:0 6px 24px rgba(0,0,0,.5)}
+  #tip b{font-size:13px} #tip .t{color:var(--accent);font-size:11px;margin:2px 0 5px}
+  #tip .s{color:var(--muted);font-size:11.5px}
+  #hint{position:fixed;right:14px;bottom:12px;color:var(--muted);font-size:11px;z-index:5}
+</style>
+</head>
+<body>
+<div id="panel">
+  <h1>🧭 Cluster Explorer</h1>
+  <p class="sub" id="meta"></p>
+  <div id="btns">
+    <button id="top3">Top 3</button>
+    <button id="all">Show all</button>
+    <button id="none">Hide all</button>
+  </div>
+  <div id="clist"></div>
+  <div id="foot" id="visinfo"></div>
+</div>
+<canvas id="c"></canvas>
+<div id="tip"></div>
+<div id="hint">scroll = zoom · drag = pan · hover = details</div>
+<script>
+const DATA = /*__DATA__*/;
+const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
+const tip = document.getElementById('tip');
+let W, H;
+function resize(){ W = canvas.width = innerWidth - 280; H = canvas.height = innerHeight; }
+resize(); addEventListener('resize', ()=>{ resize(); draw(); });
+
+const radius = d => 2.4 + Math.sqrt(d.deg||0) * 1.25;
+let transform = d3.zoomIdentity, sim, nodes = [], links = [];
+const visible = new Set(DATA.clusters.slice(0,3).map(c=>c.rank));
+
+function rebuild(){
+  nodes = DATA.nodes.filter(n => visible.has(n.cluster));
+  const ids = new Set(nodes.map(n=>n.id));
+  links = DATA.links.filter(l => ids.has(l.source) && ids.has(l.target))
+                    .map(l => ({source:l.source, target:l.target, type:l.type}));
+  if (sim) sim.stop();
+  sim = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d=>d.id).distance(38).strength(.25))
+    .force('charge', d3.forceManyBody().strength(-26).distanceMax(280))
+    .force('center', d3.forceCenter(W/2, H/2))
+    .force('collide', d3.forceCollide(d=>radius(d)+1.2))
+    .alpha(.9).alphaDecay(.025).on('tick', draw);
+  document.getElementById('visinfo').textContent =
+    `${nodes.length.toLocaleString()} nodes · ${links.length.toLocaleString()} edges visible`;
+}
+function draw(){
+  ctx.save(); ctx.clearRect(0,0,W,H);
+  ctx.translate(transform.x, transform.y); ctx.scale(transform.k, transform.k);
+  ctx.globalAlpha = .14; ctx.strokeStyle = '#5fd0c8'; ctx.lineWidth = .6; ctx.beginPath();
+  for (const l of links){ if (l.source.x==null) continue; ctx.moveTo(l.source.x,l.source.y); ctx.lineTo(l.target.x,l.target.y); }
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  for (const n of nodes){ ctx.beginPath(); ctx.arc(n.x, n.y, radius(n), 0, 6.2832); ctx.fillStyle = n.color; ctx.fill(); }
+  ctx.restore();
+}
+d3.select(canvas).call(d3.zoom().scaleExtent([.04,8]).on('zoom', ev=>{ transform = ev.transform; draw(); }));
+
+canvas.addEventListener('mousemove', ev=>{
+  const mx = (ev.offsetX - transform.x)/transform.k, my = (ev.offsetY - transform.y)/transform.k;
+  let best=null, bd=1e9;
+  for (const n of nodes){ const dx=n.x-mx, dy=n.y-my, d=dx*dx+dy*dy; if (d<bd){ bd=d; best=n; } }
+  if (best && bd < Math.pow(radius(best)+6,2)){
+    tip.style.display='block'; tip.style.left=(ev.clientX+14)+'px'; tip.style.top=(ev.clientY+14)+'px';
+    tip.innerHTML = `<b>${esc(best.label)}</b><div class="t">${best.type} · cluster ${best.cluster}</div>`+
+      (best.summary ? `<div class="s">${esc(best.summary)}</div>` : '');
+  } else tip.style.display='none';
+});
+const esc = s => (s||'').replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+// cluster panel (list the largest ~40; "Show all" reaches the rest)
+const clist = document.getElementById('clist');
+const LIST = DATA.clusters.slice(0, 40);
+for (const c of LIST){
+  const row = document.createElement('label'); row.className='crow';
+  row.innerHTML = `<input type="checkbox" data-r="${c.rank}" ${visible.has(c.rank)?'checked':''}>`+
+    `<span class="sw" style="background:${c.color}"></span>`+
+    `<span class="lab" title="${esc(c.label)}">${esc(c.label)}</span><span class="ct">${c.size}</span>`;
+  row.querySelector('input').addEventListener('change', e=>{
+    const r = +e.target.dataset.r;
+    if (e.target.checked) visible.add(r); else visible.delete(r);
+    rebuild(); draw();
+  });
+  clist.appendChild(row);
+}
+const checks = () => clist.querySelectorAll('input');
+document.getElementById('top3').onclick = ()=>{ visible.clear(); DATA.clusters.slice(0,3).forEach(c=>visible.add(c.rank));
+  checks().forEach(i=> i.checked = visible.has(+i.dataset.r)); rebuild(); draw(); };
+document.getElementById('all').onclick = ()=>{ DATA.clusters.forEach(c=>visible.add(c.rank));
+  checks().forEach(i=> i.checked = true); rebuild(); draw(); };
+document.getElementById('none').onclick = ()=>{ visible.clear(); checks().forEach(i=> i.checked=false); rebuild(); draw(); };
+
+document.getElementById('meta').textContent =
+  `${DATA.nodes.length.toLocaleString()} nodes · ${DATA.clusters.length.toLocaleString()} clusters · top 3 shown`;
+rebuild();
+</script>
+</body>
+</html>
