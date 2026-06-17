@@ -43,17 +43,17 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		verbose      = fs.Bool("verbose", false, "Print one line per per-gate decision.")
 
 		// P3 — install (G-23 two-step + provenance + --emit-installed)
-		install         = fs.Bool("install", false, "Install verified bundles into ~/.claude/skills/<name>/ with a provenance sidecar.")
-		trustMode       = fs.Bool("trust-mode", false, "Required for --install: re-affirm that you want the trust-mode path (writes a .m3c-provenance.json sidecar).")
-		dryRunInstall   = fs.Bool("dry-run-install", false, "G-23 step 1: print the create/overwrite plan + a token; do NOT write.")
-		confirmInstall  = fs.Bool("confirm-install", false, "G-23 step 2: consume --dry-run-install-token and write.")
-		installToken    = fs.String("dry-run-install-token", "", "Token returned by --dry-run-install; required if any skill would be overwritten.")
-		allowDowngrade  = fs.Bool("allow-downgrade", false, "Allow installing an older version over a newer one.")
-		emitInstalled   = fs.Bool("emit-installed", false, "After install, POST a BundleInstalledEvent so the other machine sees the install.")
+		install          = fs.Bool("install", false, "Install verified bundles into ~/.claude/skills/<name>/ with a provenance sidecar.")
+		trustMode        = fs.Bool("trust-mode", false, "Required for --install: re-affirm that you want the trust-mode path (writes a .m3c-provenance.json sidecar).")
+		dryRunInstall    = fs.Bool("dry-run-install", false, "G-23 step 1: print the create/overwrite plan + a token; do NOT write.")
+		confirmInstall   = fs.Bool("confirm-install", false, "G-23 step 2: consume --dry-run-install-token and write.")
+		installToken     = fs.String("dry-run-install-token", "", "Token returned by --dry-run-install; required if any skill would be overwritten.")
+		allowDowngrade   = fs.Bool("allow-downgrade", false, "Allow installing an older version over a newer one.")
+		emitInstalled    = fs.Bool("emit-installed", false, "After install, POST a BundleInstalledEvent so the other machine sees the install.")
 		installSkillsDir = fs.String("skills-dir", "", "Where to install skills. Default: ~/.claude/skills.")
-		keyPath         = fs.String("key", defaultSelfKeyPath(), "[--emit-installed] Signing key for the BundleInstalledEvent envelope.")
-		identity        = fs.String("identity", "id:kamir@m3c", "[--emit-installed] Author/registry identity stamped into the install event.")
-		noCheckpoint    = fs.Bool("no-checkpoint", false, "Do not append a SPEC-0213 session checkpoint after install.")
+		keyPath          = fs.String("key", defaultSelfKeyPath(), "[--emit-installed] Signing key for the BundleInstalledEvent envelope.")
+		identity         = fs.String("identity", "id:kamir@m3c", "[--emit-installed] Author/registry identity stamped into the install event.")
+		noCheckpoint     = fs.Bool("no-checkpoint", false, "Do not append a SPEC-0213 session checkpoint after install.")
 	)
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: skillctl pull [flags]")
@@ -106,9 +106,16 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "\n==> done. staged=%d  skipped=%d\n", len(res.Staged), len(res.Skipped))
 
-	if _ = verbose; len(res.Skipped) > 0 {
-		// Even one skip is a hard fail — the operator must see it before
-		// proceeding to --install (P3).
+	_ = verbose
+	if len(res.Skipped) > 0 {
+		// Even one skip is a hard fail. If the operator asked to install, say
+		// plainly WHY nothing was installed and HOW to proceed.
+		if *install || *dryRunInstall || *confirmInstall {
+			fmt.Fprintf(stderr, "\npull: NOT installing — %d bundle(s) were skipped (the ❌ rows above).\n", len(res.Skipped))
+			fmt.Fprintln(stderr, "  why: a skip means a bundle failed a gate (bad signature, revoked, governance below minimum, or unmet depends_on).")
+			fmt.Fprintln(stderr, "       install aborts on ANY skip so a broken or revoked bundle can't ride in next to the good ones.")
+			fmt.Fprintln(stderr, "  fix: install a known-good subset with --skill <name> or --digest <sha256:…>, or remove/replace the skipped bundles.")
+		}
 		return 1
 	}
 
@@ -153,13 +160,37 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		AllowDowngrade:        *allowDowngrade,
 	})
 	if err != nil {
-		if errors.Is(err, registry.ErrTokenRequired) {
-			fmt.Fprintln(stderr, "pull --install: overwrite detected — first run --dry-run-install to get a token,")
-			fmt.Fprintln(stderr, "                  then re-run with --confirm-install --dry-run-install-token <sig>.")
+		// Per-class diagnostics: every token failure states WHY and the exact FIX.
+		switch {
+		case errors.Is(err, registry.ErrTokenRequired):
+			fmt.Fprintln(stderr, "pull --install: BLOCKED — installing would overwrite an existing skill and no install token was given.")
+			fmt.Fprintln(stderr, "  why: the G-23 two-step stops you clobbering a skill without first reviewing the plan.")
+			fmt.Fprintln(stderr, "  fix: 1) re-run with --dry-run-install  → prints the create/overwrite plan + a token (5-min TTL)")
+			fmt.Fprintln(stderr, "       2) re-run with --confirm-install --dry-run-install-token <that exact token>")
 			return 2
+		case errors.Is(err, registry.ErrTokenExpired):
+			fmt.Fprintf(stderr, "pull --install: BLOCKED — the --dry-run-install-token has EXPIRED (tokens live %s).\n", registry.TokenTTL)
+			fmt.Fprintln(stderr, "  why: a stale token could confirm a plan that no longer matches what's on disk.")
+			fmt.Fprintln(stderr, "  fix: re-run --dry-run-install for a fresh token, then run --confirm-install right away.")
+			return 2
+		case errors.Is(err, registry.ErrTokenInvalid):
+			fmt.Fprintln(stderr, "pull --install: BLOCKED — the --dry-run-install-token is MALFORMED.")
+			fmt.Fprintf(stderr, "  detail: %v\n", err)
+			fmt.Fprintln(stderr, "  why: a valid token looks like <unix-seconds>.<base64url-signature>, exactly as printed by --dry-run-install.")
+			fmt.Fprintln(stderr, "  fix: re-run --dry-run-install and paste the WHOLE token verbatim — no added/removed characters, no line breaks.")
+			return 2
+		case errors.Is(err, registry.ErrPlanDrift):
+			fmt.Fprintln(stderr, "pull --install: BLOCKED — the token does NOT match this install plan (forged/tampered, or the plan changed since the dry-run).")
+			fmt.Fprintln(stderr, "  why: the token is an HMAC over the exact create/overwrite set; any mismatch fails closed.")
+			fmt.Fprintln(stderr, "  fix: re-run --dry-run-install to see the CURRENT plan + a fresh token, then --confirm-install with THAT token.")
+			return 2
+		case errors.Is(err, registry.ErrUnsafeBundleName):
+			fmt.Fprintf(stderr, "pull --install: REFUSED — a staged bundle has an unsafe name.\n  detail: %v\n", err)
+			return 2
+		default:
+			fmt.Fprintf(stderr, "pull --install: %v\n", err)
+			return 1
 		}
-		fmt.Fprintf(stderr, "pull --install: %v\n", err)
-		return 1
 	}
 	for _, r := range results {
 		marker := "+"
@@ -210,9 +241,9 @@ func emitInstalledEvents(stdout, stderr io.Writer, results []*registry.InstallRe
 			continue
 		}
 		docID, err := registry.PublishInstalled(registry.PublishInstalledOpts{
-			ER1Cfg:          cfg,
-			ContextID:       er1Context,
-			Event:           ev,
+			ER1Cfg:    cfg,
+			ContextID: er1Context,
+			Event:     ev,
 			Skill: registry.SkillMeta{
 				Name:           b.Name,
 				Version:        b.Version,
@@ -229,7 +260,6 @@ func emitInstalledEvents(stdout, stderr io.Writer, results []*registry.InstallRe
 	}
 	_ = results // referenced for symmetry; not directly used here
 }
-
 
 func strOr(s, fb string) string {
 	if s == "" {
