@@ -210,10 +210,10 @@ func ConfirmInstall(bundles []*StagedBundle, providedToken string, opts InstallO
 
 // Errors specific to the G-23 path.
 var (
-	ErrTokenRequired = errors.New("install: overwrite requires the --dry-run-install-token issued by --dry-run-install")
-	ErrTokenInvalid  = errors.New("install: --dry-run-install-token does not match the current plan (drift) or has been tampered with")
-	ErrTokenExpired  = errors.New("install: --dry-run-install-token expired (TTL is 5 minutes)")
-	ErrPlanDrift     = errors.New("install: the create/overwrite set changed between dry-run and confirm — re-run --dry-run-install")
+	ErrTokenRequired = errors.New("install: this would overwrite an existing skill — pass the --dry-run-install-token issued by --dry-run-install")
+	ErrTokenInvalid  = errors.New("install: --dry-run-install-token is malformed (expected <unix-seconds>.<base64url-signature> from --dry-run-install)")
+	ErrTokenExpired  = errors.New("install: --dry-run-install-token has expired (tokens live 5 minutes — re-run --dry-run-install)")
+	ErrPlanDrift     = errors.New("install: --dry-run-install-token does not match this install plan — it was forged/tampered, or the plan changed since --dry-run-install")
 )
 
 // mintInstallToken HMACs the canonical plan summary with a process-stable key,
