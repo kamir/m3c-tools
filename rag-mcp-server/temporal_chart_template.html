@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Braindump — Brain-Processing Temporal Deltas (SPEC-0270)</title>
+<style>
+  :root{--bg:#0a0f14;--panel:#101924;--line:#1e2b3a;--ink:#e6f1f7;--muted:#7d97a8;
+        --v2:#22d3ee;--v1:#f5a623}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);
+    font:13px/1.45 system-ui,Segoe UI,Roboto,sans-serif;padding:22px 26px 60px}
+  h1{font-size:20px;margin:0 0 2px;font-weight:800} .sub{color:var(--muted);margin:0 0 16px;font-size:13px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:20px}
+  .h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 12px;font-weight:700}
+  #metrics{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}
+  #metrics button{background:#0c1622;color:var(--ink);border:1px solid var(--line);border-radius:7px;
+    padding:6px 11px;font-size:12px;cursor:pointer}
+  #metrics button.on{border-color:var(--v2);color:var(--v2);background:#0a1c24}
+  .legend{display:flex;gap:18px;font-size:12px;margin:4px 0 10px}
+  .legend i{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:6px;vertical-align:middle}
+  svg{width:100%;height:auto;display:block} text{fill:var(--muted);font-size:10px}
+  .axis{stroke:var(--line)} .grid{stroke:#16202b}
+  .insight{color:var(--muted);font-size:12.5px;margin-top:8px}
+  .tlabel{font-size:11px}
+</style>
+</head>
+<body>
+<h1>🧠 Brain-Processing — Temporal Cluster Deltas</h1>
+<p class="sub">Monthly graph layers over the distilled braindump · <b style="color:var(--v2)">V2 global</b> (cumulative baseline) vs <b style="color:var(--v1)">V1 local</b> (sliding 2-month window) · SPEC-0270</p>
+
+<div class="card">
+  <div class="h2">Delta metric over months</div>
+  <div id="metrics"></div>
+  <div class="legend"><span><i style="background:var(--v2)"></i>V2 global (adds to whole history)</span>
+    <span><i style="background:var(--v1)"></i>V1 local (vs previous month only)</span></div>
+  <svg id="chart" viewBox="0 0 1000 360" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="insight" id="insight"></div>
+</div>
+
+<div class="card">
+  <div class="h2">Cluster trajectories (V2 lineages — size per month)</div>
+  <svg id="traj" viewBox="0 0 1000 360" preserveAspectRatio="xMidYMid meet"></svg>
+  <div id="tlegend" class="legend" style="flex-wrap:wrap"></div>
+</div>
+
+<script>
+const DATA = /*__DATA__*/;
+const NS="http://www.w3.org/2000/svg";
+const el=(t,a)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const months=DATA.months, locIdx=DATA.localMonths.map(m=>months.indexOf(m));
+const METRICS=[["nodes_added","nodes added"],["edges_added","edges added"],
+  ["bridge_edges","bridge edges"],["cross_month_builds_on","cross-month builds_on"],
+  ["clusters_after","# clusters"],["modularity_after","modularity"],
+  ["cluster_churn","cluster churn"],["articles_added","articles added"]];
+let metric="nodes_added";
+
+function line(svg, W, H, series, xs, color, smooth){
+  const pad={l:46,r:14,t:14,b:46};
+  const all=series.flatMap(s=>s.vals).filter(v=>v!=null);
+  const ymax=Math.max(1,...all), ymin=Math.min(0,...all);
+  const X=i=> pad.l + (i/(months.length-1))*(W-pad.l-pad.r);
+  const Y=v=> H-pad.b - ((v-ymin)/(ymax-ymin||1))*(H-pad.t-pad.b);
+  // grid + y ticks
+  for(let g=0;g<=4;g++){const v=ymin+(ymax-ymin)*g/4,y=Y(v);
+    svg.appendChild(el("line",{class:"grid",x1:pad.l,y1:y,x2:W-pad.r,y2:y}));
+    const tx=el("text",{x:pad.l-6,y:y+3,"text-anchor":"end"});tx.textContent=(Math.round(v*1000)/1000);svg.appendChild(tx);}
+  // x labels (every ~3rd)
+  months.forEach((m,i)=>{ if(i%3&&i!==months.length-1)return; const x=X(i);
+    const t=el("text",{x:x,y:H-pad.b+14,"text-anchor":"end",transform:`rotate(-40 ${x} ${H-pad.b+14})`});
+    t.textContent=m;svg.appendChild(t);});
+  svg.appendChild(el("line",{class:"axis",x1:pad.l,y1:H-pad.b,x2:W-pad.r,y2:H-pad.b}));
+  // lines
+  for(const s of series){
+    let d="";
+    s.vals.forEach((v,j)=>{ if(v==null)return; const x=X(s.xs[j]),y=Y(v); d+=(d?"L":"M")+x+" "+y+" ";});
+    svg.appendChild(el("path",{d,fill:"none",stroke:s.color,"stroke-width":2,"stroke-linejoin":"round"}));
+    s.vals.forEach((v,j)=>{ if(v==null)return; svg.appendChild(el("circle",{cx:X(s.xs[j]),cy:Y(v),r:2.4,fill:s.color}));});
+  }
+}
+function drawChart(){
+  const svg=document.getElementById("chart"); svg.innerHTML="";
+  const gx=months.map((_,i)=>i), lx=locIdx;
+  line(svg,1000,360,[
+    {vals:DATA.global[metric], xs:gx, color:"var(--v2)"},
+    {vals:DATA.local[metric], xs:lx, color:"var(--v1)"}],null);
+  // insight
+  const gv=DATA.global[metric], lv=DATA.local[metric];
+  const gmax=months[gv.indexOf(Math.max(...gv))], lmax=DATA.localMonths[lv.indexOf(Math.max(...lv))];
+  document.getElementById("insight").textContent=
+    `Peak ${metric.replace(/_/g," ")}: V2 global → ${gmax}; V1 local → ${lmax}. `+
+    `When V1 spikes but V2 stays flat, that month is consolidating an existing theme; when both spike, a new region of thought opened.`;
+}
+function drawTraj(){
+  const svg=document.getElementById("traj"); svg.innerHTML="";
+  const pad={l:46,r:14,t:14,b:46},W=1000,H=360;
+  const palette=["#22d3ee","#f5a623","#a855f7","#34d399","#f0683c","#facc15","#60a5fa","#e879f9","#2dd4bf","#fb7185","#a3e635","#c084fc","#38bdf8","#fda4af"];
+  const ymax=Math.max(1,...DATA.traj.flatMap(t=>Object.values(t.sizes)));
+  const X=i=>pad.l+(i/(months.length-1))*(W-pad.l-pad.r);
+  const Y=v=>H-pad.b-(v/ymax)*(H-pad.t-pad.b);
+  for(let g=0;g<=4;g++){const v=ymax*g/4,y=Y(v);svg.appendChild(el("line",{class:"grid",x1:pad.l,y1:y,x2:W-pad.r,y2:y}));
+    const tx=el("text",{x:pad.l-6,y:y+3,"text-anchor":"end"});tx.textContent=Math.round(v);svg.appendChild(tx);}
+  months.forEach((m,i)=>{if(i%3&&i!==months.length-1)return;const x=X(i);
+    const t=el("text",{x:x,y:H-pad.b+14,"text-anchor":"end",transform:`rotate(-40 ${x} ${H-pad.b+14})`});t.textContent=m;svg.appendChild(t);});
+  const leg=document.getElementById("tlegend"); leg.innerHTML="";
+  DATA.traj.forEach((t,ti)=>{const col=palette[ti%palette.length];let d="";
+    months.forEach((m,i)=>{ if(t.sizes[m]==null)return; const x=X(i),y=Y(t.sizes[m]); d+=(d?"L":"M")+x+" "+y+" ";});
+    svg.appendChild(el("path",{d,fill:"none",stroke:col,"stroke-width":1.8}));
+    const sp=document.createElement("span");sp.innerHTML=`<i style="background:${col}"></i>${t.label} (${t.final_size})`;leg.appendChild(sp);});
+}
+const mc=document.getElementById("metrics");
+METRICS.forEach(([k,lab])=>{const b=document.createElement("button");b.textContent=lab;b.className=k===metric?"on":"";
+  b.onclick=()=>{metric=k;[...mc.children].forEach(c=>c.className="");b.className="on";drawChart();};mc.appendChild(b);});
+drawChart(); drawTraj();
+</script>
+</body>
+</html>
