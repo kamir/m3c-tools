@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Runbook — Eric · sign, publish &amp; upgrade a skill</title>
+<style>
+  :root{
+    --bg:#0b0d11; --panel:#171a21; --panel2:#23262e; --line:#2b3140;
+    --txt:#e8eaed; --mut:#9aa3b2; --brand:#7c5cff; --brand2:#cdbcff;
+    --ok:#16c79a; --deny:#ff6b6b; --warn:#ffb454; --info:#d6e7ff;
+    --mono:'SF Mono',ui-monospace,'JetBrains Mono',Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--sans);line-height:1.5;
+       background-image:radial-gradient(900px 520px at 85% -10%,rgba(124,92,255,.18),transparent),
+                        radial-gradient(760px 440px at 0% 108%,rgba(22,199,154,.10),transparent);}
+  .wrap{max-width:1000px;margin:0 auto;padding:36px 22px 120px}
+  .tag{display:inline-flex;align-items:center;gap:7px;font:600 12px/1 var(--mono);letter-spacing:.5px;
+       color:var(--brand2);background:rgba(124,92,255,.12);border:1px solid rgba(124,92,255,.35);padding:6px 11px;border-radius:999px}
+  h1{font-size:30px;margin:12px 0 4px;letter-spacing:-.5px}
+  .sub{color:var(--mut);font-size:15.5px;max-width:760px;margin:0 0 6px}
+
+  .progress{position:sticky;top:0;z-index:20;margin:22px 0 8px;
+            background:linear-gradient(180deg,#13161cf2,#10131af2);backdrop-filter:blur(6px);
+            border:1px solid var(--line);border-radius:14px;padding:14px 18px}
+  .progress .row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .bar{flex:1 1 240px;height:10px;background:var(--panel2);border-radius:999px;overflow:hidden;border:1px solid var(--line)}
+  .bar > i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--brand),var(--ok));transition:width .35s ease}
+  .pct{font:700 14px/1 var(--mono);color:var(--brand2);min-width:54px;text-align:right}
+  .count{font:600 12.5px/1 var(--mono);color:var(--mut)}
+  .ready{font:700 12px/1 var(--mono);padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--mut)}
+  .ready.go{color:var(--ok);border-color:rgba(22,199,154,.45);background:rgba(22,199,154,.12)}
+
+  .mission{background:linear-gradient(180deg,var(--panel),#13161c);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin:16px 0 6px;font-size:14px;color:var(--info)}
+  .mission b{color:var(--txt)}
+
+  /* session inputs */
+  .cfg{background:linear-gradient(180deg,var(--panel),#13161c);border:1px solid rgba(124,92,255,.4);border-radius:15px;padding:18px 20px;margin:16px 0 8px}
+  .cfg h2{font-size:13px;text-transform:uppercase;letter-spacing:1.3px;color:var(--brand2);margin:0 0 4px}
+  .cfg .hint{color:var(--mut);font-size:13px;margin:0 0 14px}
+  .cfg-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px 16px}
+  @media(max-width:640px){.cfg-grid{grid-template-columns:1fr}}
+  .cfg label{display:block;font:600 11px/1 var(--mono);text-transform:uppercase;letter-spacing:.7px;color:var(--mut);margin-bottom:5px}
+  .cfg input{width:100%;background:#0d1017;color:var(--ok);border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-family:var(--mono);font-size:12.8px;font-weight:600}
+
+  /* blocks */
+  .block{display:flex;align-items:center;gap:13px;margin:34px 0 4px;padding-top:10px;border-top:1px solid var(--line)}
+  .block .bl{display:inline-grid;place-items:center;width:36px;height:36px;border-radius:10px;background:var(--brand);color:#fff;font:800 16px/1 var(--mono);flex:0 0 auto}
+  .block .bt h2{font-size:20px;margin:0}
+  .block .bt p{color:var(--mut);font-size:13px;margin:2px 0 0}
+
+  /* pre-flight (block 1) */
+  .preflight{background:linear-gradient(180deg,rgba(255,180,84,.07),#13161c);border:1px solid rgba(255,180,84,.38);border-radius:15px;padding:18px 20px;margin:10px 0 8px}
+  .preflight .pfintro{color:var(--mut);font-size:13.5px;margin:0 0 4px}
+  .pf-check{margin-top:14px;padding-top:14px;border-top:1px dashed var(--line)}
+  .pf-help{margin-top:14px}
+  .pf-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+
+  .step{background:linear-gradient(180deg,var(--panel),#13161c);border:1px solid var(--line);border-radius:15px;margin:14px 0;overflow:hidden;transition:border-color .25s}
+  .step.done{border-color:rgba(22,199,154,.5)}
+  .step .head{display:flex;align-items:flex-start;gap:13px;padding:16px 18px 4px}
+  .step .num{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:9px;background:var(--brand);color:#fff;font:800 14px/1 var(--mono);flex:0 0 auto;margin-top:1px}
+  .step.done .num{background:var(--ok)}
+  .step .htxt{flex:1}
+  .step h3{font-size:16px;margin:0 0 2px}
+  .step .why{color:var(--mut);font-size:13px;margin:0}
+  .step .req{font:700 10px/1 var(--mono);letter-spacing:.5px;padding:4px 7px;border-radius:6px;flex:0 0 auto;margin-top:3px}
+  .step .req.r{color:var(--warn);background:rgba(255,180,84,.12);border:1px solid rgba(255,180,84,.4)}
+  .step .req.o{color:var(--mut);background:var(--panel2);border:1px solid var(--line)}
+  .step .body{padding:6px 18px 18px 61px}
+  pre{position:relative;background:#0d1017;border:1px solid var(--line);border-radius:10px;padding:14px 14px 12px;overflow:auto;margin:10px 0}
+  code{font-family:var(--mono);font-size:12.6px;color:var(--info);white-space:pre}
+  .fill{color:var(--ok);background:rgba(22,199,154,.14);border-radius:4px;padding:0 3px;font-weight:700}
+  .fill.missing{color:var(--warn);background:rgba(255,180,84,.14)}
+  .copybtn{position:absolute;top:8px;right:8px;font:600 11px/1 var(--mono);padding:5px 8px;border-radius:7px;border:1px solid var(--line);background:var(--panel2);color:var(--mut);cursor:pointer;opacity:.85;z-index:2}
+  .copybtn:hover{opacity:1;color:var(--txt);border-color:var(--brand)}
+  .chk{display:block;font-size:12.8px;color:var(--mut);margin:8px 0 2px}
+  .chk b{color:var(--ok)}
+  .field{margin-top:10px}
+  .field label{display:block;font:600 11px/1 var(--mono);text-transform:uppercase;letter-spacing:.8px;color:var(--mut);margin-bottom:5px}
+  input[type=text],textarea{width:100%;background:#0d1017;color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-family:var(--mono);font-size:12.8px;resize:vertical}
+  textarea{min-height:54px}
+  .field.cliout label{color:var(--brand2)}
+  .field.cliout textarea{min-height:72px}
+  .field.feedback label{color:var(--warn)}
+  .donerow{display:flex;align-items:center;gap:9px;margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)}
+  .donerow input{width:18px;height:18px;accent-color:var(--ok)}
+  .donerow label{font:700 13px/1 var(--sans);color:var(--txt);cursor:pointer}
+
+  .actions{position:fixed;left:0;right:0;bottom:0;z-index:30;background:#0d1017f2;backdrop-filter:blur(8px);border-top:1px solid var(--line);padding:12px 22px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+  button,.btn{font:700 13px/1 var(--sans);padding:11px 16px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--txt);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:7px}
+  button.primary,.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+  button.go{background:var(--ok);border-color:var(--ok);color:#04221a}
+  .actions .hint{font:600 11px/1 var(--mono);color:var(--mut)}
+  dialog{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:14px;padding:0;max-width:680px;width:92%}
+  dialog .dhead{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--line)}
+  dialog h3{margin:0;font-size:15px}
+  dialog .dbody{padding:16px 18px}
+  dialog textarea{min-height:300px}
+  .x{cursor:pointer;color:var(--mut);font:700 18px/1 var(--mono);background:none;border:none}
+  footer{color:var(--mut);font-size:12px;text-align:center;margin-top:26px}
+  a{color:var(--brand2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="tag">● SKILLCTL RUNBOOK · PUBLISHER</span>
+  <h1>Runbook — Eric: sign, publish &amp; upgrade a skill</h1>
+  <p class="sub">Fill in the session inputs once at the top — every command below auto-fills with your values
+  (shown <span style="color:var(--ok);font-weight:700">in green</span>). Work the four blocks top to bottom; each
+  command has a ⧉ copy icon, a 📋 box for its output, and a 💬 feedback box.</p>
+
+  <div class="progress">
+    <div class="row">
+      <div class="bar"><i id="barfill"></i></div>
+      <div class="pct" id="pct">0%</div>
+      <div class="count" id="count">0 / 0 required steps</div>
+      <div class="ready" id="ready">not ready yet</div>
+    </div>
+  </div>
+
+  <div class="mission">
+    <b>Mission:</b> become a skill <i>publisher</i> — install skillctl, sign with your own key (<b>K-eric</b>),
+    publish a skill into your ER1 context + the <b>{{room}}</b> room so Kamir can take it over, then ship a
+    <i>next version</i> of it.
+  </div>
+
+  <!-- SESSION INPUTS -->
+  <div class="cfg" id="cfg">
+    <h2>Session inputs — fill once, all commands update</h2>
+    <p class="hint">Defaults are pre-filled for today's session. Change the skill name or version and watch the
+    commands below update. (Your ER1 device token is a secret — you'll paste it in the shell, not here.)</p>
+    <div class="cfg-grid">
+      <div><label>Skill name</label><input data-step="cfg" data-field="skill" value="field-note"></div>
+      <div><label>Version (publish)</label><input data-step="cfg" data-field="ver" value="0.1.0"></div>
+      <div><label>Next version (upgrade)</label><input data-step="cfg" data-field="nextver" value="0.2.0"></div>
+      <div><label>Room label</label><input data-step="cfg" data-field="room" value="aims-basics"></div>
+      <div><label>Your ER1 context</label><input data-step="cfg" data-field="ctx" value="105525022458397210134___skills"></div>
+      <div><label>Author identity</label><input data-step="cfg" data-field="identity" value="id:eric@m3c"></div>
+      <div style="grid-column:1/-1"><label>Key stem (keygen --out · key = stem.priv)</label><input data-step="cfg" data-field="keystem" value="~/.config/m3c/skill-keys/eric"></div>
+    </div>
+  </div>
+
+  <!-- ===================== BLOCK 1 ===================== -->
+  <div class="block"><div class="bl">1</div><div class="bt"><h2>Prerequisites</h2><p>Validate readiness before the call — or ask for help.</p></div></div>
+
+  <section class="preflight" id="preflight">
+    <p class="pfintro">Run these four checks now and send me the responses — I'll confirm you're good to go before we
+    start. Stuck on anything? Use <b>Request help</b> and we'll sort it beforehand.</p>
+
+    <div class="pf-check">
+      <pre><code>skillctl version 2&gt;/dev/null || echo "not installed yet — fine, block 2 installs it"</code></pre>
+      <div class="field"><label>Response</label><textarea data-step="pf" data-field="pf_version" placeholder="paste what it printed"></textarea></div>
+    </div>
+    <div class="pf-check">
+      <pre><code>[ -n "$ER1_DEVICE_TOKEN" ] &amp;&amp; echo "token present (${#ER1_DEVICE_TOKEN} chars)" || echo "NO token set in this shell"</code></pre>
+      <div class="field"><label>Response</label><textarea data-step="pf" data-field="pf_token" placeholder="paste what it printed"></textarea></div>
+    </div>
+    <div class="pf-check">
+      <pre><code>ls {{skill}}/SKILL.md 2&gt;/dev/null &amp;&amp; echo "have {{skill}}" || echo "{{skill}} folder not received yet"</code></pre>
+      <div class="field"><label>Response</label><textarea data-step="pf" data-field="pf_skill" placeholder="paste what it printed"></textarea></div>
+    </div>
+    <div class="pf-check">
+      <pre><code>uname -sm    # OS + chip (so Kamir hands you the right installer)</code></pre>
+      <div class="field"><label>Response</label><textarea data-step="pf" data-field="pf_os" placeholder="e.g. Darwin arm64"></textarea></div>
+    </div>
+
+    <div class="pf-help">
+      <div class="field"><label>🆘 Need help with anything before we start? (optional)</label><textarea data-step="pf" data-field="pf_help" placeholder="describe what's unclear or blocking — I'll prep an answer before the call"></textarea></div>
+    </div>
+
+    <div class="pf-actions">
+      <a class="btn primary" id="pfsend" href="#" target="_blank" rel="noopener">📤 Email readiness to Kamir</a>
+      <button type="button" class="btn" onclick="copyPreflight(this)">⧉ Copy readiness</button>
+      <a class="btn" id="pfhelp" href="#" target="_blank" rel="noopener">🆘 Request help</a>
+    </div>
+  </section>
+
+  <!-- ===================== BLOCK 2 ===================== -->
+  <div class="block"><div class="bl">2</div><div class="bt"><h2>Install skillctl</h2><p>Get onto __SKILLCTL_VERSION__ — the version that makes cross-person trust real.</p></div></div>
+
+  <section class="step" id="s1">
+    <div class="head"><div class="num">1</div><div class="htxt">
+      <h3>Install / update to __SKILLCTL_VERSION__</h3>
+      <p class="why">Your first build is v0.2.2; the secure sign/verify path only exists in __SKILLCTL_VERSION__.</p></div>
+      <span class="req r">REQUIRED</span></div>
+    <div class="body">
+      <pre><code>curl -fsSL https://github.com/kamir/m3c-tools/releases/download/skillctl/__SKILLCTL_VERSION__/install.sh | bash
+skillctl version
+which skillctl</code></pre>
+      <div class="chk">Expected: <b>skillctl __SKILLCTL_VERSION__</b>. Installer verifies the release signature (fp <code>5f8f39cb…</code>) first.</div>
+      <div class="donerow"><input type="checkbox" id="c1" data-step="s1" data-field="done"><label for="c1">__SKILLCTL_VERSION__ confirmed</label></div>
+    </div>
+  </section>
+
+  <section class="step" id="s2">
+    <div class="head"><div class="num">2</div><div class="htxt">
+      <h3>PATH check (if needed)</h3>
+      <p class="why">If <code>skillctl</code> says "command not found", add the bin dir to PATH.</p></div>
+      <span class="req o">if needed</span></div>
+    <div class="body">
+      <pre><code>export PATH="$HOME/.local/bin:$PATH"   # add to ~/.zshrc to persist</code></pre>
+      <div class="donerow"><input type="checkbox" id="c2" data-step="s2" data-field="done"><label for="c2">skillctl runs from a fresh terminal</label></div>
+    </div>
+  </section>
+
+  <!-- ===================== BLOCK 3 ===================== -->
+  <div class="block"><div class="bl">3</div><div class="bt"><h2>Package a skill &amp; release</h2><p>Key → skill → publish (packs + signs + shares) → attest.</p></div></div>
+
+  <section class="step" id="s3">
+    <div class="head"><div class="num">3</div><div class="htxt">
+      <h3>Generate your signing key (K-eric)</h3>
+      <p class="why">One ed25519 keypair. <code>.priv</code> never leaves your Mac; only <code>.pub</code> is shared.</p></div>
+      <span class="req r">REQUIRED</span></div>
+    <div class="body">
+      <pre><code>skillctl keygen --out {{keystem}}</code></pre>
+      <div class="chk">Produces <code>{{keystem}}.priv</code> (0600) and <code>{{keystem}}.pub</code>.</div>
+      <div class="donerow"><input type="checkbox" id="c3" data-step="s3" data-field="done"><label for="c3">Key created</label></div>
+    </div>
+  </section>
+
+  <section class="step" id="s4">
+    <div class="head"><div class="num">4</div><div class="htxt">
+      <h3>Read your fingerprint to Kamir 🔑</h3>
+      <p class="why">The load-bearing trust step. Kamir pins THIS value, or your skill won't verify on his side.</p></div>
+      <span class="req r">REQUIRED</span></div>
+    <div class="body">
+      <pre><code>openssl pkey -pubin -in {{keystem}}.pub -outform DER | tail -c 32 | shasum -a 256</code></pre>
+      <div class="chk">Read the <b>sha256</b> aloud on the call; Kamir re-derives it and confirms.</div>
+      <div class="donerow"><input type="checkbox" id="c4" data-step="s4" data-field="done"><label for="c4">Kamir confirmed the fingerprint</label></div>
+    </div>
+  </section>
+
+  <section class="step" id="s5">
+    <div class="head"><div class="num">5</div><div class="htxt">
+      <h3>Get the skill into ~/.claude/skills/</h3>
+      <p class="why">A skill is a folder with a <code>SKILL.md</code> (name = folder, semver version, ≥20-char description, governance_level green).</p></div>
+      <span class="req r">REQUIRED</span></div>
+    <div class="body">
+      <pre><code>mkdir -p ~/.claude/skills
+cp -R ./{{skill}} ~/.claude/skills/{{skill}}
+ls ~/.claude/skills/{{skill}}/SKILL.md
+bash ~/.claude/skills/{{skill}}/tests/smoke.sh</code></pre>
+      <div class="chk">Expect <b>ok: {{skill}} smoke passed</b>.</div>
+      <div class="donerow"><input type="checkbox" id="c5" data-step="s5" data-field="done"><label for="c5">{{skill}} is in ~/.claude/skills/</label></div>
+    </div>
+  </section>
+
+  <section class="step" id="s6">
+    <div class="head"><div class="num">6</div><div class="htxt">
+      <h3>Authenticate — skillctl login</h3>
+      <p class="why">From __SKILLCTL_VERSION__, skillctl logs in via the browser and uses the device token automatically (FR-0043) — no manual export, no minted token.</p></div>
+      <span class="req r">REQUIRED</span></div>
+    <div class="body">
+      <pre><code>skillctl login            # opens a browser; saves the device token
+skillctl login --status   # should print: Logged in</code></pre>
+      <div class="chk">No token to copy by hand. Headless/SSH? run <code>skillctl login --no-browser</code> and open the printed URL.
+      Fallback if login is unavailable: <code>export ER1_DEVICE_TOKEN=&lt;token from Kamir&gt;</code>.</div>
+      <div class="donerow"><input type="checkbox" id="c6" data-step="s6" data-field="done"><label for="c6">Logged in (status shows "Logged in")</label></div>
+    </div>
+  </section>
+
+  <section class="step" id="s7">
+    <div class="head"><div class="num">7</div><div class="htxt">
+      <h3>Publish &amp; share (packs → signs → posts)</h3>
+      <p class="why">One command packs the dir into a .skb, signs it with your key, admits it to your context, and maps it into the room.</p></div>
+      <span class="req r">REQUIRED</span></div>
+    <div class="body">
+      <pre><code>cd ~
+skillctl publish {{skill}}@{{ver}} \
+  --skill-dir ~/.claude/skills/{{skill}} \
+  --registry self --er1-target prod \
+  --er1-context {{ctx}} \
+  --identity {{identity}} \
+  --key {{keystem}}.priv \
+  --share-room {{room}}</code></pre>
+      <div class="chk">Produces <code>~/{{skill}}@{{ver}}.skb</code>. <b>Copy the sha256 digest</b> it prints into the output box for Kamir.</div>
+      <div class="donerow"><input type="checkbox" id="c7" data-step="s7" data-field="done"><label for="c7">Published + shared to {{room}}</label></div>
+    </div>
+  </section>
+
+  <section class="step" id="s8">
+    <div class="head"><div class="num">8</div><div class="htxt">
+      <h3>Attest it green</h3>
+      <p class="why">Self-attest = peer trust (fine for our room). Lets Kamir's governance gate pass.</p></div>
+      <span class="req r">REQUIRED</span></div>
+    <div class="body">
+      <pre><code>skillctl publish --attest {{skill}}@{{ver}} --level green \
+  --rationale 'author self-attest, {{room}} peer trust' \
+  --er1-target prod --er1-context {{ctx}} \
+  --identity {{identity}} --key {{keystem}}.priv</code></pre>
+      <div class="donerow"><input type="checkbox" id="c8" data-step="s8" data-field="done"><label for="c8">Green attestation posted</label></div>
+    </div>
+  </section>
+
+  <section class="step" id="s9">
+    <div class="head"><div class="num">9</div><div class="htxt">
+      <h3>Hand the public key to Kamir</h3>
+      <p class="why">Send the <code>.pub</code>; the fingerprint (step 4) makes it trustworthy.</p></div>
+      <span class="req r">REQUIRED</span></div>
+    <div class="body">
+      <pre><code>cat {{keystem}}.pub      # send this public key to Kamir</code></pre>
+      <div class="donerow"><input type="checkbox" id="c9" data-step="s9" data-field="done"><label for="c9">Kamir has the .pub + confirmed fingerprint</label></div>
+    </div>
+  </section>
+
+  <!-- ===================== BLOCK 4 ===================== -->
+  <div class="block"><div class="bl">4</div><div class="bt"><h2>Upgrade the bundle to next version &amp; release</h2><p>Bump → re-validate → publish {{skill}}@{{nextver}} → attest.</p></div></div>
+
+  <section class="step" id="s10">
+    <div class="head"><div class="num">10</div><div class="htxt">
+      <h3>Bump the version in the skill</h3>
+      <p class="why">The registry enforces version &gt; last admitted, so {{nextver}} must be higher than {{ver}}.</p></div>
+      <span class="req r">REQUIRED</span></div>
+    <div class="body">
+      <pre><code>sed -i '' 's/^version: .*/version: {{nextver}}/' ~/.claude/skills/{{skill}}/SKILL.md
+grep '^version:' ~/.claude/skills/{{skill}}/SKILL.md</code></pre>
+      <div class="chk">Expect <code>version: {{nextver}}</code>. (Edit the SKILL.md body too if the skill itself changed.)</div>
+      <div class="donerow"><input type="checkbox" id="c10" data-step="s10" data-field="done"><label for="c10">Version bumped to {{nextver}}</label></div>
+    </div>
+  </section>
+
+  <section class="step" id="s11">
+    <div class="head"><div class="num">11</div><div class="htxt">
+      <h3>Re-validate the skill</h3>
+      <p class="why">Smoke-test the bumped skill before re-packing.</p></div>
+      <span class="req r">REQUIRED</span></div>
+    <div class="body">
+      <pre><code>bash ~/.claude/skills/{{skill}}/tests/smoke.sh</code></pre>
+      <div class="donerow"><input type="checkbox" id="c11" data-step="s11" data-field="done"><label for="c11">Smoke passes on {{nextver}}</label></div>
+    </div>
+  </section>
+
+  <section class="step" id="s12">
+    <div class="head"><div class="num">12</div><div class="htxt">
+      <h3>Publish the next version</h3>
+      <p class="why">Packs + signs a NEW bundle <code>{{skill}}@{{nextver}}.skb</code> and shares it into the room.</p></div>
+      <span class="req r">REQUIRED</span></div>
+    <div class="body">
+      <pre><code>cd ~
+skillctl publish {{skill}}@{{nextver}} \
+  --skill-dir ~/.claude/skills/{{skill}} \
+  --registry self --er1-target prod \
+  --er1-context {{ctx}} \
+  --identity {{identity}} \
+  --key {{keystem}}.priv \
+  --share-room {{room}}</code></pre>
+      <div class="chk"><b>Copy the new digest</b> into the output box — it differs from {{ver}}.</div>
+      <div class="donerow"><input type="checkbox" id="c12" data-step="s12" data-field="done"><label for="c12">{{nextver}} published</label></div>
+    </div>
+  </section>
+
+  <section class="step" id="s13">
+    <div class="head"><div class="num">13</div><div class="htxt">
+      <h3>Attest {{nextver}} green &amp; notify Kamir</h3>
+      <p class="why">Attest the new digest; tell Kamir the new version + digest so he can re-pull.</p></div>
+      <span class="req r">REQUIRED</span></div>
+    <div class="body">
+      <pre><code>skillctl publish --attest {{skill}}@{{nextver}} --level green \
+  --rationale 'v{{nextver}} self-attest, {{room}} peer trust' \
+  --er1-target prod --er1-context {{ctx}} \
+  --identity {{identity}} --key {{keystem}}.priv</code></pre>
+      <div class="donerow"><input type="checkbox" id="c13" data-step="s13" data-field="done"><label for="c13">{{nextver}} attested + Kamir notified</label></div>
+    </div>
+  </section>
+
+  <section class="step" id="s14">
+    <div class="head"><div class="num">14</div><div class="htxt">
+      <h3>Report back</h3>
+      <p class="why">Send your full progress so Kamir can run his take-over.</p></div>
+      <span class="req o">finish</span></div>
+    <div class="body">
+      <div class="chk">Hit <b>Copy progress report</b> below (it includes your session inputs, every CLI output and your feedback) → send to Kamir, or use <b>Email to Kamir</b>.</div>
+      <div class="donerow"><input type="checkbox" id="c14" data-step="s14" data-field="done"><label for="c14">Report sent</label></div>
+    </div>
+  </section>
+
+  <footer>Self-contained runbook · progress &amp; inputs saved in this browser only · skillctl publisher · SPEC-0271</footer>
+</div>
+
+<div class="actions">
+  <span class="hint" id="savehint">progress autosaves locally</span>
+  <button class="primary" onclick="showReport()">⧉ Copy progress report</button>
+  <a class="btn" id="mailbtn" href="#" target="_blank" rel="noopener">✉ Email to Kamir</a>
+  <button onclick="resetAll()">↺ Reset</button>
+</div>
+
+<dialog id="reportdlg">
+  <div class="dhead"><h3>Progress report — paste this to Kamir</h3><button class="x" onclick="document.getElementById('reportdlg').close()">✕</button></div>
+  <div class="dbody">
+    <textarea id="reportText" readonly></textarea>
+    <div style="margin-top:12px;display:flex;gap:10px">
+      <button class="go" onclick="copyReport()">Copy to clipboard</button>
+      <button onclick="document.getElementById('reportdlg').close()">Close</button>
+    </div>
+  </div>
+</dialog>
+
+<script>
+  const WS_ID = 'ws-eric-publisher-v2';
+  const WS_TITLE = 'Eric — publisher runbook';
+  const KAMIR_EMAIL = 'mirko.kaempf@gmail.com';
+  const k = (s,f)=>`${WS_ID}:${s}:${f}`;
+  const $ = id => document.getElementById(id);
+
+  // --- templating: fill {{tokens}} from session inputs, highlight filled values ---
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function cfg(){ const o={}; document.querySelectorAll('[data-step=cfg]').forEach(e=>o[e.dataset.field]=(e.value||'').trim()); return o; }
+  function fill(tpl, map){
+    return esc(tpl).replace(/\{\{(\w+)\}\}/g, (m,key)=>{
+      const v = map[key];
+      return v ? '<span class="fill">'+esc(v)+'</span>' : '<span class="fill missing">'+esc(m)+'</span>';
+    });
+  }
+  function captureTemplates(){
+    // commands → store decoded text (so re-fill escapes once, correctly)
+    document.querySelectorAll('pre > code').forEach(c=>{ c.dataset.tpl = c.textContent; });
+    // prose with tokens → store innerHTML (token-only substitution, no re-escape)
+    document.querySelectorAll('h3, p.why, .chk, .mission, .block .bt p, .donerow label').forEach(el=>{
+      if(el.closest('pre')) return;
+      if(/\{\{\w+\}\}/.test(el.textContent) && el.dataset.tpl===undefined) el.dataset.tpl = el.innerHTML;
+    });
+  }
+  function applyTemplates(){
+    const map = cfg();
+    document.querySelectorAll('pre > code').forEach(c=>{ c.innerHTML = fill(c.dataset.tpl, map); });
+    document.querySelectorAll('[data-tpl]').forEach(el=>{
+      if(el.tagName==='CODE' && el.closest('pre')) return;
+      el.innerHTML = el.dataset.tpl.replace(/\{\{(\w+)\}\}/g,(m,key)=> map[key]? '<span class="fill">'+esc(map[key])+'</span>' : m);
+    });
+  }
+
+  // --- persistence + listeners ---
+  function bind(){
+    document.querySelectorAll('[data-step]').forEach(el=>{
+      const v = localStorage.getItem(k(el.dataset.step, el.dataset.field));
+      if(v!==null){ if(el.type==='checkbox'){ el.checked = v==='true'; } else { el.value = v; } }
+      const ev = el.type==='checkbox' ? 'change' : 'input';
+      el.addEventListener(ev, ()=>{ localStorage.setItem(k(el.dataset.step, el.dataset.field), el.type==='checkbox'? el.checked : el.value); update(); });
+    });
+  }
+  function update(){ applyTemplates(); render(); }
+
+  function render(){
+    let rt=0, rd=0;
+    document.querySelectorAll('.step').forEach(step=>{
+      const cb = step.querySelector('input[type=checkbox][data-field=done]');
+      const reqEl = step.querySelector('.req'); const required = reqEl && reqEl.classList.contains('r');
+      if(cb){ if(required) rt++; if(cb.checked){ step.classList.add('done'); if(required) rd++; } else step.classList.remove('done'); }
+    });
+    const pct = rt? Math.round(rd/rt*100):0;
+    $('barfill').style.width = pct+'%'; $('pct').textContent = pct+'%';
+    $('count').textContent = `${rd} / ${rt} required steps`;
+    const ready = $('ready');
+    if(rd===rt && rt>0){ ready.textContent='✓ all done'; ready.classList.add('go'); } else { ready.textContent='not ready yet'; ready.classList.remove('go'); }
+    $('mailbtn').href = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(KAMIR_EMAIL)}&su=${encodeURIComponent('skillctl runbook progress — Eric')}&body=${encodeURIComponent(buildReport())}`;
+    const pf = buildPreflight();
+    $('pfsend').href = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(KAMIR_EMAIL)}&su=${encodeURIComponent('Pre-flight readiness — Eric (skillctl)')}&body=${encodeURIComponent(pf)}`;
+    const helpEl = document.querySelector('[data-step=pf][data-field=pf_help]');
+    const helpTxt = helpEl ? (helpEl.value||'').trim() : '';
+    $('pfhelp').href = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(KAMIR_EMAIL)}&su=${encodeURIComponent('HELP before skillctl session — Eric')}&body=${encodeURIComponent(helpTxt||'(describe what you need help with before we start)')}`;
+  }
+
+  function buildPreflight(){
+    const g = id => { const e = document.querySelector('[data-step=pf][data-field='+id+']'); return e ? (e.value||'').trim() : ''; };
+    return ['# Pre-flight readiness — Eric (skillctl publisher session)','when: '+new Date().toISOString(),'',
+      '- skillctl version : '+(g('pf_version')||'(no response)'),
+      '- device token     : '+(g('pf_token')||'(no response)'),
+      '- skill folder      : '+(g('pf_skill')||'(no response)'),
+      '- OS / arch        : '+(g('pf_os')||'(no response)'),'',
+      'Help needed before the session: '+(g('pf_help')||'none')].join('\n');
+  }
+  function copyPreflight(btn){ navigator.clipboard.writeText(buildPreflight()).then(()=>{ const t=btn.textContent; btn.textContent='✓ copied'; setTimeout(()=>btn.textContent=t,1500); }); }
+
+  function buildReport(){
+    const c = cfg();
+    const lines = [`# Worksheet progress — ${WS_TITLE}`, `when: ${new Date().toISOString()}`, ''];
+    lines.push('## Session inputs');
+    ['skill','ver','nextver','room','ctx','identity','keystem'].forEach(key=>lines.push(`- ${key}: ${c[key]||''}`));
+    lines.push('');
+    let rt=0,rd=0;
+    document.querySelectorAll('.step').forEach(st=>{ const cb=st.querySelector('input[data-field=done]'); const req=st.querySelector('.req.r'); if(cb&&req){rt++; if(cb.checked) rd++;} });
+    lines.push(`status: ${rd}/${rt} required steps done`, '');
+    document.querySelectorAll('.step').forEach(st=>{
+      const num = st.querySelector('.num').textContent;
+      const title = st.querySelector('h3').textContent.trim();
+      const cb = st.querySelector('input[data-field=done]');
+      const box = cb ? (cb.checked?'[x]':'[ ]') : '[-]';
+      lines.push(`${box} Step ${num}: ${title}`);
+      st.querySelectorAll('input[type=text][data-field], textarea[data-field]').forEach(e=>{
+        const v=(e.value||'').trim(); if(!v) return;
+        const f=e.dataset.field;
+        if(f==='cliout'){ lines.push('      ┌─ CLI output'); v.split('\n').forEach(l=>lines.push('      │ '+l)); lines.push('      └─'); }
+        else if(f==='feedback'||f==='comment'){ lines.push('      💬 '+v); }
+        else { lines.push('      → '+v); }
+      });
+    });
+    return lines.join('\n');
+  }
+  function showReport(){ $('reportText').value = buildReport(); $('reportdlg').showModal(); }
+  function copyReport(){ const t=$('reportText'); t.select(); navigator.clipboard.writeText(t.value).then(()=>{ const h=$('savehint'); h.textContent='✓ copied'; setTimeout(()=>h.textContent='progress autosaves locally',1800); }); }
+  function resetAll(){ if(confirm('Clear all progress + inputs on this runbook?')){ Object.keys(localStorage).filter(x=>x.startsWith(WS_ID+':')).forEach(x=>localStorage.removeItem(x)); location.reload(); } }
+
+  // --- auto-injected per-step fields + copy buttons ---
+  function injectCopyButtons(){
+    document.querySelectorAll('pre').forEach(pre=>{
+      if(pre.querySelector('.copybtn')) return;
+      const btn=document.createElement('button'); btn.type='button'; btn.className='copybtn'; btn.textContent='⧉ copy';
+      btn.addEventListener('click',()=>{ const code=(pre.querySelector('code')||pre).innerText; navigator.clipboard.writeText(code).then(()=>{ btn.textContent='✓ copied'; setTimeout(()=>btn.textContent='⧉ copy',1500); }); });
+      pre.appendChild(btn);
+    });
+  }
+  function injectField(cls, label, field, ph){
+    document.querySelectorAll('.step').forEach(st=>{
+      const body=st.querySelector('.body'); if(!body) return;
+      if(body.querySelector('[data-field='+field+']')) return;
+      const wrap=document.createElement('div'); wrap.className='field '+cls;
+      wrap.innerHTML='<label>'+label+'</label><textarea data-step="'+st.id+'" data-field="'+field+'" placeholder="'+ph+'"></textarea>';
+      const dr=body.querySelector('.donerow'); if(dr) body.insertBefore(wrap,dr); else body.appendChild(wrap);
+    });
+  }
+
+  // init
+  captureTemplates();
+  injectCopyButtons();
+  injectField('cliout','📋 CLI output — paste exactly what the command printed','cliout','paste terminal output (or error) here so we learn what happens in the field…');
+  injectField('feedback','💬 Feedback / question on this command (optional)','feedback','was this clear? did it behave as described? anything Kamir should know…');
+  bind();
+  applyTemplates();
+  render();
+</script>
+</body>
+</html>

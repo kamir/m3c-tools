@@ -96,6 +96,9 @@ openssl pkeyutl -verify -pubin -inkey skillctl-release.pub -rawin \\
 \`\`\`
 EOF
 
+echo "==> generate onboarding runbook (release-prep standard)"
+"${REPO_ROOT}/tools/skillctl-runbook.sh" "${TAG}" "${OUT}/skillctl-publisher-runbook.html"
+
 echo
 echo "==> assembled: ${OUT}"
 ls -1 "${OUT}"
