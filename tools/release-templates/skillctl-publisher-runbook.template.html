@@ -123,7 +123,7 @@
   </div>
 
   <div class="mission">
-    <b>Mission:</b> become a skill <i>publisher</i> — install skillctl, sign with your own key (<b>K-eric</b>),
+    <b>Mission:</b> become a skill <i>publisher</i> — install skillctl, sign with your own signing key,
     publish a skill into your ER1 context + the <b>{{room}}</b> room so Kamir can take it over, then ship a
     <i>next version</i> of it.
   </div>
@@ -226,7 +226,7 @@ skillctl version     # → __SKILLCTL_VERSION__</code></pre>
 
   <section class="step" id="s3">
     <div class="head"><div class="num">3</div><div class="htxt">
-      <h3>Generate your signing key (K-eric)</h3>
+      <h3>Generate your signing key</h3>
       <p class="why">One ed25519 keypair. <code>.priv</code> never leaves your Mac; only <code>.pub</code> is shared.</p></div>
       <span class="req r">REQUIRED</span></div>
     <div class="body">
@@ -258,8 +258,9 @@ skillctl version     # → __SKILLCTL_VERSION__</code></pre>
       <pre><code>mkdir -p ~/.claude/skills
 cp -R ./{{skill}} ~/.claude/skills/{{skill}}
 ls ~/.claude/skills/{{skill}}/SKILL.md
-bash ~/.claude/skills/{{skill}}/tests/smoke.sh</code></pre>
-      <div class="chk">Expect <b>ok: {{skill}} smoke passed</b>.</div>
+# optional self-check — only runs if the skill ships one:
+[ -f ~/.claude/skills/{{skill}}/tests/smoke.sh ] && bash ~/.claude/skills/{{skill}}/tests/smoke.sh || echo "(no tests/smoke.sh — optional, skip)"</code></pre>
+      <div class="chk">SKILL.md must exist. A <code>tests/smoke.sh</code> is <b>optional</b> — publishing does not require it.</div>
       <div class="donerow"><input type="checkbox" id="c5" data-step="s5" data-field="done"><label for="c5">{{skill}} is in ~/.claude/skills/</label></div>
     </div>
   </section>
@@ -344,12 +345,13 @@ grep '^version:' ~/.claude/skills/{{skill}}/SKILL.md</code></pre>
 
   <section class="step" id="s11">
     <div class="head"><div class="num">11</div><div class="htxt">
-      <h3>Re-validate the skill</h3>
-      <p class="why">Smoke-test the bumped skill before re-packing.</p></div>
-      <span class="req r">REQUIRED</span></div>
+      <h3>Re-validate the skill (optional)</h3>
+      <p class="why">If the skill ships a smoke test, run it on the bumped version. Many skills have none — that's fine.</p></div>
+      <span class="req o">optional</span></div>
     <div class="body">
-      <pre><code>bash ~/.claude/skills/{{skill}}/tests/smoke.sh</code></pre>
-      <div class="donerow"><input type="checkbox" id="c11" data-step="s11" data-field="done"><label for="c11">Smoke passes on {{nextver}}</label></div>
+      <pre><code>[ -f ~/.claude/skills/{{skill}}/tests/smoke.sh ] && bash ~/.claude/skills/{{skill}}/tests/smoke.sh || echo "(no tests/smoke.sh — optional, skip)"</code></pre>
+      <div class="chk">No <code>tests/smoke.sh</code>? Skip — it's optional. At minimum re-check <code>SKILL.md</code> still has <code>version: {{nextver}}</code>.</div>
+      <div class="donerow"><input type="checkbox" id="c11" data-step="s11" data-field="done"><label for="c11">Re-validated (or skipped — no smoke test)</label></div>
     </div>
   </section>
 
