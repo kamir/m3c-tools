@@ -106,6 +106,17 @@ EOF
 echo "==> generate onboarding runbook (release-prep standard)"
 "${REPO_ROOT}/tools/skillctl-runbook.sh" "${TAG}" "${OUT}/skillctl-publisher-runbook.html"
 
+# SPEC-0272: opt-in auto-publish of the runbook into the THOH catalog. Needs a
+# device token (operator keychain / $ER1_DEVICE_TOKEN); non-fatal so a missing
+# token or unreachable catalog never breaks the release. Enable per run:
+#   THOH_PUBLISH=1 tools/skillctl-release.sh <tag>      [THOH_CATALOG_BASE=…]
+if [ -n "${THOH_PUBLISH:-}" ]; then
+  echo "==> THOH_PUBLISH set — publishing runbook to the catalog (${THOH_CATALOG_BASE:-https://onboarding.guide})"
+  "${REPO_ROOT}/tools/skillctl-runbook-publish.sh" "${TAG}" \
+    "${OUT}/skillctl-publisher-runbook.html" "${THOH_CATALOG_BASE:-https://onboarding.guide}" \
+    || echo "    (catalog publish skipped/failed — non-fatal; run tools/skillctl-runbook-publish.sh manually)"
+fi
+
 echo
 echo "==> assembled: ${OUT}"
 ls -1 "${OUT}"
