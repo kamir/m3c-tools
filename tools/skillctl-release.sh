@@ -61,6 +61,13 @@ openssl pkeyutl -verify -pubin -inkey "${OUT}/skillctl-release.pub" -rawin \
   || { echo "SIGNATURE VERIFY FAILED" >&2; exit 1; }
 
 cp "${REPO_ROOT}/tools/skillctl-install.sh" "${OUT}/install.sh"
+# Stamp the installer's default RELEASE_BASE to THIS release, so
+# `curl …/${TAG}/install.sh | bash` (no env override) installs THIS version.
+# Without this the copied default points at whatever tag was committed, and a
+# no-override install silently fetches the wrong (older) binary.
+sed "s#download/skillctl/[^\"}]*#download/${TAG}#" "${OUT}/install.sh" > "${OUT}/install.sh.tmp" && mv "${OUT}/install.sh.tmp" "${OUT}/install.sh"
+echo "==> install.sh RELEASE_BASE default → ${TAG}"
+grep 'RELEASE_BASE:-' "${OUT}/install.sh" | head -1
 FP="sha256:$(openssl pkey -in "${RELEASE_KEY}" -pubout -outform DER 2>/dev/null | tail -c 32 | sha256 | awk '{print $1}')"
 
 cat > "${OUT}/RELEASE_NOTES.md" <<EOF

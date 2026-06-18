@@ -187,10 +187,11 @@
       <p class="why">Your first build is v0.2.2; the secure sign/verify path only exists in __SKILLCTL_VERSION__.</p></div>
       <span class="req r">REQUIRED</span></div>
     <div class="body">
-      <pre><code>curl -fsSL https://github.com/kamir/m3c-tools/releases/download/skillctl/__SKILLCTL_VERSION__/install.sh | bash
-skillctl version
+      <pre><code>curl -fsSL https://github.com/kamir/m3c-tools/releases/download/skillctl/__SKILLCTL_VERSION__/install.sh | RELEASE_BASE=https://github.com/kamir/m3c-tools/releases/download/skillctl/__SKILLCTL_VERSION__ bash
+skillctl version    # must print __SKILLCTL_VERSION__
 which skillctl</code></pre>
-      <div class="chk">Expected: <b>skillctl __SKILLCTL_VERSION__</b>. Installer verifies the release signature (fp <code>5f8f39cb…</code>) first.</div>
+      <div class="chk">Expected: <b>skillctl __SKILLCTL_VERSION__</b> (installer verifies the release signature, fp <code>5f8f39cb…</code>).
+      ⚠ If <code>skillctl version</code> shows an OLDER version, the <code>RELEASE_BASE=…</code> override above is what pins this release — keep it on the command.</div>
       <div class="donerow"><input type="checkbox" id="c1" data-step="s1" data-field="done"><label for="c1">__SKILLCTL_VERSION__ confirmed</label></div>
     </div>
   </section>
@@ -216,7 +217,8 @@ which skillctl</code></pre>
       <span class="req r">REQUIRED</span></div>
     <div class="body">
       <pre><code>skillctl keygen --out {{keystem}}</code></pre>
-      <div class="chk">Produces <code>{{keystem}}.priv</code> (0600) and <code>{{keystem}}.pub</code>.</div>
+      <div class="chk">Produces <code>{{keystem}}.priv</code> (0600) and <code>{{keystem}}.pub</code>.
+      Already have a key? <code>keygen</code> refuses to overwrite — that's expected: <b>reuse your existing key, skip to step 4</b> (don't rotate unless you mean to).</div>
       <div class="donerow"><input type="checkbox" id="c3" data-step="s3" data-field="done"><label for="c3">Key created</label></div>
     </div>
   </section>
