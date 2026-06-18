@@ -101,6 +101,9 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 		// Session hook (P1.5)
 		noCheckpoint = fs.Bool("no-checkpoint", false, "Do not append a checkpoint to the open SPEC-0213 session (default: on if a session is open).")
 
+		// SPEC-0275: auto-register the skill's runbook.html into the THOH catalog.
+		noRunbookPublish = fs.Bool("no-runbook-publish", false, "Do not auto-register the skill's runbook.html/runbook.meta.json into the THOH catalog (SPEC-0275).")
+
 		// UX
 		yes    = fs.Bool("yes", false, "Skip the 🟡 confirm pause (scripted runs).")
 		dryRun = fs.Bool("dry-run", false, "Print the plan + the rendered item body; do not POST or pack.")
@@ -203,19 +206,20 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 		})
 	}
 	return runPublishAdmit(stdout, stderr, publishAdmitArgs{
-		name:         name,
-		version:      ver,
-		skillDir:     *skillDir,
-		bundlePath:   *bundle,
-		identity:     *identity,
-		keyPath:      *keyPath,
-		er1Target:    *er1Target,
-		er1Context:   *er1Context,
-		inlineMax:    *inlineMax,
-		yes:          *yes,
-		dryRun:       *dryRun,
-		noCheckpoint: *noCheckpoint,
-		shareRooms:   rooms,
+		name:             name,
+		version:          ver,
+		skillDir:         *skillDir,
+		bundlePath:       *bundle,
+		identity:         *identity,
+		keyPath:          *keyPath,
+		er1Target:        *er1Target,
+		er1Context:       *er1Context,
+		inlineMax:        *inlineMax,
+		yes:              *yes,
+		dryRun:           *dryRun,
+		noCheckpoint:     *noCheckpoint,
+		noRunbookPublish: *noRunbookPublish,
+		shareRooms:       rooms,
 	})
 }
 
@@ -225,7 +229,7 @@ type publishAdmitArgs struct {
 	name, version, skillDir, bundlePath, identity, keyPath string
 	er1Target, er1Context                                  string
 	inlineMax                                              int
-	yes, dryRun, noCheckpoint                              bool
+	yes, dryRun, noCheckpoint, noRunbookPublish            bool
 	shareRooms                                             []string
 }
 
@@ -331,6 +335,7 @@ func runPublishAdmit(stdout, stderr io.Writer, a publishAdmitArgs) int {
 	})
 	if errors.Is(err, registry.ErrAlreadyPublished) {
 		fmt.Fprintf(stdout, "==> already published: doc_id=%s (idempotent no-op)\n", res.DocID)
+		maybeRegisterRunbook(stdout, stderr, a, ver) // SPEC-0275 (best-effort)
 		return 0
 	}
 	if err != nil {
@@ -339,6 +344,7 @@ func runPublishAdmit(stdout, stderr io.Writer, a publishAdmitArgs) int {
 	}
 	fmt.Fprintf(stdout, "==> admitted: doc_id=%s  transport=%s  body_bytes=%d\n", res.DocID, res.Transport, res.ItemBodySize)
 	maybeCheckpoint(stdout, a.noCheckpoint, a.er1Target, a.er1Context, fmt.Sprintf("published (admit) %s@%s digest=%s doc=%s", a.name, ver, digest, res.DocID))
+	maybeRegisterRunbook(stdout, stderr, a, ver) // SPEC-0275 (best-effort)
 	return 0
 }
 
