@@ -342,6 +342,34 @@ func runPublishAdmit(stdout, stderr io.Writer, a publishAdmitArgs) int {
 	return 0
 }
 
+// resolveBundleDigest determines the sha256 digest for --attest / --revoke:
+//  1. --digest sha256:<hex> if given (verbatim)
+//  2. --bundle <path> → sha256 of that file
+//  3. the in-place bundle ./<name>@<version>.skb that `publish` (admit) writes —
+//     so `publish --attest <name>@<ver>` works right after `publish <name>@<ver>`
+//     with no repeated --digest/--bundle.
+func resolveBundleDigest(digestArg, bundlePath, name, version string) (string, error) {
+	if strings.TrimSpace(digestArg) != "" {
+		return digestArg, nil
+	}
+	if bundlePath == "" {
+		cand := fmt.Sprintf("%s@%s.skb", name, version)
+		if _, err := os.Stat(cand); err == nil {
+			bundlePath = cand
+		}
+	}
+	if bundlePath == "" {
+		return "", fmt.Errorf("need --digest sha256:<hex> or --bundle <path> "+
+			"(no ./%s@%s.skb here — run from where you published, or pass --digest)", name, version)
+	}
+	skb, err := os.ReadFile(bundlePath)
+	if err != nil {
+		return "", fmt.Errorf("read bundle %s: %w", bundlePath, err)
+	}
+	d, _ := sha256Hex(skb)
+	return "sha256:" + d, nil
+}
+
 // ─── attest mode ───────────────────────────────────────────────────────────
 
 type publishAttestArgs struct {
@@ -352,19 +380,10 @@ type publishAttestArgs struct {
 }
 
 func runPublishAttest(stdout, stderr io.Writer, a publishAttestArgs) int {
-	digest := a.digestArg
-	if digest == "" {
-		if a.bundlePath == "" {
-			fmt.Fprintln(stderr, "publish --attest: need --digest sha256:<hex> or --bundle <path>")
-			return 2
-		}
-		skb, err := os.ReadFile(a.bundlePath)
-		if err != nil {
-			fmt.Fprintf(stderr, "publish --attest: read bundle: %v\n", err)
-			return 1
-		}
-		d, _ := sha256Hex(skb)
-		digest = "sha256:" + d
+	digest, err := resolveBundleDigest(a.digestArg, a.bundlePath, a.name, a.version)
+	if err != nil {
+		fmt.Fprintf(stderr, "publish --attest: %v\n", err)
+		return 2
 	}
 
 	priv, err := signing.LoadPrivateKey(a.keyPath)
@@ -443,19 +462,10 @@ type publishRevokeArgs struct {
 }
 
 func runPublishRevoke(stdout, stderr io.Writer, a publishRevokeArgs) int {
-	digest := a.digestArg
-	if digest == "" {
-		if a.bundlePath == "" {
-			fmt.Fprintln(stderr, "publish --revoke: need --digest sha256:<hex> or --bundle <path>")
-			return 2
-		}
-		skb, err := os.ReadFile(a.bundlePath)
-		if err != nil {
-			fmt.Fprintf(stderr, "publish --revoke: read bundle: %v\n", err)
-			return 1
-		}
-		d, _ := sha256Hex(skb)
-		digest = "sha256:" + d
+	digest, err := resolveBundleDigest(a.digestArg, a.bundlePath, a.name, a.version)
+	if err != nil {
+		fmt.Fprintf(stderr, "publish --revoke: %v\n", err)
+		return 2
 	}
 	if a.reason == "" {
 		fmt.Fprintln(stderr, "publish --revoke: --reason required (short code, e.g. key-compromise, deprecated)")
