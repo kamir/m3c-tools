@@ -159,7 +159,7 @@
       <div class="field"><label>Response</label><textarea data-step="pf" data-field="pf_token" placeholder="paste what it printed"></textarea></div>
     </div>
     <div class="pf-check">
-      <pre><code>ls {{skill}}/SKILL.md 2&gt;/dev/null &amp;&amp; echo "have {{skill}}" || echo "{{skill}} folder not received yet"</code></pre>
+      <pre><code>ls ~/.claude/skills/{{skill}}/SKILL.md 2&gt;/dev/null &amp;&amp; echo "have {{skill}}" || echo "{{skill}} not in ~/.claude/skills/ yet"</code></pre>
       <div class="field"><label>Response</label><textarea data-step="pf" data-field="pf_skill" placeholder="paste what it printed"></textarea></div>
     </div>
     <div class="pf-check">
