@@ -121,6 +121,8 @@ func main() {
 		cmdCheckER1()
 	case "doctor":
 		cmdDoctor()
+	case "token":
+		cmdToken(os.Args[2:])
 	case "devices":
 		cmdDevices()
 	case "record":
@@ -193,6 +195,7 @@ Commands:
   devices                List audio input devices
   login                  Login via browser and link device
   doctor                 Run connectivity & config diagnostics
+  token [--print]        Show device-token status (--print emits the Bearer token for shell capture)
   check-er1              Test ER1 server connectivity (use 'doctor' for full check)
 
   retry                  Run ER1 retry loop for queued uploads
