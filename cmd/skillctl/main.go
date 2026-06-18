@@ -152,6 +152,9 @@ func main() {
 	case "registry":
 		os.Exit(runRegistry(os.Args[2:], os.Stdout, os.Stderr))
 	// === END SPEC-0225 P2 ===
+	// === SPEC-0272: publish an onboarding runbook into the THOH catalog ===
+	case "runbook":
+		os.Exit(runRunbook(os.Args[2:], os.Stdout, os.Stderr))
 	// === SPEC-0246 §7: room mapping (share published bundles into a co-learning room) ===
 	case "room":
 		os.Exit(runRoom(os.Args[2:], os.Stdout, os.Stderr))
