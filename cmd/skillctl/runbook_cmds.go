@@ -18,6 +18,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -78,7 +79,6 @@ func runRunbook(args []string, stdout, stderr io.Writer) int {
 		},
 		"html_url": fmt.Sprintf("https://github.com/kamir/m3c-tools/releases/download/%s/skillctl-publisher-runbook.html", *tag),
 	}
-	body, _ := json.Marshal(map[string]any{"descriptor": descriptor, "html": string(html)})
 
 	fmt.Fprintf(stdout, "Runbook : %s@%s — %q\n", *rbID, version, *title)
 	fmt.Fprintf(stdout, "HTML    : %s (%d bytes)\n", htmlPath, len(html))
@@ -107,20 +107,14 @@ func runRunbook(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	req, _ := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: 30 * time.Second}
-	res, err := client.Do(req)
+	code, out, err := postRunbookToCatalog(*base, token, descriptor, html)
 	if err != nil {
 		fmt.Fprintf(stderr, "runbook publish: POST failed: %v\n", err)
 		return 1
 	}
-	defer res.Body.Close()
-	out, _ := io.ReadAll(res.Body)
-	fmt.Fprintf(stdout, "HTTP %d %s\n", res.StatusCode, strings.TrimSpace(string(out)))
+	fmt.Fprintf(stdout, "HTTP %d %s\n", code, out)
 
-	switch res.StatusCode {
+	switch code {
 	case 200, 201:
 		fmt.Fprintf(stdout, "✓ runbook in catalog — assign it from the THOH board (%s/thoh).\n", strings.TrimRight(*base, "/"))
 		return 0
@@ -131,4 +125,114 @@ func runRunbook(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "publish failed.")
 		return 1
 	}
+}
+
+// postRunbookToCatalog POSTs {descriptor, html} to <base>/api/thoh/runbooks with
+// the device token. The one wire path shared by `skillctl runbook publish` and the
+// SPEC-0275 `skillctl publish` auto-register hook (no descriptor duplication).
+func postRunbookToCatalog(base, token string, descriptor map[string]any, html []byte) (int, string, error) {
+	endpoint := strings.TrimRight(base, "/") + "/api/thoh/runbooks"
+	body, _ := json.Marshal(map[string]any{"descriptor": descriptor, "html": string(html)})
+	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return 0, "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	res, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		return 0, "", err
+	}
+	defer res.Body.Close()
+	out, _ := io.ReadAll(res.Body)
+	return res.StatusCode, strings.TrimSpace(string(out)), nil
+}
+
+// maybeRegisterRunbook is the SPEC-0275 auto-register hook. After a successful
+// `skillctl publish` admit, if the skill dir carries BOTH runbook.html and the
+// sidecar runbook.meta.json (and --no-runbook-publish wasn't passed), it posts
+// them to the THOH catalog. Best-effort: every failure warns but NEVER fails the
+// publish — the admit is already done and the runbook bytes are in the signed
+// .skb regardless. The descriptor is the sidecar; version is overridden by the
+// authoritative skill version (single source of truth).
+//
+//	publish admit OK ──▶ runbook.html + runbook.meta.json present?
+//	                       ├─ neither      → silent (skill ships no runbook)
+//	                       ├─ only one     → WARN, skip
+//	                       └─ both         → validate(runbook_id,title) → POST (best-effort)
+func maybeRegisterRunbook(stdout, stderr io.Writer, a publishAdmitArgs, ver string) {
+	if a.noRunbookPublish {
+		return
+	}
+	dir := a.skillDir
+	if dir == "" {
+		home, _ := os.UserHomeDir()
+		dir = filepath.Join(home, ".claude", "skills", a.name)
+	}
+	htmlPath := filepath.Join(dir, "runbook.html")
+	metaPath := filepath.Join(dir, "runbook.meta.json")
+	_, htmlErr := os.Stat(htmlPath)
+	_, metaErr := os.Stat(metaPath)
+	if htmlErr != nil && metaErr != nil {
+		return // skill ships no runbook — nothing to do
+	}
+	if htmlErr != nil || metaErr != nil {
+		fmt.Fprintln(stderr, "    [runbook] runbook.html / runbook.meta.json present without its pair — not registered.")
+		return
+	}
+
+	html, err := os.ReadFile(htmlPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "    [runbook] read %s: %v — not registered.\n", htmlPath, err)
+		return
+	}
+	descriptor, err := loadRunbookDescriptor(metaPath, ver)
+	if err != nil {
+		fmt.Fprintf(stderr, "    [runbook] %v — not registered.\n", err)
+		return
+	}
+
+	token := os.Getenv("ER1_DEVICE_TOKEN")
+	if token == "" {
+		fmt.Fprintln(stderr, "    [runbook] no device token — skipping catalog register (run 'skillctl login').")
+		return
+	}
+	base, _ := er1Endpoint(a.er1Target)
+	code, out, err := postRunbookToCatalog(base, token, descriptor, html)
+	if err != nil {
+		fmt.Fprintf(stderr, "    [runbook] catalog register failed (non-fatal): %v\n", err)
+		return
+	}
+	if code == 200 || code == 201 {
+		rbID, _ := descriptor["runbook_id"].(string)
+		fmt.Fprintf(stdout, "    [runbook] ✓ registered %s in THOH catalog (%s/thoh)\n", rbID, strings.TrimRight(base, "/"))
+		return
+	}
+	fmt.Fprintf(stderr, "    [runbook] catalog register HTTP %d (non-fatal): %s\n", code, out)
+}
+
+// loadRunbookDescriptor reads + validates the sidecar runbook.meta.json. Required:
+// runbook_id, title. version is always overridden by the skill version (ver) so the
+// skill stays the single source of truth. Pure (no I/O beyond the file read) → unit-tested.
+func loadRunbookDescriptor(metaPath, ver string) (map[string]any, error) {
+	raw, err := os.ReadFile(metaPath)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", metaPath, err)
+	}
+	return parseRunbookDescriptor(raw, ver)
+}
+
+func parseRunbookDescriptor(raw []byte, ver string) (map[string]any, error) {
+	var d map[string]any
+	if err := json.Unmarshal(raw, &d); err != nil {
+		return nil, fmt.Errorf("runbook.meta.json is not valid JSON: %w", err)
+	}
+	if s, _ := d["runbook_id"].(string); strings.TrimSpace(s) == "" {
+		return nil, fmt.Errorf(`runbook.meta.json missing required "runbook_id"`)
+	}
+	if s, _ := d["title"].(string); strings.TrimSpace(s) == "" {
+		return nil, fmt.Errorf(`runbook.meta.json missing required "title"`)
+	}
+	d["version"] = ver // skill is the single source of truth for version
+	return d, nil
 }
