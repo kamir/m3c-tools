@@ -38,6 +38,7 @@ var networkCommands = map[string]bool{
 	"awareness": true,
 	"session":   true,
 	"room":      true,
+	"runbook":   true,
 	"install":   true,
 }
 
