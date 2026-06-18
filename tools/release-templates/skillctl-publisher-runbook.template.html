@@ -188,22 +188,29 @@
       <span class="req r">REQUIRED</span></div>
     <div class="body">
       <pre><code>curl -fsSL https://github.com/kamir/m3c-tools/releases/download/skillctl/__SKILLCTL_VERSION__/install.sh | RELEASE_BASE=https://github.com/kamir/m3c-tools/releases/download/skillctl/__SKILLCTL_VERSION__ bash
-skillctl version    # must print __SKILLCTL_VERSION__
-which skillctl</code></pre>
+hash -r                 # clear the shell's cached path to any OLD skillctl
+skillctl version        # MUST print __SKILLCTL_VERSION__
+which skillctl          # MUST be ~/.local/bin/skillctl</code></pre>
       <div class="chk">Expected: <b>skillctl __SKILLCTL_VERSION__</b> (installer verifies the release signature, fp <code>5f8f39cb…</code>).
-      ⚠ If <code>skillctl version</code> shows an OLDER version, the <code>RELEASE_BASE=…</code> override above is what pins this release — keep it on the command.</div>
+      ⚠ <b>If <code>version</code> shows an OLDER version, or a command like <code>login</code> is "unknown command":</b> a STALE skillctl is ahead on your PATH
+      (often <code>~/go/bin/skillctl</code>). Fix: <code>hash -r</code>, put <code>~/.local/bin</code> FIRST on PATH (step 2), or remove the old one
+      (<code>rm ~/go/bin/skillctl</code>) — then re-check <code>which skillctl</code> + <code>skillctl version</code>.</div>
       <div class="donerow"><input type="checkbox" id="c1" data-step="s1" data-field="done"><label for="c1">__SKILLCTL_VERSION__ confirmed</label></div>
     </div>
   </section>
 
   <section class="step" id="s2">
     <div class="head"><div class="num">2</div><div class="htxt">
-      <h3>PATH check (if needed)</h3>
-      <p class="why">If <code>skillctl</code> says "command not found", add the bin dir to PATH.</p></div>
+      <h3>PATH check — make sure the NEW skillctl wins</h3>
+      <p class="why">"command not found" OR an old build answering (wrong version / "unknown command") both mean PATH: put <code>~/.local/bin</code> first.</p></div>
       <span class="req o">if needed</span></div>
     <div class="body">
-      <pre><code>export PATH="$HOME/.local/bin:$PATH"   # add to ~/.zshrc to persist</code></pre>
-      <div class="donerow"><input type="checkbox" id="c2" data-step="s2" data-field="done"><label for="c2">skillctl runs from a fresh terminal</label></div>
+      <pre><code>export PATH="$HOME/.local/bin:$PATH"   # ~/.local/bin FIRST; add to ~/.zshrc to persist
+hash -r
+which skillctl       # → /Users/&lt;you&gt;/.local/bin/skillctl
+skillctl version     # → __SKILLCTL_VERSION__</code></pre>
+      <div class="chk">Tip: a quick bulletproof alternative is to call it by full path — <code>~/.local/bin/skillctl …</code> — which ignores PATH entirely.</div>
+      <div class="donerow"><input type="checkbox" id="c2" data-step="s2" data-field="done"><label for="c2">which skillctl → ~/.local/bin/skillctl, version is __SKILLCTL_VERSION__</label></div>
     </div>
   </section>
 
