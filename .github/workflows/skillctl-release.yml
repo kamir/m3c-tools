@@ -110,6 +110,11 @@ jobs:
         run: |
           set -euo pipefail
           cp tools/skillctl-install.sh dist/install.sh
+          # Stamp the installer's default RELEASE_BASE to THIS tag so
+          # `curl .../${GITHUB_REF_NAME}/install.sh | bash` (no override) installs
+          # THIS release. The committed default is a stale fixed tag otherwise.
+          sed -i "s#download/skillctl/[^\"}]*#download/${GITHUB_REF_NAME}#" dist/install.sh
+          grep 'RELEASE_BASE:-' dist/install.sh | head -1
           [ -f INFRA/skillctl-release.pub ] && cp INFRA/skillctl-release.pub dist/ || true
           NOTES="release/${GITHUB_REF_NAME}/RELEASE_NOTES.md"
           if [ -f "$NOTES" ]; then cp "$NOTES" dist/RELEASE_NOTES.md; \
