@@ -44,6 +44,7 @@
   @media(max-width:640px){.cfg-grid{grid-template-columns:1fr}}
   .cfg label{display:block;font:600 11px/1 var(--mono);text-transform:uppercase;letter-spacing:.7px;color:var(--mut);margin-bottom:5px}
   .cfg input{width:100%;background:#0d1017;color:var(--ok);border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-family:var(--mono);font-size:12.8px;font-weight:600}
+  .cfg select{width:100%;background:#0d1017;color:var(--brand2);border:1px solid rgba(124,92,255,.5);border-radius:9px;padding:9px 11px;font-family:var(--mono);font-size:12.8px;font-weight:700;cursor:pointer}
 
   /* blocks */
   .block{display:flex;align-items:center;gap:13px;margin:34px 0 4px;padding-top:10px;border-top:1px solid var(--line)}
@@ -130,16 +131,22 @@
   <!-- SESSION INPUTS -->
   <div class="cfg" id="cfg">
     <h2>Session inputs — fill once, all commands update</h2>
-    <p class="hint">Defaults are pre-filled for today's session. Change the skill name or version and watch the
-    commands below update. (Your ER1 device token is a secret — you'll paste it in the shell, not here.)</p>
+    <p class="hint">Pick the <b>Author</b> first — that sets identity + ER1 context + key together (they must match the
+    Google account you log in with in step 6, or publish returns 403). Then adjust skill/version. The ER1 device token is
+    a secret — you paste it in the shell, not here.</p>
     <div class="cfg-grid">
+      <div style="grid-column:1/-1"><label>Author — wer publisht? (setzt Identität + Kontext + Key)</label>
+        <select data-step="cfg" data-field="author" onchange="applyAuthor()">
+          <option value="eric">Eric — id:eric@m3c · 105525022458397210134___skills</option>
+          <option value="kamir">Mirko (kamir) — id:kamir@m3c · 107677460544181387647___skills</option>
+        </select></div>
       <div><label>Skill name</label><input data-step="cfg" data-field="skill" value="field-note"></div>
       <div><label>Version (publish)</label><input data-step="cfg" data-field="ver" value="0.1.0"></div>
       <div><label>Next version (upgrade)</label><input data-step="cfg" data-field="nextver" value="0.2.0"></div>
       <div><label>Room label</label><input data-step="cfg" data-field="room" value="aims-basics"></div>
-      <div><label>Your ER1 context</label><input data-step="cfg" data-field="ctx" value="105525022458397210134___skills"></div>
-      <div><label>Author identity</label><input data-step="cfg" data-field="identity" value="id:eric@m3c"></div>
-      <div style="grid-column:1/-1"><label>Key stem (keygen --out · key = stem.priv)</label><input data-step="cfg" data-field="keystem" value="~/.config/m3c/skill-keys/eric"></div>
+      <div><label>ER1 context (auto — vom Author)</label><input data-step="cfg" data-field="ctx" value="105525022458397210134___skills"></div>
+      <div><label>Author identity (auto — vom Author)</label><input data-step="cfg" data-field="identity" value="id:eric@m3c"></div>
+      <div style="grid-column:1/-1"><label>Key stem (auto · keygen --out · key = stem.priv)</label><input data-step="cfg" data-field="keystem" value="~/.config/m3c/skill-keys/eric"></div>
     </div>
   </div>
 
@@ -421,6 +428,22 @@ skillctl publish {{skill}}@{{nextver}} \
   // --- templating: fill {{tokens}} from session inputs, highlight filled values ---
   function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function cfg(){ const o={}; document.querySelectorAll('[data-step=cfg]').forEach(e=>o[e.dataset.field]=(e.value||'').trim()); return o; }
+
+  // Author presets — pick the publisher; identity + ER1 context + key move together
+  // (they must match the Google account used in `skillctl login`, else 403).
+  const AUTHORS = {
+    eric:  { identity:'id:eric@m3c',  ctx:'105525022458397210134___skills', keystem:'~/.config/m3c/skill-keys/eric'  },
+    kamir: { identity:'id:kamir@m3c', ctx:'107677460544181387647___skills', keystem:'~/.config/m3c/skill-keys/kamir' }
+  };
+  function applyAuthor(){
+    const sel=document.querySelector('[data-step=cfg][data-field=author]'); if(!sel) return;
+    const a=AUTHORS[sel.value]; if(!a) return;
+    ['identity','ctx','keystem'].forEach(f=>{
+      const el=document.querySelector('[data-step=cfg][data-field='+f+']');
+      if(el){ el.value=a[f]; localStorage.setItem(k('cfg',f), a[f]); }
+    });
+    update();
+  }
   function fill(tpl, map){
     return esc(tpl).replace(/\{\{(\w+)\}\}/g, (m,key)=>{
       const v = map[key];
