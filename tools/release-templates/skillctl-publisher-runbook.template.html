@@ -286,7 +286,10 @@ skillctl publish {{skill}}@{{ver}} \
   --identity {{identity}} \
   --key {{keystem}}.priv \
   --share-room {{room}}</code></pre>
-      <div class="chk">Produces <code>~/{{skill}}@{{ver}}.skb</code>. <b>Copy the sha256 digest</b> it prints into the output box for Kamir.</div>
+      <div class="chk">Produces <code>~/{{skill}}@{{ver}}.skb</code>. <b>Copy the sha256 digest</b> it prints into the output box for Kamir.
+      <br>⚠ <b>403 "Not authorized for this context"?</b> You can only publish into your <b>own</b> context. The
+      <code>--er1-context</code> sub-prefix must match the Google account you logged in with (step 6). Logged in as someone
+      else (e.g. testing with another account) → use <i>your</i> own <code>…___skills</code> context + matching <code>--identity</code>.</div>
       <div class="donerow"><input type="checkbox" id="c7" data-step="s7" data-field="done"><label for="c7">Published + shared to {{room}}</label></div>
     </div>
   </section>
