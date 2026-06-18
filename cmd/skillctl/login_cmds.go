@@ -65,12 +65,29 @@ func autoloadDeviceToken(stderr io.Writer) {
 	}
 }
 
+// publicER1Base is the default login target. `skillctl login` is the publisher
+// pairing flow against the public SaaS — NOT the local dev server. A local
+// developer overrides via --base-url or by setting ER1_API_URL.
+const publicER1Base = "https://onboarding.guide"
+
+// resolveLoginBase picks the /v2/signin host: explicit --base-url wins, then a
+// set ER1_API_URL (upload URL → stripped to its root), else the public SaaS.
+func resolveLoginBase(baseFlag, apiURLEnv string) string {
+	if b := strings.TrimSpace(baseFlag); b != "" {
+		return strings.TrimRight(b, "/")
+	}
+	if a := strings.TrimSpace(apiURLEnv); a != "" {
+		return er1login.BaseURL(a)
+	}
+	return publicER1Base
+}
+
 func runLogin(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("login", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	noBrowser := fs.Bool("no-browser", false, "Print the login URL but do not open a browser (headless/SSH).")
 	timeout := fs.Duration("timeout", 5*time.Minute, "How long to wait for the browser callback.")
-	baseFlag := fs.String("base-url", "", "ER1 server base URL. Default: derived from ER1_API_URL.")
+	baseFlag := fs.String("base-url", "", "ER1 server base URL. Default: public SaaS (https://onboarding.guide), or ER1_API_URL if set.")
 	logout := fs.Bool("logout", false, "Remove the stored device token and exit.")
 	status := fs.Bool("status", false, "Report whether a (non-expired) device token is stored, and exit.")
 	fs.Usage = func() {
@@ -107,14 +124,7 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	base := strings.TrimSpace(*baseFlag)
-	if base == "" {
-		apiURL := os.Getenv("ER1_API_URL")
-		if apiURL == "" {
-			apiURL = "https://127.0.0.1:8081/upload_2"
-		}
-		base = er1login.BaseURL(apiURL)
-	}
+	base := resolveLoginBase(*baseFlag, os.Getenv("ER1_API_URL"))
 	if base == "" {
 		fmt.Fprintln(stderr, "login: cannot determine ER1 base URL — set ER1_API_URL or pass --base-url.")
 		return 1

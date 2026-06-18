@@ -256,10 +256,11 @@ bash ~/.claude/skills/{{skill}}/tests/smoke.sh</code></pre>
       <p class="why">From __SKILLCTL_VERSION__, skillctl logs in via the browser and uses the device token automatically (FR-0043) — no manual export, no minted token.</p></div>
       <span class="req r">REQUIRED</span></div>
     <div class="body">
-      <pre><code>skillctl login            # opens a browser; saves the device token
-skillctl login --status   # should print: Logged in</code></pre>
-      <div class="chk">No token to copy by hand. Headless/SSH? run <code>skillctl login --no-browser</code> and open the printed URL.
-      Fallback if login is unavailable: <code>export ER1_DEVICE_TOKEN=&lt;token from Kamir&gt;</code>.</div>
+      <pre><code>skillctl login --base-url https://onboarding.guide   # browser -> public SaaS; saves the device token
+skillctl login --status                              # should print: Logged in</code></pre>
+      <div class="chk">⚠ Use <code>--base-url https://onboarding.guide</code> (the public SaaS) — without it, older builds default to the local
+      server and login fails. Headless/SSH? add <code>--no-browser</code> and open the printed URL. Last-resort fallback:
+      <code>export ER1_DEVICE_TOKEN=&lt;token from Kamir&gt;</code>.</div>
       <div class="donerow"><input type="checkbox" id="c6" data-step="s6" data-field="done"><label for="c6">Logged in (status shows "Logged in")</label></div>
     </div>
   </section>
