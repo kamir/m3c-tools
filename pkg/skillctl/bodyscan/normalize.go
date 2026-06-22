@@ -2,6 +2,7 @@ package bodyscan
 
 import (
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -54,29 +55,34 @@ func (n *normalized) origEnd(i int) int {
 // Default-ignorable / zero-width code points stripped before matching. Written
 // as numeric escapes so the source file stays plain ASCII (no invisible bytes).
 const (
-	runeSoftHyphen   = rune(0x00AD) // SOFT HYPHEN
-	runeZWSpace      = rune(0x200B) // ZERO WIDTH SPACE
-	runeZWNonJoiner  = rune(0x200C) // ZERO WIDTH NON-JOINER
-	runeZWJoiner     = rune(0x200D) // ZERO WIDTH JOINER
-	runeWordJoiner   = rune(0x2060) // WORD JOINER
-	runeBOM          = rune(0xFEFF) // ZERO WIDTH NO-BREAK SPACE / BOM
 	runeVarSelStart  = rune(0xFE00) // VARIATION SELECTOR-1
 	runeVarSelEnd    = rune(0xFE0F) // VARIATION SELECTOR-16
 	runeFullwidthLo  = rune(0xFF01) // FULLWIDTH EXCLAMATION MARK
 	runeFullwidthHi  = rune(0xFF5E) // FULLWIDTH TILDE
 	fullwidthToASCII = rune(0xFEE0) // U+FF01..U+FF5E minus this == U+0021..U+007E
+	runeCombiningLo  = rune(0x0300) // COMBINING DIACRITICAL MARKS block start
+	runeCombiningHi  = rune(0x036F) // COMBINING DIACRITICAL MARKS block end
 )
 
-// isIgnorable reports whether r is a default-ignorable / zero-width code point
-// we strip before matching. This is a targeted stdlib fold (no x/text): it
-// covers the demonstrated evasions — zero-width space/joiners, BOM/word-joiner,
-// and the soft hyphen — without pulling in a Unicode-tables dependency.
+// isIgnorable reports whether r is a default-ignorable / invisible code point we
+// strip before matching. Targeted stdlib fold (no x/text):
+//   - the entire Unicode Format (Cf) category — one table lookup that covers the
+//     whole invisible family: soft hyphen, zero-width space/joiners, word joiner,
+//     BOM, LRM/RLM (U+200E/200F), the bidi embedding/override controls
+//     (U+202A-202E), invisible separators (U+2061-2064) and isolates
+//     (U+2066-2069). The previous hand-enumerated set missed these siblings, so a
+//     single invisible control inside a sink word evaded detection (SPEC-0246 / RC2).
+//   - variation selectors (Mn, not Cf), and
+//   - the Combining Diacritical Marks block (U+0300-U+036F), so a base letter +
+//     combining mark spelling a trigger ("i"+U+0301 -> "ignore") re-joins.
 func isIgnorable(r rune) bool {
-	switch r {
-	case runeSoftHyphen, runeZWSpace, runeZWNonJoiner, runeZWJoiner, runeWordJoiner, runeBOM:
+	if unicode.Is(unicode.Cf, r) {
 		return true
 	}
 	if r >= runeVarSelStart && r <= runeVarSelEnd {
+		return true
+	}
+	if r >= runeCombiningLo && r <= runeCombiningHi {
 		return true
 	}
 	return false
@@ -93,7 +99,32 @@ func foldRune(r rune) (folded rune, drop bool) {
 	if r >= runeFullwidthLo && r <= runeFullwidthHi {
 		return r - fullwidthToASCII, false
 	}
+	if a, ok := confusableFold[r]; ok {
+		return a, false
+	}
 	return r, false
+}
+
+// confusableFold maps the common Cyrillic/Greek homoglyph letters to their ASCII
+// Latin lookalike, so an all-homoglyph trigger ("Ігноре алл…") folds back to
+// "Ignore all…" and the injection rules catch it (the change also raises OBF-007).
+// Scoped to the letters needed to spell injection/exfil triggers; a real Cyrillic/
+// Greek document folds to harmless Latin gibberish that matches no English rule.
+var confusableFold = map[rune]rune{
+	// Cyrillic lowercase
+	0x0430: 'a', 0x0435: 'e', 0x043E: 'o', 0x0440: 'p', 0x0441: 'c', 0x0443: 'y',
+	0x0445: 'x', 0x0456: 'i', 0x0458: 'j', 0x0455: 's', 0x051B: 'q', 0x051D: 'w',
+	// Cyrillic uppercase
+	0x0410: 'A', 0x0412: 'B', 0x0415: 'E', 0x041A: 'K', 0x041C: 'M', 0x041D: 'H',
+	0x041E: 'O', 0x0420: 'P', 0x0421: 'C', 0x0422: 'T', 0x0423: 'Y', 0x0425: 'X',
+	0x0406: 'I', 0x0408: 'J', 0x0405: 'S',
+	// Greek lowercase
+	0x03BF: 'o', 0x03B1: 'a', 0x03B5: 'e', 0x03B9: 'i', 0x03C1: 'p', 0x03BD: 'v',
+	0x03C4: 't', 0x03C5: 'u', 0x03BA: 'k', 0x03C7: 'x', 0x03F2: 'c',
+	// Greek uppercase
+	0x0391: 'A', 0x0392: 'B', 0x0395: 'E', 0x0396: 'Z', 0x0397: 'H', 0x0399: 'I',
+	0x039A: 'K', 0x039C: 'M', 0x039D: 'N', 0x039F: 'O', 0x03A1: 'P', 0x03A4: 'T',
+	0x03A5: 'Y', 0x03A7: 'X',
 }
 
 // normalizeBody folds body for matching and records the offset map back to the
