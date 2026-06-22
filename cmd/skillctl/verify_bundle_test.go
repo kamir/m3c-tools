@@ -1,0 +1,236 @@
+package main
+
+// SPEC-0276 R4.2 — end-to-end tests for `skillctl verify --bundle`. These
+// drive the real CLI runner with on-disk crypto material and assert the
+// canonical exit codes, proving the trustless third-party path works with no
+// install state and no network (the trust-roots file is a temp pinned file; no
+// HTTP server is ever started).
+
+import (
+	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
+)
+
+// bundleFixture is a fully-wired, self-consistent --bundle scenario on disk.
+type bundleFixture struct {
+	skbPath  string
+	metaPath string
+	trPath   string
+	digest   string // "sha256:<hex>"
+	authorID string
+	regURL   string
+}
+
+// buildBundleFixture writes a .skb blob, its signed BundleMeta sidecar, and a
+// pinned trust-roots file into a temp dir. mutate lets a test perturb the YAML
+// (e.g. flip to from-registry) before it is written.
+func buildBundleFixture(t *testing.T) bundleFixture {
+	t.Helper()
+	dir := t.TempDir()
+
+	authorPub, authorPriv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("author keygen: %v", err)
+	}
+	regPub, regPriv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("reg keygen: %v", err)
+	}
+
+	// The .skb blob — arbitrary bytes; the verifier only sees them via sha256.
+	skbPath := filepath.Join(dir, "demo@1.0.0.skb")
+	content := []byte("a perfectly ordinary signed skill bundle blob")
+	if err := os.WriteFile(skbPath, content, 0o644); err != nil {
+		t.Fatalf("write skb: %v", err)
+	}
+	dRaw := sha256.Sum256(content)
+	digestStr := "sha256:" + hex.EncodeToString(dRaw[:])
+
+	authorID := "id:kamir@m3c"
+	regURL := "https://reg.example/api/skills"
+
+	meta := registry.BundleMeta{
+		Bundle: map[string]any{
+			"bundle_digest": digestStr,
+			"name":          "demo",
+			"version":       "1.0.0",
+			"status":        "admitted",
+		},
+		Signatures: []registry.SignatureRow{
+			{Role: "author", IdentityID: authorID, SignatureB64: signB64(authorPriv, dRaw), Status: "active"},
+			{Role: "registry", IdentityID: "id:registry@aims-core", SignatureB64: signB64(regPriv, dRaw), Status: "active"},
+		},
+		CurrentGovernance: "green",
+	}
+	metaJSON, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal meta: %v", err)
+	}
+	metaPath := filepath.Join(dir, "demo@1.0.0.skbmeta.json")
+	if err := os.WriteFile(metaPath, metaJSON, 0o644); err != nil {
+		t.Fatalf("write meta: %v", err)
+	}
+
+	trPath := filepath.Join(dir, "trust-roots.pinned.yaml")
+	writePinnedTrustRoots(t, trPath, regURL,
+		base64.StdEncoding.EncodeToString(regPub),
+		authorID, base64.StdEncoding.EncodeToString(authorPub))
+
+	return bundleFixture{
+		skbPath: skbPath, metaPath: metaPath, trPath: trPath,
+		digest: digestStr, authorID: authorID, regURL: regURL,
+	}
+}
+
+func signB64(priv ed25519.PrivateKey, digest [32]byte) string {
+	return base64.StdEncoding.EncodeToString(ed25519.Sign(priv, digest[:]))
+}
+
+func writePinnedTrustRoots(t *testing.T, path, regURL, regPubB64, authorID, authorPubB64 string) {
+	t.Helper()
+	body := "" +
+		"trust_roots:\n" +
+		"  - registry_url: " + regURL + "\n" +
+		"    registry_keys:\n" +
+		"      - id: reg-key-1\n" +
+		"        pubkey: " + regPubB64 + "\n" +
+		"    identity_keys_authorized: pinned\n" +
+		"    governance_minimum: green\n" +
+		"    authors:\n" +
+		"      - id: " + authorID + "\n" +
+		"        pubkey: " + authorPubB64 + "\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write trust-roots: %v", err)
+	}
+}
+
+func TestVerifyBundle_HappyPath(t *testing.T) {
+	f := buildBundleFixture(t)
+	var out, errBuf bytes.Buffer
+	code := runVerify([]string{"--bundle", f.skbPath, "--trust-roots", f.trPath}, &out, &errBuf)
+	if code != exitOK {
+		t.Fatalf("want exit 0, got %d; stderr=%s", code, errBuf.String())
+	}
+	if !bytes.Contains(out.Bytes(), []byte("offline, bundle")) {
+		t.Errorf("missing offline marker; stdout=%s", out.String())
+	}
+	if !bytes.Contains(out.Bytes(), []byte(f.authorID)) {
+		t.Errorf("chain summary should name the author; stdout=%s", out.String())
+	}
+}
+
+func TestVerifyBundle_RepackDetected(t *testing.T) {
+	f := buildBundleFixture(t)
+	// Append a byte to the .skb AFTER the meta was signed → digest mismatch.
+	skb, _ := os.ReadFile(f.skbPath)
+	if err := os.WriteFile(f.skbPath, append(skb, 'X'), 0o644); err != nil {
+		t.Fatalf("repack: %v", err)
+	}
+	var out, errBuf bytes.Buffer
+	code := runVerify([]string{"--bundle", f.skbPath, "--trust-roots", f.trPath}, &out, &errBuf)
+	if code != 10 {
+		t.Fatalf("want exit 10 (digest mismatch), got %d; stderr=%s", code, errBuf.String())
+	}
+}
+
+func TestVerifyBundle_WrongPinnedAuthor(t *testing.T) {
+	f := buildBundleFixture(t)
+	// Rewrite trust-roots to pin a DIFFERENT author key under the same id.
+	otherPub, _, _ := ed25519.GenerateKey(rand.Reader)
+	regPubB64 := readRegPubB64(t, f.trPath)
+	writePinnedTrustRoots(t, f.trPath, f.regURL, regPubB64, f.authorID,
+		base64.StdEncoding.EncodeToString(otherPub))
+
+	var out, errBuf bytes.Buffer
+	code := runVerify([]string{"--bundle", f.skbPath, "--trust-roots", f.trPath}, &out, &errBuf)
+	if code != 11 {
+		t.Fatalf("want exit 11 (author sig invalid), got %d; stderr=%s", code, errBuf.String())
+	}
+}
+
+func TestVerifyBundle_FromRegistryRootRefused(t *testing.T) {
+	f := buildBundleFixture(t)
+	regPubB64 := readRegPubB64(t, f.trPath)
+	// A from-registry root has no pinned authors → --bundle can't verify
+	// offline → actionable refusal (exitGeneric), not a crypto exit code.
+	body := "" +
+		"trust_roots:\n" +
+		"  - registry_url: " + f.regURL + "\n" +
+		"    registry_keys:\n" +
+		"      - id: reg-key-1\n" +
+		"        pubkey: " + regPubB64 + "\n" +
+		"    identity_keys_authorized: from-registry\n" +
+		"    governance_minimum: green\n"
+	if err := os.WriteFile(f.trPath, []byte(body), 0o600); err != nil {
+		t.Fatalf("rewrite tr: %v", err)
+	}
+	var out, errBuf bytes.Buffer
+	code := runVerify([]string{"--bundle", f.skbPath, "--trust-roots", f.trPath}, &out, &errBuf)
+	if code != exitGeneric {
+		t.Fatalf("want exitGeneric, got %d", code)
+	}
+	if !bytes.Contains(errBuf.Bytes(), []byte("identity_keys_authorized: pinned")) {
+		t.Errorf("expected actionable message; stderr=%s", errBuf.String())
+	}
+}
+
+func TestVerifyBundle_MissingSidecar(t *testing.T) {
+	f := buildBundleFixture(t)
+	if err := os.Remove(f.metaPath); err != nil {
+		t.Fatalf("rm meta: %v", err)
+	}
+	var out, errBuf bytes.Buffer
+	code := runVerify([]string{"--bundle", f.skbPath, "--trust-roots", f.trPath}, &out, &errBuf)
+	if code != exitGeneric {
+		t.Fatalf("want exitGeneric for missing sidecar, got %d", code)
+	}
+	if !bytes.Contains(errBuf.Bytes(), []byte("sidecar not found")) {
+		t.Errorf("expected sidecar-not-found message; stderr=%s", errBuf.String())
+	}
+}
+
+func TestVerifyBundle_JSONOutput(t *testing.T) {
+	f := buildBundleFixture(t)
+	var out, errBuf bytes.Buffer
+	code := runVerify([]string{"--bundle", f.skbPath, "--trust-roots", f.trPath, "--json"}, &out, &errBuf)
+	if code != exitOK {
+		t.Fatalf("want exit 0, got %d; stderr=%s", code, errBuf.String())
+	}
+	var res bundleVerifyResult
+	if err := json.Unmarshal(out.Bytes(), &res); err != nil {
+		t.Fatalf("json parse: %v; out=%s", err, out.String())
+	}
+	if !res.OK || res.ExitCode != 0 || res.Digest != f.digest {
+		t.Errorf("unexpected json result: %+v", res)
+	}
+}
+
+// readRegPubB64 extracts the pinned registry pubkey b64 from a trust-roots file
+// so a rewrite can keep the same registry key while changing the author pin.
+func readRegPubB64(t *testing.T, trPath string) string {
+	t.Helper()
+	data, err := os.ReadFile(trPath)
+	if err != nil {
+		t.Fatalf("read tr: %v", err)
+	}
+	for _, line := range bytes.Split(data, []byte("\n")) {
+		s := bytes.TrimSpace(line)
+		// The registry key line is the first "pubkey:" under registry_keys;
+		// the author pubkey appears later. Take the first match.
+		if bytes.HasPrefix(s, []byte("pubkey:")) {
+			return string(bytes.TrimSpace(bytes.TrimPrefix(s, []byte("pubkey:"))))
+		}
+	}
+	t.Fatal("no pubkey line in trust-roots")
+	return ""
+}

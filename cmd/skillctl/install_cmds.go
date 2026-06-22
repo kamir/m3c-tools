@@ -174,13 +174,22 @@ func runVerify(args []string, stdout, stderr io.Writer) int {
 	verboseFlag := fs.Bool("verbose", false, "Print structured per-step log lines to stderr.")
 	homeOverride := fs.String("home", "", "Override the install root.")
 	offline := fs.Bool("offline", false, "Network-free verify: use the stashed metadata + bind the extracted on-disk content to the signed .skb. No registry calls (revocations posted after install are not seen).")
+	bundlePath := fs.String("bundle", "", "Verify a standalone .skb FILE (not an installed skill), fully offline against pinned trust-roots (SPEC-0276 R4.2). Requires a sidecar <file>.skbmeta.json (or --meta).")
+	metaPath := fs.String("meta", "", "Path to the BundleMeta envelope JSON for --bundle (default: the .skbmeta.json sidecar next to the .skb).")
+	trustRootsPath := fs.String("trust-roots", "", "Path to a trust-roots YAML to use instead of the default (~/.claude/skill-trust-roots.yaml). Pair with --bundle for a portable verification kit.")
+	jsonOut := fs.Bool("json", false, "Emit the verification result as JSON (--bundle mode).")
 
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: skillctl verify <name> [flags]   (or: skillctl verify --all [--quarantine])")
+		fmt.Fprintln(stderr, "Usage: skillctl verify <name> [flags]")
+		fmt.Fprintln(stderr, "   or: skillctl verify --all [--quarantine]")
+		fmt.Fprintln(stderr, "   or: skillctl verify --bundle <file.skb> [--trust-roots <file>] [--json]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Re-runs the SPEC-0188 §7 trust-chain check against an already-installed")
 		fmt.Fprintln(stderr, "skill (~/.claude/skills/<name>/). Useful for catching post-install registry")
 		fmt.Fprintln(stderr, "revocations or trust-root rotations. --offline skips the registry.")
+		fmt.Fprintln(stderr, "")
+		fmt.Fprintln(stderr, "--bundle verifies a standalone .skb FILE with NO install state and NO network,")
+		fmt.Fprintln(stderr, "against locally pinned trust-roots — the trustless third-party path.")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Exit codes are the same as `install` (see SPEC-0188 §11).")
 		fs.PrintDefaults()
@@ -189,6 +198,28 @@ func runVerify(args []string, stdout, stderr io.Writer) int {
 	if err := fs.Parse(args); err != nil {
 		return exitUsage
 	}
+
+	// --bundle: standalone, fully-offline verification of a .skb FILE against
+	// pinned trust-roots (SPEC-0276 R4.2). No install state, no network — the
+	// path a third party runs to reproduce our verdict without trusting us.
+	if *bundlePath != "" {
+		if fs.NArg() != 0 {
+			fmt.Fprintln(stderr, "skillctl verify --bundle <file.skb>: do not also pass a <name> positional arg.")
+			return exitUsage
+		}
+		return runVerifyBundle(verifyBundleParams{
+			bundlePath:     *bundlePath,
+			metaPath:       *metaPath,
+			trustRootsPath: *trustRootsPath,
+			registryURL:    *registryURL,
+			governanceMin:  *governanceMin,
+			allowYellow:    *allowYellow,
+			tenantFlag:     *tenantFlag,
+			jsonOut:        *jsonOut,
+			verbose:        *verboseFlag,
+		}, stdout, stderr)
+	}
+
 	if fs.NArg() != 1 {
 		fs.Usage()
 		return exitUsage
@@ -287,9 +318,22 @@ func parseNameAtVersion(s string) (string, string, error) {
 //     home-lab / single-tenant case).
 //   - Else, error: ambiguous, ask the user to pass --registry.
 func loadAndPickRoot(registryFlag string) (*verify.TrustRoots, *verify.TrustRoot, error) {
-	path, err := verify.DefaultPath()
-	if err != nil {
-		return nil, nil, err
+	return loadAndPickRootFromPath("", registryFlag)
+}
+
+// loadAndPickRootFromPath is loadAndPickRoot with an explicit trust-roots file
+// path. An empty path resolves to the default (~/.claude/skill-trust-roots.yaml).
+// The `--trust-roots <file>` override lets a portable verification kit
+// (SPEC-0276 R4.3) carry its own pinned-author trust-roots next to the .skb, so
+// a third party can verify with no access to our machine's config.
+func loadAndPickRootFromPath(trustRootsPath, registryFlag string) (*verify.TrustRoots, *verify.TrustRoot, error) {
+	path := trustRootsPath
+	if path == "" {
+		p, err := verify.DefaultPath()
+		if err != nil {
+			return nil, nil, err
+		}
+		path = p
 	}
 	tr, err := verify.Load(path)
 	if errors.Is(err, os.ErrNotExist) {
