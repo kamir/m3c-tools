@@ -40,6 +40,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/skillctl/bodyscan"
+	skillparser "github.com/kamir/m3c-tools/pkg/skillctl/parser"
 	"github.com/kamir/m3c-tools/pkg/skillimport/parser"
 	"github.com/kamir/m3c-tools/pkg/skillimport/policy"
 	"github.com/kamir/m3c-tools/pkg/skillimport/scanner"
@@ -62,6 +64,15 @@ import (
 const (
 	exitImportPinRequired   = 4
 	exitImportScannerRefuse = 5
+
+	// exitImportBodyscanRefuse (6) — SPEC-0246 §4.5: the staged SKILL.md body
+	// tripped a 🔴 (red) bodyscan finding (prompt injection / exfiltration /
+	// tool-escalation / policy-subversion). Distinct from the STRUCTURAL
+	// scanner refuse (5, dangerous side-effect declarations in bundle.json):
+	// 6 means "the prose itself is hostile." Refused by default; --accept-yellow
+	// does NOT lift a red (fail-closed). The bodyscan-report.json sidecar records
+	// the findings for the propose hand-off.
+	exitImportBodyscanRefuse = 6
 
 	// Numerically equal to verify.ExitDataSourceDenied (17). Surfaces as
 	// "no_source_policy" in the airlock; the install/verify path surfaces
@@ -106,11 +117,12 @@ Flags:
   --accept-yellow    Accept warn-only scan verdicts (still refuses on critical)
   --target <env>     Hand-off target hint for the printed propose command
 
-Exit codes (SPEC-0201 §11):
+Exit codes (SPEC-0201 §11 / SPEC-0246 §4.5):
    4   pin_required           — reference missing @sha256:<hex>
-   5   scanner_refuse         — staged bundle has critical scan findings
+   5   scanner_refuse         — staged bundle has critical structural findings
+   6   bodyscan_refuse        — staged SKILL.md body has 🔴 behavioural findings
   17   no_source_policy       — policy file missing or wrong path
-  18   upstream_intent_capped — warn-only scan; needs --accept-yellow
+  18   upstream_intent_capped — warn-only scan / 🟡 bodyscan; needs --accept-yellow
   19   source_blocked         — host or owner blocked by policy
 
 Sample:
@@ -313,6 +325,17 @@ func runImportPublic(args []string) int {
 		fmt.Fprintln(os.Stderr, "import-public: scanner clean")
 	}
 
+	// 7b. Behavioural bodyscan over the staged SKILL.md body (SPEC-0246 §4.5).
+	// The structural scanner above reads declarations (bundle.json side_effects);
+	// bodyscan reads the PROSE for prompt-injection / exfiltration / tool-escalation
+	// / policy-subversion / obfuscation. A bodyscan-report.json sidecar is written
+	// next to scan-report.json so the propose hand-off (and any audit) can inspect
+	// it. 🔴 refuses by default (exit 6, fail-closed — --accept-yellow does NOT lift
+	// it); 🟡 follows the same --accept-yellow gate as the structural warn.
+	if code := runImportBodyscan(stagingDir, acceptYellow); code != 0 {
+		return code
+	}
+
 	// 8. Hand-off message. Do NOT auto-run propose.
 	fmt.Println()
 	fmt.Println("Staged at:", stagingDir)
@@ -325,6 +348,106 @@ func runImportPublic(args []string) int {
 	}
 	fmt.Println()
 	return 0
+}
+
+// runImportBodyscan locates the staged SKILL.md, runs the SPEC-0246 bodyscan
+// over its body, writes a bodyscan-report.json sidecar, and returns the OS
+// exit code the airlock should use: 0 to continue, exitImportBodyscanRefuse (6)
+// on a 🔴 verdict, exitImportIntentCapped (18) on a 🟡 verdict without
+// --accept-yellow. When no SKILL.md is staged (the MVP often only drops a raw
+// bundle.skb), the body cannot be scanned — that is reported and treated as a
+// pass here, because the structural scanner already ran and the propose gate's
+// check #11 will scan the prose once the bundle is unpacked into a skill dir.
+func runImportBodyscan(stagingDir string, acceptYellow bool) int {
+	skillMD := locateStagedSkillMD(stagingDir)
+	if skillMD == "" {
+		fmt.Fprintln(os.Stderr, "import-public: bodyscan skipped (no SKILL.md in staged bundle; prose is gated again at propose check #11)")
+		return 0
+	}
+
+	raw, err := os.ReadFile(skillMD)
+	if err != nil {
+		// Fail-closed: we found a SKILL.md but couldn't read it.
+		fmt.Fprintf(os.Stderr, "import-public: bodyscan: read %s: %v\n", skillMD, err)
+		return exitImportBodyscanRefuse
+	}
+	fm, body, perr := skillparser.Parse(raw)
+	if perr != nil {
+		// Unparseable frontmatter — scan the whole file as the body.
+		body = string(raw)
+	}
+	in := bodyscan.Input{Body: body}
+	if fm != nil {
+		in.AllowedTools = fm.AllowedTools
+		in.Intent = fm.Intent
+	}
+	bsRep := bodyscan.Scan(in)
+
+	// Persist the sidecar next to scan-report.json regardless of verdict.
+	bsPath := filepath.Join(stagingDir, "bodyscan-report.json")
+	if data, mErr := json.MarshalIndent(bsRep, "", "  "); mErr == nil {
+		_ = os.WriteFile(bsPath, data, 0o644)
+	}
+
+	switch bsRep.Verdict {
+	case bodyscan.VerdictRed:
+		fmt.Fprintln(os.Stderr, "import-public: bodyscan REFUSED (🔴 behavioural findings in SKILL.md body):")
+		for _, f := range bsRep.Findings {
+			if f.Verdict == bodyscan.VerdictRed {
+				fmt.Fprintf(os.Stderr, "  [%s/%s] line %d: %s\n", f.RuleID, f.Category, f.Span.Line, f.Message)
+			}
+		}
+		fmt.Fprintf(os.Stderr, "import-public: bodyscan report: %s\n", bsPath)
+		fmt.Fprintln(os.Stderr, "import-public: a 🔴 bodyscan cannot be accepted (fail-closed); --accept-yellow does not lift it.")
+		return exitImportBodyscanRefuse
+
+	case bodyscan.VerdictYellow:
+		fmt.Fprintln(os.Stderr, "import-public: bodyscan WARN (🟡 behavioural findings in SKILL.md body):")
+		for _, f := range bsRep.Findings {
+			fmt.Fprintf(os.Stderr, "  [%s/%s] line %d: %s\n", f.RuleID, f.Category, f.Span.Line, f.Message)
+		}
+		fmt.Fprintf(os.Stderr, "import-public: bodyscan report: %s\n", bsPath)
+		if !acceptYellow {
+			fmt.Fprintln(os.Stderr, "import-public: re-run with --accept-yellow to proceed past the 🟡 bodyscan verdict (SPEC-0246 §4.6 requires an explicit rationale at propose time)")
+			return exitImportIntentCapped
+		}
+		fmt.Fprintln(os.Stderr, "import-public: --accept-yellow set; continuing past 🟡 bodyscan verdict")
+		return 0
+
+	default: // VerdictGreen
+		fmt.Fprintln(os.Stderr, "import-public: bodyscan clean (🟢)")
+		return 0
+	}
+}
+
+// locateStagedSkillMD walks stagingDir for a SKILL.md, preferring
+// .claude/SKILL.md, then any root-level SKILL.md (case-insensitive — Linux
+// packs ship "skill.md", Claude Code expects "SKILL.md"). Mirrors the lookup
+// in pkg/skillimport/scanner so the airlock and the structural scanner agree
+// on which file is "the skill body." Returns "" when none is found.
+func locateStagedSkillMD(stagingDir string) string {
+	var preferred, fallback string
+	_ = filepath.Walk(stagingDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil //nolint:nilerr // best-effort walk; unreadable entries are skipped
+		}
+		rel, relErr := filepath.Rel(stagingDir, path)
+		if relErr != nil {
+			return nil
+		}
+		if strings.EqualFold(rel, filepath.Join(".claude", "skill.md")) {
+			preferred = path
+			return nil
+		}
+		if strings.EqualFold(filepath.Base(rel), "skill.md") && fallback == "" {
+			fallback = path
+		}
+		return nil
+	})
+	if preferred != "" {
+		return preferred
+	}
+	return fallback
 }
 
 // defaultFetchURL is the v1 URL resolver: every host serves the bundle at the
