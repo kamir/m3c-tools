@@ -79,6 +79,14 @@ func main() {
 	case "verify":
 		runWithExit(func() int { return runVerify(os.Args[2:], os.Stdout, os.Stderr) })
 	// === END SPEC-0188 S8 ===
+	// === SPEC-0276 R4.3: portable, offline, trust-nothing verification kit ===
+	case "export-verification-kit":
+		runWithExit(func() int { return runExportKit(os.Args[2:], os.Stdout, os.Stderr) })
+	// === END SPEC-0276 R4.3 ===
+	// === SPEC-0276 R5: offline compliance evidence pack ===
+	case "compliance":
+		os.Exit(runCompliance(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0276 R5 ===
 	// === SPEC-0247 P0.1: Claude Code PreToolUse(Skill) trust gate ===
 	// Reads the hook event on stdin, re-runs the §7 chain against the
 	// installed skill, and emits an allow/deny decision. Fail-closed:

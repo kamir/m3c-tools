@@ -177,6 +177,7 @@ func runVerify(args []string, stdout, stderr io.Writer) int {
 	bundlePath := fs.String("bundle", "", "Verify a standalone .skb FILE (not an installed skill), fully offline against pinned trust-roots (SPEC-0276 R4.2). Requires a sidecar <file>.skbmeta.json (or --meta).")
 	metaPath := fs.String("meta", "", "Path to the BundleMeta envelope JSON for --bundle (default: the .skbmeta.json sidecar next to the .skb).")
 	trustRootsPath := fs.String("trust-roots", "", "Path to a trust-roots YAML to use instead of the default (~/.claude/skill-trust-roots.yaml). Pair with --bundle for a portable verification kit.")
+	revocationsPath := fs.String("revocations", "", "Path to a signed revocation list (JSON) to enforce offline for --bundle. A revoked digest → exit 17; an untrusted/forged list → exit 12.")
 	jsonOut := fs.Bool("json", false, "Emit the verification result as JSON (--bundle mode).")
 
 	fs.Usage = func() {
@@ -208,15 +209,16 @@ func runVerify(args []string, stdout, stderr io.Writer) int {
 			return exitUsage
 		}
 		return runVerifyBundle(verifyBundleParams{
-			bundlePath:     *bundlePath,
-			metaPath:       *metaPath,
-			trustRootsPath: *trustRootsPath,
-			registryURL:    *registryURL,
-			governanceMin:  *governanceMin,
-			allowYellow:    *allowYellow,
-			tenantFlag:     *tenantFlag,
-			jsonOut:        *jsonOut,
-			verbose:        *verboseFlag,
+			bundlePath:      *bundlePath,
+			metaPath:        *metaPath,
+			trustRootsPath:  *trustRootsPath,
+			revocationsPath: *revocationsPath,
+			registryURL:     *registryURL,
+			governanceMin:   *governanceMin,
+			allowYellow:     *allowYellow,
+			tenantFlag:      *tenantFlag,
+			jsonOut:         *jsonOut,
+			verbose:         *verboseFlag,
 		}, stdout, stderr)
 	}
 

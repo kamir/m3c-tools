@@ -35,15 +35,16 @@ import (
 // verifyBundleParams is the resolved flag set for the --bundle path. Grouped
 // into a struct so runVerify's dispatch stays a single readable call.
 type verifyBundleParams struct {
-	bundlePath     string
-	metaPath       string
-	trustRootsPath string
-	registryURL    string
-	governanceMin  string
-	allowYellow    bool
-	tenantFlag     string
-	jsonOut        bool
-	verbose        bool
+	bundlePath      string
+	metaPath        string
+	trustRootsPath  string
+	revocationsPath string
+	registryURL     string
+	governanceMin   string
+	allowYellow     bool
+	tenantFlag      string
+	jsonOut         bool
+	verbose         bool
 }
 
 // bundleVerifyResult is the --json shape. Stable field names so CI scripts can
@@ -117,12 +118,30 @@ func runVerifyBundle(p verifyBundleParams, stdout, stderr io.Writer) int {
 		Ctx:             context.Background(),
 	})
 
+	// Offline revocation enforcement (SPEC-0276 R4.4): only meaningful once the
+	// chain otherwise passed (a chain failure already returns its own code). A
+	// forged/untrusted list is fail-closed (revErr → exit 12); a revoked digest
+	// → exit 17.
+	var revoked bool
+	var revErr error
+	if verr == nil && p.revocationsPath != "" {
+		revoked, revErr = checkBundleRevoked(p.revocationsPath, root, res.Digest)
+	}
+
 	if p.jsonOut {
 		out := bundleVerifyResult{}
-		if verr != nil {
+		switch {
+		case verr != nil:
 			out.Error = verr.Error()
 			out.ExitCode = verify.ExitCode(verr)
-		} else {
+		case revErr != nil:
+			out.Error = revErr.Error()
+			out.ExitCode = verify.ExitCode(revErr)
+		case revoked:
+			out.Digest = res.Digest
+			out.Error = "bundle digest is in the signed revocation list"
+			out.ExitCode = exitBundleRevoked
+		default:
 			out.OK = true
 			out.Digest = res.Digest
 			out.Author = res.AuthorIdentity
@@ -137,12 +156,40 @@ func runVerifyBundle(p verifyBundleParams, stdout, stderr io.Writer) int {
 		return out.ExitCode
 	}
 
-	if verr != nil {
+	switch {
+	case verr != nil:
 		fmt.Fprintln(stderr, verr)
 		return verify.ExitCode(verr)
+	case revErr != nil:
+		fmt.Fprintln(stderr, revErr)
+		return verify.ExitCode(revErr)
+	case revoked:
+		fmt.Fprintf(stderr, "REVOKED: %s is in the signed revocation list (%s)\n", res.Digest, p.revocationsPath)
+		return exitBundleRevoked
 	}
 	fmt.Fprintln(stdout, res.ChainSummary+" (offline, bundle)")
 	return exitOK
+}
+
+// checkBundleRevoked loads a signed revocation list, verifies its signature
+// against the pinned root, and reports whether digest is revoked. A signature
+// that matches no active registry key is an error (fail-closed), not a silent
+// "not revoked".
+func checkBundleRevoked(path string, root *verify.TrustRoot, digest string) (bool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false, fmt.Errorf("verify --bundle: read revocations %s: %w", path, err)
+	}
+	var list verify.RevocationList
+	if err := json.Unmarshal(data, &list); err != nil {
+		return false, fmt.Errorf("verify --bundle: parse revocations %s: %w", path, err)
+	}
+	set, err := verify.VerifyRevocationList(&list, root)
+	if err != nil {
+		return false, err
+	}
+	_, revoked := set[strings.ToLower(strings.TrimSpace(digest))]
+	return revoked, nil
 }
 
 // defaultMetaSidecar derives the sidecar BundleMeta path from a .skb path:

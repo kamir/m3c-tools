@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
+	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 )
 
 // bundleFixture is a fully-wired, self-consistent --bundle scenario on disk.
@@ -26,9 +27,11 @@ type bundleFixture struct {
 	skbPath  string
 	metaPath string
 	trPath   string
+	dir      string
 	digest   string // "sha256:<hex>"
 	authorID string
 	regURL   string
+	regPriv  ed25519.PrivateKey // pins this; used to sign a revocation list
 }
 
 // buildBundleFixture writes a .skb blob, its signed BundleMeta sidecar, and a
@@ -87,8 +90,8 @@ func buildBundleFixture(t *testing.T) bundleFixture {
 		authorID, base64.StdEncoding.EncodeToString(authorPub))
 
 	return bundleFixture{
-		skbPath: skbPath, metaPath: metaPath, trPath: trPath,
-		digest: digestStr, authorID: authorID, regURL: regURL,
+		skbPath: skbPath, metaPath: metaPath, trPath: trPath, dir: dir,
+		digest: digestStr, authorID: authorID, regURL: regURL, regPriv: regPriv,
 	}
 }
 
@@ -212,6 +215,73 @@ func TestVerifyBundle_JSONOutput(t *testing.T) {
 	}
 	if !res.OK || res.ExitCode != 0 || res.Digest != f.digest {
 		t.Errorf("unexpected json result: %+v", res)
+	}
+}
+
+// writeRevocations marshals a (possibly forged) revocation list to a path.
+func writeRevocations(t *testing.T, dir string, list *verify.RevocationList) string {
+	t.Helper()
+	b, err := json.MarshalIndent(list, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal revocations: %v", err)
+	}
+	p := filepath.Join(dir, "revocations.json")
+	if err := os.WriteFile(p, b, 0o644); err != nil {
+		t.Fatalf("write revocations: %v", err)
+	}
+	return p
+}
+
+func TestVerifyBundle_RevokedDigest(t *testing.T) {
+	f := buildBundleFixture(t)
+	// A revocation list, signed by the PINNED registry key, that contains this
+	// bundle's digest → exit 17.
+	list, err := verify.NewSignedRevocationList(f.regURL, "2026-06-22T10:00:00Z", []string{f.digest}, f.regPriv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revPath := writeRevocations(t, f.dir, list)
+
+	var out, errBuf bytes.Buffer
+	code := runVerify([]string{"--bundle", f.skbPath, "--trust-roots", f.trPath, "--revocations", revPath}, &out, &errBuf)
+	if code != 17 {
+		t.Fatalf("want exit 17 (revoked), got %d; stderr=%s", code, errBuf.String())
+	}
+}
+
+func TestVerifyBundle_NotRevoked(t *testing.T) {
+	f := buildBundleFixture(t)
+	// Properly signed list that does NOT contain this digest → still exit 0.
+	other := sha256.Sum256([]byte("a different bundle"))
+	otherDigest := "sha256:" + hex.EncodeToString(other[:])
+	list, err := verify.NewSignedRevocationList(f.regURL, "2026-06-22T10:00:00Z", []string{otherDigest}, f.regPriv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revPath := writeRevocations(t, f.dir, list)
+
+	var out, errBuf bytes.Buffer
+	code := runVerify([]string{"--bundle", f.skbPath, "--trust-roots", f.trPath, "--revocations", revPath}, &out, &errBuf)
+	if code != exitOK {
+		t.Fatalf("want exit 0 (not revoked), got %d; stderr=%s", code, errBuf.String())
+	}
+}
+
+func TestVerifyBundle_ForgedRevocationListRefused(t *testing.T) {
+	f := buildBundleFixture(t)
+	// A list signed by an attacker key (not the pinned registry key). Must be
+	// fail-closed: exit 12, NOT silently ignored.
+	_, attackerPriv, _ := ed25519.GenerateKey(rand.Reader)
+	list, err := verify.NewSignedRevocationList(f.regURL, "2026-06-22T10:00:00Z", []string{f.digest}, attackerPriv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revPath := writeRevocations(t, f.dir, list)
+
+	var out, errBuf bytes.Buffer
+	code := runVerify([]string{"--bundle", f.skbPath, "--trust-roots", f.trPath, "--revocations", revPath}, &out, &errBuf)
+	if code != 12 {
+		t.Fatalf("want exit 12 (untrusted revocation list), got %d; stderr=%s", code, errBuf.String())
 	}
 }
 
