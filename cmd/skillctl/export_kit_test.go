@@ -85,7 +85,7 @@ func TestExportKit_WithRevocations(t *testing.T) {
 	// A valid list (signed by the pinned reg key) that does NOT revoke this
 	// bundle — should be included, and the kit still verifies.
 	other := sha256.Sum256([]byte("unrelated"))
-	list, err := verify.NewSignedRevocationList(f.regURL, "2026-06-22T10:00:00Z",
+	list, err := verify.NewSignedRevocationList(f.regURL, "2026-06-22T10:00:00Z", 1,
 		[]string{"sha256:" + hex.EncodeToString(other[:])}, f.regPriv)
 	if err != nil {
 		t.Fatal(err)
@@ -117,7 +117,7 @@ func TestExportKit_RefusesAlreadyRevokedBundle(t *testing.T) {
 	f := buildBundleFixture(t)
 	// A list that DOES revoke this bundle → export refuses (don't ship a kit for
 	// a dead bundle).
-	list, err := verify.NewSignedRevocationList(f.regURL, "2026-06-22T10:00:00Z", []string{f.digest}, f.regPriv)
+	list, err := verify.NewSignedRevocationList(f.regURL, "2026-06-22T10:00:00Z", 1, []string{f.digest}, f.regPriv)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -36,12 +36,12 @@ func revocationRoot(t *testing.T, regPub ed25519.PublicKey) *TrustRoot {
 func TestCanonicalRevocation_DeterministicAcrossOrderAndCase(t *testing.T) {
 	a := digestOf("one")
 	b := digestOf("two")
-	c1, err := CanonicalRevocationBytes("https://reg.example/api/skills/", "2026-06-22T10:00:00Z", []string{a, b})
+	c1, err := CanonicalRevocationBytes("https://reg.example/api/skills/", "2026-06-22T10:00:00Z", 1, []string{a, b})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Reversed order + uppercased hex + a duplicate → identical canonical bytes.
-	c2, err := CanonicalRevocationBytes("https://reg.example/api/skills", "2026-06-22T10:00:00Z", []string{bytesUpper(b), a, a})
+	c2, err := CanonicalRevocationBytes("https://reg.example/api/skills", "2026-06-22T10:00:00Z", 1, []string{bytesUpper(b), a, a})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,11 +56,11 @@ func TestRevocationList_SignVerifyRoundTrip(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 	root := revocationRoot(t, pub)
 	target := digestOf("revoke-me")
-	list, err := NewSignedRevocationList(root.RegistryURL, "2026-06-22T10:00:00Z", []string{target, digestOf("other")}, priv)
+	list, err := NewSignedRevocationList(root.RegistryURL, "2026-06-22T10:00:00Z", 1, []string{target, digestOf("other")}, priv)
 	if err != nil {
 		t.Fatal(err)
 	}
-	set, err := VerifyRevocationList(list, root)
+	set, err := VerifyRevocationList(list, root, 0)
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -74,11 +74,11 @@ func TestRevocationList_ForgedSignatureRejected(t *testing.T) {
 	pinnedPub, _, _ := ed25519.GenerateKey(rand.Reader) // a DIFFERENT key is pinned
 	root := revocationRoot(t, pinnedPub)
 	// Signed by the attacker, not by the pinned registry key.
-	list, err := NewSignedRevocationList(root.RegistryURL, "2026-06-22T10:00:00Z", []string{digestOf("x")}, attackerPriv)
+	list, err := NewSignedRevocationList(root.RegistryURL, "2026-06-22T10:00:00Z", 1, []string{digestOf("x")}, attackerPriv)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := VerifyRevocationList(list, root); !errors.Is(err, ErrRegistryNotTrusted) {
+	if _, err := VerifyRevocationList(list, root, 0); !errors.Is(err, ErrRegistryNotTrusted) {
 		t.Fatalf("forged list must be ErrRegistryNotTrusted, got: %v", err)
 	}
 }
@@ -86,19 +86,19 @@ func TestRevocationList_ForgedSignatureRejected(t *testing.T) {
 func TestRevocationList_TamperedDigestSetBreaksSignature(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 	root := revocationRoot(t, pub)
-	list, err := NewSignedRevocationList(root.RegistryURL, "2026-06-22T10:00:00Z", []string{digestOf("a")}, priv)
+	list, err := NewSignedRevocationList(root.RegistryURL, "2026-06-22T10:00:00Z", 1, []string{digestOf("a")}, priv)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Attacker adds a digest after signing → canonical bytes change → sig fails.
 	list.RevokedDigests = append(list.RevokedDigests, digestOf("sneaky"))
-	if _, err := VerifyRevocationList(list, root); !errors.Is(err, ErrRegistryNotTrusted) {
+	if _, err := VerifyRevocationList(list, root, 0); !errors.Is(err, ErrRegistryNotTrusted) {
 		t.Fatalf("tampered digest set must be rejected, got: %v", err)
 	}
 }
 
 func TestRevocationList_InvalidDigestRefused(t *testing.T) {
-	if _, err := CanonicalRevocationBytes("https://reg.example/api/skills", "now", []string{"not-a-digest"}); err == nil {
+	if _, err := CanonicalRevocationBytes("https://reg.example/api/skills", "now", 1, []string{"not-a-digest"}); err == nil {
 		t.Fatal("expected error for malformed digest")
 	}
 }

@@ -31,11 +31,17 @@ type RevocationList struct {
 	RevokedDigests []string `json:"revoked_digests"`
 
 	// IssuedAt is the RFC3339 timestamp the list was signed. Advisory for
-	// humans (freshness); the security property is the signature, not the time.
+	// humans (freshness); rollback protection is the signed Epoch, not the time.
 	IssuedAt string `json:"issued_at"`
 
+	// Epoch is a monotonic revocation generation (SPEC-0279 R1). It is part of
+	// the signed canonical payload; a verifier refuses a list whose epoch is
+	// below its pinned floor, so an attacker cannot substitute an older signed
+	// list to defeat a revocation. 0 = unversioned.
+	Epoch int `json:"epoch,omitempty"`
+
 	// SignatureB64 is base64 of the raw 64-byte ed25519 signature over
-	// CanonicalRevocationBytes(RegistryURL, IssuedAt, RevokedDigests).
+	// CanonicalRevocationBytes(RegistryURL, IssuedAt, Epoch, RevokedDigests).
 	SignatureB64 string `json:"signature_b64"`
 }
 
@@ -47,13 +53,15 @@ type revocationCanonicalV1 struct {
 	Version        int      `json:"version"`
 	RegistryURL    string   `json:"registry_url"`
 	IssuedAt       string   `json:"issued_at"`
+	Epoch          int      `json:"epoch"`
 	RevokedDigests []string `json:"revoked_digests"`
 }
 
 // CanonicalRevocationBytes returns the exact bytes that are signed/verified.
 // Digests are validated (must be sha256:<64hex>), lowercased, de-duplicated and
-// sorted, so signer and verifier agree regardless of input order or case.
-func CanonicalRevocationBytes(registryURL, issuedAt string, digests []string) ([]byte, error) {
+// sorted, so signer and verifier agree regardless of input order or case. The
+// epoch is signed so it cannot be forged upward on an old list (SPEC-0279 R1).
+func CanonicalRevocationBytes(registryURL, issuedAt string, epoch int, digests []string) ([]byte, error) {
 	norm, err := normalizeDigests(digests)
 	if err != nil {
 		return nil, err
@@ -63,6 +71,7 @@ func CanonicalRevocationBytes(registryURL, issuedAt string, digests []string) ([
 		Version:        1,
 		RegistryURL:    strings.TrimRight(strings.TrimSpace(registryURL), "/"),
 		IssuedAt:       strings.TrimSpace(issuedAt),
+		Epoch:          epoch,
 		RevokedDigests: norm,
 	}
 	return json.Marshal(payload)
@@ -93,8 +102,8 @@ func normalizeDigests(digests []string) ([]string, error) {
 // NewSignedRevocationList builds and signs a RevocationList with a registry
 // private key. Used by tooling/tests; the production signer is the registry,
 // but the format is symmetric so we can produce one locally for a kit.
-func NewSignedRevocationList(registryURL, issuedAt string, digests []string, priv ed25519.PrivateKey) (*RevocationList, error) {
-	canon, err := CanonicalRevocationBytes(registryURL, issuedAt, digests)
+func NewSignedRevocationList(registryURL, issuedAt string, epoch int, digests []string, priv ed25519.PrivateKey) (*RevocationList, error) {
+	canon, err := CanonicalRevocationBytes(registryURL, issuedAt, epoch, digests)
 	if err != nil {
 		return nil, err
 	}
@@ -104,6 +113,7 @@ func NewSignedRevocationList(registryURL, issuedAt string, digests []string, pri
 		RegistryURL:    strings.TrimRight(strings.TrimSpace(registryURL), "/"),
 		RevokedDigests: norm,
 		IssuedAt:       strings.TrimSpace(issuedAt),
+		Epoch:          epoch,
 		SignatureB64:   base64.StdEncoding.EncodeToString(sig),
 	}, nil
 }
@@ -113,14 +123,17 @@ func NewSignedRevocationList(registryURL, issuedAt string, digests []string, pri
 // a list whose signature matches no active key returns ErrRegistryNotTrusted —
 // an attacker cannot drop a revocation by stripping its signature, nor forge
 // one to block a healthy bundle.
-func VerifyRevocationList(list *RevocationList, root *TrustRoot) (map[string]struct{}, error) {
+// minEpoch (SPEC-0279 R1) is the rollback floor: a list whose signed Epoch is
+// below minEpoch is refused even if its signature is valid, so an attacker
+// cannot substitute an older genuinely-signed list to defeat a revocation.
+func VerifyRevocationList(list *RevocationList, root *TrustRoot, minEpoch int) (map[string]struct{}, error) {
 	if list == nil {
 		return nil, fmt.Errorf("revocation list: nil: %w", ErrRegistryNotTrusted)
 	}
 	if root == nil {
 		return nil, errors.New("revocation list: nil trust root")
 	}
-	canon, err := CanonicalRevocationBytes(list.RegistryURL, list.IssuedAt, list.RevokedDigests)
+	canon, err := CanonicalRevocationBytes(list.RegistryURL, list.IssuedAt, list.Epoch, list.RevokedDigests)
 	if err != nil {
 		return nil, err
 	}
@@ -144,6 +157,10 @@ func VerifyRevocationList(list *RevocationList, root *TrustRoot) (map[string]str
 	}
 	if !matched {
 		return nil, fmt.Errorf("revocation list: signature did not match any active registry key in %s: %w", root.RegistryURL, ErrRegistryNotTrusted)
+	}
+	// SPEC-0279 R1 — rollback protection: refuse a signed-but-stale list.
+	if list.Epoch < minEpoch {
+		return nil, fmt.Errorf("revocation list: epoch %d is below the pinned floor %d (rollback): %w", list.Epoch, minEpoch, ErrRegistryNotTrusted)
 	}
 	norm, err := normalizeDigests(list.RevokedDigests)
 	if err != nil {

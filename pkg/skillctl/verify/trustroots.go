@@ -170,6 +170,24 @@ type TrustRoot struct {
 	// current attestation is below this level is rejected with exit
 	// code 13 (ErrGovernanceBelowMin).
 	GovernanceMinimum string `yaml:"governance_minimum"`
+
+	// Reviewers are pinned reviewer identities (SPEC-0281). When present, the
+	// verifier re-verifies the SIGNED governance attestation against the
+	// pinned reviewer key instead of trusting the registry's unsigned
+	// CurrentGovernance string. Same shape/validation as Authors.
+	Reviewers []AuthorKey `yaml:"reviewers,omitempty"`
+
+	// RequireSignedGovernance (SPEC-0281): when true, the governance level
+	// MUST be backed by a signed attestation that verifies against a pinned
+	// reviewer key, or verification is refused (exit 13). When false (default)
+	// governance is advisory in offline mode — the chain summary reports
+	// "governance(advisory)" rather than "attested".
+	RequireSignedGovernance bool `yaml:"require_signed_governance,omitempty"`
+
+	// MinRevocationEpoch (SPEC-0279 R1): the verifier refuses a signed
+	// revocation list whose epoch is below this floor — rollback protection
+	// against substituting an older signed list. 0 = no floor.
+	MinRevocationEpoch int `yaml:"min_revocation_epoch,omitempty"`
 }
 
 // ActiveKeys returns the subset of RegistryKeys that are not retired. It
@@ -195,6 +213,20 @@ func (t *TrustRoot) FindAuthor(identityID string) *AuthorKey {
 	for i := range t.Authors {
 		if t.Authors[i].ID == identityID && t.Authors[i].IsActive() {
 			return &t.Authors[i]
+		}
+	}
+	return nil
+}
+
+// FindReviewer returns the active pinned reviewer key for identityID, or nil
+// (SPEC-0281). Retired pins are skipped. Mirrors FindAuthor.
+func (t *TrustRoot) FindReviewer(identityID string) *AuthorKey {
+	if t == nil {
+		return nil
+	}
+	for i := range t.Reviewers {
+		if t.Reviewers[i].ID == identityID && t.Reviewers[i].IsActive() {
+			return &t.Reviewers[i]
 		}
 	}
 	return nil
@@ -588,6 +620,45 @@ func (t *TrustRoots) validate() error {
 			// Hydrate raw bytes so the verifier doesn't redo the decode.
 			t.Roots[i].Authors[j].Pubkey = raw
 		}
+
+		// Pinned reviewers (SPEC-0281): same validation as authors. If
+		// require_signed_governance is set there must be at least one reviewer
+		// to verify against. Entries present without the flag are still
+		// validated (so a typo can't lie dormant).
+		if root.RequireSignedGovernance && len(root.Reviewers) == 0 {
+			return fmt.Errorf("trust_roots[%d] %s: require_signed_governance needs a non-empty reviewers list", i, root.RegistryURL)
+		}
+		seenReviewerIDs := make(map[string]struct{}, len(root.Reviewers))
+		for j, r := range root.Reviewers {
+			if r.ID == "" {
+				return fmt.Errorf("trust_roots[%d].reviewers[%d]: id is required", i, j)
+			}
+			if _, dup := seenReviewerIDs[r.ID]; dup {
+				return fmt.Errorf("trust_roots[%d] %s: duplicate reviewer id %q", i, root.RegistryURL, r.ID)
+			}
+			seenReviewerIDs[r.ID] = struct{}{}
+			if r.PubkeyB64 == "" {
+				return fmt.Errorf("trust_roots[%d].reviewers[%d] (%s): pubkey is required", i, j, r.ID)
+			}
+			raw, err := base64.StdEncoding.DecodeString(r.PubkeyB64)
+			if err != nil {
+				return fmt.Errorf("trust_roots[%d].reviewers[%d] (%s): pubkey is not valid base64: %w", i, j, r.ID, err)
+			}
+			if len(raw) != pubkeyRawSize {
+				return fmt.Errorf("trust_roots[%d].reviewers[%d] (%s): pubkey decodes to %d bytes, want %d", i, j, r.ID, len(raw), pubkeyRawSize)
+			}
+			if r.Fingerprint != "" {
+				want := authorFingerprint(raw)
+				if !strings.EqualFold(strings.TrimSpace(r.Fingerprint), want) {
+					return fmt.Errorf("trust_roots[%d].reviewers[%d] (%s): fingerprint %q does not match pubkey (derived %s)", i, j, r.ID, r.Fingerprint, want)
+				}
+			}
+			t.Roots[i].Reviewers[j].Pubkey = raw
+		}
+		if root.MinRevocationEpoch < 0 {
+			return fmt.Errorf("trust_roots[%d] %s: min_revocation_epoch must be >= 0", i, root.RegistryURL)
+		}
+
 		if root.GovernanceMinimum == "" {
 			return fmt.Errorf("trust_roots[%d] %s: governance_minimum is required", i, root.RegistryURL)
 		}

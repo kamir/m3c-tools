@@ -128,6 +128,12 @@ type VerifyResult struct {
 	// otherwise).
 	GovernanceLevel string
 
+	// GovernanceVerified (SPEC-0281) reports whether GovernanceLevel was
+	// backed by a signed attestation re-verified against a pinned reviewer
+	// key. When false the level is ADVISORY (the registry's unsigned word);
+	// the chain summary reflects this so the tool never overclaims.
+	GovernanceVerified bool
+
 	// ChainSummary is a human-readable one-liner suitable for stdout.
 	ChainSummary string
 }
@@ -207,12 +213,13 @@ func Verify(opts VerifyOpts) (*VerifyResult, error) {
 		logStep(opts.Logger, "tenant_block_ok", "tenant=%s", opts.Tenant)
 	}
 
-	// Step 5 — governance gate.
-	govLevel, err := stepCheckGovernance(opts.BundleMeta, opts.TrustRoot, opts.GovernanceMin, opts.AllowYellow)
+	// Step 5 — governance gate (SPEC-0281: re-verify the signed attestation
+	// against a pinned reviewer key; advisory if no reviewers pinned).
+	govLevel, govVerified, err := stepCheckGovernance(digestStr, opts.BundleMeta, opts.TrustRoot, opts.GovernanceMin, opts.AllowYellow)
 	if err != nil {
 		return nil, err
 	}
-	logStep(opts.Logger, "governance_ok", "level=%s", govLevel)
+	logStep(opts.Logger, "governance_ok", "level=%s verified=%v", govLevel, govVerified)
 
 	// Step 6 — depends_on resolution. v1 is a no-op (bundles in tree
 	// shape rather than DAG; Python-wheel resolution lives behind a
@@ -225,14 +232,22 @@ func Verify(opts VerifyOpts) (*VerifyResult, error) {
 	}
 	logStep(opts.Logger, "deps_ok", "ignore_deps=%v", opts.IgnoreDeps)
 
+	// SPEC-0281: only claim "attested <level>" when the governance attestation
+	// was cryptographically re-verified against a pinned reviewer key; otherwise
+	// report it as advisory so the tool never overclaims governance.
+	govDesc := "attested " + govLevel
+	if !govVerified {
+		govDesc = "governance(advisory) " + govLevel
+	}
 	res := &VerifyResult{
-		Digest:          digestStr,
-		AuthorIdentity:  authorID,
-		RegistryKeyID:   regKeyID,
-		GovernanceLevel: govLevel,
+		Digest:             digestStr,
+		AuthorIdentity:     authorID,
+		RegistryKeyID:      regKeyID,
+		GovernanceLevel:    govLevel,
+		GovernanceVerified: govVerified,
 		ChainSummary: fmt.Sprintf(
-			"%s: signed by %s, admitted by %s, attested %s",
-			digestStr, authorID, regKeyID, govLevel,
+			"%s: signed by %s, admitted by %s, %s",
+			digestStr, authorID, regKeyID, govDesc,
 		),
 	}
 	return res, nil
@@ -457,12 +472,20 @@ func stepVerifyRegistry(digest [sha256.Size]byte, meta *registry.BundleMeta, roo
 // `--allow-yellow` lowers the effective minimum from green to yellow when
 // the trust-root says green. Red bundles are NEVER admitted, regardless
 // of override.
-func stepCheckGovernance(meta *registry.BundleMeta, root *TrustRoot, override string, allowYellow bool) (string, error) {
+//
+// SPEC-0281: the level is taken from BundleMeta.CurrentGovernance, but that field
+// is the registry's UNSIGNED word in the (attacker-editable) sidecar. So the
+// verifier additionally re-verifies the SIGNED governance attestation against a
+// pinned reviewer key. Returns (level, verified). When the trust root sets
+// require_signed_governance, an unverifiable level is REFUSED (defeats the
+// red→green sidecar downgrade); otherwise the level is advisory and `verified`
+// is reported so the caller can avoid claiming "attested".
+func stepCheckGovernance(digestStr string, meta *registry.BundleMeta, root *TrustRoot, override string, allowYellow bool) (string, bool, error) {
 	level := govlevel.Normalize(meta.CurrentGovernance)
 	if level == "" {
 		// Fail-closed: a registry that didn't compute a verdict is
 		// treated as red.
-		return "", fmt.Errorf("verify: bundle has no current_governance (treated as red): %w", ErrGovernanceBelowMin)
+		return "", false, fmt.Errorf("verify: bundle has no current_governance (treated as red): %w", ErrGovernanceBelowMin)
 	}
 
 	min := override
@@ -473,7 +496,7 @@ func stepCheckGovernance(meta *registry.BundleMeta, root *TrustRoot, override st
 	if min == "" {
 		// Defensive — Load already enforces this; surface clearly
 		// rather than panic.
-		return "", fmt.Errorf("verify: trust root %s has no governance_minimum: %w", root.RegistryURL, ErrGovernanceBelowMin)
+		return "", false, fmt.Errorf("verify: trust root %s has no governance_minimum: %w", root.RegistryURL, ErrGovernanceBelowMin)
 	}
 
 	if allowYellow && min == "green" {
@@ -482,17 +505,65 @@ func stepCheckGovernance(meta *registry.BundleMeta, root *TrustRoot, override st
 
 	bundleRank := governanceRank(level)
 	if bundleRank < 0 {
-		return "", fmt.Errorf("verify: unknown governance level %q: %w", level, ErrGovernanceBelowMin)
+		return "", false, fmt.Errorf("verify: unknown governance level %q: %w", level, ErrGovernanceBelowMin)
 	}
 	minRank := governanceRank(min)
 	if minRank < 0 {
-		return "", fmt.Errorf("verify: invalid governance_minimum %q: %w", min, ErrGovernanceBelowMin)
+		return "", false, fmt.Errorf("verify: invalid governance_minimum %q: %w", min, ErrGovernanceBelowMin)
 	}
 
 	if bundleRank < minRank {
-		return "", fmt.Errorf("verify: bundle governance %q below minimum %q: %w", level, min, ErrGovernanceBelowMin)
+		return "", false, fmt.Errorf("verify: bundle governance %q below minimum %q: %w", level, min, ErrGovernanceBelowMin)
 	}
-	return level, nil
+
+	// SPEC-0281: re-verify the signed attestation that backs this level.
+	verified := verifyGovernanceAttestation(digestStr, level, meta, root)
+	if root.RequireSignedGovernance && !verified {
+		return "", false, fmt.Errorf("verify: governance %q is not backed by a signed attestation from a pinned reviewer (require_signed_governance): %w", level, ErrGovernanceBelowMin)
+	}
+	return level, verified, nil
+}
+
+// verifyGovernanceAttestation reports whether `level` is backed by a GLOBAL,
+// active governance attestation whose ed25519 signature verifies against a
+// PINNED reviewer key, over the canonical attestation message bound to this
+// bundle's digest (SPEC-0281 R2/R3). The digest binding defeats cross-bundle
+// replay; the level being part of the signed message defeats the red→green
+// sidecar edit (an attacker has no pinned reviewer's signature over "green").
+func verifyGovernanceAttestation(digestStr, level string, meta *registry.BundleMeta, root *TrustRoot) bool {
+	if len(root.Reviewers) == 0 {
+		return false
+	}
+	for _, att := range meta.Attestations {
+		if att.Status == "revoked" {
+			continue
+		}
+		if strings.TrimSpace(att.TenantScope) != "" {
+			continue // only global rows establish CurrentGovernance
+		}
+		if !strings.EqualFold(strings.TrimSpace(att.Level), level) {
+			continue
+		}
+		if att.SignatureB64 == "" || att.ReviewerID == "" || att.AttestedAt == "" {
+			continue
+		}
+		rk := root.FindReviewer(att.ReviewerID)
+		if rk == nil || len(rk.Pubkey) != ed25519.PublicKeySize {
+			continue
+		}
+		msg, err := signing.CanonicalizeAttestationMessage(digestStr, level, att.AttestedAt, att.ReviewerID)
+		if err != nil {
+			continue
+		}
+		sig, err := decodeSignatureB64(att.SignatureB64)
+		if err != nil {
+			continue
+		}
+		if ed25519.Verify(ed25519.PublicKey(rk.Pubkey), msg, sig) {
+			return true
+		}
+	}
+	return false
 }
 
 // stepTenantBlockCheck implements SPEC-0188 §7 step 5.5: when the consumer

@@ -236,7 +236,7 @@ func TestVerifyBundle_RevokedDigest(t *testing.T) {
 	f := buildBundleFixture(t)
 	// A revocation list, signed by the PINNED registry key, that contains this
 	// bundle's digest → exit 17.
-	list, err := verify.NewSignedRevocationList(f.regURL, "2026-06-22T10:00:00Z", []string{f.digest}, f.regPriv)
+	list, err := verify.NewSignedRevocationList(f.regURL, "2026-06-22T10:00:00Z", 1, []string{f.digest}, f.regPriv)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +254,7 @@ func TestVerifyBundle_NotRevoked(t *testing.T) {
 	// Properly signed list that does NOT contain this digest → still exit 0.
 	other := sha256.Sum256([]byte("a different bundle"))
 	otherDigest := "sha256:" + hex.EncodeToString(other[:])
-	list, err := verify.NewSignedRevocationList(f.regURL, "2026-06-22T10:00:00Z", []string{otherDigest}, f.regPriv)
+	list, err := verify.NewSignedRevocationList(f.regURL, "2026-06-22T10:00:00Z", 1, []string{otherDigest}, f.regPriv)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -272,7 +272,7 @@ func TestVerifyBundle_ForgedRevocationListRefused(t *testing.T) {
 	// A list signed by an attacker key (not the pinned registry key). Must be
 	// fail-closed: exit 12, NOT silently ignored.
 	_, attackerPriv, _ := ed25519.GenerateKey(rand.Reader)
-	list, err := verify.NewSignedRevocationList(f.regURL, "2026-06-22T10:00:00Z", []string{f.digest}, attackerPriv)
+	list, err := verify.NewSignedRevocationList(f.regURL, "2026-06-22T10:00:00Z", 1, []string{f.digest}, attackerPriv)
 	if err != nil {
 		t.Fatal(err)
 	}

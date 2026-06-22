@@ -184,7 +184,7 @@ func checkBundleRevoked(path string, root *verify.TrustRoot, digest string) (boo
 	if err := json.Unmarshal(data, &list); err != nil {
 		return false, fmt.Errorf("verify --bundle: parse revocations %s: %w", path, err)
 	}
-	set, err := verify.VerifyRevocationList(&list, root)
+	set, err := verify.VerifyRevocationList(&list, root, root.MinRevocationEpoch)
 	if err != nil {
 		return false, err
 	}
