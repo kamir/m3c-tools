@@ -61,10 +61,10 @@ type proposalRequest struct {
 
 // proposalResponse is the success body from the server.
 type proposalResponse struct {
-	ProposalID    string `json:"proposal_id"`
-	State         string `json:"state"`
-	BundleDigest  string `json:"bundle_digest,omitempty"`
-	ProposedAt    string `json:"proposed_at"`
+	ProposalID   string `json:"proposal_id"`
+	State        string `json:"state"`
+	BundleDigest string `json:"bundle_digest,omitempty"`
+	ProposedAt   string `json:"proposed_at"`
 }
 
 // runPropose is main's dispatch entry point. Returns a numeric exit code.
@@ -81,6 +81,7 @@ func runPropose(args []string, stdout, stderr io.Writer) int {
 	bugReportsDir := fs.String("bug-reports-dir", "", "Enable gate check #8 (open BUG-NNNN against this skill).")
 	lastAdmitted := fs.String("last-admitted-version", "", "Enable gate check #10 (proposed version > last admitted).")
 	skipSmoke := fs.Bool("skip-smoke", false, "Skip gate check #9 (smoke-test marker).")
+	bodyscanRationale := fs.String("bodyscan-rationale", "", "Justification for a 🟡 bodyscan verdict (gate check #11). A 🔴 verdict cannot be overridden.")
 	dryRun := fs.Bool("dry-run", false, "Run the gate only; do not POST a proposal record.")
 	timeout := fs.Duration("timeout", defaultHTTPTimeout, "HTTP timeout for the registry POST.")
 
@@ -127,6 +128,7 @@ func runPropose(args []string, stdout, stderr io.Writer) int {
 		SkipSmoke:           *skipSmoke,
 		BugReportsDir:       *bugReportsDir,
 		LastAdmittedVersion: *lastAdmitted,
+		BodyScanRationale:   *bodyscanRationale,
 	}
 	if *bump != "" {
 		fmt.Fprintln(stderr, "warning: --bump is not yet wired in v1; using SKILL.md version verbatim.")
@@ -328,12 +330,12 @@ func appendNotifyQueue(proposalID, skillName, intent string) error {
 	}
 	defer f.Close()
 	entry := map[string]any{
-		"proposal_id":  proposalID,
-		"skill_name":   skillName,
+		"proposal_id":   proposalID,
+		"skill_name":    skillName,
 		"author_intent": intent,
-		"created_at":   time.Now().UTC().Format(time.RFC3339),
-		"state":        "pending",
-		"acked":        false,
+		"created_at":    time.Now().UTC().Format(time.RFC3339),
+		"state":         "pending",
+		"acked":         false,
 	}
 	enc, err := json.Marshal(entry)
 	if err != nil {
