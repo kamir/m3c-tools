@@ -1,0 +1,6 @@
+{
+  "categories": ["injection"],
+  "rule_ids": ["INJ-002"],
+  "min_verdict": "red",
+  "note": "Disregard system prompt + ignore above instructions."
+}

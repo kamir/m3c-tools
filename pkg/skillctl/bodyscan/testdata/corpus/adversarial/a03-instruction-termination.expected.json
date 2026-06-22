@@ -1,0 +1,6 @@
+{
+  "categories": ["injection"],
+  "rule_ids": ["INJ-007"],
+  "min_verdict": "red",
+  "note": "Instruction-termination markers [/INST], [SYS], <|im_start|>, 'end of system prompt'."
+}

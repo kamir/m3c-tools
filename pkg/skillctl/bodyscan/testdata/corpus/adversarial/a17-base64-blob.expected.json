@@ -1,0 +1,6 @@
+{
+  "categories": ["obfuscation"],
+  "rule_ids": ["OBF-001"],
+  "min_verdict": "yellow",
+  "note": "Single opaque base64 blob >= 40 chars with no network adjacency (stays yellow)."
+}

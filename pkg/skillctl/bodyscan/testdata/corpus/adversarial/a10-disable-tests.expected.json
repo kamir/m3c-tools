@@ -1,0 +1,6 @@
+{
+  "categories": ["policy-subversion"],
+  "rule_ids": ["POL-001", "POL-002", "POL-003"],
+  "min_verdict": "yellow",
+  "note": "Disable tests, skip review, bypass CI gate."
+}
