@@ -134,6 +134,14 @@ type VerifyResult struct {
 	// the chain summary reflects this so the tool never overclaims.
 	GovernanceVerified bool
 
+	// SelfAttested (SPEC-0246 §5) reports whether the binding governance
+	// attestation was reviewed by the bundle's own author (reviewer_id ==
+	// author_id). Pointer-valued so inspect/audit can distinguish "self" (true),
+	// "independent" (false), and "unknown" (nil — no binding attestation, or a
+	// registry that didn't surface the comparison). The verifier only *refuses*
+	// on this when the trust root sets require_independent_review.
+	SelfAttested *bool
+
 	// ChainSummary is a human-readable one-liner suitable for stdout.
 	ChainSummary string
 }
@@ -221,6 +229,19 @@ func Verify(opts VerifyOpts) (*VerifyResult, error) {
 	}
 	logStep(opts.Logger, "governance_ok", "level=%s verified=%v", govLevel, govVerified)
 
+	// Step 5.6 — reviewer≠author floor (SPEC-0246 §5.2). Compute self_attested
+	// for the binding governance attestation; when the trust root requires
+	// independent review, REFUSE a self-attested bundle (fail-closed). The
+	// `self` tenant leaves require_independent_review false (the default) so
+	// this never fires there. The result is surfaced for inspect/audit either
+	// way.
+	selfAttested, err := stepIndependentReviewCheck(opts.BundleMeta, opts.TrustRoot, govLevel, authorID)
+	if err != nil {
+		return nil, err
+	}
+	logStep(opts.Logger, "independent_review_ok", "self_attested=%s require=%v",
+		boolPtrStr(selfAttested), opts.TrustRoot.RequireIndependentReview)
+
 	// Step 6 — depends_on resolution. v1 is a no-op (bundles in tree
 	// shape rather than DAG; Python-wheel resolution lives behind a
 	// future feature flag). The flag is honored either way for
@@ -239,15 +260,23 @@ func Verify(opts VerifyOpts) (*VerifyResult, error) {
 	if !govVerified {
 		govDesc = "governance(advisory) " + govLevel
 	}
+	reviewDesc := ""
+	switch boolPtrStr(selfAttested) {
+	case "true":
+		reviewDesc = ", self-attested"
+	case "false":
+		reviewDesc = ", independently reviewed"
+	}
 	res := &VerifyResult{
 		Digest:             digestStr,
 		AuthorIdentity:     authorID,
 		RegistryKeyID:      regKeyID,
 		GovernanceLevel:    govLevel,
 		GovernanceVerified: govVerified,
+		SelfAttested:       selfAttested,
 		ChainSummary: fmt.Sprintf(
-			"%s: signed by %s, admitted by %s, %s",
-			digestStr, authorID, regKeyID, govDesc,
+			"%s: signed by %s, admitted by %s, %s%s",
+			digestStr, authorID, regKeyID, govDesc, reviewDesc,
 		),
 	}
 	return res, nil
@@ -567,6 +596,103 @@ func verifyGovernanceAttestation(digestStr, level string, meta *registry.BundleM
 		}
 	}
 	return false
+}
+
+// stepIndependentReviewCheck implements the SPEC-0246 §5.2 reviewer≠author
+// floor. It finds the binding governance attestation (the global, active row
+// matching the verified governance level) and derives whether it is
+// self_attested (reviewed by the bundle's own author). When the trust root sets
+// require_independent_review, a self_attested binding attestation is refused
+// with ErrSelfAttested (exit 20) — fail-closed: if the floor is on and we
+// cannot establish independence (no binding attestation, or the row carries no
+// reviewer identity), we refuse rather than admit on a benefit-of-the-doubt.
+//
+// Returns the tri-state self_attested signal (nil = unknown) for the
+// VerifyResult so inspect/audit can surface it even when the floor is off.
+func stepIndependentReviewCheck(meta *registry.BundleMeta, root *TrustRoot, govLevel, authorID string) (*bool, error) {
+	selfAttested := bindingSelfAttested(meta, govLevel, authorID)
+
+	if !root.RequireIndependentReview {
+		// Floor off (the `self` tenant and the default): never refuse; just
+		// surface what we could determine.
+		return selfAttested, nil
+	}
+
+	// Floor ON. We must be able to PROVE independence; otherwise fail closed.
+	if selfAttested == nil {
+		return nil, fmt.Errorf(
+			"verify: require_independent_review is set but the bundle's binding governance attestation does not establish an independent reviewer (no reviewer identity to compare against author %q): %w",
+			authorID, ErrSelfAttested)
+	}
+	if *selfAttested {
+		return selfAttested, fmt.Errorf(
+			"verify: binding governance attestation is self-attested (reviewed by author %q) but trust root requires independent review: %w",
+			authorID, ErrSelfAttested)
+	}
+	return selfAttested, nil
+}
+
+// bindingSelfAttested derives the self_attested signal for the binding
+// governance attestation: the global (untenanted), active row whose level
+// matches govLevel. Resolution per SPEC-0246 §5.1:
+//
+//   - If the registry stamped att.SelfAttested, that is authoritative.
+//   - Else, if both a reviewer identity and an author identity are available
+//     (att.AuthorID or the verified authorID), recompute normalize(reviewer)
+//     == normalize(author).
+//   - Else nil (unknown).
+//
+// Returns nil when no matching binding attestation exists.
+func bindingSelfAttested(meta *registry.BundleMeta, govLevel, authorID string) *bool {
+	if meta == nil {
+		return nil
+	}
+	for _, att := range meta.Attestations {
+		if att.Status != "" && att.Status != "active" {
+			continue
+		}
+		if strings.TrimSpace(att.TenantScope) != "" {
+			continue // only global rows establish the binding verdict
+		}
+		if !strings.EqualFold(strings.TrimSpace(att.Level), govLevel) {
+			continue
+		}
+		// 1. Registry-stamped value is authoritative.
+		if att.SelfAttested != nil {
+			v := *att.SelfAttested
+			return &v
+		}
+		// 2. Recompute from reviewer vs author.
+		author := att.AuthorID
+		if author == "" {
+			author = authorID
+		}
+		if att.ReviewerID != "" && author != "" {
+			v := normalizeIdentityID(att.ReviewerID) == normalizeIdentityID(author)
+			return &v
+		}
+		// Matching binding row but no reviewer identity to compare: unknown.
+		return nil
+	}
+	return nil
+}
+
+// normalizeIdentityID canonicalises an identity id for the §5 reviewer≠author
+// comparison (trim + lowercase) so a self-attestation cannot be laundered by
+// re-casing the id between the admit record and the attestation.
+func normalizeIdentityID(id string) string {
+	return strings.ToLower(strings.TrimSpace(id))
+}
+
+// boolPtrStr renders a *bool as "true"/"false"/"unknown" for logging + summary.
+func boolPtrStr(b *bool) string {
+	if b == nil {
+		return "unknown"
+	}
+	if *b {
+		return "true"
+	}
+	return "false"
 }
 
 // stepTenantBlockCheck implements SPEC-0188 §7 step 5.5: when the consumer

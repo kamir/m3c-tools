@@ -188,6 +188,18 @@ type TrustRoot struct {
 	// revocation list whose epoch is below this floor — rollback protection
 	// against substituting an older signed list. 0 = no floor.
 	MinRevocationEpoch int `yaml:"min_revocation_epoch,omitempty"`
+
+	// RequireIndependentReview (SPEC-0246 §5.2): when true, the binding
+	// governance attestation must NOT be self_attested — i.e. the reviewer
+	// identity must differ from the author identity. A self-attested bundle is
+	// refused with ErrSelfAttested (exit 20). When false (the default and the
+	// `self` single-principal tenant per §5.2) self-attestation is allowed —
+	// the floor defaults OFF so the personal tenant keeps working.
+	//
+	// The loader is STRICT (KnownFields(true)) so this MUST be a declared field
+	// or a trust-roots file carrying `require_independent_review:` would be
+	// rejected as an unknown key.
+	RequireIndependentReview bool `yaml:"require_independent_review,omitempty"`
 }
 
 // ActiveKeys returns the subset of RegistryKeys that are not retired. It
