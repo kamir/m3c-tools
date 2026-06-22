@@ -30,6 +30,15 @@ import (
 )
 
 func cmdScan(args []string) {
+	// SPEC-0246 §4.5 standalone verb: `skillctl scan --body [<skill-dir>]`
+	// runs the behavioural bodyscan over a single skill's SKILL.md body and
+	// is wholly separate from the SPEC-0189 inventory scan below. Detect it
+	// up front so none of the inventory flags interfere; the inventory scan
+	// is left completely untouched when --body is absent.
+	if hasFlag(args, "--body") {
+		os.Exit(runScanBody(args, os.Stdout, os.Stderr))
+	}
+
 	// SPEC-0189 §4 flag set + SPEC-0115 legacy flags + SPEC-0189 §13
 	// `--push-to-registry` shorthand (delegates to awareness.Sync).
 	var (
@@ -1355,4 +1364,3 @@ func cmdSyncUsage(args []string) {
 
 	fmt.Printf("Synced %d/%d usage events\n", synced, len(pending))
 }
-

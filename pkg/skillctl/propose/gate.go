@@ -3,20 +3,25 @@
 // a file" and "I think this is ready to ship": fail loud here rather
 // than admit half-baked skills.
 //
-// The 10 checks (S3-DECISIONS S3.1 Q1=A — print all results inline):
+// The 11 checks (S3-DECISIONS S3.1 Q1=A — print all results inline):
 //
-//	1. SKILL.md exists at the source path
-//	2. Frontmatter is valid YAML
-//	3. `name` is set AND matches the directory name
-//	4. `version` is set AND parses as semver (M.m.p[-pre][+meta])
-//	5. `description` ≥ 20 chars
-//	6. `governance_level` ∈ {green, yellow, red}
-//	7. If yellow/red: rationale provided (via flag or frontmatter)
-//	8. No open BUG-NNNN against this skill (best-effort filesystem grep)
-//	9. Smoke-test marker present (tests/smoke.sh OR last_smoke_passed
-//	   in metadata OR --skip-smoke)
-//	10. Proposed version > last admitted version (registry round-trip,
-//	    OPTIONAL — see CheckOptions.RegistryClient).
+//  1. SKILL.md exists at the source path
+//  2. Frontmatter is valid YAML
+//  3. `name` is set AND matches the directory name
+//  4. `version` is set AND parses as semver (M.m.p[-pre][+meta])
+//  5. `description` ≥ 20 chars
+//  6. `governance_level` ∈ {green, yellow, red}
+//  7. If yellow/red: rationale provided (via flag or frontmatter)
+//  8. No open BUG-NNNN against this skill (best-effort filesystem grep)
+//  9. Smoke-test marker present (tests/smoke.sh OR last_smoke_passed
+//     in metadata OR --skip-smoke)
+//  10. Proposed version > last admitted version (registry round-trip,
+//     OPTIONAL — see CheckOptions.RegistryClient).
+//  11. bodyscan clean or rationale (SPEC-0246 §4.5/§4.6): the rendered
+//     SKILL.md body is scanned by pkg/skillctl/bodyscan for prompt
+//     injection / exfiltration / tool-escalation / policy-subversion /
+//     obfuscation. 🟢 → PASS; 🟡 → PASS only when a BodyScanRationale is
+//     supplied; 🔴 → FAIL (blocks the ready-to-promote / verified state).
 package propose
 
 import (
@@ -26,6 +31,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/kamir/m3c-tools/pkg/skillctl/bodyscan"
 	"github.com/kamir/m3c-tools/pkg/skillctl/parser"
 )
 
@@ -33,11 +39,11 @@ import (
 // the SPEC-0194 §6 row index (1-based); Pass is true iff the check
 // passed; Reason is a human-readable explanation when Pass is false.
 type CheckResult struct {
-	Number int
-	Name   string
-	Pass   bool
-	Reason string
-	Skipped bool
+	Number     int
+	Name       string
+	Pass       bool
+	Reason     string
+	Skipped    bool
 	SkipReason string
 }
 
@@ -74,6 +80,14 @@ type CheckOptions struct {
 	// be strictly greater than this). When empty, check #10 is skipped
 	// (offline / first-admission case).
 	LastAdmittedVersion string
+
+	// BodyScanRationale is the trainer-supplied justification for a 🟡
+	// (yellow) bodyscan verdict (SPEC-0246 §4.6: "a 🟡 requires an explicit
+	// attested rationale"). It is consulted ONLY by check #11 and ONLY when
+	// the bodyscan verdict is yellow: a yellow with a non-empty rationale
+	// passes; a yellow without it fails. A 🔴 (red) verdict always fails —
+	// no rationale can override it (fail-closed per §4.6).
+	BodyScanRationale string
 }
 
 // Result is the aggregate gate outcome.
@@ -100,11 +114,13 @@ func Run(opts CheckOptions) Result {
 			fmt.Sprintf("missing %s", skillMD)))
 		// Without SKILL.md, downstream checks are unrunnable — but we
 		// still emit placeholder rows so the trainer sees the full
-		// 10-row report (S3.1 Q1=A).
+		// 11-row report (S3.1 Q1=A).
 		for _, n := range []int{2, 3, 4, 5, 6, 7, 9} {
 			checks = append(checks, skip(n, gateName(n), "SKILL.md missing"))
 		}
 		runOptional(&checks, opts)
+		// Check #11 (bodyscan): unrunnable without a body to scan.
+		checks = append(checks, fail(11, gateName(11), "SKILL.md missing — body could not be scanned"))
 		return finalize(checks)
 	}
 
@@ -217,7 +233,76 @@ func Run(opts CheckOptions) Result {
 	}
 
 	runOptional(&checks, opts)
+
+	// 11. bodyscan clean or rationale (SPEC-0246 §4.5/§4.6). Re-read the file
+	// to recover the post-frontmatter body + declared allowed-tools/intent,
+	// then scan. The verdict gates promotion: green passes, yellow passes only
+	// with a rationale, red always fails (fail-closed).
+	checks = append(checks, bodyScanCheck(skillMD, opts))
+
 	return finalize(checks)
+}
+
+// bodyScanCheck runs the SPEC-0246 §4 bodyscan over the SKILL.md body and maps
+// the verdict to a gate row (check #11). 🟢→PASS, 🟡→PASS iff a rationale is
+// supplied, 🔴→FAIL. A read/parse failure fails closed (the body is the very
+// thing being gated, so "could not scan" must not silently pass).
+func bodyScanCheck(skillMDPath string, opts CheckOptions) CheckResult {
+	const name = "bodyscan clean or rationale"
+	raw, err := os.ReadFile(skillMDPath)
+	if err != nil {
+		return fail(11, name, fmt.Sprintf("read SKILL.md: %v", err))
+	}
+	fm, body, perr := parser.Parse(raw)
+	if perr != nil {
+		// Frontmatter is unparseable — check #2 already reported that. We can
+		// still scan the raw bytes (a malformed frontmatter is itself a yellow
+		// signal upstream); fall back to scanning the whole file as the body.
+		body = string(raw)
+	}
+	in := bodyscan.Input{Body: body}
+	if fm != nil {
+		in.AllowedTools = fm.AllowedTools
+		in.Intent = fm.Intent
+	}
+	rep := bodyscan.Scan(in)
+
+	// Fail-closed (SPEC-0246 §4.5, P1b): an oversized / not-actually-scanned body
+	// carries NO evidence it is safe. It must NOT be treated as an overridable
+	// 🟡 (a >1 MiB injection body would otherwise launder through via
+	// --bodyscan-rationale). Refuse hard, like a 🔴, ignoring any rationale.
+	if bodyscan.NotScanned(rep) {
+		return fail(11, name,
+			fmt.Sprintf("bodyscan did not run (body too large to scan: %s) — cannot be overridden by --bodyscan-rationale (fail-closed)",
+				firstFindingSummary(rep.Findings)))
+	}
+
+	switch rep.Verdict {
+	case bodyscan.VerdictGreen:
+		return ok(11, "bodyscan clean (🟢)")
+	case bodyscan.VerdictYellow:
+		if strings.TrimSpace(opts.BodyScanRationale) != "" {
+			return ok(11, "bodyscan 🟡 accepted with rationale")
+		}
+		return fail(11, name,
+			fmt.Sprintf("bodyscan 🟡 (%d finding(s)) requires --bodyscan-rationale: %s",
+				len(rep.Findings), firstFindingSummary(rep.Findings)))
+	default: // VerdictRed
+		return fail(11, name,
+			fmt.Sprintf("bodyscan 🔴 (%d finding(s)) blocks promotion — cannot be overridden: %s",
+				len(rep.Findings), firstFindingSummary(rep.Findings)))
+	}
+}
+
+// firstFindingSummary renders a compact "<rule_id>: <message>" for the first
+// (lowest-span) finding so the gate row is actionable without dumping the whole
+// report. Returns "" when there are no findings.
+func firstFindingSummary(fs []bodyscan.Finding) string {
+	if len(fs) == 0 {
+		return ""
+	}
+	f := fs[0]
+	return fmt.Sprintf("%s: %s", f.RuleID, f.Message)
 }
 
 func runOptional(checks *[]CheckResult, opts CheckOptions) {
@@ -275,8 +360,8 @@ func finalize(checks []CheckResult) Result {
 
 var semverPattern = regexp.MustCompile(`^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$`)
 
-func ok(n int, name string) CheckResult       { return CheckResult{Number: n, Name: name, Pass: true} }
-func okFn(n int, name string) CheckResult     { return CheckResult{Number: n, Name: name, Pass: true} }
+func ok(n int, name string) CheckResult   { return CheckResult{Number: n, Name: name, Pass: true} }
+func okFn(n int, name string) CheckResult { return CheckResult{Number: n, Name: name, Pass: true} }
 func fail(n int, name, reason string) CheckResult {
 	return CheckResult{Number: n, Name: name, Pass: false, Reason: reason}
 }
@@ -286,16 +371,17 @@ func skip(n int, name, reason string) CheckResult {
 
 func gateName(n int) string {
 	names := map[int]string{
-		1: "SKILL.md present",
-		2: "Frontmatter is valid YAML",
-		3: "name set + matches directory",
-		4: "version set + valid semver",
-		5: "description ≥ 20 chars",
-		6: "governance_level set",
-		7: "rationale for yellow/red",
-		8: "no open BUG-NNNN",
-		9: "smoke-test marker",
+		1:  "SKILL.md present",
+		2:  "Frontmatter is valid YAML",
+		3:  "name set + matches directory",
+		4:  "version set + valid semver",
+		5:  "description ≥ 20 chars",
+		6:  "governance_level set",
+		7:  "rationale for yellow/red",
+		8:  "no open BUG-NNNN",
+		9:  "smoke-test marker",
 		10: "version > last admitted",
+		11: "bodyscan clean or rationale",
 	}
 	return names[n]
 }

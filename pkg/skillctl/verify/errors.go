@@ -129,6 +129,17 @@ const (
 	// it on every install. Distinct from ExitTenantBlocked (16, whole
 	// bundle blocked) — 17 is per-data-source granularity.
 	ExitDataSourceDenied = 17
+
+	// ExitSelfAttested (20) — SPEC-0246 §5.2: the trust root sets
+	// `require_independent_review: true` but the bundle's binding governance
+	// attestation is self_attested (reviewer_id == author_id). This is the
+	// "reputation-laundering" weakness the SPEC closes — a skill where the only
+	// reviewer is the author is self-certification. The verifier fails closed.
+	//
+	// UX: surface the attestation's reviewer_id / author so the operator can
+	// ask for an independent review. The `self` tenant (require_independent_review
+	// false, the default) never hits this gate.
+	ExitSelfAttested = 20
 )
 
 // Sentinel errors so callers can `errors.Is(err, verify.ErrDigestMismatch)`
@@ -216,6 +227,16 @@ var (
 	//   fmt.Errorf("identity %s revoked at %s: %w",
 	//       ident.ID, ident.RevokedAt, verify.ErrIdentityRevoked)
 	ErrIdentityRevoked = errors.New("author identity revoked")
+
+	// ErrSelfAttested — the trust root requires independent review
+	// (require_independent_review: true) but the binding governance
+	// attestation is self_attested (reviewer_id == author_id). Exit code 20.
+	// SPEC-0246 §5.2. Wrap with the reviewer/author ids so the operator can
+	// chase an independent review:
+	//
+	//   fmt.Errorf("binding attestation self-attested by %s: %w",
+	//       reviewerID, verify.ErrSelfAttested)
+	ErrSelfAttested = errors.New("binding governance attestation is self-attested (independent review required)")
 )
 
 // ExitCode maps a verifier error to its numeric process exit code.
@@ -270,6 +291,8 @@ func ExitCode(err error) int {
 		return 17
 	case errors.Is(err, ErrDataSourceDenied):
 		return ExitDataSourceDenied
+	case errors.Is(err, ErrSelfAttested):
+		return ExitSelfAttested
 	default:
 		return 1
 	}

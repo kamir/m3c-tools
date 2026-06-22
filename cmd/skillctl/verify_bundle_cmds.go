@@ -58,10 +58,14 @@ type bundleVerifyResult struct {
 	// GovernanceVerified (SPEC-0281) lets machine consumers distinguish a
 	// cryptographically re-verified "attested" level from an unsigned advisory
 	// one — without scraping chain_summary free text.
-	GovernanceVerified bool   `json:"governance_verified"`
-	ChainSummary       string `json:"chain_summary,omitempty"`
-	Error              string `json:"error,omitempty"`
-	ExitCode           int    `json:"exit_code"`
+	GovernanceVerified bool `json:"governance_verified"`
+	// SelfAttested (SPEC-0246 §5) surfaces whether the binding governance
+	// attestation was reviewed by the bundle's own author. Pointer-valued:
+	// true (self), false (independent), null (unknown / no binding attestation).
+	SelfAttested *bool  `json:"self_attested"`
+	ChainSummary string `json:"chain_summary,omitempty"`
+	Error        string `json:"error,omitempty"`
+	ExitCode     int    `json:"exit_code"`
 }
 
 // runVerifyBundle implements the --bundle path. Returns the SPEC-0188 §11
@@ -152,6 +156,7 @@ func runVerifyBundle(p verifyBundleParams, stdout, stderr io.Writer) int {
 			out.RegistryKeyID = res.RegistryKeyID
 			out.Governance = res.GovernanceLevel
 			out.GovernanceVerified = res.GovernanceVerified
+			out.SelfAttested = res.SelfAttested
 			out.ChainSummary = res.ChainSummary
 			out.ExitCode = exitOK
 		}

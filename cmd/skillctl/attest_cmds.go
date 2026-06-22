@@ -63,6 +63,20 @@ type attestRequest struct {
 	ReviewerID      string `json:"reviewer_id"`
 	AttestedAt      string `json:"attested_at"`
 	Signature       string `json:"signature"`
+
+	// SelfAttested (SPEC-0246 §5.1) records that the reviewer signing this
+	// attestation is the bundle's own author (reviewer_id == author_id,
+	// normalized). The server records it on the attestation row so the verifier
+	// and inspect/audit can enforce / surface the reviewer≠author floor. The
+	// field is NOT folded into the signed bytes (same as rationale) — it is an
+	// honest derived label, and the server is the authority that re-derives it
+	// from its own author record where one exists.
+	SelfAttested bool `json:"self_attested"`
+
+	// AuthorID (SPEC-0246 §5.1) is the bundle author identity the self_attested
+	// flag was computed against. Sent so the server can re-derive / cross-check.
+	// omitempty: the server prefers its own admit record when present.
+	AuthorID string `json:"author_id,omitempty"`
 }
 
 // attestResponse is the success shape returned by aims-core on 201.
@@ -92,6 +106,7 @@ func runAttestWithClient(
 	level := fs.String("level", "", "Governance verdict: green | yellow | red. Required.")
 	rationale := fs.String("rationale", "", "Free-text rationale (audit metadata; NOT folded into signed bytes). Required.")
 	reviewerID := fs.String("reviewer-id", "", "Reviewer identity ID (e.g. id:reviewer@m3c). Required.")
+	authorID := fs.String("author-id", "", "Bundle author identity ID, for the SPEC-0246 §5 reviewer≠author check when the server's admit record is unavailable (offline). Optional.")
 	keyPath := fs.String("key", "", "Path to PEM PKCS#8 ed25519 private key (mode 0600). Required.")
 	registry := fs.String("registry", defaultRegistryURL, "Registry base URL (e.g. https://aims-core/api/skills).")
 	timeoutFlag := fs.Duration("timeout", defaultHTTPTimeout, "HTTP request timeout.")
@@ -174,6 +189,25 @@ func runAttestWithClient(
 		return exitGeneric
 	}
 
+	// ----- SPEC-0246 §5.1: derive self_attested BEFORE signing -----
+	// self_attested := normalize(reviewer_id) == normalize(author_id). The
+	// author identity comes from --author-id (offline) — when the server has an
+	// admit record it re-derives authoritatively, but we send our honest local
+	// computation so the offline path still records the right label. When
+	// --author-id is absent we cannot compute it locally; the server decides.
+	selfAttested := false
+	authorKnownLocally := strings.TrimSpace(*authorID) != ""
+	if authorKnownLocally {
+		selfAttested = normalizeIdentity(*reviewerID) == normalizeIdentity(*authorID)
+	}
+	if selfAttested {
+		fmt.Fprintf(stderr,
+			"skillctl attest: NOTE — self-attestation: reviewer %q is the bundle author. "+
+				"This attestation is self_attested=true; a trust root with "+
+				"require_independent_review will REFUSE the bundle (SPEC-0246 §5).\n",
+			*reviewerID)
+	}
+
 	// ----- Build canonical message and sign -----
 	if nowFn == nil {
 		nowFn = time.Now
@@ -196,6 +230,8 @@ func runAttestWithClient(
 		ReviewerID:      *reviewerID,
 		AttestedAt:      attestedAt,
 		Signature:       sigB64,
+		SelfAttested:    selfAttested,
+		AuthorID:        strings.TrimSpace(*authorID),
 	}
 	bodyJSON, err := json.Marshal(body)
 	if err != nil {
@@ -251,6 +287,9 @@ func runAttestWithClient(
 	fmt.Fprintf(stdout, "bundle_digest: %s\n", bundleDigest)
 	fmt.Fprintf(stdout, "level: %s\n", *level)
 	fmt.Fprintf(stdout, "attested_at: %s\n", attestedAt)
+	if authorKnownLocally {
+		fmt.Fprintf(stdout, "self_attested: %t\n", selfAttested)
+	}
 	return exitOK
 }
 
