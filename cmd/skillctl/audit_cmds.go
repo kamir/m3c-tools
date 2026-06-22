@@ -47,6 +47,13 @@ import (
 
 // runAudit is main's dispatch entry point.
 func runAudit(args []string, stdout, stderr io.Writer) int {
+	// SPEC-0246 §4.5 sub-verb: `skillctl audit security <name>` runs the
+	// behavioural bodyscan over an installed skill and surfaces self_attested.
+	// Route it before the inventory-audit flag parser so its flags don't leak.
+	if len(args) > 0 && args[0] == "security" {
+		return runAuditSecurity(args[1:], stdout, stderr)
+	}
+
 	fs := flag.NewFlagSet("audit", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
