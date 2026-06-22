@@ -174,7 +174,7 @@ func Verify(opts VerifyOpts) (*VerifyResult, error) {
 	logStep(opts.Logger, "bundle_admitted_ok", "")
 
 	// Step 2/3 — verify author signature against identity pubkey.
-	authorID, err := stepVerifyAuthor(ctx, digestRaw, opts.BundleMeta, opts.IdentityFetcher, opts.Logger)
+	authorID, err := stepVerifyAuthor(ctx, digestRaw, opts.BundleMeta, opts.TrustRoot, opts.IdentityFetcher, opts.Logger)
 	if err != nil {
 		return nil, err
 	}
@@ -250,8 +250,11 @@ func validateOpts(opts VerifyOpts) error {
 	if opts.TrustRoot == nil {
 		return errors.New("verify: TrustRoot is required")
 	}
-	if opts.IdentityFetcher == nil {
-		return errors.New("verify: IdentityFetcher is required")
+	// In pinned-author mode the author signature is checked against a locally
+	// pinned key (SPEC-0276 R4.1), so no identity fetcher is needed — this is
+	// the fully-offline path. Every other mode requires a fetcher.
+	if opts.TrustRoot.IdentityKeysAuthorized != "pinned" && opts.IdentityFetcher == nil {
+		return errors.New("verify: IdentityFetcher is required (or pin authors via identity_keys_authorized: pinned)")
 	}
 	return nil
 }
@@ -324,7 +327,7 @@ func stepCheckBundleStatus(meta *registry.BundleMeta) error {
 //   - identity not found / revoked
 //   - pubkey malformed (length, base64)
 //   - ed25519.Verify says no
-func stepVerifyAuthor(ctx context.Context, digest [sha256.Size]byte, meta *registry.BundleMeta, fetcher identityFetcher, logger io.Writer) (string, error) {
+func stepVerifyAuthor(ctx context.Context, digest [sha256.Size]byte, meta *registry.BundleMeta, root *TrustRoot, fetcher identityFetcher, logger io.Writer) (string, error) {
 	row, err := pickSingleSignature(meta.Signatures, "author")
 	if err != nil {
 		return "", fmt.Errorf("verify: %w: %w", ErrAuthorSigInvalid, err)
@@ -334,6 +337,40 @@ func stepVerifyAuthor(ctx context.Context, digest [sha256.Size]byte, meta *regis
 		return "", fmt.Errorf("verify: author signature has empty identity_id: %w", ErrAuthorSigInvalid)
 	}
 
+	sig, err := decodeSignatureB64(row.SignatureB64)
+	if err != nil {
+		return "", fmt.Errorf("verify: decode author signature: %w", errors.Join(ErrAuthorSigInvalid, err))
+	}
+
+	// Pinned-author mode (SPEC-0276 R4.1): verify the author signature against
+	// a key pinned LOCALLY in trust-roots, with NO registry call. This is what
+	// makes third-party, fully-offline verification real — the verifier trusts
+	// a key it pinned out-of-band, not the registry's identity table.
+	//
+	// Trade-off: offline mode cannot see a registry-side identity revocation
+	// (the author identity is implicitly frozen at pin time). Post-issuance
+	// revocation is covered separately by the signed revocation list
+	// (SPEC-0276 R4.2.4), not by an identity-table lookup here.
+	if root != nil && root.IdentityKeysAuthorized == "pinned" {
+		ak := root.FindAuthor(row.IdentityID)
+		if ak == nil {
+			return "", fmt.Errorf("verify: author identity %s is not pinned in trust root %s: %w", row.IdentityID, root.RegistryURL, ErrAuthorSigInvalid)
+		}
+		if len(ak.Pubkey) != ed25519.PublicKeySize {
+			return "", fmt.Errorf("verify: pinned author key for %s is malformed (%d bytes): %w", row.IdentityID, len(ak.Pubkey), ErrAuthorSigInvalid)
+		}
+		if !ed25519.Verify(ed25519.PublicKey(ak.Pubkey), digest[:], sig) {
+			return "", fmt.Errorf("verify: ed25519 author signature failed for pinned identity %s: %w", row.IdentityID, ErrAuthorSigInvalid)
+		}
+		logStep(logger, "author_identity", "id=%s source=pinned", row.IdentityID)
+		return row.IdentityID, nil
+	}
+
+	// from-registry mode (default): resolve the author pubkey from the
+	// registry's identity table.
+	if fetcher == nil {
+		return "", fmt.Errorf("verify: no identity fetcher and author %s not pinned: %w", row.IdentityID, ErrAuthorSigInvalid)
+	}
 	ident, err := fetcher.GetIdentity(ctx, row.IdentityID)
 	if err != nil {
 		return "", fmt.Errorf("verify: fetch identity %s: %w", row.IdentityID, errors.Join(ErrAuthorSigInvalid, err))
@@ -360,11 +397,7 @@ func stepVerifyAuthor(ctx context.Context, digest [sha256.Size]byte, meta *regis
 		return "", fmt.Errorf("verify: decode pubkey for %s: %w", ident.ID, errors.Join(ErrAuthorSigInvalid, err))
 	}
 
-	sig, err := decodeSignatureB64(row.SignatureB64)
-	if err != nil {
-		return "", fmt.Errorf("verify: decode author signature: %w", errors.Join(ErrAuthorSigInvalid, err))
-	}
-
+	// sig was decoded once up front (shared with the pinned path).
 	// ed25519.Verify is constant-time on the signature comparison per
 	// stdlib docs. Don't roll our own.
 	if !ed25519.Verify(pub, digest[:], sig) {
