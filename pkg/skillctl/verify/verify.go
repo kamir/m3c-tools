@@ -535,7 +535,10 @@ func verifyGovernanceAttestation(digestStr, level string, meta *registry.BundleM
 		return false
 	}
 	for _, att := range meta.Attestations {
-		if att.Status == "revoked" {
+		// Status allowlist (defense-in-depth): only "active" (or empty for
+		// forward-compat) rows establish governance; "revoked" and any unknown
+		// future status are skipped in the protective direction.
+		if att.Status != "" && att.Status != "active" {
 			continue
 		}
 		if strings.TrimSpace(att.TenantScope) != "" {
