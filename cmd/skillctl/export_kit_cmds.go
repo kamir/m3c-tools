@@ -315,7 +315,17 @@ var secretPatterns = []string{
 	"er1_api_key",
 	"device_token_secret",
 	"authorization: bearer",
-	"sk_live_", "sk_test_", "ghp_", "xoxb-", "aws_secret_access_key",
+	// Provider token prefixes (widened per the SPEC-0276 red-team review — modern
+	// 2025/26 formats the original list missed). Lower-cased substring match. We
+	// deliberately include ONLY patterns containing '-' or '_' (which StdEncoding
+	// base64 never produces) so they cannot false-positive on the kit's own base64
+	// pubkeys/signatures; bare-alnum prefixes (AKIA…, AIza…) are intentionally
+	// omitted to avoid collisions — their secret *values* carry distinct markers.
+	"sk_live_", "sk_test_", "sk-proj-", "sk-ant-",
+	"ghp_", "gho_", "ghs_", "github_pat_", "glpat-",
+	"xoxb-", "xoxp-", "xapp-",
+	"aws_secret_access_key",
+	"npm_", "hf_", "dop_v1_",
 }
 
 // scrubSecrets refuses a kit file whose bytes contain an obvious secret. The
