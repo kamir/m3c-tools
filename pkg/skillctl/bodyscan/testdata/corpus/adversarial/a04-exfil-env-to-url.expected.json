@@ -1,0 +1,6 @@
+{
+  "categories": ["exfiltration"],
+  "rule_ids": ["EXF-001"],
+  "min_verdict": "red",
+  "note": "Read .env, upload credentials to a remote URL — textbook exfiltration."
+}

@@ -1,0 +1,7 @@
+{
+  "categories": [
+    "injection"
+  ],
+  "min_verdict": "red",
+  "note": "Backslash-uNNNN-encoded 'ignore' decoded before matching."
+}

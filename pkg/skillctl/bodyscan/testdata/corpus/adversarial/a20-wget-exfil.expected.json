@@ -1,0 +1,6 @@
+{
+  "categories": ["exfiltration", "tool-escalation"],
+  "rule_ids": ["EXF-001", "TOOL-001"],
+  "min_verdict": "red",
+  "note": "Repo history + env transmitted via wget to a URL; wget not covered (only Read declared)."
+}

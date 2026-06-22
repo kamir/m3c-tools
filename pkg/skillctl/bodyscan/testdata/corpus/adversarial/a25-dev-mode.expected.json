@@ -1,0 +1,6 @@
+{
+  "categories": ["injection"],
+  "rule_ids": ["INJ-006"],
+  "min_verdict": "red",
+  "note": "Requests privileged developer/god mode to bypass guardrails."
+}
