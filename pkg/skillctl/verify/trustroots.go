@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"crypto/ed25519"
+	"crypto/sha256"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/govlevel"
 	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
@@ -44,11 +45,18 @@ const DefaultTrustRootsPath = ".claude/skill-trust-roots.yaml"
 const pubkeyRawSize = ed25519.PublicKeySize // 32
 
 // validIdentityModes is the closed set of accepted values for
-// `identity_keys_authorized`. Today only "from-registry" is meaningful;
-// future modes (e.g. "manual-pin") will be added here once their semantics
-// are speced.
+// `identity_keys_authorized`.
+//
+//   - "from-registry" — author pubkeys are resolved from the registry's
+//     identity table at verify time (the v1 default; requires a network call
+//     or a stashed identity).
+//   - "pinned" — author pubkeys are pinned LOCALLY in this trust root's
+//     `authors:` list, so the author signature is verified with NO registry
+//     call. This is the primitive that makes third-party, offline, "no trust
+//     in the registry" verification possible (SPEC-0276 R4.1).
 var validIdentityModes = map[string]struct{}{
 	"from-registry": {},
+	"pinned":        {},
 }
 
 // RegistryKey is one pinned ed25519 public key for a registry. A registry
@@ -94,6 +102,41 @@ func (rk RegistryKey) IsActive() bool {
 	return rk.Retired == ""
 }
 
+// AuthorKey is one pinned ed25519 public key for a skill-author identity.
+// Consulted ONLY when its TrustRoot sets identity_keys_authorized: pinned.
+// Pinning the author key locally lets the verifier check the author signature
+// without calling the registry's identity table — the property that makes
+// fully offline, third-party verification possible (SPEC-0276 R4.1): a party
+// who pins this key out-of-band can reproduce our verdict with no trust in,
+// and no call to, our servers.
+type AuthorKey struct {
+	// ID is the author identity_id exactly as it appears in the bundle's
+	// author signature row (e.g. "id:kamir@m3c"). Matched verbatim.
+	ID string `yaml:"id"`
+
+	// Pubkey is the raw 32-byte ed25519 public key. Hydrated once by Load
+	// from PubkeyB64 so callers don't re-decode per verification.
+	Pubkey []byte `yaml:"-"`
+
+	// PubkeyB64 is the base64 form preserved verbatim for lossless round-trip.
+	PubkeyB64 string `yaml:"pubkey"`
+
+	// Fingerprint, if set, is the advisory "sha256:<hex>" over the raw pubkey
+	// bytes. When present it MUST match the key (a typo'd fingerprint is
+	// refused at Load) so a human who cross-checks the fingerprint out-of-band
+	// can rely on it. Verification uses the key bytes, never this string.
+	Fingerprint string `yaml:"fingerprint,omitempty"`
+
+	// Retired, if non-empty, marks the pin inert — same binary-toggle
+	// semantics as RegistryKey.Retired (the date is metadata, not a schedule).
+	Retired string `yaml:"retired,omitempty"`
+}
+
+// IsActive reports whether the pinned author key is eligible today (not retired).
+func (ak AuthorKey) IsActive() bool {
+	return ak.Retired == ""
+}
+
 // TrustRoot is one pinned registry. It carries 1..N keys (overlap-window
 // rotation) plus the policy knobs that bound what the verifier will admit
 // from this registry.
@@ -111,15 +154,40 @@ type TrustRoot struct {
 	RegistryKeys []RegistryKey `yaml:"registry_keys"`
 
 	// IdentityKeysAuthorized governs how the verifier looks up author
-	// public keys. v1 only accepts "from-registry" — the verifier
-	// trusts the registry's identity table. Future values (e.g.
-	// "manual-pin") would let admins pin authoring identities locally.
+	// public keys. "from-registry" (default) trusts the registry's identity
+	// table; "pinned" verifies the author signature against the local
+	// Authors list below, with no registry call (SPEC-0276 R4.1).
 	IdentityKeysAuthorized string `yaml:"identity_keys_authorized"`
+
+	// Authors are pinned author identities, consulted ONLY when
+	// IdentityKeysAuthorized == "pinned". Each entry binds one author
+	// identity_id to its ed25519 pubkey so the author signature verifies
+	// locally and offline. Ignored (and normally absent) in from-registry
+	// mode. Additive: an empty list in from-registry mode is fine.
+	Authors []AuthorKey `yaml:"authors,omitempty"`
 
 	// GovernanceMinimum is one of "green" or "yellow". A bundle whose
 	// current attestation is below this level is rejected with exit
 	// code 13 (ErrGovernanceBelowMin).
 	GovernanceMinimum string `yaml:"governance_minimum"`
+
+	// Reviewers are pinned reviewer identities (SPEC-0281). When present, the
+	// verifier re-verifies the SIGNED governance attestation against the
+	// pinned reviewer key instead of trusting the registry's unsigned
+	// CurrentGovernance string. Same shape/validation as Authors.
+	Reviewers []AuthorKey `yaml:"reviewers,omitempty"`
+
+	// RequireSignedGovernance (SPEC-0281): when true, the governance level
+	// MUST be backed by a signed attestation that verifies against a pinned
+	// reviewer key, or verification is refused (exit 13). When false (default)
+	// governance is advisory in offline mode — the chain summary reports
+	// "governance(advisory)" rather than "attested".
+	RequireSignedGovernance bool `yaml:"require_signed_governance,omitempty"`
+
+	// MinRevocationEpoch (SPEC-0279 R1): the verifier refuses a signed
+	// revocation list whose epoch is below this floor — rollback protection
+	// against substituting an older signed list. 0 = no floor.
+	MinRevocationEpoch int `yaml:"min_revocation_epoch,omitempty"`
 }
 
 // ActiveKeys returns the subset of RegistryKeys that are not retired. It
@@ -132,6 +200,36 @@ func (t TrustRoot) ActiveKeys() []RegistryKey {
 		}
 	}
 	return out
+}
+
+// FindAuthor returns a pointer to the active pinned AuthorKey for identityID,
+// or nil if this root has no active pin for it. Retired pins are skipped so a
+// rotated-out author key cannot verify. The returned pointer aliases the
+// backing array — callers must not mutate it.
+func (t *TrustRoot) FindAuthor(identityID string) *AuthorKey {
+	if t == nil {
+		return nil
+	}
+	for i := range t.Authors {
+		if t.Authors[i].ID == identityID && t.Authors[i].IsActive() {
+			return &t.Authors[i]
+		}
+	}
+	return nil
+}
+
+// FindReviewer returns the active pinned reviewer key for identityID, or nil
+// (SPEC-0281). Retired pins are skipped. Mirrors FindAuthor.
+func (t *TrustRoot) FindReviewer(identityID string) *AuthorKey {
+	if t == nil {
+		return nil
+	}
+	for i := range t.Reviewers {
+		if t.Reviewers[i].ID == identityID && t.Reviewers[i].IsActive() {
+			return &t.Reviewers[i]
+		}
+	}
+	return nil
 }
 
 // TrustRoots is the in-memory representation of the YAML file plus a
@@ -483,8 +581,84 @@ func (t *TrustRoots) validate() error {
 			return fmt.Errorf("trust_roots[%d] %s: identity_keys_authorized is required", i, root.RegistryURL)
 		}
 		if _, ok := validIdentityModes[root.IdentityKeysAuthorized]; !ok {
-			return fmt.Errorf("trust_roots[%d] %s: identity_keys_authorized %q is not one of [from-registry]", i, root.RegistryURL, root.IdentityKeysAuthorized)
+			return fmt.Errorf("trust_roots[%d] %s: identity_keys_authorized %q is not one of [from-registry, pinned]", i, root.RegistryURL, root.IdentityKeysAuthorized)
 		}
+
+		// Pinned-author mode (SPEC-0276 R4.1): the authors list is the local
+		// authority for author pubkeys, so it must be non-empty and every
+		// entry must decode to a valid ed25519 key. In from-registry mode the
+		// list is ignored, but we still validate any entries present so a typo
+		// can't lie dormant until the operator flips the mode.
+		if root.IdentityKeysAuthorized == "pinned" && len(root.Authors) == 0 {
+			return fmt.Errorf("trust_roots[%d] %s: identity_keys_authorized: pinned requires a non-empty authors list", i, root.RegistryURL)
+		}
+		seenAuthorIDs := make(map[string]struct{}, len(root.Authors))
+		for j, a := range root.Authors {
+			if a.ID == "" {
+				return fmt.Errorf("trust_roots[%d].authors[%d]: id is required", i, j)
+			}
+			if _, dup := seenAuthorIDs[a.ID]; dup {
+				return fmt.Errorf("trust_roots[%d] %s: duplicate author id %q", i, root.RegistryURL, a.ID)
+			}
+			seenAuthorIDs[a.ID] = struct{}{}
+			if a.PubkeyB64 == "" {
+				return fmt.Errorf("trust_roots[%d].authors[%d] (%s): pubkey is required", i, j, a.ID)
+			}
+			raw, err := base64.StdEncoding.DecodeString(a.PubkeyB64)
+			if err != nil {
+				return fmt.Errorf("trust_roots[%d].authors[%d] (%s): pubkey is not valid base64: %w", i, j, a.ID, err)
+			}
+			if len(raw) != pubkeyRawSize {
+				return fmt.Errorf("trust_roots[%d].authors[%d] (%s): pubkey decodes to %d bytes, want %d", i, j, a.ID, len(raw), pubkeyRawSize)
+			}
+			if a.Fingerprint != "" {
+				want := authorFingerprint(raw)
+				if !strings.EqualFold(strings.TrimSpace(a.Fingerprint), want) {
+					return fmt.Errorf("trust_roots[%d].authors[%d] (%s): fingerprint %q does not match pubkey (derived %s)", i, j, a.ID, a.Fingerprint, want)
+				}
+			}
+			// Hydrate raw bytes so the verifier doesn't redo the decode.
+			t.Roots[i].Authors[j].Pubkey = raw
+		}
+
+		// Pinned reviewers (SPEC-0281): same validation as authors. If
+		// require_signed_governance is set there must be at least one reviewer
+		// to verify against. Entries present without the flag are still
+		// validated (so a typo can't lie dormant).
+		if root.RequireSignedGovernance && len(root.Reviewers) == 0 {
+			return fmt.Errorf("trust_roots[%d] %s: require_signed_governance needs a non-empty reviewers list", i, root.RegistryURL)
+		}
+		seenReviewerIDs := make(map[string]struct{}, len(root.Reviewers))
+		for j, r := range root.Reviewers {
+			if r.ID == "" {
+				return fmt.Errorf("trust_roots[%d].reviewers[%d]: id is required", i, j)
+			}
+			if _, dup := seenReviewerIDs[r.ID]; dup {
+				return fmt.Errorf("trust_roots[%d] %s: duplicate reviewer id %q", i, root.RegistryURL, r.ID)
+			}
+			seenReviewerIDs[r.ID] = struct{}{}
+			if r.PubkeyB64 == "" {
+				return fmt.Errorf("trust_roots[%d].reviewers[%d] (%s): pubkey is required", i, j, r.ID)
+			}
+			raw, err := base64.StdEncoding.DecodeString(r.PubkeyB64)
+			if err != nil {
+				return fmt.Errorf("trust_roots[%d].reviewers[%d] (%s): pubkey is not valid base64: %w", i, j, r.ID, err)
+			}
+			if len(raw) != pubkeyRawSize {
+				return fmt.Errorf("trust_roots[%d].reviewers[%d] (%s): pubkey decodes to %d bytes, want %d", i, j, r.ID, len(raw), pubkeyRawSize)
+			}
+			if r.Fingerprint != "" {
+				want := authorFingerprint(raw)
+				if !strings.EqualFold(strings.TrimSpace(r.Fingerprint), want) {
+					return fmt.Errorf("trust_roots[%d].reviewers[%d] (%s): fingerprint %q does not match pubkey (derived %s)", i, j, r.ID, r.Fingerprint, want)
+				}
+			}
+			t.Roots[i].Reviewers[j].Pubkey = raw
+		}
+		if root.MinRevocationEpoch < 0 {
+			return fmt.Errorf("trust_roots[%d] %s: min_revocation_epoch must be >= 0", i, root.RegistryURL)
+		}
+
 		if root.GovernanceMinimum == "" {
 			return fmt.Errorf("trust_roots[%d] %s: governance_minimum is required", i, root.RegistryURL)
 		}
@@ -608,6 +782,16 @@ func resolveAndValidatePath(path string) (string, error) {
 	// CLI defaulted to ~/.claude/...; that guard lives at the CLI
 	// boundary, not in Load.
 	return abs, nil
+}
+
+// authorFingerprint returns the canonical "sha256:<hex>" fingerprint over the
+// raw ed25519 pubkey bytes. This MUST match the derivation used everywhere
+// else in the trust stack (registry.selfFingerprint, cmd pubkeyFingerprint) so
+// a fingerprint an operator reads from one tool can be pinned in another and
+// cross-checked out-of-band. hexLower lives in verify.go (same package).
+func authorFingerprint(rawPub []byte) string {
+	sum := sha256.Sum256(rawPub)
+	return "sha256:" + hexLower(sum[:])
 }
 
 // deriveKeyID returns a short, deterministic id of the form "key-<hex8>"

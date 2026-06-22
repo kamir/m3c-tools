@@ -100,7 +100,7 @@ func runRunbook(args []string, stdout, stderr io.Writer) int {
 	if !*yes {
 		fmt.Fprintf(stdout, "\n🟡 About to publish into the THOH catalog at %s. Proceed? [y/N] ", *base)
 		var resp string
-		fmt.Fscanln(os.Stdin, &resp)
+		_, _ = fmt.Fscanln(os.Stdin, &resp)
 		if r := strings.ToLower(strings.TrimSpace(resp)); r != "y" && r != "yes" {
 			fmt.Fprintln(stdout, "aborted.")
 			return 0
