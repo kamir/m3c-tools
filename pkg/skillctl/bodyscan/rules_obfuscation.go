@@ -28,9 +28,10 @@ var (
 )
 
 // matchObfBase64 returns spans for base64 runs, anchored on the base64 text
-// itself (capture group 1), not the leading boundary char.
-func matchObfBase64(in Input) []Span {
-	locs := reObfBase64.FindAllStringSubmatchIndex(in.Body, -1)
+// itself (capture group 1), not the leading boundary char. Runs against the
+// original body (base64 alphabet is ASCII; folding cannot change it).
+func matchObfBase64(c scanCtx) []Span {
+	locs := reObfBase64.FindAllStringSubmatchIndex(c.In.Body, -1)
 	if locs == nil {
 		return nil
 	}
@@ -46,8 +47,11 @@ func matchObfBase64(in Input) []Span {
 // letter (a homoglyph smuggle, e.g. "ѕystem" with a Cyrillic 'ѕ'). A word is a
 // run of letters; it is suspicious if it mixes ASCII letters with letters from
 // the Cyrillic/Greek scripts.
-func matchObfHomoglyph(in Input) []Span {
-	b := in.Body
+func matchObfHomoglyph(c scanCtx) []Span {
+	// Runs against the ORIGINAL body: the homoglyph (a Cyrillic/Greek letter)
+	// is exactly what normalization would otherwise leave in place, but we want
+	// the original offsets and the raw rune.
+	b := c.In.Body
 	var out []Span
 	i := 0
 	for i < len(b) {
@@ -79,23 +83,59 @@ func matchObfHomoglyph(in Input) []Span {
 	return out
 }
 
+// matchObfHexRun flags runs of \xNN hex escapes. It MUST run against the
+// ORIGINAL body: normalization decodes those escapes, so a rule on the folded
+// text would no longer see the literal \xNN smell (the decoded payload is
+// caught separately by the injection rules).
+func matchObfHexRun(c scanCtx) []Span {
+	locs := reObfHexRun.FindAllStringIndex(c.In.Body, -1)
+	if locs == nil {
+		return nil
+	}
+	out := make([]Span, 0, len(locs))
+	for _, loc := range locs {
+		out = append(out, Span{Start: loc[0], End: loc[1]})
+	}
+	return out
+}
+
+// matchObfZeroWidth flags zero-width / BOM characters. It MUST run against the
+// ORIGINAL body: normalization strips exactly these characters, so a rule that
+// ran against the folded text would never see them. (The fold itself is also
+// flagged via OBF-007, but OBF-004 keeps the specific zero-width signal and its
+// precise span.)
+func matchObfZeroWidth(c scanCtx) []Span {
+	locs := reObfZeroWidth.FindAllStringIndex(c.In.Body, -1)
+	if locs == nil {
+		return nil
+	}
+	out := make([]Span, 0, len(locs))
+	for _, loc := range locs {
+		out = append(out, Span{Start: loc[0], End: loc[1]})
+	}
+	return out
+}
+
 // matchInjectionInHTMLComment flags injection-style prose hidden inside an HTML
 // comment (which renders invisibly but is still read by the agent).
-func matchInjectionInHTMLComment(in Input) []Span {
-	comments := reHTMLComment.FindAllStringIndex(in.Body, -1)
+func matchInjectionInHTMLComment(c scanCtx) []Span {
+	// Run against the normalized text so a folded injection inside the comment
+	// is still recognised; map the comment span back to original bytes.
+	text := c.Norm.Text
+	comments := reHTMLComment.FindAllStringIndex(text, -1)
 	if comments == nil {
 		return nil
 	}
 	var out []Span
-	for _, c := range comments {
-		seg := in.Body[c[0]:c[1]]
+	for _, cm := range comments {
+		seg := text[cm[0]:cm[1]]
 		if reInjIgnore.MatchString(seg) ||
 			reInjDisregard.MatchString(seg) ||
 			reInjForget.MatchString(seg) ||
 			reInjYouAreNow.MatchString(seg) ||
 			reInjRoleOverride.MatchString(seg) ||
 			reInjTermMarker.MatchString(seg) {
-			out = append(out, Span{Start: c[0], End: c[1]})
+			out = append(out, c.origSpan(cm[0], cm[1]))
 		}
 	}
 	return out
@@ -114,7 +154,7 @@ func init() {
 			ID:       "OBF-002",
 			Category: CategoryObfuscation,
 			Verdict:  VerdictYellow,
-			Pattern:  reObfHexRun,
+			Match:    matchObfHexRun,
 			Message:  "obfuscation: run of \\xNN hex escapes (possible hidden payload)",
 		},
 		Rule{
@@ -128,7 +168,7 @@ func init() {
 			ID:       "OBF-004",
 			Category: CategoryObfuscation,
 			Verdict:  VerdictYellow,
-			Pattern:  reObfZeroWidth,
+			Match:    matchObfZeroWidth,
 			Message:  "obfuscation: zero-width / BOM character used to hide text",
 		},
 		Rule{

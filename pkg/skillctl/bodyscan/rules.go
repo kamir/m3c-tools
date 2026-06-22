@@ -11,28 +11,53 @@ import (
 // function for rules that need the AllowedTools / Intent context or multi-line
 // adjacency logic. Exactly one of Pattern / Match is used; if both are set,
 // Match wins (it may consult Pattern itself).
+//
+// Pattern-based rules run against the NORMALIZED body (Unicode-folded,
+// zero-width-stripped — see normalize.go) and their match spans are mapped back
+// to ORIGINAL byte offsets before becoming Findings, so an injection hidden
+// behind fullwidth Latin or soft hyphens is caught yet the reported span still
+// points at the bytes the user can see. Custom Match functions receive the full
+// scanCtx and choose which text to operate on.
 type Rule struct {
 	ID       string
 	Category Category
 	Verdict  Verdict
-	// Pattern, when non-nil and Match is nil, is applied to Input.Body and each
-	// match index pair becomes a Span.
+	// Pattern, when non-nil and Match is nil, is applied to the normalized body
+	// and each match index pair becomes a Span (mapped back to original bytes).
 	Pattern *regexp.Regexp
 	Message string
 	// Match, when non-nil, fully computes the spans for this rule. It receives
-	// the whole Input so it can cross-check AllowedTools / Intent.
-	Match func(in Input) []Span
+	// the scan context so it can cross-check AllowedTools / Intent and use the
+	// normalized text + offset map.
+	Match func(c scanCtx) []Span
 }
 
-// spans returns the byte spans this rule trips on for the given input.
-func (r Rule) spans(in Input) []Span {
+// scanCtx carries the per-scan state shared by every rule: the original Input
+// and the normalized body with its offset map. It is constructed once per Scan.
+type scanCtx struct {
+	In   Input
+	Norm *normalized
+}
+
+// origSpan maps a [normStart,normEnd) span in the normalized text back to a Span
+// in original-body byte offsets.
+func (c scanCtx) origSpan(normStart, normEnd int) Span {
+	return Span{
+		Start: c.Norm.origStart(normStart),
+		End:   c.Norm.origEnd(normEnd),
+	}
+}
+
+// spans returns the byte spans this rule trips on for the given context. The
+// returned spans are always in ORIGINAL body offsets.
+func (r Rule) spans(c scanCtx) []Span {
 	if r.Match != nil {
-		return r.Match(in)
+		return r.Match(c)
 	}
 	if r.Pattern == nil {
 		return nil
 	}
-	return patternSpans(r.Pattern, in.Body)
+	return patternSpans(r.Pattern, c)
 }
 
 // registry is the global ordered rule table. Each rules_*.go file appends its
@@ -46,15 +71,16 @@ func register(rules ...Rule) {
 	registry = append(registry, rules...)
 }
 
-// patternSpans returns a Span for every non-overlapping match of re in body.
-func patternSpans(re *regexp.Regexp, body string) []Span {
-	locs := re.FindAllStringIndex(body, -1)
+// patternSpans returns a Span (in original offsets) for every non-overlapping
+// match of re in the normalized body.
+func patternSpans(re *regexp.Regexp, c scanCtx) []Span {
+	locs := re.FindAllStringIndex(c.Norm.Text, -1)
 	if locs == nil {
 		return nil
 	}
 	out := make([]Span, 0, len(locs))
 	for _, loc := range locs {
-		out = append(out, Span{Start: loc[0], End: loc[1]})
+		out = append(out, c.origSpan(loc[0], loc[1]))
 	}
 	return out
 }
@@ -69,11 +95,15 @@ func decodeRune(s string) (rune, int) {
 // byteRange is a [Start,End) byte interval into the body.
 type byteRange struct{ Start, End int }
 
-// fencedCodeRanges returns the byte ranges covered by triple-backtick (```) or
-// triple-tilde (~~~) fenced code blocks. A fence opens at a line that begins
-// (after optional spaces) with the fence marker and closes at the next such
-// line; an unclosed fence runs to end-of-body. Used to treat injection prose
-// quoted inside code fences as documentation, not instructions.
+// fencedCodeRanges returns the byte ranges covered by CLOSED triple-backtick
+// (```) or triple-tilde (~~~) fenced code blocks. A fence opens at a line that
+// begins (after optional spaces) with the fence marker and closes at the next
+// such line.
+//
+// SECURITY (SPEC-0246 §4, evasion #2): an UNCLOSED fence is NOT treated as a
+// fence — otherwise a single trailing "```" would suppress all content to EOF.
+// Only properly closed fences produce a range, so trailing injection prose after
+// a dangling fence is still scanned.
 func fencedCodeRanges(body string) []byteRange {
 	var ranges []byteRange
 	var openAt int
@@ -105,27 +135,41 @@ func fencedCodeRanges(body string) []byteRange {
 		}
 		lineStart = i + 1
 	}
-	if open {
-		ranges = append(ranges, byteRange{Start: openAt, End: len(body)})
-	}
+	// An unclosed fence is deliberately NOT added: do not suppress trailing
+	// content (evasion #2a).
 	return ranges
 }
 
-// suppressInjectionInFences drops injection findings whose span lies entirely
-// within a fenced code block.
-func suppressInjectionInFences(body string, findings []Finding) []Finding {
+// downgradeInjectionInFences DOWNGRADES (does not drop) injection findings whose
+// span lies entirely within a CLOSED fenced code block to YELLOW, attaching a
+// flag-for-review rationale.
+//
+// SECURITY (SPEC-0246 §4, evasion #2b): the previous behaviour dropped such
+// findings to green, which let an attacker hide a live injection inside a fence.
+// Downgrading instead means: a security-prose skill that *quotes* attacks
+// (benign) scores yellow (a "needs rationale" outcome, not an install-blocking
+// red), while a real injection smuggled in a fence still surfaces for a human.
+// Exfiltration / tool / policy / obfuscation findings are NOT touched — code
+// that *does* the dangerous thing is dangerous regardless of fencing.
+func downgradeInjectionInFences(body string, findings []Finding) []Finding {
 	ranges := fencedCodeRanges(body)
 	if len(ranges) == 0 {
 		return findings
 	}
-	out := findings[:0]
-	for _, f := range findings {
-		if f.Category == CategoryInjection && spanInAnyRange(f.Span, ranges) {
+	for i := range findings {
+		if findings[i].Category != CategoryInjection {
 			continue
 		}
-		out = append(out, f)
+		if !spanInAnyRange(findings[i].Span, ranges) {
+			continue
+		}
+		if findings[i].Verdict == VerdictRed {
+			findings[i].Verdict = VerdictYellow
+			findings[i].Message = findings[i].Message +
+				" [downgraded: quoted inside a fenced code block — flag for review, not a live instruction]"
+		}
 	}
-	return out
+	return findings
 }
 
 func spanInAnyRange(sp Span, ranges []byteRange) bool {

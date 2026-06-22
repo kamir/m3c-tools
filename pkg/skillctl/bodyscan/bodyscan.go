@@ -23,6 +23,7 @@
 package bodyscan
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 )
@@ -113,18 +114,56 @@ type Input struct {
 	Intent       string   `json:"intent"`
 }
 
+// maxBodyBytes is the input-size cap (SPEC-0246 §4, DoS hardening). Bodies
+// larger than this are NOT scanned — a regex sweep over a multi-megabyte body is
+// both slow (~1.2s/MB measured) and can produce hundreds of thousands of
+// findings. Instead a single yellow "oversized body" finding is returned.
+const maxBodyBytes = 1 << 20 // 1 MiB
+
+// maxFindingsPerRule caps how many spans a single rule may contribute, and
+// maxFindingsTotal caps the aggregate, BEFORE the escalation/sort passes. This
+// bounds work and report size on a pathological body that slips under the size
+// cap but still has many matches.
+const (
+	maxFindingsPerRule = 200
+	maxFindingsTotal   = 1000
+)
+
 // Scan runs the base (offline, deterministic) ruleset over in and returns a
 // BodyScanReport. The aggregate Verdict is the worst-of all findings; findings
 // are sorted by (Span.Start, RuleID) so the JSON is byte-identical for equal
 // Input.
 func Scan(in Input) BodyScanReport {
+	// DoS guard: do not scan oversized bodies (SPEC-0246 §4). Return a single
+	// yellow finding instead so the caller still sees a non-green signal.
+	if len(in.Body) > maxBodyBytes {
+		f := Finding{
+			RuleID:   "SIZE-001",
+			Category: CategoryObfuscation,
+			Verdict:  VerdictYellow,
+			Span:     Span{Start: 0, End: 0, Line: 1},
+			Excerpt:  "",
+			Message:  fmt.Sprintf("oversized body (%d bytes) not scanned", len(in.Body)),
+		}
+		return BodyScanReport{
+			Verdict:                VerdictYellow,
+			Findings:               []Finding{f},
+			FrontmatterConsistency: []Finding{},
+			Deep:                   false,
+		}
+	}
+
 	var findings []Finding
 	var fmConsistency []Finding
 
 	lineIdx := newLineIndex(in.Body)
+	ctx := scanCtx{In: in, Norm: normalizeBody(in.Body)}
 
 	for _, r := range registry {
-		spans := r.spans(in)
+		spans := r.spans(ctx)
+		if len(spans) > maxFindingsPerRule {
+			spans = spans[:maxFindingsPerRule]
+		}
 		for _, sp := range spans {
 			sp.Line = lineIdx.lineOf(sp.Start)
 			f := Finding{
@@ -142,13 +181,32 @@ func Scan(in Input) BodyScanReport {
 		}
 	}
 
-	// Injection phrases quoted inside a fenced code block are documentation
-	// examples (e.g. a security skill demonstrating an attack), not live
-	// instructions to the agent. Suppress injection findings that lie entirely
-	// inside a fenced block so security-prose skills are not false positives.
-	// Exfiltration/policy findings are NOT suppressed: code that *does* the
-	// exfil is still dangerous regardless of fencing.
-	findings = suppressInjectionInFences(in.Body, findings)
+	// Normalization changed the text (a zero-width strip or a fullwidth fold) —
+	// that is itself an obfuscation signal (SPEC-0246 §4). Emit one yellow
+	// finding so a soft-hyphen / fullwidth evasion surfaces even if the folded
+	// injection regex were ever to miss, and so the verdict carries a rationale.
+	if ctx.Norm.Changed {
+		findings = append(findings, Finding{
+			RuleID:   "OBF-007",
+			Category: CategoryObfuscation,
+			Verdict:  VerdictYellow,
+			Span:     Span{Start: 0, End: 0},
+			Message:  "obfuscation: text contained zero-width / soft-hyphen / fullwidth characters that were normalized before matching",
+		})
+	}
+
+	// Aggregate cap BEFORE escalation/sort passes (DoS hardening).
+	if len(findings) > maxFindingsTotal {
+		findings = findings[:maxFindingsTotal]
+	}
+
+	// Injection phrases quoted inside a CLOSED fenced code block are
+	// documentation examples (e.g. a security skill demonstrating an attack),
+	// not necessarily live instructions. DOWNGRADE such injection findings to
+	// yellow (flag-for-review) — do NOT drop them — so a live injection hidden
+	// in a fence still surfaces while benign security prose is yellow-not-red.
+	// Exfiltration/tool/policy/obfuscation findings are NOT touched.
+	findings = downgradeInjectionInFences(in.Body, findings)
 
 	// Obfuscation contributes yellow on its own but escalates to red when it
 	// is adjacent to an exfiltration finding (SPEC-0246 §4.2). Apply this

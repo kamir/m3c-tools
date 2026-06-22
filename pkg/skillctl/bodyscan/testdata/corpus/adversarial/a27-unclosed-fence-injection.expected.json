@@ -1,0 +1,10 @@
+{
+  "categories": [
+    "injection"
+  ],
+  "rule_ids": [
+    "INJ-001"
+  ],
+  "min_verdict": "red",
+  "note": "An unclosed fence is not a fence; trailing injection prose is still scanned (red)."
+}

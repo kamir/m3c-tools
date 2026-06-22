@@ -1,0 +1,10 @@
+{
+  "categories": [
+    "injection"
+  ],
+  "rule_ids": [
+    "INJ-001"
+  ],
+  "min_verdict": "red",
+  "note": "Fullwidth Latin folds to ASCII before matching; injection caught (red)."
+}

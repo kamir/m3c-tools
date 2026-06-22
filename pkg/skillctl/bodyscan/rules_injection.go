@@ -29,6 +29,23 @@ var (
 	// Instruction-termination markers: [/INST], [INST], [SYS], <|im_end|>,
 	// "end of system prompt", "### end of instructions".
 	reInjTermMarker = regexp.MustCompile(`(?i)\[/?(?:INST|SYS|SYSTEM)\]|<\|?(?:im_start|im_end|endoftext|system)\|?>|\bend\s+of\s+(?:the\s+)?(?:system\s+prompt|system\s+instructions?|instructions?|prompt)\b`)
+
+	// Paraphrased instruction-override (SPEC-0246 §4, evasion: "paraphrase"). A
+	// softer wording — "set aside / put aside / forget about / pay no attention
+	// to the guidance/instructions/rules you were given (earlier)" — that avoids
+	// the literal "ignore previous instructions" keyword. Two alternations: the
+	// "set aside ... guidance ... given/earlier" form and the "pay no attention
+	// to / forget about / disregard ... the guidance you were given" form.
+	reInjParaphrase = regexp.MustCompile(`(?i)\b(?:set|put|cast|leave)\s+(?:aside|behind)\b(?:\s+\w+){0,3}?\s+(?:guidance|guidelines?|instructions?|directions?|rules?|prompt|policy|policies)\b(?:\s+\w+){0,6}?\s+(?:given|provided|received|earlier|before|previously|above|prior)\b|` +
+		`(?i)\b(?:pay\s+no\s+attention\s+to|forget\s+about|never\s+mind|do\s+not\s+follow|stop\s+following|ignore)\b(?:\s+\w+){0,3}?\s+(?:guidance|guidelines?|instructions?|directions?|rules?|prompt)\b(?:\s+\w+){0,6}?\s+(?:given|provided|received|earlier|before|previously|above|prior)\b`)
+
+	// Non-English instruction-override (SPEC-0246 §4, evasion: "non-English").
+	// German is the demonstrated case ("Ignoriere alle vorherigen Anweisungen");
+	// a few other common languages are included so the rule is not English-only.
+	reInjNonEnglish = regexp.MustCompile(`(?i)\b(?:ignoriere|vergiss|missachte)\b[^.\n]{0,40}?\b(?:anweisungen|anweisung|vorgaben|systemprompt|regeln)\b|` + // German
+		`\bignor[ae]\b[^.\n]{0,40}?\b(?:instrucciones|instrucciones\s+anteriores|las\s+instrucciones)\b|` + // Spanish
+		`\bignorez\b[^.\n]{0,40}?\binstructions?\b|` + // French
+		`\b(?:ignora|dimentica)\b[^.\n]{0,40}?\bistruzioni\b`) // Italian
 )
 
 func init() {
@@ -81,6 +98,20 @@ func init() {
 			Verdict:  VerdictRed,
 			Pattern:  reInjTermMarker,
 			Message:  "instruction-termination: embeds a system/instruction boundary marker to smuggle a new prompt",
+		},
+		Rule{
+			ID:       "INJ-008",
+			Category: CategoryInjection,
+			Verdict:  VerdictRed,
+			Pattern:  reInjParaphrase,
+			Message:  "instruction-override (paraphrased): tells the agent to set aside the guidance it was given",
+		},
+		Rule{
+			ID:       "INJ-009",
+			Category: CategoryInjection,
+			Verdict:  VerdictRed,
+			Pattern:  reInjNonEnglish,
+			Message:  "instruction-override (non-English): foreign-language 'ignore previous instructions' phrasing",
 		},
 	)
 }

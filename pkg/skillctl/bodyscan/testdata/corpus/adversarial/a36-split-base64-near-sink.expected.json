@@ -1,0 +1,10 @@
+{
+  "categories": [
+    "exfiltration"
+  ],
+  "rule_ids": [
+    "EXF-004"
+  ],
+  "min_verdict": "red",
+  "note": "Base64 split across backticks/newlines, joined >= 40 chars, next to a URL sink."
+}

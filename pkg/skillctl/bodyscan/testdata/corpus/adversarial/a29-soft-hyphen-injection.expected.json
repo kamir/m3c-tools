@@ -1,0 +1,10 @@
+{
+  "categories": [
+    "injection"
+  ],
+  "rule_ids": [
+    "INJ-001"
+  ],
+  "min_verdict": "red",
+  "note": "Soft hyphens (U+00AD) stripped before matching; injection re-joins and is caught."
+}

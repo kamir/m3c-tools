@@ -17,6 +17,12 @@ import (
 type toolRef struct {
 	Tool    string
 	Pattern *regexp.Regexp
+	// negationGuarded marks soft "capability synonym" patterns (prose like
+	// "shell out", "over the network") that legitimately appear in NEGATED,
+	// reassuring sentences ("we do NOT shell out", "never reaches the network").
+	// For these, a match preceded by a negation within a short window is
+	// ignored. Literal command forms (curl, python -c) are not guarded.
+	negationGuarded bool
 }
 
 var toolRefs = []toolRef{
@@ -30,10 +36,26 @@ var toolRefs = []toolRef{
 	{Tool: "Edit", Pattern: regexp.MustCompile(`\bEdit\b\s+(?:the\s+)?(?:file|tool)|\buse\s+(?:the\s+)?Edit\b|\bEdit\(`)},
 	{Tool: "WebFetch", Pattern: regexp.MustCompile(`\bWebFetch\b`)},
 	{Tool: "WebSearch", Pattern: regexp.MustCompile(`\bWebSearch\b`)},
-	// Shell network/file tools — referenced as commands.
-	{Tool: "curl", Pattern: regexp.MustCompile(`(?:^|[^A-Za-z])curl\s+[-\w]`)},
-	{Tool: "wget", Pattern: regexp.MustCompile(`(?:^|[^A-Za-z])wget\s+[-\w]`)},
+	// Shell network/file tools — referenced as commands. Case-INSENSITIVE
+	// (SPEC-0246 §4, evasion #4): "CURL"/"Wget" were slipping past.
+	{Tool: "curl", Pattern: regexp.MustCompile(`(?i)(?:^|[^A-Za-z])curl\s+[-\w]`)},
+	{Tool: "wget", Pattern: regexp.MustCompile(`(?i)(?:^|[^A-Za-z])wget\s+[-\w]`)},
+	// Capability synonyms / indirection (SPEC-0246 §4, evasion #4): a body that
+	// reaches the shell or the network WITHOUT naming the tool. These map to the
+	// "Bash" capability — flagged unless Bash (a shell) is declared. Prose
+	// synonyms are negation-guarded so a reassuring "we do NOT shell out" does
+	// not score.
+	{Tool: "Bash", negationGuarded: true, Pattern: regexp.MustCompile(`(?i)\bsub-?process(?:es)?\b|\bshell\s+out\b|\bspawn\s+a\s+shell\b|\bopen\s+a\s+terminal\b|\bover\s+the\s+network\b`)},
+	// Interpreter -exec forms (python -c, sh -c, node -e, bash -c, perl -e,
+	// ruby -e) execute arbitrary code and are shell-equivalent — a literal
+	// command, not guarded.
+	{Tool: "Bash", Pattern: regexp.MustCompile(`(?i)\b(?:python[0-9.]*|sh|bash|zsh|node|perl|ruby|deno|php)\s+-(?:c|e)\b`)},
 }
+
+// reNegationBefore detects a negation cue ("not", "n't", "never", "no", "don't",
+// "without", "cannot") within a short window immediately preceding a soft
+// synonym match — the sign of a reassuring sentence rather than an instruction.
+var reNegationBefore = regexp.MustCompile(`(?i)\b(?:not|never|no|don'?t|does\s*n'?t|do\s*n'?t|cannot|can'?t|without|n'?t)\b[^.\n]{0,30}$`)
 
 // toolImpliesNetwork lists tools whose use means the skill reaches the network.
 var toolImpliesNetwork = map[string]bool{
@@ -68,27 +90,36 @@ var reIntentNetworkFalse = regexp.MustCompile(`(?i)network\s*[:=]\s*(?:false|no|
 // reIntentNetworkTrue detects an intent block that explicitly declares network.
 var reIntentNetworkTrue = regexp.MustCompile(`(?i)network\s*[:=]\s*(?:true|yes|on|1|egress|outbound)\b`)
 
-func matchToolEscalation(in Input) []Span {
+func matchToolEscalation(c scanCtx) []Span {
+	in := c.In
 	allowed := map[string]bool{}
 	for _, t := range in.AllowedTools {
 		allowed[normalizeTool(t)] = true
 	}
 
+	// Run against the normalized body so fullwidth/zero-width "ｃｕｒｌ" tricks are
+	// still recognised; map the span back to the original bytes.
+	text := c.Norm.Text
+
 	var out []Span
-	seen := map[string]bool{} // first occurrence per tool keeps output small + stable
+	seen := map[string]bool{} // first (real) occurrence per tool keeps output small + stable
 	for _, tr := range toolRefs {
 		if toolCoveredBy(tr.Tool, allowed) {
-			continue
-		}
-		loc := tr.Pattern.FindStringIndex(in.Body)
-		if loc == nil {
 			continue
 		}
 		if seen[tr.Tool] {
 			continue
 		}
-		seen[tr.Tool] = true
-		out = append(out, Span{Start: loc[0], End: loc[1]})
+		// Find the first match that is not negation-guarded away. A guarded
+		// synonym preceded by a negation cue ("we do NOT shell out") is skipped.
+		for _, loc := range tr.Pattern.FindAllStringIndex(text, -1) {
+			if tr.negationGuarded && reNegationBefore.MatchString(text[:loc[0]]) {
+				continue
+			}
+			seen[tr.Tool] = true
+			out = append(out, c.origSpan(loc[0], loc[1]))
+			break
+		}
 	}
 	return out
 }
@@ -96,7 +127,8 @@ func matchToolEscalation(in Input) []Span {
 // matchIntentNetworkMismatch flags the SPEC-0196 cross-check: the declared
 // intent says no network, but the body calls a URL or a network-capable tool is
 // in allowed-tools. YELLOW (a consistency warning, not an attack).
-func matchIntentNetworkMismatch(in Input) []Span {
+func matchIntentNetworkMismatch(c scanCtx) []Span {
+	in := c.In
 	if !reIntentNetworkFalse.MatchString(in.Intent) || reIntentNetworkTrue.MatchString(in.Intent) {
 		return nil
 	}
