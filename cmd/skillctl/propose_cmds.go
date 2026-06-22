@@ -18,7 +18,7 @@ package main
 //
 // Flow:
 //   1. Resolve skill dir.
-//   2. Run propose.Run() → 10-check gate. Print results inline.
+//   2. Run propose.Run() → 11-check gate. Print results inline.
 //   3. If --dry-run OR gate failed → exit (2 on fail, 0 on dry-run).
 //   4. Otherwise: POST a SkillProposal record to /api/skills/proposals.
 //      The bundle's actual pack+sign+admit happens via `skillctl pack/sign/install`

@@ -640,6 +640,15 @@ func (t *TrustRoots) validate() error {
 		if root.RequireSignedGovernance && len(root.Reviewers) == 0 {
 			return fmt.Errorf("trust_roots[%d] %s: require_signed_governance needs a non-empty reviewers list", i, root.RegistryURL)
 		}
+		// SPEC-0246 §5.2 (P1b): the reviewer≠author floor can only be ENFORCED if
+		// the verifier has pinned reviewer keys to PROVE independence (the floor
+		// requires a signature-verified independent attestation, not the unsigned
+		// sidecar reviewer_id). Refuse to load a floor that lacks the keys to
+		// enforce it — mirrors how require_signed_governance requires reviewers,
+		// so the floor cannot be set fail-OPEN.
+		if root.RequireIndependentReview && len(root.Reviewers) == 0 {
+			return fmt.Errorf("trust_roots[%d] %s: require_independent_review needs a non-empty reviewers list (the floor is proven by a signature-verified independent attestation)", i, root.RegistryURL)
+		}
 		seenReviewerIDs := make(map[string]struct{}, len(root.Reviewers))
 		for j, r := range root.Reviewers {
 			if r.ID == "" {

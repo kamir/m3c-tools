@@ -266,6 +266,17 @@ func bodyScanCheck(skillMDPath string, opts CheckOptions) CheckResult {
 		in.Intent = fm.Intent
 	}
 	rep := bodyscan.Scan(in)
+
+	// Fail-closed (SPEC-0246 §4.5, P1b): an oversized / not-actually-scanned body
+	// carries NO evidence it is safe. It must NOT be treated as an overridable
+	// 🟡 (a >1 MiB injection body would otherwise launder through via
+	// --bodyscan-rationale). Refuse hard, like a 🔴, ignoring any rationale.
+	if bodyscan.NotScanned(rep) {
+		return fail(11, name,
+			fmt.Sprintf("bodyscan did not run (body too large to scan: %s) — cannot be overridden by --bodyscan-rationale (fail-closed)",
+				firstFindingSummary(rep.Findings)))
+	}
+
 	switch rep.Verdict {
 	case bodyscan.VerdictGreen:
 		return ok(11, "bodyscan clean (🟢)")

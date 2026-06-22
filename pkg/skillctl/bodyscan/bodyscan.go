@@ -117,8 +117,30 @@ type Input struct {
 // maxBodyBytes is the input-size cap (SPEC-0246 §4, DoS hardening). Bodies
 // larger than this are NOT scanned — a regex sweep over a multi-megabyte body is
 // both slow (~1.2s/MB measured) and can produce hundreds of thousands of
-// findings. Instead a single yellow "oversized body" finding is returned.
+// findings. Instead a single "oversized body" finding is returned (RuleIDOversized)
+// and callers MUST treat it as "scan did not actually run" → fail-closed at the
+// gate, NOT as an overridable yellow (SPEC-0246 §4.5, P1b): otherwise a >1 MiB
+// body carrying an injection could slip through via the yellow-with-rationale /
+// --accept-yellow path.
 const maxBodyBytes = 1 << 20 // 1 MiB
+
+// RuleIDOversized is the rule id of the synthetic finding emitted when a body
+// exceeds maxBodyBytes and is therefore NOT scanned. Callers detect it (or call
+// NotScanned) to fail closed instead of treating the verdict as a normal yellow.
+const RuleIDOversized = "SIZE-001"
+
+// NotScanned reports whether the report represents a body the scanner did NOT
+// actually scan (currently: oversized, RuleIDOversized). A not-scanned report
+// carries no evidence the body is safe, so gate/airlock callers MUST fail closed
+// on it rather than honour an --accept-yellow / rationale override.
+func NotScanned(rep BodyScanReport) bool {
+	for _, f := range rep.Findings {
+		if f.RuleID == RuleIDOversized {
+			return true
+		}
+	}
+	return false
+}
 
 // maxFindingsPerRule caps how many spans a single rule may contribute, and
 // maxFindingsTotal caps the aggregate, BEFORE the escalation/sort passes. This
@@ -138,7 +160,7 @@ func Scan(in Input) BodyScanReport {
 	// yellow finding instead so the caller still sees a non-green signal.
 	if len(in.Body) > maxBodyBytes {
 		f := Finding{
-			RuleID:   "SIZE-001",
+			RuleID:   RuleIDOversized,
 			Category: CategoryObfuscation,
 			Verdict:  VerdictYellow,
 			Span:     Span{Start: 0, End: 0, Line: 1},

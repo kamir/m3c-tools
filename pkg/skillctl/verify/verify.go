@@ -231,11 +231,11 @@ func Verify(opts VerifyOpts) (*VerifyResult, error) {
 
 	// Step 5.6 — reviewer≠author floor (SPEC-0246 §5.2). Compute self_attested
 	// for the binding governance attestation; when the trust root requires
-	// independent review, REFUSE a self-attested bundle (fail-closed). The
-	// `self` tenant leaves require_independent_review false (the default) so
-	// this never fires there. The result is surfaced for inspect/audit either
-	// way.
-	selfAttested, err := stepIndependentReviewCheck(opts.BundleMeta, opts.TrustRoot, govLevel, authorID)
+	// independent review, REFUSE unless there is a SIGNATURE-VERIFIED independent
+	// attestation (fail-closed). The `self` tenant leaves
+	// require_independent_review false (the default) so this never fires there.
+	// The advisory self_attested signal is surfaced for inspect/audit either way.
+	selfAttested, err := stepIndependentReviewCheck(digestStr, opts.BundleMeta, opts.TrustRoot, govLevel, authorID)
 	if err != nil {
 		return nil, err
 	}
@@ -598,41 +598,117 @@ func verifyGovernanceAttestation(digestStr, level string, meta *registry.BundleM
 	return false
 }
 
-// stepIndependentReviewCheck implements the SPEC-0246 §5.2 reviewer≠author
-// floor. It finds the binding governance attestation (the global, active row
-// matching the verified governance level) and derives whether it is
-// self_attested (reviewed by the bundle's own author). When the trust root sets
-// require_independent_review, a self_attested binding attestation is refused
-// with ErrSelfAttested (exit 20) — fail-closed: if the floor is on and we
-// cannot establish independence (no binding attestation, or the row carries no
-// reviewer identity), we refuse rather than admit on a benefit-of-the-doubt.
+// stepIndependentReviewCheck implements the SPEC-0246 §5.2 reviewer≠author floor.
 //
-// Returns the tri-state self_attested signal (nil = unknown) for the
-// VerifyResult so inspect/audit can surface it even when the floor is off.
-func stepIndependentReviewCheck(meta *registry.BundleMeta, root *TrustRoot, govLevel, authorID string) (*bool, error) {
+// When the floor is OFF (the `self` tenant and the default) it merely surfaces
+// the ADVISORY self_attested signal derived from the (unsigned) sidecar so
+// inspect/audit can show it — it never refuses.
+//
+// When the floor is ON, independence must be CRYPTOGRAPHICALLY PROVEN. This is
+// the same unsigned-sidecar class SPEC-0281 closed for governance: in the
+// offline `verify --bundle` path the BundleMeta sidecar is attacker-controlled,
+// so a forged `reviewer_id != author` (or `self_attested:false`) with no valid
+// signature must NOT launder past the floor. We therefore require a binding
+// governance attestation whose ed25519 signature VERIFIES against a PINNED
+// reviewer key (reusing the SPEC-0281 machinery) AND whose cryptographically-
+// established reviewer_id differs from the verified author. If no such
+// signature-verified independent attestation exists we refuse with
+// ErrSelfAttested (exit 20) — fail-closed. The unsigned `self_attested` flag and
+// the unsigned `reviewer_id` are NEVER trusted to satisfy the floor.
+//
+// Returns the tri-state advisory self_attested signal (nil = unknown) for the
+// VerifyResult either way.
+func stepIndependentReviewCheck(digestStr string, meta *registry.BundleMeta, root *TrustRoot, govLevel, authorID string) (*bool, error) {
 	selfAttested := bindingSelfAttested(meta, govLevel, authorID)
 
 	if !root.RequireIndependentReview {
 		// Floor off (the `self` tenant and the default): never refuse; just
-		// surface what we could determine.
+		// surface what we could determine from the (advisory) sidecar.
 		return selfAttested, nil
 	}
 
-	// Floor ON. We must be able to PROVE independence; otherwise fail closed.
-	if selfAttested == nil {
-		return nil, fmt.Errorf(
-			"verify: require_independent_review is set but the bundle's binding governance attestation does not establish an independent reviewer (no reviewer identity to compare against author %q): %w",
-			authorID, ErrSelfAttested)
-	}
-	if *selfAttested {
+	// Floor ON. Independence must be cryptographically proven — trusting the
+	// unsigned sidecar fields here would let a forged reviewer_id launder past
+	// the floor (the exact unsigned-sidecar bug SPEC-0281 fixed for governance).
+	if root == nil || len(root.Reviewers) == 0 {
+		// Defensive: trustroots.validate() now refuses this configuration, so a
+		// floor with no pinned reviewer keys cannot reach here through Load. Fail
+		// closed regardless rather than admit on a floor we cannot enforce.
 		return selfAttested, fmt.Errorf(
-			"verify: binding governance attestation is self-attested (reviewed by author %q) but trust root requires independent review: %w",
-			authorID, ErrSelfAttested)
+			"verify: require_independent_review is set but no reviewer keys are pinned to prove independence: %w",
+			ErrSelfAttested)
 	}
-	return selfAttested, nil
+
+	if verifiedIndependentReviewer(digestStr, govLevel, authorID, meta, root) {
+		// Proven independent: a pinned reviewer (≠ author) signed the binding
+		// verdict over this digest. Surface self_attested=false authoritatively.
+		f := false
+		return &f, nil
+	}
+
+	return selfAttested, fmt.Errorf(
+		"verify: require_independent_review is set but no signature-verified independent attestation exists "+
+			"(no binding governance attestation is signed by a pinned reviewer whose reviewer_id differs from author %q): %w",
+		authorID, ErrSelfAttested)
 }
 
-// bindingSelfAttested derives the self_attested signal for the binding
+// verifiedIndependentReviewer reports whether some binding governance
+// attestation is signed by a PINNED reviewer key over this bundle's digest/level
+// (the SPEC-0281 signature check) AND that reviewer's id — established
+// cryptographically, because the reviewer_id is part of the signed message and
+// the verifying key is pinned to that id — differs from the verified author.
+//
+// This is the fail-closed primitive behind the reviewer≠author floor: it trusts
+// ONLY the signed bytes, never the unsigned sidecar `self_attested`/`reviewer_id`.
+func verifiedIndependentReviewer(digestStr, level, authorID string, meta *registry.BundleMeta, root *TrustRoot) bool {
+	if meta == nil || root == nil || len(root.Reviewers) == 0 {
+		return false
+	}
+	normAuthor := normalizeIdentityID(authorID)
+	for _, att := range meta.Attestations {
+		// Status allowlist (defense-in-depth): only "active" (or empty for
+		// forward-compat) rows establish independence.
+		if att.Status != "" && att.Status != "active" {
+			continue
+		}
+		if strings.TrimSpace(att.TenantScope) != "" {
+			continue // only global rows establish the binding verdict
+		}
+		if !strings.EqualFold(strings.TrimSpace(att.Level), level) {
+			continue
+		}
+		if att.SignatureB64 == "" || att.ReviewerID == "" || att.AttestedAt == "" {
+			continue
+		}
+		// The reviewer_id is only trustworthy once it is bound to a PINNED key
+		// AND that key verifies the signature over a message that includes the
+		// reviewer_id. An attacker who edits reviewer_id has no matching pinned
+		// key / valid signature, so this short-circuits.
+		rk := root.FindReviewer(att.ReviewerID)
+		if rk == nil || len(rk.Pubkey) != ed25519.PublicKeySize {
+			continue
+		}
+		msg, err := signing.CanonicalizeAttestationMessage(digestStr, level, att.AttestedAt, att.ReviewerID)
+		if err != nil {
+			continue
+		}
+		sig, err := decodeSignatureB64(att.SignatureB64)
+		if err != nil {
+			continue
+		}
+		if !ed25519.Verify(ed25519.PublicKey(rk.Pubkey), msg, sig) {
+			continue
+		}
+		// Signature verified → reviewer_id is cryptographically established.
+		// Independence holds iff it differs from the verified author id.
+		if normalizeIdentityID(att.ReviewerID) != normAuthor {
+			return true
+		}
+	}
+	return false
+}
+
+// bindingSelfAttested derives the ADVISORY self_attested signal for the binding
 // governance attestation: the global (untenanted), active row whose level
 // matches govLevel. Resolution per SPEC-0246 §5.1:
 //
@@ -643,6 +719,13 @@ func stepIndependentReviewCheck(meta *registry.BundleMeta, root *TrustRoot, govL
 //   - Else nil (unknown).
 //
 // Returns nil when no matching binding attestation exists.
+//
+// IMPORTANT: this reads UNSIGNED sidecar fields and is therefore advisory ONLY.
+// It is used to populate VerifyResult.SelfAttested for inspect/audit. The
+// require_independent_review FLOOR does NOT rely on it — that gate insists on a
+// signature-verified independent attestation (verifiedIndependentReviewer) so a
+// forged reviewer_id / self_attested flag in the attacker-controlled sidecar
+// cannot launder past the floor.
 func bindingSelfAttested(meta *registry.BundleMeta, govLevel, authorID string) *bool {
 	if meta == nil {
 		return nil
