@@ -23,10 +23,14 @@
 //	         NOT base64. NOT hex. NOT PEM.
 //	Signed:  the 32-byte raw SHA-256 of the bundle file bytes.
 //
-// Phase-1 (`pkg/skillbundle/`) is intentionally NOT a build-time dependency
-// of this package: signing only needs the file bytes' SHA-256, and the
-// stream needs to compile cleanly on a worktree branched from master that
-// has not yet absorbed the Phase-1 PoC.
+// SignBundle now depends on `pkg/skillbundle` to enforce the SPEC-0196
+// declared-scope gate at the sign boundary (P2b re-challenge finding #2): the
+// author signature covers the manifest's intent + data dependencies, so signing
+// MUST refuse a scope the authoritative validator rejects — "no unvalidated scope
+// is ever author-signed" has to hold at EVERY sign entrypoint, not only in Pack.
+// This is safe: skillbundle does not import signing, so there is no cycle. (The
+// rest of signing — keygen, digest, detached verify — still needs only the file
+// bytes' SHA-256.)
 package signing
 
 import (
