@@ -90,6 +90,71 @@ func TestCompliance_MDHasDisclaimerAndControls(t *testing.T) {
 	}
 }
 
+func TestCompliance_Art12PointsAtSignedTrail(t *testing.T) {
+	home := t.TempDir()
+	skillsDir := filepath.Join(home, ".claude", "skills")
+	if err := os.MkdirAll(skillsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Emit two device-signed invocation records into this home's trail.
+	appendSignedInvocation(home, sampleInvocation())
+	r2 := sampleInvocation()
+	r2.EventID = "01HZTRAILEVENT00000000099"
+	appendSignedInvocation(home, r2)
+
+	var out, errBuf bytes.Buffer
+	code := runCompliance([]string{"report", "--framework", "eu-ai-act", "--home", home, "--format", "json"}, &out, &errBuf)
+	if code != exitOK {
+		t.Fatalf("want 0, got %d; stderr=%s", code, errBuf.String())
+	}
+	var rep complianceReport
+	if err := json.Unmarshal(out.Bytes(), &rep); err != nil {
+		t.Fatalf("json: %v\n%s", err, out.String())
+	}
+	if rep.Trail == nil {
+		t.Fatalf("report missing invocation_trail block")
+	}
+	if rep.Trail.Total != 2 || rep.Trail.Verified != 2 {
+		t.Errorf("trail figures wrong: %+v", *rep.Trail)
+	}
+	// The Art.12 control row must carry the concrete signed-trail figures.
+	var art12 string
+	for _, c := range rep.ControlMap {
+		if bytes.Contains([]byte(c.Control), []byte("Art. 12")) {
+			art12 = c.Evidence
+		}
+	}
+	if art12 == "" {
+		t.Fatalf("Art.12 control row missing")
+	}
+	if !bytes.Contains([]byte(art12), []byte("2/2 invocation records pass local device-key integrity verification")) {
+		t.Errorf("Art.12 evidence does not reflect the signed trail; got %q", art12)
+	}
+	if !bytes.Contains([]byte(art12), []byte("device:")) {
+		t.Errorf("Art.12 evidence missing device key id; got %q", art12)
+	}
+	// Honesty (P2 F-5.1): the sentence must NOT overclaim external attestation.
+	if !bytes.Contains([]byte(art12), []byte("locally anchored")) {
+		t.Errorf("Art.12 evidence must state the local-anchor trust boundary; got %q", art12)
+	}
+}
+
+func TestCompliance_Art12NoTrailYet(t *testing.T) {
+	home := t.TempDir()
+	var out, errBuf bytes.Buffer
+	code := runCompliance([]string{"report", "--framework", "eu-ai-act", "--home", home, "--format", "json"}, &out, &errBuf)
+	if code != exitOK {
+		t.Fatalf("want 0, got %d", code)
+	}
+	var rep complianceReport
+	if err := json.Unmarshal(out.Bytes(), &rep); err != nil {
+		t.Fatal(err)
+	}
+	if rep.Trail == nil || rep.Trail.Present {
+		t.Errorf("expected an absent trail on a fresh home: %+v", rep.Trail)
+	}
+}
+
 func TestCompliance_UnknownFramework(t *testing.T) {
 	var out, errBuf bytes.Buffer
 	code := runCompliance([]string{"report", "--framework", "iso-9001", "--skills-dir", t.TempDir()}, &out, &errBuf)

@@ -43,7 +43,42 @@ type complianceReport struct {
 	Summary    map[string]int      `json:"summary"`
 	Skills     []complianceSkill   `json:"skills"`
 	ControlMap []complianceControl `json:"control_map"`
+	Trail      *trailVerification  `json:"invocation_trail,omitempty"`
 	Disclaimer string              `json:"disclaimer"`
+}
+
+// withTrailEvidence returns a copy of the control map in which the EU AI Act
+// Art.12 "Evidence" cell is replaced with the concrete, verified figures from
+// the signed invocation trail. Non-Art.12 rows and other frameworks are
+// untouched. Pure — never mutates the package-level complianceFrameworks map.
+func withTrailEvidence(controls []complianceControl, tv trailVerification) []complianceControl {
+	out := make([]complianceControl, len(controls))
+	copy(out, controls)
+	for i := range out {
+		if strings.HasPrefix(out[i].Control, "Art. 12") {
+			out[i].Evidence = trailEvidenceSentence(tv)
+		}
+	}
+	return out
+}
+
+// trailEvidenceSentence renders a one-line, auditor-readable summary of the
+// signed-trail state for the Art.12 evidence cell.
+func trailEvidenceSentence(tv trailVerification) string {
+	if !tv.Present {
+		return "Per-invocation signed events (SPEC-0202): no invocation-trail.jsonl yet on this host (no skill invocations recorded). Trail is created on first gated invocation."
+	}
+	key := tv.DeviceKeyID
+	if key == "" {
+		key = "(device key unavailable — cannot verify)"
+	}
+	// Honest framing (P2 challenge-gate F-5.1): the device key is LOCALLY ANCHORED
+	// — verification proves integrity-since-signing on THIS host, not authenticity
+	// against an external root (registry attestation of the device key is a
+	// follow-up). Do not let an auditor read self-referential verification as
+	// external attestation.
+	return fmt.Sprintf("Per-invocation signed events (SPEC-0202): %d/%d invocation records pass local device-key integrity verification (%d unverified, %d replays). Device key %s is locally anchored (integrity-since-signing on this host; not yet registry-attested). Append-only ~/.claude/skillctl/invocation-trail.jsonl.",
+		tv.Verified, tv.Total, tv.Unverified, tv.Replays, key)
 }
 
 const complianceDisclaimer = "Evidence aid for an auditor — NOT a certification or attestation of compliance. " +
@@ -105,17 +140,19 @@ func runCompliance(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 
+	// Resolve home first — needed both for the default skills dir AND for the
+	// signed invocation trail (the Art.12 evidence).
+	home := *homeOverride
+	if home == "" {
+		h, err := os.UserHomeDir()
+		if err != nil {
+			fmt.Fprintf(stderr, "compliance: resolve home: %v\n", err)
+			return exitGeneric
+		}
+		home = h
+	}
 	dir := *skillsDir
 	if dir == "" {
-		home := *homeOverride
-		if home == "" {
-			h, err := os.UserHomeDir()
-			if err != nil {
-				fmt.Fprintf(stderr, "compliance: resolve home: %v\n", err)
-				return exitGeneric
-			}
-			home = h
-		}
 		dir = filepath.Join(home, ".claude", "skills")
 	}
 
@@ -125,12 +162,24 @@ func runCompliance(args []string, stdout, stderr io.Writer) int {
 		return exitGeneric
 	}
 
+	// SPEC-0202 §9 — read + verify the device-signed invocation trail. This is
+	// the concrete, offline-verifiable evidence for the EU AI Act Art.12
+	// record-keeping control: the report now reports HOW MANY invocation records
+	// are signed and verifiable, by which device key — not just a forward-ref.
+	tv := readAndVerifyTrail(home)
+
+	// For the EU AI Act framework, replace the static Art.12 "Evidence" cell
+	// with the concrete trail figures. Copy the slice so we don't mutate the
+	// package-level map.
+	controls = withTrailEvidence(controls, tv)
+
 	rep := complianceReport{
 		Framework:  strings.ToLower(strings.TrimSpace(*framework)),
 		SkillsDir:  dir,
 		Summary:    summarizeCompliance(skills),
 		Skills:     skills,
 		ControlMap: controls,
+		Trail:      &tv,
 		Disclaimer: complianceDisclaimer,
 	}
 
@@ -159,6 +208,11 @@ func runCompliance(args []string, stdout, stderr io.Writer) int {
 func collectComplianceSkills(skillsDir string) ([]complianceSkill, error) {
 	entries, err := os.ReadDir(skillsDir)
 	if err != nil {
+		// A missing skills dir is a valid empty inventory (a host that has not
+		// installed any skill yet) — not an error. Other read errors propagate.
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	var out []complianceSkill
@@ -259,7 +313,21 @@ func renderComplianceMD(r complianceReport) string {
 	fmt.Fprintf(&b, "- Total skills: %d\n", r.Summary["total"])
 	fmt.Fprintf(&b, "- Governance: %d green · %d yellow · %d red · %d unknown\n", r.Summary["green"], r.Summary["yellow"], r.Summary["red"], r.Summary["unknown"])
 	fmt.Fprintf(&b, "- Offline-verifiable (stashed metadata): %d\n", r.Summary["offline_verifiable"])
-	fmt.Fprintf(&b, "- With provenance: %d\n\n", r.Summary["with_provenance"])
+	fmt.Fprintf(&b, "- With provenance: %d\n", r.Summary["with_provenance"])
+	if r.Trail != nil {
+		t := r.Trail
+		if !t.Present {
+			fmt.Fprintf(&b, "- Signed invocation trail (SPEC-0202): none yet (no recorded invocations)\n")
+		} else {
+			key := t.DeviceKeyID
+			if key == "" {
+				key = "(unavailable)"
+			}
+			fmt.Fprintf(&b, "- Signed invocation trail (SPEC-0202): %d/%d records verified · %d unverified · %d replays · device key %s\n",
+				t.Verified, t.Total, t.Unverified, t.Replays, key)
+		}
+	}
+	b.WriteString("\n")
 
 	b.WriteString("## Inventory\n\n")
 	b.WriteString("| Skill | Version | Governance | Author | Offline | Provenance |\n")

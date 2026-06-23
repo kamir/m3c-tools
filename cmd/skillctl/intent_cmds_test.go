@@ -84,13 +84,17 @@ func TestIntentDeclare_BuildsPatchPayload(t *testing.T) {
 		registryURL: srv.URL,
 		confirm:     true,
 		intent: map[string]any{
-			"summary":     "test skill",
-			"destructive": false,
-			"network":     true,
+			"summary":      "test skill",
+			"destructive":  false,
+			"network":      true,
 			"side_effects": []string{"fs:write", "llm:call"},
 		},
 		dataDeps: []map[string]any{
+			// read dep needs no scope; network=true requires an http dep, so
+			// include one (valid client-side declaration — the server still
+			// gets the PATCH).
 			{"id": "ds:filesystem/cwd", "kind": "local_fs", "access": "read"},
+			{"id": "ds:http/anthropic", "kind": "http_endpoint", "access": "passthrough", "scope": "https://api.anthropic.com/*"},
 		},
 		httpClient: srv.Client(),
 	}
@@ -105,8 +109,8 @@ func TestIntentDeclare_BuildsPatchPayload(t *testing.T) {
 	if got := captured.Intent["network"]; got != true {
 		t.Errorf("captured.Intent.network = %v, want true", got)
 	}
-	if got := len(captured.DataDependencies); got != 1 {
-		t.Fatalf("captured.DataDependencies len = %d, want 1", got)
+	if got := len(captured.DataDependencies); got != 2 {
+		t.Fatalf("captured.DataDependencies len = %d, want 2", got)
 	}
 	if got := captured.DataDependencies[0]["kind"]; got != "local_fs" {
 		t.Errorf("captured DataDeps[0].kind = %v, want local_fs", got)
@@ -206,8 +210,12 @@ func TestIntentDeclare_CrossRuleViolationExits18(t *testing.T) {
 		intent: map[string]any{
 			"network": false,
 		},
+		// Client-valid (http dep carries a scope), but the SERVER rejects the
+		// network=false ↔ http-dep contradiction → 400 → exit 18. This keeps
+		// the test exercising the server-side cross-rule path, not the client
+		// one (the client only fires on network=true without an http dep).
 		dataDeps: []map[string]any{
-			{"id": "ds:http/api", "kind": "http_endpoint", "access": "passthrough"},
+			{"id": "ds:http/api", "kind": "http_endpoint", "access": "passthrough", "scope": "https://api.example.com/*"},
 		},
 		httpClient: srv.Client(),
 	}
@@ -218,6 +226,122 @@ func TestIntentDeclare_CrossRuleViolationExits18(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "network_false_http_dep") {
 		t.Errorf("stderr missing failed_rule; got: %q", stderr.String())
+	}
+}
+
+func TestIntentDeclare_LocalCrossRuleExits18(t *testing.T) {
+	// A §3.3 cross-rule that the CLIENT catches (destructive=true + green)
+	// must exit 18 WITHOUT touching the network — the binding can't be
+	// bypassed by declaring offline.
+	hits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		http.Error(w, "should not be reached", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	opts := intentDeclareOpts{
+		skill:       "@sha256:" + strings.Repeat("d", 64),
+		registryURL: srv.URL,
+		confirm:     true,
+		governance:  "green",
+		intent: map[string]any{
+			"destructive":  true,
+			"side_effects": []string{"fs:delete"},
+		},
+		httpClient: srv.Client(),
+	}
+	var stdout, stderr bytes.Buffer
+	code := runIntentDeclareWithClient(opts, &stdout, &stderr)
+	if code != 18 {
+		t.Fatalf("exit = %d, want 18 (local destructive_green); stderr=%q", code, stderr.String())
+	}
+	if hits != 0 {
+		t.Errorf("client-side cross-rule hit the server %d times, want 0", hits)
+	}
+	if !strings.Contains(stderr.String(), "destructive_green") {
+		t.Errorf("stderr missing failed_rule destructive_green; got %q", stderr.String())
+	}
+}
+
+func TestIntentDeclare_InvalidScopeIsUsageError(t *testing.T) {
+	// A structurally-invalid data-scope (write to local_fs without a scope) is
+	// a usage error (exit 2), not an inconsistency (18) — and never reaches
+	// the server, even in --dry-run.
+	opts := intentDeclareOpts{
+		skill:       "@sha256:" + strings.Repeat("e", 64),
+		registryURL: "http://127.0.0.1:1",
+		dryRun:      true,
+		intent: map[string]any{
+			"destructive": true,
+		},
+		dataDeps: []map[string]any{
+			{"id": "ds:fs", "kind": "local_fs", "access": "write"}, // no scope → invalid
+		},
+	}
+	var stdout, stderr bytes.Buffer
+	code := runIntentDeclareWithClient(opts, &stdout, &stderr)
+	if code != exitUsage {
+		t.Fatalf("exit = %d, want %d (usage); stderr=%q", code, exitUsage, stderr.String())
+	}
+}
+
+func TestIntentDeclare_DataScopesFlagParsed(t *testing.T) {
+	// The typed --data-scopes flag flows through the flag-parser into the
+	// PATCH body. Drive runIntent end-to-end with a captured server.
+	var captured intentDeclareReq
+	srv := newIntentTestServer(t, "ok", &captured)
+	defer srv.Close()
+
+	args := []string{
+		"declare",
+		"@sha256:" + strings.Repeat("f", 64),
+		"--registry", srv.URL,
+		"--summary", "typed scope test",
+		"--destructive", "true",
+		"--side-effects", "fs:write",
+		"--data-scopes", `{"id":"ds:fs/out","kind":"local_fs","access":"write","scope":"<cwd>/out/**"}`,
+		"--confirm",
+	}
+	var stdout, stderr bytes.Buffer
+	code := runIntent(args, &stdout, &stderr)
+	if code != exitOK {
+		t.Fatalf("exit = %d, want 0; stderr=%q", code, stderr.String())
+	}
+	if len(captured.DataDependencies) != 1 {
+		t.Fatalf("data deps len = %d, want 1", len(captured.DataDependencies))
+	}
+	if captured.DataDependencies[0]["scope"] != "<cwd>/out/**" {
+		t.Errorf("scope not carried through: %v", captured.DataDependencies[0])
+	}
+}
+
+func TestIntentDeclare_DataDepAliasStillWorks(t *testing.T) {
+	// The deprecated --data-dep alias routes through the SAME validator and
+	// reaches the PATCH; a deprecation note is printed to stderr.
+	var captured intentDeclareReq
+	srv := newIntentTestServer(t, "ok", &captured)
+	defer srv.Close()
+
+	args := []string{
+		"declare",
+		"@sha256:" + strings.Repeat("1", 64),
+		"--registry", srv.URL,
+		"--summary", "alias test",
+		"--side-effects", "fs:read",
+		"--data-dep", `{"id":"ds:er1/plm","kind":"er1_collection","access":"read"}`,
+		"--confirm",
+	}
+	var stdout, stderr bytes.Buffer
+	code := runIntent(args, &stdout, &stderr)
+	if code != exitOK {
+		t.Fatalf("exit = %d, want 0; stderr=%q", code, stderr.String())
+	}
+	if len(captured.DataDependencies) != 1 {
+		t.Fatalf("data deps len = %d, want 1", len(captured.DataDependencies))
+	}
+	if !strings.Contains(stderr.String(), "deprecated") {
+		t.Errorf("expected deprecation note for --data-dep; got %q", stderr.String())
 	}
 }
 
