@@ -41,8 +41,32 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/install"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
+	"github.com/kamir/m3c-tools/pkg/skillgate"
 	"gopkg.in/yaml.v3"
 )
+
+// refusalCodeForHook maps the hook's (exitCode, reason) into a stable
+// refusal_code token for the signed invocation record. An allow (exit 0) has
+// no refusal. A deny carries "deny" by default, refined to a more specific
+// token when the reason text reveals one (revoked / suspicious-name / etc.) so
+// the Art.12 trail is queryable without parsing free-form reason strings.
+func refusalCodeForHook(exitCode int, reason string) string {
+	if exitCode == exitOK {
+		return ""
+	}
+	switch {
+	case strings.Contains(reason, "revoked"):
+		return "bundle_revoked"
+	case strings.Contains(reason, "suspicious skill name"):
+		return "unsafe_skill_name"
+	case strings.Contains(reason, "policy deny"), strings.Contains(reason, "unmanaged"):
+		return "unmanaged_policy_deny"
+	case strings.Contains(reason, "internal error"):
+		return "internal_error"
+	default:
+		return "deny"
+	}
+}
 
 // exitHookBlock is the process exit code Claude Code interprets as "block this
 // tool call" for a PreToolUse hook. It happens to equal exitUsage (2); that is
@@ -137,6 +161,22 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 				Source: "hook", Skill: audSkill, Decision: decisionForExit(code),
 				Reason: audReason, ExitCode: code,
 				Online: audOnline, CacheHit: audCache, SessionID: audSession,
+			})
+			// SPEC-0202 §9 — emit ONE device-signed invocation record per gated
+			// skill, for BOTH allow AND deny, into the SEPARATE signed trail.
+			// ALWAYS-ON evidence (Art.12), distinct from the advisory gate-audit
+			// above. Best-effort + panic-safe inside appendSignedInvocation;
+			// never alters `code`. The decision is encoded in exit_code (0=allow)
+			// and refusal_code (the deny reason as a stable token).
+			appendSignedInvocation(audHome, skillgate.InvocationRecord{
+				EventType:   "skill.invocation",
+				SkillDigest: installedSkillDigest(audHome, audSkill),
+				SkillName:   audSkill,
+				Action:      "skill_invocation",
+				Tool:        "Skill",
+				SessionID:   audSession,
+				ExitCode:    code,
+				RefusalCode: refusalCodeForHook(code, audReason),
 			})
 		}
 	}()
