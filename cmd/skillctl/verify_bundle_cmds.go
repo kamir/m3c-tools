@@ -62,10 +62,15 @@ type bundleVerifyResult struct {
 	// SelfAttested (SPEC-0246 §5) surfaces whether the binding governance
 	// attestation was reviewed by the bundle's own author. Pointer-valued:
 	// true (self), false (independent), null (unknown / no binding attestation).
-	SelfAttested *bool  `json:"self_attested"`
-	ChainSummary string `json:"chain_summary,omitempty"`
-	Error        string `json:"error,omitempty"`
-	ExitCode     int    `json:"exit_code"`
+	SelfAttested *bool `json:"self_attested"`
+	// DataScopes (SPEC-0196 §12 Q1 / P2b) surfaces the declared data-scope with
+	// provenance — "signed-manifest" (author-signature-covered, authoritative)
+	// vs "bundle-row" (mutable post-admit PATCH, advisory). A CISO consumer can
+	// branch on `.data_scopes[].provenance` to tell author-bound from post-admit.
+	DataScopes   []verify.DeclaredScope `json:"data_scopes,omitempty"`
+	ChainSummary string                 `json:"chain_summary,omitempty"`
+	Error        string                 `json:"error,omitempty"`
+	ExitCode     int                    `json:"exit_code"`
 }
 
 // runVerifyBundle implements the --bundle path. Returns the SPEC-0188 §11
@@ -157,6 +162,7 @@ func runVerifyBundle(p verifyBundleParams, stdout, stderr io.Writer) int {
 			out.Governance = res.GovernanceLevel
 			out.GovernanceVerified = res.GovernanceVerified
 			out.SelfAttested = res.SelfAttested
+			out.DataScopes = res.DataScopes
 			out.ChainSummary = res.ChainSummary
 			out.ExitCode = exitOK
 		}
@@ -178,7 +184,42 @@ func runVerifyBundle(p verifyBundleParams, stdout, stderr io.Writer) int {
 		return exitBundleRevoked
 	}
 	fmt.Fprintln(stdout, res.ChainSummary+" (offline, bundle)")
+	printDeclaredScopes(stdout, res.DataScopes)
 	return exitOK
+}
+
+// printDeclaredScopes renders the declared data-scope with its provenance so a
+// CISO sees at a glance which declarations are author-signed (authoritative) vs
+// post-admit PATCH-row (advisory). SPEC-0196 §12 Q1 / P2b.
+func printDeclaredScopes(stdout io.Writer, scopes []verify.DeclaredScope) {
+	if len(scopes) == 0 {
+		return
+	}
+	fmt.Fprintf(stdout, "data-scopes (%d):\n", len(scopes))
+	for _, s := range scopes {
+		marker := "ADVISORY"
+		if s.Provenance == verify.ScopeProvenanceSignedManifest {
+			marker = "AUTHORITATIVE"
+		}
+		id, _ := s.Raw["id"].(string)
+		kind, _ := s.Raw["kind"].(string)
+		access, _ := s.Raw["access"].(string)
+		scope, _ := s.Raw["scope"].(string)
+		fmt.Fprintf(stdout, "  [%s] %s  id=%s kind=%s access=%s",
+			s.Provenance, marker, dashOr(id), dashOr(kind), dashOr(access))
+		if scope != "" {
+			fmt.Fprintf(stdout, " scope=%s", scope)
+		}
+		fmt.Fprintln(stdout)
+	}
+}
+
+// dashOr returns s or "-" when empty, for compact tabular output.
+func dashOr(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
 }
 
 // checkBundleRevoked loads a signed revocation list, verifies its signature

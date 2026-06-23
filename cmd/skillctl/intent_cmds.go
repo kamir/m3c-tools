@@ -377,11 +377,26 @@ func runIntentShow(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	registryURL := fs.String("registry", "", "Registry base URL (required).")
 	asJSON := fs.Bool("json", false, "Emit the declared intent + data_dependencies as JSON.")
+	bundleFlag := fs.String("bundle", "", "Path to the local .skb. When given, the bundle's AUTHOR SIGNATURE is verified against the pinned trust-roots (full verify.Verify chain). Its bundle.json scope is shown as signed-manifest / AUTHORITATIVE ONLY when that verification succeeds; otherwise it is digest-matched / UNVERIFIED. WITHOUT --bundle, only the UNVERIFIED registry view is shown.")
+	metaFlag := fs.String("meta", "", "Path to a BundleMeta envelope JSON for --bundle (carries the author/registry signatures). Default: fetch the meta from --registry. Use a sidecar to verify fully offline.")
+	trustRootsPath := fs.String("trust-roots", "", "Path to a trust-roots YAML to use instead of the default (~/.claude/skill-trust-roots.yaml). The pinned author key is what gates the AUTHORITATIVE label for --bundle.")
+	governanceMin := fs.String("governance-min", "", "Override the trust-root's governance_minimum (green | yellow) for the --bundle author-sig verification.")
+	allowYellow := fs.Bool("allow-yellow", false, "Permit a yellow bundle against a green-required trust root during --bundle verification.")
+	tenantFlag := fs.String("tenant", "", "Pin the --bundle verification to a tenant scope (SPEC-0188 §7 step 5.5).")
 	timeout := fs.Duration("timeout", registry.DefaultTimeout, "HTTP timeout.")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: skillctl intent show <skill-name|@digest> --registry URL [--json]")
+		fmt.Fprintln(stderr, "Usage: skillctl intent show <skill-name|@digest> --registry URL [--bundle file.skb [--trust-roots f] [--meta f]] [--json]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Prints the declared SPEC-0196 intent + data_dependencies for a bundle.")
+		fmt.Fprintln(stderr, "")
+		fmt.Fprintln(stderr, "Provenance (SECURITY): a scope is shown as signed-manifest / AUTHORITATIVE")
+		fmt.Fprintln(stderr, "ONLY when the local .skb's AUTHOR SIGNATURE is cryptographically verified")
+		fmt.Fprintln(stderr, "against a PINNED trust-root author key (the full `skillctl verify` chain).")
+		fmt.Fprintln(stderr, "A bare digest match against the registry-advertised digest is NOT enough —")
+		fmt.Fprintln(stderr, "that field is unsigned and registry-supplied, so a malicious registry could")
+		fmt.Fprintln(stderr, "serve its own .skb + digest. Without a verifiable author signature the scope")
+		fmt.Fprintln(stderr, "is digest-matched / UNVERIFIED. The registry's own scope view is always")
+		fmt.Fprintln(stderr, "registry-reported / UNVERIFIED.")
 		fs.PrintDefaults()
 	}
 
@@ -420,14 +435,78 @@ func runIntentShow(args []string, stdout, stderr io.Writer) int {
 		return exitGeneric
 	}
 
-	intentBlock, dataDeps := extractDeclaredIntent(meta)
+	// The registry response is UNTRUSTED — its parsed manifest and bundle row are
+	// labeled registry-reported / bundle-row, NEVER author-signed.
+	view := extractDeclaredView(meta)
+
+	// AUTHORITATIVE path (P2b re-challenge fix): a scope is signed-manifest /
+	// AUTHORITATIVE ONLY when the bundle's AUTHOR SIGNATURE verifies against a
+	// PINNED trust-root author key — i.e. the full verify.Verify chain (digest
+	// recompute + stepVerifyAuthor ed25519 + registry sig + governance + tenant)
+	// succeeds. A bare digest match against the registry-advertised, UNSIGNED
+	// `bundle.bundle_digest` is NOT author-signature verification: a malicious
+	// registry can serve ITS OWN .skb, advertise ITS digest, and the bytes match
+	// without any pinned author having signed them (Attack-d). On any verify
+	// failure (no trust-roots, from-registry root with no pinned author, author sig
+	// invalid, digest mismatch, governance/revocation failure) we DOWNGRADE to
+	// digest-matched / UNVERIFIED — we never print AUTHORITATIVE and never fail the
+	// whole command, so the CISO still sees the (untrusted) scope with the right
+	// label. The signed bundle.json bytes are always read from the digest-verified
+	// .skb path (verify.ReadDigestVerifiedManifest), never from the registry copy.
+	if *bundleFlag != "" {
+		verifyBundleAuthorScope(bundleScopeParams{
+			bundlePath:     *bundleFlag,
+			metaPath:       *metaFlag,
+			trustRootsPath: *trustRootsPath,
+			registryURL:    *registryURL,
+			governanceMin:  *governanceMin,
+			allowYellow:    *allowYellow,
+			tenantFlag:     *tenantFlag,
+		}, meta, digest, c, ctx, &view, stderr)
+	}
+
+	authIntent, authDeps, authProv := view.authoritativeIntent()
 
 	if *asJSON {
+		// Emit the strongest-available declaration flat (back-compat) PLUS a
+		// provenance-tagged breakdown of ALL sources so a CISO tool can tell
+		// signed-manifest (authoritative) from digest-matched/registry-reported
+		// (UNVERIFIED) and bundle-row (advisory) without scraping text.
+		// `authoritative` is true ONLY when the author signature was cryptographically
+		// verified against a pinned trust-root key (provSignedManifest).
+		digestTrust := "UNVERIFIED (digest matched the advertised digest, but author signature NOT verified — configure trust-roots or run `skillctl verify --bundle`)"
+		if view.digestDetail != "" {
+			digestTrust = "UNVERIFIED (author signature NOT verified: " + view.digestDetail + ")"
+		}
 		out := map[string]any{
-			"digest":            digest,
-			"governance":        meta.CurrentGovernance,
-			"intent":            intentBlock,
-			"data_dependencies": dataDeps,
+			"digest":                 digest,
+			"governance":             meta.CurrentGovernance,
+			"intent":                 authIntent,
+			"data_dependencies":      authDeps,
+			"declaration_provenance": authProv,
+			"authoritative":          authProv == provSignedManifest,
+			"sources": map[string]any{
+				provSignedManifest: map[string]any{
+					"intent":            view.signedIntent,
+					"data_dependencies": view.signedDeps,
+					"trust":             "AUTHORITATIVE (author signature verified against a pinned trust-root key)",
+				},
+				provDigestMatched: map[string]any{
+					"intent":            view.digestIntent,
+					"data_dependencies": view.digestDeps,
+					"trust":             digestTrust,
+				},
+				provRegistryReported: map[string]any{
+					"intent":            view.regIntent,
+					"data_dependencies": view.regDeps,
+					"trust":             "UNVERIFIED (registry-reported; run `intent show --bundle` with pinned trust-roots for authoritative)",
+				},
+				provBundleRow: map[string]any{
+					"intent":            view.rowIntent,
+					"data_dependencies": view.rowDeps,
+					"trust":             "ADVISORY (mutable post-admit PATCH; NOT author-signed)",
+				},
+			},
 		}
 		b, _ := json.MarshalIndent(out, "", "  ")
 		fmt.Fprintln(stdout, string(b))
@@ -436,56 +515,354 @@ func runIntentShow(args []string, stdout, stderr io.Writer) int {
 
 	fmt.Fprintf(stdout, "digest:     %s\n", digest)
 	fmt.Fprintf(stdout, "governance: %s\n", dashOrValue(meta.CurrentGovernance))
-	if intentBlock == nil {
+	switch authProv {
+	case provSignedManifest:
+		fmt.Fprintln(stdout, "provenance: signed-manifest (AUTHORITATIVE — author signature verified against a pinned trust-root key)")
+	case provDigestMatched:
+		fmt.Fprintln(stdout, "provenance: digest-matched (author signature NOT verified — configure trust-roots or run `skillctl verify --bundle`)")
+		if view.digestDetail != "" {
+			fmt.Fprintf(stdout, "            reason: %s\n", view.digestDetail)
+		}
+	case provRegistryReported:
+		fmt.Fprintln(stdout, "provenance: registry-reported (UNVERIFIED — run `intent show --bundle <file.skb>` with pinned trust-roots for authoritative)")
+	case provBundleRow:
+		fmt.Fprintln(stdout, "provenance: bundle-row (ADVISORY — mutable post-admit PATCH, NOT author-signed)")
+	default:
+		fmt.Fprintln(stdout, "provenance: (none declared)")
+	}
+	if !view.hasSigned() && (view.hasDigestMatched() || view.hasRegistry() || view.hasRow()) {
+		fmt.Fprintln(stdout, "warning:    NO author-signature-verified scope shown — the displayed scope is UNTRUSTED.")
+		fmt.Fprintln(stdout, "            Pass --bundle <file.skb> with pinned trust-roots to verify the author signature cryptographically.")
+	}
+
+	printIntentSource(stdout, provSignedManifest, "AUTHORITATIVE", view.signedIntent, view.signedDeps)
+	printIntentSource(stdout, provDigestMatched, "UNVERIFIED", view.digestIntent, view.digestDeps)
+	printIntentSource(stdout, provRegistryReported, "UNVERIFIED", view.regIntent, view.regDeps)
+	printIntentSource(stdout, provBundleRow, "ADVISORY", view.rowIntent, view.rowDeps)
+	if !view.hasSigned() && !view.hasDigestMatched() && !view.hasRegistry() && !view.hasRow() {
 		fmt.Fprintln(stdout, "intent:     (none declared)")
-	} else {
-		fmt.Fprintln(stdout, "intent:")
-		if b, err := json.MarshalIndent(intentBlock, "  ", "  "); err == nil {
-			fmt.Fprintf(stdout, "  %s\n", string(b))
-		}
-	}
-	if len(dataDeps) == 0 {
 		fmt.Fprintln(stdout, "data_dependencies: (none declared)")
-	} else {
-		fmt.Fprintf(stdout, "data_dependencies (%d):\n", len(dataDeps))
-		for _, d := range dataDeps {
-			if b, err := json.Marshal(d); err == nil {
-				fmt.Fprintf(stdout, "  - %s\n", string(b))
-			}
-		}
 	}
+	fmt.Fprintln(stdout, "(authoritative signed-binding verification: `skillctl verify --bundle <file.skb>`)")
 	return exitOK
 }
 
-// extractDeclaredIntent pulls the declared intent + data_dependencies out of a
-// BundleMeta. The post-hoc `intent declare` PATCH writes them onto the registry
-// row (BundleMeta.Bundle); a pack-time binding writes them into bundle.json
-// (BundleMeta.Manifest). We prefer the row (it is the post-admission source of
-// truth) and fall back to the manifest.
-func extractDeclaredIntent(meta *registry.BundleMeta) (map[string]any, []map[string]any) {
-	pick := func(src map[string]any) (map[string]any, []map[string]any, bool) {
-		if src == nil {
-			return nil, nil, false
+// bundleScopeParams carries the resolved flags the --bundle author-sig
+// verification needs. Grouped so verifyBundleAuthorScope stays a single call.
+type bundleScopeParams struct {
+	bundlePath     string
+	metaPath       string // optional sidecar override; "" → use the registry-fetched meta
+	trustRootsPath string
+	registryURL    string
+	governanceMin  string
+	allowYellow    bool
+	tenantFlag     string
+}
+
+// verifyBundleAuthorScope runs the FULL author-signature verification for the
+// `intent show --bundle` path and overlays the resulting scope onto view with the
+// correct trust label (P2b re-challenge fix).
+//
+// It gates AUTHORITATIVE on verify.Verify success — the SAME §7 chain
+// (stepRecomputeDigest + stepCompareDigest + stepVerifyAuthor ed25519 against the
+// PINNED trust-root author key + registry sig + governance + tenant) the rest of
+// the CLI runs. The registry-supplied `bundle.bundle_digest` alone is never
+// sufficient: it is plain, unsigned and could be lied about by a malicious
+// registry (Attack-d).
+//
+// Outcomes:
+//   - verify.Verify SUCCEEDS → read bundle.json from the digest-verified .skb and
+//     overlay it as provSignedManifest / AUTHORITATIVE (overlaySignedScope).
+//   - meta lacks an advertised digest, trust-roots not configured/match, root is
+//     from-registry with no pinned author, author sig invalid, digest mismatch, or
+//     any other verify failure → if the .skb STILL digest-matches the advertised
+//     value, overlay it as provDigestMatched / UNVERIFIED with an actionable
+//     reason; otherwise surface nothing signed (the registry-reported view stands).
+//
+// It NEVER aborts the command and NEVER prints AUTHORITATIVE without a verified
+// author signature.
+func verifyBundleAuthorScope(p bundleScopeParams, meta *registry.BundleMeta, digest string, c *registry.Client, ctx context.Context, view *declaredView, stderr io.Writer) {
+	advertised := advertisedDigest(meta, digest)
+
+	// Read the bundle.json from the DIGEST-VERIFIED .skb up front. This both (a)
+	// confirms the on-disk bytes reproduce the advertised digest and (b) gives us
+	// the scope to surface regardless of the author-sig outcome. If the digest does
+	// NOT match, the bundle is not the one the registry described — surface nothing
+	// signed and let the registry-reported view stand (it is already UNVERIFIED).
+	signedManifest, derr := verify.ReadDigestVerifiedManifest(p.bundlePath, advertised)
+	if derr != nil {
+		fmt.Fprintf(stderr, "skillctl intent show: --bundle %s did not digest-match the advertised digest %s: %v\n", p.bundlePath, advertised, derr)
+		fmt.Fprintln(stderr, "            (showing the registry view as UNVERIFIED; no signed scope)")
+		return
+	}
+	bundleIntent, bundleDeps := pickDeclared(signedManifest)
+
+	// Now attempt FULL author-signature verification. Any failure → UNVERIFIED.
+	if reason, ok := verifyBundleAuthor(p, meta, c, ctx); ok {
+		// Author signature verified against a pinned trust-root key → AUTHORITATIVE.
+		view.overlaySignedScope(bundleIntent, bundleDeps)
+		return
+	} else {
+		// Digest matched but author sig NOT verified → digest-matched / UNVERIFIED.
+		fmt.Fprintf(stderr, "skillctl intent show: --bundle digest matched but author signature NOT verified: %s\n", reason)
+		view.overlayDigestMatchedScope(bundleIntent, bundleDeps, reason)
+	}
+}
+
+// verifyBundleAuthor loads the pinned trust-roots + BundleMeta envelope and runs
+// the full verify.Verify chain. It returns (reason, true) ONLY when verification
+// succeeds (author signature is valid against a pinned trust-root key); otherwise
+// (reason, false) with an actionable, CISO-facing explanation of why the bundle is
+// not author-signature-verified. It never aborts.
+func verifyBundleAuthor(p bundleScopeParams, regMeta *registry.BundleMeta, c *registry.Client, ctx context.Context) (string, bool) {
+	// 1. The BundleMeta envelope carrying the author/registry signatures. Default
+	//    to the registry-fetched meta; a --meta sidecar lets a CISO verify fully
+	//    offline against signatures they obtained out-of-band.
+	meta := regMeta
+	if p.metaPath != "" {
+		m, err := loadBundleMetaSidecar(p.metaPath)
+		if err != nil {
+			return fmt.Sprintf("could not read --meta envelope: %v", err), false
 		}
-		in, _ := src["intent"].(map[string]any)
-		var deps []map[string]any
-		if raw, ok := src["data_dependencies"].([]any); ok {
-			for _, item := range raw {
-				if m, ok := item.(map[string]any); ok {
-					deps = append(deps, m)
-				}
+		meta = m
+	}
+	if meta == nil {
+		return "no BundleMeta envelope (signatures) available", false
+	}
+
+	// 2. The PINNED trust-roots — this is where the author key comes from. With no
+	//    pinned author key there is nothing to verify the author signature against,
+	//    so the bundle is UNVERIFIED (configure trust-roots).
+	tr, root, err := loadAndPickRootFromPath(p.trustRootsPath, p.registryURL)
+	if err != nil {
+		return fmt.Sprintf("trust-roots not usable (%v); configure with `skillctl trust add`", err), false
+	}
+
+	// 3. Identity fetcher: a from-registry root resolves the author key via the
+	//    registry client; a pinned root needs none (fully offline). We deliberately
+	//    do NOT pass a fetcher for pinned roots so the author key MUST come from the
+	//    local pin, not the (untrusted) registry.
+	var fetcher interface {
+		GetIdentity(ctx context.Context, id string) (*registry.Identity, error)
+	}
+	if root.IdentityKeysAuthorized != "pinned" {
+		fetcher = c
+	}
+
+	res, verr := verify.Verify(verify.VerifyOpts{
+		BundlePath:      p.bundlePath,
+		BundleMeta:      meta,
+		TrustRoot:       root,
+		IdentityFetcher: fetcher,
+		GovernanceMin:   p.governanceMin,
+		AllowYellow:     p.allowYellow,
+		Tenant:          resolveTenant(p.tenantFlag, tr),
+		Ctx:             ctx,
+	})
+	if verr != nil {
+		return fmt.Sprintf("author-signature chain failed: %v", verr), false
+	}
+	return "author signature verified, author=" + res.AuthorIdentity, true
+}
+
+// advertisedDigest returns the digest to compare a local .skb against in the
+// --bundle path: the registry-advertised `bundle.bundle_digest` (the value the
+// author signature covers). Falls back to the digest the caller resolved (e.g. an
+// @sha256 pin) when the registry row omits it. Either way the comparison is
+// against a value the bundle.json bytes must reproduce — a malicious registry that
+// lies about the digest can only cause a fail-closed mismatch, never an
+// authoritative display of an unsigned scope.
+func advertisedDigest(meta *registry.BundleMeta, resolved string) string {
+	if meta != nil && meta.Bundle != nil {
+		if d, ok := meta.Bundle["bundle_digest"].(string); ok && strings.TrimSpace(d) != "" {
+			return d
+		}
+	}
+	return resolved
+}
+
+// printIntentSource renders one provenance source's intent + data_dependencies,
+// each line tagged with the provenance label so a CISO sees which declaration is
+// author-signed vs post-admit. Prints nothing when the source is empty.
+func printIntentSource(stdout io.Writer, provenance, marker string, intentBlock map[string]any, deps []map[string]any) {
+	if intentBlock == nil && len(deps) == 0 {
+		return
+	}
+	fmt.Fprintf(stdout, "[%s] %s:\n", provenance, marker)
+	if intentBlock != nil {
+		if b, err := json.MarshalIndent(intentBlock, "    ", "  "); err == nil {
+			fmt.Fprintf(stdout, "  intent: %s\n", string(b))
+		}
+	}
+	if len(deps) > 0 {
+		fmt.Fprintf(stdout, "  data_dependencies (%d):\n", len(deps))
+		for _, d := range deps {
+			if b, err := json.Marshal(d); err == nil {
+				fmt.Fprintf(stdout, "    - %s\n", string(b))
 			}
 		}
-		if in != nil || len(deps) > 0 {
-			return in, deps, true
+	}
+}
+
+// scopeProvenance labels WHERE a declared scope came from, so a CISO can tell at
+// a glance whether today's declaration is author-signed or merely reported by an
+// untrusted registry (SPEC-0196 §12 Q1 / P2b).
+//
+// SECURITY INVARIANT (P2b re-challenge fix): a scope may be labeled
+// provSignedManifest / AUTHORITATIVE *only* when the bundle's AUTHOR SIGNATURE was
+// cryptographically verified against a PINNED trust-root author key — i.e. the
+// full `verify.Verify` chain (digest recompute + stepVerifyAuthor ed25519 +
+// registry sig + governance + revocation) succeeded. A bare digest match against
+// the registry-advertised `bundle.bundle_digest` is NOT author-signature
+// verification: that field is plain, unsigned, registry-supplied, so a malicious
+// registry can serve ITS OWN .skb, advertise ITS digest, and the bytes "match"
+// without any pinned author having signed them (red-team Attack-d).
+//
+// When the .skb digest-matches the advertised digest but the author signature
+// could NOT be verified (no trust-roots, from-registry root with no pinned
+// author, author sig invalid, governance/revocation failure, or any verify
+// error), the scope is labeled provDigestMatched / UNVERIFIED — NEVER
+// AUTHORITATIVE. The registry's parsed `manifest` copy (meta.Manifest) is
+// provRegistryReported / UNVERIFIED and the mutable post-admit PATCH row
+// (meta.Bundle) is provBundleRow / advisory. Mirrors verify.ScopeProvenance for
+// the signed case.
+const (
+	provSignedManifest   = "signed-manifest"   // author-signature VERIFIED against a pinned trust-root key (AUTHORITATIVE)
+	provDigestMatched    = "digest-matched"    // local .skb digest matched advertised digest, but author sig NOT verified (UNVERIFIED)
+	provRegistryReported = "registry-reported" // from the registry's untrusted parsed manifest copy (UNVERIFIED)
+	provBundleRow        = "bundle-row"        // from the mutable post-admit PATCH row (advisory)
+)
+
+// declaredView is the provenance-tagged result of reading a bundle's declared
+// intent + data_dependencies from up to four sources, in DECREASING trust:
+//
+//   - signed:   read from a local .skb whose AUTHOR SIGNATURE was cryptographically
+//     verified against a pinned trust-root key (full verify.Verify chain succeeded).
+//     AUTHORITATIVE — author-signature-covered. Populated ONLY when
+//     `intent show --bundle <file.skb>` ran the real verify chain to success.
+//     NEVER populated from a bare digest match or the registry response.
+//   - digestMatched: read from a local .skb whose digest matched the advertised
+//     digest, but whose author signature could NOT be verified (no trust-roots,
+//     from-registry root with no pinned author, author sig invalid, or any verify
+//     failure). UNVERIFIED — a digest match against a registry-supplied, unsigned
+//     `bundle_digest` is NOT author-signature verification (Attack-d).
+//   - registry: read from the registry's parsed `manifest` copy (meta.Manifest).
+//     UNVERIFIED — plain HTTP, no digest recompute, no signature check. A
+//     malicious registry can put anything here, so it is NOT authoritative.
+//   - row:      read from the mutable post-admit PATCH row (meta.Bundle). Advisory.
+//
+// ALL present sources are surfaced — a CISO must see what is author-signed vs what
+// the registry merely claims, not just the winning one.
+type declaredView struct {
+	signedIntent map[string]any
+	signedDeps   []map[string]any
+	digestIntent map[string]any
+	digestDeps   []map[string]any
+	digestDetail string // why the author sig could not be verified (for the UNVERIFIED label)
+	regIntent    map[string]any
+	regDeps      []map[string]any
+	rowIntent    map[string]any
+	rowDeps      []map[string]any
+}
+
+// hasSigned reports whether an AUTHOR-SIGNATURE-VERIFIED declaration is present.
+func (v declaredView) hasSigned() bool {
+	return v.signedIntent != nil || len(v.signedDeps) > 0
+}
+
+// hasDigestMatched reports whether a digest-matched-but-UNVERIFIED declaration is
+// present (the .skb bytes reproduced the advertised digest, but no pinned author
+// signature was verified over them).
+func (v declaredView) hasDigestMatched() bool {
+	return v.digestIntent != nil || len(v.digestDeps) > 0
+}
+
+// hasRegistry reports whether the untrusted registry-manifest copy carried a
+// declaration. Present ≠ authoritative — see provRegistryReported.
+func (v declaredView) hasRegistry() bool {
+	return v.regIntent != nil || len(v.regDeps) > 0
+}
+
+// hasRow reports whether any mutable bundle-row declaration is present.
+func (v declaredView) hasRow() bool {
+	return v.rowIntent != nil || len(v.rowDeps) > 0
+}
+
+// authoritativeIntent returns the declaration a consumer should treat as the
+// strongest available, plus its provenance. The ONLY authoritative source is the
+// AUTHOR-SIGNATURE-VERIFIED local bundle (provSignedManifest). A digest-matched
+// bundle whose author signature was NOT verified (provDigestMatched), the
+// registry-manifest copy (provRegistryReported) and the bundle row (provBundleRow)
+// are all UNVERIFIED / advisory and are NEVER labeled author-signed.
+func (v declaredView) authoritativeIntent() (map[string]any, []map[string]any, string) {
+	if v.hasSigned() {
+		return v.signedIntent, v.signedDeps, provSignedManifest
+	}
+	if v.hasDigestMatched() {
+		return v.digestIntent, v.digestDeps, provDigestMatched
+	}
+	if v.hasRegistry() {
+		return v.regIntent, v.regDeps, provRegistryReported
+	}
+	if v.hasRow() {
+		return v.rowIntent, v.rowDeps, provBundleRow
+	}
+	return nil, nil, ""
+}
+
+// pickDeclared pulls (intent, data_dependencies) out of a raw map (a registry
+// envelope source, or a digest-verified bundle.json). Tolerates absence and
+// non-object entries.
+func pickDeclared(src map[string]any) (map[string]any, []map[string]any) {
+	if src == nil {
+		return nil, nil
+	}
+	in, _ := src["intent"].(map[string]any)
+	var deps []map[string]any
+	if raw, ok := src["data_dependencies"].([]any); ok {
+		for _, item := range raw {
+			if m, ok := item.(map[string]any); ok {
+				deps = append(deps, m)
+			}
 		}
-		return nil, nil, false
 	}
-	if in, deps, ok := pick(meta.Bundle); ok {
-		return in, deps
-	}
-	in, deps, _ := pick(meta.Manifest)
 	return in, deps
+}
+
+// extractDeclaredView pulls the declared intent + data_dependencies out of the
+// UNTRUSTED registry response. CRITICAL P2b invariant: this reads only the
+// registry's representation, so NOTHING it returns is authoritative. The registry
+// `manifest` copy (meta.Manifest) is tagged registry-reported / UNVERIFIED and the
+// post-admit PATCH row (meta.Bundle) is tagged bundle-row / advisory. The
+// author-signed scope is populated SEPARATELY, only from a digest-verified local
+// .skb via overlaySignedScope — see runIntentShow's `--bundle` path. This is the
+// SAME trust boundary `verify` enforces (verify.go collectDeclaredScopes:
+// "deliberately do NOT read scope from meta.Manifest").
+func extractDeclaredView(meta *registry.BundleMeta) declaredView {
+	var v declaredView
+	v.regIntent, v.regDeps = pickDeclared(meta.Manifest)
+	v.rowIntent, v.rowDeps = pickDeclared(meta.Bundle)
+	return v
+}
+
+// overlaySignedScope populates the AUTHORITATIVE signed source of a declaredView
+// from a local .skb whose AUTHOR SIGNATURE was cryptographically verified against a
+// pinned trust-root key (the full verify.Verify chain succeeded). This is the ONLY
+// path that may set provSignedManifest. The caller MUST have run verify.Verify to
+// success before calling this — a bare digest match is NOT sufficient.
+func (v *declaredView) overlaySignedScope(signedIntent map[string]any, signedDeps []map[string]any) {
+	v.signedIntent = signedIntent
+	v.signedDeps = signedDeps
+}
+
+// overlayDigestMatchedScope populates the UNVERIFIED digest-matched source from a
+// local .skb whose digest matched the advertised digest but whose author signature
+// could NOT be verified. detail explains why (no trust-roots, invalid sig, etc.) so
+// the CISO-facing label is actionable. This NEVER yields provSignedManifest.
+func (v *declaredView) overlayDigestMatchedScope(intent map[string]any, deps []map[string]any, detail string) {
+	v.digestIntent = intent
+	v.digestDeps = deps
+	v.digestDetail = detail
 }
 
 func dashOrValue(s string) string {
@@ -719,7 +1096,9 @@ func extractSkillPositional(args []string) (skill string, rest []string) {
 			switch name {
 			case "registry", "side-effects", "destructive", "network",
 				"human-review-required", "subprocess", "summary",
-				"data-dep", "from-yaml", "timeout":
+				"data-dep", "data-scopes", "from-yaml", "timeout",
+				"bundle", "governance-intent", "meta", "trust-roots",
+				"governance-min", "tenant":
 				skipNextValue = true
 			}
 			continue
