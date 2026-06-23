@@ -205,13 +205,16 @@ func readAndVerifyTrail(home string) trailVerification {
 			tv.Unverified++
 			continue
 		}
-		// Replay: a second occurrence of an event_id we've already counted.
+		// Replay: a second occurrence of an event_id we've already counted is a
+		// REPLAY, not new evidence — it must NOT inflate the verified-evidence
+		// count (P2 challenge-gate finding). Count it as a replay and move on, so
+		// `Verified` reflects DISTINCT verified events only.
 		if rec.EventID != "" {
 			if _, dup := seen[rec.EventID]; dup {
 				tv.Replays++
-			} else {
-				seen[rec.EventID] = struct{}{}
+				continue
 			}
+			seen[rec.EventID] = struct{}{}
 		}
 		if havePub && skillgate.VerifyInvocationRecord(&rec, pubKey, base64.StdEncoding.DecodeString) {
 			tv.Verified++

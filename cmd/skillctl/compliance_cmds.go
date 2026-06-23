@@ -72,7 +72,12 @@ func trailEvidenceSentence(tv trailVerification) string {
 	if key == "" {
 		key = "(device key unavailable — cannot verify)"
 	}
-	return fmt.Sprintf("Per-invocation signed events (SPEC-0202): %d/%d invocation records device-signed & verified offline (%d unverified, %d replays) by device key %s. Append-only ~/.claude/skillctl/invocation-trail.jsonl.",
+	// Honest framing (P2 challenge-gate F-5.1): the device key is LOCALLY ANCHORED
+	// — verification proves integrity-since-signing on THIS host, not authenticity
+	// against an external root (registry attestation of the device key is a
+	// follow-up). Do not let an auditor read self-referential verification as
+	// external attestation.
+	return fmt.Sprintf("Per-invocation signed events (SPEC-0202): %d/%d invocation records pass local device-key integrity verification (%d unverified, %d replays). Device key %s is locally anchored (integrity-since-signing on this host; not yet registry-attested). Append-only ~/.claude/skillctl/invocation-trail.jsonl.",
 		tv.Verified, tv.Total, tv.Unverified, tv.Replays, key)
 }
 

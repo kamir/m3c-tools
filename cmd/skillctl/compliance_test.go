@@ -127,11 +127,15 @@ func TestCompliance_Art12PointsAtSignedTrail(t *testing.T) {
 	if art12 == "" {
 		t.Fatalf("Art.12 control row missing")
 	}
-	if !bytes.Contains([]byte(art12), []byte("2/2 invocation records device-signed & verified")) {
+	if !bytes.Contains([]byte(art12), []byte("2/2 invocation records pass local device-key integrity verification")) {
 		t.Errorf("Art.12 evidence does not reflect the signed trail; got %q", art12)
 	}
 	if !bytes.Contains([]byte(art12), []byte("device:")) {
 		t.Errorf("Art.12 evidence missing device key id; got %q", art12)
+	}
+	// Honesty (P2 F-5.1): the sentence must NOT overclaim external attestation.
+	if !bytes.Contains([]byte(art12), []byte("locally anchored")) {
+		t.Errorf("Art.12 evidence must state the local-anchor trust boundary; got %q", art12)
 	}
 }
 
