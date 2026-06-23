@@ -124,6 +124,7 @@ func runAuditSecurity(args []string, stdout, stderr io.Writer) int {
 			Skill        string                  `json:"skill"`
 			SkillMD      string                  `json:"skill_md"`
 			BodyScan     bodyscan.BodyScanReport `json:"bodyscan"`
+			NotScanned   bool                    `json:"not_scanned"`
 			SelfAttested *bool                   `json:"self_attested"`
 			ReviewerID   string                  `json:"reviewer_id,omitempty"`
 			AuthorID     string                  `json:"author_id,omitempty"`
@@ -131,6 +132,7 @@ func runAuditSecurity(args []string, stdout, stderr io.Writer) int {
 			Skill:      name,
 			SkillMD:    skillMD,
 			BodyScan:   rep,
+			NotScanned: bodyscan.NotScanned(rep),
 			ReviewerID: reviewer,
 			AuthorID:   author,
 		}
@@ -156,6 +158,9 @@ func runAuditSecurity(args []string, stdout, stderr io.Writer) int {
 	if reviewer != "" || author != "" {
 		fmt.Fprintf(stdout, "  reviewer_id: %s\n", emptyDash(reviewer))
 		fmt.Fprintf(stdout, "  author_id:   %s\n", emptyDash(author))
+	}
+	if bodyscan.NotScanned(rep) {
+		fmt.Fprintln(stdout, "note:          body NOT scanned (oversized) — verdict is advisory, not a clean signal")
 	}
 	fmt.Fprintln(stdout, "")
 	renderBodyScanTable(stdout, skillMD, rep)
