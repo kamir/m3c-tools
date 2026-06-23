@@ -275,6 +275,37 @@ func TestAgentID_RevokedOffline(t *testing.T) {
 	}
 }
 
+// TestAgentID_BareCustomIDRevocable — P3 challenge gate (security LOW #1): a
+// custom --agent-id issued WITHOUT the agent: scheme must still be revocable.
+// Before the fix, `issue --agent-id custombot` stored payload id "custombot"
+// while `revoke custombot` keyed "agent:custombot", so the revocation silently
+// missed. `issue` now normalizes to the agent: scheme so the key-spaces agree.
+func TestAgentID_BareCustomIDRevocable(t *testing.T) {
+	f := buildAgentFixture(t, false)
+	f.issue(t, "custombot", "cb.json", "--expires", "2099-12-31T00:00:00Z") // bare, no agent: prefix
+
+	data, err := os.ReadFile(filepath.Join(f.dir, "cb.json"))
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if !strings.Contains(string(data), "agent:custombot") {
+		t.Fatalf("bare --agent-id must be normalized to the agent: scheme; got: %s", data)
+	}
+
+	// Revoke by the bare id (revoke also prefixes) → the key-spaces now agree.
+	listPath := filepath.Join(f.dir, "revs.json")
+	var so, se bytes.Buffer
+	if rc := runAgentIDRevoke([]string{
+		"custombot", "--reason", "key_compromise",
+		"--registry", f.regURL, "--key", f.regKeyPath, "--out", listPath,
+	}, &so, &se); rc != exitOK {
+		t.Fatalf("revoke: exit %d, stderr=%s", rc, se.String())
+	}
+	if code, _, _ := f.verify(t, "cb.json", "--revocations", listPath); code != exitBundleRevoked {
+		t.Fatalf("want exit %d (revoked) for a bare custom id, got %d — silent revocation miss", exitBundleRevoked, code)
+	}
+}
+
 // TestAgentID_ForgedRevocationListRefused — a revocation list signed by a key NOT
 // pinned in trust-roots is refused (exit 12), never silently "not revoked".
 func TestAgentID_ForgedRevocationListRefused(t *testing.T) {

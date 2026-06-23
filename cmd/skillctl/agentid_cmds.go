@@ -172,6 +172,12 @@ func runAgentIDIssue(args []string, stdout, stderr io.Writer) int {
 	id := strings.TrimSpace(*agentIDFlag)
 	if id == "" {
 		id = newAgentID()
+	} else if !strings.HasPrefix(strings.ToLower(id), "agent:") {
+		// Normalize a custom --agent-id to the agent: scheme, exactly as `revoke`
+		// does, so the issue and revoke key-spaces always agree. Without this a
+		// bare custom id (payload "custombot") would never match a revocation
+		// entry ("agent:custombot") — a silent revocation miss (P3 challenge gate).
+		id = "agent:" + id
 	}
 
 	payload := agentid.Payload{
