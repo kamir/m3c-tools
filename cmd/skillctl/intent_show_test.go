@@ -13,7 +13,10 @@ package main
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -250,70 +253,288 @@ func packIntentBundle(t *testing.T, deps []skillbundle.DataDependency) (string, 
 	return out, "sha256:" + hex.EncodeToString(d[:])
 }
 
-// TestIntentShow_DigestVerifiedBundleIsAuthoritative: when --bundle points at a
-// .skb whose digest matches the registry-advertised digest, its signed scope is
-// shown as signed-manifest / AUTHORITATIVE.
-func TestIntentShow_DigestVerifiedBundleIsAuthoritative(t *testing.T) {
+// signedIntentFixture is a fully-wired `intent show --bundle` scenario on disk:
+// a real packed .skb carrying a typed data-scope, signed by an author key whose
+// pubkey is PINNED in trust-roots, with a BundleMeta (served by an httptest
+// registry) carrying the author + registry signature rows. This is the (b)
+// scenario the re-challenge requires — and the substrate the Attack-d test
+// perturbs by swapping in an attacker-signed bundle the pinned author never
+// signed.
+type signedIntentFixture struct {
+	bundlePath string
+	digest     string // "sha256:<hex>"
+	authorID   string
+	regURL     string
+	trPath     string
+	authorPriv ed25519.PrivateKey
+	regPriv    ed25519.PrivateKey
+	srv        *httptest.Server
+}
+
+// buildSignedIntentFixture packs+signs a scoped bundle and stands up a registry
+// that advertises its digest + signatures. The trust-roots pin the author key, so
+// verify.Verify can validate the author signature fully offline (pinned mode).
+func buildSignedIntentFixture(t *testing.T, deps []skillbundle.DataDependency) signedIntentFixture {
+	t.Helper()
+	bundlePath, digest := packIntentBundle(t, deps)
+
+	authorPub, authorPriv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("author keygen: %v", err)
+	}
+	regPub, regPriv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("reg keygen: %v", err)
+	}
+	authorID := "id:kamir@m3c"
+
+	dRaw := digestRaw(t, digest)
+	meta := registry.BundleMeta{
+		Bundle: map[string]any{
+			"bundle_digest": digest,
+			"name":          "scoped",
+			"version":       "1.0.0",
+			"status":        "admitted",
+		},
+		Signatures: []registry.SignatureRow{
+			{Role: "author", IdentityID: authorID, SignatureB64: signB64(authorPriv, dRaw), Status: "active"},
+			{Role: "registry", IdentityID: "id:registry@aims-core", SignatureB64: signB64(regPriv, dRaw), Status: "active"},
+		},
+		CurrentGovernance: "green",
+		Manifest:          map[string]any{},
+	}
+	srv := metaServer(t, meta)
+	t.Cleanup(srv.Close)
+
+	// The trust-root is matched by the live --registry URL, so it MUST pin the
+	// httptest server URL (known only after the server starts).
+	trPath := filepath.Join(t.TempDir(), "trust-roots.pinned.yaml")
+	writePinnedTrustRoots(t, trPath, srv.URL,
+		base64.StdEncoding.EncodeToString(regPub),
+		authorID, base64.StdEncoding.EncodeToString(authorPub))
+
+	return signedIntentFixture{
+		bundlePath: bundlePath, digest: digest, authorID: authorID, regURL: srv.URL,
+		trPath: trPath, authorPriv: authorPriv, regPriv: regPriv, srv: srv,
+	}
+}
+
+// digestRaw decodes a "sha256:<hex>" digest back to its 32 raw bytes for signing.
+func digestRaw(t *testing.T, digest string) [32]byte {
+	t.Helper()
+	hexPart := strings.TrimPrefix(digest, "sha256:")
+	raw, err := hex.DecodeString(hexPart)
+	if err != nil || len(raw) != 32 {
+		t.Fatalf("bad digest %q: %v", digest, err)
+	}
+	var out [32]byte
+	copy(out[:], raw)
+	return out
+}
+
+// servePinnedMeta restands a registry that serves a custom BundleMeta but reuses
+// the fixture's registry URL pin (so the trust-root still matches). Used by
+// Attack-d to swap in attacker signatures while keeping the same --registry pin.
+func servePinnedMeta(t *testing.T, meta registry.BundleMeta) *httptest.Server {
+	t.Helper()
+	srv := metaServer(t, meta)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// TestIntentShow_PinnedAuthorSignedBundleIsAuthoritative (re-challenge scenario b):
+// a genuinely author-signed bundle whose author key IS pinned in trust-roots is
+// shown as signed-manifest / AUTHORITATIVE — and ONLY because the author signature
+// verified, not because a digest happened to match.
+func TestIntentShow_PinnedAuthorSignedBundleIsAuthoritative(t *testing.T) {
+	deps := []skillbundle.DataDependency{
+		{ID: "ds:fs/cwd", Kind: "local_fs", Access: "read", Scope: "<cwd>/decks/**", Reason: "read decks"},
+	}
+	f := buildSignedIntentFixture(t, deps)
+
+	for _, asJSON := range []bool{false, true} {
+		var stdout, stderr bytes.Buffer
+		args := []string{"@" + f.digest, "--registry", f.srv.URL, "--bundle", f.bundlePath, "--trust-roots", f.trPath}
+		if asJSON {
+			args = append(args, "--json")
+		}
+		code := runIntentShow(args, &stdout, &stderr)
+		if code != exitOK {
+			t.Fatalf("(json=%v) intent show exit=%d, stderr=%s", asJSON, code, stderr.String())
+		}
+		out := stdout.String()
+		if !strings.Contains(out, "ds:fs/cwd") {
+			t.Errorf("(json=%v) expected the signed scope printed, got:\n%s", asJSON, out)
+		}
+		if asJSON {
+			var got map[string]any
+			if err := json.Unmarshal([]byte(out), &got); err != nil {
+				t.Fatalf("not JSON: %v\n%s", err, out)
+			}
+			if got["authoritative"] != true {
+				t.Errorf("authoritative=%v, want true (author sig pinned+verified)", got["authoritative"])
+			}
+			if got["declaration_provenance"] != provSignedManifest {
+				t.Errorf("declaration_provenance=%v, want signed-manifest", got["declaration_provenance"])
+			}
+		} else if !strings.Contains(out, "signed-manifest (AUTHORITATIVE") {
+			t.Errorf("pinned-author-signed scope must be AUTHORITATIVE, got:\n%s", out)
+		}
+	}
+}
+
+// TestIntentShow_AttackD_MaliciousRegistryUnsignedBundle (re-challenge scenario a,
+// the MERGE-BLOCKER): an attacker packs their OWN .skb (carrying a scope the pinned
+// author never signed) and a malicious registry advertises ITS digest — but there
+// is NO valid pinned-author signature over those bytes. `intent show --bundle` must
+// print digest-matched / UNVERIFIED, authoritative:false, and NEVER
+// author-signature-covered / AUTHORITATIVE.
+func TestIntentShow_AttackD_MaliciousRegistryUnsignedBundle(t *testing.T) {
+	// The attacker's bundle carries a scope a CISO would refuse if it looked signed.
+	evil := []skillbundle.DataDependency{
+		{ID: "ds:secrets/keychain", Kind: "secrets_store", Access: "read", Scope: "keychain://*", Reason: "smuggled scope"},
+	}
+	attackerBundle, attackerDigest := packIntentBundle(t, evil)
+
+	// A legitimate pinned-author trust-root exists, but the attacker bundle was
+	// NOT signed by that author. The malicious registry advertises the attacker's
+	// digest and stuffs an ATTACKER-signed author row (a key the trust-root does
+	// NOT pin) hoping it passes for author-signed.
+	authorPub, _, _ := ed25519.GenerateKey(rand.Reader)    // pinned author (never signed the attacker bundle)
+	_, attackerPriv, _ := ed25519.GenerateKey(rand.Reader) // attacker key (not pinned)
+	regPub, regPriv, _ := ed25519.GenerateKey(rand.Reader) // registry key (pinned, so the chain reaches author)
+	authorID := "id:kamir@m3c"
+	dRaw := digestRaw(t, attackerDigest)
+
+	meta := registry.BundleMeta{
+		Bundle: map[string]any{
+			"bundle_digest": attackerDigest, // registry advertises ITS bundle's digest
+			"status":        "admitted",
+		},
+		Signatures: []registry.SignatureRow{
+			// Author row signed by the ATTACKER key, claiming the pinned author's id.
+			{Role: "author", IdentityID: authorID, SignatureB64: signB64(attackerPriv, dRaw), Status: "active"},
+			{Role: "registry", IdentityID: "id:registry@aims-core", SignatureB64: signB64(regPriv, dRaw), Status: "active"},
+		},
+		CurrentGovernance: "green",
+		Manifest: map[string]any{
+			"data_dependencies": []any{map[string]any{
+				"id": "ds:secrets/keychain", "kind": "secrets_store", "access": "read", "scope": "keychain://*",
+			}},
+		},
+	}
+	srv := servePinnedMeta(t, meta)
+
+	// Pin the live server URL so the trust-root matches the --registry passed below.
+	trPath := filepath.Join(t.TempDir(), "trust-roots.pinned.yaml")
+	writePinnedTrustRoots(t, trPath, srv.URL,
+		base64.StdEncoding.EncodeToString(regPub),
+		authorID, base64.StdEncoding.EncodeToString(authorPub))
+
+	for _, asJSON := range []bool{false, true} {
+		var stdout, stderr bytes.Buffer
+		args := []string{"@" + attackerDigest, "--registry", srv.URL, "--bundle", attackerBundle, "--trust-roots", trPath}
+		if asJSON {
+			args = append(args, "--json")
+		}
+		code := runIntentShow(args, &stdout, &stderr)
+		if code != exitOK {
+			t.Fatalf("(json=%v) intent show exit=%d, stderr=%s", asJSON, code, stderr.String())
+		}
+		out := stdout.String()
+		if asJSON {
+			var got map[string]any
+			if err := json.Unmarshal([]byte(out), &got); err != nil {
+				t.Fatalf("not JSON: %v\n%s", err, out)
+			}
+			if got["authoritative"] != false {
+				t.Errorf("Attack-d: authoritative=%v, want false (no valid pinned-author signature)", got["authoritative"])
+			}
+			if got["declaration_provenance"] == provSignedManifest {
+				t.Errorf("Attack-d: declaration_provenance must NOT be signed-manifest")
+			}
+			sources, _ := got["sources"].(map[string]any)
+			signed, _ := sources[provSignedManifest].(map[string]any)
+			if signed == nil || signed["data_dependencies"] != nil {
+				t.Errorf("Attack-d: signed-manifest source must be EMPTY (author sig not verified): %+v", signed)
+			}
+		} else {
+			if strings.Contains(out, "AUTHORITATIVE") || strings.Contains(out, "author-signature-covered") {
+				t.Errorf("Attack-d: attacker bundle shown as AUTHORITATIVE:\n%s", out)
+			}
+			if !strings.Contains(out, "digest-matched (author signature NOT verified") {
+				t.Errorf("Attack-d: expected digest-matched/UNVERIFIED label, got:\n%s", out)
+			}
+		}
+	}
+}
+
+// TestIntentShow_AttackD_NoTrustRootsIsUnverified (re-challenge scenario d): an
+// honest @sha256 out-of-band digest pin WITHOUT trust-roots configured is NOT
+// author-signature verification — it is a user-asserted digest. Without a pinned
+// author key the scope must be digest-matched / UNVERIFIED, never
+// author-signature-covered.
+func TestIntentShow_AttackD_NoTrustRootsIsUnverified(t *testing.T) {
+	// Point HOME at an empty dir so the DEFAULT trust-roots path does not exist.
+	t.Setenv("HOME", t.TempDir())
+
 	deps := []skillbundle.DataDependency{
 		{ID: "ds:fs/cwd", Kind: "local_fs", Access: "read", Scope: "<cwd>/decks/**", Reason: "read decks"},
 	}
 	bundlePath, digest := packIntentBundle(t, deps)
-
 	meta := registry.BundleMeta{
 		Bundle: map[string]any{
-			"bundle_digest": digest, // honest registry advertises the real digest
+			"bundle_digest": digest, // honest registry, real digest
 			"status":        "admitted",
 		},
 		CurrentGovernance: "yellow",
 		Manifest:          map[string]any{},
 	}
-	srv := metaServer(t, meta)
-	defer srv.Close()
+	srv := servePinnedMeta(t, meta)
 
 	var stdout, stderr bytes.Buffer
+	// No --trust-roots flag → default path (under the empty HOME) → none configured.
 	code := runIntentShow([]string{"@" + digest, "--registry", srv.URL, "--bundle", bundlePath}, &stdout, &stderr)
 	if code != exitOK {
 		t.Fatalf("intent show exit=%d, stderr=%s", code, stderr.String())
 	}
 	out := stdout.String()
-	if !strings.Contains(out, "signed-manifest (AUTHORITATIVE") {
-		t.Errorf("digest-verified bundle scope must be AUTHORITATIVE, got:\n%s", out)
+	if strings.Contains(out, "AUTHORITATIVE") || strings.Contains(out, "author-signature-covered") {
+		t.Errorf("no trust-roots: out-of-band digest pin must NOT be author-signature-covered:\n%s", out)
 	}
-	if !strings.Contains(out, "ds:fs/cwd") {
-		t.Errorf("expected the signed scope to be printed, got:\n%s", out)
+	if !strings.Contains(out, "digest-matched (author signature NOT verified") {
+		t.Errorf("no trust-roots: expected digest-matched/UNVERIFIED label, got:\n%s", out)
+	}
+	if !strings.Contains(stderr.String(), "trust-roots not usable") {
+		t.Errorf("expected an actionable trust-roots reason on stderr, got:\n%s", stderr.String())
 	}
 }
 
-// TestIntentShow_BundleDigestMismatchFailsClosed: a --bundle whose digest does NOT
-// match the registry-advertised digest (the adversary swapped bytes) must fail
-// closed — NOT silently show the tampered scope as authoritative.
-func TestIntentShow_BundleDigestMismatchFailsClosed(t *testing.T) {
+// TestIntentShow_AttackD_DigestMismatchNotAuthoritative (re-challenge scenario c):
+// a --bundle whose digest does NOT match the registry-advertised digest (the
+// adversary swapped bytes after signing) fails closed — the swapped scope is NEVER
+// shown as authoritative; only the UNVERIFIED registry view stands.
+func TestIntentShow_AttackD_DigestMismatchNotAuthoritative(t *testing.T) {
 	deps := []skillbundle.DataDependency{
 		{ID: "ds:fs/cwd", Kind: "local_fs", Access: "read", Scope: "<cwd>/decks/**", Reason: "read decks"},
 	}
-	bundlePath, _ := packIntentBundle(t, deps)
+	f := buildSignedIntentFixture(t, deps)
 
-	// Registry advertises a DIFFERENT digest than the local .skb actually has.
-	meta := registry.BundleMeta{
-		Bundle: map[string]any{
-			"bundle_digest": "sha256:" + strings.Repeat("ff", 32),
-			"status":        "admitted",
-		},
-		CurrentGovernance: "yellow",
-		Manifest:          map[string]any{},
+	// Append a byte to the .skb AFTER the meta was signed → digest mismatch.
+	skb, _ := os.ReadFile(f.bundlePath)
+	if err := os.WriteFile(f.bundlePath, append(skb, 'X'), 0o644); err != nil {
+		t.Fatalf("tamper: %v", err)
 	}
-	srv := metaServer(t, meta)
-	defer srv.Close()
 
 	var stdout, stderr bytes.Buffer
-	code := runIntentShow([]string{"@sha256:" + strings.Repeat("ff", 32), "--registry", srv.URL, "--bundle", bundlePath}, &stdout, &stderr)
-	if code == exitOK {
-		t.Fatalf("digest mismatch must NOT exit 0; stdout=%s", stdout.String())
+	code := runIntentShow([]string{"@" + f.digest, "--registry", f.srv.URL, "--bundle", f.bundlePath, "--trust-roots", f.trPath}, &stdout, &stderr)
+	if code != exitOK {
+		t.Fatalf("intent show exit=%d, stderr=%s", code, stderr.String())
 	}
 	if strings.Contains(stdout.String(), "AUTHORITATIVE") {
 		t.Errorf("a digest-mismatched bundle must NOT be shown as authoritative:\n%s", stdout.String())
 	}
-	if !strings.Contains(stderr.String(), "did not digest-verify") {
-		t.Errorf("expected a digest-verify failure message, got stderr:\n%s", stderr.String())
+	if !strings.Contains(stderr.String(), "did not digest-match") {
+		t.Errorf("expected a digest-match failure note, got stderr:\n%s", stderr.String())
 	}
 }
