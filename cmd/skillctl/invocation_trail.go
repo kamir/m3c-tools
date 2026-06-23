@@ -94,8 +94,10 @@ func defaultInvocationTrailSink(home string, line []byte) error {
 //
 // The record's transient fields are filled here: Schema, OccurredAt (if empty),
 // and DeviceKeyID (from the resolved device key). The agent_identity /
-// owner_identity P3 placeholders are left empty (v1). The signature covers the
-// canonical bytes; the line written is the full JSON including the signature.
+// owner_identity fields (SPEC-0277 P1) are taken AS-SET from the caller — empty
+// when no AgentID is configured (byte-identical to v1), or agent:<id> / id:<owner>
+// when the gate has an active mandate. The signature covers the canonical bytes;
+// the line written is the full JSON including the signature.
 func appendSignedInvocation(home string, rec skillgate.InvocationRecord) {
 	defer func() { _ = recover() }()
 	if home == "" {
@@ -121,9 +123,12 @@ func appendSignedInvocation(home string, rec skillgate.InvocationRecord) {
 		rec.OccurredAt = time.Now().UTC().Format("2006-01-02T15:04:05Z")
 	}
 	rec.DeviceKeyID = key.KeyID()
-	// P3 placeholders stay empty in v1 (SPEC-0277 forward-compat).
-	rec.AgentIdentity = ""
-	rec.OwnerIdentity = ""
+	// SPEC-0277 P1: the agent_identity / owner_identity lines are populated by the
+	// CALLER when an AgentID is configured (a VALUE change at the fixed canonical
+	// line — NOT a format change, see skillgate.CanonicalizeInvocationRecord). We
+	// no longer clobber them to "" here, so the gate can stamp agent:<id> /
+	// id:<owner> onto the always-on signed evidence. Callers with no AgentID leave
+	// them empty and the record is byte-identical to v1.
 
 	if err := skillgate.SignInvocationRecord(&rec, key.Sign, base64.StdEncoding.EncodeToString); err != nil {
 		return // refused to sign ambiguous bytes (e.g. newline-smuggled field)
