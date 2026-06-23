@@ -50,6 +50,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/skillctl/datascope"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 	"gopkg.in/yaml.v3"
@@ -60,9 +61,9 @@ import (
 // caller can declare multiple dependencies on one command line.
 type stringSliceFlag []string
 
-func (s *stringSliceFlag) String() string         { return strings.Join(*s, ",") }
-func (s *stringSliceFlag) Set(v string) error     { *s = append(*s, v); return nil }
-func (s *stringSliceFlag) Get() any               { return []string(*s) }
+func (s *stringSliceFlag) String() string     { return strings.Join(*s, ",") }
+func (s *stringSliceFlag) Set(v string) error { *s = append(*s, v); return nil }
+func (s *stringSliceFlag) Get() any           { return []string(*s) }
 
 // intentDeclareReq is the wire shape of `PATCH /api/skills/bundles/<digest>/intent`.
 // The endpoint expects the new (proposed) `intent` block plus an explicit
@@ -94,15 +95,16 @@ type intentYAMLFile struct {
 // intentDeclareOpts captures everything runIntentDeclareWithClient needs.
 // Built by the flag-parser; tests can construct it directly.
 type intentDeclareOpts struct {
-	skill          string
-	registryURL    string
-	dryRun         bool
-	confirm        bool
-	timeout        time.Duration
-	httpClient     *http.Client // injected by tests
-	intent         map[string]any
-	dataDeps       []map[string]any
-	resolveDigest  func(ctx context.Context, c *registry.Client, name string) (string, error) // injected
+	skill         string
+	registryURL   string
+	dryRun        bool
+	confirm       bool
+	timeout       time.Duration
+	httpClient    *http.Client // injected by tests
+	intent        map[string]any
+	dataDeps      []map[string]any
+	governance    string                                                                     // governance_intent for the §3.3 destructive_green client check
+	resolveDigest func(ctx context.Context, c *registry.Client, name string) (string, error) // injected
 }
 
 // runIntent is the dispatcher for `skillctl intent <subcommand>`. Today only
@@ -116,6 +118,8 @@ func runIntent(args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "declare":
 		return runIntentDeclare(args[1:], stdout, stderr)
+	case "show":
+		return runIntentShow(args[1:], stdout, stderr)
 	case "help", "--help", "-h":
 		printIntentUsage(stdout)
 		return exitOK
@@ -139,8 +143,11 @@ func runIntentDeclare(args []string, stdout, stderr io.Writer) int {
 	hrFlag := fs.String("human-review-required", "", "Author claim: skill requires human review beyond governance attestation. true|false.")
 	subprocessFlag := fs.String("subprocess", "", "Comma-separated subprocess allowlist (e.g. pandoc,git).")
 	summaryFlag := fs.String("summary", "", "One-line plain-English summary of the skill's intent.")
+	governanceFlag := fs.String("governance-intent", "", "Bundle governance intent (green|yellow|red) — checked against the §3.3 destructive_green cross-rule.")
+	var dataScopeFlag stringSliceFlag
+	fs.Var(&dataScopeFlag, "data-scopes", "Typed SPEC-0196 data-scope JSON declaration; repeatable. Validated client-side through pkg/skillctl/datascope before the PATCH.")
 	var dataDepFlag stringSliceFlag
-	fs.Var(&dataDepFlag, "data-dep", "Per-dependency JSON declaration; repeatable.")
+	fs.Var(&dataDepFlag, "data-dep", "DEPRECATED alias for --data-scopes (same JSON shape, same validation). Prefer --data-scopes.")
 	fromYAML := fs.String("from-yaml", "", "Read the entire intent + data_dependencies block from a YAML file (alternative to per-flag declaration).")
 	dryRun := fs.Bool("dry-run", false, "Print the proposed PATCH payload and exit 0; no HTTP call.")
 	confirm := fs.Bool("confirm", false, "Required to actually issue the PATCH (footgun-resistance).")
@@ -183,6 +190,16 @@ func runIntentDeclare(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 
+	// --data-scopes is the typed first-class flag; --data-dep is the
+	// deprecated alias. They share the exact JSON shape and the exact
+	// validator, so we concatenate them (scopes first) and warn once if the
+	// alias was used.
+	depStrings := append([]string(nil), dataScopeFlag...)
+	if len(dataDepFlag) > 0 {
+		fmt.Fprintln(stderr, "skillctl intent declare: NOTE --data-dep is deprecated; use --data-scopes (same JSON shape, same validation).")
+		depStrings = append(depStrings, dataDepFlag...)
+	}
+
 	// Build the intent block from flags or --from-yaml. The two are
 	// mutually exclusive only by convention — if both are passed, the
 	// per-flag values win on a key-by-key basis (so a YAML file can
@@ -195,7 +212,7 @@ func runIntentDeclare(args []string, stdout, stderr io.Writer) int {
 		*hrFlag,
 		*subprocessFlag,
 		*summaryFlag,
-		dataDepFlag,
+		depStrings,
 	)
 	if err != nil {
 		fmt.Fprintf(stderr, "skillctl intent declare: %v\n", err)
@@ -226,6 +243,7 @@ func runIntentDeclare(args []string, stdout, stderr io.Writer) int {
 		timeout:     *timeout,
 		intent:      intentBlock,
 		dataDeps:    dataDeps,
+		governance:  strings.TrimSpace(*governanceFlag),
 	}
 	return runIntentDeclareWithClient(opts, stdout, stderr)
 }
@@ -234,6 +252,17 @@ func runIntentDeclare(args []string, stdout, stderr io.Writer) int {
 // struct carries everything (flag values + injected http.Client + injected
 // digest resolver) so tests can stub the network entirely.
 func runIntentDeclareWithClient(opts intentDeclareOpts, stdout, stderr io.Writer) int {
+	// CLIENT-SIDE data-scope validation (SPEC-0196 §3 + §3.3), fail-closed.
+	// This runs BEFORE the dry-run print and BEFORE any network access, so an
+	// inconsistent declaration is rejected locally — without ever leaking a
+	// half-baked PATCH to the registry. A §3.3 cross-rule failure maps to the
+	// SAME exit 18 the server returns, so CI cannot tell client refusal from
+	// server refusal (the red-team relies on this: the binding cannot be
+	// bypassed by declaring offline).
+	if code, ok := validateDeclarationLocally(opts, stderr); !ok {
+		return code
+	}
+
 	// --dry-run prints the payload + exits 0 BEFORE any network access,
 	// even before digest resolution. This keeps `--dry-run` strictly
 	// non-side-effecting (no scan, no HTTP) — useful for fixture tests
@@ -336,6 +365,167 @@ func runIntentDeclareWithClient(opts intentDeclareOpts, stdout, stderr io.Writer
 		}
 		return exitGeneric
 	}
+}
+
+// runIntentShow implements `skillctl intent show <skill-name|@digest>`. It
+// resolves the bundle, fetches its registry meta, and prints the declared
+// intent + data_dependencies (the SPEC-0196 §3 fields). Read-only — no PATCH,
+// no --confirm. Useful for the CISO to read what a skill says it does before
+// authorizing a data dependency (SPEC-0196 §8).
+func runIntentShow(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("intent show", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	registryURL := fs.String("registry", "", "Registry base URL (required).")
+	asJSON := fs.Bool("json", false, "Emit the declared intent + data_dependencies as JSON.")
+	timeout := fs.Duration("timeout", registry.DefaultTimeout, "HTTP timeout.")
+	fs.Usage = func() {
+		fmt.Fprintln(stderr, "Usage: skillctl intent show <skill-name|@digest> --registry URL [--json]")
+		fmt.Fprintln(stderr, "")
+		fmt.Fprintln(stderr, "Prints the declared SPEC-0196 intent + data_dependencies for a bundle.")
+		fs.PrintDefaults()
+	}
+
+	skillArg, flagArgs := extractSkillPositional(args)
+	if err := fs.Parse(flagArgs); err != nil {
+		return exitUsage
+	}
+	skill := skillArg
+	if skill == "" && fs.NArg() == 1 {
+		skill = strings.TrimSpace(fs.Arg(0))
+	}
+	if skill == "" {
+		fs.Usage()
+		return exitUsage
+	}
+	if *registryURL == "" {
+		fmt.Fprintln(stderr, "skillctl intent show: --registry is required.")
+		return exitUsage
+	}
+	if err := validateRegistryURL(*registryURL); err != nil {
+		fmt.Fprintf(stderr, "skillctl intent show: %v\n", err)
+		return exitUsage
+	}
+
+	httpClient := &http.Client{Timeout: *timeout}
+	c := registry.New(*registryURL, httpClient)
+	ctx := context.Background()
+	digest, err := resolveSkillDigest(ctx, c, skill, nil)
+	if err != nil {
+		fmt.Fprintf(stderr, "skillctl intent show: %v\n", err)
+		return exitGeneric
+	}
+	meta, err := c.GetBundleMeta(ctx, digest)
+	if err != nil {
+		fmt.Fprintf(stderr, "skillctl intent show: fetch meta for %s: %v\n", digest, err)
+		return exitGeneric
+	}
+
+	intentBlock, dataDeps := extractDeclaredIntent(meta)
+
+	if *asJSON {
+		out := map[string]any{
+			"digest":            digest,
+			"governance":        meta.CurrentGovernance,
+			"intent":            intentBlock,
+			"data_dependencies": dataDeps,
+		}
+		b, _ := json.MarshalIndent(out, "", "  ")
+		fmt.Fprintln(stdout, string(b))
+		return exitOK
+	}
+
+	fmt.Fprintf(stdout, "digest:     %s\n", digest)
+	fmt.Fprintf(stdout, "governance: %s\n", dashOrValue(meta.CurrentGovernance))
+	if intentBlock == nil {
+		fmt.Fprintln(stdout, "intent:     (none declared)")
+	} else {
+		fmt.Fprintln(stdout, "intent:")
+		if b, err := json.MarshalIndent(intentBlock, "  ", "  "); err == nil {
+			fmt.Fprintf(stdout, "  %s\n", string(b))
+		}
+	}
+	if len(dataDeps) == 0 {
+		fmt.Fprintln(stdout, "data_dependencies: (none declared)")
+	} else {
+		fmt.Fprintf(stdout, "data_dependencies (%d):\n", len(dataDeps))
+		for _, d := range dataDeps {
+			if b, err := json.Marshal(d); err == nil {
+				fmt.Fprintf(stdout, "  - %s\n", string(b))
+			}
+		}
+	}
+	return exitOK
+}
+
+// extractDeclaredIntent pulls the declared intent + data_dependencies out of a
+// BundleMeta. The post-hoc `intent declare` PATCH writes them onto the registry
+// row (BundleMeta.Bundle); a pack-time binding writes them into bundle.json
+// (BundleMeta.Manifest). We prefer the row (it is the post-admission source of
+// truth) and fall back to the manifest.
+func extractDeclaredIntent(meta *registry.BundleMeta) (map[string]any, []map[string]any) {
+	pick := func(src map[string]any) (map[string]any, []map[string]any, bool) {
+		if src == nil {
+			return nil, nil, false
+		}
+		in, _ := src["intent"].(map[string]any)
+		var deps []map[string]any
+		if raw, ok := src["data_dependencies"].([]any); ok {
+			for _, item := range raw {
+				if m, ok := item.(map[string]any); ok {
+					deps = append(deps, m)
+				}
+			}
+		}
+		if in != nil || len(deps) > 0 {
+			return in, deps, true
+		}
+		return nil, nil, false
+	}
+	if in, deps, ok := pick(meta.Bundle); ok {
+		return in, deps
+	}
+	in, deps, _ := pick(meta.Manifest)
+	return in, deps
+}
+
+func dashOrValue(s string) string {
+	if strings.TrimSpace(s) == "" {
+		return "(unknown)"
+	}
+	return s
+}
+
+// validateDeclarationLocally runs the typed SPEC-0196 validator over the
+// proposed declaration. It returns (exitCode, ok): on ok=true the caller
+// proceeds; on ok=false the caller returns exitCode.
+//
+//   - A §3.3 cross-rule failure → exit 18 (verify.ExitIntentInconsistent),
+//     matching the server PATCH's 422→18 mapping (the failed_rule is printed).
+//   - A structural failure (bad kind/scope/id, out-of-vocabulary side effect)
+//     → exit 2 (usage): the declaration is malformed, not merely inconsistent.
+//
+// The dependency maps the CLI carries are decoded into typed datascope.DataScope
+// values first; a decode error is a usage error.
+func validateDeclarationLocally(opts intentDeclareOpts, stderr io.Writer) (int, bool) {
+	scopes, err := datascope.FromMaps(opts.dataDeps)
+	if err != nil {
+		fmt.Fprintf(stderr, "skillctl intent declare: %v\n", err)
+		return exitUsage, false
+	}
+	in := datascope.IntentFromMap(opts.intent)
+	if verr := datascope.Validate(in, scopes, opts.governance); verr != nil {
+		var ve *datascope.ValidationError
+		if errors.As(verr, &ve) && ve.FailedRule != "" {
+			// A real §3.3 cross-rule fired → exit 18, same as the server.
+			fmt.Fprintf(stderr, "skillctl intent declare: rejected locally — failed_rule=%s\n", ve.FailedRule)
+			fmt.Fprintf(stderr, "detail: %s\n", ve.Detail)
+			return verify.ExitCode(fmt.Errorf("rule=%s: %w", ve.FailedRule, verify.ErrIntentInconsistent)), false
+		}
+		// Structural / vocabulary failure → usage error.
+		fmt.Fprintf(stderr, "skillctl intent declare: invalid declaration: %v\n", verr)
+		return exitUsage, false
+	}
+	return exitOK, true
 }
 
 // buildIntentFromInputs assembles the (intent, data_dependencies) tuple
@@ -552,6 +742,8 @@ func printIntentUsage(w io.Writer) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  declare    Patch a previously-admitted bundle's intent block.")
+	fmt.Fprintln(w, "             Typed data-scope via --data-scopes (repeatable JSON, SPEC-0196).")
+	fmt.Fprintln(w, "  show       Print the declared intent + data_dependencies for a bundle.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Run any subcommand with --help for its flags.")
 }
