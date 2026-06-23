@@ -222,8 +222,9 @@ func (t *TrustRoot) FindAuthor(identityID string) *AuthorKey {
 	if t == nil {
 		return nil
 	}
+	want := normalizeIdentityID(identityID)
 	for i := range t.Authors {
-		if t.Authors[i].ID == identityID && t.Authors[i].IsActive() {
+		if normalizeIdentityID(t.Authors[i].ID) == want && t.Authors[i].IsActive() {
 			return &t.Authors[i]
 		}
 	}
@@ -231,13 +232,16 @@ func (t *TrustRoot) FindAuthor(identityID string) *AuthorKey {
 }
 
 // FindReviewer returns the active pinned reviewer key for identityID, or nil
-// (SPEC-0281). Retired pins are skipped. Mirrors FindAuthor.
+// (SPEC-0281). Retired pins are skipped. Mirrors FindAuthor. ID matching is
+// case-normalized (P1c) so it agrees with the reviewer≠author comparison in
+// verify.go — no case-twin asymmetry between lookup and equality.
 func (t *TrustRoot) FindReviewer(identityID string) *AuthorKey {
 	if t == nil {
 		return nil
 	}
+	want := normalizeIdentityID(identityID)
 	for i := range t.Reviewers {
-		if t.Reviewers[i].ID == identityID && t.Reviewers[i].IsActive() {
+		if normalizeIdentityID(t.Reviewers[i].ID) == want && t.Reviewers[i].IsActive() {
 			return &t.Reviewers[i]
 		}
 	}
@@ -676,6 +680,20 @@ func (t *TrustRoots) validate() error {
 			}
 			t.Roots[i].Reviewers[j].Pubkey = raw
 		}
+
+		// P1c key-confusion guard: the SAME key must not be pinned as BOTH an
+		// author and a reviewer in one root. Otherwise the author could sign an
+		// "independent" governance attestation under a reviewer id and launder
+		// reviewer≠author (the floor compares ids, not key bytes). Compare raw
+		// pubkey bytes — ids may differ while the key is the same.
+		for ai := range t.Roots[i].Authors {
+			for ri := range t.Roots[i].Reviewers {
+				if string(t.Roots[i].Authors[ai].Pubkey) == string(t.Roots[i].Reviewers[ri].Pubkey) {
+					return fmt.Errorf("trust_roots[%d] %s: key pinned as both author %q and reviewer %q — a key cannot be both (key-confusion)", i, root.RegistryURL, t.Roots[i].Authors[ai].ID, t.Roots[i].Reviewers[ri].ID)
+				}
+			}
+		}
+
 		if root.MinRevocationEpoch < 0 {
 			return fmt.Errorf("trust_roots[%d] %s: min_revocation_epoch must be >= 0", i, root.RegistryURL)
 		}
