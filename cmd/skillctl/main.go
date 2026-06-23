@@ -94,6 +94,12 @@ func main() {
 	case "verify-hook":
 		runWithExit(func() int { return runVerifyHook(os.Stdin, os.Stdout, os.Stderr) })
 	// === END SPEC-0247 P0.1 ===
+	// === SPEC-0277 P0+P1: agent-instance identity (issue/verify/show/revoke) ===
+	// `agentid verify` mirrors `verify --bundle`: SPEC-0188 §11 numbered exit
+	// codes (11/20/21/17/12/...) surface verbatim through runWithExit.
+	case "agentid":
+		runWithExit(func() int { return runAgentID(os.Args[2:], os.Stdout, os.Stderr) })
+	// === END SPEC-0277 P0+P1 ===
 	// === SPEC-0255: gate observability — summarise the append-only audit log. ===
 	case "gate-stats":
 		os.Exit(runGateStats(os.Args[2:], os.Stdout, os.Stderr))
@@ -201,6 +207,14 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "               §7 chain, and emits allow/deny. Fail-closed. Wire as a hook, not by hand.")
 	fmt.Fprintln(w, "  gate-stats   Summarise the gate-audit.jsonl (decisions, top blocks, cache-hit rate).")
 	fmt.Fprintln(w, "               Flags: --since <168h|YYYY-MM-DD>, --json.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Commands (SPEC-0277 / agent-instance identity):")
+	fmt.Fprintln(w, "  agentid issue   Owner-sign an AgentID mandate (--owner --owner-key --for-agent")
+	fmt.Fprintln(w, "                  --skills --intents [--approver --approver-key] [--expires] [--out]).")
+	fmt.Fprintln(w, "  agentid verify  Verify an AgentID offline against pinned owner/approver keys")
+	fmt.Fprintln(w, "                  (--bundle [--offline] [--trust-roots] [--revocations] [--json]).")
+	fmt.Fprintln(w, "  agentid show    Print owner, grant, expiry, fingerprints, signatures.")
+	fmt.Fprintln(w, "  agentid revoke  Add agent:<id> to a signed, offline revocation list.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Commands (SPEC-0195 / awareness bridge):")
 	fmt.Fprintln(w, "  awareness sync     Admit local skills to a registry.")

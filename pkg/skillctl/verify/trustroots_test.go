@@ -470,3 +470,64 @@ func TestRegistryKey_IsActive(t *testing.T) {
 		t.Errorf("non-empty Retired should NOT be active")
 	}
 }
+
+// SPEC-0277 §11.5 — require_agent_approver is a KNOWN field (strict loader
+// accepts it) and is rejected fail-OPEN: setting it without a reviewers list
+// (the approver/sign-off-human pin) must refuse, mirroring
+// require_independent_review.
+func TestLoad_RequireAgentApprover_NeedsReviewers(t *testing.T) {
+	path := trustRootsTempPath(t)
+	dir := filepath.Dir(path)
+	_, rawPub := writePubkeyPEM(t, dir, "k.pub")
+	b64 := base64.StdEncoding.EncodeToString(rawPub)
+	yaml := `trust_roots:
+  - registry_url: https://aims.example.com/api/skills
+    registry_keys:
+      - id: k
+        pubkey: ` + b64 + `
+        issued: 2026-05-05
+    identity_keys_authorized: from-registry
+    governance_minimum: green
+    require_agent_approver: true
+`
+	if err := os.WriteFile(path, []byte(yaml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("require_agent_approver with no reviewers must be refused (fail-OPEN guard)")
+	}
+}
+
+// With a reviewers list present, require_agent_approver loads cleanly and the
+// flag is surfaced on the root.
+func TestLoad_RequireAgentApprover_WithReviewersOK(t *testing.T) {
+	path := trustRootsTempPath(t)
+	dir := filepath.Dir(path)
+	_, regPub := writePubkeyPEM(t, dir, "reg.pub")
+	_, revPub := writePubkeyPEM(t, dir, "rev.pub")
+	regB64 := base64.StdEncoding.EncodeToString(regPub)
+	revB64 := base64.StdEncoding.EncodeToString(revPub)
+	yaml := `trust_roots:
+  - registry_url: https://aims.example.com/api/skills
+    registry_keys:
+      - id: k
+        pubkey: ` + regB64 + `
+        issued: 2026-05-05
+    identity_keys_authorized: from-registry
+    governance_minimum: green
+    require_agent_approver: true
+    reviewers:
+      - id: id:approver@m3c
+        pubkey: ` + revB64 + `
+`
+	if err := os.WriteFile(path, []byte(yaml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tr, err := Load(path)
+	if err != nil {
+		t.Fatalf("expected clean load, got %v", err)
+	}
+	if !tr.Roots[0].RequireAgentApprover {
+		t.Fatal("RequireAgentApprover should be true")
+	}
+}

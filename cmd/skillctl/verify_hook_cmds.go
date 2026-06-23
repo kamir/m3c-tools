@@ -55,6 +55,21 @@ func refusalCodeForHook(exitCode int, reason string) string {
 		return ""
 	}
 	switch {
+	// SPEC-0277 P1 — agent-authorization denies. Checked BEFORE the generic
+	// "revoked"/"unmanaged" cases so an agent deny gets its specific token (e.g.
+	// an "agent_revoked" reason must not be flattened to "bundle_revoked").
+	case strings.Contains(reason, "agentid: skill_not_in_grant"):
+		return "agent_skill_not_in_grant"
+	case strings.Contains(reason, "agentid: agent_revoked"):
+		return "agent_revoked"
+	case strings.Contains(reason, "agentid: agent_expired"):
+		return "agent_expired"
+	case strings.Contains(reason, "agentid: agent_approver_floor"):
+		return "agent_approver_floor"
+	case strings.Contains(reason, "agentid: agent_owner_sig_invalid"):
+		return "agent_owner_sig_invalid"
+	case strings.Contains(reason, "agentid:"):
+		return "agent_mandate_invalid"
 	case strings.Contains(reason, "revoked"):
 		return "bundle_revoked"
 	case strings.Contains(reason, "suspicious skill name"):
@@ -149,6 +164,12 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	var (
 		audSkill, audReason, audSession, audHome string
 		audOnline, audCache, audActive           bool
+		// SPEC-0277 P1: the acting agent's identity for the always-on signed
+		// invocation event. Populated when an AgentID mandate is configured
+		// (enforcement OPT-IN), stamped onto the record for BOTH allow and deny so
+		// every action traces to (agent, owner). Empty when no mandate → the record
+		// is byte-identical to the pre-SPEC-0277 v1.
+		audAgentID, audOwner string
 	)
 	defer func() {
 		if r := recover(); r != nil {
@@ -167,16 +188,20 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 			// ALWAYS-ON evidence (Art.12), distinct from the advisory gate-audit
 			// above. Best-effort + panic-safe inside appendSignedInvocation;
 			// never alters `code`. The decision is encoded in exit_code (0=allow)
-			// and refusal_code (the deny reason as a stable token).
+			// and refusal_code (the deny reason as a stable token). SPEC-0277 P1
+			// stamps agent_identity / owner_identity (a VALUE change at the fixed
+			// canonical line) when a mandate is active.
 			appendSignedInvocation(audHome, skillgate.InvocationRecord{
-				EventType:   "skill.invocation",
-				SkillDigest: installedSkillDigest(audHome, audSkill),
-				SkillName:   audSkill,
-				Action:      "skill_invocation",
-				Tool:        "Skill",
-				SessionID:   audSession,
-				ExitCode:    code,
-				RefusalCode: refusalCodeForHook(code, audReason),
+				EventType:     "skill.invocation",
+				SkillDigest:   installedSkillDigest(audHome, audSkill),
+				SkillName:     audSkill,
+				Action:        "skill_invocation",
+				Tool:          "Skill",
+				SessionID:     audSession,
+				AgentIdentity: audAgentID,
+				OwnerIdentity: audOwner,
+				ExitCode:      code,
+				RefusalCode:   refusalCodeForHook(code, audReason),
 			})
 		}
 	}()
@@ -226,11 +251,35 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	}
 	skill = canon
 
+	// SPEC-0277 P1 — AgentID authorization layer (the genuinely-new behaviour).
+	// Computed ONCE, here, for the canonical skill name: it attributes the acting
+	// agent (stamped onto the always-on signed invocation event for allow AND
+	// deny) AND yields the agent-level verdict. ENFORCEMENT is OPT-IN — engaged
+	// only when an AgentID mandate is configured. When engaged, EVERY allow path
+	// below (allowlist, cache-hit, the verified chain, …) is wrapped by `allow()`
+	// so an outside-grant / forged / expired / revoked agent is DENIED regardless
+	// of how the skill chain itself would rule (fail-closed, §4 step 3).
+	authz := authorizeAgentForSkill(home, skill)
+	if authz.Configured {
+		audAgentID, audOwner = authz.AgentID, authz.Owner
+	}
+	// allow() is the single allow gate: when a mandate is engaged it denies
+	// outside-grant/invalid agents; otherwise it is the plain emitAllow.
+	allow := func() int {
+		if authz.Configured && !authz.Allowed {
+			audReason = "agentid: " + authz.Reason
+			return emitDeny(stdout, stderr,
+				fmt.Sprintf("skillctl: BLOCKED '%s' — agent %s is not authorized (%s). The skill is outside the AgentID's grant, or the mandate failed verification (fail-closed, SPEC-0277).",
+					skill, dashOrAgent(authz.AgentID), authz.Reason))
+		}
+		return emitAllow()
+	}
+
 	pol := loadGatePolicyW(stderr)
 
 	if pol.isAllowlisted(skill) {
 		audReason = "allowlisted"
-		return emitAllow() // explicit operator escape hatch (§9.4)
+		return allow() // operator escape hatch (§9.4) — still bounded by the AgentID grant
 	}
 
 	managed, why := isManagedSkill(skill)
@@ -243,10 +292,10 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		case "warn":
 			audReason = fmt.Sprintf("unmanaged (%s) + policy warn", why)
 			fmt.Fprintf(stderr, "skillctl verify-hook: WARN unverified skill '%s' (%s) — allowed by policy unmanaged_skills=warn\n", skill, why)
-			return emitAllow()
+			return allow()
 		default: // "allow"
 			audReason = fmt.Sprintf("unmanaged (%s) + policy allow", why)
-			return emitAllow()
+			return allow()
 		}
 	}
 
@@ -270,7 +319,7 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	// lets us allow without touching the network (SPEC-0247 §8 / P1.1).
 	if home != "" && cachedAllow(home, skill, ev.SessionID, now) {
 		audCache, audReason = true, "verdict-cache hit"
-		return emitAllow()
+		return allow()
 	}
 
 	// Cache miss → prefer the network-free offline chain (no registry call, and
@@ -296,11 +345,20 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	}
 	audReason = reason
 	if code == exitOK {
-		return emitAllow()
+		return allow()
 	}
 	return emitDeny(stdout, stderr,
 		fmt.Sprintf("skillctl: BLOCKED '%s' — %s (exit %d). Run `skillctl verify %s` for the full chain, or `skillctl install %s` to repair.",
 			skill, reason, code, skill, skill))
+}
+
+// dashOrAgent renders an agent id for a deny message, or a placeholder when the
+// mandate was unreadable (no parsed id).
+func dashOrAgent(id string) string {
+	if id == "" {
+		return "(unknown agent)"
+	}
+	return id
 }
 
 // emitAllow lets the tool proceed. SPEC-0247 §5.3: an allow emits nothing and
