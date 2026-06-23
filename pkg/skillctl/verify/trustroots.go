@@ -200,6 +200,19 @@ type TrustRoot struct {
 	// or a trust-roots file carrying `require_independent_review:` would be
 	// rejected as an unknown key.
 	RequireIndependentReview bool `yaml:"require_independent_review,omitempty"`
+
+	// RequireAgentApprover (SPEC-0277 §11.5): the agent-instance analogue of
+	// RequireIndependentReview. When true, an AgentID (the SPEC-0277 mandate, not
+	// a skill bundle) must carry BOTH an owner signature AND an independent
+	// approver (sign-off human) signature with approver != owner — the
+	// "two-person admit for agents". Both must be PINNED and cryptographically
+	// verified; the unsigned claim is never trusted. Enforced by the `agentid`
+	// verifier (owners pinned in `authors:`, approvers pinned in `reviewers:`),
+	// not by the bundle §7 chain. Default OFF so single-delegation (owner-only)
+	// AgentIDs keep working. Declared here so the strict loader accepts the key;
+	// validate() requires a non-empty reviewers list when it is set, mirroring
+	// require_independent_review (the floor cannot be set fail-OPEN).
+	RequireAgentApprover bool `yaml:"require_agent_approver,omitempty"`
 }
 
 // ActiveKeys returns the subset of RegistryKeys that are not retired. It
@@ -652,6 +665,13 @@ func (t *TrustRoots) validate() error {
 		// so the floor cannot be set fail-OPEN.
 		if root.RequireIndependentReview && len(root.Reviewers) == 0 {
 			return fmt.Errorf("trust_roots[%d] %s: require_independent_review needs a non-empty reviewers list (the floor is proven by a signature-verified independent attestation)", i, root.RegistryURL)
+		}
+		// SPEC-0277 §11.5: the agent approver floor is enforced by a
+		// signature-verified approver pinned in the reviewers list (approvers reuse
+		// the same pinned-reviewer slot, owners reuse authors). Refuse a floor with
+		// no pinned approver keys — same fail-OPEN guard as require_independent_review.
+		if root.RequireAgentApprover && len(root.Reviewers) == 0 {
+			return fmt.Errorf("trust_roots[%d] %s: require_agent_approver needs a non-empty reviewers list (the approver/sign-off human is a pinned reviewer key)", i, root.RegistryURL)
 		}
 		seenReviewerIDs := make(map[string]struct{}, len(root.Reviewers))
 		for j, r := range root.Reviewers {

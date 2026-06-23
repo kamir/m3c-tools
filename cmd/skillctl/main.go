@@ -94,6 +94,12 @@ func main() {
 	case "verify-hook":
 		runWithExit(func() int { return runVerifyHook(os.Stdin, os.Stdout, os.Stderr) })
 	// === END SPEC-0247 P0.1 ===
+	// === SPEC-0277 P0+P1: agent-instance identity (issue/verify/show/revoke) ===
+	// `agentid verify` mirrors `verify --bundle`: SPEC-0188 §11 numbered exit
+	// codes (11/20/21/17/12/...) surface verbatim through runWithExit.
+	case "agentid":
+		runWithExit(func() int { return runAgentID(os.Args[2:], os.Stdout, os.Stderr) })
+	// === END SPEC-0277 P0+P1 ===
 	// === SPEC-0255: gate observability — summarise the append-only audit log. ===
 	case "gate-stats":
 		os.Exit(runGateStats(os.Args[2:], os.Stdout, os.Stderr))
