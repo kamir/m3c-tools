@@ -420,14 +420,29 @@ func runIntentShow(args []string, stdout, stderr io.Writer) int {
 		return exitGeneric
 	}
 
-	intentBlock, dataDeps := extractDeclaredIntent(meta)
+	view := extractDeclaredView(meta)
+	authIntent, authDeps, authProv := view.authoritativeIntent()
 
 	if *asJSON {
+		// Emit the authoritative declaration flat (back-compat with existing
+		// consumers) PLUS a provenance-tagged breakdown so a CISO tool can tell
+		// signed-manifest from bundle-row without scraping text.
 		out := map[string]any{
-			"digest":            digest,
-			"governance":        meta.CurrentGovernance,
-			"intent":            intentBlock,
-			"data_dependencies": dataDeps,
+			"digest":                 digest,
+			"governance":             meta.CurrentGovernance,
+			"intent":                 authIntent,
+			"data_dependencies":      authDeps,
+			"declaration_provenance": authProv,
+			"sources": map[string]any{
+				provSignedManifest: map[string]any{
+					"intent":            view.signedIntent,
+					"data_dependencies": view.signedDeps,
+				},
+				provBundleRow: map[string]any{
+					"intent":            view.rowIntent,
+					"data_dependencies": view.rowDeps,
+				},
+			},
 		}
 		b, _ := json.MarshalIndent(out, "", "  ")
 		fmt.Fprintln(stdout, string(b))
@@ -436,36 +451,105 @@ func runIntentShow(args []string, stdout, stderr io.Writer) int {
 
 	fmt.Fprintf(stdout, "digest:     %s\n", digest)
 	fmt.Fprintf(stdout, "governance: %s\n", dashOrValue(meta.CurrentGovernance))
-	if intentBlock == nil {
+	switch authProv {
+	case provSignedManifest:
+		fmt.Fprintln(stdout, "provenance: signed-manifest (AUTHORITATIVE — author-signature-covered)")
+	case provBundleRow:
+		fmt.Fprintln(stdout, "provenance: bundle-row (ADVISORY — mutable post-admit PATCH, NOT author-signed)")
+	default:
+		fmt.Fprintln(stdout, "provenance: (none declared)")
+	}
+	if view.hasSigned() && view.hasRow() {
+		fmt.Fprintln(stdout, "note:       both a signed-manifest and a bundle-row declaration exist; the signed-manifest one is authoritative.")
+	}
+
+	printIntentSource(stdout, provSignedManifest, "AUTHORITATIVE", view.signedIntent, view.signedDeps)
+	printIntentSource(stdout, provBundleRow, "ADVISORY", view.rowIntent, view.rowDeps)
+	if !view.hasSigned() && !view.hasRow() {
 		fmt.Fprintln(stdout, "intent:     (none declared)")
-	} else {
-		fmt.Fprintln(stdout, "intent:")
-		if b, err := json.MarshalIndent(intentBlock, "  ", "  "); err == nil {
-			fmt.Fprintf(stdout, "  %s\n", string(b))
-		}
-	}
-	if len(dataDeps) == 0 {
 		fmt.Fprintln(stdout, "data_dependencies: (none declared)")
-	} else {
-		fmt.Fprintf(stdout, "data_dependencies (%d):\n", len(dataDeps))
-		for _, d := range dataDeps {
-			if b, err := json.Marshal(d); err == nil {
-				fmt.Fprintf(stdout, "  - %s\n", string(b))
-			}
-		}
 	}
+	fmt.Fprintln(stdout, "(authoritative signed-binding verification: `skillctl verify --bundle <file.skb>`)")
 	return exitOK
 }
 
-// extractDeclaredIntent pulls the declared intent + data_dependencies out of a
-// BundleMeta. The post-hoc `intent declare` PATCH writes them onto the registry
-// row (BundleMeta.Bundle); a pack-time binding writes them into bundle.json
-// (BundleMeta.Manifest). We prefer the row (it is the post-admission source of
-// truth) and fall back to the manifest.
-func extractDeclaredIntent(meta *registry.BundleMeta) (map[string]any, []map[string]any) {
-	pick := func(src map[string]any) (map[string]any, []map[string]any, bool) {
+// printIntentSource renders one provenance source's intent + data_dependencies,
+// each line tagged with the provenance label so a CISO sees which declaration is
+// author-signed vs post-admit. Prints nothing when the source is empty.
+func printIntentSource(stdout io.Writer, provenance, marker string, intentBlock map[string]any, deps []map[string]any) {
+	if intentBlock == nil && len(deps) == 0 {
+		return
+	}
+	fmt.Fprintf(stdout, "[%s] %s:\n", provenance, marker)
+	if intentBlock != nil {
+		if b, err := json.MarshalIndent(intentBlock, "    ", "  "); err == nil {
+			fmt.Fprintf(stdout, "  intent: %s\n", string(b))
+		}
+	}
+	if len(deps) > 0 {
+		fmt.Fprintf(stdout, "  data_dependencies (%d):\n", len(deps))
+		for _, d := range deps {
+			if b, err := json.Marshal(d); err == nil {
+				fmt.Fprintf(stdout, "    - %s\n", string(b))
+			}
+		}
+	}
+}
+
+// scopeProvenance labels WHERE a declared scope came from, so a CISO can tell at
+// a glance whether today's declaration is author-signed or post-admit
+// (SPEC-0196 §12 Q1 / P2b). Mirrors verify.ScopeProvenance string values.
+const (
+	provSignedManifest = "signed-manifest" // from the author-signed bundle.json (authoritative)
+	provBundleRow      = "bundle-row"      // from the mutable post-admit PATCH row (advisory)
+)
+
+// declaredView is the provenance-tagged result of reading a BundleMeta's
+// declared intent + data_dependencies. The signed-manifest source is the
+// author-bound bundle.json the registry parsed at admit time; the bundle-row
+// source is the mutable `intent declare` PATCH target. BOTH are surfaced — a
+// CISO must see which is author-signed, not just the winning one.
+type declaredView struct {
+	signedIntent map[string]any
+	signedDeps   []map[string]any
+	rowIntent    map[string]any
+	rowDeps      []map[string]any
+}
+
+// hasSigned reports whether any author-signed declaration is present.
+func (v declaredView) hasSigned() bool {
+	return v.signedIntent != nil || len(v.signedDeps) > 0
+}
+
+// hasRow reports whether any mutable bundle-row declaration is present.
+func (v declaredView) hasRow() bool {
+	return v.rowIntent != nil || len(v.rowDeps) > 0
+}
+
+// authoritativeIntent returns the declaration a consumer should treat as
+// binding: the signed-manifest one when present, else the bundle-row one. The
+// second return value is the provenance of what was returned.
+func (v declaredView) authoritativeIntent() (map[string]any, []map[string]any, string) {
+	if v.hasSigned() {
+		return v.signedIntent, v.signedDeps, provSignedManifest
+	}
+	if v.hasRow() {
+		return v.rowIntent, v.rowDeps, provBundleRow
+	}
+	return nil, nil, ""
+}
+
+// extractDeclaredView pulls the declared intent + data_dependencies out of a
+// BundleMeta from BOTH sources, tagged with provenance. The author-signed
+// pack-time binding (SPEC-0196 §12 Q1 / P2b) lands in the parsed bundle.json
+// (BundleMeta.Manifest); the post-hoc `intent declare` PATCH lands on the
+// registry row (BundleMeta.Bundle). For an authoritative cryptographic check of
+// the signed binding, run `skillctl verify --bundle` against the .skb itself —
+// `intent show` reads the registry's representation.
+func extractDeclaredView(meta *registry.BundleMeta) declaredView {
+	pick := func(src map[string]any) (map[string]any, []map[string]any) {
 		if src == nil {
-			return nil, nil, false
+			return nil, nil
 		}
 		in, _ := src["intent"].(map[string]any)
 		var deps []map[string]any
@@ -476,16 +560,12 @@ func extractDeclaredIntent(meta *registry.BundleMeta) (map[string]any, []map[str
 				}
 			}
 		}
-		if in != nil || len(deps) > 0 {
-			return in, deps, true
-		}
-		return nil, nil, false
-	}
-	if in, deps, ok := pick(meta.Bundle); ok {
 		return in, deps
 	}
-	in, deps, _ := pick(meta.Manifest)
-	return in, deps
+	var v declaredView
+	v.signedIntent, v.signedDeps = pick(meta.Manifest)
+	v.rowIntent, v.rowDeps = pick(meta.Bundle)
+	return v
 }
 
 func dashOrValue(s string) string {

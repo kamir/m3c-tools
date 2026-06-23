@@ -29,11 +29,14 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 	"github.com/kamir/m3c-tools/pkg/skillctl/govlevel"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
@@ -142,8 +145,41 @@ type VerifyResult struct {
 	// on this when the trust root sets require_independent_review.
 	SelfAttested *bool
 
+	// DataScopes (SPEC-0196 §12 Q1 / P2b) is the declared data-scope surfaced
+	// from the bundle, each tagged with its provenance: ScopeProvenanceSignedManifest
+	// (read from the author-signed bundle.json INSIDE the digest-verified .skb —
+	// authoritative) vs ScopeProvenanceBundleRow (the mutable post-admit PATCH
+	// value on the registry row — advisory). When both carry a declaration, the
+	// signed-manifest one is authoritative; the verifier surfaces both so a CISO
+	// can see at a glance whether today's declaration is author-bound. Advisory:
+	// surfacing a scope never changes the pass/fail verdict (SPEC-0196 §11).
+	DataScopes []DeclaredScope
+
 	// ChainSummary is a human-readable one-liner suitable for stdout.
 	ChainSummary string
+}
+
+// ScopeProvenance distinguishes WHERE a declared data-scope came from. This is
+// the security-relevant fact a CISO needs: a signed-manifest scope is covered by
+// the author signature (tampering it breaks the chain — SPEC-0196 §12 Q1); a
+// bundle-row scope rides the mutable post-admit PATCH and is NOT author-bound.
+type ScopeProvenance string
+
+const (
+	// ScopeProvenanceSignedManifest — read from the author-signed bundle.json
+	// inside the digest-verified .skb. Authoritative; author-signature-covered.
+	ScopeProvenanceSignedManifest ScopeProvenance = "signed-manifest"
+	// ScopeProvenanceBundleRow — read from the mutable post-admit registry row
+	// (the `intent declare` PATCH target). Advisory; NOT author-bound.
+	ScopeProvenanceBundleRow ScopeProvenance = "bundle-row"
+)
+
+// DeclaredScope is one declared data-scope plus its provenance. The Raw map is
+// the verbatim wire entry (SPEC-0196 §3.2 shape) so consumers can render every
+// field without this package re-modeling the whole schema.
+type DeclaredScope struct {
+	Provenance ScopeProvenance `json:"provenance"`
+	Raw        map[string]any  `json:"scope"`
 }
 
 // Verify runs the SPEC-0188 §7 client-side algorithm end-to-end.
@@ -267,6 +303,15 @@ func Verify(opts VerifyOpts) (*VerifyResult, error) {
 	case "false":
 		reviewDesc = ", independently reviewed"
 	}
+	// SPEC-0196 §12 Q1 / P2b — surface the declared data-scope with provenance.
+	// The signed-manifest scope is read from the bundle.json INSIDE the .skb
+	// whose digest we just verified, so it is author-signature-covered; the
+	// bundle-row scope is read from the mutable registry row. Advisory: this
+	// never changes the verdict. A read failure is non-fatal — a chain that
+	// otherwise passed must not fail just because we could not surface scope.
+	dataScopes := collectDeclaredScopes(opts.BundlePath, opts.BundleMeta, opts.Logger)
+	logStep(opts.Logger, "datascope_ok", "scopes=%d", len(dataScopes))
+
 	res := &VerifyResult{
 		Digest:             digestStr,
 		AuthorIdentity:     authorID,
@@ -274,6 +319,7 @@ func Verify(opts VerifyOpts) (*VerifyResult, error) {
 		GovernanceLevel:    govLevel,
 		GovernanceVerified: govVerified,
 		SelfAttested:       selfAttested,
+		DataScopes:         dataScopes,
 		ChainSummary: fmt.Sprintf(
 			"%s: signed by %s, admitted by %s, %s%s",
 			digestStr, authorID, regKeyID, govDesc, reviewDesc,
@@ -876,6 +922,93 @@ func stepResolveDeps(meta *registry.BundleMeta) error {
 		}
 	}
 	return nil
+}
+
+// collectDeclaredScopes surfaces the declared data-scope from BOTH sources,
+// each tagged with its provenance (SPEC-0196 §12 Q1 / P2b):
+//
+//   - signed-manifest: the `data_dependencies` in the bundle.json INSIDE the
+//     .skb at bundlePath. The verifier has already recomputed + matched the
+//     digest of this exact file (steps 1/1b), so its bundle.json is covered by
+//     the author signature — a scope read here is AUTHORITATIVE and cannot have
+//     been tampered without breaking the chain.
+//   - bundle-row: the `data_dependencies` on the mutable registry row
+//     (meta.Bundle), the post-admit `intent declare` PATCH target. Advisory.
+//
+// We deliberately do NOT read scope from meta.Manifest: the registry's parsed
+// manifest is an untrusted copy and could disagree with the bytes that were
+// signed. Only the on-disk .skb's bundle.json is trustworthy here.
+//
+// The signed-manifest scopes are listed first so the authoritative declaration
+// is what a CISO reads at the top. Errors are swallowed (logged): surfacing is
+// advisory and must never turn a passing chain into a failure.
+func collectDeclaredScopes(bundlePath string, meta *registry.BundleMeta, logger io.Writer) []DeclaredScope {
+	var out []DeclaredScope
+
+	// 1. Author-signed scope from the digest-verified .skb's bundle.json.
+	if signed, err := readSignedManifestScopes(bundlePath); err != nil {
+		logStep(logger, "datascope_signed_skip", "err=%v", err)
+	} else {
+		for _, raw := range signed {
+			out = append(out, DeclaredScope{Provenance: ScopeProvenanceSignedManifest, Raw: raw})
+		}
+	}
+
+	// 2. Mutable bundle-row scope from the registry envelope.
+	if meta != nil {
+		for _, raw := range rawScopeList(meta.Bundle) {
+			out = append(out, DeclaredScope{Provenance: ScopeProvenanceBundleRow, Raw: raw})
+		}
+	}
+	return out
+}
+
+// readSignedManifestScopes opens the .skb, finds bundle.json, and returns its
+// `data_dependencies` entries as raw maps. Because the caller only invokes this
+// AFTER the digest of this exact file matched the advertised + signed digest,
+// the bytes returned here are author-signature-covered.
+func readSignedManifestScopes(bundlePath string) ([]map[string]any, error) {
+	if bundlePath == "" {
+		return nil, errors.New("no bundle path")
+	}
+	blob, err := os.ReadFile(bundlePath)
+	if err != nil {
+		return nil, fmt.Errorf("read bundle: %w", err)
+	}
+	entries, err := skillbundle.Unpack(blob, skillbundle.UnpackOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("unpack bundle: %w", err)
+	}
+	for _, e := range entries {
+		if e.Rel != "bundle.json" {
+			continue
+		}
+		var m map[string]any
+		if err := json.Unmarshal(e.Content, &m); err != nil {
+			return nil, fmt.Errorf("decode bundle.json: %w", err)
+		}
+		return rawScopeList(m), nil
+	}
+	return nil, errors.New("bundle.json not found in archive")
+}
+
+// rawScopeList pulls `data_dependencies` out of a map as a slice of raw entry
+// maps. Tolerates absence (returns nil) and non-object entries (skipped).
+func rawScopeList(src map[string]any) []map[string]any {
+	if src == nil {
+		return nil
+	}
+	raw, ok := src["data_dependencies"].([]any)
+	if !ok {
+		return nil
+	}
+	var out []map[string]any
+	for _, item := range raw {
+		if m, ok := item.(map[string]any); ok {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 // ----- helpers -----
