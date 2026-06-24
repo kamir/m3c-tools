@@ -213,6 +213,42 @@ type TrustRoot struct {
 	// validate() requires a non-empty reviewers list when it is set, mirroring
 	// require_independent_review (the floor cannot be set fail-OPEN).
 	RequireAgentApprover bool `yaml:"require_agent_approver,omitempty"`
+
+	// --- SPEC-0279 R2 — revocation freshness policy ---
+	//
+	// These four DECLARED fields configure the offline-revocation freshness
+	// contract (SPEC-0279 §3). The loader is STRICT (KnownFields(true)) so they
+	// MUST be typed fields or a trust-roots file carrying them would be rejected
+	// as unknown keys. Durations are Go time.ParseDuration strings ("24h",
+	// "12h"); validate() parses them into the resolved Freshness() policy.
+
+	// MaxStaleness is the maximum age of a synced revocation snapshot (now -
+	// RevocationList.issued_at) before the fail-policy acts. A Go duration string
+	// (e.g. "24h"). Empty = no staleness ceiling (the snapshot is trusted at any
+	// age — the pre-SPEC-0279 behaviour, kept so existing files don't change
+	// meaning). When set, validate() rejects a non-parseable or negative value.
+	MaxStaleness string `yaml:"max_staleness,omitempty"`
+
+	// CacheTTL is the local revocation-cache lifetime (SPEC-0279 §3). A Go
+	// duration string; default 12h (the shipped sweep cadence) when empty.
+	CacheTTL string `yaml:"cache_ttl,omitempty"`
+
+	// FailPolicy is the disposition for a LOW-RISK / read-only action once a
+	// snapshot is older than MaxStaleness: "closed" (deny, the default) or "open"
+	// (allow with an audited record). A HIGH-RISK action ALWAYS fails closed past
+	// MaxStaleness regardless of this knob (SPEC-0279 R3) — fail_policy only
+	// governs the low-risk branch. Empty defaults to "closed"; validate() rejects
+	// any value other than "closed"/"open".
+	FailPolicy string `yaml:"fail_policy,omitempty"`
+
+	// FailPolicyByRisk is an OPTIONAL per-action-risk override map (SPEC-0279 R2:
+	// "an optional per-action-risk override"), e.g. {high: closed, low: open}.
+	// Keys are risk classes ("high"/"low"); values are "closed"/"open". An entry
+	// overrides FailPolicy for that risk class — but a HIGH-risk override can only
+	// be "closed" (you cannot configure a high-risk action to fail OPEN past
+	// max_staleness; that would defeat R3). validate() enforces both the closed
+	// key/value vocabulary AND the high⇒closed floor.
+	FailPolicyByRisk map[string]string `yaml:"fail_policy_by_risk,omitempty"`
 }
 
 // ActiveKeys returns the subset of RegistryKeys that are not retired. It
@@ -716,6 +752,15 @@ func (t *TrustRoots) validate() error {
 
 		if root.MinRevocationEpoch < 0 {
 			return fmt.Errorf("trust_roots[%d] %s: min_revocation_epoch must be >= 0", i, root.RegistryURL)
+		}
+
+		// SPEC-0279 R2 — the revocation-freshness policy fields. Validate the
+		// duration strings, the fail_policy vocabulary, and the per-risk override
+		// map (including the high⇒closed floor) by constructing the resolved
+		// FreshnessPolicy; a bad value is refused at Load so a typo cannot lie
+		// dormant and silently disable the staleness ceiling.
+		if _, ferr := root.Freshness(); ferr != nil {
+			return fmt.Errorf("trust_roots[%d] %s: %w", i, root.RegistryURL, ferr)
 		}
 
 		if root.GovernanceMinimum == "" {

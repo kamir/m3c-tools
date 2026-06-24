@@ -117,12 +117,12 @@ func runExportKit(args []string, stdout, stderr io.Writer) int {
 	// If a revocation list is supplied, validate it (and that it does NOT already
 	// revoke this very bundle) before including it.
 	if *revocationsPath != "" {
-		revoked, rerr := checkBundleRevoked(*revocationsPath, root, res.Digest)
+		snap, rerr := checkBundleRevoked(*revocationsPath, root, res.Digest)
 		if rerr != nil {
 			fmt.Fprintf(stderr, "export-verification-kit: revocation list rejected: %v\n", rerr)
 			return verify.ExitCode(rerr)
 		}
-		if revoked {
+		if snap.revoked {
 			fmt.Fprintf(stderr, "export-verification-kit: this bundle (%s) is already revoked by the supplied list; not packaging.\n", res.Digest)
 			return exitBundleRevoked
 		}

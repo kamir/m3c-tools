@@ -68,6 +68,16 @@ func refusalCodeForHook(exitCode int, reason string) string {
 		return "agent_approver_floor"
 	case strings.Contains(reason, "agentid: agent_owner_sig_invalid"):
 		return "agent_owner_sig_invalid"
+	// SPEC-0279 — the freshness-channel denies (emergency deny-list + stale
+	// revocation snapshot). Specific tokens before the generic agentid case so
+	// the Art.12 trail distinguishes a compromise event / a freshness fail-closed
+	// from a plain mandate failure.
+	case strings.Contains(reason, "agentid: agent_emergency_denied"):
+		return "agent_emergency_denied"
+	case strings.Contains(reason, "agentid: agent_revocation_stale"):
+		return "agent_revocation_stale"
+	case strings.Contains(reason, "agentid: agentid_emergency_list_untrusted"):
+		return "agent_emergency_list_untrusted"
 	case strings.Contains(reason, "agentid:"):
 		return "agent_mandate_invalid"
 	case strings.Contains(reason, "revoked"):

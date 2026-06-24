@@ -140,6 +140,23 @@ const (
 	// ask for an independent review. The `self` tenant (require_independent_review
 	// false, the default) never hits this gate.
 	ExitSelfAttested = 20
+
+	// ExitRevocationStale (22) — SPEC-0279 R3: the relying party's freshness
+	// contract fired. The last synced signed revocation snapshot is older than the
+	// trust-root's max_staleness AND the action being gated is high-risk (always
+	// fail-closed) OR the configured fail_policy for its risk class is `closed`.
+	// The verifier fails closed: an offline verifier that cannot prove its
+	// revocation view is fresh-enough must NOT authorize a consequential action.
+	//
+	// DISTINCT from a revoked digest/agent (17, "the set says this is revoked")
+	// and from an untrusted/forged list (12) — 22 means "the set may be current
+	// but I cannot PROVE it is fresh enough for this action." UX: surface the
+	// epoch, the measured staleness, and the action risk so the operator can
+	// re-sync the list (or pin a fresh signed checkpoint, R4).
+	//
+	// 21 is taken by agentid-expired (cmd/skillctl exitAgentIDExpired), so 22 is
+	// the next free code.
+	ExitRevocationStale = 22
 )
 
 // Sentinel errors so callers can `errors.Is(err, verify.ErrDigestMismatch)`
@@ -237,6 +254,17 @@ var (
 	//   fmt.Errorf("binding attestation self-attested by %s: %w",
 	//       reviewerID, verify.ErrSelfAttested)
 	ErrSelfAttested = errors.New("binding governance attestation is self-attested (independent review required)")
+
+	// ErrRevocationStale — SPEC-0279 R3: the last synced signed revocation
+	// snapshot is older than the trust-root's max_staleness and the freshness
+	// fail-policy denies the action (high-risk → always; low-risk → when
+	// fail_policy=closed). Exit code 22. The verifier fails closed: it cannot
+	// prove its revocation view is fresh enough to authorize a consequential
+	// action offline. Wrap with the epoch + staleness so the operator can re-sync:
+	//
+	//   fmt.Errorf("revocation snapshot is stale (epoch %d, %s old > max_staleness; risk=%s): %w",
+	//       epoch, age, risk, verify.ErrRevocationStale)
+	ErrRevocationStale = errors.New("revocation snapshot is stale (freshness fail-closed)")
 )
 
 // ExitCode maps a verifier error to its numeric process exit code.
@@ -293,6 +321,11 @@ func ExitCode(err error) int {
 		return ExitDataSourceDenied
 	case errors.Is(err, ErrSelfAttested):
 		return ExitSelfAttested
+	case errors.Is(err, ErrRevocationStale):
+		// SPEC-0279 R3 — freshness fail-closed. Checked late: a stale-snapshot
+		// denial only matters once the chain (digest/sig/trust/governance)
+		// otherwise passed, and it must not mask a more specific failure.
+		return ExitRevocationStale
 	default:
 		return 1
 	}
