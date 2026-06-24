@@ -22,16 +22,21 @@ func TestGenerate_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("priv stat: %v", err)
 	}
-	if mode := priv.Mode().Perm(); mode != 0o600 {
-		t.Errorf("priv mode = %#o, want 0600", mode)
-	}
-
 	pub, err := os.Stat(out + ".pub")
 	if err != nil {
 		t.Fatalf("pub stat: %v", err)
 	}
-	if mode := pub.Mode().Perm(); mode != 0o644 {
-		t.Errorf("pub mode = %#o, want 0644", mode)
+	// SEC-WIN: POSIX mode bits do not reflect Windows ACLs — Go reports a
+	// 0600-written file back as 0666 there. Keep the perm assertion at full
+	// strength on Unix (it is a real security check on the private key); only
+	// the Windows path, where the OS cannot honour these bits, is gated out.
+	if runtime.GOOS != "windows" {
+		if mode := priv.Mode().Perm(); mode != 0o600 {
+			t.Errorf("priv mode = %#o, want 0600", mode)
+		}
+		if mode := pub.Mode().Perm(); mode != 0o644 {
+			t.Errorf("pub mode = %#o, want 0644", mode)
+		}
 	}
 
 	// Round-trip: load both, sign random data, verify with stdlib.

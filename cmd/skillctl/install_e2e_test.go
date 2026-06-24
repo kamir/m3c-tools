@@ -37,6 +37,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -66,6 +67,9 @@ func skillctlBin(t *testing.T) string {
 			return
 		}
 		out := filepath.Join(dir, "skillctl")
+		if runtime.GOOS == "windows" {
+			out += ".exe" // Windows needs the .exe suffix to exec the built binary
+		}
 		// Build from the cmd/skillctl package (CWD here).
 		cmd := exec.Command("go", "build", "-o", out, ".")
 		cmd.Stderr = os.Stderr
@@ -188,7 +192,7 @@ func (f *e2eFixture) happyMux(t *testing.T, manifest map[string]any, currentGove
 	mux.HandleFunc("/api/skills/bundles/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("meta") == "1" {
 			payload := map[string]any{
-				"bundle":             map[string]any{"bundle_digest": f.digestStr, "status": "admitted"},
+				"bundle": map[string]any{"bundle_digest": f.digestStr, "status": "admitted"},
 				"signatures": []map[string]any{
 					{"role": "author", "identity_id": "id:author@m3c", "signature_b64": base64.StdEncoding.EncodeToString(f.authorSig), "status": "active"},
 					{"role": "registry", "identity_id": "id:registry@aims-core", "signature_b64": base64.StdEncoding.EncodeToString(f.regSig), "status": "active"},
