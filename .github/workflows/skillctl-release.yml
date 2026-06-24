@@ -124,7 +124,7 @@ jobs:
       # SHA256SUMS.sig, and promotes. A broken cosign flow yields a draft, never
       # a published release.
       - name: Create draft release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           draft: true
           make_latest: false
