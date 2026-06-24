@@ -290,6 +290,11 @@ func runAttestWithClient(
 	if authorKnownLocally {
 		fmt.Fprintf(stdout, "self_attested: %t\n", selfAttested)
 	}
+
+	// SPEC-0278 L1: best-effort mirror of this signed attestation's digest
+	// into the local transparency log (opt-in via M3C_TRANSLOG=1). Never
+	// alters the attest decision above — the attestation already succeeded.
+	bestEffortTranslogAppend(translogEventAttest, bundleDigest, *level, stderr)
 	return exitOK
 }
 
