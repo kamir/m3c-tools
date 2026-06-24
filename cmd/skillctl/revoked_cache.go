@@ -104,13 +104,40 @@ func fetchRevokedOnline(home string) (map[string]struct{}, bool) {
 // installedSkillDigest reads the provenance sidecar's bundle_digest for an
 // installed skill, or "" if there is no sidecar / it's unreadable.
 func installedSkillDigest(home, name string) string {
-	b, err := os.ReadFile(filepath.Join(home, ".claude", "skills", name, registry.ProvenanceSidecarName))
-	if err != nil {
-		return ""
-	}
-	var side registry.ProvenanceSidecar
-	if json.Unmarshal(b, &side) != nil {
+	side, ok := loadInstalledSidecar(home, name)
+	if !ok {
 		return ""
 	}
 	return side.BundleDigest
+}
+
+// installedSkillAuthor reads the provenance sidecar's author identity (the
+// identity_id of the "author"-role signature) for an installed skill, or "" if
+// there is no sidecar / no author signature. Used by the runtime emergency gate
+// so a burned AUTHOR (not just a burned digest) is denied on sight.
+func installedSkillAuthor(home, name string) string {
+	side, ok := loadInstalledSidecar(home, name)
+	if !ok {
+		return ""
+	}
+	for _, s := range side.Signatures {
+		if s.Role == "author" && s.IdentityID != "" {
+			return s.IdentityID
+		}
+	}
+	return ""
+}
+
+// loadInstalledSidecar reads + decodes the provenance sidecar for an installed
+// skill. ok=false when there is no sidecar / it is unreadable / malformed.
+func loadInstalledSidecar(home, name string) (registry.ProvenanceSidecar, bool) {
+	b, err := os.ReadFile(filepath.Join(home, ".claude", "skills", name, registry.ProvenanceSidecarName))
+	if err != nil {
+		return registry.ProvenanceSidecar{}, false
+	}
+	var side registry.ProvenanceSidecar
+	if json.Unmarshal(b, &side) != nil {
+		return registry.ProvenanceSidecar{}, false
+	}
+	return side, true
 }

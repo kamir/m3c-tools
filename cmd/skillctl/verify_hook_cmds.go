@@ -72,11 +72,14 @@ func refusalCodeForHook(exitCode int, reason string) string {
 	// revocation snapshot). Specific tokens before the generic agentid case so
 	// the Art.12 trail distinguishes a compromise event / a freshness fail-closed
 	// from a plain mandate failure.
-	case strings.Contains(reason, "agentid: agent_emergency_denied"):
+	case strings.Contains(reason, "agent_emergency_denied"):
 		return "agent_emergency_denied"
 	case strings.Contains(reason, "agentid: agent_revocation_stale"):
 		return "agent_revocation_stale"
-	case strings.Contains(reason, "agentid: agentid_emergency_list_untrusted"):
+	// Both the mandate path ("agentid_emergency_list_untrusted") and the
+	// unconditional runtime path ("agent_emergency_list_untrusted") match this
+	// common substring → a present-but-forged emergency file's fail-closed deny.
+	case strings.Contains(reason, "emergency_list_untrusted"):
 		return "agent_emergency_list_untrusted"
 	case strings.Contains(reason, "agentid:"):
 		return "agent_mandate_invalid"
@@ -273,6 +276,28 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	if authz.Configured {
 		audAgentID, audOwner = authz.AgentID, authz.Owner
 	}
+
+	// SPEC-0279 R5 — EMERGENCY DENY-LIST on the installed bundle DIGEST + AUTHOR,
+	// consulted FIRST and UNCONDITIONALLY (review finding #1, the merge-blocker).
+	// This is the headline emergency guarantee at the runtime SPEC-0247 gate: a
+	// compromised digest/author is denied on sight
+	//   - independent of whether an AgentID mandate is configured (the common case
+	//     has none — the old code only consulted the list inside the mandate path);
+	//   - BEFORE the `fresh`-guarded readRevokedCache, BEFORE cachedAllow, and
+	//     BEFORE the offline/online chain — so a STALE sweep cache (which skips the
+	//     revoked-digest check) and a low-risk/cached action can NOT keep a burned
+	//     bundle alive. The cache cadence is short-circuited.
+	// A present-but-forged emergency file is fail-closed (DENY). A missing file is
+	// a no-op (the channel is opt-in per machine).
+	if ev := emergencyDeniesInstalledSkill(home, skill); ev.Deny {
+		audReason = "agentid: agent_" + ev.Reason // → emergency_denied / emergency_list_untrusted
+		msg := fmt.Sprintf("skillctl: BLOCKED '%s' — emergency deny-list (compromise event, SPEC-0279 R5); refusing on sight (fail-closed).", skill)
+		if ev.Token != "" {
+			msg = fmt.Sprintf("skillctl: BLOCKED '%s' — emergency deny-list names %q (compromise event, SPEC-0279 R5); refusing on sight regardless of cache freshness or AgentID mandate.", skill, ev.Token)
+		}
+		return emitDeny(stdout, stderr, msg)
+	}
+
 	// allow() is the single allow gate: when a mandate is engaged it denies
 	// outside-grant/invalid agents; otherwise it is the plain emitAllow.
 	allow := func() int {

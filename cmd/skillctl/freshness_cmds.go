@@ -110,7 +110,15 @@ func evaluateFreshness(in freshnessInputs) freshnessOutcome {
 	}
 
 	// R4 — apply an OPTIONAL signed checkpoint to (maybe) reset the staleness
-	// clock. A present-but-bad checkpoint is fail-closed.
+	// clock. A present-but-bad checkpoint is fail-closed. The checkpoint is
+	// verified against the SAME single (own-company) registry root as the
+	// revocation list — the single-company freshness case.
+	//
+	// SPEC-0279 AC4: cross-company STH freshness deferred to P5 (SPEC-0278) —
+	// where a checkpoint/Signed-Tree-Head issued by ANOTHER company's log would be
+	// cross-verified (a different trust anchor + inclusion proof) the branch would
+	// wire HERE. Out of scope for P4; the deferral boundary is intentionally
+	// visible at the call site.
 	anchor := in.syncedIssuedAt
 	checkpointApplied := false
 	if strings.TrimSpace(in.checkpointPath) != "" {

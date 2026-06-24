@@ -196,6 +196,42 @@ func TestFreshness_UnparseableIssuedAtIsStale(t *testing.T) {
 	}
 }
 
+// SPEC-0279 P4 (review finding #4): a FUTURE-dated issued_at would otherwise
+// clamp to staleness 0 and "look fresh forever". Past a small clock-skew, a
+// future timestamp is treated as infinitely stale (fail-safe), so it fails the
+// contract exactly like a missing one. A SMALL future skew (NTP jitter) is still
+// tolerated as fresh.
+func TestFreshness_FutureDatedIssuedAtIsStale(t *testing.T) {
+	p := freshPolicy(t, "24h", "open", nil) // open would otherwise allow low-risk
+	now := mustTime(t, "2026-06-22T00:00:00Z")
+
+	// Far future (1h ahead) → beyond the 5m skew → infinitely stale → fail-closed
+	// even for a HIGH-risk action (and even with a generous ceiling).
+	farFuture := "2026-06-22T01:00:00Z"
+	dec, err := EvaluateFreshness(3, farFuture, p, RiskHigh, now)
+	if !errors.Is(err, ErrRevocationStale) {
+		t.Fatalf("far-future issued_at + high-risk must fail closed, got: %v", err)
+	}
+	if !dec.Stale {
+		t.Error("far-future issued_at must be marked stale")
+	}
+
+	// Far future + LOW-risk + fail_policy=closed → DENIED: the forged-future
+	// timestamp is now treated as STALE (not fresh), so the fail-policy applies
+	// instead of being bypassed. This is the core of the fix — the future date no
+	// longer "looks fresh forever".
+	pClosed := freshPolicy(t, "24h", "closed", nil)
+	if decLow, errLow := EvaluateFreshness(3, farFuture, pClosed, RiskLow, now); !errors.Is(errLow, ErrRevocationStale) || !decLow.Stale {
+		t.Fatalf("far-future low-risk + closed must fail closed (treated stale, not fresh); got err=%v dec=%+v", errLow, decLow)
+	}
+
+	// A SMALL future skew (2m < 5m) is tolerated → fresh.
+	nearFuture := "2026-06-22T00:02:00Z"
+	if decN, errN := EvaluateFreshness(3, nearFuture, p, RiskHigh, now); errN != nil || !decN.Allowed {
+		t.Fatalf("small future skew (2m) must be tolerated as fresh, got err=%v dec=%+v", errN, decN)
+	}
+}
+
 // --- R3: action-risk classification (red-team: cannot downgrade high→low) ---
 
 func TestClassifyActionRisk(t *testing.T) {
@@ -207,7 +243,9 @@ func TestClassifyActionRisk(t *testing.T) {
 		want  ActionRisk
 	}{
 		{"read-only", []string{"fs:read", "git:read"}, false, nil, RiskLow},
-		{"empty", nil, false, nil, RiskLow},
+		// SPEC-0279 P4 (review finding #2): the fail-safe is allowlist-known-low,
+		// so an EMPTY surface cannot be proven read-only → HIGH (was RiskLow).
+		{"empty", nil, false, nil, RiskHigh},
 		{"llm-call low", []string{"llm:call", "secrets:read"}, false, nil, RiskLow},
 		{"fs:write high", []string{"fs:write"}, false, nil, RiskHigh},
 		{"fs:delete high", []string{"fs:delete"}, false, nil, RiskHigh},
@@ -218,6 +256,15 @@ func TestClassifyActionRisk(t *testing.T) {
 		{"prod signal high", []string{"fs:read"}, false, []string{"prod"}, RiskHigh},
 		// Red-team: a write side-effect cannot be hidden by also listing reads.
 		{"mixed read+write still high", []string{"fs:read", "git:read", "fs:write"}, false, nil, RiskHigh},
+		// SPEC-0279 P4 (review finding #2): an UNKNOWN / mis-typed / future token
+		// is NOT on the known-low allowlist → HIGH. A red-team cannot downgrade by
+		// using a token the classifier does not recognise. The §7 "UNKNOWN"
+		// awareness sentinel is likewise HIGH (not first-class low).
+		{"unknown token high", []string{"fs:read", "totally:bogus"}, false, nil, RiskHigh},
+		{"awareness UNKNOWN sentinel high", []string{"UNKNOWN"}, false, nil, RiskHigh},
+		{"unknown extra-signal high", []string{"fs:read"}, false, []string{"mystery"}, RiskHigh},
+		// Grant-intent read forms are on the allowlist (mandate surface).
+		{"grant read intents low", []string{"network:read", "fs:read"}, false, []string{"network:read", "fs:read"}, RiskLow},
 	}
 	for _, c := range cases {
 		if got := ClassifyActionRisk(c.se, c.destr, c.extra...); got != c.want {

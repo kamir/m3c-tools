@@ -31,6 +31,14 @@ import (
 // defaultCacheTTL is the shipped sweep cadence used when cache_ttl is unset.
 const defaultCacheTTL = 12 * time.Hour
 
+// maxFutureClockSkew is how far a snapshot's issued_at may sit in the FUTURE
+// (relative to the verifier's clock) before it is treated as DISHONEST. A small
+// skew (NTP jitter, sub-second rounding) is tolerated; anything beyond it is a
+// forged/future-dated timestamp that would otherwise "look fresh forever" — so
+// past this bound we treat the snapshot as INFINITELY STALE (fail-safe), exactly
+// like a missing/unparseable issued_at (SPEC-0279 P4 review finding #4).
+const maxFutureClockSkew = 5 * time.Minute
+
 // FailPolicy is the disposition past max_staleness. Closed (deny) is the
 // SPEC-0279 default; Open (allow, audited) is configurable for low-risk actions.
 type FailPolicy string
@@ -188,50 +196,80 @@ func parseFailPolicy(label, raw string, def FailPolicy) (FailPolicy, error) {
 	}
 }
 
-// highRiskSideEffects is the closed set of SPEC-0196 §5 side-effect tokens that
-// classify an action as HIGH-risk for freshness purposes (state-mutating /
-// consequential / egress). Everything NOT in this set (fs:read, git:read,
-// secrets:read, llm:call, the UNKNOWN sentinel, or no side-effects) is LOW-risk.
+// The AUTHORITATIVE risk classifier is allowlist-known-low (knownLowRiskTokens):
+// anything NOT PROVEN low is HIGH. The unambiguously-high SPEC-0196 §5 tokens
+// (fs:write, fs:delete, git:write, network:outbound, subprocess) are simply NOT
+// on the allowlist, so they classify HIGH by exclusion — there is no separate
+// high-list to keep in sync (a denylist-known-high model was the review's
+// finding #2 fail-safe gap).
 //
-// Reusing the SPEC-0196 vocabulary (rather than inventing a new risk taxonomy)
-// means the red-team cannot "downgrade a high-risk action to low-risk" by
-// renaming a side-effect — the classification is over the SAME tokens the
-// datascope validator already enforces as a closed set at pack time.
-var highRiskSideEffects = map[string]struct{}{
-	"fs:write":         {},
-	"fs:delete":        {},
-	"git:write":        {},
-	"network:outbound": {},
-	"subprocess":       {},
+// knownLowRiskTokens is the CLOSED ALLOWLIST of tokens that are PROVEN low-risk
+// for freshness purposes — read-only / non-egress / non-mutating. The fail-safe
+// inverts the old denylist-known-high model (SPEC-0279 P4 review finding #2):
+// a token must be on THIS list to be treated as low. An unknown / mis-typed /
+// future token, or the SPEC-0196 §7 "UNKNOWN" awareness sentinel, is therefore
+// HIGH — so a red-team cannot DOWNGRADE a high-risk action to low simply by
+// using a token the classifier does not recognise.
+//
+// It spans BOTH the SPEC-0196 §5 side-effect vocabulary (fs:read, git:read,
+// network:inbound, secrets:read, llm:call) AND the read-style grant-intent forms
+// the AgentID mandate uses (network:read, fs:read, git:read), so the one
+// classifier is correct whether it is fed datascope side-effects or grant intents.
+var knownLowRiskTokens = map[string]struct{}{
+	// SPEC-0196 §5 side-effect reads (datascope surface).
+	"fs:read":         {},
+	"git:read":        {},
+	"network:inbound": {},
+	"secrets:read":    {},
+	"llm:call":        {},
+	// AgentID grant-intent read forms (mandate surface).
+	"network:read": {},
 }
 
 // ClassifyActionRisk maps a set of declared side-effects + intent flags to a
-// freshness ActionRisk, using the SPEC-0196 vocabulary already in
-// pkg/skillctl/datascope. The classification is FAIL-SAFE / monotonic toward
-// HIGH: a `destructive` intent, a `spend` limit, a `prod` target, OR any
-// high-risk side-effect makes the action HIGH-risk. Only an action that is
-// unambiguously read-only across ALL signals is LOW-risk.
+// freshness ActionRisk. The classification is FAIL-SAFE toward HIGH via an
+// ALLOWLIST-KNOWN-LOW rule (SPEC-0279 P4 review finding #2):
+//
+//   - an EMPTY surface (no side-effects, no extra signals, not destructive) is
+//     HIGH — we cannot PROVE it read-only, so we must not assume it (matching
+//     bundleActionRisk, whose empty-scopes case is already HIGH);
+//
+//   - a `destructive` flag, OR any extra "spend"/"prod"/write/egress signal, is
+//     HIGH (the SPEC-0279 R3 spend/prod cases that are not side-effects);
+//
+//   - any side-effect / signal token NOT in knownLowRiskTokens is HIGH (an
+//     unknown/mis-typed/future token cannot dodge fail-closed);
+//
+//   - only when EVERY supplied token is in the known-low allowlist (and nothing
+//     is destructive) is the action LOW.
 //
 //   - sideEffects — the SPEC-0196 §5 side_effects tokens (fs:write, …).
-//   - destructive — the intent.destructive flag (nil = absent = treated low here;
-//     a write side-effect already forces high via the vocabulary).
-//   - extraSignals — free-form action tags the caller wants to fold in
-//     ("spend", "prod", "destructive"); any of these forces HIGH. This is the
-//     hook for the SPEC-0279 R3 "spend / prod" cases that are not side-effects.
+//
+//   - destructive — the intent.destructive flag.
+//
+//   - extraSignals — free-form action tags ("spend", "prod", "destructive",
+//     grant-intent tokens, …) the caller wants to fold in.
 //
 // The function never DOWNGRADES: once any signal says high, the result is high.
 func ClassifyActionRisk(sideEffects []string, destructive bool, extraSignals ...string) ActionRisk {
 	if destructive {
 		return RiskHigh
 	}
+	// Empty surface → cannot prove read-only → fail-safe HIGH (matches
+	// bundleActionRisk's no-declared-scopes case).
+	if len(sideEffects) == 0 && len(extraSignals) == 0 {
+		return RiskHigh
+	}
+	// Every supplied token must be on the known-low allowlist; the first token NOT
+	// on it (unknown/mis-typed/future/UNKNOWN-sentinel, or an explicit high token)
+	// forces HIGH.
 	for _, se := range sideEffects {
-		if _, hi := highRiskSideEffects[strings.ToLower(strings.TrimSpace(se))]; hi {
+		if _, low := knownLowRiskTokens[strings.ToLower(strings.TrimSpace(se))]; !low {
 			return RiskHigh
 		}
 	}
 	for _, sig := range extraSignals {
-		switch strings.ToLower(strings.TrimSpace(sig)) {
-		case "spend", "prod", "destructive", "fs:write", "network:write", "network:outbound":
+		if _, low := knownLowRiskTokens[strings.ToLower(strings.TrimSpace(sig))]; !low {
 			return RiskHigh
 		}
 	}
@@ -294,6 +332,13 @@ func EvaluateFreshness(epoch int, issuedAt string, policy FreshnessPolicy, risk 
 	}
 
 	staleness, parsedOK := snapshotStaleness(issuedAt, now)
+	// A FUTURE issued_at (negative staleness) more than maxFutureClockSkew ahead of
+	// the verifier's clock is a dishonest/forged timestamp — it would otherwise
+	// clamp to staleness 0 and "look fresh forever". Treat it as unparseable →
+	// infinitely stale (fail-safe), so the ceiling fires (SPEC-0279 P4 finding #4).
+	if parsedOK && staleness < -maxFutureClockSkew {
+		parsedOK = false
+	}
 	if staleness < 0 {
 		staleness = 0
 	}

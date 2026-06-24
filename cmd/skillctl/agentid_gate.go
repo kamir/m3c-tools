@@ -212,6 +212,76 @@ func verifyActiveAgentID(home string, doc *agentid.AgentID) (bool, string) {
 	return true, ""
 }
 
+// emergencyVerdict is the outcome of the runtime emergency-deny check on an
+// installed skill's bundle digest + author identity (SPEC-0279 R5 at the
+// SPEC-0247 gate).
+type emergencyVerdict struct {
+	// Deny is true when the skill must be refused: either a digest/author token is
+	// on the verified emergency deny-list, OR the present emergency file failed to
+	// verify (fail-closed — never ignore an operator-placed list).
+	Deny bool
+	// Token is the matched deny token (when a real entry matched), for the message.
+	Token string
+	// Reason is the stable refusal token: "emergency_denied" (a digest/author was
+	// listed) or "emergency_list_untrusted" (the file is present but unverifiable).
+	Reason string
+}
+
+// emergencyDeniesInstalledSkill consults the SPEC-0279 R5 emergency deny-list for
+// an installed skill's BUNDLE DIGEST and AUTHOR IDENTITY at the runtime gate.
+//
+// This is the headline emergency guarantee at the SPEC-0247 PreToolUse path:
+// it runs UNCONDITIONALLY — independent of any AgentID mandate, BEFORE the
+// freshness/cache cadence — so a compromised digest/author is denied on sight
+// even when no mandate is configured (the common case) and even when the
+// SPEC-0266 sweep cache is fresh (the cadence cannot keep a burned bundle alive).
+//
+// Fail-closed by construction:
+//   - no emergency file on disk            → no deny (opt-in per machine);
+//   - file PRESENT but trust roots missing → DENY (we cannot verify a list the
+//     operator placed; refusing the skill is safer than ignoring the list);
+//   - file PRESENT but signature/rollback
+//     invalid (forged)                     → DENY (emergency_list_untrusted);
+//   - a listed digest/author               → DENY (emergency_denied).
+//
+// A skill with NO provenance sidecar (no digest/author to test) is still subject
+// to a fail-closed file: if the operator placed an emergency list we cannot
+// verify, we refuse regardless.
+func emergencyDeniesInstalledSkill(home, skill string) emergencyVerdict {
+	if home == "" {
+		return emergencyVerdict{}
+	}
+	ep := emergencyDenyPath(home)
+	if !fileExists(ep) {
+		return emergencyVerdict{} // opt-in: nothing placed → nothing to enforce.
+	}
+
+	// The file is present → from here, any inability to VERIFY it is fail-closed.
+	_, root, err := loadRootsFn("")
+	if err != nil {
+		return emergencyVerdict{Deny: true, Reason: "emergency_list_untrusted"}
+	}
+	set, lerr := verify.LoadVerifiedEmergencyDenyList(ep, root)
+	if lerr != nil {
+		return emergencyVerdict{Deny: true, Reason: "emergency_list_untrusted"}
+	}
+
+	// Test BOTH the installed digest and the installed author identity. ANY hit
+	// denies. (A "sha256:<digest>" on the list burns the exact bundle; an
+	// "id:<owner>" burns everything that author signed.)
+	digest := installedSkillDigest(home, skill)
+	author := installedSkillAuthor(home, skill)
+	if tok, bad := verify.EmergencyDenies(set, digest, author); bad {
+		appendGateEvent(home, gateEvent{
+			Source: "hook", Skill: skill, Decision: "deny",
+			Reason: "emergency_deny:" + tok, ExitCode: exitBundleRevoked,
+			ContentDigest: digest,
+		})
+		return emergencyVerdict{Deny: true, Token: tok, Reason: "emergency_denied"}
+	}
+	return emergencyVerdict{}
+}
+
 // agentDenyReason maps an agentid verification error to a stable refusal token.
 func agentDenyReason(err error) string {
 	switch agentIDExitCode(err) {

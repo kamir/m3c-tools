@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/skillctl/agentid"
 	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 )
@@ -110,6 +111,28 @@ func (e gateEnv) installHighRiskMandate(t *testing.T, agentID, grantSkills strin
 	}
 }
 
+// SPEC-0279 P4 (review finding #2): an empty-intents AgentID mandate is
+// fail-safe HIGH-risk, matching bundleActionRisk's empty-scopes case. An empty
+// grant cannot be PROVEN read-only, so grantActionRisk must NOT downgrade it to
+// LOW (which would let it ride the low-risk fail-open path past max_staleness).
+func TestGate_EmptyGrantIsHighRisk(t *testing.T) {
+	if got := grantActionRisk(agentid.Grant{}); got != verify.RiskHigh {
+		t.Fatalf("empty grant: grantActionRisk = %q, want %q (fail-safe HIGH)", got, verify.RiskHigh)
+	}
+	// A read-only grant is still LOW (the allowlist recognises the read intents).
+	if got := grantActionRisk(agentid.Grant{Intents: []string{"network:read", "fs:read"}}); got != verify.RiskLow {
+		t.Fatalf("read-only grant: grantActionRisk = %q, want %q", got, verify.RiskLow)
+	}
+	// A write/egress grant is HIGH.
+	if got := grantActionRisk(agentid.Grant{Intents: []string{"network:write"}}); got != verify.RiskHigh {
+		t.Fatalf("write grant: grantActionRisk = %q, want %q", got, verify.RiskHigh)
+	}
+	// An unknown/mis-typed intent token is HIGH (cannot downgrade by obfuscation).
+	if got := grantActionRisk(agentid.Grant{Intents: []string{"weird:capability"}}); got != verify.RiskHigh {
+		t.Fatalf("unknown-intent grant: grantActionRisk = %q, want %q (fail-safe HIGH)", got, verify.RiskHigh)
+	}
+}
+
 // AC3 (gate): an emergency deny-list entry denies BEFORE the cadence — even with
 // no revocation snapshot at all.
 func TestGate_EmergencyDeniesAgent(t *testing.T) {
@@ -163,18 +186,22 @@ func TestGate_CheckpointResetsAtGate(t *testing.T) {
 	assertAllow(t, code, out)
 }
 
-// Adversarial: a forged emergency deny-list at the gate path is fail-closed (the
-// gate denies the agent rather than ignore an operator-placed list).
+// Adversarial: a forged emergency deny-list at the gate path is fail-closed.
+//
+// SPEC-0279 P4 (review finding #1): the forged file is now caught by the
+// UNCONDITIONAL runtime emergency check (verify_hook_cmds.go), which runs FIRST —
+// before the mandate path — so the gate refuses rather than ignore an
+// operator-placed list it cannot verify, EVEN with a mandate present. The deny
+// announces the emergency channel and fail-closes.
 func TestGate_ForgedEmergencyFailsClosed(t *testing.T) {
 	e := setupGate(t, "summarize", false)
 	e.installMandate(t, "agent:x", "summarize", false)
 	_, forged, _ := ed25519.GenerateKey(rand.Reader)
 	writeGateEmergency(t, e, forged, "agent:someoneelse") // forged signer; doesn't even name x
 	code, out, _ := feed(t, hookEventFor("summarize"))
-	assertDeny(t, code, out, "not authorized")
-	// A present-but-forged emergency list is fail-closed: the gate refuses the
-	// agent rather than ignore an operator-placed list it cannot verify.
-	if !strings.Contains(out, "agentid_emergency_list_untrusted") {
-		t.Fatalf("forged emergency must fail closed with agentid_emergency_list_untrusted; got %q", out)
+	assertDeny(t, code, out, "emergency deny-list")
+	// The fail-closed reason is announced.
+	if !strings.Contains(out, "fail-closed") {
+		t.Fatalf("forged emergency must fail closed; got %q", out)
 	}
 }

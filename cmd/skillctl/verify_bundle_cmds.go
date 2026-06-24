@@ -299,24 +299,74 @@ func checkBundleRevoked(path string, root *verify.TrustRoot, digest string) (rev
 }
 
 // bundleActionRisk classifies the freshness risk of installing/using a bundle
-// from its declared data-scopes (SPEC-0196): ANY write/transform access (or no
-// declared scopes at all — fail-safe toward HIGH for an unknown surface) makes it
-// high-risk; a purely read-only declared surface is low-risk. This reuses the
-// SAME access vocabulary the datascope validator enforces, so a bundle cannot
-// dodge fail-closed by relabelling a write.
+// from its declared data-scopes (SPEC-0196). SINGLE SOURCE OF TRUTH (SPEC-0279
+// P4 review finding #3): it folds BOTH risk axes into the SAME classifier
+// ClassifyActionRisk uses for the AgentID/freshness path, so the two cannot
+// diverge and a bundle cannot "fail open" by splitting its declaration across
+// axes:
+//
+//   - access (read|write|transform|delete) per data-dependency, AND
+//   - the per-dependency `side_effects` tokens (fs:write, network:outbound, …).
+//
+// A write/transform/delete access OR any high-risk side-effect → HIGH, REGARDLESS
+// of how the other axis is labelled (the access-vs-side_effects split the review
+// flagged: side_effects:["fs:write"] under access:"read" is now HIGH). No declared
+// scopes at all is HIGH (an unknown surface cannot be proven read-only) — and
+// ClassifyActionRisk's empty-surface case is ALSO HIGH, so the two are aligned.
 func bundleActionRisk(scopes []verify.DeclaredScope) verify.ActionRisk {
 	if len(scopes) == 0 {
 		// No declared surface → we cannot prove it is read-only → fail-safe HIGH.
 		return verify.RiskHigh
 	}
+	var sideEffects, accessSignals []string
 	for _, s := range scopes {
-		access, _ := s.Raw["access"].(string)
-		switch strings.ToLower(strings.TrimSpace(access)) {
+		// Fold the access verb into a token ClassifyActionRisk understands: a
+		// write/transform/delete maps to a high side-effect; read/passthrough map to
+		// a known-low read token. An empty/unknown access is left as a non-low token
+		// so it fails safe HIGH.
+		switch strings.ToLower(strings.TrimSpace(asString(s.Raw["access"]))) {
 		case "write", "transform":
-			return verify.RiskHigh
+			accessSignals = append(accessSignals, "fs:write")
+		case "delete":
+			accessSignals = append(accessSignals, "fs:delete")
+		case "read", "passthrough":
+			accessSignals = append(accessSignals, "fs:read")
+		default:
+			accessSignals = append(accessSignals, "access:unknown") // not on the low allowlist → HIGH
+		}
+		// Fold any declared per-dependency side-effects through the SAME vocabulary,
+		// so side_effects:["fs:write"] under access:"read" is still HIGH.
+		sideEffects = append(sideEffects, rawSideEffects(s.Raw)...)
+	}
+	return verify.ClassifyActionRisk(sideEffects, false, accessSignals...)
+}
+
+// rawSideEffects extracts the `side_effects` token list from a data-dependency's
+// raw map (an []any of strings), if present. Tolerant of absence/type mismatch —
+// a missing/garbled field yields no tokens (the access axis still classifies).
+func rawSideEffects(raw map[string]any) []string {
+	v, ok := raw["side_effects"]
+	if !ok {
+		return nil
+	}
+	arr, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(arr))
+	for _, item := range arr {
+		if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
+			out = append(out, s)
 		}
 	}
-	return verify.RiskLow
+	return out
+}
+
+// asString coerces a raw JSON value to a string ("" for nil/non-string), so a
+// numeric/absent access field degrades to the fail-safe unknown branch.
+func asString(v any) string {
+	s, _ := v.(string)
+	return s
 }
 
 // defaultMetaSidecar derives the sidecar BundleMeta path from a .skb path:
