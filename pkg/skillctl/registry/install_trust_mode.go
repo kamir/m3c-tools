@@ -316,7 +316,7 @@ func installTokenKey() ([]byte, error) {
 	if installTokenKeyValue != nil {
 		return installTokenKeyValue, nil
 	}
-	home, _ := os.UserHomeDir()
+	home := userHome()
 	dir := filepath.Join(home, ".cache", "m3c")
 	keyPath := filepath.Join(dir, "install-token.key")
 	if b, err := os.ReadFile(keyPath); err == nil && len(b) == 32 {
@@ -519,8 +519,7 @@ func extractSkb(skb []byte, target string) error {
 }
 
 func defaultSkillsDir() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".claude", "skills")
+	return filepath.Join(userHome(), ".claude", "skills")
 }
 
 func hostnameShort() string {

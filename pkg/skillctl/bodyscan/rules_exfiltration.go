@@ -89,7 +89,14 @@ func itoa(n int) string {
 }
 
 func matchBase64NearNetwork(c scanCtx) []Span {
-	b := c.In.Body
+	// Scan the NORMALIZED body, not the raw one. Normalization has already
+	// EOL-folded CRLF/CR to LF (normalize.go), so the single-newline separator
+	// in reB64Separator matches identically regardless of the file's line
+	// endings — a split-base64 blob authored with Windows CRLF can no longer
+	// evade the chunk-merge by inserting a stray "\r" between chunks. Spans are
+	// mapped back to ORIGINAL byte offsets via c.origSpan so the reported
+	// excerpt / line number still points into the user's on-disk bytes.
+	b := c.Norm.Text
 	netLocs := reNetworkRef.FindAllStringIndex(b, -1)
 	if netLocs == nil {
 		return nil
@@ -123,7 +130,7 @@ func matchBase64NearNetwork(c scanCtx) []Span {
 		start, end := bl[2], bl[3] // capture group 1 = the run
 		if nearNet(start) && !seen[start] {
 			seen[start] = true
-			out = append(out, Span{Start: start, End: end})
+			out = append(out, c.origSpan(start, end))
 		}
 	}
 
@@ -138,7 +145,7 @@ func matchBase64NearNetwork(c scanCtx) []Span {
 		}
 		if nearNet(m.start) && !seen[m.start] {
 			seen[m.start] = true
-			out = append(out, Span{Start: m.start, End: m.end})
+			out = append(out, c.origSpan(m.start, m.end))
 		}
 	}
 	return out

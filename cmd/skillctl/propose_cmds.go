@@ -110,7 +110,7 @@ func runPropose(args []string, stdout, stderr io.Writer) int {
 
 	skillDir := *source
 	if skillDir == "" {
-		home, err := os.UserHomeDir()
+		home, err := userHome()
 		if err != nil {
 			fmt.Fprintf(stderr, "skillctl propose: home dir: %v\n", err)
 			return exitGeneric
@@ -315,7 +315,7 @@ func newProposalID() (string, error) {
 // appendNotifyQueue writes a JSONL row to ~/.m3c-tools/notify-queue.jsonl.
 // SPEC-0194 §9 lock: lightweight, no external dependency.
 func appendNotifyQueue(proposalID, skillName, intent string) error {
-	home, err := os.UserHomeDir()
+	home, err := userHome()
 	if err != nil {
 		return err
 	}

@@ -51,8 +51,7 @@ type SelfTrustRoots struct {
 
 // DefaultSelfTrustRootsPath is the conventional location.
 func DefaultSelfTrustRootsPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".claude", "trust-roots.yaml")
+	return filepath.Join(userHome(), ".claude", "trust-roots.yaml")
 }
 
 // LoadSelfTrustRoots reads the YAML file at path. Path == "" → default.

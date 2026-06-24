@@ -133,9 +133,22 @@ var confusableFold = map[rune]rune{
 // rune — so adjacent characters re-join (defeating soft-hyphen / zero-width
 // splitting) while every surviving byte still resolves to a real original
 // offset.
+//
+// LINE-ENDING AGNOSTIC (security): the body is FIRST EOL-normalized — every
+// "\r\n" and lone "\r" becomes "\n" — before any folding or matching. Without
+// this, a skill authored with Windows (CRLF) line endings could WEAKEN
+// detection: a rule that treats a single "\n" as a base64-chunk separator
+// (EXF-004) sees "\r\n" and fails to stitch the split blob, so a "split base64
+// near a network sink" exfil evades the scanner purely by virtue of its EOL
+// style. EOL normalization makes the verdict identical regardless of line
+// endings. It is DELIBERATELY NOT treated as an obfuscation signal (it does not
+// set Changed): CRLF is benign and ubiquitous, so it must not turn every
+// Windows-authored skill yellow via OBF-007. The offset map still resolves
+// every surviving byte to its real original (CRLF) position so reported spans /
+// excerpts / line numbers stay correct on CRLF files.
 func normalizeBody(body string) *normalized {
-	// Fast path: plain ASCII with no escape sequences and no spaced-letter runs
-	// needs no transformation at all (overwhelmingly the common case).
+	// Fast path: plain ASCII with no escape sequences, no spaced-letter runs,
+	// and no carriage returns needs no transformation at all (the common case).
 	if isPlainASCII(body) && !mightNeedDecode(body) {
 		offsets := make([]int, len(body)+1)
 		for i := range offsets {
@@ -159,6 +172,23 @@ func normalizeBody(body string) *normalized {
 	}
 
 	for i := 0; i < len(body); {
+		// EOL normalization (security; see doc comment). A carriage return is
+		// rewritten to "\n": "\r\n" collapses to a single "\n" (the "\r" is
+		// dropped, the following "\n" is emitted normally on the next iteration),
+		// and a lone "\r" (old-Mac EOL) becomes "\n". This is NOT an obfuscation
+		// signal, so `changed` is intentionally left untouched here.
+		if body[i] == '\r' {
+			if i+1 < len(body) && body[i+1] == '\n' {
+				// CRLF: drop the CR, let the LF emit on the next iteration so the
+				// LF keeps its own original offset.
+				i++
+				continue
+			}
+			// Lone CR → LF, mapped to the CR's original offset.
+			emit('\n', i)
+			i++
+			continue
+		}
 		// \uXXXX / \xXX escape decoding (SPEC-0246 §4, evasion: "\uNNNN-encoded").
 		if r, consumed, ok := decodeEscape(body[i:]); ok {
 			folded, drop := foldRune(r)
@@ -193,9 +223,13 @@ func normalizeBody(body string) *normalized {
 }
 
 // mightNeedDecode reports whether body contains constructs that the slow path
-// must handle even though the body is plain ASCII: backslash-u/x escapes, or a
-// run of single letters separated by single spaces (letter-spacing evasion).
+// must handle even though the body is plain ASCII: a carriage return (EOL
+// normalization), backslash-u/x escapes, or a run of single letters separated
+// by single spaces (letter-spacing evasion).
 func mightNeedDecode(body string) bool {
+	if strings.IndexByte(body, '\r') >= 0 {
+		return true
+	}
 	if strings.Contains(body, `\u`) || strings.Contains(body, `\x`) {
 		return true
 	}
