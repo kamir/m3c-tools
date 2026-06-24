@@ -33,6 +33,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"sync/atomic"
 	"testing"
@@ -54,6 +55,9 @@ func buildSkillctl(t testing.TB) string {
 	t.Helper()
 	root := repoRoot(t)
 	bin := filepath.Join(t.TempDir(), "skillctl")
+	if runtime.GOOS == "windows" {
+		bin += ".exe" // Windows needs the .exe suffix to exec the built binary
+	}
 	cmd := exec.Command("go", "build", "-o", bin, "./cmd/skillctl")
 	cmd.Dir = root
 	if out, err := cmd.CombinedOutput(); err != nil {

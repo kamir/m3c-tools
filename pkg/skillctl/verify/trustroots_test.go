@@ -439,7 +439,9 @@ func TestDefaultPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DefaultPath: %v", err)
 	}
-	if !strings.HasSuffix(p, ".claude/skill-trust-roots.yaml") {
+	// Compare on slash-normalized form so the suffix check is OS-agnostic:
+	// on Windows filepath.Join yields ".claude\\skill-trust-roots.yaml".
+	if !strings.HasSuffix(filepath.ToSlash(p), ".claude/skill-trust-roots.yaml") {
 		t.Errorf("DefaultPath suffix wrong: %s", p)
 	}
 	if !filepath.IsAbs(p) {

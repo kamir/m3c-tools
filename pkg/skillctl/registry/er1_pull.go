@@ -719,8 +719,7 @@ func defaultCacheRoot() string {
 	if v := os.Getenv("M3C_SKILL_CACHE_DIR"); v != "" {
 		return v
 	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".cache", "m3c", "skill-bundles")
+	return filepath.Join(userHome(), ".cache", "m3c", "skill-bundles")
 }
 
 // unused-import dead-stores (keeps the linter quiet across partial builds).

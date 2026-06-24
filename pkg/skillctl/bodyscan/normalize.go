@@ -133,9 +133,26 @@ var confusableFold = map[rune]rune{
 // rune — so adjacent characters re-join (defeating soft-hyphen / zero-width
 // splitting) while every surviving byte still resolves to a real original
 // offset.
+//
+// LINE-ENDING AGNOSTIC (security): the body is FIRST EOL-normalized — every
+// "\r\n" (Windows CRLF) collapses to "\n" — before any folding or matching.
+// Without this, a skill authored with Windows line endings could WEAKEN
+// detection: a rule that treats a single "\n" as a base64-chunk separator
+// (EXF-004) sees "\r\n" and fails to stitch the split blob, so a "split base64
+// near a network sink" exfil evades the scanner purely by virtue of its EOL
+// style. EOL normalization makes the verdict identical regardless of line
+// endings. We fold ONLY CRLF; a LONE "\r" is left as an ordinary character
+// (exactly as on non-Windows platforms) — folding it to "\n" would terminate
+// the sentence-bounded `[^.\n]{0,40}` gaps in INJ-003/005/009 and EXF-003 and
+// let a "word<CR>word" payload split a sink phrase to GREEN (red-team P54-B1).
+// CRLF folding is DELIBERATELY NOT an obfuscation signal (it does not set
+// Changed): CRLF is benign and ubiquitous, so it must not turn every
+// Windows-authored skill yellow via OBF-007. The offset map still resolves
+// every surviving byte to its real original (CRLF) position so reported spans /
+// excerpts / line numbers stay correct on CRLF files.
 func normalizeBody(body string) *normalized {
-	// Fast path: plain ASCII with no escape sequences and no spaced-letter runs
-	// needs no transformation at all (overwhelmingly the common case).
+	// Fast path: plain ASCII with no escape sequences, no spaced-letter runs,
+	// and no carriage returns needs no transformation at all (the common case).
 	if isPlainASCII(body) && !mightNeedDecode(body) {
 		offsets := make([]int, len(body)+1)
 		for i := range offsets {
@@ -159,6 +176,19 @@ func normalizeBody(body string) *normalized {
 	}
 
 	for i := 0; i < len(body); {
+		// EOL normalization (security; see doc comment). Collapse ONLY "\r\n"
+		// (Windows CRLF) to a single "\n" by DROPPING the "\r" so the following
+		// "\n" emits with its own original offset. We fold ONLY CRLF — a LONE
+		// "\r" is left as a normal character (exactly as on non-Windows
+		// platforms / master). Folding a lone "\r" to "\n" would terminate the
+		// sentence-bounded `[^.\n]{0,40}` gap that INJ-003/005/009 and EXF-003
+		// rely on, letting a "word<CR>word" payload silently split a sink phrase
+		// to GREEN (red-team P54-B1). Windows authors use CRLF, never lone CR.
+		// CRLF is benign + ubiquitous, so `changed` is intentionally untouched.
+		if body[i] == '\r' && i+1 < len(body) && body[i+1] == '\n' {
+			i++
+			continue
+		}
 		// \uXXXX / \xXX escape decoding (SPEC-0246 §4, evasion: "\uNNNN-encoded").
 		if r, consumed, ok := decodeEscape(body[i:]); ok {
 			folded, drop := foldRune(r)
@@ -193,9 +223,13 @@ func normalizeBody(body string) *normalized {
 }
 
 // mightNeedDecode reports whether body contains constructs that the slow path
-// must handle even though the body is plain ASCII: backslash-u/x escapes, or a
-// run of single letters separated by single spaces (letter-spacing evasion).
+// must handle even though the body is plain ASCII: a carriage return (EOL
+// normalization), backslash-u/x escapes, or a run of single letters separated
+// by single spaces (letter-spacing evasion).
 func mightNeedDecode(body string) bool {
+	if strings.IndexByte(body, '\r') >= 0 {
+		return true
+	}
 	if strings.Contains(body, `\u`) || strings.Contains(body, `\x`) {
 		return true
 	}

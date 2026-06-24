@@ -419,7 +419,7 @@ type PinnedSTH struct {
 // (typically ~/.claude/skill-trust-roots.yaml). Returns an error if the
 // home directory can't be determined.
 func DefaultPath() (string, error) {
-	home, err := os.UserHomeDir()
+	home, err := userHome()
 	if err != nil {
 		return "", fmt.Errorf("trust-roots: resolve home dir: %w", err)
 	}
@@ -984,17 +984,18 @@ func isLoopbackOrPrivate(host string) bool {
 // surprising) silently picking up a config from an unexpected location.
 //
 // Test environments can override the home dir by setting HOME, since we
-// route through os.UserHomeDir() which honors HOME.
+// route through userHome() which honors HOME on ALL platforms (os.UserHomeDir
+// alone would read %USERPROFILE% on Windows and ignore HOME).
 func resolveAndValidatePath(path string) (string, error) {
 	expanded := path
 	if strings.HasPrefix(path, "~/") {
-		home, err := os.UserHomeDir()
+		home, err := userHome()
 		if err != nil {
 			return "", fmt.Errorf("trust-roots: resolve ~: %w", err)
 		}
 		expanded = filepath.Join(home, path[2:])
 	} else if path == "~" {
-		home, err := os.UserHomeDir()
+		home, err := userHome()
 		if err != nil {
 			return "", fmt.Errorf("trust-roots: resolve ~: %w", err)
 		}

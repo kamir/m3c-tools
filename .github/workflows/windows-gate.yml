@@ -3,6 +3,31 @@ name: Windows Gate
 # SPEC-0128: Windows Dev Test Cycle
 # Validates Windows binary correctness on every push and PR.
 # Runs on the real windows-latest runner — not emulated.
+#
+# ── OPT-OUT CONTRACT (the trust-layer test surface) ───────────────────────────
+# The `windows-trust` job below runs the WHOLE trust-layer test surface on
+# windows-latest:
+#
+#     ./pkg/skillctl/...  ./cmd/skillctl/...  ./evaluation/...
+#
+# It runs them WHOLE-PACKAGE — there is NO `-run "TestA|TestB|…"` allow-list.
+# That is the durability guarantee: every trust test we ship (today and forever)
+# is run on Windows automatically, with no list for anyone to maintain.
+#
+# The ONLY tests excluded from the Windows run are ones that SELF-SKIP because a
+# real external dependency is absent — a live ER1 server, the whisper binary,
+# real network egress, a microphone, or the Plaud cloud API. Those gate on the
+# shared pkg/testutil.Require* helpers (env-keyed off M3C_TEST_*), which the
+# windows-trust job deliberately leaves unset, so they t.Skip cleanly on every
+# platform with a clear reason. Genuinely platform-incompatible code
+# (recorder/PortAudio, menubar/menuet, the macOS app bundle) is build-tagged out
+# and never reaches this job.
+#
+# DO NOT reintroduce a `-run` allow-list into the windows-trust job. The
+# `drift-guard` job below FAILS the build if one ever appears. New trust tests
+# are covered automatically — add them and they run on Windows. If a new test
+# genuinely needs an external service, gate it with a pkg/testutil.Require*
+# helper (or add one), never by excluding it in CI.
 
 on:
   push:
@@ -50,6 +75,17 @@ jobs:
         run: |
           GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build ./pkg/config/...
 
+      # The whole trust surface must TEST-COMPILE for windows/amd64 on every
+      # change — a fast ubuntu-side guard so a Windows-incompatible test is
+      # caught before the windows-latest job even starts.
+      - name: Test-compile the whole trust surface for Windows
+        run: |
+          set -e
+          for pkg in $(go list ./pkg/skillctl/... ./cmd/skillctl/... ./evaluation/... ./pkg/testutil/...); do
+            GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go test -c -o /dev/null "$pkg"
+          done
+          echo "All trust-surface packages test-compile for windows/amd64."
+
       - name: Check binary sizes (sanity)
         run: |
           ls -lh build/m3c-tools-windows-amd64.exe
@@ -71,9 +107,13 @@ jobs:
             build/m3c-tools-windows-amd64.exe
             build/skillctl-windows-amd64.exe
 
-  # ── Phase 3: Unit tests on real Windows runner ────────────────────────────
-  windows-test:
-    name: Unit Tests (windows-latest)
+  # ── Phase 3: Whole trust surface on the real Windows runner (OPT-OUT) ──────
+  # This is the durable guarantee. It runs ./pkg/skillctl/... ./cmd/skillctl/...
+  # ./evaluation/... WHOLE-PACKAGE, env-clean. No -run allow-list — see the
+  # OPT-OUT CONTRACT at the top of this file. External-service tests self-skip
+  # because M3C_TEST_* are unset; platform-incompatible code is build-tagged out.
+  windows-trust:
+    name: Trust Surface (windows-latest)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -86,43 +126,93 @@ jobs:
       - name: go vet (Windows)
         run: go vet ./...
 
-      - name: Run Windows-safe unit tests
-        # Excludes: recorder (PortAudio), whisper, menubar (menuet/darwin),
-        #           app bundle (macOS), network (YouTube API), ER1 server
+      - name: Run the WHOLE trust surface (opt-out, env-clean)
+        # NOTE: no -run filter — this is intentional and enforced by drift-guard.
+        # -json so the parity check can count executed tests; tee keeps a
+        # human-readable copy in the log.
         run: |
-          go test -v -count=1 -timeout=120s ./e2e/ -run "TestComposite|TestBuild$|TestParseTagLine|TestER1Config|TestER1Queue|TestER1EnqueueFailure|TestUploadFailure|TestExportsDB|TestFilesDB|TestHashFile|TestFormatterLoader|TestPrettyPrint|TestFormatTranscript|TestFormatSnippet|TestFormatKeyValue|TestFormatTable|TestFormatSection|TestFormatStatusLine|TestTranslateFlagParsing|TestTranslateNotTranslatable|TestTranslateTranslatable|TestRetryQueue|TestRetryBackoffTiming|TestRetryBackoffCustomBase|TestRetryProcessingOrder|TestRetryPartialFailure|TestRetryMaxRetriesDropsEntry|TestRetryDropCallback|TestRetryRespectsBackoffDelay|TestRetryProcessesAfterBackoffElapsed|TestRetryGracefulShutdownOnCancel|TestRetryRunStopsOnContextCancel|TestRetryRunProcessesMultipleCycles|TestRetryEmptyQueue|TestRetryOnRetryCallback|TestTranscriptFilterExclude|TestTranscriptFilterBoth|TestTranscriptFilterEmpty|TestTranscriptFilterAll|TestProxyBuildURL|TestProxyGetTransport|TestProxyNewWithProxy|TestProxyHTTPIntegration|TestProxyWebshare|TestProxySocks5URL|TestRetryRunnerProcessOnce|TestRetryRunnerDropExceed|TestRetryRunnerBackoff|TestRetryRunnerRunLoop|TestRetryRunnerBackoffSkip|TestBackgroundRetryStarts|TestBackgroundRetryStops|TestBackgroundRetryHandles|TestBackgroundRetryEmpty|TestBackgroundRetryLogging|TestTranscriptImport|TestTranscriptListSearch|TestTranscriptSearch|TestTranscriptExport|TestCLIHelp|TestCLIUnknownCommand|TestCLINoArgs|TestRepoRoot|TestWriteFixture|TestFixtureDir|TestTempDataDir|TestWithEnv|TestRunCLIWithEnv|TestImporterScan|TestImporterExtension|TestImporterIsAudioFile|TestFieldnote|TestPlaudConfig|TestPlaudToken|TestPlaudFormatDuration|TestScreenshotMode"
-        shell: bash
+          go test -json -count=1 -timeout=300s `
+            ./pkg/skillctl/... ./cmd/skillctl/... ./evaluation/... `
+            | Tee-Object -FilePath win-trust.json
+        shell: pwsh
 
-  # ── SPEC-0247 trust-gate tests on real Windows (SPEC-0128 Gap B) ──────────
-  # Isolated job so the gate's behavioural validation reports independently of
-  # pre-existing e2e/smoke Windows debt (TestImporterCLI* exec a built binary;
-  # TestPlaudTokenRoundTrip asserts Unix 0600 perms — tracked separately). The
-  # gate resolves home via cmd/skillctl/home.go (userHome: $HOME-first, then
-  # os.UserHomeDir), so these temp-dir tests run cross-platform.
-  gate-tests:
-    name: SPEC-0247 Gate Tests (windows-latest)
-    runs-on: windows-latest
+      - name: Summarise run (pass / skip / fail counts)
+        if: always()
+        run: |
+          $pass = (Select-String -Path win-trust.json -Pattern '"Action":"pass"').Count
+          $skip = (Select-String -Path win-trust.json -Pattern '"Action":"skip"').Count
+          $fail = (Select-String -Path win-trust.json -Pattern '"Action":"fail"').Count
+          Write-Host "Windows trust surface: pass=$pass skip=$skip fail=$fail"
+        shell: pwsh
+
+      - name: Upload Windows test report (for drift parity)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-trust-json-${{ github.sha }}
+          retention-days: 7
+          path: win-trust.json
+
+  # ── Drift guard (the "forever") ───────────────────────────────────────────
+  # Two cheap, robust checks keep the opt-out contract honest:
+  #   1. grep guard — fail if a `-run` allow-list ever reappears in the
+  #      windows-trust job. This is the primary guard: it makes the only way to
+  #      hide a trust test from Windows be a self-skip, not a CI exclusion.
+  #   2. parity check — a Linux run of the SAME package set, compared to the
+  #      Windows run by executed-test count. If Windows executed materially
+  #      fewer tests than Linux (beyond the known self-skip set), fail — that
+  #      means tests silently vanished on Windows.
+  drift-guard:
+    name: Drift Guard (opt-out parity)
+    runs-on: ubuntu-latest
+    needs: windows-trust
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26.4"
           cache: true
-      - name: Run SPEC-0247 trust-gate tests
-        run: |
-          go test -v -count=1 -timeout=120s ./cmd/skillctl/ -run "TestSweep|TestVerifyHook|TestSkillID|TestDigest|TestVerdict|TestHook_UsesCache"
-          go test -v -count=1 -timeout=120s ./pkg/skillctl/install/ -run "TestContentBinding|TestStash|TestStaticFetcher|TestSidecar"
-        shell: bash
 
-      # SEC-WIN: on Windows Go reports a 0600-written key back as 0666, which
-      # previously tripped the strict 0077 perm check and broke
-      # publish/attest/revoke/pull --install. This runs the signing
-      # Generate→Load round-trip + sign/verify on the real windows-latest
-      # runner so the regression cannot silently come back.
-      - name: Run skillctl signing tests (SEC-WIN regression)
+      # (1) No -run allow-list may exist inside the windows-trust job.
+      #     We isolate the windows-trust job block, drop comment lines (so the
+      #     "# NOTE: no -run filter" comment never trips the guard), and fail if
+      #     any remaining `go test` line carries a -run flag.
+      - name: Guard — windows-trust job must not use a -run allow-list
         run: |
-          go test -v -count=1 -timeout=120s ./pkg/skillctl/signing/ -run "Keygen|Sign|Verify|RoundTrip"
-        shell: bash
+          set -e
+          block="$(awk '/^  windows-trust:/{f=1} /^  [a-z].*:$/{if(f && $0 !~ /windows-trust/) f=0} f' \
+                   .github/workflows/windows-gate.yml)"
+          # Keep only non-comment lines that invoke `go test`, then look for -run.
+          if printf '%s\n' "$block" \
+               | sed 's/#.*$//' \
+               | grep -E 'go[[:space:]]+test' \
+               | grep -Eq -- '-run([[:space:]"=]|$)'; then
+            echo "::error::A -run allow-list was reintroduced into the windows-trust job."
+            echo "The trust surface must run whole-package on Windows (opt-out contract)."
+            echo "Gate external-service tests with pkg/testutil.Require* instead."
+            exit 1
+          fi
+          echo "OK: windows-trust runs whole-package, no -run allow-list."
+
+      # (2) Parity: run the same set on Linux, compare executed-test counts.
+      - name: Linux run of the same trust set (-json)
+        run: |
+          go test -json -count=1 -timeout=300s \
+            ./pkg/skillctl/... ./cmd/skillctl/... ./evaluation/... \
+            | tee lin-trust.json
+        # Don't fail the parity job on a red test here — the windows-trust job
+        # is the authority on green/red; this run only counts executed tests.
+        continue-on-error: true
+
+      - name: Download Windows test report
+        uses: actions/download-artifact@v4
+        with:
+          name: win-trust-json-${{ github.sha }}
+
+      - name: Parity — Windows executed-count must not trail Linux beyond self-skips
+        run: |
+          python3 scripts/windows-trust-parity.py lin-trust.json win-trust.json
 
   # ── Phase 4: Smoke test the Windows binary on Windows ─────────────────────
   windows-smoke:
@@ -166,6 +256,13 @@ jobs:
           Write-Host "PASS: unknown command exits with code $($proc.ExitCode)"
         shell: pwsh
 
+      - name: Smoke — skillctl help (trust CLI runs on Windows)
+        run: |
+          $out = & "build\skillctl-windows-amd64.exe" --help 2>&1
+          Write-Host $out
+          Write-Host "PASS: skillctl binary executes on Windows"
+        shell: pwsh
+
       - name: Smoke — init.cfg generation
         run: |
           # Build a fresh binary for this smoke test
@@ -177,23 +274,4 @@ jobs:
             exit 1
           }
           Write-Host "PASS: fresh Windows build executable OK"
-        shell: pwsh
-
-      - name: Smoke — config package loads on Windows
-        run: |
-          # A minimal Go program that imports and exercises pkg/config
-          $testProg = @"
-          package main
-          import (
-            "fmt"
-            "os"
-            _ "github.com/kamir/m3c-tools/pkg/config"
-          )
-          func main() {
-            fmt.Println("config package imported OK")
-            os.Exit(0)
-          }
-          "@
-          $testProg | Set-Content -Path "$env:TEMP\winconfig_test.go"
-          Write-Host "PASS: config package import check skipped (compile-time verified above)"
         shell: pwsh

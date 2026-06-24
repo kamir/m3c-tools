@@ -8,6 +8,7 @@ import (
 	"encoding/pem"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -107,10 +108,15 @@ func TestTrust_AddListRemove_Roundtrip(t *testing.T) {
 	if _, err := os.Stat(cfg); err != nil {
 		t.Fatalf("config not written: %v", err)
 	}
-	// File mode should be 0600.
-	st, _ := os.Stat(cfg)
-	if mode := st.Mode().Perm(); mode != 0o600 {
-		t.Errorf("config mode = %#o, want 0600", mode)
+	// File mode should be 0600 — a real security check on the trust config.
+	// SEC-WIN: Windows reports a 0600-written file back as 0666 (ACLs, not
+	// POSIX bits), so the assertion is kept full-strength on Unix and only
+	// platform-gated where the OS cannot honour the mode.
+	if runtime.GOOS != "windows" {
+		st, _ := os.Stat(cfg)
+		if mode := st.Mode().Perm(); mode != 0o600 {
+			t.Errorf("config mode = %#o, want 0600", mode)
+		}
 	}
 
 	// list — should show the registry and the key.
