@@ -135,14 +135,18 @@ var confusableFold = map[rune]rune{
 // offset.
 //
 // LINE-ENDING AGNOSTIC (security): the body is FIRST EOL-normalized — every
-// "\r\n" and lone "\r" becomes "\n" — before any folding or matching. Without
-// this, a skill authored with Windows (CRLF) line endings could WEAKEN
+// "\r\n" (Windows CRLF) collapses to "\n" — before any folding or matching.
+// Without this, a skill authored with Windows line endings could WEAKEN
 // detection: a rule that treats a single "\n" as a base64-chunk separator
 // (EXF-004) sees "\r\n" and fails to stitch the split blob, so a "split base64
 // near a network sink" exfil evades the scanner purely by virtue of its EOL
 // style. EOL normalization makes the verdict identical regardless of line
-// endings. It is DELIBERATELY NOT treated as an obfuscation signal (it does not
-// set Changed): CRLF is benign and ubiquitous, so it must not turn every
+// endings. We fold ONLY CRLF; a LONE "\r" is left as an ordinary character
+// (exactly as on non-Windows platforms) — folding it to "\n" would terminate
+// the sentence-bounded `[^.\n]{0,40}` gaps in INJ-003/005/009 and EXF-003 and
+// let a "word<CR>word" payload split a sink phrase to GREEN (red-team P54-B1).
+// CRLF folding is DELIBERATELY NOT an obfuscation signal (it does not set
+// Changed): CRLF is benign and ubiquitous, so it must not turn every
 // Windows-authored skill yellow via OBF-007. The offset map still resolves
 // every surviving byte to its real original (CRLF) position so reported spans /
 // excerpts / line numbers stay correct on CRLF files.
@@ -172,20 +176,16 @@ func normalizeBody(body string) *normalized {
 	}
 
 	for i := 0; i < len(body); {
-		// EOL normalization (security; see doc comment). A carriage return is
-		// rewritten to "\n": "\r\n" collapses to a single "\n" (the "\r" is
-		// dropped, the following "\n" is emitted normally on the next iteration),
-		// and a lone "\r" (old-Mac EOL) becomes "\n". This is NOT an obfuscation
-		// signal, so `changed` is intentionally left untouched here.
-		if body[i] == '\r' {
-			if i+1 < len(body) && body[i+1] == '\n' {
-				// CRLF: drop the CR, let the LF emit on the next iteration so the
-				// LF keeps its own original offset.
-				i++
-				continue
-			}
-			// Lone CR → LF, mapped to the CR's original offset.
-			emit('\n', i)
+		// EOL normalization (security; see doc comment). Collapse ONLY "\r\n"
+		// (Windows CRLF) to a single "\n" by DROPPING the "\r" so the following
+		// "\n" emits with its own original offset. We fold ONLY CRLF — a LONE
+		// "\r" is left as a normal character (exactly as on non-Windows
+		// platforms / master). Folding a lone "\r" to "\n" would terminate the
+		// sentence-bounded `[^.\n]{0,40}` gap that INJ-003/005/009 and EXF-003
+		// rely on, letting a "word<CR>word" payload silently split a sink phrase
+		// to GREEN (red-team P54-B1). Windows authors use CRLF, never lone CR.
+		// CRLF is benign + ubiquitous, so `changed` is intentionally untouched.
+		if body[i] == '\r' && i+1 < len(body) && body[i+1] == '\n' {
 			i++
 			continue
 		}
