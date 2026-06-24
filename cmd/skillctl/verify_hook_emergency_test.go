@@ -45,6 +45,7 @@ func setupEmergencyGate(t *testing.T, skill, digest, author string) emergencyGat
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // Windows: os.UserHomeDir() reads %USERPROFILE%, not $HOME — without this loadRootsFn("") misses the test trust-root and fails closed.
 
 	f := buildAgentFixture(t, false)
 	defaultTR := filepath.Join(home, ".claude", "skill-trust-roots.yaml")
