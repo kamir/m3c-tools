@@ -35,6 +35,7 @@ func setupGate(t *testing.T, skillName string, requireApprover bool) gateEnv {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // Windows: os.UserHomeDir() reads %USERPROFILE%, not $HOME.
 
 	// The gate resolves trust-roots via loadRootsFn → loadAndPickRoot → the
 	// default ~/.claude/skill-trust-roots.yaml under $HOME. Build the fixture

@@ -39,12 +39,15 @@ type verifyBundleParams struct {
 	metaPath        string
 	trustRootsPath  string
 	revocationsPath string
-	registryURL     string
-	governanceMin   string
-	allowYellow     bool
-	tenantFlag      string
-	jsonOut         bool
-	verbose         bool
+	// SPEC-0279 R4/R5 — optional signed freshness checkpoint + emergency deny-list.
+	checkpointPath string
+	emergencyPath  string
+	registryURL    string
+	governanceMin  string
+	allowYellow    bool
+	tenantFlag     string
+	jsonOut        bool
+	verbose        bool
 }
 
 // bundleVerifyResult is the --json shape. Stable field names so CI scripts can
@@ -69,8 +72,12 @@ type bundleVerifyResult struct {
 	// branch on `.data_scopes[].provenance` to tell author-bound from post-admit.
 	DataScopes   []verify.DeclaredScope `json:"data_scopes,omitempty"`
 	ChainSummary string                 `json:"chain_summary,omitempty"`
-	Error        string                 `json:"error,omitempty"`
-	ExitCode     int                    `json:"exit_code"`
+	// Freshness (SPEC-0279 R6) surfaces the auditable freshness decision so a CI
+	// consumer can branch on the epoch/staleness/risk/fail_policy/outcome without
+	// parsing the human summary line. Nil when no freshness policy was in play.
+	Freshness *verify.FreshnessDecision `json:"freshness,omitempty"`
+	Error     string                    `json:"error,omitempty"`
+	ExitCode  int                       `json:"exit_code"`
 }
 
 // runVerifyBundle implements the --bundle path. Returns the SPEC-0188 §11
@@ -135,10 +142,33 @@ func runVerifyBundle(p verifyBundleParams, stdout, stderr io.Writer) int {
 	// chain otherwise passed (a chain failure already returns its own code). A
 	// forged/untrusted list is fail-closed (revErr → exit 12); a revoked digest
 	// → exit 17.
-	var revoked bool
+	var snap revocationSnapshot
 	var revErr error
 	if verr == nil && p.revocationsPath != "" {
-		revoked, revErr = checkBundleRevoked(p.revocationsPath, root, res.Digest)
+		snap, revErr = checkBundleRevoked(p.revocationsPath, root, res.Digest)
+	}
+
+	// SPEC-0279 R3/R4/R5/R6 — the freshness contract, evaluated AFTER the chain +
+	// revocation checks pass (a stale-but-not-revoked snapshot still gates a
+	// high-risk action). The emergency channel (R5) is consulted FIRST inside
+	// evaluateFreshness; a stale snapshot fails closed for a high-risk action
+	// (R3); a present-but-bad checkpoint/emergency file is fail-closed.
+	var fresh freshnessOutcome
+	freshActive := verr == nil && revErr == nil && !snap.revoked &&
+		(p.revocationsPath != "" || p.checkpointPath != "" || p.emergencyPath != "")
+	if freshActive {
+		fresh = evaluateFreshness(freshnessInputs{
+			root:            root,
+			checkpointPath:  p.checkpointPath,
+			emergencyPath:   p.emergencyPath,
+			syncedEpoch:     snap.epoch,
+			syncedIssuedAt:  snap.issuedAt,
+			risk:            bundleActionRisk(res.DataScopes),
+			emergencyTokens: []string{res.Digest, res.AuthorIdentity},
+		})
+		// R6 — record EVERY freshness decision to the gate-audit trail, allow or
+		// deny, so we never fail open (or closed) without a durable record.
+		auditFreshnessDecision("verify-bundle", res.Digest, fresh)
 	}
 
 	if p.jsonOut {
@@ -150,10 +180,15 @@ func runVerifyBundle(p verifyBundleParams, stdout, stderr io.Writer) int {
 		case revErr != nil:
 			out.Error = revErr.Error()
 			out.ExitCode = verify.ExitCode(revErr)
-		case revoked:
+		case snap.revoked:
 			out.Digest = res.Digest
 			out.Error = "bundle digest is in the signed revocation list"
 			out.ExitCode = exitBundleRevoked
+		case freshActive && fresh.Err != nil:
+			out.Digest = res.Digest
+			out.Error = fresh.Err.Error()
+			out.ExitCode = freshnessExitCode(fresh)
+			out.Freshness = &fresh.Decision
 		default:
 			out.OK = true
 			out.Digest = res.Digest
@@ -164,6 +199,9 @@ func runVerifyBundle(p verifyBundleParams, stdout, stderr io.Writer) int {
 			out.SelfAttested = res.SelfAttested
 			out.DataScopes = res.DataScopes
 			out.ChainSummary = res.ChainSummary
+			if freshActive {
+				out.Freshness = &fresh.Decision
+			}
 			out.ExitCode = exitOK
 		}
 		enc := json.NewEncoder(stdout)
@@ -179,11 +217,18 @@ func runVerifyBundle(p verifyBundleParams, stdout, stderr io.Writer) int {
 	case revErr != nil:
 		fmt.Fprintln(stderr, revErr)
 		return verify.ExitCode(revErr)
-	case revoked:
+	case snap.revoked:
 		fmt.Fprintf(stderr, "REVOKED: %s is in the signed revocation list (%s)\n", res.Digest, p.revocationsPath)
 		return exitBundleRevoked
+	case freshActive && fresh.Err != nil:
+		fmt.Fprintln(stderr, fresh.Err)
+		printFreshness(stderr, fresh, p.checkpointPath, p.emergencyPath)
+		return freshnessExitCode(fresh)
 	}
 	fmt.Fprintln(stdout, res.ChainSummary+" (offline, bundle)")
+	if freshActive {
+		printFreshness(stdout, fresh, p.checkpointPath, p.emergencyPath)
+	}
 	printDeclaredScopes(stdout, res.DataScopes)
 	return exitOK
 }
@@ -222,25 +267,106 @@ func dashOr(s string) string {
 	return s
 }
 
+// revocationSnapshot carries the verified revocation list's freshness metadata
+// (SPEC-0279) alongside the revoked verdict, so the freshness contract can judge
+// the staleness of the SAME snapshot the revocation check used.
+type revocationSnapshot struct {
+	revoked  bool
+	epoch    int
+	issuedAt string
+}
+
 // checkBundleRevoked loads a signed revocation list, verifies its signature
-// against the pinned root, and reports whether digest is revoked. A signature
-// that matches no active registry key is an error (fail-closed), not a silent
-// "not revoked".
-func checkBundleRevoked(path string, root *verify.TrustRoot, digest string) (bool, error) {
+// against the pinned root, and reports whether digest is revoked plus the
+// snapshot's epoch + issued_at (for the freshness contract). A signature that
+// matches no active registry key is an error (fail-closed), not a silent "not
+// revoked".
+func checkBundleRevoked(path string, root *verify.TrustRoot, digest string) (revocationSnapshot, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return false, fmt.Errorf("verify --bundle: read revocations %s: %w", path, err)
+		return revocationSnapshot{}, fmt.Errorf("verify --bundle: read revocations %s: %w", path, err)
 	}
 	var list verify.RevocationList
 	if err := json.Unmarshal(data, &list); err != nil {
-		return false, fmt.Errorf("verify --bundle: parse revocations %s: %w", path, err)
+		return revocationSnapshot{}, fmt.Errorf("verify --bundle: parse revocations %s: %w", path, err)
 	}
 	set, err := verify.VerifyRevocationList(&list, root, root.MinRevocationEpoch)
 	if err != nil {
-		return false, err
+		return revocationSnapshot{}, err
 	}
 	_, revoked := set[strings.ToLower(strings.TrimSpace(digest))]
-	return revoked, nil
+	return revocationSnapshot{revoked: revoked, epoch: list.Epoch, issuedAt: list.IssuedAt}, nil
+}
+
+// bundleActionRisk classifies the freshness risk of installing/using a bundle
+// from its declared data-scopes (SPEC-0196). SINGLE SOURCE OF TRUTH (SPEC-0279
+// P4 review finding #3): it folds BOTH risk axes into the SAME classifier
+// ClassifyActionRisk uses for the AgentID/freshness path, so the two cannot
+// diverge and a bundle cannot "fail open" by splitting its declaration across
+// axes:
+//
+//   - access (read|write|transform|delete) per data-dependency, AND
+//   - the per-dependency `side_effects` tokens (fs:write, network:outbound, …).
+//
+// A write/transform/delete access OR any high-risk side-effect → HIGH, REGARDLESS
+// of how the other axis is labelled (the access-vs-side_effects split the review
+// flagged: side_effects:["fs:write"] under access:"read" is now HIGH). No declared
+// scopes at all is HIGH (an unknown surface cannot be proven read-only) — and
+// ClassifyActionRisk's empty-surface case is ALSO HIGH, so the two are aligned.
+func bundleActionRisk(scopes []verify.DeclaredScope) verify.ActionRisk {
+	if len(scopes) == 0 {
+		// No declared surface → we cannot prove it is read-only → fail-safe HIGH.
+		return verify.RiskHigh
+	}
+	var sideEffects, accessSignals []string
+	for _, s := range scopes {
+		// Fold the access verb into a token ClassifyActionRisk understands: a
+		// write/transform/delete maps to a high side-effect; read/passthrough map to
+		// a known-low read token. An empty/unknown access is left as a non-low token
+		// so it fails safe HIGH.
+		switch strings.ToLower(strings.TrimSpace(asString(s.Raw["access"]))) {
+		case "write", "transform":
+			accessSignals = append(accessSignals, "fs:write")
+		case "delete":
+			accessSignals = append(accessSignals, "fs:delete")
+		case "read", "passthrough":
+			accessSignals = append(accessSignals, "fs:read")
+		default:
+			accessSignals = append(accessSignals, "access:unknown") // not on the low allowlist → HIGH
+		}
+		// Fold any declared per-dependency side-effects through the SAME vocabulary,
+		// so side_effects:["fs:write"] under access:"read" is still HIGH.
+		sideEffects = append(sideEffects, rawSideEffects(s.Raw)...)
+	}
+	return verify.ClassifyActionRisk(sideEffects, false, accessSignals...)
+}
+
+// rawSideEffects extracts the `side_effects` token list from a data-dependency's
+// raw map (an []any of strings), if present. Tolerant of absence/type mismatch —
+// a missing/garbled field yields no tokens (the access axis still classifies).
+func rawSideEffects(raw map[string]any) []string {
+	v, ok := raw["side_effects"]
+	if !ok {
+		return nil
+	}
+	arr, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(arr))
+	for _, item := range arr {
+		if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// asString coerces a raw JSON value to a string ("" for nil/non-string), so a
+// numeric/absent access field degrades to the fail-safe unknown branch.
+func asString(v any) string {
+	s, _ := v.(string)
+	return s
 }
 
 // defaultMetaSidecar derives the sidecar BundleMeta path from a .skb path:

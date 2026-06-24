@@ -107,9 +107,11 @@ const agentIDUsage = `Usage: skillctl agentid <issue|verify|show|revoke> [flags]
 
   verify  Verify an AgentID offline against pinned owner/approver keys.
           --bundle agentid.json [--offline] [--trust-roots <file>]
-          [--registry <url>] [--revocations <file>] [--json]
+          [--registry <url>] [--revocations <file>]
+          [--checkpoint <file>] [--emergency <file>] [--json]
           Exit: 0 ok | 11 owner-sig/not-pinned | 20 approver-floor |
-                21 expired | 17 revoked | 12 registry-not-pinned | 1 other.
+                21 expired | 17 revoked/emergency | 12 registry-not-pinned |
+                22 revocation-stale (SPEC-0279 freshness) | 1 other.
 
   show    Print owner, grant, expiry, fingerprints, signatures.
           skillctl agentid show <agentid.json>
@@ -248,6 +250,8 @@ func runAgentIDVerify(args []string, stdout, stderr io.Writer) int {
 	trustRootsPath := fs.String("trust-roots", "", "Trust-roots YAML to use (default: ~/.claude/skill-trust-roots.yaml).")
 	registryURL := fs.String("registry", "", "Registry URL whose pinned root to use (default: the AgentID's trust_root, else the sole root).")
 	revocationsPath := fs.String("revocations", "", "Signed revocation list (JSON) to enforce offline. A revoked agent → exit 17.")
+	checkpointPath := fs.String("checkpoint", "", "Signed freshness checkpoint (SPEC-0279 R4) that can reset the staleness clock for --revocations without a full re-sync. A forged/stale/rollback checkpoint → exit 12.")
+	emergencyPath := fs.String("emergency", "", "Signed emergency deny-list (SPEC-0279 R5). A named agent/owner denies immediately (exit 17), short-circuiting the staleness cadence; a forged list → exit 12.")
 	_ = fs.Bool("offline", false, "Offline mode (default; the verifier never touches the network either way).")
 	jsonOut := fs.Bool("json", false, "Emit the verdict as JSON.")
 	fs.Usage = func() { fmt.Fprintln(stderr, agentIDUsage) }
@@ -278,10 +282,13 @@ func runAgentIDVerify(args []string, stdout, stderr io.Writer) int {
 
 	// Offline revocation: load + signature-verify the list against the pinned
 	// root, then collect the agent:<id> revoked set. Fail-closed: a forged /
-	// untrusted list is an error (exit 12), not a silent "not revoked".
+	// untrusted list is an error (exit 12), not a silent "not revoked". We also
+	// capture the snapshot's epoch + issued_at for the SPEC-0279 freshness check.
 	var revoked map[string]struct{}
+	var revEpoch int
+	var revIssuedAt string
 	if strings.TrimSpace(*revocationsPath) != "" {
-		revoked, err = loadAgentRevocations(*revocationsPath, root)
+		revoked, revEpoch, revIssuedAt, err = loadAgentRevocationsWithMeta(*revocationsPath, root)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return verify.ExitRegistryNotTrusted
@@ -295,11 +302,41 @@ func runAgentIDVerify(args []string, stdout, stderr io.Writer) int {
 	})
 	code := agentIDExitCode(verr)
 
+	// SPEC-0279 R3/R4/R5/R6 — the freshness contract, evaluated once the mandate
+	// itself verified (a stale snapshot still gates a high-risk grant). Emergency
+	// channel first (R5); a stale snapshot fails closed for a high-risk grant
+	// (R3); the checkpoint can reset the clock (R4). Risk is classified from the
+	// grant's SPEC-0196 intents.
+	var fresh freshnessOutcome
+	freshActive := verr == nil &&
+		(strings.TrimSpace(*revocationsPath) != "" || strings.TrimSpace(*checkpointPath) != "" || strings.TrimSpace(*emergencyPath) != "")
+	if freshActive {
+		fresh = evaluateFreshness(freshnessInputs{
+			root:            root,
+			checkpointPath:  *checkpointPath,
+			emergencyPath:   *emergencyPath,
+			syncedEpoch:     revEpoch,
+			syncedIssuedAt:  revIssuedAt,
+			risk:            grantActionRisk(res.Grant),
+			emergencyTokens: []string{res.AgentID, res.Owner},
+		})
+		auditFreshnessDecision("agentid", res.AgentID, fresh)
+		if fresh.Err != nil {
+			code = freshnessExitCode(fresh)
+		}
+	}
+
 	if *jsonOut {
 		out := agentIDVerifyJSON{ExitCode: code}
-		if verr != nil {
+		switch {
+		case verr != nil:
 			out.Error = verr.Error()
-		} else {
+		case freshActive && fresh.Err != nil:
+			out.Error = fresh.Err.Error()
+			out.AgentID = res.AgentID
+			out.Owner = res.Owner
+			out.Freshness = &fresh.Decision
+		default:
 			out.OK = true
 			out.AgentID = res.AgentID
 			out.Owner = res.Owner
@@ -308,6 +345,9 @@ func runAgentIDVerify(args []string, stdout, stderr io.Writer) int {
 			out.Grant = &res.Grant
 			if !res.NotAfter.IsZero() {
 				out.NotAfter = res.NotAfter.Format(time.RFC3339)
+			}
+			if freshActive {
+				out.Freshness = &fresh.Decision
 			}
 		}
 		enc := json.NewEncoder(stdout)
@@ -320,6 +360,11 @@ func runAgentIDVerify(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, verr)
 		return code
 	}
+	if freshActive && fresh.Err != nil {
+		fmt.Fprintln(stderr, fresh.Err)
+		printFreshness(stderr, fresh, *checkpointPath, *emergencyPath)
+		return code
+	}
 	summary := fmt.Sprintf("AgentID %s OK: owner %s", res.AgentID, res.Owner)
 	if res.ApproverVerified {
 		summary += fmt.Sprintf(", approver %s (sign-off)", res.Approver)
@@ -329,19 +374,40 @@ func runAgentIDVerify(args []string, stdout, stderr io.Writer) int {
 	}
 	summary += fmt.Sprintf(" — grant: %d skills, %d intents (offline)", len(res.Grant.Skills), len(res.Grant.Intents))
 	fmt.Fprintln(stdout, summary)
+	if freshActive {
+		printFreshness(stdout, fresh, *checkpointPath, *emergencyPath)
+	}
 	return exitOK
 }
 
+// grantActionRisk classifies the freshness risk of an AgentID grant from its
+// SPEC-0196 intent tokens (the agent's declared capabilities). ANY high-risk
+// intent (a write/egress/subprocess/destructive/spend/prod token) makes the grant
+// HIGH-risk for freshness purposes; a read-only grant is LOW-risk. Reusing
+// ClassifyActionRisk over the grant intents means the red-team cannot downgrade a
+// high-risk mandate to low-risk to dodge fail-closed.
+func grantActionRisk(g agentid.Grant) verify.ActionRisk {
+	// The grant's intents ARE SPEC-0196 side-effect-style tokens (network:write,
+	// fs:write, …); pass them as both side-effects and extra signals so spend/prod
+	// limit keys also count.
+	signals := append([]string{}, g.Intents...)
+	for k := range g.Limits {
+		signals = append(signals, k)
+	}
+	return verify.ClassifyActionRisk(g.Intents, false, signals...)
+}
+
 type agentIDVerifyJSON struct {
-	OK               bool           `json:"ok"`
-	AgentID          string         `json:"agent_id,omitempty"`
-	Owner            string         `json:"owner,omitempty"`
-	ApproverVerified bool           `json:"approver_verified"`
-	Approver         string         `json:"approver,omitempty"`
-	NotAfter         string         `json:"not_after,omitempty"`
-	Grant            *agentid.Grant `json:"grant,omitempty"`
-	Error            string         `json:"error,omitempty"`
-	ExitCode         int            `json:"exit_code"`
+	OK               bool                      `json:"ok"`
+	AgentID          string                    `json:"agent_id,omitempty"`
+	Owner            string                    `json:"owner,omitempty"`
+	ApproverVerified bool                      `json:"approver_verified"`
+	Approver         string                    `json:"approver,omitempty"`
+	NotAfter         string                    `json:"not_after,omitempty"`
+	Grant            *agentid.Grant            `json:"grant,omitempty"`
+	Freshness        *verify.FreshnessDecision `json:"freshness,omitempty"`
+	Error            string                    `json:"error,omitempty"`
+	ExitCode         int                       `json:"exit_code"`
 }
 
 // ---- show ----
@@ -496,4 +562,29 @@ func loadAgentRevocations(path string, root *verify.TrustRoot) (map[string]struc
 		out[agentid.NormalizeID(k)] = struct{}{}
 	}
 	return out, nil
+}
+
+// loadAgentRevocationsWithMeta is loadAgentRevocations plus the snapshot's epoch
+// + issued_at, which the SPEC-0279 freshness contract needs to judge the
+// staleness of the SAME signed list it just verified. The signature + rollback
+// floor are STILL enforced by LoadVerifiedAgentRevocations (the metadata is read
+// from the verified list, never trusted unsigned).
+func loadAgentRevocationsWithMeta(path string, root *verify.TrustRoot) (map[string]struct{}, int, string, error) {
+	set, err := loadAgentRevocations(path, root)
+	if err != nil {
+		return nil, 0, "", err
+	}
+	// Re-read the verified list's metadata (epoch/issued_at). The file already
+	// passed signature + epoch-floor verification inside loadAgentRevocations, so
+	// re-decoding here only extracts the freshness anchor — a parse failure is
+	// surfaced (fail-closed), never silently treated as "no freshness".
+	data, rerr := os.ReadFile(path)
+	if rerr != nil {
+		return nil, 0, "", fmt.Errorf("agentid verify: read revocations for freshness %s: %w", path, rerr)
+	}
+	var list verify.AgentRevocationList
+	if jerr := json.Unmarshal(data, &list); jerr != nil {
+		return nil, 0, "", fmt.Errorf("agentid verify: parse revocations for freshness %s: %w", path, jerr)
+	}
+	return set, list.Epoch, list.IssuedAt, nil
 }

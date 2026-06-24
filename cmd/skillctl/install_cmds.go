@@ -178,6 +178,8 @@ func runVerify(args []string, stdout, stderr io.Writer) int {
 	metaPath := fs.String("meta", "", "Path to the BundleMeta envelope JSON for --bundle (default: the .skbmeta.json sidecar next to the .skb).")
 	trustRootsPath := fs.String("trust-roots", "", "Path to a trust-roots YAML to use instead of the default (~/.claude/skill-trust-roots.yaml). Pair with --bundle for a portable verification kit.")
 	revocationsPath := fs.String("revocations", "", "Path to a signed revocation list (JSON) to enforce offline for --bundle. A revoked digest → exit 17; an untrusted/forged list → exit 12.")
+	checkpointPath := fs.String("checkpoint", "", "Path to a signed freshness checkpoint (SPEC-0279 R4) that can reset the staleness clock for --revocations without a full re-sync. A forged/stale/rollback checkpoint → exit 12.")
+	emergencyPath := fs.String("emergency", "", "Path to a signed emergency deny-list (SPEC-0279 R5). A named digest denies immediately (exit 17), short-circuiting the staleness cadence; a forged list → exit 12.")
 	jsonOut := fs.Bool("json", false, "Emit the verification result as JSON (--bundle mode).")
 
 	fs.Usage = func() {
@@ -213,6 +215,8 @@ func runVerify(args []string, stdout, stderr io.Writer) int {
 			metaPath:        *metaPath,
 			trustRootsPath:  *trustRootsPath,
 			revocationsPath: *revocationsPath,
+			checkpointPath:  *checkpointPath,
+			emergencyPath:   *emergencyPath,
 			registryURL:     *registryURL,
 			governanceMin:   *governanceMin,
 			allowYellow:     *allowYellow,

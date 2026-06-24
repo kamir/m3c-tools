@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
@@ -283,6 +284,161 @@ func TestVerifyBundle_ForgedRevocationListRefused(t *testing.T) {
 	if code != 12 {
 		t.Fatalf("want exit 12 (untrusted revocation list), got %d; stderr=%s", code, errBuf.String())
 	}
+}
+
+// --- SPEC-0279 P4 — verify --bundle freshness contract ---
+
+// writePinnedTrustRootsFresh is writePinnedTrustRoots plus a freshness policy
+// (max_staleness + fail_policy), for the SPEC-0279 verify-bundle tests.
+func writePinnedTrustRootsFresh(t *testing.T, path, regURL, regPubB64, authorID, authorPubB64, maxStaleness, failPolicy string) {
+	t.Helper()
+	body := "" +
+		"trust_roots:\n" +
+		"  - registry_url: " + regURL + "\n" +
+		"    registry_keys:\n" +
+		"      - id: reg-key-1\n" +
+		"        pubkey: " + regPubB64 + "\n" +
+		"    identity_keys_authorized: pinned\n" +
+		"    governance_minimum: green\n" +
+		"    max_staleness: " + maxStaleness + "\n" +
+		"    fail_policy: " + failPolicy + "\n" +
+		"    authors:\n" +
+		"      - id: " + authorID + "\n" +
+		"        pubkey: " + authorPubB64 + "\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write trust-roots: %v", err)
+	}
+}
+
+// freshBundleISO returns an RFC3339 timestamp `age` in the past.
+func freshBundleISO(age time.Duration) string {
+	return time.Now().UTC().Add(-age).Format(time.RFC3339)
+}
+
+// A bundle with no declared data-scopes is HIGH-risk (fail-safe). A STALE
+// revocation snapshot past max_staleness therefore fails closed → exit 22.
+func TestVerifyBundle_StaleHighRiskFailsClosed(t *testing.T) {
+	f := buildBundleFixture(t)
+	regPubB64 := readRegPubB64(t, f.trPath)
+	authorPubB64 := readAuthorPubB64(t, f.trPath)
+	writePinnedTrustRootsFresh(t, f.trPath, f.regURL, regPubB64, f.authorID, authorPubB64, "24h", "open")
+
+	list, err := verify.NewSignedRevocationList(f.regURL, freshBundleISO(48*time.Hour), 1, []string{otherDigest()}, f.regPriv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revPath := writeRevocations(t, f.dir, list)
+
+	var out, errBuf bytes.Buffer
+	code := runVerify([]string{"--bundle", f.skbPath, "--trust-roots", f.trPath, "--revocations", revPath}, &out, &errBuf)
+	if code != verify.ExitRevocationStale {
+		t.Fatalf("stale high-risk bundle must exit %d, got %d; stderr=%s", verify.ExitRevocationStale, code, errBuf.String())
+	}
+}
+
+// A fresh snapshot allows the bundle.
+func TestVerifyBundle_FreshSnapshotAllows(t *testing.T) {
+	f := buildBundleFixture(t)
+	regPubB64 := readRegPubB64(t, f.trPath)
+	authorPubB64 := readAuthorPubB64(t, f.trPath)
+	writePinnedTrustRootsFresh(t, f.trPath, f.regURL, regPubB64, f.authorID, authorPubB64, "24h", "closed")
+
+	list, err := verify.NewSignedRevocationList(f.regURL, freshBundleISO(1*time.Hour), 1, []string{otherDigest()}, f.regPriv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revPath := writeRevocations(t, f.dir, list)
+
+	var out, errBuf bytes.Buffer
+	code := runVerify([]string{"--bundle", f.skbPath, "--trust-roots", f.trPath, "--revocations", revPath}, &out, &errBuf)
+	if code != exitOK {
+		t.Fatalf("fresh bundle must exit 0, got %d; stderr=%s", code, errBuf.String())
+	}
+}
+
+// A fresh signed checkpoint resets the staleness clock for a stale list.
+func TestVerifyBundle_CheckpointResets(t *testing.T) {
+	f := buildBundleFixture(t)
+	regPubB64 := readRegPubB64(t, f.trPath)
+	authorPubB64 := readAuthorPubB64(t, f.trPath)
+	writePinnedTrustRootsFresh(t, f.trPath, f.regURL, regPubB64, f.authorID, authorPubB64, "24h", "closed")
+
+	list, err := verify.NewSignedRevocationList(f.regURL, freshBundleISO(48*time.Hour), 2, []string{otherDigest()}, f.regPriv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revPath := writeRevocations(t, f.dir, list)
+
+	cp, err := verify.NewSignedFreshnessCheckpoint(f.regURL, 2, freshBundleISO(1*time.Hour), f.regPriv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cpPath := filepath.Join(f.dir, "checkpoint.json")
+	if b, _ := json.MarshalIndent(cp, "", "  "); os.WriteFile(cpPath, b, 0o644) != nil {
+		t.Fatal("write checkpoint")
+	}
+
+	var out, errBuf bytes.Buffer
+	code := runVerify([]string{"--bundle", f.skbPath, "--trust-roots", f.trPath, "--revocations", revPath, "--checkpoint", cpPath}, &out, &errBuf)
+	if code != exitOK {
+		t.Fatalf("checkpoint must reset clock → exit 0, got %d; stderr=%s", code, errBuf.String())
+	}
+}
+
+// An emergency deny-list naming the bundle's digest denies immediately (exit 17),
+// even with a fresh snapshot.
+func TestVerifyBundle_EmergencyDeniesDigest(t *testing.T) {
+	f := buildBundleFixture(t)
+	regPubB64 := readRegPubB64(t, f.trPath)
+	authorPubB64 := readAuthorPubB64(t, f.trPath)
+	writePinnedTrustRootsFresh(t, f.trPath, f.regURL, regPubB64, f.authorID, authorPubB64, "24h", "open")
+
+	list, err := verify.NewSignedRevocationList(f.regURL, freshBundleISO(1*time.Hour), 1, []string{otherDigest()}, f.regPriv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revPath := writeRevocations(t, f.dir, list)
+
+	em, err := verify.NewSignedEmergencyDenyList(f.regURL, freshBundleISO(30*time.Minute), 1, []string{f.digest}, f.regPriv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	emPath := filepath.Join(f.dir, "emergency.json")
+	if b, _ := json.MarshalIndent(em, "", "  "); os.WriteFile(emPath, b, 0o644) != nil {
+		t.Fatal("write emergency")
+	}
+
+	var out, errBuf bytes.Buffer
+	code := runVerify([]string{"--bundle", f.skbPath, "--trust-roots", f.trPath, "--revocations", revPath, "--emergency", emPath}, &out, &errBuf)
+	if code != exitBundleRevoked {
+		t.Fatalf("emergency must deny digest with exit %d, got %d; stderr=%s", exitBundleRevoked, code, errBuf.String())
+	}
+}
+
+// otherDigest is a deterministic non-matching digest for the freshness tests.
+func otherDigest() string {
+	d := sha256.Sum256([]byte("some other bundle entirely"))
+	return "sha256:" + hex.EncodeToString(d[:])
+}
+
+// readAuthorPubB64 extracts the pinned author pubkey b64 (the SECOND pubkey line).
+func readAuthorPubB64(t *testing.T, trPath string) string {
+	t.Helper()
+	data, err := os.ReadFile(trPath)
+	if err != nil {
+		t.Fatalf("read tr: %v", err)
+	}
+	var pubkeys []string
+	for _, line := range bytes.Split(data, []byte("\n")) {
+		s := bytes.TrimSpace(line)
+		if bytes.HasPrefix(s, []byte("pubkey:")) {
+			pubkeys = append(pubkeys, string(bytes.TrimSpace(bytes.TrimPrefix(s, []byte("pubkey:")))))
+		}
+	}
+	if len(pubkeys) < 2 {
+		t.Fatalf("expected >=2 pubkey lines (reg + author), got %d", len(pubkeys))
+	}
+	return pubkeys[1]
 }
 
 // readRegPubB64 extracts the pinned registry pubkey b64 from a trust-roots file
