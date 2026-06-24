@@ -99,7 +99,7 @@ jobs:
           echo "m3c-tools.exe: ${SIZE} bytes OK"
 
       - name: Upload Windows binaries
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-binaries-${{ github.sha }}
           retention-days: 7
@@ -147,7 +147,7 @@ jobs:
 
       - name: Upload Windows test report (for drift parity)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: win-trust-json-${{ github.sha }}
           retention-days: 7
