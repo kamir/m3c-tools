@@ -351,9 +351,68 @@ type TrustRoots struct {
 	// metadata / tooling field rather than a trust-policy knob.
 	Environment string `yaml:"_environment,omitempty"`
 
+	// Logs pins the transparency log(s) this machine trusts for the
+	// SPEC-0278 L1 inclusion-proof check. Each entry pins a log's public
+	// key plus a recent (witnessed) STH set. Empty means "no log pinned"
+	// and the inclusion check is skipped entirely (unless a per-log policy
+	// demands it — which it cannot, since there is no log to demand it).
+	//
+	// L1 makes equivocation/withholding DETECTABLE, not impossible; pinning
+	// a recent STH here is what lets the offline verifier confirm an event
+	// is committed under a head it already trusts, and lets cross-witnessed
+	// heads surface a split view.
+	Logs []LogTrust `yaml:"logs,omitempty"`
+
+	// RequireLogInclusion, when true, makes the ABSENCE of a valid
+	// inclusion proof under a pinned STH a HARD refusal (fail-closed). When
+	// false (the default) the inclusion check is ADVISORY: a missing/invalid
+	// proof is surfaced as a warning but does not block. SPEC-0278 §3 makes
+	// this opt-in hard, advisory by default — a transparency log that is
+	// still being rolled out should not brick every install.
+	RequireLogInclusion bool `yaml:"require_log_inclusion,omitempty"`
+
 	// Path is the resolved absolute file path used by Load (and by
 	// Save() on round-trip). Not serialized to YAML.
 	Path string `yaml:"-"`
+}
+
+// LogTrust pins one transparency log: its identity, its signing public key,
+// and a set of STHs the machine has witnessed/accepted. The verifier checks
+// inclusion proofs against the pinned STH whose tree_size covers the proof,
+// entirely offline.
+type LogTrust struct {
+	// LogID identifies the log. Must be unique within the file and match
+	// the log_id carried in the STHs and in the log's own records.
+	LogID string `yaml:"log_id"`
+
+	// LogKeyB64 is the base64 of the raw 32-byte ed25519 LOG public key.
+	// Distinct from any registry/author/attestation key — the STH domain
+	// separator guarantees a signature over an STH can't be reused as any
+	// other envelope, but pinning a dedicated key is still the right
+	// hygiene. The loader hydrates LogKey (raw bytes) from this.
+	LogKeyB64 string `yaml:"log_key"`
+
+	// LogKey is the decoded raw 32-byte ed25519 public key. Populated by
+	// the loader; not serialized (the b64 form round-trips instead).
+	LogKey []byte `yaml:"-"`
+
+	// PinnedSTHs is the set of accepted STHs for this log (the witnessed
+	// heads). A verifier checks an inclusion proof against the pinned STH
+	// whose tree_size >= the proof size (and whose signature verifies under
+	// LogKey). Multiple heads support cross-witness split-view detection.
+	PinnedSTHs []PinnedSTH `yaml:"pinned_sths,omitempty"`
+}
+
+// PinnedSTH is one accepted Signed Tree Head, stored in the trust-roots
+// file. The fields mirror translog.STH but live here so the verify package
+// declares its own typed loader surface (strict YAML) without importing the
+// translog types into the YAML schema.
+type PinnedSTH struct {
+	TreeSize  int    `yaml:"tree_size"`
+	RootHash  string `yaml:"root_hash"`
+	Timestamp string `yaml:"timestamp"`
+	LogID     string `yaml:"log_id"`
+	Signature string `yaml:"signature"`
 }
 
 // DefaultPath returns the absolute path to the user's trust-roots file
@@ -775,6 +834,71 @@ func (t *TrustRoots) validate() error {
 			return fmt.Errorf("trust_roots[%d] %s: governance_minimum %q is not one of [green, yellow]", i, root.RegistryURL, root.GovernanceMinimum)
 		}
 		t.Roots[i].GovernanceMinimum = norm
+	}
+
+	// SPEC-0278 L1: validate + hydrate the pinned transparency logs.
+	if err := t.validateLogs(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateLogs runs strict validation over the SPEC-0278 `logs` block and
+// hydrates LogKey (raw bytes) from LogKeyB64 so callers don't re-decode.
+// Each log id must be unique; each log key must decode to a 32-byte ed25519
+// public key; each pinned STH must carry the SAME log_id, a 64-hex root, a
+// 128-hex signature, and tree_size >= 1.
+func (t *TrustRoots) validateLogs() error {
+	seenLogs := make(map[string]struct{}, len(t.Logs))
+	for i := range t.Logs {
+		lt := &t.Logs[i]
+		if lt.LogID == "" {
+			return fmt.Errorf("logs[%d]: log_id is required", i)
+		}
+		if _, dup := seenLogs[lt.LogID]; dup {
+			return fmt.Errorf("logs[%d]: duplicate log_id %q", i, lt.LogID)
+		}
+		seenLogs[lt.LogID] = struct{}{}
+
+		if lt.LogKeyB64 == "" {
+			return fmt.Errorf("logs[%d] %s: log_key is required", i, lt.LogID)
+		}
+		raw, err := base64.StdEncoding.DecodeString(lt.LogKeyB64)
+		if err != nil {
+			return fmt.Errorf("logs[%d] %s: log_key is not valid base64: %w", i, lt.LogID, err)
+		}
+		if len(raw) != pubkeyRawSize {
+			return fmt.Errorf("logs[%d] %s: log_key decodes to %d bytes, want %d", i, lt.LogID, len(raw), pubkeyRawSize)
+		}
+		lt.LogKey = raw
+
+		for j, s := range lt.PinnedSTHs {
+			if s.LogID != lt.LogID {
+				return fmt.Errorf("logs[%d].pinned_sths[%d]: log_id %q must match parent log %q", i, j, s.LogID, lt.LogID)
+			}
+			if s.TreeSize < 1 {
+				return fmt.Errorf("logs[%d].pinned_sths[%d]: tree_size must be >= 1", i, j)
+			}
+			if len(s.RootHash) != 64 {
+				return fmt.Errorf("logs[%d].pinned_sths[%d]: root_hash must be 64 hex chars", i, j)
+			}
+			if len(s.Signature) != 128 {
+				return fmt.Errorf("logs[%d].pinned_sths[%d]: signature must be 128 hex chars", i, j)
+			}
+		}
+	}
+	return nil
+}
+
+// FindLog returns the pinned LogTrust for logID, or nil if none is pinned.
+func (t *TrustRoots) FindLog(logID string) *LogTrust {
+	if t == nil {
+		return nil
+	}
+	for i := range t.Logs {
+		if t.Logs[i].LogID == logID {
+			return &t.Logs[i]
+		}
 	}
 	return nil
 }

@@ -58,21 +58,21 @@ var validRevocationRoles = map[string]struct{}{
 // revokeRequest is the wire shape of POST /api/skills/bundles/<digest>/revoke.
 // Field names match the Python handler's request.get_json() keys.
 type revokeRequest struct {
-	ActorRole            string `json:"actor_role"`
-	ActorIdentity        string `json:"actor_identity,omitempty"`
-	Reason               string `json:"reason"`
-	RevocationTimestamp  string `json:"revocation_timestamp"`
-	RequestSignatureB64  string `json:"request_signature_b64,omitempty"`
+	ActorRole           string `json:"actor_role"`
+	ActorIdentity       string `json:"actor_identity,omitempty"`
+	Reason              string `json:"reason"`
+	RevocationTimestamp string `json:"revocation_timestamp"`
+	RequestSignatureB64 string `json:"request_signature_b64,omitempty"`
 }
 
 // revokeResponse is the success-shape from the server (the updated bundle row).
 type revokeResponse struct {
-	Status         string `json:"status"`
-	BundleDigest   string `json:"bundle_digest"`
-	RevokedAt      string `json:"revoked_at"`
-	RevokedReason  string `json:"revoked_reason"`
-	RevokedBy      string `json:"revoked_by"`
-	RevokedByRole  string `json:"revoked_by_role"`
+	Status        string `json:"status"`
+	BundleDigest  string `json:"bundle_digest"`
+	RevokedAt     string `json:"revoked_at"`
+	RevokedReason string `json:"revoked_reason"`
+	RevokedBy     string `json:"revoked_by"`
+	RevokedByRole string `json:"revoked_by_role"`
 }
 
 // revokeError is the failure-shape with a `reason` discriminator.
@@ -84,10 +84,10 @@ type revokeError struct {
 
 // runRevoke is main's dispatch entry point. Returns a numeric exit code:
 //
-//   0  — revoked.
-//   1  — generic / network / server 5xx.
-//   2  — usage / flag error.
-//   15 — server returned 409 already_revoked OR 404 not_admitted.
+//	0  — revoked.
+//	1  — generic / network / server 5xx.
+//	2  — usage / flag error.
+//	15 — server returned 409 already_revoked OR 404 not_admitted.
 //
 // Exit 15 reuses the SPEC-0188 §11 ExitBlobMissing class because the
 // trust-chain semantics are identical: the bundle is not in a state
@@ -235,6 +235,11 @@ func runRevoke(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "revoked_at:    %s\n", ok.RevokedAt)
 		fmt.Fprintf(stdout, "revoked_by:    %s (%s)\n", ok.RevokedBy, ok.RevokedByRole)
 		fmt.Fprintf(stdout, "reason:        %s\n", ok.RevokedReason)
+
+		// SPEC-0278 L1: best-effort mirror of this signed revocation's digest
+		// into the local transparency log (opt-in via M3C_TRANSLOG=1). Never
+		// alters the revoke decision above — the revocation already succeeded.
+		bestEffortTranslogAppend(translogEventRevoke, ok.BundleDigest, ok.RevokedByRole, stderr)
 		return exitOK
 	}
 

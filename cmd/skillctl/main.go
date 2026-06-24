@@ -141,6 +141,10 @@ func main() {
 	case "intent":
 		runWithExit(func() int { return runIntent(os.Args[2:], os.Stdout, os.Stderr) })
 	// === END SPEC-0195 S2 ===
+	// === SPEC-0278 P5: L1 transparency log ===
+	case "translog":
+		os.Exit(runTranslog(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0278 P5 ===
 	// === SPEC-0214 (PLM v2 / SPEC-0216): project-context resolution ===
 	// Reads `.m3c/project.yaml` (a committed projection of the PLM project
 	// object) to resolve project id + ER1 target/context for the cwd, with a
@@ -243,6 +247,13 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "  session list       List session-state items (--project / --host / --open-only).")
 	fmt.Fprintln(w, "  session show       Show a session-state item by session_id or doc_id.")
 	fmt.Fprintln(w, "  session resume     Print a resume hint for a prior session.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Commands (SPEC-0278 / L1 transparency log):")
+	fmt.Fprintln(w, "  translog append    Append an event (admit/attest/revoke/agentid-*).")
+	fmt.Fprintln(w, "  translog sth       Show / sign the current tree head.")
+	fmt.Fprintln(w, "  translog prove     Emit an offline inclusion receipt.")
+	fmt.Fprintln(w, "  translog verify    Offline inclusion check vs a pinned log key.")
+	fmt.Fprintln(w, "  translog witness   Cross-witness STHs for a split view (equivocation).")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Run any command with --help for its flags.")
 }

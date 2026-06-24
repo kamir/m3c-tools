@@ -410,6 +410,10 @@ func printSyncSummary(stderr io.Writer, res *awareness.SyncResult) {
 		resp.SessionTag, resp.Summary.Admitted, resp.Summary.Skipped, resp.Summary.Received)
 	for _, row := range resp.Admitted {
 		fmt.Fprintf(stderr, "  ADMIT  %-30s  %s\n", row.Name, row.LocalDigest)
+		// SPEC-0278 L1: best-effort mirror of each admit into the local
+		// transparency log (opt-in via M3C_TRANSLOG=1). Malformed digests
+		// are skipped by the entry validator; never blocks the sync.
+		bestEffortTranslogAppend(translogEventAdmit, row.LocalDigest, row.Name, stderr)
 	}
 	for _, row := range resp.Skipped {
 		fmt.Fprintf(stderr, "  SKIP   %-30s  %s\n", row.Name, row.Reason)

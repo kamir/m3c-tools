@@ -157,6 +157,20 @@ const (
 	// 21 is taken by agentid-expired (cmd/skillctl exitAgentIDExpired), so 22 is
 	// the next free code.
 	ExitRevocationStale = 22
+
+	// ExitLogInclusionMissing (23) — SPEC-0278 L1: the trust root sets
+	// `require_log_inclusion: true` but the event could not be shown INCLUDED
+	// under a pinned, signature-valid Signed Tree Head. The verifier fails
+	// closed: an event the operator demands be transparency-logged, but which
+	// no pinned head commits to, is refused.
+	//
+	// DISTINCT from the signature/governance codes (10-17) — the trust chain
+	// was fine but the event is not on the log — and from the freshness code
+	// (22). 20 (ExitSelfAttested), 21 (agentid-expired), and 22
+	// (ExitRevocationStale) are all taken, so 23 is the next free code. (The
+	// SPEC-0278 branch wrongly reused 20; it now lives at 23.) UX: surface the
+	// log_id + claimed tree_size so the operator can re-witness or pin a head.
+	ExitLogInclusionMissing = 23
 )
 
 // Sentinel errors so callers can `errors.Is(err, verify.ErrDigestMismatch)`
@@ -265,6 +279,18 @@ var (
 	//   fmt.Errorf("revocation snapshot is stale (epoch %d, %s old > max_staleness; risk=%s): %w",
 	//       epoch, age, risk, verify.ErrRevocationStale)
 	ErrRevocationStale = errors.New("revocation snapshot is stale (freshness fail-closed)")
+
+	// ErrLogInclusionMissing — SPEC-0278 L1: no valid inclusion proof was
+	// available for the event under any pinned, signature-valid STH, while
+	// the trust root sets require_log_inclusion: true. Exit code 23 (the
+	// next free code after 20/21/22). Whether this BLOCKS depends on the
+	// require_log_inclusion policy (hard) vs advisory (default); the hard
+	// path wraps this sentinel. Wrap with the log_id + tree_size so the
+	// operator can re-witness:
+	//
+	//   fmt.Errorf("event not included under pinned STH for log %q (size %d): %w",
+	//       logID, treeSize, verify.ErrLogInclusionMissing)
+	ErrLogInclusionMissing = errors.New("transparency-log inclusion proof missing or invalid")
 )
 
 // ExitCode maps a verifier error to its numeric process exit code.
@@ -326,6 +352,11 @@ func ExitCode(err error) int {
 		// denial only matters once the chain (digest/sig/trust/governance)
 		// otherwise passed, and it must not mask a more specific failure.
 		return ExitRevocationStale
+	case errors.Is(err, ErrLogInclusionMissing):
+		// SPEC-0278 L1 — require_log_inclusion fail-closed. Checked last: an
+		// inclusion-proof refusal only matters once the trust chain otherwise
+		// passed (the chain was fine but the event is not on a pinned log).
+		return ExitLogInclusionMissing
 	default:
 		return 1
 	}
