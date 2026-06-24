@@ -85,7 +85,7 @@ jobs:
           tar czf skillctl-darwin-amd64.tar.gz skillctl-darwin-amd64
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: macos-binaries
           path: |
@@ -121,7 +121,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload GoReleaser artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: goreleaser-binaries
           path: |
@@ -164,7 +164,7 @@ jobs:
         run: makensis scripts/installer.nsi
 
       - name: Upload installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-installer
           path: build/M3C-Tools-Setup.exe
