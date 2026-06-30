@@ -45,6 +45,8 @@ type FetchResult struct {
 	Text         string `json:"text"`
 	Flag         string `json:"flag"`
 	RateLimited  bool   `json:"rate_limited,omitempty"`
+	NoTranscript bool   `json:"no_transcript,omitempty"`
+	Reason       string `json:"reason,omitempty"`
 	FromCache    bool   `json:"from_cache,omitempty"`
 }
 
@@ -137,6 +139,19 @@ func (tf *TranscriptFetcher) Fetch(videoID string) (*FetchResult, error) {
 			}, nil
 		}
 
+		// Graceful degradation: the video exists but has no usable transcript
+		// (subtitles disabled / none in requested languages / none at all).
+		// Proceed so we still capture the thumbnail and link.
+		if transcript.IsTranscriptUnavailable(err) {
+			log.Printf("[menubar] no transcript available — proceeding with thumbnail + link for video=%s", videoID)
+			return &FetchResult{
+				VideoID:      videoID,
+				NoTranscript: true,
+				Reason:       err.Error(),
+				Flag:         "📄",
+			}, nil
+		}
+
 		return nil, fmt.Errorf("fetch transcript: %w", err)
 	}
 
@@ -185,6 +200,12 @@ func (tf *TranscriptFetcher) FetchAndDisplay(app *App, videoID string) {
 		app.notify("Rate Limited", fmt.Sprintf("YouTube rate limit for %s — proceeding without transcript", videoID))
 	}
 
+	// Handle no-transcript result (graceful degradation): the video exists but
+	// has no usable subtitles. We still capture the thumbnail and link.
+	if result.NoTranscript {
+		app.notify("No Transcript", fmt.Sprintf("No subtitles for %s — capturing thumbnail + link", videoID))
+	}
+
 	// Copy transcript text to clipboard (skip if rate-limited/empty).
 	if result.Text != "" {
 		if err := CopyToClipboard(result.Text); err != nil {
@@ -208,9 +229,17 @@ func (tf *TranscriptFetcher) FetchAndDisplay(app *App, videoID string) {
 		Date:         time.Now().Format("2006-01-02 15:04:05"),
 	}
 
+	videoURL := "https://www.youtube.com/watch?v=" + result.VideoID
+
 	transcriptText := result.Text
-	if result.RateLimited {
-		transcriptText = "[Transcript unavailable — YouTube rate limit (429). Try again later or configure YT_PROXY_URL in .env]"
+	switch {
+	case result.RateLimited:
+		transcriptText = "[Transcript unavailable — YouTube rate limit (429). Try again later or configure YT_PROXY_URL in .env]\n\nSource: " + videoURL
+	case result.NoTranscript:
+		transcriptText = fmt.Sprintf(
+			"[No transcript available — %s]\n\nThe video has no usable subtitles, but the thumbnail and link were captured. Add your own notes above.\n\nSource: %s",
+			result.Reason, videoURL)
+		meta.Source = "YouTube (no transcript)"
 	}
 
 	if result.FromCache {
@@ -228,6 +257,9 @@ func (tf *TranscriptFetcher) FetchAndDisplay(app *App, videoID string) {
 	if result.RateLimited {
 		app.notify("Observation Ready",
 			fmt.Sprintf("⚠️ %s — rate limited, no transcript", result.VideoID))
+	} else if result.NoTranscript {
+		app.notify("Observation Ready",
+			fmt.Sprintf("📄 %s — no transcript, captured thumbnail + link", result.VideoID))
 	} else {
 		source := ""
 		if result.FromCache {
