@@ -1982,7 +1982,13 @@ func cmdMenubar(args []string) {
 		if plmBase == "" {
 			plmBase = er1BaseURL(er1Cfg.APIURL)
 		}
-		if plmBase != "" && er1Cfg.APIKey != "" {
+		// PLM needs an ER1 credential. The API key OR a device token is
+		// sufficient — plmclient.doRequest sends whichever is present (Bearer
+		// device-token preferred, X-API-KEY fallback). Gating on APIKey alone
+		// silently disabled PLM for device-token-only logins (e.g. a fresh
+		// `m3c-tools login` whose profile still holds a placeholder key).
+		deviceToken := os.Getenv("ER1_DEVICE_TOKEN")
+		if plmBase != "" && (er1Cfg.APIKey != "" || deviceToken != "") {
 			log.Printf("[timetracking] PLM connection: base=%s context=%s ssl=%v",
 				plmBase, truncateForLog(er1Cfg.ContextID, 32), er1Cfg.VerifySSL)
 			// Strip ___mft suffix from context ID — PLM uses the raw Google UID.
@@ -1997,7 +2003,7 @@ func cmdMenubar(args []string) {
 				VerifySSL: er1Cfg.VerifySSL,
 			})
 
-			// Health check: validate API key before starting background services.
+			// Health check: validate credentials before starting background services.
 			if err := plmClient.HealthCheck(); err != nil {
 				log.Printf("[healthcheck] PLM auth check FAILED: %v", err)
 				log.Printf("[healthcheck] PLM sync and time tracking will be disabled until key is fixed")
@@ -2019,7 +2025,12 @@ func cmdMenubar(args []string) {
 				startTimeTrackingProjectRefresher(plmClient, ttStore)
 			}
 		} else {
-			log.Printf("[timetracking] PLM sync disabled (base=%q key_set=%v)", plmBase, er1Cfg.APIKey != "")
+			log.Printf("[timetracking] PLM sync disabled (base=%q key_set=%v device_token=%v)",
+				plmBase, er1Cfg.APIKey != "", deviceToken != "")
+			// Don't leave the Projects submenu stuck on "Loading projects..."
+			// forever — tell the user why it's empty. LoadConfig blanks a
+			// placeholder API key, so inspect the raw env value for the reason.
+			menubar.SetTimeTrackingError(plmDisabledReason(plmBase, os.Getenv("ER1_API_KEY")))
 		}
 
 		log.Printf("[timetracking] engine ready db=%s", timetracking.DefaultDBPath())
@@ -2293,6 +2304,22 @@ func classifyPLMHealthCheckError(err error) string {
 	}
 }
 
+// plmDisabledReason returns a short, user-facing diagnostic for the Projects
+// submenu when PLM sync can't start at all, so the menu never sits on
+// "Loading projects..." forever. rawKey is the pre-sanitization ER1_API_KEY
+// env value — LoadConfig blanks placeholders, so the reason must be derived
+// from the raw value here, not from the sanitized Config.APIKey.
+func plmDisabledReason(plmBase, rawKey string) string {
+	switch {
+	case plmBase == "":
+		return "ER1 URL not set — configure ER1_API_URL"
+	case config.IsPlaceholderKey(rawKey):
+		return "ER1_API_KEY is a placeholder — fix the active profile"
+	default:
+		return "Not signed in — run 'm3c-tools login' or set ER1_API_KEY"
+	}
+}
+
 // startTimeTrackingProjectRefresher fetches the PLM project list periodically
 // and updates the menubar cache and time tracking store (for reverse tracking tag matching).
 func startTimeTrackingProjectRefresher(plmClient *timetracking.PLMClient, ttStore *timetracking.Store) {
@@ -2300,8 +2327,14 @@ func startTimeTrackingProjectRefresher(plmClient *timetracking.PLMClient, ttStor
 		projects, err := plmClient.FetchProjects()
 		if err != nil {
 			log.Printf("[timetracking] project refresh failed: %v", err)
+			// Surface the cause in the Projects submenu instead of leaving it
+			// stuck on "Loading projects...".
+			menubar.SetTimeTrackingError(classifyPLMHealthCheckError(err))
 			return
 		}
+		// A successful fetch clears any prior diagnostic — even for an empty
+		// account (SetTimeTrackingProjects only clears on a non-empty list).
+		menubar.SetTimeTrackingError("")
 		var ttProjects []menubar.TimeTrackingProject
 		var cacheProjects []timetracking.CachedProject
 		for _, p := range projects {
