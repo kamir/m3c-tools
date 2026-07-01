@@ -114,3 +114,28 @@ func TestClassifyPLMHealthCheckError_ConsistentWithPLMClient(t *testing.T) {
 		}
 	}
 }
+// TestPLMDisabledReason verifies the Projects-submenu diagnostic shown when
+// PLM sync can't start at all — so the menu never sits on "Loading projects..."
+// forever. Regression guard for the placeholder-key shadowing bug (active
+// profile carried ER1_API_KEY=minimal-key, silently disabling PLM).
+func TestPLMDisabledReason(t *testing.T) {
+	tests := []struct {
+		name    string
+		plmBase string
+		rawKey  string
+		want    string
+	}{
+		{"placeholder key on prod", "https://onboarding.guide", "minimal-key", "placeholder"},
+		{"empty key placeholder", "https://onboarding.guide", "", "placeholder"},
+		{"no base url", "", "e25creal", "ER1 URL not set"},
+		{"real key, no other issue", "https://onboarding.guide", "e25crealkey", "Not signed in"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := plmDisabledReason(tt.plmBase, tt.rawKey)
+			if !strings.Contains(got, tt.want) {
+				t.Errorf("plmDisabledReason(%q, <key>) = %q; want substring %q", tt.plmBase, got, tt.want)
+			}
+		})
+	}
+}
