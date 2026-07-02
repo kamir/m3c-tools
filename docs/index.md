@@ -58,10 +58,19 @@ ER1_CONTEXT_ID=your-context-id
 
 See the [Getting Started](getting-started) guide for the full configuration reference.
 
+## Two tools, one repo
+
+This repository ships two CLIs. **`m3c-tools`** fills the memory; **`skillctl`** governs the
+agent skills that act on it (sign, admit, verify, revoke — offline-verifiable).
+
 ---
 
 **Documentation:**
 
-- [Getting Started](getting-started) — install, configure, first use
+- [Quickstart: m3c-tools](quickstart-m3c-tools) — capture your first memory in 5 minutes
+- [Quickstart: skillctl](quickstart-skillctl) — sign, install and verify a skill in 5 minutes
+- [Manual: m3c-tools](manual-m3c-tools) — every command, flag and config variable
+- [Manual: skillctl](manual-skillctl) — the full trust lifecycle, command by command
 - [Menu Bar App](menubar-app) — channels, Observation Window, menu items
+- [Platform differences](PLATFORM-DIFFERENCES) — what works where
 - [Roadmap](roadmap) — current state, future work, ideas
