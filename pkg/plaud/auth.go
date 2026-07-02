@@ -403,7 +403,7 @@ func extractTokenCDP() (string, error) {
 	defer resp.Body.Close()
 
 	var targets []struct {
-		ID           string `json:"id"`
+		Type         string `json:"type"`
 		URL          string `json:"url"`
 		WebSocketURL string `json:"webSocketDebuggerUrl"`
 	}
@@ -411,9 +411,33 @@ func extractTokenCDP() (string, error) {
 		return "", fmt.Errorf("parse Chrome targets: %w", err)
 	}
 
-	// 2. Find a plaud.ai tab.
+	// BUG-0168 diagnostics. The Plaud token lives in the localStorage of the
+	// profile where the user actually completed the login. If CDP on port 9222
+	// is attached to a DIFFERENT Chrome instance than the one the user logged in
+	// to — e.g. a leftover debug Chrome from a previous attempt still holding
+	// 9222, or the user logged in to their normal browser instead of the launched
+	// debug window — then no plaud.ai tab visible here carries `tokenstr`.
+	// Set M3C_PLAUD_DEBUG=1 to dump exactly what CDP sees.
+	debug := os.Getenv("M3C_PLAUD_DEBUG") != ""
+	if debug {
+		fmt.Fprintf(os.Stderr, "  [plaud-debug] CDP /json returned %d target(s):\n", len(targets))
+		for _, t := range targets {
+			fmt.Fprintf(os.Stderr, "  [plaud-debug]   type=%-8s url=%s\n", t.Type, t.URL)
+		}
+	}
+
+	// 2. Find a plaud.ai tab that carries the token.
+	plaudTabs := 0
 	for _, t := range targets {
 		if strings.Contains(t.URL, "plaud.ai") && t.WebSocketURL != "" {
+			plaudTabs++
+			if debug {
+				if keys, kerr := cdpEvaluate(t.WebSocketURL, `Object.keys(localStorage).join(",")`); kerr != nil {
+					fmt.Fprintf(os.Stderr, "  [plaud-debug]   plaud.ai tab localStorage read failed: %v\n", kerr)
+				} else {
+					fmt.Fprintf(os.Stderr, "  [plaud-debug]   plaud.ai tab (%s) localStorage keys: %s\n", t.URL, strings.Trim(keys, "\""))
+				}
+			}
 			token, err := cdpEvaluate(t.WebSocketURL, `localStorage.getItem("tokenstr")`)
 			if err != nil {
 				continue
@@ -425,7 +449,17 @@ func extractTokenCDP() (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("no plaud.ai tab with token found in Chrome (checked %d tabs)", len(targets))
+	// Distinguish the two very different failure modes (BUG-0168): a plaud.ai tab
+	// was present but carried no token (wrong profile / renamed key) vs. no
+	// plaud.ai tab at all on this CDP instance (reading a different Chrome).
+	if plaudTabs > 0 {
+		return "", fmt.Errorf("found %d plaud.ai tab(s) among %d target(s), but none had a 'tokenstr' in localStorage — "+
+			"log in on the debug window that just opened (not another Chrome window), "+
+			"or Plaud may have changed its token storage; re-run with M3C_PLAUD_DEBUG=1 to inspect", plaudTabs, len(targets))
+	}
+	return "", fmt.Errorf("no plaud.ai tab found among %d Chrome target(s) — "+
+		"the debug Chrome on port 9222 may be a different instance than the one you logged in to; "+
+		"close any leftover Chrome debug windows and re-run (M3C_PLAUD_DEBUG=1 to inspect)", len(targets))
 }
 
 // cdpEvaluate sends a Runtime.evaluate command over a WebSocket to Chrome.
