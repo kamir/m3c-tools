@@ -20,7 +20,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -193,7 +192,11 @@ func er1PostJSON(base string, cfg *er1.Config, path string, payload any) (any, e
 	for k, v := range cfg.AuthHeaders() {
 		req.Header.Set(k, v)
 	}
-	if os.Getenv("ER1_DEVICE_TOKEN") == "" && cfg.APIKey != "" {
+	// BUG-0167: the maindrec tag endpoints (_auth_or_key_required) accept ONLY the
+	// master X-API-KEY or a browser session — NOT a device-token Bearer. So always
+	// send X-API-KEY when we have it, even alongside a device token (AuthHeaders
+	// prefers the Bearer, which these routes reject with 401). Mirrors er1_publish.
+	if cfg.APIKey != "" {
 		req.Header.Set("X-API-KEY", cfg.APIKey)
 	}
 	resp, err := client.Do(req)

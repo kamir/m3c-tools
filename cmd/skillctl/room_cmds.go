@@ -63,6 +63,10 @@ func runRoomShare(args []string, stdout, stderr io.Writer, unshare bool) int {
 	if err := fs.Parse(reorderFlagArgs(fs, args)); err != nil {
 		return 2
 	}
+	// BUG-0165: prefix a bare ER1 context (no "___") with the logged-in owner id,
+	// so `room share ... --er1-context skills` targets the canonical <sub>___skills
+	// registry instead of the un-owned bare namespace (which finds no items).
+	*er1Context = ownerPrefixedContext(*er1Context)
 	if !registry.IsER1Registry(*registryNm) {
 		fmt.Fprintf(stderr, "room: only ER1 registries (\"self\"/\"er1://...\") are supported; got %q\n", *registryNm)
 		return 2
