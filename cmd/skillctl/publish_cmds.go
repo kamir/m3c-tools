@@ -42,6 +42,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/auth"
 	"github.com/kamir/m3c-tools/pkg/er1"
 	"github.com/kamir/m3c-tools/pkg/session"
 	"github.com/kamir/m3c-tools/pkg/skillbundle"
@@ -61,6 +62,38 @@ func sessionCheckpoint(sessionID, er1Target, er1Context, note string) (*session.
 		Note:       note,
 		Auto:       false,
 	})
+}
+
+// ownerPrefixedContext prefixes a bare ER1 context (one with no "___") with the
+// logged-in owner id, so publish/attest/pull target `<sub>___<ns>` instead of the
+// un-owned bare namespace (BUG-0165). Resolution order: ER1_USER_ID → the sub of
+// ER1_CONTEXT_ID → the persisted device token's UserID/ContextID (keychain-backed
+// hosts ignore the load hints). Fail-open: returns the context unchanged when no
+// owner can be resolved, preserving the previous behaviour.
+func ownerPrefixedContext(ctx string) string {
+	ctx = strings.TrimSpace(ctx)
+	if ctx == "" || strings.Contains(ctx, "___") {
+		return ctx
+	}
+	owner := strings.TrimSpace(os.Getenv("ER1_USER_ID"))
+	if owner == "" {
+		if c := os.Getenv("ER1_CONTEXT_ID"); c != "" {
+			owner = strings.SplitN(c, "___", 2)[0]
+		}
+	}
+	if owner == "" {
+		if dt, err := auth.Load(auth.DeviceID(), ""); err == nil && dt != nil {
+			if dt.UserID != "" {
+				owner = dt.UserID
+			} else if dt.ContextID != "" {
+				owner = strings.SplitN(dt.ContextID, "___", 2)[0]
+			}
+		}
+	}
+	if strings.TrimSpace(owner) == "" {
+		return ctx // fail-open: no owner resolvable → leave unchanged
+	}
+	return strings.TrimSpace(owner) + "___" + ctx
 }
 
 // runPublish is the main.go entry point for the `publish` subcommand.
@@ -123,6 +156,13 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 	if err := fs.Parse(reorderFlagArgs(fs, args)); err != nil {
 		return 2
 	}
+
+	// BUG-0165: a bare ER1 context (no "___") has no owner prefix, so the maindrec
+	// write path resolves the context owner to the literal namespace (e.g. "skills")
+	// — never the authenticated principal — and returns 403 "Not authorized for this
+	// context". Prefix it with the logged-in owner id so `--er1-context skills` (the
+	// default) targets the canonical `<sub>___skills` registry.
+	*er1Context = ownerPrefixedContext(*er1Context)
 	// Seed from $SKILL_SHARE_ROOMS when no --share-room was passed.
 	rooms := []string(shareRooms)
 	if len(rooms) == 0 {
