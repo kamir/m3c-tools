@@ -105,6 +105,10 @@ thumbnail and the link.
 
 ## What `skillctl` governs
 
+<p align="center">
+  <img src="docs/assets/skillctl-hero.png" alt="skillctl — a CLI to build, package, sign, share and run agent skills" width="840">
+</p>
+
 `skillctl` is the trust-and-governance CLI for agent skills. It implements a full lifecycle
 so a skill can be trusted end to end:
 
