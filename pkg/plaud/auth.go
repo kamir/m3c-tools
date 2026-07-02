@@ -417,12 +417,17 @@ func extractTokenCDP() (string, error) {
 	// to — e.g. a leftover debug Chrome from a previous attempt still holding
 	// 9222, or the user logged in to their normal browser instead of the launched
 	// debug window — then no plaud.ai tab visible here carries `tokenstr`.
-	// Set M3C_PLAUD_DEBUG=1 to dump exactly what CDP sees.
+	// Set M3C_PLAUD_DEBUG=1 to inspect what CDP sees. The dump is deliberately
+	// SECRET-SAFE so the output can be shared in a bug report: per-target ORIGIN
+	// only (never full URLs — query strings can carry tokens) and, per plaud.ai
+	// tab, only whether `tokenstr` exists and its length — never localStorage
+	// key names or values (a Plaud key name can itself embed a bearer JWT, e.g.
+	// `PLADU_bearer <JWT>_...`).
 	debug := os.Getenv("M3C_PLAUD_DEBUG") != ""
 	if debug {
 		fmt.Fprintf(os.Stderr, "  [plaud-debug] CDP /json returned %d target(s):\n", len(targets))
 		for _, t := range targets {
-			fmt.Fprintf(os.Stderr, "  [plaud-debug]   type=%-8s url=%s\n", t.Type, t.URL)
+			fmt.Fprintf(os.Stderr, "  [plaud-debug]   type=%-8s origin=%s\n", t.Type, plaudURLOrigin(t.URL))
 		}
 	}
 
@@ -432,10 +437,16 @@ func extractTokenCDP() (string, error) {
 		if strings.Contains(t.URL, "plaud.ai") && t.WebSocketURL != "" {
 			plaudTabs++
 			if debug {
-				if keys, kerr := cdpEvaluate(t.WebSocketURL, `Object.keys(localStorage).join(",")`); kerr != nil {
-					fmt.Fprintf(os.Stderr, "  [plaud-debug]   plaud.ai tab localStorage read failed: %v\n", kerr)
+				// Secret-safe presence check: reports counts + token length only,
+				// never key names (which can embed a JWT) or values.
+				summary, serr := cdpEvaluate(t.WebSocketURL,
+					`(function(){var k=Object.keys(localStorage);var t=localStorage.getItem("tokenstr");`+
+						`return "keys="+k.length+", tokenstr="+(t?("present(len="+t.length+")"):"absent")+`+
+						`", pld_tokenstr="+(k.indexOf("pld_tokenstr")>=0?"present":"absent");})()`)
+				if serr != nil {
+					fmt.Fprintf(os.Stderr, "  [plaud-debug]   plaud.ai tab (%s) localStorage read failed: %v\n", plaudURLOrigin(t.URL), serr)
 				} else {
-					fmt.Fprintf(os.Stderr, "  [plaud-debug]   plaud.ai tab (%s) localStorage keys: %s\n", t.URL, strings.Trim(keys, "\""))
+					fmt.Fprintf(os.Stderr, "  [plaud-debug]   plaud.ai tab (%s) %s\n", plaudURLOrigin(t.URL), strings.Trim(summary, "\""))
 				}
 			}
 			token, err := cdpEvaluate(t.WebSocketURL, `localStorage.getItem("tokenstr")`)
@@ -460,6 +471,20 @@ func extractTokenCDP() (string, error) {
 	return "", fmt.Errorf("no plaud.ai tab found among %d Chrome target(s) — "+
 		"the debug Chrome on port 9222 may be a different instance than the one you logged in to; "+
 		"close any leftover Chrome debug windows and re-run (M3C_PLAUD_DEBUG=1 to inspect)", len(targets))
+}
+
+// plaudURLOrigin reduces a URL to scheme://host so BUG-0168 debug output can
+// never leak a token embedded in a URL path or query string.
+func plaudURLOrigin(raw string) string {
+	i := strings.Index(raw, "://")
+	if i < 0 {
+		return raw
+	}
+	rest := raw[i+3:]
+	if j := strings.IndexAny(rest, "/?#"); j >= 0 {
+		rest = rest[:j]
+	}
+	return raw[:i+3+len(rest)]
 }
 
 // cdpEvaluate sends a Runtime.evaluate command over a WebSocket to Chrome.
