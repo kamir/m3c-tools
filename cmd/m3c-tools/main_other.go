@@ -461,6 +461,31 @@ func cmdPlaudAuth(args []string) {
 		return
 	}
 
+	if len(args) > 0 && (args[0] == "--from-er1" || args[0] == "from-er1") {
+		// SPEC-0304 — pull the token from the ER1 Credential Vault (captured
+		// once via the "Plaud verbinden" page, any OS) instead of harvesting a
+		// local browser. Resolves ER1 base + auth from the active profile.
+		fmt.Println("Fetching Plaud token from the ER1 credential vault...")
+		token, _, err := plaud.FetchTokenFromER1()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		session := &plaud.TokenSession{Token: token, SavedAt: time.Now()}
+		if err := plaud.SaveToken(cfg.TokenPath, session); err != nil {
+			fmt.Fprintf(os.Stderr, "Error saving token: %v\n", err)
+			os.Exit(1)
+		}
+		client := plaud.NewClient(cfg, token)
+		recordings, err := client.ListRecordings()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: token saved but verification failed: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Token retrieved from ER1 and saved. Verified: %d recordings found.\n", len(recordings))
+		return
+	}
+
 	tokenFile := ""
 	bareToken := ""
 	for i := 0; i < len(args); i++ {
@@ -484,6 +509,7 @@ func cmdPlaudAuth(args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud auth login            (extract from Chrome)")
+		fmt.Fprintln(os.Stderr, "       m3c-tools plaud auth --from-er1        (pull from the ER1 vault, SPEC-0304)")
 		fmt.Fprintln(os.Stderr, "       m3c-tools plaud auth --token-file <path>")
 		fmt.Fprintf(os.Stderr, "       %s=<token> m3c-tools plaud auth\n", plaud.PlaudTokenEnvVar)
 		os.Exit(1)

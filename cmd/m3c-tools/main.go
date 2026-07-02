@@ -235,6 +235,7 @@ Commands:
   plaud sync <id>        Sync a Plaud recording to ER1
   plaud sync --all       Sync all new Plaud recordings to ER1
   plaud auth login       Extract token from Chrome (web.plaud.ai)
+  plaud auth --from-er1  Pull token from the ER1 credential vault (SPEC-0304)
   plaud auth --token-file <path>  Save Plaud API token from a file (secure)
   plaud auth             Save token from $M3C_PLAUD_TOKEN env var (secure)
   plaud auth <token>     Save Plaud API token from argv (DEPRECATED: leaks via ps)
@@ -4453,6 +4454,36 @@ func cmdPlaudAuthLogin() {
 	fmt.Printf("Authenticated. Found %d recordings.\n", len(recordings))
 }
 
+// cmdPlaudAuthFromER1 pulls the Plaud token from the ER1 Credential Vault
+// (SPEC-0304) — captured once via the "Plaud verbinden" page, any OS — and
+// saves it locally so `plaud sync` works. Replaces browser harvesting for the
+// common case (BUG-0168): capture once, use anywhere.
+func cmdPlaudAuthFromER1() {
+	cfg := plaud.LoadConfig()
+
+	fmt.Println("Fetching Plaud token from the ER1 credential vault...")
+	token, _, err := plaud.FetchTokenFromER1()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	session := &plaud.TokenSession{Token: token}
+	if err := plaud.SaveToken(cfg.TokenPath, session); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving token: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Token retrieved from ER1 and saved to %s\n", cfg.TokenPath)
+
+	client := plaud.NewClient(cfg, token)
+	recordings, err := client.ListRecordings()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: token saved but API test failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Authenticated. Found %d recordings.\n", len(recordings))
+}
+
 // cmdPlaudAuthDispatch parses `plaud auth` arguments and routes to the right
 // handler. Supported forms:
 //
@@ -4467,6 +4498,11 @@ func cmdPlaudAuthLogin() {
 func cmdPlaudAuthDispatch(args []string) {
 	if len(args) > 0 && args[0] == "login" {
 		cmdPlaudAuthLogin()
+		return
+	}
+
+	if len(args) > 0 && (args[0] == "--from-er1" || args[0] == "from-er1") {
+		cmdPlaudAuthFromER1()
 		return
 	}
 
@@ -4493,6 +4529,7 @@ func cmdPlaudAuthDispatch(args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud auth login            (extract from Chrome)")
+		fmt.Fprintln(os.Stderr, "       m3c-tools plaud auth --from-er1        (pull from the ER1 vault, SPEC-0304)")
 		fmt.Fprintln(os.Stderr, "       m3c-tools plaud auth --token-file <path>")
 		fmt.Fprintf(os.Stderr, "       %s=<token> m3c-tools plaud auth\n", plaud.PlaudTokenEnvVar)
 		os.Exit(1)
