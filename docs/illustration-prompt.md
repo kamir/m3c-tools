@@ -80,3 +80,37 @@ cheesy stock-photo people, no cluttered UI screenshots, not skeuomorphic, not ne
 - Ask for `16:9` for the site hero, `3:1` for the GitHub social/banner, `1:1` for the badge.
 - If the model renders garbled text, re-run with "no text" emphasized — labels should be
   added later in a vector editor, not baked into the image.
+
+---
+
+## 5. Fact-accurate "ecosystem" infographic (corrected variant)
+
+A first-pass "package manager" infographic looked great but baked in wrong facts
+(a `github.com/skillctl/skillctl` URL, a `get.skillctl.dev` installer, and invented
+`skillctl search` / `pdf-extract` commands). Use this prompt instead when you want an
+infographic that renders **real** text — so it can go in the repo without misleading anyone.
+
+> A polished dark-mode developer infographic for a CLI tool called **skillctl**, the
+> trust-and-governance CLI for AI-agent skills. Left column: four labeled feature rows with
+> line icons — **Sign** (a key + signature seal), **Verify** (a shield with a checkmark),
+> **Install** (a download arrow into a box), **Revoke** (a circular arrow with a stop). Center:
+> a realistic macOS-style terminal window titled `skillctl` showing the real command flow —
+> `skillctl keygen`, `skillctl pack`, `skillctl sign`, then `skillctl verify-sig ✓ ok (offline)`,
+> then `skillctl install my-skill@1.0.0 ✓ installed`. Right column: a small ecosystem diagram —
+> a "personal registry (ER1)" node and a "git repos" node feeding into the skillctl hexagon,
+> which fans out to "verify → install → use" with a small robot labeled "AI agent". Deep navy
+> background, electric teal + violet accents, green for the ✓ success states, single-weight line
+> icons, premium open-source aesthetic, generous spacing. **Aspect ratio 16:9.**
+
+**If the model bakes text into the image, it MUST use only these real strings** (everything
+else should be "no text"):
+
+- Tool name: `skillctl`  ·  Tagline: *the trust layer for agent skills*
+- Real commands only: `keygen`, `pack`, `sign`, `verify-sig`, `trust`, `install`, `verify`,
+  `publish`, `pull`, `registry`, `agentid`, `revoke` — **never** `search`, `init`, `build`, `run`.
+- Repo URL (footer): `github.com/kamir/m3c-tools`  — **not** `skillctl/skillctl`.
+- Install line (if shown): `curl -sL github.com/kamir/m3c-tools/releases/latest/download/skillctl-darwin-arm64.tar.gz | tar xz`
+  — **not** `get.skillctl.dev`.
+- License (footer, correct): `Apache-2.0`.
+- Trust phrasing: *offline-verifiable — no hosted CA in the verification path* (evidence-led, no overclaim).
+- Do **not** invent a public skill marketplace or named skills (no `pdf-extract`, `web-search`, `skillhub`).
