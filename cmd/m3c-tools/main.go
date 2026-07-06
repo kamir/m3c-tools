@@ -5257,6 +5257,7 @@ func menubarHandlePlaudSync(app *menubar.App) {
 			Status:      status,
 			RecordingID: rec.ID,
 			ItemURL:     st.ItemURL,
+			DocID:       st.DocID,
 		})
 	}
 
