@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"os"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -197,6 +198,51 @@ func truncate(s string, n int) string {
 		return s[:n] + "..."
 	}
 	return s
+}
+
+// PatchMemoryCurrentTime updates an already-stored ER1 memory item's
+// `current_time` (the memory-viewer sort position) via
+// PATCH /memory/<ctx>/<docID>. Used by `plaud fix-times` to backfill the real
+// recording time onto items that were synced before capture-time support —
+// no audio re-upload, no transcription disruption. currentTime must be
+// "2006-01-02 15:04:05".
+func PatchMemoryCurrentTime(cfg *Config, docID, currentTime string) error {
+	if docID == "" || currentTime == "" {
+		return fmt.Errorf("doc_id and current_time are required")
+	}
+	if cfg.APIKey == "" && os.Getenv("ER1_DEVICE_TOKEN") == "" {
+		return fmt.Errorf("no authentication configured")
+	}
+	base := strings.TrimSuffix(cfg.APIURL, "/upload_2")
+	base = strings.TrimSuffix(base, "/upload")
+	base = strings.TrimSuffix(base, "/")
+	endpoint := fmt.Sprintf("%s/memory/%s/%s", base, cfg.ContextID, docID)
+
+	form := url.Values{}
+	form.Set("current_time", currentTime)
+	req, err := http.NewRequest("PATCH", endpoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	for k, v := range cfg.AuthHeaders() {
+		req.Header.Set(k, v)
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect}
+	if !cfg.VerifySSL {
+		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("PATCH current_time HTTP %d: %s", resp.StatusCode, truncate(string(body), 200))
+	}
+	return nil
 }
 
 // CaptureTimeLayout is the timestamp format ER1 stores in `current_time` and

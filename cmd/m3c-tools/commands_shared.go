@@ -711,3 +711,94 @@ func cmdPlaudCheck() {
 		}
 	}
 }
+
+// cmdPlaudFixTimes backfills the real recording time onto already-synced Plaud
+// items: it PATCHes each synced item's ER1 current_time to its Plaud CreatedAt,
+// so they move from the import moment to their true position in the memory
+// viewer. Dry-run by default; pass apply=true to actually write.
+func cmdPlaudFixTimes(apply bool) {
+	cfg := plaud.LoadConfig()
+	session, err := plaud.LoadToken(cfg.TokenPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading token: %v\nRun: m3c-tools plaud auth --from-er1   (or: m3c-tools plaud auth login)\n", err)
+		os.Exit(1)
+	}
+	client := plaud.NewClient(cfg, session.Token)
+	recordings, err := client.ListRecordings()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error listing recordings: %v\n", err)
+		os.Exit(1)
+	}
+
+	ids := make([]string, len(recordings))
+	for i, r := range recordings {
+		ids[i] = r.ID
+	}
+	states := resolvePlaudSyncStates(ids, session.Token)
+	er1Cfg := er1.LoadConfig()
+
+	type fixItem struct {
+		title  string
+		docID  string
+		target string
+	}
+	var toFix []fixItem
+	var skippedNoDoc, skippedNoTime int
+	for _, r := range recordings {
+		st := states[r.ID]
+		if st.Status != "synced" {
+			continue
+		}
+		if st.DocID == "" {
+			skippedNoDoc++ // synced on another device; doc_id unknown here
+			continue
+		}
+		target := er1.FormatCaptureTime(r.CreatedAt)
+		if target == "" {
+			skippedNoTime++ // no recording time from Plaud
+			continue
+		}
+		toFix = append(toFix, fixItem{title: r.Title, docID: st.DocID, target: target})
+	}
+
+	fmt.Printf("Plaud fix-times — %d synced items to correct to their real recording time\n", len(toFix))
+	if skippedNoDoc > 0 {
+		fmt.Printf("  (%d synced items skipped: doc_id not known locally — run on the device that synced them)\n", skippedNoDoc)
+	}
+	if skippedNoTime > 0 {
+		fmt.Printf("  (%d skipped: no recording time from Plaud)\n", skippedNoTime)
+	}
+
+	if !apply {
+		fmt.Println("\nDRY-RUN — pass --apply to write. recording -> doc_id -> new current_time:")
+		for _, f := range toFix {
+			fmt.Printf("  %-40s  doc_id=%s  ->  %s\n", truncateStr(f.title, 40), f.docID, f.target)
+		}
+		fmt.Printf("\n%d item(s) would be updated. Re-run with: m3c-tools plaud fix-times --apply\n", len(toFix))
+		return
+	}
+
+	ok, failed := 0, 0
+	for _, f := range toFix {
+		if err := er1.PatchMemoryCurrentTime(er1Cfg, f.docID, f.target); err != nil {
+			failed++
+			log.Printf("[plaud] fix-times FAIL doc_id=%s: %v", f.docID, err)
+		} else {
+			ok++
+			log.Printf("[plaud] fix-times OK doc_id=%s -> %s", f.docID, f.target)
+		}
+	}
+	fmt.Printf("Done: %d updated, %d failed (of %d)\n", ok, failed, len(toFix))
+}
+
+// truncateStr shortens s to at most n runes with an ellipsis (portable; the
+// darwin build has its own truncate()).
+func truncateStr(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	if n <= 3 {
+		return s[:n]
+	}
+	return s[:n-3] + "..."
+}

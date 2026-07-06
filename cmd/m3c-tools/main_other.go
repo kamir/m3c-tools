@@ -384,7 +384,7 @@ func cmdTranscript(args []string) {
 // cmdPlaud handles plaud subcommands: auth, list, sync.
 func cmdPlaud(args []string) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud <auth|list|check|sync> [args...]")
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud <auth|list|check|sync|fix-times> [args...]")
 		os.Exit(1)
 	}
 
@@ -395,6 +395,14 @@ func cmdPlaud(args []string) {
 		cmdPlaudList()
 	case "check":
 		cmdPlaudCheck()
+	case "fix-times":
+		apply := false
+		for _, a := range args[1:] {
+			if a == "--apply" {
+				apply = true
+			}
+		}
+		cmdPlaudFixTimes(apply)
 	case "sync":
 		if len(args) < 2 {
 			fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud sync <#|ID|--all> [-f]")
