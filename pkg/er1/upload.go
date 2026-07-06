@@ -225,8 +225,22 @@ func PatchMemoryCurrentTime(cfg *Config, docID, currentTime string) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	for k, v := range cfg.AuthHeaders() {
-		req.Header.Set(k, v)
+	// The /memory PATCH route enforces CSRF for a Bearer-only (session-style)
+	// request but exempts API-key clients — so send X-API-KEY (not just the
+	// device-token Bearer that AuthHeaders() prefers), else every PATCH 400s
+	// with "CSRF token missing". Both headers are safe; the server accepts the key.
+	if cfg.APIKey != "" {
+		req.Header.Set("X-API-KEY", cfg.APIKey)
+	}
+	if token := os.Getenv("ER1_DEVICE_TOKEN"); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	if cfg.APIKey == "" {
+		// No API key — fall back to the standard headers (may hit CSRF; the
+		// real fix is a server-side CSRF exemption for token auth on this route).
+		for k, v := range cfg.AuthHeaders() {
+			req.Header.Set(k, v)
+		}
 	}
 
 	client := &http.Client{Timeout: 30 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect}
