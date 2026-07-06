@@ -161,6 +161,43 @@ func TestCheckEpochMonotonic(t *testing.T) {
 	}
 }
 
+func TestAdoptRevocationHead(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	otherPub, _, _ := ed25519.GenerateKey(rand.Reader)
+	set := []string{mkDigest('a'), mkDigest('b')}
+	ts := time.Date(2026, 7, 6, 18, 0, 0, 0, time.UTC)
+
+	newSignedHead := func(epoch int) map[string]any {
+		h := mustHead(t, RevocationHeadInput{Epoch: epoch, IssuedAt: ts, Digests: set})
+		if _, err := SignEnvelopeSignature(priv, h); err != nil {
+			t.Fatalf("sign: %v", err)
+		}
+		return h
+	}
+
+	t.Run("happy", func(t *testing.T) {
+		ep, iss, err := AdoptRevocationHead(pub, newSignedHead(5), set, 5)
+		if err != nil || ep != 5 || !iss.Equal(ts) {
+			t.Fatalf("adopt = %d,%v,%v", ep, iss, err)
+		}
+	})
+	t.Run("bad signature (wrong key) -> reject", func(t *testing.T) {
+		if _, _, err := AdoptRevocationHead(otherPub, newSignedHead(5), set, 0); !errors.Is(err, ErrEnvelopeSignatureInvalid) {
+			t.Errorf("want ErrEnvelopeSignatureInvalid, got %v", err)
+		}
+	})
+	t.Run("rollback -> reject", func(t *testing.T) {
+		if _, _, err := AdoptRevocationHead(pub, newSignedHead(4), set, 9); !errors.Is(err, ErrHeadRollback) {
+			t.Errorf("want ErrHeadRollback, got %v", err)
+		}
+	})
+	t.Run("set mismatch -> reject", func(t *testing.T) {
+		if _, _, err := AdoptRevocationHead(pub, newSignedHead(5), []string{mkDigest('a')}, 0); !errors.Is(err, ErrHeadSetRootMismatch) {
+			t.Errorf("want ErrHeadSetRootMismatch, got %v", err)
+		}
+	})
+}
+
 func TestHeadAccessors_FromDecodedMap(t *testing.T) {
 	ts := time.Date(2026, 7, 6, 12, 30, 0, 0, time.UTC)
 	h := mustHead(t, RevocationHeadInput{

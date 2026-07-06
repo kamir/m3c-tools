@@ -14,12 +14,15 @@ package main
 // in a verified revoked set — a fetch failure never false-quarantines.
 
 import (
+	"crypto/ed25519"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/er1"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 )
 
@@ -34,22 +37,56 @@ const exitBundleRevoked = 17
 type revokedCacheFile struct {
 	Digests   []string `json:"digests"`
 	FetchedAt string   `json:"fetched_at"`
+	// Epoch / IssuedAt carry the last ADOPTED revocation HEAD (FR-0045 D3).
+	// omitempty keeps legacy caches (pre-HEAD) valid: absent => epoch 0, "".
+	// Epoch is the monotonicity floor for the next AdoptRevocationHead; IssuedAt
+	// is the freshness anchor the gate (D4) evaluates against SPEC-0279.
+	Epoch    int    `json:"epoch,omitempty"`
+	IssuedAt string `json:"issued_at,omitempty"`
 }
 
 func revokedCachePath(home string) string {
 	return filepath.Join(home, ".claude", "skillctl", "revoked-digests.json")
 }
 
+// writeRevokedCache persists the set with no HEAD freshness (epoch 0). Used by
+// the SPEC-0266 set-only path and tests.
 func writeRevokedCache(home string, set map[string]struct{}) {
+	writeRevokedCacheHead(home, set, 0, "")
+}
+
+// writeRevokedCacheHead persists the set plus the adopted HEAD's epoch/issued_at.
+func writeRevokedCacheHead(home string, set map[string]struct{}, epoch int, issuedAt string) {
 	digs := make([]string, 0, len(set))
 	for d := range set {
 		digs = append(digs, d)
 	}
 	sort.Strings(digs)
-	b, _ := json.MarshalIndent(revokedCacheFile{Digests: digs, FetchedAt: sweepClockFn().UTC().Format(time.RFC3339)}, "", "  ")
+	b, _ := json.MarshalIndent(revokedCacheFile{
+		Digests:   digs,
+		FetchedAt: sweepClockFn().UTC().Format(time.RFC3339),
+		Epoch:     epoch,
+		IssuedAt:  issuedAt,
+	}, "", "  ")
 	p := revokedCachePath(home)
 	_ = os.MkdirAll(filepath.Dir(p), 0o755)
 	_ = os.WriteFile(p, b, 0o644)
+}
+
+// readRevokedCacheHead returns the epoch + issued_at persisted from the last
+// adopted HEAD (0 / "" if none or a legacy cache). The epoch is the rollback
+// floor for the next AdoptRevocationHead; issued_at feeds the gate freshness
+// policy (D4).
+func readRevokedCacheHead(home string) (int, string) {
+	b, err := os.ReadFile(revokedCachePath(home))
+	if err != nil {
+		return 0, ""
+	}
+	var rc revokedCacheFile
+	if json.Unmarshal(b, &rc) != nil {
+		return 0, ""
+	}
+	return rc.Epoch, rc.IssuedAt
 }
 
 // readRevokedCache returns the cached revoked set and whether it is within ttl.
@@ -77,10 +114,19 @@ func readRevokedCache(home string, ttl time.Duration) (map[string]struct{}, bool
 // stub it. Production = fetchRevokedOnline. Returns (set, fetchedOnline).
 var sweepRevokedFn = fetchRevokedOnline
 
+// fetchRevocationHeadFn is the seam that fetches a signed revocation HEAD from
+// the registry (FR-0045 D2 endpoint). nil until the HEAD endpoint ships; while
+// nil, fetchRevokedOnline keeps the SPEC-0266 set-only behaviour (epoch floor is
+// preserved, never advanced). Returns (head, ok); ok=false means "no head
+// available" (not an error). Tests stub it.
+var fetchRevocationHeadFn func(cfg *er1.Config, ctx string, pub ed25519.PublicKey) (map[string]any, bool)
+
 // fetchRevokedOnline fetches the live verified revoked-digest set and refreshes
-// the cache. Fail-OPEN: any error → the cached set (possibly stale/empty),
-// online=false. Never returns an error — revocation enforcement is best-effort
-// availability, exactly as the offline-verify tradeoff documents.
+// the cache. Fail-OPEN on availability: any fetch error → the cached set
+// (possibly stale/empty), online=false. Never returns an error — revocation
+// enforcement is best-effort availability, exactly as the offline-verify tradeoff
+// documents. When a signed HEAD is available it is adopted (freshness +
+// rollback), and its epoch/issued_at are persisted for the gate (FR-0045 D3/D4).
 func fetchRevokedOnline(home string) (map[string]struct{}, bool) {
 	tr, err := registry.LoadSelfTrustRoots("")
 	if err != nil || tr == nil || len(tr.PubKey()) == 0 {
@@ -92,13 +138,47 @@ func fetchRevokedOnline(home string) (map[string]struct{}, bool) {
 		cached, _ := readRevokedCache(home, revokedCacheTTL)
 		return cached, false
 	}
-	set, err := registry.FetchRevokedDigests(cfg, envOr("ER1_CONTEXT", "skills"), tr.PubKey())
+	ctx := envOr("ER1_CONTEXT", "skills")
+	set, err := registry.FetchRevokedDigests(cfg, ctx, tr.PubKey())
 	if err != nil {
 		cached, _ := readRevokedCache(home, revokedCacheTTL)
 		return cached, false
 	}
-	writeRevokedCache(home, set)
+	epoch, issuedAt := adoptHeadOrKeepFloor(home, cfg, ctx, tr.PubKey(), set)
+	writeRevokedCacheHead(home, set, epoch, issuedAt)
 	return set, true
+}
+
+// adoptHeadOrKeepFloor tries to adopt a signed HEAD for the freshly-fetched set.
+// If there is no HEAD source, or the HEAD fails to verify (bad sig / rollback /
+// set-root mismatch), it KEEPS the previously-persisted epoch as the floor and
+// returns the prior issued_at — so the gate (D4) sees a non-advancing snapshot
+// and applies its fail-closed staleness policy under trust-root config. A
+// verified HEAD returns its epoch + issued_at to persist.
+func adoptHeadOrKeepFloor(home string, cfg *er1.Config, ctx string, pub ed25519.PublicKey, set map[string]struct{}) (int, string) {
+	prevEpoch, prevIssued := readRevokedCacheHead(home)
+	if fetchRevocationHeadFn == nil {
+		return prevEpoch, prevIssued
+	}
+	head, ok := fetchRevocationHeadFn(cfg, ctx, pub)
+	if !ok {
+		return prevEpoch, prevIssued
+	}
+	epoch, issued, aerr := registry.AdoptRevocationHead(pub, head, setToSortedSlice(set), prevEpoch)
+	if aerr != nil {
+		fmt.Fprintf(os.Stderr, "skillctl: revocation HEAD rejected (%v); keeping epoch floor %d\n", aerr, prevEpoch)
+		return prevEpoch, prevIssued
+	}
+	return epoch, issued.UTC().Format(time.RFC3339)
+}
+
+func setToSortedSlice(set map[string]struct{}) []string {
+	out := make([]string, 0, len(set))
+	for d := range set {
+		out = append(out, d)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // installedSkillDigest reads the provenance sidecar's bundle_digest for an

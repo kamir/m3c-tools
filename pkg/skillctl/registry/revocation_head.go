@@ -18,6 +18,7 @@ package registry
 // (HTTP/ER1/Kafka) — is the source of truth; the transport only carries it.
 
 import (
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -194,6 +195,33 @@ func CheckEpochMonotonic(head map[string]any, persistedMax int) error {
 		return fmt.Errorf("%w: head epoch %d < accepted floor %d", ErrHeadRollback, epoch, persistedMax)
 	}
 	return nil
+}
+
+// AdoptRevocationHead is the client's gate for accepting a fetched HEAD before
+// it advances its freshness/epoch. It composes, in fail-closed order:
+//  1. the envelope signature against the pinned registry key (event.go),
+//  2. epoch monotonicity against the client's persisted floor (R1 rollback),
+//  3. that the separately-transported set binds to the head's revoked_set_root.
+// On success it returns the epoch + issued_at to persist. On ANY failure the
+// client MUST NOT advance its epoch or treat the snapshot as fresh — the gate
+// (SPEC-0247 / FR-0045 D4) then applies the fail-closed staleness policy.
+func AdoptRevocationHead(pub ed25519.PublicKey, head map[string]any, set []string, persistedEpoch int) (epoch int, issuedAt time.Time, err error) {
+	if err = VerifyEnvelopeSignature(pub, head); err != nil {
+		return 0, time.Time{}, err
+	}
+	if err = CheckEpochMonotonic(head, persistedEpoch); err != nil {
+		return 0, time.Time{}, err
+	}
+	if err = VerifyRevocationHeadSet(head, set); err != nil {
+		return 0, time.Time{}, err
+	}
+	if epoch, err = HeadEpoch(head); err != nil {
+		return 0, time.Time{}, err
+	}
+	if issuedAt, err = HeadIssuedAt(head); err != nil {
+		return 0, time.Time{}, err
+	}
+	return epoch, issuedAt, nil
 }
 
 // ─── helpers ───────────────────────────────────────────────────────────────
