@@ -5277,11 +5277,14 @@ func menubarHandlePlaudSync(app *menubar.App) {
 				if evt.Outcome == "failed" {
 					status = "failed"
 				}
-				// Find the recording ID for this item.
-				for _, id := range recordingIDs {
-					if evt.Item != "" {
-						menubar.SetPlaudSyncStatus(id, status)
-					}
+				// Update ONLY the row that actually finished. evt.Index is
+				// 1-based and matches the order runPlaudSyncPipeline iterates
+				// recordingIDs, so recordingIDs[Index-1] is this item. The old
+				// code looped over ALL recordingIDs and flipped every selected
+				// row to "synced" as soon as the FIRST item completed — the
+				// "upload already happened" illusion.
+				if idx := evt.Index - 1; idx >= 0 && idx < len(recordingIDs) {
+					menubar.SetPlaudSyncStatus(recordingIDs[idx], status)
 				}
 			}
 		}
