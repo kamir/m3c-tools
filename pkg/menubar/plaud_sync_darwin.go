@@ -39,6 +39,9 @@ static int   g_plaudRowCount = 0;
 // Recording IDs (parallel to rows).
 static char *g_plaudRecordingIDs[PLAUD_MAX_ROWS];
 
+// ER1 memory-viewer URLs (parallel to rows); empty for un-synced rows.
+static char *g_plaudItemURLs[PLAUD_MAX_ROWS];
+
 // ---------- Helpers ----------
 
 static void clearPlaudData(void) {
@@ -47,13 +50,15 @@ static void clearPlaudData(void) {
 			if (g_plaudData[r][c]) { free(g_plaudData[r][c]); g_plaudData[r][c] = NULL; }
 		}
 		if (g_plaudRecordingIDs[r]) { free(g_plaudRecordingIDs[r]); g_plaudRecordingIDs[r] = NULL; }
+		if (g_plaudItemURLs[r])    { free(g_plaudItemURLs[r]);    g_plaudItemURLs[r] = NULL; }
 	}
 	g_plaudRowCount = 0;
 	memset(g_plaudSelected, 0, sizeof(g_plaudSelected));
 }
 
 static void addPlaudRow(const char *num, const char *title, const char *duration,
-						const char *date, const char *status, const char *recordingID) {
+						const char *date, const char *status, const char *recordingID,
+						const char *itemURL) {
 	if (g_plaudRowCount >= PLAUD_MAX_ROWS) return;
 	int r = g_plaudRowCount++;
 	g_plaudData[r][0] = strdup(num       ? num       : "");
@@ -62,6 +67,7 @@ static void addPlaudRow(const char *num, const char *title, const char *duration
 	g_plaudData[r][3] = strdup(date      ? date      : "");
 	g_plaudData[r][4] = strdup(status    ? status    : "");
 	g_plaudRecordingIDs[r] = strdup(recordingID ? recordingID : "");
+	g_plaudItemURLs[r]     = strdup(itemURL     ? itemURL     : "");
 	g_plaudSelected[r] = NO;
 }
 
@@ -182,6 +188,7 @@ extern void goPlaudSyncAction(char* action);
 - (void)selectAllClicked:(id)sender;
 - (void)deselectAllClicked:(id)sender;
 - (void)syncSelectedClicked:(id)sender;
+- (void)rowDoubleClicked:(id)sender;
 @end
 
 @implementation PlaudSyncTableDataSource
@@ -285,6 +292,19 @@ extern void goPlaudSyncAction(char* action);
 - (void)syncSelectedClicked:(id)sender {
 	if (g_plaudBulkActive) return;
 	goPlaudSyncAction("sync");
+}
+
+// Double-click a synced row to open its ER1 memory item in the browser.
+// Rows without an item URL (un-synced) do nothing.
+- (void)rowDoubleClicked:(id)sender {
+	NSInteger row = [g_plaudTable clickedRow];
+	if (row < 0 || row >= g_plaudRowCount) return;
+	const char *u = g_plaudItemURLs[row];
+	if (!u || strlen(u) == 0) return;
+	NSString *us = [NSString stringWithUTF8String:u];
+	if (!us || [us length] == 0) return;
+	NSURL *url = [NSURL URLWithString:us];
+	if (url) [[NSWorkspace sharedWorkspace] openURL:url];
 }
 
 @end
@@ -450,6 +470,10 @@ static void showPlaudSyncWindow(const char *accountInfo) {
 		[g_plaudTable setDataSource:g_plaudDS];
 		[g_plaudTable setDelegate:g_plaudDS];
 
+		// Double-click a synced row → open its ER1 item in the browser.
+		[g_plaudTable setTarget:g_plaudDS];
+		[g_plaudTable setDoubleAction:@selector(rowDoubleClicked:)];
+
 		// Wire buttons
 		[btnSelectAll setTarget:g_plaudDS];
 		[btnSelectAll setAction:@selector(selectAllClicked:)];
@@ -482,6 +506,7 @@ type PlaudSyncRecord struct {
 	Date        string
 	Status      string
 	RecordingID string
+	ItemURL     string // ER1 memory-viewer URL (empty if not synced); double-click opens it
 }
 
 // ShowPlaudSyncWindow populates and displays the Plaud Sync window.
@@ -496,13 +521,15 @@ func ShowPlaudSyncWindow(records []PlaudSyncRecord, accountInfo string, defaultT
 		cDate := C.CString(rec.Date)
 		cStatus := C.CString(rec.Status)
 		cID := C.CString(rec.RecordingID)
-		C.addPlaudRow(cNum, cTitle, cDur, cDate, cStatus, cID)
+		cURL := C.CString(rec.ItemURL)
+		C.addPlaudRow(cNum, cTitle, cDur, cDate, cStatus, cID, cURL)
 		C.free(unsafe.Pointer(cNum))
 		C.free(unsafe.Pointer(cTitle))
 		C.free(unsafe.Pointer(cDur))
 		C.free(unsafe.Pointer(cDate))
 		C.free(unsafe.Pointer(cStatus))
 		C.free(unsafe.Pointer(cID))
+		C.free(unsafe.Pointer(cURL))
 	}
 
 	var cAccount *C.char
