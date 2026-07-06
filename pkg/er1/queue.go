@@ -28,6 +28,7 @@ type QueueEntry struct {
 	AudioPath      string    `json:"audio_path,omitempty"`
 	ImagePath      string    `json:"image_path,omitempty"`
 	Tags           string    `json:"tags"`
+	CurrentTime    string    `json:"current_time,omitempty"` // real capture time; preserved across retries
 	QueuedAt       time.Time `json:"queued_at"`
 	LastRetry      time.Time `json:"last_retry,omitempty"`
 	RetryCount     int       `json:"retry_count"`
@@ -132,6 +133,7 @@ func EnqueueFailure(queuePath string, videoID string, payload *UploadPayload, ta
 		AudioPath:      payload.AudioFilename,
 		ImagePath:      payload.ImageFilename,
 		Tags:           tags,
+		CurrentTime:    payload.CurrentTime, // preserve real capture time across retries
 	}
 	if uploadErr != nil {
 		entry.LastError = uploadErr.Error()

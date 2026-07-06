@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"testing"
+	"time"
 
 	"github.com/kamir/m3c-tools/pkg/er1"
 )
@@ -31,5 +32,15 @@ func TestMemoryItemURL(t *testing.T) {
 				t.Errorf("MemoryItemURL(%q) = %q; want %q", tt.docID, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestFormatCaptureTime(t *testing.T) {
+	if got := er1.FormatCaptureTime(time.Time{}); got != "" {
+		t.Errorf("zero time should format to empty, got %q", got)
+	}
+	ts := time.Date(2026, 5, 19, 14, 3, 49, 0, time.UTC)
+	if got, want := er1.FormatCaptureTime(ts), "2026-05-19 14:03:49"; got != want {
+		t.Errorf("FormatCaptureTime = %q; want %q", got, want)
 	}
 }

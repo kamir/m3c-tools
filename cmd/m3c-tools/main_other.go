@@ -833,6 +833,7 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 			ImageFilename:      "plaud-logo.png",
 			Tags:               tags,
 			ContentType:        cfg.ContentType,
+			CurrentTime:        er1.FormatCaptureTime(rec.CreatedAt), // position at real recording time
 		}
 
 		resp, upErr := er1.Upload(er1Cfg, payload)

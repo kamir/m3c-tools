@@ -85,6 +85,7 @@ func cmdRetry(args []string) {
 			AudioFilename:      entry.AudioPath,
 			ImageFilename:      entry.ImagePath,
 			Tags:               entry.Tags,
+			CurrentTime:        entry.CurrentTime, // keep the real capture time on retry
 		}
 		if entry.TranscriptPath != "" {
 			if data, readErr := os.ReadFile(entry.TranscriptPath); readErr == nil {
