@@ -1443,6 +1443,7 @@ func cmdTrayApp(args []string) {
 		}
 		log.SetFlags(log.Ldate | log.Ltime)
 	}
+	startupBanner()
 	fmt.Fprintf(os.Stderr, "m3c-tools tray started. Logs: %s\n", logPath)
 
 	// Auto-configure from ~/m3c-tools.init.cfg if present (zero-touch onboarding).
