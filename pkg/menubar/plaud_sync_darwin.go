@@ -132,6 +132,23 @@ static void setPlaudRowStatus(const char *recordingID, const char *status) {
 	reloadPlaudTable();
 }
 
+// Back-fill a row's ER1 doc_id + item URL after it syncs, so the "ER1 Doc"
+// column populates and double-click opens the item.
+static void setPlaudRowDoc(const char *recordingID, const char *docID, const char *itemURL) {
+	if (!recordingID) return;
+	for (int i = 0; i < g_plaudRowCount; i++) {
+		if (!g_plaudRecordingIDs[i]) continue;
+		if (strcmp(g_plaudRecordingIDs[i], recordingID) == 0) {
+			if (g_plaudDocIDs[i])   free(g_plaudDocIDs[i]);
+			g_plaudDocIDs[i]   = strdup(docID   ? docID   : "");
+			if (g_plaudItemURLs[i]) free(g_plaudItemURLs[i]);
+			g_plaudItemURLs[i] = strdup(itemURL ? itemURL : "");
+			break;
+		}
+	}
+	reloadPlaudTable();
+}
+
 static void setPlaudProgressState(int active, int total, int done, int success, int failed) {
 	g_plaudBulkActive = active ? YES : NO;
 	dispatch_async(dispatch_get_main_queue(), ^{
@@ -382,7 +399,7 @@ static void showPlaudSyncWindow(const char *accountInfo) {
 		[content addSubview:btnSelectAll];
 
 		NSButton *btnDeselectAll = [[NSButton alloc] initWithFrame:NSMakeRect(112, btnY, 96, 24)];
-		[btnDeselectAll setTitle:@"Select None"];
+		[btnDeselectAll setTitle:@"Deselect"];
 		[btnDeselectAll setBezelStyle:NSBezelStyleRounded];
 		[btnDeselectAll setAutoresizingMask:NSViewMaxXMargin | NSViewMinYMargin];
 		[content addSubview:btnDeselectAll];
@@ -583,6 +600,18 @@ func SetPlaudSyncStatus(recordingID, status string) {
 	C.setPlaudRowStatus(cID, cStatus)
 	C.free(unsafe.Pointer(cID))
 	C.free(unsafe.Pointer(cStatus))
+}
+
+// SetPlaudSyncRowDoc back-fills a row's ER1 doc_id + item URL after it syncs,
+// so the "ER1 Doc" column populates and double-click opens the item.
+func SetPlaudSyncRowDoc(recordingID, docID, itemURL string) {
+	cID := C.CString(recordingID)
+	cDoc := C.CString(docID)
+	cURL := C.CString(itemURL)
+	C.setPlaudRowDoc(cID, cDoc, cURL)
+	C.free(unsafe.Pointer(cID))
+	C.free(unsafe.Pointer(cDoc))
+	C.free(unsafe.Pointer(cURL))
 }
 
 // SetPlaudSyncProgress updates the progress bar and status label.

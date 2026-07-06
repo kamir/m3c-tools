@@ -39,4 +39,5 @@ type Event struct {
 	Elapsed     time.Duration
 	Error       string
 	CurrentFile string
+	DocID       string // ER1 doc_id on a successful ITEM_DONE (for UI back-fill)
 }
