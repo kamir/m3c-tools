@@ -34,6 +34,13 @@ const revokedCacheTTL = 12 * time.Hour
 // SPEC-0198 revoke theme (exitcode.RevokeIdentityRevoked.Number).
 const exitBundleRevoked = 17
 
+// exitRevocationStale is the SPEC-0279 R3 code recorded when a skill is denied
+// because the revocation snapshot is too stale to trust (fail-closed for a
+// high-risk action past the trust-root max_staleness). 22 = verify.ExitRevocationStale.
+// As with exitBundleRevoked, the verify-hook PROCESS still exits exitHookBlock (2)
+// to block the call; 22 is carried in the human message + the signed refusal_code.
+const exitRevocationStale = 22
+
 type revokedCacheFile struct {
 	Digests   []string `json:"digests"`
 	FetchedAt string   `json:"fetched_at"`
