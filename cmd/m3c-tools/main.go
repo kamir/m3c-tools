@@ -5105,6 +5105,7 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 				Total: summary.Total, Outcome: "ok",
 				Done: i + 1, Success: summary.Success, Failed: summary.Failed,
 				CurrentFile: itemName, Phase: menubar.BulkPhaseDone,
+				DocID: resp.DocID, // back-fill the doc_id into the panel row
 			})
 		}
 	}
@@ -5280,31 +5281,51 @@ func menubarHandlePlaudSync(app *menubar.App) {
 			Active: true, Total: len(recordingIDs),
 		})
 
+		// The pipeline's events are inconsistent (ITEM_PHASE carries Total but
+		// Done=0; ITEM_START neither), which made the progress bar oscillate
+		// 0↔N and never show a real "N of M". Derive Done from evt.Index (1-based,
+		// present on every event) and keep success/failed monotonic so the
+		// counter never flickers back to 0.
+		er1Cfg := er1.LoadConfig()
+		total := len(recordingIDs)
+		lastSuccess, lastFailed := 0, 0
 		onProgress := func(evt menubar.BulkProgressEvent) {
-			state := menubar.BulkRunState{
+			if evt.Success > lastSuccess {
+				lastSuccess = evt.Success
+			}
+			if evt.Failed > lastFailed {
+				lastFailed = evt.Failed
+			}
+			done := evt.Index
+			if done < 1 {
+				done = 1
+			}
+			if done > total {
+				done = total
+			}
+			menubar.SetPlaudSyncProgress(menubar.BulkRunState{
 				Active:      true,
-				Total:       evt.Total,
-				Done:        evt.Done,
-				Success:     evt.Success,
-				Failed:      evt.Failed,
+				Total:       total,
+				Done:        done,
+				Success:     lastSuccess,
+				Failed:      lastFailed,
 				CurrentFile: evt.CurrentFile,
 				Phase:       evt.Phase,
-			}
-			menubar.SetPlaudSyncProgress(state)
+			})
 
 			if evt.Event == "ITEM_DONE" {
 				status := "synced"
 				if evt.Outcome == "failed" {
 					status = "failed"
 				}
-				// Update ONLY the row that actually finished. evt.Index is
-				// 1-based and matches the order runPlaudSyncPipeline iterates
-				// recordingIDs, so recordingIDs[Index-1] is this item. The old
-				// code looped over ALL recordingIDs and flipped every selected
-				// row to "synced" as soon as the FIRST item completed — the
-				// "upload already happened" illusion.
+				// Update ONLY the row that finished (evt.Index is 1-based).
 				if idx := evt.Index - 1; idx >= 0 && idx < len(recordingIDs) {
 					menubar.SetPlaudSyncStatus(recordingIDs[idx], status)
+					// Back-fill the ER1 doc_id + item URL so the row shows its
+					// doc_id (and double-click opens it) right after syncing.
+					if evt.DocID != "" {
+						menubar.SetPlaudSyncRowDoc(recordingIDs[idx], evt.DocID, er1Cfg.MemoryItemURL(evt.DocID))
+					}
 				}
 			}
 		}

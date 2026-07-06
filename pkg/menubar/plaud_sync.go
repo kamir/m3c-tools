@@ -44,6 +44,9 @@ func GetPlaudCustomTags() string { return "" }
 // SetPlaudSyncStatus is a no-op on non-darwin platforms.
 func SetPlaudSyncStatus(recordingID, status string) {}
 
+// SetPlaudSyncRowDoc is a no-op on non-darwin platforms.
+func SetPlaudSyncRowDoc(recordingID, docID, itemURL string) {}
+
 // SetPlaudSyncProgress is a no-op on non-darwin platforms.
 func SetPlaudSyncProgress(state BulkRunState) {}
 
