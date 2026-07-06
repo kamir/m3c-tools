@@ -25,6 +25,12 @@ func main() {
 		printUsage(os.Stderr)
 		os.Exit(2)
 	}
+	// FR-0045 D5: install the production revocation-HEAD fetch seam so the
+	// SessionStart sweep + verify-hook gate adopt the signed HEAD from the D2
+	// registry endpoint. Fail-safe when no registry URL is configured; tests leave
+	// the seam nil (pre-D2 set-only behaviour).
+	fetchRevocationHeadFn = fetchRevocationHeadOnline
+
 	// FR-0043: for ER1-bound commands, auto-load the device token persisted by
 	// `skillctl login` / `m3c-tools login` so users need not export it by hand.
 	// Gated to networkCommands so offline commands never touch the OS keychain.

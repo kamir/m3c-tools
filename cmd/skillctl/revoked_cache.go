@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/er1"
@@ -186,6 +187,28 @@ func setToSortedSlice(set map[string]struct{}) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// revocationHeadTimeout bounds the HEAD fetch. Short by design: this runs inside
+// the best-effort sweep, so a slow/unreachable registry must not stall it.
+const revocationHeadTimeout = 2 * time.Second
+
+// fetchRevocationHeadOnline is the production wiring for fetchRevocationHeadFn
+// (FR-0045 D5): it resolves the registry URL from trust-roots and GETs the signed
+// HEAD from the FR-0045 D2 endpoint. Fail-safe: no trust roots / no registry URL /
+// any fetch error → (nil, false), so the sweep keeps the prior epoch floor and the
+// gate applies its own fail-closed staleness policy. main() installs this seam;
+// tests leave it nil (the pre-D2 set-only behaviour).
+func fetchRevocationHeadOnline(cfg *er1.Config, ctx string, pub ed25519.PublicKey) (map[string]any, bool) {
+	_, root, err := loadRootsFn("")
+	if err != nil || root == nil || strings.TrimSpace(root.RegistryURL) == "" {
+		return nil, false
+	}
+	head, ferr := registry.FetchRevocationHead(root.RegistryURL, "", revocationHeadTimeout)
+	if ferr != nil {
+		return nil, false
+	}
+	return head, true
 }
 
 // installedSkillDigest reads the provenance sidecar's bundle_digest for an
