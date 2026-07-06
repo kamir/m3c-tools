@@ -12,6 +12,44 @@ import (
 
 func mkDigest(c byte) string { return "sha256:" + strings.Repeat(string(c), 64) }
 
+// TestRevocationHeadGoldenVector pins the EXACT canonical bytes a cross-language
+// producer (the aims-core Python HEAD endpoint, FR-0045 D2) must reproduce so its
+// ed25519 signature verifies here. A one-character divergence in either encoder
+// breaks it. The Python test asserts json.dumps(head, separators=(",",":"),
+// sort_keys=True, ensure_ascii=False) == this same string.
+// TestRevokedSetRootGolden pins the ComputeRevokedSetRoot output for a fixed
+// 2-digest set so the aims-core Python compute_revoked_set_root can be asserted
+// against the identical hex (cross-language set-root agreement).
+func TestRevokedSetRootGolden(t *testing.T) {
+	got := ComputeRevokedSetRoot([]string{mkDigest('b'), mkDigest('a')})
+	const golden = "sha256:4ab61be5d46a66e7f659b66144d4bead5b761c247b565fa202161590dcd9e45d"
+	if got != golden {
+		t.Fatalf("set-root golden mismatch:\n got: %s\nwant: %s", got, golden)
+	}
+}
+
+func TestRevocationHeadGoldenVector(t *testing.T) {
+	fixed := map[string]any{
+		"schema_version":   RevocationHeadSchema,
+		"event_id":         "fixed-event-id-0001",
+		"occurred_at":      "2026-07-06T18:00:00Z",
+		"epoch":            42,
+		"issued_at":        "2026-07-06T18:00:00Z",
+		"revoked_set_root": "sha256:" + strings.Repeat("a", 64),
+		"revoked_count":    2,
+		"emergency":        []any{"sha256:" + strings.Repeat("b", 64)},
+		"tenant_scope":     nil,
+	}
+	got, err := CanonicalEventBytes(fixed)
+	if err != nil {
+		t.Fatalf("canonicalize: %v", err)
+	}
+	const golden = `{"emergency":["sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],"epoch":42,"event_id":"fixed-event-id-0001","issued_at":"2026-07-06T18:00:00Z","occurred_at":"2026-07-06T18:00:00Z","revoked_count":2,"revoked_set_root":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","schema_version":"m3c-revocation-head/v1","tenant_scope":null}`
+	if string(got) != golden {
+		t.Fatalf("golden vector mismatch — cross-language canonicalization would break.\n got: %s\nwant: %s", got, golden)
+	}
+}
+
 func mustHead(t *testing.T, in RevocationHeadInput) map[string]any {
 	t.Helper()
 	h, err := BuildRevocationHead(in)
