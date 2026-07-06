@@ -233,6 +233,7 @@ Commands:
 
   plaud list             List Plaud recordings with sync status + ER1 doc_id
   plaud check            Sync-coverage report: how many synced/unsynced + doc_id links
+  plaud fix-times        Backfill real recording time onto synced items (--apply to write)
   plaud sync <id>        Sync a Plaud recording to ER1
   plaud sync --all       Sync all new Plaud recordings to ER1
   plaud auth login       Extract token from Chrome (web.plaud.ai)
@@ -4360,7 +4361,7 @@ func menubarWhisperTimeout() time.Duration {
 
 func cmdPlaud(args []string) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud <list|check|sync|auth> [args]")
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud <list|check|sync|fix-times|auth> [args]")
 		os.Exit(1)
 	}
 	switch args[0] {
@@ -4368,6 +4369,14 @@ func cmdPlaud(args []string) {
 		cmdPlaudList()
 	case "check":
 		cmdPlaudCheck()
+	case "fix-times":
+		apply := false
+		for _, a := range args[1:] {
+			if a == "--apply" {
+				apply = true
+			}
+		}
+		cmdPlaudFixTimes(apply)
 	case "sync":
 		if len(args) < 2 {
 			fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud sync <#|ID|--all> [flags]")
