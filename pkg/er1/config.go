@@ -144,6 +144,23 @@ func LoadConfig() *Config {
 	return cfg
 }
 
+// MemoryItemURL returns the ER1 memory-viewer URL for a document:
+//
+//	<base>/memory/<context_id>/<docID>
+//
+// where <base> is APIURL with the /upload_2 (or /upload) suffix stripped.
+// Returns "" when docID is empty. Used to make a synced item openable from the
+// Plaud sync panel and to print item links in `plaud list` / `plaud check`.
+func (c *Config) MemoryItemURL(docID string) string {
+	if docID == "" {
+		return ""
+	}
+	base := strings.TrimSuffix(c.APIURL, "/upload_2")
+	base = strings.TrimSuffix(base, "/upload")
+	base = strings.TrimSuffix(base, "/")
+	return fmt.Sprintf("%s/memory/%s/%s", base, c.ContextID, docID)
+}
+
 // AuthHeaders returns HTTP headers for ER1 authentication.
 // Prefers device token (Bearer) over API key (SPEC-0127).
 func (c *Config) AuthHeaders() map[string]string {

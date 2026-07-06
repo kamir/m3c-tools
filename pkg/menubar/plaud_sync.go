@@ -31,6 +31,7 @@ type PlaudSyncRecord struct {
 	Date        string
 	Status      string
 	RecordingID string
+	ItemURL     string // ER1 memory-viewer URL (empty if not synced)
 }
 
 // ShowPlaudSyncWindow is a no-op on non-darwin platforms.

@@ -384,7 +384,7 @@ func cmdTranscript(args []string) {
 // cmdPlaud handles plaud subcommands: auth, list, sync.
 func cmdPlaud(args []string) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud <auth|list|sync> [args...]")
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud <auth|list|check|sync> [args...]")
 		os.Exit(1)
 	}
 
@@ -393,6 +393,8 @@ func cmdPlaud(args []string) {
 		cmdPlaudAuth(args[1:])
 	case "list":
 		cmdPlaudList()
+	case "check":
+		cmdPlaudCheck()
 	case "sync":
 		if len(args) < 2 {
 			fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud sync <#|ID|--all> [-f]")
@@ -547,17 +549,13 @@ func cmdPlaudList() {
 		return
 	}
 
-	// Check tracking DB for sync status + ER1 doc IDs.
-	dbPath := defaultFilesDBPath()
-	filesDB, dbErr := tracking.OpenFilesDB(dbPath)
-	if dbErr != nil {
-		log.Printf("[plaud] warning: cannot open tracking DB: %v", dbErr)
+	// Resolve sync status + ER1 doc_id: local tracking DB merged with the
+	// SPEC-0117 server sync check (cross-machine authoritative).
+	ids := make([]string, len(recordings))
+	for i, r := range recordings {
+		ids[i] = r.ID
 	}
-	defer func() {
-		if filesDB != nil {
-			filesDB.Close()
-		}
-	}()
+	states := resolvePlaudSyncStates(ids, session.Token)
 
 	fmt.Printf("  %3s  %-32s  %-40s  %6s  %s  %-10s  %s\n", "#", "ID", "Title", "Dur", "Date", "Status", "ER1 Doc")
 	fmt.Println("  ---  --------------------------------  ----------------------------------------  ------  ----------  ----------  --------")
@@ -566,22 +564,19 @@ func cmdPlaudList() {
 		if len(id) > 32 {
 			id = id[:32]
 		}
-		status := "new"
-		docID := ""
-		if filesDB != nil {
-			if tracked, lookupErr := filesDB.GetByPath("plaud://" + r.ID); lookupErr == nil && tracked != nil {
-				status = tracked.Status
-				docID = tracked.UploadDocID
-			}
+		st := states[r.ID]
+		status := st.Status
+		if status == "" {
+			status = "new"
 		}
 		title := r.Title
 		if len(title) > 40 {
 			title = title[:37] + "..."
 		}
-		fmt.Printf("  %3d  %-32s  %-40s  %6d  %s  [%-8s]  %s\n", i+1, id, title, r.Duration, r.CreatedAt.Format("2006-01-02"), status, docID)
+		fmt.Printf("  %3d  %-32s  %-40s  %6d  %s  [%-8s]  %s\n", i+1, id, title, r.Duration, r.CreatedAt.Format("2006-01-02"), status, st.DocID)
 	}
 	fmt.Printf("\nTotal: %d recordings\n", len(recordings))
-	fmt.Println("Use: m3c-tools plaud sync <#>   or   m3c-tools plaud sync <ID>")
+	fmt.Println("Use: plaud sync <#>   ·   plaud check (coverage)")
 }
 
 // cmdPlaudSync syncs a recording (or all) to ER1 with detailed statistics (FR-0009),

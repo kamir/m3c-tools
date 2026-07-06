@@ -231,7 +231,8 @@ Commands:
     --compact              Machine-readable output (TSV: status, path, size, tags)
     --db <path>            Tracking DB path (default: ~/.m3c-tools/tracking.db)
 
-  plaud list             List Plaud recordings with sync status
+  plaud list             List Plaud recordings with sync status + ER1 doc_id
+  plaud check            Sync-coverage report: how many synced/unsynced + doc_id links
   plaud sync <id>        Sync a Plaud recording to ER1
   plaud sync --all       Sync all new Plaud recordings to ER1
   plaud auth login       Extract token from Chrome (web.plaud.ai)
@@ -4351,12 +4352,14 @@ func menubarWhisperTimeout() time.Duration {
 
 func cmdPlaud(args []string) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud <list|sync|auth> [args]")
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud <list|check|sync|auth> [args]")
 		os.Exit(1)
 	}
 	switch args[0] {
 	case "list":
 		cmdPlaudList()
+	case "check":
+		cmdPlaudCheck()
 	case "sync":
 		if len(args) < 2 {
 			fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud sync <#|ID|--all> [flags]")
@@ -4645,30 +4648,23 @@ func cmdPlaudList() {
 		os.Exit(1)
 	}
 
-	// Check tracking DB for sync status.
-	dbPath := defaultFilesDBPath()
-	filesDB, dbErr := tracking.OpenFilesDB(dbPath)
-	if dbErr != nil {
-		log.Printf("[plaud] warning: cannot open tracking DB: %v", dbErr)
+	// Resolve sync status + ER1 doc_id: local tracking DB merged with the
+	// SPEC-0117 server sync check (so items synced from another Mac still show
+	// as synced with their doc_id, instead of a misleading "new").
+	ids := make([]string, len(recordings))
+	for i, rec := range recordings {
+		ids[i] = rec.ID
 	}
-	defer func() {
-		if filesDB != nil {
-			filesDB.Close()
-		}
-	}()
+	states := resolvePlaudSyncStates(ids, session.Token)
 
 	fmt.Printf("Plaud recordings (%d):\n\n", len(recordings))
 	fmt.Printf("  %3s  %-32s  %-40s  %6s  %s  %-10s  %s\n", "#", "ID", "Title", "Dur", "Date", "Status", "ER1 Doc")
 	fmt.Println("  ---  --------------------------------  ----------------------------------------  ------  ----------  ----------  --------")
 	for i, rec := range recordings {
-		status := "new"
-		docID := ""
-		if filesDB != nil {
-			plaudPath := "plaud://" + rec.ID
-			if tracked, lookupErr := filesDB.GetByPath(plaudPath); lookupErr == nil && tracked != nil {
-				status = tracked.Status
-				docID = tracked.UploadDocID
-			}
+		st := states[rec.ID]
+		status := st.Status
+		if status == "" {
+			status = "new"
 		}
 		fmt.Printf("  %3d  %-32s  %-40s  %6s  %s  [%-8s]  %s\n",
 			i+1,
@@ -4677,11 +4673,11 @@ func cmdPlaudList() {
 			plaud.FormatDuration(rec.Duration),
 			rec.CreatedAt.Format("2006-01-02"),
 			status,
-			docID,
+			st.DocID,
 		)
 	}
 	fmt.Println()
-	fmt.Println("  Use: m3c-tools plaud sync <#>   or   m3c-tools plaud sync <ID>")
+	fmt.Println("  Use: plaud sync <#>   ·   plaud check (coverage)   ·   double-click a synced row in the Sync panel to open it")
 }
 
 func cmdPlaudSync(recordingID string, force bool, customTags string, filter string, dryRun bool) {
@@ -5218,51 +5214,23 @@ func menubarHandlePlaudSync(app *menubar.App) {
 	}
 	log.Printf("[plaud] found %d recordings", len(recordings))
 
-	// Check each recording against tracking DB.
+	// Recording -> sync state (status + ER1 doc_id/URL): local tracking DB
+	// merged with the SPEC-0117 server sync check. dbPath is reused by the sync
+	// pipeline below; the ItemURL makes a synced row double-clickable to open
+	// the ER1 item in the browser.
 	dbPath := defaultFilesDBPath()
-	filesDB, dbErr := tracking.OpenFilesDB(dbPath)
-	if dbErr != nil {
-		log.Printf("[plaud] warning: cannot open tracking DB: %v", dbErr)
+	allIDs := make([]string, len(recordings))
+	for i, rec := range recordings {
+		allIDs[i] = rec.ID
 	}
-	defer func() {
-		if filesDB != nil {
-			filesDB.Close()
-		}
-	}()
-
-	// Server-side sync check for status display (SPEC-0117)
-	var serverSynced map[string]plaud.SyncedInfo
-	er1Cfg := er1.LoadConfig()
-	if er1Cfg.APIKey != "" {
-		syncAPI := plaud.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, er1Cfg.ContextID, !er1Cfg.VerifySSL)
-		plaudAccountID := plaud.DeriveAccountID(session.Token)
-		allIDs := make([]string, len(recordings))
-		for i, rec := range recordings {
-			allIDs[i] = rec.ID
-		}
-		checkResult, checkErr := syncAPI.CheckRecordings(plaudAccountID, allIDs)
-		if checkErr == nil && checkResult != nil {
-			serverSynced = checkResult.Synced
-			if len(serverSynced) > 0 {
-				log.Printf("[plaud] server knows %d/%d recordings as synced", len(serverSynced), len(recordings))
-			}
-		}
-	}
+	states := resolvePlaudSyncStates(allIDs, session.Token)
 
 	var records []menubar.PlaudSyncRecord
 	for _, rec := range recordings {
-		status := "new"
-		if filesDB != nil {
-			plaudPath := "plaud://" + rec.ID
-			if tracked, lookupErr := filesDB.GetByPath(plaudPath); lookupErr == nil && tracked != nil {
-				status = tracked.Status
-			}
-		}
-		// Server-side check: mark as synced if server knows about it even when local DB doesn't (SPEC-0117)
-		if status == "new" && serverSynced != nil {
-			if _, ok := serverSynced[rec.ID]; ok {
-				status = "synced"
-			}
+		st := states[rec.ID]
+		status := st.Status
+		if status == "" {
+			status = "new"
 		}
 		records = append(records, menubar.PlaudSyncRecord{
 			Title:       rec.Title,
@@ -5270,6 +5238,7 @@ func menubarHandlePlaudSync(app *menubar.App) {
 			Date:        rec.CreatedAt.Format("2006-01-02 15:04"),
 			Status:      status,
 			RecordingID: rec.ID,
+			ItemURL:     st.ItemURL,
 		})
 	}
 

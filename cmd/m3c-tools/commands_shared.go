@@ -26,6 +26,7 @@ import (
 	"github.com/kamir/m3c-tools/pkg/config"
 	"github.com/kamir/m3c-tools/pkg/er1"
 	"github.com/kamir/m3c-tools/pkg/impression"
+	"github.com/kamir/m3c-tools/pkg/plaud"
 	"github.com/kamir/m3c-tools/pkg/tracking"
 	"github.com/kamir/m3c-tools/pkg/transcript"
 	"github.com/kamir/m3c-tools/pkg/whisper"
@@ -589,4 +590,123 @@ func validateVideoID(id string) error {
 		return fmt.Errorf("invalid video ID: %q (must be exactly 11 alphanumeric/dash/underscore chars)", id)
 	}
 	return nil
+}
+
+// --- Plaud sync visibility: recording -> ER1 doc_id mapping + coverage ------
+
+// plaudSyncState is the resolved ingestion state of one Plaud recording:
+// whether it reached ER1, under which doc_id, and the openable item URL.
+type plaudSyncState struct {
+	Status  string // "synced" | "new" | a local status (e.g. "failed")
+	DocID   string // ER1 doc_id, if known
+	ItemURL string // ER1 memory-viewer URL, if the doc_id is known
+}
+
+// resolvePlaudSyncStates returns, per Plaud recording ID, the ingestion state —
+// merging the LOCAL tracking DB (plaud://<id> -> UploadDocID/status) with the
+// SPEC-0117 SERVER-side sync check. The server is authoritative for
+// cross-machine visibility (an item synced from another Mac shows as synced
+// with its doc_id even when this machine's DB has no record); the local doc_id
+// is the fallback. The server check requires an ER1 API key.
+func resolvePlaudSyncStates(recIDs []string, plaudToken string) map[string]plaudSyncState {
+	out := make(map[string]plaudSyncState, len(recIDs))
+	er1Cfg := er1.LoadConfig()
+
+	// Local tracking DB.
+	if filesDB, err := tracking.OpenFilesDB(defaultFilesDBPath()); err == nil {
+		defer filesDB.Close()
+		for _, id := range recIDs {
+			if tracked, e := filesDB.GetByPath("plaud://" + id); e == nil && tracked != nil {
+				st := plaudSyncState{Status: tracked.Status, DocID: tracked.UploadDocID}
+				st.ItemURL = er1Cfg.MemoryItemURL(st.DocID)
+				out[id] = st
+			}
+		}
+	} else {
+		log.Printf("[plaud] warning: cannot open tracking DB: %v", err)
+	}
+
+	// Server-side sync check — authoritative, cross-machine (SPEC-0117).
+	if er1Cfg.APIKey != "" && plaudToken != "" {
+		syncAPI := plaud.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, er1Cfg.ContextID, !er1Cfg.VerifySSL)
+		accountID := plaud.DeriveAccountID(plaudToken)
+		if res, err := syncAPI.CheckRecordings(accountID, recIDs); err == nil && res != nil {
+			for id, info := range res.Synced {
+				st := out[id]
+				st.Status = "synced"
+				if info.ER1DocID != "" {
+					st.DocID = info.ER1DocID
+					st.ItemURL = er1Cfg.MemoryItemURL(info.ER1DocID)
+				}
+				out[id] = st
+			}
+		} else if err != nil {
+			log.Printf("[plaud] server sync check failed (using local DB only): %v", err)
+		}
+	}
+	return out
+}
+
+// cmdPlaudCheck prints a read-only sync-coverage report: how many Plaud
+// recordings have been ingested into ER1 (with their doc_id) versus how many
+// are still unsynced. Authoritative across machines via the server sync check.
+func cmdPlaudCheck() {
+	cfg := plaud.LoadConfig()
+	session, err := plaud.LoadToken(cfg.TokenPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading token: %v\nRun: m3c-tools plaud auth --from-er1   (or: m3c-tools plaud auth login)\n", err)
+		os.Exit(1)
+	}
+	client := plaud.NewClient(cfg, session.Token)
+	recordings, err := client.ListRecordings()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error listing recordings: %v\n", err)
+		os.Exit(1)
+	}
+
+	ids := make([]string, len(recordings))
+	for i, r := range recordings {
+		ids[i] = r.ID
+	}
+	states := resolvePlaudSyncStates(ids, session.Token)
+
+	synced := 0
+	for _, r := range recordings {
+		if st, ok := states[r.ID]; ok && st.Status == "synced" {
+			synced++
+		}
+	}
+	unsynced := len(recordings) - synced
+
+	fmt.Printf("Plaud sync check — %d recordings: %d synced, %d unsynced\n", len(recordings), synced, unsynced)
+	if er1Cfg := er1.LoadConfig(); er1Cfg.APIKey == "" {
+		fmt.Println("(note: no ER1 API key — coverage is from the LOCAL tracking DB only, not server-authoritative)")
+	}
+
+	if unsynced > 0 {
+		fmt.Printf("\nUnsynced (%d) — run: m3c-tools plaud sync <#>   or   plaud sync --all\n", unsynced)
+		for i, r := range recordings {
+			st := states[r.ID]
+			if st.Status != "synced" {
+				fmt.Printf("  [%3d] %-6s  %-10s  %s\n",
+					i+1, plaud.FormatDuration(r.Duration), r.CreatedAt.Format("2006-01-02"), r.Title)
+			}
+		}
+	}
+	if synced > 0 {
+		fmt.Printf("\nSynced (%d) — recording -> ER1 item:\n", synced)
+		for i, r := range recordings {
+			st := states[r.ID]
+			if st.Status == "synced" {
+				docShown := st.DocID
+				if docShown == "" {
+					docShown = "(doc_id unknown — server-synced from another device)"
+				}
+				fmt.Printf("  [%3d] %-40s  doc_id=%s\n", i+1, r.Title, docShown)
+				if st.ItemURL != "" {
+					fmt.Printf("        %s\n", st.ItemURL)
+				}
+			}
+		}
+	}
 }
