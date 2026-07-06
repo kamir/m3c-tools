@@ -1770,6 +1770,7 @@ func cmdMenubar(args []string) {
 		log.SetFlags(log.Ldate | log.Ltime)
 	}
 
+	startupBanner()
 	// Fix 3 (BUG-0003): Print log file path on startup so user knows where to look.
 	fmt.Fprintf(os.Stderr, "m3c-tools menubar started. Logs: %s\n", cfg.LogPath)
 

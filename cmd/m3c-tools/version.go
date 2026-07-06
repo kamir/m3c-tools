@@ -19,3 +19,20 @@ var (
 func printVersion() {
 	fmt.Printf("m3c-tools %s (commit=%s, built=%s)\n", version, commit, date)
 }
+
+// bannerArt is the "M3C" ANSI-shadow logo shown at menu-bar / tray startup.
+const bannerArt = `
+  ███╗   ███╗ ██████╗  ██████╗
+  ████╗ ████║ ╚════██╗██╔════╝
+  ██╔████╔██║  █████╔╝██║
+  ██║╚██╔╝██║  ╚═══██╗██║
+  ██║ ╚═╝ ██║ ██████╔╝╚██████╗
+  ╚═╝     ╚═╝ ╚═════╝  ╚═════╝
+`
+
+// startupBanner prints the logo, tagline, and build version when the app starts.
+func startupBanner() {
+	fmt.Print(bannerArt)
+	fmt.Println("  m3c-tools · Multi-Modal-Memory Capture")
+	fmt.Printf("  version %s  ·  commit %s  ·  built %s\n\n", version, commit, date)
+}
