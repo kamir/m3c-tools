@@ -27,6 +27,9 @@ type UploadPayload struct {
 	ContentType        string // per-observation content type (overrides cfg.ContentType if set)
 	DocID              string // if set, request ER1 to overwrite this existing document
 	DoTranscribe       bool   // if true, send DO_TRANSCRIBE=true — server transcribes audio
+	CurrentTime        string // real capture time "2006-01-02 15:04:05"; empty → server stamps now.
+	// Positions the item at its true creation time in the memory viewer instead
+	// of the import time — important for multi-device capture (SPEC-0117).
 }
 
 // UploadResponse is the parsed response from ER1 on success.
@@ -66,6 +69,10 @@ func Upload(cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
 	}
 	if payload.DoTranscribe {
 		_ = writer.WriteField("DO_TRANSCRIBE", "true")
+	}
+	if payload.CurrentTime != "" {
+		// Real capture time — the server positions the item here instead of "now".
+		_ = writer.WriteField("current_time", payload.CurrentTime)
 	}
 
 	// Transcript (optional — omit to let server handle transcription)
@@ -190,6 +197,19 @@ func truncate(s string, n int) string {
 		return s[:n] + "..."
 	}
 	return s
+}
+
+// CaptureTimeLayout is the timestamp format ER1 stores in `current_time` and
+// sorts the memory viewer by ("YYYY-MM-DD HH:MM:SS").
+const CaptureTimeLayout = "2006-01-02 15:04:05"
+
+// FormatCaptureTime formats a capture time for UploadPayload.CurrentTime.
+// A zero time yields "" so the caller omits the field and the server stamps now.
+func FormatCaptureTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format(CaptureTimeLayout)
 }
 
 func isAudioImportPayload(contentType, tags string) bool {

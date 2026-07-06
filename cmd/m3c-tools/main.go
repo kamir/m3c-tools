@@ -1232,9 +1232,15 @@ func runAudioImportPipeline(sourceDir, dbPath, onlySourcePath string, app *menub
 		_ = filesDB.RecordTranscript(imp.Hash, "audio", strings.TrimSpace(text), lang)
 
 		now := time.Now()
+		// Real capture time = the source file's mtime, so the item is positioned
+		// at when it was recorded rather than the import moment.
+		captureTime := now
+		if fi, statErr := os.Stat(imp.Source); statErr == nil {
+			captureTime = fi.ModTime()
+		}
 		doc := (&impression.CompositeDoc{
 			ObsType:        impression.Import,
-			Timestamp:      now,
+			Timestamp:      captureTime,
 			TranscriptText: strings.TrimSpace(text),
 			ImpressionText: fmt.Sprintf("Imported audio file: %s\nSource: %s\nTags: %s", filepath.Base(imp.Dest), imp.Source, imp.Tags),
 		}).Build()
@@ -1248,6 +1254,7 @@ func runAudioImportPipeline(sourceDir, dbPath, onlySourcePath string, app *menub
 			ImageFilename:      "placeholder-logo.png",
 			Tags:               imp.Tags,
 			ContentType:        cfg.ContentType,
+			CurrentTime:        er1.FormatCaptureTime(captureTime),
 		}
 
 		if onProgress != nil {
@@ -1476,6 +1483,7 @@ func reprocessAudioFile(srcPath, dbPath string, app *menubar.App, onProgress fun
 		Tags:               tags,
 		ContentType:        cfg.ContentType,
 		DocID:              existingDocID, // Reuse existing doc_id if available.
+		CurrentTime:        er1.FormatCaptureTime(info.ModTime()), // position at real file time
 	}
 
 	if existingDocID != "" {
@@ -5010,6 +5018,7 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 			Tags:          tags,
 			ContentType:   cfg.ContentType,
 			DoTranscribe:  doTranscribe,
+			CurrentTime:   er1.FormatCaptureTime(rec.CreatedAt), // position at real recording time
 		}
 		// Only send transcript when Plaud provided one.
 		if hasPlaudTranscript {
@@ -5492,6 +5501,7 @@ func pocketCloudSyncSelected(
 			Tags:               tagsStr,
 			ContentType:        pcfg.ContentType,
 			DoTranscribe:       false,
+			CurrentTime:        er1.FormatCaptureTime(full.RecordingAt), // position at real recording time
 		}
 		resp, err := er1.Upload(er1Cfg, payload)
 		if err != nil {
@@ -5794,6 +5804,7 @@ func pocketSyncSelected(selected []pocket.Recording, tags []string, cfg *pocket.
 			AudioFilename:      filepath.Base(stagedPath),
 			ContentType:        cfg.ContentType,
 			Tags:               strings.Join(tags, ","),
+			CurrentTime:        er1.FormatCaptureTime(selected[i].Timestamp), // position at real capture time
 		}
 		resp, uploadErr := er1.Upload(er1Cfg, payload)
 		if uploadErr != nil {
