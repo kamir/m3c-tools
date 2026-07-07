@@ -16,6 +16,7 @@ package main
 import (
 	"crypto/ed25519"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -57,6 +58,16 @@ func revokedCachePath(home string) string {
 	return filepath.Join(home, ".claude", "skillctl", "revoked-digests.json")
 }
 
+// revokedHeadSignedPath is the sibling file that stores the RAW BYTES of the last
+// ADOPTED, ed25519-signed revocation HEAD (FR-0045 Fix A / finding F2). Because the
+// envelope signature covers epoch/issued_at/emergency, re-verifying these bytes
+// against the pinned registry key makes the freshness floor + the HEAD emergency
+// list UNFORGEABLE without that key — the unsigned revoked-digests.json alone can
+// no longer be rewritten to roll the floor back or drop an emergency digest.
+func revokedHeadSignedPath(home string) string {
+	return filepath.Join(home, ".claude", "skillctl", "revoked-head.signed.json")
+}
+
 // writeRevokedCache persists the set with no HEAD freshness (epoch 0). Used by
 // the SPEC-0266 set-only path and tests.
 func writeRevokedCache(home string, set map[string]struct{}) {
@@ -77,15 +88,93 @@ func writeRevokedCacheHead(home string, set map[string]struct{}, epoch int, issu
 		IssuedAt:  issuedAt,
 	}, "", "  ")
 	p := revokedCachePath(home)
-	_ = os.MkdirAll(filepath.Dir(p), 0o755)
-	_ = os.WriteFile(p, b, 0o644)
+	_ = os.MkdirAll(filepath.Dir(p), 0o700)
+	// 0o600 (was 0o644): the revoked-digest floor is security state; a
+	// world-readable cache leaks the revocation set and, more importantly, a
+	// group/other-writable file would let a non-owner rewrite the epoch/issued_at
+	// floor (finding F2 / hacker#1). Owner-only.
+	_ = os.WriteFile(p, b, 0o600)
 }
 
-// readRevokedCacheHead returns the epoch + issued_at persisted from the last
-// adopted HEAD (0 / "" if none or a legacy cache). The epoch is the rollback
-// floor for the next AdoptRevocationHead; issued_at feeds the gate freshness
-// policy (D4).
-func readRevokedCacheHead(home string) (int, string) {
+// persistSignedHead writes the raw bytes of a VERIFIED, adopted revocation HEAD to
+// the sibling signed-head file (0o600). Called only from AdoptRevocationHead's
+// success path (via adoptHeadOrKeepFloor) — the head passed here has already had
+// its envelope signature + epoch monotonicity + set-root binding checked, so its
+// bytes are a trustworthy anchor for a later re-verify (readRevokedCacheHead /
+// headEmergencyDeniesDigest). Best-effort: a write failure just means the next
+// read falls back to the unsigned json floor.
+func persistSignedHead(home string, head map[string]any) {
+	b, err := json.MarshalIndent(head, "", "  ")
+	if err != nil {
+		return
+	}
+	p := revokedHeadSignedPath(home)
+	_ = os.MkdirAll(filepath.Dir(p), 0o700)
+	_ = os.WriteFile(p, b, 0o600)
+}
+
+// verifiedAdoptedHead loads the persisted signed HEAD and RE-VERIFIES its ed25519
+// envelope signature against the pinned SelfTrustRoots registry key. ok=false when
+// there is no signed HEAD on disk, the trust roots are unavailable, or the
+// signature does not verify (a tampered/forged file). This is the single
+// authenticator both the freshness floor (Fix A) and the HEAD emergency list
+// (Fix C) route through, so neither can be forged without the registry key.
+func verifiedAdoptedHead(home string) (map[string]any, bool) {
+	p := revokedHeadSignedPath(home)
+	if !fileExists(p) {
+		return nil, false
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return nil, false
+	}
+	var head map[string]any
+	if json.Unmarshal(b, &head) != nil {
+		return nil, false
+	}
+	tr, err := registry.LoadSelfTrustRoots("")
+	if err != nil || tr == nil || len(tr.PubKey()) == 0 {
+		return nil, false
+	}
+	if registry.VerifyEnvelopeSignature(tr.PubKey(), head) != nil {
+		return nil, false
+	}
+	return head, true
+}
+
+// headEmergencyDeniesDigest reports whether the installed skill's bundle digest is
+// on the ADOPTED signed HEAD's `emergency` list (FR-0045 Fix C / finding F4). The
+// emergency set is read from the RE-VERIFIED HEAD (verifiedAdoptedHead), so a
+// digest the registry placed in HEAD.emergency denies at the gate even with no
+// local emergency-deny.json present, and the list cannot be edited without the
+// registry key. Returns the matched token + true on a hit.
+func headEmergencyDeniesDigest(home, digest string) (string, bool) {
+	if strings.TrimSpace(digest) == "" {
+		return "", false
+	}
+	head, ok := verifiedAdoptedHead(home)
+	if !ok {
+		return "", false
+	}
+	em, err := registry.HeadEmergency(head)
+	if err != nil {
+		return "", false
+	}
+	want := strings.ToLower(strings.TrimSpace(digest))
+	for _, e := range em {
+		if strings.ToLower(strings.TrimSpace(e)) == want {
+			return e, true
+		}
+	}
+	return "", false
+}
+
+// readRevokedCacheHeadRaw returns the epoch + issued_at as stored in the UNSIGNED
+// revoked-digests.json (0 / "" if none or a legacy cache). This is the forgeable
+// on-disk value; it doubles as the monotonic high-water-mark store — writeRevoked-
+// CacheHead only ever writes it with an epoch that AdoptRevocationHead has already
+// proven >= the prior floor, so it never decreases through the legitimate path.
+func readRevokedCacheHeadRaw(home string) (int, string) {
 	b, err := os.ReadFile(revokedCachePath(home))
 	if err != nil {
 		return 0, ""
@@ -95,6 +184,47 @@ func readRevokedCacheHead(home string) (int, string) {
 		return 0, ""
 	}
 	return rc.Epoch, rc.IssuedAt
+}
+
+// readRevokedCacheHead returns the AUTHENTICATED epoch + issued_at floor (FR-0045
+// Fix A / finding F2). It is the rollback floor for the next AdoptRevocationHead
+// and the freshness anchor the gate (D4) evaluates.
+//
+// If a persisted signed HEAD exists, its ed25519 envelope is RE-VERIFIED against
+// the pinned SelfTrustRoots key and the floor is derived from the verified HEAD —
+// so an attacker who rewrites the unsigned json cannot move the floor. The unsigned
+// json is used ONLY when no signed HEAD is present (legacy / pre-adopt caches), and
+// as the monotonic high-water-mark store:
+//
+//   - a signed HEAD present but unverifiable (tampered/forged, or trust roots gone)
+//     is fail-safe: keep the high-water epoch, treat freshness as UNKNOWN ("");
+//   - a signed HEAD whose epoch is BELOW the high-water-mark is a replayed older
+//     HEAD → reject its (lower) epoch and its freshness, keep the high-water floor.
+func readRevokedCacheHead(home string) (int, string) {
+	hwEpoch, jsonIssued := readRevokedCacheHeadRaw(home)
+
+	if !fileExists(revokedHeadSignedPath(home)) {
+		// No signed HEAD → fall back to the unsigned json (legacy / pre-adopt).
+		return hwEpoch, jsonIssued
+	}
+	head, ok := verifiedAdoptedHead(home)
+	if !ok {
+		// Present but unverifiable → do NOT fall back to the (forgeable) json
+		// freshness; keep the high-water epoch and distrust freshness (fail-safe).
+		return hwEpoch, ""
+	}
+	epoch, eerr := registry.HeadEpoch(head)
+	issuedAt, ierr := registry.HeadIssuedAt(head)
+	if eerr != nil || ierr != nil {
+		return hwEpoch, ""
+	}
+	// Monotonic high-water-mark: never accept a floor epoch below the highest
+	// previously-verified epoch. A replayed older-but-validly-signed HEAD is
+	// rejected — keep the floor and distrust the replay's freshness.
+	if epoch < hwEpoch {
+		return hwEpoch, ""
+	}
+	return epoch, issuedAt.UTC().Format(time.RFC3339)
 }
 
 // readRevokedCache returns the cached revoked set and whether it is within ttl.
@@ -152,32 +282,62 @@ func fetchRevokedOnline(home string) (map[string]struct{}, bool) {
 		cached, _ := readRevokedCache(home, revokedCacheTTL)
 		return cached, false
 	}
-	epoch, issuedAt := adoptHeadOrKeepFloor(home, cfg, ctx, tr.PubKey(), set)
+	return applyFetchedRevokedSet(home, cfg, ctx, tr.PubKey(), set)
+}
+
+// applyFetchedRevokedSet reconciles a freshly-fetched revoked set with the signed
+// HEAD and decides the authoritative set to trust. On the happy path it adopts the
+// HEAD (freshness + rollback), persists the set + floor, and returns (set, true).
+//
+// FR-0045 Fix B / finding F1 — when the signed HEAD verifies but binds a DIFFERENT
+// revoked_set_root than the fetched set (ErrHeadSetRootMismatch), the fetched set
+// is truncated/forged relative to the signed HEAD: we REFUSE to overwrite the cache
+// with it, retain the prior last-known-good set, do NOT refresh FetchedAt (staleness
+// accrues against the prior issued_at so the D4 gate can eventually fail closed),
+// and return the prior set as authoritative (refreshed=false).
+func applyFetchedRevokedSet(home string, cfg *er1.Config, ctx string, pub ed25519.PublicKey, set map[string]struct{}) (map[string]struct{}, bool) {
+	epoch, issuedAt, setRejected := adoptHeadOrKeepFloor(home, cfg, ctx, pub, set)
+	if setRejected {
+		prior, _ := readRevokedCache(home, revokedCacheTTL)
+		return prior, false
+	}
 	writeRevokedCacheHead(home, set, epoch, issuedAt)
 	return set, true
 }
 
 // adoptHeadOrKeepFloor tries to adopt a signed HEAD for the freshly-fetched set.
-// If there is no HEAD source, or the HEAD fails to verify (bad sig / rollback /
-// set-root mismatch), it KEEPS the previously-persisted epoch as the floor and
-// returns the prior issued_at — so the gate (D4) sees a non-advancing snapshot
-// and applies its fail-closed staleness policy under trust-root config. A
-// verified HEAD returns its epoch + issued_at to persist.
-func adoptHeadOrKeepFloor(home string, cfg *er1.Config, ctx string, pub ed25519.PublicKey, set map[string]struct{}) (int, string) {
+// If there is no HEAD source, or the HEAD fails to verify (bad sig / rollback), it
+// KEEPS the previously-persisted epoch as the floor and returns the prior issued_at
+// — so the gate (D4) sees a non-advancing snapshot and applies its fail-closed
+// staleness policy under trust-root config. A verified HEAD returns its epoch +
+// issued_at to persist AND persists the signed HEAD bytes (Fix A) for a later
+// authenticated re-verify.
+//
+// The third return, setRejected, is true ONLY for ErrHeadSetRootMismatch (finding
+// F1): the HEAD verified but bound a different set-root, so the fetched set is
+// truncated/forged and the caller MUST discard it and retain last-known-good.
+func adoptHeadOrKeepFloor(home string, cfg *er1.Config, ctx string, pub ed25519.PublicKey, set map[string]struct{}) (int, string, bool) {
 	prevEpoch, prevIssued := readRevokedCacheHead(home)
 	if fetchRevocationHeadFn == nil {
-		return prevEpoch, prevIssued
+		return prevEpoch, prevIssued, false
 	}
 	head, ok := fetchRevocationHeadFn(cfg, ctx, pub)
 	if !ok {
-		return prevEpoch, prevIssued
+		return prevEpoch, prevIssued, false
 	}
 	epoch, issued, aerr := registry.AdoptRevocationHead(pub, head, setToSortedSlice(set), prevEpoch)
 	if aerr != nil {
+		if errors.Is(aerr, registry.ErrHeadSetRootMismatch) {
+			fmt.Fprintf(os.Stderr, "skillctl: revocation HEAD set-root mismatch (%v); REJECTING the fetched set as truncated/forged and retaining last-known-good (staleness accrues against prior issued_at)\n", aerr)
+			return prevEpoch, prevIssued, true
+		}
 		fmt.Fprintf(os.Stderr, "skillctl: revocation HEAD rejected (%v); keeping epoch floor %d\n", aerr, prevEpoch)
-		return prevEpoch, prevIssued
+		return prevEpoch, prevIssued, false
 	}
-	return epoch, issued.UTC().Format(time.RFC3339)
+	// Verified HEAD → persist its raw bytes as the authenticated floor / emergency
+	// anchor (Fix A / Fix C).
+	persistSignedHead(home, head)
+	return epoch, issued.UTC().Format(time.RFC3339), false
 }
 
 func setToSortedSlice(set map[string]struct{}) []string {

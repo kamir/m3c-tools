@@ -49,8 +49,8 @@ func TestAdoptHeadOrKeepFloor(t *testing.T) {
 		home := t.TempDir()
 		writeRevokedCacheHead(home, set, 3, "2026-01-01T00:00:00Z")
 		fetchRevocationHeadFn = nil
-		if ep, iss := adoptHeadOrKeepFloor(home, nil, "skills", pub, set); ep != 3 || iss != "2026-01-01T00:00:00Z" {
-			t.Errorf("= %d,%q, want 3,<prev>", ep, iss)
+		if ep, iss, rej := adoptHeadOrKeepFloor(home, nil, "skills", pub, set); ep != 3 || iss != "2026-01-01T00:00:00Z" || rej {
+			t.Errorf("= %d,%q,%v, want 3,<prev>,false", ep, iss, rej)
 		}
 	})
 
@@ -60,8 +60,8 @@ func TestAdoptHeadOrKeepFloor(t *testing.T) {
 			return signedHead(5), true
 		}
 		defer func() { fetchRevocationHeadFn = nil }()
-		if ep, iss := adoptHeadOrKeepFloor(home, nil, "skills", pub, set); ep != 5 || iss != "2026-07-06T18:00:00Z" {
-			t.Errorf("= %d,%q, want 5,<ts>", ep, iss)
+		if ep, iss, rej := adoptHeadOrKeepFloor(home, nil, "skills", pub, set); ep != 5 || iss != "2026-07-06T18:00:00Z" || rej {
+			t.Errorf("= %d,%q,%v, want 5,<ts>,false", ep, iss, rej)
 		}
 	})
 
@@ -72,8 +72,30 @@ func TestAdoptHeadOrKeepFloor(t *testing.T) {
 			return signedHead(4), true // lower epoch than the persisted floor 9
 		}
 		defer func() { fetchRevocationHeadFn = nil }()
-		if ep, iss := adoptHeadOrKeepFloor(home, nil, "skills", pub, set); ep != 9 || iss != "2026-06-01T00:00:00Z" {
-			t.Errorf("rollback advanced floor = %d,%q, want 9,<prev>", ep, iss)
+		if ep, iss, rej := adoptHeadOrKeepFloor(home, nil, "skills", pub, set); ep != 9 || iss != "2026-06-01T00:00:00Z" || rej {
+			t.Errorf("rollback advanced floor = %d,%q,%v, want 9,<prev>,false", ep, iss, rej)
+		}
+	})
+
+	// FR-0045 Fix B / finding F1 — a signed HEAD that binds a DIFFERENT set-root
+	// than the fetched set signals setRejected=true (the fetched set is
+	// truncated/forged) and keeps the prior floor.
+	t.Run("set-root mismatch is signalled and keeps floor", func(t *testing.T) {
+		home := t.TempDir()
+		writeRevokedCacheHead(home, set, 2, "2026-05-01T00:00:00Z")
+		// The signed HEAD binds the full {dg} set; feed a set MISSING dg (empty) so
+		// the recomputed set-root cannot match the head's revoked_set_root.
+		fetchRevocationHeadFn = func(_ *er1.Config, _ string, _ ed25519.PublicKey) (map[string]any, bool) {
+			return signedHead(5), true
+		}
+		defer func() { fetchRevocationHeadFn = nil }()
+		truncated := map[string]struct{}{} // dropped dg
+		ep, iss, rej := adoptHeadOrKeepFloor(home, nil, "skills", pub, truncated)
+		if !rej {
+			t.Fatalf("set-root mismatch not signalled: rej=%v", rej)
+		}
+		if ep != 2 || iss != "2026-05-01T00:00:00Z" {
+			t.Errorf("mismatch must keep prior floor, got %d,%q", ep, iss)
 		}
 	})
 }
