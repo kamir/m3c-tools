@@ -101,11 +101,20 @@ Capture → Preview + Record → Whisper transcribe → Tag editor → Store to 
 Each observation becomes a multimodal ER1 document — text + audio + image, with tags and
 metadata. On macOS this is a native menu-bar app; on Linux/Windows it's a full CLI.
 Even without a transcript (e.g. subtitles disabled), a YouTube capture still keeps the
-thumbnail and the link.
+thumbnail and the source link — the observation lands regardless.
+
+**Field recordings, positioned in real time.** `m3c-tools plaud` drains your Plaud.ai
+recordings — customer visits (*Kundenbesuche*), meetings and field notes — straight into
+ER1, and `m3c-tools pocket` does the same for a Pocket device. Synced items are placed at
+their **true recording time**, not the moment you synced them (`plaud fix-times` backfills
+earlier imports), so captures from multiple devices land on the timeline where they
+actually happened.
 
 **Command surface:** `transcript`, `upload`, `whisper`, `thumbnail`, `record`, `screenshot`,
-`import-audio`, `plaud`, `pocket`, `retry`, `schedule`, `status`, `doctor`, `login`,
-`setup`, `menubar`. See the [m3c-tools manual](docs/manual-m3c-tools.md).
+`import-audio` (capture); `plaud` (`list` · `check` · `sync` · `fix-times` · `auth`) and
+`pocket` (field-recording sync); `retry`, `cancel`, `schedule`, `status` (ER1 queue);
+`doctor`, `check-er1`, `config` (incl. `doctor`), `settings`, `token`, `devices`, `login`,
+`setup`, `menubar` (setup & diagnostics). See the [m3c-tools manual](docs/manual-m3c-tools.md).
 
 ## What `skillctl` governs
 
@@ -122,9 +131,11 @@ author → pack → sign → admit → attest → verify / install → use → a
 - **Auditable.** A local transparency log (`translog`) and a Claude Code trust gate
   (`verify-hook`) that fails closed.
 
-**Command surface:** `keygen`, `pack`, `sign`, `verify-sig`, `trust`, `install`, `verify`,
-`attest`, `revoke`, `audit`, `publish`, `pull`, `registry`, `agentid`, `translog`,
-`verify-hook`, `gate-stats`, `project`, `session`. See the [skillctl manual](docs/manual-skillctl.md).
+**Command surface** — *authoring:* `keygen`, `pack`, `sign`, `verify-sig`; *trust & install:*
+`trust`, `install`, `verify`, `verify-hook`; *governance:* `attest`, `revoke`, `agentid`,
+`publish`, `pull`, `registry`; *audit & transparency:* `audit`, `seal`, `scan`, `review`,
+`propose`, `translog`, `gate-stats`; plus `project`, `session`.
+See the [skillctl manual](docs/manual-skillctl.md).
 
 ---
 
@@ -134,6 +145,7 @@ author → pack → sign → admit → attest → verify / install → use → a
 |------|-----|
 | [**Quickstart: m3c-tools**](docs/quickstart-m3c-tools.md) | Capture your first memory in 5 minutes |
 | [**Quickstart: skillctl**](docs/quickstart-skillctl.md) | Sign, install and verify a skill in 5 minutes |
+| [**Quickstart: skillctl-demo**](docs/quickstart-skillctl-demo.md) | Run the skill-trust scenarios offline on your own machine — 3 run live with real exit codes (S1/S2A/S5); the remaining panels render their story but run nothing (S3 is a built-but-not-run PARTIAL, S2BC/S4 are ROADMAP) — plus Kata training (planned) |
 | [**Manual: m3c-tools**](docs/manual-m3c-tools.md) | Every command, flag and config variable |
 | [**Manual: skillctl**](docs/manual-skillctl.md) | The full trust lifecycle, command by command |
 | [Menu Bar App](docs/menubar-app.md) | Channels, Observation Window, menu items (macOS) |

@@ -86,17 +86,25 @@ automation can branch precisely. This is the authoritative table, sourced from
 
 Additional codes surface in specific commands:
 
-| Code | Command | Meaning |
-|-----:|---------|---------|
-| `18` | `intent declare` | intent inconsistent with `data_dependencies` (SPEC-0196 §3.3) |
-| `20` | `agentid verify` | approver-floor not met |
-| `21` | `agentid verify` | mandate expired |
-| `22` | `agentid verify` | revocation stale (SPEC-0279 freshness) |
-| `23` | `translog verify` | not included in the log |
-| `24` | `translog witness` | split-view (equivocation) detected |
+| Code | Command(s) | Meaning |
+|-----:|------------|---------|
+| `3` | `audit` | at least one skill is `BROKEN`. |
+| `4` | `import-public` | pin required (input validation). |
+| `5` | `import-public` | scanner refuse (scanner / policy hit). |
+| `6` | `import-public` | bodyscan refuse. |
+| `18` | `intent declare`, `import-public` | intent inconsistent with `data_dependencies` (SPEC-0196 §3.3); also intent-capped on import. |
+| `19` | `awareness reset`, `import-public` | identity mismatch — `client_identity` ≠ `admitted_by_identity`; also source-blocked on import. |
+| `20` | `agentid verify` | self-attested / approver-floor not met (reviewer_id == author_id; SPEC-0246 §5.2). |
+| `21` | `agentid verify` | AgentID mandate expired. |
+| `22` | `agentid verify`, `verify --bundle` | revocation snapshot stale — freshness fail-closed (SPEC-0279 R3). |
+| `23` | `translog verify`, `verify` | transparency-log inclusion missing / receipt not included (SPEC-0278 L1). |
+| `24` | `translog witness` | split-view (equivocation) detected. |
+| `25` | `translog consistency` | consistency / append-only rewrite violation detected. |
+| `32` | *(ROADMAP — not implemented)* | runtime capability-envelope (egress) violation. Appears **only** in the demo's ROADMAP scenario; **no** current `skillctl` subcommand emits it (the Go-native OS-level cage is FR-0044, pending). |
 
-`audit` uses its own scale: `0` all OK · `2` at least one `UNVERIFIED`/`BELOW_MIN` · `3` at
-least one `BROKEN`. `propose` uses `0` pass / `2` fail.
+`audit` uses its own scale: `0` all OK · `2` at least one `UNVERIFIED`/`BELOW_MIN` (or a
+G-23 confirm-delete precondition refusal on drift) · `3` at least one `BROKEN`. `propose` uses
+`0` pass / `2` gate failed.
 
 > Some commands print flags with a **single dash** in their own help output (e.g. `-key`,
 > `-out`). Both `-flag` and `--flag` are accepted. This manual reproduces flag names as the
@@ -365,12 +373,37 @@ Exit: `0` ok · `1` generic/network/non-2xx · `2` usage.
 
 ---
 
-### `revoke`
+### `revoke` — revoke an admitted bundle
 
-Revocation of skill bundles is issued through `publish --revoke` (see below); AgentID
-revocation is issued through `agentid revoke`. Both produce **signed, offline-verifiable**
-revocation lists that the verifier enforces with freshness contracts (SPEC-0279), failing
-closed on a stale or rolled-back list.
+```bash
+skillctl revoke <bundle-digest> --reason <code> [--registry <url>] [--timeout <duration>]
+```
+
+Revokes an admitted bundle (SPEC-0188 §4.5) by publishing a **signed, offline-verifiable**
+`BundleRevokedEvent` to the registry. The verifier then enforces it with freshness contracts
+(SPEC-0279), failing **closed** on a stale or rolled-back list. `<bundle-digest>` is the
+`sha256:<hex>` digest to revoke.
+
+| Flag | Purpose |
+|------|---------|
+| `-reason key_compromise\|vulnerability\|governance_retraction\|author_request\|duplicate` | Reason code. **Required.** |
+| `-actor-identity` | Revoke as a `governance_reviewer` (rather than the default `original_author`); pair with `--key`. |
+| `-key` | Signing key for the revocation event. Required for the `original_author` (default) and `governance_reviewer` roles. |
+| `-registry` | Registry base URL. |
+| `-timeout` | HTTP request timeout. |
+
+Three actor roles: **`original_author`** (the default — signs with the author key),
+**`governance_reviewer`** (`--actor-identity` + `--key`), and **`registry_operator`**
+(unsigned, operator-authenticated).
+
+```bash
+skillctl revoke sha256:<hex> --reason key_compromise --registry https://aims.example.com/api/skills
+```
+
+Related paths: `publish --revoke` posts the same `BundleRevokedEvent` to your personal ER1
+`self` registry (see [`publish`](#publish--admit--attest--revoke-via-er1-self-registry)), and
+`agentid revoke` adds `agent:<id>` to a signed AgentID revocation list. All three produce
+signed, offline-verifiable lists the verifier honours fail-closed.
 
 ---
 
@@ -381,27 +414,39 @@ skillctl audit [flags]
 ```
 
 Prints a per-skill verdict: `OK | UNVERIFIED | BROKEN | BELOW_MIN`. Cleanup is a G-23
-destructive-op **two-step** (dry-run token, then confirm).
+destructive-op **two-step** (a signed dry-run token, then a confirm that re-checks the live
+set). There is **no `--force`.**
 
 | Flag | Purpose |
 |------|---------|
 | `-minimum-governance green\|yellow\|red` | Floor below which a skill is flagged. Defaults to trust-roots `governance_minimum`, else green. |
 | `-format table\|json` | Output format (default: table on TTY, json on pipe). |
+| `-source claude\|user\|plugins\|all` | Skill source scope. |
 | `-include-shadowed` | Include shadowed skills (lower-tier names hidden by a higher-tier winner). |
 | `-cleanup` | After listing, delete affected skills (gated; requires `--dry-run-cleanup` or `--confirm-delete`). |
-| `-dry-run-cleanup` | Step 1: print the affected list + a signature token; no deletion. |
-| `-confirm-delete` | Step 2: actually delete; requires a fresh `--dry-run-cleanup-token`. |
-| `-dry-run-cleanup-token` | Token from a prior `--dry-run-cleanup`. |
+| `-dry-run-cleanup` | **Step 1**: print the affected set + a signed 5-minute token; **no deletion**. |
+| `-confirm-delete` | **Step 2**: actually delete; requires a fresh `--dry-run-cleanup-token`. |
+| `-dry-run-cleanup-token <sig>` | The token from a prior `--dry-run-cleanup`. |
 | `-keep-unverified` | Don't auto-clean `UNVERIFIED` skills under `--cleanup`. |
-| `-source` | Skill source scope. |
 
 ```bash
 skillctl audit
-skillctl audit --cleanup --dry-run-cleanup
-skillctl audit --cleanup --confirm-delete --dry-run-cleanup-token <sig>
+skillctl audit --cleanup --dry-run-cleanup                                  # step 1: plan + token
+skillctl audit --cleanup --confirm-delete --dry-run-cleanup-token <sig>     # step 2: re-check + delete
 ```
 
-Exit: `0` all OK · `2` ≥1 `UNVERIFIED`/`BELOW_MIN` · `3` ≥1 `BROKEN`.
+**The G-23 two-step contract.** Step 1 (`--cleanup --dry-run-cleanup`) computes the affected
+set and prints a **signed token** (an HMAC bound to the hostname, the sorted affected skill
+paths, and an issued-at timestamp) with a **5-minute** lifetime. It deletes nothing. Step 2
+(`--cleanup --confirm-delete --dry-run-cleanup-token <sig>`) **re-computes the live affected
+set and re-verifies the token against it.** If the set has **drifted** (a skill appeared,
+disappeared, or changed) — or the token expired or was tampered — the confirm **refuses** and
+exits `2` (a usage / precondition refusal), deleting nothing. Both the plan and the refusal
+are auditable, and there is **no `--force`** to bypass the re-check: a destructive op that no
+longer matches its approved plan simply does not run.
+
+Exit: `0` all OK · `2` ≥1 `UNVERIFIED`/`BELOW_MIN`, **or** a confirm-delete precondition
+refusal (drift/expiry/tamper) · `3` ≥1 `BROKEN`.
 
 ---
 
