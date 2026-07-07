@@ -1,0 +1,172 @@
+<!-- skillctl-demo run panel — thin, self-contained, offline (CSP-safe). -->
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>skillctl-demo — skill-trust walkthrough</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d; --fg: #e6edf3;
+    --muted: #8b949e; --accent: #58a6ff; --green: #3fb950; --red: #f85149;
+    --yellow: #d29922; --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f6f8fa; --panel:#fff; --border:#d0d7de; --fg:#1f2328;
+      --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; --yellow:#9a6700; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+    font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+  header { padding:14px 20px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0; font-weight:700; }
+  header .meta { font-family:var(--mono); font-size:11px; color:var(--muted); }
+  .wrap { display:grid; grid-template-columns: 300px 1fr; gap:0; min-height: calc(100vh - 52px); }
+  @media (max-width: 860px) { .wrap { grid-template-columns: 1fr; } }
+  nav { border-right:1px solid var(--border); padding:12px; overflow:auto; }
+  .card { border:1px solid var(--border); border-radius:8px; padding:10px;
+    margin-bottom:8px; cursor:default; background:var(--panel); }
+  .card.active { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+  .card .id { font-weight:700; font-size:13px; }
+  .card .t { font-size:12px; color:var(--muted); margin-top:2px; }
+  .badge { display:inline-block; font-size:10px; font-weight:700; padding:1px 6px;
+    border-radius:10px; letter-spacing:.03em; }
+  .LIVE { background:rgba(63,185,80,.18); color:var(--green); }
+  .PARTIAL { background:rgba(210,153,34,.18); color:var(--yellow); }
+  .ROADMAP { background:rgba(139,148,158,.2); color:var(--muted); }
+  main { display:flex; flex-direction:column; padding:16px; gap:14px; min-width:0; }
+  .stage { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+  @media (max-width: 1100px) { .stage { grid-template-columns: 1fr; } }
+  .box { border:1px solid var(--border); border-radius:10px; background:var(--panel);
+    padding:12px; min-width:0; }
+  .box h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em;
+    color:var(--muted); margin:0 0 8px; }
+  .svgwrap { display:flex; align-items:center; justify-content:center; }
+  .svgwrap img { max-width:100%; height:auto; border-radius:6px; }
+  .story { font-size:13px; line-height:1.5; }
+  .without { color:var(--red); font-size:12px; margin-top:8px; }
+  .roadmap { color:var(--yellow); font-size:12px; margin-top:8px;
+    border-left:3px solid var(--yellow); padding-left:8px; }
+  #term { font-family:var(--mono); font-size:12px; line-height:1.5;
+    background:#010409; color:#c9d1d9; border-radius:8px; padding:12px;
+    height:340px; overflow:auto; white-space:pre-wrap; word-break:break-word; }
+  @media (prefers-color-scheme: light) { #term { background:#0d1117; color:#c9d1d9; } }
+  .l-cmd { color:#79c0ff; font-weight:700; }
+  .l-step { color:#e6edf3; font-weight:700; }
+  .l-out { color:#8b949e; }
+  .l-err { color:#d29922; }
+  .l-note { color:#6e7681; font-style:italic; }
+  .l-prep { color:#6e7681; }
+  #badge { font-family:var(--mono); font-size:20px; font-weight:800; padding:10px 14px;
+    border-radius:10px; text-align:center; border:1px solid var(--border); }
+  #badge.ok { color:var(--green); border-color:var(--green); background:rgba(63,185,80,.08); }
+  #badge.bad { color:var(--red); border-color:var(--red); background:rgba(248,81,73,.08); }
+  #badge.idle { color:var(--muted); }
+  .verdict { font-size:12px; color:var(--muted); margin-top:6px; text-align:center; }
+  footer { font-size:11px; color:var(--muted); padding:0 4px; }
+</style>
+
+<header>
+  <h1>skillctl-demo</h1>
+  <span class="badge LIVE" style="align-self:center">real skillctl · real exit codes</span>
+  <span class="meta" id="meta"></span>
+</header>
+
+<div class="wrap">
+  <nav id="rail"></nav>
+  <main>
+    <div class="stage">
+      <div class="box">
+        <h2 id="scTitle">Overview</h2>
+        <div class="svgwrap"><img id="svg" src="/assets/infographic-overview.png" alt="overview" /></div>
+        <div class="story" id="story">A CISO buys containment they can see. Step through the deck — each LIVE card runs the real skillctl and shows its real exit code.</div>
+        <div class="without" id="without"></div>
+        <div class="roadmap" id="roadmap"></div>
+      </div>
+      <div class="box">
+        <h2>Live terminal — real skillctl</h2>
+        <div id="term"></div>
+        <div style="margin-top:12px" id="badge" class="idle">— awaiting first verdict —</div>
+        <div class="verdict" id="verdict"></div>
+      </div>
+    </div>
+    <footer>Offline demo. Roadmap panels run nothing. Every exit code shown is a real skillctl process exit.</footer>
+  </main>
+</div>
+
+<script>
+(function () {
+  var railEl = document.getElementById('rail');
+  var cards = {};
+  var svg = document.getElementById('svg');
+  var scTitle = document.getElementById('scTitle');
+  var story = document.getElementById('story');
+  var without = document.getElementById('without');
+  var roadmap = document.getElementById('roadmap');
+  var term = document.getElementById('term');
+  var badge = document.getElementById('badge');
+  var verdict = document.getElementById('verdict');
+  var meta = document.getElementById('meta');
+
+  fetch('/api/state').then(function (r) { return r.json(); }).then(function (s) {
+    meta.textContent = 'mode=' + s.mode + ' · skillctl=' + s.skillctl;
+  });
+
+  fetch('/api/scenarios').then(function (r) { return r.json(); }).then(function (list) {
+    list.forEach(function (sc) {
+      var d = document.createElement('div');
+      d.className = 'card';
+      d.id = 'card-' + sc.ID;
+      d.innerHTML = '<span class="badge ' + sc.Tier + '">' + sc.Tier + '</span> ' +
+        '<span class="id">' + sc.ID + '</span><div class="t">' + esc(sc.Title) + '</div>';
+      railEl.appendChild(d);
+      cards[sc.ID] = { el: d, sc: sc };
+    });
+  });
+
+  function esc(s) { var e = document.createElement('div'); e.textContent = s || ''; return e.innerHTML; }
+  function line(cls, text) {
+    var d = document.createElement('div');
+    d.className = cls; d.textContent = text;
+    term.appendChild(d); term.scrollTop = term.scrollHeight;
+  }
+
+  var es = new EventSource('/events');
+  es.onmessage = function (m) {
+    var e = JSON.parse(m.data);
+    switch (e.kind) {
+      case 'scenario':
+        Object.keys(cards).forEach(function (k) { cards[k].el.classList.remove('active'); });
+        if (cards[e.id]) cards[e.id].el.classList.add('active');
+        scTitle.textContent = e.id + ' · ' + e.title + '  [' + e.tier + ']';
+        svg.src = '/assets/' + e.svg;
+        story.textContent = e.story || '';
+        without.textContent = e.without ? ('Without skillctl: ' + e.without) : '';
+        roadmap.textContent = e.roadmap || '';
+        line('l-step', '\n=== ' + e.id + ' · ' + e.title + ' [' + e.tier + '] ===');
+        break;
+      case 'step': line('l-step', '\n' + e.text); break;
+      case 'prep': line('l-prep', '· ' + e.text); break;
+      case 'cmd': line('l-cmd', '$ ' + e.cmd); break;
+      case 'line': line(e.stream === 'stderr' ? 'l-err' : 'l-out', '    ' + e.text); break;
+      case 'note': line('l-note', '  ' + e.text); break;
+      case 'exit': setBadge(e); break;
+      case 'verdict':
+        line('l-note', '  ▸ ' + e.text);
+        setBadge(e);
+        break;
+      case 'reset': line('l-note', '\n— sandbox reset —'); break;
+      case 'done': line('l-step', '\n✔ ' + (e.text || 'demo complete')); break;
+    }
+  };
+
+  function setBadge(e) {
+    badge.className = e.ok ? 'ok' : 'bad';
+    var word = e.verdict === 'blocked' ? 'BLOCKED' :
+      e.verdict === 'refused' ? 'REFUSED' :
+      e.verdict === 'allowed' ? 'VERIFIED' : (e.verdict || '');
+    badge.textContent = (e.ok ? '✅ ' : '✗ ') + 'exit ' + e.code + '  ' + word;
+    verdict.textContent = e.ok
+      ? ('matched expected exit ' + e.expected)
+      : ('UNEXPECTED — wanted ' + e.expected);
+  }
+})();
+</script>
