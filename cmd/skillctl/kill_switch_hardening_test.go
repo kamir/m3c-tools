@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -128,10 +129,13 @@ func TestRevokedFloor_UnforgeableViaUnsignedJson(t *testing.T) {
 	}
 
 	// The cache file must be owner-only (0o600) — Fix A perms tightening.
-	if fi, err := os.Stat(revokedCachePath(home)); err != nil {
-		t.Fatal(err)
-	} else if perm := fi.Mode().Perm(); perm&0o077 != 0 {
-		t.Fatalf("revoked cache perms = %o, want owner-only (no group/other bits)", perm)
+	// POSIX-only: Windows does not map Go file modes to Unix permission bits.
+	if runtime.GOOS != "windows" {
+		if fi, err := os.Stat(revokedCachePath(home)); err != nil {
+			t.Fatal(err)
+		} else if perm := fi.Mode().Perm(); perm&0o077 != 0 {
+			t.Fatalf("revoked cache perms = %o, want owner-only (no group/other bits)", perm)
+		}
 	}
 
 	// Attacker rewrites the UNSIGNED json to a lower epoch + older issued_at.
