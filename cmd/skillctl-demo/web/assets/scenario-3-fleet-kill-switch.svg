@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" font-family="system-ui,-apple-system,Segoe UI,Roboto,sans-serif">
+  <defs>
+    <marker id="arw" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#2f9e9e"/>
+    </marker>
+  </defs>
+  <rect width="960" height="600" fill="#ffffff"/>
+  <rect width="960" height="600" fill="none" stroke="#d0d7de" stroke-width="2"/>
+
+  <!-- header -->
+  <rect x="0" y="0" width="960" height="86" fill="#1f8a8a"/>
+  <circle cx="46" cy="43" r="24" fill="#ffffff" opacity="0.18"/>
+  <text x="46" y="52" font-size="26" font-weight="700" fill="#ffffff" text-anchor="middle">3</text>
+  <text x="88" y="38" font-size="24" font-weight="700" fill="#ffffff">Fleet kill-switch under live compromise</text>
+  <text x="88" y="66" font-size="15" fill="#ffffff" opacity="0.92">Our kill-switch survives a severed network cable — signed, monotonic, fail-closed</text>
+  <rect x="726" y="26" width="60" height="26" rx="13" fill="#ffffff" opacity="0.22"/>
+  <text x="756" y="44" font-size="14" font-weight="700" fill="#ffffff" text-anchor="middle">G5</text>
+  <rect x="794" y="26" width="140" height="26" rx="13" fill="#1f6feb"/>
+  <text x="864" y="44" font-size="12.5" font-weight="700" fill="#ffffff" text-anchor="middle">◐ IN BUILD (FR-0045)</text>
+
+  <!-- intel banner -->
+  <rect x="40" y="110" width="884" height="40" rx="9" fill="#fdece9" stroke="#e5484d" stroke-width="1.3"/>
+  <text x="60" y="135" font-size="14" fill="#24292f"><tspan font-weight="700" fill="#b62324">Intel:</tspan> "report-generator" (green yesterday) — author key compromised, a backdoored version is circulating.</text>
+
+  <!-- Host A (operator revokes) -->
+  <rect x="40" y="172" width="250" height="150" rx="12" fill="#f6f8fa" stroke="#57606a" stroke-width="1.5"/>
+  <text x="60" y="198" font-size="15" font-weight="700" fill="#24292f">HOST A — operator</text>
+  <text x="60" y="224" font-size="13" fill="#24292f">skillctl revoke &lt;digest&gt;</text>
+  <text x="60" y="243" font-size="13" fill="#57606a">--reason key_compromise</text>
+  <rect x="60" y="258" width="210" height="50" rx="8" fill="#eafaf0" stroke="#1f8a8a" stroke-width="1.5"/>
+  <text x="72" y="279" font-size="12.5" font-weight="700" fill="#1f6f6f">registry publishes signed HEAD</text>
+  <text x="72" y="297" font-size="12" fill="#24292f">epoch↑ · emergency:[digest] · set-root</text>
+
+  <!-- signed HEAD in transit -->
+  <line x1="290" y1="283" x2="368" y2="283" stroke="#2f9e9e" stroke-width="3" marker-end="url(#arw)"/>
+  <rect x="372" y="196" width="200" height="176" rx="12" fill="#e7f6f6" stroke="#1f8a8a" stroke-width="2"/>
+  <text x="472" y="222" font-size="14" font-weight="700" fill="#1f6f6f" text-anchor="middle">signed revocation HEAD</text>
+  <text x="392" y="250" font-size="12.5" fill="#24292f">ed25519 · registry key</text>
+  <text x="392" y="272" font-size="12.5" fill="#24292f">epoch (monotonic, rollback-proof)</text>
+  <text x="392" y="294" font-size="12.5" fill="#24292f">revoked_set_root (binds the set)</text>
+  <text x="392" y="316" font-size="12.5" fill="#24292f">emergency deny-list (R5)</text>
+  <text x="472" y="352" font-size="11.5" fill="#1f6f6f" text-anchor="middle" font-style="italic">the signature is the source of truth</text>
+
+  <line x1="572" y1="283" x2="650" y2="283" stroke="#2f9e9e" stroke-width="3" marker-end="url(#arw)"/>
+
+  <!-- Host B (online) -->
+  <rect x="654" y="172" width="270" height="150" rx="12" fill="#eafaf0" stroke="#2ea043" stroke-width="2"/>
+  <text x="674" y="198" font-size="15" font-weight="700" fill="#1a7f37">HOST B — next gate poll</text>
+  <text x="674" y="222" font-size="12.5" fill="#24292f">verify sig + epoch monotonicity</text>
+  <text x="674" y="240" font-size="12.5" fill="#24292f">+ set-root → emergency entry hit</text>
+  <rect x="674" y="254" width="120" height="40" rx="8" fill="#1a7f37"/>
+  <text x="734" y="280" font-size="17" font-weight="800" fill="#fff" text-anchor="middle">exit 17</text>
+  <text x="802" y="272" font-size="11.5" fill="#57606a">denied on sight —</text>
+  <text x="802" y="288" font-size="11.5" fill="#57606a">short-circuits cadence</text>
+  <text x="674" y="312" font-size="12" fill="#1a7f37" font-weight="600">DENY before the normal cadence would</text>
+
+  <!-- offline / severed cable -->
+  <rect x="40" y="338" width="884" height="70" rx="12" fill="#fffbea" stroke="#d9a441" stroke-width="1.8"/>
+  <text x="60" y="364" font-size="14" font-weight="700" fill="#9a6700">✂  NETWORK CABLE CUT — Host B is offline</text>
+  <text x="60" y="388" font-size="13.5" fill="#24292f">Stale snapshot + high-risk action + trust-root max_staleness  →  fail-CLOSED</text>
+  <rect x="640" y="352" width="120" height="40" rx="8" fill="#9a6700"/>
+  <text x="700" y="378" font-size="17" font-weight="800" fill="#fff" text-anchor="middle">exit 22</text>
+  <text x="770" y="368" font-size="12" fill="#57606a">we do NOT fail open on a</text>
+  <text x="770" y="384" font-size="12" fill="#57606a">revocation we may have missed</text>
+
+  <!-- without -->
+  <rect x="40" y="424" width="884" height="118" rx="12" fill="#fff5f5" stroke="#e5484d" stroke-width="1.5"/>
+  <text x="60" y="452" font-size="14" font-weight="700" fill="#e5484d" letter-spacing="1">⚠  WITHOUT skillctl (competitors)</text>
+  <text x="60" y="480" font-size="14" fill="#24292f">IAM/admin revoke works only online · a local-only revoke never reaches Host B</text>
+  <text x="60" y="502" font-size="14" font-weight="600" fill="#b62324">The offline host silently keeps running the backdoor.</text>
+  <text x="60" y="528" font-size="13" fill="#57606a">The line: system-of-record = the signed local trail; the HEAD is the signed fleet-propagation of DENY state.</text>
+
+  <text x="924" y="576" font-size="11" fill="#8c959f" text-anchor="end">m3c skill-trust · FR-0045 D1–D5 · SPEC-0279 R1/R3/R4/R5 · KuP demo scenario 3 (flagship)</text>
+</svg>

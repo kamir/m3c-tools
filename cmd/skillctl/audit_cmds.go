@@ -268,7 +268,11 @@ func runCleanupConfirm(targets []audit.Verdict, presentedToken, outFormat string
 	now := time.Now().UTC()
 	if err := verifyCleanupToken(targets, presentedToken, now); err != nil {
 		fmt.Fprintf(stderr, "skillctl audit: %v\n", err)
-		return exitGeneric
+		// Refusing the confirm because the token failed re-verification
+		// (drift / expiry / tamper) is a precondition failure, not an internal
+		// error — exit 2 (usage), matching the G-23 two-step contract in
+		// DEMO-skill-trust-scenarios.md (S5: "refuse on drift → exit 2").
+		return exitUsage
 	}
 
 	deleted := 0

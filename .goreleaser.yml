@@ -60,6 +60,30 @@ builds:
       - goos: windows
         goarch: arm64
 
+  # --- skillctl-demo: self-contained offline CISO demo (embeds its web assets +
+  #     the KuP demo skill). Pure Go, no CGO — the whole point is a Windows binary
+  #     a customer can double-click. Ships next to skillctl (it shells out to it). ---
+  - id: skillctl-demo
+    binary: skillctl-demo
+    main: ./cmd/skillctl-demo
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    goos:
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      # No Windows arm64 build
+      - goos: windows
+        goarch: arm64
+
 archives:
   - id: m3c-tools-archive
     builds:
@@ -73,6 +97,17 @@ archives:
     builds:
       - skillctl
     name_template: "skillctl-{{ .Os }}-{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+  # The demo ships as a self-contained bundle: skillctl-demo + the skillctl it
+  # shells out to. Double-click on a locked-down Windows laptop, browser opens.
+  - id: skillctl-demo-archive
+    builds:
+      - skillctl-demo
+      - skillctl
+    name_template: "skillctl-demo-{{ .Os }}-{{ .Arch }}"
     format_overrides:
       - goos: windows
         format: zip
