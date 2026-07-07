@@ -57,9 +57,17 @@ build-skillctl:
 	@echo "Building skillctl..."
 	go build -o $(BUILD_DIR)/skillctl ./cmd/skillctl
 
+# Build the skillctl-demo tool. It shells out to skillctl (auto-resolved from
+# ./build/skillctl first), so build that too.
+.PHONY: build-skillctl-demo
+build-skillctl-demo: build-skillctl
+	@echo "Building skillctl-demo..."
+	go build -o $(BUILD_DIR)/skillctl-demo ./cmd/skillctl-demo
+	@echo "Built $(BUILD_DIR)/skillctl-demo — run: $(BUILD_DIR)/skillctl-demo (or --selftest)"
+
 # Build all commands (including POCs)
 .PHONY: build-all
-build-all: build build-skillctl
+build-all: build build-skillctl build-skillctl-demo
 	@echo "Building POCs..."
 	go build -o $(BUILD_DIR)/poc-transcript ./cmd/poc-transcript
 	go build -o $(BUILD_DIR)/poc-menubar ./cmd/poc-menubar
@@ -499,7 +507,8 @@ help:
 	@echo "  check-deps     Verify required dependencies are installed"
 	@echo "  build          Build the main CLI binary"
 	@echo "  build-skillctl Build skillctl skill inventory scanner"
-	@echo "  build-all      Build all binaries (CLI + POCs + skillctl)"
+	@echo "  build-skillctl-demo Build the offline skillctl-demo (+ skillctl)"
+	@echo "  build-all      Build all binaries (CLI + POCs + skillctl + demo)"
 	@echo "  build-app      Build macOS .app bundle"
 	@echo "  dmg            Build macOS DMG installer"
 	@echo "  setup-venv     Create Python venv and install whisper"
