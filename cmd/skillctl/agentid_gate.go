@@ -251,27 +251,39 @@ func emergencyDeniesInstalledSkill(home, skill string) emergencyVerdict {
 	if home == "" {
 		return emergencyVerdict{}
 	}
-	ep := emergencyDenyPath(home)
-	if !fileExists(ep) {
-		return emergencyVerdict{} // opt-in: nothing placed → nothing to enforce.
-	}
-
-	// The file is present → from here, any inability to VERIFY it is fail-closed.
-	_, root, err := loadRootsFn("")
-	if err != nil {
-		return emergencyVerdict{Deny: true, Reason: "emergency_list_untrusted"}
-	}
-	set, lerr := verify.LoadVerifiedEmergencyDenyList(ep, root)
-	if lerr != nil {
-		return emergencyVerdict{Deny: true, Reason: "emergency_list_untrusted"}
-	}
 
 	// Test BOTH the installed digest and the installed author identity. ANY hit
 	// denies. (A "sha256:<digest>" on the list burns the exact bundle; an
 	// "id:<owner>" burns everything that author signed.)
 	digest := installedSkillDigest(home, skill)
 	author := installedSkillAuthor(home, skill)
-	if tok, bad := verify.EmergencyDenies(set, digest, author); bad {
+
+	// (1) SPEC-0279 R5 — the local signed emergency-deny.json. Opt-in per machine:
+	// absent → skip. Present → any inability to VERIFY it is fail-closed.
+	if ep := emergencyDenyPath(home); fileExists(ep) {
+		_, root, err := loadRootsFn("")
+		if err != nil {
+			return emergencyVerdict{Deny: true, Reason: "emergency_list_untrusted"}
+		}
+		set, lerr := verify.LoadVerifiedEmergencyDenyList(ep, root)
+		if lerr != nil {
+			return emergencyVerdict{Deny: true, Reason: "emergency_list_untrusted"}
+		}
+		if tok, bad := verify.EmergencyDenies(set, digest, author); bad {
+			appendGateEvent(home, gateEvent{
+				Source: "hook", Skill: skill, Decision: "deny",
+				Reason: "emergency_deny:" + tok, ExitCode: exitBundleRevoked,
+				ContentDigest: digest,
+			})
+			return emergencyVerdict{Deny: true, Token: tok, Reason: "emergency_denied"}
+		}
+	}
+
+	// (2) FR-0045 Fix C / finding F4 — the ADOPTED signed HEAD's emergency list.
+	// A digest the registry placed in the signed HEAD.emergency MUST deny at the
+	// gate, authenticated by the same registry key (headEmergencyDeniesDigest
+	// re-verifies the HEAD envelope), even with NO local emergency-deny.json.
+	if tok, bad := headEmergencyDeniesDigest(home, digest); bad {
 		appendGateEvent(home, gateEvent{
 			Source: "hook", Skill: skill, Decision: "deny",
 			Reason: "emergency_deny:" + tok, ExitCode: exitBundleRevoked,
@@ -279,6 +291,7 @@ func emergencyDeniesInstalledSkill(home, skill string) emergencyVerdict {
 		})
 		return emergencyVerdict{Deny: true, Token: tok, Reason: "emergency_denied"}
 	}
+
 	return emergencyVerdict{}
 }
 

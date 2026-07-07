@@ -94,6 +94,13 @@ type revokeError struct {
 // the verifier can install. The `reason` field on stderr distinguishes
 // already-revoked from never-admitted for the operator.
 func runRevoke(args []string, stdout, stderr io.Writer) int {
+	// FR-0045 D5 — `skillctl revoke feed …` inspects/refreshes the signed
+	// revocation HEAD (the G5 kill-switch feed). Intercepted before the digest
+	// parsing so "feed" is never mistaken for a bundle digest.
+	if len(args) > 0 && args[0] == "feed" {
+		return runRevokeFeed(args[1:], stdout, stderr)
+	}
+
 	fs := flag.NewFlagSet("revoke", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 

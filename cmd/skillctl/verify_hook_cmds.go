@@ -76,6 +76,18 @@ func refusalCodeForHook(exitCode int, reason string) string {
 		return "agent_emergency_denied"
 	case strings.Contains(reason, "agentid: agent_revocation_stale"):
 		return "agent_revocation_stale"
+	// FR-0045 N1 — the signed revocation HEAD is present but failed verification
+	// (tampered/corrupt). A distinct token from the plain-stale case so the Art.12
+	// trail separates "we could not prove the HEAD authentic" from "the HEAD is
+	// authentic but too old". Checked BEFORE the stale case (the two tokens are
+	// disjoint, but keep the more specific one first).
+	case strings.Contains(reason, "bundle_revocation_head_untrusted"):
+		return "bundle_revocation_head_untrusted"
+	// SPEC-0279 R3 / FR-0045 D4 — bundle-revocation snapshot too stale to trust
+	// (fail-closed for a high-risk skill invocation). Distinct from the agentid
+	// mandate stale case so the Art.12 trail separates the two channels.
+	case strings.Contains(reason, "bundle_revocation_stale"):
+		return "bundle_revocation_stale"
 	// Both the mandate path ("agentid_emergency_list_untrusted") and the
 	// unconditional runtime path ("agent_emergency_list_untrusted") match this
 	// common substring → a present-but-forged emergency file's fail-closed deny.
@@ -349,6 +361,18 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		}
 	}
 
+	// SPEC-0279 R3 / FR-0045 D4 — FRESHNESS FAIL-CLOSED. If the revocation snapshot
+	// is too stale to trust (per the trust-root max_staleness), refuse a high-risk
+	// skill invocation rather than run against a revocation list we can no longer
+	// prove is current. This closes the fail-OPEN gap above where a >TTL sweep cache
+	// silently skips the revocation check. Placed BEFORE the verdict-cache fast path
+	// so a cached allow cannot bypass a stale kill-switch. OPT-IN: a no-op unless a
+	// max_staleness policy is set AND a signed HEAD/checkpoint anchor exists.
+	if stale, reason, msg := revocationSnapshotStale(home, skill); stale {
+		audReason = reason
+		return emitDeny(stdout, stderr, msg)
+	}
+
 	// Managed skill → offline fast path first: a fresh, digest-matching PASS
 	// in the verdict cache (written by the SessionStart sweep or a prior hook)
 	// lets us allow without touching the network (SPEC-0247 §8 / P1.1).
@@ -521,6 +545,82 @@ func reasonForExit(code int, err error) string {
 		}
 		return "verification failed"
 	}
+}
+
+// revocationSnapshotStale applies the SPEC-0279 R3 freshness contract to the
+// sweep-maintained bundle-revocation snapshot at the runtime gate. It is the
+// fail-CLOSED half of the G5 kill-switch (FR-0045 D4): if the revocation snapshot
+// is too stale to trust — older than the trust-root max_staleness — it refuses a
+// high-risk skill invocation rather than run one against a revocation list we can
+// no longer prove is current. That closes the fail-OPEN gap where a >TTL sweep
+// cache silently skipped the revocation check entirely.
+//
+// Deliberately gated to STAY OUT OF THE WAY until a signed freshness anchor
+// exists, so it cannot brick existing installs:
+//   - engaged ONLY when the cache carries an adopted HEAD's issued_at (FR-0045 D3)
+//     OR a signed freshness checkpoint (R4) is on disk. Absent both there is no
+//     signed anchor to judge → no-op (the pre-FR-0045 sweep set-only path stands
+//     unchanged; relevant until the D2 HEAD endpoint ships).
+//   - a no-op anyway when the trust root sets no max_staleness (EvaluateFreshness
+//     ALLOWs an unset ceiling) — so the whole fail-closed behaviour is OPT-IN by
+//     trust-root policy.
+//
+// A skill invocation is classified RiskHigh: its concrete side effects are unknown
+// at the gate, and SPEC-0279 fails high-risk closed past the ceiling (fail-safe).
+// Returns (deny, refusalToken, humanMessage). Every decision is audited (R6) via
+// auditFreshnessDecision inside evaluateFreshness's caller path.
+func revocationSnapshotStale(home, skill string) (bool, string, string) {
+	if home == "" {
+		return false, "", ""
+	}
+	epoch, issuedAt := readRevokedCacheHead(home)
+	cpPath := ""
+	if p := freshnessCheckpointPath(home); fileExists(p) {
+		cpPath = p
+	}
+
+	// FR-0045 N1 — a signed HEAD that is PRESENT but fails verification is tampering,
+	// NOT the pre-D2 "no anchor" case. readRevokedCacheHead returns issued_at="" for
+	// BOTH the ABSENT and the PRESENT-BUT-BAD states, so without this the early no-op
+	// below would flip DENY→ALLOW on a one-byte corruption wherever max_staleness is
+	// configured. Detect the tampered state explicitly and drive it through the
+	// freshness evaluation with an empty anchor (= infinitely stale, per freshness.go)
+	// so a high-risk action fails CLOSED once a max_staleness ceiling is set. The
+	// ABSENT case (no signed HEAD, no checkpoint) stays a no-op — must not brick a
+	// pre-D2 install that never adopted a HEAD.
+	headTampered := false
+	if fileExists(revokedHeadSignedPath(home)) {
+		if _, ok := verifiedAdoptedHead(home); !ok {
+			headTampered = true
+		}
+	}
+
+	if issuedAt == "" && cpPath == "" && !headTampered {
+		return false, "", "" // no signed anchor yet → nothing to enforce (pre-D2).
+	}
+	_, root, rerr := loadRootsFn("")
+	if rerr != nil {
+		// No trust roots → we cannot read the freshness policy. The managed-skill
+		// chain fails closed later on the same condition; do not double-deny here.
+		return false, "", ""
+	}
+	out := evaluateFreshness(freshnessInputs{
+		root:           root,
+		checkpointPath: cpPath,
+		syncedEpoch:    epoch,
+		syncedIssuedAt: issuedAt, // "" for a tampered HEAD → infinitely stale
+		risk:           verify.RiskHigh,
+	})
+	auditFreshnessDecision("hook", skill, out)
+	if out.Err != nil {
+		if headTampered {
+			return true, "bundle_revocation_head_untrusted",
+				fmt.Sprintf("skillctl: BLOCKED '%s' — the signed revocation HEAD is present but its ed25519 envelope failed verification (tampered/corrupt); refusing a high-risk skill invocation (exit %d, fail-closed, FR-0045 N1). Run `skillctl revoke feed --refresh` to re-fetch a valid signed HEAD.", skill, exitRevocationStale)
+		}
+		return true, "bundle_revocation_stale",
+			fmt.Sprintf("skillctl: BLOCKED '%s' — revocation snapshot too stale to trust (exit %d, SPEC-0279 R3); refusing a high-risk skill invocation until the revocation feed is refreshed. Run `skillctl verify --all` (or `skillctl revoke feed --refresh`).", skill, exitRevocationStale)
+	}
+	return false, "", ""
 }
 
 // --- managed/unmanaged classification ---
