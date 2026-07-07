@@ -282,6 +282,74 @@ func TestGate_StaleRevocation_RefusalCode(t *testing.T) {
 	}
 }
 
+// --- Fix N1 — a present-but-unverifiable signed HEAD FAILS CLOSED (not no-op) ---
+
+// TestGate_CorruptSignedHead_FailsClosed proves the regression fix: a one-byte
+// corruption of revoked-head.signed.json must NOT flip the kill-switch open. On the
+// OLD code readRevokedCacheHead returned issued_at="" for the corrupt HEAD and
+// revocationSnapshotStale treated that identically to the ABSENT case (no anchor →
+// allow); this test asserts the gate now DENIES. It also asserts the ABSENT case
+// (with the same max_staleness policy) still no-ops, so pre-D2 installs are not
+// bricked.
+func TestGate_CorruptSignedHead_FailsClosed(t *testing.T) {
+	home := khSetupHome(t)
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	khWriteSelfTrustRoots(t, home, pub)
+
+	origLoad := loadRootsFn
+	loadRootsFn = func(string) (*verify.TrustRoots, *verify.TrustRoot, error) {
+		return nil, &verify.TrustRoot{MaxStaleness: "24h", FailPolicy: "closed"}, nil
+	}
+	t.Cleanup(func() { loadRootsFn = origLoad })
+
+	revoked := headTestDigest('b')
+	installed := headTestDigest('a')
+	khInstallSkill(t, home, "er1-push", installed, "id:author@m3c")
+
+	// (0) ABSENT signed HEAD + no checkpoint, even WITH a max_staleness policy →
+	// no-op (must not brick pre-D2 installs that never adopted a HEAD).
+	if code, out, _ := feed(t, hookEventFor("er1-push")); code != exitOK {
+		t.Fatalf("absent signed HEAD must no-op (allow), got %d out=%q", code, out)
+	}
+
+	// (1) A VALID, fresh signed HEAD → the gate allows (fresh anchor).
+	fresh := time.Now().Add(-1 * time.Hour)
+	persistSignedHead(home, khSignHead(t, priv, 5, fresh, []string{revoked}, nil))
+	writeRevokedCacheHead(home, map[string]struct{}{revoked: {}}, 5, fresh.UTC().Format(time.RFC3339))
+	if code, out, _ := feed(t, hookEventFor("er1-push")); code != exitOK {
+		t.Fatalf("valid fresh signed HEAD should allow, got %d out=%q", code, out)
+	}
+
+	// (2) Corrupt the signed HEAD on disk (one-byte flip) → present-but-unverifiable.
+	p := revokedHeadSignedPath(home)
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b[len(b)/2] ^= 0xff
+	if err := os.WriteFile(p, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Sanity: it really no longer verifies.
+	if _, ok := verifiedAdoptedHead(home); ok {
+		t.Fatal("test invariant: the corrupted HEAD must not verify")
+	}
+
+	// The gate must now DENY (fail-closed) — the one-byte corruption must not open
+	// the kill-switch. On the OLD code this fed() ALLOWED.
+	code, out, _ := feed(t, hookEventFor("er1-push"))
+	assertDeny(t, code, out, "signed revocation HEAD is present but")
+
+	// The machine-readable refusal_code distinguishes tampering from mere staleness.
+	data, err := os.ReadFile(invocationTrailPath(home))
+	if err != nil {
+		t.Fatalf("read invocation trail: %v", err)
+	}
+	if !strings.Contains(string(data), `"refusal_code":"bundle_revocation_head_untrusted"`) {
+		t.Fatalf("tampered-HEAD refusal_code not asserted on the signed trail:\n%s", data)
+	}
+}
+
 // --- fetch-failure eventually denies (not merely "floor kept") ---
 
 func TestGate_AdoptedHeadFetchFailure_EventuallyDenies(t *testing.T) {

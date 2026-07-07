@@ -76,6 +76,13 @@ func refusalCodeForHook(exitCode int, reason string) string {
 		return "agent_emergency_denied"
 	case strings.Contains(reason, "agentid: agent_revocation_stale"):
 		return "agent_revocation_stale"
+	// FR-0045 N1 — the signed revocation HEAD is present but failed verification
+	// (tampered/corrupt). A distinct token from the plain-stale case so the Art.12
+	// trail separates "we could not prove the HEAD authentic" from "the HEAD is
+	// authentic but too old". Checked BEFORE the stale case (the two tokens are
+	// disjoint, but keep the more specific one first).
+	case strings.Contains(reason, "bundle_revocation_head_untrusted"):
+		return "bundle_revocation_head_untrusted"
 	// SPEC-0279 R3 / FR-0045 D4 — bundle-revocation snapshot too stale to trust
 	// (fail-closed for a high-risk skill invocation). Distinct from the agentid
 	// mandate stale case so the Art.12 trail separates the two channels.
@@ -571,7 +578,24 @@ func revocationSnapshotStale(home, skill string) (bool, string, string) {
 	if p := freshnessCheckpointPath(home); fileExists(p) {
 		cpPath = p
 	}
-	if issuedAt == "" && cpPath == "" {
+
+	// FR-0045 N1 — a signed HEAD that is PRESENT but fails verification is tampering,
+	// NOT the pre-D2 "no anchor" case. readRevokedCacheHead returns issued_at="" for
+	// BOTH the ABSENT and the PRESENT-BUT-BAD states, so without this the early no-op
+	// below would flip DENY→ALLOW on a one-byte corruption wherever max_staleness is
+	// configured. Detect the tampered state explicitly and drive it through the
+	// freshness evaluation with an empty anchor (= infinitely stale, per freshness.go)
+	// so a high-risk action fails CLOSED once a max_staleness ceiling is set. The
+	// ABSENT case (no signed HEAD, no checkpoint) stays a no-op — must not brick a
+	// pre-D2 install that never adopted a HEAD.
+	headTampered := false
+	if fileExists(revokedHeadSignedPath(home)) {
+		if _, ok := verifiedAdoptedHead(home); !ok {
+			headTampered = true
+		}
+	}
+
+	if issuedAt == "" && cpPath == "" && !headTampered {
 		return false, "", "" // no signed anchor yet → nothing to enforce (pre-D2).
 	}
 	_, root, rerr := loadRootsFn("")
@@ -584,11 +608,15 @@ func revocationSnapshotStale(home, skill string) (bool, string, string) {
 		root:           root,
 		checkpointPath: cpPath,
 		syncedEpoch:    epoch,
-		syncedIssuedAt: issuedAt,
+		syncedIssuedAt: issuedAt, // "" for a tampered HEAD → infinitely stale
 		risk:           verify.RiskHigh,
 	})
 	auditFreshnessDecision("hook", skill, out)
 	if out.Err != nil {
+		if headTampered {
+			return true, "bundle_revocation_head_untrusted",
+				fmt.Sprintf("skillctl: BLOCKED '%s' — the signed revocation HEAD is present but its ed25519 envelope failed verification (tampered/corrupt); refusing a high-risk skill invocation (exit %d, fail-closed, FR-0045 N1). Run `skillctl revoke feed --refresh` to re-fetch a valid signed HEAD.", skill, exitRevocationStale)
+		}
 		return true, "bundle_revocation_stale",
 			fmt.Sprintf("skillctl: BLOCKED '%s' — revocation snapshot too stale to trust (exit %d, SPEC-0279 R3); refusing a high-risk skill invocation until the revocation feed is refreshed. Run `skillctl verify --all` (or `skillctl revoke feed --refresh`).", skill, exitRevocationStale)
 	}

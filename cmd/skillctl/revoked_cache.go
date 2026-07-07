@@ -61,9 +61,12 @@ func revokedCachePath(home string) string {
 // revokedHeadSignedPath is the sibling file that stores the RAW BYTES of the last
 // ADOPTED, ed25519-signed revocation HEAD (FR-0045 Fix A / finding F2). Because the
 // envelope signature covers epoch/issued_at/emergency, re-verifying these bytes
-// against the pinned registry key makes the freshness floor + the HEAD emergency
-// list UNFORGEABLE without that key — the unsigned revoked-digests.json alone can
-// no longer be rewritten to roll the floor back or drop an emergency digest.
+// against the pinned registry key means the unsigned revoked-digests.json ALONE can
+// no longer be rewritten to roll the floor back or drop an emergency digest — the
+// values are authenticated, not merely cached. This is NOT a claim of being
+// unforgeable: a same-uid attacker can still replace THIS file with a validly-signed
+// OLDER HEAD, and combined with a rewrite of the unsigned high-water-mark can roll
+// the floor back (the combined-vector residual documented in readRevokedCacheHeadRaw).
 func revokedHeadSignedPath(home string) string {
 	return filepath.Join(home, ".claude", "skillctl", "revoked-head.signed.json")
 }
@@ -94,6 +97,10 @@ func writeRevokedCacheHead(home string, set map[string]struct{}, epoch int, issu
 	// group/other-writable file would let a non-owner rewrite the epoch/issued_at
 	// floor (finding F2 / hacker#1). Owner-only.
 	_ = os.WriteFile(p, b, 0o600)
+	// os.WriteFile does NOT chmod an EXISTING file, so a machine upgraded from the
+	// pre-fix 0o644 cache would stay world-readable. Chmod after the write to
+	// tighten it on first upgrade (best-effort; a chmod failure is not fatal).
+	_ = os.Chmod(p, 0o600)
 }
 
 // persistSignedHead writes the raw bytes of a VERIFIED, adopted revocation HEAD to
@@ -111,6 +118,9 @@ func persistSignedHead(home string, head map[string]any) {
 	p := revokedHeadSignedPath(home)
 	_ = os.MkdirAll(filepath.Dir(p), 0o700)
 	_ = os.WriteFile(p, b, 0o600)
+	// Tighten an existing (upgraded) file too — os.WriteFile won't chmod one that
+	// already exists. Best-effort.
+	_ = os.Chmod(p, 0o600)
 }
 
 // verifiedAdoptedHead loads the persisted signed HEAD and RE-VERIFIES its ed25519
@@ -174,6 +184,14 @@ func headEmergencyDeniesDigest(home, digest string) (string, bool) {
 // on-disk value; it doubles as the monotonic high-water-mark store — writeRevoked-
 // CacheHead only ever writes it with an epoch that AdoptRevocationHead has already
 // proven >= the prior floor, so it never decreases through the legitimate path.
+//
+// CAVEAT (documented same-uid residual): the high-water-mark lives in this UNSIGNED
+// file, so the monotonic clamp is only same-uid-defeatable, NOT unforgeable. A
+// process running as the owning uid can rewrite BOTH this json epoch AND replace
+// the signed-head file with a validly-signed OLDER HEAD to roll the floor back
+// (the "combined-vector rollback"). We defeat each SINGLE vector (json-only, or
+// signed-head-only), which is all local-file state without a hardware root of trust
+// can promise; the combined vector is a knowingly-accepted residual, not closed.
 func readRevokedCacheHeadRaw(home string) (int, string) {
 	b, err := os.ReadFile(revokedCachePath(home))
 	if err != nil {
@@ -194,10 +212,14 @@ func readRevokedCacheHeadRaw(home string) (int, string) {
 // the pinned SelfTrustRoots key and the floor is derived from the verified HEAD —
 // so an attacker who rewrites the unsigned json cannot move the floor. The unsigned
 // json is used ONLY when no signed HEAD is present (legacy / pre-adopt caches), and
-// as the monotonic high-water-mark store:
+// as the (same-uid-defeatable — see readRevokedCacheHeadRaw) high-water-mark store:
 //
-//   - a signed HEAD present but unverifiable (tampered/forged, or trust roots gone)
-//     is fail-safe: keep the high-water epoch, treat freshness as UNKNOWN ("");
+//   - a signed HEAD present but unverifiable (tampered/forged, or trust roots gone):
+//     keep the high-water epoch and return issued_at="" to signal UNKNOWN freshness.
+//     NB: "" here is NOT by itself a deny — a caller that ignores it would fail OPEN.
+//     revocationSnapshotStale (N1) therefore separately detects this present-but-bad
+//     state and fails closed for a high-risk action under a max_staleness policy,
+//     mirroring freshness.go's "missing issued_at = infinitely stale" rule.
 //   - a signed HEAD whose epoch is BELOW the high-water-mark is a replayed older
 //     HEAD → reject its (lower) epoch and its freshness, keep the high-water floor.
 func readRevokedCacheHead(home string) (int, string) {
@@ -210,7 +232,9 @@ func readRevokedCacheHead(home string) (int, string) {
 	head, ok := verifiedAdoptedHead(home)
 	if !ok {
 		// Present but unverifiable → do NOT fall back to the (forgeable) json
-		// freshness; keep the high-water epoch and distrust freshness (fail-safe).
+		// freshness; keep the high-water epoch and return "" for UNKNOWN freshness.
+		// The deny for this case lives in revocationSnapshotStale (N1) — returning
+		// "" alone is not a deny.
 		return hwEpoch, ""
 	}
 	epoch, eerr := registry.HeadEpoch(head)
