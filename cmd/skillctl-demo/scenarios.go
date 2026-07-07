@@ -11,9 +11,10 @@ package main
 //   S1  verify --bundle : 0 (clean)      → 10 (digest mismatch after poison)
 //   S2A verify-hook     : 0 (gate allows) → 2 (gate BLOCKS the tampered load)
 //       verify --all    : per-skill trust verdict 10 (digest mismatch) → quarantined
-//   S5  audit cleanup   : 0 (dry-run + token) → 1 (confirm REFUSES on drift)
-//       NOTE: the design doc predicted exit 2 for the drift refusal; the built
-//       binary returns exitGeneric (1). We show the REAL code and say so.
+//   S5  audit cleanup   : 0 (dry-run + token) → 2 (confirm REFUSES on drift)
+//       The two-step confirm returns exitUsage (2) when the token fails
+//       re-verification (drift/expiry/tamper) — a precondition refusal, matching
+//       the G-23 contract in DEMO-skill-trust-scenarios.md (S5).
 
 // Scenario is one card in the demo.
 type Scenario struct {
@@ -58,7 +59,7 @@ func Scenarios() []Scenario {
 			SVG:     "scenario-5-reversible-governance.svg",
 			Story:   "The dangerous ops aren't only the skills — a cache cleanup can itself be weaponised or fat-fingered. skillctl's own destructive op is a G-23 two-step: a signed dry-run plan, then a confirm that RE-CHECKS the live affected-set. If the set drifted, it refuses. There is no --force.",
 			Without: "A one-shot `--force delete`: no plan, no re-check, no audit trail, no undo.",
-			ExitDoc: "0 (dry-run + signed token) → 1 (confirm REFUSES on drift)",
+			ExitDoc: "0 (dry-run + signed token) → 2 (confirm REFUSES on drift)",
 			Run:     runS5,
 		},
 		{
@@ -164,8 +165,8 @@ func runS5(d *Driver) {
 	d.wait()
 
 	d.step("3 · Confirm re-checks the LIVE set against the token — it drifted, so the destructive op REFUSES.")
-	d.exec(1, "refused", "", "audit", "--cleanup", "--confirm-delete", "--dry-run-cleanup-token", token, "--format", "json")
-	d.note("Refused with exit 1 (the built binary's exitGeneric + drift message). No --force exists; both the dry-run and the refusal are auditable. NOTE: the design doc predicted exit 2 here — the tool asserts the REAL code (1).")
+	d.exec(2, "refused", "", "audit", "--cleanup", "--confirm-delete", "--dry-run-cleanup-token", token, "--format", "json")
+	d.note("Refused with exit 2 (usage/precondition — the confirm's re-verification failed on drift). No --force exists; both the dry-run and the refusal are auditable.")
 }
 
 func itoa(n int) string {

@@ -63,7 +63,7 @@ func main() {
 		os.Exit(runSelftest(sb, skctl))
 	}
 
-	renderer := &CLIRenderer{W: os.Stdout, Color: cfg.noColor == false && isTerminal(os.Stdout)}
+	renderer := &CLIRenderer{W: os.Stdout, Color: !cfg.noColor && isTerminal(os.Stdout)}
 	bus := NewBus(renderer)
 
 	// P1: web mirror.
