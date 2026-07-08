@@ -110,6 +110,10 @@ func main() {
 	case "gate-stats":
 		os.Exit(runGateStats(os.Args[2:], os.Stdout, os.Stderr))
 	// === END SPEC-0255 ===
+	// === SPEC-0247 §7.3 P1.3: managed-settings pinning (make the gate un-deletable). ===
+	case "pin":
+		os.Exit(runPin(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0247 P1.3 ===
 	// === SPEC-0189 S0a: scanner family dispatchers (imported from
 	// feature/thinking-engine-phase1; pre-SPEC-0189 behaviour preserved). ===
 	case "scan":
@@ -217,6 +221,9 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "               §7 chain, and emits allow/deny. Fail-closed. Wire as a hook, not by hand.")
 	fmt.Fprintln(w, "  gate-stats   Summarise the gate-audit.jsonl (decisions, top blocks, cache-hit rate).")
 	fmt.Fprintln(w, "               Flags: --since <168h|YYYY-MM-DD>, --json.")
+	fmt.Fprintln(w, "  pin          Pin the trust gate into Claude Code managed settings so a")
+	fmt.Fprintln(w, "               non-privileged user cannot delete it (SPEC-0247 §7.3).")
+	fmt.Fprintln(w, "               Subcommands: generate | status | install. --strict for CISO lockdown.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Commands (SPEC-0277 / agent-instance identity):")
 	fmt.Fprintln(w, "  agentid issue   Owner-sign an AgentID mandate (--owner --owner-key --for-agent")
