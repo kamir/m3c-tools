@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -303,15 +302,4 @@ func obstacleForExit(code int) string {
 	default:
 		return "unexpected exit " + strconv.Itoa(code) + " — see `skillctl <cmd> --help` for the numbered codes"
 	}
-}
-
-// sortedBeats returns a Kata's beats ordered by time (stable board rendering).
-func sortedBeats(rec *kataRecord) []Beat {
-	if rec == nil {
-		return nil
-	}
-	out := make([]Beat, len(rec.Beats))
-	copy(out, rec.Beats)
-	sort.SliceStable(out, func(i, j int) bool { return out[i].At.Before(out[j].At) })
-	return out
 }
