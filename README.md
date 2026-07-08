@@ -145,7 +145,7 @@ See the [skillctl manual](docs/manual-skillctl.md).
 |------|-----|
 | [**Quickstart: m3c-tools**](docs/quickstart-m3c-tools.md) | Capture your first memory in 5 minutes |
 | [**Quickstart: skillctl**](docs/quickstart-skillctl.md) | Sign, install and verify a skill in 5 minutes |
-| [**Quickstart: skillctl-demo**](docs/quickstart-skillctl-demo.md) | Run the skill-trust scenarios offline on your own machine — 3 run live with real exit codes (S1/S2A/S5); the remaining panels render their story but run nothing (S3 is a built-but-not-run PARTIAL, S2BC/S4 are ROADMAP) — plus Kata training (planned) |
+| [**Quickstart: skillctl-demo**](docs/quickstart-skillctl-demo.md) | Run the skill-trust scenarios offline on your own machine — 3 run live with real exit codes (S1/S2A/S5); the remaining panels render their story but run nothing (S3 is a built-but-not-run PARTIAL, S2BC/S4 are ROADMAP) — plus hands-on Kata training (shipped): five Katas, each beat a real skillctl exit code (K5 demonstrates the offline revocation deny live) |
 | [**Manual: m3c-tools**](docs/manual-m3c-tools.md) | Every command, flag and config variable |
 | [**Manual: skillctl**](docs/manual-skillctl.md) | The full trust lifecycle, command by command |
 | [Menu Bar App](docs/menubar-app.md) | Channels, Observation Window, menu items (macOS) |
