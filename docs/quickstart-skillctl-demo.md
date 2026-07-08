@@ -40,8 +40,10 @@ mirror on `127.0.0.1`, and opens your browser. It prints the sandbox `HOME`, the
 
 | Flag | Purpose |
 |------|---------|
-| `--mode guided\|kiosk` | `guided` (default): Enter advances each step; one pass, then it holds so the web mirror stays up. `kiosk`: timed auto-loop for a booth / screen-share. **These are the only two modes** — any other value is forced back to `guided`. |
+| `--mode guided\|kiosk\|kata` | `guided` (default): Enter advances each step; one pass, then it holds so the web mirror stays up. `kiosk`: timed auto-loop for a booth / screen-share. `kata`: hands-on training — the coach loop + Kata board (§5). Any unrecognised value is forced back to `guided`. |
 | `--kiosk-delay <dur>` | Auto-advance delay in kiosk mode (default `3s`). |
+| `--kata <K1..K5>` | Jump straight to one Kata (also forces `--mode kata`). |
+| `--kata-list` | Print the 5-Kata board and exit (implies `--mode kata`). |
 | `--port <n>` | Web-mirror port on `127.0.0.1` (default `8765`). |
 | `--no-browser` | Do not auto-open the browser (print the URL only). |
 | `--no-web` | CLI only; do not start the web mirror. |
@@ -51,6 +53,9 @@ mirror on `127.0.0.1`, and opens your browser. It prints the sandbox `HOME`, the
 
 ```bash
 ./skillctl-demo --mode kiosk --kiosk-delay 5s      # booth loop
+./skillctl-demo --mode kata                         # hands-on training (§5)
+./skillctl-demo --kata K3                            # jump straight to Kata K3
+./skillctl-demo --kata-list                         # print the 5-Kata board and exit
 ./skillctl-demo --no-browser --port 9000           # headless / custom port
 ./skillctl-demo --skillctl /usr/local/bin/skillctl # point at a specific skillctl
 ```
@@ -109,7 +114,7 @@ The deck also shows three scenarios the demo does **not** run — each renders i
 | Scenario | Tier | Documented exit | Why it isn't run here |
 |----------|------|-----------------|-----------------------|
 | **S2BC** — runtime envelope violation + fleet kill | `ROADMAP` | `envelope 32 · revoke 17` | The Go-native OS-level egress cage is FR-0044 (pending); the block point exists only as a Python reference (`pkg/skillgate`, SPEC-0202). Exit `32` is shown as roadmap — no `skillctl` subcommand emits it today. |
-| **S3** — fleet kill-switch under live compromise | `PARTIAL` | `17 (revoked) / 22 (offline fail-closed)` | The **offline freshness contract IS built** — `verify --bundle --revocations/--emergency` returns `17` (revoked) and `22` (stale + high-risk, fail-closed), proven by SPEC-0279 tests. The signed-HEAD fleet-propagation endpoint (FR-0045) is the remaining work, and this offline demo stands up no registry — so S3 is shown as a built surface, not run live. |
+| **S3** — fleet kill-switch under live compromise | `PARTIAL` | `17 (revoked) / 22 (offline fail-closed)` | The **offline revocation deny is now demonstrable LIVE** — Kata **K5** runs `verify --bundle … --revocations <signed-list>` and a revoked digest returns a real `17`; a forged/untrusted list is fail-closed. The freshness contract (`--emergency`/`--checkpoint` → `22` on a stale snapshot + high-risk action) and FR-0045's signed-`RevocationHead` feed (`skillctl revoke feed`, HEAD-aware fetch) are merged. What stays roadmap here is **live fleet propagation** — the offline demo stands up no registry, so the fleet-wide kill event isn't executed live. Honest scope: this is a fail-closed kill-switch against **feed/transport compromise** (MITM, malicious mirror, set truncation, epoch rollback, replay, forged freshness — all defeated by the pinned registry key); it is **not** tamper-proof against a same-UID compromised process. |
 | **S4** — untrusted internet import → airlock | `ROADMAP` | `1 (refused on critical-rule hit)` | A static import scanner exists (`import_public_cmds.go`, SPEC-0201), but the airlock flow isn't wired for the offline demo — so S4 stays a labelled roadmap panel. |
 
 ---
@@ -134,45 +139,52 @@ the CI-friendly proof that the honest core actually blocks.
 
 ---
 
-## 5. Training mode (Kata) — **planned**, not shipped
+## 5. Training mode (Kata) — **shipped**
 
-> **Status: PLANNED (P4 in `DEMO-TOOL-design.md`).** The binary today accepts **only** `--mode
-> guided` and `--mode kiosk`; there is no Kata flag, code path, or scenario in the shipped
-> tool. The section below describes the *designed* onboarding mode — treat it as a preview,
-> not a runnable command.
+> **Status: BUILT (`--mode kata`, `--kata K1..K5`, `--kata-list`).** The binary ships all three
+> modes — `guided`, `kiosk`, and `kata`. Kata mode drives the real `skillctl` through five
+> hands-on drills; **every beat is a real `skillctl` exit code**, never a simulated one.
 
-Where the demo modes *sell* (a buyer watches containment happen), the designed **Kata** mode
-*onboards* — it turns "watched a demo" into "can operate `skillctl`" through **deliberate
-practice with a coach**, not a click-through. It reuses the CEW Kata vocabulary (SPEC-0303:
-the 3-state machine, the **N/3 chip**, *sitzt* / *rust*) so tool-onboarding reinforces the
-same coaching model. Nothing is self-reported — **a "pass" is a real exit code.**
+Where the demo modes *sell* (a buyer watches containment happen), the **Kata** mode *onboards* —
+it turns "watched a demo" into "can operate `skillctl`" through **deliberate practice with a
+coach**, not a click-through. It reuses the CEW Kata vocabulary (SPEC-0303: the 3-state machine,
+the **N/3 chip**, *sitzt* / *rust*) so tool-onboarding reinforces the same coaching model.
+Nothing is self-reported — **a "pass" is a real exit code.**
 
-**The five planned Katas** (target condition → practised with → green when):
+```bash
+./skillctl-demo --mode kata        # start the coach loop + Kata board
+./skillctl-demo --kata K2          # jump straight to K2
+./skillctl-demo --kata-list        # print the 5-Kata board and exit
+```
+
+**The five Katas** (target condition → practised with → green when):
 
 | Kata | The learner can… | Practised with | Green when |
 |------|------------------|----------------|-----------|
-| **K1 Seal & prove** | seal a skill and prove authorship offline | `keygen → pack → sign → verify --bundle` | 3 distinct clean reps |
+| **K1 Seal & prove** | seal a skill and prove authorship offline | `keygen → pack → sign → verify --bundle` → exit `0` | 3 distinct clean reps |
 | **K2 Detect tamper** | catch a modified skill before it runs | edit on disk → `verify --all` → exit `10` | 3 reps |
 | **K3 Govern reversibly** | run a destructive op that refuses to be forced | `audit --cleanup --dry-run-cleanup` → `--cleanup --confirm-delete` on a drifted set → exit `2` | 3 reps |
-| **K4 Trust roots & install** | pin a registry and install only what's admitted | `trust add → install → verify` | 3 reps |
-| **K5 Revoke & fail-closed** *(concept + roadmap)* | reason about fleet revocation & offline deny | `revoke` live + the S3 roadmap panel | 1 rep + read |
+| **K4 Trust roots & install** | pin a registry and install only what's admitted | `trust add → install → verify` → exit `0` | 3 reps |
+| **K5 Revoke & fail-closed** | deny a revoked skill offline, fail-closed | `verify --bundle … --revocations <signed-list>` → revoked digest → exit `17` | 3 reps (+ the S3 fleet-propagation roadmap panel to read) |
+
+K5 is now a **live** beat: the offline revocation deny (`verify --bundle --revocations` → exit
+`17`) runs for real. What remains roadmap is only **live fleet propagation** — the offline demo
+stands up no registry (see the S3 panel in §3).
 
 **The coach loop (the tool plays the coach — 5 questions per cycle):**
 
 1. **Target** — the capability you should be able to demonstrate.
 2. **Actual** — "Where are you now? Run it and observe." (the learner runs the real command)
-3. **Obstacle** — "What blocked you?" (the tool maps the real exit code `10`/`11`/`12`/`2` to a
+3. **Obstacle** — "What blocked you?" (the tool maps the real exit code `10`/`2`/`17` to a
    plain-language obstacle).
 4. **Next experiment + expectation** — the learner predicts the exit code, then acts.
 5. **Go & see** — the learner runs it; the tool shows the **real** result and records a *beat*.
 
-**Mastery.** A clean distinct rep is a beat toward **N/3 → *sitzt* (green)**; a Kata *rusts* if
-unpractised past a stall window (identical to CEW's 3-state machine). Progress would persist
-locally (`~/.skillctl-demo/kata-progress.json`), with a later bridge to `cew_kata_events`
-(SPEC-0303) and the `skillprofile` aware→practiced→fluent ladder (SPEC-0121). The browser would
-show a **Kata board** — one card per Kata with a rot/gelb/grün state and the N/3 chip.
-
-Again: this is the **design** (P4). Today, run `--mode guided` or `--mode kiosk`.
+**Mastery.** A clean distinct rep is a beat toward **N/3 → *sitzt* (grün)**; a Kata *rusts*
+(back toward rot) if unpractised past the stall window (`KATA_STALL_DAYS`, default `5`) —
+identical to CEW's 3-state machine. Progress **persists locally** at
+`~/.skillctl-demo/kata-progress.json`. The browser shows a **Kata board** — one card per Kata
+with a rot/gelb/grün state and the N/3 chip — updating live as beats land.
 
 ---
 

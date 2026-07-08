@@ -96,7 +96,7 @@ Additional codes surface in specific commands:
 | `19` | `awareness reset`, `import-public` | identity mismatch — `client_identity` ≠ `admitted_by_identity`; also source-blocked on import. |
 | `20` | `agentid verify` | self-attested / approver-floor not met (reviewer_id == author_id; SPEC-0246 §5.2). |
 | `21` | `agentid verify` | AgentID mandate expired. |
-| `22` | `agentid verify`, `verify --bundle` | revocation snapshot stale — freshness fail-closed (SPEC-0279 R3). |
+| `22` | `agentid verify`, `verify --bundle`, `verify-hook` | revocation snapshot stale — freshness fail-closed (SPEC-0279 R3 / FR-0045 D4). |
 | `23` | `translog verify`, `verify` | transparency-log inclusion missing / receipt not included (SPEC-0278 L1). |
 | `24` | `translog witness` | split-view (equivocation) detected. |
 | `25` | `translog consistency` | consistency / append-only rewrite violation detected. |
@@ -320,7 +320,7 @@ sidecar or `--meta`).
 | `-trust-roots` | Trust-roots YAML to use instead of the default. Pair with `--bundle` for a portable kit. |
 | `-offline` | Network-free verify: use stashed metadata + bind on-disk content to the signed `.skb`. No registry calls. |
 | `-revocations` | Signed revocation list to enforce offline for `--bundle`. Revoked digest → `17`; forged list → `12`. |
-| `-checkpoint` | Signed freshness checkpoint (SPEC-0279 R4) to reset the `--revocations` staleness clock. Forged/stale → `12`. |
+| `-checkpoint` | Signed freshness checkpoint (SPEC-0279 R4) to reset the `--revocations` staleness clock. Forged/untrusted → `12`; a rollback / too-old checkpoint that can't reset the clock leaves the snapshot stale → `22`. |
 | `-emergency` | Signed emergency deny-list (SPEC-0279 R5). Named digest → `17`; forged list → `12`. |
 | `-allow-yellow` | Permit a yellow result against a green-required trust root (does not re-audit). |
 | `-governance-min green\|yellow` | Override the trust-root's `governance_minimum`. |
@@ -373,10 +373,11 @@ Exit: `0` ok · `1` generic/network/non-2xx · `2` usage.
 
 ---
 
-### `revoke` — revoke an admitted bundle
+### `revoke` — revoke an admitted bundle (and the kill-switch feed)
 
 ```bash
 skillctl revoke <bundle-digest> --reason <code> [--registry <url>] [--timeout <duration>]
+skillctl revoke feed [--status] [--refresh] [--registry <url>] [--tenant <T>]
 ```
 
 Revokes an admitted bundle (SPEC-0188 §4.5) by publishing a **signed, offline-verifiable**
@@ -398,6 +399,31 @@ Three actor roles: **`original_author`** (the default — signs with the author 
 
 ```bash
 skillctl revoke sha256:<hex> --reason key_compromise --registry https://aims.example.com/api/skills
+```
+
+**`revoke feed` — the fleet kill-switch feed (FR-0045 D5).** A distinct, operator-facing mode:
+it views or refreshes the signed **revocation HEAD** — a HEAD-aware, signed snapshot of the
+current revocation set that the verifier fetches and enforces fail-closed. `feed` is
+intercepted as the first argument **before** any digest parsing, so it is never mistaken for a
+bundle digest.
+
+| Flag | Purpose |
+|------|---------|
+| `-status` | **(default)** Fetch the signed revocation HEAD, verify it against the pinned registry key, and print its epoch / issued-at / staleness / counts — read-only; does **not** adopt it into the local cache. |
+| `-refresh` | Run the revocation sweep now: fetch the latest signed HEAD **and adopt it** into the local cache + freshness anchor the gate reads. |
+| `-registry` | Registry base URL. |
+| `-tenant` | Scope the feed to a tenant. |
+
+Because the HEAD is signed and checked against a **pinned** registry key, a MITM'd, mirrored,
+truncated, rolled-back, replayed, or forged feed is rejected rather than trusted — this is the
+transport-side, fail-closed kill-switch. It is **not** tamper-evident against a same-UID
+compromised local process. Live fleet propagation of the HEAD is still rolling out; the offline
+enforcement contract (a revoked digest → `17`, a stale snapshot → `22`) is built and testable
+today.
+
+```bash
+skillctl revoke feed --status
+skillctl revoke feed --refresh --registry https://aims.example.com/api/skills
 ```
 
 Related paths: `publish --revoke` posts the same `BundleRevokedEvent` to your personal ER1
@@ -569,6 +595,15 @@ chain, and emits an allow/deny decision as JSON on stdout. **Fail-closed** — i
 or verify the event, it denies. Wire it in your Claude Code settings as a hook; do **not** run
 it by hand. Running it interactively prints a fail-closed deny (unreadable stdin) and exits
 `2`.
+
+**Revocation freshness is fail-closed at the gate too (FR-0045 D4).** Beyond the trust chain,
+the hook enforces the SPEC-0279 freshness contract: an **emergency deny**, or a revocation
+snapshot too stale to trust for the requested action (`bundle_revocation_stale` /
+`agent_revocation_stale`, SPEC-0279 R3/R5), denies rather than allows. The hook **process**
+always exits `2` to block the tool call; the deny message carries the underlying
+`refusal_code` — `17` (revoked / emergency deny) or `22` (revocation snapshot stale). This is
+the runtime edge of the FR-0045 kill-switch: because the revocation HEAD is checked against a
+pinned registry key, a tampered, rolled-back, or forged feed is refused, not silently trusted.
 
 ```json
 // settings.json (excerpt) — wire it as a PreToolUse(Skill) hook
