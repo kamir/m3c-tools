@@ -36,6 +36,13 @@ type Event struct {
 	Expected int    `json:"expected,omitempty"`
 	Verdict  string `json:"verdict,omitempty"` // blocked | allowed | refused
 	OK       bool   `json:"ok,omitempty"`      // did the observed exit match expectation?
+
+	// kata-board fields (Kind "beat"): the local mastery state after a rep.
+	State    string `json:"state,omitempty"`    // rot | gelb | gruen
+	Reps     int    `json:"reps,omitempty"`     // distinct clean reps so far
+	Required int    `json:"required,omitempty"` // reps needed for grün (sitzt)
+	Rusting  bool   `json:"rusting,omitempty"`  // banked but freshness lapsed
+	Added    bool   `json:"added,omitempty"`    // did this rep advance the distinct count?
 }
 
 // Emitter receives events. The Bus fans out to every registered emitter.

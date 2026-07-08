@@ -23,14 +23,25 @@ var webFS embed.FS
 
 // Server mirrors the bus to browsers.
 type Server struct {
-	bus      *Bus
-	sandbox  *Sandbox
-	skillctl string
-	mode     string
+	bus       *Bus
+	sandbox   *Sandbox
+	skillctl  string
+	mode      string
+	kataStore *KataStore // set in kata mode so /api/kata reflects live progress
+	stallDays int
 }
 
 func NewServer(bus *Bus, sb *Sandbox, skillctl, mode string) *Server {
-	return &Server{bus: bus, sandbox: sb, skillctl: skillctl, mode: mode}
+	return &Server{bus: bus, sandbox: sb, skillctl: skillctl, mode: mode, stallDays: DefaultStallDays}
+}
+
+// SetKata wires the shared progress store + stall window so the /kata board and
+// /api/kata endpoint reflect the same local state the coach records into.
+func (s *Server) SetKata(store *KataStore, stallDays int) {
+	s.kataStore = store
+	if stallDays > 0 {
+		s.stallDays = stallDays
+	}
 }
 
 // Start binds 127.0.0.1 on the requested port (scanning upward if busy) and
@@ -54,6 +65,8 @@ func (s *Server) Start(port int) (string, error) {
 	mux.HandleFunc("/events", s.handleEvents)
 	mux.HandleFunc("/api/scenarios", s.handleScenarios)
 	mux.HandleFunc("/api/state", s.handleState)
+	mux.HandleFunc("/api/kata", s.handleKata)
+	mux.HandleFunc("/kata", s.handleKataBoard)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
@@ -134,6 +147,34 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 		"home":     s.sandbox.Home,
 		"mode":     s.mode,
 	})
+}
+
+// handleKata returns the current Kata board rows (local progress projection).
+// When no store is wired (guided/kiosk mode), it reports an empty board rather
+// than 404 so the page renders a neutral "not in kata mode" state.
+func (s *Server) handleKata(w http.ResponseWriter, r *http.Request) {
+	store := s.kataStore
+	if store == nil {
+		store = NewKataStore(DefaultProgressPath())
+		_ = store.Load()
+	}
+	writeJSON(w, map[string]any{
+		"stall_days": s.stallDays,
+		"rows":       BoardRows(store, s.stallDays, time.Now()),
+	})
+}
+
+// handleKataBoard serves the offline, self-contained Kata board page.
+func (s *Server) handleKataBoard(w http.ResponseWriter, r *http.Request) {
+	b, err := webFS.ReadFile("web/kata-board.html")
+	if err != nil {
+		http.Error(w, "kata-board missing", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Security-Policy",
+		"default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'")
+	_, _ = w.Write(b)
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

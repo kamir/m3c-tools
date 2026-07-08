@@ -32,10 +32,21 @@ type config struct {
 	noWeb      bool
 	kioskDelay time.Duration
 	selftest   bool
+	kata       string // jump straight to one Kata (K1..K5); empty ⇒ all
+	kataList   bool   // print the Kata board and exit (non-interactive)
 }
 
 func main() {
 	cfg := parseFlags()
+
+	// --kata-list is a pure, non-interactive board print: it reflects the local
+	// progress store only (no skillctl, no sandbox), so it can never hang.
+	if cfg.kataList {
+		store := NewKataStore(DefaultProgressPath())
+		_ = store.Load()
+		PrintBoard(os.Stdout, store, StallDays(), time.Now())
+		os.Exit(0)
+	}
 
 	skctl, err := resolveSkillctl(cfg.skillctl)
 	if err != nil {
@@ -85,6 +96,12 @@ func main() {
 	}
 	bus.Emit(Event{Kind: "ready", Text: ready})
 
+	// Kata mode is hands-on: no kiosk, a coaching loop instead of the deck.
+	if cfg.mode == "kata" {
+		runKata(cfg, sb, skctl, bus, srv, url)
+		return
+	}
+
 	if url != "" && !cfg.noBrowser {
 		openBrowser(url)
 	}
@@ -112,6 +129,51 @@ func main() {
 	}
 }
 
+// runKata drives the hands-on Kata coaching loop. It shares one KataStore with
+// the web board (so the browser reflects live progress) and reads stdin for the
+// learner's predictions; a closed stdin pauses cleanly rather than spinning.
+func runKata(cfg config, sb *Sandbox, skctl string, bus *Bus, srv *Server, url string) {
+	store := NewKataStore(DefaultProgressPath())
+	if err := store.Load(); err != nil {
+		fmt.Fprintln(os.Stderr, "skillctl-demo: kata progress load: "+err.Error())
+	}
+	stall := StallDays()
+	kataURL := url
+	if kataURL != "" {
+		kataURL += "/kata"
+	}
+	if srv != nil {
+		srv.SetKata(store, stall)
+	}
+	if kataURL != "" && !cfg.noBrowser {
+		openBrowser(kataURL)
+	}
+	ready := "KATA mode — hands-on. Every beat is a real skillctl exit code."
+	if kataURL != "" {
+		ready += "  ·  board " + kataURL
+	}
+	bus.Emit(Event{Kind: "ready", Text: ready})
+
+	run := &Runner{Skillctl: skctl, Home: sb.Home}
+	coach := NewCoach(sb, run, bus, store, bufio.NewReader(os.Stdin), stall)
+	if cfg.kata != "" {
+		k := KataByID(cfg.kata)
+		if k == nil {
+			fmt.Fprintln(os.Stderr, "skillctl-demo: unknown --kata "+cfg.kata+" (want K1..K5)")
+			os.Exit(2)
+		}
+		coach.Coach(k)
+	} else {
+		coach.CoachAll()
+	}
+
+	PrintBoard(os.Stdout, store, stall, time.Now())
+	if url != "" {
+		fmt.Fprintln(os.Stdout, "\n  Kata board still serving at "+kataURL+" — Ctrl-C to exit.")
+		select {} // hold so the browser board stays live (signal handler cleans up)
+	}
+}
+
 // runDeck walks every scenario: header, then either the live steps or (for a
 // roadmap panel) a pause on the labelled card.
 func runDeck(d *Driver, scenarios []Scenario, pause func()) {
@@ -129,7 +191,7 @@ func runDeck(d *Driver, scenarios []Scenario, pause func()) {
 
 func parseFlags() config {
 	var cfg config
-	flag.StringVar(&cfg.mode, "mode", "guided", "guided (Enter to advance) | kiosk (timed auto-loop)")
+	flag.StringVar(&cfg.mode, "mode", "guided", "guided (Enter to advance) | kiosk (timed auto-loop) | kata (hands-on training)")
 	flag.IntVar(&cfg.port, "port", 8765, "web mirror port on 127.0.0.1")
 	flag.StringVar(&cfg.skillctl, "skillctl", "", "path to the real skillctl binary (default: ./build/skillctl, next to this binary, or $PATH)")
 	flag.BoolVar(&cfg.noBrowser, "no-browser", false, "do not auto-open the browser")
@@ -137,9 +199,15 @@ func parseFlags() config {
 	flag.BoolVar(&cfg.noWeb, "no-web", false, "CLI only; do not start the web mirror")
 	flag.DurationVar(&cfg.kioskDelay, "kiosk-delay", 3*time.Second, "auto-advance delay in kiosk mode")
 	flag.BoolVar(&cfg.selftest, "selftest", false, "run the LIVE scenarios non-interactively and assert the real exit codes")
+	flag.StringVar(&cfg.kata, "kata", "", "kata mode: jump straight to one Kata (K1..K5); empty runs all in order")
+	flag.BoolVar(&cfg.kataList, "kata-list", false, "print the Kata board (local progress) and exit; implies -mode kata")
 	flag.Parse()
-	if cfg.mode != "guided" && cfg.mode != "kiosk" {
+	if cfg.mode != "guided" && cfg.mode != "kiosk" && cfg.mode != "kata" {
 		cfg.mode = "guided"
+	}
+	// --kata / --kata-list select kata mode without needing --mode kata too.
+	if cfg.kata != "" || cfg.kataList {
+		cfg.mode = "kata"
 	}
 	return cfg
 }
