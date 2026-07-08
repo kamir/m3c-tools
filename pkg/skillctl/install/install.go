@@ -540,6 +540,64 @@ func CanonicalSkillName(name string) (string, error) {
 	return name, nil
 }
 
+// CanonicalPath is the ONE realpath fixed point for path classification (SPEC-0317
+// R-6.2). The `skillctl guard-path` side-channel guard MUST resolve BOTH the
+// access target and the skills root through THIS function before comparing them,
+// so a lexical HasPrefix check (which the skills dir's own symlinks — browse →
+// gstack/browse, find-skills → ../../.agents/skills — would both false-negative
+// and false-positive) is never the classifier. It is the path analogue of
+// CanonicalSkillName: one resolution both classify and any future enforce share,
+// so they cannot diverge.
+//
+// It expands a leading ~, makes the path absolute + lexically clean, then resolves
+// symlinks (filepath.EvalSymlinks) to a single fixed point. A target that does not
+// yet exist (e.g. a Write creating a new file) has no realpath, so the LONGEST
+// EXISTING ANCESTOR is resolved and the not-yet-existing tail is re-appended —
+// this still defeats a symlinked-in ancestor while classifying a create-in-place.
+func CanonicalPath(p string) (string, error) {
+	if strings.TrimSpace(p) == "" {
+		return "", errors.New("empty path")
+	}
+	if p == "~" || strings.HasPrefix(p, "~/") {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			if p == "~" {
+				p = home
+			} else {
+				p = filepath.Join(home, p[2:])
+			}
+		}
+	}
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", err
+	}
+	abs = filepath.Clean(abs)
+	return evalSymlinksLongestPrefix(abs), nil
+}
+
+// evalSymlinksLongestPrefix resolves symlinks on abs, or — when abs does not
+// exist — on its deepest existing ancestor, re-joining the non-existent tail.
+// Never fails: an unresolvable path degrades to the lexically-cleaned abs (still
+// a deterministic fixed point for the classify comparison).
+func evalSymlinksLongestPrefix(abs string) string {
+	if r, err := filepath.EvalSymlinks(abs); err == nil {
+		return r
+	}
+	dir := abs
+	var tail []string
+	for {
+		parent := filepath.Dir(dir)
+		if parent == dir { // hit the filesystem root; nothing resolvable
+			return abs
+		}
+		tail = append([]string{filepath.Base(dir)}, tail...)
+		dir = parent
+		if r, err := filepath.EvalSymlinks(dir); err == nil {
+			return filepath.Join(append([]string{r}, tail...)...)
+		}
+	}
+}
+
 // sanitizeFilename strips path-traversal-shaped characters from a string
 // before using it as a single path segment. Conservative: anything that
 // isn't alnum / dash / underscore / dot is dropped.

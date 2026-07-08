@@ -135,6 +135,13 @@ type hookToolInput struct {
 	SkillName string `json:"skill_name"` // defensive fallback (docs-named)
 	Name      string `json:"name"`       // defensive fallback
 	Args      string `json:"args"`
+	// SPEC-0317 R-6.4 — the Bash/Read/Edit/Write side-channel guard (`skillctl
+	// guard-path`) reads these. Command is the Bash tool's shell line; FilePath is
+	// the Read/Edit/Write target. They are unused by the Skill gate (verify-hook),
+	// so adding them is inert for the Skill decision — a plain widening of the
+	// shared envelope, not a semantic change.
+	Command  string `json:"command"`   // Bash tool
+	FilePath string `json:"file_path"` // Read | Edit | Write tool
 }
 
 // skillID returns the invoked skill name, trying the confirmed field first.

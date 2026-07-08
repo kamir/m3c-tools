@@ -31,6 +31,7 @@ import (
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/govlevel"
 	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
+	"github.com/kamir/m3c-tools/pkg/skillctl/statemachine"
 	"gopkg.in/yaml.v3"
 )
 
@@ -249,6 +250,95 @@ type TrustRoot struct {
 	// max_staleness; that would defeat R3). validate() enforces both the closed
 	// key/value vocabulary AND the high⇒closed floor.
 	FailPolicyByRisk map[string]string `yaml:"fail_policy_by_risk,omitempty"`
+
+	// OfflinePolicy is the SPEC-0317 R-7.3 offline-state-machine policy block.
+	// It is the ONE surface (extends this TrustRoot, not a new file) that
+	// configures the named online/degraded/offline/locked state machine
+	// (pkg/skillctl/statemachine). Absent (nil) = the shipped default: not
+	// enterprise, no cache ceilings, unmanaged=allow — a host with no block
+	// NEVER enters `locked`. Validated at Load via ResolveOfflinePolicy so a bad
+	// duration or an enterprise-only knob set without `enterprise` is refused
+	// loudly (a typo cannot lie dormant). The strict loader (KnownFields(true))
+	// requires this to be a declared field.
+	OfflinePolicy *OfflinePolicyBlock `yaml:"offline_policy,omitempty"`
+}
+
+// OfflinePolicyBlock is the YAML surface of the SPEC-0317 R-7.3 `offline_policy`
+// block. It carries Go-duration STRINGS (parsed once at Load, like the SPEC-0279
+// freshness fields) and the enterprise gate. ResolveOfflinePolicy parses it into
+// the stdlib-only statemachine.OfflinePolicy the pure Compute consumes.
+//
+// The strict loader means every field here must be declared; an unknown key
+// under `offline_policy:` is rejected at Load.
+type OfflinePolicyBlock struct {
+	// AllowCachedTrustedSkills allows a cached, trust-verified skill to run while
+	// disconnected (degraded/offline). Advisory to the decision ladder.
+	AllowCachedTrustedSkills bool `yaml:"allow_cached_trusted_skills,omitempty"`
+
+	// DenyUnknownSkills denies a skill with no cached trust basis while
+	// disconnected. It flips unmanaged=allow for UNKNOWN skills only; it does NOT
+	// by itself produce `locked` (that needs `enterprise` + no trust basis).
+	DenyUnknownSkills bool `yaml:"deny_unknown_skills,omitempty"`
+
+	// MaxPolicyCacheAge bounds policy- AND trust-cache freshness. Go duration
+	// string ("24h"); empty = no ceiling. Rejected at Load if unparseable/negative.
+	MaxPolicyCacheAge string `yaml:"max_policy_cache_age,omitempty"`
+
+	// MaxRevocationCacheAge bounds the ORDINARY revocation cache. Go duration
+	// string; empty = no ceiling. The emergency deny-list is EXEMPT from this.
+	MaxRevocationCacheAge string `yaml:"max_revocation_cache_age,omitempty"`
+
+	// RequireLocalAudit is the SPEC-0317 R-8 inversion of the SPEC-0255
+	// decision-invariance contract. ENTERPRISE-ONLY: Load refuses it unless
+	// Enterprise is also true (the floor cannot be set on a non-enterprise host).
+	RequireLocalAudit bool `yaml:"require_local_audit,omitempty"`
+
+	// Enterprise is the opt-in that enables the `locked` state and permits
+	// RequireLocalAudit. Without it the host can NEVER lock (R-7.2 never-brick).
+	Enterprise bool `yaml:"enterprise,omitempty"`
+}
+
+// ResolveOfflinePolicy parses this trust root's SPEC-0317 R-7.3 offline_policy
+// block into the resolved, stdlib-only statemachine.OfflinePolicy the pure
+// Compute consumes. A nil block resolves to the zero policy (the shipped default:
+// not enterprise, no ceilings). Called by validate() (so a bad value is refused
+// at Load) AND by the consumers (so they read the same resolved policy) — the
+// same pattern as TrustRoot.Freshness().
+//
+// Validation (fail-safe, never fail-open):
+//   - durations parse as Go durations and are non-negative (empty → 0 = no ceiling);
+//   - require_local_audit is refused unless enterprise is set (R-7.3/R-8: the
+//     decision-invariance carve-out is enterprise opt-in only).
+//
+// There is deliberately NO high-risk fail-open knob here: the SPEC-0279
+// freshness.go R3 floor remains the authoritative high-risk fail-closed enforcer
+// (R-7.4), so the offline policy cannot configure a high-risk action fail-open.
+func (t *TrustRoot) ResolveOfflinePolicy() (statemachine.OfflinePolicy, error) {
+	if t == nil || t.OfflinePolicy == nil {
+		return statemachine.OfflinePolicy{}, nil
+	}
+	b := t.OfflinePolicy
+
+	maxPolicy, err := parseFreshnessDuration("max_policy_cache_age", b.MaxPolicyCacheAge, 0)
+	if err != nil {
+		return statemachine.OfflinePolicy{}, err
+	}
+	maxRevocation, err := parseFreshnessDuration("max_revocation_cache_age", b.MaxRevocationCacheAge, 0)
+	if err != nil {
+		return statemachine.OfflinePolicy{}, err
+	}
+	if b.RequireLocalAudit && !b.Enterprise {
+		return statemachine.OfflinePolicy{}, fmt.Errorf("offline_policy: require_local_audit is enterprise-only — set enterprise: true (SPEC-0317 R-7.3/R-8; the decision-invariance carve-out cannot be enabled on a non-enterprise host)")
+	}
+
+	return statemachine.OfflinePolicy{
+		AllowCachedTrustedSkills: b.AllowCachedTrustedSkills,
+		DenyUnknownSkills:        b.DenyUnknownSkills,
+		MaxPolicyCacheAge:        maxPolicy,
+		MaxRevocationCacheAge:    maxRevocation,
+		RequireLocalAudit:        b.RequireLocalAudit,
+		Enterprise:               b.Enterprise,
+	}, nil
 }
 
 // ActiveKeys returns the subset of RegistryKeys that are not retired. It
@@ -820,6 +910,14 @@ func (t *TrustRoots) validate() error {
 		// dormant and silently disable the staleness ceiling.
 		if _, ferr := root.Freshness(); ferr != nil {
 			return fmt.Errorf("trust_roots[%d] %s: %w", i, root.RegistryURL, ferr)
+		}
+
+		// SPEC-0317 R-7.3 — the offline_policy block. Resolve it at Load so a
+		// bad duration or an enterprise-only knob set without `enterprise` is
+		// refused loudly (a typo cannot lie dormant and silently mis-state the
+		// offline posture). Mirrors the Freshness() call above.
+		if _, oerr := root.ResolveOfflinePolicy(); oerr != nil {
+			return fmt.Errorf("trust_roots[%d] %s: %w", i, root.RegistryURL, oerr)
 		}
 
 		if root.GovernanceMinimum == "" {

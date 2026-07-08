@@ -100,6 +100,22 @@ func main() {
 	case "verify-hook":
 		runWithExit(func() int { return runVerifyHook(os.Stdin, os.Stdout, os.Stderr) })
 	// === END SPEC-0247 P0.1 ===
+	// === SPEC-0317 P0: enterprise-evidence enforce gate ===
+	// Byte-identical decision to verify-hook for a Skill event, PLUS mirrors the
+	// device-signed InvocationRecord into the write-once outbox (audit_events) for
+	// durable, drainable evidence. Fail-closed decision; fire-and-forget outbox
+	// write (a write failure never alters the decision — SPEC-0255 invariance).
+	case "enforce":
+		runWithExit(func() int { return runEnforce(os.Stdin, os.Stdout, os.Stderr) })
+	// === END SPEC-0317 P0 ===
+	// === SPEC-0317 R-6 (P2): side-channel path guard ===
+	// A SEPARATE PreToolUse hook for Bash/Read/Edit/Write (NOT a semantic change
+	// to the Skill decision — byte-parity of enforce/verify-hook is preserved). It
+	// audited-allows by default and opt-in denies a skill-dir access. Detection /
+	// bar-raising, not a seal — see `skillctl guard-path --explain`.
+	case "guard-path":
+		os.Exit(runGuardPath(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+	// === END SPEC-0317 R-6 ===
 	// === SPEC-0277 P0+P1: agent-instance identity (issue/verify/show/revoke) ===
 	// `agentid verify` mirrors `verify --bundle`: SPEC-0188 §11 numbered exit
 	// codes (11/20/21/17/12/...) surface verbatim through runWithExit.
@@ -114,6 +130,12 @@ func main() {
 	case "pin":
 		os.Exit(runPin(os.Args[2:], os.Stdout, os.Stderr))
 	// === END SPEC-0247 P1.3 ===
+	// === SPEC-0317 R-7 (P2): named offline state machine — informational
+	// SessionStart context (prints online/degraded/offline/locked + the
+	// advisory-until-pinned banner). Pure read; gates nothing. ===
+	case "session-baseline":
+		os.Exit(runSessionBaseline(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0317 P2 ===
 	// === SPEC-0189 S0a: scanner family dispatchers (imported from
 	// feature/thinking-engine-phase1; pre-SPEC-0189 behaviour preserved). ===
 	case "scan":
@@ -140,6 +162,14 @@ func main() {
 	case "sync-usage":
 		cmdSyncUsage(os.Args[2:])
 	// === END SPEC-0189 S0a ===
+	// === SPEC-0317 R-5 (P1): enforcement-evidence sync agent ===
+	// Distinct from `sync-usage` (the PII skill-telemetry drain): `sync`
+	// drains the device-signed audit_events outbox to the KafShield ingest,
+	// marks rows synced ONLY on a valid signed durable-seq, and is a SEPARATE
+	// process never invoked on the hook path.
+	case "sync":
+		os.Exit(runSync(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0317 R-5 ===
 	// === SPEC-0195 S2 / Streams M1+M2: awareness + intent ===
 	// `awareness` (M1) dispatches to runAwareness with sub-routes
 	// {sync, verify, reset}. `intent` (M2) dispatches to runIntent
@@ -219,6 +249,8 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "Commands (SPEC-0247 / Claude Code trust gate):")
 	fmt.Fprintln(w, "  verify-hook  PreToolUse(Skill) gate: reads a hook event on stdin, verifies the")
 	fmt.Fprintln(w, "               §7 chain, and emits allow/deny. Fail-closed. Wire as a hook, not by hand.")
+	fmt.Fprintln(w, "  enforce      Same decision as verify-hook, plus records the signed evidence into the")
+	fmt.Fprintln(w, "               write-once outbox for durable, drainable audit (SPEC-0317). Fail-closed.")
 	fmt.Fprintln(w, "  gate-stats   Summarise the gate-audit.jsonl (decisions, top blocks, cache-hit rate).")
 	fmt.Fprintln(w, "               Flags: --since <168h|YYYY-MM-DD>, --json.")
 	fmt.Fprintln(w, "  pin          Pin the trust gate into Claude Code managed settings so a")
