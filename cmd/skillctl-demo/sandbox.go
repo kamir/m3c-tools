@@ -23,10 +23,12 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
 	"embed"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io/fs"
 	"os"
@@ -69,6 +71,10 @@ type Sandbox struct {
 	regPubB64    string
 	srcDir       string // clean extracted skill source
 	poisonSrcDir string // poisoned skill source
+
+	// K4 (Kata mode) material — built by build(), reusing the same keys.
+	RegPubPEM       string // registry pubkey as PEM SPKI (input to `skillctl trust add --pubkey`)
+	WrongTrustRoots string // trust-roots pinning a DIFFERENT registry key → verify exit 12 (not admitted)
 }
 
 // NewSandbox builds the whole hermetic environment. Returns an error rather than
@@ -138,6 +144,13 @@ func (sb *Sandbox) build() error {
 
 	sb.TrustRoots = filepath.Join(s1, "trust-roots.pinned.yaml")
 	if err := os.WriteFile(sb.TrustRoots, []byte(sb.pinnedTrustRootsYAML()), 0o600); err != nil {
+		return err
+	}
+
+	// K4 (Kata) material: a PEM SPKI of the registry key (so a learner can run a
+	// REAL `skillctl trust add --pubkey`) and a wrong-key trust-roots file (so a
+	// verify against un-admitted roots refuses, exit 12 — the "not admitted" probe).
+	if err := sb.writeKataMaterial(s1); err != nil {
 		return err
 	}
 
@@ -290,6 +303,41 @@ func (sb *Sandbox) writeMeta(path, digestStr string) error {
 		return err
 	}
 	return os.WriteFile(path, b, 0o644)
+}
+
+// writeKataMaterial emits the K4-only inputs into dir: the registry public key
+// as PEM SPKI (the exact format `skillctl trust add --pubkey` and `keygen`
+// produce), and a "wrong" trust-roots file that pins a fresh unrelated registry
+// key under the same URL — so verifying the good bundle against it is REFUSED.
+func (sb *Sandbox) writeKataMaterial(dir string) error {
+	spki, err := x509.MarshalPKIXPublicKey(sb.regPriv.Public().(ed25519.PublicKey))
+	if err != nil {
+		return fmt.Errorf("marshal registry SPKI: %w", err)
+	}
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: spki})
+	sb.RegPubPEM = filepath.Join(dir, "registry-pub.pem")
+	if err := os.WriteFile(sb.RegPubPEM, pemBytes, 0o600); err != nil {
+		return err
+	}
+
+	_, wrongPriv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return fmt.Errorf("wrong-key keygen: %w", err)
+	}
+	wrongPub := base64.StdEncoding.EncodeToString(wrongPriv.Public().(ed25519.PublicKey))
+	sb.WrongTrustRoots = filepath.Join(dir, "trust-roots.wrong.yaml")
+	yaml := "" +
+		"trust_roots:\n" +
+		"  - registry_url: " + demoRegURL + "\n" +
+		"    registry_keys:\n" +
+		"      - id: reg-key-wrong\n" +
+		"        pubkey: " + wrongPub + "\n" +
+		"    identity_keys_authorized: pinned\n" +
+		"    governance_minimum: green\n" +
+		"    authors:\n" +
+		"      - id: " + demoAuthorID + "\n" +
+		"        pubkey: " + sb.authorPubB64 + "\n"
+	return os.WriteFile(sb.WrongTrustRoots, []byte(yaml), 0o600)
 }
 
 func (sb *Sandbox) pinnedTrustRootsYAML() string {

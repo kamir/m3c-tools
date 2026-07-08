@@ -60,6 +60,15 @@ func (r *CLIRenderer) Render(e Event) {
 		r.renderExit(e)
 	case "verdict":
 		fmt.Fprintln(r.W, "    "+r.c(cCyan, "▸ "+e.Text+"  ("+verdictWord(e.Verdict)+", code "+itoa(e.Code)+")"))
+	case "beat":
+		// Kata-board chip: the mastery state after a recorded rep.
+		col := cCyan
+		if e.State == string(StateGruen) {
+			col = cGreen
+		} else if e.State == string(StateGelb) {
+			col = cYellow
+		}
+		fmt.Fprintln(r.W, "    "+r.c(cBold+col, "◆ "+e.Text))
 	case "note":
 		fmt.Fprintln(r.W, "  "+r.c(cGrey, "  "+e.Text))
 	case "reset":
