@@ -342,6 +342,33 @@ func findChrome() string {
 	return ""
 }
 
+// plaudTokenExtractJS reads the Plaud bearer token from a plaud.ai tab's
+// localStorage. Plaud renamed the key (the extractor hard-coded "tokenstr";
+// the debug path already probes "pld_tokenstr"), so this tries known keys in
+// priority order, then any key whose NAME mentions "token", then any JWT-shaped
+// value — returning {"token","via"} JSON. `via` is a fixed, secret-safe label
+// (never a raw key name, which can itself embed a JWT) so the caller can log
+// which path matched. Single-line so it embeds cleanly in the JXA path too.
+const plaudTokenExtractJS = `(function(){try{var known=["tokenstr","pld_tokenstr"];for(var i=0;i<known.length;i++){var v=localStorage.getItem(known[i]);if(v&&v.length>10)return JSON.stringify({token:v,via:known[i]});}var ls=localStorage;for(var j=0;j<ls.length;j++){var k=ls.key(j);var val=ls.getItem(k);if(val&&val.length>20&&/token/i.test(k))return JSON.stringify({token:val,via:"name-has-token"});}for(var m=0;m<ls.length;m++){var kk=ls.key(m);var vv=ls.getItem(kk);if(vv&&/^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\./.test(vv))return JSON.stringify({token:vv,via:"jwt-shape"});}return JSON.stringify({token:"",via:""});}catch(e){return JSON.stringify({token:"",via:""});}})()`
+
+// parsePlaudTokenResult parses the {"token","via"} JSON that plaudTokenExtractJS
+// returns (cdpEvaluate returns the JS string value directly, so this is a single
+// unmarshal). Returns an empty token if none was found or the value is
+// implausibly short.
+func parsePlaudTokenResult(raw string) (token, via string) {
+	var res struct {
+		Token string `json:"token"`
+		Via   string `json:"via"`
+	}
+	if json.Unmarshal([]byte(strings.TrimSpace(raw)), &res) != nil {
+		return "", ""
+	}
+	if len(res.Token) > 10 && res.Token != "null" {
+		return res.Token, res.Via
+	}
+	return "", ""
+}
+
 // extractTokenOsascript uses macOS osascript/JXA to read localStorage from Chrome.
 func extractTokenOsascript() (string, error) {
 	script := `
@@ -355,10 +382,8 @@ function run() {
 			for (var j = 0; j < tabs.length; j++) {
 				var u = tabs[j].url();
 				if (u && u.indexOf("plaud.ai") !== -1) {
-					var token = chrome.execute(tabs[j], {javascript: 'localStorage.getItem("tokenstr")'});
-					if (token && token !== "null" && token.length > 10) {
-						return token;
-					}
+					var res = chrome.execute(tabs[j], {javascript: '` + plaudTokenExtractJS + `'});
+					try { var o = JSON.parse(res); if (o && o.token && o.token.length > 10) return res; } catch(e) {}
 				}
 			}
 		}
@@ -376,10 +401,14 @@ function run() {
 	if strings.HasPrefix(result, "__ERR__:") {
 		return "", fmt.Errorf("%s", strings.TrimPrefix(result, "__ERR__:"))
 	}
-	if result == "" || result == "null" {
+	token, via := parsePlaudTokenResult(result)
+	if token == "" {
 		return "", fmt.Errorf("no token found in Chrome localStorage")
 	}
-	return result, nil
+	if via != "tokenstr" {
+		fmt.Fprintf(os.Stderr, "  [plaud] token found via %q (Plaud renamed the 'tokenstr' key — resilient fallback used)\n", via)
+	}
+	return token, nil
 }
 
 // ExtractTokenCDP connects to Chrome's DevTools Protocol on localhost:9222
@@ -449,12 +478,15 @@ func extractTokenCDP() (string, error) {
 					fmt.Fprintf(os.Stderr, "  [plaud-debug]   plaud.ai tab (%s) %s\n", plaudURLOrigin(t.URL), strings.Trim(summary, "\""))
 				}
 			}
-			token, err := cdpEvaluate(t.WebSocketURL, `localStorage.getItem("tokenstr")`)
+			raw, err := cdpEvaluate(t.WebSocketURL, plaudTokenExtractJS)
 			if err != nil {
 				continue
 			}
-			token = strings.Trim(token, "\"")
-			if token != "" && token != "null" && len(token) > 10 {
+			token, via := parsePlaudTokenResult(raw)
+			if token != "" {
+				if via != "tokenstr" {
+					fmt.Fprintf(os.Stderr, "  [plaud] token found via %q (Plaud renamed the 'tokenstr' key — resilient fallback used)\n", via)
+				}
 				return token, nil
 			}
 		}
