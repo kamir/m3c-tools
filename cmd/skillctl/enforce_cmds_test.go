@@ -53,6 +53,12 @@ func runOne(t *testing.T, gate func(r *strings.Reader, o, e *bytes.Buffer) int, 
 	origRLA := gateRequireLocalAudit
 	gateRequireLocalAudit = func() bool { return false }
 	t.Cleanup(func() { gateRequireLocalAudit = origRLA })
+	// And the R-1.4 P2 state-gate-fallback source: OFF unless a test overrides it,
+	// so a machine whose managed file opts in can never fail-close these parity
+	// tests' online-fallback path.
+	origSGF := gateStateGatesFallback
+	gateStateGatesFallback = func() bool { return false }
+	t.Cleanup(func() { gateStateGatesFallback = origSGF })
 
 	var out, errb bytes.Buffer
 	code := gate(strings.NewReader(event), &out, &errb)

@@ -84,6 +84,21 @@ type GenerateOptions struct {
 	// and the operator's allowlisted escapes too; that is the intended "no un-audited
 	// allow" posture, not a bug. Enable it deliberately.
 	RequireLocalAudit bool
+	// StateGateFallback emits `skillctlStateGateFallback: true` — the SPEC-0317
+	// R-1.4 P2 opt-in that state-gates the verify-hook's ONLINE fallback (the §7
+	// network chain used only for LEGACY installs that carry no offline metadata).
+	// When set, that fallback runs only in the state machine's `online` state; the
+	// gate is offline-first (it does NOT probe the registry on the hot path), so in
+	// practice the hot path stays STRICTLY LOCAL and a legacy install with no offline
+	// metadata fails CLOSED (offline_unverifiable_managed) instead of blocking on an
+	// 8s network round-trip. ENTERPRISE-ONLY, so setting it also emits
+	// skillctlEnterprise:true — same root-owned managed tier as the other knobs.
+	//
+	// NEVER-BRICK: this only ever affects LEGACY managed installs missing offline
+	// metadata; modern installs verify offline and never reach the fallback. It is
+	// opt-in precisely so a disconnected NON-enterprise host keeps its network
+	// fallback (turning it on by default would fail-close legacy installs offline).
+	StateGateFallback bool
 }
 
 // wire structs — field order here is the emitted JSON key order (encoding/json
@@ -106,6 +121,7 @@ type managedSettings struct {
 	DisableBypassPermissionsMode string     `json:"disableBypassPermissionsMode,omitempty"`
 	SkillctlEnterprise           bool       `json:"skillctlEnterprise,omitempty"`
 	SkillctlRequireLocalAudit    bool       `json:"skillctlRequireLocalAudit,omitempty"`
+	SkillctlStateGateFallback    bool       `json:"skillctlStateGateFallback,omitempty"`
 	Hooks                        hooksBlock `json:"hooks"`
 }
 
@@ -162,6 +178,10 @@ func Generate(opts GenerateOptions) ([]byte, error) {
 	if opts.RequireLocalAudit {
 		ms.SkillctlEnterprise = true // require_local_audit is enterprise-only
 		ms.SkillctlRequireLocalAudit = true
+	}
+	if opts.StateGateFallback {
+		ms.SkillctlEnterprise = true // state-gating the fallback is enterprise-only
+		ms.SkillctlStateGateFallback = true
 	}
 	if opts.Strict || opts.Harden {
 		ms.AllowManagedHooksOnly = true
@@ -263,6 +283,20 @@ func RequireLocalAuditFromBytes(settings []byte) bool {
 		return false
 	}
 	return ms.SkillctlEnterprise && ms.SkillctlRequireLocalAudit
+}
+
+// StateGateFallbackFromBytes reports whether managed settings enable the
+// SPEC-0317 R-1.4 P2 posture that state-gates the verify-hook's online fallback.
+// Enterprise-GATED like RequireLocalAuditFromBytes (true only when BOTH
+// skillctlEnterprise AND skillctlStateGateFallback are set) and equally
+// conservative: missing/malformed → false, so an unreadable managed file can
+// never fail-close a legacy install's network fallback (never-brick).
+func StateGateFallbackFromBytes(settings []byte) bool {
+	var ms managedSettings
+	if json.Unmarshal(settings, &ms) != nil {
+		return false
+	}
+	return ms.SkillctlEnterprise && ms.SkillctlStateGateFallback
 }
 
 // Verify parses managed-settings bytes and reports the pinning level. It matches

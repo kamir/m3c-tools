@@ -60,3 +60,19 @@ func TestCodes_NumberRange(t *testing.T) {
 		}
 	}
 }
+
+// TestCodes_NoSkillgateBandIntrusion keeps this (semantic, message-borne) registry
+// disjoint from the 30–39 band that pkg/skillgate owns for LIVE process-exit
+// refusals (SPEC-0202 §8.2: ExitCapabilityMissing=30 … ExitEgressByteQuota=39).
+// These codes ride the refusal_code/message while the process exits 2, but reusing
+// a number from the live band would become a real ambiguity if the registry's
+// Phase-3 migration ever turns a Number into an os.Exit. The band is hard-coded (no
+// skillgate import) to keep the two registries structurally independent.
+func TestCodes_NoSkillgateBandIntrusion(t *testing.T) {
+	for _, c := range AllCodes() {
+		if c.Number >= 30 && c.Number <= 39 {
+			t.Errorf("exit code %d (%s/%s) intrudes on the skillgate SPEC-0202 §8.2 live process-exit band 30–39; pick a number outside it",
+				c.Number, c.Family, c.Label)
+		}
+	}
+}

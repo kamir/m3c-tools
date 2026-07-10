@@ -111,6 +111,52 @@ func TestSessionBaseline_JSON(t *testing.T) {
 	}
 }
 
+// TestSessionBaseline_StateGateFallbackDisplay pins the R-1.4 P2 posture output:
+// the JSON `state_gate_fallback` field and the human `online fallback` note must
+// reflect the managed opt-in (ENFORCED when on, OPT-IN/OFF when off) — a mislabel
+// (e.g. printing "ENFORCED" while off) would ship a false posture to a CISO.
+func TestSessionBaseline_StateGateFallbackDisplay(t *testing.T) {
+	for _, tc := range []struct {
+		optedIn  bool
+		wantNote string
+	}{
+		{true, "ENFORCED (R-1.4 P2)"},
+		{false, "OPT-IN and OFF"},
+	} {
+		home := t.TempDir()
+		in := statemachine.Inputs{RegistryReachable: true, TrustBasisPresent: true}
+		withSessionBaselineSeams(t, in, pin.StatusResult{Level: pin.LevelPinned})
+		orig := gateStateGatesFallback
+		gateStateGatesFallback = func() bool { return tc.optedIn }
+		t.Cleanup(func() { gateStateGatesFallback = orig })
+
+		// JSON field.
+		var out, errb bytes.Buffer
+		if code := runSessionBaseline([]string{"--home", home, "--json"}, &out, &errb); code != 0 {
+			t.Fatalf("optedIn=%v: exit %d, stderr=%s", tc.optedIn, code, errb.String())
+		}
+		var doc struct {
+			StateGateFallback bool `json:"state_gate_fallback"`
+		}
+		if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+			t.Fatalf("optedIn=%v: bad JSON: %v\n%s", tc.optedIn, err, out.String())
+		}
+		if doc.StateGateFallback != tc.optedIn {
+			t.Errorf("optedIn=%v: state_gate_fallback=%v, want %v", tc.optedIn, doc.StateGateFallback, tc.optedIn)
+		}
+
+		// Human note.
+		out.Reset()
+		errb.Reset()
+		if code := runSessionBaseline([]string{"--home", home}, &out, &errb); code != 0 {
+			t.Fatalf("optedIn=%v human: exit %d", tc.optedIn, code)
+		}
+		if !strings.Contains(out.String(), tc.wantNote) {
+			t.Errorf("optedIn=%v: human note missing %q:\n%s", tc.optedIn, tc.wantNote, out.String())
+		}
+	}
+}
+
 // TestResolveSessionOfflinePolicy_EnterpriseWins: an enterprise root's policy is
 // selected machine-wide, and a non-enterprise/absent config yields the shipped
 // default (never locks).

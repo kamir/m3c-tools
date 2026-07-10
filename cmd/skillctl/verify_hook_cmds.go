@@ -53,6 +53,14 @@ import (
 // exitBundleRevoked (17) / exitRevocationStale (22) / exitSidechannelDenied (27).
 const exitOfflineLocked = 28 // = exitcode.OfflineLocked.Number
 
+// exitOfflineUnverifiable is the semantic code carried in the SPEC-0317 R-1.4 P2
+// deny: state-gate-fallback is set and a LEGACY managed install with no offline
+// metadata would otherwise reach the online §7 chain. The PROCESS still exits
+// exitHookBlock (2); the number rides the message + signed refusal_code, mirroring
+// exitOfflineLocked. 25 is deliberately below the skillgate 30–39 live-exit band
+// (SPEC-0202 §8.2). TestExitConsts_MatchRegistry pins it to the registry.
+const exitOfflineUnverifiable = 25 // = exitcode.OfflineUnverifiable.Number
+
 // gateManagedEnterprise reports whether the ROOT-OWNED managed settings enable
 // the SPEC-0317 enterprise posture (`skillctlEnterprise: true`). This is the ONLY
 // source of the `locked` opt-in (Option B): sourcing it from the trust-roots file
@@ -97,6 +105,50 @@ func defaultGateOfflineStateDeniesManaged(home string, now time.Time) bool {
 	return statemachine.DenyAllManaged(statemachine.Compute(in, pol))
 }
 
+// gateStateGatesFallback reports whether the ROOT-OWNED managed settings enable
+// the SPEC-0317 R-1.4 P2 posture that state-gates the online fallback
+// (`skillctlStateGateFallback: true`, enterprise-gated). Same source + conservative
+// contract as gateManagedEnterprise: a missing/unreadable/malformed managed file →
+// false, so an unreadable file can never fail-close a legacy install's network
+// fallback (never-brick). Seam: tests set it directly.
+var gateStateGatesFallback = func() bool {
+	path, err := pin.DefaultManagedSettingsPath()
+	if err != nil {
+		return false
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	return pin.StateGateFallbackFromBytes(b)
+}
+
+// gateSkipOnlineFallback reports whether the SPEC-0317 R-1.4 P2 state-gate should
+// SUPPRESS the online §7 fallback for this invocation — i.e. the operator opted in
+// AND the state machine is not in `online`. Seam for tests.
+//
+// Like the R-7.2 locked gate it performs NO network probe: the offline-first
+// gather sets RegistryReachable=false, so Compute never yields StateOnline on the
+// hot path and AllowOnlineFallback is false. In practice this means: opted in →
+// the online fallback is always suppressed (the hot path stays strictly local),
+// connected or not — there is no connectivity check on the hot path. Routing
+// through the state machine (rather than a bare boolean) keeps it the single
+// arbiter and is forward-compatible with a future connectivity probe. For every
+// non-opted-in host it reads only the managed-settings file, then fast-paths to
+// false BEFORE any policy/cache gather — so the decision is byte-identical to the
+// pre-R-1.4-P2 path (AC-1) and the default machine pays only that one small read.
+var gateSkipOnlineFallback = defaultGateSkipOnlineFallback
+
+func defaultGateSkipOnlineFallback(home string, now time.Time) bool {
+	if !gateStateGatesFallback() {
+		return false // opt-in only: a non-enterprise / non-opted host keeps its fallback
+	}
+	pol, _ := resolveSessionOfflinePolicy(home, "")
+	pol.Enterprise = true // the opt-in comes from managed settings, same as R-7.2
+	in := sessionBaselineGather(home, false, now)
+	return !statemachine.AllowOnlineFallback(statemachine.Compute(in, pol))
+}
+
 // refusalCodeForHook maps the hook's (exitCode, reason) into a stable
 // refusal_code token for the signed invocation record. An allow (exit 0) has
 // no refusal. A deny carries "deny" by default, refined to a more specific
@@ -111,6 +163,12 @@ func refusalCodeForHook(exitCode int, reason string) string {
 	// first as it cannot be a substring of any other reason.
 	case strings.Contains(reason, "offline_locked"):
 		return "offline_locked"
+	// SPEC-0317 R-1.4 P2 — the state-gated online-fallback deny (a legacy managed
+	// install with no offline metadata, kept strictly local while disconnected). A
+	// unique token; placed with offline_locked as it cannot be a substring of any
+	// other reason.
+	case strings.Contains(reason, "offline_unverifiable_managed"):
+		return "offline_unverifiable_managed"
 	// SPEC-0277 P1 — agent-authorization denies. Checked BEFORE the generic
 	// "revoked"/"unmanaged" cases so an agent deny gets its specific token (e.g.
 	// an "agent_revoked" reason must not be flattened to "bundle_revoked").
@@ -476,11 +534,32 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	if home != "" {
 		if c, r, ok := verifyManagedOfflineFn(skill, pol, home); ok {
 			code, reason = c, r
+		} else if gateSkipOnlineFallback(home, now) {
+			// SPEC-0317 R-1.4 P2 — no offline metadata for this LEGACY managed
+			// install, and the enterprise state-gate keeps the hot path strictly
+			// local (offline-first; no connectivity probe): the online §7 fallback is
+			// SUPPRESSED, so we fail CLOSED here rather than blocking on an 8s network
+			// round-trip. A deny short-circuits before recordVerdict (we never cache a
+			// policy deny).
+			audReason = "offline_unverifiable_managed (state-gated online fallback; SPEC-0317 R-1.4 P2)"
+			return emitDeny(stdout, stderr,
+				fmt.Sprintf("skillctl: BLOCKED '%s' — no offline verification metadata and offline_policy state-gates the online fallback (exit %d offline_unverifiable_managed): the hot path stays strictly local (offline-first). Re-run `skillctl install %s` to stash offline verification metadata.",
+					skill, exitOfflineUnverifiable, skill))
 		} else {
 			code, reason = verifyManagedFn(skill, pol)
 			audOnline = true
 		}
 		recordVerdict(home, skill, ev.SessionID, code, "", now)
+	} else if gateSkipOnlineFallback("", now) {
+		// Same R-1.4 P2 gate with no home to verify offline against. DEFENSIVE /
+		// effectively unreachable: reaching this ladder requires a MANAGED
+		// classification, which requires userHome() to have resolved a non-empty home
+		// above — so home=="" does not occur here in practice. Kept as a fail-closed
+		// belt-and-suspenders (it mirrors the pre-existing home=="" `else` below).
+		audReason = "offline_unverifiable_managed (state-gated online fallback, no home; SPEC-0317 R-1.4 P2)"
+		return emitDeny(stdout, stderr,
+			fmt.Sprintf("skillctl: BLOCKED '%s' — offline_policy state-gates the online fallback and no local home is available to verify offline (exit %d offline_unverifiable_managed).",
+				skill, exitOfflineUnverifiable))
 	} else {
 		code, reason = verifyManagedFn(skill, pol)
 		audOnline = true

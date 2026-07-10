@@ -120,18 +120,30 @@ var (
 )
 
 // ---------------------------------------------------------------------------
-// Tier 7 — offline state machine + audit-durability (SPEC-0317 R-7.2 / R-8.2, P2).
-// 28 `offline_locked`: the `locked` state (enterprise opt-in via managed settings
-// + NO trust basis) denies a managed skill. 26 `local_audit_unavailable`:
-// require_local_audit is set and an ALLOW's evidence could not be durably recorded
-// (outbox+spool both failed) → fail closed, inverting the SPEC-0255 fire-and-forget
-// default. Both ride the message + refusal_code; the PROCESS still exits 2 to block
-// the PreToolUse call, mirroring the guard-path/verify-hook convention.
+// Tier 7 — offline state machine + audit-durability (SPEC-0317 R-7.2 / R-8.2 /
+// R-1.4 P2, P2). 28 `offline_locked`: the `locked` state (enterprise opt-in via
+// managed settings + NO trust basis) denies a managed skill. 26
+// `local_audit_unavailable`: require_local_audit is set and an ALLOW's evidence
+// could not be durably recorded (outbox+spool both failed) → fail closed,
+// inverting the SPEC-0255 fire-and-forget default. 25 `offline_unverifiable_managed`:
+// state-gate-fallback is set and a LEGACY managed install with no offline metadata
+// would otherwise reach the online §7 chain → fail closed, keeping the hot path
+// strictly local (shares theme 28, a different number).
+//
+// NUMBER CHOICE: 25 is deliberately BELOW the 30–39 band that pkg/skillgate
+// (SPEC-0202 §8.2) owns for LIVE process-exit refusals (ExitCapabilityMissing=30 …
+// ExitEgressByteQuota=39). These semantic codes ride the message + refusal_code
+// only (the PROCESS still exits 2), but keeping their numbers out of the live band
+// avoids any collision if the registry's Phase-3 migration ever makes a number a
+// real os.Exit. TestCodes_NoSkillgateBandIntrusion pins this. All three ride the
+// message + refusal_code; the PROCESS still exits 2 to block the PreToolUse call,
+// mirroring the guard-path/verify-hook convention.
 // ---------------------------------------------------------------------------
 
 var (
 	OfflineLocked         = Code{28, "offline / no-policy-basis", "state-machine", "offline_locked"}
 	LocalAuditUnavailable = Code{26, "evidence / audit-durability", "enforce", "local_audit_unavailable"}
+	OfflineUnverifiable   = Code{25, "offline / no-policy-basis", "state-machine", "offline_unverifiable_managed"}
 )
 
 // AllCodes returns every Code currently registered. Used by the
@@ -155,7 +167,7 @@ func AllCodes() []Code {
 		SyncIngestRejected,
 		// Tier 6 — guard-path side channel
 		GuardPathSidechannelDenied,
-		// Tier 7 — offline state machine (locked) + audit-durability
-		OfflineLocked, LocalAuditUnavailable,
+		// Tier 7 — offline state machine (locked + unverifiable) + audit-durability
+		OfflineLocked, LocalAuditUnavailable, OfflineUnverifiable,
 	}
 }

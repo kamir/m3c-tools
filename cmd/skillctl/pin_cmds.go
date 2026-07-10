@@ -72,11 +72,11 @@ func runPin(args []string, stdout, stderr io.Writer) int {
 const pinUsage = `Usage: skillctl pin <generate|status|install> [flags]
 
   generate   Print the Claude Code managed-settings.json that pins the trust gate.
-             Flags: --binary <path> (default: this skillctl), --strict, --harden, --enterprise, --require-local-audit, --out <file>
+             Flags: --binary <path> (default: this skillctl), --strict, --harden, --enterprise, --require-local-audit, --state-gate-fallback, --out <file>
   status     Report whether the gate is pinned in managed settings.
              Flags: --path <file> (override), --json
   install    Stage the file and print the sudo runbook (root+--confirm writes it).
-             Flags: --binary <path>, --strict, --harden, --enterprise, --require-local-audit, --path <target>, --confirm
+             Flags: --binary <path>, --strict, --harden, --enterprise, --require-local-audit, --state-gate-fallback, --path <target>, --confirm
 
 --strict adds "allowManagedHooksOnly: true" — the full CISO lockdown that also
 DISABLES every other user/project hook. Without it the gate is already
@@ -105,6 +105,7 @@ func runPinGenerate(args []string, stdout, stderr io.Writer) int {
 	harden := fs.Bool("harden", false, "imply --strict and block --dangerously-skip-permissions")
 	enterprise := fs.Bool("enterprise", false, "add skillctlEnterprise:true — enables the R-7.2 offline `locked` state")
 	requireLocalAudit := fs.Bool("require-local-audit", false, "add skillctlRequireLocalAudit:true (implies --enterprise) — R-8.2 fail-closed on un-recordable allow")
+	stateGateFallback := fs.Bool("state-gate-fallback", false, "add skillctlStateGateFallback:true (implies --enterprise) — R-1.4 P2 keep the hot path strictly local (no online fallback while disconnected)")
 	out := fs.String("out", "", "write to file instead of stdout")
 	if err := fs.Parse(args); err != nil {
 		return pinExitError
@@ -113,7 +114,7 @@ func runPinGenerate(args []string, stdout, stderr io.Writer) int {
 	if bin == "" {
 		bin = defaultBinary()
 	}
-	b, err := pin.Generate(pin.GenerateOptions{BinaryPath: bin, Strict: *strict, Harden: *harden, Enterprise: *enterprise, RequireLocalAudit: *requireLocalAudit})
+	b, err := pin.Generate(pin.GenerateOptions{BinaryPath: bin, Strict: *strict, Harden: *harden, Enterprise: *enterprise, RequireLocalAudit: *requireLocalAudit, StateGateFallback: *stateGateFallback})
 	if err != nil {
 		fmt.Fprintf(stderr, "skillctl pin generate: %v\n", err)
 		return pinExitError
@@ -219,6 +220,7 @@ func runPinInstall(args []string, stdout, stderr io.Writer) int {
 	harden := fs.Bool("harden", false, "imply --strict and block --dangerously-skip-permissions")
 	enterprise := fs.Bool("enterprise", false, "add skillctlEnterprise:true — enables the R-7.2 offline `locked` state")
 	requireLocalAudit := fs.Bool("require-local-audit", false, "add skillctlRequireLocalAudit:true (implies --enterprise) — R-8.2 fail-closed on un-recordable allow")
+	stateGateFallback := fs.Bool("state-gate-fallback", false, "add skillctlStateGateFallback:true (implies --enterprise) — R-1.4 P2 keep the hot path strictly local (no online fallback while disconnected)")
 	pathOverride := fs.String("path", "", "target managed-settings path override")
 	confirm := fs.Bool("confirm", false, "when run as root, actually write the file")
 	if err := fs.Parse(args); err != nil {
@@ -228,7 +230,7 @@ func runPinInstall(args []string, stdout, stderr io.Writer) int {
 	if bin == "" {
 		bin = defaultBinary()
 	}
-	opts := pin.GenerateOptions{BinaryPath: bin, Strict: *strict, Harden: *harden, Enterprise: *enterprise, RequireLocalAudit: *requireLocalAudit}
+	opts := pin.GenerateOptions{BinaryPath: bin, Strict: *strict, Harden: *harden, Enterprise: *enterprise, RequireLocalAudit: *requireLocalAudit, StateGateFallback: *stateGateFallback}
 	target := *pathOverride
 	if target == "" {
 		p, perr := pin.DefaultManagedSettingsPath()

@@ -404,3 +404,39 @@ func TestRequireLocalAuditFromBytes(t *testing.T) {
 		t.Error("--require-local-audit must also emit enterprise (enterprise-only)")
 	}
 }
+
+// TestStateGateFallbackFromBytes locks the R-1.4 P2 reader: enterprise-GATED (both
+// flags), missing/malformed → false (never-brick).
+func TestStateGateFallbackFromBytes(t *testing.T) {
+	if !StateGateFallbackFromBytes([]byte(`{"skillctlEnterprise":true,"skillctlStateGateFallback":true}`)) {
+		t.Error("both flags → state_gate_fallback on")
+	}
+	for _, neg := range []string{
+		`{"skillctlStateGateFallback":true}`, // enterprise missing → gated off
+		`{"skillctlEnterprise":true,"skillctlStateGateFallback":false}`,
+		`{"skillctlEnterprise":true}`,
+		`{}`,
+		`{ not json`,
+		``,
+	} {
+		if StateGateFallbackFromBytes([]byte(neg)) {
+			t.Errorf("must be off (enterprise-gated / conservative): %q", neg)
+		}
+	}
+	// round-trip via Generate: --state-gate-fallback implies enterprise.
+	b, _ := Generate(GenerateOptions{StateGateFallback: true})
+	if !StateGateFallbackFromBytes(b) {
+		t.Error("Generate(StateGateFallback) must round-trip")
+	}
+	if !EnterpriseFromBytes(b) {
+		t.Error("--state-gate-fallback must also emit enterprise (enterprise-only)")
+	}
+	if strings.Contains(string(b), "RequireLocalAudit") || strings.Contains(string(b), "skillctlRequireLocalAudit") {
+		t.Error("state-gate-fallback must NOT imply require_local_audit (independent knobs)")
+	}
+	// The knobs are independent: require_local_audit alone must not emit state-gate.
+	rla, _ := Generate(GenerateOptions{RequireLocalAudit: true})
+	if StateGateFallbackFromBytes(rla) {
+		t.Error("require_local_audit alone must NOT enable state_gate_fallback")
+	}
+}

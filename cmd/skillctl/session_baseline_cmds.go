@@ -87,6 +87,9 @@ func runSessionBaseline(args []string, stdout, stderr io.Writer) int {
 	// sourced from the ROOT-OWNED managed settings, never the trust-roots file —
 	// so the displayed posture matches what the runtime gate actually enforces.
 	pol.Enterprise = gateManagedEnterprise()
+	// R-1.4 P2 opt-in (state-gate the online fallback), from the same managed tier,
+	// so the displayed posture matches what verify-hook/enforce actually enforce.
+	stateGateFallback := gateStateGatesFallback()
 
 	// Snapshot inputs against the injected clock and compute the state.
 	now := sessionBaselineNow().UTC()
@@ -104,11 +107,13 @@ func runSessionBaseline(args []string, stdout, stderr io.Writer) int {
 			AdvisoryBanner  string   `json:"advisory_banner,omitempty"`
 			Notes           []string `json:"notes,omitempty"`
 			RequireLocalAud bool     `json:"require_local_audit"`
+			StateGateFallbk bool     `json:"state_gate_fallback"`
 		}{
 			StateDecision:   dec,
 			PinLevel:        pinStatus.Level.String(),
 			Pinned:          pinStatus.Pinned(),
 			RequireLocalAud: pol.RequireLocalAudit,
+			StateGateFallbk: stateGateFallback,
 		}
 		if !pinStatus.Pinned() {
 			out.AdvisoryBanner = advisoryUntilPinnedMsg
@@ -133,7 +138,7 @@ func runSessionBaseline(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "  translog anchor:      %s\n", yesNo(dec.AnchorPresent))
 	fmt.Fprintf(stdout, "  enterprise profile:   %s\n", yesNo(dec.Enterprise))
 	fmt.Fprintf(stdout, "  require local audit:  %s  [ENFORCED (R-8.2) by enforce: an allow that can't be durably recorded fails closed, exit 26]\n", yesNo(gateRequireLocalAudit()))
-	fmt.Fprintf(stdout, "  online fallback:      %s  [INFORMATIONAL — posture only; state-gating the online fallback is R-1.4 P2, not yet wired: the runtime gate still falls back]\n", allowedBlocked(dec.AllowOnlineFallback))
+	fmt.Fprintf(stdout, "  online fallback:      %s  [%s]\n", allowedBlocked(dec.AllowOnlineFallback), onlineFallbackNote(stateGateFallback))
 	fmt.Fprintf(stdout, "  high-risk fail-closed:%s\n", yesNoPad(dec.HighRiskFailsClosed))
 	fmt.Fprintf(stdout, "  deny all managed:     %s  [ENFORCED (R-7.2) by verify-hook/enforce when the gate is pinned: a locked host denies non-allowlisted managed skills, exit 28]\n", yesNo(dec.DenyAllManaged))
 	if polNote != "" {
@@ -273,6 +278,17 @@ func allowedBlocked(b bool) string {
 		return "allowed (online state)"
 	}
 	return "blocked (strictly local)"
+}
+
+// onlineFallbackNote describes whether the R-1.4 P2 state-gate is actually
+// enforcing. When opted in, verify-hook/enforce suppress the online §7 fallback
+// for a LEGACY managed install with no offline metadata (fail closed, exit 30);
+// when off (the shipped default) the runtime still falls back for such installs.
+func onlineFallbackNote(optedIn bool) string {
+	if optedIn {
+		return "ENFORCED (R-1.4 P2) by verify-hook/enforce: a legacy managed install with no offline metadata fails closed (offline_unverifiable_managed, exit 25) — the hot path stays strictly local (offline-first; no connectivity probe), so the fallback is suppressed regardless of connectivity"
+	}
+	return "INFORMATIONAL — state-gating the online fallback (R-1.4 P2) is OPT-IN and OFF: the runtime still falls back for legacy installs. Enable with `skillctl pin --state-gate-fallback`"
 }
 
 func yesNoPad(b bool) string {
