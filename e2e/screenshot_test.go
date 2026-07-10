@@ -189,7 +189,7 @@ func TestScreenshotClipboardImageTypes(t *testing.T) {
 
 func TestScreenshotCLIHelpOutput(t *testing.T) {
 	// Verify the CLI binary accepts --help and lists screenshot command
-	binPath := filepath.Join("..", "build", "m3c-tools")
+	binPath := BinaryPath(t)
 	if _, err := os.Stat(binPath); err != nil {
 		// Try building first
 		cmd := exec.Command("go", "build", "-o", binPath, "./cmd/m3c-tools/")
@@ -216,7 +216,7 @@ func TestScreenshotCLICapture(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	binPath := filepath.Join("..", "build", "m3c-tools")
+	binPath := BinaryPath(t)
 	if _, err := os.Stat(binPath); err != nil {
 		cmd := exec.Command("go", "build", "-o", binPath, "./cmd/m3c-tools/")
 		cmd.Dir = filepath.Join("..")

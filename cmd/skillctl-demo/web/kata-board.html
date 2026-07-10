@@ -1,0 +1,139 @@
+<!-- skillctl-demo Kata board — self-contained, offline (CSP-safe). One card per
+     Kata: rot/gelb/grün state + N/required chip + next-step hint. Reflects the
+     local progress store; live-updates on each real skillctl beat over SSE. -->
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>skillctl-demo — Kata board</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d; --fg: #e6edf3;
+    --muted: #8b949e; --accent: #58a6ff; --green: #3fb950; --red: #f85149;
+    --yellow: #d29922; --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f6f8fa; --panel:#fff; --border:#d0d7de; --fg:#1f2328;
+      --muted:#636c76; --accent:#0969da; --green:#1a7f37; --red:#cf222e; --yellow:#9a6700; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+    font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+  header { padding:14px 20px; border-bottom:1px solid var(--border);
+    display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0; font-weight:700; }
+  header .sub { font-size:12px; color:var(--muted); }
+  header .meta { font-family:var(--mono); font-size:11px; color:var(--muted); margin-left:auto; }
+  main { padding:16px; max-width:1100px; margin:0 auto; }
+  .legend { font-size:12px; color:var(--muted); margin:0 0 14px; }
+  .legend b { color:var(--fg); }
+  .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap:14px; }
+  .card { border:1px solid var(--border); border-radius:12px; background:var(--panel);
+    padding:14px; position:relative; overflow:hidden; }
+  .card::before { content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--muted); }
+  .card.rot::before { background:var(--red); }
+  .card.gelb::before { background:var(--yellow); }
+  .card.gruen::before { background:var(--green); }
+  .card.flash { animation: flash 1s ease-out; }
+  @keyframes flash { from { box-shadow:0 0 0 2px var(--accent); } to { box-shadow:none; } }
+  .row { display:flex; align-items:center; gap:8px; }
+  .kid { font-weight:800; font-size:15px; }
+  .title { font-weight:600; font-size:14px; }
+  .chip { margin-left:auto; font-family:var(--mono); font-size:12px; font-weight:700;
+    padding:2px 8px; border-radius:10px; border:1px solid var(--border); }
+  .state { font-size:10px; font-weight:800; letter-spacing:.05em; padding:1px 7px; border-radius:10px; text-transform:uppercase; }
+  .state.rot { background:rgba(248,81,73,.16); color:var(--red); }
+  .state.gelb { background:rgba(210,153,34,.16); color:var(--yellow); }
+  .state.gruen { background:rgba(63,185,80,.16); color:var(--green); }
+  .concept { font-size:9px; font-weight:800; letter-spacing:.04em; padding:1px 6px; border-radius:8px;
+    background:rgba(88,166,255,.16); color:var(--accent); }
+  .why { font-size:12px; color:var(--muted); margin:8px 0 6px; }
+  .hint { font-size:12px; }
+  .hint code, .cmd { font-family:var(--mono); font-size:11px; color:var(--accent);
+    word-break:break-word; }
+  .bar { height:6px; border-radius:6px; background:var(--border); margin:10px 0 4px; overflow:hidden; }
+  .bar > span { display:block; height:100%; background:var(--green); width:0; transition:width .3s; }
+  .target { font-family:var(--mono); font-size:11px; color:var(--muted); }
+  .rust { color:var(--yellow); font-weight:700; }
+  footer { font-size:11px; color:var(--muted); margin-top:16px; }
+</style>
+
+<header>
+  <h1>skillctl-demo · Kata board</h1>
+  <span class="sub">every beat is a real skillctl exit code</span>
+  <span class="meta" id="meta"></span>
+</header>
+
+<main>
+  <p class="legend">Mastery: <b class="rust" style="color:var(--red)">rot</b> = new ·
+    <b style="color:var(--yellow)">gelb</b> = practicing ·
+    <b style="color:var(--green)">grün</b> = sitzt. A Kata rusts if unpractised past the stall window
+    (<span id="stall">?</span> days). Progress is local; nothing is faked.</p>
+  <div class="grid" id="grid"></div>
+  <footer>Offline. K5 is concept/roadmap: the revocation exit is real; fleet propagation is roadmap.</footer>
+</main>
+
+<script>
+(function () {
+  var grid = document.getElementById('grid');
+  var stallEl = document.getElementById('stall');
+  var meta = document.getElementById('meta');
+  var cards = {};
+
+  fetch('/api/state').then(function (r) { return r.json(); }).then(function (s) {
+    meta.textContent = 'mode=' + s.mode + ' · skillctl=' + s.skillctl;
+  }).catch(function () {});
+
+  function esc(s) { var e = document.createElement('div'); e.textContent = s || ''; return e.innerHTML; }
+
+  function render(rows, stall) {
+    if (stall != null) stallEl.textContent = stall;
+    rows.forEach(function (r) {
+      var pct = r.required > 0 ? Math.min(100, Math.round(100 * r.distinct / r.required)) : 0;
+      var stateWord = r.rusted ? (r.state + ' · rusting') : r.state;
+      var html =
+        '<div class="row">' +
+          '<span class="kid">' + esc(r.id) + '</span>' +
+          '<span class="title">' + esc(r.title) + '</span>' +
+          (r.concept ? '<span class="concept">concept</span>' : '') +
+          '<span class="chip">' + r.distinct + '/' + r.required + '</span>' +
+        '</div>' +
+        '<div class="row" style="margin-top:6px">' +
+          '<span class="state ' + esc(r.state) + '">' + esc(stateWord) + '</span>' +
+          (r.rusted ? '<span class="rust" style="font-size:11px">rusting — refresh it</span>' : '') +
+        '</div>' +
+        '<div class="why">' + esc(r.why) + '</div>' +
+        '<div class="bar"><span style="width:' + pct + '%"></span></div>' +
+        '<div class="target">target exit ' + r.target_exit + '</div>' +
+        '<div class="hint">' + esc(r.hint) + '</div>';
+      var el = cards[r.id];
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'k-' + r.id;
+        grid.appendChild(el);
+        cards[r.id] = el;
+      }
+      el.className = 'card ' + esc(r.state);
+      el.innerHTML = html;
+    });
+  }
+
+  function refresh(flashId) {
+    fetch('/api/kata').then(function (r) { return r.json(); }).then(function (data) {
+      render(data.rows || [], data.stall_days);
+      if (flashId && cards[flashId]) {
+        var c = cards[flashId];
+        c.classList.remove('flash'); void c.offsetWidth; c.classList.add('flash');
+      }
+    }).catch(function () {});
+  }
+
+  refresh(null);
+
+  // Live updates: a real skillctl beat pushes a "beat" event over the shared SSE.
+  var es = new EventSource('/events');
+  es.onmessage = function (m) {
+    var e;
+    try { e = JSON.parse(m.data); } catch (_) { return; }
+    if (e.kind === 'beat') refresh(e.id);
+  };
+})();
+</script>

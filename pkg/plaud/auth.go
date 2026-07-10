@@ -342,6 +342,33 @@ func findChrome() string {
 	return ""
 }
 
+// plaudTokenExtractJS reads the Plaud bearer token from a plaud.ai tab's
+// localStorage. Plaud renamed the key (the extractor hard-coded "tokenstr";
+// the debug path already probes "pld_tokenstr"), so this tries known keys in
+// priority order, then any key whose NAME mentions "token", then any JWT-shaped
+// value — returning {"token","via"} JSON. `via` is a fixed, secret-safe label
+// (never a raw key name, which can itself embed a JWT) so the caller can log
+// which path matched. Single-line so it embeds cleanly in the JXA path too.
+const plaudTokenExtractJS = `(function(){try{var known=["tokenstr","pld_tokenstr"];for(var i=0;i<known.length;i++){var v=localStorage.getItem(known[i]);if(v&&v.length>10)return JSON.stringify({token:v,via:known[i]});}var ls=localStorage;for(var j=0;j<ls.length;j++){var k=ls.key(j);var val=ls.getItem(k);if(val&&val.length>20&&/token/i.test(k))return JSON.stringify({token:val,via:"name-has-token"});}for(var m=0;m<ls.length;m++){var kk=ls.key(m);var vv=ls.getItem(kk);if(vv&&/^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\./.test(vv))return JSON.stringify({token:vv,via:"jwt-shape"});}return JSON.stringify({token:"",via:""});}catch(e){return JSON.stringify({token:"",via:""});}})()`
+
+// parsePlaudTokenResult parses the {"token","via"} JSON that plaudTokenExtractJS
+// returns (cdpEvaluate returns the JS string value directly, so this is a single
+// unmarshal). Returns an empty token if none was found or the value is
+// implausibly short.
+func parsePlaudTokenResult(raw string) (token, via string) {
+	var res struct {
+		Token string `json:"token"`
+		Via   string `json:"via"`
+	}
+	if json.Unmarshal([]byte(strings.TrimSpace(raw)), &res) != nil {
+		return "", ""
+	}
+	if len(res.Token) > 10 && res.Token != "null" {
+		return res.Token, res.Via
+	}
+	return "", ""
+}
+
 // extractTokenOsascript uses macOS osascript/JXA to read localStorage from Chrome.
 func extractTokenOsascript() (string, error) {
 	script := `
@@ -355,10 +382,8 @@ function run() {
 			for (var j = 0; j < tabs.length; j++) {
 				var u = tabs[j].url();
 				if (u && u.indexOf("plaud.ai") !== -1) {
-					var token = chrome.execute(tabs[j], {javascript: 'localStorage.getItem("tokenstr")'});
-					if (token && token !== "null" && token.length > 10) {
-						return token;
-					}
+					var res = chrome.execute(tabs[j], {javascript: '` + plaudTokenExtractJS + `'});
+					try { var o = JSON.parse(res); if (o && o.token && o.token.length > 10) return res; } catch(e) {}
 				}
 			}
 		}
@@ -376,10 +401,14 @@ function run() {
 	if strings.HasPrefix(result, "__ERR__:") {
 		return "", fmt.Errorf("%s", strings.TrimPrefix(result, "__ERR__:"))
 	}
-	if result == "" || result == "null" {
+	token, via := parsePlaudTokenResult(result)
+	if token == "" {
 		return "", fmt.Errorf("no token found in Chrome localStorage")
 	}
-	return result, nil
+	if via != "tokenstr" {
+		fmt.Fprintf(os.Stderr, "  [plaud] token found via %q (Plaud renamed the 'tokenstr' key — resilient fallback used)\n", via)
+	}
+	return token, nil
 }
 
 // ExtractTokenCDP connects to Chrome's DevTools Protocol on localhost:9222
@@ -403,29 +432,91 @@ func extractTokenCDP() (string, error) {
 	defer resp.Body.Close()
 
 	var targets []struct {
-		ID          string `json:"id"`
-		URL         string `json:"url"`
+		Type         string `json:"type"`
+		URL          string `json:"url"`
 		WebSocketURL string `json:"webSocketDebuggerUrl"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&targets); err != nil {
 		return "", fmt.Errorf("parse Chrome targets: %w", err)
 	}
 
-	// 2. Find a plaud.ai tab.
+	// BUG-0168 diagnostics. The Plaud token lives in the localStorage of the
+	// profile where the user actually completed the login. If CDP on port 9222
+	// is attached to a DIFFERENT Chrome instance than the one the user logged in
+	// to — e.g. a leftover debug Chrome from a previous attempt still holding
+	// 9222, or the user logged in to their normal browser instead of the launched
+	// debug window — then no plaud.ai tab visible here carries `tokenstr`.
+	// Set M3C_PLAUD_DEBUG=1 to inspect what CDP sees. The dump is deliberately
+	// SECRET-SAFE so the output can be shared in a bug report: per-target ORIGIN
+	// only (never full URLs — query strings can carry tokens) and, per plaud.ai
+	// tab, only whether `tokenstr` exists and its length — never localStorage
+	// key names or values (a Plaud key name can itself embed a bearer JWT, e.g.
+	// `PLADU_bearer <JWT>_...`).
+	debug := os.Getenv("M3C_PLAUD_DEBUG") != ""
+	if debug {
+		fmt.Fprintf(os.Stderr, "  [plaud-debug] CDP /json returned %d target(s):\n", len(targets))
+		for _, t := range targets {
+			fmt.Fprintf(os.Stderr, "  [plaud-debug]   type=%-8s origin=%s\n", t.Type, plaudURLOrigin(t.URL))
+		}
+	}
+
+	// 2. Find a plaud.ai tab that carries the token.
+	plaudTabs := 0
 	for _, t := range targets {
 		if strings.Contains(t.URL, "plaud.ai") && t.WebSocketURL != "" {
-			token, err := cdpEvaluate(t.WebSocketURL, `localStorage.getItem("tokenstr")`)
+			plaudTabs++
+			if debug {
+				// Secret-safe presence check: reports counts + token length only,
+				// never key names (which can embed a JWT) or values.
+				summary, serr := cdpEvaluate(t.WebSocketURL,
+					`(function(){var k=Object.keys(localStorage);var t=localStorage.getItem("tokenstr");`+
+						`return "keys="+k.length+", tokenstr="+(t?("present(len="+t.length+")"):"absent")+`+
+						`", pld_tokenstr="+(k.indexOf("pld_tokenstr")>=0?"present":"absent");})()`)
+				if serr != nil {
+					fmt.Fprintf(os.Stderr, "  [plaud-debug]   plaud.ai tab (%s) localStorage read failed: %v\n", plaudURLOrigin(t.URL), serr)
+				} else {
+					fmt.Fprintf(os.Stderr, "  [plaud-debug]   plaud.ai tab (%s) %s\n", plaudURLOrigin(t.URL), strings.Trim(summary, "\""))
+				}
+			}
+			raw, err := cdpEvaluate(t.WebSocketURL, plaudTokenExtractJS)
 			if err != nil {
 				continue
 			}
-			token = strings.Trim(token, "\"")
-			if token != "" && token != "null" && len(token) > 10 {
+			token, via := parsePlaudTokenResult(raw)
+			if token != "" {
+				if via != "tokenstr" {
+					fmt.Fprintf(os.Stderr, "  [plaud] token found via %q (Plaud renamed the 'tokenstr' key — resilient fallback used)\n", via)
+				}
 				return token, nil
 			}
 		}
 	}
 
-	return "", fmt.Errorf("no plaud.ai tab with token found in Chrome (checked %d tabs)", len(targets))
+	// Distinguish the two very different failure modes (BUG-0168): a plaud.ai tab
+	// was present but carried no token (wrong profile / renamed key) vs. no
+	// plaud.ai tab at all on this CDP instance (reading a different Chrome).
+	if plaudTabs > 0 {
+		return "", fmt.Errorf("found %d plaud.ai tab(s) among %d target(s), but none had a 'tokenstr' in localStorage — "+
+			"log in on the debug window that just opened (not another Chrome window), "+
+			"or Plaud may have changed its token storage; re-run with M3C_PLAUD_DEBUG=1 to inspect", plaudTabs, len(targets))
+	}
+	return "", fmt.Errorf("no plaud.ai tab found among %d Chrome target(s) — "+
+		"the debug Chrome on port 9222 may be a different instance than the one you logged in to; "+
+		"close any leftover Chrome debug windows and re-run (M3C_PLAUD_DEBUG=1 to inspect)", len(targets))
+}
+
+// plaudURLOrigin reduces a URL to scheme://host so BUG-0168 debug output can
+// never leak a token embedded in a URL path or query string.
+func plaudURLOrigin(raw string) string {
+	i := strings.Index(raw, "://")
+	if i < 0 {
+		return raw
+	}
+	rest := raw[i+3:]
+	if j := strings.IndexAny(rest, "/?#"); j >= 0 {
+		rest = rest[:j]
+	}
+	return raw[:i+3+len(rest)]
 }
 
 // cdpEvaluate sends a Runtime.evaluate command over a WebSocket to Chrome.
@@ -560,12 +651,18 @@ func OpenPlaudLogin() error {
 }
 
 // OpenBrowser opens a URL in the platform's default browser.
+//
+// SEC-M11: On Windows we use rundll32 url.dll,FileProtocolHandler instead of
+// "cmd /c start". The URL passed here may be server-/profile-controlled, and
+// routing it through cmd.exe exposes a shell-metacharacter surface (&, |, ^, %)
+// even with an empty title. rundll32's FileProtocolHandler hands the URL
+// straight to the registered protocol handler with no shell interpretation.
 func OpenBrowser(url string) error {
 	switch runtime.GOOS {
 	case "darwin":
 		return exec.Command("open", url).Start()
 	case "windows":
-		return exec.Command("cmd", "/c", "start", "", url).Start() // empty title prevents injection via & in URL
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
 	case "linux":
 		return exec.Command("xdg-open", url).Start()
 	default:

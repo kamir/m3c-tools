@@ -1,10 +1,163 @@
+<div align="center">
+
 # m3c-tools
 
-**Multi-Modal-Memory-Capturing Tools** — a macOS menu bar app and CLI for capturing observations (text + audio + image) and uploading them to an [ER1](https://er1.io) personal knowledge server.
+### Give your agents a memory — and proof of what they're allowed to do.
+
+**Multi-Modal-Memory Tools** is a personal, sovereign toolkit for turning everything you
+see, hear and decide into durable, structured memory — and for governing the agent skills
+that act on it. Two command-line tools, one repository, zero mandatory cloud middleman.
+
+[![Latest release](https://img.shields.io/github/v/release/kamir/m3c-tools?sort=semver)](https://github.com/kamir/m3c-tools/releases/latest)
+[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue)](#install)
+[![Made with Go](https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go)](https://go.dev)
+
+[Quickstart: m3c-tools](docs/quickstart-m3c-tools.md) ·
+[Quickstart: skillctl](docs/quickstart-skillctl.md) ·
+[Full manuals](#-documentation) ·
+[Website](https://kamir.github.io/m3c-tools)
+
+<br>
+
+<img src="docs/assets/skillctl-hero.png" alt="skillctl — build, package, sign, share and run agent skills" width="880">
+
+</div>
 
 ---
 
-## Install (one-liner)
+## Why this exists
+
+Autonomous agents need two things you can't buy off the shelf:
+
+1. **A memory of what actually happened** — not a chat log, but structured, multimodal,
+   replayable observations that live on infrastructure *you* control.
+2. **Proof of what they're allowed to do** — every skill an agent runs should carry a
+   verifiable identity, be revocable on demand, and be checkable **offline**, with no
+   external authority in the verification path.
+
+This repository ships one focused tool for each half.
+
+| Tool | The one-liner | You use it to… |
+|------|---------------|----------------|
+| **`m3c-tools`** | *The capture pipeline.* | Turn YouTube videos, audio, screenshots and voice notes into multimodal memory on your own [ER1](https://er1.io) knowledge server. |
+| **`skillctl`** | *The capability plane.* | Sign, admit, verify and revoke the agent skills that read that memory and act — so nothing runs unless it's authorized and provable. |
+
+`m3c-tools` fills the memory. `skillctl` governs the hands. Together they're the
+personal-scale foundation for running agents you can actually trust in production.
+
+---
+
+## 60-second start
+
+Pick the tool you came for. Both ship as single static binaries in every
+[release](https://github.com/kamir/m3c-tools/releases/latest).
+
+### `m3c-tools` — capture your first memory
+
+```bash
+# macOS (Apple Silicon) — see Install below for Intel / Linux / Windows
+curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-darwin-arm64.tar.gz | tar xz \
+  && sudo mv m3c-tools-darwin-arm64 /usr/local/bin/m3c-tools
+
+m3c-tools setup                         # guided onboarding (ER1 URL, login, key)
+m3c-tools transcript dQw4w9WgXcQ        # fetch a YouTube transcript, right now
+m3c-tools doctor                        # verify connectivity & config
+```
+
+→ **Full walkthrough:** [Quickstart: m3c-tools](docs/quickstart-m3c-tools.md)
+
+### `skillctl` — sign and verify your first skill
+
+```bash
+# macOS (Apple Silicon)
+curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/skillctl-darwin-arm64.tar.gz | tar xz \
+  && sudo mv skillctl-darwin-arm64 /usr/local/bin/skillctl
+
+skillctl keygen --out ~/.config/m3c/skill-keys/mykey            # ed25519 → mykey.priv + mykey.pub
+skillctl pack --skill ./my-skill -o my-skill.skb --name my-skill --version 1.0.0
+skillctl sign my-skill.skb --key ~/.config/m3c/skill-keys/mykey.priv
+skillctl verify-sig my-skill.skb --pubkey ~/.config/m3c/skill-keys/mykey.pub   # offline, no server
+```
+
+→ **Full walkthrough:** [Quickstart: skillctl](docs/quickstart-skillctl.md)
+
+---
+
+## What `m3c-tools` captures
+
+Four capture channels flow through one shared pipeline:
+
+```
+Capture → Preview + Record → Whisper transcribe → Tag editor → Store to ER1
+```
+
+| Channel | Trigger | What it captures |
+|---------|---------|------------------|
+| **A — YouTube** | Paste a video URL/ID | Transcript + thumbnail + your voice comment |
+| **B — Screenshot** | Menu item | Screenshot + voice note (uses clipboard image if present) |
+| **C — Impulse** | Menu item | Interactive region capture + quick voice note |
+| **D — Audio Import** | Menu item / CLI | Batch audio from a folder (e.g. a voice recorder or Plaud/Pocket sync) |
+
+Each observation becomes a multimodal ER1 document — text + audio + image, with tags and
+metadata. On macOS this is a native menu-bar app; on Linux/Windows it's a full CLI.
+Even without a transcript (e.g. subtitles disabled), a YouTube capture still keeps the
+thumbnail and the source link — the observation lands regardless.
+
+**Field recordings, positioned in real time.** `m3c-tools plaud` drains your Plaud.ai
+recordings — customer visits (*Kundenbesuche*), meetings and field notes — straight into
+ER1, and `m3c-tools pocket` does the same for a Pocket device. Synced items are placed at
+their **true recording time**, not the moment you synced them (`plaud fix-times` backfills
+earlier imports), so captures from multiple devices land on the timeline where they
+actually happened.
+
+**Command surface:** `transcript`, `upload`, `whisper`, `thumbnail`, `record`, `screenshot`,
+`import-audio` (capture); `plaud` (`list` · `check` · `sync` · `fix-times` · `auth`) and
+`pocket` (field-recording sync); `retry`, `cancel`, `schedule`, `status` (ER1 queue);
+`doctor`, `check-er1`, `config` (incl. `doctor`), `settings`, `token`, `devices`, `login`,
+`setup`, `menubar` (setup & diagnostics). See the [m3c-tools manual](docs/manual-m3c-tools.md).
+
+## What `skillctl` governs
+
+`skillctl` is the trust-and-governance CLI for agent skills. It implements a full lifecycle
+so a skill can be trusted end to end:
+
+```
+author → pack → sign → admit → attest → verify / install → use → audit → revoke
+```
+
+- **Offline-verifiable.** The trust-chain check needs no hosted CA in the verification path.
+- **Revocable on demand.** Signed, offline revocation lists; freshness contracts, fail-closed.
+- **Provable identity for agents.** `agentid` issues owner-signed mandates that verify offline.
+- **Auditable.** A local transparency log (`translog`) and a Claude Code trust gate
+  (`verify-hook`) that fails closed.
+
+**Command surface** — *authoring:* `keygen`, `pack`, `sign`, `verify-sig`; *trust & install:*
+`trust`, `install`, `verify`, `verify-hook`; *governance:* `attest`, `revoke`, `agentid`,
+`publish`, `pull`, `registry`; *audit & transparency:* `audit`, `seal`, `scan`, `review`,
+`propose`, `translog`, `gate-stats`; plus `project`, `session`.
+See the [skillctl manual](docs/manual-skillctl.md).
+
+---
+
+## 📚 Documentation
+
+| Page | For |
+|------|-----|
+| [**Quickstart: m3c-tools**](docs/quickstart-m3c-tools.md) | Capture your first memory in 5 minutes |
+| [**Quickstart: skillctl**](docs/quickstart-skillctl.md) | Sign, install and verify a skill in 5 minutes |
+| [**Quickstart: skillctl-demo**](docs/quickstart-skillctl-demo.md) | Run the skill-trust scenarios offline on your own machine — 3 run live with real exit codes (S1/S2A/S5); the remaining panels render their story but run nothing (S3 is a built-but-not-run PARTIAL, S2BC/S4 are ROADMAP) — plus hands-on Kata training (shipped): five Katas, each beat a real skillctl exit code (K5 demonstrates the offline revocation deny live) |
+| [**Manual: m3c-tools**](docs/manual-m3c-tools.md) | Every command, flag and config variable |
+| [**Manual: skillctl**](docs/manual-skillctl.md) | The full trust lifecycle, command by command |
+| [Menu Bar App](docs/menubar-app.md) | Channels, Observation Window, menu items (macOS) |
+| [Platform differences](docs/PLATFORM-DIFFERENCES.md) | What works where |
+| [Website](https://kamir.github.io/m3c-tools) | The rendered docs site |
+
+---
+
+## Install
+
+Both binaries are attached to every [release](https://github.com/kamir/m3c-tools/releases/latest).
+Swap `m3c-tools` ↔ `skillctl` in any one-liner below to install the other tool.
 
 **macOS (Apple Silicon):**
 ```bash
@@ -16,344 +169,79 @@ curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-d
 curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-darwin-amd64.tar.gz | tar xz && sudo mv m3c-tools-darwin-amd64 /usr/local/bin/m3c-tools
 ```
 
-**Linux (Ubuntu/Debian):**
+**Linux (amd64):**
 ```bash
 curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-linux-amd64.tar.gz | tar xz && sudo mv m3c-tools-linux-amd64 /usr/local/bin/m3c-tools
 ```
 
-**Windows (PowerShell — run as Administrator):**
-```powershell
-# Download and install to C:\m3c-tools
-New-Item -ItemType Directory -Force -Path C:\m3c-tools
-Invoke-WebRequest -Uri https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-windows-amd64.zip -OutFile "$env:TEMP\m3c-tools.zip"
-Expand-Archive -Path "$env:TEMP\m3c-tools.zip" -DestinationPath C:\m3c-tools -Force
-Rename-Item C:\m3c-tools\m3c-tools-windows-amd64.exe C:\m3c-tools\m3c-tools.exe -Force
-
-# Add to system PATH (requires restart of terminal)
-$oldPath = [Environment]::GetEnvironmentVariable("PATH", "Machine")
-if ($oldPath -notlike "*C:\m3c-tools*") {
-    [Environment]::SetEnvironmentVariable("PATH", "$oldPath;C:\m3c-tools", "Machine")
-}
-```
-
-After installation, **open a new PowerShell window** and verify: `m3c-tools help`
+**Windows:** download `m3c-tools-windows-amd64.zip` (or the `M3C-Tools-Setup.exe` installer)
+from the [latest release](https://github.com/kamir/m3c-tools/releases/latest) and add it to your `PATH`.
+See [Quickstart: m3c-tools](docs/quickstart-m3c-tools.md) for the PowerShell one-liner.
 
 ### Platform support
 
-| Platform | Install | CLI | Menu Bar | Audio Recording | Bridge Mode |
-|----------|---------|-----|----------|-----------------|-------------|
-| macOS arm64 (Apple Silicon) | one-liner | full | full GUI | full | yes |
-| macOS amd64 (Intel/iMac) | one-liner | full | full GUI | full | yes |
-| Linux amd64 (Ubuntu) | one-liner | full | — | — | yes |
-| Linux arm64 (Jetson) | one-liner | full | — | — | yes (relay) |
-| Windows amd64 | one-liner | full | — | — | — |
+| Platform | CLI | Menu Bar | Audio Recording | Bridge Mode |
+|----------|-----|----------|-----------------|-------------|
+| macOS arm64 (Apple Silicon) | full | full GUI | full | yes |
+| macOS amd64 (Intel) | full | full GUI | full | yes |
+| Linux amd64 (Ubuntu) | full | — | — | yes |
+| Linux arm64 (Jetson) | full | — | — | yes (relay) |
+| Windows amd64 | full | — | — | — |
+
+`skillctl` is CLI-only and runs identically on all five platforms.
 
 ---
 
-## Quickstart (5 minutes)
+## Build from source
 
-### 1. Install prerequisites (macOS full build from source)
-
-```bash
-brew install pkg-config portaudio ffmpeg    # build tools + audio
-python3 -m pip install openai-whisper       # speech-to-text
-```
-
-Or: `make deps` (after cloning) to install everything at once.
-
-Requires **Go 1.25+** and **macOS** (Cocoa UI via cgo).
-
-> **First-run note:** Whisper downloads its language model on first use (~150 MB for `base`, ~1.5 GB for `medium`). This requires internet access.
-
-> **Windows/Linux users:** Use the one-liner install above — no build from source needed.
-
-### 2. Build and install
+Requires **Go 1.25+**. The macOS menu-bar GUI additionally needs `portaudio` + `ffmpeg` (cgo).
 
 ```bash
-git clone https://github.com/kamir/m3c-tools.git
-cd m3c-tools
-make install
+git clone https://github.com/kamir/m3c-tools.git && cd m3c-tools
+
+make build          # build the m3c-tools CLI → ./build/m3c-tools
+make build-all      # build the CLI + POC binaries
+go build -o build/skillctl ./cmd/skillctl   # build skillctl
+
+make install        # macOS: CLI + M3C-Tools.app + data dir + permission setup
+make menubar        # macOS: build + launch the menu bar app (dev mode)
+
+make test-unit      # offline unit tests
+make vet            # go vet ./...
+make help           # show all targets
 ```
-
-This builds the binary, creates `M3C-Tools.app`, installs both to `/usr/local/bin` and `/Applications`, and walks you through macOS permission setup (Microphone, Screen Recording).
-
-### 3. Configure
-
-**Guided setup (recommended):**
-
-```bash
-m3c-tools setup
-```
-
-The wizard walks you through:
-1. ER1 server URL (defaults to `https://onboarding.guide/upload_2`)
-2. Browser login — opens Chrome, captures your User ID automatically
-3. API key — you'll need an ER1 API key (get one from your ER1 admin)
-4. Default tags for Plaud sync
-
-This writes `~/.m3c-tools.env` with all required settings.
-
-**Manual setup** (if you prefer):
-
-```bash
-cp .env.example ~/.m3c-tools.env
-```
-
-Edit `~/.m3c-tools.env`:
-
-```
-ER1_API_URL=https://onboarding.guide/upload_2
-ER1_API_KEY=your-api-key
-ER1_CONTEXT_ID=your-context-id
-```
-
-> **Note:** An API key is required for uploads. The browser login flow captures your User ID (context), but all API calls (upload, project list) authenticate via `X-API-KEY` header. You cannot use Google login alone — ask your ER1 admin for an API key.
-
-### 4. Launch
-
-```bash
-make menubar
-```
-
-Or open `/Applications/M3C-Tools.app`. A menu bar icon appears — you're ready to capture.
-
-### 5. Try it
-
-- **Fetch a transcript**: click the menu bar icon → *Fetch Transcript...* → paste a YouTube URL
-- **Screenshot observation**: click *Capture Screenshot* → record a voice note → Store to ER1
-- **CLI only**: `m3c-tools transcript dQw4w9WgXcQ --format srt`
-
----
-
-## What does m3c-tools do?
-
-m3c-tools captures four types of observations, each flowing through a shared pipeline:
-
-```
-Capture → Preview + Record → Whisper Transcribe → Tag Editor → Store to ER1
-```
-
-| Channel | Trigger | What it captures |
-|---------|---------|------------------|
-| **A — YouTube** | Paste video URL | Transcript + thumbnail + your voice comment |
-| **B — Screenshot** | Menu item | Screenshot + voice note (uses clipboard image if present) |
-| **C — Impulse** | Menu item | Interactive region capture + quick voice note |
-| **D — Audio Import** | Menu item | Batch audio files from a folder (e.g. voice recorder sync) |
-
-Each observation becomes a multimodal ER1 document: text transcript + audio recording + image, with tags and metadata.
-
----
-
-## Configuration Reference
-
-Settings are loaded from `.env` in the project root or `~/.m3c-tools.env`. See [`.env.example`](.env.example) for all options.
-
-### Required for ER1 upload
-
-| Variable | Description |
-|----------|-------------|
-| `ER1_API_URL` | ER1 upload endpoint URL |
-| `ER1_API_KEY` | API key (sent as `X-API-KEY` header) |
-| `ER1_CONTEXT_ID` | Your ER1 context/user identifier |
-
-### Whisper (speech-to-text)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `M3C_WHISPER_MODEL` | `base` | Model size: `tiny`, `base`, `small`, `medium`, `large` |
-| `M3C_WHISPER_TIMEOUT` | `7200` | Transcription timeout in seconds |
-| `YT_WHISPER_LANGUAGE` | `de` | Language code (ISO 639-1) |
-| `M3C_WHISPER_PRELOAD` | `true` | Preload model at startup |
-
-### Screenshot capture
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `M3C_SCREENSHOT_MODE` | `clipboard-first` | `clipboard-first` or `interactive` |
-| `M3C_SCREENSHOT_CLIPBOARD_TIMEOUT_SEC` | `20` | Wait time for clipboard image |
-
-### Audio import (Channel D)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `IMPORT_AUDIO_SOURCE` | — | Source folder for audio files |
-| `IMPORT_AUDIO_DEST` | `~/ER1` | Destination for MEMORY folders |
-| `IMPORT_CONTENT_TYPE` | — | ER1 content-type label |
-
-### ER1 tuning
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ER1_UPLOAD_TIMEOUT` | `600` | HTTP timeout in seconds |
-| `ER1_VERIFY_SSL` | `false` | TLS certificate verification |
-| `ER1_RETRY_INTERVAL` | `300` | Seconds between retry cycles |
-| `ER1_MAX_RETRIES` | `10` | Max retries before dropping |
-
----
-
-## macOS App Bundle
-
-m3c-tools ships as a native macOS `.app` bundle (`M3C-Tools.app`) that runs as a menu bar agent. The bundle includes:
-
-- Go binary compiled with cgo (native Cocoa UI)
-- App icon (`.icns` generated from `maindset_icon.png`)
-- `Info.plist` with microphone and screen capture usage descriptions
-- `LSUIElement = true` (menu bar agent — no Dock icon)
-
-### Build the app bundle only
-
-```bash
-make build-app
-# Result: build/M3C-Tools.app
-```
-
-### Install to /Applications
-
-```bash
-make install
-```
-
-This runs `build-app` and then:
-1. Copies the CLI binary to `/usr/local/bin/m3c-tools`
-2. Copies `M3C-Tools.app` to `/Applications/`
-3. Creates `~/.m3c-tools/` data directory
-
-### Grant macOS permissions
-
-After installing, run:
-
-```bash
-make permissions
-```
-
-This opens each System Settings pane one at a time:
-
-| Permission | Why |
-|------------|-----|
-| **Screen Recording** | Screenshot capture (Channels B & C) |
-| **Microphone** | Voice recording for observations |
-| **Accessibility** | Clipboard monitoring for screenshot detection |
-| **Input Monitoring** | Keystroke capture for hotkey support |
-
-Toggle **M3C-Tools** ON in each pane (click `+` to add if not listed).
-
-### Launch
-
-Double-click `/Applications/M3C-Tools.app`, or:
-
-```bash
-open /Applications/M3C-Tools.app
-```
-
-Or for development:
-
-```bash
-make menubar    # builds + launches directly (no install needed)
-```
-
-### Uninstall
-
-```bash
-make uninstall
-```
-
-Removes `/usr/local/bin/m3c-tools` and `/Applications/M3C-Tools.app`. Data at `~/.m3c-tools/` is preserved.
-
----
-
-## Build & Test
-
-```bash
-make build          # Build CLI binary → ./build/m3c-tools
-make build-app      # Build macOS .app bundle → ./build/M3C-Tools.app
-make menubar        # Build + launch menu bar app (dev mode)
-make install        # Full install: CLI + .app + data dir
-
-make test-unit      # Offline unit tests
-make ci             # Full CI: vet + lint + test + build
-make test-network   # YouTube API tests (requires internet)
-make test-er1       # ER1 integration tests (requires server)
-
-make help           # Show all targets
-```
-
-Run a single test:
-
-```bash
-go test -v -count=1 ./e2e/ -run TestTranscriptFetch
-```
-
----
-
-## Cross-Platform CLI (Windows, Linux, Jetson)
-
-On non-macOS platforms, m3c-tools runs in CLI-only mode (no menu bar GUI):
-
-```bash
-m3c-tools setup                  # Interactive onboarding wizard
-m3c-tools plaud auth login       # Authenticate with Plaud (auto-launches Chrome)
-m3c-tools plaud list             # List all Plaud recordings
-m3c-tools plaud sync all         # Sync all recordings to ER1
-m3c-tools transcript <video_id>  # Fetch YouTube transcript
-m3c-tools check-er1              # Verify ER1 connectivity
-```
-
-### Plaud auth (all platforms)
-
-`plaud auth login` works on macOS, Windows, and Linux. It auto-launches Chrome (or Edge) with remote debugging, opens `app.plaud.ai`, and extracts the auth token after you log in. No manual Chrome flags needed. On macOS, it can also extract the token directly from a running Chrome via AppleScript (no debug port needed).
-
-### Context Processor Bridge (macOS / Ubuntu only)
-
-An iMac or Ubuntu box can serve as a dedicated batch processing node for transcription and bulk ingestion. Windows is **desktop interaction mode only** — no bridge mode.
-
-```bash
-# One-command bridge setup (macOS or Ubuntu):
-curl -sL https://raw.githubusercontent.com/kamir/m3c-tools-maintenance/master/scripts/setup-bridge.sh | bash
-
-# Then:
-m3c-tools import-audio ~/m3c-inbox/ --run    # Batch-transcribe
-m3c-tools import-audio retry                  # Retry failed uploads
-m3c-tools plaud sync all                      # Sync all Plaud recordings
-```
-
-Setup details: [scripts/setup-bridge.sh](https://github.com/kamir/m3c-tools-maintenance/blob/master/scripts/setup-bridge.sh) | Hardware planning: [SPEC-0018](https://github.com/kamir/m3c-tools-maintenance/blob/master/SPEC/SPEC-0018-jetson-nano-whisper.md)
 
 ---
 
 ## Architecture
 
 ```
-cmd/m3c-tools/       CLI + menu bar app entry point
-  main.go            macOS: full GUI + CLI
-  main_other.go      Windows/Linux: CLI only
+cmd/m3c-tools/       m3c-tools CLI + macOS menu-bar app entry point
+cmd/skillctl/        skillctl trust-&-governance CLI entry point
 pkg/transcript/      YouTube InnerTube API client (pure Go, no API key)
 pkg/er1/             ER1 upload client + retry queue + health check
 pkg/impression/      Composite document builder + tag system
-pkg/whisper/         Whisper CLI subprocess wrapper (heartbeat, progress)
-pkg/recorder/        PortAudio microphone recording (cgo, macOS only)
+pkg/whisper/         Whisper CLI subprocess wrapper
+pkg/recorder/        PortAudio microphone recording (cgo, macOS)
 pkg/screenshot/      macOS screenshot capture + clipboard detection
-pkg/menubar/         Native Cocoa UI via cgo (NSWindow, NSTabView, etc.)
+pkg/menubar/         Native Cocoa UI via cgo (NSWindow, NSTabView, …)
 pkg/importer/        Batch audio import pipeline
-pkg/tracking/        SQLite tracking database
 pkg/plaud/           Plaud.ai client + Chrome CDP auth
-pkg/timetracking/    Project time tracking + Gantt chart
+pkg/pocket/          Pocket capture-device sync
+pkg/timetracking/    Project time tracking + Gantt chart + PLM client
 ```
 
-## Documentation
+Core logic (transcript, er1, impression) depends only on the Go standard library.
 
-Full documentation: **[kamir.github.io/m3c-tools](https://kamir.github.io/m3c-tools)**
+---
 
-- [Getting Started](https://kamir.github.io/m3c-tools/getting-started)
-- [Menu Bar App](https://kamir.github.io/m3c-tools/menubar-app)
-- [Roadmap](https://kamir.github.io/m3c-tools/roadmap)
+## The bigger picture
 
-## Uninstalling
-
-```bash
-make uninstall
-```
-
-Data at `~/.m3c-tools/` is preserved — remove manually if desired.
+`skillctl` is the reference implementation of what we call the **capability plane** — one
+plane of a *Sovereign Decision Fabric*: an architecture for running autonomous agents where
+every decision is recorded and replayable, and every capability an agent holds is itself
+authorized, provable, and revocable. This repo is the "ur-version" where that machinery is
+built and battle-tested in the open.
 
 ## License
 

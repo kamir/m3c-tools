@@ -22,16 +22,21 @@ func TestGenerate_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("priv stat: %v", err)
 	}
-	if mode := priv.Mode().Perm(); mode != 0o600 {
-		t.Errorf("priv mode = %#o, want 0600", mode)
-	}
-
 	pub, err := os.Stat(out + ".pub")
 	if err != nil {
 		t.Fatalf("pub stat: %v", err)
 	}
-	if mode := pub.Mode().Perm(); mode != 0o644 {
-		t.Errorf("pub mode = %#o, want 0644", mode)
+	// SEC-WIN: POSIX mode bits do not reflect Windows ACLs — Go reports a
+	// 0600-written file back as 0666 there. Keep the perm assertion at full
+	// strength on Unix (it is a real security check on the private key); only
+	// the Windows path, where the OS cannot honour these bits, is gated out.
+	if runtime.GOOS != "windows" {
+		if mode := priv.Mode().Perm(); mode != 0o600 {
+			t.Errorf("priv mode = %#o, want 0600", mode)
+		}
+		if mode := pub.Mode().Perm(); mode != 0o644 {
+			t.Errorf("pub mode = %#o, want 0644", mode)
+		}
 	}
 
 	// Round-trip: load both, sign random data, verify with stdlib.
@@ -51,6 +56,46 @@ func TestGenerate_HappyPath(t *testing.T) {
 	sig := ed25519.Sign(loadedPriv, msg)
 	if !ed25519.Verify(loadedPub, msg, sig) {
 		t.Fatal("ed25519.Verify failed on freshly generated keypair")
+	}
+}
+
+// TestKeygenRoundTrip exercises the full Generate → LoadPrivateKey →
+// LoadPublicKey → Sign → Verify cycle on the CURRENT GOOS. On Windows this is
+// the regression guard for SEC-WIN: Go reports a 0600-written key back as
+// 0666, so before the runtime.GOOS guard LoadPrivateKey rejected every key on
+// Windows as "insecure mode" and publish/attest/revoke/pull --install all
+// failed. The test name matches the windows-gate `-run 'RoundTrip'` filter so
+// it runs on the real windows-latest runner.
+func TestKeygenRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "rt-key")
+
+	if err := Generate(out); err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+
+	loadedPriv, err := LoadPrivateKey(out + ".priv")
+	if err != nil {
+		// On Windows the os mode bits do not reflect ACLs; LoadPrivateKey
+		// must not reject the freshly generated key on that ground.
+		t.Fatalf("LoadPrivateKey on GOOS=%s: %v", runtime.GOOS, err)
+	}
+	loadedPub, err := LoadPublicKey(out + ".pub")
+	if err != nil {
+		t.Fatalf("LoadPublicKey: %v", err)
+	}
+
+	msg := make([]byte, 64)
+	if _, err := rand.Read(msg); err != nil {
+		t.Fatal(err)
+	}
+	sig := ed25519.Sign(loadedPriv, msg)
+	if !ed25519.Verify(loadedPub, msg, sig) {
+		t.Fatal("ed25519.Verify failed on round-tripped keypair")
+	}
+	// The loaded public key must match the private key's embedded public half.
+	if !loadedPub.Equal(loadedPriv.Public()) {
+		t.Fatal("loaded public key does not match private key's public half")
 	}
 }
 

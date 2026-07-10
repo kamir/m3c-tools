@@ -1,0 +1,10 @@
+{
+  "categories": [
+    "tool-escalation"
+  ],
+  "rule_ids": [
+    "TOOL-001"
+  ],
+  "min_verdict": "red",
+  "note": "python -c interpreter-exec is shell-equivalent; not declared -> escalation."
+}

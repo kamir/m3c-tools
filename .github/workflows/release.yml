@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 env:
-  GO_VERSION: "1.25"
+  GO_VERSION: "1.26.5"
 
 jobs:
   # -----------------------------------------------------------------------
@@ -127,8 +127,10 @@ jobs:
           path: |
             dist/m3c-tools-linux-*.tar.gz
             dist/skillctl-linux-*.tar.gz
+            dist/skillctl-demo-linux-*.tar.gz
             dist/m3c-tools-windows-*.zip
             dist/skillctl-windows-*.zip
+            dist/skillctl-demo-windows-*.zip
 
   # -----------------------------------------------------------------------
   # Windows NSIS installer
@@ -210,5 +212,8 @@ jobs:
             artifacts/skillctl-linux-amd64.tar.gz
             artifacts/skillctl-linux-arm64.tar.gz
             artifacts/skillctl-windows-amd64.zip
+            artifacts/skillctl-demo-linux-amd64.tar.gz
+            artifacts/skillctl-demo-linux-arm64.tar.gz
+            artifacts/skillctl-demo-windows-amd64.zip
             artifacts/M3C-Tools-Setup.exe
             artifacts/checksums.txt

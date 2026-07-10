@@ -150,7 +150,6 @@ type Consumer struct {
 	mu           sync.Mutex
 	eligibleIDs  []string  // thought_ids accumulated this window
 	lastFireAt   time.Time // UTC, zero at boot
-	heartbeatDue bool      // latched by ticker; cleared on fire or drain
 	stopBG       chan struct{}
 }
 

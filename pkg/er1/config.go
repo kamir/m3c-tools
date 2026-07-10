@@ -7,15 +7,87 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/auth"
 	"github.com/kamir/m3c-tools/pkg/config"
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 )
+
+// placeholderFatalOnce ensures the FATAL log for a placeholder ER1_API_KEY
+// fires at most once per process, even when LoadConfig() is called from
+// multiple startup paths (PLM sync, retry scheduler, menubar init, …).
+var placeholderFatalOnce sync.Once
+
+// insecureTLSWarnOnce ensures the SEC-M7 warning about disabled TLS
+// verification fires at most once per process, even though LoadConfig() is
+// called from many startup paths.
+var insecureTLSWarnOnce sync.Once
+
+// isLoopbackURL reports whether the host component of rawURL is a loopback
+// address (127.0.0.0/8, ::1, or the literal "localhost"). Self-contained so
+// the SEC-M7 fail-closed gate does not depend on helpers in sibling packages.
+//
+// Pure (no DNS): a hostname that merely *resolves* to loopback is NOT treated
+// as loopback — only literal loopback hosts are allowed to skip verification.
+func isLoopbackURL(rawURL string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || parsed == nil {
+		return false
+	}
+	host := parsed.Hostname()
+	if host == "localhost" {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
+}
+
+// applyTLSVerificationPolicy enforces the SEC-M7 fail-closed rule on a freshly
+// loaded Config: when TLS verification is disabled (ER1_VERIFY_SSL=false) it is
+// only honoured for a loopback target. For any non-loopback host the request to
+// skip verification is REFUSED — verification is forced back on so every
+// downstream HTTP client (10+ call sites all derive from cfg.VerifySSL) stays
+// fail-closed. A loud one-time warning is emitted whenever verification is
+// (or was about to be) disabled.
+func applyTLSVerificationPolicy(cfg *Config) {
+	if cfg.VerifySSL {
+		return // verification on — nothing to police
+	}
+	if isLoopbackURL(cfg.APIURL) {
+		insecureTLSWarnOnce.Do(func() {
+			log.Printf("[er1] WARNING: TLS verification is DISABLED (ER1_VERIFY_SSL=false) for loopback target %q. This is only safe for local development with self-signed certs.", cfg.APIURL)
+		})
+		return
+	}
+	// Non-loopback host with verification disabled: refuse (fail-closed).
+	insecureTLSWarnOnce.Do(func() {
+		log.Printf("[er1] SECURITY: REFUSING to disable TLS verification (ER1_VERIFY_SSL=false) for NON-loopback host %q — re-enabling certificate verification. ER1_VERIFY_SSL=false is only honoured for 127.0.0.1/localhost.", cfg.APIURL)
+	})
+	cfg.VerifySSL = true
+}
+
+// hasDeviceTokenAuth reports whether device-token (Bearer) auth is available
+// either via the ER1_DEVICE_TOKEN env var or a persisted token (OS keychain or
+// the encrypted fallback file). When a device token is available, the X-API-KEY
+// fallback path is never used (see AuthHeaders) — so any ER1_API_KEY value,
+// including placeholders, is irrelevant and must NOT produce a FATAL warning.
+func hasDeviceTokenAuth() bool {
+	if os.Getenv("ER1_DEVICE_TOKEN") != "" {
+		return true
+	}
+	return auth.HasStoredToken()
+}
 
 // Config holds ER1 server connection settings, loaded from environment variables.
 type Config struct {
@@ -41,28 +113,52 @@ func LoadConfig() *Config {
 		RetryInterval: envInt("ER1_RETRY_INTERVAL", 300),
 		MaxRetries:    envInt("ER1_MAX_RETRIES", 10),
 	}
-	// BUG-0137: refuse to use a placeholder API key against a non-local URL.
-	// The active profile may have shipped with a template value (`minimal-key`,
-	// `once-only`, …) that production rejects. Clearing APIKey here converts
-	// "silent 401 from the server, item queued forever" into the existing
-	// "no authentication configured" warning path below — visible at startup,
-	// and the upload code skips the request entirely (BUG-0093 fallthrough).
+	// SEC-M7: ER1_VERIFY_SSL=false silently disabled TLS verification for any
+	// host. Warn once when it is disabled, and refuse (fail-closed: force
+	// verification back on) for non-loopback hosts. Allowed only for
+	// 127.0.0.1/localhost. Applied here so all downstream clients inherit the
+	// vetted cfg.VerifySSL value.
+	applyTLSVerificationPolicy(cfg)
+	// BUG-0137 + BUG-0163: refuse to use a placeholder API key against a
+	// non-local URL — but only when the API key would actually be sent.
+	// Device token (SPEC-0127) is the primary auth method and takes
+	// precedence in AuthHeaders(). When a device token is available, the
+	// X-API-KEY fallback path is dead-code, so any value (placeholder,
+	// real, empty) in ER1_API_KEY is irrelevant: clear it silently. The
+	// FATAL warning is only meaningful when the API key WOULD be the
+	// active auth mechanism (i.e., no device token available).
+	deviceToken := hasDeviceTokenAuth()
 	if config.IsBlockingPlaceholder(cfg.APIKey, cfg.APIURL) {
-		log.Printf("[er1] FATAL: ER1_API_KEY is a placeholder (%q) targeting %q — refusing to upload. Run 'm3c-tools doctor' or fix the active profile.",
-			cfg.APIKey, cfg.APIURL)
+		if !deviceToken {
+			placeholderFatalOnce.Do(func() {
+				log.Printf("[er1] FATAL: ER1_API_KEY is a placeholder (%q) targeting %q — refusing to upload. Run 'm3c-tools doctor' or fix the active profile.",
+					cfg.APIKey, cfg.APIURL)
+			})
+		}
 		cfg.APIKey = ""
 	}
-	// BUG-0093 + SPEC-0143: Only warn when NO auth is available.
-	// Device token (SPEC-0127) is the primary auth method; API key is fallback for dev/CI.
-	// Check both env var AND token file — env var may not be set yet at startup.
-	if cfg.APIKey == "" && os.Getenv("ER1_DEVICE_TOKEN") == "" {
-		home, _ := os.UserHomeDir()
-		tokenPath := filepath.Join(home, ".m3c-tools", "device-token.enc")
-		if _, err := os.Stat(tokenPath); os.IsNotExist(err) {
-			log.Println("[er1] WARNING: No authentication configured — log in with 'm3c-tools login' or set ER1_API_KEY in your profile.")
-		}
+	// BUG-0093 + SPEC-0143: Only warn when NO auth is available at all.
+	if cfg.APIKey == "" && !deviceToken {
+		log.Println("[er1] WARNING: No authentication configured — log in with 'm3c-tools login' or set ER1_API_KEY in your profile.")
 	}
 	return cfg
+}
+
+// MemoryItemURL returns the ER1 memory-viewer URL for a document:
+//
+//	<base>/memory/<context_id>/<docID>
+//
+// where <base> is APIURL with the /upload_2 (or /upload) suffix stripped.
+// Returns "" when docID is empty. Used to make a synced item openable from the
+// Plaud sync panel and to print item links in `plaud list` / `plaud check`.
+func (c *Config) MemoryItemURL(docID string) string {
+	if docID == "" {
+		return ""
+	}
+	base := strings.TrimSuffix(c.APIURL, "/upload_2")
+	base = strings.TrimSuffix(base, "/upload")
+	base = strings.TrimSuffix(base, "/")
+	return fmt.Sprintf("%s/memory/%s/%s", base, c.ContextID, docID)
 }
 
 // AuthHeaders returns HTTP headers for ER1 authentication.
@@ -93,7 +189,7 @@ func (c *Config) HealthCheck() error {
 		baseURL = baseURL[:idx]
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect} // SEC F25
 	if !c.VerifySSL {
 		client.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},

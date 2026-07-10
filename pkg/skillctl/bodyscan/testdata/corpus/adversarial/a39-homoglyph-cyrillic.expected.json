@@ -1,0 +1,2 @@
+{ "categories": ["injection"], "min_verdict": "red",
+  "note": "Cyrillic homoglyph letters folded to Latin -> INJ-001 (OBF-005/007 also flag)." }

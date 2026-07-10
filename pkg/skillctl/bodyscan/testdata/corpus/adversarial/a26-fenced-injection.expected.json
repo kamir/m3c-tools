@@ -1,0 +1,10 @@
+{
+  "categories": [
+    "injection"
+  ],
+  "rule_ids": [
+    "INJ-001"
+  ],
+  "min_verdict": "yellow",
+  "note": "Live injection hidden inside a CLOSED fence: downgraded to yellow (flag-for-review), not dropped to green."
+}

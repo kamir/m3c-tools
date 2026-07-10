@@ -1,0 +1,2 @@
+{ "categories": ["injection"], "rule_ids": ["INJ-001"], "min_verdict": "red",
+  "note": "U+2064 (invisible plus) splits `ignore`; Cf-strip rejoins -> INJ-001." }

@@ -20,10 +20,7 @@
 package install
 
 import (
-	"archive/tar"
 	"bufio"
-	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -36,22 +33,21 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 )
 
-// MaxExtractedBytes caps the total uncompressed size of an extracted
-// bundle. 100 MiB is wildly above any plausible skill (typical bundles are
-// kilobytes); the cap exists to defend against gzip / tar bombs that
-// expand to many GB on disk and exhaust the user's home volume before any
-// audit can fire.
-//
-// Configurable via Opts.MaxExtractedBytes; 0 means use this default.
-const MaxExtractedBytes int64 = 100 << 20
-
-// MaxExtractedFiles caps the number of entries we'll write before
-// refusing — a tarball with a million tiny files is also a bomb shape.
-const MaxExtractedFiles = 10000
+// MaxExtractedBytes / MaxExtractedFiles are the install-package spelling of the
+// canonical extraction caps, which now live in pkg/skillbundle (SPEC-0252 §3.3 —
+// one source of truth). Aliases, not duplicate literals; the gzip/tar-bomb
+// guards in skillbundle.Unpack enforce them. MaxExtractedBytes stays the default
+// for Opts.MaxExtractedBytes (0 → this); kept so existing call sites and tests
+// read the same number.
+const (
+	MaxExtractedBytes int64 = skillbundle.DefaultMaxExtractedBytes
+	MaxExtractedFiles       = skillbundle.DefaultMaxExtractedFiles
+)
 
 // installRoot is the user's skills install dir, relative to $HOME. The
 // per-machine state lives at <home>/<installRoot>; the helpers below all
@@ -83,6 +79,11 @@ type Opts struct {
 	// HomeDir is the install anchor. Defaults to os.UserHomeDir() when
 	// empty. Tests pass a temp dir.
 	HomeDir string
+
+	// SelfTrustRootsPath overrides the SPEC-0225 self trust-roots location
+	// (default ~/.claude/trust-roots.yaml) used by VerifyInstalledSidecar's
+	// registry-trust check (SPEC-0247 OQ-5). Empty = default. Tests inject one.
+	SelfTrustRootsPath string
 
 	// MaxExtractedBytes overrides the gzip-bomb cap. 0 = use default.
 	MaxExtractedBytes int64
@@ -171,14 +172,14 @@ func Install(opts Opts) (*Result, error) {
 			return nil, errors.New("install: --allow-yellow / --ignore-deps require an AuditPoster (refusing to override silently)")
 		}
 		entry := AuditEntry{
-			Action:       overrideAction(opts),
-			Name:         opts.Name,
-			Version:      opts.Version,
-			AllowYellow:  opts.AllowYellow,
-			IgnoreDeps:   opts.IgnoreDeps,
-			RecordedAt:   now().UTC().Format(time.RFC3339),
-			Origin:       "skillctl",
-			RegistryURL:  opts.TrustRoot.RegistryURL,
+			Action:      overrideAction(opts),
+			Name:        opts.Name,
+			Version:     opts.Version,
+			AllowYellow: opts.AllowYellow,
+			IgnoreDeps:  opts.IgnoreDeps,
+			RecordedAt:  now().UTC().Format(time.RFC3339),
+			Origin:      "skillctl",
+			RegistryURL: opts.TrustRoot.RegistryURL,
 		}
 		if err := opts.AuditPoster(ctx, entry); err != nil {
 			return nil, fmt.Errorf("install: audit POST failed (refusing to honor override): %w", err)
@@ -275,8 +276,12 @@ func Install(opts Opts) (*Result, error) {
 	}
 
 	// ----- atomic install + archive prior version if any -----
-	target := filepath.Join(homeDir, installRoot, sanitizeFilename(opts.Name))
-	archivedPath, err := atomicInstall(extractDir, target, homeDir, opts.Name, digest)
+	canonName, err := CanonicalSkillName(opts.Name) // SEC F12: one fixed point — install writes the same dir the gate/verifier resolve
+	if err != nil {
+		return nil, err
+	}
+	target := filepath.Join(homeDir, installRoot, canonName)
+	archivedPath, err := atomicInstall(extractDir, target, homeDir, canonName, digest)
 	if err != nil {
 		return nil, err
 	}
@@ -288,6 +293,13 @@ func Install(opts Opts) (*Result, error) {
 	stashedSkb := filepath.Join(target, filepath.Base(blobPath))
 	if err := os.WriteFile(stashedSkb, blob, 0o644); err != nil {
 		return nil, fmt.Errorf("install: stash .skb in target: %w", err)
+	}
+
+	// Stash BundleMeta + author identity for network-free re-verification
+	// (SPEC-0247). Best-effort: a failure here just means offline verify
+	// falls back to the online path; the install itself still succeeded.
+	if err := StashOfflineMeta(ctx, opts.Client, target, meta, now); err != nil {
+		logStep(opts.Logger, "offline_meta_warn", "offline verify will fall back to online: %v", err)
 	}
 
 	cleanedUp = true
@@ -330,7 +342,11 @@ func VerifyInstalled(opts Opts) (*verify.VerifyResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	target := filepath.Join(homeDir, installRoot, sanitizeFilename(opts.Name))
+	canon, err := CanonicalSkillName(opts.Name) // SEC F12: same fixed point the gate/loader use
+	if err != nil {
+		return nil, err
+	}
+	target := filepath.Join(homeDir, installRoot, canon)
 	st, err := os.Stat(target)
 	if err != nil {
 		return nil, fmt.Errorf("verify-installed: %s: %w", target, err)
@@ -383,7 +399,20 @@ func VerifyInstalled(opts Opts) (*verify.VerifyResult, error) {
 		Tenant:          opts.Tenant,
 		Logger:          opts.Logger,
 	}
-	return verify.Verify(verifyOpts)
+	res, err := verify.Verify(verifyOpts)
+	if err != nil {
+		return nil, err
+	}
+	// SEC-M4: content-binding is UNCONDITIONAL on EVERY managed-verify path.
+	// verify.Verify proved the .skb's own signature + digest, but NOT that the
+	// extracted on-disk files (the SKILL.md Claude actually loads) still match
+	// that signed .skb. Re-assert the binding here so an edited body on the
+	// ONLINE path is caught as verify.ErrDigestMismatch (exit 10) — the same
+	// guarantee the offline / sidecar tiers already enforce.
+	if err := verifyExtractedMatchesBlob(skbPath, target); err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 // ----- helpers -----
@@ -471,13 +500,111 @@ func makeStagingDir(homeDir, name, digest string) (string, error) {
 	return stage, nil
 }
 
+// ErrUnsafeSkillName is returned by CanonicalSkillName for a name that is not a
+// single safe path component.
+var ErrUnsafeSkillName = errors.New("skill name is unsafe (path separator, traversal, control char, or not a single component)")
+
+// CanonicalSkillName is the ONE skill-name fixed point shared by the load-time
+// gate (classification + verdict-cache key) and the verifier (on-disk dir
+// resolution). SEC F12: the gate classifies/caches/loads by the RAW invoked
+// name while the verifier resolved sanitizeFilename(name) — a LOSSY transform
+// that DROPS unsafe chars. So an attacker who created both a malicious dir `X`
+// and a clean sibling `Y == sanitizeFilename(X)` could get the gate to verify
+// the clean `Y` and PASS while Claude loaded the malicious `X`.
+//
+// CanonicalSkillName closes that by REJECTING any name that is not already a
+// single safe component (it never silently rewrites): a valid name is returned
+// verbatim, so the gate and the verifier resolve the SAME directory — the one
+// Claude actually loads. Mirrors registry.sanitizeBundleName's strictness.
+func CanonicalSkillName(name string) (string, error) {
+	if name == "" {
+		return "", fmt.Errorf("%w: empty", ErrUnsafeSkillName)
+	}
+	if strings.ContainsAny(name, "/\\\x00") {
+		return "", fmt.Errorf("%w: %q has a path separator or NUL", ErrUnsafeSkillName, name)
+	}
+	for _, r := range name {
+		if r < 0x20 || r == 0x7f {
+			return "", fmt.Errorf("%w: %q has a control character", ErrUnsafeSkillName, name)
+		}
+	}
+	if name == "." || name == ".." || strings.HasPrefix(name, "..") {
+		return "", fmt.Errorf("%w: %q is a traversal segment", ErrUnsafeSkillName, name)
+	}
+	if filepath.IsAbs(name) {
+		return "", fmt.Errorf("%w: %q is an absolute path", ErrUnsafeSkillName, name)
+	}
+	if clean := filepath.Clean(name); clean != name || strings.ContainsRune(clean, filepath.Separator) {
+		return "", fmt.Errorf("%w: %q does not clean to a single safe component", ErrUnsafeSkillName, name)
+	}
+	return name, nil
+}
+
+// CanonicalPath is the ONE realpath fixed point for path classification (SPEC-0317
+// R-6.2). The `skillctl guard-path` side-channel guard MUST resolve BOTH the
+// access target and the skills root through THIS function before comparing them,
+// so a lexical HasPrefix check (which the skills dir's own symlinks — browse →
+// gstack/browse, find-skills → ../../.agents/skills — would both false-negative
+// and false-positive) is never the classifier. It is the path analogue of
+// CanonicalSkillName: one resolution both classify and any future enforce share,
+// so they cannot diverge.
+//
+// It expands a leading ~, makes the path absolute + lexically clean, then resolves
+// symlinks (filepath.EvalSymlinks) to a single fixed point. A target that does not
+// yet exist (e.g. a Write creating a new file) has no realpath, so the LONGEST
+// EXISTING ANCESTOR is resolved and the not-yet-existing tail is re-appended —
+// this still defeats a symlinked-in ancestor while classifying a create-in-place.
+func CanonicalPath(p string) (string, error) {
+	if strings.TrimSpace(p) == "" {
+		return "", errors.New("empty path")
+	}
+	if p == "~" || strings.HasPrefix(p, "~/") {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			if p == "~" {
+				p = home
+			} else {
+				p = filepath.Join(home, p[2:])
+			}
+		}
+	}
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", err
+	}
+	abs = filepath.Clean(abs)
+	return evalSymlinksLongestPrefix(abs), nil
+}
+
+// evalSymlinksLongestPrefix resolves symlinks on abs, or — when abs does not
+// exist — on its deepest existing ancestor, re-joining the non-existent tail.
+// Never fails: an unresolvable path degrades to the lexically-cleaned abs (still
+// a deterministic fixed point for the classify comparison).
+func evalSymlinksLongestPrefix(abs string) string {
+	if r, err := filepath.EvalSymlinks(abs); err == nil {
+		return r
+	}
+	dir := abs
+	var tail []string
+	for {
+		parent := filepath.Dir(dir)
+		if parent == dir { // hit the filesystem root; nothing resolvable
+			return abs
+		}
+		tail = append([]string{filepath.Base(dir)}, tail...)
+		dir = parent
+		if r, err := filepath.EvalSymlinks(dir); err == nil {
+			return filepath.Join(append([]string{r}, tail...)...)
+		}
+	}
+}
+
 // sanitizeFilename strips path-traversal-shaped characters from a string
 // before using it as a single path segment. Conservative: anything that
 // isn't alnum / dash / underscore / dot is dropped.
 //
-// We never derive paths from registry-supplied names without going through
-// this — the Name field comes from the registry, which we DON'T trust to
-// have validated it (defense-in-depth).
+// Retained for non-skill-name paths (staging blob filenames, digest dirs).
+// For SKILL-NAME→dir resolution use CanonicalSkillName (the fixed point) so the
+// gate and verifier cannot diverge.
 func sanitizeFilename(s string) string {
 	var b strings.Builder
 	for _, r := range s {
@@ -512,118 +639,25 @@ func sanitizeDigest(d string) string {
 	return sanitizeFilename(d)
 }
 
-// extractTGZ decompresses + untars data into destDir, with hardened path
-// validation (no traversal, no symlinks) and a total-size cap.
+// extractTGZ decompresses + untars blob into destDir via the ONE hardened core
+// (skillbundle.Unpack + ExtractTo): a single decompression pass, the byte
+// ceiling + file-count cap, the path-escape proof, symlink/hardlink/device
+// refusal, O_EXCL fail-closed writes, and the single scripts/*-0755-else-0644
+// mode policy.
 //
-// The blob bytes are passed in directly so we don't have to re-read the
-// staged file (the verifier already touched it for digest computation).
+// SPEC-0252 C4: StripWrapper is FALSE here on purpose. The HTTP install path
+// extracts WITH any single top-level wrapper dir and relocates the bundle
+// afterwards via resolveBundleTopLevel + the atomic rename into place — unlike
+// registry.extractSkb, which strips the wrapper inline. Keeping StripWrapper
+// off preserves that flow exactly. maxBytes is the caller's per-install override
+// (0 → the core default); the blob bytes are passed directly so we don't re-read
+// the staged file.
 func extractTGZ(blob []byte, destDir string, maxBytes int64) error {
-	absDest, err := filepath.Abs(destDir)
+	entries, err := skillbundle.Unpack(blob, skillbundle.UnpackOptions{MaxBytes: maxBytes})
 	if err != nil {
-		return fmt.Errorf("install: abs(destDir): %w", err)
+		return fmt.Errorf("install: %w", err)
 	}
-
-	gz, err := gzip.NewReader(bytes.NewReader(blob))
-	if err != nil {
-		return fmt.Errorf("install: gzip reader: %w", err)
-	}
-	defer gz.Close()
-
-	tr := tar.NewReader(gz)
-	var written int64
-	var entries int
-
-	for {
-		hdr, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("install: read tar header: %w", err)
-		}
-		entries++
-		if entries > MaxExtractedFiles {
-			return fmt.Errorf("install: tar entry count exceeds %d (likely a tar bomb)", MaxExtractedFiles)
-		}
-
-		// Path-traversal guard: clean the name, refuse absolute or
-		// dot-dot entries, and require the resolved abs path to live
-		// inside destDir.
-		if hdr.Name == "" {
-			continue
-		}
-		clean := filepath.Clean(hdr.Name)
-		if strings.HasPrefix(clean, "..") || strings.HasPrefix(clean, "/") || strings.HasPrefix(clean, string(filepath.Separator)) {
-			return fmt.Errorf("install: tar entry %q escapes destination", hdr.Name)
-		}
-		full := filepath.Join(absDest, clean)
-		absFull, err := filepath.Abs(full)
-		if err != nil {
-			return fmt.Errorf("install: abs(%s): %w", full, err)
-		}
-		// Trailing-separator trick to ensure prefix match is on a path
-		// component boundary (so /tmp/foo doesn't match /tmp/foobar).
-		if !strings.HasPrefix(absFull+string(filepath.Separator), absDest+string(filepath.Separator)) && absFull != absDest {
-			return fmt.Errorf("install: tar entry %q resolves outside destination (%s)", hdr.Name, absFull)
-		}
-
-		switch hdr.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(absFull, 0o755); err != nil {
-				return fmt.Errorf("install: mkdir %s: %w", absFull, err)
-			}
-		case tar.TypeReg, tar.TypeRegA:
-			if err := os.MkdirAll(filepath.Dir(absFull), 0o755); err != nil {
-				return fmt.Errorf("install: mkdir parent %s: %w", absFull, err)
-			}
-			f, err := os.OpenFile(absFull, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-			if err != nil {
-				return fmt.Errorf("install: open %s: %w", absFull, err)
-			}
-			// Cap reads at the remaining budget.
-			remaining := maxBytes - written
-			if remaining <= 0 {
-				_ = f.Close()
-				_ = os.Remove(absFull)
-				return fmt.Errorf("install: extracted size exceeds %d bytes (likely a gzip bomb)", maxBytes)
-			}
-			n, err := io.Copy(f, io.LimitReader(tr, remaining+1))
-			if err != nil {
-				_ = f.Close()
-				_ = os.Remove(absFull)
-				return fmt.Errorf("install: write %s: %w", absFull, err)
-			}
-			if n > remaining {
-				_ = f.Close()
-				_ = os.Remove(absFull)
-				return fmt.Errorf("install: extracted size exceeds %d bytes (likely a gzip bomb)", maxBytes)
-			}
-			written += n
-			// Apply sane mode bits: 0644 for files, 0755 if the
-			// path lives under scripts/.
-			mode := os.FileMode(0o644)
-			if strings.HasPrefix(clean, "scripts"+string(filepath.Separator)) || clean == "scripts" {
-				mode = 0o755
-			}
-			if err := f.Chmod(mode); err != nil {
-				_ = f.Close()
-				_ = os.Remove(absFull)
-				return fmt.Errorf("install: chmod %s: %w", absFull, err)
-			}
-			if err := f.Close(); err != nil {
-				_ = os.Remove(absFull)
-				return fmt.Errorf("install: close %s: %w", absFull, err)
-			}
-		case tar.TypeSymlink, tar.TypeLink:
-			// SPEC-0188 v1: refuse symlinks. They're a vector for
-			// pointing into / out of the install dir post-rename.
-			return fmt.Errorf("install: tar entry %q is a symlink/hardlink (refused in v1)", hdr.Name)
-		default:
-			// Devices, fifos, etc. — refuse.
-			return fmt.Errorf("install: tar entry %q has unsupported type 0x%x", hdr.Name, hdr.Typeflag)
-		}
-	}
-	return nil
+	return skillbundle.ExtractTo(entries, destDir)
 }
 
 // validateChecksumsIfPresent reads the bundle's CHECKSUMS file (if it

@@ -9,16 +9,16 @@ import (
 
 // SPEC-0202 §8.2 refusal exit codes. Mirrors the Python SkillEnvelopeViolation.
 const (
-	ExitCapabilityMissing  = 30
-	ExitDataSourceMissing  = 31
-	ExitEgressNotAllowed   = 32
-	ExitSubprocessDenied   = 33
-	ExitFileOutsideEnv     = 34
-	ExitTokenExpired       = 35
-	ExitTokenRevoked       = 36
-	ExitInvalidSignature   = 37
-	ExitRuntimeQuota       = 38
-	ExitEgressByteQuota    = 39
+	ExitCapabilityMissing = 30
+	ExitDataSourceMissing = 31
+	ExitEgressNotAllowed  = 32
+	ExitSubprocessDenied  = 33
+	ExitFileOutsideEnv    = 34
+	ExitTokenExpired      = 35
+	ExitTokenRevoked      = 36
+	ExitInvalidSignature  = 37
+	ExitRuntimeQuota      = 38
+	ExitEgressByteQuota   = 39
 )
 
 // Stable refusal codes paired with the InvocationEvent emitted on refuse.
@@ -92,12 +92,28 @@ type InvocationEvent struct {
 	RequestedCmd string `json:"requested_cmd,omitempty"`
 }
 
+// SignedSink records ONE device-signed, action-level InvocationRecord into the
+// durable signed trail (SPEC-0202 §9). It is OPTIONAL on a Gate: when nil, the
+// gate only posts the legacy unsigned InvocationEvent to AuditPoster. When set,
+// every allow/refuse ALSO produces a signed record — so action-level events
+// (subprocess / egress / capability checks inside a running skill) join the same
+// Art.12 trail the hook writes. The sink owns signing + appending and MUST be
+// fire-and-forget (the cooperative model never lets a logging failure block
+// enforcement); the gate calls it as a bare statement.
+type SignedSink func(InvocationRecord)
+
 // Gate enforces a verified token's envelope. It is COOPERATIVE — see the
 // package doc.
 type Gate struct {
 	Token       *Token
 	AuditPoster InvocationPoster
-	Now         func() time.Time // injectable clock; defaults to time.Now().UTC()
+	// SignedSink, when non-nil, receives one signed action-level record per
+	// allow/refuse. Optional — see SignedSink.
+	SignedSink SignedSink
+	// SessionID is stamped into signed records so action events join the same
+	// session join-key the hook uses (SPEC-0277 P3 forward-compat). Optional.
+	SessionID string
+	Now       func() time.Time // injectable clock; defaults to time.Now().UTC()
 }
 
 // GateError is returned by Allow() on refuse. ExitCode maps to SPEC-0202 §8.2.
@@ -260,23 +276,47 @@ func (g *Gate) refuse(code string, exitCode int, msg, requestedCmd string) error
 	return &GateError{Code: code, ExitCode: exitCode, Message: msg}
 }
 
-// audit fires-and-forgets to the AuditPoster. A nil poster is allowed (e.g.
-// in tests where audit is irrelevant); failures are silently swallowed
-// because the cooperative model never lets audit failure block enforcement.
+// audit fires-and-forgets to the AuditPoster AND (when set) the SignedSink. A
+// nil poster/sink is allowed (e.g. in tests where audit is irrelevant); failures
+// are silently swallowed because the cooperative model never lets audit failure
+// block enforcement.
 func (g *Gate) audit(eventType, refusalCode, requestedCmd string) {
-	if g.AuditPoster == nil {
-		return
+	now := g.nowFn().Format("2006-01-02T15:04:05Z")
+	if g.AuditPoster != nil {
+		ev := InvocationEvent{
+			Type:         eventType,
+			TokenID:      g.Token.TokenID,
+			SkillName:    g.Token.SkillName,
+			Tenant:       g.Token.TenantScope,
+			Timestamp:    now,
+			RefusalCode:  refusalCode,
+			RequestedCmd: requestedCmd,
+		}
+		_ = g.AuditPoster.PostInvocation(ev) // best-effort
 	}
-	ev := InvocationEvent{
-		Type:         eventType,
-		TokenID:      g.Token.TokenID,
-		SkillName:    g.Token.SkillName,
-		Tenant:       g.Token.TenantScope,
-		Timestamp:    g.nowFn().Format("2006-01-02T15:04:05Z"),
-		RefusalCode:  refusalCode,
-		RequestedCmd: requestedCmd,
+	if g.SignedSink != nil {
+		// Action-level signed record — the durable Art.12 evidence for what the
+		// running skill actually did. exit_code carries the gate verdict: 0 on
+		// allow, the refusal exit (30..39 — not known here) is left to the sink's
+		// caller; we encode allow/refuse via refusal_code (empty = allowed).
+		exit := 0
+		if refusalCode != "" {
+			exit = 1
+		}
+		g.SignedSink(InvocationRecord{
+			EventType:    eventType, // "gate.allowed" | "gate.refused"
+			SkillName:    g.Token.SkillName,
+			SkillVersion: g.Token.SkillVersion,
+			SkillDigest:  g.Token.BundleDigest,
+			Action:       requestedCmd,
+			Tool:         g.Token.SkillName,
+			TokenID:      g.Token.TokenID,
+			SessionID:    g.SessionID,
+			OccurredAt:   now,
+			ExitCode:     exit,
+			RefusalCode:  refusalCode,
+		})
 	}
-	_ = g.AuditPoster.PostInvocation(ev) // best-effort
 }
 
 // splitHostPort parses "host" or "host:port" allowlist entries. Returns

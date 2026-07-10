@@ -1,0 +1,6 @@
+{
+  "categories": ["obfuscation"],
+  "rule_ids": ["OBF-005"],
+  "min_verdict": "yellow",
+  "note": "Cyrillic homoglyphs inside ASCII words to evade keyword filters."
+}

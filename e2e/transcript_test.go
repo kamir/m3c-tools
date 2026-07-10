@@ -256,3 +256,35 @@ func TestTranscriptFetchNMSHcSq8nMs(t *testing.T) {
 	}
 	t.Logf("NMSHcSq8nMs: %d snippets, %s", len(fetched.Snippets), fetched.Language)
 }
+
+// TestIsTranscriptUnavailable verifies the degrade-vs-fail classification used
+// by the menu bar to decide whether to proceed with thumbnail + link when a
+// transcript can't be fetched. Offline — constructs error values directly.
+func TestIsTranscriptUnavailable(t *testing.T) {
+	vid := "VLUfEWN0NY8"
+
+	// Degrade gracefully: the video exists but has no usable transcript.
+	degrade := []error{
+		transcript.NewTranscriptsDisabledError(vid),
+		transcript.NewNoTranscriptFoundError(vid, []string{"en"}, nil),
+		transcript.NewTranscriptNotAvailableError(vid),
+	}
+	for _, err := range degrade {
+		if !transcript.IsTranscriptUnavailable(err) {
+			t.Errorf("expected IsTranscriptUnavailable(true) for %T", err)
+		}
+	}
+
+	// Hard-fail: the video itself is inaccessible or rate limited.
+	fail := []error{
+		transcript.NewTooManyRequestsError(vid),
+		transcript.NewVideoUnavailableError(vid),
+		transcript.NewInvalidVideoIDError(vid),
+		nil,
+	}
+	for _, err := range fail {
+		if transcript.IsTranscriptUnavailable(err) {
+			t.Errorf("expected IsTranscriptUnavailable(false) for %T", err)
+		}
+	}
+}

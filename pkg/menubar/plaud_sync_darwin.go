@@ -28,7 +28,10 @@ static BOOL          g_plaudBulkActive = NO;
 
 // ---------- Row Data Storage ----------
 
-#define PLAUD_MAX_ROWS 200
+// Headroom for large accounts. At 200 this silently dropped rows (a 209-item
+// account showed only 200, so "Select All" selected 200/209). The static arrays
+// below scale linearly (~few hundred KB at 2000) — cheap.
+#define PLAUD_MAX_ROWS 2000
 #define PLAUD_COLS     6
 
 // Columns: select(checkbox), num, title, duration, date, status
@@ -39,6 +42,13 @@ static int   g_plaudRowCount = 0;
 // Recording IDs (parallel to rows).
 static char *g_plaudRecordingIDs[PLAUD_MAX_ROWS];
 
+// ER1 memory-viewer URLs (parallel to rows); empty for un-synced rows.
+static char *g_plaudItemURLs[PLAUD_MAX_ROWS];
+
+// ER1 doc_ids (parallel to rows); empty for un-synced rows. Shown in the
+// "ER1 Doc" column so the recording->ER1 item mapping is visible at a glance.
+static char *g_plaudDocIDs[PLAUD_MAX_ROWS];
+
 // ---------- Helpers ----------
 
 static void clearPlaudData(void) {
@@ -47,13 +57,16 @@ static void clearPlaudData(void) {
 			if (g_plaudData[r][c]) { free(g_plaudData[r][c]); g_plaudData[r][c] = NULL; }
 		}
 		if (g_plaudRecordingIDs[r]) { free(g_plaudRecordingIDs[r]); g_plaudRecordingIDs[r] = NULL; }
+		if (g_plaudItemURLs[r])    { free(g_plaudItemURLs[r]);    g_plaudItemURLs[r] = NULL; }
+		if (g_plaudDocIDs[r])      { free(g_plaudDocIDs[r]);      g_plaudDocIDs[r] = NULL; }
 	}
 	g_plaudRowCount = 0;
 	memset(g_plaudSelected, 0, sizeof(g_plaudSelected));
 }
 
 static void addPlaudRow(const char *num, const char *title, const char *duration,
-						const char *date, const char *status, const char *recordingID) {
+						const char *date, const char *status, const char *recordingID,
+						const char *itemURL, const char *docID) {
 	if (g_plaudRowCount >= PLAUD_MAX_ROWS) return;
 	int r = g_plaudRowCount++;
 	g_plaudData[r][0] = strdup(num       ? num       : "");
@@ -62,6 +75,8 @@ static void addPlaudRow(const char *num, const char *title, const char *duration
 	g_plaudData[r][3] = strdup(date      ? date      : "");
 	g_plaudData[r][4] = strdup(status    ? status    : "");
 	g_plaudRecordingIDs[r] = strdup(recordingID ? recordingID : "");
+	g_plaudItemURLs[r]     = strdup(itemURL     ? itemURL     : "");
+	g_plaudDocIDs[r]       = strdup(docID       ? docID       : "");
 	g_plaudSelected[r] = NO;
 }
 
@@ -111,6 +126,23 @@ static void setPlaudRowStatus(const char *recordingID, const char *status) {
 		if (strcmp(g_plaudRecordingIDs[i], recordingID) == 0) {
 			free(g_plaudData[i][4]);
 			g_plaudData[i][4] = strdup(status);
+			break;
+		}
+	}
+	reloadPlaudTable();
+}
+
+// Back-fill a row's ER1 doc_id + item URL after it syncs, so the "ER1 Doc"
+// column populates and double-click opens the item.
+static void setPlaudRowDoc(const char *recordingID, const char *docID, const char *itemURL) {
+	if (!recordingID) return;
+	for (int i = 0; i < g_plaudRowCount; i++) {
+		if (!g_plaudRecordingIDs[i]) continue;
+		if (strcmp(g_plaudRecordingIDs[i], recordingID) == 0) {
+			if (g_plaudDocIDs[i])   free(g_plaudDocIDs[i]);
+			g_plaudDocIDs[i]   = strdup(docID   ? docID   : "");
+			if (g_plaudItemURLs[i]) free(g_plaudItemURLs[i]);
+			g_plaudItemURLs[i] = strdup(itemURL ? itemURL : "");
 			break;
 		}
 	}
@@ -182,6 +214,7 @@ extern void goPlaudSyncAction(char* action);
 - (void)selectAllClicked:(id)sender;
 - (void)deselectAllClicked:(id)sender;
 - (void)syncSelectedClicked:(id)sender;
+- (void)rowDoubleClicked:(id)sender;
 @end
 
 @implementation PlaudSyncTableDataSource
@@ -227,6 +260,11 @@ extern void goPlaudSyncAction(char* action);
 		if (col >= 0 && g_plaudData[row][col]) {
 			NSString *parsed = [NSString stringWithUTF8String:g_plaudData[row][col]];
 			if (parsed) value = parsed;  // guard against invalid UTF-8 returning nil
+		}
+		// ER1 doc_id column (stored separately, not in g_plaudData).
+		if ([identifier isEqualToString:@"doc"] && g_plaudDocIDs[row]) {
+			NSString *d = [NSString stringWithUTF8String:g_plaudDocIDs[row]];
+			if (d) value = d;
 		}
 
 		// Right-align # and duration columns.
@@ -287,6 +325,19 @@ extern void goPlaudSyncAction(char* action);
 	goPlaudSyncAction("sync");
 }
 
+// Double-click a synced row to open its ER1 memory item in the browser.
+// Rows without an item URL (un-synced) do nothing.
+- (void)rowDoubleClicked:(id)sender {
+	NSInteger row = [g_plaudTable clickedRow];
+	if (row < 0 || row >= g_plaudRowCount) return;
+	const char *u = g_plaudItemURLs[row];
+	if (!u || strlen(u) == 0) return;
+	NSString *us = [NSString stringWithUTF8String:u];
+	if (!us || [us length] == 0) return;
+	NSURL *url = [NSURL URLWithString:us];
+	if (url) [[NSWorkspace sharedWorkspace] openURL:url];
+}
+
 @end
 
 // ---------- Global data source (must live for the window's lifetime) ----------
@@ -307,7 +358,7 @@ static void showPlaudSyncWindow(const char *accountInfo) {
 			return;
 		}
 
-		NSRect frame = NSMakeRect(200, 200, 720, 520);
+		NSRect frame = NSMakeRect(200, 200, 900, 520);
 		g_plaudWindow = [[NSWindow alloc]
 			initWithContentRect:frame
 			styleMask:(NSWindowStyleMaskTitled |
@@ -339,19 +390,21 @@ static void showPlaudSyncWindow(const char *accountInfo) {
 		// Buttons row
 		CGFloat btnY = frame.size.height - 60;
 
-		NSButton *btnSelectAll = [[NSButton alloc] initWithFrame:NSMakeRect(10, btnY, 80, 24)];
+		// Wider than 80 so the full labels show — at 80px both truncated to
+		// "Select" and looked like two identical buttons.
+		NSButton *btnSelectAll = [[NSButton alloc] initWithFrame:NSMakeRect(10, btnY, 96, 24)];
 		[btnSelectAll setTitle:@"Select All"];
 		[btnSelectAll setBezelStyle:NSBezelStyleRounded];
 		[btnSelectAll setAutoresizingMask:NSViewMaxXMargin | NSViewMinYMargin];
 		[content addSubview:btnSelectAll];
 
-		NSButton *btnDeselectAll = [[NSButton alloc] initWithFrame:NSMakeRect(95, btnY, 80, 24)];
-		[btnDeselectAll setTitle:@"Select None"];
+		NSButton *btnDeselectAll = [[NSButton alloc] initWithFrame:NSMakeRect(112, btnY, 96, 24)];
+		[btnDeselectAll setTitle:@"Deselect"];
 		[btnDeselectAll setBezelStyle:NSBezelStyleRounded];
 		[btnDeselectAll setAutoresizingMask:NSViewMaxXMargin | NSViewMinYMargin];
 		[content addSubview:btnDeselectAll];
 
-		g_plaudSelectLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(185, btnY + 2, 100, 18)];
+		g_plaudSelectLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(214, btnY + 2, 80, 18)];
 		[g_plaudSelectLabel setBezeled:NO];
 		[g_plaudSelectLabel setDrawsBackground:NO];
 		[g_plaudSelectLabel setEditable:NO];
@@ -445,10 +498,19 @@ static void showPlaudSyncWindow(const char *accountInfo) {
 		[[colStatus headerCell] setStringValue:@"Status"];
 		[g_plaudTable addTableColumn:colStatus];
 
+		NSTableColumn *colDoc = [[NSTableColumn alloc] initWithIdentifier:@"doc"];
+		[colDoc setWidth:180]; [colDoc setMinWidth:80];
+		[[colDoc headerCell] setStringValue:@"ER1 Doc"];
+		[g_plaudTable addTableColumn:colDoc];
+
 		// Data source
 		g_plaudDS = [[PlaudSyncTableDataSource alloc] init];
 		[g_plaudTable setDataSource:g_plaudDS];
 		[g_plaudTable setDelegate:g_plaudDS];
+
+		// Double-click a synced row → open its ER1 item in the browser.
+		[g_plaudTable setTarget:g_plaudDS];
+		[g_plaudTable setDoubleAction:@selector(rowDoubleClicked:)];
 
 		// Wire buttons
 		[btnSelectAll setTarget:g_plaudDS];
@@ -482,6 +544,8 @@ type PlaudSyncRecord struct {
 	Date        string
 	Status      string
 	RecordingID string
+	ItemURL     string // ER1 memory-viewer URL (empty if not synced); double-click opens it
+	DocID       string // ER1 doc_id (empty if not synced); shown in the "ER1 Doc" column
 }
 
 // ShowPlaudSyncWindow populates and displays the Plaud Sync window.
@@ -496,13 +560,17 @@ func ShowPlaudSyncWindow(records []PlaudSyncRecord, accountInfo string, defaultT
 		cDate := C.CString(rec.Date)
 		cStatus := C.CString(rec.Status)
 		cID := C.CString(rec.RecordingID)
-		C.addPlaudRow(cNum, cTitle, cDur, cDate, cStatus, cID)
+		cURL := C.CString(rec.ItemURL)
+		cDoc := C.CString(rec.DocID)
+		C.addPlaudRow(cNum, cTitle, cDur, cDate, cStatus, cID, cURL, cDoc)
 		C.free(unsafe.Pointer(cNum))
 		C.free(unsafe.Pointer(cTitle))
 		C.free(unsafe.Pointer(cDur))
 		C.free(unsafe.Pointer(cDate))
 		C.free(unsafe.Pointer(cStatus))
 		C.free(unsafe.Pointer(cID))
+		C.free(unsafe.Pointer(cURL))
+		C.free(unsafe.Pointer(cDoc))
 	}
 
 	var cAccount *C.char
@@ -532,6 +600,18 @@ func SetPlaudSyncStatus(recordingID, status string) {
 	C.setPlaudRowStatus(cID, cStatus)
 	C.free(unsafe.Pointer(cID))
 	C.free(unsafe.Pointer(cStatus))
+}
+
+// SetPlaudSyncRowDoc back-fills a row's ER1 doc_id + item URL after it syncs,
+// so the "ER1 Doc" column populates and double-click opens the item.
+func SetPlaudSyncRowDoc(recordingID, docID, itemURL string) {
+	cID := C.CString(recordingID)
+	cDoc := C.CString(docID)
+	cURL := C.CString(itemURL)
+	C.setPlaudRowDoc(cID, cDoc, cURL)
+	C.free(unsafe.Pointer(cID))
+	C.free(unsafe.Pointer(cDoc))
+	C.free(unsafe.Pointer(cURL))
 }
 
 // SetPlaudSyncProgress updates the progress bar and status label.

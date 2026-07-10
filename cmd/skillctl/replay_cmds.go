@@ -341,15 +341,9 @@ func colorForType(t string) string {
 	}
 }
 
-// isStdoutTTY returns true if stdout is a terminal. Stdlib-only
-// implementation via os.Stat.Mode().
-func isStdoutTTY() bool {
-	fi, err := os.Stdout.Stat()
-	if err != nil {
-		return false
-	}
-	return (fi.Mode() & os.ModeCharDevice) != 0
-}
+// replay_cmds previously defined isStdoutTTY; audit_cmds.go owns it now.
+// The two implementations were identical (stdlib-only, fi.Mode() & ModeCharDevice).
+// Removed to fix the package-level "redeclared in this block" build error.
 
 // resolveReplayAPIKey reads the API key. Unlike the run wrapper, replay
 // REQUIRES the key (the endpoint is admin-only); missing → error.

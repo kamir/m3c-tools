@@ -729,6 +729,44 @@ func TestVerifyInstalled_OK(t *testing.T) {
 	}
 }
 
+// SEC-M4: content-binding is UNCONDITIONAL on the ONLINE managed-verify path.
+// After a clean install + a registry-PASS re-verify, editing the on-disk
+// SKILL.md (the body Claude actually loads) must be caught as ErrDigestMismatch
+// (exit 10) even though the registry-side §7 chain still passes — proving the
+// online path binds the extracted content to the signed .skb.
+func TestVerifyInstalled_EditedBody_Exit10(t *testing.T) {
+	srv, fr := newFakeRegistry(t)
+	fx := mkBundleFixture(t)
+	fillRegistry(t, fr, fx, "green")
+
+	homeDir := t.TempDir()
+	c := registry.New(srv.URL+"/api/skills", srv.Client())
+	tr := mkTrustRoot(t, fx.regPub, srv.URL+"/api/skills", "green")
+
+	res, err := Install(Opts{Name: "fetch-contract", Version: "1.0.0", Client: c, TrustRoot: tr, HomeDir: homeDir})
+	if err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	// Baseline: a pristine install re-verifies clean.
+	if _, err := VerifyInstalled(Opts{Name: "fetch-contract", Client: c, TrustRoot: tr, HomeDir: homeDir}); err != nil {
+		t.Fatalf("pristine VerifyInstalled should pass, got %v", err)
+	}
+
+	// Tamper the body Claude would load AFTER install. The registry chain still
+	// passes (the stashed .skb is untouched), so only the content-binding catches it.
+	skillMd := filepath.Join(res.InstalledPath, "SKILL.md")
+	if err := os.WriteFile(skillMd, []byte("# pwned\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err = VerifyInstalled(Opts{Name: "fetch-contract", Client: c, TrustRoot: tr, HomeDir: homeDir})
+	if !errors.Is(err, verify.ErrDigestMismatch) {
+		t.Fatalf("edited body via online path must be ErrDigestMismatch, got %v", err)
+	}
+	if got := verify.ExitCode(err); got != verify.ExitDigestMismatch {
+		t.Fatalf("exit code = %d, want %d", got, verify.ExitDigestMismatch)
+	}
+}
+
 func TestVerifyInstalled_NotInstalled(t *testing.T) {
 	srv, _ := newFakeRegistry(t)
 	homeDir := t.TempDir()

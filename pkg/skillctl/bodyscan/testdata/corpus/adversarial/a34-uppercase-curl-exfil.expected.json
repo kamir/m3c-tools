@@ -1,0 +1,10 @@
+{
+  "categories": [
+    "tool-escalation"
+  ],
+  "rule_ids": [
+    "TOOL-001"
+  ],
+  "min_verdict": "red",
+  "note": "Uppercase CURL exfil \u2014 curl pattern is now case-insensitive (tool not declared)."
+}

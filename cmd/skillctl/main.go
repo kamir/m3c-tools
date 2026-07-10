@@ -17,12 +17,34 @@ import (
 	"os"
 )
 
+// version is stamped at build time via -ldflags "-X main.version=skillctl/vX.Y.Z".
+var version = "dev"
+
 func main() {
 	if len(os.Args) < 2 {
 		printUsage(os.Stderr)
 		os.Exit(2)
 	}
+	// FR-0045 D5: install the production revocation-HEAD fetch seam so the
+	// SessionStart sweep + verify-hook gate adopt the signed HEAD from the D2
+	// registry endpoint. Fail-safe when no registry URL is configured; tests leave
+	// the seam nil (pre-D2 set-only behaviour).
+	fetchRevocationHeadFn = fetchRevocationHeadOnline
+
+	// FR-0043: for ER1-bound commands, auto-load the device token persisted by
+	// `skillctl login` / `m3c-tools login` so users need not export it by hand.
+	// Gated to networkCommands so offline commands never touch the OS keychain.
+	if networkCommands[os.Args[1]] {
+		autoloadDeviceToken(os.Stderr)
+	}
 	switch os.Args[1] {
+	// === FR-0043: device login (browser pairing) + token autoload ===
+	case "login":
+		os.Exit(runLogin(os.Args[2:], os.Stdout, os.Stderr))
+	// === END FR-0043 ===
+	case "version", "--version", "-v":
+		fmt.Println(version)
+		os.Exit(0)
 	// === SPEC-0188 Phase 1 PoC: pack ===
 	case "pack":
 		cmdPack(os.Args[2:])
@@ -63,6 +85,57 @@ func main() {
 	case "verify":
 		runWithExit(func() int { return runVerify(os.Args[2:], os.Stdout, os.Stderr) })
 	// === END SPEC-0188 S8 ===
+	// === SPEC-0276 R4.3: portable, offline, trust-nothing verification kit ===
+	case "export-verification-kit":
+		runWithExit(func() int { return runExportKit(os.Args[2:], os.Stdout, os.Stderr) })
+	// === END SPEC-0276 R4.3 ===
+	// === SPEC-0276 R5: offline compliance evidence pack ===
+	case "compliance":
+		os.Exit(runCompliance(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0276 R5 ===
+	// === SPEC-0247 P0.1: Claude Code PreToolUse(Skill) trust gate ===
+	// Reads the hook event on stdin, re-runs the §7 chain against the
+	// installed skill, and emits an allow/deny decision. Fail-closed:
+	// deny exits 2 (Claude Code "block") AND emits the decision JSON.
+	case "verify-hook":
+		runWithExit(func() int { return runVerifyHook(os.Stdin, os.Stdout, os.Stderr) })
+	// === END SPEC-0247 P0.1 ===
+	// === SPEC-0317 P0: enterprise-evidence enforce gate ===
+	// Byte-identical decision to verify-hook for a Skill event, PLUS mirrors the
+	// device-signed InvocationRecord into the write-once outbox (audit_events) for
+	// durable, drainable evidence. Fail-closed decision; fire-and-forget outbox
+	// write (a write failure never alters the decision — SPEC-0255 invariance).
+	case "enforce":
+		runWithExit(func() int { return runEnforce(os.Stdin, os.Stdout, os.Stderr) })
+	// === END SPEC-0317 P0 ===
+	// === SPEC-0317 R-6 (P2): side-channel path guard ===
+	// A SEPARATE PreToolUse hook for Bash/Read/Edit/Write (NOT a semantic change
+	// to the Skill decision — byte-parity of enforce/verify-hook is preserved). It
+	// audited-allows by default and opt-in denies a skill-dir access. Detection /
+	// bar-raising, not a seal — see `skillctl guard-path --explain`.
+	case "guard-path":
+		os.Exit(runGuardPath(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+	// === END SPEC-0317 R-6 ===
+	// === SPEC-0277 P0+P1: agent-instance identity (issue/verify/show/revoke) ===
+	// `agentid verify` mirrors `verify --bundle`: SPEC-0188 §11 numbered exit
+	// codes (11/20/21/17/12/...) surface verbatim through runWithExit.
+	case "agentid":
+		runWithExit(func() int { return runAgentID(os.Args[2:], os.Stdout, os.Stderr) })
+	// === END SPEC-0277 P0+P1 ===
+	// === SPEC-0255: gate observability — summarise the append-only audit log. ===
+	case "gate-stats":
+		os.Exit(runGateStats(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0255 ===
+	// === SPEC-0247 §7.3 P1.3: managed-settings pinning (make the gate un-deletable). ===
+	case "pin":
+		os.Exit(runPin(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0247 P1.3 ===
+	// === SPEC-0317 R-7 (P2): named offline state machine — informational
+	// SessionStart context (prints online/degraded/offline/locked + the
+	// advisory-until-pinned banner). Pure read; gates nothing. ===
+	case "session-baseline":
+		os.Exit(runSessionBaseline(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0317 P2 ===
 	// === SPEC-0189 S0a: scanner family dispatchers (imported from
 	// feature/thinking-engine-phase1; pre-SPEC-0189 behaviour preserved). ===
 	case "scan":
@@ -75,6 +148,8 @@ func main() {
 		cmdSeal(os.Args[2:])
 	case "import":
 		cmdImport(os.Args[2:])
+	case "menubar":
+		cmdMenubar(os.Args[2:])
 	// `audit` is now SPEC-0189 §14 antivirus UX (S3.3, dispatched above);
 	// the legacy SPEC-0115 cmdAudit was a Phase-2 stub and has been
 	// superseded — see runAudit in audit_cmds.go.
@@ -87,6 +162,14 @@ func main() {
 	case "sync-usage":
 		cmdSyncUsage(os.Args[2:])
 	// === END SPEC-0189 S0a ===
+	// === SPEC-0317 R-5 (P1): enforcement-evidence sync agent ===
+	// Distinct from `sync-usage` (the PII skill-telemetry drain): `sync`
+	// drains the device-signed audit_events outbox to the KafShield ingest,
+	// marks rows synced ONLY on a valid signed durable-seq, and is a SEPARATE
+	// process never invoked on the hook path.
+	case "sync":
+		os.Exit(runSync(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0317 R-5 ===
 	// === SPEC-0195 S2 / Streams M1+M2: awareness + intent ===
 	// `awareness` (M1) dispatches to runAwareness with sub-routes
 	// {sync, verify, reset}. `intent` (M2) dispatches to runIntent
@@ -98,6 +181,41 @@ func main() {
 	case "intent":
 		runWithExit(func() int { return runIntent(os.Args[2:], os.Stdout, os.Stderr) })
 	// === END SPEC-0195 S2 ===
+	// === SPEC-0278 P5: L1 transparency log ===
+	case "translog":
+		os.Exit(runTranslog(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0278 P5 ===
+	// === SPEC-0214 (PLM v2 / SPEC-0216): project-context resolution ===
+	// Reads `.m3c/project.yaml` (a committed projection of the PLM project
+	// object) to resolve project id + ER1 target/context for the cwd, with a
+	// dir-slug fallback. Consumed by /session-state (SPEC-0213).
+	case "project":
+		os.Exit(runProject(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0214 ===
+	// === SPEC-0213: session-state in ER1 — the Go mirror of the /session-state
+	// skill (open/checkpoint/close/resume/list/show) for CI/menubar/scripts. ===
+	case "session":
+		os.Exit(runSession(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0213 ===
+	// === SPEC-0225 P1: personal skill registry — ER1 bundle transport ===
+	// `publish` admits a new bundle to the `self` tenant (or posts an
+	// AttestationPublishedEvent with --attest). `pull` / `registry` / `revoke`
+	// land in P2/P3.
+	case "publish":
+		os.Exit(runPublish(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0225 P1 ===
+	// === SPEC-0225 P2: pull + registry view ===
+	case "pull":
+		os.Exit(runPull(os.Args[2:], os.Stdout, os.Stderr))
+	case "registry":
+		os.Exit(runRegistry(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0225 P2 ===
+	// === SPEC-0272: publish an onboarding runbook into the THOH catalog ===
+	case "runbook":
+		os.Exit(runRunbook(os.Args[2:], os.Stdout, os.Stderr))
+	// === SPEC-0246 §7: room mapping (share published bundles into a co-learning room) ===
+	case "room":
+		os.Exit(runRoom(os.Args[2:], os.Stdout, os.Stderr))
 	case "help", "--help", "-h":
 		printUsage(os.Stdout)
 		os.Exit(0)
@@ -117,6 +235,10 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "  verify-sig   Verify a detached author signature locally.")
 	fmt.Fprintln(w, "  attest       POST a signed governance attestation to the registry.")
 	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Commands (FR-0043 / device login):")
+	fmt.Fprintln(w, "  login        Browser device-pairing against ER1; saves a token skillctl uses automatically.")
+	fmt.Fprintln(w, "               Flags: --no-browser, --timeout 5m, --base-url URL, --status, --logout.")
+	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Commands (Stream S7 / SPEC-0188 Phase 4):")
 	fmt.Fprintln(w, "  trust        Manage ~/.claude/skill-trust-roots.yaml (list/add/remove).")
 	fmt.Fprintln(w, "")
@@ -124,9 +246,59 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "  install      Pull, verify, and install a signed skill bundle.")
 	fmt.Fprintln(w, "  verify       Re-run the trust-chain check on an installed skill.")
 	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Commands (SPEC-0247 / Claude Code trust gate):")
+	fmt.Fprintln(w, "  verify-hook  PreToolUse(Skill) gate: reads a hook event on stdin, verifies the")
+	fmt.Fprintln(w, "               §7 chain, and emits allow/deny. Fail-closed. Wire as a hook, not by hand.")
+	fmt.Fprintln(w, "  enforce      Same decision as verify-hook, plus records the signed evidence into the")
+	fmt.Fprintln(w, "               write-once outbox for durable, drainable audit (SPEC-0317). Fail-closed.")
+	fmt.Fprintln(w, "  gate-stats   Summarise the gate-audit.jsonl (decisions, top blocks, cache-hit rate).")
+	fmt.Fprintln(w, "               Flags: --since <168h|YYYY-MM-DD>, --json.")
+	fmt.Fprintln(w, "  pin          Pin the trust gate into Claude Code managed settings so a")
+	fmt.Fprintln(w, "               non-privileged user cannot delete it (SPEC-0247 §7.3).")
+	fmt.Fprintln(w, "               Subcommands: generate | status | install. --strict for CISO lockdown.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Commands (SPEC-0277 / agent-instance identity):")
+	fmt.Fprintln(w, "  agentid issue   Owner-sign an AgentID mandate (--owner --owner-key --for-agent")
+	fmt.Fprintln(w, "                  --skills --intents [--approver --approver-key] [--expires] [--out]).")
+	fmt.Fprintln(w, "  agentid verify  Verify an AgentID offline against pinned owner/approver keys")
+	fmt.Fprintln(w, "                  (--bundle [--offline] [--trust-roots] [--revocations]")
+	fmt.Fprintln(w, "                  [--checkpoint] [--emergency] [--json]). Freshness: SPEC-0279.")
+	fmt.Fprintln(w, "  agentid show    Print owner, grant, expiry, fingerprints, signatures.")
+	fmt.Fprintln(w, "  agentid revoke  Add agent:<id> to a signed, offline revocation list.")
+	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Commands (SPEC-0195 / awareness bridge):")
 	fmt.Fprintln(w, "  awareness sync     Admit local skills to a registry.")
 	fmt.Fprintln(w, "  awareness verify   Read back per-session admissions.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Commands (SPEC-0214 / PLM project context):")
+	fmt.Fprintln(w, "  project show       Resolve the PLM project context for this dir (.m3c/project.yaml).")
+	fmt.Fprintln(w, "  project resolve    Print one field (--field project_id|er1-target|er1-context|channel:<kind>|...).")
+	fmt.Fprintln(w, "  project channels   List the v2 `channels:` block (--kind to filter).")
+	fmt.Fprintln(w, "  project path       Print the descriptor file path, or (none).")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Commands (SPEC-0225 / personal skill registry via ER1):")
+	fmt.Fprintln(w, "  publish <name[@ver]>          Admit a bundle to the `self` ER1 registry (--bundle <path>|--skill-dir <dir>).")
+	fmt.Fprintln(w, "  publish --attest <name>       Post a governance attestation for an admitted digest (--level --rationale).")
+	fmt.Fprintln(w, "  publish --revoke <name>       Post a BundleRevokedEvent for an admitted digest (--digest sha256:… --reason …).")
+	fmt.Fprintln(w, "  publish --all                 Iterate INFRA/skill-registry/self/publish-manifest.txt: admit + attest each.")
+	fmt.Fprintln(w, "  pull                          Run the 5-gate gauntlet against the `self` registry; stage verified bundles.")
+	fmt.Fprintln(w, "  registry ls [--latest]        List bundles in the `self` registry.")
+	fmt.Fprintln(w, "  registry show <name|sha256:…> Show full timeline (admit/attest/revoke/install) for one bundle.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Commands (SPEC-0213 / session-state in ER1):")
+	fmt.Fprintln(w, "  session open       Create the session-state ER1 item for this session (idempotent).")
+	fmt.Fprintln(w, "  session checkpoint Append a checkpoint child item (--auto for a git/todo snapshot).")
+	fmt.Fprintln(w, "  session close      Write a final close-checkpoint (--summary | --distill).")
+	fmt.Fprintln(w, "  session list       List session-state items (--project / --host / --open-only).")
+	fmt.Fprintln(w, "  session show       Show a session-state item by session_id or doc_id.")
+	fmt.Fprintln(w, "  session resume     Print a resume hint for a prior session.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Commands (SPEC-0278 / L1 transparency log):")
+	fmt.Fprintln(w, "  translog append    Append an event (admit/attest/revoke/agentid-*).")
+	fmt.Fprintln(w, "  translog sth       Show / sign the current tree head.")
+	fmt.Fprintln(w, "  translog prove     Emit an offline inclusion receipt.")
+	fmt.Fprintln(w, "  translog verify    Offline inclusion check vs a pinned log key.")
+	fmt.Fprintln(w, "  translog witness   Cross-witness STHs for a split view (equivocation).")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Run any command with --help for its flags.")
 }

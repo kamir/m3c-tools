@@ -127,6 +127,82 @@ func TestSummary_ShowsNoAuth(t *testing.T) {
 	}
 }
 
+// --- SEC-M7: ER1_VERIFY_SSL fail-closed policy ---
+
+func TestApplyTLSVerificationPolicy_AllowsLoopback(t *testing.T) {
+	for _, url := range []string{
+		"https://127.0.0.1:8081/upload_2",
+		"https://localhost:8081/upload_2",
+		"https://[::1]:8081/upload_2",
+		"https://127.0.0.5:9000/upload_2",
+	} {
+		cfg := &Config{APIURL: url, VerifySSL: false}
+		applyTLSVerificationPolicy(cfg)
+		if cfg.VerifySSL {
+			t.Errorf("loopback %q: VerifySSL should stay false (verification disabled is allowed), got true", url)
+		}
+	}
+}
+
+func TestApplyTLSVerificationPolicy_RefusesNonLoopback(t *testing.T) {
+	for _, url := range []string{
+		"https://onboarding.guide/upload_2",
+		"https://example.com/upload_2",
+		"https://10.0.0.5:8081/upload_2",
+		"https://192.168.1.10/upload_2",
+	} {
+		cfg := &Config{APIURL: url, VerifySSL: false}
+		applyTLSVerificationPolicy(cfg)
+		if !cfg.VerifySSL {
+			t.Errorf("non-loopback %q: VerifySSL must be forced back to true (fail-closed), got false", url)
+		}
+	}
+}
+
+func TestApplyTLSVerificationPolicy_NoOpWhenVerifyOn(t *testing.T) {
+	cfg := &Config{APIURL: "https://onboarding.guide/upload_2", VerifySSL: true}
+	applyTLSVerificationPolicy(cfg)
+	if !cfg.VerifySSL {
+		t.Error("VerifySSL=true must remain true")
+	}
+}
+
+func TestLoadConfig_RefusesInsecureForRemoteHost(t *testing.T) {
+	t.Setenv("ER1_API_URL", "https://onboarding.guide/upload_2")
+	t.Setenv("ER1_VERIFY_SSL", "false")
+	cfg := LoadConfig()
+	if !cfg.VerifySSL {
+		t.Error("LoadConfig must refuse ER1_VERIFY_SSL=false for a non-loopback host (fail-closed)")
+	}
+}
+
+func TestLoadConfig_AllowsInsecureForLoopback(t *testing.T) {
+	t.Setenv("ER1_API_URL", "https://127.0.0.1:8081/upload_2")
+	t.Setenv("ER1_VERIFY_SSL", "false")
+	cfg := LoadConfig()
+	if cfg.VerifySSL {
+		t.Error("LoadConfig must honour ER1_VERIFY_SSL=false for a loopback host")
+	}
+}
+
+func TestIsLoopbackURL(t *testing.T) {
+	cases := map[string]bool{
+		"https://127.0.0.1:8081/x":  true,
+		"https://localhost/x":       true,
+		"http://[::1]:9000/x":       true,
+		"https://127.5.6.7/x":       true,
+		"https://onboarding.guide/": false,
+		"https://10.0.0.1/":         false,
+		"https://example.com":       false,
+		"not a url at all":          false,
+	}
+	for url, want := range cases {
+		if got := isLoopbackURL(url); got != want {
+			t.Errorf("isLoopbackURL(%q) = %v, want %v", url, got, want)
+		}
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsStr(s, substr))
 }

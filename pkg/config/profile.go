@@ -173,7 +173,7 @@ func (pm *ProfileManager) SwitchProfile(name string) error {
 		return fmt.Errorf(
 			"profile %q has a placeholder ER1_API_KEY (%q) targeting %q — refusing to activate. "+
 				"Edit the profile to set a real key, or run 'm3c-tools doctor' for details. "+
-				"To override (recovery only) use ForceSwitchProfile.",
+				"To override (recovery only) use ForceSwitchProfile",
 			name, p.Vars["ER1_API_KEY"], p.Vars["ER1_API_URL"])
 	}
 	return pm.forceSwitchProfileLocked(name, p)

@@ -2,12 +2,10 @@
 //
 // Walks ~/.claude/plugins/cache/<owner>/<plugin>/<version>/skills/ AND
 // ~/.claude/plugins/marketplaces/<m>/{skills,plugins/<p>/skills}/ to find
-// plugin-shipped skills. Reads installed_plugins.json (best effort) to
-// label installed-vs-marketplace.
+// plugin-shipped skills.
 package scanner
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 )
@@ -110,37 +108,4 @@ func marketplaceRoots(pluginsDir string) []ScanRoot {
 		}
 	}
 	return roots
-}
-
-// installedPluginRecord is the relevant subset of an entry in
-// installed_plugins.json. The file is best-effort: if absent or malformed,
-// we proceed with empty annotation data.
-type installedPluginRecord struct {
-	Owner   string `json:"owner"`
-	Plugin  string `json:"plugin"`
-	Version string `json:"version"`
-	Source  string `json:"source"` // "marketplace" | "cache" | etc.
-}
-
-// loadInstalledPlugins reads ~/.claude/plugins/installed_plugins.json if
-// present. Returns nil on any error (missing file, bad JSON, etc.) — the
-// caller should treat that as "no annotation data available".
-func loadInstalledPlugins(configDir string) []installedPluginRecord {
-	path := filepath.Join(configDir, "plugins", "installed_plugins.json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	// Tolerate either a top-level array or an object with a "plugins" key.
-	var arr []installedPluginRecord
-	if err := json.Unmarshal(data, &arr); err == nil {
-		return arr
-	}
-	var obj struct {
-		Plugins []installedPluginRecord `json:"plugins"`
-	}
-	if err := json.Unmarshal(data, &obj); err == nil {
-		return obj.Plugins
-	}
-	return nil
 }

@@ -1,6 +1,7 @@
 package transcript
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -30,6 +31,20 @@ func NewTranscriptsDisabledError(videoID string) *TranscriptsDisabledError {
 	return &TranscriptsDisabledError{
 		TranscriptError{VideoID: videoID, Msg: "subtitles are disabled for this video"},
 	}
+}
+
+// IsTranscriptUnavailable reports whether err means the video exists but has
+// no usable transcript: subtitles disabled, none in the requested languages,
+// or none at all. Callers use this to degrade gracefully — proceeding with the
+// thumbnail and link instead of failing — as opposed to errors that mean the
+// video itself is inaccessible (invalid ID, unavailable, rate limit).
+func IsTranscriptUnavailable(err error) bool {
+	var disabled *TranscriptsDisabledError
+	var notFound *NoTranscriptFoundError
+	var notAvailable *TranscriptNotAvailableError
+	return errors.As(err, &disabled) ||
+		errors.As(err, &notFound) ||
+		errors.As(err, &notAvailable)
 }
 
 // NoTranscriptFoundError indicates no transcript was found for the requested languages.

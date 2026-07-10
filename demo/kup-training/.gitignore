@@ -1,0 +1,8 @@
+# Demo runtime workspace — see README.md "What gets touched":
+# "The demo is isolated. It only writes under artifacts/."
+# Everything below this directory is ephemeral: built binaries, generated
+# keypairs (ed25519 .priv files — must NEVER be committed), bundle blobs,
+# signatures, attestation.json, run logs, eric-home/ scratch, rendered PDFs,
+# release binaries.
+# Per README "Cleaning up": rm -rf artifacts/  is intentionally lossless.
+artifacts/

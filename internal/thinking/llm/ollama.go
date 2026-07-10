@@ -106,7 +106,7 @@ func (a *ollamaAdapter) Complete(ctx context.Context, req Request) (Response, er
 	}
 	msgs := make([]ollamaChatMessage, 0, len(req.Messages))
 	for _, m := range req.Messages {
-		msgs = append(msgs, ollamaChatMessage{Role: m.Role, Content: m.Content})
+		msgs = append(msgs, ollamaChatMessage(m))
 	}
 	payload := ollamaChatRequest{
 		Model:    model,

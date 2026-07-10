@@ -1,0 +1,31 @@
+# rag-mcp-server — default workspace config (SPEC-0268)
+# Copied into <workspace>/.rag/config.yaml on first index; edit there per-repo.
+
+model: BAAI/bge-m3      # multilingual (DE/EN), dense dim 1024, local/offline
+dim: 1024               # informational; the real dim comes from the model at build
+bit_width: 4            # turbovec quantization (4-bit = recall-favoured config)
+max_seq_length: 512     # cap tokens/chunk; bge-m3's 8192 default OOMs MPS on long lines
+
+chunk:
+  max_chars: 1500
+  overlap_chars: 200
+
+embed_batch_size: 16
+
+# Files to index — matched by extension (the suffix of each glob).
+include:
+  - "**/*.md"
+  - "**/*.markdown"
+  - "**/*.py"
+  - "**/*.go"
+  - "**/*.yaml"
+  - "**/*.yml"
+  - "**/*.json"
+
+# Directories to skip — matched by any path segment equal to the leading token.
+exclude:
+  - ".git/**"
+  - ".rag/**"
+  - ".venv/**"
+  - "node_modules/**"
+  - "ARCHIVE/**"

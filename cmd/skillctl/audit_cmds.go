@@ -47,6 +47,13 @@ import (
 
 // runAudit is main's dispatch entry point.
 func runAudit(args []string, stdout, stderr io.Writer) int {
+	// SPEC-0246 §4.5 sub-verb: `skillctl audit security <name>` runs the
+	// behavioural bodyscan over an installed skill and surfaces self_attested.
+	// Route it before the inventory-audit flag parser so its flags don't leak.
+	if len(args) > 0 && args[0] == "security" {
+		return runAuditSecurity(args[1:], stdout, stderr)
+	}
+
 	fs := flag.NewFlagSet("audit", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
@@ -168,7 +175,7 @@ func emitReportTable(r audit.Report, w io.Writer) {
 			v.Name, v.Tier, v.State, gov, v.Reason)
 	}
 	fmt.Fprintln(tw, "-----\t----\t-----\t---\t------")
-	tw.Flush()
+	_ = tw.Flush()
 	// Aggregate summary line — the human form of the exit code (S3.3 Q3).
 	fmt.Fprintln(w, summaryLine(r))
 }
@@ -249,7 +256,7 @@ func runCleanupDryRun(targets []audit.Verdict, outFormat string, stdout, stderr 
 	for _, v := range targets {
 		fmt.Fprintf(tw, "%s\t%s\t%s\n", v.Name, v.State, v.SourcePath)
 	}
-	tw.Flush()
+	_ = tw.Flush()
 	fmt.Fprintf(stdout, "\n%d skill(s) eligible for cleanup.\n", len(targets))
 	fmt.Fprintf(stdout, "Token (valid 5 min):\n  %s\n", token)
 	fmt.Fprintln(stdout, "")
@@ -261,7 +268,11 @@ func runCleanupConfirm(targets []audit.Verdict, presentedToken, outFormat string
 	now := time.Now().UTC()
 	if err := verifyCleanupToken(targets, presentedToken, now); err != nil {
 		fmt.Fprintf(stderr, "skillctl audit: %v\n", err)
-		return exitGeneric
+		// Refusing the confirm because the token failed re-verification
+		// (drift / expiry / tamper) is a precondition failure, not an internal
+		// error — exit 2 (usage), matching the G-23 two-step contract in
+		// DEMO-skill-trust-scenarios.md (S5: "refuse on drift → exit 2").
+		return exitUsage
 	}
 
 	deleted := 0

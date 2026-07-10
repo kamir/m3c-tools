@@ -267,7 +267,7 @@ func TestLinearProcessEndToEnd(t *testing.T) {
 		if a.Provenance.IIDs == nil {
 			t.Errorf("artifact.provenance.i_ids missing")
 		}
-		if a.Content == nil || len(a.Content) == 0 {
+		if len(a.Content) == 0 {
 			t.Errorf("artifact.content empty")
 		}
 	case <-time.After(2 * time.Second):

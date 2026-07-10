@@ -19,9 +19,10 @@ package main
 // numbered process exit code. CI consumers branch on $? — we test that
 // surface directly.
 //
-// Skipped codes: none. All seven (0/10/11/12/13/14/15/16) are exercised.
-// Exit 17 (revoked-bundle) is reserved for SPEC-0198 / S3.6 and is not
-// emitted by the current verifier.
+// Skipped codes: none. All eight (0/10/11/12/13/14/15/16/17) are exercised.
+// Exit 17 (BUG-0144, 2026-05-11): SPEC-0198 §3 author-identity revocation
+// now wires through to ErrIdentityRevoked; see
+// TestInstall_RevokedAuthor_Exit17 below.
 
 import (
 	"bytes"
@@ -36,6 +37,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -65,6 +67,9 @@ func skillctlBin(t *testing.T) string {
 			return
 		}
 		out := filepath.Join(dir, "skillctl")
+		if runtime.GOOS == "windows" {
+			out += ".exe" // Windows needs the .exe suffix to exec the built binary
+		}
 		// Build from the cmd/skillctl package (CWD here).
 		cmd := exec.Command("go", "build", "-o", out, ".")
 		cmd.Stderr = os.Stderr
@@ -187,7 +192,7 @@ func (f *e2eFixture) happyMux(t *testing.T, manifest map[string]any, currentGove
 	mux.HandleFunc("/api/skills/bundles/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("meta") == "1" {
 			payload := map[string]any{
-				"bundle":             map[string]any{"bundle_digest": f.digestStr, "status": "admitted"},
+				"bundle": map[string]any{"bundle_digest": f.digestStr, "status": "admitted"},
 				"signatures": []map[string]any{
 					{"role": "author", "identity_id": "id:author@m3c", "signature_b64": base64.StdEncoding.EncodeToString(f.authorSig), "status": "active"},
 					{"role": "registry", "identity_id": "id:registry@aims-core", "signature_b64": base64.StdEncoding.EncodeToString(f.regSig), "status": "active"},
@@ -485,5 +490,67 @@ func TestInstall_TenantBlocked_Exit16(t *testing.T) {
 	)
 	if code != verify.ExitTenantBlocked {
 		t.Errorf("exit = %d, want %d; stderr: %s", code, verify.ExitTenantBlocked, stderr)
+	}
+}
+
+// ----- 17: revoked author identity (SPEC-0198 §3 / BUG-0144) -----
+//
+// The identity endpoint returns a row with `revoked_at` set; the verifier
+// must refuse with ErrIdentityRevoked (exit 17). Pre-BUG-0144 the same
+// row produced exit 11 (ErrAuthorSigInvalid) which conflated revocation
+// with cryptographic tampering — operators couldn't distinguish.
+
+func TestInstall_RevokedAuthor_Exit17(t *testing.T) {
+	home := t.TempDir()
+	f := newFixture(t)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/skills/by-name/", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"name": "fetch-contract",
+			"versions": []map[string]any{
+				{"version": "1.0.0", "digest": f.digestStr, "status": "admitted"},
+			},
+		})
+	})
+	mux.HandleFunc("/api/skills/bundles/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("meta") == "1" {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"bundle": map[string]any{"bundle_digest": f.digestStr, "status": "admitted"},
+				"signatures": []map[string]any{
+					{"role": "author", "identity_id": "id:revoked-author", "signature_b64": base64.StdEncoding.EncodeToString(f.authorSig), "status": "active"},
+					{"role": "registry", "identity_id": "id:r", "signature_b64": base64.StdEncoding.EncodeToString(f.regSig), "status": "active"},
+				},
+				"manifest":           map[string]any{},
+				"current_governance": "green",
+			})
+			return
+		}
+		_, _ = w.Write(f.blob)
+	})
+	mux.HandleFunc("/api/skills/identities/", func(w http.ResponseWriter, r *http.Request) {
+		// Identity row carries revoked_at — the verifier MUST surface
+		// ErrIdentityRevoked (exit 17), not ErrAuthorSigInvalid (exit 11).
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":               "id:revoked-author",
+			"pubkey_b64":       base64.StdEncoding.EncodeToString(f.authorPub),
+			"auth_source":      "manual",
+			"revoked_at":       "2026-05-09T00:00:00Z",
+			"revoke_rationale": "key compromised in trainer laptop theft",
+			"status":           "revoked",
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	f.pinTrust(t, home, srv.URL, "")
+
+	code, _, stderr := runSkillctl(t, home, "install", "--home", home, "fetch-contract@1.0.0")
+	if code != 17 {
+		t.Errorf("exit = %d, want 17 (RevokeIdentityRevoked); stderr: %s", code, stderr)
+	}
+	// Defense-in-depth: the stderr must mention the revoke so operators
+	// can correlate with the SPEC-0198 audit row.
+	if !strings.Contains(stderr, "revoked") {
+		t.Errorf("stderr does not mention 'revoked'; got: %s", stderr)
 	}
 }

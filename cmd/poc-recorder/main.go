@@ -1,3 +1,5 @@
+//go:build darwin
+
 // POC 4: Audio Recording with PortAudio
 //
 // Validates:

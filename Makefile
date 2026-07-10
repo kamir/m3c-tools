@@ -57,9 +57,17 @@ build-skillctl:
 	@echo "Building skillctl..."
 	go build -o $(BUILD_DIR)/skillctl ./cmd/skillctl
 
+# Build the skillctl-demo tool. It shells out to skillctl (auto-resolved from
+# ./build/skillctl first), so build that too.
+.PHONY: build-skillctl-demo
+build-skillctl-demo: build-skillctl
+	@echo "Building skillctl-demo..."
+	go build -o $(BUILD_DIR)/skillctl-demo ./cmd/skillctl-demo
+	@echo "Built $(BUILD_DIR)/skillctl-demo — run: $(BUILD_DIR)/skillctl-demo (or --selftest)"
+
 # Build all commands (including POCs)
 .PHONY: build-all
-build-all: build build-skillctl
+build-all: build build-skillctl build-skillctl-demo
 	@echo "Building POCs..."
 	go build -o $(BUILD_DIR)/poc-transcript ./cmd/poc-transcript
 	go build -o $(BUILD_DIR)/poc-menubar ./cmd/poc-menubar
@@ -366,6 +374,21 @@ lint:
 	@echo "Running golangci-lint..."
 	golangci-lint run --timeout=5m
 
+# SPEC-0280 trust-layer evaluation harness (E1–E10).
+# `eval` runs the full measured harness and regenerates results/RESULTS.{csv,md}.
+# `eval-fast` runs only the correctness drivers (E4 real corpus + E10 matrix),
+# which also run in plain CI and fail on a safety/threshold regression.
+.PHONY: eval eval-fast
+eval:
+	@echo "Running SPEC-0280 evaluation harness (RUN_EVAL=1)..."
+	RUN_EVAL=1 go test ./evaluation/ -run 'TestE|TestZZZ' -v -timeout 30m
+	EVAL_CPU="$${EVAL_CPU:-$$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo unknown)}" \
+		go run ./evaluation/cmd/results-md evaluation/results
+
+eval-fast:
+	@echo "Running SPEC-0280 correctness drivers (E4 + E10)..."
+	go test ./evaluation/ -run 'TestE4|TestE10' -v
+
 # Windows dev test gate (SPEC-0128): vet + cross-compile + Windows-safe tests + smoke
 .PHONY: test-gate-windows
 test-gate-windows:
@@ -484,7 +507,8 @@ help:
 	@echo "  check-deps     Verify required dependencies are installed"
 	@echo "  build          Build the main CLI binary"
 	@echo "  build-skillctl Build skillctl skill inventory scanner"
-	@echo "  build-all      Build all binaries (CLI + POCs + skillctl)"
+	@echo "  build-skillctl-demo Build the offline skillctl-demo (+ skillctl)"
+	@echo "  build-all      Build all binaries (CLI + POCs + skillctl + demo)"
 	@echo "  build-app      Build macOS .app bundle"
 	@echo "  dmg            Build macOS DMG installer"
 	@echo "  setup-venv     Create Python venv and install whisper"

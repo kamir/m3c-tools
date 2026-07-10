@@ -14,7 +14,11 @@ import (
 	"time"
 )
 
-// validRecordingID validates a Plaud recording ID to prevent path traversal (FIX C-H03).
+// validRecordingID validates a Plaud recording/document ID to prevent path
+// traversal and request-path injection (FIX C-H03, SEC-L9). The Plaud DocID is
+// an opaque alphanumeric token; anything outside [A-Za-z0-9_-] (notably '/',
+// '.', '?', '#', whitespace) is rejected so it can never break out of the
+// request path segment it is interpolated into.
 var validRecordingID = regexp.MustCompile(`^[a-zA-Z0-9_-]{8,64}$`)
 
 func validateRecordingID(id string) error {
@@ -22,6 +26,14 @@ func validateRecordingID(id string) error {
 		return fmt.Errorf("invalid recording ID: %q", id)
 	}
 	return nil
+}
+
+// ValidateDocID validates a Plaud document/recording ID before it is used in a
+// request path or URL (SEC-L9). Exported so CLI callers can fail fast with a
+// clear error before any network round-trip. Equivalent to the internal guard
+// applied inside GetRecording/DownloadAudio/GetTranscript.
+func ValidateDocID(id string) error {
+	return validateRecordingID(id)
 }
 
 // Sentinel errors for Plaud API responses.
@@ -117,10 +129,10 @@ type rawFile struct {
 	ID           string `json:"id"`
 	FileName     string `json:"filename"`
 	FullName     string `json:"fullname"`
-	Duration     int64  `json:"duration"`     // milliseconds
-	StartTime    int64  `json:"start_time"`   // Unix ms
-	EndTime      int64  `json:"end_time"`     // Unix ms
-	EditTime     int64  `json:"edit_time"`    // Unix seconds
+	Duration     int64  `json:"duration"`   // milliseconds
+	StartTime    int64  `json:"start_time"` // Unix ms
+	EndTime      int64  `json:"end_time"`   // Unix ms
+	EditTime     int64  `json:"edit_time"`  // Unix seconds
 	EditFrom     string `json:"edit_from"`
 	IsTrans      bool   `json:"is_trans"`
 	IsSummary    bool   `json:"is_summary"`
@@ -297,24 +309,31 @@ func (c *Client) GetTranscript(id string) (*Transcript, error) {
 // allowedS3Hosts are the expected CDN/S3 domains for Plaud recordings.
 // FIX C-M03: Validate URL domain to prevent SSRF via malicious API response.
 var allowedS3Hosts = map[string]bool{
-	"s3.amazonaws.com":           true,
-	"s3.us-east-1.amazonaws.com": true,
-	"s3.us-west-2.amazonaws.com": true,
-	"s3.ap-east-1.amazonaws.com": true,
+	"s3.amazonaws.com":              true,
+	"s3.us-east-1.amazonaws.com":    true,
+	"s3.us-west-2.amazonaws.com":    true,
+	"s3.ap-east-1.amazonaws.com":    true,
 	"d2mzb0q2lbfnv7.cloudfront.net": true,
 }
 
 func isAllowedS3URL(rawURL string) bool {
 	u, err := url.Parse(rawURL)
-	if err != nil || (u.Scheme != "https" && u.Scheme != "http") {
+	// SEC L7: require https — a compromised/MITM'd Plaud API response must not be
+	// able to downgrade a content fetch to cleartext http.
+	if err != nil || u.Scheme != "https" {
 		return false
 	}
 	host := u.Hostname()
 	if allowedS3Hosts[host] {
 		return true
 	}
-	// Allow any *.s3.amazonaws.com or *.s3.*.amazonaws.com pattern
-	if strings.HasSuffix(host, ".amazonaws.com") || strings.HasSuffix(host, ".cloudfront.net") {
+	// SEC L7: only accept S3 *bucket-style* hosts (`<bucket>.s3.amazonaws.com`,
+	// `<bucket>.s3.<region>.amazonaws.com`, `<bucket>.s3-<region>.amazonaws.com`).
+	// The previous `*.amazonaws.com` / `*.cloudfront.net` wildcards accepted any
+	// AWS subdomain (and any CloudFront distribution) — content-poisoning surface.
+	// CloudFront is pinned to the explicit distribution in allowedS3Hosts.
+	if strings.HasSuffix(host, ".amazonaws.com") &&
+		(strings.Contains(host, ".s3.") || strings.Contains(host, ".s3-")) {
 		return true
 	}
 	return false
@@ -351,16 +370,16 @@ func (c *Client) fetchS3Content(rawURL string) ([]byte, error) {
 		reader = gz
 	}
 
-	return io.ReadAll(io.LimitReader(reader, 50<<20)) // 50 MB limit (gzip bomb protection)
+	return io.ReadAll(io.LimitReader(reader, 16<<20)) // SEC L7: 16 MB cap — transcript/summary JSON is small; tighter gzip-bomb ceiling
 }
 
 // extractTranscriptText parses the Plaud transcript JSON and extracts speaker-diarized text.
 // Format: [{"start_time":N,"end_time":N,"content":"...","speaker":"Speaker 1"}, ...]
 func extractTranscriptText(data []byte) string {
 	var segments []struct {
-		Content  string `json:"content"`
-		Speaker  string `json:"speaker"`
-		Text     string `json:"text"` // fallback field name
+		Content string `json:"content"`
+		Speaker string `json:"speaker"`
+		Text    string `json:"text"` // fallback field name
 	}
 	if json.Unmarshal(data, &segments) == nil && len(segments) > 0 {
 		var parts []string
@@ -490,7 +509,7 @@ func (c *Client) doGet(url string) ([]byte, error) {
 		return nil, err
 	}
 
-	return io.ReadAll(io.LimitReader(resp.Body, 50<<20)) // 50 MB limit
+	return io.ReadAll(io.LimitReader(resp.Body, 16<<20)) // SEC L7: 16 MB cap (API JSON listings are small)
 }
 
 // DebugGet exposes the raw GET method for API exploration.

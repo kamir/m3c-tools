@@ -44,31 +44,39 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Load config: layered per SPEC-0175 (mirrors darwin main.go).
-	//   1. Active profile (account-scoped)
-	//   2. Global preferences (~/.m3c-tools/preferences.env, legacy fallback)
-	//   3. Project-local .env
-	if _, migErr := config.MigrateLegacyPreferences(); migErr != nil {
-		log.Printf("[config] preferences migration warning: %v", migErr)
-	}
-	pm := config.NewProfileManager()
-	if activeProfile, err := pm.ActiveProfile(); err == nil {
-		_ = pm.ApplyProfile(activeProfile)
-		log.Printf("[config] profile: %s", activeProfile.Name)
-	}
-	for _, p := range []string{config.PreferencesPath(), config.LegacyPreferencesPath(), ".env"} {
-		if p != "" {
-			_ = er1.LoadDotenv(p)
+	// help/version need no config — handle them WITHOUT loading the profile or
+	// ER1 config, so they never emit the ER1 placeholder FATAL (which would
+	// pollute clean help output, e.g. on a fresh machine or CI runner).
+	switch os.Args[1] {
+	case "help", "--help", "-h", "version", "--version", "-v":
+		// fall through to the dispatch switch below (no config load)
+	default:
+		// Load config: layered per SPEC-0175 (mirrors darwin main.go).
+		//   1. Active profile (account-scoped)
+		//   2. Global preferences (~/.m3c-tools/preferences.env, legacy fallback)
+		//   3. Project-local .env
+		if _, migErr := config.MigrateLegacyPreferences(); migErr != nil {
+			log.Printf("[config] preferences migration warning: %v", migErr)
 		}
-	}
+		pm := config.NewProfileManager()
+		if activeProfile, err := pm.ActiveProfile(); err == nil {
+			_ = pm.ApplyProfile(activeProfile)
+			log.Printf("[config] profile: %s", activeProfile.Name)
+		}
+		for _, p := range []string{config.PreferencesPath(), config.LegacyPreferencesPath(), ".env"} {
+			if p != "" {
+				_ = er1.LoadDotenv(p)
+			}
+		}
 
-	// Load saved device token if available (SPEC-0127).
-	// This enables uploads via Bearer auth without API key.
-	if cfg := er1.LoadConfig(); cfg.ContextID != "" {
-		if dt, err := auth.Load(auth.DeviceID(), strings.SplitN(cfg.ContextID, "___", 2)[0]); err == nil && dt != nil && !dt.IsExpired() {
-			os.Setenv("ER1_DEVICE_TOKEN", dt.Token)
-			os.Setenv("ER1_CONTEXT_ID", dt.ContextID)
-			log.Printf("[auth] device token loaded for user=%s", truncateForLog(dt.UserID, 20))
+		// Load saved device token if available (SPEC-0127).
+		// This enables uploads via Bearer auth without API key.
+		if cfg := er1.LoadConfig(); cfg.ContextID != "" {
+			if dt, err := auth.Load(auth.DeviceID(), strings.SplitN(cfg.ContextID, "___", 2)[0]); err == nil && dt != nil && !dt.IsExpired() {
+				os.Setenv("ER1_DEVICE_TOKEN", dt.Token)
+				os.Setenv("ER1_CONTEXT_ID", dt.ContextID)
+				log.Printf("[auth] device token loaded for user=%s", truncateForLog(dt.UserID, 20))
+			}
 		}
 	}
 
@@ -95,6 +103,24 @@ func main() {
 	case "screenshot":
 		fmt.Fprintln(os.Stderr, "Error: screenshot capture requires macOS")
 		os.Exit(1)
+	// SPEC-0251 §5 multi-platform parity: portable commands promoted out of the
+	// darwin-only main.go into commands_shared.go now route here too.
+	case "upload":
+		cmdUpload(os.Args[2:])
+	case "whisper":
+		cmdWhisper(os.Args[2:])
+	case "thumbnail":
+		cmdThumbnail(os.Args[2:])
+	case "settings":
+		cmdSettings()
+	case "retry":
+		cmdRetry(os.Args[2:])
+	case "schedule":
+		cmdSchedule(os.Args[2:])
+	case "status":
+		cmdStatus(os.Args[2:])
+	case "cancel":
+		cmdCancel(os.Args[2:])
 	case "version", "--version", "-v":
 		printVersion()
 	case "help", "--help", "-h":
@@ -358,7 +384,7 @@ func cmdTranscript(args []string) {
 // cmdPlaud handles plaud subcommands: auth, list, sync.
 func cmdPlaud(args []string) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud <auth|list|sync> [args...]")
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud <auth|list|check|sync|fix-times> [args...]")
 		os.Exit(1)
 	}
 
@@ -367,6 +393,16 @@ func cmdPlaud(args []string) {
 		cmdPlaudAuth(args[1:])
 	case "list":
 		cmdPlaudList()
+	case "check":
+		cmdPlaudCheck()
+	case "fix-times":
+		apply := false
+		for _, a := range args[1:] {
+			if a == "--apply" {
+				apply = true
+			}
+		}
+		cmdPlaudFixTimes(apply)
 	case "sync":
 		if len(args) < 2 {
 			fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud sync <#|ID|--all> [-f]")
@@ -398,6 +434,16 @@ func cmdPlaud(args []string) {
 }
 
 // cmdPlaudAuth handles token authentication.
+//
+// Supported forms:
+//
+//	plaud auth login                  extract token from Chrome (CDP)
+//	plaud auth --token-file <path>    read token from a file (secure)
+//	plaud auth                        read token from $M3C_PLAUD_TOKEN (secure)
+//	plaud auth <token>                bare argv token (DEPRECATED — leaks via ps)
+//
+// SEC-M8: the bare-argv form is retained for backward compatibility but emits a
+// loud deprecation warning, because argv is visible to other users via ps.
 func cmdPlaudAuth(args []string) {
 	cfg := plaud.LoadConfig()
 
@@ -425,19 +471,69 @@ func cmdPlaudAuth(args []string) {
 		return
 	}
 
-	if len(args) > 0 {
-		// Direct token
-		session := &plaud.TokenSession{Token: args[0], SavedAt: time.Now()}
+	if len(args) > 0 && (args[0] == "--from-er1" || args[0] == "from-er1") {
+		// SPEC-0304 — pull the token from the ER1 Credential Vault (captured
+		// once via the "Plaud verbinden" page, any OS) instead of harvesting a
+		// local browser. Resolves ER1 base + auth from the active profile.
+		fmt.Println("Fetching Plaud token from the ER1 credential vault...")
+		token, _, err := plaud.FetchTokenFromER1()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		session := &plaud.TokenSession{Token: token, SavedAt: time.Now()}
 		if err := plaud.SaveToken(cfg.TokenPath, session); err != nil {
 			fmt.Fprintf(os.Stderr, "Error saving token: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("Token saved.")
+		client := plaud.NewClient(cfg, token)
+		recordings, err := client.ListRecordings()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: token saved but verification failed: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Token retrieved from ER1 and saved. Verified: %d recordings found.\n", len(recordings))
 		return
 	}
 
-	fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud auth <login|TOKEN>")
-	os.Exit(1)
+	tokenFile := ""
+	bareToken := ""
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--token-file":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "--token-file requires a path")
+				os.Exit(1)
+			}
+			tokenFile = args[i+1]
+			i++
+		case strings.HasPrefix(a, "--token-file="):
+			tokenFile = strings.TrimPrefix(a, "--token-file=")
+		case !strings.HasPrefix(a, "-") && bareToken == "":
+			bareToken = a
+		}
+	}
+
+	token, argvLeaked, err := plaud.ResolveAuthToken(tokenFile, bareToken)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud auth login            (extract from Chrome)")
+		fmt.Fprintln(os.Stderr, "       m3c-tools plaud auth --from-er1        (pull from the ER1 vault, SPEC-0304)")
+		fmt.Fprintln(os.Stderr, "       m3c-tools plaud auth --token-file <path>")
+		fmt.Fprintf(os.Stderr, "       %s=<token> m3c-tools plaud auth\n", plaud.PlaudTokenEnvVar)
+		os.Exit(1)
+	}
+	if argvLeaked {
+		fmt.Fprintf(os.Stderr, "WARNING: passing the Plaud token as a command-line argument leaks it to other users via ps/argv.\n")
+		fmt.Fprintf(os.Stderr, "         Prefer: %s=<token> m3c-tools plaud auth   (or --token-file <path>)\n", plaud.PlaudTokenEnvVar)
+	}
+	session := &plaud.TokenSession{Token: token, SavedAt: time.Now()}
+	if err := plaud.SaveToken(cfg.TokenPath, session); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving token: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("Token saved.")
 }
 
 // cmdPlaudList lists all Plaud recordings.
@@ -461,17 +557,13 @@ func cmdPlaudList() {
 		return
 	}
 
-	// Check tracking DB for sync status + ER1 doc IDs.
-	dbPath := defaultFilesDBPath()
-	filesDB, dbErr := tracking.OpenFilesDB(dbPath)
-	if dbErr != nil {
-		log.Printf("[plaud] warning: cannot open tracking DB: %v", dbErr)
+	// Resolve sync status + ER1 doc_id: local tracking DB merged with the
+	// SPEC-0117 server sync check (cross-machine authoritative).
+	ids := make([]string, len(recordings))
+	for i, r := range recordings {
+		ids[i] = r.ID
 	}
-	defer func() {
-		if filesDB != nil {
-			filesDB.Close()
-		}
-	}()
+	states := resolvePlaudSyncStates(ids, session.Token)
 
 	fmt.Printf("  %3s  %-32s  %-40s  %6s  %s  %-10s  %s\n", "#", "ID", "Title", "Dur", "Date", "Status", "ER1 Doc")
 	fmt.Println("  ---  --------------------------------  ----------------------------------------  ------  ----------  ----------  --------")
@@ -480,22 +572,19 @@ func cmdPlaudList() {
 		if len(id) > 32 {
 			id = id[:32]
 		}
-		status := "new"
-		docID := ""
-		if filesDB != nil {
-			if tracked, lookupErr := filesDB.GetByPath("plaud://" + r.ID); lookupErr == nil && tracked != nil {
-				status = tracked.Status
-				docID = tracked.UploadDocID
-			}
+		st := states[r.ID]
+		status := st.Status
+		if status == "" {
+			status = "new"
 		}
 		title := r.Title
 		if len(title) > 40 {
 			title = title[:37] + "..."
 		}
-		fmt.Printf("  %3d  %-32s  %-40s  %6d  %s  [%-8s]  %s\n", i+1, id, title, r.Duration, r.CreatedAt.Format("2006-01-02"), status, docID)
+		fmt.Printf("  %3d  %-32s  %-40s  %6d  %s  [%-8s]  %s\n", i+1, id, title, r.Duration, r.CreatedAt.Format("2006-01-02"), status, st.DocID)
 	}
 	fmt.Printf("\nTotal: %d recordings\n", len(recordings))
-	fmt.Println("Use: m3c-tools plaud sync <#>   or   m3c-tools plaud sync <ID>")
+	fmt.Println("Use: plaud sync <#>   ·   plaud check (coverage)")
 }
 
 // cmdPlaudSync syncs a recording (or all) to ER1 with detailed statistics (FR-0009),
@@ -523,6 +612,15 @@ func cmdPlaudSync(recordingID string, force bool) {
 		}
 		recordingID = recordings[idx-1].ID
 		fmt.Printf("Resolved #%d → %s\n", idx, recordingID)
+	}
+
+	// SEC-L9: validate a directly-supplied DocID before it is used in any
+	// request path. "all" is the bulk sentinel and is handled separately below.
+	if recordingID != "all" {
+		if vErr := plaud.ValidateDocID(recordingID); vErr != nil {
+			fmt.Fprintf(os.Stderr, "Invalid Plaud recording ID: %v\n", vErr)
+			os.Exit(1)
+		}
 	}
 
 	if force {
@@ -606,6 +704,7 @@ func cmdPlaudSync(recordingID string, force bool) {
 			if len(ids) == 0 {
 				fmt.Println("All recordings already synced.")
 				fmt.Print(stats.FormatSummary())
+				fmt.Print(stats.CoverageReport())
 				return
 			}
 			fmt.Printf("Syncing %d new recordings...\n", len(ids))
@@ -742,6 +841,7 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 			ImageFilename:      "plaud-logo.png",
 			Tags:               tags,
 			ContentType:        cfg.ContentType,
+			CurrentTime:        er1.FormatCaptureTime(rec.CreatedAt), // position at real recording time
 		}
 
 		resp, upErr := er1.Upload(er1Cfg, payload)
@@ -1037,7 +1137,7 @@ func truncateForLog(s string, maxLen int) string {
 func printUsage() {
 	fmt.Println(`m3c-tools — Multi-Modal-Memory Tools (CLI mode)
 
-Available commands (cross-platform):
+Commands:
   setup                  Interactive ER1 onboarding wizard
     --er1-url <url>       ER1 upload endpoint (default: onboarding.guide)
     --tags <tags>         Default tags for plaud sync
@@ -1077,7 +1177,6 @@ func cmdExec(name string, args ...string) *exec.Cmd {
 	return exec.Command(name, args...)
 }
 
-
 // plaudChromeActive prevents concurrent Chrome launches for Plaud auth.
 // BUG-0102: Without this guard, ActionPlaudAuth and ActionPlaudSync can both
 // call trayExtractPlaudToken simultaneously, launching two debug Chrome windows.
@@ -1086,11 +1185,11 @@ var plaudChromeActive int32
 
 // trayExtractPlaudToken attempts to extract a Plaud token from Chrome via CDP.
 // This is the tray-friendly version that never blocks on stdin:
-//   1. First tries ExtractTokenCDP() — instant, works if Chrome is already
-//      running with plaud.ai open and --remote-debugging-port=9222.
-//   2. If that fails, launches Chrome with the debug port, opens plaud.ai,
-//      and polls for the token every 3 seconds for 60 seconds while the user
-//      logs in. Tooltip is updated with a countdown.
+//  1. First tries ExtractTokenCDP() — instant, works if Chrome is already
+//     running with plaud.ai open and --remote-debugging-port=9222.
+//  2. If that fails, launches Chrome with the debug port, opens plaud.ai,
+//     and polls for the token every 3 seconds for 60 seconds while the user
+//     logs in. Tooltip is updated with a countdown.
 //
 // Happy Maker 1: Eliminates the terminal requirement for Plaud authentication.
 func trayExtractPlaudToken(app *tray.TrayApp) (string, error) {
@@ -1269,11 +1368,8 @@ func checkFirstRun() []tray.SetupIssue {
 		}
 	}
 	// SPEC-0127: device token replaces API key — only warn if neither exists.
-	deviceTokenPath := filepath.Join(home, ".m3c-tools", "device-token.enc")
-	hasDeviceToken := false
-	if _, dtErr := os.Stat(deviceTokenPath); dtErr == nil {
-		hasDeviceToken = true
-	}
+	// Token may live in the OS keychain or the encrypted fallback file.
+	hasDeviceToken := auth.HasStoredToken()
 	if apiKey == "" && !hasDeviceToken {
 		issues = append(issues, tray.SetupIssue{
 			Key: "no_auth", Message: "Not authenticated — run 'm3c-tools login'",
@@ -1347,6 +1443,7 @@ func cmdTrayApp(args []string) {
 		}
 		log.SetFlags(log.Ldate | log.Ltime)
 	}
+	startupBanner()
 	fmt.Fprintf(os.Stderr, "m3c-tools tray started. Logs: %s\n", logPath)
 
 	// Auto-configure from ~/m3c-tools.init.cfg if present (zero-touch onboarding).
@@ -1528,7 +1625,9 @@ func openFileWithDefault(path string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", "", path)
+		// SEC-M11: avoid "cmd /c start" — route through rundll32's
+		// FileProtocolHandler so the path is never shell-interpreted.
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
 	case "linux":
 		cmd = exec.Command("xdg-open", path)
 	default:
@@ -1540,13 +1639,16 @@ func openFileWithDefault(path string) {
 }
 
 // openBrowserURL opens a URL in the platform default browser.
-// BUG-0088: Windows uses "cmd /c start" instead of rundll32 which silently fails.
+//
+// SEC-M11: Windows uses rundll32 url.dll,FileProtocolHandler instead of
+// "cmd /c start". The URL can be server-/profile-controlled; rundll32 hands it
+// straight to the registered protocol handler with no shell interpretation,
+// removing the cmd.exe metacharacter surface (&, |, ^, %).
 func openBrowserURL(url string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		// Empty title arg ("") prevents cmd from misinterpreting URLs with & as title.
-		cmd = exec.Command("cmd", "/c", "start", "", url)
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
 	case "linux":
 		cmd = exec.Command("xdg-open", url)
 	default:
