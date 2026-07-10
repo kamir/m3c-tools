@@ -377,3 +377,30 @@ func TestGenerate_EnterpriseKey(t *testing.T) {
 		t.Errorf("default must NOT emit the enterprise key:\n%s", off)
 	}
 }
+
+// TestRequireLocalAuditFromBytes locks the R-8.2 reader: enterprise-GATED (both
+// flags), missing/malformed → false.
+func TestRequireLocalAuditFromBytes(t *testing.T) {
+	if !RequireLocalAuditFromBytes([]byte(`{"skillctlEnterprise":true,"skillctlRequireLocalAudit":true}`)) {
+		t.Error("both flags → require_local_audit on")
+	}
+	for _, neg := range []string{
+		`{"skillctlRequireLocalAudit":true}`, // enterprise missing → gated off
+		`{"skillctlEnterprise":true,"skillctlRequireLocalAudit":false}`,
+		`{"skillctlEnterprise":true}`,
+		`{}`,
+		`{ not json`,
+	} {
+		if RequireLocalAuditFromBytes([]byte(neg)) {
+			t.Errorf("must be off (enterprise-gated / conservative): %q", neg)
+		}
+	}
+	// round-trip via Generate: --require-local-audit implies enterprise.
+	b, _ := Generate(GenerateOptions{RequireLocalAudit: true})
+	if !RequireLocalAuditFromBytes(b) {
+		t.Error("Generate(RequireLocalAudit) must round-trip")
+	}
+	if !EnterpriseFromBytes(b) {
+		t.Error("--require-local-audit must also emit enterprise (enterprise-only)")
+	}
+}

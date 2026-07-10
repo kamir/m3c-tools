@@ -132,6 +132,7 @@ func runSessionBaseline(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "  trust basis present:  %s (SPEC-0188 roots OR self/ER1 roots OR .m3c-provenance)\n", yesNo(dec.TrustBasisPresent))
 	fmt.Fprintf(stdout, "  translog anchor:      %s\n", yesNo(dec.AnchorPresent))
 	fmt.Fprintf(stdout, "  enterprise profile:   %s\n", yesNo(dec.Enterprise))
+	fmt.Fprintf(stdout, "  require local audit:  %s  [ENFORCED (R-8.2) by enforce: an allow that can't be durably recorded fails closed, exit 26]\n", yesNo(gateRequireLocalAudit()))
 	fmt.Fprintf(stdout, "  online fallback:      %s  [INFORMATIONAL — posture only; state-gating the online fallback is R-1.4 P2, not yet wired: the runtime gate still falls back]\n", allowedBlocked(dec.AllowOnlineFallback))
 	fmt.Fprintf(stdout, "  high-risk fail-closed:%s\n", yesNoPad(dec.HighRiskFailsClosed))
 	fmt.Fprintf(stdout, "  deny all managed:     %s  [ENFORCED (R-7.2) by verify-hook/enforce when the gate is pinned: a locked host denies non-allowlisted managed skills, exit 28]\n", yesNo(dec.DenyAllManaged))

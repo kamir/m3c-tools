@@ -71,6 +71,19 @@ type GenerateOptions struct {
 	// create a trust basis (that conflation made `locked` unreachable). Claude
 	// Code ignores the unknown key (its schema is additive); skillctl reads it.
 	Enterprise bool
+	// RequireLocalAudit emits `skillctlRequireLocalAudit: true` — the SPEC-0317
+	// R-8.2 opt-in that inverts the SPEC-0255 fire-and-forget audit contract: when
+	// set, `skillctl enforce` fails CLOSED (exit 26) if an ALLOW's evidence cannot
+	// be durably recorded. It is ENTERPRISE-ONLY, so setting it also emits
+	// skillctlEnterprise:true. Same root-owned managed tier as Enterprise, so the
+	// two enterprise knobs share ONE source (closing the R-7.2 F3 split).
+	//
+	// SCOPE: this escalates EVERY audited Skill allow that can't be recorded —
+	// managed, UNMANAGED (default-allow plugins/namespaced skills), AND allowlisted.
+	// On a host with an unrecordable outbox it therefore denies the plugin ecosystem
+	// and the operator's allowlisted escapes too; that is the intended "no un-audited
+	// allow" posture, not a bug. Enable it deliberately.
+	RequireLocalAudit bool
 }
 
 // wire structs — field order here is the emitted JSON key order (encoding/json
@@ -92,6 +105,7 @@ type managedSettings struct {
 	AllowManagedHooksOnly        bool       `json:"allowManagedHooksOnly,omitempty"`
 	DisableBypassPermissionsMode string     `json:"disableBypassPermissionsMode,omitempty"`
 	SkillctlEnterprise           bool       `json:"skillctlEnterprise,omitempty"`
+	SkillctlRequireLocalAudit    bool       `json:"skillctlRequireLocalAudit,omitempty"`
 	Hooks                        hooksBlock `json:"hooks"`
 }
 
@@ -144,6 +158,10 @@ func Generate(opts GenerateOptions) ([]byte, error) {
 	ms := managedSettings{Hooks: gateHooks(opts.BinaryPath)}
 	if opts.Enterprise {
 		ms.SkillctlEnterprise = true
+	}
+	if opts.RequireLocalAudit {
+		ms.SkillctlEnterprise = true // require_local_audit is enterprise-only
+		ms.SkillctlRequireLocalAudit = true
 	}
 	if opts.Strict || opts.Harden {
 		ms.AllowManagedHooksOnly = true
@@ -231,6 +249,20 @@ func EnterpriseFromBytes(settings []byte) bool {
 		return false
 	}
 	return ms.SkillctlEnterprise
+}
+
+// RequireLocalAuditFromBytes reports whether managed settings enable the
+// SPEC-0317 R-8.2 require_local_audit posture. Enterprise-GATED: true only when
+// BOTH skillctlEnterprise AND skillctlRequireLocalAudit are set — the
+// decision-invariance carve-out cannot be enabled on a non-enterprise host (the
+// same floor verify.Load enforced for the trust-roots surface). Same conservative
+// contract as EnterpriseFromBytes: missing/malformed → false.
+func RequireLocalAuditFromBytes(settings []byte) bool {
+	var ms managedSettings
+	if json.Unmarshal(settings, &ms) != nil {
+		return false
+	}
+	return ms.SkillctlEnterprise && ms.SkillctlRequireLocalAudit
 }
 
 // Verify parses managed-settings bytes and reports the pinning level. It matches

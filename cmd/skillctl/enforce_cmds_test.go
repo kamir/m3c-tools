@@ -47,6 +47,12 @@ func runOne(t *testing.T, gate func(r *strings.Reader, o, e *bytes.Buffer) int, 
 	origEnt := gateManagedEnterprise
 	gateManagedEnterprise = func() bool { return false }
 	t.Cleanup(func() { gateManagedEnterprise = origEnt })
+	// Same hermetic pin for the R-8.2 require_local_audit source: OFF unless a test
+	// overrides it, so every runOne-based parity test keeps the fire-and-forget
+	// contract regardless of the machine's real managed-settings file.
+	origRLA := gateRequireLocalAudit
+	gateRequireLocalAudit = func() bool { return false }
+	t.Cleanup(func() { gateRequireLocalAudit = origRLA })
 
 	var out, errb bytes.Buffer
 	code := gate(strings.NewReader(event), &out, &errb)
@@ -173,7 +179,7 @@ func TestEnforce_WritesOutboxRow(t *testing.T) {
 func TestEnforce_OutboxFailure_DecisionInvariant(t *testing.T) {
 	// Force the sink to panic on every call.
 	origSink := enforceOutboxSink
-	enforceOutboxSink = func(string, skillgate.InvocationRecord) { panic("outbox is on fire") }
+	enforceOutboxSink = func(string, skillgate.InvocationRecord) bool { panic("outbox is on fire") }
 	t.Cleanup(func() { enforceOutboxSink = origSink })
 
 	skillEvent := `{"tool_name":"Skill","tool_input":{"skill":"subject"},"session_id":"s"}`
@@ -203,7 +209,7 @@ func TestEnforce_OutboxFailure_DecisionInvariant(t *testing.T) {
 // outbox failure must not become a fail-open OR a spurious deny).
 func TestEnforce_OutboxFailure_StillDecidesAllow(t *testing.T) {
 	origSink := enforceOutboxSink
-	enforceOutboxSink = func(string, skillgate.InvocationRecord) { panic("boom") }
+	enforceOutboxSink = func(string, skillgate.InvocationRecord) bool { panic("boom") }
 	t.Cleanup(func() { enforceOutboxSink = origSink })
 
 	code, out, _ := runOne(t, hookViaEnforce, "subject",
