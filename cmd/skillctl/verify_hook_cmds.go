@@ -39,11 +39,63 @@ import (
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/install"
+	"github.com/kamir/m3c-tools/pkg/skillctl/pin"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
+	"github.com/kamir/m3c-tools/pkg/skillctl/statemachine"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 	"github.com/kamir/m3c-tools/pkg/skillgate"
 	"gopkg.in/yaml.v3"
 )
+
+// exitOfflineLocked is the semantic exit code carried in the message + signed
+// refusal_code when the SPEC-0317 R-7.2 `locked` state denies a managed skill.
+// The PROCESS still exits exitHookBlock (2); this rides the message, mirroring
+// exitBundleRevoked (17) / exitRevocationStale (22) / exitSidechannelDenied (27).
+const exitOfflineLocked = 28 // = exitcode.OfflineLocked.Number
+
+// gateManagedEnterprise reports whether the ROOT-OWNED managed settings enable
+// the SPEC-0317 enterprise posture (`skillctlEnterprise: true`). This is the ONLY
+// source of the `locked` opt-in (Option B): sourcing it from the trust-roots file
+// would make declaring "enterprise" itself create a trust basis — the conflation
+// that left `locked` unreachable. A missing/unreadable/malformed managed file →
+// false (never-brick: `locked` is the most destructive posture and must not
+// engage on a file we cannot cleanly read). Seam: tests set it directly.
+var gateManagedEnterprise = func() bool {
+	path, err := pin.DefaultManagedSettingsPath()
+	if err != nil {
+		return false
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	return pin.EnterpriseFromBytes(b)
+}
+
+// gateOfflineStateDeniesManaged reports whether the SPEC-0317 R-7.2 `locked`
+// state denies this (already-classified-managed) skill. Seam for tests.
+//
+// It performs NO network probe: `locked` depends only on the managed enterprise
+// opt-in AND trust-basis presence (Compute checks locked BEFORE RegistryReachable),
+// so the hot path stays strictly local. It fast-paths to false for every
+// non-enterprise host BEFORE any filesystem gather — so a default machine pays
+// nothing and AC-1 byte-parity holds trivially.
+var gateOfflineStateDeniesManaged = defaultGateOfflineStateDeniesManaged
+
+func defaultGateOfflineStateDeniesManaged(home string, now time.Time) bool {
+	if !gateManagedEnterprise() {
+		return false // never-brick: only a managed-enterprise host can ever lock
+	}
+	pol, _ := resolveSessionOfflinePolicy(home, "") // the freshness knobs
+	// SPEC-0317 R-7.2 (Option B): the enterprise opt-in for `locked` comes from the
+	// managed settings, overriding whatever the trust-roots offline_policy declared.
+	// NOTE: pol.RequireLocalAudit still originates from trust-roots and is inert
+	// today (Compute/gate never read it). When R-8 wires require_local_audit, its
+	// enterprise source must be reconciled with this one before it is consumed.
+	pol.Enterprise = true
+	in := sessionBaselineGather(home, false, now) // forceOnline=false; locked ignores reachability
+	return statemachine.DenyAllManaged(statemachine.Compute(in, pol))
+}
 
 // refusalCodeForHook maps the hook's (exitCode, reason) into a stable
 // refusal_code token for the signed invocation record. An allow (exit 0) has
@@ -55,6 +107,10 @@ func refusalCodeForHook(exitCode int, reason string) string {
 		return ""
 	}
 	switch {
+	// SPEC-0317 R-7.2 — the `locked`-state managed deny. A unique token; placed
+	// first as it cannot be a substring of any other reason.
+	case strings.Contains(reason, "offline_locked"):
+		return "offline_locked"
 	// SPEC-0277 P1 — agent-authorization denies. Checked BEFORE the generic
 	// "revoked"/"unmanaged" cases so an agent deny gets its specific token (e.g.
 	// an "agent_revoked" reason must not be flattened to "bundle_revoked").
@@ -351,6 +407,26 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 			audReason = fmt.Sprintf("unmanaged (%s) + policy allow", why)
 			return allow()
 		}
+	}
+
+	// SPEC-0317 R-7.2 — `locked` STATE: a managed-enterprise host with NO trust
+	// basis at all (roots/self-roots/sidecar all gone) denies ALL MANAGED skills
+	// here — BEFORE the revoked/verdict cache, so a cached allow cannot outlive a
+	// fleet that has lost its policy basis. Unmanaged skills already returned above
+	// and are untouched (R-7.2). The enterprise opt-in is read from the ROOT-OWNED
+	// managed settings (Option B), so this is inert on every non-enterprise host —
+	// it never bricks a default / self-ER1 / air-gapped machine and preserves AC-1
+	// byte-parity. Emergency already ran first (unconditional); the AgentID grant
+	// still wraps the eventual allow() elsewhere.
+	// NOTE ON SCOPE: this rung sits BELOW the operator allowlist (§9.4) above,
+	// which is read from the USER-owned gate-policy.yaml — so a same-uid user can
+	// allowlist a specific managed skill past the lock without root. That matches
+	// the allowlist's existing role as the escape hatch that bypasses all §7
+	// verification; the message therefore says "non-allowlisted", not "all".
+	if gateOfflineStateDeniesManaged(home, now) {
+		audReason = "offline_locked (managed-enterprise, no trust basis; SPEC-0317 R-7.2)"
+		return emitDeny(stdout, stderr,
+			fmt.Sprintf("skillctl: BLOCKED '%s' — offline 'locked' state (exit %d): the host is managed-enterprise but has NO trust basis (no trust roots, self/ER1 roots, or provenance sidecar), so offline_policy denies all non-allowlisted managed skills. Restore a trust root or a signed offline checkpoint.", skill, exitOfflineLocked))
 	}
 
 	// SPEC-0266 F1: a bundle revoked AFTER install is denied by the offline gate

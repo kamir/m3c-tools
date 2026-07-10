@@ -280,11 +280,14 @@ func ageFresh(age, ceiling time.Duration) bool {
 // flag the state machine feeds the ladder — it does NOT reorder the ladder.
 func AllowOnlineFallback(s State) bool { return s == StateOnline }
 
-// DenyAllManaged reports whether the state denies ALL managed skills. ONLY
-// `locked` does (enterprise opt-in, exit 28 `offline_locked`). It NEVER affects
-// unmanaged skills — the shipped unmanaged=allow default is untouched (R-7.2).
-// Because Compute only returns locked under Enterprise, this can never brick a
-// non-enterprise host.
+// DenyAllManaged reports whether the state denies managed skills. ONLY `locked`
+// does (enterprise opt-in, exit 28 `offline_locked`). It NEVER affects unmanaged
+// skills — the shipped unmanaged=allow default is untouched (R-7.2). Because
+// Compute only returns locked under Enterprise, this can never brick a
+// non-enterprise host. NOTE (scope): at the gate this rung sits below the
+// operator allowlist (§9.4), so a same-uid user can allowlist a specific managed
+// skill past the lock — the deny is over NON-ALLOWLISTED managed skills, not
+// literally all of them.
 func DenyAllManaged(s State) bool { return s == StateLocked }
 
 // HighRiskFailsClosed reports whether high-risk actions fail closed in the given
