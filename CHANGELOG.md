@@ -15,6 +15,55 @@ version is ldflags-stamped (`skillctl version`). Release tags: `skillctl/vX.Y.Z`
   a verbatim move ships half-extracted shared state, so it needs a dedicated
   refactor pass, not a release-eve edit.
 
+## [skillctl/v0.3.0] — 2026-07-10 — enterprise evidence backbone + managed-settings pinning
+Full notes: `release/skillctl/v0.3.0/RELEASE_NOTES.md`.
+### Added
+- **`skillctl pin`** (SPEC-0247 §7.3 P1.3) — pins the trust gate into Claude Code
+  **managed settings**, making it un-deletable by non-root users. `generate` /
+  `status` / `install`; install **merges** into existing managed policy (never
+  clobbers), backs it up, and re-reads the file from disk to verify what landed.
+- **`skillctl enforce`** (SPEC-0317 P0) — byte-identical to `verify-hook` for a
+  Skill event, plus a transactional **SQLite outbox** (`pkg/skillctl/outbox`,
+  hot-path-safe, `spool.jsonl` fallback, write-once rows). The SPEC-0255
+  decision-invariance contract is preserved.
+- **`skillctl sync --once|--daemon`** (SPEC-0317 P1) — separate-process drain of
+  the outbox to the audit-plane ingest contract; marks synced only on a valid
+  signed durable-seq; backoff via `delivery_attempts`. HTTPS-only, no Kafka client.
+- **`skillctl guard-path`** (SPEC-0317 P2) — side-channel guard over
+  Bash/Read/Edit/Write with a single realpath fixed point; audited-allow default.
+- **`skillctl session-baseline`** + `pkg/skillctl/statemachine`
+  (`online/degraded/offline/locked`) — informational posture.
+- **Fleet kill-switch** (FR-0045 D1–D5) — signed revocation HEAD (epoch
+  monotonicity, set-root binding), emergency deny-list, opt-in fail-closed
+  freshness (exit `22`).
+- **`skillctl-demo`** binary + **Kata training mode** (`--mode kata`).
+### Security
+- **Go 1.26.5** toolchain (`GO-2026-5856`, `crypto/tls` ECH privacy leak);
+  `govulncheck` clean.
+- **Windows `guard-path` parity** — native `C:\…\SKILL.md` tokens were classified
+  "not a path", so the guard never fired on Windows. Fixed; locked by a
+  cross-platform test.
+### Scope (not claimed)
+- Pinning is un-deletable by **non-root only**; root / same-uid is out of scope.
+- `guard-path` is **not a seal** (copies outside the skills dir, in-context reads
+  and `/slash` are uncovered).
+- The state machine is **informational**: the gate does not yet consume
+  `require_local_audit` (exit 26) or `locked` (exit 28).
+- `sync` is contract-complete against a test double; egress is **default-OFF**.
+  Per-batch transparency-log anchoring is not wired (`translog_seq` is NULL).
+
+## [skillctl/v0.2.11] — 2026-06-18 — bundled runbooks + `runbook publish`
+Recorded retroactively: this tag shipped without a changelog entry.
+### Added
+- **Skill-bundled runbooks** (SPEC-0275 P0) — auto-registered on publish.
+- **`skillctl runbook publish`** — push an onboarding runbook to the THOH catalog.
+- **Opt-in auto-publish** of a runbook on release (SPEC-0272).
+- **Author selector** (Eric / Mirko) coupling identity + context + key.
+### Fixed
+- `publish --attest/--revoke` auto-resolve the digest from the packed `.skb`.
+- Release workflow stamps `install.sh`'s `RELEASE_BASE` to the tag.
+- Runbook smoke test made optional (skills may ship none); author labels genericised.
+
 ## [skillctl/v0.2.10] — 2026-06-13 — security review remediation (SPEC-0266)
 Closes the adversarial security review (`CISO-WORK/SECURITY-REVIEW-skillctl-m3c-tools-2026-06-13.md`).
 ### Security — P0
