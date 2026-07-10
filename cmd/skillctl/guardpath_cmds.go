@@ -299,11 +299,28 @@ func shellSplit(cmd string) []string {
 }
 
 // looksPathLike reports whether a token is shaped like a filesystem path.
+// Recognises BOTH separators and drive-qualified Windows paths: on windows a
+// native path (`C:\Users\...\.claude\skills\x\SKILL.md`) carries no '/', no '~'
+// and no leading '.', so a POSIX-only check silently classified it as "not a
+// path" and the guard never fired (Trust Surface / windows-latest).
+// A false positive here is harmless: the token is only fed to
+// install.CanonicalPath, and underSkills() still gates whether it is a real hit.
 func looksPathLike(s string) bool {
 	if s == "" || s == "." || s == ".." {
 		return false
 	}
-	return strings.Contains(s, "/") || strings.HasPrefix(s, "~") || strings.HasPrefix(s, ".")
+	if strings.HasPrefix(s, "~") || strings.HasPrefix(s, ".") {
+		return true
+	}
+	if strings.ContainsAny(s, `/\`) {
+		return true
+	}
+	// Drive-qualified Windows path with no separator (e.g. `C:file`).
+	return len(s) >= 2 && s[1] == ':' && isDriveLetter(s[0])
+}
+
+func isDriveLetter(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
 }
 
 // --- self-exemption (R-6.3) -----------------------------------------------

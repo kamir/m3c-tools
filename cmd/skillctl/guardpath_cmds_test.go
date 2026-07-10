@@ -293,3 +293,31 @@ func TestGuardPath_EventReusesSignedVocabulary(t *testing.T) {
 		t.Errorf("tool = %q, want Edit", rec.Tool)
 	}
 }
+
+// TestLooksPathLike_CrossPlatform locks the Windows regression that made the
+// Trust Surface (windows-latest) job red: a native `C:\...\SKILL.md` token
+// carries no '/', no '~' and no leading '.', so a POSIX-only check classified
+// it as "not a path" and the guard never fired.
+func TestLooksPathLike_CrossPlatform(t *testing.T) {
+	pathLike := []string{
+		"/home/u/.claude/skills/x/SKILL.md",   // posix absolute
+		"~/.claude/skills/x/SKILL.md",         // tilde
+		"./relative/file",                     // leading dot
+		".claude/skills/x",                    // leading dot
+		`C:\Users\runner\.claude\skills\x.md`, // windows native
+		`C:/Users/runner/skills/x.md`,         // windows w/ forward slashes
+		`skills\x\SKILL.md`,                   // windows relative
+		"C:file",                              // drive-qualified, no separator
+	}
+	for _, p := range pathLike {
+		if !looksPathLike(p) {
+			t.Errorf("looksPathLike(%q) = false, want true", p)
+		}
+	}
+	notPathLike := []string{"", ".", "..", "cat", "base64", "skillctl", "version", "C", "5:30"}
+	for _, p := range notPathLike {
+		if looksPathLike(p) {
+			t.Errorf("looksPathLike(%q) = true, want false", p)
+		}
+	}
+}
