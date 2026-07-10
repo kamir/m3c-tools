@@ -26,6 +26,10 @@ go.work.sum
 
 # Build output
 build/
+# goreleaser output. MUST stay ignored: scripts/release.sh does `git add -A` on a
+# dirty tree, so a leftover local `goreleaser build/release --snapshot` would
+# otherwise be committed wholesale as the release commit.
+dist/
 /m3c-tools
 /m3c-tools-*
 

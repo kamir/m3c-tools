@@ -85,32 +85,36 @@ builds:
         goarch: arm64
 
 archives:
+  # goreleaser v2: `ids` replaces the deprecated `builds`, and `formats` (a list)
+  # replaces the deprecated scalar `format`. Names are unchanged on purpose —
+  # release.yml lists these filenames verbatim, and the published install.sh
+  # depends on them.
   - id: m3c-tools-archive
-    builds:
+    ids:
       - m3c-tools
     name_template: "m3c-tools-{{ .Os }}-{{ .Arch }}"
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
 
   - id: skillctl-archive
-    builds:
+    ids:
       - skillctl
     name_template: "skillctl-{{ .Os }}-{{ .Arch }}"
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
 
   # The demo ships as a self-contained bundle: skillctl-demo + the skillctl it
   # shells out to. Double-click on a locked-down Windows laptop, browser opens.
   - id: skillctl-demo-archive
-    builds:
+    ids:
       - skillctl-demo
       - skillctl
     name_template: "skillctl-demo-{{ .Os }}-{{ .Arch }}"
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
 
 checksum:
   name_template: "checksums.txt"
