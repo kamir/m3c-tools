@@ -120,17 +120,18 @@ var (
 )
 
 // ---------------------------------------------------------------------------
-// Tier 7 — offline state machine (SPEC-0317 R-7.2, P2; the runtime gate).
-// 28 is a fresh, uniquely-themed code carried in the signed refusal_code when the
-// `locked` state (enterprise opt-in via managed settings + NO trust basis at all)
-// denies a MANAGED skill. The PROCESS still exits 2 to block the PreToolUse call,
-// mirroring the guard-path/verify-hook convention. Reserved-but-not-yet-emitted:
-// 26 (local_audit_unavailable, R-8 require_local_audit) — registered when that
-// carve-out is wired, so it is NOT in AllCodes yet.
+// Tier 7 — offline state machine + audit-durability (SPEC-0317 R-7.2 / R-8.2, P2).
+// 28 `offline_locked`: the `locked` state (enterprise opt-in via managed settings
+// + NO trust basis) denies a managed skill. 26 `local_audit_unavailable`:
+// require_local_audit is set and an ALLOW's evidence could not be durably recorded
+// (outbox+spool both failed) → fail closed, inverting the SPEC-0255 fire-and-forget
+// default. Both ride the message + refusal_code; the PROCESS still exits 2 to block
+// the PreToolUse call, mirroring the guard-path/verify-hook convention.
 // ---------------------------------------------------------------------------
 
 var (
-	OfflineLocked = Code{28, "offline / no-policy-basis", "state-machine", "offline_locked"}
+	OfflineLocked         = Code{28, "offline / no-policy-basis", "state-machine", "offline_locked"}
+	LocalAuditUnavailable = Code{26, "evidence / audit-durability", "enforce", "local_audit_unavailable"}
 )
 
 // AllCodes returns every Code currently registered. Used by the
@@ -154,7 +155,7 @@ func AllCodes() []Code {
 		SyncIngestRejected,
 		// Tier 6 — guard-path side channel
 		GuardPathSidechannelDenied,
-		// Tier 7 — offline state machine (locked)
-		OfflineLocked,
+		// Tier 7 — offline state machine (locked) + audit-durability
+		OfflineLocked, LocalAuditUnavailable,
 	}
 }

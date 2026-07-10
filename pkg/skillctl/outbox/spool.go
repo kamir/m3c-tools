@@ -46,14 +46,30 @@ func (s *Store) SpoolPath() string { return filepath.Join(s.dir, "spool.jsonl") 
 // the fallback the caller invokes when Append fails; it performs no db I/O so it
 // cannot itself stall on the lock that made Append fail.
 func (s *Store) Spool(rec skillgate.InvocationRecord, payloadJSON, payloadHash string) error {
+	return spoolAppend(s.dir, rec, payloadJSON, payloadHash)
+}
+
+// SpoolTo appends one row to the home-anchored spool.jsonl WITHOUT opening the
+// SQLite db. It is the fallback for the case where Open ITSELF fails (a corrupt
+// outbox.db on an otherwise-writable dir): the row still lands durably in the
+// same 0700 dir the signed trail uses, so a later `skillctl sync` Reconcile drains
+// it — and, crucially for R-8.2, durability then tracks the same writable-dir
+// condition the trail write depends on (the two sinks fail together or succeed
+// together, so require_local_audit never fires a spurious deny while the trail
+// records the allow).
+func SpoolTo(home string, rec skillgate.InvocationRecord, payloadJSON, payloadHash string) error {
+	return spoolAppend(dirName(home), rec, payloadJSON, payloadHash)
+}
+
+func spoolAppend(dir string, rec skillgate.InvocationRecord, payloadJSON, payloadHash string) error {
 	line, err := json.Marshal(spoolEntry{Record: rec, PayloadJSON: payloadJSON, PayloadHash: payloadHash})
 	if err != nil {
 		return fmt.Errorf("outbox: spool marshal: %w", err)
 	}
-	if err := os.MkdirAll(s.dir, 0o700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("outbox: spool mkdir: %w", err)
 	}
-	f, err := os.OpenFile(s.SpoolPath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(filepath.Join(dir, "spool.jsonl"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("outbox: spool open: %w", err)
 	}
