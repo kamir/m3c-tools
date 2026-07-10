@@ -25,6 +25,7 @@ func TestCmdExitConsts_RegistryParity(t *testing.T) {
 		{"import_intent_capped", exitImportIntentCapped, exitcode.ImportIntentCapped.Number},
 		{"import_source_blocked", exitImportSourceBlocked, exitcode.ImportSourceBlocked.Number},
 		{"sign_invalid", exitSigInval, exitcode.SignInvalid.Number},
+		{"sidechannel_denied", exitSidechannelDenied, exitcode.GuardPathSidechannelDenied.Number},
 	}
 	for _, c := range cases {
 		if c.got != c.reg {

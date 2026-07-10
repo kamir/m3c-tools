@@ -40,6 +40,9 @@ var networkCommands = map[string]bool{
 	"room":      true,
 	"runbook":   true,
 	"install":   true,
+	// SPEC-0317 R-5.2: the sync agent authenticates to the ingest with the
+	// device token, so it autoloads the persisted token like other network cmds.
+	"sync": true,
 }
 
 // autoloadDeviceToken implements the read-back half of FR-0043. If

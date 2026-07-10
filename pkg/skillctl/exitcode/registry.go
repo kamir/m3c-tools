@@ -50,16 +50,16 @@ type Code struct {
 // ---------------------------------------------------------------------------
 
 var (
-	VerifyDigestMismatch      = Code{10, "trust-chain digest", "verify", "digest_mismatch"}
-	VerifyAuthorSigInvalid    = Code{11, "trust-chain signature", "verify", "author_sig_invalid"}
-	VerifyRegistryNotTrusted  = Code{12, "trust-chain registry-root", "verify", "registry_not_trusted"}
-	VerifyGovernanceBelowMin  = Code{13, "policy governance", "verify", "governance_below_min"}
-	VerifyDepsUnsatisfied     = Code{14, "policy dependency", "verify", "deps_unsatisfied"}
-	VerifyBlobMissing         = Code{15, "trust-chain blob", "verify", "blob_missing"}
-	VerifyTenantBlocked       = Code{16, "policy tenant", "verify", "tenant_blocked"}
-	VerifyDataSourceDenied    = Code{17, "data-source / source-policy", "verify", "data_source_denied"}
-	VerifyIntentInconsistent  = Code{18, "intent contradiction", "verify", "intent_inconsistent"}
-	VerifyIdentityMismatch    = Code{19, "identity / source-block", "verify", "identity_mismatch"}
+	VerifyDigestMismatch     = Code{10, "trust-chain digest", "verify", "digest_mismatch"}
+	VerifyAuthorSigInvalid   = Code{11, "trust-chain signature", "verify", "author_sig_invalid"}
+	VerifyRegistryNotTrusted = Code{12, "trust-chain registry-root", "verify", "registry_not_trusted"}
+	VerifyGovernanceBelowMin = Code{13, "policy governance", "verify", "governance_below_min"}
+	VerifyDepsUnsatisfied    = Code{14, "policy dependency", "verify", "deps_unsatisfied"}
+	VerifyBlobMissing        = Code{15, "trust-chain blob", "verify", "blob_missing"}
+	VerifyTenantBlocked      = Code{16, "policy tenant", "verify", "tenant_blocked"}
+	VerifyDataSourceDenied   = Code{17, "data-source / source-policy", "verify", "data_source_denied"}
+	VerifyIntentInconsistent = Code{18, "intent contradiction", "verify", "intent_inconsistent"}
+	VerifyIdentityMismatch   = Code{19, "identity / source-block", "verify", "identity_mismatch"}
 )
 
 // ---------------------------------------------------------------------------
@@ -68,11 +68,11 @@ var (
 // ---------------------------------------------------------------------------
 
 var (
-	ImportPinRequired      = Code{4, "input validation", "import-public", "pin_required"}
-	ImportScannerRefuse    = Code{5, "scanner / policy", "import-public", "scanner_refuse"}
-	ImportNoSourcePolicy   = Code{17, "data-source / source-policy", "import-public", "no_source_policy"}
-	ImportIntentCapped     = Code{18, "intent contradiction", "import-public", "intent_capped"}
-	ImportSourceBlocked    = Code{19, "identity / source-block", "import-public", "source_blocked"}
+	ImportPinRequired    = Code{4, "input validation", "import-public", "pin_required"}
+	ImportScannerRefuse  = Code{5, "scanner / policy", "import-public", "scanner_refuse"}
+	ImportNoSourcePolicy = Code{17, "data-source / source-policy", "import-public", "no_source_policy"}
+	ImportIntentCapped   = Code{18, "intent contradiction", "import-public", "intent_capped"}
+	ImportSourceBlocked  = Code{19, "identity / source-block", "import-public", "source_blocked"}
 )
 
 // ---------------------------------------------------------------------------
@@ -96,6 +96,29 @@ var (
 	RevokeIdentityRevoked = Code{17, "data-source / source-policy", "revoke", "identity_revoked"}
 )
 
+// ---------------------------------------------------------------------------
+// Tier 5 — sync agent / KafShield ingest surface (SPEC-0317 R-5, P1).
+// 29 is a fresh, uniquely-themed egress code; it does not share a Number with
+// any existing surface, so the Number↔Theme invariant holds trivially.
+// ---------------------------------------------------------------------------
+
+var (
+	SyncIngestRejected = Code{29, "egress / ingest", "sync", "ingest_rejected"}
+)
+
+// ---------------------------------------------------------------------------
+// Tier 6 — side-channel path guard (SPEC-0317 R-6, P2; cmd/skillctl/guardpath_cmds.go).
+// 27 is a fresh, uniquely-themed code carried in the signed refusal_code of a
+// `skillctl guard-path` opt-in deny (the PROCESS still exits 2 to block the
+// PreToolUse call, mirroring verify-hook's exitBundleRevoked/exitRevocationStale
+// convention). It does not share a Number with any other surface, so the
+// Number↔Theme invariant holds trivially.
+// ---------------------------------------------------------------------------
+
+var (
+	GuardPathSidechannelDenied = Code{27, "side-channel / path-guard", "guard-path", "sidechannel_denied"}
+)
+
 // AllCodes returns every Code currently registered. Used by the
 // CI invariant test (TestCodes_NumberTheme) and by the generator
 // that emits the SKILLCTL-MANUAL.md exit-code table.
@@ -113,5 +136,9 @@ func AllCodes() []Code {
 		SignInvalid,
 		// Tier 4 — revoke
 		RevokeIdentityRevoked,
+		// Tier 5 — sync / ingest
+		SyncIngestRejected,
+		// Tier 6 — guard-path side channel
+		GuardPathSidechannelDenied,
 	}
 }

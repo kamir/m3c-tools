@@ -63,6 +63,23 @@ func invocationTrailPath(home string) string {
 // the gate decision is unchanged when the trail write fails.
 var invocationTrailSink = defaultInvocationTrailSink
 
+// invocationOutboxSink is an OPTIONAL second sink for the signed invocation
+// record (SPEC-0317 P0). It is fed the SAME fully-signed record as the trail —
+// transient fields (event_id/occurred_at/device_key_id) filled ONCE and the
+// signature computed ONCE, so the projection (invocation-trail.jsonl) and the
+// authoritative outbox row can NEVER diverge on id/signature (dual-sink
+// consistency).
+//
+// Production `verify-hook` leaves this nil, so it is byte-identical to the
+// pre-SPEC-0317 gate and writes only the trail. `skillctl enforce` installs a
+// sink that mirrors the record into the outbox (enforce_cmds.go).
+//
+// Fire-and-forget, decision-invariant (SPEC-0255): it runs inside
+// appendSignedInvocation's recover and its result is discarded, so a full disk /
+// SQLITE_BUSY / panic in the outbox sink can NEVER alter the gate decision, exit
+// code, or stdout/stderr bytes (AC-2a).
+var invocationOutboxSink func(home string, rec skillgate.InvocationRecord)
+
 // invocationDeviceKey is the device-key seam. Production points it at
 // device.EnsureKey (lazy-create on first use); tests can stub it to force a
 // key-acquisition failure and assert fail-safety.
@@ -139,6 +156,17 @@ func appendSignedInvocation(home string, rec skillgate.InvocationRecord) {
 		return
 	}
 	_ = invocationTrailSink(home, line)
+
+	// SPEC-0317 P0: fan the SAME fully-signed record out to the optional outbox
+	// sink (installed only by `skillctl enforce`). Called AFTER the trail write
+	// with the identical `rec` so the outbox row and the trail projection share
+	// event_id / occurred_at / signature. Nil in `verify-hook` (byte-identical to
+	// v1). Its result is intentionally ignored — this whole function is
+	// fire-and-forget under the top-level recover, so an outbox failure is
+	// decision-invariant (AC-2a).
+	if sink := invocationOutboxSink; sink != nil {
+		sink(home, rec)
+	}
 }
 
 // trailVerification is the result of reading + verifying the signed trail. It is
