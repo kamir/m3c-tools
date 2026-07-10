@@ -116,9 +116,13 @@ jobs:
           sed -i "s#download/skillctl/[^\"}]*#download/${GITHUB_REF_NAME}#" dist/install.sh
           grep 'RELEASE_BASE:-' dist/install.sh | head -1
           [ -f INFRA/skillctl-release.pub ] && cp INFRA/skillctl-release.pub dist/ || true
+          # Until now `release/` was gitignored wholesale, so this lookup never hit
+          # in CI and every cut shipped the placeholder body. RELEASE_NOTES.md is
+          # tracked as of this commit.
           NOTES="release/${GITHUB_REF_NAME}/RELEASE_NOTES.md"
-          if [ -f "$NOTES" ]; then cp "$NOTES" dist/RELEASE_NOTES.md; \
-          else printf '# skillctl %s\n\nKeyless (cosign/OIDC) provenance release.\n' "${GITHUB_REF_NAME}" > dist/RELEASE_NOTES.md; fi
+          if [ -f "$NOTES" ]; then echo "using $NOTES"; cp "$NOTES" dist/RELEASE_NOTES.md; \
+          else echo "WARN: no $NOTES — falling back to the placeholder body"; \
+          printf '# skillctl %s\n\nKeyless (cosign/OIDC) provenance release.\n' "${GITHUB_REF_NAME#skillctl/}" > dist/RELEASE_NOTES.md; fi
 
       # DRAFT — the operator reviews, (transition) attaches the ed25519
       # SHA256SUMS.sig, and promotes. A broken cosign flow yields a draft, never
