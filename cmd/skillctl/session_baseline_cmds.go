@@ -83,6 +83,10 @@ func runSessionBaseline(args []string, stdout, stderr io.Writer) int {
 	// malformed trust-roots file must not wedge SessionStart; we surface a note
 	// and fall back to the shipped default, which never locks).
 	pol, polNote := resolveSessionOfflinePolicy(home, *trustRootsPath)
+	// SPEC-0317 R-7.2 (Option B): the `enterprise` opt-in that permits `locked` is
+	// sourced from the ROOT-OWNED managed settings, never the trust-roots file —
+	// so the displayed posture matches what the runtime gate actually enforces.
+	pol.Enterprise = gateManagedEnterprise()
 
 	// Snapshot inputs against the injected clock and compute the state.
 	now := sessionBaselineNow().UTC()
@@ -128,9 +132,9 @@ func runSessionBaseline(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "  trust basis present:  %s (SPEC-0188 roots OR self/ER1 roots OR .m3c-provenance)\n", yesNo(dec.TrustBasisPresent))
 	fmt.Fprintf(stdout, "  translog anchor:      %s\n", yesNo(dec.AnchorPresent))
 	fmt.Fprintf(stdout, "  enterprise profile:   %s\n", yesNo(dec.Enterprise))
-	fmt.Fprintf(stdout, "  online fallback:      %s  [INFORMATIONAL — posture only; the runtime gate still falls back until R-7.2 wiring lands]\n", allowedBlocked(dec.AllowOnlineFallback))
+	fmt.Fprintf(stdout, "  online fallback:      %s  [INFORMATIONAL — posture only; state-gating the online fallback is R-1.4 P2, not yet wired: the runtime gate still falls back]\n", allowedBlocked(dec.AllowOnlineFallback))
 	fmt.Fprintf(stdout, "  high-risk fail-closed:%s\n", yesNoPad(dec.HighRiskFailsClosed))
-	fmt.Fprintf(stdout, "  deny all managed:     %s  [INFORMATIONAL — not enforced until R-7.2 wiring + exit 28 land]\n", yesNo(dec.DenyAllManaged))
+	fmt.Fprintf(stdout, "  deny all managed:     %s  [ENFORCED (R-7.2) by verify-hook/enforce when the gate is pinned: a locked host denies non-allowlisted managed skills, exit 28]\n", yesNo(dec.DenyAllManaged))
 	if polNote != "" {
 		fmt.Fprintf(stdout, "  note: %s\n", polNote)
 	}

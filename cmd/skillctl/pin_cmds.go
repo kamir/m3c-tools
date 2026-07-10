@@ -72,11 +72,11 @@ func runPin(args []string, stdout, stderr io.Writer) int {
 const pinUsage = `Usage: skillctl pin <generate|status|install> [flags]
 
   generate   Print the Claude Code managed-settings.json that pins the trust gate.
-             Flags: --binary <path> (default: this skillctl), --strict, --harden, --out <file>
+             Flags: --binary <path> (default: this skillctl), --strict, --harden, --enterprise, --out <file>
   status     Report whether the gate is pinned in managed settings.
              Flags: --path <file> (override), --json
   install    Stage the file and print the sudo runbook (root+--confirm writes it).
-             Flags: --binary <path>, --strict, --harden, --path <target>, --confirm
+             Flags: --binary <path>, --strict, --harden, --enterprise, --path <target>, --confirm
 
 --strict adds "allowManagedHooksOnly: true" — the full CISO lockdown that also
 DISABLES every other user/project hook. Without it the gate is already
@@ -103,6 +103,7 @@ func runPinGenerate(args []string, stdout, stderr io.Writer) int {
 	binary := fs.String("binary", "", "absolute path to skillctl (default: this binary)")
 	strict := fs.Bool("strict", false, "add allowManagedHooksOnly:true (disables ALL user hooks)")
 	harden := fs.Bool("harden", false, "imply --strict and block --dangerously-skip-permissions")
+	enterprise := fs.Bool("enterprise", false, "add skillctlEnterprise:true — enables the R-7.2 offline `locked` state")
 	out := fs.String("out", "", "write to file instead of stdout")
 	if err := fs.Parse(args); err != nil {
 		return pinExitError
@@ -111,7 +112,7 @@ func runPinGenerate(args []string, stdout, stderr io.Writer) int {
 	if bin == "" {
 		bin = defaultBinary()
 	}
-	b, err := pin.Generate(pin.GenerateOptions{BinaryPath: bin, Strict: *strict, Harden: *harden})
+	b, err := pin.Generate(pin.GenerateOptions{BinaryPath: bin, Strict: *strict, Harden: *harden, Enterprise: *enterprise})
 	if err != nil {
 		fmt.Fprintf(stderr, "skillctl pin generate: %v\n", err)
 		return pinExitError
@@ -215,6 +216,7 @@ func runPinInstall(args []string, stdout, stderr io.Writer) int {
 	binary := fs.String("binary", "", "absolute path to skillctl (default: this binary)")
 	strict := fs.Bool("strict", false, "add allowManagedHooksOnly:true (disables ALL user hooks)")
 	harden := fs.Bool("harden", false, "imply --strict and block --dangerously-skip-permissions")
+	enterprise := fs.Bool("enterprise", false, "add skillctlEnterprise:true — enables the R-7.2 offline `locked` state")
 	pathOverride := fs.String("path", "", "target managed-settings path override")
 	confirm := fs.Bool("confirm", false, "when run as root, actually write the file")
 	if err := fs.Parse(args); err != nil {
@@ -224,7 +226,7 @@ func runPinInstall(args []string, stdout, stderr io.Writer) int {
 	if bin == "" {
 		bin = defaultBinary()
 	}
-	opts := pin.GenerateOptions{BinaryPath: bin, Strict: *strict, Harden: *harden}
+	opts := pin.GenerateOptions{BinaryPath: bin, Strict: *strict, Harden: *harden, Enterprise: *enterprise}
 	target := *pathOverride
 	if target == "" {
 		p, perr := pin.DefaultManagedSettingsPath()

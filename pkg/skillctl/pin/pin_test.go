@@ -331,3 +331,49 @@ func TestMerge_AddsCoveringMatcherDespiteNonCoveringDecoy(t *testing.T) {
 		t.Error("Merge dropped the pre-existing Bash matcher")
 	}
 }
+
+// TestEnterpriseFromBytes locks the SPEC-0317 R-7.2 managed enterprise reader:
+// only a cleanly-parsed skillctlEnterprise:true engages it; missing/false/
+// malformed all yield false (never-brick — locking on a corrupt file would brick).
+func TestEnterpriseFromBytes(t *testing.T) {
+	if !EnterpriseFromBytes([]byte(`{"skillctlEnterprise":true}`)) {
+		t.Error("skillctlEnterprise:true must read as enterprise")
+	}
+	for _, neg := range []string{
+		`{"skillctlEnterprise":false}`,
+		`{}`,
+		`{"other":1}`,
+		`{ not json`,
+		``,
+	} {
+		if EnterpriseFromBytes([]byte(neg)) {
+			t.Errorf("must be non-enterprise (never-brick): %q", neg)
+		}
+	}
+	if EnterpriseFromBytes(nil) {
+		t.Error("nil must be non-enterprise")
+	}
+	// The flag coexists with the gate hooks + strict lock and does not disturb the
+	// pinning classification.
+	b, err := Generate(GenerateOptions{Enterprise: true, Strict: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !EnterpriseFromBytes(b) {
+		t.Error("Generate(Enterprise) must round-trip through EnterpriseFromBytes")
+	}
+	if Verify(b).Level != LevelPinnedStrict {
+		t.Errorf("enterprise flag must not change the pinning level, got %s", Verify(b).Level)
+	}
+}
+
+func TestGenerate_EnterpriseKey(t *testing.T) {
+	on, _ := Generate(GenerateOptions{Enterprise: true})
+	if !strings.Contains(string(on), `"skillctlEnterprise": true`) {
+		t.Errorf("--enterprise must emit the key:\n%s", on)
+	}
+	off, _ := Generate(GenerateOptions{})
+	if strings.Contains(string(off), "skillctlEnterprise") {
+		t.Errorf("default must NOT emit the enterprise key:\n%s", off)
+	}
+}

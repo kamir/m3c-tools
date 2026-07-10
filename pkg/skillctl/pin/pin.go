@@ -64,6 +64,13 @@ type GenerateOptions struct {
 	Strict bool
 	// Harden implies Strict and also sets `disableBypassPermissionsMode:"disable"`.
 	Harden bool
+	// Enterprise emits `skillctlEnterprise: true` — the SPEC-0317 R-7.2 opt-in
+	// that the runtime gate reads to enable the `offline_locked` state. It lives
+	// HERE (the root-owned managed-settings tier), deliberately separate from the
+	// trust-roots verification material: declaring "enterprise" must not itself
+	// create a trust basis (that conflation made `locked` unreachable). Claude
+	// Code ignores the unknown key (its schema is additive); skillctl reads it.
+	Enterprise bool
 }
 
 // wire structs — field order here is the emitted JSON key order (encoding/json
@@ -84,6 +91,7 @@ type hooksBlock struct {
 type managedSettings struct {
 	AllowManagedHooksOnly        bool       `json:"allowManagedHooksOnly,omitempty"`
 	DisableBypassPermissionsMode string     `json:"disableBypassPermissionsMode,omitempty"`
+	SkillctlEnterprise           bool       `json:"skillctlEnterprise,omitempty"`
 	Hooks                        hooksBlock `json:"hooks"`
 }
 
@@ -134,6 +142,9 @@ func gateHooks(binary string) hooksBlock {
 // options (trailing newline included).
 func Generate(opts GenerateOptions) ([]byte, error) {
 	ms := managedSettings{Hooks: gateHooks(opts.BinaryPath)}
+	if opts.Enterprise {
+		ms.SkillctlEnterprise = true
+	}
 	if opts.Strict || opts.Harden {
 		ms.AllowManagedHooksOnly = true
 	}
@@ -202,6 +213,24 @@ type StatusResult struct {
 // Pinned reports whether the gate is un-deletable (Pinned or PinnedStrict).
 func (s StatusResult) Pinned() bool {
 	return s.Level == LevelPinned || s.Level == LevelPinnedStrict
+}
+
+// EnterpriseFromBytes reports whether managed settings enable the SPEC-0317
+// R-7.2 enterprise posture (`skillctlEnterprise: true`) — the opt-in the runtime
+// gate reads to permit the destructive `offline_locked` state.
+//
+// It is deliberately conservative and the OPPOSITE of the gate-hook checks: a
+// MISSING or MALFORMED managed file yields false, so an unreadable managed file
+// can never ENGAGE `locked` (R-7.2 never-brick priority — locking on a corrupt
+// file would brick a host). Only a cleanly-parsed true engages it. It lives in
+// the root-owned managed tier precisely so declaring "enterprise" does NOT create
+// a trust basis (the conflation that made `locked` unreachable).
+func EnterpriseFromBytes(settings []byte) bool {
+	var ms managedSettings
+	if json.Unmarshal(settings, &ms) != nil {
+		return false
+	}
+	return ms.SkillctlEnterprise
 }
 
 // Verify parses managed-settings bytes and reports the pinning level. It matches

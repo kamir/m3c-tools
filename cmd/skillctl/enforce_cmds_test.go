@@ -39,6 +39,14 @@ func runOne(t *testing.T, gate func(r *strings.Reader, o, e *bytes.Buffer) int, 
 	verifyManagedFn = func(string, gatePolicy) (int, string) { return retCode, retReason }
 	verifyManagedOfflineFn = func(string, gatePolicy, string) (int, string, bool) { return retCode, retReason, true }
 	t.Cleanup(func() { verifyManagedFn, verifyManagedOfflineFn = origF, origO })
+	// Hermetic: the shipped default reads the real platform managed-settings file
+	// (root-owned /Library/…), which must never influence a unit test. Pin the
+	// enterprise source OFF so the R-7.2 `locked` rung is inert here unless a test
+	// explicitly overrides gateOfflineStateDeniesManaged (the higher seam runOne
+	// leaves untouched).
+	origEnt := gateManagedEnterprise
+	gateManagedEnterprise = func() bool { return false }
+	t.Cleanup(func() { gateManagedEnterprise = origEnt })
 
 	var out, errb bytes.Buffer
 	code := gate(strings.NewReader(event), &out, &errb)
