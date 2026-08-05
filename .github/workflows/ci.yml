@@ -165,7 +165,7 @@ jobs:
           go build -o build/poc-recorder ./cmd/poc-recorder
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: m3c-tools-macos
           path: |
@@ -199,7 +199,7 @@ jobs:
           build/m3c-tools-linux-amd64 help
 
       - name: Upload cross-platform artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: m3c-tools-cross
           path: |
