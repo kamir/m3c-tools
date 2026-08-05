@@ -32,7 +32,7 @@ jobs:
       id-token: write # OIDC for keyless cosign + build provenance
       attestations: write # SLSA build-provenance attestation
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v5
         with:

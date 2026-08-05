@@ -47,7 +47,7 @@ jobs:
     name: Windows Cross-Compile (ubuntu)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v5
         with:
@@ -116,7 +116,7 @@ jobs:
     name: Trust Surface (windows-latest)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v5
         with:
@@ -167,7 +167,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: windows-trust
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v5
         with:
@@ -220,7 +220,7 @@ jobs:
     runs-on: windows-latest
     needs: windows-compile
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v5
         with:
