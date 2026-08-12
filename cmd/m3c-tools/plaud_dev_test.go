@@ -2,11 +2,72 @@ package main
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kamir/m3c-tools/pkg/plaud"
 	"github.com/kamir/m3c-tools/pkg/tracking"
 )
+
+// TestFormatTranscriptionQueue proves the server-side-whisper progress render:
+// the empty case, the populated case (per-status counts + per-item lines), the
+// >15 truncation tail, and the malformed-body raw fallback — all offline, using
+// the exact JSON shape aims-core's /transcription-queue returns.
+func TestFormatTranscriptionQueue(t *testing.T) {
+	t.Run("empty queue is a clean OK", func(t *testing.T) {
+		out := formatTranscriptionQueue([]byte(`{"queue":[],"failed":[],"queue_count":0,"failed_count":0}`))
+		if !strings.Contains(out, "empty") || !strings.Contains(out, "✅") {
+			t.Errorf("empty queue not reported as clean: %q", out)
+		}
+	})
+
+	t.Run("populated: counts + per-item progress", func(t *testing.T) {
+		body := `{"queue":[
+			{"doc_id":"DOC-AAAA","status":"transcribing","attempt":1,"max_attempts":3,"audio_duration_label":"12m3s","claimed_by":"worker-macpro-01"},
+			{"doc_id":"DOC-BBBB","status":"queued","attempt":0,"max_attempts":3,"audio_duration_label":"4m0s"},
+			{"doc_id":"DOC-CCCC","status":"queued","attempt":0,"max_attempts":3,"audio_duration_label":"1m2s"}
+		],"failed":[{"doc_id":"DOC-DEAD"}],"queue_count":3,"failed_count":1}`
+		out := formatTranscriptionQueue([]byte(body))
+		for _, want := range []string{
+			"3 active · 1 failed",
+			"queued", "2", // 2 queued
+			"transcribing", "1", // 1 transcribing
+			"DOC-AAAA", "12m3s", "1/3", "worker-macpro-01",
+			"DOC-BBBB", "DOC-CCCC",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("render missing %q:\n%s", want, out)
+			}
+		}
+		// A status with zero items must not be printed.
+		if strings.Contains(out, "detecting_language") {
+			t.Errorf("printed a zero-count status:\n%s", out)
+		}
+	})
+
+	t.Run("more than 15 items truncates with a tail", func(t *testing.T) {
+		var sb strings.Builder
+		sb.WriteString(`{"queue":[`)
+		for i := 0; i < 20; i++ {
+			if i > 0 {
+				sb.WriteByte(',')
+			}
+			sb.WriteString(`{"doc_id":"D","status":"queued","attempt":0,"max_attempts":3,"audio_duration_label":"1m"}`)
+		}
+		sb.WriteString(`],"failed":[],"queue_count":20,"failed_count":0}`)
+		out := formatTranscriptionQueue([]byte(sb.String()))
+		if !strings.Contains(out, "and 5 more") {
+			t.Errorf("expected '… and 5 more' tail for 20 items:\n%s", out)
+		}
+	})
+
+	t.Run("malformed body falls back to raw", func(t *testing.T) {
+		out := formatTranscriptionQueue([]byte(`not json`))
+		if !strings.Contains(out, "raw response") {
+			t.Errorf("expected raw fallback: %q", out)
+		}
+	})
+}
 
 func TestPlaudStateSynced(t *testing.T) {
 	if !plaudStateSynced(plaudSyncState{DocID: "x"}) {
@@ -61,9 +122,9 @@ func TestMigratePlaudDevLedger(t *testing.T) {
 
 func TestParseIntRange(t *testing.T) {
 	cases := []struct {
-		in         string
-		a, b       int
-		ok         bool
+		in   string
+		a, b int
+		ok   bool
 	}{
 		{"1-3", 1, 3, true},
 		{"10-2", 10, 2, true}, // reversed is still a valid range (caller normalizes)

@@ -523,7 +523,6 @@ func cmdTranscript(args []string) {
 
 // -- upload command --
 
-
 // -- check-er1 command --
 
 // SPEC-0175 §3.2: settings editor lifecycle. The server is started on demand
@@ -656,7 +655,6 @@ func cmdSetupPocketKey(args []string) {
 			verdict.RecordingCount, plural(verdict.RecordingCount))
 	}
 }
-
 
 func cmdSetup(args []string) {
 	// SPEC-0175 §3.1+§3.3: subcommand routing for the onboarding flow.
@@ -1488,7 +1486,7 @@ func reprocessAudioFile(srcPath, dbPath string, app *menubar.App, onProgress fun
 		AudioFilename:      info.Name(),
 		Tags:               tags,
 		ContentType:        cfg.ContentType,
-		DocID:              existingDocID, // Reuse existing doc_id if available.
+		DocID:              existingDocID,                         // Reuse existing doc_id if available.
 		CurrentTime:        er1.FormatCaptureTime(info.ModTime()), // position at real file time
 	}
 
@@ -4841,11 +4839,12 @@ func cmdPlaudDebugAPI() {
 // token, no consumer API. See SPEC-0341.
 func cmdPlaudDev(args []string) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud dev <list|sync> [selectors] [flags]")
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud dev <list|sync|status> [selectors] [flags]")
 		fmt.Fprintln(os.Stderr, "  Requires the durable OAuth token:  node tools/plaud-mcp-login.mjs")
 		fmt.Fprintln(os.Stderr, "  plaud dev list                       numbered list, newest first")
 		fmt.Fprintln(os.Stderr, "  plaud dev sync <#|ID|N-M> ...        sync selected items (numbers from 'dev list')")
 		fmt.Fprintln(os.Stderr, "  plaud dev sync --all | --limit N     sync all / the N most recent")
+		fmt.Fprintln(os.Stderr, "  plaud dev status                     server-side transcription queue (progress of un-transcribed items)")
 		fmt.Fprintln(os.Stderr, "  flags: --dry-run   --force (re-sync)   --tags a,b   --whisper (transcribe un-transcribed audio locally)")
 		os.Exit(1)
 	}
@@ -4857,6 +4856,9 @@ func cmdPlaudDev(args []string) {
 	}
 
 	switch args[0] {
+	case "status":
+		cmdPlaudDevStatus()
+		return
 	case "list":
 		preview, limit := false, 0
 		for i := 1; i < len(args); i++ {
@@ -4930,6 +4932,107 @@ func migratePlaudDevLedger(filesDB *tracking.FilesDB) {
 		_, _ = filesDB.RecordFile(plaudPath, h, 0, "plaud", "")
 		_ = filesDB.RecordUploadSuccess(h, "plaud", f.UploadDocID)
 	}
+}
+
+// cmdPlaudDevStatus prints the server-side transcription queue (SPEC-0113) so the
+// MacPro processing queue draining is visible after a `plaud dev sync` that left
+// transcripts to the server. The endpoint (`GET /transcription-queue`) is
+// @auth_required but resolves the tenant from `?user_id=` (session or query), NOT
+// from the Bearer — so we pass the device-token user id as the query param.
+func cmdPlaudDevStatus() {
+	er1Cfg := er1.LoadConfig()
+	applyRuntimeER1Context(er1Cfg)
+	userID := strings.SplitN(er1Cfg.ContextID, "___", 2)[0]
+	if userID == "" {
+		fmt.Fprintln(os.Stderr, "No ER1 user id (ER1_CONTEXT_ID). Configure ER1 first (check-er1).")
+		os.Exit(1)
+	}
+	base := er1Cfg.APIURL
+	for _, s := range []string{"/upload_2", "/upload"} {
+		base = strings.TrimSuffix(base, s)
+	}
+	u := base + "/transcription-queue?user_id=" + neturl.QueryEscape(userID)
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	auth.ApplyAuth(req, er1Cfg.APIKey)
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reaching transcription queue: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if resp.StatusCode != 200 {
+		fmt.Fprintf(os.Stderr, "transcription-queue: HTTP %d: %.300s\n", resp.StatusCode, strings.TrimSpace(string(body)))
+		os.Exit(1)
+	}
+	fmt.Print(formatTranscriptionQueue(body))
+}
+
+// transcriptionQueueItem mirrors one row of audioassistant.transcription_queue.
+type transcriptionQueueItem struct {
+	DocID       string `json:"doc_id"`
+	Status      string `json:"status"`
+	Attempt     int    `json:"attempt"`
+	MaxAttempts int    `json:"max_attempts"`
+	DurationLbl string `json:"audio_duration_label"`
+	Preview     string `json:"transcript_preview"`
+	ClaimedBy   string `json:"claimed_by"`
+}
+
+// formatTranscriptionQueue renders the /transcription-queue JSON into the CLI's
+// progress block. Pure (no I/O) so the render is unit-tested offline. Response
+// shape: {queue:[…], failed:[…], queue_count:N, failed_count:M}.
+func formatTranscriptionQueue(body []byte) string {
+	var q struct {
+		Queue       []transcriptionQueueItem `json:"queue"`
+		Failed      []map[string]any         `json:"failed"`
+		QueueCount  int                      `json:"queue_count"`
+		FailedCount int                      `json:"failed_count"`
+	}
+	if err := json.Unmarshal(body, &q); err != nil {
+		return fmt.Sprintf("Server-side transcription queue (raw response):\n%.1500s\n", strings.TrimSpace(string(body)))
+	}
+
+	if len(q.Queue) == 0 && q.FailedCount == 0 {
+		return "Server-side transcription queue: empty — nothing pending, nothing failed. ✅\n"
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Server-side transcription queue — %d active · %d failed\n", q.QueueCount, q.FailedCount)
+	byStatus := map[string]int{}
+	for _, it := range q.Queue {
+		byStatus[strings.ToLower(it.Status)]++
+	}
+	for _, st := range []string{"queued", "processing", "detecting_language", "transcribing", "retry"} {
+		if n := byStatus[st]; n > 0 {
+			fmt.Fprintf(&b, "  %-18s %d\n", st, n)
+		}
+	}
+	// Per-item detail (bounded) so progress is legible, not just a count.
+	if len(q.Queue) > 0 {
+		b.WriteString("  ─────\n")
+		shown := q.Queue
+		if len(shown) > 15 {
+			shown = shown[:15]
+		}
+		for _, it := range shown {
+			claim := ""
+			if it.ClaimedBy != "" {
+				claim = "  ← " + stripCtrl(truncateForLog(it.ClaimedBy, 16))
+			}
+			fmt.Fprintf(&b, "  %-18s %-10s %2d/%d  %s%s\n",
+				stripCtrl(it.Status), it.DurationLbl, it.Attempt, it.MaxAttempts,
+				stripCtrl(truncateForLog(it.DocID, 24)), claim)
+		}
+		if len(q.Queue) > len(shown) {
+			fmt.Fprintf(&b, "  … and %d more\n", len(q.Queue)-len(shown))
+		}
+	}
+	return b.String()
 }
 
 func newPlaudDevClient() *plaud.DevClient {
@@ -5116,77 +5219,133 @@ func parseIntRange(s string) (int, int, bool) {
 // recent (default 1). --force re-syncs already-synced items.
 // devSyncProgress is called once per item during a dev sync.
 // phase is "done" | "skipped" | "failed".
-type devSyncProgress func(recID, name, phase, docID string, err error)
+type devSyncProgress func(recID, name, phase, disposition, docID string, err error)
+
+// devSyncTotals summarizes a dev-sync run for a clear progress report.
+type devSyncTotals struct {
+	Synced, Skipped, Failed       int
+	Plaud, Queued, Whisper, Audio int // transcript disposition of the synced items
+}
 
 // syncOneDevRecording uploads ONE developer-API recording to ER1 (audio +
 // transcript + notes) and records it in the SHARED ledger (path plaud://<id>,
 // importType "plaud") + the SPEC-0117 server mapping. Returns the ER1 doc_id.
+// localWhisperTranscript transcribes MP3 bytes on THIS Mac via the whisper CLI.
+// Returns "" if whisper is unavailable or fails (caller falls back to audio-only).
+func localWhisperTranscript(audio []byte, id string) string {
+	if len(audio) == 0 {
+		return ""
+	}
+	if _, err := whisper.FindBinary(); err != nil {
+		log.Printf("[plaud-dev] --whisper set but whisper not found: %v", err)
+		return ""
+	}
+	tmp, err := os.CreateTemp("", "plaud-*.mp3")
+	if err != nil {
+		return ""
+	}
+	defer os.Remove(tmp.Name())
+	_, _ = tmp.Write(audio)
+	_ = tmp.Close()
+	txt, werr := whisper.TranscribeTextWithTimeout(tmp.Name(), menubarWhisperModel(), menubarWhisperLanguage(), menubarWhisperTimeout())
+	if werr != nil {
+		log.Printf("[plaud-dev] whisper failed for %s: %v", id, werr)
+		return ""
+	}
+	return strings.TrimSpace(txt)
+}
+
+// syncOneDevRecording uploads ONE recording to ER1 and returns the ER1 doc_id +
+// a disposition describing how the transcript was handled:
+//
+//	"plaud"   — used Plaud's own server transcript
+//	"queued"  — no transcript → enqueued for SERVER-SIDE whisper (SPEC-0111, DEFAULT)
+//	"whisper" — no transcript → transcribed LOCALLY (--whisper override)
+//	"audio"   — no transcript and no server-side transcription (audio only)
 func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentType string,
 	filesDB *tracking.FilesDB, syncAPI *plaud.SyncAPIClient, accountID string,
-	r plaud.DevRecording, tags string, useWhisper bool, existingDocID string) (string, error) {
+	r plaud.DevRecording, tags string, useWhisper bool, existingDocID string) (string, string, error) {
 
 	detail, err := client.GetDetail(r.ID)
 	if err != nil {
-		return "", fmt.Errorf("detail: %w", err)
+		return "", "", fmt.Errorf("detail: %w", err)
 	}
 	var audio []byte
 	if detail.PresignedURL != "" {
 		if audio, err = client.DownloadAudio(detail.PresignedURL); err != nil {
-			log.Printf("[plaud-dev] %s audio download failed (transcript only): %v", r.ID, err)
+			log.Printf("[plaud-dev] %s audio download failed: %v", r.ID, err)
 			audio = nil
 		}
 	}
 	captureTime := parseDevTime(r.StartAt)
 	transcript := detail.TranscriptText()
-	// Whisper fallback: if Plaud has no server transcript yet, transcribe the
-	// downloaded audio locally (opt-in, since it is slow on long recordings).
-	if useWhisper && transcript == "" && len(audio) > 0 {
-		if _, ferr := whisper.FindBinary(); ferr != nil {
-			log.Printf("[plaud-dev] --whisper set but whisper not found: %v", ferr)
-		} else if tmp, terr := os.CreateTemp("", "plaud-*.mp3"); terr == nil {
-			_, _ = tmp.Write(audio)
-			_ = tmp.Close()
-			defer os.Remove(tmp.Name())
-			if txt, werr := whisper.TranscribeTextWithTimeout(tmp.Name(), menubarWhisperModel(), menubarWhisperLanguage(), menubarWhisperTimeout()); werr == nil && strings.TrimSpace(txt) != "" {
-				transcript = strings.TrimSpace(txt)
-				log.Printf("[plaud-dev] whisper transcribed %s (%d chars)", r.ID, len(transcript))
-			} else if werr != nil {
-				log.Printf("[plaud-dev] whisper failed for %s: %v", r.ID, werr)
+	notes := detail.NotesText()
+
+	// Transcript decision. When Plaud has no transcript, DEFAULT to server-side
+	// whisper (the aims-core SPEC-0111 queue on the MacPro); --whisper overrides to
+	// transcribe locally. Env PLAUD_TRANSCRIBE_MODE can force lazy/off.
+	disposition := "plaud"
+	doTranscribe := false
+	extraTag := ""
+	if transcript == "" {
+		if useWhisper {
+			if transcript = localWhisperTranscript(audio, r.ID); transcript != "" {
+				disposition = "whisper"
+			} else {
+				disposition = "audio"
+			}
+		} else if len(audio) == 0 {
+			disposition = "audio" // nothing to transcribe server-side
+		} else {
+			switch strings.ToLower(strings.TrimSpace(os.Getenv("PLAUD_TRANSCRIBE_MODE"))) {
+			case "off":
+				disposition = "audio"
+			case "lazy":
+				extraTag, disposition = "todo.transcribe", "queued"
+			default: // "" | "queue" → enqueue server-side (SPEC-0111)
+				doTranscribe, disposition = true, "queued"
 			}
 		}
 	}
-	impText := fmt.Sprintf("Plaud recording: %s", r.Name)
-	if notes := detail.NotesText(); notes != "" {
-		impText += "\n\nNotes:\n" + notes
-	}
-	doc := (&impression.CompositeDoc{
-		ObsType:        impression.Import,
-		Timestamp:      captureTime,
-		TranscriptText: transcript,
-		ImpressionText: impText,
-	}).Build()
 
 	allTags := "plaud"
+	if extraTag != "" {
+		allTags = extraTag + "," + allTags
+	}
 	if tags != "" {
 		allTags += "," + tags
 	}
 	payload := &er1.UploadPayload{
-		TranscriptData:     []byte(strings.TrimSpace(doc) + "\n"),
 		TranscriptFilename: fmt.Sprintf("plaud_%s.txt", r.ID),
 		ImageFilename:      "placeholder-logo.png",
 		Tags:               allTags,
 		ContentType:        contentType,
 		CurrentTime:        er1.FormatCaptureTime(captureTime),
+		DoTranscribe:       doTranscribe,
+		DocID:              existingDocID, // overwrite on forced re-sync (no duplicate)
 	}
 	if len(audio) > 0 {
 		payload.AudioData = audio
 		payload.AudioFilename = r.ID + ".mp3"
 	}
-	// Overwrite an existing ER1 doc on a forced re-sync (avoids duplicate items).
-	payload.DocID = existingDocID
+	// Send a transcript body EXCEPT when deferring to the server queue — there the
+	// server writes transcript_text itself (matches the consumer path).
+	if !doTranscribe {
+		impText := fmt.Sprintf("Plaud recording: %s", r.Name)
+		if notes != "" {
+			impText += "\n\nNotes:\n" + notes
+		}
+		doc := (&impression.CompositeDoc{
+			ObsType:        impression.Import,
+			Timestamp:      captureTime,
+			TranscriptText: transcript,
+			ImpressionText: impText,
+		}).Build()
+		payload.TranscriptData = []byte(strings.TrimSpace(doc) + "\n")
+	}
 	resp, upErr := er1.Upload(er1Cfg, payload)
 	if upErr != nil {
-		return "", fmt.Errorf("upload: %w", upErr)
+		return "", "", fmt.Errorf("upload: %w", upErr)
 	}
 	// SHARED local ledger (plaud://<id>, importType "plaud") + SPEC-0117 server
 	// mapping — identical to the menubar/consumer sync, so both share one truth.
@@ -5215,15 +5374,16 @@ func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentTyp
 			log.Printf("[plaud-dev] server mapping failed (non-fatal): %v", mapErr)
 		}
 	}
-	return resp.DocID, nil
+	return resp.DocID, disposition, nil
 }
 
 // runDevSyncByIDs syncs the given recording IDs to ER1, deduped via the SHARED
 // sync truth. It is the common core for `plaud dev sync` (CLI) and the menubar
 // Plaud Sync, so the two never diverge. prog may be nil.
 func runDevSyncByIDs(client *plaud.DevClient, recByID map[string]plaud.DevRecording,
-	ids []string, tags string, force, whisper bool, prog devSyncProgress) (synced, skipped, failed int) {
+	ids []string, tags string, force, whisper bool, prog devSyncProgress) devSyncTotals {
 
+	var t devSyncTotals
 	cfg := plaud.LoadConfig()
 	er1Cfg := er1.LoadConfig()
 	applyRuntimeER1Context(er1Cfg)
@@ -5244,30 +5404,40 @@ func runDevSyncByIDs(client *plaud.DevClient, recByID map[string]plaud.DevRecord
 	for _, id := range ids {
 		r, ok := recByID[id]
 		if !ok {
-			failed++
+			t.Failed++
 			continue
 		}
 		if !force && plaudStateSynced(states[id]) {
-			skipped++
+			t.Skipped++
 			if prog != nil {
-				prog(id, r.Name, "skipped", states[id].DocID, nil)
+				prog(id, r.Name, "skipped", "synced", states[id].DocID, nil)
 			}
 			continue
 		}
-		docID, err := syncOneDevRecording(client, er1Cfg, cfg.ContentType, filesDB, syncAPI, accountID, r, tags, whisper, states[id].DocID)
+		docID, disp, err := syncOneDevRecording(client, er1Cfg, cfg.ContentType, filesDB, syncAPI, accountID, r, tags, whisper, states[id].DocID)
 		if err != nil {
-			failed++
+			t.Failed++
 			if prog != nil {
-				prog(id, r.Name, "failed", "", err)
+				prog(id, r.Name, "failed", "", "", err)
 			}
 			continue
 		}
-		synced++
+		t.Synced++
+		switch disp {
+		case "plaud":
+			t.Plaud++
+		case "queued":
+			t.Queued++
+		case "whisper":
+			t.Whisper++
+		default:
+			t.Audio++
+		}
 		if prog != nil {
-			prog(id, r.Name, "done", docID, nil)
+			prog(id, r.Name, "done", disp, docID, nil)
 		}
 	}
-	return
+	return t
 }
 
 func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force, whisper bool, tags string) {
@@ -5319,15 +5489,25 @@ func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force, whi
 		return
 	}
 
-	synced, skipped, failed := runDevSyncByIDs(client, recByID, ids, tags, force, whisper, func(id, name, phase, docID string, err error) {
+	done := 0
+	tot := runDevSyncByIDs(client, recByID, ids, tags, force, whisper, func(id, name, phase, disp, docID string, err error) {
 		switch phase {
 		case "done":
-			fmt.Printf("  ✓ %s → %s\n", stripCtrl(name), docID)
+			done++
+			fmt.Printf("  [%d/%d] ✓ %-7s  %s → %s\n", done, len(ids), disp, stripCtrl(name), docID)
 		case "failed":
-			fmt.Fprintf(os.Stderr, "  ✗ %s: %v\n", stripCtrl(name), err)
+			done++
+			fmt.Fprintf(os.Stderr, "  [%d/%d] ✗ %s: %v\n", done, len(ids), stripCtrl(name), err)
 		}
 	})
-	fmt.Printf("\nDone. synced=%d  skipped(already)=%d  failed=%d\n", synced, skipped, failed)
+	fmt.Printf("\nDone. synced=%d  skipped(already)=%d  failed=%d\n", tot.Synced, tot.Skipped, tot.Failed)
+	if tot.Synced > 0 {
+		fmt.Printf("  transcripts: %d Plaud · %d queued(server-side whisper) · %d local-whisper · %d audio-only\n",
+			tot.Plaud, tot.Queued, tot.Whisper, tot.Audio)
+	}
+	if tot.Queued > 0 {
+		fmt.Printf("  → %d queued for server-side transcription. Watch it:  m3c-tools plaud dev status\n", tot.Queued)
+	}
 }
 
 // parseDevTime parses the developer API's timestamps (falls back to now).
@@ -5957,14 +6137,18 @@ func menubarHandlePlaudSync(app *menubar.App) {
 		menubar.SetPlaudSyncProgress(menubar.BulkRunState{Active: true, Total: total})
 
 		done, success, failed := 0, 0, 0
-		prog := func(id, name, phase, docID string, perr error) {
+		prog := func(id, name, phase, disp, docID string, perr error) {
 			done++
 			switch phase {
 			case "done", "skipped":
 				if phase == "done" {
 					success++
 				}
-				menubar.SetPlaudSyncStatus(id, "synced")
+				status := "synced"
+				if disp == "queued" {
+					status = "queued" // audio uploaded; transcript coming server-side
+				}
+				menubar.SetPlaudSyncStatus(id, status)
 				if docID != "" {
 					menubar.SetPlaudSyncRowDoc(id, docID, er1Cfg.MemoryItemURL(docID))
 				}
@@ -5981,11 +6165,16 @@ func menubarHandlePlaudSync(app *menubar.App) {
 			})
 		}
 
-		s, sk, f := runDevSyncByIDs(client, recByID, recordingIDs, customTags, false, false, prog)
-		log.Printf("[plaud] dev sync DONE: %d synced, %d skipped, %d failed", s, sk, f)
-		app.Notify("Plaud Sync", fmt.Sprintf("Fertig: %d synchronisiert, %d übersprungen, %d Fehler", s, sk, f))
+		tot := runDevSyncByIDs(client, recByID, recordingIDs, customTags, false, false, prog)
+		log.Printf("[plaud] dev sync DONE: %d synced (%d Plaud, %d queued server-side, %d whisper), %d skipped, %d failed",
+			tot.Synced, tot.Plaud, tot.Queued, tot.Whisper, tot.Skipped, tot.Failed)
+		note := fmt.Sprintf("Fertig: %d synchronisiert, %d übersprungen, %d Fehler", tot.Synced, tot.Skipped, tot.Failed)
+		if tot.Queued > 0 {
+			note += fmt.Sprintf(" · %d in Server-Transkription", tot.Queued)
+		}
+		app.Notify("Plaud Sync", note)
 		menubar.SetPlaudSyncProgress(menubar.BulkRunState{
-			Active: false, Total: total, Done: total, Success: s + sk, Failed: f,
+			Active: false, Total: total, Done: total, Success: tot.Synced + tot.Skipped, Failed: tot.Failed,
 		})
 	})
 }
