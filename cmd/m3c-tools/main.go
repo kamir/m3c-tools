@@ -4575,14 +4575,20 @@ func cmdPlaudAuthMCP() {
 		fmt.Fprintln(os.Stderr, "then re-run:  m3c-tools plaud auth mcp")
 		os.Exit(1)
 	}
-	if err := plaud.SaveToken(cfg.TokenPath, session); err != nil {
-		fmt.Fprintf(os.Stderr, "Error saving token: %v\n", err)
-		os.Exit(1)
-	}
+	// Verify BEFORE saving so an incompatible token can never clobber a working
+	// one. (The @plaud-ai/mcp token authenticates against the DEVELOPER API
+	// platform.plaud.ai/developer/api, not the consumer api.plaud.ai this client
+	// speaks — so this check currently fails for it; a developer-API client is
+	// the durable fix. See SPEC-0341.)
 	recordings, err := plaud.NewClient(cfg, session.Token).ListRecordings()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: token loaded from %s but API test failed: %v\n", path, err)
-		fmt.Fprintln(os.Stderr, "The MCP OAuth token may not cover the consumer API for your region; tell the maintainer (coverage spike).")
+		fmt.Fprintf(os.Stderr, "Token loaded from %s but it does NOT authenticate against the consumer API: %v\n", path, err)
+		fmt.Fprintln(os.Stderr, "The @plaud-ai/mcp token is a DEVELOPER-API token (platform.plaud.ai); the consumer client can't use it yet.")
+		fmt.Fprintln(os.Stderr, "Your existing saved token was left untouched. Durable fix tracked in SPEC-0341.")
+		os.Exit(1)
+	}
+	if err := plaud.SaveToken(cfg.TokenPath, session); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving token: %v\n", err)
 		os.Exit(1)
 	}
 	exp := "unknown"
