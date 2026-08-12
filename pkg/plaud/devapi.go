@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -14,6 +15,14 @@ import (
 // (api.plaud.ai / api-euc1.plaud.ai, region-redirected), this is a single host
 // and is what the official @plaud-ai/mcp OAuth token authenticates against.
 const devAPIBase = "https://platform.plaud.ai/developer/api"
+
+// devOAuthClientID is the @plaud-ai/mcp app's PUBLIC OAuth client id (a public
+// identifier, NOT a secret — the app is a public/PKCE client). It is required to
+// refresh the third-party access token. Baked default from @plaud-ai/mcp.
+const devOAuthClientID = "client_37d250cb-50f8-4af1-8cd6-bc6711c5d684"
+
+// devRefreshMargin refreshes the access token this long before its hard expiry.
+const devRefreshMargin = 1 * time.Hour
 
 // DevTokenFile mirrors ~/.plaud/tokens-mcp.json, written by the official
 // `npx @plaud-ai/mcp login` (driven by tools/plaud-mcp-login.mjs).
@@ -28,14 +37,17 @@ type DevTokenFile struct {
 // by the official MCP login. This is the durable, SSO-native capture path — no
 // localStorage scraping, no ephemeral browser token, no consumer API.
 type DevClient struct {
-	token      string
-	base       string // API base; overridable in tests
-	httpClient *http.Client
+	token        string
+	refreshToken string
+	tokenPath    string // ~/.plaud/tokens-mcp.json, for persisting a refresh
+	base         string // API base; overridable in tests
+	httpClient   *http.Client
 }
 
 // NewDevClientFromFile loads the OAuth token from ~/.plaud/tokens-mcp.json and
-// returns a client. It refuses an expired token with an actionable message (the
-// access token lives ~24h; re-mint/refresh via the login driver).
+// returns a client. The access token lives ~24h; when at/near expiry it is
+// AUTO-REFRESHED via the long-lived refresh_token (hands-off, no re-login) and
+// the refreshed token is persisted back to the file.
 func NewDevClientFromFile(path string) (*DevClient, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -45,36 +57,120 @@ func NewDevClientFromFile(path string) (*DevClient, error) {
 	if json.Unmarshal(data, &t) != nil || t.AccessToken == "" {
 		return nil, fmt.Errorf("plaud: no access_token in %s — run: node tools/plaud-mcp-login.mjs", path)
 	}
-	if t.ExpiresAt > 0 && time.Now().After(time.UnixMilli(t.ExpiresAt).Add(-tokenExpiryMargin)) {
-		return nil, fmt.Errorf("plaud: developer token expired — refresh by re-running: node tools/plaud-mcp-login.mjs")
+	expired := t.ExpiresAt > 0 && time.Now().After(time.UnixMilli(t.ExpiresAt))
+	nearExpiry := t.ExpiresAt > 0 && time.Now().After(time.UnixMilli(t.ExpiresAt).Add(-devRefreshMargin))
+	switch {
+	case nearExpiry && t.RefreshToken != "":
+		if nt, rerr := refreshDevToken(devAPIBase, t.RefreshToken); rerr == nil && nt.AccessToken != "" {
+			t = nt
+			_ = saveDevTokenFile(path, t)
+			fmt.Fprintln(os.Stderr, "  [plaud] developer token refreshed (no re-login needed)")
+		} else if expired {
+			return nil, fmt.Errorf("plaud: developer token expired and refresh failed (%v) — re-run: node tools/plaud-mcp-login.mjs", rerr)
+		}
+	case expired:
+		return nil, fmt.Errorf("plaud: developer token expired — re-run: node tools/plaud-mcp-login.mjs")
 	}
-	return &DevClient{token: t.AccessToken, base: devAPIBase, httpClient: &http.Client{Timeout: 90 * time.Second}}, nil
+	return &DevClient{
+		token: t.AccessToken, refreshToken: t.RefreshToken, tokenPath: path,
+		base: devAPIBase, httpClient: &http.Client{Timeout: 90 * time.Second},
+	}, nil
+}
+
+// refreshDevToken exchanges the refresh_token for a fresh access token via the
+// public-client (PKCE, no secret) grant. Returns the new token set.
+func refreshDevToken(base, refreshToken string) (DevTokenFile, error) {
+	form := url.Values{
+		"grant_type":    {"refresh_token"},
+		"refresh_token": {refreshToken},
+		"client_id":     {devOAuthClientID},
+	}.Encode()
+	req, err := http.NewRequest("POST", base+"/oauth/third-party/access-token/refresh", strings.NewReader(form))
+	if err != nil {
+		return DevTokenFile{}, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		return DevTokenFile{}, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	var r struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		ExpiresIn    int64  `json:"expires_in"`
+	}
+	if json.Unmarshal(body, &r) != nil || r.AccessToken == "" {
+		return DevTokenFile{}, fmt.Errorf("HTTP %d: %.150s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	out := DevTokenFile{AccessToken: r.AccessToken, RefreshToken: r.RefreshToken, TokenType: "bearer"}
+	if out.RefreshToken == "" {
+		out.RefreshToken = refreshToken // reuse if the server didn't rotate it
+	}
+	if exp := jwtExpiry(r.AccessToken); !exp.IsZero() {
+		out.ExpiresAt = exp.UnixMilli()
+	} else if r.ExpiresIn > 0 {
+		out.ExpiresAt = time.Now().Add(time.Duration(r.ExpiresIn) * time.Second).UnixMilli()
+	}
+	return out, nil
+}
+
+// saveDevTokenFile writes the token set back to ~/.plaud/tokens-mcp.json (0600).
+func saveDevTokenFile(path string, t DevTokenFile) error {
+	data, err := json.MarshalIndent(t, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0600)
 }
 
 // AccessToken returns the bearer this client uses — for deriving the shared
 // plaud-sync account id (DeriveAccountID) so status/register are self-consistent.
 func (c *DevClient) AccessToken() string { return c.token }
 
-func (c *DevClient) get(path string) ([]byte, error) {
+func (c *DevClient) doGet(path string) ([]byte, int, error) {
 	req, err := http.NewRequest("GET", c.base+path, nil)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Accept", "application/json")
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
-	switch resp.StatusCode {
+	return body, resp.StatusCode, nil
+}
+
+func (c *DevClient) get(path string) ([]byte, error) {
+	body, status, err := c.doGet(path)
+	if err != nil {
+		return nil, err
+	}
+	// Auto-refresh on rejection, then retry once (hands-off).
+	if (status == 401 || status == 403) && c.refreshToken != "" {
+		if nt, rerr := refreshDevToken(c.base, c.refreshToken); rerr == nil && nt.AccessToken != "" {
+			c.token, c.refreshToken = nt.AccessToken, nt.RefreshToken
+			if c.tokenPath != "" {
+				_ = saveDevTokenFile(c.tokenPath, nt)
+			}
+			body, status, err = c.doGet(path)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	switch status {
 	case 200:
 		return body, nil
 	case 401, 403:
-		return nil, fmt.Errorf("plaud: developer token rejected (HTTP %d) — refresh: node tools/plaud-mcp-login.mjs", resp.StatusCode)
+		return nil, fmt.Errorf("plaud: developer token rejected (HTTP %d) — re-run: node tools/plaud-mcp-login.mjs", status)
 	default:
-		return nil, fmt.Errorf("plaud: developer API %s: HTTP %d: %.200s", path, resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, fmt.Errorf("plaud: developer API %s: HTTP %d: %.200s", path, status, strings.TrimSpace(string(body)))
 	}
 }
 

@@ -5,12 +5,82 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestRefreshDevToken(t *testing.T) {
+	jwt := makeJWT(time.Now().Add(24 * time.Hour).Unix())
+	var gotForm url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/oauth/third-party/access-token/refresh" {
+			_ = r.ParseForm()
+			gotForm = r.PostForm
+			fmt.Fprintf(w, `{"access_token":%q,"refresh_token":"r2","expires_in":3600}`, jwt)
+			return
+		}
+		http.Error(w, "nope", 404)
+	}))
+	defer srv.Close()
+
+	nt, err := refreshDevToken(srv.URL, "r1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nt.AccessToken != jwt || nt.RefreshToken != "r2" || nt.ExpiresAt == 0 {
+		t.Errorf("refreshed = %+v", nt)
+	}
+	if gotForm.Get("grant_type") != "refresh_token" || gotForm.Get("refresh_token") != "r1" || gotForm.Get("client_id") == "" {
+		t.Errorf("refresh form = %v", gotForm)
+	}
+}
+
+func TestDevClient_AutoRefreshOn401(t *testing.T) {
+	jwt := makeJWT(time.Now().Add(24 * time.Hour).Unix())
+	refreshed := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/oauth/third-party/access-token/refresh":
+			refreshed = true
+			fmt.Fprintf(w, `{"access_token":%q,"refresh_token":"r2","expires_in":3600}`, jwt)
+		case strings.HasPrefix(r.URL.Path, "/open/third-party/files/"):
+			if r.Header.Get("Authorization") == "Bearer "+jwt {
+				fmt.Fprint(w, `{"type":"list","data":[{"id":"x1"}]}`)
+			} else {
+				w.WriteHeader(401)
+				fmt.Fprint(w, `{"detail":"unauthorized"}`)
+			}
+		default:
+			http.Error(w, "nope", 404)
+		}
+	}))
+	defer srv.Close()
+
+	tmp := filepath.Join(t.TempDir(), "tok.json")
+	_ = os.WriteFile(tmp, []byte(`{"access_token":"OLD","refresh_token":"r1"}`), 0600)
+	c := &DevClient{token: "OLD", refreshToken: "r1", tokenPath: tmp, base: srv.URL, httpClient: srv.Client()}
+
+	recs, err := c.ListRecordings()
+	if err != nil || len(recs) != 1 {
+		t.Fatalf("list after auto-refresh: recs=%d err=%v", len(recs), err)
+	}
+	if !refreshed {
+		t.Error("expected a refresh on the initial 401")
+	}
+	if c.token != jwt {
+		t.Errorf("client token not updated after refresh: %q", c.token)
+	}
+	var saved DevTokenFile
+	b, _ := os.ReadFile(tmp)
+	_ = json.Unmarshal(b, &saved)
+	if saved.AccessToken != jwt {
+		t.Errorf("refreshed token not persisted: %q", saved.AccessToken)
+	}
+}
 
 func TestRenderDataContent(t *testing.T) {
 	t.Run("transcript segments with speakers", func(t *testing.T) {
