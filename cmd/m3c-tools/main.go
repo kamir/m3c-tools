@@ -4568,8 +4568,10 @@ func cmdPlaudAuthMCP() {
 	session, err := plaud.LoadMCPTokenFile(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
-		fmt.Fprintln(os.Stderr, "First, mint the token once (opens a browser for Google sign-in):")
-		fmt.Fprintln(os.Stderr, "  npx -y @plaud-ai/mcp@latest login")
+		fmt.Fprintln(os.Stderr, "First, mint the token once (opens a browser for Google/Apple sign-in):")
+		fmt.Fprintln(os.Stderr, "  node tools/plaud-mcp-login.mjs")
+		fmt.Fprintln(os.Stderr, "(In @plaud-ai/mcp, 'login' is an MCP tool, not a CLI command — `npx … login` just")
+		fmt.Fprintln(os.Stderr, " starts the server and hangs; the driver script invokes the tool for you.)")
 		fmt.Fprintln(os.Stderr, "then re-run:  m3c-tools plaud auth mcp")
 		os.Exit(1)
 	}
