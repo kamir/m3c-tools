@@ -603,6 +603,13 @@ type plaudSyncState struct {
 	ItemURL string // ER1 memory-viewer URL, if the doc_id is known
 }
 
+// plaudStateSynced reports whether a recording is already in ER1 — true when the
+// server marked it "synced" OR the local ledger has an ER1 doc_id (status
+// "uploaded"). The doc_id is the reliable signal; both tools set it on success.
+func plaudStateSynced(st plaudSyncState) bool {
+	return st.DocID != "" || st.Status == "synced"
+}
+
 // resolvePlaudSyncStates returns, per Plaud recording ID, the ingestion state —
 // merging the LOCAL tracking DB (plaud://<id> -> UploadDocID/status) with the
 // SPEC-0117 SERVER-side sync check. The server is authoritative for

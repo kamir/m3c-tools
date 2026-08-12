@@ -4849,9 +4849,29 @@ func cmdPlaudDev(args []string) {
 		fmt.Fprintln(os.Stderr, "  flags: --dry-run   --force (re-sync)   --tags a,b")
 		os.Exit(1)
 	}
+	// One-time, idempotent: migrate any legacy "plaud-dev" ledger rows to the
+	// SHARED consumer format so the menubar and `plaud dev` agree.
+	if db, err := tracking.OpenFilesDB(defaultFilesDBPath()); err == nil {
+		migratePlaudDevLedger(db)
+		db.Close()
+	}
+
 	switch args[0] {
 	case "list":
-		cmdPlaudDevList()
+		preview, limit := false, 0
+		for i := 1; i < len(args); i++ {
+			a := args[i]
+			switch {
+			case a == "--preview" || a == "--transcript":
+				preview = true
+			case a == "--limit" && i+1 < len(args):
+				if n, e := strconv.Atoi(args[i+1]); e == nil {
+					limit = n
+				}
+				i++
+			}
+		}
+		cmdPlaudDevList(preview, limit)
 	case "sync":
 		var selectors []string
 		all, dryRun, force, limit, tags := false, false, false, 0, ""
@@ -4886,6 +4906,30 @@ func cmdPlaudDev(args []string) {
 	}
 }
 
+// migratePlaudDevLedger converts any legacy "plaud-dev" tracking rows (an earlier
+// dev-sync format that stored the recording ID as FileHash) into the SHARED
+// consumer format (path plaud://<id>, importType "plaud"), so the menubar and
+// `plaud dev` share one truth. Idempotent; skips rows already in the new format.
+func migratePlaudDevLedger(filesDB *tracking.FilesDB) {
+	files, err := filesDB.ListFiles(100000)
+	if err != nil {
+		return
+	}
+	for _, f := range files {
+		if f.ImportType != "plaud-dev" || f.UploadDocID == "" {
+			continue
+		}
+		recID := f.FileHash // legacy rows stored the recording ID as the hash
+		plaudPath := "plaud://" + recID
+		if existing, _ := filesDB.GetByPath(plaudPath); existing != nil && existing.UploadDocID != "" {
+			continue
+		}
+		h := fmt.Sprintf("%x", sha256.Sum256([]byte(recID)))
+		_, _ = filesDB.RecordFile(plaudPath, h, 0, "plaud", "")
+		_ = filesDB.RecordUploadSuccess(h, "plaud", f.UploadDocID)
+	}
+}
+
 func newPlaudDevClient() *plaud.DevClient {
 	c, err := plaud.NewDevClientFromFile(plaud.DefaultMCPTokenPath())
 	if err != nil {
@@ -4901,23 +4945,89 @@ func sortDevNewestFirst(recs []plaud.DevRecording) {
 	sort.SliceStable(recs, func(i, j int) bool { return recs[i].StartAt > recs[j].StartAt })
 }
 
-func cmdPlaudDevList() {
-	recs, err := newPlaudDevClient().ListRecordings()
+// devWhen renders the developer API's ISO StartAt as "YYYY-MM-DD HH:MM".
+func devWhen(iso string) string {
+	if len(iso) >= 16 {
+		return strings.Replace(iso[:16], "T", " ", 1)
+	}
+	return iso
+}
+
+// firstWords returns the first max runes of s (whitespace-collapsed) + "…".
+func firstWords(s string, max int) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if s == "" {
+		return "—"
+	}
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max]) + "…"
+}
+
+// cmdPlaudDevList prints the numbered, newest-first recording list with each
+// item's ER1 sync status + doc_id (from the local tracking DB — no API calls).
+// --preview additionally fetches each shown item's transcript first-words (one
+// API call per item, so it is bounded to --limit, default 25).
+func cmdPlaudDevList(preview bool, limit int) {
+	client := newPlaudDevClient()
+	recs, err := client.ListRecordings()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 	sortDevNewestFirst(recs)
-	fmt.Printf("Plaud recordings via developer API (%d, newest first):\n\n", len(recs))
-	fmt.Printf("  %4s  %-19s  %6s  %s\n", "#", "Recorded", "Dur", "ID")
-	for i, r := range recs {
-		when := r.StartAt
-		if len(when) >= 16 {
-			when = strings.Replace(when[:16], "T", " ", 1)
-		}
-		fmt.Printf("  %4d  %-19s  %6s  %s\n", i+1, when, plaud.FormatDuration(int(r.Duration/1000)), r.ID)
+	total := len(recs)
+
+	if limit > 0 && limit < len(recs) {
+		recs = recs[:limit]
+	} else if preview && limit == 0 && len(recs) > 25 {
+		fmt.Fprintln(os.Stderr, "  (transcript preview does one API call per item — showing the 25 most recent; use --limit N for more)")
+		recs = recs[:25]
 	}
-	fmt.Println("\n  Sync selected:  plaud dev sync <#|ID|N-M> ...    ·    all: --all    ·    most recent: --limit N")
+
+	// Shared sync truth (SAME source as the menubar/consumer `plaud check`):
+	// local tracking DB (plaud://<id>) merged with the SPEC-0117 server mapping.
+	ids := make([]string, len(recs))
+	for i, r := range recs {
+		ids[i] = r.ID
+	}
+	states := resolvePlaudSyncStates(ids, client.AccessToken())
+
+	fmt.Printf("Plaud recordings via developer API (%d, newest first):\n\n", total)
+	lastCol := "ID"
+	if preview {
+		lastCol = "Transcript (first words)"
+	}
+	fmt.Printf("  %4s  %-16s  %6s  %-7s  %-20s  %s\n", "#", "Recorded", "Dur", "Status", "ER1 Doc", lastCol)
+	for i, r := range recs {
+		status, docID := "new", "—"
+		if st, ok := states[r.ID]; ok {
+			if st.DocID != "" {
+				docID = st.DocID
+			}
+			if plaudStateSynced(st) {
+				status = "SYNCED"
+			} else if st.Status != "" {
+				status = st.Status
+			}
+		}
+		last := r.ID
+		if preview {
+			last = "—"
+			if d, derr := client.GetDetail(r.ID); derr == nil {
+				txt := d.TranscriptText()
+				if txt == "" {
+					txt = d.NotesText()
+				}
+				last = firstWords(txt, 60)
+			}
+		}
+		fmt.Printf("  %4d  %-16s  %6s  %-7s  %-20s  %s\n",
+			i+1, devWhen(r.StartAt), plaud.FormatDuration(int(r.Duration/1000)), status, docID, last)
+	}
+	fmt.Println("\n  Sync selected:  plaud dev sync <#|ID|N-M> ...   ·   all: --all   ·   recent: --limit N   ·   preview: plaud dev list --preview --limit 10")
 }
 
 // resolveDevSelection turns list-numbers (1-based, newest-first), N-M ranges and
@@ -5019,6 +5129,14 @@ func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force bool
 		todo = recs[:limit] // the N most recent
 	}
 
+	// Shared sync truth — the SAME local ledger (plaud://<id>, importType "plaud")
+	// and SPEC-0117 server mapping the menubar/consumer sync uses, so both agree.
+	todoIDs := make([]string, len(todo))
+	for i, r := range todo {
+		todoIDs[i] = r.ID
+	}
+	states := resolvePlaudSyncStates(todoIDs, client.AccessToken())
+
 	filesDB, dbErr := tracking.OpenFilesDB(defaultFilesDBPath())
 	if dbErr != nil {
 		fmt.Fprintf(os.Stderr, "Warning: tracking DB unavailable (%v) — dedup disabled\n", dbErr)
@@ -5026,15 +5144,17 @@ func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force bool
 	} else {
 		defer filesDB.Close()
 	}
+	var syncAPI *plaud.SyncAPIClient
+	if er1Cfg.APIKey != "" {
+		syncAPI = plaud.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, er1Cfg.ContextID, !er1Cfg.VerifySSL)
+	}
+	accountID := plaud.DeriveAccountID(client.AccessToken())
 
-	const importType = "plaud-dev"
 	synced, skipped, failed := 0, 0, 0
 	for _, r := range todo {
-		if filesDB != nil && !force {
-			if done, _ := filesDB.IsFileProcessed(r.ID, importType); done {
-				skipped++
-				continue
-			}
+		if !force && plaudStateSynced(states[r.ID]) {
+			skipped++
+			continue
 		}
 		if dryRun {
 			fmt.Printf("  WOULD sync: %s  %s\n", r.ID, r.Name)
@@ -5056,6 +5176,7 @@ func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force bool
 			}
 		}
 		captureTime := parseDevTime(r.StartAt)
+		transcript := detail.TranscriptText()
 		impText := fmt.Sprintf("Plaud recording: %s", r.Name)
 		if notes := detail.NotesText(); notes != "" {
 			impText += "\n\nNotes:\n" + notes
@@ -5063,11 +5184,11 @@ func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force bool
 		doc := (&impression.CompositeDoc{
 			ObsType:        impression.Import,
 			Timestamp:      captureTime,
-			TranscriptText: detail.TranscriptText(),
+			TranscriptText: transcript,
 			ImpressionText: impText,
 		}).Build()
 
-		allTags := "plaud,plaud-dev"
+		allTags := "plaud"
 		if tags != "" {
 			allTags += "," + tags
 		}
@@ -5090,9 +5211,33 @@ func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force bool
 			failed++
 			continue
 		}
+		// Record in the SHARED local ledger exactly like the menubar/consumer sync
+		// (path plaud://<id>, importType "plaud"), then register on the server —
+		// so `plaud dev` and the menubar Plaud Sync share ONE truth.
 		if filesDB != nil {
-			_, _ = filesDB.RecordFile(r.Name, r.ID, int64(len(audio)), importType, "")
-			_ = filesDB.RecordUploadSuccess(r.ID, importType, resp.DocID)
+			h := sha256.Sum256(audio)
+			if len(audio) == 0 {
+				h = sha256.Sum256([]byte(r.ID)) // keep the row key unique when audio is absent
+			}
+			audioHash := fmt.Sprintf("%x", h)
+			plaudPath := "plaud://" + r.ID
+			_, _ = filesDB.RecordFile(plaudPath, audioHash, int64(len(audio)), "plaud", "")
+			_ = filesDB.RecordTranscript(audioHash, "plaud", transcript, "")
+			_ = filesDB.RecordUploadSuccess(audioHash, "plaud", resp.DocID)
+		}
+		if syncAPI != nil {
+			if mapErr := syncAPI.RegisterMapping(plaud.SyncMapping{
+				PlaudAccountID:    accountID,
+				PlaudRecordingID:  r.ID,
+				ER1DocID:          resp.DocID,
+				ER1ContextID:      er1Cfg.ContextID,
+				RecordingTitle:    r.Name,
+				RecordingDuration: int(r.Duration / 1000),
+				AudioSizeBytes:    len(audio),
+				TranscriptLength:  len(transcript),
+			}); mapErr != nil {
+				log.Printf("[plaud-dev] server mapping failed (non-fatal): %v", mapErr)
+			}
 		}
 		fmt.Printf("  ✓ %s → %s\n", r.Name, resp.DocID)
 		synced++

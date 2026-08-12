@@ -51,6 +51,10 @@ func NewDevClientFromFile(path string) (*DevClient, error) {
 	return &DevClient{token: t.AccessToken, base: devAPIBase, httpClient: &http.Client{Timeout: 90 * time.Second}}, nil
 }
 
+// AccessToken returns the bearer this client uses — for deriving the shared
+// plaud-sync account id (DeriveAccountID) so status/register are self-consistent.
+func (c *DevClient) AccessToken() string { return c.token }
+
 func (c *DevClient) get(path string) ([]byte, error) {
 	req, err := http.NewRequest("GET", c.base+path, nil)
 	if err != nil {
@@ -144,30 +148,71 @@ func (c *DevClient) GetDetail(id string) (*DevDetail, error) {
 	return &d, nil
 }
 
-// TranscriptText renders the transcript from source_list. Plaud's segment shape
-// is not documented and varies, so this pulls the first text-like field of each
-// segment defensively.
-func (d *DevDetail) TranscriptText() string { return joinTextFields(d.SourceList) }
+// devSegment is one transcript segment inside a source_list item's data_content.
+type devSegment struct {
+	Content string `json:"content"`
+	Speaker string `json:"speaker"`
+}
 
-// NotesText renders the AI notes/summary from note_list, defensively.
-func (d *DevDetail) NotesText() string { return joinTextFields(d.NoteList) }
+// TranscriptText renders the transcript from source_list. Each source_list item
+// carries a `data_content` field that is itself a JSON array of segments
+// [{content, speaker, start_time}]; the segments are joined with speaker labels.
+func (d *DevDetail) TranscriptText() string { return renderDataContent(d.SourceList, true) }
 
-func joinTextFields(items []json.RawMessage) string {
+// NotesText renders the AI notes/summary from note_list, whose items carry a
+// `data_content` markdown string.
+func (d *DevDetail) NotesText() string { return renderDataContent(d.NoteList, false) }
+
+// renderDataContent extracts readable text from Plaud's source_list / note_list.
+// Each item's `data_content` is EITHER a JSON array of transcript segments
+// (rendered with speaker labels when withSpeakers) OR a markdown/plain string.
+// Falls back to a direct text field if the item has no data_content.
+func renderDataContent(items []json.RawMessage, withSpeakers bool) string {
 	var b strings.Builder
 	for _, raw := range items {
-		var m map[string]any
-		if json.Unmarshal(raw, &m) != nil {
+		var item struct {
+			DataContent string `json:"data_content"`
+		}
+		if json.Unmarshal(raw, &item) != nil || strings.TrimSpace(item.DataContent) == "" {
+			if s := firstTextField(raw); s != "" {
+				b.WriteString(s + "\n")
+			}
 			continue
 		}
-		for _, k := range []string{"text", "content", "asr_text", "transcript", "trans", "value", "summary", "markdown"} {
-			if s, ok := m[k].(string); ok && strings.TrimSpace(s) != "" {
-				b.WriteString(strings.TrimSpace(s))
-				b.WriteByte('\n')
-				break
+		var segs []devSegment
+		if json.Unmarshal([]byte(item.DataContent), &segs) == nil && len(segs) > 0 {
+			last := ""
+			for _, s := range segs {
+				if strings.TrimSpace(s.Content) == "" {
+					continue
+				}
+				if withSpeakers && s.Speaker != "" && s.Speaker != last {
+					b.WriteString("\n" + s.Speaker + ": ")
+					last = s.Speaker
+				}
+				b.WriteString(s.Content + " ")
 			}
+			b.WriteString("\n")
+		} else {
+			b.WriteString(item.DataContent + "\n\n") // markdown / plain
 		}
 	}
 	return strings.TrimSpace(b.String())
+}
+
+// firstTextField returns the first text-like string field of a JSON object
+// (fallback for shapes without data_content).
+func firstTextField(raw json.RawMessage) string {
+	var m map[string]any
+	if json.Unmarshal(raw, &m) != nil {
+		return ""
+	}
+	for _, k := range []string{"text", "content", "asr_text", "transcript", "value", "summary", "markdown"} {
+		if s, ok := m[k].(string); ok && strings.TrimSpace(s) != "" {
+			return strings.TrimSpace(s)
+		}
+	}
+	return ""
 }
 
 // DownloadAudio fetches the MP3 from the presigned S3 URL (no auth header; the

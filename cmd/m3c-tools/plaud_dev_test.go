@@ -1,10 +1,63 @@
 package main
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/kamir/m3c-tools/pkg/plaud"
+	"github.com/kamir/m3c-tools/pkg/tracking"
 )
+
+func TestPlaudStateSynced(t *testing.T) {
+	if !plaudStateSynced(plaudSyncState{DocID: "x"}) {
+		t.Error("a doc_id means synced")
+	}
+	if !plaudStateSynced(plaudSyncState{Status: "synced"}) {
+		t.Error("server 'synced' means synced")
+	}
+	if plaudStateSynced(plaudSyncState{Status: "new"}) {
+		t.Error("'new' is not synced")
+	}
+	if plaudStateSynced(plaudSyncState{}) {
+		t.Error("empty state is not synced")
+	}
+}
+
+// TestMigratePlaudDevLedger proves the legacy "plaud-dev" ledger rows are moved
+// into the SHARED consumer format (plaud://<id>, importType "plaud") that the
+// menubar's resolvePlaudSyncStates reads via GetByPath — so both tools agree.
+func TestMigratePlaudDevLedger(t *testing.T) {
+	db, err := tracking.OpenFilesDB(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	const recID, docID = "abc123def4567890", "DOC-XYZ"
+	// Legacy write shape: RecordFile(name, recID, …, "plaud-dev", "") + upload.
+	if _, err := db.RecordFile("2026-07-15 09:09", recID, 0, "plaud-dev", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.RecordUploadSuccess(recID, "plaud-dev", docID); err != nil {
+		t.Fatal(err)
+	}
+	// Before migration the shared reader can't see it.
+	if pf, _ := db.GetByPath("plaud://" + recID); pf != nil && pf.UploadDocID != "" {
+		t.Fatal("precondition: shared row should not exist yet")
+	}
+
+	migratePlaudDevLedger(db)
+
+	pf, err := db.GetByPath("plaud://" + recID)
+	if err != nil || pf == nil || pf.UploadDocID != docID {
+		t.Fatalf("after migration GetByPath(plaud://%s) = %+v (err %v), want doc %s", recID, pf, err, docID)
+	}
+	// Idempotent: a second run must not error or change the doc_id.
+	migratePlaudDevLedger(db)
+	if pf, _ := db.GetByPath("plaud://" + recID); pf == nil || pf.UploadDocID != docID {
+		t.Error("migration is not idempotent")
+	}
+}
 
 func TestParseIntRange(t *testing.T) {
 	cases := []struct {

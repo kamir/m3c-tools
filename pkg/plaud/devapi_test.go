@@ -12,22 +12,35 @@ import (
 	"time"
 )
 
-func TestJoinTextFields(t *testing.T) {
-	items := []json.RawMessage{
-		json.RawMessage(`{"text":"hello"}`),
-		json.RawMessage(`{"content":"world"}`),
-		json.RawMessage(`{"speaker":"A","asr_text":"again"}`),
-		json.RawMessage(`{"irrelevant":123}`), // no text field → skipped
-		json.RawMessage(`not json`),           // unparseable → skipped
-	}
-	got := joinTextFields(items)
-	want := "hello\nworld\nagain"
-	if got != want {
-		t.Errorf("joinTextFields = %q, want %q", got, want)
-	}
-	if joinTextFields(nil) != "" {
-		t.Error("empty list should yield empty string")
-	}
+func TestRenderDataContent(t *testing.T) {
+	t.Run("transcript segments with speakers", func(t *testing.T) {
+		// A source_list item whose data_content is a JSON array of segments.
+		seg := `[{"start_time":720,"content":"Hallo zusammen.","speaker":"Speaker 1"},{"start_time":2200,"content":"Ja genau.","speaker":"Speaker 2"}]`
+		item, _ := json.Marshal(map[string]string{"data_content": seg})
+		got := (&DevDetail{SourceList: []json.RawMessage{item}}).TranscriptText()
+		want := "Speaker 1: Hallo zusammen. \nSpeaker 2: Ja genau."
+		if got != want {
+			t.Errorf("transcript = %q, want %q", got, want)
+		}
+	})
+	t.Run("notes markdown passthrough", func(t *testing.T) {
+		item, _ := json.Marshal(map[string]string{"data_content": "## Notes\n- point"})
+		got := (&DevDetail{NoteList: []json.RawMessage{item}}).NotesText()
+		if got != "## Notes\n- point" {
+			t.Errorf("notes = %q", got)
+		}
+	})
+	t.Run("fallback to direct text field", func(t *testing.T) {
+		got := renderDataContent([]json.RawMessage{json.RawMessage(`{"text":"plain"}`)}, true)
+		if got != "plain" {
+			t.Errorf("fallback = %q, want plain", got)
+		}
+	})
+	t.Run("empty", func(t *testing.T) {
+		if renderDataContent(nil, true) != "" {
+			t.Error("empty list should yield empty string")
+		}
+	})
 }
 
 func TestNewDevClientFromFile(t *testing.T) {
