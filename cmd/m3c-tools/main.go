@@ -5097,12 +5097,145 @@ func parseIntRange(s string) (int, int, bool) {
 // transcript + notes), deduped by recording ID (tracking importType "plaud-dev").
 // Selection: explicit <#|ID|N-M> selectors, else --all, else the --limit N most
 // recent (default 1). --force re-syncs already-synced items.
-func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force bool, tags string) {
-	client := newPlaudDevClient()
+// devSyncProgress is called once per item during a dev sync.
+// phase is "done" | "skipped" | "failed".
+type devSyncProgress func(recID, name, phase, docID string, err error)
+
+// syncOneDevRecording uploads ONE developer-API recording to ER1 (audio +
+// transcript + notes) and records it in the SHARED ledger (path plaud://<id>,
+// importType "plaud") + the SPEC-0117 server mapping. Returns the ER1 doc_id.
+func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentType string,
+	filesDB *tracking.FilesDB, syncAPI *plaud.SyncAPIClient, accountID string,
+	r plaud.DevRecording, tags string) (string, error) {
+
+	detail, err := client.GetDetail(r.ID)
+	if err != nil {
+		return "", fmt.Errorf("detail: %w", err)
+	}
+	var audio []byte
+	if detail.PresignedURL != "" {
+		if audio, err = client.DownloadAudio(detail.PresignedURL); err != nil {
+			log.Printf("[plaud-dev] %s audio download failed (transcript only): %v", r.ID, err)
+			audio = nil
+		}
+	}
+	captureTime := parseDevTime(r.StartAt)
+	transcript := detail.TranscriptText()
+	impText := fmt.Sprintf("Plaud recording: %s", r.Name)
+	if notes := detail.NotesText(); notes != "" {
+		impText += "\n\nNotes:\n" + notes
+	}
+	doc := (&impression.CompositeDoc{
+		ObsType:        impression.Import,
+		Timestamp:      captureTime,
+		TranscriptText: transcript,
+		ImpressionText: impText,
+	}).Build()
+
+	allTags := "plaud"
+	if tags != "" {
+		allTags += "," + tags
+	}
+	payload := &er1.UploadPayload{
+		TranscriptData:     []byte(strings.TrimSpace(doc) + "\n"),
+		TranscriptFilename: fmt.Sprintf("plaud_%s.txt", r.ID),
+		ImageFilename:      "placeholder-logo.png",
+		Tags:               allTags,
+		ContentType:        contentType,
+		CurrentTime:        er1.FormatCaptureTime(captureTime),
+	}
+	if len(audio) > 0 {
+		payload.AudioData = audio
+		payload.AudioFilename = r.ID + ".mp3"
+	}
+	resp, upErr := er1.Upload(er1Cfg, payload)
+	if upErr != nil {
+		return "", fmt.Errorf("upload: %w", upErr)
+	}
+	// SHARED local ledger (plaud://<id>, importType "plaud") + SPEC-0117 server
+	// mapping — identical to the menubar/consumer sync, so both share one truth.
+	if filesDB != nil {
+		h := sha256.Sum256(audio)
+		if len(audio) == 0 {
+			h = sha256.Sum256([]byte(r.ID)) // unique row key when audio is absent
+		}
+		audioHash := fmt.Sprintf("%x", h)
+		plaudPath := "plaud://" + r.ID
+		_, _ = filesDB.RecordFile(plaudPath, audioHash, int64(len(audio)), "plaud", "")
+		_ = filesDB.RecordTranscript(audioHash, "plaud", transcript, "")
+		_ = filesDB.RecordUploadSuccess(audioHash, "plaud", resp.DocID)
+	}
+	if syncAPI != nil {
+		if mapErr := syncAPI.RegisterMapping(plaud.SyncMapping{
+			PlaudAccountID:    accountID,
+			PlaudRecordingID:  r.ID,
+			ER1DocID:          resp.DocID,
+			ER1ContextID:      er1Cfg.ContextID,
+			RecordingTitle:    r.Name,
+			RecordingDuration: int(r.Duration / 1000),
+			AudioSizeBytes:    len(audio),
+			TranscriptLength:  len(transcript),
+		}); mapErr != nil {
+			log.Printf("[plaud-dev] server mapping failed (non-fatal): %v", mapErr)
+		}
+	}
+	return resp.DocID, nil
+}
+
+// runDevSyncByIDs syncs the given recording IDs to ER1, deduped via the SHARED
+// sync truth. It is the common core for `plaud dev sync` (CLI) and the menubar
+// Plaud Sync, so the two never diverge. prog may be nil.
+func runDevSyncByIDs(client *plaud.DevClient, recByID map[string]plaud.DevRecording,
+	ids []string, tags string, force bool, prog devSyncProgress) (synced, skipped, failed int) {
+
 	cfg := plaud.LoadConfig()
 	er1Cfg := er1.LoadConfig()
 	applyRuntimeER1Context(er1Cfg)
+	states := resolvePlaudSyncStates(ids, client.AccessToken())
 
+	filesDB, dbErr := tracking.OpenFilesDB(defaultFilesDBPath())
+	if dbErr == nil {
+		defer filesDB.Close()
+	} else {
+		filesDB = nil
+	}
+	var syncAPI *plaud.SyncAPIClient
+	if er1Cfg.APIKey != "" {
+		syncAPI = plaud.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, er1Cfg.ContextID, !er1Cfg.VerifySSL)
+	}
+	accountID := plaud.DeriveAccountID(client.AccessToken())
+
+	for _, id := range ids {
+		r, ok := recByID[id]
+		if !ok {
+			failed++
+			continue
+		}
+		if !force && plaudStateSynced(states[id]) {
+			skipped++
+			if prog != nil {
+				prog(id, r.Name, "skipped", states[id].DocID, nil)
+			}
+			continue
+		}
+		docID, err := syncOneDevRecording(client, er1Cfg, cfg.ContentType, filesDB, syncAPI, accountID, r, tags)
+		if err != nil {
+			failed++
+			if prog != nil {
+				prog(id, r.Name, "failed", "", err)
+			}
+			continue
+		}
+		synced++
+		if prog != nil {
+			prog(id, r.Name, "done", docID, nil)
+		}
+	}
+	return
+}
+
+func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force bool, tags string) {
+	client := newPlaudDevClient()
 	recs, err := client.ListRecordings()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error listing recordings: %v\n", err)
@@ -5129,124 +5262,36 @@ func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force bool
 		todo = recs[:limit] // the N most recent
 	}
 
-	// Shared sync truth — the SAME local ledger (plaud://<id>, importType "plaud")
-	// and SPEC-0117 server mapping the menubar/consumer sync uses, so both agree.
-	todoIDs := make([]string, len(todo))
+	ids := make([]string, len(todo))
+	recByID := make(map[string]plaud.DevRecording, len(todo))
 	for i, r := range todo {
-		todoIDs[i] = r.ID
+		ids[i] = r.ID
+		recByID[r.ID] = r
 	}
-	states := resolvePlaudSyncStates(todoIDs, client.AccessToken())
 
-	filesDB, dbErr := tracking.OpenFilesDB(defaultFilesDBPath())
-	if dbErr != nil {
-		fmt.Fprintf(os.Stderr, "Warning: tracking DB unavailable (%v) — dedup disabled\n", dbErr)
-		filesDB = nil
-	} else {
-		defer filesDB.Close()
-	}
-	var syncAPI *plaud.SyncAPIClient
-	if er1Cfg.APIKey != "" {
-		syncAPI = plaud.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, er1Cfg.ContextID, !er1Cfg.VerifySSL)
-	}
-	accountID := plaud.DeriveAccountID(client.AccessToken())
-
-	synced, skipped, failed := 0, 0, 0
-	for _, r := range todo {
-		if !force && plaudStateSynced(states[r.ID]) {
-			skipped++
-			continue
-		}
-		if dryRun {
-			fmt.Printf("  WOULD sync: %s  %s\n", r.ID, r.Name)
-			synced++
-			continue
-		}
-
-		detail, derr := client.GetDetail(r.ID)
-		if derr != nil {
-			fmt.Fprintf(os.Stderr, "  ✗ %s detail: %v\n", r.ID, derr)
-			failed++
-			continue
-		}
-		var audio []byte
-		if detail.PresignedURL != "" {
-			if audio, err = client.DownloadAudio(detail.PresignedURL); err != nil {
-				fmt.Fprintf(os.Stderr, "  ! %s audio download: %v (uploading transcript only)\n", r.ID, err)
-				audio = nil
-			}
-		}
-		captureTime := parseDevTime(r.StartAt)
-		transcript := detail.TranscriptText()
-		impText := fmt.Sprintf("Plaud recording: %s", r.Name)
-		if notes := detail.NotesText(); notes != "" {
-			impText += "\n\nNotes:\n" + notes
-		}
-		doc := (&impression.CompositeDoc{
-			ObsType:        impression.Import,
-			Timestamp:      captureTime,
-			TranscriptText: transcript,
-			ImpressionText: impText,
-		}).Build()
-
-		allTags := "plaud"
-		if tags != "" {
-			allTags += "," + tags
-		}
-		payload := &er1.UploadPayload{
-			TranscriptData:     []byte(strings.TrimSpace(doc) + "\n"),
-			TranscriptFilename: fmt.Sprintf("plaud_%s.txt", r.ID),
-			ImageData:          nil,
-			ImageFilename:      "placeholder-logo.png",
-			Tags:               allTags,
-			ContentType:        cfg.ContentType,
-			CurrentTime:        er1.FormatCaptureTime(captureTime),
-		}
-		if len(audio) > 0 {
-			payload.AudioData = audio
-			payload.AudioFilename = r.ID + ".mp3"
-		}
-		resp, upErr := er1.Upload(er1Cfg, payload)
-		if upErr != nil {
-			fmt.Fprintf(os.Stderr, "  ✗ %s upload: %v\n", r.ID, upErr)
-			failed++
-			continue
-		}
-		// Record in the SHARED local ledger exactly like the menubar/consumer sync
-		// (path plaud://<id>, importType "plaud"), then register on the server —
-		// so `plaud dev` and the menubar Plaud Sync share ONE truth.
-		if filesDB != nil {
-			h := sha256.Sum256(audio)
-			if len(audio) == 0 {
-				h = sha256.Sum256([]byte(r.ID)) // keep the row key unique when audio is absent
-			}
-			audioHash := fmt.Sprintf("%x", h)
-			plaudPath := "plaud://" + r.ID
-			_, _ = filesDB.RecordFile(plaudPath, audioHash, int64(len(audio)), "plaud", "")
-			_ = filesDB.RecordTranscript(audioHash, "plaud", transcript, "")
-			_ = filesDB.RecordUploadSuccess(audioHash, "plaud", resp.DocID)
-		}
-		if syncAPI != nil {
-			if mapErr := syncAPI.RegisterMapping(plaud.SyncMapping{
-				PlaudAccountID:    accountID,
-				PlaudRecordingID:  r.ID,
-				ER1DocID:          resp.DocID,
-				ER1ContextID:      er1Cfg.ContextID,
-				RecordingTitle:    r.Name,
-				RecordingDuration: int(r.Duration / 1000),
-				AudioSizeBytes:    len(audio),
-				TranscriptLength:  len(transcript),
-			}); mapErr != nil {
-				log.Printf("[plaud-dev] server mapping failed (non-fatal): %v", mapErr)
-			}
-		}
-		fmt.Printf("  ✓ %s → %s\n", r.Name, resp.DocID)
-		synced++
-	}
-	suffix := ""
 	if dryRun {
-		suffix = " (dry-run)"
+		states := resolvePlaudSyncStates(ids, client.AccessToken())
+		would := 0
+		for _, r := range todo {
+			if !force && plaudStateSynced(states[r.ID]) {
+				continue
+			}
+			fmt.Printf("  WOULD sync: %s  %s\n", r.ID, r.Name)
+			would++
+		}
+		fmt.Printf("\nDone (dry-run). would_sync=%d of %d selected\n", would, len(todo))
+		return
 	}
-	fmt.Printf("\nDone. synced=%d  skipped(already)=%d  failed=%d%s\n", synced, skipped, failed, suffix)
+
+	synced, skipped, failed := runDevSyncByIDs(client, recByID, ids, tags, force, func(id, name, phase, docID string, err error) {
+		switch phase {
+		case "done":
+			fmt.Printf("  ✓ %s → %s\n", name, docID)
+		case "failed":
+			fmt.Fprintf(os.Stderr, "  ✗ %s: %v\n", name, err)
+		}
+	})
+	fmt.Printf("\nDone. synced=%d  skipped(already)=%d  failed=%d\n", synced, skipped, failed)
 }
 
 // parseDevTime parses the developer API's timestamps (falls back to now).
@@ -5811,155 +5856,100 @@ func emitPlaudItemDone(onProgress func(menubar.BulkProgressEvent), item string, 
 // menubarHandlePlaudSync handles the Plaud Sync menu action.
 func menubarHandlePlaudSync(app *menubar.App) {
 	cfg := plaud.LoadConfig()
-	session, err := plaud.LoadToken(cfg.TokenPath)
-	needExtract := err != nil
+	// DURABLE developer-API path (auto-refreshing OAuth token); shares the sync
+	// truth with `plaud dev`. No more Chrome scraping / consumer API.
+	client, err := plaud.NewDevClientFromFile(plaud.DefaultMCPTokenPath())
 	if err != nil {
-		log.Printf("[plaud] no saved token, trying Chrome extraction...")
-	} else if ok, probeErr := plaud.NewClient(cfg, session.Token).TokenAuthenticates(); probeErr == nil && !ok {
-		// The saved token loaded fine but the API rejects it (wrong key grabbed
-		// last time, expired, or revoked). Re-extract instead of failing every
-		// sync — extraction self-calibrates by probing candidates against the API.
-		// If probeErr != nil (API unreachable) we keep the saved token (offline).
-		log.Printf("[plaud] saved token rejected by Plaud API, re-extracting from Chrome...")
-		needExtract = true
+		log.Printf("[plaud] no usable developer token: %v", err)
+		app.Notify("Plaud Sync", "Bitte einmal anmelden:  node tools/plaud-mcp-login.mjs  — dann erneut synchronisieren.")
+		return
 	}
-	if needExtract {
-		token, chromeErr := plaud.ExtractTokenFromChrome()
-		if chromeErr != nil {
-			log.Printf("[plaud] Chrome extraction failed: %v", chromeErr)
-			log.Printf("[plaud] opening web.plaud.ai for login...")
-			_ = plaud.OpenPlaudLogin()
-			app.Notify("Plaud Sync", "Please log in to web.plaud.ai in Chrome, then try again.")
-			return
-		}
-		// Save the extracted (API-validated) token.
-		session = &plaud.TokenSession{Token: token}
-		if saveErr := plaud.SaveToken(cfg.TokenPath, session); saveErr != nil {
-			log.Printf("[plaud] warning: could not save token: %v", saveErr)
-		} else {
-			log.Printf("[plaud] token extracted from Chrome and saved")
-		}
-	}
-	client := plaud.NewClient(cfg, session.Token)
 
-	log.Printf("[plaud] fetching recordings...")
-	recordings, err := client.ListRecordings()
+	log.Printf("[plaud] fetching recordings (developer API)...")
+	recs, err := client.ListRecordings()
 	if err != nil {
 		log.Printf("[plaud] list recordings FAILED: %v", err)
 		app.Notify("Plaud Sync Error", err.Error())
 		return
 	}
-	log.Printf("[plaud] found %d recordings", len(recordings))
+	sortDevNewestFirst(recs)
+	log.Printf("[plaud] found %d recordings", len(recs))
 
-	// Recording -> sync state (status + ER1 doc_id/URL): local tracking DB
-	// merged with the SPEC-0117 server sync check. dbPath is reused by the sync
-	// pipeline below; the ItemURL makes a synced row double-clickable to open
-	// the ER1 item in the browser.
-	dbPath := defaultFilesDBPath()
-	allIDs := make([]string, len(recordings))
-	for i, rec := range recordings {
-		allIDs[i] = rec.ID
+	ids := make([]string, len(recs))
+	recByID := make(map[string]plaud.DevRecording, len(recs))
+	for i, r := range recs {
+		ids[i] = r.ID
+		recByID[r.ID] = r
 	}
-	states := resolvePlaudSyncStates(allIDs, session.Token)
+	// Shared sync truth (same resolver as `plaud check` / `plaud dev`).
+	states := resolvePlaudSyncStates(ids, client.AccessToken())
+	er1Cfg := er1.LoadConfig()
 
 	var records []menubar.PlaudSyncRecord
-	for _, rec := range recordings {
-		st := states[rec.ID]
-		status := st.Status
-		if status == "" {
-			status = "new"
+	for _, r := range recs {
+		st := states[r.ID]
+		status := "new"
+		if plaudStateSynced(st) {
+			status = "synced"
+		} else if st.Status != "" {
+			status = st.Status
 		}
 		records = append(records, menubar.PlaudSyncRecord{
-			Title:       rec.Title,
-			Duration:    plaud.FormatDuration(rec.Duration),
-			Date:        rec.CreatedAt.Format("2006-01-02 15:04"),
+			Title:       r.Name,
+			Duration:    plaud.FormatDuration(int(r.Duration / 1000)),
+			Date:        devWhen(r.StartAt),
 			Status:      status,
-			RecordingID: rec.ID,
+			RecordingID: r.ID,
 			ItemURL:     st.ItemURL,
 			DocID:       st.DocID,
 		})
 	}
 
-	accountInfo := fmt.Sprintf("Plaud — %d recordings", len(recordings))
-	menubar.ShowPlaudSyncWindow(records, accountInfo, cfg.DefaultTags)
+	menubar.ShowPlaudSyncWindow(records, fmt.Sprintf("Plaud — %d recordings", len(recs)), cfg.DefaultTags)
 
-	// Register sync callback.
+	// Register sync callback — runs the SHARED dev-sync core, so the menubar and
+	// `plaud dev` never diverge (same ledger, same dedup, same server mapping).
 	menubar.SetPlaudSyncCallback(func(action string, recordingIDs []string, customTags string) {
 		if action != "sync" || len(recordingIDs) == 0 {
 			return
 		}
-		log.Printf("[plaud] sync starting for %d recordings", len(recordingIDs))
-
-		// Mark syncing in UI.
+		log.Printf("[plaud] dev sync starting for %d recordings", len(recordingIDs))
 		for _, id := range recordingIDs {
 			menubar.SetPlaudSyncStatus(id, "syncing")
 		}
-		menubar.SetPlaudSyncProgress(menubar.BulkRunState{
-			Active: true, Total: len(recordingIDs),
-		})
-
-		// The pipeline's events are inconsistent (ITEM_PHASE carries Total but
-		// Done=0; ITEM_START neither), which made the progress bar oscillate
-		// 0↔N and never show a real "N of M". Derive Done from evt.Index (1-based,
-		// present on every event) and keep success/failed monotonic so the
-		// counter never flickers back to 0.
-		er1Cfg := er1.LoadConfig()
 		total := len(recordingIDs)
-		lastSuccess, lastFailed := 0, 0
-		onProgress := func(evt menubar.BulkProgressEvent) {
-			if evt.Success > lastSuccess {
-				lastSuccess = evt.Success
-			}
-			if evt.Failed > lastFailed {
-				lastFailed = evt.Failed
-			}
-			done := evt.Index
-			if done < 1 {
-				done = 1
-			}
-			if done > total {
-				done = total
+		menubar.SetPlaudSyncProgress(menubar.BulkRunState{Active: true, Total: total})
+
+		done, success, failed := 0, 0, 0
+		prog := func(id, name, phase, docID string, perr error) {
+			done++
+			switch phase {
+			case "done", "skipped":
+				if phase == "done" {
+					success++
+				}
+				menubar.SetPlaudSyncStatus(id, "synced")
+				if docID != "" {
+					menubar.SetPlaudSyncRowDoc(id, docID, er1Cfg.MemoryItemURL(docID))
+				}
+			case "failed":
+				failed++
+				menubar.SetPlaudSyncStatus(id, "failed")
+				if perr != nil {
+					log.Printf("[plaud] sync %s failed: %v", id, perr)
+				}
 			}
 			menubar.SetPlaudSyncProgress(menubar.BulkRunState{
-				Active:      true,
-				Total:       total,
-				Done:        done,
-				Success:     lastSuccess,
-				Failed:      lastFailed,
-				CurrentFile: evt.CurrentFile,
-				Phase:       evt.Phase,
+				Active: true, Total: total, Done: done,
+				Success: success, Failed: failed, CurrentFile: name,
 			})
-
-			if evt.Event == "ITEM_DONE" {
-				status := "synced"
-				if evt.Outcome == "failed" {
-					status = "failed"
-				}
-				// Update ONLY the row that finished (evt.Index is 1-based).
-				if idx := evt.Index - 1; idx >= 0 && idx < len(recordingIDs) {
-					menubar.SetPlaudSyncStatus(recordingIDs[idx], status)
-					// Back-fill the ER1 doc_id + item URL so the row shows its
-					// doc_id (and double-click opens it) right after syncing.
-					if evt.DocID != "" {
-						menubar.SetPlaudSyncRowDoc(recordingIDs[idx], evt.DocID, er1Cfg.MemoryItemURL(evt.DocID))
-					}
-				}
-			}
 		}
 
-		summary, syncErr := runPlaudSyncPipeline(client, cfg, recordingIDs, dbPath, session.Token, onProgress, false, customTags)
-		if syncErr != nil {
-			log.Printf("[plaud] sync FAILED: %v", syncErr)
-			app.Notify("Plaud Sync Failed", syncErr.Error())
-		} else {
-			log.Printf("[plaud] sync DONE: %d synced, %d failed", summary.Success, summary.Failed)
-			app.Notify("Plaud Sync", fmt.Sprintf("Done: %d synced, %d failed", summary.Success, summary.Failed))
-		}
-
+		s, sk, f := runDevSyncByIDs(client, recByID, recordingIDs, customTags, false, prog)
+		log.Printf("[plaud] dev sync DONE: %d synced, %d skipped, %d failed", s, sk, f)
+		app.Notify("Plaud Sync", fmt.Sprintf("Fertig: %d synchronisiert, %d übersprungen, %d Fehler", s, sk, f))
 		menubar.SetPlaudSyncProgress(menubar.BulkRunState{
-			Active: false,
-			Total:  summary.Total, Done: summary.Total,
-			Success: summary.Success, Failed: summary.Failed,
+			Active: false, Total: total, Done: total, Success: s + sk, Failed: f,
 		})
 	})
 }
