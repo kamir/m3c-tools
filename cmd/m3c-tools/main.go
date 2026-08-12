@@ -4366,12 +4366,14 @@ func menubarWhisperTimeout() time.Duration {
 
 func cmdPlaud(args []string) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud <list|check|sync|fix-times|auth> [args]")
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud <list|dev|check|sync|fix-times|auth> [args]")
 		os.Exit(1)
 	}
 	switch args[0] {
 	case "list":
 		cmdPlaudList()
+	case "dev":
+		cmdPlaudDev(args[1:])
 	case "check":
 		cmdPlaudCheck()
 	case "fix-times":
@@ -4582,9 +4584,10 @@ func cmdPlaudAuthMCP() {
 	// the durable fix. See SPEC-0341.)
 	recordings, err := plaud.NewClient(cfg, session.Token).ListRecordings()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Token loaded from %s but it does NOT authenticate against the consumer API: %v\n", path, err)
-		fmt.Fprintln(os.Stderr, "The @plaud-ai/mcp token is a DEVELOPER-API token (platform.plaud.ai); the consumer client can't use it yet.")
-		fmt.Fprintln(os.Stderr, "Your existing saved token was left untouched. Durable fix tracked in SPEC-0341.")
+		fmt.Fprintf(os.Stderr, "The @plaud-ai/mcp token is a DEVELOPER-API token (platform.plaud.ai), not a consumer token.\n")
+		fmt.Fprintln(os.Stderr, "Don't import it here — use the durable developer-API path directly:")
+		fmt.Fprintln(os.Stderr, "  m3c-tools plaud dev sync --all      (capture → ER1, no browser, no daily re-auth)")
+		fmt.Fprintln(os.Stderr, "Your existing consumer token was left untouched.")
 		os.Exit(1)
 	}
 	if err := plaud.SaveToken(cfg.TokenPath, session); err != nil {
@@ -4829,6 +4832,184 @@ func cmdPlaudDebugAPI() {
 		}
 		fmt.Println(s)
 	}
+}
+
+// cmdPlaudDev drives the DURABLE developer-API path: the official OAuth token
+// from tools/plaud-mcp-login.mjs (~/.plaud/tokens-mcp.json), the platform.plaud.ai
+// developer API, and a straight map to ER1. No browser scraping, no ephemeral
+// token, no consumer API. See SPEC-0341.
+func cmdPlaudDev(args []string) {
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud dev <list|sync> [flags]")
+		fmt.Fprintln(os.Stderr, "  Requires the durable OAuth token:  node tools/plaud-mcp-login.mjs")
+		fmt.Fprintln(os.Stderr, "  plaud dev sync [--all | --limit N] [--dry-run] [--tags a,b]")
+		os.Exit(1)
+	}
+	switch args[0] {
+	case "list":
+		cmdPlaudDevList()
+	case "sync":
+		all, dryRun, limit, tags := false, false, 0, ""
+		for i := 1; i < len(args); i++ {
+			a := args[i]
+			switch {
+			case a == "--all":
+				all = true
+			case a == "--dry-run":
+				dryRun = true
+			case a == "--tags" && i+1 < len(args):
+				tags = args[i+1]
+				i++
+			case a == "--limit" && i+1 < len(args):
+				if n, e := strconv.Atoi(args[i+1]); e == nil {
+					limit = n
+				}
+				i++
+			}
+		}
+		cmdPlaudDevSync(all, limit, dryRun, tags)
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown plaud dev subcommand: %s\n", args[0])
+		os.Exit(1)
+	}
+}
+
+func newPlaudDevClient() *plaud.DevClient {
+	c, err := plaud.NewDevClientFromFile(plaud.DefaultMCPTokenPath())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+	return c
+}
+
+func cmdPlaudDevList() {
+	recs, err := newPlaudDevClient().ListRecordings()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Plaud recordings via developer API (%d):\n\n", len(recs))
+	for i, r := range recs {
+		fmt.Printf("  %3d  %-32s  %-24s  %s\n", i+1, r.ID, truncate(r.Name, 24), plaud.FormatDuration(int(r.Duration/1000)))
+	}
+}
+
+// cmdPlaudDevSync pulls recordings from the developer API and uploads each new
+// one to ER1 (audio + transcript + notes). Deduped by recording ID via the
+// tracking DB (importType "plaud-dev"). Without --all it syncs at most --limit
+// (default 1) so a first run is safe.
+func cmdPlaudDevSync(all bool, limit int, dryRun bool, tags string) {
+	client := newPlaudDevClient()
+	cfg := plaud.LoadConfig()
+	er1Cfg := er1.LoadConfig()
+	applyRuntimeER1Context(er1Cfg)
+
+	recs, err := client.ListRecordings()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error listing recordings: %v\n", err)
+		os.Exit(1)
+	}
+	if !all && limit == 0 {
+		limit = 1 // safety: use --all or --limit N to sync more
+	}
+
+	filesDB, dbErr := tracking.OpenFilesDB(defaultFilesDBPath())
+	if dbErr != nil {
+		fmt.Fprintf(os.Stderr, "Warning: tracking DB unavailable (%v) — dedup disabled\n", dbErr)
+		filesDB = nil
+	} else {
+		defer filesDB.Close()
+	}
+
+	const importType = "plaud-dev"
+	synced, skipped, failed := 0, 0, 0
+	for _, r := range recs {
+		if !all && limit > 0 && synced+failed >= limit {
+			break
+		}
+		if filesDB != nil {
+			if done, _ := filesDB.IsFileProcessed(r.ID, importType); done {
+				skipped++
+				continue
+			}
+		}
+		if dryRun {
+			fmt.Printf("  WOULD sync: %s  %s\n", r.ID, r.Name)
+			synced++
+			continue
+		}
+
+		detail, derr := client.GetDetail(r.ID)
+		if derr != nil {
+			fmt.Fprintf(os.Stderr, "  ✗ %s detail: %v\n", r.ID, derr)
+			failed++
+			continue
+		}
+		var audio []byte
+		if detail.PresignedURL != "" {
+			if audio, err = client.DownloadAudio(detail.PresignedURL); err != nil {
+				fmt.Fprintf(os.Stderr, "  ! %s audio download: %v (uploading transcript only)\n", r.ID, err)
+				audio = nil
+			}
+		}
+		captureTime := parseDevTime(r.StartAt)
+		impText := fmt.Sprintf("Plaud recording: %s", r.Name)
+		if notes := detail.NotesText(); notes != "" {
+			impText += "\n\nNotes:\n" + notes
+		}
+		doc := (&impression.CompositeDoc{
+			ObsType:        impression.Import,
+			Timestamp:      captureTime,
+			TranscriptText: detail.TranscriptText(),
+			ImpressionText: impText,
+		}).Build()
+
+		allTags := "plaud,plaud-dev"
+		if tags != "" {
+			allTags += "," + tags
+		}
+		payload := &er1.UploadPayload{
+			TranscriptData:     []byte(strings.TrimSpace(doc) + "\n"),
+			TranscriptFilename: fmt.Sprintf("plaud_%s.txt", r.ID),
+			ImageData:          nil,
+			ImageFilename:      "placeholder-logo.png",
+			Tags:               allTags,
+			ContentType:        cfg.ContentType,
+			CurrentTime:        er1.FormatCaptureTime(captureTime),
+		}
+		if len(audio) > 0 {
+			payload.AudioData = audio
+			payload.AudioFilename = r.ID + ".mp3"
+		}
+		resp, upErr := er1.Upload(er1Cfg, payload)
+		if upErr != nil {
+			fmt.Fprintf(os.Stderr, "  ✗ %s upload: %v\n", r.ID, upErr)
+			failed++
+			continue
+		}
+		if filesDB != nil {
+			_, _ = filesDB.RecordFile(r.Name, r.ID, int64(len(audio)), importType, "")
+			_ = filesDB.RecordUploadSuccess(r.ID, importType, resp.DocID)
+		}
+		fmt.Printf("  ✓ %s → %s\n", r.Name, resp.DocID)
+		synced++
+	}
+	suffix := ""
+	if dryRun {
+		suffix = " (dry-run)"
+	}
+	fmt.Printf("\nDone. synced=%d  skipped(already)=%d  failed=%d%s\n", synced, skipped, failed, suffix)
+}
+
+// parseDevTime parses the developer API's timestamps (falls back to now).
+func parseDevTime(s string) time.Time {
+	for _, layout := range []string{"2006-01-02T15:04:05", time.RFC3339, "2006-01-02T15:04:05.000Z"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t
+		}
+	}
+	return time.Now()
 }
 
 func cmdPlaudList() {
