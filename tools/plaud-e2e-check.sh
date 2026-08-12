@@ -31,7 +31,7 @@ echo "  ────────────────────────
 # ── DURABLE path (recommended): official OAuth token → developer API ──
 if [[ -f "$DEVTOK" ]]; then
   DEV="$("$BIN" plaud dev list 2>&1)"
-  DC="$(grep -oE "developer API \(([0-9]+)\)" <<<"$DEV" | grep -oE '[0-9]+' | head -1)"
+  DC="$(grep -oE "developer API \(([0-9]+)" <<<"$DEV" | grep -oE '[0-9]+' | head -1)"
   if [[ -n "$DC" && "$DC" -gt 0 ]]; then
     ok "DURABLE path works — 'plaud dev' lists $DC recordings via the official OAuth token"; DURABLE_OK=1
   elif grep -qiE "expired|rejected|refresh" <<<"$DEV"; then

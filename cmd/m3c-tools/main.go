@@ -40,6 +40,7 @@ import (
 	"regexp"
 	"runtime"
 	"runtime/debug"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -4840,16 +4841,20 @@ func cmdPlaudDebugAPI() {
 // token, no consumer API. See SPEC-0341.
 func cmdPlaudDev(args []string) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud dev <list|sync> [flags]")
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud dev <list|sync> [selectors] [flags]")
 		fmt.Fprintln(os.Stderr, "  Requires the durable OAuth token:  node tools/plaud-mcp-login.mjs")
-		fmt.Fprintln(os.Stderr, "  plaud dev sync [--all | --limit N] [--dry-run] [--tags a,b]")
+		fmt.Fprintln(os.Stderr, "  plaud dev list                       numbered list, newest first")
+		fmt.Fprintln(os.Stderr, "  plaud dev sync <#|ID|N-M> ...        sync selected items (numbers from 'dev list')")
+		fmt.Fprintln(os.Stderr, "  plaud dev sync --all | --limit N     sync all / the N most recent")
+		fmt.Fprintln(os.Stderr, "  flags: --dry-run   --force (re-sync)   --tags a,b")
 		os.Exit(1)
 	}
 	switch args[0] {
 	case "list":
 		cmdPlaudDevList()
 	case "sync":
-		all, dryRun, limit, tags := false, false, 0, ""
+		var selectors []string
+		all, dryRun, force, limit, tags := false, false, false, 0, ""
 		for i := 1; i < len(args); i++ {
 			a := args[i]
 			switch {
@@ -4857,6 +4862,8 @@ func cmdPlaudDev(args []string) {
 				all = true
 			case a == "--dry-run":
 				dryRun = true
+			case a == "--force" || a == "-f":
+				force = true
 			case a == "--tags" && i+1 < len(args):
 				tags = args[i+1]
 				i++
@@ -4865,9 +4872,14 @@ func cmdPlaudDev(args []string) {
 					limit = n
 				}
 				i++
+			case !strings.HasPrefix(a, "-"):
+				selectors = append(selectors, a)
+			default:
+				fmt.Fprintf(os.Stderr, "Unknown flag: %s\n", a)
+				os.Exit(1)
 			}
 		}
-		cmdPlaudDevSync(all, limit, dryRun, tags)
+		cmdPlaudDevSync(selectors, all, limit, dryRun, force, tags)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown plaud dev subcommand: %s\n", args[0])
 		os.Exit(1)
@@ -4883,23 +4895,99 @@ func newPlaudDevClient() *plaud.DevClient {
 	return c
 }
 
+// sortDevNewestFirst orders recordings newest-first by StartAt (ISO-8601 strings
+// sort chronologically), so list number #1 is the most recent — "the last items".
+func sortDevNewestFirst(recs []plaud.DevRecording) {
+	sort.SliceStable(recs, func(i, j int) bool { return recs[i].StartAt > recs[j].StartAt })
+}
+
 func cmdPlaudDevList() {
 	recs, err := newPlaudDevClient().ListRecordings()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("Plaud recordings via developer API (%d):\n\n", len(recs))
+	sortDevNewestFirst(recs)
+	fmt.Printf("Plaud recordings via developer API (%d, newest first):\n\n", len(recs))
+	fmt.Printf("  %4s  %-19s  %6s  %s\n", "#", "Recorded", "Dur", "ID")
 	for i, r := range recs {
-		fmt.Printf("  %3d  %-32s  %-24s  %s\n", i+1, r.ID, truncate(r.Name, 24), plaud.FormatDuration(int(r.Duration/1000)))
+		when := r.StartAt
+		if len(when) >= 16 {
+			when = strings.Replace(when[:16], "T", " ", 1)
+		}
+		fmt.Printf("  %4d  %-19s  %6s  %s\n", i+1, when, plaud.FormatDuration(int(r.Duration/1000)), r.ID)
 	}
+	fmt.Println("\n  Sync selected:  plaud dev sync <#|ID|N-M> ...    ·    all: --all    ·    most recent: --limit N")
 }
 
-// cmdPlaudDevSync pulls recordings from the developer API and uploads each new
-// one to ER1 (audio + transcript + notes). Deduped by recording ID via the
-// tracking DB (importType "plaud-dev"). Without --all it syncs at most --limit
-// (default 1) so a first run is safe.
-func cmdPlaudDevSync(all bool, limit int, dryRun bool, tags string) {
+// resolveDevSelection turns list-numbers (1-based, newest-first), N-M ranges and
+// full IDs into a concrete recording subset (deduped, order preserved).
+func resolveDevSelection(selectors []string, recs []plaud.DevRecording) ([]plaud.DevRecording, error) {
+	byID := make(map[string]plaud.DevRecording, len(recs))
+	for _, r := range recs {
+		byID[r.ID] = r
+	}
+	var out []plaud.DevRecording
+	seen := map[string]bool{}
+	add := func(r plaud.DevRecording) {
+		if !seen[r.ID] {
+			seen[r.ID] = true
+			out = append(out, r)
+		}
+	}
+	pick := func(n int) error {
+		if n < 1 || n > len(recs) {
+			return fmt.Errorf("index %d out of range (1..%d)", n, len(recs))
+		}
+		add(recs[n-1])
+		return nil
+	}
+	for _, s := range selectors {
+		if a, b, ok := parseIntRange(s); ok {
+			if a > b {
+				a, b = b, a
+			}
+			for n := a; n <= b; n++ {
+				if err := pick(n); err != nil {
+					return nil, err
+				}
+			}
+			continue
+		}
+		if n, err := strconv.Atoi(s); err == nil {
+			if err := pick(n); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if r, ok := byID[s]; ok {
+			add(r)
+			continue
+		}
+		return nil, fmt.Errorf("no recording matches %q (use a 'dev list' number, an N-M range, or a full ID)", s)
+	}
+	return out, nil
+}
+
+// parseIntRange parses "N-M" into (N, M, true); anything else → (0, 0, false).
+func parseIntRange(s string) (int, int, bool) {
+	i := strings.IndexByte(s, '-')
+	if i <= 0 || i >= len(s)-1 {
+		return 0, 0, false
+	}
+	a, e1 := strconv.Atoi(s[:i])
+	b, e2 := strconv.Atoi(s[i+1:])
+	if e1 != nil || e2 != nil {
+		return 0, 0, false
+	}
+	return a, b, true
+}
+
+// cmdPlaudDevSync uploads selected developer-API recordings to ER1 (audio +
+// transcript + notes), deduped by recording ID (tracking importType "plaud-dev").
+// Selection: explicit <#|ID|N-M> selectors, else --all, else the --limit N most
+// recent (default 1). --force re-syncs already-synced items.
+func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force bool, tags string) {
 	client := newPlaudDevClient()
 	cfg := plaud.LoadConfig()
 	er1Cfg := er1.LoadConfig()
@@ -4910,8 +4998,25 @@ func cmdPlaudDevSync(all bool, limit int, dryRun bool, tags string) {
 		fmt.Fprintf(os.Stderr, "Error listing recordings: %v\n", err)
 		os.Exit(1)
 	}
-	if !all && limit == 0 {
-		limit = 1 // safety: use --all or --limit N to sync more
+	sortDevNewestFirst(recs)
+
+	var todo []plaud.DevRecording
+	switch {
+	case len(selectors) > 0:
+		if todo, err = resolveDevSelection(selectors, recs); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	case all:
+		todo = recs
+	default:
+		if limit == 0 {
+			limit = 1 // safety: use --all, --limit N, or explicit selectors
+		}
+		if limit > len(recs) {
+			limit = len(recs)
+		}
+		todo = recs[:limit] // the N most recent
 	}
 
 	filesDB, dbErr := tracking.OpenFilesDB(defaultFilesDBPath())
@@ -4924,11 +5029,8 @@ func cmdPlaudDevSync(all bool, limit int, dryRun bool, tags string) {
 
 	const importType = "plaud-dev"
 	synced, skipped, failed := 0, 0, 0
-	for _, r := range recs {
-		if !all && limit > 0 && synced+failed >= limit {
-			break
-		}
-		if filesDB != nil {
+	for _, r := range todo {
+		if filesDB != nil && !force {
 			if done, _ := filesDB.IsFileProcessed(r.ID, importType); done {
 				skipped++
 				continue
