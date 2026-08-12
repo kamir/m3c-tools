@@ -217,6 +217,30 @@ func pickJWTField(m map[string]json.RawMessage, keys []string) string {
 	return ""
 }
 
+// jwtClaimString returns a string claim from a JWT payload (unverified decode);
+// "" on any failure. Used for a STABLE account id — the `sub` survives a token
+// refresh, unlike a hash of the whole (rotating) token.
+func jwtClaimString(jwt, claim string) string {
+	parts := strings.Split(jwt, ".")
+	if len(parts) != 3 {
+		return ""
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		if payload, err = base64.URLEncoding.DecodeString(parts[1]); err != nil {
+			return ""
+		}
+	}
+	var m map[string]any
+	if json.Unmarshal(payload, &m) != nil {
+		return ""
+	}
+	if s, ok := m[claim].(string); ok {
+		return s
+	}
+	return ""
+}
+
 // jwtExpiry decodes a JWT's `exp` claim into a time. Returns the zero time on any
 // parse failure — callers then fall back to the age-based expiry heuristic.
 func jwtExpiry(jwt string) time.Time {

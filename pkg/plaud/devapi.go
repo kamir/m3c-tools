@@ -24,6 +24,24 @@ const devOAuthClientID = "client_37d250cb-50f8-4af1-8cd6-bc6711c5d684"
 // devRefreshMargin refreshes the access token this long before its hard expiry.
 const devRefreshMargin = 1 * time.Hour
 
+// devCheckRedirect re-validates EVERY redirect hop against the plaud.ai / S3
+// allowlists, so a malicious API/detail response cannot redirect a token-bearing
+// request or a presigned-audio GET to an internal/attacker host (SSRF).
+func devCheckRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 5 {
+		return fmt.Errorf("plaud: too many redirects")
+	}
+	u := req.URL.String()
+	if isAllowedS3URL(u) || isAllowedPlaudDomain(u) {
+		return nil
+	}
+	return fmt.Errorf("plaud: refusing redirect to disallowed host %q", req.URL.Hostname())
+}
+
+func devHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{Timeout: timeout, CheckRedirect: devCheckRedirect}
+}
+
 // DevTokenFile mirrors ~/.plaud/tokens-mcp.json, written by the official
 // `npx @plaud-ai/mcp login` (driven by tools/plaud-mcp-login.mjs).
 type DevTokenFile struct {
@@ -73,7 +91,7 @@ func NewDevClientFromFile(path string) (*DevClient, error) {
 	}
 	return &DevClient{
 		token: t.AccessToken, refreshToken: t.RefreshToken, tokenPath: path,
-		base: devAPIBase, httpClient: &http.Client{Timeout: 90 * time.Second},
+		base: devAPIBase, httpClient: devHTTPClient(90 * time.Second),
 	}, nil
 }
 
@@ -91,7 +109,7 @@ func refreshDevToken(base, refreshToken string) (DevTokenFile, error) {
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
-	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	resp, err := devHTTPClient(30 * time.Second).Do(req)
 	if err != nil {
 		return DevTokenFile{}, err
 	}
@@ -117,13 +135,19 @@ func refreshDevToken(base, refreshToken string) (DevTokenFile, error) {
 	return out, nil
 }
 
-// saveDevTokenFile writes the token set back to ~/.plaud/tokens-mcp.json (0600).
+// saveDevTokenFile writes the token set back to ~/.plaud/tokens-mcp.json (0600)
+// ATOMICALLY (temp + rename) so a concurrent reader never sees a truncated file
+// and a crash mid-write can't lose the durable refresh token.
 func saveDevTokenFile(path string, t DevTokenFile) error {
 	data, err := json.MarshalIndent(t, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0600)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // AccessToken returns the bearer this client uses — for deriving the shared

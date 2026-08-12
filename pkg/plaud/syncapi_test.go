@@ -1,6 +1,7 @@
 package plaud
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,27 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestDeriveAccountIDFromToken_StableAcrossRefresh(t *testing.T) {
+	// Two DIFFERENT tokens (different iat) that carry the SAME `sub` must yield
+	// the SAME account id — so cross-machine dedup survives token refresh.
+	mk := func(sub, iat string) string {
+		payload := base64.RawURLEncoding.EncodeToString([]byte(`{"sub":"` + sub + `","iat":` + iat + `}`))
+		return "eyJhbGciOiJIUzI1NiJ9." + payload + ".sig"
+	}
+	a := DeriveAccountIDFromToken(mk("user-123", "1"))
+	b := DeriveAccountIDFromToken(mk("user-123", "2")) // "refreshed" token, same sub
+	if a != b {
+		t.Errorf("account id not stable across refresh: %q vs %q", a, b)
+	}
+	if a == DeriveAccountIDFromToken(mk("user-999", "1")) {
+		t.Error("different sub must yield a different account id")
+	}
+	// No JWT sub → falls back to whole-token hash (legacy behavior preserved).
+	if DeriveAccountIDFromToken("not-a-jwt") != DeriveAccountID("not-a-jwt") {
+		t.Error("no-sub token should fall back to DeriveAccountID")
+	}
+}
 
 func TestDeriveAccountID_Deterministic(t *testing.T) {
 	token := "test-plaud-token-abc123"

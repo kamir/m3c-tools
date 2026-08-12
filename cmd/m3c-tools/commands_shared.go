@@ -637,7 +637,7 @@ func resolvePlaudSyncStates(recIDs []string, plaudToken string) map[string]plaud
 	// Server-side sync check — authoritative, cross-machine (SPEC-0117).
 	if er1Cfg.APIKey != "" && plaudToken != "" {
 		syncAPI := plaud.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, er1Cfg.ContextID, !er1Cfg.VerifySSL)
-		accountID := plaud.DeriveAccountID(plaudToken)
+		accountID := plaud.DeriveAccountIDFromToken(plaudToken)
 		if res, err := syncAPI.CheckRecordings(accountID, recIDs); err == nil && res != nil {
 			for id, info := range res.Synced {
 				st := out[id]

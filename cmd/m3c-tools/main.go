@@ -4953,9 +4953,24 @@ func devWhen(iso string) string {
 	return iso
 }
 
+// stripCtrl removes C0/C1 control bytes (except tab) from untrusted Plaud text
+// before it is printed to a terminal, so a hostile recording name/transcript
+// cannot inject ANSI/OSC escape sequences.
+func stripCtrl(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\t' {
+			return r
+		}
+		if r < 0x20 || (r >= 0x7f && r <= 0x9f) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
 // firstWords returns the first max runes of s (whitespace-collapsed) + "…".
 func firstWords(s string, max int) string {
-	s = strings.Join(strings.Fields(s), " ")
+	s = stripCtrl(strings.Join(strings.Fields(s), " "))
 	if s == "" {
 		return "—"
 	}
@@ -5106,7 +5121,7 @@ type devSyncProgress func(recID, name, phase, docID string, err error)
 // importType "plaud") + the SPEC-0117 server mapping. Returns the ER1 doc_id.
 func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentType string,
 	filesDB *tracking.FilesDB, syncAPI *plaud.SyncAPIClient, accountID string,
-	r plaud.DevRecording, tags string) (string, error) {
+	r plaud.DevRecording, tags, existingDocID string) (string, error) {
 
 	detail, err := client.GetDetail(r.ID)
 	if err != nil {
@@ -5148,6 +5163,8 @@ func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentTyp
 		payload.AudioData = audio
 		payload.AudioFilename = r.ID + ".mp3"
 	}
+	// Overwrite an existing ER1 doc on a forced re-sync (avoids duplicate items).
+	payload.DocID = existingDocID
 	resp, upErr := er1.Upload(er1Cfg, payload)
 	if upErr != nil {
 		return "", fmt.Errorf("upload: %w", upErr)
@@ -5203,7 +5220,7 @@ func runDevSyncByIDs(client *plaud.DevClient, recByID map[string]plaud.DevRecord
 	if er1Cfg.APIKey != "" {
 		syncAPI = plaud.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, er1Cfg.ContextID, !er1Cfg.VerifySSL)
 	}
-	accountID := plaud.DeriveAccountID(client.AccessToken())
+	accountID := plaud.DeriveAccountIDFromToken(client.AccessToken())
 
 	for _, id := range ids {
 		r, ok := recByID[id]
@@ -5218,7 +5235,7 @@ func runDevSyncByIDs(client *plaud.DevClient, recByID map[string]plaud.DevRecord
 			}
 			continue
 		}
-		docID, err := syncOneDevRecording(client, er1Cfg, cfg.ContentType, filesDB, syncAPI, accountID, r, tags)
+		docID, err := syncOneDevRecording(client, er1Cfg, cfg.ContentType, filesDB, syncAPI, accountID, r, tags, states[id].DocID)
 		if err != nil {
 			failed++
 			if prog != nil {
@@ -5276,7 +5293,7 @@ func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force bool
 			if !force && plaudStateSynced(states[r.ID]) {
 				continue
 			}
-			fmt.Printf("  WOULD sync: %s  %s\n", r.ID, r.Name)
+			fmt.Printf("  WOULD sync: %s  %s\n", r.ID, stripCtrl(r.Name))
 			would++
 		}
 		fmt.Printf("\nDone (dry-run). would_sync=%d of %d selected\n", would, len(todo))
@@ -5286,9 +5303,9 @@ func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force bool
 	synced, skipped, failed := runDevSyncByIDs(client, recByID, ids, tags, force, func(id, name, phase, docID string, err error) {
 		switch phase {
 		case "done":
-			fmt.Printf("  ✓ %s → %s\n", name, docID)
+			fmt.Printf("  ✓ %s → %s\n", stripCtrl(name), docID)
 		case "failed":
-			fmt.Fprintf(os.Stderr, "  ✗ %s: %v\n", name, err)
+			fmt.Fprintf(os.Stderr, "  ✗ %s: %v\n", stripCtrl(name), err)
 		}
 	})
 	fmt.Printf("\nDone. synced=%d  skipped(already)=%d  failed=%d\n", synced, skipped, failed)

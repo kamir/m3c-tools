@@ -203,6 +203,19 @@ func DeriveAccountID(token string) string {
 	return "plaud-" + hexStr
 }
 
+// DeriveAccountIDFromToken derives a STABLE plaud-sync account id. For a JWT
+// access token it hashes the `sub` claim — which survives the ~daily token
+// refresh — so SPEC-0117 cross-machine dedup keeps matching after rotation.
+// Falls back to hashing the whole token when there is no `sub` (legacy tokens),
+// preserving existing behavior for those.
+func DeriveAccountIDFromToken(token string) string {
+	if sub := jwtClaimString(token, "sub"); sub != "" {
+		hash := sha256.Sum256([]byte("sub:" + sub))
+		return "plaud-" + fmt.Sprintf("%x", hash)[:16]
+	}
+	return DeriveAccountID(token)
+}
+
 // BaseURL returns the derived base URL for testing/logging.
 func (s *SyncAPIClient) BaseURL() string {
 	return s.baseURL
