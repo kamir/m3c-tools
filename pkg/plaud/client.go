@@ -43,15 +43,33 @@ var (
 	ErrRateLimited  = errors.New("plaud: rate limited (429)")
 )
 
-// isAllowedPlaudDomain validates that a redirect URL points to a *.plaud.ai domain.
-// FIX-12: Prevents SSRF via malicious region redirect responses.
+// isAllowedPlaudDomain validates that a URL points to an https *.plaud.ai host.
+// FIX-12: prevents SSRF via a malicious region-redirect response. The https
+// requirement (matching isAllowedS3URL) prevents an http downgrade that would
+// re-send the bearer in cleartext, and — because it also gates the configured
+// API base (see LoadConfig) — it prevents harvested tokens from being fanned out
+// to a non-plaud.ai host set via PLAUD_API_URL.
 func isAllowedPlaudDomain(rawURL string) bool {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
 		return false
 	}
+	if parsed.Scheme != "https" {
+		return false
+	}
 	host := parsed.Hostname()
 	return host == "plaud.ai" || strings.HasSuffix(host, ".plaud.ai")
+}
+
+// bearerHeader builds the Authorization value for the Plaud consumer API, which
+// now expects `Bearer <jwt>` (the web app and the reference client both send
+// this scheme). It tolerates a token that already carries the prefix so a
+// pasted `Bearer …` value is not doubled.
+func bearerHeader(token string) string {
+	if strings.HasPrefix(token, "Bearer ") {
+		return token
+	}
+	return "Bearer " + token
 }
 
 // Client communicates with the Plaud cloud API.
@@ -493,7 +511,7 @@ func (c *Client) doGet(url string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", c.token)
+	req.Header.Set("Authorization", bearerHeader(c.token))
 	req.Header.Set("app-platform", "web")
 	req.Header.Set("edit-from", "web")
 	req.Header.Set("Content-Type", "application/json")
@@ -515,6 +533,30 @@ func (c *Client) doGet(url string) ([]byte, error) {
 // DebugGet exposes the raw GET method for API exploration.
 func (c *Client) DebugGet(path string) ([]byte, error) {
 	return c.get(path)
+}
+
+// TokenAuthenticates issues a minimal authenticated request and reports whether
+// the Plaud API accepts this client's token. It returns (true, nil) only on a
+// clean status==0 envelope; (false, nil) when the API is reached but rejects the
+// token (e.g. status -3900 "invalid auth header"); and (false, err) on a
+// transport failure, so callers can distinguish "rejected" from "unreachable".
+//
+// It is the validation primitive behind self-calibrating token extraction:
+// Plaud renames its localStorage token key often and also stores a user-identity
+// JWT under a token-named key, so the only reliable way to pick the real bearer
+// out of several candidates is to ask the API which one it accepts.
+func (c *Client) TokenAuthenticates() (bool, error) {
+	body, err := c.get("/file/simple/web?skip=0&limit=1&is_trash=2&is_desc=true")
+	if err != nil {
+		return false, err
+	}
+	var resp struct {
+		Status int `json:"status"`
+	}
+	if json.Unmarshal(body, &resp) != nil {
+		return false, nil // unparseable body → treat as not-authenticated
+	}
+	return resp.Status == 0, nil
 }
 
 // checkStatus maps HTTP error codes to sentinel errors.

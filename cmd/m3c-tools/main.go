@@ -19,6 +19,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -236,7 +237,10 @@ Commands:
   plaud fix-times        Backfill real recording time onto synced items (--apply to write)
   plaud sync <id>        Sync a Plaud recording to ER1
   plaud sync --all       Sync all new Plaud recordings to ER1
-  plaud auth login       Extract token from Chrome (web.plaud.ai)
+  plaud auth mcp         Import the official OAuth token (npx @plaud-ai/mcp login) — durable, no DevTools
+  plaud auth paste       Import the Authorization header from the clipboard (SSO stopgap)
+  plaud auth password    Email+password login → ~300-day token (password accounts)
+  plaud auth login       Extract token from Chrome (legacy/fragile)
   plaud auth --from-er1  Pull token from the ER1 credential vault (SPEC-0304)
   plaud auth --token-file <path>  Save Plaud API token from a file (secure)
   plaud auth             Save token from $M3C_PLAUD_TOKEN env var (secure)
@@ -4505,10 +4509,136 @@ func cmdPlaudAuthFromER1() {
 	fmt.Printf("Authenticated. Found %d recordings.\n", len(recordings))
 }
 
+// cmdPlaudAuthPassword logs in with an email + password (Plaud's consumer
+// password grant) and stores the resulting long-lived (~300-day) token. This is
+// the robust replacement for browser token-scraping — no Chrome, no CDP, no
+// localStorage. Credentials come from $PLAUD_EMAIL / $PLAUD_PASSWORD when set
+// (for automation), otherwise from an interactive prompt (password read without
+// echo). Only the resulting token is stored, never the password.
+func cmdPlaudAuthPassword() {
+	cfg := plaud.LoadConfig()
+
+	email := strings.TrimSpace(os.Getenv("PLAUD_EMAIL"))
+	if email == "" {
+		email = strings.TrimSpace(promptLine("Plaud email: "))
+	}
+	password := os.Getenv("PLAUD_PASSWORD")
+	if password == "" {
+		password = readSecret("Plaud password: ")
+	}
+	if email == "" || password == "" {
+		fmt.Fprintln(os.Stderr, "Error: email and password are required "+
+			"(set PLAUD_EMAIL/PLAUD_PASSWORD, or enter them when prompted).")
+		os.Exit(1)
+	}
+
+	fmt.Println("Logging in to Plaud...")
+	session, err := plaud.Login(cfg, email, password)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Login failed: %v\n", err)
+		fmt.Fprintln(os.Stderr, "If your account is Google/Apple-SSO only, set a password via "+
+			"'Forgot password' at https://web.plaud.ai, or use 'plaud auth login' (browser).")
+		os.Exit(1)
+	}
+	if err := plaud.SaveToken(cfg.TokenPath, session); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving token: %v\n", err)
+		os.Exit(1)
+	}
+
+	client := plaud.NewClient(cfg, session.Token)
+	recordings, err := client.ListRecordings()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: token saved but API test failed: %v\n", err)
+		os.Exit(1)
+	}
+	exp := "unknown"
+	if !session.ExpiresAt.IsZero() {
+		exp = session.ExpiresAt.Format("2006-01-02")
+	}
+	fmt.Printf("Authenticated. Found %d recordings. Token saved to %s (valid until ~%s).\n",
+		len(recordings), cfg.TokenPath, exp)
+}
+
+// cmdPlaudAuthMCP imports the durable OAuth token minted by the official
+// `npx @plaud-ai/mcp login` (Google-SSO, ~300-day, auto-refreshing) from
+// ~/.plaud/tokens-mcp.json. This is the no-DevTools, no-daily-re-auth path.
+func cmdPlaudAuthMCP() {
+	cfg := plaud.LoadConfig()
+	path := plaud.DefaultMCPTokenPath()
+	session, err := plaud.LoadMCPTokenFile(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		fmt.Fprintln(os.Stderr, "First, mint the token once (opens a browser for Google sign-in):")
+		fmt.Fprintln(os.Stderr, "  npx -y @plaud-ai/mcp@latest login")
+		fmt.Fprintln(os.Stderr, "then re-run:  m3c-tools plaud auth mcp")
+		os.Exit(1)
+	}
+	if err := plaud.SaveToken(cfg.TokenPath, session); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving token: %v\n", err)
+		os.Exit(1)
+	}
+	recordings, err := plaud.NewClient(cfg, session.Token).ListRecordings()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: token loaded from %s but API test failed: %v\n", path, err)
+		fmt.Fprintln(os.Stderr, "The MCP OAuth token may not cover the consumer API for your region; tell the maintainer (coverage spike).")
+		os.Exit(1)
+	}
+	exp := "unknown"
+	if !session.ExpiresAt.IsZero() {
+		exp = session.ExpiresAt.Format("2006-01-02")
+	}
+	fmt.Printf("Authenticated via official MCP OAuth token. Found %d recordings. Saved to %s (valid until ~%s).\n",
+		len(recordings), cfg.TokenPath, exp)
+}
+
+// cmdPlaudAuthPaste imports the Plaud bearer from the macOS clipboard (falling
+// back to stdin) — the reliable path for Google/Apple-SSO accounts whose token
+// never lands in localStorage. Copy the `authorization` request-header value
+// from DevTools → Network (a live api.plaud.ai call), then run `plaud auth paste`.
+func cmdPlaudAuthPaste() {
+	var raw string
+	if out, err := exec.Command("pbpaste").Output(); err == nil && strings.TrimSpace(string(out)) != "" {
+		raw = string(out)
+	} else if data, rerr := io.ReadAll(os.Stdin); rerr == nil {
+		raw = string(data)
+	}
+	if strings.TrimSpace(raw) == "" {
+		fmt.Fprintln(os.Stderr, "Nothing to import. On a logged-in web.plaud.ai tab: DevTools → Network → "+
+			"click a live api.plaud.ai request → copy the 'authorization' header value, then run: plaud auth paste")
+		os.Exit(1)
+	}
+	cmdPlaudAuth(strings.TrimSpace(raw))
+}
+
+// promptLine reads a single echoed line from stdin (for non-secret input).
+func promptLine(prompt string) string {
+	fmt.Fprint(os.Stderr, prompt)
+	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	return strings.TrimRight(line, "\r\n")
+}
+
+// readSecret reads a line from stdin with terminal echo disabled via stty on the
+// controlling terminal (dependency-free). Falls back to echoed input if stty is
+// unavailable (e.g. stdin is not a TTY).
+func readSecret(prompt string) string {
+	fmt.Fprint(os.Stderr, prompt)
+	stty := func(arg string) error {
+		c := exec.Command("stty", arg)
+		c.Stdin = os.Stdin
+		return c.Run()
+	}
+	if err := stty("-echo"); err == nil {
+		defer func() { _ = stty("echo"); fmt.Fprintln(os.Stderr) }()
+	}
+	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	return strings.TrimRight(line, "\r\n")
+}
+
 // cmdPlaudAuthDispatch parses `plaud auth` arguments and routes to the right
 // handler. Supported forms:
 //
-//	plaud auth login                     extract token from Chrome (CDP)
+//	plaud auth password                  email+password login → ~300-day token (recommended)
+//	plaud auth login                     extract token from Chrome (CDP) — legacy/fragile
 //	plaud auth --token-file <path>       read token from a file (secure)
 //	plaud auth                           read token from $M3C_PLAUD_TOKEN (secure)
 //	plaud auth <token>                   bare argv token (DEPRECATED — leaks via ps)
@@ -4524,6 +4654,21 @@ func cmdPlaudAuthDispatch(args []string) {
 
 	if len(args) > 0 && (args[0] == "--from-er1" || args[0] == "from-er1") {
 		cmdPlaudAuthFromER1()
+		return
+	}
+
+	if len(args) > 0 && (args[0] == "password" || args[0] == "login-password") {
+		cmdPlaudAuthPassword()
+		return
+	}
+
+	if len(args) > 0 && (args[0] == "paste" || args[0] == "clipboard") {
+		cmdPlaudAuthPaste()
+		return
+	}
+
+	if len(args) > 0 && (args[0] == "mcp" || args[0] == "from-mcp") {
+		cmdPlaudAuthMCP()
 		return
 	}
 
@@ -4549,7 +4694,9 @@ func cmdPlaudAuthDispatch(args []string) {
 	token, argvLeaked, err := plaud.ResolveAuthToken(tokenFile, bareToken)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
-		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud auth login            (extract from Chrome)")
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud auth paste            (import the Authorization header from the clipboard — best for SSO accounts)")
+		fmt.Fprintln(os.Stderr, "       m3c-tools plaud auth password         (email+password login → ~300-day token)")
+		fmt.Fprintln(os.Stderr, "       m3c-tools plaud auth login            (Chrome auto-capture — fragile vs Plaud's app)")
 		fmt.Fprintln(os.Stderr, "       m3c-tools plaud auth --from-er1        (pull from the ER1 vault, SPEC-0304)")
 		fmt.Fprintln(os.Stderr, "       m3c-tools plaud auth --token-file <path>")
 		fmt.Fprintf(os.Stderr, "       %s=<token> m3c-tools plaud auth\n", plaud.PlaudTokenEnvVar)
@@ -4564,12 +4711,36 @@ func cmdPlaudAuthDispatch(args []string) {
 
 func cmdPlaudAuth(token string) {
 	cfg := plaud.LoadConfig()
-	session := &plaud.TokenSession{Token: token}
+	// Normalize a pasted value (strip "Bearer "/quotes) and record the JWT's real
+	// expiry — this is the reliable path for Google/Apple-SSO accounts, whose
+	// bearer never lands in localStorage: copy the Authorization header from the
+	// DevTools Network tab of a logged-in web.plaud.ai.
+	session := plaud.NewImportedTokenSession(token)
+	if session.Token == "" {
+		fmt.Fprintln(os.Stderr, "Error: no Plaud token (a JWT starting 'eyJ') was found in the input.")
+		fmt.Fprintln(os.Stderr, "In DevTools → Network on a logged-in web.plaud.ai tab, click a live api.plaud.ai request,")
+		fmt.Fprintln(os.Stderr, "then right-click the 'authorization' header → Copy value, and run: plaud auth paste")
+		os.Exit(1)
+	}
 	if err := plaud.SaveToken(cfg.TokenPath, session); err != nil {
 		fmt.Fprintf(os.Stderr, "Error saving token: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("Token saved to %s\n", cfg.TokenPath)
+
+	// Verify against the API so the user gets immediate confirmation.
+	recordings, err := plaud.NewClient(cfg, session.Token).ListRecordings()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: token saved to %s but API test failed: %v\n", cfg.TokenPath, err)
+		fmt.Fprintln(os.Stderr, "Copy the *Authorization* request header from a live api.plaud.ai call "+
+			"(DevTools → Network) on a logged-in web.plaud.ai tab, then import that value.")
+		os.Exit(1)
+	}
+	exp := "unknown"
+	if !session.ExpiresAt.IsZero() {
+		exp = session.ExpiresAt.Format("2006-01-02")
+	}
+	fmt.Printf("Authenticated. Found %d recordings. Token saved to %s (valid until ~%s).\n",
+		len(recordings), cfg.TokenPath, exp)
 }
 
 func cmdPlaudDebugAPI() {
@@ -5205,8 +5376,18 @@ func emitPlaudItemDone(onProgress func(menubar.BulkProgressEvent), item string, 
 func menubarHandlePlaudSync(app *menubar.App) {
 	cfg := plaud.LoadConfig()
 	session, err := plaud.LoadToken(cfg.TokenPath)
+	needExtract := err != nil
 	if err != nil {
 		log.Printf("[plaud] no saved token, trying Chrome extraction...")
+	} else if ok, probeErr := plaud.NewClient(cfg, session.Token).TokenAuthenticates(); probeErr == nil && !ok {
+		// The saved token loaded fine but the API rejects it (wrong key grabbed
+		// last time, expired, or revoked). Re-extract instead of failing every
+		// sync — extraction self-calibrates by probing candidates against the API.
+		// If probeErr != nil (API unreachable) we keep the saved token (offline).
+		log.Printf("[plaud] saved token rejected by Plaud API, re-extracting from Chrome...")
+		needExtract = true
+	}
+	if needExtract {
 		token, chromeErr := plaud.ExtractTokenFromChrome()
 		if chromeErr != nil {
 			log.Printf("[plaud] Chrome extraction failed: %v", chromeErr)
@@ -5215,7 +5396,7 @@ func menubarHandlePlaudSync(app *menubar.App) {
 			app.Notify("Plaud Sync", "Please log in to web.plaud.ai in Chrome, then try again.")
 			return
 		}
-		// Save the extracted token.
+		// Save the extracted (API-validated) token.
 		session = &plaud.TokenSession{Token: token}
 		if saveErr := plaud.SaveToken(cfg.TokenPath, session); saveErr != nil {
 			log.Printf("[plaud] warning: could not save token: %v", saveErr)

@@ -18,14 +18,29 @@ import (
 // FIX-14: Tokens older than this prompt re-authentication.
 const DefaultMaxTokenAge = 7 * 24 * time.Hour
 
-// TokenSession holds the Plaud API authentication token.
+// tokenExpiryMargin retires a token just before its real hard expiry so a
+// request never goes out with an about-to-die token. Keep it SMALL: Plaud's
+// browser-captured access tokens live only ~1 day, so a large margin (e.g. a
+// full day) would treat a freshly-captured token as already expired.
+const tokenExpiryMargin = 2 * time.Minute
+
+// TokenSession holds the Plaud API authentication token. ExpiresAt, when set,
+// is the token's real JWT `exp` (password-login tokens live ~300 days) and takes
+// precedence over the age-based maxAge cap used for scraped session tokens.
 type TokenSession struct {
-	Token   string    `json:"token"`
-	SavedAt time.Time `json:"saved_at"`
+	Token     string    `json:"token"`
+	SavedAt   time.Time `json:"saved_at"`
+	ExpiresAt time.Time `json:"expires_at,omitempty"`
 }
 
-// IsExpired returns true if the token is older than maxAge.
+// IsExpired reports whether the token should no longer be used. When the token's
+// real expiry is known (ExpiresAt set, e.g. a password-login token) it is honored
+// with a small refresh margin; otherwise the age-based maxAge cap applies (the
+// safe default for scraped session tokens whose true lifetime is unknown).
 func (s *TokenSession) IsExpired(maxAge time.Duration) bool {
+	if !s.ExpiresAt.IsZero() {
+		return time.Now().After(s.ExpiresAt.Add(-tokenExpiryMargin))
+	}
 	if s.SavedAt.IsZero() {
 		return true // No saved timestamp — treat as expired
 	}
@@ -43,6 +58,10 @@ func LoadToken(path string) (*TokenSession, error) {
 	if err := json.Unmarshal(data, &s); err != nil {
 		return nil, fmt.Errorf("plaud: parse token: %w", err)
 	}
+	// Self-heal a token persisted by an older extractor that stored the JSON-
+	// encoded (quote-wrapped) localStorage value; a quoted token produces Plaud
+	// API error -3900 ("invalid auth header"). Idempotent on a clean token.
+	s.Token = sanitizePlaudToken(s.Token)
 	if s.Token == "" {
 		return nil, fmt.Errorf("plaud: token file is empty")
 	}
@@ -342,32 +361,24 @@ func findChrome() string {
 	return ""
 }
 
-// plaudTokenExtractJS reads the Plaud bearer token from a plaud.ai tab's
-// localStorage. Plaud renamed the key (the extractor hard-coded "tokenstr";
-// the debug path already probes "pld_tokenstr"), so this tries known keys in
-// priority order, then any key whose NAME mentions "token", then any JWT-shaped
-// value — returning {"token","via"} JSON. `via` is a fixed, secret-safe label
-// (never a raw key name, which can itself embed a JWT) so the caller can log
-// which path matched. Single-line so it embeds cleanly in the JXA path too.
-const plaudTokenExtractJS = `(function(){try{var known=["tokenstr","pld_tokenstr"];for(var i=0;i<known.length;i++){var v=localStorage.getItem(known[i]);if(v&&v.length>10)return JSON.stringify({token:v,via:known[i]});}var ls=localStorage;for(var j=0;j<ls.length;j++){var k=ls.key(j);var val=ls.getItem(k);if(val&&val.length>20&&/token/i.test(k))return JSON.stringify({token:val,via:"name-has-token"});}for(var m=0;m<ls.length;m++){var kk=ls.key(m);var vv=ls.getItem(kk);if(vv&&/^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\./.test(vv))return JSON.stringify({token:vv,via:"jwt-shape"});}return JSON.stringify({token:"",via:""});}catch(e){return JSON.stringify({token:"",via:""});}})()`
-
-// parsePlaudTokenResult parses the {"token","via"} JSON that plaudTokenExtractJS
-// returns (cdpEvaluate returns the JS string value directly, so this is a single
-// unmarshal). Returns an empty token if none was found or the value is
-// implausibly short.
-func parsePlaudTokenResult(raw string) (token, via string) {
-	var res struct {
-		Token string `json:"token"`
-		Via   string `json:"via"`
+// sanitizePlaudToken normalizes a raw bearer value read from browser
+// localStorage or from the on-disk session file. Some Plaud localStorage keys
+// hold the token JSON-encoded, so the raw value arrives wrapped in literal
+// double quotes (`"eyJhbGci…"`). Passed verbatim into the Authorization header
+// that yields Plaud API error -3900 ("invalid auth header"). This trims
+// surrounding whitespace and one layer of matched surrounding quotes so callers
+// get the bare credential. Idempotent; safe on an already-clean token.
+func sanitizePlaudToken(tok string) string {
+	tok = strings.TrimSpace(tok)
+	if len(tok) >= 2 {
+		first, last := tok[0], tok[len(tok)-1]
+		if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
+			tok = strings.TrimSpace(tok[1 : len(tok)-1])
+		}
 	}
-	if json.Unmarshal([]byte(strings.TrimSpace(raw)), &res) != nil {
-		return "", ""
-	}
-	if len(res.Token) > 10 && res.Token != "null" {
-		return res.Token, res.Via
-	}
-	return "", ""
+	return tok
 }
+
 
 // extractTokenOsascript uses macOS osascript/JXA to read localStorage from Chrome.
 func extractTokenOsascript() (string, error) {
@@ -382,8 +393,8 @@ function run() {
 			for (var j = 0; j < tabs.length; j++) {
 				var u = tabs[j].url();
 				if (u && u.indexOf("plaud.ai") !== -1) {
-					var res = chrome.execute(tabs[j], {javascript: '` + plaudTokenExtractJS + `'});
-					try { var o = JSON.parse(res); if (o && o.token && o.token.length > 10) return res; } catch(e) {}
+					var res = chrome.execute(tabs[j], {javascript: '` + plaudTokenCandidatesJS + `'});
+					try { var o = JSON.parse(res); if (o && o.candidates && o.candidates.length > 0) return res; } catch(e) {}
 				}
 			}
 		}
@@ -401,14 +412,11 @@ function run() {
 	if strings.HasPrefix(result, "__ERR__:") {
 		return "", fmt.Errorf("%s", strings.TrimPrefix(result, "__ERR__:"))
 	}
-	token, via := parsePlaudTokenResult(result)
-	if token == "" {
+	cands := parsePlaudCandidates(result)
+	if len(cands) == 0 {
 		return "", fmt.Errorf("no token found in Chrome localStorage")
 	}
-	if via != "tokenstr" {
-		fmt.Fprintf(os.Stderr, "  [plaud] token found via %q (Plaud renamed the 'tokenstr' key — resilient fallback used)\n", via)
-	}
-	return token, nil
+	return finishTokenSelection(cands)
 }
 
 // ExtractTokenCDP connects to Chrome's DevTools Protocol on localhost:9222
@@ -460,11 +468,32 @@ func extractTokenCDP() (string, error) {
 		}
 	}
 
-	// 2. Find a plaud.ai tab that carries the token.
+	// 2. Harvest token candidates from every plaud.ai tab, then let the API pick
+	// the real bearer (self-calibrating: Plaud renames its token key often and
+	// also stores a user-identity JWT under a token-named key). Candidates are
+	// merged and deduped across tabs so a stray second tab can't hide the token.
 	plaudTabs := 0
+	firstWS := ""
+	captureWS := "" // best PAGE target for live network capture (prefer web.plaud.ai)
+	seen := make(map[string]bool)
+	var allCands []candidate
 	for _, t := range targets {
 		if strings.Contains(t.URL, "plaud.ai") && t.WebSocketURL != "" {
 			plaudTabs++
+			if firstWS == "" {
+				firstWS = t.WebSocketURL
+			}
+			// Pick a real PAGE (not a service-worker/iframe target) to capture on,
+			// preferring web.plaud.ai — the logged-in origin that issues the
+			// api.plaud.ai calls. BUG-0168: the launcher opens app.plaud.ai but the
+			// session/API traffic lives on web.plaud.ai.
+			if t.Type == "page" {
+				if strings.Contains(t.URL, "web.plaud.ai") {
+					captureWS = t.WebSocketURL
+				} else if captureWS == "" {
+					captureWS = t.WebSocketURL
+				}
+			}
 			if debug {
 				// Secret-safe presence check: reports counts + token length only,
 				// never key names (which can embed a JWT) or values.
@@ -478,17 +507,40 @@ func extractTokenCDP() (string, error) {
 					fmt.Fprintf(os.Stderr, "  [plaud-debug]   plaud.ai tab (%s) %s\n", plaudURLOrigin(t.URL), strings.Trim(summary, "\""))
 				}
 			}
-			raw, err := cdpEvaluate(t.WebSocketURL, plaudTokenExtractJS)
+			raw, err := cdpEvaluate(t.WebSocketURL, plaudTokenCandidatesJS)
 			if err != nil {
 				continue
 			}
-			token, via := parsePlaudTokenResult(raw)
-			if token != "" {
-				if via != "tokenstr" {
-					fmt.Fprintf(os.Stderr, "  [plaud] token found via %q (Plaud renamed the 'tokenstr' key — resilient fallback used)\n", via)
+			for _, c := range parsePlaudCandidates(raw) {
+				if !seen[c.Value] {
+					seen[c.Value] = true
+					allCands = append(allCands, c)
 				}
-				return token, nil
 			}
+		}
+	}
+	// Phase 1 — storage candidates (fast path for accounts that keep the bearer
+	// in localStorage/sessionStorage).
+	if len(allCands) > 0 {
+		if tok, err := finishTokenSelection(allCands); err == nil {
+			return tok, nil
+		}
+		// None authenticated (renamed key / SSO account / token moved out of
+		// JS-readable storage) — fall through to live network capture.
+	}
+
+	// Phase 2 — live capture (SSO-safe): reload the logged-in plaud.ai PAGE and read
+	// the Authorization header straight off an api.plaud.ai request. Works no matter
+	// where Plaud keeps the token, because it reads exactly what the app sends.
+	capWS := captureWS
+	if capWS == "" {
+		capWS = firstWS
+	}
+	if capWS != "" {
+		if tok, err := captureAndValidateAuthHeader(capWS); err == nil {
+			return tok, nil
+		} else {
+			fmt.Fprintf(os.Stderr, "  [plaud] live network capture failed: %v\n", err)
 		}
 	}
 

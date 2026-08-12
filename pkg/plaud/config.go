@@ -35,12 +35,21 @@ func ResolveAuthToken(tokenFile, argvToken string) (token string, argvLeaked boo
 		if tok == "" {
 			return "", false, fmt.Errorf("plaud: --token-file %q is empty", tokenFile)
 		}
+		if hasControlChars(tok) {
+			return "", false, fmt.Errorf("plaud: --token-file %q contains control characters", tokenFile)
+		}
 		return tok, false, nil
 	}
 	if env := strings.TrimSpace(os.Getenv(PlaudTokenEnvVar)); env != "" {
+		if hasControlChars(env) {
+			return "", false, fmt.Errorf("plaud: %s contains control characters", PlaudTokenEnvVar)
+		}
 		return env, false, nil
 	}
 	if argvToken != "" {
+		if hasControlChars(argvToken) {
+			return "", false, fmt.Errorf("plaud: token contains control characters")
+		}
 		return argvToken, true, nil
 	}
 	return "", false, fmt.Errorf("plaud: no token provided (set %s, pass --token-file <path>, or 'plaud auth login')", PlaudTokenEnvVar)
@@ -67,10 +76,26 @@ type Config struct {
 	TranscribeMode TranscribeMode // what to do when Plaud has no transcript (queue|lazy|off)
 }
 
+const defaultPlaudAPIURL = "https://api.plaud.ai"
+
 // LoadConfig reads Plaud settings from environment variables with defaults.
+//
+// SECURITY: the API base receives the raw bearer token on every request (and,
+// during extraction, EVERY harvested candidate). PLAUD_API_URL can be set by a
+// project-local `.env` in the current working directory (LoadDotenv → os.Setenv),
+// so an untrusted repo could otherwise redirect those secrets to an attacker
+// host. We therefore refuse any base that is not an https *.plaud.ai host and
+// fall back to the default, warning secret-safely (origin only — never the token
+// a hostile value might smuggle in the path/query).
 func LoadConfig() *Config {
+	apiURL := envOr("PLAUD_API_URL", defaultPlaudAPIURL)
+	if !isAllowedPlaudDomain(apiURL) {
+		fmt.Fprintf(os.Stderr, "  [plaud] refusing PLAUD_API_URL=%s (not an https *.plaud.ai host) — "+
+			"using %s; the API base receives your bearer token\n", plaudURLOrigin(apiURL), defaultPlaudAPIURL)
+		apiURL = defaultPlaudAPIURL
+	}
 	return &Config{
-		APIURL:         envOr("PLAUD_API_URL", "https://api.plaud.ai"),
+		APIURL:         apiURL,
 		TokenPath:      envOr("PLAUD_TOKEN_FILE", defaultTokenPath()),
 		ContentType:    envOr("PLAUD_CONTENT_TYPE", "Plaud-Fieldnote"),
 		DefaultTags:    os.Getenv("PLAUD_DEFAULT_TAGS"),
