@@ -4846,7 +4846,7 @@ func cmdPlaudDev(args []string) {
 		fmt.Fprintln(os.Stderr, "  plaud dev list                       numbered list, newest first")
 		fmt.Fprintln(os.Stderr, "  plaud dev sync <#|ID|N-M> ...        sync selected items (numbers from 'dev list')")
 		fmt.Fprintln(os.Stderr, "  plaud dev sync --all | --limit N     sync all / the N most recent")
-		fmt.Fprintln(os.Stderr, "  flags: --dry-run   --force (re-sync)   --tags a,b")
+		fmt.Fprintln(os.Stderr, "  flags: --dry-run   --force (re-sync)   --tags a,b   --whisper (transcribe un-transcribed audio locally)")
 		os.Exit(1)
 	}
 	// One-time, idempotent: migrate any legacy "plaud-dev" ledger rows to the
@@ -4874,7 +4874,7 @@ func cmdPlaudDev(args []string) {
 		cmdPlaudDevList(preview, limit)
 	case "sync":
 		var selectors []string
-		all, dryRun, force, limit, tags := false, false, false, 0, ""
+		all, dryRun, force, whisper, limit, tags := false, false, false, false, 0, ""
 		for i := 1; i < len(args); i++ {
 			a := args[i]
 			switch {
@@ -4884,6 +4884,8 @@ func cmdPlaudDev(args []string) {
 				dryRun = true
 			case a == "--force" || a == "-f":
 				force = true
+			case a == "--whisper":
+				whisper = true
 			case a == "--tags" && i+1 < len(args):
 				tags = args[i+1]
 				i++
@@ -4899,7 +4901,7 @@ func cmdPlaudDev(args []string) {
 				os.Exit(1)
 			}
 		}
-		cmdPlaudDevSync(selectors, all, limit, dryRun, force, tags)
+		cmdPlaudDevSync(selectors, all, limit, dryRun, force, whisper, tags)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown plaud dev subcommand: %s\n", args[0])
 		os.Exit(1)
@@ -5121,7 +5123,7 @@ type devSyncProgress func(recID, name, phase, docID string, err error)
 // importType "plaud") + the SPEC-0117 server mapping. Returns the ER1 doc_id.
 func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentType string,
 	filesDB *tracking.FilesDB, syncAPI *plaud.SyncAPIClient, accountID string,
-	r plaud.DevRecording, tags, existingDocID string) (string, error) {
+	r plaud.DevRecording, tags string, useWhisper bool, existingDocID string) (string, error) {
 
 	detail, err := client.GetDetail(r.ID)
 	if err != nil {
@@ -5136,6 +5138,23 @@ func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentTyp
 	}
 	captureTime := parseDevTime(r.StartAt)
 	transcript := detail.TranscriptText()
+	// Whisper fallback: if Plaud has no server transcript yet, transcribe the
+	// downloaded audio locally (opt-in, since it is slow on long recordings).
+	if useWhisper && transcript == "" && len(audio) > 0 {
+		if _, ferr := whisper.FindBinary(); ferr != nil {
+			log.Printf("[plaud-dev] --whisper set but whisper not found: %v", ferr)
+		} else if tmp, terr := os.CreateTemp("", "plaud-*.mp3"); terr == nil {
+			_, _ = tmp.Write(audio)
+			_ = tmp.Close()
+			defer os.Remove(tmp.Name())
+			if txt, werr := whisper.TranscribeTextWithTimeout(tmp.Name(), menubarWhisperModel(), menubarWhisperLanguage(), menubarWhisperTimeout()); werr == nil && strings.TrimSpace(txt) != "" {
+				transcript = strings.TrimSpace(txt)
+				log.Printf("[plaud-dev] whisper transcribed %s (%d chars)", r.ID, len(transcript))
+			} else if werr != nil {
+				log.Printf("[plaud-dev] whisper failed for %s: %v", r.ID, werr)
+			}
+		}
+	}
 	impText := fmt.Sprintf("Plaud recording: %s", r.Name)
 	if notes := detail.NotesText(); notes != "" {
 		impText += "\n\nNotes:\n" + notes
@@ -5203,7 +5222,7 @@ func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentTyp
 // sync truth. It is the common core for `plaud dev sync` (CLI) and the menubar
 // Plaud Sync, so the two never diverge. prog may be nil.
 func runDevSyncByIDs(client *plaud.DevClient, recByID map[string]plaud.DevRecording,
-	ids []string, tags string, force bool, prog devSyncProgress) (synced, skipped, failed int) {
+	ids []string, tags string, force, whisper bool, prog devSyncProgress) (synced, skipped, failed int) {
 
 	cfg := plaud.LoadConfig()
 	er1Cfg := er1.LoadConfig()
@@ -5235,7 +5254,7 @@ func runDevSyncByIDs(client *plaud.DevClient, recByID map[string]plaud.DevRecord
 			}
 			continue
 		}
-		docID, err := syncOneDevRecording(client, er1Cfg, cfg.ContentType, filesDB, syncAPI, accountID, r, tags, states[id].DocID)
+		docID, err := syncOneDevRecording(client, er1Cfg, cfg.ContentType, filesDB, syncAPI, accountID, r, tags, whisper, states[id].DocID)
 		if err != nil {
 			failed++
 			if prog != nil {
@@ -5251,7 +5270,7 @@ func runDevSyncByIDs(client *plaud.DevClient, recByID map[string]plaud.DevRecord
 	return
 }
 
-func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force bool, tags string) {
+func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force, whisper bool, tags string) {
 	client := newPlaudDevClient()
 	recs, err := client.ListRecordings()
 	if err != nil {
@@ -5300,7 +5319,7 @@ func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force bool
 		return
 	}
 
-	synced, skipped, failed := runDevSyncByIDs(client, recByID, ids, tags, force, func(id, name, phase, docID string, err error) {
+	synced, skipped, failed := runDevSyncByIDs(client, recByID, ids, tags, force, whisper, func(id, name, phase, docID string, err error) {
 		switch phase {
 		case "done":
 			fmt.Printf("  ✓ %s → %s\n", stripCtrl(name), docID)
@@ -5962,7 +5981,7 @@ func menubarHandlePlaudSync(app *menubar.App) {
 			})
 		}
 
-		s, sk, f := runDevSyncByIDs(client, recByID, recordingIDs, customTags, false, prog)
+		s, sk, f := runDevSyncByIDs(client, recByID, recordingIDs, customTags, false, false, prog)
 		log.Printf("[plaud] dev sync DONE: %d synced, %d skipped, %d failed", s, sk, f)
 		app.Notify("Plaud Sync", fmt.Sprintf("Fertig: %d synchronisiert, %d übersprungen, %d Fehler", s, sk, f))
 		menubar.SetPlaudSyncProgress(menubar.BulkRunState{

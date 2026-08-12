@@ -209,6 +209,57 @@ func TestDevClient_ListAndDetail(t *testing.T) {
 	}
 }
 
+// TestDevClient_Integration exercises the full client chain (paginated list →
+// detail) against realistic responses, including the nested `data_content`
+// transcript shape Plaud actually returns.
+func TestDevClient_Integration(t *testing.T) {
+	segs := `[{"start_time":720,"content":"Hallo zusammen.","speaker":"Speaker 1"},{"start_time":2200,"content":"Ja, genau.","speaker":"Speaker 2"},{"start_time":4000,"content":"Weiter geht's.","speaker":"Speaker 1"}]`
+	detail := map[string]any{
+		"id": "711f200de464b5fcaea3bc0a375ec16f", "name": "Meeting", "start_at": "2026-08-11T13:02:00", "duration": 81000,
+		"presigned_url": "https://euc1-prod-plaud-bucket.s3-accelerate.amazonaws.com/x.mp3",
+		"source_list":   []any{map[string]string{"data_content": segs}},
+		"note_list":     []any{map[string]string{"data_content": "## Summary\n- point A"}},
+	}
+	detailBytes, _ := json.Marshal(detail)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/open/third-party/files/":
+			if r.URL.Query().Get("page") == "1" {
+				fmt.Fprint(w, `{"type":"list","data":[{"id":"711f200de464b5fcaea3bc0a375ec16f","name":"Meeting","start_at":"2026-08-11T13:02:00","duration":81000}]}`)
+			} else {
+				fmt.Fprint(w, `{"type":"list","data":[]}`)
+			}
+		case strings.HasPrefix(r.URL.Path, "/open/third-party/files/"):
+			w.Write(detailBytes)
+		default:
+			http.Error(w, "nope", 404)
+		}
+	}))
+	defer srv.Close()
+
+	c := &DevClient{token: "t", base: srv.URL, httpClient: srv.Client()}
+	recs, err := c.ListRecordings()
+	if err != nil || len(recs) != 1 || recs[0].Name != "Meeting" {
+		t.Fatalf("list = %+v err=%v", recs, err)
+	}
+	d, err := c.GetDetail(recs[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantTx := "Speaker 1: Hallo zusammen. \nSpeaker 2: Ja, genau. \nSpeaker 1: Weiter geht's."
+	if got := d.TranscriptText(); got != wantTx {
+		t.Errorf("transcript =\n%q\nwant\n%q", got, wantTx)
+	}
+	if got := d.NotesText(); got != "## Summary\n- point A" {
+		t.Errorf("notes = %q", got)
+	}
+	if d.PresignedURL == "" {
+		t.Error("missing presigned_url")
+	}
+}
+
 func TestDevClient_DownloadAudio_HostGuard(t *testing.T) {
 	c := &DevClient{token: "t", base: devAPIBase, httpClient: &http.Client{}}
 	const guard = "allowed https S3 host"
