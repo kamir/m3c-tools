@@ -5232,6 +5232,27 @@ type devSyncTotals struct {
 // importType "plaud") + the SPEC-0117 server mapping. Returns the ER1 doc_id.
 // localWhisperTranscript transcribes MP3 bytes on THIS Mac via the whisper CLI.
 // Returns "" if whisper is unavailable or fails (caller falls back to audio-only).
+// plaudMaxAudioBytes is the largest audio clip attached to an ER1 upload. Bigger
+// clips are dropped (transcript-only) to stay under the ER1 ingress limit — Cloud
+// Run / GFE reject requests over ~32 MiB with HTTP 413. Raise PLAUD_MAX_AUDIO_MB to
+// mirror important long recordings (up to the ~32MB server cap); lower it if a
+// stricter proxy sits in front. Default 30 MB leaves headroom for the multipart
+// envelope (transcript + placeholder image + boundaries).
+func plaudMaxAudioBytes() int {
+	mb := 30
+	if v := strings.TrimSpace(os.Getenv("PLAUD_MAX_AUDIO_MB")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			mb = n
+		}
+	}
+	return mb * 1024 * 1024
+}
+
+// humanMB formats a byte count as a compact "12.3 MB" string (1 MB = 1024²).
+func humanMB(b int) string {
+	return fmt.Sprintf("%.1f MB", float64(b)/(1024*1024))
+}
+
 func localWhisperTranscript(audio []byte, id string) string {
 	if len(audio) == 0 {
 		return ""
@@ -5281,16 +5302,32 @@ func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentTyp
 	transcript := detail.TranscriptText()
 	notes := detail.NotesText()
 
+	// Cap the attached audio: the ER1 ingress (Cloud Run / Google Front End)
+	// rejects requests over ~32 MiB with HTTP 413. Audio is OPTIONAL whenever we
+	// have a transcript, so an oversized clip is dropped from the upload — the
+	// transcript still lands and the recording stays in Plaud. PLAUD_MAX_AUDIO_MB
+	// tunes the cap so important long recordings can still be mirrored (default 30).
+	maxAudio := plaudMaxAudioBytes()
+	oversized := len(audio) > maxAudio
+
 	// Transcript decision. When Plaud has no transcript, DEFAULT to server-side
 	// whisper (the aims-core SPEC-0111 queue on the MacPro); --whisper overrides to
-	// transcribe locally. Env PLAUD_TRANSCRIBE_MODE can force lazy/off.
+	// transcribe locally. Env PLAUD_TRANSCRIBE_MODE can force lazy/off. An oversized
+	// clip cannot be shipped for server-side transcription, so it is forced onto the
+	// LOCAL whisper path (we already hold the bytes) before the audio is dropped.
 	disposition := "plaud"
 	doTranscribe := false
 	extraTag := ""
 	if transcript == "" {
-		if useWhisper {
+		if useWhisper || oversized {
 			if transcript = localWhisperTranscript(audio, r.ID); transcript != "" {
 				disposition = "whisper"
+			} else if oversized {
+				return "", "", fmt.Errorf(
+					"audio %s exceeds the %s upload cap and no transcript is available — "+
+						"install whisper for a local fallback (see `doctor`) or raise "+
+						"PLAUD_MAX_AUDIO_MB (ER1 accepts up to ~32MB)",
+					humanMB(len(audio)), humanMB(maxAudio))
 			} else {
 				disposition = "audio"
 			}
@@ -5306,6 +5343,15 @@ func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentTyp
 				doTranscribe, disposition = true, "queued"
 			}
 		}
+	}
+
+	// Drop oversized audio from the payload — by here we either had Plaud's
+	// transcript or just produced a local one, so the bytes add nothing but 413s.
+	if oversized && len(audio) > 0 {
+		log.Printf("[plaud-dev] %s audio %s exceeds cap %s — uploading transcript only; "+
+			"recording stays in Plaud (raise PLAUD_MAX_AUDIO_MB to mirror it, ER1 cap ~32MB)",
+			r.ID, humanMB(len(audio)), humanMB(maxAudio))
+		audio = nil
 	}
 
 	allTags := "plaud"

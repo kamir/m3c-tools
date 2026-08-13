@@ -69,6 +69,39 @@ func TestFormatTranscriptionQueue(t *testing.T) {
 	})
 }
 
+// TestPlaudMaxAudioBytes proves the configurable audio cap that keeps oversized
+// Plaud uploads under the ER1 ingress limit (the 413 fix): default, override,
+// and rejection of invalid / non-positive values.
+func TestPlaudMaxAudioBytes(t *testing.T) {
+	const MB = 1024 * 1024
+	cases := []struct {
+		env  string
+		want int
+	}{
+		{"", 30 * MB},        // unset → default 30 MB
+		{"10", 10 * MB},      // raise/lower for important long recordings
+		{"31", 31 * MB},      // push toward the ~32 MiB server cap
+		{"garbage", 30 * MB}, // invalid → default
+		{"0", 30 * MB},       // non-positive rejected → default
+		{"-5", 30 * MB},      // negative rejected → default
+	}
+	for _, c := range cases {
+		t.Setenv("PLAUD_MAX_AUDIO_MB", c.env)
+		if got := plaudMaxAudioBytes(); got != c.want {
+			t.Errorf("PLAUD_MAX_AUDIO_MB=%q → %d bytes, want %d", c.env, got, c.want)
+		}
+	}
+}
+
+func TestHumanMB(t *testing.T) {
+	if got := humanMB(30 * 1024 * 1024); got != "30.0 MB" {
+		t.Errorf("humanMB(30MiB) = %q, want %q", got, "30.0 MB")
+	}
+	if got := humanMB(0); got != "0.0 MB" {
+		t.Errorf("humanMB(0) = %q, want %q", got, "0.0 MB")
+	}
+}
+
 func TestPlaudStateSynced(t *testing.T) {
 	if !plaudStateSynced(plaudSyncState{DocID: "x"}) {
 		t.Error("a doc_id means synced")

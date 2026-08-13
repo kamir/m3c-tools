@@ -542,6 +542,8 @@ YouTube transcripts, which are fetched directly).
 | `PLAUD_TOKEN_FILE` | `~/.m3c-tools/plaud-session.json` | Path to the Plaud session token file |
 | `PLAUD_CONTENT_TYPE` | `Plaud-Fieldnote` | Content-type label for Plaud fieldnote uploads |
 | `M3C_PLAUD_TOKEN` | — | Plaud API token consumed by `plaud auth` (secure, avoids argv leaks) |
+| `PLAUD_TRANSCRIBE_MODE` | `queue` | For un-transcribed recordings in `plaud dev sync`: `queue` (server-side whisper, SPEC-0111), `lazy` (`todo.transcribe` tag), or `off` (audio only). 🍎 |
+| `PLAUD_MAX_AUDIO_MB` | `30` | Max audio (MB) attached to an ER1 upload by `plaud dev sync`. Larger clips upload **transcript-only** (they still land; the recording stays in Plaud) to avoid the ER1 ingress **HTTP 413** — Cloud Run rejects requests over ~32 MiB. Raise toward ~31 to mirror bigger recordings. 🍎 |
 
 ### Time tracking & reverse tracking (menu-bar app)
 
@@ -594,6 +596,7 @@ m3c-tools cancel vid-001
 | `[reverse-tracking] no project match` in the log | Diagnostic, not an error: a capture's tags didn't overlap any PLM project. Add matching tags to the project, or capture with a `project:<slug>` / `client:<name>` tag — see [reverse tracking](menubar-app.md#how-to-make-reverse-tracking-work-for-your-captures). |
 | Upload fails, then retries | Failed uploads queue at `~/.m3c-tools/queue.json`. Run `m3c-tools retry`, check `m3c-tools status`. |
 | YouTube 429 / rate limited | Set `YT_PROXY_URL`; transcripts are cached for 7 days and the app degrades gracefully without them. |
+| `plaud dev sync` → HTTP 413 | The recording's audio exceeds the ER1 ingress limit (~32 MiB). `plaud dev sync` already drops audio over `PLAUD_MAX_AUDIO_MB` (default 30) and uploads transcript-only. If you still see 413, lower `PLAUD_MAX_AUDIO_MB`; a stricter proxy may cap below 30 MB. |
 
 ---
 
