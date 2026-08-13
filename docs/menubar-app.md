@@ -177,10 +177,12 @@ When you store an observation, the menubar app:
 5. **Skips if covered.** If you already had an explicit session active
    for the matched project at that timestamp, no inferred block is
    created — the explicit session already accounts for the time.
-6. **Merges adjacent blocks.** Two inferred blocks for the same project
-   that overlap or are within 5 minutes of each other are merged into
-   one session, so a flurry of captures in 20 minutes shows up as a
-   single 20-minute block, not five fragmented ones.
+6. **Skips a nearby duplicate.** If an inferred block for the matched
+   project already sits within **half the block duration** of the
+   observation (default ±7.5 min, i.e. `M3C_REVERSE_BLOCK_DURATION`/2),
+   no second block is created (`hasInferredNearby`). So a flurry of
+   captures in a short window shows up as one block, not several
+   overlapping fragments.
 
 ### Backfill — replaying past observations
 

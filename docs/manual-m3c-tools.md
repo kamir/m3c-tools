@@ -543,6 +543,22 @@ YouTube transcripts, which are fetched directly).
 | `PLAUD_CONTENT_TYPE` | `Plaud-Fieldnote` | Content-type label for Plaud fieldnote uploads |
 | `M3C_PLAUD_TOKEN` | — | Plaud API token consumed by `plaud auth` (secure, avoids argv leaks) |
 
+### Time tracking & reverse tracking (menu-bar app)
+
+The menu-bar app can **infer** project time blocks from your captures: when an
+observation is uploaded, its tags are matched against your PLM projects and a
+~15-minute block is created for the best match. This runs **only in the menu-bar
+app** (the plain CLI does not track time). The full matching rules (strong
+`project:<slug>` / medium `client:<name>` / weak ≥2-tag overlap), the month-at-startup
+backfill, and the `[reverse-tracking] no project match` diagnostic are documented in
+**[Menu Bar App → How reverse tracking works](menubar-app.md#how-reverse-tracking-works)**.
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `M3C_REVERSE_BLOCK_ENABLED` | `true` | Master switch for inferred time blocks. `false` disables them (observations are still recorded, so a later backfill can credit them). |
+| `M3C_REVERSE_BLOCK_DURATION` | `900` | Inferred block size in seconds (900 = 15 min, centred on the observation timestamp). |
+| `M3C_REVERSE_MIN_TAG_OVERLAP` | `2` | Minimum plain-tag overlap for a **weak** match. Lower = more (noisier) matches. A `project:<slug>` or `client:<name>` tag is a strong match regardless of this. |
+
 ---
 
 ## Exit behavior & the retry queue
@@ -575,6 +591,7 @@ m3c-tools cancel vid-001
 | `whisper` command not found | Install it: `python3 -m pip install openai-whisper` (needs `ffmpeg`). Or run `m3c-tools setup`. |
 | `subtitles are disabled for this video` | Expected. The capture still keeps the **thumbnail + link** — add a voice note or `--impression`. |
 | "Projects" menu stuck on *Loading…* | No ER1 credential reached the app. Fix the active profile's key or run `login`, then **restart the menu-bar app**. |
+| `[reverse-tracking] no project match` in the log | Diagnostic, not an error: a capture's tags didn't overlap any PLM project. Add matching tags to the project, or capture with a `project:<slug>` / `client:<name>` tag — see [reverse tracking](menubar-app.md#how-to-make-reverse-tracking-work-for-your-captures). |
 | Upload fails, then retries | Failed uploads queue at `~/.m3c-tools/queue.json`. Run `m3c-tools retry`, check `m3c-tools status`. |
 | YouTube 429 / rate limited | Set `YT_PROXY_URL`; transcripts are cached for 7 days and the app degrades gracefully without them. |
 
@@ -583,6 +600,7 @@ m3c-tools cancel vid-001
 ## See also
 
 - [Quickstart: m3c-tools](quickstart-m3c-tools.md) — the 5-minute path
+- [Menu Bar App](menubar-app.md) — projects, the Gantt time tracker, and reverse tracking in depth
 - [Manual: skillctl](manual-skillctl.md) — the agent-skill trust lifecycle, command by command
 - [Menu Bar App](menubar-app.md) — every menu item and the Observation Window
 - [Platform differences](PLATFORM-DIFFERENCES.md) — macOS vs Linux vs Windows behavior

@@ -284,6 +284,12 @@ m3c-tools menubar        # macOS: native Cocoa menubar · Windows: fyne system t
 m3c-tools settings       # open the profile settings editor in the browser (localhost)
 ```
 
+The menu-bar app also does **reverse time tracking** — it infers project time
+blocks from your capture tags (and logs `[reverse-tracking] no project match`
+when a capture matches no project). See
+[Menu Bar App → reverse tracking](menubar-app.md#how-reverse-tracking-works) and
+the `M3C_REVERSE_*` variables in [Manual → Time tracking](manual-m3c-tools.md#time-tracking--reverse-tracking-menu-bar-app).
+
 ### Voice & screen capture — 🍎 macOS only
 
 ```bash
