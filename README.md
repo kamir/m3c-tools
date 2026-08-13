@@ -108,10 +108,12 @@ recordings — customer visits (*Kundenbesuche*), meetings and field notes — s
 ER1, and `m3c-tools pocket` does the same for a Pocket device. Synced items are placed at
 their **true recording time**, not the moment you synced them (`plaud fix-times` backfills
 earlier imports), so captures from multiple devices land on the timeline where they
-actually happened.
+actually happened. On **macOS**, `plaud dev` uses the official auto-refreshing OAuth token
+(no daily re-login) and, by default, leaves un-transcribed audio to **server-side**
+transcription — see [Setup & Operations](docs/setup-target-devices.md).
 
 **Command surface:** `transcript`, `upload`, `whisper`, `thumbnail`, `record`, `screenshot`,
-`import-audio` (capture); `plaud` (`list` · `check` · `sync` · `fix-times` · `auth`) and
+`import-audio` (capture); `plaud` (`list` · `check` · `sync` · `fix-times` · `auth`; macOS `dev list/sync/status`) and
 `pocket` (field-recording sync); `retry`, `cancel`, `schedule`, `status` (ER1 queue);
 `doctor`, `check-er1`, `config` (incl. `doctor`), `settings`, `token`, `devices`, `login`,
 `setup`, `menubar` (setup & diagnostics). See the [m3c-tools manual](docs/manual-m3c-tools.md).

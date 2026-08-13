@@ -10,6 +10,14 @@ APP_ID   = com.kamir.m3c-tools
 APP_VERSION ?= $(shell git tag --list 'v*' --sort=-v:refname | head -1 | sed 's/^v//' 2>/dev/null || echo "0.0.0")
 ICON_SRC = maindset_icon.png
 
+# Build metadata stamped into the binaries via ldflags (version.go's
+# main.version / main.commit / main.date). Local `make build` gets real values
+# too — not just the release CI. Release/CI overrides these with the clean tag.
+GIT_VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo dev)
+GIT_COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
+BUILD_DATE  ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+GO_LDFLAGS   = -X main.version=$(GIT_VERSION) -X main.commit=$(GIT_COMMIT) -X main.date=$(BUILD_DATE)
+
 # Default: build the CLI
 .PHONY: all
 all: build
@@ -48,21 +56,21 @@ check-deps:
 # Build the main CLI binary
 .PHONY: build
 build: check-deps
-	@echo "Building $(BINARY)..."
-	go build -o $(BUILD_DIR)/$(BINARY) $(CMD_DIR)
+	@echo "Building $(BINARY)... (version $(GIT_VERSION))"
+	go build -ldflags="$(GO_LDFLAGS)" -o $(BUILD_DIR)/$(BINARY) $(CMD_DIR)
 
 # Build skillctl scanner
 .PHONY: build-skillctl
 build-skillctl:
 	@echo "Building skillctl..."
-	go build -o $(BUILD_DIR)/skillctl ./cmd/skillctl
+	go build -ldflags="$(GO_LDFLAGS)" -o $(BUILD_DIR)/skillctl ./cmd/skillctl
 
 # Build the skillctl-demo tool. It shells out to skillctl (auto-resolved from
 # ./build/skillctl first), so build that too.
 .PHONY: build-skillctl-demo
 build-skillctl-demo: build-skillctl
 	@echo "Building skillctl-demo..."
-	go build -o $(BUILD_DIR)/skillctl-demo ./cmd/skillctl-demo
+	go build -ldflags="$(GO_LDFLAGS)" -o $(BUILD_DIR)/skillctl-demo ./cmd/skillctl-demo
 	@echo "Built $(BUILD_DIR)/skillctl-demo — run: $(BUILD_DIR)/skillctl-demo (or --selftest)"
 
 # Build all commands (including POCs)
@@ -404,8 +412,8 @@ test-gate-windows-quick:
 build-windows:
 	@echo "Cross-compiling for Windows (amd64)..."
 	@mkdir -p $(BUILD_DIR)/windows
-	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o $(BUILD_DIR)/windows/m3c-tools.exe $(CMD_DIR)
-	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o $(BUILD_DIR)/windows/skillctl.exe ./cmd/skillctl
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w $(GO_LDFLAGS)" -o $(BUILD_DIR)/windows/m3c-tools.exe $(CMD_DIR)
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w $(GO_LDFLAGS)" -o $(BUILD_DIR)/windows/skillctl.exe ./cmd/skillctl
 	cp design/icons/menubar-icon.png $(BUILD_DIR)/windows/
 	@echo "Windows binaries in $(BUILD_DIR)/windows/"
 
