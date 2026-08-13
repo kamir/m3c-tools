@@ -202,7 +202,7 @@ def _load_graph(ua, ws):
         "frameworks": pm.get("frameworks") or [],
         "description": pm.get("description")
         or "Distilled knowledge layer (SPEC-0269): ER1 notes distilled into articles, entities, and claims.",
-        "analyzedAt": _now_iso(),
+        "analyzedAt": _now(),
         "gitCommitHash": commit or pm.get("gitCommitHash", ""),
     }
     g.setdefault("kind", "knowledge")
