@@ -10,8 +10,9 @@
 | **Screenshot capture** | Native screencapture | Not available | Not available |
 | **Whisper transcription** | Local whisper binary | Local whisper binary | Local whisper binary |
 | **Transcript fetching** | Full | Full | Full |
-| **Plaud Sync** | Full (Chrome CDP + API) | Full (API only) | Full (API only) |
-| **Pocket Sync** | USB + API | USB + API | USB + API |
+| **Plaud Sync — legacy** (`plaud auth/list/sync/check`) | Full (Chrome CDP + API) | API only | API only |
+| **Plaud Sync — durable dev API** (`plaud dev`) | Full (OAuth, server-side whisper) | Not available¹ | Not available¹ |
+| **Pocket Sync** (`pocket`, `import-audio`, `token`) | USB + API | Not available¹ | Not available¹ |
 | **ER1 Upload** | Full | Full | Full |
 | **Config profiles** | Full | Full | Full |
 | **Settings editor** | Web UI (localhost) | Web UI (localhost) | Web UI (localhost) |
@@ -20,6 +21,12 @@
 | **.app bundle** | Yes | No | No |
 | **Keyboard shortcuts** | Global hotkeys (planned) | Not yet | Not yet |
 | **Notifications** | Native (menuet) | Not yet | Not yet |
+
+¹ These command clusters (`plaud dev`, `pocket`, `import-audio`, `token`) are
+still coupled to the darwin `main.go` and are **not compiled into** the non-darwin
+build (`main_other.go`) — on Windows/Linux they resolve to "Unknown command".
+Multi-platform parity is tracked under **Pending / SPEC-0251 §5** in
+[`../CHANGELOG.md`](../CHANGELOG.md). On Windows/Linux use the legacy `plaud sync`.
 
 ## Architecture
 

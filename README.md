@@ -149,6 +149,7 @@ See the [skillctl manual](docs/manual-skillctl.md).
 | [**Manual: m3c-tools**](docs/manual-m3c-tools.md) | Every command, flag and config variable |
 | [**Manual: skillctl**](docs/manual-skillctl.md) | The full trust lifecycle, command by command |
 | [Menu Bar App](docs/menubar-app.md) | Channels, Observation Window, menu items (macOS) |
+| [Setup & Operations — Intel Mac & Windows](docs/setup-target-devices.md) | Zero-to-operating runbook for fresh Intel Mac / Windows target devices |
 | [Platform differences](docs/PLATFORM-DIFFERENCES.md) | What works where |
 | [Website](https://kamir.github.io/m3c-tools) | The rendered docs site |
 
