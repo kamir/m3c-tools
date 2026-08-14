@@ -46,6 +46,17 @@ type fileEntry struct {
 func Pack(skillDir, outFile string, opts PackOptions) (digest string, err error) {
 	skillDir = filepath.Clean(skillDir)
 
+	// If the skill dir is itself a symlink (e.g. ~/.claude/skills/<name> →
+	// gstack/<name>), resolve it to the real target BEFORE walking. filepath.WalkDir
+	// Lstats its root: a symlink root is reported as a non-dir, so WalkDir never
+	// descends and collectFiles returns nothing — the historical "symlink skills
+	// pack EMPTY" bug (SPEC-0188 §3). EvalSymlinks canonicalizes the root so the walk
+	// packs the target's real contents. Best-effort: a broken/absent link falls
+	// through to the original path and the SKILL.md check below reports it.
+	if resolved, rerr := filepath.EvalSymlinks(skillDir); rerr == nil {
+		skillDir = resolved
+	}
+
 	if _, err := os.Stat(filepath.Join(skillDir, "SKILL.md")); err != nil {
 		return "", fmt.Errorf("skill dir %q must contain SKILL.md: %w", skillDir, err)
 	}
