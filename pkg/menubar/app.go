@@ -8,8 +8,9 @@ package menubar
 
 import (
 	"fmt"
-	"os/exec"
+	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -256,17 +257,41 @@ func (a *App) Run() {
 	mApp.Label = a.Config.AppLabel
 	mApp.Children = a.buildMenuItems
 
-	// Register the icon file with NSImage so menuet can find it by name.
+	// Resolve and register the menu bar icon with NSImage so menuet can find it
+	// by name. Prefer the on-disk design-system icon (dev), and fall back to the
+	// copy embedded in the binary so the icon also works inside the .app bundle
+	// and from any working directory, where the on-disk icon is not reachable.
 	state := &menuet.MenuState{Title: a.Config.Title}
+	iconApplied := false
+	const iconName = "m3c-menubar-icon"
+	switch {
+	case a.Config.IconPath != "" && RegisterImage(iconName, a.Config.IconPath):
+		state.Image = iconName
+		iconApplied = true
+	case RegisterImageBytes(iconName, embeddedMenuBarIconPNG, true):
+		state.Image = iconName
+		iconApplied = true
+		log.Printf("[menubar] using embedded menu bar icon (on-disk icon %q unavailable)", a.Config.IconPath)
+	default:
+		log.Printf("[menubar] WARNING: could not load menu bar icon "+
+			"(on-disk %q and embedded copy both failed) — falling back to a text title", a.Config.IconPath)
+	}
 	if a.Config.IconPath != "" {
-		const iconName = "m3c-menubar-icon"
-		if RegisterImage(iconName, a.Config.IconPath) {
-			state.Image = iconName
-		}
 		// Also set the NSApp icon for Cmd+Tab/Dock when we temporarily switch
 		// to regular app mode while showing the Observation window.
 		_ = SetApplicationIcon(a.Config.IconPath)
 	}
+
+	// Never render an invisible menu bar item. When the icon can't be applied
+	// (or the user forces text via M3C_MENUBAR_TITLE), show a text label so the
+	// app is always reachable from the menu bar.
+	state.Title = ResolveMenuBarTitle(a.Config.Title, iconApplied, os.Getenv("M3C_MENUBAR_TITLE"))
+
+	// Diagnostic: this single line tells us whether the icon actually
+	// registered at runtime — the decisive signal when "no icon" is reported.
+	log.Printf("[menubar] menu bar state: icon_applied=%v image=%q title=%q icon_path=%q",
+		iconApplied, state.Image, state.Title, a.Config.IconPath)
+
 	mApp.SetMenuState(state)
 
 	// Register menu item icons from design system.

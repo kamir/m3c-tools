@@ -284,6 +284,17 @@ run: build
 menubar: build
 	$(BUILD_DIR)/$(BINARY) menubar $(ARGS)
 
+# Build + launch the BUNDLED menu bar app (.app). Unlike `make menubar` (which
+# runs the bare binary), this runs inside a proper application bundle — which is
+# what macOS needs to reliably render the menu bar icon AND show notifications.
+# Prefer this over `make menubar` for anything but quick CLI-style debugging.
+.PHONY: menubar-app
+menubar-app: build-app
+	@echo "Launching $(APP_BUNDLE) (bundled — menu bar icon + notifications work here)..."
+	@open $(APP_BUNDLE)
+	@echo "Running as a menu bar app. Logs: ~/.m3c-tools/m3c-tools.log"
+	@echo "Quit from the menu bar, or: pkill -f '$(APP_NAME).app/Contents/MacOS/$(BINARY)'"
+
 # Clean build artifacts
 .PHONY: clean
 clean:
@@ -538,7 +549,8 @@ help:
 	@echo "  release-patch  Release with patch version bump"
 	@echo "  release-minor  Release with minor version bump"
 	@echo "  release-major  Release with major version bump"
-	@echo "  menubar        Build and launch the menu bar app"
+	@echo "  menubar        Build and launch the menu bar app (bare binary — CLI debugging)"
+	@echo "  menubar-app    Build + launch the BUNDLED .app (icon + notifications work here)"
 	@echo "  build-windows  Cross-compile CLI + tray for Windows (amd64)"
 	@echo "  installer-windows  Build NSIS installer (requires nsis)"
 	@echo "  snapshot       Build with GoReleaser (local snapshot, no publish)"
