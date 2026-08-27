@@ -10,14 +10,20 @@
 #   curl -fsSL .../install.sh | INSTALL_DIR=$HOME/.local/bin bash
 set -euo pipefail
 
-RELEASE_BASE="${RELEASE_BASE:-https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.2.10}"
+# SEC: an env-supplied release base relaxes the trust anchor. Honor it (legitimate
+# for testing) but warn loudly so a poisoned environment can't silently repoint us.
+[ -n "${RELEASE_BASE:-}" ] && echo "WARNING: RELEASE_BASE overrides the default release origin (${RELEASE_BASE})" >&2
+RELEASE_BASE="${RELEASE_BASE:-https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.3.1}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 
 # SEC-M2: pin the release-key fingerprint. The signature alone proves only that
 # SHA256SUMS was signed by WHATEVER key sits next to it at the same origin — an
 # origin compromise can swap key + sig + binaries together and still "verify".
-# Pinning the expected fingerprint here (and preferring the in-repo key below)
-# closes that hole: the fetched key must match this exact value or we refuse.
+# Pinning the expected fingerprint here narrows that hole: the fetched key must
+# match this exact value or we refuse. CAVEAT: when this script is delivered via
+# `curl … | bash`, the script (and this pin) is itself fetched from the release
+# origin, so the pin only fully closes the hole for a run from a reviewed CHECKOUT,
+# where the in-repo INFRA/skillctl-release.pub is preferred below.
 # Fingerprint = sha256 of the raw 32-byte ed25519 key (DER SPKI tail).
 EXPECTED_FP="sha256:5f8f39cb0454dcd8ac04c6729af2fa4b71a13a5e125e56924701d9e38187a9c2"
 
@@ -60,6 +66,7 @@ fetch SHA256SUMS
 # FAIL (an attacker must not be able to strip it to force a downgrade); a fully
 # ABSENT bundle/cosign falls through to the pinned-ed25519 track below, so every
 # existing release (which has no cosign bundle) keeps installing unchanged.
+[ -n "${SKILLCTL_COSIGN_IDENTITY:-}" ] && echo "WARNING: SKILLCTL_COSIGN_IDENTITY overrides the pinned cosign identity — provenance is only as trustworthy as this value." >&2
 COSIGN_ID_REGEX="${SKILLCTL_COSIGN_IDENTITY:-^https://github.com/kamir/m3c-tools/\.github/workflows/skillctl-release\.yml@refs/tags/skillctl/v}"
 COSIGN_ISSUER="https://token.actions.githubusercontent.com"
 verified=0
