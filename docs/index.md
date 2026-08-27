@@ -74,6 +74,7 @@ agent skills that act on it (sign, admit, verify, revoke — offline-verifiable)
 - [Acceptance & Handover: skill lifecycle](acceptance-skillctl-lifecycle) — the two-person (Mirko → Eric) procedure over ER1, with success criteria
 - [Runbook: two-person ER1 exchange](runbook-two-person-er1-exchange) — copy-paste prod runbook (Mirko + Eric lanes) for the live exercise
 - [CISO onboarding deck](skillctl-ciso-deck.html) — sharp, honest arguments to defend skillctl to a security expert + a CTO (infographic)
+- [CISO-Onboarding-Deck (Deutsch)](skillctl-ciso-deck.de.html) — dieselben Argumente auf Deutsch
 - [Menu Bar App](menubar-app) — channels, Observation Window, menu items
 - [Setup & Operations — Intel Mac & Windows](setup-target-devices) — zero-to-operating runbook for fresh target devices
 - [Platform differences](PLATFORM-DIFFERENCES) — what works where
