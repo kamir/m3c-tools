@@ -71,6 +71,7 @@ agent skills that act on it (sign, admit, verify, revoke — offline-verifiable)
 - [Quickstart: skillctl](quickstart-skillctl) — sign, install and verify a skill in 5 minutes
 - [Manual: m3c-tools](manual-m3c-tools) — every command, flag and config variable
 - [Manual: skillctl](manual-skillctl) — the full trust lifecycle, command by command
+- [Acceptance & Handover: skill lifecycle](acceptance-skillctl-lifecycle) — the two-person (Mirko → Eric) procedure over ER1, with success criteria
 - [Menu Bar App](menubar-app) — channels, Observation Window, menu items
 - [Setup & Operations — Intel Mac & Windows](setup-target-devices) — zero-to-operating runbook for fresh target devices
 - [Platform differences](PLATFORM-DIFFERENCES) — what works where
