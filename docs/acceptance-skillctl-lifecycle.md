@@ -79,6 +79,33 @@ For this ER1 procedure, Eric uses **`~/.claude/trust-roots.yaml`** and does **no
 
 ---
 
+## Quick validate on Windows (PowerShell)
+
+To confirm skillctl's lifecycle works on a fresh **Windows** box — the trust core, with no ER1
+and no second person needed — copy this into **Windows PowerShell** (grab it from the repo, or
+straight from here):
+
+```powershell
+# 1) Install skillctl (verifies cosign provenance + SHA-256, no admin):
+irm https://raw.githubusercontent.com/kamir/m3c-tools/master/tools/skillctl-install.ps1 | iex
+
+# 2) Download + run the lifecycle smoke (keygen -> pack -> sign -> verify -> trust -> tamper):
+$q = "$env:TEMP\skillctl-quickstart.ps1"
+irm https://raw.githubusercontent.com/kamir/m3c-tools/master/scripts/skillctl-quickstart-windows.ps1 -OutFile $q
+powershell -ExecutionPolicy Bypass -File $q
+```
+
+It walks **keygen → pack → sign → verify-sig → trust add → tamper** in a throwaway `%TEMP%` dir
+and prints one PASS/FAIL line per step, exiting non-zero if any required step fails. The tamper
+case must be **refused** (exit 11) — that is the fail-closed proof. It writes nothing outside
+`%TEMP%` and touches neither ER1 nor your real `~/.claude`. (This is the same script the
+`installer-winps51` / quickstart-smoke CI job runs on `windows-latest`.)
+
+**What this does *not* cover:** the two-person ER1 exchange in Parts A/B below — that needs two
+ER1 logins over prod and is run manually. This smoke validates the **tool + trust core** on Windows.
+
+---
+
 ## 3. Part A — Mirko's lane (author → publish over ER1 `self`)
 
 ```bash
