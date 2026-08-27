@@ -318,6 +318,7 @@ B manually** and recording the result; the harness covers the trust core and neg
 
 ## See also
 
+- [Runbook — two-person ER1 exchange (Mirko → Eric)](runbook-two-person-er1-exchange.md) — the copy-paste prod runbook to actually execute Parts A/B together.
 - [manual-skillctl.md](manual-skillctl.md) — the full command/flag/exit-code reference.
 - [quickstart-skillctl.md](quickstart-skillctl.md) — the author happy-path in 5 minutes.
 - [quickstart-skillctl-demo.md](quickstart-skillctl-demo.md) — the offline Kata demo.
