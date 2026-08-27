@@ -43,8 +43,7 @@ curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-l
 ```powershell
 New-Item -ItemType Directory -Force -Path C:\m3c-tools
 Invoke-WebRequest -Uri https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-windows-amd64.zip -OutFile "$env:TEMP\m3c-tools.zip"
-Expand-Archive -Path "$env:TEMP\m3c-tools.zip" -DestinationPath C:\m3c-tools -Force
-Rename-Item C:\m3c-tools\m3c-tools-windows-amd64.exe C:\m3c-tools\m3c-tools.exe -Force
+Expand-Archive -Path "$env:TEMP\m3c-tools.zip" -DestinationPath C:\m3c-tools -Force   # the zip already contains m3c-tools.exe — no rename needed
 $oldPath = [Environment]::GetEnvironmentVariable("PATH", "Machine")
 if ($oldPath -notlike "*C:\m3c-tools*") { [Environment]::SetEnvironmentVariable("PATH", "$oldPath;C:\m3c-tools", "Machine") }
 ```

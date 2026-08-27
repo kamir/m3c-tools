@@ -1,0 +1,51 @@
+name: skillctl Windows Quickstart Smoke
+
+# M2.5 — build skillctl.exe on a real windows-latest runner and walk the
+# author -> sign -> verify -> trust -> tamper quickstart lifecycle via
+# scripts/skillctl-quickstart-windows.ps1. The job fails iff the script exits
+# non-zero (i.e. any required lifecycle step failed).
+#
+# Offline + self-contained: the script never hits the network or a live
+# registry; `trust add` writes a sandboxed trust-roots.yaml under a temp $HOME.
+# This is SEPARATE from windows-gate.yml (the whole-package trust test surface);
+# it proves the shipping CLI walks the documented quickstart end-to-end.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/skillctl-windows-rollout-m1-m2]
+    paths:
+      - "cmd/skillctl/**"
+      - "pkg/skillctl/**"
+      - "pkg/skillbundle/**"
+      - "scripts/skillctl-quickstart-windows.ps1"
+      - ".github/workflows/skillctl-windows-smoke.yml"
+
+jobs:
+  quickstart-smoke:
+    name: Quickstart Smoke (windows-latest)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.5"
+          cache: true
+
+      # Build the shipping CLI from source (native GOOS=windows on this runner).
+      - name: Build skillctl.exe
+        run: |
+          go build -o skillctl.exe ./cmd/skillctl
+          $exe = (Resolve-Path .\skillctl.exe).Path
+          "SKILLCTL=$exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "built $exe"
+        shell: pwsh
+
+      # Run exactly the documented invocation; propagate its exit code so a
+      # non-zero (any required step failed) fails the job.
+      - name: Run quickstart smoke script
+        run: |
+          powershell -ExecutionPolicy Bypass -File scripts\skillctl-quickstart-windows.ps1
+          if ($LASTEXITCODE -ne 0) { Write-Error "quickstart smoke failed (exit $LASTEXITCODE)"; exit $LASTEXITCODE }
+        shell: pwsh

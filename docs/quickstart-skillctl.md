@@ -22,7 +22,43 @@ no server required. Then see how the same bundle flows through admit → install
 [release](https://github.com/kamir/m3c-tools/releases/latest). It runs identically on
 macOS, Linux and Windows.
 
-**macOS (Apple Silicon):**
+The **one-liner installers** fetch the right binary for your host, **verify cosign provenance
+(GitHub OIDC) and the SHA-256 integrity digest**, then install to a **user-scoped** bin dir —
+no admin rights required.
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/kamir/m3c-tools/master/tools/skillctl-install.ps1 | iex
+```
+
+Installs to `%LOCALAPPDATA%\Programs\skillctl` after verifying cosign provenance + SHA-256.
+Override the target dir or the release with `$env:INSTALL_DIR` and `$env:RELEASE_BASE` before
+running. This is the **light, user-scoped, no-admin** path — distinct from the machine-wide
+`M3C-Tools-Setup.exe` installer; use **one or the other**, not both, so you don't end up with
+two `skillctl.exe` on your `PATH`.
+
+**macOS / Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/master/tools/skillctl-install.sh | bash
+```
+
+Override the target dir or the release with `INSTALL_DIR=…` / `RELEASE_BASE=…`.
+
+**Interim (unsigned — until the signed `skillctl/v0.3.x` release is published):** the scripted
+installers above verify a *signed* release, so until that release is live they report a missing
+download. For a quick Windows install *today* you can pull the unsigned binary from the current
+product release — this does **not** verify provenance, so prefer the signed one-liner once it
+ships:
+```powershell
+$d="$env:LOCALAPPDATA\Programs\skillctl"
+New-Item -ItemType Directory -Force -Path $d | Out-Null
+Invoke-WebRequest "https://github.com/kamir/m3c-tools/releases/latest/download/skillctl-windows-amd64.zip" -OutFile "$env:TEMP\skillctl.zip"
+Expand-Archive "$env:TEMP\skillctl.zip" $d -Force   # the zip already contains skillctl.exe — no rename needed
+$u=[Environment]::GetEnvironmentVariable("PATH","User"); if($u -notlike "*$d*"){[Environment]::SetEnvironmentVariable("PATH","$u;$d","User")}
+& "$d\skillctl.exe" version
+```
+
+**Manual install (raw tarball):**
 ```bash
 curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/skillctl-darwin-arm64.tar.gz | tar xz \
   && sudo mv skillctl-darwin-arm64 /usr/local/bin/skillctl
@@ -113,8 +149,8 @@ To pull and install skills from a registry, first **pin** that registry's public
 trust roots (`~/.claude/skill-trust-roots.yaml`):
 
 ```bash
-skillctl trust add   <registry> --pubkey <registry.pub>   # pin a key
-skillctl trust list                                        # show pinned registries
+skillctl trust add --registry <url> --pubkey <registry.pub>   # pin a key (optional: --id <key-id>)
+skillctl trust list                                           # show pinned registries
 ```
 
 Then install — this pulls the bundle, runs the full trust-chain verifier, and installs

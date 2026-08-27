@@ -46,6 +46,17 @@ type fileEntry struct {
 func Pack(skillDir, outFile string, opts PackOptions) (digest string, err error) {
 	skillDir = filepath.Clean(skillDir)
 
+	// If the skill dir is itself a symlink (e.g. ~/.claude/skills/<name> →
+	// gstack/<name>), resolve it to the real target BEFORE walking. filepath.WalkDir
+	// Lstats its root: a symlink root is reported as a non-dir, so WalkDir never
+	// descends and collectFiles returns nothing — the historical "symlink skills
+	// pack EMPTY" bug (SPEC-0188 §3). EvalSymlinks canonicalizes the root so the walk
+	// packs the target's real contents. Best-effort: a broken/absent link falls
+	// through to the original path and the SKILL.md check below reports it.
+	if resolved, rerr := filepath.EvalSymlinks(skillDir); rerr == nil {
+		skillDir = resolved
+	}
+
 	if _, err := os.Stat(filepath.Join(skillDir, "SKILL.md")); err != nil {
 		return "", fmt.Errorf("skill dir %q must contain SKILL.md: %w", skillDir, err)
 	}
@@ -124,7 +135,13 @@ func Pack(skillDir, outFile string, opts PackOptions) (digest string, err error)
 // collectFiles walks skillDir and returns sorted file entries. Skips
 // top-level dotfiles (e.g. .DS_Store) and synthesized files (bundle.json,
 // CHECKSUMS) if they happen to exist on disk. Nested dotfiles are kept.
+//
+// SPEC-0188 §3.4: build artifacts (a `dist/` binary, `node_modules/`,
+// `__pycache__/`, …) and any `.skbignore` patterns are pruned so bundles stay
+// source-sized. The required top-level SKILL.md is never ignored. See ignore.go
+// for the pattern language; the trim is deterministic so the digest is stable.
 func collectFiles(skillDir string) ([]fileEntry, error) {
+	ignoreRules := loadIgnoreRules(skillDir)
 	var entries []fileEntry
 	err := filepath.WalkDir(skillDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -146,6 +163,14 @@ func collectFiles(skillDir string) ([]fileEntry, error) {
 			return nil
 		}
 		if rel == "bundle.json" || rel == "CHECKSUMS" {
+			return nil
+		}
+		// SPEC-0188 §3.4 artifact / .skbignore prune. Guard: the required
+		// top-level SKILL.md is always kept, whatever the rules say.
+		if rel != "SKILL.md" && ignored(ignoreRules, rel, d.IsDir()) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if d.IsDir() {

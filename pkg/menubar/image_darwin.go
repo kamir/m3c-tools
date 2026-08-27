@@ -25,6 +25,26 @@ static int registerImageFromFile(const char *name, const char *path, int isTempl
 	return 1;
 }
 
+// registerImageFromBytes loads an image from an in-memory buffer (e.g. a PNG
+// embedded in the binary) and registers it as a named NSImage, so it works
+// without any on-disk file — including inside a .app bundle. Returns 1 on
+// success, 0 on failure.
+static int registerImageFromBytes(const char *name, const void *bytes, int len, int isTemplate) {
+	if (bytes == NULL || len <= 0) {
+		return 0;
+	}
+	NSData *data = [NSData dataWithBytes:bytes length:(NSUInteger)len];
+	NSImage *image = [[NSImage alloc] initWithData:data];
+	if (image == nil) {
+		return 0;
+	}
+	if (isTemplate) {
+		[image setTemplate:YES];
+	}
+	[image setName:[NSString stringWithUTF8String:name]];
+	return 1;
+}
+
 // setApplicationIconFromFile loads an image and applies it as the NSApp icon
 // used in Cmd+Tab and Dock when activation policy is regular.
 // Returns 1 on success, 0 on failure.
@@ -61,6 +81,24 @@ func RegisterImage(name, filePath string) bool {
 		isTemplate = 1
 	}
 	return C.registerImageFromFile(cName, cPath, isTemplate) == 1
+}
+
+// RegisterImageBytes registers an in-memory image (e.g. a PNG embedded via
+// go:embed) as a named NSImage, so menuet can reference it by name in
+// MenuState.Image / MenuItem.Image without any on-disk file. Pass template=true
+// for menu-bar template icons (monochrome, auto dark/light). Returns false if
+// the bytes are empty or cannot be decoded.
+func RegisterImageBytes(name string, data []byte, template bool) bool {
+	if len(data) == 0 {
+		return false
+	}
+	cName := C.CString(name)
+	defer C.free(unsafe.Pointer(cName))
+	isTemplate := C.int(0)
+	if template {
+		isTemplate = 1
+	}
+	return C.registerImageFromBytes(cName, unsafe.Pointer(&data[0]), C.int(len(data)), isTemplate) == 1
 }
 
 // SetApplicationIcon sets the app icon used in Cmd+Tab/Dock while the app is

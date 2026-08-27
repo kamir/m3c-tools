@@ -162,6 +162,33 @@ See the [skillctl manual](docs/manual-skillctl.md).
 Both binaries are attached to every [release](https://github.com/kamir/m3c-tools/releases/latest).
 Swap `m3c-tools` ↔ `skillctl` in any one-liner below to install the other tool.
 
+The **scripted one-liners** fetch the right binary for your host, **verify cosign provenance
+(GitHub OIDC) + the SHA-256 digest**, then install **user-scoped** — no admin rights:
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/kamir/m3c-tools/master/tools/skillctl-install.ps1 | iex
+```
+
+Installs `skillctl` to `%LOCALAPPDATA%\Programs\skillctl` after verifying cosign provenance +
+SHA-256. Override with `$env:INSTALL_DIR` / `$env:RELEASE_BASE`. This is the **light,
+user-scoped, no-admin** path — distinct from the machine-wide `M3C-Tools-Setup.exe` installer;
+use **one or the other**, not both, so you don't end up with two `skillctl.exe` on `PATH`.
+
+**macOS / Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/master/tools/skillctl-install.sh | bash
+```
+
+Override the target dir or release with `INSTALL_DIR=…` / `RELEASE_BASE=…` (default `~/.local/bin`).
+These verify a **signed** `skillctl/v0.3.x` release; until it is published they report a missing
+download — see the [skillctl quickstart](docs/quickstart-skillctl.md#1-install) for an interim
+(unsigned) Windows install.
+
+<br>
+
+Manual per-platform install (raw tarball):
+
 **macOS (Apple Silicon):**
 ```bash
 curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-darwin-arm64.tar.gz | tar xz && sudo mv m3c-tools-darwin-arm64 /usr/local/bin/m3c-tools
@@ -177,9 +204,10 @@ curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-d
 curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-linux-amd64.tar.gz | tar xz && sudo mv m3c-tools-linux-amd64 /usr/local/bin/m3c-tools
 ```
 
-**Windows:** download `m3c-tools-windows-amd64.zip` (or the `M3C-Tools-Setup.exe` installer)
-from the [latest release](https://github.com/kamir/m3c-tools/releases/latest) and add it to your `PATH`.
-See [Quickstart: m3c-tools](docs/quickstart-m3c-tools.md) for the PowerShell one-liner.
+**Windows (manual / GUI):** download `m3c-tools-windows-amd64.zip` (or the `M3C-Tools-Setup.exe`
+installer) from the [latest release](https://github.com/kamir/m3c-tools/releases/latest) and add
+it to your `PATH`. See [Quickstart: m3c-tools](docs/quickstart-m3c-tools.md) for the full
+PowerShell setup.
 
 ### Platform support
 

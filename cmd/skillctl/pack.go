@@ -431,6 +431,15 @@ Required:
   --name <s>               Skill name (manifest field)
   --version <s>            Skill version (manifest field)
 
+Pack-time content (SPEC-0188 §3.4):
+  A bundle is skill SOURCE, not build output. These paths are pruned automatically
+  (they bloat the bundle past the admit cap and a consumer rebuilds them locally):
+    node_modules/ dist/ build/ target/ .git/ .svn/ .DS_Store
+    __pycache__/ .venv/ venv/ .pytest_cache/ .mypy_cache/ .ruff_cache/ *.pyc *.pyo
+  A top-level .skbignore (gitignore subset: !negate, trailing / = dir-only, no **)
+  adds or re-includes patterns; e.g. "!dist/" keeps a dist you actually ship.
+  SKILL.md is always packed regardless of any rule.
+
 Optional manifest fields:
   --summary <s>
   --source-repo <s>        e.g. kamir/m3c-tools-maintenance

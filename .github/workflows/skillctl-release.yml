@@ -115,6 +115,11 @@ jobs:
           # THIS release. The committed default is a stale fixed tag otherwise.
           sed -i "s#download/skillctl/[^\"}]*#download/${GITHUB_REF_NAME}#" dist/install.sh
           grep 'RELEASE_BASE:-' dist/install.sh | head -1
+          # Same for the PowerShell installer. Its default RELEASE_BASE is a
+          # single-quoted PS string literal, so match up to the closing quote.
+          cp tools/skillctl-install.ps1 dist/install.ps1
+          sed -i "s#download/skillctl/[^']*#download/${GITHUB_REF_NAME}#" dist/install.ps1
+          grep 'download/skillctl' dist/install.ps1 | head -1
           [ -f INFRA/skillctl-release.pub ] && cp INFRA/skillctl-release.pub dist/ || true
           # Until now `release/` was gitignored wholesale, so this lookup never hit
           # in CI and every cut shipped the placeholder body. RELEASE_NOTES.md is
@@ -143,6 +148,7 @@ jobs:
             dist/SHA256SUMS
             dist/SHA256SUMS.cosign.bundle
             dist/install.sh
+            dist/install.ps1
             dist/skillctl-release.pub
             dist/skillctl.sbom.cdx.json
         env:

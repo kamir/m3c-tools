@@ -138,6 +138,13 @@ test-recorder:
 # Build macOS .app bundle
 .PHONY: build-app
 build-app: build
+	@if [ -e "$(APP_BUNDLE)" ] && [ ! -w "$(APP_BUNDLE)" ]; then \
+		echo "ERROR: '$(APP_BUNDLE)' exists but is not writable — most likely root-owned"; \
+		echo "  from an earlier 'sudo make'. Remove it once (this is the ONLY sudo needed):"; \
+		echo "      sudo rm -rf $(APP_BUNDLE)"; \
+		echo "  then rebuild WITHOUT sudo:  make build-app   (or: make menubar-app)"; \
+		exit 1; \
+	fi
 	@echo "Building $(APP_NAME).app bundle..."
 	@rm -rf $(APP_BUNDLE)
 	@mkdir -p $(APP_BUNDLE)/Contents/MacOS
@@ -283,6 +290,34 @@ run: build
 .PHONY: menubar
 menubar: build
 	$(BUILD_DIR)/$(BINARY) menubar $(ARGS)
+
+# Guard: the menu bar app MUST run as the logged-in user, never as root. A GUI
+# menu-bar app launched via `sudo` renders a broken menu — no Quit, no Sign-In
+# (BUG-0192). This runs before build-app so a `sudo make menubar-app` fails
+# fast without creating root-owned artifacts.
+.PHONY: check-not-root
+check-not-root:
+	@if [ "$$(id -u)" = "0" ]; then \
+		echo "ERROR: do NOT run this with sudo."; \
+		echo "  The menu bar app must run as your login user, or macOS renders a broken"; \
+		echo "  menu (no Quit / no Sign-In — BUG-0192)."; \
+		echo "  If '$(APP_BUNDLE)' is root-owned from an earlier sudo run, remove it once:"; \
+		echo "      sudo rm -rf $(APP_BUNDLE)"; \
+		echo "  then run WITHOUT sudo:  make menubar-app"; \
+		exit 1; \
+	fi
+
+# Build + launch the BUNDLED menu bar app (.app). Unlike `make menubar` (which
+# runs the bare binary), this runs inside a proper application bundle — which is
+# what macOS needs to reliably render the menu bar icon AND show notifications.
+# Prefer this over `make menubar` for anything but quick CLI-style debugging.
+# MUST be run WITHOUT sudo (see check-not-root / BUG-0192).
+.PHONY: menubar-app
+menubar-app: check-not-root build-app
+	@echo "Launching $(APP_BUNDLE) (bundled — menu bar icon + notifications work here)..."
+	@open $(APP_BUNDLE)
+	@echo "Running as a menu bar app. Logs: ~/.m3c-tools/m3c-tools.log"
+	@echo "Quit from the menu bar's Quit item, or: pkill -f '$(APP_NAME).app/Contents/MacOS/$(BINARY)'"
 
 # Clean build artifacts
 .PHONY: clean
@@ -538,7 +573,8 @@ help:
 	@echo "  release-patch  Release with patch version bump"
 	@echo "  release-minor  Release with minor version bump"
 	@echo "  release-major  Release with major version bump"
-	@echo "  menubar        Build and launch the menu bar app"
+	@echo "  menubar        Build and launch the menu bar app (bare binary — CLI debugging)"
+	@echo "  menubar-app    Build + launch the BUNDLED .app (icon + notifications work here)"
 	@echo "  build-windows  Cross-compile CLI + tray for Windows (amd64)"
 	@echo "  installer-windows  Build NSIS installer (requires nsis)"
 	@echo "  snapshot       Build with GoReleaser (local snapshot, no publish)"
@@ -559,4 +595,50 @@ help:
 	@echo "  thinking-logs             docker compose logs -f"
 	@echo "  thinking-topics           Create 8 topics for CTX_HASH"
 	@echo ""
+	@echo "Skill Trust-Plane containers (SPEC-0354):"
+	@echo "  skillctl-image        Build distroless $(SKILLCTL_IMAGE):\$$SKILLCTL_TAG image (D1)"
+	@echo "  skillctl-image-smoke  Smoke-test the image (version, non-root user, size)"
+	@echo "  publish-skb           Publish a .skb as an OCI artifact via ORAS+cosign (D2):"
+	@echo "                        make publish-skb SKB=x@1.0.0.skb REGISTRY=ghcr.io/kamir"
+	@echo ""
 	@echo "  help           Show this help"
+
+# -----------------------------------------------------------------------------
+# Skill Trust-Plane containerization (SPEC-0354)
+# -----------------------------------------------------------------------------
+
+# Engine-agnostic: docker OR podman (identical CLI surface for these targets).
+CONTAINER_ENGINE    ?= docker
+SKILLCTL_DOCKERFILE  = deploy/skillctl/Dockerfile
+SKILLCTL_IMAGE       = m3c/skillctl
+SKILLCTL_TAG        ?= $(GIT_VERSION)
+
+# D1: build the skillctl container image (distroless, static, CGO=0).
+.PHONY: skillctl-image
+skillctl-image:
+	@echo "Building $(SKILLCTL_IMAGE):$(SKILLCTL_TAG) with $(CONTAINER_ENGINE) ..."
+	$(CONTAINER_ENGINE) build \
+		-f $(SKILLCTL_DOCKERFILE) \
+		-t $(SKILLCTL_IMAGE):$(SKILLCTL_TAG) \
+		--build-arg VERSION=$(SKILLCTL_TAG) \
+		.
+	@echo ""
+	@echo "Built $(SKILLCTL_IMAGE):$(SKILLCTL_TAG). Smoke-test with: make skillctl-image-smoke"
+
+# D1 acceptance: version prints, image user is non-root, image is small.
+# (distroless has no shell, so we inspect the image config rather than
+# exec-ing into it.)
+.PHONY: skillctl-image-smoke
+skillctl-image-smoke:
+	@echo "== skillctl version (from inside the image) =="
+	@$(CONTAINER_ENGINE) run --rm $(SKILLCTL_IMAGE):$(SKILLCTL_TAG) version
+	@echo "== image user (must be non-root) =="
+	@$(CONTAINER_ENGINE) image inspect --format 'User={{.Config.User}}' $(SKILLCTL_IMAGE):$(SKILLCTL_TAG)
+	@echo "== image size =="
+	@$(CONTAINER_ENGINE) image inspect --format 'Size={{.Size}} bytes' $(SKILLCTL_IMAGE):$(SKILLCTL_TAG)
+
+# D2: publish a .skb bundle as a signed OCI artifact. SKB + REGISTRY required;
+# pass extra flags via PUBLISH_ARGS (e.g. PUBLISH_ARGS="--dry-run").
+.PHONY: publish-skb
+publish-skb:
+	@scripts/publish-skb.sh --skb "$(SKB)" --registry "$(REGISTRY)" $(PUBLISH_ARGS)

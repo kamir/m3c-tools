@@ -71,10 +71,28 @@ func init() {
 	runtime.LockOSThread()
 }
 
+// runningInAppBundle reports whether this binary is executing from inside a
+// macOS .app bundle (…/Contents/MacOS/<exe>), i.e. it was launched via
+// LaunchServices (double-click / `open`) rather than from the CLI.
+func runningInAppBundle() bool {
+	exe, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	return strings.Contains(exe, ".app/Contents/MacOS/")
+}
+
 func main() {
 	if len(os.Args) < 2 {
-		printUsage()
-		os.Exit(1)
+		// When launched from the .app bundle (double-click / `open`), macOS
+		// passes no subcommand — default to the menu bar app instead of
+		// printing usage and exiting immediately.
+		if runningInAppBundle() {
+			os.Args = append(os.Args, "menubar")
+		} else {
+			printUsage()
+			os.Exit(1)
+		}
 	}
 
 	// Load config: layered per SPEC-0175.
@@ -6122,8 +6140,16 @@ func menubarHandlePlaudSync(app *menubar.App) {
 	// truth with `plaud dev`. No more Chrome scraping / consumer API.
 	client, err := plaud.NewDevClientFromFile(plaud.DefaultMCPTokenPath())
 	if err != nil {
+		// Surface the exact recovery command in the log — this fires whether the
+		// token is missing entirely, expired, or its refresh failed, so the user
+		// always sees how to get a new one without digging.
 		log.Printf("[plaud] no usable developer token: %v", err)
-		app.Notify("Plaud Sync", "Bitte einmal anmelden:  node tools/plaud-mcp-login.mjs  — dann erneut synchronisieren.")
+		log.Printf("[plaud] ── To get a new token, run this once, then sync again: ──")
+		log.Printf("[plaud]     node tools/plaud-mcp-login.mjs")
+		log.Printf("[plaud]   (opens the browser for Plaud SSO; writes ~/.plaud/tokens-mcp.json —")
+		log.Printf("[plaud]    a ~300-day self-refreshing token, so no daily re-auth after this)")
+		app.Notify("Plaud Sync — sign-in needed",
+			"Run:  node tools/plaud-mcp-login.mjs   then sync again")
 		return
 	}
 
