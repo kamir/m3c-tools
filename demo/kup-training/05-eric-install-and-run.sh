@@ -16,22 +16,36 @@ BUNDLE="$BUNDLES_DIR/${SKILL_NAME}-${SKILL_VERSION}.skb"
 SIG="${BUNDLE}.${DIGEST#sha256:}.author.sig"
 
 if online_mode_available; then
-  log "Eric: skillctl install $SKILL_NAME@$SKILL_VERSION --registry $REGISTRY_URL"
+  # Re-pointed (SPEC-0246 AC3 convergence) from `skillctl install --registry
+  # .../api/skills` to the ER1 `self` pull path. Single-machine smoke (see 02's
+  # note). Eric pins Mirko's key via a HAND-WRITTEN self trust-roots.yaml — the
+  # ER1 `self` path uses ~/.claude/trust-roots.yaml, NOT `trust add`.
+  ER1_TARGET="${ER1_TARGET:-local}"
+  mkdir -p "$INSTALL_HOME/.claude"
+  PUB_B64=$(openssl pkey -pubin -in "$KEYS_DIR/mirko.pub" -outform DER 2>/dev/null | tail -c 32 | base64 | tr -d '\n')
+  cat > "$INSTALL_HOME/.claude/trust-roots.yaml" <<YAML
+registry: self
+pubkey_b64: $PUB_B64
+governance_minimum: green
+YAML
+  log "Eric: skillctl pull --registry self --er1-target $ER1_TARGET (G-23 dry-run then confirm)"
   set +e
-  HOME="$INSTALL_HOME" \
-    "$SKILLCTL" install "$SKILL_NAME@$SKILL_VERSION" \
-        --registry "$REGISTRY_URL/api/skills" \
-        --allow-yellow \
-        --verbose \
-      >>"$LOG_DIR/full.log" 2>&1
-  rc=$?
-  set -e
-  if [[ "$rc" -eq 0 ]]; then
-    ok "install exit 0 — full chain verified by registry"
+  TOKEN=$(HOME="$INSTALL_HOME" "$SKILLCTL" pull --registry self \
+       --er1-target "$ER1_TARGET" --er1-context skills --skill "$SKILL_NAME" \
+       --install --trust-mode --dry-run-install --no-checkpoint 2>>"$LOG_DIR/full.log" \
+       | sed -n 's/.*dry-run-install token (5-minute TTL): //p' | head -1)
+  if [[ -n "${TOKEN:-}" ]]; then
+    HOME="$INSTALL_HOME" "$SKILLCTL" pull --registry self \
+       --er1-target "$ER1_TARGET" --er1-context skills --skill "$SKILL_NAME" \
+       --install --trust-mode --confirm-install --dry-run-install-token "$TOKEN" \
+       --no-checkpoint >>"$LOG_DIR/full.log" 2>&1 \
+      && ok "pulled + installed via ER1 self ($ER1_TARGET) — full chain verified by pull's 5 gates" \
+      || warn "pull --confirm-install failed — ER1 transport not fully exercised"
   else
-    warn "install exit $rc — registry round-trip incomplete (likely missing identity registration)"
-    warn "falling back to offline chain proof"
+    warn "pull --registry self did not yield an install token — ER1 transport not exercised"
+    warn "(needs a live '$ER1_TARGET' ER1 with the skill published in step 02); falling back to offline proof"
   fi
+  set -e
 fi
 
 # OFFLINE / FALLBACK CHAIN PROOF — this is the load-bearing demonstration:

@@ -244,8 +244,11 @@ The `demo/kup-training/` scripts are the **automated regression** for the trust 
   not the **ER1 `self`** path this procedure (and Eric, in the field) use. So it proves the
   trust core, but not the ER1 transport of AC3.
 - **Convergence plan (tracked):**
-  1. Re-point `02-mirko-publish.sh` / `05-eric-install-and-run.sh` at `publish`/`pull
-     --registry self` so the automated run exercises the ER1 transport of AC3.
+  1. **Done (best-effort):** `02-mirko-publish.sh` / `05-eric-install-and-run.sh` now attempt
+     the ER1 `self` transport (`publish` / `pull --registry self`, target `local` by default) as
+     a **single-machine smoke** — the runner's ER1 login acts as the author. It needs a live
+     local ER1 to actually exercise, and a true two-person cross-principal AC3 run needs two ER1
+     accounts (validated manually, §11). The offline chain + N1–N3 remain the automated bar.
   2. Add negative steps for **N4 (exit 10)**, **N5 (12)**, **N6 (13)**, **N7 (17)** (pull N7
      in from the Kata harness).
   3. Wire (or explicitly scope out) the orphaned demand-side steps `10-scan` / `11-use` /
