@@ -268,7 +268,7 @@ func (a *App) Run() {
 	case a.Config.IconPath != "" && RegisterImage(iconName, a.Config.IconPath):
 		state.Image = iconName
 		iconApplied = true
-	case RegisterImageBytes(iconName, embeddedMenuBarIconPNG, true):
+	case RegisterImageBytes(iconName, embeddedIconBytes("menubar-icon.png"), true):
 		state.Image = iconName
 		iconApplied = true
 		log.Printf("[menubar] using embedded menu bar icon (on-disk icon %q unavailable)", a.Config.IconPath)
@@ -333,9 +333,13 @@ func (a *App) registerMenuIcons() {
 		iconStar:        "menu-star.png",
 	}
 	for name, file := range icons {
-		path := FindIcon(file)
-		if path != "" {
+		// Prefer the on-disk design-system icon (dev); fall back to the copy
+		// embedded in the binary so per-item icons also render inside the .app
+		// bundle and from any cwd (where FindIcon returns "" — BUG-0192).
+		if path := FindIcon(file); path != "" {
 			RegisterImage(name, path)
+		} else if b := embeddedIconBytes(file); b != nil {
+			RegisterImageBytes(name, b, true)
 		}
 	}
 }

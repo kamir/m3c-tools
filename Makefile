@@ -138,6 +138,13 @@ test-recorder:
 # Build macOS .app bundle
 .PHONY: build-app
 build-app: build
+	@if [ -e "$(APP_BUNDLE)" ] && [ ! -w "$(APP_BUNDLE)" ]; then \
+		echo "ERROR: '$(APP_BUNDLE)' exists but is not writable — most likely root-owned"; \
+		echo "  from an earlier 'sudo make'. Remove it once (this is the ONLY sudo needed):"; \
+		echo "      sudo rm -rf $(APP_BUNDLE)"; \
+		echo "  then rebuild WITHOUT sudo:  make build-app   (or: make menubar-app)"; \
+		exit 1; \
+	fi
 	@echo "Building $(APP_NAME).app bundle..."
 	@rm -rf $(APP_BUNDLE)
 	@mkdir -p $(APP_BUNDLE)/Contents/MacOS
@@ -284,16 +291,33 @@ run: build
 menubar: build
 	$(BUILD_DIR)/$(BINARY) menubar $(ARGS)
 
+# Guard: the menu bar app MUST run as the logged-in user, never as root. A GUI
+# menu-bar app launched via `sudo` renders a broken menu — no Quit, no Sign-In
+# (BUG-0192). This runs before build-app so a `sudo make menubar-app` fails
+# fast without creating root-owned artifacts.
+.PHONY: check-not-root
+check-not-root:
+	@if [ "$$(id -u)" = "0" ]; then \
+		echo "ERROR: do NOT run this with sudo."; \
+		echo "  The menu bar app must run as your login user, or macOS renders a broken"; \
+		echo "  menu (no Quit / no Sign-In — BUG-0192)."; \
+		echo "  If '$(APP_BUNDLE)' is root-owned from an earlier sudo run, remove it once:"; \
+		echo "      sudo rm -rf $(APP_BUNDLE)"; \
+		echo "  then run WITHOUT sudo:  make menubar-app"; \
+		exit 1; \
+	fi
+
 # Build + launch the BUNDLED menu bar app (.app). Unlike `make menubar` (which
 # runs the bare binary), this runs inside a proper application bundle — which is
 # what macOS needs to reliably render the menu bar icon AND show notifications.
 # Prefer this over `make menubar` for anything but quick CLI-style debugging.
+# MUST be run WITHOUT sudo (see check-not-root / BUG-0192).
 .PHONY: menubar-app
-menubar-app: build-app
+menubar-app: check-not-root build-app
 	@echo "Launching $(APP_BUNDLE) (bundled — menu bar icon + notifications work here)..."
 	@open $(APP_BUNDLE)
 	@echo "Running as a menu bar app. Logs: ~/.m3c-tools/m3c-tools.log"
-	@echo "Quit from the menu bar, or: pkill -f '$(APP_NAME).app/Contents/MacOS/$(BINARY)'"
+	@echo "Quit from the menu bar's Quit item, or: pkill -f '$(APP_NAME).app/Contents/MacOS/$(BINARY)'"
 
 # Clean build artifacts
 .PHONY: clean
