@@ -13,12 +13,13 @@ name: skillctl Windows Quickstart Smoke
 on:
   workflow_dispatch:
   push:
-    branches: [feat/skillctl-windows-rollout-m1-m2]
+    branches: [feat/skillctl-windows-rollout-m1-m2, fix/bug-0193-installer-manifest-404, master]
     paths:
       - "cmd/skillctl/**"
       - "pkg/skillctl/**"
       - "pkg/skillbundle/**"
       - "scripts/skillctl-quickstart-windows.ps1"
+      - "tools/skillctl-install.ps1"
       - ".github/workflows/skillctl-windows-smoke.yml"
 
 jobs:
@@ -49,3 +50,29 @@ jobs:
           powershell -ExecutionPolicy Bypass -File scripts\skillctl-quickstart-windows.ps1
           if ($LASTEXITCODE -ne 0) { Write-Error "quickstart smoke failed (exit $LASTEXITCODE)"; exit $LASTEXITCODE }
         shell: pwsh
+
+  # BUG-0193 regression guard: reproduce the FIELD environment — Windows PowerShell
+  # 5.1 (powershell.exe, NOT pwsh) — running the REAL installer against the published
+  # release. WinPS 5.1 raises a terminating NativeCommandError on ANY native-command
+  # stderr write under $ErrorActionPreference='Stop', even on success (cosign prints
+  # "Verified OK" to stderr). This job fails if the installer crashes on that.
+  installer-winps51:
+    name: Installer under Windows PowerShell 5.1 (BUG-0193)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install under Windows PowerShell 5.1 (from published release)
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dir = Join-Path $env:RUNNER_TEMP 'skillctl-inst'
+          $env:INSTALL_DIR = $dir
+          # Fresh WinPS 5.1 process, exactly like a user's `irm ... | iex` (default
+          # RELEASE_BASE = the published skillctl/v0.3.1; real cosign auto-fetch + verify).
+          powershell.exe -ExecutionPolicy Bypass -File tools\skillctl-install.ps1
+          if ($LASTEXITCODE -ne 0) { Write-Error "installer exited $LASTEXITCODE"; exit 1 }
+          $v = & "$dir\skillctl.exe" version
+          if ($LASTEXITCODE -ne 0) { Write-Error "skillctl version failed"; exit 1 }
+          if ($v -notmatch 'skillctl/v') { Write-Error "unexpected version: $v"; exit 1 }
+          Write-Host "OK: installed + ran under Windows PowerShell 5.1: $v"

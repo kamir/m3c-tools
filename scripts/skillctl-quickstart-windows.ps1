@@ -1,15 +1,15 @@
 <#
 .SYNOPSIS
-  Windows quickstart SMOKE TEST for skillctl: walks the author→sign→verify→trust
+  Windows quickstart SMOKE TEST for skillctl: walks the author->sign->verify->trust
   lifecycle end-to-end in a throwaway temp dir and prints PASS/FAIL per step.
 
 .DESCRIPTION
   The Windows twin of the demo/kup-training/run-and-prove.sh proof: each lifecycle
   step is executed and asserted (exit code + load-bearing artifact), with a green
   [PASS] / red [FAIL] line and a final summary. Exits non-zero iff any REQUIRED
-  step failed (exit 0 iff every required step passed) — safe to wire into CI.
+  step failed (exit 0 iff every required step passed) -- safe to wire into CI.
 
-  Lifecycle walked (all OFFLINE — no network, no live registry):
+  Lifecycle walked (all OFFLINE -- no network, no live registry):
     1. version     skillctl version prints a non-empty version string
     2. keygen      skillctl keygen --out <tmp>\author        (author.priv + author.pub)
     3. pack        skillctl pack a throwaway skill dir into <tmp>\demo.skb
@@ -25,11 +25,11 @@
       exit (keep it with -KeepWork). A new GUID each run makes the script re-runnable.
     * `skillctl trust add` writes ~/.claude/skill-trust-roots.yaml. skillctl resolves
       that home via $HOME first on ALL platforms (pkg/skillctl/verify/home.go), so we
-      point $env:HOME at the sandbox dir for the run — the REAL user trust roots are
+      point $env:HOME at the sandbox dir for the run -- the REAL user trust roots are
       never touched. (env change is process-local and dies with this PowerShell.)
     * NEVER prints a private key, signature bytes, or any secret. Only public paths,
       digests, and exit codes are shown.
-    * `--registry self` is NOT valid — validateRegistryURL requires https:// (or
+    * `--registry self` is NOT valid -- validateRegistryURL requires https:// (or
       loopback http://). We pin a never-contacted https:// sandbox URL; nothing on the
       network is ever reached (trust add only writes local YAML).
 
@@ -54,7 +54,7 @@ param(
     [switch]$KeepWork,
     [switch]$Help
 )
-# NB: deliberately NOT [CmdletBinding()] — a plain script collects unmatched tokens
+# NB: deliberately NOT [CmdletBinding()] -- a plain script collects unmatched tokens
 # (e.g. -h / --help) into $args instead of throwing a parameter-binding error.
 
 $ErrorActionPreference = 'Continue'   # a native non-zero exit must not abort the run
