@@ -57,7 +57,17 @@ tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 fetch() { curl -fsSL -o "$tmp/$1" "$RELEASE_BASE/$1"; }
 
 echo "Fetching manifest"
-fetch SHA256SUMS
+# A missing manifest usually means the release is not published yet (GitHub draft
+# releases are not publicly downloadable — their asset URLs 404). Give a clear hint
+# instead of letting `set -e` abort silently on curl's exit 22.
+if ! fetch SHA256SUMS; then
+  echo "Could not fetch the release manifest (SHA256SUMS) from:" >&2
+  echo "  $RELEASE_BASE" >&2
+  echo "The release may not be published yet — GitHub draft releases are not publicly" >&2
+  echo "downloadable (their asset URLs return 404). Verify the release is published, or" >&2
+  echo "set RELEASE_BASE to a published release." >&2
+  exit 1
+fi
 
 # === Provenance track 1 (preferred): keyless cosign / GitHub OIDC (SPEC-0253). ===
 # When cosign is installed AND the release carries a cosign bundle, verify

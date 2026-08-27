@@ -137,22 +137,36 @@ function Die($m) {
 function Invoke-Download {
     param([string]$Url, [string]$OutFile, [switch]$Optional)
     $ok = $false
+    $script:LastHttpStatus = $null
     try {
         Invoke-WebRequest -Uri $Url -OutFile $OutFile -UseBasicParsing -ErrorAction Stop
         $ok = $true
     } catch {
-        $ok = $false
+        # Capture the HTTP status (e.g. 404) so callers can give a precise message.
+        try { $script:LastHttpStatus = [int]$_.Exception.Response.StatusCode } catch { }
     }
     if (-not $ok -and $haveCurl) {
-        & curl.exe -fsSL -o $OutFile $Url 2>$null
-        if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $OutFile)) { $ok = $true }
+        # Windows PowerShell 5.1 turns a native command's stderr into a terminating
+        # NativeCommandError under $ErrorActionPreference='Stop' (and it ignores
+        # $PSNativeCommandUseErrorActionPreference). Drop to 'Continue' around the
+        # curl.exe call so a 404 does not spew a raw stack trace before our clean Die.
+        $savedEAP = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            & curl.exe -fsSL -o $OutFile $Url 2>$null
+            if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $OutFile)) { $ok = $true }
+            elseif (-not $script:LastHttpStatus -and $LASTEXITCODE -eq 22) { $script:LastHttpStatus = 404 } # curl -f: exit 22 = HTTP >= 400
+        } finally {
+            $ErrorActionPreference = $savedEAP
+        }
     }
     if (-not $ok) {
         if (Test-Path -LiteralPath $OutFile) {
             Remove-Item -LiteralPath $OutFile -Force -ErrorAction SilentlyContinue
         }
         if ($Optional) { return $false }
-        Die "download failed: $Url"
+        $suffix = if ($script:LastHttpStatus) { " (HTTP $script:LastHttpStatus)" } else { "" }
+        Die "download failed: $Url$suffix"
     }
     return $true
 }
@@ -180,7 +194,20 @@ try {
     Write-Host "  target:  $InstallDir"
 
     Write-Info "Fetching manifest"
-    Fetch 'SHA256SUMS' | Out-Null
+    if (-not (Fetch 'SHA256SUMS' -Optional)) {
+        $hint = if ($script:LastHttpStatus -eq 404) {
+            "The release may not be published yet — GitHub draft releases are NOT publicly`n" +
+            "downloadable (their asset URLs return 404). Verify the release exists and is`n" +
+            "published, or set `$env:RELEASE_BASE to a published release."
+        } else {
+            "Check your network connection and that the release URL is correct."
+        }
+        Die @"
+Could not fetch the release manifest (SHA256SUMS) from:
+  $ReleaseBase
+$hint
+"@
+    }
     $sumsPath = Join-Path $tmp 'SHA256SUMS'
 
     $verified = $false
