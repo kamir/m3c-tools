@@ -1027,6 +1027,193 @@ Derived from each command's own usage output.
 
 ---
 
+## Roles & playbooks
+
+Skill governance is a separation-of-duties system: no single role can both create and bless a
+skill. Each role below lists *what you own* and the current `skillctl` commands you actually run.
+For the HTTP-registry vs ER1-`self` split, see
+[Trust roots & registries — which file, when](#trust-roots--registries--which-file-when); for
+the exit codes every role branches on, see [Exit codes](#exit-codes).
+
+### Author / Skill-Steward
+
+You write the skill and put the first signature on it; you never bless your own governance
+verdict. Keep your private key local — only the `.pub` ever leaves your machine.
+
+```bash
+skillctl keygen --out ~/.config/m3c/skill-keys/author            # -> author.priv + author.pub
+skillctl pack --skill ~/.claude/skills/my-skill -o my-skill.skb \
+  --name my-skill --version 1.0.0 --summary "…" \
+  --data-scopes '{"id":"ds:fs/cwd","kind":"local_fs","access":"write","scope":"<cwd>/out/**","reason":"…"}'
+skillctl sign my-skill.skb --key ~/.config/m3c/skill-keys/author.priv
+skillctl verify-sig my-skill.skb --pubkey ~/.config/m3c/skill-keys/author.pub   # offline self-check
+```
+
+You may **not** attest your own skill (reviewer≠author is enforced — SPEC-0246) and `--author-intent`
+is advisory only; imported bundles are capped at yellow.
+
+### Reviewer
+
+You own the binding governance verdict. Read the bundle, verify the author signature offline,
+then post a signed attestation on the digest — as a *different* identity than the author.
+
+```bash
+skillctl verify --bundle my-skill.skb --trust-roots ./roots.yaml --json   # inspect offline, no install
+skillctl attest sha256:<hex> --level green \
+  --rationale "activation gate passed; intent matches data-scopes" \
+  --reviewer-id id:reviewer@m3c --author-id id:author@m3c \
+  --key ~/.config/m3c/skill-keys/reviewer.priv \
+  --registry https://aims.example.com/api/skills
+skillctl attest sha256:<hex> --level red --rationale "…" --reviewer-id id:reviewer@m3c --key …   # demote / retract
+```
+
+Passing `--author-id` triggers the offline reviewer≠author check. The most-recent qualified
+attestation wins; a `red` re-attest is how a verdict is retracted.
+
+### Registry Operator
+
+You own the registry signing key and the trust distribution. In the ER1 `self` model *you are*
+the registry — you admit and sign; in the HTTP model you run the server, hand out its pubkey,
+register author identities, and drive the revocation feed.
+
+```bash
+# ER1 self: admit a bundle into your own context
+skillctl publish my-skill --bundle my-skill.skb --version 1.0.0 \
+  --registry self --er1-target prod --er1-context skills \
+  --key ~/.config/m3c/skill-registry-self.priv --identity id:op@m3c
+skillctl registry ls                                             # inspect the self registry
+skillctl revoke sha256:<hex> --reason key_compromise --registry https://aims.example.com/api/skills
+skillctl revoke feed --refresh --registry https://aims.example.com/api/skills   # roll the signed kill-switch HEAD
+```
+
+`--er1-context skills` is auto-prefixed to `<your-sub>___skills`; you can publish **only** into
+your own context (403 / BUG-0165 otherwise). Registering an *author's* identity on an HTTP
+registry is a server-side admin operation (see [Tenant operations](#tenant-operations)), not a
+`skillctl` verb.
+
+### Tenant Admin
+
+You own the fleet's trust posture: which registry keys the machines pin, the `governance_minimum`
+floor, and the tenant scope. That lives in the trust-roots file you distribute.
+
+```bash
+# HTTP fleet: pin the registry the whole tenant trusts (writes ~/.claude/skill-trust-roots.yaml)
+skillctl trust add --registry https://aims.example.com/api/skills --pubkey registry.pub --id aims-prod
+skillctl trust list
+skillctl install my-skill@1.0.0 --tenant kup-berlin              # installs respect tenant scope + floor
+```
+
+Set `governance_minimum` (default green) in the distributed trust-roots file; a CISO-console
+tenant block surfaces to consumers as exit `16`.
+
+### CISO (Tenant Security Officer)
+
+You authorize what runs inside your tenant and pull the trigger when something turns hostile.
+The `skillctl`-side levers are revocation, the kill-switch feed, audit, and demotion.
+
+```bash
+skillctl revoke feed --status --registry https://aims.example.com/api/skills   # inspect the signed revocation HEAD
+skillctl revoke sha256:<hex> --reason governance_retraction --actor-identity governance_reviewer --key reviewer.priv
+skillctl audit --format json                                     # fleet inventory verdicts
+```
+
+A revoked digest fails install/verify with exit `17`; a stale revocation snapshot fails **closed**
+with exit `22`.
+
+### End-User / Consumer
+
+You pin trust once, install verified skills, and let the runtime gate enforce the chain on every
+invocation. You never publish.
+
+```bash
+# HTTP path — pin, install, verify
+skillctl trust add --registry https://aims.example.com/api/skills --pubkey registry.pub --id aims-prod
+skillctl install didactic-session@1.0.0 --tenant kup-berlin
+skillctl verify didactic-session
+
+# ER1 self path — hand-written ~/.claude/trust-roots.yaml (fingerprint checked out-of-band), then pull
+skillctl pull --registry self --er1-target prod --er1-context <publisher-sub>___skills \
+  --install --trust-mode --dry-run-install                       # G-23 step 1 (plan + token)
+skillctl audit                                                   # OK | UNVERIFIED | BROKEN | BELOW_MIN
+```
+
+Wire the fail-closed gate so nothing runs unverified — it denies if it cannot verify:
+
+```json
+{ "hooks": { "PreToolUse": [ { "matcher": "Skill",
+  "hooks": [ { "type": "command", "command": "skillctl verify-hook" } ] } ] } }
+```
+
+Don't hand-edit an installed skill under `~/.claude/skills/` — `skillctl audit` flags the drift
+as `BROKEN`. See **[Acceptance & Handover: the skill lifecycle](acceptance-skillctl-lifecycle.md)**
+for the two-person hand-off procedure over ER1.
+
+---
+
+## Tenant operations
+
+Operator-side procedures. Each notes whether it applies to an **HTTP `/api/skills` registry** or
+the **ER1 `self`** registry — they pin trust in different files (see
+[Trust roots & registries](#trust-roots--registries--which-file-when)).
+
+### Provision a tenant
+
+**ER1 `self` (personal / small-team).** Nothing to stand up: your tenant *is* your ER1 login's
+`<sub>___skills` context. Mint a registry key, publish into your own context, and hand consumers
+the pubkey fingerprint out-of-band.
+
+```bash
+skillctl keygen --out ~/.config/m3c/skill-registry-self          # -> .priv + .pub
+skillctl publish my-skill --bundle my-skill.skb --version 1.0.0 \
+  --registry self --er1-target prod --er1-context skills \
+  --key ~/.config/m3c/skill-registry-self.priv --identity id:op@m3c
+# consumers hand-write ~/.claude/trust-roots.yaml (registry: self, pubkey_b64, fingerprint,
+# governance_minimum) and pull from <your-sub>___skills — NOT `trust add`.
+```
+
+**HTTP `/api/skills` registry (fleet / regulated).** The server side — bucket, namespace,
+per-tenant registry key — is provisioned by aims-core infrastructure, *not* by `skillctl`. Once
+it exists, every consumer machine pins it and installs scoped to the tenant:
+
+```bash
+skillctl trust add --registry https://aims.example.com/api/skills --pubkey registry.pub --id aims-prod
+skillctl install my-skill@1.0.0 --tenant <tenant-id>
+```
+
+### Rotate the registry key (overlap-publish window)
+
+Never swap keys abruptly. Run an **overlap window** where both keys are accepted, re-sign under
+the new key, then drop the old.
+
+**HTTP registry** — `skill-trust-roots.yaml` holds multiple keys per registry, so pin the new key
+alongside the old for the window:
+
+```bash
+skillctl keygen --out ~/.config/m3c/skill-registry-v2                       # 1) new keypair
+skillctl trust add --registry https://aims.example.com/api/skills \
+  --pubkey ~/.config/m3c/skill-registry-v2.pub --id aims-prod-v2            # 2) pin new (old still pinned)
+# 3) re-admit / re-sign current bundles under the new key during the window
+skillctl trust remove --registry https://aims.example.com/api/skills        # 4) after cutover, re-pin new-only
+```
+
+**ER1 `self`** — the flat `~/.claude/trust-roots.yaml` pins a single `pubkey_b64`, so re-publish
+current bundles under the v2 key during the window, then have each consumer swap their
+`pubkey_b64` / `fingerprint` (carried out-of-band) before you retire v1. Attestations bind to the
+`bundle_digest`, not the signing key, so they generally survive a rotation.
+
+### Register an author identity
+
+**ER1 `self`.** Identity is the `id:you@m3c` you stamp into events plus the keypair behind it —
+no self-serve endpoint. Generate the keypair, stamp `--identity` on publish (and `--identity-id`
+on `sign`), and give consumers the `.pub` fingerprint out-of-band.
+
+**HTTP registry.** Registering an author's public key is a **server-side admin operation** on the
+aims-core registry (`POST /api/skills/identities` with an operator bearer token) — not a
+`skillctl` verb. The author sends their `.pub`; the operator registers it; consumers' `verify` /
+`install` then check the author signature (exit `11` on mismatch) against that identity.
+
+---
+
 ## Files & locations
 
 | Path | Contents |
