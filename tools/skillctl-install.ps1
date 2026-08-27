@@ -182,6 +182,26 @@ function Get-Sha256Hex($path) {
     return (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash.ToLower()
 }
 
+# Run a native command WITHOUT letting its stderr become a terminating error.
+# Windows PowerShell 5.1 raises NativeCommandError on ANY stderr write under
+# $ErrorActionPreference='Stop' — even on success (e.g. cosign prints "Verified OK"
+# to stderr on exit 0). $PSNativeCommandUseErrorActionPreference is PS7.3+ only, so we
+# cannot rely on it (line 53 is a no-op on 5.1). We drop to 'Continue' for the duration
+# of the call — the SAME guard the curl.exe fallback uses (see Invoke-Download). Returns
+# the native exit code; merged STDOUT+STDERR is discarded (every caller here consults
+# only the exit code or reads a `-out` file, never STDOUT). NEVER use this for a command
+# whose STDOUT must be shown to the user (e.g. `skillctl version`).
+function Invoke-Native([scriptblock]$Command) {
+    $savedEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $Command 2>&1 | Out-Null
+        return $LASTEXITCODE   # Out-Null is a cmdlet; it does not touch $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $savedEAP
+    }
+}
+
 # ============================================================================
 # Main
 # ============================================================================
@@ -255,11 +275,14 @@ $hint
         $bundlePath = Join-Path $tmp 'SHA256SUMS.cosign.bundle'
         if (Fetch 'SHA256SUMS.cosign.bundle' -Optional) {
             Write-Info "Verifying cosign keyless provenance over SHA256SUMS (GitHub OIDC)"
-            & $cosignExe verify-blob $sumsPath `
+            # cosign prints "Verified OK" to STDERR even on success — route through
+            # Invoke-Native so that stderr write cannot throw on WinPS 5.1. The returned
+            # exit code drives the exact same verdict as before.
+            $rc = Invoke-Native { & $cosignExe verify-blob $sumsPath `
                 --bundle $bundlePath `
                 --certificate-identity-regexp $idRegex `
-                --certificate-oidc-issuer $COSIGN_ISSUER 2>&1 | Out-Null
-            if ($LASTEXITCODE -eq 0) {
+                --certificate-oidc-issuer $COSIGN_ISSUER }
+            if ($rc -eq 0) {
                 Write-Ok "cosign keyless provenance verified (signed by the release workflow)"
                 $verified = $true
             } else {
@@ -311,17 +334,17 @@ expected workflow identity; refusing to install (no silent downgrade to ed25519)
 
             if ($haveSig -and $pubkey) {
                 Write-Info "Verifying ed25519 signature over SHA256SUMS (provenance)"
-                & $openssl pkeyutl -verify -pubin -inkey $pubkey -rawin `
-                    -in $sumsPath -sigfile (Join-Path $tmp 'SHA256SUMS.sig') 2>&1 | Out-Null
-                if ($LASTEXITCODE -ne 0) {
+                $rc = Invoke-Native { & $openssl pkeyutl -verify -pubin -inkey $pubkey -rawin `
+                    -in $sumsPath -sigfile (Join-Path $tmp 'SHA256SUMS.sig') }
+                if ($rc -ne 0) {
                     Die "SIGNATURE VERIFICATION FAILED — refusing to install"
                 }
 
                 # Fingerprint = sha256 of the raw 32-byte ed25519 key (DER SPKI tail) —
                 # the same derivation used for trust-roots + the published fingerprint.
                 $derPath = Join-Path $tmp 'skillctl-release.der'
-                & $openssl pkey -pubin -in $pubkey -outform DER -out $derPath 2>&1 | Out-Null
-                if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $derPath)) {
+                $rc = Invoke-Native { & $openssl pkey -pubin -in $pubkey -outform DER -out $derPath }
+                if ($rc -ne 0 -or -not (Test-Path -LiteralPath $derPath)) {
                     Die "could not derive release-key fingerprint — refusing to install"
                 }
                 $der = [System.IO.File]::ReadAllBytes($derPath)
@@ -415,7 +438,13 @@ Fix: install cosign so provenance can be verified:
     }
 
     Write-Host ""
-    & $target version 2>$null
+    # The user must SEE this version output, so do NOT route it through Invoke-Native
+    # (which discards STDOUT). Instead drop to EAP='Continue' for the call so a stderr
+    # write cannot raise a terminating NativeCommandError on WinPS 5.1, while STDOUT
+    # still prints to the console.
+    $savedEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { & $target version } finally { $ErrorActionPreference = $savedEAP }
 
     Write-Host ""
     Write-Host "Installed / next steps:" -ForegroundColor Green
