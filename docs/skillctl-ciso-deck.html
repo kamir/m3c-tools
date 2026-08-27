@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>skillctl — CISO Onboarding Deck</title>
+<style>
+  :root{
+    --bg:#0a0f1c; --panel:#111a2e; --panel2:#0d1424; --ink:#eaf0fb; --mut:#9db0d0;
+    --line:#243146; --accent:#7c9cff; --gold:#f6c667;
+    --good:#34d399; --good2:#0c5b45; --bad:#f87171; --bad2:#5b1d1d;
+    --amber:#f59e0b; --amber2:#5a3d0a; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#eef2f8; --panel:#ffffff; --panel2:#f5f8fd; --ink:#0f1a2e; --mut:#4a5c7a;
+      --line:#d9e2f0; --good2:#d6f5ea; --bad2:#fbe0e0; --amber2:#fbe7cd; }
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15.5px/1.62 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+  code,.m{font-family:var(--mono);font-size:.9em}
+  .bar{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--bg) 88%,transparent);
+    backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:10px 20px;
+    display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}
+  .bar b{font-size:15px} .bar .tag{color:var(--gold);font-weight:700;font-size:12px;letter-spacing:.1em;text-transform:uppercase}
+  .bar .sp{flex:1}
+  .wrap{max-width:1000px;margin:0 auto;padding:8px 20px 80px}
+  section.slide{border:1px solid var(--line);background:var(--panel);border-radius:16px;
+    padding:26px 28px;margin:22px 0;scroll-margin-top:64px}
+  .n{display:inline-block;min-width:1.9em;color:var(--accent);font-weight:800;font-variant-numeric:tabular-nums}
+  h1.deck{font-size:30px;line-height:1.12;margin:.2em 0}
+  h2{font-size:21px;margin:0 0 4px} h2 small{color:var(--mut);font-weight:600;font-size:13px}
+  .key{color:var(--mut);margin:2px 0 14px;font-size:15px}
+  ul{margin:8px 0;padding-left:20px} li{margin:5px 0}
+  .quote{margin:16px 0 2px;padding:12px 16px;border-left:4px solid var(--gold);background:var(--panel2);
+    border-radius:0 10px 10px 0;font-size:15.5px;font-style:italic}
+  .quote b{font-style:normal}
+  .grid{display:grid;gap:14px}
+  .g3{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .card h3{margin:0 0 4px;font-size:14px;color:var(--accent)} .card p{margin:0;color:var(--mut);font-size:13.5px}
+  table{width:100%;border-collapse:collapse;font-size:13.6px;margin:6px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--mut);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em}
+  .ex{font-family:var(--mono);font-weight:800} .ex.b{color:var(--bad)} .ex.g{color:var(--good)}
+  .obj td:nth-child(1){width:22%} .obj .c{background:color-mix(in srgb,var(--amber2) 55%,transparent)}
+  .obj .r{background:color-mix(in srgb,var(--good2) 45%,transparent)}
+  .obj .e{font-family:var(--mono);font-size:11.6px;color:var(--mut)}
+  .ledger{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .ledger>div{padding:14px 16px} .ledger .is{background:color-mix(in srgb,var(--good2) 40%,transparent)}
+  .ledger .isnot{background:color-mix(in srgb,var(--bad2) 40%,transparent);border-left:1px solid var(--line)}
+  .ledger h3{margin:0 0 6px;font-size:13px;letter-spacing:.05em;text-transform:uppercase}
+  .band{margin-top:10px;padding:12px 16px;border:1px dashed var(--accent);border-radius:10px;background:var(--panel2)}
+  .diag{width:100%;height:auto;display:block;overflow:visible}
+  .lead3{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+  .lead3 .card{border-color:var(--accent)}
+  .lead3 .card h3{color:var(--gold)}
+  .foot{color:var(--mut);font-size:12.6px;text-align:center;margin-top:26px}
+  .pill{display:inline-block;font-family:var(--mono);font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);color:var(--mut)}
+  @media(max-width:620px){.ledger,.g3{grid-template-columns:1fr}.obj td:nth-child(1){width:auto}}
+</style>
+</head>
+<body>
+<div class="bar">
+  <span class="tag">CISO onboarding</span><b>skillctl — the trust layer for agent skills</b>
+  <span class="sp"></span>
+  <span class="pill">honest by design</span>
+</div>
+
+<div class="wrap">
+
+  <section class="slide" id="s0">
+    <h1 class="deck">Arm the CISO to defend skillctl — to a hostile security expert <em>and</em> a picky CTO</h1>
+    <p class="key">Every agent skill is arbitrary code that runs with your agent's full permissions, and today that
+      supply chain is unsigned, unreviewed, and unrevocable. skillctl closes the <b>provenance + governance +
+      integrity + revocation</b> half of that problem — and is deliberately honest about the half it does not
+      (the runtime cage). The deck wins by conceding the real limit, then holding the defensible core with exact evidence.</p>
+    <div class="lead3">
+      <div class="card"><h3>Lead argument #1</h3><p><b>No hosted CA in the verdict path.</b> A different principal verifies the whole chain with <em>your</em> pinned ed25519 roots + the bundle bytes alone — no OCSP / CRL / Rekor / Fulcio call to reach a verdict. If we disappear, verification still works.</p></div>
+      <div class="card"><h3>Lead argument #2</h3><p><b>reviewer≠author, enforced in cryptography.</b> Separation-of-duties as a pinned-key floor across <em>distinct</em> principals. A stolen author key still can't manufacture a green review; a red→green sidecar edit fails closed.</p></div>
+      <div class="card"><h3>Lead argument #3</h3><p><b>Honest, fail-closed scope.</b> We sell the provenance+governance+integrity+revocation <em>lock</em> now, and explicitly <em>not</em> the runtime cage (FR-0044, roadmap). The PreToolUse gate shrinks what reaches ambient authority — it doesn't confine it.</p></div>
+    </div>
+  </section>
+
+  <section class="slide" id="s1">
+    <h2><span class="n">1</span>The hole: a skill is code with your agent's keys</h2>
+    <p class="key">An agent skill isn't a library you <em>might</em> call — it's arbitrary code the agent executes on its own initiative, with the agent's full permissions. Today that supply chain is unsigned, unreviewed, and unrevocable.</p>
+    <ul>
+      <li>A poisoned or swapped skill = SolarWinds / xz / npm-typosquat — but the payload runs with the <b>agent's</b> ambient authority, not yours.</li>
+      <li>Today's default: no author identity, no independent review, no integrity check, no way to revoke a known-bad skill fleet-wide.</li>
+      <li>The realistic vector is <b>data-borne</b>: a skill pulled from a room, imported from the internet, shared cross-person — no attacker code-exec on your box required.</li>
+    </ul>
+    <div class="quote">"If your risk register carries dependency-confusion as a real line, agent skills are that line — <b>with the safety off.</b>"</div>
+  </section>
+
+  <section class="slide" id="s2">
+    <h2><span class="n">2</span>Threat model: what actually reaches invocation</h2>
+    <p class="key">Rank by likelihood, not movie-plot. The common vector is a tampered / forged / revoked / under-reviewed skill entering as data — exactly the population skillctl removes from the board.</p>
+    <svg class="diag" viewBox="0 0 720 250" role="img" aria-label="threat likelihood pyramid">
+      <polygon points="360,20 90,205 630,205" fill="none" stroke="var(--line)"/>
+      <line x1="150" y1="165" x2="570" y2="165" stroke="var(--line)" stroke-dasharray="4 3"/>
+      <text x="360" y="120" text-anchor="middle" fill="var(--good)" font-size="13" font-weight="700">skillctl kills these at the gate</text>
+      <text x="360" y="140" text-anchor="middle" fill="var(--mut)" font-size="11">tampered · forged-author · untrusted-registry · self-reviewed · red→green · revoked</text>
+      <text x="360" y="188" text-anchor="middle" fill="var(--mut)" font-size="11">out of scope — OS boundary (FR-0044): same-uid config tamper · fully-vetted-then-malicious runtime</text>
+      <text x="360" y="45" text-anchor="middle" fill="var(--gold)" font-size="12" font-weight="700">rare / apex</text>
+    </svg>
+    <p class="key" style="margin-top:6px">Stated up front as out of scope: an attacker who <em>already</em> has same-uid write in the agent's config dir — a truism about the OS boundary, not a skillctl defect.</p>
+  </section>
+
+  <section class="slide" id="s3">
+    <h2><span class="n">3</span>The answer: a three-signature chain over a content-addressed digest</h2>
+    <p class="key">Bundle identity = sha256 of a deterministic archive. Three <b>distinct pinned principals</b> sign over that digest: author ("who wrote it"), registry ("admitted on this date"), governance ("a named reviewer set the level"). The verifier recomputes the digest and never trusts the advertised one.</p>
+    <svg class="diag" viewBox="0 0 720 210" role="img" aria-label="three signature chain">
+      <g font-size="12" font-family="var(--mono)">
+        <rect x="20" y="20" width="150" height="34" rx="8" fill="var(--panel2)" stroke="var(--line)"/><text x="95" y="41" text-anchor="middle" fill="var(--ink)">skill dir</text>
+        <text x="185" y="41" fill="var(--mut)">— pack →</text>
+        <rect x="250" y="20" width="200" height="34" rx="8" fill="var(--panel2)" stroke="var(--accent)"/><text x="350" y="41" text-anchor="middle" fill="var(--ink)">sha256 DIGEST (identity)</text>
+        <rect x="250" y="78" width="420" height="30" rx="7" fill="color-mix(in srgb,var(--good2) 45%,transparent)" stroke="var(--good)"/><text x="260" y="98" fill="var(--ink)">① AUTHOR ed25519 — who wrote it</text>
+        <rect x="250" y="116" width="420" height="30" rx="7" fill="color-mix(in srgb,var(--good2) 45%,transparent)" stroke="var(--good)"/><text x="260" y="136" fill="var(--ink)">② REGISTRY ed25519 — admitted on date</text>
+        <rect x="250" y="154" width="420" height="30" rx="7" fill="color-mix(in srgb,var(--good2) 45%,transparent)" stroke="var(--good)"/><text x="260" y="174" fill="var(--ink)">③ GOVERNANCE ed25519 — reviewer≠author set level</text>
+        <line x1="350" y1="54" x2="350" y2="78" stroke="var(--line)"/>
+      </g>
+    </svg>
+    <ul>
+      <li>Same primitive TUF and Sigstore sign with — <b>no novel crypto</b>. The value claim is narrow and true: three <em>distinct pinned principals</em>, not "three files on one box" (that's an operator error, not the design — see Slide 8).</li>
+      <li><b>Reproducible digest, scoped honestly:</b> byte-for-byte reproducible with the same <code>skillctl pack</code> (pinned version, deterministic PAX tar + <code>gzip --no-name</code>). Gzip output is toolchain-dependent, so the <em>cross-implementation</em> content check is the per-file <code>CHECKSUMS</code> manifest.</li>
+    </ul>
+  </section>
+
+  <section class="slide" id="s4">
+    <h2><span class="n">4</span>Differentiator #1 — no hosted CA in the verification path</h2>
+    <p class="key">A different principal verifies the full chain with pinned ed25519 roots + the bundle bytes <b>alone</b> — no OCSP, CRL, Rekor, or Fulcio call to reach a verdict. Even revocation is a signed, pinnable offline list, not a network lookup.</p>
+    <table>
+      <tr><th>Hosted-CA model</th><th>skillctl offline model</th></tr>
+      <tr><td>A permanently-online, permanently-attackable issuance authority that can mint a valid cert for your fleet on <em>any</em> day, not just day-zero.</td>
+          <td>The trust root is <b>yours</b> — a key you generate and hold. <code>verify.go</code> pinned-author mode does <code>ed25519.Verify</code> against a local key with zero registry calls.</td></tr>
+    </table>
+    <div class="quote">"Sigstore proves where a public binary came from in the open; skillctl proves a skill's provenance+governance+integrity to an <b>offline</b> verifier who pins their own root."</div>
+    <p class="key" style="margin-top:8px"><b>Reconciled with revocation (Slide 6):</b> the verdict <em>computation</em> is offline. Revocation <em>freshness</em> has a distribution SLO over any channel you already run (MDM / git / S3); "brick-on-stale" for high-risk actions is intended fail-closed, not a network dependency in the crypto. Low/no-risk verification stays fully offline.</p>
+  </section>
+
+  <section class="slide" id="s5">
+    <h2><span class="n">5</span>Differentiator #2 — reviewer≠author, enforced in cryptography</h2>
+    <p class="key">The "only reviewer is the author" laundering weakness is closed by a signature-verified attestation from a <b>pinned</b> reviewer whose id differs from the verified author. A forged unsigned reviewer_id can't launder past the floor; a stolen author key still can't manufacture a green review.</p>
+    <table>
+      <tr><th>Attack</th><th>What happens</th><th>Exit</th></tr>
+      <tr><td>Self-attestation (author signs "reviewed: green")</td><td><code>verifiedIndependentReviewer()</code> trusts only signed bytes; reviewer_id == author → fails closed</td><td class="ex b">20</td></tr>
+      <tr><td>Sidecar downgrade (registry's unsigned governance edited red→green)</td><td>level re-verified over signed <code>(digest, level, attestedAt, reviewerID)</code> vs the pinned reviewer key</td><td class="ex b">13</td></tr>
+    </table>
+    <p class="key" style="margin-top:6px">Cryptographic segregation-of-duties — an auditor's favourite kind of control (SOC 2 CC8.1, ISO/IEC 27001 A.5.23): enforced, not a checkbox on a form.</p>
+  </section>
+
+  <section class="slide" id="s6">
+    <h2><span class="n">6</span>Differentiator #3 — fail-closed revocation + freshness with a rollback floor</h2>
+    <p class="key">A stale, replayed, or rolled-back revocation view cannot authorize a high-risk action. Past <code>max_staleness</code>, HIGH-risk always fails closed regardless of config; a monotonic signed-epoch floor refuses an older genuinely-signed list; the clock is injected so a replayed stale list can't masquerade as fresh.</p>
+    <ul>
+      <li><code>freshness.go PolicyFor()</code>: <b>RiskHigh → FailClosed is an invariant</b> — validation refuses to even configure high-risk <code>fail_policy=open</code>.</li>
+      <li>Risk classifier is a <b>closed allowlist</b> (<code>knownLowRiskTokens</code>): an unknown / mistyped / creatively-labelled action is HIGH by exclusion — an author can't "declare read-only" into fail-open.</li>
+      <li><code>revocation.go minEpoch</code>: a list below the pinned epoch floor is refused even with a valid signature (TUF anti-rollback idea).</li>
+      <li>Future-dated / unparseable <code>issued_at</code> → treated as infinitely stale (fail-safe, not fail-random).</li>
+    </ul>
+  </section>
+
+  <section class="slide" id="s7">
+    <h2><span class="n">7</span>Every failure is a numbered exit code — <small>CI-branchable, SIEM-portable</small></h2>
+    <p class="key">The verify/install CLI exit is a <b>stable integer CI can branch on</b> (<code>os.Exit(verify.ExitCode(err))</code>) — no bespoke stderr parser. Codes are <em>not</em> injective: overloaded numbers (12, 17) are disambiguated by label/surface; the PreToolUse hook exits <code>2</code> to block while carrying the numbered code in its output.</p>
+    <table>
+      <tr><th>Attack</th><th>Defense</th><th>Exit</th></tr>
+      <tr><td>Bundle bytes modified after signing</td><td>recompute sha256 + constant-time compare</td><td class="ex b">10</td></tr>
+      <tr><td>Forged author signature / wrong key</td><td><code>ed25519.Verify</code> vs pinned identity pubkey</td><td class="ex b">11</td></tr>
+      <tr><td>Untrusted registry · forged revocation list · rollback (older epoch)</td><td>registry-sig vs non-retired pinned root; epoch floor</td><td class="ex b">12</td></tr>
+      <tr><td>Under-reviewed (yellow) where green required · red→green</td><td>rank level vs floor + re-verify signed attestation</td><td class="ex b">13</td></tr>
+      <tr><td>Unsatisfiable declared dependencies</td><td><code>depends_on</code> resolution refuses</td><td class="ex b">14</td></tr>
+      <tr><td>Bundle status ≠ admitted / blob unreachable (covers registry-side revoked status)</td><td>status must be <code>admitted</code>; else fail closed</td><td class="ex b">15</td></tr>
+      <tr><td>Tenant CISO blocked a globally-admitted bundle</td><td>active tenant-scoped red attestation fails closed</td><td class="ex b">16</td></tr>
+      <tr><td><b>Author-key / bundle revoked</b> (SPEC-0198) · data-source denied</td><td><code>ident.IsRevoked → ErrIdentityRevoked</code></td><td class="ex b">17</td></tr>
+      <tr><td>Self-attestation (author is only reviewer)</td><td>require independent, signature-verified reviewer</td><td class="ex b">20</td></tr>
+      <tr><td>Replayed stale-but-signed revocation snapshot (high-risk)</td><td>freshness vs injected clock; high-risk past staleness</td><td class="ex b">22</td></tr>
+      <tr><td>Required transparency-log inclusion missing</td><td><code>require_log_inclusion</code> vs pinned Signed Tree Head</td><td class="ex b">23</td></tr>
+      <tr><td>Valid install</td><td>full chain verified</td><td class="ex g">0</td></tr>
+    </table>
+    <p class="key" style="margin-top:4px">Codes are test-covered end-to-end (<code>verify_test.go / freshness_test.go / revocation_test.go / governance_signed_test.go</code>). Prompt-injection/exfil is handled <em>advisorily</em> by the static <code>bodyscan</code> (Slide 8/10), not by an exit code.</p>
+  </section>
+
+  <section class="slide" id="s8">
+    <h2><span class="n">8</span>Objections you'll hear — the security expert</h2>
+    <p class="key">Win by conceding the real limit first, then holding the defensible core with exact evidence. The concessions are what make the rebuttals credible — never bluff.</p>
+    <table class="obj">
+      <tr><th>Objection</th><th class="c">Concede</th><th class="r">Rebut</th></tr>
+      <tr><td><b>Software keys, no HSM</b> — three signatures are three <code>cat</code>-able files</td>
+        <td class="c">True: ed25519 PEM at 0600; no HSM/threshold yet.</td>
+        <td class="r">You've conflated key <em>storage</em> with key <em>co-location</em>. The value is three <b>distinct principals</b> — a stolen <em>author</em> key still can't forge a green <em>reviewer</em> signature. Release custody is already keyless (Sigstore/OIDC, no laptop key). HSM/threshold for the registry root is a named roadmap gate, not a claim we make today. <span class="e">verify.go verifiedIndependentReviewer()</span></td></tr>
+      <tr><td><b>Provenance ≠ safety</b> — you prove <em>who</em>, never <em>what it does</em></td>
+        <td class="c">Dead right: crypto proves who signed + that bytes are unchanged, not runtime behaviour.</td>
+        <td class="r">So don't buy it as behavioural safety — buy the layer that makes behavioural defense <em>possible &amp; accountable</em>: (1) <b>attribution</b> — when a sleeper detonates, you know exactly which author+reviewer signed which digest (a lookup, not a forensic dig); (2) <b>revocation has teeth</b> — fail-closed, tested. (bodyscan is advisory/unproven — we claim no credit for it.)</td></tr>
+      <tr><td><b>No runtime cage</b> — you gate a knife then hand it over handle-first</td>
+        <td class="c">Conceded: FR-0044 is PENDING; a passed skill runs with ambient authority.</td>
+        <td class="r">The compensating control is real and fail-closed: the PreToolUse hook <b>hardens the entry</b> — unsigned/tampered/revoked/self-reviewed skills never reach invocation (panic-safe DENY on any error). It is <em>not</em> self-protecting against same-uid tampering <em>after</em> execution — that is exactly the FR-0044 gap, named not hidden. A seal that refuses to open when broken is worth money before the walls ship.</td></tr>
+      <tr><td><b>TOFU root bootstrap</b> — your root of trust is a YAML file; how did it arrive?</td>
+        <td class="c">Sharp and fair: the first pin is trust-on-first-use; we relocated "trust the CA" to "trust the first pin".</td>
+        <td class="r">But TOFU-<em>once</em> beats a standing CA for a security org: a hosted CA <em>also</em> has to bootstrap its root to the endpoint, <b>and</b> adds a permanently-online authority that can betray you any day. Our pin rides your existing MDM / signed-image / provisioning channel — one authenticated moment vs a perpetual attack surface.</td></tr>
+      <tr><td><b>No transparency log</b> — offline = undetectably compromisable</td>
+        <td class="c">Correct in pure-offline config: pinned-roots-only gives no external post-compromise witness.</td>
+        <td class="r">That's a <em>configuration</em>, not a ceiling: log-inclusion is a <b>shipped opt-in</b> — set <code>require_log_inclusion</code> and the verifier fails closed (exit 23) with no valid inclusion proof under a pinned Signed Tree Head. "Offline by default, log-witnessed by policy."</td></tr>
+      <tr><td><b>Registry key = its own revocation</b> — steal it, own the kill-switch</td>
+        <td class="c">The genuine structural weak point, named precisely: the revocation feed is signed by the key it protects.</td>
+        <td class="r">The epoch floor still blunts the 2am case: an attacker with the key can <em>suppress</em> a revocation but <b>cannot roll an existing fleet backward</b> to un-revoke (clients that saw epoch N refuse anything below N). In-band threshold/timestamp-role recovery (TUF-style) is on the roadmap, named as a sign-off condition — not claimed as present.</td></tr>
+      <tr><td><b>You reinvented TUF/in-toto</b> — uncited, un-analyzed crypto</td>
+        <td class="c">Partly landed: bespoke ed25519 framing + epoch scheme, no external formal-analysis paper on our exact composition.</td>
+        <td class="r">The honest framing is "<b>layers on where the standard fits, diverges only where a mandatory online log is a liability, reuses their audited ideas</b>": release provenance = Sigstore/cosign <em>directly</em>; three-sig = in-toto layered attestation; epoch floor = TUF anti-rollback; raw ed25519 = the same primitive both sign with. External crypto review of the canonicalization is a named sign-off condition.</td></tr>
+      <tr><td><b>Governance theater</b> — an attestation is a signature over "trust me"</td>
+        <td class="c">True: a signature proves the authenticity of a claim, never its truth; the attestation embeds no scan/diff evidence today.</td>
+        <td class="r">It's not bare: the verdict is bound to the <b>exact digest</b> under review and re-verified against a pinned reviewer key — "trust me, about <em>this</em> digest, and I can't lie about which." Binding richer evidence (scan hash, policy id) into the signed message is a named enhancement, not a reinvention.</td></tr>
+    </table>
+  </section>
+
+  <section class="slide" id="s9">
+    <h2><span class="n">9</span>Objections you'll hear — the CTO</h2>
+    <p class="key">The CTO probes cost, bus factor, lock-in, and "why not wait for the standard." Same discipline: concede the operational truth, then show what the offline design deliberately <em>deletes</em> from the TCO.</p>
+    <table class="obj">
+      <tr><th>Objection</th><th class="c">Concede</th><th class="r">Rebut</th></tr>
+      <tr><td><b>Single maintainer / bus factor</b></td>
+        <td class="c">True — the git log shows one author on the trust core; a single-maintainer dependency on a fail-closed path is a real risk.</td>
+        <td class="r">De-risked without waiting for a second committer: it's an <b>offline verifier with no server to keep alive</b> — the core sig+digest check is small, and the full offline verifier (freshness, signed-revocation, rollback-floor, tenant, trust-roots, transparency-log) is <b>~4.2k LOC of test-covered stdlib-crypto Go</b>. Fork-and-pin + a second committer are named sign-off conditions. If the maintainer vanishes, your pinned root keeps verifying.</td></tr>
+      <tr><td><b>Real TCO isn't $0</b></td>
+        <td class="c">Conceded: key custody/rotation for three tiers, a registry to keep, reviewer workflow, responder training — an operational program, not a download.</td>
+        <td class="r">Price it honestly — then notice what the design <em>doesn't</em> put on your books: <b>no always-on HSM-backed CA, no OCSP service</b>; the registry is <em>not</em> in the verification path, so a registry outage doesn't hard-block verification. The expensive part of classic PKI is architected out.</td></tr>
+      <tr><td><b>Lock-in / single-vendor trust root</b></td>
+        <td class="c">Fair one layer up: your operators learn skillctl, pipelines emit <code>.skb</code>, CI policy speaks its exit codes.</td>
+        <td class="r">The trust root is <b>yours</b>, not ours — you pin your own key and verify with no vendor CA. <code>.skb</code> is a standard gzip-tar + ed25519, re-serializable; the exit path is CI glue, not a rewrite. Transport is carrier-agnostic (ER1 / GCS-MinIO / OCI as peers).</td></tr>
+      <tr><td><b>Why not wait for the OpenSSF/MCP standard?</b></td>
+        <td class="c">The category is ~18 months old; a standard attestation format may converge.</td>
+        <td class="r">We're built <b>on the primitives any standard will use</b> (content-addressing, detached sigs, in-toto layering, TUF anti-rollback), so we're the low-regret bet, not the stranded one — meanwhile every unsigned skill runs with agent permissions <em>today</em>. Adopt the reversible parts now (pin your own root, CI exit codes); the <code>.skb</code>→SPDX/in-toto export is a named roadmap item.</td></tr>
+      <tr><td><b>Does it move an audit line?</b> (SOC2 / AI-Act)</td>
+        <td class="c">There's no auditor checkbox named "skillctl"; we position AI-Act as <em>evidence</em>, not a compliance stamp.</td>
+        <td class="r">It maps to named controls as evidence you can hand an auditor: <b>SOC 2 CC8.1</b> (change mgmt) + <b>CC7.x</b> (unauthorized-change detection) via the tamper-evident digest + three-sig chain; cryptographic reviewer≠author for segregation-of-duties. Stronger than ad-hoc signing on the two axes auditors actually probe.</td></tr>
+      <tr><td><b>Is this a real problem or theater?</b></td>
+        <td class="c">Honest: I can't hand you a named public breach of a signed-skill supply chain that this uniquely stopped — the surface is new.</td>
+        <td class="r">The risk is theoretical only in <em>label</em>: it's the supply-chain class with named public incidents (SolarWinds, xz/liblzma, npm/PyPI typosquats) — now pointed at a payload that runs with the <b>agent's</b> permissions. The reversible Phase-1 spend is small; the downside of waiting is unsigned code with ambient authority.</td></tr>
+    </table>
+  </section>
+
+  <section class="slide" id="s10">
+    <h2><span class="n">10</span>Honest scope — what it is, what it is <em>not</em></h2>
+    <p class="key">The deck wins by drawing this line in ink. Overclaiming loses a sharp reviewer.</p>
+    <div class="ledger">
+      <div class="is"><h3>✓ skillctl IS</h3>
+        <ul>
+          <li>A <b>provenance</b> layer — content-addressed <code>.skb</code> identity binds a version to a signing author + admission.</li>
+          <li>A <b>governance</b> layer — a reviewer's Ampel verdict is a signed attestation, reviewer≠author cryptographically enforceable.</li>
+          <li>An <b>integrity</b> layer — any post-signing byte change breaks the digest; tamper-evident, fails closed.</li>
+          <li><b>Offline third-party verifiable</b> — pinned roots + bytes, no hosted CA / log / network in the verdict.</li>
+          <li>A fail-closed <b>revocation + freshness</b> system (signed lists, epoch floor, staleness contract).</li>
+          <li>A CI-gateable surface — numbered exit codes (10–23).</li>
+        </ul></div>
+      <div class="isnot"><h3>✕ skillctl is NOT</h3>
+        <ul>
+          <li>A <b>runtime sandbox / OS capability cage</b> — that is FR-0044, <b>PENDING</b>. The hook gates whether a skill may be invoked; it does not confine it.</li>
+          <li>A <b>behavioural-safety proof</b> — <code>bodyscan</code> is a static heuristic (≥95% TP / ≤5% FP <em>target</em>, unproven), not a guarantee.</li>
+          <li>A <b>hosted-CA / online-CRL</b> model.</li>
+          <li>Yet <b>hardened for arbitrary untrusted multi-party fan-out</b> beyond the pinned-key + co-learning-room model.</li>
+          <li>A <b>replacement</b> for Sigstore/SLSA/in-toto/TUF — it layers on them (Slide 11).</li>
+        </ul></div>
+    </div>
+    <div class="band"><b>Compensating control today:</b> the fail-closed PreToolUse verify-hook shrinks the population reaching ambient authority to exactly the signed + attested + non-revoked + attributable set. It hardens the <em>entry</em>; it is not self-protecting against same-uid tampering post-execution — that is the FR-0044 gap.</div>
+    <div class="quote">"I'm selling you the <b>gate</b> now and the <b>cage</b> on the roadmap — and I'm pricing it as exactly that."</div>
+  </section>
+
+  <section class="slide" id="s11">
+    <h2><span class="n">11</span>How it layers — Sigstore / SLSA / in-toto / TUF</h2>
+    <p class="key">skillctl doesn't reinvent the ecosystem: it uses the standard where a public artifact fits, diverges only where a mandatory online log is a liability, and reuses the standards' audited ideas everywhere else.</p>
+    <div class="grid g3">
+      <div class="card"><h3>Public release artifact → standards, directly</h3><p>cosign keyless + GitHub OIDC (no key on any laptop), SLSA build-provenance (<code>gh attestation verify</code> → 0), CycloneDX SBOM. Flows straight into your existing supply-chain tooling.</p></div>
+      <div class="card"><h3>Sovereign skill bundle → diverges by decision</h3><p>The bundle chain deliberately does <em>not</em> depend on Rekor/Fulcio in the verdict path (SPEC-0188 D1 — a decision, not an oversight). That <em>is</em> the offline-sovereign differentiator.</p></div>
+      <div class="card"><h3>Ideas reused</h3><p>Three-sig chain = in-toto layered attestation; monotonic-epoch floor = TUF anti-rollback; raw ed25519 = the primitive both sign with. Rekor-style transparency is <b>opt-in</b> (exit 23) under a pinned Signed Tree Head.</p></div>
+    </div>
+  </section>
+
+  <section class="slide" id="s12">
+    <h2><span class="n">12</span>Field proof — it worked off the slide</h2>
+    <p class="key">"looks-verified ≠ is-verified" made concrete: a cross-person exchange, a published signed release, and a repeated adversarial gate that honestly downgrades the tool where it isn't ready.</p>
+    <div class="grid g3">
+      <div class="card"><h3>Cross-person exchange (SPEC-0246)</h3><p>A <em>different</em> principal pinned the anchor out-of-band (fingerprint over voice), pulled room skills via a per-user device token, passed the 5-gate verify on macOS + Ubuntu — with no write-back to the author's registry.</p></div>
+      <div class="card"><h3>Signed release v0.3.1</h3><p>Cut &amp; published; <code>cosign verify-blob</code> → "Verified OK"; all public asset URLs 200; windows-gate + windows-smoke CI green. Field-installed on Windows PowerShell 5.1.</p></div>
+      <div class="card"><h3>Adversarial discipline</h3><p>Real defects found by real testers (e.g. BUG-0193) fixed <em>and</em> CI-guarded. Reviews honestly grade posture: <b>at v0.3.1</b> — defensible single-operator + cross-person proven; <b>not yet</b> hardened for arbitrary untrusted fan-out.</p></div>
+    </div>
+  </section>
+
+  <section class="slide" id="s13">
+    <h2><span class="n">13</span>The ask — adopt the lock now, roadmap the cage</h2>
+    <p class="key">Approve a scoped, phased rollout that gates the realistic supply-chain vector today, with maturity conditions and the runtime cage named as the next layer — not oversold as present.</p>
+    <div class="grid g3">
+      <div class="card"><h3>Phase 1 — adopt now (reversible)</h3><p>Pin your own ed25519 root via MDM / signed-image; turn on the fail-closed PreToolUse hook; wire exit codes 10–23 into CI + SIEM.</p></div>
+      <div class="card"><h3>Sign-off conditions (owned, not hidden)</h3><p>2nd committer + fork-and-pin runbook; a line-item 3-year TCO model; measured block-rate as an SLI before any revenue-path agent; tiered review policy.</p></div>
+      <div class="card"><h3>Named next layers</h3><p>FR-0044 OS-level cage; TUF-style timestamp/threshold role for registry-key recovery; external crypto review of the freshness canonicalization; <code>.skb</code> → SPDX/in-toto export.</p></div>
+    </div>
+    <div class="quote">"skillctl raises the bar from <b>ship-a-bad-skill</b> to <b>first-achieve-same-uid-code-execution-then-tamper-the-gate</b> — a strictly higher bar, and the leap between them is exactly what the cage is being built to deny."</div>
+  </section>
+
+  <p class="foot">
+    Built from an adversarial team pass (hostile security-expert + picky-CTO red team → grounded rebuttals → demolition gate).
+    Every claim is scoped to what the repo/SPECs support. Companion docs:
+    <a href="acceptance-skillctl-lifecycle.md">Acceptance &amp; Handover</a> ·
+    <a href="manual-skillctl.md">Manual</a> ·
+    <a href="runbook-two-person-er1-exchange.md">Two-person ER1 runbook</a>.
+    Run <code>skillctl version</code> for your build; posture stated as of v0.3.1.
+  </p>
+
+</div>
+</body>
+</html>
