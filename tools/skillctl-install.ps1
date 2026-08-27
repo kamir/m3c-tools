@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  skillctl installer (Windows) — native PowerShell mirror of tools/skillctl-install.sh.
+  skillctl installer (Windows) -- native PowerShell mirror of tools/skillctl-install.sh.
 
 .DESCRIPTION
   Fetch the windows/amd64 binary from a GitHub release, VERIFY provenance over
@@ -8,12 +8,12 @@
   program dir and put it on the user PATH. Fail-closed, verify-before-install.
 
   Provenance has two tracks, exactly like the shell installer:
-    TRACK 1 (PRIMARY) — keyless cosign / GitHub OIDC (SPEC-0253). cosign is the
+    TRACK 1 (PRIMARY) -- keyless cosign / GitHub OIDC (SPEC-0253). cosign is the
       primary path and is AUTO-FETCHED (pinned + self-verified) when not on PATH.
       A cosign bundle that is present but does NOT verify is a HARD FAIL (an
       attacker must not be able to force a downgrade). A fully ABSENT bundle falls
       through to track 2.
-    TRACK 2 (FALLBACK) — pinned ed25519 (SEC-M2), used only when track 1 did not
+    TRACK 2 (FALLBACK) -- pinned ed25519 (SEC-M2), used only when track 1 did not
       verify AND openssl.exe is available. Windows does not ship openssl, so unlike
       the shell installer this is a conditional fallback, not a hard prerequisite;
       if NEITHER track can verify, we REFUSE.
@@ -27,7 +27,7 @@
   %LOCALAPPDATA%\Programs\skillctl
 
 .NOTES
-  Usage (one-liner) — a published release ships this file as install.ps1 with its
+  Usage (one-liner) -- a published release ships this file as install.ps1 with its
   RELEASE_BASE already baked in to that release, so the ... is pre-filled there:
     irm .../install.ps1 | iex
 
@@ -49,7 +49,7 @@ param(
 $ErrorActionPreference = 'Stop'
 # Native tools (cosign, curl.exe, openssl, skillctl) report failure via their EXIT
 # CODE, which we check explicitly. Do NOT let a native non-zero exit throw (this is
-# the PowerShell 7.4+ default) — it would break our $LASTEXITCODE-based control flow.
+# the PowerShell 7.4+ default) -- it would break our $LASTEXITCODE-based control flow.
 $PSNativeCommandUseErrorActionPreference = $false
 # Invoke-WebRequest's progress bar makes downloads crawl on Windows PowerShell 5.1.
 $ProgressPreference = 'SilentlyContinue'
@@ -65,11 +65,11 @@ try {
 # ============================================================================
 
 # SEC-M2: pin the release-key fingerprint. The signature alone proves only that
-# SHA256SUMS was signed by WHATEVER key sits next to it at the same origin — an
+# SHA256SUMS was signed by WHATEVER key sits next to it at the same origin -- an
 # origin compromise can swap key + sig + binaries together and still "verify".
 # Pinning the expected fingerprint here narrows that hole: the fetched key must
 # match this exact value or we refuse. CAVEAT: when this script is delivered via
-# `irm … | iex`, the script (and this pin) is itself fetched from the release
+# `irm ... | iex`, the script (and this pin) is itself fetched from the release
 # origin, so the pin only fully closes the hole for a run from a reviewed
 # CHECKOUT, where the in-repo INFRA/skillctl-release.pub is preferred below. For
 # the highest assurance, clone the repo and run this script from the checkout.
@@ -78,7 +78,7 @@ $EXPECTED_FP   = 'sha256:5f8f39cb0454dcd8ac04c6729af2fa4b71a13a5e125e56924701d9e
 
 # cosign auto-fetch pin. If cosign is not already on PATH we download THIS exact
 # release and verify its OWN SHA-256 against $COSIGN_SHA256 before ever executing
-# it — never run a cosign.exe whose hash does not match the pin.
+# it -- never run a cosign.exe whose hash does not match the pin.
 # $COSIGN_SHA256 is the value published in sigstore's cosign_checksums.txt for
 # cosign-windows-amd64.exe at $COSIGN_VERSION. Re-confirm before cutting a release:
 #   https://github.com/sigstore/cosign/releases/download/<ver>/cosign_checksums.txt
@@ -88,7 +88,7 @@ $COSIGN_SHA256  = 'a2ac24e197111c9430cb2a98f10a641164381afb83df036504868e4ea5720
 
 $COSIGN_ISSUER  = 'https://token.actions.githubusercontent.com'
 
-# The ONLY windows asset — no windows/arm64 build exists.
+# The ONLY windows asset -- no windows/arm64 build exists.
 $ASSET = 'skillctl-windows-amd64.exe'
 
 # ============================================================================
@@ -102,15 +102,15 @@ if (-not $InstallDir) {
     $InstallDir = if ($env:INSTALL_DIR) { $env:INSTALL_DIR }
                   else { Join-Path $env:LOCALAPPDATA 'Programs\skillctl' }
 }
-# cosign certificate-identity regexp — same value the release workflow pins.
+# cosign certificate-identity regexp -- same value the release workflow pins.
 $idRegex = if ($env:SKILLCTL_COSIGN_IDENTITY) { $env:SKILLCTL_COSIGN_IDENTITY }
            else { '^https://github.com/kamir/m3c-tools/\.github/workflows/skillctl-release\.yml@refs/tags/skillctl/v' }
 
-# SEC: an env-supplied cosign identity or release base relaxes the trust anchor —
+# SEC: an env-supplied cosign identity or release base relaxes the trust anchor --
 # a poisoned environment could repoint verification at an attacker-signed release.
 # We still honor the overrides (they are legitimate for testing), but warn loudly.
 if ($env:SKILLCTL_COSIGN_IDENTITY) {
-    $host.UI.WriteErrorLine("WARNING: SKILLCTL_COSIGN_IDENTITY overrides the pinned cosign identity — provenance is only as trustworthy as this regexp.")
+    $host.UI.WriteErrorLine("WARNING: SKILLCTL_COSIGN_IDENTITY overrides the pinned cosign identity -- provenance is only as trustworthy as this regexp.")
 }
 if ($env:RELEASE_BASE) {
     $host.UI.WriteErrorLine("WARNING: RELEASE_BASE overrides the default release origin ($env:RELEASE_BASE).")
@@ -184,10 +184,10 @@ function Get-Sha256Hex($path) {
 
 # Run a native command WITHOUT letting its stderr become a terminating error.
 # Windows PowerShell 5.1 raises NativeCommandError on ANY stderr write under
-# $ErrorActionPreference='Stop' — even on success (e.g. cosign prints "Verified OK"
+# $ErrorActionPreference='Stop' -- even on success (e.g. cosign prints "Verified OK"
 # to stderr on exit 0). $PSNativeCommandUseErrorActionPreference is PS7.3+ only, so we
 # cannot rely on it (line 53 is a no-op on 5.1). We drop to 'Continue' for the duration
-# of the call — the SAME guard the curl.exe fallback uses (see Invoke-Download). Returns
+# of the call -- the SAME guard the curl.exe fallback uses (see Invoke-Download). Returns
 # the native exit code; merged STDOUT+STDERR is discarded (every caller here consults
 # only the exit code or reads a `-out` file, never STDOUT). NEVER use this for a command
 # whose STDOUT must be shown to the user (e.g. `skillctl version`).
@@ -216,7 +216,7 @@ try {
     Write-Info "Fetching manifest"
     if (-not (Fetch 'SHA256SUMS' -Optional)) {
         $hint = if ($script:LastHttpStatus -eq 404) {
-            "The release may not be published yet — GitHub draft releases are NOT publicly`n" +
+            "The release may not be published yet -- GitHub draft releases are NOT publicly`n" +
             "downloadable (their asset URLs return 404). Verify the release exists and is`n" +
             "published, or set `$env:RELEASE_BASE to a published release."
         } else {
@@ -236,7 +236,7 @@ $hint
     # cosign is the primary path. If it is not on PATH we auto-fetch a PINNED cosign
     # and verify its own SHA-256 before using it. When cosign is available AND the
     # release carries a cosign bundle, verify SHA256SUMS against the EXPECTED workflow
-    # OIDC identity (no key to trust — the signer is the release workflow itself).
+    # OIDC identity (no key to trust -- the signer is the release workflow itself).
     # A present-but-invalid bundle is a HARD FAIL (no silent downgrade); a fully
     # ABSENT bundle falls through to the pinned-ed25519 track below.
     $cosignExe = $null
@@ -245,13 +245,13 @@ $hint
     if ($cmd) { $cosignExe = $cmd.Source }
 
     if (-not $cosignExe) {
-        Write-Info "cosign not on PATH — fetching pinned cosign $COSIGN_VERSION (windows/amd64)"
+        Write-Info "cosign not on PATH -- fetching pinned cosign $COSIGN_VERSION (windows/amd64)"
         $cosignDl = Join-Path $tmp 'cosign.exe'
         if (Invoke-Download -Url $COSIGN_URL -OutFile $cosignDl -Optional) {
             if ($COSIGN_SHA256 -eq 'REPLACE_WITH_PINNED_SHA256') {
                 # SEC: never run an UNPINNED cosign. If the pin is unset, we cannot
-                # trust the downloaded cosign — skip the cosign track entirely.
-                Write-Info "cosign pin is not set (COSIGN_SHA256) — refusing to run unverified cosign; skipping cosign track"
+                # trust the downloaded cosign -- skip the cosign track entirely.
+                Write-Info "cosign pin is not set (COSIGN_SHA256) -- refusing to run unverified cosign; skipping cosign track"
             } else {
                 $dlHash = Get-Sha256Hex $cosignDl
                 if ($dlHash -ieq $COSIGN_SHA256) {
@@ -261,13 +261,13 @@ $hint
                 } else {
                     # SEC: never USE a cosign whose hash != pin. Do not set $cosignExe;
                     # fall through to the ed25519 track (as if cosign were absent).
-                    $host.UI.WriteErrorLine("downloaded cosign SHA-256 does not match the pin — refusing to use it")
+                    $host.UI.WriteErrorLine("downloaded cosign SHA-256 does not match the pin -- refusing to use it")
                     $host.UI.WriteErrorLine("  expected: $COSIGN_SHA256")
                     $host.UI.WriteErrorLine("  got:      $dlHash")
                 }
             }
         } else {
-            Write-Info "could not download pinned cosign — will try the ed25519 fallback"
+            Write-Info "could not download pinned cosign -- will try the ed25519 fallback"
         }
     }
 
@@ -275,7 +275,7 @@ $hint
         $bundlePath = Join-Path $tmp 'SHA256SUMS.cosign.bundle'
         if (Fetch 'SHA256SUMS.cosign.bundle' -Optional) {
             Write-Info "Verifying cosign keyless provenance over SHA256SUMS (GitHub OIDC)"
-            # cosign prints "Verified OK" to STDERR even on success — route through
+            # cosign prints "Verified OK" to STDERR even on success -- route through
             # Invoke-Native so that stderr write cannot throw on WinPS 5.1. The returned
             # exit code drives the exact same verdict as before.
             $rc = Invoke-Native { & $cosignExe verify-blob $sumsPath `
@@ -287,7 +287,7 @@ $hint
                 $verified = $true
             } else {
                 Die @"
-COSIGN VERIFICATION FAILED — a bundle is present but did not verify against the
+COSIGN VERIFICATION FAILED -- a bundle is present but did not verify against the
 expected workflow identity; refusing to install (no silent downgrade to ed25519).
 "@
             }
@@ -296,7 +296,7 @@ expected workflow identity; refusing to install (no silent downgrade to ed25519)
     }
 
     if ($env:SKILLCTL_REQUIRE_COSIGN -eq '1' -and -not $verified) {
-        Die "SKILLCTL_REQUIRE_COSIGN=1 but no verifiable cosign provenance was found — refusing."
+        Die "SKILLCTL_REQUIRE_COSIGN=1 but no verifiable cosign provenance was found -- refusing."
     }
 
     # === Provenance track 2 (FALLBACK): pinned ed25519 (SEC-M2). ===
@@ -313,7 +313,7 @@ expected workflow identity; refusing to install (no silent downgrade to ed25519)
             $havePubDl = Fetch 'skillctl-release.pub' -Optional
 
             # SEC-M2: prefer the in-repo, version-controlled release key when this
-            # script runs from a checkout — it is reviewed and cannot be swapped by an
+            # script runs from a checkout -- it is reviewed and cannot be swapped by an
             # origin compromise. Search a few likely roots relative to the script.
             $scriptDir = if ($PSScriptRoot) { $PSScriptRoot }
                          elseif ($PSCommandPath) { Split-Path -Parent $PSCommandPath }
@@ -337,18 +337,18 @@ expected workflow identity; refusing to install (no silent downgrade to ed25519)
                 $rc = Invoke-Native { & $openssl pkeyutl -verify -pubin -inkey $pubkey -rawin `
                     -in $sumsPath -sigfile (Join-Path $tmp 'SHA256SUMS.sig') }
                 if ($rc -ne 0) {
-                    Die "SIGNATURE VERIFICATION FAILED — refusing to install"
+                    Die "SIGNATURE VERIFICATION FAILED -- refusing to install"
                 }
 
-                # Fingerprint = sha256 of the raw 32-byte ed25519 key (DER SPKI tail) —
+                # Fingerprint = sha256 of the raw 32-byte ed25519 key (DER SPKI tail) --
                 # the same derivation used for trust-roots + the published fingerprint.
                 $derPath = Join-Path $tmp 'skillctl-release.der'
                 $rc = Invoke-Native { & $openssl pkey -pubin -in $pubkey -outform DER -out $derPath }
                 if ($rc -ne 0 -or -not (Test-Path -LiteralPath $derPath)) {
-                    Die "could not derive release-key fingerprint — refusing to install"
+                    Die "could not derive release-key fingerprint -- refusing to install"
                 }
                 $der = [System.IO.File]::ReadAllBytes($derPath)
-                if ($der.Length -lt 32) { Die "unexpected release-key DER length — refusing to install" }
+                if ($der.Length -lt 32) { Die "unexpected release-key DER length -- refusing to install" }
                 $raw = $der[($der.Length - 32)..($der.Length - 1)]
                 $sha = [System.Security.Cryptography.SHA256]::Create()
                 try {
@@ -360,10 +360,10 @@ expected workflow identity; refusing to install (no silent downgrade to ed25519)
 
                 # SEC-M2: fail closed unless the key's fingerprint matches the pin.
                 # Without this, a signature that merely verifies against a co-located
-                # key would pass — defeating the point of signing.
+                # key would pass -- defeating the point of signing.
                 if ($fp -ne $EXPECTED_FP) {
                     Die @"
-RELEASE KEY FINGERPRINT MISMATCH — refusing to install
+RELEASE KEY FINGERPRINT MISMATCH -- refusing to install
   expected: $EXPECTED_FP
   got:      $fp
 "@
@@ -374,14 +374,14 @@ RELEASE KEY FINGERPRINT MISMATCH — refusing to install
                 Write-Info "ed25519 fallback unavailable (missing signature or public key at the release)"
             }
         } else {
-            Write-Info "openssl.exe not found — cannot use the ed25519 fallback"
+            Write-Info "openssl.exe not found -- cannot use the ed25519 fallback"
         }
     }
 
     # Fail-closed: if NEITHER track verified provenance, refuse.
     if (-not $verified) {
         Die @"
-No verifiable provenance for SHA256SUMS — refusing to install (fail-closed).
+No verifiable provenance for SHA256SUMS -- refusing to install (fail-closed).
 Neither cosign (keyless/OIDC, primary) nor an openssl ed25519 fallback could verify it.
 Fix: install cosign so provenance can be verified:
   https://docs.sigstore.dev/cosign/system_config/installation/
