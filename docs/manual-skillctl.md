@@ -53,7 +53,7 @@ transparency log. Run any command with `--help` for its flags.
 |------|---------|
 | **`.skb` bundle** | A sealed skill bundle: a `SKILL.md`-bearing skill directory packed with a signed manifest (`bundle.json`). Its SHA-256 digest is the bundle's stable identity. |
 | **Author signature (detached)** | An ed25519 signature over the bundle's 32-byte digest, written *next to* the bundle as `<bundle>.<digest_hex>.author.sig`. Anyone with the author's public key can verify it offline. |
-| **Trust roots** | `~/.claude/skill-trust-roots.yaml`: the registry public keys *you* have pinned. The verifier trusts only these. Multiple keys per registry support rotation overlap windows. |
+| **Trust roots** | The registry public keys *you* have pinned; the verifier trusts only these. There are **two files, one per registry model** — `~/.claude/skill-trust-roots.yaml` (HTTP registries, managed by `trust`) and `~/.claude/trust-roots.yaml` (the ER1 `self` registry, hand-written). See [Trust roots & registries — which file, when](#trust-roots--registries--which-file-when). |
 | **Registry** | Where admitted bundles and their governance events live. Can be a `self` ER1 registry (personal) or an HTTP registry. The registry is a *distribution + audit* surface — it is **not** in the cryptographic verification path. |
 | **Admit / attest** | *Admit* publishes a bundle to a registry. *Attest* posts a signed governance verdict on an admitted digest. Attestations — not author intent — are what bind governance. |
 | **Governance level (green/yellow/red)** | The verdict carried by an attestation. Install/verify enforce a configurable minimum (default green). Author *intent* is advisory; the verifier ignores it. |
@@ -61,6 +61,29 @@ transparency log. Run any command with `--help` for its flags.
 | **AgentID** | An owner-signed *mandate* stating that a specific agent instance may use these skills for these intents. It verifies **offline** against pinned owner/approver keys — no authority in the path. |
 | **Transparency log (translog)** | A local RFC-6962 Merkle log (SPEC-0278, "L1"). It makes equivocation and withholding **detectable**, and emits offline inclusion receipts. It does not gate installs; L2 (BFT ledger) and L3 (public anchoring) are deferred. |
 | **The fail-closed gate** | `verify-hook` is a Claude Code `PreToolUse(Skill)` hook. It verifies the trust chain before any skill runs and emits allow/deny. If it cannot read or verify, it **denies** — fail-closed. |
+
+---
+
+## Trust roots & registries — which file, when
+
+skillctl has **two** trust-roots files, one per registry model. Using the wrong one is the
+most common setup error, so pick deliberately:
+
+| You are using… | Trust-roots file | Created by | Read by |
+|----------------|------------------|------------|---------|
+| **ER1 `self`** (`publish` / `pull --registry self`) | `~/.claude/trust-roots.yaml` — flat: `registry: self`, `pubkey_b64`, `fingerprint`, `governance_minimum` | **hand-written / carried out-of-band** | `pull` |
+| **HTTP `/api/skills` registry** | `~/.claude/skill-trust-roots.yaml` | `skillctl trust add --registry <URL> --pubkey <path>` | `install`, `verify`, `audit` |
+
+- `skillctl trust add --registry` takes a **URL** (e.g. `https://aims.example.com/api/skills`),
+  **never** an ER1 context id. It writes `skill-trust-roots.yaml`.
+- The ER1 `self` consumer path does **not** use `trust add` — hand-write `trust-roots.yaml`
+  and verify its `fingerprint` out-of-band before the first `pull`.
+- **Keys:** `keygen --out P` writes `P.priv` + `P.pub`. Pass the private key explicitly to
+  `sign` / `publish` as `--key P.priv`; the `self` default `~/.config/m3c/skill-registry-self.key`
+  applies only when `--key` is omitted.
+
+For the full two-person walkthrough over ER1, see
+**[Acceptance & Handover: the skill lifecycle](acceptance-skillctl-lifecycle.md)**.
 
 ---
 
@@ -1008,7 +1031,8 @@ Derived from each command's own usage output.
 
 | Path | Contents |
 |------|----------|
-| `~/.claude/skill-trust-roots.yaml` | Pinned registry public keys (managed by `trust`). The root of the offline verification chain. |
+| `~/.claude/skill-trust-roots.yaml` | Pinned **HTTP-registry** public keys (managed by `trust`). Read by `install` / `verify` / `audit`. |
+| `~/.claude/trust-roots.yaml` | The **ER1 `self`** trust root (flat `registry: self` + `pubkey_b64`), hand-written / carried out-of-band. Read by `pull`. See [Trust roots & registries](#trust-roots--registries--which-file-when). |
 | `~/.claude/skills/<name>/` | Installed skills (`install`, `pull --install`). Installs are atomic. |
 | `<stem>.priv` (mode `0600`) / `<stem>.pub` (mode `0644`) | ed25519 keypair written by `keygen`, PEM PKCS#8 / SPKI. |
 | `<bundle>.<digest_hex>.author.sig` | Detached author signature written by `sign` (64 raw bytes, mode `0644`). |
@@ -1023,7 +1047,21 @@ ER1 credentials for registry-backed commands resolve via Keychain → Secret Man
 
 ---
 
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `skillctl version` prints `dev` | a stale binary earlier on `PATH` (e.g. `~/go/bin/skillctl` shadowing `~/.local/bin/skillctl`) | `which -a skillctl`; remove or rebuild the stale copy |
+| `403 not authorized for this context` on `publish` | publishing into a context whose `<sub>` ≠ your login (BUG-0165) | publish only into your own `<sub>___skills` |
+| `pull` rejects the trust-roots file | used `skill-trust-roots.yaml` (hosted) for the `self` path | use `~/.claude/trust-roots.yaml` (see [Trust roots & registries](#trust-roots--registries--which-file-when)) |
+| `exit 12` (`registry_not_trusted`) | registry key not pinned | pin it — HTTP: `trust add`; self: fix `trust-roots.yaml` |
+| `exit 13` (`governance_below_min`) | no attestation meets the floor | post a green attestation, or lower the floor deliberately |
+
+---
+
 ## See also
 
 - **[Quickstart: skillctl](quickstart-skillctl.md)** — the happy path in five minutes.
+- **[Acceptance & Handover: the skill lifecycle](acceptance-skillctl-lifecycle.md)** — the two-person (Mirko → Eric) acceptance procedure over ER1, with success criteria.
+- **[Quickstart: the offline demo](quickstart-skillctl-demo.md)** — the `skillctl-demo` Kata walkthrough (CISO/booth).
 - **[Manual: m3c-tools](manual-m3c-tools.md)** — the memory-capture toolkit `skillctl` ships alongside.
