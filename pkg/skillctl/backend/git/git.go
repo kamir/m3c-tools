@@ -20,8 +20,12 @@ func init() {
 }
 
 // openGitLab maps gitlab://<host>/<group>/<proj>[@ref] → https://…/….git.
-// Credential injection (a read-only Deploy-Token via opts.Creds, SPEC-0356 D5)
-// is a follow-up; v1 relies on ambient git credentials / a token-in-URL remote.
+// Credential injection is via opts.Creds (SPEC-0356 D5). Publishing PUSHES, so
+// it needs a WRITE-capable credential — a GitLab **Project Access Token** (or a
+// personal access token / write deploy key), NOT a Deploy Token: GitLab rejects
+// write_repository as a deploy-token scope, and the default branch is protected
+// at Maintainer (push level 40). The oauth2:<token>@host form used below works
+// unchanged for a project/personal token, so no code change is required.
 func openGitLab(spec string, opts artifact.OpenOptions) (artifact.Backend, error) {
 	remote, err := gitRemoteFromSpec(spec, "gitlab://")
 	if err != nil {

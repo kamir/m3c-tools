@@ -202,10 +202,14 @@ func TestGitDefaultUserOauth2(t *testing.T) {
 }
 
 // TestGitBackendAgainstRemote runs the full lifecycle against a LIVE git remote
-// (e.g. the Demo-Lab NAS GitLab). Gated on M3C_TEST_GIT_REMOTE so CI's default
-// offline `test-unit` skips it; the bare-repo test above is the always-on cover.
+// (e.g. the Demo-Lab GitLab on master2). Gated on M3C_TEST_GIT_REMOTE so CI's
+// default offline `test-unit` skips it; the bare-repo test above is the
+// always-on cover.
 //
-//	M3C_TEST_GIT_REMOTE="http://oauth2:<token>@192.168.0.131:8929/<group>/skills.git" \
+// The credential must be a PROJECT ACCESS TOKEN, not a Deploy Token: GitLab
+// rejects write_repository as a deploy-token scope, and Publish pushes.
+//
+//	M3C_TEST_GIT_REMOTE="http://oauth2:<project-access-token>@192.168.0.135:8929/m3c/skills.git" \
 //	  go test -run TestGitBackendAgainstRemote ./pkg/skillctl/backend/git/
 func TestGitBackendAgainstRemote(t *testing.T) {
 	remote := os.Getenv("M3C_TEST_GIT_REMOTE")
