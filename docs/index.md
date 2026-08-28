@@ -67,6 +67,9 @@ agent skills that act on it (sign, admit, verify, revoke — offline-verifiable)
 
 **Documentation:**
 
+- [Program Index](program-index) — every runnable binary, MCP server and entry point in the repo
+- [Service Index](service-index) — the long-running services and their runtime wrappers (`deploy/*`)
+- [Component Index](component-index) — the importable Go library packages under `pkg/` and `internal/`
 - [Quickstart: m3c-tools](quickstart-m3c-tools) — capture your first memory in 5 minutes
 - [Quickstart: skillctl](quickstart-skillctl) — sign, install and verify a skill in 5 minutes
 - [Manual: m3c-tools](manual-m3c-tools) — every command, flag and config variable
