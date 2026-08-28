@@ -2,12 +2,21 @@ package git
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
 )
+
+type fakeCreds struct{ user, token string }
+
+func (f fakeCreds) Credential(ctx context.Context, scheme, host string) (artifact.Credential, error) {
+	return artifact.Credential{User: f.user, Token: f.token, Scheme: scheme}, nil
+}
 
 func mustGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
@@ -166,4 +175,83 @@ func TestGitOpenSchemeMapping(t *testing.T) {
 	if gh.(*gitBackend).remote != "https://github.com/kamir/skill-registry.git" {
 		t.Errorf("github remote = %q", gh.(*gitBackend).remote)
 	}
+}
+
+func TestGitCredInjectionNoLeak(t *testing.T) {
+	b, err := openGitLab("gitlab://192.168.0.131:8929/grp/skills",
+		artifact.OpenOptions{Creds: fakeCreds{user: "deployer", token: "s3cr3t-TOKEN"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gb := b.(*gitBackend)
+	// The token must NOT leak through Describe() or the stored remote.
+	if strings.Contains(gb.Describe().Display, "s3cr3t") || strings.Contains(gb.remote, "s3cr3t") {
+		t.Fatalf("token leaked: display=%q remote=%q", gb.Describe().Display, gb.remote)
+	}
+	// …but it IS injected into the transport URL used for clone/push.
+	if ar := gb.authRemote(); !strings.Contains(ar, "deployer:s3cr3t-TOKEN@192.168.0.131:8929") {
+		t.Errorf("authRemote missing injected creds: %q", ar)
+	}
+}
+
+func TestGitDefaultUserOauth2(t *testing.T) {
+	b, _ := openGitLab("gitlab://host/g/p", artifact.OpenOptions{Creds: fakeCreds{token: "T"}})
+	if ar := b.(*gitBackend).authRemote(); !strings.Contains(ar, "oauth2:T@host") {
+		t.Errorf("default user should be oauth2: %q", ar)
+	}
+}
+
+// TestGitBackendAgainstRemote runs the full lifecycle against a LIVE git remote
+// (e.g. the Demo-Lab NAS GitLab). Gated on M3C_TEST_GIT_REMOTE so CI's default
+// offline `test-unit` skips it; the bare-repo test above is the always-on cover.
+//
+//	M3C_TEST_GIT_REMOTE="http://oauth2:<token>@192.168.0.131:8929/<group>/skills.git" \
+//	  go test -run TestGitBackendAgainstRemote ./pkg/skillctl/backend/git/
+func TestGitBackendAgainstRemote(t *testing.T) {
+	remote := os.Getenv("M3C_TEST_GIT_REMOTE")
+	if remote == "" {
+		t.Skip("set M3C_TEST_GIT_REMOTE=<authenticated git remote URL> to run (needs a live remote)")
+	}
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	ctx := context.Background()
+	b := newGitBackend(remote, "gitlab") // remote already carries auth
+	defer b.Close()
+
+	// Unique name+digest per run so re-runs don't collide on a persistent remote.
+	name := fmt.Sprintf("itest-%d", time.Now().UnixNano())
+	d := fmt.Sprintf("sha256:%064x", time.Now().UnixNano())
+	if _, err := b.Publish(ctx, artifact.PublishRequest{
+		Kind:  artifact.KindAdmit,
+		Event: map[string]any{"kind": "admitted", "skill": name, "version": "1.0.0", "bundle_digest": d},
+		Meta:  artifact.ArtifactMeta{Name: name, Version: "1.0.0", Digest: d, GovernanceLevel: "green"},
+		Blob:  []byte("SKB-integration"),
+	}); err != nil {
+		t.Fatalf("Publish to remote: %v", err)
+	}
+	lst, err := b.List(ctx, artifact.ListFilter{Name: name}, artifact.Page{})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(lst.Skills) != 1 || lst.Skills[0].LatestVersion != "1.0.0" {
+		t.Fatalf("List returned %+v, want one skill @1.0.0", lst.Skills)
+	}
+	ref, err := b.Resolve(ctx, artifact.RefQuery{Name: name})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	blob, err := b.Fetch(ctx, *ref)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if string(blob) != "SKB-integration" {
+		t.Errorf("Fetch = %q, want SKB-integration", blob)
+	}
+	// Log host only (never the token-in-URL).
+	host := remote
+	if i := strings.LastIndex(remote, "@"); i >= 0 {
+		host = remote[i+1:]
+	}
+	t.Logf("integration OK against %s (skill %s)", host, name)
 }

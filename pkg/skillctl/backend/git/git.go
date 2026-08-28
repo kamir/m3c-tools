@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,7 +27,9 @@ func openGitLab(spec string, opts artifact.OpenOptions) (artifact.Backend, error
 	if err != nil {
 		return nil, err
 	}
-	return newGitBackend(remote, "gitlab"), nil
+	b := newGitBackend(remote, "gitlab")
+	b.applyCreds(opts)
+	return b, nil
 }
 
 // openGitHub maps github://<owner>/<repo>[@ref] → https://github.com/…/….git.
@@ -36,7 +39,9 @@ func openGitHub(spec string, opts artifact.OpenOptions) (artifact.Backend, error
 	if rest == "" {
 		return nil, fmt.Errorf("git: empty github spec %q", spec)
 	}
-	return newGitBackend("https://github.com/"+rest+".git", "github"), nil
+	b := newGitBackend("https://github.com/"+rest+".git", "github")
+	b.applyCreds(opts)
+	return b, nil
 }
 
 func gitRemoteFromSpec(spec, scheme string) (string, error) {
@@ -53,12 +58,54 @@ func gitRemoteFromSpec(spec, scheme string) (string, error) {
 // wire-format, and (for writes) pushes. Correct and simple for v1; a cached
 // clone + fetch is the efficiency follow-up.
 type gitBackend struct {
-	remote string
-	scheme string // "gitlab" | "github"
+	remote    string // clean remote URL (NO secret) — used for Describe/display
+	scheme    string // "gitlab" | "github"
+	token     string // optional; injected into the clone/push URL only
+	tokenUser string // "" => "oauth2" (works for GitLab PAT + Deploy-Token)
 }
 
 func newGitBackend(remote, scheme string) *gitBackend {
 	return &gitBackend{remote: remote, scheme: scheme}
+}
+
+// applyCreds resolves a token for this backend's host via opts.Creds (read-only,
+// SPEC-0356 D5) and stores it for URL injection. Best-effort: no creds / a
+// resolve error just leaves the backend anonymous (ambient git credentials or a
+// public repo still work). The token is NEVER stored in b.remote and NEVER
+// surfaced by Describe.
+func (b *gitBackend) applyCreds(opts artifact.OpenOptions) {
+	if opts.Creds == nil {
+		return
+	}
+	host := ""
+	if u, err := url.Parse(b.remote); err == nil {
+		host = u.Host
+	}
+	c, err := opts.Creds.Credential(context.Background(), b.scheme, host)
+	if err != nil || c.Token == "" {
+		return
+	}
+	b.token = c.Token
+	b.tokenUser = c.User
+}
+
+// authRemote returns the remote with credentials injected for git transport.
+// Only used for the clone/push into a throwaway temp dir (whose .git/config is
+// deleted straight after the op); b.remote itself stays secret-free.
+func (b *gitBackend) authRemote() string {
+	if b.token == "" {
+		return b.remote
+	}
+	u, err := url.Parse(b.remote)
+	if err != nil {
+		return b.remote
+	}
+	user := b.tokenUser
+	if user == "" {
+		user = "oauth2"
+	}
+	u.User = url.UserPassword(user, b.token)
+	return u.String()
 }
 
 // Compile-time assertion.
@@ -112,7 +159,7 @@ func (b *gitBackend) withClone(fn func(dir string) error) error {
 	}
 	defer os.RemoveAll(tmp)
 	dir := filepath.Join(tmp, "repo")
-	if _, err := b.git("", "clone", "--quiet", b.remote, dir); err != nil {
+	if _, err := b.git("", "clone", "--quiet", b.authRemote(), dir); err != nil {
 		return err
 	}
 	return fn(dir)
