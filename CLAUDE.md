@@ -84,3 +84,24 @@ Settings loaded from `.env` or `~/.m3c-tools.env` (see `.env.example`). Key vari
 Core MVP complete: transcript fetching, ER1 upload, composite docs, whisper, recording, thumbnails — all implemented and tested. Stubbed: `record` and `devices` CLI commands, background retry scheduler, menu bar integration into main binary, screenshot capture, batch audio importer.
 
 See `m3c-tools-maintenance/PLAN/go-rewrite-plan.md` for the full migration spec and `m3c-tools-maintenance/SPEC/requirements-er1-integration.md` for ER1 requirements.
+
+## Context Efficiency
+
+Treat conversation history as **disposable working memory**. Durable project state belongs in the repository, not the conversation. **Retrieve, don't replay.**
+
+**Before reading large files:**
+1. Search for the relevant symbol / section / filename first (grep/glob), then open it.
+2. Read only the relevant line ranges — not the whole file "to be safe".
+3. Do not load generated files, logs, lock files, or large datasets unless the task requires it.
+4. **Never inspect the whole repo recursively** unless repository-wide discovery is genuinely needed.
+
+**Multi-stage work:**
+1. Carry accepted results (artifacts, decisions, test results) forward.
+2. Do not carry rejected reasoning or abandoned approaches.
+3. Write a checkpoint and start a **fresh session** before a substantially different task.
+
+**Answers & tools:** ask for / produce exactly what's needed (paragraph, JSON, 5 bullets). Output costs twice — once when written, then in every later turn as input. Load only the tools the task needs (least-context access: `coding` = filesystem + git + shell).
+
+**At task completion**, produce a compact handoff (no transcript): objective · facts established · decisions made · files changed · tests/results · open questions · next action · relevant files (name 3–10, don't load broadly).
+
+Context budget: 🟢 <20k normal · 🟡 20–60k prune + checkpoint · 🔴 >60k or task-switch: finish the atomic operation, write the handoff, start a fresh session. See SPEC-0357 (`context-handoff`) for the sealed, provider-neutral handoff contract.
