@@ -1,0 +1,47 @@
+# Local GitLab CE — acceptance environment for the skillctl git/GitLab artifact
+# backend (SPEC-0356 D6). LOCAL TEST ONLY: not hardened, no real data.
+#
+#   docker compose -f deploy/testing/gitlab/docker-compose.yml up -d
+#   # first boot takes ~3-5 min; watch: docker compose ... logs -f gitlab
+#   docker exec skillctl-gitlab cat /etc/gitlab/initial_root_password   # (valid 24h)
+#   open http://localhost:8929   (user: root)
+#
+# See README.md for wiring a repo + token to the backend.
+name: skillctl-gitlab-test
+
+services:
+  gitlab:
+    # Pin to a real tag for reproducibility, e.g. gitlab/gitlab-ce:17.11.1-ce.0
+    image: gitlab/gitlab-ce:latest
+    container_name: skillctl-gitlab
+    hostname: gitlab.local
+    restart: unless-stopped
+    shm_size: "256m"
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://localhost:8929'
+        gitlab_rails['gitlab_shell_ssh_port'] = 2224
+        # Trim the footprint for a laptop (~2.5-3 GB instead of 4+):
+        puma['worker_processes'] = 0
+        sidekiq['max_concurrency'] = 5
+        prometheus_monitoring['enable'] = false
+        grafana['enable'] = false
+        gitlab_rails['gitlab_default_projects_features_container_registry'] = false
+    ports:
+      - "8929:8929"   # http (matches external_url)
+      - "2224:22"     # ssh (git over ssh)
+    volumes:
+      - gitlab-config:/etc/gitlab
+      - gitlab-logs:/var/log/gitlab
+      - gitlab-data:/var/opt/gitlab
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8929/-/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 30
+      start_period: 300s   # GitLab CE needs several minutes on first boot
+
+volumes:
+  gitlab-config:
+  gitlab-logs:
+  gitlab-data:
