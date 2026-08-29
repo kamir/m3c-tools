@@ -34,16 +34,18 @@ fi
 echo ""
 echo "Running pre-sync security and hygiene checks..."
 
-# Check for hardcoded /Users/ paths in tracked files
-if git grep -n "/Users/" HEAD -- ':!.github' ':!Makefile' >/dev/null 2>&1; then
-  echo "WARNING: Found potential hardcoded local user paths in tracked files:"
-  git grep -n "/Users/" HEAD -- ':!.github' ':!Makefile' || true
+# Check for hardcoded private user paths in tracked files
+if git grep -n "/Users/kamir" HEAD >/dev/null 2>&1; then
+  echo "ERROR: Found hardcoded private paths in tracked files:"
+  git grep -n "/Users/kamir" HEAD
+  echo "Please sanitize these paths before pushing."
+  exit 1
 fi
 
-# Check for untracked junk in git index
-if git ls-files | grep -E "(\.DS_Store|\.skb|\.claude|\.deploy)" >/dev/null 2>&1; then
+# Check for untracked junk in git index (excluding testdata)
+if git ls-files | grep -E "(\.DS_Store|^\.claude/|^\.deploy/|[^a-zA-Z0-9_\-\./]\.skb|^[^/]+\.skb)" >/dev/null 2>&1; then
   echo "ERROR: Unwanted files detected in git index:"
-  git ls-files | grep -E "(\.DS_Store|\.skb|\.claude|\.deploy)"
+  git ls-files | grep -E "(\.DS_Store|^\.claude/|^\.deploy/|[^a-zA-Z0-9_\-\./]\.skb|^[^/]+\.skb)"
   echo "Please untrack these files before pushing."
   exit 1
 fi
