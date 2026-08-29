@@ -7,7 +7,7 @@
 set -euo pipefail
 
 GITLAB_REMOTE_NAME="${GITLAB_REMOTE_NAME:-gitlab-local}"
-GITLAB_REMOTE_URL="${1:-${GITLAB_REMOTE_URL:-git@192.168.0.135:ai-platform/m3c-tools.git}}"
+GITLAB_REMOTE_URL="${1:-${GITLAB_REMOTE_URL:-ssh://git@192.168.0.135:2224/ai-platform/m3c-tools.git}}"
 BRANCH="${2:-master}"
 
 echo "=== Synchronizing m3c-tools to GitLab ==="
