@@ -35,9 +35,9 @@ echo ""
 echo "Running pre-sync security and hygiene checks..."
 
 # Check for hardcoded private user paths in tracked files
-if git grep -n "/Users/kamir" HEAD >/dev/null 2>&1; then
+if git grep -n "/Users/""kamir" HEAD -- ':!scripts/gitlab-sync.sh' >/dev/null 2>&1; then
   echo "ERROR: Found hardcoded private paths in tracked files:"
-  git grep -n "/Users/kamir" HEAD
+  git grep -n "/Users/""kamir" HEAD -- ':!scripts/gitlab-sync.sh'
   echo "Please sanitize these paths before pushing."
   exit 1
 fi
