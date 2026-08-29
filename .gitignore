@@ -50,13 +50,25 @@ __pycache__/
 
 # macOS
 .DS_Store
+**/.DS_Store
 
-# Editor/IDE
+# Python cache and virtual environments
+__pycache__/
+*.pyc
+.venv/
+*/.venv/
+
+# Editor/IDE and AI tool configurations (local only)
 # .idea/
 # .vscode/
+.claude/
 
 # Deployment state (machine-specific)
-.deploy/gcp-state.json
+.deploy/
+deploy/**/.env
+
+# Demo run artifacts
+demo/kup-training/artifacts/
 
 # Local git worktrees for parallel dev (SPEC-0167 lesson: see feedback_parallel_agents_worktree)
 .worktrees/

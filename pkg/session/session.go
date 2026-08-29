@@ -76,12 +76,13 @@ func shortHost() string {
 	return h
 }
 
-// deviceFor looks up the host in the INFRA/devices/ registry (m3c-tools-maintenance);
+// deviceFor looks up the host in the devices registry;
 // returns "" if not found / not present.
 func deviceFor(host string) string {
 	candidates := []string{
 		os.Getenv("M3C_DEVICES_DIR"),
-		"/Users/kamir/GITHUB.kamir/m3c-tools-maintenance/INFRA/devices",
+		filepath.Join(os.Getenv("HOME"), ".config", "m3c", "devices"),
+		"/etc/m3c/devices",
 	}
 	for _, dir := range candidates {
 		if dir == "" {

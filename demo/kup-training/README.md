@@ -1,20 +1,20 @@
 # KuP Skill-Manager Training — End-to-End Demo
 
-Every claim in [PROJECTS/Skill-Manager/USER-MANUAL.md](../../../m3c-tools-maintenance/PROJECTS/Skill-Manager/USER-MANUAL.md) is proven here by an executable shell script. The orchestrator (`run-all.sh`) is the **release gate**: it asserts the four contractually required outputs.
+Every claim in the Skill-Manager manuals is proven here by an executable shell script. The orchestrator (`run-all.sh`) is the **release gate**: it asserts the four contractually required outputs.
 
 ## Release-gate items
 
 | # | Gate | Proof |
 |---|---|---|
 | **G1** | Print user guide as PDF | `make-pdf.sh` → `artifacts/{USER-MANUAL,SKILLCTL-MANUAL,KuP-skill-manager-handbook}.pdf` |
-| **G2** | Release skillctl via GitHub download + installer | `build-release.sh` → `artifacts/release/{skillctl-*,SHA256SUMS,install.sh,RELEASE_NOTES.md,gh-release-create.sh}` |
+| **G2** | Release skillctl via GitHub/GitLab download + installer | `build-release.sh` → `artifacts/release/{skillctl-*,SHA256SUMS,install.sh,RELEASE_NOTES.md,gh-release-create.sh}` |
 | **G3** | Run skill transfer Mirko → Eric via aims | `01–05` step scripts; `05` ends with `artifacts/eric-home/output/hello.txt` produced by Eric running a chain-verified skill |
 | **G4** | Valid skill works for Eric, invalid skill fails | `05` (valid ✓) + `06`/`07`/`08`/`09` (four distinct invalid scenarios, each asserting the expected non-zero exit) |
 
 ## Quick start
 
 ```bash
-cd /Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training
+cd demo/kup-training
 ./run-all.sh                    # full demo + PDF + release build
 ./run-all.sh --offline-only     # skip aims-core round-trip (chain proof still runs)
 ./run-all.sh --no-pdf           # skip PDF render

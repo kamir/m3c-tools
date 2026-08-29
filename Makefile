@@ -382,6 +382,11 @@ lint:
 	@echo "Running golangci-lint..."
 	golangci-lint run --timeout=5m
 
+# Synchronize sanitized repository to GitLab (Master2 192.168.0.135)
+.PHONY: gitlab-sync
+gitlab-sync:
+	@./scripts/gitlab-sync.sh $(GITLAB_URL) $(BRANCH)
+
 # SPEC-0280 trust-layer evaluation harness (E1–E10).
 # `eval` runs the full measured harness and regenerates results/RESULTS.{csv,md}.
 # `eval-fast` runs only the correctness drivers (E4 real corpus + E10 matrix),
@@ -545,6 +550,7 @@ help:
 	@echo "  checksums      Generate SHA-256 checksums for build/ artifacts"
 	@echo "  ci             Run full CI locally (vet + lint + test + build)"
 	@echo "  lint           Run golangci-lint"
+	@echo "  gitlab-sync    Push sanitized repository & tags to GitLab (192.168.0.135)"
 	@echo "  test-gate-windows  Windows dev test gate: vet + cross-compile + tests (SPEC-0128)"
 	@echo "  test-gate-windows-quick  Same but skip test phase (compile check only)"
 	@echo ""

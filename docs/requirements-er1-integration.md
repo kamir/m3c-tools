@@ -87,7 +87,7 @@ ER1 connection settings via environment variables (`.env`):
 | `M3C_WHISPER_MODEL` | `base` | Whisper model for menu bar recordings |
 | `M3C_WHISPER_TIMEOUT` | `120` | Whisper transcription timeout (seconds) |
 | `IMPORT_AUDIO_SOURCE` | *(required for Channel D)* | Audio import source folder |
-| `IMPORT_AUDIO_DEST` | `/Users/kamir/ER1` | Audio import destination |
+| `IMPORT_AUDIO_DEST` | `~/ER1` | Audio import destination |
 | `YT_PROXY_URL` | *(optional)* | YouTube proxy for rate limit mitigation |
 | `YT_PROXY_AUTH` | *(optional)* | Proxy authentication |
 

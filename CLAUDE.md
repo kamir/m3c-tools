@@ -1,86 +1,86 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) and AI coding assistants when working with code in this repository.
 
 ## Project Overview
 
-**m3c-tools** (Multi-Modal-Memory Tools) is a Go rewrite of a Python-based YouTube transcript toolkit. It fetches YouTube transcripts, captures voice impressions, and uploads multimodal observations (text + audio + image) to an ER1 personal knowledge server.
+**m3c-tools** (Multi-Modal-Memory Tools) is a sovereign toolkit for turning observations into durable, structured memory and governing autonomous agent skills:
 
-The core pipeline: **YouTube video → transcript + thumbnail → composite document → ER1 upload**.
+1. **`skillctl` (The Capability Plane)**: Agent trust, signing, verification, and governance CLI. Allows authors to package and sign skill bundles (`.skb`), operators to admit and attest skills, agents to verify identities offline, and security hooks to fail closed on unverified skills.
+2. **`m3c-tools` (The Capture Pipeline)**: Captures transcripts (YouTube), screenshots, impulse notes, voice recordings (Whisper), Plaud/Pocket audio imports, and synchronizes them to an ER1 knowledge server.
+3. **`skillctl-demo`**: Self-contained offline interactive demo and Kata training simulator.
+4. **`thinking-engine`**: Kafka-based reasoning and event-processing worker (pure Go).
+5. **MCP Servers**: Local FastMCP tools (`mcp-skill-server/`) and workspace RAG vector search (`rag-mcp-server/`).
 
-Four observation types: Progress (YouTube video), Idea (screenshot), Impulse (quick note), Import (batch audio).
+---
 
 ## Build & Test Commands
 
 ```bash
-make build              # Build CLI → ./build/m3c-tools
-make build-all          # Build CLI + 4 POC binaries
+# Build binaries
+make build              # Build m3c-tools CLI → ./build/m3c-tools
+make build-skillctl     # Build skillctl CLI → ./build/skillctl
+make build-skillctl-demo# Build skillctl-demo CLI → ./build/skillctl-demo
+make build-all          # Build CLI + skillctl + demo + POCs
+make thinking-build     # Build thinking-engine → ./build/thinking-engine
+
+# Code quality & tests
 make vet                # go vet ./...
+make lint               # golangci-lint run
+make test-unit          # Fast offline unit tests
+make ci                 # Full CI (vet + lint + test + build)
 
-# Tests (all in e2e/ directory, no pkg-level unit tests)
-make test-unit          # Offline-only tests (composites, tags, queue, WAV encoding)
-make test-network       # Requires internet (transcript only by default)
-make test-network M3C_TEST_FULL_NETWORK=1  # Include thumbnail + translate tests
-make test-er1           # Requires running ER1 server
-make test-whisper       # Requires whisper binary in PATH
-make test-recorder      # Requires PortAudio + microphone
-make e2e                # Run all e2e tests
+# Targeted test runs
+go test -v -count=1 ./pkg/skillctl/...
+go test -v -count=1 ./pkg/skillbundle/...
+go test -v -count=1 ./pkg/skillgate/...
+go test -v -count=1 ./pkg/er1/...
 
-# Run a single test
-go test -v -count=1 ./e2e/ -run TestTranscriptFetch
-
-# Run the CLI
-make run ARGS="transcript dQw4w9WgXcQ --format srt"
+# GitLab & cross-platform builds
+make gitlab-sync        # Push sanitized repository & tags to GitLab (192.168.0.135)
+make build-windows      # Cross-compile for Windows
 ```
 
-## Architecture
+---
 
-### Data Flow
+## Architecture & Subsystems
 
 ```
-transcript.API.Fetch(videoID)  →  FetchedTranscript (snippets)
-                                        ↓
-                              impression.CompositeDoc.Build()  →  composite text
-                                        ↓
-transcript.Fetcher.FetchThumbnail()  →  JPEG bytes
-                                        ↓
-                              er1.Upload(config, payload)  →  ER1 server
-                                        ↓ (on failure)
-                              er1.Queue.Add(entry)  →  JSON file (retry later)
+cmd/
+  ├── m3c-tools/          # Multimodal capture CLI & macOS menu bar app
+  ├── skillctl/           # Agent capability & trust governance CLI
+  ├── skillctl-demo/      # Offline interactive demo & Kata runner
+  ├── thinking-engine/    # Event-driven reasoning engine (Kafka)
+  └── poc-*/              # Reference POC implementations
+pkg/
+  ├── skillctl/           # Skillctl subcommands, scan, trust, and verification logic
+  ├── skillbundle/        # Skill bundle (.skb) pack, unpack, manifest, and digest computation
+  ├── skillgate/          # Claude Code trust gate, signature verification, admission policies
+  ├── er1/                # ER1 upload client, multipart encoding, retry queue
+  ├── plaud/              # Plaud.ai sync client & token management
+  ├── pocket/             # Pocket capture-device sync client
+  ├── whisper/            # Whisper CLI subprocess runner
+  ├── recorder/           # PortAudio microphone recording (cgo)
+  ├── transcript/         # YouTube transcript InnerTube API parser
+  ├── session/            # Session token and device registry management
+  └── timetracking/       # Time tracking engine and PLM client
+internal/
+  └── thinking/           # Thinking engine core logic and Kafka drivers
 ```
 
-### Package Responsibilities
-
-- **pkg/transcript/** — Complete port of Python's youtube-transcript-api. Uses YouTube's InnerTube API (no official API key needed). Handles: video page fetch → API key extraction → InnerTube POST → caption XML parsing → snippet extraction. Supports 4 output formats (Text, SRT, JSON, WebVTT), proxy configs, and 10+ error types. Also handles thumbnail fetching with size fallback.
-
-- **pkg/er1/** — ER1 knowledge server integration. Multipart HTTP upload with `transcript_file_ext`, `audio_data_ext`, `image_data` fields. ER1 requires all three fields — system sends placeholder audio (1s silence WAV) or placeholder image (1x1 red PNG) when real data is unavailable. Includes JSON-backed retry queue with mutex synchronization.
-
-- **pkg/impression/** — Composite document builder and tag system. Builds structured text documents combining video transcript + user commentary. Tags auto-generated from observation type.
-
-- **pkg/whisper/** — Wraps the whisper CLI binary as a subprocess (not C bindings). Finds binary in PATH or standard locations, runs with `--output_format json`, parses segments.
-
-- **pkg/recorder/** — PortAudio microphone recording via cgo. Records 16kHz/16-bit PCM mono WAV (whisper-compatible format).
-
-### Entry Points
-
-- **cmd/m3c-tools/** — Main CLI with subcommands: transcript, upload, whisper, thumbnail, check-er1, record, devices.
-- **cmd/poc-*/** — Four validated proof-of-concept binaries (menubar, transcript, whisper, recorder). These are reference implementations, not production code.
-
-### Key Technical Details
-
-- **Zero external deps for core logic** — transcript, er1, impression packages use only Go stdlib. External deps (menuet, portaudio) are only for POC features.
-- **InnerTube API**: Uses Android client context to avoid age-restriction issues. Must set `CONSENT=YES+cb` cookie. Must strip `&fmt=srv3` from caption baseUrl to get XML format.
-- **PoToken check**: If caption URLs contain `&exp=xpe`, raise an error (YouTube anti-bot measure).
-- **CLI flag parsing**: Uses manual `os.Args` parsing (no cobra/flag). Follow the existing pattern in `cmdTranscript()` when adding commands.
+---
 
 ## Configuration
 
-Settings loaded from `.env` or `~/.m3c-tools.env` (see `.env.example`). Key variables:
-- `ER1_API_URL`, `ER1_API_KEY`, `ER1_CONTEXT_ID` — server connection
-- `ER1_VERIFY_SSL` — set `false` for local dev with self-signed certs
+Settings are loaded from `.env` or `~/.m3c-tools.env` (see [`.env.example`](.env.example)):
+- `ER1_API_URL`, `ER1_API_KEY`, `ER1_CONTEXT_ID` — ER1 knowledge server connection
+- `M3C_WHISPER_MODEL`, `M3C_WHISPER_LANGUAGE` — Whisper speech-to-text settings
+- `GITLAB_REMOTE_URL` — Internal GitLab sync target (`git@192.168.0.135:ai-platform/m3c-tools.git`)
 
-## Current Status
+---
 
-Core MVP complete: transcript fetching, ER1 upload, composite docs, whisper, recording, thumbnails — all implemented and tested. Stubbed: `record` and `devices` CLI commands, background retry scheduler, menu bar integration into main binary, screenshot capture, batch audio importer.
+## Conventions & Rules
 
-See `m3c-tools-maintenance/PLAN/go-rewrite-plan.md` for the full migration spec and `m3c-tools-maintenance/SPEC/requirements-er1-integration.md` for ER1 requirements.
+- **Zero-leaks policy**: Never commit personal filesystem paths, private developer configs (`.claude/`), or `.env` files.
+- **Offline verification**: `skillctl` verification and policy checks must always run offline with no external authority in the critical verification path.
+- **Cross-platform**: Core packages under `pkg/` must remain pure Go and compile with `CGO_ENABLED=0` across Linux, macOS, and Windows.

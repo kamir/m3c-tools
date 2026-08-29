@@ -26,8 +26,8 @@ func TestFindGroupByFilePath(t *testing.T) {
 				DocID:   "abc123",
 				Title:   "Test Session",
 				FilePaths: []string{
-					"/Users/kamir/m3c-data/pocket/raw/2026-04-02/20260402163416.mp3",
-					"/Users/kamir/m3c-data/pocket/raw/2026-04-02/20260402171200.mp3",
+					"/var/m3c-data/pocket/raw/2026-04-02/20260402163416.mp3",
+					"/var/m3c-data/pocket/raw/2026-04-02/20260402171200.mp3",
 				},
 				Segments: 2,
 			},
@@ -37,7 +37,7 @@ func TestFindGroupByFilePath(t *testing.T) {
 	os.WriteFile(filepath.Join(stagingDir, "groups.json"), data, 0644)
 
 	// Should find the group by exact file path match
-	result := FindGroupByFilePath("/Users/kamir/m3c-data/pocket/raw/2026-04-02/20260402163416.mp3", cfg)
+	result := FindGroupByFilePath("/var/m3c-data/pocket/raw/2026-04-02/20260402163416.mp3", cfg)
 	if result == nil {
 		t.Fatal("FindGroupByFilePath should find group for matching path")
 	}

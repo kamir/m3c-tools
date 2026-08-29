@@ -135,6 +135,18 @@ m3c-tools transcript dQw4w9WgXcQ --list
 m3c-tools transcript dQw4w9WgXcQ --lang de
 ```
 
+### Build & Run `skillctl` (Agent Governance CLI)
+
+`skillctl` is pure Go and runs identically on macOS, Linux, and Windows:
+
+```bash
+make build-skillctl
+./build/skillctl keygen --out ~/.config/m3c/skill-keys/mykey
+./build/skillctl pack --skill ./my-skill -o my-skill.skb --name my-skill --version 1.0.0
+./build/skillctl sign my-skill.skb --key ~/.config/m3c/skill-keys/mykey.priv
+./build/skillctl verify-sig my-skill.skb --pubkey ~/.config/m3c/skill-keys/mykey.pub
+```
+
 ### Run tests
 
 ```bash
@@ -172,4 +184,4 @@ rm -rf /Applications/M3C-Tools.app
 
 ---
 
-Next: [Menu Bar App](menubar-app) | [Home](/)
+Next: [Quickstart: skillctl](quickstart-skillctl.md) | [Menu Bar App](menubar-app) | [GitLab Enterprise Deployment](gitlab-enterprise-deployment.md) | [Home](/)

@@ -18,7 +18,7 @@ CTX_HASH="${CTX_HASH:-c241d2aad2268287}"
 CTX_HASH_UPPER=$(echo "$CTX_HASH" | tr 'a-z' 'A-Z')
 ENGINE_PORT="${ENGINE_PORT:-7140}"
 KAFKA_URL="${KAFKA_URL:-localhost:9094}"
-AIMS_CORE_DIR="${AIMS_CORE_DIR:-/Users/kamir/GITHUB.active/my-ai-X/aims-core}"
+AIMS_CORE_DIR="${AIMS_CORE_DIR:-}"
 ENGINE_BIN="${ENGINE_BIN:-./build/thinking-engine}"
 
 # ---------------------------------------------------------------- pre-flight

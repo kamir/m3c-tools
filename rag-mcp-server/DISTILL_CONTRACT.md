@@ -3,7 +3,7 @@
 You are the **article-analyzer**. Your task names ONE wave + batch (e.g. "wave 2, batch w2b07").
 Let `WAVE` = the wave dir (e.g. `w2`) and `BID` = the batch id (e.g. `w2b07`). Base dir:
 
-    B = /Users/kamir/GITHUB.kamir/mirkos-braindump/.understand-anything/waves/<WAVE>
+    B = ${CORPUS_ROOT}/.understand-anything/waves/<WAVE>
 
 ## Steps
 

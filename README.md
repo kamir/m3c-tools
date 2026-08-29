@@ -153,6 +153,7 @@ See the [skillctl manual](docs/manual-skillctl.md).
 | [Menu Bar App](docs/menubar-app.md) | Channels, Observation Window, menu items (macOS) |
 | [Setup & Operations — Intel Mac & Windows](docs/setup-target-devices.md) | Zero-to-operating runbook for fresh Intel Mac / Windows target devices |
 | [Platform differences](docs/PLATFORM-DIFFERENCES.md) | What works where |
+| [GitLab Enterprise Deployment](docs/gitlab-enterprise-deployment.md) | Deployment, CI/CD, and registry runbook for internal/customer GitLab setups |
 | [Website](https://kamir.github.io/m3c-tools) | The rendered docs site |
 
 ---

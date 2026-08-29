@@ -7,8 +7,8 @@ source "$SCRIPT_DIR/lib/common.sh"
 
 header "G1 — Render USER-MANUAL.md → PDF"
 
-USER_MANUAL_MD="/Users/kamir/GITHUB.kamir/m3c-tools-maintenance/PROJECTS/Skill-Manager/USER-MANUAL.md"
-SKILLCTL_MANUAL_MD="/Users/kamir/GITHUB.kamir/m3c-tools-maintenance/PROJECTS/Skill-Manager/SKILLCTL-MANUAL.md"
+USER_MANUAL_MD="${USER_MANUAL_MD:-$(cd "$SCRIPT_DIR/../../docs" && pwd)/manual-m3c-tools.md}"
+SKILLCTL_MANUAL_MD="${SKILLCTL_MANUAL_MD:-$(cd "$SCRIPT_DIR/../../docs" && pwd)/manual-skillctl.md}"
 OUT_USER="$ARTIFACTS_DIR/USER-MANUAL.pdf"
 OUT_CLI="$ARTIFACTS_DIR/SKILLCTL-MANUAL.pdf"
 OUT_BUNDLE="$ARTIFACTS_DIR/KuP-skill-manager-handbook.pdf"

@@ -252,7 +252,7 @@
 <section class="start-dir-banner" id="start-dir-banner">
   <div class="start-dir-row">
     <span class="banner-label">Start in this directory</span>
-    <code id="start-dir-cmd">cd /Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training</code>
+    <code id="start-dir-cmd">cd demo/kup-training</code>
     <button id="start-dir-copy" class="copy-btn">copy</button>
   </div>
   <div class="banner-hint">Each step also leads with this <code>cd</code> so any single step is safe to copy-paste into a fresh terminal.</div>
@@ -343,7 +343,7 @@ override = explicit "Show system insights" toggle</pre>
 // =========================================================================
 // Data: the gate steps. Edit here to adjust what the form prompts for.
 // =========================================================================
-const START_DIR = "/Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training";
+const START_DIR = "demo/kup-training";
 
 const STEPS = [
   {
@@ -733,7 +733,7 @@ document.getElementById("btn-er1-recipe").addEventListener("click", () => {
   const filename = (state.meta.session_id || "release-gate") + ".json";
   const recipe = `# 1) Click "Download JSON" first → saves ${filename} to your Downloads folder
 # 2) Push to ER1 (one item per step):
-cd /Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training
+cd demo/kup-training
 mv ~/Downloads/${filename} ./
 ./push-to-er1.sh ./${filename}
 

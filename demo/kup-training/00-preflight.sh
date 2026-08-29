@@ -21,10 +21,10 @@ done
 # 2) Locate skillctl source
 SOURCE_DIR=""
 for cand in \
-    "/Users/kamir/wt/spec-0189/s2-integration" \
-    "/Users/kamir/GITHUB.kamir/m3c-tools" \
-    "$(cd "$SCRIPT_DIR/../.." && pwd)" ; do
-  if [[ -d "$cand/cmd/skillctl" ]]; then
+    "${SKILLCTL_SOURCE_DIR:-}" \
+    "$(cd "$SCRIPT_DIR/../.." && pwd)" \
+    "$(git rev-parse --show-toplevel 2>/dev/null || true)" ; do
+  if [[ -n "$cand" && -d "$cand/cmd/skillctl" ]]; then
     SOURCE_DIR="$cand"; break
   fi
 done
