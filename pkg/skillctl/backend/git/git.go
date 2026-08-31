@@ -205,7 +205,21 @@ func (b *gitBackend) withClone(fn func(dir string) error) error {
 	dir := filepath.Join(tmp, "repo")
 	// Clone the CLEAN remote (no token in argv or the resulting .git/config);
 	// auth rides in an env http.extraHeader (authEnv).
-	if _, err := b.git("", "clone", "--quiet", b.remote, dir); err != nil {
+	//
+	// core.symlinks=false is a SECURITY control, not a preference: the git host is
+	// untrusted (SPEC-0356 §6). With it, git materializes any committed symlink as
+	// a regular file holding the link text instead of a real symlink, so a hostile
+	// repo cannot commit `.skillctl/registry.json` or `.gitattributes` (or any
+	// path) as a symlink that our marker/attribute read+write would follow to
+	// escape the clone root. The format.go lstat guards are the belt to this
+	// suspenders. Our repos never contain legitimate symlinks.
+	if _, err := b.git("", "-c", "core.symlinks=false", "clone", "--quiet", b.remote, dir); err != nil {
+		return err
+	}
+	// SPEC-0356 §6a: refuse a repo whose wire-format version this build cannot
+	// understand — BEFORE reading or writing anything (fail closed). Absent
+	// marker (fresh/pre-marker repo) is compatible; first publish stamps it.
+	if err := checkMarkerCompatible(dir); err != nil {
 		return err
 	}
 	return fn(dir)
@@ -247,16 +261,26 @@ func (b *gitBackend) Publish(ctx context.Context, req artifact.PublishRequest) (
 	err := b.withClone(func(dir string) error {
 		tag := tagName(name, ver)
 
-		if req.Kind == artifact.KindAdmit {
-			if b.tagExists(dir, tag) {
-				res = &artifact.PublishResult{
-					Ref:           b.ref(name, ver, dig),
-					NativeID:      tag,
-					Transport:     "git",
-					AlreadyExists: true,
-				}
-				return nil
+		// Admit is idempotent on the tag: an already-published version is a safe
+		// no-op (checked before we stamp anything).
+		if req.Kind == artifact.KindAdmit && b.tagExists(dir, tag) {
+			res = &artifact.PublishResult{
+				Ref:           b.ref(name, ver, dig),
+				NativeID:      tag,
+				Transport:     "git",
+				AlreadyExists: true,
 			}
+			return nil
+		}
+
+		// SPEC-0356 §6a: stamp the write-once version marker + *.skb byte-safety
+		// on the first publish into the repo. Idempotent — never rewrites an
+		// existing marker. `git add -A` below commits any new format files.
+		if _, err := ensureFormatFiles(dir, "skillctl", time.Now()); err != nil {
+			return err
+		}
+
+		if req.Kind == artifact.KindAdmit {
 			if err := writeRepoFile(dir, bundleSkbPath(name, ver), req.Blob); err != nil {
 				return err
 			}
