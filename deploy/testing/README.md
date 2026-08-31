@@ -75,8 +75,8 @@ M3C_TEST_GIT_REMOTE="$REMOTE" go test -run TestGitBackendAgainstRemote ./pkg/ski
 `master2` (`http://192.168.0.135:8929`, project `m3c/skills`), credential =
 project access token `skillctl-m4` (Maintainer). Full publish → list → resolve
 → fetch byte round-trip confirmed. (GitLab does **not** run on the NAS — a
-DS223j with 968 MiB RAM is under GitLab's 4 GiB floor; see
-`m3c-tools-maintenance/INFRA/devices/master2.md`.)
+DS223j with 968 MiB RAM is under GitLab's 4 GiB floor; see the
+private maintenance plane for the device note.)
 
 ## Operational notes (learned on the lab instance)
 

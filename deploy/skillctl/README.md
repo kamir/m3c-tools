@@ -1,8 +1,7 @@
 # skillctl container image + `.skb` OCI publish (SPEC-0354 D1 + D2)
 
-The **P0** slice of [SPEC-0354](../../../m3c-tools-maintenance/SPEC/SPEC-0354-containerized-skill-trust-plane-deployment.md)
-(Containerized Skill Trust-Plane). Companion research:
-`m3c-tools-maintenance/RESEARCH/skill-containerization/`.
+The **P0** slice of **SPEC-0354** (Containerized Skill Trust-Plane) — see the private
+maintenance plane for the spec and its companion containerization research.
 
 Only the **reine-Go trust-plane** is containerized. The capture-plane
 (portaudio recorder, menubar — cgo + macOS-only) is deliberately excluded;

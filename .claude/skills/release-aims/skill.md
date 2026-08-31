@@ -37,7 +37,7 @@ Parse the user's input to determine which subcommand to run:
 - **aims-core repo**: `/Users/kamir/GITHUB.active/my-ai-X` (git root), app at `aims-core/`
 - **VERSION file**: `aims-core/VERSION` (contains semver like `4.0.0`)
 - **State file**: `.deploy/gcp-state.json` in m3c-tools project root
-- **Release strategy**: See `m3c-tools-maintenance/SPEC/release-strategy.md` if it exists
+- **Release strategy**: See `${M3C_MAINTENANCE_DIR}/SPEC/release-strategy.md` if it exists (private maintenance plane; set `$M3C_MAINTENANCE_DIR`)
 - **Image tag format**: `:latest`, `:v4.X.Y`, `:v4.X.Y-YYYYMMDD`
 
 ## How to execute

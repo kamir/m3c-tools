@@ -76,12 +76,12 @@ func shortHost() string {
 	return h
 }
 
-// deviceFor looks up the host in the INFRA/devices/ registry (m3c-tools-maintenance);
-// returns "" if not found / not present.
+// deviceFor looks up the host in the INFRA/devices/ registry (on the private
+// maintenance plane); returns "" if not found / not present. The registry path is
+// supplied via M3C_DEVICES_DIR so no private path is baked into the public binary.
 func deviceFor(host string) string {
 	candidates := []string{
 		os.Getenv("M3C_DEVICES_DIR"),
-		"/Users/kamir/GITHUB.kamir/m3c-tools-maintenance/INFRA/devices",
 	}
 	for _, dir := range candidates {
 		if dir == "" {

@@ -39,14 +39,17 @@ Process the observation into a structured bug report by following these steps:
 
 ### Step 3: Check existing reports
 
-- Read `/Users/kamir/GITHUB.kamir/m3c-tools-maintenance/bug-reports/` for duplicates
-- Read `/Users/kamir/GITHUB.kamir/m3c-tools-maintenance/SPEC/` for relevant specs that define expected behavior
+> Paths below resolve under `$M3C_MAINTENANCE_DIR` — the private maintenance
+> plane's repo root. Set that environment variable before running this skill.
+
+- Read `${M3C_MAINTENANCE_DIR}/bug-reports/` for duplicates
+- Read `${M3C_MAINTENANCE_DIR}/SPEC/` for relevant specs that define expected behavior
 
 ### Step 4: Write the bug report
 
 Create a new file at:
 ```
-/Users/kamir/GITHUB.kamir/m3c-tools-maintenance/bug-reports/BUG-NNNN-<short-slug>.md
+${M3C_MAINTENANCE_DIR}/bug-reports/BUG-NNNN-<short-slug>.md
 ```
 
 Where `NNNN` is the next sequential number (check existing files).

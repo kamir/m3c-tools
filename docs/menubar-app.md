@@ -145,7 +145,7 @@ Both feed the same store (`~/.m3c-tools/timetracking.db`) and both are
 visible in the Gantt chart (open via **Projects ▶ Show Time Tracker…**).
 
 > **Specifications:**
-> [SPEC-0007 — Project Time Tracking](https://github.com/kamir/m3c-tools-maintenance/blob/main/SPEC/SPEC-0007-project-time-tracking.md)
+> **SPEC-0007 — Project Time Tracking** (private maintenance plane)
 > covers the full design, including the requirements referenced below.
 
 ### How reverse tracking works
@@ -157,7 +157,7 @@ When you store an observation, the menubar app:
    depending on capture type.
 2. **Compares those tags against every active/validating project** loaded
    from PLM (`~/.m3c-tools/timetracking.db`, refreshed every 5 minutes).
-   Match priority (per [SPEC-0007 §REQ-9](https://github.com/kamir/m3c-tools-maintenance/blob/main/SPEC/SPEC-0007-project-time-tracking.md#req-9-reverse-time-tracking-observation-inferred-time-blocks)):
+   Match priority (per SPEC-0007 REQ-9):
 
    | Strength | Trigger | Example |
    |---|---|---|
@@ -190,7 +190,7 @@ Tag rules and project lists change over time. To make sure historical
 observations still get credited when their target project is added or
 re-tagged later, m3c-tools replays observations through the reverse
 tracker on two triggers (per
-[SPEC-0007 §REQ-10](https://github.com/kamir/m3c-tools-maintenance/blob/main/SPEC/SPEC-0007-project-time-tracking.md#req-10-reverse-tracking-backfill-observation-replay)):
+SPEC-0007 REQ-10):
 
 | Trigger | Window |
 |---|---|
@@ -225,7 +225,7 @@ overlap**. Two ways to fix it:
 
 ### Configuration
 
-Per [SPEC-0007 §REQ-9](https://github.com/kamir/m3c-tools-maintenance/blob/main/SPEC/SPEC-0007-project-time-tracking.md#req-9-reverse-time-tracking-observation-inferred-time-blocks),
+Per SPEC-0007 REQ-9,
 three environment variables tune the behaviour. Set them in your active
 profile (`~/.m3c-tools/profiles/<name>.env`) or in `~/.m3c-tools/preferences.env`:
 
@@ -239,10 +239,10 @@ profile (`~/.m3c-tools/profiles/<name>.env`) or in `~/.m3c-tools/preferences.env
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Projects submenu is empty | PLM auth failed at startup | `m3c-tools doctor` — the device-token / API-key check there will pinpoint it. See also [BUG-0124](https://github.com/kamir/m3c-tools-maintenance/blob/main/bug-reports/BUG-0124-menubar-no-projects-active-profile-placeholder-key.md) for the v2.7.0 fix. |
+| Projects submenu is empty | PLM auth failed at startup | `m3c-tools doctor` — the device-token / API-key check there will pinpoint it. See also BUG-0124 (private maintenance plane) for the v2.7.0 fix. |
 | Many `no project match` log lines, no inferred blocks | Project tag patterns don't overlap with capture tags | See "How to make reverse tracking work" above. |
 | Inferred blocks appear at wrong project | Tag overlap is too generic | Add a `project:<slug>` anchor to either the project's tags or your capture tags — strong matches override weak overlap. |
-| Profile is mis-configured (placeholder API key etc.) | Init wizard left a `once-only` / `minimal-key` placeholder | `m3c-tools config doctor` — the profile validator (see [SPEC-0177](https://github.com/kamir/m3c-tools-maintenance/blob/main/SPEC/SPEC-0177-profile-doctor.md)) flags placeholder keys, missing context ids, malformed URLs, and duplicate keys across profiles. |
+| Profile is mis-configured (placeholder API key etc.) | Init wizard left a `once-only` / `minimal-key` placeholder | `m3c-tools config doctor` — the profile validator (see SPEC-0177 on the private maintenance plane) flags placeholder keys, missing context ids, malformed URLs, and duplicate keys across profiles. |
 
 ## Logs
 

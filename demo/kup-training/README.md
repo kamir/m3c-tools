@@ -1,6 +1,6 @@
 # KuP Skill-Manager Training — End-to-End Demo
 
-Every claim in [PROJECTS/Skill-Manager/USER-MANUAL.md](../../../m3c-tools-maintenance/PROJECTS/Skill-Manager/USER-MANUAL.md) is proven here by an executable shell script. The orchestrator (`run-all.sh`) is the **release gate**: it asserts the four contractually required outputs.
+Every claim in the Skill-Manager USER-MANUAL (on the private maintenance plane) is proven here by an executable shell script. The orchestrator (`run-all.sh`) is the **release gate**: it asserts the four contractually required outputs.
 
 ## Release-gate items
 

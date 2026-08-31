@@ -21,9 +21,9 @@ install → keygen → login → package → publish → upgrade for *that exact
 # into the release dir (default)
 tools/skillctl-runbook.sh skillctl/v0.2.11-rc1
 
-# into the living onboarding copy (sibling maintenance repo)
+# into the living onboarding copy (sibling private maintenance plane)
 tools/skillctl-runbook.sh skillctl/v0.2.11-rc1 \
-  ../m3c-tools-maintenance/ONBOARDING/skillctl-publisher-runbook.html
+  "${M3C_MAINTENANCE_DIR}"/ONBOARDING/skillctl-publisher-runbook.html
 ```
 
 ### Editing the runbook

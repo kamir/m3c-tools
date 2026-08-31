@@ -24,7 +24,10 @@ Fix the bug and feed lessons back into the project's specification documents.
 
 ### Step 1: Load the bug report
 
-- Read the bug report from `/Users/kamir/GITHUB.kamir/m3c-tools-maintenance/bug-reports/`
+> Paths below resolve under `$M3C_MAINTENANCE_DIR` — the private maintenance
+> plane's repo root. Set that environment variable before running this skill.
+
+- Read the bug report from `${M3C_MAINTENANCE_DIR}/bug-reports/`
 - If only a number is given (e.g. `0001`), search for `BUG-0001-*.md`
 - Parse: severity, component, root cause analysis, suggested fix, affected SPECs
 
@@ -52,7 +55,7 @@ Fix the bug and feed lessons back into the project's specification documents.
 
 ### Step 5: Update or create SPEC
 
-Check `/Users/kamir/GITHUB.kamir/m3c-tools-maintenance/SPEC/` for an existing spec that covers the buggy behavior.
+Check `${M3C_MAINTENANCE_DIR}/SPEC/` for an existing spec that covers the buggy behavior.
 
 **If a relevant SPEC exists**, update it:
 - Add or correct the requirement that was violated
@@ -61,7 +64,7 @@ Check `/Users/kamir/GITHUB.kamir/m3c-tools-maintenance/SPEC/` for an existing sp
 
 **If no relevant SPEC exists**, create one at:
 ```
-/Users/kamir/GITHUB.kamir/m3c-tools-maintenance/SPEC/SPEC-NNNN-<component>.md
+${M3C_MAINTENANCE_DIR}/SPEC/SPEC-NNNN-<component>.md
 ```
 
 Use this template:
