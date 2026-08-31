@@ -34,10 +34,9 @@
 #     client legitimately carries its own localhost endpoint, header name, API paths
 #     and default context there, so patterns 2-5 are not checked on those paths.
 #     Pattern 1 (a path into the private repo) is ALWAYS checked, everywhere.
-#   * PRIV_BASELINE — a small, explicit baseline of machine-local agent config and a
-#     local demo build that intentionally bridge to the maintenance plane and cannot
-#     be de-pathed without breaking a local workflow. Tracked for follow-up; NOT a way
-#     to hide a real product leak (the shipped code/docs are all checked).
+#   * PRIV_BASELINE — now EMPTY. Former machine-local bridges were resolved for real:
+#     .claude/settings.json is git-ignored, and the skills + demo build resolve the
+#     private plane via $M3C_MAINTENANCE_DIR. Rule 1 has no exceptions.
 #
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
@@ -59,11 +58,11 @@ OPS_EXEMPT_PREFIX=(cmd/ pkg/ e2e/ docs/ demo/ installer/ mcp-skill-server/ rag-m
 OPS_EXEMPT_EXACT=(.env.example)
 
 # ---- Private-path baseline: pattern 1 only (documented local bridges) ----------
-PRIV_BASELINE=(.claude/settings.json \
-               .claude/skills/bug-fix/SKILL.md \
-               .claude/skills/bug-report/SKILL.md \
-               .claude/skills/release-aims/skill.md \
-               demo/kup-training/make-pdf.sh)
+# EMPTY: every former bridge has been resolved for real — .claude/settings.json is
+# now git-ignored (machine-local), and the skills + demo build resolve the private
+# plane via $M3C_MAINTENANCE_DIR instead of a literal path. Keep this empty; the
+# private-repo-path rule now applies to every tracked file with no exceptions.
+PRIV_BASELINE=()
 
 # scan_pattern FILE REASON PATTERN — emit "file:line: reason: text" per match
 scan_pattern() {
@@ -84,7 +83,7 @@ check() {
   grep -Iq . "$f" 2>/dev/null || return 0        # skip binary / empty files
 
   # Rule 1 — reference into the PRIVATE repo (always checked, minus the baseline)
-  if ! match_exact "$f" "${PRIV_BASELINE[@]}"; then
+  if [ "${#PRIV_BASELINE[@]}" -eq 0 ] || ! match_exact "$f" "${PRIV_BASELINE[@]}"; then
     scan_pattern "$f" 'private-repo path reference' 'm3c-tools-maintenance/'
   fi
 

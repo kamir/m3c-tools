@@ -77,3 +77,8 @@ __pycache__/
 
 # Packed skill bundles (build artifacts from `skillctl pack`; never source)
 *.skb
+
+# Machine-local Claude Code agent config (holds absolute paths into the private
+# maintenance plane; per SPEC-0358 it must not be tracked in this public repo).
+.claude/settings.json
+.claude/settings.local.json

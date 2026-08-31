@@ -7,8 +7,11 @@ source "$SCRIPT_DIR/lib/common.sh"
 
 header "G1 — Render USER-MANUAL.md → PDF"
 
-USER_MANUAL_MD="/Users/kamir/GITHUB.kamir/m3c-tools-maintenance/PROJECTS/Skill-Manager/USER-MANUAL.md"
-SKILLCTL_MANUAL_MD="/Users/kamir/GITHUB.kamir/m3c-tools-maintenance/PROJECTS/Skill-Manager/SKILLCTL-MANUAL.md"
+# Source manuals live on the private maintenance plane; its repo root is supplied
+# via M3C_MAINTENANCE_DIR so no private path is baked into this public script.
+: "${M3C_MAINTENANCE_DIR:?set M3C_MAINTENANCE_DIR to the private maintenance-plane repo root}"
+USER_MANUAL_MD="${M3C_MAINTENANCE_DIR}/PROJECTS/Skill-Manager/USER-MANUAL.md"
+SKILLCTL_MANUAL_MD="${M3C_MAINTENANCE_DIR}/PROJECTS/Skill-Manager/SKILLCTL-MANUAL.md"
 OUT_USER="$ARTIFACTS_DIR/USER-MANUAL.pdf"
 OUT_CLI="$ARTIFACTS_DIR/SKILLCTL-MANUAL.pdf"
 OUT_BUNDLE="$ARTIFACTS_DIR/KuP-skill-manager-handbook.pdf"
