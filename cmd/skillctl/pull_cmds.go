@@ -220,16 +220,67 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 
 	if *emitInstalled {
 		if artifact.SchemeOf(*registryName) != "er1" {
-			// Do NOT silently write the install-ack into ER1 for a git registry.
-			// Routing BundleInstalledEvent to the active backend is a SPEC-0351
-			// follow-up; for now install completed but no installed-event is written.
-			fmt.Fprintf(stderr, "pull: --emit-installed is not yet routed to %q — install completed, but no BundleInstalledEvent was written (SPEC-0351 follow-up)\n", *registryName)
+			// Route the BundleInstalledEvent to the ACTIVE backend (git/GitLab),
+			// not silently into ER1 — cross-machine install visibility on the same
+			// carrier the bundle came from.
+			emitInstalledEventsViaBackend(stdout, stderr, res.Staged, *registryName, *keyPath, *identity, tr.Fingerprint)
 		} else {
 			emitInstalledEvents(stdout, stderr, results, res.Staged, *keyPath, *identity, *er1Target, *er1Context, tr.Fingerprint)
 		}
 	}
 	maybeCheckpoint(stdout, *noCheckpoint, *er1Target, *er1Context, fmt.Sprintf("installed %d bundle(s) under %s (trust-mode)", len(results), strOr(*installSkillsDir, "~/.claude/skills")))
 	return 0
+}
+
+// emitInstalledEventsViaBackend is the git/GitLab peer of emitInstalledEvents:
+// it builds + signs the SAME BundleInstalledEvent and appends it to the active
+// artifact backend via Publish(KindInstall) — ZERO signing changes, the git
+// backend commits it under events/<digesthex>/. Failures are non-fatal (the
+// install already succeeded); each is reported and the loop continues.
+func emitInstalledEventsViaBackend(stdout, stderr io.Writer, staged []*registry.StagedBundle, spec, keyPath, identity, trustRootsFP string) {
+	priv, err := signing.LoadPrivateKey(keyPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "    (emit-installed skipped: load key: %v)\n", err)
+		return
+	}
+	defer wipe(priv)
+	be, err := artifact.Open(spec, artifact.OpenOptions{Creds: artifactauth.New()})
+	if err != nil {
+		fmt.Fprintf(stderr, "    (emit-installed skipped: open %s: %v)\n", spec, err)
+		return
+	}
+	defer be.Close()
+	host := shortHostname()
+	ctx := context.Background()
+	for _, b := range staged {
+		ev, err := registry.BuildBundleInstalledEvent(registry.InstalledEventInput{
+			BundleDigest:          b.Digest,
+			Name:                  b.Name,
+			Version:               b.Version,
+			InstalledOnHost:       host,
+			InstalledAt:           time.Now().UTC(),
+			TrustRootsFingerprint: trustRootsFP,
+			Registry:              spec,
+		})
+		if err != nil {
+			fmt.Fprintf(stderr, "    (emit-installed %s: build event: %v)\n", b.Name, err)
+			continue
+		}
+		if _, err := registry.SignEnvelopeSignature(priv, ev); err != nil {
+			fmt.Fprintf(stderr, "    (emit-installed %s: sign envelope: %v)\n", b.Name, err)
+			continue
+		}
+		res, err := be.Publish(ctx, artifact.PublishRequest{
+			Kind:  artifact.KindInstall,
+			Event: ev,
+			Meta:  artifact.ArtifactMeta{Name: b.Name, Version: b.Version, Digest: b.Digest, AuthorIdentity: identity},
+		})
+		if err != nil {
+			fmt.Fprintf(stderr, "    (emit-installed %s: %v)\n", b.Name, err)
+			continue
+		}
+		fmt.Fprintf(stdout, "    ✉ emitted installed event: %s@%s on host=%s ref=%s\n", b.Name, b.Version, host, res.NativeID)
+	}
 }
 
 // emitInstalledEvents posts one BundleInstalledEvent per installed bundle so

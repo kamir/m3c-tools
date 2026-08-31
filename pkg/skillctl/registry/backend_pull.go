@@ -19,9 +19,49 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
 )
+
+// parsePullSince turns the --since flag into a lower bound on occurred_at.
+// Accepts RFC3339, a date (YYYY-MM-DD), or a Go duration ("168h" => now-168h).
+// Empty => zero time (no bound). Shared by PullBundles (ER1) and
+// PullBundlesFromBackend (git) so --since behaves identically on both carriers.
+func parsePullSince(s string) (time.Time, error) {
+	if strings.TrimSpace(s) == "" {
+		return time.Time{}, nil
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t, nil
+	}
+	if t, err := time.Parse("2006-01-02", s); err == nil {
+		return t, nil
+	}
+	if d, err := time.ParseDuration(s); err == nil {
+		return time.Now().Add(-d), nil
+	}
+	return time.Time{}, fmt.Errorf("bad --since %q (want RFC3339, YYYY-MM-DD, or a duration like 168h)", s)
+}
+
+// eventOlderThan reports whether a signed event's occurred_at is strictly before
+// cutoff. An absent/unparseable timestamp is treated as NOT older (kept): --since
+// is a best-effort scope narrowing, never a security gate. Callers apply it only
+// AFTER the envelope signature verifies, so the timestamp is authenticated.
+func eventOlderThan(ev map[string]any, cutoff time.Time) bool {
+	if cutoff.IsZero() {
+		return false
+	}
+	ts, _ := ev["occurred_at"].(string)
+	if ts == "" {
+		return false
+	}
+	t, err := time.Parse(time.RFC3339, ts)
+	if err != nil {
+		return false
+	}
+	return t.Before(cutoff)
+}
 
 // PullBundlesFromBackend runs the SPEC-0188 §7 gauntlet over be and stages the
 // bundles that pass. The governance floor requires a SIGNED AttestationPublished
@@ -92,6 +132,11 @@ func PullBundlesFromBackend(ctx context.Context, be artifact.Backend, tr *SelfTr
 		return nil, fmt.Errorf("pull: mkdir cache: %w", err)
 	}
 
+	sinceCutoff, serr := parsePullSince(opts.Since)
+	if serr != nil {
+		return nil, serr
+	}
+
 	res := &PullResult{}
 	for _, event := range admits {
 		name, _ := event["name"].(string)
@@ -104,6 +149,10 @@ func PullBundlesFromBackend(ctx context.Context, be artifact.Backend, tr *SelfTr
 		// Gate 1: envelope_signature (admit).
 		if err := VerifyEnvelopeSignature(pub, event); err != nil {
 			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, Gate: ErrGateEnvelope, Detail: err.Error()})
+			continue
+		}
+		// --since: best-effort scope narrowing on the now-AUTHENTICATED occurred_at.
+		if eventOlderThan(event, sinceCutoff) {
 			continue
 		}
 		// Gate 5: revoked?

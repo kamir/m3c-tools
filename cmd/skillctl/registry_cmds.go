@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
@@ -135,10 +136,7 @@ func runRegistryShow(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if artifact.SchemeOf(*registrySpec) != "er1" {
-		// Do NOT silently target ER1 for a git spec. The full signed timeline is
-		// in the repo (events/<digesthex>/); a git-native `show` is a follow-up.
-		fmt.Fprintf(stderr, "registry show: not yet wired for %q — use `registry ls --registry %s`; the signed event timeline is in the repo under events/<digesthex>/\n", *registrySpec, *registrySpec)
-		return 2
+		return runRegistryShowBackend(*registrySpec, fs.Arg(0), stdout, stderr)
 	}
 	cfg, err := resolveER1Config(*er1Target)
 	if err != nil {
@@ -177,4 +175,126 @@ func runRegistryShow(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	return 0
+}
+
+// runRegistryShowBackend renders `registry show` for a SPEC-0356 artifact backend
+// (gitlab:// / github://) from its GovernanceLog event timeline — the git-native
+// peer of ShowSkill, sourced from events/<digesthex>/ in the repo. Read-only; no
+// verification (that is `pull`). Accepts a skill name or a sha256:<hex> digest.
+func runRegistryShowBackend(spec, key string, stdout, stderr io.Writer) int {
+	be, err := artifact.Open(spec, artifact.OpenOptions{Creds: artifactauth.New()})
+	if err != nil {
+		fmt.Fprintf(stderr, "registry show: open %s: %v\n", spec, err)
+		return 1
+	}
+	defer be.Close()
+	gl, ok := be.(artifact.GovernanceLog)
+	if !ok {
+		fmt.Fprintf(stderr, "registry show: backend %q exposes no signed event timeline\n", spec)
+		return 1
+	}
+	ctx := context.Background()
+	isDigest := strings.HasPrefix(key, "sha256:")
+
+	var filter artifact.ListFilter
+	if !isDigest {
+		filter.Name = key
+	}
+	page, err := gl.Events(ctx, filter, artifact.Page{})
+	if err != nil {
+		fmt.Fprintf(stderr, "registry show: %v\n", err)
+		return 1
+	}
+	evs := page.Events
+	if isDigest {
+		filtered := evs[:0:0]
+		for _, e := range evs {
+			if e.Digest == key {
+				filtered = append(filtered, e)
+			}
+		}
+		evs = filtered
+	}
+	if len(evs) == 0 {
+		fmt.Fprintf(stdout, "(no events for %q in %s)\n", key, spec)
+		return 0
+	}
+
+	// Header: name from the events; latest version/digest via Resolve (name query)
+	// or the pinned digest (digest query); status = revoked if a revoke event exists.
+	name := key
+	for _, e := range evs {
+		if n := envString(e.Envelope, "name"); n != "" {
+			name = n
+			break
+		}
+	}
+	latestVer, latestDig := "", key
+	if !isDigest {
+		latestDig = ""
+		if ref, rerr := be.Resolve(ctx, artifact.RefQuery{Name: key}); rerr == nil {
+			latestVer, latestDig = ref.Version, ref.Digest
+		}
+	}
+	sort.SliceStable(evs, func(i, j int) bool { return evs[i].OccurredAt.After(evs[j].OccurredAt) })
+	latestGov, revoked := "", false
+	for _, e := range evs {
+		if latestDig != "" && e.Digest != latestDig {
+			continue
+		}
+		if e.Kind == artifact.KindAttest && latestGov == "" && e.Governance != "" {
+			latestGov = e.Governance
+		}
+		if e.Kind == artifact.KindRevoke {
+			revoked = true
+		}
+	}
+
+	fmt.Fprintf(stdout, "skill:           %s\n", name)
+	fmt.Fprintf(stdout, "registry:        %s\n", spec)
+	if latestVer != "" {
+		fmt.Fprintf(stdout, "latest version:  %s\n", latestVer)
+	}
+	fmt.Fprintf(stdout, "latest digest:   %s\n", strOr(latestDig, "?"))
+	fmt.Fprintf(stdout, "latest gov:      %s\n", strOr(latestGov, "—"))
+	if revoked {
+		fmt.Fprintln(stdout, "status:          REVOKED")
+	} else {
+		fmt.Fprintln(stdout, "status:          ok")
+	}
+	fmt.Fprintln(stdout, "\nevents (newest first):")
+	fmt.Fprintln(stdout, strings.Repeat("-", 80))
+	for _, e := range evs {
+		occ := "?"
+		if !e.OccurredAt.IsZero() {
+			occ = e.OccurredAt.UTC().Format("2006-01-02T15:04:05Z")
+		}
+		fmt.Fprintf(stdout, "  %-20s  %-9s  %s\n", occ, e.Kind, shortDigest(e.Digest))
+		if e.Governance != "" {
+			fmt.Fprintf(stdout, "    governance: %s\n", e.Governance)
+		}
+		if e.Host != "" {
+			fmt.Fprintf(stdout, "    host:       %s\n", e.Host)
+		}
+		if e.Rationale != "" {
+			fmt.Fprintf(stdout, "    rationale:  %s\n", e.Rationale)
+		}
+	}
+	return 0
+}
+
+func envString(env map[string]any, k string) string {
+	if env == nil {
+		return ""
+	}
+	s, _ := env[k].(string)
+	return s
+}
+
+func shortDigest(d string) string {
+	h := strings.TrimPrefix(d, "sha256:")
+	if len(h) > 12 {
+		return "sha256:" + h[:12] + "…"
+	}
+	return d
 }

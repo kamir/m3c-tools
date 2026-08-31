@@ -285,6 +285,11 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 		return nil, fmt.Errorf("pull: mkdir cache: %w", err)
 	}
 
+	sinceCutoff, serr := parsePullSince(opts.Since)
+	if serr != nil {
+		return nil, serr
+	}
+
 	res := &PullResult{}
 	for _, item := range admits {
 		docID, _ := item["doc_id"].(string)
@@ -304,6 +309,10 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 		// Gate 1: envelope_signature.
 		if err := VerifyEnvelopeSignature(tr.PubKey(), event); err != nil {
 			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, DocID: docID, Gate: ErrGateEnvelope, Detail: err.Error()})
+			continue
+		}
+		// --since: best-effort scope narrowing on the now-AUTHENTICATED occurred_at.
+		if eventOlderThan(event, sinceCutoff) {
 			continue
 		}
 		// Gate 5: revoked? (cheapest non-cryptographic gate; check before fetching bytes)
