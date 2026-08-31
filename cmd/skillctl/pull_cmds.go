@@ -70,10 +70,10 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	tr, err := registry.LoadSelfTrustRoots(*trustPath)
+	tr, peerName, err := resolvePullTrustRoots(*registryName, *trustPath)
 	if err != nil {
 		fmt.Fprintf(stderr, "pull: load trust-roots: %v\n", err)
-		fmt.Fprintln(stderr, "       Carry ~/.claude/trust-roots.yaml from machine 1 (10-keygen-and-trustroots.sh).")
+		fmt.Fprintln(stderr, "       Carry ~/.claude/trust-roots.yaml from machine 1 (10-keygen-and-trustroots.sh), or pin the peer with `skillctl peer add`.")
 		return 2
 	}
 
@@ -110,6 +110,9 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 
 	fmt.Fprintf(stdout, "==> pull (registry=%s, gov-min=%s)\n", *registryName, tr.GovernanceMinimum)
 	fmt.Fprintf(stdout, "    trust-roots: %s  fp=%s\n", tr.Path, tr.Fingerprint)
+	if peerName != "" {
+		fmt.Fprintf(stdout, "    peer:        %s (pinned key)\n", peerName)
+	}
 	fmt.Fprintln(stdout)
 
 	for _, s := range res.Staged {
@@ -342,4 +345,32 @@ func strOr(s, fb string) string {
 		return fb
 	}
 	return s
+}
+
+// resolvePullTrustRoots picks the verification key for a pull (SPEC-0359 D2). For
+// self / er1:// / empty it loads the self trust-roots VERBATIM (byte-identical to
+// pre-D2 — the no-regression guarantee). For any other locator it consults the
+// peer store: a PINNED peer verifies against THAT peer's pinned key; an unpinned
+// locator falls through to the self roots (unchanged — a gitlab:// mirror of your
+// OWN skills still verifies against your own key). Returns the peer name when a
+// pin was used ("" otherwise).
+func resolvePullTrustRoots(registryName, trustPath string) (*registry.SelfTrustRoots, string, error) {
+	if registryName == "" || registry.IsER1Registry(registryName) {
+		tr, err := registry.LoadSelfTrustRoots(trustPath)
+		return tr, "", err
+	}
+	peers, err := registry.LoadPeers(peersConfigPath)
+	if err != nil {
+		return nil, "", err
+	}
+	if pe, ok := peers.FindPeerByLocator(registryName); ok {
+		tr, aerr := pe.AsTrustRoots()
+		if aerr != nil {
+			return nil, "", aerr
+		}
+		tr.Path = strOr(peersConfigPath, registry.DefaultPeersPath())
+		return tr, pe.Name, nil
+	}
+	tr, lerr := registry.LoadSelfTrustRoots(trustPath)
+	return tr, "", lerr
 }
