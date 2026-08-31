@@ -11,7 +11,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifactauth"
@@ -85,7 +87,7 @@ func runRegistryLs(args []string, stdout, stderr io.Writer) int {
 		if s.IsRevoked {
 			status = "REVOKED"
 		}
-		fmt.Fprintf(stdout, "%-32s %-10s %-72s %-8s %s\n", s.Name, strOr(s.LatestVersion, "?"), s.LatestDigest, strOr(s.LatestGovernance, "—"), status)
+		fmt.Fprintf(stdout, "%-32s %-10s %-72s %-8s %s\n", safeCell(s.Name), strOr(safeCell(s.LatestVersion), "?"), safeCell(s.LatestDigest), strOr(safeCell(s.LatestGovernance), "—"), status)
 	}
 	return 0
 }
@@ -116,7 +118,7 @@ func runRegistryLsBackend(spec, skillName string, latest bool, stdout, stderr io
 		if s.IsRevoked {
 			status = "REVOKED"
 		}
-		fmt.Fprintf(stdout, "%-32s %-10s %-72s %-8s %s\n", s.Name, strOr(s.LatestVersion, "?"), s.LatestDigest, strOr(s.LatestGovernance, "—"), status)
+		fmt.Fprintf(stdout, "%-32s %-10s %-72s %-8s %s\n", safeCell(s.Name), strOr(safeCell(s.LatestVersion), "?"), safeCell(s.LatestDigest), strOr(safeCell(s.LatestGovernance), "—"), status)
 	}
 	return 0
 }
@@ -135,10 +137,7 @@ func runRegistryShow(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if artifact.SchemeOf(*registrySpec) != "er1" {
-		// Do NOT silently target ER1 for a git spec. The full signed timeline is
-		// in the repo (events/<digesthex>/); a git-native `show` is a follow-up.
-		fmt.Fprintf(stderr, "registry show: not yet wired for %q — use `registry ls --registry %s`; the signed event timeline is in the repo under events/<digesthex>/\n", *registrySpec, *registrySpec)
-		return 2
+		return runRegistryShowBackend(*registrySpec, fs.Arg(0), stdout, stderr)
 	}
 	cfg, err := resolveER1Config(*er1Target)
 	if err != nil {
@@ -177,4 +176,152 @@ func runRegistryShow(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	return 0
+}
+
+// runRegistryShowBackend renders `registry show` for a SPEC-0356 artifact backend
+// (gitlab:// / github://) from its GovernanceLog event timeline — the git-native
+// peer of ShowSkill, sourced from events/<digesthex>/ in the repo. Read-only; no
+// verification (that is `pull`). Accepts a skill name or a sha256:<hex> digest.
+func runRegistryShowBackend(spec, key string, stdout, stderr io.Writer) int {
+	be, err := artifact.Open(spec, artifact.OpenOptions{Creds: artifactauth.New()})
+	if err != nil {
+		fmt.Fprintf(stderr, "registry show: open %s: %v\n", spec, err)
+		return 1
+	}
+	defer be.Close()
+	gl, ok := be.(artifact.GovernanceLog)
+	if !ok {
+		fmt.Fprintf(stderr, "registry show: backend %q exposes no signed event timeline\n", spec)
+		return 1
+	}
+	ctx := context.Background()
+	isDigest := strings.HasPrefix(key, "sha256:")
+
+	var filter artifact.ListFilter
+	if !isDigest {
+		filter.Name = key
+	}
+	page, err := gl.Events(ctx, filter, artifact.Page{})
+	if err != nil {
+		fmt.Fprintf(stderr, "registry show: %v\n", err)
+		return 1
+	}
+	evs := page.Events
+	if isDigest {
+		filtered := evs[:0:0]
+		for _, e := range evs {
+			if e.Digest == key {
+				filtered = append(filtered, e)
+			}
+		}
+		evs = filtered
+	}
+	if len(evs) == 0 {
+		fmt.Fprintf(stdout, "(no events for %q in %s)\n", key, spec)
+		return 0
+	}
+
+	// Header: name from the events; latest version/digest via Resolve (name query)
+	// or the pinned digest (digest query); status = revoked if a revoke event exists.
+	name := key
+	for _, e := range evs {
+		if n := envString(e.Envelope, "name"); n != "" {
+			name = n
+			break
+		}
+	}
+	latestVer, latestDig := "", key
+	if !isDigest {
+		latestDig = ""
+		if ref, rerr := be.Resolve(ctx, artifact.RefQuery{Name: key}); rerr == nil {
+			latestVer, latestDig = ref.Version, ref.Digest
+		}
+	}
+	sort.SliceStable(evs, func(i, j int) bool { return evs[i].OccurredAt.After(evs[j].OccurredAt) })
+	latestGov, revoked := "", false
+	for _, e := range evs {
+		if latestDig != "" && e.Digest != latestDig {
+			continue
+		}
+		if e.Kind == artifact.KindAttest && latestGov == "" && e.Governance != "" {
+			latestGov = e.Governance
+		}
+		if e.Kind == artifact.KindRevoke {
+			revoked = true
+		}
+	}
+
+	fmt.Fprintf(stdout, "skill:           %s\n", safeCell(name))
+	fmt.Fprintf(stdout, "registry:        %s\n", spec) // operator-provided, trusted
+	if latestVer != "" {
+		fmt.Fprintf(stdout, "latest version:  %s\n", safeCell(latestVer))
+	}
+	fmt.Fprintf(stdout, "latest digest:   %s\n", strOr(safeCell(latestDig), "?"))
+	fmt.Fprintf(stdout, "latest gov:      %s\n", strOr(safeCell(latestGov), "—"))
+	if revoked {
+		fmt.Fprintln(stdout, "status:          REVOKED")
+	} else {
+		fmt.Fprintln(stdout, "status:          ok")
+	}
+	fmt.Fprintln(stdout, "\nevents (newest first):")
+	fmt.Fprintln(stdout, strings.Repeat("-", 80))
+	for _, e := range evs {
+		occ := "?"
+		if !e.OccurredAt.IsZero() {
+			occ = e.OccurredAt.UTC().Format("2006-01-02T15:04:05Z")
+		}
+		fmt.Fprintf(stdout, "  %-20s  %-9s  %s\n", occ, safeCell(string(e.Kind)), shortDigest(e.Digest))
+		if e.Governance != "" {
+			fmt.Fprintf(stdout, "    governance: %s\n", safeCell(e.Governance))
+		}
+		if e.Host != "" {
+			fmt.Fprintf(stdout, "    host:       %s\n", safeCell(e.Host))
+		}
+		if e.Rationale != "" {
+			fmt.Fprintf(stdout, "    rationale:  %s\n", safeCell(e.Rationale))
+		}
+	}
+	return 0
+}
+
+func envString(env map[string]any, k string) string {
+	if env == nil {
+		return ""
+	}
+	s, _ := env[k].(string)
+	return s
+}
+
+func shortDigest(d string) string {
+	h := strings.TrimPrefix(safeCell(d), "sha256:")
+	if len(h) > 12 {
+		return "sha256:" + h[:12] + "…"
+	}
+	return "sha256:" + h
+}
+
+// safeCell strips control characters from a repo-sourced string and caps its
+// length before it reaches a terminal. The git host is UNTRUSTED (SPEC-0356 §6):
+// an event/bundle.json field (name, governance, host, rationale, digest) can
+// carry ANSI escape sequences that rewrite earlier output — e.g. overwrite a
+// printed `status: REVOKED` with `ok` in the operator's decide-what-to-pull view.
+// Display-only defense; the authoritative pull gauntlet re-verifies independently
+// of the terminal. Mirrors the install path's control-char rejection.
+func safeCell(s string) string {
+	const max = 200
+	var b strings.Builder
+	for _, r := range s {
+		if r == '\t' {
+			r = ' '
+		}
+		if unicode.IsControl(r) {
+			continue // drop C0/C1 incl. ESC, CR, LF, backspace
+		}
+		if b.Len() >= max {
+			b.WriteString("…")
+			break
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }

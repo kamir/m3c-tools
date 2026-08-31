@@ -43,7 +43,7 @@ func (b *ER1Backend) Describe() artifact.Descriptor {
 			CanAdmit: true, CanAttest: true, CanRevoke: true, CanInstall: true,
 			ServerEventLog: true,                      // via GovernanceLog.Events
 			Paginated:      false,                     // single-shot list today (the known limit=500 fetch)
-			HonoursSince:   false,                     // --since is not yet honored
+			HonoursSince:   true,                      // Events applies ListFilter.Since on occurred_at
 			Governance:     artifact.GovFromEventLog,  // newest signed attestation
 			LatestPolicy:   artifact.LatestMostRecent, // admit-time newest (NOT semver-max — a real ER1↔git difference)
 			Rooms:          false,                     // TODO: expose er1_room.go via Roomer (rooms are an ER1-only feature)
@@ -53,6 +53,16 @@ func (b *ER1Backend) Describe() artifact.Descriptor {
 }
 
 func (b *ER1Backend) Close() error { return nil }
+
+// strOrEmpty returns the first non-empty string among vals (each may be any).
+func strOrEmpty(vals ...any) string {
+	for _, v := range vals {
+		if s, ok := v.(string); ok && s != "" {
+			return s
+		}
+	}
+	return ""
+}
 
 func (b *ER1Backend) skillMeta(m artifact.ArtifactMeta) SkillMeta {
 	return SkillMeta{
@@ -194,9 +204,23 @@ func (b *ER1Backend) Events(ctx context.Context, filter artifact.ListFilter, pag
 			}
 			d, _ := ev["bundle_digest"].(string)
 			lvl, _ := ev["governance_level"].(string)
-			out.Events = append(out.Events, artifact.EventRecord{
-				Kind: artifact.EventKind(kind), Digest: d, Governance: lvl, Envelope: ev,
-			})
+			rec := artifact.EventRecord{
+				Kind: artifact.EventKind(kind), Digest: d, Governance: lvl,
+				Host:      strOrEmpty(ev["packed_on_host"], ev["installed_on_host"]),
+				Rationale: strOrEmpty(ev["rationale"]),
+				Envelope:  ev,
+			}
+			if ts, _ := ev["occurred_at"].(string); ts != "" {
+				if t, perr := time.Parse(time.RFC3339, ts); perr == nil {
+					rec.OccurredAt = t
+				}
+			}
+			// --since (ListFilter.Since): drop events older than the bound; a
+			// zero/unparseable timestamp is kept (best-effort, never a gate).
+			if !filter.Since.IsZero() && !rec.OccurredAt.IsZero() && rec.OccurredAt.Before(filter.Since) {
+				continue
+			}
+			out.Events = append(out.Events, rec)
 		}
 	}
 	return out, nil

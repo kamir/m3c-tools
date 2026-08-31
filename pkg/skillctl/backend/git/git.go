@@ -161,7 +161,7 @@ func (b *gitBackend) Describe() artifact.Descriptor {
 			CanAdmit: true, CanAttest: true, CanRevoke: true, CanInstall: true,
 			ServerEventLog: true,  // committed events/ tree, surfaced via GovernanceLog.Events
 			Paginated:      false, // single-shot: one clone returns the COMPLETE listing; Page.Cursor is not honored
-			HonoursSince:   false, // v1: no server-side since filter
+			HonoursSince:   true,  // Events applies ListFilter.Since on occurred_at
 			Governance:     artifact.GovFromEventLog,
 			LatestPolicy:   artifact.LatestSemverMax,
 			Rooms:          false,
@@ -521,14 +521,23 @@ func (b *gitBackend) Events(ctx context.Context, filter artifact.ListFilter, pag
 					Kind:       artifact.EventKind(kindFromEventFile(e.Name())),
 					Digest:     "sha256:" + dh,
 					Governance: strFromMap(env, "governance_level"),
+					Host:       strFromMap(env, "packed_on_host"),
 					Rationale:  strFromMap(env, "rationale"),
 					NativeID:   e.Name(),
 					Envelope:   env,
+				}
+				if rec.Host == "" {
+					rec.Host = strFromMap(env, "installed_on_host")
 				}
 				if ts := strFromMap(env, "occurred_at"); ts != "" {
 					if t, perr := time.Parse(time.RFC3339, ts); perr == nil {
 						rec.OccurredAt = t
 					}
+				}
+				// --since (ListFilter.Since): drop events older than the bound. A
+				// zero/unparseable timestamp is kept (best-effort, never a gate).
+				if !filter.Since.IsZero() && !rec.OccurredAt.IsZero() && rec.OccurredAt.Before(filter.Since) {
+					continue
 				}
 				recs = append(recs, rec)
 			}
