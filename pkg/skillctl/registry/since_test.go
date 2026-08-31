@@ -22,6 +22,14 @@ func TestParsePullSince(t *testing.T) {
 	if _, err := parsePullSince("not-a-time"); err == nil {
 		t.Error("garbage should error")
 	}
+	// A negative duration would invert --since into a future cutoff — reject it.
+	if _, err := parsePullSince("-24h"); err == nil {
+		t.Error("negative duration must error (would silently exclude everything)")
+	}
+	// A positive duration still yields a PAST cutoff.
+	if got, err := parsePullSince("1h"); err != nil || !got.Before(time.Now()) {
+		t.Errorf("positive duration => past cutoff, got %v / %v", got, err)
+	}
 }
 
 // TestEventOlderThan covers the best-effort admit-timestamp filter: only a

@@ -39,6 +39,11 @@ func parsePullSince(s string) (time.Time, error) {
 		return t, nil
 	}
 	if d, err := time.ParseDuration(s); err == nil {
+		if d < 0 {
+			// A negative duration would invert --since into a FUTURE lower bound
+			// (now-(-d)), silently excluding everything. Reject it instead.
+			return time.Time{}, fmt.Errorf("bad --since %q (duration must be non-negative, e.g. 168h)", s)
+		}
 		return time.Now().Add(-d), nil
 	}
 	return time.Time{}, fmt.Errorf("bad --since %q (want RFC3339, YYYY-MM-DD, or a duration like 168h)", s)

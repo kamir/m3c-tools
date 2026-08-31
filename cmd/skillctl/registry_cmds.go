@@ -13,6 +13,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifactauth"
@@ -86,7 +87,7 @@ func runRegistryLs(args []string, stdout, stderr io.Writer) int {
 		if s.IsRevoked {
 			status = "REVOKED"
 		}
-		fmt.Fprintf(stdout, "%-32s %-10s %-72s %-8s %s\n", s.Name, strOr(s.LatestVersion, "?"), s.LatestDigest, strOr(s.LatestGovernance, "—"), status)
+		fmt.Fprintf(stdout, "%-32s %-10s %-72s %-8s %s\n", safeCell(s.Name), strOr(safeCell(s.LatestVersion), "?"), safeCell(s.LatestDigest), strOr(safeCell(s.LatestGovernance), "—"), status)
 	}
 	return 0
 }
@@ -117,7 +118,7 @@ func runRegistryLsBackend(spec, skillName string, latest bool, stdout, stderr io
 		if s.IsRevoked {
 			status = "REVOKED"
 		}
-		fmt.Fprintf(stdout, "%-32s %-10s %-72s %-8s %s\n", s.Name, strOr(s.LatestVersion, "?"), s.LatestDigest, strOr(s.LatestGovernance, "—"), status)
+		fmt.Fprintf(stdout, "%-32s %-10s %-72s %-8s %s\n", safeCell(s.Name), strOr(safeCell(s.LatestVersion), "?"), safeCell(s.LatestDigest), strOr(safeCell(s.LatestGovernance), "—"), status)
 	}
 	return 0
 }
@@ -250,13 +251,13 @@ func runRegistryShowBackend(spec, key string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	fmt.Fprintf(stdout, "skill:           %s\n", name)
-	fmt.Fprintf(stdout, "registry:        %s\n", spec)
+	fmt.Fprintf(stdout, "skill:           %s\n", safeCell(name))
+	fmt.Fprintf(stdout, "registry:        %s\n", spec) // operator-provided, trusted
 	if latestVer != "" {
-		fmt.Fprintf(stdout, "latest version:  %s\n", latestVer)
+		fmt.Fprintf(stdout, "latest version:  %s\n", safeCell(latestVer))
 	}
-	fmt.Fprintf(stdout, "latest digest:   %s\n", strOr(latestDig, "?"))
-	fmt.Fprintf(stdout, "latest gov:      %s\n", strOr(latestGov, "—"))
+	fmt.Fprintf(stdout, "latest digest:   %s\n", strOr(safeCell(latestDig), "?"))
+	fmt.Fprintf(stdout, "latest gov:      %s\n", strOr(safeCell(latestGov), "—"))
 	if revoked {
 		fmt.Fprintln(stdout, "status:          REVOKED")
 	} else {
@@ -269,15 +270,15 @@ func runRegistryShowBackend(spec, key string, stdout, stderr io.Writer) int {
 		if !e.OccurredAt.IsZero() {
 			occ = e.OccurredAt.UTC().Format("2006-01-02T15:04:05Z")
 		}
-		fmt.Fprintf(stdout, "  %-20s  %-9s  %s\n", occ, e.Kind, shortDigest(e.Digest))
+		fmt.Fprintf(stdout, "  %-20s  %-9s  %s\n", occ, safeCell(string(e.Kind)), shortDigest(e.Digest))
 		if e.Governance != "" {
-			fmt.Fprintf(stdout, "    governance: %s\n", e.Governance)
+			fmt.Fprintf(stdout, "    governance: %s\n", safeCell(e.Governance))
 		}
 		if e.Host != "" {
-			fmt.Fprintf(stdout, "    host:       %s\n", e.Host)
+			fmt.Fprintf(stdout, "    host:       %s\n", safeCell(e.Host))
 		}
 		if e.Rationale != "" {
-			fmt.Fprintf(stdout, "    rationale:  %s\n", e.Rationale)
+			fmt.Fprintf(stdout, "    rationale:  %s\n", safeCell(e.Rationale))
 		}
 	}
 	return 0
@@ -292,9 +293,35 @@ func envString(env map[string]any, k string) string {
 }
 
 func shortDigest(d string) string {
-	h := strings.TrimPrefix(d, "sha256:")
+	h := strings.TrimPrefix(safeCell(d), "sha256:")
 	if len(h) > 12 {
 		return "sha256:" + h[:12] + "…"
 	}
-	return d
+	return "sha256:" + h
+}
+
+// safeCell strips control characters from a repo-sourced string and caps its
+// length before it reaches a terminal. The git host is UNTRUSTED (SPEC-0356 §6):
+// an event/bundle.json field (name, governance, host, rationale, digest) can
+// carry ANSI escape sequences that rewrite earlier output — e.g. overwrite a
+// printed `status: REVOKED` with `ok` in the operator's decide-what-to-pull view.
+// Display-only defense; the authoritative pull gauntlet re-verifies independently
+// of the terminal. Mirrors the install path's control-char rejection.
+func safeCell(s string) string {
+	const max = 200
+	var b strings.Builder
+	for _, r := range s {
+		if r == '\t' {
+			r = ' '
+		}
+		if unicode.IsControl(r) {
+			continue // drop C0/C1 incl. ESC, CR, LF, backspace
+		}
+		if b.Len() >= max {
+			b.WriteString("…")
+			break
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
