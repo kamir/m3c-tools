@@ -11,7 +11,17 @@ import (
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
+	"github.com/kamir/m3c-tools/pkg/skillctl/artifact/conformance"
 )
+
+// TestGitBackendConformance runs the shared SPEC-0356 backend conformance suite
+// (D8) against a bare-repo git backend — the SAME assertions run against ER1.
+func TestGitBackendConformance(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	conformance.Run(t, newGitBackend(bareRepo(t), "gitlab"))
+}
 
 type fakeCreds struct{ user, token string }
 
