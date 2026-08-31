@@ -36,6 +36,42 @@ func TestResolveLocalPath(t *testing.T) {
 	}
 }
 
+// TestInitLocalRegistryGuards: init must refuse to scatter bare-repo plumbing over
+// a non-empty non-repo directory (the local://~ / local://. typo footgun), while
+// still allowing an absent path, an empty dir, and idempotent re-init of a repo.
+func TestInitLocalRegistryGuards(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	// Non-empty NON-repo dir → REFUSE (the footgun).
+	danger := t.TempDir()
+	if err := os.WriteFile(filepath.Join(danger, "my-important.txt"), []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := InitLocalRegistry("local://" + danger); err == nil {
+		t.Errorf("init over a non-empty non-repo dir must be refused")
+	}
+	if _, err := os.Stat(filepath.Join(danger, "HEAD")); err == nil {
+		t.Errorf("init wrote bare-repo plumbing into a user directory — footgun not guarded")
+	}
+
+	// Empty dir → OK.
+	empty := t.TempDir()
+	if _, err := InitLocalRegistry("local://" + empty); err != nil {
+		t.Errorf("init over an empty dir should succeed: %v", err)
+	}
+	// Idempotent re-init of the now-bare repo → OK.
+	if _, err := InitLocalRegistry("local://" + empty); err != nil {
+		t.Errorf("re-init of an existing bare repo should be idempotent: %v", err)
+	}
+
+	// Absent path → OK (git creates it).
+	absent := filepath.Join(t.TempDir(), "new", "reg.git")
+	if _, err := InitLocalRegistry("local://" + absent); err != nil {
+		t.Errorf("init over an absent path should succeed: %v", err)
+	}
+}
+
 // TestLocalRegistryEndToEnd: init a bare local registry, publish + read through
 // artifact.Open("local://…"), export a git-bundle snapshot, and prove a peer can
 // list+fetch from the READ-ONLY bundle — the offline handoff flow, no remote.

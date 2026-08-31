@@ -80,12 +80,58 @@ func InitLocalRegistry(spec string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// `git init --bare` is safe to re-run on an existing bare repo.
+	if err := ensureInitTarget(path); err != nil {
+		return "", err
+	}
+	// `git init --bare` is safe to re-run on an existing bare repo (idempotent).
 	out, err := exec.Command("git", "-c", "init.defaultBranch=main", "init", "--bare", path).CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("git init --bare %s: %w: %s", path, err, strings.TrimSpace(string(out)))
 	}
 	return path, nil
+}
+
+// ensureInitTarget refuses to `git init --bare` over an existing NON-EMPTY,
+// NON-REPO directory — the classic `local://~` / `local://.` dropped-subpath typo
+// that would otherwise scatter bare-repo plumbing (HEAD/config/objects/refs)
+// across $HOME or the cwd. Allowed: the path is absent, an empty dir, or already a
+// git repo (so idempotent re-init still works).
+func ensureInitTarget(path string) error {
+	fi, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return nil // absent → git init creates it fresh
+	}
+	if err != nil {
+		return err
+	}
+	if !fi.IsDir() {
+		return fmt.Errorf("local: %q exists and is not a directory", path)
+	}
+	if isGitRepo(path) {
+		return nil // already a registry → idempotent re-init
+	}
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return err
+	}
+	if len(entries) > 0 {
+		return fmt.Errorf("local: refusing to init a registry over the non-empty directory %q (it is not a git repo) — point --registry at a new or empty path, e.g. local://%s", path, filepath.Join(path, "skills.git"))
+	}
+	return nil
+}
+
+// isGitRepo reports whether path is already a git repository — a bare repo (HEAD
+// + objects/ at the root) or a working repo (a .git directory).
+func isGitRepo(path string) bool {
+	if _, err := os.Stat(filepath.Join(path, "objects")); err == nil {
+		if _, err := os.Stat(filepath.Join(path, "HEAD")); err == nil {
+			return true
+		}
+	}
+	if fi, err := os.Stat(filepath.Join(path, ".git")); err == nil && fi.IsDir() {
+		return true
+	}
+	return false
 }
 
 // ExportBundle writes a single-file git bundle of the local registry's full ref
@@ -100,6 +146,11 @@ func ExportBundle(spec, outPath string) error {
 	}
 	if outPath == "" {
 		return fmt.Errorf("local: export needs an output path (--out)")
+	}
+	if strings.HasPrefix(outPath, "-") {
+		// outPath is the only caller-controlled arg (--all is a fixed literal);
+		// rejecting a leading '-' closes git-flag injection into bundle create.
+		return fmt.Errorf("local: --out path may not start with '-' (%q)", outPath)
 	}
 	out, err := exec.Command("git", "-C", path, "bundle", "create", outPath, "--all").CombinedOutput()
 	if err != nil {
