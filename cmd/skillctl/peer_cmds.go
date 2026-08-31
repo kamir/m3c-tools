@@ -79,8 +79,15 @@ func runPeerAdd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	name, locator := fs.Arg(0), fs.Arg(1)
-	if artifact.SchemeOf(locator) == "" && !registry.IsER1Registry(locator) {
-		fmt.Fprintf(stderr, "peer add: %q is not a recognized registry locator (gitlab://…, github://…, local://…, er1://…)\n", locator)
+	if registry.IsER1Registry(locator) || locator == "self" {
+		// er1://… and `self` always verify against your OWN trust-roots
+		// (resolvePullTrustRoots sends them to LoadSelfTrustRoots verbatim), so a
+		// peer pin there would be a silent no-op — reject it rather than mislead.
+		fmt.Fprintln(stderr, "peer add: er1://… and \"self\" are not peers — they always verify against your own trust-roots. Pin a gitlab://, github://, local:// or oci:// registry instead.")
+		return 2
+	}
+	if artifact.SchemeOf(locator) == "" {
+		fmt.Fprintf(stderr, "peer add: %q is not a recognized registry locator (gitlab://…, github://…, local://…, oci://…)\n", locator)
 		return 2
 	}
 	if strings.TrimSpace(*pubB64) == "" || strings.TrimSpace(*pin) == "" {

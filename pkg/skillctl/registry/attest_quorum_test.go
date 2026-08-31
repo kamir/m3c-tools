@@ -149,6 +149,36 @@ func TestAccumulatorFreshness(t *testing.T) {
 	}
 }
 
+// TestAccumulatorExpiryNotShadowed is the challenge-gate regression: a signer's
+// NEWER expired attestation must sunset the digest even when an OLDER non-expiring
+// green exists — the reviewer's latest word governs, never a fall-back.
+func TestAccumulatorExpiryNotShadowed(t *testing.T) {
+	priv, pub := genEd(t)
+	tr := &SelfTrustRoots{GovernanceMinimum: "green", pub: pub}
+	past := qnow.Add(-time.Hour)
+
+	acc := NewAttestAccumulator(tr, qnow)
+	acc.OfferAttest(signedAttest(t, priv, "id", qd, "green", "2026-08-01T00:00:00Z", nil))   // OLD, no expiry
+	acc.OfferAttest(signedAttest(t, priv, "id", qd, "green", "2026-08-15T00:00:00Z", &past)) // NEWER, expired
+	if len(acc.Qualifying(qd)) != 0 {
+		t.Error("a newer EXPIRED attestation must sunset the digest — an older non-expiring green must not shadow it")
+	}
+	// Order-independent.
+	acc2 := NewAttestAccumulator(tr, qnow)
+	acc2.OfferAttest(signedAttest(t, priv, "id", qd, "green", "2026-08-15T00:00:00Z", &past))
+	acc2.OfferAttest(signedAttest(t, priv, "id", qd, "green", "2026-08-01T00:00:00Z", nil))
+	if len(acc2.Qualifying(qd)) != 0 {
+		t.Error("order-independent: a newer expired attestation still sunsets")
+	}
+	// Sanity: an older expiry does NOT sunset a newer non-expiring green.
+	acc3 := NewAttestAccumulator(tr, qnow)
+	acc3.OfferAttest(signedAttest(t, priv, "id", qd, "green", "2026-08-01T00:00:00Z", &past)) // OLD, expired
+	acc3.OfferAttest(signedAttest(t, priv, "id", qd, "green", "2026-08-15T00:00:00Z", nil))   // NEWER, no expiry
+	if len(acc3.Qualifying(qd)) != 1 {
+		t.Error("a newer non-expiring green must qualify despite an older expired sibling")
+	}
+}
+
 // TestAttestationExpiresAtOptIn (D5 producer): expires_at is written only when set.
 func TestAttestationExpiresAtOptIn(t *testing.T) {
 	base := AttestedEventInput{BundleDigest: qd, ReviewerID: "id:kamir@m3c", GovernanceLevel: "green", OccurredAt: qnow}

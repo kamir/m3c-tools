@@ -44,12 +44,11 @@ type attRec struct {
 // AttestAccumulator collects verified, fresh attestations per digest keyed by the
 // distinct verifying signer key, plus the revoked-digest set.
 type AttestAccumulator struct {
-	tr         *SelfTrustRoots
-	now        time.Time
-	signers    []Signer
-	byDigest   map[string]map[string]attRec // digest -> signerKeyID -> newest fresh attRec
-	belowFloor map[string]bool              // digest -> saw a verified attestation below floor
-	revoked    map[string]struct{}
+	tr       *SelfTrustRoots
+	now      time.Time
+	signers  []Signer
+	byDigest map[string]map[string]attRec // digest -> signerKeyID -> the signer's NEWEST attestation
+	revoked  map[string]struct{}
 }
 
 // NewAttestAccumulator binds the accumulator to the trust roots + a fixed clock
@@ -60,9 +59,8 @@ func NewAttestAccumulator(tr *SelfTrustRoots, now time.Time) *AttestAccumulator 
 	}
 	return &AttestAccumulator{
 		tr: tr, now: now, signers: tr.signerSet(),
-		byDigest:   map[string]map[string]attRec{},
-		belowFloor: map[string]bool{},
-		revoked:    map[string]struct{}{},
+		byDigest: map[string]map[string]attRec{},
+		revoked:  map[string]struct{}{},
 	}
 }
 
@@ -93,9 +91,6 @@ func (a *AttestAccumulator) OfferAttest(ev map[string]any) {
 	if digest == "" {
 		return
 	}
-	if attestationExpired(ev, a.now) {
-		return // D5(a): stale never counts toward floor OR quorum
-	}
 	for _, s := range a.signers {
 		if VerifyEnvelopeSignature(s.pub, ev) != nil {
 			continue // not this signer's key
@@ -111,11 +106,12 @@ func (a *AttestAccumulator) OfferAttest(ev map[string]any) {
 		if a.byDigest[digest] == nil {
 			a.byDigest[digest] = map[string]attRec{}
 		}
+		// Record the signer's NEWEST-occurred_at attestation REGARDLESS of expiry —
+		// the reviewer's LATEST word governs. Qualifying then denies a slot whose
+		// newest is expired, so an expiry cannot be shadowed by an older
+		// non-expiring sibling (challenge-gate fix; invariant "never fall back").
 		if prev, ok := a.byDigest[digest][key]; !ok || ts > prev.occurredAt {
 			a.byDigest[digest][key] = attRec{level: level, occurredAt: ts, event: ev}
-		}
-		if !a.tr.MeetsFloor(level) {
-			a.belowFloor[digest] = true
 		}
 		return // an attestation is signed by exactly one key → one signer slot
 	}
@@ -137,11 +133,16 @@ func (a *AttestAccumulator) OfferRevoke(ev map[string]any) {
 	}
 }
 
-// Qualifying returns the accepted attestations from DISTINCT signers whose newest
-// fresh level meets the floor. len >= tr.quorum() ⇒ the governance gate passes.
+// Qualifying returns the accepted attestations from DISTINCT signers whose NEWEST
+// attestation is BOTH unexpired AND meets the floor. A signer whose newest word
+// has expired is denied even if an older non-expiring sibling exists (invariant:
+// never fall back to an older green). len >= tr.quorum() ⇒ the governance gate passes.
 func (a *AttestAccumulator) Qualifying(digest string) []attRec {
 	var out []attRec
 	for _, rec := range a.byDigest[digest] {
+		if attestationExpired(rec.event, a.now) {
+			continue // the signer's latest word has lapsed → slot denied
+		}
 		if a.tr.MeetsFloor(rec.level) {
 			out = append(out, rec)
 		}
@@ -155,9 +156,16 @@ func (a *AttestAccumulator) IsRevoked(digest string) bool {
 	return ok
 }
 
-// HasBelowFloor reports whether a verified attestation was seen that did not meet
-// the floor (for a precise gate-4 message).
-func (a *AttestAccumulator) HasBelowFloor(digest string) bool { return a.belowFloor[digest] }
+// HasBelowFloor reports whether a signer's newest (unexpired) attestation was seen
+// that did not meet the floor (for a precise gate-4 message).
+func (a *AttestAccumulator) HasBelowFloor(digest string) bool {
+	for _, rec := range a.byDigest[digest] {
+		if !attestationExpired(rec.event, a.now) && !a.tr.MeetsFloor(rec.level) {
+			return true
+		}
+	}
+	return false
+}
 
 // RepresentativeLevel returns the newest qualifying level for the digest (for
 // StagedBundle.Governance). Empty when nothing qualifies.
