@@ -18,12 +18,15 @@ package main
 // items match the query, which is also a success).
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
+	"github.com/kamir/m3c-tools/pkg/skillctl/artifactauth"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
 )
@@ -62,8 +65,8 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 	if err := fs.Parse(reorderFlagArgs(fs, args)); err != nil {
 		return 2
 	}
-	if !registry.IsER1Registry(*registryName) {
-		fmt.Fprintf(stderr, "pull: only ER1 registries (\"self\" / \"er1://…\") are supported here; got %q\n", *registryName)
+	if !registry.IsER1Registry(*registryName) && !artifact.Registered(*registryName) {
+		fmt.Fprintf(stderr, "pull: unsupported registry %q — use \"self\"/\"er1://…\" or \"gitlab://host/group/proj\"; HTTP admission registries route through `skillctl install`\n", *registryName)
 		return 2
 	}
 
@@ -74,23 +77,38 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	cfg, err := resolveER1Config(*er1Target)
+	// Get the VERIFIED staging result from the selected carrier. The §7 gauntlet,
+	// the cache/staging layout, StagedBundle, and the whole install path below are
+	// identical for ER1 and git — only the SOURCE of the signed events + the .skb
+	// bytes differs (SPEC-0356). A git registry requires a signed attestation ≥
+	// governance_minimum per digest, exactly like the ER1 self tenant.
+	var res *registry.PullResult
+	if artifact.SchemeOf(*registryName) != "er1" {
+		be, oerr := artifact.Open(*registryName, artifact.OpenOptions{Creds: artifactauth.New()})
+		if oerr != nil {
+			fmt.Fprintf(stderr, "pull: open %s: %v\n", *registryName, oerr)
+			return 1
+		}
+		defer be.Close()
+		res, err = registry.PullBundlesFromBackend(context.Background(), be, tr, registry.PullOpts{
+			OnlySkill: *skillName, OnlyDigest: *digestArg, Since: *since,
+		})
+	} else {
+		cfg, cerr := resolveER1Config(*er1Target)
+		if cerr != nil {
+			fmt.Fprintf(stderr, "pull: %v\n", cerr)
+			return 1
+		}
+		res, err = registry.PullBundles(cfg, *er1Context, tr, registry.PullOpts{
+			OnlySkill: *skillName, OnlyDigest: *digestArg, Since: *since,
+		})
+	}
 	if err != nil {
 		fmt.Fprintf(stderr, "pull: %v\n", err)
 		return 1
 	}
 
-	res, err := registry.PullBundles(cfg, *er1Context, tr, registry.PullOpts{
-		OnlySkill:  *skillName,
-		OnlyDigest: *digestArg,
-		Since:      *since,
-	})
-	if err != nil {
-		fmt.Fprintf(stderr, "pull: %v\n", err)
-		return 1
-	}
-
-	fmt.Fprintf(stdout, "==> pull (registry=%s, target=%s, context=%s, gov-min=%s)\n", "self", *er1Target, *er1Context, tr.GovernanceMinimum)
+	fmt.Fprintf(stdout, "==> pull (registry=%s, gov-min=%s)\n", *registryName, tr.GovernanceMinimum)
 	fmt.Fprintf(stdout, "    trust-roots: %s  fp=%s\n", tr.Path, tr.Fingerprint)
 	fmt.Fprintln(stdout)
 

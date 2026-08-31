@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
 )
@@ -146,8 +147,11 @@ func (b *gitBackend) redact(s string) string {
 	return s
 }
 
-// Compile-time assertion.
-var _ artifact.Backend = (*gitBackend)(nil)
+// Compile-time assertions.
+var (
+	_ artifact.Backend       = (*gitBackend)(nil)
+	_ artifact.GovernanceLog = (*gitBackend)(nil)
+)
 
 func (b *gitBackend) Describe() artifact.Descriptor {
 	return artifact.Descriptor{
@@ -155,7 +159,7 @@ func (b *gitBackend) Describe() artifact.Descriptor {
 		Display: b.scheme + " repo (" + b.remote + ")",
 		Capabilities: artifact.Capabilities{
 			CanAdmit: true, CanAttest: true, CanRevoke: true,
-			ServerEventLog: false, // "the log" is the committed events/ tree
+			ServerEventLog: true,  // committed events/ tree, surfaced via GovernanceLog.Events
 			Paginated:      true,  // git listings are complete
 			HonoursSince:   false, // v1: no server-side since filter
 			Governance:     artifact.GovFromEventLog,
@@ -452,6 +456,105 @@ func (b *gitBackend) Fetch(ctx context.Context, ref artifact.ArtifactRef) ([]byt
 		return nil
 	})
 	return data, err
+}
+
+// --- GovernanceLog: surface the raw signed event envelopes for verification ---
+
+// Events implements artifact.GovernanceLog. It returns the RAW signed SPEC-0190
+// event envelopes committed under events/<digesthex>/ (admitted/attested/revoked)
+// so the SPEC-0188 §7 verifier can re-verify them (envelope sig → digest → author/
+// registry sigs → governance floor → revoked). List/Resolve/Fetch read only the
+// ADVISORY bundle.json; this is the git backend's trust-read surface. Re-parsing
+// the committed pretty-printed JSON round-trips safely: VerifyEnvelopeSignature
+// re-canonicalizes from the parsed map, so the on-disk indentation is irrelevant.
+func (b *gitBackend) Events(ctx context.Context, filter artifact.ListFilter, page artifact.Page) (*artifact.EventPage, error) {
+	var out *artifact.EventPage
+	err := b.withClone(func(dir string) error {
+		digs, err := b.targetDigestHexes(dir, filter.Name)
+		if err != nil {
+			return err
+		}
+		var recs []artifact.EventRecord
+		for _, dh := range digs {
+			edir := filepath.Join(dir, "events", dh)
+			ents, err := os.ReadDir(edir)
+			if err != nil {
+				continue // no events for this digest yet
+			}
+			for _, e := range ents {
+				if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+					continue
+				}
+				data, err := os.ReadFile(filepath.Join(edir, e.Name()))
+				if err != nil {
+					continue
+				}
+				var env map[string]any
+				if err := json.Unmarshal(data, &env); err != nil {
+					continue // a malformed file is untrusted → ignore (never influences a verdict)
+				}
+				rec := artifact.EventRecord{
+					Kind:       artifact.EventKind(kindFromEventFile(e.Name())),
+					Digest:     "sha256:" + dh,
+					Governance: strFromMap(env, "governance_level"),
+					Rationale:  strFromMap(env, "rationale"),
+					NativeID:   e.Name(),
+					Envelope:   env,
+				}
+				if ts := strFromMap(env, "occurred_at"); ts != "" {
+					if t, perr := time.Parse(time.RFC3339, ts); perr == nil {
+						rec.OccurredAt = t
+					}
+				}
+				recs = append(recs, rec)
+			}
+		}
+		out = &artifact.EventPage{Events: recs}
+		return nil
+	})
+	return out, err
+}
+
+// targetDigestHexes returns the events/<digesthex> dir names to scan. With a name
+// filter, only the digests of that skill's versions; otherwise every present dir.
+func (b *gitBackend) targetDigestHexes(dir, name string) ([]string, error) {
+	if name != "" {
+		if err := validateName(name); err != nil {
+			return nil, err
+		}
+		var out []string
+		for _, r := range b.versionRows(dir, name) {
+			out = append(out, digestHex(r.Digest))
+		}
+		return out, nil
+	}
+	ents, err := os.ReadDir(filepath.Join(dir, "events"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var out []string
+	for _, e := range ents {
+		if e.IsDir() {
+			out = append(out, e.Name())
+		}
+	}
+	return out, nil
+}
+
+func kindFromEventFile(fn string) string {
+	fn = strings.TrimSuffix(fn, ".json")
+	if i := strings.Index(fn, "-"); i >= 0 {
+		return fn[i+1:]
+	}
+	return fn
+}
+
+func strFromMap(m map[string]any, k string) string {
+	s, _ := m[k].(string)
+	return s
 }
 
 // --- read helpers (operate on a clone's working tree) ---

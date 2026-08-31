@@ -202,12 +202,9 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "publish: unsupported registry %q — use an ER1 registry (\"self\" / \"er1://...\"), a git registry (\"gitlab://host/group/proj\" / \"github://owner/repo\"), or `skillctl install` for an HTTP admission registry\n", *registryName)
 		return 2
 	}
-	// SPEC-0356 D3: only the admit path is wired for non-ER1 (git) backends today
-	// (attest/revoke idempotency + a verifying git pull are follow-ups).
-	if !registry.IsER1Registry(*registryName) && (*attest || *revoke) {
-		fmt.Fprintf(stderr, "publish: --attest/--revoke are not yet supported for %q (only admit); ER1 registries support all three\n", *registryName)
-		return 2
-	}
+	// SPEC-0356: publish admit / attest / revoke are all wired for git backends —
+	// attest/revoke write signed SPEC-0190 events into events/<digesthex>/, which
+	// the verifying pull (PullBundlesFromBackend) consumes for the §7 gauntlet.
 
 	name, ver := splitNameVersion(fs.Arg(0))
 	if *version != "" {
@@ -228,6 +225,7 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 			bundlePath:   *bundle,
 			identity:     *identity,
 			keyPath:      *keyPath,
+			registry:     *registryName,
 			er1Target:    *er1Target,
 			er1Context:   *er1Context,
 			yes:          *yes,
@@ -246,6 +244,7 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 			bundlePath:   *bundle,
 			identity:     *identity,
 			keyPath:      *keyPath,
+			registry:     *registryName,
 			er1Target:    *er1Target,
 			er1Context:   *er1Context,
 			yes:          *yes,
@@ -453,6 +452,30 @@ func publishAdmitViaBackend(stdout, stderr io.Writer, a publishAdmitArgs, ev map
 	return 0
 }
 
+// publishEventViaBackend dispatches an attest/revoke (no-blob) publish through the
+// artifact-backend factory. The event is already signed + envelope-signed by the
+// caller; the git backend commits it under events/<digesthex>/ (SPEC-0356 §6) for
+// the verifying pull's §7 gauntlet to consume.
+func publishEventViaBackend(stdout, stderr io.Writer, spec string, kind artifact.EventKind, ev map[string]any, name, version, digest string) int {
+	be, err := artifact.Open(spec, artifact.OpenOptions{Creds: artifactauth.New()})
+	if err != nil {
+		fmt.Fprintf(stderr, "publish: open %s: %v\n", spec, err)
+		return 1
+	}
+	defer be.Close()
+	pr, err := be.Publish(context.Background(), artifact.PublishRequest{
+		Kind:  kind,
+		Event: ev,
+		Meta:  artifact.ArtifactMeta{Name: name, Version: version, Digest: digest},
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "publish: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "==> %s: %s  transport=%s  registry=%s\n", kind, pr.NativeID, pr.Transport, spec)
+	return 0
+}
+
 // resolveBundleDigest determines the sha256 digest for --attest / --revoke:
 //  1. --digest sha256:<hex> if given (verbatim)
 //  2. --bundle <path> → sha256 of that file
@@ -485,6 +508,7 @@ func resolveBundleDigest(digestArg, bundlePath, name, version string) (string, e
 
 type publishAttestArgs struct {
 	name, version, level, rationale, digestArg, bundlePath, identity, keyPath string
+	registry                                                                  string
 	er1Target, er1Context                                                     string
 	yes, dryRun, noCheckpoint                                                 bool
 	shareRooms                                                                []string
@@ -542,6 +566,9 @@ func runPublishAttest(stdout, stderr io.Writer, a publishAttestArgs) int {
 		return 0
 	}
 
+	if a.registry != "" && artifact.SchemeOf(a.registry) != "er1" {
+		return publishEventViaBackend(stdout, stderr, a.registry, artifact.KindAttest, ev, a.name, a.version, digest)
+	}
 	cfg, err := resolveER1Config(a.er1Target)
 	if err != nil {
 		fmt.Fprintf(stderr, "publish --attest: %v\n", err)
@@ -567,6 +594,7 @@ func runPublishAttest(stdout, stderr io.Writer, a publishAttestArgs) int {
 
 type publishRevokeArgs struct {
 	name, version, reason, rationale, digestArg, bundlePath, identity, keyPath string
+	registry                                                                   string
 	er1Target, er1Context                                                      string
 	yes, dryRun, noCheckpoint                                                  bool
 	shareRooms                                                                 []string
@@ -626,6 +654,9 @@ func runPublishRevoke(stdout, stderr io.Writer, a publishRevokeArgs) int {
 	if !a.yes && !promptYesNo(stdout, "Proceed with revocation? [y/N]: ") {
 		fmt.Fprintln(stdout, "    aborted by operator")
 		return 0
+	}
+	if a.registry != "" && artifact.SchemeOf(a.registry) != "er1" {
+		return publishEventViaBackend(stdout, stderr, a.registry, artifact.KindRevoke, ev, a.name, a.version, digest)
 	}
 	cfg, err := resolveER1Config(a.er1Target)
 	if err != nil {
