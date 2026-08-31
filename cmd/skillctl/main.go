@@ -15,6 +15,10 @@ package main
 import (
 	"fmt"
 	"os"
+
+	// Register the git artifact backends (gitlab:// / github://) so
+	// artifact.Open() can resolve those schemes at runtime (SPEC-0356 D3).
+	_ "github.com/kamir/m3c-tools/pkg/skillctl/backend/git"
 )
 
 // version is stamped at build time via -ldflags "-X main.version=skillctl/vX.Y.Z".

@@ -7,11 +7,14 @@ package main
 // happens in `pull`.
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
 	"strings"
 
+	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
+	"github.com/kamir/m3c-tools/pkg/skillctl/artifactauth"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 )
 
@@ -49,10 +52,14 @@ func runRegistryLs(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	latest := fs.Bool("latest", false, "Collapse to the newest non-revoked digest per skill.")
 	skillName := fs.String("skill", "", "Filter: only this skill.")
+	registrySpec := fs.String("registry", "self", "Registry: \"self\"/\"er1://…\" (ER1) or \"gitlab://host/group/proj\".")
 	er1Target := fs.String("er1-target", envOr("ER1_TARGET", "prod"), "ER1 target.")
 	er1Context := fs.String("er1-context", envOr("ER1_CONTEXT", "skills"), "ER1 context.")
 	if err := fs.Parse(reorderFlagArgs(fs, args)); err != nil {
 		return 2
+	}
+	if artifact.SchemeOf(*registrySpec) != "er1" {
+		return runRegistryLsBackend(*registrySpec, *skillName, *latest, stdout, stderr)
 	}
 	cfg, err := resolveER1Config(*er1Target)
 	if err != nil {
@@ -83,9 +90,41 @@ func runRegistryLs(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
+// runRegistryLsBackend renders `registry ls` from a SPEC-0356 artifact backend
+// (gitlab:// / github://) via artifact.Open + Backend.List — the same view as the
+// ER1 path, sourced from the git registry. Read-only.
+func runRegistryLsBackend(spec, skillName string, latest bool, stdout, stderr io.Writer) int {
+	be, err := artifact.Open(spec, artifact.OpenOptions{Creds: artifactauth.New()})
+	if err != nil {
+		fmt.Fprintf(stderr, "registry ls: open %s: %v\n", spec, err)
+		return 1
+	}
+	defer be.Close()
+	listing, err := be.List(context.Background(), artifact.ListFilter{Name: skillName, Latest: latest}, artifact.Page{})
+	if err != nil {
+		fmt.Fprintf(stderr, "registry ls: %v\n", err)
+		return 1
+	}
+	if listing == nil || len(listing.Skills) == 0 {
+		fmt.Fprintln(stdout, "(no skills in registry)")
+		return 0
+	}
+	fmt.Fprintf(stdout, "%-32s %-10s %-72s %-8s %s\n", "skill", "version", "latest digest", "gov", "status")
+	fmt.Fprintln(stdout, strings.Repeat("-", 132))
+	for _, s := range listing.Skills {
+		status := "ok"
+		if s.IsRevoked {
+			status = "REVOKED"
+		}
+		fmt.Fprintf(stdout, "%-32s %-10s %-72s %-8s %s\n", s.Name, strOr(s.LatestVersion, "?"), s.LatestDigest, strOr(s.LatestGovernance, "—"), status)
+	}
+	return 0
+}
+
 func runRegistryShow(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("registry show", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	registrySpec := fs.String("registry", "self", "Registry: \"self\"/\"er1://…\" (ER1) or \"gitlab://host/group/proj\".")
 	er1Target := fs.String("er1-target", envOr("ER1_TARGET", "prod"), "ER1 target.")
 	er1Context := fs.String("er1-context", envOr("ER1_CONTEXT", "skills"), "ER1 context.")
 	if err := fs.Parse(reorderFlagArgs(fs, args)); err != nil {
@@ -93,6 +132,12 @@ func runRegistryShow(args []string, stdout, stderr io.Writer) int {
 	}
 	if fs.NArg() < 1 {
 		fmt.Fprintln(stderr, "registry show: name or sha256:<hex> required")
+		return 2
+	}
+	if artifact.SchemeOf(*registrySpec) != "er1" {
+		// Do NOT silently target ER1 for a git spec. The full signed timeline is
+		// in the repo (events/<digesthex>/); a git-native `show` is a follow-up.
+		fmt.Fprintf(stderr, "registry show: not yet wired for %q — use `registry ls --registry %s`; the signed event timeline is in the repo under events/<digesthex>/\n", *registrySpec, *registrySpec)
 		return 2
 	}
 	cfg, err := resolveER1Config(*er1Target)

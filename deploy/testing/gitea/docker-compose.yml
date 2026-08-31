@@ -1,0 +1,38 @@
+# Local Gitea — fast inner-loop / CI environment for the skillctl git artifact
+# backend (SPEC-0356 D6). ~150 MB, boots in ~10 s. Provider-neutral: our git
+# backend drives it exactly as it drives GitLab (clone/push/tag/fetch + REST).
+# LOCAL TEST ONLY.
+#
+#   docker compose -f deploy/testing/gitea/docker-compose.yml up -d
+#   open http://localhost:3000   (first visit: create the admin user)
+#
+# See ../gitlab/README.md for wiring a repo + token to the backend.
+name: skillctl-gitea-test
+
+services:
+  gitea:
+    image: gitea/gitea:1.22
+    container_name: skillctl-gitea
+    restart: unless-stopped
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - GITEA__server__ROOT_URL=http://localhost:3000/
+      - GITEA__server__SSH_PORT=2222
+      - GITEA__server__START_SSH_SERVER=true
+      - GITEA__service__DISABLE_REGISTRATION=false
+      - GITEA__lfs__ENABLED=true
+    ports:
+      - "3000:3000"   # http
+      - "2222:22"     # ssh
+    volumes:
+      - gitea-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+volumes:
+  gitea-data:
