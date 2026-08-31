@@ -219,7 +219,14 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if *emitInstalled {
-		emitInstalledEvents(stdout, stderr, results, res.Staged, *keyPath, *identity, *er1Target, *er1Context, tr.Fingerprint)
+		if artifact.SchemeOf(*registryName) != "er1" {
+			// Do NOT silently write the install-ack into ER1 for a git registry.
+			// Routing BundleInstalledEvent to the active backend is a SPEC-0351
+			// follow-up; for now install completed but no installed-event is written.
+			fmt.Fprintf(stderr, "pull: --emit-installed is not yet routed to %q — install completed, but no BundleInstalledEvent was written (SPEC-0351 follow-up)\n", *registryName)
+		} else {
+			emitInstalledEvents(stdout, stderr, results, res.Staged, *keyPath, *identity, *er1Target, *er1Context, tr.Fingerprint)
+		}
 	}
 	maybeCheckpoint(stdout, *noCheckpoint, *er1Target, *er1Context, fmt.Sprintf("installed %d bundle(s) under %s (trust-mode)", len(results), strOr(*installSkillsDir, "~/.claude/skills")))
 	return 0

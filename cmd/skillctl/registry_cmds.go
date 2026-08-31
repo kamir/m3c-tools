@@ -124,6 +124,7 @@ func runRegistryLsBackend(spec, skillName string, latest bool, stdout, stderr io
 func runRegistryShow(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("registry show", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	registrySpec := fs.String("registry", "self", "Registry: \"self\"/\"er1://…\" (ER1) or \"gitlab://host/group/proj\".")
 	er1Target := fs.String("er1-target", envOr("ER1_TARGET", "prod"), "ER1 target.")
 	er1Context := fs.String("er1-context", envOr("ER1_CONTEXT", "skills"), "ER1 context.")
 	if err := fs.Parse(reorderFlagArgs(fs, args)); err != nil {
@@ -131,6 +132,12 @@ func runRegistryShow(args []string, stdout, stderr io.Writer) int {
 	}
 	if fs.NArg() < 1 {
 		fmt.Fprintln(stderr, "registry show: name or sha256:<hex> required")
+		return 2
+	}
+	if artifact.SchemeOf(*registrySpec) != "er1" {
+		// Do NOT silently target ER1 for a git spec. The full signed timeline is
+		// in the repo (events/<digesthex>/); a git-native `show` is a follow-up.
+		fmt.Fprintf(stderr, "registry show: not yet wired for %q — use `registry ls --registry %s`; the signed event timeline is in the repo under events/<digesthex>/\n", *registrySpec, *registrySpec)
 		return 2
 	}
 	cfg, err := resolveER1Config(*er1Target)

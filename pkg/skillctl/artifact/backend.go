@@ -34,8 +34,11 @@ type Backend interface {
 
 	// Publish emits ONE lifecycle event. For KindAdmit the .skb Blob is
 	// required (it is the artifact); other kinds carry only the signed
-	// envelope. MUST be idempotent on (Kind, Meta.Digest) so re-runs are safe
-	// no-ops (map an already-published item to PublishResult.AlreadyExists).
+	// envelope. KindAdmit MUST be idempotent on Meta.Digest — re-admitting the
+	// same digest is a safe no-op that sets PublishResult.AlreadyExists. The
+	// governance events (KindAttest/KindRevoke/KindInstall) are APPEND-ONLY by
+	// design (the event history is the record): a repeat appends another signed
+	// event and idempotency is NOT promised for them.
 	Publish(ctx context.Context, req PublishRequest) (*PublishResult, error)
 
 	// List returns one PAGE of the per-skill index, filtered and cursor-

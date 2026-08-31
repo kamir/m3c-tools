@@ -142,10 +142,16 @@ func Run(t *testing.T, be artifact.Backend) {
 	}); err != nil {
 		t.Fatalf("Publish revoke: %v", err)
 	}
-	if ref2, err := be.Resolve(ctx, artifact.RefQuery{Name: "pdf"}); err != nil {
+	ref2, err := be.Resolve(ctx, artifact.RefQuery{Name: "pdf"})
+	if err != nil {
 		t.Fatalf("Resolve after revoke: %v", err)
-	} else if ref2.Version != "1.0.0" {
-		t.Errorf("after revoking 1.2.0, latest non-revoked = %q, want 1.0.0", ref2.Version)
+	}
+	// Revoke VISIBILITY is a universal contract (checked via Events below); the
+	// LATEST-after-revoke depends on the backend's declared LatestPolicy — a
+	// semver-max backend falls back to 1.0.0, whereas a most-recent-admit backend
+	// may still report 1.2.0 as latest (but must still surface it as revoked).
+	if be.Describe().Capabilities.LatestPolicy == artifact.LatestSemverMax && ref2.Version != "1.0.0" {
+		t.Errorf("semver-max backend: latest non-revoked = %q, want 1.0.0", ref2.Version)
 	}
 
 	// --- GovernanceLog (optional): Events surfaces the signed envelopes ---

@@ -158,15 +158,15 @@ func (b *gitBackend) Describe() artifact.Descriptor {
 		Scheme:  b.scheme,
 		Display: b.scheme + " repo (" + b.remote + ")",
 		Capabilities: artifact.Capabilities{
-			CanAdmit: true, CanAttest: true, CanRevoke: true,
+			CanAdmit: true, CanAttest: true, CanRevoke: true, CanInstall: true,
 			ServerEventLog: true,  // committed events/ tree, surfaced via GovernanceLog.Events
-			Paginated:      true,  // git listings are complete
+			Paginated:      false, // single-shot: one clone returns the COMPLETE listing; Page.Cursor is not honored
 			HonoursSince:   false, // v1: no server-side since filter
 			Governance:     artifact.GovFromEventLog,
 			LatestPolicy:   artifact.LatestSemverMax,
 			Rooms:          false,
 			IdentityDir:    false,
-			ClaimCheck:     true, // blob committed as a file (LFS in production)
+			ClaimCheck:     false, // the .skb is committed IN-repo, not stored out-of-line (Git-LFS is a follow-up)
 		},
 	}
 }
