@@ -7,7 +7,7 @@
 # Usage:
 #   tools/skillctl-runbook.sh <tag> [out.html]
 #   tools/skillctl-runbook.sh skillctl/v0.2.11-rc1
-#   tools/skillctl-runbook.sh skillctl/v0.2.11-rc1 ../m3c-tools-maintenance/ONBOARDING/skillctl-publisher-runbook.html
+#   tools/skillctl-runbook.sh skillctl/v0.2.11-rc1 "$M3C_MAINTENANCE"/ONBOARDING/skillctl-publisher-runbook.html
 #
 # Default output: release/<tag>/skillctl-publisher-runbook.html
 set -euo pipefail

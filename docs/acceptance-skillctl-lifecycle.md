@@ -12,7 +12,7 @@ and prove that invalid skills are refused. Functionality and the skill lifecycle
 first; performance and scale are out of scope for this pass.
 
 **Backend:** this procedure runs on the **ER1 `self` registry** (the field-proven path,
-[SPEC-0246](https://github.com/kamir/m3c-tools-maintenance/blob/master/SPEC/SPEC-0246-skill-exchange-trust-layer-asm-compat.md)).
+per **SPEC-0246** on the private maintenance plane).
 The **only** two commands that are backend-specific are `publish` and `pull`; everything
 else is identical when the registry is later swapped for the skill-repo backend
 (see [§7 Backend swap point](#7-backend-swap-point-er1--skill-repo)).

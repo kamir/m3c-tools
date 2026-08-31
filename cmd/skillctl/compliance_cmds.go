@@ -85,8 +85,8 @@ const complianceDisclaimer = "Evidence aid for an auditor — NOT a certificatio
 	"It summarises technical controls and maps them to the named framework; it does not assert conformance."
 
 // complianceFrameworks embeds a concise, real control→evidence map per
-// framework. The CISO owns the authoritative mapping (m3c-tools-maintenance/
-// CISO-WORK/compliance-maps/); this is the machine-collected projection.
+// framework. The CISO owns the authoritative mapping on the private
+// maintenance plane; this is the machine-collected projection.
 var complianceFrameworks = map[string][]complianceControl{
 	"eu-ai-act": {
 		{"Art. 12 — Record-keeping", "Automatic logging over the lifetime", "Per-invocation signed events (SPEC-0202) + admit/attest/revoke audit trail"},

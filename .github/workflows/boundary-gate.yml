@@ -1,0 +1,18 @@
+name: boundary-gate
+
+# SPEC-0358 content-plane leak gate: fail if a public-plane file embeds
+# private-plane content (private-repo paths, internal endpoints/secrets/context).
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  boundary-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run boundary-gate
+        run: bash tools/boundary-gate.sh

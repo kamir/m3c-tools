@@ -83,7 +83,7 @@ Settings loaded from `.env` or `~/.m3c-tools.env` (see `.env.example`). Key vari
 
 Core MVP complete: transcript fetching, ER1 upload, composite docs, whisper, recording, thumbnails — all implemented and tested. Stubbed: `record` and `devices` CLI commands, background retry scheduler, menu bar integration into main binary, screenshot capture, batch audio importer.
 
-See `m3c-tools-maintenance/PLAN/go-rewrite-plan.md` for the full migration spec and `m3c-tools-maintenance/SPEC/requirements-er1-integration.md` for ER1 requirements.
+See the private maintenance plane (SPEC repo) for the full migration spec and ER1 requirements.
 
 ## Context Efficiency
 
