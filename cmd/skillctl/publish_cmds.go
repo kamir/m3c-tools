@@ -126,6 +126,7 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 		attest    = fs.Bool("attest", false, "Mode: publish a governance attestation (AttestationPublishedEvent) rather than admitting a new bundle.")
 		revoke    = fs.Bool("revoke", false, "Mode: publish a BundleRevokedEvent for an admitted digest. Requires --digest and --reason.")
 		level     = fs.String("level", "green", "[--attest] Governance level: green | yellow | red.")
+		expires   = fs.String("expires", "", "[--attest] Optional SIGNED expiry: RFC3339, YYYY-MM-DD, or a duration like 720h. Absent = never expires (D5).")
 		rationale = fs.String("rationale", "", "[--attest|--revoke] One-line rationale.")
 		reason    = fs.String("reason", "", "[--revoke] Short reason code (e.g. key-compromise, deprecated).")
 		digestArg = fs.String("digest", "", "[--attest|--revoke] Existing bundle digest (sha256:<hex>). If empty, derived from --bundle.")
@@ -228,6 +229,7 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 			registry:     *registryName,
 			er1Target:    *er1Target,
 			er1Context:   *er1Context,
+			expires:      *expires,
 			yes:          *yes,
 			dryRun:       *dryRun,
 			noCheckpoint: *noCheckpoint,
@@ -504,12 +506,41 @@ func resolveBundleDigest(digestArg, bundlePath, name, version string) (string, e
 	return "sha256:" + d, nil
 }
 
+// parseExpiresAt parses the --expires value into an OPT-IN signed attestation
+// expiry (SPEC-0359 D5). Accepts RFC3339, a date (YYYY-MM-DD), or a Go duration
+// ("720h" => now+720h). Empty => nil (never expires). A past instant or a
+// non-positive duration is rejected (an already-expired attestation is a mistake).
+func parseExpiresAt(s string, now time.Time) (*time.Time, error) {
+	if strings.TrimSpace(s) == "" {
+		return nil, nil
+	}
+	var t time.Time
+	if v, err := time.Parse(time.RFC3339, s); err == nil {
+		t = v
+	} else if v, err := time.Parse("2006-01-02", s); err == nil {
+		t = v
+	} else if d, err := time.ParseDuration(s); err == nil {
+		if d <= 0 {
+			return nil, fmt.Errorf("--expires duration must be positive (e.g. 720h)")
+		}
+		t = now.Add(d)
+	} else {
+		return nil, fmt.Errorf("bad --expires %q (want RFC3339, YYYY-MM-DD, or a duration like 720h)", s)
+	}
+	if !t.After(now) {
+		return nil, fmt.Errorf("--expires %q is not in the future", s)
+	}
+	tt := t.UTC()
+	return &tt, nil
+}
+
 // ─── attest mode ───────────────────────────────────────────────────────────
 
 type publishAttestArgs struct {
 	name, version, level, rationale, digestArg, bundlePath, identity, keyPath string
 	registry                                                                  string
 	er1Target, er1Context                                                     string
+	expires                                                                   string // D5: optional signed expiry
 	yes, dryRun, noCheckpoint                                                 bool
 	shareRooms                                                                []string
 }
@@ -529,16 +560,25 @@ func runPublishAttest(stdout, stderr io.Writer, a publishAttestArgs) int {
 	defer wipe(priv)
 
 	now := time.Now().UTC()
+	expiresAt, err := parseExpiresAt(a.expires, now)
+	if err != nil {
+		fmt.Fprintf(stderr, "publish --attest: %v\n", err)
+		return 2
+	}
 	ev, err := registry.BuildAttestationPublishedEvent(registry.AttestedEventInput{
 		BundleDigest:    digest,
 		ReviewerID:      a.identity,
 		GovernanceLevel: a.level,
 		Rationale:       a.rationale,
 		OccurredAt:      now,
+		ExpiresAt:       expiresAt,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "publish --attest: build event: %v\n", err)
 		return 1
+	}
+	if expiresAt != nil {
+		fmt.Fprintf(stdout, "    expires:   %s (signed)\n", expiresAt.UTC().Format(time.RFC3339))
 	}
 	if _, err := registry.SignEnvelopeSignature(priv, ev); err != nil {
 		fmt.Fprintf(stderr, "publish --attest: sign envelope: %v\n", err)

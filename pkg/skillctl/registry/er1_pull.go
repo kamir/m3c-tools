@@ -38,6 +38,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/kamir/m3c-tools/pkg/er1"
 )
@@ -230,9 +231,18 @@ type StagedBundle struct {
 
 // PullOpts bounds the pull.
 type PullOpts struct {
-	OnlySkill  string // empty → all skills
-	OnlyDigest string // empty → all admit items in scope
-	Since      string // RFC3339; pass to the search query (best-effort filter)
+	OnlySkill  string    // empty → all skills
+	OnlyDigest string    // empty → all admit items in scope
+	Since      string    // RFC3339; pass to the search query (best-effort filter)
+	Now        time.Time // injectable clock for attestation freshness (D5); zero → time.Now()
+}
+
+// now resolves the freshness clock (zero → wall clock).
+func (o PullOpts) now() time.Time {
+	if o.Now.IsZero() {
+		return time.Now()
+	}
+	return o.Now
 }
 
 // PullResult reports the outcome of a pull.
@@ -275,7 +285,7 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 	// attest/revoke event before trusting its governance_level / revoked status
 	// — mirroring Gate 1's admit-envelope verification (~:297). An unsigned or
 	// forged governance verdict is otherwise free to forge.
-	attestByDigest, revokedDigests, attestEventByDigest, err := loadAttestRevoke(cfg, ctxID, opts.OnlySkill, tr.PubKey())
+	acc, err := loadAttestAccumulator(cfg, ctxID, opts.OnlySkill, tr, opts.now())
 	if err != nil {
 		return nil, err
 	}
@@ -316,20 +326,24 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 			continue
 		}
 		// Gate 5: revoked? (cheapest non-cryptographic gate; check before fetching bytes)
-		if _, isRevoked := revokedDigests[digest]; isRevoked {
+		if acc.IsRevoked(digest) {
 			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, DocID: docID, Gate: ErrGateRevoked, Detail: "BundleRevokedEvent present for this digest"})
 			continue
 		}
-		// Gate 4: governance floor.
-		level, hasAttest := attestByDigest[digest]
-		if !hasAttest || !tr.MeetsFloor(level) {
+		// Gate 4: governance floor — N-of-M signed, fresh attestations ≥ floor from
+		// DISTINCT pinned signers (default quorum 1 == a single attestation).
+		qual := acc.Qualifying(digest)
+		if len(qual) < tr.quorum() {
 			detail := "no attestation found for this digest"
-			if hasAttest {
-				detail = fmt.Sprintf("latest attestation %q < governance_minimum %q", level, tr.GovernanceMinimum)
+			if len(qual) == 0 && acc.HasBelowFloor(digest) {
+				detail = fmt.Sprintf("attestation(s) below governance_minimum %q", tr.GovernanceMinimum)
+			} else if tr.quorum() > 1 {
+				detail = fmt.Sprintf("quorum not met: %d of %d distinct signers ≥ %q", len(qual), tr.quorum(), tr.GovernanceMinimum)
 			}
 			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, DocID: docID, Gate: ErrGateGovernance, Detail: detail})
 			continue
 		}
+		level := acc.RepresentativeLevel(digest)
 		// Fetch bytes (inline base64 or claim-check). v1 only inline.
 		skbBytes, err := extractSkbBytes(body)
 		if err != nil {
@@ -374,12 +388,9 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 			SourceDocID:    docID,
 			AuthorIdentity: authorIdentity,
 			// SPEC-0266 F2/F19: carry the SIGNED context (this admit event +
-			// the signed governance attestation for the same digest) so the
+			// the signed governance attestation(s) for the same digest) so the
 			// installer can stash it and the runtime gate can re-verify it.
-			Attestation: &AttestationContext{
-				AdmitEvent:            event,
-				GovernanceAttestation: attestEventByDigest[digest],
-			},
+			Attestation: attestationContextFor(event, acc, digest),
 		})
 	}
 	return res, nil
@@ -511,6 +522,36 @@ func loadAttestRevoke(cfg *er1.Config, ctxID, onlySkill string, pub ed25519.Publ
 		}
 	}
 	return attestByDigest, revokedDigests, attestEventByDigest, nil
+}
+
+// loadAttestAccumulator fetches the attest + revoke events for the target skill(s)
+// and feeds them into an AttestAccumulator (SPEC-0359 D3/D5) — the shared N-of-M +
+// freshness path used by both carriers. Mirrors loadAttestRevoke's fetch; the
+// accumulator performs the SEC-H1 envelope verification against each pinned signer.
+func loadAttestAccumulator(cfg *er1.Config, ctxID, onlySkill string, tr *SelfTrustRoots, now time.Time) (*AttestAccumulator, error) {
+	acc := NewAttestAccumulator(tr, now)
+	for _, kind := range []string{EventKindAttested, EventKindRevoked} {
+		tags := []string{"m3c-skill-bundle", "skill-registry:self", "skill-event:" + kind}
+		if onlySkill != "" {
+			tags = append(tags, "skill:"+onlySkill)
+		}
+		items, err := searchByTagsRaw(cfg, ctxID, tags)
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range items {
+			ev, err := extractEvent(itemBody(item))
+			if err != nil {
+				continue
+			}
+			if kind == EventKindRevoked {
+				acc.OfferRevoke(ev)
+			} else {
+				acc.OfferAttest(ev)
+			}
+		}
+	}
+	return acc, nil
 }
 
 // ─── ER1 item body parsing ─────────────────────────────────────────────────

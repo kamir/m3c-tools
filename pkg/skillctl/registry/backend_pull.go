@@ -90,15 +90,12 @@ func PullBundlesFromBackend(ctx context.Context, be artifact.Backend, tr *SelfTr
 
 	pub := tr.PubKey()
 
-	// Governance/revocation side-index + admit set — mirrors loadAttestRevoke,
-	// including SEC-H1: verify the envelope of EVERY attest/revoke event before
-	// trusting its governance_level / revoked status.
-	attestByDigest := map[string]string{}
-	attestTS := map[string]string{}
-	attestEventByDigest := map[string]map[string]any{}
-	revokedDigests := map[string]struct{}{}
+	// Governance/revocation accumulator (SPEC-0359 D3/D5), shared with PullBundles
+	// so the carriers cannot drift: it verifies each attest/revoke envelope
+	// (SEC-H1), dedups per DISTINCT pinned signer key, drops expired attestations
+	// (D5), and answers the N-of-M floor. Admits are collected alongside.
+	acc := NewAttestAccumulator(tr, opts.now())
 	var admits []map[string]any
-
 	for _, rec := range page.Events {
 		ev := rec.Envelope
 		if ev == nil {
@@ -108,27 +105,9 @@ func PullBundlesFromBackend(ctx context.Context, be artifact.Backend, tr *SelfTr
 		case artifact.KindAdmit:
 			admits = append(admits, ev)
 		case artifact.KindRevoke:
-			if err := VerifyEnvelopeSignature(pub, ev); err != nil {
-				continue // SEC-H1: unsigned/forged revoke does not count
-			}
-			if d, _ := ev["bundle_digest"].(string); d != "" {
-				revokedDigests[d] = struct{}{}
-			}
+			acc.OfferRevoke(ev)
 		case artifact.KindAttest:
-			if err := VerifyEnvelopeSignature(pub, ev); err != nil {
-				continue // SEC-H1: unsigned/forged verdict does not count
-			}
-			d, _ := ev["bundle_digest"].(string)
-			if d == "" {
-				continue
-			}
-			level, _ := ev["governance_level"].(string)
-			ts, _ := ev["occurred_at"].(string)
-			if prev, ok := attestTS[d]; !ok || ts > prev { // keep the latest attestation
-				attestByDigest[d] = level
-				attestTS[d] = ts
-				attestEventByDigest[d] = ev
-			}
+			acc.OfferAttest(ev)
 		}
 	}
 
@@ -161,20 +140,24 @@ func PullBundlesFromBackend(ctx context.Context, be artifact.Backend, tr *SelfTr
 			continue
 		}
 		// Gate 5: revoked?
-		if _, isRevoked := revokedDigests[digest]; isRevoked {
+		if acc.IsRevoked(digest) {
 			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, Gate: ErrGateRevoked, Detail: "BundleRevokedEvent present for this digest"})
 			continue
 		}
-		// Gate 4: governance floor — a signed attestation ≥ floor is mandatory.
-		level, hasAttest := attestByDigest[digest]
-		if !hasAttest || !tr.MeetsFloor(level) {
+		// Gate 4: governance floor — N-of-M signed, fresh attestations ≥ floor from
+		// DISTINCT pinned signers (default quorum 1 == a single attestation).
+		qual := acc.Qualifying(digest)
+		if len(qual) < tr.quorum() {
 			detail := "no signed attestation found for this digest"
-			if hasAttest {
-				detail = fmt.Sprintf("latest attestation %q < governance_minimum %q", level, tr.GovernanceMinimum)
+			if len(qual) == 0 && acc.HasBelowFloor(digest) {
+				detail = fmt.Sprintf("attestation(s) below governance_minimum %q", tr.GovernanceMinimum)
+			} else if tr.quorum() > 1 {
+				detail = fmt.Sprintf("quorum not met: %d of %d distinct signers ≥ %q", len(qual), tr.quorum(), tr.GovernanceMinimum)
 			}
 			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, Gate: ErrGateGovernance, Detail: detail})
 			continue
 		}
+		level := acc.RepresentativeLevel(digest)
 		// Fetch the bytes from the backend (untrusted-but-available).
 		skbBytes, err := be.Fetch(ctx, artifact.ArtifactRef{Name: name, Version: ver, Digest: digest})
 		if err != nil {
@@ -217,10 +200,7 @@ func PullBundlesFromBackend(ctx context.Context, be artifact.Backend, tr *SelfTr
 			AuthorIdentity: authorIdentity,
 			// Carry the SIGNED context so the installer can stash it and the
 			// runtime gate (SPEC-0247) can re-verify offline.
-			Attestation: &AttestationContext{
-				AdmitEvent:            event,
-				GovernanceAttestation: attestEventByDigest[digest],
-			},
+			Attestation: attestationContextFor(event, acc, digest),
 		})
 	}
 	return res, nil
