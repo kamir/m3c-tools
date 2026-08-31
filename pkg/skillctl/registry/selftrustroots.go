@@ -30,6 +30,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/govlevel"
 	"gopkg.in/yaml.v3"
@@ -49,6 +50,12 @@ type SelfTrustRoots struct {
 	// reviewer_id (byte-identical to pre-D3). Both omitempty for schema stability.
 	GovernanceQuorum int      `yaml:"governance_quorum,omitempty"`
 	Signers          []Signer `yaml:"signers,omitempty"`
+
+	// D3(i) cross-signing: pin ONE governance root + a path of signed
+	// cross-signature records; verified, unexpired members are added to the
+	// signer set at load. Lets you trust a group without listing every member key.
+	GovernanceRootPubKeyB64 string `yaml:"governance_root_pubkey_b64,omitempty"`
+	CrossSignPath           string `yaml:"cross_sign_path,omitempty"`
 
 	// Path is the file the data was loaded from. Empty for in-memory tests.
 	Path string `yaml:"-"`
@@ -151,6 +158,18 @@ func LoadSelfTrustRoots(path string) (*SelfTrustRoots, error) {
 			return nil, fmt.Errorf("trust-roots: signer %q pubkey size %d, want %d", tr.Signers[i].ReviewerID, len(sb), ed25519.PublicKeySize)
 		}
 		tr.Signers[i].pub = ed25519.PublicKey(sb)
+	}
+	// D3(i): admit cross-signed members from the PINNED governance root.
+	if tr.GovernanceRootPubKeyB64 != "" && tr.CrossSignPath != "" {
+		gpub, gerr := base64.StdEncoding.DecodeString(strings.TrimSpace(tr.GovernanceRootPubKeyB64))
+		if gerr != nil || len(gpub) != ed25519.PublicKeySize {
+			return nil, fmt.Errorf("trust-roots: governance_root_pubkey_b64 invalid in %s", path)
+		}
+		records, rerr := loadCrossSignRecords(tr.CrossSignPath)
+		if rerr != nil {
+			return nil, fmt.Errorf("trust-roots: cross_sign_path %s: %w", tr.CrossSignPath, rerr)
+		}
+		tr.Signers = append(tr.Signers, DeriveCrossSignedSigners(ed25519.PublicKey(gpub), records, time.Now())...)
 	}
 	if tr.GovernanceQuorum > 1 && len(tr.Signers) < tr.GovernanceQuorum {
 		return nil, fmt.Errorf("trust-roots: governance_quorum %d exceeds the %d pinned signers in %s", tr.GovernanceQuorum, len(tr.Signers), path)
