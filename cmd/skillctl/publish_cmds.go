@@ -25,6 +25,7 @@ package main
 // overflow (deferred — keep bundles inline for v1).
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/base64"
@@ -46,6 +47,8 @@ import (
 	"github.com/kamir/m3c-tools/pkg/er1"
 	"github.com/kamir/m3c-tools/pkg/session"
 	"github.com/kamir/m3c-tools/pkg/skillbundle"
+	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
+	"github.com/kamir/m3c-tools/pkg/skillctl/artifactauth"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
 )
@@ -195,8 +198,14 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	if !registry.IsER1Registry(*registryName) {
-		fmt.Fprintf(stderr, "publish: only ER1 registries (\"self\" or \"er1://...\") are supported by this command — use `skillctl install` for HTTP admission registries; got %q\n", *registryName)
+	if !registry.IsER1Registry(*registryName) && !artifact.Registered(*registryName) {
+		fmt.Fprintf(stderr, "publish: unsupported registry %q — use an ER1 registry (\"self\" / \"er1://...\"), a git registry (\"gitlab://host/group/proj\" / \"github://owner/repo\"), or `skillctl install` for an HTTP admission registry\n", *registryName)
+		return 2
+	}
+	// SPEC-0356 D3: only the admit path is wired for non-ER1 (git) backends today
+	// (attest/revoke idempotency + a verifying git pull are follow-ups).
+	if !registry.IsER1Registry(*registryName) && (*attest || *revoke) {
+		fmt.Fprintf(stderr, "publish: --attest/--revoke are not yet supported for %q (only admit); ER1 registries support all three\n", *registryName)
 		return 2
 	}
 
@@ -252,6 +261,7 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 		bundlePath:       *bundle,
 		identity:         *identity,
 		keyPath:          *keyPath,
+		registry:         *registryName,
 		er1Target:        *er1Target,
 		er1Context:       *er1Context,
 		inlineMax:        *inlineMax,
@@ -267,6 +277,7 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 
 type publishAdmitArgs struct {
 	name, version, skillDir, bundlePath, identity, keyPath string
+	registry                                               string // --registry spec ("self"/"er1://…"/"gitlab://…")
 	er1Target, er1Context                                  string
 	inlineMax                                              int
 	yes, dryRun, noCheckpoint, noRunbookPublish            bool
@@ -345,10 +356,18 @@ func runPublishAdmit(stdout, stderr io.Writer, a publishAdmitArgs) int {
 	fmt.Fprintf(stdout, "==> publish (admit) %s@%s\n", a.name, ver)
 	fmt.Fprintf(stdout, "    digest:    %s\n", digest)
 	fmt.Fprintf(stdout, "    bytes:     %d\n", len(skb))
-	fmt.Fprintf(stdout, "    transport: %s\n", chooseTransport(len(skb), a.inlineMax))
+	if a.registry != "" && artifact.SchemeOf(a.registry) != "er1" {
+		fmt.Fprintf(stdout, "    transport: git (in-repo blob)\n")
+	} else {
+		fmt.Fprintf(stdout, "    transport: %s\n", chooseTransport(len(skb), a.inlineMax))
+	}
 	fmt.Fprintf(stdout, "    host:      %s\n", skill.PackedOnHost)
 	fmt.Fprintf(stdout, "    identity:  %s\n", a.identity)
-	fmt.Fprintf(stdout, "    target:    %s  context: %s\n", a.er1Target, a.er1Context)
+	if a.registry != "" && artifact.SchemeOf(a.registry) != "er1" {
+		fmt.Fprintf(stdout, "    registry:  %s\n", a.registry)
+	} else {
+		fmt.Fprintf(stdout, "    target:    %s  context: %s\n", a.er1Target, a.er1Context)
+	}
 	if a.dryRun {
 		fmt.Fprintln(stdout, "    (dry-run; skipping POST)")
 		return 0
@@ -358,7 +377,13 @@ func runPublishAdmit(stdout, stderr io.Writer, a publishAdmitArgs) int {
 		return 0
 	}
 
-	// 6. POST.
+	// 6. POST — dispatch to the artifact backend (git) or the ER1 carrier.
+	// The whole flow above (skb bytes, digest, signed event `ev`, `skill`) is
+	// carrier-neutral; the git backend only carries the SAME signed bytes — no
+	// signing/verify code moves (SPEC-0356 D3).
+	if a.registry != "" && artifact.SchemeOf(a.registry) != "er1" {
+		return publishAdmitViaBackend(stdout, stderr, a, ev, skill, skb, digest, ver)
+	}
 	cfg, err := resolveER1Config(a.er1Target)
 	if err != nil {
 		fmt.Fprintf(stderr, "publish: %v\n", err)
@@ -385,6 +410,46 @@ func runPublishAdmit(stdout, stderr io.Writer, a publishAdmitArgs) int {
 	fmt.Fprintf(stdout, "==> admitted: doc_id=%s  transport=%s  body_bytes=%d\n", res.DocID, res.Transport, res.ItemBodySize)
 	maybeCheckpoint(stdout, a.noCheckpoint, a.er1Target, a.er1Context, fmt.Sprintf("published (admit) %s@%s digest=%s doc=%s", a.name, ver, digest, res.DocID))
 	maybeRegisterRunbook(stdout, stderr, a, ver) // SPEC-0275 (best-effort)
+	return 0
+}
+
+// publishAdmitViaBackend dispatches an admit publish through the SPEC-0356
+// artifact-backend factory (gitlab:// / github://). The .skb is already packed
+// and the SPEC-0190 event already signed + envelope-signed by the caller; the
+// backend only carries those exact bytes (no signing/verify moves here).
+// Credentials resolve read-only via artifactauth (env → macOS Keychain).
+func publishAdmitViaBackend(stdout, stderr io.Writer, a publishAdmitArgs, ev map[string]any, skill registry.SkillMeta, skb []byte, digest, ver string) int {
+	be, err := artifact.Open(a.registry, artifact.OpenOptions{Creds: artifactauth.New()})
+	if err != nil {
+		fmt.Fprintf(stderr, "publish: open %s: %v\n", a.registry, err)
+		return 1
+	}
+	defer be.Close()
+	pr, err := be.Publish(context.Background(), artifact.PublishRequest{
+		Kind:  artifact.KindAdmit,
+		Event: ev,
+		Meta: artifact.ArtifactMeta{
+			Name:            a.name,
+			Version:         ver,
+			Digest:          digest,
+			AuthorIdentity:  a.identity,
+			GovernanceLevel: skill.GovernanceLevel,
+			PackedOnHost:    skill.PackedOnHost,
+			ProjectID:       skill.ProjectID,
+			Rooms:           a.shareRooms,
+		},
+		Blob:           skb,
+		InlineMaxBytes: a.inlineMax,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "publish: %v\n", err)
+		return 1
+	}
+	if pr.AlreadyExists {
+		fmt.Fprintf(stdout, "==> already published: %s (idempotent no-op) transport=%s registry=%s\n", pr.NativeID, pr.Transport, a.registry)
+		return 0
+	}
+	fmt.Fprintf(stdout, "==> admitted: %s  transport=%s  registry=%s\n", pr.NativeID, pr.Transport, a.registry)
 	return 0
 }
 
