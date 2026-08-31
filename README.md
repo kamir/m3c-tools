@@ -242,6 +242,16 @@ make vet            # go vet ./...
 make help           # show all targets
 ```
 
+### Maintenance tooling env
+
+Some contributor tooling — the `release-*` / `bug-*` agent skills and `demo/kup-training/make-pdf.sh` — reference documents that live in the **private maintenance checkout** (the sibling SPEC/OPS repository). They resolve those locations from an environment variable instead of embedding them, so the public tree stays free of private references (enforced by `tools/boundary-gate.sh`):
+
+```bash
+export M3C_MAINTENANCE_DIR=/absolute/path/to/your/maintenance/checkout
+```
+
+If it is unset, those scripts fail loudly rather than silently pointing at a missing path. **End users of the CLI do not need this** — it only matters when running the maintenance/release tooling.
+
 ---
 
 ## Architecture
