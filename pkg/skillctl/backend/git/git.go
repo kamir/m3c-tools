@@ -33,6 +33,12 @@ func openGitLab(spec string, opts artifact.OpenOptions) (artifact.Backend, error
 	if err != nil {
 		return nil, err
 	}
+	// Lab convenience: an on-prem/self-hosted GitLab may serve plain HTTP on the
+	// LAN (e.g. the Demo-Lab instance). M3C_GIT_HTTP=1 flips gitlab:// to http://.
+	// Production (KuP on-prem) leaves it unset → https. GitHub is always https.
+	if os.Getenv("M3C_GIT_HTTP") == "1" {
+		remote = "http://" + strings.TrimPrefix(remote, "https://")
+	}
 	b := newGitBackend(remote, "gitlab")
 	b.applyCreds(opts)
 	return b, nil

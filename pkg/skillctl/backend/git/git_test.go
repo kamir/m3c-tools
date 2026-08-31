@@ -314,3 +314,49 @@ func TestGitBackendAgainstRemote(t *testing.T) {
 	}
 	t.Logf("integration OK against %s (skill %s)", host, name)
 }
+
+// TestGitBackendHeaderAuthRemote validates the REAL CLI credential path against a
+// live GitLab: openGitLab (clean remote, no token-in-URL) + a Creds source →
+// env http.extraHeader (authEnv). This confirms GitLab accepts
+// Authorization: Basic base64(oauth2:PAT), which D3 (CLI wiring) will rely on.
+// Gated on M3C_TEST_GITLAB_SPEC (e.g. gitlab://192.168.0.135:8929/m3c/skills) +
+// M3C_TEST_GITLAB_TOKEN. For an http-only lab GitLab, also set M3C_GIT_HTTP=1.
+func TestGitBackendHeaderAuthRemote(t *testing.T) {
+	spec := os.Getenv("M3C_TEST_GITLAB_SPEC")
+	tok := os.Getenv("M3C_TEST_GITLAB_TOKEN")
+	if spec == "" || tok == "" {
+		t.Skip("set M3C_TEST_GITLAB_SPEC + M3C_TEST_GITLAB_TOKEN to run")
+	}
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	ctx := context.Background()
+	b, err := openGitLab(spec, artifact.OpenOptions{Creds: fakeCreds{user: "oauth2", token: tok}})
+	if err != nil {
+		t.Fatalf("openGitLab: %v", err)
+	}
+	defer b.Close()
+	gb := b.(*gitBackend)
+	// The remote used for clone/push must be token-free (auth rides in the header).
+	if strings.Contains(gb.remote, "@") || strings.Contains(gb.remote, tok) {
+		t.Fatalf("token leaked into remote: %q", gb.remote)
+	}
+
+	name := fmt.Sprintf("itest-hdr-%d", time.Now().UnixNano())
+	d := fmt.Sprintf("sha256:%064x", time.Now().UnixNano())
+	if _, err := b.Publish(ctx, admitEvent(name, "1.0.0", d)); err != nil {
+		t.Fatalf("publish via header-auth: %v", err)
+	}
+	ref, err := b.Resolve(ctx, artifact.RefQuery{Name: name})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	blob, err := b.Fetch(ctx, *ref)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if string(blob) != "SKB:"+name+"@1.0.0" {
+		t.Errorf("Fetch = %q", blob)
+	}
+	t.Logf("header-auth OK: clean remote=%s, published+fetched %s", gb.remote, name)
+}
