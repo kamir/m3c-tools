@@ -91,8 +91,13 @@ func TestGitWireFormatFrozen(t *testing.T) {
 		"  \"skill\": \"freeze-canary\",\n" +
 		"  \"version\": \"1.0.0\"\n" +
 		"}"
-	if got := read(evRel); string(got) != wantEv {
-		t.Errorf("event file %s serialization drifted:\n got: %s\nwant: %s", evRel, got, wantEv)
+	// Git may smudge a text file to CRLF on checkout (Windows). EOL is presentational
+	// for the event JSON — the verifier re-canonicalizes from the parsed map
+	// (WIRE-FORMAT.md §4) — so the freeze pins indent + key order + content, with EOL
+	// normalized. A reindent (2-space -> tab) still fails here; a line-ending does not.
+	gotEv := strings.ReplaceAll(string(read(evRel)), "\r\n", "\n")
+	if gotEv != wantEv {
+		t.Errorf("event file %s serialization drifted:\n got: %q\nwant: %q", evRel, gotEv, wantEv)
 	}
 
 	// 6) The publish unit is the tag <name>/v<version>.
@@ -215,7 +220,10 @@ func TestGitWireFormatSymlinkRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(outside, marker); err != nil {
-		t.Fatal(err)
+		// Windows needs privilege to create symlinks; there git also defaults to
+		// core.symlinks=false, so a committed symlink is never materialized — the
+		// attack vector this test covers is a *nix concern. Skip where unsupported.
+		t.Skipf("symlink creation unsupported here (%v); defense is core.symlinks=false, OS-independent", err)
 	}
 	mustGit(t, atk, "add", "-A")
 	mustGit(t, atk, "-c", "user.email=a@a", "-c", "user.name=a", "commit", "-m", "evil marker symlink")
