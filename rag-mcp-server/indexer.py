@@ -248,11 +248,32 @@ class Indexer:
             upd_files.append((rel, h, p.stat().st_mtime, len(frows)))
 
         if to_embed:
-            vecs = self.embedder.encode([r[5] for r in to_embed],
+            # Chunk ids are content-independent (sha1(path#ci)), so a changed
+            # file re-uses ids the idx.remove() above should have cleared. Two
+            # cases still leave an id resident when we go to add it: (a) two
+            # chunks in this batch hash to the same id (build() dedups these via
+            # its `seen` set; sync must too), and (b) an earlier sync was
+            # interrupted -- the store is written incrementally but index.tvim
+            # only at the end, so a killed run drops files from the store while
+            # their vectors survive in index.tvim, and they then look "added".
+            # add_with_ids() raises on a duplicate id, so dedup the batch and
+            # drop any already-resident id first. This makes the add idempotent
+            # and lets a plain `sync` self-heal an index left inconsistent by an
+            # interrupted run (no full rebuild needed).
+            batch, seen = [], set()
+            for r in to_embed:
+                if r[0] in seen:
+                    continue
+                seen.add(r[0])
+                batch.append(r)
+            for cid in seen:
+                if idx.contains(int(cid)):
+                    idx.remove(int(cid))
+            vecs = self.embedder.encode([r[5] for r in batch],
                                        batch_size=self.cfg.get("embed_batch_size", 16))
-            ids = np.array([r[0] for r in to_embed], dtype=np.uint64)
+            ids = np.array([r[0] for r in batch], dtype=np.uint64)
             idx.add_with_ids(vecs, ids)
-            self.store.insert_chunks(to_embed)
+            self.store.insert_chunks(batch)
         for fm in upd_files:
             self.store.upsert_file(*fm)
         idx.write(str(self.index_path))
