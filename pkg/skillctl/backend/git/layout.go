@@ -16,10 +16,44 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 )
+
+// --- input validation (SEC-M9): skill name/version/digest become filesystem
+// paths (filepath.Join) AND git operands. Reject anything that could escape the
+// repo root ('..', '/', absolute) or be parsed as a git flag (leading '-'), and
+// pin the digest to its canonical shape. This mirrors the sanitization the rest
+// of the codebase enforces; the challenge gate flagged its absence here. ---
+
+var (
+	nameRe    = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+	versionRe = regexp.MustCompile(`^[A-Za-z0-9._+-]+$`)
+	digestRe  = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+)
+
+func validateName(s string) error {
+	if s == "" || s == "." || strings.HasPrefix(s, "-") || strings.Contains(s, "..") || !nameRe.MatchString(s) {
+		return fmt.Errorf("git: invalid skill name %q (allowed [A-Za-z0-9._-], no '..', no leading '-')", s)
+	}
+	return nil
+}
+
+func validateVersion(s string) error {
+	if s == "" || strings.HasPrefix(s, "-") || strings.Contains(s, "..") || !versionRe.MatchString(s) {
+		return fmt.Errorf("git: invalid version %q", s)
+	}
+	return nil
+}
+
+func validateDigest(s string) error {
+	if !digestRe.MatchString(s) {
+		return fmt.Errorf("git: invalid digest %q (want sha256:<64 lowercase hex>)", s)
+	}
+	return nil
+}
 
 // bundleJSON is the per-version review handle committed next to the blob. The
 // digest here is advisory for humans/CI; the trust identity is always the

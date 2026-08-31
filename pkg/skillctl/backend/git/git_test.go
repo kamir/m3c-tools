@@ -2,6 +2,7 @@ package git
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
@@ -177,27 +178,81 @@ func TestGitOpenSchemeMapping(t *testing.T) {
 	}
 }
 
-func TestGitCredInjectionNoLeak(t *testing.T) {
+func TestGitCredNoLeak(t *testing.T) {
+	const tok = "s3cr3t-TOKEN"
 	b, err := openGitLab("gitlab://192.168.0.131:8929/grp/skills",
-		artifact.OpenOptions{Creds: fakeCreds{user: "deployer", token: "s3cr3t-TOKEN"}})
+		artifact.OpenOptions{Creds: fakeCreds{user: "deployer", token: tok}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	gb := b.(*gitBackend)
-	// The token must NOT leak through Describe() or the stored remote.
-	if strings.Contains(gb.Describe().Display, "s3cr3t") || strings.Contains(gb.remote, "s3cr3t") {
+	// The token must NEVER appear in Describe() or the stored remote (which IS
+	// the clone/push argv — no userinfo, no '@').
+	if strings.Contains(gb.Describe().Display, tok) || strings.Contains(gb.remote, tok) || strings.Contains(gb.remote, "@") {
 		t.Fatalf("token leaked: display=%q remote=%q", gb.Describe().Display, gb.remote)
 	}
-	// …but it IS injected into the transport URL used for clone/push.
-	if ar := gb.authRemote(); !strings.Contains(ar, "deployer:s3cr3t-TOKEN@192.168.0.131:8929") {
-		t.Errorf("authRemote missing injected creds: %q", ar)
+	// It rides in an env http.extraHeader instead.
+	want := "Authorization: Basic " + base64.StdEncoding.EncodeToString([]byte("deployer:"+tok))
+	if !strings.Contains(strings.Join(gb.authEnv(), "\n"), want) {
+		t.Errorf("authEnv missing header: %q", gb.authEnv())
+	}
+	// redact() scrubs the token (raw + base64) and URL userinfo from error text.
+	leaky := "git clone https://oauth2:" + tok + "@host failed; " + want
+	if r := gb.redact(leaky); strings.Contains(r, tok) || strings.Contains(r, "oauth2:s") {
+		t.Errorf("redact leaked: %q", r)
 	}
 }
 
 func TestGitDefaultUserOauth2(t *testing.T) {
 	b, _ := openGitLab("gitlab://host/g/p", artifact.OpenOptions{Creds: fakeCreds{token: "T"}})
-	if ar := b.(*gitBackend).authRemote(); !strings.Contains(ar, "oauth2:T@host") {
-		t.Errorf("default user should be oauth2: %q", ar)
+	if u := b.(*gitBackend).authUser(); u != "oauth2" {
+		t.Errorf("default user = %q, want oauth2", u)
+	}
+}
+
+// TestGitTokenNotInError — regression for the challenge-gate CRITICAL: a failing
+// git operation must never return the token in its error string.
+func TestGitTokenNotInError(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	const tok = "TOP-SECRET-PAT-123"
+	b := &gitBackend{remote: "https://127.0.0.1:1/nope.git", scheme: "gitlab", token: tok, tokenUser: "deployer"}
+	_, err := b.List(context.Background(), artifact.ListFilter{}, artifact.Page{})
+	if err == nil {
+		t.Fatal("expected the clone to fail")
+	}
+	if strings.Contains(err.Error(), tok) {
+		t.Fatalf("TOKEN LEAKED in error: %v", err)
+	}
+}
+
+// TestGitPathTraversalRejected — regression for the challenge-gate CRITICAL: a
+// malicious name/version/digest is rejected before any filesystem write.
+func TestGitPathTraversalRejected(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	ctx := context.Background()
+	b := newGitBackend(bareRepo(t), "gitlab")
+	defer b.Close()
+	good := dig(3)
+	for _, bad := range []artifact.ArtifactMeta{
+		{Name: "../../../../tmp/pwn", Version: "1.0.0", Digest: good},
+		{Name: "ok", Version: "../../etc", Digest: good},
+		{Name: "-danger", Version: "1.0.0", Digest: good},
+		{Name: "a/b", Version: "1.0.0", Digest: good},
+		{Name: "ok", Version: "1.0.0", Digest: "not-a-digest"},
+	} {
+		if _, err := b.Publish(ctx, artifact.PublishRequest{
+			Kind: artifact.KindAdmit, Blob: []byte("x"),
+			Event: map[string]any{"kind": "admitted"}, Meta: bad,
+		}); err == nil {
+			t.Errorf("Publish accepted malicious meta %+v", bad)
+		}
+	}
+	if _, statErr := os.Stat("/tmp/pwn/1.0.0/bundle.skb"); statErr == nil {
+		t.Fatal("path traversal wrote /tmp/pwn — SEC-M9 breach")
 	}
 }
 

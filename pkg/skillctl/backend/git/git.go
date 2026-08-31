@@ -2,12 +2,14 @@ package git
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -62,10 +64,10 @@ func gitRemoteFromSpec(spec, scheme string) (string, error) {
 // wire-format, and (for writes) pushes. Correct and simple for v1; a cached
 // clone + fetch is the efficiency follow-up.
 type gitBackend struct {
-	remote    string // clean remote URL (NO secret) — used for Describe/display
+	remote    string // clean remote URL (NO secret) — used for Describe/display AND git argv
 	scheme    string // "gitlab" | "github"
-	token     string // optional; injected into the clone/push URL only
-	tokenUser string // "" => "oauth2" (works for GitLab PAT + Deploy-Token)
+	token     string // optional write token; supplied to git via an env http.extraHeader ONLY (never argv/URL/.git/config/error strings)
+	tokenUser string // "" => "oauth2" (works for a GitLab project/personal access token)
 }
 
 func newGitBackend(remote, scheme string) *gitBackend {
@@ -73,10 +75,10 @@ func newGitBackend(remote, scheme string) *gitBackend {
 }
 
 // applyCreds resolves a token for this backend's host via opts.Creds (read-only,
-// SPEC-0356 D5) and stores it for URL injection. Best-effort: no creds / a
-// resolve error just leaves the backend anonymous (ambient git credentials or a
-// public repo still work). The token is NEVER stored in b.remote and NEVER
-// surfaced by Describe.
+// SPEC-0356 D5) and stores it for out-of-band header injection (authEnv) — never
+// in the URL. Best-effort: no creds / a resolve error just leaves the backend
+// anonymous (ambient git credentials or a public repo still work). The token is
+// NEVER stored in b.remote and NEVER surfaced by Describe.
 func (b *gitBackend) applyCreds(opts artifact.OpenOptions) {
 	if opts.Creds == nil {
 		return
@@ -93,23 +95,49 @@ func (b *gitBackend) applyCreds(opts artifact.OpenOptions) {
 	b.tokenUser = c.User
 }
 
-// authRemote returns the remote with credentials injected for git transport.
-// Only used for the clone/push into a throwaway temp dir (whose .git/config is
-// deleted straight after the op); b.remote itself stays secret-free.
-func (b *gitBackend) authRemote() string {
+// userinfoRe strips credentials embedded in any URL (scheme://user:pass@host).
+var userinfoRe = regexp.MustCompile(`://[^/@\s]*@`)
+
+// authUser is the git username for the token (default oauth2, valid for a
+// GitLab project/personal access token).
+func (b *gitBackend) authUser() string {
+	if b.tokenUser != "" {
+		return b.tokenUser
+	}
+	return "oauth2"
+}
+
+// authEnv injects the write token as an HTTP Authorization header via git's env
+// config — NEVER in the clone/push argv or the on-disk .git/config (SPEC-0356
+// §6.2; challenge-gate fix for the token-in-URL / token-in-error leaks). Returns
+// nil when anonymous. GIT_CONFIG_* is process-scoped and not persisted; each
+// git() call targets a single controlled remote, so an unscoped header is safe.
+func (b *gitBackend) authEnv() []string {
 	if b.token == "" {
-		return b.remote
+		return nil
 	}
-	u, err := url.Parse(b.remote)
-	if err != nil {
-		return b.remote
+	hdr := "Authorization: Basic " + base64.StdEncoding.EncodeToString([]byte(b.authUser()+":"+b.token))
+	return []string{
+		"GIT_CONFIG_COUNT=1",
+		"GIT_CONFIG_KEY_0=http.extraHeader",
+		"GIT_CONFIG_VALUE_0=" + hdr,
 	}
-	user := b.tokenUser
-	if user == "" {
-		user = "oauth2"
+}
+
+// redact strips credential material from a string before it is returned in an
+// error: URL userinfo, and the token itself (raw + base64). This closes the
+// error-path token leak the challenge gate reproduced.
+func (b *gitBackend) redact(s string) string {
+	if s == "" {
+		return s
 	}
-	u.User = url.UserPassword(user, b.token)
-	return u.String()
+	s = userinfoRe.ReplaceAllString(s, "://")
+	if b.token != "" {
+		s = strings.ReplaceAll(s, b.token, "[REDACTED]")
+		enc := base64.StdEncoding.EncodeToString([]byte(b.authUser() + ":" + b.token))
+		s = strings.ReplaceAll(s, enc, "[REDACTED]")
+	}
+	return s
 }
 
 // Compile-time assertion.
@@ -147,10 +175,12 @@ func (b *gitBackend) git(dir string, args ...string) (string, error) {
 		"GIT_AUTHOR_NAME=skillctl", "GIT_AUTHOR_EMAIL=skillctl@m3c",
 		"GIT_COMMITTER_NAME=skillctl", "GIT_COMMITTER_EMAIL=skillctl@m3c",
 	)
+	cmd.Env = append(cmd.Env, b.authEnv()...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return string(out), fmt.Errorf("git %s: %w: %s",
-			strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		red := b.redact(string(out))
+		return red, fmt.Errorf("git %s: %w: %s",
+			b.redact(strings.Join(args, " ")), err, strings.TrimSpace(red))
 	}
 	return string(out), nil
 }
@@ -163,7 +193,9 @@ func (b *gitBackend) withClone(fn func(dir string) error) error {
 	}
 	defer os.RemoveAll(tmp)
 	dir := filepath.Join(tmp, "repo")
-	if _, err := b.git("", "clone", "--quiet", b.authRemote(), dir); err != nil {
+	// Clone the CLEAN remote (no token in argv or the resulting .git/config);
+	// auth rides in an env http.extraHeader (authEnv).
+	if _, err := b.git("", "clone", "--quiet", b.remote, dir); err != nil {
 		return err
 	}
 	return fn(dir)
@@ -190,8 +222,15 @@ func (b *gitBackend) Publish(ctx context.Context, req artifact.PublishRequest) (
 		return nil, fmt.Errorf("git: unsupported event kind %q", req.Kind)
 	}
 	name, ver, dig := req.Meta.Name, req.Meta.Version, req.Meta.Digest
-	if name == "" || dig == "" {
-		return nil, fmt.Errorf("git: publish needs Meta.Name and Meta.Digest")
+	// SEC-M9: these become filesystem paths + git operands — validate BEFORE any use.
+	if err := validateName(name); err != nil {
+		return nil, err
+	}
+	if err := validateVersion(ver); err != nil {
+		return nil, err
+	}
+	if err := validateDigest(dig); err != nil {
+		return nil, err
 	}
 
 	var res *artifact.PublishResult
@@ -237,17 +276,16 @@ func (b *gitBackend) Publish(ctx context.Context, req artifact.PublishRequest) (
 			return err
 		}
 		if req.Kind == artifact.KindAdmit {
-			if _, err := b.git(dir, "tag", tag); err != nil {
+			if _, err := b.git(dir, "tag", "--", tag); err != nil {
 				return err
 			}
-		}
-		if _, err := b.git(dir, "push", "--quiet", "origin", "HEAD"); err != nil {
+			// Atomic: branch + tag land together or neither does — no
+			// half-published skill (blob present, tag missing) on a partial push.
+			if _, err := b.git(dir, "push", "--quiet", "--atomic", "origin", "HEAD", "refs/tags/"+tag); err != nil {
+				return err
+			}
+		} else if _, err := b.git(dir, "push", "--quiet", "origin", "HEAD"); err != nil {
 			return err
-		}
-		if req.Kind == artifact.KindAdmit {
-			if _, err := b.git(dir, "push", "--quiet", "origin", "--tags"); err != nil {
-				return err
-			}
 		}
 		res = &artifact.PublishResult{Ref: b.ref(name, ver, dig), NativeID: tag, Transport: "git"}
 		return nil
@@ -327,6 +365,21 @@ func (b *gitBackend) List(ctx context.Context, filter artifact.ListFilter, page 
 func (b *gitBackend) Resolve(ctx context.Context, q artifact.RefQuery) (*artifact.ArtifactRef, error) {
 	var ref *artifact.ArtifactRef
 	err := b.withClone(func(dir string) error {
+		if q.Digest != "" {
+			if err := validateDigest(q.Digest); err != nil {
+				return err
+			}
+		}
+		if q.Name != "" {
+			if err := validateName(q.Name); err != nil {
+				return err
+			}
+		}
+		if q.Version != "" {
+			if err := validateVersion(q.Version); err != nil {
+				return err
+			}
+		}
 		if q.Name == "" && q.Digest != "" {
 			if n, v, dig, ok := b.findByDigest(dir, q.Digest); ok {
 				r := b.ref(n, v, dig)
@@ -369,14 +422,21 @@ func (b *gitBackend) Fetch(ctx context.Context, ref artifact.ArtifactRef) ([]byt
 	err := b.withClone(func(dir string) error {
 		name, ver := ref.Name, ref.Version
 		if name == "" || ver == "" {
-			if ref.Digest == "" {
-				return fmt.Errorf("git: fetch needs name@version or a digest")
+			if err := validateDigest(ref.Digest); err != nil {
+				return fmt.Errorf("git: fetch needs name@version or a valid digest: %w", err)
 			}
 			n, v, _, ok := b.findByDigest(dir, ref.Digest)
 			if !ok {
 				return fmt.Errorf("git: digest %s not found", ref.Digest)
 			}
 			name, ver = n, v
+		}
+		// SEC-M9: a caller-supplied ref must not escape the repo root.
+		if err := validateName(name); err != nil {
+			return err
+		}
+		if err := validateVersion(ver); err != nil {
+			return err
 		}
 		d, err := os.ReadFile(filepath.Join(dir, bundleSkbPath(name, ver)))
 		if err != nil {
