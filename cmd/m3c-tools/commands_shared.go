@@ -137,7 +137,10 @@ func cmdRetry(args []string) {
 		cancel()
 	}()
 
-	if loopErr := runner.Run(ctx, time.Duration(interval)*time.Second); loopErr != nil && !errors.Is(loopErr, context.Canceled) {
+	// RetryRunner.Run only returns on context cancellation (never nil), so a bare
+	// `!= nil` is always-true (SA4023); the meaningful check is whether it was a
+	// clean context-cancel vs a real error worth surfacing.
+	if loopErr := runner.Run(ctx, time.Duration(interval)*time.Second); !errors.Is(loopErr, context.Canceled) {
 		fmt.Fprintf(os.Stderr, "Retry loop error: %v\n", loopErr)
 		os.Exit(1)
 	}

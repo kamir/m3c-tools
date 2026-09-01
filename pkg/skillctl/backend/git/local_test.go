@@ -12,11 +12,14 @@ import (
 
 func TestResolveLocalPath(t *testing.T) {
 	home, _ := os.UserHomeDir()
+	// Expected values are computed via filepath.Abs so they match resolveLocalPath
+	// on every OS (on Windows "/abs/reg.git" absolutizes to a drive-lettered path).
+	absSlash, _ := filepath.Abs("/abs/reg.git")
 	cases := []struct {
 		spec, want string
 		err        bool
 	}{
-		{"local:///abs/reg.git", "/abs/reg.git", false},
+		{"local:///abs/reg.git", absSlash, false},
 		{"local://~/reg.git", filepath.Join(home, "reg.git"), false},
 		{"local://-oops", "", true},  // leading '-' rejected (git-flag injection)
 		{"local://", "", true},       // empty
