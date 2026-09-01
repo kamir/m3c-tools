@@ -83,8 +83,8 @@ func RegisterImage(name, filePath string) bool {
 	return C.registerImageFromFile(cName, cPath, isTemplate) == 1
 }
 
-// RegisterImageBytes registers an in-memory image (e.g. a PNG embedded via
-// go:embed) as a named NSImage, so menuet can reference it by name in
+// RegisterImageBytes registers an in-memory image (e.g. a PNG embedded with a
+// build-time go:embed) as a named NSImage, so menuet can reference it by name in
 // MenuState.Image / MenuItem.Image without any on-disk file. Pass template=true
 // for menu-bar template icons (monochrome, auto dark/light). Returns false if
 // the bytes are empty or cannot be decoded.
