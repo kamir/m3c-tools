@@ -42,8 +42,8 @@ func TestIgnoreSkbignore(t *testing.T) {
 	rules := append(parseIgnore(defaultIgnorePatterns),
 		parseIgnore([]string{
 			"# a comment",
-			"*.tmp",     // add
-			"!dist/",    // re-include a default-ignored dir
+			"*.tmp",      // add
+			"!dist/",     // re-include a default-ignored dir
 			"docs/build", // anchored (interior slash): only this exact path
 		})...)
 
@@ -93,14 +93,14 @@ func packNames(t *testing.T, dir string) map[string]bool {
 // real skill source does.
 func TestPackExcludesArtifacts(t *testing.T) {
 	dir := mustWriteSkill(t, map[string]string{
-		"SKILL.md":                          "---\nname: x\n---\n",
-		"src/main.py":                       "print(1)\n",
-		"references/data.json":              "{}\n",
-		"node_modules/left-pad/index.js":    "module.exports=1\n",
-		"dist/app":                          "BINARY",
-		"__pycache__/mod.cpython-313.pyc":   "PYC",
-		"scratch.pyc":                       "PYC",
-		"nested/.DS_Store":                  "junk",
+		"SKILL.md":                        "---\nname: x\n---\n",
+		"src/main.py":                     "print(1)\n",
+		"references/data.json":            "{}\n",
+		"node_modules/left-pad/index.js":  "module.exports=1\n",
+		"dist/app":                        "BINARY",
+		"__pycache__/mod.cpython-313.pyc": "PYC",
+		"scratch.pyc":                     "PYC",
+		"nested/.DS_Store":                "junk",
 	})
 	names := packNames(t, dir)
 
@@ -111,10 +111,8 @@ func TestPackExcludesArtifacts(t *testing.T) {
 		}
 	}
 	for n := range names {
-		switch {
-		case n == "dist/app",
-			n == "scratch.pyc",
-			n == "nested/.DS_Store":
+		switch n {
+		case "dist/app", "scratch.pyc", "nested/.DS_Store":
 			t.Errorf("artifact %q leaked into bundle", n)
 		}
 		if len(n) >= 13 && n[:13] == "node_modules/" {
@@ -130,11 +128,11 @@ func TestPackExcludesArtifacts(t *testing.T) {
 // default-ignored file; the .skbignore file itself does not ship.
 func TestPackSkbignore(t *testing.T) {
 	dir := mustWriteSkill(t, map[string]string{
-		"SKILL.md":     "---\nname: x\n---\n",
-		"keep.txt":     "keep\n",
-		"drop.tmp":     "drop\n",
-		"vendor.pyc":   "PYC", // default-ignored…
-		".skbignore":   "*.tmp\n!vendor.pyc\n",
+		"SKILL.md":   "---\nname: x\n---\n",
+		"keep.txt":   "keep\n",
+		"drop.tmp":   "drop\n",
+		"vendor.pyc": "PYC", // default-ignored…
+		".skbignore": "*.tmp\n!vendor.pyc\n",
 	})
 	names := packNames(t, dir)
 	if !names["keep.txt"] {

@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -136,7 +137,7 @@ func cmdRetry(args []string) {
 		cancel()
 	}()
 
-	if loopErr := runner.Run(ctx, time.Duration(interval)*time.Second); loopErr != nil && loopErr != context.Canceled {
+	if loopErr := runner.Run(ctx, time.Duration(interval)*time.Second); loopErr != nil && !errors.Is(loopErr, context.Canceled) {
 		fmt.Fprintf(os.Stderr, "Retry loop error: %v\n", loopErr)
 		os.Exit(1)
 	}
@@ -381,7 +382,6 @@ func cmdCancel(args []string) {
 
 	fmt.Printf("Cancelled entry: %s\n", entryID)
 }
-
 
 func cmdUpload(args []string) {
 	if len(args) == 0 {
