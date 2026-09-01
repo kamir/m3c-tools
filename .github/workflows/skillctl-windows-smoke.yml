@@ -31,7 +31,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
           cache: true
 
       # Build the shipping CLI from source (native GOOS=windows on this runner).

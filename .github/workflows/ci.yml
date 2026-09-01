@@ -15,7 +15,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
 
       - name: Install PortAudio
         run: brew install portaudio
@@ -37,7 +37,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
 
       - name: Install PortAudio
         run: brew install portaudio
@@ -63,7 +63,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
 
       - name: Install PortAudio
         run: brew install portaudio
@@ -87,7 +87,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
 
       # The cgo packages (recorder/menubar) need PortAudio to typecheck, so run
       # on macOS like the other jobs rather than a pure-Go ubuntu runner.
@@ -132,7 +132,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
 
       - name: Install PortAudio (Homebrew, for native arm64 build)
         run: brew install portaudio pkg-config
@@ -181,7 +181,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
 
       - name: Build linux/amd64
         run: |
