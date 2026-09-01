@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -30,25 +31,100 @@ def load_cfg(ws):
     return yaml.safe_load(default.read_text())
 
 
-def ensure_git_tracking(ws):
-    """Track the index in git (SPEC-0268): LFS for the binary, ignore only the
-    derived SQLite cache. Idempotent; removes any stale bare `.rag/` ignore."""
-    ws = Path(ws).resolve()
+_RAG_IGNORE_LINES = (".rag", ".rag/", "/.rag", "/.rag/")
+_LFS_ATTR = ".rag/index.tvim filter=lfs diff=lfs merge=lfs -text"
 
+
+def _git_root(ws):
+    try:
+        r = subprocess.run(["git", "-C", str(ws), "rev-parse", "--show-toplevel"],
+                           capture_output=True, text=True, timeout=5)
+        return Path(r.stdout.strip()).resolve() if r.stdout.strip() else None
+    except Exception:  # noqa: BLE001 — no git, no worktree: nothing to arrange
+        return None
+
+
+def _set_gitignore(ws, keep, add):
+    """Rewrite <ws>/.gitignore: drop every line in `keep`-negated set, ensure `add`."""
     gi = ws / ".gitignore"
     lines = gi.read_text().splitlines() if gi.exists() else []
-    lines = [ln for ln in lines if ln.strip() not in (".rag", ".rag/", "/.rag", "/.rag/")]
-    if ".rag/meta.sqlite" not in [ln.strip() for ln in lines]:
-        lines.append(".rag/meta.sqlite")
+    lines = [ln for ln in lines if ln.strip() not in keep]
+    if add and add not in [ln.strip() for ln in lines]:
+        lines.append(add)
     gi.write_text("\n".join(lines).strip() + "\n")
 
+
+def _persist_git_tracking(ws, value):
+    """Record the choice in .rag/config.yaml so a later plain `index` cannot
+    silently flip a deliberately-untracked workspace back to tracked."""
+    cfg_path = Path(ws) / ".rag" / "config.yaml"
+    if not cfg_path.exists():
+        return
+    txt = cfg_path.read_text()
+    line = f"git_tracking: {value}"
+    if "git_tracking:" in txt:
+        txt = "\n".join(line if ln.startswith("git_tracking:") else ln
+                        for ln in txt.splitlines()) + "\n"
+    else:
+        txt = txt.rstrip("\n") + (
+            "\n\n# tracked = index committed to git (LFS); none = machine-local artifact,\n"
+            "# .rag/ ignored wholesale. Set by `index [--no-track]`; sticky across runs.\n"
+            f"{line}\n")
+    cfg_path.write_text(txt)
+
+
+def ensure_git_tracking(ws, track=True):
+    """Arrange git so the index behaves the way this workspace intends.
+
+    TRACKED (the SPEC-0268 default): LFS for the binary, ignore only the derived
+    SQLite cache, so a fresh clone is searchable with no re-embedding.
+
+    UNTRACKED: ignore `.rag/` wholesale and add no LFS rule. Two cases need this,
+    and both were found the hard way:
+
+    * **The workspace is not the git root.** Indexing a SUBDIRECTORY of a repo
+      (e.g. an app inside a monorepo) otherwise leaves tens of megabytes of
+      untracked index sitting in the PARENT repo's `git status`, one `git add -A`
+      away from being committed there — plus an LFS rule for a file that repo was
+      never going to carry. This is detected, not configured.
+    * **`track=False`** (`index --no-track`), for a repo whose index is
+      deliberately a machine-local artifact. Committing a rebuilt index costs a
+      new LFS object every time; when a second machine can just rebuild, the
+      index is cheaper than its transport.
+
+    Idempotent either way, and it converts between the two states — flipping a
+    workspace to untracked removes the LFS attribute it previously added.
+    """
+    ws = Path(ws).resolve()
+    root = _git_root(ws)
+    if root is None:
+        return "no-git"
+
+    if track and root == ws:
+        _persist_git_tracking(ws, "tracked")
+        _set_gitignore(ws, keep=set(_RAG_IGNORE_LINES), add=".rag/meta.sqlite")
+        ga = ws / ".gitattributes"
+        atxt = ga.read_text() if ga.exists() else ""
+        if "index.tvim" not in atxt:
+            with open(ga, "a") as f:
+                if atxt and not atxt.endswith("\n"):
+                    f.write("\n")
+                f.write(_LFS_ATTR + "\n")
+        return "tracked"
+
+    # Untracked: the whole .rag/ is ignored and any LFS rule we added is removed.
+    _persist_git_tracking(ws, "none")
+    _set_gitignore(ws, keep={".rag/meta.sqlite"}, add=".rag/")
     ga = ws / ".gitattributes"
-    atxt = ga.read_text() if ga.exists() else ""
-    if "index.tvim" not in atxt:
-        with open(ga, "a") as f:
-            if atxt and not atxt.endswith("\n"):
-                f.write("\n")
-            f.write(".rag/index.tvim filter=lfs diff=lfs merge=lfs -text\n")
+    if ga.exists():
+        kept = [ln for ln in ga.read_text().splitlines() if ln.strip() != _LFS_ATTR]
+        if any(k.strip() for k in kept):
+            ga.write_text("\n".join(kept).strip() + "\n")
+        else:
+            # The file held nothing but our LFS rule -> we created it. Leaving an
+            # empty .gitattributes behind is litter in someone else's repo.
+            ga.unlink()
+    return "untracked (workspace is not the git root)" if root != ws else "untracked (--no-track)"
 
 
 def resolve_workspaces(arg):
@@ -135,6 +211,10 @@ def main():
     for name in ("index", "sync", "status", "verify"):
         s = sub.add_parser(name)
         s.add_argument("--workspace", "-w", action="append")
+        if name == "index":
+            s.add_argument("--no-track", action="store_true",
+                           help="keep the index out of git: ignore .rag/ wholesale "
+                                "and add no LFS rule (machine-local artifact)")
     ss = sub.add_parser("search")
     ss.add_argument("--workspace", "-w", action="append",
                     help="repeatable; fans the query out and merges by score. "
@@ -177,7 +257,11 @@ def main():
     ws = workspaces[0]
     ix = Indexer(ws, load_cfg(ws))
     if a.cmd == "index":
-        ensure_git_tracking(ws)
+        # A recorded `git_tracking: none` outlives the flag: re-indexing a
+        # deliberately-untracked workspace must not quietly re-arm LFS tracking.
+        track = not a.no_track and load_cfg(ws).get("git_tracking", "auto") != "none"
+        mode = ensure_git_tracking(ws, track=track)
+        print(f"[index] git: {mode}", file=sys.stderr)
         print(json.dumps(ix.build(), indent=2))
     elif a.cmd == "sync":
         print(json.dumps(ix.sync(), indent=2))
