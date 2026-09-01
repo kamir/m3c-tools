@@ -43,16 +43,19 @@ func TestUnionVerifiedRevokes(t *testing.T) {
 	good := gd(1)
 	forged := gd(2)
 
+	rebindFrom := gd(5) // signed revoke is for gd(6), replayed into dir gd(5)
 	events := []artifact.EventRecord{
 		{Kind: artifact.KindRevoke, Digest: good, Envelope: signedRevoke(t, priv, good)},          // valid
 		{Kind: artifact.KindRevoke, Digest: forged, Envelope: signedRevoke(t, wrongPriv, forged)}, // wrong key
-		{Kind: artifact.KindAdmit, Digest: gd(3), Envelope: signedRevoke(t, priv, gd(3))},         // not a revoke
-		{Kind: artifact.KindRevoke, Digest: "", Envelope: signedRevoke(t, priv, good)},            // no digest
+		{Kind: artifact.KindAdmit, Digest: gd(3), Envelope: signedRevoke(t, priv, gd(3))},         // not a revoke (kind)
+		{Kind: artifact.KindRevoke, Digest: "", Envelope: signedRevoke(t, priv, good)},            // no path digest
+		{Kind: artifact.KindRevoke, Digest: rebindFrom, Envelope: signedRevoke(t, priv, gd(6))},   // DIGEST REBIND: signed X, path Y
+		{Kind: artifact.KindRevoke, Digest: gd(7), Envelope: signedNonRevoke(t, priv, gd(7))},     // WRONG-TYPE: signed non-revoke filed as revoke
 	}
 	into := map[string]struct{}{}
 	n := unionVerifiedRevokes(events, pub, into)
 	if n != 1 {
-		t.Fatalf("unioned %d, want 1 (only the validly-signed revoke)", n)
+		t.Fatalf("unioned %d, want 1 (only the one validly-signed, path-consistent revoke)", n)
 	}
 	if _, ok := into[good]; !ok {
 		t.Error("the valid revoke was not unioned")
@@ -60,6 +63,34 @@ func TestUnionVerifiedRevokes(t *testing.T) {
 	if _, ok := into[forged]; ok {
 		t.Error("a revoke signed by the WRONG key must be dropped (integrity fail-closed)")
 	}
+	// The gate PoC: neither the path digest NOR the signed digest of a rebind is unioned.
+	if _, ok := into[rebindFrom]; ok {
+		t.Error("SECURITY: a digest-rebind replayed the path digest into the revoked set")
+	}
+	if _, ok := into[gd(6)]; ok {
+		t.Error("SECURITY: a digest-rebind unioned the signed digest into the wrong-path slot")
+	}
+	if _, ok := into[gd(7)]; ok {
+		t.Error("SECURITY: a signed NON-revoke (no revoked_by) was accepted as a revoke")
+	}
+}
+
+// signedNonRevoke is a peer-signed event that is NOT a revoke (no revoked_by) —
+// the admit/attest an attacker would replay into a *-revoked.json slot.
+func signedNonRevoke(t *testing.T, priv ed25519.PrivateKey, digest string) map[string]any {
+	t.Helper()
+	ev := map[string]any{
+		"schema_version": registry.EventSchemaVersion,
+		"event_id":       "a-" + digest,
+		"occurred_at":    "2026-08-01T00:00:00Z",
+		"bundle_digest":  digest,
+		"name":           "x",
+		"version":        "1.0.0",
+	}
+	if _, err := registry.SignEnvelopeSignature(priv, ev); err != nil {
+		t.Fatal(err)
+	}
+	return ev
 }
 
 // TestGossipedRevokedGrowOnly: the durable gossip cache only grows — a later merge

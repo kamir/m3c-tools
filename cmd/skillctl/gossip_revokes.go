@@ -137,18 +137,34 @@ func gossipRevokedDigests(peers *registry.Peers) (map[string]struct{}, []peerGos
 }
 
 // unionVerifiedRevokes adds every SIGNED revoke digest in events (verified against
-// pub) into `into` and returns how many it added. Integrity fail-closed: an
-// unsigned/forged revoke, a non-revoke event, or a digest-less event is ignored.
+// pub) into `into` and returns how many it added. Integrity fail-closed.
+//
+// CRITICAL: the revoke IDENTITY comes from the SIGNED envelope, never the unsigned
+// git path. For a git peer both EventRecord.Kind (filename) and .Digest (dir name)
+// are attacker-controllable path components; VerifyEnvelopeSignature authenticates
+// only the envelope content. So after the signature verifies we (a) confirm it is
+// genuinely a REVOKE via the signed `revoked_by` (a field only revokes carry — a
+// replayed admit/attest has none, closing the kind-confusion), and (b) union the
+// SIGNED `bundle_digest`, rejecting a mismatch with the path digest (a rebind that
+// would revoke an attacker-chosen digest). This mirrors the online loadAttestRevoke
+// binding (registry/er1_pull.go) that the git-path Kind/Digest projection dropped.
 func unionVerifiedRevokes(events []artifact.EventRecord, pub ed25519.PublicKey, into map[string]struct{}) int {
 	n := 0
 	for _, ev := range events {
-		if ev.Kind != artifact.KindRevoke || ev.Envelope == nil || ev.Digest == "" {
-			continue
+		if ev.Kind != artifact.KindRevoke || ev.Envelope == nil {
+			continue // cheap pre-filter; the authoritative check is the envelope below
 		}
 		if registry.VerifyEnvelopeSignature(pub, ev.Envelope) != nil {
-			continue // an unsigned/forged revoke does not count
+			continue // an unsigned/forged event does not count
 		}
-		into[ev.Digest] = struct{}{}
+		if rb, _ := ev.Envelope["revoked_by"].(string); rb == "" {
+			continue // signed discriminator: not a revoke envelope (e.g. a replayed admit)
+		}
+		signedDigest, _ := ev.Envelope["bundle_digest"].(string)
+		if signedDigest == "" || signedDigest != ev.Digest {
+			continue // digest not signed, or path-rebound to an attacker-chosen digest → drop
+		}
+		into[signedDigest] = struct{}{} // the SIGNED digest, never the path
 		n++
 	}
 	return n
