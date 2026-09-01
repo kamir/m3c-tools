@@ -7112,7 +7112,11 @@ func cmdPocketMappings(_ []string) {
 	if !er1Cfg.VerifySSL {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
-	client := &http.Client{Transport: transport}
+	// R-01 / Release It! "Integration Points": ohne Timeout blockiert Do()
+	// unbegrenzt, wenn der Server die Verbindung annimmt und nicht antwortet.
+	// Die uebrigen 40+ Clients in diesem Repo setzen es korrekt — diese Stelle
+	// war die einzige Ausnahme (Scan ueber alle *.go, 2026-09-01).
+	client := &http.Client{Transport: transport, Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "request failed: %v\n", err)
