@@ -1,0 +1,6 @@
+{
+  "categories": ["policy-subversion"],
+  "rule_ids": ["POL-004"],
+  "min_verdict": "yellow",
+  "note": "Dependency steering toward unvetted packages."
+}

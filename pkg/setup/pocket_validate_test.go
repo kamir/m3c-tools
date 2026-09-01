@@ -65,7 +65,7 @@ func TestValidatePocketKey_ZeroRecordings(t *testing.T) {
 
 func TestValidatePocketKey_Unauthorized(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "unauthorized", 401)
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
 	}))
 	defer srv.Close()
 	v := ValidatePocketKey(srv.Client(), srv.URL, "pk_bad")
@@ -82,7 +82,7 @@ func TestValidatePocketKey_Unauthorized(t *testing.T) {
 
 func TestValidatePocketKey_Forbidden(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "forbidden", 403)
+		http.Error(w, "forbidden", http.StatusForbidden)
 	}))
 	defer srv.Close()
 	v := ValidatePocketKey(srv.Client(), srv.URL, "pk_x")

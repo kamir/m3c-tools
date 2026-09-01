@@ -1,0 +1,6 @@
+{
+  "categories": ["exfiltration"],
+  "rule_ids": ["EXF-003"],
+  "min_verdict": "red",
+  "note": "Summarize-and-transmit covert exfil; also trips the verb->URL rule."
+}

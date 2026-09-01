@@ -372,7 +372,7 @@ func TestBuildFileEntriesWithTrackingDB(t *testing.T) {
 }
 
 func TestImporterCLIScanWithStatus(t *testing.T) {
-	binPath := filepath.Join("..", "build", "m3c-tools")
+	binPath := BinaryPath(t)
 	if _, err := os.Stat(binPath); err != nil {
 		cmd := exec.Command("go", "build", "-tags", "cgo", "-o", binPath, "./cmd/m3c-tools/")
 		cmd.Dir = filepath.Join("..")
@@ -431,7 +431,7 @@ func TestImporterCLIScanWithStatus(t *testing.T) {
 }
 
 func TestImporterCLICompactOutput(t *testing.T) {
-	binPath := filepath.Join("..", "build", "m3c-tools")
+	binPath := BinaryPath(t)
 	if _, err := os.Stat(binPath); err != nil {
 		cmd := exec.Command("go", "build", "-tags", "cgo", "-o", binPath, "./cmd/m3c-tools/")
 		cmd.Dir = filepath.Join("..")

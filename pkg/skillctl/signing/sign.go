@@ -4,11 +4,14 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 )
 
 // signatureSize is the exact length of an ed25519 detached signature.
@@ -94,6 +97,21 @@ func SignBundle(bundlePath, keyPath, identityID string) (sigPath, digestHex stri
 		return "", "", fmt.Errorf("sign: bundle %s is empty", bundlePath)
 	}
 
+	// SCOPE GATE AT THE SIGN BOUNDARY (P2b re-challenge finding #2). Pack already
+	// validates the declared data-scope before it produces bytes, but SignBundle is
+	// a SECOND author-sign entrypoint: a hand-built .skb (assembled WITHOUT Pack)
+	// can carry a Pack-rejected, §3.3-contradictory scope and still reach here. The
+	// author signature covers manifest.Intent + manifest.DataDependencies, so we
+	// MUST refuse to sign an invalid scope — otherwise "no unvalidated scope is ever
+	// author-signed" does not actually hold at every sign boundary. Fail-closed: an
+	// invalid scope returns an error and writes NO signature. This is the SAME
+	// validator Pack runs (skillbundle.ValidateManifestDataScope → datascope.Validate);
+	// same verdict, same failed_rule. No import cycle: skillbundle does not import
+	// signing.
+	if err := validateBundleScope(bundlePath); err != nil {
+		return "", "", err
+	}
+
 	priv, err := LoadPrivateKey(keyPath)
 	if err != nil {
 		return "", "", err
@@ -129,6 +147,49 @@ func SignBundle(bundlePath, keyPath, identityID string) (sigPath, digestHex stri
 
 	_ = identityID // reserved for future use (see doc comment above)
 	return sigPath, digestHex, nil
+}
+
+// validateBundleScope unpacks the .skb at bundlePath, reads its bundle.json
+// manifest, and runs the FULL SPEC-0196 declared-scope check via the single
+// authoritative validator (skillbundle.ValidateManifestDataScope →
+// datascope.Validate): per-kind scope, §5 side-effect vocabulary, and the §3.3
+// cross-rules. This is the sign-boundary half of "no unvalidated scope is ever
+// author-signed" (the pack boundary is enforced in skillbundle.Pack).
+//
+// Fail-closed: an invalid or §3.3-contradictory scope returns a non-nil error
+// (wrapping *datascope.ValidationError, so callers can errors.As the FailedRule)
+// and SignBundle then writes no signature. A bundle whose manifest declares no
+// intent and no data dependencies (the common legacy case) validates trivially, so
+// pre-P2b bundles still sign exactly as before.
+//
+// A bundle that cannot be unpacked or whose bundle.json cannot be decoded is NOT
+// silently accepted: signing must not vouch for bytes it cannot read, so any such
+// failure is surfaced as an error (fail-closed).
+func validateBundleScope(bundlePath string) error {
+	blob, err := os.ReadFile(bundlePath)
+	if err != nil {
+		return fmt.Errorf("sign: read bundle %s: %w", bundlePath, err)
+	}
+	entries, err := skillbundle.Unpack(blob, skillbundle.UnpackOptions{})
+	if err != nil {
+		return fmt.Errorf("sign: unpack bundle %s for scope validation: %w", bundlePath, err)
+	}
+	for _, e := range entries {
+		if e.Rel != "bundle.json" {
+			continue
+		}
+		var m skillbundle.BundleManifest
+		if err := json.Unmarshal(e.Content, &m); err != nil {
+			return fmt.Errorf("sign: decode bundle.json in %s: %w", bundlePath, err)
+		}
+		if err := skillbundle.ValidateManifestDataScope(m); err != nil {
+			return fmt.Errorf("sign: refusing to author-sign %s — invalid declared scope: %w", bundlePath, err)
+		}
+		return nil
+	}
+	// No bundle.json in the archive: there is no declared scope to validate. This
+	// is unusual for a real .skb but not a scope violation — let signing proceed.
+	return nil
 }
 
 // SignaturePath returns the canonical detached-signature path for a

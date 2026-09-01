@@ -26,6 +26,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net"
@@ -49,9 +50,9 @@ import (
 	"github.com/kamir/m3c-tools/pkg/er1"
 	"github.com/kamir/m3c-tools/pkg/importer"
 	"github.com/kamir/m3c-tools/pkg/impression"
+	"github.com/kamir/m3c-tools/pkg/menubar"
 	"github.com/kamir/m3c-tools/pkg/plaud"
 	"github.com/kamir/m3c-tools/pkg/pocket"
-	"github.com/kamir/m3c-tools/pkg/menubar"
 	"github.com/kamir/m3c-tools/pkg/recorder"
 	"github.com/kamir/m3c-tools/pkg/screenshot"
 	"github.com/kamir/m3c-tools/pkg/setup"
@@ -120,6 +121,8 @@ func main() {
 		cmdCheckER1()
 	case "doctor":
 		cmdDoctor()
+	case "token":
+		cmdToken(os.Args[2:])
 	case "devices":
 		cmdDevices()
 	case "record":
@@ -192,6 +195,7 @@ Commands:
   devices                List audio input devices
   login                  Login via browser and link device
   doctor                 Run connectivity & config diagnostics
+  token [--print]        Show device-token status (--print emits the Bearer token for shell capture)
   check-er1              Test ER1 server connectivity (use 'doctor' for full check)
 
   retry                  Run ER1 retry loop for queued uploads
@@ -227,11 +231,16 @@ Commands:
     --compact              Machine-readable output (TSV: status, path, size, tags)
     --db <path>            Tracking DB path (default: ~/.m3c-tools/tracking.db)
 
-  plaud list             List Plaud recordings with sync status
+  plaud list             List Plaud recordings with sync status + ER1 doc_id
+  plaud check            Sync-coverage report: how many synced/unsynced + doc_id links
+  plaud fix-times        Backfill real recording time onto synced items (--apply to write)
   plaud sync <id>        Sync a Plaud recording to ER1
   plaud sync --all       Sync all new Plaud recordings to ER1
   plaud auth login       Extract token from Chrome (web.plaud.ai)
-  plaud auth <token>     Save Plaud API token manually
+  plaud auth --from-er1  Pull token from the ER1 credential vault (SPEC-0304)
+  plaud auth --token-file <path>  Save Plaud API token from a file (secure)
+  plaud auth             Save token from $M3C_PLAUD_TOKEN env var (secure)
+  plaud auth <token>     Save Plaud API token from argv (DEPRECATED: leaks via ps)
 
   pocket list            List Pocket recordings with sync status
     --path <dir>           Override device recording path
@@ -375,14 +384,6 @@ func clearPersistedER1Session() error {
 }
 
 // FIX-18: Validate YouTube video IDs at CLI entry to prevent path traversal and injection.
-var videoIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{11}$`)
-
-func validateVideoID(id string) error {
-	if !videoIDPattern.MatchString(id) {
-		return fmt.Errorf("invalid video ID: %q (must be exactly 11 alphanumeric/dash/underscore chars)", id)
-	}
-	return nil
-}
 
 // -- transcript command --
 
@@ -517,206 +518,6 @@ func cmdTranscript(args []string) {
 
 // -- upload command --
 
-func cmdUpload(args []string) {
-	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: m3c-tools upload <video_id> [--audio file.wav] [--impression text]")
-		os.Exit(1)
-	}
-	videoID := args[0]
-	if err := validateVideoID(videoID); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-	audioPath := ""
-	impressionText := ""
-
-	for i := 1; i < len(args); i++ {
-		switch args[i] {
-		case "--audio":
-			if i+1 < len(args) {
-				audioPath = args[i+1]
-				i++
-			}
-		case "--impression":
-			if i+1 < len(args) {
-				impressionText = args[i+1]
-				i++
-			}
-		default:
-			if strings.HasPrefix(args[i], "--") {
-				fmt.Fprintf(os.Stderr, "Warning: unknown flag %q (ignored)\n", args[i])
-			}
-		}
-	}
-
-	// Start background retry goroutine to process any previously queued uploads.
-	// This runs concurrently with the current upload attempt.
-	queuePath := er1.DefaultQueuePath()
-	cfg := er1.LoadConfig()
-	bgRetry := er1.StartBackgroundRetry(
-		queuePath, cfg,
-		time.Duration(cfg.RetryInterval)*time.Second,
-		cfg.MaxRetries,
-	)
-	bgRetry.OnLog = func(msg string) {
-		fmt.Println(msg)
-	}
-	defer bgRetry.Stop(5 * time.Second)
-	fmt.Println("Background retry goroutine started.")
-
-	fmt.Printf("Fetching transcript for %s...\n", videoID)
-	api := transcript.New()
-	fetched, err := api.Fetch(videoID, []string{"en"}, false)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Transcript error: %v\n", err)
-		os.Exit(1)
-	}
-	fmt.Printf("  %d snippets, %s (%s)\n", len(fetched.Snippets), fetched.Language, fetched.LanguageCode)
-
-	// Build composite document
-	textFmt := transcript.TextFormatter{}
-	doc := &impression.CompositeDoc{
-		VideoID:        videoID,
-		VideoURL:       "https://www.youtube.com/watch?v=" + videoID,
-		Language:       fetched.Language,
-		LanguageCode:   fetched.LanguageCode,
-		IsGenerated:    fetched.IsGenerated,
-		SnippetCount:   len(fetched.Snippets),
-		TranscriptText: textFmt.FormatTranscript(fetched),
-		ImpressionText: impressionText,
-		ObsType:        impression.Progress,
-		Timestamp:      time.Now(),
-	}
-	composite := doc.Build()
-	fmt.Printf("  Composite: %d chars\n", len(composite))
-
-	// Fetch thumbnail
-	fmt.Println("Fetching thumbnail...")
-	fetcher, _ := transcript.NewFetcher(nil)
-	thumbData, err := fetcher.FetchThumbnail(videoID)
-	if err != nil {
-		fmt.Printf("  Warning: %v (using placeholder)\n", err)
-	} else {
-		fmt.Printf("  Thumbnail: %d bytes\n", len(thumbData))
-	}
-
-	// Read audio if provided
-	var audioData []byte
-	if audioPath != "" {
-		audioData, err = os.ReadFile(audioPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading audio: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Printf("  Audio: %s (%d bytes)\n", audioPath, len(audioData))
-	}
-
-	// Upload to ER1
-	fmt.Printf("Uploading to %s...\n", cfg.APIURL)
-
-	tags := impression.BuildVideoTags(videoID, "", impression.Progress) + "," + strings.Join(impression.OriginTags(""), ",")
-	payload := &er1.UploadPayload{
-		TranscriptData:     []byte(composite),
-		TranscriptFilename: fmt.Sprintf("%s_transcript.txt", videoID),
-		AudioData:          audioData,
-		AudioFilename:      fmt.Sprintf("%s_audio.wav", videoID),
-		ImageData:          thumbData,
-		ImageFilename:      fmt.Sprintf("%s_thumbnail.jpg", videoID),
-		Tags:               tags,
-	}
-	resp, err := er1.Upload(cfg, payload)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Upload error: %v\n", err)
-		// ER1 failure detection: queue failed upload for retry
-		entry := er1.EnqueueFailure(queuePath, videoID, payload, tags, err)
-		fmt.Fprintf(os.Stderr, "Queued for retry: %s → %s\n", entry.ID, queuePath)
-		os.Exit(1)
-	}
-
-	fmt.Printf("\nUpload SUCCESS\n")
-	fmt.Printf("  doc_id: %s\n", resp.DocID)
-	fmt.Printf("  GCS:    %s\n", resp.GCSURI)
-	fmt.Printf("  time:   %s\n", resp.Time)
-}
-
-// -- whisper command --
-
-func cmdWhisper(args []string) {
-	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: m3c-tools whisper <audio_file> [--model base] [--language en]")
-		os.Exit(1)
-	}
-	audioFile := args[0]
-	model := "base"
-	language := ""
-
-	for i := 1; i < len(args); i++ {
-		switch args[i] {
-		case "--model":
-			if i+1 < len(args) {
-				model = args[i+1]
-				i++
-			}
-		case "--language":
-			if i+1 < len(args) {
-				language = args[i+1]
-				i++
-			}
-		}
-	}
-
-	result, err := whisper.Transcribe(audioFile, model, language)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("Segments: %d\n", len(result.Segments))
-	for _, s := range result.Segments {
-		fmt.Printf("[%6.1fs → %6.1fs] %s\n", s.Start, s.End, strings.TrimSpace(s.Text))
-	}
-	fmt.Printf("\nFull text (%d chars):\n%s\n", len(result.Text), result.Text)
-}
-
-// -- thumbnail command --
-
-func cmdThumbnail(args []string) {
-	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: m3c-tools thumbnail <video_id> [--output file.jpg]")
-		os.Exit(1)
-	}
-	videoID := args[0]
-	if err := validateVideoID(videoID); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-	output := videoID + "_thumbnail.jpg"
-
-	for i := 1; i < len(args); i++ {
-		if args[i] == "--output" && i+1 < len(args) {
-			output = args[i+1]
-			i++
-		}
-	}
-
-	fetcher, _ := transcript.NewFetcher(nil)
-	data, err := fetcher.FetchThumbnail(videoID)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-	os.WriteFile(output, data, 0600)
-	fmt.Printf("Saved %s (%d bytes)\n", output, len(data))
-}
-
-// -- settings command --
-
-func cmdSettings() {
-	srv := config.NewEditorServer(":9116")
-	if err := srv.Start(); err != nil {
-		log.Fatalf("[settings] editor error: %v", err)
-	}
-}
 
 // -- check-er1 command --
 
@@ -764,9 +565,10 @@ func openProfileEditor() {
 // wizard will wrap with green/red marker UI.
 //
 // Usage:
-//   m3c-tools setup pocket-key pk_3aa72a536d28c3fde2f9a08c514697fe8f9e55590e178bd82d6a26e415fe70ae
-//   m3c-tools setup pocket-key pk_xxx --no-write   (validate only, don't write)
-//   m3c-tools setup pocket-key pk_xxx --profile dev  (target a non-active profile)
+//
+//	m3c-tools setup pocket-key pk_3aa72a536d28c3fde2f9a08c514697fe8f9e55590e178bd82d6a26e415fe70ae
+//	m3c-tools setup pocket-key pk_xxx --no-write   (validate only, don't write)
+//	m3c-tools setup pocket-key pk_xxx --profile dev  (target a non-active profile)
 func cmdSetupPocketKey(args []string) {
 	noWrite := false
 	profileName := ""
@@ -850,14 +652,6 @@ func cmdSetupPocketKey(args []string) {
 	}
 }
 
-// plural is a tiny helper that mirrors setup.plural; kept inline so we don't
-// export it from pkg/setup.
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
-}
 
 func cmdSetup(args []string) {
 	// SPEC-0175 §3.1+§3.3: subcommand routing for the onboarding flow.
@@ -976,7 +770,7 @@ func cmdSetup(args []string) {
 	setupScript := findSetupScript()
 	if setupScript == "" {
 		fmt.Fprintf(os.Stderr, "Error: setup-venv.sh not found.\n")
-		fmt.Fprintf(os.Stderr, "Expected at: scripts/setup-venv.sh (relative to repo root)\n")
+		fmt.Fprintf(os.Stderr, "Expected next to the m3c-tools binary (e.g. <install-dir>/scripts/setup-venv.sh).\n")
 		os.Exit(1)
 	}
 
@@ -1009,24 +803,41 @@ func cmdSetup(args []string) {
 	}
 }
 
-// findSetupScript locates scripts/setup-venv.sh relative to the binary or CWD.
+// findSetupScript locates setup-venv.sh anchored to the running binary's
+// install location.
+//
+// SEC-M12: it deliberately does NOT consult a cwd-relative "scripts/..." path.
+// The result is passed to `bash <script>`, so a cwd-relative lookup would let
+// anyone who can choose the working directory drop a malicious setup-venv.sh and
+// have it executed (working-dir hijack). All candidates are resolved against
+// os.Executable()'s directory (and its parent), then symlinks are resolved so
+// the returned path is absolute and stable.
 func findSetupScript() string {
-	// Check relative to working directory
-	if _, err := os.Stat("scripts/setup-venv.sh"); err == nil {
-		return "scripts/setup-venv.sh"
+	exePath, err := os.Executable()
+	if err != nil {
+		return ""
 	}
-	// Check relative to binary location
-	if exePath, err := os.Executable(); err == nil {
-		candidate := filepath.Join(filepath.Dir(exePath), "..", "scripts", "setup-venv.sh")
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
-		}
+	// Resolve symlinks so a symlinked binary still anchors to its real install dir.
+	if resolved, rErr := filepath.EvalSymlinks(exePath); rErr == nil {
+		exePath = resolved
 	}
-	// Check in app bundle Resources
-	if exePath, err := os.Executable(); err == nil {
-		candidate := filepath.Join(filepath.Dir(exePath), "..", "Resources", "setup-venv.sh")
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
+	exeDir := filepath.Dir(exePath)
+
+	candidates := []string{
+		// Alongside the binary (e.g. release tarball layout).
+		filepath.Join(exeDir, "scripts", "setup-venv.sh"),
+		filepath.Join(exeDir, "setup-venv.sh"),
+		// One level up (e.g. <prefix>/bin/m3c-tools -> <prefix>/scripts/...).
+		filepath.Join(exeDir, "..", "scripts", "setup-venv.sh"),
+		// macOS app bundle Resources.
+		filepath.Join(exeDir, "..", "Resources", "setup-venv.sh"),
+	}
+	for _, c := range candidates {
+		if _, statErr := os.Stat(c); statErr == nil {
+			if abs, aErr := filepath.Abs(c); aErr == nil {
+				return abs
+			}
+			return c
 		}
 	}
 	return ""
@@ -1123,346 +934,6 @@ func cmdRecord(args []string) {
 }
 
 // -- retry command --
-
-func cmdRetry(args []string) {
-	interval := 30
-	maxRetries := 10
-	queuePath := er1.DefaultQueuePath()
-
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--interval":
-			if i+1 < len(args) {
-				if v, err := strconv.Atoi(args[i+1]); err == nil {
-					interval = v
-				}
-				i++
-			}
-		case "--max-retries":
-			if i+1 < len(args) {
-				if v, err := strconv.Atoi(args[i+1]); err == nil {
-					maxRetries = v
-				}
-				i++
-			}
-		case "--queue":
-			if i+1 < len(args) {
-				queuePath = args[i+1]
-				i++
-			}
-		}
-	}
-
-	fmt.Printf("Starting ER1 retry loop (interval=%ds, max-retries=%d, queue=%s)\n", interval, maxRetries, queuePath)
-
-	cfg := er1.LoadConfig()
-	q := er1.NewQueue(queuePath)
-
-	fmt.Printf("  ER1: %s\n", cfg.Summary())
-	fmt.Printf("  Queue entries: %d\n", q.Len())
-	fmt.Println("  Press Ctrl+C to stop.")
-
-	runner := er1.NewRetryRunner(q, func(entry er1.QueueEntry) error {
-		payload := &er1.UploadPayload{
-			TranscriptFilename: entry.TranscriptPath,
-			AudioFilename:      entry.AudioPath,
-			ImageFilename:      entry.ImagePath,
-			Tags:               entry.Tags,
-		}
-		if entry.TranscriptPath != "" {
-			if data, readErr := os.ReadFile(entry.TranscriptPath); readErr == nil {
-				payload.TranscriptData = data
-			} else {
-				payload.TranscriptData = []byte(fmt.Sprintf("Retry upload for %s", entry.ID))
-			}
-		} else {
-			payload.TranscriptData = []byte(fmt.Sprintf("Retry upload for %s", entry.ID))
-		}
-		if entry.AudioPath != "" {
-			if data, readErr := os.ReadFile(entry.AudioPath); readErr == nil {
-				payload.AudioData = data
-			}
-		}
-		if entry.ImagePath != "" {
-			if data, readErr := os.ReadFile(entry.ImagePath); readErr == nil {
-				payload.ImageData = data
-			}
-		}
-		_, uploadErr := er1.Upload(cfg, payload)
-		return uploadErr
-	}, maxRetries)
-
-	runner.Backoff = er1.DefaultBackoff(
-		time.Duration(interval)*time.Second,
-		5*time.Minute,
-	)
-
-	runner.OnRetry = func(entry er1.QueueEntry, retryErr error, removed bool) {
-		if retryErr == nil {
-			fmt.Printf("[retry] SUCCESS: %s (removed from queue)\n", entry.ID)
-		} else if removed {
-			fmt.Printf("[retry] DROPPED: %s — max retries exceeded\n", entry.ID)
-		} else {
-			fmt.Printf("[retry] FAILED: %s — attempt %d: %v\n", entry.ID, entry.RetryCount+1, retryErr)
-		}
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigCh
-		fmt.Println("\nShutting down retry loop...")
-		cancel()
-	}()
-
-	if loopErr := runner.Run(ctx, time.Duration(interval)*time.Second); loopErr != nil && loopErr != context.Canceled {
-		fmt.Fprintf(os.Stderr, "Retry loop error: %v\n", loopErr)
-		os.Exit(1)
-	}
-	fmt.Println("Retry loop stopped.")
-}
-
-// -- schedule command --
-
-func defaultExportsDBPath() string {
-	home, _ := os.UserHomeDir()
-	dir := filepath.Join(home, ".m3c-tools")
-	os.MkdirAll(dir, 0700)
-	return filepath.Join(dir, "exports.db")
-}
-
-func cmdSchedule(args []string) {
-	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: m3c-tools schedule <entry_id> --transcript <path> [--audio <path>] [--image <path>] [--tags <tags>] [--max-attempts <n>] [--db <path>]")
-		os.Exit(1)
-	}
-	entryID := args[0]
-	transcriptPath := ""
-	audioPath := ""
-	imagePath := ""
-	tags := ""
-	maxAttempts := 10
-	dbPath := defaultExportsDBPath()
-
-	for i := 1; i < len(args); i++ {
-		switch args[i] {
-		case "--transcript":
-			if i+1 < len(args) {
-				transcriptPath = args[i+1]
-				i++
-			}
-		case "--audio":
-			if i+1 < len(args) {
-				audioPath = args[i+1]
-				i++
-			}
-		case "--image":
-			if i+1 < len(args) {
-				imagePath = args[i+1]
-				i++
-			}
-		case "--tags":
-			if i+1 < len(args) {
-				tags = args[i+1]
-				i++
-			}
-		case "--max-attempts":
-			if i+1 < len(args) {
-				if v, err := strconv.Atoi(args[i+1]); err == nil {
-					maxAttempts = v
-				}
-				i++
-			}
-		case "--db":
-			if i+1 < len(args) {
-				dbPath = args[i+1]
-				i++
-			}
-		}
-	}
-
-	if transcriptPath == "" {
-		fmt.Fprintln(os.Stderr, "Error: --transcript is required")
-		os.Exit(1)
-	}
-
-	db, err := tracking.OpenRetryQueueDB(dbPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error opening DB: %v\n", err)
-		os.Exit(1)
-	}
-	defer db.Close()
-
-	entry, err := db.Insert(entryID, transcriptPath, audioPath, imagePath, tags, maxAttempts)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error scheduling entry: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("Scheduled retry entry:\n")
-	fmt.Printf("  entry_id:     %s\n", entry.EntryID)
-	fmt.Printf("  transcript:   %s\n", entry.TranscriptPath)
-	if entry.AudioPath != "" {
-		fmt.Printf("  audio:        %s\n", entry.AudioPath)
-	}
-	if entry.ImagePath != "" {
-		fmt.Printf("  image:        %s\n", entry.ImagePath)
-	}
-	if entry.Tags != "" {
-		fmt.Printf("  tags:         %s\n", entry.Tags)
-	}
-	fmt.Printf("  max_attempts: %d\n", entry.MaxAttempts)
-	fmt.Printf("  status:       %s\n", entry.Status)
-}
-
-// -- status command --
-
-func cmdStatus(args []string) {
-	entryID := ""
-	dbPath := defaultExportsDBPath()
-
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--entry":
-			if i+1 < len(args) {
-				entryID = args[i+1]
-				i++
-			}
-		case "--db":
-			if i+1 < len(args) {
-				dbPath = args[i+1]
-				i++
-			}
-		}
-	}
-
-	db, err := tracking.OpenRetryQueueDB(dbPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error opening DB: %v\n", err)
-		os.Exit(1)
-	}
-	defer db.Close()
-
-	if entryID != "" {
-		entry, err := db.GetByEntryID(entryID)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		if entry == nil {
-			fmt.Fprintf(os.Stderr, "Entry not found: %s\n", entryID)
-			os.Exit(1)
-		}
-		printRetryEntry(entry)
-		return
-	}
-
-	// Show summary counts and list all entries
-	pending, _ := db.CountByStatus(tracking.RetryStatusPending)
-	retrying, _ := db.CountByStatus(tracking.RetryStatusRetrying)
-	completed, _ := db.CountByStatus(tracking.RetryStatusCompleted)
-	failed, _ := db.CountByStatus(tracking.RetryStatusFailed)
-
-	fmt.Printf("ER1 Retry Queue Status:\n")
-	fmt.Printf("  pending:   %d\n", pending)
-	fmt.Printf("  retrying:  %d\n", retrying)
-	fmt.Printf("  completed: %d\n", completed)
-	fmt.Printf("  failed:    %d\n", failed)
-	fmt.Printf("  total:     %d\n", pending+retrying+completed+failed)
-
-	entries, err := db.ListAll(100)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error listing entries: %v\n", err)
-		os.Exit(1)
-	}
-
-	if len(entries) > 0 {
-		fmt.Printf("\nEntries:\n")
-		for _, e := range entries {
-			fmt.Printf("  %-20s  status=%-10s  attempts=%d/%d", e.EntryID, e.Status, e.Attempts, e.MaxAttempts)
-			if e.LastError != "" {
-				fmt.Printf("  error=%q", e.LastError)
-			}
-			fmt.Println()
-		}
-	}
-}
-
-func printRetryEntry(e *tracking.RetryEntry) {
-	fmt.Printf("Entry: %s\n", e.EntryID)
-	fmt.Printf("  status:       %s\n", e.Status)
-	fmt.Printf("  attempts:     %d/%d\n", e.Attempts, e.MaxAttempts)
-	fmt.Printf("  transcript:   %s\n", e.TranscriptPath)
-	if e.AudioPath != "" {
-		fmt.Printf("  audio:        %s\n", e.AudioPath)
-	}
-	if e.ImagePath != "" {
-		fmt.Printf("  image:        %s\n", e.ImagePath)
-	}
-	if e.Tags != "" {
-		fmt.Printf("  tags:         %s\n", e.Tags)
-	}
-	if e.LastError != "" {
-		fmt.Printf("  last_error:   %s\n", e.LastError)
-	}
-	fmt.Printf("  created_at:   %s\n", e.CreatedAt.Format(time.RFC3339))
-	fmt.Printf("  updated_at:   %s\n", e.UpdatedAt.Format(time.RFC3339))
-	fmt.Printf("  next_retry:   %s\n", e.NextRetryAt.Format(time.RFC3339))
-}
-
-// -- cancel command --
-
-func cmdCancel(args []string) {
-	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: m3c-tools cancel <entry_id> [--db <path>]")
-		os.Exit(1)
-	}
-	entryID := args[0]
-	dbPath := defaultExportsDBPath()
-
-	for i := 1; i < len(args); i++ {
-		switch args[i] {
-		case "--db":
-			if i+1 < len(args) {
-				dbPath = args[i+1]
-				i++
-			}
-		}
-	}
-
-	db, err := tracking.OpenRetryQueueDB(dbPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error opening DB: %v\n", err)
-		os.Exit(1)
-	}
-	defer db.Close()
-
-	// Check entry exists
-	entry, err := db.GetByEntryID(entryID)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-	if entry == nil {
-		fmt.Fprintf(os.Stderr, "Entry not found: %s\n", entryID)
-		os.Exit(1)
-	}
-	if entry.Status == tracking.RetryStatusCompleted {
-		fmt.Fprintf(os.Stderr, "Entry %s is already completed\n", entryID)
-		os.Exit(1)
-	}
-
-	err = db.SetStatus(entryID, "cancelled")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error cancelling: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("Cancelled entry: %s\n", entryID)
-}
 
 // -- screenshot command --
 
@@ -1762,9 +1233,15 @@ func runAudioImportPipeline(sourceDir, dbPath, onlySourcePath string, app *menub
 		_ = filesDB.RecordTranscript(imp.Hash, "audio", strings.TrimSpace(text), lang)
 
 		now := time.Now()
+		// Real capture time = the source file's mtime, so the item is positioned
+		// at when it was recorded rather than the import moment.
+		captureTime := now
+		if fi, statErr := os.Stat(imp.Source); statErr == nil {
+			captureTime = fi.ModTime()
+		}
 		doc := (&impression.CompositeDoc{
 			ObsType:        impression.Import,
-			Timestamp:      now,
+			Timestamp:      captureTime,
 			TranscriptText: strings.TrimSpace(text),
 			ImpressionText: fmt.Sprintf("Imported audio file: %s\nSource: %s\nTags: %s", filepath.Base(imp.Dest), imp.Source, imp.Tags),
 		}).Build()
@@ -1778,6 +1255,7 @@ func runAudioImportPipeline(sourceDir, dbPath, onlySourcePath string, app *menub
 			ImageFilename:      "placeholder-logo.png",
 			Tags:               imp.Tags,
 			ContentType:        cfg.ContentType,
+			CurrentTime:        er1.FormatCaptureTime(captureTime),
 		}
 
 		if onProgress != nil {
@@ -2006,6 +1484,7 @@ func reprocessAudioFile(srcPath, dbPath string, app *menubar.App, onProgress fun
 		Tags:               tags,
 		ContentType:        cfg.ContentType,
 		DocID:              existingDocID, // Reuse existing doc_id if available.
+		CurrentTime:        er1.FormatCaptureTime(info.ModTime()), // position at real file time
 	}
 
 	if existingDocID != "" {
@@ -2291,6 +1770,7 @@ func cmdMenubar(args []string) {
 		log.SetFlags(log.Ldate | log.Ltime)
 	}
 
+	startupBanner()
 	// Fix 3 (BUG-0003): Print log file path on startup so user knows where to look.
 	fmt.Fprintf(os.Stderr, "m3c-tools menubar started. Logs: %s\n", cfg.LogPath)
 
@@ -2514,7 +1994,13 @@ func cmdMenubar(args []string) {
 		if plmBase == "" {
 			plmBase = er1BaseURL(er1Cfg.APIURL)
 		}
-		if plmBase != "" && er1Cfg.APIKey != "" {
+		// PLM needs an ER1 credential. The API key OR a device token is
+		// sufficient — plmclient.doRequest sends whichever is present (Bearer
+		// device-token preferred, X-API-KEY fallback). Gating on APIKey alone
+		// silently disabled PLM for device-token-only logins (e.g. a fresh
+		// `m3c-tools login` whose profile still holds a placeholder key).
+		deviceToken := os.Getenv("ER1_DEVICE_TOKEN")
+		if plmBase != "" && (er1Cfg.APIKey != "" || deviceToken != "") {
 			log.Printf("[timetracking] PLM connection: base=%s context=%s ssl=%v",
 				plmBase, truncateForLog(er1Cfg.ContextID, 32), er1Cfg.VerifySSL)
 			// Strip ___mft suffix from context ID — PLM uses the raw Google UID.
@@ -2529,7 +2015,7 @@ func cmdMenubar(args []string) {
 				VerifySSL: er1Cfg.VerifySSL,
 			})
 
-			// Health check: validate API key before starting background services.
+			// Health check: validate credentials before starting background services.
 			if err := plmClient.HealthCheck(); err != nil {
 				log.Printf("[healthcheck] PLM auth check FAILED: %v", err)
 				log.Printf("[healthcheck] PLM sync and time tracking will be disabled until key is fixed")
@@ -2551,7 +2037,12 @@ func cmdMenubar(args []string) {
 				startTimeTrackingProjectRefresher(plmClient, ttStore)
 			}
 		} else {
-			log.Printf("[timetracking] PLM sync disabled (base=%q key_set=%v)", plmBase, er1Cfg.APIKey != "")
+			log.Printf("[timetracking] PLM sync disabled (base=%q key_set=%v device_token=%v)",
+				plmBase, er1Cfg.APIKey != "", deviceToken != "")
+			// Don't leave the Projects submenu stuck on "Loading projects..."
+			// forever — tell the user why it's empty. LoadConfig blanks a
+			// placeholder API key, so inspect the raw env value for the reason.
+			menubar.SetTimeTrackingError(plmDisabledReason(plmBase, os.Getenv("ER1_API_KEY")))
 		}
 
 		log.Printf("[timetracking] engine ready db=%s", timetracking.DefaultDBPath())
@@ -2825,6 +2316,22 @@ func classifyPLMHealthCheckError(err error) string {
 	}
 }
 
+// plmDisabledReason returns a short, user-facing diagnostic for the Projects
+// submenu when PLM sync can't start at all, so the menu never sits on
+// "Loading projects..." forever. rawKey is the pre-sanitization ER1_API_KEY
+// env value — LoadConfig blanks placeholders, so the reason must be derived
+// from the raw value here, not from the sanitized Config.APIKey.
+func plmDisabledReason(plmBase, rawKey string) string {
+	switch {
+	case plmBase == "":
+		return "ER1 URL not set — configure ER1_API_URL"
+	case config.IsPlaceholderKey(rawKey):
+		return "ER1_API_KEY is a placeholder — fix the active profile"
+	default:
+		return "Not signed in — run 'm3c-tools login' or set ER1_API_KEY"
+	}
+}
+
 // startTimeTrackingProjectRefresher fetches the PLM project list periodically
 // and updates the menubar cache and time tracking store (for reverse tracking tag matching).
 func startTimeTrackingProjectRefresher(plmClient *timetracking.PLMClient, ttStore *timetracking.Store) {
@@ -2832,8 +2339,14 @@ func startTimeTrackingProjectRefresher(plmClient *timetracking.PLMClient, ttStor
 		projects, err := plmClient.FetchProjects()
 		if err != nil {
 			log.Printf("[timetracking] project refresh failed: %v", err)
+			// Surface the cause in the Projects submenu instead of leaving it
+			// stuck on "Loading projects...".
+			menubar.SetTimeTrackingError(classifyPLMHealthCheckError(err))
 			return
 		}
+		// A successful fetch clears any prior diagnostic — even for an empty
+		// account (SetTimeTrackingProjects only clears on a non-empty list).
+		menubar.SetTimeTrackingError("")
 		var ttProjects []menubar.TimeTrackingProject
 		var cacheProjects []timetracking.CachedProject
 		for _, p := range projects {
@@ -3726,6 +3239,12 @@ func startER1LoginCallbackServer() (*http.Server, string, <-chan loginCallbackRe
 		default:
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		// SEC M10: lock the throwaway callback page down — no scripts, no remote
+		// fetches; only the page's own inline <style> is allowed. Defends the
+		// (now-escaped) reflected query params against any residual injection.
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "no-referrer")
 		_, _ = fmt.Fprint(w, buildDeviceHubHTML(ctxID, er1BaseURL(er1.LoadConfig().APIURL)))
 	})
 
@@ -3777,6 +3296,12 @@ func buildDeviceHubHTML(contextID, baseURL string) string {
 	if i := strings.Index(userID, "___"); i > 0 {
 		userID = userID[:i]
 	}
+	// SEC M10: contextID arrives raw from the login-callback query string and is
+	// interpolated into HTML below — escape it (and baseURL, which lands in href
+	// attributes) so a malicious/MITM'd ER1 redirect can't inject markup. Paired
+	// with the restrictive CSP set on the response.
+	userID = html.EscapeString(userID)
+	baseURL = html.EscapeString(baseURL)
 
 	return fmt.Sprintf(`<!DOCTYPE html>
 <html lang="en">
@@ -3884,8 +3409,18 @@ func buildDeviceHubHTML(contextID, baseURL string) string {
 			}
 			return "no source"
 		}(),
-		func() string { if apiStatus != "" { return "ok" }; return "muted" }(),
-		func() string { if apiStatus != "" { return "&#10003; " + apiStatus }; return "not configured" }(),
+		func() string {
+			if apiStatus != "" {
+				return "ok"
+			}
+			return "muted"
+		}(),
+		func() string {
+			if apiStatus != "" {
+				return "&#10003; " + apiStatus
+			}
+			return "not configured"
+		}(),
 		baseURL, baseURL, baseURL,
 	)
 }
@@ -3997,9 +3532,9 @@ func menubarFetchTranscriptAndTrack(app *menubar.App, fetcher *menubar.Transcrip
 		TranscriptText: result.Text,
 		VideoID:        result.VideoID,
 		VideoURL:       "https://www.youtube.com/watch?v=" + result.VideoID,
-		Language:        result.Language,
-		LanguageCode:    result.LanguageCode,
-		SnippetCount:    result.SnippetCount,
+		Language:       result.Language,
+		LanguageCode:   result.LanguageCode,
+		SnippetCount:   result.SnippetCount,
 	}
 
 	// Channel A (YouTube): defer recording until user clicks "Start Recording".
@@ -4022,11 +3557,11 @@ func menubarFetchTranscriptAndTrack(app *menubar.App, fetcher *menubar.Transcrip
 		doc := &impression.CompositeDoc{
 			VideoID:        obsCtx.VideoID,
 			VideoURL:       obsCtx.VideoURL,
-			Language:        obsCtx.Language,
-			LanguageCode:    obsCtx.LanguageCode,
-			IsGenerated:     obsCtx.IsGenerated,
-			SnippetCount:    obsCtx.SnippetCount,
-			TranscriptText:  obsCtx.TranscriptText,
+			Language:       obsCtx.Language,
+			LanguageCode:   obsCtx.LanguageCode,
+			IsGenerated:    obsCtx.IsGenerated,
+			SnippetCount:   obsCtx.SnippetCount,
+			TranscriptText: obsCtx.TranscriptText,
 			ImpressionText: memoText,
 			ObsType:        impression.Progress,
 			Timestamp:      now,
@@ -4402,11 +3937,11 @@ func observationRecordAndUpload(app *menubar.App, label string, imgPath string, 
 		doc := &impression.CompositeDoc{
 			VideoID:        obsCtx.VideoID,
 			VideoURL:       obsCtx.VideoURL,
-			Language:        obsCtx.Language,
-			LanguageCode:    obsCtx.LanguageCode,
-			IsGenerated:     obsCtx.IsGenerated,
-			SnippetCount:    obsCtx.SnippetCount,
-			TranscriptText:  obsCtx.TranscriptText,
+			Language:       obsCtx.Language,
+			LanguageCode:   obsCtx.LanguageCode,
+			IsGenerated:    obsCtx.IsGenerated,
+			SnippetCount:   obsCtx.SnippetCount,
+			TranscriptText: obsCtx.TranscriptText,
 			ImpressionText: memoText,
 			ObsType:        obsType,
 			Timestamp:      now,
@@ -4505,14 +4040,26 @@ func menubarUploadPayload(app *menubar.App, label string, payload *er1.UploadPay
 	_ = openURL(itemURL)
 }
 
-// openURL opens a URL in the default browser (macOS only).
+// openURL opens a URL in the default browser. Cross-platform (mirrors the
+// menubar's openBrowserURL): Windows → rundll32 FileProtocolHandler, Linux →
+// xdg-open, macOS → `open` (Chrome-preferred to keep the ER1 auth session in
+// the same browser). Used by `m3c-tools login`, so it MUST work off-macOS.
+//
+// SEC-M11: Windows uses rundll32 url.dll,FileProtocolHandler instead of
+// "cmd /c start" so server-/profile-controlled URLs are never routed through
+// cmd.exe (no shell-metacharacter surface from &, |, ^, % in the URL).
 func openURL(url string) error {
-	// Prefer Chrome to keep auth/session in the same browser used for ER1.
-	if err := exec.Command("open", "-a", "Google Chrome", url).Start(); err == nil {
-		return nil
+	switch runtime.GOOS {
+	case "windows":
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	case "linux":
+		return exec.Command("xdg-open", url).Start()
+	default: // darwin
+		if err := exec.Command("open", "-a", "Google Chrome", url).Start(); err == nil {
+			return nil
+		}
+		return exec.Command("open", url).Start()
 	}
-	// Fallback to system default browser if Chrome is unavailable.
-	return exec.Command("open", url).Start()
 }
 
 func captureScreenshotForMenu(app *menubar.App, flow string) (string, string, error) {
@@ -4815,12 +4362,22 @@ func menubarWhisperTimeout() time.Duration {
 
 func cmdPlaud(args []string) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud <list|sync|auth> [args]")
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud <list|check|sync|fix-times|auth> [args]")
 		os.Exit(1)
 	}
 	switch args[0] {
 	case "list":
 		cmdPlaudList()
+	case "check":
+		cmdPlaudCheck()
+	case "fix-times":
+		apply := false
+		for _, a := range args[1:] {
+			if a == "--apply" {
+				apply = true
+			}
+		}
+		cmdPlaudFixTimes(apply)
 	case "sync":
 		if len(args) < 2 {
 			fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud sync <#|ID|--all> [flags]")
@@ -4879,16 +4436,7 @@ func cmdPlaud(args []string) {
 		}
 		cmdPlaudSync(syncArg, force, customTags, filter, dryRun)
 	case "auth":
-		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud auth <token>")
-			fmt.Fprintln(os.Stderr, "       m3c-tools plaud auth login   (extract from Chrome)")
-			os.Exit(1)
-		}
-		if args[1] == "login" {
-			cmdPlaudAuthLogin()
-		} else {
-			cmdPlaudAuth(args[1])
-		}
+		cmdPlaudAuthDispatch(args[1:])
 	case "debug":
 		cmdPlaudDebugAPI()
 	default:
@@ -4925,6 +4473,93 @@ func cmdPlaudAuthLogin() {
 		os.Exit(1)
 	}
 	fmt.Printf("Authenticated. Found %d recordings.\n", len(recordings))
+}
+
+// cmdPlaudAuthFromER1 pulls the Plaud token from the ER1 Credential Vault
+// (SPEC-0304) — captured once via the "Plaud verbinden" page, any OS — and
+// saves it locally so `plaud sync` works. Replaces browser harvesting for the
+// common case (BUG-0168): capture once, use anywhere.
+func cmdPlaudAuthFromER1() {
+	cfg := plaud.LoadConfig()
+
+	fmt.Println("Fetching Plaud token from the ER1 credential vault...")
+	token, _, err := plaud.FetchTokenFromER1()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	session := &plaud.TokenSession{Token: token}
+	if err := plaud.SaveToken(cfg.TokenPath, session); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving token: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Token retrieved from ER1 and saved to %s\n", cfg.TokenPath)
+
+	client := plaud.NewClient(cfg, token)
+	recordings, err := client.ListRecordings()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: token saved but API test failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Authenticated. Found %d recordings.\n", len(recordings))
+}
+
+// cmdPlaudAuthDispatch parses `plaud auth` arguments and routes to the right
+// handler. Supported forms:
+//
+//	plaud auth login                     extract token from Chrome (CDP)
+//	plaud auth --token-file <path>       read token from a file (secure)
+//	plaud auth                           read token from $M3C_PLAUD_TOKEN (secure)
+//	plaud auth <token>                   bare argv token (DEPRECATED — leaks via ps)
+//
+// SEC-M8: the bare-argv form is kept for backward compatibility but emits a
+// loud deprecation warning, because command-line arguments are visible to other
+// users via ps/argv.
+func cmdPlaudAuthDispatch(args []string) {
+	if len(args) > 0 && args[0] == "login" {
+		cmdPlaudAuthLogin()
+		return
+	}
+
+	if len(args) > 0 && (args[0] == "--from-er1" || args[0] == "from-er1") {
+		cmdPlaudAuthFromER1()
+		return
+	}
+
+	tokenFile := ""
+	bareToken := ""
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--token-file":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "--token-file requires a path")
+				os.Exit(1)
+			}
+			tokenFile = args[i+1]
+			i++
+		case strings.HasPrefix(a, "--token-file="):
+			tokenFile = strings.TrimPrefix(a, "--token-file=")
+		case !strings.HasPrefix(a, "-") && bareToken == "":
+			bareToken = a
+		}
+	}
+
+	token, argvLeaked, err := plaud.ResolveAuthToken(tokenFile, bareToken)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud auth login            (extract from Chrome)")
+		fmt.Fprintln(os.Stderr, "       m3c-tools plaud auth --from-er1        (pull from the ER1 vault, SPEC-0304)")
+		fmt.Fprintln(os.Stderr, "       m3c-tools plaud auth --token-file <path>")
+		fmt.Fprintf(os.Stderr, "       %s=<token> m3c-tools plaud auth\n", plaud.PlaudTokenEnvVar)
+		os.Exit(1)
+	}
+	if argvLeaked {
+		fmt.Fprintf(os.Stderr, "WARNING: passing the Plaud token as a command-line argument leaks it to other users via ps/argv.\n")
+		fmt.Fprintf(os.Stderr, "         Prefer: %s=<token> m3c-tools plaud auth   (or --token-file <path>)\n", plaud.PlaudTokenEnvVar)
+	}
+	cmdPlaudAuth(token)
 }
 
 func cmdPlaudAuth(token string) {
@@ -5031,30 +4666,23 @@ func cmdPlaudList() {
 		os.Exit(1)
 	}
 
-	// Check tracking DB for sync status.
-	dbPath := defaultFilesDBPath()
-	filesDB, dbErr := tracking.OpenFilesDB(dbPath)
-	if dbErr != nil {
-		log.Printf("[plaud] warning: cannot open tracking DB: %v", dbErr)
+	// Resolve sync status + ER1 doc_id: local tracking DB merged with the
+	// SPEC-0117 server sync check (so items synced from another Mac still show
+	// as synced with their doc_id, instead of a misleading "new").
+	ids := make([]string, len(recordings))
+	for i, rec := range recordings {
+		ids[i] = rec.ID
 	}
-	defer func() {
-		if filesDB != nil {
-			filesDB.Close()
-		}
-	}()
+	states := resolvePlaudSyncStates(ids, session.Token)
 
 	fmt.Printf("Plaud recordings (%d):\n\n", len(recordings))
 	fmt.Printf("  %3s  %-32s  %-40s  %6s  %s  %-10s  %s\n", "#", "ID", "Title", "Dur", "Date", "Status", "ER1 Doc")
 	fmt.Println("  ---  --------------------------------  ----------------------------------------  ------  ----------  ----------  --------")
 	for i, rec := range recordings {
-		status := "new"
-		docID := ""
-		if filesDB != nil {
-			plaudPath := "plaud://" + rec.ID
-			if tracked, lookupErr := filesDB.GetByPath(plaudPath); lookupErr == nil && tracked != nil {
-				status = tracked.Status
-				docID = tracked.UploadDocID
-			}
+		st := states[rec.ID]
+		status := st.Status
+		if status == "" {
+			status = "new"
 		}
 		fmt.Printf("  %3d  %-32s  %-40s  %6s  %s  [%-8s]  %s\n",
 			i+1,
@@ -5063,11 +4691,11 @@ func cmdPlaudList() {
 			plaud.FormatDuration(rec.Duration),
 			rec.CreatedAt.Format("2006-01-02"),
 			status,
-			docID,
+			st.DocID,
 		)
 	}
 	fmt.Println()
-	fmt.Println("  Use: m3c-tools plaud sync <#>   or   m3c-tools plaud sync <ID>")
+	fmt.Println("  Use: plaud sync <#>   ·   plaud check (coverage)   ·   double-click a synced row in the Sync panel to open it")
 }
 
 func cmdPlaudSync(recordingID string, force bool, customTags string, filter string, dryRun bool) {
@@ -5103,6 +4731,15 @@ func cmdPlaudSync(recordingID string, force bool, customTags string, filter stri
 		}
 		recordingID = recordings[idx-1].ID
 		fmt.Printf("Resolved #%d → %s\n", idx, recordingID)
+	}
+
+	// SEC-L9: validate a directly-supplied DocID before it is used in any
+	// request path. "all" is the bulk sentinel and is handled separately below.
+	if recordingID != "all" {
+		if vErr := plaud.ValidateDocID(recordingID); vErr != nil {
+			fmt.Fprintf(os.Stderr, "Invalid Plaud recording ID: %v\n", vErr)
+			os.Exit(1)
+		}
 	}
 
 	if force {
@@ -5391,6 +5028,7 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 			Tags:          tags,
 			ContentType:   cfg.ContentType,
 			DoTranscribe:  doTranscribe,
+			CurrentTime:   er1.FormatCaptureTime(rec.CreatedAt), // position at real recording time
 		}
 		// Only send transcript when Plaud provided one.
 		if hasPlaudTranscript {
@@ -5467,6 +5105,7 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 				Total: summary.Total, Outcome: "ok",
 				Done: i + 1, Success: summary.Success, Failed: summary.Failed,
 				CurrentFile: itemName, Phase: menubar.BulkPhaseDone,
+				DocID: resp.DocID, // back-fill the doc_id into the panel row
 			})
 		}
 	}
@@ -5595,51 +5234,23 @@ func menubarHandlePlaudSync(app *menubar.App) {
 	}
 	log.Printf("[plaud] found %d recordings", len(recordings))
 
-	// Check each recording against tracking DB.
+	// Recording -> sync state (status + ER1 doc_id/URL): local tracking DB
+	// merged with the SPEC-0117 server sync check. dbPath is reused by the sync
+	// pipeline below; the ItemURL makes a synced row double-clickable to open
+	// the ER1 item in the browser.
 	dbPath := defaultFilesDBPath()
-	filesDB, dbErr := tracking.OpenFilesDB(dbPath)
-	if dbErr != nil {
-		log.Printf("[plaud] warning: cannot open tracking DB: %v", dbErr)
+	allIDs := make([]string, len(recordings))
+	for i, rec := range recordings {
+		allIDs[i] = rec.ID
 	}
-	defer func() {
-		if filesDB != nil {
-			filesDB.Close()
-		}
-	}()
-
-	// Server-side sync check for status display (SPEC-0117)
-	var serverSynced map[string]plaud.SyncedInfo
-	er1Cfg := er1.LoadConfig()
-	if er1Cfg.APIKey != "" {
-		syncAPI := plaud.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, er1Cfg.ContextID, !er1Cfg.VerifySSL)
-		plaudAccountID := plaud.DeriveAccountID(session.Token)
-		allIDs := make([]string, len(recordings))
-		for i, rec := range recordings {
-			allIDs[i] = rec.ID
-		}
-		checkResult, checkErr := syncAPI.CheckRecordings(plaudAccountID, allIDs)
-		if checkErr == nil && checkResult != nil {
-			serverSynced = checkResult.Synced
-			if len(serverSynced) > 0 {
-				log.Printf("[plaud] server knows %d/%d recordings as synced", len(serverSynced), len(recordings))
-			}
-		}
-	}
+	states := resolvePlaudSyncStates(allIDs, session.Token)
 
 	var records []menubar.PlaudSyncRecord
 	for _, rec := range recordings {
-		status := "new"
-		if filesDB != nil {
-			plaudPath := "plaud://" + rec.ID
-			if tracked, lookupErr := filesDB.GetByPath(plaudPath); lookupErr == nil && tracked != nil {
-				status = tracked.Status
-			}
-		}
-		// Server-side check: mark as synced if server knows about it even when local DB doesn't (SPEC-0117)
-		if status == "new" && serverSynced != nil {
-			if _, ok := serverSynced[rec.ID]; ok {
-				status = "synced"
-			}
+		st := states[rec.ID]
+		status := st.Status
+		if status == "" {
+			status = "new"
 		}
 		records = append(records, menubar.PlaudSyncRecord{
 			Title:       rec.Title,
@@ -5647,6 +5258,8 @@ func menubarHandlePlaudSync(app *menubar.App) {
 			Date:        rec.CreatedAt.Format("2006-01-02 15:04"),
 			Status:      status,
 			RecordingID: rec.ID,
+			ItemURL:     st.ItemURL,
+			DocID:       st.DocID,
 		})
 	}
 
@@ -5668,27 +5281,50 @@ func menubarHandlePlaudSync(app *menubar.App) {
 			Active: true, Total: len(recordingIDs),
 		})
 
+		// The pipeline's events are inconsistent (ITEM_PHASE carries Total but
+		// Done=0; ITEM_START neither), which made the progress bar oscillate
+		// 0↔N and never show a real "N of M". Derive Done from evt.Index (1-based,
+		// present on every event) and keep success/failed monotonic so the
+		// counter never flickers back to 0.
+		er1Cfg := er1.LoadConfig()
+		total := len(recordingIDs)
+		lastSuccess, lastFailed := 0, 0
 		onProgress := func(evt menubar.BulkProgressEvent) {
-			state := menubar.BulkRunState{
+			if evt.Success > lastSuccess {
+				lastSuccess = evt.Success
+			}
+			if evt.Failed > lastFailed {
+				lastFailed = evt.Failed
+			}
+			done := evt.Index
+			if done < 1 {
+				done = 1
+			}
+			if done > total {
+				done = total
+			}
+			menubar.SetPlaudSyncProgress(menubar.BulkRunState{
 				Active:      true,
-				Total:       evt.Total,
-				Done:        evt.Done,
-				Success:     evt.Success,
-				Failed:      evt.Failed,
+				Total:       total,
+				Done:        done,
+				Success:     lastSuccess,
+				Failed:      lastFailed,
 				CurrentFile: evt.CurrentFile,
 				Phase:       evt.Phase,
-			}
-			menubar.SetPlaudSyncProgress(state)
+			})
 
 			if evt.Event == "ITEM_DONE" {
 				status := "synced"
 				if evt.Outcome == "failed" {
 					status = "failed"
 				}
-				// Find the recording ID for this item.
-				for _, id := range recordingIDs {
-					if evt.Item != "" {
-						menubar.SetPlaudSyncStatus(id, status)
+				// Update ONLY the row that finished (evt.Index is 1-based).
+				if idx := evt.Index - 1; idx >= 0 && idx < len(recordingIDs) {
+					menubar.SetPlaudSyncStatus(recordingIDs[idx], status)
+					// Back-fill the ER1 doc_id + item URL so the row shows its
+					// doc_id (and double-click opens it) right after syncing.
+					if evt.DocID != "" {
+						menubar.SetPlaudSyncRowDoc(recordingIDs[idx], evt.DocID, er1Cfg.MemoryItemURL(evt.DocID))
 					}
 				}
 			}
@@ -5897,6 +5533,7 @@ func pocketCloudSyncSelected(
 			Tags:               tagsStr,
 			ContentType:        pcfg.ContentType,
 			DoTranscribe:       false,
+			CurrentTime:        er1.FormatCaptureTime(full.RecordingAt), // position at real recording time
 		}
 		resp, err := er1.Upload(er1Cfg, payload)
 		if err != nil {
@@ -6199,6 +5836,7 @@ func pocketSyncSelected(selected []pocket.Recording, tags []string, cfg *pocket.
 			AudioFilename:      filepath.Base(stagedPath),
 			ContentType:        cfg.ContentType,
 			Tags:               strings.Join(tags, ","),
+			CurrentTime:        er1.FormatCaptureTime(selected[i].Timestamp), // position at real capture time
 		}
 		resp, uploadErr := er1.Upload(er1Cfg, payload)
 		if uploadErr != nil {
@@ -6717,7 +6355,7 @@ func runPocketCloudSync(dryRun bool) error {
 	apiClient := pocket.NewAPIClient()
 	apiClient.BaseURL = strings.TrimRight(pcfg.APIURL, "/")
 	if !apiClient.IsConfigured() {
-		return fmt.Errorf("Pocket API client not configured")
+		return fmt.Errorf("pocket API client not configured")
 	}
 
 	syncClient := pocket.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, "", !er1Cfg.VerifySSL)

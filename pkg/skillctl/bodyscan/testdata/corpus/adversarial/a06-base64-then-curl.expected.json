@@ -1,0 +1,6 @@
+{
+  "categories": ["exfiltration", "obfuscation"],
+  "rule_ids": ["EXF-004"],
+  "min_verdict": "red",
+  "note": "Base64 blob adjacent to a curl POST; obfuscation escalates to red near exfil."
+}

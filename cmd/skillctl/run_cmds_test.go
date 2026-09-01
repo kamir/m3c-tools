@@ -53,8 +53,11 @@ func makeSignedToken(t *testing.T, env skillgate.TokenEnvelope, expiresIn time.D
 	return b, "k-test", pubKey
 }
 
-// writeTrustRoots writes a YAML trust roots file with one key.
-func writeTrustRoots(t *testing.T, dir, keyID string, pub ed25519.PublicKey) string {
+// writeTrustRootsForRun writes a YAML trust roots file with one key.
+// Local to run_cmds_test.go — install_cmds_test.go has a 3-param
+// writeTrustRoots that lives at package scope; renaming here breaks
+// the redeclaration without rewiring install's callers.
+func writeTrustRootsForRun(t *testing.T, dir, keyID string, pub ed25519.PublicKey) string {
 	t.Helper()
 	path := filepath.Join(dir, "trust-roots.yaml")
 	contents := "registry_keys:\n  " + keyID + ": " + base64.StdEncoding.EncodeToString(pub) + "\n"
@@ -89,7 +92,7 @@ func TestRun_VerifyExpired(t *testing.T) {
 	if err := os.WriteFile(tokPath, tokenJSON, 0600); err != nil {
 		t.Fatalf("write token: %v", err)
 	}
-	rootsPath := writeTrustRoots(t, tmp, kid, pub)
+	rootsPath := writeTrustRootsForRun(t, tmp, kid, pub)
 
 	rc := runRun([]string{
 		"--token", tokPath,
@@ -121,7 +124,7 @@ func TestRun_VerifyBadSignature(t *testing.T) {
 	if err := os.WriteFile(tokPath, b, 0600); err != nil {
 		t.Fatalf("write tampered: %v", err)
 	}
-	rootsPath := writeTrustRoots(t, tmp, kid, pub)
+	rootsPath := writeTrustRootsForRun(t, tmp, kid, pub)
 
 	rc := runRun([]string{
 		"--token", tokPath,
@@ -163,7 +166,7 @@ func TestRun_HappyPathPostsAuditAndExecsChild(t *testing.T) {
 	if err := os.WriteFile(tokPath, tokenJSON, 0600); err != nil {
 		t.Fatalf("write token: %v", err)
 	}
-	rootsPath := writeTrustRoots(t, tmp, kid, pub)
+	rootsPath := writeTrustRootsForRun(t, tmp, kid, pub)
 
 	rc := runRun([]string{
 		"--token", tokPath,
@@ -207,7 +210,7 @@ func TestRun_AuditFailureDoesNotBlockChild(t *testing.T) {
 	}, time.Hour)
 	tokPath := filepath.Join(tmp, "token.json")
 	_ = os.WriteFile(tokPath, tokenJSON, 0600)
-	rootsPath := writeTrustRoots(t, tmp, kid, pub)
+	rootsPath := writeTrustRootsForRun(t, tmp, kid, pub)
 
 	// Audit URL points to a black-hole port → POST will fail; child must
 	// still run and we must still get exit 0.
@@ -250,7 +253,7 @@ func TestRun_TokenViaEnvVar(t *testing.T) {
 		Capabilities:        []string{"subprocess_run:echo"},
 		SubprocessAllowlist: []string{"echo"},
 	}, time.Hour)
-	rootsPath := writeTrustRoots(t, tmp, kid, pub)
+	rootsPath := writeTrustRootsForRun(t, tmp, kid, pub)
 
 	t.Setenv("RUN_TOKEN_TEST_VAR", string(tokenJSON))
 

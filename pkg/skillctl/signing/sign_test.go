@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -194,11 +195,10 @@ func TestSignBundle_DoesNotLeakKeyInError(t *testing.T) {
 	}
 }
 
-// quick sanity that ErrSignatureInvalid is wrappable.
+// quick sanity that ErrSignatureInvalid wraps cleanly under fmt.Errorf %w.
 func TestErrSignatureInvalid_WrapsCleanly(t *testing.T) {
-	wrapped := errors.New("outer: " + ErrSignatureInvalid.Error())
-	if errors.Is(wrapped, ErrSignatureInvalid) {
-		// errors.Is on a string-built error wouldn't be true; this
-		// branch only exists to silence "unused import" if ever.
+	wrapped := fmt.Errorf("outer context: %w", ErrSignatureInvalid)
+	if !errors.Is(wrapped, ErrSignatureInvalid) {
+		t.Errorf("fmt.Errorf %%w should wrap ErrSignatureInvalid so errors.Is matches")
 	}
 }

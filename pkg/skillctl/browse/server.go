@@ -1,9 +1,13 @@
 package browse
 
 import (
+	"crypto/rand"
+	"crypto/subtle"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -19,9 +23,15 @@ import (
 var uiHTML []byte
 
 // Server serves the skill graph browser UI and API.
+//
+// SEC-M3: binds loopback only (127.0.0.1) and enforces a loopback Host-header
+// allowlist plus a per-launch random token on its data endpoints, so the local
+// browse API is never reachable from other hosts on the LAN.
 type Server struct {
 	Addr      string
 	NoBrowser bool
+
+	token string // per-launch random token required on data endpoints
 
 	mu    sync.RWMutex
 	graph *SkillGraph
@@ -33,11 +43,12 @@ type Server struct {
 // NewServer creates a browse server from a pre-built inventory.
 func NewServer(addr string, inv *model.Inventory) *Server {
 	if addr == "" {
-		addr = ":9116"
+		addr = "127.0.0.1:9116"
 	}
 	graph := BuildGraph(inv)
 	return &Server{
-		Addr:  addr,
+		Addr:  loopbackAddr(addr),
+		token: newLaunchToken(),
 		graph: graph,
 		inv:   inv,
 	}
@@ -48,10 +59,11 @@ func NewServer(addr string, inv *model.Inventory) *Server {
 // to persist refreshed graphs.
 func NewServerWithCache(addr string, inv *model.Inventory, graph *SkillGraph, store *GraphStore, inventoryHash string) *Server {
 	if addr == "" {
-		addr = ":9116"
+		addr = "127.0.0.1:9116"
 	}
 	return &Server{
-		Addr:  addr,
+		Addr:  loopbackAddr(addr),
+		token: newLaunchToken(),
 		graph: graph,
 		inv:   inv,
 		store: store,
@@ -59,21 +71,14 @@ func NewServerWithCache(addr string, inv *model.Inventory, graph *SkillGraph, st
 	}
 }
 
-// Start registers routes and starts the HTTP server. Blocks until shutdown.
+// Start registers routes and starts the HTTP server. Binds loopback only
+// (SEC-M3). Blocks until shutdown.
 func (s *Server) Start() error {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", s.handleUI)
-	mux.HandleFunc("/api/graph", s.handleGraph)
-	mux.HandleFunc("/api/graph/filter", s.handleFilter)
-	mux.HandleFunc("/api/graph/search", s.handleSearch)
-	mux.HandleFunc("/api/graph/rebuild", s.handleRebuild)
-	mux.HandleFunc("/api/health", s.handleHealth)
+	// SEC-M3: defend in depth — pin the listener to loopback even if Addr
+	// was tampered with after construction.
+	s.Addr = loopbackAddr(s.Addr)
 
-	host := s.Addr
-	if strings.HasPrefix(host, ":") {
-		host = "localhost" + host
-	}
-	url := "http://" + host
+	url := s.browserURL()
 
 	fmt.Fprintf(os.Stderr, "skillctl browse server listening on %s\n", url)
 
@@ -84,7 +89,151 @@ func (s *Server) Start() error {
 		}()
 	}
 
-	return http.ListenAndServe(s.Addr, mux)
+	ln, err := net.Listen("tcp", s.Addr)
+	if err != nil {
+		return err
+	}
+	httpSrv := &http.Server{Handler: s.GuardedHandler()}
+	return httpSrv.Serve(ln)
+}
+
+// mux builds the route table shared by Handler and GuardedHandler.
+func (s *Server) mux() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", s.handleUI)
+	mux.HandleFunc("/api/graph", s.handleGraph)
+	mux.HandleFunc("/api/graph/filter", s.handleFilter)
+	mux.HandleFunc("/api/graph/search", s.handleSearch)
+	mux.HandleFunc("/api/graph/rebuild", s.handleRebuild)
+	mux.HandleFunc("/api/health", s.handleHealth)
+	return mux
+}
+
+// Handler returns the raw (unguarded) route mux, for unit-testing handler
+// logic in isolation. The network-facing path uses GuardedHandler.
+func (s *Server) Handler() http.Handler { return s.mux() }
+
+// GuardedHandler returns the route mux wrapped in the SEC-M3 loopback-Host +
+// per-launch-token guard. This is what is served on the network.
+func (s *Server) GuardedHandler() http.Handler { return s.guard(s.mux()) }
+
+// Token returns the per-launch token required by guarded data endpoints.
+func (s *Server) Token() string { return s.token }
+
+// guard enforces the SEC-M3 access controls: a loopback Host-header allowlist
+// (every request) plus a constant-time per-launch token check (every data
+// endpoint; the UI page and health check are token-exempt so a bare reopen of
+// the page still bootstraps).
+func (s *Server) guard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !isLoopbackHost(r.Host) {
+			http.Error(w, "forbidden: non-loopback Host", http.StatusForbidden)
+			return
+		}
+		if r.URL.Path != "/" && r.URL.Path != "/api/health" && !s.tokenOK(r) {
+			http.Error(w, "forbidden: missing or invalid token", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// tokenOK reports whether the request carries the per-launch token, supplied
+// as an X-M3C-Token header or a "token" query parameter. An empty server token
+// (RNG failure) rejects everything — fail closed.
+func (s *Server) tokenOK(r *http.Request) bool {
+	if s.token == "" {
+		return false
+	}
+	got := r.Header.Get("X-M3C-Token")
+	if got == "" {
+		got = r.URL.Query().Get("token")
+	}
+	return subtle.ConstantTimeCompare([]byte(got), []byte(s.token)) == 1
+}
+
+// browserURL returns the loopback URL (with the launch token) to open.
+func (s *Server) browserURL() string {
+	url := "http://" + loopbackHostPort(s.Addr)
+	if s.token != "" {
+		url += "/?token=" + s.token
+	}
+	return url
+}
+
+// newLaunchToken mints a 256-bit hex token unique to this process launch.
+// On RNG failure it returns "" so the guard fails closed.
+func newLaunchToken() string {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(b)
+}
+
+// loopbackAddr forces any host portion of addr to the loopback interface, so a
+// bare ":9116" or an explicit "0.0.0.0:9116" both bind 127.0.0.1.
+func loopbackAddr(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "127.0.0.1" + addr
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" || host == "*" {
+		host = "127.0.0.1"
+	}
+	return net.JoinHostPort(host, port)
+}
+
+// loopbackHostPort renders addr as a host:port for a browser URL, pinning a
+// missing/wildcard host to loopback.
+func loopbackHostPort(addr string) string {
+	if strings.HasPrefix(addr, ":") {
+		return "127.0.0.1" + addr
+	}
+	if h, port, err := net.SplitHostPort(addr); err == nil {
+		if h == "" || h == "0.0.0.0" || h == "::" {
+			h = "127.0.0.1"
+		}
+		return net.JoinHostPort(h, port)
+	}
+	return addr
+}
+
+// isLoopbackHost reports whether the HTTP Host header refers to loopback only.
+func isLoopbackHost(hostHeader string) bool {
+	host := hostHeader
+	if h, _, err := net.SplitHostPort(hostHeader); err == nil {
+		host = h
+	}
+	host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
+	switch strings.ToLower(host) {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
+}
+
+// injectToken inserts the launch token into the served HTML as a meta tag.
+// The token is hex (no HTML-significant characters) so plain concatenation is
+// safe. If there is no <head> or no token, the page is served unchanged.
+func injectToken(page []byte, token string) []byte {
+	if token == "" {
+		return page
+	}
+	meta := `<meta name="m3c-token" content="` + token + `">`
+	const anchor = "<head>"
+	if i := strings.Index(string(page), anchor); i >= 0 {
+		i += len(anchor)
+		out := make([]byte, 0, len(page)+len(meta))
+		out = append(out, page[:i]...)
+		out = append(out, meta...)
+		out = append(out, page[i:]...)
+		return out
+	}
+	return page
 }
 
 func (s *Server) handleUI(w http.ResponseWriter, r *http.Request) {
@@ -93,7 +242,7 @@ func (s *Server) handleUI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(uiHTML)
+	w.Write(injectToken(uiHTML, s.token))
 }
 
 func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {

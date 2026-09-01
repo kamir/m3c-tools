@@ -1,0 +1,6 @@
+{
+  "categories": ["tool-escalation"],
+  "rule_ids": ["TOOL-001"],
+  "min_verdict": "red",
+  "note": "Declares only Read but body invokes curl and Write — undeclared tool use."
+}

@@ -84,6 +84,36 @@ func (s *SyncStats) FormatSummary() string {
 	return b.String()
 }
 
+// CoverageReport returns a 1:1 coverage block matching the field shape of the
+// pocket_sync /reconcile endpoint (total / already_synced / newly_ingested /
+// failed / remaining_missing / coverage / complete). Both capture devices then
+// report their completeness identically — the "be sure" surface for a post-trip
+// drain (parity request, 2026-06-08). `coverage` is covered/total where covered
+// = already-synced + newly-ingested (saved-locally is NOT in ER1, so not covered).
+func (s *SyncStats) CoverageReport() string {
+	already := s.LocalExisting + s.AlreadyInER1
+	covered := already + s.UploadedNew
+	remaining := s.LocalTotal - covered
+	if remaining < 0 {
+		remaining = 0
+	}
+	complete := remaining == 0 && s.UploadFailed == 0
+	var b strings.Builder
+	b.WriteString("-- Plaud Coverage (1:1) ------------------------\n")
+	b.WriteString(fmt.Sprintf("  total_on_plaud:    %4d\n", s.LocalTotal))
+	b.WriteString(fmt.Sprintf("  already_synced:    %4d\n", already))
+	b.WriteString(fmt.Sprintf("  newly_ingested:    %4d\n", s.UploadedNew))
+	b.WriteString(fmt.Sprintf("  failed:            %4d\n", s.UploadFailed))
+	if s.SavedLocally > 0 {
+		b.WriteString(fmt.Sprintf("  saved_locally:     %4d\n", s.SavedLocally))
+	}
+	b.WriteString(fmt.Sprintf("  remaining_missing: %4d\n", remaining))
+	b.WriteString(fmt.Sprintf("  coverage:          %d/%d\n", covered, s.LocalTotal))
+	b.WriteString(fmt.Sprintf("  complete:          %t\n", complete))
+	b.WriteString("------------------------------------------------\n")
+	return b.String()
+}
+
 // FormatNotification returns a compact single-line summary for tray notifications.
 func (s *SyncStats) FormatNotification() string {
 	if s.UploadFailed > 0 {

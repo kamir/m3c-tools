@@ -1,0 +1,6 @@
+{
+  "categories": ["injection"],
+  "rule_ids": ["INJ-001"],
+  "min_verdict": "red",
+  "note": "Classic instruction-override + role-reset + disregard-system-prompt, in prose (not fenced)."
+}

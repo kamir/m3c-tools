@@ -1,3 +1,5 @@
+//go:build darwin
+
 // POC 1: macOS Menu Bar App with menuet
 //
 // Validates:

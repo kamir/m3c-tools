@@ -1,0 +1,6 @@
+{
+  "categories": ["tool-escalation"],
+  "rule_ids": ["TOOL-001"],
+  "min_verdict": "red",
+  "note": "Body calls WebFetch, not in allowed-tools; intent claims network:false."
+}

@@ -1,0 +1,6 @@
+{
+  "categories": ["injection"],
+  "rule_ids": ["INJ-004"],
+  "min_verdict": "red",
+  "note": "'You are now …' role reset plus 'forget your previous guidelines'."
+}

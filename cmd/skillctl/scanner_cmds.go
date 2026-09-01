@@ -30,6 +30,15 @@ import (
 )
 
 func cmdScan(args []string) {
+	// SPEC-0246 §4.5 standalone verb: `skillctl scan --body [<skill-dir>]`
+	// runs the behavioural bodyscan over a single skill's SKILL.md body and
+	// is wholly separate from the SPEC-0189 inventory scan below. Detect it
+	// up front so none of the inventory flags interfere; the inventory scan
+	// is left completely untouched when --body is absent.
+	if hasFlag(args, "--body") {
+		os.Exit(runScanBody(args, os.Stdout, os.Stderr))
+	}
+
 	// SPEC-0189 §4 flag set + SPEC-0115 legacy flags + SPEC-0189 §13
 	// `--push-to-registry` shorthand (delegates to awareness.Sync).
 	var (
@@ -1207,18 +1216,6 @@ func readAPIKeyFromSession() string {
 	return session.APIKey
 }
 
-// cmdAudit inspects a single skill in detail (Phase 2 stub).
-func cmdAudit(args []string) {
-	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: skillctl audit <skill-id>")
-		os.Exit(1)
-	}
-	// TODO: Phase 2 — deep inspection of a single skill: dependencies, conflicts,
-	// version history, content diff, frontmatter validation.
-	fmt.Fprintln(os.Stderr, "audit: not yet implemented (Phase 2)")
-	os.Exit(0)
-}
-
 // cmdSyncUsage reads unsynced skill usage events from the local SQLite database
 // and POSTs each to aims-core /api/v2/skills/usage. Successfully synced rows are
 // marked synced=1 so they are not re-sent.
@@ -1367,4 +1364,3 @@ func cmdSyncUsage(args []string) {
 
 	fmt.Printf("Synced %d/%d usage events\n", synced, len(pending))
 }
-

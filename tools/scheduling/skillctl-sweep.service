@@ -1,0 +1,12 @@
+# SPEC-0247/SPEC-0251 §5: skillctl revocation sweep (systemd user service).
+# Paired with skillctl-sweep.timer. EDIT ExecStart for your machine.
+# Install: cp to ~/.config/systemd/user/ ; systemctl --user enable --now skillctl-sweep.timer
+[Unit]
+Description=skillctl trust-chain revocation sweep (verify --all --quarantine)
+Documentation=https://github.com/kamir/m3c-tools
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/skillctl verify --all --quarantine --json
+# Best-effort: a failed sweep must not spam the journal as a hard failure.
+SuccessExitStatus=0 2

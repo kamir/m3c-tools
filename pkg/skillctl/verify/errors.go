@@ -129,6 +129,48 @@ const (
 	// it on every install. Distinct from ExitTenantBlocked (16, whole
 	// bundle blocked) — 17 is per-data-source granularity.
 	ExitDataSourceDenied = 17
+
+	// ExitSelfAttested (20) — SPEC-0246 §5.2: the trust root sets
+	// `require_independent_review: true` but the bundle's binding governance
+	// attestation is self_attested (reviewer_id == author_id). This is the
+	// "reputation-laundering" weakness the SPEC closes — a skill where the only
+	// reviewer is the author is self-certification. The verifier fails closed.
+	//
+	// UX: surface the attestation's reviewer_id / author so the operator can
+	// ask for an independent review. The `self` tenant (require_independent_review
+	// false, the default) never hits this gate.
+	ExitSelfAttested = 20
+
+	// ExitRevocationStale (22) — SPEC-0279 R3: the relying party's freshness
+	// contract fired. The last synced signed revocation snapshot is older than the
+	// trust-root's max_staleness AND the action being gated is high-risk (always
+	// fail-closed) OR the configured fail_policy for its risk class is `closed`.
+	// The verifier fails closed: an offline verifier that cannot prove its
+	// revocation view is fresh-enough must NOT authorize a consequential action.
+	//
+	// DISTINCT from a revoked digest/agent (17, "the set says this is revoked")
+	// and from an untrusted/forged list (12) — 22 means "the set may be current
+	// but I cannot PROVE it is fresh enough for this action." UX: surface the
+	// epoch, the measured staleness, and the action risk so the operator can
+	// re-sync the list (or pin a fresh signed checkpoint, R4).
+	//
+	// 21 is taken by agentid-expired (cmd/skillctl exitAgentIDExpired), so 22 is
+	// the next free code.
+	ExitRevocationStale = 22
+
+	// ExitLogInclusionMissing (23) — SPEC-0278 L1: the trust root sets
+	// `require_log_inclusion: true` but the event could not be shown INCLUDED
+	// under a pinned, signature-valid Signed Tree Head. The verifier fails
+	// closed: an event the operator demands be transparency-logged, but which
+	// no pinned head commits to, is refused.
+	//
+	// DISTINCT from the signature/governance codes (10-17) — the trust chain
+	// was fine but the event is not on the log — and from the freshness code
+	// (22). 20 (ExitSelfAttested), 21 (agentid-expired), and 22
+	// (ExitRevocationStale) are all taken, so 23 is the next free code. (The
+	// SPEC-0278 branch wrongly reused 20; it now lives at 23.) UX: surface the
+	// log_id + claimed tree_size so the operator can re-witness or pin a head.
+	ExitLogInclusionMissing = 23
 )
 
 // Sentinel errors so callers can `errors.Is(err, verify.ErrDigestMismatch)`
@@ -202,6 +244,53 @@ var (
 	//   fmt.Errorf("data_source %s denied for this tenant: %w",
 	//       dsID, verify.ErrDataSourceDenied)
 	ErrDataSourceDenied = errors.New("data_source denied for this tenant")
+
+	// ErrIdentityRevoked — author identity has been revoked via
+	// SPEC-0198 §3. Exit code 17 (same numeric as DataSourceDenied; the
+	// theme is "data-source / source-policy" per exitcode registry
+	// RevokeIdentityRevoked). Before BUG-0144 this path mapped to
+	// ErrAuthorSigInvalid (exit 11) which conflated "key was tampered"
+	// with "key was revoked" — operators couldn't distinguish.
+	//
+	// Wrap with the offending identity id so the operator timeline
+	// shows the audit chain:
+	//
+	//   fmt.Errorf("identity %s revoked at %s: %w",
+	//       ident.ID, ident.RevokedAt, verify.ErrIdentityRevoked)
+	ErrIdentityRevoked = errors.New("author identity revoked")
+
+	// ErrSelfAttested — the trust root requires independent review
+	// (require_independent_review: true) but the binding governance
+	// attestation is self_attested (reviewer_id == author_id). Exit code 20.
+	// SPEC-0246 §5.2. Wrap with the reviewer/author ids so the operator can
+	// chase an independent review:
+	//
+	//   fmt.Errorf("binding attestation self-attested by %s: %w",
+	//       reviewerID, verify.ErrSelfAttested)
+	ErrSelfAttested = errors.New("binding governance attestation is self-attested (independent review required)")
+
+	// ErrRevocationStale — SPEC-0279 R3: the last synced signed revocation
+	// snapshot is older than the trust-root's max_staleness and the freshness
+	// fail-policy denies the action (high-risk → always; low-risk → when
+	// fail_policy=closed). Exit code 22. The verifier fails closed: it cannot
+	// prove its revocation view is fresh enough to authorize a consequential
+	// action offline. Wrap with the epoch + staleness so the operator can re-sync:
+	//
+	//   fmt.Errorf("revocation snapshot is stale (epoch %d, %s old > max_staleness; risk=%s): %w",
+	//       epoch, age, risk, verify.ErrRevocationStale)
+	ErrRevocationStale = errors.New("revocation snapshot is stale (freshness fail-closed)")
+
+	// ErrLogInclusionMissing — SPEC-0278 L1: no valid inclusion proof was
+	// available for the event under any pinned, signature-valid STH, while
+	// the trust root sets require_log_inclusion: true. Exit code 23 (the
+	// next free code after 20/21/22). Whether this BLOCKS depends on the
+	// require_log_inclusion policy (hard) vs advisory (default); the hard
+	// path wraps this sentinel. Wrap with the log_id + tree_size so the
+	// operator can re-witness:
+	//
+	//   fmt.Errorf("event not included under pinned STH for log %q (size %d): %w",
+	//       logID, treeSize, verify.ErrLogInclusionMissing)
+	ErrLogInclusionMissing = errors.New("transparency-log inclusion proof missing or invalid")
 )
 
 // ExitCode maps a verifier error to its numeric process exit code.
@@ -247,8 +336,27 @@ func ExitCode(err error) int {
 		return ExitIntentInconsistent
 	case errors.Is(err, ErrIdentityMismatch):
 		return ExitIdentityMismatch
+	case errors.Is(err, ErrIdentityRevoked):
+		// SPEC-0198 §3 / BUG-0144 — identity-revoked maps to 17, same
+		// theme as DataSourceDenied ("data-source / source-policy"
+		// per pkg/skillctl/exitcode RevokeIdentityRevoked). Checked
+		// BEFORE DataSourceDenied so an explicit revoke wins over a
+		// downstream data-source denial.
+		return 17
 	case errors.Is(err, ErrDataSourceDenied):
 		return ExitDataSourceDenied
+	case errors.Is(err, ErrSelfAttested):
+		return ExitSelfAttested
+	case errors.Is(err, ErrRevocationStale):
+		// SPEC-0279 R3 — freshness fail-closed. Checked late: a stale-snapshot
+		// denial only matters once the chain (digest/sig/trust/governance)
+		// otherwise passed, and it must not mask a more specific failure.
+		return ExitRevocationStale
+	case errors.Is(err, ErrLogInclusionMissing):
+		// SPEC-0278 L1 — require_log_inclusion fail-closed. Checked last: an
+		// inclusion-proof refusal only matters once the trust chain otherwise
+		// passed (the chain was fine but the event is not on a pinned log).
+		return ExitLogInclusionMissing
 	default:
 		return 1
 	}

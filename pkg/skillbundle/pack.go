@@ -50,6 +50,20 @@ func Pack(skillDir, outFile string, opts PackOptions) (digest string, err error)
 		return "", fmt.Errorf("skill dir %q must contain SKILL.md: %w", skillDir, err)
 	}
 
+	// LIBRARY-BOUNDARY SCOPE GATE (P2b challenge-gate fix). The author signature
+	// covers manifest.Intent + manifest.DataDependencies, so NO unvalidated scope
+	// may ever be author-signed — the gate must live HERE, at the pack/sign
+	// boundary, not only in the CLI. A programmatic producer (e.g.
+	// publish_cmds.go ensureBundle) that calls Pack directly is now bound by the
+	// SAME datascope.Validate rule the CLI runs. Fail-closed: an invalid or §3.3-
+	// contradictory scope returns an error and writes NO bundle. The CLI still
+	// pre-validates to map exact exit codes (18/2) before calling Pack; this is a
+	// belt-and-braces enforcement, not a different verdict (same validator, same
+	// failed_rule).
+	if err := ValidateManifestDataScope(opts.Manifest); err != nil {
+		return "", err
+	}
+
 	contentFiles, err := collectFiles(skillDir)
 	if err != nil {
 		return "", fmt.Errorf("collecting files: %w", err)

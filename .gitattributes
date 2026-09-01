@@ -1,0 +1,16 @@
+# Keep byte-exact security test fixtures LF on every platform.
+#
+# The bodyscan corpus (pkg/skillctl/bodyscan/testdata/corpus/**) is read
+# byte-for-byte by the scanner and its detection is offset-sensitive. If Git
+# checks these files out with CRLF on Windows (core.autocrlf=true), the bytes
+# the scanner sees differ from the bytes the fixtures were authored against —
+# which is exactly the EXF-004 "split base64 near sink" evasion the
+# windows-latest CI run surfaced. Pin the fixtures to LF so the corpus is
+# deterministic regardless of platform or autocrlf setting.
+#
+# (The scanner itself is now line-ending-agnostic — see
+# pkg/skillctl/bodyscan/normalize.go — so this is defence in depth: it keeps the
+# checked-out fixtures stable so a CRLF checkout can't perturb the measured
+# TP/FP numbers, while the scanner guarantees a real malicious skill can't evade
+# detection by its EOL style either way.)
+pkg/skillctl/bodyscan/testdata/** -text eol=lf

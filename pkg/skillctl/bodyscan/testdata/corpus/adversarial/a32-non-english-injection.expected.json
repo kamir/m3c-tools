@@ -1,0 +1,7 @@
+{
+  "categories": [
+    "injection"
+  ],
+  "min_verdict": "red",
+  "note": "German instruction-override ('Ignoriere alle vorherigen Anweisungen')."
+}

@@ -26,6 +26,10 @@ go.work.sum
 
 # Build output
 build/
+# goreleaser output. MUST stay ignored: scripts/release.sh does `git add -A` on a
+# dirty tree, so a leftover local `goreleaser build/release --snapshot` would
+# otherwise be committed wholesale as the release commit.
+dist/
 /m3c-tools
 /m3c-tools-*
 
@@ -42,6 +46,7 @@ __pycache__/
 
 # Built binaries (root level)
 /skillctl
+/skillctl-demo
 
 # macOS
 .DS_Store
@@ -58,3 +63,17 @@ __pycache__/
 
 # Local-built thinking-engine binary (output of cmd/thinking-engine)
 /thinking-engine
+
+# skillctl release build artifacts (published to GitHub Releases, not git).
+#
+# EXCEPT RELEASE_NOTES.md: skillctl-release.yml reads
+# `release/<tag>/RELEASE_NOTES.md` FROM THE TAGGED TREE. Ignoring the whole dir
+# meant CI never saw those files, so every cut silently fell back to the generic
+# placeholder body (v0.2.9 … v0.2.11 all shipped it, despite hand-written notes
+# sitting untracked on the author's disk).
+/release/**
+!/release/**/
+!/release/**/RELEASE_NOTES.md
+
+# Packed skill bundles (build artifacts from `skillctl pack`; never source)
+*.skb

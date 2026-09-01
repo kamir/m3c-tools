@@ -423,6 +423,28 @@
 </div>
 
 <script>
+// SEC-M3: the local server requires a per-launch token on its API endpoints.
+// It is injected server-side as <meta name="m3c-token"> (and may also be in the
+// URL as ?token=...). Wrap fetch so every same-origin /api/ request carries it;
+// a LAN attacker without the token is rejected.
+(function installTokenFetch() {
+  const meta = document.querySelector('meta[name="m3c-token"]');
+  const token = (meta && meta.content) ||
+    new URLSearchParams(window.location.search).get('token') || '';
+  if (!token) return;
+  const orig = window.fetch.bind(window);
+  window.fetch = function(input, init) {
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    if (url.startsWith('/api/')) {
+      init = init || {};
+      const h = new Headers(init.headers || {});
+      h.set('X-M3C-Token', token);
+      init.headers = h;
+    }
+    return orig(input, init);
+  };
+})();
+
 const TYPE_COLORS = {
   claude_code_skill: '#7c3aed',
   skill_index: '#ffd93d',

@@ -172,9 +172,24 @@ func runRun(args []string) int {
 	}
 	apiKey := resolveAPIKey(apiKeyFrom)
 
-	// 5. Post skill.invoked (best-effort).
+	// 5. Post skill.invoked (best-effort). ALSO append a device-signed record to
+	// the durable local trail (SPEC-0202 §9) — the wrapper-level invocation
+	// event joins the same Art.12 trail the hook + the gate's SignedSink write.
+	// The HTTP post is best-effort; the signed trail is the durable record.
 	requestedCmd := strings.Join(childArgv, " ")
 	postRunEvent(auditURL, apiKey, target, "skill.invoked", &tok, requestedCmd, 0, 0)
+	runHome, _ := userHome()
+	appendSignedInvocation(runHome, skillgate.InvocationRecord{
+		EventType:    "skill.invoked",
+		SkillDigest:  tok.BundleDigest,
+		SkillName:    tok.SkillName,
+		SkillVersion: tok.SkillVersion,
+		Action:       "invoke",
+		Tool:         requestedCmd,
+		TokenID:      tok.TokenID,
+		SessionID:    tok.CallerSession,
+		ExitCode:     0,
+	})
 
 	// 6. Build child env.
 	env := os.Environ()
@@ -189,9 +204,20 @@ func runRun(args []string) int {
 	exitCode := runChild(childArgv, env, tok.Envelope.MaxRuntimeSeconds)
 	dur := time.Since(start)
 
-	// 8. Post skill.completed (best-effort).
+	// 8. Post skill.completed (best-effort) + signed completion record.
 	postRunEvent(auditURL, apiKey, target, "skill.completed", &tok, requestedCmd,
 		exitCode, dur.Milliseconds())
+	appendSignedInvocation(runHome, skillgate.InvocationRecord{
+		EventType:    "skill.completed",
+		SkillDigest:  tok.BundleDigest,
+		SkillName:    tok.SkillName,
+		SkillVersion: tok.SkillVersion,
+		Action:       "complete",
+		Tool:         requestedCmd,
+		TokenID:      tok.TokenID,
+		SessionID:    tok.CallerSession,
+		ExitCode:     exitCode,
+	})
 
 	return exitCode
 }

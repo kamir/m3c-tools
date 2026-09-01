@@ -1,0 +1,6 @@
+{
+  "categories": ["obfuscation"],
+  "rule_ids": ["OBF-006"],
+  "min_verdict": "red",
+  "note": "Injection prose smuggled inside an HTML comment (hidden from human reviewers)."
+}

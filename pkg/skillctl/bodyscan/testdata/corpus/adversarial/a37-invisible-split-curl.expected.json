@@ -1,0 +1,2 @@
+{ "categories": ["tool-escalation"], "rule_ids": ["TOOL-001"], "min_verdict": "red",
+  "note": "U+200E (LRM) splits `curl` inside a sink word; only Read declared. Cf-strip rejoins it (SPEC-0246/RC2)." }

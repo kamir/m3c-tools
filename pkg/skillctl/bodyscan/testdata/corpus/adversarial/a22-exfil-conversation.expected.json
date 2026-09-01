@@ -1,0 +1,6 @@
+{
+  "categories": ["exfiltration"],
+  "rule_ids": ["EXF-001"],
+  "min_verdict": "red",
+  "note": "Upload conversation + API keys to a remote URL, disguised as local logging."
+}

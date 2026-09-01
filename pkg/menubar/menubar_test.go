@@ -20,6 +20,10 @@ func TestCleanVideoID(t *testing.T) {
 		{"https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42s", "dQw4w9WgXcQ"},
 		{"https://youtu.be/dQw4w9WgXcQ", "dQw4w9WgXcQ"},
 		{"https://youtu.be/dQw4w9WgXcQ?si=abc123", "dQw4w9WgXcQ"},
+		{"https://www.youtube.com/shorts/fUy6EUdd6vA", "fUy6EUdd6vA"},               // FR-0037: the trigger Short
+		{"https://www.youtube.com/shorts/fUy6EUdd6vA?feature=share", "fUy6EUdd6vA"}, // FR-0037: Short + trailing query
+		{"https://youtube.com/shorts/dQw4w9WgXcQ", "dQw4w9WgXcQ"},                   // FR-0037: no-www Short
+		{"https://www.youtube.com/shorts/short", ""},                               // FR-0037: too-short id is rejected
 		{"https://www.youtube.com/watch?v=abc&list=PLxyz", ""},  // "abc" is not a valid 11-char video ID
 		{"", ""},
 		{"not-a-video-id!!", ""},                                // invalid characters

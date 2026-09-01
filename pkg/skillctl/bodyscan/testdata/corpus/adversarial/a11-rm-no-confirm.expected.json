@@ -1,0 +1,6 @@
+{
+  "categories": ["policy-subversion"],
+  "rule_ids": ["POL-005", "POL-006"],
+  "min_verdict": "yellow",
+  "note": "rm without confirmation + --force flag."
+}

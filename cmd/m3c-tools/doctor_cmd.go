@@ -74,10 +74,7 @@ func doctorProfile() diag.Section {
 func doctorAuth() diag.Section {
 	s := diag.Section{Title: "Authentication"}
 
-	home, _ := os.UserHomeDir()
-	tokenPath := filepath.Join(home, ".m3c-tools", "device-token.enc")
-
-	// Check device token file.
+	// Check device token (loaded into env at startup from keychain or file).
 	tokenEnv := os.Getenv("ER1_DEVICE_TOKEN")
 	if tokenEnv != "" {
 		// Token was loaded at startup — check for expiration info.
@@ -120,15 +117,26 @@ func doctorAuth() diag.Section {
 				Name: "Device token", Status: diag.OK, Detail: "loaded (in env)",
 			})
 		}
-	} else if _, err := os.Stat(tokenPath); err == nil {
-		// File exists but wasn't loaded — likely decryption failed or expired at startup.
+	} else if auth.HasStoredToken() {
+		// Stored but wasn't loaded — likely decryption failed or expired at startup.
 		s.Checks = append(s.Checks, diag.Check{
 			Name: "Device token", Status: diag.Warn,
-			Detail: fmt.Sprintf("file exists (%s) but not loaded — may be expired or wrong device", tokenPath),
+			Detail: fmt.Sprintf("stored in %s but not loaded — may be expired or wrong device", auth.ActiveStoreName()),
 		})
 	} else {
 		s.Checks = append(s.Checks, diag.Check{
 			Name: "Device token", Status: diag.Skipped, Detail: "not configured",
+		})
+	}
+
+	// Report where the token is persisted at rest (keychain-first, file fallback).
+	if storage := auth.ActiveStoreName(); storage != "none" {
+		s.Checks = append(s.Checks, diag.Check{
+			Name: "Token storage", Status: diag.OK, Detail: storage,
+		})
+	} else if tokenEnv != "" {
+		s.Checks = append(s.Checks, diag.Check{
+			Name: "Token storage", Status: diag.OK, Detail: "env override (not persisted)",
 		})
 	}
 

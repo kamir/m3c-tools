@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"log"
 	"os"
+	"sync"
 	"testing"
 )
 
@@ -83,6 +84,10 @@ func TestLoadConfig_PlaceholderKeyOnProdIsCleared(t *testing.T) {
 	t.Setenv("ER1_API_URL", "https://onboarding.guide/upload_2")
 	t.Setenv("HOME", t.TempDir()) // suppress device-token.enc presence noise
 
+	// BUG-0163: FATAL is once-guarded across the process; reset so this
+	// test asserts a fresh emission regardless of earlier test order.
+	placeholderFatalOnce = sync.Once{}
+
 	var buf bytes.Buffer
 	log.SetOutput(&buf)
 	defer log.SetOutput(os.Stderr)
@@ -99,6 +104,65 @@ func TestLoadConfig_PlaceholderKeyOnProdIsCleared(t *testing.T) {
 	}
 	if !bytes.Contains(buf.Bytes(), []byte("minimal-key")) {
 		t.Errorf("FATAL log line must name the offending placeholder, got: %q", buf.String())
+	}
+}
+
+// BUG-0163: when a device token is available, ER1_API_KEY is dead-code in
+// AuthHeaders(), so a placeholder value MUST NOT produce a FATAL log line.
+// The placeholder is still cleared (defence-in-depth) but the noise is
+// suppressed because there is no operational failure to warn about.
+func TestLoadConfig_PlaceholderKeySilentWhenDeviceTokenPresent(t *testing.T) {
+	t.Setenv("ER1_DEVICE_TOKEN", "fake-bearer-token")
+	t.Setenv("ER1_API_KEY", "minimal-key")
+	t.Setenv("ER1_API_URL", "https://onboarding.guide/upload_2")
+	t.Setenv("HOME", t.TempDir())
+
+	// Reset the once-guard so this test is independent of any earlier test
+	// that may have consumed it in the same package run.
+	placeholderFatalOnce = sync.Once{}
+
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
+	cfg := LoadConfig()
+	if cfg == nil {
+		t.Fatal("LoadConfig returned nil")
+	}
+	if cfg.APIKey != "" {
+		t.Errorf("placeholder key must still be cleared; got APIKey = %q", cfg.APIKey)
+	}
+	if bytes.Contains(buf.Bytes(), []byte("FATAL")) {
+		t.Errorf("FATAL log must be suppressed when device token is present; got: %q", buf.String())
+	}
+	if bytes.Contains(buf.Bytes(), []byte("WARNING: No authentication")) {
+		t.Errorf("No-auth WARNING must be suppressed when device token is present; got: %q", buf.String())
+	}
+}
+
+// BUG-0163: when LoadConfig is called multiple times during startup (PLM
+// sync, retry scheduler, menubar init), the FATAL line for a placeholder
+// key without device token MUST fire at most once — not once per call.
+func TestLoadConfig_PlaceholderFatalFiresAtMostOnce(t *testing.T) {
+	t.Setenv("ER1_DEVICE_TOKEN", "")
+	os.Unsetenv("ER1_DEVICE_TOKEN")
+	t.Setenv("ER1_API_KEY", "minimal-key")
+	t.Setenv("ER1_API_URL", "https://onboarding.guide/upload_2")
+	t.Setenv("HOME", t.TempDir())
+
+	placeholderFatalOnce = sync.Once{}
+
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
+	for i := 0; i < 5; i++ {
+		_ = LoadConfig()
+	}
+
+	fatalCount := bytes.Count(buf.Bytes(), []byte("FATAL"))
+	if fatalCount != 1 {
+		t.Errorf("FATAL must fire exactly once across 5 LoadConfig calls; got %d. Log: %s", fatalCount, buf.String())
 	}
 }
 

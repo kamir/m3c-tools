@@ -31,6 +31,8 @@ type PlaudSyncRecord struct {
 	Date        string
 	Status      string
 	RecordingID string
+	ItemURL     string // ER1 memory-viewer URL (empty if not synced)
+	DocID       string // ER1 doc_id (empty if not synced)
 }
 
 // ShowPlaudSyncWindow is a no-op on non-darwin platforms.
@@ -41,6 +43,9 @@ func GetPlaudCustomTags() string { return "" }
 
 // SetPlaudSyncStatus is a no-op on non-darwin platforms.
 func SetPlaudSyncStatus(recordingID, status string) {}
+
+// SetPlaudSyncRowDoc is a no-op on non-darwin platforms.
+func SetPlaudSyncRowDoc(recordingID, docID, itemURL string) {}
 
 // SetPlaudSyncProgress is a no-op on non-darwin platforms.
 func SetPlaudSyncProgress(state BulkRunState) {}

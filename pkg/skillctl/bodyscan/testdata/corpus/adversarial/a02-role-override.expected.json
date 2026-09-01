@@ -1,0 +1,6 @@
+{
+  "categories": ["injection"],
+  "rule_ids": ["INJ-005"],
+  "min_verdict": "red",
+  "note": "Role-override: act as root/admin, developer mode, DAN."
+}

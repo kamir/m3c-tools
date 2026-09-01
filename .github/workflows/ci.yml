@@ -15,7 +15,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.26.5"
 
       - name: Install PortAudio
         run: brew install portaudio
@@ -37,7 +37,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.26.5"
 
       - name: Install PortAudio
         run: brew install portaudio
@@ -45,11 +45,83 @@ jobs:
       # SPEC-0176 §3.1: every package under ./pkg/ now gates the build.
       # Race detector catches concurrency bugs in the retry queue, the
       # background scheduler, and the new pocket cloud-sync goroutines.
-      - name: Run unit tests (./pkg/...)
-        run: go test -race -count=1 ./pkg/...
+      # Also race the m3c-tools command package (menubar + plaud-sync
+      # goroutines, retry runner, bulk-progress) and the skillctl-demo
+      # command (SSE event bus) — previously only ./pkg/... and
+      # ./cmd/skillctl/... (skillctl-race job) were exercised under -race.
+      - name: Run unit tests (-race, ./pkg/... + m3c-tools/skillctl-demo cmds)
+        run: go test -race -count=1 ./pkg/... ./cmd/m3c-tools/... ./cmd/skillctl-demo/...
 
       - name: Run e2e tests (allow-list)
         run: go test -v -count=1 ./e2e/ -run "TestComposite|TestBuild|TestParseTagLine|TestER1Config|TestER1Queue|TestER1EnqueueFailure|TestUploadFailure|TestRecorderEncodeWAV|TestRecorderStats|TestExportsDB|TestFilesDB|TestHashFile|TestFormatterLoader|TestPrettyPrint|TestFormatTranscript|TestFormatSnippet|TestFormatKeyValue|TestFormatTable|TestFormatSection|TestFormatStatusLine|TestTranslateFlagParsing|TestTranslateNotTranslatable|TestTranslateTranslatable|TestRetryQueue|TestRetryBackoffTiming|TestRetryBackoffCustomBase|TestRetryProcessingOrder|TestRetryPartialFailure|TestRetryMaxRetriesDropsEntry|TestRetryDropCallback|TestRetryRespectsBackoffDelay|TestRetryProcessesAfterBackoffElapsed|TestRetryGracefulShutdownOnCancel|TestRetryRunStopsOnContextCancel|TestRetryRunProcessesMultipleCycles|TestRetryEmptyQueue|TestRetryOnRetryCallback|TestTranscriptFilter|TestProxy|TestRetryRunner|TestBackgroundRetry|TestTranscriptImport|TestTranscriptList|TestTranscriptExport|TestScheduleCommand|TestStatusCommand|TestCancelCommand|TestScheduleStatusCancelWorkflow|TestCLI|TestRepoRoot|TestWriteFixture|TestFixtureDir|TestTempDataDir|TestWithEnv|TestRunCLIWithEnv|TestImporter"
+
+  skillctl-race:
+    name: skillctl Security Tests (-race)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.5"
+
+      - name: Install PortAudio
+        run: brew install portaudio
+
+      # SPEC-0251 (P1, LOT D-ci): the skillctl trust layer is the highest-value
+      # security surface (install verification, signing/revocation, two-step
+      # install tokens) and also the largest concurrency surface (install-token
+      # HMAC key persistence, run/awareness state). The general unit-test job
+      # already runs ./pkg/... under -race, but ./cmd/skillctl/... — where the
+      # security-critical command wiring and e2e install tests live — was never
+      # exercised with the race detector. Run both explicitly, green-or-fail.
+      - name: Run skillctl security tests (-race)
+        run: go test -race -count=1 ./cmd/skillctl/... ./pkg/skillctl/...
+
+  # SPEC-0251 §5 supply-chain hygiene ─────────────────────────────────────────
+  govulncheck:
+    name: govulncheck (reachable CVEs)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.5"
+
+      # The cgo packages (recorder/menubar) need PortAudio to typecheck, so run
+      # on macOS like the other jobs rather than a pure-Go ubuntu runner.
+      - name: Install PortAudio
+        run: brew install portaudio
+
+      # govulncheck fails ONLY on vulns reachable from our code. The toolchain is
+      # pinned to a patched Go (go1.26.5, via go.mod `toolchain` + setup-go) so the
+      # stdlib CVEs older toolchains carried are gone; this job keeps them from
+      # regressing. Standalone (not in any build job's `needs`) so a fresh upstream
+      # CVE blocks merge but never the release builds.
+      - name: govulncheck ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  gitleaks:
+    name: gitleaks (secret scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history for a complete secret scan
+
+      # .gitleaks.toml already drives the local pre-commit hook, but the hook is
+      # opt-in per clone. Enforce it in CI over full history. Pinned to the same
+      # gitleaks version validated locally; exits non-zero on any finding (blocks).
+      - name: Install gitleaks
+        run: |
+          curl -fsSL -o /tmp/gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.0/gitleaks_8.30.0_linux_x64.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          sudo install /tmp/gitleaks /usr/local/bin/gitleaks
+
+      - name: Scan full history (config-aware)
+        run: gitleaks git . --config .gitleaks.toml --no-banner --redact
 
   build-macos:
     name: Build macOS (arm64 + amd64)
@@ -60,7 +132,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.26.5"
 
       - name: Install PortAudio (Homebrew, for native arm64 build)
         run: brew install portaudio pkg-config
@@ -109,7 +181,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.26.5"
 
       - name: Build linux/amd64
         run: |

@@ -1,0 +1,7 @@
+{
+  "categories": [
+    "injection"
+  ],
+  "min_verdict": "red",
+  "note": "Letter-spacing evasion: spaces removed between single letters before matching."
+}

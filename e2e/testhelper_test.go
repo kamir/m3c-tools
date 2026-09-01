@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -42,9 +43,19 @@ func BinaryPath(t *testing.T) string {
 	builtBinaryOnce.Do(func() {
 		root := RepoRoot(t)
 		builtBinary = filepath.Join(root, "build", "m3c-tools-e2e-test")
+		if runtime.GOOS == "windows" {
+			builtBinary += ".exe" // Windows requires the .exe to exec the binary
+		}
+		// The macOS build needs cgo (menubar); the non-darwin CLI build is
+		// CGO-free (matches `make build-windows`) and must not require a C
+		// toolchain on the runner.
+		cgo := "0"
+		if runtime.GOOS == "darwin" {
+			cgo = "1"
+		}
 		cmd := exec.Command("go", "build", "-o", builtBinary, "./cmd/m3c-tools")
 		cmd.Dir = root
-		cmd.Env = append(os.Environ(), "CGO_ENABLED=1")
+		cmd.Env = append(os.Environ(), "CGO_ENABLED="+cgo)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			builtBinaryErr = fmt.Errorf("build failed: %v\n%s", err, out)

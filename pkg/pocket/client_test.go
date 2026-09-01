@@ -224,7 +224,7 @@ func TestRateLimit_Parsed(t *testing.T) {
 func TestClient_429ReturnsRateLimitedError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(time.Now().Add(60*time.Second).Unix(), 10))
-		http.Error(w, "rate limited", 429)
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
 	}))
 	defer srv.Close()
 	c := newTestAPIClient(srv.URL, "pk_x")

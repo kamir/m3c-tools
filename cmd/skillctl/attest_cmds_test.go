@@ -411,8 +411,8 @@ func TestValidateRegistryURL_AllowsPlainHTTPForPrivate(t *testing.T) {
 func TestValidateRegistryURL_RejectsPlainHTTPForPublic(t *testing.T) {
 	cases := []string{
 		"http://aims-core.example.com/api/skills",
-		"http://1.2.3.4/api/skills",       // public IP
-		"http://8.8.8.8:8080/api/skills",  // public IP
+		"http://1.2.3.4/api/skills",      // public IP
+		"http://8.8.8.8:8080/api/skills", // public IP
 	}
 	for _, u := range cases {
 		t.Run(u, func(t *testing.T) {
@@ -430,8 +430,8 @@ func TestValidateRegistryURL_RejectsBadSchemes(t *testing.T) {
 		"ftp://aims-core.example.com",
 		"ssh://aims-core",
 		"://no-scheme",
-		"https://",   // no host
-		"not-a-url",  // url.Parse won't error but Scheme will be empty
+		"https://",  // no host
+		"not-a-url", // url.Parse won't error but Scheme will be empty
 	}
 	for _, u := range cases {
 		t.Run(u, func(t *testing.T) {
@@ -439,5 +439,106 @@ func TestValidateRegistryURL_RejectsBadSchemes(t *testing.T) {
 				t.Errorf("accepted %q; expected refusal", u)
 			}
 		})
+	}
+}
+
+// TestAttest_SelfAttested_NoteAndFlag covers SPEC-0246 §5.1: when --author-id
+// equals --reviewer-id (normalized), the attestation is stamped
+// self_attested=true, the request carries it, and a clear stderr note warns
+// that a require_independent_review floor will refuse the bundle.
+func TestAttest_SelfAttested_NoteAndFlag(t *testing.T) {
+	dir := t.TempDir()
+	priv, _, pub := makeReviewerKeys(t, dir)
+	fr, srv := newFakeRegistry(t, pub)
+
+	pinnedNow := func() time.Time { return time.Date(2026, 5, 5, 19, 30, 0, 0, time.UTC) }
+
+	var stdout, stderr bytes.Buffer
+	args := []string{
+		validDigestForTest,
+		"--level", "green",
+		"--rationale", "self review for the personal tenant",
+		"--reviewer-id", "id:Kamir@m3c", // mixed case on purpose
+		"--author-id", " id:kamir@m3c ", // padded + lowercase: same principal
+		"--key", priv,
+		"--registry", srv.URL,
+	}
+	code := runAttestWithClient(args, &stdout, &stderr, pinnedNow, srv.Client())
+	if code != exitOK {
+		t.Fatalf("attest exit=%d stderr=%s", code, stderr.String())
+	}
+	if !fr.lastRequest.SelfAttested {
+		t.Errorf("request self_attested should be true when reviewer == author (normalized)")
+	}
+	if !strings.Contains(stderr.String(), "self-attestation") {
+		t.Errorf("stderr should warn about self-attestation; got %q", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "self_attested: true") {
+		t.Errorf("stdout should report self_attested: true; got %q", stdout.String())
+	}
+}
+
+// TestAttest_IndependentReview_NoNote covers the independent case: a distinct
+// --author-id yields self_attested=false, no warning note.
+func TestAttest_IndependentReview_NoNote(t *testing.T) {
+	dir := t.TempDir()
+	priv, _, pub := makeReviewerKeys(t, dir)
+	fr, srv := newFakeRegistry(t, pub)
+
+	pinnedNow := func() time.Time { return time.Date(2026, 5, 5, 19, 30, 0, 0, time.UTC) }
+
+	var stdout, stderr bytes.Buffer
+	args := []string{
+		validDigestForTest,
+		"--level", "green",
+		"--rationale", "independent review by Eric",
+		"--reviewer-id", "id:eric@m3c",
+		"--author-id", "id:kamir@m3c",
+		"--key", priv,
+		"--registry", srv.URL,
+	}
+	code := runAttestWithClient(args, &stdout, &stderr, pinnedNow, srv.Client())
+	if code != exitOK {
+		t.Fatalf("attest exit=%d stderr=%s", code, stderr.String())
+	}
+	if fr.lastRequest.SelfAttested {
+		t.Errorf("request self_attested should be false for distinct author/reviewer")
+	}
+	if strings.Contains(stderr.String(), "self-attestation") {
+		t.Errorf("stderr must NOT warn for independent review; got %q", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "self_attested: false") {
+		t.Errorf("stdout should report self_attested: false; got %q", stdout.String())
+	}
+}
+
+// TestAttest_NoAuthorID_OmitsLocalSelfAttested covers the offline path with no
+// --author-id: the CLI cannot compute self_attested locally, so it does not
+// emit the stdout line (the server is the authority) and sends self_attested=false.
+func TestAttest_NoAuthorID_OmitsLocalSelfAttested(t *testing.T) {
+	dir := t.TempDir()
+	priv, _, pub := makeReviewerKeys(t, dir)
+	fr, srv := newFakeRegistry(t, pub)
+
+	pinnedNow := func() time.Time { return time.Date(2026, 5, 5, 19, 30, 0, 0, time.UTC) }
+
+	var stdout, stderr bytes.Buffer
+	args := []string{
+		validDigestForTest,
+		"--level", "green",
+		"--rationale", "no author id supplied",
+		"--reviewer-id", "id:kamir@m3c",
+		"--key", priv,
+		"--registry", srv.URL,
+	}
+	code := runAttestWithClient(args, &stdout, &stderr, pinnedNow, srv.Client())
+	if code != exitOK {
+		t.Fatalf("attest exit=%d stderr=%s", code, stderr.String())
+	}
+	if fr.lastRequest.SelfAttested {
+		t.Errorf("self_attested should default false when not locally computable")
+	}
+	if strings.Contains(stdout.String(), "self_attested:") {
+		t.Errorf("stdout should NOT claim a self_attested verdict without --author-id; got %q", stdout.String())
 	}
 }

@@ -1,0 +1,2 @@
+{ "categories": ["injection"], "min_verdict": "red",
+  "note": "Base letters + combining marks (U+0301) spelling `ignore`; combining block stripped -> INJ-001." }

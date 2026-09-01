@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" font-family="system-ui,-apple-system,Segoe UI,Roboto,sans-serif">
+  <defs>
+    <marker id="arw" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#57606a"/>
+    </marker>
+  </defs>
+  <rect width="960" height="600" fill="#ffffff"/>
+  <rect width="960" height="600" fill="none" stroke="#d0d7de" stroke-width="2"/>
+
+  <!-- header -->
+  <rect x="0" y="0" width="960" height="86" fill="#e8833a"/>
+  <circle cx="46" cy="43" r="24" fill="#ffffff" opacity="0.18"/>
+  <text x="46" y="52" font-size="26" font-weight="700" fill="#ffffff" text-anchor="middle">2</text>
+  <text x="88" y="38" font-size="24" font-weight="700" fill="#ffffff">An agent manipulates a skill — and we block it</text>
+  <text x="88" y="66" font-size="15" fill="#ffffff" opacity="0.92">Changing a skill changes its digest; exceeding its envelope is refused; the burned digest is revoked</text>
+  <rect x="690" y="26" width="96" height="26" rx="13" fill="#ffffff" opacity="0.22"/>
+  <text x="738" y="44" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">G2 · G4 · G5</text>
+  <rect x="794" y="26" width="140" height="26" rx="13" fill="#9a6700"/>
+  <text x="864" y="44" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">◑ PARTIAL</text>
+
+  <!-- threat -->
+  <text x="40" y="122" font-size="14" font-weight="700" fill="#e5484d" letter-spacing="1">THREAT</text>
+  <rect x="40" y="132" width="884" height="50" rx="9" fill="#fdece9" stroke="#e5484d" stroke-width="1.5"/>
+  <text x="60" y="154" font-size="15" font-weight="600" fill="#24292f">An autonomous agent manipulates the installed, green-attested "data-summarizer"</text>
+  <text x="60" y="173" font-size="13" fill="#57606a">envelope allows egress only to api.anthropic.com — the agent tries to exfiltrate customer data</text>
+
+  <!-- three escalating block layers -->
+  <text x="40" y="212" font-size="14" font-weight="700" fill="#2ea043" letter-spacing="1">skillctl — THREE ESCALATING BLOCK POINTS</text>
+
+  <!-- A -->
+  <rect x="40" y="224" width="288" height="150" rx="12" fill="#eafaf0" stroke="#2ea043" stroke-width="2"/>
+  <circle cx="66" cy="250" r="14" fill="#1a7f37"/><text x="66" y="255" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">A</text>
+  <text x="88" y="255" font-size="15" font-weight="700" fill="#1a7f37">Tamper on disk</text>
+  <text x="60" y="282" font-size="13" fill="#24292f">Agent edits the installed files.</text>
+  <text x="60" y="301" font-size="13" fill="#24292f">Next load: verify --all recomputes</text>
+  <text x="60" y="320" font-size="13" fill="#24292f">the digest → mismatch.</text>
+  <rect x="60" y="332" width="104" height="34" rx="8" fill="#1a7f37"/>
+  <text x="112" y="355" font-size="16" font-weight="800" fill="#fff" text-anchor="middle">exit 10</text>
+  <text x="176" y="353" font-size="11.5" fill="#57606a">BUILT</text>
+
+  <!-- B -->
+  <rect x="336" y="224" width="288" height="150" rx="12" fill="#eafaf0" stroke="#2ea043" stroke-width="2"/>
+  <circle cx="362" cy="250" r="14" fill="#1a7f37"/><text x="362" y="255" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">B</text>
+  <text x="384" y="255" font-size="15" font-weight="700" fill="#1a7f37">Runtime egress</text>
+  <text x="356" y="282" font-size="13" fill="#24292f">Manipulated skill calls</text>
+  <text x="356" y="301" font-size="13" fill="#24292f">attacker.example → capability</text>
+  <text x="356" y="320" font-size="13" fill="#24292f">gateway refuses the crossing.</text>
+  <rect x="356" y="332" width="104" height="34" rx="8" fill="#1a7f37"/>
+  <text x="408" y="355" font-size="16" font-weight="800" fill="#fff" text-anchor="middle">exit 32</text>
+  <text x="472" y="353" font-size="11.5" fill="#9a6700">Py-ref · Go cage = FR-0044</text>
+
+  <!-- C -->
+  <rect x="632" y="224" width="292" height="150" rx="12" fill="#eafaf0" stroke="#2ea043" stroke-width="2"/>
+  <circle cx="658" cy="250" r="14" fill="#1a7f37"/><text x="658" y="255" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">C</text>
+  <text x="680" y="255" font-size="15" font-weight="700" fill="#1a7f37">Kill after detection</text>
+  <text x="652" y="282" font-size="13" fill="#24292f">skillctl revoke &lt;digest&gt; →</text>
+  <text x="652" y="301" font-size="13" fill="#24292f">every host denies on the next</text>
+  <text x="652" y="320" font-size="13" fill="#24292f">gate check (see scenario 3).</text>
+  <rect x="652" y="332" width="104" height="34" rx="8" fill="#1a7f37"/>
+  <text x="704" y="355" font-size="16" font-weight="800" fill="#fff" text-anchor="middle">exit 17</text>
+  <text x="768" y="353" font-size="11.5" fill="#9a6700">G5 in build</text>
+
+  <!-- without -->
+  <rect x="40" y="392" width="884" height="150" rx="12" fill="#fff5f5" stroke="#e5484d" stroke-width="1.5"/>
+  <text x="60" y="422" font-size="14" font-weight="700" fill="#e5484d" letter-spacing="1">⚠  WITHOUT skillctl</text>
+  <text x="60" y="452" font-size="14.5" fill="#24292f">The agent's edit is invisible. No digest check, no envelope, no kill.</text>
+  <text x="60" y="476" font-size="14.5" font-weight="600" fill="#b62324">The malicious egress succeeds — customer data leaves the host.</text>
+  <text x="60" y="516" font-size="13.5" fill="#57606a">The line: manipulating a skill changes its digest (caught) and its behaviour exceeds its declared envelope (caught).</text>
+
+  <text x="924" y="576" font-size="11" fill="#8c959f" text-anchor="end">m3c skill-trust · SPEC-0202 gateway (FR-0044 hardening) + FR-0045 · KuP demo scenario 2</text>
+</svg>

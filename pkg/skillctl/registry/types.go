@@ -156,6 +156,21 @@ type AttestationRow struct {
 	// attestation is global / untenanted; the tenant-block step ignores
 	// global rows.
 	TenantScope string `json:"tenant_scope,omitempty"`
+
+	// SelfAttested records whether the registry computed reviewer_id ==
+	// author_id for this attestation (SPEC-0246 §5.1). It is a *pointer* so the
+	// verifier can distinguish "registry said false" from "registry omitted the
+	// field" (older registries): when nil, the verifier recomputes it from
+	// ReviewerID vs AuthorID if both are present, else treats it as unknown
+	// (and, under require_independent_review, fails closed). A non-nil value
+	// from a trusted registry is authoritative.
+	SelfAttested *bool `json:"self_attested,omitempty"`
+
+	// AuthorID is the bundle author identity this attestation was compared
+	// against to derive SelfAttested (SPEC-0246 §5.1). Surface + fallback: when
+	// SelfAttested is nil but both AuthorID and ReviewerID are present, the
+	// verifier recomputes self_attested = normalize(ReviewerID) == normalize(AuthorID).
+	AuthorID string `json:"author_id,omitempty"`
 }
 
 // SignatureRow is one entry in BundleMeta.Signatures. Mirrors the

@@ -32,6 +32,9 @@ func TestDoctorNoAuthShowsFail(t *testing.T) {
 		"HOME=" + tmpHome,
 		"ER1_API_KEY=",
 		"ER1_DEVICE_TOKEN=",
+		// Force the file backend so a real keychain item on the dev machine
+		// cannot mask the no-auth condition this test asserts.
+		"M3C_TOKEN_STORE=file",
 		"ER1_API_URL=https://onboarding.guide/upload_2",
 	}, "doctor")
 	r.AssertContains(t, "NO AUTH")

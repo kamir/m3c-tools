@@ -1,0 +1,6 @@
+{
+  "categories": ["tool-escalation"],
+  "rule_ids": ["TOOL-002"],
+  "min_verdict": "yellow",
+  "note": "intent:network:false but WebFetch is allowed and the body fetches a URL (frontmatter inconsistency)."
+}

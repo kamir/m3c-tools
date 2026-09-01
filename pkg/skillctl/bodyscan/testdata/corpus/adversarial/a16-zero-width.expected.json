@@ -1,0 +1,6 @@
+{
+  "categories": ["obfuscation"],
+  "rule_ids": ["OBF-004"],
+  "min_verdict": "yellow",
+  "note": "Zero-width characters inserted between letters to split flagged keywords."
+}

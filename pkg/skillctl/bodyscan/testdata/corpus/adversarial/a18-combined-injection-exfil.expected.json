@@ -1,0 +1,6 @@
+{
+  "categories": ["injection", "exfiltration", "policy-subversion"],
+  "rule_ids": ["INJ-001"],
+  "min_verdict": "red",
+  "note": "Full kill-chain: instruction override + role reset + key/.env exfil to URL + disable tests. Exfil may match EXF-001 or EXF-002 depending on word order."
+}

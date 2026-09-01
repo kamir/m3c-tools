@@ -41,12 +41,12 @@ const GitHubRepoURL = "https://github.com/kamir/m3c-tools"
 type ActionType string
 
 const (
-	ActionSignIn    ActionType = "sign_in"
-	ActionSignOut   ActionType = "sign_out"
-	ActionPlaudSync ActionType = "plaud_sync"
-	ActionPlaudAuth ActionType = "plaud_auth"
+	ActionSignIn     ActionType = "sign_in"
+	ActionSignOut    ActionType = "sign_out"
+	ActionPlaudSync  ActionType = "plaud_sync"
+	ActionPlaudAuth  ActionType = "plaud_auth"
 	ActionEditConfig ActionType = "edit_config"
-	ActionQuit      ActionType = "quit"
+	ActionQuit       ActionType = "quit"
 )
 
 // Profile represents a configuration profile shown in the tray submenu.
@@ -390,13 +390,13 @@ func (t *TrayApp) fireAction(action ActionType, data string) {
 // (Profile menu and history submenu removed for Windows MVP — Plaud sync only)
 
 // openURL opens a URL in the default browser.
-// BUG-0088: Windows uses "cmd /c start" instead of rundll32 which silently fails.
+// SEC-M11: Windows uses rundll32 url.dll,FileProtocolHandler (URL as a separate
+// argv element) — NOT `cmd /c start`, which shell-interprets &, |, ^, %% chars in the URL.
 func (t *TrayApp) openURL(url string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		// Empty title arg ("") prevents cmd from misinterpreting URLs with & as title.
-		cmd = exec.Command("cmd", "/c", "start", "", url)
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
 	case "linux":
 		cmd = exec.Command("xdg-open", url)
 	default:
@@ -423,7 +423,8 @@ func (t *TrayApp) openFile(path string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", "", path)
+		// SEC-M11: avoid the cmd.exe metacharacter surface (see openURL).
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
 	case "linux":
 		cmd = exec.Command("xdg-open", path)
 	default:

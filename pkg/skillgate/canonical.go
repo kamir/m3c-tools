@@ -40,40 +40,54 @@ func canonicalCSV(items []string) string {
 // Set-semantics rules ("shrink_egress_allowlist", "shrink_subprocess_allowlist")
 // require sorting the slice value before marshaling — mirrors the Python
 // behavior at canonicalize time.
-func canonicalAttenuationValue(rule string, value map[string]any) (string, error) {
-	// Python stores `value` as the raw rule value (str/list/int/bool/dict/null),
-	// not a wrapper map. The Go type holds map[string]any; callers using
-	// flat values should put them under a sentinel key OR pass the value
-	// directly. To keep byte-parity we accept either: if `value` has a single
-	// key "_" we emit the inner; otherwise we emit the map.
+func canonicalAttenuationValue(rule string, value any) (string, error) {
+	// BUG-0143: Value is `any` since 2026-05-11 (was map[string]any). The
+	// wire shape carries whatever Python serialized — scalar/list/dict/null.
+	// Back-compat: pre-BUG-0143 Go callers wrap non-dict values under a
+	// sentinel "_value" key; still recognised here for fixtures already
+	// in flight.
 	//
-	// In practice the Python issuer puts the rule value in directly (e.g.
-	// `value=["a", "b"]` for shrink_egress_allowlist). The Go-side caller
-	// constructs Attenuation.Value as a map with a "_value" key for non-dict
-	// rule values; the map case (full envelope deltas) is emitted as-is.
-	if v, ok := value["_value"]; ok {
-		// Set-semantics rules sort the slice value at canonical time.
-		if (rule == "shrink_egress_allowlist" || rule == "shrink_subprocess_allowlist") && v != nil {
-			if sl, ok := v.([]any); ok {
-				strs := make([]string, 0, len(sl))
-				ok := true
-				for _, item := range sl {
-					if s, isStr := item.(string); isStr {
-						strs = append(strs, s)
-					} else {
-						ok = false
-						break
-					}
-				}
-				if ok {
-					sort.Strings(strs)
-					return marshalCanonical(strs)
+	// Path resolution:
+	//   1. Legacy {"_value": <inner>} wrapper → unwrap to <inner>.
+	//   2. Set-semantics rules (shrink_egress_allowlist, shrink_subprocess_allowlist)
+	//      sort their list value at canonical time to match Python.
+	//   3. Everything else: marshal as-is (json.Marshal alphabetises map keys,
+	//      preserves scalar JSON types, matches Python json.dumps defaults).
+
+	// (1) Legacy wrapper unwrap.
+	if m, ok := value.(map[string]any); ok {
+		if inner, hasInner := m["_value"]; hasInner && len(m) == 1 {
+			value = inner
+		}
+	}
+
+	// (2) Set-semantics sort. Accepts []any (after json.Unmarshal) and
+	// []string (when callers constructed the Attenuation in-code).
+	if rule == "shrink_egress_allowlist" || rule == "shrink_subprocess_allowlist" {
+		switch sl := value.(type) {
+		case []any:
+			strs := make([]string, 0, len(sl))
+			allStr := true
+			for _, item := range sl {
+				if s, isStr := item.(string); isStr {
+					strs = append(strs, s)
+				} else {
+					allStr = false
+					break
 				}
 			}
+			if allStr {
+				sort.Strings(strs)
+				return marshalCanonical(strs)
+			}
+		case []string:
+			strs := append([]string(nil), sl...)
+			sort.Strings(strs)
+			return marshalCanonical(strs)
 		}
-		return marshalCanonical(v)
 	}
-	// Full envelope-shape map.
+
+	// (3) Pass-through canonical marshal.
 	return marshalCanonical(value)
 }
 

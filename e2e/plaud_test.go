@@ -3,6 +3,7 @@ package e2e
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -121,9 +122,11 @@ func TestPlaudTokenRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stat: %v", err)
 	}
-	perm := info.Mode().Perm()
-	if perm != 0600 {
-		t.Errorf("file perm = %o, want 0600", perm)
+	if runtime.GOOS != "windows" { // Windows does not honor Unix 0600 perms
+		perm := info.Mode().Perm()
+		if perm != 0600 {
+			t.Errorf("file perm = %o, want 0600", perm)
+		}
 	}
 
 	// Load.

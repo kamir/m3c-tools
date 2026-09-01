@@ -1,0 +1,5 @@
+{
+  "categories": ["injection"],
+  "min_verdict": "red",
+  "note": "Injection spread across hard-wrapped lines; \\s+ in patterns spans newlines so disregard/you-are-now still fire."
+}

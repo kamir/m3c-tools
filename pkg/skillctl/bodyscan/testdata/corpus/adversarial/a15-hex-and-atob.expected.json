@@ -1,0 +1,6 @@
+{
+  "categories": ["obfuscation"],
+  "rule_ids": ["OBF-002", "OBF-003"],
+  "min_verdict": "yellow",
+  "note": "\\xNN hex run plus literal atob( decode primitive."
+}

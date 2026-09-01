@@ -9,8 +9,11 @@ import (
 	"mime/multipart"
 	"os"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 )
 
 // UploadPayload describes the multipart data to send to ER1.
@@ -25,6 +28,9 @@ type UploadPayload struct {
 	ContentType        string // per-observation content type (overrides cfg.ContentType if set)
 	DocID              string // if set, request ER1 to overwrite this existing document
 	DoTranscribe       bool   // if true, send DO_TRANSCRIBE=true — server transcribes audio
+	CurrentTime        string // real capture time "2006-01-02 15:04:05"; empty → server stamps now.
+	// Positions the item at its true creation time in the memory viewer instead
+	// of the import time — important for multi-device capture (SPEC-0117).
 }
 
 // UploadResponse is the parsed response from ER1 on success.
@@ -64,6 +70,10 @@ func Upload(cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
 	}
 	if payload.DoTranscribe {
 		_ = writer.WriteField("DO_TRANSCRIBE", "true")
+	}
+	if payload.CurrentTime != "" {
+		// Real capture time — the server positions the item here instead of "now".
+		_ = writer.WriteField("current_time", payload.CurrentTime)
 	}
 
 	// Transcript (optional — omit to let server handle transcription)
@@ -125,7 +135,8 @@ func Upload(cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
 
 	// Send
 	client := &http.Client{
-		Timeout: time.Duration(cfg.UploadTimeout) * time.Second,
+		Timeout:       time.Duration(cfg.UploadTimeout) * time.Second,
+		CheckRedirect: httpsafe.NoCredentialRedirect, // SEC F25: don't leak X-API-KEY cross-host
 	}
 	if !cfg.VerifySSL {
 		client.Transport = &http.Transport{
@@ -159,7 +170,8 @@ func Upload(cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
 // IsReachable checks if the ER1 server is reachable via HEAD request.
 func IsReachable(cfg *Config) bool {
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout:       5 * time.Second,
+		CheckRedirect: httpsafe.NoCredentialRedirect, // SEC F25
 	}
 	if !cfg.VerifySSL {
 		client.Transport = &http.Transport{
@@ -186,6 +198,78 @@ func truncate(s string, n int) string {
 		return s[:n] + "..."
 	}
 	return s
+}
+
+// PatchMemoryCurrentTime updates an already-stored ER1 memory item's
+// `current_time` (the memory-viewer sort position) via
+// PATCH /memory/<ctx>/<docID>. Used by `plaud fix-times` to backfill the real
+// recording time onto items that were synced before capture-time support —
+// no audio re-upload, no transcription disruption. currentTime must be
+// "2006-01-02 15:04:05".
+func PatchMemoryCurrentTime(cfg *Config, docID, currentTime string) error {
+	if docID == "" || currentTime == "" {
+		return fmt.Errorf("doc_id and current_time are required")
+	}
+	if cfg.APIKey == "" && os.Getenv("ER1_DEVICE_TOKEN") == "" {
+		return fmt.Errorf("no authentication configured")
+	}
+	base := strings.TrimSuffix(cfg.APIURL, "/upload_2")
+	base = strings.TrimSuffix(base, "/upload")
+	base = strings.TrimSuffix(base, "/")
+	endpoint := fmt.Sprintf("%s/memory/%s/%s", base, cfg.ContextID, docID)
+
+	form := url.Values{}
+	form.Set("current_time", currentTime)
+	req, err := http.NewRequest("PATCH", endpoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	// The /memory PATCH route enforces CSRF for a Bearer-only (session-style)
+	// request but exempts API-key clients — so send X-API-KEY (not just the
+	// device-token Bearer that AuthHeaders() prefers), else every PATCH 400s
+	// with "CSRF token missing". Both headers are safe; the server accepts the key.
+	if cfg.APIKey != "" {
+		req.Header.Set("X-API-KEY", cfg.APIKey)
+	}
+	if token := os.Getenv("ER1_DEVICE_TOKEN"); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	if cfg.APIKey == "" {
+		// No API key — fall back to the standard headers (may hit CSRF; the
+		// real fix is a server-side CSRF exemption for token auth on this route).
+		for k, v := range cfg.AuthHeaders() {
+			req.Header.Set(k, v)
+		}
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect}
+	if !cfg.VerifySSL {
+		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("PATCH current_time HTTP %d: %s", resp.StatusCode, truncate(string(body), 200))
+	}
+	return nil
+}
+
+// CaptureTimeLayout is the timestamp format ER1 stores in `current_time` and
+// sorts the memory viewer by ("YYYY-MM-DD HH:MM:SS").
+const CaptureTimeLayout = "2006-01-02 15:04:05"
+
+// FormatCaptureTime formats a capture time for UploadPayload.CurrentTime.
+// A zero time yields "" so the caller omits the field and the server stamps now.
+func FormatCaptureTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format(CaptureTimeLayout)
 }
 
 func isAudioImportPayload(contentType, tags string) bool {
