@@ -135,7 +135,9 @@ func Run(t *testing.T, be artifact.Backend) {
 	revEv, _ := registry.BuildBundleRevokedEvent(registry.RevokedEventInput{
 		BundleDigest: digPdf2, ReasonCode: "deprecated", RevokedBy: "id:conformance", OccurredAt: time.Unix(1, 0).UTC(),
 	})
-	registry.SignEnvelopeSignature(priv, revEv)
+	if _, err := registry.SignEnvelopeSignature(priv, revEv); err != nil {
+		t.Fatalf("SignEnvelopeSignature(revoke): %v", err)
+	}
 	if _, err := be.Publish(ctx, artifact.PublishRequest{
 		Kind: artifact.KindRevoke, Event: revEv,
 		Meta: artifact.ArtifactMeta{Name: "pdf", Version: "1.2.0", Digest: digPdf2},
