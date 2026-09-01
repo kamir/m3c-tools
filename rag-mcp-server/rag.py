@@ -60,7 +60,14 @@ def resolve_workspaces(arg):
         ws = [w for w in os.environ.get("RAG_WORKSPACES", "").split(os.pathsep) if w]
     seen, out = set(), []
     for w in ws:
-        r = str(Path(w).expanduser().resolve())
+        pw = Path(w).expanduser().resolve()
+        # A standing fan-out set (a committed .mcp.json, $RAG_WORKSPACES in a
+        # profile) is shared across machines that do not all have every repo
+        # checked out. A missing one must not take the whole server down.
+        if not pw.is_dir():
+            print(f"rag: warning — skipping missing workspace {w}", file=sys.stderr)
+            continue
+        r = str(pw)
         if r not in seen:
             seen.add(r)
             out.append(r)
