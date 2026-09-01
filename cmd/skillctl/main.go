@@ -19,6 +19,10 @@ import (
 	// Register the git artifact backends (gitlab:// / github://) so
 	// artifact.Open() can resolve those schemes at runtime (SPEC-0356 D3).
 	_ "github.com/kamir/m3c-tools/pkg/skillctl/backend/git"
+
+	// Register the OCI backend (oci://) — enterprise/container-registry carrier
+	// (GHCR / Zot / Harbor), events-as-referrers (SPEC-0356 D7).
+	_ "github.com/kamir/m3c-tools/pkg/skillctl/backend/oci"
 )
 
 // version is stamped at build time via -ldflags "-X main.version=skillctl/vX.Y.Z".
