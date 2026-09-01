@@ -150,7 +150,7 @@ def resolve_workspaces(arg):
     return out
 
 
-def _search_many(workspaces, query, k, path_prefix, since_days, get_indexer=None):
+def _search_many(workspaces, query, k, path_prefix, since_days, get_indexer=None, mode="hybrid"):
     """Fan out one query across several workspaces and merge by score.
 
     Three things make the merge honest and cheap:
@@ -192,7 +192,13 @@ def _search_many(workspaces, query, k, path_prefix, since_days, get_indexer=None
     for w in workspaces:
         ix = get_indexer(w)
         try:
-            hits = ix.search(query, k=k, path_prefix=path_prefix, since_days=since_days)
+            # TIEFER als k je Workspace holen. Sonst liefert jeder nur seine
+            # Spitze, die Fusion interleavt round-robin, und der eine Workspace,
+            # der die Antwort WIRKLICH hat, kommt mit Rang 5 nie durch.
+            # Gemessen: admission.py steht in aims-core auf Rang 5 und fehlte im
+            # Verbund-Top-10 vollstaendig.
+            hits = ix.search(query, k=max(k * 3, 30), path_prefix=path_prefix,
+                             since_days=since_days, mode=mode)
         except Exception as e:  # a broken/absent index must not sink the whole fan-out
             print(f"rag: warning — {Path(w).name}: {e}", file=sys.stderr)
             continue
@@ -201,7 +207,18 @@ def _search_many(workspaces, query, k, path_prefix, since_days, get_indexer=None
             h["workspace"] = label
             h["workspace_path"] = w
             merged.append(h)
-    merged.sort(key=lambda h: h["score"], reverse=True)
+    # Bei hybrid tragen rein-lexikalische Treffer keinen Kosinus-Score. Nach score
+    # zu sortieren wuerde sie ans Ende schieben und den Fan-out um genau die
+    # Treffer bringen, wegen derer die lexikalische Haelfte existiert. Deshalb
+    # wird ueber die Workspaces erneut per RRF fusioniert.
+    # Global nach dem Fusionswert sortieren, den jeder Workspace SELBST vergeben
+    # hat — nicht die Workspaces gegeneinander round-robin interleaven. Ein stark
+    # fusionierter Treffer aus einem Repo schlaegt damit die schwache Spitze eines
+    # anderen, was der ganze Punkt des Verbundes ist.
+    if any(h.get("rrf") for h in merged):
+        merged.sort(key=lambda h: (h.get("rrf", 0.0), h["score"]), reverse=True)
+    else:
+        merged.sort(key=lambda h: h["score"], reverse=True)
     return merged[:k]
 
 
@@ -223,6 +240,9 @@ def main():
     ss.add_argument("-k", type=int, default=8)
     ss.add_argument("--path-prefix", default="")
     ss.add_argument("--since-days", type=int, default=0)
+    ss.add_argument("--mode", choices=["hybrid", "dense", "lexical"], default="hybrid",
+                    help="hybrid (default): dense + BM25, fused by rank. dense: wie bisher. "
+                         "lexical: nur BM25 — nuetzlich, um einen exakten Begriff zu pruefen.")
     ss.add_argument("--json", action="store_true")
     a = ap.parse_args()
 
@@ -239,7 +259,7 @@ def main():
 
     if a.cmd == "search":
         try:
-            res = _search_many(workspaces, a.query, a.k, a.path_prefix, a.since_days)
+            res = _search_many(workspaces, a.query, a.k, a.path_prefix, a.since_days, mode=a.mode)
         except ValueError as e:
             sys.exit(f"rag: {e}")
         if a.json:
@@ -250,7 +270,9 @@ def main():
         multi = len(workspaces) > 1
         for r in res:
             where = f"{r['workspace']}:{r['path']}" if multi else r["path"]
-            print(f"\n{r['score']:.3f}  {where}:{r['lines']}  [{r['heading']}]")
+            via = r.get("via", "")
+            tag = {"both": " ‡", "lexical": " ¶"}.get(via, "")
+            print(f"\n{r['score']:.3f}{tag}  {where}:{r['lines']}  [{r['heading']}]")
             print("    " + r["snippet"].replace("\n", " ")[:240])
         return
 

@@ -195,6 +195,7 @@ class Indexer:
         for fm in files_meta:
             self.store.upsert_file(*fm)
         self._export_jsonl()
+        self.store.rebuild_fts()
         corpus = self._corpus_hash([(fm[0], fm[1]) for fm in files_meta])
         n_chunks, n_files = self.store.counts()
         self._write_state(n_chunks, n_files, corpus)
@@ -278,6 +279,7 @@ class Indexer:
             self.store.upsert_file(*fm)
         idx.write(str(self.index_path))
         self._export_jsonl()
+        self.store.rebuild_fts()
         corpus = self._corpus_hash(list(self.store.all_files().items()))
         n_chunks, n_files = self.store.counts()
         self._write_state(n_chunks, n_files, corpus)
@@ -286,7 +288,21 @@ class Indexer:
                 "corpus_hash": corpus[:12]}
 
     # ---------- search ----------
-    def search(self, query, k=8, path_prefix="", since_days=0):
+    @staticmethod
+    def _rrf(ranked_lists, k0=60):
+        """Reciprocal Rank Fusion: score(d) = sum 1/(k0 + rank_i(d)).
+
+        Deliberately rank-based, not score-based. Cosine similarity and BM25 live
+        on incomparable scales; any attempt to normalise them needs per-corpus
+        tuning that goes stale. RRF needs neither and is the standard answer.
+        """
+        acc = {}
+        for lst in ranked_lists:
+            for rank, cid in enumerate(lst, 1):
+                acc[cid] = acc.get(cid, 0.0) + 1.0 / (k0 + rank)
+        return sorted(acc.items(), key=lambda x: -x[1])
+
+    def search(self, query, k=8, path_prefix="", since_days=0, mode="hybrid"):
         from turbovec import IdMapIndex
         if not self.index_path.exists():
             return []
@@ -306,9 +322,60 @@ class Indexer:
                 return []
             allow = np.array(sorted(common), dtype=np.uint64)
 
-        scores, ids = _tv_search(idx, qv, k, allow)
+        # HYBRID (default): dense + lexical, fused by rank.
+        #
+        # Why the lexical half is not optional: a question can carry a rare literal
+        # term that appears verbatim in the target and STILL be missed by dense
+        # retrieval, because the rest of the sentence dominates the embedding.
+        # Measured 2026-09-01 over 4 workspaces / ~125k chunks: the German question
+        # "Wird propose-by-default serverseitig erzwungen?" returned nothing from
+        # admission.py or SPEC-0350 in the top FIFTY — although `propose-by-default`
+        # occurs literally in both, and in 13 files overall. Not a ranking problem
+        # (reranking cannot fix what was never retrieved) but a recall problem.
+        deep = max(k * 5, 50) if mode == "hybrid" else k
+        dense_ids = []
+        if mode in ("hybrid", "dense"):
+            scores, ids = _tv_search(idx, qv, deep, allow)
+            dense_ids = [int(i) for i in ids]
+        lex_ids, n_ident = [], 0
+        if mode in ("hybrid", "lexical"):
+            lex_ids, n_ident = self.store.search_lexical(
+                query, k=deep, allow=set(allow.tolist()) if allow is not None else None)
+
+        rrf_score = {}
+        if mode == "hybrid" and lex_ids:
+            pairs = self._rrf([dense_ids, lex_ids])
+            rrf_score = dict(pairs)
+            fused = [cid for cid, _ in pairs][:k]
+            # EXAKTBEGRIFF HAT VORRANG. Traegt die Frage einen Identifier
+            # (`propose-by-default`, `ail_admission_hook`, `SPEC-0350`), dann ist
+            # der woertliche Treffer das staerkste Signal, das es gibt — staerker
+            # als jede Aehnlichkeit. Reines RRF verliert ihn trotzdem, weil es
+            # Treffer belohnt, die BEIDE Haelften finden: ist die dichte Haelfte
+            # fuer diese Frage falsch, gewinnen Rausch-Chunks, die zufaellig in
+            # beiden Listen stehen. Gemessen an genau diesem Fall.
+            if n_ident:
+                head = [c for c in lex_ids[:n_ident] if c not in ()][:max(1, k // 2)]
+                rest = [c for c in fused if c not in set(head)]
+                fused = (head + rest)[:k]
+                for r, c in enumerate(head, 1):
+                    rrf_score[c] = 1.0 / r          # vor jedem RRF-Wert (< 1/60)
+        elif mode == "lexical":
+            fused = lex_ids[:k]
+        else:
+            fused = dense_ids[:k]
+
+        dense_rank = {cid: r for r, cid in enumerate(dense_ids, 1)}
+        lex_rank = {cid: r for r, cid in enumerate(lex_ids, 1)}
+        # Der Score bleibt die Kosinus-Aehnlichkeit, wo es eine gibt — sonst waere
+        # die Ausgabe nicht mehr mit fruheren Laeufen vergleichbar. Woher ein
+        # Treffer kommt, sagt `via`.
+        dense_score = {int(i): float(s) for s, i in zip(*_tv_search(idx, qv, deep, allow))} \
+            if mode in ("hybrid", "dense") else {}
+
         out = []
-        for s, i in zip(scores, ids):
+        for i in fused:
+            s = dense_score.get(i, 0.0)
             row = self.store.get_chunk(int(i))
             if not row:
                 continue
@@ -317,6 +384,9 @@ class Indexer:
                 "heading": row["heading"],
                 "lines": f"{row['line_start']}-{row['line_end']}",
                 "score": round(float(s), 4),
+                "rrf": round(rrf_score.get(i, 0.0), 6),
+                "via": ("both" if i in dense_rank and i in lex_rank
+                        else "lexical" if i in lex_rank else "dense"),
                 "snippet": row["text"][:500],
             })
         return out
