@@ -43,12 +43,12 @@ type Request struct {
 
 // Response is one completion.
 type Response struct {
-	Content      string
-	Model        string  // actual model reported by the provider
-	TokensIn     int     // prompt tokens
-	TokensOut    int     // completion tokens
-	CostUSD      float64 // provider-derived USD cost for this call
-	DurationMS   int
+	Content    string
+	Model      string  // actual model reported by the provider
+	TokensIn   int     // prompt tokens
+	TokensOut  int     // completion tokens
+	CostUSD    float64 // provider-derived USD cost for this call
+	DurationMS int
 }
 
 // Adapter is the common surface every provider implements.
@@ -106,8 +106,9 @@ func (a *openaiAdapter) Complete(ctx context.Context, req Request) (Response, er
 		msgs = append(msgs, openai.ChatCompletionMessage{Role: m.Role, Content: m.Content})
 	}
 	in := openai.ChatCompletionRequest{
-		Model:       model,
-		Messages:    msgs,
+		Model:    model,
+		Messages: msgs,
+		//nolint:staticcheck // MaxTokens is retained deliberately: MaxCompletionTokens is incompatible with the non-o1 chat models this path targets.
 		MaxTokens:   req.MaxTokens,
 		Temperature: req.Temperature,
 	}
@@ -134,7 +135,7 @@ func (a *openaiAdapter) Complete(ctx context.Context, req Request) (Response, er
 		Content:    body,
 		Model:      out.Model,
 		TokensIn:   tokensIn,
-		TokensOut: tokensOut,
+		TokensOut:  tokensOut,
 		CostUSD:    cost,
 		DurationMS: dur,
 	}, nil
@@ -170,9 +171,9 @@ func (a *openaiAdapter) EstimateCost(req Request) (int, float64) {
 //
 //  1. If OPENAI_API_KEY is set → OpenAI adapter.
 //     - If OLLAMA_URL is also set AND M3C_LLM_FALLBACK=ollama, the
-//       returned adapter wraps OpenAI as primary and Ollama as
-//       fallback on 5xx responses. Lets a prod-configured engine
-//       degrade to local inference during transient outages.
+//     returned adapter wraps OpenAI as primary and Ollama as
+//     fallback on 5xx responses. Lets a prod-configured engine
+//     degrade to local inference during transient outages.
 //  2. Else if OLLAMA_URL is set → Ollama adapter (local, zero cost).
 //  3. Else → error. The engine refuses to start without a configured
 //     LLM path rather than silently no-op. Matches the Week-1
@@ -259,9 +260,10 @@ func isTransientLLMError(err error) bool {
 // gating and trace records.
 //
 // Rates are per-1M-tokens, approximate as of 2026-Q1:
-//   gpt-4o-mini: $0.15 / $0.60
-//   gpt-4o:      $2.50 / $10.00
-//   default:     $1.00 / $3.00
+//
+//	gpt-4o-mini: $0.15 / $0.60
+//	gpt-4o:      $2.50 / $10.00
+//	default:     $1.00 / $3.00
 func EstimateOpenAICost(model string, inTok, outTok int) float64 {
 	var inRate, outRate float64 // per 1M tokens
 	m := strings.ToLower(model)
@@ -346,7 +348,7 @@ func (m *MockAdapter) Complete(ctx context.Context, req Request) (Response, erro
 		Content:    body,
 		Model:      model,
 		TokensIn:   tokensIn,
-		TokensOut: tokensOut,
+		TokensOut:  tokensOut,
 		CostUSD:    0, // mock calls are free
 		DurationMS: 1,
 	}, nil

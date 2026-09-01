@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -84,9 +85,11 @@ func TestGossipedRevokedGrowOnly(t *testing.T) {
 			t.Errorf("digest %s missing after grow-only merge", d)
 		}
 	}
-	// Perms: 0600.
-	if fi, err := os.Stat(gossipedRevokedPath(home)); err == nil && fi.Mode().Perm() != 0o600 {
-		t.Errorf("gossip cache perms = %o, want 600", fi.Mode().Perm())
+	// Perms: 0600 (POSIX only — Windows does not model unix mode bits).
+	if runtime.GOOS != "windows" {
+		if fi, err := os.Stat(gossipedRevokedPath(home)); err == nil && fi.Mode().Perm() != 0o600 {
+			t.Errorf("gossip cache perms = %o, want 600", fi.Mode().Perm())
+		}
 	}
 }
 
