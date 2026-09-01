@@ -30,6 +30,10 @@ func runRegistry(args []string, stdout, stderr io.Writer) int {
 		return runRegistryLs(args[1:], stdout, stderr)
 	case "show":
 		return runRegistryShow(args[1:], stdout, stderr)
+	case "init":
+		return runRegistryInit(args[1:], stdout, stderr)
+	case "export":
+		return runRegistryExport(args[1:], stdout, stderr)
 	case "help", "--help", "-h":
 		printRegistryUsage(stdout)
 		return 0
@@ -41,12 +45,18 @@ func runRegistry(args []string, stdout, stderr io.Writer) int {
 }
 
 func printRegistryUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: skillctl registry <ls|show> [flags]")
+	fmt.Fprintln(w, "Usage: skillctl registry <ls|show|init|export> [flags]")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "  ls    [--latest] [--skill <name>] [--er1-target ...] [--er1-context ...]")
-	fmt.Fprintln(w, "        List bundles in the `self` registry, grouped by skill.")
-	fmt.Fprintln(w, "  show  <name | sha256:<hex>>  [--er1-target ...] [--er1-context ...]")
-	fmt.Fprintln(w, "        Show the full event timeline for one skill or one digest.")
+	fmt.Fprintln(w, "  ls     [--latest] [--skill <name>] [--registry <spec>]")
+	fmt.Fprintln(w, "         List bundles in a registry, grouped by skill.")
+	fmt.Fprintln(w, "  show   <name | sha256:<hex>>  [--registry <spec>]")
+	fmt.Fprintln(w, "         Show the full event timeline for one skill or one digest.")
+	fmt.Fprintln(w, "  init   --registry local://<path>")
+	fmt.Fprintln(w, "         Create a BARE local git registry (a folder you can publish into,")
+	fmt.Fprintln(w, "         offline). Push to a central GitLab/GitHub later with `git push`.")
+	fmt.Fprintln(w, "  export --registry local://<path> --out <file.bundle>")
+	fmt.Fprintln(w, "         Write a portable, verifiable one-file snapshot (git bundle) — the")
+	fmt.Fprintln(w, "         offline handoff: a peer runs `pull --registry local://<file.bundle>`.")
 }
 
 func runRegistryLs(args []string, stdout, stderr io.Writer) int {
