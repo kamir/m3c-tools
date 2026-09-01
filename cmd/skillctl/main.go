@@ -63,6 +63,14 @@ func main() {
 	case "trust":
 		os.Exit(runTrust(os.Args[2:], os.Stdout, os.Stderr))
 	// === END SPEC-0188 S7 ===
+	// === SPEC-0359 D2: peer discovery + trust pinning ===
+	case "peer":
+		os.Exit(runPeer(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0359 D2 ===
+	// === SPEC-0359 D3(i): governance-root cross-signing ===
+	case "cross-sign":
+		os.Exit(runCrossSign(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0359 D3(i) ===
 	// === SPEC-0188 S9-cli: attest subcommand ===
 	case "attest":
 		os.Exit(runAttest(os.Args[2:], os.Stdout, os.Stderr))

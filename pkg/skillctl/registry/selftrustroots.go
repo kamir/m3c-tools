@@ -30,6 +30,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/govlevel"
 	"gopkg.in/yaml.v3"
@@ -42,11 +43,56 @@ type SelfTrustRoots struct {
 	Fingerprint       string `yaml:"fingerprint,omitempty"`
 	GovernanceMinimum string `yaml:"governance_minimum,omitempty"`
 
+	// SPEC-0359 D3 (federation) — N-of-M co-attestation. GovernanceQuorum is the
+	// number of DISTINCT pinned signer keys whose attestation must meet the floor
+	// (default 1 → today's single-attestation behaviour). Signers is the pinned
+	// reviewer key set; empty → one implicit signer {"", pub} matching any
+	// reviewer_id (byte-identical to pre-D3). Both omitempty for schema stability.
+	GovernanceQuorum int      `yaml:"governance_quorum,omitempty"`
+	Signers          []Signer `yaml:"signers,omitempty"`
+
+	// D3(i) cross-signing: pin ONE governance root + a path of signed
+	// cross-signature records; verified, unexpired members are added to the
+	// signer set at load. Lets you trust a group without listing every member key.
+	GovernanceRootPubKeyB64 string `yaml:"governance_root_pubkey_b64,omitempty"`
+	CrossSignPath           string `yaml:"cross_sign_path,omitempty"`
+
 	// Path is the file the data was loaded from. Empty for in-memory tests.
 	Path string `yaml:"-"`
 
 	// Resolved pub key (computed once at Load).
 	pub ed25519.PublicKey
+}
+
+// quorum returns the required number of distinct qualifying signers (>= 1).
+func (t *SelfTrustRoots) quorum() int {
+	if t == nil || t.GovernanceQuorum < 1 {
+		return 1
+	}
+	return t.GovernanceQuorum
+}
+
+// signerSet returns the pinned reviewer keys, or a single implicit signer bound
+// to the primary key (ReviewerID "" matches any reviewer_id) when none are
+// pinned — the D3-off default that reproduces the single-key gauntlet exactly.
+func (t *SelfTrustRoots) signerSet() []Signer {
+	if len(t.Signers) > 0 {
+		return t.Signers
+	}
+	return []Signer{{ReviewerID: "", pub: t.pub}}
+}
+
+// MeetsQuorum reports whether at least `quorum()` of the given per-signer levels
+// meet the floor. MeetsFloor keeps its exact per-level semantics; this only
+// aggregates over it, so the artifact.TrustProvider interface is untouched.
+func (t *SelfTrustRoots) MeetsQuorum(levels []string) bool {
+	n := 0
+	for _, l := range levels {
+		if t.MeetsFloor(l) {
+			n++
+		}
+	}
+	return n >= t.quorum()
 }
 
 // DefaultSelfTrustRootsPath is the conventional location.
@@ -101,6 +147,33 @@ func LoadSelfTrustRoots(path string) (*SelfTrustRoots, error) {
 		return nil, fmt.Errorf("trust-roots: pubkey size %d, want %d", len(pubBytes), ed25519.PublicKeySize)
 	}
 	tr.pub = ed25519.PublicKey(pubBytes)
+
+	// D3: resolve each pinned signer key + ensure the quorum is satisfiable.
+	for i := range tr.Signers {
+		sb, derr := base64.StdEncoding.DecodeString(strings.TrimSpace(tr.Signers[i].PubKeyB64))
+		if derr != nil {
+			return nil, fmt.Errorf("trust-roots: signer %q pubkey_b64 not valid base64: %w", tr.Signers[i].ReviewerID, derr)
+		}
+		if len(sb) != ed25519.PublicKeySize {
+			return nil, fmt.Errorf("trust-roots: signer %q pubkey size %d, want %d", tr.Signers[i].ReviewerID, len(sb), ed25519.PublicKeySize)
+		}
+		tr.Signers[i].pub = ed25519.PublicKey(sb)
+	}
+	// D3(i): admit cross-signed members from the PINNED governance root.
+	if tr.GovernanceRootPubKeyB64 != "" && tr.CrossSignPath != "" {
+		gpub, gerr := base64.StdEncoding.DecodeString(strings.TrimSpace(tr.GovernanceRootPubKeyB64))
+		if gerr != nil || len(gpub) != ed25519.PublicKeySize {
+			return nil, fmt.Errorf("trust-roots: governance_root_pubkey_b64 invalid in %s", path)
+		}
+		records, rerr := loadCrossSignRecords(tr.CrossSignPath)
+		if rerr != nil {
+			return nil, fmt.Errorf("trust-roots: cross_sign_path %s: %w", tr.CrossSignPath, rerr)
+		}
+		tr.Signers = append(tr.Signers, DeriveCrossSignedSigners(ed25519.PublicKey(gpub), records, time.Now())...)
+	}
+	if tr.GovernanceQuorum > 1 && len(tr.Signers) < tr.GovernanceQuorum {
+		return nil, fmt.Errorf("trust-roots: governance_quorum %d exceeds the %d pinned signers in %s", tr.GovernanceQuorum, len(tr.Signers), path)
+	}
 
 	// Compute fingerprint (or check the one the file declares).
 	computed := selfFingerprint(pubBytes)

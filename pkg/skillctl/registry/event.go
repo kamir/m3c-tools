@@ -75,10 +75,10 @@ var (
 // SignatureRef is one entry of an event's `signatures` array (admitted events
 // only). Mirrors SPEC-0190 §3.1.
 type SignatureRef struct {
-	Role               string // "author" | "registry"
-	IdentityID         string // e.g. "id:kamir@m3c"
-	SignatureB64       string // base64 ed25519 detached signature over the bundle digest
-	PubKeyFingerprint  string // "sha256:<hex>"
+	Role              string // "author" | "registry"
+	IdentityID        string // e.g. "id:kamir@m3c"
+	SignatureB64      string // base64 ed25519 detached signature over the bundle digest
+	PubKeyFingerprint string // "sha256:<hex>"
 }
 
 func (s SignatureRef) toMap() map[string]any {
@@ -92,15 +92,15 @@ func (s SignatureRef) toMap() map[string]any {
 
 // AdmittedEventInput is the typed input for BuildBundleAdmittedEvent.
 type AdmittedEventInput struct {
-	BundleDigest        string         // "sha256:<hex>"
-	Name                string         // skill name
-	Version             string         // skill version (semver-ish, no leading 'v')
-	AuthorIntent        string         // "green" | "yellow" | "red"
-	AdmittedByIdentity  string         // "id:kamir@m3c" for the self tenant
-	AdmittedAt          time.Time      // event ts (UTC)
-	BlobURI             string         // empty for transport:er1-inline
-	Signatures          []SignatureRef // author + registry refs
-	TenantScope         *string        // nil for self
+	BundleDigest       string         // "sha256:<hex>"
+	Name               string         // skill name
+	Version            string         // skill version (semver-ish, no leading 'v')
+	AuthorIntent       string         // "green" | "yellow" | "red"
+	AdmittedByIdentity string         // "id:kamir@m3c" for the self tenant
+	AdmittedAt         time.Time      // event ts (UTC)
+	BlobURI            string         // empty for transport:er1-inline
+	Signatures         []SignatureRef // author + registry refs
+	TenantScope        *string        // nil for self
 }
 
 // BuildBundleAdmittedEvent constructs the SPEC-0190 §3.1 event payload.
@@ -155,6 +155,11 @@ type AttestedEventInput struct {
 	Rationale       string
 	OccurredAt      time.Time
 	TenantScope     *string
+	// ExpiresAt (SPEC-0359 D5) is an OPT-IN signed expiry. When nil the field is
+	// omitted entirely, so legacy attestations' canonical bytes + signature are
+	// byte-identical. When set, a pull/runtime past this instant fails closed
+	// (DENY — treated as a missing attestation, never a fall-back to an older one).
+	ExpiresAt *time.Time
 }
 
 // BuildAttestationPublishedEvent constructs the SPEC-0190 §3.2 event payload.
@@ -182,6 +187,11 @@ func BuildAttestationPublishedEvent(in AttestedEventInput) (map[string]any, erro
 		"governance_level": in.GovernanceLevel,
 		"rationale":        in.Rationale,
 		"tenant_scope":     derefOrNil(in.TenantScope),
+	}
+	// D5: opt-in signed expiry. Written ONLY when set, so a no-expiry attestation
+	// keeps byte-identical canonical bytes + signature (no regression).
+	if in.ExpiresAt != nil {
+		ev["expires_at"] = rfc3339(*in.ExpiresAt)
 	}
 	return ev, nil
 }

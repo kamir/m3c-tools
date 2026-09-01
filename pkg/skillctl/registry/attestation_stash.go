@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // AttestationStashName is the per-skill signed-context stash filename.
@@ -45,8 +46,13 @@ type AttestationContext struct {
 	AdmitEvent map[string]any `json:"admit_event"`
 	// GovernanceAttestation is the latest envelope-signed attestation event for
 	// the SAME digest; its governance_level is the authentic, non-forgeable
-	// governance verdict (replaces the unsigned sidecar field — F19).
+	// governance verdict (replaces the unsigned sidecar field — F19). Kept as the
+	// singular field for legacy stashes + the k=1 path.
 	GovernanceAttestation map[string]any `json:"governance_attestation"`
+	// GovernanceAttestations is the full N-of-M qualifying signed attestation set
+	// (SPEC-0359 D3). Omitted when a single attestation qualifies (k=1), so legacy
+	// stashes stay byte-identical.
+	GovernanceAttestations []map[string]any `json:"governance_attestations,omitempty"`
 }
 
 // WriteAttestationStash writes the signed context into the installed dir.
@@ -96,6 +102,15 @@ func ReadAttestationStash(dir string) (*AttestationContext, error) {
 // over the new bytes); a flipped governance level in the sidecar is irrelevant
 // because the level comes from the SIGNED attestation here.
 func (c *AttestationContext) Reverify(pub ed25519.PublicKey, stashedSkb []byte) (string, error) {
+	return c.ReverifyAt(pub, stashedSkb, time.Now())
+}
+
+// ReverifyAt is Reverify with an injectable clock for the D5 attestation-freshness
+// check: a stashed attestation whose signed expires_at has lapsed fails closed
+// (DENY), never silently reviving an older verdict. now is threaded so the runtime
+// gate + tests are deterministic; the expiry check is a no-op when expires_at is
+// absent (legacy stashes byte-identical).
+func (c *AttestationContext) ReverifyAt(pub ed25519.PublicKey, stashedSkb []byte, now time.Time) (string, error) {
 	if c == nil || c.AdmitEvent == nil {
 		return "", fmt.Errorf("%w: missing admit event", ErrAttestationReanchor)
 	}
@@ -131,6 +146,11 @@ func (c *AttestationContext) Reverify(pub ed25519.PublicKey, stashedSkb []byte) 
 	level, _ := c.GovernanceAttestation["governance_level"].(string)
 	if level == "" {
 		return "", fmt.Errorf("%w: governance attestation has no governance_level", ErrAttestationReanchor)
+	}
+	// D5: a signed attestation whose expires_at has lapsed is DENIED at runtime,
+	// exactly as a missing attestation — never a fall-back to a stale approval.
+	if attestationExpired(c.GovernanceAttestation, now) {
+		return "", fmt.Errorf("%w: governance attestation expired (expires_at lapsed)", ErrAttestationReanchor)
 	}
 	return level, nil
 }

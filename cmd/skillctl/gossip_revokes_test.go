@@ -1,0 +1,111 @@
+package main
+
+import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
+	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
+)
+
+func gd(seed byte) string {
+	s := make([]byte, 64)
+	for i := range s {
+		s[i] = "0123456789abcdef"[int(seed)%16]
+	}
+	return "sha256:" + string(s)
+}
+
+func signedRevoke(t *testing.T, priv ed25519.PrivateKey, digest string) map[string]any {
+	t.Helper()
+	ev := map[string]any{
+		"schema_version": registry.EventSchemaVersion,
+		"event_id":       "r-" + digest,
+		"occurred_at":    "2026-08-01T00:00:00Z",
+		"bundle_digest":  digest,
+		"revoked_by":     "id:gov@org",
+	}
+	if _, err := registry.SignEnvelopeSignature(priv, ev); err != nil {
+		t.Fatal(err)
+	}
+	return ev
+}
+
+// TestUnionVerifiedRevokes: only revoke events that verify against the peer's key
+// are unioned; wrong-key/unsigned/non-revoke are dropped (integrity fail-closed).
+func TestUnionVerifiedRevokes(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	_, wrongPriv, _ := ed25519.GenerateKey(rand.Reader)
+	good := gd(1)
+	forged := gd(2)
+
+	events := []artifact.EventRecord{
+		{Kind: artifact.KindRevoke, Digest: good, Envelope: signedRevoke(t, priv, good)},          // valid
+		{Kind: artifact.KindRevoke, Digest: forged, Envelope: signedRevoke(t, wrongPriv, forged)}, // wrong key
+		{Kind: artifact.KindAdmit, Digest: gd(3), Envelope: signedRevoke(t, priv, gd(3))},         // not a revoke
+		{Kind: artifact.KindRevoke, Digest: "", Envelope: signedRevoke(t, priv, good)},            // no digest
+	}
+	into := map[string]struct{}{}
+	n := unionVerifiedRevokes(events, pub, into)
+	if n != 1 {
+		t.Fatalf("unioned %d, want 1 (only the validly-signed revoke)", n)
+	}
+	if _, ok := into[good]; !ok {
+		t.Error("the valid revoke was not unioned")
+	}
+	if _, ok := into[forged]; ok {
+		t.Error("a revoke signed by the WRONG key must be dropped (integrity fail-closed)")
+	}
+}
+
+// TestGossipedRevokedGrowOnly: the durable gossip cache only grows — a later merge
+// that omits a digest cannot un-revoke it (anti-rollback).
+func TestGossipedRevokedGrowOnly(t *testing.T) {
+	home := t.TempDir()
+	now := time.Now()
+	if _, err := mergeGossipedRevoked(home, map[string]struct{}{gd(1): {}, gd(2): {}}, now); err != nil {
+		t.Fatal(err)
+	}
+	// A second merge that OMITS gd(1) must not drop it.
+	total, err := mergeGossipedRevoked(home, map[string]struct{}{gd(3): {}}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 3 {
+		t.Errorf("grow-only cache = %d, want 3 (nothing dropped)", total)
+	}
+	got := loadGossipedRevoked(home)
+	for _, d := range []string{gd(1), gd(2), gd(3)} {
+		if _, ok := got[d]; !ok {
+			t.Errorf("digest %s missing after grow-only merge", d)
+		}
+	}
+	// Perms: 0600.
+	if fi, err := os.Stat(gossipedRevokedPath(home)); err == nil && fi.Mode().Perm() != 0o600 {
+		t.Errorf("gossip cache perms = %o, want 600", fi.Mode().Perm())
+	}
+}
+
+// TestFetchRevokedWithGossipUnions: the sweep seam unions the durable gossip cache
+// on top of the (stubbed) online set.
+func TestFetchRevokedWithGossipUnions(t *testing.T) {
+	home := t.TempDir()
+	if _, err := mergeGossipedRevoked(home, map[string]struct{}{gd(9): {}}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	// Seed a valid revoked-cache file with one online digest so fetchRevokedOnline's
+	// fail-open path returns it.
+	if err := os.MkdirAll(filepath.Dir(revokedCachePath(home)), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeRevokedCache(home, map[string]struct{}{gd(8): {}})
+
+	set, _ := fetchRevokedWithGossip(home)
+	if _, ok := set[gd(9)]; !ok {
+		t.Error("gossiped revoke not unioned into the sweep set")
+	}
+}
