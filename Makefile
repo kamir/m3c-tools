@@ -381,8 +381,31 @@ check-docs:
 	@./scripts/check-docs.sh
 
 # Release targets — code review + docs check run before release
-.PHONY: release release-patch release-minor release-major
-release: code-review check-docs release-patch
+#
+# `release` LEITET die Stufe aus den Commits ab (scripts/derive-bump.sh), statt
+# sie zu raten. Vorher war es fest `release-patch` verdrahtet: deshalb ist der
+# Fleet-Kill-Switch (FR-0045) als v2.8.1 ausgeliefert worden — eine Patch-Nummer
+# fuer ein Feature. Gegenprobe an der Historie: die Regel haette genau diesen
+# Fall gefangen und stimmt sonst mit den menschlichen Entscheidungen ueberein.
+#
+# MAJOR wird nie automatisch vergeben. "Breaking" ist eine Aussage ueber die
+# AUFRUFER, und die sieht kein Diff — bei drei ueber HTTP verdrahteten Systemen
+# ist das keine Formalie. Der Ableiter bricht dann ab und verlangt die
+# ausdrueckliche Handlung `make release-major`.
+.PHONY: release release-auto release-patch release-minor release-major
+release: code-review check-docs release-auto
+
+release-auto:
+	@lvl=$$(./scripts/derive-bump.sh); \
+	echo "abgeleitete Stufe aus den Commits: $$lvl"; \
+	if [ "$$lvl" = "major" ]; then \
+	  echo ""; \
+	  echo "  Die Commits enthalten eine Breaking Change (! oder BREAKING CHANGE:)."; \
+	  echo "  Ein Major-Release wird nicht automatisch vergeben."; \
+	  echo "  Bewusst ausloesen mit:  make release-major"; \
+	  exit 1; \
+	fi; \
+	./scripts/release.sh "$$lvl"
 
 release-patch:
 	@./scripts/release.sh patch
@@ -569,7 +592,8 @@ help:
 	@echo "  clean          Remove build artifacts"
 	@echo "  code-review    Run pre-release code review checks"
 	@echo "  check-docs     Check documentation consistency with implementation"
-	@echo "  release        Release with patch bump (runs code-review + check-docs first)"
+	@echo "  release        Release; bump level DERIVED from commits (code-review + check-docs first)"
+	@echo "  release-auto   Same derivation without the pre-checks"
 	@echo "  release-patch  Release with patch version bump"
 	@echo "  release-minor  Release with minor version bump"
 	@echo "  release-major  Release with major version bump"
