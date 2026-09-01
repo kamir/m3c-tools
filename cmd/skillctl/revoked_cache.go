@@ -273,8 +273,25 @@ func readRevokedCache(home string, ttl time.Duration) (map[string]struct{}, bool
 }
 
 // sweepRevokedFn is the seam the sweep uses to obtain the revoked set; tests
-// stub it. Production = fetchRevokedOnline. Returns (set, fetchedOnline).
-var sweepRevokedFn = fetchRevokedOnline
+// stub it. Production = fetchRevokedWithGossip. Returns (set, fetchedOnline).
+var sweepRevokedFn = fetchRevokedWithGossip
+
+// fetchRevokedWithGossip is the production seam: the online/cached revoked set
+// UNIONED with the durable grow-only gossip cache (SPEC-0359 D5(b)), so a digest
+// revoked by any governance-contributing peer is enforced even without pulling
+// from it. Union is the fail-closed direction; the gossip set only grows, so an
+// HTTP refresh can never drop a gossiped revoke.
+func fetchRevokedWithGossip(home string) (map[string]struct{}, bool) {
+	set, online := fetchRevokedOnline(home)
+	out := make(map[string]struct{}, len(set))
+	for d := range set {
+		out[d] = struct{}{}
+	}
+	for d := range loadGossipedRevoked(home) {
+		out[d] = struct{}{}
+	}
+	return out, online
+}
 
 // fetchRevocationHeadFn is the seam that fetches a signed revocation HEAD from
 // the registry (FR-0045 D2 endpoint). nil until the HEAD endpoint ships; while

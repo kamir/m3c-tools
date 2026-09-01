@@ -70,6 +70,7 @@ func runPeerAdd(args []string, stdout, stderr io.Writer) int {
 	pubB64 := fs.String("pubkey", "", "Peer's ed25519 public key, base64 (raw 32 bytes).")
 	pin := fs.String("pin", "", "Peer's trust-root fingerprint sha256:<hex> (verified out-of-band; REQUIRED).")
 	floor := fs.String("floor", "green", "governance_minimum for this peer: green | yellow.")
+	contributes := fs.Bool("contributes-revokes", false, "Union this peer's SIGNED revoke events into the local revoked set (`revoke feed --gossip`). Set ONLY for a governance-trusted peer — bounds revoke-DoS.")
 	if err := fs.Parse(reorderFlagArgs(fs, args)); err != nil {
 		return 2
 	}
@@ -99,7 +100,7 @@ func runPeerAdd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "peer add: %v\n", err)
 		return 1
 	}
-	pe := registry.Peer{Name: name, Locator: locator, PubKeyB64: *pubB64, Fingerprint: *pin, GovernanceMinimum: *floor}
+	pe := registry.Peer{Name: name, Locator: locator, PubKeyB64: *pubB64, Fingerprint: *pin, GovernanceMinimum: *floor, ContributesRevokes: *contributes}
 	if err := peers.AddPeer(pe); err != nil {
 		fmt.Fprintf(stderr, "peer add: %v\n", err)
 		return 1

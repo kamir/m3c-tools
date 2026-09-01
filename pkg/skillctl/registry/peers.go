@@ -45,6 +45,11 @@ type Peer struct {
 	GovernanceQuorum        int    `yaml:"governance_quorum,omitempty"`
 	GovernanceRootPubKeyB64 string `yaml:"governance_root_pubkey_b64,omitempty"`
 	CrossSignPath           string `yaml:"cross_sign_path,omitempty"`
+
+	// D5(b): when true, this peer's SIGNED revoke events are unioned into the local
+	// revoked set by `revoke feed --gossip` (a governance contributor). Default
+	// false → the peer's feed is advisory only, bounding revoke-DoS.
+	ContributesRevokes bool `yaml:"contributes_revokes,omitempty"`
 }
 
 // Peers is the loaded skill-peers.yaml.

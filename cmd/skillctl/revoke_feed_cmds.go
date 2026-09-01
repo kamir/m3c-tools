@@ -26,6 +26,7 @@ func runRevokeFeed(args []string, stdout, stderr io.Writer) int {
 	tenant := fs.String("tenant", "", "Tenant scope (optional; default global).")
 	timeout := fs.Duration("timeout", defaultHTTPTimeout, "HTTP timeout for the HEAD fetch.")
 	refresh := fs.Bool("refresh", false, "Run the revocation sweep now to refresh the local cache + freshness anchor.")
+	gossip := fs.Bool("gossip", false, "Gossip: union CONTRIBUTING pinned peers' SIGNED revoke events into the durable local revoked set (SPEC-0359 D5(b)).")
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: skillctl revoke feed [--status] [--refresh] [--registry URL] [--tenant T]")
 		fmt.Fprintln(stderr, "")
@@ -40,6 +41,23 @@ func runRevokeFeed(args []string, stdout, stderr io.Writer) int {
 	}
 
 	home, _ := userHome()
+
+	if *gossip {
+		peers, err := registry.LoadPeers(peersConfigPath)
+		if err != nil {
+			fmt.Fprintf(stderr, "revoke feed --gossip: load peers: %v\n", err)
+			return exitGeneric
+		}
+		union, reports := gossipRevokedDigests(peers)
+		total, err := mergeGossipedRevoked(home, union, time.Now())
+		if err != nil {
+			fmt.Fprintf(stderr, "revoke feed --gossip: persist: %v\n", err)
+			return exitGeneric
+		}
+		fmt.Fprintf(stdout, "gossip: %d verified revoke(s) from contributing peers this run; %d total in the durable gossip set\n", len(union), total)
+		printGossipReports(stdout, reports)
+		return exitOK
+	}
 
 	if *refresh {
 		// Ensure the production fetch seam is installed even if this runs outside
