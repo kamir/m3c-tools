@@ -49,7 +49,22 @@ hide which one failed.
 
 First `index` downloads `bge-m3` (~2.3 GB) to the HuggingFace cache, then runs
 offline. The index (`index.tvim`), sidecar (`meta.sqlite`) and `state.json` are
-written to `$WS/.rag/` (auto-added to `$WS/.gitignore`).
+written to `$WS/.rag/`.
+
+### Tracked vs machine-local
+
+By default `index` arranges git to **track** the index (LFS for `index.tvim`,
+ignore only `meta.sqlite`) so a fresh clone is searchable with no re-embedding.
+Two cases want the opposite, and `index` handles both:
+
+| Situation | What happens |
+|---|---|
+| The workspace is **not the git root** (an app inside a monorepo) | Detected automatically: `.rag/` is ignored wholesale, no LFS rule. Otherwise tens of MB of index sit untracked in the **parent** repo, one `git add -A` from being committed there. |
+| `index --no-track` | The index is a deliberate machine-local artifact. Each committed rebuild costs a new LFS object; when a second machine can just rebuild, the index is cheaper than its transport. |
+
+The choice is recorded as `git_tracking: tracked|none` in `.rag/config.yaml` and
+is **sticky** — a later plain `index` will not silently re-arm LFS tracking on a
+workspace you deliberately made local. Switching back is `index` without the flag.
 
 ## MCP exposure
 
