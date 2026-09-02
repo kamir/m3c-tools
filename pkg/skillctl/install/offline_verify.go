@@ -119,6 +119,40 @@ func readOfflineMeta(target string) (*OfflineMeta, error) {
 	return &om, nil
 }
 
+// InstalledBundleDigest returns the canonical bundle digest ("sha256:<hex>")
+// recorded in the stashed offline metadata (.skillctl-offline.json) for an
+// installed skill, or ("", false) when there is no readable offline stash.
+//
+// The primary `skillctl install` path (SPEC-0188) writes this offline stash but
+// NOT a `.m3c-provenance.json` sidecar; only the trust-mode `skillctl pull` path
+// writes the sidecar. The agent-mandate gate (SPEC-0277 IS-T7) therefore uses
+// this as the FALLBACK basis for resolving a skill's digest-verified signed
+// scope — without it, every install-path skill resolves no digest and silently
+// degrades to name-only scope enforcement.
+//
+// The digest is only a lookup key: the caller (verify.ReadDigestVerifiedManifest)
+// recomputes the on-disk .skb digest and constant-time-compares it against this
+// value before trusting any manifest bytes, so a tampered stash cannot forge a
+// smaller scope — it can at most make the digest fail to match (→ fail closed).
+func InstalledBundleDigest(homeDir, name string) (string, bool) {
+	home, err := resolveHomeDir(homeDir)
+	if err != nil {
+		return "", false
+	}
+	canon, err := CanonicalSkillName(name)
+	if err != nil {
+		return "", false
+	}
+	om, err := readOfflineMeta(filepath.Join(home, installRoot, canon))
+	if err != nil || om.BundleMeta == nil || om.BundleMeta.Bundle == nil {
+		return "", false
+	}
+	// The canonical digest lives in the BundleRecord as "bundle_digest"
+	// ("sha256:<hex>"), the same field the verify layer keys on.
+	d, _ := om.BundleMeta.Bundle["bundle_digest"].(string)
+	return d, d != ""
+}
+
 // VerifyInstalledOffline re-runs §7 against an installed skill with NO network,
 // then binds the extracted content to the signed .skb. Returns ErrNoOfflineMeta
 // when there is no stash (caller should fall back to VerifyInstalled).

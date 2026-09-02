@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/er1"
+	"github.com/kamir/m3c-tools/pkg/skillctl/install"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 )
 
@@ -412,14 +413,30 @@ func fetchRevocationHeadOnline(cfg *er1.Config, ctx string, pub ed25519.PublicKe
 	return head, true
 }
 
-// installedSkillDigest reads the provenance sidecar's bundle_digest for an
-// installed skill, or "" if there is no sidecar / it's unreadable.
+// installedSkillDigest resolves the recorded bundle_digest for an installed
+// skill from whichever managed basis exists, or "" if none does.
+//
+//   - (1) the `.m3c-provenance.json` provenance sidecar — authoritative, but
+//     written ONLY by the trust-mode `skillctl pull` path;
+//   - (2) the `.skillctl-offline.json` offline stash — written by the PRIMARY
+//     `skillctl install` path (SPEC-0188), which writes no provenance sidecar.
+//
+// Reading only the sidecar (the pre-fix behaviour) left the mandate gate (IS-T7)
+// unable to resolve any digest for install-path skills, silently degrading every
+// one of them to name-only scope enforcement, and let a same-uid actor delete the
+// sidecar to strip enforcement even on pull-path skills. Falling back to the
+// offline stash closes both: the gate can resolve the signed scope on either
+// install path, and both provenance files must be removed to reach the
+// unresolvable state (which the resolver then fails closed under a restricting
+// grant, see resolveInstalledSkillRequirements).
 func installedSkillDigest(home, name string) string {
-	side, ok := loadInstalledSidecar(home, name)
-	if !ok {
-		return ""
+	if side, ok := loadInstalledSidecar(home, name); ok && side.BundleDigest != "" {
+		return side.BundleDigest
 	}
-	return side.BundleDigest
+	if d, ok := install.InstalledBundleDigest(home, name); ok {
+		return d
+	}
+	return ""
 }
 
 // installedSkillAuthor reads the provenance sidecar's author identity (the

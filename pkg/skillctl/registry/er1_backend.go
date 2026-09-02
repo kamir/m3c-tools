@@ -189,55 +189,53 @@ func (b *ER1Backend) Fetch(ctx context.Context, ref artifact.ArtifactRef) ([]byt
 // envelopes for the target skill(s), so the §7 verifier can re-verify them.
 func (b *ER1Backend) Events(ctx context.Context, filter artifact.ListFilter, page artifact.Page) (*artifact.EventPage, error) {
 	out := &artifact.EventPage{}
-	for _, kind := range []string{EventKindAdmitted, EventKindAttested, EventKindRevoked} {
-		tags := []string{"m3c-skill-bundle", "skill-registry:self", "skill-event:" + kind}
-		if filter.Name != "" {
-			tags = append(tags, "skill:"+filter.Name)
-		}
-		items, err := searchByTagsRaw(b.cfg, b.ctxID, tags)
+	// FR-0090 IS-T4b: enumerate by the STABLE bundle tags every skill-event item
+	// carries (registry/context, plus skill:<name> when scoped), NOT the
+	// attacker-controlled skill-event:<kind> tag. Each event's Kind + Digest are then
+	// taken from the SIGNED envelope, so a hostile ER1 tenant retagging a signed
+	// revoke to skill-event:installed (or stripping the tag) can no longer drop it
+	// from discovery — matching git's structural enumeration of every event. This
+	// closes the IS-T4b residual: an intra-set retag AND a cross-kind/strip retag are
+	// both defeated because discovery no longer keys on the tag at all. One search
+	// replaces the three per-kind searches; install envelopes now surface too (a
+	// signed KindInstall), which the §7 verifier / accumulator consumers ignore.
+	tags := []string{"m3c-skill-bundle", "skill-registry:self"}
+	if filter.Name != "" {
+		tags = append(tags, "skill:"+filter.Name)
+	}
+	items, err := searchByTagsRaw(b.cfg, b.ctxID, tags)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range items {
+		ev, err := extractEvent(itemBody(item))
 		if err != nil {
-			return nil, err
+			continue
 		}
-		for _, item := range items {
-			ev, err := extractEvent(itemBody(item))
-			if err != nil {
-				continue
-			}
-			// FR-0090 IS-T4 (parity with git/oci Events): Kind + Digest come from the
-			// SIGNED envelope, never the skill-event:<kind> TAG (the `kind` loop var is
-			// only the coarse search prefilter). This closes the tag projection for every
-			// item the search FETCHES — an intra-set retag (revoked<->attested) can no
-			// longer flip a verdict. RESIDUAL (tracked, IS-T4b): discovery is still gated
-			// on the skill-event:<kind> tag, so a hostile ER1 tenant retagging a signed
-			// revoke to skill-event:installed (or stripping the tag) can drop it from the
-			// search BEFORE it reaches this classifier. Full parity with git (which
-			// enumerates every event file structurally) needs de-gating the search off
-			// skill-event:<kind>; until then the freshness ceiling (IS-T5) is the
-			// compensating control for managed roots.
-			signedKind := trustcore.KindFromSignedEnvelope(ev)
-			d := trustcore.SignedDigest(ev)
-			if signedKind == "" || !trustcore.ValidDigest(d) {
-				continue // unclassifiable / no well-formed anchor → never a verdict
-			}
-			lvl, _ := ev["governance_level"].(string)
-			rec := artifact.EventRecord{
-				Kind: signedKind, Digest: d, Governance: lvl,
-				Host:      strOrEmpty(ev["packed_on_host"], ev["installed_on_host"]),
-				Rationale: strOrEmpty(ev["rationale"]),
-				Envelope:  ev,
-			}
-			if ts, _ := ev["occurred_at"].(string); ts != "" {
-				if t, perr := time.Parse(time.RFC3339, ts); perr == nil {
-					rec.OccurredAt = t
-				}
-			}
-			// --since (ListFilter.Since): drop events older than the bound; a
-			// zero/unparseable timestamp is kept (best-effort, never a gate).
-			if !filter.Since.IsZero() && !rec.OccurredAt.IsZero() && rec.OccurredAt.Before(filter.Since) {
-				continue
-			}
-			out.Events = append(out.Events, rec)
+		// Kind + Digest come from the SIGNED envelope, never a carrier tag.
+		signedKind := trustcore.KindFromSignedEnvelope(ev)
+		d := trustcore.SignedDigest(ev)
+		if signedKind == "" || !trustcore.ValidDigest(d) {
+			continue // unclassifiable / no well-formed anchor → never a verdict
 		}
+		lvl, _ := ev["governance_level"].(string)
+		rec := artifact.EventRecord{
+			Kind: signedKind, Digest: d, Governance: lvl,
+			Host:      strOrEmpty(ev["packed_on_host"], ev["installed_on_host"]),
+			Rationale: strOrEmpty(ev["rationale"]),
+			Envelope:  ev,
+		}
+		if ts, _ := ev["occurred_at"].(string); ts != "" {
+			if t, perr := time.Parse(time.RFC3339, ts); perr == nil {
+				rec.OccurredAt = t
+			}
+		}
+		// --since (ListFilter.Since): drop events older than the bound; a
+		// zero/unparseable timestamp is kept (best-effort, never a gate).
+		if !filter.Since.IsZero() && !rec.OccurredAt.IsZero() && rec.OccurredAt.Before(filter.Since) {
+			continue
+		}
+		out.Events = append(out.Events, rec)
 	}
 	return out, nil
 }

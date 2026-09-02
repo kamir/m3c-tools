@@ -99,6 +99,15 @@ type GenerateOptions struct {
 	// opt-in precisely so a disconnected NON-enterprise host keeps its network
 	// fallback (turning it on by default would fail-close legacy installs offline).
 	StateGateFallback bool
+	// RequireAgentMandate emits `skillctlRequireAgentMandate: true` — the SPEC-0277
+	// IS-06 root-owned floor that turns a MISSING ~/.claude/skillctl/agentid.json from
+	// the silent opt-OUT (skill-chain-only) into a hard DENY at the SPEC-0247 gate.
+	// It lives in the root-owned managed tier precisely so a non-privileged user
+	// cannot delete the mandate to escape agent authorization — deleting agentid.json
+	// then fails CLOSED instead of disabling enforcement. Standalone (NOT
+	// enterprise-gated): it is an authorization policy, orthogonal to the SPEC-0317
+	// offline-locked machinery. Claude Code ignores the unknown key; skillctl reads it.
+	RequireAgentMandate bool
 }
 
 // wire structs — field order here is the emitted JSON key order (encoding/json
@@ -122,6 +131,7 @@ type managedSettings struct {
 	SkillctlEnterprise           bool       `json:"skillctlEnterprise,omitempty"`
 	SkillctlRequireLocalAudit    bool       `json:"skillctlRequireLocalAudit,omitempty"`
 	SkillctlStateGateFallback    bool       `json:"skillctlStateGateFallback,omitempty"`
+	SkillctlRequireAgentMandate  bool       `json:"skillctlRequireAgentMandate,omitempty"`
 	Hooks                        hooksBlock `json:"hooks"`
 }
 
@@ -182,6 +192,10 @@ func Generate(opts GenerateOptions) ([]byte, error) {
 	if opts.StateGateFallback {
 		ms.SkillctlEnterprise = true // state-gating the fallback is enterprise-only
 		ms.SkillctlStateGateFallback = true
+	}
+	if opts.RequireAgentMandate {
+		// Standalone floor — deliberately NOT enterprise-gated (see the field doc).
+		ms.SkillctlRequireAgentMandate = true
 	}
 	if opts.Strict || opts.Harden {
 		ms.AllowManagedHooksOnly = true
@@ -297,6 +311,22 @@ func StateGateFallbackFromBytes(settings []byte) bool {
 		return false
 	}
 	return ms.SkillctlEnterprise && ms.SkillctlStateGateFallback
+}
+
+// RequireAgentMandateFromBytes reports whether managed settings engage the
+// SPEC-0277 IS-06 root-owned require-mandate floor (`skillctlRequireAgentMandate:
+// true`). Standalone — NOT enterprise-gated (it is an authorization policy, not a
+// posture of the SPEC-0317 offline-locked machinery). Same conservative contract as
+// the other readers: a MISSING or MALFORMED managed file yields false, so an
+// unreadable managed file can never itself DENY every skill (never-brick). When it
+// yields true, a missing agentid.json is a hard DENY at the gate instead of the
+// silent opt-out default.
+func RequireAgentMandateFromBytes(settings []byte) bool {
+	var ms managedSettings
+	if json.Unmarshal(settings, &ms) != nil {
+		return false
+	}
+	return ms.SkillctlRequireAgentMandate
 }
 
 // Verify parses managed-settings bytes and reports the pinning level. It matches
