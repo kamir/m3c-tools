@@ -284,6 +284,167 @@ func TestReadAndVerifyTrail_ChainSignatureDetectsKeylessRewrite(t *testing.T) {
 	}
 }
 
+// TestReadAndVerifyTrail_OversizedLineIsFailClosed is the IS-RS-05(a) bite-test.
+// A single line larger than the 4 MiB per-line scanner cap makes bufio.Scan()
+// stop with bufio.ErrTooLong. PRE-FIX, sc.Err() was never checked after the loop:
+// the scan ended SILENTLY, every record after the oversized line was dropped from
+// the counts, and ChainVerified still read TRUE for the surviving prefix (a clean,
+// signed, contiguous chain). POST-FIX, the scan error is surfaced as a chain break
+// so the trail is reported present-but-UNVERIFIED, never a silent truncation.
+func TestReadAndVerifyTrail_OversizedLineIsFailClosed(t *testing.T) {
+	home := t.TempDir()
+	for _, id := range []string{
+		"01HZBIGLINE00000000000A",
+		"01HZBIGLINE00000000000B",
+		"01HZBIGLINE00000000000C",
+	} {
+		rec := sampleInvocation()
+		rec.EventID = id
+		appendSignedInvocation(home, rec)
+	}
+	path := invocationTrailPath(home)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read trail: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("want 3 trail lines, got %d", len(lines))
+	}
+	// Isolate IS-RS-05(a) from the IS-RS-04 high-water-mark: drop the sidecar so the
+	// ONLY reason the trail can be reported unverified is the scan error itself.
+	_ = os.Remove(trailHWMPath(home))
+
+	// A single line > 4 MiB (the scanner's per-line cap) inserted AFTER the genesis
+	// record. Scan() reads record0, then errors on the oversized line and stops —
+	// records 1 and 2 (after it) are never read.
+	giant := strings.Repeat("x", (4<<20)+1024)
+	rewritten := lines[0] + "\n" + giant + "\n" + lines[1] + "\n" + lines[2] + "\n"
+	if err := os.WriteFile(path, []byte(rewritten), 0o600); err != nil {
+		t.Fatalf("rewrite trail: %v", err)
+	}
+
+	tv := readAndVerifyTrail(home)
+	// The oversized line stopped the scan: only the genesis record was read (the two
+	// records after it were dropped) — proof the scan halted mid-file.
+	if tv.Total != 1 {
+		t.Fatalf("scan should have stopped after the genesis record, Total=%d (%+v)", tv.Total, tv)
+	}
+	// Load-bearing: the surviving prefix must NOT be reported as a verified, intact
+	// chain. Pre-fix this read true (the silent stop was invisible).
+	if tv.ChainVerified {
+		t.Errorf("oversized line silently truncated the scan yet ChainVerified stayed true (IS-RS-05a): %+v", tv)
+	}
+	if tv.ScanError == "" || !strings.Contains(tv.ScanError, "too long") {
+		t.Errorf("scan error not surfaced; ScanError=%q", tv.ScanError)
+	}
+}
+
+// TestReadAndVerifyTrail_OversizedFileIsRefused is the IS-RS-05(b) bite-test. An
+// unbounded same-uid writer can grow the trail past all rotation; PRE-FIX
+// os.ReadFile would slurp the whole file into memory (OOM). POST-FIX the read is
+// refused above a hard ceiling: present-but-UNVERIFIED, no records counted.
+func TestReadAndVerifyTrail_OversizedFileIsRefused(t *testing.T) {
+	home := t.TempDir()
+	for _, id := range []string{"01HZBIGFILE0000000000A", "01HZBIGFILE0000000000B"} {
+		rec := sampleInvocation()
+		rec.EventID = id
+		appendSignedInvocation(home, rec)
+	}
+	// Lower the ceiling below the (tiny) real file so the refusal path triggers
+	// without writing tens of megabytes.
+	orig := invocationTrailReadCeilingBytes
+	defer func() { invocationTrailReadCeilingBytes = orig }()
+	fi, err := os.Stat(invocationTrailPath(home))
+	if err != nil {
+		t.Fatalf("stat trail: %v", err)
+	}
+	invocationTrailReadCeilingBytes = fi.Size() - 1 // file now exceeds the ceiling
+
+	tv := readAndVerifyTrail(home)
+	if !tv.Present {
+		t.Fatal("an oversized trail is still present")
+	}
+	if !tv.Oversize {
+		t.Errorf("oversized trail not flagged Oversize: %+v", tv)
+	}
+	// Load-bearing: the file was REFUSED, not slurped — no records counted and the
+	// trail is not reported as a clean verify. Pre-fix Total would be > 0 and
+	// ChainVerified true.
+	if tv.Total != 0 {
+		t.Errorf("refused trail must not count records, Total=%d", tv.Total)
+	}
+	if tv.ChainVerified {
+		t.Errorf("a refused (unread) trail must not report ChainVerified=true: %+v", tv)
+	}
+}
+
+// TestReadAndVerifyTrail_TailTruncationDetectedViaHWM is the IS-RS-04 bite-test.
+// Deleting the trailing records leaves a VALID, contiguous, fully-signed prefix:
+// the hash chain re-verifies clean (ChainVerified stays true — even keyless), so
+// the chain alone cannot see tail truncation. The local high-water-mark sidecar
+// remembers how far the trail once reached and flags the regression.
+//
+// HONEST SCOPE: this is LOCAL, cross-run, and best-effort. It is NOT tamper-proof
+// — a same-uid actor who truncates the trail can also edit/delete the sidecar to
+// erase the high-water-mark; the non-repudiable close is an EXTERNAL SPEC-0358
+// head anchor, not this sidecar.
+func TestReadAndVerifyTrail_TailTruncationDetectedViaHWM(t *testing.T) {
+	home := t.TempDir()
+	const n = 4
+	for i, id := range []string{
+		"01HZTAIL00000000000000A",
+		"01HZTAIL00000000000000B",
+		"01HZTAIL00000000000000C",
+		"01HZTAIL00000000000000D",
+	} {
+		rec := sampleInvocation()
+		rec.EventID = id
+		rec.ExitCode = i
+		appendSignedInvocation(home, rec)
+	}
+	// Baseline: intact, clean, and the high-water-mark now records max seq n-1.
+	if tv := readAndVerifyTrail(home); !tv.ChainVerified || tv.TailTruncated {
+		t.Fatalf("intact %d-record trail should verify clean and untruncated: %+v", n, tv)
+	}
+	if hwm, ok := readTrailHWM(home); !ok || hwm.MaxSeq != uint64(n-1) {
+		t.Fatalf("high-water-mark should record max seq %d, got %+v (ok=%v)", n-1, hwm, ok)
+	}
+
+	// Truncate the tail: keep only the first n-2 records (drop seq 2 and seq 3).
+	data, err := os.ReadFile(invocationTrailPath(home))
+	if err != nil {
+		t.Fatalf("read trail: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) != n {
+		t.Fatalf("want %d trail lines, got %d", n, len(lines))
+	}
+	kept := strings.Join(lines[:n-2], "\n") + "\n"
+	if err := os.WriteFile(invocationTrailPath(home), []byte(kept), 0o600); err != nil {
+		t.Fatalf("truncate trail: %v", err)
+	}
+
+	tv := readAndVerifyTrail(home)
+	// The surviving prefix is a VALID signed chain — the hash-chain check cannot see
+	// the tail deletion. This is exactly the gap IS-RS-04 fills.
+	if !tv.ChainVerified {
+		t.Fatalf("truncated prefix should still be a clean hash chain (the chain cannot see tail truncation): %+v", tv)
+	}
+	// ...but the high-water-mark caught the regression.
+	if !tv.TailTruncated {
+		t.Errorf("tail truncation not detected against the high-water-mark (IS-RS-04): %+v", tv)
+	}
+	if tv.HWMSeq != uint64(n-1) {
+		t.Errorf("HWMSeq = %d, want %d", tv.HWMSeq, n-1)
+	}
+	// The high-water-mark must NOT be lowered by a truncated verify, or the
+	// truncation would hide itself on the next run.
+	if hwm, ok := readTrailHWM(home); !ok || hwm.MaxSeq != uint64(n-1) {
+		t.Errorf("high-water-mark must not regress after a truncated verify: %+v (ok=%v)", hwm, ok)
+	}
+}
+
 func TestAppendSignedInvocation_SinkFailureIsSwallowed(t *testing.T) {
 	home := t.TempDir()
 	orig := invocationTrailSink

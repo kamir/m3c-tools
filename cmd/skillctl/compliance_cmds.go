@@ -68,6 +68,11 @@ func trailEvidenceSentence(tv trailVerification) string {
 	if !tv.Present {
 		return "Per-invocation signed events (SPEC-0202): no invocation-trail.jsonl yet on this host (no skill invocations recorded). Trail is created on first gated invocation."
 	}
+	// IS-RS-05(b): an oversized trail was REFUSED (not slurped) — report it as
+	// present-but-unverified rather than a clean verify on a file we declined to read.
+	if tv.Oversize {
+		return "Per-invocation signed events (SPEC-0202): invocation-trail.jsonl exceeds the safe whole-file read ceiling and was REFUSED — present-but-UNVERIFIED (an unbounded same-uid writer can grow the file past all rotation; refusing to load it avoids OOM). Rotate/inspect the trail out-of-band."
+	}
 	key := tv.DeviceKeyID
 	if key == "" {
 		key = "(device key unavailable — cannot verify)"
@@ -80,14 +85,25 @@ func trailEvidenceSentence(tv trailVerification) string {
 	// IS-T8: report the hash-chain integrity check — keyless seq+prev_hash
 	// contiguity PLUS the second device signature over each link — that makes a
 	// deleted, reordered, or same-uid-rewritten middle record tamper-EVIDENT on top
-	// of the per-line signature. Honest scope: TAIL truncation is NOT covered here
-	// (a valid signed prefix; needs an external SPEC-0358 head anchor).
-	chain := fmt.Sprintf("hash-chained (seq+prev_hash, %d/%d links device-signed) intact — no middle record deleted, reordered, or rewritten (tail-truncation not covered: needs an external SPEC-0358 anchor)", tv.ChainSigned, tv.Total)
+	// of the per-line signature.
+	chain := fmt.Sprintf("hash-chained (seq+prev_hash, %d/%d links device-signed) intact — no middle record deleted, reordered, or rewritten", tv.ChainSigned, tv.Total)
 	if !tv.ChainVerified {
-		chain = fmt.Sprintf("hash-chain BROKEN — %d break(s): a record was deleted, reordered, or a link's seq/prev_hash/signature was altered", tv.ChainBreaks)
+		chain = fmt.Sprintf("hash-chain BROKEN — %d break(s): a record was deleted, reordered, rewritten, or the trail could not be fully read", tv.ChainBreaks)
+		if tv.ScanError != "" {
+			// IS-RS-05(a): a scan error stopped the read mid-file (esp. a > 4 MiB line).
+			chain += fmt.Sprintf(" (read stopped mid-file: %s — records after the offending line are unreadable)", tv.ScanError)
+		}
 	}
-	return fmt.Sprintf("Per-invocation signed events (SPEC-0202): %d/%d invocation records pass local device-key integrity verification (%d unverified, %d replays); %s. Device key %s is locally anchored (integrity-since-signing on this host; not yet registry-attested). Append-only ~/.claude/skillctl/invocation-trail.jsonl.",
-		tv.Verified, tv.Total, tv.Unverified, tv.Replays, chain, key)
+	// IS-RS-04: LOCAL, best-effort tail-truncation watch via a high-water-mark
+	// sidecar. HONEST SCOPE — do NOT overclaim: cross-run and LOCAL only; defeatable
+	// by a same-uid actor who also edits the sidecar; the non-repudiable close is an
+	// EXTERNAL head anchor (SPEC-0358 transparency log), NOT this sidecar.
+	tail := "tail-truncation watched LOCALLY (high-water-mark sidecar; best-effort, defeatable by a same-uid sidecar edit — the non-repudiable close is an external SPEC-0358 head anchor)"
+	if tv.TailTruncated {
+		tail = fmt.Sprintf("LOCAL TAIL-TRUNCATION DETECTED — the live max seq regressed below the recorded local high-water-mark (%d): records were dropped from the END (local best-effort signal only; a same-uid actor can also edit the sidecar, so an external SPEC-0358 head anchor is still required to make this non-repudiable)", tv.HWMSeq)
+	}
+	return fmt.Sprintf("Per-invocation signed events (SPEC-0202): %d/%d invocation records pass local device-key integrity verification (%d unverified, %d replays); %s; %s. Device key %s is locally anchored (integrity-since-signing on this host; not yet registry-attested). Append-only ~/.claude/skillctl/invocation-trail.jsonl.",
+		tv.Verified, tv.Total, tv.Unverified, tv.Replays, chain, tail, key)
 }
 
 const complianceDisclaimer = "Evidence aid for an auditor — NOT a certification or attestation of compliance. " +
@@ -327,6 +343,8 @@ func renderComplianceMD(r complianceReport) string {
 		t := r.Trail
 		if !t.Present {
 			fmt.Fprintf(&b, "- Signed invocation trail (SPEC-0202): none yet (no recorded invocations)\n")
+		} else if t.Oversize {
+			fmt.Fprintf(&b, "- Signed invocation trail (SPEC-0202): REFUSED — file exceeds the safe read ceiling (present-but-unverified; OOM defense)\n")
 		} else {
 			key := t.DeviceKeyID
 			if key == "" {
@@ -334,6 +352,16 @@ func renderComplianceMD(r complianceReport) string {
 			}
 			fmt.Fprintf(&b, "- Signed invocation trail (SPEC-0202): %d/%d records verified · %d unverified · %d replays · device key %s\n",
 				t.Verified, t.Total, t.Unverified, t.Replays, key)
+			if !t.ChainVerified {
+				detail := "middle record deleted/reordered/rewritten"
+				if t.ScanError != "" {
+					detail = "read stopped mid-file: " + t.ScanError
+				}
+				fmt.Fprintf(&b, "  - Hash-chain: BROKEN (%d break(s) — %s)\n", t.ChainBreaks, detail)
+			}
+			if t.TailTruncated {
+				fmt.Fprintf(&b, "  - LOCAL tail-truncation DETECTED: max seq regressed below high-water-mark %d (local best-effort; defeatable by a same-uid sidecar edit — external SPEC-0358 anchor still required)\n", t.HWMSeq)
+			}
 		}
 	}
 	b.WriteString("\n")

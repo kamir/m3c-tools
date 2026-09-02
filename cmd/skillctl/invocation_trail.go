@@ -56,6 +56,16 @@ func newInvocationEventID() string {
 // so the two logs rotate independently.
 var invocationTrailMaxBytes int64 = 5 << 20 // 5 MiB
 
+// invocationTrailReadCeilingBytes is the HARD upper bound on the whole-file read
+// in readAndVerifyTrail (IS-RS-05). Rotation bounds a HEALTHY trail to
+// ~invocationTrailMaxBytes (+ one over-cap final line + the 4 MiB per-line scan
+// cap ≈ under 10 MiB); this ceiling sits well above that. An UNBOUNDED same-uid
+// writer can grow the file past all rotation, and a naive os.ReadFile would slurp
+// the whole thing into memory (OOM). Past the ceiling the trail is REFUSED (read
+// present-but-unverified) rather than loaded. A var (not const) so tests can lower
+// it without writing tens of megabytes.
+var invocationTrailReadCeilingBytes int64 = 64 << 20 // 64 MiB
+
 // invocationTrailPath reuses verdictDir so the ~/.claude/skillctl 0700
 // convention matches the verdict cache and the gate-audit log.
 func invocationTrailPath(home string) string {
@@ -276,6 +286,116 @@ func nextChainLink(home string) (seq uint64, prevHash string) {
 	return *prev.Seq + 1, h
 }
 
+// trailHWM is the LOCAL high-water-mark sidecar (IS-RS-04, PARTIAL mitigation).
+// It records the max seq and the tip (head) canonical hash of the CURRENT trail
+// generation in a small JSON file next to the trail, so a later run can notice
+// that the live trail's max seq REGRESSED below a value it had already reached —
+// i.e. the tail was truncated (records dropped from the END). This is the ONE
+// truncation shape the hash chain cannot see on its own: a valid, contiguous,
+// fully-signed PREFIX re-verifies clean (deleting the newest N records, even
+// keyless, leaves no break), so without an out-of-band memory of "how far the
+// trail once reached" tail truncation is undetectable.
+//
+// HONEST SCOPE — read carefully, do NOT overclaim (this is deliberately PARTIAL):
+//
+//   - What it DOES detect: tail truncation of the current generation ACROSS runs
+//     on THIS host — the live trail's max seq is now lower than the sidecar's
+//     recorded high-water-mark. It also flags an in-place rewrite of the tip
+//     record (same max seq, different head hash). It works EVEN KEYLESS (it is a
+//     plain seq comparison, not a signature check).
+//   - What it does NOT do: it is NOT tamper-proof. A same-uid actor who truncates
+//     the trail can ALSO edit or delete this sidecar to erase or lower the
+//     high-water-mark, after which the truncation is invisible again — the sidecar
+//     has no more integrity than the trail it guards (same uid, same disk). It
+//     therefore raises the bar for a careless/partial truncation across runs; it
+//     does not close the hole. It also cannot see a truncation that happens and is
+//     verified within a single run before any sidecar was written.
+//   - The REAL close is an EXTERNAL anchor of the head that a local actor cannot
+//     rewrite: the SPEC-0358 transparency log / server counter-signature. That is
+//     out of scope here; this local sidecar does not attempt to replace it and
+//     must not be presented as if it did.
+//
+// Rotation-safe: each rotation generation (.jsonl vs .jsonl.1) is its own chain
+// restarting at seq 0, so the sidecar is anchored to the current generation's
+// GENESIS canonical hash. A genesis append (seq 0 — fresh trail OR a rotation)
+// re-anchors the sidecar; verify only compares seq when the sidecar's genesis
+// anchor matches the live trail's genesis, so a legitimate rotation is NEVER
+// mistaken for a truncation.
+type trailHWM struct {
+	GenesisHash string `json:"genesis_hash"` // canonical hash of the seq=0 record — the generation anchor
+	MaxSeq      uint64 `json:"max_seq"`      // highest seq the trail has reached in this generation
+	HeadHash    string `json:"head_hash"`    // canonical hash of the seq==MaxSeq record
+	UpdatedAt   string `json:"updated_at"`
+}
+
+// trailHWMPath is the sidecar next to the trail (same 0700 dir convention).
+func trailHWMPath(home string) string {
+	return filepath.Join(verdictDir(home), "invocation-trail.hwm.json")
+}
+
+// readTrailHWM loads the high-water-mark sidecar; ok is false when it is absent
+// or unparseable (a torn concurrent write), in which case truncation detection is
+// simply skipped for this run — a missing sidecar is never itself a break.
+func readTrailHWM(home string) (h trailHWM, ok bool) {
+	data, err := os.ReadFile(trailHWMPath(home))
+	if err != nil {
+		return trailHWM{}, false
+	}
+	if err := json.Unmarshal(data, &h); err != nil {
+		return trailHWM{}, false
+	}
+	return h, true
+}
+
+// writeTrailHWM persists the sidecar atomically (temp + rename) so a concurrent
+// reader never sees a torn file. Best-effort: every failure is swallowed.
+func writeTrailHWM(home string, h trailHWM) {
+	dir := verdictDir(home)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return
+	}
+	h.UpdatedAt = time.Now().UTC().Format("2006-01-02T15:04:05Z")
+	data, err := json.Marshal(h)
+	if err != nil {
+		return
+	}
+	tmp := trailHWMPath(home) + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return
+	}
+	_ = os.Rename(tmp, trailHWMPath(home))
+}
+
+// updateTrailHWMOnAppend advances the local high-water-mark after a record has
+// been appended (IS-RS-04). Genesis (seq 0 — a fresh trail OR a rotation)
+// RE-ANCHORS the sidecar to the new generation; a later record only ever raises
+// max_seq/head_hash (monotonic). Best-effort and decision-invariant: it runs
+// inside appendSignedInvocation's recover and swallows every failure.
+func updateTrailHWMOnAppend(home string, seq uint64, selfHash string, okHash bool) {
+	if !okHash {
+		return // no stable canonical hash → nothing trustworthy to anchor on
+	}
+	if seq == 0 {
+		// Fresh trail or rotation: this record IS the new generation's genesis.
+		writeTrailHWM(home, trailHWM{GenesisHash: selfHash, MaxSeq: 0, HeadHash: selfHash})
+		return
+	}
+	prev, ok := readTrailHWM(home)
+	if !ok {
+		// Feature met a pre-existing trail with no sidecar: we did not write the
+		// seq=0 record's sidecar, so the true genesis anchor is unknown. Leave it
+		// empty — verify treats an unknown/mismatched anchor as "cannot compare
+		// generations" and re-anchors instead of risking a FALSE truncation report.
+		writeTrailHWM(home, trailHWM{GenesisHash: "", MaxSeq: seq, HeadHash: selfHash})
+		return
+	}
+	if seq > prev.MaxSeq {
+		prev.MaxSeq = seq
+		prev.HeadHash = selfHash
+		writeTrailHWM(home, prev)
+	}
+}
+
 // appendSignedInvocation builds, device-signs, and appends one InvocationRecord
 // to the signed trail. Fire-and-forget: any error or panic is swallowed so it
 // can NEVER reach the caller's decision path.
@@ -334,7 +454,8 @@ func appendSignedInvocation(home string, rec skillgate.InvocationRecord) {
 		Seq:              &seq,
 		PrevHash:         prevHash,
 	}
-	if selfHash, ok := invocationChainHash(rec); ok {
+	selfHash, okHash := invocationChainHash(rec)
+	if okHash {
 		msg := invocationChainSigMessage(seq, prevHash, selfHash)
 		if sig := key.Sign(msg); len(sig) == ed25519.SignatureSize {
 			chained.ChainSignatureB64 = base64.StdEncoding.EncodeToString(sig)
@@ -345,7 +466,12 @@ func appendSignedInvocation(home string, rec skillgate.InvocationRecord) {
 	if err != nil {
 		return
 	}
-	_ = invocationTrailSink(home, line)
+	if err := invocationTrailSink(home, line); err == nil {
+		// IS-RS-04: advance the local tail-truncation high-water-mark, but ONLY after
+		// the record actually landed in the trail. A failed sink must not leave a
+		// phantom high-water-mark that a later verify would misread as a truncation.
+		updateTrailHWMOnAppend(home, seq, selfHash, okHash)
+	}
 
 	// SPEC-0317 P0: fan the SAME fully-signed record out to the optional outbox
 	// sink (installed only by `skillctl enforce`). Called AFTER the trail write
@@ -404,6 +530,32 @@ type trailVerification struct {
 	// control: false means the append-only trail was truncated (in the middle),
 	// reordered, or a link was altered.
 	ChainVerified bool
+	// ScanError is non-empty when reading the trail stopped on a bufio.Scanner
+	// error (IS-RS-05) — most importantly bufio.ErrTooLong on a line larger than the
+	// 4 MiB per-line cap, which would otherwise stop the scan SILENTLY and drop every
+	// record after it. It is counted as a ChainBreak so ChainVerified reads false:
+	// the trail is reported present-but-unverified, never a silent truncation.
+	ScanError string
+	// Oversize is true when the trail file exceeded invocationTrailReadCeilingBytes
+	// (IS-RS-05) and was REFUSED — not slurped into memory (OOM defense against an
+	// unbounded same-uid writer). Present stays true; the trail is reported
+	// present-but-unverified and no records are counted (Total stays 0).
+	Oversize bool
+	// TailTruncated is true when the live trail's max seq REGRESSED below the LOCAL
+	// high-water-mark sidecar (IS-RS-04) — records were dropped from the END of the
+	// current generation, which the hash chain alone cannot see (a valid signed
+	// prefix re-verifies clean, even keyless). HONEST SCOPE: a LOCAL, best-effort,
+	// cross-run detector only. It is NOT tamper-proof — a same-uid actor who
+	// truncates the trail can also edit/delete the sidecar to erase the
+	// high-water-mark. The non-repudiable close is an EXTERNAL head anchor
+	// (SPEC-0358 transparency log / server counter-signature), not this sidecar.
+	// Kept SEPARATE from ChainVerified on purpose: ChainVerified is the in-trail
+	// hash-chain signal (middle delete/reorder/rewrite); TailTruncated is the
+	// out-of-band high-water-mark signal (tail delete) the chain cannot provide.
+	TailTruncated bool
+	// HWMSeq is the recorded high-water-mark max seq when TailTruncated is true (the
+	// seq the trail had reached on a prior run, now missing from the tail).
+	HWMSeq uint64
 }
 
 // readAndVerifyTrail reads the signed invocation trail at home, verifies each
@@ -433,11 +585,36 @@ func readAndVerifyTrail(home string) trailVerification {
 		havePub = true
 	}
 
-	data, err := os.ReadFile(tv.Path)
+	// IS-RS-05(b): stat-then-bounded-read instead of a naive os.ReadFile. Rotation
+	// bounds a healthy trail, but an UNBOUNDED same-uid writer can grow the file
+	// past all rotation; os.ReadFile would slurp the whole thing into memory (OOM).
+	fi, err := os.Stat(tv.Path)
 	if err != nil {
 		return tv // absent trail → present=false, zero counts (empty evidence)
 	}
 	tv.Present = true
+	if fi.Size() > invocationTrailReadCeilingBytes {
+		// Refuse an oversized trail rather than loading it. Fail-closed and
+		// SURFACED: present-but-unverified, no records counted, ChainVerified stays
+		// false (a break) — never a clean verify on a file we declined to read.
+		tv.Oversize = true
+		tv.ChainBreaks++
+		return tv
+	}
+	f, err := os.Open(tv.Path)
+	if err != nil {
+		return tv
+	}
+	// Hard-cap the read even against a file that grows between the stat and the read
+	// (TOCTOU): LimitReader never yields more than the ceiling.
+	data, err := io.ReadAll(io.LimitReader(f, invocationTrailReadCeilingBytes))
+	_ = f.Close()
+	if err != nil {
+		// A read error mid-file is fail-closed: present-but-unverified, surfaced.
+		tv.ScanError = err.Error()
+		tv.ChainBreaks++
+		return tv
+	}
 
 	seen := make(map[string]struct{})
 	// Hash-chain contiguity state (IS-T8). Tracked across the PHYSICAL order of
@@ -448,6 +625,15 @@ func readAndVerifyTrail(home string) trailVerification {
 		chainStarted  bool
 		expectSeq     uint64 // predecessor.seq + 1
 		prevChainHash string // hash of the predecessor's canonical bytes
+	)
+	// IS-RS-04 tail-truncation state: the current generation's genesis anchor, and
+	// the seq/hash of the LAST chained record seen (the live max), compared after the
+	// scan against the persisted high-water-mark sidecar.
+	var (
+		haveChain       bool
+		genesisHashSeen string // canonical hash of the seq=0 record (generation anchor)
+		lastChainSeq    uint64
+		lastChainHash   string
 	)
 	sc := bufio.NewScanner(bytes.NewReader(data))
 	sc.Buffer(make([]byte, 0, 64*1024), 4<<20)
@@ -471,6 +657,12 @@ func readAndVerifyTrail(home string) trailVerification {
 		// (no "seq") are excluded so pre-feature trails do not report false breaks.
 		if rec.Seq != nil {
 			thisHash, okHash := invocationChainHash(rec.InvocationRecord)
+			// IS-RS-04: anchor the current generation on its genesis (seq 0) record so
+			// verify only compares the high-water-mark within the SAME generation (a
+			// legitimate rotation restarts at seq 0 and must not read as a truncation).
+			if !haveChain && *rec.Seq == 0 && okHash {
+				genesisHashSeen = thisHash
+			}
 			broke := false
 			// (1) Keyless contiguity — detects a naive delete/reorder even with no key.
 			if !chainStarted {
@@ -508,6 +700,15 @@ func readAndVerifyTrail(home string) trailVerification {
 			} else {
 				prevChainHash = "" // cannot recompute → the next record will mismatch
 			}
+			// IS-RS-04: remember the live tail (last chained record's seq + hash) for
+			// the high-water-mark comparison after the scan.
+			haveChain = true
+			lastChainSeq = *rec.Seq
+			if okHash {
+				lastChainHash = thisHash
+			} else {
+				lastChainHash = ""
+			}
 		}
 
 		// Replay: a second occurrence of an event_id we've already counted is a
@@ -528,6 +729,54 @@ func readAndVerifyTrail(home string) trailVerification {
 			tv.Unverified++
 		}
 	}
+	// IS-RS-05(a): a bufio.Scanner error (esp. bufio.ErrTooLong on a line larger
+	// than the 4 MiB per-line cap set above) makes Scan() stop SILENTLY — the loop
+	// ends, every record after the offending line is dropped from the counts, and
+	// ChainVerified could otherwise still read true for the surviving prefix. Check
+	// sc.Err() and treat any scan error as a ChainBreak: fail-closed and SURFACED
+	// (present-but-unverified), never a silent truncation.
+	if err := sc.Err(); err != nil {
+		tv.ScanError = err.Error()
+		tv.ChainBreaks++
+	}
+
+	// IS-RS-04: LOCAL tail-truncation detection against the high-water-mark sidecar.
+	// See trailHWM for the (deliberately partial, NOT tamper-proof) honest scope.
+	if haveChain {
+		if hwm, ok := readTrailHWM(home); ok {
+			// Only compare within the SAME generation: the sidecar's genesis anchor
+			// must match the live trail's genesis. A rotation restarts at seq 0 with a
+			// different genesis record, so a mismatched/unknown anchor means "different
+			// generation" — skip the comparison rather than risk a FALSE truncation.
+			sameGen := hwm.GenesisHash != "" && hwm.GenesisHash == genesisHashSeen
+			if sameGen {
+				if lastChainSeq < hwm.MaxSeq {
+					// The live max seq regressed below a value the trail already reached:
+					// records were dropped from the END.
+					tv.TailTruncated = true
+					tv.HWMSeq = hwm.MaxSeq
+				} else if lastChainSeq == hwm.MaxSeq && lastChainHash != "" &&
+					hwm.HeadHash != "" && lastChainHash != hwm.HeadHash {
+					// Same tip seq but a different tip hash: the newest record was
+					// rewritten in place. Also a tail-integrity failure.
+					tv.TailTruncated = true
+					tv.HWMSeq = hwm.MaxSeq
+				}
+			}
+		}
+	}
+
+	// Advance / re-anchor the high-water-mark on a CLEAN verify (best-effort). Only
+	// ever move it FORWARD (or re-anchor a fresh generation) — never lower it — so a
+	// truncated trail can NEVER quietly reset its own high-water-mark and hide the
+	// truncation on the next run. Skipped when the read itself was refused/failed
+	// (Oversize/ScanError already returned) or a break/truncation was detected.
+	if haveChain && !tv.TailTruncated && tv.ChainBreaks == 0 && genesisHashSeen != "" {
+		if hwm, ok := readTrailHWM(home); !ok || hwm.GenesisHash != genesisHashSeen || lastChainSeq > hwm.MaxSeq {
+			writeTrailHWM(home, trailHWM{GenesisHash: genesisHashSeen, MaxSeq: lastChainSeq, HeadHash: lastChainHash})
+		}
+	}
+
 	// ChainVerified requires zero breaks AND — for a trail that actually CONTAINS
 	// chained records — that the device public key was available to verify the chain
 	// signatures. Keyless contiguity alone is forgeable: a same-uid actor who deletes
