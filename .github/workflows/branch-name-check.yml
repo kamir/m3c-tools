@@ -8,6 +8,10 @@ on:
   pull_request:
     types: [opened, reopened, edited, synchronize]
 
+# CD-T6: least-privilege default GITHUB_TOKEN for the whole workflow.
+permissions:
+  contents: read
+
 jobs:
   check-branch-name:
     name: Validate branch name

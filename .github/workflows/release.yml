@@ -5,11 +5,15 @@ on:
     tags:
       - 'v*'
 
+# CD-T6: least-privilege default — read-only for the whole workflow; the single
+# job that creates the GitHub Release elevates to contents: write per-job below.
 permissions:
-  contents: write
+  contents: read
 
 env:
   GO_VERSION: "1.26.6"
+  # CD-T4: builds must use go.sum as-is; never mutate the module graph mid-build.
+  GOFLAGS: -mod=readonly
 
 jobs:
   # -----------------------------------------------------------------------
@@ -19,9 +23,9 @@ jobs:
     name: Build macOS (arm64 + amd64)
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: ${{ env.GO_VERSION }}
 
@@ -85,9 +89,10 @@ jobs:
           tar czf skillctl-darwin-amd64.tar.gz skillctl-darwin-amd64
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: macos-binaries
+          retention-days: 7
           path: |
             m3c-tools-darwin-arm64.tar.gz
             m3c-tools-darwin-amd64.tar.gz
@@ -101,16 +106,16 @@ jobs:
     name: Build Linux + Windows (GoReleaser)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: ${{ env.GO_VERSION }}
 
       - name: Install GoReleaser
-        uses: goreleaser/goreleaser-action@v7
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
         with:
           install-only: true
           version: "~> v2"
@@ -121,9 +126,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload GoReleaser artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: goreleaser-binaries
+          retention-days: 7
           path: |
             dist/m3c-tools-linux-*.tar.gz
             dist/skillctl-linux-*.tar.gz
@@ -140,9 +146,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-linux-windows]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: ${{ env.GO_VERSION }}
 
@@ -166,9 +172,10 @@ jobs:
         run: makensis scripts/installer.nsi
 
       - name: Upload installer
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: windows-installer
+          retention-days: 7
           path: build/M3C-Tools-Setup.exe
 
   # -----------------------------------------------------------------------
@@ -178,11 +185,13 @@ jobs:
     name: Create Release
     runs-on: ubuntu-latest
     needs: [build-macos, build-linux-windows, build-windows-installer]
+    permissions:
+      contents: write # create the GitHub Release + upload its assets
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: artifacts
           merge-multiple: true
@@ -197,8 +206,16 @@ jobs:
           echo "=== checksums.txt ==="
           cat checksums.txt
 
+      # CD-T3 (RETIRE): the UNSIGNED skillctl CLI binaries no longer ship on the
+      # v* product release. The ONLY skillctl distribution is the signed
+      # (cosign/OIDC + SLSA provenance) skillctl/v* path built by
+      # skillctl-release.yml. Do NOT re-add skillctl-{darwin,linux,windows} assets
+      # to the files list below — a second, unsigned download channel defeats the
+      # pinned verification in tools/skillctl-install.sh. (skillctl-demo, a
+      # separate offline demo binary, is not part of the signed CLI channel and
+      # stays.)
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           generate_release_notes: true
           files: |
@@ -207,11 +224,6 @@ jobs:
             artifacts/m3c-tools-linux-amd64.tar.gz
             artifacts/m3c-tools-linux-arm64.tar.gz
             artifacts/m3c-tools-windows-amd64.zip
-            artifacts/skillctl-darwin-arm64.tar.gz
-            artifacts/skillctl-darwin-amd64.tar.gz
-            artifacts/skillctl-linux-amd64.tar.gz
-            artifacts/skillctl-linux-arm64.tar.gz
-            artifacts/skillctl-windows-amd64.zip
             artifacts/skillctl-demo-linux-amd64.tar.gz
             artifacts/skillctl-demo-linux-arm64.tar.gz
             artifacts/skillctl-demo-windows-amd64.zip

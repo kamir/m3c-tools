@@ -11,10 +11,9 @@ version: 2
 
 project_name: m3c-tools
 
-before:
-  hooks:
-    - go mod tidy
-
+# CD-T4: no `before: hooks: - go mod tidy`. A release build must never mutate
+# go.mod/go.sum; module tidiness is enforced by the mod-tidy-check job in ci.yml,
+# and every build below runs with GOFLAGS=-mod=readonly.
 builds:
   # --- m3c-tools: Linux + Windows only (CGO_ENABLED=0, CLI-only mode via main_other.go) ---
   - id: m3c-tools
@@ -22,6 +21,7 @@ builds:
     main: ./cmd/m3c-tools
     env:
       - CGO_ENABLED=0
+      - GOFLAGS=-mod=readonly
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
@@ -44,6 +44,7 @@ builds:
     main: ./cmd/skillctl
     env:
       - CGO_ENABLED=0
+      - GOFLAGS=-mod=readonly
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
@@ -68,6 +69,7 @@ builds:
     main: ./cmd/skillctl-demo
     env:
       - CGO_ENABLED=0
+      - GOFLAGS=-mod=readonly
     ldflags:
       - -s -w
       - -X main.version={{.Version}}

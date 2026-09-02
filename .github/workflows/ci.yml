@@ -6,14 +6,18 @@ on:
   pull_request:
     branches: [main, master]
 
+# CD-T6: least-privilege default GITHUB_TOKEN for the whole workflow.
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: Lint & Vet
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: "1.26.6"
 
@@ -24,7 +28,7 @@ jobs:
         run: go vet ./...
 
       - name: Install golangci-lint
-        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
 
       - name: golangci-lint
         run: golangci-lint run --timeout=5m
@@ -33,9 +37,9 @@ jobs:
     name: Unit Tests
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: "1.26.6"
 
@@ -59,9 +63,9 @@ jobs:
     name: skillctl Security Tests (-race)
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: "1.26.6"
 
@@ -83,9 +87,9 @@ jobs:
     name: govulncheck (reachable CVEs)
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: "1.26.6"
 
@@ -100,13 +104,13 @@ jobs:
       # regressing. Standalone (not in any build job's `needs`) so a fresh upstream
       # CVE blocks merge but never the release builds.
       - name: govulncheck ./...
-        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
 
   gitleaks:
     name: gitleaks (secret scan)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0 # full history for a complete secret scan
 
@@ -115,22 +119,46 @@ jobs:
       # gitleaks version validated locally; exits non-zero on any finding (blocks).
       - name: Install gitleaks
         run: |
+          # CD-T2: pin the tarball hash and verify integrity BEFORE extract/install
+          # (modeled on tools/skillctl-install.sh's sha256 gate). A swapped tarball
+          # at the release origin fails `sha256sum -c` and never reaches `install`.
+          GITLEAKS_SHA256="79a3ab579b53f71efd634f3aaf7e04a0fa0cf206b7ed434638d1547a2470a66e"
           curl -fsSL -o /tmp/gitleaks.tar.gz \
             https://github.com/gitleaks/gitleaks/releases/download/v8.30.0/gitleaks_8.30.0_linux_x64.tar.gz
+          echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tar.gz" | sha256sum -c -
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
           sudo install /tmp/gitleaks /usr/local/bin/gitleaks
 
       - name: Scan full history (config-aware)
         run: gitleaks git . --config .gitleaks.toml --no-banner --redact
 
+  # CD-T4: go.mod/go.sum must already be tidy in the repo. GoReleaser no longer
+  # runs `go mod tidy` at release time (that hook was removed), so an untidy
+  # module graph must be caught here at PR/push time, not papered over silently
+  # during a release build.
+  mod-tidy-check:
+    name: go mod tidy is a no-op
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.26.6"
+
+      - name: go mod tidy && git diff --exit-code
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
   build-macos:
     name: Build macOS (arm64 + amd64)
     runs-on: macos-latest
     needs: [lint, test]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: "1.26.6"
 
@@ -165,9 +193,10 @@ jobs:
           go build -o build/poc-recorder ./cmd/poc-recorder
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: m3c-tools-macos
+          retention-days: 7
           path: |
             build/m3c-tools-darwin-arm64
             build/m3c-tools-darwin-amd64
@@ -177,9 +206,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint, test]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: "1.26.6"
 
@@ -199,9 +228,10 @@ jobs:
           build/m3c-tools-linux-amd64 help
 
       - name: Upload cross-platform artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: m3c-tools-cross
+          retention-days: 7
           path: |
             build/m3c-tools-linux-amd64
             build/m3c-tools-windows-amd64.exe

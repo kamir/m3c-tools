@@ -69,9 +69,9 @@ m3c-tools doctor                        # verify connectivity & config
 ### `skillctl` — sign and verify your first skill
 
 ```bash
-# macOS (Apple Silicon)
-curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/skillctl-darwin-arm64.tar.gz | tar xz \
-  && sudo mv skillctl-darwin-arm64 /usr/local/bin/skillctl
+# macOS / Linux / Windows — signed installer: fetches the right binary from the
+# signed skillctl/v* release and verifies cosign/OIDC provenance + SHA-256 first.
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/master/tools/skillctl-install.sh | bash
 
 skillctl keygen --out ~/.config/m3c/skill-keys/mykey            # ed25519 → mykey.priv + mykey.pub
 skillctl pack --skill ./my-skill -o my-skill.skb --name my-skill --version 1.0.0

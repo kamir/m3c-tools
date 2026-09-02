@@ -41,15 +41,19 @@ on:
   pull_request:
     branches: [main, master]
 
+# CD-T6: least-privilege default GITHUB_TOKEN for the whole workflow.
+permissions:
+  contents: read
+
 jobs:
   # ── Phase 1+2: Cross-compile check (fast, ubuntu runner) ──────────────────
   windows-compile:
     name: Windows Cross-Compile (ubuntu)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: "1.26.6"
           cache: true
@@ -99,7 +103,7 @@ jobs:
           echo "m3c-tools.exe: ${SIZE} bytes OK"
 
       - name: Upload Windows binaries
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: windows-binaries-${{ github.sha }}
           retention-days: 7
@@ -116,9 +120,9 @@ jobs:
     name: Trust Surface (windows-latest)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: "1.26.6"
           cache: true
@@ -147,7 +151,7 @@ jobs:
 
       - name: Upload Windows test report (for drift parity)
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: win-trust-json-${{ github.sha }}
           retention-days: 7
@@ -167,9 +171,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: windows-trust
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: "1.26.6"
           cache: true
@@ -206,7 +210,7 @@ jobs:
         continue-on-error: true
 
       - name: Download Windows test report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: win-trust-json-${{ github.sha }}
 
@@ -220,15 +224,15 @@ jobs:
     runs-on: windows-latest
     needs: windows-compile
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: "1.26.6"
           cache: true
 
       - name: Download Windows binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: windows-binaries-${{ github.sha }}
           path: build/
