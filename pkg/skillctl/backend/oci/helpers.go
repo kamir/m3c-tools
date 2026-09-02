@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"net"
 	"os"
 	"regexp"
 	"sort"
@@ -18,6 +17,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote/retry"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
+	"github.com/kamir/m3c-tools/pkg/skillctl/netguard"
 )
 
 // Bounds against a hostile/oversized registry (the carrier is untrusted). Manifests
@@ -117,19 +117,10 @@ func parseRFC3339(s string) (time.Time, error) { return time.Parse(time.RFC3339,
 // isLoopbackOrPrivate reports whether host (possibly host:port) resolves to a
 // loopback or RFC1918/ULA address — the only place a bearer token may ride plain
 // HTTP. A bare hostname (not an IP literal) is treated as NON-local (fail-closed).
-func isLoopbackOrPrivate(host string) bool {
-	if h, _, err := net.SplitHostPort(host); err == nil {
-		host = h
-	}
-	if host == "localhost" {
-		return true
-	}
-	ip := net.ParseIP(host)
-	if ip == nil {
-		return false // a DNS name could resolve anywhere → not provably local
-	}
-	return ip.IsLoopback() || ip.IsPrivate()
-}
+//
+// This is now a thin alias over netguard.IsLoopbackOrPrivate so the OCI, git, and
+// ER1 egress guards share ONE audited definition (FR-0090-style) and cannot drift.
+func isLoopbackOrPrivate(host string) bool { return netguard.IsLoopbackOrPrivate(host) }
 
 // tagHash is an injective disambiguator so that no two distinct (name,version)
 // pairs can collide onto one tag (sanitizeTag is lossy and '_' is legal in both

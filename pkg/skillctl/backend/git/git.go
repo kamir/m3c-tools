@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"os/exec"
@@ -16,8 +17,45 @@ import (
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
+	"github.com/kamir/m3c-tools/pkg/skillctl/netguard"
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustcore"
 )
+
+// Bounds against a hostile/oversized clone (the git host is untrusted, SPEC-0356
+// §6). A malicious repo could commit a multi-GiB bundle.skb or event JSON and OOM
+// the pulling host on os.ReadFile. These mirror the OCI backend's ceilings
+// (maxBlobBytes / maxManifestBytes) so the two carriers fail closed identically
+// (IS-09 / IS-T10).
+const (
+	maxGitBlobBytes     = 128 << 20 // 128 MiB — the .skb bundle layer (mirror OCI maxBlobBytes)
+	maxGitManifestBytes = 4 << 20   // 4 MiB — event JSON + bundle.json (mirror OCI maxManifestBytes)
+)
+
+// readCapped reads a regular file from the untrusted clone with a hard byte
+// ceiling (IS-T10). It mirrors the OCI backend's fetchCapped bound: reject an
+// oversized file BEFORE allocating its contents (the Stat pre-check), and treat
+// the LimitReader as the authoritative bound in case Stat lies or the file grows
+// mid-read. On oversize it returns a bounded-read ERROR (never a silently
+// truncated success), so callers fail closed instead of parsing a partial JSON
+// document or a truncated bundle.
+func readCapped(p string, max int64) ([]byte, error) {
+	f, err := os.Open(p)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	if fi, serr := f.Stat(); serr == nil && fi.Size() > max {
+		return nil, fmt.Errorf("git: %s is %d bytes, exceeds cap %d", filepath.Base(p), fi.Size(), max)
+	}
+	data, err := io.ReadAll(io.LimitReader(f, max+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > max {
+		return nil, fmt.Errorf("git: %s exceeds cap %d bytes", filepath.Base(p), max)
+	}
+	return data, nil
+}
 
 // gitExe resolves the `git` binary ONCE to a validated absolute path. A bare
 // exec.Command("git", …) re-runs a PATH lookup on every call, and on Windows a
@@ -72,7 +110,9 @@ func openGitLab(spec string, opts artifact.OpenOptions) (artifact.Backend, error
 		remote = "http://" + strings.TrimPrefix(remote, "https://")
 	}
 	b := newGitBackend(remote, "gitlab")
-	b.applyCreds(opts)
+	if err := b.applyCreds(opts); err != nil {
+		return nil, err
+	}
 	return b, nil
 }
 
@@ -84,7 +124,9 @@ func openGitHub(spec string, opts artifact.OpenOptions) (artifact.Backend, error
 		return nil, fmt.Errorf("git: empty github spec %q", spec)
 	}
 	b := newGitBackend("https://github.com/"+rest+".git", "github")
-	b.applyCreds(opts)
+	if err := b.applyCreds(opts); err != nil {
+		return nil, err // unreachable in practice (github is always https), kept for uniformity
+	}
 	return b, nil
 }
 
@@ -114,12 +156,23 @@ func newGitBackend(remote, scheme string) *gitBackend {
 
 // applyCreds resolves a token for this backend's host via opts.Creds (read-only,
 // SPEC-0356 D5) and stores it for out-of-band header injection (authEnv) — never
-// in the URL. Best-effort: no creds / a resolve error just leaves the backend
-// anonymous (ambient git credentials or a public repo still work). The token is
-// NEVER stored in b.remote and NEVER surfaced by Describe.
-func (b *gitBackend) applyCreds(opts artifact.OpenOptions) {
+// in the URL. Best-effort for the no-token case: no creds / a resolve error just
+// leaves the backend anonymous (ambient git credentials or a public repo still
+// work). The token is NEVER stored in b.remote and NEVER surfaced by Describe.
+//
+// CD-03 / WIN-12 (CD-T8 / WIN-T10): it REFUSES (returns an error) when a resolved
+// write token would ride cleartext HTTP to a host that is not provably
+// loopback/RFC1918. Base64(user:token) in an Authorization header is encoding,
+// not encryption, so an on-path attacker on a public network would capture a
+// write-scoped registry token — the same failure class as the OCI plain-HTTP
+// guard and ER1_VERIFY_SSL=false. M3C_GIT_HTTP=1 (the only way b.remote becomes
+// http://) is for a LAN/test registry; sending a token to a public http:// host
+// is never legitimate. HTTPS and loopback/private HTTP are fine. When there is no
+// token to attach, cleartext HTTP is left alone (anonymous fetch of a public repo
+// over http is the caller's choice, no secret at risk).
+func (b *gitBackend) applyCreds(opts artifact.OpenOptions) error {
 	if opts.Creds == nil {
-		return
+		return nil
 	}
 	host := ""
 	if u, err := url.Parse(b.remote); err == nil {
@@ -127,10 +180,15 @@ func (b *gitBackend) applyCreds(opts artifact.OpenOptions) {
 	}
 	c, err := opts.Creds.Credential(context.Background(), b.scheme, host)
 	if err != nil || c.Token == "" {
-		return
+		return nil // no token → nothing to protect; stay anonymous
+	}
+	if strings.HasPrefix(b.remote, "http://") && !netguard.IsLoopbackOrPrivate(host) {
+		fmt.Fprintf(os.Stderr, "skillctl: SECURITY: REFUSING to attach a %s write token over cleartext HTTP to non-loopback host %q — an on-path attacker would capture it. Use https, or a loopback/RFC1918 registry (M3C_GIT_HTTP is for LAN/test only).\n", b.scheme, host)
+		return fmt.Errorf("git: refusing to send credential over plain HTTP to non-loopback host %q; use https or unset M3C_GIT_HTTP", host)
 	}
 	b.token = c.Token
 	b.tokenUser = c.User
+	return nil
 }
 
 // userinfoRe strips credentials embedded in any URL (scheme://user:pass@host).
@@ -514,7 +572,7 @@ func (b *gitBackend) Fetch(ctx context.Context, ref artifact.ArtifactRef) ([]byt
 		if _, lerr := lstatRegular(bp); lerr != nil {
 			return fmt.Errorf("git: read blob %s@%s: %w", name, ver, lerr)
 		}
-		d, err := os.ReadFile(bp)
+		d, err := readCapped(bp, maxGitBlobBytes)
 		if err != nil {
 			return fmt.Errorf("git: read blob %s@%s: %w", name, ver, err)
 		}
@@ -558,9 +616,9 @@ func (b *gitBackend) Events(ctx context.Context, filter artifact.ListFilter, pag
 				if ok, lerr := lstatRegular(ep); lerr != nil || !ok {
 					continue
 				}
-				data, err := os.ReadFile(ep)
+				data, err := readCapped(ep, maxGitManifestBytes)
 				if err != nil {
-					continue
+					continue // oversized/unreadable event → ignore (never influences a verdict)
 				}
 				var env map[string]any
 				if err := json.Unmarshal(data, &env); err != nil {
@@ -693,7 +751,7 @@ func (b *gitBackend) readBundleJSON(dir, name, ver string) (bundleJSON, error) {
 	if _, lerr := lstatRegular(mp); lerr != nil {
 		return bj, lerr
 	}
-	data, err := os.ReadFile(mp)
+	data, err := readCapped(mp, maxGitManifestBytes)
 	if err != nil {
 		return bj, err
 	}

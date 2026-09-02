@@ -16,13 +16,45 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/er1"
+	"github.com/kamir/m3c-tools/pkg/skillctl/netguard"
 )
+
+// er1TLSGuard enforces the CD-11 egress rule at the point an HTTP client is built,
+// as defense-in-depth behind er1.applyTLSVerificationPolicy (which only runs at
+// LoadConfig time): TLS verification may be disabled ONLY for a provably
+// loopback/RFC1918 target. A *er1.Config constructed programmatically or in a test
+// can carry VerifySSL=false with a public APIURL and would otherwise slip past the
+// config-layer sanitizer straight into an InsecureSkipVerify client. Returns an
+// error (fail closed) for a non-loopback host with verification disabled; nil when
+// verification is on (nothing to police) or the host is loopback. host is derived
+// from the request base URL. Shared by er1Get and er1PostJSON.
+//
+// LOOPBACK-ONLY on purpose: this mirrors pkg/er1.applyTLSVerificationPolicy, which
+// honors ER1_VERIFY_SSL=false only for 127.0.0.1/localhost and forces verification
+// back on for every other host — RFC1918 LAN hosts included. Permitting an
+// RFC1918 TLS-skip here that the core ER1 client forbids would be an inconsistency
+// an attacker could target, so the registry client uses netguard.IsLoopback (not
+// IsLoopbackOrPrivate). The git/OCI *credential* guards keep the wider predicate.
+func er1TLSGuard(base string, verifySSL bool) error {
+	if verifySSL {
+		return nil
+	}
+	host := base
+	if u, err := url.Parse(base); err == nil && u.Host != "" {
+		host = u.Host
+	}
+	if !netguard.IsLoopback(host) {
+		return fmt.Errorf("er1: refusing to disable TLS verification (VerifySSL=false) for non-loopback host %q — only 127.0.0.1/localhost may skip certificate verification", host)
+	}
+	return nil
+}
 
 // ─── Errors ────────────────────────────────────────────────────────────────
 
@@ -43,13 +75,13 @@ var ErrClaimCheckNotImplemented = errors.New("registry: claim-check (MinIO overf
 // SPEC-0225 §6 tag set. It mirrors the fields the cmd handler already extracts
 // from the skill dir + signing step.
 type SkillMeta struct {
-	Name              string // skill name, used in `skill:` and `skill-version:` tags
-	Version           string // version string, used in `skill-version:` tag
-	BundleDigest      string // "sha256:<hex>", used in `skill-digest:` tag
-	AuthorIdentity    string // "id:kamir@m3c", used in `skill-author:` tag
-	GovernanceLevel   string // "green"|"yellow"|"red", used in `governance:` tag
-	PackedOnHost      string // short hostname, used in `host:` tag
-	ProjectID         string // optional; if set, stamps `project:<id>` for provenance
+	Name            string // skill name, used in `skill:` and `skill-version:` tags
+	Version         string // version string, used in `skill-version:` tag
+	BundleDigest    string // "sha256:<hex>", used in `skill-digest:` tag
+	AuthorIdentity  string // "id:kamir@m3c", used in `skill-author:` tag
+	GovernanceLevel string // "green"|"yellow"|"red", used in `governance:` tag
+	PackedOnHost    string // short hostname, used in `host:` tag
+	ProjectID       string // optional; if set, stamps `project:<id>` for provenance
 
 	// ShareRooms maps the bundle into one or more SPEC-0096 co-learning rooms.
 	// Each entry is a room's *room_label* (e.g. "aims-basics") and is stamped as
@@ -215,12 +247,12 @@ type PublishRevokedOpts struct {
 
 // PublishInstalledOpts captures the inputs for the install-event publish path.
 type PublishInstalledOpts struct {
-	ER1Cfg            *er1.Config
-	ContextID         string
-	Event             map[string]any // signed BundleInstalledEvent
-	Skill             SkillMeta
-	InstalledOnHost   string
-	Now               time.Time
+	ER1Cfg          *er1.Config
+	ContextID       string
+	Event           map[string]any // signed BundleInstalledEvent
+	Skill           SkillMeta
+	InstalledOnHost string
+	Now             time.Time
 }
 
 // PublishInstalled POSTs a BundleInstalledEvent item with the install-event
@@ -508,6 +540,9 @@ func findAdmittedByDigest(cfg *er1.Config, ctxID, digest string) (string, error)
 }
 
 func er1Get(base string, cfg *er1.Config, path string) (any, error) {
+	if err := er1TLSGuard(base, cfg.VerifySSL); err != nil {
+		return nil, err
+	}
 	client := &http.Client{Timeout: 15 * time.Second}
 	if !cfg.VerifySSL {
 		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}

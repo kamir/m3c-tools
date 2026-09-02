@@ -19,7 +19,15 @@
 # Only the reine-Go trust-plane is containerized here.
 
 # ---- Stage 1: build ----------------------------------------------------
-FROM golang:1.25-alpine AS builder
+# CD-T11 / CD-06: base images are DIGEST-PINNED, not tag-floating. A tag like
+# `golang:1.26-alpine` is mutable (the registry can repoint it), so pinning the
+# tag alone lets an upstream repoint (or a registry compromise) swap the build
+# toolchain under us. The @sha256 digest is content-addressed and immutable; the
+# tag is kept as a human-readable comment. Refresh with:
+#   docker buildx imagetools inspect golang:1.26-alpine   # -> index Digest
+# Resolved 2026-09-02: golang:1.26-alpine == 1.26.8-alpine3.24 (>= go.mod
+# toolchain go1.26.6, so no toolchain re-download at build time).
+FROM golang:1.26-alpine@sha256:b6890e35ded5d19118c2bca3d7754dc4e6f694aac2d0aeb92f9807c2879e4230 AS builder
 
 # git for VCS build metadata; ca-certificates so `go mod download` over
 # https module proxies works.
@@ -50,7 +58,11 @@ RUN go build \
 # distroless/static: no shell, no package manager, non-root by default.
 # ca-certificates are included in the base, so `pull`/`verify`/`attest`
 # can reach an HTTPS registry when a network path is provided.
-FROM gcr.io/distroless/static-debian12:nonroot
+#
+# CD-T11 / CD-06: digest-pinned (see Stage 1). Refresh with:
+#   docker buildx imagetools inspect gcr.io/distroless/static-debian12:nonroot
+# Resolved 2026-09-02 (multi-arch index digest).
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 
 COPY --from=builder /out/skillctl /usr/local/bin/skillctl
 

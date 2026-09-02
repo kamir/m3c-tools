@@ -353,7 +353,9 @@ func (failingReader) Read([]byte) (int, error) {
 //     or verified), so the destructive overwrite never happens.
 func TestInstallTokenKey_RNGFailureFailsClosed(t *testing.T) {
 	// Isolate HOME so no pre-existing ~/.cache/m3c/install-token.key is read
-	// (that would short-circuit the RNG path).
+	// (that would short-circuit the RNG path). On Windows userHome() ignores
+	// $HOME in a shipping build (WIN-T8); the windows-latest test surface builds
+	// with -tags allow_home_override_test so this injection takes effect there.
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
 
