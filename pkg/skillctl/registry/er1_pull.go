@@ -252,6 +252,14 @@ type PullOpts struct {
 	// enterprise root demands a fresh revoke authority); when false, HEAD consultation
 	// is best-effort (a fetch failure falls back to discovery + the cap-hit trigger).
 	RequireRevocationHead bool
+	// RevocationHeadFloorEpoch is the client's epoch floor for SPEC-0279 R1 rollback
+	// protection: consultRevokeHead rejects a fetched HEAD whose epoch is below this,
+	// defeating a replay of an older validly-signed HEAD. Resolve it as
+	// max(readRevokedCacheHead(home).epoch, root.MinRevocationEpoch).
+	RevocationHeadFloorEpoch int
+	// RevocationHeadMaxStaleness, when > 0, rejects a validly-signed monotonic HEAD
+	// whose issued_at is older than this (freshness). 0 → epoch-floor only.
+	RevocationHeadMaxStaleness time.Duration
 }
 
 // now resolves the freshness clock (zero → wall clock).
@@ -264,8 +272,9 @@ func (o PullOpts) now() time.Time {
 
 // PullResult reports the outcome of a pull.
 type PullResult struct {
-	Staged  []*StagedBundle
-	Skipped []*PullSkip // bundles rejected by one of the 5 gates
+	Staged   []*StagedBundle
+	Skipped  []*PullSkip // bundles rejected by one of the 5 gates
+	Warnings []string    // non-fatal advisories (e.g. a best-effort revoke-discovery cap-hit)
 }
 
 // PullSkip is a per-bundle rejection.
@@ -301,6 +310,7 @@ type revokeHeadDecision struct {
 	denySet             map[string]struct{}
 	discoveryIncomplete bool
 	reason              string
+	capWarning          string // non-fatal: a best-effort cap-hit that does NOT brick the pull
 }
 
 func (d revokeHeadDecision) denies(digest string) bool {
@@ -315,52 +325,105 @@ func (d revokeHeadDecision) denies(digest string) bool {
 func consultRevokeHead(tr *SelfTrustRoots, opts PullOpts, discoveredRevoked []string, discoveryCapHit bool) revokeHeadDecision {
 	dec := revokeHeadDecision{denySet: map[string]struct{}{}}
 
-	if opts.RevocationHeadURL == "" {
+	// capFallback handles a discovery page-cap hit when there is no trustworthy
+	// HEAD to prove completeness. When a HEAD is REQUIRED it is a hard fail-closed;
+	// on a best-effort (self) host it is only a WARNING (IS-RS-01c): searchTagsLimit
+	// is counted on RAW context items (not the tag-filtered skill set), so it is
+	// not a reliable completeness signal on its own, and bricking every pull once a
+	// self context grows past the cap is a worse failure than the residual it guards.
+	capFallback := func() {
 		if opts.RequireRevocationHead {
 			dec.discoveryIncomplete = true
-			dec.reason = "revocation HEAD required by policy but no registry URL is configured"
-			return dec
+			dec.reason = fmt.Sprintf("revocation HEAD required but unavailable/unverifiable and discovery hit the %d-item cap — completeness cannot be proven", searchTagsLimit)
+			return
 		}
-		// Best-effort, no HEAD source: the only completeness signal left is the
-		// page-cap. A truncated page we cannot cross-check must fail closed.
 		if discoveryCapHit {
-			dec.discoveryIncomplete = true
-			dec.reason = fmt.Sprintf("revocation discovery page hit the %d-item cap and no signed HEAD is configured to prove completeness", searchTagsLimit)
+			dec.capWarning = fmt.Sprintf("revocation discovery page hit the %d-item cap and no trustworthy signed HEAD proves completeness (best-effort self host)", searchTagsLimit)
 		}
+	}
+
+	if opts.RevocationHeadURL == "" {
+		capFallback()
 		return dec
 	}
 
 	head, ferr := pullRevocationHeadFetch(opts.RevocationHeadURL, opts.RevocationHeadTenant, pullRevocationHeadTimeout)
-	if ferr != nil || VerifyEnvelopeSignature(tr.PubKey(), head) != nil {
-		if opts.RequireRevocationHead {
-			dec.discoveryIncomplete = true
-			dec.reason = "revocation HEAD required by policy but unreachable/unverifiable"
-			return dec
-		}
-		// Best-effort: no trustworthy HEAD → fall back to the cap-hit trigger.
-		if discoveryCapHit {
-			dec.discoveryIncomplete = true
-			dec.reason = fmt.Sprintf("revocation discovery page hit the %d-item cap and the signed HEAD was unreachable/unverifiable", searchTagsLimit)
-		}
+	if ferr != nil {
+		capFallback()
 		return dec
 	}
 
-	// Verified HEAD → deny each enumerable emergency (burned) digest outright.
+	// (1) Signature. An untrustworthy HEAD is not a completeness proof: a REQUIRED
+	// HEAD fails closed; a best-effort host falls back to the cap rule (a flaky/bad
+	// response must not brick a self host).
+	if VerifyEnvelopeSignature(tr.PubKey(), head) != nil {
+		if opts.RequireRevocationHead {
+			dec.discoveryIncomplete = true
+			dec.reason = "revocation HEAD required by policy but unverifiable (bad signature)"
+			return dec
+		}
+		capFallback()
+		return dec
+	}
+
+	// (2) Epoch monotonicity — the IS-RS-01 replay/rollback fix, enforced at EVERY
+	// policy level. A signature-only check accepted a replayed OLD-but-validly-signed
+	// HEAD (e.g. the genesis head: epoch 0, empty set) whose stale revoked_set_root
+	// matched a hostile-truncated discovery, silently un-revoking everything. A HEAD
+	// whose epoch is below the persisted/pinned floor is an unambiguous active-attack
+	// signal → fail closed. (Residual, documented honestly: a brand-new self host
+	// that has never synced AND pins no min_revocation_epoch has floor 0, so a
+	// first-contact genesis replay still passes here — inherent TOFU; the sweep
+	// advances the floor after the first legitimate sync, and on `self` the tenant is
+	// the author/trust-root owner anyway. A managed root closes it via
+	// min_revocation_epoch.) A same-epoch-but-stale HEAD cannot omit a revoke the
+	// current epoch commits to (its revoked_set_root is unchanged, so step (5) still
+	// binds); the issued_at freshness in step (3) is the defense-in-depth against it
+	// and fires only under a max_staleness policy (managed roots default 48h; a self
+	// host with no policy relies on the epoch floor + set-root binding). We do NOT
+	// persist the epoch here — the pull is read-only.
+	if err := CheckEpochMonotonic(head, opts.RevocationHeadFloorEpoch); err != nil {
+		dec.discoveryIncomplete = true
+		dec.reason = "revocation HEAD epoch rolled back below the accepted floor (replay/rollback): " + err.Error()
+		return dec
+	}
+
+	// (3) Freshness — a validly-signed, monotonic, but stale HEAD must not prove
+	// completeness when a max_staleness policy is set.
+	if opts.RevocationHeadMaxStaleness > 0 {
+		if ia, e := HeadIssuedAt(head); e != nil || opts.now().Sub(ia) > opts.RevocationHeadMaxStaleness {
+			dec.discoveryIncomplete = true
+			dec.reason = "revocation HEAD is older than the max_staleness freshness policy (or has no valid issued_at)"
+			return dec
+		}
+	}
+
+	// (4) tenant_scope (defense-in-depth): a HEAD committing to a different tenant's
+	// scope must not bind ours.
+	if opts.RevocationHeadTenant != "" {
+		if ts, _ := headString(head, "tenant_scope"); ts != "" && ts != opts.RevocationHeadTenant {
+			dec.discoveryIncomplete = true
+			dec.reason = "revocation HEAD tenant_scope does not match the expected tenant"
+			return dec
+		}
+	}
+
+	// (5) Bind the discovered revoked set to the HEAD's committed root. A MATCH
+	// proves discovery is complete; a MISMATCH means discovery omitted a revoke the
+	// (now signature-verified, monotonic, fresh) HEAD commits to → fail closed.
+	if VerifyRevocationHeadSet(head, discoveredRevoked) != nil {
+		dec.discoveryIncomplete = true
+		dec.reason = "revocation HEAD revoked_set_root does not match the discovered revoked set (a revoke was omitted from discovery)"
+		return dec
+	}
+
+	// HEAD accepted (verified, monotonic, fresh, tenant-correct, set-root bound →
+	// discovery complete). Deny each enumerable emergency (burned) digest outright.
 	if em, e := HeadEmergency(head); e == nil {
 		for _, d := range em {
 			dec.denySet[strings.ToLower(strings.TrimSpace(d))] = struct{}{}
 		}
 	}
-
-	// Bind the discovered revoked set to the HEAD's committed root. A MATCH proves
-	// discovery is complete (the HEAD commits to exactly this revoked set) — which
-	// also neutralises the page-cap concern for a large registry that publishes a
-	// HEAD. A MISMATCH means discovery is missing a revoke the HEAD commits to.
-	if VerifyRevocationHeadSet(head, discoveredRevoked) == nil {
-		return dec // complete: emergency-only, no global fail-closed
-	}
-	dec.discoveryIncomplete = true
-	dec.reason = "signed revocation HEAD revoked_set_root does not match the discovered revoked set (a revoke was omitted from discovery)"
 	return dec
 }
 
@@ -410,6 +473,9 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 	}
 
 	res := &PullResult{}
+	if headDec.capWarning != "" {
+		res.Warnings = append(res.Warnings, headDec.capWarning)
+	}
 	for _, item := range admits {
 		docID, _ := item["doc_id"].(string)
 		if docID == "" {

@@ -23,6 +23,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
@@ -104,14 +105,17 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		// carry it into the gauntlet so Gate 5 can catch a revoke that tag discovery
 		// missed. Best-effort / never-brick: a self-ER1 host with no verify.TrustRoot
 		// configured leaves the URL empty (HEAD not consulted); a MANAGED enterprise
-		// root additionally REQUIRES the HEAD (fail closed if unreachable, mirror
-		// IS-T5).
-		headURL, headTenant, headRequired := resolveRevokeHeadSource()
+		// root additionally REQUIRES the HEAD (fail closed if unreachable) AND, via
+		// the resolved epoch floor + max_staleness, rejects a replayed OLD or STALE
+		// signed HEAD (SPEC-0279 R1 rollback + R3 freshness — mirror IS-T5).
+		headURL, headTenant, headRequired, headFloor, headStaleness := resolveRevokeHeadSource()
 		res, err = registry.PullBundles(cfg, *er1Context, tr, registry.PullOpts{
 			OnlySkill: *skillName, OnlyDigest: *digestArg, Since: *since,
-			RevocationHeadURL:     headURL,
-			RevocationHeadTenant:  headTenant,
-			RequireRevocationHead: headRequired,
+			RevocationHeadURL:          headURL,
+			RevocationHeadTenant:       headTenant,
+			RequireRevocationHead:      headRequired,
+			RevocationHeadFloorEpoch:   headFloor,
+			RevocationHeadMaxStaleness: headStaleness,
 		})
 	}
 	if err != nil {
@@ -135,6 +139,9 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 			gateName = k.Gate.Error()
 		}
 		fmt.Fprintf(stdout, "    ❌ %s@%s  digest=%s  [%s] %s\n", strOr(k.Name, "?"), strOr(k.Version, "?"), k.Digest, gateName, k.Detail)
+	}
+	for _, w := range res.Warnings {
+		fmt.Fprintf(stderr, "    ⚠️  %s\n", w)
 	}
 	fmt.Fprintf(stdout, "\n==> done. staged=%d  skipped=%d\n", len(res.Staged), len(res.Skipped))
 
@@ -366,15 +373,28 @@ func strOr(s, fb string) string {
 // URL, so a default self-ER1 / air-gapped host consults no HEAD and behaves as
 // before. A MANAGED enterprise root REQUIRES the HEAD (fail closed if it is
 // unreachable/unverifiable), mirroring the IS-T5 managed-root freshness contract.
-func resolveRevokeHeadSource() (url, tenant string, required bool) {
+func resolveRevokeHeadSource() (url, tenant string, required bool, floorEpoch int, maxStaleness time.Duration) {
 	roots, root, err := loadRootsFn("")
 	if err != nil || root == nil {
-		return "", "", false
+		return "", "", false, 0, 0
 	}
 	if roots != nil {
 		tenant = roots.TenantScope
 	}
-	return root.RegistryURL, tenant, root.IsManaged()
+	// Epoch floor for SPEC-0279 R1 rollback protection = the higher of the pinned
+	// minimum and the persisted adopted epoch (the sweep's floor). Either alone
+	// defeats a replay of an older signed HEAD; together they cover a fresh host
+	// (pinned min) and a previously-synced host (persisted).
+	floorEpoch = root.MinRevocationEpoch
+	if home, herr := userHome(); herr == nil {
+		if he, _ := readRevokedCacheHead(home); he > floorEpoch {
+			floorEpoch = he
+		}
+	}
+	if d, perr := time.ParseDuration(strings.TrimSpace(root.MaxStaleness)); perr == nil && d > 0 {
+		maxStaleness = d
+	}
+	return root.RegistryURL, tenant, root.IsManaged(), floorEpoch, maxStaleness
 }
 
 // resolvePullTrustRoots picks the verification key for a pull (SPEC-0359 D2). For

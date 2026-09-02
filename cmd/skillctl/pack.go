@@ -80,13 +80,21 @@ func runPack(args []string, stdout, stderr io.Writer) int {
 		return code
 	}
 
-	// FR-0090 IS-RS-03 — bind DECLARATION↔BEHAVIOR at pack time. IS-T7 enforces the
-	// author-DECLARED manifest, but nothing else bound the declaration to what the
-	// SKILL.md body actually does, so a skill could declare no network / a narrow
-	// tool set and still instruct an outbound call. Run the body-vs-declaration
-	// bodyscan and FAIL the pack on a RED consistency finding (a 🟡 may pass),
-	// mirroring propose check #11 — before the digest is computed, so no bundle is
-	// ever produced from a body that contradicts its own manifest.
+	// FR-0090 IS-RS-03 — a PRODUCER-SIDE body-vs-declaration lint at pack time. IS-T7
+	// enforces the author-DECLARED manifest, but nothing binds the declaration to what
+	// the SKILL.md body actually does. This gate FAILS the pack on a RED
+	// FrontmatterConsistency finding — principally TOOL ESCALATION: the body uses a
+	// tool the manifest does not declare (an undeclared `curl`/`bash`, etc.). A softer
+	// intent mismatch where the tool IS declared (e.g. declares Bash, runs curl, with
+	// intent:network=false) is a 🟡 note that may pass (URL heuristics are
+	// false-positive-prone). Mirrors propose check #11; runs before the digest so no
+	// bundle is produced from a body that escalates beyond its own manifest.
+	//
+	// SCOPE (honest): this binds the COOPERATING producer only. A hand-built .skb
+	// installed via `skillctl install` never runs pack, so an untrusted federated
+	// author (SPEC-0359) can still ship a contradicting body — the non-repudiable
+	// close is a consumer-side re-scan at verify/install or folding the verdict into
+	// the signed attestation (tracked follow-up), not this pack lint.
 	if code, ok := packBodyConsistencyGate(in.skillDir, stderr); !ok {
 		return code
 	}
@@ -126,7 +134,21 @@ func packBodyConsistencyGate(skillDir string, stderr io.Writer) (int, bool) {
 	}
 	rep, err := scanBodyFile(skillMD)
 	if err != nil {
-		return exitOK, true // unreadable here → defer to Pack; do not brick
+		// The SKILL.md RESOLVED but could not be read+scanned here. Do NOT defer to
+		// Pack (a TOCTOU where the file becomes readable at Pack time would then pack
+		// an UNSCANNED body): a consistency gate cannot PASS a body it could not
+		// examine — fail closed.
+		fmt.Fprintf(stderr, "skillctl pack: REFUSED — SKILL.md resolved but could not be scanned for body-vs-declaration consistency (IS-RS-03): %v\n", err)
+		return verify.ExitIntentInconsistent, false
+	}
+	// An oversized (>1 MiB) body is NOT consistency-scanned (bodyscan DoS guard emits
+	// a RuleIDOversized finding instead). A gate that claims to bind
+	// declaration↔behavior must not silently pass an unscanned body → fail closed.
+	for _, f := range rep.Findings {
+		if f.RuleID == bodyscan.RuleIDOversized {
+			fmt.Fprintf(stderr, "skillctl pack: REFUSED — SKILL.md body is too large to scan for body-vs-declaration consistency (IS-RS-03): %s\n", f.Message)
+			return verify.ExitIntentInconsistent, false
+		}
 	}
 	var reds []string
 	for _, f := range rep.FrontmatterConsistency {

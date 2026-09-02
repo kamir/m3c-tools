@@ -98,6 +98,28 @@ func TestPackCleanBodyStillPacks(t *testing.T) {
 	}
 }
 
+// TestPackFailsOnOversizedUnscannableBody (IS-RS-03 hardening): a SKILL.md body
+// larger than the bodyscan DoS cap (1 MiB) is NOT consistency-scanned, so the pack
+// gate must FAIL closed rather than silently pack an unscanned body that could
+// escalate beyond its declaration.
+func TestPackFailsOnOversizedUnscannableBody(t *testing.T) {
+	big := "# t\n" + strings.Repeat("A", (1<<20)+1024) // > maxBodyBytes (1 MiB)
+	dir := writePackSkillDirBody(t, "name: t\nallowed-tools:\n  - Read", big)
+	out := filepath.Join(t.TempDir(), "t.skb")
+
+	var stdout, stderr strings.Builder
+	code := runPack(baseArgs(dir, out), &stdout, &stderr)
+	if code == exitOK {
+		t.Fatalf("pack must FAIL closed on an oversized/unscannable body; got exit 0. stderr=%q", stderr.String())
+	}
+	if code != verify.ExitIntentInconsistent {
+		t.Errorf("exit = %d, want %d (ExitIntentInconsistent)", code, verify.ExitIntentInconsistent)
+	}
+	if _, err := os.Stat(out); err == nil {
+		t.Errorf("a rejected pack must NOT produce a .skb, but %s exists", out)
+	}
+}
+
 // readBundleJSON extracts and decodes bundle.json from a packed .skb.
 func readBundleJSON(t *testing.T, skbPath string) skillbundle.BundleManifest {
 	t.Helper()
