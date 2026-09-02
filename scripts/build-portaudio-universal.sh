@@ -12,15 +12,41 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKDIR="/tmp/portaudio-universal-build"
 PA_VERSION="pa_stable_v190700_20210406"
-PA_URL="https://files.portaudio.com/archives/${PA_VERSION}.tgz"
+# SHA-256 of the immutable upstream release tarball (matches the Homebrew formula
+# and MacPorts). The download below is verified against this and fails closed on
+# mismatch — integrity does not depend on which host served the bytes.
+PA_SHA256="47efbf42c77c19a05d22e627d42873e991ec0c1357219c0d74ce6a2948cb2def"
+# The canonical host files.portaudio.com went offline (DNS no longer resolves),
+# which broke this build for everyone. Try it first in case it returns, then fall
+# back to the Wayback Machine's immutable snapshot of the exact same tarball. The
+# `id_` modifier makes Wayback serve the original raw bytes (no HTML rewriting).
+PA_URLS=(
+    "https://files.portaudio.com/archives/${PA_VERSION}.tgz"
+    "https://web.archive.org/web/20210601000000id_/http://files.portaudio.com/archives/${PA_VERSION}.tgz"
+)
 OUT="${REPO_ROOT}/lib/portaudio"
 
 echo "==> Downloading PortAudio source..."
 mkdir -p "$WORKDIR"
 cd "$WORKDIR"
 if [ ! -f "${PA_VERSION}.tgz" ]; then
-    curl -LO "$PA_URL"
+    downloaded=""
+    for url in "${PA_URLS[@]}"; do
+        echo "    trying ${url%%\?*}"
+        if curl -fsSL --retry 3 --connect-timeout 20 -o "${PA_VERSION}.tgz.part" "$url"; then
+            mv "${PA_VERSION}.tgz.part" "${PA_VERSION}.tgz"
+            downloaded=1
+            break
+        fi
+    done
+    if [ -z "$downloaded" ]; then
+        echo "ERROR: could not download ${PA_VERSION}.tgz from any known source" >&2
+        exit 1
+    fi
 fi
+echo "==> Verifying SHA-256 (fail closed on mismatch)..."
+echo "${PA_SHA256}  ${PA_VERSION}.tgz" | shasum -a 256 -c - \
+    || { echo "ERROR: SHA-256 mismatch for ${PA_VERSION}.tgz — refusing to build" >&2; exit 1; }
 rm -rf portaudio
 tar xzf "${PA_VERSION}.tgz"
 
