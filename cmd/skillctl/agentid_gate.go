@@ -74,6 +74,16 @@ type agentAuthzResult struct {
 
 	// Reason is a stable deny token for the refusal_code / human reason.
 	Reason string
+
+	// GrantRestricting / GrantNamesSkill are set only on the VERIFIED-mandate path
+	// (FR-0090 IS-RS-02). GrantRestricting mirrors grantIsRestricting(grant) — the
+	// grant bounds capability intents / data-scopes / limits, so a scope check is
+	// owed. GrantNamesSkill mirrors grant.AllowsSkill(skill). Together they let the
+	// gate deny an UNMANAGED skill (all provenance stripped → no digest-verified
+	// scope to check) that a restricting mandate names, instead of letting it take
+	// the unmanaged=allow branch and skip the IS-T7 scope check entirely.
+	GrantRestricting bool
+	GrantNamesSkill  bool
 }
 
 // agentIDVerifyForGateFn is the verification seam so tests can drive the gate's
@@ -148,6 +158,14 @@ func authorizeAgentForSkill(home, skill string) agentAuthzResult {
 		res.Reason = reason
 		return res
 	}
+
+	// FR-0090 IS-RS-02: expose the grant shape now that the mandate has VERIFIED, so
+	// the gate can refuse an UNMANAGED (provenance-stripped) skill that a restricting
+	// grant names — which would otherwise slip through the unmanaged=allow branch,
+	// skipping the IS-T7 scope check. Only meaningful on the verified path (a forged
+	// mandate already denies via allow()).
+	res.GrantRestricting = grantIsRestricting(doc.Payload.Grant)
+	res.GrantNamesSkill = doc.Payload.Grant.AllowsSkill(skill)
 
 	// Mandate verified → authorize the skill against the grant, enforcing not just
 	// the skill NAME but the capability intents / data-scopes / limits the skill

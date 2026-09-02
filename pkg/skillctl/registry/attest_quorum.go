@@ -176,6 +176,20 @@ func (a *AttestAccumulator) IsRevoked(digest string) bool {
 	return ok
 }
 
+// RevokedDigests returns the full set of digests carrying a verified revoke, as
+// discovered by tag search. FR-0090 IS-RS-01 binds this DISCOVERED set against
+// the signed revocation HEAD's revoked_set_root: if they differ, discovery is
+// missing a revoke the HEAD commits to (a tag was stripped, the item aged past
+// the range=year window, or the list was flooded past the limit=500 cap), so the
+// pull fails closed rather than trust an incomplete list.
+func (a *AttestAccumulator) RevokedDigests() []string {
+	out := make([]string, 0, len(a.revoked))
+	for d := range a.revoked {
+		out = append(out, d)
+	}
+	return out
+}
+
 // HasBelowFloor reports whether a signer's newest (unexpired) attestation was seen
 // that did not meet the floor (for a precise gate-4 message).
 func (a *AttestAccumulator) HasBelowFloor(digest string) bool {

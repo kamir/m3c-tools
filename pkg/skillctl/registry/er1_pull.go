@@ -237,6 +237,29 @@ type PullOpts struct {
 	OnlyDigest string    // empty → all admit items in scope
 	Since      string    // RFC3339; pass to the search query (best-effort filter)
 	Now        time.Time // injectable clock for attestation freshness (D5); zero → time.Now()
+
+	// FR-0090 IS-RS-01 — signed revoke-HEAD consultation. Gate 5's revoked set is
+	// built only from tag DISCOVERY (searchByTagsRaw, limit=500, range=year), which
+	// a hostile/compromised tenant can truncate so a revoke never enters the
+	// accumulator (strip a tag, age it past a year, or flood past 500). The signed
+	// revocation HEAD (revoked_set_root + emergency[], verified against the pinned
+	// trust root) is the authority that catches such an omission. These carry it in.
+	RevocationHeadURL string // registry base for FetchRevocationHead; "" → HEAD not consulted (best-effort)
+	// RevocationHeadTenant is the optional tenant_scope for the HEAD fetch.
+	RevocationHeadTenant string
+	// RequireRevocationHead is the freshness policy (mirror IS-T5). When true, an
+	// UNCONFIGURED / UNREACHABLE / UNVERIFIABLE HEAD FAILS the pull closed (a managed
+	// enterprise root demands a fresh revoke authority); when false, HEAD consultation
+	// is best-effort (a fetch failure falls back to discovery + the cap-hit trigger).
+	RequireRevocationHead bool
+	// RevocationHeadFloorEpoch is the client's epoch floor for SPEC-0279 R1 rollback
+	// protection: consultRevokeHead rejects a fetched HEAD whose epoch is below this,
+	// defeating a replay of an older validly-signed HEAD. Resolve it as
+	// max(readRevokedCacheHead(home).epoch, root.MinRevocationEpoch).
+	RevocationHeadFloorEpoch int
+	// RevocationHeadMaxStaleness, when > 0, rejects a validly-signed monotonic HEAD
+	// whose issued_at is older than this (freshness). 0 → epoch-floor only.
+	RevocationHeadMaxStaleness time.Duration
 }
 
 // now resolves the freshness clock (zero → wall clock).
@@ -249,8 +272,9 @@ func (o PullOpts) now() time.Time {
 
 // PullResult reports the outcome of a pull.
 type PullResult struct {
-	Staged  []*StagedBundle
-	Skipped []*PullSkip // bundles rejected by one of the 5 gates
+	Staged   []*StagedBundle
+	Skipped  []*PullSkip // bundles rejected by one of the 5 gates
+	Warnings []string    // non-fatal advisories (e.g. a best-effort revoke-discovery cap-hit)
 }
 
 // PullSkip is a per-bundle rejection.
@@ -261,6 +285,146 @@ type PullSkip struct {
 	DocID   string
 	Gate    error // one of ErrGateEnvelope/Digest/BundleSigs/Governance/Revoked
 	Detail  string
+}
+
+// pullRevocationHeadTimeout bounds the HEAD fetch during a pull. Short by design:
+// the HEAD is a best-effort authority unless a freshness policy demands it, so a
+// slow/unreachable registry must not stall the gauntlet.
+const pullRevocationHeadTimeout = 3 * time.Second
+
+// pullRevocationHeadFetch is the injectable seam PullBundles uses to fetch the
+// signed revocation HEAD (FR-0090 IS-RS-01). Production = FetchRevocationHead
+// (the SAME mechanism the SessionStart quarantine sweep reuses); tests replace it
+// to serve a signed HEAD offline.
+var pullRevocationHeadFetch = FetchRevocationHead
+
+// revokeHeadDecision is the outcome of consulting the signed revoke HEAD for a
+// pull. denySet lists digests to refuse OUTRIGHT (the HEAD's emergency[] burn
+// list, enumerable inline). discoveryIncomplete is true when the pull must fail
+// CLOSED for every candidate because it cannot prove its DISCOVERED revoked set
+// is complete: the HEAD verified but its revoked_set_root did NOT match the
+// discovered set (a revoke was omitted from discovery), OR discovery hit the page
+// cap without a verified HEAD to independently prove completeness, OR a freshness
+// policy demanded a HEAD that was unconfigured/unreachable/unverifiable.
+type revokeHeadDecision struct {
+	denySet             map[string]struct{}
+	discoveryIncomplete bool
+	reason              string
+	capWarning          string // non-fatal: a best-effort cap-hit that does NOT brick the pull
+}
+
+func (d revokeHeadDecision) denies(digest string) bool {
+	_, ok := d.denySet[digest]
+	return ok
+}
+
+// consultRevokeHead binds the DISCOVERED revoked set to the signed revocation
+// HEAD. discoveredRevoked is acc.RevokedDigests(); discoveryCapHit is whether the
+// discovery page was truncated. Fail-closed everywhere a completeness claim
+// cannot be proven; best-effort (no HEAD) only when RequireRevocationHead is off.
+func consultRevokeHead(tr *SelfTrustRoots, opts PullOpts, discoveredRevoked []string, discoveryCapHit bool) revokeHeadDecision {
+	dec := revokeHeadDecision{denySet: map[string]struct{}{}}
+
+	// capFallback handles a discovery page-cap hit when there is no trustworthy
+	// HEAD to prove completeness. When a HEAD is REQUIRED it is a hard fail-closed;
+	// on a best-effort (self) host it is only a WARNING (IS-RS-01c): searchTagsLimit
+	// is counted on RAW context items (not the tag-filtered skill set), so it is
+	// not a reliable completeness signal on its own, and bricking every pull once a
+	// self context grows past the cap is a worse failure than the residual it guards.
+	capFallback := func() {
+		if opts.RequireRevocationHead {
+			dec.discoveryIncomplete = true
+			dec.reason = fmt.Sprintf("revocation HEAD required but unavailable/unverifiable and discovery hit the %d-item cap — completeness cannot be proven", searchTagsLimit)
+			return
+		}
+		if discoveryCapHit {
+			dec.capWarning = fmt.Sprintf("revocation discovery page hit the %d-item cap and no trustworthy signed HEAD proves completeness (best-effort self host)", searchTagsLimit)
+		}
+	}
+
+	if opts.RevocationHeadURL == "" {
+		capFallback()
+		return dec
+	}
+
+	head, ferr := pullRevocationHeadFetch(opts.RevocationHeadURL, opts.RevocationHeadTenant, pullRevocationHeadTimeout)
+	if ferr != nil {
+		capFallback()
+		return dec
+	}
+
+	// (1) Signature. An untrustworthy HEAD is not a completeness proof: a REQUIRED
+	// HEAD fails closed; a best-effort host falls back to the cap rule (a flaky/bad
+	// response must not brick a self host).
+	if VerifyEnvelopeSignature(tr.PubKey(), head) != nil {
+		if opts.RequireRevocationHead {
+			dec.discoveryIncomplete = true
+			dec.reason = "revocation HEAD required by policy but unverifiable (bad signature)"
+			return dec
+		}
+		capFallback()
+		return dec
+	}
+
+	// (2) Epoch monotonicity — the IS-RS-01 replay/rollback fix, enforced at EVERY
+	// policy level. A signature-only check accepted a replayed OLD-but-validly-signed
+	// HEAD (e.g. the genesis head: epoch 0, empty set) whose stale revoked_set_root
+	// matched a hostile-truncated discovery, silently un-revoking everything. A HEAD
+	// whose epoch is below the persisted/pinned floor is an unambiguous active-attack
+	// signal → fail closed. (Residual, documented honestly: a brand-new self host
+	// that has never synced AND pins no min_revocation_epoch has floor 0, so a
+	// first-contact genesis replay still passes here — inherent TOFU; the sweep
+	// advances the floor after the first legitimate sync, and on `self` the tenant is
+	// the author/trust-root owner anyway. A managed root closes it via
+	// min_revocation_epoch.) A same-epoch-but-stale HEAD cannot omit a revoke the
+	// current epoch commits to (its revoked_set_root is unchanged, so step (5) still
+	// binds); the issued_at freshness in step (3) is the defense-in-depth against it
+	// and fires only under a max_staleness policy (managed roots default 48h; a self
+	// host with no policy relies on the epoch floor + set-root binding). We do NOT
+	// persist the epoch here — the pull is read-only.
+	if err := CheckEpochMonotonic(head, opts.RevocationHeadFloorEpoch); err != nil {
+		dec.discoveryIncomplete = true
+		dec.reason = "revocation HEAD epoch rolled back below the accepted floor (replay/rollback): " + err.Error()
+		return dec
+	}
+
+	// (3) Freshness — a validly-signed, monotonic, but stale HEAD must not prove
+	// completeness when a max_staleness policy is set.
+	if opts.RevocationHeadMaxStaleness > 0 {
+		if ia, e := HeadIssuedAt(head); e != nil || opts.now().Sub(ia) > opts.RevocationHeadMaxStaleness {
+			dec.discoveryIncomplete = true
+			dec.reason = "revocation HEAD is older than the max_staleness freshness policy (or has no valid issued_at)"
+			return dec
+		}
+	}
+
+	// (4) tenant_scope (defense-in-depth): a HEAD committing to a different tenant's
+	// scope must not bind ours.
+	if opts.RevocationHeadTenant != "" {
+		if ts, _ := headString(head, "tenant_scope"); ts != "" && ts != opts.RevocationHeadTenant {
+			dec.discoveryIncomplete = true
+			dec.reason = "revocation HEAD tenant_scope does not match the expected tenant"
+			return dec
+		}
+	}
+
+	// (5) Bind the discovered revoked set to the HEAD's committed root. A MATCH
+	// proves discovery is complete; a MISMATCH means discovery omitted a revoke the
+	// (now signature-verified, monotonic, fresh) HEAD commits to → fail closed.
+	if VerifyRevocationHeadSet(head, discoveredRevoked) != nil {
+		dec.discoveryIncomplete = true
+		dec.reason = "revocation HEAD revoked_set_root does not match the discovered revoked set (a revoke was omitted from discovery)"
+		return dec
+	}
+
+	// HEAD accepted (verified, monotonic, fresh, tenant-correct, set-root bound →
+	// discovery complete). Deny each enumerable emergency (burned) digest outright.
+	if em, e := HeadEmergency(head); e == nil {
+		for _, d := range em {
+			dec.denySet[strings.ToLower(strings.TrimSpace(d))] = struct{}{}
+		}
+	}
+	return dec
 }
 
 // PullBundles runs the 5-gate gauntlet over every admit item in scope and
@@ -287,10 +451,16 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 	// attest/revoke event before trusting its governance_level / revoked status
 	// — mirroring Gate 1's admit-envelope verification (~:297). An unsigned or
 	// forged governance verdict is otherwise free to forge.
-	acc, err := loadAttestAccumulator(cfg, ctxID, tr, opts.now())
+	acc, discoveryCapHit, err := loadAttestAccumulator(cfg, ctxID, tr, opts.now())
 	if err != nil {
 		return nil, err
 	}
+
+	// FR-0090 IS-RS-01: consult the SIGNED revoke HEAD to catch a revoke that tag
+	// discovery MISSED, and to fail closed when we cannot prove the discovered
+	// revoked set is complete. Reuses FetchRevocationHead (the same mechanism the
+	// SessionStart quarantine sweep uses) and verifies it against the pinned key.
+	headDec := consultRevokeHead(tr, opts, acc.RevokedDigests(), discoveryCapHit)
 
 	cacheRoot := defaultCacheRoot()
 	if err := os.MkdirAll(cacheRoot, 0o755); err != nil {
@@ -303,6 +473,9 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 	}
 
 	res := &PullResult{}
+	if headDec.capWarning != "" {
+		res.Warnings = append(res.Warnings, headDec.capWarning)
+	}
 	for _, item := range admits {
 		docID, _ := item["doc_id"].(string)
 		if docID == "" {
@@ -328,8 +501,20 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 			continue
 		}
 		// Gate 5: revoked? (cheapest non-cryptographic gate; check before fetching bytes)
-		if acc.IsRevoked(digest) {
-			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, DocID: docID, Gate: ErrGateRevoked, Detail: "BundleRevokedEvent present for this digest"})
+		// FR-0090 IS-RS-01: also deny a digest the DISCOVERED accumulator missed but
+		// the signed HEAD names (emergency burn list), and fail closed for EVERY
+		// candidate when discovery could not be proven complete.
+		if acc.IsRevoked(digest) || headDec.denies(strings.ToLower(strings.TrimSpace(digest))) || headDec.discoveryIncomplete {
+			detail := "BundleRevokedEvent present for this digest"
+			switch {
+			case acc.IsRevoked(digest):
+				// keep the default detail
+			case headDec.denies(strings.ToLower(strings.TrimSpace(digest))):
+				detail = "digest is on the signed revocation HEAD emergency burn list but was ABSENT from tag discovery (IS-RS-01)"
+			default:
+				detail = "revocation discovery could not be proven complete — failing closed (IS-RS-01): " + headDec.reason
+			}
+			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, DocID: docID, Gate: ErrGateRevoked, Detail: detail})
 			continue
 		}
 		// Gate 4: governance floor — N-of-M signed, fresh attestations ≥ floor from
@@ -551,7 +736,7 @@ func loadAttestRevoke(cfg *er1.Config, ctxID string, pub ed25519.PublicKey) (map
 // feeds them into an AttestAccumulator (SPEC-0359 D3/D5) — the shared N-of-M +
 // freshness path used by both carriers. Mirrors loadAttestRevoke's fetch; the
 // accumulator performs the SEC-H1 envelope verification against each pinned signer.
-func loadAttestAccumulator(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, now time.Time) (*AttestAccumulator, error) {
+func loadAttestAccumulator(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, now time.Time) (*AttestAccumulator, bool, error) {
 	acc := NewAttestAccumulator(tr, now)
 	// FR-0090 IS-T4b: search the STABLE bundle tags every skill-event item carries
 	// (registry/context), NOT skill-event:<kind> and NOT skill:<name> — so a signed
@@ -564,9 +749,9 @@ func loadAttestAccumulator(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, no
 	// verdict to the digest a caller is pulling. Admit/install fall through to the
 	// default (never a governance verdict). One comprehensive search.
 	tags := []string{"m3c-skill-bundle", "skill-registry:self"}
-	items, err := searchByTagsRaw(cfg, ctxID, tags)
+	items, hitCap, err := searchByTagsRawCapped(cfg, ctxID, tags)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	for _, item := range items {
 		ev, err := extractEvent(itemBody(item))
@@ -582,7 +767,7 @@ func loadAttestAccumulator(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, no
 			// admit/install/unclassifiable → not a governance verdict.
 		}
 	}
-	return acc, nil
+	return acc, hitCap, nil
 }
 
 // ─── ER1 item body parsing ─────────────────────────────────────────────────
@@ -751,23 +936,42 @@ func sha256Sum(b []byte) []byte {
 // Tag matching is "all of `tags` are in the item's `tags` field" — same
 // semantics the (non-existent) /search route would have had.
 func searchByTagsRaw(cfg *er1.Config, ctxID string, tags []string) ([]map[string]any, error) {
+	out, _, err := searchByTagsRawCapped(cfg, ctxID, tags)
+	return out, err
+}
+
+// searchTagsLimit is the server-side page cap searchByTagsRaw requests. The
+// personal registry is tens-to-hundreds of events by design, so a page that
+// RETURNS exactly this many raw items is itself the anomaly signal: the list may
+// be truncated (naturally, or by a flood attack that pushes a revoke off the
+// page). FR-0090 IS-RS-01 uses the cap-hit as a fail-closed trigger for the
+// revocation gate unless the signed HEAD independently proves the revoked set is
+// complete.
+const searchTagsLimit = 500
+
+// searchByTagsRawCapped is searchByTagsRaw plus a hitCap flag: hitCap is true
+// when the server returned at least searchTagsLimit RAW items (before tag
+// filtering), i.e. the page may have been truncated and the caller cannot prove
+// it saw every matching item.
+func searchByTagsRawCapped(cfg *er1.Config, ctxID string, tags []string) (items []map[string]any, hitCap bool, err error) {
 	base := strings.TrimSuffix(cfg.APIURL, "/upload_2")
 	q := url.Values{}
-	q.Set("limit", "500")
+	q.Set("limit", fmt.Sprintf("%d", searchTagsLimit))
 	q.Set("range", "year")
 	path := "/memory/" + url.PathEscape(ctxID) + "?" + q.Encode()
-	v, err := er1Get(base, cfg, path)
-	if err != nil {
-		return nil, err
+	v, gerr := er1Get(base, cfg, path)
+	if gerr != nil {
+		return nil, false, gerr
 	}
 	all := coerceItems(v)
+	hitCap = len(all) >= searchTagsLimit
 	var out []map[string]any
 	for _, item := range all {
 		if itemMatchesAllTags(item, tags) {
 			out = append(out, item)
 		}
 	}
-	return out, nil
+	return out, hitCap, nil
 }
 
 // itemMatchesAllTags returns true iff every tag in `want` appears in the

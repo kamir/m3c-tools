@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/kamir/m3c-tools/pkg/skillbundle"
+	"github.com/kamir/m3c-tools/pkg/skillctl/bodyscan"
 	"github.com/kamir/m3c-tools/pkg/skillctl/datascope"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 )
@@ -79,6 +80,25 @@ func runPack(args []string, stdout, stderr io.Writer) int {
 		return code
 	}
 
+	// FR-0090 IS-RS-03 — a PRODUCER-SIDE body-vs-declaration lint at pack time. IS-T7
+	// enforces the author-DECLARED manifest, but nothing binds the declaration to what
+	// the SKILL.md body actually does. This gate FAILS the pack on a RED
+	// FrontmatterConsistency finding — principally TOOL ESCALATION: the body uses a
+	// tool the manifest does not declare (an undeclared `curl`/`bash`, etc.). A softer
+	// intent mismatch where the tool IS declared (e.g. declares Bash, runs curl, with
+	// intent:network=false) is a 🟡 note that may pass (URL heuristics are
+	// false-positive-prone). Mirrors propose check #11; runs before the digest so no
+	// bundle is produced from a body that escalates beyond its own manifest.
+	//
+	// SCOPE (honest): this binds the COOPERATING producer only. A hand-built .skb
+	// installed via `skillctl install` never runs pack, so an untrusted federated
+	// author (SPEC-0359) can still ship a contradicting body — the non-repudiable
+	// close is a consumer-side re-scan at verify/install or folding the verdict into
+	// the signed attestation (tracked follow-up), not this pack lint.
+	if code, ok := packBodyConsistencyGate(in.skillDir, stderr); !ok {
+		return code
+	}
+
 	digest, err := skillbundle.Pack(in.skillDir, in.outFile, skillbundle.PackOptions{
 		Manifest: in.manifest,
 		BuiltBy:  fmt.Sprintf("skillctl/%s", in.manifest.Version),
@@ -94,6 +114,63 @@ func runPack(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "data_scopes:   %d declared (author-signed, in bundle.json)\n", len(in.manifest.DataDependencies))
 	}
 	return exitOK
+}
+
+// packBodyConsistencyGate runs the SPEC-0246 bodyscan over the skill's SKILL.md
+// and enforces the declaration↔behavior binding at pack time (FR-0090 IS-RS-03):
+// a RED bodyscan.FrontmatterConsistency finding — the body reaches a capability
+// (e.g. an outbound call via curl) that the declared allowed-tools / intent do not
+// grant — FAILS the pack. A 🟡 consistency finding is a note, not a block
+// (mirroring propose check #11's yellow-may-pass). Returns (exitCode, ok); ok=false
+// aborts before Pack so no bundle is produced from a self-contradictory body.
+//
+// If SKILL.md cannot be resolved/scanned here it is NOT failed by this gate —
+// skillbundle.Pack owns the missing-SKILL.md error, and this gate must not change
+// that behavior or brick a pack whose body simply could not be pre-read.
+func packBodyConsistencyGate(skillDir string, stderr io.Writer) (int, bool) {
+	skillMD, err := resolveSkillMD(skillDir)
+	if err != nil {
+		return exitOK, true // let skillbundle.Pack surface the missing SKILL.md
+	}
+	rep, err := scanBodyFile(skillMD)
+	if err != nil {
+		// The SKILL.md RESOLVED but could not be read+scanned here. Do NOT defer to
+		// Pack (a TOCTOU where the file becomes readable at Pack time would then pack
+		// an UNSCANNED body): a consistency gate cannot PASS a body it could not
+		// examine — fail closed.
+		fmt.Fprintf(stderr, "skillctl pack: REFUSED — SKILL.md resolved but could not be scanned for body-vs-declaration consistency (IS-RS-03): %v\n", err)
+		return verify.ExitIntentInconsistent, false
+	}
+	// An oversized (>1 MiB) body is NOT consistency-scanned (bodyscan DoS guard emits
+	// a RuleIDOversized finding instead). A gate that claims to bind
+	// declaration↔behavior must not silently pass an unscanned body → fail closed.
+	for _, f := range rep.Findings {
+		if f.RuleID == bodyscan.RuleIDOversized {
+			fmt.Fprintf(stderr, "skillctl pack: REFUSED — SKILL.md body is too large to scan for body-vs-declaration consistency (IS-RS-03): %s\n", f.Message)
+			return verify.ExitIntentInconsistent, false
+		}
+	}
+	var reds []string
+	for _, f := range rep.FrontmatterConsistency {
+		if f.Verdict == bodyscan.VerdictRed {
+			reds = append(reds, fmt.Sprintf("%s: %s", f.RuleID, f.Message))
+		}
+	}
+	if len(reds) > 0 {
+		fmt.Fprintf(stderr, "skillctl pack: REFUSED — the SKILL.md body contradicts its own declaration (🔴 body-vs-declaration, IS-RS-03):\n")
+		for _, r := range reds {
+			fmt.Fprintf(stderr, "  - %s\n", r)
+		}
+		fmt.Fprintln(stderr, "  A 🔴 consistency finding cannot be overridden. Declare the capability the body uses (allowed-tools / intent), or remove the behavior.")
+		return verify.ExitIntentInconsistent, false
+	}
+	// Surface a 🟡 as a non-blocking note so the author sees the softer signal.
+	for _, f := range rep.FrontmatterConsistency {
+		if f.Verdict == bodyscan.VerdictYellow {
+			fmt.Fprintf(stderr, "skillctl pack: NOTE 🟡 body-vs-declaration consistency: %s: %s (allowed to pass)\n", f.RuleID, f.Message)
+		}
+	}
+	return exitOK, true
 }
 
 // parsePackArgs walks os.Args-style flags. Returns (inputs, exitCode, ok); on

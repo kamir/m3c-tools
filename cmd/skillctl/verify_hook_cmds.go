@@ -452,6 +452,21 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 
 	managed, why := isManagedSkill(skill)
 	if !managed {
+		// FR-0090 IS-RS-02: a RESTRICTING mandate that NAMES this skill demands an
+		// IS-T7 scope check that only a MANAGED (digest-verified) skill can satisfy.
+		// If all provenance was stripped (.skb + .m3c-provenance.json +
+		// .skillctl-offline.json) so the skill reads as unmanaged, the unmanaged=allow
+		// branch below would skip that scope check entirely — a same-uid actor could
+		// delete provenance to escape the mandate. DENY instead, overriding
+		// unmanaged=allow. Never-brick preserved: fires ONLY when a mandate is
+		// configured AND its grant is restricting AND the (verified) grant names this
+		// skill; a no-mandate / non-restricting / not-in-grant skill keeps the unmanaged
+		// policy path, and a forged mandate is already denied by allow() below.
+		if authz.Configured && authz.GrantRestricting && authz.GrantNamesSkill {
+			audReason = "unmanaged_under_restricting_mandate"
+			return emitDeny(stdout, stderr,
+				fmt.Sprintf("skillctl: BLOCKED '%s' — not skillctl-managed (%s) but a RESTRICTING AgentID mandate names it, so its declared scope cannot be verified (fail-closed, IS-T7/IS-RS-02). Re-install it with `skillctl install %s` to restore provenance, or widen/relax the mandate.", skill, why, skill))
+		}
 		switch pol.Unmanaged {
 		case "deny":
 			audReason = fmt.Sprintf("unmanaged (%s) + policy deny", why)
