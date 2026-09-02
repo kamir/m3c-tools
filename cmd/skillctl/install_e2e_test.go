@@ -94,6 +94,12 @@ func runSkillctl(t *testing.T, home string, args ...string) (int, string, string
 	cmd := exec.Command(bin, args...)
 	cmd.Env = append(os.Environ(),
 		"HOME="+home,
+		// The built binary is a SHIPPING build (no allow_home_override_test tag),
+		// so per WIN-T8 it ignores $HOME on Windows and resolves the trust-root
+		// paths from %USERPROFILE% (os.UserHomeDir()). Set USERPROFILE too so the
+		// e2e stays scoped to the temp home on Windows AND exercises the real
+		// shipping resolution; on Linux/Darwin USERPROFILE is inert ($HOME wins).
+		"USERPROFILE="+home,
 		// On Linux, os.UserHomeDir prefers $HOME; Darwin same. Belt:
 		// also unset XDG so nothing overrides the trust-roots path.
 		"XDG_CONFIG_HOME=",

@@ -89,7 +89,9 @@ func ltInstallSidecar(t *testing.T, home, name, src string) {
 func ltHook(t *testing.T, home, skill string) (int, string) {
 	t.Helper()
 	cmd := exec.Command(skillctlBin(t), "verify-hook")
-	cmd.Env = append(os.Environ(), "HOME="+home, "XDG_CONFIG_HOME=")
+	// USERPROFILE too: the built binary is a shipping build that ignores $HOME on
+	// Windows (WIN-T8) and resolves from %USERPROFILE%; inert on Linux/Darwin.
+	cmd.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home, "XDG_CONFIG_HOME=")
 	cmd.Stdin = strings.NewReader(`{"tool_name":"Skill","tool_input":{"skill":"` + skill + `"},"session_id":"sim"}`)
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
