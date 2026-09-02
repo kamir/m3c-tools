@@ -34,6 +34,16 @@ var (
 	digestRe  = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 )
 
+// NOTE (WIN-T9, NTFS case-insensitivity): the name/version validated here become
+// filesystem path components under skills/<name>/<version>/ in a CLONE. NTFS (and
+// APFS by default) are case-INSENSITIVE but case-PRESERVING, so two names that
+// differ only in case — "Foo" vs "foo" — are distinct tags/annotations but collide
+// onto the SAME directory when the repo is checked out on Windows/macOS. Whatever
+// was written last wins; the other silently reads back the wrong bytes. The regexp
+// below intentionally does NOT fold case (git storage is case-sensitive and the
+// authoritative identity is the recomputed .skb digest, which a collision does not
+// forge). If a future storage layer relies on the on-disk name being unique, it
+// must dedup names case-INSENSITIVELY, not rely on this validator.
 func validateName(s string) error {
 	if s == "" || s == "." || strings.HasPrefix(s, "-") || strings.Contains(s, "..") || !nameRe.MatchString(s) {
 		return fmt.Errorf("git: invalid skill name %q (allowed [A-Za-z0-9._-], no '..', no leading '-')", s)

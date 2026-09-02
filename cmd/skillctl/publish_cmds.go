@@ -40,6 +40,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -924,12 +925,20 @@ func resolveAPIKeyFromKeychain() string {
 	if k := os.Getenv("ER1_API_KEY"); k != "" {
 		return k
 	}
+	// The Keychain (`security`) exists only on macOS. On Windows/Linux there is no
+	// such binary, so skip the lookup rather than spawn — or PATH-resolve — a
+	// non-existent `security`. Callers fall back to ER1_API_KEY / other config.
+	if runtime.GOOS != "darwin" {
+		return ""
+	}
 	u, _ := user.Current()
 	uname := "kamir"
 	if u != nil && u.Username != "" {
 		uname = u.Username
 	}
-	out, err := exec.Command("security", "find-generic-password", "-s", "aims-core-er1", "-a", uname, "-w").Output()
+	// Absolute /usr/bin/security (macOS ships it there), not a bare-name PATH
+	// lookup that a planted `security` could hijack.
+	out, err := exec.Command("/usr/bin/security", "find-generic-password", "-s", "aims-core-er1", "-a", uname, "-w").Output()
 	if err != nil {
 		return ""
 	}

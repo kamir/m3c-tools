@@ -12,6 +12,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
@@ -44,21 +45,35 @@ func (r *Resolver) Credential(ctx context.Context, scheme, host string) (artifac
 	if v := strings.TrimSpace(os.Getenv(m.env)); v != "" {
 		return artifact.Credential{Scheme: scheme, Token: v, User: m.user}, nil
 	}
-	if v := keychain(m.kcService, host); v != "" {
+	// macOS Keychain — only on darwin. keychain() shells out to `security`, which
+	// exists only on macOS; guarding the call keeps a Windows/Linux box from
+	// spawning (or, worse, PATH-resolving) a non-existent `security` binary.
+	if runtime.GOOS == "darwin" {
+		if v := keychain(m.kcService, host); v != "" {
+			return artifact.Credential{Scheme: scheme, Token: v, User: m.user}, nil
+		}
+	}
+	// Per-OS credential store (Windows DPAPI in creds_windows.go; no-op elsewhere).
+	// Lets a Windows user keep a write-capable PAT out of a plaintext env var.
+	if v := osCredStore(m.kcService, host); v != "" {
 		return artifact.Credential{Scheme: scheme, Token: v, User: m.user}, nil
 	}
 	return artifact.Credential{}, nil // anonymous
 }
 
-// keychain reads a generic-password from the macOS Keychain (read-only). Returns
-// empty on any error or on non-macOS platforms. Store one with:
+// keychain reads a generic-password from the macOS Keychain (read-only). It is
+// only ever CALLED on darwin (see Credential). Returns empty on any error. Store
+// one with:
 //
 //	security add-generic-password -s m3c-skillctl-gitlab -a <host> -w '<PAT>' -U
+//
+// The binary is the absolute /usr/bin/security (macOS ships it there) rather than
+// a bare-name PATH lookup, so a `security` planted on PATH cannot be run instead.
 func keychain(service, account string) string {
 	if account == "" {
 		return ""
 	}
-	out, err := exec.Command("security", "find-generic-password", "-s", service, "-a", account, "-w").Output()
+	out, err := exec.Command("/usr/bin/security", "find-generic-password", "-s", service, "-a", account, "-w").Output()
 	if err != nil {
 		return ""
 	}

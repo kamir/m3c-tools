@@ -30,6 +30,7 @@ import (
 	"crypto/sha256"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/govlevel"
+	"github.com/kamir/m3c-tools/pkg/skillctl/secfile"
 	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
 	"github.com/kamir/m3c-tools/pkg/skillctl/statemachine"
 	"gopkg.in/yaml.v3"
@@ -684,6 +685,13 @@ func (t *TrustRoots) Save() error {
 	if err := os.Rename(tmp, t.Path); err != nil {
 		_ = os.Remove(tmp)
 		return fmt.Errorf("trust-roots: rename %s → %s: %w", tmp, t.Path, err)
+	}
+	// WIN-T7: on Windows the 0600 above is advisory (NTFS honours inherited ACEs,
+	// not the Unix perm bits). Enforce an owner+SYSTEM-only, non-inheriting DACL so
+	// this machine's trust policy can't be read or silently rewritten by another
+	// local principal. No-op on Unix (0600 already holds). Fail closed.
+	if err := secfile.SecureFileDACL(t.Path); err != nil {
+		return fmt.Errorf("trust-roots: harden permissions on %s: %w", t.Path, err)
 	}
 	return nil
 }

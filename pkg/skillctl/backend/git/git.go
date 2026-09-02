@@ -12,11 +12,41 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustcore"
 )
+
+// gitExe resolves the `git` binary ONCE to a validated absolute path. A bare
+// exec.Command("git", …) re-runs a PATH lookup on every call, and on Windows a
+// `git.exe` dropped in the current working directory (or a writable PATH entry)
+// could be executed instead of the real one (the classic cwd/relative-resolution
+// hijack). We resolve via exec.LookPath, reject anything that is not an absolute
+// path (Go ≥1.19 already refuses a cwd-relative result with exec.ErrDot; the
+// IsAbs check makes that guarantee explicit and fail-closed), and cache it.
+var (
+	gitExeOnce sync.Once
+	gitExe     string
+	gitExeErr  error
+)
+
+func resolveGit() (string, error) {
+	gitExeOnce.Do(func() {
+		p, err := exec.LookPath("git")
+		if err != nil {
+			gitExeErr = fmt.Errorf("git: cannot locate a git executable on PATH: %w", err)
+			return
+		}
+		if !filepath.IsAbs(p) {
+			gitExeErr = fmt.Errorf("git: refusing to run non-absolute git path %q (possible cwd/relative-resolution hijack)", p)
+			return
+		}
+		gitExe = p
+	})
+	return gitExe, gitExeErr
+}
 
 func init() {
 	artifact.Register("gitlab", openGitLab)
@@ -177,7 +207,11 @@ func (b *gitBackend) Close() error { return nil }
 // --- git exec plumbing ---
 
 func (b *gitBackend) git(dir string, args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
+	gitBin, err := resolveGit()
+	if err != nil {
+		return "", err
+	}
+	cmd := exec.Command(gitBin, args...)
 	if dir != "" {
 		cmd.Dir = dir
 	}
@@ -473,7 +507,14 @@ func (b *gitBackend) Fetch(ctx context.Context, ref artifact.ArtifactRef) ([]byt
 		if err := validateVersion(ver); err != nil {
 			return err
 		}
-		d, err := os.ReadFile(filepath.Join(dir, bundleSkbPath(name, ver)))
+		// The clone is untrusted (SPEC-0356 §6). lstatRegular fails closed on a
+		// symlinked blob path so a malicious repo cannot redirect the read outside
+		// the clone (defense-in-depth behind the core.symlinks=false clone).
+		bp := filepath.Join(dir, bundleSkbPath(name, ver))
+		if _, lerr := lstatRegular(bp); lerr != nil {
+			return fmt.Errorf("git: read blob %s@%s: %w", name, ver, lerr)
+		}
+		d, err := os.ReadFile(bp)
 		if err != nil {
 			return fmt.Errorf("git: read blob %s@%s: %w", name, ver, err)
 		}
@@ -510,7 +551,14 @@ func (b *gitBackend) Events(ctx context.Context, filter artifact.ListFilter, pag
 				if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 					continue
 				}
-				data, err := os.ReadFile(filepath.Join(edir, e.Name()))
+				// Untrusted clone: skip a symlinked/irregular event file rather than
+				// follow it (lstatRegular fails closed on a symlink). A skipped file
+				// simply never influences a verdict — the same as a malformed one.
+				ep := filepath.Join(edir, e.Name())
+				if ok, lerr := lstatRegular(ep); lerr != nil || !ok {
+					continue
+				}
+				data, err := os.ReadFile(ep)
 				if err != nil {
 					continue
 				}
@@ -640,7 +688,12 @@ func (b *gitBackend) isRevoked(dir, digest string) bool {
 
 func (b *gitBackend) readBundleJSON(dir, name, ver string) (bundleJSON, error) {
 	var bj bundleJSON
-	data, err := os.ReadFile(filepath.Join(dir, bundleJSONPath(name, ver)))
+	// Untrusted clone: fail closed on a symlinked manifest path (see lstatRegular).
+	mp := filepath.Join(dir, bundleJSONPath(name, ver))
+	if _, lerr := lstatRegular(mp); lerr != nil {
+		return bj, lerr
+	}
+	data, err := os.ReadFile(mp)
 	if err != nil {
 		return bj, err
 	}

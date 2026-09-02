@@ -9,10 +9,12 @@
 
   Provenance has two tracks, exactly like the shell installer:
     TRACK 1 (PRIMARY) -- keyless cosign / GitHub OIDC (SPEC-0253). cosign is the
-      primary path and is AUTO-FETCHED (pinned + self-verified) when not on PATH.
-      A cosign bundle that is present but does NOT verify is a HARD FAIL (an
-      attacker must not be able to force a downgrade). A fully ABSENT bundle falls
-      through to track 2.
+      primary path. The cosign we run must ALWAYS match the pinned SHA-256 --
+      including one found on PATH -- so a planted cosign.exe cannot rubber-stamp an
+      unsigned manifest (WIN-T5); the pinned build is auto-fetched and a PATH cosign
+      is used only if it byte-matches the pin. A cosign bundle that is present but
+      does NOT verify is a HARD FAIL (an attacker must not be able to force a
+      downgrade). A fully ABSENT bundle falls through to track 2.
     TRACK 2 (FALLBACK) -- pinned ed25519 (SEC-M2), used only when track 1 did not
       verify AND openssl.exe is available. Windows does not ship openssl, so unlike
       the shell installer this is a conditional fallback, not a hard prerequisite;
@@ -202,6 +204,39 @@ function Invoke-Native([scriptblock]$Command) {
     }
 }
 
+# Resolve a native helper tool to an ABSOLUTE path from a TRUSTED location instead
+# of a bare-name PATH lookup. A bare `Get-Command openssl` returns whatever comes
+# first on PATH -- which an attacker can influence via a writable PATH entry or the
+# current working directory, letting a planted openssl.exe run in our place
+# (WIN-T5). We first probe a fixed list of known-good ABSOLUTE install paths; only
+# if none exist do we consult PATH, and then we ACCEPT the result solely when it is
+# an absolute path rooted under a system / Program Files directory (never the cwd,
+# a temp dir, or a user-writable %LOCALAPPDATA%). Returns $null when nothing
+# trustworthy is found (the caller then fails closed).
+function Resolve-TrustedTool {
+    param([string]$Name, [string[]]$KnownPaths)
+    foreach ($p in $KnownPaths) {
+        if ($p -and (Test-Path -LiteralPath $p -PathType Leaf)) {
+            return (Resolve-Path -LiteralPath $p).Path
+        }
+    }
+    $cmd = Get-Command $Name -ErrorAction SilentlyContinue
+    if ($cmd -and $cmd.Source) {
+        $src = $cmd.Source
+        try { $src = (Resolve-Path -LiteralPath $src -ErrorAction Stop).Path } catch { $src = $null }
+        if ($src -and [System.IO.Path]::IsPathRooted($src)) {
+            $trustedRoots = @($env:SystemRoot, $env:ProgramFiles, ${env:ProgramFiles(x86)}) |
+                Where-Object { $_ }
+            foreach ($root in $trustedRoots) {
+                $prefix = ($root.TrimEnd('\') + '\').ToLower()
+                if ($src.ToLower().StartsWith($prefix)) { return $src }
+            }
+            $host.UI.WriteErrorLine("ignoring ${Name} at ${src}: not under a trusted system/Program Files directory")
+        }
+    }
+    return $null
+}
+
 # ============================================================================
 # Main
 # ============================================================================
@@ -233,41 +268,58 @@ $hint
     $verified = $false
 
     # === Provenance track 1 (PRIMARY): keyless cosign / GitHub OIDC (SPEC-0253). ===
-    # cosign is the primary path. If it is not on PATH we auto-fetch a PINNED cosign
-    # and verify its own SHA-256 before using it. When cosign is available AND the
-    # release carries a cosign bundle, verify SHA256SUMS against the EXPECTED workflow
-    # OIDC identity (no key to trust -- the signer is the release workflow itself).
-    # A present-but-invalid bundle is a HARD FAIL (no silent downgrade); a fully
-    # ABSENT bundle falls through to the pinned-ed25519 track below.
+    # cosign is the primary path. WIN-T5: the pinned SHA-256 gate applies to EVERY
+    # cosign we might run -- INCLUDING one already on PATH. A cosign.exe planted on a
+    # writable PATH entry (or dropped in the cwd) could otherwise print "Verified OK"
+    # for an UNSIGNED SHA256SUMS and silently bypass provenance. So we never trust a
+    # PATH cosign implicitly: we build a candidate list (PATH cosign first, then the
+    # auto-fetched pinned download) and accept the FIRST candidate whose SHA-256
+    # equals the pinned $COSIGN_SHA256. A candidate that does not match is refused.
+    # When a trusted cosign AND a cosign bundle are present, verify SHA256SUMS
+    # against the EXPECTED workflow OIDC identity (no key to trust -- the signer is
+    # the release workflow itself). A present-but-invalid bundle is a HARD FAIL (no
+    # silent downgrade); a fully ABSENT bundle falls through to the ed25519 track.
     $cosignExe = $null
-    $cmd = Get-Command cosign -ErrorAction SilentlyContinue
-    if (-not $cmd) { $cmd = Get-Command cosign.exe -ErrorAction SilentlyContinue }
-    if ($cmd) { $cosignExe = $cmd.Source }
+    if ($COSIGN_SHA256 -eq 'REPLACE_WITH_PINNED_SHA256') {
+        # SEC: never run an UNPINNED cosign. If the pin is unset we cannot vouch for
+        # ANY cosign (PATH or downloaded) -- skip the cosign track entirely.
+        Write-Info "cosign pin is not set (COSIGN_SHA256) -- refusing to run unverified cosign; skipping cosign track"
+    } else {
+        $candidates = New-Object System.Collections.Generic.List[string]
 
-    if (-not $cosignExe) {
-        Write-Info "cosign not on PATH -- fetching pinned cosign $COSIGN_VERSION (windows/amd64)"
+        # Candidate 1: a cosign already on PATH -- UNTRUSTED until it hash-matches the
+        # pin (a bare-name PATH resolution is attacker-influenceable).
+        $pathCmd = Get-Command cosign -ErrorAction SilentlyContinue
+        if (-not $pathCmd) { $pathCmd = Get-Command cosign.exe -ErrorAction SilentlyContinue }
+        if ($pathCmd -and $pathCmd.Source) { [void]$candidates.Add($pathCmd.Source) }
+
+        # Candidate 2: the pinned auto-fetch. Always downloaded so a non-matching (or
+        # absent) PATH cosign still has the pinned build to fall back to.
+        Write-Info "Obtaining a pin-verified cosign $COSIGN_VERSION (windows/amd64)"
         $cosignDl = Join-Path $tmp 'cosign.exe'
         if (Invoke-Download -Url $COSIGN_URL -OutFile $cosignDl -Optional) {
-            if ($COSIGN_SHA256 -eq 'REPLACE_WITH_PINNED_SHA256') {
-                # SEC: never run an UNPINNED cosign. If the pin is unset, we cannot
-                # trust the downloaded cosign -- skip the cosign track entirely.
-                Write-Info "cosign pin is not set (COSIGN_SHA256) -- refusing to run unverified cosign; skipping cosign track"
-            } else {
-                $dlHash = Get-Sha256Hex $cosignDl
-                if ($dlHash -ieq $COSIGN_SHA256) {
-                    Unblock-File -LiteralPath $cosignDl -ErrorAction SilentlyContinue
-                    $cosignExe = $cosignDl
-                    Write-Ok "pinned cosign verified ($COSIGN_SHA256)"
-                } else {
-                    # SEC: never USE a cosign whose hash != pin. Do not set $cosignExe;
-                    # fall through to the ed25519 track (as if cosign were absent).
-                    $host.UI.WriteErrorLine("downloaded cosign SHA-256 does not match the pin -- refusing to use it")
-                    $host.UI.WriteErrorLine("  expected: $COSIGN_SHA256")
-                    $host.UI.WriteErrorLine("  got:      $dlHash")
-                }
-            }
+            [void]$candidates.Add($cosignDl)
         } else {
-            Write-Info "could not download pinned cosign -- will try the ed25519 fallback"
+            Write-Info "could not download pinned cosign -- a PATH cosign is used ONLY if it matches the pin"
+        }
+
+        foreach ($cand in $candidates) {
+            if (-not (Test-Path -LiteralPath $cand)) { continue }
+            $h = Get-Sha256Hex $cand
+            if ($h -ieq $COSIGN_SHA256) {
+                Unblock-File -LiteralPath $cand -ErrorAction SilentlyContinue
+                $cosignExe = $cand
+                Write-Ok "pinned cosign verified ($COSIGN_SHA256)"
+                break
+            } else {
+                # SEC: never USE a cosign whose hash != pin. Try the next candidate.
+                $host.UI.WriteErrorLine("ignoring cosign at ${cand}: SHA-256 does not match the pin")
+                $host.UI.WriteErrorLine("  expected: $COSIGN_SHA256")
+                $host.UI.WriteErrorLine("  got:      $h")
+            }
+        }
+        if (-not $cosignExe) {
+            Write-Info "no pin-matching cosign available -- will try the ed25519 fallback"
         }
     }
 
@@ -304,11 +356,26 @@ expected workflow identity; refusing to install (no silent downgrade to ed25519)
     # Windows does not ship openssl, so this track is CONDITIONAL on openssl.exe being
     # present (the shell installer can hard-require openssl; here we cannot).
     if (-not $verified) {
-        $osslCmd = Get-Command openssl.exe -ErrorAction SilentlyContinue
-        if (-not $osslCmd) { $osslCmd = Get-Command openssl -ErrorAction SilentlyContinue }
+        # WIN-T5: resolve openssl to an ABSOLUTE, trusted path -- never a bare-name
+        # PATH lookup that a planted openssl.exe (cwd / writable PATH) could hijack.
+        # Windows does not ship openssl; it typically arrives with Git-for-Windows or
+        # an OpenSSL install, so probe those known-good absolute locations first.
+        $osslKnown = @()
+        foreach ($base in @($env:ProgramFiles, ${env:ProgramFiles(x86)})) {
+            if ($base) {
+                $osslKnown += (Join-Path $base 'Git\usr\bin\openssl.exe')
+                $osslKnown += (Join-Path $base 'Git\mingw64\bin\openssl.exe')
+                $osslKnown += (Join-Path $base 'OpenSSL-Win64\bin\openssl.exe')
+                $osslKnown += (Join-Path $base 'OpenSSL-Win32\bin\openssl.exe')
+                $osslKnown += (Join-Path $base 'OpenSSL\bin\openssl.exe')
+            }
+        }
+        if ($env:SystemRoot) { $osslKnown += (Join-Path $env:SystemRoot 'System32\openssl.exe') }
 
-        if ($osslCmd) {
-            $openssl = $osslCmd.Source
+        $openssl = Resolve-TrustedTool -Name 'openssl.exe' -KnownPaths $osslKnown
+        if (-not $openssl) { $openssl = Resolve-TrustedTool -Name 'openssl' -KnownPaths @() }
+
+        if ($openssl) {
             $haveSig   = Fetch 'SHA256SUMS.sig' -Optional
             $havePubDl = Fetch 'skillctl-release.pub' -Optional
 
@@ -374,7 +441,7 @@ RELEASE KEY FINGERPRINT MISMATCH -- refusing to install
                 Write-Info "ed25519 fallback unavailable (missing signature or public key at the release)"
             }
         } else {
-            Write-Info "openssl.exe not found -- cannot use the ed25519 fallback"
+            Write-Info "openssl not found in a trusted location -- cannot use the ed25519 fallback"
         }
     }
 
