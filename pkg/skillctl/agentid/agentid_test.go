@@ -344,3 +344,63 @@ func TestEmptyGrantDeniesEverything(t *testing.T) {
 		t.Fatal("empty grant must deny all skills (fail-closed)")
 	}
 }
+
+// SPEC-0277 IS-04 / IS-T7: AuthorizeSkillScoped enforces the SIGNED manifest scope
+// — intents, data-scopes AND declared limits — not just the skill name. The old
+// path enforced neither data-scopes nor limits, so the limit + data-scope cases
+// here bite code that shipped before IS-T7.
+func TestAuthorizeSkillScoped_EnforcesIntentsScopesAndLimits(t *testing.T) {
+	g := Grant{
+		Skills:     []string{"pdf"},
+		Intents:    []string{"network:read"},
+		DataScopes: []string{"ds:er1/plm/allowed"},
+		Limits:     map[string]string{"spend_eur_max": "0"},
+	}
+
+	// Bare in-grant skill (no extra requirements) → allow.
+	if r, ok := g.AuthorizeSkillScoped("pdf", SkillRequirements{}); !ok {
+		t.Fatalf("bare in-grant skill should pass, got reason=%q", r)
+	}
+	// A skill declaring fs:write under a network:read-only grant → DENY.
+	if r, ok := g.AuthorizeSkillScoped("pdf", SkillRequirements{Intents: []string{"fs:write"}}); ok || r != "intent_not_in_grant" {
+		t.Fatalf("fs:write must be denied under a network:read grant, got reason=%q ok=%v", r, ok)
+	}
+	// The granted intent passes.
+	if r, ok := g.AuthorizeSkillScoped("pdf", SkillRequirements{Intents: []string{"network:read"}}); !ok {
+		t.Fatalf("granted intent should pass, got reason=%q", r)
+	}
+	// spend cap 0 DENIES any declared spend > 0.
+	if r, ok := g.AuthorizeSkillScoped("pdf", SkillRequirements{Limits: map[string]string{"spend_eur_max": "5"}}); ok || r != "limit_exceeded" {
+		t.Fatalf("declared spend 5 must be denied under cap 0, got reason=%q ok=%v", r, ok)
+	}
+	// A declared spend AT the cap (0 ≤ 0) is allowed.
+	if r, ok := g.AuthorizeSkillScoped("pdf", SkillRequirements{Limits: map[string]string{"spend_eur_max": "0"}}); !ok {
+		t.Fatalf("declared spend 0 within cap 0 should pass, got reason=%q", r)
+	}
+	// A data-scope outside the (restricting) grant allowlist → DENY.
+	if r, ok := g.AuthorizeSkillScoped("pdf", SkillRequirements{DataScopes: []string{"ds:er1/plm/secret"}}); ok || r != "data_scope_not_in_grant" {
+		t.Fatalf("out-of-grant data scope must be denied, got reason=%q ok=%v", r, ok)
+	}
+	// A granted data-scope passes.
+	if r, ok := g.AuthorizeSkillScoped("pdf", SkillRequirements{DataScopes: []string{"ds:er1/plm/allowed"}}); !ok {
+		t.Fatalf("granted data scope should pass, got reason=%q", r)
+	}
+	// An unparseable declared limit against a cap fails CLOSED.
+	if r, ok := g.AuthorizeSkillScoped("pdf", SkillRequirements{Limits: map[string]string{"spend_eur_max": "lots"}}); ok || r != "limit_exceeded" {
+		t.Fatalf("an unparseable declared limit must fail closed, got reason=%q ok=%v", r, ok)
+	}
+}
+
+// A grant that does NOT restrict data scopes (empty DataScopes) must not deny a
+// scope-declaring skill — data scopes stay bounded by the SPEC-0202 layer. (Intents
+// and limits keep their fail-closed/absent-cap semantics; this guards only scopes.)
+func TestAuthorizeSkillScoped_UnrestrictedDataScopesAllowed(t *testing.T) {
+	g := Grant{Skills: []string{"pdf"}, Intents: []string{"network:read"}}
+	if r, ok := g.AuthorizeSkillScoped("pdf", SkillRequirements{DataScopes: []string{"ds:anything"}}); !ok {
+		t.Fatalf("a scope-silent grant must not deny declared scopes, got reason=%q", r)
+	}
+	// A limit key the grant does not cap is unrestricted.
+	if r, ok := g.AuthorizeSkillScoped("pdf", SkillRequirements{Limits: map[string]string{"calls_max": "999"}}); !ok {
+		t.Fatalf("an uncapped limit key must not deny, got reason=%q", r)
+	}
+}

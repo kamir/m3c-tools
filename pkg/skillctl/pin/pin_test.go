@@ -440,3 +440,39 @@ func TestStateGateFallbackFromBytes(t *testing.T) {
 		t.Error("require_local_audit alone must NOT enable state_gate_fallback")
 	}
 }
+
+// TestRequireAgentMandateFromBytes locks the SPEC-0277 IS-06 reader: STANDALONE
+// (NOT enterprise-gated) — the bare flag engages it — but conservative: a
+// missing/malformed managed file → false (never-brick).
+func TestRequireAgentMandateFromBytes(t *testing.T) {
+	if !RequireAgentMandateFromBytes([]byte(`{"skillctlRequireAgentMandate":true}`)) {
+		t.Error("the bare flag → require_agent_mandate on (standalone, not enterprise-gated)")
+	}
+	for _, neg := range []string{
+		`{"skillctlRequireAgentMandate":false}`,
+		`{"skillctlEnterprise":true}`,
+		`{}`,
+		`{ not json`,
+		``,
+	} {
+		if RequireAgentMandateFromBytes([]byte(neg)) {
+			t.Errorf("must be off (conservative): %q", neg)
+		}
+	}
+	if RequireAgentMandateFromBytes(nil) {
+		t.Error("a nil managed file must never engage the floor (never-brick)")
+	}
+	// round-trip via Generate; it must NOT drag in the enterprise flag (standalone).
+	b, _ := Generate(GenerateOptions{RequireAgentMandate: true})
+	if !RequireAgentMandateFromBytes(b) {
+		t.Error("Generate(RequireAgentMandate) must round-trip")
+	}
+	if EnterpriseFromBytes(b) {
+		t.Error("--require-agent-mandate must NOT imply enterprise (it is a standalone authorization floor)")
+	}
+	// Independent of the other knobs: a default file does not engage it.
+	def, _ := Generate(GenerateOptions{})
+	if RequireAgentMandateFromBytes(def) {
+		t.Error("a default managed file must not engage require_agent_mandate")
+	}
+}

@@ -485,55 +485,60 @@ func loadAttestRevoke(cfg *er1.Config, ctxID, onlySkill string, pub ed25519.Publ
 	attestEventByDigest := map[string]map[string]any{} // SPEC-0266 F19: raw signed attestation event (latest) per digest
 	revokedDigests := map[string]struct{}{}
 
-	for _, kind := range []string{EventKindAttested, EventKindRevoked} {
-		tags := []string{"m3c-skill-bundle", "skill-registry:self", "skill-event:" + kind}
-		if onlySkill != "" {
-			tags = append(tags, "skill:"+onlySkill)
-		}
-		items, err := searchByTagsRaw(cfg, ctxID, tags)
+	// FR-0090 IS-T4b: DISCOVERY must NOT be prefiltered on the attacker-controlled
+	// skill-event:<kind> tag. The old per-kind loop searched
+	// skill-event:{attested,revoked} only, so a signed revoke re-tagged
+	// skill-event:installed (or tag-stripped) was dropped at DISCOVERY, BEFORE the
+	// signed-shape classifier ever saw it — a hostile ER1 tenant could suppress a
+	// revoke by retagging it. We now search only the STABLE bundle tags every
+	// skill-event item carries regardless of kind (the registry/context tags, plus
+	// skill:<name> when scoped) and classify each item by the SIGNED envelope shape
+	// after its signature verifies. Admit/install envelopes fall through to the
+	// default (never a governance verdict), so widening the search adds no false
+	// verdicts; a signed revoke is now discovered whatever its skill-event tag says
+	// (or if it carries none). One search now replaces the two per-kind searches.
+	tags := []string{"m3c-skill-bundle", "skill-registry:self"}
+	if onlySkill != "" {
+		tags = append(tags, "skill:"+onlySkill)
+	}
+	items, err := searchByTagsRaw(cfg, ctxID, tags)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	for _, item := range items {
+		body := itemBody(item)
+		ev, err := extractEvent(body)
 		if err != nil {
-			return nil, nil, nil, err
+			continue
 		}
-		for _, item := range items {
-			body := itemBody(item)
-			ev, err := extractEvent(body)
-			if err != nil {
-				continue
+		digest, _ := ev["bundle_digest"].(string)
+		if digest == "" {
+			continue
+		}
+		// SEC-H1: verify the event envelope signature before trusting its
+		// governance_level / revoked status. Skip (and effectively log via
+		// the dropped event) unsigned or forged verdicts.
+		if err := VerifyEnvelopeSignature(pub, ev); err != nil {
+			continue
+		}
+		// FR-0090 IS-T4/IS-T4b: classify by the SIGNED envelope SHAPE, never a
+		// carrier tag. An ER1 item's tags are metadata a writer controls, so a signed
+		// revoke re-tagged skill-event:attested/installed (to SUPPRESS the revoke) or
+		// an attestation re-tagged skill-event:revoked (to forge a revocation) is
+		// judged by what the SIGNED bytes actually are.
+		switch trustcore.KindFromSignedEnvelope(ev) {
+		case artifact.KindRevoke:
+			revokedDigests[digest] = struct{}{}
+		case artifact.KindAttest:
+			level, _ := ev["governance_level"].(string)
+			ts, _ := ev["occurred_at"].(string)
+			if prev, ok := attestTS[digest]; !ok || ts > prev {
+				attestByDigest[digest] = level
+				attestTS[digest] = ts
+				attestEventByDigest[digest] = ev // keep the SIGNED event for the install-time stash
 			}
-			digest, _ := ev["bundle_digest"].(string)
-			if digest == "" {
-				continue
-			}
-			// SEC-H1: verify the event envelope signature before trusting its
-			// governance_level / revoked status. Skip (and effectively log via
-			// the dropped event) unsigned or forged verdicts.
-			if err := VerifyEnvelopeSignature(pub, ev); err != nil {
-				continue
-			}
-			// FR-0090 IS-T4: classify by the SIGNED envelope SHAPE, not the
-			// skill-event:<kind> TAG. The tag was only a coarse SEARCH prefilter (the
-			// `kind` loop variable above); an ER1 item's tags are carrier metadata a
-			// writer controls, so a signed revoke re-tagged skill-event:attested (to
-			// SUPPRESS the revoke) or an attestation re-tagged skill-event:revoked (to
-			// forge a revocation) must be judged by what the SIGNED bytes actually are.
-			// RESIDUAL (tracked, IS-T4b): the search only returns items still tagged with
-			// one of the searched skill-event:<kind> values, so a revoke retagged to an
-			// UNsearched value (e.g. skill-event:installed) or stripped of the tag is
-			// dropped at DISCOVERY, before this classifier — de-gating the search closes it.
-			switch trustcore.KindFromSignedEnvelope(ev) {
-			case artifact.KindRevoke:
-				revokedDigests[digest] = struct{}{}
-			case artifact.KindAttest:
-				level, _ := ev["governance_level"].(string)
-				ts, _ := ev["occurred_at"].(string)
-				if prev, ok := attestTS[digest]; !ok || ts > prev {
-					attestByDigest[digest] = level
-					attestTS[digest] = ts
-					attestEventByDigest[digest] = ev // keep the SIGNED event for the install-time stash
-				}
-			default:
-				// admit/install/unclassifiable → never a governance verdict here.
-			}
+		default:
+			// admit/install/unclassifiable → never a governance verdict here.
 		}
 	}
 	return attestByDigest, revokedDigests, attestEventByDigest, nil
@@ -545,33 +550,33 @@ func loadAttestRevoke(cfg *er1.Config, ctxID, onlySkill string, pub ed25519.Publ
 // accumulator performs the SEC-H1 envelope verification against each pinned signer.
 func loadAttestAccumulator(cfg *er1.Config, ctxID, onlySkill string, tr *SelfTrustRoots, now time.Time) (*AttestAccumulator, error) {
 	acc := NewAttestAccumulator(tr, now)
-	for _, kind := range []string{EventKindAttested, EventKindRevoked} {
-		tags := []string{"m3c-skill-bundle", "skill-registry:self", "skill-event:" + kind}
-		if onlySkill != "" {
-			tags = append(tags, "skill:"+onlySkill)
-		}
-		items, err := searchByTagsRaw(cfg, ctxID, tags)
+	// FR-0090 IS-T4b: search the STABLE bundle tags every skill-event item carries
+	// (registry/context, plus skill:<name> when scoped), NOT skill-event:<kind> — so
+	// a signed revoke/attest re-tagged to another kind (or tag-stripped) is still
+	// DISCOVERED. The accumulator's OfferRevoke/OfferAttest re-check the signed
+	// discriminator fields (IS-T3), so a re-tagged event is both routed by what it
+	// actually IS and gated on the signed bytes. Admit/install fall through to the
+	// default (never a governance verdict). One search replaces the two per-kind ones.
+	tags := []string{"m3c-skill-bundle", "skill-registry:self"}
+	if onlySkill != "" {
+		tags = append(tags, "skill:"+onlySkill)
+	}
+	items, err := searchByTagsRaw(cfg, ctxID, tags)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range items {
+		ev, err := extractEvent(itemBody(item))
 		if err != nil {
-			return nil, err
+			continue
 		}
-		for _, item := range items {
-			ev, err := extractEvent(itemBody(item))
-			if err != nil {
-				continue
-			}
-			// FR-0090 IS-T4: route by the SIGNED envelope shape, not the skill-event
-			// TAG (the `kind` loop variable is only the coarse search prefilter). The
-			// accumulator's OfferRevoke/OfferAttest re-check the signed discriminator
-			// fields (IS-T3), so a re-tagged event is both routed and gated by what it
-			// actually IS — a revoke re-tagged attested still reaches OfferRevoke.
-			switch trustcore.KindFromSignedEnvelope(ev) {
-			case artifact.KindRevoke:
-				acc.OfferRevoke(ev)
-			case artifact.KindAttest:
-				acc.OfferAttest(ev)
-			default:
-				// admit/install/unclassifiable → not a governance verdict.
-			}
+		switch trustcore.KindFromSignedEnvelope(ev) {
+		case artifact.KindRevoke:
+			acc.OfferRevoke(ev)
+		case artifact.KindAttest:
+			acc.OfferAttest(ev)
+		default:
+			// admit/install/unclassifiable → not a governance verdict.
 		}
 	}
 	return acc, nil

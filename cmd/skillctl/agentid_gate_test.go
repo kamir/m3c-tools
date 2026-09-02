@@ -112,6 +112,30 @@ func (e gateEnv) revokeAgent(t *testing.T, agentID string) {
 	}
 }
 
+// installMandateWithSpendCap writes an active mandate granting `grantSkills` with
+// intents network:read AND a hard spend ceiling (--limit spend_eur_max=<cap>).
+func (e gateEnv) installMandateWithSpendCap(t *testing.T, agentID, grantSkills, cap string) {
+	t.Helper()
+	out := filepath.Join(e.home, ".claude", "skillctl", "agentid.json")
+	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{
+		"--owner", e.f.ownerID, "--owner-key", e.f.ownerKeyPath,
+		"--agent-id", agentID,
+		"--skills", grantSkills,
+		"--intents", "network:read",
+		"--limit", "spend_eur_max=" + cap,
+		"--trust-root", e.f.regURL,
+		"--expires", "2099-12-31T00:00:00Z",
+		"--out", out,
+	}
+	var so, se strings.Builder
+	if code := runAgentIDIssue(args, &so, &se); code != exitOK {
+		t.Fatalf("install mandate: exit %d %s", code, se.String())
+	}
+}
+
 func hookEventFor(skill string) string {
 	ev := map[string]any{
 		"hook_event_name": "PreToolUse",
@@ -212,6 +236,96 @@ func TestGate_InvocationEventCarriesAgentIdentity(t *testing.T) {
 	if tv.Verified == 0 {
 		t.Fatal("the agent-stamped invocation event must still verify (value change, not format break)")
 	}
+}
+
+// AC IS-T6: with the ROOT-OWNED require-mandate floor engaged, a MISSING
+// agentid.json is a hard DENY (agent_mandate_required), NOT the silent opt-out.
+// Against the pre-IS-T6 code (no mandate → Configured=false → allow) this bites:
+// the identical setup previously allowed the skill (see TestGate_NoMandateUnchanged).
+func TestGate_RequireMandateFloor_MissingMandateDenied(t *testing.T) {
+	_ = setupGate(t, "summarize", false) // managed skill + trust-roots, but NO mandate installed
+	orig := gateRequireAgentMandate
+	gateRequireAgentMandate = func() bool { return true }
+	t.Cleanup(func() { gateRequireAgentMandate = orig })
+
+	code, out, _ := feed(t, hookEventFor("summarize"))
+	assertDeny(t, code, out, "not authorized")
+	if !strings.Contains(out, "agent_mandate_required") {
+		t.Fatalf("expected agent_mandate_required reason, got %q", out)
+	}
+}
+
+// Control for IS-T6: with the floor OFF, a missing mandate stays the opt-out
+// default (allow) — the floor is the ONLY thing that turns absence into a deny.
+func TestGate_RequireMandateFloor_OffKeepsOptOut(t *testing.T) {
+	_ = setupGate(t, "summarize", false)
+	orig := gateRequireAgentMandate
+	gateRequireAgentMandate = func() bool { return false }
+	t.Cleanup(func() { gateRequireAgentMandate = orig })
+
+	code, out, _ := feed(t, hookEventFor("summarize"))
+	assertAllow(t, code, out)
+}
+
+// AC IS-T7: the gate enforces the SIGNED manifest SCOPE, not just the skill NAME. A
+// skill NAMED in the grant but whose digest-verified manifest declares fs:write —
+// an intent the network:read-only grant lacks — is DENIED. Against the pre-IS-T7
+// code (which called AuthorizeSkill(skill, nil): no intents/scopes/limits) this
+// bites — the identical in-grant skill was allowed on name membership alone. Drives
+// the REAL gate; only the manifest-resolution seam is injected (so the test needn't
+// mint a real .skb), which is exactly the value the old code discarded.
+func TestGate_ManifestIntentExceedsGrantDenied(t *testing.T) {
+	e := setupGate(t, "pdf", false)
+	e.installMandate(t, "agent:scoped", "pdf", false) // grants pdf + intents network:read
+	orig := skillRequirementsFn
+	skillRequirementsFn = func(home, skill string) agentid.SkillRequirements {
+		return agentid.SkillRequirements{Intents: []string{"fs:write"}}
+	}
+	t.Cleanup(func() { skillRequirementsFn = orig })
+
+	code, out, _ := feed(t, hookEventFor("pdf"))
+	assertDeny(t, code, out, "not authorized")
+	if !strings.Contains(out, "intent_not_in_grant") {
+		t.Fatalf("expected intent_not_in_grant, got %q", out)
+	}
+}
+
+// AC IS-T7 (limits): a manifest declaring a spend over the mandate's spend_eur_max
+// cap of 0 is DENIED at the gate (limit_exceeded). Bites the pre-IS-T7 code that
+// enforced no limits at all.
+func TestGate_ManifestSpendOverCapDenied(t *testing.T) {
+	e := setupGate(t, "pdf", false)
+	e.installMandateWithSpendCap(t, "agent:spender", "pdf", "0")
+	orig := skillRequirementsFn
+	skillRequirementsFn = func(home, skill string) agentid.SkillRequirements {
+		return agentid.SkillRequirements{Limits: map[string]string{"spend_eur_max": "5"}}
+	}
+	t.Cleanup(func() { skillRequirementsFn = orig })
+
+	code, out, _ := feed(t, hookEventFor("pdf"))
+	assertDeny(t, code, out, "not authorized")
+	if !strings.Contains(out, "limit_exceeded") {
+		t.Fatalf("expected limit_exceeded, got %q", out)
+	}
+}
+
+// AC IS-T7 (in-scope still allowed): a manifest fully within the grant (a
+// network:read intent, spend 0 within cap 0) still runs — enforcement denies only
+// what EXCEEDS the grant.
+func TestGate_ManifestWithinGrantAllowed(t *testing.T) {
+	e := setupGate(t, "pdf", false)
+	e.installMandateWithSpendCap(t, "agent:ok", "pdf", "0")
+	orig := skillRequirementsFn
+	skillRequirementsFn = func(home, skill string) agentid.SkillRequirements {
+		return agentid.SkillRequirements{
+			Intents: []string{"network:read"},
+			Limits:  map[string]string{"spend_eur_max": "0"},
+		}
+	}
+	t.Cleanup(func() { skillRequirementsFn = orig })
+
+	code, out, _ := feed(t, hookEventFor("pdf"))
+	assertAllow(t, code, out)
 }
 
 // Direct unit on the authorization predicate via a forged mandate: an unsigned /

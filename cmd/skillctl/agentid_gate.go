@@ -23,10 +23,13 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/agentid"
+	"github.com/kamir/m3c-tools/pkg/skillctl/pin"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 )
 
@@ -78,6 +81,25 @@ type agentAuthzResult struct {
 // at verifyActiveAgentID.
 var agentIDVerifyForGateFn = verifyActiveAgentID
 
+// gateRequireAgentMandate reports whether the ROOT-OWNED managed settings engage
+// the SPEC-0277 IS-06 require-mandate floor (`skillctlRequireAgentMandate: true`).
+// When set, a MISSING ~/.claude/skillctl/agentid.json is a DENY at the gate rather
+// than the silent opt-out default — a non-privileged user cannot delete the mandate
+// to escape agent authorization. Same conservative, never-brick contract as
+// gateManagedEnterprise: a missing/unreadable/malformed managed file → false (an
+// unreadable managed file must never itself deny every skill). Seam: tests set it.
+var gateRequireAgentMandate = func() bool {
+	path, err := pin.DefaultManagedSettingsPath()
+	if err != nil {
+		return false
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	return pin.RequireAgentMandateFromBytes(b)
+}
+
 // authorizeAgentForSkill is the gate's AgentID authorization entry point. It
 // loads the active mandate (if any), verifies it offline, attributes the actor,
 // and decides whether `skill` is within the grant. Fail-closed by construction:
@@ -97,8 +119,15 @@ func authorizeAgentForSkill(home, skill string) agentAuthzResult {
 	}
 	doc, err := loadAgentIDFile(activeAgentIDPath(home))
 	if err != nil {
-		// No mandate configured (the common case) → opt-in: not engaged.
+		// No mandate configured (the common case).
 		if errors.Is(err, os.ErrNotExist) {
+			// SPEC-0277 IS-06: a root-owned require-mandate floor turns the MISSING
+			// mandate from a silent opt-OUT into a hard DENY, so a non-privileged user
+			// cannot delete agentid.json to escape agent authorization. Absent the
+			// floor, keep the opt-in default (no mandate → skill chain only).
+			if gateRequireAgentMandate() {
+				return agentAuthzResult{Configured: true, Allowed: false, Reason: "agent_mandate_required"}
+			}
 			return agentAuthzResult{Configured: false}
 		}
 		// A PRESENT-but-unreadable mandate is suspicious: the operator clearly
@@ -120,14 +149,145 @@ func authorizeAgentForSkill(home, skill string) agentAuthzResult {
 		return res
 	}
 
-	// Mandate verified → authorize the skill against the grant (fail-closed).
-	if r, ok := doc.Payload.Grant.AuthorizeSkill(skill, nil); !ok {
+	// Mandate verified → authorize the skill against the grant, enforcing not just
+	// the skill NAME but the capability intents / data-scopes / limits the skill
+	// declares in its DIGEST-VERIFIED bundle.json (SPEC-0277 IS-04 / IS-T7). A skill
+	// whose signed manifest exceeds the mandate's granted scope is DENIED even though
+	// it is named in the grant. Fail-closed by construction.
+	req := skillRequirementsFn(home, skill)
+	if r, ok := doc.Payload.Grant.AuthorizeSkillScoped(skill, req); !ok {
 		res.Allowed = false
-		res.Reason = r // "skill_not_in_grant"
+		res.Reason = r // skill_not_in_grant | intent_not_in_grant | data_scope_not_in_grant | limit_exceeded
 		return res
 	}
 	res.Allowed = true
 	return res
+}
+
+// skillRequirementsFn resolves an installed skill's author-signed declared
+// requirements (intents / data-scopes / limits) from its digest-verified
+// bundle.json. Seam so tests can drive the scope-enforcement branch without minting
+// a real .skb; production points it at resolveInstalledSkillRequirements.
+var skillRequirementsFn = resolveInstalledSkillRequirements
+
+// resolveInstalledSkillRequirements resolves an installed skill's author-signed
+// declared requirements from its DIGEST-VERIFIED bundle.json:
+//   - the capability intents its data_dependencies imply (kind+access →
+//     "<category>:<action>", the SAME vocabulary a mandate grant uses),
+//   - the data-scope ids it declares (data_dependencies[].id),
+//   - any declared resource ceilings (a `limits` block; forward-compatible).
+//
+// The bytes are trustworthy ONLY because verify.ReadDigestVerifiedManifest
+// recomputes the on-disk .skb digest and constant-time-compares it against the
+// provenance sidecar's recorded bundle_digest before returning the manifest map — a
+// tampered manifest breaks the digest and yields nothing. When the digest or the
+// stashed .skb cannot be resolved (e.g. a legacy sidecar-only install with no .skb
+// on disk, or the gate's fake-skb test fixtures), we return an EMPTY requirement
+// set: the gate then enforces skill-NAME membership only (the pre-IS-T7 P1
+// behaviour), and NEVER a fabricated scope.
+func resolveInstalledSkillRequirements(home, skill string) agentid.SkillRequirements {
+	digest := installedSkillDigest(home, skill)
+	if digest == "" {
+		return agentid.SkillRequirements{}
+	}
+	skbPath := stashedSkbPath(home, skill)
+	if skbPath == "" {
+		return agentid.SkillRequirements{}
+	}
+	manifest, err := verify.ReadDigestVerifiedManifest(skbPath, digest)
+	if err != nil {
+		return agentid.SkillRequirements{}
+	}
+	return requirementsFromManifest(manifest)
+}
+
+// stashedSkbPath returns the path to the first stashed .skb inside an installed
+// skill's directory (~/.claude/skills/<skill>/), or "" if none. This is the same
+// on-disk .skb whose bytes carry the author-signature-covered bundle.json.
+func stashedSkbPath(home, skill string) string {
+	dir := filepath.Join(home, ".claude", "skills", skill)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".skb") {
+			return filepath.Join(dir, e.Name())
+		}
+	}
+	return ""
+}
+
+// requirementsFromManifest projects a digest-verified bundle.json map into the
+// agentid.SkillRequirements the grant is checked against.
+func requirementsFromManifest(m map[string]any) agentid.SkillRequirements {
+	var req agentid.SkillRequirements
+	if deps, ok := m["data_dependencies"].([]any); ok {
+		seenIntent := map[string]struct{}{}
+		for _, d := range deps {
+			dm, ok := d.(map[string]any)
+			if !ok {
+				continue
+			}
+			if id, _ := dm["id"].(string); strings.TrimSpace(id) != "" {
+				req.DataScopes = append(req.DataScopes, strings.TrimSpace(id))
+			}
+			kind, _ := dm["kind"].(string)
+			access, _ := dm["access"].(string)
+			if intent := intentForKindAccess(kind, access); intent != "" {
+				if _, dup := seenIntent[intent]; !dup {
+					seenIntent[intent] = struct{}{}
+					req.Intents = append(req.Intents, intent)
+				}
+			}
+		}
+	}
+	// Declared resource ceilings (forward-compatible: today's bundle.json carries
+	// none; a future `limits` block is enforced against the grant's caps). Values are
+	// stringified so a JSON number (float64) and a JSON string compare identically.
+	if lim, ok := m["limits"].(map[string]any); ok && len(lim) > 0 {
+		req.Limits = make(map[string]string, len(lim))
+		for k, v := range lim {
+			req.Limits[k] = fmt.Sprint(v)
+		}
+	}
+	return req
+}
+
+// intentForKindAccess maps a signed data_dependency (SPEC-0196 kind + access) to
+// the "<category>:<action>" capability-intent token a mandate grant uses, so the
+// skill's signed data access is checked in the grant's own vocabulary
+// (http read → "network:read"; local_fs write → "fs:write"). An unknown kind maps
+// to "" (contributes no intent). An unknown access surfaces verbatim so it fails
+// set-membership unless the operator granted exactly it (fail-closed).
+func intentForKindAccess(kind, access string) string {
+	cat := ""
+	switch kind {
+	case "local_fs":
+		cat = "fs"
+	case "http_endpoint":
+		cat = "network"
+	case "er1_collection":
+		cat = "er1"
+	case "firestore_collection":
+		cat = "firestore"
+	case "gcs_bucket":
+		cat = "gcs"
+	case "secrets_store":
+		cat = "secrets"
+	default:
+		return "" // unknown kind → no derived intent
+	}
+	act := "read"
+	switch strings.TrimSpace(access) {
+	case "write", "transform":
+		act = "write"
+	case "", "read", "passthrough":
+		act = "read"
+	default:
+		act = strings.TrimSpace(access) // unknown → verbatim, fails membership unless granted
+	}
+	return cat + ":" + act
 }
 
 // verifyActiveAgentID runs the offline AgentID verification against the SAME
