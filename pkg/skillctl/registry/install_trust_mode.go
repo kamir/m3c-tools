@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillbundle"
+	"github.com/kamir/m3c-tools/pkg/skillctl/secfile"
 )
 
 // MaxExtractedBytes / MaxExtractedFiles are the registry-package spelling of the
@@ -332,7 +333,16 @@ func installTokenKey() ([]byte, error) {
 	}
 	installTokenKeyValue = key
 	_ = os.MkdirAll(dir, 0o700)
-	_ = os.WriteFile(keyPath, installTokenKeyValue, 0o600)
+	if err := os.WriteFile(keyPath, installTokenKeyValue, 0o600); err == nil {
+		// WIN-T7: 0600 is advisory on Windows/NTFS (inherited ACEs win). Lock the
+		// on-disk HMAC key to owner+SYSTEM only. This key guards the G-23
+		// destructive-overwrite token, so if hardening fails we DELETE the cache
+		// rather than leave the secret inheritable — the in-memory key still serves
+		// this process; the next run re-mints and re-caches. No-op on Unix.
+		if derr := secfile.SecureFileDACL(keyPath); derr != nil {
+			_ = os.Remove(keyPath)
+		}
+	}
 	return installTokenKeyValue, nil
 }
 
