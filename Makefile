@@ -286,10 +286,18 @@ uninstall:
 run: build
 	$(BUILD_DIR)/$(BINARY) $(ARGS)
 
-# Run the menu bar app
+# Run the menu bar app (foreground: live stdout logs, Ctrl-C to quit).
+# menuet unconditionally touches [UNUserNotificationCenter currentNotificationCenter]
+# at startup (createAndRunApplication -> initNotifications). On macOS 14+ that API
+# HARD-ASSERTS ("bundleProxyForCurrentProcess is nil") unless the running executable
+# lives inside a .app bundle — so the old bare-binary run ($(BUILD_DIR)/$(BINARY))
+# aborts on launch. Running the bundle's INNER executable directly gives a valid
+# bundle proxy (verified: notification init succeeds) while keeping the foreground
+# stdout dev workflow — unlike `menubar-app`, which detaches via `open`.
 .PHONY: menubar
-menubar: build
-	$(BUILD_DIR)/$(BINARY) menubar $(ARGS)
+menubar: check-not-root build-app
+	@echo "Running $(APP_NAME).app (foreground; Ctrl-C to quit). Logs also at: ~/.m3c-tools/m3c-tools.log"
+	$(APP_BUNDLE)/Contents/MacOS/$(BINARY) menubar $(ARGS)
 
 # Guard: the menu bar app MUST run as the logged-in user, never as root. A GUI
 # menu-bar app launched via `sudo` renders a broken menu — no Quit, no Sign-In
@@ -597,8 +605,8 @@ help:
 	@echo "  release-patch  Release with patch version bump"
 	@echo "  release-minor  Release with minor version bump"
 	@echo "  release-major  Release with major version bump"
-	@echo "  menubar        Build and launch the menu bar app (bare binary — CLI debugging)"
-	@echo "  menubar-app    Build + launch the BUNDLED .app (icon + notifications work here)"
+	@echo "  menubar        Build + run the menu bar .app in the FOREGROUND (stdout logs, Ctrl-C)"
+	@echo "  menubar-app    Build + launch the .app DETACHED via 'open' (background, quit from menu)"
 	@echo "  build-windows  Cross-compile CLI + tray for Windows (amd64)"
 	@echo "  installer-windows  Build NSIS installer (requires nsis)"
 	@echo "  snapshot       Build with GoReleaser (local snapshot, no publish)"
