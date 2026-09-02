@@ -341,6 +341,62 @@ func (t *TrustRoot) ResolveOfflinePolicy() (statemachine.OfflinePolicy, error) {
 	}, nil
 }
 
+// IsManaged reports whether this trust root is enterprise-MANAGED — i.e. it carries
+// an offline_policy with enterprise: true (the same gate that enables the `locked`
+// state, SPEC-0317). A managed root gets the FR-0090 IS-T5 fail-closed defaults
+// (max_staleness = 48h, require_signed_governance ON) that the shipped self/unmanaged
+// host does not, and its freshness contract therefore always has a staleness ceiling.
+func (t *TrustRoot) IsManaged() bool {
+	return t != nil && t.OfflinePolicy != nil && t.OfflinePolicy.Enterprise
+}
+
+// applyManagedDefaults stamps the FR-0090 IS-T5 fail-closed defaults onto every
+// MANAGED (enterprise) root whose knobs are unset, BEFORE validate() runs (so the
+// require_signed_governance⇒reviewers invariant is enforced against the defaulted
+// value). A managed host must never trust an unbounded-age revocation snapshot, and
+// should require signed governance wherever it CAN enforce it. Non-managed roots are
+// untouched — the shipped self/unmanaged behaviour is preserved.
+//
+//   - max_staleness → 48h UNCONDITIONALLY for a managed root. This never depends on
+//     other fields and never fails validate, so the freshness ceiling always applies.
+//
+//   - require_signed_governance → ON, but ONLY when the managed root PINS REVIEWERS.
+//     The invariant require_signed_governance⇒non-empty reviewers (validate) means the
+//     flag cannot be enforced without reviewer keys; a managed root that pins reviewers
+//     clearly intends signed governance, so defaulting it ON when unset is the safe
+//     reading. A managed root that pins NO reviewers uses `enterprise` purely for the
+//     SPEC-0317 offline state machine (the `locked` state) and has no key to verify a
+//     governance signature against — forcing the flag there would only brick Load, so
+//     it is left off (the 48h staleness ceiling still applies).
+//
+// NOTE (flagged for the challenge gate): require_signed_governance is a bool, so
+// "unset" is indistinguishable from an explicit `false`. On a reviewer-pinned managed
+// root an explicit false is therefore promoted to true (fail-closed). An operator who
+// genuinely wants signed governance off on such a host would have to drop the
+// reviewers or the enterprise flag. This is the safe direction for a managed fleet.
+//
+// SCOPE (challenge-gate NOTE-1): this default makes the freshness EVALUATION
+// (EvaluateFreshness) deny a stale high-risk verdict on a managed root. The RUNTIME
+// revoked-snapshot gate (cmd/skillctl verify-hook, revocationSnapshotStale) additionally
+// short-circuits to a no-op when the host has NEVER adopted a signed revocation HEAD —
+// so a managed host that has not yet bootstrapped a freshness anchor is not yet covered
+// against a WITHHELD upstream revoke. FR-0090/IS-T5 closes the anchor-PRESENT case (an
+// adopted-but-stale snapshot is no longer trusted); HEAD-adoption bootstrap is tracked
+// under FR-0045 D2 (same scoping as the g5 kill-switch).
+func (t *TrustRoots) applyManagedDefaults() {
+	for i := range t.Roots {
+		if !t.Roots[i].IsManaged() {
+			continue
+		}
+		if strings.TrimSpace(t.Roots[i].MaxStaleness) == "" {
+			t.Roots[i].MaxStaleness = managedDefaultMaxStalenessStr
+		}
+		if !t.Roots[i].RequireSignedGovernance && len(t.Roots[i].Reviewers) > 0 {
+			t.Roots[i].RequireSignedGovernance = true
+		}
+	}
+}
+
 // ActiveKeys returns the subset of RegistryKeys that are not retired. It
 // preserves the original order so error messages stay deterministic.
 func (t TrustRoot) ActiveKeys() []RegistryKey {
@@ -555,6 +611,10 @@ func Load(path string) (*TrustRoots, error) {
 		return nil, fmt.Errorf("trust-roots: parse %s: %w", abs, err)
 	}
 	tr.Path = abs
+
+	// FR-0090 IS-T5: stamp managed (enterprise) fail-closed defaults BEFORE validate,
+	// so the require_signed_governance⇒reviewers invariant sees the defaulted value.
+	tr.applyManagedDefaults()
 
 	if err := tr.validate(); err != nil {
 		return nil, fmt.Errorf("trust-roots: validate %s: %w", abs, err)

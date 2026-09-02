@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
+	"github.com/kamir/m3c-tools/pkg/skillctl/trustcore"
 )
 
 func init() {
@@ -517,13 +518,26 @@ func (b *gitBackend) Events(ctx context.Context, filter artifact.ListFilter, pag
 				if err := json.Unmarshal(data, &env); err != nil {
 					continue // a malformed file is untrusted → ignore (never influences a verdict)
 				}
+				// FR-0090 IS-T1: derive Kind + Digest from the SIGNED envelope, NEVER
+				// from the unsigned carrier projection. The file name ("<seq>-<kind>.json")
+				// and the events/<digesthex>/ directory are attacker-controllable path
+				// projections — a signed revoke of X committed at events/<Yhex>/NNNN-
+				// installed.json must surface as {revoke, X}, not {install, Y}, or a
+				// hostile registry could relabel a revoke to suppress it or rebind its
+				// digest onto an innocent skill. The filename is kept only as NativeID
+				// (advisory). See reference_git_event_signed_identity.
+				kind := trustcore.KindFromSignedEnvelope(env)
+				signedDigest := trustcore.SignedDigest(env)
+				if kind == "" || !trustcore.ValidDigest(signedDigest) {
+					continue // unclassifiable, or no well-formed signed anchor → drop
+				}
 				rec := artifact.EventRecord{
-					Kind:       artifact.EventKind(kindFromEventFile(e.Name())),
-					Digest:     "sha256:" + dh,
+					Kind:       kind,
+					Digest:     signedDigest,
 					Governance: strFromMap(env, "governance_level"),
 					Host:       strFromMap(env, "packed_on_host"),
 					Rationale:  strFromMap(env, "rationale"),
-					NativeID:   e.Name(),
+					NativeID:   e.Name(), // advisory only (the unsigned filename projection)
 					Envelope:   env,
 				}
 				if rec.Host == "" {
@@ -577,13 +591,13 @@ func (b *gitBackend) targetDigestHexes(dir, name string) ([]string, error) {
 	return out, nil
 }
 
-func kindFromEventFile(fn string) string {
-	fn = strings.TrimSuffix(fn, ".json")
-	if i := strings.Index(fn, "-"); i >= 0 {
-		return fn[i+1:]
-	}
-	return fn
-}
+// kindFromEventFile (the old filename-projection classifier) was removed in
+// FR-0090 IS-T1: Events() now classifies from the SIGNED envelope via
+// trustcore.KindFromSignedEnvelope, and the "<seq>-<kind>.json" name is advisory
+// (NativeID) only. isRevoked() below still reads the filename, but purely for the
+// List/Resolve DISPLAY status column — never for a trust decision (parity with the
+// OCI backend's advisory digestRevoked; the authoritative revoke gate is the pull
+// gauntlet's signed-envelope path).
 
 func strFromMap(m map[string]any, k string) string {
 	s, _ := m[k].(string)

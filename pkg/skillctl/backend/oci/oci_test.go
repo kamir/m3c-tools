@@ -14,6 +14,7 @@ import (
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact/conformance"
+	"github.com/kamir/m3c-tools/pkg/skillctl/trustcore"
 )
 
 // ociStore builds an offline OCI layout in t.TempDir() — a real content store
@@ -225,7 +226,8 @@ func TestOpenOCISchemeMapping(t *testing.T) {
 }
 
 // TestOCIKindFromSignedEnvelope pins the classifier: kind comes from the signed
-// discriminator field, and the function never even sees an annotation.
+// discriminator field, and the function never even sees an annotation. The OCI
+// backend now derives this from the shared trustcore helper (FR-0090 IS-T0).
 func TestOCIKindFromSignedEnvelope(t *testing.T) {
 	cases := []struct {
 		env  map[string]any
@@ -239,8 +241,8 @@ func TestOCIKindFromSignedEnvelope(t *testing.T) {
 		{map[string]any{"revoked_by": ""}, ""},     // empty discriminator → not present
 	}
 	for _, c := range cases {
-		if got := kindFromSignedEnvelope(c.env); got != c.want {
-			t.Errorf("kindFromSignedEnvelope(%v) = %q, want %q", c.env, got, c.want)
+		if got := trustcore.KindFromSignedEnvelope(c.env); got != c.want {
+			t.Errorf("trustcore.KindFromSignedEnvelope(%v) = %q, want %q", c.env, got, c.want)
 		}
 	}
 }

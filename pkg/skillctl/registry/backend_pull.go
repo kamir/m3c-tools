@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
+	"github.com/kamir/m3c-tools/pkg/skillctl/trustcore"
 )
 
 // parsePullSince turns the --since flag into a lower bound on occurred_at.
@@ -101,7 +102,13 @@ func PullBundlesFromBackend(ctx context.Context, be artifact.Backend, tr *SelfTr
 		if ev == nil {
 			continue
 		}
-		switch rec.Kind {
+		// FR-0090 IS-T3: dispatch on the SIGNED envelope shape, never the carrier's
+		// rec.Kind (an unsigned projection the backend's Events() derived from a
+		// filename/annotation/tag). This is defense-in-depth atop OfferRevoke /
+		// OfferAttest, which independently require the signed revoked_by /
+		// reviewer_id+governance_level — so a mislabeled event is routed by what it
+		// actually IS and then re-checked by the accumulator.
+		switch trustcore.KindFromSignedEnvelope(ev) {
 		case artifact.KindAdmit:
 			admits = append(admits, ev)
 		case artifact.KindRevoke:

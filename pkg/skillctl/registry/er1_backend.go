@@ -17,6 +17,7 @@ import (
 
 	"github.com/kamir/m3c-tools/pkg/er1"
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
+	"github.com/kamir/m3c-tools/pkg/skillctl/trustcore"
 )
 
 // ER1Backend is the artifact.Backend view of one ER1 self-tenant context.
@@ -202,10 +203,25 @@ func (b *ER1Backend) Events(ctx context.Context, filter artifact.ListFilter, pag
 			if err != nil {
 				continue
 			}
-			d, _ := ev["bundle_digest"].(string)
+			// FR-0090 IS-T4 (parity with git/oci Events): Kind + Digest come from the
+			// SIGNED envelope, never the skill-event:<kind> TAG (the `kind` loop var is
+			// only the coarse search prefilter). This closes the tag projection for every
+			// item the search FETCHES — an intra-set retag (revoked<->attested) can no
+			// longer flip a verdict. RESIDUAL (tracked, IS-T4b): discovery is still gated
+			// on the skill-event:<kind> tag, so a hostile ER1 tenant retagging a signed
+			// revoke to skill-event:installed (or stripping the tag) can drop it from the
+			// search BEFORE it reaches this classifier. Full parity with git (which
+			// enumerates every event file structurally) needs de-gating the search off
+			// skill-event:<kind>; until then the freshness ceiling (IS-T5) is the
+			// compensating control for managed roots.
+			signedKind := trustcore.KindFromSignedEnvelope(ev)
+			d := trustcore.SignedDigest(ev)
+			if signedKind == "" || !trustcore.ValidDigest(d) {
+				continue // unclassifiable / no well-formed anchor → never a verdict
+			}
 			lvl, _ := ev["governance_level"].(string)
 			rec := artifact.EventRecord{
-				Kind: artifact.EventKind(kind), Digest: d, Governance: lvl,
+				Kind: signedKind, Digest: d, Governance: lvl,
 				Host:      strOrEmpty(ev["packed_on_host"], ev["installed_on_host"]),
 				Rationale: strOrEmpty(ev["rationale"]),
 				Envelope:  ev,
