@@ -1,5 +1,0 @@
-{
-  "intent": {
-    "side_effects": ["exec", "fs:write"]
-  }
-}

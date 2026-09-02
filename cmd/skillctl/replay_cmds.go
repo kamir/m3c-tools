@@ -380,6 +380,33 @@ func defaultReplayBaseURL(target string) string {
 	}
 }
 
+// readDeployEnvStageURL is best-effort. Looks for tools/config/deploy.env
+// relative to a few likely roots. Returns "" if not found.
+func readDeployEnvStageURL() string {
+	candidates := []string{
+		"tools/config/deploy.env",
+		"../tools/config/deploy.env",
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		candidates = append(candidates,
+			filepath.Join(home, "GITHUB.active/my-ai-X/aims-core/tools/config/deploy.env"))
+	}
+	for _, p := range candidates {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "STAGE_URL=") {
+				v := strings.TrimPrefix(line, "STAGE_URL=")
+				return strings.Trim(v, `"'`)
+			}
+		}
+	}
+	return ""
+}
+
 func newReplayHTTPClient(target string) *http.Client {
 	if target == "local" {
 		tr := &http.Transport{
