@@ -30,18 +30,33 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # (1) CD-T1 — every remote action ref must be a 40-hex commit SHA.
+      #
+      # NARROW EXCEPTION (CD-T5): the SLSA github-generator REUSABLE WORKFLOWS
+      # (slsa-framework/slsa-github-generator/.github/workflows/*.yml) MUST be
+      # referenced by an immutable `@vX.Y.Z` release tag, NOT a commit SHA:
+      # slsa-verifier verifies the generator ran from that signed tag, and a
+      # SHA ref (or a shorter @vX / @vX.Y tag) breaks builder-identity
+      # verification. This is a documented, intentional slsa-github-generator
+      # constraint — the ONE place SHA-pinning is not just discouraged but wrong.
+      # Tag movement is caught by slsa-verifier + the Rekor transparency log, so
+      # this is not a "mutable tag" hole. The exception is scoped to that exact
+      # repo + workflows dir + a full 3-part semver tag; everything else (incl.
+      # slsa-verifier's own installer action) must still be a 40-hex SHA.
       - name: Guard — all `uses:` refs are pinned to a 40-hex SHA
         run: |
           set -euo pipefail
           bad=""
           for f in .github/workflows/*.yml; do
-            # Strip trailing comments, keep only real step-level `uses:` keys,
-            # drop local (./) and docker:// refs, then drop anything already
-            # pinned to @<40 hex>. Whatever survives is an unpinned violation.
+            # Strip trailing comments, keep only real step/job-level `uses:` keys,
+            # drop local (./) and docker:// refs, drop anything already pinned to
+            # @<40 hex>, then drop the tag-pinned SLSA generator reusable workflow
+            # (see NARROW EXCEPTION above). Whatever survives is an unpinned
+            # violation.
             v="$(sed 's/#.*$//' "$f" \
                   | grep -nE '^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]' \
                   | grep -vE 'uses:[[:space:]]+(\.|docker://)' \
-                  | grep -vE '@[0-9a-f]{40}[[:space:]]*$' || true)"
+                  | grep -vE '@[0-9a-f]{40}[[:space:]]*$' \
+                  | grep -vE 'uses:[[:space:]]+slsa-framework/slsa-github-generator/\.github/workflows/[A-Za-z0-9_.-]+\.yml@v[0-9]+\.[0-9]+\.[0-9]+[[:space:]]*$' || true)"
             if [ -n "$v" ]; then
               bad="$bad$(printf '%s\n' "$v" | sed "s|^|$f:|")"$'\n'
             fi
