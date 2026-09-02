@@ -134,8 +134,13 @@ jobs:
         # NOTE: no -run filter — this is intentional and enforced by drift-guard.
         # -json so the parity check can count executed tests; tee keeps a
         # human-readable copy in the log.
+        # -tags allow_home_override_test (WIN-T8): on Windows a shipping build
+        # ignores $HOME for the trust-root/token-key paths; the tag re-enables the
+        # $HOME injection the hermetic trust tests rely on. It flips a const, not a
+        # test set, so windows/linux executed-test COUNTS stay identical (the Linux
+        # parity run below needs no tag — non-Windows always honors $HOME).
         run: |
-          go test -json -count=1 -timeout=300s `
+          go test -tags allow_home_override_test -json -count=1 -timeout=300s `
             ./pkg/skillctl/... ./cmd/skillctl/... ./evaluation/... `
             | Tee-Object -FilePath win-trust.json
         shell: pwsh

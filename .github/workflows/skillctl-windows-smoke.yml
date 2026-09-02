@@ -38,10 +38,15 @@ jobs:
           go-version: "1.26.6"
           cache: true
 
-      # Build the shipping CLI from source (native GOOS=windows on this runner).
+      # Build the CLI from source (native GOOS=windows on this runner).
+      # -tags allow_home_override_test (WIN-T8): the quickstart script sandboxes
+      # trust-roots by pointing $env:HOME at a temp dir, but a SHIPPING Windows
+      # build ignores $HOME for the trust-root paths (WIN-09 confinement). The tag
+      # re-enables the $HOME override so the offline sandbox works; a real release
+      # (skillctl-release.yml) carries no tag and stays confined.
       - name: Build skillctl.exe
         run: |
-          go build -o skillctl.exe ./cmd/skillctl
+          go build -tags allow_home_override_test -o skillctl.exe ./cmd/skillctl
           $exe = (Resolve-Path .\skillctl.exe).Path
           "SKILLCTL=$exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Write-Host "built $exe"

@@ -15,50 +15,56 @@ func TestER1TLSGuardNonLoopback(t *testing.T) {
 		t.Errorf("VerifySSL=true must never be refused: %v", err)
 	}
 
-	// VerifySSL off against a PUBLIC host → refused (fail closed).
-	if err := er1TLSGuard("https://onboarding.guide/upload_2", false); err == nil {
-		t.Error("VerifySSL=false against a public host must be refused")
+	// VerifySSL off against a non-loopback host → refused (fail closed). This is
+	// LOOPBACK-ONLY, matching pkg/er1.applyTLSVerificationPolicy: an RFC1918 LAN
+	// host (192.168.x) is refused here too, because the core ER1 client already
+	// forces verification back on for it. A public host is likewise refused.
+	for _, base := range []string{
+		"https://onboarding.guide/upload_2", // public
+		"https://192.168.1.10:8081",         // RFC1918 — no longer permitted (FIX 2)
+		"https://10.0.0.5:8081",             // RFC1918
+	} {
+		if err := er1TLSGuard(base, false); err == nil {
+			t.Errorf("VerifySSL=false against non-loopback host %q must be refused", base)
+		}
 	}
 
-	// VerifySSL off against loopback / localhost / RFC1918 → allowed (local dev
-	// with a self-signed cert). Mirrors netguard.IsLoopbackOrPrivate.
+	// VerifySSL off against loopback / localhost only → allowed (local dev with a
+	// self-signed cert). Mirrors netguard.IsLoopback.
 	for _, base := range []string{
 		"https://127.0.0.1:8081/upload_2",
 		"https://localhost:8081",
-		"https://192.168.1.10:8081",
 		"https://[::1]:8081",
 	} {
 		if err := er1TLSGuard(base, false); err != nil {
-			t.Errorf("VerifySSL=false against local target %q must proceed: %v", base, err)
+			t.Errorf("VerifySSL=false against loopback target %q must proceed: %v", base, err)
 		}
 	}
 }
 
 // TestHomeOverrideAllowed — WIN-T8 (WIN-09): on Windows an explicit $HOME may only
-// override the per-user security root (token key, trust roots) when
-// M3C_ALLOW_HOME_OVERRIDE=1; on every other OS $HOME is always honored. The
-// decision is a pure function of (goos, flag), so this runs identically on all
-// platforms — no runtime.GOOS skip, which keeps the windows/linux executed-test
-// parity even for the windows-gate drift-guard.
+// override the per-user security root (token key, trust roots) when the override
+// was COMPILED IN (the `allow_home_override_test` build tag) — there is no
+// ambient-env escape hatch. On every other OS $HOME is always honored. The
+// decision is a pure function of (goos, compiledIn), so this runs identically on
+// all platforms — no runtime.GOOS skip, which keeps the windows/linux
+// executed-test parity even for the windows-gate drift-guard.
 func TestHomeOverrideAllowed(t *testing.T) {
+	// Non-Windows: always honor $HOME, regardless of the compiled-in flag.
 	for _, goos := range []string{"darwin", "linux"} {
-		if !homeOverrideAllowed(goos, "") {
-			t.Errorf("%s: $HOME must be honored with no flag", goos)
+		if !homeOverrideAllowed(goos, false) {
+			t.Errorf("%s: $HOME must be honored (compiledIn=false)", goos)
 		}
-		if !homeOverrideAllowed(goos, "1") {
-			t.Errorf("%s: $HOME must be honored with the flag", goos)
+		if !homeOverrideAllowed(goos, true) {
+			t.Errorf("%s: $HOME must be honored (compiledIn=true)", goos)
 		}
 	}
-	if homeOverrideAllowed("windows", "") {
-		t.Error("windows: $HOME must be IGNORED without M3C_ALLOW_HOME_OVERRIDE")
+	// Windows: honor $HOME ONLY when the override is compiled in (dev/test tag);
+	// a normal shipping build compiles homeOverrideCompiledIn=false → ignored.
+	if homeOverrideAllowed("windows", false) {
+		t.Error("windows: $HOME must be IGNORED when the override is not compiled in (no env escape hatch)")
 	}
-	if homeOverrideAllowed("windows", "0") {
-		t.Error("windows: $HOME must be IGNORED when the flag is not exactly 1")
-	}
-	if !homeOverrideAllowed("windows", "1") {
-		t.Error("windows: $HOME must be honored with M3C_ALLOW_HOME_OVERRIDE=1")
-	}
-	if !homeOverrideAllowed("windows", " 1 ") {
-		t.Error("windows: a whitespace-padded flag value of 1 must still honor $HOME")
+	if !homeOverrideAllowed("windows", true) {
+		t.Error("windows: $HOME must be honored when the override is compiled in (allow_home_override_test tag)")
 	}
 }

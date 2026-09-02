@@ -35,3 +35,27 @@ func IsLoopbackOrPrivate(host string) bool {
 	}
 	return ip.IsLoopback() || ip.IsPrivate()
 }
+
+// IsLoopback is the STRICTER sibling of IsLoopbackOrPrivate: it treats ONLY
+// loopback addresses (127.0.0.0/8, ::1) and the name "localhost" as local — an
+// RFC1918/ULA private address is NOT local here. It exists for the ER1
+// TLS-verification-bypass guard, which must match pkg/er1.applyTLSVerificationPolicy
+// exactly: that policy honors ER1_VERIFY_SSL=false only for 127.0.0.1/localhost and
+// forces verification back on for every other host, RFC1918 LAN hosts included. A
+// TLS-skip that the core ER1 client forbids must not be reachable through the
+// registry client. (The git/OCI *credential* guards keep IsLoopbackOrPrivate — a
+// LAN registry over plain HTTP is a legitimate, narrower risk than skipping cert
+// verification against a routable-but-private host.)
+func IsLoopback(host string) bool {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback()
+}

@@ -28,3 +28,24 @@ func TestIsLoopbackOrPrivate(t *testing.T) {
 		}
 	}
 }
+
+// TestIsLoopback pins the STRICTER loopback-only predicate used by the ER1
+// TLS-verification-bypass guard: loopback + "localhost" only; RFC1918/ULA private
+// and public are NOT loopback (unlike IsLoopbackOrPrivate).
+func TestIsLoopback(t *testing.T) {
+	loopback := []string{"127.0.0.1", "127.0.0.1:8081", "localhost", "localhost:8081", "::1", "[::1]:8081"}
+	for _, h := range loopback {
+		if !IsLoopback(h) {
+			t.Errorf("IsLoopback(%q) = false, want true (loopback)", h)
+		}
+	}
+	notLoopback := []string{
+		"10.0.0.5", "172.16.9.9", "192.168.0.131:8929", "fd00::1", // private, but NOT loopback
+		"8.8.8.8", "onboarding.guide:443", "ghcr.io", "", // public / name
+	}
+	for _, h := range notLoopback {
+		if IsLoopback(h) {
+			t.Errorf("IsLoopback(%q) = true, want false (not loopback)", h)
+		}
+	}
+}

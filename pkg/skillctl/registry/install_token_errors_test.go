@@ -11,8 +11,7 @@ import (
 // actionable message. (Refusal behaviour itself is covered by
 // TestInstall_TokenForgedRefuses / TestInstall_Overwrite_RequiresTokenViaTwoStep.)
 func TestVerifyInstallToken_ErrorClasses(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())            // installTokenKey persists a per-user 0600 key here
-	t.Setenv("M3C_ALLOW_HOME_OVERRIDE", "1") // Windows: honor the injected HOME (WIN-T8)
+	t.Setenv("HOME", t.TempDir()) // installTokenKey persists a per-user 0600 key here (Windows: honored under -tags allow_home_override_test)
 
 	plan := &InstallPlan{
 		IssuedAt:   time.Now().UTC().Unix(),

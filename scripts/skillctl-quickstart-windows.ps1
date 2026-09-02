@@ -24,9 +24,13 @@
     * Everything happens in a fresh %TEMP%\skillctl-quickstart-<guid> dir, removed on
       exit (keep it with -KeepWork). A new GUID each run makes the script re-runnable.
     * `skillctl trust add` writes ~/.claude/skill-trust-roots.yaml. skillctl resolves
-      that home via $HOME first on ALL platforms (pkg/skillctl/verify/home.go), so we
-      point $env:HOME at the sandbox dir for the run -- the REAL user trust roots are
-      never touched. (env change is process-local and dies with this PowerShell.)
+      that home via $HOME (pkg/skillctl/verify/home.go), so we point $env:HOME at the
+      sandbox dir for the run -- the REAL user trust roots are never touched. (env
+      change is process-local and dies with this PowerShell.)
+      NOTE (WIN-T8/WIN-09): a SHIPPING Windows build ignores $HOME for the trust-root
+      paths (an env var is attacker-settable), so this sandbox needs a binary built
+      with `-tags allow_home_override_test` (the windows-smoke CI job builds it that
+      way). A plain `go build` on Windows will write under %USERPROFILE% instead.
     * NEVER prints a private key, signature bytes, or any secret. Only public paths,
       digests, and exit codes are shown.
     * `--registry self` is NOT valid -- validateRegistryURL requires https:// (or

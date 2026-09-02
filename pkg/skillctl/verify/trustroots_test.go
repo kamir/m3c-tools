@@ -451,10 +451,11 @@ func TestDefaultPath(t *testing.T) {
 
 func TestResolveAndValidatePath_TildeExpansion(t *testing.T) {
 	// Force HOME to a known temp dir so the test is hermetic. On Windows the
-	// trust-root resolver ignores $HOME unless this dev flag is set (WIN-T8).
+	// trust-root resolver ignores $HOME in a shipping build (WIN-T8); the
+	// windows-latest test surface builds with -tags allow_home_override_test so
+	// this injection takes effect there too.
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
-	t.Setenv("M3C_ALLOW_HOME_OVERRIDE", "1")
 
 	got, err := resolveAndValidatePath("~/.claude/skill-trust-roots.yaml")
 	if err != nil {

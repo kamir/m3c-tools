@@ -32,9 +32,16 @@ import (
 // loopback/RFC1918 target. A *er1.Config constructed programmatically or in a test
 // can carry VerifySSL=false with a public APIURL and would otherwise slip past the
 // config-layer sanitizer straight into an InsecureSkipVerify client. Returns an
-// error (fail closed) for a non-local host with verification disabled; nil when
-// verification is on (nothing to police) or the host is provably local. host is
-// derived from the request base URL. Shared by er1Get and er1PostJSON.
+// error (fail closed) for a non-loopback host with verification disabled; nil when
+// verification is on (nothing to police) or the host is loopback. host is derived
+// from the request base URL. Shared by er1Get and er1PostJSON.
+//
+// LOOPBACK-ONLY on purpose: this mirrors pkg/er1.applyTLSVerificationPolicy, which
+// honors ER1_VERIFY_SSL=false only for 127.0.0.1/localhost and forces verification
+// back on for every other host — RFC1918 LAN hosts included. Permitting an
+// RFC1918 TLS-skip here that the core ER1 client forbids would be an inconsistency
+// an attacker could target, so the registry client uses netguard.IsLoopback (not
+// IsLoopbackOrPrivate). The git/OCI *credential* guards keep the wider predicate.
 func er1TLSGuard(base string, verifySSL bool) error {
 	if verifySSL {
 		return nil
@@ -43,8 +50,8 @@ func er1TLSGuard(base string, verifySSL bool) error {
 	if u, err := url.Parse(base); err == nil && u.Host != "" {
 		host = u.Host
 	}
-	if !netguard.IsLoopbackOrPrivate(host) {
-		return fmt.Errorf("er1: refusing to disable TLS verification (VerifySSL=false) for non-loopback host %q — only loopback/RFC1918 targets may skip certificate verification", host)
+	if !netguard.IsLoopback(host) {
+		return fmt.Errorf("er1: refusing to disable TLS verification (VerifySSL=false) for non-loopback host %q — only 127.0.0.1/localhost may skip certificate verification", host)
 	}
 	return nil
 }

@@ -18,13 +18,19 @@ import (
 // directory an attacker controls. Ignoring $HOME on Windows keeps this per-user
 // state under %USERPROFILE% (via os.UserHomeDir()), fail-closed.
 //
-// The dev/quickstart/CI escape hatch is M3C_ALLOW_HOME_OVERRIDE=1: with it set,
-// $HOME is honored on Windows too. This preserves the sandboxed quickstart and
-// the SEC-L6 isolation tests (which set HOME to a fresh temp dir to force the
-// install-token mint path) on the windows-latest runner. See homeOverrideAllowed.
+// The Windows override is NOT re-openable from the ambient environment — an
+// env-var escape hatch (the earlier M3C_ALLOW_HOME_OVERRIDE) would be settable by
+// the very attacker/child-process WIN-09 models, re-opening the vector for the
+// cost of one extra variable. Instead the override is a COMPILE-TIME decision:
+// homeOverrideCompiledIn is true only in a build made with `-tags
+// allow_home_override_test`. Shipping Windows releases carry no such tag, so
+// $HOME is unconditionally ignored there; the dev/quickstart sandbox and the
+// windows-latest test surface (including the SEC-L6 isolation tests that force
+// the install-token mint path via a temp HOME) build WITH the tag. See
+// homeOverrideAllowed.
 func userHome() string {
 	if h := strings.TrimSpace(os.Getenv("HOME")); h != "" &&
-		homeOverrideAllowed(runtime.GOOS, os.Getenv("M3C_ALLOW_HOME_OVERRIDE")) {
+		homeOverrideAllowed(runtime.GOOS, homeOverrideCompiledIn) {
 		return h
 	}
 	h, _ := os.UserHomeDir()
@@ -33,13 +39,14 @@ func userHome() string {
 
 // homeOverrideAllowed is the pure, platform-parameterized decision behind
 // userHome: may an explicit $HOME override the per-user security root on goos?
-// Non-Windows always allows it; Windows allows it ONLY when the operator opts in
-// with M3C_ALLOW_HOME_OVERRIDE=1. Kept pure (goos + flag as arguments, no OS
-// reads) so it can be unit-tested for BOTH platforms from any host — which also
-// keeps windows/linux executed-test parity even (windows-gate drift-guard).
-func homeOverrideAllowed(goos, allowOverride string) bool {
+// Non-Windows always allows it; Windows allows it ONLY when the override was
+// compiled in (the `allow_home_override_test` build tag). Kept pure (goos +
+// compiled-in flag as arguments, no OS/env reads) so it can be unit-tested for
+// BOTH platforms from any host — which also keeps windows/linux executed-test
+// parity even (windows-gate drift-guard).
+func homeOverrideAllowed(goos string, compiledIn bool) bool {
 	if goos != "windows" {
 		return true
 	}
-	return strings.TrimSpace(allowOverride) == "1"
+	return compiledIn
 }
