@@ -33,6 +33,7 @@ import (
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/bodyscan"
 	"github.com/kamir/m3c-tools/pkg/skillctl/parser"
+	"github.com/kamir/m3c-tools/pkg/skillctl/semver"
 )
 
 // CheckResult is the outcome of one of the 10 gate checks. Number is
@@ -336,7 +337,7 @@ func runOptional(checks *[]CheckResult, opts CheckOptions) {
 			"proposed version unresolved (no --bump and no frontmatter)"))
 		return
 	}
-	if compareSemver(proposed, opts.LastAdmittedVersion) <= 0 {
+	if semver.Compare(proposed, opts.LastAdmittedVersion) <= 0 {
 		*checks = append(*checks, fail(10, "version > last admitted",
 			fmt.Sprintf("proposed %q ≤ last admitted %q", proposed, opts.LastAdmittedVersion)))
 	} else {
@@ -415,44 +416,6 @@ type frontmatterView struct {
 	Description     string
 	GovernanceLevel string
 	Metadata        map[string]interface{}
-}
-
-// compareSemver returns -1 / 0 / 1 in semver order. Invalid inputs
-// compare as equal (the format check on row 4 catches them earlier).
-func compareSemver(a, b string) int {
-	parseTriple := func(s string) [3]int {
-		var out [3]int
-		// Strip any pre-release / build metadata.
-		core := s
-		if i := strings.IndexAny(core, "-+"); i >= 0 {
-			core = core[:i]
-		}
-		parts := strings.SplitN(core, ".", 3)
-		for i := range parts {
-			if i >= 3 {
-				break
-			}
-			n := 0
-			for _, ch := range parts[i] {
-				if ch < '0' || ch > '9' {
-					break
-				}
-				n = n*10 + int(ch-'0')
-			}
-			out[i] = n
-		}
-		return out
-	}
-	A, B := parseTriple(a), parseTriple(b)
-	for i := 0; i < 3; i++ {
-		if A[i] < B[i] {
-			return -1
-		}
-		if A[i] > B[i] {
-			return 1
-		}
-	}
-	return 0
 }
 
 // scanBugReports walks `dir` (non-recursive) looking for files matching
