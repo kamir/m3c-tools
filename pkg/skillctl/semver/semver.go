@@ -11,9 +11,14 @@
 // validated SemVer parser):
 //   - a single leading "v" is stripped ("v1.2.0" == "1.2.0");
 //   - pre-release / build metadata (everything from the first '-' or '+') is
-//     dropped, so "1.0.0-rc" compares EQUAL to "1.0.0" — matching the prior
-//     behavior of all four call sites (git/oci reached 0 via Atoi-failure,
-//     propose stripped it explicitly), NOT full SemVer pre-release precedence;
+//     dropped, so "1.0.0-rc" compares EQUAL to "1.0.0" — NOT full SemVer
+//     pre-release precedence. For a SINGLE-segment suffix ("1.0.0-rc",
+//     "1.0.0+build") this matches all four prior call sites exactly. For a
+//     DOTTED suffix ("1.2.0-rc.1") it INTENTIONALLY differs from them: the old
+//     copies split the whole string on '.' first, leaking the trailing ".1" as a
+//     4th field and ranking the pre-release ABOVE its GA; dropping the whole
+//     suffix (so "1.2.0-rc.1" == "1.2.0") is the more correct choice and is
+//     unreachable via the normal X.Y.Z release pipeline anyway;
 //   - the numeric core is split on '.', compared field-by-field, with missing
 //     or non-numeric fields treated as 0 and shorter forms zero-extended.
 package semver

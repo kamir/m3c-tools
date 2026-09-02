@@ -18,12 +18,20 @@ func TestCompare(t *testing.T) {
 		{"v1.2.0", "1.2.0", 0},
 		{"v2.0.0", "1.9.9", 1}, // old registry impl: "v2..."→0 → wrongly -1
 		{"1.2.0", "v1.2.1", -1},
-		// Pre-release / build metadata dropped → EQUAL to the release core
-		// (preserves all four prior call sites' behavior; NOT SemVer precedence).
-		{"1.0.0-rc.1", "1.0.0", 0},
+		// Pre-release / build metadata dropped → EQUAL to the release core (NOT
+		// SemVer precedence). Single-segment suffixes match the prior impls exactly.
 		{"1.0.0+build7", "1.0.0", 0},
 		{"1.0.1-rc", "1.0.0", 1},
 		{"v1.0.0-rc", "1.0.0", 0},
+		// DOTTED suffixes: this is the ONE spot the new impl INTENTIONALLY diverges
+		// from the old ones. The old copies split the whole string on '.' first, so
+		// "1.2.0-rc.1" leaked the trailing ".1" as a 4th field → parsed [1,2,0,1] and
+		// ranked the pre-release ABOVE its GA. We cut at the first '-'/'+' so the
+		// whole suffix drops: "1.2.0-rc.1" == "1.2.0" (more correct — a pre-release
+		// must not outrank its GA). Not reachable via the normal X.Y.Z pipeline.
+		{"1.0.0-rc.1", "1.0.0", 0},
+		{"1.2.0-rc.2", "1.2.0-rc.1", 0}, // pre-release identifiers not ordered — both are "a pre-release of 1.2.0"
+		{"1.2.0+build.5", "1.2.0", 0},
 		// Zero-extend shorter forms.
 		{"1.2", "1.2.0", 0},
 		{"1", "1.0.0", 0},
