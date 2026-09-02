@@ -77,8 +77,17 @@ func trailEvidenceSentence(tv trailVerification) string {
 	// against an external root (registry attestation of the device key is a
 	// follow-up). Do not let an auditor read self-referential verification as
 	// external attestation.
-	return fmt.Sprintf("Per-invocation signed events (SPEC-0202): %d/%d invocation records pass local device-key integrity verification (%d unverified, %d replays). Device key %s is locally anchored (integrity-since-signing on this host; not yet registry-attested). Append-only ~/.claude/skillctl/invocation-trail.jsonl.",
-		tv.Verified, tv.Total, tv.Unverified, tv.Replays, key)
+	// IS-T8: report the hash-chain integrity check — keyless seq+prev_hash
+	// contiguity PLUS the second device signature over each link — that makes a
+	// deleted, reordered, or same-uid-rewritten middle record tamper-EVIDENT on top
+	// of the per-line signature. Honest scope: TAIL truncation is NOT covered here
+	// (a valid signed prefix; needs an external SPEC-0358 head anchor).
+	chain := fmt.Sprintf("hash-chained (seq+prev_hash, %d/%d links device-signed) intact — no middle record deleted, reordered, or rewritten (tail-truncation not covered: needs an external SPEC-0358 anchor)", tv.ChainSigned, tv.Total)
+	if !tv.ChainVerified {
+		chain = fmt.Sprintf("hash-chain BROKEN — %d break(s): a record was deleted, reordered, or a link's seq/prev_hash/signature was altered", tv.ChainBreaks)
+	}
+	return fmt.Sprintf("Per-invocation signed events (SPEC-0202): %d/%d invocation records pass local device-key integrity verification (%d unverified, %d replays); %s. Device key %s is locally anchored (integrity-since-signing on this host; not yet registry-attested). Append-only ~/.claude/skillctl/invocation-trail.jsonl.",
+		tv.Verified, tv.Total, tv.Unverified, tv.Replays, chain, key)
 }
 
 const complianceDisclaimer = "Evidence aid for an auditor — NOT a certification or attestation of compliance. " +

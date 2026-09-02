@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -104,6 +105,182 @@ func TestReadAndVerifyTrail_DetectsReplay(t *testing.T) {
 	}
 	if tv.Replays != 1 {
 		t.Errorf("duplicate event_id not flagged as replay: %+v", tv)
+	}
+}
+
+// TestReadAndVerifyTrail_HashChainDetectsMiddleDeletion is the IS-T8 acceptance
+// test: append three signed records, delete the MIDDLE line, and assert the
+// hash-chain contiguity check reports a break. Before IS-T8 this excision passed
+// clean — each surviving line still carries a valid per-line device signature, so
+// nothing flagged the removed record. The seq + prev_hash chain now bites.
+func TestReadAndVerifyTrail_HashChainDetectsMiddleDeletion(t *testing.T) {
+	home := t.TempDir()
+	for i, id := range []string{
+		"01HZTRAILEVENT0000000000A",
+		"01HZTRAILEVENT0000000000B",
+		"01HZTRAILEVENT0000000000C",
+	} {
+		rec := sampleInvocation()
+		rec.EventID = id
+		rec.ExitCode = i // distinct content per record
+		appendSignedInvocation(home, rec)
+	}
+
+	// Intact chain: three verified records, zero breaks.
+	if tv := readAndVerifyTrail(home); tv.Total != 3 || tv.Verified != 3 || tv.ChainBreaks != 0 || !tv.ChainVerified {
+		t.Fatalf("intact 3-record chain should verify clean, got %+v", tv)
+	}
+
+	// Excise the MIDDLE line (the seq=1 record).
+	path := invocationTrailPath(home)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read trail: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 trail lines, got %d", len(lines))
+	}
+	kept := lines[0] + "\n" + lines[2] + "\n" // drop the middle record
+	if err := os.WriteFile(path, []byte(kept), 0o600); err != nil {
+		t.Fatalf("rewrite trail: %v", err)
+	}
+
+	tv := readAndVerifyTrail(home)
+	// Both survivors STILL pass their per-line signature (that is exactly why the
+	// deletion was previously invisible)...
+	if tv.Total != 2 || tv.Verified != 2 || tv.Unverified != 0 {
+		t.Fatalf("surviving lines should still individually sign: %+v", tv)
+	}
+	// ...but the hash chain now reports the gap the deletion opened: the seq=2
+	// survivor's seq is not 0+1 and its prev_hash points at the deleted record.
+	if tv.ChainBreaks == 0 || tv.ChainVerified {
+		t.Errorf("middle-record deletion not detected as a chain/sequence gap: %+v", tv)
+	}
+}
+
+// Re-gate residual bite (audit fail-open): a chained trail whose DEVICE KEY has
+// been removed must NOT report ChainVerified=true. A same-uid actor who deletes the
+// device key can then keyless-recompute a fully contiguous chain (seq/prev_hash/
+// self_hash) that passes every contiguity check; the chain SIGNATURE is what stops
+// that, and it cannot be checked without the key. So a chained-but-keyless trail is
+// present-but-UNVERIFIED (ChainSigned==0), not verified. Pre-fix, ChainVerified was
+// ChainBreaks==0 alone, so removing the key upgraded a forgeable trail to "verified".
+func TestReadAndVerifyTrail_ChainedTrailWithoutDeviceKeyIsUnverified(t *testing.T) {
+	home := t.TempDir()
+	for i, id := range []string{
+		"01HZTRAILEVENT0000000000A",
+		"01HZTRAILEVENT0000000000B",
+		"01HZTRAILEVENT0000000000C",
+	} {
+		rec := sampleInvocation()
+		rec.EventID = id
+		rec.ExitCode = i
+		appendSignedInvocation(home, rec)
+	}
+	// Baseline: with the device key present the intact chain verifies clean.
+	if tv := readAndVerifyTrail(home); !tv.ChainVerified || tv.ChainSigned != 3 {
+		t.Fatalf("baseline intact chain should be signed+verified, got %+v", tv)
+	}
+
+	// Remove the device key material (both priv + pub) — the state after a same-uid
+	// key wipe. readAndVerifyTrail loads the key directly, so this forces havePub=false.
+	_ = os.Remove(device.PrivPath(home))
+	_ = os.Remove(device.PubPath(home))
+
+	tv := readAndVerifyTrail(home)
+	if !tv.Present {
+		t.Fatal("trail should still be present")
+	}
+	if tv.ChainVerified {
+		t.Fatalf("a chained trail with the device key removed must not report ChainVerified=true (keyless contiguity is forgeable); got ChainSigned=%d Total=%d", tv.ChainSigned, tv.Total)
+	}
+	if tv.ChainSigned != 0 {
+		t.Errorf("no chain signatures are verifiable without the device key; ChainSigned=%d, want 0", tv.ChainSigned)
+	}
+}
+
+// TestReadAndVerifyTrail_ChainSignatureDetectsKeylessRewrite is the hardening
+// bite-test for the SECOND (chain-link) device signature. A same-uid attacker
+// with NO key deletes the middle record and rewrites the survivor's seq/prev_hash
+// so the KEYLESS contiguity check passes again — but cannot re-sign the link, so
+// the chain-signature layer must still report a break. Case B covers the downgrade
+// where the attacker strips the signature entirely to fall back to keyless-only.
+func TestReadAndVerifyTrail_ChainSignatureDetectsKeylessRewrite(t *testing.T) {
+	buildTrail := func(t *testing.T) (home string, rec0, rec2 chainedInvocationRecord) {
+		t.Helper()
+		home = t.TempDir()
+		for i, id := range []string{
+			"01HZREWRITE000000000000A",
+			"01HZREWRITE000000000000B",
+			"01HZREWRITE000000000000C",
+		} {
+			r := sampleInvocation()
+			r.EventID = id
+			r.ExitCode = i
+			appendSignedInvocation(home, r)
+		}
+		data, err := os.ReadFile(invocationTrailPath(home))
+		if err != nil {
+			t.Fatalf("read trail: %v", err)
+		}
+		lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+		if len(lines) != 3 {
+			t.Fatalf("want 3 trail lines, got %d", len(lines))
+		}
+		if err := json.Unmarshal([]byte(lines[0]), &rec0); err != nil {
+			t.Fatalf("parse rec0: %v", err)
+		}
+		if err := json.Unmarshal([]byte(lines[2]), &rec2); err != nil {
+			t.Fatalf("parse rec2: %v", err)
+		}
+		return home, rec0, rec2
+	}
+	writeTwo := func(t *testing.T, home string, a, b chainedInvocationRecord) {
+		t.Helper()
+		la, _ := json.Marshal(a)
+		lb, _ := json.Marshal(b)
+		var buf []byte
+		buf = append(buf, la...)
+		buf = append(buf, '\n')
+		buf = append(buf, lb...)
+		buf = append(buf, '\n')
+		if err := os.WriteFile(invocationTrailPath(home), buf, 0o600); err != nil {
+			t.Fatalf("rewrite trail: %v", err)
+		}
+	}
+
+	// Case A — rewrite seq/prev_hash to look contiguous, keep the OLD signature
+	// (which signed seq=2). The device-signature check must catch it.
+	home, rec0, rec2 := buildTrail(t)
+	h0, ok := invocationChainHash(rec0.InvocationRecord)
+	if !ok {
+		t.Fatal("canonicalize rec0")
+	}
+	one := uint64(1)
+	rec2.Seq = &one    // was 2 → now 1, so keyless contiguity now PASSES
+	rec2.PrevHash = h0 // points at rec0 instead of the deleted rec1
+	writeTwo(t, home, rec0, rec2)
+
+	tv := readAndVerifyTrail(home)
+	if tv.Total != 2 || tv.Verified != 2 {
+		t.Fatalf("per-line signatures should still verify (attack does not touch them): %+v", tv)
+	}
+	if tv.ChainBreaks == 0 || tv.ChainVerified {
+		t.Errorf("keyless seq/prev_hash rewrite not caught by the chain signature: %+v", tv)
+	}
+
+	// Case B — same rewrite but STRIP the signature (downgrade to keyless-only).
+	home2, rec0b, rec2b := buildTrail(t)
+	h0b, _ := invocationChainHash(rec0b.InvocationRecord)
+	one2 := uint64(1)
+	rec2b.Seq = &one2
+	rec2b.PrevHash = h0b
+	rec2b.ChainSignatureB64 = "" // a chained record with no verifiable sig is a break
+	writeTwo(t, home2, rec0b, rec2b)
+
+	if tv2 := readAndVerifyTrail(home2); tv2.ChainBreaks == 0 || tv2.ChainVerified {
+		t.Errorf("stripped chain signature (downgrade) not caught: %+v", tv2)
 	}
 }
 
