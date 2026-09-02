@@ -99,8 +99,19 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "pull: %v\n", cerr)
 			return 1
 		}
+		// FR-0090 IS-RS-01: resolve the signed revoke-HEAD source (the SAME
+		// verify.TrustRoot the SessionStart quarantine sweep uses for the HEAD) and
+		// carry it into the gauntlet so Gate 5 can catch a revoke that tag discovery
+		// missed. Best-effort / never-brick: a self-ER1 host with no verify.TrustRoot
+		// configured leaves the URL empty (HEAD not consulted); a MANAGED enterprise
+		// root additionally REQUIRES the HEAD (fail closed if unreachable, mirror
+		// IS-T5).
+		headURL, headTenant, headRequired := resolveRevokeHeadSource()
 		res, err = registry.PullBundles(cfg, *er1Context, tr, registry.PullOpts{
 			OnlySkill: *skillName, OnlyDigest: *digestArg, Since: *since,
+			RevocationHeadURL:     headURL,
+			RevocationHeadTenant:  headTenant,
+			RequireRevocationHead: headRequired,
 		})
 	}
 	if err != nil {
@@ -345,6 +356,25 @@ func strOr(s, fb string) string {
 		return fb
 	}
 	return s
+}
+
+// resolveRevokeHeadSource resolves the signed revoke-HEAD source for the ER1 pull
+// gauntlet (FR-0090 IS-RS-01). It reuses loadRootsFn — the SAME verify.TrustRoot
+// resolver the quarantine sweep's fetchRevocationHeadOnline uses — so the HEAD
+// endpoint + freshness posture are configured in one place. Never-brick: any
+// failure (no verify.TrustRoot, multiple registries pinned, …) yields an empty
+// URL, so a default self-ER1 / air-gapped host consults no HEAD and behaves as
+// before. A MANAGED enterprise root REQUIRES the HEAD (fail closed if it is
+// unreachable/unverifiable), mirroring the IS-T5 managed-root freshness contract.
+func resolveRevokeHeadSource() (url, tenant string, required bool) {
+	roots, root, err := loadRootsFn("")
+	if err != nil || root == nil {
+		return "", "", false
+	}
+	if roots != nil {
+		tenant = roots.TenantScope
+	}
+	return root.RegistryURL, tenant, root.IsManaged()
 }
 
 // resolvePullTrustRoots picks the verification key for a pull (SPEC-0359 D2). For
