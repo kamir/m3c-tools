@@ -374,6 +374,15 @@ func (t *TrustRoot) IsManaged() bool {
 // root an explicit false is therefore promoted to true (fail-closed). An operator who
 // genuinely wants signed governance off on such a host would have to drop the
 // reviewers or the enterprise flag. This is the safe direction for a managed fleet.
+//
+// SCOPE (challenge-gate NOTE-1): this default makes the freshness EVALUATION
+// (EvaluateFreshness) deny a stale high-risk verdict on a managed root. The RUNTIME
+// revoked-snapshot gate (cmd/skillctl verify-hook, revocationSnapshotStale) additionally
+// short-circuits to a no-op when the host has NEVER adopted a signed revocation HEAD —
+// so a managed host that has not yet bootstrapped a freshness anchor is not yet covered
+// against a WITHHELD upstream revoke. FR-0090/IS-T5 closes the anchor-PRESENT case (an
+// adopted-but-stale snapshot is no longer trusted); HEAD-adoption bootstrap is tracked
+// under FR-0045 D2 (same scoping as the g5 kill-switch).
 func (t *TrustRoots) applyManagedDefaults() {
 	for i := range t.Roots {
 		if !t.Roots[i].IsManaged() {

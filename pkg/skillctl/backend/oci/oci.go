@@ -476,8 +476,8 @@ func (b *ociBackend) Events(ctx context.Context, filter artifact.ListFilter, pag
 			// annotation is advisory display only. See reference_git_event_signed_identity.
 			kind := trustcore.KindFromSignedEnvelope(env)
 			signedDigest := trustcore.SignedDigest(env)
-			if kind == "" || signedDigest == "" {
-				continue // unclassifiable/anchor-less signed envelope → ignore
+			if kind == "" || !trustcore.ValidDigest(signedDigest) {
+				continue // unclassifiable / no well-formed signed anchor → never a verdict (parity with git/er1)
 			}
 			rec := artifact.EventRecord{
 				Kind:       kind,

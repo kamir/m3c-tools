@@ -516,6 +516,10 @@ func loadAttestRevoke(cfg *er1.Config, ctxID, onlySkill string, pub ed25519.Publ
 			// writer controls, so a signed revoke re-tagged skill-event:attested (to
 			// SUPPRESS the revoke) or an attestation re-tagged skill-event:revoked (to
 			// forge a revocation) must be judged by what the SIGNED bytes actually are.
+			// RESIDUAL (tracked, IS-T4b): the search only returns items still tagged with
+			// one of the searched skill-event:<kind> values, so a revoke retagged to an
+			// UNsearched value (e.g. skill-event:installed) or stripped of the tag is
+			// dropped at DISCOVERY, before this classifier — de-gating the search closes it.
 			switch trustcore.KindFromSignedEnvelope(ev) {
 			case artifact.KindRevoke:
 				revokedDigests[digest] = struct{}{}

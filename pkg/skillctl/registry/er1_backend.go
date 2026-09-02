@@ -205,9 +205,15 @@ func (b *ER1Backend) Events(ctx context.Context, filter artifact.ListFilter, pag
 			}
 			// FR-0090 IS-T4 (parity with git/oci Events): Kind + Digest come from the
 			// SIGNED envelope, never the skill-event:<kind> TAG (the `kind` loop var is
-			// only the coarse search prefilter). A hostile ER1 item could otherwise
-			// relabel a signed revoke as skill-event:installed to suppress it. Digest was
-			// already envelope-sourced; classifying Kind here closes the tag projection.
+			// only the coarse search prefilter). This closes the tag projection for every
+			// item the search FETCHES — an intra-set retag (revoked<->attested) can no
+			// longer flip a verdict. RESIDUAL (tracked, IS-T4b): discovery is still gated
+			// on the skill-event:<kind> tag, so a hostile ER1 tenant retagging a signed
+			// revoke to skill-event:installed (or stripping the tag) can drop it from the
+			// search BEFORE it reaches this classifier. Full parity with git (which
+			// enumerates every event file structurally) needs de-gating the search off
+			// skill-event:<kind>; until then the freshness ceiling (IS-T5) is the
+			// compensating control for managed roots.
 			signedKind := trustcore.KindFromSignedEnvelope(ev)
 			d := trustcore.SignedDigest(ev)
 			if signedKind == "" || !trustcore.ValidDigest(d) {
