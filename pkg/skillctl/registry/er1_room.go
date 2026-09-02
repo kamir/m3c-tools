@@ -180,6 +180,9 @@ func er1PostJSON(base string, cfg *er1.Config, path string, payload any) (any, e
 	if err != nil {
 		return nil, err
 	}
+	if err := er1TLSGuard(base, cfg.VerifySSL); err != nil {
+		return nil, err
+	}
 	client := &http.Client{Timeout: 30 * time.Second}
 	if !cfg.VerifySSL {
 		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}

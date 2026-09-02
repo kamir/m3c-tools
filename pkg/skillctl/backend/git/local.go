@@ -39,7 +39,7 @@ func openLocal(spec string, opts artifact.OpenOptions) (artifact.Backend, error)
 		return nil, fmt.Errorf("local: registry path %q not found — run `skillctl registry init --registry %s` first (or check the .bundle path): %w", path, spec, err)
 	}
 	b := newGitBackend(path, "local")
-	b.applyCreds(opts) // no-op for local (no token), kept for symmetry
+	_ = b.applyCreds(opts) // no-op for local (filesystem path, no token, never http://), kept for symmetry
 	return b, nil
 }
 

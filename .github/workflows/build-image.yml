@@ -1,0 +1,103 @@
+name: skillctl Image (build · cosign · provenance)
+
+# CD-T11 / CD-06: build the skillctl container image from the digest-pinned
+# deploy/skillctl/Dockerfile, push it to GHCR, KEYLESS-sign it with cosign +
+# GitHub OIDC (no long-lived key), and attach a SLSA build-provenance
+# attestation. Mirrors skillctl-release.yml's keyless model, for the image
+# instead of the raw binaries.
+#
+# Triggered on a dedicated image tag (disjoint from the `v*` product release and
+# the `skillctl/v*` binary release) and on manual dispatch, so cutting an image
+# is an explicit, reviewable act.
+#
+# Kyverno admission (verifyImages against this workflow's OIDC identity) is
+# DEPLOY-SIDE and OUT OF SCOPE here — it belongs in the cluster policy repo, not
+# in this build workflow. This workflow's job is to PRODUCE a signed+attested
+# image; enforcing that only signed images admit is the cluster's job.
+
+on:
+  push:
+    tags:
+      - 'skillctl-image/v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/skillctl
+
+jobs:
+  build:
+    name: Build · push · cosign-sign · attest
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # checkout
+      packages: write # push the image to GHCR
+      id-token: write # OIDC for keyless cosign + build provenance
+      attestations: write # SLSA build-provenance attestation
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive image tags + labels
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=ref,event=tag
+            type=sha,format=long
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
+
+      # provenance:false → publish a plain image manifest (no attestation-manifest
+      # wrapper), so the digest cosign signs and attest-build-provenance references
+      # is the image's own content digest.
+      - name: Build + push (digest-pinned base, static Go binary)
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: deploy/skillctl/Dockerfile
+          push: true
+          provenance: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ github.ref_name }}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+
+      # Keyless: cosign mints a short-lived Fulcio cert bound to THIS workflow's
+      # OIDC identity — the same identity a Kyverno verifyImages policy pins.
+      - name: Keyless-sign the image (GitHub OIDC)
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+
+      # Gate: fail the build if the signature we just made does not verify against
+      # this workflow's identity — never ship an image whose signature won't check.
+      - name: Verify the cosign signature in-job (gate)
+        run: |
+          cosign verify "${IMAGE}@${DIGEST}" \
+            --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/\.github/workflows/build-image\.yml@refs/" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+
+      - name: SLSA build provenance (image)
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true

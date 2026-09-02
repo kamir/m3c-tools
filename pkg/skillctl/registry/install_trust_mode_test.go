@@ -353,9 +353,11 @@ func (failingReader) Read([]byte) (int, error) {
 //     or verified), so the destructive overwrite never happens.
 func TestInstallTokenKey_RNGFailureFailsClosed(t *testing.T) {
 	// Isolate HOME so no pre-existing ~/.cache/m3c/install-token.key is read
-	// (that would short-circuit the RNG path).
+	// (that would short-circuit the RNG path). On Windows userHome() ignores
+	// $HOME unless this dev flag is set (WIN-T8).
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
+	t.Setenv("M3C_ALLOW_HOME_OVERRIDE", "1")
 
 	// Reset the in-process key cache and inject a failing CSPRNG; restore both.
 	prevKey := installTokenKeyValue
