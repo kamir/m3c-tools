@@ -179,7 +179,7 @@ func classify(sk *model.SkillDescriptor, minimum MinimumLevel) Verdict {
 			v.State = StateUnverified
 			v.Reason = "no sibling .skb on disk"
 			return v
-		case scanner.TrustVerified:
+		case scanner.TrustSignaturePresent:
 			// Bundle is good; fall through to governance check.
 		}
 	} else {

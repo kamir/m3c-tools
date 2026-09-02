@@ -87,7 +87,10 @@ func tabRows(inv *model.Inventory, withTrust bool) []string {
 				}
 				switch sk.Bundle.TrustChain {
 				case "verified":
-					trusted = "yes"
+					// The scanner only checked that a 64-byte detached sig is
+					// present — not that it verifies. Say so; real trust is
+					// established by `skillctl verify`, not this scan.
+					trusted = "sig-only"
 				case "broken":
 					trusted = "BROKEN"
 				case "unverified":

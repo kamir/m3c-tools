@@ -34,8 +34,8 @@ func mkBundle(chain string, errMsg string, exitCode int) *model.BundleAttestatio
 func TestCompute_AllOK(t *testing.T) {
 	inv := &model.Inventory{
 		Skills: []model.SkillDescriptor{
-			mkSkill("foo", "user", "green", mkBundle(scanner.TrustVerified, "", 0)),
-			mkSkill("bar", "user", "green", mkBundle(scanner.TrustVerified, "", 0)),
+			mkSkill("foo", "user", "green", mkBundle(scanner.TrustSignaturePresent, "", 0)),
+			mkSkill("bar", "user", "green", mkBundle(scanner.TrustSignaturePresent, "", 0)),
 		},
 	}
 	r := Compute(inv, MinGreen)
@@ -50,7 +50,7 @@ func TestCompute_AllOK(t *testing.T) {
 func TestCompute_OneUnverified_Exit2(t *testing.T) {
 	inv := &model.Inventory{
 		Skills: []model.SkillDescriptor{
-			mkSkill("foo", "user", "green", mkBundle(scanner.TrustVerified, "", 0)),
+			mkSkill("foo", "user", "green", mkBundle(scanner.TrustSignaturePresent, "", 0)),
 			mkSkill("bar", "user", "yellow", nil), // no bundle = unverified
 		},
 	}
@@ -66,7 +66,7 @@ func TestCompute_OneUnverified_Exit2(t *testing.T) {
 func TestCompute_OneBroken_Exit3(t *testing.T) {
 	inv := &model.Inventory{
 		Skills: []model.SkillDescriptor{
-			mkSkill("foo", "user", "green", mkBundle(scanner.TrustVerified, "", 0)),
+			mkSkill("foo", "user", "green", mkBundle(scanner.TrustSignaturePresent, "", 0)),
 			mkSkill("hostile", "user", "green", mkBundle(scanner.TrustBroken, "digest mismatch", 0)),
 			mkSkill("bar", "user", "yellow", nil),
 		},
@@ -83,7 +83,7 @@ func TestCompute_OneBroken_Exit3(t *testing.T) {
 func TestCompute_BelowMin(t *testing.T) {
 	inv := &model.Inventory{
 		Skills: []model.SkillDescriptor{
-			mkSkill("yellow-skill", "user", "yellow", mkBundle(scanner.TrustVerified, "", 0)),
+			mkSkill("yellow-skill", "user", "yellow", mkBundle(scanner.TrustSignaturePresent, "", 0)),
 		},
 	}
 	r := Compute(inv, MinGreen)
@@ -101,8 +101,8 @@ func TestCompute_BelowMin(t *testing.T) {
 func TestCompute_NoFloorPassesEverything(t *testing.T) {
 	inv := &model.Inventory{
 		Skills: []model.SkillDescriptor{
-			mkSkill("yellow-skill", "user", "yellow", mkBundle(scanner.TrustVerified, "", 0)),
-			mkSkill("red-skill", "user", "red", mkBundle(scanner.TrustVerified, "", 0)),
+			mkSkill("yellow-skill", "user", "yellow", mkBundle(scanner.TrustSignaturePresent, "", 0)),
+			mkSkill("red-skill", "user", "red", mkBundle(scanner.TrustSignaturePresent, "", 0)),
 		},
 	}
 	r := Compute(inv, MinAny)
@@ -116,7 +116,7 @@ func TestCompute_NonSkillTypesExcluded(t *testing.T) {
 		Skills: []model.SkillDescriptor{
 			{Name: "agent-thing", Type: model.SkillTypeAgent, Tier: "user"},
 			{Name: "mcp-thing", Type: model.SkillTypeMCPServer, Tier: "user"},
-			mkSkill("real-skill", "user", "green", mkBundle(scanner.TrustVerified, "", 0)),
+			mkSkill("real-skill", "user", "green", mkBundle(scanner.TrustSignaturePresent, "", 0)),
 		},
 	}
 	r := Compute(inv, MinGreen)
@@ -135,7 +135,7 @@ func TestCompute_TierlessSkillsExcluded(t *testing.T) {
 				Tier:        "",
 				Frontmatter: &model.Frontmatter{Name: "legacy"},
 			},
-			mkSkill("real", "user", "green", mkBundle(scanner.TrustVerified, "", 0)),
+			mkSkill("real", "user", "green", mkBundle(scanner.TrustSignaturePresent, "", 0)),
 		},
 	}
 	r := Compute(inv, MinGreen)
@@ -147,7 +147,7 @@ func TestCompute_TierlessSkillsExcluded(t *testing.T) {
 func TestCompute_VerdictOrderingBrokenFirst(t *testing.T) {
 	inv := &model.Inventory{
 		Skills: []model.SkillDescriptor{
-			mkSkill("zebra", "user", "green", mkBundle(scanner.TrustVerified, "", 0)),
+			mkSkill("zebra", "user", "green", mkBundle(scanner.TrustSignaturePresent, "", 0)),
 			mkSkill("alpha", "user", "green", mkBundle(scanner.TrustBroken, "digest mismatch", 0)),
 			mkSkill("middle", "user", "yellow", nil),
 		},

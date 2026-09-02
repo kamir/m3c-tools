@@ -49,8 +49,8 @@ func makeBundleDir(t *testing.T, tierRoot, name string, withBundle, validSig boo
 	}
 }
 
-// TestAnnotateTrust_Verified — sibling .skb + correct-size sig → verified.
-func TestAnnotateTrust_Verified(t *testing.T) {
+// TestAnnotateTrust_SignaturePresent — sibling .skb + correct-size sig → verified.
+func TestAnnotateTrust_SignaturePresent(t *testing.T) {
 	tmp := t.TempDir()
 	makeBundleDir(t, tmp, "fetch-contract", true, true)
 
@@ -69,7 +69,7 @@ func TestAnnotateTrust_Verified(t *testing.T) {
 	if sk.Bundle == nil {
 		t.Fatal("Bundle block missing — AnnotateTrust didn't run?")
 	}
-	if sk.Bundle.TrustChain != TrustVerified {
+	if sk.Bundle.TrustChain != TrustSignaturePresent {
 		t.Errorf("trust_chain = %q, want verified; err=%q", sk.Bundle.TrustChain, sk.Bundle.VerifierError)
 	}
 	if !sk.Bundle.Signed {
