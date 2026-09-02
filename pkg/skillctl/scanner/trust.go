@@ -33,11 +33,18 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/model"
 )
 
-// trust_chain values.
+// trust_chain values recorded by AnnotateTrust (the scan/audit DISPLAY layer).
+//
+// IMPORTANT: TrustSignaturePresent means only that a detached signature file of
+// the correct length (64-byte ed25519) sits next to the .skb — it is NOT a
+// cryptographic verification. The authenticating check (recompute the digest,
+// verify the author/registry/governance signature chain against pinned roots)
+// is pkg/skillctl/verify (`skillctl verify`), not this scanner. The string
+// value stays "verified" for output/JSON compatibility.
 const (
-	TrustVerified   = "verified"
-	TrustUnverified = "unverified"
-	TrustBroken     = "broken"
+	TrustSignaturePresent = "verified" // sig file present + 64-byte length (NOT crypto-verified)
+	TrustUnverified       = "unverified"
+	TrustBroken           = "broken"
 )
 
 // AnnotateTrust walks every claude_code_skill in the inventory and
@@ -123,7 +130,7 @@ func annotateSkillTrust(sk *model.SkillDescriptor) *model.BundleAttestation {
 		BundleDigest:           "sha256:" + digest,
 		Signed:                 true,
 		RegisteredInLocalTrust: false, // populated only when a registry round-trip is run
-		TrustChain:             TrustVerified,
+		TrustChain:             TrustSignaturePresent,
 	}
 }
 
