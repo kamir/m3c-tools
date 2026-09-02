@@ -20,14 +20,18 @@ on:
         required: false
         default: "false"
 
+# CD-15: least privilege by default — the whole workflow is read-only; the single
+# job that pushes archive tags + deletes merged branches elevates per-job below.
 permissions:
-  contents: write   # to push tags + delete branches
-  pull-requests: read
+  contents: read
 
 jobs:
   archive:
     name: Archive merged branches
     runs-on: ubuntu-latest
+    permissions:
+      contents: write      # push archive/<branch> tags + delete merged branches
+      pull-requests: read  # gh pr list --state all
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

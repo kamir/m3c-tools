@@ -6,14 +6,19 @@ name: Pin Guard (supply-chain)
 #
 #   1. CD-T1  every remote `uses:` must be pinned to a full 40-hex commit SHA.
 #   2. CD-T2  no `@latest` ref may appear in any workflow (pin tool versions).
-#   3. CD-T6  every workflow must declare a top-level `permissions:` block.
+#   3. CD-T6  every workflow must declare a top-level `permissions:` block AND
+#             that block must be READ-ONLY (least privilege) — no `write-all`,
+#             no top-level `: write` scope; writes are granted per-job.
 #   4. CD-T7  every actions/upload-artifact step must set `retention-days:`.
 #
 # Self-reference: this file necessarily contains the tokens it searches for
-# ("uses:", "@latest", "upload-artifact"). The uses/retention checks anchor to a
-# real YAML `uses:` key (optional "- " then `uses:` at line start) after
-# stripping comments, so the grep/awk PROGRAM lines here (which have other
-# leading text) never match. The @latest check excludes this file by name.
+# ("uses:", "@latest", "upload-artifact", and now "write-all"/": write"). The
+# uses/retention checks anchor to a real YAML `uses:` key (optional "- " then
+# `uses:` at line start) after stripping comments, so the grep/awk PROGRAM lines
+# here (which have other leading text) never match. The @latest check excludes
+# this file by name. The least-privilege check extracts ONLY the top-level
+# `permissions:` block (up to the next column-0 key), so the `write-all`/`: write`
+# tokens inside this job's `run:` program are never in scope.
 
 on:
   push:
@@ -81,19 +86,49 @@ jobs:
           fi
           echo "OK: no @latest refs."
 
-      # (3) CD-T6 — every workflow declares a top-level permissions block.
-      - name: Guard — top-level permissions present
+      # (3) CD-T6 — every workflow declares a top-level permissions block AND that
+      # block is LEAST-PRIVILEGE: read-only. Presence alone is not enough — a
+      # workflow with `permissions: write-all` (or `contents: write`) at the top
+      # level would hand every job, including the one running third-party action
+      # code, a write-scoped GITHUB_TOKEN. Writes MUST be granted per-job. This
+      # check extracts ONLY the top-level block (the `^permissions:` line plus its
+      # indented children, up to the next column-0 key) so legitimate PER-JOB
+      # `permissions: { contents: write, id-token: write }` (indented under a job)
+      # is never examined. Allowed top-level values: `read`, `none`, `{}`,
+      # `read-all`. Rejected: `write-all` and any `: write` scope.
+      - name: Guard — top-level permissions present AND read-only (least privilege)
         run: |
           set -euo pipefail
-          missing=""
+          bad=""
           for f in .github/workflows/*.yml; do
-            grep -qE '^permissions:' "$f" || missing="$missing $f"
+            if ! grep -qE '^permissions:' "$f"; then
+              bad="$bad$f: missing a top-level 'permissions:' block"$'\n'
+              continue
+            fi
+            # Extract the top-level permissions block only (stop at the next
+            # column-0 YAML key like `env:`/`jobs:`), stripping trailing comments.
+            block="$(awk '
+              /^permissions:/ { inblk=1; print; next }
+              inblk {
+                if ($0 ~ /^[^[:space:]#]/) { inblk=0 }
+                else print
+              }
+            ' "$f" | sed 's/#.*$//')"
+            # (a) write-all at the top level is never allowed.
+            if printf '%s\n' "$block" | grep -qE 'write-all'; then
+              bad="$bad$f: top-level 'permissions: write-all' is forbidden — grant writes per-job"$'\n'
+            fi
+            # (b) any top-level write scope (contents: write, id-token: write, …).
+            if printf '%s\n' "$block" | grep -qE ':[[:space:]]*write([[:space:]]|$)'; then
+              bad="$bad$f: top-level permissions grants a write scope — move writes to a per-job 'permissions:' block"$'\n'
+            fi
           done
-          if [ -n "$missing" ]; then
-            echo "::error::Workflow(s) missing a top-level 'permissions:' block (CD-T6):$missing"
+          if [ -n "$bad" ]; then
+            echo "::error::Top-level permissions must be present and read-only (CD-T6):"
+            printf '%s' "$bad"
             exit 1
           fi
-          echo "OK: every workflow declares a top-level permissions block."
+          echo "OK: every workflow declares a read-only top-level permissions block (writes are per-job)."
 
       # (4) CD-T7 — every upload-artifact step sets retention-days.
       - name: Guard — upload-artifact steps set retention-days

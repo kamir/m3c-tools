@@ -13,14 +13,39 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKDIR="/tmp/portaudio-universal-build"
 PA_VERSION="pa_stable_v190700_20210406"
 # SHA-256 of the immutable upstream release tarball (matches the Homebrew formula
-# and MacPorts). The download below is verified against this and fails closed on
+# and MacPorts). Every download below is verified against this and fails closed on
 # mismatch — integrity does not depend on which host served the bytes.
 PA_SHA256="47efbf42c77c19a05d22e627d42873e991ec0c1357219c0d74ce6a2948cb2def"
-# The canonical host files.portaudio.com went offline (DNS no longer resolves),
-# which broke this build for everyone. Try it first in case it returns, then fall
-# back to the Wayback Machine's immutable snapshot of the exact same tarball. The
-# `id_` modifier makes Wayback serve the original raw bytes (no HTML rewriting).
+
+# CD-16: an ORG-CONTROLLED mirror is the PRIMARY source, so this build does not
+# depend on infrastructure we do not control. The canonical host
+# files.portaudio.com went offline (DNS no longer resolves), which broke the build
+# for everyone; the Wayback Machine is a best-effort community archive, not an SLA
+# we can rely on for a release build. Host the exact upstream tarball (~1.5 MB) as
+# a GitHub Release asset on our own repo and point PA_MIRROR at it. The SHA-256 gate
+# makes the mirror's integrity independent of the source.
+#
+# >>> ONE-TIME OPERATOR/INFRA STEP (the default URL 404s until this is done) <<<
+#   The PA_MIRROR default below is a documented PLACEHOLDER. Upload the tarball once:
+#     curl -fL -o "${PA_VERSION}.tgz" \
+#       "https://web.archive.org/web/20210601000000id_/http://files.portaudio.com/archives/${PA_VERSION}.tgz"
+#     echo "${PA_SHA256}  ${PA_VERSION}.tgz" | shasum -a 256 -c -   # verify before publishing
+#     gh release create portaudio-vendor "${PA_VERSION}.tgz" \
+#       --repo kamir/m3c-tools --title "Vendored build deps" \
+#       --notes "PortAudio ${PA_VERSION}.tgz mirror — sha256 ${PA_SHA256}"
+#   The placeholder path already follows gh's asset-URL scheme, so once the
+#   'portaudio-vendor' release + asset exist the default resolves with NO code
+#   change. Override at will:  PA_MIRROR=https://my.host/pa.tgz bash scripts/build-portaudio-universal.sh
+#   Until the asset is uploaded the build still succeeds via the upstream + Wayback
+#   fallbacks below (the mirror just 404s and the loop falls through).
+PA_MIRROR="${PA_MIRROR:-https://github.com/kamir/m3c-tools/releases/download/portaudio-vendor/${PA_VERSION}.tgz}"
+
+# Ordered sources: the org-controlled mirror FIRST, then the (currently-dead)
+# canonical upstream in case it returns, then the Wayback snapshot as a last
+# resort. The `id_` modifier makes Wayback serve the original raw bytes (no HTML
+# rewriting). Every source feeds the SAME SHA-256 gate below.
 PA_URLS=(
+    "${PA_MIRROR}"
     "https://files.portaudio.com/archives/${PA_VERSION}.tgz"
     "https://web.archive.org/web/20210601000000id_/http://files.portaudio.com/archives/${PA_VERSION}.tgz"
 )

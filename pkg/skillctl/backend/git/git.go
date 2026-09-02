@@ -145,21 +145,31 @@ func gitRemoteFromSpec(spec, scheme string) (string, error) {
 // wire-format, and (for writes) pushes. Correct and simple for v1; a cached
 // clone + fetch is the efficiency follow-up.
 type gitBackend struct {
-	remote    string // clean remote URL (NO secret) — used for Describe/display AND git argv
-	scheme    string // "gitlab" | "github"
-	token     string // optional write token; supplied to git via an env http.extraHeader ONLY (never argv/URL/.git/config/error strings)
-	tokenUser string // "" => "oauth2" (works for a GitLab project/personal access token)
+	remote string // clean remote URL (NO secret) — used for Describe/display AND git argv
+	scheme string // "gitlab" | "github"
+	// Write-capable credential (Publish/attest/revoke push). Supplied to git via a
+	// URL-scoped env http.extraHeader ONLY (never argv/URL/.git/config/error).
+	// "" => "oauth2" for tokenUser (works for a GitLab project/personal token).
+	token     string
+	tokenUser string
+	// CD-13: read-only credential for a verifying PULL (Fetch/List/Resolve/Events).
+	// Resolved via ModeRead; equals the write token when the operator provisioned
+	// only one (backward-compatible). authEnvForMode selects the tier per op.
+	readToken string
+	readUser  string
 }
 
 func newGitBackend(remote, scheme string) *gitBackend {
 	return &gitBackend{remote: remote, scheme: scheme}
 }
 
-// applyCreds resolves a token for this backend's host via opts.Creds (read-only,
-// SPEC-0356 D5) and stores it for out-of-band header injection (authEnv) — never
-// in the URL. Best-effort for the no-token case: no creds / a resolve error just
-// leaves the backend anonymous (ambient git credentials or a public repo still
-// work). The token is NEVER stored in b.remote and NEVER surfaced by Describe.
+// applyCreds resolves this backend's host credentials via opts.Creds (read-only,
+// SPEC-0356 D5) and stores them for out-of-band, URL-scoped header injection
+// (authEnvForMode) — never in the URL. CD-13: it resolves the write tier AND the
+// optional read-only tier separately, so a verifying pull can use a narrower
+// token. Best-effort for the no-token case: no creds / a resolve error just leaves
+// that tier anonymous (ambient git credentials or a public repo still work). No
+// token is EVER stored in b.remote or surfaced by Describe.
 //
 // CD-03 / WIN-12 (CD-T8 / WIN-T10): it REFUSES (returns an error) when a resolved
 // write token would ride cleartext HTTP to a host that is not provably
@@ -179,16 +189,28 @@ func (b *gitBackend) applyCreds(opts artifact.OpenOptions) error {
 	if u, err := url.Parse(b.remote); err == nil {
 		host = u.Host
 	}
-	c, err := opts.Creds.Credential(context.Background(), b.scheme, host)
-	if err != nil || c.Token == "" {
-		return nil // no token → nothing to protect; stay anonymous
+	// CD-13: resolve the write tier and the OPTIONAL read tier separately. A
+	// resolve error or an empty token for a tier just leaves that tier anonymous
+	// (ambient git credentials or a public repo still work). A single-token
+	// operator's ModeRead falls back to the write token inside the resolver, so
+	// readToken may equal token — that is the backward-compatible case.
+	if wc, werr := opts.Creds.Credential(context.Background(), b.scheme, host, artifact.ModeWrite); werr == nil && wc.Token != "" {
+		b.token, b.tokenUser = wc.Token, wc.User
 	}
-	if strings.HasPrefix(b.remote, "http://") && !netguard.IsLoopbackOrPrivate(host) {
-		fmt.Fprintf(os.Stderr, "skillctl: SECURITY: REFUSING to attach a %s write token over cleartext HTTP to non-loopback host %q — an on-path attacker would capture it. Use https, or a loopback/RFC1918 registry (M3C_GIT_HTTP is for LAN/test only).\n", b.scheme, host)
+	if rc, rerr := opts.Creds.Credential(context.Background(), b.scheme, host, artifact.ModeRead); rerr == nil && rc.Token != "" {
+		b.readToken, b.readUser = rc.Token, rc.User
+	}
+	// CD-03/WIN-12 egress guard: refuse if ANY resolved token would ride cleartext
+	// HTTP to a host that is not provably loopback/RFC1918 — base64(user:token) in
+	// an Authorization header is encoding, not encryption, so an on-path attacker
+	// would capture it. HTTPS and loopback/private HTTP are fine; a token-less
+	// (anonymous) http fetch of a public repo is the caller's choice.
+	if (b.token != "" || b.readToken != "") &&
+		strings.HasPrefix(b.remote, "http://") && !netguard.IsLoopbackOrPrivate(host) {
+		fmt.Fprintf(os.Stderr, "skillctl: SECURITY: REFUSING to attach a %s token over cleartext HTTP to non-loopback host %q — an on-path attacker would capture it. Use https, or a loopback/RFC1918 registry (M3C_GIT_HTTP is for LAN/test only).\n", b.scheme, host)
+		b.token, b.tokenUser, b.readToken, b.readUser = "", "", "", ""
 		return fmt.Errorf("git: refusing to send credential over plain HTTP to non-loopback host %q; use https or unset M3C_GIT_HTTP", host)
 	}
-	b.token = c.Token
-	b.tokenUser = c.User
 	return nil
 }
 
@@ -204,36 +226,76 @@ func (b *gitBackend) authUser() string {
 	return "oauth2"
 }
 
-// authEnv injects the write token as an HTTP Authorization header via git's env
-// config — NEVER in the clone/push argv or the on-disk .git/config (SPEC-0356
-// §6.2; challenge-gate fix for the token-in-URL / token-in-error leaks). Returns
-// nil when anonymous. GIT_CONFIG_* is process-scoped and not persisted; each
-// git() call targets a single controlled remote, so an unscoped header is safe.
-func (b *gitBackend) authEnv() []string {
-	if b.token == "" {
+// tokenFor returns the (user, token) for the given access mode. CD-13: ModeRead
+// uses the read-only tier when the operator provisioned one; ModeWrite uses the
+// write tier. A read with no dedicated read token falls back to the write token,
+// which is exactly the single-token-operator case (readToken == token).
+func (b *gitBackend) tokenFor(mode artifact.AccessMode) (user, token string) {
+	if mode == artifact.ModeRead && b.readToken != "" {
+		u := b.readUser
+		if u == "" {
+			u = "oauth2"
+		}
+		return u, b.readToken
+	}
+	return b.authUser(), b.token
+}
+
+// authEnvForMode injects the mode-appropriate credential as an HTTP Authorization
+// header via git's env config — NEVER in the clone/push argv or the on-disk
+// .git/config (SPEC-0356 §6.2; challenge-gate fix for the token-in-URL /
+// token-in-error leaks). Returns nil when anonymous for this mode.
+//
+// CD-14: the header is SCOPED to this exact remote URL via `http.<remote>.extraHeader`
+// (git applies it by longest-prefix urlmatch), and `http.followRedirects=false` is
+// forced whenever a token is attached. So if the auth path is redirected to a
+// DIFFERENT host, git (a) would not follow the redirect at all, and (b) even if it
+// did, the URL-scoped header would not match the redirect target — the credential
+// is DROPPED rather than resent cross-host. GIT_CONFIG_* is process-scoped and not
+// persisted.
+func (b *gitBackend) authEnvForMode(mode artifact.AccessMode) []string {
+	user, token := b.tokenFor(mode)
+	if token == "" {
 		return nil
 	}
-	hdr := "Authorization: Basic " + base64.StdEncoding.EncodeToString([]byte(b.authUser()+":"+b.token))
+	hdr := "Authorization: Basic " + base64.StdEncoding.EncodeToString([]byte(user+":"+token))
 	return []string{
-		"GIT_CONFIG_COUNT=1",
-		"GIT_CONFIG_KEY_0=http.extraHeader",
+		"GIT_CONFIG_COUNT=2",
+		// URL-scoped: only a request whose URL is prefixed by b.remote gets the header.
+		"GIT_CONFIG_KEY_0=http." + b.remote + ".extraHeader",
 		"GIT_CONFIG_VALUE_0=" + hdr,
+		// Never chase a redirect while a credential is attached (cross-host leak guard).
+		"GIT_CONFIG_KEY_1=http.followRedirects",
+		"GIT_CONFIG_VALUE_1=false",
 	}
 }
 
+// authEnv is the WRITE-mode credential env — Publish's push and the redact/
+// regression surface use it.
+func (b *gitBackend) authEnv() []string { return b.authEnvForMode(artifact.ModeWrite) }
+
 // redact strips credential material from a string before it is returned in an
-// error: URL userinfo, and the token itself (raw + base64). This closes the
-// error-path token leak the challenge gate reproduced.
+// error: URL userinfo, and BOTH tokens (raw + base64, each with its own user).
+// This closes the error-path token leak the challenge gate reproduced.
 func (b *gitBackend) redact(s string) string {
 	if s == "" {
 		return s
 	}
 	s = userinfoRe.ReplaceAllString(s, "://")
-	if b.token != "" {
-		s = strings.ReplaceAll(s, b.token, "[REDACTED]")
-		enc := base64.StdEncoding.EncodeToString([]byte(b.authUser() + ":" + b.token))
+	scrub := func(user, token string) {
+		if token == "" {
+			return
+		}
+		s = strings.ReplaceAll(s, token, "[REDACTED]")
+		enc := base64.StdEncoding.EncodeToString([]byte(user + ":" + token))
 		s = strings.ReplaceAll(s, enc, "[REDACTED]")
 	}
+	scrub(b.authUser(), b.token)
+	ru := b.readUser
+	if ru == "" {
+		ru = "oauth2"
+	}
+	scrub(ru, b.readToken)
 	return s
 }
 
@@ -263,7 +325,21 @@ func (b *gitBackend) Close() error { return nil }
 
 // --- git exec plumbing ---
 
+// git runs a LOCAL git subcommand (no network) against an already-cloned dir —
+// add/commit/tag/tag -l. These need no credential, so the token is NEVER attached
+// to them (least exposure; CD-13/CD-14 keep auth on the two network ops only).
 func (b *gitBackend) git(dir string, args ...string) (string, error) {
+	return b.gitEnv(nil, dir, args...)
+}
+
+// gitAuth runs a NETWORK git subcommand (clone/push) with the mode-appropriate,
+// URL-scoped, redirect-safe credential env (CD-13 + CD-14). Reads pass ModeRead,
+// writes pass ModeWrite.
+func (b *gitBackend) gitAuth(mode artifact.AccessMode, dir string, args ...string) (string, error) {
+	return b.gitEnv(b.authEnvForMode(mode), dir, args...)
+}
+
+func (b *gitBackend) gitEnv(extra []string, dir string, args ...string) (string, error) {
 	gitBin, err := resolveGit()
 	if err != nil {
 		return "", err
@@ -277,7 +353,7 @@ func (b *gitBackend) git(dir string, args ...string) (string, error) {
 		"GIT_AUTHOR_NAME=skillctl", "GIT_AUTHOR_EMAIL=skillctl@m3c",
 		"GIT_COMMITTER_NAME=skillctl", "GIT_COMMITTER_EMAIL=skillctl@m3c",
 	)
-	cmd.Env = append(cmd.Env, b.authEnv()...)
+	cmd.Env = append(cmd.Env, extra...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		red := b.redact(string(out))
@@ -287,8 +363,10 @@ func (b *gitBackend) git(dir string, args ...string) (string, error) {
 	return string(out), nil
 }
 
-// withClone clones the remote into a throwaway dir and runs fn against it.
-func (b *gitBackend) withClone(fn func(dir string) error) error {
+// withClone clones the remote into a throwaway dir and runs fn against it. mode
+// selects the credential tier used for the network clone: read ops pass ModeRead,
+// Publish passes ModeWrite (its subsequent push also uses ModeWrite).
+func (b *gitBackend) withClone(mode artifact.AccessMode, fn func(dir string) error) error {
 	tmp, err := os.MkdirTemp("", "skillctl-git-")
 	if err != nil {
 		return err
@@ -305,7 +383,7 @@ func (b *gitBackend) withClone(fn func(dir string) error) error {
 	// path) as a symlink that our marker/attribute read+write would follow to
 	// escape the clone root. The format.go lstat guards are the belt to this
 	// suspenders. Our repos never contain legitimate symlinks.
-	if _, err := b.git("", "-c", "core.symlinks=false", "clone", "--quiet", b.remote, dir); err != nil {
+	if _, err := b.gitAuth(mode, "", "-c", "core.symlinks=false", "clone", "--quiet", b.remote, dir); err != nil {
 		return err
 	}
 	// SPEC-0356 §6a: refuse a repo whose wire-format version this build cannot
@@ -350,7 +428,7 @@ func (b *gitBackend) Publish(ctx context.Context, req artifact.PublishRequest) (
 	}
 
 	var res *artifact.PublishResult
-	err := b.withClone(func(dir string) error {
+	err := b.withClone(artifact.ModeWrite, func(dir string) error {
 		tag := tagName(name, ver)
 
 		// Admit is idempotent on the tag: an already-published version is a safe
@@ -407,10 +485,10 @@ func (b *gitBackend) Publish(ctx context.Context, req artifact.PublishRequest) (
 			}
 			// Atomic: branch + tag land together or neither does — no
 			// half-published skill (blob present, tag missing) on a partial push.
-			if _, err := b.git(dir, "push", "--quiet", "--atomic", "origin", "HEAD", "refs/tags/"+tag); err != nil {
+			if _, err := b.gitAuth(artifact.ModeWrite, dir, "push", "--quiet", "--atomic", "origin", "HEAD", "refs/tags/"+tag); err != nil {
 				return err
 			}
-		} else if _, err := b.git(dir, "push", "--quiet", "origin", "HEAD"); err != nil {
+		} else if _, err := b.gitAuth(artifact.ModeWrite, dir, "push", "--quiet", "origin", "HEAD"); err != nil {
 			return err
 		}
 		res = &artifact.PublishResult{Ref: b.ref(name, ver, dig), NativeID: tag, Transport: "git"}
@@ -430,7 +508,7 @@ func (b *gitBackend) ref(name, ver, dig string) artifact.ArtifactRef {
 
 func (b *gitBackend) List(ctx context.Context, filter artifact.ListFilter, page artifact.Page) (*artifact.Listing, error) {
 	var out *artifact.Listing
-	err := b.withClone(func(dir string) error {
+	err := b.withClone(artifact.ModeRead, func(dir string) error {
 		skillsDir := filepath.Join(dir, "skills")
 		nameEntries, err := os.ReadDir(skillsDir)
 		if err != nil {
@@ -490,7 +568,7 @@ func (b *gitBackend) List(ctx context.Context, filter artifact.ListFilter, page 
 
 func (b *gitBackend) Resolve(ctx context.Context, q artifact.RefQuery) (*artifact.ArtifactRef, error) {
 	var ref *artifact.ArtifactRef
-	err := b.withClone(func(dir string) error {
+	err := b.withClone(artifact.ModeRead, func(dir string) error {
 		if q.Digest != "" {
 			if err := validateDigest(q.Digest); err != nil {
 				return err
@@ -545,7 +623,7 @@ func (b *gitBackend) Resolve(ctx context.Context, q artifact.RefQuery) (*artifac
 
 func (b *gitBackend) Fetch(ctx context.Context, ref artifact.ArtifactRef) ([]byte, error) {
 	var data []byte
-	err := b.withClone(func(dir string) error {
+	err := b.withClone(artifact.ModeRead, func(dir string) error {
 		name, ver := ref.Name, ref.Version
 		if name == "" || ver == "" {
 			if err := validateDigest(ref.Digest); err != nil {
@@ -592,7 +670,7 @@ func (b *gitBackend) Fetch(ctx context.Context, ref artifact.ArtifactRef) ([]byt
 // re-canonicalizes from the parsed map, so the on-disk indentation is irrelevant.
 func (b *gitBackend) Events(ctx context.Context, filter artifact.ListFilter, page artifact.Page) (*artifact.EventPage, error) {
 	var out *artifact.EventPage
-	err := b.withClone(func(dir string) error {
+	err := b.withClone(artifact.ModeRead, func(dir string) error {
 		digs, err := b.targetDigestHexes(dir, filter.Name)
 		if err != nil {
 			return err

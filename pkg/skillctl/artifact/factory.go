@@ -107,11 +107,37 @@ type OpenOptions struct {
 	HTTPClient *http.Client
 }
 
+// AccessMode distinguishes a read-only credential resolution (a verifying PULL:
+// Fetch/List/Resolve/Events) from a write resolution (Publish/attest/revoke — a
+// push). CD-13: the mode lets a resolver hand back a NARROWER, read-only token on
+// the read path when the operator provisioned one, so a verifying pull never
+// transmits a write-scoped registry token. A resolver that ignores the mode stays
+// correct — it just returns the same token for both — so the interface remains
+// backward-compatible.
+type AccessMode int
+
+const (
+	// ModeRead is a verifying pull; the least-privilege (read-only) token is
+	// preferred when one exists.
+	ModeRead AccessMode = iota
+	// ModeWrite is a publish/attest/revoke; a write-capable token is required.
+	ModeWrite
+)
+
+// String renders the mode for logs/errors.
+func (m AccessMode) String() string {
+	if m == ModeWrite {
+		return "write"
+	}
+	return "read"
+}
+
 // CredentialSource resolves backend credentials keyed on scheme+host (the
-// git-credential.<url> / npm-per-registry-token shape). Read-only by contract:
-// implementations MUST NOT write or delete any credential store.
+// git-credential.<url> / npm-per-registry-token shape) and an access mode
+// (read vs write — CD-13). Read-only by contract: implementations MUST NOT write
+// or delete any credential store.
 type CredentialSource interface {
-	Credential(ctx context.Context, scheme, host string) (Credential, error)
+	Credential(ctx context.Context, scheme, host string, mode AccessMode) (Credential, error)
 }
 
 // Credential is one resolved credential. Value is the raw secret; the caller
