@@ -128,22 +128,3 @@ type EventRecord struct {
 	Envelope   map[string]any // the raw signed event, for re-verification
 }
 
-// RoomSelector maps 1:1 to registry.RoomShareSelector (SPEC-0096).
-type RoomSelector struct {
-	SkillName string
-	Digest    string
-	All       bool
-}
-
-// RoomResult / RoomMatch are the neutral room-operation results.
-type RoomResult struct{ ItemIDs, Skills []string }
-type RoomMatch struct{ ItemIDs, Skills []string }
-
-// Identity is a neutral mirror of registry.Identity (the pubkey-directory row),
-// defined here so this package stays a leaf. IdentityDirectory backends convert
-// their native identity type into this.
-type Identity struct {
-	ID         string // canonical identity id, e.g. "id:kamir@m3c"
-	PubkeyB64  string // base64 of the raw 32-byte ed25519 public key
-	AuthSource string // "manual" | "github-oidc" | "dsm-sso"
-}

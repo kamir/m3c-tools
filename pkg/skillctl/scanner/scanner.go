@@ -110,7 +110,11 @@ func (s *Scanner) Scan() (*model.Inventory, error) {
 	// Run duplicate detection (shared by both modes).
 	// SPEC-0189 §6: cross-reference each skill with sibling-.skb trust state.
 	if s.WithTrust {
-		_ = AnnotateTrust(inv)
+		if err := AnnotateTrust(inv); err != nil {
+			// Best-effort: the scan still returns, but a failure to cross-reference
+			// sibling-.skb trust state must not be silent in a trust tool.
+			fmt.Fprintf(os.Stderr, "skillctl scan: trust annotation incomplete: %v\n", err)
+		}
 	}
 
 	hasher.DetectDuplicates(inv.Skills)

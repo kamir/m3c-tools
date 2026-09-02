@@ -266,11 +266,6 @@ func renderReplayTable(w io.Writer, events []replayEvent, colorize bool) {
 		last = e.Timestamp
 		typeCounts[e.Type]++
 
-		typeStr := e.Type
-		if colorize {
-			typeStr = colorForType(e.Type) + typeStr + ansiReset
-		}
-
 		codeOrExit := ""
 		switch {
 		case e.RefusalCode != "":
@@ -292,7 +287,6 @@ func renderReplayTable(w io.Writer, events []replayEvent, colorize bool) {
 		}
 		fmt.Fprintf(w, "%-22s  %s  %-24s  %-14s  %s\n",
 			truncString(e.Timestamp, 22), typeCol, skillTrunc, tokTrunc, codeOrExit)
-		_ = typeStr // keep variable used for clarity
 	}
 
 	// Footer.

@@ -505,8 +505,11 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	// SPEC-0279 R3 / FR-0045 D4 — FRESHNESS FAIL-CLOSED. If the revocation snapshot
 	// is too stale to trust (per the trust-root max_staleness), refuse a high-risk
 	// skill invocation rather than run against a revocation list we can no longer
-	// prove is current. This closes the fail-OPEN gap above where a >TTL sweep cache
-	// silently skips the revocation check. Placed BEFORE the verdict-cache fast path
+	// prove is current. This narrows the fail-OPEN gap above where a >TTL sweep cache
+	// silently skips the revocation check — but only when configured: it is a no-op
+	// unless a max_staleness policy is set AND a signed anchor exists (see below), so
+	// on a default host the >TTL stale-cache gap is not closed by this control alone.
+	// Placed BEFORE the verdict-cache fast path
 	// so a cached allow cannot bypass a stale kill-switch. OPT-IN: a no-op unless a
 	// max_staleness policy is set AND a signed HEAD/checkpoint anchor exists.
 	if stale, reason, msg := revocationSnapshotStale(home, skill); stale {

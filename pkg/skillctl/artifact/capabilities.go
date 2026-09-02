@@ -2,10 +2,10 @@ package artifact
 
 // Capabilities is a backend's declarative statement of what it can do. Callers
 // branch on these flags BEFORE offering a CLI flag or calling an optional
-// sub-interface — never by probing a method and catching an error. The flags
-// that mirror an optional interface (Rooms ⇔ Roomer, IdentityDir ⇔
-// IdentityDirectory, ServerEventLog ⇔ GovernanceLog) MUST agree with the type
-// assertion; that invariant is what the conformance suite checks.
+// sub-interface — never by probing a method and catching an error. The flag
+// that mirrors an optional interface (ServerEventLog ⇔ GovernanceLog) MUST
+// agree with the type assertion; that invariant is what the conformance suite
+// checks.
 type Capabilities struct {
 	// Lifecycle events this backend can PUBLISH.
 	CanAdmit   bool
@@ -23,10 +23,6 @@ type Capabilities struct {
 
 	// Explicit "latest" semantics — designs out the compareSemver guesswork.
 	LatestPolicy LatestPolicy
-
-	// Optional-interface mirrors (must equal the type assertions).
-	Rooms       bool // ⇔ Roomer
-	IdentityDir bool // ⇔ IdentityDirectory
 
 	// ClaimCheck is true when the bundle blob is stored out-of-line (MinIO
 	// claim-check / OCI blob / git Release asset) rather than inline.

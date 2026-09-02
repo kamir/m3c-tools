@@ -81,7 +81,6 @@ func (b *ociBackend) Describe() artifact.Descriptor {
 			HonoursSince:   true,                     // Events applies ListFilter.Since on occurred_at
 			Governance:     artifact.GovFromEventLog, // newest signed attestation
 			LatestPolicy:   artifact.LatestSemverMax, // highest semver among non-revoked
-			Rooms:          false,                    // no co-learning rooms
 			ClaimCheck:     false,                    // the .skb IS the OCI layer blob (no out-of-line store)
 		},
 	}

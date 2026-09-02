@@ -159,10 +159,8 @@ func runPinStatus(args []string, stdout, stderr io.Writer) int {
 
 	data, readErr := os.ReadFile(path)
 	var res pin.StatusResult
-	absent := false
 	if readErr != nil {
 		if os.IsNotExist(readErr) {
-			absent = true
 			res = pin.StatusResult{Level: pin.LevelAbsent, Findings: []string{
 				"no managed-settings file at " + path + " — the gate is ADVISORY (a user can delete the user-level hook). Run `skillctl pin install`.",
 			}}
@@ -201,7 +199,6 @@ func runPinStatus(args []string, stdout, stderr io.Writer) int {
 	if res.Pinned() {
 		return pinExitOK
 	}
-	_ = absent
 	return pinExitNotPinned
 }
 

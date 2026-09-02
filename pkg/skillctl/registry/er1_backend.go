@@ -47,7 +47,6 @@ func (b *ER1Backend) Describe() artifact.Descriptor {
 			HonoursSince:   true,                      // Events applies ListFilter.Since on occurred_at
 			Governance:     artifact.GovFromEventLog,  // newest signed attestation
 			LatestPolicy:   artifact.LatestMostRecent, // admit-time newest (NOT semver-max — a real ER1↔git difference)
-			Rooms:          false,                     // TODO: expose er1_room.go via Roomer (rooms are an ER1-only feature)
 			ClaimCheck:     false,                     // inline-only today; the MinIO ClaimCheckFn seam is not wired
 		},
 	}
