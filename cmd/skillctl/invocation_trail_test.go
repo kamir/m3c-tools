@@ -107,6 +107,57 @@ func TestReadAndVerifyTrail_DetectsReplay(t *testing.T) {
 	}
 }
 
+// TestReadAndVerifyTrail_HashChainDetectsMiddleDeletion is the IS-T8 acceptance
+// test: append three signed records, delete the MIDDLE line, and assert the
+// hash-chain contiguity check reports a break. Before IS-T8 this excision passed
+// clean — each surviving line still carries a valid per-line device signature, so
+// nothing flagged the removed record. The seq + prev_hash chain now bites.
+func TestReadAndVerifyTrail_HashChainDetectsMiddleDeletion(t *testing.T) {
+	home := t.TempDir()
+	for i, id := range []string{
+		"01HZTRAILEVENT0000000000A",
+		"01HZTRAILEVENT0000000000B",
+		"01HZTRAILEVENT0000000000C",
+	} {
+		rec := sampleInvocation()
+		rec.EventID = id
+		rec.ExitCode = i // distinct content per record
+		appendSignedInvocation(home, rec)
+	}
+
+	// Intact chain: three verified records, zero breaks.
+	if tv := readAndVerifyTrail(home); tv.Total != 3 || tv.Verified != 3 || tv.ChainBreaks != 0 || !tv.ChainVerified {
+		t.Fatalf("intact 3-record chain should verify clean, got %+v", tv)
+	}
+
+	// Excise the MIDDLE line (the seq=1 record).
+	path := invocationTrailPath(home)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read trail: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 trail lines, got %d", len(lines))
+	}
+	kept := lines[0] + "\n" + lines[2] + "\n" // drop the middle record
+	if err := os.WriteFile(path, []byte(kept), 0o600); err != nil {
+		t.Fatalf("rewrite trail: %v", err)
+	}
+
+	tv := readAndVerifyTrail(home)
+	// Both survivors STILL pass their per-line signature (that is exactly why the
+	// deletion was previously invisible)...
+	if tv.Total != 2 || tv.Verified != 2 || tv.Unverified != 0 {
+		t.Fatalf("surviving lines should still individually sign: %+v", tv)
+	}
+	// ...but the hash chain now reports the gap the deletion opened: the seq=2
+	// survivor's seq is not 0+1 and its prev_hash points at the deleted record.
+	if tv.ChainBreaks == 0 || tv.ChainVerified {
+		t.Errorf("middle-record deletion not detected as a chain/sequence gap: %+v", tv)
+	}
+}
+
 func TestAppendSignedInvocation_SinkFailureIsSwallowed(t *testing.T) {
 	home := t.TempDir()
 	orig := invocationTrailSink

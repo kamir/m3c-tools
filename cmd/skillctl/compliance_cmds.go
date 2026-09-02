@@ -77,8 +77,14 @@ func trailEvidenceSentence(tv trailVerification) string {
 	// against an external root (registry attestation of the device key is a
 	// follow-up). Do not let an auditor read self-referential verification as
 	// external attestation.
-	return fmt.Sprintf("Per-invocation signed events (SPEC-0202): %d/%d invocation records pass local device-key integrity verification (%d unverified, %d replays). Device key %s is locally anchored (integrity-since-signing on this host; not yet registry-attested). Append-only ~/.claude/skillctl/invocation-trail.jsonl.",
-		tv.Verified, tv.Total, tv.Unverified, tv.Replays, key)
+	// IS-T8: report the hash-chain contiguity check (seq + prev_hash) that makes a
+	// deleted/truncated middle record tamper-EVIDENT on top of the per-line signature.
+	chain := "hash-chained (seq+prev_hash) contiguous — no middle record deleted or reordered"
+	if !tv.ChainVerified {
+		chain = fmt.Sprintf("hash-chain BROKEN — %d contiguity break(s): the append-only trail was truncated or reordered", tv.ChainBreaks)
+	}
+	return fmt.Sprintf("Per-invocation signed events (SPEC-0202): %d/%d invocation records pass local device-key integrity verification (%d unverified, %d replays); %s. Device key %s is locally anchored (integrity-since-signing on this host; not yet registry-attested). Append-only ~/.claude/skillctl/invocation-trail.jsonl.",
+		tv.Verified, tv.Total, tv.Unverified, tv.Replays, chain, key)
 }
 
 const complianceDisclaimer = "Evidence aid for an auditor — NOT a certification or attestation of compliance. " +

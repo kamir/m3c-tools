@@ -25,10 +25,12 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -105,6 +107,119 @@ func defaultInvocationTrailSink(home string, line []byte) error {
 	return err
 }
 
+// chainedInvocationRecord is the ON-DISK trail line: a signed
+// skillgate.InvocationRecord PLUS two ADDITIVE, unsigned integrity fields that
+// hash-chain the trail (IS-T8, SPEC-0202 §9 / EU AI Act Art.12 tamper-evidence):
+//
+//   - Seq — a monotonic per-generation sequence number (genesis = 0). A deleted
+//     or truncated middle record leaves a gap the verifier detects.
+//   - PrevHash — the SHA-256 (hex) of the PREVIOUS record's CANONICAL bytes
+//     (skillgate.CanonicalizeInvocationRecord output). Because each record commits
+//     to its predecessor's content, deleting a middle record makes the survivor's
+//     prev_hash no longer match the recomputed hash of its new predecessor.
+//
+// These two fields are deliberately OUTSIDE the signed canonical message: adding
+// them there would change the v1 canonical bytes and invalidate every existing
+// per-line signature (and the golden-bytes pin). So they layer tamper-EVIDENCE
+// (contiguity + content chaining) ON TOP of the unchanged per-line device
+// signature — the signature proves each record's own integrity, the chain proves
+// the trail was not silently truncated in the middle.
+//
+// HONEST SCOPE (no overclaim): the chain fields are not themselves signed, so an
+// adversary holding the device signing key — or one who deletes a record AND
+// rewrites every surviving record's seq/prev_hash — is out of scope here; that is
+// what the device-key custody + the append-only file mode defend. This closes the
+// naive delete/truncate gap (records currently pass clean after a middle deletion).
+// Each rotation generation (.jsonl vs .jsonl.1) is its own self-contained chain.
+type chainedInvocationRecord struct {
+	skillgate.InvocationRecord
+	// Seq is a pointer so a legacy record written BEFORE this feature (no "seq"
+	// key) unmarshals to nil and is excluded from chain verification — avoiding a
+	// false break on pre-existing trails. A non-nil pointer to 0 marks genesis.
+	Seq      *uint64 `json:"seq,omitempty"`
+	PrevHash string  `json:"prev_hash"`
+}
+
+// invocationChainHash returns the hex SHA-256 over a record's canonical bytes —
+// the value the NEXT record stores as its prev_hash. ok is false only if the
+// record refuses to canonicalize (e.g. a newline-smuggled field), in which case
+// the chain intentionally cannot continue across it.
+func invocationChainHash(rec skillgate.InvocationRecord) (hash string, ok bool) {
+	canon, err := skillgate.CanonicalizeInvocationRecord(&rec)
+	if err != nil {
+		return "", false
+	}
+	sum := sha256.Sum256(canon)
+	return hex.EncodeToString(sum[:]), true
+}
+
+// readLastTrailLine returns the last non-empty line of the trail file, reading
+// only a bounded tail so an append stays cheap regardless of trail size. Returns
+// nil when the file is absent, empty, or unreadable.
+func readLastTrailLine(path string) []byte {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil || fi.Size() == 0 {
+		return nil
+	}
+	const tail = 256 << 10 // 256 KiB — far larger than one record line
+	start := int64(0)
+	if fi.Size() > tail {
+		start = fi.Size() - tail
+	}
+	buf := make([]byte, fi.Size()-start)
+	if _, err := f.ReadAt(buf, start); err != nil && err != io.EOF {
+		return nil
+	}
+	// The tail may begin mid-line; iterate from the end and take the last COMPLETE
+	// non-empty line (the trailing record is always fully within the tail).
+	for _, ln := range revLines(buf) {
+		if t := bytes.TrimSpace(ln); len(t) > 0 {
+			return t
+		}
+	}
+	return nil
+}
+
+// revLines splits buf on '\n' and returns the lines in reverse order.
+func revLines(buf []byte) [][]byte {
+	parts := bytes.Split(buf, []byte{'\n'})
+	for i, j := 0, len(parts)-1; i < j; i, j = i+1, j-1 {
+		parts[i], parts[j] = parts[j], parts[i]
+	}
+	return parts
+}
+
+// nextChainLink computes the (seq, prev_hash) to stamp onto the NEXT appended
+// record, from the current live trail. Genesis (0, "") when the trail is fresh,
+// unreadable, about to rotate, or its last record predates the chain feature.
+func nextChainLink(home string) (seq uint64, prevHash string) {
+	path := invocationTrailPath(home)
+	// Mirror the default sink's pre-append rotation: an at/over-cap live file is
+	// renamed to .jsonl.1 and a fresh file started, so the next record opens a new
+	// generation's chain at genesis.
+	if fi, err := os.Stat(path); err == nil && fi.Size() >= invocationTrailMaxBytes {
+		return 0, ""
+	}
+	last := readLastTrailLine(path)
+	if last == nil {
+		return 0, ""
+	}
+	var prev chainedInvocationRecord
+	if err := json.Unmarshal(last, &prev); err != nil || prev.Seq == nil {
+		return 0, "" // unreadable, or a legacy predecessor → start a fresh chain
+	}
+	h, ok := invocationChainHash(prev.InvocationRecord)
+	if !ok {
+		return 0, ""
+	}
+	return *prev.Seq + 1, h
+}
+
 // appendSignedInvocation builds, device-signs, and appends one InvocationRecord
 // to the signed trail. Fire-and-forget: any error or panic is swallowed so it
 // can NEVER reach the caller's decision path.
@@ -151,7 +266,18 @@ func appendSignedInvocation(home string, rec skillgate.InvocationRecord) {
 		return // refused to sign ambiguous bytes (e.g. newline-smuggled field)
 	}
 
-	line, err := json.Marshal(rec)
+	// IS-T8: stamp the hash-chain link (seq + prev_hash over the PRIOR record's
+	// canonical bytes) so a later deletion/truncation of a middle record is
+	// detectable. Additive, unsigned fields — the per-line signature above is
+	// unchanged (rec is signed BEFORE it is wrapped).
+	seq, prevHash := nextChainLink(home)
+	chained := chainedInvocationRecord{
+		InvocationRecord: rec,
+		Seq:              &seq,
+		PrevHash:         prevHash,
+	}
+
+	line, err := json.Marshal(chained)
 	if err != nil {
 		return
 	}
@@ -189,6 +315,18 @@ type trailVerification struct {
 	Replays int
 	// DeviceKeyID is the local device key's id ("" if the key is unavailable).
 	DeviceKeyID string
+	// ChainBreaks counts hash-chain contiguity violations (IS-T8): a chained
+	// record whose seq is not predecessor.seq+1, or whose prev_hash does not equal
+	// the recomputed hash of the preceding chained record's canonical bytes, or a
+	// first chained record that is not genesis (seq 0 / empty prev_hash). A deleted
+	// or truncated middle record yields at least one break. Records predating the
+	// chain feature (no "seq" field) are excluded, so a legacy trail reports 0.
+	ChainBreaks int
+	// ChainVerified is true when the trail's chained records form one contiguous
+	// hash chain with no breaks (vacuously true for a trail with no chained
+	// records). It is the tamper-evidence signal for the Art.12 record-keeping
+	// control: false means the append-only trail was truncated/reordered.
+	ChainVerified bool
 }
 
 // readAndVerifyTrail reads the signed invocation trail at home, verifies each
@@ -225,6 +363,15 @@ func readAndVerifyTrail(home string) trailVerification {
 	tv.Present = true
 
 	seen := make(map[string]struct{})
+	// Hash-chain contiguity state (IS-T8). Tracked across the PHYSICAL order of
+	// chained records (independent of replay dedup / signature validity) so a
+	// deleted or truncated middle record is detected even when every surviving
+	// record still signs cleanly.
+	var (
+		chainStarted  bool
+		expectSeq     uint64 // predecessor.seq + 1
+		prevChainHash string // hash of the predecessor's canonical bytes
+	)
 	sc := bufio.NewScanner(bytes.NewReader(data))
 	sc.Buffer(make([]byte, 0, 64*1024), 4<<20)
 	for sc.Scan() {
@@ -233,15 +380,45 @@ func readAndVerifyTrail(home string) trailVerification {
 			continue
 		}
 		tv.Total++
-		var rec skillgate.InvocationRecord
+		var rec chainedInvocationRecord
 		if err := json.Unmarshal(raw, &rec); err != nil {
+			// An unparseable line is counted Unverified; it also breaks the chain
+			// for the following record (whose prev_hash can no longer be recomputed
+			// here), which surfaces as a ChainBreak there — never a silent drop.
 			tv.Unverified++
 			continue
 		}
+
+		// --- hash-chain contiguity (IS-T8) --------------------------------------
+		// Only records carrying the chain fields participate; legacy records
+		// (no "seq") are excluded so pre-feature trails do not report false breaks.
+		if rec.Seq != nil {
+			thisHash, okHash := invocationChainHash(rec.InvocationRecord)
+			if !chainStarted {
+				// The first chained record must be genesis (seq 0, empty prev_hash).
+				// A non-genesis first record means the trail head was truncated.
+				if *rec.Seq != 0 || rec.PrevHash != "" {
+					tv.ChainBreaks++
+				}
+				chainStarted = true
+			} else if *rec.Seq != expectSeq || rec.PrevHash != prevChainHash {
+				// A gap in seq OR a prev_hash that does not match the recomputed hash
+				// of the preceding record → a deleted/truncated/reordered record.
+				tv.ChainBreaks++
+			}
+			expectSeq = *rec.Seq + 1
+			if okHash {
+				prevChainHash = thisHash
+			} else {
+				prevChainHash = "" // cannot recompute → the next record will mismatch
+			}
+		}
+
 		// Replay: a second occurrence of an event_id we've already counted is a
 		// REPLAY, not new evidence — it must NOT inflate the verified-evidence
 		// count (P2 challenge-gate finding). Count it as a replay and move on, so
-		// `Verified` reflects DISTINCT verified events only.
+		// `Verified` reflects DISTINCT verified events only. (Chain state was
+		// already advanced above, so a replayed line does not corrupt contiguity.)
 		if rec.EventID != "" {
 			if _, dup := seen[rec.EventID]; dup {
 				tv.Replays++
@@ -249,11 +426,13 @@ func readAndVerifyTrail(home string) trailVerification {
 			}
 			seen[rec.EventID] = struct{}{}
 		}
-		if havePub && skillgate.VerifyInvocationRecord(&rec, pubKey, base64.StdEncoding.DecodeString) {
+		if havePub && skillgate.VerifyInvocationRecord(&rec.InvocationRecord, pubKey, base64.StdEncoding.DecodeString) {
 			tv.Verified++
 		} else {
 			tv.Unverified++
 		}
 	}
+	// Vacuously true for a legacy/empty trail (no chained records → no breaks).
+	tv.ChainVerified = tv.ChainBreaks == 0
 	return tv
 }

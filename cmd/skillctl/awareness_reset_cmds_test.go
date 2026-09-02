@@ -190,3 +190,49 @@ func TestAwarenessReset_CrossIdentityExits19(t *testing.T) {
 		t.Errorf("stderr should mention identity; got: %q", stderr.String())
 	}
 }
+
+// TestIsAwarenessResetTokenExpired_OverflowPrefixRejected is the IS-T11
+// acceptance test. The OLD hand-rolled `issued = issued*10 + (r-'0')` loop
+// silently OVERFLOWED int64 on a long numeric prefix; the wrapped value could
+// land time.Unix() far in the FUTURE, so the `age < 0` branch returned
+// (false, nil) — the token was treated as FRESH and the client-side TTL guard
+// was skipped. The bounded strconv.ParseUint parse must FAIL CLOSED instead.
+func TestIsAwarenessResetTokenExpired_OverflowPrefixRejected(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0).UTC()
+
+	// A numeric prefix far longer than int64's range → parse error, NOT a
+	// silently-wrapped future timestamp treated as fresh.
+	longNumeric := strings.Repeat("9", 40) + ".deadbeef"
+	if expired, err := isAwarenessResetTokenExpired(longNumeric, now); err == nil {
+		t.Errorf("long numeric prefix accepted (expired=%v); overflow not rejected", expired)
+	}
+
+	// Over the digit cap (20 digits > 19) → rejected up front.
+	overCap := strings.Repeat("1", 20) + ".sig"
+	if expired, err := isAwarenessResetTokenExpired(overCap, now); err == nil {
+		t.Errorf("over-cap prefix accepted (expired=%v); want error", expired)
+	}
+
+	// Within the digit cap (19 digits) but numerically > MaxInt64 → the range
+	// check (ParseUint bitSize 63) rejects it rather than wrapping negative.
+	overRange := "9999999999999999999.sig" // 19 nines > 9223372036854775807
+	if _, err := isAwarenessResetTokenExpired(overRange, now); err == nil {
+		t.Errorf("out-of-range prefix accepted; want error")
+	}
+
+	// A signed prefix is non-numeric under the digits-only contract → rejected
+	// (ParseUint permits no sign).
+	if _, err := isAwarenessResetTokenExpired("-5.sig", now); err == nil {
+		t.Errorf("signed prefix accepted; want error")
+	}
+
+	// Regression guard: a normal, in-range token still parses and is judged by age.
+	fresh := fmt.Sprintf("%d.sig", now.Unix())
+	if expired, err := isAwarenessResetTokenExpired(fresh, now); err != nil || expired {
+		t.Errorf("fresh in-range token mishandled: expired=%v err=%v", expired, err)
+	}
+	stale := fmt.Sprintf("%d.sig", now.Add(-10*time.Minute).Unix())
+	if expired, err := isAwarenessResetTokenExpired(stale, now); err != nil || !expired {
+		t.Errorf("stale in-range token mishandled: expired=%v err=%v", expired, err)
+	}
+}

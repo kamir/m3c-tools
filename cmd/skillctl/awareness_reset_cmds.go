@@ -32,6 +32,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -45,15 +46,21 @@ import (
 // stale token in shell history isn't a free destructive primitive).
 const awarenessResetMaxTokenAge = 5 * time.Minute
 
+// awarenessResetMaxIssuedDigits bounds the length of the token's issued-at
+// prefix (IS-T11). A Unix-seconds timestamp needs ≤ 19 digits (int64's range);
+// anything longer is definitionally out of range and is rejected before parsing,
+// rather than being fed to a parser that could silently overflow.
+const awarenessResetMaxIssuedDigits = 19
+
 // awarenessResetDryRunResp is the response shape from a `?dry_run=1` GET
 // on the reset endpoint. Stream A's handler returns this.
 type awarenessResetDryRunResp struct {
-	SessionTag    string                   `json:"session_tag"`
-	Affected      []map[string]any         `json:"affected"`
-	AffectedCount int                      `json:"affected_count"`
-	Token         string                   `json:"token"`
-	IssuedAt      string                   `json:"issued_at"`
-	ExpiresAt     string                   `json:"expires_at"`
+	SessionTag    string           `json:"session_tag"`
+	Affected      []map[string]any `json:"affected"`
+	AffectedCount int              `json:"affected_count"`
+	Token         string           `json:"token"`
+	IssuedAt      string           `json:"issued_at"`
+	ExpiresAt     string           `json:"expires_at"`
 }
 
 // awarenessResetConfirmResp is the response shape from a successful DELETE.
@@ -320,14 +327,24 @@ func isAwarenessResetTokenExpired(token string, now time.Time) (bool, error) {
 		return false, fmt.Errorf("token shape: expected <issued>.<sig>, got %q", token)
 	}
 	prefix := token[:dot]
-	var issued int64
-	for _, r := range prefix {
-		if r < '0' || r > '9' {
-			return false, fmt.Errorf("token issued-at prefix %q not numeric", prefix)
-		}
-		issued = issued*10 + int64(r-'0')
+	// IS-T11: parse the issued-at with explicit bounds instead of the old
+	// hand-rolled `issued = issued*10 + (r-'0')` loop, which silently OVERFLOWS
+	// int64 on a long numeric prefix. On overflow the value could wrap to a large
+	// number that lands time.Unix() far in the FUTURE — the `age < 0` branch below
+	// would then treat an absurd token as FRESH, silently skipping the client-side
+	// TTL guard (a non-numeric-or-overflowed prefix must fail closed, not pass).
+	//
+	// strconv.ParseUint rejects a sign and any non-digit (preserving the old
+	// digits-only contract) and returns ErrRange on overflow; bitSize 63 keeps the
+	// result within int64's positive range so the time.Unix conversion is exact.
+	if len(prefix) > awarenessResetMaxIssuedDigits {
+		return false, fmt.Errorf("token issued-at prefix %q too long (max %d digits)", prefix, awarenessResetMaxIssuedDigits)
 	}
-	issuedTime := time.Unix(issued, 0).UTC()
+	issued, err := strconv.ParseUint(prefix, 10, 63)
+	if err != nil {
+		return false, fmt.Errorf("token issued-at prefix %q invalid: %w", prefix, err)
+	}
+	issuedTime := time.Unix(int64(issued), 0).UTC()
 	age := now.UTC().Sub(issuedTime)
 	if age < 0 {
 		// Clock skew: token claims to be from the future. Treat as
