@@ -18,6 +18,7 @@ import (
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
 	"github.com/kamir/m3c-tools/pkg/skillctl/netguard"
+	"github.com/kamir/m3c-tools/pkg/skillctl/semver"
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustcore"
 )
 
@@ -458,9 +459,9 @@ func (b *gitBackend) List(ctx context.Context, filter artifact.ListFilter, page 
 					nonRevoked = append(nonRevoked, r.Version)
 				}
 			}
-			latest := maxSemver(nonRevoked)
+			latest := semver.Max(nonRevoked)
 			if latest == "" {
-				latest = maxSemver(versionStrings(rows))
+				latest = semver.Max(versionStrings(rows))
 			}
 			entry := artifact.SkillIndexEntry{Name: name, IsRevoked: len(nonRevoked) == 0, Versions: rows}
 			if r, ok := rowFor(rows, latest); ok {
@@ -524,7 +525,7 @@ func (b *gitBackend) Resolve(ctx context.Context, q artifact.RefQuery) (*artifac
 					nonRevoked = append(nonRevoked, r.Version)
 				}
 			}
-			ver = maxSemver(nonRevoked)
+			ver = semver.Max(nonRevoked)
 			if ver == "" {
 				return fmt.Errorf("git: no non-revoked version for %s", q.Name)
 			}
@@ -780,7 +781,7 @@ func (b *gitBackend) versionRows(dir, name string) []artifact.VersionRow {
 			Version: ver, Digest: bj.Digest, Governance: bj.Governance, Status: status,
 		})
 	}
-	sort.Slice(rows, func(i, j int) bool { return semverLess(rows[i].Version, rows[j].Version) })
+	sort.Slice(rows, func(i, j int) bool { return semver.Less(rows[i].Version, rows[j].Version) })
 	return rows
 }
 

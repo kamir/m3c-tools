@@ -34,6 +34,7 @@ import (
 
 	"github.com/kamir/m3c-tools/pkg/skillbundle"
 	"github.com/kamir/m3c-tools/pkg/skillctl/secfile"
+	"github.com/kamir/m3c-tools/pkg/skillctl/semver"
 )
 
 // MaxExtractedBytes / MaxExtractedFiles are the registry-package spelling of the
@@ -396,7 +397,7 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 	// Optional downgrade gate.
 	if !opts.AllowDowngrade {
 		if pre, err := loadProvenance(filepath.Join(target, ProvenanceSidecarName)); err == nil {
-			if compareSemver(b.Version, pre.Version) < 0 {
+			if semver.Compare(b.Version, pre.Version) < 0 {
 				return nil, fmt.Errorf("install: refusing to downgrade %s: have %s, new %s (use --allow-downgrade)", b.Name, pre.Version, b.Version)
 			}
 		}
@@ -563,32 +564,6 @@ func writeProvenance(path string, side ProvenanceSidecar) error {
 	return os.WriteFile(path, out, 0o644)
 }
 
-// compareSemver does a small loose-semver comparison: split on '.', compare
-// each numeric part; non-numeric or short forms fall back to lexicographic.
-// Returns -1 (a < b), 0 (a == b), +1 (a > b).
-func compareSemver(a, b string) int {
-	if a == b {
-		return 0
-	}
-	ap := strings.Split(a, ".")
-	bp := strings.Split(b, ".")
-	for i := 0; i < len(ap) || i < len(bp); i++ {
-		var ai, bi int
-		if i < len(ap) {
-			ai, _ = strconv.Atoi(ap[i])
-		}
-		if i < len(bp) {
-			bi, _ = strconv.Atoi(bp[i])
-		}
-		if ai < bi {
-			return -1
-		}
-		if ai > bi {
-			return 1
-		}
-	}
-	return 0
-}
 
 // AuditProvenance re-computes the skill-directory digest and compares it to
 // the sidecar's bundle_digest. Returns nil if they match, an error if drifted.

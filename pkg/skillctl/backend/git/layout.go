@@ -17,8 +17,6 @@ import (
 	"fmt"
 	"path"
 	"regexp"
-	"sort"
-	"strconv"
 	"strings"
 )
 
@@ -105,45 +103,3 @@ func marshalEvent(event map[string]any) ([]byte, error) {
 
 func marshalBundleJSON(b bundleJSON) ([]byte, error) { return json.MarshalIndent(b, "", "  ") }
 
-// --- minimal semver (semver-max, non-revoked). TODO(SPEC-0356): move to a
-// shared pkg/skillctl/semver and retire the duplicated compareSemver copies. ---
-
-func semverLess(a, b string) bool { return compareSemver(a, b) < 0 }
-
-func compareSemver(a, b string) int {
-	if a == b {
-		return 0
-	}
-	ap := strings.Split(strings.TrimPrefix(a, "v"), ".")
-	bp := strings.Split(strings.TrimPrefix(b, "v"), ".")
-	n := len(ap)
-	if len(bp) > n {
-		n = len(bp)
-	}
-	for i := 0; i < n; i++ {
-		var ai, bi int
-		if i < len(ap) {
-			ai, _ = strconv.Atoi(ap[i])
-		}
-		if i < len(bp) {
-			bi, _ = strconv.Atoi(bp[i])
-		}
-		if ai != bi {
-			if ai < bi {
-				return -1
-			}
-			return 1
-		}
-	}
-	return 0
-}
-
-// maxSemver returns the highest version in vs (empty string if none).
-func maxSemver(vs []string) string {
-	if len(vs) == 0 {
-		return ""
-	}
-	cp := append([]string(nil), vs...)
-	sort.Slice(cp, func(i, j int) bool { return semverLess(cp[i], cp[j]) })
-	return cp[len(cp)-1]
-}

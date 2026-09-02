@@ -419,20 +419,5 @@ func TestRun_BodyScanMissingSkillMDFailsClosed(t *testing.T) {
 	}
 }
 
-func TestCompareSemver(t *testing.T) {
-	cases := []struct {
-		a, b string
-		want int
-	}{
-		{"1.0.0", "1.0.0", 0},
-		{"1.0.1", "1.0.0", 1},
-		{"1.0.0", "1.0.1", -1},
-		{"2.0.0", "1.99.99", 1},
-		{"1.0.0-rc1", "1.0.0", 0}, // pre-release stripped; equal cores
-	}
-	for _, tc := range cases {
-		if got := compareSemver(tc.a, tc.b); got != tc.want {
-			t.Errorf("compareSemver(%q, %q) = %d, want %d", tc.a, tc.b, got, tc.want)
-		}
-	}
-}
+// Semver comparison is now tested at its source, pkg/skillctl/semver (TestCompare
+// covers v-prefix, pre-release stripping, zero-extend, and the ordering matrix).

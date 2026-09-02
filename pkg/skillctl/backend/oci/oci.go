@@ -29,6 +29,7 @@ import (
 	"oras.land/oras-go/v2/registry"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
+	"github.com/kamir/m3c-tools/pkg/skillctl/semver"
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustcore"
 )
 
@@ -319,9 +320,9 @@ func (b *ociBackend) List(ctx context.Context, filter artifact.ListFilter, page 
 				nonRevoked = append(nonRevoked, r.Version)
 			}
 		}
-		latest := maxSemver(nonRevoked)
+		latest := semver.Max(nonRevoked)
 		if latest == "" {
-			latest = maxSemver(versionStrings(vrows))
+			latest = semver.Max(versionStrings(vrows))
 		}
 		entry := artifact.SkillIndexEntry{Name: name, IsRevoked: len(nonRevoked) == 0, Versions: vrows}
 		if r, ok := rowFor(vrows, latest); ok {
