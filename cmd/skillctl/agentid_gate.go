@@ -155,14 +155,17 @@ func authorizeAgentForSkill(home, skill string) agentAuthzResult {
 	// whose signed manifest exceeds the mandate's granted scope is DENIED even though
 	// it is named in the grant. Fail-closed by construction.
 	req, resolved := skillRequirementsFn(home, skill)
-	if !resolved && grantIsRestricting(doc.Payload.Grant) {
-		// A bundle digest IS on record for this skill, but its signed manifest could
-		// not be read + digest-verified (missing/unreadable stashed .skb, or a digest
-		// mismatch). For a RESTRICTING grant that is a fail-closed DENY: a same-uid
-		// actor could otherwise `rm ~/.claude/skills/<skill>/*.skb` to strip scope
-		// enforcement down to name-only and slip an over-scoped skill through. We refuse
-		// to authorize a scope we cannot confirm — mirroring the IS-T6 deleted-mandate
-		// → deny posture. A NON-restricting grant keeps the name-only never-brick path.
+	if !resolved && grantIsRestricting(doc.Payload.Grant) && doc.Payload.Grant.AllowsSkill(skill) {
+		// A managed bundle demonstrably exists for this IN-GRANT skill, but its signed
+		// scope could not be resolved + digest-verified (no provenance basis at all, a
+		// missing/unreadable stashed .skb, or a digest mismatch). For a RESTRICTING
+		// grant that is a fail-closed DENY: a same-uid actor could otherwise delete the
+		// provenance files (`.m3c-provenance.json` / `.skillctl-offline.json`) or the
+		// stashed `*.skb` to strip scope enforcement down to name-only and slip an
+		// over-scoped skill through. We refuse to authorize a scope we cannot confirm —
+		// mirroring the IS-T6 deleted-mandate → deny posture. A NON-restricting grant
+		// keeps the name-only never-brick path; a skill NOT named in the grant falls
+		// through to the AuthorizeSkillScoped name check below (skill_not_in_grant).
 		res.Allowed = false
 		res.Reason = "skill_requirements_unresolved"
 		return res
@@ -205,20 +208,29 @@ var skillRequirementsFn = resolveInstalledSkillRequirements
 // provenance sidecar's recorded bundle_digest before returning the manifest map — a
 // tampered manifest breaks the digest and yields nothing.
 //
-// The (req, resolved) contract distinguishes two "empty" cases the gate must treat
-// differently:
-//   - NO digest on record (a genuine legacy/unmanaged skill, or the gate's fake-skb
-//     test fixtures) → (empty, TRUE): name-only enforcement is correct; never-brick.
-//   - a digest IS on record but the .skb is absent/unreadable, or the manifest fails
-//     the digest check → (empty, FALSE): the code KNOWS a bundle should exist but
-//     cannot confirm its scope. The gate fails this CLOSED for a restricting grant
-//     (a same-uid actor must not be able to delete the .skb to escape enforcement).
+// The (req, resolved) contract distinguishes the "empty" cases the gate must treat
+// differently. The anchor is whether a MANAGED BASIS exists — a stashed .skb — and
+// whether its digest is resolvable from any recorded basis (provenance sidecar OR
+// the `skillctl install` offline stash, see installedSkillDigest):
+//   - NO managed basis at all (no stashed .skb, no digest on record) → a genuine
+//     legacy/unmanaged skill → (empty, TRUE): name-only is correct; never-brick.
+//   - a stashed .skb IS present but NO digest resolves from any basis (both the
+//     provenance sidecar and the offline stash are absent/unreadable — e.g. a
+//     same-uid actor deleted them to strip enforcement) → (empty, FALSE): a bundle
+//     demonstrably exists but its scope cannot be confirmed.
+//   - a digest IS on record but the .skb is absent/unreadable, or the manifest
+//     fails the digest check → (empty, FALSE): same "cannot confirm scope".
+// The gate fails every (empty, FALSE) case CLOSED for a restricting grant, so a
+// same-uid actor cannot delete provenance to downgrade enforcement to name-only.
 func resolveInstalledSkillRequirements(home, skill string) (agentid.SkillRequirements, bool) {
 	digest := installedSkillDigest(home, skill)
-	if digest == "" {
-		return agentid.SkillRequirements{}, true // genuine legacy/unmanaged → name-only, never-brick
-	}
 	skbPath := stashedSkbPath(home, skill)
+	if digest == "" {
+		if skbPath == "" {
+			return agentid.SkillRequirements{}, true // no managed basis → name-only, never-brick
+		}
+		return agentid.SkillRequirements{}, false // managed .skb present but no resolvable digest → unconfirmable
+	}
 	if skbPath == "" {
 		return agentid.SkillRequirements{}, false // digest on record but no .skb → scope unconfirmable
 	}
@@ -300,7 +312,7 @@ func requirementsFromManifest(m map[string]any) agentid.SkillRequirements {
 		if net, _ := intent["network"].(bool); net {
 			addIntent("network:write") // a skill asserting outbound network needs the network:write capability
 		}
-		if sp, ok := intent["subprocess"].([]any); ok && len(sp) > 0 {
+		if subprocessDeclared(intent["subprocess"]) {
 			addIntent("subprocess:exec")
 		}
 		if d, _ := intent["destructive"].(bool); d {
@@ -320,14 +332,43 @@ func requirementsFromManifest(m map[string]any) agentid.SkillRequirements {
 	return req
 }
 
+// subprocessDeclared reports whether a signed intent.subprocess value declares a
+// subprocess/shell capability in ANY of its encodings: a non-empty argv list (the
+// documented form), a bool true, a non-empty command string, or a non-empty
+// object. Only an absent / false / empty value means "no subprocess"; every other
+// non-empty shape is treated as declared (fail-closed), so a skill cannot dodge
+// the subprocess:exec requirement by encoding its declaration as a scalar or map.
+func subprocessDeclared(v any) bool {
+	switch t := v.(type) {
+	case nil:
+		return false
+	case bool:
+		return t
+	case string:
+		return strings.TrimSpace(t) != ""
+	case []any:
+		return len(t) > 0
+	case map[string]any:
+		return len(t) > 0
+	default:
+		return true // an unexpected non-empty encoding → fail-closed, treat as declared
+	}
+}
+
 // intentForKindAccess maps a signed data_dependency (SPEC-0196 kind + access) to
 // the "<category>:<action>" capability-intent token a mandate grant uses, so the
 // skill's signed data access is checked in the grant's own vocabulary
-// (http read → "network:read"; local_fs write → "fs:write"). An unknown kind maps
-// to "" (contributes no intent). An unknown access surfaces verbatim so it fails
-// set-membership unless the operator granted exactly it (fail-closed).
+// (http read → "network:read"; local_fs write → "fs:write"). An unknown kind is
+// carried VERBATIM as its own category (fail-closed): it fails set-membership
+// unless the operator granted exactly it, rather than silently contributing no
+// intent (pack-time already rejects unknown kinds, so this is defense-in-depth).
+// An empty kind contributes nothing. An unknown access likewise surfaces verbatim.
 func intentForKindAccess(kind, access string) string {
-	cat := ""
+	kind = strings.TrimSpace(kind)
+	if kind == "" {
+		return "" // no declared kind → no derived intent
+	}
+	var cat string
 	switch kind {
 	case "local_fs":
 		cat = "fs"
@@ -342,7 +383,7 @@ func intentForKindAccess(kind, access string) string {
 	case "secrets_store":
 		cat = "secrets"
 	default:
-		return "" // unknown kind → no derived intent
+		cat = kind // unknown kind → verbatim category, fails membership unless granted
 	}
 	act := "read"
 	switch strings.TrimSpace(access) {

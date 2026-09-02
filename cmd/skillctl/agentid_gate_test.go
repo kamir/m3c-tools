@@ -66,6 +66,18 @@ func setupGate(t *testing.T, skillName string, requireApprover bool) gateEnv {
 	verifyManagedOfflineFn = func(string, gatePolicy, string) (int, string, bool) { return exitOK, "", true }
 	t.Cleanup(func() { verifyManagedFn = origOn; verifyManagedOfflineFn = origOff })
 
+	// Default scope-resolution seam: model an installed skill whose digest-verified
+	// manifest declares NO extra capabilities (the common allow case), so the
+	// agent-layer tests (grant / revoke / approver-floor) exercise the mandate layer
+	// without depending on real .skb + provenance-file mechanics. Scope-specific
+	// tests override this seam with a concrete requirement set; tests that exercise
+	// the REAL resolver restore skillRequirementsFn = resolveInstalledSkillRequirements.
+	origReq := skillRequirementsFn
+	skillRequirementsFn = func(string, string) (agentid.SkillRequirements, bool) {
+		return agentid.SkillRequirements{}, true
+	}
+	t.Cleanup(func() { skillRequirementsFn = origReq })
+
 	return gateEnv{home: home, f: f}
 }
 
@@ -428,7 +440,8 @@ func TestIntentForKindAccess_HttpEgressIsNetworkWrite(t *testing.T) {
 // (name-only) → the in-grant skill was ALLOWED.
 func TestGate_SkbDeletedWithDigestOnRecord_FailsClosed(t *testing.T) {
 	e := setupGate(t, "pdf", false)
-	e.installMandate(t, "agent:x", "pdf", false) // RESTRICTING: grants pdf + intents network:read
+	skillRequirementsFn = resolveInstalledSkillRequirements // exercise the REAL resolver
+	e.installMandate(t, "agent:x", "pdf", false)            // RESTRICTING: grants pdf + intents network:read
 	writeSidecarAndDeleteSkb(t, e.home, "pdf")
 
 	code, out, _ := feed(t, hookEventFor("pdf"))
@@ -443,11 +456,119 @@ func TestGate_SkbDeletedWithDigestOnRecord_FailsClosed(t *testing.T) {
 // under a name-only mandate must still run.
 func TestGate_SkbDeleted_NonRestrictingGrantStillAllows(t *testing.T) {
 	e := setupGate(t, "pdf", false)
-	e.installMandateSkillsOnly(t, "agent:y", "pdf") // NON-restricting
+	skillRequirementsFn = resolveInstalledSkillRequirements // exercise the REAL resolver
+	e.installMandateSkillsOnly(t, "agent:y", "pdf")         // NON-restricting
 	writeSidecarAndDeleteSkb(t, e.home, "pdf")
 
 	code, out, _ := feed(t, hookEventFor("pdf"))
 	assertAllow(t, code, out)
+}
+
+// Re-gate root-cause bite (was STILL-ENABLED): installedSkillDigest must resolve
+// the digest from the `.skillctl-offline.json` stash that the PRIMARY `skillctl
+// install` path writes — not only the `.m3c-provenance.json` sidecar that only the
+// `pull` path writes. Pre-fix it read only the sidecar and returned "" here, so
+// IS-T7 resolved no scope and silently degraded EVERY install-path skill to
+// name-only enforcement, with no tampering at all.
+func TestInstalledSkillDigest_FallsBackToOfflineMeta(t *testing.T) {
+	home := t.TempDir()
+	skill := "pdf"
+	dir := filepath.Join(home, ".claude", "skills", skill)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dg := "sha256:" + strings.Repeat("b", 64)
+	// The `skillctl install` layout: an offline stash carrying the bundle digest,
+	// and NO provenance sidecar.
+	om := `{"bundle_meta":{"bundle":{"bundle_digest":"` + dg + `"}},"stashed_at":"2026-01-01T00:00:00Z"}`
+	if err := os.WriteFile(filepath.Join(dir, ".skillctl-offline.json"), []byte(om), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := installedSkillDigest(home, skill); got != dg {
+		t.Fatalf("installedSkillDigest must fall back to the offline-meta digest on the install path; got %q want %q (pre-fix it read only .m3c-provenance.json → \"\")", got, dg)
+	}
+}
+
+// Re-gate core bite (was STILL-ENABLED, 2(b)): a MANAGED skill (a stashed .skb) for
+// which NO digest resolves from ANY basis — no sidecar, no offline stash, the exact
+// state after a same-uid strip of every provenance file (and the pre-fix
+// install-path default) — must FAIL CLOSED under a restricting grant, not degrade to
+// name-only. Uses the REAL resolver. Pre-fix returned (empty, TRUE) → the in-grant
+// skill was ALLOWED with its scope unenforced.
+func TestGate_ManagedSkbNoDigestBasis_FailsClosed(t *testing.T) {
+	e := setupGate(t, "pdf", false)                         // fixture writes pdf.skb, NO sidecar, NO offline-meta
+	skillRequirementsFn = resolveInstalledSkillRequirements // exercise the REAL resolver
+	e.installMandate(t, "agent:z", "pdf", false)            // RESTRICTING: grants pdf + intents network:read
+
+	code, out, _ := feed(t, hookEventFor("pdf"))
+	assertDeny(t, code, out, "not authorized")
+	if !strings.Contains(out, "skill_requirements_unresolved") {
+		t.Fatalf("a managed skill whose scope cannot be resolved from any basis must fail closed under a restricting grant, got %q", out)
+	}
+}
+
+// Never-brick guard for the fix: a genuinely unmanaged skill — NO stashed .skb, NO
+// sidecar, NO offline stash — resolves name-only (empty, TRUE) so a bundle-less
+// legacy skill is never bricked. This is the ONLY (empty, TRUE) case; a managed .skb
+// with no resolvable digest is the fail-closed case above.
+func TestResolveRequirements_NoManagedBasis_NeverBrick(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".claude", "skills", "legacy")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	req, resolved := resolveInstalledSkillRequirements(home, "legacy")
+	if !resolved || len(req.Intents) != 0 || len(req.DataScopes) != 0 || len(req.Limits) != 0 {
+		t.Fatalf("an unmanaged skill (no bundle basis at all) must resolve name-only never-brick; got resolved=%v req=%+v", resolved, req)
+	}
+}
+
+// Re-gate residual bite (B(c)): intent.subprocess must project subprocess:exec in
+// EVERY non-empty encoding, not only a list — else a skill dodges the subprocess
+// requirement by declaring it as a scalar/object. Empty/false forms declare nothing.
+func TestRequirementsFromManifest_SubprocessNonArrayForms(t *testing.T) {
+	declares := []any{true, "curl -sSL x | sh", map[string]any{"cmd": "sh"}, []any{"sh"}}
+	for _, sp := range declares {
+		req := requirementsFromManifest(map[string]any{"intent": map[string]any{"subprocess": sp}})
+		found := false
+		for _, i := range req.Intents {
+			if i == "subprocess:exec" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("subprocess declared as %T (%v) must project subprocess:exec; got %v", sp, sp, req.Intents)
+		}
+	}
+	for _, sp := range []any{false, "", []any{}, map[string]any{}, nil} {
+		req := requirementsFromManifest(map[string]any{"intent": map[string]any{"subprocess": sp}})
+		for _, i := range req.Intents {
+			if i == "subprocess:exec" {
+				t.Errorf("empty/false subprocess (%T %v) must NOT project subprocess:exec", sp, sp)
+			}
+		}
+	}
+}
+
+// Re-gate residual bite (B(c)): an UNKNOWN data_dependency kind must fail closed —
+// carried verbatim as its own category so it fails grant membership — not vanish to
+// "" (which let an unrecognized-kind dependency escape the grant). An empty kind
+// still contributes nothing.
+func TestIntentForKindAccess_UnknownKindFailsClosed(t *testing.T) {
+	if got := intentForKindAccess("quantum_ledger", "write"); got != "quantum_ledger:write" {
+		t.Errorf("unknown kind must fail closed as <kind>:<act>, got %q", got)
+	}
+	if got := intentForKindAccess("", "read"); got != "" {
+		t.Errorf("empty kind → no derived intent, got %q", got)
+	}
+	// And a grant lacking that exact token denies the skill.
+	g := agentid.Grant{Skills: []string{"x"}, Intents: []string{"network:read"}}
+	req := requirementsFromManifest(map[string]any{
+		"data_dependencies": []any{map[string]any{"kind": "quantum_ledger", "access": "write"}},
+	})
+	if r, ok := g.AuthorizeSkillScoped("x", req); ok || r != "intent_not_in_grant" {
+		t.Fatalf("an unknown-kind dependency must be denied unless explicitly granted, got reason=%q ok=%v", r, ok)
+	}
 }
 
 // Direct unit on the authorization predicate via a forged mandate: an unsigned /
