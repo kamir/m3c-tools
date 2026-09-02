@@ -287,7 +287,7 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 	// attest/revoke event before trusting its governance_level / revoked status
 	// — mirroring Gate 1's admit-envelope verification (~:297). An unsigned or
 	// forged governance verdict is otherwise free to forge.
-	acc, err := loadAttestAccumulator(cfg, ctxID, opts.OnlySkill, tr, opts.now())
+	acc, err := loadAttestAccumulator(cfg, ctxID, tr, opts.now())
 	if err != nil {
 		return nil, err
 	}
@@ -451,8 +451,8 @@ func verifyBundleSignatures(event map[string]any, pub ed25519.PublicKey, recompu
 	return nil
 }
 
-// loadAttestRevoke fetches the attest + revoke items for the registry (optionally
-// scoped to one skill) and returns:
+// loadAttestRevoke fetches the attest + revoke items for the WHOLE registry (never
+// narrowed by skill — see the discovery note below) and returns:
 //   - the latest governance_level per digest (newest occurred_at wins)
 //   - the set of digests that carry any (verified) BundleRevokedEvent
 //
@@ -472,14 +472,14 @@ func verifyBundleSignatures(event map[string]any, pub ed25519.PublicKey, recompu
 // against `pub` (a forged revoke can't be used to suppress, and — more to the
 // point here — a forged revoke can't be used to quarantine a good bundle).
 func FetchRevokedDigests(cfg *er1.Config, ctxID string, pub ed25519.PublicKey) (map[string]struct{}, error) {
-	_, revoked, _, err := loadAttestRevoke(cfg, ctxID, "", pub)
+	_, revoked, _, err := loadAttestRevoke(cfg, ctxID, pub)
 	if err != nil {
 		return nil, err
 	}
 	return revoked, nil
 }
 
-func loadAttestRevoke(cfg *er1.Config, ctxID, onlySkill string, pub ed25519.PublicKey) (map[string]string, map[string]struct{}, map[string]map[string]any, error) {
+func loadAttestRevoke(cfg *er1.Config, ctxID string, pub ed25519.PublicKey) (map[string]string, map[string]struct{}, map[string]map[string]any, error) {
 	attestByDigest := map[string]string{}
 	attestTS := map[string]string{}
 	attestEventByDigest := map[string]map[string]any{} // SPEC-0266 F19: raw signed attestation event (latest) per digest
@@ -491,16 +491,19 @@ func loadAttestRevoke(cfg *er1.Config, ctxID, onlySkill string, pub ed25519.Publ
 	// skill-event:installed (or tag-stripped) was dropped at DISCOVERY, BEFORE the
 	// signed-shape classifier ever saw it — a hostile ER1 tenant could suppress a
 	// revoke by retagging it. We now search only the STABLE bundle tags every
-	// skill-event item carries regardless of kind (the registry/context tags, plus
-	// skill:<name> when scoped) and classify each item by the SIGNED envelope shape
-	// after its signature verifies. Admit/install envelopes fall through to the
-	// default (never a governance verdict), so widening the search adds no false
-	// verdicts; a signed revoke is now discovered whatever its skill-event tag says
-	// (or if it carries none). One search now replaces the two per-kind searches.
+	// skill-event item carries regardless of kind (the registry/context tags) and
+	// classify each item by the SIGNED envelope shape after its signature verifies.
+	//
+	// IS-T4b (scoped-pull residual, challenge-gate LOW): this AUTHORITATIVE revocation
+	// sweep also does NOT narrow on skill:<name> — a skill: tag is equally
+	// writer-controlled, so a revoke with that one tag stripped must not be able to
+	// hide from a scoped pull. Correctness is preserved because every verdict is keyed
+	// on the SIGNED bundle_digest (unique per bundle), so seeing OTHER skills' events
+	// only ever adds their own digests; it never mis-attributes a verdict to the
+	// bundle a caller is checking. The personal registry is tens-to-hundreds of events
+	// (see searchByTagsRaw), so the comprehensive sweep is cheap. One search now
+	// replaces the two per-kind searches.
 	tags := []string{"m3c-skill-bundle", "skill-registry:self"}
-	if onlySkill != "" {
-		tags = append(tags, "skill:"+onlySkill)
-	}
 	items, err := searchByTagsRaw(cfg, ctxID, tags)
 	if err != nil {
 		return nil, nil, nil, err
@@ -544,23 +547,23 @@ func loadAttestRevoke(cfg *er1.Config, ctxID, onlySkill string, pub ed25519.Publ
 	return attestByDigest, revokedDigests, attestEventByDigest, nil
 }
 
-// loadAttestAccumulator fetches the attest + revoke events for the target skill(s)
-// and feeds them into an AttestAccumulator (SPEC-0359 D3/D5) — the shared N-of-M +
+// loadAttestAccumulator fetches the attest + revoke events for the registry and
+// feeds them into an AttestAccumulator (SPEC-0359 D3/D5) — the shared N-of-M +
 // freshness path used by both carriers. Mirrors loadAttestRevoke's fetch; the
 // accumulator performs the SEC-H1 envelope verification against each pinned signer.
-func loadAttestAccumulator(cfg *er1.Config, ctxID, onlySkill string, tr *SelfTrustRoots, now time.Time) (*AttestAccumulator, error) {
+func loadAttestAccumulator(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, now time.Time) (*AttestAccumulator, error) {
 	acc := NewAttestAccumulator(tr, now)
 	// FR-0090 IS-T4b: search the STABLE bundle tags every skill-event item carries
-	// (registry/context, plus skill:<name> when scoped), NOT skill-event:<kind> — so
-	// a signed revoke/attest re-tagged to another kind (or tag-stripped) is still
-	// DISCOVERED. The accumulator's OfferRevoke/OfferAttest re-check the signed
-	// discriminator fields (IS-T3), so a re-tagged event is both routed by what it
-	// actually IS and gated on the signed bytes. Admit/install fall through to the
-	// default (never a governance verdict). One search replaces the two per-kind ones.
+	// (registry/context), NOT skill-event:<kind> and NOT skill:<name> — so a signed
+	// revoke/attest re-tagged to another kind, tag-stripped, OR with its skill tag
+	// stripped is still DISCOVERED, even on a scoped pull (challenge-gate LOW: the
+	// authoritative sweep must not be narrowable by an attacker-strippable skill tag).
+	// The accumulator's OfferRevoke/OfferAttest re-check the signed discriminator
+	// fields (IS-T3) and key every verdict on the SIGNED bundle_digest, so seeing
+	// other skills' events only adds their own digests — never mis-attributing a
+	// verdict to the digest a caller is pulling. Admit/install fall through to the
+	// default (never a governance verdict). One comprehensive search.
 	tags := []string{"m3c-skill-bundle", "skill-registry:self"}
-	if onlySkill != "" {
-		tags = append(tags, "skill:"+onlySkill)
-	}
 	items, err := searchByTagsRaw(cfg, ctxID, tags)
 	if err != nil {
 		return nil, err

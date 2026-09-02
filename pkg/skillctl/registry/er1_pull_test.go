@@ -376,6 +376,56 @@ func TestPullBundles_Revoked_RejectsAtGate5(t *testing.T) {
 	}
 }
 
+// FR-0090 IS-T4b (scoped-pull residual, challenge-gate LOW): the AUTHORITATIVE
+// revocation sweep must find a signed revoke even on a SCOPED pull (OnlySkill set)
+// when the revoke item's skill:<name> tag has been STRIPPED. Against the pre-fix code
+// (loadAttestAccumulator narrowed the search to skill:<name>) the stripped-tag revoke
+// is invisible to a scoped pull, so the bundle STAGES; after de-scoping the sweep the
+// revoke is found and the bundle is rejected at Gate 5.
+func TestPullBundles_ScopedPull_FindsRevokeWithStrippedSkillTag(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	f := newPullFake(t)
+	admit, digest := mintAdmitItem(t, priv, "pdf", "1.0.0", "skb")
+	attest := mintAttestItem(t, priv, "pdf", "1.0.0", digest, "green", "ok")
+	f.addItem(admit)
+	f.addItem(attest)
+
+	// A signed revoke of `digest`, but the ER1 item carries NO skill:pdf tag.
+	revEv, err := BuildBundleRevokedEvent(RevokedEventInput{
+		BundleDigest: digest, ReasonCode: "key-compromise", RevokedBy: "id:test@m3c", OccurredAt: testTime(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SignEnvelopeSignature(priv, revEv); err != nil {
+		t.Fatal(err)
+	}
+	f.addItem(map[string]any{
+		"doc_id": "revoke-skill-tag-stripped",
+		"tags": strings.Join([]string{
+			"m3c-skill-bundle", "skill-registry:self",
+			"skill-digest:" + digest, "skill-event:" + EventKindRevoked,
+			// deliberately NO skill:pdf tag — the old scoped search would miss this
+		}, ","),
+		"transcript": renderTestEventBody(revEv, "revoked"),
+	})
+
+	trPath := writeTrustRoots(t, pub)
+	tr, _ := LoadSelfTrustRoots(trPath)
+	t.Setenv("M3C_SKILL_CACHE_DIR", t.TempDir())
+
+	res, err := PullBundles(f.cfg(), "skills", tr, PullOpts{OnlySkill: "pdf"})
+	if err != nil {
+		t.Fatalf("PullBundles: %v", err)
+	}
+	if len(res.Staged) != 0 {
+		t.Fatalf("a scoped pull must NOT stage a bundle whose revoke had its skill tag stripped; staged=%+v", res.Staged)
+	}
+	if len(res.Skipped) != 1 || !errors.Is(res.Skipped[0].Gate, ErrGateRevoked) {
+		t.Fatalf("expected ErrGateRevoked (revoke found despite stripped skill tag), got skipped=%+v", res.Skipped)
+	}
+}
+
 func TestPullBundles_WrongKey_RejectsAtGate1(t *testing.T) {
 	_, priv, _ := ed25519.GenerateKey(nil)
 	otherPub, _, _ := ed25519.GenerateKey(nil)

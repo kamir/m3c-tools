@@ -68,7 +68,7 @@ func TestER1LoadAttestRevokeSignedIdentity(t *testing.T) {
 		"transcript": renderTestEventBody(attEv, "revoked"),
 	})
 
-	attestByDigest, revoked, _, err := loadAttestRevoke(f.cfg(), "skills", "", pub)
+	attestByDigest, revoked, _, err := loadAttestRevoke(f.cfg(), "skills", pub)
 	if err != nil {
 		t.Fatalf("loadAttestRevoke: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestER1LoadAttestRevokeDiscoveryDeGate(t *testing.T) {
 		"transcript": renderTestEventBody(revNoTag, "revoked"),
 	})
 
-	_, revoked, _, err := loadAttestRevoke(f.cfg(), "skills", "", pub)
+	_, revoked, _, err := loadAttestRevoke(f.cfg(), "skills", pub)
 	if err != nil {
 		t.Fatalf("loadAttestRevoke: %v", err)
 	}

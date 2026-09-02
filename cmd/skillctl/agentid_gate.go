@@ -154,7 +154,19 @@ func authorizeAgentForSkill(home, skill string) agentAuthzResult {
 	// declares in its DIGEST-VERIFIED bundle.json (SPEC-0277 IS-04 / IS-T7). A skill
 	// whose signed manifest exceeds the mandate's granted scope is DENIED even though
 	// it is named in the grant. Fail-closed by construction.
-	req := skillRequirementsFn(home, skill)
+	req, resolved := skillRequirementsFn(home, skill)
+	if !resolved && grantIsRestricting(doc.Payload.Grant) {
+		// A bundle digest IS on record for this skill, but its signed manifest could
+		// not be read + digest-verified (missing/unreadable stashed .skb, or a digest
+		// mismatch). For a RESTRICTING grant that is a fail-closed DENY: a same-uid
+		// actor could otherwise `rm ~/.claude/skills/<skill>/*.skb` to strip scope
+		// enforcement down to name-only and slip an over-scoped skill through. We refuse
+		// to authorize a scope we cannot confirm — mirroring the IS-T6 deleted-mandate
+		// → deny posture. A NON-restricting grant keeps the name-only never-brick path.
+		res.Allowed = false
+		res.Reason = "skill_requirements_unresolved"
+		return res
+	}
 	if r, ok := doc.Payload.Grant.AuthorizeSkillScoped(skill, req); !ok {
 		res.Allowed = false
 		res.Reason = r // skill_not_in_grant | intent_not_in_grant | data_scope_not_in_grant | limit_exceeded
@@ -164,41 +176,57 @@ func authorizeAgentForSkill(home, skill string) agentAuthzResult {
 	return res
 }
 
+// grantIsRestricting reports whether the grant bounds anything BEYOND the skill
+// name — i.e. it names capability intents, data-scopes, or resource limits. When it
+// does, an UNRESOLVABLE signed manifest (a digest is on record but its .skb can't be
+// read) must fail closed rather than silently degrade to name-only enforcement.
+func grantIsRestricting(g agentid.Grant) bool {
+	return len(g.Intents) > 0 || len(g.DataScopes) > 0 || len(g.Limits) > 0
+}
+
 // skillRequirementsFn resolves an installed skill's author-signed declared
 // requirements (intents / data-scopes / limits) from its digest-verified
-// bundle.json. Seam so tests can drive the scope-enforcement branch without minting
-// a real .skb; production points it at resolveInstalledSkillRequirements.
+// bundle.json. The second result is `resolved`: true when the requirements are
+// authoritative (either a genuine legacy/unmanaged skill with NO digest on record →
+// empty req → name-only, OR a successful digest-verified read), false ONLY when a
+// bundle digest IS on record but its signed manifest could not be read+verified.
+// Seam so tests can drive the scope-enforcement branch without minting a real .skb;
+// production points it at resolveInstalledSkillRequirements.
 var skillRequirementsFn = resolveInstalledSkillRequirements
 
 // resolveInstalledSkillRequirements resolves an installed skill's author-signed
 // declared requirements from its DIGEST-VERIFIED bundle.json:
-//   - the capability intents its data_dependencies imply (kind+access →
-//     "<category>:<action>", the SAME vocabulary a mandate grant uses),
+//   - the capability intents its data_dependencies + signed `intent` block imply,
 //   - the data-scope ids it declares (data_dependencies[].id),
 //   - any declared resource ceilings (a `limits` block; forward-compatible).
 //
 // The bytes are trustworthy ONLY because verify.ReadDigestVerifiedManifest
 // recomputes the on-disk .skb digest and constant-time-compares it against the
 // provenance sidecar's recorded bundle_digest before returning the manifest map — a
-// tampered manifest breaks the digest and yields nothing. When the digest or the
-// stashed .skb cannot be resolved (e.g. a legacy sidecar-only install with no .skb
-// on disk, or the gate's fake-skb test fixtures), we return an EMPTY requirement
-// set: the gate then enforces skill-NAME membership only (the pre-IS-T7 P1
-// behaviour), and NEVER a fabricated scope.
-func resolveInstalledSkillRequirements(home, skill string) agentid.SkillRequirements {
+// tampered manifest breaks the digest and yields nothing.
+//
+// The (req, resolved) contract distinguishes two "empty" cases the gate must treat
+// differently:
+//   - NO digest on record (a genuine legacy/unmanaged skill, or the gate's fake-skb
+//     test fixtures) → (empty, TRUE): name-only enforcement is correct; never-brick.
+//   - a digest IS on record but the .skb is absent/unreadable, or the manifest fails
+//     the digest check → (empty, FALSE): the code KNOWS a bundle should exist but
+//     cannot confirm its scope. The gate fails this CLOSED for a restricting grant
+//     (a same-uid actor must not be able to delete the .skb to escape enforcement).
+func resolveInstalledSkillRequirements(home, skill string) (agentid.SkillRequirements, bool) {
 	digest := installedSkillDigest(home, skill)
 	if digest == "" {
-		return agentid.SkillRequirements{}
+		return agentid.SkillRequirements{}, true // genuine legacy/unmanaged → name-only, never-brick
 	}
 	skbPath := stashedSkbPath(home, skill)
 	if skbPath == "" {
-		return agentid.SkillRequirements{}
+		return agentid.SkillRequirements{}, false // digest on record but no .skb → scope unconfirmable
 	}
 	manifest, err := verify.ReadDigestVerifiedManifest(skbPath, digest)
 	if err != nil {
-		return agentid.SkillRequirements{}
+		return agentid.SkillRequirements{}, false // digest on record but manifest unverifiable
 	}
-	return requirementsFromManifest(manifest)
+	return requirementsFromManifest(manifest), true
 }
 
 // stashedSkbPath returns the path to the first stashed .skb inside an installed
@@ -222,8 +250,21 @@ func stashedSkbPath(home, skill string) string {
 // agentid.SkillRequirements the grant is checked against.
 func requirementsFromManifest(m map[string]any) agentid.SkillRequirements {
 	var req agentid.SkillRequirements
+	seenIntent := map[string]struct{}{}
+	addIntent := func(tok string) {
+		tok = strings.TrimSpace(tok)
+		if tok == "" {
+			return
+		}
+		if _, dup := seenIntent[tok]; dup {
+			return
+		}
+		seenIntent[tok] = struct{}{}
+		req.Intents = append(req.Intents, tok)
+	}
+
+	// (1) Intents the signed data_dependencies imply (kind+access), plus their ids.
 	if deps, ok := m["data_dependencies"].([]any); ok {
-		seenIntent := map[string]struct{}{}
 		for _, d := range deps {
 			dm, ok := d.(map[string]any)
 			if !ok {
@@ -234,15 +275,40 @@ func requirementsFromManifest(m map[string]any) agentid.SkillRequirements {
 			}
 			kind, _ := dm["kind"].(string)
 			access, _ := dm["access"].(string)
-			if intent := intentForKindAccess(kind, access); intent != "" {
-				if _, dup := seenIntent[intent]; !dup {
-					seenIntent[intent] = struct{}{}
-					req.Intents = append(req.Intents, intent)
+			addIntent(intentForKindAccess(kind, access))
+		}
+	}
+
+	// (2) The SIGNED `intent` block is ITSELF a capability declaration — the exact
+	// class operators most want to restrict (network egress, subprocess/shell,
+	// destructive ops, arbitrary side-effects). A skill can declare these with NO
+	// data_dependencies entry (e.g. an http-egress or shell-spawning skill whose only
+	// declared "data" is read-shaped), so reading data_dependencies ALONE let such a
+	// skill pass a grant that never granted those capabilities — a false-security
+	// overclaim. Union the intent block's declared tokens into the required intents so
+	// the grant must cover them. side_effects are the authoritative SPEC-0196 §5
+	// vocabulary ("fs:write", "network:outbound", "subprocess", "llm:call", …); the
+	// network/subprocess/destructive flags are folded to stable capability tokens.
+	if intent, ok := m["intent"].(map[string]any); ok {
+		if ses, ok := intent["side_effects"].([]any); ok {
+			for _, s := range ses {
+				if t, _ := s.(string); strings.TrimSpace(t) != "" {
+					addIntent(strings.TrimSpace(t))
 				}
 			}
 		}
+		if net, _ := intent["network"].(bool); net {
+			addIntent("network:write") // a skill asserting outbound network needs the network:write capability
+		}
+		if sp, ok := intent["subprocess"].([]any); ok && len(sp) > 0 {
+			addIntent("subprocess:exec")
+		}
+		if d, _ := intent["destructive"].(bool); d {
+			addIntent("destructive")
+		}
 	}
-	// Declared resource ceilings (forward-compatible: today's bundle.json carries
+
+	// (3) Declared resource ceilings (forward-compatible: today's bundle.json carries
 	// none; a future `limits` block is enforced against the grant's caps). Values are
 	// stringified so a JSON number (float64) and a JSON string compare identically.
 	if lim, ok := m["limits"].(map[string]any); ok && len(lim) > 0 {
@@ -280,8 +346,8 @@ func intentForKindAccess(kind, access string) string {
 	}
 	act := "read"
 	switch strings.TrimSpace(access) {
-	case "write", "transform":
-		act = "write"
+	case "write", "transform", "egress":
+		act = "write" // any mutating / outbound-egress access is the "write" capability
 	case "", "read", "passthrough":
 		act = "read"
 	default:
