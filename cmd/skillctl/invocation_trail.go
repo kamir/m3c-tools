@@ -528,7 +528,15 @@ func readAndVerifyTrail(home string) trailVerification {
 			tv.Unverified++
 		}
 	}
-	// Vacuously true for a legacy/empty trail (no chained records → no breaks).
-	tv.ChainVerified = tv.ChainBreaks == 0
+	// ChainVerified requires zero breaks AND — for a trail that actually CONTAINS
+	// chained records — that the device public key was available to verify the chain
+	// signatures. Keyless contiguity alone is forgeable: a same-uid actor who deletes
+	// the device key can then recompute a fully contiguous chain (seq/prev_hash/
+	// self_hash) that passes every contiguity check, which is exactly what the chain
+	// signature exists to stop. So a chained trail whose device key is missing is
+	// present-but-UNVERIFIED (reported via ChainSigned == 0), not verified. A
+	// legacy/empty trail (no chained records; chainStarted == false) stays vacuously
+	// verified.
+	tv.ChainVerified = tv.ChainBreaks == 0 && (!chainStarted || havePub)
 	return tv
 }

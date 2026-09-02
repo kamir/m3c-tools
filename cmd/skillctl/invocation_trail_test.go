@@ -159,6 +159,47 @@ func TestReadAndVerifyTrail_HashChainDetectsMiddleDeletion(t *testing.T) {
 	}
 }
 
+// Re-gate residual bite (audit fail-open): a chained trail whose DEVICE KEY has
+// been removed must NOT report ChainVerified=true. A same-uid actor who deletes the
+// device key can then keyless-recompute a fully contiguous chain (seq/prev_hash/
+// self_hash) that passes every contiguity check; the chain SIGNATURE is what stops
+// that, and it cannot be checked without the key. So a chained-but-keyless trail is
+// present-but-UNVERIFIED (ChainSigned==0), not verified. Pre-fix, ChainVerified was
+// ChainBreaks==0 alone, so removing the key upgraded a forgeable trail to "verified".
+func TestReadAndVerifyTrail_ChainedTrailWithoutDeviceKeyIsUnverified(t *testing.T) {
+	home := t.TempDir()
+	for i, id := range []string{
+		"01HZTRAILEVENT0000000000A",
+		"01HZTRAILEVENT0000000000B",
+		"01HZTRAILEVENT0000000000C",
+	} {
+		rec := sampleInvocation()
+		rec.EventID = id
+		rec.ExitCode = i
+		appendSignedInvocation(home, rec)
+	}
+	// Baseline: with the device key present the intact chain verifies clean.
+	if tv := readAndVerifyTrail(home); !tv.ChainVerified || tv.ChainSigned != 3 {
+		t.Fatalf("baseline intact chain should be signed+verified, got %+v", tv)
+	}
+
+	// Remove the device key material (both priv + pub) — the state after a same-uid
+	// key wipe. readAndVerifyTrail loads the key directly, so this forces havePub=false.
+	_ = os.Remove(device.PrivPath(home))
+	_ = os.Remove(device.PubPath(home))
+
+	tv := readAndVerifyTrail(home)
+	if !tv.Present {
+		t.Fatal("trail should still be present")
+	}
+	if tv.ChainVerified {
+		t.Fatalf("a chained trail with the device key removed must not report ChainVerified=true (keyless contiguity is forgeable); got ChainSigned=%d Total=%d", tv.ChainSigned, tv.Total)
+	}
+	if tv.ChainSigned != 0 {
+		t.Errorf("no chain signatures are verifiable without the device key; ChainSigned=%d, want 0", tv.ChainSigned)
+	}
+}
+
 // TestReadAndVerifyTrail_ChainSignatureDetectsKeylessRewrite is the hardening
 // bite-test for the SECOND (chain-link) device signature. A same-uid attacker
 // with NO key deletes the middle record and rewrites the survivor's seq/prev_hash
