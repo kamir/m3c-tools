@@ -36,8 +36,29 @@ func signedRevoke(t *testing.T, priv ed25519.PrivateKey, digest string) map[stri
 	return ev
 }
 
+// signedAttestEvent is a genuinely-signed ATTESTATION (reviewer_id + governance_level,
+// no revoked_by) — used to prove a signed non-revoke unions nothing even when the
+// carrier relabels its EventRecord.Kind to revoke.
+func signedAttestEvent(t *testing.T, priv ed25519.PrivateKey, digest string) map[string]any {
+	t.Helper()
+	ev := map[string]any{
+		"schema_version":   registry.EventSchemaVersion,
+		"event_id":         "a-" + digest,
+		"occurred_at":      "2026-08-01T00:00:00Z",
+		"bundle_digest":    digest,
+		"reviewer_id":      "id:gov@org",
+		"governance_level": "green",
+	}
+	if _, err := registry.SignEnvelopeSignature(priv, ev); err != nil {
+		t.Fatal(err)
+	}
+	return ev
+}
+
 // TestUnionVerifiedRevokes: only revoke events that verify against the peer's key
-// are unioned; wrong-key/unsigned/non-revoke are dropped (integrity fail-closed).
+// are unioned; wrong-key/unsigned are dropped (integrity fail-closed). Classification
+// is by the SIGNED envelope shape (FR-0090 IS-T2), so a signed revoke is unioned on
+// its SIGNED bundle_digest regardless of how the carrier labelled EventRecord.Kind.
 func TestUnionVerifiedRevokes(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 	_, wrongPriv, _ := ed25519.GenerateKey(rand.Reader)
@@ -46,9 +67,7 @@ func TestUnionVerifiedRevokes(t *testing.T) {
 
 	events := []artifact.EventRecord{
 		{Kind: artifact.KindRevoke, Digest: good, Envelope: signedRevoke(t, priv, good)},          // valid
-		{Kind: artifact.KindRevoke, Digest: forged, Envelope: signedRevoke(t, wrongPriv, forged)}, // wrong key
-		{Kind: artifact.KindAdmit, Digest: gd(3), Envelope: signedRevoke(t, priv, gd(3))},         // not a revoke
-		{Kind: artifact.KindRevoke, Digest: "", Envelope: signedRevoke(t, priv, good)},            // no digest
+		{Kind: artifact.KindRevoke, Digest: forged, Envelope: signedRevoke(t, wrongPriv, forged)}, // wrong key → dropped
 	}
 	into := map[string]struct{}{}
 	n := unionVerifiedRevokes(events, pub, into)
@@ -60,6 +79,39 @@ func TestUnionVerifiedRevokes(t *testing.T) {
 	}
 	if _, ok := into[forged]; ok {
 		t.Error("a revoke signed by the WRONG key must be dropped (integrity fail-closed)")
+	}
+}
+
+// TestUnionVerifiedRevokesSignedIdentity is the FR-0090 IS-T2 regression. A hostile
+// peer serves signed events whose EventRecord carrier fields (Kind/Digest) LIE:
+//
+//   - a genuinely-signed revoke of X wrapped in EventRecord{Kind:revoke, Digest:Y}
+//     must union X (the SIGNED bundle_digest), never the carrier Digest Y;
+//   - a genuinely-signed ATTEST relabelled EventRecord{Kind:revoke, Digest:Y}
+//     must union NOTHING (it is not a signed revoke).
+//
+// Against the old code (which keyed on ev.Digest and filtered on ev.Kind) BOTH
+// events would have unioned Y — revoking an innocent digest and honouring a forged
+// revocation. The signed-identity union defeats both.
+func TestUnionVerifiedRevokesSignedIdentity(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	x := gd(7) // the digest the SIGNED revoke actually targets
+	y := gd(8) // the digest the carrier LABELS both records with
+
+	events := []artifact.EventRecord{
+		// Signed revoke of X, but the carrier claims Digest:Y.
+		{Kind: artifact.KindRevoke, Digest: y, Envelope: signedRevoke(t, priv, x)},
+		// Signed attest of Y, but the carrier claims Kind:revoke.
+		{Kind: artifact.KindRevoke, Digest: y, Envelope: signedAttestEvent(t, priv, y)},
+	}
+	into := map[string]struct{}{}
+	unionVerifiedRevokes(events, pub, into)
+
+	if _, ok := into[x]; !ok {
+		t.Error("a signed revoke of X must union X (its SIGNED bundle_digest), not the carrier's Digest")
+	}
+	if _, ok := into[y]; ok {
+		t.Error("must NOT union Y: neither the carrier Digest of the revoke nor a relabelled signed attest may add a digest")
 	}
 }
 

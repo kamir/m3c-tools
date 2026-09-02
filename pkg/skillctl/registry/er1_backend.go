@@ -17,6 +17,7 @@ import (
 
 	"github.com/kamir/m3c-tools/pkg/er1"
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
+	"github.com/kamir/m3c-tools/pkg/skillctl/trustcore"
 )
 
 // ER1Backend is the artifact.Backend view of one ER1 self-tenant context.
@@ -202,10 +203,19 @@ func (b *ER1Backend) Events(ctx context.Context, filter artifact.ListFilter, pag
 			if err != nil {
 				continue
 			}
-			d, _ := ev["bundle_digest"].(string)
+			// FR-0090 IS-T4 (parity with git/oci Events): Kind + Digest come from the
+			// SIGNED envelope, never the skill-event:<kind> TAG (the `kind` loop var is
+			// only the coarse search prefilter). A hostile ER1 item could otherwise
+			// relabel a signed revoke as skill-event:installed to suppress it. Digest was
+			// already envelope-sourced; classifying Kind here closes the tag projection.
+			signedKind := trustcore.KindFromSignedEnvelope(ev)
+			d := trustcore.SignedDigest(ev)
+			if signedKind == "" || !trustcore.ValidDigest(d) {
+				continue // unclassifiable / no well-formed anchor → never a verdict
+			}
 			lvl, _ := ev["governance_level"].(string)
 			rec := artifact.EventRecord{
-				Kind: artifact.EventKind(kind), Digest: d, Governance: lvl,
+				Kind: signedKind, Digest: d, Governance: lvl,
 				Host:      strOrEmpty(ev["packed_on_host"], ev["installed_on_host"]),
 				Rationale: strOrEmpty(ev["rationale"]),
 				Envelope:  ev,

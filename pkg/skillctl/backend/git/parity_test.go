@@ -27,8 +27,11 @@ func TestGitEventsSinceHostInstall(t *testing.T) {
 	if _, err := b.Publish(ctx, artifact.PublishRequest{
 		Kind: artifact.KindAdmit,
 		Event: map[string]any{
+			// admitted_by_identity is the SIGNED admit discriminator (FR-0090 IS-T1):
+			// Events() now classifies from it, exactly as BuildBundleAdmittedEvent sets it.
 			"kind": "admitted", "name": "ev", "version": "1.0.0", "bundle_digest": d,
-			"occurred_at": "2026-01-01T00:00:00Z", "packed_on_host": "boxA",
+			"admitted_by_identity": "id:test@m3c",
+			"occurred_at":          "2026-01-01T00:00:00Z", "packed_on_host": "boxA",
 		},
 		Meta: artifact.ArtifactMeta{Name: "ev", Version: "1.0.0", Digest: d},
 		Blob: []byte("SKB:ev@1.0.0"),

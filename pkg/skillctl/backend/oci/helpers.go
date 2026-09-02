@@ -109,37 +109,10 @@ func strFromMap(m map[string]any, k string) string {
 }
 func parseRFC3339(s string) (time.Time, error) { return time.Parse(time.RFC3339, s) }
 
-// kindFromSignedEnvelope classifies a lifecycle event from fields that are inside
-// the SIGNED SPEC-0190 envelope — never from the registry-controlled OCI annotation.
-// A malicious registry can relabel/strip a referrer's annKind, but it cannot alter
-// `revoked_by`/`reviewer_id`/… without breaking the ed25519 signature the gauntlet
-// re-verifies. The builders are mutually exclusive (event.go), so field presence is
-// an unambiguous discriminator. Returns "" for an unclassifiable envelope (dropped).
-func kindFromSignedEnvelope(env map[string]any) artifact.EventKind {
-	switch {
-	case envHas(env, "revoked_by"):
-		return artifact.KindRevoke
-	case envHas(env, "reviewer_id"):
-		return artifact.KindAttest
-	case envHas(env, "installed_on_host"):
-		return artifact.KindInstall
-	case envHas(env, "admitted_by_identity"):
-		return artifact.KindAdmit
-	}
-	return ""
-}
-
-func envHas(m map[string]any, k string) bool {
-	if m == nil {
-		return false
-	}
-	v, ok := m[k]
-	if !ok || v == nil {
-		return false
-	}
-	s, isStr := v.(string)
-	return !isStr || s != ""
-}
+// kindFromSignedEnvelope / the signed-envelope classifier now lives in the shared
+// pkg/skillctl/trustcore (FR-0090 IS-T0) so the OCI, git, and ER1 backends plus the
+// gossip + gauntlet paths derive event identity from ONE audited definition. Events()
+// calls trustcore.KindFromSignedEnvelope + trustcore.SignedDigest directly.
 
 // isLoopbackOrPrivate reports whether host (possibly host:port) resolves to a
 // loopback or RFC1918/ULA address — the only place a bearer token may ride plain

@@ -215,3 +215,94 @@ func TestAccumulatorRevoke(t *testing.T) {
 		t.Error("a verified revoke must mark the digest revoked")
 	}
 }
+
+// signedAdmit is a genuinely-signed ADMIT envelope (admitted_by_identity, no
+// revoked_by, no reviewer_id) — a signed event of the WRONG shape for a revoke or an
+// attestation, used to prove the accumulator gates on signed shape, not "it verifies".
+func signedAdmit(t *testing.T, priv ed25519.PrivateKey, digest string) map[string]any {
+	t.Helper()
+	ev := map[string]any{
+		"schema_version":       EventSchemaVersion,
+		"event_id":             "adm-" + digest,
+		"occurred_at":          "2026-08-01T00:00:00Z",
+		"bundle_digest":        digest,
+		"admitted_by_identity": "id:kamir@m3c",
+	}
+	if _, err := SignEnvelopeSignature(priv, ev); err != nil {
+		t.Fatal(err)
+	}
+	return ev
+}
+
+// TestOfferRevokeRequiresSignedRevokedBy is the FR-0090 IS-T3 regression: an
+// admit/attest envelope — correctly signed by the pinned key — must NOT mark its
+// digest revoked when fed to OfferRevoke. A revoke is the SIGNED revoked_by shape,
+// not merely a signature that verifies. Against the old code (which revoked on any
+// verifying envelope with a bundle_digest) both cases below would have revoked qd,
+// letting an attacker suppress a good bundle by replaying a signed admit/attest into
+// the revoke path.
+func TestOfferRevokeRequiresSignedRevokedBy(t *testing.T) {
+	priv, pub := genEd(t)
+	tr := &SelfTrustRoots{GovernanceMinimum: "green", pub: pub}
+
+	// A signed ATTEST (reviewer_id + governance_level, no revoked_by) → not a revoke.
+	attest := signedAttest(t, priv, "id:kamir@m3c", qd, "green", "2026-08-01T00:00:00Z", nil)
+	accA := NewAttestAccumulator(tr, qnow)
+	accA.OfferRevoke(attest)
+	if accA.IsRevoked(qd) {
+		t.Error("a signed ATTEST fed to OfferRevoke must NOT revoke (no signed revoked_by)")
+	}
+
+	// A signed ADMIT (admitted_by_identity, no revoked_by) → not a revoke.
+	accB := NewAttestAccumulator(tr, qnow)
+	accB.OfferRevoke(signedAdmit(t, priv, qd))
+	if accB.IsRevoked(qd) {
+		t.Error("a signed ADMIT fed to OfferRevoke must NOT revoke (no signed revoked_by)")
+	}
+
+	// Sanity: a genuine signed revoke still revokes (the guard did not over-reject).
+	rev := map[string]any{"schema_version": EventSchemaVersion, "event_id": "r", "occurred_at": "2026-08-01T00:00:00Z", "bundle_digest": qd, "revoked_by": "id:gov@org"}
+	if _, err := SignEnvelopeSignature(priv, rev); err != nil {
+		t.Fatal(err)
+	}
+	accC := NewAttestAccumulator(tr, qnow)
+	accC.OfferRevoke(rev)
+	if !accC.IsRevoked(qd) {
+		t.Error("a genuine signed revoke must still mark the digest revoked")
+	}
+}
+
+// TestOfferAttestRequiresSignedReviewerAndLevel is the attestation half of IS-T3: a
+// signed revoke/admit envelope must never occupy a governance slot. Against the old
+// code a signed revoke (which has a bundle_digest and verifies) would be recorded as
+// an attestation with an empty governance_level — a shape-confusion the floor should
+// never see.
+func TestOfferAttestRequiresSignedReviewerAndLevel(t *testing.T) {
+	priv, pub := genEd(t)
+	tr := &SelfTrustRoots{GovernanceMinimum: "green", pub: pub}
+
+	// A signed revoke fed to OfferAttest → no reviewer_id → must not qualify.
+	rev := map[string]any{"schema_version": EventSchemaVersion, "event_id": "r", "occurred_at": "2026-08-01T00:00:00Z", "bundle_digest": qd, "revoked_by": "id:gov@org"}
+	if _, err := SignEnvelopeSignature(priv, rev); err != nil {
+		t.Fatal(err)
+	}
+	accA := NewAttestAccumulator(tr, qnow)
+	accA.OfferAttest(rev)
+	if len(accA.Qualifying(qd)) != 0 || accA.HasBelowFloor(qd) {
+		t.Error("a signed revoke fed to OfferAttest must occupy NO governance slot")
+	}
+
+	// A signed admit fed to OfferAttest → no reviewer_id → must not qualify.
+	accB := NewAttestAccumulator(tr, qnow)
+	accB.OfferAttest(signedAdmit(t, priv, qd))
+	if len(accB.Qualifying(qd)) != 0 {
+		t.Error("a signed admit fed to OfferAttest must occupy NO governance slot")
+	}
+
+	// Sanity: a real attestation still qualifies.
+	accC := NewAttestAccumulator(tr, qnow)
+	accC.OfferAttest(signedAttest(t, priv, "id:kamir@m3c", qd, "green", "2026-08-01T00:00:00Z", nil))
+	if len(accC.Qualifying(qd)) != 1 {
+		t.Error("a genuine signed attestation must still qualify")
+	}
+}

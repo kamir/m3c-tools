@@ -29,6 +29,7 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifactauth"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
+	"github.com/kamir/m3c-tools/pkg/skillctl/trustcore"
 )
 
 func gossipedRevokedPath(home string) string {
@@ -137,19 +138,36 @@ func gossipRevokedDigests(peers *registry.Peers) (map[string]struct{}, []peerGos
 }
 
 // unionVerifiedRevokes adds every SIGNED revoke digest in events (verified against
-// pub) into `into` and returns how many it added. Integrity fail-closed: an
-// unsigned/forged revoke, a non-revoke event, or a digest-less event is ignored.
+// pub) into `into` and returns how many NEW digests it added. Integrity fail-closed:
+// an unsigned/forged revoke, a non-revoke event, or an anchor-less event is ignored.
+//
+// FR-0090 IS-T2: the classification and the revoked-set KEY are taken from the
+// SIGNED envelope (trustcore.KindFromSignedEnvelope + SignedDigest), NEVER from the
+// EventRecord.Kind / .Digest carrier projection a hostile peer controls. Without
+// this, a peer could relabel a signed revoke of X as EventRecord{Digest:Y} to
+// revoke an innocent digest Y, or wrap a signed ATTEST in EventRecord{Kind:revoke}
+// to forge a revocation — both defeated here because the union only ever trusts the
+// bytes the peer's key actually signed.
 func unionVerifiedRevokes(events []artifact.EventRecord, pub ed25519.PublicKey, into map[string]struct{}) int {
 	n := 0
 	for _, ev := range events {
-		if ev.Kind != artifact.KindRevoke || ev.Envelope == nil || ev.Digest == "" {
+		if ev.Envelope == nil {
 			continue
+		}
+		if trustcore.KindFromSignedEnvelope(ev.Envelope) != artifact.KindRevoke {
+			continue // a signed non-revoke (e.g. an attest relabeled Kind:revoke) unions nothing
+		}
+		signedDigest := trustcore.SignedDigest(ev.Envelope)
+		if !trustcore.ValidDigest(signedDigest) {
+			continue // no well-formed signed anchor → cannot revoke anything
 		}
 		if registry.VerifyEnvelopeSignature(pub, ev.Envelope) != nil {
 			continue // an unsigned/forged revoke does not count
 		}
-		into[ev.Digest] = struct{}{}
-		n++
+		if _, seen := into[signedDigest]; !seen {
+			into[signedDigest] = struct{}{}
+			n++
+		}
 	}
 	return n
 }

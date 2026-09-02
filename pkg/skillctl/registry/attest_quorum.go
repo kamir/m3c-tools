@@ -91,6 +91,18 @@ func (a *AttestAccumulator) OfferAttest(ev map[string]any) {
 	if digest == "" {
 		return
 	}
+	// FR-0090 IS-T3: an attestation MUST carry BOTH signed discriminator fields —
+	// reviewer_id (who) and governance_level (what). A revoke/admit/install envelope
+	// (no reviewer_id) can therefore never occupy a governance slot, even if it
+	// verifies against a pinned key. The identity of a signed event is its signed
+	// SHAPE, not merely "it verifies". BuildAttestationPublishedEvent always sets
+	// both, so legitimate attestations are unaffected.
+	if rid, _ := ev["reviewer_id"].(string); rid == "" {
+		return
+	}
+	if lvl, _ := ev["governance_level"].(string); lvl == "" {
+		return
+	}
 	for _, s := range a.signers {
 		if VerifyEnvelopeSignature(s.pub, ev) != nil {
 			continue // not this signer's key
@@ -123,6 +135,14 @@ func (a *AttestAccumulator) OfferAttest(ev map[string]any) {
 func (a *AttestAccumulator) OfferRevoke(ev map[string]any) {
 	digest, _ := ev["bundle_digest"].(string)
 	if digest == "" {
+		return
+	}
+	// FR-0090 IS-T3: a revoke MUST carry the signed revoked_by discriminator. Without
+	// this guard, ANY envelope that merely verifies against a pinned key — an admit or
+	// an attestation for `digest` — would mark `digest` revoked (a signed-but-wrong-
+	// shape confusion). revoked_by is the field BuildBundleRevokedEvent sets and the
+	// only thing that makes a signed envelope a revocation.
+	if rb, _ := ev["revoked_by"].(string); rb == "" {
 		return
 	}
 	for _, s := range a.signers {

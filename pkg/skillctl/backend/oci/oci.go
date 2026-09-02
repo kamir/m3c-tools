@@ -29,6 +29,7 @@ import (
 	"oras.land/oras-go/v2/registry"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
+	"github.com/kamir/m3c-tools/pkg/skillctl/trustcore"
 )
 
 const (
@@ -473,8 +474,8 @@ func (b *ociBackend) Events(ctx context.Context, filter artifact.ListFilter, pag
 			// malicious registry relabel a signed revoke ("revoked"→"installed") to
 			// SUPPRESS it, or rebind its digest to revoke an innocent skill. The
 			// annotation is advisory display only. See reference_git_event_signed_identity.
-			kind := kindFromSignedEnvelope(env)
-			signedDigest := strFromMap(env, "bundle_digest")
+			kind := trustcore.KindFromSignedEnvelope(env)
+			signedDigest := trustcore.SignedDigest(env)
 			if kind == "" || signedDigest == "" {
 				continue // unclassifiable/anchor-less signed envelope → ignore
 			}
