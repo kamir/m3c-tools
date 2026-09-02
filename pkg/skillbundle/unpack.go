@@ -311,6 +311,14 @@ func sanitizeArchivePath(name string) (string, error) {
 	if strings.ContainsRune(name, '\\') {
 		return "", fmt.Errorf("skillbundle: tar entry %q contains a backslash", name)
 	}
+	// A colon is the NTFS Alternate-Data-Stream separator ("name:stream") and the
+	// Windows drive separator. A mid-name colon like "README:payload" would create
+	// a hidden ADS on Windows, and filepath.VolumeName below only catches a
+	// leading single-letter drive prefix — not a colon in a later position. The
+	// producer never emits a colon in any segment, so reject it on ALL platforms.
+	if strings.ContainsRune(name, ':') {
+		return "", fmt.Errorf("skillbundle: tar entry %q contains a colon (NTFS ADS / drive separator)", name)
+	}
 	if path.IsAbs(name) {
 		return "", fmt.Errorf("skillbundle: tar entry %q is absolute", name)
 	}

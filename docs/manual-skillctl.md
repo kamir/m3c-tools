@@ -224,7 +224,7 @@ a **detached** signature: `<BUNDLE.skb>.<digest_hex>.author.sig` (64 raw bytes, 
 | Flag | Purpose |
 |------|---------|
 | `-key` | Path to PEM PKCS#8 ed25519 private key (mode `0600`). **Required.** |
-| `-identity-id` | Author identity ID (advisory; reserved for future use). |
+| `-identity-id` | Author identity id — **advisory only, NOT embedded in the signature**. The detached signature is over the bundle digest alone; author identity is bound at verify time via the trust-root pin (SPEC-0188 D4), not by this flag. Recorded for your own bookkeeping. |
 
 ```bash
 skillctl sign my-skill.skb --key ~/.config/m3c/skill-keys/mykey.priv

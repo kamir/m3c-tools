@@ -113,7 +113,10 @@ func TestUnpack_RejectsTraversalAbsolute(t *testing.T) {
 // high-level tar.Writer normalises NUL/volume names, so they can't be injected
 // through makeArchive — but a hand-rolled or foreign tar can carry them).
 func TestSanitizeArchivePath(t *testing.T) {
-	reject := []string{"../evil", "a/../../b", "/etc/passwd", "..", `a\b`, "a\x00b"}
+	// "README:payload" — a mid-name colon (NTFS ADS separator) must be rejected on
+	// ALL platforms (WIN-05); pre-fix it passed because filepath.VolumeName only
+	// catches a leading single-letter drive prefix. "a:b" pins the general case.
+	reject := []string{"../evil", "a/../../b", "/etc/passwd", "..", `a\b`, "a\x00b", "README:payload", "a:b", "dir/file:stream"}
 	for _, name := range reject {
 		if _, err := sanitizeArchivePath(name); err == nil {
 			t.Errorf("sanitizeArchivePath(%q) must reject", name)

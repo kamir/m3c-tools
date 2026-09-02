@@ -1,6 +1,12 @@
 package registry
 
-import "testing"
+import (
+	"os"
+	"runtime"
+	"testing"
+
+	"github.com/kamir/m3c-tools/pkg/skillctl/homeroot"
+)
 
 // TestER1TLSGuardNonLoopback — CD-T10 (CD-11): the registry ER1 client must
 // refuse to disable TLS verification (VerifySSL=false) against a non-loopback
@@ -42,29 +48,26 @@ func TestER1TLSGuardNonLoopback(t *testing.T) {
 	}
 }
 
-// TestHomeOverrideAllowed — WIN-T8 (WIN-09): on Windows an explicit $HOME may only
-// override the per-user security root (token key, trust roots) when the override
-// was COMPILED IN (the `allow_home_override_test` build tag) — there is no
-// ambient-env escape hatch. On every other OS $HOME is always honored. The
-// decision is a pure function of (goos, compiledIn), so this runs identically on
-// all platforms — no runtime.GOOS skip, which keeps the windows/linux
-// executed-test parity even for the windows-gate drift-guard.
-func TestHomeOverrideAllowed(t *testing.T) {
-	// Non-Windows: always honor $HOME, regardless of the compiled-in flag.
-	for _, goos := range []string{"darwin", "linux"} {
-		if !homeOverrideAllowed(goos, false) {
-			t.Errorf("%s: $HOME must be honored (compiledIn=false)", goos)
+// TestUserHome_HonorsSharedDecision — WIN-T8 (WIN-09) parity: registry.userHome
+// must apply the SINGLE shared $HOME-on-Windows decision
+// (homeroot.OverrideAllowed) — the same one the verify package and the
+// cmd/skillctl binary use — so the three former copies can no longer drift into
+// separate policies. The pure (goos, compiledIn) matrix is pinned in the homeroot
+// package's own test; this proves THIS site delegates to it behaviorally. No
+// runtime.GOOS skip → the windows/linux executed-test parity stays even for the
+// windows-gate drift-guard.
+func TestUserHome_HonorsSharedDecision(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	got := userHome()
+	if homeroot.OverrideAllowed(runtime.GOOS, homeroot.CompiledIn) {
+		if got != tmp {
+			t.Errorf("userHome() = %q, want %q (override allowed on %s)", got, tmp, runtime.GOOS)
 		}
-		if !homeOverrideAllowed(goos, true) {
-			t.Errorf("%s: $HOME must be honored (compiledIn=true)", goos)
+	} else {
+		want, _ := os.UserHomeDir()
+		if got != want {
+			t.Errorf("userHome() = %q, want %q (override NOT allowed on %s)", got, want, runtime.GOOS)
 		}
-	}
-	// Windows: honor $HOME ONLY when the override is compiled in (dev/test tag);
-	// a normal shipping build compiles homeOverrideCompiledIn=false → ignored.
-	if homeOverrideAllowed("windows", false) {
-		t.Error("windows: $HOME must be IGNORED when the override is not compiled in (no env escape hatch)")
-	}
-	if !homeOverrideAllowed("windows", true) {
-		t.Error("windows: $HOME must be honored when the override is compiled in (allow_home_override_test tag)")
 	}
 }

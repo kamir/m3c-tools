@@ -1,4 +1,4 @@
-package verify
+package main
 
 import (
 	"os"
@@ -8,13 +8,14 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/homeroot"
 )
 
-// TestUserHome_HonorsSharedDecision — WIN-T8 (WIN-09) parity: verify.userHome must
-// apply the SINGLE shared $HOME-on-Windows decision (homeroot.OverrideAllowed) —
-// the same one the registry package and the cmd/skillctl binary use — so the
-// three former copies can no longer drift into separate policies. The pure
-// (goos, compiledIn) matrix is pinned in the homeroot package's own test; this
-// proves THIS site delegates to it behaviorally. No runtime.GOOS skip → the
-// windows/linux executed-test parity stays even for the windows-gate drift-guard.
+// TestUserHome_HonorsSharedDecision — WIN-T8 (WIN-09) parity: the cmd/skillctl
+// userHome must apply the SINGLE shared $HOME-on-Windows decision
+// (homeroot.OverrideAllowed) — the same one the verify and registry packages use.
+// This closes the former footgun where the CLI copy honored $HOME on ALL
+// platforms with no Windows guard, and, together with the identical per-site
+// tests in verify and registry, guards against any one site drifting back into a
+// second policy. No runtime.GOOS skip → windows/linux executed-test parity stays
+// even for the windows-gate drift-guard.
 func TestUserHome_HonorsSharedDecision(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
