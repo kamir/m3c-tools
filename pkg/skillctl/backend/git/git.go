@@ -253,8 +253,6 @@ func (b *gitBackend) Describe() artifact.Descriptor {
 			HonoursSince:   true,  // Events applies ListFilter.Since on occurred_at
 			Governance:     artifact.GovFromEventLog,
 			LatestPolicy:   artifact.LatestSemverMax,
-			Rooms:          false,
-			IdentityDir:    false,
 			ClaimCheck:     false, // the .skb is committed IN-repo, not stored out-of-line (Git-LFS is a follow-up)
 		},
 	}

@@ -6,7 +6,7 @@ package main
 // with no stashed offline metadata (verifyManagedOfflineFn returns ok=false). When
 // the enterprise `state_gate_fallback` opt-in is set, that fallback is SUPPRESSED
 // outside the `online` state so the hot path stays strictly local: such an install
-// fails CLOSED (exit 30 `offline_unverifiable_managed`) instead of blocking on an
+// fails CLOSED (exit 25 `offline_unverifiable_managed`) instead of blocking on an
 // 8s network round-trip. The invariants under test:
 //   - opted in + no offline metadata → deny, and the online seam is NEVER reached
 //     (no network on the hot path);

@@ -221,7 +221,7 @@ func Run(opts CheckOptions) Result {
 			checks = append(checks, ok(9, "tests/smoke.sh present"))
 		} else if parsed != nil && parsed.Metadata != nil {
 			if v, ok2 := parsed.Metadata["last_smoke_passed"]; ok2 && v != nil && fmt.Sprintf("%v", v) != "" {
-				checks = append(checks, okFn(9, fmt.Sprintf("metadata.last_smoke_passed = %v", v)))
+				checks = append(checks, ok(9, fmt.Sprintf("metadata.last_smoke_passed = %v", v)))
 			} else {
 				checks = append(checks, fail(9, "smoke-test marker",
 					"no tests/smoke.sh; metadata.last_smoke_passed unset; --skip-smoke not set"))
@@ -360,8 +360,7 @@ func finalize(checks []CheckResult) Result {
 
 var semverPattern = regexp.MustCompile(`^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$`)
 
-func ok(n int, name string) CheckResult   { return CheckResult{Number: n, Name: name, Pass: true} }
-func okFn(n int, name string) CheckResult { return CheckResult{Number: n, Name: name, Pass: true} }
+func ok(n int, name string) CheckResult { return CheckResult{Number: n, Name: name, Pass: true} }
 func fail(n int, name, reason string) CheckResult {
 	return CheckResult{Number: n, Name: name, Pass: false, Reason: reason}
 }

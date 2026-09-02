@@ -71,21 +71,6 @@ type GovernanceLog interface {
 	Events(ctx context.Context, filter ListFilter, page Page) (*EventPage, error)
 }
 
-// Roomer is implemented by backends with SPEC-0096 co-learning rooms: ER1.
-// GitHub/GitLab/OCI/HTTP do not; callers degrade with a clear message.
-type Roomer interface {
-	Share(ctx context.Context, room string, sel RoomSelector) (*RoomResult, error)
-	Unshare(ctx context.Context, room string, sel RoomSelector) (*RoomResult, error)
-	MatchRoom(ctx context.Context, sel RoomSelector, inRooms ...string) (*RoomMatch, error)
-}
-
-// IdentityDirectory is implemented by backends that expose a pubkey directory
-// keyed by identity id: the HTTP admission API. ER1 does not — its trust anchor
-// is the single pinned trust-roots key, not a server lookup.
-type IdentityDirectory interface {
-	Identity(ctx context.Context, id string) (*Identity, error)
-}
-
 // Descriptor is a backend's self-description: its scheme key, a human label,
 // and its declared capabilities.
 type Descriptor struct {

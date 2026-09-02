@@ -177,7 +177,7 @@ func applyShadowing(inv *model.Inventory, includeShadowed bool) {
 	}
 
 	dropIdx := map[int]bool{}
-	for name, members := range groups {
+	for _, members := range groups {
 		if len(members) <= 1 {
 			continue
 		}
@@ -200,7 +200,6 @@ func applyShadowing(inv *model.Inventory, includeShadowed bool) {
 				dropIdx[m.i] = true
 			}
 		}
-		_ = name
 	}
 
 	if len(dropIdx) == 0 {
