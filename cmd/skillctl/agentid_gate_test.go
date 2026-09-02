@@ -451,6 +451,90 @@ func TestGate_SkbDeletedWithDigestOnRecord_FailsClosed(t *testing.T) {
 	}
 }
 
+// stripAllProvenance removes EVERY provenance basis for a skill — the stashed
+// *.skb, the .m3c-provenance.json sidecar, and the .skillctl-offline.json stash —
+// leaving only a SKILL.md. This is the state a same-uid actor reaches by deleting
+// all provenance to reclassify an in-grant skill as UNMANAGED (isManagedSkill →
+// false), which the pre-IS-RS-02 gate then routed through unmanaged=allow.
+func stripAllProvenance(t *testing.T, home, skill string) {
+	t.Helper()
+	dir := filepath.Join(home, ".claude", "skills", skill)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, en := range entries {
+		n := en.Name()
+		if strings.HasSuffix(n, ".skb") || n == ".m3c-provenance.json" || n == ".skillctl-offline.json" {
+			if err := os.Remove(filepath.Join(dir, n)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: "+skill+"\n---\nbody\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// FR-0090 IS-RS-02 bite: deleting ALL provenance (.skb + sidecar + offline stash)
+// while keeping SKILL.md reclassifies an in-grant skill as UNMANAGED, so the pre-fix
+// gate took the unmanaged=allow branch and SKIPPED the IS-T7 mandate scope check —
+// letting a same-uid actor escape a restricting mandate. Under a RESTRICTING mandate
+// that NAMES the skill, the fully-stripped unmanaged skill must now be DENIED.
+// Pre-fix: allowed.
+func TestGate_FullyStrippedUnmanaged_RestrictingMandate_Denied(t *testing.T) {
+	e := setupGate(t, "pdf", false)                         // fixture writes pdf.skb (managed)
+	skillRequirementsFn = resolveInstalledSkillRequirements // exercise the REAL resolver
+	e.installMandate(t, "agent:s", "pdf", false)            // RESTRICTING: grants pdf + intents network:read
+	stripAllProvenance(t, e.home, "pdf")                    // now UNMANAGED (no .skb, no sidecar, no offline stash)
+
+	// Precondition: the skill really is unmanaged now (else the test would exercise
+	// the managed path and prove nothing about the unmanaged=allow bypass).
+	if managed, _ := isManagedSkill("pdf"); managed {
+		t.Fatal("precondition: pdf must be UNMANAGED after stripping all provenance")
+	}
+
+	code, out, _ := feed(t, hookEventFor("pdf"))
+	assertDeny(t, code, out, "not skillctl-managed")
+	if !strings.Contains(out, "IS-RS-02") {
+		t.Fatalf("expected the IS-RS-02 unmanaged-under-restricting-mandate deny, got %q", out)
+	}
+}
+
+// Never-brick control for IS-RS-02: a fully-stripped UNMANAGED skill under a
+// NON-restricting (name-only) mandate that names it must STILL run — a name-only
+// mandate owes no scope check, so the unmanaged=allow path is correct.
+func TestGate_FullyStrippedUnmanaged_NonRestrictingMandate_Allows(t *testing.T) {
+	e := setupGate(t, "pdf", false)
+	skillRequirementsFn = resolveInstalledSkillRequirements
+	e.installMandateSkillsOnly(t, "agent:t", "pdf") // NON-restricting
+	stripAllProvenance(t, e.home, "pdf")
+
+	if managed, _ := isManagedSkill("pdf"); managed {
+		t.Fatal("precondition: pdf must be UNMANAGED after stripping all provenance")
+	}
+	code, out, _ := feed(t, hookEventFor("pdf"))
+	assertAllow(t, code, out)
+}
+
+// Never-brick control for IS-RS-02: a fully-stripped UNMANAGED skill NOT named in a
+// restricting grant must NOT be denied by the new rung — it falls through to the
+// normal unmanaged policy path (default allow). (A different skill IS granted, so
+// the mandate is configured + restricting but does not name `other`.)
+func TestGate_FullyStrippedUnmanaged_NotInGrant_UnmanagedPolicyPath(t *testing.T) {
+	e := setupGate(t, "other", false)
+	skillRequirementsFn = resolveInstalledSkillRequirements
+	e.installMandate(t, "agent:u", "pdf", false) // RESTRICTING, but grants pdf — NOT `other`
+	stripAllProvenance(t, e.home, "other")
+
+	_, out, _ := feed(t, hookEventFor("other"))
+	// `other` is not in grant → the mandate denies it via allow() with the normal
+	// skill_not_in_grant reason, NOT the new unmanaged_under_restricting_mandate rung.
+	if strings.Contains(out, "unmanaged_under_restricting_mandate") {
+		t.Fatalf("a not-in-grant skill must not hit the IS-RS-02 rung; got %q", out)
+	}
+}
+
 // Never-brick control for the MEDIUM fix: a NON-restricting grant (skills only) keeps
 // the name-only fallback even when the .skb is gone — a bundle-less-but-named skill
 // under a name-only mandate must still run.
