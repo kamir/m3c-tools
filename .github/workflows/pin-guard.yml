@@ -1,0 +1,109 @@
+name: Pin Guard (supply-chain)
+
+# CD-T1 keystone + CD-T2/T6/T7 drift guard. Modeled on the drift-guard grep
+# block in windows-gate.yml. Four cheap, robust checks keep the supply-chain
+# hardening honest on every push/PR:
+#
+#   1. CD-T1  every remote `uses:` must be pinned to a full 40-hex commit SHA.
+#   2. CD-T2  no `@latest` ref may appear in any workflow (pin tool versions).
+#   3. CD-T6  every workflow must declare a top-level `permissions:` block.
+#   4. CD-T7  every actions/upload-artifact step must set `retention-days:`.
+#
+# Self-reference: this file necessarily contains the tokens it searches for
+# ("uses:", "@latest", "upload-artifact"). The uses/retention checks anchor to a
+# real YAML `uses:` key (optional "- " then `uses:` at line start) after
+# stripping comments, so the grep/awk PROGRAM lines here (which have other
+# leading text) never match. The @latest check excludes this file by name.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pin-guard:
+    name: Enforce pinning + least-privilege + retention
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # (1) CD-T1 — every remote action ref must be a 40-hex commit SHA.
+      - name: Guard — all `uses:` refs are pinned to a 40-hex SHA
+        run: |
+          set -euo pipefail
+          bad=""
+          for f in .github/workflows/*.yml; do
+            # Strip trailing comments, keep only real step-level `uses:` keys,
+            # drop local (./) and docker:// refs, then drop anything already
+            # pinned to @<40 hex>. Whatever survives is an unpinned violation.
+            v="$(sed 's/#.*$//' "$f" \
+                  | grep -nE '^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]' \
+                  | grep -vE 'uses:[[:space:]]+(\.|docker://)' \
+                  | grep -vE '@[0-9a-f]{40}[[:space:]]*$' || true)"
+            if [ -n "$v" ]; then
+              bad="$bad$(printf '%s\n' "$v" | sed "s|^|$f:|")"$'\n'
+            fi
+          done
+          if [ -n "$bad" ]; then
+            echo "::error::Unpinned action ref(s) — pin to a full 40-char commit SHA (e.g. actions/checkout@<sha> # v7):"
+            printf '%s\n' "$bad"
+            exit 1
+          fi
+          echo "OK: every 'uses:' ref is pinned to a 40-hex commit SHA."
+
+      # (2) CD-T2 — no floating @latest anywhere in the workflows.
+      - name: Guard — no @latest refs
+        run: |
+          set -euo pipefail
+          # Exclude this guard file: it contains the literal token by necessity.
+          hits="$(grep -rnE '@latest' .github/workflows/ | grep -v 'pin-guard.yml' || true)"
+          if [ -n "$hits" ]; then
+            echo "::error::@latest ref(s) found — pin to a fixed version (CD-T2):"
+            printf '%s\n' "$hits"
+            exit 1
+          fi
+          echo "OK: no @latest refs."
+
+      # (3) CD-T6 — every workflow declares a top-level permissions block.
+      - name: Guard — top-level permissions present
+        run: |
+          set -euo pipefail
+          missing=""
+          for f in .github/workflows/*.yml; do
+            grep -qE '^permissions:' "$f" || missing="$missing $f"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Workflow(s) missing a top-level 'permissions:' block (CD-T6):$missing"
+            exit 1
+          fi
+          echo "OK: every workflow declares a top-level permissions block."
+
+      # (4) CD-T7 — every upload-artifact step sets retention-days.
+      - name: Guard — upload-artifact steps set retention-days
+        run: |
+          set -euo pipefail
+          bad=""
+          for f in .github/workflows/*.yml; do
+            # For each real `uses: …upload-artifact…` step key, scan its block
+            # (until the next `- ` step item) for a retention-days: key.
+            out="$(awk '
+              /^[ \t]*(-[ \t]+)?uses:[ \t].*upload-artifact/ { inblk=1; has=0; ln=NR; next }
+              inblk {
+                if ($0 ~ /retention-days:/) has=1
+                if ($0 ~ /^[ \t]*-[ \t]/) {
+                  if (!has) print FILENAME ":" ln ": upload-artifact step missing retention-days"
+                  inblk=0
+                }
+              }
+              END { if (inblk && !has) print FILENAME ":" ln ": upload-artifact step missing retention-days" }
+            ' "$f")"
+            if [ -n "$out" ]; then bad="$bad$out"$'\n'; fi
+          done
+          if [ -n "$bad" ]; then
+            echo "::error::upload-artifact step(s) without retention-days (CD-T7):"
+            printf '%s\n' "$bad"
+            exit 1
+          fi
+          echo "OK: every upload-artifact step sets retention-days."

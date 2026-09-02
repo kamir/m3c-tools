@@ -109,8 +109,8 @@ else should be "no text"):
 - Real commands only: `keygen`, `pack`, `sign`, `verify-sig`, `trust`, `install`, `verify`,
   `publish`, `pull`, `registry`, `agentid`, `revoke` — **never** `search`, `init`, `build`, `run`.
 - Repo URL (footer): `github.com/kamir/m3c-tools`  — **not** `skillctl/skillctl`.
-- Install line (if shown): `curl -sL github.com/kamir/m3c-tools/releases/latest/download/skillctl-darwin-arm64.tar.gz | tar xz`
-  — **not** `get.skillctl.dev`.
+- Install line (if shown): `curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/master/tools/skillctl-install.sh | bash`
+  (the signed installer — skillctl ships **only** from the signed `skillctl/v*` release) — **not** `get.skillctl.dev`.
 - License (footer, correct): `Apache-2.0`.
 - Trust phrasing: *offline-verifiable — no hosted CA in the verification path* (evidence-led, no overclaim).
 - Do **not** invent a public skill marketplace or named skills (no `pdf-extract`, `web-search`, `skillhub`).

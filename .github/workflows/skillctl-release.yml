@@ -23,6 +23,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # CD-T4: builds use go.sum as-is; never mutate the module graph mid-build.
+  GOFLAGS: -mod=readonly
+
 jobs:
   release:
     name: Build · cosign-sign · draft
@@ -32,9 +36,9 @@ jobs:
       id-token: write # OIDC for keyless cosign + build provenance
       attestations: write # SLSA build-provenance attestation
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: "1.26.6" # patched toolchain (SPEC-0251 §5) — CVE-free binaries (GO-2026-5856)
 
@@ -71,7 +75,7 @@ jobs:
       # never block a release cut.
       - name: Generate SBOM (CycloneDX)
         continue-on-error: true
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           path: .
           format: cyclonedx-json
@@ -79,7 +83,7 @@ jobs:
           artifact-name: skillctl.sbom.cdx.json
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
 
       - name: Keyless-sign SHA256SUMS (GitHub OIDC)
         working-directory: dist
@@ -96,7 +100,7 @@ jobs:
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 
       - name: SLSA build provenance (binaries + manifest)
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: |
             dist/skillctl-darwin-arm64
@@ -133,7 +137,7 @@ jobs:
       # SHA256SUMS.sig, and promotes. A broken cosign flow yields a draft, never
       # a published release.
       - name: Create draft release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           draft: true
           make_latest: false

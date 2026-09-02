@@ -44,28 +44,21 @@ curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/master/tools/skillc
 
 Override the target dir or the release with `INSTALL_DIR=…` / `RELEASE_BASE=…`.
 
-**Interim (unsigned — until the signed `skillctl/v0.3.x` release is published):** the scripted
-installers above verify a *signed* release, so until that release is live they report a missing
-download. For a quick Windows install *today* you can pull the unsigned binary from the current
-product release — this does **not** verify provenance, so prefer the signed one-liner once it
-ships:
-```powershell
-$d="$env:LOCALAPPDATA\Programs\skillctl"
-New-Item -ItemType Directory -Force -Path $d | Out-Null
-Invoke-WebRequest "https://github.com/kamir/m3c-tools/releases/latest/download/skillctl-windows-amd64.zip" -OutFile "$env:TEMP\skillctl.zip"
-Expand-Archive "$env:TEMP\skillctl.zip" $d -Force   # the zip already contains skillctl.exe — no rename needed
-$u=[Environment]::GetEnvironmentVariable("PATH","User"); if($u -notlike "*$d*"){[Environment]::SetEnvironmentVariable("PATH","$u;$d","User")}
-& "$d\skillctl.exe" version
-```
-
-**Manual install (raw tarball):**
+**Manual install (signed release, raw binary):** the **only** skillctl distribution channel is
+the signed `skillctl/v*` release (cosign/OIDC + SLSA provenance, plus a pinned ed25519 fallback).
+The unsigned per-arch skillctl assets that used to ride along on the `v*` product release have
+been **retired** — don't look for them there. To install by hand, pull the raw binary and its
+`SHA256SUMS` from the signed release and verify integrity *before* moving it onto your `PATH`:
 ```bash
-curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/skillctl-darwin-arm64.tar.gz | tar xz \
-  && sudo mv skillctl-darwin-arm64 /usr/local/bin/skillctl
+BASE="https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.3.1"   # latest signed tag
+curl -sLO "$BASE/skillctl-darwin-arm64"     # or darwin-amd64 / linux-amd64 / linux-arm64 / windows-amd64.exe
+curl -sLO "$BASE/SHA256SUMS"
+grep ' skillctl-darwin-arm64$' SHA256SUMS | shasum -a 256 -c -     # integrity gate — fails closed on mismatch
+sudo install skillctl-darwin-arm64 /usr/local/bin/skillctl
 ```
 
-Swap `darwin-arm64` for `darwin-amd64`, `linux-amd64`, `linux-arm64`, or use the
-`skillctl-windows-amd64.zip`. Or build from source: `go build -o build/skillctl ./cmd/skillctl`.
+For full provenance verification (cosign bundle / ed25519 signature), prefer the one-liner
+installers above — they do it for you. Or build from source: `go build -o build/skillctl ./cmd/skillctl`.
 
 ```bash
 skillctl version
