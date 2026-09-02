@@ -433,7 +433,7 @@ func TestOCIPlaintextCredRefused(t *testing.T) {
 
 type fakeCreds struct{ user, token string }
 
-func (f fakeCreds) Credential(ctx context.Context, scheme, host string) (artifact.Credential, error) {
+func (f fakeCreds) Credential(ctx context.Context, scheme, host string, mode artifact.AccessMode) (artifact.Credential, error) {
 	return artifact.Credential{User: f.user, Token: f.token, Scheme: scheme}, nil
 }
 

@@ -44,23 +44,47 @@ func openOCI(spec string, opts artifact.OpenOptions) (artifact.Backend, error) {
 	if os.Getenv("M3C_OCI_HTTP") == "1" {
 		repo.PlainHTTP = true
 	}
-	if opts.Creds != nil {
-		host := repo.Reference.Registry
-		if c, cerr := opts.Creds.Credential(context.Background(), "oci", host); cerr == nil && (c.Token != "" || c.User != "") {
-			// Never send a bearer/basic credential over cleartext to a host that is
-			// not provably loopback/private — an on-path attacker would capture a
-			// write-scoped registry token (same class as ER1_VERIFY_SSL=false).
-			if repo.PlainHTTP && !isLoopbackOrPrivate(host) {
-				return nil, fmt.Errorf("oci: refusing to send credential over plain HTTP to non-loopback host %q; use https or unset M3C_OCI_HTTP", host)
-			}
-			repo.Client = &auth.Client{
-				Client:     retry.DefaultClient,
-				Cache:      auth.NewCache(),
-				Credential: auth.StaticCredential(host, auth.Credential{Username: c.User, Password: c.Token}),
-			}
-		}
+	b := newOCIBackend(repo, spec)
+	// CD-13: bake the READ-only credential into the shared oras client by default.
+	// The oras auth.Client is constructed once, and its per-request Credential
+	// callback carries no read/write mode, so we cannot distinguish op mode inside
+	// oras. Instead the common path (Fetch/List/Resolve/Events — a verifying pull)
+	// uses the read tier here, and Publish — the ONLY write op — swaps to the write
+	// tier via applyOCIAuth(ModeWrite) at its start. For a single-token operator
+	// ModeRead falls back to the write token in the resolver, so behavior is
+	// unchanged; only an operator who provisioned a distinct read-only token gets
+	// least privilege on pulls.
+	b.creds = opts.Creds
+	b.credHost = repo.Reference.Registry
+	if err := applyOCIAuth(repo, opts.Creds, b.credHost, artifact.ModeRead); err != nil {
+		return nil, err
 	}
-	return newOCIBackend(repo, spec), nil
+	return b, nil
+}
+
+// applyOCIAuth resolves the (host, mode) credential via creds and installs it on
+// repo.Client, or leaves the repo anonymous when there is no resolver/token. It
+// enforces the CD-03/WIN-12 egress guard: a bearer/basic credential must never
+// ride cleartext HTTP to a host that is not provably loopback/private — an on-path
+// attacker would capture a write-scoped registry token (same class as
+// ER1_VERIFY_SSL=false). Called at Open with ModeRead and by Publish with ModeWrite.
+func applyOCIAuth(repo *remote.Repository, creds artifact.CredentialSource, host string, mode artifact.AccessMode) error {
+	if creds == nil {
+		return nil
+	}
+	c, cerr := creds.Credential(context.Background(), "oci", host, mode)
+	if cerr != nil || (c.Token == "" && c.User == "") {
+		return nil // anonymous for this mode
+	}
+	if repo.PlainHTTP && !isLoopbackOrPrivate(host) {
+		return fmt.Errorf("oci: refusing to send credential over plain HTTP to non-loopback host %q; use https or unset M3C_OCI_HTTP", host)
+	}
+	repo.Client = &auth.Client{
+		Client:     retry.DefaultClient,
+		Cache:      auth.NewCache(),
+		Credential: auth.StaticCredential(host, auth.Credential{Username: c.User, Password: c.Token}),
+	}
+	return nil
 }
 
 // --- input validation (SEC-M9): name/version/digest become tags + annotations. ---

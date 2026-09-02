@@ -109,11 +109,19 @@ archives:
 
   # The demo ships as a self-contained bundle: skillctl-demo + the skillctl it
   # shells out to. Double-click on a locked-down Windows laptop, browser opens.
+  #
+  # CD-10: the archive is named `skillctl-offline-demo-*`, NOT `skillctl-demo-*`, so
+  # a user browsing release assets cannot mistake this bundle (which embeds an
+  # in-repo-built `skillctl`) for the independently signed skillctl CLI channel
+  # (skillctl/v*, cosign + SLSA L3). The extracted binaries are still `skillctl-demo`
+  # and `skillctl` (docs unchanged); only the archive filename disambiguates. This
+  # whole channel is now cosign-signed + SLSA-attested via release.yml, so the demo
+  # bundle's integrity is covered — the rename just removes the naming ambiguity.
   - id: skillctl-demo-archive
     ids:
       - skillctl-demo
       - skillctl
-    name_template: "skillctl-demo-{{ .Os }}-{{ .Arch }}"
+    name_template: "skillctl-offline-demo-{{ .Os }}-{{ .Arch }}"
     format_overrides:
       - goos: windows
         formats: [zip]

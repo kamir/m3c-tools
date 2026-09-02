@@ -25,8 +25,22 @@ func TestGitBackendConformance(t *testing.T) {
 
 type fakeCreds struct{ user, token string }
 
-func (f fakeCreds) Credential(ctx context.Context, scheme, host string) (artifact.Credential, error) {
+func (f fakeCreds) Credential(ctx context.Context, scheme, host string, mode artifact.AccessMode) (artifact.Credential, error) {
+	// A mode-agnostic resolver (the backward-compatible case): the same token for
+	// read and write. CD-13 read/write splitting is exercised by fakeRWCreds.
 	return artifact.Credential{User: f.user, Token: f.token, Scheme: scheme}, nil
+}
+
+// fakeRWCreds returns DISTINCT tokens per access mode, so a test can prove a read
+// path (ModeRead) never receives the write token (CD-13).
+type fakeRWCreds struct{ readTok, writeTok, user string }
+
+func (f fakeRWCreds) Credential(ctx context.Context, scheme, host string, mode artifact.AccessMode) (artifact.Credential, error) {
+	tok := f.writeTok
+	if mode == artifact.ModeRead {
+		tok = f.readTok
+	}
+	return artifact.Credential{User: f.user, Token: tok, Scheme: scheme}, nil
 }
 
 func mustGit(t *testing.T, dir string, args ...string) {
@@ -217,6 +231,65 @@ func TestGitDefaultUserOauth2(t *testing.T) {
 	b, _ := openGitLab("gitlab://host/g/p", artifact.OpenOptions{Creds: fakeCreds{token: "T"}})
 	if u := b.(*gitBackend).authUser(); u != "oauth2" {
 		t.Errorf("default user = %q, want oauth2", u)
+	}
+}
+
+// TestGitCredModeSplit — CD-13: with a distinct read-only and write token, a read
+// operation's credential env carries the READ token and a write operation's
+// carries the WRITE token. A verifying pull (clone under ModeRead) therefore never
+// transmits the write-scoped registry token.
+func TestGitCredModeSplit(t *testing.T) {
+	creds := fakeRWCreds{readTok: "RO-TOKEN", writeTok: "RW-TOKEN", user: "oauth2"}
+	// RFC1918 host over https keeps the egress guard happy while the token attaches.
+	b, err := openGitLab("gitlab://192.168.0.131:8929/grp/skills", artifact.OpenOptions{Creds: creds})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gb := b.(*gitBackend)
+	if gb.token != "RW-TOKEN" || gb.readToken != "RO-TOKEN" {
+		t.Fatalf("tiers not split: write=%q read=%q", gb.token, gb.readToken)
+	}
+	readEnv := strings.Join(gb.authEnvForMode(artifact.ModeRead), "\n")
+	writeEnv := strings.Join(gb.authEnvForMode(artifact.ModeWrite), "\n")
+	roHdr := "Authorization: Basic " + base64.StdEncoding.EncodeToString([]byte("oauth2:RO-TOKEN"))
+	rwHdr := "Authorization: Basic " + base64.StdEncoding.EncodeToString([]byte("oauth2:RW-TOKEN"))
+	if !strings.Contains(readEnv, roHdr) || strings.Contains(readEnv, "RW-TOKEN") {
+		t.Errorf("read env must carry ONLY the read token; got %q", readEnv)
+	}
+	if !strings.Contains(writeEnv, rwHdr) || strings.Contains(writeEnv, "RO-TOKEN") {
+		t.Errorf("write env must carry ONLY the write token; got %q", writeEnv)
+	}
+}
+
+// TestGitAuthHeaderScopedAndNoRedirect — CD-14: the credential is injected as a
+// URL-SCOPED http.<remote>.extraHeader (NOT a global http.extraHeader) and
+// http.followRedirects is forced false, so a cross-host redirect on the auth path
+// drops the credential instead of resending it.
+func TestGitAuthHeaderScopedAndNoRedirect(t *testing.T) {
+	b, err := openGitLab("gitlab://gitlab.example.com/grp/skills",
+		artifact.OpenOptions{Creds: fakeCreds{user: "oauth2", token: "s3cr3t"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gb := b.(*gitBackend)
+	env := gb.authEnv()
+	joined := strings.Join(env, "\n")
+	wantKey := "http." + gb.remote + ".extraHeader"
+	if !strings.Contains(joined, "GIT_CONFIG_KEY_0="+wantKey) {
+		t.Errorf("header not scoped to the remote URL; want key %q in %q", wantKey, joined)
+	}
+	// The bare, GLOBAL header key must NOT be used (that is the pre-CD-14 leak).
+	for _, e := range env {
+		if e == "GIT_CONFIG_KEY_0=http.extraHeader" {
+			t.Error("credential injected via a GLOBAL http.extraHeader — a cross-host redirect would resend it")
+		}
+	}
+	if !strings.Contains(joined, "GIT_CONFIG_KEY_1=http.followRedirects") ||
+		!strings.Contains(joined, "GIT_CONFIG_VALUE_1=false") {
+		t.Errorf("http.followRedirects=false not set while a token is attached; got %q", joined)
+	}
+	if !strings.Contains(joined, "GIT_CONFIG_COUNT=2") {
+		t.Errorf("GIT_CONFIG_COUNT must cover both keys; got %q", joined)
 	}
 }
 

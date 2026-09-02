@@ -27,6 +27,7 @@ import (
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/registry"
+	"oras.land/oras-go/v2/registry/remote"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
 	"github.com/kamir/m3c-tools/pkg/skillctl/semver"
@@ -60,10 +61,21 @@ type ociBackend struct {
 	target  ociTarget
 	display string // e.g. "oci://ghcr.io/kamir/skills"
 	scheme  string
+	// CD-13 write-mode swap: when target is a live remote.Repository, authRepo
+	// points at it and creds/credHost let Publish re-resolve the WRITE credential
+	// (the shared oras client is baked read-only at Open). All nil/zero for a local
+	// oci.Store (no network, no credential) — Publish's swap is then a no-op.
+	authRepo *remote.Repository
+	creds    artifact.CredentialSource
+	credHost string
 }
 
 func newOCIBackend(target ociTarget, display string) *ociBackend {
-	return &ociBackend{target: target, display: display, scheme: "oci"}
+	b := &ociBackend{target: target, display: display, scheme: "oci"}
+	if r, ok := target.(*remote.Repository); ok {
+		b.authRepo = r
+	}
+	return b
 }
 
 var (
@@ -119,6 +131,15 @@ func sanitizeTag(s string) string {
 // --- Publish ---
 
 func (b *ociBackend) Publish(ctx context.Context, req artifact.PublishRequest) (*artifact.PublishResult, error) {
+	// CD-13: Publish is the only write op. Swap the shared oras client from its
+	// read-only default (baked at Open) to the WRITE credential. No-op for a local
+	// oci.Store (authRepo nil) and for a single-token operator (ModeWrite resolves
+	// the same token). Re-runs the plain-HTTP egress guard for the write token.
+	if b.authRepo != nil && b.creds != nil {
+		if err := applyOCIAuth(b.authRepo, b.creds, b.credHost, artifact.ModeWrite); err != nil {
+			return nil, err
+		}
+	}
 	name, ver, dig := req.Meta.Name, req.Meta.Version, req.Meta.Digest
 	if err := validateName(name); err != nil {
 		return nil, err
