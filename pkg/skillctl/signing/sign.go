@@ -69,11 +69,15 @@ func ComputeBundleDigest(bundlePath string) ([sha256.Size]byte, error) {
 // at keyPath and writes a detached signature next to the bundle.
 //
 // Returns the full signature path, the lowercase hex digest, and any
-// error. identityID is currently advisory metadata only — the signature
-// file format does NOT embed it (the Phase-3 admission endpoint takes
-// identity_id as a separate form field, so embedding it here would just
-// invite drift). The parameter is preserved so callers can wire it
-// through without an interface break later.
+// error. identityID is ADVISORY ONLY and is deliberately NOT embedded in the
+// signature: the detached signature is over the raw 32-byte bundle digest alone.
+// This is not a "wire it in later" gap — SPEC-0188 D4 LOCKED identity binding as
+// a trust-root pin (identity_id → pubkey, added out-of-band and checked at verify
+// time), and the admission endpoint takes identity_id as a separate form field,
+// so embedding it in the signature bytes would only invite drift. The parameter
+// is retained because the documented author workflow and the two-person ER1
+// acceptance runbook pass `--identity-id` for the author's own bookkeeping; it
+// travels through unchanged and never enters the signed message.
 //
 // Refuses to overwrite an existing signature file: regenerating signatures
 // silently is exactly the kind of "looks like it worked" failure we want
@@ -145,7 +149,7 @@ func SignBundle(bundlePath, keyPath, identityID string) (sigPath, digestHex stri
 		return "", "", fmt.Errorf("sign: write signature: %w", err)
 	}
 
-	_ = identityID // reserved for future use (see doc comment above)
+	_ = identityID // advisory only — never embedded in the signature (see doc comment above)
 	return sigPath, digestHex, nil
 }
 

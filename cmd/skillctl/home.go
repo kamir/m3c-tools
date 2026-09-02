@@ -1,23 +1,17 @@
 package main
 
-import (
-	"os"
-	"strings"
-)
+import "github.com/kamir/m3c-tools/pkg/skillctl/homeroot"
 
-// userHome resolves the user's home directory, honoring an explicit $HOME on
-// ALL platforms before falling back to os.UserHomeDir().
-//
-// Why: on Windows os.UserHomeDir() reads %USERPROFILE% and ignores $HOME, so a
-// test (or a Git-Bash session) that sets HOME would be silently ignored. The
-// SPEC-0247 gate's home resolution goes through here so it is uniform and
-// test-injectable cross-platform — this is what lets the gate tests run on the
-// windows-latest CI runner (SPEC-0128 / Gap B) without per-test USERPROFILE
-// plumbing. In production on Windows, HOME is normally unset → os.UserHomeDir()
-// → %USERPROFILE%, so behaviour is unchanged for real users.
+// userHome resolves the user's home directory for skillctl's per-user trust
+// paths. It now uses the SAME WIN-T8 tag-gated $HOME policy as the verify and
+// registry packages (single-sourced in pkg/skillctl/homeroot) — closing a
+// footgun where this copy honored $HOME on ALL platforms with no Windows guard,
+// so a shipping Windows binary would trust a $HOME an attacker or Git-Bash
+// session could set. A shipping Windows build (no `allow_home_override_test` tag)
+// now ignores $HOME here too and resolves %USERPROFILE% via os.UserHomeDir();
+// dev/test builds and every non-Windows build still honor $HOME. The e2e/
+// lifecycle tests inject USERPROFILE alongside HOME (WIN-T8), so a shipping
+// cmd binary stays scoped to the temp home via %USERPROFILE%.
 func userHome() (string, error) {
-	if h := strings.TrimSpace(os.Getenv("HOME")); h != "" {
-		return h, nil
-	}
-	return os.UserHomeDir()
+	return homeroot.UserHome()
 }

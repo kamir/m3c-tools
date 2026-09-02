@@ -65,7 +65,7 @@ func runSign(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("sign", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	keyPath := fs.String("key", "", "Path to PEM PKCS#8 ed25519 private key (mode 0600). Required.")
-	identityID := fs.String("identity-id", "", "Author identity ID (advisory; reserved for future use).")
+	identityID := fs.String("identity-id", "", "Author identity id — ADVISORY ONLY, NOT embedded in the signature. The detached signature is over the bundle digest alone; author identity is bound at verify time via the trust-root pin (SPEC-0188 D4), not by this flag.")
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: skillctl sign BUNDLE.skb --key PATH.priv [--identity-id ID]")
 		fmt.Fprintln(stderr, "")
