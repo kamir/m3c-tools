@@ -390,7 +390,7 @@ func intentForKindAccess(kind, access string) string {
 	case "write", "transform", "egress":
 		act = "write" // any mutating / outbound-egress access is the "write" capability
 	case "", "read", "passthrough":
-		act = "read"
+		// keep the "read" default (read/passthrough/unspecified access is read-only)
 	default:
 		act = strings.TrimSpace(access) // unknown → verbatim, fails membership unless granted
 	}
