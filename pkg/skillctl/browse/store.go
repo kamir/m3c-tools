@@ -45,7 +45,7 @@ func OpenGraphStore(dbPath string) (*GraphStore, error) {
 
 	s := &GraphStore{db: db, dbPath: dbPath}
 	if err := s.migrate(); err != nil {
-		db.Close()
+		db.Close() //nolint:errcheck // best-effort close of the just-opened DB on this error path
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	return s, nil

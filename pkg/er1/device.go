@@ -1,9 +1,10 @@
 // device.go — Device pairing and heartbeat client for SPEC-0126.
 //
 // Talks to the aims-core device management endpoints:
-//   POST /api/v2/devices/pair       — idempotent device pairing (upsert)
-//   POST /api/v2/devices/heartbeat  — update sync state after batch
-//   GET  /api/v2/devices            — list paired devices
+//
+//	POST /api/v2/devices/pair       — idempotent device pairing (upsert)
+//	POST /api/v2/devices/heartbeat  — update sync state after batch
+//	GET  /api/v2/devices            — list paired devices
 package er1
 
 import (
@@ -73,7 +74,7 @@ func PairDevice(ctx context.Context, baseURL, apiKey string, req PairRequest) er
 		return fmt.Errorf("pair device request: %w", err)
 	}
 	defer resp.Body.Close()
-	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20)) //nolint:errcheck // draining the response body for connection reuse; the data is discarded
 
 	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
 		return nil
@@ -101,7 +102,7 @@ func DeviceHeartbeat(ctx context.Context, baseURL, apiKey string, req HeartbeatR
 		return fmt.Errorf("heartbeat request: %w", err)
 	}
 	defer resp.Body.Close()
-	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20)) //nolint:errcheck // draining the response body for connection reuse; the data is discarded
 
 	if resp.StatusCode == http.StatusOK {
 		return nil

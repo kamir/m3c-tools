@@ -366,11 +366,11 @@ func (pm *ProfileManager) writeActiveProfile(name string) error {
 		return fmt.Errorf("open active-profile file: %w", err)
 	}
 	if _, err := f.WriteString(name + "\n"); err != nil {
-		f.Close()
+		f.Close() //nolint:errcheck // best-effort close on error path; the write error is already returned below
 		return fmt.Errorf("write active-profile: %w", err)
 	}
 	if err := f.Sync(); err != nil {
-		f.Close()
+		f.Close() //nolint:errcheck // best-effort close on error path; the sync error is already returned below
 		return fmt.Errorf("sync active-profile: %w", err)
 	}
 	if err := f.Close(); err != nil {

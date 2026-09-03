@@ -309,7 +309,7 @@ func (c *Config) HealthCheck() error {
 		return fmt.Errorf("ER1 server unreachable: %w", err)
 	}
 	defer resp.Body.Close()
-	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20)) //nolint:errcheck // draining the response body for connection reuse; the data is discarded
 
 	switch resp.StatusCode {
 	case http.StatusOK:
@@ -366,7 +366,7 @@ func LoadDotenv(path string) error {
 			v = v[1 : len(v)-1]
 		}
 		if os.Getenv(k) == "" {
-			os.Setenv(k, v)
+			os.Setenv(k, v) //nolint:errcheck // best-effort .env->process env; a malformed key is simply skipped, same as an absent line
 		}
 	}
 	return nil

@@ -98,7 +98,7 @@ func healthCheckER1(apiURL, verifySSLStr string) error {
 		return fmt.Errorf("ER1 server unreachable: %w", err)
 	}
 	defer resp.Body.Close()
-	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20)) //nolint:errcheck // draining the response body for connection reuse; the data is discarded
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
 		return nil

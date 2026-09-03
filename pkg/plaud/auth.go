@@ -173,7 +173,7 @@ func extractTokenWithAutoLaunch() (string, error) {
 		client := &http.Client{Timeout: 2 * time.Second}
 		resp, err := client.Get("http://127.0.0.1:9222/json")
 		if err == nil {
-			resp.Body.Close()
+			resp.Body.Close() //nolint:errcheck // best-effort close of a read-only CDP readiness-probe response
 			cdpReady = true
 			break
 		}
@@ -237,7 +237,7 @@ func LaunchChromeForPlaud() (cleanup func(), err error) {
 		"https://app.plaud.ai",
 	)
 	if err := cmd.Start(); err != nil {
-		os.RemoveAll(debugDir)
+		os.RemoveAll(debugDir) //nolint:errcheck // best-effort cleanup of the temp Chrome profile dir on this error path
 		return nil, fmt.Errorf("failed to launch Chrome: %w", err)
 	}
 
@@ -246,7 +246,7 @@ func LaunchChromeForPlaud() (cleanup func(), err error) {
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()
 		}
-		os.RemoveAll(debugDir)
+		os.RemoveAll(debugDir) //nolint:errcheck // best-effort cleanup of the temp Chrome profile dir
 	}
 	return cleanup, nil
 }
@@ -266,7 +266,7 @@ func WaitForCDPReady(timeout time.Duration, progress ProgressFunc) bool {
 		client := &http.Client{Timeout: 2 * time.Second}
 		resp, err := client.Get("http://127.0.0.1:9222/json")
 		if err == nil {
-			resp.Body.Close()
+			resp.Body.Close() //nolint:errcheck // best-effort close of a read-only CDP readiness-probe response
 			return true
 		}
 	}
@@ -378,7 +378,6 @@ func sanitizePlaudToken(tok string) string {
 	}
 	return tok
 }
-
 
 // extractTokenOsascript uses macOS osascript/JXA to read localStorage from Chrome.
 func extractTokenOsascript() (string, error) {
