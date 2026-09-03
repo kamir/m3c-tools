@@ -25,19 +25,20 @@ PA_SHA256="47efbf42c77c19a05d22e627d42873e991ec0c1357219c0d74ce6a2948cb2def"
 # a GitHub Release asset on our own repo and point PA_MIRROR at it. The SHA-256 gate
 # makes the mirror's integrity independent of the source.
 #
-# >>> ONE-TIME OPERATOR/INFRA STEP (the default URL 404s until this is done) <<<
-#   The PA_MIRROR default below is a documented PLACEHOLDER. Upload the tarball once:
+# PROVISIONED (2026-09-03): the mirror asset is live at the default URL below —
+# the 'portaudio-vendor' release on kamir/m3c-tools carries ${PA_VERSION}.tgz
+# (sha256 ${PA_SHA256}). No operator action is required for a normal build.
+#
+#   To RE-PROVISION (new host/repo, or if the asset is ever removed):
 #     curl -fL -o "${PA_VERSION}.tgz" \
 #       "https://web.archive.org/web/20210601000000id_/http://files.portaudio.com/archives/${PA_VERSION}.tgz"
 #     echo "${PA_SHA256}  ${PA_VERSION}.tgz" | shasum -a 256 -c -   # verify before publishing
 #     gh release create portaudio-vendor "${PA_VERSION}.tgz" \
-#       --repo kamir/m3c-tools --title "Vendored build deps" \
+#       --repo kamir/m3c-tools --title "PortAudio vendor mirror (build dependency)" \
 #       --notes "PortAudio ${PA_VERSION}.tgz mirror — sha256 ${PA_SHA256}"
-#   The placeholder path already follows gh's asset-URL scheme, so once the
-#   'portaudio-vendor' release + asset exist the default resolves with NO code
-#   change. Override at will:  PA_MIRROR=https://my.host/pa.tgz bash scripts/build-portaudio-universal.sh
-#   Until the asset is uploaded the build still succeeds via the upstream + Wayback
-#   fallbacks below (the mirror just 404s and the loop falls through).
+#   Override at will:  PA_MIRROR=https://my.host/pa.tgz bash scripts/build-portaudio-universal.sh
+#   If the mirror is ever unreachable the build still succeeds via the upstream +
+#   Wayback fallbacks below (the SHA-256 gate applies to whichever source serves it).
 PA_MIRROR="${PA_MIRROR:-https://github.com/kamir/m3c-tools/releases/download/portaudio-vendor/${PA_VERSION}.tgz}"
 
 # Ordered sources: the org-controlled mirror FIRST, then the (currently-dead)
