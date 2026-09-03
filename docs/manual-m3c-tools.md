@@ -42,7 +42,7 @@ and `python3 -m pip install openai-whisper`. See the
 m3c-tools <command> [args] [flags]
 ```
 
-- Flags use the `--flag <value>` form and follow their command.
+- Flags use the `--<flag> <value>` form and follow their command.
 - Run `m3c-tools help` for the top-level listing, or `m3c-tools <command> --help` for a
   single command. When in doubt about a flag, trust `--help` over any doc.
 - Every run prints two informational log lines first (`[config] profile: …` and
@@ -204,29 +204,95 @@ m3c-tools import-audio ~/m3c-inbox/ --run
 m3c-tools import-audio --extensions
 ```
 
+**`import-audio reset`** clears tracking records so items can be imported again. It only
+touches the DB — it never deletes audio files. At least one of `--status`, `--file` or
+`--all` is required; with no selector it prints the current per-status counts and exits
+non-zero.
+
+| Flag | Argument | Default | Meaning |
+|------|----------|---------|---------|
+| `--status` | `<state>` | — | Reset entries in this state (`imported`, `uploaded`, `failed`, `whisper-error`) |
+| `--type` | `<kind>` | — | Narrow `--status` to one import type (e.g. `plaud`, `audio`) |
+| `--file` | `<path>` | — | Reset the single entry with this file path |
+| `--all` | — | — | Remove **all** tracking records (full reset) |
+
+```bash
+m3c-tools import-audio reset --status failed
+m3c-tools import-audio reset --status failed --type plaud
+m3c-tools import-audio reset --all
+```
+
 ### Capture devices
 
 #### `plaud` — Plaud recorder integration
 
 ```bash
-m3c-tools plaud <subcommand>
+m3c-tools plaud <subcommand> [flags]
 ```
 
-Syncs recordings from a Plaud.ai device into ER1.
+Syncs recordings from a Plaud.ai device into ER1. There are **two transports**: the
+scraped web session (`plaud list` / `plaud sync`, driven by the `web.plaud.ai` token) and
+the official developer API (`plaud dev …`, driven by the durable OAuth token). Both write
+into the same tracking ledger, so an item synced by one is not re-synced by the other.
 
 | Subcommand | Meaning |
 |------------|---------|
 | `plaud list` | List Plaud recordings with sync status |
-| `plaud sync <id>` | Sync one Plaud recording to ER1 |
+| `plaud sync <#\|ID>` | Sync one Plaud recording to ER1 |
 | `plaud sync --all` | Sync all new Plaud recordings to ER1 |
+| `plaud dev list` | List recordings via the developer API, newest first |
+| `plaud dev sync <#\|ID\|N-M>` | Sync the selected items via the developer API |
+| `plaud dev status` | Show the server-side transcription queue |
+| `plaud check` | Check the stored token against the Plaud API |
+| `plaud fix-times` | Repair wrong recording timestamps in already-synced items |
 | `plaud auth login` | Extract the API token from Chrome (`web.plaud.ai`) |
-| `plaud auth --token-file <path>` | Save the Plaud token from a file (secure) |
+| `plaud auth paste` | Import the `Authorization` header from the clipboard (best for SSO) |
+| `plaud auth password` | Email+password login → long-lived token |
 | `plaud auth` | Save the token from `$M3C_PLAUD_TOKEN` (secure) |
 | `plaud auth <token>` | Save the token from argv — **deprecated** (leaks via `ps`) |
+
+**`plaud sync` flags**
+
+| Flag | Argument | Default | Meaning |
+|------|----------|---------|---------|
+| `--all` | — | — | Sync every not-yet-synced recording instead of one selector |
+| `--force` | — | — | Re-sync: re-download from Plaud and re-upload to ER1 (also `-f`) |
+| `--tags` | `<list>` | — | Comma-separated tags applied to every synced item |
+| `--filter` | `<regex>` | — | Only sync items whose title matches this regular expression |
+| `--dry-run` | — | — | Print what *would* be synced; download and upload nothing |
+
+**`plaud dev` flags** — `dev list` takes `--preview` (alias `--transcript`) and `--limit`;
+`dev sync` takes the rest.
+
+| Flag | Argument | Default | Meaning |
+|------|----------|---------|---------|
+| `--all` | — | — | Sync every not-yet-synced recording |
+| `--limit` | `<n>` | — | Restrict to the `n` most recent recordings |
+| `--preview` | — | — | `dev list`: also print the transcript preview |
+| `--whisper` | — | — | Transcribe un-transcribed audio locally instead of skipping it |
+| `--force` | — | — | Re-sync items already in the ledger (also `-f`) |
+| `--tags` | `<list>` | — | Comma-separated tags applied to every synced item |
+| `--dry-run` | — | — | Print what *would* be synced; download and upload nothing |
+
+**`plaud auth` flags**
+
+| Flag | Argument | Default | Meaning |
+|------|----------|---------|---------|
+| `--token-file` | `<path>` | — | Read the token from a file (secure — keeps it out of `ps`) |
+| `--from-er1` | — | — | Pull the token from the ER1 credential vault (SPEC-0304) |
+
+**`plaud fix-times` flags**
+
+| Flag | Argument | Default | Meaning |
+|------|----------|---------|---------|
+| `--apply` | — | — | Write the corrected timestamps; without it the run is a preview |
 
 ```bash
 m3c-tools plaud auth login
 m3c-tools plaud sync --all
+m3c-tools plaud sync --all --filter '^(02-04|03-12)' --tags 'Denny,DV' --dry-run
+m3c-tools plaud dev sync --limit 5 --whisper
+m3c-tools plaud fix-times --apply
 ```
 
 #### `pocket` — Pocket recorder integration
@@ -235,17 +301,29 @@ m3c-tools plaud sync --all
 m3c-tools pocket <subcommand> [flags]
 ```
 
-Syncs recordings from a Pocket device into ER1.
+Syncs recordings from a Pocket device into ER1. `pocket sync` reads the **mounted
+device**; `pocket cloud-sync` ingests from the Pocket **cloud API** instead (SPEC-0173
+Path B) and needs a `pk_…` API key — see [`setup pocket-key`](#setup--set-up-the-python-venv--whisper).
 
-| Subcommand / flag | Argument | Meaning |
-|-------------------|----------|---------|
-| `pocket list` | — | List Pocket recordings with sync status |
-| `pocket sync --all` | — | Sync all new Pocket recordings to ER1 |
-| `--path` | `<dir>` | Override the device recording path (either subcommand) |
+| Subcommand | Meaning |
+|------------|---------|
+| `pocket list` | List Pocket recordings with sync status |
+| `pocket sync --all` | Sync all new Pocket recordings from the mounted device |
+| `pocket cloud-sync` | Sync all new recordings from the Pocket cloud API |
+| `pocket api <sub>` | Low-level Pocket API calls (`list`, `get`, …) |
+| `pocket backfill` | Register a mapping for an item uploaded outside the sync flow |
+| `pocket mappings` | List the recorded recording → ER1 doc-id mappings |
+
+| Flag | Argument | Default | Meaning |
+|------|----------|---------|---------|
+| `--all` | — | — | `pocket sync`: sync every new recording (required — there is no single-item form) |
+| `--path` | `<dir>` | from config | Override the device recording path (`pocket list` / `pocket sync`) |
+| `--dry-run` | — | — | `pocket cloud-sync`: list what would be ingested; upload nothing (also `-n`) |
 
 ```bash
 m3c-tools pocket list
 m3c-tools pocket sync --all --path /Volumes/POCKET
+m3c-tools pocket cloud-sync --dry-run
 ```
 
 #### `devices` — list audio input devices
@@ -374,7 +452,8 @@ m3c-tools cancel vid-001
 m3c-tools setup [flags]
 ```
 
-Sets up the Python virtual environment and installs whisper for local transcription.
+**On macOS** this sets up the Python virtual environment and installs whisper for local
+transcription.
 
 | Flag | Argument | Default | Meaning |
 |------|----------|---------|---------|
@@ -386,10 +465,38 @@ m3c-tools setup --check
 m3c-tools setup --force
 ```
 
+**On Linux and Windows** `setup` is instead the interactive ER1 onboarding wizard (whisper
+is installed by hand there). It asks for the server, opens the browser to pair the device
+and writes the result into the active profile.
+
+| Flag | Argument | Default | Meaning |
+|------|----------|---------|---------|
+| `--er1-url` | `<url>` | prompted | Pre-fill the ER1 server URL instead of asking for it |
+| `--no-browser` | — | — | Print the pairing URL instead of opening a browser (headless hosts) |
+| `--tags` | `<list>` | — | Default tags to store in the profile |
+
+```bash
+m3c-tools setup --er1-url https://er1.example.com --no-browser
+```
+
+**`setup pocket-key <pk_…>`** (macOS) validates a Pocket API key live against the Pocket
+API and writes it to a profile on success. An unreachable API is **not** fatal — the key
+is still saved; only an outright *unauthorized* answer fails the command.
+
+| Flag | Argument | Default | Meaning |
+|------|----------|---------|---------|
+| `--no-write` | — | — | Validate only; do not save the key to any profile |
+| `--profile` | `<name>` | active profile | Write the key to this profile instead of the active one |
+
+```bash
+m3c-tools setup pocket-key pk_… --no-write
+m3c-tools setup pocket-key pk_… --profile dev
+```
+
 #### `config` — configuration profile management
 
 ```bash
-m3c-tools config <list|show|switch|create|test|import>
+m3c-tools config <list|show|switch|create|test|import|delete|doctor>
 ```
 
 Manages named configuration profiles.
@@ -402,10 +509,20 @@ Manages named configuration profiles.
 | `config create` | Create a new profile |
 | `config test` | Test a profile's ER1 connectivity |
 | `config import` | Import a profile |
+| `config delete` | Delete a profile |
+| `config doctor` | Validate profile consistency; exits non-zero on any FAIL |
+
+`config doctor` takes a profile name, or one of the following:
+
+| Flag | Argument | Default | Meaning |
+|------|----------|---------|---------|
+| `--all` | — | *the default* | Validate every profile in `~/.m3c-tools/profiles` (the literal word `all` works too) |
 
 ```bash
 m3c-tools config list
 m3c-tools config switch cloud
+m3c-tools config doctor --all
+m3c-tools config doctor cloud
 ```
 
 #### `settings` — open the profile settings editor
@@ -439,6 +556,8 @@ Launches the native menu-bar app (macOS only). See the
 | `--title` | `<text>` | `M3C` | Menu-bar title text |
 | `--icon` | `<path>` | — | Menu-bar icon PNG path |
 | `--log` | `<path>` | `~/.m3c-tools/m3c-tools.log` | Log file path |
+| `--verbose` | — | — | Also mirror the log to stderr (the terminal), not just the log file |
+| `--quiet` | — | — | Log to the file only — the default, and the way to undo an earlier `--verbose` |
 
 ```bash
 m3c-tools menubar --title "M3C" --icon ~/icons/m3c.png
@@ -450,7 +569,9 @@ m3c-tools menubar --title "M3C" --icon ~/icons/m3c.png
 m3c-tools version
 ```
 
-Prints the build version. No flags.
+Prints the build version. It takes no flags of its own, but `--version` and `-v` are
+accepted as top-level aliases for the subcommand (`m3c-tools --version`). Likewise
+`--help` and `-h` are aliases for `help`.
 
 #### `help` — show the command listing
 
