@@ -215,7 +215,7 @@ Exit: `0` ok · `2` usage / validation error.
 ### `sign` — sign a bundle
 
 ```bash
-skillctl sign BUNDLE.skb --key PATH.priv [--identity-id ID]
+skillctl sign --key PATH.priv [--identity-id ID] BUNDLE.skb
 ```
 
 Computes the bundle's SHA-256 digest, signs the 32 raw digest bytes with ed25519, and writes
@@ -227,7 +227,7 @@ a **detached** signature: `<BUNDLE.skb>.<digest_hex>.author.sig` (64 raw bytes, 
 | `-identity-id` | Author identity id — **advisory only, NOT embedded in the signature**. The detached signature is over the bundle digest alone; author identity is bound at verify time via the trust-root pin (SPEC-0188 D4), not by this flag. Recorded for your own bookkeeping. |
 
 ```bash
-skillctl sign my-skill.skb --key ~/.config/m3c/skill-keys/mykey.priv
+skillctl sign --key ~/.config/m3c/skill-keys/mykey.priv my-skill.skb
 ```
 
 Exit: `0` ok · `2` usage.
@@ -237,7 +237,7 @@ Exit: `0` ok · `2` usage.
 ### `verify-sig` — verify a detached signature (offline)
 
 ```bash
-skillctl verify-sig BUNDLE.skb --pubkey PATH.pub
+skillctl verify-sig --pubkey PATH.pub BUNDLE.skb
 ```
 
 Recomputes the bundle's digest, locates the matching `.author.sig`, and verifies it. **No
@@ -248,7 +248,7 @@ network, no CA.**
 | `-pubkey` | Path to PEM SPKI ed25519 public key. **Required.** |
 
 ```bash
-skillctl verify-sig my-skill.skb --pubkey ~/.config/m3c/skill-keys/mykey.pub
+skillctl verify-sig --pubkey ~/.config/m3c/skill-keys/mykey.pub my-skill.skb
 ```
 
 Exit: `0` ok · `11` signature invalid · `1` other error · `2` usage.
@@ -1402,8 +1402,8 @@ skillctl keygen --out ~/.config/m3c/skill-keys/author            # -> author.pri
 skillctl pack --skill ~/.claude/skills/my-skill -o my-skill.skb \
   --name my-skill --version 1.0.0 --summary "…" \
   --data-scopes '{"id":"ds:fs/cwd","kind":"local_fs","access":"write","scope":"<cwd>/out/**","reason":"…"}'
-skillctl sign my-skill.skb --key ~/.config/m3c/skill-keys/author.priv
-skillctl verify-sig my-skill.skb --pubkey ~/.config/m3c/skill-keys/author.pub   # offline self-check
+skillctl sign --key ~/.config/m3c/skill-keys/author.priv my-skill.skb
+skillctl verify-sig --pubkey ~/.config/m3c/skill-keys/author.pub my-skill.skb   # offline self-check
 ```
 
 You may **not** attest your own skill (reviewer≠author is enforced — SPEC-0246) and `--author-intent`
