@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
 # check-docs.sh — Validate documentation consistency with implementation.
 #
-# Checks that key references in docs/ match the current codebase.
+# Checks that key references in docs/ match the current codebase, and runs the
+# BLOCKING CLI/manual gate (cmd/docaudit) as section 4.
+#
+# Exit: 0 = ok (warnings allowed) - 1 = a blocking issue, the release stops.
 # Usage: ./scripts/check-docs.sh
 set -euo pipefail
 
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
+RED='\033[0;31m'
 NC='\033[0m'
 
 WARNINGS=0
+FAILURES=0
+fail() { echo -e "  ${RED}x${NC} $1"; FAILURES=$((FAILURES + 1)); }
 warn() { echo -e "  ${YELLOW}!${NC} $1"; WARNINGS=$((WARNINGS + 1)); }
 pass() { echo -e "  ${GREEN}✓${NC} $1"; }
 
@@ -58,10 +64,32 @@ else
     pass "No docs to check targets against"
 fi
 
+# ─── 4. CLI ↔ manual consistency (BLOCKING) ───
+#
+# Sections 1-3 above are heuristics and only warn. This one is the release
+# gate: docaudit compares each CLI's REAL flag surface (AST-extracted) against
+# its manual, in both directions, and exits 1 on any drift. It blocks, because
+# a manual that disagrees with the binary is how a user ends up trusting a flag
+# that does not exist -- or missing one that does.
+echo "4. CLI/manual consistency (docaudit)"
+if ! command -v go >/dev/null 2>&1; then
+    fail "go toolchain not found - cannot run the CLI/manual gate"
+elif go run ./cmd/docaudit -cli all; then
+    pass "every real flag is documented and every documented flag is real"
+else
+    fail "CLI surface and manual disagree (see the report above)"
+    echo "    Draft the missing entries with:"
+    echo "      go run ./cmd/docaudit -cli <m3c-tools|skillctl> -scaffold"
+fi
+
 # ─── Summary ───
 echo ""
 echo "─────────────────────────────"
-if [ "$WARNINGS" -gt 0 ]; then
+if [ "$FAILURES" -gt 0 ]; then
+    echo -e "${RED}FAIL${NC}: $FAILURES blocking issue(s), $WARNINGS warning(s)"
+    echo "Release is BLOCKED until the docs match the code."
+    exit 1
+elif [ "$WARNINGS" -gt 0 ]; then
     echo -e "${YELLOW}PASS with warnings${NC}: $WARNINGS warning(s)"
     echo "Docs may need updating. Release is allowed."
     exit 0

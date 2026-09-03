@@ -130,8 +130,8 @@ G-23 confirm-delete precondition refusal on drift) · `3` at least one `BROKEN`.
 `0` pass / `2` gate failed.
 
 > Some commands print flags with a **single dash** in their own help output (e.g. `-key`,
-> `-out`). Both `-flag` and `--flag` are accepted. This manual reproduces flag names as the
-> command prints them, and shows examples in the common `--flag` form.
+> `-out`). Both `-<flag>` and `--<flag>` are accepted. This manual reproduces flag names as
+> the command prints them, and shows examples in the common `--<flag>` form.
 
 ---
 
@@ -291,6 +291,63 @@ skillctl trust remove --registry https://aims.example.com/api/skills
 
 ---
 
+### `peer` — pin a federated peer registry (SPEC-0359)
+
+```bash
+skillctl peer <add|ls|verify|rm> [args]
+```
+
+A peer is another registry you are willing to pull from. Pinning is **out-of-band only**:
+`add` refuses unless `sha256(pubkey)` equals the `--pin` you supply, so there is no
+trust-on-first-use window.
+
+**`peer add <name> <locator>`**
+
+| Flag | Purpose |
+|------|---------|
+| `--pubkey <b64>` | The peer's ed25519 signing key, base64. **Required.** |
+| `--pin sha256:<hex>` | The peer's trust-root fingerprint, verified out-of-band. **Required** — `add` fails if it does not match `--pubkey`. |
+| `--floor green\|yellow` | `governance_minimum` for this peer. |
+| `--contributes-revokes` | Union this peer's **signed** revoke events into the local revoked set for `revoke feed --gossip`. Set it **only** for a governance-trusted peer: that is the bound that keeps a peer from mounting a revoke-DoS. |
+
+**`peer ls`** — list pinned peers (name, locator, fingerprint, floor).
+**`peer verify <name>`** — dry-run the §7 gauntlet against the peer's registry and pinned
+key and report what would pass or fail. Installs nothing.
+**`peer rm <name>`** — remove a pinned peer.
+
+```bash
+skillctl peer add alice https://alice.example.com/api/skills \
+  --pubkey <base64> --pin sha256:<hex> --floor yellow
+skillctl peer verify alice
+```
+
+---
+
+### `cross-sign` — a governance root vouching for a member reviewer (SPEC-0359)
+
+```bash
+skillctl cross-sign --member-id <id> --member-pubkey <b64> --not-after <when> [flags]
+```
+
+Issues a **governance-root-signed** statement that a member reviewer's key is recognised, so
+an N-of-M attestation quorum can be satisfied by reviewers you did not pin one by one.
+
+| Flag | Purpose |
+|------|---------|
+| `--key <path>` | **Governance root** private key (PEM PKCS#8 ed25519). **Required.** |
+| `--member-id <id>` | Member reviewer identity id (e.g. `id:alice@org`). **Required.** |
+| `--member-pubkey <b64>` | Member ed25519 public key, base64. **Required.** |
+| `--not-after <when>` | Hard expiry: RFC3339, `YYYY-MM-DD`, or a duration like `8760h`. **Required** — a cross-signature with no end date is not one we will issue. |
+| `--locator <url>` | Optional member registry locator. |
+| `--out <file>` | Output file (default: stdout). |
+
+```bash
+skillctl cross-sign --key governance-root.priv \
+  --member-id id:alice@org --member-pubkey <base64> --not-after 8760h --out alice.crosssig
+```
+
+---
+
 ### `install` — pull, verify, and install
 
 ```bash
@@ -354,6 +411,17 @@ sidecar or `--meta`).
 | `-timeout` | HTTP timeout for registry calls (default `30s`). |
 | `-verbose` | Print structured per-step log lines to stderr. |
 
+**`verify --all` — the fleet sweep** (SPEC-0247 P0.2). `--all` is detected *before* flag
+parsing and switches to a different flag set, because the sweep is a different job: verify
+every installed skill, report one verdict per skill, and optionally quarantine the failures.
+
+| Flag | Purpose |
+|------|---------|
+| `--all` | Run the sweep over every installed skill instead of verifying one by name (`-all` also works). |
+| `--quarantine` | Move TRUST-failing *managed* skills out of `~/.claude/skills/` into the quarantine dir. |
+| `--budget` | Total wall-clock budget for the sweep. Skills not reached are reported `unverified` — never quarantined, so a slow registry cannot delete your skills. |
+| `--session-id` | Stamp the recorded verdict-cache rows with this session id (the one from the `SessionStart` event). |
+
 ```bash
 skillctl verify my-skill
 skillctl verify --all
@@ -412,6 +480,7 @@ Revokes an admitted bundle (SPEC-0188 §4.5) by publishing a **signed, offline-v
 |------|---------|
 | `-reason key_compromise\|vulnerability\|governance_retraction\|author_request\|duplicate` | Reason code. **Required.** |
 | `-actor-identity` | Revoke as a `governance_reviewer` (rather than the default `original_author`); pair with `--key`. |
+| `-role registry_operator\|governance_reviewer\|original_author` | Name the actor role explicitly instead of inferring it from `--actor-identity`. |
 | `-key` | Signing key for the revocation event. Required for the `original_author` (default) and `governance_reviewer` roles. |
 | `-registry` | Registry base URL. |
 | `-timeout` | HTTP request timeout. |
@@ -436,6 +505,7 @@ bundle digest.
 | `-refresh` | Run the revocation sweep now: fetch the latest signed HEAD **and adopt it** into the local cache + freshness anchor the gate reads. |
 | `-registry` | Registry base URL. |
 | `-tenant` | Scope the feed to a tenant. |
+| `-gossip` | Union the **signed** revoke events of pinned peers that were added with `peer add --contributes-revokes` into the durable local revoked set (SPEC-0359 D5(b)). Only signed events count, and only from peers you marked as contributing — that bound is what stops a peer from mounting a revoke-DoS. |
 
 Because the HEAD is signed and checked against a **pinned** registry key, a MITM'd, mirrored,
 truncated, rolled-back, replayed, or forged feed is rejected rather than trusted — this is the
@@ -655,6 +725,110 @@ skillctl gate-stats --since 2026-06-01 --json
 
 ---
 
+### `pin` — make the gate un-deletable via managed settings (SPEC-0247 §7.3)
+
+```bash
+skillctl pin <generate|status|install> [flags]
+```
+
+Emits (and optionally stages) the Claude Code `managed-settings.json` that pins the
+`verify-hook` trust gate. Without `--strict` the gate is already un-deletable by
+non-privileged users and its deny is absolute, while the operator's own hooks keep working;
+root — or anyone who can write the managed-settings directory — can still remove it.
+
+**`pin generate`** — print the managed-settings JSON. **`pin install`** — stage the file and
+print the sudo runbook (as root, `--confirm` writes it). Both take:
+
+| Flag | Purpose |
+|------|---------|
+| `--binary <path>` | Absolute path to `skillctl` (default: this binary). |
+| `--strict` | Add `allowManagedHooksOnly: true` — the full CISO lockdown, which also **disables every other user/project hook**. |
+| `--harden` | Imply `--strict` **and** block `claude --dangerously-skip-permissions`. |
+| `--enterprise` | Add `skillctlEnterprise: true` — enables the R-7.2 offline `locked` state. |
+| `--require-local-audit` | Add `skillctlRequireLocalAudit: true` (implies `--enterprise`) — R-8.2: fail closed when an allow cannot be recorded. |
+| `--state-gate-fallback` | Add `skillctlStateGateFallback: true` (implies `--enterprise`) — R-1.4 P2: keep the hot path strictly local, with no online fallback while disconnected. |
+| `--out <file>` | Write the JSON to a file instead of stdout (`generate`). |
+| `--path <file>` | Target managed-settings path (`install`), or the path to inspect (`status`). |
+| `--confirm` | `install` only, and only as root: actually write the file. |
+
+**`pin status`** — report whether the gate is pinned. Takes `--path <file>` and `--json`.
+
+```bash
+skillctl pin generate --harden --enterprise
+skillctl pin status --json
+```
+
+---
+
+### `guard-path` — the skill-dir access guard
+
+```bash
+skillctl guard-path [flags]
+```
+
+The PreToolUse companion to `verify-hook`: it sees an access to a skill directory and, by
+default, **allows it and records it**. Denying is opt-in, because a default-deny here would
+break every unmanaged skill dir.
+
+| Flag | Purpose |
+|------|---------|
+| `--deny` | Opt in to DENY (exit `2`) a skill-dir access instead of audited-allow. |
+| `--explain` | Print the honest scope + the coverage gaps, then exit. Read this before you rely on it. |
+| `--home <dir>` | Home-dir override (default `$HOME`). |
+
+```bash
+skillctl guard-path --explain
+```
+
+---
+
+### `session-baseline` — informational SessionStart context (SPEC-0317 R-7)
+
+```bash
+skillctl session-baseline [flags]
+```
+
+Prints the named offline state — `online` / `degraded` / `offline` / `locked` — plus the
+advisory-until-pinned banner. It is a **pure read that gates nothing**.
+
+| Flag | Purpose |
+|------|---------|
+| `--online` | Assert the registry is reachable. `SessionStart` deliberately does **not** probe the network by default. |
+| `--managed-settings <file>` | `managed-settings.json` path override (default: the platform path). |
+| `--trust-roots <file>` | Trust-roots path override (default `~/.claude/skill-trust-roots.yaml`). |
+| `--home <dir>` | Home-dir override. |
+| `--json` | Emit JSON. |
+
+---
+
+### `sync` — drain the enforcement-evidence outbox (SPEC-0317 R-5)
+
+```bash
+skillctl sync [--once | --daemon] [flags]
+```
+
+Drains the device-signed `audit_events` outbox to the KafShield ingest. It is a **separate
+process, never on the hook path**, and it is distinct from `sync-usage` (the skill-telemetry
+drain). Rows are marked synced **only** against a valid signed durable-seq ack, so a
+lying or replaying endpoint cannot make evidence disappear locally.
+
+| Flag | Purpose |
+|------|---------|
+| `--once` | Drain pending evidence once, then exit. |
+| `--daemon` | Loop the drain on `--interval`, with a signal-handled shutdown. |
+| `--interval <dur>` | Daemon loop interval (default `1m0s`). |
+| `--batch <n>` | Max rows per drain batch (default `100`). |
+| `--endpoint <url>` | Ingest endpoint base URL (https). **Default OFF** — evidence stays local-only until you set it. |
+| `--ingest-pubkey <path>` | PEM (SPKI) ed25519 public key that signs durable-seq acks. **Required to mark rows synced.** |
+| `--log-id <id>` | Log id the durable-seq signature is bound to (default `skillctl-local`). |
+| `--insecure` | Skip TLS verification. Loopback endpoints only. |
+
+```bash
+skillctl sync --once --endpoint https://ingest.example.com --ingest-pubkey ingest.pub
+```
+
+---
+
 ### `agentid` — offline-verifiable agent identity
 
 ```bash
@@ -692,8 +866,16 @@ these intents*. It verifies **offline** against pinned owner/approver keys.
 **`agentid show`** — print owner, grant, expiry, fingerprints, signatures:
 `skillctl agentid show <agentid.json>`.
 
-**`agentid revoke`** — add `agent:<id>` to a signed, offline revocation list (SPEC-0276):
-`skillctl agentid revoke <agent-id> --reason <text> --registry <url> [--key <path>] [--out <list.json>] [--epoch N]`.
+**`agentid revoke <agent-id>`** — add `agent:<id>` to a signed, offline revocation list
+(SPEC-0276).
+
+| Flag | Purpose |
+|------|---------|
+| `--reason <text>` | Why the mandate is revoked. |
+| `--registry <url>` | Registry the list speaks for. |
+| `--key <path>` | Signing key for the revocation list. |
+| `--out <list.json>` | Where to write the signed list. |
+| `--epoch <n>` | Epoch to stamp. `0` (the default) means auto: bump the existing list's epoch by 1, or start at 1. The epoch is what makes a rolled-back list detectable. |
 
 ```bash
 skillctl agentid issue --owner id:you@m3c --owner-key mykey.priv \
@@ -719,10 +901,14 @@ A local RFC-6962 Merkle log (SPEC-0278, stdlib-only). L1 makes equivocation/with
 digest is appended. The default log file is `~/.claude/skillctl/transparency-log.jsonl`
 (`--log` to override; `--log-id` default `skillctl-local`).
 
-**`translog append`** — append an event.
-`skillctl translog append <type> <digest> [--subject S] [--log PATH] [--log-id ID]`
-where `type` ∈ `admit | attest | revoke | agentid-issue | agentid-revoke` and `digest` is
+**`translog append <type> <digest>`** — append an event, where `type` ∈
+`admit | attest | revoke | agentid-issue | agentid-revoke` and `digest` is
 `sha256:<64 lowercase hex>` of the already-signed event.
+
+| Flag | Purpose |
+|------|---------|
+| `--subject <s>` | Optional event subject (skill name, agent id, …) recorded alongside the digest. |
+| `--log` / `--log-id` | Log path / log id override. |
 
 **`translog sth`** — show / sign the current tree head.
 
@@ -731,17 +917,34 @@ where `type` ∈ `admit | attest | revoke | agentid-issue | agentid-revoke` and 
 | `-key` | Log ed25519 private key (PEM). If set, sign the head into an STH. |
 | `-log` / `-log-id` | Log path / id. |
 
-**`translog prove`** — emit an offline inclusion receipt.
-`skillctl translog prove <digest> --key PATH.priv [--out FILE]` (`-key` **required**; `-out`
-defaults to stdout).
+**`translog prove <digest>`** — emit an offline inclusion receipt.
+
+| Flag | Purpose |
+|------|---------|
+| `--key <path>` | Log ed25519 private key (PEM) used to sign the head the receipt is against. **Required.** |
+| `--out <file>` | Write the receipt here (default: stdout). |
 
 **`translog verify`** — offline inclusion check.
-`skillctl translog verify --receipt FILE --log-pubkey PATH.pub` (both **required**).
 
-**`translog consistency`** — verify append-only between two heads.
+| Flag | Purpose |
+|------|---------|
+| `--receipt <file>` | Inclusion receipt JSON, as produced by `prove`. **Required.** |
+| `--log-pubkey <path>` | Pinned log ed25519 public key (PEM SPKI). **Required** — an unpinned key would verify nothing. |
 
-**`translog witness`** — cross-witness STHs for a split view.
-`skillctl translog witness --sths FILE --log-pubkey PATH.pub` (both **required**).
+**`translog consistency`** — verify the log is append-only between two heads.
+
+| Flag | Purpose |
+|------|---------|
+| `--sth1 <file>` | The earlier (smaller) STH JSON. **Required.** |
+| `--sth2 <file>` | The later (larger) STH JSON. **Required.** |
+| `--proof <json>` | Consistency proof — a JSON array of hex hashes. **Required.** |
+
+**`translog witness`** — cross-witness STHs to detect a split view.
+
+| Flag | Purpose |
+|------|---------|
+| `--sths <file>` | JSON array of STHs collected from different witnesses. **Required.** |
+| `--log-pubkey <path>` | Pinned log public key every STH must verify against. **Required.** |
 
 ```bash
 skillctl translog append admit sha256:<hex> --subject my-skill
@@ -855,7 +1058,15 @@ Default is dry-run; pass `--confirm` to actually POST. Registry resolution:
 **`awareness verify`** — read back per-session admissions.
 Usage: `skillctl awareness verify [--session TAG] [--registry URL]`.
 
-**`awareness reset`** — delete admit-from-scan docs scoped to a `session_tag` (G-23 two-step).
+**`awareness reset`** — delete admit-from-scan docs scoped to a `session_tag`. Destructive,
+so it is a **G-23 two-step**: the preview issues a short-lived token and the deletion is
+refused without it.
+
+| Flag | Purpose |
+|------|---------|
+| `--dry-run-reset` | Step 1: preview the affected docs and mint a 5-minute token. Deletes nothing. |
+| `--dry-run-reset-token <token>` | Step 2: the token from step 1 — required to confirm the destructive call. |
+| `--confirm-reset` | Step 2: required alongside `--dry-run-reset-token` to actually DELETE. |
 
 ```bash
 skillctl awareness sync --source claude --dry-run
@@ -874,6 +1085,14 @@ skillctl intent <declare|show> [flags]
 **`intent declare <skill-name|@digest>`** — patch the `intent` block of a previously-admitted
 bundle, replacing the awareness `UNKNOWN` sentinel with a real declaration. Requires
 `--confirm` to issue the PATCH; typed data-scope via `--data-scopes` (repeatable JSON).
+
+| Flag | Purpose |
+|------|---------|
+| `--from-yaml <file>` | Read the whole intent + `data_dependencies` block from a YAML file, instead of declaring it flag by flag. |
+| `--governance-intent green\|yellow\|red` | Bundle governance intent — checked against the §3.3 `destructive_green` cross-rule. |
+| `--human-review-required true\|false` | Author claim: this skill needs human review beyond a governance attestation. |
+| `--subprocess <list>` | Comma-separated subprocess allowlist (e.g. `pandoc,git`). |
+
 Exit codes: `0` ok · `1` generic/network · `2` usage · `18` intent inconsistent with
 `data_dependencies` (SPEC-0196 §3.3).
 
@@ -910,6 +1129,7 @@ admitted.
 | `-bodyscan-rationale` | Justify a 🟡 bodyscan verdict (check #11); a 🔴 verdict cannot be overridden. |
 | `-proposal-id` | Client-generated proposal id (ULID). Default: locally generated. |
 | `-registry` | Registry base URL (default `http://localhost:8080/api/skills`). |
+| `-bump major\|minor\|patch` | Auto-bump the `SKILL.md` version. **Parsed but not yet wired** in v1 — it currently changes nothing. |
 
 Exit: `0` gate passed (or `--dry-run`) · `2` gate failed (one or more rows print `FAIL`).
 
@@ -996,34 +1216,171 @@ skillctl version     # print the build version
 skillctl help        # the grouped command map
 ```
 
+Both are also reachable as top-level flags:
+
+| Flag | Purpose |
+|------|---------|
+| `-v`, `--version` | Aliases for `skillctl version`. |
+| `-h`, `--help` | Aliases for `skillctl help`. |
+
 Any command accepts `--help` (some sub-verbed groups print usage on the bare parent, e.g.
 `skillctl agentid --help`, `skillctl translog`).
 
 ---
 
-### Other commands (one-line synopsis)
+### The scanner family and the other commands
 
-Derived from each command's own usage output.
+These commands are the SPEC-0189 inventory/report family plus a few operator utilities. They
+share a common vocabulary: `--path` (repeatable) selects directories, `--recursive` walks
+into them, `--include-home` adds `~/.claude/skills`, `--input` reads a saved scan JSON
+instead of re-scanning, and `--out` writes to a file instead of stdout.
 
-| Command | Synopsis |
-|---------|----------|
-| `scan` | Scan skill directories (`~/.claude/skills`, plugin skill dirs, …) and emit a JSON inventory. |
-| `report` | Render a scan into a report. `skillctl report [--format html\|md] --input <scan.json> [--out <file>]`. |
-| `diff` | Diff two scans. `skillctl diff <scan1.json> <scan2.json> [--output json\|md\|html\|text] [--out <file>]`. |
-| `seal` | Snapshot all installed skills into a signed inventory seal (under `~/.m3c-tools/skill-seals/`). |
-| `import` | Import a scan into a remote target. `skillctl import --target <url> [--api-key <key>] [--input <scan.json>] [--dry-run]`. |
-| `menubar` | Launch the macOS menu-bar app surface (interactive; long-running). |
-| `review` | Review installed / scanned skills. |
-| `browse` | Build a local skill graph and serve an interactive browser at `http://127.0.0.1:<port>/?token=…`. |
-| `consolidate` | Report duplicate / orphan / drifted / missing-frontmatter skills across projects. |
-| `sync-usage` | Sync local skill-usage counters to ER1 (needs `--api-key`, `M3C_API_KEY`, or `~/.m3c-tools/er1_session.json`). |
-| `runbook` | `skillctl runbook publish <runbook.html> --tag <tag> [flags]` — publish an onboarding runbook into the THOH catalog (SPEC-0272/0275). |
-| `room` | `skillctl room <share\|unshare> <skill> --room <label> [flags]` — share/unshare a skill into a SPEC-0096 co-learning room. |
+> `scan`, `report`, `diff`, `seal`, `import`, `menubar`, `review`, `browse`, `consolidate`
+> and `sync-usage` do **not** implement `-h`/`--help`: run them with no arguments to see
+> their own usage. Every other command accepts `--help`.
 
-> `scan`, `report`, `diff`, `seal`, `import`, `menubar`, `review`, `browse`, `consolidate`,
-> `sync-usage` do not implement `-h`/`--help`; run them with no arguments to see their usage,
-> or consult the flags shown above. Run `skillctl <cmd> --help` for the current flags on the
-> other commands.
+**`scan`** — scan skill directories and emit a JSON inventory.
+
+| Flag | Purpose |
+|------|---------|
+| `--source claude\|user\|plugins\|all` | Scan source (SPEC-0189; default `claude`). Ignored when `--input` is given. |
+| `--include-shadowed` | Also report skills shadowed by a higher-precedence copy. |
+| `--with-trust` | Attach each entry's trust posture to the inventory. |
+| `--path <dir>` | Legacy SPEC-0115 path selection. Repeatable; implies the `projects` source. |
+| `--recursive` | Recurse into the given paths. |
+| `--include-home` | Include the home skills dir. |
+| `--format <fmt>` / `--output <fmt>` | Output format. |
+| `--out <file>` | Write the inventory to a file. |
+| `--verbose` | Verbose progress on stderr. |
+
+`scan` can also admit what it finds in one step (SPEC-0189 §13), delegating to
+`awareness sync`:
+
+| Flag | Purpose |
+|------|---------|
+| `--push-to-registry` | Admit the scanned entries to the registry. Implies `--with-trust`. |
+| `--dry-run-push` | Build the admission envelope and print the plan; do not POST. |
+| `--registry <url>` | Registry to push to. |
+| `--default-attest yellow\|green\|none` | Request a default attestation after admission (default `none`). |
+| `--default-attest-yellow` | Shorthand for `--default-attest yellow`. |
+| `--default-attest-green` | Shorthand for `--default-attest green`. |
+| `--no-default-attest` | Shorthand for `--default-attest none`. |
+
+**`scan --body [<skill-dir>]`** — a *different* command that happens to share the verb: the
+SPEC-0246 §4.5 behavioural bodyscan over one skill's `SKILL.md` body. It is detected before
+any inventory flag is parsed, so the two never interfere.
+
+| Flag | Purpose |
+|------|---------|
+| `--body` | Route to the bodyscan. **Required** to select this mode. |
+| `--format table\|json` / `--json` | Output format. |
+
+Exit: `0` green · `2` any finding.
+
+**`report`** — render a scan into a report.
+
+| Flag | Purpose |
+|------|---------|
+| `--input <scan.json>` | The scan to render (a bare positional argument works too). |
+| `--format html\|md` | Report format. |
+| `--out <file>` | Write to a file instead of stdout. |
+
+**`diff`** — diff two scans: `skillctl diff <scan1.json> <scan2.json>`.
+
+| Flag | Purpose |
+|------|---------|
+| `--output json\|md\|html\|text` | Delta format. |
+| `--out <file>` | Write to a file instead of stdout. |
+
+**`review`** — serve a local review UI for a delta report.
+
+| Flag | Purpose |
+|------|---------|
+| `--input <delta.json>` | The delta report to review. **Required.** |
+| `--port <n>` | Listen port (default `9115`). |
+| `--no-browser` | Do not open a browser. |
+
+**`browse`** — build a local skill graph and serve an interactive browser at
+`http://127.0.0.1:<port>/?token=…`.
+
+| Flag | Purpose |
+|------|---------|
+| `--input <scan.json>` | Browse a saved scan instead of scanning now. |
+| `--port <n>` | Listen port (default `9116`). |
+| `--path <dir>` / `--recursive` / `--include-home` | What to scan when there is no `--input`. |
+| `--no-browser` | Do not open a browser. |
+
+**`consolidate`** — report duplicate / orphan / drifted / missing-frontmatter skills across
+projects.
+
+| Flag | Purpose |
+|------|---------|
+| `--input <scan.json>` / `--path <dir>` / `--recursive` / `--include-home` | What to analyse. |
+| `--output text\|json\|md` | Report format (default `text`). |
+| `--out <file>` | Write the report to a file. |
+| `--report-only` | Report and stop — never offer to change anything. |
+| `--fix` | After the report, **interactively** offer to fill frontmatter annotation gaps (asks `[y/N]`, and does nothing else). `--report-only` wins over it. |
+
+**`seal`** — snapshot all installed skills into a signed inventory seal under
+`~/.m3c-tools/skill-seals/`.
+
+| Flag | Purpose |
+|------|---------|
+| `--input <scan.json>` / `--path <dir>` / `--include-home` | What to seal. |
+| `--by <who>` | Who is sealing — recorded in the seal. |
+| `--list` | List existing seals instead of creating one. |
+| `--latest` | Show the most recent seal. |
+| `--status` | Compare the current inventory against the latest seal. |
+
+**`import`** — import a scan into a remote target.
+
+| Flag | Purpose |
+|------|---------|
+| `--target <url>` | Target to import into. |
+| `--api-key <key>` | API key for the target. |
+| `--user-id <id>` | Attribute the imported inventory to this user id. |
+| `--input <scan.json>` / `--path <dir>` / `--recursive` / `--include-home` | What to import. |
+| `--dry-run` | Print what would be imported; do not POST. |
+
+**`menubar`** — launch the macOS menu-bar skill monitor (interactive, long-running).
+
+| Flag | Purpose |
+|------|---------|
+| `--path <dir>` | Directory to monitor. Repeatable; defaults to the current directory. |
+| `--interval <dur>` | Re-scan interval as a Go duration (default `30m0s`). |
+| `--include-home` | Also monitor the home skills dir. |
+
+**`sync-usage`** — sync local skill-usage counters to ER1. Needs `--api-key`, `$M3C_API_KEY`,
+or `~/.m3c-tools/er1_session.json`.
+
+**`runbook publish <runbook.html>`** — publish an onboarding runbook into the THOH catalog
+(SPEC-0272/0275).
+
+| Flag | Purpose |
+|------|---------|
+| `--tag <tag>` | Release tag the runbook belongs to (e.g. `skillctl/v0.2.11-rc3`); the version is the last path segment. **Required.** |
+| `--base <url>` | THOH catalog base URL (default `https://onboarding.guide`). |
+| `--id <id>` | Runbook id in the catalog. |
+| `--title <s>` | Catalog title. |
+| `--purpose <s>` | One-line purpose. |
+| `--goal <s>` | Completion goal. |
+| `--dry-run` | Print the plan + descriptor; do not POST. |
+| `--yes` | Skip the 🟡 confirm pause (scripted runs). |
+
+**`room <share|unshare> [<skill>]`** — share/unshare a skill into a SPEC-0096 co-learning
+room.
+
+| Flag | Purpose |
+|------|---------|
+| `--room <label>` | Room label to map into/out of (e.g. `aims-basics`). **Required.** |
+| `--skill <name>` | Skill to (un)map — or pass it as the positional argument. |
+| `--digest sha256:<hex>` | Map only the bundle with this digest. |
+| `--all` | Map every `m3c-skill-bundle` item in the context. |
+| `--er1-context <ctx>` | ER1 context the bundles live in (default `skills`). |
+| `--er1-target prod\|stage\|local` | ER1 target (default `prod`). |
+| `--registry <spec>` | Registry spec; only `self` / `er1://…` are handled here. |
+| `--dry-run` | Show what would change; do not POST. |
+| `--yes` | Skip the confirm pause. |
 
 ---
 
