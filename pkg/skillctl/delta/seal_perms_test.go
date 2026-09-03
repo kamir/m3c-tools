@@ -3,6 +3,7 @@ package delta
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -19,6 +20,10 @@ func TestSealFilesAreOwnerOnly(t *testing.T) {
 	record, err := store.Seal(testInventory(), "test-user")
 	if err != nil {
 		t.Fatalf("Seal: %v", err)
+	}
+
+	if runtime.GOOS == "windows" { // POSIX mode bits are not enforced on Windows
+		t.Skip("POSIX mode bits are not enforced on Windows")
 	}
 
 	if info, err := os.Stat(dir); err != nil {

@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -242,8 +243,10 @@ func TestSealAfterFullReview(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seal file not persisted at %s: %v", sealPath, err)
 	}
-	if perm := info.Mode().Perm(); perm != 0600 {
-		t.Errorf("seal file mode = %04o, want 0600 (must not be world-readable)", perm)
+	if runtime.GOOS != "windows" { // POSIX mode bits are not enforced on Windows
+		if perm := info.Mode().Perm(); perm != 0600 {
+			t.Errorf("seal file mode = %04o, want 0600 (must not be world-readable)", perm)
+		}
 	}
 }
 
