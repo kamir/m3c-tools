@@ -490,7 +490,7 @@ static void showPlaudSyncWindow(const char *accountInfo) {
 
 		NSTableColumn *colDate = [[NSTableColumn alloc] initWithIdentifier:@"date"];
 		[colDate setWidth:140]; [colDate setMinWidth:80];
-		[[colDate headerCell] setStringValue:@"Date"];
+		[[colDate headerCell] setStringValue:@"Recorded"];
 		[g_plaudTable addTableColumn:colDate];
 
 		NSTableColumn *colStatus = [[NSTableColumn alloc] initWithIdentifier:@"status"];

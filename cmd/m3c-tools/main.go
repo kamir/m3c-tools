@@ -253,7 +253,8 @@ Commands:
 
   plaud list             List Plaud recordings with sync status + ER1 doc_id
   plaud check            Sync-coverage report: how many synced/unsynced + doc_id links
-  plaud fix-times        Backfill real recording time onto synced items (--apply to write)
+  plaud fix-times        Set synced items' ER1 time to the real (local) recording time
+                         [--since YYYY-MM-DD] [--limit N] [--apply]   dry-run by default
   plaud sync <id>        Sync a Plaud recording to ER1
   plaud sync --all       Sync all new Plaud recordings to ER1
   plaud auth mcp         Import the official OAuth token (npx @plaud-ai/mcp login) — durable, no DevTools
@@ -4394,13 +4395,28 @@ func cmdPlaud(args []string) {
 	case "check":
 		cmdPlaudCheck()
 	case "fix-times":
-		apply := false
-		for _, a := range args[1:] {
-			if a == "--apply" {
+		apply, since, limit := false, "", 0
+		for i := 1; i < len(args); i++ {
+			switch a := args[i]; {
+			case a == "--apply":
 				apply = true
+			case a == "--since" && i+1 < len(args):
+				since = args[i+1]
+				i++
+			case strings.HasPrefix(a, "--since="):
+				since = strings.TrimPrefix(a, "--since=")
+			case a == "--limit" && i+1 < len(args):
+				if v, err := strconv.Atoi(args[i+1]); err == nil {
+					limit = v
+				}
+				i++
+			case strings.HasPrefix(a, "--limit="):
+				if v, err := strconv.Atoi(strings.TrimPrefix(a, "--limit=")); err == nil {
+					limit = v
+				}
 			}
 		}
-		cmdPlaudFixTimes(apply)
+		cmdPlaudFixTimes(apply, since, limit)
 	case "sync":
 		if len(args) < 2 {
 			fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud sync <#|ID|--all> [flags]")
@@ -5068,10 +5084,16 @@ func sortDevNewestFirst(recs []plaud.DevRecording) {
 	sort.SliceStable(recs, func(i, j int) bool { return recs[i].StartAt > recs[j].StartAt })
 }
 
-// devWhen renders the developer API's ISO StartAt as "YYYY-MM-DD HH:MM".
+// devWhen renders the developer API's ISO StartAt as LOCAL "YYYY-MM-DD HH:MM".
+//
+// FR-0095: the API emits a zone-less ISO string that is UTC ("2026-09-03T13:44:14"
+// for a recording made at 15:44 CEST). Slicing those 16 characters printed the UTC
+// wall clock as if it were local time — every row an hour (CET) or two (CEST) too
+// early. Parse, then convert; an unparsable value is shown RAW rather than guessed,
+// so a format change from Plaud is visible instead of silently plausible.
 func devWhen(iso string) string {
-	if len(iso) >= 16 {
-		return strings.Replace(iso[:16], "T", " ", 1)
+	if t, ok := plaud.ParseDevTime(iso); ok {
+		return t.Local().Format("2006-01-02 15:04")
 	}
 	return iso
 }
@@ -5316,7 +5338,13 @@ func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentTyp
 			audio = nil
 		}
 	}
-	captureTime := parseDevTime(r.StartAt)
+	// LOCAL, not UTC: both consumers of this instant — ER1's `current_time` and the
+	// composite doc's "Date:" line — format with a ZONE-LESS layout, so whatever
+	// zone the time.Time carries becomes the stored wall clock. The other producer
+	// of the same ER1 field (the file import, ~line 1261) uses os.FileInfo.ModTime,
+	// which is local; without this the two producers disagree by 1-2 h and the
+	// braindump corpus mixes both. FR-0095.
+	captureTime := parseDevTime(r.StartAt).Local()
 	transcript := detail.TranscriptText()
 	notes := detail.NotesText()
 
@@ -5575,11 +5603,10 @@ func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force, whi
 }
 
 // parseDevTime parses the developer API's timestamps (falls back to now).
+// The zone handling lives in plaud.ParseDevTime — see FR-0095.
 func parseDevTime(s string) time.Time {
-	for _, layout := range []string{"2006-01-02T15:04:05", time.RFC3339, "2006-01-02T15:04:05.000Z"} {
-		if t, err := time.Parse(layout, s); err == nil {
-			return t
-		}
+	if t, ok := plaud.ParseDevTime(s); ok {
+		return t
 	}
 	return time.Now()
 }
