@@ -21,7 +21,7 @@ $ARGUMENTS
 |----------|-------|---------|
 | **FR file** (private) | `${M3C_MAINTENANCE_DIR}/bug-reports/FR-NNNN-<slug>.md` | *What is being asked, by whom, and why.* Full reasoning, trade-offs, the arguments against. |
 | **SPEC** (private) | `${M3C_MAINTENANCE_DIR}/SPEC/SPEC-NNNN-<name>.md` | *What contract the result must satisfy.* Requirements, constraints, non-goals. |
-| **Issue** (public) | a GitHub issue in `$M3C_BUG_REPO` | *What will change for a user of this tool.* Redacted; refers to the FR and SPEC **ID-only**. |
+| **Issue** (public) | a GitHub issue in the repo the FR's `Repo:` line names | *What will change for a user of this tool.* Redacted; refers to the FR and SPEC **ID-only**. |
 
 The FR is the **ask**; the SPEC is the **contract**; the issue is the **public
 commitment**. Closing an issue means the contract is served — `bugtracker.sh`
@@ -95,6 +95,7 @@ One file per ask, `${M3C_MAINTENANCE_DIR}/bug-reports/FR-NNNN-<slug>.md`:
 - **Component:** <package or surface>
 - **Spec:** SPEC-NNNN §N
 - **Public:** yes | no
+- **Repo:** <owner/repo the issue belongs in>
 
 ## The ask
 

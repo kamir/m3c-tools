@@ -206,6 +206,79 @@ accepts "closing an FR defaults to implemented" "$BT" close FR-0096
 is "the FR is implemented" "$("$BT" status FR-0096)" "implemented"
 is "the FR issue closed as completed" "$(grep -c 'issue close 88 .* --reason completed' "$GH_CALLS")" "1"
 
+# --- the target repository belongs to the ITEM, not to the cwd ----------------
+#
+# The regression this guards: repo_for used to read `git remote origin`, so the
+# same command addressed a different repository depending on where you stood —
+# and `close` ignored the repo the item had already recorded.
+
+# a throwaway checkout whose origin is a DIFFERENT repository
+OTHER="$TMP/other-checkout"
+mkdir -p "$OTHER"; ( cd "$OTHER"; git init -q; git remote add origin https://github.com/someone/unrelated.git )
+
+: > "$GH_CALLS"
+( cd "$OTHER" && M3C_BUG_REPO= "$BT" close 213 --status wontfix >/dev/null 2>&1 )
+is "close from a foreign checkout still targets the recorded repo" \
+   "$(grep -c 'issue close 77 --repo acme/widget' "$GH_CALLS")" "1"
+
+: > "$GH_CALLS"
+( cd "$OTHER" && M3C_BUG_REPO=wrong/repo "$BT" close 213 --status wontfix >/dev/null 2>&1 )
+is "a stray M3C_BUG_REPO cannot redirect an item that has an issue" \
+   "$(grep -c 'issue close 77 --repo acme/widget' "$GH_CALLS")" "1"
+"$BT" status 213 open >/dev/null
+
+: > "$GH_CALLS"
+( cd "$OTHER" && GH_ISSUE_STATE=OPEN M3C_BUG_REPO=wrong/repo "$BT" sync 213 >/dev/null 2>&1 )
+is "sync reads the state from the recorded repo" \
+   "$(grep -c 'issue view 77 --repo acme/widget' "$GH_CALLS")" "1"
+
+# --- open, before an issue exists ---------------------------------------------
+DECL="$BUGS/BUG-0215-declares-its-own-repo.md"
+cat > "$DECL" <<'EOF'
+# BUG-0215 — declares its own repo
+
+- **Status:** open
+- **Public:** yes
+- **Repo:** declared/target
+EOF
+cat > "${DECL%.md}.public.md" <<'EOF'
+# a title
+
+a clean body
+EOF
+: > "$GH_CALLS"
+GH_NEW_ISSUE=91 accepts "open uses the declared Repo line" \
+  bash -c "M3C_BUG_REPO=env/override '$BT' open 215"
+is "the file outranks the environment" "$(grep -c 'issue create --repo declared/target' "$GH_CALLS")" "1"
+is "the backlink records the repo it published to" "$("$BT" issue 215)" "declared/target#91"
+
+NOREPO="$BUGS/BUG-0216-declares-nothing.md"
+cat > "$NOREPO" <<'EOF'
+# BUG-0216 — declares nothing
+
+- **Status:** open
+- **Public:** yes
+EOF
+cp "${DECL%.md}.public.md" "${NOREPO%.md}.public.md"
+: > "$GH_CALLS"
+refuses "open refuses when nothing declares a target" \
+  bash -c "cd '$OTHER' && M3C_BUG_REPO= '$BT' open 216"
+is "nothing was created without a target" "$(grep -c 'issue create' "$GH_CALLS" || true)" "0"
+accepts "M3C_BUG_REPO fills the gap when the file is silent" \
+  bash -c "cd '$OTHER' && M3C_BUG_REPO=env/fallback GH_NEW_ISSUE=92 '$BT' open 216"
+is "the env fallback was used" "$(grep -c 'issue create --repo env/fallback' "$GH_CALLS")" "1"
+
+BADREPO="$BUGS/BUG-0217-malformed-repo.md"
+cat > "$BADREPO" <<'EOF'
+# BUG-0217 — malformed repo
+
+- **Status:** open
+- **Public:** yes
+- **Repo:** https://github.com/owner/repo
+EOF
+cp "${DECL%.md}.public.md" "${BADREPO%.md}.public.md"
+refuses "a malformed Repo value is rejected, not passed to gh" "$BT" open 217
+
 # --- sync ---------------------------------------------------------------------
 "$BT" status 213 fixed >/dev/null
 GH_ISSUE_STATE=CLOSED accepts "sync is quiet when both agree" "$BT" sync 213
