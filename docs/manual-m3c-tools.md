@@ -261,6 +261,14 @@ into the same tracking ledger, so an item synced by one is not re-synced by the 
 | `--filter` | `<regex>` | — | Only sync items whose title matches this regular expression |
 | `--dry-run` | — | — | Print what *would* be synced; download and upload nothing |
 
+**`plaud fix-times` flags** — backfill the true (local) recording time onto items already synced:
+
+| Flag | Argument | Default | Meaning |
+|------|----------|---------|---------|
+| `--apply` | — | — | Write the corrected times (without it: dry-run — print what would change) |
+| `--since` | `<YYYY-MM-DD>` | — | Only repair items synced on or after this local date |
+| `--limit` | `<n>` | — | Repair at most this many items |
+
 **`plaud dev` flags** — `dev list` takes `--preview` (alias `--transcript`) and `--limit`;
 `dev sync` takes the rest.
 
