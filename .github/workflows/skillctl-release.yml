@@ -27,6 +27,9 @@ name: skillctl Release (SLSA L3 provenance)
 #           └───────────────────────────────┐
 #   [build, provenance] ─────────────> verify (slsa-verifier GATE)
 #   [build, provenance, cosign, verify] ─> release (DRAFT only)
+#   [release] ───────────────────────> smoke  (HARD Tier-1 5-platform GATE, H9)
+#
+# The `build` job's CycloneDX SBOM step is BLOCKING (H5): no SBOM → no release.
 #
 # Output format mirrors tools/skillctl-release.sh exactly (raw per-arch binaries +
 # SHA256SUMS) so the published install.sh keeps working; this adds a signed SLSA
@@ -135,11 +138,11 @@ jobs:
       # SPEC-0253 follow-up: emit a CycloneDX SBOM of the Go build inputs. All 5
       # arches build from the same go.mod with no CGO and an identical import set
       # (only GOOS/GOARCH differ), so one source-level SBOM represents the supply
-      # chain of every published binary. WARN-only: a transient syft failure must
-      # never block a release cut. anchore/sbom-action uploads it as the workflow
-      # artifact `skillctl.sbom.cdx.json` for the release job to consume.
+      # chain of every published binary. H5: BLOCKING — no continue-on-error. Every
+      # release is enterprise-grade, so "no SBOM → no release": a failed SBOM step
+      # fails the build job and the whole release. anchore/sbom-action uploads it as
+      # the workflow artifact `skillctl.sbom.cdx.json` for the release job to consume.
       - name: Generate SBOM (CycloneDX)
-        continue-on-error: true
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           path: .
@@ -307,8 +310,10 @@ jobs:
           name: skillctl-cosign-bundle
           path: dist
 
-      - name: Download SBOM (best-effort)
-        continue-on-error: true
+      # H5: BLOCKING — the SBOM is a required release asset ("no SBOM → no
+      # release"). The generate step is blocking, so this artifact always exists;
+      # if it is somehow absent this download fails and no draft is cut.
+      - name: Download SBOM (CycloneDX)
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: skillctl.sbom.cdx.json
@@ -360,3 +365,24 @@ jobs:
             dist/skillctl.sbom.cdx.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # 6) SMOKE GATE — H9: the HARD Tier-1 platform gate. Runs AFTER the draft is
+  #    created and exercises the full install → verify → execute → uninstall
+  #    lifecycle on ALL 5 Tier-1 platforms (macOS arm64/amd64, Linux amd64/arm64,
+  #    Windows amd64) against the EXACT bytes this release ships. A reusable 5-way
+  #    matrix (skillctl-smoke-matrix.yml); each leg STAGES the same-run build
+  #    artifacts (skillctl-dist + skillctl-cosign-bundle) — so the gate stays on
+  #    contents:read and never has to read the draft release. fail-fast:false, so
+  #    every platform is reported. If ANY Tier-1 leg fails, this job fails → the
+  #    release run goes RED. Under the DRAFT-first model (the operator promotes the
+  #    draft by hand), a red smoke gate is the signal — and, as a required status
+  #    check, the enforcement — that the draft must NOT be promoted to a published
+  #    release.
+  smoke:
+    name: Tier-1 platform smoke gate (5 platforms)
+    needs: [release]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/skillctl-smoke-matrix.yml
+    with:
+      tag: ${{ github.ref_name }}
