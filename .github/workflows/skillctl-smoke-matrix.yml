@@ -1,0 +1,165 @@
+name: skillctl Tier-1 Platform Smoke (matrix)
+
+# H9 — the HARD Tier-1 platform smoke gate. Runs the full
+#   install → verify → execute → uninstall
+# lifecycle against the artifact a skillctl release actually publishes, on ALL 5
+# Tier-1 platforms (decision in force: platform Tier-1 = all 5 built targets, a
+# hard gate). Reusable: skillctl-release.yml calls this AFTER the (draft) release
+# job; a failure of ANY leg fails this workflow, turns the release run RED, and —
+# under the DRAFT-first model — is the signal (and, as a required status check,
+# the enforcement) that the operator must NOT promote the draft. Also runnable on
+# its own via workflow_dispatch against an already-published tag.
+#
+# The 5 GitHub-hosted runners (os/arch = the Tier-1 targets):
+#   macos-14         darwin/arm64   (Apple silicon)
+#   macos-13         darwin/amd64   (Intel mac)
+#   ubuntu-latest    linux/amd64
+#   ubuntu-24.04-arm linux/arm64
+#   windows-latest   windows/amd64
+#
+# Asset source (least privilege): each leg STAGES the same-run build artifacts
+# (skillctl-dist = the 5 binaries + SHA256SUMS; skillctl-cosign-bundle = the
+# cosign bundle) via actions/download-artifact — the EXACT bytes the release job
+# attaches. This keeps the gate on contents:read and never has to read a draft
+# release. When run standalone (workflow_dispatch, no run artifacts), the staging
+# steps no-op and the script/leg falls back to fetching the published release via
+# authenticated `gh`.
+#
+# macOS/Linux legs run scripts/skillctl-smoke.sh <tag> (SHA-256 + cosign verify →
+# offline keygen/pack/sign/verify-sig → uninstall). The Windows leg replicates
+# skillctl-windows-smoke.yml's install + `skillctl version` pattern (staged .exe →
+# SHA-256 verify → version → uninstall).
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: "skillctl release tag to smoke (e.g. skillctl/v0.4.0)"
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "skillctl release tag to smoke (e.g. skillctl/v0.4.0)"
+        required: true
+        type: string
+
+# CD-T6: least-privilege default. contents: read is all a leg needs — it stages
+# same-run artifacts, and (standalone) reads a published release; nothing writes.
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: smoke (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false # one failing platform must not mask the others
+      matrix:
+        include:
+          - { name: macos-arm64,   os: macos-14 }
+          - { name: macos-amd64,   os: macos-13 }
+          - { name: linux-amd64,   os: ubuntu-latest }
+          - { name: linux-arm64,   os: ubuntu-24.04-arm }
+          - { name: windows-amd64, os: windows-latest }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # Stage the same-run build artifacts (the bytes the release attaches). These
+      # no-op when run standalone (no such artifacts in the run); the smoke leg
+      # then falls back to fetching the published release via `gh`.
+      - name: Stage binaries + SHA256SUMS (skillctl-dist)
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: skillctl-dist
+          path: ${{ runner.temp }}/skillctl-assets
+
+      - name: Stage cosign bundle (skillctl-cosign-bundle)
+        if: runner.os != 'Windows'
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: skillctl-cosign-bundle
+          path: ${{ runner.temp }}/skillctl-assets
+
+      # cosign makes the macOS/Linux legs' provenance check REAL (not warn-skipped);
+      # the Windows leg verifies integrity via SHA-256 only, so skip it there.
+      - name: Install cosign
+        if: runner.os != 'Windows'
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+
+      # macOS + Linux: the full install → verify → execute → uninstall lifecycle.
+      - name: Smoke (macOS/Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          SMOKE_TAG: ${{ inputs.tag }}
+          REPO: ${{ github.repository }}
+          SMOKE_ASSET_DIR: ${{ runner.temp }}/skillctl-assets
+          GH_TOKEN: ${{ github.token }} # standalone fallback: read a published release
+        run: scripts/skillctl-smoke.sh "$SMOKE_TAG"
+
+      # Windows: install (staged .exe, else gh) + SHA-256 verify + `skillctl
+      # version` (mirrors skillctl-windows-smoke.yml) + uninstall.
+      - name: Smoke (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          SMOKE_TAG: ${{ inputs.tag }}
+          REPO: ${{ github.repository }}
+          SMOKE_ASSET_DIR: ${{ runner.temp }}/skillctl-assets
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = $env:SMOKE_TAG
+          $ver = ($tag -replace '^skillctl/','')          # v0.4.0
+          $verNum = ($ver -replace '^v','')               # 0.4.0
+          $asset = 'skillctl-windows-amd64.exe'
+          $work = Join-Path $env:RUNNER_TEMP 'skillctl-smoke'
+          New-Item -ItemType Directory -Force -Path $work | Out-Null
+
+          Write-Host "=== skillctl smoke: $tag ($asset) ==="
+
+          # 1. Install — use the staged same-run build artifact, else fetch the
+          # published release via gh (standalone).
+          Write-Host "1. Install ($asset)"
+          $staged = Join-Path $env:SMOKE_ASSET_DIR $asset
+          $stagedSums = Join-Path $env:SMOKE_ASSET_DIR 'SHA256SUMS'
+          $exe = Join-Path $work $asset
+          $sums = Join-Path $work 'SHA256SUMS'
+          if ((Test-Path $staged) -and (Test-Path $stagedSums)) {
+            Copy-Item $staged $exe -Force
+            Copy-Item $stagedSums $sums -Force
+            Write-Host "   staged from the same-run build artifact"
+          } else {
+            gh release download "$tag" --repo "$env:REPO" --pattern $asset --pattern 'SHA256SUMS' --dir $work --clobber
+            Write-Host "   downloaded from the published release"
+          }
+          if (-not (Test-Path $exe)) { Write-Error "install failed: $asset absent"; exit 1 }
+
+          # 2. Verify — SHA-256 of the .exe must match the signed SHA256SUMS.
+          Write-Host "2. Verify (SHA-256 against SHA256SUMS)"
+          $line = Select-String -Path $sums -Pattern ([regex]::Escape($asset)) | Select-Object -First 1
+          if (-not $line) { Write-Error "no SHA256SUMS entry for $asset"; exit 1 }
+          $want = (($line.Line -split '\s+')[0]).ToLower()
+          $got = (Get-FileHash -Algorithm SHA256 $exe).Hash.ToLower()
+          if ($want -ne $got) { Write-Error "SHA-256 mismatch (want=$want got=$got)"; exit 1 }
+          Write-Host "   OK SHA-256 matches"
+
+          # 3. Execute — the shipped .exe reports this tag's version.
+          Write-Host "3. Execute (skillctl version)"
+          $out = & $exe version 2>&1
+          if ($LASTEXITCODE -ne 0) { Write-Error "skillctl version failed: $out"; exit 1 }
+          if ("$out" -notmatch [regex]::Escape($verNum)) { Write-Error "version output does not mention ${verNum}: $out"; exit 1 }
+          Write-Host "   OK version reports $verNum"
+
+          # 4. Uninstall — remove the installed .exe and confirm it is gone.
+          Write-Host "4. Uninstall (remove the binary, verify it is gone)"
+          Remove-Item -Force $exe
+          if (Test-Path $exe) { Write-Error "uninstall failed — $asset still present"; exit 1 }
+          Write-Host "   OK uninstalled"
+
+          Write-Host "SMOKE PASS: $tag (windows-amd64) — install -> verify -> execute -> uninstall"

@@ -1,14 +1,27 @@
 #!/usr/bin/env bash
 # skillctl-smoke.sh — Smoke-test a PUBLISHED skillctl release build.
 #
-# Downloads the shipped binary for this host from the GitHub release, verifies its
-# integrity (SHA-256 against the signed SHA256SUMS, plus cosign provenance when
-# cosign is present), then runs a minimal offline lifecycle (version → keygen →
-# pack → sign → verify-sig) to prove the artifact users actually download works.
+# Runs the full install → verify → execute → uninstall lifecycle against the
+# artifact users actually download:
+#   install    download the shipped binary for this host from the GitHub release
+#   verify     SHA-256 against the signed SHA256SUMS (+ cosign provenance if cosign)
+#   execute    a minimal offline lifecycle (version → keygen → pack → sign → verify-sig)
+#   uninstall  remove the installed binary and confirm it is gone
 #
 # This is Phase 4 of the skillctl release chain (see docs/releasing.md and the
-# /release-skillctl skill). Windows is smoke-tested separately by
-# .github/workflows/skillctl-windows-smoke.yml (install from the published release).
+# /release-skillctl skill) AND the per-leg body of the H9 Tier-1 platform smoke
+# gate (.github/workflows/skillctl-smoke-matrix.yml), which runs it on macOS
+# arm64/amd64 + Linux amd64/arm64 (Windows is covered by a parallel matrix leg).
+#
+# Where the assets come from (checked in order, per asset):
+#   1. SMOKE_ASSET_DIR   a locally-staged dir holding the release assets. The H9
+#                        release gate stages the SAME-RUN build artifacts here
+#                        (the exact bytes the release attaches) via
+#                        actions/download-artifact — so the gate needs only
+#                        contents:read and never has to read a DRAFT release.
+#   2. gh                authenticated GitHub API (GH_TOKEN/GITHUB_TOKEN) — resolves
+#                        a published release's assets for standalone/manual runs.
+#   3. curl              the public download URL — local dev against a published tag.
 #
 # Usage:  scripts/skillctl-smoke.sh [skillctl/vX.Y.Z]   (defaults to the latest skillctl tag)
 set -euo pipefail
@@ -30,23 +43,39 @@ fail() { echo -e "  ${RED}✗${NC} $1"; FAILED=1; }
 warn() { echo -e "  ${YEL}!${NC} $1"; }
 FAILED=0
 
+# Fetch a single release asset into the CWD. Tries, per asset: (1) a locally-staged
+# SMOKE_ASSET_DIR (the release gate stages the same-run build artifacts there —
+# contents:read, no draft read needed), (2) the authenticated `gh` API for a
+# published release, (3) the public download URL via curl.
+dl() {
+  local asset="$1"
+  if [ -n "${SMOKE_ASSET_DIR:-}" ] && [ -f "${SMOKE_ASSET_DIR}/${asset}" ]; then
+    cp "${SMOKE_ASSET_DIR}/${asset}" .
+  elif [ -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ] && command -v gh >/dev/null 2>&1; then
+    GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}" gh release download "$TAG" \
+      --repo "$REPO" --pattern "$asset" --dir . --clobber
+  else
+    curl -fsSLO "${BASE}/${asset}"
+  fi
+}
+
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 cd "$WORK"
 
 echo "=== skillctl smoke: ${TAG} (${ASSET}) ==="
 
-# ── 1. Download the published artifact + its signed checksums ────────────────
-echo "1. Download from the release"
-if ! curl -fsSLO "${BASE}/${ASSET}" || ! curl -fsSLO "${BASE}/SHA256SUMS"; then
-  fail "could not download ${ASSET} / SHA256SUMS from ${TAG} (is the release published?)"
+# ── 1. Install: download the published artifact + its signed checksums ───────
+echo "1. Install (download ${ASSET} from the release)"
+if ! dl "$ASSET" || ! dl SHA256SUMS; then
+  fail "could not download ${ASSET} / SHA256SUMS from ${TAG} (is the release published or drafted?)"
   exit 1
 fi
-curl -fsSLO "${BASE}/SHA256SUMS.cosign.bundle" 2>/dev/null || true
+dl SHA256SUMS.cosign.bundle 2>/dev/null || true
 pass "downloaded ${ASSET} + SHA256SUMS"
 
-# ── 2. Integrity: the binary's digest must be in the signed SHA256SUMS ───────
-echo "2. Integrity (SHA-256 against SHA256SUMS)"
+# ── 2. Verify (integrity): the binary's digest must be in the signed SHA256SUMS ─
+echo "2. Verify (SHA-256 against SHA256SUMS)"
 sumtool() { command -v sha256sum >/dev/null 2>&1 && sha256sum "$@" || shasum -a 256 "$@"; }
 want=$(grep " ${ASSET}\$" SHA256SUMS | awk '{print $1}' || true)
 got=$(sumtool "${ASSET}" | awk '{print $1}')
@@ -56,8 +85,8 @@ else
   fail "SHA-256 mismatch (want=${want:-<absent>} got=${got})"
 fi
 
-# ── 3. Provenance: cosign (keyless OIDC) when available ─────────────────────
-echo "3. Provenance"
+# ── 3. Verify (provenance): cosign (keyless OIDC) when available ─────────────
+echo "3. Verify (cosign provenance)"
 if command -v cosign >/dev/null 2>&1 && [ -f SHA256SUMS.cosign.bundle ]; then
   if cosign verify-blob SHA256SUMS --bundle SHA256SUMS.cosign.bundle \
        --certificate-identity-regexp "^https://github.com/${REPO}/\.github/workflows/skillctl-release\.yml@refs/tags/skillctl/v" \
@@ -70,8 +99,8 @@ else
   warn "cosign not available — skipped provenance check (SHA-256 above is the integrity anchor)"
 fi
 
-# ── 4. The shipped binary runs, end to end, offline ─────────────────────────
-echo "4. Lifecycle on the shipped binary"
+# ── 4. Execute: the shipped binary runs, end to end, offline ─────────────────
+echo "4. Execute (offline lifecycle on the shipped binary)"
 chmod +x "${ASSET}"
 BIN="./${ASSET}"
 if out=$("$BIN" version 2>&1); then
@@ -91,6 +120,15 @@ if "$BIN" keygen --out ./smk >/dev/null 2>&1 \
   pass "keygen → pack → sign → verify-sig (offline) succeeded"
 else
   fail "offline lifecycle failed on the shipped binary"
+fi
+
+# ── 5. Uninstall: remove the installed binary and confirm it is gone ─────────
+echo "5. Uninstall (remove the binary, verify it is gone)"
+rm -f "${BIN}"
+if [ ! -e "${BIN}" ]; then
+  pass "uninstalled — ${ASSET} removed"
+else
+  fail "uninstall failed — ${ASSET} still present"
 fi
 
 echo "─────────────────────────────"
