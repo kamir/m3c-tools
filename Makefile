@@ -424,6 +424,30 @@ release-minor: code-review check-docs
 release-major: code-review check-docs
 	@./scripts/release.sh major
 
+# ── skillctl release chain (docs/releasing.md · skill: /release-skillctl) ──────
+# skillctl is a SEPARATE, tag-driven line (skillctl/vX.Y.Z → skillctl-release.yml);
+# `release-skillctl` runs every PRE-TAG gate for it, then prints the derived
+# version context + the next step. It deliberately does NOT tag — tagging
+# origin/master BY HASH is the confirmed manual step (the point of no return).
+.PHONY: release-skillctl skillctl-smoke
+release-skillctl: build-skillctl build-skillctl-demo vet lint check-docs
+	@echo "→ skillctl pre-tag gates (race tests + boundary)…"
+	@go test -race -count=1 ./cmd/skillctl/... ./pkg/skillctl/...
+	@./tools/boundary-gate.sh
+	@last=$$(git tag --list 'skillctl/v*' --sort=-v:refname | head -1); \
+	 echo ""; \
+	 echo "  last skillctl tag : $$last"; \
+	 echo "  commits since     : $$(git rev-list --count $$last..origin/master 2>/dev/null) on origin/master"; \
+	 echo ""; \
+	 echo "  ✓ pre-tag gates green. Next: sync CHANGELOG, then tag origin/master BY HASH"; \
+	 echo "    (skillctl/vX.Y.Z) + push — see docs/releasing.md / the /release-skillctl skill."
+
+# Smoke-test a PUBLISHED skillctl release build (Phase 4). VERSION defaults to latest tag.
+#   make skillctl-smoke                     # smoke the latest published skillctl/v*
+#   make skillctl-smoke VERSION=skillctl/v0.4.0
+skillctl-smoke:
+	@./scripts/skillctl-smoke.sh $(VERSION)
+
 # Build with GoReleaser (snapshot, no publish — for local testing)
 .PHONY: snapshot
 snapshot:
