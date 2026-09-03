@@ -75,8 +75,8 @@ curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/ac04005305ee1637900
 
 skillctl keygen --out ~/.config/m3c/skill-keys/mykey            # ed25519 → mykey.priv + mykey.pub
 skillctl pack --skill ./my-skill -o my-skill.skb --name my-skill --version 1.0.0
-skillctl sign my-skill.skb --key ~/.config/m3c/skill-keys/mykey.priv
-skillctl verify-sig my-skill.skb --pubkey ~/.config/m3c/skill-keys/mykey.pub   # offline, no server
+skillctl sign --key ~/.config/m3c/skill-keys/mykey.priv my-skill.skb
+skillctl verify-sig --pubkey ~/.config/m3c/skill-keys/mykey.pub my-skill.skb   # offline, no server
 ```
 
 → **Full walkthrough:** [Quickstart: skillctl](docs/quickstart-skillctl.md)

@@ -119,7 +119,7 @@ Useful optional manifest fields:
 ## 4. Sign it
 
 ```bash
-skillctl sign my-skill.skb --key ~/.config/m3c/skill-keys/mykey.priv
+skillctl sign --key ~/.config/m3c/skill-keys/mykey.priv my-skill.skb
 ```
 
 This computes the bundle's SHA-256 digest, signs it with ed25519, and writes a **detached**
@@ -130,7 +130,7 @@ signature next to the bundle: `my-skill.skb.<digest>.author.sig`.
 ## 5. Verify it — offline
 
 ```bash
-skillctl verify-sig my-skill.skb --pubkey ~/.config/m3c/skill-keys/mykey.pub
+skillctl verify-sig --pubkey ~/.config/m3c/skill-keys/mykey.pub my-skill.skb
 ```
 
 It recomputes the digest, finds the matching signature, and checks it. **No network, no CA.**

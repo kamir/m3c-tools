@@ -165,3 +165,73 @@ func TestRunVerifySig_UsageErrors(t *testing.T) {
 		t.Errorf("missing --pubkey exit=%d, want %d", code, exitUsage)
 	}
 }
+
+// TestSignVerify_ArgOrder proves the bundle positional works BEFORE the flags
+// (the order the usage brief + README show) as well as after, and in the
+// `--key=value` form — the fix for Go's flag package stopping at the first
+// positional. Before the fix, "sign BUNDLE.skb --key K" failed with a usage error.
+func TestSignVerify_ArgOrder(t *testing.T) {
+	dir := t.TempDir()
+	key := filepath.Join(dir, "k")
+	var out, errb bytes.Buffer
+	if code := runKeygen([]string{"--out", key}, &out, &errb); code != 0 {
+		t.Fatalf("keygen exit=%d stderr=%s", code, errb.String())
+	}
+	priv, pub := key+".priv", key+".pub"
+
+	cases := []struct {
+		name    string
+		signArg func(b string) []string
+		verArg  func(b string) []string
+	}{
+		{"positional-before-flags",
+			func(b string) []string { return []string{b, "--key", priv} },
+			func(b string) []string { return []string{b, "--pubkey", pub} }},
+		{"flags-before-positional",
+			func(b string) []string { return []string{"--key", priv, b} },
+			func(b string) []string { return []string{"--pubkey", pub, b} }},
+		{"key-equals-form",
+			func(b string) []string { return []string{b, "--key=" + priv} },
+			func(b string) []string { return []string{"--pubkey=" + pub, b} }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			bundle := makeBundleForCLI(t, dir, tc.name+".skb")
+			var so, se bytes.Buffer
+			if code := runSign(tc.signArg(bundle), &so, &se); code != 0 {
+				t.Fatalf("sign exit=%d stderr=%s", code, se.String())
+			}
+			so.Reset()
+			se.Reset()
+			if code := runVerifySig(tc.verArg(bundle), &so, &se); code != 0 {
+				t.Fatalf("verify-sig exit=%d stderr=%s", code, se.String())
+			}
+		})
+	}
+}
+
+// TestExtractBundlePositional pins the parser: the bundle is found at any slot,
+// a value-taking flag's value is never mistaken for it, and zero/two positionals
+// bail to "" so the caller emits a clean usage error.
+func TestExtractBundlePositional(t *testing.T) {
+	vf := map[string]bool{"key": true, "identity-id": true}
+	cases := []struct {
+		name string
+		in   []string
+		want string
+	}{
+		{"after-flags", []string{"--key", "k.priv", "b.skb"}, "b.skb"},
+		{"before-flags", []string{"b.skb", "--key", "k.priv"}, "b.skb"},
+		{"middle", []string{"--key", "k.priv", "b.skb", "--identity-id", "id"}, "b.skb"},
+		{"key-equals", []string{"--key=k.priv", "b.skb"}, "b.skb"},
+		{"value-not-mistaken", []string{"--key", "k.priv"}, ""},
+		{"two-positionals", []string{"a.skb", "b.skb", "--key", "k.priv"}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got, _ := extractBundlePositional(tc.in, vf); got != tc.want {
+				t.Errorf("bundle=%q, want %q", got, tc.want)
+			}
+		})
+	}
+}

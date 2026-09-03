@@ -134,11 +134,11 @@ skillctl pack --skill ~/.claude/skills/<name> -o <name>@<ver>.skb \
 #   Determinism check (acceptance): pack a second time and diff — MUST be byte-identical.
 
 # A3. Sign the bundle (detached ed25519 author signature over the digest).
-skillctl sign <name>@<ver>.skb --key ~/.config/m3c/skill-registry-self.priv --identity-id id:mirko@m3c
+skillctl sign --key ~/.config/m3c/skill-registry-self.priv --identity-id id:mirko@m3c <name>@<ver>.skb
 #   → sidecar <bundle>.<hex>.author.sig ; prints digest sha256:<hex>
 
 # A4. Local self-check BEFORE publishing.
-skillctl verify-sig <name>@<ver>.skb --pubkey ~/.config/m3c/skill-registry-self.pub
+skillctl verify-sig --pubkey ~/.config/m3c/skill-registry-self.pub <name>@<ver>.skb
 #   → EXIT 0 expected.
 
 # --- HUMAN CHECKPOINT: admit (publishing to the registry) ---
