@@ -66,7 +66,7 @@ scripts/bugtracker.sh <command> [args]
 
 | Command | Purpose |
 |---------|---------|
-| `next-id [BUG\|FR]` | Next free id of that kind (default `BUG`). Use it instead of counting files. |
+| `next-id [BUG\|FR] [--no-fetch]` | Next free id of that kind (default `BUG`). Use it instead of counting files — see [Allocating an id](#allocating-an-id). |
 | `path <ID>` | Resolve the analysis file. |
 | `status <ID> [STATUS]` | Read, or set, the canonical status. |
 | `issue <ID>` | The linked issue reference, or empty for a private-only item. |
@@ -78,6 +78,36 @@ scripts/bugtracker.sh <command> [args]
 
 Exit codes: `0` ok · `1` a check failed (drift, leak, refusal) · `2` usage or configuration
 error.
+
+---
+
+## Allocating an id
+
+`next-id` fetches first, then takes the ceiling from **every** place a number can
+already be claimed:
+
+1. a file in the local `bug-reports/`
+2. a file on **any** local or remote branch — someone else's unmerged work
+3. a **branch name** like `docs/fr-0096-…`
+
+The third matters more than it looks: a branch is usually named before its file
+is written, so it is the earliest visible claim there is. When the ceiling comes
+from outside your working tree, `next-id` says so on stderr rather than silently
+handing you a number someone else is already using.
+
+```
+next-id: highest FR claim is FR-0005 in branch docs/fr-0005-… — not in your working tree
+FR-0006
+```
+
+`--no-fetch` skips the network; the answer is then only as fresh as your last
+pull.
+
+> **This is mitigation, not a fix.** Allocation is still a *read*: two sessions
+> asking in the same moment still get the same number, because nothing records
+> that the first one took it. The durable answer is to make allocation a write —
+> the slot table that already governs SPEC ids does exactly that, and extending
+> it to FR and BUG is tracked separately.
 
 ---
 

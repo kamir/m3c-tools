@@ -56,6 +56,42 @@ is "next-id fr is case-insensitive"                 "$("$BT" next-id fr)" "FR-01
 rm "$BUGS/BUG-0007-alpha.md" "$BUGS/BUG-0042-beta.md" "$BUGS/FR-0099-not-a-bug.md"
 is "next-id FR on an empty tree" "$("$BT" next-id FR)" "FR-0001"
 
+# --- next-id sees claims outside the working tree ------------------------------
+#
+# Reading max+1 out of one tree is how two sessions get handed the same id. This
+# rebuilds the real case: a number taken on master, another on someone else's
+# unmerged branch, and a third claimed by a BRANCH NAME before any file exists.
+
+GITBUGS="$TMP/gitmaint"
+mkdir -p "$GITBUGS/bug-reports"
+( cd "$GITBUGS"
+  git init -q -b master; git config user.email t@t; git config user.name t
+  printf '# FR-0001\n' > bug-reports/FR-0001-on-master.md
+  git add -A >/dev/null; git commit -qm one
+  # someone else's unmerged work: a file that exists on no other checkout
+  git checkout -q -b feat/other
+  printf '# FR-0003\n' > bug-reports/FR-0003-on-a-branch.md
+  git add -A >/dev/null; git commit -qm three
+  # the earliest claim there is: a branch named before its file is written
+  git checkout -q -b docs/fr-0005-not-written-yet
+  git checkout -q master ) >/dev/null 2>&1
+
+is "the working tree alone sees only FR-0001" \
+   "$(ls "$GITBUGS/bug-reports" | sed -nE 's/^FR-0*([0-9]+)-.*/\1/p' | sort -n | tail -1)" "1"
+is "next-id skips a file on another branch AND a branch-name claim" \
+   "$(M3C_MAINTENANCE_DIR=$GITBUGS "$BT" next-id FR --no-fetch)" "FR-0006"
+is "the reason is reported, naming where the ceiling came from" \
+   "$(M3C_MAINTENANCE_DIR=$GITBUGS "$BT" next-id FR --no-fetch 2>&1 >/dev/null | grep -c 'docs/fr-0005-not-written-yet')" "1"
+
+# a BUG id must not be raised by an FR claim, and vice versa
+is "kinds do not bleed into each other" \
+   "$(M3C_MAINTENANCE_DIR=$GITBUGS "$BT" next-id BUG --no-fetch)" "BUG-0001"
+
+# a non-git bug dir must keep working exactly as before
+is "a bug-reports dir outside git still resolves" "$("$BT" next-id FR)" "FR-0001"
+
+refuses "next-id rejects an unknown flag" "$BT" next-id FR --nope
+
 # --- a realistic report -------------------------------------------------------
 REPORT="$BUGS/BUG-0213-widget-drops-the-last-frame.md"
 cat > "$REPORT" <<'EOF'
