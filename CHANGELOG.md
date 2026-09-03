@@ -15,6 +15,58 @@ version is ldflags-stamped (`skillctl version`). Release tags: `skillctl/vX.Y.Z`
   a verbatim move ships half-extracted shared state, so it needs a dedicated
   refactor pass, not a release-eve edit.
 
+## [skillctl/v0.4.0] — 2026-09-03 — federated registries + the P1/P2 security-remediation wave
+### Added
+- **Decentralized / federated registries (SPEC-0359).** The folder *is* the
+  registry: `local://` scheme (D1), peer discovery + trust pinning (D2),
+  governance-root cross-signing (D3-i) and N-of-M co-attestation with attestation
+  freshness (D3-ii / D5-a), and a git-native revoke-feed gossip (D5-b). Proven by
+  an offline federation end-to-end test (§8, D1→D5 compose).
+- **Pluggable artifact backend (SPEC-0356).** The git wire format is frozen at v1
+  (P0 cutover gate); ER1 ↔ GitLab parity (`show` / `emit-installed` over git,
+  `--since` on both); and an **OCI artifact backend** (D7) for enterprise /
+  container registries.
+- **Content-plane leak gate (SPEC-0358).** `boundary-gate` now runs a strict
+  content-topology gate (`CONTENT-TOPOLOGY.md`); the private-plane baseline is empty.
+- Releases now **derive the semver level from the commits** instead of guessing it.
+### Security
+- **P1 remediation wave** — authorization + ER1-discovery de-gate (IS-T4b/T6/T7),
+  egress/credential + container hardening (closes CD-03 HIGH), audit-trail integrity
+  and reset-TTL overflow guard (IS-T8/IS-T11), plus the challenge-gate follow-ups
+  (IS-T7 scope-enforcement on the primary install path; ChainVerified closes the
+  keyless-recompute fail-open).
+- **P2 remediation wave** — the pull-path revocation gate is now **bound to the
+  signed revoke HEAD** with adopt-grade epoch + freshness (IS-RS-01, the stale-HEAD
+  replay was challenge-gate-caught and fixed) + producer bodyscan (IS-RS-03); the
+  Art.12 invocation trail is hardened against two audit gaps; the product channel is
+  signed, credentials are read/write scope-split, and pin-guard runs least-privilege.
+- **FR-0090** — a trust event's identity is now derived from the **signed envelope**,
+  never a carrier (git/OCI/registry) projection, so a relabel cannot suppress a
+  signed revoke.
+- **SLSA Build Level 3** — provenance is isolated in a trusted reusable workflow
+  (CD-T5); CI actions are SHA-pinned, least-privilege, and the unsigned skillctl
+  channel is retired.
+### Fixed
+- Consolidated four divergent `compareSemver` copies into `pkg/skillctl/semver`,
+  closing a latent version-ordering bug (the registry copy did not strip a leading
+  `v`); documented + tested the dotted-suffix ordering.
+- AI-slop cleanup: removed dead abstractions/locals and comment drift (no behaviour
+  change); renamed the scanner's `TrustVerified` → `TrustSignaturePresent` for an
+  honest scan display; cleared the repo-wide lint/staticcheck debt and the Windows
+  Gate `go vet` failure.
+
+## [skillctl/v0.3.1] — 2026-08-27 — Windows one-click rollout + trust-plane container/OCI
+### Added
+- **Windows one-click rollout (M1+M2)** — a signed one-click installer and a green
+  `windows-gate`, with the Windows rollout release runbook.
+- **Containerized trust plane + `.skb` OCI publish** (SPEC-0354 D1+D2) — the portable
+  Go trust plane runs in a container and can publish bundles to an OCI registry.
+### Security
+- **SPEC-0317 gate hardening** — wire the offline `locked` state into the gate
+  (R-7.2), add opt-in fail-closed `require_local_audit` on an un-recordable allow
+  (R-8.2), and state-gate the online fallback so the strictly-local hot path is
+  opt-in (R-1.4 P2).
+
 ## [skillctl/v0.3.0] — 2026-07-10 — enterprise evidence backbone + managed-settings pinning
 Full notes: `release/skillctl/v0.3.0/RELEASE_NOTES.md`.
 ### Added
