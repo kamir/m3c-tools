@@ -1,0 +1,63 @@
+name: Coverage (ratchet)
+
+# Gate 2 (H3) — ratchet test coverage over the skillctl trust/security surface.
+#
+# The floors live in .testcoverage.yml, each seeded from the coverage the package
+# ACTUALLY had when the gate was added (rounded down). So this job is GREEN on
+# master today and can only move UP: any change that drops a package below its
+# recorded floor fails here. It is not a "reach 85%" mandate — it is a no-regression
+# ratchet. See .testcoverage.yml for the per-package numbers and the rationale.
+#
+# Runs on macos-latest (matching the environment the floors were measured in, and
+# the existing `test` / `skillctl-race` jobs) so coverage reproduces: git,
+# symlinks, tz db and POSIX perms are all present, so the OS-/tool-gated test
+# skips do not fire, and the live-remote env-gated tests are skipped here exactly
+# as they were when the floors were measured.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+# CD-T6: least-privilege default token for the whole workflow.
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    name: Ratchet coverage (skillctl trust surface)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.26.6"
+
+      - name: Install PortAudio (cmd/skillctl -> menubar cgo must build)
+        run: brew install portaudio
+
+      # Scope = the skillctl trust surface only (see .testcoverage.yml). -covermode=atomic
+      # so the profile is valid even if a future change adds -race here.
+      - name: Generate coverage profile
+        run: go test ./pkg/skillctl/... ./cmd/skillctl/... -covermode=atomic -coverprofile=cover.out
+
+      # Pinned go-test-coverage release (CD-T2: an exact version tag, never a
+      # floating ref), installed via `go install` like the other Go tools in ci.yml.
+      - name: Install go-test-coverage (pinned)
+        run: go install github.com/vladopajic/go-test-coverage/v2@v2.19.0
+
+      - name: Enforce coverage ratchet (.testcoverage.yml)
+        run: go-test-coverage --config .testcoverage.yml
+
+  # FOLLOW-UP (not blocking) — diff/new-code coverage (>=85% on changed lines).
+  # go-test-coverage supports it (`diff.threshold` + `diff.base-breakdown-file-name`)
+  # but needs the BASE branch's coverage breakdown to compare against. Wiring it
+  # cleanly means: (1) on push to master, run go-test-coverage with
+  # `--breakdown-file-name` and persist that breakdown (its git storer commits it
+  # to an orphan branch, or upload it as a workflow artifact keyed by branch);
+  # (2) on PRs, restore that base breakdown and set `diff.base-breakdown-file-name`
+  # so only changed code is graded at 85%. The per-package ratchet above already
+  # blocks regressions on every touched package, so this is an enhancement, not a
+  # gap that blocks the release.
