@@ -148,15 +148,71 @@ $hits"
 
 public_body_path() { printf '%s\n' "${1%.md}.public.md"; }
 
+# claims KIND — every number of that kind anyone has already taken, as
+# "<number><TAB><where>" lines. The point is the SOURCES: reading max+1 out of
+# one working tree is why two sessions can be handed the same id. A claim is
+# real if it exists ANYWHERE another checkout could later push:
+#
+#   1. a file in the local bug-reports/          (what the old code saw)
+#   2. a file on ANY local or remote branch      (someone else's unmerged work)
+#   3. a BRANCH NAME like docs/fr-0096-…         (claimed before the file exists)
+#
+# Source 3 matters more than it looks: a branch is usually named before the file
+# is written, so it is the earliest visible claim there is.
+claims() {
+  local kind=$1 dir lower ref
+  dir=$(bug_dir)
+  lower=$(printf '%s\n' "$kind" | tr '[:upper:]' '[:lower:]')
+
+  find "$dir" -maxdepth 1 -name "$kind-*.md" 2>/dev/null \
+    | sed -E -n "s#.*/$kind-0*([0-9]+)-.*#\\1\\tlocal file#p"
+
+  git -C "$dir" rev-parse --git-dir >/dev/null 2>&1 || return 0
+
+  for ref in $(git -C "$dir" for-each-ref --format='%(refname:short)' refs/heads refs/remotes 2>/dev/null); do
+    git -C "$dir" ls-tree --name-only "$ref" bug-reports/ 2>/dev/null \
+      | sed -E -n "s#.*/$kind-0*([0-9]+)-.*#\\1\\t$ref#p"
+    printf '%s\n' "$ref" \
+      | sed -E -n "s#.*[^a-z]$lower-?0*([0-9]+).*#\\1\\tbranch $ref#p"
+  done
+}
+
 cmd_next_id() {
-  local kind=${1:-BUG} dir max n
+  local kind=${1:-BUG} fetch=1 dir n where max=0 top="" all
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --no-fetch) fetch=0 ;;
+      -*) die "next-id: unknown flag '$1'" ;;
+      *) kind=$1 ;;
+    esac
+    shift
+  done
   kind=$(printf '%s\n' "$kind" | tr '[:lower:]' '[:upper:]')
   statuses_for "$kind" >/dev/null      # rejects an unknown kind
-  dir=$(bug_dir); max=0
-  while IFS= read -r f; do
-    n=$(basename "$f" | sed -E -n "s/^$kind-0*([0-9]+)-.*\$/\1/p")
-    [ -n "$n" ] && [ "$n" -gt "$max" ] && max=$n
-  done < <(find "$dir" -maxdepth 1 -name "$kind-*.md")
+  dir=$(bug_dir)
+
+  # Without a fetch the answer is only as fresh as your last pull — which is
+  # exactly how a number that someone else already pushed still looks free.
+  if [ "$fetch" -eq 1 ] && git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
+    git -C "$dir" fetch --quiet origin 2>/dev/null \
+      || note "next-id: could not fetch — the answer may be stale (use --no-fetch to silence)"
+  fi
+
+  all=$(claims "$kind" | sort -u)
+  while IFS=$'\t' read -r n where; do
+    [ -n "$n" ] || continue
+    if [ "$n" -gt "$max" ]; then max=$n; top=$where; fi
+  done <<EOF
+$all
+EOF
+
+  # Say where the ceiling came from when it is NOT something in your own tree:
+  # that is the claim you would otherwise have walked straight into.
+  case "$top" in
+    ""|"local file") ;;
+    *) note "next-id: highest $kind claim is $(printf '%s-%04d' "$kind" "$max") in $top — not in your working tree" ;;
+  esac
+
   printf '%s-%04d\n' "$kind" "$((max + 1))"
 }
 
