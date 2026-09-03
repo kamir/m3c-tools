@@ -208,6 +208,35 @@ type DevRecording struct {
 	SerialNumber string `json:"serial_number"`
 }
 
+// ParseDevTime parses a developer-API timestamp (start_at, created_at) and
+// reports whether it could.
+//
+// The zone-less layout is deliberate and correct: Plaud emits UTC WITHOUT a
+// suffix — "2026-09-03T13:44:14" is a recording made at 15:44 Berlin time during
+// CEST — and time.Parse assigns UTC to a layout that carries no zone, so the
+// returned INSTANT is right. Only its rendering zone is still open: every caller
+// that shows the value to a human, or writes it into a zone-less field such as
+// ER1's current_time, must call .Local() first. RFC3339 stays in the list so a
+// future Plaud release that does add an offset keeps working. FR-0095.
+func ParseDevTime(s string) (time.Time, bool) {
+	for _, layout := range []string{"2006-01-02T15:04:05", time.RFC3339, "2006-01-02T15:04:05.000Z"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
+// StartedAtLocal returns the recording's true start time in the machine's local
+// zone — the moment the button was pressed, not the upload or the transcription.
+func (r DevRecording) StartedAtLocal() (time.Time, bool) {
+	t, ok := ParseDevTime(r.StartAt)
+	if !ok {
+		return time.Time{}, false
+	}
+	return t.Local(), true
+}
+
 // ListRecordings returns ALL of the user's recordings from the developer API,
 // paginating (the endpoint returns a default page of ~20).
 func (c *DevClient) ListRecordings() ([]DevRecording, error) {

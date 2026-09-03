@@ -396,13 +396,28 @@ func cmdPlaud(args []string) {
 	case "check":
 		cmdPlaudCheck()
 	case "fix-times":
-		apply := false
-		for _, a := range args[1:] {
-			if a == "--apply" {
+		apply, since, limit := false, "", 0
+		for i := 1; i < len(args); i++ {
+			switch a := args[i]; {
+			case a == "--apply":
 				apply = true
+			case a == "--since" && i+1 < len(args):
+				since = args[i+1]
+				i++
+			case strings.HasPrefix(a, "--since="):
+				since = strings.TrimPrefix(a, "--since=")
+			case a == "--limit" && i+1 < len(args):
+				if v, err := strconv.Atoi(args[i+1]); err == nil {
+					limit = v
+				}
+				i++
+			case strings.HasPrefix(a, "--limit="):
+				if v, err := strconv.Atoi(strings.TrimPrefix(a, "--limit=")); err == nil {
+					limit = v
+				}
 			}
 		}
-		cmdPlaudFixTimes(apply)
+		cmdPlaudFixTimes(apply, since, limit)
 	case "sync":
 		if len(args) < 2 {
 			fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud sync <#|ID|--all> [-f]")

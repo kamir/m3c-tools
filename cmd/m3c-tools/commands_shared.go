@@ -19,6 +19,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -723,66 +724,105 @@ func cmdPlaudCheck() {
 }
 
 // cmdPlaudFixTimes backfills the real recording time onto already-synced Plaud
-// items: it PATCHes each synced item's ER1 current_time to its Plaud CreatedAt,
-// so they move from the import moment to their true position in the memory
-// viewer. Dry-run by default; pass apply=true to actually write.
-func cmdPlaudFixTimes(apply bool) {
-	cfg := plaud.LoadConfig()
-	session, err := plaud.LoadToken(cfg.TokenPath)
+// items: it PATCHes each synced item's ER1 current_time to its Plaud start_at,
+// rendered in LOCAL time, so they sit at the moment the button was pressed
+// rather than at the upload moment — or, since FR-0095, two hours before it.
+//
+// It runs on the DEVELOPER API (the same durable token as `plaud dev` and the
+// menubar). The previous version used the retired consumer client and its
+// CreatedAt field: it could not see start_at at all, and on a machine without a
+// consumer token it exited before doing anything — which is why the UTC drift
+// stayed in the corpus unnoticed.
+//
+// Dry-run by default. `since` (YYYY-MM-DD, local) and `limit` narrow the set;
+// an empty/zero value means "all synced recordings".
+func cmdPlaudFixTimes(apply bool, since string, limit int) {
+	var sinceT time.Time
+	if since != "" {
+		var err error
+		sinceT, err = time.ParseInLocation("2006-01-02", since, time.Local)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "--since expects YYYY-MM-DD, got %q\n", since)
+			os.Exit(1)
+		}
+	}
+
+	client, err := plaud.NewDevClientFromFile(plaud.DefaultMCPTokenPath())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading token: %v\nRun: m3c-tools plaud auth --from-er1   (or: m3c-tools plaud auth login)\n", err)
+		fmt.Fprintf(os.Stderr, "Error: no usable developer token: %v\nRun once: node tools/plaud-mcp-login.mjs\n", err)
 		os.Exit(1)
 	}
-	client := plaud.NewClient(cfg, session.Token)
 	recordings, err := client.ListRecordings()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error listing recordings: %v\n", err)
 		os.Exit(1)
 	}
+	sort.SliceStable(recordings, func(i, j int) bool { return recordings[i].StartAt > recordings[j].StartAt })
 
 	ids := make([]string, len(recordings))
 	for i, r := range recordings {
 		ids[i] = r.ID
 	}
-	states := resolvePlaudSyncStates(ids, session.Token)
+	states := resolvePlaudSyncStates(ids, client.AccessToken())
 	er1Cfg := er1.LoadConfig()
 
 	type fixItem struct {
 		title  string
 		docID  string
-		target string
+		wasUTC string // what the buggy path wrote: the UTC wall clock
+		target string // what it should be: the same instant, local
 	}
 	var toFix []fixItem
-	var skippedNoDoc, skippedNoTime int
+	var skippedNoDoc, skippedNoTime, skippedOlder int
 	for _, r := range recordings {
 		st := states[r.ID]
-		if st.Status != "synced" {
+		// plaudStateSynced, not `st.Status == "synced"`: the server-side check
+		// (SPEC-0117) returns the doc_id without necessarily setting a status
+		// string, and it is the only source on a machine whose local tracking DB
+		// is empty. The old fix-times compared the status directly and therefore
+		// found zero items on exactly the machines that needed it. FR-0095.
+		if !plaudStateSynced(st) {
 			continue
 		}
 		if st.DocID == "" {
 			skippedNoDoc++ // synced on another device; doc_id unknown here
 			continue
 		}
-		target := er1.FormatCaptureTime(r.CreatedAt)
-		if target == "" {
-			skippedNoTime++ // no recording time from Plaud
+		local, ok := r.StartedAtLocal()
+		if !ok {
+			skippedNoTime++ // no parsable recording time from Plaud
 			continue
 		}
-		toFix = append(toFix, fixItem{title: r.Title, docID: st.DocID, target: target})
+		if !sinceT.IsZero() && local.Before(sinceT) {
+			skippedOlder++
+			continue
+		}
+		toFix = append(toFix, fixItem{
+			title:  r.Name,
+			docID:  st.DocID,
+			wasUTC: er1.FormatCaptureTime(local.UTC()),
+			target: er1.FormatCaptureTime(local),
+		})
+		if limit > 0 && len(toFix) >= limit {
+			break
+		}
 	}
 
-	fmt.Printf("Plaud fix-times — %d synced items to correct to their real recording time\n", len(toFix))
+	fmt.Printf("Plaud fix-times — %d synced item(s) to set to their real recording time (local)\n", len(toFix))
 	if skippedNoDoc > 0 {
 		fmt.Printf("  (%d synced items skipped: doc_id not known locally — run on the device that synced them)\n", skippedNoDoc)
 	}
 	if skippedNoTime > 0 {
-		fmt.Printf("  (%d skipped: no recording time from Plaud)\n", skippedNoTime)
+		fmt.Printf("  (%d skipped: no parsable recording time from Plaud)\n", skippedNoTime)
+	}
+	if skippedOlder > 0 {
+		fmt.Printf("  (%d skipped: recorded before %s)\n", skippedOlder, since)
 	}
 
 	if !apply {
-		fmt.Println("\nDRY-RUN — pass --apply to write. recording -> doc_id -> new current_time:")
+		fmt.Println("\nDRY-RUN — pass --apply to write. recording -> doc_id -> current_time (was UTC -> now local):")
 		for _, f := range toFix {
-			fmt.Printf("  %-40s  doc_id=%s  ->  %s\n", truncateStr(f.title, 40), f.docID, f.target)
+			fmt.Printf("  %-38s  doc_id=%s  %s  ->  %s\n", truncateStr(f.title, 38), f.docID, f.wasUTC, f.target)
 		}
 		fmt.Printf("\n%d item(s) would be updated. Re-run with: m3c-tools plaud fix-times --apply\n", len(toFix))
 		return
@@ -795,7 +835,7 @@ func cmdPlaudFixTimes(apply bool) {
 			log.Printf("[plaud] fix-times FAIL doc_id=%s: %v", f.docID, err)
 		} else {
 			ok++
-			log.Printf("[plaud] fix-times OK doc_id=%s -> %s", f.docID, f.target)
+			log.Printf("[plaud] fix-times OK doc_id=%s %s -> %s", f.docID, f.wasUTC, f.target)
 		}
 	}
 	fmt.Printf("Done: %d updated, %d failed (of %d)\n", ok, failed, len(toFix))
