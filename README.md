@@ -8,9 +8,13 @@
 see, hear and decide into durable, structured memory — and for governing the agent skills
 that act on it. Two command-line tools, one repository, zero mandatory cloud middleman.
 
+[![CI](https://github.com/kamir/m3c-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/kamir/m3c-tools/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/kamir/m3c-tools?sort=semver)](https://github.com/kamir/m3c-tools/releases/latest)
 [![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue)](#install)
 [![Made with Go](https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go)](https://go.dev)
+[![Go Report Card](https://goreportcard.com/badge/github.com/kamir/m3c-tools)](https://goreportcard.com/report/github.com/kamir/m3c-tools)
+[![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
 [Quickstart: m3c-tools](docs/quickstart-m3c-tools.md) ·
 [Quickstart: skillctl](docs/quickstart-skillctl.md) ·
@@ -71,7 +75,7 @@ m3c-tools doctor                        # verify connectivity & config
 ```bash
 # macOS / Linux / Windows — signed installer: fetches the right binary from the
 # signed skillctl/v* release and verifies cosign/OIDC provenance + SHA-256 first.
-curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/ac04005305ee163790024520cda2d7aee1c2eed9/tools/skillctl-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/82c832882e8683fa3824ce65db01d945af639c50/tools/skillctl-install.sh | bash
 
 skillctl keygen --out ~/.config/m3c/skill-keys/mykey            # ed25519 → mykey.priv + mykey.pub
 skillctl pack --skill ./my-skill -o my-skill.skb --name my-skill --version 1.0.0
@@ -167,7 +171,7 @@ The **scripted one-liners** fetch the right binary for your host, **verify cosig
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/kamir/m3c-tools/ac04005305ee163790024520cda2d7aee1c2eed9/tools/skillctl-install.ps1 | iex
+irm https://raw.githubusercontent.com/kamir/m3c-tools/82c832882e8683fa3824ce65db01d945af639c50/tools/skillctl-install.ps1 | iex
 ```
 
 Installs `skillctl` to `%LOCALAPPDATA%\Programs\skillctl` after verifying cosign provenance +
@@ -177,16 +181,16 @@ use **one or the other**, not both, so you don't end up with two `skillctl.exe` 
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/ac04005305ee163790024520cda2d7aee1c2eed9/tools/skillctl-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/82c832882e8683fa3824ce65db01d945af639c50/tools/skillctl-install.sh | bash
 ```
 
 Override the target dir or release with `INSTALL_DIR=…` / `RELEASE_BASE=…` (default `~/.local/bin`).
-These verify a **signed** `skillctl/v0.3.x` release; until it is published they report a missing
-download — see the [skillctl quickstart](docs/quickstart-skillctl.md#1-install) for an interim
-(unsigned) Windows install.
+These verify the **signed** `skillctl/v*` release — cosign provenance (GitHub OIDC) + the SHA-256
+digest, with an **ed25519 fallback** for hosts without cosign — see the
+[skillctl quickstart](docs/quickstart-skillctl.md#1-install).
 
 **Bootstrap integrity.** The one-liner URLs are pinned to the **immutable commit
-`ac04005`** — not the mutable `master` branch, where a single rewrite could swap the
+`82c8328`** — not the mutable `master` branch, where a single rewrite could swap the
 bootstrap script *and* every pin inside it (a TOFU trap). Verify the fetched bytes
 out-of-band before trusting them. Expected SHA-256:
 
@@ -199,7 +203,7 @@ Verify-then-run instead of piping straight to `iex` / `bash`:
 
 ```powershell
 # Windows
-$u = 'https://raw.githubusercontent.com/kamir/m3c-tools/ac04005305ee163790024520cda2d7aee1c2eed9/tools/skillctl-install.ps1'
+$u = 'https://raw.githubusercontent.com/kamir/m3c-tools/82c832882e8683fa3824ce65db01d945af639c50/tools/skillctl-install.ps1'
 $f = "$env:TEMP\skillctl-install.ps1"; irm $u -OutFile $f
 if ((Get-FileHash $f -Algorithm SHA256).Hash -ne '9E8CEEC9D2C87B4F5A7136653E8CA69224FA6579A55DA221D9E2FE875F9924C8') { throw 'SHA-256 mismatch' }
 & $f
@@ -207,7 +211,7 @@ if ((Get-FileHash $f -Algorithm SHA256).Hash -ne '9E8CEEC9D2C87B4F5A7136653E8CA6
 
 ```bash
 # macOS / Linux
-u='https://raw.githubusercontent.com/kamir/m3c-tools/ac04005305ee163790024520cda2d7aee1c2eed9/tools/skillctl-install.sh'
+u='https://raw.githubusercontent.com/kamir/m3c-tools/82c832882e8683fa3824ce65db01d945af639c50/tools/skillctl-install.sh'
 f=$(mktemp); curl -fsSL "$u" -o "$f"
 echo 'adf9d768a376ee921f9df728546de072a2b3f14e9616e10bf3419fef520034a9  '"$f" | shasum -a 256 -c - && bash "$f"
 ```
@@ -252,6 +256,31 @@ PowerShell setup.
 
 ---
 
+## Security & supply chain
+
+Because `skillctl` is a *trust* tool, its own supply chain is held to the standard it asks of
+others — **evidence you can verify yourself, with no mandatory hosted authority in the path.**
+
+- **Signed releases, keyless.** Every release is signed with **cosign** via GitHub OIDC — no
+  long-lived key in the repo. The signing job **verifies its own signature in-job**, so a broken
+  signature yields a failed/draft release, never an unsigned one. The signed `skillctl/v*` line
+  additionally carries an **ed25519 fallback signature**, so hosts without cosign still verify.
+- **Build provenance (SLSA).** Releases ship **SLSA provenance** (`multiple.intoto.jsonl`), gated
+  by `slsa-verifier`; the signed `skillctl/v*` line targets **SLSA Level 3**.
+- **SBOM.** The skillctl release includes a **CycloneDX SBOM** (`skillctl.sbom.cdx.json`).
+- **Offline verification.** `skillctl verify-sig` checks a skill's ed25519 trust chain with **no
+  server and no hosted CA** in the verification path; revocation lists are signed, offline and
+  fail-closed.
+- **CI hygiene on every push.** `go vet`, **golangci-lint**, **govulncheck** (reachability-aware
+  CVE scan) and **gitleaks** (secret scan) all run in [CI](.github/workflows/ci.yml).
+- **Pinned bootstrap.** The install one-liners pin an **immutable commit** + each script's
+  SHA-256 (not the mutable `master`) — verify-then-run is documented under [Install](#install).
+
+The full release, signing and provenance flow is in **[docs/releasing.md](docs/releasing.md)**;
+**report a vulnerability** privately via **[SECURITY.md](SECURITY.md)**.
+
+---
+
 ## Build from source
 
 Requires **Go 1.25+**. The macOS menu-bar GUI additionally needs `portaudio` + `ffmpeg` (cgo).
@@ -280,6 +309,27 @@ export M3C_MAINTENANCE_DIR=/absolute/path/to/your/maintenance/checkout
 ```
 
 If it is unset, those scripts fail loudly rather than silently pointing at a missing path. **End users of the CLI do not need this** — it only matters when running the maintenance/release tooling.
+
+### Quality gates
+
+New contributors: start with **[CONTRIBUTING.md](CONTRIBUTING.md)**. Run the same checks CI runs,
+locally:
+
+```bash
+make ci            # vet · golangci-lint · unit tests · build — the gate CI enforces
+make code-review   # pre-release review: build, vet, tests, secret scan, dead code, deps
+make check-docs    # documentation ↔ implementation consistency
+make vet           # go vet ./...
+```
+
+Formatting is **`gofumpt` + `gci`** on top of golangci-lint (formatting is not negotiable in Go —
+it is built into the toolchain), and `.golangci.yml` is the enforced linter config.
+
+### Releasing
+
+Releases are **tag-driven** — pushing a `vX.Y.Z` or `skillctl/vX.Y.Z` tag builds, signs and
+publishes via GitHub Actions. The full runbook — bump derivation, the two release lines, cosign +
+SLSA signing, post-release steps and gotchas — is in **[docs/releasing.md](docs/releasing.md)**.
 
 ---
 
@@ -315,4 +365,4 @@ built and battle-tested in the open.
 
 ## License
 
-See [LICENSE](LICENSE).
+**Apache-2.0** — see [LICENSE](LICENSE).
