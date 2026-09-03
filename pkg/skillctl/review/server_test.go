@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -233,6 +234,48 @@ func TestSealAfterFullReview(t *testing.T) {
 	}
 	if resp.SealID == "" {
 		t.Error("seal_id should not be empty")
+	}
+
+	// The seal is a trust artifact: it must be persisted with owner-only
+	// permissions (0600), never world-readable.
+	sealPath := filepath.Join(s.sealStore.BaseDir, resp.SealID+".json")
+	info, err := os.Stat(sealPath)
+	if err != nil {
+		t.Fatalf("seal file not persisted at %s: %v", sealPath, err)
+	}
+	if runtime.GOOS != "windows" { // POSIX mode bits are not enforced on Windows
+		if perm := info.Mode().Perm(); perm != 0600 {
+			t.Errorf("seal file mode = %04o, want 0600 (must not be world-readable)", perm)
+		}
+	}
+}
+
+// TestSealPersistFailureReturns500 proves the seal write error is propagated:
+// pointing the seal store at a path that cannot be written must yield a 500,
+// not a false 200.
+func TestSealPersistFailureReturns500(t *testing.T) {
+	s := setupServer(t)
+
+	// Make the seal store BaseDir a path under a regular file so WriteFile fails.
+	blocker := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(blocker, []byte("x"), 0600); err != nil {
+		t.Fatalf("setup blocker: %v", err)
+	}
+	s.sealStore.BaseDir = filepath.Join(blocker, "seals")
+
+	for i := 0; i < 3; i++ {
+		body := strings.NewReader(`{"status":"approved"}`)
+		req := httptest.NewRequest(http.MethodPut, "/api/delta/"+string(rune('0'+i))+"/review", body)
+		w := httptest.NewRecorder()
+		s.handleReviewEntry(w, req)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/seal", nil)
+	w := httptest.NewRecorder()
+	s.handleSeal(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("seal with unwritable store: status = %d, want 500", w.Code)
 	}
 }
 

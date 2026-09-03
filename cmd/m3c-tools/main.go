@@ -3672,6 +3672,13 @@ func menubarUploadER1(videoID string) (*menubar.ER1UploadResult, error) {
 		// Queue for retry on failure
 		queuePath := er1.DefaultQueuePath()
 		entry := er1.EnqueueFailure(queuePath, videoID, payload, tags, err)
+		if entry == nil {
+			return &menubar.ER1UploadResult{
+				VideoID: videoID,
+				Message: "Upload failed AND retry-queue write failed",
+				Queued:  false,
+			}, nil
+		}
 		return &menubar.ER1UploadResult{
 			VideoID: videoID,
 			Message: fmt.Sprintf("Upload failed, queued for retry: %s", entry.ID),

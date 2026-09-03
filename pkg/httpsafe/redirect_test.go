@@ -125,3 +125,75 @@ func TestNoCredentialRedirect_CapsChain(t *testing.T) {
 		t.Error("expected an error after the redirect cap, got nil")
 	}
 }
+
+// TestNoCrossHostRedirect_RejectsCrossHost proves the strict trust-path policy:
+// a redirect to a DIFFERENT host must fail closed (the request must not reach the
+// attacker-chosen host at all).
+func TestNoCrossHostRedirect_RejectsCrossHost(t *testing.T) {
+	const originHost = "registry.test"
+	const attackerHost = "attacker.test"
+
+	reached := false
+	attacker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer attacker.Close()
+
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://"+attackerHost+"/revoke", http.StatusFound)
+	}))
+	defer origin.Close()
+
+	originAddr := origin.Listener.Addr().String()
+	attackerAddr := attacker.Listener.Addr().String()
+	dial := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		var d net.Dialer
+		switch addr {
+		case originHost + ":80":
+			addr = originAddr
+		case attackerHost + ":80":
+			addr = attackerAddr
+		}
+		return d.DialContext(ctx, network, addr)
+	}
+
+	c := &http.Client{
+		Timeout:       5 * time.Second,
+		Transport:     &http.Transport{DialContext: dial},
+		CheckRedirect: NoCrossHostRedirect,
+	}
+	req, _ := http.NewRequest("POST", "http://"+originHost+"/revoke", nil)
+	if _, err := c.Do(req); err == nil {
+		t.Fatal("expected a cross-host redirect to be refused, got nil error")
+	}
+	if reached {
+		t.Error("request reached the cross-host redirect target despite NoCrossHostRedirect")
+	}
+}
+
+// TestNoCrossHostRedirect_AllowsSameHost verifies a same-host redirect still
+// follows (the guard must not break legitimate intra-host 30x).
+func TestNoCrossHostRedirect_AllowsSameHost(t *testing.T) {
+	done := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/start" {
+			http.Redirect(w, r, "/end", http.StatusFound)
+			return
+		}
+		done = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := &http.Client{Timeout: 5 * time.Second, CheckRedirect: NoCrossHostRedirect}
+	req, _ := http.NewRequest("GET", srv.URL+"/start", nil)
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatalf("same-host redirect should succeed: %v", err)
+	}
+	_ = resp.Body.Close()
+	if !done {
+		t.Error("same-host redirect did not reach the final handler")
+	}
+}

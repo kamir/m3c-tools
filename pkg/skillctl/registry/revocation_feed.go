@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 )
 
 // FetchRevocationHead GETs the signed revocation HEAD from the registry
@@ -35,7 +37,10 @@ func FetchRevocationHead(baseURL, tenantScope string, timeout time.Duration) (ma
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
-	resp, err := (&http.Client{Timeout: timeout}).Do(req)
+	// Fail closed on a cross-host / https→http-downgrade redirect: a hostile
+	// registry must not bounce this trust-path GET to an attacker host.
+	client := &http.Client{Timeout: timeout, CheckRedirect: httpsafe.NoCrossHostRedirect}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}

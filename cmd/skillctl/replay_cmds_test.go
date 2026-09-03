@@ -313,6 +313,28 @@ func TestTruncString(t *testing.T) {
 	}
 }
 
+// TestReplayHTTPClient_TLSPolicy pins the secure-by-default contract behind the
+// gated G402 site in newReplayHTTPClient: only target=="local" (which maps to the
+// hardcoded loopback base URL) skips TLS verification; prod/stage must verify.
+func TestReplayHTTPClient_TLSPolicy(t *testing.T) {
+	// prod / stage must NOT skip verification.
+	for _, target := range []string{"prod", "stage"} {
+		c := newReplayHTTPClient(target)
+		if tr, ok := c.Transport.(*http.Transport); ok && tr.TLSClientConfig != nil && tr.TLSClientConfig.InsecureSkipVerify {
+			t.Fatalf("target %q must verify TLS (InsecureSkipVerify must be false)", target)
+		}
+	}
+	// local skips verification — but only because its base URL is loopback.
+	local := newReplayHTTPClient("local")
+	tr, ok := local.Transport.(*http.Transport)
+	if !ok || tr.TLSClientConfig == nil || !tr.TLSClientConfig.InsecureSkipVerify {
+		t.Fatal("target=local should use the loopback dev transport (InsecureSkipVerify=true)")
+	}
+	if base := defaultReplayBaseURL("local"); !strings.HasPrefix(base, "https://127.0.0.1") {
+		t.Fatalf("target=local base URL must be loopback, got %q", base)
+	}
+}
+
 func TestColorForType(t *testing.T) {
 	cases := map[string]string{
 		"gate.allowed":    ansiGreen,

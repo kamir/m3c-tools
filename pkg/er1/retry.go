@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"time"
 )
 
@@ -88,7 +89,9 @@ func (r *RetryRunner) ProcessOnce(ctx context.Context) (successes int, failures 
 
 		// Check if entry exceeded max retries
 		if r.MaxRetries > 0 && entry.RetryCount >= r.MaxRetries {
-			r.Queue.Remove(entry.ID)
+			if err := r.Queue.Remove(entry.ID); err != nil {
+				fmt.Fprintf(os.Stderr, "retry: could not persist removal of %s: %v\n", entry.ID, err)
+			}
 			dropped++
 			if r.OnRetry != nil {
 				r.OnRetry(entry, fmt.Errorf("max retries (%d) exceeded", r.MaxRetries), true)
@@ -100,14 +103,18 @@ func (r *RetryRunner) ProcessOnce(ctx context.Context) (successes int, failures 
 		err := r.UploadFunc(entry)
 		if err == nil {
 			// Success — remove from queue
-			r.Queue.Remove(entry.ID)
+			if rerr := r.Queue.Remove(entry.ID); rerr != nil {
+				fmt.Fprintf(os.Stderr, "retry: could not persist removal of %s: %v\n", entry.ID, rerr)
+			}
 			successes++
 			if r.OnRetry != nil {
 				r.OnRetry(entry, nil, true)
 			}
 		} else {
 			// Failure — update retry count
-			r.Queue.UpdateRetry(entry.ID, err)
+			if uerr := r.Queue.UpdateRetry(entry.ID, err); uerr != nil {
+				fmt.Fprintf(os.Stderr, "retry: could not persist retry update of %s: %v\n", entry.ID, uerr)
+			}
 			failures++
 			if r.OnRetry != nil {
 				r.OnRetry(entry, err, false)

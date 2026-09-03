@@ -185,7 +185,11 @@ func er1PostJSON(base string, cfg *er1.Config, path string, payload any) (any, e
 	}
 	client := &http.Client{Timeout: 30 * time.Second}
 	if !cfg.VerifySSL {
-		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+		// #nosec G402 -- gated: default is ER1_VERIFY_SSL=true (verifies). VerifySSL=false
+		// is honored only for loopback — er1TLSGuard above fails closed for any non-loopback
+		// host, and pkg/er1.applyTLSVerificationPolicy forces verification back on at load
+		// time for non-loopback. Reaching here implies a loopback dev target.
+		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} // #nosec G402 -- loopback-only, gated by er1TLSGuard
 	}
 	req, err := http.NewRequest("POST", base+path, bytes.NewReader(body))
 	if err != nil {
