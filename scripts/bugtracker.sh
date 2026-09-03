@@ -3,9 +3,13 @@
 # scripts/bugtracker.sh — keep a bug's two planes in step (SPEC-0358,
 # "ship the code, keep the reasoning").
 #
-#   1. the REPORT — ${M3C_MAINTENANCE_DIR}/bug-reports/BUG-NNNN-<slug>.md
-#      The source of truth. PRIVATE plane: root cause, file:line, customer
-#      context, SPEC references, whatever the analysis needs.
+# It tracks the two kinds of item that live in bug-reports/:
+#   BUG-NNNN  a defect        — closed as `fixed`
+#   FR-NNNN   a feature request — closed as `implemented`
+#
+#   1. the REPORT — ${M3C_MAINTENANCE_DIR}/bug-reports/<KIND>-NNNN-<slug>.md
+#      The source of truth. PRIVATE plane: root cause or rationale, file:line,
+#      customer context, SPEC references, whatever the analysis needs.
 #
 #   2. the ISSUE — a GitHub issue in this (PUBLIC) repository.
 #      The tracker view other people can see. It is a REDACTED restatement,
@@ -23,20 +27,31 @@
 #   M3C_MAINTENANCE_DIR   required — the private maintenance repo's root
 #   M3C_BUG_REPO          optional — owner/repo for issues (default: origin)
 #
+# An item is named BUG-0213 / FR-0096, or fr-96, or a filename. A BARE NUMBER
+# means a BUG — the FR kind must be spelled out, so "96" can never silently
+# resolve to the wrong item.
+#
 # Commands:
-#   next-id                       next free BUG id
-#   path   <BUG-NNNN>             resolve the report file
-#   status <BUG-NNNN> [STATUS]    read, or set, the canonical status
-#   issue  <BUG-NNNN>             print the linked issue reference
+#   next-id [BUG|FR]              next free id of that kind (default BUG)
+#   path   <ID>                   resolve the report file
+#   status <ID> [STATUS]          read, or set, the canonical status
+#   issue  <ID>                   print the linked issue reference
+#   spec   <ID>                   print the SPEC the item answers to
 #   redact-check [FILE|-]         SPEC-0358 leak patterns over text; 1 = a hit
-#   open   <BUG-NNNN>             create the public issue and link it back
-#   close  <BUG-NNNN> [--status S] [--comment TEXT]
-#   sync   [<BUG-NNNN>]           read-only: report/issue drift
+#   open   <ID>                   create the public issue and link it back
+#   close  <ID> [--status S] [--comment TEXT]
+#   sync   [<ID>]                 read-only: report/issue drift
+#
+# Closing an item as done requires a `- **Spec:**` line. Solving an issue means
+# serving the contract it belongs to, so the value may be `none — <reason>`, but
+# the question has to have been ANSWERED rather than skipped.
 #
 # Exit: 0 ok · 1 a check failed (drift, leak, refusal) · 2 usage/config error.
 set -euo pipefail
 
-STATUSES="open in-progress fixed wontfix duplicate"
+# The states that mean "done" — closing an issue as completed, and the states
+# that require a Spec answer.
+DONE_STATES="fixed implemented"
 
 die()  { printf 'bugtracker: %s\n' "$1" >&2; exit "${2:-2}"; }
 note() { printf '%s\n' "$1" >&2; }
@@ -66,17 +81,39 @@ need_gh() { command -v gh >/dev/null 2>&1 || die "the GitHub CLI (gh) is require
 
 # ------------------------------------------------------------- resolving ----
 
-# normalise "213" / "bug-0213" / "BUG-0213-slug.md" -> BUG-0213
-bug_id() {
-  local n
-  n=$(printf '%s\n' "$1" | tr '[:lower:]' '[:upper:]' | sed -n 's/^\(BUG-\)\{0,1\}0*\([0-9]\{1,\}\).*$/\2/p')
-  [ -n "$n" ] || die "not a bug id: $1"
-  printf 'BUG-%04d\n' "$n"
+# normalise "213" / "bug-0213" / "FR-96" / "BUG-0213-slug.md" -> BUG-0213 / FR-0096
+item_id() {
+  local up kind n
+  up=$(printf '%s\n' "$1" | tr '[:lower:]' '[:upper:]')
+  kind=$(printf '%s\n' "$up" | sed -E -n 's/^(BUG|FR)[-_]?[0-9].*$/\1/p')
+  [ -n "$kind" ] || kind=BUG
+  n=$(printf '%s\n' "$up" | sed -E -n 's/^(BUG|FR)?[-_]?0*([0-9]+).*$/\2/p')
+  [ -n "$n" ] || die "not an item id: $1 (expected BUG-NNNN, FR-NNNN or a bare number)"
+  printf '%s-%04d\n' "$kind" "$n"
+}
+
+kind_of() { printf '%s\n' "${1%%-*}"; }
+
+# The vocabulary differs by kind on one word only: a defect is FIXED, a feature
+# request is IMPLEMENTED. Sharing the rest keeps sync and close uniform.
+statuses_for() {
+  case "$1" in
+    BUG) printf 'open in-progress fixed wontfix duplicate\n' ;;
+    FR)  printf 'open in-progress implemented wontfix duplicate\n' ;;
+    *)   die "unknown item kind: $1" ;;
+  esac
+}
+
+label_for() {
+  case "$1" in
+    BUG) printf 'bug\n' ;;
+    FR)  printf 'enhancement\n' ;;
+  esac
 }
 
 report_path() {
   local id dir hits
-  id=$(bug_id "$1"); dir=$(bug_dir)
+  id=$(item_id "$1"); dir=$(bug_dir)
   hits=$(find "$dir" -maxdepth 1 -name "$id-*.md" ! -name '*.public.md' | sort)
   [ -n "$hits" ] || die "no report file for $id in $dir" 1
   [ "$(printf '%s\n' "$hits" | wc -l)" -eq 1 ] || die "several files match $id:
@@ -87,13 +124,15 @@ $hits"
 public_body_path() { printf '%s\n' "${1%.md}.public.md"; }
 
 cmd_next_id() {
-  local dir max n
+  local kind=${1:-BUG} dir max n
+  kind=$(printf '%s\n' "$kind" | tr '[:lower:]' '[:upper:]')
+  statuses_for "$kind" >/dev/null      # rejects an unknown kind
   dir=$(bug_dir); max=0
   while IFS= read -r f; do
-    n=$(basename "$f" | sed -n 's/^BUG-0*\([0-9]\{1,\}\)-.*$/\1/p')
+    n=$(basename "$f" | sed -E -n "s/^$kind-0*([0-9]+)-.*\$/\1/p")
     [ -n "$n" ] && [ "$n" -gt "$max" ] && max=$n
-  done < <(find "$dir" -maxdepth 1 -name 'BUG-*.md')
-  printf 'BUG-%04d\n' "$((max + 1))"
+  done < <(find "$dir" -maxdepth 1 -name "$kind-*.md")
+  printf '%s-%04d\n' "$kind" "$((max + 1))"
 }
 
 # ---------------------------------------------------------------- fields ----
@@ -122,7 +161,8 @@ canon_status() {
     ""|unknown)                 printf 'unknown\n' ;;
     open|new|reported)          printf 'open\n' ;;
     in-progress|wip|doing)      printf 'in-progress\n' ;;
-    fixed|resolved|done|closed) printf 'fixed\n' ;;
+    fixed|resolved|closed)      printf 'fixed\n' ;;
+    implemented|shipped|delivered|done) printf 'implemented\n' ;;
     wontfix|declined)           printf 'wontfix\n' ;;
     duplicate|dup)              printf 'duplicate\n' ;;
     *)                          printf '%s\n' "$raw" ;;
@@ -151,16 +191,18 @@ set_field() {
 }
 
 cmd_status() {
-  local file; file=$(report_path "$1")
+  local id file kind allowed want
+  id=$(item_id "$1"); file=$(report_path "$1"); kind=$(kind_of "$id")
   if [ $# -lt 2 ]; then canon_status "$(read_field "$file" Status)"; return 0; fi
-  local want; want=$(canon_status "$2")
-  case " $STATUSES " in *" $want "*) ;; *) die "unknown status '$2' (use: $STATUSES)";; esac
+  allowed=$(statuses_for "$kind"); want=$(canon_status "$2")
+  case " $allowed " in *" $want "*) ;; *) die "status '$2' is not valid for a $kind (use: $allowed)";; esac
   set_field "$file" Status "$want"
   printf '%s\n' "$want"
 }
 
 issue_ref()  { read_field "$1" Issue | sed -n 's/.*#\([0-9]\{1,\}\).*/\1/p' | head -1; }
 cmd_issue()  { local f; f=$(report_path "$1"); printf '%s\n' "$(read_field "$f" Issue)"; }
+cmd_spec()   { local f; f=$(report_path "$1"); printf '%s\n' "$(read_field "$f" Spec)"; }
 
 # ----------------------------------------------------------- redact-check ---
 #
@@ -206,7 +248,7 @@ cmd_redact_check() {
 
 cmd_open() {
   local id file pub_file title body num url
-  id=$(bug_id "$1"); file=$(report_path "$1")
+  id=$(item_id "$1"); file=$(report_path "$1")
 
   if [ -n "$(issue_ref "$file")" ]; then
     note "$id already links $(read_field "$file" Issue) — nothing to do"
@@ -235,8 +277,8 @@ cmd_open() {
   fi
 
   need_gh
-  url=$(gh issue create --repo "$(bug_repo)" --title "$title" --label bug \
-        --body "$body"$'\n\n---\n_Analysis is tracked privately as '"$id"'._')
+  url=$(gh issue create --repo "$(bug_repo)" --title "$title" --label "$(label_for "$(kind_of "$id")")" \
+        --body "$body"$'\n\n---\n_Tracked privately as '"$id"'._')
   num=$(printf '%s\n' "$url" | sed -n 's#.*/issues/\([0-9]\{1,\}\).*#\1#p' | head -1)
   [ -n "$num" ] || die "could not read the created issue number from: $url" 1
 
@@ -247,8 +289,11 @@ cmd_open() {
 # ----------------------------------------------------------------- close ----
 
 cmd_close() {
-  local id file status="fixed" comment="" num
-  id=$(bug_id "$1"); file=$(report_path "$1"); shift
+  local id file kind allowed status comment="" num
+  id=$(item_id "$1"); file=$(report_path "$1"); kind=$(kind_of "$id")
+  allowed=$(statuses_for "$kind")
+  case "$kind" in BUG) status=fixed ;; FR) status=implemented ;; esac
+  shift
   while [ $# -gt 0 ]; do
     case "$1" in
       --status)  shift; status=$(canon_status "${1:-}") ;;
@@ -257,7 +302,18 @@ cmd_close() {
     esac
     shift
   done
-  case " $STATUSES " in *" $status "*) ;; *) die "unknown status '$status' (use: $STATUSES)";; esac
+  case " $allowed " in *" $status "*) ;; *) die "status '$status' is not valid for a $kind (use: $allowed)";; esac
+
+  # Solving an issue means serving the contract it belongs to. The Spec line may
+  # legitimately say "none — <reason>"; what it may not do is be missing, which
+  # is how the question gets skipped rather than answered.
+  case " $DONE_STATES " in
+    *" $status "*)
+      [ -n "$(read_field "$file" Spec)" ] || die "refusing to close $id as '$status': the report has no '- **Spec:**' line.
+  Record which SPEC this serves — or state 'none — <reason>' if it genuinely
+  serves none. Either is an answer; a missing line is not." 1
+      ;;
+  esac
 
   set_field "$file" Status "$status"
   echo "$id: status -> $status"
@@ -281,16 +337,16 @@ cmd_close() {
 
 cmd_sync() {
   local files drift=0 file id st num state
-  if [ $# -gt 0 ]; then files=$(report_path "$1"); else files=$(find "$(bug_dir)" -maxdepth 1 -name 'BUG-*.md' ! -name '*.public.md' | sort); fi
+  if [ $# -gt 0 ]; then files=$(report_path "$1"); else files=$(find "$(bug_dir)" -maxdepth 1 \( -name 'BUG-*.md' -o -name 'FR-*.md' \) ! -name '*.public.md' | sort); fi
   need_gh
   while IFS= read -r file; do
     [ -n "$file" ] || continue
     num=$(issue_ref "$file"); [ -n "$num" ] || continue
-    id=$(basename "$file" | sed -n 's/^\(BUG-[0-9]\{4\}\).*/\1/p')
+    id=$(basename "$file" | sed -E -n 's/^((BUG|FR)-[0-9]{4}).*/\1/p')
     st=$(canon_status "$(read_field "$file" Status)")
     state=$(gh issue view "$num" --repo "$(bug_repo)" --json state -q .state 2>/dev/null || echo UNKNOWN)
     case "$st:$state" in
-      fixed:CLOSED|wontfix:CLOSED|duplicate:CLOSED|open:OPEN|in-progress:OPEN) ;;
+      fixed:CLOSED|implemented:CLOSED|wontfix:CLOSED|duplicate:CLOSED|open:OPEN|in-progress:OPEN) ;;
       unknown:*) echo "$id: report has no canonical Status line (issue is $state)"; drift=1 ;;
       *) echo "$id: report says '$st' but issue #$num is $state"; drift=1 ;;
     esac
@@ -301,16 +357,17 @@ cmd_sync() {
 
 # ------------------------------------------------------------------ main ----
 
-usage() { sed -n '3,37p' "$0" | sed 's/^#\{1,\} \{0,1\}//'; }
+usage() { sed -n '3,50p' "$0" | sed 's/^#\{1,\} \{0,1\}//'; }
 
 case "${1:-}" in
   next-id)      shift; cmd_next_id "$@" ;;
-  path)         shift; [ $# -ge 1 ] || die "path needs a bug id"; report_path "$1" ;;
-  status)       shift; [ $# -ge 1 ] || die "status needs a bug id"; cmd_status "$@" ;;
-  issue)        shift; [ $# -ge 1 ] || die "issue needs a bug id"; cmd_issue "$1" ;;
+  path)         shift; [ $# -ge 1 ] || die "path needs an item id"; report_path "$1" ;;
+  status)       shift; [ $# -ge 1 ] || die "status needs an item id"; cmd_status "$@" ;;
+  issue)        shift; [ $# -ge 1 ] || die "issue needs an item id"; cmd_issue "$1" ;;
+  spec)         shift; [ $# -ge 1 ] || die "spec needs an item id"; cmd_spec "$1" ;;
   redact-check) shift; cmd_redact_check "$@" ;;
-  open)         shift; [ $# -ge 1 ] || die "open needs a bug id"; cmd_open "$1" ;;
-  close)        shift; [ $# -ge 1 ] || die "close needs a bug id"; cmd_close "$@" ;;
+  open)         shift; [ $# -ge 1 ] || die "open needs an item id"; cmd_open "$1" ;;
+  close)        shift; [ $# -ge 1 ] || die "close needs an item id"; cmd_close "$@" ;;
   sync)         shift; cmd_sync "$@" ;;
   -h|--help|help|"") usage ;;
   *) die "unknown command '$1' (try --help)" ;;

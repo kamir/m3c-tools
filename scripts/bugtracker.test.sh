@@ -50,8 +50,11 @@ is "next-id on an empty tree" "$("$BT" next-id)" "BUG-0001"
 : > "$BUGS/BUG-0007-alpha.md"
 : > "$BUGS/BUG-0042-beta.md"
 : > "$BUGS/FR-0099-not-a-bug.md"
-is "next-id takes the max, ignores FR-" "$("$BT" next-id)" "BUG-0043"
+is "next-id takes the max, ignores the other kind" "$("$BT" next-id)" "BUG-0043"
+is "next-id FR counts FR files"                     "$("$BT" next-id FR)" "FR-0100"
+is "next-id fr is case-insensitive"                 "$("$BT" next-id fr)" "FR-0100"
 rm "$BUGS/BUG-0007-alpha.md" "$BUGS/BUG-0042-beta.md" "$BUGS/FR-0099-not-a-bug.md"
+is "next-id FR on an empty tree" "$("$BT" next-id FR)" "FR-0001"
 
 # --- a realistic report -------------------------------------------------------
 REPORT="$BUGS/BUG-0213-widget-drops-the-last-frame.md"
@@ -135,10 +138,23 @@ is "still exactly one issue was created" "$(grep -c 'issue create' "$GH_CALLS")"
 
 is "the public body is not mistaken for a report" "$("$BT" path 213)" "$REPORT"
 
+# --- close: the Spec question must be ANSWERED, not skipped -------------------
+refuses "close as done refuses a report with no Spec line" "$BT" close 213
+is "the status was not changed by the refusal" "$("$BT" status 213)" "open"
+accepts "close as wontfix does not need a Spec line" "$BT" close 213 --status wontfix
+"$BT" status 213 open >/dev/null
+
+printf '%s\n' "- **Spec:** none — a rendering slip, no contract to change" >> "$REPORT"
+accepts "a 'none — reason' Spec answer satisfies the rule" "$BT" close 213
+is "spec reads back the recorded answer" \
+   "$("$BT" spec 213)" "none — a rendering slip, no contract to change"
+"$BT" status 213 open >/dev/null
+
 # --- close: both planes, and the comment is checked too -----------------------
+: > "$GH_CALLS"          # count only the calls the assertions below are about
 refuses "close refuses a leaking public comment" \
   "$BT" close 213 --comment "fixed in m3c-tools-maintenance/SPEC/SPEC-0001-x.md"
-is "no close was issued" "$(grep -c 'issue close' "$GH_CALLS" || true)" "0"
+is "no close was issued by the leaking comment" "$(grep -c 'issue close 77' "$GH_CALLS" || true)" "0"
 
 accepts "close sets the status and closes the issue" \
   "$BT" close 213 --comment "Fixed in v2.11.1 — see BUG-0213."
@@ -152,8 +168,43 @@ is "wontfix closes with 'not planned'" \
    "$(grep -c "reason not planned" "$GH_CALLS")" "1"
 
 : > "$GH_CALLS"
+printf '%s\n' "- **Spec:** SPEC-0401" >> "$NOSTATUS"
 accepts "close on an unlinked report touches no issue" "$BT" close 214
 is "no gh call was made" "$(wc -l < "$GH_CALLS" | tr -d ' ')" "0"
+
+# --- the FR kind: same machinery, one different word --------------------------
+FR="$BUGS/FR-0096-declarative-data-requirements.md"
+cat > "$FR" <<'EOF'
+# FR-0096 — declarative data requirements
+
+- **Status:** open
+- **Spec:** SPEC-0401 §1
+- **Public:** yes
+EOF
+is "an FR id is resolved by kind"      "$("$BT" path FR-0096)" "$FR"
+is "a lowercase short FR id resolves"  "$("$BT" path fr-96)"   "$FR"
+refuses "a bare number never resolves to an FR" "$BT" path 96
+
+is "an FR closes as implemented, not fixed" "$("$BT" status FR-0096 implemented)" "implemented"
+refuses "'fixed' is not a valid FR status"  "$BT" status FR-0096 fixed
+"$BT" status FR-0096 open >/dev/null
+refuses "'implemented' is not a valid BUG status" "$BT" status 213 implemented
+
+cat > "${FR%.md}.public.md" <<'EOF'
+# Declare a skill's data requirements semantically
+
+A skill should say what KIND of data it needs, not which server holds it today.
+EOF
+: > "$GH_CALLS"
+GH_NEW_ISSUE=88 accepts "an FR opens an issue too" "$BT" open FR-0096
+is "an FR is labelled enhancement, not bug" \
+   "$(grep -c 'label enhancement' "$GH_CALLS")" "1"
+is "the FR issue is linked back" "$("$BT" issue FR-0096)" "acme/widget#88"
+
+: > "$GH_CALLS"
+accepts "closing an FR defaults to implemented" "$BT" close FR-0096
+is "the FR is implemented" "$("$BT" status FR-0096)" "implemented"
+is "the FR issue closed as completed" "$(grep -c 'issue close 88 .* --reason completed' "$GH_CALLS")" "1"
 
 # --- sync ---------------------------------------------------------------------
 "$BT" status 213 fixed >/dev/null
