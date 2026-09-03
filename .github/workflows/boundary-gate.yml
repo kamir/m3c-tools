@@ -2,6 +2,12 @@ name: boundary-gate
 
 # SPEC-0358 content-plane leak gate: fail if a public-plane file embeds
 # private-plane content (private-repo paths, internal endpoints/secrets/context).
+#
+# The patterns live in tools/leak-patterns.txt and are shared with
+# scripts/bugtracker.sh, which applies them to GitHub issue bodies — text this
+# gate can never see, because it is posted through the API rather than committed.
+# Both sides' fixtures run here: a leak gate that silently stops flagging still
+# reads green, so it is asserted from the failing side on every push.
 
 on:
   push:
@@ -20,3 +26,9 @@ jobs:
           fetch-depth: 0
       - name: Run boundary-gate
         run: bash tools/boundary-gate.sh
+
+      - name: boundary-gate fixtures (every pattern still blocks)
+        run: bash tools/boundary-gate.test.sh
+
+      - name: bugtracker fixtures (the post-gate refuses to publish a leak)
+        run: bash scripts/bugtracker.test.sh

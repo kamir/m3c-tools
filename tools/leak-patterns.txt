@@ -1,0 +1,26 @@
+# tools/leak-patterns.txt — the SPEC-0358 content-plane leak patterns, in ONE place.
+#
+# Read by BOTH gates, so a pattern added here tightens both at once:
+#   * tools/boundary-gate.sh   — the COMMIT gate (tracked files, in CI)
+#   * scripts/bugtracker.sh    — the POST gate (issue bodies and comments, which
+#                                no CI job ever sees)
+#
+# Format:  <scope>TAB<reason>TAB<extended regex>
+#
+#   always      checked in every public-plane file, no exceptions. A reference
+#               from the public plane into the private one must be ID-ONLY
+#               ("implements SPEC-1234"), never a concrete path.
+#   ops-exempt  skipped for the public tool's OWN operational surface (cmd/,
+#               pkg/, docs/, scripts/, tools/, .claude/, …): per SPEC-0358
+#               "ship the code", the ER1 client legitimately carries its own
+#               endpoint, header name and API paths there. Everywhere else —
+#               and in every issue body — these are leaks.
+#
+# This file necessarily contains the literals it defines, so it is exempt from
+# the commit gate (tools/boundary-gate.sh BASE_EXACT), exactly as that gate's
+# own source is.
+always	private-repo path reference	m3c-tools-maintenance/
+ops-exempt	internal endpoint	127\.0\.0\.1:8081
+ops-exempt	ER1 context-id	[0-9]{18,25}___[a-z0-9]+
+ops-exempt	secret header	X-API-KEY
+ops-exempt	internal API path	/upload_2|/api/plm/
