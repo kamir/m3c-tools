@@ -25,7 +25,9 @@
 #
 # Configuration:
 #   M3C_MAINTENANCE_DIR   required — the private maintenance repo's root
-#   M3C_BUG_REPO          optional — owner/repo for issues (default: origin)
+#   M3C_BUG_REPO          optional — owner/repo fallback for an item that does
+#                         not declare `- **Repo:**` and has no issue yet. The
+#                         target is NEVER inferred from the working directory.
 #
 # An item is named BUG-0213 / FR-0096, or fr-96, or a filename. A BARE NUMBER
 # means a BUG — the FR kind must be spelled out, so "96" can never silently
@@ -66,15 +68,38 @@ bug_dir() {
   printf '%s\n' "$M3C_MAINTENANCE_DIR/bug-reports"
 }
 
-bug_repo() {
-  if [ -n "${M3C_BUG_REPO:-}" ]; then printf '%s\n' "$M3C_BUG_REPO"; return; fi
-  local url
-  url=$(git config --get remote.origin.url 2>/dev/null || true)
-  [ -n "$url" ] || die "M3C_BUG_REPO is not set and this is not a git checkout with an origin"
-  url=${url%.git}
-  url=${url#git@github.com:}
-  url=${url#https://github.com/}
-  printf '%s\n' "$url"
+# repo_for FILE — which GitHub repository this item's issue lives in.
+#
+# The target is a property of the ITEM, never of the working directory. Deriving
+# it from `git remote origin` was wrong in both directions: run from the private
+# maintenance checkout it resolved to the private repo (so `close` would address
+# a DIFFERENT issue of the same number), and run from some other public checkout
+# it would have published into that repo instead. bug-reports/ holds items for
+# several systems, so there is no single correct default to infer.
+#
+# Resolution order, most authoritative first:
+#   1. the recorded `- **Issue:** owner/repo#N` — after creation this IS the fact
+#   2. the declared `- **Repo:** owner/repo`    — before creation, reviewed in-file
+#   3. $M3C_BUG_REPO                            — a stated override for one-offs
+#   4. refuse
+#
+# The file outranks the environment on purpose: an item that has declared its
+# target must not be redirected somewhere else by a stray variable.
+repo_for() {
+  local file=$1 r
+  # NB: `s///p` prints the whole line, so the pattern must consume the "#N" too.
+  r=$(read_field "$file" Issue | sed -n 's|^\([A-Za-z0-9_.-]\{1,\}/[A-Za-z0-9_.-]\{1,\}\)#.*$|\1|p' | head -1)
+  [ -n "$r" ] || r=$(read_field "$file" Repo)
+  [ -n "$r" ] || r=${M3C_BUG_REPO:-}
+  [ -n "$r" ] || die "$(basename "$file"): no target repository.
+  Declare it in the report as
+      - **Repo:** owner/repo
+  or set M3C_BUG_REPO for a one-off. It is NOT inferred from the working
+  directory: bug-reports/ holds items for several systems, and guessing from
+  wherever you happen to stand is how an issue lands in the wrong repository." 1
+  printf '%s\n' "$r" | grep -qE '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' \
+    || die "$(basename "$file"): '$r' is not a valid owner/repo" 1
+  printf '%s\n' "$r"
 }
 
 need_gh() { command -v gh >/dev/null 2>&1 || die "the GitHub CLI (gh) is required for issue commands"; }
@@ -276,14 +301,16 @@ cmd_open() {
     die "refusing to publish $id: the redacted body still carries private-plane content (SPEC-0358)" 1
   fi
 
+  local repo; repo=$(repo_for "$file")
+
   need_gh
-  url=$(gh issue create --repo "$(bug_repo)" --title "$title" --label "$(label_for "$(kind_of "$id")")" \
+  url=$(gh issue create --repo "$repo" --title "$title" --label "$(label_for "$(kind_of "$id")")" \
         --body "$body"$'\n\n---\n_Tracked privately as '"$id"'._')
   num=$(printf '%s\n' "$url" | sed -n 's#.*/issues/\([0-9]\{1,\}\).*#\1#p' | head -1)
   [ -n "$num" ] || die "could not read the created issue number from: $url" 1
 
-  set_field "$file" Issue "$(bug_repo)#$num"
-  echo "$(bug_repo)#$num  $url"
+  set_field "$file" Issue "$repo#$num"
+  echo "$repo#$num  $url"
 }
 
 # ----------------------------------------------------------------- close ----
@@ -324,13 +351,15 @@ cmd_close() {
   local reason=completed
   case "$status" in wontfix|duplicate) reason="not planned" ;; esac
 
+  local repo; repo=$(repo_for "$file")   # from the recorded Issue line, not the cwd
+
   need_gh
   if [ -n "$comment" ]; then
     redact_scan "$comment" || die "refusing to comment publicly on $id: the text carries private-plane content (SPEC-0358)" 1
-    gh issue comment "$num" --repo "$(bug_repo)" --body "$comment" >/dev/null
+    gh issue comment "$num" --repo "$repo" --body "$comment" >/dev/null
   fi
-  gh issue close "$num" --repo "$(bug_repo)" --reason "$reason" >/dev/null
-  echo "closed $(bug_repo)#$num ($reason)"
+  gh issue close "$num" --repo "$repo" --reason "$reason" >/dev/null
+  echo "closed $repo#$num ($reason)"
 }
 
 # ------------------------------------------------------------------ sync ----
@@ -344,7 +373,7 @@ cmd_sync() {
     num=$(issue_ref "$file"); [ -n "$num" ] || continue
     id=$(basename "$file" | sed -E -n 's/^((BUG|FR)-[0-9]{4}).*/\1/p')
     st=$(canon_status "$(read_field "$file" Status)")
-    state=$(gh issue view "$num" --repo "$(bug_repo)" --json state -q .state 2>/dev/null || echo UNKNOWN)
+    state=$(gh issue view "$num" --repo "$(repo_for "$file")" --json state -q .state 2>/dev/null || echo UNKNOWN)
     case "$st:$state" in
       fixed:CLOSED|implemented:CLOSED|wontfix:CLOSED|duplicate:CLOSED|open:OPEN|in-progress:OPEN) ;;
       unknown:*) echo "$id: report has no canonical Status line (issue is $state)"; drift=1 ;;

@@ -27,7 +27,7 @@ A bug lives in up to two places, and `scripts/bugtracker.sh` keeps them in step:
 | Plane | Where | Holds |
 |-------|-------|-------|
 | **Analysis** (private) | `${M3C_MAINTENANCE_DIR}/bug-reports/BUG-NNNN-<slug>.md` | Everything: root cause, `file:line`, customer context, SPEC references. The source of truth. |
-| **Issue** (public) | a GitHub issue in `$M3C_BUG_REPO` (default: this repo's origin) | A **redacted restatement**: observed, expected, reproduction, version. Refers to the analysis **ID-only** (`BUG-0213`). |
+| **Issue** (public) | a GitHub issue in the repo the report's `Repo:` line names | A **redacted restatement**: observed, expected, reproduction, version. Refers to the analysis **ID-only** (`BUG-0213`). |
 
 The issue is **never a copy** of the analysis. `bug-reports/` also holds bugs for
 systems this repository does not ship; those stay private. Publishing is per-bug,
@@ -76,6 +76,7 @@ Write `${M3C_MAINTENANCE_DIR}/bug-reports/BUG-NNNN-<short-slug>.md`:
 - **Component:** <package or flow>
 - **Version:** <from Makefile APP_VERSION>
 - **Public:** yes | no
+- **Repo:** <owner/repo the issue belongs in>
 
 ## Observed Behavior
 
@@ -108,8 +109,12 @@ Write `${M3C_MAINTENANCE_DIR}/bug-reports/BUG-NNNN-<short-slug>.md`:
 <What assumption led to this? What should we watch for?>
 ```
 
-`Status`, `Public` and `Issue` are the three lines the script owns — keep their
-exact spelling so `status`, `close` and `sync` can parse them.
+`Status`, `Public`, `Repo` and `Issue` are the lines the script owns — keep their
+exact spelling so `status`, `open`, `close` and `sync` can parse them.
+
+`Repo` names the repository the issue belongs in. It is **not** inferred from the
+working directory: `bug-reports/` holds items for several systems, and guessing
+from wherever you happen to stand is how an issue lands in the wrong repository.
 
 ### Step 5: Decide the plane
 
