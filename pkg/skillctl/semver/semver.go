@@ -13,7 +13,7 @@
 //   - pre-release / build metadata (everything from the first '-' or '+') is
 //     dropped, so "1.0.0-rc" compares EQUAL to "1.0.0" — NOT full SemVer
 //     pre-release precedence. For a SINGLE-segment suffix ("1.0.0-rc",
-//     "1.0.0+build") this matches all four prior call sites exactly. For a
+//     "1.0.0+meta") this matches all four prior call sites exactly. For a
 //     DOTTED suffix ("1.2.0-rc.1") it INTENTIONALLY differs from them: the old
 //     copies split the whole string on '.' first, leaking the trailing ".1" as a
 //     4th field and ranking the pre-release ABOVE its GA; dropping the whole
