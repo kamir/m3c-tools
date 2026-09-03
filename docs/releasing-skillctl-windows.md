@@ -75,18 +75,18 @@ gh run watch $(gh run list --workflow=skillctl-windows-smoke.yml --limit 1 --jso
 **(b) Real Windows PowerShell — the true acceptance (after Step 2 publishes):**
 ```powershell
 # 1) one-click install — verifies cosign provenance + SHA-256, installs to %LOCALAPPDATA%\Programs\skillctl:
-irm https://raw.githubusercontent.com/kamir/m3c-tools/ac04005305ee163790024520cda2d7aee1c2eed9/tools/skillctl-install.ps1 | iex
+irm https://raw.githubusercontent.com/kamir/m3c-tools/82c832882e8683fa3824ce65db01d945af639c50/tools/skillctl-install.ps1 | iex
 
 # 2) open a NEW terminal (PATH was updated), then:
 skillctl version        # -> skillctl/v0.3.1
 
 # 3) walk the packaged lifecycle smoke (keygen -> pack -> sign -> verify -> trust -> tamper):
 $q = "$env:TEMP\skillctl-qs.ps1"
-irm https://raw.githubusercontent.com/kamir/m3c-tools/ac04005305ee163790024520cda2d7aee1c2eed9/scripts/skillctl-quickstart-windows.ps1 -OutFile $q
+irm https://raw.githubusercontent.com/kamir/m3c-tools/82c832882e8683fa3824ce65db01d945af639c50/scripts/skillctl-quickstart-windows.ps1 -OutFile $q
 powershell -ExecutionPolicy Bypass -File $q
 ```
 
-> **Bootstrap integrity.** These URLs are pinned to the **immutable commit `ac04005`**, not the
+> **Bootstrap integrity.** These URLs are pinned to the **immutable commit `82c8328`**, not the
 > mutable `master` branch (where one rewrite could swap the bootstrap script *and* every pin
 > inside it). Expected SHA-256: `tools/skillctl-install.ps1` →
 > `9e8ceec9d2c87b4f5a7136653e8ca69224fa6579a55da221d9e2fe875f9924c8`;
