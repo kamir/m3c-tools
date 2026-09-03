@@ -84,8 +84,9 @@ users' engines pointed at the same broker still cannot share a group.
 
 ## Dev-Cycle Recipes
 
-See `SPEC-0167-m3c-thinking-engine.md` and `PLAN-0167-week3-kickoff.md`
-(in the sibling `m3c-tools-maintenance` repo) §Stream 3c for detail.
+See **SPEC-0167** and **PLAN-0167** §Stream 3c in the private maintenance plane
+for detail — referenced by id, because a public-plane file must not carry a path
+into the private one (SPEC-0358).
 `NewAdapterFromEnv()` picks an LLM by env:
 `OPENAI_API_KEY` → OpenAI; else `OLLAMA_URL` → Ollama (zero-cost local);
 both + `M3C_LLM_FALLBACK=ollama` → OpenAI primary with Ollama fallback on 5xx.

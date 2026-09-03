@@ -17,8 +17,8 @@
 //	GET /api/skills/identities/<id>
 //	    → {"id": "...", "pubkey_b64": "...", "auth_source": "...", "revoked_at": ""}
 //
-// Field-naming caveat: the S5 brief in PLAN-SPEC-0188-parallel-execution.md
-// publishes the response shape but not the exact JSON field spelling. This
+// Field-naming caveat: the S5 parallel-execution brief for SPEC-0188 publishes
+// the response shape but not the exact JSON field spelling. This
 // package decodes leniently for both common spellings (`pubkey` vs
 // `pubkey_b64`) so a small drift between the brief and what S5 ships
 // doesn't block S8. Any drift discovered at integration time is documented
