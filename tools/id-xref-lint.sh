@@ -55,8 +55,15 @@ XREF_EXEMPT_EXACT=(
   tools/id-xref-lint.sh          # this lint — its comments carry example bad patterns
   tools/id-xref-lint.test.sh     # its self-test — fixtures embed dangling + glued ids
   tools/boundary-gate.sh         # docstring cites SPEC-1234 / ADR-1234 as placeholders
+  tools/leak-patterns.txt        # defines the rule; its comment cites SPEC-1234 as THE placeholder
+  tools/boundary-gate.test.sh    # fixtures embed dangling ids + a deliberately-bad private path
+  scripts/bugtracker.test.sh     # same: the post-gate fixtures must contain what they reject
   CONTENT-TOPOLOGY.md            # the public topology doc: placeholder ids + rule examples
 )
+
+# NOTE: this list and tools/boundary-gate.sh's BASE_EXACT now name the same set of
+# fixture/definition files, for the same reason — a file whose PURPOSE is the rule has to
+# contain what the rule forbids. Keep them in step; nothing else belongs on either.
 
 # ---- Marker + violation patterns (ERE) -----------------------------------------
 # NOTE: scope is SPEC + ADR per SPEC-0358 §4 (the resolvable design/decision plane).

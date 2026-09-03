@@ -727,4 +727,5 @@ m3c-tools cancel vid-001
 - [Menu Bar App](menubar-app.md) — projects, the Gantt time tracker, and reverse tracking in depth
 - [Manual: skillctl](manual-skillctl.md) — the agent-skill trust lifecycle, command by command
 - [Menu Bar App](menubar-app.md) — every menu item and the Observation Window
+- [Bug & feature tracking](bug-tracking.md) — how a defect or a request is tracked across the private and public planes
 - [Platform differences](PLATFORM-DIFFERENCES.md) — macOS vs Linux vs Windows behavior
