@@ -46,7 +46,7 @@ func OpenStore(dbPath string) (*Store, error) {
 
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
-		db.Close()
+		db.Close() //nolint:errcheck // best-effort close of the just-opened DB on this error path
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	return s, nil
@@ -73,7 +73,7 @@ func (s *Store) migrate() error {
 	}
 
 	// Add tags column (safe to call multiple times — ignore "duplicate column" error).
-	s.db.Exec("ALTER TABLE projects ADD COLUMN tags TEXT DEFAULT ''")
+	s.db.Exec("ALTER TABLE projects ADD COLUMN tags TEXT DEFAULT ''") //nolint:errcheck // idempotent migration; a "duplicate column" error on re-run is expected and intentionally ignored
 
 	_, err = s.db.Exec(`
 		CREATE TABLE IF NOT EXISTS events (

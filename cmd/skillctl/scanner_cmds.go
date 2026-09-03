@@ -715,7 +715,7 @@ func cmdConsolidate(args []string) {
 		}
 		fmt.Fprintf(os.Stderr, "\nFound %d annotation gaps. Apply frontmatter fixes? [y/N] ", len(rpt.AnnotationGaps))
 		var answer string
-		fmt.Scanln(&answer)
+		fmt.Scanln(&answer) //nolint:errcheck // an empty answer on read failure (e.g. EOF) is treated as "no", the safe default
 		if answer == "y" || answer == "Y" || answer == "yes" {
 			fixed, skipped, err := consolidate.FixAnnotationGaps(rpt.AnnotationGaps)
 			if err != nil {
@@ -1302,7 +1302,7 @@ func cmdSyncUsage(args []string) {
 		}
 		pending = append(pending, r)
 	}
-	rows.Close()
+	rows.Close() //nolint:errcheck // best-effort close of already-iterated read-only rows
 
 	if len(pending) == 0 {
 		fmt.Println("No unsynced usage events.")
@@ -1347,9 +1347,8 @@ func cmdSyncUsage(args []string) {
 			fmt.Fprintf(os.Stderr, "  [FAIL] id=%d (%s): %v\n", r.ID, r.SkillID, err)
 			continue
 		}
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
-
+		io.Copy(io.Discard, resp.Body) //nolint:errcheck // draining the response body for connection reuse; the data is discarded
+		resp.Body.Close()              //nolint:errcheck // best-effort close of the read-only response body
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			now := time.Now().UTC().Format(time.RFC3339)
 			_, err := db.Exec("UPDATE skill_usage SET synced = 1, synced_at = ? WHERE id = ?", now, r.ID)

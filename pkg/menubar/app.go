@@ -539,7 +539,7 @@ func (a *App) buildHelpMenu() menuet.MenuItem {
 					Text:  "Open Log File",
 					Image: iconLogFile,
 					Clicked: func() {
-						exec.Command("open", a.Config.LogPath).Run()
+						exec.Command("open", a.Config.LogPath).Run() //nolint:errcheck // fire-and-forget UI action: open the log file in the default app
 						a.fireAction(ActionOpenLog, a.Config.LogPath)
 					},
 				},
@@ -803,7 +803,7 @@ func (a *App) buildHistoryMenu() menuet.MenuItem {
 							{
 								Text: "Copy Transcript",
 								Clicked: func() {
-									CopyToClipboard("Transcript for " + entry.VideoID)
+									CopyToClipboard("Transcript for " + entry.VideoID) //nolint:errcheck // best-effort UI clipboard write
 									a.fireAction(ActionCopyTranscript, entry.VideoID)
 								},
 							},
@@ -959,7 +959,7 @@ func (a *App) ShowTranscriptResult(videoID string, snippets, chars int) bool {
 		Buttons: []string{"Close", "🗑 Trash"},
 	})
 	if result.Button == 1 { // Trash
-		CopyToClipboard("")
+		CopyToClipboard("") //nolint:errcheck // best-effort UI clipboard clear
 		a.notify("Cleared", "Clipboard cleared")
 		return false
 	}

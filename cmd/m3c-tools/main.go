@@ -122,8 +122,8 @@ func main() {
 	// This enables uploads via Bearer auth without API key.
 	if cfg := er1.LoadConfig(); cfg.ContextID != "" {
 		if dt, err := auth.Load(auth.DeviceID(), strings.SplitN(cfg.ContextID, "___", 2)[0]); err == nil && dt != nil && !dt.IsExpired() {
-			os.Setenv("ER1_DEVICE_TOKEN", dt.Token)
-			os.Setenv("ER1_CONTEXT_ID", dt.ContextID)
+			os.Setenv("ER1_DEVICE_TOKEN", dt.Token)   //nolint:errcheck // in-process env propagation; the durable device-token store is the source of truth and the key is a constant
+			os.Setenv("ER1_CONTEXT_ID", dt.ContextID) //nolint:errcheck // in-process env propagation; the durable device-token store is the source of truth and the key is a constant
 			log.Printf("[auth] device token loaded for user=%s", truncateForLog(dt.UserID, 20))
 		}
 	}
@@ -1576,7 +1576,7 @@ func cmdImportRetry() {
 	}
 	defer func() {
 		if filesDB != nil {
-			filesDB.Close()
+			filesDB.Close() //nolint:errcheck // best-effort close of the read-only tracking DB on cleanup
 		}
 	}()
 
@@ -1737,7 +1737,7 @@ func cmdImportReset(args []string) {
 func defaultFilesDBPath() string {
 	home, _ := os.UserHomeDir()
 	dir := filepath.Join(home, ".m3c-tools")
-	os.MkdirAll(dir, 0700)
+	os.MkdirAll(dir, 0700) //nolint:errcheck // best-effort dir create; a real failure surfaces when the DB at this path is opened
 	return filepath.Join(dir, "tracking.db")
 }
 
@@ -1778,7 +1778,7 @@ func cmdMenubar(args []string) {
 	// Open log file for writing so "Open Log File" has something to show.
 	// Ensure log directory exists
 	if logDir := filepath.Dir(cfg.LogPath); logDir != "" && logDir != "." {
-		os.MkdirAll(logDir, 0700)
+		os.MkdirAll(logDir, 0700) //nolint:errcheck // best-effort dir create; a real failure surfaces when the log file below is opened
 	}
 	logFile, err := os.OpenFile(cfg.LogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
@@ -2243,7 +2243,7 @@ func cmdMenubar(args []string) {
 		case menubar.ActionPocketSync:
 			safeGo("PocketSync", func() { menubarHandlePocketSync(app) })
 		case menubar.ActionStarGitHub:
-			safeGo("StarGitHub", func() { openURL(menubar.GitHubRepoURL) })
+			safeGo("StarGitHub", func() { openURL(menubar.GitHubRepoURL) }) //nolint:errcheck // fire-and-forget UI action: open the GitHub repo in a browser
 		}
 	}
 
@@ -2286,7 +2286,7 @@ func cmdMenubar(args []string) {
 			ttSyncer.Stop(5 * time.Second)
 		}
 		if ttStore != nil {
-			ttStore.Close()
+			ttStore.Close() //nolint:errcheck // best-effort close of the time-tracking store on shutdown
 		}
 		log.Printf("[timetracking] shutdown complete")
 	})
@@ -3064,7 +3064,7 @@ func completeER1Login(app *menubar.App, contextID string, result *loginCallbackR
 		} else {
 			log.Printf("[auth] device token saved for user=%s device=%s", truncateForLog(result.UserID, 20), auth.DeviceID())
 			// Set the token as the active API key so uploads use Bearer auth.
-			os.Setenv("ER1_DEVICE_TOKEN", result.DeviceToken)
+			os.Setenv("ER1_DEVICE_TOKEN", result.DeviceToken) //nolint:errcheck // in-process env propagation; auth.Save above is the checked durable write and the key is a constant
 		}
 	}
 
@@ -3165,7 +3165,7 @@ func cmdLogin() {
 			if err := savePersistedER1Session(ctxID); err != nil {
 				log.Printf("[auth] persist session failed: %v", err)
 			}
-			os.Setenv("ER1_CONTEXT_ID", ctxID)
+			os.Setenv("ER1_CONTEXT_ID", ctxID) //nolint:errcheck // in-process env propagation; savePersistedER1Session above is the checked durable write and the key is a constant
 
 			// Also save to active profile.
 			pm := config.NewProfileManager()
@@ -3195,7 +3195,7 @@ func cmdLogin() {
 				if err := auth.Save(dt); err != nil {
 					log.Printf("[auth] save device token failed: %v", err)
 				} else {
-					os.Setenv("ER1_DEVICE_TOKEN", result.DeviceToken)
+					os.Setenv("ER1_DEVICE_TOKEN", result.DeviceToken) //nolint:errcheck // in-process env propagation; auth.Save above is the checked durable write and the key is a constant
 					fmt.Printf("Device token saved for user=%s device=%s\n", truncateForLog(result.UserID, 20), auth.DeviceID())
 				}
 			}
@@ -3233,7 +3233,7 @@ func startER1LoginCallbackServer() (*http.Server, string, <-chan loginCallbackRe
 	// Generate a random nonce so only the legitimate ER1 redirect can hit the callback.
 	nonce := make([]byte, 16)
 	if _, err := rand.Read(nonce); err != nil {
-		ln.Close()
+		ln.Close() //nolint:errcheck // best-effort close of the just-opened listener on this error path
 		return nil, "", nil, nil, fmt.Errorf("generate callback nonce: %w", err)
 	}
 	callbackPath := "/m3c-login-" + hex.EncodeToString(nonce)
@@ -4325,7 +4325,7 @@ func maybePreloadWhisper() {
 			return
 		}
 		n, _ := io.Copy(io.Discard, f)
-		f.Close()
+		f.Close() //nolint:errcheck // best-effort close of a read-only file opened only to warm the OS cache
 
 		log.Printf("[whisper] preload done in %s (read %.0fMB into OS cache)",
 			time.Since(start).Round(time.Millisecond), float64(n)/(1024*1024))
@@ -4818,7 +4818,7 @@ func cmdPlaudDebugAPI() {
 			Dur     int64  `json:"duration"`
 		} `json:"data_file_list"`
 	}
-	json.Unmarshal(body, &listResp)
+	json.Unmarshal(body, &listResp) //nolint:errcheck // debug endpoint explorer; an empty list on parse failure is acceptable here
 	fmt.Printf("Total recordings in list: %d\n", len(listResp.DataFileList))
 
 	// Find one untranscribed and one transcribed recording.
@@ -4893,7 +4893,7 @@ func cmdPlaudDev(args []string) {
 	// SHARED consumer format so the menubar and `plaud dev` agree.
 	if db, err := tracking.OpenFilesDB(defaultFilesDBPath()); err == nil {
 		migratePlaudDevLedger(db)
-		db.Close()
+		db.Close() //nolint:errcheck // best-effort close after a one-time idempotent ledger migration
 	}
 
 	switch args[0] {
@@ -5779,7 +5779,7 @@ func cmdPlaudSync(recordingID string, force bool, customTags string, filter stri
 				fmt.Printf("Retrying %d recordings with missing ER1 doc_id.\n", retryCount)
 			}
 			if filesDB != nil {
-				filesDB.Close()
+				filesDB.Close() //nolint:errcheck // best-effort close of the read-only tracking DB before syncing
 			}
 			fmt.Printf("Syncing %d new recordings (of %d after filter).\n", len(ids), len(recordings))
 			if len(ids) == 0 {

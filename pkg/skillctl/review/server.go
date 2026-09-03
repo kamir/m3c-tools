@@ -242,7 +242,7 @@ func (s *Server) handleUI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(injectToken(uiHTML, s.token))
+	w.Write(injectToken(uiHTML, s.token)) //nolint:errcheck // best-effort write to an HTTP response (client may have disconnected)
 }
 
 // injectToken inserts the launch token into the served HTML as a meta tag.
@@ -314,7 +314,7 @@ func (s *Server) handleGetDelta(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(buildDeltaJSON(d))
+	json.NewEncoder(w).Encode(buildDeltaJSON(d)) //nolint:errcheck // best-effort JSON write to an HTTP response (client may have disconnected)
 }
 
 // reviewRequest is the JSON body for updating a review status.
@@ -378,7 +378,7 @@ func (s *Server) handleReviewEntry(w http.ResponseWriter, r *http.Request) {
 
 	entry := entryJSON{Index: idx, DeltaEntry: s.report.Entries[idx]}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(entry)
+	json.NewEncoder(w).Encode(entry) //nolint:errcheck // best-effort JSON write to an HTTP response (client may have disconnected)
 }
 
 // sealResponse is the JSON returned after sealing.
@@ -467,7 +467,7 @@ func (s *Server) handleSeal(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	json.NewEncoder(w).Encode(resp) //nolint:errcheck // best-effort JSON write to an HTTP response (client may have disconnected)
 }
 
 // handleListSeals returns all seal records.
@@ -479,7 +479,7 @@ func (s *Server) handleListSeals(w http.ResponseWriter, r *http.Request) {
 
 	if s.sealStore == nil {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte("[]"))
+		w.Write([]byte("[]")) //nolint:errcheck // best-effort write to an HTTP response (client may have disconnected)
 		return
 	}
 
@@ -493,13 +493,13 @@ func (s *Server) handleListSeals(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(seals)
+	json.NewEncoder(w).Encode(seals) //nolint:errcheck // best-effort JSON write to an HTTP response (client may have disconnected)
 }
 
 // handleHealth returns a simple health check response.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status":"ok","service":"skillctl-review"}`))
+	w.Write([]byte(`{"status":"ok","service":"skillctl-review"}`)) //nolint:errcheck // best-effort write to an HTTP response (client may have disconnected)
 }
 
 // openBrowser opens the given URL in the default browser.
@@ -515,5 +515,5 @@ func openBrowser(url string) {
 	default:
 		return
 	}
-	cmd.Start()
+	cmd.Start() //nolint:errcheck // fire-and-forget UI action: open the review UI in a browser
 }

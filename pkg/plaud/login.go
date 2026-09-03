@@ -101,7 +101,7 @@ func postAccessToken(base, email, password string) (string, error) {
 			return "", fmt.Errorf("plaud: login request: %w", err)
 		}
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		resp.Body.Close()
+		resp.Body.Close() //nolint:errcheck // best-effort close of the read-only response body already read above
 
 		var r struct {
 			Status      int    `json:"status"`

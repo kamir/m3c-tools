@@ -254,7 +254,7 @@ func (s *EditorServer) handleUI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(s.injectToken(editorHTML))
+	w.Write(s.injectToken(editorHTML)) //nolint:errcheck // best-effort write to an HTTP response (client may have disconnected)
 }
 
 // injectToken inserts the launch token into the served HTML as a meta tag.
@@ -482,20 +482,20 @@ func (s *EditorServer) testProfile(w http.ResponseWriter, name string) {
 // handleHealth returns a simple health check response.
 func (s *EditorServer) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status":"ok","service":"m3c-settings-editor"}`))
+	w.Write([]byte(`{"status":"ok","service":"m3c-settings-editor"}`)) //nolint:errcheck // best-effort write to an HTTP response (client may have disconnected)
 }
 
 // ── Helpers ──
 
 func jsonOK(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(v)
+	json.NewEncoder(w).Encode(v) //nolint:errcheck // best-effort JSON write to an HTTP response (client may have disconnected)
 }
 
 func jsonError(w http.ResponseWriter, msg string, code int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+	json.NewEncoder(w).Encode(map[string]string{"error": msg}) //nolint:errcheck // best-effort JSON write to an HTTP response (client may have disconnected)
 }
 
 // openEditorBrowser opens the given URL in the default browser.
@@ -511,5 +511,5 @@ func openEditorBrowser(url string) {
 	default:
 		return
 	}
-	cmd.Start()
+	cmd.Start() //nolint:errcheck // fire-and-forget UI action: open the settings editor in a browser
 }

@@ -95,7 +95,7 @@ func (c *PLMClient) HealthCheck() error {
 		return fmt.Errorf("health check request failed: %w", err)
 	}
 	defer resp.Body.Close()
-	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20)) //nolint:errcheck // draining the response body for connection reuse; the data is discarded
 
 	switch resp.StatusCode {
 	case http.StatusOK:
@@ -174,7 +174,7 @@ func (c *PLMClient) PostTimeEvent(event Event) error {
 		return fmt.Errorf("post time event: %w", err)
 	}
 	defer resp.Body.Close()
-	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20)) //nolint:errcheck // draining the response body for connection reuse; the data is discarded
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("post time event HTTP %d", resp.StatusCode)

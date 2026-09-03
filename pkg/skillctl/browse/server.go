@@ -242,7 +242,7 @@ func (s *Server) handleUI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(injectToken(uiHTML, s.token))
+	w.Write(injectToken(uiHTML, s.token)) //nolint:errcheck // best-effort write to an HTTP response (client may have disconnected)
 }
 
 func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
@@ -255,7 +255,7 @@ func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 	s.mu.RUnlock()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(g)
+	json.NewEncoder(w).Encode(g) //nolint:errcheck // best-effort JSON write to an HTTP response (client may have disconnected)
 }
 
 func (s *Server) handleFilter(w http.ResponseWriter, r *http.Request) {
@@ -277,7 +277,7 @@ func (s *Server) handleFilter(w http.ResponseWriter, r *http.Request) {
 	filtered := filterGraph(g, projects, types, categories, tags)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(filtered)
+	json.NewEncoder(w).Encode(filtered) //nolint:errcheck // best-effort JSON write to an HTTP response (client may have disconnected)
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
@@ -308,12 +308,12 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(matches)
+	json.NewEncoder(w).Encode(matches) //nolint:errcheck // best-effort JSON write to an HTTP response (client may have disconnected)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status":"ok","service":"skillctl-browse"}`))
+	w.Write([]byte(`{"status":"ok","service":"skillctl-browse"}`)) //nolint:errcheck // best-effort write to an HTTP response (client may have disconnected)
 }
 
 func (s *Server) handleRebuild(w http.ResponseWriter, r *http.Request) {
@@ -345,7 +345,7 @@ func (s *Server) handleRebuild(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck // best-effort JSON write to an HTTP response (client may have disconnected)
 		"status":     "rebuilt",
 		"node_count": len(graph.Nodes),
 		"edge_count": len(graph.Edges),
@@ -478,5 +478,5 @@ func openBrowserURL(url string) {
 	default:
 		return
 	}
-	cmd.Start()
+	cmd.Start() //nolint:errcheck // fire-and-forget UI action: open the browse UI in a browser
 }

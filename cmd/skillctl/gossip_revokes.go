@@ -118,13 +118,13 @@ func gossipRevokedDigests(peers *registry.Peers) (map[string]struct{}, []peerGos
 		}
 		gl, ok := be.(artifact.GovernanceLog)
 		if !ok {
-			be.Close()
+			be.Close() //nolint:errcheck // best-effort close of a read-only artifact backend on this branch
 			rep.Status = "no signed event log"
 			reports = append(reports, rep)
 			continue
 		}
 		page, err := gl.Events(ctx, artifact.ListFilter{}, artifact.Page{})
-		be.Close()
+		be.Close() //nolint:errcheck // best-effort close of a read-only artifact backend after reading events
 		if err != nil {
 			rep.Status = "read error (fail-open): " + err.Error()
 			reports = append(reports, rep)

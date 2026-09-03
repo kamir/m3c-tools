@@ -439,13 +439,13 @@ func (sb *SkillBar) openReport() {
 	}
 
 	if err := report.GenerateHTML(tmpFile, inv); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpFile.Name())
+		tmpFile.Close()           //nolint:errcheck // best-effort close on error path before removing the temp file
+		os.Remove(tmpFile.Name()) //nolint:errcheck // best-effort removal of the temp report file on error path
 		log.Printf("[skillbar] generate HTML: %v", err)
 		sb.showNotification("Skill Monitor", fmt.Sprintf("Error generating report: %v", err))
 		return
 	}
-	tmpFile.Close()
+	tmpFile.Close() //nolint:errcheck // best-effort close of an ephemeral temp report file opened only for browser display
 
 	// Open in default browser.
 	if err := exec.Command("open", tmpFile.Name()).Start(); err != nil {
@@ -573,7 +573,7 @@ func (sb *SkillBar) handleReviewPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	buf.WriteString("</body></html>")
-	w.Write(buf.Bytes())
+	w.Write(buf.Bytes()) //nolint:errcheck // best-effort write to an HTTP response (client may have disconnected)
 }
 
 // --- Utilities ---
@@ -591,7 +591,7 @@ func (sb *SkillBar) shutdown() {
 	sb.mu.Unlock()
 
 	if srv != nil {
-		srv.Close()
+		srv.Close() //nolint:errcheck // best-effort close of the review HTTP server on shutdown
 	}
 }
 
