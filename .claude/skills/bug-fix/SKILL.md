@@ -139,6 +139,11 @@ This sets `Status: fixed` in the analysis file and, if an issue is linked,
 comments and closes it. Use `--status wontfix` or `--status duplicate` when that
 is the honest outcome; those close the issue as *not planned*.
 
+`close` **refuses** unless the report carries a `- **Spec:**` line: solving a bug
+means serving the contract it belongs to. `none — <reason>` is a valid answer
+when a bug genuinely changes no contract; a missing line is not, because that is
+how Step 5 gets skipped rather than decided.
+
 The comment is **public-plane text**: the script runs the SPEC-0358 leak check on
 it and refuses rather than post. Write it for a stranger — what changed and in
 which version, referring to the analysis ID-only.
