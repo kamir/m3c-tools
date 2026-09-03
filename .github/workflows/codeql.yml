@@ -6,11 +6,10 @@ name: CodeQL
 # findings; blocking is the "Require code scanning results" branch-protection
 # setting (see gosec.yml for the knob). So this job is green on master today.
 #
-# build-mode: none — Go is extracted WITHOUT compiling. This sidesteps the cgo
-# build (recorder/menubar need PortAudio) that autobuild would hit on the Linux
-# runner, and is the mode GitHub's own default CodeQL setup uses for Go. If you
-# ever want autobuild-level precision instead, switch to `build-mode: autobuild`
-# and move this job to macos-latest with `brew install portaudio`.
+# build-mode: autobuild on macos-latest + `brew install portaudio` — the installed
+# CodeQL (2.26.x) rejects `build-mode: none` for Go ("Go does not support the none
+# build mode"), so we compile. macOS + PortAudio matches how the whole cgo module
+# (recorder/menubar) builds in the "Build macOS" release job, so autobuild succeeds.
 
 on:
   push:
@@ -27,7 +26,7 @@ permissions:
 jobs:
   analyze:
     name: CodeQL Analyze (Go)
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     permissions:
       contents: read
       security-events: write # upload CodeQL results to Code Scanning
@@ -38,11 +37,14 @@ jobs:
         with:
           go-version: "1.26.6"
 
+      - name: Install PortAudio (cgo dep for the autobuild)
+        run: brew install portaudio
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@6f5948dfacef28e207b48d0905cf90c03365536d # v3.37.9
         with:
           languages: go
-          build-mode: none
+          build-mode: autobuild
           queries: security-extended
 
       - name: Perform CodeQL Analysis
