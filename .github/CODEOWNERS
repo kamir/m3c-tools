@@ -1,0 +1,54 @@
+# CODEOWNERS — an ownership MAP, not an enforced review gate
+#
+# This file exists for REVIEW-ROUTING and ACCOUNTABILITY: it records who is
+# responsible for the trust-critical and release-critical surfaces of this
+# repository, so a change to any of them is automatically routed to that owner
+# for review and there is a named owner of record for each path.
+#
+# It is deliberately a MAP and nothing more. Mandatory two-person review is
+# intentionally NOT (yet) enforced via GitHub branch protection — this is a
+# small team, and a required-reviewer rule with a single effective maintainer
+# blocks its own releases with no second reviewer to unblock them. That is a
+# documented, revisitable decision (H6d), not an oversight. When the team grows
+# a second trusted reviewer, the intended follow-up is to turn on branch
+# protection with CODEOWNERS review REQUIRED on these same paths.
+#
+# Because review is not force-blocked, the release runbook documents the
+# emergency / break-glass release path a solo maintainer uses (the local
+# scripted-release path and the rollback procedure) — see docs/releasing.md.
+#
+# Syntax: gitignore-style patterns, most-specific-last wins. A leading "/"
+# anchors to the repo root; a trailing "/" matches a directory tree.
+
+# ── Trust core: signing, verification, revocation, trust roots ───────────────
+/pkg/skillctl/signing/     @kamir
+/pkg/skillctl/verify/      @kamir
+/pkg/skillctl/trustcore/   @kamir
+/pkg/skillbundle/          @kamir
+
+# ── Registry, scanner, propose (admission + version/trust decisions) ─────────
+/pkg/skillctl/registry/    @kamir
+/pkg/skillctl/scanner/     @kamir
+/pkg/skillctl/propose/     @kamir
+
+# ── The trust CLI and the safe HTTP surface ──────────────────────────────────
+/cmd/skillctl/             @kamir
+/pkg/httpsafe/             @kamir
+
+# ── CI, release build + signing config, supply-chain bootstrap ───────────────
+/.github/workflows/        @kamir
+/.goreleaser.yml           @kamir
+/scripts/release*.sh       @kamir
+/scripts/skillctl-smoke.sh @kamir
+/tools/skillctl-install.sh   @kamir
+/tools/skillctl-install.ps1  @kamir
+
+# ── Trust-root / signing configuration (pinned release public key) ───────────
+/INFRA/                    @kamir
+
+# ── Governance & security documents ──────────────────────────────────────────
+/THREAT_MODEL.md           @kamir
+/SECURITY.md               @kamir
+/COMPATIBILITY.md          @kamir
+/docs/releasing.md         @kamir
+/.github/CODEOWNERS        @kamir
