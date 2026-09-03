@@ -1,0 +1,74 @@
+name: Nightly Fuzz (trust-layer parsers)
+
+# Nightly Go native-fuzzing sweep over the untrusted-input surfaces of the
+# skillctl trust layer (archive readers, semver comparator, event envelope,
+# revocation list, trust-roots + SKILL.md parsers). Each target runs for a bounded
+# time and FAILS the job on any NEW crasher — an input that panics or violates the
+# target's invariant oracle (a path escape, a fail-open verify, an ordering
+# inconsistency).
+#
+# When a target crashes, `go test -fuzz` writes the minimised failing input to
+#   pkg/<...>/testdata/fuzz/<FuzzTarget>/<hash>
+# The fix workflow is: reproduce locally, COMMIT that testdata/fuzz/<FuzzTarget>/
+# seed to the repo, and fix the bug. Once committed the seed is replayed by the
+# ORDINARY `go test` PR gate (no -fuzz needed), so it becomes a permanent
+# regression guard that fails every future PR reintroducing the bug. The nightly
+# job also uploads the crasher as an artifact so it can be retrieved even if the
+# runner is ephemeral.
+#
+# Cheap runner + no PortAudio: every fuzzed package is pure Go stdlib (no cgo), so
+# this runs on ubuntu-latest with just setup-go.
+
+on:
+  schedule:
+    - cron: "27 3 * * *" # nightly at 03:27 UTC
+  workflow_dispatch: {}
+
+# Least privilege: the fuzz job only reads the repo.
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # one target's crasher must not cancel the others
+      matrix:
+        include:
+          - target: FuzzUnpack
+            dir: pkg/skillbundle
+          - target: FuzzExtractTo
+            dir: pkg/skillbundle
+          - target: FuzzCompare
+            dir: pkg/skillctl/semver
+          - target: FuzzEventEnvelope
+            dir: pkg/skillctl/registry
+          - target: FuzzVerifyRevocationList
+            dir: pkg/skillctl/verify
+          - target: FuzzParseTrustRoots
+            dir: pkg/skillctl/verify
+          - target: FuzzParse
+            dir: pkg/skillctl/parser
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.26.6"
+
+      # -run=^$ skips the ordinary unit tests; -fuzz=^<target>$ selects exactly
+      # one fuzz function; a new crasher makes `go test` exit non-zero → job fails.
+      - name: Fuzz ${{ matrix.target }} (${{ matrix.dir }})
+        run: go test -run=^$ -fuzz=^${{ matrix.target }}$ -fuzztime=3m ./${{ matrix.dir }}/
+
+      # On a crash, surface the minimised failing input(s) so a human can commit
+      # them under testdata/fuzz/<target>/ as a permanent PR-gate regression seed.
+      - name: Upload crasher(s)
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: crasher-${{ matrix.target }}
+          path: ${{ matrix.dir }}/testdata/fuzz/${{ matrix.target }}/
+          if-no-files-found: ignore
+          retention-days: 30
