@@ -605,20 +605,43 @@ func Load(path string) (*TrustRoots, error) {
 		return nil, fmt.Errorf("trust-roots: read %s: %w", abs, err)
 	}
 
+	tr, err := ParseTrustRoots(data)
+	if err != nil {
+		return nil, err
+	}
+	tr.Path = abs
+	return tr, nil
+}
+
+// ParseTrustRoots decodes + validates a trust-roots YAML document from an
+// in-memory byte slice. It is the pure, filesystem-free core that Load wraps:
+// Load resolves + reads the file, then hands the bytes here. Splitting the parse
+// out lets a fuzzer drive the (untrusted-input) decoder/validator directly with
+// no disk I/O, and lets callers validate a document they already hold in memory.
+//
+// Behaviour matches the in-file parse Load used to do inline:
+//   - strict decode (KnownFields(true)) — an unknown YAML key is rejected loudly
+//     rather than silently disabling a key (see Load's doc comment);
+//   - FR-0090 IS-T5 managed (enterprise) fail-closed defaults are stamped BEFORE
+//     validate, so the require_signed_governance⇒reviewers invariant sees the
+//     defaulted value;
+//   - validate() runs the full sanity check and hydrates raw pubkey bytes.
+//
+// Path is NOT set here (there is no file) — Load sets it on the returned value.
+func ParseTrustRoots(data []byte) (*TrustRoots, error) {
 	var tr TrustRoots
 	dec := yaml.NewDecoder(strings.NewReader(string(data)))
 	dec.KnownFields(true) // strict: unknown fields → error
 	if err := dec.Decode(&tr); err != nil {
-		return nil, fmt.Errorf("trust-roots: parse %s: %w", abs, err)
+		return nil, fmt.Errorf("trust-roots: parse: %w", err)
 	}
-	tr.Path = abs
 
 	// FR-0090 IS-T5: stamp managed (enterprise) fail-closed defaults BEFORE validate,
 	// so the require_signed_governance⇒reviewers invariant sees the defaulted value.
 	tr.applyManagedDefaults()
 
 	if err := tr.validate(); err != nil {
-		return nil, fmt.Errorf("trust-roots: validate %s: %w", abs, err)
+		return nil, fmt.Errorf("trust-roots: validate: %w", err)
 	}
 	return &tr, nil
 }
