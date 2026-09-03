@@ -1,0 +1,76 @@
+name: gosec (SAST)
+
+# Gate 1 (H1) — gosec static analysis, baseline-then-block.
+#
+# MECHANISM: gosec runs over the whole module, emits SARIF, and uploads it to
+# GitHub Code Scanning. Code Scanning fingerprints each result and does the
+# new-vs-baseline diff NATIVELY — the first upload establishes the baseline (the
+# ~500 pre-existing findings triaged in docs/security/gosec-baseline.md), and
+# every later run surfaces only findings that are NEW relative to that history.
+# The gosec step itself uses `-no-fail`, so this job is ALWAYS green on the
+# existing backlog — it never blocks a build on its own.
+#
+# THE BLOCKING KNOB IS A REPO SETTING, not this file: enable branch protection
+# "Require the code scanning results check to pass" (Settings → Branches, or
+# Settings → Code security → Code scanning → Protection rules) and point it at
+# the `gosec` tool. That is what turns "a new finding appeared" into "the PR is
+# blocked" — exactly like CODEOWNERS, it lives in repo settings, not in YAML.
+# Until it is set, this job still gives you the Code Scanning dashboard + alerts.
+#
+# ALTERNATIVE (not used): an in-CI hard diff against the committed baseline
+# SARIF. Rejected because gosec's SARIF carries no partialFingerprints, so a
+# self-contained diff would have to key on (rule, file, snippet) and would drift
+# across gosec versions (docs/security/gosec-baseline.md flags this). Code
+# Scanning's native fingerprinting is the robust path and adds a dashboard.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+# CD-T6: least-privilege default token for the whole workflow.
+permissions:
+  contents: read
+
+jobs:
+  gosec:
+    name: gosec SAST (SARIF -> Code Scanning)
+    # gosec type-checks the packages it scans; the cgo packages (recorder,
+    # menubar) need PortAudio to typecheck, so run on macOS like the other
+    # cgo-aware jobs (test / skillctl-race / govulncheck) and match how the
+    # committed baseline was generated (whole module, `./...`).
+    runs-on: macos-latest
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to GitHub Code Scanning
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.26.6"
+
+      - name: Install PortAudio (cgo packages must typecheck)
+        run: brew install portaudio
+
+      # Pinned gosec release (CD-T2: an exact version tag, never a floating ref).
+      # Installed via `go install` like golangci-lint/govulncheck in ci.yml (keeps
+      # the third-party ACTION surface minimal — only the SARIF uploader below is
+      # a pinned external action).
+      - name: Install gosec (pinned)
+        run: go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
+
+      # -no-fail: emit findings but exit 0 so the job stays green on the existing
+      # backlog (blocking is done by Code Scanning + branch protection, above).
+      # -track-suppressions: keep #nosec-annotated sites in the SARIF as
+      # `suppressions` so a justified suppression is distinguishable from an
+      # un-triaged finding (same flag used to build the committed baseline).
+      - name: Run gosec -> SARIF
+        run: gosec -no-fail -track-suppressions -fmt sarif -out gosec.sarif ./...
+
+      - name: Upload SARIF to Code Scanning
+        uses: github/codeql-action/upload-sarif@6f5948dfacef28e207b48d0905cf90c03365536d # v3.37.9
+        with:
+          sarif_file: gosec.sarif
+          category: gosec

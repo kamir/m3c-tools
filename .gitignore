@@ -16,6 +16,10 @@
 coverage.*
 *.coverprofile
 profile.cov
+# SAST output (gosec SARIF is generated in CI and uploaded to Code Scanning)
+*.sarif
+# ...but the committed gosec baseline snapshot must stay tracked.
+!docs/security/*.sarif
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
