@@ -221,6 +221,10 @@ func TestDoctorDevices_NoAuth(t *testing.T) {
 	os.Unsetenv("ER1_DEVICE_TOKEN")
 	t.Setenv("ER1_API_KEY", "")
 	os.Unsetenv("ER1_API_KEY")
+	// FR-0096: LoadConfig now falls back to the `aims-core-er1` Keychain item.
+	// On a machine that HAS it, "no auth" is no longer producible by clearing the
+	// environment alone — and HOME=t.TempDir() cannot isolate the Keychain.
+	t.Setenv("M3C_ER1_KEYCHAIN", "off")
 
 	s := doctorDevices()
 	if s.Title != "Device Pairing" {
