@@ -153,7 +153,9 @@ func cmdRetry(args []string) {
 func defaultExportsDBPath() string {
 	home, _ := os.UserHomeDir()
 	dir := filepath.Join(home, ".m3c-tools")
-	os.MkdirAll(dir, 0700)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not create %s: %v\n", dir, err)
+	}
 	return filepath.Join(dir, "exports.db")
 }
 
@@ -575,7 +577,10 @@ func cmdThumbnail(args []string) {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-	os.WriteFile(output, data, 0600)
+	if err := os.WriteFile(output, data, 0600); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: could not write %s: %v\n", output, err)
+		os.Exit(1)
+	}
 	fmt.Printf("Saved %s (%d bytes)\n", output, len(data))
 }
 

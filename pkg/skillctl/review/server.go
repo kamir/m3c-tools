@@ -440,7 +440,10 @@ func (s *Server) handleSeal(w http.ResponseWriter, r *http.Request) {
 		Total:    len(d.Entries),
 	}
 
-	// Write the seal record to the seal store as a minimal record.
+	// Write the seal record to the seal store as a minimal record. The seal is
+	// the trust artifact for a completed review, so persistence failure MUST be
+	// surfaced (never report a 200 for a seal we did not durably write), and the
+	// file must not be world-readable (0600, not 0644).
 	if s.sealStore != nil {
 		sealRecord := delta.SealRecord{
 			SealID:     resp.SealID,
@@ -452,9 +455,14 @@ func (s *Server) handleSeal(w http.ResponseWriter, r *http.Request) {
 			Deferred:   deferred,
 		}
 		sealData, err := json.MarshalIndent(sealRecord, "", "  ")
-		if err == nil {
-			sealPath := fmt.Sprintf("%s/%s.json", s.sealStore.BaseDir, resp.SealID)
-			os.WriteFile(sealPath, sealData, 0644)
+		if err != nil {
+			http.Error(w, "failed to encode seal record", http.StatusInternalServerError)
+			return
+		}
+		sealPath := fmt.Sprintf("%s/%s.json", s.sealStore.BaseDir, resp.SealID)
+		if err := os.WriteFile(sealPath, sealData, 0600); err != nil {
+			http.Error(w, "failed to persist seal record", http.StatusInternalServerError)
+			return
 		}
 	}
 

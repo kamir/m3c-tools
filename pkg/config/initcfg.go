@@ -107,7 +107,9 @@ func CheckAndApplyInitCfg() InitCfgResult {
 
 	// Apply to current process
 	for k, v := range profile.Vars {
-		os.Setenv(k, v)
+		if err := os.Setenv(k, v); err != nil {
+			log.Printf("[config] warning: could not apply %s to the current process: %v", k, err)
+		}
 	}
 
 	// Rename init file so it's not re-processed

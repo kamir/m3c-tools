@@ -17,7 +17,11 @@ func DefaultQueuePath() string {
 		home = "."
 	}
 	dir := filepath.Join(home, ".m3c-tools")
-	os.MkdirAll(dir, 0700)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		// Non-fatal: return the path anyway so the caller's subsequent save()
+		// surfaces the real write error, but don't swallow the signal.
+		fmt.Fprintf(os.Stderr, "queue: could not create %s: %v\n", dir, err)
+	}
 	return filepath.Join(dir, "queue.json")
 }
 
@@ -49,13 +53,14 @@ func NewQueue(path string) *Queue {
 	return q
 }
 
-// Add adds an entry to the queue and persists it.
-func (q *Queue) Add(entry QueueEntry) {
+// Add adds an entry to the queue and persists it. It returns an error if the
+// queue could not be persisted, so an enqueue failure is not silently dropped.
+func (q *Queue) Add(entry QueueEntry) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	entry.QueuedAt = time.Now()
 	q.entries = append(q.entries, entry)
-	q.save()
+	return q.save()
 }
 
 // Entries returns a copy of all queue entries.
@@ -74,21 +79,23 @@ func (q *Queue) Len() int {
 	return len(q.entries)
 }
 
-// Remove removes an entry by ID and persists.
-func (q *Queue) Remove(id string) {
+// Remove removes an entry by ID and persists. Returns the persistence error, if
+// any (nil when the id was not present — nothing changed).
+func (q *Queue) Remove(id string) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	for i, e := range q.entries {
 		if e.ID == id {
 			q.entries = append(q.entries[:i], q.entries[i+1:]...)
-			q.save()
-			return
+			return q.save()
 		}
 	}
+	return nil
 }
 
-// UpdateRetry updates retry metadata for an entry.
-func (q *Queue) UpdateRetry(id string, err error) {
+// UpdateRetry updates retry metadata for an entry. Returns the persistence
+// error, if any (nil when the id was not present).
+func (q *Queue) UpdateRetry(id string, err error) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	for i, e := range q.entries {
@@ -98,18 +105,18 @@ func (q *Queue) UpdateRetry(id string, err error) {
 			if err != nil {
 				q.entries[i].LastError = err.Error()
 			}
-			q.save()
-			return
+			return q.save()
 		}
 	}
+	return nil
 }
 
-// Clear removes all entries.
-func (q *Queue) Clear() {
+// Clear removes all entries. Returns the persistence error, if any.
+func (q *Queue) Clear() error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.entries = nil
-	q.save()
+	return q.save()
 }
 
 // EnqueueFailure creates a QueueEntry from a failed upload and persists
@@ -140,7 +147,10 @@ func EnqueueFailure(queuePath string, videoID string, payload *UploadPayload, ta
 	}
 
 	q := NewQueue(queuePath)
-	q.Add(entry)
+	if err := q.Add(entry); err != nil {
+		fmt.Fprintf(os.Stderr, "enqueue failure: persist entry %s: %v\n", entry.ID, err)
+		return nil
+	}
 
 	// Return a copy with QueuedAt set
 	entries := q.Entries()
@@ -162,16 +172,26 @@ func (q *Queue) load() {
 	}
 }
 
-func (q *Queue) save() {
+// save persists the queue to disk. It returns an error so callers can surface a
+// failed persist instead of silently dropping a retry-queue mutation. The error
+// is also logged to stderr (queue mutations are best-effort at most call sites).
+func (q *Queue) save() error {
 	data, err := json.MarshalIndent(q.entries, "", "  ")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "queue save error: %v\n", err)
-		return
+		return err
 	}
 	// Ensure parent directory exists
 	dir := filepath.Dir(q.path)
 	if dir != "" && dir != "." {
-		os.MkdirAll(dir, 0700)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			fmt.Fprintf(os.Stderr, "queue save error: create %s: %v\n", dir, err)
+			return err
+		}
 	}
-	os.WriteFile(q.path, data, 0600)
+	if err := os.WriteFile(q.path, data, 0600); err != nil {
+		fmt.Fprintf(os.Stderr, "queue save error: write %s: %v\n", q.path, err)
+		return err
+	}
+	return nil
 }

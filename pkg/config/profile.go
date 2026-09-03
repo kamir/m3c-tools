@@ -328,12 +328,16 @@ func (pm *ProfileManager) TestConnection(p *Profile) error {
 	}
 	defer func() {
 		for k, v := range saved {
-			os.Setenv(k, v)
+			if err := os.Setenv(k, v); err != nil {
+				log.Printf("[config] warning: could not restore env %s after connection test: %v", k, err)
+			}
 		}
 	}()
 
 	for k, v := range p.Vars {
-		os.Setenv(k, v)
+		if err := os.Setenv(k, v); err != nil {
+			return fmt.Errorf("apply profile var %s for connection test: %w", k, err)
+		}
 	}
 
 	// SPEC-0143: Device token (loaded at startup) provides auth without API key.
