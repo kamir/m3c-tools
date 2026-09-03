@@ -45,6 +45,23 @@ func NoCredentialRedirect(req *http.Request, via []*http.Request) error {
 	return nil
 }
 
+// NoCrossHostRedirect is a stricter CheckRedirect for trust-critical requests
+// (e.g. the skillctl revoke submission and revocation-HEAD fetch): it caps the
+// chain at MaxRedirects and FAILS CLOSED on any redirect whose host differs from
+// the originating request's host. A validated, allow-listed origin therefore
+// cannot be bounced to an attacker-chosen host by a 30x from the registry (or a
+// MITM on a plain-HTTP RFC1918 hop). Same-host port changes are permitted.
+func NoCrossHostRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= MaxRedirects {
+		return fmt.Errorf("stopped after %d redirects", MaxRedirects)
+	}
+	if len(via) > 0 && !sameHost(req, via[0]) {
+		return fmt.Errorf("refusing cross-host redirect to %q (originating host was %q)",
+			req.URL.Hostname(), via[0].URL.Hostname())
+	}
+	return nil
+}
+
 func sameHost(a, b *http.Request) bool {
 	if a == nil || b == nil || a.URL == nil || b.URL == nil {
 		return false

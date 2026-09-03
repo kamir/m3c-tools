@@ -35,6 +35,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
 )
 
@@ -205,7 +206,11 @@ func runRevoke(args []string, stdout, stderr io.Writer) int {
 	}
 
 	// POST to <registry>/bundles/<digest>/revoke.
-	client := &http.Client{Timeout: *timeout}
+	// The registry origin was already scheme/host-validated by validateRegistryURL
+	// above (https anywhere; plain http only for loopback/RFC1918). NoCrossHostRedirect
+	// fails closed on any 30x that would bounce this trust-path request off the
+	// validated origin onto an attacker-chosen host.
+	client := &http.Client{Timeout: *timeout, CheckRedirect: httpsafe.NoCrossHostRedirect}
 	endpoint := strings.TrimRight(*registryURL, "/") + "/bundles/" + digest + "/revoke"
 
 	body, err := json.Marshal(&req)
@@ -214,6 +219,9 @@ func runRevoke(args []string, stdout, stderr io.Writer) int {
 		return exitGeneric
 	}
 
+	// #nosec G107 -- endpoint host+scheme validated by validateRegistryURL above and
+	// the client refuses cross-host redirects (httpsafe.NoCrossHostRedirect); not
+	// an attacker-controlled taint source.
 	httpReq, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		fmt.Fprintf(stderr, "skillctl revoke: build request: %v\n", err)
