@@ -80,8 +80,8 @@ func TestSweep_RevokedBundle_Quarantined(t *testing.T) {
 	writeSidecarDigest(t, home, "er1-push", "sha256:dead")
 
 	orig := sweepRevokedFn
-	sweepRevokedFn = func(string) (map[string]struct{}, bool) {
-		return map[string]struct{}{"sha256:dead": {}}, true
+	sweepRevokedFn = func(string) (map[string]struct{}, bool, error) {
+		return map[string]struct{}{"sha256:dead": {}}, true, nil
 	}
 	t.Cleanup(func() { sweepRevokedFn = orig })
 

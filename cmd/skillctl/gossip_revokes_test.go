@@ -159,7 +159,7 @@ func TestFetchRevokedWithGossipUnions(t *testing.T) {
 	}
 	writeRevokedCache(home, map[string]struct{}{gd(8): {}})
 
-	set, _ := fetchRevokedWithGossip(home)
+	set, _, _ := fetchRevokedWithGossip(home)
 	if _, ok := set[gd(9)]; !ok {
 		t.Error("gossiped revoke not unioned into the sweep set")
 	}
