@@ -356,6 +356,23 @@ func TestSync_RejectsNonHTTPSEndpoint(t *testing.T) {
 	}
 }
 
+// TestSync_DefaultVerifiesTLS pins the secure-by-default contract behind the
+// gated G402 site: with insecure=false (the default) the built client must NOT
+// skip certificate verification.
+func TestSync_DefaultVerifiesTLS(t *testing.T) {
+	c, err := buildIngestClient("https://ingest.example.com", "", "L", false, io.Discard)
+	if err != nil {
+		t.Fatalf("buildIngestClient (default, secure): unexpected error: %v", err)
+	}
+	tr, ok := c.Client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("transport = %T, want *http.Transport", c.Client.Transport)
+	}
+	if tr.TLSClientConfig != nil && tr.TLSClientConfig.InsecureSkipVerify {
+		t.Fatal("default client must verify TLS (InsecureSkipVerify must be false)")
+	}
+}
+
 func TestSync_TamperedRowNotShipped(t *testing.T) {
 	dev := syncTestDeviceKey(t)
 	ingest := syncTestIngestKey(t)

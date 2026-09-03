@@ -403,8 +403,13 @@ func readDeployEnvStageURL() string {
 
 func newReplayHTTPClient(target string) *http.Client {
 	if target == "local" {
+		// #nosec G402 -- gated: TLS verification is skipped ONLY for target=="local",
+		// whose base URL is the hardcoded loopback https://127.0.0.1:8081
+		// (defaultReplayBaseURL). prod/stage targets fall through to the verifying
+		// client below. The base URL is not caller-overridable — only the --target
+		// selector is — so a public host can never inherit this transport.
 		tr := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // #nosec G402 -- loopback-only (target=="local" ⇒ 127.0.0.1)
 		}
 		return &http.Client{Transport: tr, Timeout: 10 * time.Second}
 	}

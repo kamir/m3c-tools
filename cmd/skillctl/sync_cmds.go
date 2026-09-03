@@ -174,7 +174,7 @@ func buildIngestClient(endpoint, pubkeyPath, logID string, insecure bool, stderr
 		if !isLoopbackHost(u.Hostname()) {
 			return nil, fmt.Errorf("--insecure is only permitted for a loopback endpoint (got host %q)", u.Hostname())
 		}
-		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // loopback-only, gated above
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // loopback-only, gated above // #nosec G402 -- gated: default (no --insecure) verifies; skip permitted only for a loopback endpoint (isLoopbackHost check above fails closed for any other host) and endpoint is already required to be https
 	}
 
 	var pub ed25519.PublicKey
