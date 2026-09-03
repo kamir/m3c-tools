@@ -55,6 +55,26 @@ env:
   GOFLAGS: -mod=readonly
 
 jobs:
+  # 0) DOCS GATE — a skillctl/v* tag push skips `make release` (and therefore
+  #    scripts/check-docs.sh), so the CLI/manual gate is re-run here to close
+  #    that bypass. Scoped to `-cli skillctl`: this workflow releases skillctl,
+  #    so m3c-tools drift must not block it. Holds no signing identity, so it
+  #    does not touch the SLSA L3 isolation argument below.
+  docs-gate:
+    name: skillctl CLI/manual consistency (docaudit)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.26.6"
+
+      - name: Every real skillctl flag documented, every documented flag real
+        run: go run ./cmd/docaudit -cli skillctl
+
   # 1) BUILD — compiles the 5 arches and emits their digests. Holds NO signing
   #    identity (contents: read only): it CANNOT sign provenance, an attestation,
   #    or a blob. The only thing it hands the trusted generator is a base64 string
@@ -62,6 +82,7 @@ jobs:
   build:
     name: Build 5 arches + digests
     runs-on: ubuntu-latest
+    needs: [docs-gate]
     permissions:
       contents: read
     outputs:
