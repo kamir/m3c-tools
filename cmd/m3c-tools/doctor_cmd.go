@@ -352,7 +352,7 @@ func doctorConnectivity() diag.Section {
 				Name: "TLS handshake", Status: diag.Fail, Detail: fmt.Sprintf("%s — %v", tlsAddr, err),
 			})
 		} else {
-			conn.Close()
+			conn.Close() //nolint:errcheck // best-effort close of a diagnostic-only TLS connection
 			s.Checks = append(s.Checks, diag.Check{
 				Name: "TLS handshake", Status: diag.OK,
 				Detail: fmt.Sprintf("%s (%s)", tlsAddr, elapsed.Round(time.Millisecond)),
@@ -377,7 +377,7 @@ func doctorConnectivity() diag.Section {
 		})
 		return s
 	}
-	resp.Body.Close()
+	resp.Body.Close() //nolint:errcheck // best-effort close of the read-only diagnostic response body
 	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
 		s.Checks = append(s.Checks, diag.Check{
 			Name: "ER1 /health", Status: diag.OK,
@@ -425,8 +425,8 @@ func doctorConnectivity() diag.Section {
 		})
 		return s
 	}
-	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
-	resp.Body.Close()
+	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20)) //nolint:errcheck // draining the response body for connection reuse; the data is discarded
+	resp.Body.Close()                                     //nolint:errcheck // best-effort close of the read-only diagnostic response body
 
 	switch resp.StatusCode {
 	case http.StatusOK:
@@ -570,8 +570,8 @@ func doctorPlaud() diag.Section {
 					Detail: fmt.Sprintf("unreachable (%v)", err),
 				})
 			} else {
-				io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
-				resp.Body.Close()
+				io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20)) //nolint:errcheck // draining the response body for connection reuse; the data is discarded
+				resp.Body.Close()                                     //nolint:errcheck // best-effort close of the read-only diagnostic response body
 				if resp.StatusCode >= 200 && resp.StatusCode < 400 {
 					s.Checks = append(s.Checks, diag.Check{
 						Name: "Plaud sync API", Status: diag.OK,
