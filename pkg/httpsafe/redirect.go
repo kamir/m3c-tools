@@ -55,9 +55,17 @@ func NoCrossHostRedirect(req *http.Request, via []*http.Request) error {
 	if len(via) >= MaxRedirects {
 		return fmt.Errorf("stopped after %d redirects", MaxRedirects)
 	}
-	if len(via) > 0 && !sameHost(req, via[0]) {
-		return fmt.Errorf("refusing cross-host redirect to %q (originating host was %q)",
-			req.URL.Hostname(), via[0].URL.Hostname())
+	if len(via) > 0 {
+		if !sameHost(req, via[0]) {
+			return fmt.Errorf("refusing cross-host redirect to %q (originating host was %q)",
+				req.URL.Hostname(), via[0].URL.Hostname())
+		}
+		// Refuse an https→http downgrade even on the same host: a redirect must
+		// not drop a trust-critical request onto plaintext (MITM / suppression).
+		if via[0].URL != nil && req.URL != nil && via[0].URL.Scheme == "https" && req.URL.Scheme != "https" {
+			return fmt.Errorf("refusing https→%s downgrade redirect on host %q",
+				req.URL.Scheme, req.URL.Hostname())
+		}
 	}
 	return nil
 }

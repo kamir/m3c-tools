@@ -40,7 +40,7 @@ func NewSealStore() (*SealStore, error) {
 		return nil, fmt.Errorf("cannot determine home directory: %w", err)
 	}
 	dir := filepath.Join(home, ".m3c-tools", "skill-seals")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil { // 0700: trust-seal store, owner-only
 		return nil, fmt.Errorf("creating seal store directory: %w", err)
 	}
 	return &SealStore{BaseDir: dir}, nil
@@ -48,7 +48,7 @@ func NewSealStore() (*SealStore, error) {
 
 // NewSealStoreAt creates a SealStore at a specific directory (useful for testing).
 func NewSealStoreAt(dir string) (*SealStore, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil { // 0700: trust-seal store, owner-only
 		return nil, fmt.Errorf("creating seal store directory: %w", err)
 	}
 	return &SealStore{BaseDir: dir}, nil
@@ -72,7 +72,7 @@ func (s *SealStore) Seal(inventory *model.Inventory, sealedBy string) (*SealReco
 
 	// Write inventory file.
 	invPath := filepath.Join(s.BaseDir, fmt.Sprintf("inventory-%s.json", ts))
-	if err := os.WriteFile(invPath, invData, 0o644); err != nil {
+	if err := os.WriteFile(invPath, invData, 0o600); err != nil { // 0600: trust seal, not world-readable
 		return nil, fmt.Errorf("writing inventory: %w", err)
 	}
 
@@ -92,7 +92,7 @@ func (s *SealStore) Seal(inventory *model.Inventory, sealedBy string) (*SealReco
 		return nil, fmt.Errorf("marshaling seal record: %w", err)
 	}
 	sealPath := filepath.Join(s.BaseDir, fmt.Sprintf("seal-%s.json", ts))
-	if err := os.WriteFile(sealPath, sealData, 0o644); err != nil {
+	if err := os.WriteFile(sealPath, sealData, 0o600); err != nil { // 0600: trust seal, not world-readable
 		return nil, fmt.Errorf("writing seal record: %w", err)
 	}
 

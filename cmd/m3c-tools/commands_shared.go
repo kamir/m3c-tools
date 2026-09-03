@@ -501,7 +501,11 @@ func cmdUpload(args []string) {
 		fmt.Fprintf(os.Stderr, "Upload error: %v\n", err)
 		// ER1 failure detection: queue failed upload for retry
 		entry := er1.EnqueueFailure(queuePath, videoID, payload, tags, err)
-		fmt.Fprintf(os.Stderr, "Queued for retry: %s → %s\n", entry.ID, queuePath)
+		if entry != nil {
+			fmt.Fprintf(os.Stderr, "Queued for retry: %s → %s\n", entry.ID, queuePath)
+		} else {
+			fmt.Fprintf(os.Stderr, "WARNING: retry-queue write failed; upload NOT queued (%s)\n", queuePath)
+		}
 		os.Exit(1)
 	}
 

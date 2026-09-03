@@ -34,7 +34,7 @@ Active findings by rule (highest first):
 | G703  |  52 | Errors unhandled (audit variant) | Bulk-defer with G104. |
 | G115  |  45 | Integer overflow on conversion | Bulk-defer. Concentrated in WAV/audio byte packing (`byte(v>>8)` — intended truncation). |
 | G204  |  42 | Subprocess launched with variable | Bulk-defer. whisper / ffmpeg / tool wrappers; args are program-controlled, review for injection. |
-| G301/G302/G306 | 79 | Poor file/dir permissions | Bulk-defer; the trust-seal 0644→0600 was fixed in this PR. Re-audit any 0644/0777 on secret-bearing paths. |
+| G301/G302/G306 | 79 | Poor file/dir permissions | Bulk-defer; BOTH trust-seal write paths (review-server `handleSeal` + scanner `delta.SealStore.Seal`) were tightened 0644→0600 (dir 0755→0700) in this PR. Re-audit any 0644/0777 on secret-bearing paths. |
 | G706  |  22 | (audit) | Bulk-defer. |
 | **G402** | **14** | **TLS InsecureSkipVerify** | **Partly triaged (see below).** The 4 named trust-path sites are annotated + suppressed. The remaining 14 are other clients (er1/upload, plaud, pocket, health-check) that share the same loopback-gated `VerifySSL`/`ER1_VERIFY_SSL` pattern — should be verified + annotated in a follow-up. |
 | G704  |   6 | Variable used as HTTP request URL (SSRF surface) | Partly triaged. The revoke path is validated (`validateRegistryURL`) + cross-host-redirect-locked in this PR; the rest are operator-configured registry/ER1 URLs — review each for origin constraints. |
