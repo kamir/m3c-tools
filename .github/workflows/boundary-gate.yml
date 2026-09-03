@@ -8,6 +8,14 @@ name: boundary-gate
 # gate can never see, because it is posted through the API rather than committed.
 # Both sides' fixtures run here: a leak gate that silently stops flagging still
 # reads green, so it is asserted from the failing side on every push.
+#
+# id-xref-lint enforces the other half of SPEC-0358: a public-plane reference into
+# the private plane must be ID-ONLY ("implements SPEC-NNNN"), never a path or a
+# document filename. Its resolution check needs the private registry, which public
+# CI does not have — so here it runs FORMAT-ONLY and says so in its own output.
+# That half is still worth gating: a glued `SPEC-NNNN-some-private-doc.md` leaks a
+# private filename whether or not the id resolves. (Written with NNNN on purpose —
+# a real four-digit id here would be the very violation this step rejects.)
 
 on:
   push:
@@ -32,3 +40,9 @@ jobs:
 
       - name: bugtracker fixtures (the post-gate refuses to publish a leak)
         run: bash scripts/bugtracker.test.sh
+
+      - name: id-xref-lint (public->private references are id-only)
+        run: bash tools/id-xref-lint.sh
+
+      - name: id-xref-lint fixtures (including the registry-absent degrade)
+        run: bash tools/id-xref-lint.test.sh
