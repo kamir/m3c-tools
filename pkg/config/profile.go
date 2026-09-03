@@ -7,6 +7,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -206,9 +207,24 @@ func (pm *ProfileManager) forceSwitchProfileLocked(name string, p *Profile) erro
 }
 
 // ApplyProfile sets all environment variables from the profile using os.Setenv.
-// Existing env vars are overwritten to ensure a clean switch.
+// Existing env vars are overwritten to ensure a clean switch — the profile is the
+// target selector, and a stale ER1_API_URL left over in someone's shell must not
+// quietly defeat a profile switch.
+//
+// The ONE exception is a placeholder (FR-0096): "your-api-key-here", "changeme",
+// the demo credential, or the empty string are not values, they are the profile
+// saying "nothing stored here" — usually on purpose, because the real key belongs
+// in the Keychain and not in a plaintext .env. Letting such a token overwrite a
+// deliberately exported credential replaced a working key with one the very next
+// function then recognises as unusable, and every key-authenticated write route
+// failed with an HTML 400 that looked like a server fault.
 func (pm *ProfileManager) ApplyProfile(p *Profile) error {
 	for k, v := range p.Vars {
+		if cur, set := os.LookupEnv(k); set && IsPlaceholderKey(v) && !IsPlaceholderKey(cur) {
+			// Name the variable, never the value.
+			log.Printf("[config] %s: keeping the value from the environment — profile %q has a placeholder", k, p.Name)
+			continue
+		}
 		if err := os.Setenv(k, v); err != nil {
 			return fmt.Errorf("setenv %s: %w", k, err)
 		}

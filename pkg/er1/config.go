@@ -3,6 +3,7 @@
 package er1
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -11,7 +12,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
+	"os/user"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -79,9 +83,15 @@ func applyTLSVerificationPolicy(cfg *Config) {
 
 // hasDeviceTokenAuth reports whether device-token (Bearer) auth is available
 // either via the ER1_DEVICE_TOKEN env var or a persisted token (OS keychain or
-// the encrypted fallback file). When a device token is available, the X-API-KEY
-// fallback path is never used (see AuthHeaders) — so any ER1_API_KEY value,
-// including placeholders, is irrelevant and must NOT produce a FATAL warning.
+// the encrypted fallback file). On the UPLOAD path a device token makes the
+// X-API-KEY fallback unused (see AuthHeaders), so any ER1_API_KEY value —
+// placeholders included — is irrelevant there and must NOT produce a FATAL
+// warning.
+//
+// FR-0096: that is true of /upload_2, not of the whole API. The /memory PATCH
+// route enforces CSRF for Bearer-only requests and exempts API-key clients, so
+// there the key is the ONLY auth that works and a device token cannot stand in
+// for it. Do not read this function as "auth is covered".
 func hasDeviceTokenAuth() bool {
 	if os.Getenv("ER1_DEVICE_TOKEN") != "" {
 		return true
@@ -122,11 +132,16 @@ func LoadConfig() *Config {
 	// BUG-0137 + BUG-0163: refuse to use a placeholder API key against a
 	// non-local URL — but only when the API key would actually be sent.
 	// Device token (SPEC-0127) is the primary auth method and takes
-	// precedence in AuthHeaders(). When a device token is available, the
-	// X-API-KEY fallback path is dead-code, so any value (placeholder,
-	// real, empty) in ER1_API_KEY is irrelevant: clear it silently. The
-	// FATAL warning is only meaningful when the API key WOULD be the
-	// active auth mechanism (i.e., no device token available).
+	// precedence in AuthHeaders(), so on the upload path a placeholder is
+	// merely useless and gets cleared silently. The FATAL warning is only
+	// meaningful when the API key WOULD be the active auth mechanism.
+	//
+	// FR-0096 corrects the old claim that the X-API-KEY path is "dead-code"
+	// whenever a device token exists: on the /memory PATCH route the key is
+	// NOT a fallback but the only auth form that clears CSRF (see the note in
+	// PatchMemoryCurrentTime). A missing key there is a hard failure — an
+	// HTML 400 that reads like a server fault — which is why the Keychain
+	// fallback below runs regardless of the device token.
 	deviceToken := hasDeviceTokenAuth()
 	if config.IsBlockingPlaceholder(cfg.APIKey, cfg.APIURL) {
 		if !deviceToken {
@@ -137,11 +152,96 @@ func LoadConfig() *Config {
 		}
 		cfg.APIKey = ""
 	}
+	// FR-0096: last link of the documented credential chain — Keychain → Secret
+	// Manager → file. Every other credential loader in this binary already reads
+	// the same `aims-core-er1` item (pkg/session, pkg/skillctl/artifactauth);
+	// LoadConfig was the one place where the chain stopped at the environment,
+	// and it is the place all uploads and patches go through. Only consulted
+	// when nothing usable came from the environment, so an explicit key and the
+	// localhost demo credential both still win.
+	if cfg.APIKey == "" {
+		if k := cachedKeychainAPIKey(); k != "" {
+			keychainSourceOnce.Do(func() {
+				log.Printf("[er1] API key resolved from the macOS Keychain (%s)", keychainService)
+			})
+			cfg.APIKey = k
+		}
+	}
 	// BUG-0093 + SPEC-0143: Only warn when NO auth is available at all.
 	if cfg.APIKey == "" && !deviceToken {
 		log.Println("[er1] WARNING: No authentication configured — log in with 'm3c-tools login' or set ER1_API_KEY in your profile.")
 	}
 	return cfg
+}
+
+// keychainService is the macOS Keychain service name holding the ER1 maindrec
+// key. Add or rotate it with:
+//
+//	security add-generic-password -s aims-core-er1 -a "$USER" -w '<key>' -U
+const keychainService = "aims-core-er1"
+
+var (
+	// keychainLookup is a package variable so tests can exercise the precedence
+	// without a real Keychain. Production always points at keychainAPIKey.
+	keychainLookup = keychainAPIKey
+
+	keychainOnce       sync.Once
+	keychainCached     string
+	keychainSourceOnce sync.Once
+)
+
+// cachedKeychainAPIKey resolves the key at most once per process. LoadConfig is
+// called from several startup paths (PLM sync, retry scheduler, menubar init),
+// and each miss would otherwise spawn another subprocess.
+//
+// The M3C_ER1_KEYCHAIN=off switch is honoured HERE rather than inside the lookup,
+// because the cache would otherwise defeat it: once any earlier call has resolved
+// a key, a later check at lookup time never runs again. It mirrors
+// M3C_TOKEN_STORE=file for the device token, and has two uses — a test that must
+// observe "no credential configured" on a developer machine that HAS the item
+// (HOME=t.TempDir() cannot isolate the Keychain), and an operator who wants a run
+// to use strictly what the environment gives it.
+func cachedKeychainAPIKey() string {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("M3C_ER1_KEYCHAIN")), "off") {
+		return ""
+	}
+	keychainOnce.Do(func() { keychainCached = keychainLookup() })
+	return keychainCached
+}
+
+// keychainAPIKey reads the ER1 key from the macOS Keychain.
+//
+// Three deliberate choices: the ABSOLUTE /usr/bin/security, so a `security`
+// planted on PATH cannot be run instead (same reasoning as
+// pkg/skillctl/artifactauth); a TIMEOUT, because a hung credential lookup inside
+// a launchd run would be worse than a missing key; and a fallback from the
+// account-qualified query to the service-only one, since the item may have been
+// added either way. Returns "" on any failure — the caller then behaves exactly
+// as before this change.
+func keychainAPIKey() string {
+	if runtime.GOOS != "darwin" {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	queries := [][]string{}
+	if u, err := user.Current(); err == nil && u.Username != "" {
+		queries = append(queries, []string{"find-generic-password", "-s", keychainService, "-a", u.Username, "-w"})
+	}
+	queries = append(queries, []string{"find-generic-password", "-s", keychainService, "-w"})
+
+	for _, q := range queries {
+		out, err := exec.CommandContext(ctx, "/usr/bin/security", q...).Output()
+		if err != nil {
+			continue
+		}
+		// A placeholder in the Keychain is no better than one in a profile.
+		if k := strings.TrimSpace(string(out)); k != "" && !config.IsPlaceholderKey(k) {
+			return k
+		}
+	}
+	return ""
 }
 
 // MemoryItemURL returns the ER1 memory-viewer URL for a document:
