@@ -66,7 +66,8 @@ scripts/bugtracker.sh <command> [args]
 
 | Command | Purpose |
 |---------|---------|
-| `next-id [BUG\|FR] [--no-fetch]` | Next free id of that kind (default `BUG`). Use it instead of counting files: see [Allocating an id](#allocating-an-id). |
+| `next-id [BUG\|FR] [--no-fetch]` | Next free id of that kind (default `BUG`). Use it instead of counting files — see [Allocating an id](#allocating-an-id). |
+| `claim <ID>` | Record the id in the shared slot table. **This** is what allocates it. |
 | `path <ID>` | Resolve the analysis file. |
 | `status <ID> [STATUS]` | Read, or set, the canonical status. |
 | `issue <ID>` | The linked issue reference, or empty for a private-only item. |
@@ -103,11 +104,28 @@ FR-0006
 `--no-fetch` skips the network; the answer is then only as fresh as your last
 pull.
 
-> **This is mitigation, not a fix.** Allocation is still a *read*: two sessions
-> asking in the same moment still get the same number, because nothing records
-> that the first one took it. The durable answer is to make allocation a write.
-> the slot table that already governs SPEC ids does exactly that, and extending
-> it to FR and BUG is tracked separately.
+### Claiming it
+
+`next-id` only **reads**. Two sessions asking in the same moment still get the
+same number, because reading a ceiling records nothing — that is exactly how one
+id was handed out twice. The write is a separate step:
+
+```bash
+scripts/bugtracker.sh next-id FR          # FR-0105  (a ceiling, not a claim)
+# … write the report file …
+scripts/bugtracker.sh claim FR-0105       # now it is allocated
+```
+
+`claim` appends the id and its **filename** to the shared slot table named by
+`$M3C_SLOT_TABLE`, and refuses when the number already belongs to a different
+file — naming who holds it, and that the later one yields.
+
+Two honest limits:
+
+- It is a separate verb because a slot row carries the **filename**, which does
+  not exist at `next-id` time. Claiming earlier could only reserve a placeholder.
+- The claim is durable only once the slot table is **committed**. Until then it
+  lives in one working copy — the narrower carrier the rule warns about.
 
 ---
 
