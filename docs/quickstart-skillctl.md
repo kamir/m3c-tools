@@ -132,6 +132,71 @@ described in [Windows release verification](releasing-skillctl-windows.md).
 
 ---
 
+## 1c. Stage 2: run our CI on your own machine (enterprise gate)
+
+When stage 1 is green, the next question is not "does it build" but **"would this tree pass
+the gates we merge and release on?"** That is stage 2. It runs every CI gate that can honestly
+run on a laptop, never fails fast, and ends with a PASS / FAIL / SKIP **trust report**.
+
+**Windows (PowerShell):**
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass -Force
+irm https://raw.githubusercontent.com/kamir/m3c-tools/master/scripts/skillctl-enterprise-test.ps1 | iex
+```
+
+**macOS / Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/master/scripts/skillctl-enterprise-test.sh | bash
+```
+
+| Gate | What it proves | CI counterpart |
+|---|---|---|
+| `stage1` | builds, tests pass, CLI answers | the section above |
+| `vet` | no `go vet` finding | `ci.yml` Lint & Vet |
+| `lint` | golangci-lint clean (pinned v2.13.2) | `ci.yml` Lint & Vet |
+| `mod-tidy` | `go mod tidy` is a no-op | `ci.yml` CD-T4 |
+| `docaudit` | every real CLI flag documented, every documented flag real | `ci.yml` docs-gate |
+| `prose` | no U+2014 in the tracked tree | `ci.yml` prose-gate |
+| `pins` | every pinned install one-liner resolves, digests match | `pin-guard` and BUG-0215 |
+| `boundary` | the public/private plane boundary holds | `boundary-gate.yml` |
+| `coverage` | the `.testcoverage.yml` ratchet over the trust surface | `coverage-gate.yml` |
+| `govulncheck` | no CVE reachable from our code (pinned v1.7.0) | `ci.yml` govulncheck |
+| `gosec` | no **new** SAST finding against the committed baseline | `gosec-diff-gate.yml` |
+| `gitleaks` | no secret in the full history | `ci.yml` gitleaks |
+| `trust-surface` | the whole trust surface, whole-package, no allow-list | `windows-gate.yml` |
+| `lifecycle` | author, sign, verify, trust, and a tampered bundle **refused** | `skillctl-windows-smoke.yml` |
+
+Flags: `--full` / `-Full` widens the Go gates from the skillctl trust surface to `./...`,
+`--no-install` / `-NoInstall` forbids installing a missing tool, `--strict` / `-Strict` makes a
+skipped gate fail the run, `--skip-stage1` / `-SkipStage1` skips the build-and-test stage.
+
+**Three things this report deliberately does not do.**
+
+*It does not install tools behind your back without saying so.* golangci-lint, gosec and
+go-test-coverage are fetched at the versions CI pins, into `$(go env GOPATH)/bin`, and the run
+says so. gitleaks is never auto-installed: CI verifies its release tarball against a pinned
+SHA-256 before running it, and a convenience script should not fake that. Missing tool, `SKIP`.
+
+*It does not count a skip as a pass.* A gate that could not run says `SKIP` and the verdict
+line reads `PASS with N skipped`. Use `--strict` when you want the report to be evidence.
+
+*It is not the release.* SLSA provenance, cosign/OIDC signing, Code Scanning ingestion and the
+cross-compile matrix exist only server-side. A green report here is not a substitute for a
+green PR.
+
+**One Windows detail worth knowing.** A shipping Windows build ignores `$HOME` for the
+trust-root paths on purpose, because an environment variable is attacker-settable. The
+hermetic trust tests inject `$HOME`, so on Windows they only run for real under
+`-tags allow_home_override_test`. Stage 1 runs the untagged suite (shipping behaviour); the
+`trust-surface` gate here runs the tagged one, and the `lifecycle` gate builds its sandbox
+binary with that tag so the proof can never touch your real `%USERPROFILE%\.claude`. On macOS
+and Linux no tag is needed: `$HOME` is honored there, and the lifecycle proof is
+[`scripts/skillctl-quickstart-unix.sh`](https://github.com/kamir/m3c-tools/blob/master/scripts/skillctl-quickstart-unix.sh),
+the twin of the Windows
+[`scripts/skillctl-quickstart-windows.ps1`](https://github.com/kamir/m3c-tools/blob/master/scripts/skillctl-quickstart-windows.ps1).
+
+---
+
 ## 2. Create your author identity
 
 A skill is trusted because it's **signed**. Generate your ed25519 keypair once:
@@ -284,6 +349,7 @@ intents*, and it verifies offline, no authority in the path.
 
 - **Every command, flag and exit code:** [skillctl manual](manual-skillctl.md)
 - **Build it yourself and run the suite:** the [source self-test](#1b-optional-prove-it-on-your-own-machine-source-self-test) one-liners above
+- **Run our CI on your own machine:** the [enterprise gate](#1c-stage-2-run-our-ci-on-your-own-machine-enterprise-gate) and its trust report
 - **Capture the memory your agents reason over:** [Quickstart: m3c-tools](quickstart-m3c-tools.md)
 - **The full lifecycle & governance model** lives behind `skillctl help`: it groups commands
   by capability (signing, trust roots, install, agent identity, registry, transparency log,

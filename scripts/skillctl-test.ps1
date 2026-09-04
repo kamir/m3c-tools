@@ -276,6 +276,6 @@ Set-Result 'CLI smoke' 'PASS'
 Write-Summary
 if ($script:Failed) { exit 1 }
 Write-Host 'skillctl builds and tests clean on this machine.'
-Write-Host 'Next: the stage 2 enterprise gate (lint, govulncheck, gosec, coverage, e2e).'
+Write-Host 'Next: stage 2, the local CI gate: scripts\skillctl-enterprise-test.ps1'
 Write-Host ''
 exit 0
