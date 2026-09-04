@@ -84,7 +84,7 @@ that names it.
 ./scripts/bugtracker.sh next-id FR      # -> FR-0096  (a ceiling, not a claim)
 ```
 
-Write the file, then **claim the number** — reading a ceiling allocates nothing,
+Write the file, then **claim the number**, reading a ceiling allocates nothing,
 and two sessions asking at the same moment get the same answer:
 
 ```bash
