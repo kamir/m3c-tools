@@ -614,9 +614,10 @@ Die vollständige Kette prüft mehr als die Autorensignatur: Registry-Signatur, 
 Governance-Level, Tenant-Scope. Offline und ohne Registry können Sie davon nur die
 Autorensignatur prüfen. Der dafür vorgesehene portable Weg (`skillctl verify --bundle` mit
 einer `BundleMeta`-Hülle, oder ein `export-verification-kit`) setzt voraus, dass das Bundle
-einmal durch ein Registry gelaufen ist: die Hülle `<name>.skbmeta.json` entsteht beim Admit.
-Ein frisch gepacktes, sauber signiertes Bundle lässt sich heute nicht in ein solches Kit
-verwandeln.
+einmal durch ein Registry gelaufen ist: die Hülle `<name>.skbmeta.json` entsteht beim Admit,
+kein Kommando erzeugt sie lokal. Ein frisch gepacktes, sauber signiertes Bundle lässt sich
+deshalb nicht in ein solches Kit verwandeln, und die Fehlermeldung sagt inzwischen, woher die
+Hülle stattdessen kommt.
 
 ### 3.3 Von Hand entpackte Skills sind stumm
 

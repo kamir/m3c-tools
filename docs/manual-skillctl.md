@@ -1183,6 +1183,14 @@ skillctl export-verification-kit --bundle <file.skb> --out <dir> [flags]
 Builds a portable, offline verification kit that a third party can check with no network and
 no trust in you.
 
+**Prerequisite, and it is easy to miss:** the kit is built around the `BundleMeta` envelope
+(`<name>.skbmeta.json`), which carries the author, registry and governance signatures and
+comes into existence when the bundle is **admitted to a registry**. No verb produces it
+locally, so a bundle that has only been packed and signed cannot be turned into a kit yet.
+Fetch the envelope from the registry the bundle was admitted to, or pass it with `--meta`.
+Offline, without it, the available check is `verify-sig` against the author key, which proves
+authorship and nothing about governance, revocation or tenant scope (BUG-0215).
+
 | Flag | Purpose |
 |------|---------|
 | `-bundle` | Signed `.skb` to package. **Required.** |

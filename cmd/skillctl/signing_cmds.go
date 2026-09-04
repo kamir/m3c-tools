@@ -137,7 +137,14 @@ func runSign(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return exitGeneric
 	}
+	// BUG-0213: this is the bundle digest, the SHA-256 of the .skb bytes, and it
+	// is the value every later step wants. `pack` prints a DIFFERENT one (the
+	// manifest digest), and nothing used to say which was which; the wrong value
+	// does not fail here, it fails much later at the consumer as
+	// "gate 4: no attestation ...", which points at a different problem entirely.
+	// The `digest: <hex>` shape is unchanged so existing parsers keep working.
 	fmt.Fprintf(stdout, "digest: %s\n", digestHex)
+	fmt.Fprintf(stdout, "        ^ bundle digest: use this for `attest`, `publish --digest` and `revoke --digest`\n")
 	fmt.Fprintf(stdout, "signature: %s\n", sigPath)
 	return exitOK
 }

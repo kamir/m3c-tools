@@ -108,7 +108,12 @@ func runPack(args []string, stdout, stderr io.Writer) int {
 		return exitGeneric
 	}
 
-	fmt.Fprintf(stdout, "bundle_digest: %s\n", digest)
+	// BUG-0213: `pack` and `sign` print two different SHA-256 values for the same
+	// file, and the one that belongs in `attest` / `publish --digest` /
+	// `revoke --digest` is the one SIGN prints. Say so at both ends. The field
+	// names and their positions are unchanged, so anything parsing
+	// `^bundle_digest:` keeps working; only a trailing note is added.
+	fmt.Fprintf(stdout, "bundle_digest: %s  (manifest digest; NOT the value attest/publish/revoke take)\n", digest)
 	fmt.Fprintf(stdout, "output:        %s\n", in.outFile)
 	if len(in.manifest.DataDependencies) > 0 {
 		fmt.Fprintf(stdout, "data_scopes:   %d declared (author-signed, in bundle.json)\n", len(in.manifest.DataDependencies))

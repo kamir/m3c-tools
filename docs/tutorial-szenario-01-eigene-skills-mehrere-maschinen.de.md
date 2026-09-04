@@ -445,7 +445,8 @@ Widerrufsprüfung, keinen Tenant-Scope, und keine spätere Nachprüfbarkeit (sie
 Das ist ein Notweg, kein Regelweg. Der dafür vorgesehene portable Weg,
 `skillctl verify --bundle` mit einer `BundleMeta`-Hülle, setzt voraus, dass das Bundle einmal
 durch ein Registry gelaufen ist: die Hülle `<name>.skbmeta.json` entsteht beim Admit, und
-`export-verification-kit` kann sie heute nicht aus einem frisch signierten Bundle erzeugen.
+`export-verification-kit` kann sie nicht erzeugen, es baut das Kit nur um sie herum. Das
+Kommando sagt das inzwischen selbst und nennt `skillctl registry show <digest>` als Bezugsquelle.
 
 ---
 
