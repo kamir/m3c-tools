@@ -3,6 +3,7 @@ package main
 // `skillctl peer`: SPEC-0359 D2 peer discovery + trust pinning.
 //
 //	peer add <name> <locator> --pubkey <b64> --pin sha256:<hex> [--floor green|yellow]
+//	                          [--signer <reviewer-id>:<b64>]... [--quorum <n>]
 //	peer ls
 //	peer verify <name>          # dry-run the §7 gauntlet against the peer's pinned key
 //	peer rm <name>
@@ -71,6 +72,9 @@ func runPeerAdd(args []string, stdout, stderr io.Writer) int {
 	pin := fs.String("pin", "", "Peer's trust-root fingerprint sha256:<hex> (verified out-of-band; REQUIRED).")
 	floor := fs.String("floor", "green", "governance_minimum for this peer: green | yellow.")
 	contributes := fs.Bool("contributes-revokes", false, "Union this peer's SIGNED revoke events into the local revoked set (`revoke feed --gossip`). Set ONLY for a governance-trusted peer: bounds revoke-DoS.")
+	var signers multiFlag
+	fs.Var(&signers, "signer", "Reviewer whose attestations count for this peer, as <reviewer-id>:<pubkey_b64> (repeatable). Omit when the publisher and the reviewer are the same key.")
+	quorum := fs.Int("quorum", 0, "Number of DISTINCT pinned signers that must attest at or above the floor (default 1). Requires at least that many --signer entries.")
 	if err := fs.Parse(reorderFlagArgs(fs, args)); err != nil {
 		return 2
 	}
@@ -100,7 +104,20 @@ func runPeerAdd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "peer add: %v\n", err)
 		return 1
 	}
-	pe := registry.Peer{Name: name, Locator: locator, PubKeyB64: *pubB64, Fingerprint: *pin, GovernanceMinimum: *floor, ContributesRevokes: *contributes}
+	parsed, perr := parseSignerFlags(signers)
+	if perr != nil {
+		fmt.Fprintf(stderr, "peer add: %v\n", perr)
+		return 2
+	}
+	if *quorum > 1 && len(parsed) < *quorum {
+		fmt.Fprintf(stderr, "peer add: --quorum %d needs at least %d --signer entries, got %d\n", *quorum, *quorum, len(parsed))
+		return 2
+	}
+	pe := registry.Peer{
+		Name: name, Locator: locator, PubKeyB64: *pubB64, Fingerprint: *pin,
+		GovernanceMinimum: *floor, ContributesRevokes: *contributes,
+		GovernanceQuorum: *quorum, Signers: parsed,
+	}
 	if err := peers.AddPeer(pe); err != nil {
 		fmt.Fprintf(stderr, "peer add: %v\n", err)
 		return 1
@@ -111,8 +128,45 @@ func runPeerAdd(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "pinned peer %q → %s\n", name, locator)
 	fmt.Fprintf(stdout, "  fingerprint: %s (matched)\n", pe.Fingerprint)
+	if len(pe.Signers) > 0 {
+		for _, sg := range pe.Signers {
+			fmt.Fprintf(stdout, "  signer:      %s\n", sg.ReviewerID)
+		}
+		fmt.Fprintf(stdout, "  quorum:      %d of %d pinned signer(s)\n", maxInt(pe.GovernanceQuorum, 1), len(pe.Signers))
+	} else {
+		fmt.Fprintln(stdout, "  signer:      (none pinned: only this registry key may attest)")
+	}
 	fmt.Fprintf(stdout, "  pull with:   skillctl pull --registry %s\n", locator)
 	return 0
+}
+
+// parseSignerFlags turns --signer <reviewer-id>:<pubkey_b64> into pinned signers.
+// The id is split on the LAST colon, because a reviewer id legitimately carries
+// one (id:alice@org) while base64 never does.
+func parseSignerFlags(raw []string) ([]registry.Signer, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	out := make([]registry.Signer, 0, len(raw))
+	for _, r := range raw {
+		i := strings.LastIndex(r, ":")
+		if i <= 0 || i == len(r)-1 {
+			return nil, fmt.Errorf("--signer %q is not <reviewer-id>:<pubkey_b64>", r)
+		}
+		id, key := strings.TrimSpace(r[:i]), strings.TrimSpace(r[i+1:])
+		if id == "" || key == "" {
+			return nil, fmt.Errorf("--signer %q is not <reviewer-id>:<pubkey_b64>", r)
+		}
+		out = append(out, registry.Signer{ReviewerID: id, PubKeyB64: key})
+	}
+	return out, nil
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func runPeerLs(args []string, stdout, stderr io.Writer) int {
@@ -129,6 +183,9 @@ func runPeerLs(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintln(stdout, strings.Repeat("-", 110))
 	for _, pe := range peers.Peers {
 		fmt.Fprintf(stdout, "%-16s %-40s %-8s %s\n", pe.Name, pe.Locator, strOr(pe.GovernanceMinimum, "green"), pe.Fingerprint)
+		for _, sg := range pe.Signers {
+			fmt.Fprintf(stdout, "%-16s   signer %s\n", "", sg.ReviewerID)
+		}
 	}
 	return 0
 }

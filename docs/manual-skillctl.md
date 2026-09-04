@@ -309,6 +309,8 @@ trust-on-first-use window.
 | `--pubkey <b64>` | The peer's ed25519 signing key, base64. **Required.** |
 | `--pin sha256:<hex>` | The peer's trust-root fingerprint, verified out-of-band. **Required**: `add` fails if it does not match `--pubkey`. |
 | `--floor green\|yellow` | `governance_minimum` for this peer. |
+| `--signer <reviewer-id>:<b64>` | A reviewer whose attestations count for this peer, as `id:alice@org:<pubkey_b64>` (repeatable). Omit it when the publisher and the reviewer are the **same** key: without any signer the registry key itself is the only acceptable attester (the D2 model). |
+| `--quorum <n>` | How many **distinct** pinned signers must attest at or above the floor (default `1`). Refused unless at least that many `--signer` entries are given. |
 | `--contributes-revokes` | Union this peer's **signed** revoke events into the local revoked set for `revoke feed --gossip`. Set it **only** for a governance-trusted peer: that is the bound that keeps a peer from mounting a revoke-DoS. |
 
 **`peer ls`**, list pinned peers (name, locator, fingerprint, floor).
@@ -320,6 +322,13 @@ key and report what would pass or fail. Installs nothing.
 skillctl peer add alice https://alice.example.com/api/skills \
   --pubkey <base64> --pin sha256:<hex> --floor yellow
 skillctl peer verify alice
+
+# publisher and reviewer are DIFFERENT keys: pin the reviewer as a signer, or the
+# pull refuses a perfectly valid attestation with
+# "gate 4: no attestation at or above the trust-roots governance_minimum".
+skillctl peer add kup github://kup/skill-registry \
+  --pubkey <publisher-b64> --pin sha256:<hex> \
+  --signer id:reviewer@kup:<reviewer-b64> --quorum 1
 ```
 
 ---

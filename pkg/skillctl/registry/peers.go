@@ -41,10 +41,15 @@ type Peer struct {
 	Fingerprint       string `yaml:"fingerprint"`
 	GovernanceMinimum string `yaml:"governance_minimum,omitempty"`
 
-	// D3 (federation): omitempty, unused in D2; documented for schema stability.
-	GovernanceQuorum        int    `yaml:"governance_quorum,omitempty"`
-	GovernanceRootPubKeyB64 string `yaml:"governance_root_pubkey_b64,omitempty"`
-	CrossSignPath           string `yaml:"cross_sign_path,omitempty"`
+	// D3 (federation), FR-0115: the reviewer set this peer's attestations are
+	// judged against. Empty → one implicit signer {"", pubkey}, which is the D2
+	// single-key model: only the registry key itself may attest. Fill Signers
+	// when the publisher and the reviewer are DIFFERENT keys, which is what makes
+	// a separation of duties cryptographic rather than merely organisational.
+	GovernanceQuorum        int      `yaml:"governance_quorum,omitempty"`
+	Signers                 []Signer `yaml:"signers,omitempty"`
+	GovernanceRootPubKeyB64 string   `yaml:"governance_root_pubkey_b64,omitempty"`
+	CrossSignPath           string   `yaml:"cross_sign_path,omitempty"`
 
 	// D5(b): when true, this peer's SIGNED revoke events are unioned into the local
 	// revoked set by `revoke feed --gossip` (a governance contributor). Default
@@ -194,11 +199,32 @@ func (pe *Peer) AsTrustRoots() (*SelfTrustRoots, error) {
 	if !ok {
 		return nil, fmt.Errorf("governance_minimum %q is not one of [green, yellow]", pe.GovernanceMinimum)
 	}
-	return &SelfTrustRoots{
+	tr := &SelfTrustRoots{
 		Registry:          pe.Locator,
 		PubKeyB64:         pe.PubKeyB64,
 		Fingerprint:       computed,
 		GovernanceMinimum: norm,
 		pub:               ed25519.PublicKey(pubBytes),
-	}, nil
+
+		// FR-0115: carry the D3 declaration across. Before this, the adapter
+		// dropped it, so a peer could express only the D2 single-key model: the
+		// registry key was the sole acceptable attester. A publisher and a
+		// reviewer holding DIFFERENT keys therefore hit
+		// "gate 4: no attestation at or above the trust-roots governance_minimum"
+		// with a perfectly valid attestation sitting in the registry, and the only
+		// way out was to abandon `peer add` (and its enforced out-of-band pin) for
+		// a hand-written trust-roots file. The capability was always in the
+		// verifier; it was unreachable from here.
+		GovernanceQuorum:        pe.GovernanceQuorum,
+		Signers:                 append([]Signer(nil), pe.Signers...),
+		GovernanceRootPubKeyB64: pe.GovernanceRootPubKeyB64,
+		CrossSignPath:           pe.CrossSignPath,
+	}
+	// Same resolution the hand-written file gets: decode the signer keys, admit
+	// cross-signed members, refuse an unsatisfiable quorum. Shared on purpose, so
+	// the two carriers cannot drift.
+	if err := tr.resolveSigners("peer " + pe.Name); err != nil {
+		return nil, err
+	}
+	return tr, nil
 }

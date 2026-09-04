@@ -504,15 +504,23 @@ signers:
     pubkey_b64: <Erics Reviewer-Schlüssel, roh, base64>
 ```
 
-> **Warum von Hand und nicht mit `skillctl peer add`.** `peer add` erzwingt den
-> Out-of-Band-Pin (es verweigert, wenn `--pin` nicht zum `--pubkey` passt) und wäre die
-> schönere Form. Es kann heute aber **keinen Reviewer-Schlüssel ausdrücken**: ein gepinnter
-> Peer trägt genau einen Schlüssel, und der Pull weist die Attestierung dann mit
-> `gate 4: no attestation at or above the trust-roots governance_minimum` ab, obwohl sie im
-> Repository liegt (nachgemessen, Prozess-Exit `1`). Solange das so ist, ist die
-> handgeschriebene Datei der Weg, und der Fingerprint-Vergleich ist Ihre Aufgabe, nicht die
-> des Werkzeugs. Wer Herausgeber und Reviewer bewusst mit **einem** Schlüssel fährt, kann
-> `peer add` benutzen und `signers` weglassen.
+> **Der kürzere Weg, und warum er der bessere ist.** Dieselbe Aussage können Sie
+> `skillctl` schreiben lassen, statt sie zu tippen:
+>
+> ```bash
+> skillctl peer add kup "$REG" \
+>   --pubkey <Herausgeberschlüssel-b64> --pin sha256:<Fingerprint> \
+>   --signer id:eric-reviewer@kup:<Reviewer-Schlüssel-b64> --quorum 1
+> ```
+>
+> `peer add` **erzwingt** den Out-of-Band-Pin: es verweigert, wenn `--pin` nicht zum
+> `--pubkey` passt, es gibt also kein Fenster für Vertrauen beim ersten Anblick. Bei der
+> handgeschriebenen Datei ist dieser Abgleich Ihre Aufgabe, nicht die des Werkzeugs.
+> `peer ls` zeigt danach, wem Sie das Urteil erlaubt haben.
+>
+> Lassen Sie `--signer` weg, gilt wieder nur der Herausgeberschlüssel als Attestierer. Das
+> ist richtig für den Fall, dass eine Person beide Rollen mit einem Schlüssel fährt, und es
+> ist genau der Fall, den Sie **nicht** wollen, sobald es zwei Menschen sind.
 
 ```bash
 # K1. Nur Lesetoken setzen. Ein Konsument braucht keinen Schreibzugriff.

@@ -254,8 +254,17 @@ YAML
 Der Block `signers:` ist nicht optional, wenn Sie in A5 mit einem **zweiten** Schlüssel
 attestiert haben: die Attestierung wird gegen die gepinnten Signer geprüft, und ohne diesen
 Eintrag gilt implizit nur der Signierschlüssel als zulässiger Attestierer. Der Pull würde
-sonst mit Exit `13` abbrechen, obwohl die Attestierung existiert. Wer beide Rollen mit
-demselben Schlüssel fährt, lässt `governance_quorum` und `signers` weg.
+sonst abbrechen, obwohl die Attestierung existiert. Wer beide Rollen mit demselben Schlüssel
+fährt, lässt `governance_quorum` und `signers` weg.
+
+Für ein Git-Registry geht dasselbe kürzer und sicherer, weil `peer add` den
+Fingerprint-Abgleich erzwingt statt ihn Ihnen zu überlassen:
+
+```bash
+skillctl peer add meins "$REG" \
+  --pubkey <Signierschlüssel-b64> --pin sha256:<Fingerprint> \
+  --signer id:eric-reviewer@kup:<Reviewer-Schlüssel-b64> --quorum 1
+```
 
 > **Die zwei Dateien, die man verwechselt.** `~/.claude/trust-roots.yaml` (flach, von Hand)
 > gilt für den ER1-`self`-Weg und wird von `pull` gelesen.
