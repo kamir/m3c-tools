@@ -10,6 +10,8 @@ package sim
 // nothing about the real one.
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -116,4 +118,36 @@ func (w *World) TamperStoredBundle(skill string) error {
 		return fmt.Errorf("push: %v: %s", err, out)
 	}
 	return nil
+}
+
+// ForgeEnvelope rewrites the envelope signature on the ADMIT event in the store.
+// A hostile mirror can change any byte it holds; what it cannot do is produce a
+// signature that verifies against the pinned key. This is the only move in the
+// alphabet that reaches gate 1, and it exists because the theory check proved the
+// gate was otherwise unreachable: no corpus size would have covered it.
+func (w *World) ForgeEnvelope(skill string) error {
+	return w.mutateRegistry(skill, func(dir, evPath string) error {
+		if !strings.Contains(evPath, "admitted") {
+			return nil
+		}
+		full := filepath.Join(dir, evPath)
+		// #nosec G304 -- a path this function just enumerated inside its own clone.
+		data, err := os.ReadFile(full)
+		if err != nil {
+			return err
+		}
+		var ev map[string]any
+		if err := json.Unmarshal(data, &ev); err != nil {
+			return err
+		}
+		// Replace the signature with a well-formed but wrong one: the shape stays
+		// valid so the parser is not what refuses. The CRYPTOGRAPHY has to refuse,
+		// which is the property under test.
+		ev["envelope_signature"] = base64.StdEncoding.EncodeToString(make([]byte, 64))
+		out, err := json.MarshalIndent(ev, "", "  ")
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(full, out, 0o600)
+	})
 }

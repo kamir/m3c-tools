@@ -90,6 +90,9 @@ func Execute(skillctl, rootDir string, sc Scenario) ScenarioResult {
 		case ActTamperInstalled:
 			aerr = w.TamperInstalled(skill)
 			code = -1
+		case ActForgeEnvelope:
+			aerr = w.ForgeEnvelope(skill)
+			code = -1
 		case ActStripRevoke:
 			aerr = w.StripRevoke(skill)
 			code = -1

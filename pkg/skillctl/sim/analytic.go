@@ -49,7 +49,14 @@ package sim
 // either a defect or a wrong theory. Which of the two it is, is a human decision,
 // never an automatic one.
 
-import "sort"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"os"
+	"sort"
+)
 
 // State is the five-component state vector the decision function reads. Each
 // component is a single yes/no fact about the world at pull time, so the whole
@@ -94,10 +101,12 @@ func (s State) Decide() (accept bool, gateName string) {
 // world looks like, and each one is falsifiable by the run.
 func StateAt(p Params, afterRevoke bool) State {
 	s := State{
-		// The admit is always signed by the publisher key, which is the key the
-		// consumer pins. A stolen key does not change this: that is precisely why
-		// key theft is outside the model, the chain it produces is genuine.
-		EnvelopeSigned: true,
+		// The admit is signed by the publisher key, which is the key the consumer
+		// pins. A stolen key does not change this: that is precisely why key theft
+		// is outside the model, the chain it produces is genuine. A store that
+		// REWRITES the signature does change it, and that is the only move in this
+		// alphabet which can.
+		EnvelopeSigned: p.Adv != AdvForgeEnvelope,
 		SigsVerify:     true,
 		DigestMatches:  p.Adv != AdvStoredBundle,
 	}
@@ -187,4 +196,61 @@ func Bins(pred, obs map[string]int) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// --- EV-1: pre-registration ------------------------------------------------
+//
+// A prediction that can be edited after seeing the measurement is not a
+// prediction. Physics solves this with pre-registration; here the equivalent is
+// cheap, because the model and the corpus are code: hash them, print the hashes
+// in the report, and a later comparison of two reports shows immediately whether
+// the theory was changed between runs.
+//
+// The three hashes answer three different questions:
+//   model   did the decision function or the state mapping change?
+//   corpus  were the same scenarios run, with the same predictions?
+//   binary  which build produced the measurement?
+
+// ModelHash fingerprints the theory: the gate order plus the complete
+// input-output table of the decision function over the whole state space. Any
+// edit to a predicate, to the order, or to a gate name changes it.
+func ModelHash() string {
+	h := sha256.New()
+	for _, g := range gauntlet {
+		fmt.Fprintf(h, "gate:%s\n", g.name)
+	}
+	for _, s := range AllStates() {
+		accept, gate := s.Decide()
+		fmt.Fprintf(h, "%s->%t:%s\n", s.Key(), accept, gate)
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16]
+}
+
+// CorpusHash fingerprints the experiment: every scenario id together with the
+// prediction attached to each of its steps.
+func CorpusHash(corpus []Scenario) string {
+	h := sha256.New()
+	for _, sc := range corpus {
+		fmt.Fprintf(h, "%s\n", sc.ID)
+		for _, st := range sc.Steps {
+			fmt.Fprintf(h, "  %s|%s|%s|%d|%t\n",
+				st.Action.Kind, st.Expect.Outcome, st.Expect.Gate, st.Expect.Exit, st.Expect.Claimed)
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16]
+}
+
+// BinaryHash fingerprints the implementation under test. An empty string when the
+// file cannot be read: a missing hash is reported as missing, never faked.
+func BinaryHash(path string) string {
+	f, err := os.Open(path) // #nosec G304 -- the operator names the binary to test
+	if err != nil {
+		return "unreadable"
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "unreadable"
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16]
 }

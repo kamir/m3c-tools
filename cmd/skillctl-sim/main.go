@@ -32,6 +32,8 @@ func main() {
 		os.Exit(runList(os.Args[2:]))
 	case "run":
 		os.Exit(runRun(os.Args[2:]))
+	case "theory":
+		os.Exit(runTheory(os.Args[2:]))
 	case "-h", "--help", "help":
 		usage()
 		return
@@ -45,6 +47,7 @@ func main() {
 func usage() {
 	fmt.Fprintln(os.Stderr, `Usage: skillctl-sim <list|run> [flags]
 
+  theory               check the SPECIFICATION alone, with no binary involved
   list                 print the generated corpus with its predictions
   run                  execute the corpus against the real binary and compare
 
@@ -125,7 +128,7 @@ func runRun(args []string) int {
 	wg.Wait()
 	fmt.Println()
 
-	rep := sim.Report{Results: results}
+	rep := sim.Report{Results: results, BinaryID: sim.BinaryHash(skillctl)}
 	rep.Write(os.Stdout)
 
 	if *mdOut != "" {
@@ -155,4 +158,23 @@ func resolveBinary(flagVal string) (string, error) {
 		return p, nil
 	}
 	return "", fmt.Errorf("skillctl-sim: no skillctl found; build one with `make build-skillctl` or pass -skillctl <path>")
+}
+
+// runTheory answers the question that has to come first: is the specification
+// sound on its own? It needs no skillctl, no registry and no network, because it
+// reasons over the state space rather than over a run.
+func runTheory(args []string) int {
+	fs := flag.NewFlagSet("theory", flag.ContinueOnError)
+	n := fs.Int("n", 0, "corpus size to judge coverage against (0 = the whole corpus)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	corpus := sim.Generate(*n)
+	rep := sim.CheckTheory(corpus)
+	rep.WriteTheory(os.Stdout, corpus)
+	if !rep.Sound() {
+		fmt.Fprintln(os.Stderr, "the specification did not pass its own check: fix the model before testing any code against it")
+		return 1
+	}
+	return 0
 }

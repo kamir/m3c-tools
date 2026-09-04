@@ -12,7 +12,8 @@ import (
 
 // Report is the aggregate of one corpus run.
 type Report struct {
-	Results []ScenarioResult
+	Results  []ScenarioResult
+	BinaryID string // sha256 prefix of the binary under test (EV-1)
 }
 
 // Summary counts the verdicts.
@@ -119,6 +120,14 @@ func (rep Report) Write(w io.Writer) {
 	gates, exits := rep.Coverage()
 
 	fmt.Fprintf(w, "\nskillctl trust-plane simulation\n")
+	// EV-1: the pre-registration line. Two reports with the same model and corpus
+	// hash made the same prediction; a changed hash means the theory moved, and
+	// that has to be visible before anyone compares the numbers.
+	var corpus []Scenario
+	for _, r := range rep.Results {
+		corpus = append(corpus, r.Scenario)
+	}
+	fmt.Fprintf(w, "  model %s  corpus %s  binary %s\n", ModelHash(), CorpusHash(corpus), rep.BinaryID)
 	fmt.Fprintf(w, "  scenarios : %d\n", len(rep.Results))
 	fmt.Fprintf(w, "  steps     : %d matched, %d conflicts, %d out-of-model, %d skipped\n",
 		match, conflict, unclaimed, skipped)

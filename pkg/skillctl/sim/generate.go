@@ -57,6 +57,11 @@ const (
 	AdvRelabelRevoke   AdvKind = "relabel-revoke"   // hostile store renames the revoke to look like an install
 	AdvTamperInstalled AdvKind = "tamper-installed" // same-uid edit of an installed skill
 	AdvStolenKey       AdvKind = "stolen-key"       // attacker holds the publisher's private key
+	// AdvForgeEnvelope corrupts the ADMIT EVENT's envelope signature in the store.
+	// Added because the theory check PROVED gate 1 was unreachable without it: the
+	// action alphabet had no move that could set the envelope bit to zero, so no
+	// number of scenarios could ever have demonstrated that gate.
+	AdvForgeEnvelope AdvKind = "forge-envelope"
 )
 
 // Params is one point in the corpus.
@@ -81,6 +86,7 @@ func Generate(limit int) []Scenario {
 	advs := []AdvKind{
 		AdvNone, AdvTransitChecked, AdvTransitSkipped, AdvStoredBundle,
 		AdvForgeAttest, AdvStripRevoke, AdvRelabelRevoke, AdvTamperInstalled, AdvStolenKey,
+		AdvForgeEnvelope,
 	}
 
 	for _, c := range casts {
@@ -137,6 +143,11 @@ func meaningful(p Params) bool {
 	}
 	// A stolen key with no governance never gets far enough to be interesting.
 	if p.Adv == AdvStolenKey && p.Gov == GovNone {
+		return false
+	}
+	// The envelope forgery is decided by the FIRST gate, so the other axes add
+	// nothing: one point per cast is the whole lesson.
+	if p.Adv == AdvForgeEnvelope && (p.Gov != GovGreen || p.Key != KeySeparatePin) {
 		return false
 	}
 	// The transit attacks are about the publisher's own discipline; the governance
@@ -278,6 +289,15 @@ func build(p Params) Scenario {
 			Action: Action{Kind: ActForgeAttest, Actor: Adversary, Skill: skill},
 			Expect: Expectation{Outcome: Accept, Exit: 0, Claimed: true,
 				Why: "anyone may WRITE an attestation; only a pinned signer's counts"},
+		})
+	}
+
+	// 5a. The envelope forgery: the store rewrites the signature on the admit event.
+	if p.Adv == AdvForgeEnvelope {
+		sc.Steps = append(sc.Steps, Step{
+			Action: Action{Kind: ActForgeEnvelope, Actor: Adversary, Skill: skill},
+			Expect: Expectation{Outcome: NoEffect, Exit: -1, Claimed: true,
+				Why: "a hostile store can rewrite the bytes of an event; it cannot re-sign it"},
 		})
 	}
 

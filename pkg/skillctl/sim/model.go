@@ -69,6 +69,7 @@ const (
 	ActStripRevoke     ActionKind = "adv:strip-revoke"     // hostile registry deletes the revoke event
 	ActRelabelRevoke   ActionKind = "adv:relabel-revoke"   // hostile registry renames a revoke to look like an install
 	ActStolenKey       ActionKind = "adv:stolen-key"       // attacker holds the publisher's private key
+	ActForgeEnvelope   ActionKind = "adv:forge-envelope"   // hostile store rewrites an event's envelope signature
 )
 
 // Action is one step with its parameters. Params stay stringly-typed: a scenario
