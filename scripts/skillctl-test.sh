@@ -251,6 +251,6 @@ set_result "CLI smoke" "PASS"
 summary
 [ "$FAILED" -eq 0 ] || exit 1
 echo "skillctl builds and tests clean on this machine."
-echo "Next: the stage 2 enterprise gate (lint, govulncheck, gosec, coverage, e2e)."
+echo "Next: stage 2, the local CI gate: ./scripts/skillctl-enterprise-test.sh"
 echo ""
 exit 0
