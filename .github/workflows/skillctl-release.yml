@@ -386,3 +386,209 @@ jobs:
     uses: ./.github/workflows/skillctl-smoke-matrix.yml
     with:
       tag: ${{ github.ref_name }}
+
+  # 7) EVIDENCE — H10 capstone (WF-001 "Trust Binder"). ASSEMBLE the Release
+  #    Evidence Bundle: one signed, machine-readable proof that these exact
+  #    artifacts came from THIS commit AND passed the mandatory gate-set G at
+  #    time T. It is an INDEX of evidence, not a second copy: references[] POINT
+  #    at the already-produced cosign bundle / SLSA provenance / SBOM by URL +
+  #    digest — nothing is re-embedded or re-verified here, so the SLSA L3 build
+  #    isolation is untouched.
+  #
+  #    Runs LAST (after the draft AND the post-draft smoke gate) so platform-smoke
+  #    can be recorded honestly. Holds NO signing identity (contents:read only):
+  #    ASSEMBLY IS ISOLATED FROM SIGNING — only the downstream evidence-sign job
+  #    signs. checks:read lets it read the release commit's CI check-run
+  #    conclusions: the CI-plane gates (unit-tests/race/e2e/lint/gosec/
+  #    govulncheck/gitleaks) ran in ci.yml + gosec.yml on this commit BEFORE the
+  #    tag, so they are GATHERED (an unmatched/unreachable check → skip, i.e.
+  #    "not confirmed", never a silent pass), not asserted. The release-plane
+  #    gates come from this run's needs.<job>.result.
+  #
+  #    enterprise_ready is RECOMPUTED inside the tool from the gate results under
+  #    the fixed policy G (12 required + threat-model-delta advisory); a strict
+  #    consumer recomputes it again. This job never trusts a stored bool.
+  evidence:
+    name: Assemble release-evidence bundle (Trust Binder)
+    needs: [docs-gate, build, provenance, cosign, verify, release, smoke]
+    # Run whenever the draft was cut (release succeeded) EVEN IF the post-draft
+    # smoke gate failed — a red smoke must be recorded as platform-smoke:fail /
+    # enterprise_ready:false, not suppress the evidence entirely.
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read   # read the release commit's CI check-run conclusions
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.26.6"
+
+      - name: Download binaries + SHA256SUMS
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: skillctl-dist
+          path: dist
+
+      - name: Assemble release-evidence.json (+ in-toto statement)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROV_NAME: ${{ needs.provenance.outputs.provenance-name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DOCAUDIT_RESULT: ${{ needs['docs-gate'].result }}
+          SBOM_RESULT: ${{ needs.build.result }}
+          SLSA_RESULT: ${{ needs.verify.result }}
+          COSIGN_RESULT: ${{ needs.cosign.result }}
+          SMOKE_RESULT: ${{ needs.smoke.result }}
+        run: |
+          set -euo pipefail
+
+          # --- CI-plane gates: read THIS commit's check-run conclusions -------
+          # ci.yml + gosec.yml run on the branch/PR before the tag; their checks
+          # attach to this commit SHA. An absent/in-progress/unmatched check
+          # resolves to "skip" (not confirmed), never a silent pass.
+          declare -A CONCL
+          RAW="$(gh api --paginate \
+                   -H 'Accept: application/vnd.github+json' \
+                   "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs" \
+                   --jq '.check_runs[] | [.name, (.conclusion // "")] | @tsv' 2>/dev/null || true)"
+          while IFS=$'\t' read -r cname cconcl; do
+            [ -n "$cname" ] && CONCL["$cname"]="$cconcl"
+          done <<< "$RAW"
+          resolve() {
+            local v="${CONCL[$1]:-}"
+            if [ -z "$v" ]; then v=skip; fi
+            printf '%s' "$v"
+          }
+
+          # --- checksums reference tamper-evidence: sha256 of SHA256SUMS -------
+          CHECKSUMS_SHA="$(sha256sum dist/SHA256SUMS | awk '{print $1}')"
+
+          # --- gate-set G (CI-plane gathered by check-name; release-plane from
+          #     needs.<job>.result; threat-model-delta advisory) ---------------
+          GATES=(
+            -gate "unit-tests=$(resolve 'Unit Tests')"
+            -gate "e2e=$(resolve 'Unit Tests'),note=runs as a step inside the Unit Tests job"
+            -gate "race=$(resolve 'skillctl Security Tests (-race)')"
+            -gate "lint=$(resolve 'Lint & Vet')"
+            -gate "gosec-sast=$(resolve 'gosec SAST (SARIF -> Code Scanning)')"
+            -gate "govulncheck-cve=$(resolve 'govulncheck (reachable CVEs)')"
+            -gate "gitleaks-secret=$(resolve 'gitleaks (secret scan)')"
+            -gate "docaudit=${DOCAUDIT_RESULT}"
+            -gate "sbom=${SBOM_RESULT},note=CycloneDX SBOM is a blocking step of the build job"
+            -gate "slsa-provenance=${SLSA_RESULT},note=slsa-verifier verify-artifact gate over the isolated L3 generator provenance"
+            -gate "cosign-signature=${COSIGN_RESULT}"
+            -gate "platform-smoke=${SMOKE_RESULT}"
+            -gate "threat-model-delta=skip,evidence=https://github.com/kamir/m3c-tools-maintenance/tree/main/CISO-WORK/scans,note=manual security-triad review; off-CI (advisory)"
+          )
+
+          go run ./cmd/release-evidence \
+            -commit "${GITHUB_SHA}" \
+            -tag "${GITHUB_REF_NAME}" \
+            -repo "${GITHUB_REPOSITORY}" \
+            -run-url "${RUN_URL}" \
+            -channel skillctl \
+            -artifacts dist/SHA256SUMS \
+            -checksums-sha256 "${CHECKSUMS_SHA}" \
+            -provenance-name "${PROV_NAME}" \
+            -sbom-name skillctl.sbom.cdx.json \
+            -schema docs/security/release-evidence.schema.json \
+            -out dist/release-evidence.json \
+            -intoto dist/release-evidence.intoto.json \
+            "${GATES[@]}"
+
+          echo "::group::release-evidence.json"
+          cat dist/release-evidence.json
+          echo "::endgroup::"
+
+      - name: Upload release-evidence (unsigned bundle + statement)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-evidence
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            dist/release-evidence.json
+            dist/release-evidence.intoto.json
+
+  # 8) EVIDENCE-SIGN — keyless cosign sign-blob of the assembled bundle, with the
+  #    SAME OIDC identity that signs SHA256SUMS (install.sh already pins it).
+  #    Holds ONLY id-token:write (no contents:write, runs no build): SIGNING IS
+  #    ISOLATED to this job, mirroring the `cosign` job. Verifies its own
+  #    signature in-job as a gate before publishing the bundle.
+  evidence-sign:
+    name: Sign release-evidence (cosign keyless)
+    needs: [evidence]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # keyless cosign OIDC — isolated to this job
+    steps:
+      - name: Download release-evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-evidence
+          path: dist
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+
+      - name: cosign sign-blob release-evidence.json (GitHub OIDC)
+        working-directory: dist
+        run: cosign sign-blob --yes release-evidence.json --bundle release-evidence.json.cosign.bundle
+
+      # Gate: the bundle must verify against THIS workflow's OIDC identity — the
+      # same identity install.sh pins for SHA256SUMS.
+      - name: Verify the cosign signature in-job (gate)
+        working-directory: dist
+        run: |
+          cosign verify-blob release-evidence.json \
+            --bundle release-evidence.json.cosign.bundle \
+            --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/\.github/workflows/skillctl-release\.yml@refs/tags/skillctl/v" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+
+      - name: Upload cosign bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-evidence-cosign
+          if-no-files-found: error
+          retention-days: 7
+          path: dist/release-evidence.json.cosign.bundle
+
+  # 9) EVIDENCE-ATTACH — attach the bundle + its cosign bundle + the in-toto
+  #    statement to the EXISTING draft (contents:write only; runs no build, holds
+  #    no signing identity). `gh release upload --clobber` adds assets surgically
+  #    without touching the draft's name/body. The bundle is produced AFTER the
+  #    draft is cut (it must record the post-draft smoke gate), so it is attached
+  #    here rather than in the release job's initial `files:` list.
+  evidence-attach:
+    name: Attach release-evidence to the draft
+    needs: [evidence, evidence-sign]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # add assets to the existing draft release
+    steps:
+      - name: Download release-evidence (bundle + statement)
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-evidence
+          path: dist
+
+      - name: Download release-evidence cosign bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-evidence-cosign
+          path: dist
+
+      - name: Attach to the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release upload "${GITHUB_REF_NAME}" \
+            dist/release-evidence.json \
+            dist/release-evidence.json.cosign.bundle \
+            dist/release-evidence.intoto.json \
+            --clobber

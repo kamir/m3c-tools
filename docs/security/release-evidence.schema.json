@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kamir/m3c-tools/spec/release-evidence.schema.json",
+  "title": "Release Evidence Bundle (Trust Binder)",
+  "description": "Machine-readable proof that a set of release artifacts came from commit X AND passed gate-set G at time T. One instance per release tag. Designed to be signed as a detached cosign blob AND/OR wrapped as an in-toto predicate tied to the existing SLSA provenance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "subject", "produced_at", "gates", "summary"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "SemVer of THIS bundle schema.",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "predicate_type": {
+      "type": "string",
+      "description": "in-toto predicateType URI when this bundle is embedded as a statement predicate.",
+      "const": "https://m3c-tools.dev/attestations/release-evidence/v0"
+    },
+    "bundle_id": {
+      "type": "string",
+      "description": "Stable id for this evidence bundle, e.g. <repo>@<tag>."
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repo", "commit", "tag", "artifact_digests"],
+      "properties": {
+        "repo": { "type": "string", "description": "owner/name" },
+        "source_uri": { "type": "string", "description": "git+https URI, matches the SLSA provenance --source-uri." },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$", "description": "Full 40-char release commit SHA." },
+        "tag": { "type": "string", "description": "Release tag, e.g. skillctl/v0.5.0 or v1.2.0." },
+        "channel": { "type": "string", "enum": ["product", "skillctl"], "description": "Which release workflow produced these artifacts." },
+        "artifact_digests": {
+          "type": "array",
+          "minItems": 1,
+          "description": "One entry per published binary/asset. Mirrors the in-toto subject shape so this list can be reused as the statement subjects.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "digest"],
+            "properties": {
+              "name": { "type": "string" },
+              "digest": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sha256"],
+                "properties": { "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "produced_at": { "type": "string", "format": "date-time", "description": "T — when this bundle was assembled (UTC, RFC3339)." },
+    "generated_by": {
+      "type": "object",
+      "description": "What assembled the bundle (for reproducibility / non-repudiation).",
+      "additionalProperties": false,
+      "properties": {
+        "tool": { "type": "string" },
+        "version": { "type": "string" },
+        "workflow_run": { "type": "string", "description": "URL of the CI run that assembled the bundle." }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "description": "The ruleset that decides which gates are required and what enterprise_ready means. A verifier re-evaluates enterprise_ready against a named policy rather than trusting the stored bool.",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "description": "Policy identifier, e.g. trust-binder/policy@v0-prototype." },
+        "rule": { "type": "string", "description": "Human-readable decision rule for enterprise_ready." }
+      }
+    },
+    "gates": {
+      "type": "array",
+      "description": "Gate-set G. Order is presentational; identity is `id`.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "required", "kind"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable machine id.",
+            "enum": [
+              "unit-tests", "race", "e2e", "lint", "gosec-sast",
+              "govulncheck-cve", "gitleaks-secret", "sbom", "docaudit",
+              "slsa-provenance", "cosign-signature", "platform-smoke",
+              "threat-model-delta"
+            ]
+          },
+          "name": { "type": "string", "description": "Human label; SHOULD match the CI job name so a consumer can find it in the run." },
+          "kind": {
+            "type": "string",
+            "enum": ["test", "sast", "sca", "secret", "provenance", "signature", "sbom", "docs", "smoke", "threat-model"],
+            "description": "Evidence family, for policy grouping."
+          },
+          "status": { "type": "string", "enum": ["pass", "fail", "skip"] },
+          "required": { "type": "boolean", "description": "Whether this gate counts toward enterprise_ready under `policy`." },
+          "evidence_ref": {
+            "type": "string",
+            "format": "uri",
+            "description": "URL to the concrete evidence: a CI run/job, a release asset, or an attestation. This is the human/audit landing point."
+          },
+          "evidence_type": {
+            "type": "string",
+            "enum": ["ci-log", "release-asset", "attestation", "external"],
+            "description": "Shape of evidence_ref, so a consumer knows whether it is re-verifiable (attestation/asset) or a pointer (ci-log)."
+          },
+          "verifiability": {
+            "type": "string",
+            "enum": ["re-verify", "reference", "trust-ci"],
+            "description": "re-verify: an offline consumer can cryptographically re-check (cosign bundle, SLSA provenance, SBOM digest). reference: points at signed-elsewhere evidence. trust-ci: only a CI-run log attests it (pass/fail is asserted, not re-provable offline)."
+          },
+          "tool": { "type": "string" },
+          "version": { "type": "string" },
+          "completed_at": { "type": "string", "format": "date-time" },
+          "note": { "type": "string", "description": "Why skipped / caveats / roadmap." }
+        }
+      }
+    },
+    "references": {
+      "type": "array",
+      "description": "Aggregate evidence artifacts this bundle POINTS AT (does not re-embed). Lets a verifier fetch + re-verify without re-listing per-gate.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "uri"],
+        "properties": {
+          "type": { "type": "string", "enum": ["checksums", "cosign-bundle", "slsa-provenance", "sbom", "ed25519-sig", "pubkey"] },
+          "uri": { "type": "string", "format": "uri" },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "Digest of the referenced artifact, so the pointer is itself tamper-evident." }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required_total", "required_passed", "enterprise_ready"],
+      "properties": {
+        "required_total": { "type": "integer", "minimum": 0 },
+        "required_passed": { "type": "integer", "minimum": 0 },
+        "required_failed": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 },
+        "enterprise_ready": {
+          "type": "boolean",
+          "description": "Convenience bool = (required_failed == 0 AND every required gate status==pass) under `policy`. A strict verifier RECOMPUTES this from `gates` + its own policy rather than trusting the stored value."
+        },
+        "caveats": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Gates that a stricter enterprise policy would demand but are currently required:false (e.g. gosec, threat-model-delta)."
+        }
+      }
+    }
+  }
+}
