@@ -1,0 +1,112 @@
+name: pin-bump
+
+# Post-release trigger: move the install one-liners in the docs to the commit of
+# the release that was just published, and recompute the SHA-256 digests beside
+# them.
+#
+# Why it exists (BUG-0215): this was a manual runbook step. The runbook said to
+# pin `git rev-parse origin/master`; somebody pinned a tag instead, and
+# `git rev-parse <annotated-tag>` returns the TAG OBJECT, which
+# raw.githubusercontent.com does not serve. Every published install one-liner
+# returned 404, on Windows and Unix, until a user reported it from the field.
+# scripts/bump-install-pins.sh resolves `<ref>^{commit}`, so the mistake is not
+# available any more.
+#
+# It fires on `published`, not on the tag push: skillctl-release.yml cuts a
+# DRAFT, and a pin must not move to a release nobody has released yet.
+#
+# It opens a PULL REQUEST rather than pushing to master. Two reasons, and the
+# second matters more: a bot pushing to master would bypass exactly the branch
+# protections that make a pinned commit worth trusting, and the bump edits the
+# repository's bootstrap-integrity claim, which is a thing a human should see.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "tag, branch or commit to pin (default: latest release tag)"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  bump:
+    name: Pin the docs to the released commit
+    runs-on: ubuntu-latest
+    # Only skillctl releases carry the install scripts the one-liners fetch.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.event.release.tag_name, 'skillctl/v')
+    permissions:
+      contents: write        # push the bump branch
+      pull-requests: write   # open the PR
+    steps:
+      # A pin is by definition an older commit, and a shallow clone cannot tell
+      # a commit from a tag object. That distinction is the entire point here.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Resolve the ref to pin
+        id: ref
+        env:
+          INPUT_REF: ${{ github.event.inputs.ref }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          ref="${INPUT_REF:-$TAG}"
+          [ -n "$ref" ] || { echo "no ref to pin" >&2; exit 1; }
+          git fetch --quiet --tags origin
+          commit=$(git rev-parse --verify "${ref}^{commit}")
+          echo "ref=$ref"       >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "Pinning to $commit (from $ref)"
+
+      - name: Bump the pins and digests
+        run: ./scripts/bump-install-pins.sh "${{ steps.ref.outputs.commit }}"
+
+      # A bad bump must fail here, not become a pull request. The bumper only
+      # rewrites; this is what judges the result.
+      - name: Verify the result
+        run: ./scripts/check-install-pins.sh
+
+      - name: Open a pull request if anything changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF: ${{ steps.ref.outputs.ref }}
+          COMMIT: ${{ steps.ref.outputs.commit }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "docs already pin ${COMMIT:0:12}; nothing to do"
+            exit 0
+          fi
+          branch="chore/pin-bump-${COMMIT:0:12}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git commit -qam "docs: pin the install one-liners to ${COMMIT:0:12} (${REF})
+
+          Post-release bump by .github/workflows/pin-bump.yml. The ref was
+          resolved with \`^{commit}\`, so an annotated tag cannot be pinned by
+          mistake; that mistake shipped once and 404'd every install one-liner
+          (BUG-0215). scripts/check-install-pins.sh passed before this branch
+          was pushed."
+          git push -q origin "$branch"
+          gh pr create --base master --head "$branch" \
+            --title "docs: pin the install one-liners to ${COMMIT:0:12} (${REF})" \
+            --body "Automatic post-release pin bump for \`${REF}\`.
+
+          The docs now pin commit \`${COMMIT}\` and publish the SHA-256 of the
+          install scripts at that commit.
+
+          Resolved with \`${REF}^{commit}\`: an annotated tag resolves to a tag
+          object, which raw.githubusercontent.com does not serve. That is the
+          bug this workflow exists to remove (BUG-0215).
+
+          \`scripts/check-install-pins.sh\` passed before this PR was opened:
+          the pin is a published commit, the files exist at it, and every
+          digest in the docs matches the bytes there."
