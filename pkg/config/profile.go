@@ -6,6 +6,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -54,6 +55,60 @@ func (pm *ProfileManager) profilesDir() string {
 // activeProfilePath returns the full path to the active-profile file.
 func (pm *ProfileManager) activeProfilePath() string {
 	return filepath.Join(pm.BaseDir, ActiveProfileFile)
+}
+
+// ErrInvalidProfileName is returned when a profile name cannot be used as a
+// filename inside the profiles directory.
+var ErrInvalidProfileName = errors.New("invalid profile name")
+
+// maxProfileNameLen bounds the name so a caller cannot push the joined path
+// past a filesystem limit. No legitimate profile name comes close.
+const maxProfileNameLen = 64
+
+// ValidateProfileName reports whether name is safe to use as the stem of a
+// file inside the profiles directory.
+//
+// A profile name becomes a path (profilesDir()/<name>.env), so an unvalidated
+// name is a path-traversal primitive: "../../tmp/x" would read, write or
+// delete outside the profile directory. The reachable callers are the CLI and
+// the loopback config-editor API (pkg/config/editor.go), so this is not purely
+// a self-inflicted wound.
+//
+// The rule is an allow-list, deliberately narrow: letters, digits, dot,
+// underscore and hyphen. That accepts every name the tool has ever created
+// ("default", "dev", "prod", "kup-berlin") and rejects every separator, every
+// relative segment and every control character in one stroke. A leading dot is
+// rejected as well, so a name can never produce a hidden file.
+func ValidateProfileName(name string) error {
+	if name == "" {
+		return fmt.Errorf("%w: empty", ErrInvalidProfileName)
+	}
+	if len(name) > maxProfileNameLen {
+		return fmt.Errorf("%w: longer than %d characters", ErrInvalidProfileName, maxProfileNameLen)
+	}
+	if name == "." || name == ".." || strings.HasPrefix(name, ".") {
+		return fmt.Errorf("%w: %q starts with a dot", ErrInvalidProfileName, name)
+	}
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '.' || r == '_' || r == '-':
+		default:
+			return fmt.Errorf("%w: %q contains %q (allowed: letters, digits, '.', '_', '-')",
+				ErrInvalidProfileName, name, string(r))
+		}
+	}
+	return nil
+}
+
+// profilePath is the ONE place a profile name becomes a path. Every operation
+// that reads, writes or deletes a profile file goes through here, so the
+// traversal check cannot be forgotten at a new call site.
+func (pm *ProfileManager) profilePath(name string) (string, error) {
+	if err := ValidateProfileName(name); err != nil {
+		return "", err
+	}
+	return filepath.Join(pm.profilesDir(), name+".env"), nil
 }
 
 // EnsureDefaults creates the profiles directory and default profiles if they
@@ -131,7 +186,10 @@ func (pm *ProfileManager) ListProfiles() ([]Profile, error) {
 
 // GetProfile loads a specific profile by name from the profiles directory.
 func (pm *ProfileManager) GetProfile(name string) (*Profile, error) {
-	path := filepath.Join(pm.profilesDir(), name+".env")
+	path, err := pm.profilePath(name)
+	if err != nil {
+		return nil, err
+	}
 	return ParseEnvFile(path)
 }
 
@@ -142,7 +200,14 @@ func (pm *ProfileManager) ActiveProfileName() string {
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(data))
+	name := strings.TrimSpace(string(data))
+	// The active-profile file is just text on disk. If something wrote a
+	// traversal name into it, that name must not reach profilePath as a
+	// trusted value: report "no active profile" rather than resolve it.
+	if ValidateProfileName(name) != nil {
+		return ""
+	}
+	return name
 }
 
 // ActiveProfile loads the currently active profile. Returns an error if no
@@ -234,14 +299,13 @@ func (pm *ProfileManager) ApplyProfile(p *Profile) error {
 
 // CreateProfile writes a new profile .env file to the profiles directory.
 func (pm *ProfileManager) CreateProfile(name, description string, vars map[string]string) error {
-	if name == "" {
-		return fmt.Errorf("profile name cannot be empty")
+	path, err := pm.profilePath(name)
+	if err != nil {
+		return err
 	}
 	if err := os.MkdirAll(pm.profilesDir(), 0700); err != nil {
 		return fmt.Errorf("create profiles dir: %w", err)
 	}
-
-	path := filepath.Join(pm.profilesDir(), name+".env")
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "# M3C Profile: %s\n", name)
@@ -282,7 +346,10 @@ func (pm *ProfileManager) DeleteProfile(name string) error {
 	if active == name {
 		return fmt.Errorf("cannot delete active profile %q: switch to another profile first", name)
 	}
-	path := filepath.Join(pm.profilesDir(), name+".env")
+	path, err := pm.profilePath(name)
+	if err != nil {
+		return err
+	}
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return fmt.Errorf("profile %q does not exist", name)
 	}
@@ -292,8 +359,8 @@ func (pm *ProfileManager) DeleteProfile(name string) error {
 // ImportProfile copies an existing .env file into the profiles directory
 // under the given name. The file is parsed to validate its format.
 func (pm *ProfileManager) ImportProfile(name, envFilePath string) error {
-	if name == "" {
-		return fmt.Errorf("profile name cannot be empty")
+	if err := ValidateProfileName(name); err != nil {
+		return err
 	}
 	if err := os.MkdirAll(pm.profilesDir(), 0700); err != nil {
 		return fmt.Errorf("create profiles dir: %w", err)
@@ -379,6 +446,24 @@ func (pm *ProfileManager) writeActiveProfile(name string) error {
 	return nil
 }
 
+// stripControl removes control characters from a value read out of a profile
+// file header.
+//
+// The file content is not necessarily ours: ImportProfile copies a .env from
+// wherever the user points it. The name and description are echoed into log
+// lines and into the CLI listing, and a carriage return survives the line split
+// and the trim, so an imported file could forge a log line or overwrite part of
+// a terminal row. The file NAME is still the profile's identity (it is what
+// ValidateProfileName guards); this only cleans what gets displayed.
+func stripControl(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, s)
+}
+
 // ParseEnvFile reads a .env file and extracts the profile metadata and
 // key=value pairs. Comment lines starting with "# M3C Profile:" and
 // "# Description:" are parsed for metadata.
@@ -407,9 +492,9 @@ func ParseEnvFile(path string) (*Profile, error) {
 			comment := strings.TrimPrefix(line, "#")
 			comment = strings.TrimSpace(comment)
 			if strings.HasPrefix(comment, "M3C Profile:") {
-				p.Name = strings.TrimSpace(strings.TrimPrefix(comment, "M3C Profile:"))
+				p.Name = stripControl(strings.TrimSpace(strings.TrimPrefix(comment, "M3C Profile:")))
 			} else if strings.HasPrefix(comment, "Description:") {
-				p.Description = strings.TrimSpace(strings.TrimPrefix(comment, "Description:"))
+				p.Description = stripControl(strings.TrimSpace(strings.TrimPrefix(comment, "Description:")))
 			}
 			continue
 		}

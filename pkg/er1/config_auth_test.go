@@ -2,6 +2,7 @@ package er1
 
 import (
 	"bytes"
+	"github.com/kamir/m3c-tools/pkg/config"
 	"log"
 	"os"
 	"sync"
@@ -102,8 +103,14 @@ func TestLoadConfig_PlaceholderKeyOnProdIsCleared(t *testing.T) {
 	if !bytes.Contains(buf.Bytes(), []byte("FATAL")) {
 		t.Errorf("expected FATAL log line for placeholder key, got: %q", buf.String())
 	}
-	if !bytes.Contains(buf.Bytes(), []byte("minimal-key")) {
+	// The line identifies the placeholder without printing it in the clear:
+	// config.MaskAPIKey keeps the first and last four characters, which is
+	// enough to recognise "minimal-key" and never enough to leak a real key.
+	if !bytes.Contains(buf.Bytes(), []byte(config.MaskAPIKey("minimal-key"))) {
 		t.Errorf("FATAL log line must name the offending placeholder, got: %q", buf.String())
+	}
+	if bytes.Contains(buf.Bytes(), []byte("minimal-key")) {
+		t.Errorf("FATAL log line must NOT contain the raw key value, got: %q", buf.String())
 	}
 }
 

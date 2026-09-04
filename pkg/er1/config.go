@@ -146,8 +146,14 @@ func LoadConfig() *Config {
 	if config.IsBlockingPlaceholder(cfg.APIKey, cfg.APIURL) {
 		if !deviceToken {
 			placeholderFatalOnce.Do(func() {
-				log.Printf("[er1] FATAL: ER1_API_KEY is a placeholder (%q) targeting %q: refusing to upload. Run 'm3c-tools doctor' or fix the active profile.",
-					cfg.APIKey, cfg.APIURL)
+				// SEC (go/clear-text-logging): the value is a KNOWN placeholder
+				// here, never a live secret, but that redaction then depends on
+				// IsBlockingPlaceholder staying correct. Mask it instead, so the
+				// line stays diagnosable (the placeholder is still recognisable
+				// from its first and last four characters) and no future change
+				// to the predicate can put a real key into a log file.
+				log.Printf("[er1] FATAL: ER1_API_KEY is a placeholder (%s) targeting %q: refusing to upload. Run 'm3c-tools doctor' or fix the active profile.",
+					config.MaskAPIKey(cfg.APIKey), cfg.APIURL)
 			})
 		}
 		cfg.APIKey = ""

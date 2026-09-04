@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -165,7 +166,7 @@ func runReplay(args []string) int {
 	}
 	endpoint := strings.TrimRight(base, "/") + "/api/skills/runtime/invocations?" + q.Encode()
 
-	events, err := fetchReplayEvents(endpoint, apiKey, target)
+	events, err := fetchReplayEvents(endpoint, apiKey)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "skillctl invoke-replay: %v\n", err)
 		return 1
@@ -203,8 +204,10 @@ func runReplay(args []string) int {
 
 // fetchReplayEvents performs the GET and unmarshals into a slice of events.
 // Tolerant: accepts either top-level array OR {events: [...]}.
-func fetchReplayEvents(endpoint, apiKey, target string) ([]replayEvent, error) {
-	client := newReplayHTTPClient(target)
+func fetchReplayEvents(endpoint, apiKey string) ([]replayEvent, error) {
+	// The transport is chosen from the URL actually being requested, not from
+	// the --target selector that produced it. See newReplayHTTPClient.
+	client := newReplayHTTPClient(endpoint)
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
@@ -401,19 +404,46 @@ func readDeployEnvStageURL() string {
 	return ""
 }
 
-func newReplayHTTPClient(target string) *http.Client {
-	if target == "local" {
-		// #nosec G402 -- gated: TLS verification is skipped ONLY for target=="local",
-		// whose base URL is the hardcoded loopback https://127.0.0.1:8081
-		// (defaultReplayBaseURL). prod/stage targets fall through to the verifying
-		// client below. The base URL is not caller-overridable, only the --target
-		// selector is, so a public host can never inherit this transport.
+// newReplayHTTPClient returns the transport for the resolved base URL.
+//
+// TLS verification is skipped only for a base URL whose host is loopback. The
+// old form of this function trusted the --target selector alone and argued, in
+// a comment, that target=="local" always resolves to 127.0.0.1. That argument
+// was correct but unenforced: it lived in prose, not in code, and a later edit
+// to defaultReplayBaseURL could have falsified it silently. Now the loopback
+// property is CHECKED on the URL actually about to be used, and anything else
+// falls through to the verifying client. Fail closed, not fail argued.
+//
+// CodeQL still reports go/disabled-certificate-check here. It flags the
+// InsecureSkipVerify literal without modelling the guard above it, so the
+// alert is expected; see docs/security/codeql-backlog.md.
+func newReplayHTTPClient(baseURL string) *http.Client {
+	if replayBaseIsLoopback(baseURL) {
 		tr := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // #nosec G402 -- loopback-only (target=="local" ⇒ 127.0.0.1)
+			// #nosec G402 -- reached only when replayBaseIsLoopback(baseURL) is
+			// true, i.e. the request goes to this machine over the loopback
+			// interface, where the dev server presents a self-signed cert and
+			// there is no network path for a man in the middle.
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // #nosec G402
 		}
 		return &http.Client{Transport: tr, Timeout: 10 * time.Second}
 	}
 	return &http.Client{Timeout: 10 * time.Second}
+}
+
+// replayBaseIsLoopback reports whether base is an https(s) URL whose host is
+// the loopback interface. A parse failure answers false: unknown is not local.
+func replayBaseIsLoopback(base string) bool {
+	u, err := url.Parse(base)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // truncString returns s[:n] + "…" if len(s) > n, else s.
