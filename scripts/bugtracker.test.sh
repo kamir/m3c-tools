@@ -341,7 +341,7 @@ refuses "a malformed Repo value is rejected, not passed to gh" "$BT" open 217
 # --- claim: die Vergabe wird ein Schreibvorgang -------------------------------
 #
 # next-id LIEST nur. Zwei Sessions, die im selben Moment fragen, bekommen dieselbe
-# Zahl — so wurde FR-0096 zweimal vergeben. claim ist der Schreibvorgang.
+# Zahl, so wurde FR-0096 zweimal vergeben. claim ist der Schreibvorgang.
 
 CLAIMED="$BUGS/BUG-0300-nimmt-eine-nummer.md"
 printf '# BUG-0300\n\n- **Status:** open\n' > "$CLAIMED"
