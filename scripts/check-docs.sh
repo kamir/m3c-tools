@@ -82,6 +82,24 @@ else
     echo "      go run ./cmd/docaudit -cli <m3c-tools|skillctl> -scaffold"
 fi
 
+# ─── 5. skillctl verb register (BLOCKING) ───
+#
+# FR-0113 / SPEC-0404 §7-K3: verbaudit AST-reads the `switch os.Args[1]` dispatch
+# in cmd/skillctl/main.go and reconciles it against docs/CLI-VERBS.md. A
+# dispatched verb with no register row turns this red (REQ-7.10), and a
+# main-table row must carry an exit-code space (REQ-7.9). It blocks for the same
+# reason the flag gate does: verb allocation must be a WRITE, so two collisions
+# in two days cannot recur.
+echo "5. skillctl verb register (verbaudit)"
+if ! command -v go >/dev/null 2>&1; then
+    fail "go toolchain not found - cannot run the verb-register gate"
+elif go run ./cmd/verbaudit; then
+    pass "every dispatched verb is registered in docs/CLI-VERBS.md"
+else
+    fail "a dispatched verb is not registered (see the report above)"
+    echo "    Register the verb first (add a row to docs/CLI-VERBS.md), then implement its case."
+fi
+
 # ─── Summary ───
 echo ""
 echo "─────────────────────────────"

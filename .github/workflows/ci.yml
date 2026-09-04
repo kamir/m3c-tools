@@ -89,6 +89,12 @@ jobs:
       - name: Every real flag documented, every documented flag real
         run: go run ./cmd/docaudit -cli all
 
+      - name: verbaudit unit tests
+        run: go test -count=1 ./cmd/verbaudit/
+
+      - name: Every dispatched verb registered (FR-0113)
+        run: go run ./cmd/verbaudit
+
   test:
     name: Unit Tests
     runs-on: macos-latest
