@@ -140,13 +140,15 @@ the sandbox.
 Do not report "I did the training". Produce the artifact:
 
 ```bash
-./run-and-prove.sh --skip-online --json ride-report.json
+./run-and-prove.sh --skip-online --chain-only --json ride-report.json
 ```
 
 `run-and-prove.sh` runs the same chain and asserts every step's load-bearing output, not just
-its exit code. The JSON summary names the host, the steps, and what each produced. Attach it
-to your onboarding ticket; keep the trust-claim rule that governs this tool pointed at
-yourself too: a claim is worth what its evidence is worth.
+its exit code. Expect `Pass: 24, Warn: 2, Fail: 0` and exit 0; the two warnings are the
+maintainer gates `--chain-only` skips (the PDF render, which needs a document you do not
+have, and the cross-platform release build). The JSON summary names the host, the steps and
+what each produced. Attach it to your onboarding ticket; keep the trust-claim rule that
+governs this tool pointed at yourself too: a claim is worth what its evidence is worth.
 
 ## Then keep the muscle
 
@@ -170,7 +172,7 @@ See [Quickstart: skillctl-demo](../../docs/quickstart-skillctl-demo.md#5-trainin
 | `private key ... has insecure mode 0644` | a key file arrived with the wrong permissions | `chmod 600 artifacts/keys/*.priv`. Preflight now does this for you; if you see it, say so, it means a key came from somewhere it should not have |
 | step `01` fails and `05`, `06`, `09` follow it down | there is no signature, so nothing downstream can verify | fix `01` first, the rest are consequences, not four separate bugs |
 | `online mode not available: skipping` | no `ER1_API_KEY`, or the registry did not answer 200 | see [Part 3](#part-3-the-online-half-scan-use-decay). Parts 1 and 2 do not need it |
-| `make-pdf.sh` cannot find the manual | it renders a document from the private maintenance checkout | set `M3C_MAINTENANCE_DIR`, or skip it with `--no-pdf`. It is a maintainer gate, not part of the ride |
+| `make-pdf.sh` cannot find the manual | it renders a document from the private maintenance checkout | `run-all.sh --no-pdf`, `run-and-prove.sh --chain-only`. It is a maintainer gate, not part of the ride |
 | you want to start over | | `rm -rf artifacts/` and run again. Keys are regenerated |
 
 ## Where the rest of it lives

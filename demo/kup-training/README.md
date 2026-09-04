@@ -30,6 +30,19 @@ cd demo/kup-training             # from the repository root
 
 The orchestrator prints a final report mapping every gate item to its proof artifact.
 
+`run-and-prove.sh` is the assertion-level twin: it runs the same chain and checks each step's
+load-bearing artifact, not just its exit code.
+
+```bash
+./run-and-prove.sh                                  # full chain, fail-fast
+./run-and-prove.sh --skip-online --chain-only       # trust chain only: skips G1 (PDF) + G2 (release)
+./run-and-prove.sh --keep-going --json out.json     # run everything, emit a summary
+```
+
+`--chain-only` exists for the Test Ride: G1 renders a manual from the private maintenance
+plane, and without that checkout the whole proof used to abort with rc=1 after every trust
+check had passed.
+
 ## Steps in order
 
 | File | What it does | Asserts |
