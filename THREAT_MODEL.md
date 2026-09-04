@@ -212,24 +212,23 @@ floor cannot be forged via unsigned JSON; an unsigned revoke does not suppress i
 - `TestRevokedFloor_UnforgeableViaUnsignedJson` — `cmd/skillctl/kill_switch_hardening_test.go`
 - `TestPullBundles_UnsignedRevoke_DoesNotSuppress` — `pkg/skillctl/registry/er1_pull_test.go`
 
-### R06 — TOCTOU (verify-then-use race) — **GAP**
+### R06 — TOCTOU (verify-then-use race) — **covered**
 
 **Threat.** A time-of-check-to-time-of-use gap: the bytes that are *verified* differ from the bytes
 that are *used* because the artefact is swapped on disk between the digest check and the read, or
 the extracted tree is mutated after verification but before execution.
 
-**Status — GAP (filed follow-up).** There is **no dedicated verify-then-use race test today.** What
-exists is **content-binding**: `TestContentBinding_EditedBody_ExitDigestMismatch`
-(`pkg/skillctl/install/offline_verify_test.go`) proves that an edited body fails the digest check —
-i.e. verification is bound to content, so a *static* swap is caught. That is a necessary property
-but it is **not** the same as proving there is no exploitable window between check and use. The code
-carries TOCTOU-aware comments in several places (`pack.go`, `invocation_trail.go`,
-`verdict_cache.go`), but comments are not coverage.
-
-**Recommended follow-up test.** A race/ordering test that mutates the on-disk artefact (or its
-extracted tree) *after* the verify step and asserts the mutation is either impossible (verified
-bytes are the executed bytes — e.g. verify-from-immutable-handle) or re-detected before use. File
-it against `R06`.
+**Status — covered.** `TestVerifyThenUse_MutatedAfterVerify_RechecksAndFailsClosed`
+(`pkg/skillctl/install/offline_verify_test.go`) closes the window: verify PASSES on a pristine
+extraction (time-of-check), then the on-disk tree is mutated three ways — edit-a-byte, swap the
+whole file (atomic `rename` over the verified inode), and **repoint a verified regular file to a
+symlink pointing outside the tree** (a vector no earlier test covered) — and each *subsequent* call
+(time-of-use) re-reads + re-hashes and fails closed with `ErrDigestMismatch`. The seam
+`verifyExtractedMatchesBlob` — on the hot per-invocation gate path (`verify_hook_cmds.go` →
+`VerifyInstalledOffline`/`VerifyInstalledSidecar`) — is **stateless**: it caches no verdict and
+reuses no check-time handle between check and use, so the verified bytes ARE the used bytes. A
+negative control (drop the mutation → the subtest fails) confirms the test bites. The complementary
+verdict-cache reuse path is covered by `TestVerdict_TamperedFile_MissesCache`.
 
 ### R07 — Archive bomb (size / count exhaustion)
 
@@ -273,7 +272,7 @@ rule for agent identities.
 - `TestInstall_BadAuthorSig_Exit11` — `cmd/skillctl/install_e2e_test.go`
 - signing **AC5** (sign with key A → verify with key B → exit 11), inside `TestEndToEnd` — `cmd/skillctl/signing_cmds_test.go`
 
-### R10 — Credential leakage — **THIN / partial**
+### R10 — Credential leakage — **covered**
 
 **Threat.** A signing key, a Git credential, or another secret is exposed — most dangerously through
 an error message, a log line, or persisted state that a later reader can harvest.
@@ -281,20 +280,19 @@ an error message, a log line, or persisted state that a later reader can harvest
 **Mitigation (what is proven).** Signing does not leak the private key in its error output; the Git
 backend does not leak credentials in its output.
 
-**Status — THIN (filed follow-up).** Coverage is limited to *error-path / in-flight* leakage. There
-is **no test over persisted state** — the transparency log (`translog`), the invocation/audit trail,
-or the verdict cache — asserting that a secret never lands *at rest* in files skillctl writes. Given
-that A7 (translog + audit) is an asset precisely *because* it records security events, this is the
-more valuable gap to close.
+**Status — covered.** `TestNoSecretAtRest_PersistedArtifacts` (`cmd/skillctl/threat_r10_test.go`)
+drives a full secret-handling cycle producing the three durable artefacts A7 names — the
+device-signed invocation trail, the HMAC-signed verdict cache, and the ed25519-signed
+transparency-log head/STH — then sweeps EVERY file skillctl wrote for the three secrets (the device
+signing-key seed, the verdict HMAC key, the translog signing key) in 7 encodings (raw, hex, base64
+variants), asserting none appears — only the secrets' own `0600` key files are excused. A positive
+control (a key IS found in its own key file) plus a negative control (a planted seed is detected)
+prove non-vacuity. The artefacts carry only public identifiers (KeyID) + detached signatures.
 
-**Covering tests (partial).**
-- `TestSignBundle_DoesNotLeakKeyInError` — `pkg/skillctl/signing/sign_test.go`
-- `TestGitCredNoLeak` — `pkg/skillctl/backend/git/git_test.go`
-
-**Recommended follow-up test.** A "no secret at rest" test that drives a full sign → install →
-audit/translog write cycle and greps the persisted artefacts (translog entries, verdict-cache
-files, audit rows) for key material / credential patterns, asserting none is present. File it
-against `R10`.
+**Covering tests.**
+- `TestNoSecretAtRest_PersistedArtifacts` — `cmd/skillctl/threat_r10_test.go` (no secret at rest)
+- `TestSignBundle_DoesNotLeakKeyInError` — `pkg/skillctl/signing/sign_test.go` (error-path)
+- `TestGitCredNoLeak` — `pkg/skillctl/backend/git/git_test.go` (error-path)
 
 ### R11 — Malicious / unsigned admission rejected
 
@@ -329,22 +327,14 @@ still **denies** a bad signature with no network; translog receipts round-trip v
 
 ## 5. Residual risks & gaps
 
-The register is honest about two places where the model is ahead of the tests, plus a few risks
-that are structurally out of `skillctl`'s reach. We list them so nobody reads a covered row and
-assumes the whole surface is covered.
+The register lists a few risks that are structurally out of `skillctl`'s reach; we call them out so
+nobody reads a covered row and assumes the whole surface is covered.
 
-**Known test gaps (tracked to a threat ID):**
-
-- **R06 — TOCTOU / verify-then-use race — GAP.** Content-binding is proven
-  (`TestContentBinding_EditedBody_ExitDigestMismatch`); the *race window* between check and use is
-  not. Follow-up: a mutate-after-verify ordering test (see R06). Until then, do not claim "no
-  verify-then-use race" — claim "verification is content-bound".
-
-- **R10 — Credential leakage — THIN.** Only error-path leakage is tested
-  (`TestSignBundle_DoesNotLeakKeyInError`, `TestGitCredNoLeak`). Leakage into *persisted* state
-  (translog, audit trail, verdict cache) is untested. Follow-up: a "no secret at rest" sweep over
-  the written artefacts (see R10). This is the higher-value of the two gaps, because the persisted
-  state is durable and shareable.
+**Recently closed** — the model's two former test gaps are now covered (see the register above):
+- **R06** (verify-then-use race) → `TestVerifyThenUse_MutatedAfterVerify_RechecksAndFailsClosed`
+  (mutate-after-verify: edit / file-swap / symlink-repoint, each re-checked + fail-closed).
+- **R10** (secret at rest) → `TestNoSecretAtRest_PersistedArtifacts` (sweeps trail + verdict cache +
+  translog/STH for the device / verdict-HMAC / translog keys in 7 encodings).
 
 **Structural residuals (defended elsewhere or by design, not by this register):**
 

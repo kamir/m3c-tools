@@ -18,6 +18,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
@@ -370,4 +371,96 @@ func (s stubResolver) GetIdentity(_ context.Context, id string) (*registry.Ident
 		return v, nil
 	}
 	return nil, errors.New("not found")
+}
+
+// TestVerifyThenUse_MutatedAfterVerify_RechecksAndFailsClosed closes the R06
+// gap in THREAT_MODEL.md (§R06 — TOCTOU / verify-then-use race).
+//
+// THREAT-R06: a PASS from the content-binding seam (verifyExtractedMatchesBlob)
+// at time-of-check must NEVER exempt a later use. The existing
+// TestContentBinding_* tests prove that a STATIC swap is caught (verification is
+// content-bound); they do NOT exercise the ORDERING — verify, THEN mutate, THEN
+// use. This test drives that sequence at the real verify->use seam (the hot
+// per-invocation gate calls verifyExtractedMatchesBlob on every skill use, and
+// VerifyInstalledOffline / VerifyInstalledSidecar both funnel through it): after
+// a successful verify we mutate the on-disk tree three ways — edit a byte, swap
+// the whole file, repoint a symlink at attacker content — and assert the NEXT
+// call re-reads the current on-disk bytes and fails closed with
+// verify.ErrDigestMismatch (exit 10) rather than trusting the earlier verdict.
+//
+// The property holds because the seam is stateless: it re-reads the
+// signature-verified .skb AND re-hashes every on-disk file on every call, with
+// no cached verdict between check and use. If a future change ever cached the
+// PASS (or resolved the file handle at check time and reused it at use time),
+// one of the sub-cases below would start passing the stale verdict and fail
+// this test — which is exactly the TOCTOU window R06 guards against.
+func TestVerifyThenUse_MutatedAfterVerify_RechecksAndFailsClosed(t *testing.T) {
+	t.Run("edit_a_byte_after_verify", func(t *testing.T) {
+		dir := t.TempDir()
+		skb := makeSkb(t, dir, map[string]string{"SKILL.md": "# hello", "sub/x.txt": "data"})
+		// time-of-check: verify PASSES against the pristine extraction.
+		if err := verifyExtractedMatchesBlob(skb, dir); err != nil {
+			t.Fatalf("pre-mutation verify must pass, got %v", err)
+		}
+		// mutate a single byte AFTER the verdict was reached.
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("# hellX"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		// time-of-use: the next call must RE-check and fail closed.
+		if err := verifyExtractedMatchesBlob(skb, dir); !errors.Is(err, verify.ErrDigestMismatch) {
+			t.Fatalf("post-edit use must re-detect + fail closed (ErrDigestMismatch), got %v", err)
+		}
+	})
+
+	t.Run("swap_the_whole_file_after_verify", func(t *testing.T) {
+		dir := t.TempDir()
+		skb := makeSkb(t, dir, map[string]string{"SKILL.md": "# hello"})
+		if err := verifyExtractedMatchesBlob(skb, dir); err != nil {
+			t.Fatalf("pre-mutation verify must pass, got %v", err)
+		}
+		// Atomic file swap (rename over the verified file) — the classic
+		// time-of-check-to-time-of-use substitution: the inode the verify saw is
+		// no longer the inode the use reads.
+		staging := filepath.Join(dir, ".staging.tmp")
+		if err := os.WriteFile(staging, []byte("# SWAPPED PAYLOAD"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(staging, filepath.Join(dir, "SKILL.md")); err != nil {
+			t.Fatal(err)
+		}
+		if err := verifyExtractedMatchesBlob(skb, dir); !errors.Is(err, verify.ErrDigestMismatch) {
+			t.Fatalf("post-swap use must fail closed (ErrDigestMismatch), got %v", err)
+		}
+	})
+
+	t.Run("repoint_a_symlink_after_verify", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("symlink creation/semantics differ on Windows; covered on POSIX")
+		}
+		dir := t.TempDir()
+		skb := makeSkb(t, dir, map[string]string{"SKILL.md": "# hello"})
+		if err := verifyExtractedMatchesBlob(skb, dir); err != nil {
+			t.Fatalf("pre-mutation verify must pass, got %v", err)
+		}
+		// Replace the verified regular file with a symlink pointing OUT of the
+		// installed tree at attacker-controlled content. SafeJoin is lexical (it
+		// does not follow the link), so the link is not rejected up front; the
+		// seam instead reads THROUGH it at use time, the bytes no longer match the
+		// signed blob, and it fails closed — never silently followed to a PASS.
+		evilDir := t.TempDir()
+		evil := filepath.Join(evilDir, "evil.md")
+		if err := os.WriteFile(evil, []byte("# EVIL PAYLOAD"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		skillPath := filepath.Join(dir, "SKILL.md")
+		if err := os.Remove(skillPath); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(evil, skillPath); err != nil {
+			t.Fatal(err)
+		}
+		if err := verifyExtractedMatchesBlob(skb, dir); !errors.Is(err, verify.ErrDigestMismatch) {
+			t.Fatalf("post-symlink-repoint use must fail closed (ErrDigestMismatch), got %v", err)
+		}
+	})
 }
