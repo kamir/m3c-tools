@@ -26,7 +26,7 @@ whether **you** can operate the thing. That is this ride.
 | You need | Why | Check |
 |---|---|---|
 | `git`, Go 1.25+ | the demo builds `skillctl` from this checkout | `go version` |
-| `bash`, `curl`, `tar`, `shasum` | the step scripts | present on macOS and Linux |
+| `bash`, `curl`, `tar`, `shasum` | the step scripts | present on macOS and Linux. On Windows they come with Git for Windows, see below |
 | about 200 MB free | build cache and artifacts | n/a |
 | **only for the online half** | an ER1 account, `ER1_API_KEY`, and a reachable aims-core | see [Part 3](#part-3-the-online-half-scan-use-decay) |
 
@@ -34,6 +34,18 @@ whether **you** can operate the thing. That is this ride.
 git clone https://github.com/kamir/m3c-tools.git
 cd m3c-tools/demo/kup-training
 ```
+
+**On Windows.** These are POSIX shell scripts and PowerShell does not run them. Git for
+Windows ships the bash you need, but its recommended install leaves `bash.exe` off your
+PATH, so call it by path:
+
+```powershell
+& "$env:ProgramFiles\Git\bin\bash.exe" run-all.sh --offline-only --no-pdf --no-release
+```
+
+or use the Start menu's **Git Bash** and run the commands below unchanged. Missing git or
+Go entirely: [docs/prerequisites.md](../../docs/prerequisites.md) has one `winget` line per
+tool, plus the no-admin path.
 
 Everything this ride writes lands under `demo/kup-training/artifacts/`, which is
 git-ignored. Your real `~/.claude/` is never touched: the demo gives "Eric" a fake home at
