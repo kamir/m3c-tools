@@ -75,6 +75,63 @@ skillctl help        # the full command map, grouped by capability
 
 ---
 
+## 1b. Optional: prove it on your own machine (source self-test)
+
+Before trusting a binary somebody else built, you can build it yourself and run the test
+suite locally. One command per platform. It clones (or fast-forwards) the repository into
+`~/m3c-tools`, checks the toolchain, verifies the module checksums, builds `skillctl`, runs
+the skillctl test suite (with the race detector where a C toolchain is available), smoke-tests
+the CLI, and prints a PASS/FAIL table.
+
+**Windows (PowerShell):**
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass -Force
+irm https://raw.githubusercontent.com/kamir/m3c-tools/master/scripts/skillctl-test.ps1 | iex
+```
+
+**macOS / Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/master/scripts/skillctl-test.sh | bash
+```
+
+Prerequisites: **git** and **Go 1.25+** on `PATH`. Nothing else. The scripts never touch your
+trust roots, never write outside the checkout, and exit non-zero if any step fails.
+
+Prefer to read before you run? The scripts are
+[`scripts/skillctl-test.ps1`](https://github.com/kamir/m3c-tools/blob/master/scripts/skillctl-test.ps1)
+and [`scripts/skillctl-test.sh`](https://github.com/kamir/m3c-tools/blob/master/scripts/skillctl-test.sh).
+Clone first, then run the local copy:
+
+```bash
+git clone https://github.com/kamir/m3c-tools.git && cd m3c-tools
+./scripts/skillctl-test.sh --repo-dir "$PWD"
+```
+
+Useful flags, the same on both platforms:
+
+| What | PowerShell | bash |
+|---|---|---|
+| Different checkout dir | `-RepoDir C:\src\m3c-tools` | `--repo-dir ~/src/m3c-tools` |
+| Test another branch | `-Ref my-branch` | `--ref my-branch` |
+| Whole module, not just skillctl | `-Full` | `--full` |
+| Skip the race detector | `-NoRace` | `--no-race` |
+
+Two things worth knowing. The default test scope is the package set the release gate uses
+(`./cmd/skillctl/... ./pkg/skillctl/...`): a bare `go test ./...` also builds packages that
+need the network, an ER1 server, whisper or a microphone, and their failures say nothing
+about skillctl. And the race detector needs cgo plus a C compiler (mingw-w64 on Windows,
+`xcode-select --install` on macOS, gcc on Linux); without one the tests still run and the
+race line reports `SKIP` rather than quietly claiming a pass.
+
+This is stage 1 by design: build reproducibility and the test suite. It is **not** the trust
+and release gate. Lint, `govulncheck`, gosec, the coverage gate, the boundary gate and the
+Windows e2e smoke run in [CI](https://github.com/kamir/m3c-tools/actions) and in
+`make ci` / `make release-skillctl`; the Windows lifecycle proof is
+[`scripts/skillctl-quickstart-windows.ps1`](https://github.com/kamir/m3c-tools/blob/master/scripts/skillctl-quickstart-windows.ps1),
+described in [Windows release verification](releasing-skillctl-windows.md).
+
+---
+
 ## 2. Create your author identity
 
 A skill is trusted because it's **signed**. Generate your ed25519 keypair once:
@@ -226,6 +283,7 @@ intents*, and it verifies offline, no authority in the path.
 ## Next steps
 
 - **Every command, flag and exit code:** [skillctl manual](manual-skillctl.md)
+- **Build it yourself and run the suite:** the [source self-test](#1b-optional-prove-it-on-your-own-machine-source-self-test) one-liners above
 - **Capture the memory your agents reason over:** [Quickstart: m3c-tools](quickstart-m3c-tools.md)
 - **The full lifecycle & governance model** lives behind `skillctl help`: it groups commands
   by capability (signing, trust roots, install, agent identity, registry, transparency log,
