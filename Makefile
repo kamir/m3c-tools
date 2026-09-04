@@ -472,6 +472,20 @@ lint:
 	@echo "Running golangci-lint..."
 	golangci-lint run --timeout=5m
 
+# gosec in-CI "no-new-findings" diff gate (mirrors .github/workflows/gosec-diff-gate.yml).
+# Fails iff a change introduces a gosec finding NEW vs the committed signature
+# baseline (docs/security/gosec-inci-baseline.txt). Assumes gosec on PATH:
+#   go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
+.PHONY: gosec-diff-gate
+gosec-diff-gate:
+	@./scripts/gosec-diff-gate.sh
+
+# Regenerate the gosec signature baseline from the current tree (maintainer step,
+# for intentionally accepting a new finding).
+.PHONY: gosec-baseline-update
+gosec-baseline-update:
+	@./scripts/gosec-diff-gate.sh --update
+
 # SPEC-0280 trust-layer evaluation harness (E1–E10).
 # `eval` runs the full measured harness and regenerates results/RESULTS.{csv,md}.
 # `eval-fast` runs only the correctness drivers (E4 real corpus + E10 matrix),
@@ -637,6 +651,8 @@ help:
 	@echo "  checksums      Generate SHA-256 checksums for build/ artifacts"
 	@echo "  ci             Run full CI locally (vet + lint + test + build)"
 	@echo "  lint           Run golangci-lint"
+	@echo "  gosec-diff-gate       Fail on gosec findings NEW vs the committed baseline (needs gosec on PATH)"
+	@echo "  gosec-baseline-update Regenerate the gosec signature baseline from the current tree"
 	@echo "  test-gate-windows  Windows dev test gate: vet + cross-compile + tests (SPEC-0128)"
 	@echo "  test-gate-windows-quick  Same but skip test phase (compile check only)"
 	@echo ""

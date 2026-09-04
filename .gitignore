@@ -20,6 +20,9 @@ profile.cov
 *.sarif
 # ...but the committed gosec baseline snapshot must stay tracked.
 !docs/security/*.sarif
+# gosec JSON scratch file emitted by scripts/gosec-diff-gate.sh (the in-CI
+# no-new-findings diff gate); the committed signature baseline is the .txt below.
+/gosec.json
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
