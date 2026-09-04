@@ -81,8 +81,17 @@ that names it.
 ### Step 4: Write the FR files
 
 ```bash
-./scripts/bugtracker.sh next-id FR      # -> FR-0096
+./scripts/bugtracker.sh next-id FR      # -> FR-0096  (a ceiling, not a claim)
 ```
+
+Write the file, then **claim the number** — reading a ceiling allocates nothing,
+and two sessions asking at the same moment get the same answer:
+
+```bash
+./scripts/bugtracker.sh claim FR-0096
+```
+
+The claim is durable only once the slot table is committed.
 
 One file per ask, `${M3C_MAINTENANCE_DIR}/bug-reports/FR-NNNN-<slug>.md`:
 

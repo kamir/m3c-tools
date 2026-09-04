@@ -338,6 +338,44 @@ EOF
 cp "${DECL%.md}.public.md" "${BADREPO%.md}.public.md"
 refuses "a malformed Repo value is rejected, not passed to gh" "$BT" open 217
 
+# --- claim: die Vergabe wird ein Schreibvorgang -------------------------------
+#
+# next-id LIEST nur. Zwei Sessions, die im selben Moment fragen, bekommen dieselbe
+# Zahl — so wurde FR-0096 zweimal vergeben. claim ist der Schreibvorgang.
+
+CLAIMED="$BUGS/BUG-0300-nimmt-eine-nummer.md"
+printf '# BUG-0300\n\n- **Status:** open\n' > "$CLAIMED"
+
+refuses "claim ohne Slot-Tabelle verweigert" \
+  bash -c "M3C_SLOT_TABLE= '$BT' claim 300"
+refuses "claim mit fehlender Tabelle verweigert" \
+  bash -c "M3C_SLOT_TABLE=$TMP/gibt-es-nicht.md '$BT' claim 300"
+
+TABLE="$TMP/slots.md"
+printf '| 0299 | `BUG-0299-alt.md` | x | y |\n' > "$TABLE"
+accepts "claim schreibt die Zeile" bash -c "M3C_SLOT_TABLE=$TABLE '$BT' claim 300"
+is "die Nummer steht jetzt in der Tabelle" \
+   "$(grep -c '^| 0300 | `BUG-0300-nimmt-eine-nummer.md`' "$TABLE")" "1"
+accepts "claim ist idempotent" bash -c "M3C_SLOT_TABLE=$TABLE '$BT' claim 300"
+is "und schreibt keine zweite Zeile" \
+   "$(grep -c '^| 0300 |' "$TABLE")" "1"
+
+# Genau der Fall, um den es geht: jemand anders hat die Nummer schon.
+RIVAL="$BUGS/BUG-0299-mein-zweitanspruch.md"
+printf '# BUG-0299\n' > "$RIVAL"
+refuses "claim verweigert eine fremd belegte Nummer" \
+  bash -c "M3C_SLOT_TABLE=$TABLE '$BT' claim 299"
+OUT=$(M3C_SLOT_TABLE=$TABLE "$BT" claim 299 2>&1 || true)
+grep -q 'BUG-0299-alt.md' <<<"$OUT" && ok "und nennt, wer sie hat" || bad "nennt den Inhaber nicht"
+grep -q 'later one yields' <<<"$OUT" && ok "und wer weicht" || bad "sagt nicht, wer weicht"
+is "die Tabelle blieb unveraendert" "$(grep -c '^| 0299 |' "$TABLE")" "1"
+rm "$RIVAL" "$CLAIMED"
+
+# next-id sagt, dass eine gelesene Zahl noch keine Vergabe ist.
+OUT=$("$BT" next-id BUG 2>&1 >/dev/null)
+grep -q 'NOT yet allocated' <<<"$OUT" && ok "next-id sagt, dass die Zahl noch nicht belegt ist" \
+  || bad "next-id verschweigt, dass die Zahl nicht belegt ist"
+
 # --- sync ---------------------------------------------------------------------
 "$BT" status 213 fixed >/dev/null
 GH_ISSUE_STATE=CLOSED accepts "sync is quiet when both agree" "$BT" sync 213

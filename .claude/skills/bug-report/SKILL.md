@@ -62,7 +62,14 @@ is indexed the moment it is created.
 Get the next id deterministically — do not count files yourself:
 
 ```bash
-./scripts/bugtracker.sh next-id      # -> BUG-0213
+./scripts/bugtracker.sh next-id      # -> BUG-0213  (a ceiling, not a claim)
+```
+
+After writing the file, **claim the number** — reading a ceiling allocates
+nothing:
+
+```bash
+./scripts/bugtracker.sh claim BUG-0213
 ```
 
 Write `${M3C_MAINTENANCE_DIR}/bug-reports/BUG-NNNN-<short-slug>.md`:
