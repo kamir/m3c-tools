@@ -1179,7 +1179,10 @@ admitted.
 | `-registry` | Registry base URL (default `http://localhost:8080/api/skills`). |
 | `-bump major\|minor\|patch` | Auto-bump the `SKILL.md` version. **Parsed but not yet wired** in v1: it currently changes nothing. |
 
-Exit: `0` gate passed (or `--dry-run`) · `2` gate failed (one or more rows print `FAIL`).
+Exit: `0` gate passed · `2` gate failed (one or more rows print `FAIL`). **`--dry-run` does
+not force a `0`**: it skips the proposal POST, the verdict still rides the exit code. Measured,
+because the earlier wording ("0 gate passed (or --dry-run)") said otherwise and a script that
+believed it would treat every failed gate as a pass.
 
 ---
 
