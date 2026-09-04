@@ -66,7 +66,7 @@ Get the next id deterministically: do not count files yourself:
 ```
 
 After writing the file, **claim the number**: reading a ceiling allocates
-nothing:
+nothing.
 
 ```bash
 ./scripts/bugtracker.sh claim BUG-0213

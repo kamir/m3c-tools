@@ -13,17 +13,17 @@
 set -euo pipefail
 
 # Fixtures legen Wegwerf-git-Repos an. Als Hook geerbte GIT_*-Variablen wuerden
-# jeden git-Aufruf hier auf das AUFRUFENDE Repo umlenken: in
+# jeden git-Aufruf hier auf das AUFRUFENDE Repo umlenken. In
 # m3c-tools-maintenance hat genau das 3076 Loeschungen in einen echten Index
 # geschrieben (BUG-0213, zurueckgenommen, kein Datenverlust). Ein Fixture, das
 # ein echtes Repo anfassen kann, ist eine Waffe, kein Test.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
       GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX
 
-# in_throwaway DIR bricht ab, wenn git auf ein FREMDES Repo zeigt. Muss VOR
+# in_throwaway DIR: bricht ab, wenn git auf ein FREMDES Repo zeigt. Muss VOR
 # dem ersten Schreibbefehl laufen: schon `git init` und `git config` schreiben,
 # und `git config user.email` landete beim ersten Anlauf in der Config des
-# echten Repos. "Noch kein Repo" ist in Ordnung, das ist der Normalfall vor
+# echten Repos. "Noch kein Repo" ist in Ordnung; das ist der Normalfall vor
 # `git init`. Pfade aufgeloest vergleichen (macOS: /var -> /private/var).
 in_throwaway() {
   local want have

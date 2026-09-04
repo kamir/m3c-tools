@@ -85,7 +85,7 @@ that names it.
 ```
 
 Write the file, then **claim the number**: reading a ceiling allocates nothing,
-and two sessions asking at the same moment get the same answer:
+and two sessions asking at the same moment get the same answer.
 
 ```bash
 ./scripts/bugtracker.sh claim FR-0096

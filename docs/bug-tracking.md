@@ -66,7 +66,7 @@ scripts/bugtracker.sh <command> [args]
 
 | Command | Purpose |
 |---------|---------|
-| `next-id [BUG\|FR] [--no-fetch]` | Next free id of that kind (default `BUG`). Use it instead of counting files; see [Allocating an id](#allocating-an-id). |
+| `next-id [BUG\|FR] [--no-fetch]` | Next free id of that kind (default `BUG`). Use it instead of counting files: see [Allocating an id](#allocating-an-id). |
 | `claim <ID>` | Record the id in the shared slot table. **This** is what allocates it. |
 | `path <ID>` | Resolve the analysis file. |
 | `status <ID> [STATUS]` | Read, or set, the canonical status. |
@@ -107,7 +107,7 @@ pull.
 ### Claiming it
 
 `next-id` only **reads**. Two sessions asking in the same moment still get the
-same number, because reading a ceiling records nothing. That is exactly how one
+same number, because reading a ceiling records nothing; that is exactly how one
 id was handed out twice. The write is a separate step:
 
 ```bash
@@ -118,7 +118,7 @@ scripts/bugtracker.sh claim FR-0105       # now it is allocated
 
 `claim` appends the id and its **filename** to the shared slot table named by
 `$M3C_SLOT_TABLE`, and refuses when the number already belongs to a different
-file, naming who holds it, and that the later one yields.
+file, naming who holds it and that the later one yields.
 
 Two honest limits:
 

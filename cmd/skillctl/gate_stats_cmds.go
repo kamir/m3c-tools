@@ -4,6 +4,13 @@ package main
 // append-only gate-audit.jsonl that the hook + sweep write. Read-only; the log
 // is advisory telemetry, never a trust input. Malformed/tampered lines are
 // skipped, not fatal.
+//
+// SPEC-0403 §13-O6 clean-cut: the reader now consumes ONLY the new
+// skillctl.audit.v1 envelope (via auditevent.ToGateEvent). Old flat gate lines
+// written before the FR-0110a upgrade are abandoned: they parse into an Event
+// with no policy and are skipped, never migrated. The human/JSON output columns
+// are unchanged (they are reconstructed from the envelope), so downstream
+// consumers see the same summary shape.
 
 import (
 	"bufio"
@@ -15,6 +22,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/skillctl/auditevent"
 )
 
 type skillCount struct {
@@ -103,11 +112,15 @@ func aggregateGateAudit(home string, cutoff time.Time) gateStatsSummary {
 		}
 		defer f.Close()
 		sc := bufio.NewScanner(f)
-		sc.Buffer(make([]byte, 0, 64*1024), 1<<20) // tolerate long lines; over-long → skipped
+		sc.Buffer(make([]byte, 0, 64*1024), 1<<20) // tolerate long lines; over-long is skipped
 		for sc.Scan() {
-			var ev gateEvent
-			if err := json.Unmarshal(sc.Bytes(), &ev); err != nil {
-				continue // malformed / tampered line → skip, never fatal
+			var e auditevent.Event
+			if err := json.Unmarshal(sc.Bytes(), &e); err != nil {
+				continue // malformed / torn line: skip, never fatal
+			}
+			ev, ok := auditevent.ToGateEvent(&e)
+			if !ok {
+				continue // O6 clean-cut: not a skillctl.audit.v1 gate event (old flat lines land here)
 			}
 			if !cutoff.IsZero() {
 				t, err := time.Parse(time.RFC3339, ev.Ts)
@@ -129,7 +142,7 @@ func aggregateGateAudit(home string, cutoff time.Time) gateStatsSummary {
 				if ev.Reason != "" {
 					denyReasons[ev.Reason]++
 				}
-				recent = append(recent, ev)
+				recent = append(recent, gateEvent(ev))
 			}
 		}
 	}
