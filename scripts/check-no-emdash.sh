@@ -20,9 +20,12 @@ EN=$(printf '\xe2\x80\x93')   # U+2013 EN DASH
 # Exempt paths, each for a reason that is about bytes, not about prose:
 #   pkg/skillctl/bodyscan/testdata/  scanner corpus; the fixtures ARE the input
 #                                    under test, and .expected.json pins offsets
-#   demo/kup-training/artifacts/     checked-in generated demo output, including
-#                                    signed bundles and digests that would break
-EXEMPT='^(pkg/skillctl/bodyscan/testdata/|demo/kup-training/artifacts/)'
+#
+# demo/kup-training/artifacts/ used to be exempt as checked-in generated demo
+# output. That tree is untracked now (it shipped three ed25519 private keys, and
+# git does not carry mode 0600, so every clone broke the demo at `sign`), so the
+# exemption has nothing to exempt: .gitignore keeps it out of the file list.
+EXEMPT='^(pkg/skillctl/bodyscan/testdata/)'
 
 MODE="${1:-}"
 case "$MODE" in
