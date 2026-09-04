@@ -219,7 +219,7 @@ jobs:
         with:
           name: win-trust-json-${{ github.sha }}
 
-      - name: Parity: Windows executed-count must not trail Linux beyond self-skips
+      - name: "Parity: Windows executed-count must not trail Linux beyond self-skips"
         run: |
           python3 scripts/windows-trust-parity.py lin-trust.json win-trust.json
 
@@ -253,7 +253,7 @@ jobs:
           Write-Host "PASS: help output OK"
         shell: pwsh
 
-      - name: Smoke: m3c-tools unknown command exits non-zero
+      - name: "Smoke: m3c-tools unknown command exits non-zero"
         run: |
           $proc = Start-Process -FilePath "build\m3c-tools-windows-amd64.exe" `
             -ArgumentList "unknown-command-xyz" `
@@ -265,14 +265,14 @@ jobs:
           Write-Host "PASS: unknown command exits with code $($proc.ExitCode)"
         shell: pwsh
 
-      - name: Smoke: skillctl help (trust CLI runs on Windows)
+      - name: "Smoke: skillctl help (trust CLI runs on Windows)"
         run: |
           $out = & "build\skillctl-windows-amd64.exe" --help 2>&1
           Write-Host $out
           Write-Host "PASS: skillctl binary executes on Windows"
         shell: pwsh
 
-      - name: Smoke: init.cfg generation
+      - name: "Smoke: init.cfg generation"
         run: |
           # Build a fresh binary for this smoke test
           go build -o build\m3c-tools-test.exe .\cmd\m3c-tools
