@@ -418,7 +418,7 @@ G703	pkg/config/preferences.go	annotation := []byte("\\n# (Migrated to ~/.m3c-to
 G703	pkg/config/preferences.go	} if err := os.WriteFile(canonical, data, 0o600); err != nil { return legacy, err
 G703	pkg/config/profile.go	func ParseEnvFile(path string) (*Profile, error) { data, err := os.ReadFile(path) if err != nil {
 G703	pkg/config/profile.go	if err := os.WriteFile(path, []byte(b.String()), 0600); err != nil { return fmt.Errorf("write profile %q: %w", name, err)
-G703	pkg/config/profile.go	path := filepath.Join(pm.profilesDir(), name+".env") if _, err := os.Stat(path); os.IsNotExist(err) { return fmt.Errorf("profile %q does not exist", name)
+G703	pkg/config/profile.go	} if _, err := os.Stat(path); os.IsNotExist(err) { return fmt.Errorf("profile %q does not exist", name)
 G703	pkg/config/profile.go	} return os.Remove(path) }
 G703	pkg/er1/audio.go	} data, err := os.ReadFile(p) if err != nil || len(data) == 0 {
 G703	pkg/importer/scanner.go	err = filepath.Walk(absRoot, func(path string, info os.FileInfo, err error) error { if err != nil {
@@ -431,6 +431,8 @@ G704	cmd/skillctl/revoke_cmds.go	// an attacker-controlled taint source. httpReq
 G704	cmd/skillctl/revoke_cmds.go	resp, err := client.Do(httpReq) if err != nil {
 G704	cmd/skillctl/scanner_cmds.go	resp, err := httpClient.Do(req) if err != nil {
 G704	cmd/skillctl/scanner_cmds.go	url := target + "/api/v2/skills/usage" req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body)) if err != nil {
+G704	pkg/config/healthcheck.go	req, err := http.NewRequest("GET", baseURL+"/health", nil) // BUG-0086: was /api/plm/projects (requires auth) if err != nil {
+G704	pkg/config/healthcheck.go	resp, err := client.Do(req) if err != nil {
 G704	pkg/plaud/er1source.go	req, err := http.NewRequest("GET", endpoint, nil) if err != nil {
 G704	pkg/plaud/er1source.go	} resp, err := client.Do(req) if err != nil {
 G705	internal/thinking/api/auth.go	w.WriteHeader(http.StatusUnauthorized) _, _ = w.Write([]byte(fmt.Sprintf(`{"error":"unauthorized","detail":%q}`, msg))) }
@@ -455,5 +457,8 @@ G706	cmd/m3c-tools/main.go	} log.Printf("[plaud] downloading audio for %s (%s)..
 G706	cmd/m3c-tools/main.go	} log.Printf("[plaud] got Plaud transcript for %s (%d chars, summary %d chars)", recID, len(tx.Text), len(tx.Summary)) }
 G706	cmd/m3c-tools/main.go	} log.Printf("[plaud] saved locally to ~/plaud-sync/%s/", recID[:8]) // Record in tracking DB as locally saved.
 G706	cmd/m3c-tools/main.go	} log.Printf("[plaud] upload %s DONE doc_id=%s", recID, resp.DocID)
+G706	pkg/config/healthcheck.go	healthCheckInsecureWarnOnce.Do(func() { log.Printf("[config] SECURITY: REFUSING to disable TLS verification (ER1_VERIFY_SSL=false) for NON-loopback host %q during Test Connection: testing over a verified channel instead. ER1_VERIFY_SSL=false is only honoured for 127.0.0.1/localhost.", apiURL) })
+G706	pkg/config/healthcheck.go	healthCheckInsecureWarnOnce.Do(func() { log.Printf("[config] WARNING: TLS verification is DISABLED (ER1_VERIFY_SSL=false) for loopback target %q during Test Connection. This is only safe for local development with self-signed certs.", apiURL) })
+G706	pkg/config/profile.go	// Name the variable, never the value. log.Printf("[config] %s: keeping the value from the environment: profile %q has a placeholder", k, p.Name) continue
 G706	pkg/menubar/app.go	// registered at runtime. The decisive signal when "no icon" is reported. log.Printf("[menubar] menu bar state: icon_applied=%v image=%q title=%q icon_path=%q", iconApplied, state.Image, state.Title, a.Config.IconPath)
 G706	pkg/menubar/fetch.go	} log.Printf("[fetch] using proxy: %s", redacted) return api

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -52,6 +53,80 @@ func (v PocketKeyVerdict) IsValid() bool { return v.State == "valid" }
 //
 // Always returns a non-nil verdict; never returns an error itself. The Detail
 // field carries the underlying technical reason for unreachable / unauthorized.
+// allowedPocketHost reports whether host is a base-URL host this package will
+// send a Pocket API key to.
+//
+// SEC (go/request-forgery): baseURL reaches this function from the loopback
+// config-editor API (pkg/config/editor.go handleValidatePocketKey reads it out
+// of a JSON body), and the request built from it carries the user's Pocket key
+// in an Authorization header. Without a check, a caller who can reach that
+// endpoint chooses where the credential is sent. The endpoint is already bound
+// to loopback behind a per-launch token, so this is defence in depth rather
+// than the only barrier, but "the credential leaves only to hosts we name" is
+// worth enforcing in the one function that attaches the credential.
+//
+// Loopback stays allowed on purpose: the unit tests and the local mock server
+// point at 127.0.0.1, and a request to your own machine cannot exfiltrate.
+func allowedPocketHost(host string) bool {
+	h := strings.ToLower(host)
+	if i := strings.LastIndex(h, ":"); i != -1 && !strings.Contains(h[i:], "]") {
+		h = h[:i] // strip the port; IPv6 literals keep their brackets
+	}
+	h = strings.Trim(h, "[]")
+	switch h {
+	case "public.heypocketai.com", "app.heypocket.com", "heypocketai.com":
+		return true
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	}
+	return strings.HasSuffix(h, ".heypocketai.com") || strings.HasSuffix(h, ".heypocket.com")
+}
+
+// checkPocketBaseURL parses baseURL and rejects anything this package must not
+// send the API key to. It returns a ready-to-return verdict on refusal.
+func checkPocketBaseURL(baseURL string) *PocketKeyVerdict {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return &PocketKeyVerdict{
+			State:        "unreachable",
+			HumanMessage: "The Pocket API URL is not a valid URL.",
+			Detail:       err.Error(),
+		}
+	}
+	if u.Scheme != "https" && u.Scheme != "http" {
+		return &PocketKeyVerdict{
+			State:        "unreachable",
+			HumanMessage: "The Pocket API URL must be an http(s) URL.",
+			Detail:       fmt.Sprintf("scheme %q", u.Scheme),
+		}
+	}
+	if !allowedPocketHost(u.Host) {
+		return &PocketKeyVerdict{
+			State:        "unreachable",
+			HumanMessage: "Refusing to send the Pocket API key to " + u.Host + ". Use the official Pocket API URL.",
+			Detail:       "host not in the Pocket allow-list",
+		}
+	}
+	if u.Scheme == "http" && !isLoopbackHost(u.Host) {
+		return &PocketKeyVerdict{
+			State:        "unreachable",
+			HumanMessage: "Refusing to send the Pocket API key over plain http to " + u.Host + ".",
+			Detail:       "http is allowed for loopback only",
+		}
+	}
+	return nil
+}
+
+// isLoopbackHost reports whether host (with or without a port) is loopback.
+func isLoopbackHost(host string) bool {
+	h := strings.ToLower(host)
+	if i := strings.LastIndex(h, ":"); i != -1 && !strings.Contains(h[i:], "]") {
+		h = h[:i]
+	}
+	h = strings.Trim(h, "[]")
+	return h == "localhost" || h == "127.0.0.1" || h == "::1"
+}
+
 func ValidatePocketKey(httpClient *http.Client, baseURL, key string) PocketKeyVerdict {
 	if strings.TrimSpace(key) == "" {
 		return PocketKeyVerdict{
@@ -67,8 +142,12 @@ func ValidatePocketKey(httpClient *http.Client, baseURL, key string) PocketKeyVe
 		httpClient = &http.Client{Timeout: 10 * time.Second}
 	}
 
-	url := strings.TrimRight(baseURL, "/") + "/public/recordings?limit=1"
-	req, err := http.NewRequest("GET", url, nil)
+	if bad := checkPocketBaseURL(baseURL); bad != nil {
+		return *bad
+	}
+
+	endpoint := strings.TrimRight(baseURL, "/") + "/public/recordings?limit=1"
+	req, err := http.NewRequest("GET", endpoint, nil)
 	if err != nil {
 		return PocketKeyVerdict{
 			State:        "unreachable",

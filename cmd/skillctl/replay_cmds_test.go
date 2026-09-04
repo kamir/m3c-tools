@@ -88,7 +88,7 @@ func TestFetchReplayEvents_EnvelopedShape(t *testing.T) {
 	defer srv.Close()
 
 	got, err := fetchReplayEvents(srv.URL+"/api/skills/runtime/invocations?tenant=kup-001",
-		"test-key", "stage")
+		"test-key")
 	if err != nil {
 		t.Fatalf("fetch: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestFetchReplayEvents_TopLevelArrayShape(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	got, err := fetchReplayEvents(srv.URL+"/api/skills/runtime/invocations", "k", "stage")
+	got, err := fetchReplayEvents(srv.URL+"/api/skills/runtime/invocations", "k")
 	if err != nil {
 		t.Fatalf("fetch: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestFetchReplayEvents_HTTPError(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	_, err := fetchReplayEvents(srv.URL+"/api/skills/runtime/invocations", "k", "stage")
+	_, err := fetchReplayEvents(srv.URL+"/api/skills/runtime/invocations", "k")
 	if err == nil {
 		t.Fatal("want error on 500, got nil")
 	}
@@ -255,7 +255,7 @@ func TestRunReplay_JSONFormat_EndToEnd(t *testing.T) {
 	// Simpler: directly call fetchReplayEvents + JSON encoder; this is
 	// what runReplay does for --format json.
 	got, err := fetchReplayEvents(srv.URL+"/api/skills/runtime/invocations?tenant=x",
-		"test-key", "stage")
+		"test-key")
 	if err != nil {
 		t.Fatalf("fetch: %v", err)
 	}
@@ -317,21 +317,43 @@ func TestTruncString(t *testing.T) {
 // gated G402 site in newReplayHTTPClient: only target=="local" (which maps to the
 // hardcoded loopback base URL) skips TLS verification; prod/stage must verify.
 func TestReplayHTTPClient_TLSPolicy(t *testing.T) {
-	// prod / stage must NOT skip verification.
-	for _, target := range []string{"prod", "stage"} {
-		c := newReplayHTTPClient(target)
+	// A public host must verify, whatever selector produced it.
+	for _, base := range []string{
+		"https://onboarding.guide",
+		"https://youtube-summarizer-mvp-v1-bf2osjjeqa-lz.a.run.app",
+		"https://127.0.0.1.evil.example.com:8081", // loopback-looking, not loopback
+		"https://[2001:db8::1]:8081",
+		"not a url at all",
+	} {
+		c := newReplayHTTPClient(base)
 		if tr, ok := c.Transport.(*http.Transport); ok && tr.TLSClientConfig != nil && tr.TLSClientConfig.InsecureSkipVerify {
-			t.Fatalf("target %q must verify TLS (InsecureSkipVerify must be false)", target)
+			t.Fatalf("base %q must verify TLS (InsecureSkipVerify must be false)", base)
 		}
 	}
-	// local skips verification, but only because its base URL is loopback.
-	local := newReplayHTTPClient("local")
-	tr, ok := local.Transport.(*http.Transport)
-	if !ok || tr.TLSClientConfig == nil || !tr.TLSClientConfig.InsecureSkipVerify {
-		t.Fatal("target=local should use the loopback dev transport (InsecureSkipVerify=true)")
+	// A loopback host gets the dev transport, because there is no network path
+	// for a man in the middle and the dev server is self-signed.
+	for _, base := range []string{
+		"https://127.0.0.1:8081",
+		"https://localhost:8081",
+		"https://[::1]:8081",
+	} {
+		c := newReplayHTTPClient(base)
+		tr, ok := c.Transport.(*http.Transport)
+		if !ok || tr.TLSClientConfig == nil || !tr.TLSClientConfig.InsecureSkipVerify {
+			t.Fatalf("base %q should use the loopback dev transport (InsecureSkipVerify=true)", base)
+		}
 	}
+	// The selector that reaches that branch must still resolve to loopback:
+	// if this ever changes, the guard above silently starts verifying instead
+	// of silently trusting, which is the safe direction, but the test says so.
 	if base := defaultReplayBaseURL("local"); !strings.HasPrefix(base, "https://127.0.0.1") {
 		t.Fatalf("target=local base URL must be loopback, got %q", base)
+	}
+	if !replayBaseIsLoopback(defaultReplayBaseURL("local")) {
+		t.Fatal("target=local must be recognised as loopback")
+	}
+	if replayBaseIsLoopback(defaultReplayBaseURL("prod")) {
+		t.Fatal("target=prod must NOT be recognised as loopback")
 	}
 }
 
