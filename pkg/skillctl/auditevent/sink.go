@@ -35,20 +35,23 @@ type Sink interface {
 }
 
 // Dispatcher redacts an event, validates it, and fans it out to every configured
-// sink. In FR-0109 it is best-effort by construction: a sink failure is collected
-// and returned but never panics and never blocks; this preserves the SPEC-0255
-// decision-invariance default for the gate hot path (REQ-6.4). The explicit
-// best-effort / durable / required delivery modes (§6) arrive in FR-0110; this
-// type is their attachment point.
+// sink. Its delivery MODE (best-effort / durable / required, §6) decides what a
+// sink failure means (delivery.go). It never panics and never blocks, which
+// preserves the SPEC-0255 decision-invariance default for the gate hot path
+// (REQ-6.4). NewDispatcher keeps the FR-0109 best-effort default; NewDispatcherMode
+// selects durable (FR-0110a) or names required (whose enforcement is FR-0110b).
 type Dispatcher struct {
-	redactor Redactor
-	sinks    []Sink
+	redactor       Redactor
+	sinks          []Sink
+	mode           Mode // §6 delivery semantics; best-effort unless set (delivery.go).
+	durableRetries int  // in-process retry budget for a durable/required sink Write (>=1).
 }
 
-// NewDispatcher builds a Dispatcher applying r to every event before fan-out.
-// Pass DefaultRedactor() unless a policy supplies its own (REQ-5.6).
+// NewDispatcher builds a best-effort Dispatcher applying r to every event before
+// fan-out. Pass DefaultRedactor() unless a policy supplies its own (REQ-5.6). Use
+// NewDispatcherMode for durable delivery (§6).
 func NewDispatcher(r Redactor, sinks ...Sink) *Dispatcher {
-	return &Dispatcher{redactor: r, sinks: sinks}
+	return &Dispatcher{redactor: r, sinks: sinks, mode: ModeBestEffort, durableRetries: 1}
 }
 
 // Dispatch redacts e in place (so no un-redacted copy lingers), stamps any
@@ -80,13 +83,9 @@ func (d *Dispatcher) Dispatch(e *Event) error {
 		return err
 	}
 
-	var errs []error
-	for _, s := range d.sinks {
-		if err := s.Write(e); err != nil {
-			errs = append(errs, fmt.Errorf("sink %q: %w", s.Name(), err))
-		}
-	}
-	return errors.Join(errs...)
+	// Fan out under the configured delivery mode (delivery.go). The result is
+	// advisory on the gate hot path (REQ-6.4).
+	return d.deliver(e)
 }
 
 // Close closes every sink, joining any errors. Sinks are closed even if an

@@ -15,6 +15,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/skillctl/auditevent"
 )
 
 // gateEvent is one JSON line in gate-audit.jsonl. Tags are lowercase_snake to
@@ -28,8 +30,8 @@ type gateEvent struct {
 	Reason        string `json:"reason,omitempty"` //
 	ExitCode      int    `json:"exit_code"`        //
 	ContentDigest string `json:"content_digest,omitempty"`
-	Online        bool   `json:"online"`     // the online chain ran (hook path)
-	CacheHit      bool   `json:"cache_hit"`  // a verdict-cache hit served it (hook path)
+	Online        bool   `json:"online"`    // the online chain ran (hook path)
+	CacheHit      bool   `json:"cache_hit"` // a verdict-cache hit served it (hook path)
 	SessionID     string `json:"session_id,omitempty"`
 }
 
@@ -68,6 +70,15 @@ func defaultGateAuditSink(home string, line []byte) error {
 
 // appendGateEvent records one decision. Fire-and-forget: any error or panic is
 // swallowed so it can never reach the gate. Fills Ts if the caller left it empty.
+//
+// SPEC-0403 FR-0110a: the SPEC-0255 gate line is now emitted ON the shared
+// skillctl.audit.v1 envelope (policy.allow / policy.deny / policy.evaluate, §4)
+// through the best-effort auditevent Dispatcher. The write still goes through the
+// SAME gateAuditSink seam (append-only 0600 JSONL + rotation), so decision-
+// invariance holds byte-for-byte: this whole function is best-effort, swallows
+// every error, and recovers from any panic, so a mapping or sink failure NEVER
+// changes the gate decision or exit code (REQ-6.4 / SPEC-0255). No `required`-mode
+// fail-close here; that is FR-0110b.
 func appendGateEvent(home string, ev gateEvent) {
 	defer func() { _ = recover() }()
 	if home == "" {
@@ -76,11 +87,36 @@ func appendGateEvent(home string, ev gateEvent) {
 	if ev.Ts == "" {
 		ev.Ts = time.Now().UTC().Format(time.RFC3339)
 	}
-	line, err := json.Marshal(ev)
+	// Map the flat gate line onto the shared envelope. An unknown decision (or any
+	// mapping error) is swallowed: the gate is never affected.
+	e, err := auditevent.FromGateEvent(auditevent.GateEvent(ev), version)
 	if err != nil {
 		return
 	}
-	_ = gateAuditSink(home, line)
+	_ = newGateAuditDispatcher(home).Dispatch(e)
+}
+
+// newGateAuditDispatcher builds the best-effort dispatcher for the gate producer.
+// Its sole sink marshals the envelope and writes it through the injectable
+// gateAuditSink seam, which SPEC-0255's decision-invariance test drives to force a
+// logging failure. Best-effort mode: a sink error is returned to Dispatch and
+// dropped by appendGateEvent, never reaching the gate (REQ-6.4).
+func newGateAuditDispatcher(home string) *auditevent.Dispatcher {
+	return auditevent.NewDispatcher(auditevent.DefaultRedactor(), &gateAuditSeamSink{home: home})
+}
+
+// gateAuditSeamSink adapts the auditevent.Sink interface onto the SPEC-0255
+// gateAuditSink write seam.
+type gateAuditSeamSink struct{ home string }
+
+func (s *gateAuditSeamSink) Name() string { return "gate-audit" }
+func (s *gateAuditSeamSink) Close() error { return nil }
+func (s *gateAuditSeamSink) Write(e *auditevent.Event) error {
+	line, err := json.Marshal(e)
+	if err != nil {
+		return err
+	}
+	return gateAuditSink(s.home, line)
 }
 
 // decisionForExit maps a numeric exit to the allow/deny vocabulary (hook path).
