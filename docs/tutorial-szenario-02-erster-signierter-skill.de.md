@@ -181,8 +181,11 @@ Ausgabe: eine Tabelle mit elf Prüfungen. In diesem Übungsskill schlägt `#9 sm
 fehl, weil es kein `tests/smoke.sh` gibt. Das ist der beabsichtigte Anblick: das Tor sagt
 Ihnen, was fehlt, bevor ein Mensch seine Zeit darauf verwendet.
 
-> Zwei Dinge dazu. Mit `--dry-run` ist der Prozess-Exit **immer** `0`, lesen Sie die Tabelle,
-> nicht den Exit-Code; ohne `--dry-run` bedeutet `2`, dass das Tor gehalten hat.
+> Zwei Dinge dazu. Der Exit-Code trägt das Urteil, auch mit `--dry-run`: `0` heißt, das Tor
+> ist bestanden, `2` heißt, es hat gehalten. `--dry-run` lässt nur den Eintrag im Registry
+> weg. (Eine frühere Fassung dieses Absatzes behauptete, `--dry-run` sei immer `0`. Das war
+> falsch, und ein Skript, das es geglaubt hätte, hätte jedes gehaltene Tor als Erfolg
+> gelesen.)
 > Und `tar -xzf` ist hier nur ein Übungsgriff: ein von Hand entpackter Skill ist danach für
 > `skillctl verify` unsichtbar (siehe Teil 3.3).
 
