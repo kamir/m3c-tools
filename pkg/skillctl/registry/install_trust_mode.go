@@ -87,6 +87,14 @@ type InstallOpts struct {
 	TrustRootsFingerprint string
 	ContextID             string
 	AllowDowngrade        bool
+
+	// RegistrySpec records WHERE the bundle came from, verbatim: "self", an
+	// er1://… context, or a git locator (github://…, gitlab://…, local://…).
+	// Empty defaults to "self", which is what the sidecar recorded
+	// unconditionally before FR-0116. It has to be the real locator, because a
+	// later `verify <name>` resolves the anchor from it: a registry pinned with
+	// `peer add` keeps its key in skill-peers.yaml, findable only by locator.
+	RegistrySpec string
 }
 
 // InstallResult reports what changed.
@@ -429,7 +437,7 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 		Skill:                 b.Name,
 		Version:               b.Version,
 		BundleDigest:          b.Digest,
-		Registry:              "self",
+		Registry:              strOrSelf(opts.RegistrySpec),
 		SourceER1ItemID:       b.SourceDocID,
 		SourceER1Context:      opts.ContextID,
 		PulledAt:              time.Now().UTC().Format(time.RFC3339),
@@ -554,6 +562,14 @@ func loadProvenance(path string) (*ProvenanceSidecar, error) {
 		return nil, err
 	}
 	return &s, nil
+}
+
+// strOrSelf keeps the pre-FR-0116 default: an unset spec still reads "self".
+func strOrSelf(s string) string {
+	if strings.TrimSpace(s) == "" {
+		return "self"
+	}
+	return s
 }
 
 func writeProvenance(path string, side ProvenanceSidecar) error {

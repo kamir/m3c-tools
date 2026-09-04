@@ -275,7 +275,13 @@ func VerifyInstalledSidecar(opts Opts) error {
 	if ac, aerr := registry.ReadAttestationStash(target); aerr == nil {
 		// Trust-roots are MANDATORY to re-anchor (policy: parity with the HTTP
 		// path, which errors when the root is nil). Fail closed if absent.
-		str, lerr := registry.LoadSelfTrustRoots(trPath)
+		// FR-0116: a caller that already resolved the anchor (typically from a
+		// pinned peer, whose key lives in skill-peers.yaml and in no file this
+		// function could find) hands it in directly.
+		str, lerr := opts.SelfTrustRoots, error(nil)
+		if str == nil {
+			str, lerr = registry.LoadSelfTrustRoots(trPath)
+		}
 		if lerr != nil || str == nil || len(str.PubKey()) == 0 {
 			return fmt.Errorf("verify-sidecar: self trust-roots required to re-anchor %q but unavailable (%v): %w",
 				opts.Name, lerr, verify.ErrRegistryNotTrusted)

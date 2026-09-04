@@ -2,6 +2,7 @@ package install
 
 import (
 	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -187,4 +188,54 @@ func TestSidecarReanchor_GovernanceFromSignedAttestation(t *testing.T) {
 	if !errors.Is(err, verify.ErrGovernanceBelowMin) {
 		t.Fatalf("signed yellow under green floor must be DENIED via the SIGNED level (not the green sidecar), got: %v", err)
 	}
+}
+
+// FR-0116: a caller that resolved the anchor itself, typically from a peer
+// pinned with `skillctl peer add` (whose key lives in skill-peers.yaml and in no
+// file this package could find), hands it in directly. It must be honoured, and
+// it must WIN over the path.
+func TestSidecarReanchor_ResolvedTrustRootsWins(t *testing.T) {
+	home, name, _, _, pub, _ := reanchorFixture(t, "green")
+
+	str := loadRootsFromKey(t, pub, "github://kup/skill-registry")
+	if err := VerifyInstalledSidecar(Opts{
+		Name: name, HomeDir: home,
+		SelfTrustRootsPath: filepath.Join(t.TempDir(), "does-not-exist.yaml"),
+		SelfTrustRoots:     str,
+	}); err != nil {
+		t.Fatalf("a resolved self trust-root must be honoured even when the path is missing: %v", err)
+	}
+}
+
+// The resolved root is not a bypass: hand in the WRONG key and the re-anchor
+// must still refuse. Otherwise the new field would be a way around the pin.
+func TestSidecarReanchor_ResolvedTrustRootsWrongKeyRefused(t *testing.T) {
+	home, name, _, _, _, _ := reanchorFixture(t, "green")
+
+	otherPub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	str := loadRootsFromKey(t, otherPub, "github://kup/skill-registry")
+	if err := VerifyInstalledSidecar(Opts{Name: name, HomeDir: home, SelfTrustRoots: str}); err == nil {
+		t.Fatal("a foreign key must not re-anchor the install")
+	}
+}
+
+// loadRootsFromKey builds a RESOLVED *registry.SelfTrustRoots the way production
+// does: through the loader, so the verifying key is actually resolved. A
+// hand-built struct carries base64 and no key, which is precisely the half-built
+// state a caller must not be able to pass off as an anchor.
+func loadRootsFromKey(t *testing.T, pub ed25519.PublicKey, locator string) *registry.SelfTrustRoots {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "trust-roots.yaml")
+	body := "registry: " + locator + "\npubkey_b64: " + base64.StdEncoding.EncodeToString(pub) + "\ngovernance_minimum: green\n"
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	str, err := registry.LoadSelfTrustRoots(p)
+	if err != nil {
+		t.Fatalf("load trust-roots fixture: %v", err)
+	}
+	return str
 }

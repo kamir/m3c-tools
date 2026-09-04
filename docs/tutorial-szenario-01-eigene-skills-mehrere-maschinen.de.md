@@ -489,16 +489,13 @@ skillctl verify --all
 skillctl audit --source all --minimum-governance green
 ```
 
-> **Zwei Grenzen, gemessen, bevor Sie das in einen Cronjob schreiben.** Erstens antwortet
-> `skillctl verify <name>` nach einer Installation aus einem Git- oder ER1-Registry mit
-> „trust roots not configured; run `skillctl trust add …`" und zeigt auf
-> `~/.claude/skill-trust-roots.yaml`, die Datei des HTTP-Modells: das Nachprüfen eines
-> einzelnen installierten Skills ist an dieses Modell gebunden. Der belastbare Nachweis ist
-> vorerst der Pull selbst plus `skillctl registry show`. Zweitens fällt `verify --all` unter
-> verwalteten Trust-Roots **fail-closed**, wenn keine Widerrufsquelle erreichbar ist, und
-> würde mit `--quarantine` frisch installierte Skills verschieben. Lassen Sie den Sweep
+> **Eine Grenze, gemessen, bevor Sie das in einen Cronjob schreiben.** `verify --all` fällt
+> unter verwalteten Trust-Roots **fail-closed**, wenn keine Widerrufsquelle erreichbar ist,
+> und würde mit `--quarantine` frisch installierte Skills verschieben. Lassen Sie den Sweep
 > deshalb erst ohne `--quarantine` laufen und lesen Sie die Ausgabe, bis der Widerrufskanal
-> steht.
+> steht. Das Nachprüfen eines **einzelnen** Skills (`skillctl verify <name>`) funktioniert
+> dagegen auch für einen aus dem Git-Registry installierten Skill: es bindet den Inhalt an
+> das signierte Bundle und rechnet die Attestierung gegen den gepinnten Schlüssel nach.
 
 `audit` hat eine eigene Skala: `0` alles in Ordnung, `2` mindestens ein Skill unbestätigt
 oder unter der Schwelle, `3` mindestens ein Skill defekt.
