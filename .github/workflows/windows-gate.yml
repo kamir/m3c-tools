@@ -2,7 +2,7 @@ name: Windows Gate
 
 # SPEC-0128: Windows Dev Test Cycle
 # Validates Windows binary correctness on every push and PR.
-# Runs on the real windows-latest runner — not emulated.
+# Runs on the real windows-latest runner, not emulated.
 #
 # ── OPT-OUT CONTRACT (the trust-layer test surface) ───────────────────────────
 # The `windows-trust` job below runs the WHOLE trust-layer test surface on
@@ -10,12 +10,12 @@ name: Windows Gate
 #
 #     ./pkg/skillctl/...  ./cmd/skillctl/...  ./evaluation/...
 #
-# It runs them WHOLE-PACKAGE — there is NO `-run "TestA|TestB|…"` allow-list.
+# It runs them WHOLE-PACKAGE. There is NO `-run "TestA|TestB|…"` allow-list.
 # That is the durability guarantee: every trust test we ship (today and forever)
 # is run on Windows automatically, with no list for anyone to maintain.
 #
 # The ONLY tests excluded from the Windows run are ones that SELF-SKIP because a
-# real external dependency is absent — a live ER1 server, the whisper binary,
+# real external dependency is absent: a live ER1 server, the whisper binary,
 # real network egress, a microphone, or the Plaud cloud API. Those gate on the
 # shared pkg/testutil.Require* helpers (env-keyed off M3C_TEST_*), which the
 # windows-trust job deliberately leaves unset, so they t.Skip cleanly on every
@@ -25,7 +25,7 @@ name: Windows Gate
 #
 # DO NOT reintroduce a `-run` allow-list into the windows-trust job. The
 # `drift-guard` job below FAILS the build if one ever appears. New trust tests
-# are covered automatically — add them and they run on Windows. If a new test
+# are covered automatically: add them and they run on Windows. If a new test
 # genuinely needs an external service, gate it with a pkg/testutil.Require*
 # helper (or add one), never by excluding it in CI.
 
@@ -80,7 +80,7 @@ jobs:
           GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build ./pkg/config/...
 
       # The whole trust surface must TEST-COMPILE for windows/amd64 on every
-      # change — a fast ubuntu-side guard so a Windows-incompatible test is
+      # change: a fast ubuntu-side guard so a Windows-incompatible test is
       # caught before the windows-latest job even starts.
       - name: Test-compile the whole trust surface for Windows
         run: |
@@ -97,7 +97,7 @@ jobs:
           # Fail if exe is suspiciously small (< 1 MB = something went wrong)
           SIZE=$(stat -c%s build/m3c-tools-windows-amd64.exe)
           if [ "$SIZE" -lt 1048576 ]; then
-            echo "ERROR: m3c-tools.exe is only ${SIZE} bytes — build may be incomplete"
+            echo "ERROR: m3c-tools.exe is only ${SIZE} bytes, build may be incomplete"
             exit 1
           fi
           echo "m3c-tools.exe: ${SIZE} bytes OK"
@@ -113,7 +113,7 @@ jobs:
 
   # ── Phase 3: Whole trust surface on the real Windows runner (OPT-OUT) ──────
   # This is the durable guarantee. It runs ./pkg/skillctl/... ./cmd/skillctl/...
-  # ./evaluation/... WHOLE-PACKAGE, env-clean. No -run allow-list — see the
+  # ./evaluation/... WHOLE-PACKAGE, env-clean. No -run allow-list: see the
   # OPT-OUT CONTRACT at the top of this file. External-service tests self-skip
   # because M3C_TEST_* are unset; platform-incompatible code is build-tagged out.
   windows-trust:
@@ -131,14 +131,14 @@ jobs:
         run: go vet ./...
 
       - name: Run the WHOLE trust surface (opt-out, env-clean)
-        # NOTE: no -run filter — this is intentional and enforced by drift-guard.
+        # NOTE: no -run filter: this is intentional and enforced by drift-guard.
         # -json so the parity check can count executed tests; tee keeps a
         # human-readable copy in the log.
         # -tags allow_home_override_test (WIN-T8): on Windows a shipping build
         # ignores $HOME for the trust-root/token-key paths; the tag re-enables the
         # $HOME injection the hermetic trust tests rely on. It flips a const, not a
         # test set, so windows/linux executed-test COUNTS stay identical (the Linux
-        # parity run below needs no tag — non-Windows always honors $HOME).
+        # parity run below needs no tag: non-Windows always honors $HOME).
         run: |
           go test -tags allow_home_override_test -json -count=1 -timeout=300s `
             ./pkg/skillctl/... ./cmd/skillctl/... ./evaluation/... `
@@ -164,12 +164,12 @@ jobs:
 
   # ── Drift guard (the "forever") ───────────────────────────────────────────
   # Two cheap, robust checks keep the opt-out contract honest:
-  #   1. grep guard — fail if a `-run` allow-list ever reappears in the
+  #   1. grep guard: fail if a `-run` allow-list ever reappears in the
   #      windows-trust job. This is the primary guard: it makes the only way to
   #      hide a trust test from Windows be a self-skip, not a CI exclusion.
-  #   2. parity check — a Linux run of the SAME package set, compared to the
+  #   2. parity check: a Linux run of the SAME package set, compared to the
   #      Windows run by executed-test count. If Windows executed materially
-  #      fewer tests than Linux (beyond the known self-skip set), fail — that
+  #      fewer tests than Linux (beyond the known self-skip set), fail, that
   #      means tests silently vanished on Windows.
   drift-guard:
     name: Drift Guard (opt-out parity)
@@ -187,7 +187,7 @@ jobs:
       #     We isolate the windows-trust job block, drop comment lines (so the
       #     "# NOTE: no -run filter" comment never trips the guard), and fail if
       #     any remaining `go test` line carries a -run flag.
-      - name: Guard — windows-trust job must not use a -run allow-list
+      - name: "Guard: windows-trust job must not use a -run allow-list"
         run: |
           set -e
           block="$(awk '/^  windows-trust:/{f=1} /^  [a-z].*:$/{if(f && $0 !~ /windows-trust/) f=0} f' \
@@ -210,7 +210,7 @@ jobs:
           go test -json -count=1 -timeout=300s \
             ./pkg/skillctl/... ./cmd/skillctl/... ./evaluation/... \
             | tee lin-trust.json
-        # Don't fail the parity job on a red test here — the windows-trust job
+        # Don't fail the parity job on a red test here. The windows-trust job
         # is the authority on green/red; this run only counts executed tests.
         continue-on-error: true
 
@@ -219,7 +219,7 @@ jobs:
         with:
           name: win-trust-json-${{ github.sha }}
 
-      - name: Parity — Windows executed-count must not trail Linux beyond self-skips
+      - name: Parity: Windows executed-count must not trail Linux beyond self-skips
         run: |
           python3 scripts/windows-trust-parity.py lin-trust.json win-trust.json
 
@@ -242,7 +242,7 @@ jobs:
           name: windows-binaries-${{ github.sha }}
           path: build/
 
-      - name: Smoke — m3c-tools help
+      - name: Smoke, m3c-tools help
         run: |
           $out = & "build\m3c-tools-windows-amd64.exe" help 2>&1
           Write-Host $out
@@ -253,7 +253,7 @@ jobs:
           Write-Host "PASS: help output OK"
         shell: pwsh
 
-      - name: Smoke — m3c-tools unknown command exits non-zero
+      - name: Smoke: m3c-tools unknown command exits non-zero
         run: |
           $proc = Start-Process -FilePath "build\m3c-tools-windows-amd64.exe" `
             -ArgumentList "unknown-command-xyz" `
@@ -265,14 +265,14 @@ jobs:
           Write-Host "PASS: unknown command exits with code $($proc.ExitCode)"
         shell: pwsh
 
-      - name: Smoke — skillctl help (trust CLI runs on Windows)
+      - name: Smoke: skillctl help (trust CLI runs on Windows)
         run: |
           $out = & "build\skillctl-windows-amd64.exe" --help 2>&1
           Write-Host $out
           Write-Host "PASS: skillctl binary executes on Windows"
         shell: pwsh
 
-      - name: Smoke — init.cfg generation
+      - name: Smoke: init.cfg generation
         run: |
           # Build a fresh binary for this smoke test
           go build -o build\m3c-tools-test.exe .\cmd\m3c-tools

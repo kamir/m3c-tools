@@ -19,7 +19,7 @@ package verify
 //
 // Why we re-fetch identities here even when BundleMeta carries pubkey hints:
 // SPEC §4.4 says "trust the registry's identity table" (identity_keys_authorized:
-// from-registry). The signature-row-embedded fingerprint is a UX hint only —
+// from-registry). The signature-row-embedded fingerprint is a UX hint only:
 // we re-resolve via GetIdentity so a key rotation that touches the identity
 // table (but hasn't yet propagated into older signature rows) still verifies.
 
@@ -42,7 +42,7 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
 )
 
-// Identity-fetcher injection point — lets tests hand a deterministic
+// Identity-fetcher injection point: lets tests hand a deterministic
 // fixture without spinning an httptest.Server. Prod callers pass a
 // *registry.Client; the type matches because Client has a method with
 // this exact signature.
@@ -54,7 +54,7 @@ type identityFetcher interface {
 // by the caller; Verify does not mutate any of them.
 type VerifyOpts struct {
 	// BundlePath is the on-disk location of the staged blob whose digest
-	// is being verified. The verifier reads this file ONCE — see
+	// is being verified. The verifier reads this file ONCE: see
 	// step 1 (digest recomputation).
 	BundlePath string
 
@@ -116,7 +116,7 @@ type VerifyOpts struct {
 // install record.
 type VerifyResult struct {
 	// Digest is the canonical "sha256:<hex>" of the recomputed blob
-	// (NOT the value advertised by the registry — see step 1).
+	// (NOT the value advertised by the registry: see step 1).
 	Digest string
 
 	// AuthorIdentity is the verified author's identity_id.
@@ -140,16 +140,16 @@ type VerifyResult struct {
 	// SelfAttested (SPEC-0246 §5) reports whether the binding governance
 	// attestation was reviewed by the bundle's own author (reviewer_id ==
 	// author_id). Pointer-valued so inspect/audit can distinguish "self" (true),
-	// "independent" (false), and "unknown" (nil — no binding attestation, or a
+	// "independent" (false), and "unknown" (nil, no binding attestation, or a
 	// registry that didn't surface the comparison). The verifier only *refuses*
 	// on this when the trust root sets require_independent_review.
 	SelfAttested *bool
 
 	// DataScopes (SPEC-0196 §12 Q1 / P2b) is the declared data-scope surfaced
 	// from the bundle, each tagged with its provenance: ScopeProvenanceSignedManifest
-	// (read from the author-signed bundle.json INSIDE the digest-verified .skb —
+	// (read from the author-signed bundle.json INSIDE the digest-verified .skb,
 	// authoritative) vs ScopeProvenanceBundleRow (the mutable post-admit PATCH
-	// value on the registry row — advisory). When both carry a declaration, the
+	// value on the registry row, advisory). When both carry a declaration, the
 	// signed-manifest one is authoritative; the verifier surfaces both so a CISO
 	// can see at a glance whether today's declaration is author-bound. Advisory:
 	// surfacing a scope never changes the pass/fail verdict (SPEC-0196 §11).
@@ -161,15 +161,15 @@ type VerifyResult struct {
 
 // ScopeProvenance distinguishes WHERE a declared data-scope came from. This is
 // the security-relevant fact a CISO needs: a signed-manifest scope is covered by
-// the author signature (tampering it breaks the chain — SPEC-0196 §12 Q1); a
+// the author signature (tampering it breaks the chain: SPEC-0196 §12 Q1); a
 // bundle-row scope rides the mutable post-admit PATCH and is NOT author-bound.
 type ScopeProvenance string
 
 const (
-	// ScopeProvenanceSignedManifest — read from the author-signed bundle.json
+	// ScopeProvenanceSignedManifest: read from the author-signed bundle.json
 	// inside the digest-verified .skb. Authoritative; author-signature-covered.
 	ScopeProvenanceSignedManifest ScopeProvenance = "signed-manifest"
-	// ScopeProvenanceBundleRow — read from the mutable post-admit registry row
+	// ScopeProvenanceBundleRow: read from the mutable post-admit registry row
 	// (the `intent declare` PATCH target). Advisory; NOT author-bound.
 	ScopeProvenanceBundleRow ScopeProvenance = "bundle-row"
 )
@@ -201,20 +201,20 @@ func Verify(opts VerifyOpts) (*VerifyResult, error) {
 		ctx = context.Background()
 	}
 
-	// Step 1 — recompute digest from the staged blob.
+	// Step 1: recompute digest from the staged blob.
 	digestRaw, digestStr, err := stepRecomputeDigest(opts.BundlePath)
 	if err != nil {
 		return nil, err
 	}
 	logStep(opts.Logger, "digest_ok", "digest=%s", digestStr)
 
-	// Step 1b — compare to advertised digest (constant-time slice cmp).
+	// Step 1b: compare to advertised digest (constant-time slice cmp).
 	if err := stepCompareDigest(digestRaw, opts.BundleMeta); err != nil {
 		return nil, err
 	}
 	logStep(opts.Logger, "digest_match_ok", "digest=%s", digestStr)
 
-	// Step 7 — bundle status must be "admitted". (SPEC §7 step 7 is a
+	// Step 7: bundle status must be "admitted". (SPEC §7 step 7 is a
 	// late check, but `status: revoked` is cheap to short-circuit before
 	// we reach for crypto. Wrap as ErrBlobMissing since "this bundle is
 	// not currently admissible" is the spirit of the existing sentinel.)
@@ -223,21 +223,21 @@ func Verify(opts VerifyOpts) (*VerifyResult, error) {
 	}
 	logStep(opts.Logger, "bundle_admitted_ok", "")
 
-	// Step 2/3 — verify author signature against identity pubkey.
+	// Step 2/3: verify author signature against identity pubkey.
 	authorID, err := stepVerifyAuthor(ctx, digestRaw, opts.BundleMeta, opts.TrustRoot, opts.IdentityFetcher, opts.Logger)
 	if err != nil {
 		return nil, err
 	}
 	logStep(opts.Logger, "author_sig_ok", "author=%s", authorID)
 
-	// Step 4 — verify registry signature against any non-retired trust-root key.
+	// Step 4: verify registry signature against any non-retired trust-root key.
 	regKeyID, err := stepVerifyRegistry(digestRaw, opts.BundleMeta, opts.TrustRoot)
 	if err != nil {
 		return nil, err
 	}
 	logStep(opts.Logger, "registry_sig_ok", "key=%s", regKeyID)
 
-	// Step 5.5 — tenant-block check (SPEC-0188 §7 step 5.5, G-18 closure
+	// Step 5.5: tenant-block check (SPEC-0188 §7 step 5.5, G-18 closure
 	// 2026-05-06). When a tenant scope is in effect, look for any tenant-
 	// scoped attestation with governance_level=red for this bundle. If
 	// present, fail closed with ErrTenantBlocked (exit 16). This is how
@@ -257,7 +257,7 @@ func Verify(opts VerifyOpts) (*VerifyResult, error) {
 		logStep(opts.Logger, "tenant_block_ok", "tenant=%s", opts.Tenant)
 	}
 
-	// Step 5 — governance gate (SPEC-0281: re-verify the signed attestation
+	// Step 5: governance gate (SPEC-0281: re-verify the signed attestation
 	// against a pinned reviewer key; advisory if no reviewers pinned).
 	govLevel, govVerified, err := stepCheckGovernance(digestStr, opts.BundleMeta, opts.TrustRoot, opts.GovernanceMin, opts.AllowYellow)
 	if err != nil {
@@ -265,7 +265,7 @@ func Verify(opts VerifyOpts) (*VerifyResult, error) {
 	}
 	logStep(opts.Logger, "governance_ok", "level=%s verified=%v", govLevel, govVerified)
 
-	// Step 5.6 — reviewer≠author floor (SPEC-0246 §5.2). Compute self_attested
+	// Step 5.6: reviewer≠author floor (SPEC-0246 §5.2). Compute self_attested
 	// for the binding governance attestation; when the trust root requires
 	// independent review, REFUSE unless there is a SIGNATURE-VERIFIED independent
 	// attestation (fail-closed). The `self` tenant leaves
@@ -278,7 +278,7 @@ func Verify(opts VerifyOpts) (*VerifyResult, error) {
 	logStep(opts.Logger, "independent_review_ok", "self_attested=%s require=%v",
 		boolPtrStr(selfAttested), opts.TrustRoot.RequireIndependentReview)
 
-	// Step 6 — depends_on resolution. v1 is a no-op (bundles in tree
+	// Step 6: depends_on resolution. v1 is a no-op (bundles in tree
 	// shape rather than DAG; Python-wheel resolution lives behind a
 	// future feature flag). The flag is honored either way for
 	// forward-compat with the CLI surface.
@@ -303,11 +303,11 @@ func Verify(opts VerifyOpts) (*VerifyResult, error) {
 	case "false":
 		reviewDesc = ", independently reviewed"
 	}
-	// SPEC-0196 §12 Q1 / P2b — surface the declared data-scope with provenance.
+	// SPEC-0196 §12 Q1 / P2b: surface the declared data-scope with provenance.
 	// The signed-manifest scope is read from the bundle.json INSIDE the .skb
 	// whose digest we just verified, so it is author-signature-covered; the
 	// bundle-row scope is read from the mutable registry row. Advisory: this
-	// never changes the verdict. A read failure is non-fatal — a chain that
+	// never changes the verdict. A read failure is non-fatal. A chain that
 	// otherwise passed must not fail just because we could not surface scope.
 	dataScopes := collectDeclaredScopes(opts.BundlePath, opts.BundleMeta, opts.Logger)
 	logStep(opts.Logger, "datascope_ok", "scopes=%d", len(dataScopes))
@@ -341,7 +341,7 @@ func validateOpts(opts VerifyOpts) error {
 		return errors.New("verify: TrustRoot is required")
 	}
 	// In pinned-author mode the author signature is checked against a locally
-	// pinned key (SPEC-0276 R4.1), so no identity fetcher is needed — this is
+	// pinned key (SPEC-0276 R4.1), so no identity fetcher is needed. This is
 	// the fully-offline path. Every other mode requires a fetcher.
 	if opts.TrustRoot.IdentityKeysAuthorized != "pinned" && opts.IdentityFetcher == nil {
 		return errors.New("verify: IdentityFetcher is required (or pin authors via identity_keys_authorized: pinned)")
@@ -434,7 +434,7 @@ func stepVerifyAuthor(ctx context.Context, digest [sha256.Size]byte, meta *regis
 
 	// Pinned-author mode (SPEC-0276 R4.1): verify the author signature against
 	// a key pinned LOCALLY in trust-roots, with NO registry call. This is what
-	// makes third-party, fully-offline verification real — the verifier trusts
+	// makes third-party, fully-offline verification real: the verifier trusts
 	// a key it pinned out-of-band, not the registry's identity table.
 	//
 	// Trade-off: offline mode cannot see a registry-side identity revocation
@@ -469,7 +469,7 @@ func stepVerifyAuthor(ctx context.Context, digest [sha256.Size]byte, meta *regis
 		return "", fmt.Errorf("verify: identity %s: nil response: %w", row.IdentityID, ErrAuthorSigInvalid)
 	}
 	if ident.IsRevoked() {
-		// BUG-0144 / SPEC-0198 §3 — explicit revoke maps to ErrIdentityRevoked
+		// BUG-0144 / SPEC-0198 §3: explicit revoke maps to ErrIdentityRevoked
 		// (exit 17, theme "data-source / source-policy") so operators can
 		// distinguish "your key was revoked by the registry" from "your
 		// signature is mathematically invalid" (ErrAuthorSigInvalid, exit 11).
@@ -523,7 +523,7 @@ func stepVerifyRegistry(digest [sha256.Size]byte, meta *registry.BundleMeta, roo
 	// the loop is short (rotation-overlap windows pin 1-2 keys typically).
 	for _, k := range active {
 		if len(k.Pubkey) != ed25519.PublicKeySize {
-			// Defensive — Load already validates this. Skip rather
+			// Defensive: Load already validates this. Skip rather
 			// than abort so a single corrupt key can't break a
 			// healthy second key during rotation.
 			continue
@@ -569,7 +569,7 @@ func stepCheckGovernance(digestStr string, meta *registry.BundleMeta, root *Trus
 	}
 	min = govlevel.Normalize(min)
 	if min == "" {
-		// Defensive — Load already enforces this; surface clearly
+		// Defensive: Load already enforces this; surface clearly
 		// rather than panic.
 		return "", false, fmt.Errorf("verify: trust root %s has no governance_minimum: %w", root.RegistryURL, ErrGovernanceBelowMin)
 	}
@@ -648,7 +648,7 @@ func verifyGovernanceAttestation(digestStr, level string, meta *registry.BundleM
 //
 // When the floor is OFF (the `self` tenant and the default) it merely surfaces
 // the ADVISORY self_attested signal derived from the (unsigned) sidecar so
-// inspect/audit can show it — it never refuses.
+// inspect/audit can show it: it never refuses.
 //
 // When the floor is ON, independence must be CRYPTOGRAPHICALLY PROVEN. This is
 // the same unsigned-sidecar class SPEC-0281 closed for governance: in the
@@ -659,7 +659,7 @@ func verifyGovernanceAttestation(digestStr, level string, meta *registry.BundleM
 // reviewer key (reusing the SPEC-0281 machinery) AND whose cryptographically-
 // established reviewer_id differs from the verified author. If no such
 // signature-verified independent attestation exists we refuse with
-// ErrSelfAttested (exit 20) — fail-closed. The unsigned `self_attested` flag and
+// ErrSelfAttested (exit 20): fail-closed. The unsigned `self_attested` flag and
 // the unsigned `reviewer_id` are NEVER trusted to satisfy the floor.
 //
 // Returns the tri-state advisory self_attested signal (nil = unknown) for the
@@ -673,7 +673,7 @@ func stepIndependentReviewCheck(digestStr string, meta *registry.BundleMeta, roo
 		return selfAttested, nil
 	}
 
-	// Floor ON. Independence must be cryptographically proven — trusting the
+	// Floor ON. Independence must be cryptographically proven. Trusting the
 	// unsigned sidecar fields here would let a forged reviewer_id launder past
 	// the floor (the exact unsigned-sidecar bug SPEC-0281 fixed for governance).
 	if root == nil || len(root.Reviewers) == 0 {
@@ -700,9 +700,9 @@ func stepIndependentReviewCheck(digestStr string, meta *registry.BundleMeta, roo
 
 // verifiedIndependentReviewer reports whether some binding governance
 // attestation is signed by a PINNED reviewer key over this bundle's digest/level
-// (the SPEC-0281 signature check) AND that reviewer's id — established
+// (the SPEC-0281 signature check) AND that reviewer's id (established
 // cryptographically, because the reviewer_id is part of the signed message and
-// the verifying key is pinned to that id — differs from the verified author.
+// the verifying key is pinned to that id) differs from the verified author.
 //
 // This is the fail-closed primitive behind the reviewer≠author floor: it trusts
 // ONLY the signed bytes, never the unsigned sidecar `self_attested`/`reviewer_id`.
@@ -768,7 +768,7 @@ func verifiedIndependentReviewer(digestStr, level, authorID string, meta *regist
 //
 // IMPORTANT: this reads UNSIGNED sidecar fields and is therefore advisory ONLY.
 // It is used to populate VerifyResult.SelfAttested for inspect/audit. The
-// require_independent_review FLOOR does NOT rely on it — that gate insists on a
+// require_independent_review FLOOR does NOT rely on it, that gate insists on a
 // signature-verified independent attestation (verifiedIndependentReviewer) so a
 // forged reviewer_id / self_attested flag in the attacker-controlled sidecar
 // cannot launder past the floor.
@@ -850,7 +850,7 @@ func boolPtrStr(b *bool) string {
 func stepTenantBlockCheck(meta *registry.BundleMeta, tenant string) error {
 	tenant = strings.TrimSpace(tenant)
 	if tenant == "" {
-		// No tenant pinned — step 5.5 is a no-op per SPEC §7.
+		// No tenant pinned: step 5.5 is a no-op per SPEC §7.
 		return nil
 	}
 	for _, att := range meta.Attestations {
@@ -865,7 +865,7 @@ func stepTenantBlockCheck(meta *registry.BundleMeta, tenant string) error {
 		}
 		if strings.ToLower(strings.TrimSpace(att.Level)) != "red" {
 			// Tenant-scoped green / yellow attestations are advisory at
-			// this gate — they document approval, they don't block.
+			// this gate: they document approval, they don't block.
 			continue
 		}
 		return fmt.Errorf(
@@ -890,7 +890,7 @@ func nonEmpty(s, fallback string) string {
 }
 
 // stepResolveDeps checks the manifest's `depends_on` field for obvious
-// problems. v1 is conservative — we don't actually run pip install — but
+// problems. v1 is conservative, we don't actually run pip install, but
 // we DO refuse a bundle whose depends_on is structurally malformed so
 // downstream tooling has something to react to.
 //
@@ -930,7 +930,7 @@ func stepResolveDeps(meta *registry.BundleMeta) error {
 //   - signed-manifest: the `data_dependencies` in the bundle.json INSIDE the
 //     .skb at bundlePath. The verifier has already recomputed + matched the
 //     digest of this exact file (steps 1/1b), so its bundle.json is covered by
-//     the author signature — a scope read here is AUTHORITATIVE and cannot have
+//     the author signature. A scope read here is AUTHORITATIVE and cannot have
 //     been tampered without breaking the chain.
 //   - bundle-row: the `data_dependencies` on the mutable registry row
 //     (meta.Bundle), the post-admit `intent declare` PATCH target. Advisory.
@@ -994,23 +994,23 @@ func readSignedManifestScopes(bundlePath string) ([]map[string]any, error) {
 
 // ReadDigestVerifiedManifest is the SAME P2b trust boundary `Verify` uses,
 // exported so read-only inspectors (e.g. `skillctl intent show --bundle`) can label
-// a scope AUTHORITATIVE / signed-manifest WITHOUT reimplementing — or weakening —
+// a scope AUTHORITATIVE / signed-manifest WITHOUT reimplementing, or weakening:
 // the rule.
 //
 // It is the ONLY way to obtain author-signature-covered bundle.json content: it
 //
 //  1. recomputes the digest of the on-disk .skb at bundlePath (NEVER trusts an
-//     advertised/embedded value — see stepRecomputeDigest), then
+//     advertised/embedded value: see stepRecomputeDigest), then
 //  2. constant-time-compares it against expectedDigest ("sha256:<hex>", the digest
 //     the registry advertised AND that the author signature covers), failing
 //     CLOSED with ErrDigestMismatch on any mismatch, then
-//  3. only on a match, unpacks and returns the parsed bundle.json map — these bytes
+//  3. only on a match, unpacks and returns the parsed bundle.json map. These bytes
 //     are author-signature-covered (tampering them breaks the digest, which we just
 //     matched). The caller reads `intent` / `data_dependencies` from it.
 //
 // This deliberately does NOT read meta.Manifest or any registry row: the registry
 // copy is untrusted (plain HTTP, no signature). A caller that has only the registry
-// view MUST label the scope registry-reported / UNVERIFIED, never authoritative —
+// view MUST label the scope registry-reported / UNVERIFIED, never authoritative,
 // that is the invariant documented at collectDeclaredScopes above, and `intent
 // show` now honors it too.
 func ReadDigestVerifiedManifest(bundlePath, expectedDigest string) (map[string]any, error) {
@@ -1020,7 +1020,7 @@ func ReadDigestVerifiedManifest(bundlePath, expectedDigest string) (map[string]a
 	if strings.TrimSpace(expectedDigest) == "" {
 		return nil, fmt.Errorf("verify: no expected digest to compare against: %w", ErrDigestMismatch)
 	}
-	// 1. Recompute the digest of THIS exact file — never trust an advertised value.
+	// 1. Recompute the digest of THIS exact file: never trust an advertised value.
 	recomputed, err := signing.ComputeBundleDigest(bundlePath)
 	if err != nil {
 		return nil, fmt.Errorf("verify: recompute digest %s: %w", bundlePath, errors.Join(ErrDigestMismatch, err))
@@ -1078,7 +1078,7 @@ func rawScopeList(src map[string]any) []map[string]any {
 // ----- helpers -----
 
 // pickSingleSignature returns the unique signature row of the given role.
-// Refuses if zero or >1 rows match — a bundle with two author signatures
+// Refuses if zero or >1 rows match: a bundle with two author signatures
 // is not a configuration we want to silently pick from.
 //
 // Status-filter: rows with `status: "revoked"` are skipped.

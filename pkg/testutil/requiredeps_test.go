@@ -49,7 +49,7 @@ func TestRequireGatesSkipWhenAbsent(t *testing.T) {
 			// Force the env clean for this subtest.
 			t.Setenv("M3C_TEST_"+upper(name), "0")
 			gate(t)
-			// If we reach here, the gate did NOT skip — that is a failure for
+			// If we reach here, the gate did NOT skip, that is a failure for
 			// the absent-dependency contract.
 			t.Fatalf("Require%s did not skip when dependency absent", name)
 		})

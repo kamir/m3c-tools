@@ -3,7 +3,7 @@
 // exactly. Every message carries SchemaVer = 1 per D3.
 //
 // additionalProperties:false in the JSON Schemas means we never add
-// struct fields silently — any new field starts in the SPEC.
+// struct fields silently, any new field starts in the SPEC.
 package schema
 
 import "time"
@@ -175,7 +175,7 @@ const (
 	AudienceSystem Audience = "system"
 )
 
-// ArtifactProvenance is A.provenance — closure over the cognitive chain.
+// ArtifactProvenance is A.provenance: closure over the cognitive chain.
 type ArtifactProvenance struct {
 	TIDs []string `json:"t_ids"`
 	RIDs []string `json:"r_ids"`

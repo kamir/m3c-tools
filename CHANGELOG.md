@@ -8,14 +8,14 @@ version is ldflags-stamped (`skillctl version`). Release tags: `skillctl/vX.Y.Z`
 ## [Unreleased]
 ### Pending
 - Multi-platform parity (SPEC-0251 §5 / project ST-002): promote the remaining
-  darwin-coupled `m3c-tools` subcommands — `import-audio` (decouple the
+  darwin-coupled `m3c-tools` subcommands, `import-audio` (decouple the
   `reverseTracker` package var init'd in darwin `main()` + the `*menubar.App` /
-  `menubarWhisper*` web) and the `pocket` cloud-sync cluster — off the darwin-only
+  `menubarWhisper*` web) and the `pocket` cloud-sync cluster, off the darwin-only
   `main.go`, plus the `cmdTranscript`/`cmdCheckER1` dedup. Deliberately deferred:
   a verbatim move ships half-extracted shared state, so it needs a dedicated
   refactor pass, not a release-eve edit.
 
-## [skillctl/v0.4.0] — 2026-09-03 — federated registries + the P1/P2 security-remediation wave
+## [skillctl/v0.4.0], 2026-09-03, federated registries + the P1/P2 security-remediation wave
 ### Added
 - **Decentralized / federated registries (SPEC-0359).** The folder *is* the
   registry: `local://` scheme (D1), peer discovery + trust pinning (D2),
@@ -30,20 +30,20 @@ version is ldflags-stamped (`skillctl version`). Release tags: `skillctl/vX.Y.Z`
   content-topology gate (`CONTENT-TOPOLOGY.md`); the private-plane baseline is empty.
 - Releases now **derive the semver level from the commits** instead of guessing it.
 ### Security
-- **P1 remediation wave** — authorization + ER1-discovery de-gate (IS-T4b/T6/T7),
+- **P1 remediation wave**: authorization + ER1-discovery de-gate (IS-T4b/T6/T7),
   egress/credential + container hardening (closes CD-03 HIGH), audit-trail integrity
   and reset-TTL overflow guard (IS-T8/IS-T11), plus the challenge-gate follow-ups
   (IS-T7 scope-enforcement on the primary install path; ChainVerified closes the
   keyless-recompute fail-open).
-- **P2 remediation wave** — the pull-path revocation gate is now **bound to the
+- **P2 remediation wave**: the pull-path revocation gate is now **bound to the
   signed revoke HEAD** with adopt-grade epoch + freshness (IS-RS-01, the stale-HEAD
   replay was challenge-gate-caught and fixed) + producer bodyscan (IS-RS-03); the
   Art.12 invocation trail is hardened against two audit gaps; the product channel is
   signed, credentials are read/write scope-split, and pin-guard runs least-privilege.
-- **FR-0090** — a trust event's identity is now derived from the **signed envelope**,
+- **FR-0090**: a trust event's identity is now derived from the **signed envelope**,
   never a carrier (git/OCI/registry) projection, so a relabel cannot suppress a
   signed revoke.
-- **SLSA Build Level 3** — provenance is isolated in a trusted reusable workflow
+- **SLSA Build Level 3**: provenance is isolated in a trusted reusable workflow
   (CD-T5); CI actions are SHA-pinned, least-privilege, and the unsigned skillctl
   channel is retired.
 ### Fixed
@@ -55,44 +55,44 @@ version is ldflags-stamped (`skillctl version`). Release tags: `skillctl/vX.Y.Z`
   honest scan display; cleared the repo-wide lint/staticcheck debt and the Windows
   Gate `go vet` failure.
 
-## [skillctl/v0.3.1] — 2026-08-27 — Windows one-click rollout + trust-plane container/OCI
+## [skillctl/v0.3.1], 2026-08-27, Windows one-click rollout + trust-plane container/OCI
 ### Added
-- **Windows one-click rollout (M1+M2)** — a signed one-click installer and a green
+- **Windows one-click rollout (M1+M2)**: a signed one-click installer and a green
   `windows-gate`, with the Windows rollout release runbook.
-- **Containerized trust plane + `.skb` OCI publish** (SPEC-0354 D1+D2) — the portable
+- **Containerized trust plane + `.skb` OCI publish** (SPEC-0354 D1+D2): the portable
   Go trust plane runs in a container and can publish bundles to an OCI registry.
 ### Security
-- **SPEC-0317 gate hardening** — wire the offline `locked` state into the gate
+- **SPEC-0317 gate hardening**: wire the offline `locked` state into the gate
   (R-7.2), add opt-in fail-closed `require_local_audit` on an un-recordable allow
   (R-8.2), and state-gate the online fallback so the strictly-local hot path is
   opt-in (R-1.4 P2).
 
-## [skillctl/v0.3.0] — 2026-07-10 — enterprise evidence backbone + managed-settings pinning
+## [skillctl/v0.3.0], 2026-07-10, enterprise evidence backbone + managed-settings pinning
 Full notes: `release/skillctl/v0.3.0/RELEASE_NOTES.md`.
 ### Added
-- **`skillctl pin`** (SPEC-0247 §7.3 P1.3) — pins the trust gate into Claude Code
+- **`skillctl pin`** (SPEC-0247 §7.3 P1.3): pins the trust gate into Claude Code
   **managed settings**, making it un-deletable by non-root users. `generate` /
   `status` / `install`; install **merges** into existing managed policy (never
   clobbers), backs it up, and re-reads the file from disk to verify what landed.
-- **`skillctl enforce`** (SPEC-0317 P0) — byte-identical to `verify-hook` for a
+- **`skillctl enforce`** (SPEC-0317 P0): byte-identical to `verify-hook` for a
   Skill event, plus a transactional **SQLite outbox** (`pkg/skillctl/outbox`,
   hot-path-safe, `spool.jsonl` fallback, write-once rows). The SPEC-0255
   decision-invariance contract is preserved.
-- **`skillctl sync --once|--daemon`** (SPEC-0317 P1) — separate-process drain of
+- **`skillctl sync --once|--daemon`** (SPEC-0317 P1): separate-process drain of
   the outbox to the audit-plane ingest contract; marks synced only on a valid
   signed durable-seq; backoff via `delivery_attempts`. HTTPS-only, no Kafka client.
-- **`skillctl guard-path`** (SPEC-0317 P2) — side-channel guard over
+- **`skillctl guard-path`** (SPEC-0317 P2): side-channel guard over
   Bash/Read/Edit/Write with a single realpath fixed point; audited-allow default.
 - **`skillctl session-baseline`** + `pkg/skillctl/statemachine`
-  (`online/degraded/offline/locked`) — informational posture.
-- **Fleet kill-switch** (FR-0045 D1–D5) — signed revocation HEAD (epoch
+  (`online/degraded/offline/locked`): informational posture.
+- **Fleet kill-switch** (FR-0045 D1–D5): signed revocation HEAD (epoch
   monotonicity, set-root binding), emergency deny-list, opt-in fail-closed
   freshness (exit `22`).
 - **`skillctl-demo`** binary + **Kata training mode** (`--mode kata`).
 ### Security
 - **Go 1.26.5** toolchain (`GO-2026-5856`, `crypto/tls` ECH privacy leak);
   `govulncheck` clean.
-- **Windows `guard-path` parity** — native `C:\…\SKILL.md` tokens were classified
+- **Windows `guard-path` parity**: native `C:\…\SKILL.md` tokens were classified
   "not a path", so the guard never fired on Windows. Fixed; locked by a
   cross-platform test.
 ### Scope (not claimed)
@@ -104,11 +104,11 @@ Full notes: `release/skillctl/v0.3.0/RELEASE_NOTES.md`.
 - `sync` is contract-complete against a test double; egress is **default-OFF**.
   Per-batch transparency-log anchoring is not wired (`translog_seq` is NULL).
 
-## [skillctl/v0.2.11] — 2026-06-18 — bundled runbooks + `runbook publish`
+## [skillctl/v0.2.11], 2026-06-18, bundled runbooks + `runbook publish`
 Recorded retroactively: this tag shipped without a changelog entry.
 ### Added
-- **Skill-bundled runbooks** (SPEC-0275 P0) — auto-registered on publish.
-- **`skillctl runbook publish`** — push an onboarding runbook to the THOH catalog.
+- **Skill-bundled runbooks** (SPEC-0275 P0): auto-registered on publish.
+- **`skillctl runbook publish`**: push an onboarding runbook to the THOH catalog.
 - **Opt-in auto-publish** of a runbook on release (SPEC-0272).
 - **Author selector** (Eric / Mirko) coupling identity + context + key.
 ### Fixed
@@ -116,25 +116,25 @@ Recorded retroactively: this tag shipped without a changelog entry.
 - Release workflow stamps `install.sh`'s `RELEASE_BASE` to the tag.
 - Runbook smoke test made optional (skills may ship none); author labels genericised.
 
-## [skillctl/v0.2.10] — 2026-06-13 — security review remediation (SPEC-0266)
+## [skillctl/v0.2.10], 2026-06-13, security review remediation (SPEC-0266)
 Closes the adversarial security review (`CISO-WORK/SECURITY-REVIEW-skillctl-m3c-tools-2026-06-13.md`).
-### Security — P0
-- **F2 + F19 — self/ER1 sidecar gate re-anchored to the pinned key.** The runtime
+### Security: P0
+- **F2 + F19: self/ER1 sidecar gate re-anchored to the pinned key.** The runtime
   gate now re-verifies a stashed SIGNED attestation (`.skillctl-attest.json`)
   against the pinned (off-machine) trust-root: a repacked self-consistent `.skb`
   is denied (`ErrDigestMismatch`), and governance is read from the SIGNED
   attestation, never the attacker-writable sidecar. Trust-roots MANDATORY when
   re-anchoring; legacy installs WARN + content-bind + flag-for-reinstall.
-- **F1 — post-install bundle revocation.** The SessionStart sweep is the
+- **F1: post-install bundle revocation.** The SessionStart sweep is the
   revocation authority (fail-open fetch → quarantines revoked installs + writes a
   12h cache); the offline gate denies revoked skills from that cache. A forged
   (unsigned) revoke is ignored.
-- **F12 — gate↔verifier canonicalization fixed point** (`CanonicalSkillName`):
+- **F12: gate↔verifier canonicalization fixed point** (`CanonicalSkillName`):
   a name is rejected or used verbatim, so a clean sibling can't be verified while
   a malicious dir loads.
-- **F25 — credential-redirect leak**: ER1/session/plaud/pocket clients no longer
+- **F25: credential-redirect leak**: ER1/session/plaud/pocket clients no longer
   re-emit `X-API-KEY`/`X-Context-ID` on a cross-host redirect (`NoCredentialRedirect`).
-### Security — P1
+### Security: P1
 - **M7 (third path)**: the `pkg/config` TestConnection healthcheck honours
   `ER1_VERIFY_SSL=false` only for loopback; remote hosts force verification on.
 - **ffmpeg concat-list injection**: Pocket merge rejects `\n`/`\r`/NUL in a
@@ -150,7 +150,7 @@ green on every commit. The `m3c-tools` product-binary fixes (device-hub, F25 dev
 client, ffmpeg) also ride the next `v*` product cut. Operational follow-up: reinstall
 the green skill set on consumer boxes so they carry the attestation stash (SPEC-0266).
 
-## [skillctl/v0.2.9] — 2026-06-13 — lifecycle validation harness + constrained-low closure
+## [skillctl/v0.2.9], 2026-06-13, lifecycle validation harness + constrained-low closure
 ### Added
 - **Lifecycle tamper-detection harness** (SPEC-0265, derived from
   `CISO-WORK/TEST-CONCEPT-skillctl-lifecycle-tamper-detection.md`): a hermetic Go
@@ -163,25 +163,25 @@ the green skill set on consumer boxes so they carry the attestation stash (SPEC-
   CycloneDX SBOM of the Go build inputs alongside the signed artifacts (WARN-only;
   a syft failure never blocks a cut).
 ### Security
-- **M10 — reflected XSS on the login-callback Device Hub page** closed: the raw
+- **M10: reflected XSS on the login-callback Device Hub page** closed: the raw
   `context_id` (and `baseURL`) are now `html.EscapeString`-escaped, and the
   throwaway page is served under a strict CSP (`default-src 'none'; style-src
   'unsafe-inline'`) + `X-Content-Type-Options`/`Referrer-Policy`. Regression test
   added.
-- **L7 — Plaud S3 allowlist hardening**: require `https` (no cleartext downgrade);
+- **L7: Plaud S3 allowlist hardening**: require `https` (no cleartext downgrade);
   drop the over-broad `*.amazonaws.com`/`*.cloudfront.net` wildcards in favour of
   S3 bucket-style hosts only, CloudFront pinned to the explicit distribution; S3
   content + API read ceilings lowered 50 MB → 16 MB. Regression test added.
 ### Deferred
-- **L5 — device token transits the login callback as a GET query param**: the fix
+- **L5: device token transits the login callback as a GET query param**: the fix
   (POST/fragment/one-time code) is a cross-system contract change requiring the ER1
   server's redirect to change in lockstep, so it cannot land unilaterally without
   breaking login. Tracked; blast radius is constrained (browser history on a
   nonce'd loopback page).
 
-## [skillctl/v0.2.8] — 2026-06-11 — keyless provenance (cosign/OIDC)
+## [skillctl/v0.2.8], 2026-06-11, keyless provenance (cosign/OIDC)
 ### Added
-- **Release-signing in CI** (SPEC-0253) — **first keyless cut**:
+- **Release-signing in CI** (SPEC-0253): **first keyless cut**:
   `.github/workflows/skillctl-release.yml` builds the 5-arch set on go1.26.4 and
   keyless-signs `SHA256SUMS` with **Sigstore cosign + GitHub OIDC** (no private key
   in the repo or workflow secrets), self-verifies against the workflow identity,
@@ -195,26 +195,26 @@ the green skill set on consumer boxes so they carry the attestation stash (SPEC-
 - Sample scheduling units for the revocation sweep (`tools/scheduling/`: launchd,
   systemd timer, cron, Windows Task Scheduler).
 
-## [skillctl/v0.2.7] — 2026-06-11 — hygiene, hardening & observability
+## [skillctl/v0.2.7], 2026-06-11, hygiene, hardening & observability
 ### Security
 - **Toolchain → go1.26.4**: clears **14 reachable Go-stdlib CVEs** the older
   toolchain shipped into binaries (govulncheck 14 → 0).
 ### Added
 - `govulncheck` + `gitleaks` CI gates; `dependabot.yml`.
 - `skillctl gate-stats` + append-only `~/.claude/skillctl/gate-audit.jsonl`
-  (SPEC-0255) — advisory, decision-invariant under logging failure.
+  (SPEC-0255): advisory, decision-invariant under logging failure.
 - Exit-code single-source guard tests (SPEC-0251 §5) pinning the 10–19 ladder.
 ### Removed
-- Four dead `//nolint:unused` symbols — zero suppressions; `unused` re-armed.
+- Four dead `//nolint:unused` symbols: zero suppressions; `unused` re-armed.
 
-## [skillctl/v0.2.6] — 2026-06-11 — trust-chain convergence (SPEC-0252)
+## [skillctl/v0.2.6], 2026-06-11, trust-chain convergence (SPEC-0252)
 ### Changed
 - Collapsed three drifted gzip+tar extractors → one hardened `pkg/skillbundle.Unpack`;
   two wrapper-strip helpers → one; duplicated caps → one canonical definition;
   two governance-floor sets → one `pkg/skillctl/govlevel` (closes the SEC-L1
   case-collapse class). Adversarially verified equivalent-or-stricter.
 
-## [skillctl/v0.2.5] — 2026-06-10 — P1 hardening (SPEC-0251)
+## [skillctl/v0.2.5], 2026-06-10, P1 hardening (SPEC-0251)
 ### Security
 - Panic-safe fail-closed load gate; strict fail-closed policy & trust-roots;
   install-token fails closed on RNG failure; verdict-cache atomic write;
@@ -222,11 +222,11 @@ the green skill set on consumer boxes so they carry the attestation stash (SPEC-
   `rundll32`; Plaud token via env/`--token-file`. CI runs the skillctl tests
   under `-race`.
 
-## [skillctl/v0.2.4] — 2026-06-10 — P0 security must-fixes (SPEC-0251)
+## [skillctl/v0.2.4], 2026-06-10, P0 security must-fixes (SPEC-0251)
 ### Security
-- Attest/revoke envelope signatures verified (closes the one HIGH — forged
+- Attest/revoke envelope signatures verified (closes the one HIGH: forged
   governance verdict); weak-twin extractor bomb-capped + content-binding
   unconditional; release installer pins the K-release fingerprint; unsanitized
   bundle-name fixed; sidecar verify fails closed.
 
-## [skillctl/v0.2.3] — 2026-06 — prerelease (superseded)
+## [skillctl/v0.2.3], 2026-06, prerelease (superseded)

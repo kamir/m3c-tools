@@ -1,4 +1,4 @@
-// Package importer — tracked/untracked status detection for discovered files.
+// Package importer: tracked/untracked status detection for discovered files.
 //
 // StatusCheckerFromDB creates a StatusChecker that compares discovered files
 // against the tracking database (processed_files table) to determine whether
@@ -18,8 +18,8 @@ import (
 // to determine the status of each discovered file. The checker uses a two-phase
 // lookup strategy:
 //
-//  1. Path lookup — fast check if the exact file path is already recorded.
-//  2. Hash lookup — if the path is new, compute SHA-256 and check whether the
+//  1. Path lookup: fast check if the exact file path is already recorded.
+//  2. Hash lookup: if the path is new, compute SHA-256 and check whether the
 //     same content was imported from a different path (duplicate detection).
 //
 // If the DB is nil, the returned checker always returns StatusNew (all files
@@ -52,7 +52,7 @@ func StatusCheckerFromDB(db *tracking.FilesDB, importType string) StatusChecker 
 		// Phase 2: hash-based duplicate detection.
 		// Only hash if the file still exists on disk.
 		if _, statErr := os.Stat(filePath); statErr != nil {
-			// File doesn't exist on disk — treat as new (scanner may have
+			// File doesn't exist on disk: treat as new (scanner may have
 			// found it just before deletion).
 			return StatusNew, nil
 		}

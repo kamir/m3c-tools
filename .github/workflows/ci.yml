@@ -33,6 +33,17 @@ jobs:
       - name: golangci-lint
         run: golangci-lint run --timeout=5m
 
+  prose-gate:
+    name: Prose (no em dash)
+    # Pure shell over the tracked tree: no Go toolchain, no cgo, cheap runner.
+    # The rule and its two exemptions are in CODESTYLE.md ("Prose: no em dashes").
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: No U+2014 EM DASH in the tracked tree
+        run: ./scripts/check-no-emdash.sh
+
   docs-gate:
     name: CLI/manual consistency (docaudit)
     # Pure-stdlib AST gate: it only PARSES cmd/m3c-tools and cmd/skillctl, so it
@@ -69,7 +80,7 @@ jobs:
       # background scheduler, and the new pocket cloud-sync goroutines.
       # Also race the m3c-tools command package (menubar + plaud-sync
       # goroutines, retry runner, bulk-progress) and the skillctl-demo
-      # command (SSE event bus) — previously only ./pkg/... and
+      # command (SSE event bus): previously only ./pkg/... and
       # ./cmd/skillctl/... (skillctl-race job) were exercised under -race.
       - name: Run unit tests (-race, ./pkg/... + m3c-tools/skillctl-demo cmds)
         run: go test -race -count=1 ./pkg/... ./cmd/m3c-tools/... ./cmd/skillctl-demo/...
@@ -94,8 +105,8 @@ jobs:
       # security surface (install verification, signing/revocation, two-step
       # install tokens) and also the largest concurrency surface (install-token
       # HMAC key persistence, run/awareness state). The general unit-test job
-      # already runs ./pkg/... under -race, but ./cmd/skillctl/... — where the
-      # security-critical command wiring and e2e install tests live — was never
+      # already runs ./pkg/... under -race, but ./cmd/skillctl/..., where the
+      # security-critical command wiring and e2e install tests live, was never
       # exercised with the race detector. Run both explicitly, green-or-fail.
       - name: Run skillctl security tests (-race)
         run: go test -race -count=1 ./cmd/skillctl/... ./pkg/skillctl/...

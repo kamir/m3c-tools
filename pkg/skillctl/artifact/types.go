@@ -22,7 +22,7 @@ const (
 type ArtifactMeta struct {
 	Name            string // "pdf"
 	Version         string // "1.2.0"
-	Digest          string // "sha256:<hex>" — the invariant join key
+	Digest          string // "sha256:<hex>": the invariant join key
 	AuthorIdentity  string // "id:kamir@m3c"
 	GovernanceLevel string // "green" | "yellow" | "red"
 	PackedOnHost    string
@@ -32,7 +32,7 @@ type ArtifactMeta struct {
 
 // PublishRequest carries the SAME signed SPEC-0190 envelope across every
 // backend. Event is deliberately a map[string]any reused verbatim from the
-// registry event builders — no re-typing, so the canonical signed bytes never
+// registry event builders, no re-typing, so the canonical signed bytes never
 // drift.
 type PublishRequest struct {
 	Kind           EventKind
@@ -56,7 +56,7 @@ type PublishResult struct {
 type ArtifactRef struct {
 	Name    string // may be "" when addressed purely by digest
 	Version string
-	Digest  string // "sha256:<hex>" — REQUIRED for Fetch
+	Digest  string // "sha256:<hex>": REQUIRED for Fetch
 	Locator string // ER1 doc_id | oci://…@sha256:… | https://…/bundles/<digest> | git ref
 	Scheme  string // originating backend scheme, for provenance
 }
@@ -78,7 +78,7 @@ type ListFilter struct {
 	Latest bool      // collapse to the LatestPolicy winner per skill
 }
 
-// Page drives cursor pagination — the fix for the single-shot list bug.
+// Page drives cursor pagination: the fix for the single-shot list bug.
 type Page struct {
 	Cursor string // "" => first page; opaque, backend-defined
 	Limit  int    // 0 => backend default

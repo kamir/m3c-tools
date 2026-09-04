@@ -2,10 +2,10 @@ package bodyscan
 
 import "regexp"
 
-// Injection rules (SPEC-0246 §4.2) — all RED. These detect prose that tries to
+// Injection rules (SPEC-0246 §4.2): all RED. These detect prose that tries to
 // override the agent's instructions or terminate its system prompt.
 var (
-	// "ignore (the|all)? (previous|above) instructions" — tolerates a few
+	// "ignore (the|all)? (previous|above) instructions": tolerates a few
 	// filler words ("all of the", "any of your") between the verb and the
 	// "previous/above" qualifier, and between the qualifier and the noun, so
 	// hard-wrapped or padded variants still trip.
@@ -31,8 +31,8 @@ var (
 	reInjTermMarker = regexp.MustCompile(`(?i)\[/?(?:INST|SYS|SYSTEM)\]|<\|?(?:im_start|im_end|endoftext|system)\|?>|\bend\s+of\s+(?:the\s+)?(?:system\s+prompt|system\s+instructions?|instructions?|prompt)\b`)
 
 	// Paraphrased instruction-override (SPEC-0246 §4, evasion: "paraphrase"). A
-	// softer wording — "set aside / put aside / forget about / pay no attention
-	// to the guidance/instructions/rules you were given (earlier)" — that avoids
+	// softer wording, "set aside / put aside / forget about / pay no attention
+	// to the guidance/instructions/rules you were given (earlier)", that avoids
 	// the literal "ignore previous instructions" keyword. Two alternations: the
 	// "set aside ... guidance ... given/earlier" form and the "pay no attention
 	// to / forget about / disregard ... the guidance you were given" form.

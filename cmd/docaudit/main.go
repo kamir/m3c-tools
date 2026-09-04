@@ -8,14 +8,14 @@
 // The "real" surface is extracted mechanism-independently by the UNION of two
 // AST strategies, because the two CLIs use different idioms:
 //
-//   - flag.FlagSet registration — the authoritative name is the first STRING
+//   - flag.FlagSet registration: the authoritative name is the first STRING
 //     literal argument of a fs.String/Bool/Int/Duration/Var/Func(...) call
 //     (skillctl: `fs.String("reviewer-id", def, "usage")`). The usage string is
 //     right there, which is why it is also the scaffolding source for --fix.
-//   - `"--flag"` string literals — a hand-rolled `case "--x":` switch never
+//   - `"--flag"` string literals: a hand-rolled `case "--x":` switch never
 //     registers a FlagSet, so its surface is the double-dash literals it matches
 //     (m3c-tools).
-//   - SHORT ALIASES named alongside their long form — `case "-f", "--force":` or
+//   - SHORT ALIASES named alongside their long form: `case "-f", "--force":` or
 //     `if a == "--dry-run" || a == "-n"`. A lone `-x` literal is NOT a flag (it is
 //     usually another program's argument: `open -a`, `stty -echo`, `security -w`),
 //     so a single-dash literal counts only when the SAME switch-case list or `if`
@@ -27,17 +27,17 @@
 // runtime, so the union IS the surface.
 //
 // The "documented" surface is every flag DEFINED by an inline code span in the
-// manual — the house convention. A span DEFINES the flags it LEADS with:
+// manual: the house convention. A span DEFINES the flags it LEADS with:
 //
 //	`--skill <dir>`                        → skill
 //	`-o, --output <path>`                  → output, o
 //	`--author-intent green|yellow|red`     → author-intent
 //	`skillctl report --input <scan.json>`  → nothing: a command line, not a definition
 //
-// so a flag that appears only inside a copy-paste example — a fenced block (those
-// are stripped first) or an inline command line — is NOT documented. That is
+// so a flag that appears only inside a copy-paste example, a fenced block (those
+// are stripped first) or an inline command line, is NOT documented. That is
 // deliberate: the gate enforces "described", not merely "mentioned". Intentional
-// exemptions — a flag documented to state its ABSENCE, an internal debug flag —
+// exemptions: a flag documented to state its ABSENCE, an internal debug flag:
 // live in docs/docaudit-ignore.txt, fail-closed with a written reason.
 //
 // Exit codes: 0 = consistent; 1 = drift found (the release gate blocks); 2 = a
@@ -69,7 +69,7 @@ type target struct {
 }
 
 // defaultTargets is the built-in surface; override with -config for reuse on
-// other CLIs / other repos (the same gate, keyed by config — see CODESTYLE.md).
+// other CLIs / other repos (the same gate, keyed by config: see CODESTYLE.md).
 var defaultTargets = []target{
 	{Name: "m3c-tools", PkgDir: "cmd/m3c-tools", Manual: "docs/manual-m3c-tools.md"},
 	{Name: "skillctl", PkgDir: "cmd/skillctl", Manual: "docs/manual-skillctl.md"},
@@ -83,7 +83,7 @@ var nameRe = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 var dashLitRe = regexp.MustCompile(`^--([a-z][a-z0-9-]*)$`)
 
 // shortLitRe matches a `-f` SINGLE-dash string literal. Admitted only inside a
-// group that also names a `--long` flag — see shortAliases.
+// group that also names a `--long` flag: see shortAliases.
 var shortLitRe = regexp.MustCompile(`^-([a-z][a-z0-9-]*)$`)
 
 // codeSpanRe matches one inline code span (never spanning a line break).
@@ -101,7 +101,7 @@ var (
 var fenceRe = regexp.MustCompile("^\\s*(```|~~~)")
 
 // flagMethods are the *flag.FlagSet (and top-level flag.*) registration methods.
-// For every one, the flag NAME is the first string-literal argument — true for
+// For every one, the flag NAME is the first string-literal argument: true for
 // the value-returning forms String(name,…), the *Var forms StringVar(&p,name,…),
 // and Var(value,name,…)/Func(name,…) alike.
 var flagMethods = map[string]bool{
@@ -137,7 +137,7 @@ func run(argv []string) int {
 		configPath string
 		ignorePath = "docs/docaudit-ignore.txt"
 	)
-	// Minimal flag parsing — no external deps, matches the repo idiom.
+	// Minimal flag parsing: no external deps, matches the repo idiom.
 	for i := 0; i < len(argv); i++ {
 		switch argv[i] {
 		case "-cli":
@@ -290,7 +290,7 @@ func codeFlags(pkgDir string) (map[string]bool, error) {
 					}
 				}
 			case *ast.CallExpr:
-				// Strategy 1: a FlagSet registration — name = first string arg.
+				// Strategy 1: a FlagSet registration: name = first string arg.
 				sel, ok := node.Fun.(*ast.SelectorExpr)
 				if !ok || !flagMethods[sel.Sel.Name] {
 					return true
@@ -318,7 +318,7 @@ func codeFlags(pkgDir string) (map[string]bool, error) {
 
 // shortAliases returns the canonical names of the short flags in n that are
 // named ALONGSIDE a long flag. The group is one switch-case list or one `if`
-// condition — a scope small enough that a `--long` literal in it is real
+// condition: a scope small enough that a `--long` literal in it is real
 // evidence that the neighbouring `-x` is that flag's alias.
 //
 // Only the case LIST and the `if` COND are scanned, never their bodies: that is
@@ -373,7 +373,7 @@ func shortAliases(n ast.Node) map[string]bool {
 // docFlags returns the canonical (dashless) names of every flag the manual
 // DEFINES. Fenced code blocks are stripped first (a copy-paste example does not
 // document anything), then each inline code span contributes the flags it LEADS
-// with — see the package doc for why leading position is the definition signal.
+// with. See the package doc for why leading position is the definition signal.
 func docFlags(manual string) (map[string]bool, error) {
 	b, err := os.ReadFile(manual)
 	if err != nil {
@@ -431,7 +431,7 @@ type flagInfo struct {
 }
 
 // scaffoldFlags returns, per canonical flag name, its usage string and the
-// subcommand it belongs to — for drafting manual entries. It walks each
+// subcommand it belongs to, for drafting manual entries. It walks each
 // FuncDecl and attributes flags to the flag.NewFlagSet("<sub>", …) created in
 // that function (or, absent one, to the function's own name).
 func scaffoldFlags(pkgDir string) (map[string]flagInfo, error) {
@@ -532,7 +532,7 @@ func subName(fnName string) string {
 // grouped by subcommand, seeded from each flag's own usage string.
 func printScaffold(t target, r report) error {
 	if len(r.Undocumented) == 0 {
-		fmt.Printf("## %s — no undocumented flags ✓\n\n", t.Name)
+		fmt.Printf("## %s: no undocumented flags ✓\n\n", t.Name)
 		return nil
 	}
 	info, err := scaffoldFlags(t.PkgDir)
@@ -544,20 +544,20 @@ func printScaffold(t target, r report) error {
 		fi := info[canon(disp)]
 		usage := fi.Usage
 		if usage == "" {
-			usage = "TODO — describe (read the handler)"
+			usage = "TODO, describe (read the handler)"
 		}
 		sub := fi.Sub
 		if sub == "" {
 			sub = "(ungrouped)"
 		}
-		bySub[sub] = append(bySub[sub], fmt.Sprintf("- `%s` — %s", disp, usage))
+		bySub[sub] = append(bySub[sub], fmt.Sprintf("- `%s`, %s", disp, usage))
 	}
 	subs := make([]string, 0, len(bySub))
 	for s := range bySub {
 		subs = append(subs, s)
 	}
 	sort.Strings(subs)
-	fmt.Printf("## %s — %d undocumented flag(s) to add\n\n", t.Name, len(r.Undocumented))
+	fmt.Printf("## %s: %d undocumented flag(s) to add\n\n", t.Name, len(r.Undocumented))
 	for _, s := range subs {
 		fmt.Printf("### %s\n", s)
 		sort.Strings(bySub[s])
@@ -622,13 +622,13 @@ func printHuman(reports []report) {
 			continue
 		}
 		if len(r.Undocumented) > 0 {
-			fmt.Printf("  %s✗ UNDOCUMENTED%s (in code, not in manual — add to %s):\n", red, nc, "the manual")
+			fmt.Printf("  %s✗ UNDOCUMENTED%s (in code, not in manual: add to %s):\n", red, nc, "the manual")
 			for _, f := range r.Undocumented {
 				fmt.Printf("      %s\n", f)
 			}
 		}
 		if len(r.Phantom) > 0 {
-			fmt.Printf("  %s✗ PHANTOM%s (documented, not in code — remove, code moved on):\n", yellow, nc)
+			fmt.Printf("  %s✗ PHANTOM%s (documented, not in code: remove, code moved on):\n", yellow, nc)
 			for _, f := range r.Phantom {
 				fmt.Printf("      %s\n", f)
 			}

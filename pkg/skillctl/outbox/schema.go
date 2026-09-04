@@ -1,8 +1,8 @@
-// schema.go — DDL for the SPEC-0317 (R-2.3) transactional audit outbox.
+// schema.go: DDL for the SPEC-0317 (R-2.3) transactional audit outbox.
 //
 // The store is the single AUTHORITATIVE system of record for signed skill
 // invocation evidence (R-2.5). Decided rows are write-once (R-2.6): the schema
-// enforces immutability with TRIGGERS — not convention — so a same-uid rewrite
+// enforces immutability with TRIGGERS, not convention, so a same-uid rewrite
 // of an evidence column ABORTs at the SQL layer. The only permitted mutations
 // are the sync bookkeeping (sync_status / synced_at), the one-shot translog_seq
 // backfill (NULL→value, per-sync-batch anchoring, R-4.2), and the retention

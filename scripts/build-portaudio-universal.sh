@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-portaudio-universal.sh — Build a universal (arm64 + x86_64) PortAudio
+# build-portaudio-universal.sh: Build a universal (arm64 + x86_64) PortAudio
 # static library for macOS cross-compilation on Apple Silicon.
 #
 # Output: lib/portaudio/libportaudio.a (fat binary)
@@ -14,7 +14,7 @@ WORKDIR="/tmp/portaudio-universal-build"
 PA_VERSION="pa_stable_v190700_20210406"
 # SHA-256 of the immutable upstream release tarball (matches the Homebrew formula
 # and MacPorts). Every download below is verified against this and fails closed on
-# mismatch — integrity does not depend on which host served the bytes.
+# mismatch. Integrity does not depend on which host served the bytes.
 PA_SHA256="47efbf42c77c19a05d22e627d42873e991ec0c1357219c0d74ce6a2948cb2def"
 
 # CD-16: an ORG-CONTROLLED mirror is the PRIMARY source, so this build does not
@@ -25,7 +25,7 @@ PA_SHA256="47efbf42c77c19a05d22e627d42873e991ec0c1357219c0d74ce6a2948cb2def"
 # a GitHub Release asset on our own repo and point PA_MIRROR at it. The SHA-256 gate
 # makes the mirror's integrity independent of the source.
 #
-# PROVISIONED (2026-09-03): the mirror asset is live at the default URL below —
+# PROVISIONED (2026-09-03): the mirror asset is live at the default URL below:
 # the 'portaudio-vendor' release on kamir/m3c-tools carries ${PA_VERSION}.tgz
 # (sha256 ${PA_SHA256}). No operator action is required for a normal build.
 #
@@ -35,7 +35,7 @@ PA_SHA256="47efbf42c77c19a05d22e627d42873e991ec0c1357219c0d74ce6a2948cb2def"
 #     echo "${PA_SHA256}  ${PA_VERSION}.tgz" | shasum -a 256 -c -   # verify before publishing
 #     gh release create portaudio-vendor "${PA_VERSION}.tgz" \
 #       --repo kamir/m3c-tools --title "PortAudio vendor mirror (build dependency)" \
-#       --notes "PortAudio ${PA_VERSION}.tgz mirror — sha256 ${PA_SHA256}"
+#       --notes "PortAudio ${PA_VERSION}.tgz mirror: sha256 ${PA_SHA256}"
 #   Override at will:  PA_MIRROR=https://my.host/pa.tgz bash scripts/build-portaudio-universal.sh
 #   If the mirror is ever unreachable the build still succeeds via the upstream +
 #   Wayback fallbacks below (the SHA-256 gate applies to whichever source serves it).
@@ -72,7 +72,7 @@ if [ ! -f "${PA_VERSION}.tgz" ]; then
 fi
 echo "==> Verifying SHA-256 (fail closed on mismatch)..."
 echo "${PA_SHA256}  ${PA_VERSION}.tgz" | shasum -a 256 -c - \
-    || { echo "ERROR: SHA-256 mismatch for ${PA_VERSION}.tgz — refusing to build" >&2; exit 1; }
+    || { echo "ERROR: SHA-256 mismatch for ${PA_VERSION}.tgz: refusing to build" >&2; exit 1; }
 rm -rf portaudio
 tar xzf "${PA_VERSION}.tgz"
 
@@ -115,5 +115,5 @@ echo "==> Verifying..."
 lipo -info "$OUT/libportaudio.a"
 echo ""
 echo "Universal PortAudio installed to: $OUT"
-echo "  libportaudio.a — $(wc -c < "$OUT/libportaudio.a" | tr -d ' ') bytes"
+echo "  libportaudio.a: $(wc -c < "$OUT/libportaudio.a" | tr -d ' ') bytes"
 echo "  portaudio.h"

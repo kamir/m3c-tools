@@ -104,7 +104,7 @@ func TestSplitView_DifferentLogsNotCompared(t *testing.T) {
 }
 
 // TestDetectSplitView_VerifiesSignaturesFirst: an UNPINNED-key STH in the
-// witness set is rejected before the comparison — an attacker can't smuggle
+// witness set is rejected before the comparison: an attacker can't smuggle
 // an unsigned "head" to hide (or fabricate) an equivocation.
 func TestDetectSplitView_RejectsUnpinned(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(nil)
@@ -150,7 +150,7 @@ func TestCheckAppendConsistency_DetectsRewrite(t *testing.T) {
 	honest := leafHashes(8)
 	s4 := sthAt(t, priv, "log-1", 4, time.Now(), honest)
 
-	// Operator rewrote leaf 1 by size 8 — its size-8 STH commits a root
+	// Operator rewrote leaf 1 by size 8: its size-8 STH commits a root
 	// that is NOT a pure append of the size-4 root.
 	rewritten := leafHashes(8)
 	rewritten[1] = HashLeaf([]byte("rewritten"))

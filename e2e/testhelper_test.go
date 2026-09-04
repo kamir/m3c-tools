@@ -18,7 +18,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// YT API rate-limit protection — register flag early
+// YT API rate-limit protection: register flag early
 // ---------------------------------------------------------------------------
 
 func init() {
@@ -26,7 +26,7 @@ func init() {
 }
 
 // ---------------------------------------------------------------------------
-// Binary builder — builds once per test run, reused across all tests
+// Binary builder: builds once per test run, reused across all tests
 // ---------------------------------------------------------------------------
 
 var (
@@ -68,7 +68,7 @@ func BinaryPath(t *testing.T) string {
 }
 
 // ---------------------------------------------------------------------------
-// CLI runner — execute subcommands and capture output
+// CLI runner: execute subcommands and capture output
 // ---------------------------------------------------------------------------
 
 // CLIResult holds the output and exit information from a CLI invocation.

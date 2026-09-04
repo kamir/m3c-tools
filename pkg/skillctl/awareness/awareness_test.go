@@ -347,7 +347,7 @@ func TestSync_DefaultAttest_TriggersAttestCall(t *testing.T) {
 }
 
 // TestVerify_ReadsBackAdmissions: smoke test for the verify subcommand
-// path — fake server returns a list, helper prints one line per skill.
+// path: fake server returns a list, helper prints one line per skill.
 func TestVerify_ReadsBackAdmissions(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.URL.Query().Get("session"); got != "skill-awareness/testhost/2026-05-06" {
@@ -494,7 +494,7 @@ func TestSync_DefaultIntentYellow_StampsAll(t *testing.T) {
 	if len(env.Skills) != 3 {
 		t.Fatalf("expected 3 skills, got %d", len(env.Skills))
 	}
-	// real should stay as-is — no _default_intent_source key.
+	// real should stay as-is, no _default_intent_source key.
 	for _, sk := range env.Skills {
 		switch sk.Name {
 		case "real":
@@ -515,7 +515,7 @@ func TestSync_DefaultIntentYellow_StampsAll(t *testing.T) {
 	}
 }
 
-// TestSync_InventoryFromStdinShape — Sync doesn't read stdin itself; the
+// TestSync_InventoryFromStdinShape: Sync doesn't read stdin itself; the
 // CLI does, but the package-level invariant is that an inventory built
 // from stdin and one built from a file produce the SAME envelope. This
 // test asserts the BuildEnvelope output is deterministic given a stable
@@ -559,7 +559,7 @@ func TestResolveSessionTag_Default(t *testing.T) {
 	}
 }
 
-// TestValidateOpts_RejectsObviousMisuse — the 6 required fields fail loud.
+// TestValidateOpts_RejectsObviousMisuse: the 6 required fields fail loud.
 func TestValidateOpts_RejectsObviousMisuse(t *testing.T) {
 	cases := []struct {
 		name string

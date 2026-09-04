@@ -1,5 +1,5 @@
 // Unit tests for proxy configuration and CLI flag wiring.
-// These tests are offline — no network required.
+// These tests are offline, no network required.
 //
 // Run: go test -v ./e2e/ -run TestProxy
 package e2e

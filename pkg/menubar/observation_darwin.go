@@ -1,4 +1,4 @@
-// observation_darwin.go — Native macOS Observation Window via Cocoa/cgo.
+// observation_darwin.go: Native macOS Observation Window via Cocoa/cgo.
 //
 // Creates an NSWindow with an NSTabView containing 3 tabs:
 //   - Record: displays a captured image (NSImageView), VU meter with dB readout, & controls
@@ -113,7 +113,7 @@ static NSTextField *g_vuLabel     = nil;  // The dB readout label beside the met
 
 // updateVUMeterLevel sets the VU meter fill width proportional to level (0.0–1.0).
 // Color coding: green (< 0.6), yellow (0.6–0.85), red (>= 0.85).
-// Safe to call from any thread — dispatches to main thread internally.
+// Safe to call from any thread: dispatches to main thread internally.
 static void updateVUMeterLevel(float level) {
 	if (level < 0.0f) level = 0.0f;
 	if (level > 1.0f) level = 1.0f;
@@ -163,11 +163,11 @@ static void resetVUMeter(void) {
 // ReviewMeta holds metadata displayed in the Review tab header.
 typedef struct {
 	const char *source;        // e.g. "Screenshot", "YouTube", "Microphone"
-	const char *language;      // e.g. "English", "—"
+	const char *language;      // e.g. "English", ": "
 	int         snippetCount;  // number of transcript snippets
 	int         charCount;     // total character count
-	const char *duration;      // e.g. "1m 23s", "—"
-	const char *fileSize;      // e.g. "42 KB", "—"
+	const char *duration;      // e.g. "1m 23s", ": "
+	const char *fileSize;      // e.g. "42 KB", ": "
 	const char *date;          // e.g. "2026-03-10 14:23:05"
 	const char *filePath;      // e.g. "/tmp/recording.wav"
 } ReviewMeta;
@@ -303,7 +303,7 @@ static void setReviewTranscript(const char *text, const char *statusText) {
 	});
 }
 
-// Forward declaration — defined in Global Window State section below.
+// Forward declaration: defined in Global Window State section below.
 static NSTextView *g_obsSummaryText;
 
 // setObsNotes sets the text content of the Notes field in the Tags tab.
@@ -697,7 +697,7 @@ extern void goObservationStartCallback(void);
 // ---------- Tab Switching ----------
 
 // switchToTab switches the NSTabView to the given tab index (0=Record, 1=Review, 2=Tags).
-// Safe to call from any thread — dispatches to the main thread.
+// Safe to call from any thread: dispatches to the main thread.
 static void switchToTab(int tabIndex) {
 	dispatch_async(dispatch_get_main_queue(), ^{
 		if (g_obsTabView != nil) {
@@ -1065,7 +1065,7 @@ static id getOrCreateCaptureHintHandler(void) {
 static int showObservationWindow(const char *title, const char *imagePath, const ReviewMeta *meta, int channelType) {
 	// Must run on main thread for Cocoa UI.
 	// dispatch_sync (not async) because the Go caller uses defer C.free()
-	// on the string arguments — async would use-after-free the pointers.
+	// on the string arguments: async would use-after-free the pointers.
 	dispatch_sync(dispatch_get_main_queue(), ^{
 		// ---- Screen geometry for sizing ----
 		NSScreen *screen = [NSScreen mainScreen];
@@ -1274,7 +1274,7 @@ static int showObservationWindow(const char *title, const char *imagePath, const
 		if (channelType == 0) { // 0 = ChannelTypeProgress
 			[startBtn setHidden:NO];
 			[stopBtn setHidden:YES];
-			[statusLabel setStringValue:@"● Ready — click Start Recording"];
+			[statusLabel setStringValue:@"● Ready: click Start Recording"];
 		}
 
 		[recordTab setView:recordView];
@@ -1394,7 +1394,7 @@ static int showObservationWindow(const char *title, const char *imagePath, const
 		// Text inset for comfortable reading margin.
 		[textView setTextContainerInset:NSMakeSize(4, 6)];
 
-		// Appearance — editable so user can refine the memo text.
+		// Appearance: editable so user can refine the memo text.
 		[textView setEditable:YES];
 		[textView setSelectable:YES];
 		[textView setRichText:NO];
@@ -1761,7 +1761,7 @@ func goObservationStopCallback(cElapsedSeconds C.int) {
 		// recording finalization and whisper transcription.
 		go cb(elapsed)
 	} else {
-		log.Printf("[observation] WARNING: no stop callback registered — recording not processed")
+		log.Printf("[observation] WARNING: no stop callback registered: recording not processed")
 	}
 }
 
@@ -1781,7 +1781,7 @@ func goObservationStoreCallback(cTags, cNotes, cContentType, cImagePath *C.char)
 		// Run in a goroutine so the Cocoa UI thread is not blocked during upload.
 		go cb(tags, notes, contentType, imagePath)
 	} else {
-		log.Printf("[store] WARNING: no store callback registered — upload skipped")
+		log.Printf("[store] WARNING: no store callback registered: upload skipped")
 	}
 }
 
@@ -1789,11 +1789,11 @@ func goObservationStoreCallback(cTags, cNotes, cContentType, cImagePath *C.char)
 type ObservationTab int
 
 const (
-	// TabRecord is the first tab — image preview, VU meter, recording controls.
+	// TabRecord is the first tab (image preview, VU meter, recording controls.
 	TabRecord ObservationTab = iota
-	// TabReview is the second tab — transcript review after whisper processing.
+	// TabReview is the second tab) transcript review after whisper processing.
 	TabReview
-	// TabTags is the third tab — tag editing before ER1 upload or draft save.
+	// TabTags is the third tab: tag editing before ER1 upload or draft save.
 	TabTags
 )
 
@@ -1867,13 +1867,13 @@ func FormatFileSize(bytes int64) string {
 type ChannelType int
 
 const (
-	// ChannelTypeProgress is Channel A — YouTube video impression.
+	// ChannelTypeProgress is Channel A, YouTube video impression.
 	ChannelTypeProgress ChannelType = iota
-	// ChannelTypeIdea is Channel B — Screenshot observation.
+	// ChannelTypeIdea is Channel B, Screenshot observation.
 	ChannelTypeIdea
-	// ChannelTypeImpulse is Channel C — Quick capture / impulse.
+	// ChannelTypeImpulse is Channel C, Quick capture / impulse.
 	ChannelTypeImpulse
-	// ChannelTypeImport is Channel D — Batch audio import.
+	// ChannelTypeImport is Channel D, Batch audio import.
 	ChannelTypeImport
 )
 
@@ -1935,26 +1935,26 @@ func ShowObservationWindowWithMeta(title, imagePath string, channelType ChannelT
 // (Screenshot capture). It opens the Observation Window with the Record tab
 // active, displaying the captured screenshot image.
 func ShowObservationWindowForScreenshot(screenshotPath string) bool {
-	return ShowObservationWindow("Observation — Screenshot", screenshotPath, ChannelTypeIdea)
+	return ShowObservationWindow("Observation: Screenshot", screenshotPath, ChannelTypeIdea)
 }
 
 // ShowObservationWindowForProgress is a convenience wrapper for Channel A
 // (YouTube video). Tags are pre-filled with "youtube".
 func ShowObservationWindowForProgress(imagePath string) bool {
-	return ShowObservationWindow("Observation — YouTube", imagePath, ChannelTypeProgress)
+	return ShowObservationWindow("Observation: YouTube", imagePath, ChannelTypeProgress)
 }
 
 // ShowObservationWindowForImpulse is a convenience wrapper for Channel C
 // (Quick capture). Tags are pre-filled with "impulse". If imagePath is
 // non-empty, the region screenshot is displayed in the Record tab.
 func ShowObservationWindowForImpulse(imagePath string) bool {
-	return ShowObservationWindow("Observation — Impulse", imagePath, ChannelTypeImpulse)
+	return ShowObservationWindow("Observation: Impulse", imagePath, ChannelTypeImpulse)
 }
 
 // ShowObservationWindowForImport is a convenience wrapper for Channel D
 // (Batch audio import). Tags are pre-filled with "import, audio-import".
 func ShowObservationWindowForImport() bool {
-	return ShowObservationWindow("Observation — Import", "", ChannelTypeImport)
+	return ShowObservationWindow("Observation: Import", "", ChannelTypeImport)
 }
 
 // UpdateReviewTranscript sets the transcript text displayed in the Review tab's
@@ -2000,7 +2000,7 @@ func ElapsedSeconds() int {
 // level is a linear amplitude value from 0.0 (silence) to 1.0 (full scale).
 // The meter bar is color-coded: green (< 0.6), yellow (0.6–0.85), red (>= 0.85).
 // A dB readout label is updated alongside the bar.
-// Safe to call from any goroutine — dispatches to the main thread internally.
+// Safe to call from any goroutine: dispatches to the main thread internally.
 func UpdateVUMeterLevel(level float32) {
 	C.updateVUMeterLevel(C.float(level))
 }
@@ -2103,7 +2103,7 @@ func HideWhisperProgress() {
 }
 
 // SwitchToTab switches the Observation Window to the specified tab.
-// Safe to call from any goroutine — dispatches to the main thread internally.
+// Safe to call from any goroutine: dispatches to the main thread internally.
 // This is a no-op if the Observation Window has not been shown yet.
 func SwitchToTab(tab ObservationTab) {
 	C.switchToTab(C.int(tab))
@@ -2195,7 +2195,7 @@ func SetObservationNotes(text string) {
 //   - meta: review metadata (language, snippet count, char count, etc.)
 //   - transcriptText: the formatted transcript text for the Review tab
 func ShowObservationWindowForYouTube(thumbnailPath, videoID string, meta *ReviewMetadata, transcriptText string) bool {
-	title := fmt.Sprintf("Observation — YouTube [%s]", videoID)
+	title := fmt.Sprintf("Observation: YouTube [%s]", videoID)
 	ok := ShowObservationWindowWithMeta(title, thumbnailPath, ChannelTypeProgress, meta)
 	if !ok {
 		return false
@@ -2210,7 +2210,7 @@ func ShowObservationWindowForYouTube(thumbnailPath, videoID string, meta *Review
 
 	// Set transcript text in the Review tab
 	if transcriptText != "" {
-		statusText := fmt.Sprintf("Transcript loaded — %d chars", len(transcriptText))
+		statusText := fmt.Sprintf("Transcript loaded: %d chars", len(transcriptText))
 		SetReviewTranscript(transcriptText, statusText)
 		// Switch to the Review tab to show the transcript
 		SwitchToReviewTab()

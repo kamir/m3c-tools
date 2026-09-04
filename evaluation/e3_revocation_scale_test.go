@@ -1,6 +1,6 @@
 package evaluation
 
-// E3 — Revocation-list verify vs SIZE (SPEC-0280 §2; SPEC-0276 R4.4).
+// E3: Revocation-list verify vs SIZE (SPEC-0280 §2; SPEC-0276 R4.4).
 //
 // Method: build a signed revocation list of N digests (N = 10 … 10^6), signed by
 // the population registry key, then measure the SHIPPED offline verification:

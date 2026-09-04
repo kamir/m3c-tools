@@ -11,7 +11,7 @@ import (
 )
 
 // TestER1BackendConformance runs the SAME SPEC-0356 backend conformance suite
-// (pkg/skillctl/artifact/conformance) against a LIVE ER1 self-tenant context —
+// (pkg/skillctl/artifact/conformance) against a LIVE ER1 self-tenant context:
 // proving ER1 and GitLab honor the same artifact.Backend contract, tested by
 // identical code. Gated on M3C_TEST_ER1_URL + M3C_TEST_ER1_KEY + M3C_TEST_ER1_CTX;
 // the suite PUBLISHES + REVOKES, so point it at a THROWAWAY context, never the

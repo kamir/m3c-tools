@@ -2,7 +2,7 @@
   "schema": "m3c-skill-bundle/v1",
   "name": "kup-hello",
   "version": "0.1.0",
-  "summary": "KuP training demo skill — writes a hello.txt.",
+  "summary": "KuP training demo skill: writes a hello.txt.",
 
   "source_repo": "kamir/m3c-tools",
   "source_commit": "",

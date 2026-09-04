@@ -49,7 +49,7 @@ type DataDependency struct {
 	Kind         string `json:"kind"`             // local_fs | http_endpoint | er1_collection | firestore_collection | gcs_bucket | secrets_store
 	Ref          string `json:"ref,omitempty"`    // legacy identifier within Kind (pre-P2b)
 	Access       string `json:"access,omitempty"` // read | write | passthrough | transform
-	Scope        string `json:"scope,omitempty"`  // narrow specifier — path glob / URL pattern / collection path
+	Scope        string `json:"scope,omitempty"`  // narrow specifier: path glob / URL pattern / collection path
 	Reason       string `json:"reason,omitempty"` // human rationale (§3.2 required for new declarations)
 	PayloadClass string `json:"payload_class,omitempty"`
 	Retention    string `json:"retention,omitempty"`
@@ -67,7 +67,7 @@ type BundleManifest struct {
 	SourceRepo   string `json:"source_repo"`
 	SourceCommit string `json:"source_commit"`
 	SourcePath   string `json:"source_path"`
-	// AuthorGovernanceIntent is advisory metadata only — verifiers MUST NOT
+	// AuthorGovernanceIntent is advisory metadata only. Verifiers MUST NOT
 	// use it for trust decisions. The binding governance verdict comes from
 	// signed attestations (SPEC-0188 §4.3). See SPEC-0188 §3.2 "Author intent
 	// vs binding governance verdict".

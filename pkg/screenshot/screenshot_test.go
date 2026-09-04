@@ -9,7 +9,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// captureMock — test helper for mocking screencapture exec calls.
+// captureMock: test helper for mocking screencapture exec calls.
 // (Uses different type name from clipboard_test.go's mockCommander.)
 // ---------------------------------------------------------------------------
 

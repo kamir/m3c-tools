@@ -8,9 +8,9 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/homeroot"
 )
 
-// TestUserHome_HonorsSharedDecision — WIN-T8 (WIN-09) parity: the cmd/skillctl
+// TestUserHome_HonorsSharedDecision, WIN-T8 (WIN-09) parity: the cmd/skillctl
 // userHome must apply the SINGLE shared $HOME-on-Windows decision
-// (homeroot.OverrideAllowed) — the same one the verify and registry packages use.
+// (homeroot.OverrideAllowed), the same one the verify and registry packages use.
 // This closes the former footgun where the CLI copy honored $HOME on ALL
 // platforms with no Windows guard, and, together with the identical per-site
 // tests in verify and registry, guards against any one site drifting back into a

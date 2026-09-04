@@ -14,7 +14,7 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/statemachine"
 )
 
-// testPubkeyB64 is a syntactically valid base64 of 32 zero bytes — enough for
+// testPubkeyB64 is a syntactically valid base64 of 32 zero bytes. Enough for
 // the trust-roots loader's length + base64 validation (these tests never verify
 // a signature).
 func testPubkeyB64() string {
@@ -113,7 +113,7 @@ func TestSessionBaseline_JSON(t *testing.T) {
 
 // TestSessionBaseline_StateGateFallbackDisplay pins the R-1.4 P2 posture output:
 // the JSON `state_gate_fallback` field and the human `online fallback` note must
-// reflect the managed opt-in (ENFORCED when on, OPT-IN/OFF when off) — a mislabel
+// reflect the managed opt-in (ENFORCED when on, OPT-IN/OFF when off): a mislabel
 // (e.g. printing "ENFORCED" while off) would ship a false posture to a CISO.
 func TestSessionBaseline_StateGateFallbackDisplay(t *testing.T) {
 	for _, tc := range []struct {

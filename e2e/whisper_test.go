@@ -11,7 +11,7 @@ import (
 func TestWhisperBinaryFound(t *testing.T) {
 	path, err := whisper.FindBinary()
 	if err != nil {
-		t.Skip("Whisper binary not found — install with: pip install openai-whisper")
+		t.Skip("Whisper binary not found, install with: pip install openai-whisper")
 	}
 	t.Logf("Whisper binary: %s", path)
 }
@@ -32,5 +32,5 @@ func TestWhisperTranscribe(t *testing.T) {
 		t.Fatalf("Transcribe error: %v", err)
 	}
 	t.Logf("Whisper result: %d segments, text=%q", len(result.Segments), result.Text)
-	// Silence may produce 0 or 1 segments — just check it didn't crash
+	// Silence may produce 0 or 1 segments, just check it didn't crash
 }

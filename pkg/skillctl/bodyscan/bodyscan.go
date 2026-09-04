@@ -8,7 +8,7 @@
 // Design constraints (SPEC-0246 R4.3 / R4.4):
 //
 //   - Core logic is stdlib-only (regexp/strings/unicode/encoding/base64).
-//   - Base mode is deterministic and OFFLINE — no network, no LLM.
+//   - Base mode is deterministic and OFFLINE, no network, no LLM.
 //   - The same Input produces a byte-identical JSON BodyScanReport.
 //
 // Detection is table-driven: each Rule carries a Category, a Verdict
@@ -115,7 +115,7 @@ type Input struct {
 }
 
 // maxBodyBytes is the input-size cap (SPEC-0246 §4, DoS hardening). Bodies
-// larger than this are NOT scanned — a regex sweep over a multi-megabyte body is
+// larger than this are NOT scanned. A regex sweep over a multi-megabyte body is
 // both slow (~1.2s/MB measured) and can produce hundreds of thousands of
 // findings. Instead a single "oversized body" finding is returned (RuleIDOversized)
 // and callers MUST treat it as "scan did not actually run" → fail-closed at the
@@ -203,7 +203,7 @@ func Scan(in Input) BodyScanReport {
 		}
 	}
 
-	// Normalization changed the text (a zero-width strip or a fullwidth fold) —
+	// Normalization changed the text (a zero-width strip or a fullwidth fold),
 	// that is itself an obfuscation signal (SPEC-0246 §4). Emit one yellow
 	// finding so a soft-hyphen / fullwidth evasion surfaces even if the folded
 	// injection regex were ever to miss, and so the verdict carries a rationale.
@@ -225,7 +225,7 @@ func Scan(in Input) BodyScanReport {
 	// Injection phrases quoted inside a CLOSED fenced code block are
 	// documentation examples (e.g. a security skill demonstrating an attack),
 	// not necessarily live instructions. DOWNGRADE such injection findings to
-	// yellow (flag-for-review) — do NOT drop them — so a live injection hidden
+	// yellow (flag-for-review), do NOT drop them, so a live injection hidden
 	// in a fence still surfaces while benign security prose is yellow-not-red.
 	// Exfiltration/tool/policy/obfuscation findings are NOT touched.
 	findings = downgradeInjectionInFences(in.Body, findings)

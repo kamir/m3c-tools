@@ -1,6 +1,6 @@
 ---
 layout: default
-title: Quickstart — m3c-tools
+title: Quickstart: m3c-tools
 ---
 
 # Quickstart: m3c-tools
@@ -43,7 +43,7 @@ curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-l
 ```powershell
 New-Item -ItemType Directory -Force -Path C:\m3c-tools
 Invoke-WebRequest -Uri https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-windows-amd64.zip -OutFile "$env:TEMP\m3c-tools.zip"
-Expand-Archive -Path "$env:TEMP\m3c-tools.zip" -DestinationPath C:\m3c-tools -Force   # the zip already contains m3c-tools.exe — no rename needed
+Expand-Archive -Path "$env:TEMP\m3c-tools.zip" -DestinationPath C:\m3c-tools -Force   # the zip already contains m3c-tools.exe, no rename needed
 $oldPath = [Environment]::GetEnvironmentVariable("PATH", "Machine")
 if ($oldPath -notlike "*C:\m3c-tools*") { [Environment]::SetEnvironmentVariable("PATH", "$oldPath;C:\m3c-tools", "Machine") }
 ```
@@ -68,15 +68,15 @@ m3c-tools setup
 
 The wizard walks you through:
 
-1. **ER1 server URL** — defaults to `https://onboarding.guide/upload_2`.
-2. **Browser login** — opens Chrome and captures your User ID (context) automatically.
-3. **API key** — required for uploads (sent as the `X-API-KEY` header). Ask your ER1 admin.
-4. **Default tags** — used for capture-device sync.
+1. **ER1 server URL**: defaults to `https://onboarding.guide/upload_2`.
+2. **Browser login**: opens Chrome and captures your User ID (context) automatically.
+3. **API key**: required for uploads (sent as the `X-API-KEY` header). Ask your ER1 admin.
+4. **Default tags**: used for capture-device sync.
 
 It writes everything to `~/.m3c-tools.env`.
 
 > **Login vs. API key.** The browser login captures your *context* and can also store a
-> device token. Uploads authenticate with an API key **or** a device token — set up at
+> device token. Uploads authenticate with an API key **or** a device token: set up at
 > least one. Run `m3c-tools login` any time to (re-)pair via the browser.
 
 **Prefer manual config?** Copy the template and edit it:
@@ -118,7 +118,7 @@ m3c-tools transcript dQw4w9WgXcQ --list          # list available languages
 m3c-tools transcript dQw4w9WgXcQ --translate de  # translate to German
 ```
 
-Uses YouTube's InnerTube API — **no API key required**. Supports `text`, `srt`, `json`,
+Uses YouTube's InnerTube API: **no API key required**. Supports `text`, `srt`, `json`,
 `webvtt`, proxies (`--proxy-url`), and translation.
 
 ### Capture a full observation to ER1
@@ -173,7 +173,7 @@ See the [Menu Bar App guide](menubar-app.md) for every menu item and the Observa
 If you use a **Plaud** recorder or a **Pocket** device:
 
 ```bash
-m3c-tools plaud auth login      # pair (auto-launches Chrome) — macOS/Windows/Linux
+m3c-tools plaud auth login      # pair (auto-launches Chrome): macOS/Windows/Linux
 m3c-tools plaud list            # list recordings + sync status
 m3c-tools plaud sync all        # sync everything to ER1
 
@@ -188,7 +188,7 @@ m3c-tools pocket ...            # see: m3c-tools pocket --help
 |---------|-----|
 | `doctor` shows `key_set=false` / auth failing | Your active profile has no real key. Re-run `m3c-tools setup` or `m3c-tools login`; ensure `ER1_API_KEY` isn't a placeholder. |
 | "Projects" menu stuck on *Loading projects…* | No ER1 credential reached the app. Fix the active profile's key or run `login`, then restart the menu-bar app. |
-| `subtitles are disabled for this video` | Expected — the capture still keeps the thumbnail + link. Add a voice note. |
+| `subtitles are disabled for this video` | Expected. The capture still keeps the thumbnail + link. Add a voice note. |
 | Whisper "command not found" | Install it: `python3 -m pip install openai-whisper` (needs `ffmpeg`). |
 | Upload fails, then retries | Failed uploads queue locally; run `m3c-tools retry` or check `m3c-tools status`. |
 

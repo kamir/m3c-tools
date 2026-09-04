@@ -49,7 +49,7 @@ func Pack(skillDir, outFile string, opts PackOptions) (digest string, err error)
 	// If the skill dir is itself a symlink (e.g. ~/.claude/skills/<name> →
 	// gstack/<name>), resolve it to the real target BEFORE walking. filepath.WalkDir
 	// Lstats its root: a symlink root is reported as a non-dir, so WalkDir never
-	// descends and collectFiles returns nothing — the historical "symlink skills
+	// descends and collectFiles returns nothing: the historical "symlink skills
 	// pack EMPTY" bug (SPEC-0188 §3). EvalSymlinks canonicalizes the root so the walk
 	// packs the target's real contents. Best-effort: a broken/absent link falls
 	// through to the original path and the SKILL.md check below reports it.
@@ -63,7 +63,7 @@ func Pack(skillDir, outFile string, opts PackOptions) (digest string, err error)
 
 	// LIBRARY-BOUNDARY SCOPE GATE (P2b challenge-gate fix). The author signature
 	// covers manifest.Intent + manifest.DataDependencies, so NO unvalidated scope
-	// may ever be author-signed — the gate must live HERE, at the pack/sign
+	// may ever be author-signed. The gate must live HERE, at the pack/sign
 	// boundary, not only in the CLI. A programmatic producer (e.g.
 	// publish_cmds.go ensureBundle) that calls Pack directly is now bound by the
 	// SAME datascope.Validate rule the CLI runs. Fail-closed: an invalid or §3.3-

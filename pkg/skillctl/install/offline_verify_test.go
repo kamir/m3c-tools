@@ -206,7 +206,7 @@ func TestSidecar_TamperedBody_DigestMismatch(t *testing.T) {
 	target := filepath.Join(home, ".claude", "skills", "good")
 	makeSkb(t, target, map[string]string{"SKILL.md": "# good"})
 	writeSidecar(t, target, "green")
-	// Tamper the body Claude loads — must be caught via content-binding.
+	// Tamper the body Claude loads: must be caught via content-binding.
 	if err := os.WriteFile(filepath.Join(target, "SKILL.md"), []byte("# EVIL"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -228,7 +228,7 @@ func TestSidecar_GovernanceBelowFloor(t *testing.T) {
 }
 
 // SEC-M5: a sidecar skill with NO stashed .skb has a fully unverified body.
-// Governance + fingerprint alone must NOT pass it — it FAILS CLOSED with
+// Governance + fingerprint alone must NOT pass it. It FAILS CLOSED with
 // ErrDigestMismatch (exit 10), and content-binding is never skipped.
 func TestSidecar_NoSkb_FailsClosed(t *testing.T) {
 	home := t.TempDir()
@@ -252,7 +252,7 @@ func TestSidecar_NoSkb_FailsClosed(t *testing.T) {
 
 // makeOversizedSkb writes a .skb whose single entry decompresses to far more
 // than MaxExtractedBytes (a gzip bomb shape). The on-disk extraction is NOT
-// written — content-binding should abort on the size cap before any compare.
+// written. Content-binding should abort on the size cap before any compare.
 func makeOversizedSkb(t *testing.T, target string, oversizeBytes int64) string {
 	t.Helper()
 	if err := os.MkdirAll(target, 0o755); err != nil {
@@ -291,7 +291,7 @@ func (zeroReader) Read(p []byte) (int, error) {
 }
 
 // SEC-M1/M6: a single entry larger than the 100 MiB ceiling must abort the
-// content-binding walk with ErrDigestMismatch — the per-entry io.Copy is now
+// content-binding walk with ErrDigestMismatch. The per-entry io.Copy is now
 // capped via io.LimitReader against the running total, so the gzip bomb never
 // gets fully buffered/hashed.
 func TestContentBinding_OversizedEntry_Mismatch(t *testing.T) {
@@ -374,17 +374,17 @@ func (s stubResolver) GetIdentity(_ context.Context, id string) (*registry.Ident
 }
 
 // TestVerifyThenUse_MutatedAfterVerify_RechecksAndFailsClosed closes the R06
-// gap in THREAT_MODEL.md (§R06 — TOCTOU / verify-then-use race).
+// gap in THREAT_MODEL.md (§R06: TOCTOU / verify-then-use race).
 //
 // THREAT-R06: a PASS from the content-binding seam (verifyExtractedMatchesBlob)
 // at time-of-check must NEVER exempt a later use. The existing
 // TestContentBinding_* tests prove that a STATIC swap is caught (verification is
-// content-bound); they do NOT exercise the ORDERING — verify, THEN mutate, THEN
+// content-bound); they do NOT exercise the ORDERING: verify, THEN mutate, THEN
 // use. This test drives that sequence at the real verify->use seam (the hot
 // per-invocation gate calls verifyExtractedMatchesBlob on every skill use, and
 // VerifyInstalledOffline / VerifyInstalledSidecar both funnel through it): after
-// a successful verify we mutate the on-disk tree three ways — edit a byte, swap
-// the whole file, repoint a symlink at attacker content — and assert the NEXT
+// a successful verify we mutate the on-disk tree three ways (edit a byte, swap
+// the whole file, repoint a symlink at attacker content) and assert the NEXT
 // call re-reads the current on-disk bytes and fails closed with
 // verify.ErrDigestMismatch (exit 10) rather than trusting the earlier verdict.
 //
@@ -393,7 +393,7 @@ func (s stubResolver) GetIdentity(_ context.Context, id string) (*registry.Ident
 // no cached verdict between check and use. If a future change ever cached the
 // PASS (or resolved the file handle at check time and reused it at use time),
 // one of the sub-cases below would start passing the stale verdict and fail
-// this test — which is exactly the TOCTOU window R06 guards against.
+// this test, which is exactly the TOCTOU window R06 guards against.
 func TestVerifyThenUse_MutatedAfterVerify_RechecksAndFailsClosed(t *testing.T) {
 	t.Run("edit_a_byte_after_verify", func(t *testing.T) {
 		dir := t.TempDir()
@@ -418,7 +418,7 @@ func TestVerifyThenUse_MutatedAfterVerify_RechecksAndFailsClosed(t *testing.T) {
 		if err := verifyExtractedMatchesBlob(skb, dir); err != nil {
 			t.Fatalf("pre-mutation verify must pass, got %v", err)
 		}
-		// Atomic file swap (rename over the verified file) — the classic
+		// Atomic file swap (rename over the verified file): the classic
 		// time-of-check-to-time-of-use substitution: the inode the verify saw is
 		// no longer the inode the use reads.
 		staging := filepath.Join(dir, ".staging.tmp")
@@ -446,7 +446,7 @@ func TestVerifyThenUse_MutatedAfterVerify_RechecksAndFailsClosed(t *testing.T) {
 		// installed tree at attacker-controlled content. SafeJoin is lexical (it
 		// does not follow the link), so the link is not rejected up front; the
 		// seam instead reads THROUGH it at use time, the bytes no longer match the
-		// signed blob, and it fails closed — never silently followed to a PASS.
+		// signed blob, and it fails closed, never silently followed to a PASS.
 		evilDir := t.TempDir()
 		evil := filepath.Join(evilDir, "evil.md")
 		if err := os.WriteFile(evil, []byte("# EVIL PAYLOAD"), 0o644); err != nil {

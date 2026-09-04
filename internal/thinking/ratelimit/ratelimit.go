@@ -7,7 +7,7 @@
 //
 //   - One row per (key, UTC-hour-bucket) in the shared
 //     `hourly_rate_counters` table owned by the store package.
-//   - Counters reset naturally at the top of each UTC hour — no
+//   - Counters reset naturally at the top of each UTC hour, no
 //     background GC needed for the hot path.
 //
 // The feedback package uses a parallel, key-less `feedback_counters`

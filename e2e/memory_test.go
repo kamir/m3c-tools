@@ -64,7 +64,7 @@ func TestCreateMemoryFolderIdempotent(t *testing.T) {
 		t.Fatalf("write marker: %v", err)
 	}
 
-	// Create again — must succeed and not destroy contents
+	// Create again: must succeed and not destroy contents
 	mf2, err := er1.CreateMemoryFolder(rootDir, ts)
 	if err != nil {
 		t.Fatalf("second CreateMemoryFolder failed: %v", err)
@@ -258,7 +258,7 @@ func TestLoadPayloadMultipleFiles(t *testing.T) {
 }
 
 func TestLoadPayloadLegacyNoMetadata(t *testing.T) {
-	// MEMORY folder without metadata.json — legacy fallback behavior
+	// MEMORY folder without metadata.json: legacy fallback behavior
 	rootDir := t.TempDir()
 	ts := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 

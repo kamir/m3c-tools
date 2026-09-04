@@ -1,4 +1,4 @@
-// bus_franz_test.go — unit tests for the franz-go Bus driver that
+// bus_franz_test.go: unit tests for the franz-go Bus driver that
 // can run without a broker.
 //
 // A broker-required integration test lives in
@@ -60,7 +60,7 @@ func TestGroupNameForDifferentOwnersDiffer(t *testing.T) {
 	tA := TopicName(rA.Hash(), TopicReflectionsGenerated)
 	// Synthetic: if user B somehow received user A's topic name and
 	// the guard were bypassed, the group name rooted in B's hash
-	// still differs from A's — belt and suspenders.
+	// still differs from A's: belt and suspenders.
 	nameA := groupNameFor(rA.Hash(), tA)
 	nameB := groupNameFor(rB.Hash(), tA) // different owner, same topic
 	if nameA == nameB {
@@ -69,7 +69,7 @@ func TestGroupNameForDifferentOwnersDiffer(t *testing.T) {
 }
 
 // TestNewFranzBusRejectsEmptyBrokers locks in the "refuse to half-
-// wire" invariant — no brokers, no bus.
+// wire" invariant, no brokers, no bus.
 func TestNewFranzBusRejectsEmptyBrokers(t *testing.T) {
 	raw, _ := mctx.NewRaw("user-A")
 	b, err := NewFranzBus(raw.Hash(), nil)
@@ -81,7 +81,7 @@ func TestNewFranzBusRejectsEmptyBrokers(t *testing.T) {
 
 // TestFranzBusProducePanicsOnForeignTopic confirms the SPEC-0167
 // §Isolation Model guard fires on the franz driver exactly like the
-// in-memory one. Uses a bogus broker address — the guard runs before
+// in-memory one. Uses a bogus broker address: the guard runs before
 // any network I/O, so no broker is required for this test.
 func TestFranzBusProducePanicsOnForeignTopic(t *testing.T) {
 	ownRaw, _ := mctx.NewRaw("user-A")
@@ -101,7 +101,7 @@ func TestFranzBusProducePanicsOnForeignTopic(t *testing.T) {
 	_ = b.Produce(context.Background(), foreignTopic, "k", map[string]string{"x": "y"})
 }
 
-// TestFranzBusSubscribePanicsOnForeignTopic — same as above, for
+// TestFranzBusSubscribePanicsOnForeignTopic: same as above, for
 // the consumer side.
 func TestFranzBusSubscribePanicsOnForeignTopic(t *testing.T) {
 	ownRaw, _ := mctx.NewRaw("user-A")

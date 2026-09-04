@@ -39,7 +39,7 @@ Grouped by domain:
 |---------|----------------|
 | `er1` | ER1 server config + multipart HTTP upload (`transcript_file_ext`/`audio_data_ext`/`image_data`, placeholder audio/image when absent) + JSON-backed retry queue with mutex sync. |
 | `er1login` | Runs the aims-core browser **device-pairing** flow and returns credentials. |
-| `session` | SPEC-0213 "session-state in ER1" — persist a working session as a machine-tagged memory item + checkpoint chain. |
+| `session` | SPEC-0213 "session-state in ER1": persist a working session as a machine-tagged memory item + checkpoint chain. |
 | `tracking` | SQLite-backed export tracking for ER1 uploads. |
 | `timetracking` | Local time tracking scoped to PLM project contexts. |
 | `m3cproject` | Resolves the PLM project context for the current working directory (`.m3c/project.yaml`). |
@@ -71,7 +71,7 @@ Grouped by domain:
 
 ## F. skillctl trust subsystem (`pkg/skillctl/*` + siblings)
 
-The offline-verifiable skill **trust plane** — the library behind the
+The offline-verifiable skill **trust plane**: the library behind the
 [`skillctl`](program-index) CLI. 30 focused subpackages, grouped by role:
 
 **Inventory & parsing**

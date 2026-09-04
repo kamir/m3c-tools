@@ -9,7 +9,7 @@ import (
 )
 
 // StageRecording copies a recording from the Pocket device to the local raw archive.
-// The raw file is preserved permanently — the device copy is never modified.
+// The raw file is preserved permanently. The device copy is never modified.
 func StageRecording(rec *Recording, cfg *Config) error {
 	destDir := filepath.Join(cfg.RawDir, rec.Date)
 	if err := os.MkdirAll(destDir, 0755); err != nil {

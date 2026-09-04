@@ -61,7 +61,7 @@ func mustKeypair(t *testing.T) keyMaterial {
 
 // writeBundle produces a fake "blob" file with random bytes and returns
 // (path, raw_digest, "sha256:<hex>"). The bytes don't have to be a real
-// gzipped tar — the verifier only sees them via SHA-256.
+// gzipped tar: the verifier only sees them via SHA-256.
 func writeBundle(t *testing.T, content []byte) (string, [32]byte, string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -203,7 +203,7 @@ func TestVerify_DigestMismatch_BundleTampered(t *testing.T) {
 	authorKey := mustKeypair(t)
 	regKey := mustKeypair(t)
 
-	// Original bytes — these are what the registry signed.
+	// Original bytes: these are what the registry signed.
 	origBytes := []byte("original content for tamper test")
 	origDigest := sha256.Sum256(origBytes)
 	origDigestStr := "sha256:" + hexLower(origDigest[:])
@@ -296,7 +296,7 @@ func TestVerify_AuthorSig_WrongPubkey(t *testing.T) {
 }
 
 func TestVerify_AuthorSig_RevokedIdentity(t *testing.T) {
-	// SPEC-0198 §3 / BUG-0144 — revoked identity now surfaces as
+	// SPEC-0198 §3 / BUG-0144: revoked identity now surfaces as
 	// ErrIdentityRevoked (exit 17) instead of ErrAuthorSigInvalid (exit 11).
 	// Operators must be able to distinguish "key was revoked" from
 	// "signature is invalid".
@@ -428,7 +428,7 @@ func TestVerify_RegistryNotTrusted_SkipsRetiredAcceptsActive(t *testing.T) {
 	// key (which actually signed). Verify must skip the retired one.
 	opts, _ := happyOpts(t)
 	// Keep the live signing key but mark it retired; add a fresh key
-	// that ALSO matches by re-signing? That's the inverse — we want the
+	// that ALSO matches by re-signing? That's the inverse: we want the
 	// retired key to NOT verify anyway. Easier setup: retire the live
 	// key and ensure exit is ErrRegistryNotTrusted.
 	for i := range opts.TrustRoot.RegistryKeys {
@@ -503,7 +503,7 @@ func TestVerify_GovernanceBelowMin_AuthorIntentIsIgnored(t *testing.T) {
 	// SPEC-0188 §3.2 + §7 step 6: author_governance_intent in the manifest
 	// MUST NOT bind. The signed CurrentGovernance is the only verdict.
 	// Construct a bundle whose manifest says "green" but whose
-	// CurrentGovernance is "red" — verifier must reject.
+	// CurrentGovernance is "red". Verifier must reject.
 	opts, _ := happyOpts(t)
 	opts.BundleMeta.Manifest["author_governance_intent"] = "green"
 	opts.BundleMeta.CurrentGovernance = "red"

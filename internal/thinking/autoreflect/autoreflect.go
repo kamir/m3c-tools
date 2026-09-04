@@ -125,7 +125,7 @@ type Config struct {
 	// for every auto-fired process. 0 → DefaultHardTokenCap.
 	HardTokenCap int
 
-	// Metrics is the optional observability surface. nil is safe —
+	// Metrics is the optional observability surface. nil is safe,
 	// each call site guards on nil so existing unit tests keep
 	// working without constructing a real registry.
 	Metrics observability.Metrics
@@ -294,7 +294,7 @@ func (c *Consumer) onThought(ctx context.Context, m tkafka.Message) error {
 // eligible reports whether a T should count toward the window. Rules:
 //
 //   - Ts with type=question are always excluded (they are engine
-//     self-output — feedback-loop follow-ups, contradiction questions,
+//     self-output: feedback-loop follow-ups, contradiction questions,
 //     or in the future, auto-reflect-derived prompts).
 //   - When SkipPlaceholder is on, any content matching a configured
 //     regex is excluded.
@@ -382,7 +382,7 @@ func (c *Consumer) tryFire(ctx context.Context, reason string) {
 	ids := append([]string(nil), c.eligibleIDs...)
 	windowStart := c.lastFireAt // may be zero on first fire
 	windowEnd := c.cfg.now()
-	// Reset for next window. We commit this reset even on skip —
+	// Reset for next window. We commit this reset even on skip:
 	// skipping is a terminal decision; we do not want to keep
 	// retrying the same window forever.
 	c.eligibleIDs = nil
@@ -391,7 +391,7 @@ func (c *Consumer) tryFire(ctx context.Context, reason string) {
 
 	hash := dedupHash(ids)
 
-	// 1. dedup — identical window hash fired within 60s?
+	// 1. dedup: identical window hash fired within 60s?
 	fired, err := c.recentDedup(hash, windowEnd)
 	if err != nil {
 		c.logger.Printf("autoreflect: dedup lookup: %v", err)
@@ -401,7 +401,7 @@ func (c *Consumer) tryFire(ctx context.Context, reason string) {
 		return
 	}
 
-	// 2. rate limit — at most RateLimitPerHour per user.
+	// 2. rate limit: at most RateLimitPerHour per user.
 	count, err := c.limiter.Increment("auto_reflect")
 	if err != nil {
 		c.logger.Printf("autoreflect: limiter: %v", err)
@@ -412,7 +412,7 @@ func (c *Consumer) tryFire(ctx context.Context, reason string) {
 		return
 	}
 
-	// 3. budget — ≥80% consumed → pause until next day.
+	// 3. budget: ≥80% consumed → pause until next day.
 	remaining, err := c.cfg.Ledger.RemainingFraction()
 	if err != nil {
 		c.logger.Printf("autoreflect: budget lookup: %v", err)
@@ -445,7 +445,7 @@ func (c *Consumer) tryFire(ctx context.Context, reason string) {
 // are logged and dropped. If SkipPlaceholder is on and the final
 // set is empty, the DefaultPlaceholderPattern is used as a
 // belt-and-suspenders fallback (per brief: "Don't crash on regex
-// compile errors — log and fall back to the default pattern list.")
+// compile errors: log and fall back to the default pattern list.")
 func (c *Consumer) compilePatterns(raw []string, skip bool) []*regexp.Regexp {
 	if !skip {
 		return nil
@@ -466,7 +466,7 @@ func (c *Consumer) compilePatterns(raw []string, skip bool) []*regexp.Regexp {
 	if len(out) == 0 {
 		re, err := regexp.Compile(DefaultPlaceholderPattern)
 		if err != nil {
-			// Should never happen — the default is a compile-time constant.
+			// Should never happen. The default is a compile-time constant.
 			c.logger.Printf("autoreflect: default pattern failed to compile: %v", err)
 			return nil
 		}
@@ -589,9 +589,9 @@ func (c *Consumer) emit(ctx context.Context, processID string, name schema.Proce
 //                  seeded template IDs. A T-scope step is expressed
 //                  on R/I/A via context.scope.entities (the list of
 //                  triggering thought_ids).
-//   - budget:      MaxTokens capped at hardCap (default 20_000 — well
+//   - budget:      MaxTokens capped at hardCap (default 20_000: well
 //                  below the 50_000 interactive default).
-//   - created_by:  "thinking-engine/auto_reflect" — distinguishes
+//   - created_by:  "thinking-engine/auto_reflect": distinguishes
 //                  from user-initiated runs in the UI without
 //                  requiring a new schema field (origin is packed in
 //                  the companion AutoReflectTriggered event).

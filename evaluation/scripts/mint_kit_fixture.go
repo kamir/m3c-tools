@@ -1,6 +1,6 @@
 //go:build ignore
 
-// mint_kit_fixture.go — a standalone, deterministic issuer that writes a single
+// mint_kit_fixture.go: a standalone, deterministic issuer that writes a single
 // signed bundle + its BundleMeta sidecar + a pinned trust-roots YAML into an
 // output directory, exactly the inputs `skillctl export-verification-kit`
 // consumes. It reuses the white-paper evidence/mint-evidence.go pattern but is

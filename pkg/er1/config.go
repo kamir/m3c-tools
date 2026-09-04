@@ -41,7 +41,7 @@ var insecureTLSWarnOnce sync.Once
 // the SEC-M7 fail-closed gate does not depend on helpers in sibling packages.
 //
 // Pure (no DNS): a hostname that merely *resolves* to loopback is NOT treated
-// as loopback — only literal loopback hosts are allowed to skip verification.
+// as loopback, only literal loopback hosts are allowed to skip verification.
 func isLoopbackURL(rawURL string) bool {
 	parsed, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil || parsed == nil {
@@ -60,13 +60,13 @@ func isLoopbackURL(rawURL string) bool {
 // applyTLSVerificationPolicy enforces the SEC-M7 fail-closed rule on a freshly
 // loaded Config: when TLS verification is disabled (ER1_VERIFY_SSL=false) it is
 // only honoured for a loopback target. For any non-loopback host the request to
-// skip verification is REFUSED — verification is forced back on so every
+// skip verification is REFUSED. Verification is forced back on so every
 // downstream HTTP client (10+ call sites all derive from cfg.VerifySSL) stays
 // fail-closed. A loud one-time warning is emitted whenever verification is
 // (or was about to be) disabled.
 func applyTLSVerificationPolicy(cfg *Config) {
 	if cfg.VerifySSL {
-		return // verification on — nothing to police
+		return // verification on: nothing to police
 	}
 	if isLoopbackURL(cfg.APIURL) {
 		insecureTLSWarnOnce.Do(func() {
@@ -76,7 +76,7 @@ func applyTLSVerificationPolicy(cfg *Config) {
 	}
 	// Non-loopback host with verification disabled: refuse (fail-closed).
 	insecureTLSWarnOnce.Do(func() {
-		log.Printf("[er1] SECURITY: REFUSING to disable TLS verification (ER1_VERIFY_SSL=false) for NON-loopback host %q — re-enabling certificate verification. ER1_VERIFY_SSL=false is only honoured for 127.0.0.1/localhost.", cfg.APIURL)
+		log.Printf("[er1] SECURITY: REFUSING to disable TLS verification (ER1_VERIFY_SSL=false) for NON-loopback host %q: re-enabling certificate verification. ER1_VERIFY_SSL=false is only honoured for 127.0.0.1/localhost.", cfg.APIURL)
 	})
 	cfg.VerifySSL = true
 }
@@ -84,8 +84,8 @@ func applyTLSVerificationPolicy(cfg *Config) {
 // hasDeviceTokenAuth reports whether device-token (Bearer) auth is available
 // either via the ER1_DEVICE_TOKEN env var or a persisted token (OS keychain or
 // the encrypted fallback file). On the UPLOAD path a device token makes the
-// X-API-KEY fallback unused (see AuthHeaders), so any ER1_API_KEY value —
-// placeholders included — is irrelevant there and must NOT produce a FATAL
+// X-API-KEY fallback unused (see AuthHeaders), so any ER1_API_KEY value,
+// placeholders included, is irrelevant there and must NOT produce a FATAL
 // warning.
 //
 // FR-0096: that is true of /upload_2, not of the whole API. The /memory PATCH
@@ -130,7 +130,7 @@ func LoadConfig() *Config {
 	// vetted cfg.VerifySSL value.
 	applyTLSVerificationPolicy(cfg)
 	// BUG-0137 + BUG-0163: refuse to use a placeholder API key against a
-	// non-local URL — but only when the API key would actually be sent.
+	// non-local URL, but only when the API key would actually be sent.
 	// Device token (SPEC-0127) is the primary auth method and takes
 	// precedence in AuthHeaders(), so on the upload path a placeholder is
 	// merely useless and gets cleared silently. The FATAL warning is only
@@ -139,20 +139,20 @@ func LoadConfig() *Config {
 	// FR-0096 corrects the old claim that the X-API-KEY path is "dead-code"
 	// whenever a device token exists: on the /memory PATCH route the key is
 	// NOT a fallback but the only auth form that clears CSRF (see the note in
-	// PatchMemoryCurrentTime). A missing key there is a hard failure — an
-	// HTML 400 that reads like a server fault — which is why the Keychain
+	// PatchMemoryCurrentTime). A missing key there is a hard failure, an
+	// HTML 400 that reads like a server fault, which is why the Keychain
 	// fallback below runs regardless of the device token.
 	deviceToken := hasDeviceTokenAuth()
 	if config.IsBlockingPlaceholder(cfg.APIKey, cfg.APIURL) {
 		if !deviceToken {
 			placeholderFatalOnce.Do(func() {
-				log.Printf("[er1] FATAL: ER1_API_KEY is a placeholder (%q) targeting %q — refusing to upload. Run 'm3c-tools doctor' or fix the active profile.",
+				log.Printf("[er1] FATAL: ER1_API_KEY is a placeholder (%q) targeting %q: refusing to upload. Run 'm3c-tools doctor' or fix the active profile.",
 					cfg.APIKey, cfg.APIURL)
 			})
 		}
 		cfg.APIKey = ""
 	}
-	// FR-0096: last link of the documented credential chain — Keychain → Secret
+	// FR-0096: last link of the documented credential chain: Keychain → Secret
 	// Manager → file. Every other credential loader in this binary already reads
 	// the same `aims-core-er1` item (pkg/session, pkg/skillctl/artifactauth);
 	// LoadConfig was the one place where the chain stopped at the environment,
@@ -169,7 +169,7 @@ func LoadConfig() *Config {
 	}
 	// BUG-0093 + SPEC-0143: Only warn when NO auth is available at all.
 	if cfg.APIKey == "" && !deviceToken {
-		log.Println("[er1] WARNING: No authentication configured — log in with 'm3c-tools login' or set ER1_API_KEY in your profile.")
+		log.Println("[er1] WARNING: No authentication configured: log in with 'm3c-tools login' or set ER1_API_KEY in your profile.")
 	}
 	return cfg
 }
@@ -197,7 +197,7 @@ var (
 // The M3C_ER1_KEYCHAIN=off switch is honoured HERE rather than inside the lookup,
 // because the cache would otherwise defeat it: once any earlier call has resolved
 // a key, a later check at lookup time never runs again. It mirrors
-// M3C_TOKEN_STORE=file for the device token, and has two uses — a test that must
+// M3C_TOKEN_STORE=file for the device token, and has two uses. A test that must
 // observe "no credential configured" on a developer machine that HAS the item
 // (HOME=t.TempDir() cannot isolate the Keychain), and an operator who wants a run
 // to use strictly what the environment gives it.
@@ -216,7 +216,7 @@ func cachedKeychainAPIKey() string {
 // pkg/skillctl/artifactauth); a TIMEOUT, because a hung credential lookup inside
 // a launchd run would be worse than a missing key; and a fallback from the
 // account-qualified query to the service-only one, since the item may have been
-// added either way. Returns "" on any failure — the caller then behaves exactly
+// added either way. Returns "" on any failure: the caller then behaves exactly
 // as before this change.
 func keychainAPIKey() string {
 	if runtime.GOOS != "darwin" {

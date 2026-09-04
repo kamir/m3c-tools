@@ -1,6 +1,6 @@
 package verify
 
-// SPEC-0281 — signed governance attestation re-verification (closes the
+// SPEC-0281: signed governance attestation re-verification (closes the
 // red-team's red→green sidecar-downgrade exploit) + SPEC-0279 revocation epoch
 // rollback protection.
 
@@ -77,7 +77,7 @@ func TestGovernance_SignedAttestation_Verified(t *testing.T) {
 	}
 }
 
-// AC1 — the red-team exploit: a genuinely-RED bundle with its sidecar flipped to
+// AC1. The red-team exploit: a genuinely-RED bundle with its sidecar flipped to
 // green is REFUSED under require_signed_governance (no signed green attestation).
 func TestGovernance_DowngradeRefused(t *testing.T) {
 	_, err := runGovCase(t, govCase{currentGov: "green", attLevel: "red", pinReviewer: true, requireSigned: true, governanceMin: "green"})
@@ -86,7 +86,7 @@ func TestGovernance_DowngradeRefused(t *testing.T) {
 	}
 }
 
-// AC2 — a valid signed green attestation by a NON-pinned reviewer is not trusted.
+// AC2: a valid signed green attestation by a NON-pinned reviewer is not trusted.
 func TestGovernance_NonPinnedReviewerRefused(t *testing.T) {
 	_, err := runGovCase(t, govCase{currentGov: "green", attLevel: "green", pinReviewer: false, requireSigned: true, governanceMin: "green"})
 	if !errors.Is(err, ErrGovernanceBelowMin) {
@@ -94,7 +94,7 @@ func TestGovernance_NonPinnedReviewerRefused(t *testing.T) {
 	}
 }
 
-// AC3 — a green attestation signed over a DIFFERENT bundle's digest (replay) fails.
+// AC3: a green attestation signed over a DIFFERENT bundle's digest (replay) fails.
 func TestGovernance_ReplayedAttestationRefused(t *testing.T) {
 	other := digestOf("some other bundle entirely")
 	_, err := runGovCase(t, govCase{currentGov: "green", attLevel: "green", attSignDigest: other, pinReviewer: true, requireSigned: true, governanceMin: "green"})
@@ -103,7 +103,7 @@ func TestGovernance_ReplayedAttestationRefused(t *testing.T) {
 	}
 }
 
-// AC4 — backward compatible: with no reviewers pinned and require off, the level
+// AC4. Backward compatible: with no reviewers pinned and require off, the level
 // is ADVISORY (passes the floor) and the summary does not claim "attested".
 func TestGovernance_AdvisoryWhenNoReviewers(t *testing.T) {
 	res, err := runGovCase(t, govCase{currentGov: "green", attLevel: "green", pinReviewer: false, requireSigned: false, governanceMin: "green"})
@@ -118,7 +118,7 @@ func TestGovernance_AdvisoryWhenNoReviewers(t *testing.T) {
 	}
 }
 
-// SPEC-0279 R1 — a signed list with epoch below the pinned floor is refused (rollback).
+// SPEC-0279 R1: a signed list with epoch below the pinned floor is refused (rollback).
 func TestRevocation_EpochRollbackRefused(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 	root := revocationRoot(t, pub)

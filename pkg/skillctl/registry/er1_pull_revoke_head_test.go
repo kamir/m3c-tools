@@ -31,12 +31,12 @@ func signedRevokeHead(t *testing.T, priv ed25519.PrivateKey, digests, emergency 
 // TestPullBundles_RevokeAbsentFromDiscovery_ButOnSignedHead_RejectsAtGate5 is the
 // FR-0090 IS-RS-01 bite. A signed revoke for digest X is ABSENT from tag discovery
 // (a hostile/compromised tenant stripped/aged/flooded it out of the searchByTags
-// window) so it never enters the accumulator — acc.IsRevoked(X) is false. But X is
+// window) so it never enters the accumulator: acc.IsRevoked(X) is false, but X is
 // named on the SIGNED revocation HEAD (emergency burn list + committed
 // revoked_set_root). PullBundles must STILL refuse X at Gate 5.
 //
 // Pre-fix (no HEAD consultation) PullBundles built Gate 5 only from discovery, so
-// X — cleanly admitted + attested — STAGED. Post-fix the verified HEAD both names
+// X, cleanly admitted + attested, STAGED. Post-fix the verified HEAD both names
 // X on the emergency list AND fails the set-root binding (discovered revoked set
 // is empty, HEAD commits to {X}), so the pull fails closed.
 func TestPullBundles_RevokeAbsentFromDiscovery_ButOnSignedHead_RejectsAtGate5(t *testing.T) {
@@ -44,7 +44,7 @@ func TestPullBundles_RevokeAbsentFromDiscovery_ButOnSignedHead_RejectsAtGate5(t 
 	f := newPullFake(t)
 
 	// X is admitted + attested (clears gates 1-4). NO revoke item is published, so
-	// tag discovery finds no revoke for X — modelling the omission attack.
+	// tag discovery finds no revoke for X: modelling the omission attack.
 	admit, digest := mintAdmitItem(t, priv, "victim", "1.0.0", "PRETEND-SKB")
 	attest := mintAttestItem(t, priv, "victim", "1.0.0", digest, "green", "ok")
 	f.addItem(admit)
@@ -104,7 +104,7 @@ func signedRevokeHeadEpoch(t *testing.T, priv ed25519.PrivateKey, epoch int, dig
 // TestPullBundles_ReplayedStaleHead_RejectedByEpochFloor is the challenge-gate bite
 // for the IS-RS-01 replay gap. A hostile tenant strips X's revoke from discovery AND
 // serves a genuinely-signed OLD head (epoch 0, from before X was revoked, empty
-// revoked set) instead of the current one. A signature-only check accepted it — its
+// revoked set) instead of the current one. A signature-only check accepted it: its
 // stale empty root matched the truncated (empty) discovery, so X staged. With the
 // epoch floor (the client already accepted epoch 5), the replayed epoch-0 head is a
 // rollback → the pull fails closed and X is refused.
@@ -126,7 +126,7 @@ func TestPullBundles_ReplayedStaleHead_RejectedByEpochFloor(t *testing.T) {
 	t.Setenv("M3C_SKILL_CACHE_DIR", t.TempDir())
 
 	// The attacker replays a validly-signed GENESIS head (epoch 0, empty set) that
-	// predates X's revoke — it does NOT name X.
+	// predates X's revoke. It does NOT name X.
 	stale := signedRevokeHeadEpoch(t, priv, 0, nil, nil)
 	orig := pullRevocationHeadFetch
 	pullRevocationHeadFetch = func(_, _ string, _ time.Duration) (map[string]any, error) {
@@ -155,7 +155,7 @@ func TestPullBundles_ReplayedStaleHead_RejectedByEpochFloor(t *testing.T) {
 
 // TestPullBundles_NoHeadConfigured_StillStages is the never-regress control: with
 // no HEAD URL configured and a small (uncapped) discovery page, PullBundles behaves
-// exactly as before — a clean, attested, non-revoked bundle STAGES. This proves the
+// exactly as before: a clean, attested, non-revoked bundle STAGES. This proves the
 // IS-RS-01 gate is inert on the default self-ER1 host that pins no revoke HEAD.
 func TestPullBundles_NoHeadConfigured_StillStages(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(nil)

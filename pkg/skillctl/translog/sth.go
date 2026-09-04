@@ -17,8 +17,8 @@ import (
 // ("attestation" in signing/attest.go, "revoke" in signing/revoke.go, the
 // AgentID envelopes, the device-token envelope, ...). Because the domain
 // string is the FIRST line of the signed message, an ed25519 signature
-// produced over an STH can never be byte-equal to — and therefore never be
-// replayed as — an attestation, a revocation, or any other envelope; and
+// produced over an STH can never be byte-equal to, and therefore never be
+// replayed as, an attestation, a revocation, or any other envelope; and
 // vice versa. Bumping the "-v1" suffix is how we'd migrate the STH format
 // without a cross-family collision.
 const STHDomain = "skillctl-sth-v1"
@@ -40,10 +40,10 @@ var logIDPattern = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`)
 
 // STH errors.
 var (
-	// ErrSTHMalformed — the STH failed structural validation before any
+	// ErrSTHMalformed: the STH failed structural validation before any
 	// crypto check (bad size, bad timestamp, empty root, bad log id).
 	ErrSTHMalformed = errors.New("translog: malformed signed tree head")
-	// ErrSTHSignatureInvalid — the ed25519 signature did not verify
+	// ErrSTHSignatureInvalid: the ed25519 signature did not verify
 	// against the pinned log key. Covers BOTH a forged signature and an
 	// STH signed by a NON-pinned key (the caller passes the pinned key;
 	// any other signer fails here).
@@ -53,12 +53,12 @@ var (
 // STH is a Signed Tree Head: a log operator's signed commitment to "at
 // this timestamp, my log had exactly TreeSize entries and this RootHash."
 // It is the anchor a verifier pins (with the log's public key) and checks
-// inclusion proofs against — entirely offline.
+// inclusion proofs against: entirely offline.
 //
 // Per SPEC-0278 §3.4 the trust-roots file pins the log public key plus a
 // recent STH (or a witnessed-STH set); this struct is that pinned object.
 type STH struct {
-	// TreeSize is the number of leaves committed. Must be >= 1 — we never
+	// TreeSize is the number of leaves committed. Must be >= 1: we never
 	// sign over an empty tree.
 	TreeSize int `json:"tree_size" yaml:"tree_size"`
 
@@ -80,7 +80,7 @@ type STH struct {
 }
 
 // RootBytes decodes RootHash into a fixed [HashSize]byte. Returns
-// ErrSTHMalformed if the hex is the wrong length or not valid hex — so a
+// ErrSTHMalformed if the hex is the wrong length or not valid hex, so a
 // caller can never hand a half-decoded root into VerifyInclusion.
 func (s STH) RootBytes() ([HashSize]byte, error) {
 	var out [HashSize]byte
@@ -151,7 +151,7 @@ func (s STH) CanonicalSTHMessage() ([]byte, error) {
 
 // SignSTH signs an STH with the log's ed25519 private key and returns a
 // copy with Signature populated (hex). The input's Signature field is
-// ignored. logKey must be the LOG signing key — distinct from author /
+// ignored. logKey must be the LOG signing key: distinct from author /
 // registry / attestation keys.
 func SignSTH(logKey ed25519.PrivateKey, s STH) (STH, error) {
 	if len(logKey) != ed25519.PrivateKeySize {
@@ -171,7 +171,7 @@ func SignSTH(logKey ed25519.PrivateKey, s STH) (STH, error) {
 //
 // This is the single chokepoint for "is this STH authentic and from the
 // log I trust." An STH signed by ANY key other than logPub fails with
-// ErrSTHSignatureInvalid — so a head signed by an unpinned key is refused,
+// ErrSTHSignatureInvalid, so a head signed by an unpinned key is refused,
 // and a forged head whose root does not match its signed bytes is refused.
 // (Whether the root actually matches a set of leaves is a separate concern,
 // checked by VerifyInclusion / the log builder.)

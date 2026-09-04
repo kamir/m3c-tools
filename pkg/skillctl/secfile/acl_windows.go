@@ -11,7 +11,7 @@
 // SecureFileDACL is the Windows enforcement of the 0600 intent (WIN-T7); on
 // every other OS it is a no-op (see acl_other.go) because 0600 already holds.
 //
-// It lives in its own leaf package — not in pkg/skillctl/verify — because verify
+// It lives in its own leaf package, not in pkg/skillctl/verify, because verify
 // already imports pkg/skillctl/registry, and the registry install path is one of
 // the callers; a setter in verify called from registry would be an import cycle.
 package secfile
@@ -23,8 +23,8 @@ import (
 )
 
 // SecureFileDACL replaces the DACL on path with a PROTECTED (inheritance-disabled)
-// DACL that grants FULL control to exactly two trustees — the current user (whom
-// it also sets as the OWNER) and the local SYSTEM account — and to no one else.
+// DACL that grants FULL control to exactly two trustees, the current user (whom
+// it also sets as the OWNER) and the local SYSTEM account, and to no one else.
 // PROTECTED_DACL strips any ACEs inherited from the parent directory, so the file
 // no longer leaks read/write access through inheritance. Fail-closed: any Win32
 // error is returned so the caller can treat a failed hardening as a failed write.
@@ -61,9 +61,9 @@ func SecureFileDACL(path string) error {
 		return fmt.Errorf("secfile: assemble DACL: %w", err)
 	}
 
-	// DACL_SECURITY_INFORMATION           — replace the DACL,
-	// PROTECTED_DACL_SECURITY_INFORMATION — and DROP inherited ACEs (no inheritance),
-	// OWNER_SECURITY_INFORMATION          — pin ownership to the current user.
+	// DACL_SECURITY_INFORMATION (replace the DACL,
+	// PROTECTED_DACL_SECURITY_INFORMATION) and DROP inherited ACEs (no inheritance),
+	// OWNER_SECURITY_INFORMATION: pin ownership to the current user.
 	secInfo := windows.SECURITY_INFORMATION(
 		windows.DACL_SECURITY_INFORMATION |
 			windows.PROTECTED_DACL_SECURITY_INFORMATION |

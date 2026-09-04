@@ -249,7 +249,7 @@ func TestStepFailedFlowsToLogAndCounter(t *testing.T) {
 	if len(rec.stepFails) != 1 {
 		t.Fatalf("stepFails = %v, want 1 entry", rec.stepFails)
 	}
-	// schema.LayerR is the string "R" (uppercase) — the events sink
+	// schema.LayerR is the string "R" (uppercase): the events sink
 	// pipes ev.StepLayer through to the counter label verbatim.
 	if rec.stepFails[0] != "R/compare/llm" {
 		t.Errorf("stepFails[0] = %q, want R/compare/llm", rec.stepFails[0])

@@ -34,7 +34,7 @@ Use AskUserQuestion:
 
 | Option | What it does | Restart effort |
 |--------|-------------|----------------|
-| **Leave as-is** | Service stays deployed but scales to zero. No compute cost when idle. | None — already running |
+| **Leave as-is** | Service stays deployed but scales to zero. No compute cost when idle. | None: already running |
 | **Delete service** | Fully removes Cloud Run service. Zero cost. | Must redeploy from scratch (~5 min) |
 | **Delete service + images** | Removes service AND GCR images. Saves ~$0.30/month storage. | Must rebuild + redeploy (~15 min) |
 
@@ -77,7 +77,7 @@ Show the user what was done and how to restart:
 
 ## Important notes
 
-- Cloud Run min-instances=0 means NO compute cost when idle — this is already the default
+- Cloud Run min-instances=0 means NO compute cost when idle. This is already the default
 - The only way to fully "stop" Cloud Run is to delete the service
 - Deleting is safe: all config is captured in gcp-state.json and the deploy skill
-- Base images (baseimage1-3) should be kept — they take 15+ min to rebuild
+- Base images (baseimage1-3) should be kept: they take 15+ min to rebuild

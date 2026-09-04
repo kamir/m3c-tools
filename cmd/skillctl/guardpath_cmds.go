@@ -1,6 +1,6 @@
 package main
 
-// guardpath_cmds.go — `skillctl guard-path` (SPEC-0317 R-6, P2).
+// guardpath_cmds.go: `skillctl guard-path` (SPEC-0317 R-6, P2).
 //
 // A SIDE-CHANNEL PreToolUse guard for the file-touching tools (Bash / Read /
 // Edit / Write). It reads the hook event on stdin, classifies the target
@@ -8,7 +8,7 @@ package main
 // (records a skill-dir hit, allows the tool). An opt-in enterprise mode DENIES a
 // skill-dir access (exit 2, refusal_code `sidechannel_denied`).
 //
-// HONEST SCOPE (R-6.4 — this guard is DETECTION / BAR-RAISING, NOT a seal):
+// HONEST SCOPE (R-6.4: this guard is DETECTION / BAR-RAISING, NOT a seal):
 // it is defeatable by construction (symlinks, $HOME indirection, cd + relative
 // paths, base64 pipelines, copies made OUTSIDE the skills dir, content already
 // in the model's context, a direct /slash skill load). It is sold ONLY as
@@ -18,22 +18,22 @@ package main
 // hook NEVER overrides another hook's deny (same silent-allow contract as
 // verify-hook: an allow emits nothing and exits 0).
 //
-// THE ONE CANONICALISATION FIXED POINT (R-6.2 — the load-bearing correctness
+// THE ONE CANONICALISATION FIXED POINT (R-6.2: the load-bearing correctness
 // point): classification resolves BOTH the access target and the skills root
 // through install.CanonicalPath (expand ~, abs+clean, EvalSymlinks) and compares
 // the cleaned absolute real paths with filepath.Rel + a no-"../"-escape check. A
-// lexical HasPrefix on the skills dir is FORBIDDEN — that dir already contains
+// lexical HasPrefix on the skills dir is FORBIDDEN, that dir already contains
 // symlinks (browse → gstack/browse, find-skills → ../../.agents/skills), so a
 // HasPrefix check both false-negatives (a symlinked-in body) and false-positives.
 //
 // SELF-EXEMPTION (R-6.3): skillctl's own subprocess reads (compliance inventory,
 // the SessionStart sweep) and the harness's legitimate SKILL.md load must never
 // be denied. Where the event shape lets us tell (a Bash line that invokes
-// skillctl), we exempt; otherwise we DEFAULT TO ALLOW — the audited-allow default
+// skillctl), we exempt; otherwise we DEFAULT TO ALLOW: the audited-allow default
 // already never denies, so an ambiguous case cannot become a false block.
 //
 // VOLUME-BOUNDING (R-6.1): Bash/Read/Edit/Write fire far more than Skill, so an
-// event is emitted ONLY on a deny or a skill-dir hit — never on an ordinary file
+// event is emitted ONLY on a deny or a skill-dir hit, never on an ordinary file
 // op. The telemetry rides a SEPARATE, off-by-default stream (guard-path.jsonl)
 // with its own consent basis (R-9); it is NEVER folded into the enforcement
 // evidence (invocation-trail.jsonl / the outbox), so SPEC-0276 readAndVerifyTrail
@@ -58,7 +58,7 @@ import (
 
 // exitSidechannelDenied is the numbered refusal code carried in the signed guard
 // event on an opt-in deny. The PROCESS still exits exitHookBlock (2) to block the
-// PreToolUse call — 27 is carried in the human reason + the signed refusal_code,
+// PreToolUse call: 27 is carried in the human reason + the signed refusal_code,
 // exactly as exitBundleRevoked (17) / exitRevocationStale (22) do for verify-hook.
 const exitSidechannelDenied = 27 // = exitcode.GuardPathSidechannelDenied.Number
 
@@ -87,7 +87,7 @@ func runGuardPath(args []string, stdin io.Reader, stdout, stderr io.Writer) (cod
 	}
 
 	// Fail OPEN on panic: a detection side channel must NEVER false-block a tool
-	// (R-6.4 — it is not a seal and must not override another hook's decision).
+	// (R-6.4. It is not a seal and must not override another hook's decision).
 	defer func() {
 		if r := recover(); r != nil {
 			code = exitOK
@@ -136,13 +136,13 @@ func runGuardPath(args []string, stdin io.Reader, stdout, stderr io.Writer) (cod
 
 	if deny {
 		reason := fmt.Sprintf(
-			"skillctl guard-path: BLOCKED %s access to skill directory %q (side-channel deny, SPEC-0317 R-6.1; refusal_code=%s, code %d). This is opt-in detection, not a seal — clear SKILLCTL_GUARD_PATH / drop --deny if this access is legitimate.",
+			"skillctl guard-path: BLOCKED %s access to skill directory %q (side-channel deny, SPEC-0317 R-6.1; refusal_code=%s, code %d). This is opt-in detection, not a seal: clear SKILLCTL_GUARD_PATH / drop --deny if this access is legitimate.",
 			toolLabel(ev.ToolName), hits[0], guardPathRefusalToken, exitSidechannelDenied)
 		emitGuardEvent(home, canonRoot, ev, hits, "deny", guardPathRefusalToken, exitSidechannelDenied, obfuscated)
 		return emitDeny(stdout, stderr, reason)
 	}
 
-	// Default disposition: AUDITED-ALLOW — record the hit, allow the tool (exit 0,
+	// Default disposition: AUDITED-ALLOW: record the hit, allow the tool (exit 0,
 	// emit nothing on stdout/stderr).
 	emitGuardEvent(home, canonRoot, ev, hits, "audited-allow", "", exitOK, obfuscated)
 	return exitOK
@@ -197,7 +197,7 @@ func skillDirHits(canonRoot string, ev hookEvent) []string {
 
 // underSkills reports whether canonTarget is the skills root itself or inside it,
 // using filepath.Rel + a no-"../"-escape check on the two already-canonical
-// absolute paths (NOT a lexical HasPrefix — R-6.2).
+// absolute paths (NOT a lexical HasPrefix: R-6.2).
 func underSkills(canonRoot, canonTarget string) bool {
 	if canonRoot == "" || canonTarget == "" {
 		return false
@@ -288,7 +288,7 @@ func shellPathTokens(cmd string) []string {
 
 // shellSplit is a deliberately minimal tokeniser: it neutralises common shell
 // separators (so a piped/compound command still surfaces its path args) and
-// splits on whitespace. It is NOT a real shell parser — that limitation is part
+// splits on whitespace. It is NOT a real shell parser, that limitation is part
 // of the honestly-enumerated coverage gap.
 func shellSplit(cmd string) []string {
 	repl := strings.NewReplacer(
@@ -327,11 +327,11 @@ func isDriveLetter(b byte) bool {
 
 // guardSelfExempt reports whether the event is skillctl's own tool access (the
 // compliance inventory read, the SessionStart sweep), which must NEVER be denied.
-// When the event shape does not let us tell, it returns false — the audited-allow
+// When the event shape does not let us tell, it returns false: the audited-allow
 // default already never denies, so an ambiguous case cannot become a false block.
 //
 // R-6.3: the exemption is granted ONLY to a verified SOLE-skillctl command. A
-// compound / piped / substituted command forfeits it — otherwise the leading
+// compound / piped / substituted command forfeits it: otherwise the leading
 // `skillctl` word would whitelist a SECOND command chained after it
 // (`skillctl x; cat <victim>`), silently allowing the victim read AND blinding the
 // audit. commandHasSeparator strips that escape so the chained access still
@@ -341,7 +341,7 @@ func guardSelfExempt(ev hookEvent) bool {
 		return false
 	}
 	if commandHasSeparator(ev.ToolInput.Command) {
-		return false // not a SOLE skillctl command — no exemption
+		return false // not a SOLE skillctl command: no exemption
 	}
 	return commandInvokesSkillctl(ev.ToolInput.Command)
 }
@@ -372,7 +372,7 @@ func commandInvokesSkillctl(cmd string) bool {
 		}
 		switch tok {
 		case "env", "sudo", "command", "exec", "nohup", "time":
-			continue // wrapper — look at the next word
+			continue // wrapper: look at the next word
 		}
 		base := filepath.Base(tok)
 		return base == "skillctl" || base == "m3c-tools"
@@ -383,7 +383,7 @@ func commandInvokesSkillctl(cmd string) bool {
 // --- obfuscation flag (R-6.4: reuse bodyscan, not ad-hoc regexes) ----------
 
 // commandObfuscated flags a Bash command whose body trips bodyscan's
-// obfuscation rules (base64 / pipeline decoding). Advisory only — it annotates
+// obfuscation rules (base64 / pipeline decoding). Advisory only: it annotates
 // the guard event; it never changes the allow/deny disposition.
 func commandObfuscated(ev hookEvent) bool {
 	if ev.ToolName != "Bash" || strings.TrimSpace(ev.ToolInput.Command) == "" {
@@ -414,11 +414,11 @@ func guardDenyMode(flagDeny bool) bool {
 	return false
 }
 
-// --- emit (SEPARATE, off-by-default stream — R-9) --------------------------
+// --- emit (SEPARATE, off-by-default stream: R-9) --------------------------
 
 // guardPathLine is one JSONL record in the side-channel stream: the SIGNED
 // InvocationRecord (reusing the SPEC-0202 device-signed vocabulary + inv: event
-// id — NOT a new event format) embedded, plus the guard-specific advisory fields.
+// id: NOT a new event format) embedded, plus the guard-specific advisory fields.
 // Embedding keeps the line a strict superset of the signed record, so the
 // signature still verifies against the canonical record bytes.
 type guardPathLine struct {
@@ -429,7 +429,7 @@ type guardPathLine struct {
 }
 
 // guardPathLogPath is the SEPARATE stream file. It is NEVER invocation-trail.jsonl
-// (the enforcement-evidence projection) nor the outbox — R-9 keeps guard-path
+// (the enforcement-evidence projection) nor the outbox: R-9 keeps guard-path
 // file-access telemetry on its own consent basis.
 func guardPathLogPath(home string) string {
 	return filepath.Join(verdictDir(home), "guard-path.jsonl")
@@ -492,20 +492,20 @@ func emitGuardEvent(home, canonRoot string, ev hookEvent, hits []string, decisio
 // --- --explain (R-6.4: enumerate the honest scope + coverage gaps) ---------
 
 func printGuardPathExplain(w io.Writer) {
-	fmt.Fprintln(w, "skillctl guard-path — side-channel PreToolUse guard (SPEC-0317 R-6)")
+	fmt.Fprintln(w, "skillctl guard-path: side-channel PreToolUse guard (SPEC-0317 R-6)")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "WHAT IT DOES")
 	fmt.Fprintln(w, "  Reads a Bash/Read/Edit/Write PreToolUse hook event on stdin and classifies")
 	fmt.Fprintln(w, "  the target path(s) against ~/.claude/skills using a SINGLE realpath fixed")
-	fmt.Fprintln(w, "  point (EvalSymlinks on both the target and the skills root — never a lexical")
+	fmt.Fprintln(w, "  point (EvalSymlinks on both the target and the skills root, never a lexical")
 	fmt.Fprintln(w, "  HasPrefix, because the skills dir itself contains symlinks).")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "DISPOSITION")
-	fmt.Fprintln(w, "  default: AUDITED-ALLOW — record a skill-dir hit, allow the tool (exit 0).")
-	fmt.Fprintln(w, "  opt-in : DENY (--deny or SKILLCTL_GUARD_PATH=deny) — exit 2, refusal_code")
+	fmt.Fprintln(w, "  default: AUDITED-ALLOW, record a skill-dir hit, allow the tool (exit 0).")
+	fmt.Fprintln(w, "  opt-in : DENY (--deny or SKILLCTL_GUARD_PATH=deny), exit 2, refusal_code")
 	fmt.Fprintf(w, "           %q (code %d). skillctl's own reads are never denied.\n", guardPathRefusalToken, exitSidechannelDenied)
 	fmt.Fprintln(w, "  Emits ONLY on a deny or a skill-dir hit, to a SEPARATE off-by-default stream")
-	fmt.Fprintln(w, "  (guard-path.jsonl) — never folded into the enforcement evidence.")
+	fmt.Fprintln(w, "  (guard-path.jsonl): never folded into the enforcement evidence.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "THIS IS DETECTION / BAR-RAISING, NOT A SEAL. Known coverage gaps:")
 	fmt.Fprintln(w, "  - copies of a skill body made OUTSIDE ~/.claude/skills are not classified;")

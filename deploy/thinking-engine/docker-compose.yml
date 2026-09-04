@@ -1,4 +1,4 @@
-# docker-compose.yml — Phase 1 (dev/local) Thinking Engine stack.
+# docker-compose.yml: Phase 1 (dev/local) Thinking Engine stack.
 #
 # SPEC-0167 §Deployment Topology §Phase 1:
 #   - cp-all-in-one (broker, zookeeper, schema-registry, control-center)
@@ -6,7 +6,7 @@
 #   - single broker, RF=1 (D5)
 #
 # All ports are parameterized so multiple users' stacks can coexist
-# on one machine — run with per-user .env files keyed by ctx_hash.
+# on one machine: run with per-user .env files keyed by ctx_hash.
 
 services:
   zookeeper:
@@ -74,7 +74,7 @@ services:
     # The engine image can be built locally via `make thinking-image`
     # OR on-demand by this compose stanza. The `profiles: [engine]`
     # gate means this service only starts when the engine profile is
-    # requested — the broker/registry/control-center subset keeps
+    # requested. The broker/registry/control-center subset keeps
     # working without it (Week 1 behaviour).
     #
     # Stream 2c (SPEC-0167) wires the real franz-go driver behind the

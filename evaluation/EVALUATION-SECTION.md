@@ -28,14 +28,14 @@ are medians (and p99) over the sample sizes noted per metric.
 > with **zero** outbound network calls (every proxy environment variable is
 > routed at a localhost sentinel that counts any connection attempt; the count is
 > 0). **Revocation** verification (E3) scales from **0.044 ms** at 10 entries to
-> **1.58 s** at 10⁶ entries — dominated by canonical sort, with a single
-> constant-time signature check — and the freshness model (E10) passes **all
+> **1.58 s** at 10⁶ entries (dominated by canonical sort, with a single
+> constant-time signature check) and the freshness model (E10) passes **all
 > 7/7** rollback / stale / split-view / consistency / future-dated cases.
 > **Behaviour scanning** (E4) achieves **100.0 %** true-positive at **0.0 %**
 > false-positive on the SPEC-0246 corpus (thresholds TP ≥ 95 %, FP ≤ 5 %).
 > **Agent authorization** (E5) adds **0.000023 ms** per invocation for the
 > cached-mandate gate and **0.037 ms** per invocation when the signed mandate is
-> re-verified on every call. **OIDC offline** verification (E6) is **N/A —
+> re-verified on every call. **OIDC offline** verification (E6) is **N/A:
 > deferred (gated P3-P2)**: the OIDC/JWKS owner/sign-off binding (SPEC-0277 P2)
 > is not built, so there is no path to measure and we report no number rather
 > than fabricate one. **Transparency-log** inclusion proofs (E7) verify in
@@ -51,11 +51,11 @@ are medians (and p99) over the sample sizes noted per metric.
 > *Threats to validity.* Our scale population is **synthetic**: it is minted by
 > the same signing primitives the product ships (so the cryptography and the
 > verification path are real), but the *distribution* of skills, authors, and
-> revocations is generated, not drawn from a deployed cohort — absolute latencies
+> revocations is generated, not drawn from a deployed cohort. Absolute latencies
 > would shift with real bundle sizes and registry policy, though the asymptotic
 > shapes (E3 sort-bound, E7 O(log N), E8 crypto-floor) are structural and
 > distribution-independent. Results are **single-platform** (one Apple M3 Max);
-> they fix relative costs but not portability — the air-gap proof (E2) and the
+> they fix relative costs but not portability: the air-gap proof (E2) and the
 > reproducibility result (E9) are platform-independent properties, while the
 > latency numbers (E1/E3/E7/E8) are machine-specific and the harness records the
 > hardware so a re-run elsewhere is directly comparable. The behaviour-scan
@@ -73,14 +73,14 @@ are medians (and p99) over the sample sizes noted per metric.
 
 | #   | Metric                                  | Result (this machine)                                              | Population | Threshold / note |
 |-----|-----------------------------------------|-------------------------------------------------------------------|------------|------------------|
-| E1  | Offline `verify` latency                | warm median **0.117 ms** / p99 **0.294 ms**; cold median **0.259 ms** / p99 **0.495 ms** (N=10⁴, 1 core) | synthetic | — |
+| E1  | Offline `verify` latency                | warm median **0.117 ms** / p99 **0.294 ms**; cold median **0.259 ms** / p99 **0.495 ms** (N=10⁴, 1 core) | synthetic | n/a |
 | E2  | Kit verify on air-gapped host           | **8.76 ms** wall-clock; **0** net calls                            | synthetic  | net calls must be 0 ✓ |
 | E3  | Revocation-list verify vs size          | **0.044 ms** (10) → **0.086 ms** (10²) → **0.80 ms** (10³) → **10.0 ms** (10⁴) → **111.7 ms** (10⁵) → **1583 ms** (10⁶) | synthetic | sort-bound curve |
 | E4  | Behaviour-scan TP/FP (**real corpus**)  | **100.0 %** TP (40/40), **0.0 %** FP (0/32)                        | **real**   | TP ≥ 95 % ✓, FP ≤ 5 % ✓ |
 | E5  | Agent-grant authorization overhead      | cached **+0.000023 ms**/invocation; full re-verify **+0.037 ms**/invocation | synthetic | delta over no-gate baseline |
-| E6  | OIDC/JWKS offline verify                | **N/A — deferred (gated P3-P2)**                                   | n/a        | not built; not faked |
+| E6  | OIDC/JWKS offline verify                | **N/A: deferred (gated P3-P2)**                                   | n/a        | not built; not faked |
 | E7  | Transparency-log inclusion-proof verify | **0.375 µs** (16) → **0.75 µs** (256) → **1.08 µs** (4096) → **1.25 µs** (65536) | synthetic | O(log N), proof_len 4→16 |
-| E8  | Trust-root scale (pinned authors)       | **0.125 ms** (1) → **0.120 ms** (10) → **0.125 ms** (100) → **0.145 ms** (10³) | synthetic | flat — crypto-floor dominated |
+| E8  | Trust-root scale (pinned authors)       | **0.125 ms** (1) → **0.120 ms** (10) → **0.125 ms** (100) → **0.145 ms** (10³) | synthetic | flat: crypto-floor dominated |
 | E9  | Kit size + reproducibility              | **3123 bytes**; byte-identical **yes**                            | synthetic  | reproducible ✓ |
 | E10 | Revocation freshness correctness        | **7/7** cases pass (rollback, stale-high, stale-low-open, fresh, future-dated, split-view, consistency) | synthetic | pass/fail matrix ✓ |
 
@@ -118,5 +118,5 @@ EVAL_CPU="Apple M3 Max" go run ./evaluation/cmd/results-md evaluation/results
 ```
 
 Seeds are fixed (`e1Seed … e10Seed` in each driver); the synthesizer derives all
-keys deterministically, so the population — and therefore the numbers' shape — is
+keys deterministically, so the population, and therefore the numbers' shape, is
 reproducible on any host (absolute latencies are hardware-specific and recorded).

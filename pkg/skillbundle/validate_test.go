@@ -38,28 +38,28 @@ func TestValidateIntentDataCrossRules(t *testing.T) {
 
 		// --- Rule 1: destructive_green ---
 		{
-			name:             "Rule 1 — destructive=true + green fires",
+			name:             "Rule 1: destructive=true + green fires",
 			intent:           &Intent{Destructive: true, SideEffects: []string{"fs:write"}},
 			governanceIntent: "green",
 			deps:             nil,
 			want:             RuleDestructiveGreen,
 		},
 		{
-			name:             "Rule 1 — destructive=true + yellow does NOT fire",
+			name:             "Rule 1: destructive=true + yellow does NOT fire",
 			intent:           &Intent{Destructive: true, SideEffects: []string{"fs:write"}},
 			governanceIntent: "yellow",
 			deps:             nil,
 			want:             RuleNone,
 		},
 		{
-			name:             "Rule 1 — destructive=true + red does NOT fire",
+			name:             "Rule 1: destructive=true + red does NOT fire",
 			intent:           &Intent{Destructive: true, SideEffects: []string{"fs:write"}},
 			governanceIntent: "red",
 			deps:             nil,
 			want:             RuleNone,
 		},
 		{
-			name:             "Rule 1 — destructive=false + green is fine",
+			name:             "Rule 1: destructive=false + green is fine",
 			intent:           &Intent{Destructive: false, SideEffects: []string{"fs:read"}},
 			governanceIntent: "green",
 			deps:             nil,
@@ -68,14 +68,14 @@ func TestValidateIntentDataCrossRules(t *testing.T) {
 
 		// --- Rule 2: network_false_http_dep ---
 		{
-			name:             "Rule 2 — network=false + http_endpoint dep fires",
+			name:             "Rule 2: network=false + http_endpoint dep fires",
 			intent:           &Intent{Network: boolPtr(false), SideEffects: []string{"net:none"}, Destructive: true},
 			governanceIntent: "yellow",
 			deps:             []DataDependency{{Kind: "http_endpoint", Ref: "https://api.anthropic.com", Access: "read"}},
 			want:             RuleNetworkFalseHttpDep,
 		},
 		{
-			name:             "Rule 2 — network=false + non-http deps does NOT fire",
+			name:             "Rule 2: network=false + non-http deps does NOT fire",
 			intent:           &Intent{Network: boolPtr(false), SideEffects: []string{"fs:read"}},
 			governanceIntent: "yellow",
 			deps: []DataDependency{
@@ -85,14 +85,14 @@ func TestValidateIntentDataCrossRules(t *testing.T) {
 			want: RuleNone,
 		},
 		{
-			name:             "Rule 2 — network=true + http_endpoint dep is fine",
+			name:             "Rule 2: network=true + http_endpoint dep is fine",
 			intent:           &Intent{Network: boolPtr(true), SideEffects: []string{"net:http"}},
 			governanceIntent: "yellow",
 			deps:             []DataDependency{{Kind: "http_endpoint", Ref: "https://api.anthropic.com", Access: "read"}},
 			want:             RuleNone,
 		},
 		{
-			name:             "Rule 2 — network unset (nil) + http_endpoint dep does NOT fire",
+			name:             "Rule 2: network unset (nil) + http_endpoint dep does NOT fire",
 			intent:           &Intent{Network: nil, SideEffects: []string{"net:http"}},
 			governanceIntent: "yellow",
 			deps:             []DataDependency{{Kind: "http_endpoint", Ref: "https://api.anthropic.com", Access: "read"}},
@@ -101,28 +101,28 @@ func TestValidateIntentDataCrossRules(t *testing.T) {
 
 		// --- Rule 3: write_access_non_destructive ---
 		{
-			name:             "Rule 3 — destructive=false + write access fires",
+			name:             "Rule 3: destructive=false + write access fires",
 			intent:           &Intent{Destructive: false, SideEffects: []string{"fs:write"}},
 			governanceIntent: "yellow",
 			deps:             []DataDependency{{Kind: "filesystem", Ref: "/tmp/x", Access: "write"}},
 			want:             RuleWriteAccessNonDestructive,
 		},
 		{
-			name:             "Rule 3 — destructive=true + write access is fine",
+			name:             "Rule 3: destructive=true + write access is fine",
 			intent:           &Intent{Destructive: true, SideEffects: []string{"fs:write"}, Network: boolPtr(true)},
 			governanceIntent: "yellow",
 			deps:             []DataDependency{{Kind: "filesystem", Ref: "/tmp/x", Access: "write"}},
 			want:             RuleNone,
 		},
 		{
-			name:             "Rule 3 — destructive=false + read access is fine",
+			name:             "Rule 3: destructive=false + read access is fine",
 			intent:           &Intent{Destructive: false, SideEffects: []string{"fs:read"}},
 			governanceIntent: "yellow",
 			deps:             []DataDependency{{Kind: "filesystem", Ref: "/tmp/x", Access: "read"}},
 			want:             RuleNone,
 		},
 		{
-			name:             "Rule 3 — destructive=false + passthrough access is fine",
+			name:             "Rule 3: destructive=false + passthrough access is fine",
 			intent:           &Intent{Destructive: false, SideEffects: []string{"net:passthrough"}, Network: boolPtr(true)},
 			governanceIntent: "yellow",
 			deps:             []DataDependency{{Kind: "http_endpoint", Ref: "https://api.anthropic.com", Access: "passthrough"}},
@@ -131,14 +131,14 @@ func TestValidateIntentDataCrossRules(t *testing.T) {
 
 		// --- ordering: rule 1 trumps rule 2 trumps rule 3 ---
 		{
-			name:             "ordering — rule 1 fires before rule 2",
+			name:             "ordering: rule 1 fires before rule 2",
 			intent:           &Intent{Destructive: true, Network: boolPtr(false), SideEffects: []string{"all"}},
 			governanceIntent: "green",
 			deps:             []DataDependency{{Kind: "http_endpoint", Access: "read"}},
 			want:             RuleDestructiveGreen,
 		},
 		{
-			name:             "ordering — rule 2 fires before rule 3 when rule 1 doesn't apply",
+			name:             "ordering: rule 2 fires before rule 3 when rule 1 doesn't apply",
 			intent:           &Intent{Destructive: false, Network: boolPtr(false), SideEffects: []string{"all"}},
 			governanceIntent: "yellow",
 			deps:             []DataDependency{{Kind: "http_endpoint", Access: "write"}},

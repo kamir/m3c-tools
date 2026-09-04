@@ -1,8 +1,8 @@
 package main
 
-// SPEC-0276 R4.3 — end-to-end tests for `skillctl export-verification-kit`.
+// SPEC-0276 R4.3: end-to-end tests for `skillctl export-verification-kit`.
 // The decisive test (TestExportKit_BuildsAndReverifies) proves the round trip:
-// export a kit, then verify it with ONLY the kit's own files — the trustless
+// export a kit, then verify it with ONLY the kit's own files: the trustless
 // third-party path, demonstrated.
 
 import (
@@ -83,7 +83,7 @@ func TestExportKit_SecretScrubRefuses(t *testing.T) {
 func TestExportKit_WithRevocations(t *testing.T) {
 	f := buildBundleFixture(t)
 	// A valid list (signed by the pinned reg key) that does NOT revoke this
-	// bundle — should be included, and the kit still verifies.
+	// bundle. Should be included, and the kit still verifies.
 	other := sha256.Sum256([]byte("unrelated"))
 	list, err := verify.NewSignedRevocationList(f.regURL, "2026-06-22T10:00:00Z", 1,
 		[]string{"sha256:" + hex.EncodeToString(other[:])}, f.regPriv)

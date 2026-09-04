@@ -1,12 +1,12 @@
 package verify
 
-// SPEC-0277 P1 — signed, offline-distributable AGENT revocation list.
+// SPEC-0277 P1: signed, offline-distributable AGENT revocation list.
 //
 // This is the agent-instance analogue of the SPEC-0276 bundle RevocationList in
-// revocation.go. It REUSES that exact pattern — a struct-marshalled canonical
+// revocation.go. It REUSES that exact pattern: a struct-marshalled canonical
 // payload, an ed25519 signature verified against the SAME pinned registry keys
 // that admit bundles, a monotonic Epoch rollback floor, and fail-closed
-// semantics (a forged/unsigned list cannot block or silently fail-open) — but
+// semantics (a forged/unsigned list cannot block or silently fail-open), but
 // keys the revoked set by `agent:<id>` instead of `sha256:<hex>`.
 //
 // Why a sibling type rather than reusing RevocationList verbatim: the bundle

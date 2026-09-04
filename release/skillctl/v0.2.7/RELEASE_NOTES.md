@@ -1,9 +1,9 @@
-# skillctl v0.2.7 — hygiene, hardening & observability
+# skillctl v0.2.7: hygiene, hardening & observability
 
-Trust-and-governance CLI for AI-agent skills. Single static Go binary — no Node.
+Trust-and-governance CLI for AI-agent skills. Single static Go binary: no Node.
 
 > Builds on **v0.2.6** (trust-chain convergence). This release lands the
-> **SPEC-0251 §5 hygiene floor + SPEC-0255 gate observability** — the binaries are
+> **SPEC-0251 §5 hygiene floor + SPEC-0255 gate observability**: the binaries are
 > now built CVE-free, the CI enforces supply-chain gates, and the gate finally
 > keeps a record. **No breaking changes.** Recommended upgrade.
 
@@ -16,23 +16,23 @@ curl -fsSL https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.2.7/
 
 ## What changed
 
-- **Patched toolchain — 14 → 0 reachable CVEs.** govulncheck found the prior
+- **Patched toolchain: 14 → 0 reachable CVEs.** govulncheck found the prior
   releases' binaries carried **14 reachable Go-stdlib CVEs** (crypto/x509,
   html/template, …); the build moved to **go1.26.4**, which clears all of them.
   These v0.2.7 binaries are built on the patched stdlib.
-- **Supply-chain gates in CI** — `govulncheck` (blocks on reachable CVEs) and
+- **Supply-chain gates in CI**: `govulncheck` (blocks on reachable CVEs) and
   `gitleaks` (full-history secret scan) now gate every push; `dependabot.yml`
   keeps deps + actions current.
-- **`skillctl gate-stats` — gate observability (SPEC-0255).** Every gate decision
+- **`skillctl gate-stats`: gate observability (SPEC-0255).** Every gate decision
   (PreToolUse hook + SessionStart sweep) is now appended to an advisory
   `~/.claude/skillctl/gate-audit.jsonl`; `gate-stats [--since 168h|YYYY-MM-DD]
   [--json]` summarises decisions, top blocked skills, and the hook cache-hit rate.
-  The log is **fire-and-forget telemetry, never a trust input** — a logging
+  The log is **fire-and-forget telemetry, never a trust input**. A logging
   failure provably cannot change a gate decision (decision-invariance is tested).
 - **Exit-code single source of truth (SPEC-0251 §5).** Guard tests pin the 10–19
   ladder to `pkg/skillctl/exitcode`; drift fails CI. (Codified the SPEC-0198
   exit-17 overload: data-source-denied **and** author-identity-revoked share 17.)
-- **Zero `//nolint:unused`** — the four dead WIP symbols were removed; the
+- **Zero `//nolint:unused`**: the four dead WIP symbols were removed; the
   `unused` linter is a real enforcer again. CI (lint, unit, `-race` security
   suite, govulncheck, gitleaks, builds) + the Windows Gate are all green.
 

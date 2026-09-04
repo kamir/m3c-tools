@@ -1,6 +1,6 @@
 package main
 
-// sync_cmds_test.go — SPEC-0317 AC-4 against a CONTRACT DOUBLE (httptest).
+// sync_cmds_test.go: SPEC-0317 AC-4 against a CONTRACT DOUBLE (httptest).
 //
 // No real Kafka, no real backend: the double is an httptest.NewTLSServer that
 // mimics the ingest ACK contract. The four AC-4 assertions:
@@ -264,7 +264,7 @@ func TestSync_AC4_ReplayIsNoOp(t *testing.T) {
 		t.Fatalf("first sync exit=%d; stderr=%s", code, errb.String())
 	}
 	// Second run: the row is already synced, so the drain set is empty and no
-	// new POST is made — a client-side no-op.
+	// new POST is made: a client-side no-op.
 	out.Reset()
 	errb.Reset()
 	if code := runSync(args, &out, &errb); code != syncExitOK {

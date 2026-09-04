@@ -61,7 +61,7 @@ func refRoot(leaves [][HashSize]byte) [HashSize]byte {
 }
 
 func TestHashLeaf_DomainPrefix(t *testing.T) {
-	// A leaf hash MUST be SHA-256(0x00 || bytes) — verify against a manual
+	// A leaf hash MUST be SHA-256(0x00 || bytes): verify against a manual
 	// computation so the prefix can never be silently dropped.
 	data := []byte("hello-world")
 	got := HashLeaf(data)
@@ -76,7 +76,7 @@ func TestHashLeaf_DomainPrefix(t *testing.T) {
 		t.Fatalf("HashLeaf mismatch:\n got %x\nwant %x", got, want)
 	}
 
-	// And it must DIFFER from the bare SHA-256 (no prefix) — that's the
+	// And it must DIFFER from the bare SHA-256 (no prefix), that's the
 	// whole point of domain separation.
 	bare := sha256.Sum256(data)
 	if got == bare {
@@ -103,7 +103,7 @@ func TestSecondPreimage_LeafNodeConfusion(t *testing.T) {
 	leaf := HashLeaf(concat) // 0x00 || (a||b)
 
 	if leaf == node {
-		t.Fatal("leaf-vs-node confusion: HashLeaf(a||b) collided with hashChildren(a,b) — domain prefixes broken")
+		t.Fatal("leaf-vs-node confusion: HashLeaf(a||b) collided with hashChildren(a,b): domain prefixes broken")
 	}
 }
 
@@ -164,7 +164,7 @@ func TestMerkleTreeHash_GoldenVectors(t *testing.T) {
 		}
 	}
 
-	// n=4 must equal H(H(l0,l1), H(l2,l3)) — a balanced tree.
+	// n=4 must equal H(H(l0,l1), H(l2,l3)): a balanced tree.
 	l := leafHashes(4)
 	want4 := hashChildren(hashChildren(l[0], l[1]), hashChildren(l[2], l[3]))
 	got4, _ := MerkleTreeHash(l)
@@ -172,7 +172,7 @@ func TestMerkleTreeHash_GoldenVectors(t *testing.T) {
 		t.Fatal("n=4 balanced-tree shape mismatch")
 	}
 
-	// n=3 must equal H(H(l0,l1), l2) — k=2, right subtree is a lone leaf.
+	// n=3 must equal H(H(l0,l1), l2). K=2, right subtree is a lone leaf.
 	l3 := leafHashes(3)
 	want3 := hashChildren(hashChildren(l3[0], l3[1]), l3[2])
 	got3, _ := MerkleTreeHash(l3)

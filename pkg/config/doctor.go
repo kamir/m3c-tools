@@ -119,7 +119,7 @@ func IsPlaceholderKey(key string) bool {
 // when the URL is non-local.
 //
 // Pure (no network). Localhost detection is literal: 127.x, ::1, localhost.
-// We deliberately do not treat *.local as localhost — that's mDNS and may
+// We deliberately do not treat *.local as localhost. That's mDNS and may
 // resolve to a real LAN host.
 func IsBlockingPlaceholder(key, apiURL string) bool {
 	if !IsPlaceholderKey(key) {
@@ -146,7 +146,7 @@ func isLocalhostURL(s string) bool {
 
 // ValidateProfile inspects a single profile and returns its issues.
 //
-// Pure (no network) — wires up against ValidateAll, which adds cross-profile
+// Pure (no network): wires up against ValidateAll, which adds cross-profile
 // checks. Live HTTP probes belong in a separate function so unit tests stay
 // hermetic.
 func ValidateProfile(p *Profile) []Issue {
@@ -160,7 +160,7 @@ func ValidateProfile(p *Profile) []Issue {
 		if !ok || strings.TrimSpace(v) == "" {
 			sev := SevFail
 			// dev profile pointed at localhost is allowed to omit a real key
-			// for the upload key — but it must still be present.
+			// for the upload key, but it must still be present.
 			issues = append(issues, Issue{
 				Profile:  p.Name,
 				Key:      k,
@@ -194,7 +194,7 @@ func ValidateProfile(p *Profile) []Issue {
 			issues = append(issues, Issue{
 				Profile: p.Name, Key: "ER1_API_KEY",
 				Severity: SevFail, Code: "key-placeholder",
-				Message: fmt.Sprintf("ER1_API_KEY is a known placeholder (%q) — replace with a real key", k),
+				Message: fmt.Sprintf("ER1_API_KEY is a known placeholder (%q): replace with a real key", k),
 			})
 		} else if len(k) < 16 {
 			issues = append(issues, Issue{
@@ -224,7 +224,7 @@ func ValidateProfile(p *Profile) []Issue {
 				issues = append(issues, Issue{
 					Profile: p.Name, Key: "",
 					Severity: SevWarn, Code: "perms-loose",
-					Message: fmt.Sprintf("profile file is world/group readable (%04o) — chmod 600 %s", perm, p.Path),
+					Message: fmt.Sprintf("profile file is world/group readable (%04o): chmod 600 %s", perm, p.Path),
 				})
 			}
 		}
@@ -262,7 +262,7 @@ func ValidateAll(profiles []Profile, active string) DoctorReport {
 	if active == "" {
 		rep.CrossIssues = append(rep.CrossIssues, Issue{
 			Severity: SevFail, Code: "no-active",
-			Message: "no active profile set — run: m3c-tools config switch <name>",
+			Message: "no active profile set, run: m3c-tools config switch <name>",
 		})
 	} else if _, ok := byName[active]; !ok {
 		rep.CrossIssues = append(rep.CrossIssues, Issue{

@@ -12,7 +12,7 @@ import (
 
 func TestDeriveAccountIDFromToken_StableAcrossRefresh(t *testing.T) {
 	// Two DIFFERENT tokens (different iat) that carry the SAME `sub` must yield
-	// the SAME account id — so cross-machine dedup survives token refresh.
+	// the SAME account id, so cross-machine dedup survives token refresh.
 	mk := func(sub, iat string) string {
 		payload := base64.RawURLEncoding.EncodeToString([]byte(`{"sub":"` + sub + `","iat":` + iat + `}`))
 		return "eyJhbGciOiJIUzI1NiJ9." + payload + ".sig"

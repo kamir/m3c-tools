@@ -10,7 +10,7 @@ package verify
 //	      - id: aims-core-dev
 //	        pubkey: <base64 of raw 32-byte ed25519 pubkey>
 //	        issued: 2026-05-05
-//	        # retired: 2026-12-31    # OPTIONAL — retired keys are inert
+//	        # retired: 2026-12-31    # OPTIONAL: retired keys are inert
 //	    identity_keys_authorized: from-registry
 //	    governance_minimum: green   # green | yellow
 //
@@ -42,17 +42,17 @@ import (
 const DefaultTrustRootsPath = ".claude/skill-trust-roots.yaml"
 
 // pubkeyRawSize is the ed25519 public key size in bytes. Anything that
-// decodes to a different length is rejected — there is no useful "lenient
+// decodes to a different length is rejected. There is no useful "lenient
 // mode" for a key length check.
 const pubkeyRawSize = ed25519.PublicKeySize // 32
 
 // validIdentityModes is the closed set of accepted values for
 // `identity_keys_authorized`.
 //
-//   - "from-registry" — author pubkeys are resolved from the registry's
+//   - "from-registry": author pubkeys are resolved from the registry's
 //     identity table at verify time (the v1 default; requires a network call
 //     or a stashed identity).
-//   - "pinned" — author pubkeys are pinned LOCALLY in this trust root's
+//   - "pinned": author pubkeys are pinned LOCALLY in this trust root's
 //     `authors:` list, so the author signature is verified with NO registry
 //     call. This is the primitive that makes third-party, offline, "no trust
 //     in the registry" verification possible (SPEC-0276 R4.1).
@@ -67,7 +67,7 @@ var validIdentityModes = map[string]struct{}{
 // them.
 type RegistryKey struct {
 	// ID is a human-friendly label for the key. Used in error messages
-	// only — never matched against signature material.
+	// only: never matched against signature material.
 	ID string `yaml:"id"`
 
 	// Pubkey is the raw 32-byte ed25519 public key. The on-disk
@@ -82,13 +82,13 @@ type RegistryKey struct {
 	PubkeyB64 string `yaml:"pubkey"`
 
 	// Issued is the ISO-8601 date the key was first published. Stored
-	// as a free-form string — verification doesn't currently use it
+	// as a free-form string: verification doesn't currently use it
 	// (rotation policy is encoded in `retired`, not in date math) but
 	// admins reading the file want to see when each key entered service.
 	Issued string `yaml:"issued"`
 
 	// Retired, if non-empty, marks the key as retired as of that ISO
-	// date. The verifier rejects retired keys regardless of date —
+	// date. The verifier rejects retired keys regardless of date:
 	// "retired" is a binary toggle in v1, the date is just metadata.
 	Retired string `yaml:"retired,omitempty"`
 }
@@ -107,7 +107,7 @@ func (rk RegistryKey) IsActive() bool {
 // AuthorKey is one pinned ed25519 public key for a skill-author identity.
 // Consulted ONLY when its TrustRoot sets identity_keys_authorized: pinned.
 // Pinning the author key locally lets the verifier check the author signature
-// without calling the registry's identity table — the property that makes
+// without calling the registry's identity table. The property that makes
 // fully offline, third-party verification possible (SPEC-0276 R4.1): a party
 // who pins this key out-of-band can reproduce our verdict with no trust in,
 // and no call to, our servers.
@@ -129,7 +129,7 @@ type AuthorKey struct {
 	// can rely on it. Verification uses the key bytes, never this string.
 	Fingerprint string `yaml:"fingerprint,omitempty"`
 
-	// Retired, if non-empty, marks the pin inert — same binary-toggle
+	// Retired, if non-empty, marks the pin inert: same binary-toggle
 	// semantics as RegistryKey.Retired (the date is metadata, not a schedule).
 	Retired string `yaml:"retired,omitempty"`
 }
@@ -150,8 +150,8 @@ type TrustRoot struct {
 	RegistryURL string `yaml:"registry_url"`
 
 	// RegistryKeys are the pinned ed25519 public keys that this
-	// registry signs its attestations with. May contain retired keys —
-	// the loader does NOT silently filter them; callers must check
+	// registry signs its attestations with. May contain retired keys.
+	// The loader does NOT silently filter them; callers must check
 	// IsActive(). This preserves the file's history when round-tripped.
 	RegistryKeys []RegistryKey `yaml:"registry_keys"`
 
@@ -182,21 +182,21 @@ type TrustRoot struct {
 	// RequireSignedGovernance (SPEC-0281): when true, the governance level
 	// MUST be backed by a signed attestation that verifies against a pinned
 	// reviewer key, or verification is refused (exit 13). When false (default)
-	// governance is advisory in offline mode — the chain summary reports
+	// governance is advisory in offline mode: the chain summary reports
 	// "governance(advisory)" rather than "attested".
 	RequireSignedGovernance bool `yaml:"require_signed_governance,omitempty"`
 
 	// MinRevocationEpoch (SPEC-0279 R1): the verifier refuses a signed
-	// revocation list whose epoch is below this floor — rollback protection
+	// revocation list whose epoch is below this floor: rollback protection
 	// against substituting an older signed list. 0 = no floor.
 	MinRevocationEpoch int `yaml:"min_revocation_epoch,omitempty"`
 
 	// RequireIndependentReview (SPEC-0246 §5.2): when true, the binding
-	// governance attestation must NOT be self_attested — i.e. the reviewer
+	// governance attestation must NOT be self_attested, i.e. the reviewer
 	// identity must differ from the author identity. A self-attested bundle is
 	// refused with ErrSelfAttested (exit 20). When false (the default and the
-	// `self` single-principal tenant per §5.2) self-attestation is allowed —
-	// the floor defaults OFF so the personal tenant keeps working.
+	// `self` single-principal tenant per §5.2) self-attestation is allowed.
+	// The floor defaults OFF so the personal tenant keeps working.
 	//
 	// The loader is STRICT (KnownFields(true)) so this MUST be a declared field
 	// or a trust-roots file carrying `require_independent_review:` would be
@@ -206,7 +206,7 @@ type TrustRoot struct {
 	// RequireAgentApprover (SPEC-0277 §11.5): the agent-instance analogue of
 	// RequireIndependentReview. When true, an AgentID (the SPEC-0277 mandate, not
 	// a skill bundle) must carry BOTH an owner signature AND an independent
-	// approver (sign-off human) signature with approver != owner — the
+	// approver (sign-off human) signature with approver != owner: the
 	// "two-person admit for agents". Both must be PINNED and cryptographically
 	// verified; the unsigned claim is never trusted. Enforced by the `agentid`
 	// verifier (owners pinned in `authors:`, approvers pinned in `reviewers:`),
@@ -216,7 +216,7 @@ type TrustRoot struct {
 	// require_independent_review (the floor cannot be set fail-OPEN).
 	RequireAgentApprover bool `yaml:"require_agent_approver,omitempty"`
 
-	// --- SPEC-0279 R2 — revocation freshness policy ---
+	// --- SPEC-0279 R2: revocation freshness policy ---
 	//
 	// These four DECLARED fields configure the offline-revocation freshness
 	// contract (SPEC-0279 §3). The loader is STRICT (KnownFields(true)) so they
@@ -227,7 +227,7 @@ type TrustRoot struct {
 	// MaxStaleness is the maximum age of a synced revocation snapshot (now -
 	// RevocationList.issued_at) before the fail-policy acts. A Go duration string
 	// (e.g. "24h"). Empty = no staleness ceiling (the snapshot is trusted at any
-	// age — the pre-SPEC-0279 behaviour, kept so existing files don't change
+	// age: the pre-SPEC-0279 behaviour, kept so existing files don't change
 	// meaning). When set, validate() rejects a non-parseable or negative value.
 	MaxStaleness string `yaml:"max_staleness,omitempty"`
 
@@ -238,7 +238,7 @@ type TrustRoot struct {
 	// FailPolicy is the disposition for a LOW-RISK / read-only action once a
 	// snapshot is older than MaxStaleness: "closed" (deny, the default) or "open"
 	// (allow with an audited record). A HIGH-RISK action ALWAYS fails closed past
-	// MaxStaleness regardless of this knob (SPEC-0279 R3) — fail_policy only
+	// MaxStaleness regardless of this knob (SPEC-0279 R3): fail_policy only
 	// governs the low-risk branch. Empty defaults to "closed"; validate() rejects
 	// any value other than "closed"/"open".
 	FailPolicy string `yaml:"fail_policy,omitempty"`
@@ -246,7 +246,7 @@ type TrustRoot struct {
 	// FailPolicyByRisk is an OPTIONAL per-action-risk override map (SPEC-0279 R2:
 	// "an optional per-action-risk override"), e.g. {high: closed, low: open}.
 	// Keys are risk classes ("high"/"low"); values are "closed"/"open". An entry
-	// overrides FailPolicy for that risk class — but a HIGH-risk override can only
+	// overrides FailPolicy for that risk class, but a HIGH-risk override can only
 	// be "closed" (you cannot configure a high-risk action to fail OPEN past
 	// max_staleness; that would defeat R3). validate() enforces both the closed
 	// key/value vocabulary AND the high⇒closed floor.
@@ -256,7 +256,7 @@ type TrustRoot struct {
 	// It is the ONE surface (extends this TrustRoot, not a new file) that
 	// configures the named online/degraded/offline/locked state machine
 	// (pkg/skillctl/statemachine). Absent (nil) = the shipped default: not
-	// enterprise, no cache ceilings, unmanaged=allow — a host with no block
+	// enterprise, no cache ceilings, unmanaged=allow: a host with no block
 	// NEVER enters `locked`. Validated at Load via ResolveOfflinePolicy so a bad
 	// duration or an enterprise-only knob set without `enterprise` is refused
 	// loudly (a typo cannot lie dormant). The strict loader (KnownFields(true))
@@ -303,7 +303,7 @@ type OfflinePolicyBlock struct {
 // block into the resolved, stdlib-only statemachine.OfflinePolicy the pure
 // Compute consumes. A nil block resolves to the zero policy (the shipped default:
 // not enterprise, no ceilings). Called by validate() (so a bad value is refused
-// at Load) AND by the consumers (so they read the same resolved policy) — the
+// at Load) AND by the consumers (so they read the same resolved policy): the
 // same pattern as TrustRoot.Freshness().
 //
 // Validation (fail-safe, never fail-open):
@@ -329,7 +329,7 @@ func (t *TrustRoot) ResolveOfflinePolicy() (statemachine.OfflinePolicy, error) {
 		return statemachine.OfflinePolicy{}, err
 	}
 	if b.RequireLocalAudit && !b.Enterprise {
-		return statemachine.OfflinePolicy{}, fmt.Errorf("offline_policy: require_local_audit is enterprise-only — set enterprise: true (SPEC-0317 R-7.3/R-8; the decision-invariance carve-out cannot be enabled on a non-enterprise host)")
+		return statemachine.OfflinePolicy{}, fmt.Errorf("offline_policy: require_local_audit is enterprise-only. Set enterprise: true (SPEC-0317 R-7.3/R-8; the decision-invariance carve-out cannot be enabled on a non-enterprise host)")
 	}
 
 	return statemachine.OfflinePolicy{
@@ -342,7 +342,7 @@ func (t *TrustRoot) ResolveOfflinePolicy() (statemachine.OfflinePolicy, error) {
 	}, nil
 }
 
-// IsManaged reports whether this trust root is enterprise-MANAGED — i.e. it carries
+// IsManaged reports whether this trust root is enterprise-MANAGED, i.e. it carries
 // an offline_policy with enterprise: true (the same gate that enables the `locked`
 // state, SPEC-0317). A managed root gets the FR-0090 IS-T5 fail-closed defaults
 // (max_staleness = 48h, require_signed_governance ON) that the shipped self/unmanaged
@@ -356,7 +356,7 @@ func (t *TrustRoot) IsManaged() bool {
 // require_signed_governance⇒reviewers invariant is enforced against the defaulted
 // value). A managed host must never trust an unbounded-age revocation snapshot, and
 // should require signed governance wherever it CAN enforce it. Non-managed roots are
-// untouched — the shipped self/unmanaged behaviour is preserved.
+// untouched. The shipped self/unmanaged behaviour is preserved.
 //
 //   - max_staleness → 48h UNCONDITIONALLY for a managed root. This never depends on
 //     other fields and never fails validate, so the freshness ceiling always applies.
@@ -367,7 +367,7 @@ func (t *TrustRoot) IsManaged() bool {
 //     clearly intends signed governance, so defaulting it ON when unset is the safe
 //     reading. A managed root that pins NO reviewers uses `enterprise` purely for the
 //     SPEC-0317 offline state machine (the `locked` state) and has no key to verify a
-//     governance signature against — forcing the flag there would only brick Load, so
+//     governance signature against. Forcing the flag there would only brick Load, so
 //     it is left off (the 48h staleness ceiling still applies).
 //
 // NOTE (flagged for the challenge gate): require_signed_governance is a bool, so
@@ -379,7 +379,7 @@ func (t *TrustRoot) IsManaged() bool {
 // SCOPE (challenge-gate NOTE-1): this default makes the freshness EVALUATION
 // (EvaluateFreshness) deny a stale high-risk verdict on a managed root. The RUNTIME
 // revoked-snapshot gate (cmd/skillctl verify-hook, revocationSnapshotStale) additionally
-// short-circuits to a no-op when the host has NEVER adopted a signed revocation HEAD —
+// short-circuits to a no-op when the host has NEVER adopted a signed revocation HEAD,
 // so a managed host that has not yet bootstrapped a freshness anchor is not yet covered
 // against a WITHHELD upstream revoke. FR-0090/IS-T5 closes the anchor-PRESENT case (an
 // adopted-but-stale snapshot is no longer trusted); HEAD-adoption bootstrap is tracked
@@ -413,7 +413,7 @@ func (t TrustRoot) ActiveKeys() []RegistryKey {
 // FindAuthor returns a pointer to the active pinned AuthorKey for identityID,
 // or nil if this root has no active pin for it. Retired pins are skipped so a
 // rotated-out author key cannot verify. The returned pointer aliases the
-// backing array — callers must not mutate it.
+// backing array: callers must not mutate it.
 func (t *TrustRoot) FindAuthor(identityID string) *AuthorKey {
 	if t == nil {
 		return nil
@@ -430,7 +430,7 @@ func (t *TrustRoot) FindAuthor(identityID string) *AuthorKey {
 // FindReviewer returns the active pinned reviewer key for identityID, or nil
 // (SPEC-0281). Retired pins are skipped. Mirrors FindAuthor. ID matching is
 // case-normalized (P1c) so it agrees with the reviewer≠author comparison in
-// verify.go — no case-twin asymmetry between lookup and equality.
+// verify.go, no case-twin asymmetry between lookup and equality.
 func (t *TrustRoot) FindReviewer(identityID string) *AuthorKey {
 	if t == nil {
 		return nil
@@ -475,7 +475,7 @@ type TrustRoots struct {
 	//	3. $M3C_REGISTRY_URL
 	//	4. error
 	//
-	// An empty value means "no default" — callers must require the flag.
+	// An empty value means "no default". Callers must require the flag.
 	DefaultRegistry string `yaml:"default_registry,omitempty"`
 
 	// Environment, if non-empty, names the deployment environment of
@@ -483,10 +483,10 @@ type TrustRoots struct {
 	// in single-pin home-lab setups). SPEC-0195 §6.1 (G-21 closure
 	// 2026-05-06) defines the canonical values:
 	//
-	//	prod  — production registry; refuses dev-seed identities.
-	//	dev   — development registry; permissive.
-	//	local — loopback / home-lab registry; permissive.
-	//	stage — pre-prod; permissive but distinct from `dev`.
+	//	prod, production registry; refuses dev-seed identities.
+	//	dev, development registry; permissive.
+	//	local, loopback / home-lab registry; permissive.
+	//	stage, pre-prod; permissive but distinct from `dev`.
 	//
 	// The client uses this for the §6.1 short-circuit: if Environment
 	// is "prod" and the envelope's client_identity is the SKILLCTL_DEV_SEED
@@ -502,7 +502,7 @@ type TrustRoots struct {
 	// SPEC-0278 L1 inclusion-proof check. Each entry pins a log's public
 	// key plus a recent (witnessed) STH set. Empty means "no log pinned"
 	// and the inclusion check is skipped entirely (unless a per-log policy
-	// demands it — which it cannot, since there is no log to demand it).
+	// demands it, which it cannot, since there is no log to demand it).
 	//
 	// L1 makes equivocation/withholding DETECTABLE, not impossible; pinning
 	// a recent STH here is what lets the offline verifier confirm an event
@@ -514,7 +514,7 @@ type TrustRoots struct {
 	// inclusion proof under a pinned STH a HARD refusal (fail-closed). When
 	// false (the default) the inclusion check is ADVISORY: a missing/invalid
 	// proof is surfaced as a warning but does not block. SPEC-0278 §3 makes
-	// this opt-in hard, advisory by default — a transparency log that is
+	// this opt-in hard, advisory by default. A transparency log that is
 	// still being rolled out should not brick every install.
 	RequireLogInclusion bool `yaml:"require_log_inclusion,omitempty"`
 
@@ -533,7 +533,7 @@ type LogTrust struct {
 	LogID string `yaml:"log_id"`
 
 	// LogKeyB64 is the base64 of the raw 32-byte ed25519 LOG public key.
-	// Distinct from any registry/author/attestation key — the STH domain
+	// Distinct from any registry/author/attestation key: the STH domain
 	// separator guarantees a signature over an STH can't be reused as any
 	// other envelope, but pinning a dedicated key is still the right
 	// hygiene. The loader hydrates LogKey (raw bytes) from this.
@@ -582,9 +582,9 @@ func DefaultPath() (string, error) {
 // trust add` need to bootstrap a config without an extra "exists?" check.
 //
 // Strict mode: unknown YAML fields are rejected. A typo in `governance_minimum`
-// or `registry_keys` would otherwise silently disable a key — the verifier
+// or `registry_keys` would otherwise silently disable a key (the verifier
 // would then trust nothing on that registry, refusing every install with a
-// confusing "registry not in trust roots" — and the user would never know
+// confusing "registry not in trust roots") and the user would never know
 // their YAML had a typo. We refuse loudly instead.
 func Load(path string) (*TrustRoots, error) {
 	if path == "" {
@@ -620,14 +620,14 @@ func Load(path string) (*TrustRoots, error) {
 // no disk I/O, and lets callers validate a document they already hold in memory.
 //
 // Behaviour matches the in-file parse Load used to do inline:
-//   - strict decode (KnownFields(true)) — an unknown YAML key is rejected loudly
+//   - strict decode (KnownFields(true)): an unknown YAML key is rejected loudly
 //     rather than silently disabling a key (see Load's doc comment);
 //   - FR-0090 IS-T5 managed (enterprise) fail-closed defaults are stamped BEFORE
 //     validate, so the require_signed_governance⇒reviewers invariant sees the
 //     defaulted value;
 //   - validate() runs the full sanity check and hydrates raw pubkey bytes.
 //
-// Path is NOT set here (there is no file) — Load sets it on the returned value.
+// Path is NOT set here (there is no file): Load sets it on the returned value.
 func ParseTrustRoots(data []byte) (*TrustRoots, error) {
 	var tr TrustRoots
 	dec := yaml.NewDecoder(strings.NewReader(string(data)))
@@ -648,7 +648,7 @@ func ParseTrustRoots(data []byte) (*TrustRoots, error) {
 
 // Save writes the TrustRoots back to t.Path with mode 0600. The file is
 // written atomically (write to <path>.tmp, fsync, rename) so a crashed
-// editor never leaves a half-written config — a corrupted trust-roots file
+// editor never leaves a half-written config. A corrupted trust-roots file
 // would brick `skillctl install` until the user noticed and fixed it.
 //
 // Mode 0600: the pubkeys themselves aren't secrets, but the file IS the
@@ -937,7 +937,7 @@ func (t *TrustRoots) validate() error {
 		// the verifier has pinned reviewer keys to PROVE independence (the floor
 		// requires a signature-verified independent attestation, not the unsigned
 		// sidecar reviewer_id). Refuse to load a floor that lacks the keys to
-		// enforce it — mirrors how require_signed_governance requires reviewers,
+		// enforce it. Mirrors how require_signed_governance requires reviewers,
 		// so the floor cannot be set fail-OPEN.
 		if root.RequireIndependentReview && len(root.Reviewers) == 0 {
 			return fmt.Errorf("trust_roots[%d] %s: require_independent_review needs a non-empty reviewers list (the floor is proven by a signature-verified independent attestation)", i, root.RegistryURL)
@@ -945,7 +945,7 @@ func (t *TrustRoots) validate() error {
 		// SPEC-0277 §11.5: the agent approver floor is enforced by a
 		// signature-verified approver pinned in the reviewers list (approvers reuse
 		// the same pinned-reviewer slot, owners reuse authors). Refuse a floor with
-		// no pinned approver keys — same fail-OPEN guard as require_independent_review.
+		// no pinned approver keys: same fail-OPEN guard as require_independent_review.
 		if root.RequireAgentApprover && len(root.Reviewers) == 0 {
 			return fmt.Errorf("trust_roots[%d] %s: require_agent_approver needs a non-empty reviewers list (the approver/sign-off human is a pinned reviewer key)", i, root.RegistryURL)
 		}
@@ -981,11 +981,11 @@ func (t *TrustRoots) validate() error {
 		// author and a reviewer in one root. Otherwise the author could sign an
 		// "independent" governance attestation under a reviewer id and launder
 		// reviewer≠author (the floor compares ids, not key bytes). Compare raw
-		// pubkey bytes — ids may differ while the key is the same.
+		// pubkey bytes: ids may differ while the key is the same.
 		for ai := range t.Roots[i].Authors {
 			for ri := range t.Roots[i].Reviewers {
 				if string(t.Roots[i].Authors[ai].Pubkey) == string(t.Roots[i].Reviewers[ri].Pubkey) {
-					return fmt.Errorf("trust_roots[%d] %s: key pinned as both author %q and reviewer %q — a key cannot be both (key-confusion)", i, root.RegistryURL, t.Roots[i].Authors[ai].ID, t.Roots[i].Reviewers[ri].ID)
+					return fmt.Errorf("trust_roots[%d] %s: key pinned as both author %q and reviewer %q: a key cannot be both (key-confusion)", i, root.RegistryURL, t.Roots[i].Authors[ai].ID, t.Roots[i].Reviewers[ri].ID)
 				}
 			}
 		}
@@ -994,7 +994,7 @@ func (t *TrustRoots) validate() error {
 			return fmt.Errorf("trust_roots[%d] %s: min_revocation_epoch must be >= 0", i, root.RegistryURL)
 		}
 
-		// SPEC-0279 R2 — the revocation-freshness policy fields. Validate the
+		// SPEC-0279 R2: the revocation-freshness policy fields. Validate the
 		// duration strings, the fail_policy vocabulary, and the per-risk override
 		// map (including the high⇒closed floor) by constructing the resolved
 		// FreshnessPolicy; a bad value is refused at Load so a typo cannot lie
@@ -1003,7 +1003,7 @@ func (t *TrustRoots) validate() error {
 			return fmt.Errorf("trust_roots[%d] %s: %w", i, root.RegistryURL, ferr)
 		}
 
-		// SPEC-0317 R-7.3 — the offline_policy block. Resolve it at Load so a
+		// SPEC-0317 R-7.3: the offline_policy block. Resolve it at Load so a
 		// bad duration or an enterprise-only knob set without `enterprise` is
 		// refused loudly (a typo cannot lie dormant and silently mis-state the
 		// offline posture). Mirrors the Freshness() call above.
@@ -1014,7 +1014,7 @@ func (t *TrustRoots) validate() error {
 		if root.GovernanceMinimum == "" {
 			return fmt.Errorf("trust_roots[%d] %s: governance_minimum is required", i, root.RegistryURL)
 		}
-		// One shared floor guard (SPEC-0252 §6) — same {green,yellow}, red-and-
+		// One shared floor guard (SPEC-0252 §6): same {green,yellow}, red-and-
 		// unknown-rejected check the self loader uses. Store the normalized form
 		// back into the loaded root so the governance comparison can't depend on
 		// re-normalising mixed case (matches registry.LoadSelfTrustRoots).
@@ -1096,7 +1096,7 @@ func (t *TrustRoots) FindLog(logID string) *LogTrust {
 // always permitted; HTTP is permitted ONLY when the host is loopback or
 // in an RFC1918 private range (so the home-lab MinIO at
 // http://192.168.0.131:9100 works without `--allow-insecure`). Anything
-// else is refused — a plain-HTTP public-Internet registry is exactly the
+// else is refused. A plain-HTTP public-Internet registry is exactly the
 // scenario the trust-chain is meant to prevent.
 //
 // We keep this loose enough to be useful (no DNS lookup; no TLS probe)

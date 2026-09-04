@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>M3C Tools — Settings</title>
+<title>M3C Tools: Settings</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -583,7 +583,7 @@ body {
           <div class="field">
             <div class="field-label">Status</div>
             <div class="field-input">
-              <span id="pocketStatus" style="font-size:12px;color:#86868b">— click Validate to check the key against Pocket</span>
+              <span id="pocketStatus" style="font-size:12px;color:#86868b">: click Validate to check the key against Pocket</span>
             </div>
           </div>
           <div class="field">
@@ -1022,7 +1022,7 @@ body {
     const key = (keyInput.value || '').trim();
     if (!key) {
       status.style.color = '#ff3b30';
-      status.textContent = '✗ Empty key — paste the pk_… value from the Pocket app.';
+      status.textContent = '✗ Empty key: paste the pk_… value from the Pocket app.';
       return;
     }
     status.style.color = '#86868b';
@@ -1036,7 +1036,7 @@ body {
         case 'valid':
           status.style.color = '#34c759';
           status.textContent = '✓ ' + verdict.human_message;
-          showToast('Pocket key valid — ' + verdict.recording_count + ' recording(s)', 'success');
+          showToast('Pocket key valid: ' + verdict.recording_count + ' recording(s)', 'success');
           break;
         case 'unauthorized':
           status.style.color = '#ff3b30';
@@ -1047,7 +1047,7 @@ body {
         default:
           status.style.color = '#ff9500';
           status.textContent = '⚠ ' + verdict.human_message;
-          showToast('Pocket unreachable — saving key anyway', 'info');
+          showToast('Pocket unreachable: saving key anyway', 'info');
           break;
       }
     } catch (e) {

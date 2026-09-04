@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// plaud-mcp-login.mjs — mint a durable Plaud OAuth token via the OFFICIAL
+// plaud-mcp-login.mjs (mint a durable Plaud OAuth token via the OFFICIAL
 // @plaud-ai/mcp server.
 //
 // Why this exists: in @plaud-ai/mcp, `login` is an MCP *tool*, not a CLI command
-// — `npx @plaud-ai/mcp login` just starts the stdio server and appears to hang.
+//) `npx @plaud-ai/mcp login` just starts the stdio server and appears to hang.
 // This driver speaks MCP over stdio, calls the `login` tool (which opens your
 // browser for Google sign-in and runs the OAuth callback on localhost:8199), and
 // the server writes the token (~300-day, refreshing) to ~/.plaud/tokens-mcp.json.
@@ -31,7 +31,7 @@ srv.stdout.on('data', (d) => {
       // initialized → call the login tool
       send({ jsonrpc: '2.0', method: 'notifications/initialized' });
       console.error('\n  A browser window will open for Plaud sign-in (Google/Apple SSO supported).');
-      console.error('  Complete the sign-in, then return here — this finishes automatically.\n');
+      console.error('  Complete the sign-in, then return here: this finishes automatically.\n');
       send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'login', arguments: {} } });
     } else if (m.id === 2) {
       const text = m.result?.content?.map((c) => c.text).join(' ')

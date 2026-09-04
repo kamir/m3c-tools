@@ -1,4 +1,4 @@
-// token_cmd.go — "m3c-tools token" device-token inspection + emission.
+// token_cmd.go: "m3c-tools token" device-token inspection + emission.
 //
 // SPEC-0267 FR-0267.12 follow-up: the /plm-export skill (and any shell tooling)
 // needs the Bearer device token to call PLM endpoints, but the token is stored
@@ -20,7 +20,7 @@ import (
 
 // cmdToken implements `m3c-tools token [--print]`.
 //
-//	(no flag)  human-readable status (configured? user, expiry) — never prints
+//	(no flag)  human-readable status (configured? user, expiry): never prints
 //	           the raw token.
 //	--print    emits ONLY the Bearer token value to stdout (nothing else), for
 //	           shell capture. Exit 0 only when a non-expired token exists.
@@ -35,9 +35,9 @@ func cmdToken(args []string) {
 	if *doPrint {
 		if token == "" {
 			if expired {
-				fmt.Fprintln(os.Stderr, "device token expired — run: m3c-tools login")
+				fmt.Fprintln(os.Stderr, "device token expired, run: m3c-tools login")
 			} else {
-				fmt.Fprintln(os.Stderr, "no device token — run: m3c-tools login")
+				fmt.Fprintln(os.Stderr, "no device token, run: m3c-tools login")
 			}
 			os.Exit(1)
 		}
@@ -45,7 +45,7 @@ func cmdToken(args []string) {
 		return
 	}
 
-	// Status mode — metadata only, never the raw token.
+	// Status mode: metadata only, never the raw token.
 	switch {
 	case token != "":
 		fmt.Println("device token: configured")
@@ -59,10 +59,10 @@ func cmdToken(args []string) {
 		}
 		fmt.Println("  capture: export ER1_DEVICE_TOKEN=$(m3c-tools token --print)")
 	case expired:
-		fmt.Fprintln(os.Stderr, "device token: EXPIRED — run: m3c-tools login")
+		fmt.Fprintln(os.Stderr, "device token: EXPIRED, run: m3c-tools login")
 		os.Exit(1)
 	default:
-		fmt.Fprintln(os.Stderr, "device token: not configured — run: m3c-tools login")
+		fmt.Fprintln(os.Stderr, "device token: not configured, run: m3c-tools login")
 		os.Exit(1)
 	}
 }

@@ -1,5 +1,5 @@
 #!/bin/bash
-# build-windows.sh — Cross-compile m3c-tools for Windows and optionally
+# build-windows.sh: Cross-compile m3c-tools for Windows and optionally
 # build the NSIS installer.
 #
 # Usage:
@@ -38,7 +38,7 @@ if [[ "${1:-}" == "--nsis" ]]; then
         exit 1
     fi
 
-    # NSIS needs EnvVarUpdate.nsh — check if it's available.
+    # NSIS needs EnvVarUpdate.nsh. Check if it's available.
     # If not, use a simplified installer without PATH manipulation.
     makensis "$REPO_ROOT/scripts/installer.nsi"
     echo ""

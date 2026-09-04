@@ -1,4 +1,4 @@
-// skillctl — m3c-tools command-line front-end.
+// skillctl: m3c-tools command-line front-end.
 //
 // Stream S1 (SPEC-0188 Phase 2) ships ONLY the three signing
 // subcommands: keygen, sign, verify-sig. The full skillctl CLI
@@ -20,7 +20,7 @@ import (
 	// artifact.Open() can resolve those schemes at runtime (SPEC-0356 D3).
 	_ "github.com/kamir/m3c-tools/pkg/skillctl/backend/git"
 
-	// Register the OCI backend (oci://) — enterprise/container-registry carrier
+	// Register the OCI backend (oci://): enterprise/container-registry carrier
 	// (GHCR / Zot / Harbor), events-as-referrers (SPEC-0356 D7).
 	_ "github.com/kamir/m3c-tools/pkg/skillctl/backend/oci"
 )
@@ -94,7 +94,7 @@ func main() {
 	// === SPEC-0188 S8: install/verify subcommands ===
 	//
 	// Both routed through runWithExit so the SPEC-0188 §11 numbered exit
-	// codes (10..16) surface verbatim to the parent process — see
+	// codes (10..16) surface verbatim to the parent process: see
 	// cmd/skillctl/exit.go for the single audit point.
 	case "install":
 		runWithExit(func() int { return runInstall(os.Args[2:], os.Stdout, os.Stderr) })
@@ -120,15 +120,15 @@ func main() {
 	// Byte-identical decision to verify-hook for a Skill event, PLUS mirrors the
 	// device-signed InvocationRecord into the write-once outbox (audit_events) for
 	// durable, drainable evidence. Fail-closed decision; fire-and-forget outbox
-	// write (a write failure never alters the decision — SPEC-0255 invariance).
+	// write (a write failure never alters the decision: SPEC-0255 invariance).
 	case "enforce":
 		runWithExit(func() int { return runEnforce(os.Stdin, os.Stdout, os.Stderr) })
 	// === END SPEC-0317 P0 ===
 	// === SPEC-0317 R-6 (P2): side-channel path guard ===
 	// A SEPARATE PreToolUse hook for Bash/Read/Edit/Write (NOT a semantic change
-	// to the Skill decision — byte-parity of enforce/verify-hook is preserved). It
+	// to the Skill decision. Byte-parity of enforce/verify-hook is preserved). It
 	// audited-allows by default and opt-in denies a skill-dir access. Detection /
-	// bar-raising, not a seal — see `skillctl guard-path --explain`.
+	// bar-raising, not a seal: see `skillctl guard-path --explain`.
 	case "guard-path":
 		os.Exit(runGuardPath(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 	// === END SPEC-0317 R-6 ===
@@ -138,7 +138,7 @@ func main() {
 	case "agentid":
 		runWithExit(func() int { return runAgentID(os.Args[2:], os.Stdout, os.Stderr) })
 	// === END SPEC-0277 P0+P1 ===
-	// === SPEC-0255: gate observability — summarise the append-only audit log. ===
+	// === SPEC-0255: gate observability: summarise the append-only audit log. ===
 	case "gate-stats":
 		os.Exit(runGateStats(os.Args[2:], os.Stdout, os.Stderr))
 	// === END SPEC-0255 ===
@@ -146,7 +146,7 @@ func main() {
 	case "pin":
 		os.Exit(runPin(os.Args[2:], os.Stdout, os.Stderr))
 	// === END SPEC-0247 P1.3 ===
-	// === SPEC-0317 R-7 (P2): named offline state machine — informational
+	// === SPEC-0317 R-7 (P2): named offline state machine: informational
 	// SessionStart context (prints online/degraded/offline/locked + the
 	// advisory-until-pinned banner). Pure read; gates nothing. ===
 	case "session-baseline":
@@ -168,7 +168,7 @@ func main() {
 		cmdMenubar(os.Args[2:])
 	// `audit` is now SPEC-0189 §14 antivirus UX (S3.3, dispatched above);
 	// the legacy SPEC-0115 cmdAudit was a Phase-2 stub and has been
-	// superseded — see runAudit in audit_cmds.go.
+	// superseded: see runAudit in audit_cmds.go.
 	case "review":
 		cmdReview(os.Args[2:])
 	case "browse":
@@ -208,12 +208,12 @@ func main() {
 	case "project":
 		os.Exit(runProject(os.Args[2:], os.Stdout, os.Stderr))
 	// === END SPEC-0214 ===
-	// === SPEC-0213: session-state in ER1 — the Go mirror of the /session-state
+	// === SPEC-0213: session-state in ER1: the Go mirror of the /session-state
 	// skill (open/checkpoint/close/resume/list/show) for CI/menubar/scripts. ===
 	case "session":
 		os.Exit(runSession(os.Args[2:], os.Stdout, os.Stderr))
 	// === END SPEC-0213 ===
-	// === SPEC-0225 P1: personal skill registry — ER1 bundle transport ===
+	// === SPEC-0225 P1: personal skill registry: ER1 bundle transport ===
 	// `publish` admits a new bundle to the `self` tenant (or posts an
 	// AttestationPublishedEvent with --attest). `pull` / `registry` / `revoke`
 	// land in P2/P3.

@@ -1,4 +1,4 @@
-// Package importer — audio import logic: scan, deduplicate, copy, and track.
+// Package importer, audio import logic: scan, deduplicate, copy, and track.
 //
 // ImportAudio uses the configured ImportConfig properties (source, dest,
 // content-type) and integrates with the tracking.FilesDB to skip

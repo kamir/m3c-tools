@@ -181,7 +181,7 @@ func (f PrettyPrintFormatter) FormatTranscriptInfo(t *TranscriptInfo) string {
 	}
 	flag := FlagForLanguage(t.LanguageCode)
 
-	fmt.Fprintf(&b, "%s %s (%s) — %s\n", flag, t.Language, t.LanguageCode, kind)
+	fmt.Fprintf(&b, "%s %s (%s): %s\n", flag, t.Language, t.LanguageCode, kind)
 	if t.IsTranslatable && len(t.TranslationLanguages) > 0 {
 		fmt.Fprintf(&b, "  Translations available: %d languages\n", len(t.TranslationLanguages))
 	}

@@ -143,8 +143,8 @@ func TestAuditProvenance_DigestDriftFlags(t *testing.T) {
 	skillPath := filepath.Join(skillsDir, "x")
 	if err := AuditProvenance(skillPath); err == nil {
 		// Our skillDirDigest doesn't compute the original packing digest
-		// (different scheme — by design), so the post-install audit *will*
-		// disagree with the sidecar's bundle_digest. That's expected — the
+		// (different scheme, by design), so the post-install audit *will*
+		// disagree with the sidecar's bundle_digest. That's expected. The
 		// audit flags drift if the live content's directory hash differs
 		// from itself, which it can't (mtime-stable). Instead, what we
 		// really test: after we mutate a file, the audit DOES report drift.
@@ -158,7 +158,7 @@ func TestAuditProvenance_DigestDriftFlags(t *testing.T) {
 	err := AuditProvenance(skillPath)
 	if err == nil || !contains(err.Error(), "digest drift") {
 		// audit might fall through clean if our digest scheme stabilized
-		// against the sidecar — skip in that case.
+		// against the sidecar: skip in that case.
 		// But for THIS specific test we expect drift since the sidecar's
 		// digest was the original .skb digest while the dir-digest changes.
 		t.Logf("audit err = %v (acceptable if sidecar digest matches dir-digest scheme)", err)
@@ -252,7 +252,7 @@ func makeOversizedSkb(name string, size int64) []byte {
 	return gz.Bytes()
 }
 
-// makeSymlinkSkb builds a gzip+tar containing a symlink entry — extractSkb must
+// makeSymlinkSkb builds a gzip+tar containing a symlink entry: extractSkb must
 // refuse it (SEC-M1).
 func makeSymlinkSkb(name string) []byte {
 	var gz bytes.Buffer
@@ -306,7 +306,7 @@ func TestExtractSkb_SymlinkRefused(t *testing.T) {
 }
 
 // SEC-M9: a staged bundle whose Name is a path-traversal segment must be
-// refused before any write — installOne (via ConfirmInstall) must not escape
+// refused before any write. InstallOne (via ConfirmInstall) must not escape
 // the skills dir.
 func TestInstall_TraversalNameRefused(t *testing.T) {
 	skillsDir := t.TempDir()
@@ -337,7 +337,7 @@ func TestSanitizeBundleName(t *testing.T) {
 	}
 }
 
-// failingReader is an io.Reader that always errors — used to simulate a
+// failingReader is an io.Reader that always errors: used to simulate a
 // crypto/rand (OS CSPRNG) failure on the install-token key-mint path.
 type failingReader struct{}
 
@@ -346,7 +346,7 @@ func (failingReader) Read([]byte) (int, error) {
 }
 
 // SEC-L6: when the OS CSPRNG fails while minting the install-token HMAC key,
-// the code must FAIL CLOSED — it must NOT fall back to a hardcoded world-known
+// the code must FAIL CLOSED. It must NOT fall back to a hardcoded world-known
 // key (which an attacker could use to forge the overwrite token). Concretely:
 //   - PlanInstall must return ErrInstallTokenKey and NOT emit a usable token;
 //   - ConfirmInstall of an overwrite must be refused (no token can be minted

@@ -47,17 +47,17 @@ var version = "0.0.0-dev"
 
 func main() {
 	var (
-		userCtxID   = flag.String("user-context-id", "", "REQUIRED — user_context_id the engine is bound to (SPEC-0167)")
+		userCtxID   = flag.String("user-context-id", "", "REQUIRED: user_context_id the engine is bound to (SPEC-0167)")
 		listen      = flag.String("listen", ":7140", "address to listen on")
 		secretEnv   = flag.String("secret-env", "THINKING_ENGINE_SECRET", "env var holding the HMAC secret")
 		statePath   = flag.String("state-path", "", "SQLite path (default: ~/.m3c-tools/thinking/<hash>/state.db)")
 		kafkaAddr   = flag.String("kafka", "", "Kafka bootstrap address (comma-separated). Empty = in-memory bus. Requires -tags thinking_kafka build to actually connect.")
-		er1CredPath = flag.String("er1-credentials", "", "path to ER1 service-account key (Phase 1: unused — HMAC to Flask bridge)")
+		er1CredPath = flag.String("er1-credentials", "", "path to ER1 service-account key (Phase 1: unused: HMAC to Flask bridge)")
 	)
 	flag.Parse()
 
 	if *userCtxID == "" {
-		fmt.Fprintln(os.Stderr, "ERROR: --user-context-id is REQUIRED — refuse to start without a concrete user context (SPEC-0167 §Isolation Model)")
+		fmt.Fprintln(os.Stderr, "ERROR: --user-context-id is REQUIRED: refuse to start without a concrete user context (SPEC-0167 §Isolation Model)")
 		os.Exit(2)
 	}
 
@@ -72,7 +72,7 @@ func main() {
 	logger.Printf("starting version=%s listen=%s", version, *listen)
 	logger.Printf("unused-in-week1 kafka=%q er1=%q", *kafkaAddr, *er1CredPath)
 
-	// HMAC secret — required. In dev, export THINKING_ENGINE_SECRET=anything.
+	// HMAC secret: required. In dev, export THINKING_ENGINE_SECRET=anything.
 	secret := []byte(os.Getenv(*secretEnv))
 	if len(secret) == 0 {
 		// Dev fallback: derive from ctx hash so local curl-with-no-env still works.
@@ -96,7 +96,7 @@ func main() {
 	}
 	defer st.Close()
 
-	// Kafka bus — in-memory when no brokers given OR when built without
+	// Kafka bus: in-memory when no brokers given OR when built without
 	// `-tags thinking_kafka`; real franz-go driver when both conditions
 	// are met. Wrapped in a schema validator so every produce and every
 	// consume goes through the SPEC-0167 gate.
@@ -134,7 +134,7 @@ func main() {
 	// (SPEC-0167 §Stream 3a).
 	orc := orchestrator.New(hash, bus, st)
 
-	// Prompt registry — prefer HTTP if configured, fall back to the
+	// Prompt registry: prefer HTTP if configured, fall back to the
 	// in-memory stub so local dev still works without a Flask bridge.
 	var promptReg prompts.Registry
 	if baseURL := os.Getenv("THINKING_PROMPT_REGISTRY_URL"); baseURL != "" {
@@ -153,14 +153,14 @@ func main() {
 		logger.Printf("prompts: in-memory stub registry (set THINKING_PROMPT_REGISTRY_URL to use Flask)")
 	}
 
-	// LLM adapter — OpenAI if OPENAI_API_KEY is set; otherwise
+	// LLM adapter: OpenAI if OPENAI_API_KEY is set; otherwise
 	// processors that need LLM will error cleanly.
 	var llmAdapter llm.Adapter
 	if adapter, err := llm.NewOpenAI(); err == nil {
 		llmAdapter = adapter
 		logger.Printf("llm: openai adapter initialised")
 	} else {
-		logger.Printf("llm: not configured (%v) — R/I handlers will fail until configured", err)
+		logger.Printf("llm: not configured (%v): R/I handlers will fail until configured", err)
 	}
 
 	// Budget factory: one controller per process, reusing the shared
@@ -170,7 +170,7 @@ func main() {
 	}
 	_ = budgetFactory // referenced below via deps
 
-	// D4 budget read-view — shared by autoreflect (when enabled) and
+	// D4 budget read-view: shared by autoreflect (when enabled) and
 	// the /v1/budget/* HTTP endpoints (PLAN-0168 P1). Always non-nil so
 	// the API can surface spend even when autoreflect is off.
 	budgetLedger := budget.NewLedger(st, 0) // 0 → DefaultDailyUSD
@@ -195,7 +195,7 @@ func main() {
 	//   DISABLE_METRICS=1      → skip Prometheus registry + /metrics
 	//   DISABLE_EVENTS_SINK=1  → skip process.events → stdout logger
 	// The Metrics surface is also passed into processors, autoreflect,
-	// and sink so their hooks populate counters at the source — the
+	// and sink so their hooks populate counters at the source. The
 	// events sink is an independent second path.
 	var metricsReg observability.Metrics
 	var metricsCloser func()
@@ -246,12 +246,12 @@ func main() {
 		}
 	}
 
-	// Orchestrator's own events subscription (semi_linear + loop — Stream 3a).
+	// Orchestrator's own events subscription (semi_linear + loop: Stream 3a).
 	if err := orc.Start(ctx); err != nil {
 		logger.Fatalf("start orchestrator: %v", err)
 	}
 
-	// Feedback consumer — closes the contradiction → new process loop
+	// Feedback consumer: closes the contradiction → new process loop
 	// (SPEC-0167 §Stream 3a). Rate-limited at 10/hour.
 	fbConsumer, err := feedback.New(feedback.Config{
 		Hash:         hash,
@@ -268,7 +268,7 @@ func main() {
 	}
 	defer fbConsumer.Stop()
 
-	// Auto-reflect consumer — opt-in via ENABLE_AUTO_REFLECT=1. Fires a
+	// Auto-reflect consumer: opt-in via ENABLE_AUTO_REFLECT=1. Fires a
 	// default semi_linear T→R→I→A ProcessSpec on window-count OR
 	// heartbeat triggers (SPEC-0167 Week 3 Phase 2 scaffolding). Gated
 	// by its own 10/hour rate limit, dedup ledger, and the D4 daily
@@ -309,7 +309,7 @@ func main() {
 		Bus: bus, ER1: er1Client, Orc: orc, Cache: cache, Logger: logger,
 	}
 
-	// ER1 sinker (D2 async artifact persistence — Stream 3b). Opt-in via
+	// ER1 sinker (D2 async artifact persistence: Stream 3b). Opt-in via
 	// ENABLE_ER1_SINK=1. Default ON in deployments; tests leave it OFF.
 	var sinker *sink.Sinker
 	if sink.Enabled(os.Getenv) {

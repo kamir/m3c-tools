@@ -1,6 +1,6 @@
 package main
 
-// freshness_cmds.go — SPEC-0279 R3/R4/R5/R6 CLI wiring.
+// freshness_cmds.go: SPEC-0279 R3/R4/R5/R6 CLI wiring.
 //
 // The shared client glue every revocation consumer (verify --bundle, agentid
 // verify, the SPEC-0247 gate) uses to honour the freshness contract on top of the
@@ -9,7 +9,7 @@ package main
 //   - load + signature-verify the OPTIONAL signed freshness checkpoint (R4) and
 //     the OPTIONAL signed emergency deny-list (R5), both against the SAME pinned
 //     registry key the revocation list uses;
-//   - consult the emergency channel FIRST (R5) — a compromise token denies on
+//   - consult the emergency channel FIRST (R5): a compromise token denies on
 //     sight, before staleness or risk are even considered;
 //   - resolve the effective staleness anchor (the checkpoint can reset the clock,
 //     R4) and run the staleness→fail-policy decision (R3) with an INJECTABLE
@@ -72,7 +72,7 @@ type freshnessOutcome struct {
 //   - an emergency-deny error (exit 17 theme) when a token is on the deny-list;
 //   - verify.ErrRevocationStale (exit 22) when the snapshot is stale + fail-closed;
 //   - a registry-not-trusted error (exit 12) when a present checkpoint/emergency
-//     file fails to verify (fail-closed — never silently ignored);
+//     file fails to verify (fail-closed, never silently ignored);
 //   - nil when the action is allowed (fresh, or stale+low-risk+fail-open).
 func evaluateFreshness(in freshnessInputs) freshnessOutcome {
 	now := in.now
@@ -84,7 +84,7 @@ func evaluateFreshness(in freshnessInputs) freshnessOutcome {
 		floor = in.root.MinRevocationEpoch
 	}
 
-	// R5 — emergency channel FIRST. A present-but-bad list is fail-closed.
+	// R5: emergency channel FIRST. A present-but-bad list is fail-closed.
 	if strings.TrimSpace(in.emergencyPath) != "" {
 		set, err := verify.LoadVerifiedEmergencyDenyList(in.emergencyPath, in.root)
 		if err != nil {
@@ -103,18 +103,18 @@ func evaluateFreshness(in freshnessInputs) freshnessOutcome {
 		}
 	}
 
-	// R2 — resolve the relying-party freshness policy from the pinned root.
+	// R2: resolve the relying-party freshness policy from the pinned root.
 	policy, err := in.root.Freshness()
 	if err != nil {
 		return freshnessOutcome{Err: fmt.Errorf("freshness policy: %w", err)}
 	}
 
-	// R4 — apply an OPTIONAL signed checkpoint to (maybe) reset the staleness
+	// R4: apply an OPTIONAL signed checkpoint to (maybe) reset the staleness
 	// clock. A present-but-bad checkpoint is fail-closed. The checkpoint is
 	// verified against the SAME single (own-company) registry root as the
-	// revocation list — the single-company freshness case.
+	// revocation list: the single-company freshness case.
 	//
-	// SPEC-0279 AC4: cross-company STH freshness deferred to P5 (SPEC-0278) —
+	// SPEC-0279 AC4: cross-company STH freshness deferred to P5 (SPEC-0278):
 	// where a checkpoint/Signed-Tree-Head issued by ANOTHER company's log would be
 	// cross-verified (a different trust anchor + inclusion proof) the branch would
 	// wire HERE. Out of scope for P4; the deferral boundary is intentionally
@@ -133,7 +133,7 @@ func evaluateFreshness(in freshnessInputs) freshnessOutcome {
 		anchor, checkpointApplied = newAnchor, applied
 	}
 
-	// R3 — the staleness → fail-policy decision (clock injected).
+	// R3: the staleness → fail-policy decision (clock injected).
 	dec, ferr := verify.EvaluateFreshness(in.syncedEpoch, anchor, policy, in.risk, now)
 	dec.CheckpointReset = checkpointApplied
 	return freshnessOutcome{Decision: dec, Err: ferr}
@@ -193,7 +193,7 @@ func freshnessSummaryLine(out freshnessOutcome, checkpointPath, emergencyPath st
 func printFreshness(w io.Writer, out freshnessOutcome, checkpointPath, emergencyPath string) {
 	d := out.Decision
 	if d.MaxStalenessSeconds == 0 && checkpointPath == "" && emergencyPath == "" && !out.Emergency {
-		return // no freshness policy in play — stay quiet.
+		return // no freshness policy in play: stay quiet.
 	}
 	fmt.Fprintln(w, freshnessSummaryLine(out, checkpointPath, emergencyPath))
 }
@@ -218,7 +218,7 @@ func freshnessExitCode(out freshnessOutcome) int {
 }
 
 // auditFreshnessDecision records EVERY freshness decision (SPEC-0279 R6) into the
-// SPEC-0255 gate-audit trail — allow AND deny — so the verifier never fails open
+// SPEC-0255 gate-audit trail, allow AND deny, so the verifier never fails open
 // (or closed) on freshness without a durable record of (epoch, staleness, risk,
 // fail_policy, outcome). Best-effort + panic-safe via appendGateEvent; never
 // alters the verdict. `source` is the consumer ("verify-bundle" | "agentid" |

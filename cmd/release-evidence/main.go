@@ -1,5 +1,5 @@
 // Command release-evidence assembles the Release Evidence Bundle (the "Trust
-// Binder") for an m3c-tools / skillctl release — H10 of the WF-001 hardening
+// Binder") for an m3c-tools / skillctl release: H10 of the WF-001 hardening
 // track.
 //
 // It answers ONE question in machine-readable, signable form: did this exact set
@@ -13,11 +13,11 @@
 // Design decision H10d:
 //   - agent (not human) schema; in-toto + cosign-keyless framing;
 //   - `summary.enterprise_ready` is RECOMPUTED here from the gate results under a
-//     fixed policy G — never taken on trust from an input. A strict CONSUMER is
+//     fixed policy G, never taken on trust from an input. A strict CONSUMER is
 //     expected to recompute it again against its own policy; this tool's job is to
 //     compute the honest value and make the inputs auditable.
 //
-// The `required` set (gate-set G) is POLICY and lives in the registry below — it
+// The `required` set (gate-set G) is POLICY and lives in the registry below. It
 // is NOT caller-overridable. A caller supplies only each gate's STATUS (+ optional
 // evidence URL / note). This is deliberate: it prevents a caller from marking a
 // required gate `required:false` to fake enterprise-readiness.
@@ -337,7 +337,7 @@ func run(argv []string) int {
 	}
 
 	fmt.Fprintf(os.Stderr,
-		"release-evidence: %s — enterprise_ready=%v (required %d/%d pass, %d skipped) -> %s\n",
+		"release-evidence: %s: enterprise_ready=%v (required %d/%d pass, %d skipped) -> %s\n",
 		b.BundleID, b.Summary.EnterpriseReady, b.Summary.RequiredPassed, b.Summary.RequiredTotal, b.Summary.Skipped, *out)
 	return 0
 }
@@ -441,7 +441,7 @@ func defaultEvidence(m gateMeta, base string, o options) string {
 	}
 }
 
-// buildReferences emits the evidence INDEX — pointers (not copies) at the
+// buildReferences emits the evidence INDEX: pointers (not copies) at the
 // aggregate artifacts a verifier can fetch + re-verify. For the skillctl channel
 // this is the standard six-asset set; extra/override refs are appended.
 func buildReferences(o options, base string) []Reference {
@@ -478,7 +478,7 @@ func computeSummary(gates []Gate) Summary {
 				s.RequiredFailed++
 			}
 		} else if g.Status != "pass" {
-			caveats = append(caveats, fmt.Sprintf("%s (%s, advisory) — not counted toward enterprise_ready.", g.ID, g.Status))
+			caveats = append(caveats, fmt.Sprintf("%s (%s, advisory): not counted toward enterprise_ready.", g.ID, g.Status))
 		}
 	}
 	// enterprise_ready: no required failure AND every required gate passed (a
@@ -720,13 +720,13 @@ func upsertGate(gs []gateInput, gi gateInput) []gateInput {
 }
 
 // crossCheckSchema loads the shipped JSON-schema and asserts its gate-id enum is
-// exactly the registry set — so policy G and the schema cannot drift. A missing
+// exactly the registry set, so policy G and the schema cannot drift. A missing
 // file is a soft skip (the tool must still run where the schema isn't checked out).
 func crossCheckSchema(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "release-evidence: schema %q absent — skipping gate-id cross-check\n", path)
+			fmt.Fprintf(os.Stderr, "release-evidence: schema %q absent: skipping gate-id cross-check\n", path)
 			return nil
 		}
 		return err

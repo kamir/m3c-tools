@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# code-review.sh — Pre-release code review checks.
+# code-review.sh: Pre-release code review checks.
 #
 # Validates code quality, consistency, and release readiness.
 # Blocks release if critical issues are found.
@@ -47,7 +47,7 @@ echo "3. Tests"
 if go test -count=1 ./pkg/... 2>/dev/null | grep -q "^ok"; then
     pass "pkg/ tests pass"
 else
-    # Some packages may have no tests — check if any failures
+    # Some packages may have no tests: check if any failures
     TEST_OUT=$(go test -count=1 ./pkg/... 2>&1) || true
     if echo "$TEST_OUT" | grep -q "^FAIL"; then
         fail "pkg/ tests have failures"
@@ -71,7 +71,7 @@ fi
 
 # Check .env is not staged
 if git diff --cached --name-only 2>/dev/null | grep -q "^\.env$"; then
-    fail ".env is staged for commit — DO NOT commit secrets"
+    fail ".env is staged for commit, DO NOT commit secrets"
 else
     pass ".env not staged"
 fi
@@ -156,14 +156,14 @@ if command -v govulncheck >/dev/null 2>&1; then
         echo "$VULN_CHECK" | head -5 | sed 's/^/      /'
     fi
 else
-    info "govulncheck not installed (skipping — install: go install golang.org/x/vuln/cmd/govulncheck@latest)"
+    info "govulncheck not installed (skipping, install: go install golang.org/x/vuln/cmd/govulncheck@latest)"
 fi
 
 # ─── Summary ───
 echo ""
 echo "─────────────────────────────"
 if [ "$ERRORS" -gt 0 ]; then
-    echo -e "${RED}BLOCKED${NC}: $ERRORS error(s), $WARNINGS warning(s) — fix before releasing"
+    echo -e "${RED}BLOCKED${NC}: $ERRORS error(s), $WARNINGS warning(s): fix before releasing"
     exit 1
 elif [ "$WARNINGS" -gt 0 ]; then
     echo -e "${YELLOW}PASS with warnings${NC}: $WARNINGS warning(s), 0 errors"

@@ -11,7 +11,7 @@ name: skillctl Image (build · cosign · provenance)
 # is an explicit, reviewable act.
 #
 # Kyverno admission (verifyImages against this workflow's OIDC identity) is
-# DEPLOY-SIDE and OUT OF SCOPE here — it belongs in the cluster policy repo, not
+# DEPLOY-SIDE and OUT OF SCOPE here. It belongs in the cluster policy repo, not
 # in this build workflow. This workflow's job is to PRODUCE a signed+attested
 # image; enforcing that only signed images admit is the cluster's job.
 
@@ -79,14 +79,14 @@ jobs:
         uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
 
       # Keyless: cosign mints a short-lived Fulcio cert bound to THIS workflow's
-      # OIDC identity — the same identity a Kyverno verifyImages policy pins.
+      # OIDC identity: the same identity a Kyverno verifyImages policy pins.
       - name: Keyless-sign the image (GitHub OIDC)
         run: cosign sign --yes "${IMAGE}@${DIGEST}"
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
 
       # Gate: fail the build if the signature we just made does not verify against
-      # this workflow's identity — never ship an image whose signature won't check.
+      # this workflow's identity, never ship an image whose signature won't check.
       - name: Verify the cosign signature in-job (gate)
         run: |
           cosign verify "${IMAGE}@${DIGEST}" \

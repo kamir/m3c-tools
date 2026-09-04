@@ -1,11 +1,11 @@
 package registry
 
-// SPEC-0279 R4 (signed freshness checkpoint) / FR-0045 D1 — the G5 kill-switch
+// SPEC-0279 R4 (signed freshness checkpoint) / FR-0045 D1: the G5 kill-switch
 // feed HEAD.
 //
 // A RevocationHead is a signed, monotonic pointer at the current revoked-digest
 // set: {epoch, issued_at, revoked_set_root, emergency}. It is NOT a new envelope
-// — it reuses the SPEC-0190 canonical bytes + ed25519 signing from event.go
+//: it reuses the SPEC-0190 canonical bytes + ed25519 signing from event.go
 // verbatim (CanonicalEventBytes / SignEnvelopeSignature / VerifyEnvelopeSignature),
 // so the HEAD is just another event shape on the same wire. The registry key
 // signs it; verifiers pin that key via trust-roots (ActiveKeys).
@@ -14,8 +14,8 @@ package registry
 // a fresh snapshot from a stale one, so it silently fails open. The HEAD carries
 // a monotonic `epoch` (rollback protection) and an `issued_at` (freshness), and
 // binds itself to the full set via `revoked_set_root` so a truncated or forged
-// set is detectable. Per the 2026-07-06 BDR, the signed HEAD — not the transport
-// (HTTP/ER1/Kafka) — is the source of truth; the transport only carries it.
+// set is detectable. Per the 2026-07-06 BDR, the signed HEAD, not the transport
+// (HTTP/ER1/Kafka), is the source of truth; the transport only carries it.
 
 import (
 	"crypto/ed25519"
@@ -203,7 +203,7 @@ func CheckEpochMonotonic(head map[string]any, persistedMax int) error {
 //  2. epoch monotonicity against the client's persisted floor (R1 rollback),
 //  3. that the separately-transported set binds to the head's revoked_set_root.
 // On success it returns the epoch + issued_at to persist. On ANY failure the
-// client MUST NOT advance its epoch or treat the snapshot as fresh — the gate
+// client MUST NOT advance its epoch or treat the snapshot as fresh. The gate
 // (SPEC-0247 / FR-0045 D4) then applies the fail-closed staleness policy.
 func AdoptRevocationHead(pub ed25519.PublicKey, head map[string]any, set []string, persistedEpoch int) (epoch int, issuedAt time.Time, err error) {
 	if err = VerifyEnvelopeSignature(pub, head); err != nil {

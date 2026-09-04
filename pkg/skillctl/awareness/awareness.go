@@ -12,11 +12,11 @@
 //
 // Subpackage layout:
 //
-//	awareness.go  — Sync(), Verify(), public types + the orchestration loop.
-//	envelope.go   — BuildEnvelope() + the SPEC-0196 §3.3 client-side
+//	awareness.go, Sync(), Verify(), public types + the orchestration loop.
+//	envelope.go, BuildEnvelope() + the SPEC-0196 §3.3 client-side
 //	                intent / data_dependencies cross-rule that mirrors
 //	                what the registry will (also) enforce.
-//	client.go     — HTTP wrapper around POST /admit-from-scan,
+//	client.go: HTTP wrapper around POST /admit-from-scan,
 //	                POST /admit-from-scan/attest, GET /admit-from-scan?session=.
 //
 // What this package is NOT:
@@ -52,7 +52,7 @@ const EnvelopeVersion = "awareness/v1"
 // registry whose trust-roots `_environment` is `prod`.
 //
 // The exact spelling is shared with the SKILLOR-WORK/s1 standalone
-// script — `id:dev-skill-awareness@m3c` — so envelopes built by the Go
+// script, `id:dev-skill-awareness@m3c`, so envelopes built by the Go
 // path and the Python path are interchangeable for backstops/comparison.
 const DevSeedSentinel = "id:dev-skill-awareness@m3c"
 
@@ -91,7 +91,7 @@ func (l AttestLevel) IsCallable() bool {
 }
 
 // SkillEntry is one row in the SPEC-0195 §5.1 request envelope's
-// `skills[]` array. Field names match the wire JSON exactly — any
+// `skills[]` array. Field names match the wire JSON exactly: any
 // rename here is a wire-contract break and should be reflected in
 // SPEC-0195 in the same change.
 type SkillEntry struct {
@@ -222,7 +222,7 @@ type Opts struct {
 	// DefaultIntentLevel, if non-empty, stamps the chosen
 	// `governance_level` onto every skill whose frontmatter is missing
 	// it OR whose `intent.side_effects` is the UNKNOWN sentinel. It
-	// does NOT replace explicit non-sentinel intent — it only fills
+	// does NOT replace explicit non-sentinel intent: it only fills
 	// gaps. SPEC-0195 §5.3 step 1.5 + S2-QUESTIONS S2.1 acceptance #6.
 	//
 	// Closed set: "" | "yellow" | "green". An invalid value is rejected
@@ -311,16 +311,16 @@ func ErrDevSeedAgainstProd() error { return errDevSeedAgainstProd }
 //
 // Steps:
 //
-//  1. validateOpts — refuse obvious caller bugs (missing inventory,
+//  1. validateOpts: refuse obvious caller bugs (missing inventory,
 //     missing registry URL, missing identity, etc.) BEFORE any I/O.
-//  2. resolveSession — fill in the default session_tag from
+//  2. resolveSession: fill in the default session_tag from
 //     hostname + today's date if not set.
-//  3. buildEnvelope — convert the inventory into a SyncEnvelope, apply
+//  3. buildEnvelope: convert the inventory into a SyncEnvelope, apply
 //     --require-intent / --default-intent gates, sign each digest.
-//  4. shortCircuitIfDevSeedProd — §6.1 client-side gate.
-//  5. dumpDryRun OR doSync — emit the envelope to stdout (dry-run) OR
+//  4. shortCircuitIfDevSeedProd: §6.1 client-side gate.
+//  5. dumpDryRun OR doSync: emit the envelope to stdout (dry-run) OR
 //     POST to the registry and decode the response.
-//  6. doAttest — if DefaultAttest != AttestNone AND the sync succeeded
+//  6. doAttest: if DefaultAttest != AttestNone AND the sync succeeded
 //     AND not in dry-run, POST to /admit-from-scan/attest.
 //
 // The function returns the SyncResult on every successful path (including
@@ -371,8 +371,8 @@ func Sync(opts Opts) (*SyncResult, error) {
 	res.Response = syncResp
 
 	// Optional default-attestation pass. Only fires on non-dry-run AND
-	// when the user explicitly asked for it. Failure is non-fatal — the
-	// admission has already happened — but surfaces as a return error
+	// when the user explicitly asked for it. Failure is non-fatal, the
+	// admission has already happened, but surfaces as a return error
 	// so the CLI's exit code reflects "not entirely clean".
 	if opts.DefaultAttest.IsCallable() {
 		atResp, atErr := postAttest(opts, opts.SessionTag)

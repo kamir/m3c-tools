@@ -1,17 +1,17 @@
 package evaluation
 
-// E8 — Trust-root SCALE (SPEC-0280 §2).
+// E8: Trust-root SCALE (SPEC-0280 §2).
 //
 // Method: verify ONE bundle while the trust root pins N authors (N = 1 … 10^3),
 // measuring how offline verify.Verify() scales with the size of the pinned-author
 // set. The bundle's author sits at the END of the pinned list, so FindAuthor must
-// scan the whole set — the worst case for the lookup. This is the "how many
+// scan the whole set. The worst case for the lookup. This is the "how many
 // independent authors can a single relying party pin before verification slows"
 // question (the trust-root scale the SPEC asks for).
 //
 // We report wall-clock vs N (a CSV curve). Verification cost is dominated by the
 // fixed-size crypto (one SHA-256 over the blob + two ed25519 verifies), so the
-// curve shows the author-lookup overhead is negligible against the crypto floor —
+// curve shows the author-lookup overhead is negligible against the crypto floor:
 // itself a finding worth stating.
 
 import (

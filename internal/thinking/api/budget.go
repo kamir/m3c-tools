@@ -1,4 +1,4 @@
-// budget.go — read-only budget surface for SPEC-0167 P1 (PLAN-0168).
+// budget.go: read-only budget surface for SPEC-0167 P1 (PLAN-0168).
 //
 // Exposes two endpoints behind the standard HMAC middleware:
 //
@@ -6,7 +6,7 @@
 //	GET /v1/budget/history?days=N
 //
 // Both are pure projections of the D4 ledger state owned by
-// internal/thinking/budget.Ledger — no state lives in this file.
+// internal/thinking/budget.Ledger, no state lives in this file.
 // Enforcement of the cap continues to happen in budget.Controller;
 // these endpoints are read-only mirrors for the UI and operators.
 //
@@ -146,7 +146,7 @@ func (s *Server) budgetHistory(w http.ResponseWriter, r *http.Request) {
 	days := budget.DefaultHistoryDays
 	if q := r.URL.Query().Get("days"); q != "" {
 		// Best-effort parse. Invalid or out-of-range values silently
-		// snap to defaults/limits — the endpoint MUST be a simple GET
+		// snap to defaults/limits. The endpoint MUST be a simple GET
 		// for the UI pill.
 		var n int
 		if _, err := fmt.Sscanf(q, "%d", &n); err == nil {
@@ -174,7 +174,7 @@ func (s *Server) budgetHistory(w http.ResponseWriter, r *http.Request) {
 			PausedMinutes: r.PausedMinutes,
 		})
 	}
-	// Always return a JSON array (never null) — the UI expects to
+	// Always return a JSON array (never null): the UI expects to
 	// iterate unconditionally.
 	if out == nil {
 		out = []BudgetHistoryEntry{}

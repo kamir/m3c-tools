@@ -1,6 +1,6 @@
 //go:build darwin
 
-// healthcheck_classifier_test.go — BUG-0124 Layer 3.
+// healthcheck_classifier_test.go: BUG-0124 Layer 3.
 //
 // Tests for classifyPLMHealthCheckError, which converts a PLM HealthCheck
 // error into a short user-facing diagnostic for the menubar Projects submenu.
@@ -99,7 +99,7 @@ func TestClassifyPLMHealthCheckError(t *testing.T) {
 //   - "health check request failed: %w" (wraps net errors)
 func TestClassifyPLMHealthCheckError_ConsistentWithPLMClient(t *testing.T) {
 	// These are the literal error strings PLMClient.HealthCheck() emits.
-	// If any return "PLM auth check failed — see log" instead of a
+	// If any return "PLM auth check failed: see log" instead of a
 	// targeted message, the classifier has drifted from its source.
 	cases := map[string]string{
 		"ER1 API key is invalid or expired (HTTP 401)": "ER1 key invalid (401)",
@@ -109,13 +109,13 @@ func TestClassifyPLMHealthCheckError_ConsistentWithPLMClient(t *testing.T) {
 		got := classifyPLMHealthCheckError(errors.New(input))
 		if !strings.Contains(got, wantSubs) {
 			t.Errorf("classifier drift: input=%q got=%q want substring=%q "+
-				"— update classifyPLMHealthCheckError in cmd/m3c-tools/main.go",
+				": update classifyPLMHealthCheckError in cmd/m3c-tools/main.go",
 				input, got, wantSubs)
 		}
 	}
 }
 // TestPLMDisabledReason verifies the Projects-submenu diagnostic shown when
-// PLM sync can't start at all — so the menu never sits on "Loading projects..."
+// PLM sync can't start at all, so the menu never sits on "Loading projects..."
 // forever. Regression guard for the placeholder-key shadowing bug (active
 // profile carried ER1_API_KEY=minimal-key, silently disabling PLM).
 func TestPLMDisabledReason(t *testing.T) {

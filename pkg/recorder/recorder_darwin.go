@@ -1,4 +1,4 @@
-// recorder_darwin.go — PortAudio-based audio recording (macOS only, requires cgo).
+// recorder_darwin.go: PortAudio-based audio recording (macOS only, requires cgo).
 //
 //go:build darwin
 

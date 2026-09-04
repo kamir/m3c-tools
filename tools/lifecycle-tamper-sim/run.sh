@@ -124,7 +124,7 @@ set +e
 HOOK_OUT="$(HOOK 2>&1)"; HOOK_CODE=$?
 set -e
 eviv "02-verify-hook-deny.txt" "$HOOK_OUT"
-if [ "$HOOK_CODE" = 2 ]; then ok "verify-hook DENY (exit 2) — tampered body blocked from loading"; else bad "verify-hook should DENY (exit 2), got $HOOK_CODE"; fi
+if [ "$HOOK_CODE" = 2 ]; then ok "verify-hook DENY (exit 2): tampered body blocked from loading"; else bad "verify-hook should DENY (exit 2), got $HOOK_CODE"; fi
 echo "$HOOK_OUT" | grep -q BLOCKED && ok "deny message announces BLOCKED" || bad "deny should announce BLOCKED"
 
 set +e
@@ -143,4 +143,4 @@ echo "$STATS_OUT" | grep -q '"deny"' && ok "gate-stats records the DENY (CISO al
 # ---------------------------------------------------------------- verdict
 say "Result"
 echo "  passed: $PASS   failed: $FAIL"
-[ "$FAIL" = 0 ] && { echo "  ✅ ALL tamper-detection controls fired as expected."; exit 0; } || { echo "  ❌ a control did NOT fire — investigate."; exit 1; }
+[ "$FAIL" = 0 ] && { echo "  ✅ ALL tamper-detection controls fired as expected."; exit 0; } || { echo "  ❌ a control did NOT fire: investigate."; exit 1; }

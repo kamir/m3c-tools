@@ -2,10 +2,10 @@
 
 # m3c-tools
 
-### Give your agents a memory — and proof of what they're allowed to do.
+### Give your agents a memory, and proof of what they're allowed to do.
 
 **Multi-Modal-Memory Tools** is a personal, sovereign toolkit for turning everything you
-see, hear and decide into durable, structured memory — and for governing the agent skills
+see, hear and decide into durable, structured memory, and for governing the agent skills
 that act on it. Two command-line tools, one repository, zero mandatory cloud middleman.
 
 [![CI](https://github.com/kamir/m3c-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/kamir/m3c-tools/actions/workflows/ci.yml)
@@ -23,7 +23,7 @@ that act on it. Two command-line tools, one repository, zero mandatory cloud mid
 
 <br>
 
-<img src="docs/assets/skillctl-hero.png" alt="skillctl — build, package, sign, share and run agent skills" width="880">
+<img src="docs/assets/skillctl-hero.png" alt="skillctl: build, package, sign, share and run agent skills" width="880">
 
 </div>
 
@@ -33,9 +33,9 @@ that act on it. Two command-line tools, one repository, zero mandatory cloud mid
 
 Autonomous agents need two things you can't buy off the shelf:
 
-1. **A memory of what actually happened** — not a chat log, but structured, multimodal,
+1. **A memory of what actually happened**: not a chat log, but structured, multimodal,
    replayable observations that live on infrastructure *you* control.
-2. **Proof of what they're allowed to do** — every skill an agent runs should carry a
+2. **Proof of what they're allowed to do**. Every skill an agent runs should carry a
    verifiable identity, be revocable on demand, and be checkable **offline**, with no
    external authority in the verification path.
 
@@ -44,7 +44,7 @@ This repository ships one focused tool for each half.
 | Tool | The one-liner | You use it to… |
 |------|---------------|----------------|
 | **`m3c-tools`** | *The capture pipeline.* | Turn YouTube videos, audio, screenshots and voice notes into multimodal memory on your own [ER1](https://er1.io) knowledge server. |
-| **`skillctl`** | *The capability plane.* | Sign, admit, verify and revoke the agent skills that read that memory and act — so nothing runs unless it's authorized and provable. |
+| **`skillctl`** | *The capability plane.* | Sign, admit, verify and revoke the agent skills that read that memory and act, so nothing runs unless it's authorized and provable. |
 
 `m3c-tools` fills the memory. `skillctl` governs the hands. Together they're the
 personal-scale foundation for running agents you can actually trust in production.
@@ -56,10 +56,10 @@ personal-scale foundation for running agents you can actually trust in productio
 Pick the tool you came for. Both ship as single static binaries in every
 [release](https://github.com/kamir/m3c-tools/releases/latest).
 
-### `m3c-tools` — capture your first memory
+### `m3c-tools`: capture your first memory
 
 ```bash
-# macOS (Apple Silicon) — see Install below for Intel / Linux / Windows
+# macOS (Apple Silicon): see Install below for Intel / Linux / Windows
 curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-darwin-arm64.tar.gz | tar xz \
   && sudo mv m3c-tools-darwin-arm64 /usr/local/bin/m3c-tools
 
@@ -70,10 +70,10 @@ m3c-tools doctor                        # verify connectivity & config
 
 → **Full walkthrough:** [Quickstart: m3c-tools](docs/quickstart-m3c-tools.md)
 
-### `skillctl` — sign and verify your first skill
+### `skillctl`: sign and verify your first skill
 
 ```bash
-# macOS / Linux / Windows — signed installer: fetches the right binary from the
+# macOS / Linux / Windows, signed installer: fetches the right binary from the
 # signed skillctl/v* release and verifies cosign/OIDC provenance + SHA-256 first.
 curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/82c832882e8683fa3824ce65db01d945af639c50/tools/skillctl-install.sh | bash
 
@@ -97,24 +97,24 @@ Capture → Preview + Record → Whisper transcribe → Tag editor → Store to 
 
 | Channel | Trigger | What it captures |
 |---------|---------|------------------|
-| **A — YouTube** | Paste a video URL/ID | Transcript + thumbnail + your voice comment |
-| **B — Screenshot** | Menu item | Screenshot + voice note (uses clipboard image if present) |
-| **C — Impulse** | Menu item | Interactive region capture + quick voice note |
-| **D — Audio Import** | Menu item / CLI | Batch audio from a folder (e.g. a voice recorder or Plaud/Pocket sync) |
+| **A: YouTube** | Paste a video URL/ID | Transcript + thumbnail + your voice comment |
+| **B: Screenshot** | Menu item | Screenshot + voice note (uses clipboard image if present) |
+| **C: Impulse** | Menu item | Interactive region capture + quick voice note |
+| **D: Audio Import** | Menu item / CLI | Batch audio from a folder (e.g. a voice recorder or Plaud/Pocket sync) |
 
-Each observation becomes a multimodal ER1 document — text + audio + image, with tags and
+Each observation becomes a multimodal ER1 document: text + audio + image, with tags and
 metadata. On macOS this is a native menu-bar app; on Linux/Windows it's a full CLI.
 Even without a transcript (e.g. subtitles disabled), a YouTube capture still keeps the
-thumbnail and the source link — the observation lands regardless.
+thumbnail and the source link: the observation lands regardless.
 
 **Field recordings, positioned in real time.** `m3c-tools plaud` drains your Plaud.ai
-recordings — customer visits (*Kundenbesuche*), meetings and field notes — straight into
+recordings, customer visits (*Kundenbesuche*), meetings and field notes, straight into
 ER1, and `m3c-tools pocket` does the same for a Pocket device. Synced items are placed at
 their **true recording time**, not the moment you synced them (`plaud fix-times` backfills
 earlier imports), so captures from multiple devices land on the timeline where they
 actually happened. On **macOS**, `plaud dev` uses the official auto-refreshing OAuth token
 (no daily re-login) and, by default, leaves un-transcribed audio to **server-side**
-transcription — see [Setup & Operations](docs/setup-target-devices.md).
+transcription: see [Setup & Operations](docs/setup-target-devices.md).
 
 **Command surface:** `transcript`, `upload`, `whisper`, `thumbnail`, `record`, `screenshot`,
 `import-audio` (capture); `plaud` (`list` · `check` · `sync` · `fix-times` · `auth`; macOS `dev list/sync/status`) and
@@ -137,7 +137,7 @@ author → pack → sign → admit → attest → verify / install → use → a
 - **Auditable.** A local transparency log (`translog`) and a Claude Code trust gate
   (`verify-hook`) that fails closed.
 
-**Command surface** — *authoring:* `keygen`, `pack`, `sign`, `verify-sig`; *trust & install:*
+**Command surface**: *authoring:* `keygen`, `pack`, `sign`, `verify-sig`; *trust & install:*
 `trust`, `install`, `verify`, `verify-hook`; *governance:* `attest`, `revoke`, `agentid`,
 `publish`, `pull`, `registry`; *audit & transparency:* `audit`, `seal`, `scan`, `review`,
 `propose`, `translog`, `gate-stats`; plus `project`, `session`.
@@ -151,11 +151,11 @@ See the [skillctl manual](docs/manual-skillctl.md).
 |------|-----|
 | [**Quickstart: m3c-tools**](docs/quickstart-m3c-tools.md) | Capture your first memory in 5 minutes |
 | [**Quickstart: skillctl**](docs/quickstart-skillctl.md) | Sign, install and verify a skill in 5 minutes |
-| [**Quickstart: skillctl-demo**](docs/quickstart-skillctl-demo.md) | Run the skill-trust scenarios offline on your own machine — 3 run live with real exit codes (S1/S2A/S5); the remaining panels render their story but run nothing (S3 is a built-but-not-run PARTIAL, S2BC/S4 are ROADMAP) — plus hands-on Kata training (shipped): five Katas, each beat a real skillctl exit code (K5 demonstrates the offline revocation deny live) |
+| [**Quickstart: skillctl-demo**](docs/quickstart-skillctl-demo.md) | Run the skill-trust scenarios offline on your own machine, 3 run live with real exit codes (S1/S2A/S5); the remaining panels render their story but run nothing (S3 is a built-but-not-run PARTIAL, S2BC/S4 are ROADMAP), plus hands-on Kata training (shipped): five Katas, each beat a real skillctl exit code (K5 demonstrates the offline revocation deny live) |
 | [**Manual: m3c-tools**](docs/manual-m3c-tools.md) | Every command, flag and config variable |
 | [**Manual: skillctl**](docs/manual-skillctl.md) | The full trust lifecycle, command by command |
 | [Menu Bar App](docs/menubar-app.md) | Channels, Observation Window, menu items (macOS) |
-| [Setup & Operations — Intel Mac & Windows](docs/setup-target-devices.md) | Zero-to-operating runbook for fresh Intel Mac / Windows target devices |
+| [Setup & Operations: Intel Mac & Windows](docs/setup-target-devices.md) | Zero-to-operating runbook for fresh Intel Mac / Windows target devices |
 | [Platform differences](docs/PLATFORM-DIFFERENCES.md) | What works where |
 | [Website](https://kamir.github.io/m3c-tools) | The rendered docs site |
 
@@ -167,7 +167,7 @@ Both binaries are attached to every [release](https://github.com/kamir/m3c-tools
 Swap `m3c-tools` ↔ `skillctl` in any one-liner below to install the other tool.
 
 The **scripted one-liners** fetch the right binary for your host, **verify cosign provenance
-(GitHub OIDC) + the SHA-256 digest**, then install **user-scoped** — no admin rights:
+(GitHub OIDC) + the SHA-256 digest**, then install **user-scoped**: no admin rights:
 
 **Windows (PowerShell):**
 ```powershell
@@ -176,7 +176,7 @@ irm https://raw.githubusercontent.com/kamir/m3c-tools/82c832882e8683fa3824ce65db
 
 Installs `skillctl` to `%LOCALAPPDATA%\Programs\skillctl` after verifying cosign provenance +
 SHA-256. Override with `$env:INSTALL_DIR` / `$env:RELEASE_BASE`. This is the **light,
-user-scoped, no-admin** path — distinct from the machine-wide `M3C-Tools-Setup.exe` installer;
+user-scoped, no-admin** path: distinct from the machine-wide `M3C-Tools-Setup.exe` installer;
 use **one or the other**, not both, so you don't end up with two `skillctl.exe` on `PATH`.
 
 **macOS / Linux:**
@@ -185,12 +185,12 @@ curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/82c832882e8683fa382
 ```
 
 Override the target dir or release with `INSTALL_DIR=…` / `RELEASE_BASE=…` (default `~/.local/bin`).
-These verify the **signed** `skillctl/v*` release — cosign provenance (GitHub OIDC) + the SHA-256
-digest, with an **ed25519 fallback** for hosts without cosign — see the
+These verify the **signed** `skillctl/v*` release, cosign provenance (GitHub OIDC) + the SHA-256
+digest, with an **ed25519 fallback** for hosts without cosign, see the
 [skillctl quickstart](docs/quickstart-skillctl.md#1-install).
 
 **Bootstrap integrity.** The one-liner URLs are pinned to the **immutable commit
-`82c8328`** — not the mutable `master` branch, where a single rewrite could swap the
+`82c8328`**, not the mutable `master` branch, where a single rewrite could swap the
 bootstrap script *and* every pin inside it (a TOFU trap). Verify the fetched bytes
 out-of-band before trusting them. Expected SHA-256:
 
@@ -248,9 +248,9 @@ PowerShell setup.
 |----------|-----|----------|-----------------|-------------|
 | macOS arm64 (Apple Silicon) | full | full GUI | full | yes |
 | macOS amd64 (Intel) | full | full GUI | full | yes |
-| Linux amd64 (Ubuntu) | full | — | — | yes |
-| Linux arm64 (Jetson) | full | — | — | yes (relay) |
-| Windows amd64 | full | — | — | — |
+| Linux amd64 (Ubuntu) | full | n/a | n/a | yes |
+| Linux arm64 (Jetson) | full | n/a | n/a | yes (relay) |
+| Windows amd64 | full | n/a | n/a | n/a |
 
 `skillctl` is CLI-only and runs identically on all five platforms.
 
@@ -259,9 +259,9 @@ PowerShell setup.
 ## Security & supply chain
 
 Because `skillctl` is a *trust* tool, its own supply chain is held to the standard it asks of
-others — **evidence you can verify yourself, with no mandatory hosted authority in the path.**
+others. **Evidence you can verify yourself, with no mandatory hosted authority in the path.**
 
-- **Signed releases, keyless.** Every release is signed with **cosign** via GitHub OIDC — no
+- **Signed releases, keyless.** Every release is signed with **cosign** via GitHub OIDC, no
   long-lived key in the repo. The signing job **verifies its own signature in-job**, so a broken
   signature yields a failed/draft release, never an unsigned one. The signed `skillctl/v*` line
   additionally carries an **ed25519 fallback signature**, so hosts without cosign still verify.
@@ -274,7 +274,7 @@ others — **evidence you can verify yourself, with no mandatory hosted authorit
 - **CI hygiene on every push.** `go vet`, **golangci-lint**, **govulncheck** (reachability-aware
   CVE scan) and **gitleaks** (secret scan) all run in [CI](.github/workflows/ci.yml).
 - **Pinned bootstrap.** The install one-liners pin an **immutable commit** + each script's
-  SHA-256 (not the mutable `master`) — verify-then-run is documented under [Install](#install).
+  SHA-256 (not the mutable `master`). Verify-then-run is documented under [Install](#install).
 
 The full release, signing and provenance flow is in **[docs/releasing.md](docs/releasing.md)**;
 **report a vulnerability** privately via **[SECURITY.md](SECURITY.md)**.
@@ -302,13 +302,13 @@ make help           # show all targets
 
 ### Maintenance tooling env
 
-Some contributor tooling — the `release-*` / `bug-*` agent skills and `demo/kup-training/make-pdf.sh` — reference documents that live in the **private maintenance checkout** (the sibling SPEC/OPS repository). They resolve those locations from an environment variable instead of embedding them, so the public tree stays free of private references (enforced by `tools/boundary-gate.sh`):
+Some contributor tooling, the `release-*` / `bug-*` agent skills and `demo/kup-training/make-pdf.sh`, reference documents that live in the **private maintenance checkout** (the sibling SPEC/OPS repository). They resolve those locations from an environment variable instead of embedding them, so the public tree stays free of private references (enforced by `tools/boundary-gate.sh`):
 
 ```bash
 export M3C_MAINTENANCE_DIR=/absolute/path/to/your/maintenance/checkout
 ```
 
-If it is unset, those scripts fail loudly rather than silently pointing at a missing path. **End users of the CLI do not need this** — it only matters when running the maintenance/release tooling.
+If it is unset, those scripts fail loudly rather than silently pointing at a missing path. **End users of the CLI do not need this**. It only matters when running the maintenance/release tooling.
 
 ### Quality gates
 
@@ -316,20 +316,20 @@ New contributors: start with **[CONTRIBUTING.md](CONTRIBUTING.md)**. Run the sam
 locally:
 
 ```bash
-make ci            # vet · golangci-lint · unit tests · build — the gate CI enforces
+make ci            # vet · golangci-lint · unit tests · build: the gate CI enforces
 make code-review   # pre-release review: build, vet, tests, secret scan, dead code, deps
 make check-docs    # documentation ↔ implementation consistency
 make vet           # go vet ./...
 ```
 
-Formatting is **`gofumpt` + `gci`** on top of golangci-lint (formatting is not negotiable in Go —
-it is built into the toolchain), and `.golangci.yml` is the enforced linter config.
+Formatting is **`gofumpt` + `gci`** on top of golangci-lint (formatting is not negotiable in Go.
+It is built into the toolchain), and `.golangci.yml` is the enforced linter config.
 
 ### Releasing
 
-Releases are **tag-driven** — pushing a `vX.Y.Z` or `skillctl/vX.Y.Z` tag builds, signs and
-publishes via GitHub Actions. The full runbook — bump derivation, the two release lines, cosign +
-SLSA signing, post-release steps and gotchas — is in **[docs/releasing.md](docs/releasing.md)**.
+Releases are **tag-driven**: pushing a `vX.Y.Z` or `skillctl/vX.Y.Z` tag builds, signs and
+publishes via GitHub Actions. The full runbook (bump derivation, the two release lines, cosign +
+SLSA signing, post-release steps and gotchas) is in **[docs/releasing.md](docs/releasing.md)**.
 
 ---
 
@@ -357,7 +357,7 @@ Core logic (transcript, er1, impression) depends only on the Go standard library
 
 ## The bigger picture
 
-`skillctl` is the reference implementation of what we call the **capability plane** — one
+`skillctl` is the reference implementation of what we call the **capability plane**, one
 plane of a *Sovereign Decision Fabric*: an architecture for running autonomous agents where
 every decision is recorded and replayable, and every capability an agent holds is itself
 authorized, provable, and revocable. This repo is the "ur-version" where that machinery is
@@ -365,4 +365,4 @@ built and battle-tested in the open.
 
 ## License
 
-**Apache-2.0** — see [LICENSE](LICENSE).
+**Apache-2.0**: see [LICENSE](LICENSE).

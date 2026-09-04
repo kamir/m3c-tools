@@ -198,7 +198,7 @@ func GenerateMarkdown(w io.Writer, inv *model.Inventory) error {
 		fmt.Fprintf(w, "\n## Skills Without Frontmatter\n\n")
 		for _, sk := range inv.Skills {
 			if !sk.HasYAMLFrontmatter {
-				fmt.Fprintf(w, "- %s (%s) — `%s`\n", sk.Name, sk.Type, sk.SourcePath)
+				fmt.Fprintf(w, "- %s (%s): `%s`\n", sk.Name, sk.Type, sk.SourcePath)
 			}
 		}
 	}

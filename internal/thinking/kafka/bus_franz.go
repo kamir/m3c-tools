@@ -1,9 +1,9 @@
-// bus_franz.go — franz-go-backed Bus (SPEC-0167 Stream 2c).
+// bus_franz.go: franz-go-backed Bus (SPEC-0167 Stream 2c).
 //
 // Compile with:  go build -tags thinking_kafka
 //
 // Intentionally behind a build tag so the default build does not
-// require franz-go (or a broker) to produce a usable binary — the
+// require franz-go (or a broker) to produce a usable binary: the
 // default build resolves to the in-memory memBus in bus.go.
 //
 // This driver implements the same Bus interface as the in-memory
@@ -11,22 +11,22 @@
 // invariants:
 //
 //   - assertOwnedBy(topic, owner) is called on every Produce and
-//     Subscribe — cross-tenant topic names panic.
+//     Subscribe: cross-tenant topic names panic.
 //   - Consumer groups are named "m3c-<ctx_hash>-<role>" so two
 //     users' engines can never accidentally share a group even if
 //     they were to point at the same broker.
 //
 // Producer configuration for Phase 1 (dev, RF=1):
-//   - Acks       : LeaderAck()  — broker=1, min ISR=1 in cp-all-in-one.
+//   - Acks       : LeaderAck(): broker=1, min ISR=1 in cp-all-in-one.
 //     Phase 2 will flip to AllISRAcks() once the 3-broker cluster is
 //     deployed (D5).
-//   - Idempotent : disabled      — irrelevant with acks=1.
-//   - Retries    : 5             — plenty for a local broker.
+//   - Idempotent : disabled: irrelevant with acks=1.
+//   - Retries    : 5: plenty for a local broker.
 //   - Timeout    : 5s request, 10s record delivery.
 //
 // Consumer configuration:
 //   - Group          : "m3c-<ctx_hash>-<role>"
-//   - ResetOffset    : AtStart() — the engine replays from the
+//   - ResetOffset    : AtStart(): the engine replays from the
 //     beginning of each topic on first start. Once an offset is
 //     committed, it takes over.
 //   - AutoCommit     : off; we commit only after successful handler
@@ -77,12 +77,12 @@ type franzSub struct {
 // prefix does not match the owner's ctx hash (SPEC-0167 §Isolation).
 //
 // brokers is a list of bootstrap addresses (e.g. ["localhost:9092"]).
-// An empty list is rejected — the engine refuses to run half-wired.
+// An empty list is rejected: the engine refuses to run half-wired.
 func NewFranzBus(owner mctx.Hash, brokers []string) (Bus, error) {
 	if len(brokers) == 0 {
 		return nil, errors.New("thinking/kafka: NewFranzBus requires at least one bootstrap broker")
 	}
-	// Shared producer client — one connection pool per engine.
+	// Shared producer client: one connection pool per engine.
 	producer, err := kgo.NewClient(
 		kgo.SeedBrokers(brokers...),
 		kgo.RequiredAcks(kgo.LeaderAck()),
@@ -105,7 +105,7 @@ func NewFranzBus(owner mctx.Hash, brokers []string) (Bus, error) {
 
 // Produce writes a single JSON-encoded value to topic with the given
 // key. Blocks until the broker acknowledges or the ctx deadline is
-// reached. Panics if topic is not owned by this engine — this is the
+// reached. Panics if topic is not owned by this engine. This is the
 // SPEC-0167 hard guard and must not be silenced.
 func (b *franzBus) Produce(ctx context.Context, topic string, key string, value any) error {
 	assertOwnedBy(topic, b.owner)
@@ -127,7 +127,7 @@ func (b *franzBus) Produce(ctx context.Context, topic string, key string, value 
 
 // Subscribe starts a consumer bound to a per-role group and
 // dispatches each record to h. The returned stop function shuts down
-// only this subscription — other subscriptions on the same bus keep
+// only this subscription: other subscriptions on the same bus keep
 // running. Errors from h do not crash the loop; the offset is NOT
 // committed for failed records, so each such record re-delivers on
 // the next poll until it succeeds or is explicitly dropped.
@@ -189,7 +189,7 @@ func (b *franzBus) Subscribe(topic string, h Handler) (func(), error) {
 			fetches.EachRecord(func(r *kgo.Record) {
 				msg := Message{Topic: r.Topic, Key: r.Key, Value: r.Value}
 				if err := h(ctx, msg); err != nil {
-					// Do NOT commit this record — it re-delivers.
+					// Do NOT commit this record: it re-delivers.
 					return
 				}
 				committable = append(committable, r)
@@ -198,7 +198,7 @@ func (b *franzBus) Subscribe(topic string, h Handler) (func(), error) {
 				// Commit synchronously so a restart never loses
 				// more than one in-flight batch of handled records.
 				if err := cl.CommitRecords(ctx, committable...); err != nil && ctx.Err() == nil {
-					// Couldn't commit — records will re-deliver.
+					// Couldn't commit: records will re-deliver.
 					// Back off briefly to avoid a tight retry loop.
 					time.Sleep(100 * time.Millisecond)
 				}
@@ -225,12 +225,12 @@ func (b *franzBus) Subscribe(topic string, h Handler) (func(), error) {
 // this bus's consumer group. Implementation note: franz-go's kgo.Client
 // does not expose admin queries directly; a full implementation needs
 // the optional kadm package (separate module) to call ListCommittedOffsets
-// + ListEndOffsets. For now this returns (0, nil) — the interface and
+// + ListEndOffsets. For now this returns (0, nil). The interface and
 // the polling infrastructure are in place, and an operator can swap
 // the impl in without touching the observability package.
 //
 // This is explicitly a stub that satisfies the BusMetrics contract;
-// see PLAN-0168 §P0 "Gauge: bus_consumer_lag — polled every 10 s from
+// see PLAN-0168 §P0 "Gauge: bus_consumer_lag: polled every 10 s from
 // franz-go admin client" for the target behaviour. Shipping the gauge
 // at 0 is preferable to skipping the metric entirely because it gives
 // dashboard authors a stable series name to build on.

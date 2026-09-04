@@ -91,7 +91,7 @@ func TestGenerate_DefaultBinaryName(t *testing.T) {
 func TestGenerate_QuotesBinaryWithSpaces(t *testing.T) {
 	b, _ := Generate(GenerateOptions{BinaryPath: "/Applications/My Tools/skillctl"})
 	// Decode the JSON and check the actual command value (raw bytes contain
-	// JSON-escaped quotes \" — assert on the decoded string, not the wire bytes).
+	// JSON-escaped quotes \": assert on the decoded string, not the wire bytes).
 	var got struct {
 		Hooks struct {
 			PreToolUse []struct {
@@ -301,7 +301,7 @@ func TestVerify_QuoteConcatNotPinned(t *testing.T) {
 	}
 }
 
-// D4: Claude Code matchers are regex — a regex that matches "Skill" covers it.
+// D4: Claude Code matchers are regex: a regex that matches "Skill" covers it.
 func TestVerify_RegexMatcherCovers(t *testing.T) {
 	for _, m := range []string{".*", "Skill.*", "Sk.*", "Task|Skill"} {
 		if !Verify(preToolJSON(t, m, "skillctl verify-hook")).HasVerifyHook {
@@ -316,7 +316,7 @@ func TestVerify_RegexMatcherCovers(t *testing.T) {
 }
 
 // D2: an existing verify-hook under a NON-covering matcher must not stop Merge
-// from adding the covering Skill matcher — else the merged file fails Verify.
+// from adding the covering Skill matcher. Else the merged file fails Verify.
 func TestMerge_AddsCoveringMatcherDespiteNonCoveringDecoy(t *testing.T) {
 	existing := `{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"skillctl verify-hook"}]}]}}`
 	merged, err := Merge([]byte(existing), GenerateOptions{BinaryPath: "skillctl"})
@@ -334,7 +334,7 @@ func TestMerge_AddsCoveringMatcherDespiteNonCoveringDecoy(t *testing.T) {
 
 // TestEnterpriseFromBytes locks the SPEC-0317 R-7.2 managed enterprise reader:
 // only a cleanly-parsed skillctlEnterprise:true engages it; missing/false/
-// malformed all yield false (never-brick — locking on a corrupt file would brick).
+// malformed all yield false (never-brick: locking on a corrupt file would brick).
 func TestEnterpriseFromBytes(t *testing.T) {
 	if !EnterpriseFromBytes([]byte(`{"skillctlEnterprise":true}`)) {
 		t.Error("skillctlEnterprise:true must read as enterprise")
@@ -442,7 +442,7 @@ func TestStateGateFallbackFromBytes(t *testing.T) {
 }
 
 // TestRequireAgentMandateFromBytes locks the SPEC-0277 IS-06 reader: STANDALONE
-// (NOT enterprise-gated) — the bare flag engages it — but conservative: a
+// (NOT enterprise-gated), the bare flag engages it, but conservative: a
 // missing/malformed managed file → false (never-brick).
 func TestRequireAgentMandateFromBytes(t *testing.T) {
 	if !RequireAgentMandateFromBytes([]byte(`{"skillctlRequireAgentMandate":true}`)) {

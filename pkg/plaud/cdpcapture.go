@@ -16,9 +16,9 @@ import (
 // network traffic via CDP), then validates it against the API. This is the
 // SSO-safe token path: it works for Google/Apple-SSO accounts whose bearer never
 // lands in localStorage, because it reads exactly what the web app sends on the
-// wire — independent of where Plaud stores the token.
+// wire, independent of where Plaud stores the token.
 func captureAndValidateAuthHeader(wsURL string) (string, error) {
-	fmt.Fprintln(os.Stderr, "  [plaud] token not in browser storage — capturing the live "+
+	fmt.Fprintln(os.Stderr, "  [plaud] token not in browser storage, capturing the live "+
 		"api.plaud.ai Authorization header (reloading the tab, ~up to 15s)...")
 
 	raw, err := cdpCaptureAuthHeader(wsURL, 15*time.Second)
@@ -87,8 +87,8 @@ func cdpCaptureAuthHeader(wsURL string, timeout time.Duration) (string, error) {
 
 // authHeaderFromCDPEvent inspects one CDP message for the bearer. The
 // Authorization header can arrive in EITHER `Network.requestWillBeSent`
-// (headers the page set on the fetch) OR — for headers added lower in the stack
-// — only in `Network.requestWillBeSentExtraInfo`, which carries the real on-wire
+// (headers the page set on the fetch) OR, for headers added lower in the stack
+//, only in `Network.requestWillBeSentExtraInfo`, which carries the real on-wire
 // headers but no URL. So we remember which requestIds target *.plaud.ai from the
 // first event, and match the header from either. `plaudReqs` is shared across
 // calls to correlate the two events by requestId.
@@ -169,7 +169,7 @@ func cdpReadMessage(conn net.Conn) (string, error) {
 			}
 		case 0x8: // close
 			return "", fmt.Errorf("websocket closed")
-		case 0x9, 0xA: // ping / pong — ignore
+		case 0x9, 0xA: // ping / pong: ignore
 		default:
 			// Unknown opcode; ignore its payload and keep reading.
 		}

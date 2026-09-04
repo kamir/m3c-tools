@@ -56,6 +56,6 @@ Scales to zero when idle (no cost).
 
 ## Important notes
 
-- Cloud Run with min-instances=0 scales to zero automatically — "starting" just means sending a request
+- Cloud Run with min-instances=0 scales to zero automatically: "starting" just means sending a request
 - Cold starts take 30-60 seconds for the first request after idle
 - If the service was deleted, a full redeploy is needed via /release-aims deploy staging

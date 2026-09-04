@@ -1,19 +1,19 @@
 package main
 
-// FR-0045 kill-switch HARDENING tests — the enforcement negatives the 3-reviewer
+// FR-0045 kill-switch HARDENING tests: the enforcement negatives the 3-reviewer
 // adversarial gate found missing (the ed25519 envelope had negatives; the
 // ENFORCEMENT did not). Each test drives the REAL enforcement surface:
 //
-//   Fix A — the epoch/issued_at floor is authenticated against the pinned registry
+//   Fix A: the epoch/issued_at floor is authenticated against the pinned registry
 //           key and is monotonic: it cannot be rolled back by rewriting the
 //           unsigned json, and a replayed lower-epoch signed HEAD is rejected.
-//   Fix B — a set-root mismatch retains last-known-good; a revoked digest still
+//   Fix B, a set-root mismatch retains last-known-good; a revoked digest still
 //           denies at the gate (the truncated set cannot un-revoke a bundle).
-//   Fix C — a digest placed in the SIGNED HEAD.emergency denies at the gate, with
+//   Fix C, a digest placed in the SIGNED HEAD.emergency denies at the gate, with
 //           no local emergency-deny.json present.
-//   Fix D — the stale-revocation deny carries the machine-readable
+//   Fix D: the stale-revocation deny carries the machine-readable
 //           `bundle_revocation_stale` refusal code on the signed invocation record.
-//   +     — an adopted HEAD whose fetch then fails eventually DENIES once its
+//   +: an adopted HEAD whose fetch then fails eventually DENIES once its
 //           signed issued_at ages past max_staleness (not merely "floor kept").
 
 import (
@@ -103,7 +103,7 @@ func khInstallSkill(t *testing.T, home, skill, digest, author string) {
 	t.Cleanup(func() { verifyManagedFn = origOn; verifyManagedOfflineFn = origOff })
 }
 
-// --- Fix A — authenticated + monotonic floor ---
+// --- Fix A: authenticated + monotonic floor ---
 
 // TestRevokedFloor_UnforgeableViaUnsignedJson: with a signed HEAD present, the
 // floor is derived from the RE-VERIFIED HEAD, so rewriting the unsigned json cannot
@@ -128,7 +128,7 @@ func TestRevokedFloor_UnforgeableViaUnsignedJson(t *testing.T) {
 		t.Fatalf("authenticated floor = %d,%q, want 9,<ts>", ep, iss)
 	}
 
-	// The cache file must be owner-only (0o600) — Fix A perms tightening.
+	// The cache file must be owner-only (0o600). Fix A perms tightening.
 	// POSIX-only: Windows does not map Go file modes to Unix permission bits.
 	if runtime.GOOS != "windows" {
 		if fi, err := os.Stat(revokedCachePath(home)); err != nil {
@@ -169,7 +169,7 @@ func TestRevokedFloor_ReplayedLowerEpochRejected(t *testing.T) {
 	}
 }
 
-// --- Fix B — set-root mismatch retains last-known-good; revoked digest still denies ---
+// --- Fix B: set-root mismatch retains last-known-good; revoked digest still denies ---
 
 func TestFetchedSetRootMismatch_RetainsAndDenies(t *testing.T) {
 	home := khSetupHome(t)
@@ -207,7 +207,7 @@ func TestFetchedSetRootMismatch_RetainsAndDenies(t *testing.T) {
 	assertDeny(t, code, out, "revoked")
 }
 
-// --- Fix C — the signed HEAD's emergency list denies at the gate ---
+// --- Fix C: the signed HEAD's emergency list denies at the gate ---
 
 func TestGate_SignedHeadEmergencyDenies(t *testing.T) {
 	home := khSetupHome(t)
@@ -221,7 +221,7 @@ func TestGate_SignedHeadEmergencyDenies(t *testing.T) {
 		t.Fatalf("pre-emergency should allow, got %d out=%q", code, out)
 	}
 
-	// Registry burns the digest in the SIGNED HEAD.emergency — NO local
+	// Registry burns the digest in the SIGNED HEAD.emergency: NO local
 	// emergency-deny.json is present, proving the HEAD channel is enforced on its own.
 	persistSignedHead(home, khSignHead(t, priv, 3, time.Now().Add(-1*time.Hour), []string{dig}, []string{dig}))
 	if fileExists(emergencyDenyPath(home)) {
@@ -249,7 +249,7 @@ func TestGate_SignedHeadEmergencyNonListedAllowed(t *testing.T) {
 	assertAllow(t, code, out)
 }
 
-// --- Fix D — the stale-revocation deny carries the bundle_revocation_stale code ---
+// --- Fix D: the stale-revocation deny carries the bundle_revocation_stale code ---
 
 func TestGate_StaleRevocation_RefusalCode(t *testing.T) {
 	home := khSetupHome(t)
@@ -263,7 +263,7 @@ func TestGate_StaleRevocation_RefusalCode(t *testing.T) {
 	}
 	t.Cleanup(func() { loadRootsFn = origLoad })
 
-	revoked := headTestDigest('b')   // the revoked set — NOT the skill's digest
+	revoked := headTestDigest('b')   // the revoked set: NOT the skill's digest
 	installed := headTestDigest('a') // the installed skill digest (not revoked/emergency)
 	khInstallSkill(t, home, "er1-push", installed, "id:author@m3c")
 
@@ -276,7 +276,7 @@ func TestGate_StaleRevocation_RefusalCode(t *testing.T) {
 	assertDeny(t, code, out, "revocation snapshot too stale")
 
 	// The signed invocation record's machine-readable refusal_code is the "22"
-	// semantic token — the qa exit-22 assertion the gate said was missing.
+	// semantic token. The qa exit-22 assertion the gate said was missing.
 	data, err := os.ReadFile(invocationTrailPath(home))
 	if err != nil {
 		t.Fatalf("read invocation trail: %v", err)
@@ -286,7 +286,7 @@ func TestGate_StaleRevocation_RefusalCode(t *testing.T) {
 	}
 }
 
-// --- Fix N1 — a present-but-unverifiable signed HEAD FAILS CLOSED (not no-op) ---
+// --- Fix N1: a present-but-unverifiable signed HEAD FAILS CLOSED (not no-op) ---
 
 // TestGate_CorruptSignedHead_FailsClosed proves the regression fix: a one-byte
 // corruption of revoked-head.signed.json must NOT flip the kill-switch open. On the
@@ -339,7 +339,7 @@ func TestGate_CorruptSignedHead_FailsClosed(t *testing.T) {
 		t.Fatal("test invariant: the corrupted HEAD must not verify")
 	}
 
-	// The gate must now DENY (fail-closed) — the one-byte corruption must not open
+	// The gate must now DENY (fail-closed). The one-byte corruption must not open
 	// the kill-switch. On the OLD code this fed() ALLOWED.
 	code, out, _ := feed(t, hookEventFor("er1-push"))
 	assertDeny(t, code, out, "signed revocation HEAD is present but")
@@ -390,7 +390,7 @@ func TestGate_AdoptedHeadFetchFailure_EventuallyDenies(t *testing.T) {
 		t.Fatalf("fetch failure must keep the floor (epoch 5, not rejected), got ep=%d rej=%v", ep, rej)
 	}
 
-	// 3) With the anchor now 48h old and max_staleness 24h, the gate must DENY —
+	// 3) With the anchor now 48h old and max_staleness 24h, the gate must DENY,
 	//    not merely keep the floor. (The local cache TTL still looks fresh; the D4
 	//    gate judges the SIGNED issued_at, which cannot be refreshed while the feed
 	//    is down.)

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 07-invalid-wrong-key — A bundle signed by an attacker, presented under
+# 07-invalid-wrong-key: A bundle signed by an attacker, presented under
 # Mirko's identity, must fail when Eric verifies against Mirko's pinned pubkey.
 # Expected: skillctl verify-sig exits 11.
 set -euo pipefail
@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 require_skillctl
 
-header "07 — INVALID: bundle signed by an unauthorized key"
+header "07, INVALID: bundle signed by an unauthorized key"
 
 # 1) Generate an attacker key (idempotent)
 rm -f "$KEYS_DIR/attacker.priv" "$KEYS_DIR/attacker.pub"
@@ -22,7 +22,7 @@ ATTACKER_BUNDLE="$BUNDLES_DIR/attacker-${SKILL_NAME}-${SKILL_VERSION}.skb"
     -o "$ATTACKER_BUNDLE" \
     --name "$SKILL_NAME" \
     --version "$SKILL_VERSION" \
-    --summary "Attacker bundle — same shape, different signing key." \
+    --summary "Attacker bundle: same shape, different signing key." \
     --source-repo "attacker/spoof" \
     --source-path "." \
     --author-intent yellow \
@@ -37,14 +37,14 @@ rm -f "${ATTACKER_BUNDLE}".*.author.sig
   >>"$LOG_DIR/full.log" 2>&1
 ok "attacker bundle signed (under attacker key)"
 
-# 4) Eric verifies with MIRKO's pinned pubkey — must refuse with exit 11.
-log "Eric: skillctl verify-sig (expecting exit 11 — sig invalid against pinned key)"
+# 4) Eric verifies with MIRKO's pinned pubkey, must refuse with exit 11.
+log "Eric: skillctl verify-sig (expecting exit 11, sig invalid against pinned key)"
 assert_exit 11 -- "$SKILLCTL" verify-sig --pubkey "$KEYS_DIR/mirko.pub" "$ATTACKER_BUNDLE"
 
-# 5) Sanity check — the attacker's own key DOES validate (proving the test
+# 5) Sanity check: the attacker's own key DOES validate (proving the test
 #    rules out "the attacker bundle is structurally broken"); the failure in
 #    step 4 is specifically the wrong-key signal.
 log "control: same bundle verifies fine against the attacker's own pubkey"
 assert_exit 0  -- "$SKILLCTL" verify-sig --pubkey "$KEYS_DIR/attacker.pub" "$ATTACKER_BUNDLE"
 
-header "07 — done — IMPERSONATION DETECTED, INVALID SKILL REFUSED ✓"
+header "07, done, IMPERSONATION DETECTED, INVALID SKILL REFUSED ✓"

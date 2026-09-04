@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# register-identity.sh — one-shot, idempotent registration of a SPEC-0188
+# register-identity.sh: one-shot, idempotent registration of a SPEC-0188
 # author/reviewer identity in the local skill registry.
 #
 # Generalized from register-mirko-identity.sh (2026-05-08 KuP fix). Used
@@ -25,9 +25,9 @@
 #         in ADMIN_USER_IDS (set in tools/config/environments/docker-local.env).
 #
 # Exit codes
-#   0  — registered (HTTP 201) or already registered (HTTP 409, idempotent)
-#   1  — server error (403/500/etc.) — message printed
-#   2  — local input/setup error (missing keychain, missing pubkey, etc.)
+#   0, registered (HTTP 201) or already registered (HTTP 409, idempotent)
+#   1, server error (403/500/etc.), message printed
+#   2, local input/setup error (missing keychain, missing pubkey, etc.)
 
 set -euo pipefail
 
@@ -60,7 +60,7 @@ if [[ -z "${ER1_API_KEY}" ]]; then
 fi
 c_dim "✓ ER1_API_KEY resolved from keychain"
 
-# ---- 2. X-User-ID — normalized per BUG-0021 --------------------------------
+# ---- 2. X-User-ID: normalized per BUG-0021 --------------------------------
 USER_ID=""
 if [[ -f "$HOME/.m3c-tools.env" ]]; then
   USER_ID=$(grep -E '^ER1_CONTEXT_ID=' "$HOME/.m3c-tools.env" | head -1 | cut -d= -f2- | tr -d '"')
@@ -104,11 +104,11 @@ case "$HTTP" in
     cat "$RESP_FILE" | python3 -m json.tool 2>/dev/null || cat "$RESP_FILE"
     ;;
   409)
-    c_yellow "✓ identity already exists: $IDENTITY_ID (HTTP 409 — idempotent, no-op)"
+    c_yellow "✓ identity already exists: $IDENTITY_ID (HTTP 409, idempotent, no-op)"
     cat "$RESP_FILE" | python3 -m json.tool 2>/dev/null || cat "$RESP_FILE"
     ;;
   403)
-    c_red "✗ HTTP 403 — your account ($USER_ID) is not tagged admin on the local stack."
+    c_red "✗ HTTP 403, your account ($USER_ID) is not tagged admin on the local stack."
     c_red "  Check ADMIN_USER_IDS in tools/config/environments/docker-local.env."
     cat "$RESP_FILE" >&2
     exit 1

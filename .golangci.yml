@@ -11,11 +11,11 @@ linters:
     errcheck:
       # The ONLY retained class-level exception: formatted output to a writer
       # (fmt.Fprint/Fprintf/Fprintln). These are ~1,300 CLI stdout/stderr and
-      # already-committed HTTP-response writes — a whole benign class that cannot
+      # already-committed HTTP-response writes. A whole benign class that cannot
       # lose durable data or corrupt state (the same family errcheck excludes
       # upstream by default). Annotating each site would bury the signal.
       # Everything RISK-BEARING (Close/Write/MkdirAll/Setenv/Remove/Exec/…) is
-      # NOT excluded here — those carry a call-site //nolint:errcheck with a
+      # NOT excluded here: those carry a call-site //nolint:errcheck with a
       # concrete reason, per the "exception at the call site, not by operation
       # class" rule. Matched by function identity, not by brittle source text.
       exclude-functions:
@@ -25,13 +25,13 @@ linters:
 
   exclusions:
     rules:
-      # Don't lint test files with errcheck — tests intentionally skip error checks.
+      # Don't lint test files with errcheck: tests intentionally skip error checks.
       - linters: [errcheck]
         path: _test\.go$
       # Ignore unchecked Close/Remove/cleanup in defer statements
       # (deferred cleanup is idiomatically ignorable).
       - linters: [errcheck]
         source: "defer "
-      # Allow WriteString(fmt.Sprintf(...)) — stylistic, not a bug.
+      # Allow WriteString(fmt.Sprintf(...)): stylistic, not a bug.
       - linters: [staticcheck]
         text: "QF1012"

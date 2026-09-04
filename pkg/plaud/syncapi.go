@@ -181,7 +181,7 @@ func (s *SyncAPIClient) RegisterMapping(mapping SyncMapping) error {
 }
 
 // setHeaders applies authentication and identity headers.
-// SPEC-0143: Uses shared auth helper — prefers device token over API key.
+// SPEC-0143: Uses shared auth helper: prefers device token over API key.
 func (s *SyncAPIClient) setHeaders(req *http.Request) {
 	auth.ApplyAuth(req, s.apiKey)
 	if s.userID != "" {
@@ -204,8 +204,8 @@ func DeriveAccountID(token string) string {
 }
 
 // DeriveAccountIDFromToken derives a STABLE plaud-sync account id. For a JWT
-// access token it hashes the `sub` claim — which survives the ~daily token
-// refresh — so SPEC-0117 cross-machine dedup keeps matching after rotation.
+// access token it hashes the `sub` claim, which survives the ~daily token
+// refresh, so SPEC-0117 cross-machine dedup keeps matching after rotation.
 // Falls back to hashing the whole token when there is no `sub` (legacy tokens),
 // preserving existing behavior for those.
 func DeriveAccountIDFromToken(token string) string {

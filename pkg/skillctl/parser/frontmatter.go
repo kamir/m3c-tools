@@ -32,7 +32,7 @@ func Parse(content []byte) (fm *model.Frontmatter, body string, err error) {
 
 	closeIdx := strings.Index(rest, "\n---")
 	if closeIdx < 0 {
-		// No closing delimiter — treat as no frontmatter
+		// No closing delimiter: treat as no frontmatter
 		return nil, s, nil
 	}
 

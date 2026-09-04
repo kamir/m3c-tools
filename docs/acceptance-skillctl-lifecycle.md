@@ -3,11 +3,11 @@ layout: default
 title: "Acceptance & Handover: the skillctl skill lifecycle (Mirko → Eric)"
 ---
 
-# Acceptance & Handover — the skillctl skill lifecycle
+# Acceptance & Handover: the skillctl skill lifecycle
 
 **Audience:** Eric's team (a second organisation taking over `skillctl`).
-**Goal:** validate the *full tool + skill lifecycle* end-to-end across **two people** —
-Mirko authors, signs and publishes a skill; Eric trusts, pulls, verifies and uses it —
+**Goal:** validate the *full tool + skill lifecycle* end-to-end across **two people**:
+Mirko authors, signs and publishes a skill; Eric trusts, pulls, verifies and uses it,
 and prove that invalid skills are refused. Functionality and the skill lifecycle come
 first; performance and scale are out of scope for this pass.
 
@@ -40,7 +40,7 @@ else is identical when the registry is later swapped for the skill-repo backend
 ```
 
 The trust decisions (and their exit codes) are pure functions of the bundle bytes + the
-pinned key + the trust-roots file — the transport is invisible to them. Only `publish`
+pinned key + the trust-roots file. The transport is invisible to them. Only `publish`
 and `pull` know it is ER1.
 
 ---
@@ -62,19 +62,19 @@ curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/82c832882e8683fa382
 #   Windows (PowerShell):
 #   irm https://raw.githubusercontent.com/kamir/m3c-tools/82c832882e8683fa3824ce65db01d945af639c50/tools/skillctl-install.ps1 | iex
 
-skillctl version          # MUST print a real skillctl/vX.Y.Z — NOT "dev" (see Troubleshooting)
+skillctl version          # MUST print a real skillctl/vX.Y.Z, NOT "dev" (see Troubleshooting)
 skillctl login --base-url https://onboarding.guide   # ER1 device pairing (FR-0043)
 skillctl login --status
 ```
 
 > **Bootstrap integrity.** The installer URLs are pinned to the **immutable commit `82c8328`**
-> (not the mutable `master` branch — one rewrite there could swap the bootstrap script *and* every
-> pin inside it). Verify the fetched bytes out-of-band — expected SHA-256:
+> (not the mutable `master` branch: one rewrite there could swap the bootstrap script *and* every
+> pin inside it). Verify the fetched bytes out-of-band, expected SHA-256:
 > `tools/skillctl-install.ps1` → `9e8ceec9d2c87b4f5a7136653e8ca69224fa6579a55da221d9e2fe875f9924c8`,
 > `tools/skillctl-install.sh` → `adf9d768a376ee921f9df728546de072a2b3f14e9616e10bf3419fef520034a9`.
 > The [README Install section](../README.md#install) has a copy-paste verify-then-run recipe.
 
-### The trust-root file — pick the right one (this is the #1 source of confusion)
+### The trust-root file: pick the right one (this is the #1 source of confusion)
 
 | You are using… | Trust-roots file | How it's created | Read by |
 |----------------|------------------|------------------|---------|
@@ -88,8 +88,8 @@ For this ER1 procedure, Eric uses **`~/.claude/trust-roots.yaml`** and does **no
 
 ## Quick validate on Windows (PowerShell)
 
-To confirm skillctl's lifecycle works on a fresh **Windows** box — the trust core, with no ER1
-and no second person needed — copy this into **Windows PowerShell** (grab it from the repo, or
+To confirm skillctl's lifecycle works on a fresh **Windows** box (the trust core, with no ER1
+and no second person needed) copy this into **Windows PowerShell** (grab it from the repo, or
 straight from here):
 
 ```powershell
@@ -109,16 +109,16 @@ powershell -ExecutionPolicy Bypass -File $q
 
 It walks **keygen → pack → sign → verify-sig → trust add → tamper** in a throwaway `%TEMP%` dir
 and prints one PASS/FAIL line per step, exiting non-zero if any required step fails. The tamper
-case must be **refused** (exit 11) — that is the fail-closed proof. It writes nothing outside
+case must be **refused** (exit 11), that is the fail-closed proof. It writes nothing outside
 `%TEMP%` and touches neither ER1 nor your real `~/.claude`. (This is the same script the
 `installer-winps51` / quickstart-smoke CI job runs on `windows-latest`.)
 
-**What this does *not* cover:** the two-person ER1 exchange in Parts A/B below — that needs two
+**What this does *not* cover:** the two-person ER1 exchange in Parts A/B below, that needs two
 ER1 logins over prod and is run manually. This smoke validates the **tool + trust core** on Windows.
 
 ---
 
-## 3. Part A — Mirko's lane (author → publish over ER1 `self`)
+## 3. Part A: Mirko's lane (author → publish over ER1 `self`)
 
 ```bash
 # A1. One-time: generate the author keypair.
@@ -131,7 +131,7 @@ skillctl pack --skill ~/.claude/skills/<name> -o <name>@<ver>.skb \
               --name <name> --version <ver> \
               --author-intent green \
               --author-intent-rationale "Writes one local file. No network. No subprocess."
-#   Determinism check (acceptance): pack a second time and diff — MUST be byte-identical.
+#   Determinism check (acceptance): pack a second time and diff: MUST be byte-identical.
 
 # A3. Sign the bundle (detached ed25519 author signature over the digest).
 skillctl sign --key ~/.config/m3c/skill-registry-self.priv --identity-id id:mirko@m3c <name>@<ver>.skb
@@ -171,10 +171,10 @@ openssl pkey -pubin -in ~/.config/m3c/skill-registry-self.pub -outform DER | tai
 
 ---
 
-## 4. Part B — Eric's lane (consumer: trust → pull → verify → use over ER1 `self`)
+## 4. Part B: Eric's lane (consumer: trust → pull → verify → use over ER1 `self`)
 
 ```bash
-# B1. Verify the fingerprint OUT-OF-BAND first (SPEC-0246 R6.3) — read it back to Mirko.
+# B1. Verify the fingerprint OUT-OF-BAND first (SPEC-0246 R6.3): read it back to Mirko.
 
 # B2. Hand-write the self trust-roots file (NOT `trust add`).
 cat > ~/.claude/trust-roots.yaml <<'YAML'
@@ -184,13 +184,13 @@ fingerprint: sha256:<hex you verified out-of-band>
 governance_minimum: green
 YAML
 
-# B3. G-23 step 1 — dry-run the install to review the plan + get a 5-min token.
+# B3. G-23 step 1: dry-run the install to review the plan + get a 5-min token.
 skillctl pull --registry self --er1-target prod --er1-context <mirko-sub>___skills \
               --dry-run-install
 #   Reads ~/.claude/trust-roots.yaml by default. Prints the create/overwrite plan + token.
 
 # --- HUMAN CHECKPOINT: review the plan, then confirm ---
-# B4. G-23 step 2 — read-only consumer install (no --key, no --emit-installed).
+# B4. G-23 step 2: read-only consumer install (no --key, no --emit-installed).
 skillctl pull --registry self --er1-target prod --er1-context <mirko-sub>___skills \
               --install --trust-mode \
               --confirm-install --dry-run-install-token <tok> --no-checkpoint
@@ -210,7 +210,7 @@ skillctl audit --source all --minimum-governance green --format table   # → EX
 
 ---
 
-## 5. Part C — Negative acceptance (invalid skills MUST be refused)
+## 5. Part C: Negative acceptance (invalid skills MUST be refused)
 
 Fail-closed is the whole point. Each case has a **specific** expected exit code (the full
 table is in [manual §Exit codes](manual-skillctl.md#exit-codes)):
@@ -219,14 +219,14 @@ table is in [manual §Exit codes](manual-skillctl.md#exit-codes)):
 |---|--------|---------|--------|
 | N1 | Tampered bundle (flip a byte) | `skillctl verify-sig --pubkey mirko.pub tampered.skb` | **exit 11** (author_sig_invalid) |
 | N2 | Wrong key / impersonation | `skillctl verify-sig --pubkey mirko.pub attacker.skb` | **exit 11** (control vs attacker.pub = 0) |
-| N3 | No signature | `skillctl verify-sig --pubkey mirko.pub no-sig.skb` | **non-zero** (11 or 1 — never 0) |
+| N3 | No signature | `skillctl verify-sig --pubkey mirko.pub no-sig.skb` | **non-zero** (11 or 1, never 0) |
 | N4 | Digest mismatch | installed bundle modified after signing | **exit 10** |
 | N5 | Registry not trusted / forged root | pull with an unpinned registry key | **exit 12** |
 | N6 | Governance below minimum | pull a skill with no green attestation | **exit 13** |
 | N7 | **Revoked author/bundle** | `skillctl verify <name> --revocations <signed-list>` | **exit 17** (SPEC-0198) |
 
 **Coverage today (honest):** N1–N3 are automated in `demo/kup-training/` (steps 06/07/08).
-N4–N7 are **not** in that harness — N7 (revoke) lives in the separate CISO Kata demo
+N4–N7 are **not** in that harness. N7 (revoke) lives in the separate CISO Kata demo
 (`skillctl-demo --kata K5`), and N4/N5/N6 are asserted by unit tests, not the two-person
 script. Closing N4–N7 in the acceptance harness is a tracked gap (see §8).
 
@@ -264,20 +264,20 @@ seam `IsER1Registry` already draws in code, and the invariant SPEC-0248 §4 asse
 | `audit` (0/2/3), `revoke` (G-23) | `--registry` / `--er1-target` / `--er1-context` / `--share-room` flags |
 | | room-based read authorization (SPEC-0096) |
 
-> The skill-repo backend is **not yet a written spec** — today it is the architectural
+> The skill-repo backend is **not yet a written spec**. Today it is the architectural
 > decision in SPEC-0188 §8 **D3** plus the `IsER1Registry` seam. A named `Backend` interface
-> (and a real SPEC — 0356 is unallocated) is the planned formalisation. When it lands, this
+> (and a real SPEC: 0356 is unallocated) is the planned formalisation. When it lands, this
 > procedure is edited in exactly one place: Parts A5 and B3–B4 (the `publish`/`pull` flags).
 
 ---
 
-## 8. Relationship to the automated harness — and the convergence plan
+## 8. Relationship to the automated harness, and the convergence plan
 
 The `demo/kup-training/` scripts are the **automated regression** for the trust core:
 
 - **What they prove today:** the offline cryptographic chain (keygen→pack→sign→verify),
   the Mirko→Eric transfer (G3 → `artifacts/eric-home/output/hello.txt`), and the negative
-  tests N1–N3 (G4) — driven by `run-and-prove.sh` (exit 0 iff every check passes, `--json`
+  tests N1–N3 (G4): driven by `run-and-prove.sh` (exit 0 iff every check passes, `--json`
   summary) and `run-all.sh` (the four release gates G1–G4).
 - **The divergence:** that harness uses the older **HTTP `/api/skills/*` admission registry**,
   not the **ER1 `self`** path this procedure (and Eric, in the field) use. So it proves the
@@ -285,7 +285,7 @@ The `demo/kup-training/` scripts are the **automated regression** for the trust 
 - **Convergence plan (tracked):**
   1. **Done (best-effort):** `02-mirko-publish.sh` / `05-eric-install-and-run.sh` now attempt
      the ER1 `self` transport (`publish` / `pull --registry self`, target `local` by default) as
-     a **single-machine smoke** — the runner's ER1 login acts as the author. It needs a live
+     a **single-machine smoke**: the runner's ER1 login acts as the author. It needs a live
      local ER1 to actually exercise, and a true two-person cross-principal AC3 run needs two ER1
      accounts (validated manually, §11). The offline chain + N1–N3 remain the automated bar.
   2. Add negative steps for **N4 (exit 10)**, **N5 (12)**, **N6 (13)**, **N7 (17)** (pull N7
@@ -321,7 +321,7 @@ B manually** and recording the result; the harness covers the trust core and neg
 |---------|-------|-----|
 | `skillctl version` prints `dev` | a stale binary earlier on `PATH` (e.g. `~/go/bin/skillctl` shadowing `~/.local/bin/skillctl`) | remove/rebuild the stale one; `which -a skillctl` to find shadows |
 | `403 not authorized for this context` on publish | publishing into a context whose `<sub>` ≠ your Google login (BUG-0165) | publish only into **your own** `<your-sub>___skills`; Eric *reads* Mirko's context |
-| `pull` rejects the trust-roots file | wrong file/schema — used `skill-trust-roots.yaml` (hosted) for the self path | use `~/.claude/trust-roots.yaml` (flat self format); see §2 table |
+| `pull` rejects the trust-roots file | wrong file/schema: used `skill-trust-roots.yaml` (hosted) for the self path | use `~/.claude/trust-roots.yaml` (flat self format); see §2 table |
 | install one-liner 404s | targeting a release that isn't published yet | check the release is published; or set `RELEASE_BASE` to a published tag |
 | `exit 12` on install | registry key not pinned | pin it (HTTP path: `trust add`; self path: fix `trust-roots.yaml`) |
 | `exit 13` | no attestation meets the `green` floor | author must post a green attestation (A6), or lower the floor deliberately |
@@ -330,8 +330,8 @@ B manually** and recording the result; the harness covers the trust core and neg
 
 ## See also
 
-- [Runbook — two-person ER1 exchange (Mirko → Eric)](runbook-two-person-er1-exchange.md) — the copy-paste prod runbook to actually execute Parts A/B together.
-- [manual-skillctl.md](manual-skillctl.md) — the full command/flag/exit-code reference.
-- [quickstart-skillctl.md](quickstart-skillctl.md) — the author happy-path in 5 minutes.
-- [quickstart-skillctl-demo.md](quickstart-skillctl-demo.md) — the offline Kata demo.
+- [Runbook, two-person ER1 exchange (Mirko → Eric)](runbook-two-person-er1-exchange.md), the copy-paste prod runbook to actually execute Parts A/B together.
+- [manual-skillctl.md](manual-skillctl.md): the full command/flag/exit-code reference.
+- [quickstart-skillctl.md](quickstart-skillctl.md): the author happy-path in 5 minutes.
+- [quickstart-skillctl-demo.md](quickstart-skillctl-demo.md): the offline Kata demo.
 - SPEC-0246 (cross-person exchange, AC1–AC5), SPEC-0248 (lifecycle umbrella), SPEC-0188 (trust chain + exit codes).

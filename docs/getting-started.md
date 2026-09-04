@@ -9,19 +9,19 @@ title: Getting Started
 
 - **macOS** (menu bar app uses native Cocoa via cgo)
 - **Go 1.25+** (build from source)
-- **Homebrew dependencies** — install all at once:
+- **Homebrew dependencies**, install all at once:
   ```bash
   brew install pkg-config portaudio ffmpeg
   ```
-  - `pkg-config` — required by cgo to locate PortAudio headers
-  - `portaudio` — microphone recording
-  - `ffmpeg` — audio decoding (required by Whisper at runtime)
-- **Whisper** — for speech-to-text:
+  - `pkg-config`: required by cgo to locate PortAudio headers
+  - `portaudio`: microphone recording
+  - `ffmpeg`: audio decoding (required by Whisper at runtime)
+- **Whisper**, for speech-to-text:
   ```bash
   python3 -m pip install openai-whisper
   ```
   > **Note:** On first use, Whisper downloads its language model automatically. The default `base` model is ~150 MB; the `medium` model is ~1.5 GB. Ensure you have internet access on first launch. You can pre-download with: `whisper --model base /dev/null`
-- **ER1 server** (optional) — for uploading observations to your knowledge base
+- **ER1 server** (optional): for uploading observations to your knowledge base
 
 Or install everything at once with `make deps` (see below).
 
@@ -65,9 +65,9 @@ M3C-Tools.app/
 ```
 
 Key `Info.plist` settings:
-- `LSUIElement = true` — runs as a menu bar agent (no Dock icon)
-- `NSMicrophoneUsageDescription` — microphone permission prompt
-- `NSScreenCaptureUsageDescription` — screen capture permission prompt
+- `LSUIElement = true`: runs as a menu bar agent (no Dock icon)
+- `NSMicrophoneUsageDescription`: microphone permission prompt
+- `NSScreenCaptureUsageDescription`: screen capture permission prompt
 - Bundle ID: `com.kamir.m3c-tools`
 
 ## Configuration
@@ -101,9 +101,9 @@ cp .env.example ~/.m3c-tools.env
 | `M3C_WHISPER_TIMEOUT` | `7200` | Transcription timeout in seconds |
 | `YT_WHISPER_LANGUAGE` | `de` | Transcription language (ISO 639-1) |
 | `M3C_SCREENSHOT_MODE` | `clipboard-first` | Screenshot mode (`clipboard-first` or `interactive`) |
-| `IMPORT_AUDIO_SOURCE` | — | Audio import source folder (for Channel D) |
+| `IMPORT_AUDIO_SOURCE` | n/a | Audio import source folder (for Channel D) |
 | `IMPORT_AUDIO_DEST` | `~/ER1` | Audio import destination folder |
-| `YT_PROXY_URL` | — | HTTP/SOCKS5 proxy for YouTube (rate limit mitigation) |
+| `YT_PROXY_URL` | n/a | HTTP/SOCKS5 proxy for YouTube (rate limit mitigation) |
 
 See [`.env.example`](https://github.com/kamir/m3c-tools/blob/main/.env.example) for the complete list with descriptions.
 
@@ -167,7 +167,7 @@ Or manually:
 ```bash
 rm -f /usr/local/bin/m3c-tools
 rm -rf /Applications/M3C-Tools.app
-# Data preserved at ~/.m3c-tools/ — remove manually if desired
+# Data preserved at ~/.m3c-tools/: remove manually if desired
 ```
 
 ---

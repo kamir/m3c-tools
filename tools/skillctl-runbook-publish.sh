@@ -8,7 +8,7 @@
 # Auth: device token (FR-0043). Reads $ER1_DEVICE_TOKEN, else the persisted
 # token (same as skillctl). Endpoint: POST <ER1_BASE>/api/thoh/runbooks.
 #
-# NOTE: not wired into skillctl-release.sh yet — activate that one-liner once
+# NOTE: not wired into skillctl-release.sh yet: activate that one-liner once
 # thoh_manager is deployed (the endpoint must exist). Until then, run manually.
 #
 # Usage:
@@ -38,7 +38,7 @@ html = open(html_path, encoding="utf-8").read()
 descriptor = {
     "runbook_id": "rb-skillctl-publisher",
     "version": version,
-    "title": "skillctl — sign & publish a skill",
+    "title": "skillctl: sign & publish a skill",
     "purpose": "Turn a person into a verified skill publisher",
     "goal": "A signed, green-attested skill published to the room",
     "tags": ["skillctl", "onboarding", "publisher", "trust"],
@@ -62,4 +62,4 @@ code=$(curl -s -o /tmp/thoh-publish.out -w '%{http_code}' \
 echo "HTTP $code"
 cat /tmp/thoh-publish.out 2>/dev/null; echo
 [ "$code" = "201" ] || { echo "publish failed" >&2; exit 1; }
-echo "==> runbook in catalog — assign it from the THOH board."
+echo "==> runbook in catalog: assign it from the THOH board."

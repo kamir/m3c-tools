@@ -21,7 +21,7 @@ import (
 //
 //	{"name": "...", "token": <wire-shape-token>, "expected_canonical_b64": "..."}
 //
-// Each token is the on-wire JSON shape (registry_signature_b64 left empty —
+// Each token is the on-wire JSON shape (registry_signature_b64 left empty:
 // the canonical message excludes the signature field).
 //
 // SPEC-0202 §4.1, §6, §15 D1.
@@ -29,7 +29,7 @@ import (
 // FAILURE MODE: if this test fails, signatures produced by the Python
 // issuer will not verify in the Go gateway (or vice versa). DO NOT
 // "fix" by adjusting either canonicalizer until you've identified
-// which side is wrong against the schema/SPEC — both implementations
+// which side is wrong against the schema/SPEC, both implementations
 // are signed against by clients in the wild.
 func TestCanonicalize_PythonParity_Vectors(t *testing.T) {
 	path := filepath.Join("testdata", "canonical-vectors.jsonl")
@@ -40,7 +40,7 @@ func TestCanonicalize_PythonParity_Vectors(t *testing.T) {
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
-	// JSONL lines can be long with full envelopes — bump the buffer.
+	// JSONL lines can be long with full envelopes: bump the buffer.
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	count := 0
@@ -93,6 +93,6 @@ func TestCanonicalize_PythonParity_Vectors(t *testing.T) {
 		t.Fatalf("scanner: %v", err)
 	}
 	if count == 0 {
-		t.Fatal("no vectors loaded — testdata/canonical-vectors.jsonl is empty?")
+		t.Fatal("no vectors loaded: testdata/canonical-vectors.jsonl is empty?")
 	}
 }

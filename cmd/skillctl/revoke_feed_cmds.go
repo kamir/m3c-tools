@@ -1,6 +1,6 @@
 package main
 
-// revoke_feed_cmds.go — `skillctl revoke feed` (FR-0045 D5).
+// revoke_feed_cmds.go: `skillctl revoke feed` (FR-0045 D5).
 //
 // Operator-facing view of the signed revocation HEAD (the G5 kill-switch feed):
 //   --status  (default) fetch the HEAD from the registry, verify its ed25519
@@ -30,7 +30,7 @@ func runRevokeFeed(args []string, stdout, stderr io.Writer) int {
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: skillctl revoke feed [--status] [--refresh] [--registry URL] [--tenant T]")
 		fmt.Fprintln(stderr, "")
-		fmt.Fprintln(stderr, "Inspect or refresh the signed revocation HEAD — the G5 kill-switch feed (FR-0045).")
+		fmt.Fprintln(stderr, "Inspect or refresh the signed revocation HEAD: the G5 kill-switch feed (FR-0045).")
 		fmt.Fprintln(stderr, "  --status  (default) fetch + verify the HEAD against the pinned registry key")
 		fmt.Fprintln(stderr, "  --refresh sweep now: adopt the HEAD into the local cache + freshness anchor")
 		fmt.Fprintln(stderr, "")
@@ -70,11 +70,11 @@ func runRevokeFeed(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "refreshed: %d revoked digest(s), epoch=%d issued_at=%q online=%v\n",
 			len(set), epoch, issuedAt, online)
 		if ferr != nil {
-			// WF-001 H-F1 — MANAGED fail-closed: the revoked-set fetch was unavailable
+			// WF-001 H-F1. MANAGED fail-closed: the revoked-set fetch was unavailable
 			// and no fresh cache bounds staleness. Surface it with the SAME semantic
 			// exit code the sweep + hook use (exitRevocationStale / 22), not the generic
 			// 1, so an operator script keying on 22 catches this fail-closed signal at
-			// all three sites — rather than a misleading OK.
+			// all three sites: rather than a misleading OK.
 			fmt.Fprintf(stderr, "skillctl revoke feed --refresh: revocation unavailable under managed trust roots (fail-closed, exit %d): %v\n", exitRevocationStale, ferr)
 			return exitRevocationStale
 		}

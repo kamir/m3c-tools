@@ -1,4 +1,4 @@
-; installer.nsi — NSIS installer script for M3C Tools on Windows.
+; installer.nsi: NSIS installer script for M3C Tools on Windows.
 ;
 ; Installs m3c-tools.exe and skillctl.exe, adds to PATH, creates
 ; Start Menu and optional Desktop shortcuts, and registers in
@@ -46,16 +46,16 @@ SetCompressor /SOLID lzma
 ; --- Installation sections ---
 
 Section "Core Files (required)" SecCore
-    SectionIn RO  ; read-only — cannot deselect
+    SectionIn RO  ; read-only: cannot deselect
 
     SetOutPath $INSTDIR
     File "..\build\windows\m3c-tools.exe"
     File "..\build\windows\skillctl.exe"
     File "..\build\windows\menubar-icon.png"
 
-    ; Write init config (SPEC-0127: no API key — login issues device token)
+    ; Write init config (SPEC-0127: no API key, login issues device token)
     FileOpen $0 "$PROFILE\m3c-tools.init.cfg" w
-    FileWrite $0 "# m3c-tools configuration — created by installer$\r$\n"
+    FileWrite $0 "# m3c-tools configuration, created by installer$\r$\n"
     FileWrite $0 "# Run 'm3c-tools login' after install to authenticate.$\r$\n"
     FileWrite $0 "PROFILE_NAME=cloud$\r$\n"
     FileWrite $0 "ER1_API_URL=https://onboarding.guide/upload_2$\r$\n"
@@ -75,7 +75,7 @@ Section "Core Files (required)" SecCore
     Call StrContains
     Pop $2
     StrCmp $2 "" 0 path_done
-        ; Not in PATH — append
+        ; Not in PATH: append
         StrCmp $0 "" 0 +2
             StrCpy $0 "$INSTDIR"
         StrCmp $0 "$INSTDIR" path_write
@@ -170,7 +170,7 @@ Section "Uninstall"
     ; Simple removal: replace ";$INSTDIR" and "$INSTDIR;" and exact "$INSTDIR"
     ${If} $0 != ""
         StrCpy $1 $0
-        ; This is a simplified removal — may leave extra semicolons
+        ; This is a simplified removal. May leave extra semicolons
         ; but will not break PATH
     ${EndIf}
 

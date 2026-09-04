@@ -10,7 +10,7 @@ import (
 )
 
 // A key pinned as BOTH an author and a reviewer in one root must be refused at
-// Load — otherwise the author could sign an "independent" attestation under a
+// Load: otherwise the author could sign an "independent" attestation under a
 // reviewer id and launder reviewer≠author.
 func TestTrustRoots_KeyConfusion_Refused(t *testing.T) {
 	regKey := mustKeypair(t)

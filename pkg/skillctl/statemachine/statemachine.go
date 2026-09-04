@@ -5,7 +5,7 @@
 //
 //	(connectivity × cache ages × anchor presence × trust-basis presence)
 //
-// to one of four named states — online / degraded / offline / locked — via an
+// to one of four named states, online / degraded / offline / locked, via an
 // INJECTABLE clock. It holds NO state, touches NO filesystem, and reaches NO
 // network; the caller gathers the Inputs (cache issued-at → ages against the
 // injected clock, reachability probe, trust-basis file sweep) and this package
@@ -14,7 +14,7 @@
 // What this package IS (R-7.4): the state machine introduces NO second decision
 // ladder. It only supplies the `online` flag that gates the R-1.3 online
 // fallback (AllowOnlineFallback) plus two advisory predicates
-// (HighRiskFailsClosed, DenyAllManaged) that MIRROR — never replace — the
+// (HighRiskFailsClosed, DenyAllManaged) that MIRROR, never replace, the
 // authoritative freshness.go R3 floor and the SPEC-0247 unmanaged=allow default.
 // The precedence remains the one R-1.3 ladder: emergency deny-list > allowlist >
 // revoked/revocation staleness > verdict cache > unmanaged policy > state
@@ -26,14 +26,14 @@
 //   - NEVER-BRICK (R-7.1/7.2): a healthy self/ER1 sidecar-only host with fresh
 //     caches computes online (or degraded when disconnected), NEVER locked.
 //     `trust basis present` INCLUDES the SPEC-0225 self/ER1 roots and the
-//     `.m3c-provenance` sidecar — not only the SPEC-0188 skill-trust-roots.yaml
+//     `.m3c-provenance` sidecar, not only the SPEC-0188 skill-trust-roots.yaml
 //     (legitimately absent on self hosts). The caller folds all of those into
 //     Inputs.TrustBasisPresent.
 //
 //   - LOCKED IS OPT-IN (R-7.2, AC-7): `locked = deny all managed skills` is
 //     enterprise policy ONLY. A fresh / unmanaged / air-gapped machine WITHOUT
 //     an enterprise profile (OfflinePolicy.Enterprise == false) NEVER enters
-//     locked — the shipped unmanaged=allow default is untouched.
+//     locked: the shipped unmanaged=allow default is untouched.
 //
 //   - EMERGENCY IS EXEMPT (R-7.3, AC-7): the emergency deny-list is exempt from
 //     cache expiry and from the state machine. EmergencyActive is a pure
@@ -54,23 +54,23 @@ import (
 type State int
 
 const (
-	// StateOnline — the registry is reachable, so the online verify fallback is
+	// StateOnline: the registry is reachable, so the online verify fallback is
 	// available. The fully healthy posture. This is the ONLY state in which the
 	// R-1.4 online fallback may run.
 	StateOnline State = iota
 
-	// StateDegraded — the registry is unreachable BUT the policy / trust /
+	// StateDegraded: the registry is unreachable BUT the policy / trust /
 	// revocation caches are all fresh within the configured max_*_age ceilings.
 	// The hot path is strictly local; local decisions are trustworthy because
 	// the caches are current.
 	StateDegraded
 
-	// StateOffline — caches are present but AGING past their ceilings. The hot
+	// StateOffline: caches are present but AGING past their ceilings. The hot
 	// path is strictly local and high-risk actions fail closed per SPEC-0279
-	// (enforced by freshness.go — this state only NAMES the posture).
+	// (enforced by freshness.go: this state only NAMES the posture).
 	StateOffline
 
-	// StateLocked — there is NO trust basis at all AND an enterprise profile has
+	// StateLocked: there is NO trust basis at all AND an enterprise profile has
 	// opted in. Deny all managed skills (exit 28 `offline_locked`). NEVER reached
 	// without OfflinePolicy.Enterprise, so it can never brick a self / unmanaged /
 	// air-gapped host (R-7.2).
@@ -83,7 +83,7 @@ const (
 func (s State) MarshalJSON() ([]byte, error) { return json.Marshal(s.String()) }
 
 // String returns the stable lower-case label used in `session-baseline` output,
-// audit records, and any downstream console. Keep these tokens stable — they are
+// audit records, and any downstream console. Keep these tokens stable: they are
 // an additive contract.
 func (s State) String() string {
 	switch s {
@@ -110,7 +110,7 @@ func (s State) String() string {
 // The zero value is the SHIPPED DEFAULT: not enterprise, no cache ceilings
 // (0 == "no ceiling" → caches never expire the posture), unmanaged=allow. A host
 // with no offline_policy block therefore computes online/degraded and NEVER
-// locked — exactly the day-one plugin-compat behaviour.
+// locked: exactly the day-one plugin-compat behaviour.
 type OfflinePolicy struct {
 	// AllowCachedTrustedSkills allows a cached, trust-verified skill to run while
 	// disconnected (degraded/offline). Advisory to the decision ladder; the state
@@ -129,7 +129,7 @@ type OfflinePolicy struct {
 	MaxPolicyCacheAge time.Duration
 
 	// MaxRevocationCacheAge bounds the revocation cache freshness. Zero == no
-	// ceiling. NOTE: this bounds the ORDINARY revocation cache only — the
+	// ceiling. NOTE: this bounds the ORDINARY revocation cache only: the
 	// emergency deny-list is EXEMPT (see EmergencyActive).
 	MaxRevocationCacheAge time.Duration
 
@@ -141,7 +141,7 @@ type OfflinePolicy struct {
 
 	// Enterprise gates the two consequential knobs: it is the opt-in that enables
 	// the `locked` state and permits RequireLocalAudit. Without it the host can
-	// NEVER lock — the never-brick guard lives HERE and in Compute.
+	// NEVER lock. The never-brick guard lives HERE and in Compute.
 	Enterprise bool
 }
 
@@ -189,40 +189,40 @@ type Inputs struct {
 // side effects.
 //
 // Precedence (this is a VIEW of the R-1.3 ladder's state-default rung, not a new
-// ladder — R-7.4):
+// ladder: R-7.4):
 //
-//  1. locked  — ENTERPRISE opt-in AND no trust basis at all. Checked first
+//  1. locked: ENTERPRISE opt-in AND no trust basis at all. Checked first
 //     because "no policy basis" is the most severe posture. The Enterprise gate
 //     is the never-brick guard: a non-enterprise host can never reach this rung.
-//  2. online  — the registry is reachable, so the online fallback is available.
+//  2. online: the registry is reachable, so the online fallback is available.
 //     Reachability is the discriminator; a reachable host can always refresh, so
 //     it is online regardless of current cache age.
-//  3. degraded — disconnected but every cache is fresh within its ceiling.
-//  4. offline — disconnected and at least one cache is aging past its ceiling
+//  3. degraded: disconnected but every cache is fresh within its ceiling.
+//  4. offline: disconnected and at least one cache is aging past its ceiling
 //     (high-risk fails closed per SPEC-0279, enforced downstream).
 func Compute(in Inputs, pol OfflinePolicy) State {
-	// (1) locked — enterprise opt-in ONLY, and only with NO trust basis at all.
+	// (1) locked: enterprise opt-in ONLY, and only with NO trust basis at all.
 	// `trust basis present` is broad (SPEC-0188 roots OR self/ER1 roots OR the
 	// .m3c-provenance sidecar OR a translog anchor), folded by the caller into
-	// TrustBasisPresent / AnchorPresent. A self / unmanaged / air-gapped host —
-	// or ANY non-enterprise host — therefore never locks.
+	// TrustBasisPresent / AnchorPresent. A self / unmanaged / air-gapped host,
+	// or ANY non-enterprise host, therefore never locks.
 	if pol.Enterprise && !hasTrustBasis(in) {
 		return StateLocked
 	}
 
-	// (2) online — the registry is reachable: the R-1.4 online fallback is
+	// (2) online. The registry is reachable: the R-1.4 online fallback is
 	// available. A reachable host can always re-sync, so cache age does not
 	// demote it below online.
 	if in.RegistryReachable {
 		return StateOnline
 	}
 
-	// (3) degraded — disconnected but caches fresh within the configured ceilings.
+	// (3) degraded: disconnected but caches fresh within the configured ceilings.
 	if cachesFresh(in, pol) {
 		return StateDegraded
 	}
 
-	// (4) offline — disconnected and caches aging past a ceiling.
+	// (4) offline: disconnected and caches aging past a ceiling.
 	return StateOffline
 }
 
@@ -253,7 +253,7 @@ func cachesFresh(in Inputs, pol OfflinePolicy) bool {
 // maxFutureSkew is how far a cache's issued_at may sit in the FUTURE relative to
 // the injected clock (a negative age) before it is treated as dishonest. A small
 // skew (NTP jitter, sub-second rounding) is tolerated; beyond it the cache is
-// treated as stale (fail-safe), mirroring freshness.go's maxFutureClockSkew — a
+// treated as stale (fail-safe), mirroring freshness.go's maxFutureClockSkew. A
 // future-dated cache must not "look fresh forever".
 const maxFutureSkew = 5 * time.Minute
 
@@ -277,16 +277,16 @@ func ageFresh(age, ceiling time.Duration) bool {
 // AllowOnlineFallback reports whether the R-1.3 online fallback may run in the
 // given state (SPEC-0317 R-1.4 P2, opt-in). ONLY `online` permits it; in
 // degraded / offline / locked the hot path is strictly local. This is the single
-// flag the state machine feeds the ladder — it does NOT reorder the ladder.
+// flag the state machine feeds the ladder. It does NOT reorder the ladder.
 func AllowOnlineFallback(s State) bool { return s == StateOnline }
 
 // DenyAllManaged reports whether the state denies managed skills. ONLY `locked`
 // does (enterprise opt-in, exit 28 `offline_locked`). It NEVER affects unmanaged
-// skills — the shipped unmanaged=allow default is untouched (R-7.2). Because
+// skills: the shipped unmanaged=allow default is untouched (R-7.2). Because
 // Compute only returns locked under Enterprise, this can never brick a
 // non-enterprise host. NOTE (scope): at the gate this rung sits below the
 // operator allowlist (§9.4), so a same-uid user can allowlist a specific managed
-// skill past the lock — the deny is over NON-ALLOWLISTED managed skills, not
+// skill past the lock. The deny is over NON-ALLOWLISTED managed skills, not
 // literally all of them.
 func DenyAllManaged(s State) bool { return s == StateLocked }
 
@@ -294,7 +294,7 @@ func DenyAllManaged(s State) bool { return s == StateLocked }
 // state. True for offline and locked; false for online and degraded (degraded
 // caches are fresh, so cached trust decisions stand). This MIRRORS the
 // authoritative SPEC-0279 freshness.go R3 floor for display/gating; it is NOT the
-// enforcer — freshness.go remains the one place high-risk fail-closed is applied
+// enforcer. freshness.go remains the one place high-risk fail-closed is applied
 // (R-7.4). A defensive default: any unrecognised (never-produced) state also
 // fails closed.
 func HighRiskFailsClosed(s State) bool {
@@ -302,7 +302,7 @@ func HighRiskFailsClosed(s State) bool {
 }
 
 // EmergencyActive reports whether the emergency deny-list is in force. It is a
-// PURE PASSTHROUGH of emergencyPresent — the state is intentionally the blank
+// PURE PASSTHROUGH of emergencyPresent. The state is intentionally the blank
 // parameter so this signature documents, at the type level, that NO state may
 // suppress the compromise channel (R-7.3, AC-7). The emergency deny-list is
 // EXEMPT from cache expiry: an old-but-valid emergency list still denies in

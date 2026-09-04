@@ -1,5 +1,5 @@
 // Package consolidate analyzes a skill inventory for duplicates, orphans,
-// drift, and missing frontmatter — then optionally fixes annotation gaps.
+// drift, and missing frontmatter, then optionally fixes annotation gaps.
 package consolidate
 
 import (

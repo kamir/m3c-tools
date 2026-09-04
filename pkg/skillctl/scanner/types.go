@@ -1,4 +1,4 @@
-// Tier + Source types and ResolveDefaults — SPEC-0189 Phase 1.
+// Tier + Source types and ResolveDefaults: SPEC-0189 Phase 1.
 //
 // Claude Code resolves skills from three precedence tiers (project > user >
 // plugin). This file defines the canonical Tier and Source values and the
@@ -25,7 +25,7 @@ const (
 type Source string
 
 const (
-	// SourceClaude is the default — user tier + plugin tier (matches
+	// SourceClaude is the default: user tier + plugin tier (matches
 	// what Claude Code itself resolves at runtime per SPEC-0189 §10 D3).
 	SourceClaude   Source = "claude"
 	SourceUser     Source = "user"
@@ -51,7 +51,7 @@ type ScanRoot struct {
 //
 // SourceClaude expands to user + plugin (SPEC-0189 §10 D3).
 // SourceAll expands to user + plugin only (project tier requires explicit
-// paths from the caller; auto-discovery is intentionally out of scope —
+// paths from the caller; auto-discovery is intentionally out of scope:
 // see SPEC-0189 §12).
 func ResolveDefaults(sources []Source) []ScanRoot {
 	configDir := claudeConfigDir()

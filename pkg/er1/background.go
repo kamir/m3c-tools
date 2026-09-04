@@ -62,9 +62,9 @@ func StartBackgroundRetry(queuePath string, cfg *Config, interval time.Duration,
 		if err == nil {
 			bg.OnLog(fmt.Sprintf("[bg-retry] SUCCESS: %s", entry.ID))
 		} else if removed {
-			bg.OnLog(fmt.Sprintf("[bg-retry] DROPPED: %s — max retries exceeded", entry.ID))
+			bg.OnLog(fmt.Sprintf("[bg-retry] DROPPED: %s, max retries exceeded", entry.ID))
 		} else {
-			bg.OnLog(fmt.Sprintf("[bg-retry] FAILED: %s — attempt %d: %v", entry.ID, entry.RetryCount+1, err))
+			bg.OnLog(fmt.Sprintf("[bg-retry] FAILED: %s, attempt %d: %v", entry.ID, entry.RetryCount+1, err))
 		}
 	}
 
@@ -107,7 +107,7 @@ func (bg *BackgroundRetry) Stop(timeout time.Duration) {
 	case <-bg.done:
 		// goroutine finished cleanly
 	case <-time.After(timeout):
-		// timed out waiting — goroutine will be cancelled by context
+		// timed out waiting: goroutine will be cancelled by context
 	}
 }
 

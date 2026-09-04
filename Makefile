@@ -1,4 +1,4 @@
-# m3c-tools — Multi-Modal-Memory Tools
+# m3c-tools: Multi-Modal-Memory Tools
 # Makefile for building, testing, and running e2e tests
 
 BINARY   = m3c-tools
@@ -12,7 +12,7 @@ ICON_SRC = maindset_icon.png
 
 # Build metadata stamped into the binaries via ldflags (version.go's
 # main.version / main.commit / main.date). Local `make build` gets real values
-# too — not just the release CI. Release/CI overrides these with the clean tag.
+# too: not just the release CI. Release/CI overrides these with the clean tag.
 GIT_VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo dev)
 GIT_COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 BUILD_DATE  ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -71,7 +71,7 @@ build-skillctl:
 build-skillctl-demo: build-skillctl
 	@echo "Building skillctl-demo..."
 	go build -ldflags="$(GO_LDFLAGS)" -o $(BUILD_DIR)/skillctl-demo ./cmd/skillctl-demo
-	@echo "Built $(BUILD_DIR)/skillctl-demo — run: $(BUILD_DIR)/skillctl-demo (or --selftest)"
+	@echo "Built $(BUILD_DIR)/skillctl-demo, run: $(BUILD_DIR)/skillctl-demo (or --selftest)"
 
 # Build all commands (including POCs)
 .PHONY: build-all
@@ -97,13 +97,13 @@ e2e:
 	go test -v -count=1 ./e2e/ -run TestRecorderEncodeWAV
 	go test -v -count=1 ./e2e/ -run TestRecorderStats
 
-# Fast tests — no network, no hardware, no server
+# Fast tests: no network, no hardware, no server
 .PHONY: test-unit
 test-unit:
 	@echo "Running unit tests (offline)..."
 	go test -v -count=1 ./e2e/ -run "TestComposite|TestBuild|TestParseTagLine|TestER1Config|TestER1Queue|TestER1EnqueueFailure|TestUploadFailure|TestRecorderEncodeWAV|TestRecorderStats|TestExportsDB|TestFilesDB|TestHashFile|TestFormatterLoader|TestPrettyPrint|TestFormatTranscript|TestFormatSnippet|TestFormatKeyValue|TestFormatTable|TestFormatSection|TestFormatStatusLine|TestBuildApp|TestTranslateFlagParsing|TestTranslateNotTranslatable|TestTranslateTranslatable|TestRetryQueue|TestRetryBackoffTiming|TestRetryBackoffCustomBase|TestRetryProcessingOrder|TestRetryPartialFailure|TestRetryMaxRetriesDropsEntry|TestRetryDropCallback|TestRetryRespectsBackoffDelay|TestRetryProcessesAfterBackoffElapsed|TestRetryGracefulShutdownOnCancel|TestRetryRunStopsOnContextCancel|TestRetryRunProcessesMultipleCycles|TestRetryEmptyQueue|TestRetryOnRetryCallback|TestTranscriptFilterExcludeGenerated|TestTranscriptFilterExcludeManuallyCreated|TestTranscriptFilterBothExcludes|TestTranscriptFilterEmptyList|TestTranscriptFilterAllSameType|TestProxyBuildURL|TestProxyGetTransport|TestProxyNewWithProxy|TestProxyHTTPIntegration|TestProxyWebshare|TestProxySocks5URL|TestRetryRunnerProcessOnce|TestRetryRunnerDropExceedMaxRetries|TestRetryRunnerBackoff|TestRetryRunnerRunLoop|TestRetryRunnerBackoffSkip|TestBackgroundRetryStartsAndProcesses|TestBackgroundRetryStopsGracefully|TestBackgroundRetryHandlesFailures|TestBackgroundRetryEmptyQueue|TestBackgroundRetryLogging|TestTranscriptImportFromSnippets|TestTranscriptImportPreservesMetadata|TestTranscriptListSearchByLanguage|TestTranscriptListSearchGenerated|TestTranscriptListSearchManual|TestTranscriptSearchNotFound|TestTranscriptExportText|TestTranscriptExportSRT|TestTranscriptExportJSON|TestTranscriptExportWebVTT|TestTranscriptExportPretty|TestTranscriptExportAllFormats|TestTranscriptExportToFile|TestTranscriptListString|TestTranscriptListStringEmpty|TestMenubarIntegrationFullLifecycle|TestMenubarIntegrationTranscriptFetcherWired|TestMenubarIntegrationStatusDuringFetch|TestMenubarIntegrationMenuItemsComplete|TestMenubarIntegrationConcurrentStatusUpdates|TestMenubarIntegrationHistoryInMenuUpdates|TestAppBundleLaunchHelp|TestAppBundleLaunchUnknownCommand|TestAppBundleLaunchNoArgs|TestAppBundleRetryGracefulShutdown|TestAppBundleRetryExitsOnSIGINT|TestAppBundleMenubarFlagParsing|TestAppBundleExecPermissions|TestAppBundleInfoPlistLSUIElement|TestScheduleCommand|TestScheduleCommandDuplicate|TestScheduleCommandMissingTranscript|TestStatusCommand|TestStatusCommandEntryNotFound|TestCancelCommand|TestCancelCommandNotFound|TestScheduleStatusCancelWorkflow|TestCLIHelp|TestCLIUnknownCommand|TestCLINoArgs|TestRepoRoot|TestWriteFixture|TestWriteFixtureBytes|TestFixtureDir|TestTempDataDir|TestWithEnv|TestCLIResultAssertions|TestRunCLIWithEnv|TestScreenshotModeConstants|TestScreenshotClipboardImageTypes|TestScreenshotCLIHelpOutput|TestImporterScanDir|TestImporterScanDirEmpty|TestImporterScanDirNotExist|TestImporterScanDirNotDirectory|TestImporterIsAudioFile|TestImporterExtensionList|TestImporterScanDirHiddenSkip|TestImporterScanDirCaseInsensitive|TestImporterScanDirAbsPath|TestImporterScanDirDeepNesting|TestImporterExtensionCoverage|TestImporterCLIExtensions|TestImporterCLIScanDir|TestImporterCLIEmptyDir|TestImporterCLINonexistentDir|TestImporterCLINoArgs|TestFieldnoteCompositeDoc|TestFieldnoteCompositeDocWithNotes|TestFieldnoteTags|TestBuildFieldnoteTags|TestPlaudConfigDefaults|TestPlaudTokenRoundTrip|TestPlaudFormatDuration"
 
-# Network tests — require internet
+# Network tests: require internet
 # By default only runs TestTranscript (lightweight, no thumbnail API calls).
 # To include thumbnail + translated transcript tests (higher API load):
 #   make test-network M3C_TEST_FULL_NETWORK=1
@@ -113,23 +113,23 @@ ifdef M3C_TEST_FULL_NETWORK
 	@echo "Running full network tests (transcript + thumbnail + translate)..."
 	M3C_YT_CALLS_ENFORCE_ALL=1 go test -v -count=1 ./e2e/ -run "TestTranscript|TestThumbnail|TestTranscriptFetchTranslated"
 else
-	@echo "Running network tests (transcript only — set M3C_TEST_FULL_NETWORK=1 for all)..."
+	@echo "Running network tests (transcript only: set M3C_TEST_FULL_NETWORK=1 for all)..."
 	M3C_YT_CALLS_ENFORCE_ALL=1 go test -v -count=1 ./e2e/ -run "TestTranscriptList|TestTranscriptFetch|TestTranscriptFormatters|TestTranscriptInvalidVideoID"
 endif
 
-# ER1 tests — require running ER1 server
+# ER1 tests: require running ER1 server
 .PHONY: test-er1
 test-er1:
 	@echo "Running ER1 tests..."
 	go test -v -count=1 ./e2e/ -run "TestER1Reachable|TestER1Upload"
 
-# Whisper tests — require whisper binary
+# Whisper tests: require whisper binary
 .PHONY: test-whisper
 test-whisper:
 	@echo "Running whisper tests..."
 	go test -v -count=1 ./e2e/ -run TestWhisper
 
-# Recorder tests — require PortAudio + microphone
+# Recorder tests: require PortAudio + microphone
 .PHONY: test-recorder
 test-recorder:
 	@echo "Running recorder tests..."
@@ -139,7 +139,7 @@ test-recorder:
 .PHONY: build-app
 build-app: build
 	@if [ -e "$(APP_BUNDLE)" ] && [ ! -w "$(APP_BUNDLE)" ]; then \
-		echo "ERROR: '$(APP_BUNDLE)' exists but is not writable — most likely root-owned"; \
+		echo "ERROR: '$(APP_BUNDLE)' exists but is not writable: most likely root-owned"; \
 		echo "  from an earlier 'sudo make'. Remove it once (this is the ONLY sudo needed):"; \
 		echo "      sudo rm -rf $(APP_BUNDLE)"; \
 		echo "  then rebuild WITHOUT sudo:  make build-app   (or: make menubar-app)"; \
@@ -236,16 +236,16 @@ install: build-app
 
 # Grant macOS privacy permissions for Screen Recording, Microphone,
 # Accessibility, and Input Monitoring. Opens System Settings panes
-# one at a time — waits for user to press Enter before opening the next.
+# one at a time: waits for user to press Enter before opening the next.
 .PHONY: permissions
 permissions:
 	@echo "=== macOS Permissions for $(APP_NAME) ($(APP_ID)) ==="
 	@echo ""
 	@echo "The app requires these permissions:"
-	@echo "  1. Screen Recording  — screenshot capture"
-	@echo "  2. Microphone        — voice recording"
-	@echo "  3. Accessibility     — window/app interaction"
-	@echo "  4. Input Monitoring  — keystroke capture"
+	@echo "  1. Screen Recording: screenshot capture"
+	@echo "  2. Microphone: voice recording"
+	@echo "  3. Accessibility: window/app interaction"
+	@echo "  4. Input Monitoring: keystroke capture"
 	@echo ""
 	@echo "Toggle ON '$(APP_NAME)' in each pane (add with '+' if not listed)."
 	@echo "Close System Settings before pressing Enter for the next step."
@@ -290,17 +290,17 @@ run: build
 # menuet unconditionally touches [UNUserNotificationCenter currentNotificationCenter]
 # at startup (createAndRunApplication -> initNotifications). On macOS 14+ that API
 # HARD-ASSERTS ("bundleProxyForCurrentProcess is nil") unless the running executable
-# lives inside a .app bundle — so the old bare-binary run ($(BUILD_DIR)/$(BINARY))
+# lives inside a .app bundle, so the old bare-binary run ($(BUILD_DIR)/$(BINARY))
 # aborts on launch. Running the bundle's INNER executable directly gives a valid
 # bundle proxy (verified: notification init succeeds) while keeping the foreground
-# stdout dev workflow — unlike `menubar-app`, which detaches via `open`.
+# stdout dev workflow: unlike `menubar-app`, which detaches via `open`.
 .PHONY: menubar
 menubar: check-not-root build-app
 	@echo "Running $(APP_NAME).app (foreground; Ctrl-C to quit). Logs also at: ~/.m3c-tools/m3c-tools.log"
 	$(APP_BUNDLE)/Contents/MacOS/$(BINARY) menubar $(ARGS)
 
 # Guard: the menu bar app MUST run as the logged-in user, never as root. A GUI
-# menu-bar app launched via `sudo` renders a broken menu — no Quit, no Sign-In
+# menu-bar app launched via `sudo` renders a broken menu, no Quit, no Sign-In
 # (BUG-0192). This runs before build-app so a `sudo make menubar-app` fails
 # fast without creating root-owned artifacts.
 .PHONY: check-not-root
@@ -308,7 +308,7 @@ check-not-root:
 	@if [ "$$(id -u)" = "0" ]; then \
 		echo "ERROR: do NOT run this with sudo."; \
 		echo "  The menu bar app must run as your login user, or macOS renders a broken"; \
-		echo "  menu (no Quit / no Sign-In — BUG-0192)."; \
+		echo "  menu (no Quit / no Sign-In: BUG-0192)."; \
 		echo "  If '$(APP_BUNDLE)' is root-owned from an earlier sudo run, remove it once:"; \
 		echo "      sudo rm -rf $(APP_BUNDLE)"; \
 		echo "  then run WITHOUT sudo:  make menubar-app"; \
@@ -316,13 +316,13 @@ check-not-root:
 	fi
 
 # Build + launch the BUNDLED menu bar app (.app). Unlike `make menubar` (which
-# runs the bare binary), this runs inside a proper application bundle — which is
+# runs the bare binary), this runs inside a proper application bundle, which is
 # what macOS needs to reliably render the menu bar icon AND show notifications.
 # Prefer this over `make menubar` for anything but quick CLI-style debugging.
 # MUST be run WITHOUT sudo (see check-not-root / BUG-0192).
 .PHONY: menubar-app
 menubar-app: check-not-root build-app
-	@echo "Launching $(APP_BUNDLE) (bundled — menu bar icon + notifications work here)..."
+	@echo "Launching $(APP_BUNDLE) (bundled: menu bar icon + notifications work here)..."
 	@open $(APP_BUNDLE)
 	@echo "Running as a menu bar app. Logs: ~/.m3c-tools/m3c-tools.log"
 	@echo "Quit from the menu bar's Quit item, or: pkill -f '$(APP_NAME).app/Contents/MacOS/$(BINARY)'"
@@ -351,7 +351,7 @@ worktree:
 	wtpath="../wt/$(SPEC)/$(STEP)"; \
 	if [ -e "$$wtpath" ]; then echo "$$wtpath already exists"; exit 2; fi; \
 	if git show-ref --verify --quiet "refs/heads/$(BRANCH)"; then \
-		echo "Branch $(BRANCH) exists — attaching worktree to it"; \
+		echo "Branch $(BRANCH) exists: attaching worktree to it"; \
 		git worktree add "$$wtpath" "$(BRANCH)"; \
 	else \
 		echo "Creating branch $(BRANCH) from $$base"; \
@@ -388,16 +388,16 @@ code-review:
 check-docs:
 	@./scripts/check-docs.sh
 
-# Release targets — code review + docs check run before release
+# Release targets: code review + docs check run before release
 #
 # `release` LEITET die Stufe aus den Commits ab (scripts/derive-bump.sh), statt
 # sie zu raten. Vorher war es fest `release-patch` verdrahtet: deshalb ist der
-# Fleet-Kill-Switch (FR-0045) als v2.8.1 ausgeliefert worden — eine Patch-Nummer
+# Fleet-Kill-Switch (FR-0045) als v2.8.1 ausgeliefert worden: eine Patch-Nummer
 # fuer ein Feature. Gegenprobe an der Historie: die Regel haette genau diesen
 # Fall gefangen und stimmt sonst mit den menschlichen Entscheidungen ueberein.
 #
 # MAJOR wird nie automatisch vergeben. "Breaking" ist eine Aussage ueber die
-# AUFRUFER, und die sieht kein Diff — bei drei ueber HTTP verdrahteten Systemen
+# AUFRUFER, und die sieht kein Diff: bei drei ueber HTTP verdrahteten Systemen
 # ist das keine Formalie. Der Ableiter bricht dann ab und verlangt die
 # ausdrueckliche Handlung `make release-major`.
 .PHONY: release release-auto release-patch release-minor release-major
@@ -427,7 +427,7 @@ release-major: code-review check-docs
 # ── skillctl release chain (docs/releasing.md · skill: /release-skillctl) ──────
 # skillctl is a SEPARATE, tag-driven line (skillctl/vX.Y.Z → skillctl-release.yml);
 # `release-skillctl` runs every PRE-TAG gate for it, then prints the derived
-# version context + the next step. It deliberately does NOT tag — tagging
+# version context + the next step. It deliberately does NOT tag. Tagging
 # origin/master BY HASH is the confirmed manual step (the point of no return).
 .PHONY: release-skillctl skillctl-smoke
 release-skillctl: build-skillctl build-skillctl-demo vet lint check-docs
@@ -440,7 +440,7 @@ release-skillctl: build-skillctl build-skillctl-demo vet lint check-docs
 	 echo "  commits since     : $$(git rev-list --count $$last..origin/master 2>/dev/null) on origin/master"; \
 	 echo ""; \
 	 echo "  ✓ pre-tag gates green. Next: sync CHANGELOG, then tag origin/master BY HASH"; \
-	 echo "    (skillctl/vX.Y.Z) + push — see docs/releasing.md / the /release-skillctl skill."
+	 echo "    (skillctl/vX.Y.Z) + push: see docs/releasing.md / the /release-skillctl skill."
 
 # Smoke-test a PUBLISHED skillctl release build (Phase 4). VERSION defaults to latest tag.
 #   make skillctl-smoke                     # smoke the latest published skillctl/v*
@@ -448,7 +448,7 @@ release-skillctl: build-skillctl build-skillctl-demo vet lint check-docs
 skillctl-smoke:
 	@./scripts/skillctl-smoke.sh $(VERSION)
 
-# Build with GoReleaser (snapshot, no publish — for local testing)
+# Build with GoReleaser (snapshot, no publish: for local testing)
 .PHONY: snapshot
 snapshot:
 	goreleaser release --snapshot --clean
@@ -462,9 +462,14 @@ checksums:
 
 # Run CI checks locally (mirrors .github/workflows/ci.yml)
 .PHONY: ci
-ci: vet lint test-unit build
+ci: vet lint check-emdash test-unit build
 	@echo ""
-	@echo "CI passed: vet ✓  lint ✓  test ✓  build ✓"
+	@echo "CI passed: vet ✓  lint ✓  prose ✓  test ✓  build ✓"
+
+# Prose gate: no U+2014 EM DASH anywhere in the tree (CODESTYLE.md).
+.PHONY: check-emdash
+check-emdash:
+	@./scripts/check-no-emdash.sh
 
 # Run golangci-lint
 .PHONY: lint
@@ -529,7 +534,7 @@ installer-windows: build-windows
 	@echo "Installer: $(BUILD_DIR)/M3C-Tools-Setup.exe"
 
 # -----------------------------------------------------------------------------
-# Thinking Engine (SPEC-0167) — Phase 1 Week 1 scaffold
+# Thinking Engine (SPEC-0167): Phase 1 Week 1 scaffold
 # -----------------------------------------------------------------------------
 
 THINKING_BIN        = thinking-engine
@@ -553,7 +558,7 @@ thinking-test:
 	go test -short -count=1 ./internal/thinking/...
 
 # Run the tagged unit tests for the franz-go driver. These still do
-# NOT need a broker — they exercise the isolation guard and
+# NOT need a broker: they exercise the isolation guard and
 # consumer-group naming logic with no network I/O.
 .PHONY: thinking-test-tagged
 thinking-test-tagged:
@@ -565,7 +570,7 @@ thinking-test-tagged:
 .PHONY: thinking-test-integration
 thinking-test-integration:
 	@if [ -z "$$M3C_KAFKA_URL" ]; then \
-		echo "thinking-test-integration: M3C_KAFKA_URL not set — skipping."; \
+		echo "thinking-test-integration: M3C_KAFKA_URL not set: skipping."; \
 		echo "To run against a local broker:"; \
 		echo "  make thinking-up CTX_HASH=<hash>"; \
 		echo "  M3C_KAFKA_URL=localhost:9092 make thinking-test-integration"; \
@@ -612,7 +617,7 @@ thinking-topics:
 # Show help
 .PHONY: help
 help:
-	@echo "m3c-tools — Multi-Modal-Memory Tools"
+	@echo "m3c-tools: Multi-Modal-Memory Tools"
 	@echo ""
 	@echo "Targets:"
 	@echo "  deps           Install all system dependencies (Homebrew + pip)"

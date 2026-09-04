@@ -1,4 +1,4 @@
-// trace.go — provenance-tree walker for GET /v1/trace/{artifact_id}.
+// trace.go: provenance-tree walker for GET /v1/trace/{artifact_id}.
 //
 // SPEC-0167 §Service Components §internal/api + OpenAPI schema
 // require a TraceNode tree:
@@ -8,7 +8,7 @@
 // The walker reads the A from the cache, then recursively looks up
 // the I/R/T messages it references via provenance + input/thought_id
 // arrays. Missing intermediate nodes are surfaced as leaves with a
-// `summary: "missing"` marker — never as a crash — per Stream 3b's
+// `summary: "missing"` marker, never as a crash, per Stream 3b's
 // acceptance criteria.
 package api
 
@@ -70,7 +70,7 @@ func buildTrace(cache *store.Cache, artifactID string) (traceNode, bool) {
 }
 
 // walkInsight returns a TraceNode for an I message, recursing into its
-// input_ids — which can point to R and/or T messages.
+// input_ids, which can point to R and/or T messages.
 func walkInsight(cache *store.Cache, insightID string) traceNode {
 	payload := cache.Get("I", insightID)
 	if payload == nil {
@@ -266,7 +266,7 @@ func mapFirstStringValue(v interface{}) string {
 			return s
 		}
 	}
-	// No string value — json-encode the first key.
+	// No string value: json-encode the first key.
 	if len(keys) > 0 {
 		b, _ := json.Marshal(m[keys[0]])
 		return string(b)

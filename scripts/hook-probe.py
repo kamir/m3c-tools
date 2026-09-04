@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Observation probe — SPEC-0247 OQ-1 (temporary instrument).
+"""Observation probe: SPEC-0247 OQ-1 (temporary instrument).
 
 Captures the RAW stdin of a Claude Code hook event to a log so we can resolve
 the remaining OQ-1 unknowns empirically instead of guessing:

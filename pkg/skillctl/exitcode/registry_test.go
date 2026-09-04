@@ -2,7 +2,7 @@ package exitcode
 
 import "testing"
 
-// TestCodes_NumberTheme — the CI invariant FR-0023 buys us.
+// TestCodes_NumberTheme: the CI invariant FR-0023 buys us.
 //
 // Codes sharing a Number MUST share a Theme. Operators rely on the
 // theme being stable across surfaces (a "data-source / source-policy"
@@ -14,7 +14,7 @@ func TestCodes_NumberTheme(t *testing.T) {
 	originByNum := make(map[int]Code)
 	for _, c := range AllCodes() {
 		if c.Number == 0 {
-			continue // 0 is "success" — codes don't claim 0
+			continue // 0 is "success": codes don't claim 0
 		}
 		if prev, ok := themeByNum[c.Number]; ok {
 			if prev != c.Theme {
@@ -31,7 +31,7 @@ func TestCodes_NumberTheme(t *testing.T) {
 	}
 }
 
-// TestCodes_LabelUniquePerFamily — within a single Family the Labels
+// TestCodes_LabelUniquePerFamily: within a single Family the Labels
 // must be unique. Two surfaces can share a label (verify and import-public
 // both have "intent_*"-themed entries) but no surface should have two
 // codes with the same label.
@@ -49,7 +49,7 @@ func TestCodes_LabelUniquePerFamily(t *testing.T) {
 	}
 }
 
-// TestCodes_NumberRange — sanity. Exit codes should fit in the
+// TestCodes_NumberRange: sanity. Exit codes should fit in the
 // conventional 1..127 process-exit range. Anything outside is a
 // programmer error.
 func TestCodes_NumberRange(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 
 // FromMap decodes one raw `data_dependencies[]` entry (the `map[string]any`
 // shape the `intent declare` CLI and the bundle.json both carry) into a typed
-// DataScope. It does NOT validate — the caller runs Validate()/Validate(...)
+// DataScope. It does NOT validate. The caller runs Validate()/Validate(...)
 // after decoding so the structural decode error and the semantic validation
 // error stay distinguishable.
 //
@@ -41,7 +41,7 @@ func FromMaps(ms []map[string]any) ([]DataScope, error) {
 // IntentFromMap pulls the typed cross-rule fields out of the free-form `intent`
 // map. It is lenient: a missing/absent key leaves the corresponding pointer
 // nil (so the cross-rules can tell "absent" from "false"). Non-bool values for
-// destructive/network are treated as absent rather than an error — the field
+// destructive/network are treated as absent rather than an error: the field
 // validators in the CLI already reject malformed flag input upstream; here we
 // only extract what is cleanly typed.
 func IntentFromMap(m map[string]any) Intent {

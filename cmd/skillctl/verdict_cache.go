@@ -1,6 +1,6 @@
 package main
 
-// verdict_cache.go — offline verdict cache (SPEC-0247 P1.1, §8).
+// verdict_cache.go: offline verdict cache (SPEC-0247 P1.1, §8).
 //
 // The online §7 chain (VerifyInstalled) fetches fresh registry metadata, so
 // running it on every PreToolUse(Skill) invocation is slow and network-bound.
@@ -14,12 +14,12 @@ package main
 // useless without also producing files whose digest matches that row, which the
 // honest verifier would never have signed PASS. The HMAC (key at
 // ~/.claude/skillctl/verdict.key, 0600) only stops casual tampering / stale
-// rows — it is explicitly NOT the trust boundary (that's the binary + trust
+// rows. It is explicitly NOT the trust boundary (that's the binary + trust
 // roots + §3.2).
 //
 // Offline resilience: when the registry is unreachable, an unexpired PASS row
 // for an UNCHANGED skill still allows it (we verified it recently and the bytes
-// haven't moved) — see verify_all_cmds.go, which leaves the row in place on an
+// haven't moved): see verify_all_cmds.go, which leaves the row in place on an
 // availability failure instead of deleting it.
 
 import (
@@ -114,7 +114,7 @@ func saveVerdictCache(home string, c verdictCache) {
 	// SessionStart sweep and a PreToolUse hook, say) write the SAME temp path and
 	// rename it out from under each other, corrupting the cache. os.CreateTemp
 	// gives each writer its own file in the same dir (so the rename stays atomic
-	// on one filesystem); last-writer-wins on the final rename is fine — a lost
+	// on one filesystem); last-writer-wins on the final rename is fine: a lost
 	// race just yields a future cache miss → re-verify.
 	f, err := os.CreateTemp(dir, "verdicts-*.json")
 	if err != nil {
@@ -207,7 +207,7 @@ func computeInstalledDigest(dir string) (string, error) {
 }
 
 // cachedAllow reports whether a fresh, valid, digest-matching PASS row exists
-// for <name> — i.e. the gate can allow offline without re-running the chain.
+// for <name>, i.e. the gate can allow offline without re-running the chain.
 func cachedAllow(home, name, sessionID string, now time.Time) bool {
 	digest, err := computeInstalledDigest(filepath.Join(home, ".claude", "skills", name))
 	if err != nil || digest == "" {
@@ -236,7 +236,7 @@ func cachedAllow(home, name, sessionID string, now time.Time) bool {
 
 // recordVerdict updates the cache after an online managed verify: a PASS writes
 // a fresh signed row; any non-PASS removes the skill's row (so a now-failing
-// skill cannot ride an old PASS). A best-effort, last-writer-wins file update —
+// skill cannot ride an old PASS). A best-effort, last-writer-wins file update:
 // a lost race just yields a future cache miss → re-verify.
 func recordVerdict(home, name, sessionID string, code int, summary string, now time.Time) {
 	key, err := loadOrCreateVerdictKey(home)

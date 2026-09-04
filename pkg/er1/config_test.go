@@ -82,7 +82,7 @@ func TestHealthCheck_AcceptsDeviceToken(t *testing.T) {
 	if err != nil && err.Error() == "no authentication configured (no device token, no API key)" {
 		t.Error("HealthCheck should accept device token as valid auth")
 	}
-	// It may fail with "unreachable" (no server) — that's OK, the auth gate passed.
+	// It may fail with "unreachable" (no server), that's OK, the auth gate passed.
 }
 
 func TestHealthCheck_RejectsNoAuth(t *testing.T) {

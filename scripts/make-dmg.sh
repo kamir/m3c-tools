@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# make-dmg.sh — Create a distributable macOS DMG from the app bundle
+# make-dmg.sh: Create a distributable macOS DMG from the app bundle
 #
 # Usage: ./scripts/make-dmg.sh [version]
 #   version   Version string (default: derived from git tags)
@@ -59,7 +59,7 @@ ln -s /Applications "$STAGING_DIR/Applications"
 
 # Create README
 cat > "$STAGING_DIR/README.txt" << 'READMEEOF'
-M3C-Tools — Multi-Modal-Memory Tools
+M3C-Tools: Multi-Modal-Memory Tools
 =====================================
 
 INSTALLATION

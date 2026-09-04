@@ -1,4 +1,4 @@
-// tracking_darwin.go — Native macOS Tracking DB Window via Cocoa/cgo.
+// tracking_darwin.go: Native macOS Tracking DB Window via Cocoa/cgo.
 //
 // Creates an NSWindow with an NSTabView containing 2 tabs:
 //   - Tracked: table view of all DB records (uploaded/imported/failed)
@@ -820,10 +820,10 @@ func ShowTrackingWindow(tracked []TrackingRecord, source []SourceFileRecord, fol
 	}
 
 	if C.isTrackingWindowOpen() != 0 {
-		// Window exists — just reload tables with the new data.
+		// Window exists, just reload tables with the new data.
 		C.reloadTrackingTables()
 	} else {
-		// First open — create the window (includes initial reloadData).
+		// First open, create the window (includes initial reloadData).
 		C.showTrackingWindow()
 	}
 }

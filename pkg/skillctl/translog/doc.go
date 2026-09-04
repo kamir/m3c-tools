@@ -5,13 +5,13 @@
 //
 // # What L1 buys, and what it deliberately does NOT
 //
-// L1 makes equivocation, censorship and withholding DETECTABLE — it does
+// L1 makes equivocation, censorship and withholding DETECTABLE. It does
 // NOT make them impossible. Concretely:
 //
 //   - An inclusion proof lets a verifier confirm offline that a specific
 //     event is committed under a Signed Tree Head (STH) it trusts.
 //   - A consistency proof lets a verifier confirm that a newer tree is a
-//     pure append of an older one — i.e. nothing in history was rewritten
+//     pure append of an older one, i.e. nothing in history was rewritten
 //     or dropped. A log that drops/rewrites an entry FAILS this check, so
 //     a rewrite becomes DETECTABLE.
 //   - Cross-witnessed STHs let two parties notice when a log operator
@@ -33,7 +33,7 @@
 // ever goes on the log. A leaf commits only the DIGEST of an
 // already-signed event plus its type and timestamp (see LogEntry). The
 // signed event itself stays off-log. The log adds ordering, freshness,
-// non-equivocation and shared availability — and nothing more.
+// non-equivocation and shared availability, and nothing more.
 //
 // # Domain separation (second-preimage resistance)
 //
@@ -45,12 +45,12 @@
 //
 // Without the prefixes an attacker who controls a leaf value could feed
 // in the concatenation of two child hashes and have the verifier treat an
-// internal node as a leaf (or vice versa) — the classic Merkle
+// internal node as a leaf (or vice versa): the classic Merkle
 // second-preimage / leaf-vs-node confusion. The prefixes (LeafPrefix /
 // NodePrefix below) close that.
 //
 // The STH carries its OWN distinct domain separator ("skillctl-sth-v1",
 // see sth.go) so an ed25519 signature produced over an STH can never be
 // replayed as an attestation, a revocation, or any other envelope in the
-// spine — and vice versa.
+// spine, and vice versa.
 package translog

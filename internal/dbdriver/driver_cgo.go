@@ -1,4 +1,4 @@
-// driver_cgo.go — SQLite driver registration for cgo-enabled builds.
+// driver_cgo.go: SQLite driver registration for cgo-enabled builds.
 // Uses github.com/mattn/go-sqlite3 (C-backed, faster, production-tested).
 //
 //go:build cgo

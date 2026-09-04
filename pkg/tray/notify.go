@@ -1,4 +1,4 @@
-// notify.go — Native OS notifications for Windows (toast) and Linux (libnotify).
+// notify.go: Native OS notifications for Windows (toast) and Linux (libnotify).
 //
 // Uses github.com/gen2brain/beeep which is pure Go:
 //   - Windows: PowerShell-based toast notifications

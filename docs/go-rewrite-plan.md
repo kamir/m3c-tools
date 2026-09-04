@@ -1,4 +1,4 @@
-# M3C Tools — Go Rewrite Plan (COMPLETED)
+# M3C Tools: Go Rewrite Plan (COMPLETED)
 
 > **Status: COMPLETE (v1.4.4)**. This document is preserved as historical reference for the Python-to-Go migration. All phases are implemented and in production. See [Roadmap](roadmap) for current status.
 
@@ -117,12 +117,12 @@ m3c-tools transcript <video_ids...>
 
 The fetcher pipeline must be ported exactly:
 
-1. `_fetch_video_html(videoID)` — GET `youtube.com/watch?v=ID`, handle EU consent cookie
-2. `_extract_innertube_api_key(html)` — regex for `"INNERTUBE_API_KEY":"..."`
-3. `_fetch_innertube_data(videoID, apiKey)` — POST to InnerTube API with Android client context
-4. `_extract_captions_json(innertubeData)` — extract `captions.playerCaptionsTracklistRenderer`
-5. `_assert_playability(status)` — check playability, raise specific errors
-6. `_TranscriptParser.parse(xml)` — parse caption XML, handle HTML entities + formatting tags
+1. `_fetch_video_html(videoID)`: GET `youtube.com/watch?v=ID`, handle EU consent cookie
+2. `_extract_innertube_api_key(html)`: regex for `"INNERTUBE_API_KEY":"..."`
+3. `_fetch_innertube_data(videoID, apiKey)`: POST to InnerTube API with Android client context
+4. `_extract_captions_json(innertubeData)`: extract `captions.playerCaptionsTracklistRenderer`
+5. `_assert_playability(status)`: check playability, raise specific errors
+6. `_TranscriptParser.parse(xml)`: parse caption XML, handle HTML entities + formatting tags
 
 ### Go Package Structure for the Library
 
@@ -162,7 +162,7 @@ pkg/transcript/
 
 | Module | Purpose | Lines | Key Dependencies |
 |--------|---------|-------|-----------------|
-| `yt_menubar.py` | Menu bar app (rumps) — main entry point | ~1030 | rumps, PyObjC, youtube_transcript_api |
+| `yt_menubar.py` | Menu bar app (rumps): main entry point | ~1030 | rumps, PyObjC, youtube_transcript_api |
 | `impression_capture.py` | Voice impression + ER1 upload orchestration | ~2050 | whisper (subprocess), requests, threading |
 | `impression_recorder.py` | Tkinter audio recording dialog (PyAudio) | ~350 | tkinter, pyaudio, wave |
 | `impression_tags.py` | Tag system + observation types | ~250 | stdlib only |
@@ -234,7 +234,7 @@ The closest equivalent to Python's `rumps`. macOS-only, uses NSStatusBar directl
 
 #### Option B: `energye/systray` (Cross-platform fallback)
 
-If cross-platform is ever needed. Fewer dialog features — would need `andybrewer/mack` for alerts.
+If cross-platform is ever needed. Fewer dialog features: would need `andybrewer/mack` for alerts.
 
 #### Option C: `progrium/darwinkit` (Maximum flexibility)
 
@@ -311,7 +311,7 @@ cmd/
     main.go              # CLI entry point (port of __main__.py / _cli.py)
 pkg/
   menubar/
-    app.go               # Menu bar app (menuet) — equivalent to yt_menubar.py
+    app.go               # Menu bar app (menuet): equivalent to yt_menubar.py
     history.go            # Transcript history persistence
     dialogs.go            # Alert/input dialogs
   transcript/
@@ -452,7 +452,7 @@ resources/
 | **Thread safety** | threading.Lock, GIL limitations | goroutines + channels (native concurrency) |
 | **Distribution** | py2app bundle + system Python for whisper | Single binary + model file |
 | **macOS integration** | PyObjC bridge (fragile) | CGo / menuet (direct) |
-| **Tkinter workaround** | Subprocess to system Python (PYTHONHOME hack) | Not needed — native dialogs |
+| **Tkinter workaround** | Subprocess to system Python (PYTHONHOME hack) | Not needed: native dialogs |
 | **Crash resilience** | Python exceptions, subprocess failures | Go error handling, no subprocess needed |
 
 ---
@@ -509,7 +509,7 @@ GOOS=darwin GOARCH=arm64 go build -o YT-Transcript ./cmd/m3c-tools
 - Menu bar: **menuet** (closest to rumps)
 - Alert/input dialogs: **menuet** built-in (no Tkinter subprocess hack needed)
 - Audio recording: **gordonklaus/portaudio**
-- Whisper: **whisper.cpp Go bindings** (major improvement — in-process, no Python)
+- Whisper: **whisper.cpp Go bindings** (major improvement: in-process, no Python)
 - HTTP upload: **net/http** stdlib
 - Screenshot: **exec.Command + CGo** for NSPasteboard
 - YouTube transcripts: Port ~200 lines of HTTP + parsing logic
@@ -539,7 +539,7 @@ All four POCs built and tested successfully:
 - **Cookie jar**: Must use `http.CookieJar` with `CONSENT=YES+cb` on all YouTube requests
 - **InnerTube API**: Always use InnerTube API for captions (never HTML parsing)
 - **PoToken check**: URLs with `&exp=xpe` require Proof-of-Origin token (raise error, same as Python lib)
-- **ER1 server bug**: `/upload_2` requires `image_data` field — crashes with `FileNotFoundError` if missing. Must always send image (use thumbnail or 1x1 placeholder)
+- **ER1 server bug**: `/upload_2` requires `image_data` field. Crashes with `FileNotFoundError` if missing. Must always send image (use thumbnail or 1x1 placeholder)
 - **Whisper approach**: Subprocess to CLI is simpler and sufficient for POC. Native whisper.cpp bindings can follow in production if performance matters.
 
 ### Design Decision: YouTube Thumbnail as Image Modality
@@ -553,7 +553,7 @@ For YouTube transcript imports, the system now captures the video's **title imag
 
 New file: `pkg/transcript/thumbnail.go` with `FetchThumbnail()` and `ThumbnailURL()` methods.
 
-### Multimodal Memory Capture — Formal Definition
+### Multimodal Memory Capture: Formal Definition
 
 **Multimodal Memory Capturing** is the process of recording an observation about digital content through up to three sensory channels (text, audio, image) and persisting it as a single structured entry in an ER1 knowledge server.
 

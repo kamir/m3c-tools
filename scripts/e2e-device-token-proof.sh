@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# e2e-device-token-proof.sh — Prove device token issuance works
+# e2e-device-token-proof.sh: Prove device token issuance works
 #
 # Tests that the login callback returns a device_token (SPEC-0127).
 # Simulates what m3c-tools login does: starts a callback server,
@@ -48,7 +48,7 @@ _curl() {
 }
 
 echo "╔═══════════════════════════════════════════════╗"
-echo "║  Device Token Proof — SPEC-0127 ($TARGET)    ║"
+echo "║  Device Token Proof: SPEC-0127 ($TARGET)    ║"
 echo "╚═══════════════════════════════════════════════╝"
 
 # ── Phase 1: Server reachable ────────────────────────────────────────────────
@@ -68,7 +68,7 @@ _section "Phase 2: Signin redirect"
 COOKIE_JAR="$(mktemp /tmp/e2e-cookies-XXXX.txt)"
 trap "rm -f $COOKIE_JAR" EXIT
 
-# Hit /v2/signin with next= parameter — should redirect to Google OAuth
+# Hit /v2/signin with next= parameter: should redirect to Google OAuth
 SIGNIN_STATUS=$(_curl "${BASE_URL}/v2/signin?next=http://127.0.0.1:9999/test-callback" \
   -c "$COOKIE_JAR" \
   -o /dev/null -w "%{http_code}" \
@@ -89,7 +89,7 @@ DT_STATUS=$(_curl "${BASE_URL}/api/device-tokens/health" -o /dev/null -w "%{http
 if [[ "$DT_STATUS" == "200" ]]; then
   _pass "device_tokens module registered"
 else
-  _skip "device_tokens health endpoint (HTTP $DT_STATUS — may not expose health)"
+  _skip "device_tokens health endpoint (HTTP $DT_STATUS, may not expose health)"
 fi
 
 # ── Phase 4: Test token creation via API (if available) ──────────────────────
@@ -109,7 +109,7 @@ if [[ "$TARGET" == "local" ]]; then
     _skip "direct token creation test (HTTP $TOKEN_TEST)"
   fi
 else
-  _skip "direct token creation test (cloud mode — requires real login)"
+  _skip "direct token creation test (cloud mode: requires real login)"
 fi
 
 # ── Phase 5: Full login flow via m3c-tools ───────────────────────────────────
@@ -190,7 +190,7 @@ print(f'{b64}.{sig}')
     if [[ "$DEVICE_BEARER" == "200" ]]; then
       _pass "device API accepts Bearer token (HTTP 200)"
     elif [[ "$DEVICE_BEARER" == "401" ]]; then
-      _fail "device API rejects Bearer token (HTTP 401) — device_auth.py may need update"
+      _fail "device API rejects Bearer token (HTTP 401): device_auth.py may need update"
     else
       _skip "device API Bearer test (HTTP $DEVICE_BEARER)"
     fi
@@ -209,7 +209,7 @@ print(f'{b64}.{sig}')
     fi
   fi
 else
-  _skip "Bearer auth verification (cloud mode — requires real device token from login)"
+  _skip "Bearer auth verification (cloud mode: requires real device token from login)"
 fi
 
 # ── Summary ──────────────────────────────────────────────────────────────────
@@ -224,9 +224,9 @@ if [ "$FAIL" -eq 0 ]; then
   echo "  Next steps:"
   echo "    1. Run 'm3c-tools login' interactively"
   echo "    2. Verify 'Device token saved' appears in output"
-  echo "    3. Run 'm3c-tools doctor' — should show Bearer token auth"
+  echo "    3. Run 'm3c-tools doctor', should show Bearer token auth"
   exit 0
 else
-  echo "  ISSUES FOUND — fix and re-run"
+  echo "  ISSUES FOUND, fix and re-run"
   exit 1
 fi

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# 00-preflight — build skillctl, set up the demo workspace, sanity-check tools.
+# 00-preflight: build skillctl, set up the demo workspace, sanity-check tools.
 # Idempotent: safe to re-run.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 
-header "00 — Preflight"
+header "00: Preflight"
 
 # 1) Required tools
 log "checking host tools"
@@ -44,7 +44,7 @@ ok "built $(file "$SKILLCTL" | sed 's/.*: //')"
 "$SKILLCTL" --help >>"$LOG_DIR/full.log" 2>&1
 ok "skillctl --help works"
 
-# 5) Online-mode probe — auto-resolve ER1_API_KEY from macOS keychain if unset.
+# 5) Online-mode probe: auto-resolve ER1_API_KEY from macOS keychain if unset.
 # Same convention used by register-identity.sh and push-to-er1.sh:
 #   service = aims-core-er1 ,  account = $USER
 if [[ -z "${ER1_API_KEY:-}" ]] && command -v security >/dev/null 2>&1; then
@@ -56,7 +56,7 @@ if [[ -z "${ER1_API_KEY:-}" ]] && command -v security >/dev/null 2>&1; then
 fi
 
 if online_mode_available; then
-  ok "registry reachable at $REGISTRY_URL — online stretch goal will run"
+  ok "registry reachable at $REGISTRY_URL: online stretch goal will run"
 else
   warn "online stretch goal will be skipped"
   if [[ -z "${ER1_API_KEY:-}" ]]; then
@@ -70,7 +70,7 @@ else
   fi
 fi
 
-# 6) Clean previous demo state (artifacts/ only — we never touch the host)
+# 6) Clean previous demo state (artifacts/ only: we never touch the host)
 # Keys are preserved by default so registered identities (Mirko, reviewer)
 # stay valid across runs. The registry persists identities forever; if the
 # local key changes, signature_invalid is the resulting error class.

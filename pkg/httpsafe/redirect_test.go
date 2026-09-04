@@ -11,14 +11,14 @@ import (
 
 // TestNoCredentialRedirect_CrossHostLeak is the SEC F25 regression proof. It
 // stands up two servers on DISTINCT hostnames (both dialed to loopback via a
-// custom DialContext — httptest's same-host-different-port does NOT reproduce
+// custom DialContext. Httptest's same-host-different-port does NOT reproduce
 // Go's custom-header propagation), has the victim 302 to the collector, and
 // checks whether the collector receives the X-API-KEY header.
 //
 //   - default stdlib policy (CheckRedirect == nil): the collector RECEIVES the
-//     key — this documents the vulnerability (and would have passed before the
+//     key, this documents the vulnerability (and would have passed before the
 //     fix existed).
-//   - NoCredentialRedirect: the collector receives NOTHING — this fails to even
+//   - NoCredentialRedirect: the collector receives NOTHING, this fails to even
 //     compile against the pre-fix tree (the symbol didn't exist) and passes once
 //     the helper lands.
 func TestNoCredentialRedirect_CrossHostLeak(t *testing.T) {
@@ -81,7 +81,7 @@ func TestNoCredentialRedirect_CrossHostLeak(t *testing.T) {
 }
 
 // TestNoCredentialRedirect_SameHostKeepsHeaders verifies a same-host redirect
-// (e.g. /a → /b on the same server) does NOT strip the credential — the fix
+// (e.g. /a → /b on the same server) does NOT strip the credential. The fix
 // must not break legitimate intra-host redirects.
 func TestNoCredentialRedirect_SameHostKeepsHeaders(t *testing.T) {
 	var gotKey string

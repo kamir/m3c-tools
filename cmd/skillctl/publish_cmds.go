@@ -1,6 +1,6 @@
 package main
 
-// `skillctl publish` — SPEC-0225 P1.3.
+// `skillctl publish`: SPEC-0225 P1.3.
 //
 // Two modes:
 //   skillctl publish <name[@ver]> [--registry self] [--bundle <path>] [--skill-dir <dir>]
@@ -13,7 +13,7 @@ package main
 //
 //   skillctl publish --attest <name[@ver]> --level green|yellow|red --rationale <text>
 //                    [--digest sha256:<hex> | --bundle <path>] [--registry self] [...]
-//      Posts an AttestationPublishedEvent item — the governance verdict for an
+//      Posts an AttestationPublishedEvent item: the governance verdict for an
 //      already-admitted digest.
 //
 // Default registry is "self" (the personal ER1-mediated tenant, SPEC-0225). The
@@ -22,7 +22,7 @@ package main
 //
 // What's deliberately not here yet (next P1 commits): --all manifest loop (P1.4);
 // auto-checkpoint on the open SPEC-0213 session (P1.5); MinIO claim-check
-// overflow (deferred — keep bundles inline for v1).
+// overflow (deferred: keep bundles inline for v1).
 
 import (
 	"context"
@@ -164,7 +164,7 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 
 	// BUG-0165: a bare ER1 context (no "___") has no owner prefix, so the maindrec
 	// write path resolves the context owner to the literal namespace (e.g. "skills")
-	// — never the authenticated principal — and returns 403 "Not authorized for this
+	//, never the authenticated principal, and returns 403 "Not authorized for this
 	// context". Prefix it with the logged-in owner id so `--er1-context skills` (the
 	// default) targets the canonical `<sub>___skills` registry.
 	*er1Context = ownerPrefixedContext(*er1Context)
@@ -201,10 +201,10 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if !registry.IsER1Registry(*registryName) && !artifact.Registered(*registryName) {
-		fmt.Fprintf(stderr, "publish: unsupported registry %q — use an ER1 registry (\"self\" / \"er1://...\"), a git registry (\"gitlab://host/group/proj\" / \"github://owner/repo\"), or `skillctl install` for an HTTP admission registry\n", *registryName)
+		fmt.Fprintf(stderr, "publish: unsupported registry %q: use an ER1 registry (\"self\" / \"er1://...\"), a git registry (\"gitlab://host/group/proj\" / \"github://owner/repo\"), or `skillctl install` for an HTTP admission registry\n", *registryName)
 		return 2
 	}
-	// SPEC-0356: publish admit / attest / revoke are all wired for git backends —
+	// SPEC-0356: publish admit / attest / revoke are all wired for git backends:
 	// attest/revoke write signed SPEC-0190 events into events/<digesthex>/, which
 	// the verifying pull (PullBundlesFromBackend) consumes for the §7 gauntlet.
 
@@ -308,7 +308,7 @@ func runPublishAdmit(stdout, stderr io.Writer, a publishAdmitArgs) int {
 	digest := "sha256:" + digestHex
 
 	// 3. Load the key and produce the author+registry sigs. The personal
-	// tenant uses one key playing both roles — same sig bytes, two records.
+	// tenant uses one key playing both roles: same sig bytes, two records.
 	priv, err := signing.LoadPrivateKey(a.keyPath)
 	if err != nil {
 		fmt.Fprintf(stderr, "publish: load key: %v\n", err)
@@ -379,9 +379,9 @@ func runPublishAdmit(stdout, stderr io.Writer, a publishAdmitArgs) int {
 		return 0
 	}
 
-	// 6. POST — dispatch to the artifact backend (git) or the ER1 carrier.
+	// 6. POST: dispatch to the artifact backend (git) or the ER1 carrier.
 	// The whole flow above (skb bytes, digest, signed event `ev`, `skill`) is
-	// carrier-neutral; the git backend only carries the SAME signed bytes — no
+	// carrier-neutral; the git backend only carries the SAME signed bytes, no
 	// signing/verify code moves (SPEC-0356 D3).
 	if a.registry != "" && artifact.SchemeOf(a.registry) != "er1" {
 		return publishAdmitViaBackend(stdout, stderr, a, ev, skill, skb, digest, ver)
@@ -482,7 +482,7 @@ func publishEventViaBackend(stdout, stderr io.Writer, spec string, kind artifact
 // resolveBundleDigest determines the sha256 digest for --attest / --revoke:
 //  1. --digest sha256:<hex> if given (verbatim)
 //  2. --bundle <path> → sha256 of that file
-//  3. the in-place bundle ./<name>@<version>.skb that `publish` (admit) writes —
+//  3. the in-place bundle ./<name>@<version>.skb that `publish` (admit) writes,
 //     so `publish --attest <name>@<ver>` works right after `publish <name>@<ver>`
 //     with no repeated --digest/--bundle.
 func resolveBundleDigest(digestArg, bundlePath, name, version string) (string, error) {
@@ -497,7 +497,7 @@ func resolveBundleDigest(digestArg, bundlePath, name, version string) (string, e
 	}
 	if bundlePath == "" {
 		return "", fmt.Errorf("need --digest sha256:<hex> or --bundle <path> "+
-			"(no ./%s@%s.skb here — run from where you published, or pass --digest)", name, version)
+			"(no ./%s@%s.skb here: run from where you published, or pass --digest)", name, version)
 	}
 	skb, err := os.ReadFile(bundlePath)
 	if err != nil {
@@ -750,7 +750,7 @@ func runPublishAll(stdout, stderr io.Writer, a publishAllArgs) int {
 		}
 		lvl := e.Level
 		if lvl == "" {
-			lvl = "—"
+			lvl = ": "
 		}
 		fmt.Fprintf(stdout, "    %2d  admit + attest(%s)  %s@%s  %s\n", e.Line, lvl, e.Name, v, e.Rationale)
 	}
@@ -821,7 +821,7 @@ func runPublishAll(stdout, stderr io.Writer, a publishAllArgs) int {
 // is detected. Detection: CLAUDE_SESSION_ID env var (set by the harness for
 // every hook payload; also set by `skillctl session open --export` flows).
 //
-// We deliberately do NOT search ER1 for an open session-state item — the env
+// We deliberately do NOT search ER1 for an open session-state item. The env
 // var is the authoritative "session is open here, right now" signal; searching
 // ER1 would introduce ambiguity (multiple open sessions across hosts).
 func maybeCheckpoint(stdout io.Writer, noCheckpoint bool, er1Target, er1Context, note string) {
@@ -890,7 +890,7 @@ func resolveER1Config(target string) (*er1.Config, error) {
 		cfg.APIKey = resolveAPIKeyFromKeychain()
 	}
 	if cfg.APIKey == "" && os.Getenv("ER1_DEVICE_TOKEN") == "" {
-		return nil, fmt.Errorf("no ER1 credential — set ER1_API_KEY or add the `aims-core-er1` Keychain item (ADR-0003)")
+		return nil, fmt.Errorf("no ER1 credential: set ER1_API_KEY or add the `aims-core-er1` Keychain item (ADR-0003)")
 	}
 	return cfg, nil
 }
@@ -926,7 +926,7 @@ func resolveAPIKeyFromKeychain() string {
 		return k
 	}
 	// The Keychain (`security`) exists only on macOS. On Windows/Linux there is no
-	// such binary, so skip the lookup rather than spawn — or PATH-resolve — a
+	// such binary, so skip the lookup rather than spawn, or PATH-resolve, a
 	// non-existent `security`. Callers fall back to ER1_API_KEY / other config.
 	if runtime.GOOS != "darwin" {
 		return ""
@@ -1032,7 +1032,7 @@ func promptYesNo(stdout io.Writer, prompt string) bool {
 // reorderFlagArgs walks `args` and returns a permutation that puts every
 // flag (with its value, if it takes one) first, followed by the positionals.
 // This works around Go stdlib flag.Parse() stopping at the first non-flag
-// arg — a problem when a user writes e.g. `skillctl publish pdf --dry-run`
+// arg: a problem when a user writes e.g. `skillctl publish pdf --dry-run`
 // (the `--dry-run` gets silently dropped). The reordering is conservative:
 // only tokens that match a flag in `fs` are treated as flags; unknown
 // `-foo` tokens fall through as positionals so Parse can report them.
@@ -1064,7 +1064,7 @@ func reorderFlagArgs(fs *flag.FlagSet, args []string) []string {
 				i++
 				continue
 			}
-			// Unknown flag — let fs.Parse error on it; leave in place.
+			// Unknown flag: let fs.Parse error on it; leave in place.
 			flagToks = append(flagToks, t)
 			i++
 			continue

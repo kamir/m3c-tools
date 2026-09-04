@@ -1,6 +1,6 @@
 ---
 name: bug-report
-description: Turn a field observation into a structured bug report — a private analysis file in the maintenance repo, and (opt-in, redacted) a public GitHub issue linked to it. Use when the user shares logs, error messages, or behavior descriptions from testing.
+description: Turn a field observation into a structured bug report: a private analysis file in the maintenance repo, and (opt-in, redacted) a public GitHub issue linked to it. Use when the user shares logs, error messages, or behavior descriptions from testing.
 argument-hint: "<paste logs, error output, or describe the observed behavior>"
 metadata:
   version: 2.0.0
@@ -14,7 +14,7 @@ You are a bug-tracking assistant for the **m3c-tools** project.
 
 ## Input
 
-The user provides a **field observation** — raw logs, error messages, screenshots,
+The user provides a **field observation**: raw logs, error messages, screenshots,
 or a description of unexpected behavior.
 
 **Observation:**
@@ -31,11 +31,11 @@ A bug lives in up to two places, and `scripts/bugtracker.sh` keeps them in step:
 
 The issue is **never a copy** of the analysis. `bug-reports/` also holds bugs for
 systems this repository does not ship; those stay private. Publishing is per-bug,
-declared in the file, and **cannot be undone** — a GitHub issue on a public repo
+declared in the file, and **cannot be undone**. A GitHub issue on a public repo
 is indexed the moment it is created.
 
 > Set `M3C_MAINTENANCE_DIR` before running this skill. If it is unset, say so and
-> stop — do not guess a path, and never write a private path into a public file.
+> stop: do not guess a path, and never write a private path into a public file.
 
 ## Your Task
 
@@ -59,7 +59,7 @@ is indexed the moment it is created.
 
 ### Step 4: Write the analysis file
 
-Get the next id deterministically — do not count files yourself:
+Get the next id deterministically: do not count files yourself:
 
 ```bash
 ./scripts/bugtracker.sh next-id      # -> BUG-0213  (a ceiling, not a claim)
@@ -75,7 +75,7 @@ nothing:
 Write `${M3C_MAINTENANCE_DIR}/bug-reports/BUG-NNNN-<short-slug>.md`:
 
 ```markdown
-# BUG-NNNN — <concise title>
+# BUG-NNNN: <concise title>
 
 - **Date:** YYYY-MM-DD
 - **Severity:** critical | high | medium | low
@@ -87,11 +87,11 @@ Write `${M3C_MAINTENANCE_DIR}/bug-reports/BUG-NNNN-<short-slug>.md`:
 
 ## Observed Behavior
 
-<What the user saw — exact log lines, error messages, timestamps>
+<What the user saw: exact log lines, error messages, timestamps>
 
 ## Expected Behavior
 
-<What should have happened — reference the SPEC by id if there is one>
+<What should have happened, reference the SPEC by id if there is one>
 
 ## Root Cause Analysis
 
@@ -101,7 +101,7 @@ Write `${M3C_MAINTENANCE_DIR}/bug-reports/BUG-NNNN-<short-slug>.md`:
 
 ## Reproduction
 
-<Steps, or "observed in field — reproduction TBD">
+<Steps, or "observed in field: reproduction TBD">
 
 ## Suggested Fix
 
@@ -116,7 +116,7 @@ Write `${M3C_MAINTENANCE_DIR}/bug-reports/BUG-NNNN-<short-slug>.md`:
 <What assumption led to this? What should we watch for?>
 ```
 
-`Status`, `Public`, `Repo` and `Issue` are the lines the script owns — keep their
+`Status`, `Public`, `Repo` and `Issue` are the lines the script owns: keep their
 exact spelling so `status`, `open`, `close` and `sync` can parse them.
 
 `Repo` names the repository the issue belongs in. It is **not** inferred from the
@@ -153,7 +153,7 @@ for someone with no access to the private plane:
   `X-API-KEY`, internal API paths, customer names, SPEC *paths* (ids are fine),
   and any root-cause detail that is really internal design discussion
 
-Write it as a restatement, not a summary of the analysis — someone should be able
+Write it as a restatement, not a summary of the analysis. Someone should be able
 to confirm the bug from it without ever seeing the private file.
 
 ### Step 7: Open the issue
@@ -164,7 +164,7 @@ to confirm the bug from it without ever seeing the private file.
 
 The script refuses unless `Public: yes` is declared, the `.public.md` body
 exists, and the body passes the same five leak patterns `tools/boundary-gate.sh`
-enforces in CI (SPEC-0358). If it refuses, **fix the body — never work around
+enforces in CI (SPEC-0358). If it refuses, **fix the body: never work around
 the refusal.** On success it writes `- **Issue:** owner/repo#NN` back into the
 analysis file.
 
@@ -172,6 +172,6 @@ analysis file.
 
 1. Bug id and title
 2. Severity and component
-3. Root cause — confirmed, or the leading candidate
+3. Root cause: confirmed, or the leading candidate
 4. Which planes exist now (private only, or private + issue URL)
 5. Next step: `/bug-fix BUG-NNNN`, or the investigation still needed

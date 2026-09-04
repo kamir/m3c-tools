@@ -3,7 +3,7 @@
 // m3c.<ctx>.thoughts.raw, this consumer picks it up and launches a
 // fresh default ProcessSpec so the engine reflects on its own output.
 //
-// SPEC-0167 §Stream 3a — "Consumer subscribed to
+// SPEC-0167 §Stream 3a: "Consumer subscribed to
 // m3c.<ctx>.thoughts.raw. Filters: only T messages with type ==
 // 'question' AND provenance.parent_artifact_id != null (the
 // contradiction-follow-ups emitted by I-proc in Week 2). Behavior:
@@ -14,7 +14,7 @@
 //
 // The rate limit is enforced against store.feedback_counters so it
 // survives restarts. Over the cap the consumer drops the message
-// with a warn log — the follow-up question still lives on
+// with a warn log. The follow-up question still lives on
 // thoughts.raw and the user can pick it up manually.
 package feedback
 
@@ -137,7 +137,7 @@ func (c *Consumer) onThought(ctx context.Context, m tkafka.Message) error {
 		return nil
 	}
 	if count > c.limit {
-		c.log.Printf("feedback: rate-limit exceeded (count=%d > cap=%d) — dropping follow-up thought=%s", count, c.limit, th.ThoughtID)
+		c.log.Printf("feedback: rate-limit exceeded (count=%d > cap=%d): dropping follow-up thought=%s", count, c.limit, th.ThoughtID)
 		return nil
 	}
 
@@ -174,7 +174,7 @@ func MatchFilter(th schema.Thought) bool {
 
 // DefaultFeedbackSpec returns the canonical feedback ProcessSpec the
 // engine runs in response to a contradiction follow-up: T → R.clarify
-// → I.decision → A.summary. Linear mode — every step runs as soon as
+// → I.decision → A.summary. Linear mode: every step runs as soon as
 // the command hits the topic (Week 3 keeps the feedback loop simple;
 // semi_linear ordering is available for the composer UI to use
 // deliberately).

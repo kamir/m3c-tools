@@ -1,6 +1,6 @@
 package main
 
-// SPEC-0276 R4.2 — end-to-end tests for `skillctl verify --bundle`. These
+// SPEC-0276 R4.2: end-to-end tests for `skillctl verify --bundle`. These
 // drive the real CLI runner with on-disk crypto material and assert the
 // canonical exit codes, proving the trustless third-party path works with no
 // install state and no network (the trust-roots file is a temp pinned file; no
@@ -51,7 +51,7 @@ func buildBundleFixture(t *testing.T) bundleFixture {
 		t.Fatalf("reg keygen: %v", err)
 	}
 
-	// The .skb blob — arbitrary bytes; the verifier only sees them via sha256.
+	// The .skb blob: arbitrary bytes; the verifier only sees them via sha256.
 	skbPath := filepath.Join(dir, "demo@1.0.0.skb")
 	content := []byte("a perfectly ordinary signed skill bundle blob")
 	if err := os.WriteFile(skbPath, content, 0o644); err != nil {
@@ -286,7 +286,7 @@ func TestVerifyBundle_ForgedRevocationListRefused(t *testing.T) {
 	}
 }
 
-// --- SPEC-0279 P4 — verify --bundle freshness contract ---
+// --- SPEC-0279 P4: verify --bundle freshness contract ---
 
 // writePinnedTrustRootsFresh is writePinnedTrustRoots plus a freshness policy
 // (max_staleness + fail_policy), for the SPEC-0279 verify-bundle tests.

@@ -51,7 +51,7 @@ For each recording in the Plaud cloud:
 ├── 3dc1eb8d83fd45e397cd0fe4695babb1/
 │   ├── audio.ogg
 │   ├── fieldnote.txt
-│   ├── transcript.txt         # "[No transcript available — audio only]"
+│   ├── transcript.txt         # "[No transcript available: audio only]"
 │   └── metadata.json
 └── ...
 ```
@@ -129,9 +129,9 @@ Plaud recordings are tracked in the existing `processed_files` table (same as au
 ```
 
 **States:**
-- **(not in DB)** — Recording exists in Plaud cloud but never synced
-- **imported** — Downloaded to `~/plaud-sync/`, not yet uploaded to ER1
-- **uploaded** — Successfully uploaded to ER1, `upload_doc_id` set
+- **(not in DB)**: Recording exists in Plaud cloud but never synced
+- **imported**: Downloaded to `~/plaud-sync/`, not yet uploaded to ER1
+- **uploaded**: Successfully uploaded to ER1, `upload_doc_id` set
 
 #### Deduplication
 
@@ -187,10 +187,10 @@ The client auto-follows this redirect and caches the regional URL.
 ```
 
 Key fields:
-- `duration` — **milliseconds** (divide by 1000 for seconds)
-- `start_time` — **Unix milliseconds**
-- `is_trans` — `true` if Plaud has transcribed this recording
-- `is_summary` — `true` if Plaud has generated a summary
+- `duration`: **milliseconds** (divide by 1000 for seconds)
+- `start_time`: **Unix milliseconds**
+- `is_trans`: `true` if Plaud has transcribed this recording
+- `is_summary`: `true` if Plaud has generated a summary
 
 ### Detail Response Format (`/file/detail/<id>`)
 
@@ -221,7 +221,7 @@ Key fields:
 - `content_list[].data_type = "transaction"` → transcript (gzipped JSON)
 - `content_list[].data_type = "outline"` → summary/outline (gzipped JSON)
 - `task_status = 1` → content ready for download
-- `data_link` — pre-signed S3 URL (expires ~5 minutes)
+- `data_link`: pre-signed S3 URL (expires ~5 minutes)
 
 ### Transcript Format (`trans_result.json.gz`)
 
@@ -269,7 +269,7 @@ falsch gelieferte Werkzeuge abgeholt...
 ```
 
 For audio-only recordings (no Plaud transcript), `transcript_file_ext` is **omitted** from
-the upload. The server receives audio only — transcription is controlled by `PLAUD_TRANSCRIBE_MODE`.
+the upload. The server receives audio only: transcription is controlled by `PLAUD_TRANSCRIBE_MODE`.
 No placeholder text is sent.
 
 ## CLI Commands
@@ -294,7 +294,7 @@ m3c-tools plaud sync all
 m3c-tools plaud debug
 ```
 
-## Re-Upload Workflow (Phase 3 — Planned)
+## Re-Upload Workflow (Phase 3: Planned)
 
 When ER1 becomes available after a local-only sync:
 
@@ -305,7 +305,7 @@ m3c-tools plaud upload-local [--all | --id <recording_id>]
 
 This command:
 1. Scans `~/plaud-sync/` for folders with `metadata.json`
-2. Checks tracking DB — skips entries with `status = 'uploaded'`
+2. Checks tracking DB: skips entries with `status = 'uploaded'`
 3. For each unuploaded folder:
    a. Read `fieldnote.txt` + `audio.ogg` + `metadata.json`
    b. Build `UploadPayload`
@@ -346,7 +346,7 @@ CREATE INDEX IF NOT EXISTS idx_plaud_sync_status ON plaud_sync(status);
 
 Plaud recordings may or may not have transcripts from the Plaud cloud. When a Plaud
 transcript exists, re-transcribing wastes compute and delays sync. When no transcript
-exists, the recording needs transcription — but the *when* and *how* should be configurable.
+exists, the recording needs transcription, but the *when* and *how* should be configurable.
 
 ### Configuration: `PLAUD_TRANSCRIBE_MODE`
 
@@ -354,11 +354,11 @@ A new environment variable controls what happens when Plaud has **no transcript*
 
 | Mode | Value | Behavior | Use Case |
 |------|-------|----------|----------|
-| **Queue** | `queue` | Sets `DO_TRANSCRIBE=true` on upload — server transcribes immediately | Fast turnaround, server has transcription capacity |
-| **Lazy** *(default)* | `lazy` | Adds `todo.transcribe` tag — background workers pick it up later | Preferred: decoupled, allows retranscription by other procedures |
-| **Off** | `off` | No transcription requested — audio stored without transcript | Bulk import where transcription is handled separately |
+| **Queue** | `queue` | Sets `DO_TRANSCRIBE=true` on upload: server transcribes immediately | Fast turnaround, server has transcription capacity |
+| **Lazy** *(default)* | `lazy` | Adds `todo.transcribe` tag: background workers pick it up later | Preferred: decoupled, allows retranscription by other procedures |
+| **Off** | `off` | No transcription requested: audio stored without transcript | Bulk import where transcription is handled separately |
 
-**Default:** `lazy` — this is the safest option because:
+**Default:** `lazy`: this is the safest option because:
 1. Items are tagged for transcription but not blocking the upload
 2. Any procedure (Whisper worker, manual trigger, batch job) can pick up `todo.transcribe`
 3. Retranscription can be triggered later by re-adding the `todo.transcribe` tag
@@ -400,7 +400,7 @@ The `lazy` mode is designed to support retranscription workflows:
 - **Retranscribe trigger:** Any procedure can re-add `todo.transcribe` to an existing item
   to force retranscription (e.g., better model available, language detection was wrong)
 
-This makes `todo.transcribe` a universal signal — not just for Plaud sync but for any
+This makes `todo.transcribe` a universal signal, not just for Plaud sync but for any
 audio item that needs (re)transcription.
 
 ## Configuration
@@ -451,5 +451,5 @@ PLAUD_TRANSCRIBE_MODE=lazy
 2. **`plaud upload-local`:** CLI command for re-uploading locally-synced recordings to ER1 (Phase 3).
 3. **Dedicated `plaud_sync` table:** Migrate from `processed_files` when state tracking needs grow.
 4. **Incremental sync:** `plaud sync --since <date>` to limit API calls for accounts with many recordings.
-5. ~~**Whisper fallback toggle**~~ — Replaced by `PLAUD_TRANSCRIBE_MODE` (queue/lazy/off). See "Transcription Decision Logic" section.
+5. ~~**Whisper fallback toggle**~~: Replaced by `PLAUD_TRANSCRIBE_MODE` (queue/lazy/off). See "Transcription Decision Logic" section.
 6. **Menu bar progress:** PlaudSyncWindow per-item progress during bulk sync (wired but needs ER1 to test end-to-end).

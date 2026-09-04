@@ -6,7 +6,7 @@ package artifactauth
 //
 // The macOS path reads the token from the Keychain (creds.go:keychain). Windows
 // has no Keychain, so without this a Windows user's only option is the plaintext
-// env var (M3C_GITHUB_TOKEN / M3C_GITLAB_TOKEN) — a WRITE-scoped registry token
+// env var (M3C_GITHUB_TOKEN / M3C_GITLAB_TOKEN): a WRITE-scoped registry token
 // sitting in the process environment, inherited by every child process and dumped
 // into crash reports. Instead we persist it as a DPAPI-protected blob: the
 // ciphertext is bound to the current user account (CryptProtectData), so even a
@@ -48,8 +48,8 @@ func osCredStore(service, account string) string {
 }
 
 // StoreCred DPAPI-protects secret and writes it under the per-user credential dir
-// for (service, account). This is the write side of the Windows credential store —
-// the analogue of `security add-generic-password` on macOS — so an operator can
+// for (service, account). This is the write side of the Windows credential store,
+// the analogue of `security add-generic-password` on macOS, so an operator can
 // keep a write-capable PAT out of the environment. The ciphertext is user-bound by
 // DPAPI; the 0600 is best-effort belt-and-braces (Windows ignores the perm bits).
 func StoreCred(service, account, secret string) error {

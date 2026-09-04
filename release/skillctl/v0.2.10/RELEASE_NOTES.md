@@ -1,17 +1,17 @@
-# skillctl v0.2.10 — security review remediation (SPEC-0266)
+# skillctl v0.2.10: security review remediation (SPEC-0266)
 
 Keyless (cosign/OIDC) provenance release. Dual-track install (cosign-preferred,
 pinned-ed25519 fallback). Closes the 2026-06-13 adversarial security review.
 
 ## P0 (trust spine)
-- **F2 + F19** — the self/ER1 sidecar gate now **re-verifies a signed attestation
+- **F2 + F19**: the self/ER1 sidecar gate now **re-verifies a signed attestation
   against the pinned (off-machine) key**: a repacked `.skb` is denied and
   governance comes from the SIGNED attestation, not the attacker-writable sidecar.
   Trust-roots mandatory when re-anchoring.
-- **F1** — post-install bundle revocation: the sweep is the revocation authority
+- **F1**. Post-install bundle revocation: the sweep is the revocation authority
   (quarantines revoked installs + 12h offline cache); a forged revoke is ignored.
-- **F12** — gate↔verifier canonicalization fixed point.
-- **F25** — credential clients no longer leak `X-API-KEY`/`X-Context-ID` on a
+- **F12**: gate↔verifier canonicalization fixed point.
+- **F25**: credential clients no longer leak `X-API-KEY`/`X-Context-ID` on a
   cross-host redirect.
 
 ## P1 (defense-in-depth)

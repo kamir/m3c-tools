@@ -116,7 +116,7 @@ func (d *CompositeDoc) Build() string {
 			b.WriteString(d.TranscriptText)
 			b.WriteByte('\n')
 		} else {
-			fmt.Fprintf(&b, "[Transcription pending — audio queued for processing]\n\n")
+			fmt.Fprintf(&b, "[Transcription pending: audio queued for processing]\n\n")
 		}
 		fmt.Fprintf(&b, "\n=== END POCKET FIELDNOTE ===\n")
 
@@ -130,7 +130,7 @@ func (d *CompositeDoc) Build() string {
 		if d.TranscriptText != "" {
 			b.WriteString(d.TranscriptText)
 		} else {
-			fmt.Fprintf(&b, "[Transcription pending — merged audio queued for processing]\n\n")
+			fmt.Fprintf(&b, "[Transcription pending: merged audio queued for processing]\n\n")
 		}
 		if d.ImpressionText != "" {
 			fmt.Fprintf(&b, "\n--- Raw File Manifest ---\n")

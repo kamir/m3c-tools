@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""distill_backfill — wave-by-wave distillation backfill runner (SPEC-0269 P1).
+"""distill_backfill: wave-by-wave distillation backfill runner (SPEC-0269 P1).
 
 Turns raw ER1/braindump notes into a distilled knowledge layer + cumulative
 knowledge graph, resumably, mostly on Sonnet with Opus reserved for strategic
@@ -337,10 +337,10 @@ def _note_ctx(p, default):
 def cmd_er1_sync(a):
     """Sync distilled WIKI notes to ER1 as linked children of their raw items.
 
-    LOCAL TARGET ONLY (https://127.0.0.1:8081), matching the er1-comment skill —
+    LOCAL TARGET ONLY (https://127.0.0.1:8081), matching the er1-comment skill.
     prod/stage are gated by design. Dry-run by default; pass --confirm to POST.
     Idempotent via er1-sync-ledger.jsonl. NOTE: raw parents must exist in the
-    target ER1 or the link/parent tag orphans (SPEC-0269 OQ — prod path is P3).
+    target ER1 or the link/parent tag orphans (SPEC-0269 OQ, prod path is P3).
     """
     import os
     import subprocess

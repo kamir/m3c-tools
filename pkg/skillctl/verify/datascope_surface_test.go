@@ -1,6 +1,6 @@
 package verify
 
-// SPEC-0196 §12 Q1 / P2b — the verifier surfaces declared data-scope WITH
+// SPEC-0196 §12 Q1 / P2b: the verifier surfaces declared data-scope WITH
 // provenance: a scope read from the author-signed bundle.json INSIDE the
 // digest-verified .skb is "signed-manifest" (authoritative); a scope on the
 // mutable post-admit registry row is "bundle-row" (advisory). These tests prove
@@ -138,7 +138,7 @@ func TestVerify_SurfacesBundleRowScope(t *testing.T) {
 	}
 }
 
-// TestVerify_BundleRowCannotMasqueradeAsSigned: the red-team scenario — a
+// TestVerify_BundleRowCannotMasqueradeAsSigned: the red-team scenario: a
 // bundle-row scope that DIFFERS from the (absent) signed manifest must NOT be
 // reported as signed-manifest. The signed-manifest provenance is reserved for
 // scope read from the digest-verified .skb; a registry that injects a scope into
@@ -162,13 +162,13 @@ func TestVerify_BundleRowCannotMasqueradeAsSigned(t *testing.T) {
 			t.Fatalf("a non-signed scope was reported as signed-manifest: %+v", s.Raw)
 		}
 	}
-	// And it IS still surfaced — as the advisory bundle-row it really is.
+	// And it IS still surfaced, as the advisory bundle-row it really is.
 	if len(res.DataScopes) != 1 || res.DataScopes[0].Provenance != ScopeProvenanceBundleRow {
 		t.Fatalf("want exactly one bundle-row scope, got %+v", res.DataScopes)
 	}
 }
 
-// TestVerify_NoScopeUnchanged: a bundle with no declared scope surfaces none —
+// TestVerify_NoScopeUnchanged: a bundle with no declared scope surfaces none:
 // back-compat (an old bundle verifies exactly as before, DataScopes empty).
 func TestVerify_NoScopeUnchanged(t *testing.T) {
 	opts := scopedOpts(t, nil, nil, nil)

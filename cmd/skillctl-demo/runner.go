@@ -1,6 +1,6 @@
 package main
 
-// runner.go — execute the REAL skillctl binary as a subprocess, capture its
+// runner.go: execute the REAL skillctl binary as a subprocess, capture its
 // stdout/stderr and the numbered exit code, and stream output lines to a sink.
 //
 // This is the honesty spine of the demo: every LIVE scenario verdict is the
@@ -37,7 +37,7 @@ type Runner struct {
 
 // Run executes `skillctl <args...>` with an optional stdin string. It streams
 // each output line through emit (prefixed by stream name) as it is produced,
-// and returns the complete captured result. A non-zero exit is NOT an error —
+// and returns the complete captured result. A non-zero exit is NOT an error,
 // the exit code is the whole point.
 func (r *Runner) Run(emit func(stream, line string), stdin string, args ...string) RunResult {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)

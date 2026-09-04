@@ -1,11 +1,11 @@
 package main
 
-// SPEC-0276 R5 — `skillctl compliance report --framework <eu-ai-act|nist-ai-rmf|soc2>`.
+// SPEC-0276 R5: `skillctl compliance report --framework <eu-ai-act|nist-ai-rmf|soc2>`.
 //
 // An offline evidence pack: it enumerates installed skills and their trust
 // posture (governance level, author, offline-verifiable, provenance) from the
 // metadata we already keep, and maps our controls to the named framework. It is
-// an EVIDENCE AID for an auditor — NOT a certification (that is precisely the
+// an EVIDENCE AID for an auditor, NOT a certification (that is precisely the
 // overreach we flagged in the hosted-CA rival's "we built it"). Closes the one
 // productised asset that rival ships and we did not (R5).
 
@@ -50,7 +50,7 @@ type complianceReport struct {
 // withTrailEvidence returns a copy of the control map in which the EU AI Act
 // Art.12 "Evidence" cell is replaced with the concrete, verified figures from
 // the signed invocation trail. Non-Art.12 rows and other frameworks are
-// untouched. Pure — never mutates the package-level complianceFrameworks map.
+// untouched. Pure: never mutates the package-level complianceFrameworks map.
 func withTrailEvidence(controls []complianceControl, tv trailVerification) []complianceControl {
 	out := make([]complianceControl, len(controls))
 	copy(out, controls)
@@ -68,45 +68,45 @@ func trailEvidenceSentence(tv trailVerification) string {
 	if !tv.Present {
 		return "Per-invocation signed events (SPEC-0202): no invocation-trail.jsonl yet on this host (no skill invocations recorded). Trail is created on first gated invocation."
 	}
-	// IS-RS-05(b): an oversized trail was REFUSED (not slurped) — report it as
+	// IS-RS-05(b): an oversized trail was REFUSED (not slurped): report it as
 	// present-but-unverified rather than a clean verify on a file we declined to read.
 	if tv.Oversize {
-		return "Per-invocation signed events (SPEC-0202): invocation-trail.jsonl exceeds the safe whole-file read ceiling and was REFUSED — present-but-UNVERIFIED (an unbounded same-uid writer can grow the file past all rotation; refusing to load it avoids OOM). Rotate/inspect the trail out-of-band."
+		return "Per-invocation signed events (SPEC-0202): invocation-trail.jsonl exceeds the safe whole-file read ceiling and was REFUSED: present-but-UNVERIFIED (an unbounded same-uid writer can grow the file past all rotation; refusing to load it avoids OOM). Rotate/inspect the trail out-of-band."
 	}
 	key := tv.DeviceKeyID
 	if key == "" {
-		key = "(device key unavailable — cannot verify)"
+		key = "(device key unavailable, cannot verify)"
 	}
 	// Honest framing (P2 challenge-gate F-5.1): the device key is LOCALLY ANCHORED
-	// — verification proves integrity-since-signing on THIS host, not authenticity
+	//, verification proves integrity-since-signing on THIS host, not authenticity
 	// against an external root (registry attestation of the device key is a
 	// follow-up). Do not let an auditor read self-referential verification as
 	// external attestation.
-	// IS-T8: report the hash-chain integrity check — keyless seq+prev_hash
-	// contiguity PLUS the second device signature over each link — that makes a
+	// IS-T8: report the hash-chain integrity check, keyless seq+prev_hash
+	// contiguity PLUS the second device signature over each link, that makes a
 	// deleted, reordered, or same-uid-rewritten middle record tamper-EVIDENT on top
 	// of the per-line signature.
-	chain := fmt.Sprintf("hash-chained (seq+prev_hash, %d/%d links device-signed) intact — no middle record deleted, reordered, or rewritten", tv.ChainSigned, tv.Total)
+	chain := fmt.Sprintf("hash-chained (seq+prev_hash, %d/%d links device-signed) intact, no middle record deleted, reordered, or rewritten", tv.ChainSigned, tv.Total)
 	if !tv.ChainVerified {
-		chain = fmt.Sprintf("hash-chain BROKEN — %d break(s): a record was deleted, reordered, rewritten, or the trail could not be fully read", tv.ChainBreaks)
+		chain = fmt.Sprintf("hash-chain BROKEN, %d break(s): a record was deleted, reordered, rewritten, or the trail could not be fully read", tv.ChainBreaks)
 		if tv.ScanError != "" {
 			// IS-RS-05(a): a scan error stopped the read mid-file (esp. a > 4 MiB line).
-			chain += fmt.Sprintf(" (read stopped mid-file: %s — records after the offending line are unreadable)", tv.ScanError)
+			chain += fmt.Sprintf(" (read stopped mid-file: %s: records after the offending line are unreadable)", tv.ScanError)
 		}
 	}
 	// IS-RS-04: LOCAL, best-effort tail-truncation watch via a high-water-mark
-	// sidecar. HONEST SCOPE — do NOT overclaim: cross-run and LOCAL only; defeatable
+	// sidecar. HONEST SCOPE. Do NOT overclaim: cross-run and LOCAL only; defeatable
 	// by a same-uid actor who also edits the sidecar; the non-repudiable close is an
 	// EXTERNAL head anchor (SPEC-0358 transparency log), NOT this sidecar.
-	tail := "tail-truncation watched LOCALLY (high-water-mark sidecar; best-effort, defeatable by a same-uid sidecar edit — the non-repudiable close is an external SPEC-0358 head anchor)"
+	tail := "tail-truncation watched LOCALLY (high-water-mark sidecar; best-effort, defeatable by a same-uid sidecar edit, the non-repudiable close is an external SPEC-0358 head anchor)"
 	if tv.TailTruncated {
-		tail = fmt.Sprintf("LOCAL TAIL-TRUNCATION DETECTED — the live max seq regressed below the recorded local high-water-mark (%d): records were dropped from the END (local best-effort signal only; a same-uid actor can also edit the sidecar, so an external SPEC-0358 head anchor is still required to make this non-repudiable)", tv.HWMSeq)
+		tail = fmt.Sprintf("LOCAL TAIL-TRUNCATION DETECTED, the live max seq regressed below the recorded local high-water-mark (%d): records were dropped from the END (local best-effort signal only; a same-uid actor can also edit the sidecar, so an external SPEC-0358 head anchor is still required to make this non-repudiable)", tv.HWMSeq)
 	}
 	return fmt.Sprintf("Per-invocation signed events (SPEC-0202): %d/%d invocation records pass local device-key integrity verification (%d unverified, %d replays); %s; %s. Device key %s is locally anchored (integrity-since-signing on this host; not yet registry-attested). Append-only ~/.claude/skillctl/invocation-trail.jsonl.",
 		tv.Verified, tv.Total, tv.Unverified, tv.Replays, chain, tail, key)
 }
 
-const complianceDisclaimer = "Evidence aid for an auditor — NOT a certification or attestation of compliance. " +
+const complianceDisclaimer = "Evidence aid for an auditor: NOT a certification or attestation of compliance. " +
 	"It summarises technical controls and maps them to the named framework; it does not assert conformance."
 
 // complianceFrameworks embeds a concise, real control→evidence map per
@@ -114,10 +114,10 @@ const complianceDisclaimer = "Evidence aid for an auditor — NOT a certificatio
 // maintenance plane; this is the machine-collected projection.
 var complianceFrameworks = map[string][]complianceControl{
 	"eu-ai-act": {
-		{"Art. 12 — Record-keeping", "Automatic logging over the lifetime", "Per-invocation signed events (SPEC-0202) + admit/attest/revoke audit trail"},
-		{"Art. 13 — Transparency", "Information to deployers", "Declared intent + data-scope per skill (SPEC-0196); provenance edges"},
-		{"Art. 14 — Human oversight", "Enable human oversight", "Governance Ampel 🟢🟡🔴 + human checkpoints; reviewer≠author (SPEC-0246)"},
-		{"Art. 15 — Accuracy/robustness/security", "Resilience to tampering", "ed25519 signed bundles + content-binding; offline verify + revocation (SPEC-0276)"},
+		{"Art. 12: Record-keeping", "Automatic logging over the lifetime", "Per-invocation signed events (SPEC-0202) + admit/attest/revoke audit trail"},
+		{"Art. 13: Transparency", "Information to deployers", "Declared intent + data-scope per skill (SPEC-0196); provenance edges"},
+		{"Art. 14: Human oversight", "Enable human oversight", "Governance Ampel 🟢🟡🔴 + human checkpoints; reviewer≠author (SPEC-0246)"},
+		{"Art. 15: Accuracy/robustness/security", "Resilience to tampering", "ed25519 signed bundles + content-binding; offline verify + revocation (SPEC-0276)"},
 	},
 	"nist-ai-rmf": {
 		{"GOVERN", "Policies, accountability, roles", "Trust-roots policy + skill:author RBAC; governance handbook"},
@@ -126,9 +126,9 @@ var complianceFrameworks = map[string][]complianceControl{
 		{"MANAGE", "Respond, recover, revoke", "Signed revocation list enforced offline (SPEC-0276 R4.4)"},
 	},
 	"soc2": {
-		{"CC6.x — Logical access", "Restrict access to assets", "Pinned trust-roots; capability/data-scope declarations"},
-		{"CC7.x — System operations", "Detect & respond to anomalies", "Audit trail of admit/attest/revoke + invocation events"},
-		{"CC8.1 — Change management", "Authorize & track changes", "Signed bundles, reviewer≠author, version/digest pinning"},
+		{"CC6.x (Logical access", "Restrict access to assets", "Pinned trust-roots; capability/data-scope declarations"},
+		{"CC7.x) System operations", "Detect & respond to anomalies", "Audit trail of admit/attest/revoke + invocation events"},
+		{"CC8.1: Change management", "Authorize & track changes", "Signed bundles, reviewer≠author, version/digest pinning"},
 	},
 }
 
@@ -165,7 +165,7 @@ func runCompliance(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 
-	// Resolve home first — needed both for the default skills dir AND for the
+	// Resolve home first: needed both for the default skills dir AND for the
 	// signed invocation trail (the Art.12 evidence).
 	home := *homeOverride
 	if home == "" {
@@ -187,10 +187,10 @@ func runCompliance(args []string, stdout, stderr io.Writer) int {
 		return exitGeneric
 	}
 
-	// SPEC-0202 §9 — read + verify the device-signed invocation trail. This is
+	// SPEC-0202 §9: read + verify the device-signed invocation trail. This is
 	// the concrete, offline-verifiable evidence for the EU AI Act Art.12
 	// record-keeping control: the report now reports HOW MANY invocation records
-	// are signed and verifiable, by which device key — not just a forward-ref.
+	// are signed and verifiable, by which device key, not just a forward-ref.
 	tv := readAndVerifyTrail(home)
 
 	// For the EU AI Act framework, replace the static Art.12 "Evidence" cell
@@ -234,7 +234,7 @@ func collectComplianceSkills(skillsDir string) ([]complianceSkill, error) {
 	entries, err := os.ReadDir(skillsDir)
 	if err != nil {
 		// A missing skills dir is a valid empty inventory (a host that has not
-		// installed any skill yet) — not an error. Other read errors propagate.
+		// installed any skill yet), not an error. Other read errors propagate.
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
@@ -330,7 +330,7 @@ func summarizeCompliance(skills []complianceSkill) map[string]int {
 
 func renderComplianceMD(r complianceReport) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# Compliance evidence — %s\n\n", strings.ToUpper(r.Framework))
+	fmt.Fprintf(&b, "# Compliance evidence: %s\n\n", strings.ToUpper(r.Framework))
 	fmt.Fprintf(&b, "> %s\n\n", r.Disclaimer)
 	fmt.Fprintf(&b, "Skills directory: `%s`\n\n", r.SkillsDir)
 
@@ -344,7 +344,7 @@ func renderComplianceMD(r complianceReport) string {
 		if !t.Present {
 			fmt.Fprintf(&b, "- Signed invocation trail (SPEC-0202): none yet (no recorded invocations)\n")
 		} else if t.Oversize {
-			fmt.Fprintf(&b, "- Signed invocation trail (SPEC-0202): REFUSED — file exceeds the safe read ceiling (present-but-unverified; OOM defense)\n")
+			fmt.Fprintf(&b, "- Signed invocation trail (SPEC-0202): REFUSED: file exceeds the safe read ceiling (present-but-unverified; OOM defense)\n")
 		} else {
 			key := t.DeviceKeyID
 			if key == "" {
@@ -357,10 +357,10 @@ func renderComplianceMD(r complianceReport) string {
 				if t.ScanError != "" {
 					detail = "read stopped mid-file: " + t.ScanError
 				}
-				fmt.Fprintf(&b, "  - Hash-chain: BROKEN (%d break(s) — %s)\n", t.ChainBreaks, detail)
+				fmt.Fprintf(&b, "  - Hash-chain: BROKEN (%d break(s): %s)\n", t.ChainBreaks, detail)
 			}
 			if t.TailTruncated {
-				fmt.Fprintf(&b, "  - LOCAL tail-truncation DETECTED: max seq regressed below high-water-mark %d (local best-effort; defeatable by a same-uid sidecar edit — external SPEC-0358 anchor still required)\n", t.HWMSeq)
+				fmt.Fprintf(&b, "  - LOCAL tail-truncation DETECTED: max seq regressed below high-water-mark %d (local best-effort; defeatable by a same-uid sidecar edit: external SPEC-0358 anchor still required)\n", t.HWMSeq)
 			}
 		}
 	}
@@ -387,7 +387,7 @@ func renderComplianceMD(r complianceReport) string {
 
 func dash(s string) string {
 	if s == "" {
-		return "—"
+		return ": "
 	}
 	return s
 }
@@ -396,5 +396,5 @@ func yn(b bool) string {
 	if b {
 		return "✓"
 	}
-	return "—"
+	return ": "
 }

@@ -1,12 +1,12 @@
 package verify
 
-// SPEC-0246 §5 — reviewer≠author floor (require_independent_review), P1b hardening.
+// SPEC-0246 §5: reviewer≠author floor (require_independent_review), P1b hardening.
 //
 // The floor must be CRYPTOGRAPHICALLY enforced: when require_independent_review
 // is set, independence is established ONLY by a binding governance attestation
 // whose ed25519 signature verifies against a PINNED reviewer key AND whose
 // (signature-bound) reviewer_id differs from the author. The unsigned sidecar
-// fields (self_attested, reviewer_id) are NEVER trusted to satisfy the floor —
+// fields (self_attested, reviewer_id) are NEVER trusted to satisfy the floor,
 // in the offline `verify --bundle` path the sidecar is attacker-controlled, so a
 // forged reviewer_id / self_attested:false with no valid signature must FAIL
 // CLOSED. This is the same unsigned-sidecar class SPEC-0281 fixed for governance.
@@ -56,7 +56,7 @@ func pinReviewer(opts *VerifyOpts, reviewerID string, reviewerPub ed25519.Public
 
 // setBindingReviewer overwrites the single binding attestation's reviewer id on
 // a pinned-opts BundleMeta WITHOUT a signature, and clears any registry-stamped
-// self_attested / author_id — i.e. the attacker-controlled, unsigned sidecar.
+// self_attested / author_id, i.e. the attacker-controlled, unsigned sidecar.
 func setBindingReviewer(opts *VerifyOpts, reviewerID string) {
 	for i := range opts.BundleMeta.Attestations {
 		opts.BundleMeta.Attestations[i].ReviewerID = reviewerID
@@ -139,7 +139,7 @@ func TestVerify_IndependentReview_FloorOn_SignedIndependentPasses(t *testing.T) 
 }
 
 // HACKER PoC #1: a fabricated independent reviewer_id with NO valid signature in
-// the attacker-controlled offline sidecar must FAIL CLOSED — the unsigned
+// the attacker-controlled offline sidecar must FAIL CLOSED. The unsigned
 // reviewer_id cannot launder past the floor.
 func TestVerify_IndependentReview_FloorOn_ForgedReviewerID_FailsClosed(t *testing.T) {
 	opts, _ := pinnedOpts(t)
@@ -161,7 +161,7 @@ func TestVerify_IndependentReview_FloorOn_ForgedReviewerID_FailsClosed(t *testin
 }
 
 // HACKER PoC #2: an UNSIGNED self_attested:false flag in the sidecar must FAIL
-// CLOSED — the unsigned flag is never trusted to assert independence.
+// CLOSED. The unsigned flag is never trusted to assert independence.
 func TestVerify_IndependentReview_FloorOn_UnsignedSelfAttestedFalse_FailsClosed(t *testing.T) {
 	opts, _ := pinnedOpts(t)
 	fls := false
@@ -244,7 +244,7 @@ func TestVerify_IndependentReview_FloorOn_NoReviewerFailsClosed(t *testing.T) {
 
 func TestTrustRoots_RequireIndependentReview_StrictLoaderAccepts(t *testing.T) {
 	// The STRICT loader (KnownFields(true)) must accept the declared
-	// require_independent_review field — but ONLY together with a non-empty
+	// require_independent_review field, but ONLY together with a non-empty
 	// reviewers list (the floor must ship with the keys to enforce it).
 	regKey := mustKeypair(t)
 	reviewerKey := mustKeypair(t)

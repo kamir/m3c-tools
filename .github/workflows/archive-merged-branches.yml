@@ -20,7 +20,7 @@ on:
         required: false
         default: "false"
 
-# CD-15: least privilege by default — the whole workflow is read-only; the single
+# CD-15: least privilege by default: the whole workflow is read-only; the single
 # job that pushes archive tags + deletes merged branches elevates per-job below.
 permissions:
   contents: read
@@ -78,7 +78,7 @@ jobs:
           fi
 
           if [ "$DRY_RUN" = "true" ]; then
-            echo "DRY RUN — no tags pushed, no branches deleted."
+            echo "DRY RUN: no tags pushed, no branches deleted."
             exit 0
           fi
 

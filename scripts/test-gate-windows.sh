@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test-gate-windows.sh — Local Windows dev test gate for m3c-tools
+# test-gate-windows.sh: Local Windows dev test gate for m3c-tools
 #
 # Validates that the Windows build is clean without needing a Windows machine.
 # Runs four phases: vet → cross-compile → Windows-safe unit tests → smoke.
@@ -105,7 +105,7 @@ _section "Phase 1: go vet"
 if go vet ./...; then
   _pass "go vet ./..."
 else
-  _fail "go vet ./... — fix errors before proceeding"
+  _fail "go vet ./...: fix errors before proceeding"
   exit 1
 fi
 
@@ -154,7 +154,7 @@ fi
 # ── Phase 3: Unit tests (Windows-safe subset) ────────────────────────────────
 if [[ "$QUICK" == "--quick" ]]; then
   echo ""
-  echo "=== Phase 3: Unit tests (skipped — --quick) ==="
+  echo "=== Phase 3: Unit tests (skipped: --quick) ==="
   echo "  (run without --quick to include)"
 else
   _section "Phase 3: Windows-safe unit tests"
@@ -200,12 +200,12 @@ echo "  Results: ${PASS} passed, ${FAIL} failed"
 echo "────────────────────────────────────────────────"
 echo ""
 if [ "$FAIL" -eq 0 ]; then
-  echo "  GATE PASSED — safe to push"
+  echo "  GATE PASSED, safe to push"
   echo ""
   echo "  Next: push to trigger GitHub Actions windows-latest runner"
   echo "         (.github/workflows/windows-gate.yml)"
   exit 0
 else
-  echo "  GATE FAILED — fix errors before pushing"
+  echo "  GATE FAILED, fix errors before pushing"
   exit 1
 fi

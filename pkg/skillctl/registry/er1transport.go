@@ -1,6 +1,6 @@
 package registry
 
-// ER1 registry recognizer — SPEC-0225 (Personal Skill Registry & Cross-Machine
+// ER1 registry recognizer: SPEC-0225 (Personal Skill Registry & Cross-Machine
 // Trust-Mode Distribution via ER1).
 //
 // This file recognizes which `--registry` specs select the ER1 carrier. The
@@ -9,7 +9,7 @@ package registry
 // the ER1 free functions (er1_publish.go / er1_pull.go) do the publish/pull work.
 //
 // Background. The existing registry.Client in this package is the HTTP client
-// for the aims-core admission API (SPEC-0188 §5) — it talks to a `--registry
+// for the aims-core admission API (SPEC-0188 §5): it talks to a `--registry
 // <url>` endpoint. The ER1 carrier is a *different carrier*: it does not call
 // that HTTP API. A published bundle event is one ER1 memory item (created via
 // POST /upload_2, SPEC-0187) whose body is a SPEC-0190 event verbatim and whose
@@ -23,7 +23,7 @@ package registry
 import "strings"
 
 // ER1RegistrySelf is the well-known registry spec that means "the author's
-// personal ER1-mediated registry" — the `self` tenant of SPEC-0225 /
+// personal ER1-mediated registry": the `self` tenant of SPEC-0225 /
 // INFRA/skill-registry/env/self.env. Used as `skillctl ... --registry self`.
 const ER1RegistrySelf = "self"
 

@@ -15,7 +15,7 @@ make build                                  # → ./build/m3c-tools
 go build -o build/skillctl ./cmd/skillctl   # skillctl
 ```
 
-## Before you open a PR — run the gates CI runs
+## Before you open a PR: run the gates CI runs
 
 ```bash
 make ci            # vet · golangci-lint · unit tests · build (the gate CI enforces)
@@ -28,10 +28,10 @@ make check-docs    # documentation ↔ implementation consistency
 - **Tests bite.** Add tests with your change; the suite runs with `-race`. Offline tests live
   under `make test-unit`; networked / ER1 / whisper suites are opt-in (`make test-*`).
 - **Document CLI flags.** Every CLI flag must be described in its manual
-  (`docs/manual-m3c-tools.md` / `docs/manual-skillctl.md`) — and only real flags may be
+  (`docs/manual-m3c-tools.md` / `docs/manual-skillctl.md`), and only real flags may be
   documented. Undocumented or phantom flags are treated as a defect.
 
-## Commit messages — Conventional Commits
+## Commit messages: Conventional Commits
 
 The release version bump is **derived from your commits**, so the prefix matters
 ([`scripts/derive-bump.sh`](scripts/derive-bump.sh)):
@@ -57,7 +57,7 @@ refactor is not.
 
 - **Code** lives in this repository.
 - **Plans, SPECs and design docs** live in the sibling private maintenance repository, not in
-  this tree — the boundary is enforced by [`tools/boundary-gate.sh`](tools/boundary-gate.sh).
+  this tree. The boundary is enforced by [`tools/boundary-gate.sh`](tools/boundary-gate.sh).
   Contributor/release tooling resolves it via `M3C_MAINTENANCE_DIR` (see the README).
 
 ## Releasing
@@ -67,7 +67,7 @@ Releases are tag-driven and signed in CI. The full runbook is in
 
 ## Security
 
-Please report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
+Please report vulnerabilities privately: see [SECURITY.md](SECURITY.md).
 
 ## License
 

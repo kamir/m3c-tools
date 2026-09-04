@@ -87,7 +87,7 @@ func (s *SyncStats) FormatSummary() string {
 // CoverageReport returns a 1:1 coverage block matching the field shape of the
 // pocket_sync /reconcile endpoint (total / already_synced / newly_ingested /
 // failed / remaining_missing / coverage / complete). Both capture devices then
-// report their completeness identically — the "be sure" surface for a post-trip
+// report their completeness identically: the "be sure" surface for a post-trip
 // drain (parity request, 2026-06-08). `coverage` is covered/total where covered
 // = already-synced + newly-ingested (saved-locally is NOT in ER1, so not covered).
 func (s *SyncStats) CoverageReport() string {

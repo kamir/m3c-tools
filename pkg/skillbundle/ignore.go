@@ -12,7 +12,7 @@ import (
 // A skill bundle is source, not build output. Compiled binaries, dependency
 // trees, and caches (a `dist/` executable, `node_modules/`, `__pycache__/`) can
 // dwarf the actual skill by three orders of magnitude and blow the registry's
-// inline-admit cap — while adding nothing a consumer needs (they rebuild locally
+// inline-admit cap, while adding nothing a consumer needs (they rebuild locally
 // from the packed source). `collectFiles` therefore skips a small, conservative
 // set of well-known artifact paths, plus any patterns a skill declares in a
 // top-level `.skbignore`.
@@ -23,7 +23,7 @@ import (
 //   - the required top-level `SKILL.md` is NEVER ignored (guarded in collectFiles);
 //   - `.skbignore` may *re-include* a default-ignored path with a `!pattern`.
 //
-// Pattern language — a deliberate, documented subset of gitignore:
+// Pattern language: a deliberate, documented subset of gitignore:
 //   - blank lines and lines beginning with `#` are comments;
 //   - a leading `!` negates (re-includes) a match;
 //   - a trailing `/` restricts the rule to directories;
@@ -31,7 +31,7 @@ import (
 //     (`node_modules/`, `*.pyc`);
 //   - a pattern with an interior or leading `/` is ANCHORED to the skill root and
 //     matched against the whole relative path;
-//   - globs use path.Match semantics (`*`, `?`, `[…]`) — there is no `**`.
+//   - globs use path.Match semantics (`*`, `?`, `[…]`): there is no `**`.
 // Last matching rule wins (gitignore order). As in gitignore, a file cannot be
 // re-included once a parent directory is ignored (the walk prunes the subtree),
 // so negate the directory, not a file beneath it.
@@ -64,9 +64,9 @@ var defaultIgnorePatterns = []string{
 // ignoreRule is one parsed pattern.
 type ignoreRule struct {
 	glob     string // path.Match glob (basename or anchored rel path)
-	dirOnly  bool   // trailing "/" — matches directories only
-	negate   bool   // leading "!" — re-includes
-	anchored bool   // contained/leading "/" — match the full rel path, not the basename
+	dirOnly  bool   // trailing "/", matches directories only
+	negate   bool   // leading "!", re-includes
+	anchored bool   // contained/leading "/": match the full rel path, not the basename
 }
 
 // parseIgnoreLine parses one pattern line. ok=false for blanks/comments.
@@ -110,7 +110,7 @@ func parseIgnore(lines []string) []ignoreRule {
 }
 
 // loadIgnoreRules returns the default artifact rules followed by any rules from
-// a top-level `.skbignore` in skillDir (so a skill's rules — including negations —
+// a top-level `.skbignore` in skillDir (so a skill's rules, including negations:
 // take precedence via last-match-wins).
 func loadIgnoreRules(skillDir string) []ignoreRule {
 	rules := parseIgnore(defaultIgnorePatterns)

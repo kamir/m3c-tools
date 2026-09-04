@@ -162,7 +162,7 @@ func (pm *ProfileManager) ActiveProfile() (*Profile, error) {
 // diagnose silent failures on Windows where file writes may not persist.
 //
 // BUG-0137: Refuses to activate a profile that carries a placeholder API key
-// against a non-local target URL — that combination silently breaks every
+// against a non-local target URL, that combination silently breaks every
 // upload with a server-side 401 and is the single most common menubar outage.
 // Use ForceSwitchProfile to bypass (e.g. seeding scripts or recovery flows).
 func (pm *ProfileManager) SwitchProfile(name string) error {
@@ -172,7 +172,7 @@ func (pm *ProfileManager) SwitchProfile(name string) error {
 	}
 	if IsBlockingPlaceholder(p.Vars["ER1_API_KEY"], p.Vars["ER1_API_URL"]) {
 		return fmt.Errorf(
-			"profile %q has a placeholder ER1_API_KEY (%q) targeting %q — refusing to activate. "+
+			"profile %q has a placeholder ER1_API_KEY (%q) targeting %q: refusing to activate. "+
 				"Edit the profile to set a real key, or run 'm3c-tools doctor' for details. "+
 				"To override (recovery only) use ForceSwitchProfile",
 			name, p.Vars["ER1_API_KEY"], p.Vars["ER1_API_URL"])
@@ -207,13 +207,13 @@ func (pm *ProfileManager) forceSwitchProfileLocked(name string, p *Profile) erro
 }
 
 // ApplyProfile sets all environment variables from the profile using os.Setenv.
-// Existing env vars are overwritten to ensure a clean switch — the profile is the
+// Existing env vars are overwritten to ensure a clean switch. The profile is the
 // target selector, and a stale ER1_API_URL left over in someone's shell must not
 // quietly defeat a profile switch.
 //
 // The ONE exception is a placeholder (FR-0096): "your-api-key-here", "changeme",
 // the demo credential, or the empty string are not values, they are the profile
-// saying "nothing stored here" — usually on purpose, because the real key belongs
+// saying "nothing stored here", usually on purpose, because the real key belongs
 // in the Keychain and not in a plaintext .env. Letting such a token overwrite a
 // deliberately exported credential replaced a working key with one the very next
 // function then recognises as unusable, and every key-authenticated write route
@@ -222,7 +222,7 @@ func (pm *ProfileManager) ApplyProfile(p *Profile) error {
 	for k, v := range p.Vars {
 		if cur, set := os.LookupEnv(k); set && IsPlaceholderKey(v) && !IsPlaceholderKey(cur) {
 			// Name the variable, never the value.
-			log.Printf("[config] %s: keeping the value from the environment — profile %q has a placeholder", k, p.Name)
+			log.Printf("[config] %s: keeping the value from the environment: profile %q has a placeholder", k, p.Name)
 			continue
 		}
 		if err := os.Setenv(k, v); err != nil {
@@ -280,7 +280,7 @@ func (pm *ProfileManager) CreateProfile(name, description string, vars map[strin
 func (pm *ProfileManager) DeleteProfile(name string) error {
 	active := pm.ActiveProfileName()
 	if active == name {
-		return fmt.Errorf("cannot delete active profile %q — switch to another profile first", name)
+		return fmt.Errorf("cannot delete active profile %q: switch to another profile first", name)
 	}
 	path := filepath.Join(pm.profilesDir(), name+".env")
 	if _, err := os.Stat(path); os.IsNotExist(err) {
@@ -348,7 +348,7 @@ func (pm *ProfileManager) TestConnection(p *Profile) error {
 		return fmt.Errorf("profile %q has no ER1_API_URL", p.Name)
 	}
 
-	// Lightweight health check — tests server reachability via /health endpoint.
+	// Lightweight health check: tests server reachability via /health endpoint.
 	// Auth validation happens separately in the doctor/check-er1 commands.
 	return healthCheckER1(apiURL, p.Vars["ER1_VERIFY_SSL"])
 }

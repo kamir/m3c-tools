@@ -167,7 +167,7 @@ func TestConsistency_RewriteDetected(t *testing.T) {
 	}
 
 	// The tampered new tree, presented with the genuine old root, must NOT
-	// verify — regardless of which proof the attacker supplies.
+	// verify: regardless of which proof the attacker supplies.
 	tamperedProof, _ := ConsistencyProof(first, second, tampered)
 	if err := VerifyConsistency(first, second, oldRoot, newRootTampered, tamperedProof); !errors.Is(err, ErrConsistencyMismatch) {
 		t.Fatalf("rewrite via tampered proof: want ErrConsistencyMismatch, got %v", err)
@@ -215,7 +215,7 @@ func TestConsistency_BadArgs(t *testing.T) {
 
 // TestConsistency_FirstEqualsSecond_RootMustMatch ensures the same-size
 // path still checks root equality (a verifier shouldn't accept two
-// different roots claimed at the same size — that's the split-view shape,
+// different roots claimed at the same size. That's the split-view shape,
 // caught here at the proof layer too).
 func TestConsistency_FirstEqualsSecond_RootMustMatch(t *testing.T) {
 	leaves := leafHashes(5)

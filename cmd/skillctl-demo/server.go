@@ -1,12 +1,12 @@
 package main
 
-// server.go — the P1 web mirror.
+// server.go: the P1 web mirror.
 //
 // A tiny embed.FS HTTP server on 127.0.0.1 that serves the scenario SVGs +
 // competitor infographics (copied from skill-governance/) and a thin run-panel
 // page. It live-bridges the driver's event stream over Server-Sent Events, so
 // the browser shows the current scenario's SVG, a live terminal pane, and the
-// exit-code badge — with no external hosts and no CDN (CSP-safe, offline).
+// exit-code badge, with no external hosts and no CDN (CSP-safe, offline).
 
 import (
 	"embed"

@@ -1,9 +1,9 @@
 package verify
 
-// SPEC-0279 R5 — emergency deny-list channel tests.
+// SPEC-0279 R5, emergency deny-list channel tests.
 //
 // AC3 (emergency half): an emergency deny-list entry denies BEFORE the normal
-// cadence — even with a fresh snapshot and a low-risk, fail-open action.
+// cadence, even with a fresh snapshot and a low-risk, fail-open action.
 
 import (
 	"crypto/ed25519"

@@ -1,4 +1,4 @@
-# KuP Skill-Manager Training — End-to-End Demo
+# KuP Skill-Manager Training: End-to-End Demo
 
 Every claim in the Skill-Manager USER-MANUAL (on the private maintenance plane) is proven here by an executable shell script. The orchestrator (`run-all.sh`) is the **release gate**: it asserts the four contractually required outputs.
 
@@ -49,11 +49,11 @@ The demo is **isolated**. It only writes under `artifacts/` (relative to this di
 | keygen, pack, sign | ✓ | ✓ |
 | local verify-sig (chain root) | ✓ | ✓ |
 | trust roots (file-based) | ✓ | ✓ |
-| Bundle install via registry | _skipped_ — replaced with verify-sig + extract | ✓ via `skillctl install` |
-| Attestation push | _skipped_ — local attestation.json instead | ✓ via `skillctl attest` |
+| Bundle install via registry | _skipped_: replaced with verify-sig + extract | ✓ via `skillctl install` |
+| Attestation push | _skipped_: local attestation.json instead | ✓ via `skillctl attest` |
 | Identity registration | _skipped_ | ✓ via `POST /api/skills/identities` |
 
-The cryptographic proof is identical in both modes — the registry is the storage substrate, not the trust source. The demo emphasizes this on purpose so the lesson survives a network outage during training.
+The cryptographic proof is identical in both modes. The registry is the storage substrate, not the trust source. The demo emphasizes this on purpose so the lesson survives a network outage during training.
 
 ## Outputs
 
@@ -100,7 +100,7 @@ artifacts/
 rm -rf artifacts/
 ```
 
-That's it — the demo never touches anything outside this directory.
+That's it: the demo never touches anything outside this directory.
 
 ## Where to extend next
 

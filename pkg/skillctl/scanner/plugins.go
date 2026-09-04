@@ -1,4 +1,4 @@
-// Plugin-cache + marketplace walker — SPEC-0189 Phase 2.
+// Plugin-cache + marketplace walker: SPEC-0189 Phase 2.
 //
 // Walks ~/.claude/plugins/cache/<owner>/<plugin>/<version>/skills/ AND
 // ~/.claude/plugins/marketplaces/<m>/{skills,plugins/<p>/skills}/ to find

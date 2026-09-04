@@ -1,10 +1,10 @@
-// SPEC-0198 author-identity revocation — verifier-layer test suite (BUG-0144).
+// SPEC-0198 author-identity revocation: verifier-layer test suite (BUG-0144).
 //
 // Closes Layer 3 of the BUG-0144 acceptance:
 //   pkg/skillctl/verify/Verify must return ErrIdentityRevoked (not
 //   ErrAuthorSigInvalid) for any bundle whose author identity has been
 //   revoked via SPEC-0198 §3. The numeric exit code is 17 (theme
-//   "data-source / source-policy", same as DataSourceDenied — see
+//   "data-source / source-policy", same as DataSourceDenied: see
 //   pkg/skillctl/exitcode RevokeIdentityRevoked).
 //
 // These tests are intentionally minimal: they rely on the fakeFetcher /
@@ -20,7 +20,7 @@ import (
 	"testing"
 )
 
-// TestVerify_IdentityRevoke_Sentinel — the canonical happy path: an
+// TestVerify_IdentityRevoke_Sentinel, the canonical happy path: an
 // active identity verifies, then we flip its RevokedAt and the same
 // verify call now returns ErrIdentityRevoked. Same bundle, same
 // signature, only the identity row changed.
@@ -45,7 +45,7 @@ func TestVerify_IdentityRevoke_Sentinel(t *testing.T) {
 	}
 }
 
-// TestVerify_IdentityRevoke_ExitCode — the registry contract: revoked
+// TestVerify_IdentityRevoke_ExitCode. The registry contract: revoked
 // authors map to 17, not 11. This is what `skillctl install` exits
 // with, and what the e2e harness asserts.
 func TestVerify_IdentityRevoke_ExitCode(t *testing.T) {
@@ -64,7 +64,7 @@ func TestVerify_IdentityRevoke_ExitCode(t *testing.T) {
 	}
 }
 
-// TestVerify_IdentityRevoke_ErrorContext — the operator MUST see the
+// TestVerify_IdentityRevoke_ErrorContext: the operator MUST see the
 // identity id + revoke timestamp in the error message so they can
 // look up the SPEC-0198 audit row.
 func TestVerify_IdentityRevoke_ErrorContext(t *testing.T) {
@@ -85,7 +85,7 @@ func TestVerify_IdentityRevoke_ErrorContext(t *testing.T) {
 	}
 }
 
-// TestVerify_ActiveIdentity_NoRevoke — sanity: an identity with empty
+// TestVerify_ActiveIdentity_NoRevoke, sanity: an identity with empty
 // RevokedAt continues to verify cleanly (no false positives).
 func TestVerify_ActiveIdentity_NoRevoke(t *testing.T) {
 	opts, _ := happyOpts(t)
@@ -100,7 +100,7 @@ func TestVerify_ActiveIdentity_NoRevoke(t *testing.T) {
 	}
 }
 
-// TestExitCode_IdentityRevokeDistinctFromAuthorSig — the registry
+// TestExitCode_IdentityRevokeDistinctFromAuthorSig. The registry
 // invariant: ErrIdentityRevoked must not alias ErrAuthorSigInvalid.
 // Pre-BUG-0144 the verifier wrapped the revoke path into
 // ErrAuthorSigInvalid; a regression that re-wraps would break the

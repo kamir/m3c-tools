@@ -1,6 +1,6 @@
 package main
 
-// driver.go — the event model, the fan-out bus (CLI renderer + SSE browsers),
+// driver.go: the event model, the fan-out bus (CLI renderer + SSE browsers),
 // and the Driver that walks the scenarios one step at a time.
 //
 // There is exactly ONE driver running the real skillctl. The web page is a

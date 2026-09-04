@@ -104,7 +104,7 @@ func TestVerify_AttenuationGrowsCapabilitiesFails(t *testing.T) {
 	tok := makeTestToken(t, priv, "k1", TokenEnvelope{
 		Capabilities: []string{"fs:read"},
 	}, time.Hour)
-	// Inject an attenuation that "grows" caps — a malicious chain.
+	// Inject an attenuation that "grows" caps: a malicious chain.
 	tok.Attenuations = []Attenuation{
 		{
 			AppliedAt: time.Now().UTC().Format("2006-01-02T15:04:05Z"),

@@ -39,7 +39,7 @@
 | E4 | bodyscan-corpus | true_positive_pct | 100.0000 | real | shipped bodyscan.Scan over the committed SPEC-0246 corpus, 40 adversarial samples, threshold>=95% |
 | E5 | authorize-only | added_ms_per_invocation | 0.000023 | synthetic | cached-mandate gate (Grant.AuthorizeSkill), 200000 iters, delta over no-gate baseline |
 | E5 | full-gate | added_ms_per_invocation | 0.036675 | synthetic | re-verify-each-call gate (agentid.Verify + AuthorizeSkill), 200000 iters, delta over no-gate baseline |
-| E6 | oidc-jwks-offline | status | N/A — deferred (gated P3-P2) | n/a | the OIDC/Keycloak owner/sign-off binding is SPEC-0277 P2, not built; no JWKS verify path exists to measure (no number fabricated) |
+| E6 | oidc-jwks-offline | status | N/A: deferred (gated P3-P2) | n/a | the OIDC/Keycloak owner/sign-off binding is SPEC-0277 P2, not built; no JWKS verify path exists to measure (no number fabricated) |
 | E7 | inclusion-proof | median_us | 0.3750 | synthetic | offline VerifyInclusion against witnessed STH, tree_size=16, proof_len=4 |
 | E7 | inclusion-proof | median_us | 0.7500 | synthetic | offline VerifyInclusion against witnessed STH, tree_size=256, proof_len=8 |
 | E7 | inclusion-proof | median_us | 1.0830 | synthetic | offline VerifyInclusion against witnessed STH, tree_size=4096, proof_len=12 |
@@ -55,4 +55,4 @@
 | E9 | kit-reproducibility | byte_identical | yes | synthetic | two exports from the same deterministic signed fixture compared file-by-file |
 | E9 | kit-size | bytes | 3123 | synthetic | exported verification-kit total size (5 files) |
 
-E6 is recorded as `N/A — deferred (gated P3-P2)`: the OIDC/JWKS binding (SPEC-0277 P2) is not built, so there is no path to measure — no number is fabricated.
+E6 is recorded as `N/A, deferred (gated P3-P2)`: the OIDC/JWKS binding (SPEC-0277 P2) is not built, so there is no path to measure, no number is fabricated.

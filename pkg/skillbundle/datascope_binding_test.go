@@ -1,6 +1,6 @@
 package skillbundle
 
-// SPEC-0196 §12 Q1 / P2b — the load-bearing security proof: a data-scope bound
+// SPEC-0196 §12 Q1 / P2b. The load-bearing security proof: a data-scope bound
 // into bundle.json at pack time is INSIDE the signed bytes (the author signs
 // the SHA-256 of the whole .skb), so EDITING the scope after pack changes the
 // digest and BREAKS author-signature verification.
@@ -18,7 +18,7 @@ import (
 
 // scopedManifest returns a manifest carrying one author-signed write-scope plus
 // the consistent intent (destructive=true so the §3.3 cross-rules are satisfied
-// — this test is about binding, not validation).
+//. This test is about binding, not validation).
 func scopedManifest() BundleManifest {
 	m := fixtureManifest()
 	m.AuthorGovernanceIntent = "yellow"
@@ -80,7 +80,7 @@ func TestDataScopeIsInsideSignedBytes(t *testing.T) {
 	// 2. Re-pack the SAME skill but with the scope EDITED (the tamper). A
 	// red-teamer who edits the declared scope must change the bytes that were
 	// signed. Re-packing is the most faithful model of "edit bundle.json and
-	// re-tar" — it produces the archive an attacker would have to substitute.
+	// re-tar". It produces the archive an attacker would have to substitute.
 	tampered := scopedManifest()
 	tampered.DataDependencies[0].Scope = "<cwd>/**" // widened from decks/** to everything
 	bad := filepath.Join(t.TempDir(), "bad.skb")
@@ -89,15 +89,15 @@ func TestDataScopeIsInsideSignedBytes(t *testing.T) {
 	}
 	_, badDigest := signDigest(t, priv, bad)
 
-	// 3. The digest MUST differ — proof the scope is inside the signed bytes.
+	// 3. The digest MUST differ, proof the scope is inside the signed bytes.
 	if goodDigest == badDigest {
-		t.Fatal("editing the scope did not change the digest — scope is NOT digest-covered")
+		t.Fatal("editing the scope did not change the digest, scope is NOT digest-covered")
 	}
 
 	// 4. The ORIGINAL author signature MUST NOT verify against the tampered
-	// digest — the tamper is detected.
+	// digest, the tamper is detected.
 	if ed25519.Verify(pub, badDigest[:], sig) {
-		t.Fatal("author signature verified against a TAMPERED scope — binding is broken")
+		t.Fatal("author signature verified against a TAMPERED scope, binding is broken")
 	}
 }
 
@@ -127,10 +127,10 @@ func TestStrippingScopeBreaksSignature(t *testing.T) {
 	_, badDigest := signDigest(t, priv, bad)
 
 	if goodDigest == badDigest {
-		t.Fatal("stripping the scope did not change the digest — scope is NOT digest-covered")
+		t.Fatal("stripping the scope did not change the digest, scope is NOT digest-covered")
 	}
 	if ed25519.Verify(pub, badDigest[:], sig) {
-		t.Fatal("author signature verified against a STRIPPED scope — binding is broken")
+		t.Fatal("author signature verified against a STRIPPED scope, binding is broken")
 	}
 }
 

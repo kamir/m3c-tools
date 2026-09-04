@@ -3,10 +3,10 @@
 //
 // Three operations live here:
 //
-//	Generate      — produce an ed25519 keypair on disk (PEM-wrapped).
-//	SignBundle    — sign the SHA-256 digest of a `.skb` file, write a
+//	Generate, produce an ed25519 keypair on disk (PEM-wrapped).
+//	SignBundle, sign the SHA-256 digest of a `.skb` file, write a
 //	                detached signature next to it.
-//	VerifyDetached — verify a detached signature locally against a public
+//	VerifyDetached: verify a detached signature locally against a public
 //	                 key (no registry round-trip).
 //
 // Key file formats (interface contract owned by stream S1):
@@ -26,10 +26,10 @@
 // SignBundle now depends on `pkg/skillbundle` to enforce the SPEC-0196
 // declared-scope gate at the sign boundary (P2b re-challenge finding #2): the
 // author signature covers the manifest's intent + data dependencies, so signing
-// MUST refuse a scope the authoritative validator rejects — "no unvalidated scope
+// MUST refuse a scope the authoritative validator rejects. "no unvalidated scope
 // is ever author-signed" has to hold at EVERY sign entrypoint, not only in Pack.
 // This is safe: skillbundle does not import signing, so there is no cycle. (The
-// rest of signing — keygen, digest, detached verify — still needs only the file
+// rest of signing (keygen, digest, detached verify) still needs only the file
 // bytes' SHA-256.)
 package signing
 
@@ -64,7 +64,7 @@ const publicKeyMode os.FileMode = 0644
 // Generate writes an ed25519 keypair to outPath.priv (mode 0600) and
 // outPath.pub (mode 0644), both PEM-wrapped.
 //
-// The function refuses to clobber existing files at either path — losing a
+// The function refuses to clobber existing files at either path. Losing a
 // private key by overwrite is far worse than a noisy error. The caller must
 // remove the old key explicitly if they intend to rotate.
 //
@@ -144,7 +144,7 @@ func Generate(outPath string) error {
 //
 // Security posture:
 //   - Refuses to read if the file mode is broader than 0600 (rather than
-//     silently chmod'ing — the user should fix it explicitly).
+//     silently chmod'ing. The user should fix it explicitly).
 //   - Validates the PEM block type strictly.
 //   - Rejects files with extra trailing PEM blocks (defense-in-depth
 //     against ambiguity attacks).
@@ -158,13 +158,13 @@ func LoadPrivateKey(path string) (ed25519.PrivateKey, error) {
 	// POSIX permission bits are not meaningful on Windows: Go's os package
 	// synthesizes a mode (typically 0666/0444 from the read-only attribute)
 	// that does not reflect ACL-based access control, so a key written with
-	// 0600 reads back as 0666 and would spuriously trip this check —
+	// 0600 reads back as 0666 and would spuriously trip this check:
 	// breaking publish/attest/revoke/pull --install. Skip the strict 0077
 	// check there; on POSIX it stays fail-closed. Mask off the type bits; we
 	// only care about the permission bits.
 	if runtime.GOOS != "windows" {
 		if mode := st.Mode().Perm(); mode&0o077 != 0 {
-			return nil, fmt.Errorf("private key %s has insecure mode %#o; expected 0600 — fix with `chmod 600 %s`", path, mode, path)
+			return nil, fmt.Errorf("private key %s has insecure mode %#o; expected 0600: fix with `chmod 600 %s`", path, mode, path)
 		}
 	}
 
@@ -244,7 +244,7 @@ func writeExclusive(path string, data []byte, mode os.FileMode) error {
 		return err
 	}
 	// Belt and braces: also chmod, since umask may have stripped bits we
-	// wanted (mostly defensive — for 0600 there's nothing to strip).
+	// wanted (mostly defensive, for 0600 there's nothing to strip).
 	if err := os.Chmod(path, mode); err != nil {
 		_ = f.Close()
 		_ = os.Remove(path)

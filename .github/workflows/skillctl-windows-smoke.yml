@@ -1,6 +1,6 @@
 name: skillctl Windows Quickstart Smoke
 
-# M2.5 — build skillctl.exe on a real windows-latest runner and walk the
+# M2.5: build skillctl.exe on a real windows-latest runner and walk the
 # author -> sign -> verify -> trust -> tamper quickstart lifecycle via
 # scripts/skillctl-quickstart-windows.ps1. The job fails iff the script exits
 # non-zero (i.e. any required lifecycle step failed).
@@ -60,8 +60,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { Write-Error "quickstart smoke failed (exit $LASTEXITCODE)"; exit $LASTEXITCODE }
         shell: pwsh
 
-  # BUG-0193 regression guard: reproduce the FIELD environment — Windows PowerShell
-  # 5.1 (powershell.exe, NOT pwsh) — running the REAL installer against the published
+  # BUG-0193 regression guard: reproduce the FIELD environment, Windows PowerShell
+  # 5.1 (powershell.exe, NOT pwsh), running the REAL installer against the published
   # release. WinPS 5.1 raises a terminating NativeCommandError on ANY native-command
   # stderr write under $ErrorActionPreference='Stop', even on success (cosign prints
   # "Verified OK" to stderr). This job fails if the installer crashes on that.

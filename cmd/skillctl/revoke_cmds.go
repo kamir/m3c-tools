@@ -6,7 +6,7 @@ package main
 // file so cmd/skillctl/revoke_cmds_test.go can drive it without spinning a
 // process. main.go's dispatcher is a one-line case → runRevoke.
 //
-// Three actor paths (S3-DECISIONS S3.6 Q1=A — single endpoint, server
+// Three actor paths (S3-DECISIONS S3.6 Q1=A: single endpoint, server
 // dispatches by role):
 //
 //   skillctl revoke <digest> --reason <enum>
@@ -85,17 +85,17 @@ type revokeError struct {
 
 // runRevoke is main's dispatch entry point. Returns a numeric exit code:
 //
-//	0  — revoked.
-//	1  — generic / network / server 5xx.
-//	2  — usage / flag error.
-//	15 — server returned 409 already_revoked OR 404 not_admitted.
+//	0, revoked.
+//	1, generic / network / server 5xx.
+//	2, usage / flag error.
+//	15, server returned 409 already_revoked OR 404 not_admitted.
 //
 // Exit 15 reuses the SPEC-0188 §11 ExitBlobMissing class because the
 // trust-chain semantics are identical: the bundle is not in a state
 // the verifier can install. The `reason` field on stderr distinguishes
 // already-revoked from never-admitted for the operator.
 func runRevoke(args []string, stdout, stderr io.Writer) int {
-	// FR-0045 D5 — `skillctl revoke feed …` inspects/refreshes the signed
+	// FR-0045 D5: `skillctl revoke feed …` inspects/refreshes the signed
 	// revocation HEAD (the G5 kill-switch feed). Intercepted before the digest
 	// parsing so "feed" is never mistaken for a bundle digest.
 	if len(args) > 0 && args[0] == "feed" {
@@ -122,9 +122,9 @@ func runRevoke(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "Reasons: key_compromise | vulnerability | governance_retraction | author_request | duplicate.")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Roles:")
-		fmt.Fprintln(stderr, "  original_author      (default) — sign with your skillctl author key")
-		fmt.Fprintln(stderr, "  governance_reviewer  — sign with the reviewer's key (requires --actor-identity + --key)")
-		fmt.Fprintln(stderr, "  registry_operator    — unsigned; HTTP-layer admin auth at the registry")
+		fmt.Fprintln(stderr, "  original_author      (default), sign with your skillctl author key")
+		fmt.Fprintln(stderr, "  governance_reviewer, sign with the reviewer's key (requires --actor-identity + --key)")
+		fmt.Fprintln(stderr, "  registry_operator: unsigned; HTTP-layer admin auth at the registry")
 		fmt.Fprintln(stderr, "")
 		fs.PrintDefaults()
 	}
@@ -253,7 +253,7 @@ func runRevoke(args []string, stdout, stderr io.Writer) int {
 
 		// SPEC-0278 L1: best-effort mirror of this signed revocation's digest
 		// into the local transparency log (opt-in via M3C_TRANSLOG=1). Never
-		// alters the revoke decision above — the revocation already succeeded.
+		// alters the revoke decision above: the revocation already succeeded.
 		bestEffortTranslogAppend(translogEventRevoke, ok.BundleDigest, ok.RevokedByRole, stderr)
 		return exitOK
 	}
@@ -269,13 +269,13 @@ func runRevoke(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "skillctl revoke: bundle is already revoked (digest=%s)\n", digest)
 		return 15
 	case http.StatusForbidden:
-		fmt.Fprintf(stderr, "skillctl revoke: refused (reason=%s) — %s\n", e.Reason, e.Error)
+		fmt.Fprintf(stderr, "skillctl revoke: refused (reason=%s), %s\n", e.Reason, e.Error)
 		return exitGeneric
 	case http.StatusBadRequest:
-		fmt.Fprintf(stderr, "skillctl revoke: bad request (reason=%s) — %s\n", e.Reason, e.Error)
+		fmt.Fprintf(stderr, "skillctl revoke: bad request (reason=%s), %s\n", e.Reason, e.Error)
 		return exitUsage
 	default:
-		fmt.Fprintf(stderr, "skillctl revoke: HTTP %d — %s\n", resp.StatusCode, e.Error)
+		fmt.Fprintf(stderr, "skillctl revoke: HTTP %d: %s\n", resp.StatusCode, e.Error)
 		return exitGeneric
 	}
 }

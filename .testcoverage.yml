@@ -1,15 +1,15 @@
-# .testcoverage.yml — ratchet coverage gate (H3)
+# .testcoverage.yml: ratchet coverage gate (H3)
 #
 # Consumed by `go-test-coverage` (github.com/vladopajic/go-test-coverage) in the
 # `coverage` workflow (.github/workflows/coverage-gate.yml). Its job is NOT to demand
-# a high absolute number — it is a RATCHET: every package floor below is seeded
+# a high absolute number. It is a RATCHET: every package floor below is seeded
 # from the coverage that package ACTUALLY had when this gate was introduced
 # (measured with `go test ./pkg/skillctl/... ./cmd/skillctl/... -coverprofile`),
 # rounded DOWN to the nearest integer. So the gate starts GREEN on master and
-# can only move UP — a change that drops a package below its recorded floor
+# can only move UP: a change that drops a package below its recorded floor
 # fails CI. Raise a floor whenever you meaningfully raise a package's coverage.
 #
-# Scope: the skillctl trust/security surface only — ./pkg/skillctl/... and the
+# Scope: the skillctl trust/security surface only: ./pkg/skillctl/... and the
 # ./cmd/skillctl CLI. That is the highest-value code (install verification,
 # signing, revocation, trust roots). The rest of the module (pkg/er1, pkg/plaud,
 # internal/thinking, POCs, cgo audio) is intentionally out of scope here; add it
@@ -17,15 +17,15 @@
 profile: cover.out
 
 # Global thresholds are the BASELINE for anything without an explicit override.
-#   package: 0 — do not gate un-listed packages. Several skillctl packages ship
+#   package: 0: do not gate un-listed packages. Several skillctl packages ship
 #               with 0% unit coverage today (menubar cgo GUI, consolidate,
 #               importer, hasher, secfile, artifact/conformance); a non-zero
 #               global floor would fail them immediately. They stay green here
 #               and are called out below as coverage gaps to close later.
-#   file:    0 — do not gate per-file. cmd/skillctl is one large package whose
+#   file:    0: do not gate per-file. cmd/skillctl is one large package whose
 #               files range 0%..95%; a per-file floor would be pure noise. The
 #               per-package override on ^cmd/skillctl$ is what protects it.
-#   total:  57 — aggregate backstop across the scoped packages (measured 57.8%).
+#   total:  57: aggregate backstop across the scoped packages (measured 57.8%).
 #               Prevents the whole surface from sliding even if no single
 #               package trips its own floor.
 threshold:
@@ -33,21 +33,21 @@ threshold:
   package: 0
   total: 57
 
-# NOTE — diff/new-code threshold (target: >=85% on changed lines) is deliberately
+# NOTE: diff/new-code threshold (target: >=85% on changed lines) is deliberately
 # NOT enabled here. go-test-coverage's diff mode (`diff.threshold` +
 # `diff.base-breakdown-file-name`) needs a stored breakdown of the BASE branch to
 # compare against, which means a second CI step that fetches/persists the base
 # breakdown (via its git or CDN storer). That plumbing is a clean follow-up, not
-# a blocker — see coverage-gate.yml's trailing comment for the exact wiring. The
+# a blocker. See coverage-gate.yml's trailing comment for the exact wiring. The
 # per-package ratchet above already prevents regressions on every changed package.
 # diff:
 #   threshold: 85
 #   base-breakdown-file-name: testcoverage-base-breakdown.json
 
-# Per-package floors — module-relative package path (regex, anchored). Each value
+# Per-package floors: module-relative package path (regex, anchored). Each value
 # is floor(measured-coverage-at-introduction). Ordered high-to-low for reading.
 override:
-  # Trust core & pure-logic utilities currently at 100% — kept strict (no
+  # Trust core & pure-logic utilities currently at 100%: kept strict (no
   # regression). These are small, deterministic, security-critical packages;
   # if a legitimate addition genuinely can't reach 100%, lower the specific
   # floor here in the same PR (that is the ratchet working as intended).
@@ -82,14 +82,14 @@ override:
   - { path: '^pkg/skillctl/install$',      threshold: 64 } # measured 64.6
   - { path: '^pkg/skillctl/registry$',     threshold: 63 } # measured 63.5
   - { path: '^pkg/skillctl/report$',       threshold: 63 } # measured 63.0
-  # Low-coverage QA helper — floored at current so it cannot regress further.
+  # Low-coverage QA helper: floored at current so it cannot regress further.
   - { path: '^pkg/skillctl/browse$',       threshold: 17 } # measured 17.1
   # CLI-glue blob: one big package, files span 0%..95% (main.go, session_cmds.go,
-  # peer_cmds.go etc. are 0%). Per H3d it gets NO aspirational target — floored at
+  # peer_cmds.go etc. are 0%). Per H3d it gets NO aspirational target: floored at
   # its current 48.4% only to stop it sliding as new subcommands are added. Cover
   # new command logic in the trust packages it calls, not in this wiring layer.
   - { path: '^cmd/skillctl$',              threshold: 48 } # measured 48.4
 
-# Coverage gaps (0% today, intentionally ungated — candidates for future tests):
+# Coverage gaps (0% today, intentionally ungated: candidates for future tests):
 #   pkg/skillctl/menubar (cgo GUI), pkg/skillctl/consolidate, pkg/skillctl/importer,
 #   pkg/skillctl/hasher, pkg/skillctl/secfile, pkg/skillctl/artifact/conformance.

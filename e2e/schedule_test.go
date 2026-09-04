@@ -97,7 +97,7 @@ func TestScheduleCommandDuplicate(t *testing.T) {
 	bin := buildBinary(t)
 	dbPath := filepath.Join(t.TempDir(), "test-dup.db")
 
-	// First schedule — should succeed
+	// First schedule: should succeed
 	cmd := exec.Command(bin, "schedule", "dup-001",
 		"--transcript", "/tmp/t.txt",
 		"--db", dbPath,
@@ -107,7 +107,7 @@ func TestScheduleCommandDuplicate(t *testing.T) {
 		t.Fatalf("first schedule failed: %v\n%s", err, out)
 	}
 
-	// Second schedule with same ID — should fail
+	// Second schedule with same ID: should fail
 	cmd2 := exec.Command(bin, "schedule", "dup-001",
 		"--transcript", "/tmp/t2.txt",
 		"--db", dbPath,
@@ -155,7 +155,7 @@ func TestStatusCommand(t *testing.T) {
 		}
 	}
 
-	// Status without --entry — should show summary
+	// Status without --entry: should show summary
 	cmd := exec.Command(bin, "status", "--db", dbPath)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -179,7 +179,7 @@ func TestStatusCommand(t *testing.T) {
 		t.Errorf("Expected status-002 in entry list, got:\n%s", output)
 	}
 
-	// Status with --entry — should show specific entry
+	// Status with --entry: should show specific entry
 	cmd2 := exec.Command(bin, "status", "--entry", "status-001", "--db", dbPath)
 	out2, err2 := cmd2.CombinedOutput()
 	if err2 != nil {
@@ -249,7 +249,7 @@ func TestCancelCommand(t *testing.T) {
 		t.Errorf("Expected cancellation confirmation, got:\n%s", out2)
 	}
 
-	// Verify SQLite state — should be "cancelled"
+	// Verify SQLite state: should be "cancelled"
 	db, err := tracking.OpenRetryQueueDB(dbPath)
 	if err != nil {
 		t.Fatalf("OpenRetryQueueDB: %v", err)
@@ -320,7 +320,7 @@ func TestScheduleStatusCancelWorkflow(t *testing.T) {
 		t.Fatalf("schedule failed: %v\n%s", err, out)
 	}
 
-	// Step 2: Status — should show 1 pending
+	// Step 2: Status: should show 1 pending
 	cmd2 := exec.Command(bin, "status", "--db", dbPath)
 	out2, err2 := cmd2.CombinedOutput()
 	if err2 != nil {
@@ -337,7 +337,7 @@ func TestScheduleStatusCancelWorkflow(t *testing.T) {
 		t.Fatalf("cancel failed: %v\n%s", err3, out3)
 	}
 
-	// Step 4: Status after cancel — should show 0 pending, entry listed as cancelled
+	// Step 4: Status after cancel: should show 0 pending, entry listed as cancelled
 	cmd4 := exec.Command(bin, "status", "--db", dbPath)
 	out4, err4 := cmd4.CombinedOutput()
 	if err4 != nil {

@@ -9,12 +9,12 @@ import (
 // Split-view / equivocation detection.
 //
 // A transparency log operator equivocates when it shows DIFFERENT histories
-// to different observers — e.g. "this skill is revoked for company A but
+// to different observers, e.g. "this skill is revoked for company A but
 // still valid for company B." With L1 we cannot PREVENT that (only the
 // deferred L2 BFT consortium ledger could), but we CAN make it DETECTABLE by
 // cross-witnessing Signed Tree Heads: if two witnesses report STHs for the
 // same log at the SAME tree_size with DIFFERENT root_hash, the operator
-// signed two incompatible histories — a split view.
+// signed two incompatible histories: a split view.
 //
 // This is exactly the cross-company STH freshness / split-view check that
 // SPEC-0279 AC4 (the P4 freshness checkpoint) deferred: an STH cross-checked
@@ -22,7 +22,7 @@ import (
 // reaches for it (see verify integration).
 //
 // NOTE on scope: this is the OFFLINE comparison LOGIC. The wire transport
-// that gossips STHs between org nodes (SPEC-0190 / Kafka) is DEFERRED — a
+// that gossips STHs between org nodes (SPEC-0190 / Kafka) is DEFERRED: a
 // caller hands us the witnessed STH set however it obtained them.
 
 // ErrSplitView is returned when two STHs for the same log equivocate: same
@@ -31,7 +31,7 @@ import (
 var ErrSplitView = errors.New("translog: split view detected (log equivocated)")
 
 // ErrWitnessInconsistent is returned when two STHs for the same log are not
-// a same-size conflict but still cannot be a pure append of one another —
+// a same-size conflict but still cannot be a pure append of one another,
 // i.e. a supplied consistency proof between them FAILS. A log that rewrote
 // history between two sizes trips this.
 var ErrWitnessInconsistent = errors.New("translog: witnessed STHs are not append-consistent")
@@ -74,7 +74,7 @@ func (c *SplitViewConflict) Unwrap() error { return ErrSplitView }
 //
 // STHs carrying DIFFERENT LogIDs are never compared against each other
 // (they are different logs; a size collision is not a conflict). Only the
-// (size, root) pair is compared — timestamp and signature differences are
+// (size, root) pair is compared. Timestamp and signature differences are
 // expected and benign.
 //
 // This function does NOT verify signatures; callers MUST VerifySTH each

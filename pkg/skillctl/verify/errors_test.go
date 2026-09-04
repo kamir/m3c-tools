@@ -44,7 +44,7 @@ func TestExitCode_Wrapped(t *testing.T) {
 		t.Errorf("wrapped ErrDigestMismatch → %d, want %d", got, ExitDigestMismatch)
 	}
 
-	// Doubly wrapped — survives.
+	// Doubly wrapped: survives.
 	doubled := fmt.Errorf("install: %w", wrapped)
 	if got := ExitCode(doubled); got != ExitDigestMismatch {
 		t.Errorf("double-wrapped → %d, want %d", got, ExitDigestMismatch)

@@ -226,7 +226,7 @@ func (q *RetryQueueDB) UpdateAttempt(entryID string, retryErr error) (*RetryEntr
 	var nextRetryAt time.Time
 
 	if newAttempts >= entry.MaxAttempts {
-		// Permanently failed — exceeded max attempts.
+		// Permanently failed: exceeded max attempts.
 		newStatus = RetryStatusFailed
 		nextRetryAt = now // won't be retried
 	} else {

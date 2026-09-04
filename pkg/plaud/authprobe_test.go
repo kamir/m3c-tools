@@ -38,7 +38,7 @@ func TestTokenAuthenticates(t *testing.T) {
 }
 
 func TestTokenAuthenticates_Unreachable(t *testing.T) {
-	// Port 1 refuses instantly — a transport error, distinct from "rejected".
+	// Port 1 refuses instantly: a transport error, distinct from "rejected".
 	cfg := &Config{APIURL: "http://127.0.0.1:1"}
 	ok, err := NewClient(cfg, "eyJhbGciOiJIUzI1NiJ9.x.sig").TokenAuthenticates()
 	if err == nil {

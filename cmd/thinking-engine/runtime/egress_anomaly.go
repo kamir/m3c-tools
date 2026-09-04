@@ -27,9 +27,9 @@ import (
 //     AlertWindow but not yet emitted. Flushed on Tick or when more
 //     than EmitThreshold candidates accumulate.
 type EgressAnomaly struct {
-	KnownWindow    time.Duration // default 30 days — how long a host stays "known"
-	AlertWindow    time.Duration // default 24 hours — anomaly horizon
-	EmitThreshold  int           // default 1 — emit on first new host (sensitive)
+	KnownWindow    time.Duration // default 30 days, how long a host stays "known"
+	AlertWindow    time.Duration // default 24 hours, anomaly horizon
+	EmitThreshold  int           // default 1: emit on first new host (sensitive)
 
 	emitter ReflectionEmitter
 	idFn    func() string
@@ -224,7 +224,7 @@ func extractHost(target string) string {
 	if i := strings.Index(target, ":"); i > 0 {
 		return strings.ToLower(target[:i])
 	}
-	// Argv-shaped or path-shaped — not an egress target
+	// Argv-shaped or path-shaped: not an egress target
 	if strings.ContainsAny(target, "/ ") {
 		return ""
 	}

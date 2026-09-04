@@ -106,7 +106,7 @@ func ComputeDelta(baseline, current *model.Inventory) *DeltaReport {
 			})
 			continue
 		}
-		// Skill exists in both — check for modifications.
+		// Skill exists in both: check for modifications.
 		if base.ContentHash != curr.ContentHash {
 			diff := GenerateUnifiedDiff(base.ContentHash, curr.ContentHash,
 				fmt.Sprintf("baseline:%s", id), fmt.Sprintf("current:%s", id))
@@ -157,7 +157,7 @@ func ComputeDelta(baseline, current *model.Inventory) *DeltaReport {
 				continue
 			}
 			if rem.BaselineHash == add.CurrentHash {
-				// Same content, different ID — this is a move.
+				// Same content, different ID: this is a move.
 				entry := DeltaEntry{
 					SkillID:             add.SkillID,
 					SkillName:           add.SkillName,

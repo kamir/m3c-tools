@@ -1,6 +1,6 @@
 ---
 layout: default
-title: Manual — m3c-tools
+title: Manual: m3c-tools
 ---
 
 # Manual: m3c-tools
@@ -11,7 +11,7 @@ audio + image) uploaded to *your* [ER1](https://er1.io) personal knowledge serve
 macOS it ships as a native menu-bar app **and** a full CLI; on Linux and Windows it is
 CLI-only. The core packages (`transcript`, `er1`, `impression`) use only the Go standard
 library. If you just want the 5-minute path, start with the
-[Quickstart](quickstart-m3c-tools.md) — **this page is the exhaustive reference** for
+[Quickstart](quickstart-m3c-tools.md). **This page is the exhaustive reference** for
 every command, flag and configuration variable.
 
 ---
@@ -46,7 +46,7 @@ m3c-tools <command> [args] [flags]
 - Run `m3c-tools help` for the top-level listing, or `m3c-tools <command> --help` for a
   single command. When in doubt about a flag, trust `--help` over any doc.
 - Every run prints two informational log lines first (`[config] profile: …` and
-  `[auth] …`) — these are diagnostics, not command output.
+  `[auth] …`): these are diagnostics, not command output.
 
 **Where configuration comes from.** Settings load from `~/.m3c-tools.env` (the global
 config), from a project-local `.env`, and from named **profiles** managed by
@@ -68,7 +68,7 @@ sync`, `pocket sync`, the retry/queue commands) needs a working ER1 config.
 
 ### Capture
 
-#### `transcript` — fetch a YouTube transcript
+#### `transcript`: fetch a YouTube transcript
 
 ```bash
 m3c-tools transcript <video_id> [flags]
@@ -81,19 +81,19 @@ format. Also lists available transcript tracks and can translate to another lang
 |------|----------|---------|---------|
 | `--lang` | `<code>` | `en` | Language code of the transcript to fetch |
 | `--format` | `<fmt>` | `text` | Output format: `text`, `srt`, `json`, `webvtt` |
-| `--translate` | `<code>` | — | Translate the transcript to this language code |
-| `--list` | — | — | List available transcripts only (no fetch) |
-| `--exclude-generated` | — | — | With `--list`: exclude auto-generated transcripts |
-| `--exclude-manually-created` | — | — | With `--list`: exclude manually created transcripts |
-| `--proxy-url` | `<url>` | — | HTTP/SOCKS5 proxy URL, e.g. `http://host:port` |
-| `--proxy-auth` | `<creds>` | — | Proxy credentials as `user:password` |
+| `--translate` | `<code>` | n/a | Translate the transcript to this language code |
+| `--list` | n/a | n/a | List available transcripts only (no fetch) |
+| `--exclude-generated` | n/a | n/a | With `--list`: exclude auto-generated transcripts |
+| `--exclude-manually-created` | n/a | n/a | With `--list`: exclude manually created transcripts |
+| `--proxy-url` | `<url>` | n/a | HTTP/SOCKS5 proxy URL, e.g. `http://host:port` |
+| `--proxy-auth` | `<creds>` | n/a | Proxy credentials as `user:password` |
 
 ```bash
 m3c-tools transcript dQw4w9WgXcQ --format srt
 m3c-tools transcript dQw4w9WgXcQ --list --exclude-generated
 ```
 
-#### `upload` — capture a full observation to ER1
+#### `upload`: capture a full observation to ER1
 
 ```bash
 m3c-tools upload <video_id> [flags]
@@ -105,15 +105,15 @@ the observation is never empty.
 
 | Flag | Argument | Default | Meaning |
 |------|----------|---------|---------|
-| `--audio` | `<file>` | — | Include an audio file with the observation |
-| `--impression` | `<text>` | — | Add your own impression / commentary text |
+| `--audio` | `<file>` | n/a | Include an audio file with the observation |
+| `--impression` | `<text>` | n/a | Add your own impression / commentary text |
 
 ```bash
 m3c-tools upload dQw4w9WgXcQ --impression "Great intro to the topic"
 m3c-tools upload dQw4w9WgXcQ --audio note.wav --impression "My take"
 ```
 
-#### `whisper` — transcribe local audio
+#### `whisper`: transcribe local audio
 
 ```bash
 m3c-tools whisper <audio_file> [flags]
@@ -124,13 +124,13 @@ Transcribes an audio file by invoking your local `whisper` binary as a subproces
 | Flag | Argument | Default | Meaning |
 |------|----------|---------|---------|
 | `--model` | `<model>` | `base` | Whisper model (`tiny`, `base`, `small`, `medium`, `large`) |
-| `--language` | `<lang>` | — | Language hint for transcription |
+| `--language` | `<lang>` | n/a | Language hint for transcription |
 
 ```bash
 m3c-tools whisper meeting.wav --model base --language en
 ```
 
-#### `thumbnail` — download a video thumbnail
+#### `thumbnail`: download a video thumbnail
 
 ```bash
 m3c-tools thumbnail <video_id> [flags]
@@ -146,7 +146,7 @@ Downloads the highest-available thumbnail for a video (with size fallback).
 m3c-tools thumbnail dQw4w9WgXcQ --output cover.jpg
 ```
 
-#### `record` — record from the microphone
+#### `record`: record from the microphone
 
 ```bash
 m3c-tools record [output.wav] [flags]
@@ -163,7 +163,7 @@ whisper-compatible). Requires PortAudio and a microphone.
 m3c-tools record note.wav --duration 15
 ```
 
-#### `screenshot` — capture a screenshot (macOS only)
+#### `screenshot`: capture a screenshot (macOS only)
 
 ```bash
 m3c-tools screenshot [flags]
@@ -176,14 +176,14 @@ Captures the screen, a window, or a selected region and writes an image file. ma
 | `--mode` | `<mode>` | `full` | Capture mode: `full`, `window`, `region` |
 | `--output` | `<dir>` | current dir | Output directory |
 | `--filename` | `<name>` | timestamped | Output filename |
-| `--silent` | — | — | Suppress the capture sound |
-| `--hide-cursor` | — | — | Hide the cursor in the capture |
+| `--silent` | n/a | n/a | Suppress the capture sound |
+| `--hide-cursor` | n/a | n/a | Hide the cursor in the capture |
 
 ```bash
 m3c-tools screenshot --mode region --output ~/shots --silent
 ```
 
-#### `import-audio` — scan / import a folder of audio
+#### `import-audio`: scan / import a folder of audio
 
 ```bash
 m3c-tools import-audio <dir> [flags]
@@ -194,9 +194,9 @@ file end-to-end. Progress is tracked in a local SQLite DB so re-runs skip what's
 
 | Flag | Argument | Default | Meaning |
 |------|----------|---------|---------|
-| `--run` | — | — | Import, transcribe, upload and tag end-to-end |
-| `--extensions` | — | — | List supported audio extensions |
-| `--compact` | — | — | Machine-readable TSV output (status, path, size, tags) |
+| `--run` | n/a | n/a | Import, transcribe, upload and tag end-to-end |
+| `--extensions` | n/a | n/a | List supported audio extensions |
+| `--compact` | n/a | n/a | Machine-readable TSV output (status, path, size, tags) |
 | `--db` | `<path>` | `~/.m3c-tools/tracking.db` | Tracking DB path |
 
 ```bash
@@ -205,16 +205,16 @@ m3c-tools import-audio --extensions
 ```
 
 **`import-audio reset`** clears tracking records so items can be imported again. It only
-touches the DB — it never deletes audio files. At least one of `--status`, `--file` or
+touches the DB: it never deletes audio files. At least one of `--status`, `--file` or
 `--all` is required; with no selector it prints the current per-status counts and exits
 non-zero.
 
 | Flag | Argument | Default | Meaning |
 |------|----------|---------|---------|
-| `--status` | `<state>` | — | Reset entries in this state (`imported`, `uploaded`, `failed`, `whisper-error`) |
-| `--type` | `<kind>` | — | Narrow `--status` to one import type (e.g. `plaud`, `audio`) |
-| `--file` | `<path>` | — | Reset the single entry with this file path |
-| `--all` | — | — | Remove **all** tracking records (full reset) |
+| `--status` | `<state>` | n/a | Reset entries in this state (`imported`, `uploaded`, `failed`, `whisper-error`) |
+| `--type` | `<kind>` | n/a | Narrow `--status` to one import type (e.g. `plaud`, `audio`) |
+| `--file` | `<path>` | n/a | Reset the single entry with this file path |
+| `--all` | n/a | n/a | Remove **all** tracking records (full reset) |
 
 ```bash
 m3c-tools import-audio reset --status failed
@@ -224,7 +224,7 @@ m3c-tools import-audio reset --all
 
 ### Capture devices
 
-#### `plaud` — Plaud recorder integration
+#### `plaud`: Plaud recorder integration
 
 ```bash
 m3c-tools plaud <subcommand> [flags]
@@ -249,51 +249,51 @@ into the same tracking ledger, so an item synced by one is not re-synced by the 
 | `plaud auth paste` | Import the `Authorization` header from the clipboard (best for SSO) |
 | `plaud auth password` | Email+password login → long-lived token |
 | `plaud auth` | Save the token from `$M3C_PLAUD_TOKEN` (secure) |
-| `plaud auth <token>` | Save the token from argv — **deprecated** (leaks via `ps`) |
+| `plaud auth <token>` | Save the token from argv: **deprecated** (leaks via `ps`) |
 
 **`plaud sync` flags**
 
 | Flag | Argument | Default | Meaning |
 |------|----------|---------|---------|
-| `--all` | — | — | Sync every not-yet-synced recording instead of one selector |
-| `--force` | — | — | Re-sync: re-download from Plaud and re-upload to ER1 (also `-f`) |
-| `--tags` | `<list>` | — | Comma-separated tags applied to every synced item |
-| `--filter` | `<regex>` | — | Only sync items whose title matches this regular expression |
-| `--dry-run` | — | — | Print what *would* be synced; download and upload nothing |
+| `--all` | n/a | n/a | Sync every not-yet-synced recording instead of one selector |
+| `--force` | n/a | n/a | Re-sync: re-download from Plaud and re-upload to ER1 (also `-f`) |
+| `--tags` | `<list>` | n/a | Comma-separated tags applied to every synced item |
+| `--filter` | `<regex>` | n/a | Only sync items whose title matches this regular expression |
+| `--dry-run` | n/a | n/a | Print what *would* be synced; download and upload nothing |
 
-**`plaud fix-times` flags** — backfill the true (local) recording time onto items already synced:
+**`plaud fix-times` flags**: backfill the true (local) recording time onto items already synced:
 
 | Flag | Argument | Default | Meaning |
 |------|----------|---------|---------|
-| `--apply` | — | — | Write the corrected times (without it: dry-run — print what would change) |
-| `--since` | `<YYYY-MM-DD>` | — | Only repair items synced on or after this local date |
-| `--limit` | `<n>` | — | Repair at most this many items |
+| `--apply` | n/a | n/a | Write the corrected times (without it: dry-run: print what would change) |
+| `--since` | `<YYYY-MM-DD>` | n/a | Only repair items synced on or after this local date |
+| `--limit` | `<n>` | n/a | Repair at most this many items |
 
-**`plaud dev` flags** — `dev list` takes `--preview` (alias `--transcript`) and `--limit`;
+**`plaud dev` flags**: `dev list` takes `--preview` (alias `--transcript`) and `--limit`;
 `dev sync` takes the rest.
 
 | Flag | Argument | Default | Meaning |
 |------|----------|---------|---------|
-| `--all` | — | — | Sync every not-yet-synced recording |
-| `--limit` | `<n>` | — | Restrict to the `n` most recent recordings |
-| `--preview` | — | — | `dev list`: also print the transcript preview |
-| `--whisper` | — | — | Transcribe un-transcribed audio locally instead of skipping it |
-| `--force` | — | — | Re-sync items already in the ledger (also `-f`) |
-| `--tags` | `<list>` | — | Comma-separated tags applied to every synced item |
-| `--dry-run` | — | — | Print what *would* be synced; download and upload nothing |
+| `--all` | n/a | n/a | Sync every not-yet-synced recording |
+| `--limit` | `<n>` | n/a | Restrict to the `n` most recent recordings |
+| `--preview` | n/a | n/a | `dev list`: also print the transcript preview |
+| `--whisper` | n/a | n/a | Transcribe un-transcribed audio locally instead of skipping it |
+| `--force` | n/a | n/a | Re-sync items already in the ledger (also `-f`) |
+| `--tags` | `<list>` | n/a | Comma-separated tags applied to every synced item |
+| `--dry-run` | n/a | n/a | Print what *would* be synced; download and upload nothing |
 
 **`plaud auth` flags**
 
 | Flag | Argument | Default | Meaning |
 |------|----------|---------|---------|
-| `--token-file` | `<path>` | — | Read the token from a file (secure — keeps it out of `ps`) |
-| `--from-er1` | — | — | Pull the token from the ER1 credential vault (SPEC-0304) |
+| `--token-file` | `<path>` | n/a | Read the token from a file (secure. Keeps it out of `ps`) |
+| `--from-er1` | n/a | n/a | Pull the token from the ER1 credential vault (SPEC-0304) |
 
 **`plaud fix-times` flags**
 
 | Flag | Argument | Default | Meaning |
 |------|----------|---------|---------|
-| `--apply` | — | — | Write the corrected timestamps; without it the run is a preview |
+| `--apply` | n/a | n/a | Write the corrected timestamps; without it the run is a preview |
 
 ```bash
 m3c-tools plaud auth login
@@ -303,7 +303,7 @@ m3c-tools plaud dev sync --limit 5 --whisper
 m3c-tools plaud fix-times --apply
 ```
 
-#### `pocket` — Pocket recorder integration
+#### `pocket`: Pocket recorder integration
 
 ```bash
 m3c-tools pocket <subcommand> [flags]
@@ -311,7 +311,7 @@ m3c-tools pocket <subcommand> [flags]
 
 Syncs recordings from a Pocket device into ER1. `pocket sync` reads the **mounted
 device**; `pocket cloud-sync` ingests from the Pocket **cloud API** instead (SPEC-0173
-Path B) and needs a `pk_…` API key — see [`setup pocket-key`](#setup--set-up-the-python-venv--whisper).
+Path B) and needs a `pk_…` API key: see [`setup pocket-key`](#setup--set-up-the-python-venv--whisper).
 
 | Subcommand | Meaning |
 |------------|---------|
@@ -324,9 +324,9 @@ Path B) and needs a `pk_…` API key — see [`setup pocket-key`](#setup--set-up
 
 | Flag | Argument | Default | Meaning |
 |------|----------|---------|---------|
-| `--all` | — | — | `pocket sync`: sync every new recording (required — there is no single-item form) |
+| `--all` | n/a | n/a | `pocket sync`: sync every new recording (required: there is no single-item form) |
 | `--path` | `<dir>` | from config | Override the device recording path (`pocket list` / `pocket sync`) |
-| `--dry-run` | — | — | `pocket cloud-sync`: list what would be ingested; upload nothing (also `-n`) |
+| `--dry-run` | n/a | n/a | `pocket cloud-sync`: list what would be ingested; upload nothing (also `-n`) |
 
 ```bash
 m3c-tools pocket list
@@ -334,7 +334,7 @@ m3c-tools pocket sync --all --path /Volumes/POCKET
 m3c-tools pocket cloud-sync --dry-run
 ```
 
-#### `devices` — list audio input devices
+#### `devices`: list audio input devices
 
 ```bash
 m3c-tools devices
@@ -344,7 +344,7 @@ Lists the available audio input devices (useful before `record`). No flags.
 
 ### ER1 & queue
 
-#### `check-er1` — test ER1 reachability
+#### `check-er1`: test ER1 reachability
 
 ```bash
 m3c-tools check-er1
@@ -353,7 +353,7 @@ m3c-tools check-er1
 A quick reachability check against the ER1 server. For a full diagnostic use `doctor`.
 No flags.
 
-#### `doctor` — connectivity & config diagnostics
+#### `doctor`: connectivity & config diagnostics
 
 ```bash
 m3c-tools doctor
@@ -362,7 +362,7 @@ m3c-tools doctor
 Runs the full diagnostic: active profile, authentication (API key and/or device token),
 DNS, TLS, and the ER1 health/auth endpoints. Run this first when uploads fail. No flags.
 
-#### `token` — show device-token status
+#### `token`: show device-token status
 
 ```bash
 m3c-tools token [--print]
@@ -372,14 +372,14 @@ Shows whether a device token is loaded.
 
 | Flag | Argument | Default | Meaning |
 |------|----------|---------|---------|
-| `--print` | — | — | Emit the Bearer token to stdout (for shell capture) |
+| `--print` | n/a | n/a | Emit the Bearer token to stdout (for shell capture) |
 
 ```bash
 m3c-tools token
 export TOKEN=$(m3c-tools token --print)
 ```
 
-#### `retry` — run the retry loop for queued uploads
+#### `retry`: run the retry loop for queued uploads
 
 ```bash
 m3c-tools retry [flags]
@@ -397,7 +397,7 @@ Processes the local retry queue of failed uploads, polling on an interval.
 m3c-tools retry --interval 60 --max-retries 5
 ```
 
-#### `schedule` — schedule a retry entry in the tracking DB
+#### `schedule`: schedule a retry entry in the tracking DB
 
 ```bash
 m3c-tools schedule <entry_id> --transcript <path> [flags]
@@ -407,10 +407,10 @@ Registers an ER1 retry entry in the SQLite tracking DB. `--transcript` is requir
 
 | Flag | Argument | Default | Meaning |
 |------|----------|---------|---------|
-| `--transcript` | `<path>` | — (required) | Transcript file path |
-| `--audio` | `<path>` | — | Audio file path |
-| `--image` | `<path>` | — | Image file path |
-| `--tags` | `<tags>` | — | Comma-separated tags |
+| `--transcript` | `<path>` |: (required) | Transcript file path |
+| `--audio` | `<path>` | n/a | Audio file path |
+| `--image` | `<path>` | n/a | Image file path |
+| `--tags` | `<tags>` | n/a | Comma-separated tags |
 | `--max-attempts` | `<n>` | `10` | Max retry attempts |
 | `--db` | `<path>` | `~/.m3c-tools/exports.db` | SQLite DB path |
 
@@ -418,7 +418,7 @@ Registers an ER1 retry entry in the SQLite tracking DB. `--transcript` is requir
 m3c-tools schedule vid-001 --transcript out.txt --tags progress,youtube
 ```
 
-#### `status` — show retry entry status
+#### `status`: show retry entry status
 
 ```bash
 m3c-tools status [flags]
@@ -428,7 +428,7 @@ Shows the status of ER1 retry entries in the tracking DB.
 
 | Flag | Argument | Default | Meaning |
 |------|----------|---------|---------|
-| `--entry` | `<id>` | — | Show a specific entry only |
+| `--entry` | `<id>` | n/a | Show a specific entry only |
 | `--db` | `<path>` | `~/.m3c-tools/exports.db` | SQLite DB path |
 
 ```bash
@@ -436,7 +436,7 @@ m3c-tools status
 m3c-tools status --entry vid-001
 ```
 
-#### `cancel` — cancel a pending retry entry
+#### `cancel`: cancel a pending retry entry
 
 ```bash
 m3c-tools cancel <entry_id> [flags]
@@ -454,7 +454,7 @@ m3c-tools cancel vid-001
 
 ### Config & app
 
-#### `setup` — set up the Python venv + whisper
+#### `setup`: set up the Python venv + whisper
 
 ```bash
 m3c-tools setup [flags]
@@ -465,8 +465,8 @@ transcription.
 
 | Flag | Argument | Default | Meaning |
 |------|----------|---------|---------|
-| `--force` | — | — | Recreate the venv from scratch |
-| `--check` | — | — | Check setup status without installing |
+| `--force` | n/a | n/a | Recreate the venv from scratch |
+| `--check` | n/a | n/a | Check setup status without installing |
 
 ```bash
 m3c-tools setup --check
@@ -480,20 +480,20 @@ and writes the result into the active profile.
 | Flag | Argument | Default | Meaning |
 |------|----------|---------|---------|
 | `--er1-url` | `<url>` | prompted | Pre-fill the ER1 server URL instead of asking for it |
-| `--no-browser` | — | — | Print the pairing URL instead of opening a browser (headless hosts) |
-| `--tags` | `<list>` | — | Default tags to store in the profile |
+| `--no-browser` | n/a | n/a | Print the pairing URL instead of opening a browser (headless hosts) |
+| `--tags` | `<list>` | n/a | Default tags to store in the profile |
 
 ```bash
 m3c-tools setup --er1-url https://er1.example.com --no-browser
 ```
 
 **`setup pocket-key <pk_…>`** (macOS) validates a Pocket API key live against the Pocket
-API and writes it to a profile on success. An unreachable API is **not** fatal — the key
+API and writes it to a profile on success. An unreachable API is **not** fatal. The key
 is still saved; only an outright *unauthorized* answer fails the command.
 
 | Flag | Argument | Default | Meaning |
 |------|----------|---------|---------|
-| `--no-write` | — | — | Validate only; do not save the key to any profile |
+| `--no-write` | n/a | n/a | Validate only; do not save the key to any profile |
 | `--profile` | `<name>` | active profile | Write the key to this profile instead of the active one |
 
 ```bash
@@ -501,7 +501,7 @@ m3c-tools setup pocket-key pk_… --no-write
 m3c-tools setup pocket-key pk_… --profile dev
 ```
 
-#### `config` — configuration profile management
+#### `config`: configuration profile management
 
 ```bash
 m3c-tools config <list|show|switch|create|test|import|delete|doctor>
@@ -524,7 +524,7 @@ Manages named configuration profiles.
 
 | Flag | Argument | Default | Meaning |
 |------|----------|---------|---------|
-| `--all` | — | *the default* | Validate every profile in `~/.m3c-tools/profiles` (the literal word `all` works too) |
+| `--all` | n/a | *the default* | Validate every profile in `~/.m3c-tools/profiles` (the literal word `all` works too) |
 
 ```bash
 m3c-tools config list
@@ -533,7 +533,7 @@ m3c-tools config doctor --all
 m3c-tools config doctor cloud
 ```
 
-#### `settings` — open the profile settings editor
+#### `settings`: open the profile settings editor
 
 ```bash
 m3c-tools settings
@@ -541,7 +541,7 @@ m3c-tools settings
 
 Opens the profile settings editor in your browser. No flags.
 
-#### `login` — pair this device via the browser
+#### `login`: pair this device via the browser
 
 ```bash
 m3c-tools login
@@ -550,7 +550,7 @@ m3c-tools login
 Opens the browser to sign in to ER1 and links this device (captures your context and can
 store a device token). Run any time to re-pair. No flags.
 
-#### `menubar` — launch the macOS menu-bar app
+#### `menubar`: launch the macOS menu-bar app
 
 ```bash
 m3c-tools menubar [flags]
@@ -562,16 +562,16 @@ Launches the native menu-bar app (macOS only). See the
 | Flag | Argument | Default | Meaning |
 |------|----------|---------|---------|
 | `--title` | `<text>` | `M3C` | Menu-bar title text |
-| `--icon` | `<path>` | — | Menu-bar icon PNG path |
+| `--icon` | `<path>` | n/a | Menu-bar icon PNG path |
 | `--log` | `<path>` | `~/.m3c-tools/m3c-tools.log` | Log file path |
-| `--verbose` | — | — | Also mirror the log to stderr (the terminal), not just the log file |
-| `--quiet` | — | — | Log to the file only — the default, and the way to undo an earlier `--verbose` |
+| `--verbose` | n/a | n/a | Also mirror the log to stderr (the terminal), not just the log file |
+| `--quiet` | n/a | n/a | Log to the file only: the default, and the way to undo an earlier `--verbose` |
 
 ```bash
 m3c-tools menubar --title "M3C" --icon ~/icons/m3c.png
 ```
 
-#### `version` — print the version
+#### `version`: print the version
 
 ```bash
 m3c-tools version
@@ -581,7 +581,7 @@ Prints the build version. It takes no flags of its own, but `--version` and `-v`
 accepted as top-level aliases for the subcommand (`m3c-tools --version`). Likewise
 `--help` and `-h` are aliases for `help`.
 
-#### `help` — show the command listing
+#### `help`: show the command listing
 
 ```bash
 m3c-tools help
@@ -601,9 +601,9 @@ lines in `.env.example` mean the value is optional.
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `ER1_API_URL` | — | ER1 upload endpoint URL, e.g. `https://onboarding.guide/upload_2` |
-| `ER1_API_KEY` | — | API key sent as the `X-API-KEY` header |
-| `ER1_CONTEXT_ID` | — | Context identifier for uploads |
+| `ER1_API_URL` | n/a | ER1 upload endpoint URL, e.g. `https://onboarding.guide/upload_2` |
+| `ER1_API_KEY` | n/a | API key sent as the `X-API-KEY` header |
+| `ER1_CONTEXT_ID` | n/a | Context identifier for uploads |
 | `ER1_VERIFY_SSL` | `false` | SSL verification: `true` \| `false` (use `false` for self-signed local dev) |
 | `ER1_CONTENT_TYPE` | `YouTube-Video-Impression` | Content-type label in the upload form payload |
 
@@ -617,15 +617,15 @@ lines in `.env.example` mean the value is optional.
 | `M3C_ER1_SESSION_PERSIST` | `false` | Persist login-linked context across app restarts |
 | `M3C_ER1_SESSION_FILE` | `~/.m3c-tools/er1_session.json` | Custom path for the persisted ER1 session JSON |
 
-> Retry backoff itself is hardcoded in `pkg/er1/retry.go` — the former
+> Retry backoff itself is hardcoded in `pkg/er1/retry.go`: the former
 > `ER1_RETRY_BASE_DELAY` / `ER1_RETRY_MAX_DELAY` variables were removed and have no effect.
 
 ### YouTube rate-limit mitigation
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `YT_PROXY_URL` | — | HTTP/SOCKS5 proxy to avoid YouTube 429 rate limits |
-| `YT_PROXY_AUTH` | — | Proxy credentials as `user:password` |
+| `YT_PROXY_URL` | n/a | HTTP/SOCKS5 proxy to avoid YouTube 429 rate limits |
+| `YT_PROXY_AUTH` | n/a | Proxy credentials as `user:password` |
 
 > Transcripts are also cached at `~/.m3c-tools/cache/transcripts/` (7-day TTL). On a 429,
 > the app proceeds without the transcript (graceful degradation).
@@ -658,7 +658,7 @@ YouTube transcripts, which are fetched directly).
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `IMPORT_AUDIO_SOURCE` | — | Source folder for audio files (e.g. a GDrive mirror) |
+| `IMPORT_AUDIO_SOURCE` | n/a | Source folder for audio files (e.g. a GDrive mirror) |
 | `IMPORT_AUDIO_DEST` | `~/ER1` | Destination base folder for imported MEMORY folders |
 | `IMPORT_CONTENT_TYPE` | `Audio-Track vom Diktiergerät` | Content-type label for audio imports |
 | `IMPORT_TRACKER_FILE` | `~/.m3c-tools/transcript_tracker.md` | Tracks which files have been imported |
@@ -670,9 +670,9 @@ YouTube transcripts, which are fetched directly).
 | `PLAUD_API_URL` | `https://api.plaud.ai` | Plaud API base URL |
 | `PLAUD_TOKEN_FILE` | `~/.m3c-tools/plaud-session.json` | Path to the Plaud session token file |
 | `PLAUD_CONTENT_TYPE` | `Plaud-Fieldnote` | Content-type label for Plaud fieldnote uploads |
-| `M3C_PLAUD_TOKEN` | — | Plaud API token consumed by `plaud auth` (secure, avoids argv leaks) |
+| `M3C_PLAUD_TOKEN` | n/a | Plaud API token consumed by `plaud auth` (secure, avoids argv leaks) |
 | `PLAUD_TRANSCRIBE_MODE` | `queue` | For un-transcribed recordings in `plaud dev sync`: `queue` (server-side whisper, SPEC-0111), `lazy` (`todo.transcribe` tag), or `off` (audio only). 🍎 |
-| `PLAUD_MAX_AUDIO_MB` | `30` | Max audio (MB) attached to an ER1 upload by `plaud dev sync`. Larger clips upload **transcript-only** (they still land; the recording stays in Plaud) to avoid the ER1 ingress **HTTP 413** — Cloud Run rejects requests over ~32 MiB. Raise toward ~31 to mirror bigger recordings. 🍎 |
+| `PLAUD_MAX_AUDIO_MB` | `30` | Max audio (MB) attached to an ER1 upload by `plaud dev sync`. Larger clips upload **transcript-only** (they still land; the recording stays in Plaud) to avoid the ER1 ingress **HTTP 413**: Cloud Run rejects requests over ~32 MiB. Raise toward ~31 to mirror bigger recordings. 🍎 |
 
 ### Time tracking & reverse tracking (menu-bar app)
 
@@ -694,7 +694,7 @@ backfill, and the `[reverse-tracking] no project match` diagnostic are documente
 
 ## Exit behavior & the retry queue
 
-Uploads that fail (network error, ER1 unreachable, auth problem) are **not lost** — they
+Uploads that fail (network error, ER1 unreachable, auth problem) are **not lost**. They
 are queued locally and can be retried later.
 
 - **Where.** The JSON retry queue lives at `~/.m3c-tools/queue.json`. The `schedule`,
@@ -718,11 +718,11 @@ m3c-tools cancel vid-001
 
 | Symptom | Fix |
 |---------|-----|
-| Uploads fail / auth failing (`key_set=false`) | Run `m3c-tools doctor`. The active profile likely has a placeholder key — re-run `setup` or `login`, and make sure `ER1_API_KEY` is real. |
+| Uploads fail / auth failing (`key_set=false`) | Run `m3c-tools doctor`. The active profile likely has a placeholder key: re-run `setup` or `login`, and make sure `ER1_API_KEY` is real. |
 | `whisper` command not found | Install it: `python3 -m pip install openai-whisper` (needs `ffmpeg`). Or run `m3c-tools setup`. |
-| `subtitles are disabled for this video` | Expected. The capture still keeps the **thumbnail + link** — add a voice note or `--impression`. |
+| `subtitles are disabled for this video` | Expected. The capture still keeps the **thumbnail + link**: add a voice note or `--impression`. |
 | "Projects" menu stuck on *Loading…* | No ER1 credential reached the app. Fix the active profile's key or run `login`, then **restart the menu-bar app**. |
-| `[reverse-tracking] no project match` in the log | Diagnostic, not an error: a capture's tags didn't overlap any PLM project. Add matching tags to the project, or capture with a `project:<slug>` / `client:<name>` tag — see [reverse tracking](menubar-app.md#how-to-make-reverse-tracking-work-for-your-captures). |
+| `[reverse-tracking] no project match` in the log | Diagnostic, not an error: a capture's tags didn't overlap any PLM project. Add matching tags to the project, or capture with a `project:<slug>` / `client:<name>` tag: see [reverse tracking](menubar-app.md#how-to-make-reverse-tracking-work-for-your-captures). |
 | Upload fails, then retries | Failed uploads queue at `~/.m3c-tools/queue.json`. Run `m3c-tools retry`, check `m3c-tools status`. |
 | YouTube 429 / rate limited | Set `YT_PROXY_URL`; transcripts are cached for 7 days and the app degrades gracefully without them. |
 | `plaud dev sync` → HTTP 413 | The recording's audio exceeds the ER1 ingress limit (~32 MiB). `plaud dev sync` already drops audio over `PLAUD_MAX_AUDIO_MB` (default 30) and uploads transcript-only. If you still see 413, lower `PLAUD_MAX_AUDIO_MB`; a stricter proxy may cap below 30 MB. |
@@ -731,9 +731,9 @@ m3c-tools cancel vid-001
 
 ## See also
 
-- [Quickstart: m3c-tools](quickstart-m3c-tools.md) — the 5-minute path
-- [Menu Bar App](menubar-app.md) — projects, the Gantt time tracker, and reverse tracking in depth
-- [Manual: skillctl](manual-skillctl.md) — the agent-skill trust lifecycle, command by command
-- [Menu Bar App](menubar-app.md) — every menu item and the Observation Window
-- [Bug & feature tracking](bug-tracking.md) — how a defect or a request is tracked across the private and public planes
-- [Platform differences](PLATFORM-DIFFERENCES.md) — macOS vs Linux vs Windows behavior
+- [Quickstart: m3c-tools](quickstart-m3c-tools.md): the 5-minute path
+- [Menu Bar App](menubar-app.md): projects, the Gantt time tracker, and reverse tracking in depth
+- [Manual: skillctl](manual-skillctl.md): the agent-skill trust lifecycle, command by command
+- [Menu Bar App](menubar-app.md): every menu item and the Observation Window
+- [Bug & feature tracking](bug-tracking.md): how a defect or a request is tracked across the private and public planes
+- [Platform differences](PLATFORM-DIFFERENCES.md): macOS vs Linux vs Windows behavior

@@ -2,10 +2,10 @@ package main
 
 // Tests for `skillctl enforce` (SPEC-0317 P0).
 //
-// AC-1  — enforce is BYTE-IDENTICAL to verify-hook (exit + stdout + stderr) for
+// AC-1: enforce is BYTE-IDENTICAL to verify-hook (exit + stdout + stderr) for
 //         an allow and for every deny class. enforce must be a pure silent router
 //         that only adds an outbox sink; it must never change a byte of output.
-// AC-2a — DECISION-INVARIANCE: a forced outbox-write failure (a panicking sink)
+// AC-2a, DECISION-INVARIANCE: a forced outbox-write failure (a panicking sink)
 //         leaves exit + stdout + stderr byte-identical to the healthy path, so the
 //         SPEC-0255 landed contract is preserved.
 //
@@ -26,7 +26,7 @@ import (
 // runOne executes a single gate function against event on a FRESH temp $HOME with
 // the two verification seams stubbed to (retCode, retReason). Each call gets its
 // own home so state written by one run (trail, verdict cache, outbox) can never
-// leak into a comparison run — the only intended difference between enforce and
+// leak into a comparison run: the only intended difference between enforce and
 // verify-hook is the outbox side effect, never the (exit, stdout, stderr) tuple.
 func runOne(t *testing.T, gate func(r *strings.Reader, o, e *bytes.Buffer) int, name, event string, retCode int, retReason string) (int, string, string) {
 	t.Helper()
@@ -115,7 +115,7 @@ func TestEnforce_ByteParity_AllowAndDenyClasses(t *testing.T) {
 }
 
 // TestEnforce_UnmanagedPolicyDeny_Parity checks a deny that comes from policy
-// (unmanaged_skills=deny) rather than the §7 chain — a distinct deny class.
+// (unmanaged_skills=deny) rather than the §7 chain: a distinct deny class.
 func TestEnforce_UnmanagedPolicyDeny_Parity(t *testing.T) {
 	t.Setenv("SKILLCTL_GATE_UNMANAGED", "deny")
 	event := `{"tool_name":"Skill","tool_input":{"skill":"some-plugin:thing"}}`
@@ -180,8 +180,8 @@ func TestEnforce_WritesOutboxRow(t *testing.T) {
 }
 
 // TestEnforce_OutboxFailure_DecisionInvariant is AC-2a: with a panicking outbox
-// sink, enforce's (exit, stdout, stderr) stays byte-identical to verify-hook —
-// the SPEC-0255 decision-invariance contract holds even when the write blows up.
+// sink, enforce's (exit, stdout, stderr) stays byte-identical to verify-hook.
+// The SPEC-0255 decision-invariance contract holds even when the write blows up.
 func TestEnforce_OutboxFailure_DecisionInvariant(t *testing.T) {
 	// Force the sink to panic on every call.
 	origSink := enforceOutboxSink

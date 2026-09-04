@@ -240,7 +240,7 @@ func cmdScan(args []string) {
 		fmt.Fprintf(os.Stderr, "Scan paths: %v\n", inv.ScanPaths)
 	}
 
-	// SPEC-0189 §13 amendment — post-scan push to registry. Delegates
+	// SPEC-0189 §13 amendment: post-scan push to registry. Delegates
 	// to awareness.Sync (Sprint 2 / Stream M1) so both entry points
 	// share the same wire contract.
 	if pushToRegistry {
@@ -258,7 +258,7 @@ func cmdScan(args []string) {
 func runScanPushToRegistry(inv *model.Inventory, registryURL, attestStr string, dryRunPush bool) int {
 	if !dryRunPush {
 		// Per §13.4 acceptance #7 the dry-run-push path is the one
-		// pinned by tests. The non-dry-run shorthand is convenience —
+		// pinned by tests. The non-dry-run shorthand is convenience,
 		// for now we route it through the same code path with
 		// confirm=true. A future op-mode flag can split them.
 		fmt.Fprintln(os.Stderr,
@@ -279,7 +279,7 @@ func runScanPushToRegistry(inv *model.Inventory, registryURL, attestStr string, 
 		return exitGeneric
 	}
 	if resolvedRegistry == "" && dryRunPush {
-		// In dry-run-push we don't NEED a registry URL — the envelope
+		// In dry-run-push we don't NEED a registry URL. The envelope
 		// dump just needs a placeholder so BuildEnvelope's caller-side
 		// validation doesn't complain.
 		resolvedRegistry = "https://dryrun.invalid/api/skills"
@@ -556,7 +556,7 @@ func cmdBrowse(args []string) {
 	var graph *browse.SkillGraph
 
 	if !store.IsStale(invHash) {
-		// Cache hit — load graph from SQLite.
+		// Cache hit: load graph from SQLite.
 		fmt.Fprintf(os.Stderr, "Loading cached graph...\n")
 		graph, err = store.LoadGraph()
 		if err != nil || graph == nil {
@@ -568,7 +568,7 @@ func cmdBrowse(args []string) {
 			}
 		}
 	} else {
-		// Cache miss — build and persist.
+		// Cache miss: build and persist.
 		fmt.Fprintf(os.Stderr, "Building graph...\n")
 		graph = browse.BuildGraph(inv)
 		if err := store.SaveGraphWithHash(graph, invHash); err != nil {

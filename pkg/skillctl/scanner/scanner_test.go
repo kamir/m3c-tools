@@ -166,7 +166,7 @@ func TestScanSkipsBlacklistedDirs(t *testing.T) {
 	root := t.TempDir()
 	os.MkdirAll(filepath.Join(root, ".git"), 0o755)
 
-	// Put a skill file inside node_modules — should be skipped.
+	// Put a skill file inside node_modules: should be skipped.
 	nmDir := filepath.Join(root, "node_modules", ".claude", "skills", "bad")
 	os.MkdirAll(nmDir, 0o755)
 	os.WriteFile(filepath.Join(nmDir, "bad.md"), []byte("# bad"), 0o644)
@@ -187,7 +187,7 @@ func TestScanSkipsBlacklistedDirs(t *testing.T) {
 
 	for _, sk := range inv.Skills {
 		if sk.Name == "bad" {
-			t.Error("found skill inside node_modules — should have been skipped")
+			t.Error("found skill inside node_modules: should have been skipped")
 		}
 	}
 

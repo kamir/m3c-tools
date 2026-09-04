@@ -14,9 +14,9 @@ package main
 //                  [--cleanup --confirm-delete --dry-run-cleanup-token TOKEN]
 //
 // Exit codes per S3-DECISIONS S3.3 Q4 / SPEC-0189 §14.2:
-//   0  — every active skill OK
-//   2  — at least one UNVERIFIED or BELOW_MIN
-//   3  — at least one BROKEN
+//   0, every active skill OK
+//   2, at least one UNVERIFIED or BELOW_MIN
+//   3, at least one BROKEN
 // Plus shared usage / generic codes from cmd/skillctl/exit.go.
 //
 // The cleanup path mirrors the G-23 destructive-op convention proven in
@@ -176,7 +176,7 @@ func emitReportTable(r audit.Report, w io.Writer) {
 	}
 	fmt.Fprintln(tw, "-----\t----\t-----\t---\t------")
 	_ = tw.Flush()
-	// Aggregate summary line — the human form of the exit code (S3.3 Q3).
+	// Aggregate summary line: the human form of the exit code (S3.3 Q3).
 	fmt.Fprintln(w, summaryLine(r))
 }
 
@@ -270,7 +270,7 @@ func runCleanupConfirm(targets []audit.Verdict, presentedToken, outFormat string
 		fmt.Fprintf(stderr, "skillctl audit: %v\n", err)
 		// Refusing the confirm because the token failed re-verification
 		// (drift / expiry / tamper) is a precondition failure, not an internal
-		// error — exit 2 (usage), matching the G-23 two-step contract in
+		// error: exit 2 (usage), matching the G-23 two-step contract in
 		// DEMO-skill-trust-scenarios.md (S5: "refuse on drift → exit 2").
 		return exitUsage
 	}
@@ -312,11 +312,11 @@ func runCleanupConfirm(targets []audit.Verdict, presentedToken, outFormat string
 // HMAC-SHA-256 over `(hostname, sorted(skill-paths), issued_at)` with the
 // skillctl author key as the HMAC key. The token format (Unix-seconds
 // prefix + base64url tag) is identical in shape to the awareness-reset
-// token format from S2.2 — operators learn one shape across the CLI.
+// token format from S2.2: operators learn one shape across the CLI.
 //
 // Implementation note: we HMAC with a process-derived secret (the
 // SHA-256 of the skillctl binary path + the hostname). The secret is
-// not crypto-grade — the threat model is "operator paste-error," not
+// not crypto-grade. The threat model is "operator paste-error," not
 // "active attacker on the local box." A dedicated key would imply
 // state on disk; the SPEC-0188 §11b convention requires the dry-run be
 // purely advisory, not a privileged key holder.
@@ -447,7 +447,7 @@ func resolveMinimum(flagVal string) audit.MinimumLevel {
 		}
 		return audit.MinGreen
 	default:
-		// Unknown value — caller maps to usage error elsewhere.
+		// Unknown value: caller maps to usage error elsewhere.
 		return audit.MinGreen
 	}
 }
@@ -465,7 +465,7 @@ func readTrustRootsMinimum() audit.MinimumLevel {
 	if err != nil {
 		return ""
 	}
-	// Tiny YAML scan — avoid pulling a yaml dep here. The trust-roots
+	// Tiny YAML scan: avoid pulling a yaml dep here. The trust-roots
 	// schema (per SPEC-0188 §4.4) carries `governance_minimum: <enum>`
 	// at top level. Just look for that line.
 	for _, line := range strings.Split(string(data), "\n") {

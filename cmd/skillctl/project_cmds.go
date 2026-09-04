@@ -1,6 +1,6 @@
 package main
 
-// `skillctl project` — resolve the PLM project context for the current
+// `skillctl project`: resolve the PLM project context for the current
 // working directory from the SPEC-0214 descriptor `.m3c/project.yaml`
 // (falling back to a dir-slug when no descriptor is present). This is the
 // client side of SPEC-0214: skills (e.g. /session-state, SPEC-0213) call this
@@ -13,7 +13,7 @@ package main
 //                                              github-repo|source|descriptor-path|
 //                                              commit-sha|channel:<kind>  (the ref
 //                                              of the primary channel of <kind>)
-//   skillctl project channels [--kind K]  list the v2 `channels:` block — one
+//   skillctl project channels [--kind K]  list the v2 `channels:` block, one
 //                                         "kind  role  ref  [label]" per line
 //                                         (SPEC-0217); --kind filters by kind
 //   skillctl project path                 print the descriptor path, or "(none)"
@@ -134,7 +134,7 @@ func projectField(d *m3cproject.Descriptor, name string) (string, bool) {
 	case "repo-root", "repo_root":
 		return d.RepoRoot, true
 	}
-	// channel:<kind> — the ref of the primary channel of that kind (SPEC-0217 v2).
+	// channel:<kind>: the ref of the primary channel of that kind (SPEC-0217 v2).
 	if strings.HasPrefix(strings.ToLower(name), "channel:") {
 		k := name[len("channel:"):]
 		return primaryChannelRef(d, k), true
@@ -152,7 +152,7 @@ func printProjectContext(w io.Writer, d *m3cproject.Descriptor) {
 	}
 	fmt.Fprintf(w, "er1.target        %s\n", d.EffectiveER1Target())
 	if d.ER1.URL != "" {
-		fmt.Fprintf(w, "er1.url           %s   (informational; `target` is authoritative — ADR-0003)\n", d.ER1.URL)
+		fmt.Fprintf(w, "er1.url           %s   (informational; `target` is authoritative: ADR-0003)\n", d.ER1.URL)
 	}
 	fmt.Fprintf(w, "er1.context       %s\n", d.EffectiveER1Context())
 	if d.Repo.GithubRepoURL != "" {
@@ -162,7 +162,7 @@ func printProjectContext(w io.Writer, d *m3cproject.Descriptor) {
 		fmt.Fprintf(w, "memory.tag_filter %v   disable_filter: %t\n", d.Memory.TagFilter, d.Memory.DisableFilter)
 	}
 	if len(d.Channels) > 0 {
-		fmt.Fprintf(w, "channels          %d  (SPEC-0217 — `skillctl project channels` for the list):\n", len(d.Channels))
+		fmt.Fprintf(w, "channels          %d  (SPEC-0217: `skillctl project channels` for the list):\n", len(d.Channels))
 		for _, ch := range d.Channels {
 			lbl := ""
 			if ch.Label != "" {
@@ -177,10 +177,10 @@ func printProjectContext(w io.Writer, d *m3cproject.Descriptor) {
 			fmt.Fprintf(w, "descriptor_sha    %s\n", sha)
 		}
 		if d.Source.PLMDocUpdatedAt != "" && d.Source.PLMDocUpdatedAt != "null" {
-			fmt.Fprintf(w, "plm_updated_at    %s   (compare against live PLM /projects/<id> to detect staleness — SPEC-0214 §6)\n", d.Source.PLMDocUpdatedAt)
+			fmt.Fprintf(w, "plm_updated_at    %s   (compare against live PLM /projects/<id> to detect staleness, SPEC-0214 §6)\n", d.Source.PLMDocUpdatedAt)
 		}
 	} else {
-		fmt.Fprintf(w, "descriptor        (none — falling back to dir-slug; run aims-core PLM with github_sync_enabled to get one)\n")
+		fmt.Fprintf(w, "descriptor        (none, falling back to dir-slug; run aims-core PLM with github_sync_enabled to get one)\n")
 	}
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "ER1 credential resolves via Keychain -> Secret Manager -> env (ADR-0003), keyed by er1.target.")

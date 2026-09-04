@@ -1,6 +1,6 @@
 package main
 
-// `skillctl peer` — SPEC-0359 D2 peer discovery + trust pinning.
+// `skillctl peer`: SPEC-0359 D2 peer discovery + trust pinning.
 //
 //	peer add <name> <locator> --pubkey <b64> --pin sha256:<hex> [--floor green|yellow]
 //	peer ls
@@ -70,7 +70,7 @@ func runPeerAdd(args []string, stdout, stderr io.Writer) int {
 	pubB64 := fs.String("pubkey", "", "Peer's ed25519 public key, base64 (raw 32 bytes).")
 	pin := fs.String("pin", "", "Peer's trust-root fingerprint sha256:<hex> (verified out-of-band; REQUIRED).")
 	floor := fs.String("floor", "green", "governance_minimum for this peer: green | yellow.")
-	contributes := fs.Bool("contributes-revokes", false, "Union this peer's SIGNED revoke events into the local revoked set (`revoke feed --gossip`). Set ONLY for a governance-trusted peer — bounds revoke-DoS.")
+	contributes := fs.Bool("contributes-revokes", false, "Union this peer's SIGNED revoke events into the local revoked set (`revoke feed --gossip`). Set ONLY for a governance-trusted peer: bounds revoke-DoS.")
 	if err := fs.Parse(reorderFlagArgs(fs, args)); err != nil {
 		return 2
 	}
@@ -83,8 +83,8 @@ func runPeerAdd(args []string, stdout, stderr io.Writer) int {
 	if registry.IsER1Registry(locator) || locator == "self" {
 		// er1://… and `self` always verify against your OWN trust-roots
 		// (resolvePullTrustRoots sends them to LoadSelfTrustRoots verbatim), so a
-		// peer pin there would be a silent no-op — reject it rather than mislead.
-		fmt.Fprintln(stderr, "peer add: er1://… and \"self\" are not peers — they always verify against your own trust-roots. Pin a gitlab://, github://, local:// or oci:// registry instead.")
+		// peer pin there would be a silent no-op, reject it rather than mislead.
+		fmt.Fprintln(stderr, "peer add: er1://… and \"self\" are not peers, they always verify against your own trust-roots. Pin a gitlab://, github://, local:// or oci:// registry instead.")
 		return 2
 	}
 	if artifact.SchemeOf(locator) == "" {
@@ -122,7 +122,7 @@ func runPeerLs(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if len(peers.Peers) == 0 {
-		fmt.Fprintln(stdout, "(no pinned peers — add one with `skillctl peer add`)")
+		fmt.Fprintln(stdout, "(no pinned peers: add one with `skillctl peer add`)")
 		return 0
 	}
 	fmt.Fprintf(stdout, "%-16s %-40s %-8s %s\n", "name", "locator", "floor", "fingerprint")
@@ -173,7 +173,7 @@ func runPeerVerify(args []string, stdout, stderr io.Writer) int {
 	if len(res.Skipped) > 0 {
 		fmt.Fprintf(stdout, "  rejected: %d\n", len(res.Skipped))
 		for _, sk := range res.Skipped {
-			fmt.Fprintf(stdout, "    ✗ %s@%s  %v — %s\n", sk.Name, sk.Version, sk.Gate, sk.Detail)
+			fmt.Fprintf(stdout, "    ✗ %s@%s  %v: %s\n", sk.Name, sk.Version, sk.Gate, sk.Detail)
 		}
 	}
 	if len(res.Staged) == 0 {

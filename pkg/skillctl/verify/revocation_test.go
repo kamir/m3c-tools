@@ -1,6 +1,6 @@
 package verify
 
-// SPEC-0276 R4.4 — signed offline revocation list.
+// SPEC-0276 R4.4: signed offline revocation list.
 
 import (
 	"bytes"

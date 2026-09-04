@@ -1,6 +1,6 @@
 package main
 
-// SPEC-0196 §12 Q1 / P2b — `skillctl pack --data-scopes` binds a typed,
+// SPEC-0196 §12 Q1 / P2b: `skillctl pack --data-scopes` binds a typed,
 // validated data-scope INTO the signed bundle.json. These tests drive runPack
 // directly (no process spawn) and assert:
 //
@@ -12,7 +12,7 @@ package main
 //   - a malformed scope JSON is a usage error (exit 2), distinct from a
 //     semantic rejection,
 //   - packing WITHOUT --data-scopes leaves the manifest scope absent (unchanged
-//     behavior — back-compat).
+//     behavior: back-compat).
 
 import (
 	"archive/tar"
@@ -40,7 +40,7 @@ func writePackSkillDir(t *testing.T) string {
 }
 
 // writePackSkillDirBody builds a skill dir whose SKILL.md carries the given
-// frontmatter + body — for the IS-RS-03 body-vs-declaration pack gate.
+// frontmatter + body, for the IS-RS-03 body-vs-declaration pack gate.
 func writePackSkillDirBody(t *testing.T, frontmatter, body string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -53,7 +53,7 @@ func writePackSkillDirBody(t *testing.T, frontmatter, body string) string {
 
 // FR-0090 IS-RS-03 bite: packing a skill that declares no network and does NOT
 // declare a shell/network tool, but whose BODY instructs an outbound call (curl),
-// must FAIL the pack on a 🔴 body-vs-declaration consistency finding — before any
+// must FAIL the pack on a 🔴 body-vs-declaration consistency finding. Before any
 // .skb is produced. Pre-fix the pack gate did not run bodyscan, so the self-
 // contradictory skill packed clean.
 func TestPackFailsOnRedBodyVsDeclaration(t *testing.T) {
@@ -278,7 +278,7 @@ func TestPackRejectsStructurallyInvalidScope(t *testing.T) {
 }
 
 // TestPackWithoutDataScopeUnchanged: omitting --data-scopes leaves the manifest
-// scope absent — back-compat (a bundle packed the old way is unchanged).
+// scope absent: back-compat (a bundle packed the old way is unchanged).
 func TestPackWithoutDataScopeUnchanged(t *testing.T) {
 	dir := writePackSkillDir(t)
 	out := filepath.Join(t.TempDir(), "t.skb")

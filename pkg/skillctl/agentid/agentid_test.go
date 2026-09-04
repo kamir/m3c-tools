@@ -83,7 +83,7 @@ func TestGoldenCanonicalBytes(t *testing.T) {
 	}
 }
 
-// TestCanonicalDeterministic — the same logical payload yields the same bytes
+// TestCanonicalDeterministic: the same logical payload yields the same bytes
 // regardless of input array ordering (the property signer+verifier rely on).
 func TestCanonicalDeterministic(t *testing.T) {
 	p1 := samplePayload()
@@ -105,7 +105,7 @@ func TestCanonicalRejectsNewlineSmuggling(t *testing.T) {
 	}
 }
 
-// TestSignVerifyRoundTrip — issue (sign) → verify against the pinned owner key.
+// TestSignVerifyRoundTrip: issue (sign) → verify against the pinned owner key.
 func TestSignVerifyRoundTrip(t *testing.T) {
 	pub, priv := mustKey(t)
 	p := samplePayload()
@@ -130,7 +130,7 @@ func TestSignVerifyRoundTrip(t *testing.T) {
 	}
 }
 
-// TestTamperPayloadFails — flip a grant entry after signing → owner sig fails.
+// TestTamperPayloadFails: flip a grant entry after signing → owner sig fails.
 func TestTamperPayloadFails(t *testing.T) {
 	pub, priv := mustKey(t)
 	p := samplePayload()
@@ -147,7 +147,7 @@ func TestTamperPayloadFails(t *testing.T) {
 	}
 }
 
-// TestOwnerNotPinnedFails — a valid signature by an UNPINNED owner → exit-11 class.
+// TestOwnerNotPinnedFails: a valid signature by an UNPINNED owner → exit-11 class.
 func TestOwnerNotPinnedFails(t *testing.T) {
 	_, priv := mustKey(t)
 	p := samplePayload()
@@ -161,7 +161,7 @@ func TestOwnerNotPinnedFails(t *testing.T) {
 	}
 }
 
-// TestWrongKeyFails — owner pinned to a DIFFERENT key than signed → fail.
+// TestWrongKeyFails: owner pinned to a DIFFERENT key than signed → fail.
 func TestWrongKeyFails(t *testing.T) {
 	_, priv := mustKey(t)
 	otherPub, _ := mustKey(t)
@@ -177,7 +177,7 @@ func TestWrongKeyFails(t *testing.T) {
 	}
 }
 
-// TestExpiredIsDistinct — an expired AgentID returns ErrExpired, NOT a sig error.
+// TestExpiredIsDistinct: an expired AgentID returns ErrExpired, NOT a sig error.
 func TestExpiredIsDistinct(t *testing.T) {
 	pub, priv := mustKey(t)
 	p := samplePayload()
@@ -224,7 +224,7 @@ func TestNoExpiryNeverExpires(t *testing.T) {
 	}
 }
 
-// TestRevokedOffline — an agent id in the revoked set → ErrRevoked, enforced
+// TestRevokedOffline: an agent id in the revoked set → ErrRevoked, enforced
 // purely from the in-memory set (offline).
 func TestRevokedOffline(t *testing.T) {
 	pub, priv := mustKey(t)
@@ -280,7 +280,7 @@ func TestApproverFloorRefusesOwnerOnly(t *testing.T) {
 	}
 }
 
-// TestApproverFloorRefusesApproverEqualsOwner — separation of duty: the approver
+// TestApproverFloorRefusesApproverEqualsOwner. Separation of duty: the approver
 // must be a DIFFERENT principal even if the owner signs a second "approver" row.
 func TestApproverFloorRefusesApproverEqualsOwner(t *testing.T) {
 	ownerPub, ownerPriv := mustKey(t)
@@ -298,7 +298,7 @@ func TestApproverFloorRefusesApproverEqualsOwner(t *testing.T) {
 	}
 }
 
-// TestApproverFloorRefusesUnsignedApproverClaim — an approver row whose key is
+// TestApproverFloorRefusesUnsignedApproverClaim: an approver row whose key is
 // NOT pinned (or whose signature is forged) must NOT satisfy the floor. This is
 // the red-team "bypass with an unsigned/self claim" case.
 func TestApproverFloorRefusesUnsignedApproverClaim(t *testing.T) {
@@ -346,7 +346,7 @@ func TestEmptyGrantDeniesEverything(t *testing.T) {
 }
 
 // SPEC-0277 IS-04 / IS-T7: AuthorizeSkillScoped enforces the SIGNED manifest scope
-// — intents, data-scopes AND declared limits — not just the skill name. The old
+// (intents, data-scopes AND declared limits) not just the skill name. The old
 // path enforced neither data-scopes nor limits, so the limit + data-scope cases
 // here bite code that shipped before IS-T7.
 func TestAuthorizeSkillScoped_EnforcesIntentsScopesAndLimits(t *testing.T) {
@@ -392,7 +392,7 @@ func TestAuthorizeSkillScoped_EnforcesIntentsScopesAndLimits(t *testing.T) {
 }
 
 // A grant that does NOT restrict data scopes (empty DataScopes) must not deny a
-// scope-declaring skill — data scopes stay bounded by the SPEC-0202 layer. (Intents
+// scope-declaring skill: data scopes stay bounded by the SPEC-0202 layer. (Intents
 // and limits keep their fail-closed/absent-cap semantics; this guards only scopes.)
 func TestAuthorizeSkillScoped_UnrestrictedDataScopesAllowed(t *testing.T) {
 	g := Grant{Skills: []string{"pdf"}, Intents: []string{"network:read"}}

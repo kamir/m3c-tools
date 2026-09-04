@@ -5,11 +5,11 @@ title: Roadmap & Ideas
 
 # Roadmap & Ideas
 
-This project is designed to grow. Below is the living roadmap — a place to track ideas, capture impulses, and plan next steps.
+This project is designed to grow. Below is the living roadmap: a place to track ideas, capture impulses, and plan next steps.
 
 ## Current state (v1.5)
 
-- [x] Full Go rewrite (from Python) — native macOS binary
+- [x] Full Go rewrite (from Python): native macOS binary
 - [x] Pure Go transcript library (port of youtube-transcript-api)
 - [x] macOS menu bar app (menuet + native Cocoa via cgo)
 - [x] Unified Observation Window (3 tabs: Record, Review, Tags)
@@ -54,11 +54,11 @@ Key wins over Python version:
 
 The ER1 integration is **fully implemented** in Go packages:
 
-- [x] `pkg/er1/` — config, upload, retry queue, reachability check
-- [x] `pkg/impression/` — observation types, tag system, composite documents
-- [x] `pkg/whisper/` — local Whisper transcription
-- [x] `pkg/importer/` — batch audio import from preconfigured folder
-- [x] `pkg/menubar/capture.go` — Store/Cancel with draft saving
+- [x] `pkg/er1/`: config, upload, retry queue, reachability check
+- [x] `pkg/impression/`: observation types, tag system, composite documents
+- [x] `pkg/whisper/`: local Whisper transcription
+- [x] `pkg/importer/`: batch audio import from preconfigured folder
+- [x] `pkg/menubar/capture.go`: Store/Cancel with draft saving
 - [x] ER1 browser login linking with session persistence
 - [x] Offline retry queue with exponential backoff
 
@@ -70,31 +70,31 @@ Full requirements are archived in the maintenance repository (`SPEC/requirements
 
 ### Hardening & quality
 
-- [ ] **Gemini post-processing** — tag-to-prompt pipeline for automated enrichment (R5)
-- [ ] **Login callback token validation** — explicit signature/token verification
-- [ ] **Encrypted session file** — at-rest encryption for ER1 session
-- [ ] **Integration tests for login callback** — callback parsing and URL extraction
-- [ ] **Go 1.26.1 upgrade** — fixes 4 stdlib vulnerabilities (GO-2026-4599 through 4602)
+- [ ] **Gemini post-processing**: tag-to-prompt pipeline for automated enrichment (R5)
+- [ ] **Login callback token validation**: explicit signature/token verification
+- [ ] **Encrypted session file**: at-rest encryption for ER1 session
+- [ ] **Integration tests for login callback**: callback parsing and URL extraction
+- [ ] **Go 1.26.1 upgrade**: fixes 4 stdlib vulnerabilities (GO-2026-4599 through 4602)
 
 ### Transcript tools
 
-- [ ] **Batch fetch** — fetch transcripts for a list of video IDs from a file
-- [ ] **Export formats** — save transcripts as Markdown, Obsidian notes, or Logseq pages
-- [ ] **Transcript search** — full-text search across all stored transcripts
-- [ ] **Summary generation** — LLM summarization of transcripts (optional)
+- [ ] **Batch fetch**: fetch transcripts for a list of video IDs from a file
+- [ ] **Export formats**: save transcripts as Markdown, Obsidian notes, or Logseq pages
+- [ ] **Transcript search**: full-text search across all stored transcripts
+- [ ] **Summary generation**: LLM summarization of transcripts (optional)
 
 ### Menu bar enhancements
 
-- [ ] **Quick search** — search transcript history from the menu bar
-- [ ] **Global keyboard shortcut** — hotkey to trigger transcript fetch
-- [ ] **Auto-detect clipboard** — detect YouTube URLs in clipboard and offer to fetch
-- [ ] **Auto-update** — check for new versions on launch
+- [ ] **Quick search**: search transcript history from the menu bar
+- [ ] **Global keyboard shortcut**: hotkey to trigger transcript fetch
+- [ ] **Auto-detect clipboard**: detect YouTube URLs in clipboard and offer to fetch
+- [ ] **Auto-update**: check for new versions on launch
 
 ### Infrastructure
 
-- [ ] **Code signing** — sign the .app bundle for Gatekeeper
-- [ ] **DMG packaging** — distribute as signed DMG
-- [ ] **Homebrew formula** — `brew install m3c-tools`
+- [ ] **Code signing**: sign the .app bundle for Gatekeeper
+- [ ] **DMG packaging**: distribute as signed DMG
+- [ ] **Homebrew formula**: `brew install m3c-tools`
 
 ### Large file refactoring (noted)
 
@@ -106,15 +106,15 @@ These files exceed 2000 lines and could benefit from splitting:
 
 ## Impulse capture
 
-A scratchpad for raw ideas and impulses. No commitment, no priority — just capture.
+A scratchpad for raw ideas and impulses. No commitment, no priority: just capture.
 
 _Use GitHub Issues or edit this page directly to add new impulses._
 
 | Date | Impulse | Status |
 |------|---------|--------|
 | 2026-03-09 | Create gh-pages documentation site | done |
-| 2026-03-09 | ER1 integration — standardize audio-checklist-checker pattern for YT videos | done |
-| 2026-03-09 | Impression capture — speak about a video, bundle both transcripts into ER1 | done |
+| 2026-03-09 | ER1 integration: standardize audio-checklist-checker pattern for YT videos | done |
+| 2026-03-09 | Impression capture: speak about a video, bundle both transcripts into ER1 | done |
 | 2026-03-10 | Pre-release code review gates | done |
 | 2026-03-10 | Mein Nutzerkonto menu item (ER1 profile page) | done |
 | | Integrate with Obsidian for knowledge management | idea |
