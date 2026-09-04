@@ -102,6 +102,14 @@ func runEnforce(stdin io.Reader, stdout, stderr io.Writer) int {
 	// is preserved byte-for-byte. An allow emits nothing to stdout, so writing the
 	// deny now is clean.
 	//
+	// SPEC-0403 §6b RECONCILIATION (FR-0110b): this block IS the LIVE gate-path
+	// instantiation of the §6b positive-list entry `policy.allow` under `required`.
+	// The mapping (policy.allow ↔ escalated allow, spool = fulfillment, denial
+	// exemption ↔ a deny is never re-escalated, the separate skillctlRequireLocalAudit
+	// flag ↔ REQ-6.10a confirmation) is documented in required_audit.go. FR-0110b
+	// deliberately adds NO second policy.allow fail-close here; it adds the general
+	// §6b mechanism in pkg/skillctl/auditevent for the other REQ-6.9 types.
+	//
 	// SCOPE (breadth): "a skill ALLOW" means EVERY audited Skill decision the gate
 	// allowed: managed, UNMANAGED (default-allow plugins / namespaced skills), AND
 	// allowlisted. audActive is set before those branches, so all reach the sink.

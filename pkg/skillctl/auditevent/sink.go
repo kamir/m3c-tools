@@ -45,6 +45,13 @@ type Dispatcher struct {
 	sinks          []Sink
 	mode           Mode // §6 delivery semantics; best-effort unless set (delivery.go).
 	durableRetries int  // in-process retry budget for a durable/required sink Write (>=1).
+	// required is the FR-0110b §6b positive-list policy. It is nil for every
+	// non-required Dispatcher AND for a required Dispatcher built without a
+	// validated policy: in both cases deliver never fail-closes, so the
+	// SPEC-0255 / REQ-6.4 default holds. It is set ONLY by NewDispatcherRequired,
+	// whose policy comes from RequiredConfig.BuildPolicy (which rejects an empty
+	// allow-list, REQ-6.6). See required.go.
+	required *RequiredPolicy
 }
 
 // NewDispatcher builds a best-effort Dispatcher applying r to every event before
