@@ -77,6 +77,9 @@ agent skills that act on it (sign, admit, verify, revoke: offline-verifiable).
 - [Bug & feature tracking](bug-tracking): the private analysis file, the public issue, and the guards between them
 - [Acceptance & Handover: skill lifecycle](acceptance-skillctl-lifecycle): the two-person (Mirko → Eric) procedure over ER1, with success criteria
 - [Runbook: two-person ER1 exchange](runbook-two-person-er1-exchange): copy-paste prod runbook (Mirko + Eric lanes) for the live exercise
+- [Tutorial, Szenario 01 (Deutsch)](tutorial-szenario-01-eigene-skills-mehrere-maschinen.de): eigene Skills auf mehreren Maschinen, plus fremde signierte Skills
+- [Tutorial, Szenario 02 (Deutsch)](tutorial-szenario-02-erster-signierter-skill.de): der erste signierte Skill, mit Prüfung durch einen Zweiten
+- [Tutorial, Katas und Test Ride (Deutsch)](tutorial-katas-und-test-ride.de): üben statt zusehen, jeder Beat ein echter Exit-Code
 - [CISO onboarding deck](skillctl-ciso-deck.html): sharp, honest arguments to defend skillctl to a security expert + a CTO (infographic)
 - [CISO-Onboarding-Deck (Deutsch)](skillctl-ciso-deck.de.html): dieselben Argumente auf Deutsch
 - [Menu Bar App](menubar-app): channels, Observation Window, menu items
