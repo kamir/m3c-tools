@@ -78,6 +78,12 @@ jobs:
       - name: Every real skillctl flag documented, every documented flag real
         run: go run ./cmd/docaudit -cli skillctl
 
+      - name: verbaudit unit tests
+        run: go test -count=1 ./cmd/verbaudit/
+
+      - name: Every dispatched verb registered (FR-0113)
+        run: go run ./cmd/verbaudit
+
       - name: No U+2014 EM DASH in the tracked tree (CODESTYLE.md)
         run: ./scripts/check-no-emdash.sh
 
