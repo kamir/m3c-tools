@@ -208,50 +208,72 @@ means the checks are seen, not obeyed. Closing that gap is step 1 below.
 **Secret-scanning push protection is off** (secret scanning itself and
 Dependabot security updates are on).
 
-### The user-only actions
+### What is enforced on the default branch
 
-These need repository-admin rights and cannot be done from a pull request.
+The `base` ruleset now carries a `required_status_checks` rule. Applied through
+the API, not the Settings UI, so the exact list is reviewable here:
 
-1. **Add a `required_status_checks` rule to the `base` ruleset** (Settings,
-   Rules). The ruleset already requires a pull request; this is the part that
-   makes its checks binding. The names CI reports today:
+```
+Lint & Vet
+Unit Tests
+skillctl Security Tests (-race)
+CLI/manual consistency (docaudit)
+Prose (no em dash)
+gitleaks (secret scan)
+govulncheck (reachable CVEs)
+go mod tidy is a no-op
+boundary-gate
+gosec no-new-findings (in-CI diff gate)
+Ratchet coverage (skillctl trust surface)
+Validate branch name
+Enforce pinning + least-privilege + retention
+CodeQL
+```
 
-   ```
-   Lint & Vet
-   Unit Tests
-   skillctl Security Tests (-race)
-   CLI/manual consistency (docaudit)
-   Prose (no em dash)
-   gitleaks (secret scan)
-   govulncheck (reachable CVEs)
-   go mod tidy is a no-op
-   boundary-gate
-   gosec no-new-findings (in-CI diff gate)
-   Ratchet coverage (skillctl trust surface)
-   Validate branch name
-   CodeQL
-   ```
+Every name was taken from the check runs of a live pull request, not from the
+workflow files, because the two differ. Three traps this avoids:
 
-   These are the check-run names exactly as reported. Two traps: the code
-   scanning check is called plain **`CodeQL`**, not "Code scanning results /
-   CodeQL"; and the `gosec` check run reports **skipped** on most runs, so it is
-   deliberately not in the list.
+- The code scanning check is called plain **`CodeQL`**, not "Code scanning
+  results / CodeQL".
+- The pin-guard check is named for its **job** (`Enforce pinning +
+  least-privilege + retention`), not for its file (`pin-guard.yml`).
+- The `gosec` check run reports **skipped** on most runs, so requiring it would
+  block every pull request. It is deliberately absent; `gosec no-new-findings`
+  is the one that actually gates.
 
-   `CodeQL` is safe to require now: as of this file, **zero alerts are open**
-   on the default branch. Requiring it before the accepted alerts were dismissed
-   would have blocked every pull request on findings documented here as
-   accepted.
+`strict_required_status_checks_policy` is **false** on purpose. Several sessions
+merge into this repository in parallel; requiring every branch to be up to date
+first would mean a rebase before every merge, and the checks re-run on the merge
+commit anyway.
 
-   Verify with:
+`Enforce pinning + least-privilege + retention` is on the list for a specific
+reason: it is the supply-chain guard (SHA pinning, no `@latest`, least-privilege
+`permissions`, `retention-days`), and it had just spent four merges silently not
+running. Required, a future breakage blocks; not required, it disappears again.
 
-   ```bash
-   gh api repos/<owner>/<repo>/branches/master/protection \
-     --jq '{required: .required_status_checks.contexts, strict: .required_status_checks.strict, admins: .enforce_admins.enabled}'
-   ```
+**Recovery.** The ruleset has no bypass actors, so a required check that never
+reports blocks every pull request, including the owner's. That is intended
+(fail closed), and it is recoverable: ruleset editing is not itself restricted
+by the ruleset.
 
-2. **Turn on secret-scanning push protection** (Settings, Code security). It
-   refuses a push that contains a recognised credential, which is strictly
-   earlier than the gitleaks job.
+```bash
+# inspect
+gh api repos/<owner>/<repo>/rulesets/<id> \
+  --jq '.rules[] | select(.type=="required_status_checks") | [.parameters.required_status_checks[].context]'
+
+# drop one check, or the whole rule, by PUTting the ruleset back without it
+gh api -X PUT repos/<owner>/<repo>/rulesets/<id> --input ruleset.json
+```
+
+Keep a copy of the ruleset JSON before editing it. A `PUT` replaces the whole
+object, so a partial body silently drops the other rules.
+
+### Still user-only
+
+**Turn on secret-scanning push protection** (Settings, Code security). It
+refuses a push that contains a recognised credential, which is strictly earlier
+than the gitleaks job. This one has no API equivalent that a pull request can
+carry, so it stays a Settings action.
 
 ---
 
