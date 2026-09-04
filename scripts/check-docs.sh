@@ -100,6 +100,35 @@ else
     echo "    Register the verb first (add a row to docs/CLI-VERBS.md), then implement its case."
 fi
 
+# ─── 6. Tutorial chain (BLOCKING) ───
+#
+# gate: scripts/tutorial-smoke.sh runs the chain the German scenario tutorials
+# describe (docs/tutorial-szenario-0*.de.md) against a bare local:// registry in
+# a throwaway HOME, and asserts every documented exit code, INCLUDING the two
+# refusals. docaudit gates the flag surface of the two manuals; nothing gated the
+# tutorials, so a renamed flag or a changed message could make them wrong without
+# turning anything red. FR-0118, SPEC-0407 AC-11.
+echo ""
+echo "6. Tutorial chain (tutorial-smoke)"
+if ! command -v go >/dev/null 2>&1; then
+    warn "go toolchain not found - skipping the tutorial chain"
+elif [ ! -f "scripts/tutorial-smoke.sh" ]; then
+    warn "scripts/tutorial-smoke.sh not found - skipping"
+else
+    SMOKE_BIN="$(mktemp -d)/skillctl"
+    if ! go build -o "$SMOKE_BIN" ./cmd/skillctl >/dev/null 2>&1; then
+        fail "cannot build skillctl for the tutorial chain"
+    elif ./scripts/tutorial-smoke.sh --skillctl "$SMOKE_BIN" >/tmp/tutorial-smoke.$$.log 2>&1; then
+        pass "the tutorial chain still behaves as documented"
+    else
+        fail "the tutorial chain drifted from the tutorials (see below)"
+        grep -E "DRIFT|FAIL:" /tmp/tutorial-smoke.$$.log | head -12 | sed 's/^/      /'
+        echo "      full run: ./scripts/tutorial-smoke.sh --keep"
+    fi
+    rm -f "/tmp/tutorial-smoke.$$.log"
+    rm -rf "$(dirname "$SMOKE_BIN")"
+fi
+
 # ─── Summary ───
 echo ""
 echo "─────────────────────────────"

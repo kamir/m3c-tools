@@ -28,6 +28,7 @@ Es gibt zwei verschiedene Fragen, und sie werden dauernd verwechselt.
 | 1 | Baut es und laufen die Tests? | `scripts/skillctl-test.sh` bzw. `.ps1` | die Maschine |
 | 2 | Würde dieser Stand unsere CI-Tore bestehen? | `scripts/skillctl-enterprise-test.sh` bzw. `.ps1` | die Maschine |
 | 3 | Kann **ich** das Werkzeug bedienen? | `demo/kup-training/`, der **Test Ride** | den Menschen, einmal |
+| 3b | Kann ich die **Publisher-Kette** bedienen? | `scripts/tutorial-smoke.sh --walk` | den Menschen, an der Kette aus Szenario 02 |
 | 4 | Sitzt der Griff auch nächste Woche noch? | `skillctl-demo --mode kata`, die **Katas** | den Menschen, dauerhaft |
 
 Stufen 1 und 2 stehen im [Quickstart](quickstart-skillctl.md#1b-optional-prove-it-on-your-own-machine-source-self-test).
@@ -116,6 +117,29 @@ Trainers statt des Demo-Homes; benutzen Sie das nur bewusst.
 | Schritt `01` bricht bei `sign` ab, „insecure mode 0644" | ein privater Schlüssel mit zu offenem Modus | `chmod 600 artifacts/keys/*.priv`, dann neu starten. Seit 2026-09-04 erzwingt `00-preflight.sh` das selbst |
 | Der Lauf endet rot, obwohl alle Vertrauensprüfungen grün waren | ein Tor braucht eine Quelle, die nur auf der Wartungsebene liegt | `run-and-prove.sh --skip-online --chain-only` |
 | Schritt `02`, `03` melden „skipped" | kein Registry erreichbar | erwartet und in Ordnung: der kryptografische Beweis ist offline derselbe |
+
+---
+
+## Teil 1b: die Publisher-Kette geführt (etwa 10 Minuten, offline)
+
+Der Test Ride oben zeigt die Vertrauenskette aus Sicht von Autor und Konsument. Wer den
+**Veröffentlichungsvorgang** selbst üben will (aufnehmen, attestieren, ziehen, und die zwei
+Ablehnungen), nimmt das Begleitskript zu
+[Szenario 02](tutorial-szenario-02-erster-signierter-skill.de.md):
+
+```bash
+make build-skillctl
+./scripts/tutorial-smoke.sh --walk      # geführt, mit Pausen und Begründung
+./scripts/tutorial-smoke.sh             # dieselbe Kette, ohne Pausen, als Prüfung
+```
+
+Zehn Schritte in einem Wegwerf-Sandkasten, ohne Netz und ohne Server, gegen ein bares
+`local://`-Registry. Die Schritte 9 und 10 sind die interessanten: einmal zählt eine gültige
+Attestierung nicht, weil der Konsument den Reviewer nicht gepinnt hat, und einmal wird eine
+umbenannte Signatur mit Exit `11` zurückgewiesen.
+
+Ohne `--walk` hängt dasselbe Skript blockierend in `scripts/check-docs.sh`. Es ist damit
+zugleich Übung und Gate: die Tutorials können nicht still veralten.
 
 ---
 

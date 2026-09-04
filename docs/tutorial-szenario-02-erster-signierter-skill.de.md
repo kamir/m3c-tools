@@ -284,6 +284,27 @@ Die Attestierung liegt im Repository, sie ist gültig, und sie zählt trotzdem n
 Konsument hat diesen Reviewer nicht gepinnt. Das ist keine Panne, das ist die Aussage des
 Systems. Vertrauen entsteht beim Empfänger, nicht beim Sender.
 
+### 1.9b Dasselbe geführt, in einem Kommando
+
+Alles aus Teil 1 gibt es auch als Skript, das Sie Schritt für Schritt durchführt und
+zwischen den Schritten erklärt, warum er da ist:
+
+```bash
+make build-skillctl
+./scripts/tutorial-smoke.sh --walk
+```
+
+Es baut denselben Sandkasten, fährt dieselbe Kette bis zu den beiden Ablehnungen, und hält
+nach jedem Schritt an. Ohne `--walk` läuft es ohne Pausen durch und prüft jeden Exit-Code:
+in dieser Form hängt es blockierend in `scripts/check-docs.sh` und sorgt dafür, dass
+dieses Tutorial nicht still veralten kann.
+
+> Wichtig, wenn Sie ein installiertes `skillctl` auf dem `PATH` haben: das Skript nimmt
+> `./build/skillctl`, falls vorhanden, sonst das aus dem `PATH`. Ein älteres installiertes
+> Binary kennt `local://` noch nicht und bricht dann mit
+> `only ER1 registries ("self" / "er1://…") are supported here` ab. Mit
+> `--skillctl <pfad>` legen Sie das Binary fest.
+
 ### 1.8 Aufräumen
 
 ```bash
