@@ -51,7 +51,7 @@
 #
 # ALLOCATION IS A WRITE, NOT A READ. `next-id` only READS: it takes the ceiling
 # from every claim it can see, which still lets two sessions asking at the same
-# moment receive the same number — that is how FR-0096 was handed out twice.
+# moment receive the same number; that is how FR-0096 was handed out twice.
 # `claim` is the write. Until an id is recorded in the shared slot table
 # ($M3C_SLOT_TABLE) it is not allocated.
 #
@@ -226,7 +226,7 @@ EOF
   esac
 
   local next; next=$(printf '%s-%04d' "$kind" "$((max + 1))")
-  note "next-id: $next is NOT yet allocated — reading a ceiling is not a claim.
+  note "next-id: $next is NOT yet allocated: reading a ceiling is not a claim.
   Write the report, then: $(basename "$0") claim $next"
   printf '%s\n' "$next"
 }
@@ -388,7 +388,7 @@ cmd_open() {
 
 slot_table() {
   local t=${M3C_SLOT_TABLE:-}
-  [ -n "$t" ] || die "M3C_SLOT_TABLE is not set — there is nowhere to record the claim.
+  [ -n "$t" ] || die "M3C_SLOT_TABLE is not set. There is nowhere to record the claim.
   Point it at the shared slot table, the same file the slot checker reads.
   Until a number is written there it is NOT allocated: a number that exists only
   in your working copy, or in a conversation, is one someone else can be handed a
@@ -408,7 +408,7 @@ cmd_claim() {
              "$table" | head -1)
   if [ -n "$existing" ]; then
     if [ "$existing" = "$base" ]; then
-      echo "$id already claimed by this file — nothing to do"
+      echo "$id already claimed by this file, nothing to do"
       return 0
     fi
     die "$id is already claimed by '$existing'.
@@ -419,7 +419,7 @@ cmd_claim() {
   row="| $num | \`$base\` | angelegt $(date +%Y-%m-%d) | belegt via bugtracker.sh claim |"
   printf '%s\n' "$row" >> "$table"
   echo "$id claimed in $(basename "$table")"
-  note "claim: durable only once the slot table is COMMITTED — until then it lives
+  note "claim: durable only once the slot table is COMMITTED; until then it lives
   in one working copy, which is the narrower carrier the rule warns about."
 }
 
