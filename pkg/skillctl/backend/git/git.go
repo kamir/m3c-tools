@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -420,8 +421,18 @@ func (b *gitBackend) Publish(ctx context.Context, req artifact.PublishRequest) (
 	if err := validateName(name); err != nil {
 		return nil, err
 	}
-	if err := validateVersion(ver); err != nil {
-		return nil, err
+	// A DIGEST-BOUND event (attest, revoke, install) needs no version: it is filed
+	// under events/<digesthex>/ and the version appears only in the commit message
+	// and the returned ref. `publish --revoke` legitimately has none, because a
+	// revoke is bound to a digest, not to a version, and requiring one made the
+	// kill switch unusable against a git registry: it failed with
+	// `git: invalid version ""` while the same command worked over ER1. An admit
+	// still requires one, because there the version IS a path (skills/<n>/<v>/)
+	// and a tag. A version that IS supplied is validated for every kind.
+	if req.Kind == artifact.KindAdmit || ver != "" {
+		if err := validateVersion(ver); err != nil {
+			return nil, err
+		}
 	}
 	if err := validateDigest(dig); err != nil {
 		return nil, err
@@ -429,7 +440,13 @@ func (b *gitBackend) Publish(ctx context.Context, req artifact.PublishRequest) (
 
 	var res *artifact.PublishResult
 	err := b.withClone(artifact.ModeWrite, func(dir string) error {
-		tag := tagName(name, ver)
+		// Without a version there is no publish unit to name; the event is
+		// identified by its digest. Keep the tag empty rather than minting the
+		// nonsense "<name>/v".
+		tag := ""
+		if ver != "" {
+			tag = tagName(name, ver)
+		}
 
 		// Admit is idempotent on the tag: an already-published version is a safe
 		// no-op (checked before we stamp anything).
@@ -476,6 +493,9 @@ func (b *gitBackend) Publish(ctx context.Context, req artifact.PublishRequest) (
 			return err
 		}
 		msg := fmt.Sprintf("skill %s@%s (%s) %s", name, ver, req.Kind, dig)
+		if ver == "" {
+			msg = fmt.Sprintf("skill %s (%s) %s", name, req.Kind, dig)
+		}
 		if _, err := b.git(dir, "commit", "--quiet", "-m", msg); err != nil {
 			return err
 		}
@@ -491,7 +511,11 @@ func (b *gitBackend) Publish(ctx context.Context, req artifact.PublishRequest) (
 		} else if _, err := b.gitAuth(artifact.ModeWrite, dir, "push", "--quiet", "origin", "HEAD"); err != nil {
 			return err
 		}
-		res = &artifact.PublishResult{Ref: b.ref(name, ver, dig), NativeID: tag, Transport: "git"}
+		nativeID := tag
+		if nativeID == "" {
+			nativeID = path.Join(eventDir(dig), eventFileName(seq, string(req.Kind)))
+		}
+		res = &artifact.PublishResult{Ref: b.ref(name, ver, dig), NativeID: nativeID, Transport: "git"}
 		return nil
 	})
 	if err != nil {

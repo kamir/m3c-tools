@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -442,4 +443,70 @@ func TestGitBackendHeaderAuthRemote(t *testing.T) {
 		t.Errorf("Fetch = %q", blob)
 	}
 	t.Logf("header-auth OK: clean remote=%s, published+fetched %s", gb.remote, name)
+}
+
+// BUG-0215-Nachbar (aus dem Szenario-Durchlauf): a revoke is bound to a DIGEST,
+// not to a version, so `publish --revoke` supplies none. The backend used to
+// reject that with `git: invalid version ""`, which made the kill switch unusable
+// against a git registry while the same command worked over ER1. The version is a
+// path only for an admit; for a digest-bound event it is decoration.
+func TestPublishDigestBoundEventWithoutVersion(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	ctx := context.Background()
+	regPath := filepath.Join(t.TempDir(), "reg.git")
+	spec := "local://" + regPath
+	if _, err := InitLocalRegistry(spec); err != nil {
+		t.Fatalf("InitLocalRegistry: %v", err)
+	}
+	be, err := artifact.Open(spec, artifact.OpenOptions{})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer be.Close()
+
+	d := dig(3)
+	if _, err := be.Publish(ctx, admitEvent("revokeme", "1.0.0", d)); err != nil {
+		t.Fatalf("admit: %v", err)
+	}
+
+	// The revoke, exactly as the CLI sends it: name + digest, NO version.
+	res, err := be.Publish(ctx, artifact.PublishRequest{
+		Kind: artifact.KindRevoke,
+		Event: map[string]any{
+			"kind": "revoked", "skill": "revokeme", "bundle_digest": d,
+			"reason": "superseded", "schema_version": "1.0.0",
+		},
+		Meta: artifact.ArtifactMeta{Name: "revokeme", Digest: d},
+	})
+	if err != nil {
+		t.Fatalf("a revoke without a version must be accepted: %v", err)
+	}
+	if res.NativeID == "" || !strings.Contains(res.NativeID, "events/") {
+		t.Errorf("a digest-bound event should report its event path, got %q", res.NativeID)
+	}
+
+	// It has to LAND in the events tree, otherwise the kill switch is decorative.
+	// Asserted on the committed tree rather than through Events(): that reader
+	// classifies by the SIGNED envelope shape (FR-0090 IS-T1) and correctly drops
+	// this test's hand-built envelope. What this test owns is the WRITE path.
+	out, gerr := exec.Command("git", "-C", regPath, "ls-tree", "-r", "HEAD", "--name-only").Output()
+	if gerr != nil {
+		t.Fatalf("ls-tree: %v", gerr)
+	}
+	want := "events/" + digestHex(d) + "/0002-revoked.json"
+	if !strings.Contains(string(out), want) {
+		t.Errorf("the revoke event is not in the repository\n  want a path containing %s\n  got:\n%s", want, out)
+	}
+
+	// An ADMIT still requires a version: there it IS a path (skills/<n>/<v>/).
+	if _, err := be.Publish(ctx, artifact.PublishRequest{
+		Kind:  artifact.KindAdmit,
+		Event: map[string]any{"kind": "admitted", "skill": "nover", "bundle_digest": dig(4)},
+		Meta:  artifact.ArtifactMeta{Name: "nover", Digest: dig(4)},
+		Blob:  []byte("SKB:nover"),
+	}); err == nil {
+		t.Error("an admit without a version must still be refused")
+	}
 }
