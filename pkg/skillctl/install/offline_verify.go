@@ -284,7 +284,11 @@ func VerifyInstalledSidecar(opts Opts) error {
 		if rerr != nil {
 			return fmt.Errorf("verify-sidecar: read stashed .skb: %w", rerr)
 		}
-		level, verr := ac.Reverify(str.PubKey(), skbBytes)
+		// FR-0115 seam: the governance attestation may be signed by a REVIEWER key
+		// that is not the registry key. Pass the whole trust-root so the pinned
+		// signer set is honoured, exactly as the pull gauntlet does. Without this,
+		// `peer add --signer` admits an install that the later `verify` refuses.
+		level, verr := ac.ReverifyWithRoots(str, skbBytes)
 		if verr != nil {
 			// Repacked .skb or forged governance → the body Claude would load is
 			// not what the pinned key signed. Map to a digest mismatch (exit 10).
