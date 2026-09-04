@@ -4,14 +4,14 @@
 // events as every other backend.
 //
 // Wire mapping (the elegant part): the .skb is pushed as ONE blob whose OCI
-// descriptor digest EQUALS our sha256:<hex> — our identity IS the layer digest,
+// descriptor digest EQUALS our sha256:<hex>. Our identity IS the layer digest,
 // so Fetch by digest is native. The skill is an artifact manifest (artifactType
 // application/vnd.m3c.skill.bundle.v1+gzip) with that blob as its single layer,
 // tagged <name>:<version> (name+version also in annotations, advisory). Each
-// signed lifecycle event (admit/attest/revoke/install) is a REFERRER — an artifact
+// signed lifecycle event (admit/attest/revoke/install) is a REFERRER. An artifact
 // manifest whose `subject` is the skill manifest and whose layer is the event JSON.
 // Events() lists referrers; the §7 verifier re-verifies them. cosign is NOT used
-// here — it signs the OCI manifest digest (registry-native admission, optional,
+// here: it signs the OCI manifest digest (registry-native admission, optional,
 // out-of-band); our Ed25519 chain signs the .skb digest and stays the sole trust
 // root (SPEC-0356 §7).
 package oci
@@ -64,7 +64,7 @@ type ociBackend struct {
 	// CD-13 write-mode swap: when target is a live remote.Repository, authRepo
 	// points at it and creds/credHost let Publish re-resolve the WRITE credential
 	// (the shared oras client is baked read-only at Open). All nil/zero for a local
-	// oci.Store (no network, no credential) — Publish's swap is then a no-op.
+	// oci.Store (no network, no credential). Publish's swap is then a no-op.
 	authRepo *remote.Repository
 	creds    artifact.CredentialSource
 	credHost string
@@ -103,7 +103,7 @@ func (b *ociBackend) Close() error { return nil }
 
 // tagFor is the reference a skill version is tagged under in the layout. OCI tags
 // forbid ':' and '@'; a readable sanitized prefix keeps the tag greppable while a
-// 12-hex suffix over (name,version) makes it INJECTIVE — sanitizeTag is lossy and
+// 12-hex suffix over (name,version) makes it INJECTIVE. SanitizeTag is lossy and
 // '_' is legal in both fields, so "a_b"+"1.0" and "a"+"b_1.0" would otherwise
 // collide onto one tag. List/Resolve read the AUTHORITATIVE name+version from the
 // manifest annotations, never by parsing the tag.
@@ -159,7 +159,7 @@ func (b *ociBackend) Publish(ctx context.Context, req artifact.PublishRequest) (
 		if len(req.Blob) == 0 {
 			return nil, fmt.Errorf("oci: %s requires the .skb blob", req.Kind)
 		}
-		// Idempotent on the tag — but ONLY a genuine re-publish of the same content is
+		// Idempotent on the tag, but ONLY a genuine re-publish of the same content is
 		// a no-op. A registry that pre-plants the tag pointing at different content
 		// must NOT make a legitimate publish silently succeed-without-pushing (which
 		// would drop the real .skb + admit referrer). Verify the resolved manifest's
@@ -169,9 +169,9 @@ func (b *ociBackend) Publish(ctx context.Context, req artifact.PublishRequest) (
 			if merr == nil && man.Annotations[annName] == name && man.Annotations[annVersion] == ver && man.Annotations[annDigest] == dig {
 				return &artifact.PublishResult{Ref: b.ref(name, ver, dig), NativeID: tagFor(name, ver), Transport: "oci", AlreadyExists: true}, nil
 			}
-			return nil, fmt.Errorf("oci: tag %s already occupied by different content (name/version/digest mismatch) — refusing to overwrite", tagFor(name, ver))
+			return nil, fmt.Errorf("oci: tag %s already occupied by different content (name/version/digest mismatch), refusing to overwrite", tagFor(name, ver))
 		}
-		// Push the .skb blob — its descriptor digest is our sha256:<hex>.
+		// Push the .skb blob, its descriptor digest is our sha256:<hex>.
 		skbDesc, err := oras.PushBytes(ctx, b.target, BundleArtifactType, req.Blob)
 		if err != nil {
 			return nil, fmt.Errorf("oci: push .skb: %w", err)
@@ -199,7 +199,7 @@ func (b *ociBackend) Publish(ctx context.Context, req artifact.PublishRequest) (
 
 	// attest / revoke / install: attach a signed-event referrer to the EXISTING skill
 	// manifest for this digest (append-only; no manifest mutation). An OCI event is a
-	// REFERRER, so it needs a subject manifest — recording a governance event for a
+	// REFERRER, so it needs a subject manifest: recording a governance event for a
 	// digest never admitted on THIS target is refused here. Cross-target install-event
 	// recording (federation "install from A, record on B") is a tracked follow-up.
 	manDesc, ok, err := b.manifestForDigest(ctx, dig)
@@ -360,7 +360,7 @@ func (b *ociBackend) List(ctx context.Context, filter artifact.ListFilter, page 
 	return &artifact.Listing{Skills: skills}, nil // complete; no cursor
 }
 
-// digestRevoked feeds only the DISPLAY status column of List/Resolve — it reads the
+// digestRevoked feeds only the DISPLAY status column of List/Resolve. It reads the
 // advisory annKind, which an untrusted registry controls. This is intentionally NOT
 // a trust gate: the authoritative revocation check is the pull gauntlet's signed-
 // envelope path (Events → OfferRevoke on the signed `revoked_by`). A registry that
@@ -409,7 +409,7 @@ func (b *ociBackend) Resolve(ctx context.Context, q artifact.RefQuery) (*artifac
 	}
 	s := lst.Skills[0]
 	if q.Version == "" {
-		// A fully-revoked skill has no installable latest — error rather than hand
+		// A fully-revoked skill has no installable latest: error rather than hand
 		// back a revoked bundle as "latest" (parity with the git backend; the pull
 		// gauntlet would refuse it anyway, this keeps resolve/install consistent).
 		if s.IsRevoked {
@@ -451,7 +451,7 @@ func (b *ociBackend) Fetch(ctx context.Context, ref artifact.ArtifactRef) ([]byt
 	for _, layer := range man.Layers {
 		if layer.Digest.String() == dig {
 			// fetchCapped rejects an over-cap declared size, then re-verifies the blob
-			// against `dig` (the layer descriptor's digest) + size before returning —
+			// against `dig` (the layer descriptor's digest) + size before returning:
 			// the pull gauntlet recomputes sha256 again, but a lying registry is caught here too.
 			return b.fetchCapped(ctx, layer, maxBlobBytes)
 		}
@@ -491,7 +491,7 @@ func (b *ociBackend) Events(ctx context.Context, filter artifact.ListFilter, pag
 			// SECURITY (challenge-gate HIGH): Kind and Digest MUST come from the SIGNED
 			// envelope, never from the registry-controlled annotation. The gauntlet
 			// routes lifecycle state on rec.Kind and the gossip path keys the revoked
-			// set on rec.Digest — sourcing either from annKind/annDigest would let a
+			// set on rec.Digest. Sourcing either from annKind/annDigest would let a
 			// malicious registry relabel a signed revoke ("revoked"→"installed") to
 			// SUPPRESS it, or rebind its digest to revoke an innocent skill. The
 			// annotation is advisory display only. See reference_git_event_signed_identity.

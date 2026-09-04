@@ -8,10 +8,10 @@
 //
 // What lives here:
 //
-//	HTTPDoer          — minimal interface for test injection.
-//	postSync          — POST /admit-from-scan
-//	postAttest        — POST /admit-from-scan/attest
-//	getSessionAdmissions — GET /admit-from-scan?session=<tag>
+//	HTTPDoer, minimal interface for test injection.
+//	postSync, POST /admit-from-scan
+//	postAttest, POST /admit-from-scan/attest
+//	getSessionAdmissions, GET /admit-from-scan?session=<tag>
 //
 // All three share request-construction + status-code handling so a SPEC
 // drift on response shape only needs to be fixed once.
@@ -163,7 +163,7 @@ func getSessionAdmissions(opts VerifyOpts) (*VerifyResponse, error) {
 	if resp.StatusCode == http.StatusNotFound {
 		// Server says no admissions exist for this session_tag.
 		// Return an empty (non-error) response so the CLI can print
-		// "0 admitted" rather than failing — this is a normal "verify
+		// "0 admitted" rather than failing. This is a normal "verify
 		// before any sync" case.
 		return &VerifyResponse{SessionTag: opts.SessionTag}, nil
 	}
@@ -224,7 +224,7 @@ func newDefaultHTTPClient() HTTPDoer {
 	}
 }
 
-// AttestResponse — JSON unmarshal hook so unknown server fields are
+// AttestResponse: JSON unmarshal hook so unknown server fields are
 // preserved in `Extra` for forward-compat (we don't lose new fields the
 // registry might add). The base shape lives in awareness.go.
 func (r *AttestResponse) UnmarshalJSON(data []byte) error {
@@ -247,7 +247,7 @@ func (r *AttestResponse) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// recognized error sentinels — exported as predicates so tests / CLI can
+// recognized error sentinels: exported as predicates so tests / CLI can
 // branch without parsing strings.
 var (
 	// errNoBody is returned when the server returns a 200 with an empty

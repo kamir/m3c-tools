@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# scripts/publish-skb.sh — publish a signed .skb skill bundle as an OCI
+# scripts/publish-skb.sh: publish a signed .skb skill bundle as an OCI
 # artifact (SPEC-0354 D2).
 #
 # A .skb is a deterministic, portable, signed skill bundle. This script
 # pushes it into any OCI registry as a first-class artifact (via ORAS,
 # with a dedicated artifact-type) and then signs the resulting reference
-# with cosign — so image, bundle, and signature can live in one registry
+# with cosign, so image, bundle, and signature can live in one registry
 # (Zot / Harbor / GHCR / GAR). The consumer side is `oras pull` +
 # `skillctl verify`; the trust lives in the registry metadata + trust
 # roots, never inside the artifact.
@@ -88,7 +88,7 @@ fi
 # ---- transport integrity marker ---------------------------------------
 # sha256 of the .skb bytes; used to prove byte-identity after --verify-after.
 # (This is the transport digest, distinct from skillctl's canonical bundle
-# digest — that one is recomputed by `skillctl verify` from the archive.)
+# digest, that one is recomputed by `skillctl verify` from the archive.)
 if command -v shasum >/dev/null 2>&1; then
   SRC_SHA="$(shasum -a 256 "$SKB" | awk '{print $1}')"
 else
@@ -101,7 +101,7 @@ note "version: $VERSION"
 note "ref    : $REF"
 note "sha256 : $SRC_SHA"
 note "type   : $ARTIFACT_TYPE"
-[ "$DRY_RUN" -eq 1 ] && note "(dry-run — no registry calls will be made)"
+[ "$DRY_RUN" -eq 1 ] && note "(dry-run: no registry calls will be made)"
 
 # ---- push -------------------------------------------------------------
 run oras push "$REF" \
@@ -113,7 +113,7 @@ if [ "$SIGN" -eq 1 ]; then
   if [ -n "$COSIGN_KEY" ]; then
     run cosign sign --yes --key "$COSIGN_KEY" "$REF"
   else
-    note "no --key/COSIGN_KEY given — attempting keyless (OIDC) cosign sign"
+    note "no --key/COSIGN_KEY given: attempting keyless (OIDC) cosign sign"
     run cosign sign --yes "$REF"
   fi
 else
@@ -134,7 +134,7 @@ if [ "$VERIFY_AFTER" -eq 1 ] && [ "$DRY_RUN" -eq 0 ]; then
     GOT_SHA="$(sha256sum "$pulled" | awk '{print $1}')"
   fi
   [ "$GOT_SHA" = "$SRC_SHA" ] || die "verify-after: digest mismatch ($GOT_SHA != $SRC_SHA)" 5
-  note "verify-after: OK — byte-identical ($GOT_SHA)"
+  note "verify-after: OK: byte-identical ($GOT_SHA)"
   if [ "$SIGN" -eq 1 ] && [ -n "$COSIGN_KEY" ]; then
     run cosign verify --key "${COSIGN_KEY}.pub" "$REF" >/dev/null 2>&1 \
       && note "cosign verify: OK" || note "cosign verify: skipped/failed (check pubkey)"

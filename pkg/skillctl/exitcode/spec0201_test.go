@@ -1,4 +1,4 @@
-// SPEC-0201 §11 / SPEC-0188 §11 — exit-19 source-block invariants.
+// SPEC-0201 §11 / SPEC-0188 §11: exit-19 source-block invariants.
 //
 // The "source-block" theme is shared across surfaces (verify, import-public)
 // at the SAME numeric code (19). This test enforces:
@@ -35,7 +35,7 @@ func TestExit19_SourceBlockInvariant(t *testing.T) {
 			len(matchingCodes))
 	}
 
-	// Themes must match — codes sharing a number share a theme is already
+	// Themes must match. Codes sharing a number share a theme is already
 	// enforced by TestCodes_NumberTheme, but this test pins THE specific
 	// theme expected for 19 so a rename anywhere else (e.g. someone changes
 	// VerifyIdentityMismatch.Theme) breaks this test loudly.
@@ -71,7 +71,7 @@ func TestExit19_SourceBlockInvariant(t *testing.T) {
 	}
 }
 
-// TestExit19_DistinctFrom17 — sanity: a regression that collapses 17 and 19
+// TestExit19_DistinctFrom17. Sanity: a regression that collapses 17 and 19
 // into one numeric slot would silently break operator triage.
 func TestExit19_DistinctFrom17(t *testing.T) {
 	for _, c := range AllCodes() {

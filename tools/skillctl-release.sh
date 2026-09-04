@@ -3,10 +3,10 @@
 #
 # Produces, under release/<tag>/ :
 #   skillctl-{darwin,linux}-{amd64,arm64}, skillctl-windows-amd64.exe
-#   SHA256SUMS            — sha256 of every binary (integrity)
-#   SHA256SUMS.sig        — detached ed25519 signature over SHA256SUMS (provenance, K-release)
-#   skillctl-release.pub  — the K-release public key (also pinned at INFRA/)
-#   install.sh            — curl|bash installer (verifies sig + sha256)
+#   SHA256SUMS, sha256 of every binary (integrity)
+#   SHA256SUMS.sig, detached ed25519 signature over SHA256SUMS (provenance, K-release)
+#   skillctl-release.pub, the K-release public key (also pinned at INFRA/)
+#   install.sh, curl|bash installer (verifies sig + sha256)
 #   RELEASE_NOTES.md
 #
 # Usage:
@@ -73,7 +73,7 @@ FP="sha256:$(openssl pkey -in "${RELEASE_KEY}" -pubout -outform DER 2>/dev/null 
 cat > "${OUT}/RELEASE_NOTES.md" <<EOF
 # skillctl ${VERSION}
 
-Trust-and-governance CLI for AI-agent skills. Single static Go binary — no Node.
+Trust-and-governance CLI for AI-agent skills. Single static Go binary: no Node.
 
 ## Install (verifies signature + checksum)
 
@@ -83,11 +83,11 @@ curl -fsSL https://github.com/kamir/m3c-tools/releases/download/${TAG}/install.s
 \`\`\`
 
 ## What's new
-- \`skillctl publish --share-room <label>\` — map a bundle into a SPEC-0096
+- \`skillctl publish --share-room <label>\`: map a bundle into a SPEC-0096
   co-learning room at admit time (repeatable; \`\$SKILL_SHARE_ROOMS\`).
-- \`skillctl room share|unshare <skill> --room <label>\` — back-fill / remove the
+- \`skillctl room share|unshare <skill> --room <label>\`: back-fill / remove the
   room mapping on already-published bundles.
-- \`skillctl version\` — prints the stamped release tag.
+- \`skillctl version\`: prints the stamped release tag.
 
 ## Provenance
 Binaries are checksummed (\`SHA256SUMS\`) and the manifest is ed25519-signed
@@ -111,10 +111,10 @@ echo "==> generate onboarding runbook (release-prep standard)"
 # token or unreachable catalog never breaks the release. Enable per run:
 #   THOH_PUBLISH=1 tools/skillctl-release.sh <tag>      [THOH_CATALOG_BASE=…]
 if [ -n "${THOH_PUBLISH:-}" ]; then
-  echo "==> THOH_PUBLISH set — publishing runbook to the catalog (${THOH_CATALOG_BASE:-https://onboarding.guide})"
+  echo "==> THOH_PUBLISH set: publishing runbook to the catalog (${THOH_CATALOG_BASE:-https://onboarding.guide})"
   "${REPO_ROOT}/tools/skillctl-runbook-publish.sh" "${TAG}" \
     "${OUT}/skillctl-publisher-runbook.html" "${THOH_CATALOG_BASE:-https://onboarding.guide}" \
-    || echo "    (catalog publish skipped/failed — non-fatal; run tools/skillctl-runbook-publish.sh manually)"
+    || echo "    (catalog publish skipped/failed: non-fatal; run tools/skillctl-runbook-publish.sh manually)"
 fi
 
 echo

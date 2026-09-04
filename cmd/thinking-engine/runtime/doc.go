@@ -3,12 +3,12 @@
 // into the user's T/R/I/A pipeline.
 //
 // SPEC source of truth:
-//   - SPEC-0167 §"Amendment 2026-05-06 — SPEC-0202 Invocation-Stream
-//     Consumption" (sections A.1–A.10) — the contract this package
+//   - SPEC-0167 §"Amendment 2026-05-06, SPEC-0202 Invocation-Stream
+//     Consumption" (sections A.1–A.10), the contract this package
 //     implements. Consult that amendment FIRST when changing behavior;
 //     code drift from the SPEC is a bug.
-//   - SPEC-0202 §9 — invocation event Avro schemas (the producer side).
-//   - SPEC-0202 §4.1 + SPEC/schemas/skill-capability-v1.json — the
+//   - SPEC-0202 §9: invocation event Avro schemas (the producer side).
+//   - SPEC-0202 §4.1 + SPEC/schemas/skill-capability-v1.json: the
 //     capability-token shape. The watcher does not parse tokens itself;
 //     it consumes events about them.
 //
@@ -26,7 +26,7 @@
 //
 //  3. Loopback only. Read from the tenant-scope cluster (per
 //     SPEC-0193); write to the engine's own per-context cluster. Never
-//     produce events back onto the tenant-scope cluster — the watcher
+//     produce events back onto the tenant-scope cluster: the watcher
 //     is one-way (consume in, project local, write local).
 //
 // Phase mapping (SPEC-0167 A.8):
@@ -36,7 +36,7 @@
 //   Step 4 → integration tests (separate file: watcher_integration_test.go)
 //   Step 5 → T-schema v2 proposal note (DRAFT only, no schema bump)
 //
-// All files in this package are stubs — types and signatures land the
+// All files in this package are stubs: types and signatures land the
 // contract, function bodies are TODOs. Implementation kicks off as
 // SPEC-0202 Phase 5.
 package runtime

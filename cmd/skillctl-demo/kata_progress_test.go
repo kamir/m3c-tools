@@ -54,7 +54,7 @@ func TestComputeKataState_RustStallTransition(t *testing.T) {
 	if st != StateGruen || rusted {
 		t.Fatalf("fresh met Kata = (%s,%v); want (gruen,false)", st, rusted)
 	}
-	// A never-met Kata does not "rust" — it stays practicing (gelb), never rot.
+	// A never-met Kata does not "rust". It stays practicing (gelb), never rot.
 	st, rusted = computeKataState(1, 3, last, now, 5)
 	if st != StateGelb || rusted {
 		t.Fatalf("stale unmet Kata = (%s,%v); want (gelb,false)", st, rusted)

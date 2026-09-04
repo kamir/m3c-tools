@@ -22,7 +22,7 @@ func TestParsePullSince(t *testing.T) {
 	if _, err := parsePullSince("not-a-time"); err == nil {
 		t.Error("garbage should error")
 	}
-	// A negative duration would invert --since into a future cutoff — reject it.
+	// A negative duration would invert --since into a future cutoff: reject it.
 	if _, err := parsePullSince("-24h"); err == nil {
 		t.Error("negative duration must error (would silently exclude everything)")
 	}
@@ -34,7 +34,7 @@ func TestParsePullSince(t *testing.T) {
 
 // TestEventOlderThan covers the best-effort admit-timestamp filter: only a
 // parseable occurred_at strictly before the cutoff is dropped; everything else
-// (zero cutoff, absent/unparseable timestamp) is kept — it is never a gate.
+// (zero cutoff, absent/unparseable timestamp) is kept. It is never a gate.
 func TestEventOlderThan(t *testing.T) {
 	cutoff := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 	older := map[string]any{"occurred_at": "2026-07-01T00:00:00Z"}

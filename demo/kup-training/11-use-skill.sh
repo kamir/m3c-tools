@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 11-use-skill — drive a profile entry through aware → practiced (lifecycle phase 5: USE).
+# 11-use-skill: drive a profile entry through aware → practiced (lifecycle phase 5: USE).
 #
 # Posts 5 synthetic usage events for SKILL_NAME (kup-hello) against the
 # operator's profile via POST /api/v2/skills/usage. Each call:
@@ -31,7 +31,7 @@ USE_SKILL="${USE_SKILL:-$SKILL_NAME}"
 
 ensure_er1_api_key_from_keychain
 if ! online_mode_available; then
-  warn "online mode not available — skipping (this step requires the registry)"
+  warn "online mode not available: skipping (this step requires the registry)"
   exit 0
 fi
 
@@ -42,7 +42,7 @@ if [[ -z "$USER_ID" ]]; then
   exit 2
 fi
 
-header "11 — USE: post $USE_COUNT usage events for '$USE_SKILL'"
+header "11, USE: post $USE_COUNT usage events for '$USE_SKILL'"
 note "endpoint:  POST $REGISTRY_URL/api/v2/skills/usage"
 note "user_id:   $USER_ID"
 
@@ -63,7 +63,7 @@ for i in $(seq 1 "$USE_COUNT"); do
     -o "$LAST_RESP" -w "%{http_code}") || true
 
   if [[ "$HTTP" != "202" ]]; then
-    warn "iter $i: unexpected HTTP $HTTP — body: $(head -c 200 "$LAST_RESP")"
+    warn "iter $i: unexpected HTTP $HTTP, body: $(head -c 200 "$LAST_RESP")"
     continue
   fi
 
@@ -72,7 +72,7 @@ for i in $(seq 1 "$USE_COUNT"); do
   ok "iter $i: HTTP 202  use_count=$LAST_COUNT  mastery=$LAST_MASTERY"
 done
 
-header "11 — done"
+header "11: done"
 note "skill:        $USE_SKILL"
 note "final count:  $LAST_COUNT"
 note "final master: $LAST_MASTERY"

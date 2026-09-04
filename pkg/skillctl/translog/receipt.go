@@ -9,17 +9,17 @@ import (
 
 // Receipt is a portable, self-contained inclusion receipt: everything a
 // verifier needs to confirm OFFLINE that one event is committed under a
-// signed tree head — the event, its leaf position, the inclusion proof, and
+// signed tree head: the event, its leaf position, the inclusion proof, and
 // the STH. It is the JSON artifact the CLI `prove` verb emits and the
 // `verify` verb consumes, and the "log receipt" that can ride alongside a
 // signed bundle.
 //
 // The proof hashes are hex-encoded for JSON portability. NO event data
 // beyond the LogEntry (which is itself just a digest + type + timestamp +
-// subject) is carried — data stays off the log (SPEC-0278 §5).
+// subject) is carried. Data stays off the log (SPEC-0278 §5).
 type Receipt struct {
-	// Entry is the logged event. Its leaf hash is RECOMPUTED on verify —
-	// the receipt never carries a trusted leaf hash.
+	// Entry is the logged event. Its leaf hash is RECOMPUTED on verify.
+	// The receipt never carries a trusted leaf hash.
 	Entry LogEntry `json:"entry"`
 
 	// Index is the leaf position the proof claims.
@@ -36,7 +36,7 @@ type Receipt struct {
 	STH STH `json:"sth"`
 }
 
-// ErrReceiptInvalid — a receipt failed structural validation (bad proof
+// ErrReceiptInvalid: a receipt failed structural validation (bad proof
 // hex, size/STH mismatch, etc.).
 var ErrReceiptInvalid = errors.New("translog: invalid inclusion receipt")
 
@@ -111,7 +111,7 @@ func (r Receipt) validate() error {
 //     r.Index in a tree of r.TreeSize whose root is the STH's root.
 //
 // Returns nil on success; a wrapped sentinel on any failure. This is the
-// single call the CLI `verify` verb makes — it is the offline inclusion
+// single call the CLI `verify` verb makes. It is the offline inclusion
 // check a cross-org verifier runs against a head it already trusts.
 func (r Receipt) VerifyOffline(logPub []byte) error {
 	if err := r.validate(); err != nil {

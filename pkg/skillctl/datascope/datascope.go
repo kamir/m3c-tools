@@ -3,10 +3,10 @@
 // signed bundle).
 //
 // It is a LEAF package: stdlib-only, no imports from the rest of m3c-tools.
-// That is deliberate — both the `intent declare` CLI path (post-hoc PATCH)
+// That is deliberate, both the `intent declare` CLI path (post-hoc PATCH)
 // and any future pack-time binding share ONE validator, and the package is
 // safe for bodyscan (P1) to import later without a cycle. It does NOT import
-// bodyscan; bodyscan does NOT import it today (no collision — see ADR §4.5).
+// bodyscan; bodyscan does NOT import it today (no collision: see ADR §4.5).
 //
 // What this package adds over the server-side validation that already existed
 // (which only ran on PATCH/admit and surfaced as exit 18) is the missing
@@ -34,13 +34,13 @@ import (
 type Access string
 
 const (
-	// AccessRead — the skill reads from the source (reads_from edge).
+	// AccessRead, the skill reads from the source (reads_from edge).
 	AccessRead Access = "read"
-	// AccessWrite — the skill writes to the source (writes_to edge).
+	// AccessWrite, the skill writes to the source (writes_to edge).
 	AccessWrite Access = "write"
-	// AccessTransform — reads + writes; mapped to writes_to (SPEC-0196 §6.2).
+	// AccessTransform, reads + writes; mapped to writes_to (SPEC-0196 §6.2).
 	AccessTransform Access = "transform"
-	// AccessPassthrough — relays data without retention; mapped to reads_from.
+	// AccessPassthrough, relays data without retention; mapped to reads_from.
 	AccessPassthrough Access = "passthrough"
 )
 
@@ -61,23 +61,23 @@ func (a Access) isWriteAccess() bool {
 
 // Kind is the data-source kind. Each kind selects a scope validator
 // (SPEC-0196 §12 Q2). Closed set; an unknown kind fails validation rather
-// than being waved through (fail-closed — an attacker can't smuggle a scope
+// than being waved through (fail-closed: an attacker can't smuggle a scope
 // past the per-kind validator by inventing a kind).
 type Kind string
 
 const (
-	// KindLocalFS — local filesystem; scope is a path glob (** allowed).
+	// KindLocalFS, local filesystem; scope is a path glob (** allowed).
 	KindLocalFS Kind = "local_fs"
-	// KindHTTPEndpoint — an outbound HTTP endpoint; scope is a URL pattern.
+	// KindHTTPEndpoint, an outbound HTTP endpoint; scope is a URL pattern.
 	KindHTTPEndpoint Kind = "http_endpoint"
-	// KindER1Collection — an ER1 / Firestore collection path.
+	// KindER1Collection, an ER1 / Firestore collection path.
 	KindER1Collection Kind = "er1_collection"
-	// KindFirestore — a raw Firestore collection (alias kind kept distinct
+	// KindFirestore, a raw Firestore collection (alias kind kept distinct
 	// so the CISO console can facet ER1 vs general Firestore).
 	KindFirestore Kind = "firestore_collection"
-	// KindGCSBucket — a Google Cloud Storage bucket / object prefix.
+	// KindGCSBucket, a Google Cloud Storage bucket / object prefix.
 	KindGCSBucket Kind = "gcs_bucket"
-	// KindSecretsStore — a secrets store reference (e.g. macOS Keychain item).
+	// KindSecretsStore, a secrets store reference (e.g. macOS Keychain item).
 	KindSecretsStore Kind = "secrets_store"
 )
 
@@ -110,7 +110,7 @@ var SideEffectVocabulary = map[string]struct{}{
 	"subprocess":       {},
 	"secrets:read":     {},
 	"llm:call":         {},
-	"UNKNOWN":          {}, // §7 awareness sentinel — tolerated, not first-class.
+	"UNKNOWN":          {}, // §7 awareness sentinel: tolerated, not first-class.
 }
 
 // DataScope is one declared (skill → data source) dependency. It is the typed
@@ -126,8 +126,8 @@ type DataScope struct {
 	Kind Kind `json:"kind"`
 	// Access is read|write|transform|passthrough (§3.2).
 	Access Access `json:"access"`
-	// Scope is the narrow specifier — path glob / URL pattern / collection
-	// path — interpreted per Kind. Optional for some kinds (e.g. a whole ER1
+	// Scope is the narrow specifier, path glob / URL pattern / collection
+	// path, interpreted per Kind. Optional for some kinds (e.g. a whole ER1
 	// collection); required for others (local_fs, http_endpoint) so a write
 	// dependency can never be unbounded.
 	Scope string `json:"scope,omitempty"`
@@ -209,13 +209,13 @@ func validateScopeForKind(kind Kind, access Access, scope string) error {
 	scope = strings.TrimSpace(scope)
 	switch kind {
 	case KindLocalFS:
-		// A WRITE/TRANSFORM to the filesystem MUST be bounded — a skill may not
+		// A WRITE/TRANSFORM to the filesystem MUST be bounded. A skill may not
 		// declare an unbounded write. A READ may omit the scope (read broadly).
 		if access.isWriteAccess() && scope == "" {
 			return &ValidationError{Detail: "local_fs write dependency requires a path-glob scope (e.g. <cwd>/decks/**)"}
 		}
 		// When a scope IS given (any access), it must not be a bare wildcard
-		// that escapes any anchor — "**" or "/**" alone is unbounded.
+		// that escapes any anchor. "**" or "/**" alone is unbounded.
 		if scope == "**" || scope == "/**" || scope == "/" {
 			return &ValidationError{Detail: fmt.Sprintf("local_fs scope %q is unbounded; anchor it (e.g. <cwd>/path/**)", scope)}
 		}
@@ -249,7 +249,7 @@ func validateScopeForKind(kind Kind, access Access, scope string) error {
 
 // validateHTTPScope checks an http_endpoint scope is an https URL pattern. A
 // trailing "/*" or "*" is allowed (prefix match per §12 Q2). http:// (non-TLS)
-// is rejected — a declared cleartext egress is a smell, and the gate's
+// is rejected. A declared cleartext egress is a smell, and the gate's
 // egress_allowlist is host-based anyway.
 func validateHTTPScope(scope string) error {
 	bare := strings.TrimSuffix(strings.TrimSuffix(scope, "*"), "/")
@@ -312,7 +312,7 @@ func Validate(intent Intent, scopes []DataScope, governanceLevel string) error {
 //     inconsistent (a write IS a destructive-ish effect; declaring otherwise is
 //     the cross-check the spec wants to catch).
 //
-// "Spec divergence between fields is itself a security signal" (§3.3) — a skill
+// "Spec divergence between fields is itself a security signal" (§3.3). A skill
 // that lies in `intent` but tells the truth in `data_dependencies` is caught
 // here. Fail-closed ordering: the cheapest, most-specific rule first.
 func crossRules(intent Intent, scopes []DataScope, governanceLevel string) error {
@@ -346,7 +346,7 @@ func crossRules(intent Intent, scopes []DataScope, governanceLevel string) error
 
 	// Rule 3: any write/transform dependency ⇒ destructive=true.
 	// Only fires when destructive was explicitly declared false (a missing
-	// destructive is handled by the pack-time requirement, not here) — this
+	// destructive is handled by the pack-time requirement, not here): this
 	// mirrors the server rule `write_access_non_destructive`.
 	if intent.Destructive != nil && !*intent.Destructive {
 		for i, d := range scopes {

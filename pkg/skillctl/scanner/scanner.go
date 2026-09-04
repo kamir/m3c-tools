@@ -83,7 +83,7 @@ func (s *Scanner) Scan() (*model.Inventory, error) {
 		}
 		applyShadowing(inv, s.IncludeShadowed)
 	} else {
-		// Legacy SPEC-0115 mode — preserved for `--source projects`.
+		// Legacy SPEC-0115 mode: preserved for `--source projects`.
 		for _, p := range s.Paths {
 			abs, err := filepath.Abs(p)
 			if err != nil {

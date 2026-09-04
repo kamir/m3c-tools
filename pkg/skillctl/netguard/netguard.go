@@ -4,7 +4,7 @@
 //
 // It is deliberately ONE audited definition (in the same spirit as
 // trustcore.KindFromSignedEnvelope, FR-0090): a bearer/basic credential may only
-// ride plain HTTP — and TLS verification may only be disabled — when the target
+// ride plain HTTP, and TLS verification may only be disabled, when the target
 // host is provably loopback or on a private (RFC1918/ULA) network. If three
 // backends each carried their own copy of this predicate they could drift, and a
 // drift here is a credential-exfiltration / MITM hole. Keeping it in one place
@@ -37,13 +37,13 @@ func IsLoopbackOrPrivate(host string) bool {
 }
 
 // IsLoopback is the STRICTER sibling of IsLoopbackOrPrivate: it treats ONLY
-// loopback addresses (127.0.0.0/8, ::1) and the name "localhost" as local — an
+// loopback addresses (127.0.0.0/8, ::1) and the name "localhost" as local: an
 // RFC1918/ULA private address is NOT local here. It exists for the ER1
 // TLS-verification-bypass guard, which must match pkg/er1.applyTLSVerificationPolicy
 // exactly: that policy honors ER1_VERIFY_SSL=false only for 127.0.0.1/localhost and
 // forces verification back on for every other host, RFC1918 LAN hosts included. A
 // TLS-skip that the core ER1 client forbids must not be reachable through the
-// registry client. (The git/OCI *credential* guards keep IsLoopbackOrPrivate — a
+// registry client. (The git/OCI *credential* guards keep IsLoopbackOrPrivate: a
 // LAN registry over plain HTTP is a legitimate, narrower risk than skipping cert
 // verification against a routable-but-private host.)
 func IsLoopback(host string) bool {

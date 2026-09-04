@@ -60,10 +60,10 @@ assert_exit() {
   local actual=$?
   set -e
   if [[ "$actual" == "$expected" ]]; then
-    ok "exit $actual (expected $expected)  —  $cmd_str"
+    ok "exit $actual (expected $expected), $cmd_str"
     return 0
   else
-    fail "exit $actual (expected $expected)  —  $cmd_str"
+    fail "exit $actual (expected $expected), $cmd_str"
     fail "tail of full.log:"
     tail -n 5 "$LOG_DIR/full.log" | sed 's/^/      /' >&2
     return 1
@@ -85,7 +85,7 @@ run_ok() {
     rc=$?
   fi
   if [[ "$rc" -ne 0 ]]; then
-    fail "exit $rc — $cmd_str"
+    fail "exit $rc: $cmd_str"
     rm -f "$tmp_out"
     return 1
   fi

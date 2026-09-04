@@ -20,18 +20,18 @@ func TestIsAllowedS3URL(t *testing.T) {
 		{"bucket-style regional", "https://my-bucket.s3.eu-central-1.amazonaws.com/k", true},
 		{"bucket-style dash region", "https://my-bucket.s3-us-west-2.amazonaws.com/k", true},
 
-		// rejected — scheme downgrade
+		// rejected: scheme downgrade
 		{"http downgrade explicit", "http://s3.amazonaws.com/b/k", false},
 		{"http downgrade bucket", "http://my-bucket.s3.amazonaws.com/k", false},
 
-		// rejected — over-broad AWS subdomain (old wildcard would have allowed)
+		// rejected: over-broad AWS subdomain (old wildcard would have allowed)
 		{"arbitrary aws subdomain", "https://evil.amazonaws.com/k", false},
 		{"ec2-style aws host", "https://ec2-1-2-3-4.compute.amazonaws.com/k", false},
 
-		// rejected — arbitrary cloudfront (old wildcard would have allowed)
+		// rejected: arbitrary cloudfront (old wildcard would have allowed)
 		{"unpinned cloudfront", "https://attacker.cloudfront.net/k", false},
 
-		// rejected — unrelated / malformed
+		// rejected: unrelated / malformed
 		{"unrelated host", "https://example.com/k", false},
 		{"lookalike suffix", "https://amazonaws.com.evil.test/k", false},
 		{"empty", "", false},

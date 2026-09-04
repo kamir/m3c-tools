@@ -4,7 +4,7 @@ name: boundary-gate
 # private-plane content (private-repo paths, internal endpoints/secrets/context).
 #
 # The patterns live in tools/leak-patterns.txt and are shared with
-# scripts/bugtracker.sh, which applies them to GitHub issue bodies — text this
+# scripts/bugtracker.sh, which applies them to GitHub issue bodies. Text this
 # gate can never see, because it is posted through the API rather than committed.
 # Both sides' fixtures run here: a leak gate that silently stops flagging still
 # reads green, so it is asserted from the failing side on every push.
@@ -12,9 +12,9 @@ name: boundary-gate
 # id-xref-lint enforces the other half of SPEC-0358: a public-plane reference into
 # the private plane must be ID-ONLY ("implements SPEC-NNNN"), never a path or a
 # document filename. Its resolution check needs the private registry, which public
-# CI does not have — so here it runs FORMAT-ONLY and says so in its own output.
+# CI does not have, so here it runs FORMAT-ONLY and says so in its own output.
 # That half is still worth gating: a glued `SPEC-NNNN-some-private-doc.md` leaks a
-# private filename whether or not the id resolves. (Written with NNNN on purpose —
+# private filename whether or not the id resolves. (Written with NNNN on purpose:
 # a real four-digit id here would be the very violation this step rejects.)
 
 on:

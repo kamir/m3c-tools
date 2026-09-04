@@ -1,8 +1,8 @@
 package main
 
-// Regression tests for WF-001 H-F1 / THREAT-R01 — revocation-SUPPRESSION.
+// Regression tests for WF-001 H-F1 / THREAT-R01, revocation-SUPPRESSION.
 //
-// The bug: fetchRevokedOnline "failed OPEN on availability" — on ANY fetch error
+// The bug: fetchRevokedOnline "failed OPEN on availability", on ANY fetch error
 // it returned the (possibly EMPTY) cache with online=false and NEVER an error. On
 // a fresh machine, or after an attacker clears the cache and blocks the network /
 // serves a hostile 5xx / redirects to a dead host, the empty set meant a KNOWN-
@@ -40,11 +40,11 @@ import (
 // sweep consumer (test-theater FIXED)
 // ---------------------------------------------------------------------------
 
-// THREAT-R01 (consumer / sweep) — the trust-decision caller fails CLOSED, and the
+// THREAT-R01 (consumer / sweep): the trust-decision caller fails CLOSED, and the
 // assertion now BITES: it requires the quarantine to come from the R01 fail-closed
 // branch (exit 22 / reason names the cause), not from the fixture's incidental
 // blob-vs-sidecar digest mismatch (exit 10). Both the offline path and the online
-// verify are stubbed to PASS, so ONLY the R01 branch can quarantine — reverting it
+// verify are stubbed to PASS, so ONLY the R01 branch can quarantine. Reverting it
 // makes the skill verify clean and the test FAIL.
 func TestSweep_RevocationUnavailableUnderManaged_FailsClosed(t *testing.T) {
 	home := t.TempDir()
@@ -76,7 +76,7 @@ func TestSweep_RevocationUnavailableUnderManaged_FailsClosed(t *testing.T) {
 	}
 }
 
-// THREAT-R01 (negative / no spurious deny) — UNMANAGED / clean fetch must NOT
+// THREAT-R01 (negative / no spurious deny): UNMANAGED / clean fetch must NOT
 // quarantine a managed-looking skill.
 func TestSweep_UnmanagedCleanFetch_NoSpuriousDeny(t *testing.T) {
 	home := t.TempDir()
@@ -98,13 +98,13 @@ func TestSweep_UnmanagedCleanFetch_NoSpuriousDeny(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// R01-A — verify-hook HOT PATH
+// R01-A: verify-hook HOT PATH
 // ---------------------------------------------------------------------------
 
-// R01-A (crux) — a KNOWN-revoked managed skill is DENIED per-invocation on a stale
+// R01-A (crux): a KNOWN-revoked managed skill is DENIED per-invocation on a stale
 // cache, because the hot path refreshes the revoked set instead of skipping the
 // check between sweeps. The host is ADOPTED (a revoked-cache file exists, gone
-// stale) — the scenario the fix must catch. BITE: revert the R01-A block → the
+// stale). The scenario the fix must catch. BITE: revert the R01-A block → the
 // stale cache is skipped → the (stubbed-allow) skill is ALLOWED → assertDeny fails.
 func TestVerifyHook_HotPath_RevokedOnStaleCache_Denied(t *testing.T) {
 	home := t.TempDir()
@@ -126,7 +126,7 @@ func TestVerifyHook_HotPath_RevokedOnStaleCache_Denied(t *testing.T) {
 	assertDeny(t, code, out, "revoked")
 }
 
-// R01-A (fail-closed on unavailable) — an ADOPTED managed host whose hot-path
+// R01-A (fail-closed on unavailable): an ADOPTED managed host whose hot-path
 // refresh is UNAVAILABLE (feed blackholed: stale cache file still present) denies
 // rather than runs against an unprovable revocation state.
 func TestVerifyHook_HotPath_UnavailableUnderManaged_Denied(t *testing.T) {
@@ -148,9 +148,9 @@ func TestVerifyHook_HotPath_UnavailableUnderManaged_Denied(t *testing.T) {
 	assertDeny(t, code, out, "revocation authority unavailable")
 }
 
-// R01-A (pre-D2 NOT bricked) — an UN-ADOPTED managed host (self-trust-roots present
+// R01-A (pre-D2 NOT bricked), an UN-ADOPTED managed host (self-trust-roots present
 // but NO revoked-cache file: kill-switch-only / never pulled a feed) must ALLOW and
-// must NOT even attempt the fetch — nothing to suppress, so no brick and no latency.
+// must NOT even attempt the fetch, nothing to suppress, so no brick and no latency.
 // This is the exact regression the hermetic CI caught (managed + no cache → the old
 // code fetched → unreachable → deny). BITE: drop the `!revocationAdopted` guard →
 // the fetch runs → errRevokedSetUnavailable → DENY → this test fails.
@@ -178,7 +178,7 @@ func TestVerifyHook_HotPath_UnadoptedManaged_NoBrick(t *testing.T) {
 	}
 }
 
-// R01-A (no spurious deny + latency guard) — a FRESH cache within grace allows and
+// R01-A (no spurious deny + latency guard): a FRESH cache within grace allows and
 // the hot path does NOT fetch (zero added latency on the normal path). BITE for the
 // latency guard: if the fetch ran on a fresh cache, `called` trips.
 func TestVerifyHook_HotPath_FreshCache_NoFetch_Allowed(t *testing.T) {
@@ -201,12 +201,12 @@ func TestVerifyHook_HotPath_FreshCache_NoFetch_Allowed(t *testing.T) {
 	code, out, _ := feed(t, `{"tool_name":"Skill","tool_input":{"skill":"er1-push"}}`)
 	assertAllow(t, code, out)
 	if called {
-		t.Fatalf("hot path fetched despite a FRESH cache — must add no latency to normal invocations")
+		t.Fatalf("hot path fetched despite a FRESH cache: must add no latency to normal invocations")
 	}
 }
 
 // ---------------------------------------------------------------------------
-// R01-B — AUTHENTICATED grace window
+// R01-B: AUTHENTICATED grace window
 // ---------------------------------------------------------------------------
 
 func TestRevokedUnavailableUnderManaged_AuthenticatedGrace(t *testing.T) {
@@ -219,7 +219,7 @@ func TestRevokedUnavailableUnderManaged_AuthenticatedGrace(t *testing.T) {
 		}
 	})
 
-	// R01-B BITE — a forged {digests:[],fetched_at:now} (unsigned, same-uid-writable)
+	// R01-B BITE: a forged {digests:[],fetched_at:now} (unsigned, same-uid-writable)
 	// must NOT open the grace window: without a pinned-key-verified signed HEAD, an
 	// attacker could otherwise ride grace forever with an EMPTY set. Reverting R01-B
 	// (grace = plain fetched_at freshness) makes this return nil and the test FAIL.
@@ -234,7 +234,7 @@ func TestRevokedUnavailableUnderManaged_AuthenticatedGrace(t *testing.T) {
 		}
 	})
 
-	// Positive — an AUTHENTICATED basis (verified signed HEAD, recent issued_at,
+	// Positive: an AUTHENTICATED basis (verified signed HEAD, recent issued_at,
 	// cached set binds to the HEAD's revoked_set_root) DOES open grace.
 	t.Run("verified signed HEAD + bound fresh set -> grace open", func(t *testing.T) {
 		home := t.TempDir()
@@ -273,7 +273,7 @@ func TestRevokedUnavailableUnderManaged_AuthenticatedGrace(t *testing.T) {
 		}
 	})
 
-	// R01-B rollback BITE — a validly-signed but ROLLED-BACK HEAD (epoch below the
+	// R01-B rollback BITE: a validly-signed but ROLLED-BACK HEAD (epoch below the
 	// persisted high-water, issued_at still <12h, set binds) must NOT open grace, or
 	// it would resurrect an already-adopted revoke for a TTL window. Everything else
 	// is deliberately valid so the ONLY thing keeping grace shut is the epoch clamp:
@@ -299,10 +299,10 @@ func TestRevokedUnavailableUnderManaged_AuthenticatedGrace(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// R01-C — present-but-corrupt trust-roots.yaml
+// R01-C: present-but-corrupt trust-roots.yaml
 // ---------------------------------------------------------------------------
 
-// R01-C — a PRESENT-but-unparseable trust-roots.yaml is tampering, not "unmanaged":
+// R01-C: a PRESENT-but-unparseable trust-roots.yaml is tampering, not "unmanaged":
 // it must fail CLOSED, not silently downgrade to fail-open. BITE: reverting R01-C
 // (treating any LoadSelfTrustRoots error as unmanaged) returns nil and this FAILS.
 func TestFetchRevokedOnline_CorruptTrustRoots_FailsClosed(t *testing.T) {
@@ -321,7 +321,7 @@ func TestFetchRevokedOnline_CorruptTrustRoots_FailsClosed(t *testing.T) {
 	}
 }
 
-// The ABSENT case stays fail-OPEN (genuine unmanaged / first-run) — the counterpart
+// The ABSENT case stays fail-OPEN (genuine unmanaged / first-run): the counterpart
 // to R01-C that guards against over-reaching into a hard deny.
 func TestFetchRevokedOnline_AbsentTrustRoots_FailOpen(t *testing.T) {
 	home := t.TempDir()
@@ -337,7 +337,7 @@ func TestFetchRevokedOnline_AbsentTrustRoots_FailOpen(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// fetchRevokedOnline — MANAGED branch end-to-end (real code path, unreachable reg)
+// fetchRevokedOnline: MANAGED branch end-to-end (real code path, unreachable reg)
 // ---------------------------------------------------------------------------
 
 func TestFetchRevokedOnline_ManagedUnavailable_EndToEnd(t *testing.T) {
@@ -382,7 +382,7 @@ func TestFetchRevokedOnline_ManagedUnavailable_EndToEnd(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // writeStaleRevokedCache writes a revoked-cache file with a long-past fetched_at,
-// so the host reads as ADOPTED (the file exists — a feed was pulled at least once)
+// so the host reads as ADOPTED (the file exists. A feed was pulled at least once)
 // but the cache is STALE (past revokedCacheTTL → readRevokedCache !fresh). Used to
 // reproduce the "adopted host, feed gone stale/blackholed" scenario R01-A must
 // still fail closed on.

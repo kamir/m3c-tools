@@ -1,4 +1,4 @@
-# M3C Tools — Platform Differences
+# M3C Tools: Platform Differences
 
 ## Feature Matrix
 
@@ -10,8 +10,8 @@
 | **Screenshot capture** | Native screencapture | Not available | Not available |
 | **Whisper transcription** | Local whisper binary | Local whisper binary | Local whisper binary |
 | **Transcript fetching** | Full | Full | Full |
-| **Plaud Sync — legacy** (`plaud auth/list/sync/check`) | Full (Chrome CDP + API) | API only | API only |
-| **Plaud Sync — durable dev API** (`plaud dev`) | Full (OAuth, server-side whisper) | Not available¹ | Not available¹ |
+| **Plaud Sync: legacy** (`plaud auth/list/sync/check`) | Full (Chrome CDP + API) | API only | API only |
+| **Plaud Sync: durable dev API** (`plaud dev`) | Full (OAuth, server-side whisper) | Not available¹ | Not available¹ |
 | **Pocket Sync** (`pocket`, `import-audio`, `token`) | USB + API | Not available¹ | Not available¹ |
 | **ER1 Upload** | Full | Full | Full |
 | **Config profiles** | Full | Full | Full |
@@ -24,7 +24,7 @@
 
 ¹ These command clusters (`plaud dev`, `pocket`, `import-audio`, `token`) are
 still coupled to the darwin `main.go` and are **not compiled into** the non-darwin
-build (`main_other.go`) — on Windows/Linux they resolve to "Unknown command".
+build (`main_other.go`), on Windows/Linux they resolve to "Unknown command".
 Multi-platform parity is tracked under **Pending / SPEC-0251 §5** in
 [`../CHANGELOG.md`](../CHANGELOG.md). On Windows/Linux use the legacy `plaud sync`.
 
@@ -46,20 +46,20 @@ Multi-platform parity is tracked under **Pending / SPEC-0251 §5** in
 │    (screencapture)   │                                    │
 ├──────────────────────┴───────────────────────────────────┤
 │               Shared packages (all platforms)             │
-│  pkg/er1/        — ER1 upload pipeline                    │
-│  pkg/plaud/      — Plaud sync + API client                │
-│  pkg/transcript/ — YouTube transcript fetcher             │
-│  pkg/impression/ — Composite document builder             │
-│  pkg/tracking/   — SQLite tracking DB                     │
-│  pkg/whisper/    — Whisper transcription (subprocess)     │
-│  pkg/config/     — Profile manager + settings editor      │
-│  pkg/skillctl/   — Skill scanner + delta engine           │
+│  pkg/er1/, ER1 upload pipeline                    │
+│  pkg/plaud/, Plaud sync + API client                │
+│  pkg/transcript/, YouTube transcript fetcher             │
+│  pkg/impression/, Composite document builder             │
+│  pkg/tracking/, SQLite tracking DB                     │
+│  pkg/whisper/, Whisper transcription (subprocess)     │
+│  pkg/config/, Profile manager + settings editor      │
+│  pkg/skillctl/, Skill scanner + delta engine           │
 └──────────────────────────────────────────────────────────┘
 ```
 
 ## Menu Comparison
 
-### macOS (menuet — native Cocoa)
+### macOS (menuet: native Cocoa)
 
 - Dynamic submenus (children rebuilt on each open)
 - NSImage template icons per menu item (auto dark/light)
@@ -68,7 +68,7 @@ Multi-platform parity is tracked under **Pending / SPEC-0251 §5** in
 - Global keyboard shortcuts (planned)
 - macOS notifications via menuet
 
-### Windows/Linux (systray — cross-platform)
+### Windows/Linux (systray: cross-platform)
 
 - Static menu structure (rebuilt on state change via systray.Quit + systray.Run cycle)
 - Single tray icon (no per-item icons in systray)

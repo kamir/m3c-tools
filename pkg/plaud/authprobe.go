@@ -10,13 +10,13 @@ import (
 
 // plaudTokenCandidatesJS enumerates EVERY plausible bearer token in a plaud.ai
 // tab's localStorage AND sessionStorage, returning them as a JSON
-// {"candidates":[{"v":<token>,"src":<label>}]} list — quote-stripped, deduped,
+// {"candidates":[{"v":<token>,"src":<label>}]} list: quote-stripped, deduped,
 // JWT-shaped candidates first. Plaud has renamed/reshaped its token key
 // repeatedly and ALSO stores a user-identity JWT (claims email/id/name) under a
 // token-named key, so any single "first match" heuristic can grab the wrong
 // value; the caller probes each candidate against the API and keeps the one that
 // authenticates. `src` is a fixed, secret-safe label (store + match-kind), never
-// a raw key name — a Plaud key name can itself embed a JWT. Both stores are
+// a raw key name. A Plaud key name can itself embed a JWT. Both stores are
 // origin-scoped to plaud.ai, so every candidate legitimately belongs to Plaud.
 // Single-line so it embeds cleanly in the JXA osascript path too.
 const plaudTokenCandidatesJS = `(function(){try{var seen={},out=[];function strip(v){return v.replace(/^\s*["']|["']\s*$/g,"");}function scan(store,label){if(!store)return;for(var i=0;i<store.length;i++){var k=store.key(i);if(!k)continue;var v=store.getItem(k);if(!v)continue;var uv=strip(v);if(uv.length<=10)continue;var isJwt=/^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\./.test(uv);var nameHit=/token|jwt|auth|bearer|session/i.test(k);if(!isJwt&&!(nameHit&&uv.length>20))continue;if(seen[uv])continue;seen[uv]=1;out.push({v:uv,src:label+(isJwt?":jwt":":name"),j:isJwt?0:1});}}scan(localStorage,"LS");scan(sessionStorage,"SS");out.sort(function(a,b){return a.j-b.j;});for(var m=0;m<out.length;m++){delete out[m].j;}return JSON.stringify({candidates:out});}catch(e){return JSON.stringify({candidates:[]});}})()`
@@ -41,7 +41,7 @@ var allowedSrcLabels = map[string]bool{
 // hasControlChars reports whether s contains a C0 control byte or DEL. Such a
 // value could not be a real bearer and would only either poison an HTTP header
 // or, worse, error the transport on the FIRST probe and be misread as
-// "API unreachable" — causing the poisoned value to be persisted as a fallback.
+// "API unreachable": causing the poisoned value to be persisted as a fallback.
 func hasControlChars(s string) bool {
 	return strings.IndexFunc(s, func(r rune) bool { return r < 0x20 || r == 0x7f }) >= 0
 }
@@ -104,7 +104,7 @@ func selectValidatedToken(cfg *Config, cands []candidate) (token, src string, er
 		ok, perr := NewClient(cfg, c.Value).TokenAuthenticates()
 		if perr != nil {
 			if !reached {
-				// Never reached the API — treat as unreachable, not "rejected".
+				// Never reached the API: treat as unreachable, not "rejected".
 				return "", "", fmt.Errorf("%w: %v", errProbeUnreachable, perr)
 			}
 			continue // transient error mid-run; try the next candidate
@@ -116,7 +116,7 @@ func selectValidatedToken(cfg *Config, cands []candidate) (token, src string, er
 		}
 	}
 	return "", "", fmt.Errorf("plaud: extracted %d candidate(s) [%s] but the API accepted none "+
-		"(invalid auth header) — the bearer may live outside localStorage/sessionStorage; "+
+		"(invalid auth header): the bearer may live outside localStorage/sessionStorage; "+
 		"re-run with M3C_PLAUD_DEBUG=1 to inspect", len(cands), strings.Join(tried, ", "))
 }
 
@@ -134,7 +134,7 @@ func finishTokenSelection(cands []candidate) (string, error) {
 	// Defense in depth: never fan harvested tokens at a non-plaud.ai base, even if
 	// a future caller hands us a hand-built Config that bypassed LoadConfig's guard.
 	if !isAllowedPlaudDomain(cfg.APIURL) {
-		return "", fmt.Errorf("plaud: refusing to probe tokens — API base is not an https *.plaud.ai host")
+		return "", fmt.Errorf("plaud: refusing to probe tokens: API base is not an https *.plaud.ai host")
 	}
 	tok, src, err := selectValidatedToken(cfg, cands)
 	if err == nil {
@@ -143,7 +143,7 @@ func finishTokenSelection(cands []candidate) (string, error) {
 	}
 	if errors.Is(err, errProbeUnreachable) {
 		fmt.Fprintf(os.Stderr, "  [plaud] could not reach Plaud API to validate token (%v); "+
-			"using best-guess candidate %s — a later API call will surface any auth problem\n", err, cands[0].Src)
+			"using best-guess candidate %s: a later API call will surface any auth problem\n", err, cands[0].Src)
 		return cands[0].Value, nil
 	}
 	return "", err

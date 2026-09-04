@@ -3,7 +3,7 @@
 
 Runs after every Skill tool invocation in Claude Code.
 Sends usage events to aims-core and always saves locally to SQLite.
-Never blocks Claude Code — always exits 0, completes in under 2 seconds.
+Never blocks Claude Code: always exits 0, completes in under 2 seconds.
 """
 import json
 import sys

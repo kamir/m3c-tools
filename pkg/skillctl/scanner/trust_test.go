@@ -25,7 +25,7 @@ func makeBundleDir(t *testing.T, tierRoot, name string, withBundle, validSig boo
 	if !withBundle {
 		return
 	}
-	// Make a fake .skb (just some bytes — content doesn't matter for the
+	// Make a fake .skb (just some bytes: content doesn't matter for the
 	// digest-pattern check).
 	skbContent := []byte("fake .skb content for " + name)
 	skbPath := filepath.Join(tierRoot, name+"-1.0.0.skb")
@@ -49,7 +49,7 @@ func makeBundleDir(t *testing.T, tierRoot, name string, withBundle, validSig boo
 	}
 }
 
-// TestAnnotateTrust_SignaturePresent — sibling .skb + correct-size sig → verified.
+// TestAnnotateTrust_SignaturePresent: sibling .skb + correct-size sig → verified.
 func TestAnnotateTrust_SignaturePresent(t *testing.T) {
 	tmp := t.TempDir()
 	makeBundleDir(t, tmp, "fetch-contract", true, true)
@@ -67,7 +67,7 @@ func TestAnnotateTrust_SignaturePresent(t *testing.T) {
 	}
 	sk := inv.Skills[0]
 	if sk.Bundle == nil {
-		t.Fatal("Bundle block missing — AnnotateTrust didn't run?")
+		t.Fatal("Bundle block missing: AnnotateTrust didn't run?")
 	}
 	if sk.Bundle.TrustChain != TrustSignaturePresent {
 		t.Errorf("trust_chain = %q, want verified; err=%q", sk.Bundle.TrustChain, sk.Bundle.VerifierError)
@@ -83,7 +83,7 @@ func TestAnnotateTrust_SignaturePresent(t *testing.T) {
 	}
 }
 
-// TestAnnotateTrust_Unverified — no sibling .skb → unverified.
+// TestAnnotateTrust_Unverified: no sibling .skb → unverified.
 func TestAnnotateTrust_Unverified(t *testing.T) {
 	tmp := t.TempDir()
 	makeBundleDir(t, tmp, "hand-authored", false, false)
@@ -105,7 +105,7 @@ func TestAnnotateTrust_Unverified(t *testing.T) {
 	}
 }
 
-// TestAnnotateTrust_Broken — sibling .skb but sig file wrong size → broken.
+// TestAnnotateTrust_Broken: sibling .skb but sig file wrong size → broken.
 func TestAnnotateTrust_Broken(t *testing.T) {
 	tmp := t.TempDir()
 	makeBundleDir(t, tmp, "tampered", true, false /* sig wrong size */)
@@ -127,7 +127,7 @@ func TestAnnotateTrust_Broken(t *testing.T) {
 	}
 }
 
-// TestAnnotateTrust_NoTrust — without WithTrust=true, Bundle stays nil.
+// TestAnnotateTrust_NoTrust: without WithTrust=true, Bundle stays nil.
 func TestAnnotateTrust_NoTrust(t *testing.T) {
 	tmp := t.TempDir()
 	makeBundleDir(t, tmp, "untouched", true, true)
@@ -146,13 +146,13 @@ func TestAnnotateTrust_NoTrust(t *testing.T) {
 	}
 }
 
-// TestAnnotateTrust_CacheByContentHash — two skills with identical
+// TestAnnotateTrust_CacheByContentHash: two skills with identical
 // SKILL.md content share an answer (sanity check the cache path).
 func TestAnnotateTrust_CacheByContentHash(t *testing.T) {
 	tmp := t.TempDir()
 	makeBundleDir(t, tmp, "twin-a", false, false)
 	makeBundleDir(t, tmp, "twin-b", false, false)
-	// Twin SKILL.md content — overwrite to identical bytes.
+	// Twin SKILL.md content: overwrite to identical bytes.
 	bytes := []byte("same content\n")
 	_ = os.WriteFile(filepath.Join(tmp, "twin-a", "SKILL.md"), bytes, 0o644)
 	_ = os.WriteFile(filepath.Join(tmp, "twin-b", "SKILL.md"), bytes, 0o644)

@@ -4,7 +4,7 @@
 // dir, the peers file). It exists to kill a drift hazard: three separate
 // userHome() helpers (pkg/skillctl/verify, pkg/skillctl/registry, and the
 // cmd/skillctl binary) used to each re-implement this, and they had already
-// diverged into TWO different $HOME policies — the two library copies gated
+// diverged into TWO different $HOME policies: the two library copies gated
 // $HOME on Windows (WIN-T8), while the CLI copy honored $HOME on every platform
 // with no Windows guard (a footgun). Now all three import this package, so the
 // policy is single-sourced and cannot drift again.
@@ -15,12 +15,12 @@
 // os.UserHomeDir() (the conventional POSIX precedence). On Windows $HOME is
 // ignored for these security paths by default: %USERPROFILE% is the real
 // per-user, ACL'd root that Windows binds to, whereas $HOME is not a security
-// boundary — any process, a Git-Bash session, or an attacker who can set an
+// boundary, any process, a Git-Bash session, or an attacker who can set an
 // environment variable could point the trust roots / token key at a directory
 // they control. Ignoring $HOME on Windows means these paths always resolve under
 // %USERPROFILE% (via os.UserHomeDir()), fail-closed.
 //
-// The Windows override is NOT re-openable from the ambient environment — an
+// The Windows override is NOT re-openable from the ambient environment: an
 // env-var escape hatch (the earlier M3C_ALLOW_HOME_OVERRIDE) would be settable
 // by the very attacker/child-process WIN-09 models, re-opening the vector for
 // the cost of one extra variable. Instead the override is a COMPILE-TIME
@@ -55,7 +55,7 @@ func UserHome() (string, error) {
 // always allows it; Windows allows it ONLY when the override was compiled in (the
 // `allow_home_override_test` build tag). Kept pure (goos + compiled-in flag as
 // arguments, no OS/env reads) so it can be unit-tested for BOTH platforms from
-// any host — which also keeps the windows/linux executed-test parity even
+// any host, which also keeps the windows/linux executed-test parity even
 // (windows-gate drift-guard).
 func OverrideAllowed(goos string, compiledIn bool) bool {
 	if goos != "windows" {

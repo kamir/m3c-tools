@@ -17,7 +17,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Menu bar integration tests — full component wiring
+// Menu bar integration tests: full component wiring
 // ---------------------------------------------------------------------------
 
 // TestMenubarIntegrationFullLifecycle verifies the complete menu bar app
@@ -88,7 +88,7 @@ func TestMenubarIntegrationFullLifecycle(t *testing.T) {
 	//
 	// History stays top-level. The identity row is the green-dot label
 	// when idle ("🟢 …"); idle does NOT emit a status sentence in the
-	// submenu — that contract is unit-tested in
+	// submenu, that contract is unit-tested in
 	// TestStatusMessage_OnlySpeaksWhenSomethingToSay. Here we just
 	// assert the closed-state row carries the green dot and history
 	// reflects the inserted entries.
@@ -194,7 +194,7 @@ func TestMenubarIntegrationStatusDuringFetch(t *testing.T) {
 // TestMenubarIntegrationMenuItemsComplete verifies the Mac-style top-level
 // menu shape: identity row, primary capture actions, grouped cabinets for
 // Recordings/Sync, Projects+History, and a Settings/Help tail. Sign Out,
-// Open Log File and the Tracking DB no longer live at the top level —
+// Open Log File and the Tracking DB no longer live at the top level:
 // they're inside the identity / Help / Recordings submenus respectively.
 // Submenu contents are exercised by the per-builder unit tests in
 // pkg/menubar.
@@ -428,10 +428,10 @@ func TestAppBundleRetryGracefulShutdown(t *testing.T) {
 
 	select {
 	case err := <-done:
-		// Process exited — success. The exit code may be non-zero due to
+		// Process exited: success. The exit code may be non-zero due to
 		// signal handling, but the key thing is it didn't hang.
 		_ = err
-		t.Log("retry process exited after SIGTERM — graceful shutdown confirmed")
+		t.Log("retry process exited after SIGTERM: graceful shutdown confirmed")
 	case <-time.After(10 * time.Second):
 		cmd.Process.Kill()
 		t.Fatal("retry process did not exit within 10s after SIGTERM")
@@ -477,7 +477,7 @@ func TestAppBundleRetryExitsOnSIGINT(t *testing.T) {
 	select {
 	case err := <-done:
 		_ = err
-		t.Log("retry process exited after SIGINT — graceful shutdown confirmed")
+		t.Log("retry process exited after SIGINT: graceful shutdown confirmed")
 	case <-time.After(10 * time.Second):
 		cmd.Process.Kill()
 		t.Fatal("retry process did not exit within 10s after SIGINT")

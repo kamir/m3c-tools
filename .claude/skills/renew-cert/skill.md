@@ -20,12 +20,12 @@ When the user says "renew cert", "update certificate", "SSL expiring", "renew SS
 
 ## What it does
 
-1. **Ask** — Which deployment to renew (onboarding.guide or maindset.academy)
-2. **Check** — Show current certificate expiry dates (local and live)
-3. **Issue** — Run certbot/Docker to obtain a new Let's Encrypt certificate via DNS challenge
-4. **Upload** — Create a new GCP SSL certificate resource
-5. **Attach** — Update the target HTTPS proxy to use the new certificate
-6. **Verify** — Confirm the live endpoint serves the new certificate
+1. **Ask**: Which deployment to renew (onboarding.guide or maindset.academy)
+2. **Check**: Show current certificate expiry dates (local and live)
+3. **Issue**: Run certbot/Docker to obtain a new Let's Encrypt certificate via DNS challenge
+4. **Upload**: Create a new GCP SSL certificate resource
+5. **Attach**: Update the target HTTPS proxy to use the new certificate
+6. **Verify**: Confirm the live endpoint serves the new certificate
 
 ## Deployments
 
@@ -63,16 +63,16 @@ There are two deployments with separate certificates:
 Use AskUserQuestion:
 
 **"Which deployment needs a certificate renewal?"**
-- `onboarding.guide` — ER1 / aims-core legacy (semanpix)
-- `maindset.academy` — Celloon / production
-- `Check all` — Show expiry status for all deployments
+- `onboarding.guide`: ER1 / aims-core legacy (semanpix)
+- `maindset.academy`: Celloon / production
+- `Check all`: Show expiry status for all deployments
 
 ### Step 2: Check current certificate status
 
 Check both the local cert files and the live endpoint:
 
 ```bash
-# For onboarding.guide — find the highest-numbered cert:
+# For onboarding.guide, find the highest-numbered cert:
 SEC_DIR=/Users/kamir/GITHUB.active/my-ai-X/aims-core/sec
 ls -la ${SEC_DIR}/cert_*.pem
 openssl x509 -in ${SEC_DIR}/cert_NNN.pem -noout -subject -dates
@@ -108,7 +108,7 @@ sudo docker run -it --rm --name certbot \
     --manual --preferred-challenges dns certonly
 ```
 
-**IMPORTANT — shell paste issue:** Multi-line commands with `\` continuations can break when pasted into zsh. If the user has trouble, provide the command as a single line or copy it to clipboard via `pbcopy`.
+**IMPORTANT: shell paste issue:** Multi-line commands with `\` continuations can break when pasted into zsh. If the user has trouble, provide the command as a single line or copy it to clipboard via `pbcopy`.
 
 Tell the user:
 
@@ -133,7 +133,7 @@ sudo ls -la /etc/letsencrypt/live/ | grep ${DOMAIN}
 
 ### Step 4: Copy cert files to local storage
 
-**Requires sudo** — give the user these commands. Determine NEXT_NUM by checking existing files first (e.g., if highest is `cert_005.pem`, next is `006`).
+**Requires sudo**: give the user these commands. Determine NEXT_NUM by checking existing files first (e.g., if highest is `cert_005.pem`, next is `006`).
 
 ```bash
 # For onboarding.guide:
@@ -148,7 +148,7 @@ sudo cp /etc/letsencrypt/live/maindset.academy-NNNN/privkey.pem /Users/kamir/GIT
 sudo chown kamir:staff /Users/kamir/GITLAB.Celloon/sec/cert_${NEXT_NUM}.pem /Users/kamir/GITLAB.Celloon/sec/key_${NEXT_NUM}.pem
 ```
 
-Verify the new cert (this can run from Claude Code — no sudo needed):
+Verify the new cert (this can run from Claude Code, no sudo needed):
 ```bash
 openssl x509 -in <NEW_CERT_PATH> -noout -subject -dates
 ```
@@ -182,7 +182,7 @@ echo "=== Step 5: Upload certificate to GCP ==="
 ${GCLOUD} compute ssl-certificates create "${CERT_NAME}" \
     --certificate="${SEC_DIR}/cert_${NEXT_NUM}.pem" \
     --private-key="${SEC_DIR}/key_${NEXT_NUM}.pem" \
-    --description="Let's Encrypt certificate for ${DOMAIN} — $(date +%B\ %Y)"
+    --description="Let's Encrypt certificate for ${DOMAIN}: $(date +%B\ %Y)"
 echo ""
 
 echo "=== Step 6: Attach to load balancer ==="
@@ -203,17 +203,17 @@ Write this script to the sec/ directory and tell the user to run it with `bash <
 
 ## Important notes
 
-- **Claude Code cannot run sudo** — steps 3-4 (certbot, file copy) must be given as commands for the user to paste. Steps 5-7 (gcloud) must NOT use sudo.
-- **Never mix sudo and gcloud** — running the script with `sudo bash` causes gcloud to authenticate as root, which fails with permission errors. Always run gcloud steps as the normal user.
-- **DNS challenge is interactive** — the user must manually create the TXT record. This cannot be fully automated without DNS API access.
-- **Shell paste issue** — multi-line commands with `\` can break in zsh. Use `pbcopy` to put single-line versions on the clipboard if the user has trouble pasting.
-- **GCP propagation takes ~30s** — 10s is not enough. Use `sleep 30` before verifying the live endpoint. If still showing old cert, wait another 30s and retry.
-- **certbot numbering** — Each run may create a new `-NNNN` subdirectory under `/etc/letsencrypt/live/`. Always check for the latest.
-- **Use fullchain.pem not cert.pem** — GCP needs the full chain including intermediate certs.
-- **Let's Encrypt rate limits** — Max 5 duplicate certificates per week per domain. Don't retry excessively.
+- **Claude Code cannot run sudo**. Steps 3-4 (certbot, file copy) must be given as commands for the user to paste. Steps 5-7 (gcloud) must NOT use sudo.
+- **Never mix sudo and gcloud**: running the script with `sudo bash` causes gcloud to authenticate as root, which fails with permission errors. Always run gcloud steps as the normal user.
+- **DNS challenge is interactive**. The user must manually create the TXT record. This cannot be fully automated without DNS API access.
+- **Shell paste issue**: multi-line commands with `\` can break in zsh. Use `pbcopy` to put single-line versions on the clipboard if the user has trouble pasting.
+- **GCP propagation takes ~30s**: 10s is not enough. Use `sleep 30` before verifying the live endpoint. If still showing old cert, wait another 30s and retry.
+- **certbot numbering**: Each run may create a new `-NNNN` subdirectory under `/etc/letsencrypt/live/`. Always check for the latest.
+- **Use fullchain.pem not cert.pem**: GCP needs the full chain including intermediate certs.
+- **Let's Encrypt rate limits**. Max 5 duplicate certificates per week per domain. Don't retry excessively.
 - **Wildcard certs** require DNS-01 challenge (not HTTP-01). That's why we use `--preferred-challenges dns`.
-- **gcloud path** — On this machine, gcloud is at `/Users/kamir/bin/google-cloud-sdk/bin/gcloud`, not in the default PATH.
-- **Cert files contain secrets** — never log or display private key contents. Only show the cert (public) details.
+- **gcloud path**: On this machine, gcloud is at `/Users/kamir/bin/google-cloud-sdk/bin/gcloud`, not in the default PATH.
+- **Cert files contain secrets**: never log or display private key contents. Only show the cert (public) details.
 - **Old certificates** in GCP are not auto-deleted. They can be cleaned up later with `gcloud compute ssl-certificates delete <old-name>`.
-- **chown after sudo cp** — cert files copied with sudo are owned by root. Always chown to `kamir:staff` so they're readable without sudo.
+- **chown after sudo cp**: cert files copied with sudo are owned by root. Always chown to `kamir:staff` so they're readable without sudo.
 - Let's Encrypt certs are valid for 90 days. Renew when < 30 days remain.

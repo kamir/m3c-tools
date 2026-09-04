@@ -22,8 +22,8 @@ import (
 // and event JSON are tiny; the .skb is capped generously (SPEC-0252 extraction is
 // 100 MiB). Enumeration is capped so a registry cannot OOM/hang the pulling host.
 const (
-	maxManifestBytes = 4 << 20   // 4 MiB — skill/event/referrer manifests + event JSON
-	maxBlobBytes     = 128 << 20 // 128 MiB — the .skb layer
+	maxManifestBytes = 4 << 20   // 4 MiB, skill/event/referrer manifests + event JSON
+	maxBlobBytes     = 128 << 20 // 128 MiB, the .skb layer
 	maxTags          = 100_000   // tags scanned per List/Resolve/Fetch/Events
 	maxReferrers     = 10_000    // event referrers scanned per skill manifest
 )
@@ -48,8 +48,8 @@ func openOCI(spec string, opts artifact.OpenOptions) (artifact.Backend, error) {
 	// CD-13: bake the READ-only credential into the shared oras client by default.
 	// The oras auth.Client is constructed once, and its per-request Credential
 	// callback carries no read/write mode, so we cannot distinguish op mode inside
-	// oras. Instead the common path (Fetch/List/Resolve/Events — a verifying pull)
-	// uses the read tier here, and Publish — the ONLY write op — swaps to the write
+	// oras. Instead the common path (Fetch/List/Resolve/Events, a verifying pull)
+	// uses the read tier here, and Publish, the ONLY write op: swaps to the write
 	// tier via applyOCIAuth(ModeWrite) at its start. For a single-token operator
 	// ModeRead falls back to the write token in the resolver, so behavior is
 	// unchanged; only an operator who provisioned a distinct read-only token gets
@@ -65,7 +65,7 @@ func openOCI(spec string, opts artifact.OpenOptions) (artifact.Backend, error) {
 // applyOCIAuth resolves the (host, mode) credential via creds and installs it on
 // repo.Client, or leaves the repo anonymous when there is no resolver/token. It
 // enforces the CD-03/WIN-12 egress guard: a bearer/basic credential must never
-// ride cleartext HTTP to a host that is not provably loopback/private — an on-path
+// ride cleartext HTTP to a host that is not provably loopback/private. An on-path
 // attacker would capture a write-scoped registry token (same class as
 // ER1_VERIFY_SSL=false). Called at Open with ModeRead and by Publish with ModeWrite.
 func applyOCIAuth(repo *remote.Repository, creds artifact.CredentialSource, host string, mode artifact.AccessMode) error {
@@ -137,7 +137,7 @@ func parseRFC3339(s string) (time.Time, error) { return time.Parse(time.RFC3339,
 // calls trustcore.KindFromSignedEnvelope + trustcore.SignedDigest directly.
 
 // isLoopbackOrPrivate reports whether host (possibly host:port) resolves to a
-// loopback or RFC1918/ULA address — the only place a bearer token may ride plain
+// loopback or RFC1918/ULA address: the only place a bearer token may ride plain
 // HTTP. A bare hostname (not an IP literal) is treated as NON-local (fail-closed).
 //
 // This is now a thin alias over netguard.IsLoopbackOrPrivate so the OCI, git, and

@@ -55,7 +55,7 @@ func TestLoadConfigKeychainFallback(t *testing.T) {
 		stubKeychain(t, "key-from-the-keychain")
 
 		if got := LoadConfig().APIKey; got != "explicitly-exported" {
-			t.Errorf("APIKey = %q — the keychain overrode an explicit key", got)
+			t.Errorf("APIKey = %q: the keychain overrode an explicit key", got)
 		}
 	})
 
@@ -121,7 +121,7 @@ func TestKeychainLookupIsCached(t *testing.T) {
 }
 
 // TestKeychainOffSwitch: the switch must work even after the cache is warm.
-// Checking it inside the lookup would be useless — once any earlier call has
+// Checking it inside the lookup would be useless. Once any earlier call has
 // resolved a key, the lookup never runs again, and a test that must observe
 // "no credential configured" would keep seeing the developer's real key.
 func TestKeychainOffSwitch(t *testing.T) {
@@ -132,7 +132,7 @@ func TestKeychainOffSwitch(t *testing.T) {
 	if got := LoadConfig().APIKey; got != "key-from-the-keychain" {
 		t.Fatalf("precondition failed: APIKey = %q", got)
 	}
-	// Cache is now warm — the switch must still bite.
+	// Cache is now warm. The switch must still bite.
 	t.Setenv("M3C_ER1_KEYCHAIN", "off")
 	if got := LoadConfig().APIKey; got != "" {
 		t.Errorf("APIKey = %q with M3C_ER1_KEYCHAIN=off, want empty", got)

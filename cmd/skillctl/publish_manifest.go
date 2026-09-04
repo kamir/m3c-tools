@@ -10,7 +10,7 @@ package main
 //	<name>  <level>  <rationale words…>
 //	<name>@<version>  <level>  <rationale words…>
 //
-// `level` is one of green/yellow/red — used by the --attest pass that follows
+// `level` is one of green/yellow/red: used by the --attest pass that follows
 // each admit so a manifest run produces both admitted and attested events.
 
 import (
@@ -28,7 +28,7 @@ import (
 type ManifestEntry struct {
 	Name      string
 	Version   string
-	Level     string // "green" | "yellow" | "red" — empty if no attestation column
+	Level     string // "green" | "yellow" | "red": empty if no attestation column
 	Rationale string
 	Line      int // 1-indexed source line, for error reporting
 }

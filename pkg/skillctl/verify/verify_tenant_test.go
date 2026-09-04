@@ -14,7 +14,7 @@ package verify
 //     trip step 5.5 (the global gate is stepCheckGovernance, exercised
 //     elsewhere). Confirms we only block on tenant-scoped rows.
 //   - precedence: CLI tenant wins over trust-roots tenant (asserted at the
-//     CLI helper level — see TestResolveTenant_CLIBeatsTrustRoots in
+//     CLI helper level: see TestResolveTenant_CLIBeatsTrustRoots in
 //     install_cmds_test.go for the integration; here we cover the verifier-
 //     level surface, which only sees one Tenant string).
 //   - exit-code mapping: ExitCode(ErrTenantBlocked) == 16 and the constant
@@ -44,7 +44,7 @@ func withTenantAttestations(t *testing.T, tenant string, rows []registry.Attesta
 }
 
 // TestVerifierAcceptsTenantWithGreenAttestation: a tenant-scoped GREEN
-// attestation is advisory at step 5.5 — it documents approval but does
+// attestation is advisory at step 5.5. It documents approval but does
 // not block. The chain still passes.
 func TestVerifierAcceptsTenantWithGreenAttestation(t *testing.T) {
 	opts := withTenantAttestations(t, "kup-berlin", []registry.AttestationRow{
@@ -141,13 +141,13 @@ func TestVerifierIgnoresAttestationsForOtherTenants(t *testing.T) {
 // TestVerifierIgnoresAttestationsWithoutTenantScope: a GLOBAL attestation
 // (empty tenant_scope) is the registry's verdict, which feeds
 // CurrentGovernance and is gated by stepCheckGovernance. Step 5.5 must NOT
-// fire on global rows even when they're red — that path is covered by the
+// fire on global rows even when they're red, that path is covered by the
 // existing governance gate (exit 13), and routing a global red through
 // step 5.5 would emit the wrong exit code (16 instead of 13).
 //
 // We exercise this by pinning a tenant AND attaching a global red row; the
 // verifier should refuse the bundle with ErrGovernanceBelowMin (because
-// CurrentGovernance != red here — we've left the chain otherwise green —
+// CurrentGovernance != red here: we've left the chain otherwise green,
 // and global red rows in Attestations don't, on their own, trigger 5.5).
 func TestVerifierIgnoresAttestationsWithoutTenantScope(t *testing.T) {
 	opts := withTenantAttestations(t, "kup-berlin", []registry.AttestationRow{
@@ -156,7 +156,7 @@ func TestVerifierIgnoresAttestationsWithoutTenantScope(t *testing.T) {
 			Level:         "red",
 			ReviewerID:    "id:reviewer@m3c",
 			AttestedAt:    "2026-05-05T20:00:00Z",
-			// TenantScope deliberately empty — this is a global row.
+			// TenantScope deliberately empty: this is a global row.
 			Status: "active",
 		},
 	})
@@ -185,7 +185,7 @@ func TestVerifierIgnoresAttestationsWithoutTenantScope(t *testing.T) {
 // opts.Tenant to "cflt" while the tenant-scoped red attestation in the
 // fixture is for "kup-berlin" (which would be the trust-roots-pinned
 // tenant in a real run). The verifier sees only "cflt" and lets the
-// install through — that's the desired precedence.
+// install through, that's the desired precedence.
 //
 // The integration of resolveTenant() itself is exercised in
 // install_cmds_test.go (TestResolveTenant_*).
@@ -244,7 +244,7 @@ func TestVerifierExitCodeMapping(t *testing.T) {
 // TestVerifierStep55_NoOpWhenTenantEmpty asserts the explicit no-op contract:
 // when opts.Tenant == "", even a red tenant-scoped row in BundleMeta does
 // not block. The bundle's tenant-scoped governance only applies when the
-// consumer is pinned to that tenant — an untenanted machine does not see
+// consumer is pinned to that tenant. An untenanted machine does not see
 // per-tenant policy.
 func TestVerifierStep55_NoOpWhenTenantEmpty(t *testing.T) {
 	opts := withTenantAttestations(t, "", []registry.AttestationRow{
@@ -264,7 +264,7 @@ func TestVerifierStep55_NoOpWhenTenantEmpty(t *testing.T) {
 }
 
 // TestVerifierStep55_RevokedAttestationDoesNotBlock asserts that a
-// tenant-scoped row whose status is "revoked" is skipped by step 5.5 —
+// tenant-scoped row whose status is "revoked" is skipped by step 5.5:
 // revocation supersedes the verdict (matching the existing pattern in
 // pickSingleSignature). A re-attest-green by the same CISO would land as
 // a separate active row.

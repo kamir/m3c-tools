@@ -8,7 +8,7 @@ import (
 // TestCanonicalSkillName_FixedPoint locks SEC F12: the gate and the verifier
 // must resolve the SAME directory for any given invoked name. The root cause
 // was that the verifier resolved a LOSSY sanitizeFilename(name) (dropping unsafe
-// chars) while the gate classified/loaded the raw name — so two distinct names
+// chars) while the gate classified/loaded the raw name, so two distinct names
 // could collapse to one dir, letting a clean sibling be verified while a
 // malicious dir loaded.
 //
@@ -24,7 +24,7 @@ func TestCanonicalSkillName_FixedPoint(t *testing.T) {
 			continue
 		}
 		if got != n {
-			t.Errorf("CanonicalSkillName(%q) = %q — must be verbatim (no lossy rewrite)", n, got)
+			t.Errorf("CanonicalSkillName(%q) = %q: must be verbatim (no lossy rewrite)", n, got)
 		}
 		// Idempotent fixed point.
 		if again, err := CanonicalSkillName(got); err != nil || again != got {
@@ -42,7 +42,7 @@ func TestCanonicalSkillName_FixedPoint(t *testing.T) {
 	}
 
 	// The divergence proof: names that the OLD lossy sanitizeFilename collapsed
-	// onto the SAME dir must NOT collapse under CanonicalSkillName — either they
+	// onto the SAME dir must NOT collapse under CanonicalSkillName, either they
 	// survive distinct (verbatim) or are rejected, but two distinct accepted
 	// names never share an output.
 	pairs := [][2]string{{"er1@push", "er1push"}, {"a b", "ab"}, {"x!y", "xy"}}

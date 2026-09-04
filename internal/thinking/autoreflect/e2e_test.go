@@ -1,4 +1,4 @@
-// e2e_test.go — in-memory end-to-end test for the auto-reflect
+// e2e_test.go: in-memory end-to-end test for the auto-reflect
 // consumer wired to the real orchestrator.
 //
 // Flow under test (matches the brief acceptance check):

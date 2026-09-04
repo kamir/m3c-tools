@@ -1,19 +1,19 @@
 package main
 
-// invocation_trail.go — SPEC-0202 §9 signed invocation trail.
+// invocation_trail.go: SPEC-0202 §9 signed invocation trail.
 //
 // This is the DURABLE, append-only, DEVICE-SIGNED evidence log: one JSON line
 // per skill invocation in ~/.claude/skillctl/invocation-trail.jsonl. It is kept
 // STRICTLY SEPARATE from the unsigned advisory gate-audit.jsonl (SPEC-0255) so
 // the trust posture is unambiguous:
 //
-//   - gate-audit.jsonl  — advisory telemetry, NOT a trust input, unsigned.
-//   - invocation-trail.jsonl — SIGNED evidence, the EU AI Act Art.12 record.
+//   - gate-audit.jsonl: advisory telemetry, NOT a trust input, unsigned.
+//   - invocation-trail.jsonl: SIGNED evidence, the EU AI Act Art.12 record.
 //
 // Don't retrofit signatures onto the advisory log; don't read this trail back
 // into a gate decision. The two never mix (ADR §4.3).
 //
-// CONTRACT — panic-safe, fire-and-forget, ALWAYS-ON:
+// CONTRACT: panic-safe, fire-and-forget, ALWAYS-ON:
 // appendSignedInvocation swallows EVERY error and recovers from any panic. It
 // sits next to the gate/run hot path; a logging failure (read-only home, full
 // disk, a key it cannot create, a marshal panic) must NEVER alter the decision
@@ -42,7 +42,7 @@ import (
 
 // newInvocationEventID returns a sortable-by-time, replay-resistant event id:
 // a millisecond Unix timestamp prefix + a 10-byte random tail (the SPEC-0202
-// §4.3 nonce shape). This is the dedup key of the trail — the device signature
+// §4.3 nonce shape). This is the dedup key of the trail: the device signature
 // binds it, so a replayed signature can't be re-pointed at a fresh id.
 func newInvocationEventID() string {
 	var tail [10]byte
@@ -72,12 +72,12 @@ func invocationTrailPath(home string) string {
 	return filepath.Join(verdictDir(home), "invocation-trail.jsonl")
 }
 
-// invocationTrailSink is the write seam — tests inject a failing sink to prove
+// invocationTrailSink is the write seam: tests inject a failing sink to prove
 // the gate decision is unchanged when the trail write fails.
 var invocationTrailSink = defaultInvocationTrailSink
 
 // invocationOutboxSink is an OPTIONAL second sink for the signed invocation
-// record (SPEC-0317 P0). It is fed the SAME fully-signed record as the trail —
+// record (SPEC-0317 P0). It is fed the SAME fully-signed record as the trail:
 // transient fields (event_id/occurred_at/device_key_id) filled ONCE and the
 // signature computed ONCE, so the projection (invocation-trail.jsonl) and the
 // authoritative outbox row can NEVER diverge on id/signature (dual-sink
@@ -105,7 +105,7 @@ func defaultInvocationTrailSink(home string, line []byte) error {
 	}
 	path := invocationTrailPath(home)
 	// Best-effort size rotation BEFORE the append. A lost rotation race just
-	// means one extra line in the old generation — bounded, never load-bearing.
+	// means one extra line in the old generation: bounded, never load-bearing.
 	if fi, err := os.Stat(path); err == nil && fi.Size() >= invocationTrailMaxBytes {
 		_ = os.Rename(path, path+".1")
 	}
@@ -122,24 +122,24 @@ func defaultInvocationTrailSink(home string, line []byte) error {
 // skillgate.InvocationRecord PLUS three ADDITIVE integrity fields that hash-chain
 // the trail (IS-T8, SPEC-0202 §9 / EU AI Act Art.12 tamper-evidence):
 //
-//   - Seq — a monotonic per-generation sequence number (genesis = 0). A deleted
+//   - Seq: a monotonic per-generation sequence number (genesis = 0). A deleted
 //     record leaves a gap.
-//   - PrevHash — the SHA-256 (hex) of the PREVIOUS record's CANONICAL bytes
+//   - PrevHash: the SHA-256 (hex) of the PREVIOUS record's CANONICAL bytes
 //     (skillgate.CanonicalizeInvocationRecord output). Because each record commits
 //     to its predecessor's content, deleting a middle record makes the survivor's
 //     prev_hash no longer match the recomputed hash of its new predecessor.
-//   - ChainSignatureB64 — a SECOND detached ed25519 signature (same device key,
+//   - ChainSignatureB64: a SECOND detached ed25519 signature (same device key,
 //     DISTINCT domain "invocation_chain_v1") over (seq, prev_hash, self_hash),
 //     where self_hash binds the link to THIS record's own canonical bytes so a
 //     signed link cannot be transplanted onto a different record.
 //
 // All three sit OUTSIDE the per-line InvocationRecord canonical message: putting
 // them there would change the v1 canonical bytes and invalidate every existing
-// per-line signature (and the golden-bytes pin). They are additive/separate — the
+// per-line signature (and the golden-bytes pin). They are additive/separate, the
 // per-line signature proves each record's own integrity; the chain proves the
 // trail was not truncated or reordered in the middle.
 //
-// HONEST SCOPE — read carefully, do NOT overclaim:
+// HONEST SCOPE, read carefully, do NOT overclaim:
 //
 //   - seq + prev_hash ALONE are keyless SHA-256 over PUBLIC canonical bytes. On
 //     their own they are a NAIVE delete/reorder DETECTOR (tamper-EVIDENT for a
@@ -154,14 +154,14 @@ func defaultInvocationTrailSink(home string, line []byte) error {
 //     public key is available). This is the "second detached signature" option
 //     from the challenge gate.
 //   - STILL out of scope, even with the signature: (a) anyone holding the device
-//     signing key can forge any record — key custody, not this chain, is the trust
-//     anchor; (b) TAIL truncation — dropping the newest N records leaves a valid,
+//     signing key can forge any record, key custody, not this chain, is the trust
+//     anchor; (b) TAIL truncation, dropping the newest N records leaves a valid,
 //     contiguous, fully-signed prefix, so it is NOT detectable here. Detecting
 //     wholesale/tail truncation needs an EXTERNAL anchor of the head hash (the
 //     SPEC-0358 transparency log), which this local chain does not provide.
 //   - CONCURRENCY (gate N1): two concurrent skillctl processes sharing the trail
 //     can BOTH stamp seq=N+1, so verification may report a benign ChainBreak on a
-//     NON-tampered trail. This is a deliberate FAIL-SAFE over-report — the trail is
+//     NON-tampered trail. This is a deliberate FAIL-SAFE over-report. The trail is
 //     advisory (never a gate input) and every per-line signature still verifies; we
 //     accept a false "break" rather than risk a false "clean".
 //
@@ -169,14 +169,14 @@ func defaultInvocationTrailSink(home string, line []byte) error {
 type chainedInvocationRecord struct {
 	skillgate.InvocationRecord
 	// Seq is a pointer so a legacy record written BEFORE this feature (no "seq"
-	// key) unmarshals to nil and is excluded from chain verification — avoiding a
+	// key) unmarshals to nil and is excluded from chain verification: avoiding a
 	// false break on pre-existing trails. A non-nil pointer to 0 marks genesis.
 	Seq               *uint64 `json:"seq,omitempty"`
 	PrevHash          string  `json:"prev_hash"`
 	ChainSignatureB64 string  `json:"chain_signature_b64,omitempty"`
 }
 
-// invocationChainHash returns the hex SHA-256 over a record's canonical bytes —
+// invocationChainHash returns the hex SHA-256 over a record's canonical bytes:
 // the value the NEXT record stores as its prev_hash. ok is false only if the
 // record refuses to canonicalize (e.g. a newline-smuggled field), in which case
 // the chain intentionally cannot continue across it.
@@ -192,7 +192,7 @@ func invocationChainHash(rec skillgate.InvocationRecord) (hash string, ok bool) 
 // invocationChainDomain domain-separates the SECOND (chain-link) device signature
 // from the per-line InvocationRecord signature (invocation_event_v1) and every
 // other signature family, so a signature captured under one can never replay under
-// another — even with the same key.
+// another, even with the same key.
 const invocationChainDomain = "invocation_chain_v1"
 
 // invocationChainSigMessage builds the canonical bytes the chain signature covers:
@@ -232,7 +232,7 @@ func readLastTrailLine(path string) []byte {
 	if err != nil || fi.Size() == 0 {
 		return nil
 	}
-	const tail = 256 << 10 // 256 KiB — far larger than one record line
+	const tail = 256 << 10 // 256 KiB: far larger than one record line
 	start := int64(0)
 	if fi.Size() > tail {
 		start = fi.Size() - tail
@@ -289,23 +289,23 @@ func nextChainLink(home string) (seq uint64, prevHash string) {
 // trailHWM is the LOCAL high-water-mark sidecar (IS-RS-04, PARTIAL mitigation).
 // It records the max seq and the tip (head) canonical hash of the CURRENT trail
 // generation in a small JSON file next to the trail, so a later run can notice
-// that the live trail's max seq REGRESSED below a value it had already reached —
+// that the live trail's max seq REGRESSED below a value it had already reached,
 // i.e. the tail was truncated (records dropped from the END). This is the ONE
 // truncation shape the hash chain cannot see on its own: a valid, contiguous,
 // fully-signed PREFIX re-verifies clean (deleting the newest N records, even
 // keyless, leaves no break), so without an out-of-band memory of "how far the
 // trail once reached" tail truncation is undetectable.
 //
-// HONEST SCOPE — read carefully, do NOT overclaim (this is deliberately PARTIAL):
+// HONEST SCOPE: read carefully, do NOT overclaim (this is deliberately PARTIAL):
 //
 //   - What it DOES detect: tail truncation of the current generation ACROSS runs
-//     on THIS host — the live trail's max seq is now lower than the sidecar's
+//     on THIS host. The live trail's max seq is now lower than the sidecar's
 //     recorded high-water-mark. It also flags an in-place rewrite of the tip
 //     record (same max seq, different head hash). It works EVEN KEYLESS (it is a
 //     plain seq comparison, not a signature check).
 //   - What it does NOT do: it is NOT tamper-proof. A same-uid actor who truncates
 //     the trail can ALSO edit or delete this sidecar to erase or lower the
-//     high-water-mark, after which the truncation is invisible again — the sidecar
+//     high-water-mark, after which the truncation is invisible again. The sidecar
 //     has no more integrity than the trail it guards (same uid, same disk). It
 //     therefore raises the bar for a careless/partial truncation across runs; it
 //     does not close the hole. It also cannot see a truncation that happens and is
@@ -317,12 +317,12 @@ func nextChainLink(home string) (seq uint64, prevHash string) {
 //
 // Rotation-safe: each rotation generation (.jsonl vs .jsonl.1) is its own chain
 // restarting at seq 0, so the sidecar is anchored to the current generation's
-// GENESIS canonical hash. A genesis append (seq 0 — fresh trail OR a rotation)
+// GENESIS canonical hash. A genesis append (seq 0: fresh trail OR a rotation)
 // re-anchors the sidecar; verify only compares seq when the sidecar's genesis
 // anchor matches the live trail's genesis, so a legitimate rotation is NEVER
 // mistaken for a truncation.
 type trailHWM struct {
-	GenesisHash string `json:"genesis_hash"` // canonical hash of the seq=0 record — the generation anchor
+	GenesisHash string `json:"genesis_hash"` // canonical hash of the seq=0 record: the generation anchor
 	MaxSeq      uint64 `json:"max_seq"`      // highest seq the trail has reached in this generation
 	HeadHash    string `json:"head_hash"`    // canonical hash of the seq==MaxSeq record
 	UpdatedAt   string `json:"updated_at"`
@@ -335,7 +335,7 @@ func trailHWMPath(home string) string {
 
 // readTrailHWM loads the high-water-mark sidecar; ok is false when it is absent
 // or unparseable (a torn concurrent write), in which case truncation detection is
-// simply skipped for this run — a missing sidecar is never itself a break.
+// simply skipped for this run. A missing sidecar is never itself a break.
 func readTrailHWM(home string) (h trailHWM, ok bool) {
 	data, err := os.ReadFile(trailHWMPath(home))
 	if err != nil {
@@ -367,7 +367,7 @@ func writeTrailHWM(home string, h trailHWM) {
 }
 
 // updateTrailHWMOnAppend advances the local high-water-mark after a record has
-// been appended (IS-RS-04). Genesis (seq 0 — a fresh trail OR a rotation)
+// been appended (IS-RS-04). Genesis (seq 0: a fresh trail OR a rotation)
 // RE-ANCHORS the sidecar to the new generation; a later record only ever raises
 // max_seq/head_hash (monotonic). Best-effort and decision-invariant: it runs
 // inside appendSignedInvocation's recover and swallows every failure.
@@ -384,7 +384,7 @@ func updateTrailHWMOnAppend(home string, seq uint64, selfHash string, okHash boo
 	if !ok {
 		// Feature met a pre-existing trail with no sidecar: we did not write the
 		// seq=0 record's sidecar, so the true genesis anchor is unknown. Leave it
-		// empty — verify treats an unknown/mismatched anchor as "cannot compare
+		// empty: verify treats an unknown/mismatched anchor as "cannot compare
 		// generations" and re-anchors instead of risking a FALSE truncation report.
 		writeTrailHWM(home, trailHWM{GenesisHash: "", MaxSeq: seq, HeadHash: selfHash})
 		return
@@ -402,7 +402,7 @@ func updateTrailHWMOnAppend(home string, seq uint64, selfHash string, okHash boo
 //
 // The record's transient fields are filled here: Schema, OccurredAt (if empty),
 // and DeviceKeyID (from the resolved device key). The agent_identity /
-// owner_identity fields (SPEC-0277 P1) are taken AS-SET from the caller — empty
+// owner_identity fields (SPEC-0277 P1) are taken AS-SET from the caller. Empty
 // when no AgentID is configured (byte-identical to v1), or agent:<id> / id:<owner>
 // when the gate has an active mandate. The signature covers the canonical bytes;
 // the line written is the full JSON including the signature.
@@ -413,7 +413,7 @@ func appendSignedInvocation(home string, rec skillgate.InvocationRecord) {
 	}
 
 	// Resolve (lazily create) the per-machine device key. A failure here is NOT
-	// fatal to the caller — we just skip the signed record. Fail-safe for the
+	// fatal to the caller: we just skip the signed record. Fail-safe for the
 	// hot path; the absence of a record is itself observable if the key store
 	// is broken.
 	key, err := invocationDeviceKey(home)
@@ -433,7 +433,7 @@ func appendSignedInvocation(home string, rec skillgate.InvocationRecord) {
 	rec.DeviceKeyID = key.KeyID()
 	// SPEC-0277 P1: the agent_identity / owner_identity lines are populated by the
 	// CALLER when an AgentID is configured (a VALUE change at the fixed canonical
-	// line — NOT a format change, see skillgate.CanonicalizeInvocationRecord). We
+	// line, NOT a format change, see skillgate.CanonicalizeInvocationRecord). We
 	// no longer clobber them to "" here, so the gate can stamp agent:<id> /
 	// id:<owner> onto the always-on signed evidence. Callers with no AgentID leave
 	// them empty and the record is byte-identical to v1.
@@ -446,7 +446,7 @@ func appendSignedInvocation(home string, rec skillgate.InvocationRecord) {
 	// canonical bytes) so a later deletion/truncation of a middle record is
 	// detectable, PLUS a second detached device signature over (seq, prev_hash,
 	// self_hash) so a same-uid keyless rewrite of those fields is tamper-evident.
-	// All additive/separate — the per-line signature above is unchanged (rec is
+	// All additive/separate: the per-line signature above is unchanged (rec is
 	// signed BEFORE it is wrapped).
 	seq, prevHash := nextChainLink(home)
 	chained := chainedInvocationRecord{
@@ -477,7 +477,7 @@ func appendSignedInvocation(home string, rec skillgate.InvocationRecord) {
 	// sink (installed only by `skillctl enforce`). Called AFTER the trail write
 	// with the identical `rec` so the outbox row and the trail projection share
 	// event_id / occurred_at / signature. Nil in `verify-hook` (byte-identical to
-	// v1). Its result is intentionally ignored — this whole function is
+	// v1). Its result is intentionally ignored. This whole function is
 	// fire-and-forget under the top-level recover, so an outbox failure is
 	// decision-invariant (AC-2a).
 	if sink := invocationOutboxSink; sink != nil {
@@ -500,27 +500,27 @@ type trailVerification struct {
 	Verified int
 	// Unverified is Total - Verified (tampered / wrong-key / unsigned lines).
 	Unverified int
-	// Replays is the count of records sharing an already-seen event_id —
+	// Replays is the count of records sharing an already-seen event_id,
 	// duplicate event ids are the replay signal.
 	Replays int
 	// DeviceKeyID is the local device key's id ("" if the key is unavailable).
 	DeviceKeyID string
-	// ChainBreaks counts hash-chain integrity violations (IS-T8) — at most one per
+	// ChainBreaks counts hash-chain integrity violations (IS-T8), at most one per
 	// record. A chained record breaks the chain when EITHER: its seq is not
 	// predecessor.seq+1 / its prev_hash does not equal the recomputed hash of the
 	// preceding chained record's canonical bytes / it is a first record that is not
-	// genesis (seq 0, empty prev_hash) — the keyless contiguity check; OR (when the
+	// genesis (seq 0, empty prev_hash), the keyless contiguity check; OR (when the
 	// device public key is available) its chain-link device signature over
-	// (seq, prev_hash, self_hash) is missing or does not verify — the check that
+	// (seq, prev_hash, self_hash) is missing or does not verify, the check that
 	// catches a same-uid keyless rewrite or a stripped signature. A deleted,
 	// reordered, or rewritten middle record yields at least one break. NOT detected:
-	// tail truncation (a valid signed prefix) — that needs an external SPEC-0358
+	// tail truncation (a valid signed prefix): that needs an external SPEC-0358
 	// head anchor. Records predating the chain feature (no "seq") are excluded, so a
 	// legacy trail reports 0. Concurrent writers can cause a benign over-report (a
 	// fail-safe; see chainedInvocationRecord).
 	ChainBreaks int
 	// ChainSigned counts chained records whose chain-link device signature verified
-	// — the number of links backed by cryptographic tamper-evidence (0 when the
+	//: the number of links backed by cryptographic tamper-evidence (0 when the
 	// device public key is unavailable). ChainSigned == number-of-chained-records
 	// means every link is device-signed.
 	ChainSigned int
@@ -531,21 +531,21 @@ type trailVerification struct {
 	// reordered, or a link was altered.
 	ChainVerified bool
 	// ScanError is non-empty when reading the trail stopped on a bufio.Scanner
-	// error (IS-RS-05) — most importantly bufio.ErrTooLong on a line larger than the
+	// error (IS-RS-05): most importantly bufio.ErrTooLong on a line larger than the
 	// 4 MiB per-line cap, which would otherwise stop the scan SILENTLY and drop every
 	// record after it. It is counted as a ChainBreak so ChainVerified reads false:
 	// the trail is reported present-but-unverified, never a silent truncation.
 	ScanError string
 	// Oversize is true when the trail file exceeded invocationTrailReadCeilingBytes
-	// (IS-RS-05) and was REFUSED — not slurped into memory (OOM defense against an
+	// (IS-RS-05) and was REFUSED, not slurped into memory (OOM defense against an
 	// unbounded same-uid writer). Present stays true; the trail is reported
 	// present-but-unverified and no records are counted (Total stays 0).
 	Oversize bool
 	// TailTruncated is true when the live trail's max seq REGRESSED below the LOCAL
-	// high-water-mark sidecar (IS-RS-04) — records were dropped from the END of the
+	// high-water-mark sidecar (IS-RS-04). Records were dropped from the END of the
 	// current generation, which the hash chain alone cannot see (a valid signed
 	// prefix re-verifies clean, even keyless). HONEST SCOPE: a LOCAL, best-effort,
-	// cross-run detector only. It is NOT tamper-proof — a same-uid actor who
+	// cross-run detector only. It is NOT tamper-proof. A same-uid actor who
 	// truncates the trail can also edit/delete the sidecar to erase the
 	// high-water-mark. The non-repudiable close is an EXTERNAL head anchor
 	// (SPEC-0358 transparency log / server counter-signature), not this sidecar.
@@ -561,11 +561,11 @@ type trailVerification struct {
 // readAndVerifyTrail reads the signed invocation trail at home, verifies each
 // record's device signature against the LOCAL device key, and counts
 // verified / unverified / replayed records. Read-only; never creates the key
-// (it Loads an existing one — a machine that never emitted a record has no key
+// (it Loads an existing one: a machine that never emitted a record has no key
 // and no trail, which is a legitimate empty-evidence state, not an error).
 //
 // Fail-closed counting: any line that does not parse, or whose signature does
-// not verify, is counted as Unverified — never silently dropped from the total
+// not verify, is counted as Unverified, never silently dropped from the total
 // in a way that would inflate the verified ratio.
 func readAndVerifyTrail(home string) trailVerification {
 	tv := trailVerification{Path: invocationTrailPath(home)}
@@ -573,7 +573,7 @@ func readAndVerifyTrail(home string) trailVerification {
 		return tv
 	}
 
-	// Load (do not create) the device key. Without it we cannot verify — report
+	// Load (do not create) the device key. Without it we cannot verify: report
 	// the records as present-but-unverified rather than claiming verification.
 	var (
 		havePub bool
@@ -596,7 +596,7 @@ func readAndVerifyTrail(home string) trailVerification {
 	if fi.Size() > invocationTrailReadCeilingBytes {
 		// Refuse an oversized trail rather than loading it. Fail-closed and
 		// SURFACED: present-but-unverified, no records counted, ChainVerified stays
-		// false (a break) — never a clean verify on a file we declined to read.
+		// false (a break), never a clean verify on a file we declined to read.
 		tv.Oversize = true
 		tv.ChainBreaks++
 		return tv
@@ -647,7 +647,7 @@ func readAndVerifyTrail(home string) trailVerification {
 		if err := json.Unmarshal(raw, &rec); err != nil {
 			// An unparseable line is counted Unverified; it also breaks the chain
 			// for the following record (whose prev_hash can no longer be recomputed
-			// here), which surfaces as a ChainBreak there — never a silent drop.
+			// here), which surfaces as a ChainBreak there, never a silent drop.
 			tv.Unverified++
 			continue
 		}
@@ -664,7 +664,7 @@ func readAndVerifyTrail(home string) trailVerification {
 				genesisHashSeen = thisHash
 			}
 			broke := false
-			// (1) Keyless contiguity — detects a naive delete/reorder even with no key.
+			// (1) Keyless contiguity: detects a naive delete/reorder even with no key.
 			if !chainStarted {
 				// The first chained record must be genesis (seq 0, empty prev_hash).
 				// A non-genesis first record means the trail head was truncated.
@@ -677,12 +677,12 @@ func readAndVerifyTrail(home string) trailVerification {
 				// of the preceding record → a deleted/truncated/reordered record.
 				broke = true
 			}
-			// (2) Chain-link device signature — the cryptographic layer. When the
+			// (2) Chain-link device signature: the cryptographic layer. When the
 			// device public key is available, a chained record MUST carry a chain
 			// signature that verifies over (seq, prev_hash, self_hash); a missing or
 			// invalid one is a break (this is what catches a same-uid KEYLESS rewrite
 			// of seq/prev_hash, and a downgrade that strips the signature). When the
-			// key is unavailable we cannot verify — fall back to contiguity only,
+			// key is unavailable we cannot verify: fall back to contiguity only,
 			// exactly as the per-line signature path reports present-but-unverified.
 			if havePub {
 				if okHash && verifyChainSignature(pubKey, *rec.Seq, rec.PrevHash, thisHash, rec.ChainSignatureB64) {
@@ -712,7 +712,7 @@ func readAndVerifyTrail(home string) trailVerification {
 		}
 
 		// Replay: a second occurrence of an event_id we've already counted is a
-		// REPLAY, not new evidence — it must NOT inflate the verified-evidence
+		// REPLAY, not new evidence. It must NOT inflate the verified-evidence
 		// count (P2 challenge-gate finding). Count it as a replay and move on, so
 		// `Verified` reflects DISTINCT verified events only. (Chain state was
 		// already advanced above, so a replayed line does not corrupt contiguity.)
@@ -730,7 +730,7 @@ func readAndVerifyTrail(home string) trailVerification {
 		}
 	}
 	// IS-RS-05(a): a bufio.Scanner error (esp. bufio.ErrTooLong on a line larger
-	// than the 4 MiB per-line cap set above) makes Scan() stop SILENTLY — the loop
+	// than the 4 MiB per-line cap set above) makes Scan() stop SILENTLY: the loop
 	// ends, every record after the offending line is dropped from the counts, and
 	// ChainVerified could otherwise still read true for the surviving prefix. Check
 	// sc.Err() and treat any scan error as a ChainBreak: fail-closed and SURFACED
@@ -747,7 +747,7 @@ func readAndVerifyTrail(home string) trailVerification {
 			// Only compare within the SAME generation: the sidecar's genesis anchor
 			// must match the live trail's genesis. A rotation restarts at seq 0 with a
 			// different genesis record, so a mismatched/unknown anchor means "different
-			// generation" — skip the comparison rather than risk a FALSE truncation.
+			// generation": skip the comparison rather than risk a FALSE truncation.
 			sameGen := hwm.GenesisHash != "" && hwm.GenesisHash == genesisHashSeen
 			if sameGen {
 				if lastChainSeq < hwm.MaxSeq {
@@ -767,7 +767,7 @@ func readAndVerifyTrail(home string) trailVerification {
 	}
 
 	// Advance / re-anchor the high-water-mark on a CLEAN verify (best-effort). Only
-	// ever move it FORWARD (or re-anchor a fresh generation) — never lower it — so a
+	// ever move it FORWARD (or re-anchor a fresh generation), never lower it, so a
 	// truncated trail can NEVER quietly reset its own high-water-mark and hide the
 	// truncation on the next run. Skipped when the read itself was refused/failed
 	// (Oversize/ScanError already returned) or a break/truncation was detected.
@@ -777,8 +777,8 @@ func readAndVerifyTrail(home string) trailVerification {
 		}
 	}
 
-	// ChainVerified requires zero breaks AND — for a trail that actually CONTAINS
-	// chained records — that the device public key was available to verify the chain
+	// ChainVerified requires zero breaks AND, for a trail that actually CONTAINS
+	// chained records, that the device public key was available to verify the chain
 	// signatures. Keyless contiguity alone is forgeable: a same-uid actor who deletes
 	// the device key can then recompute a fully contiguous chain (seq/prev_hash/
 	// self_hash) that passes every contiguity check, which is exactly what the chain

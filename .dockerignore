@@ -1,4 +1,4 @@
-# .dockerignore — trims the build context used by
+# .dockerignore: trims the build context used by
 # deploy/thinking-engine/Dockerfile (SPEC-0167 Stream 2c).
 #
 # The thinking-engine image only needs Go sources + go.mod/go.sum.
@@ -27,7 +27,7 @@ m3c-tools.exe
 .env
 .env.*
 
-# Installer assets, docs, design — not needed in the thinking-engine image.
+# Installer assets, docs, design: not needed in the thinking-engine image.
 installer/
 docs/
 design/

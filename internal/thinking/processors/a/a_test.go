@@ -1,4 +1,4 @@
-// a_test.go — unit tests for the Week-3 Artifact processor.
+// a_test.go: unit tests for the Week-3 Artifact processor.
 //
 // Covers:
 //   - report: LLM output of {title, sections[{heading,body}], key_points}
@@ -129,7 +129,7 @@ func TestReportEmitsStructuredArtifactWithNonEmptyBody(t *testing.T) {
 		s0, _ := sections[0].(map[string]interface{})
 		body, _ := s0["body"].(string)
 		if strings.TrimSpace(body) == "" {
-			t.Errorf("sections[0].body empty — Week 3 acceptance criterion")
+			t.Errorf("sections[0].body empty: Week 3 acceptance criterion")
 		}
 		if len(art.InsightIDs) != 2 {
 			t.Errorf("insight_ids = %v (want 2 from context.scope.entities)", art.InsightIDs)
@@ -140,7 +140,7 @@ func TestReportEmitsStructuredArtifactWithNonEmptyBody(t *testing.T) {
 }
 
 func TestReportRejectsEmptyBody(t *testing.T) {
-	// sections[0].body is whitespace only — must be rejected.
+	// sections[0].body is whitespace only. Must be rejected.
 	mock := llm.NewMock(`{"title":"x","sections":[{"heading":"h","body":"   "}],"key_points":[]}`)
 	deps, _, _, cleanup := newDeps(t, mock)
 	defer cleanup()

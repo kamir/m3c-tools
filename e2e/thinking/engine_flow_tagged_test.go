@@ -1,4 +1,4 @@
-// engine_flow_tagged_test.go — integration test that runs the
+// engine_flow_tagged_test.go: integration test that runs the
 // thinking-engine flow against a REAL Kafka broker.
 //
 // Compile + run with:
@@ -18,7 +18,7 @@
 //   2. Cross-tenant produce still panics with a real broker wired up
 //      (the isolation guard is independent of the driver).
 //   3. A linear ProcessSpec produces the same artifact shape as the
-//      in-memory reference run — i.e. the two drivers are
+//      in-memory reference run, i.e. the two drivers are
 //      behaviourally equivalent for Stream 2a's processors.
 //
 //go:build thinking_kafka
@@ -78,7 +78,7 @@ func TestEngineFlowReal(t *testing.T) {
 	}
 	defer stop()
 
-	// Give the consumer group a moment to join — cp-all-in-one
+	// Give the consumer group a moment to join: cp-all-in-one
 	// assigns quickly but not instantly. Then produce.
 	time.Sleep(2 * time.Second)
 
@@ -117,7 +117,7 @@ func TestEngineFlowReal(t *testing.T) {
 
 // TestIsolationGuardOnRealBroker confirms the SPEC-0167 §Isolation
 // Model panic guard fires BEFORE any network I/O even when a real
-// broker is configured — i.e. an engine for user A wired against a
+// broker is configured, i.e. an engine for user A wired against a
 // live cluster still cannot accidentally publish to user B's topic.
 func TestIsolationGuardOnRealBroker(t *testing.T) {
 	brokers := requireBroker(t)

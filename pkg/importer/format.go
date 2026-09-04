@@ -1,4 +1,4 @@
-// Package importer — scan output formatting with tracking status and parsed tags.
+// Package importer: scan output formatting with tracking status and parsed tags.
 package importer
 
 import (

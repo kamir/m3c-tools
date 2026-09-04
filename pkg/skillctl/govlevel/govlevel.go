@@ -1,8 +1,8 @@
 // Package govlevel holds the ONE canonical governance-level vocabulary and its
 // normalisation + floor-validation primitives (SPEC-0252 §6, SPEC-0188 §4.4).
 //
-// Before this, the two trust-root loaders — verify.Load (SPEC-0188 signing
-// roots) and registry.LoadSelfTrustRoots (SPEC-0225 governance floor) — each
+// Before this, the two trust-root loaders, verify.Load (SPEC-0188 signing
+// roots) and registry.LoadSelfTrustRoots (SPEC-0225 governance floor), each
 // spelled the valid-floor set AND the case/whitespace normalisation separately,
 // and they had drifted:
 //
@@ -23,7 +23,7 @@ package govlevel
 import "strings"
 
 // Canonical governance levels, strictest first. "red" is the most-permissive
-// rung — a valid *attestation level* but never a valid *floor* (see ValidFloor).
+// rung: a valid *attestation level* but never a valid *floor* (see ValidFloor).
 const (
 	Green  = "green"
 	Yellow = "yellow"

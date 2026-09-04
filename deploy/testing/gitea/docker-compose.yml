@@ -1,4 +1,4 @@
-# Local Gitea — fast inner-loop / CI environment for the skillctl git artifact
+# Local Gitea: fast inner-loop / CI environment for the skillctl git artifact
 # backend (SPEC-0356 D6). ~150 MB, boots in ~10 s. Provider-neutral: our git
 # backend drives it exactly as it drives GitLab (clone/push/tag/fetch + REST).
 # LOCAL TEST ONLY.

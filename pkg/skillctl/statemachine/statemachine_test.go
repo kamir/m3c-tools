@@ -90,7 +90,7 @@ func TestCompute_TableStates(t *testing.T) {
 // TestCompute_NeverBrick_SelfER1SidecarOnly is the load-bearing R-7.1/7.2 case:
 // a self/ER1 host that has NO SPEC-0188 skill-trust-roots.yaml but DOES have a
 // .m3c-provenance sidecar (folded into TrustBasisPresent) must compute
-// online/degraded and NEVER locked — even under an enterprise profile.
+// online/degraded and NEVER locked, even under an enterprise profile.
 func TestCompute_NeverBrick_SelfER1SidecarOnly(t *testing.T) {
 	sidecarOnly := Inputs{
 		RegistryReachable: false,
@@ -104,7 +104,7 @@ func TestCompute_NeverBrick_SelfER1SidecarOnly(t *testing.T) {
 
 	// Even under an enterprise profile, sidecar-present ⇒ not locked.
 	if got := Compute(sidecarOnly, enterprisePol()); got == StateLocked {
-		t.Fatalf("sidecar-only host locked under enterprise profile — day-one brick trap (R-7.2)")
+		t.Fatalf("sidecar-only host locked under enterprise profile: day-one brick trap (R-7.2)")
 	}
 	if got := Compute(sidecarOnly, enterprisePol()); got != StateDegraded {
 		t.Fatalf("disconnected sidecar-only host = %s, want degraded", got)
@@ -131,7 +131,7 @@ func TestCompute_NeverBrick_UnmanagedHostNeverLocks(t *testing.T) {
 	}
 	// Zero-value policy = the shipped default (not enterprise, no ceilings).
 	if got := Compute(airgapped, OfflinePolicy{}); got == StateLocked {
-		t.Fatalf("unmanaged air-gapped host locked WITHOUT an enterprise profile — the shipped default must never lock (R-7.2)")
+		t.Fatalf("unmanaged air-gapped host locked WITHOUT an enterprise profile. The shipped default must never lock (R-7.2)")
 	}
 	// With no ceilings, disconnected-with-no-basis is degraded (caches trivially
 	// "fresh" because there is no ceiling), never locked.
@@ -158,19 +158,19 @@ func TestCompute_AnchorAloneIsTrustBasis(t *testing.T) {
 		Now:               testNow,
 	}
 	if got := Compute(anchored, enterprisePol()); got == StateLocked {
-		t.Fatalf("anchored host locked — a translog anchor is a trust basis (R-7.1)")
+		t.Fatalf("anchored host locked: a translog anchor is a trust basis (R-7.1)")
 	}
 }
 
 // TestEmergencyActive_ExemptFromStateAndExpiry is the AC-7 emergency case: an
 // old-but-valid emergency deny-list still denies in EVERY state, including
 // locked and fully-expired offline. The emergency channel is exempt from cache
-// expiry and from the state machine — EmergencyActive does not even accept the
+// expiry and from the state machine. EmergencyActive does not even accept the
 // age/ceiling, and ignores the state.
 func TestEmergencyActive_ExemptFromStateAndExpiry(t *testing.T) {
 	for _, s := range []State{StateOnline, StateDegraded, StateOffline, StateLocked} {
 		if !EmergencyActive(true, s) {
-			t.Fatalf("emergency deny-list suppressed in state %s — the compromise channel must be exempt from every state (AC-7)", s)
+			t.Fatalf("emergency deny-list suppressed in state %s: the compromise channel must be exempt from every state (AC-7)", s)
 		}
 		if EmergencyActive(false, s) {
 			t.Fatalf("EmergencyActive(false, %s) = true; must be a pure passthrough", s)
@@ -178,7 +178,7 @@ func TestEmergencyActive_ExemptFromStateAndExpiry(t *testing.T) {
 	}
 
 	// Concretely: a host whose caches are ALL expired (offline) still honours the
-	// emergency list — expiry of the ordinary revocation cache does not expire the
+	// emergency list: expiry of the ordinary revocation cache does not expire the
 	// emergency channel.
 	expired := Inputs{RegistryReachable: false, PolicyAge: 999 * time.Hour, RevocationAge: 999 * time.Hour, TrustAge: 999 * time.Hour, TrustBasisPresent: true, Now: testNow}
 	st := Compute(expired, enterprisePol())

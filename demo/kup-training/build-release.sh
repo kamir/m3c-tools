@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-release — Build cross-platform skillctl binaries, checksums,
+# build-release: Build cross-platform skillctl binaries, checksums,
 # install.sh, and draft GitHub release notes.
 #
 # Output: $ARTIFACTS_DIR/release/
@@ -16,7 +16,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 
-header "G2 — Cross-platform release of skillctl"
+header "G2: Cross-platform release of skillctl"
 
 # Locate source
 SOURCE_DIR=""
@@ -65,14 +65,14 @@ sed 's/^/      /' "$REL/SHA256SUMS"
 log "writing installer: install.sh"
 cat > "$REL/install.sh" <<'INSTALLER'
 #!/usr/bin/env bash
-# skillctl installer — fetch the right binary for this host from a GitHub
+# skillctl installer: fetch the right binary for this host from a GitHub
 # release, verify SHA-256, install to a user-writable bin directory.
 #
 # Usage:
 #   curl -L https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.1.0-kup/install.sh | bash
 #   curl -L .../install.sh | INSTALL_DIR=$HOME/.local/bin bash
 #
-# Required env (or args): RELEASE_BASE — GitHub raw release URL prefix.
+# Required env (or args): RELEASE_BASE: GitHub raw release URL prefix.
 set -euo pipefail
 
 RELEASE_BASE="${RELEASE_BASE:-https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.1.0-kup}"
@@ -126,7 +126,7 @@ ok "installer: $REL/install.sh"
 # Release notes
 log "writing release notes"
 cat > "$REL/RELEASE_NOTES.md" <<EOF
-# skillctl ${TAG#skillctl/} — KuP Berlin training cut
+# skillctl ${TAG#skillctl/}: KuP Berlin training cut
 
 Released: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 Source:   $SOURCE_DIR ($(cd "$SOURCE_DIR" && git rev-parse --short HEAD 2>/dev/null || echo "<no git>"))
@@ -174,8 +174,8 @@ Verify checksums against \`SHA256SUMS\` before running.
 
 ## Known gaps (read before training)
 
-- Author-side \`propose\` (SPEC-0194) is drafted, not in the dispatcher yet — use \`pack\` + \`sign\` + the registry HTTP endpoint manually until it lands.
-- \`audit\` Phase 2 (full verdict UX with cleanup) is in flight — Phase 1 surface (scan + per-skill verdict) is what's wired today.
+- Author-side \`propose\` (SPEC-0194) is drafted, not in the dispatcher yet: use \`pack\` + \`sign\` + the registry HTTP endpoint manually until it lands.
+- \`audit\` Phase 2 (full verdict UX with cleanup) is in flight. Phase 1 surface (scan + per-skill verdict) is what's wired today.
 - SPEC-0201 \`import-public\`/\`-list\`/\`-policy lint\` and SPEC-0202 \`run\`/\`invoke-replay\` are documented but not in this binary cut.
 
 ## Verifying the release
@@ -188,7 +188,7 @@ as documented.
 EOF
 ok "release notes: $REL/RELEASE_NOTES.md"
 
-# Recommended `gh release create` command (do NOT run automatically — that's
+# Recommended `gh release create` command (do NOT run automatically. That's
 # a destructive ship action and stays user-driven).
 log "writing gh-release recipe (NOT executed)"
 cat > "$REL/gh-release-create.sh" <<EOF
@@ -197,7 +197,7 @@ cat > "$REL/gh-release-create.sh" <<EOF
 set -euo pipefail
 cd "$REL"
 gh release create "$TAG" \\
-    --title "skillctl ${TAG#skillctl/} — KuP Berlin training cut" \\
+    --title "skillctl ${TAG#skillctl/}: KuP Berlin training cut" \\
     --notes-file RELEASE_NOTES.md \\
     --draft \\
     skillctl-darwin-arm64 skillctl-darwin-amd64 \\
@@ -210,9 +210,9 @@ gh release create "$TAG" \\
     \$( [[ -f "$ARTIFACTS_DIR/KuP-skill-manager-handbook.pdf" ]]   && echo "$ARTIFACTS_DIR/KuP-skill-manager-handbook.pdf" )
 EOF
 chmod +x "$REL/gh-release-create.sh"
-ok "release recipe: $REL/gh-release-create.sh  (run manually to publish — DRAFT by default)"
+ok "release recipe: $REL/gh-release-create.sh  (run manually to publish: DRAFT by default)"
 
-header "G2 — done"
+header "G2: done"
 note "Release dir: $REL"
 note "Tag:         $TAG"
 note "Assets:      $(ls -1 "$REL" | wc -l | tr -d ' ') files"

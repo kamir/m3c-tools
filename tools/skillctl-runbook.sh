@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Generate the skillctl publisher onboarding runbook (a self-contained, CSP-safe
 # HTML worksheet) for a given release tag, by stamping the version into the
-# template. This is a STANDARD step of skillctl release prep — invoked by
+# template. This is a STANDARD step of skillctl release prep: invoked by
 # tools/skillctl-release.sh so every release ships a version-matched runbook.
 #
 # Usage:

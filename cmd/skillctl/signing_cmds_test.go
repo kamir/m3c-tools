@@ -45,11 +45,11 @@ func makeBundleForCLI(t *testing.T, dir, name string) string {
 // TestEndToEnd covers all five acceptance scenarios in PLAN
 // §170-180 against the actual CLI runner functions.
 //
-//	AC1 — keygen produces a valid pair
-//	AC2 — sign writes a 64-byte sig at the canonical path
-//	AC3 — verify-sig exits 0 for a valid sig
-//	AC4 — tampered bundle → non-zero exit
-//	AC5 — wrong pubkey → non-zero exit (and specifically exit 11)
+//	AC1, keygen produces a valid pair
+//	AC2, sign writes a 64-byte sig at the canonical path
+//	AC3, verify-sig exits 0 for a valid sig
+//	AC4, tampered bundle → non-zero exit
+//	AC5: wrong pubkey → non-zero exit (and specifically exit 11)
 func TestEndToEnd(t *testing.T) {
 	dir := t.TempDir()
 	bundle := makeBundleForCLI(t, dir, "demo.skb")
@@ -168,7 +168,7 @@ func TestRunVerifySig_UsageErrors(t *testing.T) {
 
 // TestSignVerify_ArgOrder proves the bundle positional works BEFORE the flags
 // (the order the usage brief + README show) as well as after, and in the
-// `--key=value` form — the fix for Go's flag package stopping at the first
+// `--key=value` form. The fix for Go's flag package stopping at the first
 // positional. Before the fix, "sign BUNDLE.skb --key K" failed with a usage error.
 func TestSignVerify_ArgOrder(t *testing.T) {
 	dir := t.TempDir()

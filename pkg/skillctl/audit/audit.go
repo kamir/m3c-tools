@@ -5,17 +5,17 @@
 //
 // The verdict set is closed, four states:
 //
-//	StateOK         — sibling .skb present, digest matches, governance ≥ floor
-//	StateUnverified — no sibling .skb (hand-authored or awareness-only)
-//	StateBroken     — sibling .skb present but digest/sig integrity failed
-//	StateBelowMin   — bundle present, valid, but governance below the
+//	StateOK (sibling .skb present, digest matches, governance ≥ floor
+//	StateUnverified) no sibling .skb (hand-authored or awareness-only)
+//	StateBroken, sibling .skb present but digest/sig integrity failed
+//	StateBelowMin, bundle present, valid, but governance below the
 //	                  pinned minimum (e.g. 🟡 yellow when floor is 🟢)
 //
 // Exit-code mapping per SPEC-0189 §14.2 / S3-DECISIONS S3.3 Q4:
 //
-//	0  — every active skill is OK
-//	2  — at least one UNVERIFIED or BELOW_MIN
-//	3  — at least one BROKEN (stronger signal; structurally tampered)
+//	0, every active skill is OK
+//	2, at least one UNVERIFIED or BELOW_MIN
+//	3, at least one BROKEN (stronger signal; structurally tampered)
 //
 // Cleanup eligibility per SPEC-0189 §14.4 / S3-DECISIONS S3.4 Q1:
 //
@@ -78,7 +78,7 @@ type Verdict struct {
 	State            State
 	GovernanceLevel  string // "" when no frontmatter or no governance_level field
 	Reason           string // human-readable; rendered in the REASON column
-	SourcePath       string // ~/.claude/skills/<name> — what cleanup would delete
+	SourcePath       string // ~/.claude/skills/<name>. What cleanup would delete
 	BundleDigest     string // canonical sha256:... when known
 	VerifierExitCode int    // forwarded from scanner.BundleAttestation when nonzero
 }
@@ -110,7 +110,7 @@ type Report struct {
 // treated as UNVERIFIED.
 //
 // Skills not of type claude_code_skill (commands, agents, MCP servers,
-// etc.) are excluded — the audit's verdict surface only covers skills,
+// etc.) are excluded. The audit's verdict surface only covers skills,
 // per the SPEC-0189 §14.1 framing.
 func Compute(inv *model.Inventory, minimum MinimumLevel) Report {
 	if inv == nil {
@@ -131,7 +131,7 @@ func Compute(inv *model.Inventory, minimum MinimumLevel) Report {
 		}
 		if sk.Tier == "" {
 			// Legacy SPEC-0115 skills without tier annotation aren't
-			// part of the audit surface — they show up under
+			// part of the audit surface: they show up under
 			// `skillctl scan --source projects` only. SPEC-0189 §14
 			// scope is "what Claude Code can load on this machine",
 			// which is tier-aware.

@@ -55,7 +55,7 @@ class Store:
         self.conn.commit()
 
     def rebuild_fts(self):
-        """(Re)populate the FTS mirror from `chunks`. Cheap — it is a scan, no model."""
+        """(Re)populate the FTS mirror from `chunks`. Cheap: it is a scan, no model."""
         with self.conn:
             self.conn.execute("INSERT INTO chunks_fts(chunks_fts) VALUES('delete-all')")
             self.conn.execute(
@@ -67,7 +67,7 @@ class Store:
 
         The query is reduced to bare terms OR-ed together: a user question is a
         sentence, not an FTS expression, and one stray quote would otherwise be a
-        syntax error. Rare terms still dominate — that is exactly what BM25 is for
+        syntax error. Rare terms still dominate: that is exactly what BM25 is for
         and exactly what the dense side loses.
         """
         import re
@@ -81,11 +81,11 @@ class Store:
         # BM25 belohnt Seltenheit, und in einem ueberwiegend englischen Korpus ist
         # ein deutsches Prosawort ("serverseitig") seltener als der gesuchte
         # Fachbegriff. Gemessen: die Frage "Wird propose-by-default serverseitig
-        # erzwungen?" lieferte per OR sync_session.py und corps_album — der Begriff
+        # erzwungen?" lieferte per OR sync_session.py und corps_album: der Begriff
         # ALLEIN findet admission.py auf Rang 2. Die Prosa uebertoent das Signal.
         #
         # Identifier erkennt man an ihrer FORM: Bindestrich, Punkt, Unterstrich,
-        # Slash. Bewusst KEINE Laengenregel — "serverseitig" hat 12 Zeichen und
+        # Slash. Bewusst KEINE Laengenregel: "serverseitig" hat 12 Zeichen und
         # waere damit als Identifier durchgegangen, genau das deutsche Prosawort
         # also, das den Fachbegriff ueberstimmt hat. Interpunktion ist das
         # verlaessliche Signal, Laenge ist es nicht.
@@ -101,7 +101,7 @@ class Store:
                 return [int(r[0]) for r in self.conn.execute(
                     "SELECT rowid FROM chunks_fts WHERE chunks_fts MATCH ? "
                     "ORDER BY bm25(chunks_fts, 1.0, 2.0, 0.5) LIMIT ?", (expr, limit)).fetchall()]
-            except Exception:  # noqa: BLE001 — kein FTS (alter Index) oder unlesbarer Ausdruck
+            except Exception:  # noqa: BLE001: kein FTS (alter Index) oder unlesbarer Ausdruck
                 return []
 
         ident_hits = _run(idents, k * 4)

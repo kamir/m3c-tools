@@ -1,14 +1,14 @@
-// spool.go — the bounded JSONL fallback for R-2.4 hot-path safety.
+// spool.go: the bounded JSONL fallback for R-2.4 hot-path safety.
 //
 // When Append can't reach the db (SQLITE_BUSY at the ~250ms pin, or an open
 // failure), the caller spools the row here so the DECISION RETURNS REGARDLESS
 // (R-2.4 / R-8.1 default). The spool is a single O_APPEND Write per line (0600),
-// which is cross-process atomic for lines below PIPE_BUF — the same discipline
+// which is cross-process atomic for lines below PIPE_BUF: the same discipline
 // the invocation-trail.jsonl appender uses. The next sync/enforce Reconcile
 // drains it into audit_events in occurred_at order (R-2.5).
 //
-// NOT-YET-BUILT (AC-5a): per-batch translog anchoring — stamping translog_seq and
-// emitting a signed tree head so the local trail becomes tamper-EVIDENT — is not
+// NOT-YET-BUILT (AC-5a): per-batch translog anchoring, stamping translog_seq and
+// emitting a signed tree head so the local trail becomes tamper-EVIDENT, is not
 // wired. BackfillTranslogSeq exists and is unit-tested, but NOTHING in the
 // sync/enforce drain calls it, so translog_seq stays NULL in production and there
 // is no local-monotonicity guarantee to preserve here. The tamper-detection claim
@@ -53,7 +53,7 @@ func (s *Store) Spool(rec skillgate.InvocationRecord, payloadJSON, payloadHash s
 // SQLite db. It is the fallback for the case where Open ITSELF fails (a corrupt
 // outbox.db on an otherwise-writable dir): the row still lands durably in the
 // same 0700 dir the signed trail uses, so a later `skillctl sync` Reconcile drains
-// it — and, crucially for R-8.2, durability then tracks the same writable-dir
+// it: and, crucially for R-8.2, durability then tracks the same writable-dir
 // condition the trail write depends on (the two sinks fail together or succeed
 // together, so require_local_audit never fires a spurious deny while the trail
 // records the allow).
@@ -90,7 +90,7 @@ func spoolAppend(dir string, rec skillgate.InvocationRecord, payloadJSON, payloa
 // so a FUTURE translog anchor (AC-5a, NOT-YET-BUILT) could stamp translog_seq in a
 // stable order; today nothing anchors, so this ordering only fixes the insert
 // order of spilled rows. A malformed line is SKIPPED (counted) rather than
-// aborting the whole drain — one bad line must not strand the rest of the queue.
+// aborting the whole drain: one bad line must not strand the rest of the queue.
 func (s *Store) Reconcile() (drained int, err error) {
 	path := s.SpoolPath()
 	data, err := os.ReadFile(path)
@@ -133,7 +133,7 @@ func (s *Store) Reconcile() (drained int, err error) {
 
 	for _, e := range entries {
 		if aerr := s.Append(e.Record, e.PayloadJSON, e.PayloadHash); aerr != nil {
-			// The db is still contended — leave the spool in place so a later
+			// The db is still contended: leave the spool in place so a later
 			// Reconcile retries (idempotent). Report what we managed to drain.
 			return drained, fmt.Errorf("outbox: reconcile append: %w", aerr)
 		}
@@ -141,7 +141,7 @@ func (s *Store) Reconcile() (drained int, err error) {
 	}
 
 	// All rows landed (dedup no-ops included). Remove the spool; a fresh failure
-	// re-creates it. Skipped malformed lines are dropped with the file — they are
+	// re-creates it. Skipped malformed lines are dropped with the file. They are
 	// unusable evidence by definition (no valid event_id to anchor).
 	if rerr := os.Remove(path); rerr != nil && !os.IsNotExist(rerr) {
 		return drained, fmt.Errorf("outbox: reconcile cleanup: %w", rerr)

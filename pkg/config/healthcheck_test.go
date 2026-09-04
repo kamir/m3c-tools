@@ -14,7 +14,7 @@ import (
 // for a literal loopback target; for any remote host the request is refused.
 //
 // Before the F33 fix, healthCheckER1 set skipVerify=true for ANY host whenever
-// the raw string was false/0/no — so the remote rows below would have been true.
+// the raw string was false/0/no, so the remote rows below would have been true.
 func TestHealthCheckSkipVerify_Decision(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -69,7 +69,7 @@ func TestConnection_RefusesInsecureRemote(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// srv.URL is https://127.0.0.1:<port> — a loopback host.
+	// srv.URL is https://127.0.0.1:<port>: a loopback host.
 	loopbackURL := srv.URL + "/upload_2"
 
 	t.Run("loopback-insecure-passes", func(t *testing.T) {
@@ -92,7 +92,7 @@ func TestConnection_RefusesInsecureRemote(t *testing.T) {
 
 	t.Run("remote-insecure-is-refused-fails-cert", func(t *testing.T) {
 		// THE F33 REGRESSION GUARD: a REMOTE host with verify=false must be
-		// refused — verification stays ON, so the self-signed cert is rejected
+		// refused. Verification stays ON, so the self-signed cert is rejected
 		// and the health check FAILS rather than reporting the remote profile
 		// as healthy over an unverified channel.
 		//

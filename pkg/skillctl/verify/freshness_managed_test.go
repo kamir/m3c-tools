@@ -8,7 +8,7 @@ import (
 
 // managedRootYAML builds a valid enterprise-MANAGED trust-roots file (offline_policy
 // enterprise: true) with a pinned reviewer but NO max_staleness and NO
-// require_signed_governance set — the FR-0090 IS-T5 defaulting must fill both in.
+// require_signed_governance set. The FR-0090 IS-T5 defaulting must fill both in.
 func managedRootYAML(t *testing.T) string {
 	t.Helper()
 	regKey := validPubkeyB64(t)
@@ -30,7 +30,7 @@ func managedRootYAML(t *testing.T) string {
 }
 
 // TestManagedTrustRootDefaults is the FR-0090 IS-T5 loader half: a managed root with
-// unset knobs is stamped with the fail-closed defaults at Load — max_staleness = 48h
+// unset knobs is stamped with the fail-closed defaults at Load: max_staleness = 48h
 // and require_signed_governance ON. Against the old loader both stay unset (0 / false),
 // so the freshness contract has "no ceiling" and governance is advisory.
 func TestManagedTrustRootDefaults(t *testing.T) {
@@ -65,7 +65,7 @@ func TestManagedTrustRootDefaults(t *testing.T) {
 // ceiling, and a HIGH-risk invocation of a since-revoked digest → DENY with
 // ErrRevocationStale. Against the old code the managed root had no ceiling, so
 // EvaluateFreshness returned Allowed=true ("no_staleness_ceiling") and the stale
-// snapshot would have been trusted — the since-revoked digest would run.
+// snapshot would have been trusted. The since-revoked digest would run.
 func TestManagedRootStaleHighRiskDenied(t *testing.T) {
 	tr, err := Load(writeRootsFile(t, managedRootYAML(t)))
 	if err != nil {
@@ -96,7 +96,7 @@ func TestManagedRootStaleHighRiskDenied(t *testing.T) {
 // TestManagedPolicyNoCeilingIsBeltAndSuspenders proves the freshness.go guard bites
 // even on a HAND-CONSTRUCTED managed policy whose MaxStaleness is 0 (bypassing the
 // loader): the effective ceiling is forced to 48h so a stale high-risk action is
-// denied. The non-managed control with the same 0 ceiling is ALLOWED — "no ceiling"
+// denied. The non-managed control with the same 0 ceiling is ALLOWED. "no ceiling"
 // applies ONLY to non-managed roots.
 func TestManagedPolicyNoCeilingIsBeltAndSuspenders(t *testing.T) {
 	now := time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)

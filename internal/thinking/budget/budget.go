@@ -77,7 +77,7 @@ func New(processID string, processCapTok int, dailyCapUSD float64, s *store.Stor
 //
 // Returns a detailed error the API layer can surface verbatim.
 //
-// Spend is NOT tagged with (layer, strategy) on this path — use
+// Spend is NOT tagged with (layer, strategy) on this path: use
 // ReserveTagged from call sites that have that context (see
 // /v1/budget/today top_consumers).
 func (c *Controller) Reserve(promptID, model string, inputTokens int) error {
@@ -96,7 +96,7 @@ func (c *Controller) ReserveTagged(promptID, model, layer, strategy string, inpu
 
 	if c.processCapTok > 0 && c.processUsedTok+tokens > c.processCapTok {
 		return fmt.Errorf(
-			"budget: per-process token cap exceeded (used=%d + est=%d > cap=%d) — SPEC-0167 D4",
+			"budget: per-process token cap exceeded (used=%d + est=%d > cap=%d): SPEC-0167 D4",
 			c.processUsedTok, tokens, c.processCapTok,
 		)
 	}
@@ -108,19 +108,19 @@ func (c *Controller) ReserveTagged(promptID, model, layer, strategy string, inpu
 		}
 		if dayCost+costUSD > c.dailyCapUSD {
 			return fmt.Errorf(
-				"budget: per-day USD cap exceeded (today=$%.4f + est=$%.4f > cap=$%.2f) — SPEC-0167 D4",
+				"budget: per-day USD cap exceeded (today=$%.4f + est=$%.4f > cap=$%.2f): SPEC-0167 D4",
 				dayCost, costUSD, c.dailyCapUSD,
 			)
 		}
 		if err := c.store.AddBudgetSpend(tokens, costUSD); err != nil {
 			return fmt.Errorf("budget: record spend: %w", err)
 		}
-		// Per-tag ledger — non-fatal on error so a schema hiccup can't
+		// Per-tag ledger: non-fatal on error so a schema hiccup can't
 		// break the cognitive path. Untagged (empty layer/strategy) is
 		// still written so the row count agrees with budget_counters,
 		// but those rows are excluded from top_consumers.
 		if err := c.store.AddLLMLedgerEntry(layer, strategy, tokens, costUSD); err != nil {
-			// swallow — we already recorded the spend; tagging failure
+			// swallow: we already recorded the spend; tagging failure
 			// is a visibility regression, not a correctness one.
 			_ = err
 		}
@@ -171,7 +171,7 @@ func (l *Ledger) SpentUSD() (float64, error) {
 }
 
 // RemainingFraction returns (cap - spent) / cap in [0, 1]. An
-// overspent day clamps to 0 — callers interpret "0 remaining" as
+// overspent day clamps to 0: callers interpret "0 remaining" as
 // "skip".
 func (l *Ledger) RemainingFraction() (float64, error) {
 	if l == nil || l.store == nil {
@@ -204,7 +204,7 @@ const PausedThreshold = 0.80
 // Paused reports whether autoreflect should currently be paused by
 // the D4 daily cap. Derived from fraction_used (= 1 - RemainingFraction)
 // against PausedThreshold; the paused flag is NOT separately persisted
-// — autoreflect recomputes it on every window tick. Exposing the same
+//: autoreflect recomputes it on every window tick. Exposing the same
 // derivation here means /v1/budget/today stays consistent with
 // autoreflect's own gating decision.
 func (l *Ledger) Paused() (bool, error) {
@@ -219,7 +219,7 @@ func (l *Ledger) Paused() (bool, error) {
 }
 
 // DaySpend is one calendar day of LLM spend, returned by History.
-// PausedMinutes is present but always zero in Phase 1 — autoreflect
+// PausedMinutes is present but always zero in Phase 1. Autoreflect
 // does not currently persist per-day pause durations. The field is
 // reserved for Phase 2 when the observability sink records them.
 type DaySpend struct {
@@ -245,7 +245,7 @@ const DefaultHistoryDays = 7
 
 // History returns the last `days` UTC calendar days of spend (newest
 // first). days is clamped to [1, MaxHistoryDays]; days ≤ 0 defaults to
-// DefaultHistoryDays. Days with no spend are omitted — the engine may
+// DefaultHistoryDays. Days with no spend are omitted. The engine may
 // be younger than the requested window, or the user may not have run
 // anything that day.
 //

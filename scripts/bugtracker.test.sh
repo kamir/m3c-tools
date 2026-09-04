@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# scripts/bugtracker.test.sh — self-contained fixtures for scripts/bugtracker.sh.
+# scripts/bugtracker.test.sh: self-contained fixtures for scripts/bugtracker.sh.
 #
 # Builds a throwaway maintenance tree and stubs `gh` on PATH, so nothing here
 # touches the network or creates a real issue. The point of most assertions is
@@ -118,7 +118,7 @@ refuses "next-id rejects an unknown flag" "$BT" next-id FR --nope
 # --- a realistic report -------------------------------------------------------
 REPORT="$BUGS/BUG-0213-widget-drops-the-last-frame.md"
 cat > "$REPORT" <<'EOF'
-# BUG-0213 — widget drops the last frame
+# BUG-0213: widget drops the last frame
 
 - **Datum:** 2026-09-03
 - **Severity:** S2
@@ -145,7 +145,7 @@ is "status write does not duplicate the line" \
 refuses "status refuses an unknown value" "$BT" status 213 banana
 
 NOSTATUS="$BUGS/BUG-0214-no-metadata-block.md"
-printf '# BUG-0214 — no metadata block\n\nJust prose.\n' > "$NOSTATUS"
+printf '# BUG-0214, no metadata block\n\nJust prose.\n' > "$NOSTATUS"
 is "status is inserted when absent" "$("$BT" status 214 open)" "open"
 is "the inserted line sits under the title" "$(sed -n '3p' "$NOSTATUS")" "- **Status:** open"
 
@@ -203,10 +203,10 @@ is "the status was not changed by the refusal" "$("$BT" status 213)" "open"
 accepts "close as wontfix does not need a Spec line" "$BT" close 213 --status wontfix
 "$BT" status 213 open >/dev/null
 
-printf '%s\n' "- **Spec:** none — a rendering slip, no contract to change" >> "$REPORT"
-accepts "a 'none — reason' Spec answer satisfies the rule" "$BT" close 213
+printf '%s\n' "- **Spec:** none: a rendering slip, no contract to change" >> "$REPORT"
+accepts "a 'none: reason' Spec answer satisfies the rule" "$BT" close 213
 is "spec reads back the recorded answer" \
-   "$("$BT" spec 213)" "none — a rendering slip, no contract to change"
+   "$("$BT" spec 213)" "none: a rendering slip, no contract to change"
 "$BT" status 213 open >/dev/null
 
 # --- close: both planes, and the comment is checked too -----------------------
@@ -216,7 +216,7 @@ refuses "close refuses a leaking public comment" \
 is "no close was issued by the leaking comment" "$(grep -c 'issue close 77' "$GH_CALLS" || true)" "0"
 
 accepts "close sets the status and closes the issue" \
-  "$BT" close 213 --comment "Fixed in v2.11.1 — see BUG-0213."
+  "$BT" close 213 --comment "Fixed in v2.11.1. See BUG-0213."
 is "the report is fixed"  "$("$BT" status 213)" "fixed"
 is "the issue was closed as completed" \
    "$(grep -c 'issue close 77 --repo acme/widget --reason completed' "$GH_CALLS")" "1"
@@ -234,7 +234,7 @@ is "no gh call was made" "$(wc -l < "$GH_CALLS" | tr -d ' ')" "0"
 # --- the FR kind: same machinery, one different word --------------------------
 FR="$BUGS/FR-0096-declarative-data-requirements.md"
 cat > "$FR" <<'EOF'
-# FR-0096 — declarative data requirements
+# FR-0096: declarative data requirements
 
 - **Status:** open
 - **Spec:** SPEC-0401 §1
@@ -268,7 +268,7 @@ is "the FR issue closed as completed" "$(grep -c 'issue close 88 .* --reason com
 # --- the target repository belongs to the ITEM, not to the cwd ----------------
 #
 # The regression this guards: repo_for used to read `git remote origin`, so the
-# same command addressed a different repository depending on where you stood —
+# same command addressed a different repository depending on where you stood,
 # and `close` ignored the repo the item had already recorded.
 
 # a throwaway checkout whose origin is a DIFFERENT repository
@@ -294,7 +294,7 @@ is "sync reads the state from the recorded repo" \
 # --- open, before an issue exists ---------------------------------------------
 DECL="$BUGS/BUG-0215-declares-its-own-repo.md"
 cat > "$DECL" <<'EOF'
-# BUG-0215 — declares its own repo
+# BUG-0215: declares its own repo
 
 - **Status:** open
 - **Public:** yes
@@ -313,7 +313,7 @@ is "the backlink records the repo it published to" "$("$BT" issue 215)" "declare
 
 NOREPO="$BUGS/BUG-0216-declares-nothing.md"
 cat > "$NOREPO" <<'EOF'
-# BUG-0216 — declares nothing
+# BUG-0216: declares nothing
 
 - **Status:** open
 - **Public:** yes
@@ -329,7 +329,7 @@ is "the env fallback was used" "$(grep -c 'issue create --repo env/fallback' "$G
 
 BADREPO="$BUGS/BUG-0217-malformed-repo.md"
 cat > "$BADREPO" <<'EOF'
-# BUG-0217 — malformed repo
+# BUG-0217: malformed repo
 
 - **Status:** open
 - **Public:** yes

@@ -327,7 +327,7 @@ func TestExtractMetadataEmptyTags(t *testing.T) {
 }
 
 func TestMetadataTagsKnownPrefixAtEnd(t *testing.T) {
-	// Known prefix at end of tags with no value — should stay as plain tag
+	// Known prefix at end of tags with no value: should stay as plain tag
 	mt := impression.ParseMetadataTags("braindump_speaker.wav")
 	// "speaker" is at end with no following value, so it stays as plain tag
 	assertContainsTag(t, mt.Plain, "braindump")

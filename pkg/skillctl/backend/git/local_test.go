@@ -55,7 +55,7 @@ func TestInitLocalRegistryGuards(t *testing.T) {
 		t.Errorf("init over a non-empty non-repo dir must be refused")
 	}
 	if _, err := os.Stat(filepath.Join(danger, "HEAD")); err == nil {
-		t.Errorf("init wrote bare-repo plumbing into a user directory — footgun not guarded")
+		t.Errorf("init wrote bare-repo plumbing into a user directory: footgun not guarded")
 	}
 
 	// Empty dir → OK.
@@ -77,7 +77,7 @@ func TestInitLocalRegistryGuards(t *testing.T) {
 
 // TestLocalRegistryEndToEnd: init a bare local registry, publish + read through
 // artifact.Open("local://…"), export a git-bundle snapshot, and prove a peer can
-// list+fetch from the READ-ONLY bundle — the offline handoff flow, no remote.
+// list+fetch from the READ-ONLY bundle: the offline handoff flow, no remote.
 func TestLocalRegistryEndToEnd(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")

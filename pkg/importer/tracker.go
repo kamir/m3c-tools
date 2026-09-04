@@ -1,4 +1,4 @@
-// Package importer — markdown-based tracker file for import deduplication.
+// Package importer: markdown-based tracker file for import deduplication.
 //
 // The tracker file is a simple line-oriented markdown file that records
 // which audio files have been imported. Each entry is a line containing
@@ -8,7 +8,7 @@
 // Format:
 //
 //	# M3C Import Tracker
-//	# Auto-generated — do not edit while import is running.
+//	# Auto-generated: do not edit while import is running.
 //
 //	recording-2024-01-15.mp3
 //	meeting-notes.wav
@@ -32,7 +32,7 @@ import (
 )
 
 const trackerHeader = `# M3C Import Tracker
-# Auto-generated — do not edit while import is running.
+# Auto-generated: do not edit while import is running.
 # Last updated: %s
 `
 

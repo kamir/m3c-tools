@@ -116,7 +116,7 @@ func TestUploadWithDeviceTokenOnly(t *testing.T) {
 	}
 	token := os.Getenv("ER1_DEVICE_TOKEN")
 	if token == "" {
-		t.Skip("Skipping: ER1_DEVICE_TOKEN not set — pair device first")
+		t.Skip("Skipping: ER1_DEVICE_TOKEN not set: pair device first")
 	}
 
 	// Upload with device token, no API key.

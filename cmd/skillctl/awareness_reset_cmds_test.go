@@ -4,10 +4,10 @@ package main
 //
 // Coverage matrix (from S2-QUESTIONS.md §5.C acceptance plan):
 //
-//   TestAwarenessReset_RequiresConfirmReset    — flag-parser refusal
-//   TestAwarenessReset_DryRunProducesToken      — dry-run prints the token
-//   TestAwarenessReset_TokenExpiresAfter5Min   — client-side 5-min TTL
-//   TestAwarenessReset_CrossIdentityExits19    — server 403 → exit 19
+//   TestAwarenessReset_RequiresConfirmReset, flag-parser refusal
+//   TestAwarenessReset_DryRunProducesToken, dry-run prints the token
+//   TestAwarenessReset_TokenExpiresAfter5Min, client-side 5-min TTL
+//   TestAwarenessReset_CrossIdentityExits19, server 403 → exit 19
 //
 // Pattern: drive `runAwarenessResetWithClient` directly with a test-built
 // opts struct and an httptest.Server-backed http.Client, the same shape
@@ -195,7 +195,7 @@ func TestAwarenessReset_CrossIdentityExits19(t *testing.T) {
 // acceptance test. The OLD hand-rolled `issued = issued*10 + (r-'0')` loop
 // silently OVERFLOWED int64 on a long numeric prefix; the wrapped value could
 // land time.Unix() far in the FUTURE, so the `age < 0` branch returned
-// (false, nil) — the token was treated as FRESH and the client-side TTL guard
+// (false, nil). The token was treated as FRESH and the client-side TTL guard
 // was skipped. The bounded strconv.ParseUint parse must FAIL CLOSED instead.
 func TestIsAwarenessResetTokenExpired_OverflowPrefixRejected(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0).UTC()

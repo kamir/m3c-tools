@@ -37,7 +37,7 @@ func TestRetryQueueInsertAndQuery(t *testing.T) {
 		t.Errorf("TranscriptPath = %q, want /tmp/transcript.txt", entry.TranscriptPath)
 	}
 
-	// Query pending — should return the entry (next_retry_at is now).
+	// Query pending: should return the entry (next_retry_at is now).
 	pending, err := db.QueryPending(10)
 	if err != nil {
 		t.Fatalf("QueryPending: %v", err)
@@ -119,7 +119,7 @@ func TestRetryQueueUpdateAttempt(t *testing.T) {
 		t.Errorf("Status = %q, want retrying", entry.Status)
 	}
 
-	// Third attempt — should exceed max_attempts (3) and become failed.
+	// Third attempt: should exceed max_attempts (3) and become failed.
 	entry, err = db.UpdateAttempt("upload-002", errors.New("still broken"))
 	if err != nil {
 		t.Fatalf("UpdateAttempt 3: %v", err)

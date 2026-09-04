@@ -6,7 +6,7 @@ title: Program Index
 # Program Index
 
 **What you run.** Every buildable/runnable entry point in the `m3c-tools`
-repository — Go binaries, Python MCP servers, and the evaluation harness.
+repository: Go binaries, Python MCP servers, and the evaluation harness.
 
 > Go module: `github.com/kamir/m3c-tools`. All Go binaries build to `./build/`.
 > The bare executables checked out at the repo root (`m3c-tools`, `skillctl`,
@@ -20,9 +20,9 @@ See also: [Service Index](service-index) (what stays running) ·
 | Program | Entry point | Build | What it is |
 |---------|-------------|-------|------------|
 | **m3c-tools** | `cmd/m3c-tools/` | `make build` | The main Multi-Modal-Memory CLI. Also launches the macOS menu bar app with `--menubar`. |
-| **skillctl** | `cmd/skillctl/` | `make build-skillctl` | The skill **trust** CLI — sign, admit, verify, revoke, audit skills (offline-verifiable). |
+| **skillctl** | `cmd/skillctl/` | `make build-skillctl` | The skill **trust** CLI: sign, admit, verify, revoke, audit skills (offline-verifiable). |
 | **skillctl-demo** | `cmd/skillctl-demo/` | `make build-skillctl-demo` | Self-contained offline demo that shows a CISO the trust plane *containing an attack live* (scenarios S1/S2A/S5, real exit codes). |
-| **thinking-engine** | `cmd/thinking-engine/` | `make thinking-build` | Per-user cognitive runtime (SPEC-0167). Runs as a service — see [Service Index](service-index). |
+| **thinking-engine** | `cmd/thinking-engine/` | `make thinking-build` | Per-user cognitive runtime (SPEC-0167). Runs as a service: see [Service Index](service-index). |
 | **poc-menubar** | `cmd/poc-menubar/` | `make build-all` | Reference POC: macOS menu bar via `menuet`. |
 | **poc-recorder** | `cmd/poc-recorder/` | `make build-all` | Reference POC: PortAudio microphone recording. |
 | **poc-transcript** | `cmd/poc-transcript/` | `make build-all` | Reference POC: YouTube transcript fetch (core library port). |
@@ -51,10 +51,10 @@ revocation, and reporting. Full reference: [Manual: skillctl](manual-skillctl).
 
 | Program | Entry point | What it is |
 |---------|-------------|------------|
-| **mcp-skill-server** | `mcp-skill-server/server.py` | MCP (stdio) server exposing the skill lifecycle as Claude Code tools — wraps the `skillctl` Go CLI + aims-core REST. |
+| **mcp-skill-server** | `mcp-skill-server/server.py` | MCP (stdio) server exposing the skill lifecycle as Claude Code tools: wraps the `skillctl` Go CLI + aims-core REST. |
 | **rag-mcp-server** | `rag-mcp-server/rag_mcp_server.py` | MCP (stdio) server for local, air-gapped workspace RAG (SPEC-0268). Also ships a CLI (`rag.py`) and pipeline scripts (`indexer.py`, `embedder.py`, `chunker.py`, `distill_backfill.py`). |
 
-Both run as long-lived services — see [Service Index](service-index).
+Both run as long-lived services: see [Service Index](service-index).
 
 ## Evaluation harness
 

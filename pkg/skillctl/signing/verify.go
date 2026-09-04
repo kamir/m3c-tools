@@ -21,7 +21,7 @@ var ErrSignatureInvalid = errors.New("signature is invalid")
 // Returns nil on success, ErrSignatureInvalid wrapped with context on
 // crypto failure, and a generic error wrapped with context on other
 // failures (file missing, malformed sig, etc.). The caller is responsible
-// for translating into exit codes — see the CLI wrapper.
+// for translating into exit codes: see the CLI wrapper.
 //
 // We intentionally do NOT trust any digest field embedded in the bundle
 // manifest. The brief is unambiguous: "Recomputes digest, loads
@@ -51,7 +51,7 @@ func VerifyDetached(bundlePath, pubkeyPath string) error {
 	sig, err := os.ReadFile(sigPath)
 	if err != nil {
 		// A missing sig file is the most common cause of "verify
-		// fails" in practice — say so explicitly. Don't reveal
+		// fails" in practice: say so explicitly. Don't reveal
 		// anything that wasn't already on the filesystem.
 		if errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("verify-sig: signature file not found at %s (digest %s)", sigPath, digestHex)

@@ -27,7 +27,7 @@ type RefusalCluster struct {
 	clock   func() time.Time
 
 	// Per-rule sliding window of (Thought, occurredAt). Bounded by
-	// Window — entries older than now-Window are evicted on Observe/Tick.
+	// Window: entries older than now-Window are evicted on Observe/Tick.
 	byRule map[string][]refusalSample
 
 	// Suppression: once a rule fires, don't re-fire until the window
@@ -129,7 +129,7 @@ func (r *RefusalCluster) evict(rule string, now time.Time) {
 	cutoff := now.Add(-r.Window)
 	in := r.byRule[rule]
 	// Find first index whose occurredAt >= cutoff. Samples were
-	// appended in arrival order, which is roughly chronological — but
+	// appended in arrival order, which is roughly chronological, but
 	// we don't trust that for correctness; sort if needed.
 	if !sort.SliceIsSorted(in, func(a, b int) bool { return in[a].occurredAt.Before(in[b].occurredAt) }) {
 		sort.Slice(in, func(a, b int) bool { return in[a].occurredAt.Before(in[b].occurredAt) })

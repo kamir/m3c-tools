@@ -145,7 +145,7 @@ func TestDocFlagsCountsDefinitionsNotMentions(t *testing.T) {
 		"| `--author-intent green|yellow|red` | defined, value is not a flag |",
 		"| `--a` / `--b` | two spans, both leading |",
 		"",
-		"Run `skillctl report --input <scan.json>` — a command line, so its --input is",
+		"Run `skillctl report --input <scan.json>`: a command line, so its --input is",
 		"only mentioned, never defined.",
 		"",
 		"```bash",
@@ -218,7 +218,7 @@ func TestAuditBothDirectionsAndExemptions(t *testing.T) {
 	}
 }
 
-// An exemption scoped to another CLI must not silence this one — otherwise one
+// An exemption scoped to another CLI must not silence this one. Otherwise one
 // CLI's justified exemption would quietly widen the hole for every other.
 func TestExemptionScopeIsPerCLI(t *testing.T) {
 	dir := t.TempDir()
@@ -313,6 +313,6 @@ func TestRunExitCodes(t *testing.T) {
 func TestRepoSurfaceIsConsistent(t *testing.T) {
 	t.Chdir("../..") // restored by the test framework, so no other test is affected
 	if got := run([]string{"-cli", "all"}); got != 0 {
-		t.Errorf("docaudit -cli all = %d, want 0 — the CLI surface and the manuals disagree; run `go run ./cmd/docaudit -cli <cli> -scaffold`", got)
+		t.Errorf("docaudit -cli all = %d, want 0: the CLI surface and the manuals disagree; run `go run ./cmd/docaudit -cli <cli> -scaffold`", got)
 	}
 }

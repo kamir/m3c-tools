@@ -1,6 +1,6 @@
 package evaluation
 
-// E4 — Behaviour-scan TP/FP on the REAL committed corpus (SPEC-0280 §2; SPEC-0246 §4.6).
+// E4: Behaviour-scan TP/FP on the REAL committed corpus (SPEC-0280 §2; SPEC-0246 §4.6).
 //
 // This is the ONE metric measured on REAL, not synthetic, data: the committed
 // adversarial/benign corpus at pkg/skillctl/bodyscan/testdata/corpus (40
@@ -9,7 +9,7 @@ package evaluation
 //
 //   - True-positive rate  = (adversarial samples caught) / (adversarial samples).
 //     "Caught" = aggregate verdict reaches the sample's expected min_verdict AND
-//     every expected category/rule the sidecar names is present — the SAME
+//     every expected category/rule the sidecar names is present: the SAME
 //     correctness bar the shipped corpus gate uses, so E4 is an honest
 //     re-measurement of the production acceptance criterion.
 //   - False-positive rate = (benign samples scored RED) / (benign samples). Yellow

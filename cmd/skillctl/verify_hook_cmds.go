@@ -1,10 +1,10 @@
 package main
 
-// verify_hook_cmds.go — `skillctl verify-hook` (SPEC-0247 P0.1).
+// verify_hook_cmds.go: `skillctl verify-hook` (SPEC-0247 P0.1).
 //
 // A non-interactive Claude Code PreToolUse(Skill) trust gate. It reads the hook
 // event JSON on stdin, extracts the invoked skill name (the confirmed field
-// `tool_input.skill` — SPEC-0247 §3.4, observed across 93 real events + the
+// `tool_input.skill`: SPEC-0247 §3.4, observed across 93 real events + the
 // production skill-usage hook), re-runs the SPEC-0188 §7 trust chain against the
 // installed skill, and emits a Claude Code permission decision.
 //
@@ -15,15 +15,15 @@ package main
 //   - a suspicious skill name (path traversal)            → DENY
 //
 // Skills skillctl does NOT manage (namespaced/plugin skills, project command
-// skills, built-ins — no stashed .skb under ~/.claude/skills/<name>/) follow the
+// skills, built-ins, no stashed .skb under ~/.claude/skills/<name>/) follow the
 // configurable unmanaged-skills policy (SPEC-0247 §9), default `allow`, so the
 // gate does not break the plugin ecosystem on day one.
 //
 // Wire shape note (SPEC-0247 OQ-1, residual): the structured-deny JSON shape
 // (`hookSpecificOutput.permissionDecision`) is documented but not yet observed
 // firing on this machine. To be safe against that uncertainty, a DENY is emitted
-// THREE ways at once — structured JSON on stdout, a human reason on stderr, and
-// process exit code 2 — so whichever mechanism the installed harness honors, the
+// THREE ways at once (structured JSON on stdout, a human reason on stderr, and
+// process exit code 2) so whichever mechanism the installed harness honors, the
 // skill body does not load. Confirm with scripts/hook-probe.py, then narrow.
 
 import (
@@ -64,7 +64,7 @@ const exitOfflineUnverifiable = 25 // = exitcode.OfflineUnverifiable.Number
 // gateManagedEnterprise reports whether the ROOT-OWNED managed settings enable
 // the SPEC-0317 enterprise posture (`skillctlEnterprise: true`). This is the ONLY
 // source of the `locked` opt-in (Option B): sourcing it from the trust-roots file
-// would make declaring "enterprise" itself create a trust basis — the conflation
+// would make declaring "enterprise" itself create a trust basis: the conflation
 // that left `locked` unreachable. A missing/unreadable/malformed managed file →
 // false (never-brick: `locked` is the most destructive posture and must not
 // engage on a file we cannot cleanly read). Seam: tests set it directly.
@@ -86,7 +86,7 @@ var gateManagedEnterprise = func() bool {
 // It performs NO network probe: `locked` depends only on the managed enterprise
 // opt-in AND trust-basis presence (Compute checks locked BEFORE RegistryReachable),
 // so the hot path stays strictly local. It fast-paths to false for every
-// non-enterprise host BEFORE any filesystem gather — so a default machine pays
+// non-enterprise host BEFORE any filesystem gather, so a default machine pays
 // nothing and AC-1 byte-parity holds trivially.
 var gateOfflineStateDeniesManaged = defaultGateOfflineStateDeniesManaged
 
@@ -124,18 +124,18 @@ var gateStateGatesFallback = func() bool {
 }
 
 // gateSkipOnlineFallback reports whether the SPEC-0317 R-1.4 P2 state-gate should
-// SUPPRESS the online §7 fallback for this invocation — i.e. the operator opted in
+// SUPPRESS the online §7 fallback for this invocation, i.e. the operator opted in
 // AND the state machine is not in `online`. Seam for tests.
 //
 // Like the R-7.2 locked gate it performs NO network probe: the offline-first
 // gather sets RegistryReachable=false, so Compute never yields StateOnline on the
 // hot path and AllowOnlineFallback is false. In practice this means: opted in →
 // the online fallback is always suppressed (the hot path stays strictly local),
-// connected or not — there is no connectivity check on the hot path. Routing
+// connected or not. There is no connectivity check on the hot path. Routing
 // through the state machine (rather than a bare boolean) keeps it the single
 // arbiter and is forward-compatible with a future connectivity probe. For every
 // non-opted-in host it reads only the managed-settings file, then fast-paths to
-// false BEFORE any policy/cache gather — so the decision is byte-identical to the
+// false BEFORE any policy/cache gather, so the decision is byte-identical to the
 // pre-R-1.4-P2 path (AC-1) and the default machine pays only that one small read.
 var gateSkipOnlineFallback = defaultGateSkipOnlineFallback
 
@@ -159,17 +159,17 @@ func refusalCodeForHook(exitCode int, reason string) string {
 		return ""
 	}
 	switch {
-	// SPEC-0317 R-7.2 — the `locked`-state managed deny. A unique token; placed
+	// SPEC-0317 R-7.2: the `locked`-state managed deny. A unique token; placed
 	// first as it cannot be a substring of any other reason.
 	case strings.Contains(reason, "offline_locked"):
 		return "offline_locked"
-	// SPEC-0317 R-1.4 P2 — the state-gated online-fallback deny (a legacy managed
+	// SPEC-0317 R-1.4 P2: the state-gated online-fallback deny (a legacy managed
 	// install with no offline metadata, kept strictly local while disconnected). A
 	// unique token; placed with offline_locked as it cannot be a substring of any
 	// other reason.
 	case strings.Contains(reason, "offline_unverifiable_managed"):
 		return "offline_unverifiable_managed"
-	// SPEC-0277 P1 — agent-authorization denies. Checked BEFORE the generic
+	// SPEC-0277 P1: agent-authorization denies. Checked BEFORE the generic
 	// "revoked"/"unmanaged" cases so an agent deny gets its specific token (e.g.
 	// an "agent_revoked" reason must not be flattened to "bundle_revoked").
 	case strings.Contains(reason, "agentid: skill_not_in_grant"):
@@ -182,7 +182,7 @@ func refusalCodeForHook(exitCode int, reason string) string {
 		return "agent_approver_floor"
 	case strings.Contains(reason, "agentid: agent_owner_sig_invalid"):
 		return "agent_owner_sig_invalid"
-	// SPEC-0279 — the freshness-channel denies (emergency deny-list + stale
+	// SPEC-0279: the freshness-channel denies (emergency deny-list + stale
 	// revocation snapshot). Specific tokens before the generic agentid case so
 	// the Art.12 trail distinguishes a compromise event / a freshness fail-closed
 	// from a plain mandate failure.
@@ -190,19 +190,19 @@ func refusalCodeForHook(exitCode int, reason string) string {
 		return "agent_emergency_denied"
 	case strings.Contains(reason, "agentid: agent_revocation_stale"):
 		return "agent_revocation_stale"
-	// FR-0045 N1 — the signed revocation HEAD is present but failed verification
+	// FR-0045 N1: the signed revocation HEAD is present but failed verification
 	// (tampered/corrupt). A distinct token from the plain-stale case so the Art.12
 	// trail separates "we could not prove the HEAD authentic" from "the HEAD is
 	// authentic but too old". Checked BEFORE the stale case (the two tokens are
 	// disjoint, but keep the more specific one first).
 	case strings.Contains(reason, "bundle_revocation_head_untrusted"):
 		return "bundle_revocation_head_untrusted"
-	// SPEC-0279 R3 / FR-0045 D4 — bundle-revocation snapshot too stale to trust
+	// SPEC-0279 R3 / FR-0045 D4: bundle-revocation snapshot too stale to trust
 	// (fail-closed for a high-risk skill invocation). Distinct from the agentid
 	// mandate stale case so the Art.12 trail separates the two channels.
 	case strings.Contains(reason, "bundle_revocation_stale"):
 		return "bundle_revocation_stale"
-	// WF-001 H-F1 / R01-A — the managed revoked-set was unavailable on the hot path
+	// WF-001 H-F1 / R01-A: the managed revoked-set was unavailable on the hot path
 	// with no authenticated grace (fail-closed). Distinct from the plain-stale case:
 	// here we had NO trustworthy snapshot at all, not merely an old one.
 	case strings.Contains(reason, "bundle_revocation_unavailable_managed"):
@@ -229,7 +229,7 @@ func refusalCodeForHook(exitCode int, reason string) string {
 
 // exitHookBlock is the process exit code Claude Code interprets as "block this
 // tool call" for a PreToolUse hook. It happens to equal exitUsage (2); that is
-// fine — verify-hook never reports a usage error (it has no flags), so 2 here
+// fine. Verify-hook never reports a usage error (it has no flags), so 2 here
 // unambiguously means "deny".
 const exitHookBlock = 2
 
@@ -254,10 +254,10 @@ type hookToolInput struct {
 	SkillName string `json:"skill_name"` // defensive fallback (docs-named)
 	Name      string `json:"name"`       // defensive fallback
 	Args      string `json:"args"`
-	// SPEC-0317 R-6.4 — the Bash/Read/Edit/Write side-channel guard (`skillctl
+	// SPEC-0317 R-6.4: the Bash/Read/Edit/Write side-channel guard (`skillctl
 	// guard-path`) reads these. Command is the Bash tool's shell line; FilePath is
 	// the Read/Edit/Write target. They are unused by the Skill gate (verify-hook),
-	// so adding them is inert for the Skill decision — a plain widening of the
+	// so adding them is inert for the Skill decision: a plain widening of the
 	// shared envelope, not a semantic change.
 	Command  string `json:"command"`   // Bash tool
 	FilePath string `json:"file_path"` // Read | Edit | Write tool
@@ -302,7 +302,7 @@ var hookPreflight func()
 // Panic-safety by design (SPEC-0251 P1): this gate sits on the PreToolUse path,
 // so a panic anywhere below (a malformed cache row, a nil seam in a future
 // refactor, a registry client that dereferences nil) must NOT crash the process
-// — a crash exits non-2 and the harness may interpret a non-block exit as
+//. A crash exits non-2 and the harness may interpret a non-block exit as
 // "allow", silently opening the very hole the gate exists to close. The deferred
 // recover therefore converts any panic into the canonical three-way DENY (exit
 // 2 + decision JSON + stderr), failing closed. The named return `code` is what
@@ -311,7 +311,7 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	// SPEC-0255 gate-audit context: populated as the decision is made; the
 	// deferred logger emits exactly ONE advisory event per gated skill, AFTER the
 	// decision is final (best-effort, never alters code). audActive gates logging
-	// to real skills — pre-skill input-validation denies are not logged.
+	// to real skills: pre-skill input-validation denies are not logged.
 	var (
 		audSkill, audReason, audSession, audHome string
 		audOnline, audCache, audActive           bool
@@ -325,7 +325,7 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	defer func() {
 		if r := recover(); r != nil {
 			code = emitDeny(stdout, stderr,
-				fmt.Sprintf("skillctl verify-hook: internal error (%v) — failing closed (DENY)", r))
+				fmt.Sprintf("skillctl verify-hook: internal error (%v): failing closed (DENY)", r))
 			audReason = fmt.Sprintf("internal error: %v", r)
 		}
 		if audActive {
@@ -334,7 +334,7 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 				Reason: audReason, ExitCode: code,
 				Online: audOnline, CacheHit: audCache, SessionID: audSession,
 			})
-			// SPEC-0202 §9 — emit ONE device-signed invocation record per gated
+			// SPEC-0202 §9: emit ONE device-signed invocation record per gated
 			// skill, for BOTH allow AND deny, into the SEPARATE signed trail.
 			// ALWAYS-ON evidence (Art.12), distinct from the advisory gate-audit
 			// above. Best-effort + panic-safe inside appendSignedInvocation;
@@ -372,7 +372,7 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	}
 
 	// Gate only the Skill tool. A matcher mis-wired onto another tool must not
-	// block it — verify-hook governs skills, nothing else.
+	// block it: verify-hook governs skills, nothing else.
 	if ev.ToolName != "" && ev.ToolName != "Skill" {
 		return emitAllow()
 	}
@@ -398,14 +398,14 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	if nameErr != nil {
 		audReason = "suspicious skill name (not a single safe component)"
 		return emitDeny(stdout, stderr,
-			fmt.Sprintf("skillctl: BLOCKED %q — unsafe skill name (%v); refusing (fail-closed)", skill, nameErr))
+			fmt.Sprintf("skillctl: BLOCKED %q: unsafe skill name (%v); refusing (fail-closed)", skill, nameErr))
 	}
 	skill = canon
 
-	// SPEC-0277 P1 — AgentID authorization layer (the genuinely-new behaviour).
+	// SPEC-0277 P1: AgentID authorization layer (the genuinely-new behaviour).
 	// Computed ONCE, here, for the canonical skill name: it attributes the acting
 	// agent (stamped onto the always-on signed invocation event for allow AND
-	// deny) AND yields the agent-level verdict. ENFORCEMENT is OPT-IN — engaged
+	// deny) AND yields the agent-level verdict. ENFORCEMENT is OPT-IN. Engaged
 	// only when an AgentID mandate is configured. When engaged, EVERY allow path
 	// below (allowlist, cache-hit, the verified chain, …) is wrapped by `allow()`
 	// so an outside-grant / forged / expired / revoked agent is DENIED regardless
@@ -415,23 +415,23 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		audAgentID, audOwner = authz.AgentID, authz.Owner
 	}
 
-	// SPEC-0279 R5 — EMERGENCY DENY-LIST on the installed bundle DIGEST + AUTHOR,
+	// SPEC-0279 R5: EMERGENCY DENY-LIST on the installed bundle DIGEST + AUTHOR,
 	// consulted FIRST and UNCONDITIONALLY (review finding #1, the merge-blocker).
 	// This is the headline emergency guarantee at the runtime SPEC-0247 gate: a
 	// compromised digest/author is denied on sight
 	//   - independent of whether an AgentID mandate is configured (the common case
-	//     has none — the old code only consulted the list inside the mandate path);
+	//     has none, the old code only consulted the list inside the mandate path);
 	//   - BEFORE the `fresh`-guarded readRevokedCache, BEFORE cachedAllow, and
-	//     BEFORE the offline/online chain — so a STALE sweep cache (which skips the
+	//     BEFORE the offline/online chain, so a STALE sweep cache (which skips the
 	//     revoked-digest check) and a low-risk/cached action can NOT keep a burned
 	//     bundle alive. The cache cadence is short-circuited.
 	// A present-but-forged emergency file is fail-closed (DENY). A missing file is
 	// a no-op (the channel is opt-in per machine).
 	if ev := emergencyDeniesInstalledSkill(home, skill); ev.Deny {
 		audReason = "agentid: agent_" + ev.Reason // → emergency_denied / emergency_list_untrusted
-		msg := fmt.Sprintf("skillctl: BLOCKED '%s' — emergency deny-list (compromise event, SPEC-0279 R5); refusing on sight (fail-closed).", skill)
+		msg := fmt.Sprintf("skillctl: BLOCKED '%s', emergency deny-list (compromise event, SPEC-0279 R5); refusing on sight (fail-closed).", skill)
 		if ev.Token != "" {
-			msg = fmt.Sprintf("skillctl: BLOCKED '%s' — emergency deny-list names %q (compromise event, SPEC-0279 R5); refusing on sight regardless of cache freshness or AgentID mandate.", skill, ev.Token)
+			msg = fmt.Sprintf("skillctl: BLOCKED '%s', emergency deny-list names %q (compromise event, SPEC-0279 R5); refusing on sight regardless of cache freshness or AgentID mandate.", skill, ev.Token)
 		}
 		return emitDeny(stdout, stderr, msg)
 	}
@@ -442,7 +442,7 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		if authz.Configured && !authz.Allowed {
 			audReason = "agentid: " + authz.Reason
 			return emitDeny(stdout, stderr,
-				fmt.Sprintf("skillctl: BLOCKED '%s' — agent %s is not authorized (%s). The skill is outside the AgentID's grant, or the mandate failed verification (fail-closed, SPEC-0277).",
+				fmt.Sprintf("skillctl: BLOCKED '%s': agent %s is not authorized (%s). The skill is outside the AgentID's grant, or the mandate failed verification (fail-closed, SPEC-0277).",
 					skill, dashOrAgent(authz.AgentID), authz.Reason))
 		}
 		return emitAllow()
@@ -452,7 +452,7 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 
 	if pol.isAllowlisted(skill) {
 		audReason = "allowlisted"
-		return allow() // operator escape hatch (§9.4) — still bounded by the AgentID grant
+		return allow() // operator escape hatch (§9.4): still bounded by the AgentID grant
 	}
 
 	managed, why := isManagedSkill(skill)
@@ -461,7 +461,7 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		// IS-T7 scope check that only a MANAGED (digest-verified) skill can satisfy.
 		// If all provenance was stripped (.skb + .m3c-provenance.json +
 		// .skillctl-offline.json) so the skill reads as unmanaged, the unmanaged=allow
-		// branch below would skip that scope check entirely — a same-uid actor could
+		// branch below would skip that scope check entirely: a same-uid actor could
 		// delete provenance to escape the mandate. DENY instead, overriding
 		// unmanaged=allow. Never-brick preserved: fires ONLY when a mandate is
 		// configured AND its grant is restricting AND the (verified) grant names this
@@ -470,16 +470,16 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		if authz.Configured && authz.GrantRestricting && authz.GrantNamesSkill {
 			audReason = "unmanaged_under_restricting_mandate"
 			return emitDeny(stdout, stderr,
-				fmt.Sprintf("skillctl: BLOCKED '%s' — not skillctl-managed (%s) but a RESTRICTING AgentID mandate names it, so its declared scope cannot be verified (fail-closed, IS-T7/IS-RS-02). Re-install it with `skillctl install %s` to restore provenance, or widen/relax the mandate.", skill, why, skill))
+				fmt.Sprintf("skillctl: BLOCKED '%s': not skillctl-managed (%s) but a RESTRICTING AgentID mandate names it, so its declared scope cannot be verified (fail-closed, IS-T7/IS-RS-02). Re-install it with `skillctl install %s` to restore provenance, or widen/relax the mandate.", skill, why, skill))
 		}
 		switch pol.Unmanaged {
 		case "deny":
 			audReason = fmt.Sprintf("unmanaged (%s) + policy deny", why)
 			return emitDeny(stdout, stderr,
-				fmt.Sprintf("skillctl: BLOCKED '%s' — not skillctl-managed (%s) and policy unmanaged_skills=deny. Import it with `skillctl import` or allowlist it.", skill, why))
+				fmt.Sprintf("skillctl: BLOCKED '%s': not skillctl-managed (%s) and policy unmanaged_skills=deny. Import it with `skillctl import` or allowlist it.", skill, why))
 		case "warn":
 			audReason = fmt.Sprintf("unmanaged (%s) + policy warn", why)
-			fmt.Fprintf(stderr, "skillctl verify-hook: WARN unverified skill '%s' (%s) — allowed by policy unmanaged_skills=warn\n", skill, why)
+			fmt.Fprintf(stderr, "skillctl verify-hook: WARN unverified skill '%s' (%s): allowed by policy unmanaged_skills=warn\n", skill, why)
 			return allow()
 		default: // "allow"
 			audReason = fmt.Sprintf("unmanaged (%s) + policy allow", why)
@@ -487,27 +487,27 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		}
 	}
 
-	// SPEC-0317 R-7.2 — `locked` STATE: a managed-enterprise host with NO trust
+	// SPEC-0317 R-7.2, `locked` STATE: a managed-enterprise host with NO trust
 	// basis at all (roots/self-roots/sidecar all gone) denies ALL MANAGED skills
-	// here — BEFORE the revoked/verdict cache, so a cached allow cannot outlive a
+	// here, BEFORE the revoked/verdict cache, so a cached allow cannot outlive a
 	// fleet that has lost its policy basis. Unmanaged skills already returned above
 	// and are untouched (R-7.2). The enterprise opt-in is read from the ROOT-OWNED
-	// managed settings (Option B), so this is inert on every non-enterprise host —
+	// managed settings (Option B), so this is inert on every non-enterprise host:
 	// it never bricks a default / self-ER1 / air-gapped machine and preserves AC-1
 	// byte-parity. Emergency already ran first (unconditional); the AgentID grant
 	// still wraps the eventual allow() elsewhere.
 	// NOTE ON SCOPE: this rung sits BELOW the operator allowlist (§9.4) above,
-	// which is read from the USER-owned gate-policy.yaml — so a same-uid user can
+	// which is read from the USER-owned gate-policy.yaml, so a same-uid user can
 	// allowlist a specific managed skill past the lock without root. That matches
 	// the allowlist's existing role as the escape hatch that bypasses all §7
 	// verification; the message therefore says "non-allowlisted", not "all".
 	if gateOfflineStateDeniesManaged(home, now) {
 		audReason = "offline_locked (managed-enterprise, no trust basis; SPEC-0317 R-7.2)"
 		return emitDeny(stdout, stderr,
-			fmt.Sprintf("skillctl: BLOCKED '%s' — offline 'locked' state (exit %d): the host is managed-enterprise but has NO trust basis (no trust roots, self/ER1 roots, or provenance sidecar), so offline_policy denies all non-allowlisted managed skills. Restore a trust root or a signed offline checkpoint.", skill, exitOfflineLocked))
+			fmt.Sprintf("skillctl: BLOCKED '%s': offline 'locked' state (exit %d): the host is managed-enterprise but has NO trust basis (no trust roots, self/ER1 roots, or provenance sidecar), so offline_policy denies all non-allowlisted managed skills. Restore a trust root or a signed offline checkpoint.", skill, exitOfflineLocked))
 	}
 
-	// SPEC-0266 F1 + WF-001 H-F1 / R01-A — bundle-revocation at the HOT PATH.
+	// SPEC-0266 F1 + WF-001 H-F1 / R01-A: bundle-revocation at the HOT PATH.
 	// A bundle revoked AFTER install must be denied PER-INVOCATION, not only at the
 	// SessionStart sweep. The cache is consulted while FRESH (the sweep refreshes
 	// it); the pre-fix code SKIPPED the check on a stale/empty cache, so a revoked
@@ -515,17 +515,17 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	// Close that under MANAGED config: on a stale/empty cache attempt ONE BOUNDED
 	// online refresh on the hot path, and fail CLOSED when the managed revoked set
 	// is unavailable (no authenticated grace). The refresh runs ONLY when the cache
-	// is stale — the fresh path adds ZERO latency to a normal invocation.
+	// is stale: the fresh path adds ZERO latency to a normal invocation.
 	if home != "" {
 		revset, fresh := readRevokedCache(home, revokedCacheTTL)
 		if !fresh {
 			// Stale/empty cache. The managed fail-closed refresh engages ONLY for a
 			// MANAGED host that has ADOPTED a revocation feed (a revoked-cache file
-			// exists — the sweep pulled one at least once). Two exemptions keep a stale
+			// exists: the sweep pulled one at least once). Two exemptions keep a stale
 			// cache from being used AND skip the fetch entirely (no deny, no latency):
-			//   - UNMANAGED/dev — the sweep is the authority; first-run/offline dev
+			//   - UNMANAGED/dev: the sweep is the authority; first-run/offline dev
 			//     must stay working;
-			//   - UN-ADOPTED managed (no revoked-cache file at all) — pre-D2 /
+			//   - UN-ADOPTED managed (no revoked-cache file at all): pre-D2 /
 			//     kill-switch-only hosts that never subscribed to a feed have NOTHING
 			//     to suppress, so failing them closed would brick them (the pre-D2
 			//     brick the kill-switch tests guard). A blackholed ADOPTED host still
@@ -543,7 +543,7 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 				if errors.Is(ferr, errRevokedSetUnavailable) {
 					audReason = "bundle_revocation_unavailable_managed"
 					return emitDeny(stdout, stderr,
-						fmt.Sprintf("skillctl: BLOCKED '%s' — revocation authority unavailable under managed trust roots and no fresh signed snapshot (exit %d, fail-closed, WF-001 H-F1): refusing to run against a revocation state we cannot prove current. Restore registry reachability or refresh the signed revocation HEAD (`skillctl revoke feed --refresh`).", skill, exitRevocationStale))
+						fmt.Sprintf("skillctl: BLOCKED '%s': revocation authority unavailable under managed trust roots and no fresh signed snapshot (exit %d, fail-closed, WF-001 H-F1): refusing to run against a revocation state we cannot prove current. Restore registry reachability or refresh the signed revocation HEAD (`skillctl revoke feed --refresh`).", skill, exitRevocationStale))
 				}
 				revset = set
 			}
@@ -553,17 +553,17 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 				if _, bad := revset[dig]; bad {
 					audReason = "revoked (BundleRevokedEvent)"
 					return emitDeny(stdout, stderr,
-						fmt.Sprintf("skillctl: BLOCKED '%s' — bundle revoked (exit %d); a BundleRevokedEvent was published for this digest. Run `skillctl verify --all` to refresh + quarantine.", skill, exitBundleRevoked))
+						fmt.Sprintf("skillctl: BLOCKED '%s': bundle revoked (exit %d); a BundleRevokedEvent was published for this digest. Run `skillctl verify --all` to refresh + quarantine.", skill, exitBundleRevoked))
 				}
 			}
 		}
 	}
 
-	// SPEC-0279 R3 / FR-0045 D4 — FRESHNESS FAIL-CLOSED. If the revocation snapshot
+	// SPEC-0279 R3 / FR-0045 D4: FRESHNESS FAIL-CLOSED. If the revocation snapshot
 	// is too stale to trust (per the trust-root max_staleness), refuse a high-risk
 	// skill invocation rather than run against a revocation list we can no longer
 	// prove is current. This narrows the fail-OPEN gap above where a >TTL sweep cache
-	// silently skips the revocation check — but only when configured: it is a no-op
+	// silently skips the revocation check, but only when configured: it is a no-op
 	// unless a max_staleness policy is set AND a signed anchor exists (see below), so
 	// on a default host the >TTL stale-cache gap is not closed by this control alone.
 	// Placed BEFORE the verdict-cache fast path
@@ -595,7 +595,7 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		if c, r, ok := verifyManagedOfflineFn(skill, pol, home); ok {
 			code, reason = c, r
 		} else if gateSkipOnlineFallback(home, now) {
-			// SPEC-0317 R-1.4 P2 — no offline metadata for this LEGACY managed
+			// SPEC-0317 R-1.4 P2: no offline metadata for this LEGACY managed
 			// install, and the enterprise state-gate keeps the hot path strictly
 			// local (offline-first; no connectivity probe): the online §7 fallback is
 			// SUPPRESSED, so we fail CLOSED here rather than blocking on an 8s network
@@ -603,7 +603,7 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 			// policy deny).
 			audReason = "offline_unverifiable_managed (state-gated online fallback; SPEC-0317 R-1.4 P2)"
 			return emitDeny(stdout, stderr,
-				fmt.Sprintf("skillctl: BLOCKED '%s' — no offline verification metadata and offline_policy state-gates the online fallback (exit %d offline_unverifiable_managed): the hot path stays strictly local (offline-first). Re-run `skillctl install %s` to stash offline verification metadata.",
+				fmt.Sprintf("skillctl: BLOCKED '%s': no offline verification metadata and offline_policy state-gates the online fallback (exit %d offline_unverifiable_managed): the hot path stays strictly local (offline-first). Re-run `skillctl install %s` to stash offline verification metadata.",
 					skill, exitOfflineUnverifiable, skill))
 		} else {
 			code, reason = verifyManagedFn(skill, pol)
@@ -614,11 +614,11 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		// Same R-1.4 P2 gate with no home to verify offline against. DEFENSIVE /
 		// effectively unreachable: reaching this ladder requires a MANAGED
 		// classification, which requires userHome() to have resolved a non-empty home
-		// above — so home=="" does not occur here in practice. Kept as a fail-closed
+		// above, so home=="" does not occur here in practice. Kept as a fail-closed
 		// belt-and-suspenders (it mirrors the pre-existing home=="" `else` below).
 		audReason = "offline_unverifiable_managed (state-gated online fallback, no home; SPEC-0317 R-1.4 P2)"
 		return emitDeny(stdout, stderr,
-			fmt.Sprintf("skillctl: BLOCKED '%s' — offline_policy state-gates the online fallback and no local home is available to verify offline (exit %d offline_unverifiable_managed).",
+			fmt.Sprintf("skillctl: BLOCKED '%s': offline_policy state-gates the online fallback and no local home is available to verify offline (exit %d offline_unverifiable_managed).",
 				skill, exitOfflineUnverifiable))
 	} else {
 		code, reason = verifyManagedFn(skill, pol)
@@ -629,7 +629,7 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		return allow()
 	}
 	return emitDeny(stdout, stderr,
-		fmt.Sprintf("skillctl: BLOCKED '%s' — %s (exit %d). Run `skillctl verify %s` for the full chain, or `skillctl install %s` to repair.",
+		fmt.Sprintf("skillctl: BLOCKED '%s': %s (exit %d). Run `skillctl verify %s` for the full chain, or `skillctl install %s` to repair.",
 			skill, reason, code, skill, skill))
 }
 
@@ -772,7 +772,7 @@ func reasonForExit(code int, err error) string {
 // revocationSnapshotStale applies the SPEC-0279 R3 freshness contract to the
 // sweep-maintained bundle-revocation snapshot at the runtime gate. It is the
 // fail-CLOSED half of the G5 kill-switch (FR-0045 D4): if the revocation snapshot
-// is too stale to trust — older than the trust-root max_staleness — it refuses a
+// is too stale to trust, older than the trust-root max_staleness, it refuses a
 // high-risk skill invocation rather than run one against a revocation list we can
 // no longer prove is current. That closes the fail-OPEN gap where a >TTL sweep
 // cache silently skipped the revocation check entirely.
@@ -784,7 +784,7 @@ func reasonForExit(code int, err error) string {
 //     signed anchor to judge → no-op (the pre-FR-0045 sweep set-only path stands
 //     unchanged; relevant until the D2 HEAD endpoint ships).
 //   - a no-op anyway when the trust root sets no max_staleness (EvaluateFreshness
-//     ALLOWs an unset ceiling) — so the whole fail-closed behaviour is OPT-IN by
+//     ALLOWs an unset ceiling), so the whole fail-closed behaviour is OPT-IN by
 //     trust-root policy.
 //
 // A skill invocation is classified RiskHigh: its concrete side effects are unknown
@@ -801,14 +801,14 @@ func revocationSnapshotStale(home, skill string) (bool, string, string) {
 		cpPath = p
 	}
 
-	// FR-0045 N1 — a signed HEAD that is PRESENT but fails verification is tampering,
+	// FR-0045 N1: a signed HEAD that is PRESENT but fails verification is tampering,
 	// NOT the pre-D2 "no anchor" case. readRevokedCacheHead returns issued_at="" for
 	// BOTH the ABSENT and the PRESENT-BUT-BAD states, so without this the early no-op
 	// below would flip DENY→ALLOW on a one-byte corruption wherever max_staleness is
 	// configured. Detect the tampered state explicitly and drive it through the
 	// freshness evaluation with an empty anchor (= infinitely stale, per freshness.go)
 	// so a high-risk action fails CLOSED once a max_staleness ceiling is set. The
-	// ABSENT case (no signed HEAD, no checkpoint) stays a no-op — must not brick a
+	// ABSENT case (no signed HEAD, no checkpoint) stays a no-op; it must not brick a
 	// pre-D2 install that never adopted a HEAD.
 	headTampered := false
 	if fileExists(revokedHeadSignedPath(home)) {
@@ -837,10 +837,10 @@ func revocationSnapshotStale(home, skill string) (bool, string, string) {
 	if out.Err != nil {
 		if headTampered {
 			return true, "bundle_revocation_head_untrusted",
-				fmt.Sprintf("skillctl: BLOCKED '%s' — the signed revocation HEAD is present but its ed25519 envelope failed verification (tampered/corrupt); refusing a high-risk skill invocation (exit %d, fail-closed, FR-0045 N1). Run `skillctl revoke feed --refresh` to re-fetch a valid signed HEAD.", skill, exitRevocationStale)
+				fmt.Sprintf("skillctl: BLOCKED '%s': the signed revocation HEAD is present but its ed25519 envelope failed verification (tampered/corrupt); refusing a high-risk skill invocation (exit %d, fail-closed, FR-0045 N1). Run `skillctl revoke feed --refresh` to re-fetch a valid signed HEAD.", skill, exitRevocationStale)
 		}
 		return true, "bundle_revocation_stale",
-			fmt.Sprintf("skillctl: BLOCKED '%s' — revocation snapshot too stale to trust (exit %d, SPEC-0279 R3); refusing a high-risk skill invocation until the revocation feed is refreshed. Run `skillctl verify --all` (or `skillctl revoke feed --refresh`).", skill, exitRevocationStale)
+			fmt.Sprintf("skillctl: BLOCKED '%s': revocation snapshot too stale to trust (exit %d, SPEC-0279 R3); refusing a high-risk skill invocation until the revocation feed is refreshed. Run `skillctl verify --all` (or `skillctl revoke feed --refresh`).", skill, exitRevocationStale)
 	}
 	return false, "", ""
 }
@@ -894,13 +894,13 @@ func defaultGatePolicy() gatePolicy { return gatePolicy{Unmanaged: "allow"} }
 // loadGatePolicy reads ~/.claude/skillctl/gate-policy.yaml.
 //
 // A MISSING file yields safe defaults (unmanaged=allow, managed still verified)
-// — the gate must not brick a fresh machine that never wrote a policy.
+//. The gate must not brick a fresh machine that never wrote a policy.
 //
 // A PRESENT-BUT-BROKEN file (malformed YAML, or an unknown/misspelled field)
 // fails CLOSED (SPEC-0251 SEC-L2, mirroring the SPEC-0188 strict trust-roots
 // loader): the operator clearly INTENDED a policy, so silently discarding it and
-// falling back to unmanaged=allow would turn a typo — e.g. `unmanaged_skils:
-// deny` — into an allow-all, defeating the gate. Instead we treat the unmanaged
+// falling back to unmanaged=allow would turn a typo, e.g. `unmanaged_skils:
+// deny`: into an allow-all, defeating the gate. Instead we treat the unmanaged
 // disposition as `deny` and log a clear warning to stderr. Parsing is strict
 // (yaml.Decoder + KnownFields(true)) so an unknown field is an error, not a
 // silently-ignored line.
@@ -909,7 +909,7 @@ func defaultGatePolicy() gatePolicy { return gatePolicy{Unmanaged: "allow"} }
 // an operator who knows what they are doing can recover without editing the file.
 //
 // loadGatePolicy is the zero-arg convenience form (callers that have no captured
-// stderr — e.g. the sweep in verify_all_cmds.go, and direct unit tests). It logs
+// stderr, e.g. the sweep in verify_all_cmds.go, and direct unit tests). It logs
 // the fail-closed WARN to the process os.Stderr. The verify-hook gate uses
 // loadGatePolicyW so the WARN lands on the SAME stderr writer the harness
 // captures (otherwise the operator never sees the "failing closed" signal on the
@@ -932,7 +932,7 @@ func loadGatePolicyW(warn io.Writer) gatePolicy {
 				// Present but unparseable → fail closed for the unmanaged
 				// disposition rather than silently reverting to allow-all.
 				fmt.Fprintf(warn,
-					"skillctl verify-hook: WARN gate-policy.yaml at %s is invalid (%v) — failing closed: treating unmanaged_skills as deny. Fix the policy or set SKILLCTL_GATE_UNMANAGED.\n",
+					"skillctl verify-hook: WARN gate-policy.yaml at %s is invalid (%v), failing closed: treating unmanaged_skills as deny. Fix the policy or set SKILLCTL_GATE_UNMANAGED.\n",
 					path, derr)
 				p.Unmanaged = "deny"
 			} else {
@@ -943,7 +943,7 @@ func loadGatePolicyW(warn io.Writer) gatePolicy {
 				p.ManagedMinGovernance = loaded.ManagedMinGovernance
 			}
 		}
-		// A missing file (os.ReadFile error) keeps the safe default — see doc.
+		// A missing file (os.ReadFile error) keeps the safe default: see doc.
 	}
 	if e := strings.TrimSpace(os.Getenv("SKILLCTL_GATE_UNMANAGED")); e != "" {
 		p.Unmanaged = e
@@ -952,13 +952,13 @@ func loadGatePolicyW(warn io.Writer) gatePolicy {
 	// SKILLCTL_GATE_UNMANAGED env override) MUST be one of deny|warn|allow. The
 	// gate's switch routes any OTHER value through `default: emitAllow`, so an
 	// attacker who can set a bogus env value (or a typo'd policy) would silently
-	// neuter the unmanaged-skill deny. Validate in one place — unknown → FAIL
+	// neuter the unmanaged-skill deny. Validate in one place: unknown → FAIL
 	// CLOSED to deny with a loud WARN.
 	switch p.Unmanaged {
 	case "deny", "warn", "allow":
 	default:
 		fmt.Fprintf(warn,
-			"skillctl verify-hook: WARN unmanaged_skills=%q is not deny|warn|allow (from gate-policy.yaml or SKILLCTL_GATE_UNMANAGED) — failing closed (treating as deny).\n",
+			"skillctl verify-hook: WARN unmanaged_skills=%q is not deny|warn|allow (from gate-policy.yaml or SKILLCTL_GATE_UNMANAGED): failing closed (treating as deny).\n",
 			p.Unmanaged)
 		p.Unmanaged = "deny"
 	}

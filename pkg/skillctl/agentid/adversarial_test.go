@@ -8,14 +8,14 @@ import (
 	"time"
 )
 
-// adversarial_test.go — explicit red-team coverage for the SPEC-0277 challenge
+// adversarial_test.go: explicit red-team coverage for the SPEC-0277 challenge
 // gate: forge/replay, grant escalation, approver-floor bypass, revocation
 // evasion, and cross-domain signature reuse. Each is a property the design
 // promises; each test pins it so a regression that re-opens the hole fails CI.
 
 var fixedNow = time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 
-// TestAdversarial_CrossDomainAttestationReplay — a signature produced over the
+// TestAdversarial_CrossDomainAttestationReplay: a signature produced over the
 // SPEC-0188 ATTESTATION domain ("attestation\n<digest>\n<level>\n...") must NOT
 // verify as an AgentID owner signature, even though the SAME key signs both. The
 // distinct "agentid_v1" first line is the guard.
@@ -42,7 +42,7 @@ func TestAdversarial_CrossDomainAttestationReplay(t *testing.T) {
 	}
 }
 
-// TestAdversarial_CrossDomainRevocationReplay — a signature over the SPEC-0276
+// TestAdversarial_CrossDomainRevocationReplay: a signature over the SPEC-0276
 // revocation-list domain must not verify as an AgentID owner sig either.
 func TestAdversarial_CrossDomainRevocationReplay(t *testing.T) {
 	pub, priv := mustKey(t)
@@ -63,7 +63,7 @@ func TestAdversarial_CrossDomainRevocationReplay(t *testing.T) {
 	}
 }
 
-// TestAdversarial_AgentIDSigDoesNotCollideWithOtherDomains — the inverse: the
+// TestAdversarial_AgentIDSigDoesNotCollideWithOtherDomains. The inverse: the
 // bytes a valid AgentID is signed over MUST start with the agentid domain and
 // MUST NOT be reinterpretable as any other family's message (they all begin with
 // a different first token). This is a structural assertion on the canonical bytes.
@@ -83,7 +83,7 @@ func TestAdversarial_DomainPrefixIsExclusive(t *testing.T) {
 	}
 }
 
-// TestAdversarial_GrantEscalationDetected — adding ANY skill to the grant after
+// TestAdversarial_GrantEscalationDetected: adding ANY skill to the grant after
 // signing breaks verification (the grant is inside the signed canonical bytes).
 func TestAdversarial_GrantEscalationDetected(t *testing.T) {
 	pub, priv := mustKey(t)
@@ -104,7 +104,7 @@ func TestAdversarial_GrantEscalationDetected(t *testing.T) {
 	}
 }
 
-// TestAdversarial_OwnerImpersonationViaRow — a signature row whose identity_id
+// TestAdversarial_OwnerImpersonationViaRow: a signature row whose identity_id
 // differs from the payload owner cannot launder a valid signature by a different
 // pinned principal into "owner authorization".
 func TestAdversarial_OwnerRowMustMatchPayloadOwner(t *testing.T) {
@@ -119,7 +119,7 @@ func TestAdversarial_OwnerRowMustMatchPayloadOwner(t *testing.T) {
 	}
 }
 
-// TestAdversarial_RevocationEvasionByOmission — the offline revocation set is
+// TestAdversarial_RevocationEvasionByOmission: the offline revocation set is
 // authoritative; an attacker cannot evade it by relying on the AgentID itself
 // (which has no revocation field). The gate/CLI supplies the verified set.
 func TestAdversarial_RevocationStillBindsWithValidSignature(t *testing.T) {
@@ -136,7 +136,7 @@ func TestAdversarial_RevocationStillBindsWithValidSignature(t *testing.T) {
 	}
 }
 
-// TestAdversarial_ApproverFloorCaseTwins — the approver != owner check is
+// TestAdversarial_ApproverFloorCaseTwins: the approver != owner check is
 // case-normalized, so an attacker cannot satisfy "approver != owner" by merely
 // re-casing the owner id in the approver row (and signing with the owner key).
 func TestAdversarial_ApproverFloorCaseTwins(t *testing.T) {

@@ -1,6 +1,6 @@
 //go:build darwin
 
-// capture.go — Unified capture pipeline data and Store/Draft actions.
+// capture.go: Unified capture pipeline data and Store/Draft actions.
 //
 // CaptureData holds all observation data collected across the 4-step pipeline
 // (Capture → Record → Review → Tags). The Store action uploads to ER1; the
@@ -71,7 +71,7 @@ type StoreResult struct {
 
 // StoreToER1 uploads the capture data to the ER1 endpoint. On failure, the
 // upload is queued for retry via the JSON queue. Returns a StoreResult with
-// the outcome. This function never returns an error — failures are captured
+// the outcome. This function never returns an error. Failures are captured
 // in the result and queued for retry.
 func StoreToER1(data *CaptureData) *StoreResult {
 	cfg := er1.LoadConfig()
@@ -225,7 +225,7 @@ func DefaultCaptureData(channel impression.ObservationType) *CaptureData {
 	}
 
 	// Pre-fill tags and content type based on channel.
-	// Each channel has its own content type — ER1_CONTENT_TYPE is only used
+	// Each channel has its own content type. ER1_CONTENT_TYPE is only used
 	// for Progress (YouTube) uploads to stay backward-compatible.
 	switch channel {
 	case impression.Idea:

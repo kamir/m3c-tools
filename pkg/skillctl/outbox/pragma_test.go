@@ -1,6 +1,6 @@
 // pragma_test.go proves the R-2.4 hot-path constraint on the PURE-GO (modernc)
 // driver path: with a competing writer holding the file's write lock, the hot
-// Append must return within the pinned busy_timeout (~250ms) — NEVER the 5000ms
+// Append must return within the pinned busy_timeout (~250ms), NEVER the 5000ms
 // house default (a 5s stall would freeze the hook and the harness could read the
 // non-return as ALLOW, AC-3). The caller then spools.
 //
@@ -25,7 +25,7 @@ func TestBusyTimeoutBoundedModernc(t *testing.T) {
 	defer s.Close()
 
 	// A SECOND independent handle to the same file (the cross-process
-	// contention R-2.4 addresses — each process has its own pinned connection).
+	// contention R-2.4 addresses, each process has its own pinned connection).
 	blocker, err := openHotPathDB(DBPath(home))
 	if err != nil {
 		t.Fatalf("open blocker: %v", err)

@@ -14,7 +14,7 @@ import (
 )
 
 // writeTestPubkey produces a PEM SPKI ed25519 public key file. Same shape
-// the `skillctl keygen` subcommand emits — the trust commands accept that
+// the `skillctl keygen` subcommand emits: the trust commands accept that
 // format so the round-trip is honest.
 func writeTestPubkey(t *testing.T, dir, name string) string {
 	t.Helper()
@@ -108,7 +108,7 @@ func TestTrust_AddListRemove_Roundtrip(t *testing.T) {
 	if _, err := os.Stat(cfg); err != nil {
 		t.Fatalf("config not written: %v", err)
 	}
-	// File mode should be 0600 — a real security check on the trust config.
+	// File mode should be 0600: a real security check on the trust config.
 	// SEC-WIN: Windows reports a 0600-written file back as 0666 (ACLs, not
 	// POSIX bits), so the assertion is kept full-strength on Unix and only
 	// platform-gated where the OS cannot honour the mode.
@@ -119,7 +119,7 @@ func TestTrust_AddListRemove_Roundtrip(t *testing.T) {
 		}
 	}
 
-	// list — should show the registry and the key.
+	// list: should show the registry and the key.
 	stdout.Reset()
 	stderr.Reset()
 	if code := runTrust([]string{"list"}, &stdout, &stderr); code != exitOK {
@@ -139,7 +139,7 @@ func TestTrust_AddListRemove_Roundtrip(t *testing.T) {
 		t.Fatalf("trust remove exit=%d, stderr=%s", code, stderr.String())
 	}
 
-	// list again — should be empty.
+	// list again: should be empty.
 	stdout.Reset()
 	stderr.Reset()
 	if code := runTrust([]string{"list"}, &stdout, &stderr); code != exitOK {

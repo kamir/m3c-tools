@@ -12,7 +12,7 @@ export THINKING_ENGINE_SECRET=dev-secret-please-change
 curl http://localhost:7140/v1/health     # returns ctx hash
 ```
 
-Week 1 ships an in-memory Kafka bus and a stubbed ER1 client — no
+Week 1 ships an in-memory Kafka bus and a stubbed ER1 client, no
 broker required. See PLAN-0167 for the week-by-week roadmap.
 
 ## Run with the real broker (`thinking_kafka` build tag, Stream 2c)
@@ -31,7 +31,7 @@ make thinking-up            # zookeeper + broker + schema-registry + control-cen
 make thinking-topics        # create the 8 canonical topics
 ```
 
-### 2. Build the engine image (optional — only needed for container runs)
+### 2. Build the engine image (optional: only needed for container runs)
 
 ```bash
 make thinking-image         # tags m3c/thinking-engine:dev
@@ -66,7 +66,7 @@ docker compose -f deploy/thinking-engine/docker-compose.yml --profile engine up 
 M3C_KAFKA_URL=localhost:9092 make thinking-test-integration
 ```
 
-Without `M3C_KAFKA_URL` the test skips cleanly — this is the CI path
+Without `M3C_KAFKA_URL` the test skips cleanly: this is the CI path
 for environments that don't have a broker available.
 
 ## Isolation invariant
@@ -74,7 +74,7 @@ for environments that don't have a broker available.
 Every produce and subscribe goes through `assertOwnedBy(topic, owner)`
 in `internal/thinking/kafka/topics.go`, which panics on any topic
 whose prefix does not match the engine's own ctx hash. This is a
-runtime guard, not a lint — SPEC-0167 §Isolation Model makes it
+runtime guard, not a lint. SPEC-0167 §Isolation Model makes it
 operational, not advisory. The franz-go driver inherits this guard
 unchanged.
 
@@ -85,7 +85,7 @@ users' engines pointed at the same broker still cannot share a group.
 ## Dev-Cycle Recipes
 
 See **SPEC-0167** and **PLAN-0167** §Stream 3c in the private maintenance plane
-for detail — referenced by id, because a public-plane file must not carry a path
+for detail. Referenced by id, because a public-plane file must not carry a path
 into the private one (SPEC-0358).
 `NewAdapterFromEnv()` picks an LLM by env:
 `OPENAI_API_KEY` → OpenAI; else `OLLAMA_URL` → Ollama (zero-cost local);

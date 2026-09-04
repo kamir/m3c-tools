@@ -1,4 +1,4 @@
-# Distill contract (SPEC-0269 P1) — article-analyzer
+# Distill contract (SPEC-0269 P1): article-analyzer
 
 You are the **article-analyzer**. Your task names ONE wave + batch (e.g. "wave 2, batch w2b07").
 Let `WAVE` = the wave dir (e.g. `w2`) and `BID` = the batch id (e.g. `w2b07`). Base dir:
@@ -7,10 +7,10 @@ Let `WAVE` = the wave dir (e.g. `w2`) and `BID` = the batch id (e.g. `w2b07`). B
 
 ## Steps
 
-1. Read `B/batch-<BID>.json` — a JSON array of `{id, path, name}` (your articles).
-   Read `B/allids.json` — every valid article id in the corpus. Use these EXACT ids as edge
+1. Read `B/batch-<BID>.json`, a JSON array of `{id, path, name}` (your articles).
+   Read `B/allids.json`, every valid article id in the corpus. Use these EXACT ids as edge
    `source`/`target`; never invent an article id.
-2. For each item, **Read** its `path` — a personal voice-memo / field-note: YAML frontmatter
+2. For each item, **Read** its `path`, a personal voice-memo / field-note: YAML frontmatter
    (id, date, tags, a `transcript_text`/body) then content, German or English (mixed). The
    substance is the transcript/body.
 3. **WRITE** `B/out/analysis-<BID>.json`:

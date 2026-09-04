@@ -4,7 +4,7 @@ package main
 // subcommands. They live in their own file so the integration branch
 // can merge into the existing skillctl main.go (on the
 // feature/thinking-engine-phase1 branch) by just adding three case
-// branches in the dispatch switch — no logic conflicts.
+// branches in the dispatch switch, no logic conflicts.
 
 import (
 	"errors"
@@ -105,7 +105,7 @@ func runSign(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("sign", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	keyPath := fs.String("key", "", "Path to PEM PKCS#8 ed25519 private key (mode 0600). Required.")
-	identityID := fs.String("identity-id", "", "Author identity id — ADVISORY ONLY, NOT embedded in the signature. The detached signature is over the bundle digest alone; author identity is bound at verify time via the trust-root pin (SPEC-0188 D4), not by this flag.")
+	identityID := fs.String("identity-id", "", "Author identity id: ADVISORY ONLY, NOT embedded in the signature. The detached signature is over the bundle digest alone; author identity is bound at verify time via the trust-root pin (SPEC-0188 D4), not by this flag.")
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: skillctl sign --key PATH.priv [--identity-id ID] BUNDLE.skb")
 		fmt.Fprintln(stderr, "")

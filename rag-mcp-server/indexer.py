@@ -1,10 +1,10 @@
 """Workspace indexer + incremental sync over a turbovec IdMapIndex (SPEC-0268).
 
-build()  — full index from scratch.
-sync()   — re-embed only files changed/added/deleted since the last sync.
-search() — embed a query, optional path_prefix / since_days allowlist, hydrate.
-verify() — FRESH/STALE: does the committed index match the current workspace?
-stats()  — counts + state, no model load.
+build(), full index from scratch.
+sync(), re-embed only files changed/added/deleted since the last sync.
+search(), embed a query, optional path_prefix / since_days allowlist, hydrate.
+verify(), FRESH/STALE: does the committed index match the current workspace?
+stats(): counts + state, no model load.
 
 Git-tracked artifacts in <ws>/.rag/ (see SPEC-0268 "Tracking the index in git"):
   index.tvim     binary vectors            -> Git LFS
@@ -329,7 +329,7 @@ class Indexer:
         # retrieval, because the rest of the sentence dominates the embedding.
         # Measured 2026-09-01 over 4 workspaces / ~125k chunks: the German question
         # "Wird propose-by-default serverseitig erzwungen?" returned nothing from
-        # admission.py or SPEC-0350 in the top FIFTY — although `propose-by-default`
+        # admission.py or SPEC-0350 in the top FIFTY, although `propose-by-default`
         # occurs literally in both, and in 13 files overall. Not a ranking problem
         # (reranking cannot fix what was never retrieved) but a recall problem.
         deep = max(k * 5, 50) if mode == "hybrid" else k
@@ -349,7 +349,7 @@ class Indexer:
             fused = [cid for cid, _ in pairs][:k]
             # EXAKTBEGRIFF HAT VORRANG. Traegt die Frage einen Identifier
             # (`propose-by-default`, `ail_admission_hook`, `SPEC-0350`), dann ist
-            # der woertliche Treffer das staerkste Signal, das es gibt — staerker
+            # der woertliche Treffer das staerkste Signal, das es gibt: staerker
             # als jede Aehnlichkeit. Reines RRF verliert ihn trotzdem, weil es
             # Treffer belohnt, die BEIDE Haelften finden: ist die dichte Haelfte
             # fuer diese Frage falsch, gewinnen Rausch-Chunks, die zufaellig in
@@ -367,7 +367,7 @@ class Indexer:
 
         dense_rank = {cid: r for r, cid in enumerate(dense_ids, 1)}
         lex_rank = {cid: r for r, cid in enumerate(lex_ids, 1)}
-        # Der Score bleibt die Kosinus-Aehnlichkeit, wo es eine gibt — sonst waere
+        # Der Score bleibt die Kosinus-Aehnlichkeit, wo es eine gibt: sonst waere
         # die Ausgabe nicht mehr mit fruheren Laeufen vergleichbar. Woher ein
         # Treffer kommt, sagt `via`.
         dense_score = {int(i): float(s) for s, i in zip(*_tv_search(idx, qv, deep, allow))} \

@@ -1,4 +1,4 @@
-// plaud_sync_darwin.go — Native macOS Plaud Sync Window via Cocoa/cgo.
+// plaud_sync_darwin.go: Native macOS Plaud Sync Window via Cocoa/cgo.
 //
 // Creates an NSWindow with an NSTableView showing Plaud recordings
 // with checkboxes for selection and a "Sync Selected" button.
@@ -30,7 +30,7 @@ static BOOL          g_plaudBulkActive = NO;
 
 // Headroom for large accounts. At 200 this silently dropped rows (a 209-item
 // account showed only 200, so "Select All" selected 200/209). The static arrays
-// below scale linearly (~few hundred KB at 2000) — cheap.
+// below scale linearly (~few hundred KB at 2000): cheap.
 #define PLAUD_MAX_ROWS 2000
 #define PLAUD_COLS     6
 
@@ -347,7 +347,7 @@ static PlaudSyncTableDataSource *g_plaudDS = nil;
 // ---------- Window Creation ----------
 
 static void showPlaudSyncWindow(const char *accountInfo) {
-	// FIX: Copy accountInfo before dispatch_async — the Go caller frees the
+	// FIX: Copy accountInfo before dispatch_async: the Go caller frees the
 	// original pointer (via defer) before this block executes on the main queue.
 	char *accountCopy = accountInfo ? strdup(accountInfo) : NULL;
 	dispatch_async(dispatch_get_main_queue(), ^{
@@ -367,7 +367,7 @@ static void showPlaudSyncWindow(const char *accountInfo) {
 					   NSWindowStyleMaskMiniaturizable)
 			backing:NSBackingStoreBuffered
 			defer:NO];
-		[g_plaudWindow setTitle:@"Plaud Sync — Fieldnote Recordings"];
+		[g_plaudWindow setTitle:@"Plaud Sync: Fieldnote Recordings"];
 		[g_plaudWindow setMinSize:NSMakeSize(600, 400)];
 
 		NSView *content = [g_plaudWindow contentView];
@@ -390,7 +390,7 @@ static void showPlaudSyncWindow(const char *accountInfo) {
 		// Buttons row
 		CGFloat btnY = frame.size.height - 60;
 
-		// Wider than 80 so the full labels show — at 80px both truncated to
+		// Wider than 80 so the full labels show: at 80px both truncated to
 		// "Select" and looked like two identical buttons.
 		NSButton *btnSelectAll = [[NSButton alloc] initWithFrame:NSMakeRect(10, btnY, 96, 24)];
 		[btnSelectAll setTitle:@"Select All"];

@@ -1,4 +1,4 @@
-// recorder_stub.go — Stubs for platforms without PortAudio support.
+// recorder_stub.go: Stubs for platforms without PortAudio support.
 //
 //go:build !darwin
 

@@ -1,21 +1,21 @@
-# deploy/skillctl/Dockerfile — container image for skillctl
+# deploy/skillctl/Dockerfile: container image for skillctl
 # (SPEC-0354 D1, mirrors deploy/thinking-engine/Dockerfile).
 #
 # skillctl is the skill trust-plane CLI: pack / sign / verify / install /
 # pull / attest / revoke / audit. It is pure Go with CGO disabled, so it
-# builds to a fully static binary and ships on a `distroless/static` base —
+# builds to a fully static binary and ships on a `distroless/static` base,
 # no shell, non-root, ~20 MB. The intended runtime shapes are:
 #   • a k8s Job / initContainer  (pull -> verify -> install into a PVC), and
 #   • a Compose/pod sidecar next to the MCP servers (SPEC-0354 D5).
 #
-# Build (engine-agnostic — docker OR podman):
+# Build (engine-agnostic: docker OR podman):
 #   make skillctl-image
 #   make skillctl-image CONTAINER_ENGINE=podman
 # Or directly:
 #   docker build -f deploy/skillctl/Dockerfile -t m3c/skillctl:dev .
 #
 # NOTE: the capture-plane features (portaudio recorder, menubar) are cgo +
-# macOS-only and are deliberately NOT part of any container — see SPEC-0354 §4.
+# macOS-only and are deliberately NOT part of any container. See SPEC-0354 §4.
 # Only the reine-Go trust-plane is containerized here.
 
 # ---- Stage 1: build ----------------------------------------------------

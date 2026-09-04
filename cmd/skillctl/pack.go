@@ -14,12 +14,12 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 )
 
-// cmdPack implements `skillctl pack` per SPEC-0188 §3 — produce a deterministic
+// cmdPack implements `skillctl pack` per SPEC-0188 §3: produce a deterministic
 // `.skb` archive from a local skill directory.
 //
 // SPEC-0196 §12 Q1 / P2b: `--data-scopes` binds a typed, validated data-scope
 // declaration INTO the signed `bundle.json` (manifest.Intent + manifest.
-// DataDependencies) BEFORE the digest is computed and the author signs — so the
+// DataDependencies) BEFORE the digest is computed and the author signs, so the
 // declaration is covered by the author signature, not the mutable post-admit
 // PATCH row. The validation is fail-closed at pack time: an invalid or §3.3-
 // contradictory scope is rejected before any bundle is produced, with the SAME
@@ -44,7 +44,7 @@ type packInputs struct {
 	dataScopeJSON []string // repeated --data-scopes / --data-dep JSON blobs (datascope wire shape)
 	usedDataDep   bool     // true if the deprecated --data-dep alias was used (warn once)
 
-	// SPEC-0196 §3.1 intent toggles — only the fields the §3.3 cross-rules read
+	// SPEC-0196 §3.1 intent toggles: only the fields the §3.3 cross-rules read
 	// are first-class flags; the rest of the intent block stays advisory.
 	sideEffects string // comma-separated §5 side-effect tokens
 	destructive string // "" | true | false (pointer-ish: "" = unset)
@@ -73,17 +73,17 @@ func runPack(args []string, stdout, stderr io.Writer) int {
 	}
 	in.manifest.DependsOn = deps
 
-	// SPEC-0196 §12 Q1 / P2b — bind the validated data-scope into the manifest
+	// SPEC-0196 §12 Q1 / P2b: bind the validated data-scope into the manifest
 	// BEFORE Pack computes the digest. Fail-closed: an invalid declaration aborts
 	// the pack so no bundle is ever produced with an unvalidated scope.
 	if code, ok := bindDataScope(&in, stderr); !ok {
 		return code
 	}
 
-	// FR-0090 IS-RS-03 — a PRODUCER-SIDE body-vs-declaration lint at pack time. IS-T7
+	// FR-0090 IS-RS-03: a PRODUCER-SIDE body-vs-declaration lint at pack time. IS-T7
 	// enforces the author-DECLARED manifest, but nothing binds the declaration to what
 	// the SKILL.md body actually does. This gate FAILS the pack on a RED
-	// FrontmatterConsistency finding — principally TOOL ESCALATION: the body uses a
+	// FrontmatterConsistency finding. Principally TOOL ESCALATION: the body uses a
 	// tool the manifest does not declare (an undeclared `curl`/`bash`, etc.). A softer
 	// intent mismatch where the tool IS declared (e.g. declares Bash, runs curl, with
 	// intent:network=false) is a 🟡 note that may pass (URL heuristics are
@@ -92,7 +92,7 @@ func runPack(args []string, stdout, stderr io.Writer) int {
 	//
 	// SCOPE (honest): this binds the COOPERATING producer only. A hand-built .skb
 	// installed via `skillctl install` never runs pack, so an untrusted federated
-	// author (SPEC-0359) can still ship a contradicting body — the non-repudiable
+	// author (SPEC-0359) can still ship a contradicting body. The non-repudiable
 	// close is a consumer-side re-scan at verify/install or folding the verdict into
 	// the signed attestation (tracked follow-up), not this pack lint.
 	if code, ok := packBodyConsistencyGate(in.skillDir, stderr); !ok {
@@ -118,13 +118,13 @@ func runPack(args []string, stdout, stderr io.Writer) int {
 
 // packBodyConsistencyGate runs the SPEC-0246 bodyscan over the skill's SKILL.md
 // and enforces the declaration↔behavior binding at pack time (FR-0090 IS-RS-03):
-// a RED bodyscan.FrontmatterConsistency finding — the body reaches a capability
+// a RED bodyscan.FrontmatterConsistency finding: the body reaches a capability
 // (e.g. an outbound call via curl) that the declared allowed-tools / intent do not
-// grant — FAILS the pack. A 🟡 consistency finding is a note, not a block
+// grant. FAILS the pack. A 🟡 consistency finding is a note, not a block
 // (mirroring propose check #11's yellow-may-pass). Returns (exitCode, ok); ok=false
 // aborts before Pack so no bundle is produced from a self-contradictory body.
 //
-// If SKILL.md cannot be resolved/scanned here it is NOT failed by this gate —
+// If SKILL.md cannot be resolved/scanned here it is NOT failed by this gate:
 // skillbundle.Pack owns the missing-SKILL.md error, and this gate must not change
 // that behavior or brick a pack whose body simply could not be pre-read.
 func packBodyConsistencyGate(skillDir string, stderr io.Writer) (int, bool) {
@@ -137,8 +137,8 @@ func packBodyConsistencyGate(skillDir string, stderr io.Writer) (int, bool) {
 		// The SKILL.md RESOLVED but could not be read+scanned here. Do NOT defer to
 		// Pack (a TOCTOU where the file becomes readable at Pack time would then pack
 		// an UNSCANNED body): a consistency gate cannot PASS a body it could not
-		// examine — fail closed.
-		fmt.Fprintf(stderr, "skillctl pack: REFUSED — SKILL.md resolved but could not be scanned for body-vs-declaration consistency (IS-RS-03): %v\n", err)
+		// examine, fail closed.
+		fmt.Fprintf(stderr, "skillctl pack: REFUSED, SKILL.md resolved but could not be scanned for body-vs-declaration consistency (IS-RS-03): %v\n", err)
 		return verify.ExitIntentInconsistent, false
 	}
 	// An oversized (>1 MiB) body is NOT consistency-scanned (bodyscan DoS guard emits
@@ -146,7 +146,7 @@ func packBodyConsistencyGate(skillDir string, stderr io.Writer) (int, bool) {
 	// declaration↔behavior must not silently pass an unscanned body → fail closed.
 	for _, f := range rep.Findings {
 		if f.RuleID == bodyscan.RuleIDOversized {
-			fmt.Fprintf(stderr, "skillctl pack: REFUSED — SKILL.md body is too large to scan for body-vs-declaration consistency (IS-RS-03): %s\n", f.Message)
+			fmt.Fprintf(stderr, "skillctl pack: REFUSED: SKILL.md body is too large to scan for body-vs-declaration consistency (IS-RS-03): %s\n", f.Message)
 			return verify.ExitIntentInconsistent, false
 		}
 	}
@@ -157,7 +157,7 @@ func packBodyConsistencyGate(skillDir string, stderr io.Writer) (int, bool) {
 		}
 	}
 	if len(reds) > 0 {
-		fmt.Fprintf(stderr, "skillctl pack: REFUSED — the SKILL.md body contradicts its own declaration (🔴 body-vs-declaration, IS-RS-03):\n")
+		fmt.Fprintf(stderr, "skillctl pack: REFUSED: the SKILL.md body contradicts its own declaration (🔴 body-vs-declaration, IS-RS-03):\n")
 		for _, r := range reds {
 			fmt.Fprintf(stderr, "  - %s\n", r)
 		}
@@ -271,7 +271,7 @@ func parsePackArgs(args []string, stderr io.Writer) (packInputs, int, bool) {
 			in.dataScopeJSON = append(in.dataScopeJSON, v)
 		case "--data-dep":
 			// Deprecated alias for --data-scopes (same JSON shape, same
-			// validation) — kept symmetric with `intent declare`.
+			// validation): kept symmetric with `intent declare`.
 			i++
 			if v, ok = take(i, "--data-dep"); !ok {
 				return in, exitUsage, false
@@ -311,7 +311,7 @@ func parsePackArgs(args []string, stderr io.Writer) (packInputs, int, bool) {
 // the validated typed scope into in.manifest.Intent + in.manifest.DataDependencies
 // so the binding is covered by the author signature.
 //
-// Returns (exitCode, ok). When ok=false the caller aborts before Pack — no
+// Returns (exitCode, ok). When ok=false the caller aborts before Pack: no
 // bundle is produced. Exit-code policy mirrors `intent declare`:
 //   - §3.3 cross-rule fired   → exit 18 (verify.ExitIntentInconsistent), failed_rule printed
 //   - malformed scope/json    → exit 2  (usage)
@@ -374,7 +374,7 @@ func bindDataScope(in *packInputs, stderr io.Writer) (int, bool) {
 	}
 
 	// Bind the validated scope into the signed manifest. Marshal each typed
-	// DataScope through its JSON tags into the manifest's DataDependency — the
+	// DataScope through its JSON tags into the manifest's DataDependency. The
 	// tags are identical (SPEC-0196 §3.2 wire shape), so this is a lossless
 	// round-trip and the bytes that land in bundle.json match the declaration.
 	deps, err := scopesToManifestDeps(scopes)
@@ -391,7 +391,7 @@ func bindDataScope(in *packInputs, stderr io.Writer) (int, bool) {
 
 // buildPackIntent assembles the signed-manifest *skillbundle.Intent from the
 // intent toggle flags. Returns nil when no intent flag was supplied (the
-// common case — most skills declare scopes without overriding intent). A
+// common case: most skills declare scopes without overriding intent). A
 // malformed bool flag is a usage error.
 func buildPackIntent(in *packInputs, stderr io.Writer) (*skillbundle.Intent, int, bool) {
 	if in.sideEffects == "" && in.destructive == "" && in.network == "" {
@@ -423,7 +423,7 @@ func buildPackIntent(in *packInputs, stderr io.Writer) (*skillbundle.Intent, int
 // typedIntent projects a signed-manifest *skillbundle.Intent onto the datascope
 // validator's typed Intent (only the §3.3 cross-rule fields). A nil manifest
 // intent yields the zero datascope.Intent (all-absent), which the cross-rules
-// treat as "nothing declared" — the safe default.
+// treat as "nothing declared": the safe default.
 func typedIntent(m *skillbundle.Intent) datascope.Intent {
 	if m == nil {
 		return datascope.Intent{}
@@ -443,7 +443,7 @@ func typedIntent(m *skillbundle.Intent) datascope.Intent {
 
 // scopesToManifestDeps round-trips each typed DataScope through its JSON tags
 // into a manifest DataDependency. The tags match exactly (SPEC-0196 §3.2), so
-// the bytes are conserved — the verifier reads back the identical declaration.
+// the bytes are conserved. The verifier reads back the identical declaration.
 func scopesToManifestDeps(scopes []datascope.DataScope) ([]skillbundle.DataDependency, error) {
 	deps := make([]skillbundle.DataDependency, 0, len(scopes))
 	for i, s := range scopes {
@@ -466,7 +466,7 @@ func scopesToManifestDeps(scopes []datascope.DataScope) ([]skillbundle.DataDepen
 func reportScopeValidationError(verr error, stderr io.Writer) (int, bool) {
 	var ve *datascope.ValidationError
 	if errors.As(verr, &ve) && ve.FailedRule != "" {
-		fmt.Fprintf(stderr, "skillctl pack: rejected at pack time — failed_rule=%s\n", ve.FailedRule)
+		fmt.Fprintf(stderr, "skillctl pack: rejected at pack time: failed_rule=%s\n", ve.FailedRule)
 		fmt.Fprintf(stderr, "detail: %s\n", ve.Detail)
 		return verify.ExitCode(fmt.Errorf("rule=%s: %w", ve.FailedRule, verify.ErrIntentInconsistent)), false
 	}
@@ -522,12 +522,12 @@ Optional manifest fields:
   --source-repo <s>        e.g. kamir/m3c-tools-maintenance
   --source-commit <sha>
   --source-path <s>
-  --author-intent <s>      green | yellow | red (advisory only — verifier ignores; signed attestations bind)
+  --author-intent <s>      green | yellow | red (advisory only: verifier ignores; signed attestations bind)
   --author-intent-rationale <s>
   --compatibility <s>
   --depends-on kind:name:constraint   Repeatable, e.g. python:requests:>=2.31
 
-SPEC-0196 §12 Q1 / P2b — author-signed declared data-scope (bound INTO bundle.json):
+SPEC-0196 §12 Q1 / P2b: author-signed declared data-scope (bound INTO bundle.json):
   --data-scopes <json>     Typed SPEC-0196 data-scope (repeatable). Validated fail-closed
                            at pack time through pkg/skillctl/datascope (per-kind scope,
                            §5 side-effect vocab, §3.3 cross-rules) BEFORE the digest is

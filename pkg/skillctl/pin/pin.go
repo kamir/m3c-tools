@@ -8,18 +8,18 @@
 // root-owned system directory).
 //
 // Verified mechanism (Claude Code docs, fetched 2026-07-08):
-//   - Managed settings occupy the HIGHEST precedence tier; nothing — not even a
-//     CLI flag or `--dangerously-skip-permissions` — overrides them.
+//   - Managed settings occupy the HIGHEST precedence tier; nothing, not even a
+//     CLI flag or `--dangerously-skip-permissions`, overrides them.
 //   - A hook defined in managed settings cannot be suppressed or deleted by
 //     user/project settings, so the gate becomes un-deletable by non-root users
-//     (root, or anyone who can write the managed-settings dir, still can —
+//     (root, or anyone who can write the managed-settings dir, still can,
 //     SPEC-0247 §3.2).
 //   - A PreToolUse hook returning "deny" blocks even under
 //     `--dangerously-skip-permissions`, and a user "allow" hook can never
-//     override a "deny" — so a managed deny is absolute.
+//     override a "deny", so a managed deny is absolute.
 //   - `allowManagedHooksOnly: true` (STRICT) additionally blocks ALL user and
 //     project hooks. That is the CISO lockdown, but it also disables any OTHER
-//     user hooks the operator relies on (e.g. usage telemetry) — callers MUST
+//     user hooks the operator relies on (e.g. usage telemetry): callers MUST
 //     warn about this. Without it, the gate is still un-deletable by non-root
 //     users and its deny is still absolute; the operator's own hooks keep working.
 //
@@ -64,27 +64,27 @@ type GenerateOptions struct {
 	Strict bool
 	// Harden implies Strict and also sets `disableBypassPermissionsMode:"disable"`.
 	Harden bool
-	// Enterprise emits `skillctlEnterprise: true` — the SPEC-0317 R-7.2 opt-in
+	// Enterprise emits `skillctlEnterprise: true`: the SPEC-0317 R-7.2 opt-in
 	// that the runtime gate reads to enable the `offline_locked` state. It lives
 	// HERE (the root-owned managed-settings tier), deliberately separate from the
 	// trust-roots verification material: declaring "enterprise" must not itself
 	// create a trust basis (that conflation made `locked` unreachable). Claude
 	// Code ignores the unknown key (its schema is additive); skillctl reads it.
 	Enterprise bool
-	// RequireLocalAudit emits `skillctlRequireLocalAudit: true` — the SPEC-0317
+	// RequireLocalAudit emits `skillctlRequireLocalAudit: true`: the SPEC-0317
 	// R-8.2 opt-in that inverts the SPEC-0255 fire-and-forget audit contract: when
 	// set, `skillctl enforce` fails CLOSED (exit 26) if an ALLOW's evidence cannot
 	// be durably recorded. It is ENTERPRISE-ONLY, so setting it also emits
 	// skillctlEnterprise:true. Same root-owned managed tier as Enterprise, so the
 	// two enterprise knobs share ONE source (closing the R-7.2 F3 split).
 	//
-	// SCOPE: this escalates EVERY audited Skill allow that can't be recorded —
+	// SCOPE: this escalates EVERY audited Skill allow that can't be recorded:
 	// managed, UNMANAGED (default-allow plugins/namespaced skills), AND allowlisted.
 	// On a host with an unrecordable outbox it therefore denies the plugin ecosystem
 	// and the operator's allowlisted escapes too; that is the intended "no un-audited
 	// allow" posture, not a bug. Enable it deliberately.
 	RequireLocalAudit bool
-	// StateGateFallback emits `skillctlStateGateFallback: true` — the SPEC-0317
+	// StateGateFallback emits `skillctlStateGateFallback: true`: the SPEC-0317
 	// R-1.4 P2 opt-in that state-gates the verify-hook's ONLINE fallback (the §7
 	// network chain used only for LEGACY installs that carry no offline metadata).
 	// When set, that fallback runs only in the state machine's `online` state; the
@@ -92,25 +92,25 @@ type GenerateOptions struct {
 	// practice the hot path stays STRICTLY LOCAL and a legacy install with no offline
 	// metadata fails CLOSED (offline_unverifiable_managed) instead of blocking on an
 	// 8s network round-trip. ENTERPRISE-ONLY, so setting it also emits
-	// skillctlEnterprise:true — same root-owned managed tier as the other knobs.
+	// skillctlEnterprise:true: same root-owned managed tier as the other knobs.
 	//
 	// NEVER-BRICK: this only ever affects LEGACY managed installs missing offline
 	// metadata; modern installs verify offline and never reach the fallback. It is
 	// opt-in precisely so a disconnected NON-enterprise host keeps its network
 	// fallback (turning it on by default would fail-close legacy installs offline).
 	StateGateFallback bool
-	// RequireAgentMandate emits `skillctlRequireAgentMandate: true` — the SPEC-0277
+	// RequireAgentMandate emits `skillctlRequireAgentMandate: true`: the SPEC-0277
 	// IS-06 root-owned floor that turns a MISSING ~/.claude/skillctl/agentid.json from
 	// the silent opt-OUT (skill-chain-only) into a hard DENY at the SPEC-0247 gate.
 	// It lives in the root-owned managed tier precisely so a non-privileged user
-	// cannot delete the mandate to escape agent authorization — deleting agentid.json
+	// cannot delete the mandate to escape agent authorization. Deleting agentid.json
 	// then fails CLOSED instead of disabling enforcement. Standalone (NOT
 	// enterprise-gated): it is an authorization policy, orthogonal to the SPEC-0317
 	// offline-locked machinery. Claude Code ignores the unknown key; skillctl reads it.
 	RequireAgentMandate bool
 }
 
-// wire structs — field order here is the emitted JSON key order (encoding/json
+// wire structs: field order here is the emitted JSON key order (encoding/json
 // preserves struct field order). Security flags first, then hooks.
 type hookCommand struct {
 	Type    string `json:"type"`
@@ -136,8 +136,8 @@ type managedSettings struct {
 }
 
 // Canonical gate command shapes (SPEC-0247 §7.1). Verify() matches on the
-// command's *argv shape* — the binary basename must be skillctl and the
-// subcommand tokens must match — NOT a loose substring, so decoys like
+// command's *argv shape*, the binary basename must be skillctl and the
+// subcommand tokens must match, NOT a loose substring, so decoys like
 // `echo verify-hook` or exit-suppressed `skillctl verify-hook || true` (which
 // would turn every DENY into an ALLOW) are rejected.
 const (
@@ -194,7 +194,7 @@ func Generate(opts GenerateOptions) ([]byte, error) {
 		ms.SkillctlStateGateFallback = true
 	}
 	if opts.RequireAgentMandate {
-		// Standalone floor — deliberately NOT enterprise-gated (see the field doc).
+		// Standalone floor: deliberately NOT enterprise-gated (see the field doc).
 		ms.SkillctlRequireAgentMandate = true
 	}
 	if opts.Strict || opts.Harden {
@@ -214,18 +214,18 @@ func Generate(opts GenerateOptions) ([]byte, error) {
 type Level int
 
 const (
-	// LevelAbsent — no managed-settings file exists (gate is advisory: a
+	// LevelAbsent: no managed-settings file exists (gate is advisory: a
 	// user-level hook, if any, is deletable). Set by the caller when the file
 	// is missing; Verify never returns it.
 	LevelAbsent Level = iota
-	// LevelTampered — the file exists but is not valid JSON.
+	// LevelTampered, the file exists but is not valid JSON.
 	LevelTampered
-	// LevelPartial — valid JSON, but one or both gate hooks are missing.
+	// LevelPartial, valid JSON, but one or both gate hooks are missing.
 	LevelPartial
-	// LevelPinned — both gate hooks are present in managed settings; the gate is
+	// LevelPinned: both gate hooks are present in managed settings; the gate is
 	// un-deletable and its deny is absolute. User hooks still run.
 	LevelPinned
-	// LevelPinnedStrict — LevelPinned + allowManagedHooksOnly:true; no
+	// LevelPinnedStrict: LevelPinned + allowManagedHooksOnly:true; no
 	// non-managed hooks run at all (full CISO lockdown).
 	LevelPinnedStrict
 )
@@ -268,12 +268,12 @@ func (s StatusResult) Pinned() bool {
 }
 
 // EnterpriseFromBytes reports whether managed settings enable the SPEC-0317
-// R-7.2 enterprise posture (`skillctlEnterprise: true`) — the opt-in the runtime
+// R-7.2 enterprise posture (`skillctlEnterprise: true`): the opt-in the runtime
 // gate reads to permit the destructive `offline_locked` state.
 //
 // It is deliberately conservative and the OPPOSITE of the gate-hook checks: a
 // MISSING or MALFORMED managed file yields false, so an unreadable managed file
-// can never ENGAGE `locked` (R-7.2 never-brick priority — locking on a corrupt
+// can never ENGAGE `locked` (R-7.2 never-brick priority. Locking on a corrupt
 // file would brick a host). Only a cleanly-parsed true engages it. It lives in
 // the root-owned managed tier precisely so declaring "enterprise" does NOT create
 // a trust basis (the conflation that made `locked` unreachable).
@@ -287,7 +287,7 @@ func EnterpriseFromBytes(settings []byte) bool {
 
 // RequireLocalAuditFromBytes reports whether managed settings enable the
 // SPEC-0317 R-8.2 require_local_audit posture. Enterprise-GATED: true only when
-// BOTH skillctlEnterprise AND skillctlRequireLocalAudit are set — the
+// BOTH skillctlEnterprise AND skillctlRequireLocalAudit are set. The
 // decision-invariance carve-out cannot be enabled on a non-enterprise host (the
 // same floor verify.Load enforced for the trust-roots surface). Same conservative
 // contract as EnterpriseFromBytes: missing/malformed → false.
@@ -315,7 +315,7 @@ func StateGateFallbackFromBytes(settings []byte) bool {
 
 // RequireAgentMandateFromBytes reports whether managed settings engage the
 // SPEC-0277 IS-06 root-owned require-mandate floor (`skillctlRequireAgentMandate:
-// true`). Standalone — NOT enterprise-gated (it is an authorization policy, not a
+// true`). Standalone: NOT enterprise-gated (it is an authorization policy, not a
 // posture of the SPEC-0317 offline-locked machinery). Same conservative contract as
 // the other readers: a MISSING or MALFORMED managed file yields false, so an
 // unreadable managed file can never itself DENY every skill (never-brick). When it
@@ -367,7 +367,7 @@ func Verify(settings []byte) StatusResult {
 		res.Findings = append(res.Findings, "gate is un-deletable by non-root users, but not strict: a user may still run their own hooks (a managed deny still wins). Use --strict for the full CISO lockdown.")
 	}
 	if res.Pinned() && res.AllowManagedHooksOnly {
-		res.Findings = append(res.Findings, "un-deletable by non-root users only — root, or anyone with write access to the managed-settings directory, can still remove or rewrite it (SPEC-0247 §7.3, §3.2).")
+		res.Findings = append(res.Findings, "un-deletable by non-root users only: root, or anyone with write access to the managed-settings directory, can still remove or rewrite it (SPEC-0247 §7.3, §3.2).")
 	}
 	return res
 }
@@ -390,7 +390,7 @@ func hasGateHook(matchers []hookMatcher, covers func(string) bool, shapeOK func(
 
 // preToolUseCovers reports whether a PreToolUse matcher fires on the Skill tool.
 // Claude Code matchers are REGEX (e.g. "Edit|Write", "Skill.*"), so we test the
-// matcher — anchored to a full match — against the literal "Skill", plus the
+// matcher, anchored to a full match, against the literal "Skill", plus the
 // "*"/"" match-all shorthands. A matcher that fails to compile falls back to an
 // exact/"|"-token check, so a plain "Skill" is never missed.
 func preToolUseCovers(matcher string) bool {
@@ -468,7 +468,7 @@ func isSkillctlBinary(bin string) bool {
 // gate's exit code (|| && ; | > < ` $ newline #), or if a quoted binary is
 // concatenated to more text with no separating whitespace (e.g.
 // `"skillctl"verify-hook`, which the shell would run as the single word
-// `skillctlverify-hook` → command-not-found → gate fails open) — such a command
+// `skillctlverify-hook` → command-not-found → gate fails open), such a command
 // is never a trustworthy gate.
 func splitCommand(cmd string) (bin string, args []string, ok bool) {
 	c := strings.TrimSpace(cmd)
@@ -504,8 +504,8 @@ func containsShellControl(cmd string) bool {
 
 // Merge injects skillctl's gate hooks into an EXISTING managed-settings.json,
 // preserving every other key (other managed hooks, permission rules, env). It is
-// idempotent — a file already carrying the covering gate hook is not
-// duplicated — and never drops other entries. Empty/whitespace input returns a
+// idempotent, a file already carrying the covering gate hook is not
+// duplicated, and never drops other entries. Empty/whitespace input returns a
 // fresh Generate(opts). Invalid existing JSON is an error (refuse to overwrite).
 func Merge(existing []byte, opts GenerateOptions) ([]byte, error) {
 	if len(strings.TrimSpace(string(existing))) == 0 {
@@ -541,8 +541,8 @@ func Merge(existing []byte, opts GenerateOptions) ([]byte, error) {
 // mergeMatcher appends our gate matcher to an existing event array unless a
 // shape-valid gate command already exists UNDER A COVERING MATCHER (idempotent).
 // A shape-valid command under a NON-covering matcher (e.g. verify-hook under
-// "Bash") does NOT satisfy the gate, so we still append our covering matcher —
-// otherwise the merged file would fail its own Verify. Foreign entries are
+// "Bash") does NOT satisfy the gate, so we still append our covering matcher.
+// Otherwise the merged file would fail its own Verify. Foreign entries are
 // preserved verbatim.
 func mergeMatcher(existing any, want hookMatcher, covers func(string) bool, shapeOK func(string) bool) []any {
 	arr, _ := existing.([]any)

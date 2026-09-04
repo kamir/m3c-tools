@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# make-pdf — Render the canonical Skill-Manager user manual as a branded PDF.
+# make-pdf: Render the canonical Skill-Manager user manual as a branded PDF.
 # Output: $ARTIFACTS_DIR/USER-MANUAL.pdf
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 
-header "G1 — Render USER-MANUAL.md → PDF"
+header "G1: Render USER-MANUAL.md → PDF"
 
 # Source manuals live on the private maintenance plane; its repo root is supplied
 # via M3C_MAINTENANCE_DIR so no private path is baked into this public script.
@@ -34,7 +34,7 @@ PANDOC_FLAGS=(
   --variable=urlcolor:NavyBlue
   --highlight-style=tango
   --metadata=date:"$(date +%Y-%m-%d)"
-  --metadata=author:"m3c · Scalytics — KuP Berlin training"
+  --metadata=author:"m3c · Scalytics: KuP Berlin training"
 )
 
 # Substitute glyphs that Helvetica Neue lacks with print-friendly ASCII so
@@ -54,7 +54,7 @@ preprocess() {
     s/\x{2705}/[ok]/g;   # ✅
     s/\x{274C}/[X]/g;    # ❌
     s/\x{2026}/.../g;    # … → ...
-    s/\x{2014}/--/g;     # — → --
+    s/\x{2014}/--/g;     #: → --
     s/\x{2013}/-/g;      # – → -
     s/\x{00A0}/ /g;      # NBSP → space
     s/\x{2022}/*/g;      # • → *
@@ -93,7 +93,7 @@ ok "wrote $OUT_BUNDLE ($(du -h "$OUT_BUNDLE" | awk '{print $1}'))"
 # Tidy intermediate files
 rm -f "$PRE_USER" "$PRE_CLI"
 
-header "G1 — done"
+header "G1: done"
 note "Standalone: $OUT_USER"
 note "Standalone: $OUT_CLI"
 note "Combined:   $OUT_BUNDLE  ←  hand this to KuP attendees"

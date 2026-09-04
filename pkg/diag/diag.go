@@ -9,7 +9,7 @@ type Status int
 
 const (
 	OK      Status = iota // check passed
-	Fail                  // check failed — action needed
+	Fail                  // check failed. Action needed
 	Warn                  // works but suboptimal
 	Skipped               // not configured / not needed
 )
@@ -74,7 +74,7 @@ type Report struct {
 
 // Print writes the full report to stdout.
 func (r Report) Print() {
-	fmt.Println("m3c-tools doctor — connectivity & config diagnostics")
+	fmt.Println("m3c-tools doctor: connectivity & config diagnostics")
 	fmt.Println()
 	for _, s := range r.Sections {
 		s.Print()

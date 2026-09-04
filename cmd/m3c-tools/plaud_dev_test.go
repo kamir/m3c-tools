@@ -13,7 +13,7 @@ import (
 
 // TestFormatTranscriptionQueue proves the server-side-whisper progress render:
 // the empty case, the populated case (per-status counts + per-item lines), the
-// >15 truncation tail, and the malformed-body raw fallback — all offline, using
+// >15 truncation tail, and the malformed-body raw fallback: all offline, using
 // the exact JSON shape aims-core's /transcription-queue returns.
 func TestFormatTranscriptionQueue(t *testing.T) {
 	t.Run("empty queue is a clean OK", func(t *testing.T) {
@@ -121,7 +121,7 @@ func TestPlaudStateSynced(t *testing.T) {
 
 // TestMigratePlaudDevLedger proves the legacy "plaud-dev" ledger rows are moved
 // into the SHARED consumer format (plaud://<id>, importType "plaud") that the
-// menubar's resolvePlaudSyncStates reads via GetByPath — so both tools agree.
+// menubar's resolvePlaudSyncStates reads via GetByPath, so both tools agree.
 func TestMigratePlaudDevLedger(t *testing.T) {
 	db, err := tracking.OpenFilesDB(filepath.Join(t.TempDir(), "t.db"))
 	if err != nil {

@@ -1,4 +1,4 @@
-// ledger_test.go — unit tests for the budget.Ledger read view.
+// ledger_test.go: unit tests for the budget.Ledger read view.
 //
 // Focus areas (PLAN-0168 P1 acceptance):
 //   - History returns UTC day rows ordered newest-first.

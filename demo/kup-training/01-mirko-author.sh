@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# 01-mirko-author — Mirko writes a skill, packs it, signs it.
+# 01-mirko-author: Mirko writes a skill, packs it, signs it.
 # Proves: keygen → pack → sign → verify-sig (local round-trip).
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 require_skillctl
 
-header "01 — Mirko authors and signs the skill"
+header "01: Mirko authors and signs the skill"
 
 # 1) Generate Mirko's signing key (idempotent across runs)
-# Reuse existing keys if present — the registry persists Mirko's identity
+# Reuse existing keys if present: the registry persists Mirko's identity
 # tied to a specific pubkey, so generating a new keypair every run would
 # produce signature_invalid on subsequent online publish attempts. Pass
 # --new-key to force regen (you'd then need to re-register the identity).
@@ -45,21 +45,21 @@ run_ok "$SKILLCTL" pack \
     -o "$BUNDLE" \
     --name "$SKILL_NAME" \
     --version "$SKILL_VERSION" \
-    --summary "KuP training demo skill — writes a hello.txt." \
+    --summary "KuP training demo skill: writes a hello.txt." \
     --source-repo "kamir/m3c-tools" \
     --source-path "demo/kup-training/fixtures/valid-skill" \
     --author-intent yellow \
     --author-intent-rationale "Writes one local file under ./output/. No network. No subprocess." \
     >/dev/null
 
-# 4) Determinism check — re-pack and compare
+# 4) Determinism check: re-pack and compare
 BUNDLE2="$BUNDLES_DIR/${SKILL_NAME}-${SKILL_VERSION}.repack.skb"
 "$SKILLCTL" pack \
     --skill "$SRC" \
     -o "$BUNDLE2" \
     --name "$SKILL_NAME" \
     --version "$SKILL_VERSION" \
-    --summary "KuP training demo skill — writes a hello.txt." \
+    --summary "KuP training demo skill: writes a hello.txt." \
     --source-repo "kamir/m3c-tools" \
     --source-path "demo/kup-training/fixtures/valid-skill" \
     --author-intent yellow \
@@ -90,7 +90,7 @@ ok "bundle digest: $DIGEST"
 log "Mirko: skillctl verify-sig --pubkey mirko.pub $BUNDLE"
 assert_exit 0 -- "$SKILLCTL" verify-sig --pubkey "$KEYS_DIR/mirko.pub" "$BUNDLE"
 
-header "01 — done"
+header "01: done"
 note "Bundle:    $BUNDLE"
 note "Digest:    $DIGEST"
 note "Signature: ${BUNDLE}.${DIGEST#sha256:}.author.sig"

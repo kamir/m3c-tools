@@ -34,7 +34,7 @@ const digestReadBufferSize = 1 << 20
 //
 // This is the canonical 32-byte message that author/registry/governance
 // signatures all sign over. The brief is explicit: "32-byte SHA-256 of the
-// gzipped tarball — recompute, do NOT trust manifest field."
+// gzipped tarball: recompute, do NOT trust manifest field."
 //
 // Empty files are refused: an empty bundle has no useful identity and is
 // almost certainly a caller bug.
@@ -71,7 +71,7 @@ func ComputeBundleDigest(bundlePath string) ([sha256.Size]byte, error) {
 // Returns the full signature path, the lowercase hex digest, and any
 // error. identityID is ADVISORY ONLY and is deliberately NOT embedded in the
 // signature: the detached signature is over the raw 32-byte bundle digest alone.
-// This is not a "wire it in later" gap — SPEC-0188 D4 LOCKED identity binding as
+// This is not a "wire it in later" gap: SPEC-0188 D4 LOCKED identity binding as
 // a trust-root pin (identity_id → pubkey, added out-of-band and checked at verify
 // time), and the admission endpoint takes identity_id as a separate form field,
 // so embedding it in the signature bytes would only invite drift. The parameter
@@ -91,7 +91,7 @@ func SignBundle(bundlePath, keyPath, identityID string) (sigPath, digestHex stri
 	}
 
 	// Quick sanity check on the bundle. We don't validate it's actually
-	// a gzipped tarball — that's not signing's job. We just refuse to
+	// a gzipped tarball. That's not signing's job. We just refuse to
 	// sign files that don't exist or are empty.
 	st, err := os.Stat(bundlePath)
 	if err != nil {
@@ -106,7 +106,7 @@ func SignBundle(bundlePath, keyPath, identityID string) (sigPath, digestHex stri
 	// a SECOND author-sign entrypoint: a hand-built .skb (assembled WITHOUT Pack)
 	// can carry a Pack-rejected, §3.3-contradictory scope and still reach here. The
 	// author signature covers manifest.Intent + manifest.DataDependencies, so we
-	// MUST refuse to sign an invalid scope — otherwise "no unvalidated scope is ever
+	// MUST refuse to sign an invalid scope. Otherwise "no unvalidated scope is ever
 	// author-signed" does not actually hold at every sign boundary. Fail-closed: an
 	// invalid scope returns an error and writes NO signature. This is the SAME
 	// validator Pack runs (skillbundle.ValidateManifestDataScope → datascope.Validate);
@@ -149,7 +149,7 @@ func SignBundle(bundlePath, keyPath, identityID string) (sigPath, digestHex stri
 		return "", "", fmt.Errorf("sign: write signature: %w", err)
 	}
 
-	_ = identityID // advisory only — never embedded in the signature (see doc comment above)
+	_ = identityID // advisory only: never embedded in the signature (see doc comment above)
 	return sigPath, digestHex, nil
 }
 
@@ -187,12 +187,12 @@ func validateBundleScope(bundlePath string) error {
 			return fmt.Errorf("sign: decode bundle.json in %s: %w", bundlePath, err)
 		}
 		if err := skillbundle.ValidateManifestDataScope(m); err != nil {
-			return fmt.Errorf("sign: refusing to author-sign %s — invalid declared scope: %w", bundlePath, err)
+			return fmt.Errorf("sign: refusing to author-sign %s, invalid declared scope: %w", bundlePath, err)
 		}
 		return nil
 	}
 	// No bundle.json in the archive: there is no declared scope to validate. This
-	// is unusual for a real .skb but not a scope violation — let signing proceed.
+	// is unusual for a real .skb but not a scope violation: let signing proceed.
 	return nil
 }
 

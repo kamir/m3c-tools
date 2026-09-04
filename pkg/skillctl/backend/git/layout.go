@@ -1,4 +1,4 @@
-// Package git implements a SPEC-0356 artifact.Backend over a git repository —
+// Package git implements a SPEC-0356 artifact.Backend over a git repository:
 // the provider-neutral core shared by the GitHub and GitLab schemes. It carries
 // the SAME .skb bytes and the SAME signed SPEC-0190 event JSON as every other
 // backend, laid out per the SPEC-0356 §6 git wire-format:
@@ -35,7 +35,7 @@ var (
 // NOTE (WIN-T9, NTFS case-insensitivity): the name/version validated here become
 // filesystem path components under skills/<name>/<version>/ in a CLONE. NTFS (and
 // APFS by default) are case-INSENSITIVE but case-PRESERVING, so two names that
-// differ only in case — "Foo" vs "foo" — are distinct tags/annotations but collide
+// differ only in case, "Foo" vs "foo", are distinct tags/annotations but collide
 // onto the SAME directory when the repo is checked out on Windows/macOS. Whatever
 // was written last wins; the other silently reads back the wrong bytes. The regexp
 // below intentionally does NOT fold case (git storage is case-sensitive and the

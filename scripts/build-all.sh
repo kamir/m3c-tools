@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# build-all.sh — Build m3c-tools for all supported platforms.
+# build-all.sh, Build m3c-tools for all supported platforms.
 #
 # Targets:
-#   darwin/arm64  — Full GUI + audio (native on Apple Silicon)
-#   darwin/amd64  — Full GUI + audio (requires universal PortAudio)
-#   linux/amd64   — CLI only (CGO_ENABLED=0)
-#   windows/amd64 — CLI only (CGO_ENABLED=0)
+#   darwin/arm64, Full GUI + audio (native on Apple Silicon)
+#   darwin/amd64, Full GUI + audio (requires universal PortAudio)
+#   linux/amd64, CLI only (CGO_ENABLED=0)
+#   windows/amd64: CLI only (CGO_ENABLED=0)
 #
 # Usage:
 #   ./scripts/build-all.sh              # build all targets

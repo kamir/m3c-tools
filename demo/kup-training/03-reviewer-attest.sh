@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 03-reviewer-attest — A reviewer signs a 🟢 governance attestation.
+# 03-reviewer-attest: A reviewer signs a 🟢 governance attestation.
 # Online: posts to /api/skills/attestations.
 # Offline: produces a local attestation file the install path can consume.
 set -euo pipefail
@@ -7,11 +7,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 require_skillctl
 
-header "03 — Reviewer attests 🟢 (governance verdict)"
+header "03: Reviewer attests 🟢 (governance verdict)"
 
 DIGEST=$(cat "$ARTIFACTS_DIR/digest.txt")
 
-# 1) Reviewer keypair (idempotent across runs — same rationale as 01)
+# 1) Reviewer keypair (idempotent across runs: same rationale as 01)
 NEW_KEY=0
 for arg in "$@"; do
   case "$arg" in
@@ -32,7 +32,7 @@ if online_mode_available; then
   set +e
   "$SKILLCTL" attest "$DIGEST" \
       --level green \
-      --rationale "KuP training demo — Activation Gate satisfied (smoke test, intent matches data_deps)." \
+      --rationale "KuP training demo: Activation Gate satisfied (smoke test, intent matches data_deps)." \
       --reviewer-id "$REVIEWER_ID" \
       --key "$KEYS_DIR/reviewer.priv" \
       --registry "$REGISTRY_URL/api/skills" \
@@ -42,7 +42,7 @@ if online_mode_available; then
   if [[ "$rc" -eq 0 ]]; then
     ok "reviewer attestation accepted by registry"
   else
-    warn "skillctl attest exit $rc — registry may reject identity_mismatch (19) until reviewer is registered"
+    warn "skillctl attest exit $rc. Registry may reject identity_mismatch (19) until reviewer is registered"
     warn "demo continues; offline attestation file is generated below"
   fi
 fi
@@ -56,7 +56,7 @@ cat > "$ARTIFACTS_DIR/attestation.json" <<EOF
   "schema": "m3c-skill-attestation/v1",
   "bundle_digest": "$DIGEST",
   "level": "green",
-  "rationale": "KuP training demo — Activation Gate satisfied.",
+  "rationale": "KuP training demo: Activation Gate satisfied.",
   "reviewer_id": "$REVIEWER_ID",
   "reviewer_pubkey_path": "$KEYS_DIR/reviewer.pub",
   "attested_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -64,7 +64,7 @@ cat > "$ARTIFACTS_DIR/attestation.json" <<EOF
 EOF
 ok "wrote $ARTIFACTS_DIR/attestation.json (level: green)"
 
-header "03 — done"
+header "03: done"
 note "Reviewer ID:  $REVIEWER_ID"
 note "Reviewer pub: $KEYS_DIR/reviewer.pub"
 note "Attestation:  $ARTIFACTS_DIR/attestation.json"

@@ -55,8 +55,8 @@ var (
 	ttSummary     map[string]time.Duration
 	ttLastRefresh time.Time
 	// ttError carries a user-facing diagnostic when project loading fails
-	// (e.g. "ER1 key invalid (401) — open Settings"). Empty string means
-	// no error. BUG-0124 Layer 3 — distinguishes auth-failure from no-data.
+	// (e.g. "ER1 key invalid (401): open Settings"). Empty string means
+	// no error. BUG-0124 Layer 3: distinguishes auth-failure from no-data.
 	ttError string
 )
 

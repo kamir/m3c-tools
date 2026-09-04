@@ -1,6 +1,6 @@
-# skillctl v0.2.5 — P1 hardening
+# skillctl v0.2.5: P1 hardening
 
-Trust-and-governance CLI for AI-agent skills. Single static Go binary — no Node.
+Trust-and-governance CLI for AI-agent skills. Single static Go binary: no Node.
 
 > Builds on the **v0.2.4 security release** (7 P0 fixes). This release lands the
 > SPEC-0251 **P1 hardening** batch. Recommended upgrade.
@@ -13,16 +13,16 @@ curl -fsSL https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.2.5/
 ```
 
 ## P1 hardening (SPEC-0251)
-- **Load-time gate is panic-safe by design** — a panic anywhere in `verify-hook`
+- **Load-time gate is panic-safe by design**: a panic anywhere in `verify-hook`
   now yields a fail-closed DENY (exit 2), never a crash the harness might read as allow.
-- **Strict, fail-closed policy & trust-roots** — `gate-policy.yaml` and the self
+- **Strict, fail-closed policy & trust-roots**: `gate-policy.yaml` and the self
   trust-roots parse strictly (unknown/typo'd fields no longer silently allow-all);
   `governance_minimum: red` is rejected and the floor is case-normalised so it can't
   collapse.
 - **Install-token fails closed** on RNG failure (no world-known fallback key on the
   destructive-overwrite guard).
 - **Verdict cache** uses a unique temp file per write (no concurrent-rename corruption).
-- **TLS:** `ER1_VERIFY_SSL=false` is honoured **only for loopback** — verification is
+- **TLS:** `ER1_VERIFY_SSL=false` is honoured **only for loopback**. Verification is
   forced on for any remote host (closes a stage/unknown-target downgrade).
 - **Windows URL/file open** uses `rundll32 url.dll,FileProtocolHandler` (no `cmd /c
   start` metacharacter surface), everywhere.

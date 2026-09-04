@@ -2,11 +2,11 @@
 //
 // For each scanned skill, look for a sibling <name>-<version>.skb in the
 // same parent directory (or in ../.archive/) per Decision D1: the on-disk
-// `.skb` is the canonical signal — there is no separate per-machine
+// `.skb` is the canonical signal. There is no separate per-machine
 // install ledger. Recompute the bundle digest, look for the matching
 // detached author signature, and annotate the descriptor.
 //
-// "verified" — .skb present, digest matches the digest in the sig
+// "verified": .skb present, digest matches the digest in the sig
 // filename, and the sig file is the expected 64 raw bytes. The author
 // signature itself is not cryptographically verified here (that needs
 // a network round-trip to the registry to fetch the signer's pubkey,
@@ -14,10 +14,10 @@
 // envelope" is a strong local-only signal that nothing was tampered
 // after install.
 //
-// "unverified" — no sibling .skb (skill was hand-authored, not
+// "unverified", no sibling .skb (skill was hand-authored, not
 // installed via `skillctl install`).
 //
-// "broken" — .skb present but digest computation fails, sig file
+// "broken", .skb present but digest computation fails, sig file
 // missing, or sig file wrong size.
 package scanner
 
@@ -36,7 +36,7 @@ import (
 // trust_chain values recorded by AnnotateTrust (the scan/audit DISPLAY layer).
 //
 // IMPORTANT: TrustSignaturePresent means only that a detached signature file of
-// the correct length (64-byte ed25519) sits next to the .skb — it is NOT a
+// the correct length (64-byte ed25519) sits next to the .skb: it is NOT a
 // cryptographic verification. The authenticating check (recompute the digest,
 // verify the author/registry/governance signature chain against pinned roots)
 // is pkg/skillctl/verify (`skillctl verify`), not this scanner. The string

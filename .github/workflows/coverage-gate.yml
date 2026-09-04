@@ -1,11 +1,11 @@
 name: Coverage (ratchet)
 
-# Gate 2 (H3) — ratchet test coverage over the skillctl trust/security surface.
+# Gate 2 (H3): ratchet test coverage over the skillctl trust/security surface.
 #
 # The floors live in .testcoverage.yml, each seeded from the coverage the package
 # ACTUALLY had when the gate was added (rounded down). So this job is GREEN on
 # master today and can only move UP: any change that drops a package below its
-# recorded floor fails here. It is not a "reach 85%" mandate — it is a no-regression
+# recorded floor fails here. It is not a "reach 85%" mandate. It is a no-regression
 # ratchet. See .testcoverage.yml for the per-package numbers and the rationale.
 #
 # Runs on macos-latest (matching the environment the floors were measured in, and
@@ -51,7 +51,7 @@ jobs:
       - name: Enforce coverage ratchet (.testcoverage.yml)
         run: go-test-coverage --config .testcoverage.yml
 
-  # FOLLOW-UP (not blocking) — diff/new-code coverage (>=85% on changed lines).
+  # FOLLOW-UP (not blocking): diff/new-code coverage (>=85% on changed lines).
   # go-test-coverage supports it (`diff.threshold` + `diff.base-breakdown-file-name`)
   # but needs the BASE branch's coverage breakdown to compare against. Wiring it
   # cleanly means: (1) on push to master, run go-test-coverage with

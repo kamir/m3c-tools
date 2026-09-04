@@ -1,4 +1,4 @@
-// http_registry.go — Flask-hosted prompt registry client (D1).
+// http_registry.go: Flask-hosted prompt registry client (D1).
 //
 // Protocol (from PLAN-0167 §Contract: Prompt Registry HTTP API):
 //
@@ -146,7 +146,7 @@ func (r *httpRegistry) Get(ctx context.Context, id string) (Prompt, error) {
 
 	now := time.Now()
 	if hasCache && now.Sub(entry.LastVerifiedAt) < r.cfg.TTL {
-		// Fresh — serve cache.
+		// Fresh: serve cache.
 		return entry.Prompt, nil
 	}
 
@@ -168,7 +168,7 @@ func (r *httpRegistry) Get(ctx context.Context, id string) (Prompt, error) {
 	resp, err := r.client.Do(req)
 	if err != nil {
 		// Network failure. If we have a usable cache entry within the
-		// grace window, serve it and log a warning — don't fail
+		// grace window, serve it and log a warning: don't fail
 		// reflections on a transient Flask outage.
 		if hasCache && now.Sub(entry.LastVerifiedAt) < OfflineGraceWindow {
 			r.log.Printf("prompts/http: serving stale cache for %q during Flask outage: %v", id, err)

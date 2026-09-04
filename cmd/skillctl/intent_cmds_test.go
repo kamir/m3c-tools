@@ -4,11 +4,11 @@ package main
 //
 // Coverage matrix (from S2-QUESTIONS.md §5.A acceptance plan):
 //
-//   TestIntentDeclare_BuildsPatchPayload   — flag values flow into PATCH body
-//   TestIntentDeclare_FromYaml             — --from-yaml supplies base layer
-//   TestIntentDeclare_DryRunPrintsNoHTTP   — --dry-run is strictly non-side-effecting
-//   TestIntentDeclare_CrossRuleViolationExits18 — 400 → exit 18
-//   TestIntentDeclare_FailsWithoutConfirm  — refuses without --confirm
+//   TestIntentDeclare_BuildsPatchPayload, flag values flow into PATCH body
+//   TestIntentDeclare_FromYaml, --from-yaml supplies base layer
+//   TestIntentDeclare_DryRunPrintsNoHTTP, --dry-run is strictly non-side-effecting
+//   TestIntentDeclare_CrossRuleViolationExits18, 400 → exit 18
+//   TestIntentDeclare_FailsWithoutConfirm: refuses without --confirm
 //
 // Pattern: most tests drive `runIntentDeclareWithClient` directly with a
 // pre-built `intentDeclareOpts`, including an httptest.Server-backed
@@ -91,7 +91,7 @@ func TestIntentDeclare_BuildsPatchPayload(t *testing.T) {
 		},
 		dataDeps: []map[string]any{
 			// read dep needs no scope; network=true requires an http dep, so
-			// include one (valid client-side declaration — the server still
+			// include one (valid client-side declaration: the server still
 			// gets the PATCH).
 			{"id": "ds:filesystem/cwd", "kind": "local_fs", "access": "read"},
 			{"id": "ds:http/anthropic", "kind": "http_endpoint", "access": "passthrough", "scope": "https://api.anthropic.com/*"},
@@ -231,7 +231,7 @@ func TestIntentDeclare_CrossRuleViolationExits18(t *testing.T) {
 
 func TestIntentDeclare_LocalCrossRuleExits18(t *testing.T) {
 	// A §3.3 cross-rule that the CLIENT catches (destructive=true + green)
-	// must exit 18 WITHOUT touching the network — the binding can't be
+	// must exit 18 WITHOUT touching the network: the binding can't be
 	// bypassed by declaring offline.
 	hits := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -266,7 +266,7 @@ func TestIntentDeclare_LocalCrossRuleExits18(t *testing.T) {
 
 func TestIntentDeclare_InvalidScopeIsUsageError(t *testing.T) {
 	// A structurally-invalid data-scope (write to local_fs without a scope) is
-	// a usage error (exit 2), not an inconsistency (18) — and never reaches
+	// a usage error (exit 2), not an inconsistency (18), and never reaches
 	// the server, even in --dry-run.
 	opts := intentDeclareOpts{
 		skill:       "@sha256:" + strings.Repeat("e", 64),

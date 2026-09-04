@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run-and-prove.sh — run the full KuP Release-Gate chain and assert every
+# run-and-prove.sh: run the full KuP Release-Gate chain and assert every
 # step produced its load-bearing artifact, with real content checks (not
 # just exit codes).
 #
@@ -78,7 +78,7 @@ run_step() {
   local id="$1" desc="$2"; shift 2
   c_bold ""
   c_bold "═══════════════════════════════════════"
-  c_bold " $id — $desc"
+  c_bold " $id: $desc"
   c_bold "═══════════════════════════════════════"
   echo "[$id] $desc" >> "$LOG"
   if "$@" >> "$LOG" 2>&1; then
@@ -93,48 +93,48 @@ run_step() {
 assert_file() {
   local id="$1" path="$2" desc="$3"
   if [ -e "$path" ]; then
-    record "$id" green "$desc — exists"
+    record "$id" green "$desc, exists"
   else
-    record "$id" red "$desc — MISSING ($path)"
+    record "$id" red "$desc, MISSING ($path)"
   fi
 }
 
 assert_file_min() {
   local id="$1" path="$2" min="$3" desc="$4"
   if [ ! -e "$path" ]; then
-    record "$id" red "$desc — MISSING ($path)"; return
+    record "$id" red "$desc, MISSING ($path)"; return
   fi
   local sz; sz=$(wc -c < "$path" | tr -d ' ')
   if [ "$sz" -ge "$min" ]; then
-    record "$id" green "$desc — ${sz} bytes ≥ ${min}"
+    record "$id" green "$desc, ${sz} bytes ≥ ${min}"
   else
-    record "$id" red "$desc — ${sz} bytes < ${min} (truncated?)"
+    record "$id" red "$desc: ${sz} bytes < ${min} (truncated?)"
   fi
 }
 
 assert_grep() {
   local id="$1" path="$2" pattern="$3" desc="$4"
   if [ ! -e "$path" ]; then
-    record "$id" red "$desc — file missing ($path)"; return
+    record "$id" red "$desc, file missing ($path)"; return
   fi
   if grep -qE "$pattern" "$path"; then
     record "$id" green "$desc"
   else
-    record "$id" red "$desc — pattern not found"
+    record "$id" red "$desc, pattern not found"
   fi
 }
 
-# Fixed-string variant — use when the value may contain regex metachars
+# Fixed-string variant: use when the value may contain regex metachars
 # (base64 strings have + and / which are regex specials in -E mode).
 assert_contains() {
   local id="$1" path="$2" needle="$3" desc="$4"
   if [ ! -e "$path" ]; then
-    record "$id" red "$desc — file missing ($path)"; return
+    record "$id" red "$desc, file missing ($path)"; return
   fi
   if grep -qF "$needle" "$path"; then
     record "$id" green "$desc"
   else
-    record "$id" red "$desc — string not found"
+    record "$id" red "$desc, string not found"
   fi
 }
 
@@ -146,9 +146,9 @@ assert_exit() {
   actual=$?
   set -e
   if [ "$actual" -eq "$expected" ]; then
-    record "$id" green "$desc — exit $actual (expected $expected)"
+    record "$id" green "$desc, exit $actual (expected $expected)"
   else
-    record "$id" red "$desc — exit $actual (expected $expected)"
+    record "$id" red "$desc, exit $actual (expected $expected)"
   fi
 }
 
@@ -222,17 +222,17 @@ write_json() {
   } > "$JSON_OUT"
 }
 
-trap 'rc=$?; if [ $rc -ne 0 ] && [ $CHECKS_FAIL -eq 0 ]; then c_red "ABORTED with rc=$rc — see $LOG"; fi; summary' EXIT
+trap 'rc=$?; if [ $rc -ne 0 ] && [ $CHECKS_FAIL -eq 0 ]; then c_red "ABORTED with rc=$rc: see $LOG"; fi; summary' EXIT
 
 # ============================================================================
-# Step P0 — register identities (skipped in offline mode)
+# Step P0: register identities (skipped in offline mode)
 # ============================================================================
 if [ "$SKIP_ONLINE" -eq 0 ]; then
   c_bold ""
   c_bold "═══════════════════════════════════════"
-  c_bold " P0 — register identities (one-time)"
+  c_bold " P0: register identities (one-time)"
   c_bold "═══════════════════════════════════════"
-  # Only register if keys already exist (otherwise this fails — let 01/03 generate first)
+  # Only register if keys already exist (otherwise this fails: let 01/03 generate first)
   if [ -f "$KEYS_DIR/mirko.pub" ]; then
     if "$SCRIPT_DIR/register-identity.sh" id:mirko@m3c "$KEYS_DIR/mirko.pub" \
        "Mirko (KuP demo author)" >> "$LOG" 2>&1; then
@@ -242,16 +242,16 @@ if [ "$SKIP_ONLINE" -eq 0 ]; then
       if [ $rc -eq 0 ] || grep -q "already_exists\|HTTP 201\|HTTP 409" "$LOG" 2>/dev/null; then
         record P0 green "Mirko identity ok (idempotent)"
       else
-        record P0 yellow "Mirko identity registration returned $rc — will retry post-01"
+        record P0 yellow "Mirko identity registration returned $rc, will retry post-01"
       fi
     fi
   else
-    record P0 yellow "skipping Mirko registration (keys not yet generated — will run after step 01)"
+    record P0 yellow "skipping Mirko registration (keys not yet generated, will run after step 01)"
   fi
 fi
 
 # ============================================================================
-# Step 00 — Preflight
+# Step 00: Preflight
 # ============================================================================
 run_step 00 "Preflight" bash 00-preflight.sh
 assert_file        00 "$SKILLCTL"               "skillctl binary built"
@@ -259,7 +259,7 @@ assert_exit        00 0 "skillctl --help runs"  "$SKILLCTL" --help
 finished
 
 # ============================================================================
-# Step 01 — Mirko authors and signs
+# Step 01: Mirko authors and signs
 # ============================================================================
 run_step 01 "Mirko authors and signs" bash 01-mirko-author.sh
 assert_file 01 "$KEYS_DIR/mirko.priv"             "mirko.priv keypair"
@@ -282,12 +282,12 @@ if [ "$SKIP_ONLINE" -eq 0 ]; then
      "Mirko (KuP demo author)" >> "$LOG" 2>&1; then
     record P0 green "Mirko identity active in registry"
   else
-    record P0 yellow "Mirko identity registration not OK — 02 will likely return signature_invalid"
+    record P0 yellow "Mirko identity registration not OK, 02 will likely return signature_invalid"
   fi
 fi
 
 # ============================================================================
-# Step 02 — Mirko publishes (online stretch)
+# Step 02: Mirko publishes (online stretch)
 # ============================================================================
 if [ "$SKIP_ONLINE" -eq 0 ]; then
   run_step 02 "Mirko publishes to aims" bash 02-mirko-publish.sh
@@ -299,17 +299,17 @@ if [ "$SKIP_ONLINE" -eq 0 ]; then
     if grep -qE '"digest"\s*:' "$LOG_DIR/admit.json"; then
       record 02 green "registry admitted bundle fresh (200/201 with digest)"
     elif grep -qE '"code"\s*:\s*"already_admitted"' "$LOG_DIR/admit.json"; then
-      record 02 green "registry returned 'already_admitted' (idempotent re-run — normal)"
+      record 02 green "registry returned 'already_admitted' (idempotent re-run, normal)"
     elif grep -qE '"code"\s*:\s*"already_exists"' "$LOG_DIR/admit.json"; then
-      record 02 green "registry returned 'already_exists' (HTTP 409 — idempotent)"
+      record 02 green "registry returned 'already_exists' (HTTP 409, idempotent)"
     elif grep -qE '"code"\s*:\s*"signature_invalid"' "$LOG_DIR/admit.json"; then
-      record 02 red "signature_invalid — registered Mirko pubkey doesn't match local key (ran P0 with the right keypair?)"
+      record 02 red "signature_invalid: registered Mirko pubkey doesn't match local key (ran P0 with the right keypair?)"
     elif grep -qE '"code"\s*:\s*"storage_failed"' "$LOG_DIR/admit.json"; then
-      record 02 yellow "storage_failed — server-side SKILL_REGISTRY_KEY not configured (chain proof in 05 doesn't depend on this)"
+      record 02 yellow "storage_failed: server-side SKILL_REGISTRY_KEY not configured (chain proof in 05 doesn't depend on this)"
     elif grep -qE '"code"\s*:\s*"identity_not_found"' "$LOG_DIR/admit.json"; then
-      record 02 red "identity_not_found — register Mirko first via P0 (./register-identity.sh id:mirko@m3c …)"
+      record 02 red "identity_not_found, register Mirko first via P0 (./register-identity.sh id:mirko@m3c …)"
     elif grep -qE '"code"\s*:\s*"VALIDATION_ERROR"' "$LOG_DIR/admit.json"; then
-      record 02 red "VALIDATION_ERROR — script may have wrong multipart field names (expected: bundle/signature/identity_id)"
+      record 02 red "VALIDATION_ERROR, script may have wrong multipart field names (expected: bundle/signature/identity_id)"
     else
       record 02 yellow "registry response shape unrecognized: $(head -c 200 "$LOG_DIR/admit.json" | tr -d '\n')"
     fi
@@ -317,7 +317,7 @@ if [ "$SKIP_ONLINE" -eq 0 ]; then
 fi
 
 # ============================================================================
-# Step 03 — Reviewer attests
+# Step 03: Reviewer attests
 # ============================================================================
 run_step 03 "Reviewer attests" bash 03-reviewer-attest.sh
 assert_file 03 "$KEYS_DIR/reviewer.priv"          "reviewer.priv keypair"
@@ -335,7 +335,7 @@ if [ "$SKIP_ONLINE" -eq 0 ] && [ -f "$KEYS_DIR/reviewer.pub" ]; then
 fi
 
 # ============================================================================
-# Step 04 — Eric pins trust root
+# Step 04: Eric pins trust root
 # ============================================================================
 run_step 04 "Eric pins trust root" bash 04-eric-trust-root.sh
 TRUST_FILE="$INSTALL_HOME/.claude/skill-trust-roots.yaml"
@@ -350,20 +350,20 @@ fi
 finished
 
 # ============================================================================
-# Step 05 — Eric installs and runs (LOAD-BEARING)
+# Step 05. Eric installs and runs (LOAD-BEARING)
 # ============================================================================
 run_step 05 "Eric installs and runs (VALID)" bash 05-eric-install-and-run.sh
 HELLO_OUT="$INSTALL_HOME/output/hello.txt"
-assert_file 05 "$HELLO_OUT"                        "★ hello.txt — load-bearing valid-path proof"
+assert_file 05 "$HELLO_OUT"                        "★ hello.txt: load-bearing valid-path proof"
 if [ -f "$HELLO_OUT" ]; then
   assert_grep 05 "$HELLO_OUT" 'kup-hello|Hello' 'hello.txt has canonical greeting content'
 fi
 finished
 
 # ============================================================================
-# Steps 06–09 — INVALID paths (must refuse)
+# Steps 06–09, INVALID paths (must refuse)
 # ============================================================================
-run_step 06 "INVALID — tampered bytes" bash 06-invalid-tampered.sh
+run_step 06 "INVALID, tampered bytes" bash 06-invalid-tampered.sh
 TAMPERED="$BUNDLES_DIR/tampered.skb"
 if [ -f "$TAMPERED" ]; then
   assert_exit 06 11 "verify-sig REFUSES tampered bundle (signature_invalid)" \
@@ -372,7 +372,7 @@ else
   record 06 red "tampered bundle not produced"
 fi
 
-run_step 07 "INVALID — wrong key (impersonation)" bash 07-invalid-wrong-key.sh
+run_step 07 "INVALID: wrong key (impersonation)" bash 07-invalid-wrong-key.sh
 ATTACKER_BUNDLE="$BUNDLES_DIR/attacker-${SKILL_NAME}-${SKILL_VERSION}.skb"
 if [ -f "$ATTACKER_BUNDLE" ]; then
   assert_exit 07 11 "verify-sig REFUSES attacker bundle against pinned mirko.pub" \
@@ -383,7 +383,7 @@ if [ -f "$ATTACKER_BUNDLE" ]; then
   fi
 fi
 
-run_step 08 "INVALID — no signature delivered" bash 08-invalid-no-signature.sh
+run_step 08 "INVALID: no signature delivered" bash 08-invalid-no-signature.sh
 NOSIG_BUNDLE="$BUNDLES_DIR/no-sig/${SKILL_NAME}-${SKILL_VERSION}.skb"
 if [ -f "$NOSIG_BUNDLE" ]; then
   set +e
@@ -391,14 +391,14 @@ if [ -f "$NOSIG_BUNDLE" ]; then
   rc=$?
   set -e
   if [ "$rc" -ne 0 ]; then
-    record 08 green "verify-sig REFUSES no-signature bundle — exit $rc"
+    record 08 green "verify-sig REFUSES no-signature bundle, exit $rc"
   else
-    record 08 red "verify-sig accepted bundle with no sidecar signature — CRITICAL FAIL-OPEN"
+    record 08 red "verify-sig accepted bundle with no sidecar signature, CRITICAL FAIL-OPEN"
   fi
 fi
 
-run_step 09 "INVALID — post-install edit" bash 09-invalid-edited-install.sh
-# 09's script repairs the install at the end — assert log captured the mismatch
+run_step 09 "INVALID: post-install edit" bash 09-invalid-edited-install.sh
+# 09's script repairs the install at the end: assert log captured the mismatch
 if grep -q "CHECKSUMS mismatch detected" "$LOG"; then
   record 09 green "post-install drift detected via CHECKSUMS"
 else
@@ -412,7 +412,7 @@ fi
 finished
 
 # ============================================================================
-# G1 — PDFs
+# G1: PDFs
 # ============================================================================
 run_step G1 "Print user guide as PDF" bash make-pdf.sh
 assert_file_min G1 "$ARTIFACTS_DIR/USER-MANUAL.pdf" 50000      "USER-MANUAL.pdf"
@@ -420,7 +420,7 @@ assert_file_min G1 "$ARTIFACTS_DIR/SKILLCTL-MANUAL.pdf" 50000  "SKILLCTL-MANUAL.
 assert_file_min G1 "$ARTIFACTS_DIR/KuP-skill-manager-handbook.pdf" 50000 "combined handbook PDF"
 
 # ============================================================================
-# G2 — release artifacts
+# G2: release artifacts
 # ============================================================================
 run_step G2 "Cross-platform release of skillctl" bash build-release.sh
 RELEASE_DIR="$ARTIFACTS_DIR/release"
@@ -434,7 +434,7 @@ if [ -d "$RELEASE_DIR" ]; then
   assert_file G2 "$RELEASE_DIR/SHA256SUMS" "SHA256SUMS file"
   assert_file G2 "$RELEASE_DIR/install.sh" "install.sh"
   assert_file G2 "$RELEASE_DIR/RELEASE_NOTES.md" "RELEASE_NOTES.md"
-  # Validate SHA256SUMS — every listed file must hash-match
+  # Validate SHA256SUMS. Every listed file must hash-match
   if [ -f "$RELEASE_DIR/SHA256SUMS" ]; then
     set +e
     ( cd "$RELEASE_DIR" && shasum -a 256 -c SHA256SUMS ) >> "$LOG" 2>&1
@@ -449,7 +449,7 @@ if [ -d "$RELEASE_DIR" ]; then
 fi
 
 # ============================================================================
-# G3 — synthesis: skill transfer Mirko → Eric (steps 01–05 all green AND hello.txt)
+# G3, synthesis: skill transfer Mirko → Eric (steps 01–05 all green AND hello.txt)
 # ============================================================================
 G3_FAILS=$(printf '%s\n' "${RESULTS[@]}" | awk -F'|' '$1 ~ /^0[1-5]$/ && $2=="red"' | wc -l | tr -d ' ')
 if [ "$G3_FAILS" -eq 0 ] && [ -f "$HELLO_OUT" ]; then
@@ -459,7 +459,7 @@ else
 fi
 
 # ============================================================================
-# G4 — synthesis: valid works AND invalid fails
+# G4. Synthesis: valid works AND invalid fails
 # ============================================================================
 G4_FAILS=$(printf '%s\n' "${RESULTS[@]}" | awk -F'|' '$1 ~ /^0[5-9]$/ && $2=="red"' | wc -l | tr -d ' ')
 if [ "$G4_FAILS" -eq 0 ]; then

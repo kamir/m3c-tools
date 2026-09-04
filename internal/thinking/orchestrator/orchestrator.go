@@ -10,7 +10,7 @@
 //     orchestrator subscribes to its own process.events topic and
 //     only dispatches the next command once the previous step has
 //     reported completion. If any step emits ProcessFailed the
-//     barrier stops — subsequent steps are never dispatched.
+//     barrier stops, subsequent steps are never dispatched.
 //
 //   - loop: same barrier semantics as semi_linear, but after the
 //     final step completes we re-enter step 0 with a fresh iteration
@@ -76,7 +76,7 @@ func New(h mctx.Hash, bus tkafka.Bus, s *store.Store) *Orchestrator {
 
 // Start subscribes the orchestrator to its own process.events topic
 // so it can implement semi_linear / loop step barriers. Called once
-// at engine boot. Safe to call multiple times — idempotent.
+// at engine boot. Safe to call multiple times: idempotent.
 func (o *Orchestrator) Start(ctx context.Context) error {
 	o.mu.Lock()
 	if o.stopEvt != nil {
@@ -165,7 +165,7 @@ func (o *Orchestrator) Submit(ctx context.Context, spec schema.ProcessSpec) erro
 		}
 		return o.dispatchStep(ctx, spec, 0)
 	default:
-		// linear — dispatch every step eagerly (Week 1 behaviour).
+		// linear: dispatch every step eagerly (Week 1 behaviour).
 		for i := range spec.Steps {
 			if err := o.dispatchStep(ctx, spec, i); err != nil {
 				return err
@@ -243,7 +243,7 @@ func (o *Orchestrator) onProcessEvent(ctx context.Context, ev schema.ProcessEven
 				_ = o.dispatchStep(ctx, spec, 0)
 				return
 			}
-			// Cap reached — mark done and close out. Completion is
+			// Cap reached: mark done and close out. Completion is
 			// normally emitted by the last-step processor (A-proc);
 			// if the spec has no A-step or that emitter doesn't run,
 			// the caller can still call Complete() separately.
@@ -256,12 +256,12 @@ func (o *Orchestrator) onProcessEvent(ctx context.Context, ev schema.ProcessEven
 			_ = o.store.UpdateState(ev.ProcessID, store.StateCompleted, "")
 			return
 		}
-		// semi_linear — end of chain.
+		// semi_linear: end of chain.
 		b.done = true
 		o.mu.Unlock()
 
 	case schema.EventProcessFailed, schema.EventProcessCancelled:
-		// Stop the barrier — no more steps will be dispatched.
+		// Stop the barrier: no more steps will be dispatched.
 		o.mu.Lock()
 		b.done = true
 		o.mu.Unlock()
@@ -296,7 +296,7 @@ func stepIndexFromDetail(detail map[string]interface{}) (int, bool) {
 // of type=schedule with Cron unset are treated as opaque; the only
 // way to override the default today is an explicit integer-valued
 // Trigger.Event of form "max_iterations=N". Keeps the schema stable
-// without growing ProcessSpec — revisit in Phase 2 if power users
+// without growing ProcessSpec: revisit in Phase 2 if power users
 // need a richer knob.
 func loopMaxIterations(spec schema.ProcessSpec) int {
 	for _, t := range spec.Triggers {

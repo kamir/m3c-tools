@@ -1,4 +1,4 @@
-// pocket_sync_darwin.go — Native macOS Pocket Sync Window via Cocoa/cgo (SPEC-0119).
+// pocket_sync_darwin.go: Native macOS Pocket Sync Window via Cocoa/cgo (SPEC-0119).
 //
 // Creates an NSWindow with an NSTableView showing Pocket recordings with
 // checkboxes, "Group Selected", "Sync Selected" buttons, and a tags field.
@@ -327,7 +327,7 @@ extern void goPocketSyncAction(char* action);
 	// Checkbox column: empty for group rows, checkbox for regular rows
 	if ([identifier isEqualToString:@"select"]) {
 		if (isGroupRow) {
-			// Empty cell — no checkbox for group headers
+			// Empty cell: no checkbox for group headers
 			NSTextField *empty = [[NSTextField alloc] initWithFrame:NSZeroRect];
 			[empty setBezeled:NO]; [empty setDrawsBackground:NO]; [empty setEditable:NO];
 			[empty setStringValue:@""];
@@ -423,7 +423,7 @@ extern void goPocketSyncAction(char* action);
 }
 
 - (void)groupDisclosureClicked:(NSButton *)sender {
-	// Legacy — kept for compatibility
+	// Legacy: kept for compatibility
 }
 
 - (void)groupToggleClicked:(NSButton *)sender {
@@ -472,7 +472,7 @@ static void showPocketSyncWindow(const char *deviceInfo) {
 	char *deviceCopy = deviceInfo ? strdup(deviceInfo) : NULL;
 	dispatch_async(dispatch_get_main_queue(), ^{
 		if (g_pocketWindow != nil) {
-			// Window exists — just reload the table with new data
+			// Window exists, just reload the table with new data
 			if (g_pocketTable) [g_pocketTable reloadData];
 			updatePocketSelectionLabel();
 			[g_pocketWindow makeKeyAndOrderFront:nil];
@@ -490,7 +490,7 @@ static void showPocketSyncWindow(const char *deviceInfo) {
 					   NSWindowStyleMaskMiniaturizable)
 			backing:NSBackingStoreBuffered
 			defer:NO];
-		[g_pocketWindow setTitle:@"Pocket Sync — Audio Recordings"];
+		[g_pocketWindow setTitle:@"Pocket Sync: Audio Recordings"];
 		[g_pocketWindow setMinSize:NSMakeSize(640, 420)];
 
 		NSView *content = [g_pocketWindow contentView];

@@ -1,4 +1,4 @@
-# Local GitLab CE — acceptance environment for the skillctl git/GitLab artifact
+# Local GitLab CE: acceptance environment for the skillctl git/GitLab artifact
 # backend (SPEC-0356 D6). LOCAL TEST ONLY: not hardened, no real data.
 #
 #   docker compose -f deploy/testing/gitlab/docker-compose.yml up -d

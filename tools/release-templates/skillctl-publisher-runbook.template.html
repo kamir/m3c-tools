@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Runbook — Eric · sign, publish &amp; upgrade a skill</title>
+<title>Runbook: Eric · sign, publish &amp; upgrade a skill</title>
 <style>
   :root{
     --bg:#0b0d11; --panel:#171a21; --panel2:#23262e; --line:#2b3140;
@@ -108,8 +108,8 @@
 <body>
 <div class="wrap">
   <span class="tag">● SKILLCTL RUNBOOK · PUBLISHER</span>
-  <h1>Runbook — Eric: sign, publish &amp; upgrade a skill</h1>
-  <p class="sub">Fill in the session inputs once at the top — every command below auto-fills with your values
+  <h1>Runbook (Eric: sign, publish &amp; upgrade a skill</h1>
+  <p class="sub">Fill in the session inputs once at the top) every command below auto-fills with your values
   (shown <span style="color:var(--ok);font-weight:700">in green</span>). Work the four blocks top to bottom; each
   command has a ⧉ copy icon, a 📋 box for its output, and a 💬 feedback box.</p>
 
@@ -123,42 +123,42 @@
   </div>
 
   <div class="mission">
-    <b>Mission:</b> become a skill <i>publisher</i> — install skillctl, sign with your own signing key,
+    <b>Mission:</b> become a skill <i>publisher</i>: install skillctl, sign with your own signing key,
     publish a skill into your ER1 context + the <b>{{room}}</b> room so Kamir can take it over, then ship a
     <i>next version</i> of it.
   </div>
 
   <!-- SESSION INPUTS -->
   <div class="cfg" id="cfg">
-    <h2>Session inputs — fill once, all commands update</h2>
-    <p class="hint">Pick the <b>Author</b> first — that sets identity + ER1 context + key together (they must match the
+    <h2>Session inputs (fill once, all commands update</h2>
+    <p class="hint">Pick the <b>Author</b> first) that sets identity + ER1 context + key together (they must match the
     Google account you log in with in step 6, or publish returns 403). Then adjust skill/version. The ER1 device token is
-    a secret — you paste it in the shell, not here.</p>
+    a secret (you paste it in the shell, not here.</p>
     <div class="cfg-grid">
-      <div style="grid-column:1/-1"><label>Author — wer publisht? (setzt Identität + Kontext + Key)</label>
+      <div style="grid-column:1/-1"><label>Author) wer publisht? (setzt Identität + Kontext + Key)</label>
         <select data-step="cfg" data-field="author" onchange="applyAuthor()">
-          <option value="eric">Eric — id:eric@m3c · 105525022458397210134___skills</option>
-          <option value="kamir">Mirko (kamir) — id:kamir@m3c · 107677460544181387647___skills</option>
+          <option value="eric">Eric, id:eric@m3c · 105525022458397210134___skills</option>
+          <option value="kamir">Mirko (kamir), id:kamir@m3c · 107677460544181387647___skills</option>
         </select></div>
       <div><label>Skill name</label><input data-step="cfg" data-field="skill" value="field-note"></div>
       <div><label>Version (publish)</label><input data-step="cfg" data-field="ver" value="0.1.0"></div>
       <div><label>Next version (upgrade)</label><input data-step="cfg" data-field="nextver" value="0.2.0"></div>
       <div><label>Room label</label><input data-step="cfg" data-field="room" value="aims-basics"></div>
-      <div><label>ER1 context (auto — vom Author)</label><input data-step="cfg" data-field="ctx" value="105525022458397210134___skills"></div>
-      <div><label>Author identity (auto — vom Author)</label><input data-step="cfg" data-field="identity" value="id:eric@m3c"></div>
+      <div><label>ER1 context (auto, vom Author)</label><input data-step="cfg" data-field="ctx" value="105525022458397210134___skills"></div>
+      <div><label>Author identity (auto, vom Author)</label><input data-step="cfg" data-field="identity" value="id:eric@m3c"></div>
       <div style="grid-column:1/-1"><label>Key stem (auto · keygen --out · key = stem.priv)</label><input data-step="cfg" data-field="keystem" value="~/.config/m3c/skill-keys/eric"></div>
     </div>
   </div>
 
   <!-- ===================== BLOCK 1 ===================== -->
-  <div class="block"><div class="bl">1</div><div class="bt"><h2>Prerequisites</h2><p>Validate readiness before the call — or ask for help.</p></div></div>
+  <div class="block"><div class="bl">1</div><div class="bt"><h2>Prerequisites</h2><p>Validate readiness before the call, or ask for help.</p></div></div>
 
   <section class="preflight" id="preflight">
-    <p class="pfintro">Run these four checks now and send me the responses — I'll confirm you're good to go before we
+    <p class="pfintro">Run these four checks now and send me the responses: I'll confirm you're good to go before we
     start. Stuck on anything? Use <b>Request help</b> and we'll sort it beforehand.</p>
 
     <div class="pf-check">
-      <pre><code>skillctl version 2&gt;/dev/null || echo "not installed yet — fine, block 2 installs it"</code></pre>
+      <pre><code>skillctl version 2&gt;/dev/null || echo "not installed yet: fine, block 2 installs it"</code></pre>
       <div class="field"><label>Response</label><textarea data-step="pf" data-field="pf_version" placeholder="paste what it printed"></textarea></div>
     </div>
     <div class="pf-check">
@@ -175,7 +175,7 @@
     </div>
 
     <div class="pf-help">
-      <div class="field"><label>🆘 Need help with anything before we start? (optional)</label><textarea data-step="pf" data-field="pf_help" placeholder="describe what's unclear or blocking — I'll prep an answer before the call"></textarea></div>
+      <div class="field"><label>🆘 Need help with anything before we start? (optional)</label><textarea data-step="pf" data-field="pf_help" placeholder="describe what's unclear or blocking: I'll prep an answer before the call"></textarea></div>
     </div>
 
     <div class="pf-actions">
@@ -186,7 +186,7 @@
   </section>
 
   <!-- ===================== BLOCK 2 ===================== -->
-  <div class="block"><div class="bl">2</div><div class="bt"><h2>Install skillctl</h2><p>Get onto __SKILLCTL_VERSION__ — the version that makes cross-person trust real.</p></div></div>
+  <div class="block"><div class="bl">2</div><div class="bt"><h2>Install skillctl</h2><p>Get onto __SKILLCTL_VERSION__. The version that makes cross-person trust real.</p></div></div>
 
   <section class="step" id="s1">
     <div class="head"><div class="num">1</div><div class="htxt">
@@ -201,14 +201,14 @@ which skillctl          # MUST be ~/.local/bin/skillctl</code></pre>
       <div class="chk">Expected: <b>skillctl __SKILLCTL_VERSION__</b> (installer verifies the release signature, fp <code>5f8f39cb…</code>).
       ⚠ <b>If <code>version</code> shows an OLDER version, or a command like <code>login</code> is "unknown command":</b> a STALE skillctl is ahead on your PATH
       (often <code>~/go/bin/skillctl</code>). Fix: <code>hash -r</code>, put <code>~/.local/bin</code> FIRST on PATH (step 2), or remove the old one
-      (<code>rm ~/go/bin/skillctl</code>) — then re-check <code>which skillctl</code> + <code>skillctl version</code>.</div>
+      (<code>rm ~/go/bin/skillctl</code>), then re-check <code>which skillctl</code> + <code>skillctl version</code>.</div>
       <div class="donerow"><input type="checkbox" id="c1" data-step="s1" data-field="done"><label for="c1">__SKILLCTL_VERSION__ confirmed</label></div>
     </div>
   </section>
 
   <section class="step" id="s2">
     <div class="head"><div class="num">2</div><div class="htxt">
-      <h3>PATH check — make sure the NEW skillctl wins</h3>
+      <h3>PATH check: make sure the NEW skillctl wins</h3>
       <p class="why">"command not found" OR an old build answering (wrong version / "unknown command") both mean PATH: put <code>~/.local/bin</code> first.</p></div>
       <span class="req o">if needed</span></div>
     <div class="body">
@@ -216,7 +216,7 @@ which skillctl          # MUST be ~/.local/bin/skillctl</code></pre>
 hash -r
 which skillctl       # → /Users/&lt;you&gt;/.local/bin/skillctl
 skillctl version     # → __SKILLCTL_VERSION__</code></pre>
-      <div class="chk">Tip: a quick bulletproof alternative is to call it by full path — <code>~/.local/bin/skillctl …</code> — which ignores PATH entirely.</div>
+      <div class="chk">Tip: a quick bulletproof alternative is to call it by full path, <code>~/.local/bin/skillctl …</code>, which ignores PATH entirely.</div>
       <div class="donerow"><input type="checkbox" id="c2" data-step="s2" data-field="done"><label for="c2">which skillctl → ~/.local/bin/skillctl, version is __SKILLCTL_VERSION__</label></div>
     </div>
   </section>
@@ -232,7 +232,7 @@ skillctl version     # → __SKILLCTL_VERSION__</code></pre>
     <div class="body">
       <pre><code>skillctl keygen --out {{keystem}}</code></pre>
       <div class="chk">Produces <code>{{keystem}}.priv</code> (0600) and <code>{{keystem}}.pub</code>.
-      Already have a key? <code>keygen</code> refuses to overwrite — that's expected: <b>reuse your existing key, skip to step 4</b> (don't rotate unless you mean to).</div>
+      Already have a key? <code>keygen</code> refuses to overwrite. That's expected: <b>reuse your existing key, skip to step 4</b> (don't rotate unless you mean to).</div>
       <div class="donerow"><input type="checkbox" id="c3" data-step="s3" data-field="done"><label for="c3">Key created</label></div>
     </div>
   </section>
@@ -258,22 +258,22 @@ skillctl version     # → __SKILLCTL_VERSION__</code></pre>
       <pre><code>mkdir -p ~/.claude/skills
 cp -R ./{{skill}} ~/.claude/skills/{{skill}}
 ls ~/.claude/skills/{{skill}}/SKILL.md
-# optional self-check — only runs if the skill ships one:
-[ -f ~/.claude/skills/{{skill}}/tests/smoke.sh ] && bash ~/.claude/skills/{{skill}}/tests/smoke.sh || echo "(no tests/smoke.sh — optional, skip)"</code></pre>
-      <div class="chk">SKILL.md must exist. A <code>tests/smoke.sh</code> is <b>optional</b> — publishing does not require it.</div>
+# optional self-check, only runs if the skill ships one:
+[ -f ~/.claude/skills/{{skill}}/tests/smoke.sh ] && bash ~/.claude/skills/{{skill}}/tests/smoke.sh || echo "(no tests/smoke.sh, optional, skip)"</code></pre>
+      <div class="chk">SKILL.md must exist. A <code>tests/smoke.sh</code> is <b>optional</b>. Publishing does not require it.</div>
       <div class="donerow"><input type="checkbox" id="c5" data-step="s5" data-field="done"><label for="c5">{{skill}} is in ~/.claude/skills/</label></div>
     </div>
   </section>
 
   <section class="step" id="s6">
     <div class="head"><div class="num">6</div><div class="htxt">
-      <h3>Authenticate — skillctl login</h3>
-      <p class="why">From __SKILLCTL_VERSION__, skillctl logs in via the browser and uses the device token automatically (FR-0043) — no manual export, no minted token.</p></div>
+      <h3>Authenticate, skillctl login</h3>
+      <p class="why">From __SKILLCTL_VERSION__, skillctl logs in via the browser and uses the device token automatically (FR-0043), no manual export, no minted token.</p></div>
       <span class="req r">REQUIRED</span></div>
     <div class="body">
       <pre><code>skillctl login --base-url https://onboarding.guide   # browser -> public SaaS; saves the device token
 skillctl login --status                              # should print: Logged in</code></pre>
-      <div class="chk">⚠ Use <code>--base-url https://onboarding.guide</code> (the public SaaS) — without it, older builds default to the local
+      <div class="chk">⚠ Use <code>--base-url https://onboarding.guide</code> (the public SaaS), without it, older builds default to the local
       server and login fails. Headless/SSH? add <code>--no-browser</code> and open the printed URL. Last-resort fallback:
       <code>export ER1_DEVICE_TOKEN=&lt;token from Kamir&gt;</code>.</div>
       <div class="donerow"><input type="checkbox" id="c6" data-step="s6" data-field="done"><label for="c6">Logged in (status shows "Logged in")</label></div>
@@ -346,12 +346,12 @@ grep '^version:' ~/.claude/skills/{{skill}}/SKILL.md</code></pre>
   <section class="step" id="s11">
     <div class="head"><div class="num">11</div><div class="htxt">
       <h3>Re-validate the skill (optional)</h3>
-      <p class="why">If the skill ships a smoke test, run it on the bumped version. Many skills have none — that's fine.</p></div>
+      <p class="why">If the skill ships a smoke test, run it on the bumped version. Many skills have none. That's fine.</p></div>
       <span class="req o">optional</span></div>
     <div class="body">
-      <pre><code>[ -f ~/.claude/skills/{{skill}}/tests/smoke.sh ] && bash ~/.claude/skills/{{skill}}/tests/smoke.sh || echo "(no tests/smoke.sh — optional, skip)"</code></pre>
-      <div class="chk">No <code>tests/smoke.sh</code>? Skip — it's optional. At minimum re-check <code>SKILL.md</code> still has <code>version: {{nextver}}</code>.</div>
-      <div class="donerow"><input type="checkbox" id="c11" data-step="s11" data-field="done"><label for="c11">Re-validated (or skipped — no smoke test)</label></div>
+      <pre><code>[ -f ~/.claude/skills/{{skill}}/tests/smoke.sh ] && bash ~/.claude/skills/{{skill}}/tests/smoke.sh || echo "(no tests/smoke.sh, optional, skip)"</code></pre>
+      <div class="chk">No <code>tests/smoke.sh</code>? Skip, it's optional. At minimum re-check <code>SKILL.md</code> still has <code>version: {{nextver}}</code>.</div>
+      <div class="donerow"><input type="checkbox" id="c11" data-step="s11" data-field="done"><label for="c11">Re-validated (or skipped, no smoke test)</label></div>
     </div>
   </section>
 
@@ -369,7 +369,7 @@ skillctl publish {{skill}}@{{nextver}} \
   --identity {{identity}} \
   --key {{keystem}}.priv \
   --share-room {{room}}</code></pre>
-      <div class="chk"><b>Copy the new digest</b> into the output box — it differs from {{ver}}.</div>
+      <div class="chk"><b>Copy the new digest</b> into the output box: it differs from {{ver}}.</div>
       <div class="donerow"><input type="checkbox" id="c12" data-step="s12" data-field="done"><label for="c12">{{nextver}} published</label></div>
     </div>
   </section>
@@ -410,7 +410,7 @@ skillctl publish {{skill}}@{{nextver}} \
 </div>
 
 <dialog id="reportdlg">
-  <div class="dhead"><h3>Progress report — paste this to Kamir</h3><button class="x" onclick="document.getElementById('reportdlg').close()">✕</button></div>
+  <div class="dhead"><h3>Progress report: paste this to Kamir</h3><button class="x" onclick="document.getElementById('reportdlg').close()">✕</button></div>
   <div class="dbody">
     <textarea id="reportText" readonly></textarea>
     <div style="margin-top:12px;display:flex;gap:10px">
@@ -422,7 +422,7 @@ skillctl publish {{skill}}@{{nextver}} \
 
 <script>
   const WS_ID = 'ws-eric-publisher-v2';
-  const WS_TITLE = 'Eric — publisher runbook';
+  const WS_TITLE = 'Eric: publisher runbook';
   const KAMIR_EMAIL = 'mirko.kaempf@gmail.com';
   const k = (s,f)=>`${WS_ID}:${s}:${f}`;
   const $ = id => document.getElementById(id);
@@ -431,7 +431,7 @@ skillctl publish {{skill}}@{{nextver}} \
   function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function cfg(){ const o={}; document.querySelectorAll('[data-step=cfg]').forEach(e=>o[e.dataset.field]=(e.value||'').trim()); return o; }
 
-  // Author presets — pick the publisher; identity + ER1 context + key move together
+  // Author presets: pick the publisher; identity + ER1 context + key move together
   // (they must match the Google account used in `skillctl login`, else 403).
   const AUTHORS = {
     eric:  { identity:'id:eric@m3c',  ctx:'105525022458397210134___skills', keystem:'~/.config/m3c/skill-keys/eric'  },
@@ -493,17 +493,17 @@ skillctl publish {{skill}}@{{nextver}} \
     $('count').textContent = `${rd} / ${rt} required steps`;
     const ready = $('ready');
     if(rd===rt && rt>0){ ready.textContent='✓ all done'; ready.classList.add('go'); } else { ready.textContent='not ready yet'; ready.classList.remove('go'); }
-    $('mailbtn').href = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(KAMIR_EMAIL)}&su=${encodeURIComponent('skillctl runbook progress — Eric')}&body=${encodeURIComponent(buildReport())}`;
+    $('mailbtn').href = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(KAMIR_EMAIL)}&su=${encodeURIComponent('skillctl runbook progress: Eric')}&body=${encodeURIComponent(buildReport())}`;
     const pf = buildPreflight();
-    $('pfsend').href = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(KAMIR_EMAIL)}&su=${encodeURIComponent('Pre-flight readiness — Eric (skillctl)')}&body=${encodeURIComponent(pf)}`;
+    $('pfsend').href = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(KAMIR_EMAIL)}&su=${encodeURIComponent('Pre-flight readiness: Eric (skillctl)')}&body=${encodeURIComponent(pf)}`;
     const helpEl = document.querySelector('[data-step=pf][data-field=pf_help]');
     const helpTxt = helpEl ? (helpEl.value||'').trim() : '';
-    $('pfhelp').href = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(KAMIR_EMAIL)}&su=${encodeURIComponent('HELP before skillctl session — Eric')}&body=${encodeURIComponent(helpTxt||'(describe what you need help with before we start)')}`;
+    $('pfhelp').href = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(KAMIR_EMAIL)}&su=${encodeURIComponent('HELP before skillctl session: Eric')}&body=${encodeURIComponent(helpTxt||'(describe what you need help with before we start)')}`;
   }
 
   function buildPreflight(){
     const g = id => { const e = document.querySelector('[data-step=pf][data-field='+id+']'); return e ? (e.value||'').trim() : ''; };
-    return ['# Pre-flight readiness — Eric (skillctl publisher session)','when: '+new Date().toISOString(),'',
+    return ['# Pre-flight readiness: Eric (skillctl publisher session)','when: '+new Date().toISOString(),'',
       '- skillctl version : '+(g('pf_version')||'(no response)'),
       '- device token     : '+(g('pf_token')||'(no response)'),
       '- skill folder      : '+(g('pf_skill')||'(no response)'),
@@ -514,7 +514,7 @@ skillctl publish {{skill}}@{{nextver}} \
 
   function buildReport(){
     const c = cfg();
-    const lines = [`# Worksheet progress — ${WS_TITLE}`, `when: ${new Date().toISOString()}`, ''];
+    const lines = [`# Worksheet progress: ${WS_TITLE}`, `when: ${new Date().toISOString()}`, ''];
     lines.push('## Session inputs');
     ['skill','ver','nextver','room','ctx','identity','keystem'].forEach(key=>lines.push(`- ${key}: ${c[key]||''}`));
     lines.push('');
@@ -563,7 +563,7 @@ skillctl publish {{skill}}@{{nextver}} \
   // init
   captureTemplates();
   injectCopyButtons();
-  injectField('cliout','📋 CLI output — paste exactly what the command printed','cliout','paste terminal output (or error) here so we learn what happens in the field…');
+  injectField('cliout','📋 CLI output: paste exactly what the command printed','cliout','paste terminal output (or error) here so we learn what happens in the field…');
   injectField('feedback','💬 Feedback / question on this command (optional)','feedback','was this clear? did it behave as described? anything Kamir should know…');
   bind();
   applyTemplates();

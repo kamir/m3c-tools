@@ -27,7 +27,7 @@ Each file's progress is tracked in the **SQLite tracking database** at
 
 | Status     | Meaning                                              |
 |------------|------------------------------------------------------|
-| `new`      | File is on disk but not in the DB — ready to import  |
+| `new`      | File is on disk but not in the DB: ready to import  |
 | `imported` | Copied to MEMORY folder, recorded in DB              |
 | `uploaded` | Successfully uploaded to ER1 (has `upload_doc_id`)   |
 | `failed`   | Import or upload failed (see `upload_error` column)  |

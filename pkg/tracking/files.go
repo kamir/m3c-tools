@@ -91,7 +91,7 @@ func OpenFilesDB(dbPath string) (*FilesDB, error) {
 		return nil, fmt.Errorf("create processed_files table: %w", err)
 	}
 
-	// Run migrations for existing DBs — each ALTER is idempotent.
+	// Run migrations for existing DBs: each ALTER is idempotent.
 	for _, stmt := range splitStatements(migrateFilesTableSQL) {
 		_, _ = db.Exec(stmt) // ignore "duplicate column" errors
 	}

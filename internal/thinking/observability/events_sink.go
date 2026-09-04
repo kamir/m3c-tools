@@ -1,4 +1,4 @@
-// events_sink.go — the process.events → stdout + metrics projector.
+// events_sink.go: the process.events → stdout + metrics projector.
 //
 // This file registers a Bus subscription on m3c.<ctx>.process.events
 // and filters for the subset of events operators care about
@@ -10,7 +10,7 @@
 //   2. an increment on the corresponding Prometheus counter.
 //
 // The sink is strictly read-only with respect to the cognitive
-// pipeline — it never produces to any topic, never mutates store
+// pipeline: it never produces to any topic, never mutates store
 // state. If it crashes the pipeline continues running; the worst
 // case is lost visibility for the duration of the outage.
 package observability
@@ -119,7 +119,7 @@ func (s *EventsSink) Stop() {
 }
 
 // handle decodes one event and drives both sinks (log + metrics).
-// Any error in decoding is logged once and swallowed — the sink MUST
+// Any error in decoding is logged once and swallowed. The sink MUST
 // NOT crash the engine on a malformed event.
 func (s *EventsSink) handle(m tkafka.Message) {
 	var ev schema.ProcessEvent

@@ -10,13 +10,13 @@ import (
 // line-wrap does not break a verb→noun→"to"→URL chain) but is tightly bounded
 // (n is the max length) so it cannot stitch together unrelated, far-apart text.
 // RE2 has no lookahead, so a blank-line guard is applied separately by the
-// caller's overall window size — a real exfil instruction lives in one short
+// caller's overall window size. A real exfil instruction lives in one short
 // span, which is what n captures.
 func gapClass(n int) string {
 	return fmt.Sprintf(`(?s:.{0,%d}?)`, n)
 }
 
-// Exfiltration rules (SPEC-0246 §4.2) — all RED. These detect prose that moves
+// Exfiltration rules (SPEC-0246 §4.2): all RED. These detect prose that moves
 // sensitive material (context, secrets, env, credentials, repo, history,
 // conversation) off the machine to a network endpoint.
 var (
@@ -24,14 +24,14 @@ var (
 	// must co-occur with a sensitive noun in between, within a bounded window
 	// so unrelated sentences do not chain together. The window may span a soft
 	// line-wrap (a single newline) but NOT a blank-line paragraph break
-	// (\n\n) — see gapClass.
+	// (\n\n): see gapClass.
 	reExfilVerbToURL = regexp.MustCompile(`(?i)\b(?:send|post|upload|transmit|exfiltrate|leak|forward|email|curl|wget|fetch)\b` + gapClass(80) + `\b(?:context|secrets?|env(?:ironment)?|\.env|credentials?|api[\s_-]?keys?|tokens?|passwords?|repo(?:sitory)?|git\s+history|history|conversation|chat\s+log|messages?|private[\s_-]?key)\b` + gapClass(80) + `\bto\b` + gapClass(40) + `https?://`)
 
 	// Same, but the sensitive noun precedes the verb: "the .env ... send ... to http://".
 	reExfilNounToURL = regexp.MustCompile(`(?i)\b(?:secrets?|env(?:ironment)?|\.env|credentials?|api[\s_-]?keys?|tokens?|passwords?|conversation|chat\s+log|context)\b` + gapClass(60) + `\b(?:send|post|upload|transmit|exfiltrate|leak|forward|email|curl|wget|fetch)\b` + gapClass(60) + `https?://`)
 
 	// "summarize ... and (send|transmit|post|upload) ... <network sink OR
-	// sensitive noun>" — covert exfil framed as a helpful summary.
+	// sensitive noun>": covert exfil framed as a helpful summary.
 	//
 	// FALSE-POSITIVE FIX (SPEC-0246 §4, evasion #5): the bare "summarize and
 	// send" form matched benign skills like "summarize and email the report".
@@ -65,15 +65,15 @@ const exfilB64MinChars = 24
 
 // exfilB64JoinedMinChars is the threshold for the SPLIT form. Because the split
 // rule tolerates separators, it must reconstruct to at least the STANDALONE
-// blob size (40) to count — otherwise an attacker who simply wrote 24 normal
+// blob size (40) to count: otherwise an attacker who simply wrote 24 normal
 // chars would not have needed to split at all. This keeps the split rule from
 // firing on incidental backtick-separated identifiers.
 const exfilB64JoinedMinChars = 40
 
-// reB64Chunk matches one run of >=4 base64-alphabet characters — a "chunk" of a
+// reB64Chunk matches one run of >=4 base64-alphabet characters: a "chunk" of a
 // split blob. Adversaries break a long base64 payload into adjacent
 // `chunk1` `chunk2` fragments (separated ONLY by backticks/quotes/newlines, not
-// by spaces — prose uses spaces) to dodge the contiguous-run threshold.
+// by spaces: prose uses spaces) to dodge the contiguous-run threshold.
 var reB64Chunk = regexp.MustCompile("[A-Za-z0-9+/]{4,}")
 
 // reB64Separator is the set of separators that may join split base64 chunks:
@@ -92,7 +92,7 @@ func matchBase64NearNetwork(c scanCtx) []Span {
 	// Scan the NORMALIZED body, not the raw one. Normalization has already
 	// EOL-folded CRLF/CR to LF (normalize.go), so the single-newline separator
 	// in reB64Separator matches identically regardless of the file's line
-	// endings — a split-base64 blob authored with Windows CRLF can no longer
+	// endings. A split-base64 blob authored with Windows CRLF can no longer
 	// evade the chunk-merge by inserting a stray "\r" between chunks. Spans are
 	// mapped back to ORIGINAL byte offsets via c.origSpan so the reported
 	// excerpt / line number still points into the user's on-disk bytes.
@@ -136,7 +136,7 @@ func matchBase64NearNetwork(c scanCtx) []Span {
 
 	// (b) Base64 split across backticks/quotes/newlines. Merge consecutive
 	// base64 chunks that are joined by ONLY backtick/quote/newline separators
-	// (no inline spaces — those mean prose), and flag the merged run when its
+	// (no inline spaces: those mean prose), and flag the merged run when its
 	// reconstructed base64 length reaches the standalone-blob threshold AND it
 	// sits next to a network sink.
 	for _, m := range mergeSplitB64(b) {
@@ -220,7 +220,7 @@ func init() {
 			Category: CategoryExfiltration,
 			Verdict:  VerdictRed,
 			Pattern:  reExfilSummarizeSend,
-			Message:  "exfiltration: \"summarize and send/transmit\" — covert summary-then-exfil sequence",
+			Message:  "exfiltration: \"summarize and send/transmit\": covert summary-then-exfil sequence",
 		},
 		Rule{
 			ID:       "EXF-004",

@@ -266,7 +266,7 @@ func TestBestEffortAppend_EnabledLogs(t *testing.T) {
 
 // TestBestEffortAppend_MalformedDigestSwallowed: a bad digest is rejected by
 // the entry validator but the helper must NOT panic or fail the caller (it
-// is best-effort) — it emits a non-fatal note.
+// is best-effort): it emits a non-fatal note.
 func TestBestEffortAppend_MalformedDigestSwallowed(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

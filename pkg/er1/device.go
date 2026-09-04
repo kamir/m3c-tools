@@ -1,10 +1,10 @@
-// device.go — Device pairing and heartbeat client for SPEC-0126.
+// device.go, Device pairing and heartbeat client for SPEC-0126.
 //
 // Talks to the aims-core device management endpoints:
 //
-//	POST /api/v2/devices/pair       — idempotent device pairing (upsert)
-//	POST /api/v2/devices/heartbeat  — update sync state after batch
-//	GET  /api/v2/devices            — list paired devices
+//	POST /api/v2/devices/pair, idempotent device pairing (upsert)
+//	POST /api/v2/devices/heartbeat, update sync state after batch
+//	GET  /api/v2/devices, list paired devices
 package er1
 
 import (
@@ -53,7 +53,7 @@ type PairedDevice struct {
 // deviceHTTPClient is the shared HTTP client for device API calls.
 var deviceHTTPClient = &http.Client{Timeout: 30 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect} // SEC F25
 
-// PairDevice registers or updates a device pairing. Idempotent — returns nil
+// PairDevice registers or updates a device pairing. Idempotent: returns nil
 // on both 200 (already paired) and 201 (new pairing).
 func PairDevice(ctx context.Context, baseURL, apiKey string, req PairRequest) error {
 	body, err := json.Marshal(req)

@@ -1,6 +1,6 @@
 package main
 
-// cli.go — the terminal renderer. It turns the event stream into a coloured,
+// cli.go: the terminal renderer. It turns the event stream into a coloured,
 // presenter-friendly transcript: each scenario header, the live command, its
 // streamed output, and a bold exit-code verdict badge.
 
@@ -38,7 +38,7 @@ func (r *CLIRenderer) c(code, s string) string {
 func (r *CLIRenderer) Render(e Event) {
 	switch e.Kind {
 	case "ready":
-		fmt.Fprintln(r.W, r.c(cBold+cCyan, "\n  skillctl-demo — KuP / CISO skill-trust walkthrough"))
+		fmt.Fprintln(r.W, r.c(cBold+cCyan, "\n  skillctl-demo: KuP / CISO skill-trust walkthrough"))
 		if e.Text != "" {
 			fmt.Fprintln(r.W, r.c(cGrey, "  "+e.Text))
 		}
@@ -72,7 +72,7 @@ func (r *CLIRenderer) Render(e Event) {
 	case "note":
 		fmt.Fprintln(r.W, "  "+r.c(cGrey, "  "+e.Text))
 	case "reset":
-		fmt.Fprintln(r.W, r.c(cGrey, "\n  — sandbox reset to clean state —"))
+		fmt.Fprintln(r.W, r.c(cGrey, "\n, sandbox reset to clean state, "))
 	case "done":
 		fmt.Fprintln(r.W, r.c(cBold+cGreen, "\n  ✔ demo complete."))
 		if e.Text != "" {
@@ -114,7 +114,7 @@ func (r *CLIRenderer) renderExit(e Event) {
 	} else {
 		fmt.Fprintf(r.W, "  %s  %s\n",
 			r.c(cBold+cRed, "✗ exit "+itoa(e.Code)),
-			r.c(cRed, "UNEXPECTED — wanted "+itoa(e.Expected)))
+			r.c(cRed, "UNEXPECTED: wanted "+itoa(e.Expected)))
 	}
 }
 

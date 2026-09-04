@@ -8,7 +8,7 @@ package registry
 // of the inline base64 body. EVERY §7 gate and the staging are identical to
 // PullBundles and use the SAME primitives (VerifyEnvelopeSignature,
 // verifyBundleSignatures, MeetsFloor, the revoked set, SEC-H1 verify-before-trust)
-// — this file lives in package registry precisely so it can call the unexported
+//. This file lives in package registry precisely so it can call the unexported
 // verifyBundleSignatures. Verified bundles land in the same cache layout, so
 // PlanInstall / ConfirmInstall are reused unchanged.
 
@@ -71,7 +71,7 @@ func eventOlderThan(ev map[string]any, cutoff time.Time) bool {
 
 // PullBundlesFromBackend runs the SPEC-0188 §7 gauntlet over be and stages the
 // bundles that pass. The governance floor requires a SIGNED AttestationPublished
-// event at/above tr.GovernanceMinimum for each digest — the admit event's
+// event at/above tr.GovernanceMinimum for each digest. The admit event's
 // author_intent is never sufficient (identical to PullBundles / the ER1 self
 // tenant). A backend with no GovernanceLog cannot be verified and is rejected.
 func PullBundlesFromBackend(ctx context.Context, be artifact.Backend, tr *SelfTrustRoots, opts PullOpts) (*PullResult, error) {
@@ -80,7 +80,7 @@ func PullBundlesFromBackend(ctx context.Context, be artifact.Backend, tr *SelfTr
 	}
 	gl, ok := be.(artifact.GovernanceLog)
 	if !ok {
-		return nil, fmt.Errorf("pull: backend %q exposes no signed events (no GovernanceLog) — cannot verify", be.Describe().Scheme)
+		return nil, fmt.Errorf("pull: backend %q exposes no signed events (no GovernanceLog): cannot verify", be.Describe().Scheme)
 	}
 
 	// Read every signed event envelope for the target skill(s).
@@ -106,7 +106,7 @@ func PullBundlesFromBackend(ctx context.Context, be artifact.Backend, tr *SelfTr
 		// rec.Kind (an unsigned projection the backend's Events() derived from a
 		// filename/annotation/tag). This is defense-in-depth atop OfferRevoke /
 		// OfferAttest, which independently require the signed revoked_by /
-		// reviewer_id+governance_level — so a mislabeled event is routed by what it
+		// reviewer_id+governance_level, so a mislabeled event is routed by what it
 		// actually IS and then re-checked by the accumulator.
 		switch trustcore.KindFromSignedEnvelope(ev) {
 		case artifact.KindAdmit:
@@ -151,7 +151,7 @@ func PullBundlesFromBackend(ctx context.Context, be artifact.Backend, tr *SelfTr
 			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, Gate: ErrGateRevoked, Detail: "BundleRevokedEvent present for this digest"})
 			continue
 		}
-		// Gate 4: governance floor — N-of-M signed, fresh attestations ≥ floor from
+		// Gate 4: governance floor: N-of-M signed, fresh attestations ≥ floor from
 		// DISTINCT pinned signers (default quorum 1 == a single attestation).
 		qual := acc.Qualifying(digest)
 		if len(qual) < tr.quorum() {
@@ -171,7 +171,7 @@ func PullBundlesFromBackend(ctx context.Context, be artifact.Backend, tr *SelfTr
 			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, Gate: ErrGateDigest, Detail: err.Error()})
 			continue
 		}
-		// Gate 2: digest match (recompute — never trust the backend).
+		// Gate 2: digest match (recompute: never trust the backend).
 		gotDigest := "sha256:" + hex.EncodeToString(sha256Sum(skbBytes))
 		if gotDigest != digest {
 			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, Gate: ErrGateDigest, Detail: fmt.Sprintf("computed %s, event declared %s", gotDigest, digest)})
@@ -183,7 +183,7 @@ func PullBundlesFromBackend(ctx context.Context, be artifact.Backend, tr *SelfTr
 			continue
 		}
 
-		// All gates passed — stage to the SAME cache layout PullBundles uses.
+		// All gates passed: stage to the SAME cache layout PullBundles uses.
 		dir := filepath.Join(cacheRoot, strings.TrimPrefix(digest, "sha256:"))
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return nil, fmt.Errorf("pull: mkdir %s: %w", dir, err)

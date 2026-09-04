@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""rag MCP server (SPEC-0268) — FastMCP stdio, mirrors mcp-skill-server.
+"""rag MCP server (SPEC-0268): FastMCP stdio, mirrors mcp-skill-server.
 
 Exposes local workspace RAG search/stats/sync as Claude Code tools.
 
 Launch:  rag_mcp_server.py --workspace <repo> [--workspace <repo> ...]
 
 `--workspace` is repeatable (and $RAG_WORKSPACES is honoured), so ONE registered
-server can answer across several repos — e.g. the thinking corpus, the private
+server can answer across several repos, e.g. the thinking corpus, the private
 SPEC/intent repo and the running code. `rag_search` then merges by score and
 labels every hit with its workspace; pass `workspace="<name>"` to scope to one.
 The FIRST workspace is the primary: it is what a single-target call defaults to.
@@ -32,7 +32,7 @@ ARGS, _ = _ap.parse_known_args()
 
 WORKSPACES = resolve_workspaces(ARGS.workspace)
 if not WORKSPACES:
-    sys.exit("rag_mcp_server: no workspace — pass --workspace <repo> or set $RAG_WORKSPACES")
+    sys.exit("rag_mcp_server: no workspace: pass --workspace <repo> or set $RAG_WORKSPACES")
 PRIMARY = WORKSPACES[0]
 
 
@@ -62,7 +62,7 @@ def _indexer(ws):
     model is loaded once no matter how many repos are registered."""
     if ws not in _ixs:
         from indexer import Indexer
-        # Only hand over an embedder that is ALREADY materialized — `.embedder` is
+        # Only hand over an embedder that is ALREADY materialized. `.embedder` is
         # a lazy property, so touching it here would load the model even for a
         # stats-only call that never needs it.
         shared = next((i._embedder for i in _ixs.values() if i._embedder is not None), None)

@@ -95,7 +95,7 @@ func isolateHome(t *testing.T) string {
 	return tmp
 }
 
-// TestAwarenessSync_DryRun_NoHTTP — `awareness sync --dry-run --inventory FILE`
+// TestAwarenessSync_DryRun_NoHTTP: `awareness sync --dry-run --inventory FILE`
 // makes ZERO HTTP requests against a mock server.
 func TestAwarenessSync_DryRun_NoHTTP(t *testing.T) {
 	withDevSeed(t)
@@ -126,7 +126,7 @@ func TestAwarenessSync_DryRun_NoHTTP(t *testing.T) {
 	}
 }
 
-// TestAwarenessSync_EnvelopeMatchesSpec0195_5_1 — assert the envelope's
+// TestAwarenessSync_EnvelopeMatchesSpec0195_5_1: assert the envelope's
 // JSON keys verbatim match SPEC-0195 §5.1.
 func TestAwarenessSync_EnvelopeMatchesSpec0195_5_1(t *testing.T) {
 	withDevSeed(t)
@@ -158,7 +158,7 @@ func TestAwarenessSync_EnvelopeMatchesSpec0195_5_1(t *testing.T) {
 	}
 }
 
-// TestAwarenessSync_InventoryFromStdin — `--inventory -` reads from stdin.
+// TestAwarenessSync_InventoryFromStdin: `--inventory -` reads from stdin.
 // We verify by intercepting stdin via the loadAwarenessInventory helper.
 func TestAwarenessSync_InventoryFromStdin(t *testing.T) {
 	invPath := writeInventoryFile(t)
@@ -191,7 +191,7 @@ func TestAwarenessSync_InventoryFromStdin(t *testing.T) {
 	}
 }
 
-// TestAwarenessSync_RegistryResolutionPrecedence —
+// TestAwarenessSync_RegistryResolutionPrecedence:
 // flag > trust-roots default_registry > $M3C_REGISTRY_URL > error.
 func TestAwarenessSync_RegistryResolutionPrecedence(t *testing.T) {
 	// Exercise the public ResolveRegistry helper that the CLI uses.
@@ -218,7 +218,7 @@ func TestAwarenessSync_RegistryResolutionPrecedence(t *testing.T) {
 	})
 }
 
-// TestAwarenessSync_RequireIntent_RejectsSentinel — --require-intent
+// TestAwarenessSync_RequireIntent_RejectsSentinel: --require-intent
 // causes UNKNOWN-sentinel skills to be locally skipped (server never
 // sees them).
 func TestAwarenessSync_RequireIntent_RejectsSentinel(t *testing.T) {
@@ -278,7 +278,7 @@ func TestAwarenessSync_RequireIntent_RejectsSentinel(t *testing.T) {
 	}
 }
 
-// TestAwarenessSync_DefaultIntentYellow_StampsAll — --default-intent yellow
+// TestAwarenessSync_DefaultIntentYellow_StampsAll: --default-intent yellow
 // stamps the level on entries with no/UNKNOWN intent so they pass the gate.
 func TestAwarenessSync_DefaultIntentYellow_StampsAll(t *testing.T) {
 	withDevSeed(t)
@@ -335,7 +335,7 @@ func TestAwarenessSync_DefaultIntentYellow_StampsAll(t *testing.T) {
 	}
 }
 
-// TestAwarenessSync_DevSeedAgainstProd_RefusesPreflight — S2.6 client
+// TestAwarenessSync_DevSeedAgainstProd_RefusesPreflight: S2.6 client
 // short-circuit. We write a fake trust-roots file with _environment: prod
 // and confirm the CLI refuses to issue ANY HTTP request.
 func TestAwarenessSync_DevSeedAgainstProd_RefusesPreflight(t *testing.T) {
@@ -388,7 +388,7 @@ _environment: prod
 	}
 }
 
-// TestScan_PushToRegistry_DelegatesToAwarenessSync — SPEC-0189 §13
+// TestScan_PushToRegistry_DelegatesToAwarenessSync: SPEC-0189 §13
 // acceptance #6: scan --push-to-registry --dry-run-push produces the
 // same envelope shape as awareness sync --dry-run from the same
 // inventory.
@@ -445,7 +445,7 @@ func TestScan_PushToRegistry_DelegatesToAwarenessSync(t *testing.T) {
 	}
 }
 
-// TestAwarenessVerify_ReadsBackAdmissions — `awareness verify` reads
+// TestAwarenessVerify_ReadsBackAdmissions: `awareness verify` reads
 // /admit-from-scan?session=<tag> and prints the summary.
 func TestAwarenessVerify_ReadsBackAdmissions(t *testing.T) {
 	isolateHome(t)
@@ -485,7 +485,7 @@ func TestAwarenessVerify_ReadsBackAdmissions(t *testing.T) {
 	}
 }
 
-// base64Stub32 returns a base64 of 32 zero bytes — a syntactically valid
+// base64Stub32 returns a base64 of 32 zero bytes: a syntactically valid
 // (but functionally inert) ed25519 public key for trust-roots fixture
 // purposes. The trust-roots loader's only check is "decodes to 32 bytes",
 // which this satisfies.

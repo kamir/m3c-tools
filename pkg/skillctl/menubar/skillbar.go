@@ -177,7 +177,7 @@ func (sb *SkillBar) menuTitle() string {
 }
 
 func (sb *SkillBar) updateMenuTitle() {
-	// Called with lock held — compute title and schedule update.
+	// Called with lock held: compute title and schedule update.
 	title := sb.menuTitle()
 	go func() {
 		menuet.App().SetMenuState(&menuet.MenuState{Title: title})
@@ -248,7 +248,7 @@ func (sb *SkillBar) menuItems() []menuet.MenuItem {
 		},
 	})
 
-	// Review Changes — only if changes detected
+	// Review Changes: only if changes detected
 	if status == SkillBarChanges && pendingDelta != nil {
 		items = append(items, menuet.MenuItem{
 			Text: "\U0001F50D Review Changes...",
@@ -371,7 +371,7 @@ func (sb *SkillBar) runScan() {
 	// For now, we attempt to load and compare.
 	dr, deltaErr := sb.computeDelta(inv)
 	if deltaErr != nil {
-		// No seal to compare against — treat as clean.
+		// No seal to compare against: treat as clean.
 		log.Printf("[skillbar] delta: %v (treating as no changes)", deltaErr)
 		sb.setPendingDelta(nil)
 		sb.setStatus(SkillBarIdle)

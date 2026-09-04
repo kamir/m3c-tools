@@ -49,7 +49,7 @@ type Config struct {
 	Rebuild *rebuild.Service
 
 	// Ledger serves the /v1/budget/today + /v1/budget/history
-	// endpoints (SPEC-0167 P1 — PLAN-0168). When nil, both endpoints
+	// endpoints (SPEC-0167 P1: PLAN-0168). When nil, both endpoints
 	// return 503 so the handler is safe to register unconditionally.
 	Ledger *budget.Ledger
 
@@ -95,13 +95,13 @@ func New(cfg Config) *Server {
 		return nil
 	})
 	if err != nil {
-		// Not fatal for Week 1 — SSE will simply be empty.
+		// Not fatal for Week 1: SSE will simply be empty.
 		_ = err
 	}
 
 	bypass := map[string]bool{"/v1/health": true}
 	if cfg.MetricsHandler != nil {
-		// Mount /metrics BEFORE the auth middleware wraps mux — we
+		// Mount /metrics BEFORE the auth middleware wraps mux: we
 		// want Prometheus scrapes to succeed without HMAC. Bypass
 		// list keeps the door ajar; the handler registration is what
 		// actually serves it.
@@ -273,7 +273,7 @@ func (s *Server) trace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.cfg.Cache == nil {
-		http.Error(w, "trace unavailable — cache not wired", http.StatusServiceUnavailable)
+		http.Error(w, "trace unavailable: cache not wired", http.StatusServiceUnavailable)
 		return
 	}
 	tree, ok := buildTrace(s.cfg.Cache, artifactID)
@@ -318,7 +318,7 @@ func (s *Server) rebuild(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) replay(w http.ResponseWriter, r *http.Request) {
-	// Phase 2 — see SPEC-0167 D5.
+	// Phase 2: see SPEC-0167 D5.
 	http.Error(w, "replay not implemented in Phase 1", http.StatusNotImplemented)
 }
 
@@ -415,7 +415,7 @@ func (s *Server) fanoutSSE(ev schema.ProcessEvent) {
 	for _, ch := range subs {
 		select {
 		case ch <- ev:
-		default: // slow consumer — drop
+		default: // slow consumer: drop
 		}
 	}
 }

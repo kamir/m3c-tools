@@ -1,6 +1,6 @@
 // Package agentid is the pure, stdlib-only core of the SPEC-0277 agent-instance
-// identity layer (Round B). An AgentID is a signed JSON envelope — deliberately
-// the same SHAPE as a SPEC-0188 BundleMeta (a payload + a signatures[] array) —
+// identity layer (Round B). An AgentID is a signed JSON envelope: deliberately
+// the same SHAPE as a SPEC-0188 BundleMeta (a payload + a signatures[] array),
 // that binds an agent instance to a key-holding owner and an attenuated
 // capability grant. It is verifiable OFFLINE against a pinned owner key, with no
 // hosted CA in the verification path (the whole point: self-sovereign, not a
@@ -10,7 +10,7 @@
 // shipped (SPEC-0277 §3 reuse map):
 //
 //   - the AgentID envelope type (§2 data model);
-//   - CanonicalAgentIDBytes — the deterministic, domain-separated signed bytes,
+//   - CanonicalAgentIDBytes: the deterministic, domain-separated signed bytes,
 //     modeled byte-for-byte on the shipped CanonicalRevocationBytes pattern
 //     (struct marshal, SORTED grant arrays) so signer and verifier agree;
 //   - Sign (owner key) / Verify (against a PINNED owner key + expiry check),
@@ -37,9 +37,9 @@ import (
 // Domain is the literal first line of the canonical signed message for an
 // AgentID. It is the domain separator (SPEC-0277 §2): a signature produced over
 // these bytes can NEVER be replayed as a signature under another message family
-// — capability_v1 (SPEC-0202 tokens), attestation (SPEC-0188 governance),
+//: capability_v1 (SPEC-0202 tokens), attestation (SPEC-0188 governance),
 // invocation_event_v1 (SPEC-0202 runtime events), revoke (SPEC-0188 revocation),
-// or skillctl-revocation-list (SPEC-0276) — even when the SAME key signs both.
+// or skillctl-revocation-list (SPEC-0276), even when the SAME key signs both.
 // Cross-domain signature reuse against any of those is the explicit red-team
 // target; the distinct first line defeats it.
 const Domain = "agentid_v1"
@@ -55,12 +55,12 @@ const (
 
 // RoleOwner / RoleApprover / RoleIssuer are the signature roles in signatures[].
 //
-//   - owner    — the key-holding PLM principal the agent acts ON BEHALF OF
+//   - owner: the key-holding PLM principal the agent acts ON BEHALF OF
 //     (the delegator). REQUIRED. The load-bearing signature.
-//   - approver — the SPEC-0277 §11.2 "sign-off human": an independent,
+//   - approver: the SPEC-0277 §11.2 "sign-off human": an independent,
 //     accountable human who co-signs. Optional unless a trust-roots policy floor
 //     (require_agent_approver) demands it with approver != owner.
-//   - issuer   — an optional org/institution countersignature (P2; modeled here
+//   - issuer: an optional org/institution countersignature (P2; modeled here
 //     so the envelope is forward-compatible, not enforced in P0/P1).
 const (
 	RoleOwner    = "owner"
@@ -94,7 +94,7 @@ type Grant struct {
 }
 
 // Payload is the signed core of an AgentID (the `agentid` object in §2). Every
-// field here is covered by the owner (and approver) signature — tampering any of
+// field here is covered by the owner (and approver) signature: tampering any of
 // them breaks verification.
 type Payload struct {
 	// ID is the stable, opaque agent identifier, e.g. "agent:9f2c…" (UUIDv4 or
@@ -111,7 +111,7 @@ type Payload struct {
 	DisplayName string `json:"display_name,omitempty"`
 
 	// AgentBundleDigest is the FR-0060 signed agent bundle this identity is FOR
-	// (OQ-B4), "sha256:<hex>". Optional in P0/P1 — the AgentID references the
+	// (OQ-B4), "sha256:<hex>". Optional in P0/P1: the AgentID references the
 	// agent definition, it does not re-implement agent packaging.
 	AgentBundleDigest string `json:"agent_bundle_digest,omitempty"`
 
@@ -127,7 +127,7 @@ type Payload struct {
 	// "https://onboarding.guide/api/skills". Matched against the pinned root.
 	TrustRoot string `json:"trust_root,omitempty"`
 
-	// Grant is the attenuated capability grant — what the agent may do.
+	// Grant is the attenuated capability grant. What the agent may do.
 	Grant Grant `json:"grant"`
 }
 
@@ -147,7 +147,7 @@ type Signature struct {
 	SignatureB64 string `json:"signature_b64"`
 
 	// PubkeyFingerprint, if present, is the advisory "sha256:<hex>" over the raw
-	// signing pubkey. UX hint only — verification uses the PINNED key bytes, never
+	// signing pubkey. UX hint only: verification uses the PINNED key bytes, never
 	// this string (a forged fingerprint cannot launder an unpinned key).
 	PubkeyFingerprint string `json:"pubkey_fingerprint,omitempty"`
 }
@@ -172,7 +172,7 @@ type grantCanonicalV1 struct {
 
 // agentIDCanonicalV1 is the deterministic, signed payload. A struct (not a map)
 // so json.Marshal field order is fixed; the grant arrays are sorted before
-// marshalling so the same logical AgentID always yields the same bytes —
+// marshalling so the same logical AgentID always yields the same bytes:
 // modeled directly on revocationCanonicalV1 (SPEC-0276).
 type agentIDCanonicalV1 struct {
 	Type              string           `json:"type"`
@@ -195,7 +195,7 @@ type agentIDCanonicalV1 struct {
 // agree byte-for-byte regardless of input ordering or whitespace.
 //
 // Pattern source: verify.CanonicalRevocationBytes + signing.CanonicalizeAttestationMessage
-// (domain-separated). NO new crypto — this is a deterministic byte assembler.
+// (domain-separated). NO new crypto: this is a deterministic byte assembler.
 func CanonicalAgentIDBytes(p Payload) ([]byte, error) {
 	if strings.TrimSpace(p.ID) == "" {
 		return nil, errors.New("agentid: id is required")
@@ -264,7 +264,7 @@ func canonicalGrant(g Grant) grantCanonicalV1 {
 }
 
 // sortedDedup trims, drops empties, de-duplicates and sorts a string slice.
-// Returns a NON-nil empty slice so the JSON is "[]" not "null" — a stable shape
+// Returns a NON-nil empty slice so the JSON is "[]" not "null": a stable shape
 // for the golden-bytes test and for cross-language parity.
 func sortedDedup(in []string) []string {
 	seen := make(map[string]struct{}, len(in))
@@ -287,7 +287,7 @@ func sortedDedup(in []string) []string {
 // Sign produces an owner (or approver) Signature over the canonical bytes of p,
 // using the provided ed25519 private key. The caller supplies role + identityID
 // (the principal id whose key this is). This is a thin wrapper over ed25519.Sign
-// — the stdlib primitive runs in constant time; we add only a length assertion.
+//. The stdlib primitive runs in constant time; we add only a length assertion.
 //
 // Reuse note: this mirrors signing.SignAttestation / SignRevocation exactly; no
 // new crypto. The detached signature is base64-std encoded into SignatureB64.
@@ -325,7 +325,7 @@ func PubkeyFingerprint(pub ed25519.PublicKey) string {
 }
 
 // FindSignature returns the single Signature row with the given role, or nil if
-// there is zero or more than one. >1 is refused upstream (verifyOneRole) — two
+// there is zero or more than one. >1 is refused upstream (verifyOneRole). Two
 // owner signatures is not a configuration to silently pick from.
 func (a *AgentID) FindSignature(role string) *Signature {
 	if a == nil {

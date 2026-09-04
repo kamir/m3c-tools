@@ -1,4 +1,4 @@
-# .goreleaser.yml — GoReleaser configuration for m3c-tools + skillctl
+# .goreleaser.yml: GoReleaser configuration for m3c-tools + skillctl
 #
 # NOTE: m3c-tools macOS builds require CGO (portaudio/menubar) and are handled
 # by a separate CI job. GoReleaser builds Linux, Windows, and all skillctl targets.
@@ -62,7 +62,7 @@ builds:
         goarch: arm64
 
   # --- skillctl-demo: self-contained offline CISO demo (embeds its web assets +
-  #     the KuP demo skill). Pure Go, no CGO — the whole point is a Windows binary
+  #     the KuP demo skill). Pure Go, no CGO: the whole point is a Windows binary
   #     a customer can double-click. Ships next to skillctl (it shells out to it). ---
   - id: skillctl-demo
     binary: skillctl-demo
@@ -88,7 +88,7 @@ builds:
 
 archives:
   # goreleaser v2: `ids` replaces the deprecated `builds`, and `formats` (a list)
-  # replaces the deprecated scalar `format`. Names are unchanged on purpose —
+  # replaces the deprecated scalar `format`. Names are unchanged on purpose:
   # release.yml lists these filenames verbatim, and the published install.sh
   # depends on them.
   - id: m3c-tools-archive
@@ -116,7 +116,7 @@ archives:
   # (skillctl/v*, cosign + SLSA L3). The extracted binaries are still `skillctl-demo`
   # and `skillctl` (docs unchanged); only the archive filename disambiguates. This
   # whole channel is now cosign-signed + SLSA-attested via release.yml, so the demo
-  # bundle's integrity is covered — the rename just removes the naming ambiguity.
+  # bundle's integrity is covered: the rename just removes the naming ambiguity.
   - id: skillctl-demo-archive
     ids:
       - skillctl-demo
@@ -140,7 +140,7 @@ changelog:
       - "^chore:"
       - "Merge pull request"
 
-# Homebrew tap — uncomment when kamir/homebrew-tap is created
+# Homebrew tap: uncomment when kamir/homebrew-tap is created
 # brews:
 #   - repository:
 #       owner: kamir

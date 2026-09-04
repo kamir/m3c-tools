@@ -1,4 +1,4 @@
-# deploy/thinking-engine/Dockerfile — multi-stage build for the m3c
+# deploy/thinking-engine/Dockerfile: multi-stage build for the m3c
 # Thinking Engine (SPEC-0167 Stream 2c).
 #
 # Stage 1: compile the binary with the `thinking_kafka` tag so the
@@ -64,7 +64,7 @@ USER m3c
 EXPOSE 7140
 
 # The engine refuses to start without --user-context-id, so this is
-# NOT a working default — operators must override CMD or supply the
+# NOT a working default. Operators must override CMD or supply the
 # flag via compose. Declaring it here is a reminder, not a default.
 ENTRYPOINT ["/app/thinking-engine"]
 CMD ["--listen", ":7140"]

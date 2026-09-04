@@ -17,7 +17,7 @@ import (
 // land in a git registry the on-disk layout is a permanent, externally-pinned
 // contract; this test pins that contract byte-for-byte so any accidental drift
 // (a renamed path, a dropped attribute, a reserialized event) goes red in CI.
-// If this test needs updating, the wire format changed — bump WireFormatVersion
+// If this test needs updating, the wire format changed. Bump WireFormatVersion
 // and write a migration, do not "fix" the assertions.
 func TestGitWireFormatFrozen(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
@@ -46,9 +46,9 @@ func TestGitWireFormatFrozen(t *testing.T) {
 		return data
 	}
 
-	// 1) The write-once version anchor — dedicated marker at a HARDCODED literal
+	// 1) The write-once version anchor, dedicated marker at a HARDCODED literal
 	//    path (not the markerPath const, so a rename is caught), schema_version
-	//    asserted as a literal 1 (not against WireFormatVersion — which would make
+	//    asserted as a literal 1 (not against WireFormatVersion, which would make
 	//    a version bump self-follow).
 	var m formatMarker
 	if err := json.Unmarshal(read(".skillctl/registry.json"), &m); err != nil {
@@ -58,7 +58,7 @@ func TestGitWireFormatFrozen(t *testing.T) {
 		t.Errorf("frozen schema_version = %d, want 1", m.SchemaVersion)
 	}
 
-	// 2) Byte-safety attribute at its literal path — without this a Windows
+	// 2) Byte-safety attribute at its literal path: without this a Windows
 	//    checkout corrupts the .skb digest. It MUST be in the frozen layout.
 	if attrs := string(read(".gitattributes")); !strings.Contains(attrs, "*.skb binary -text") {
 		t.Errorf(".gitattributes missing `*.skb binary -text`; got:\n%s", attrs)
@@ -80,7 +80,7 @@ func TestGitWireFormatFrozen(t *testing.T) {
 
 	// 5) The event path (events/<digesthex>/0001-admitted.json) + the frozen
 	//    serialization, pinned to a HAND-WRITTEN golden literal (2-space indent,
-	//    sorted keys) — NOT marshalEvent(admit.Event), which would move both sides
+	//    sorted keys), NOT marshalEvent(admit.Event), which would move both sides
 	//    together and hide a serializer drift. External SPEC-0190 consumers read
 	//    these bytes; a reindent is a wire change, so it must redden here.
 	evRel := "events/" + strings.Repeat("a", 64) + "/0001-admitted.json"
@@ -92,8 +92,8 @@ func TestGitWireFormatFrozen(t *testing.T) {
 		"  \"version\": \"1.0.0\"\n" +
 		"}"
 	// Git may smudge a text file to CRLF on checkout (Windows). EOL is presentational
-	// for the event JSON — the verifier re-canonicalizes from the parsed map
-	// (WIRE-FORMAT.md §4) — so the freeze pins indent + key order + content, with EOL
+	// for the event JSON, the verifier re-canonicalizes from the parsed map
+	// (WIRE-FORMAT.md §4), so the freeze pins indent + key order + content, with EOL
 	// normalized. A reindent (2-space -> tab) still fails here; a line-ending does not.
 	gotEv := strings.ReplaceAll(string(read(evRel)), "\r\n", "\n")
 	if gotEv != wantEv {
@@ -110,7 +110,7 @@ func TestGitWireFormatFrozen(t *testing.T) {
 // rewritten by a later publish. It drives ensureFormatFiles directly with TWO
 // DIFFERENT clocks (no git, no wall-clock dependency): a re-stamp regression is
 // caught deterministically because it would flip changed→true AND drift
-// created_at to T2 — unlike a byte-compare of two same-second live publishes,
+// created_at to T2: unlike a byte-compare of two same-second live publishes,
 // which the challenge gate proved is a false-negative 11/20 runs.
 func TestGitWireFormatWriteOnce(t *testing.T) {
 	dir := t.TempDir()
@@ -221,7 +221,7 @@ func TestGitWireFormatSymlinkRefused(t *testing.T) {
 	}
 	if err := os.Symlink(outside, marker); err != nil {
 		// Windows needs privilege to create symlinks; there git also defaults to
-		// core.symlinks=false, so a committed symlink is never materialized — the
+		// core.symlinks=false, so a committed symlink is never materialized. The
 		// attack vector this test covers is a *nix concern. Skip where unsupported.
 		t.Skipf("symlink creation unsupported here (%v); defense is core.symlinks=false, OS-independent", err)
 	}

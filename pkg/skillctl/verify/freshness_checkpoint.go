@@ -1,19 +1,19 @@
 package verify
 
-// SPEC-0279 R4 — the signed FRESHNESS CHECKPOINT.
+// SPEC-0279 R4: the signed FRESHNESS CHECKPOINT.
 //
 // A full revocation list can be large; re-downloading it just to PROVE the set
 // is still current is wasteful, and an air-gapped verifier may not be able to at
-// all. A FreshnessCheckpoint is a SHORT signed assertion — "the revocation set
-// for registry R is current as of epoch E at time T" — signed by the SAME pinned
+// all. A FreshnessCheckpoint is a SHORT signed assertion, "the revocation set
+// for registry R is current as of epoch E at time T", signed by the SAME pinned
 // registry key the revocation list uses. A verifier can pin/refresh a checkpoint
 // INDEPENDENTLY of a full re-sync: a valid, fresh checkpoint whose epoch is ≥ the
 // synced list's epoch RESETS THE STALENESS CLOCK (the snapshot is proven current
 // as of the checkpoint's T) without re-downloading the whole list.
 //
-// Reuse, not new crypto: this mirrors RevocationList exactly — a struct-marshalled
+// Reuse, not new crypto: this mirrors RevocationList exactly (a struct-marshalled
 // canonical payload, an ed25519 signature against the active pinned registry
-// keys, the monotonic-epoch rollback floor — but with a DISTINCT domain-separator
+// keys, the monotonic-epoch rollback floor) but with a DISTINCT domain-separator
 // `type` ("skillctl-freshness-checkpoint") and a distinct first-line so a
 // checkpoint signature can never be replayed as a revocation-list (or agent-list,
 // or AgentID) signature, and vice-versa.
@@ -28,7 +28,7 @@ import (
 	"time"
 )
 
-// FreshnessCheckpointType is the canonical type discriminator — the domain
+// FreshnessCheckpointType is the canonical type discriminator: the domain
 // separator vs the revocation lists and the AgentID envelope. A signature over
 // this type cannot be cross-replayed onto any other signed object in the stack.
 const FreshnessCheckpointType = "skillctl-freshness-checkpoint"
@@ -121,8 +121,8 @@ func VerifyFreshnessCheckpoint(cp *FreshnessCheckpoint, root *TrustRoot, minEpoc
 	if root == nil {
 		return "", errors.New("freshness checkpoint: nil trust root")
 	}
-	// The checkpoint must speak for the SAME registry as the pinned root —
-	// otherwise a checkpoint for registry B (signed by B's key, which the operator
+	// The checkpoint must speak for the SAME registry as the pinned root.
+	// Otherwise a checkpoint for registry B (signed by B's key, which the operator
 	// also pinned) could reset the clock for registry A's list.
 	if strings.TrimRight(strings.TrimSpace(cp.RegistryURL), "/") != strings.TrimRight(strings.TrimSpace(root.RegistryURL), "/") {
 		return "", fmt.Errorf("freshness checkpoint: registry %q != pinned root %q: %w", cp.RegistryURL, root.RegistryURL, ErrRegistryNotTrusted)
@@ -153,7 +153,7 @@ func VerifyFreshnessCheckpoint(cp *FreshnessCheckpoint, root *TrustRoot, minEpoc
 		return "", fmt.Errorf("freshness checkpoint: signature did not match any active registry key in %s: %w", root.RegistryURL, ErrRegistryNotTrusted)
 	}
 	// Rollback floor (SPEC-0279 R1, shared with the lists): a checkpoint whose
-	// epoch is below the pinned floor cannot reset the clock — an attacker cannot
+	// epoch is below the pinned floor cannot reset the clock. An attacker cannot
 	// replay an OLD signed checkpoint to vouch for a superseded epoch.
 	if cp.Epoch < minEpoch {
 		return "", fmt.Errorf("freshness checkpoint: epoch %d is below the pinned floor %d (rollback): %w", cp.Epoch, minEpoch, ErrRegistryNotTrusted)
@@ -169,14 +169,14 @@ func VerifyFreshnessCheckpoint(cp *FreshnessCheckpoint, root *TrustRoot, minEpoc
 //   - checkpoint present, but it fails to
 //     verify / epoch < floor              → ERROR (caller fails closed; a forged or
 //     rolled-back checkpoint must NOT silently
-//     fall back to the list's older anchor —
+//     fall back to the list's older anchor,
 //     that would let an attacker who plants a
 //     bad checkpoint avoid detection).
 //   - checkpoint valid but epoch <
 //     syncedEpoch                         → list's issued_at (the checkpoint vouches
 //     for an OLDER set than we hold; it cannot
 //     move the clock forward, but it is not an
-//     attack — just stale, so we ignore it).
+//     attack, just stale, so we ignore it).
 //   - checkpoint valid AND epoch ≥
 //     syncedEpoch                         → the checkpoint's issued_at, and the later
 //     of (checkpoint, list) wins so a checkpoint
@@ -197,7 +197,7 @@ func ApplyCheckpoint(listIssuedAt string, syncedEpoch int, cp *FreshnessCheckpoi
 		return "", false, err
 	}
 	if cp.Epoch < syncedEpoch {
-		// Valid, but vouches for an older set than we hold — cannot advance.
+		// Valid, but vouches for an older set than we hold. Cannot advance.
 		return strings.TrimSpace(listIssuedAt), false, nil
 	}
 	// Valid + epoch ≥ synced: use the LATER of (checkpoint, list) so the anchor

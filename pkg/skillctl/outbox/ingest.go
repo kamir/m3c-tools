@@ -1,9 +1,9 @@
-// ingest.go — the SPEC-0317 (P1) KafShield ingest CLIENT contract.
+// ingest.go: the SPEC-0317 (P1) KafShield ingest CLIENT contract.
 //
 // The sync agent (cmd/skillctl/sync_cmds.go) drains audit_events over HTTPS to
 // this endpoint. The contract's load-bearing rule (R-5.3 / AC-4) is the ACK
 // shape: the server acknowledges each accepted event_id with a SIGNED
-// durable-seq — a monotonic sequence number counter-signed over the canonical
+// durable-seq: a monotonic sequence number counter-signed over the canonical
 // (log_id, event_id, durable_seq) message with the ingest key. The client marks
 // a row synced ONLY on a valid signed durable-seq; a bare-2xx (an in-memory stub
 // that returns 200 with no signed seq) does NOT mark rows synced. This half is
@@ -12,7 +12,7 @@
 //
 // HTTPS-only (R-5.2): PostBatch refuses any non-https endpoint. The decision to
 // tolerate a self-signed cert (InsecureSkipVerify) lives in the CALLER's
-// http.Client and is gated to loopback there — prod endpoints never inherit it.
+// http.Client and is gated to loopback there: prod endpoints never inherit it.
 //
 // Transport auth (R-5.2) is the SPEC-0127 device token as a bearer, NOT the
 // shared X-API-KEY. The client sends NO authorization-bearing tenant field:
@@ -41,13 +41,13 @@ const IngestPath = "/api/skills/enforcement/events"
 // durableSeqDomain is the domain-separation tag for the signed durable-seq ack
 // message. It is DISTINCT from the invocation_event_v1 canonical (event.go): the
 // ack is the ingest's counter-signature, a different signed-message family. This
-// is NOT a new audit-event vocabulary — event_id / the record canonical are
+// is NOT a new audit-event vocabulary. event_id / the record canonical are
 // unchanged.
 const durableSeqDomain = "durable-seq-v1"
 
 // CanonicalDurableSeq is the exact byte message the ingest signs (and the client
 // re-verifies) for one durable-seq ack. Domain-separated first line, LF-framed,
-// fixed field order, trailing LF — the same discipline as the record canonical.
+// fixed field order, trailing LF: the same discipline as the record canonical.
 // The contract double MUST sign these exact bytes.
 //
 //	durable-seq-v1
@@ -66,7 +66,7 @@ func CanonicalDurableSeq(logID, eventID string, seq int64) []byte {
 
 // IngestBatch is the POST body. Records are the EXACT signed InvocationRecord
 // bytes (payload_json), embedded verbatim as raw JSON so the server re-verifies
-// the same bytes the device signed — no re-marshalling, no field reordering.
+// the same bytes the device signed, no re-marshalling, no field reordering.
 type IngestBatch struct {
 	Records     []json.RawMessage `json:"records"`
 	ClientEpoch int64             `json:"client_epoch"`

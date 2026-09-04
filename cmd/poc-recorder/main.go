@@ -6,7 +6,7 @@
 //   - PortAudio Go bindings + cgo linking
 //   - Default input device detection
 //   - Microphone capture to buffer
-//   - WAV file writing (16-bit PCM, 16kHz mono — whisper-compatible)
+//   - WAV file writing (16-bit PCM, 16kHz mono: whisper-compatible)
 //   - Timed recording with clean shutdown
 //
 // Prerequisites:
@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	sampleRate = 16000 // 16kHz — whisper's native sample rate
+	sampleRate = 16000 // 16kHz: whisper's native sample rate
 	channels   = 1     // mono
 	bitsPerSample = 16
 )
@@ -162,7 +162,7 @@ func main() {
 	fmt.Printf("  Average amplitude: %.0f (%.1f%%)\n", avgAmp, avgAmp/32768.0*100)
 
 	if maxAmp < 100 {
-		fmt.Println("  WARNING: Very low audio levels — check microphone permissions")
+		fmt.Println("  WARNING: Very low audio levels: check microphone permissions")
 	}
 
 	// Step 6: Write WAV file

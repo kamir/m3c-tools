@@ -90,7 +90,7 @@ tail -1 ~/.claude/skill-usage-tracker.log
 ```
 
 A `200` response with `recorded=false` means the dedupe layer
-suppressed an immediate retry — that's expected.
+suppressed an immediate retry, that's expected.
 
 ## Why this lives in m3c-tools
 

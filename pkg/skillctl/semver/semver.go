@@ -2,16 +2,16 @@
 // "highest non-revoked version" across every backend (git/oci/ER1) and to gate
 // version monotonicity at propose time. It replaces four divergent copies of a
 // compareSemver helper (git/oci, propose, registry/install_trust_mode) that
-// disagreed on a leading "v" — e.g. the registry copy did NOT strip it, so
+// disagreed on a leading "v": e.g. the registry copy did NOT strip it, so
 // compareSemver("v1.2.0","1.2.0") returned "v1.2.0 < 1.2.0" there (v1.2.0 parsed
 // as major 0) while git/oci returned equal. That divergence is a latent
 // version-ordering bug in a trust path; this package is the single source of truth.
 //
-// Semantics (loose by design — inputs come from manifests + git tags, not a
+// Semantics (loose by design: inputs come from manifests + git tags, not a
 // validated SemVer parser):
 //   - a single leading "v" is stripped ("v1.2.0" == "1.2.0");
 //   - pre-release / build metadata (everything from the first '-' or '+') is
-//     dropped, so "1.0.0-rc" compares EQUAL to "1.0.0" — NOT full SemVer
+//     dropped, so "1.0.0-rc" compares EQUAL to "1.0.0", NOT full SemVer
 //     pre-release precedence. For a SINGLE-segment suffix ("1.0.0-rc",
 //     "1.0.0+meta") this matches all four prior call sites exactly. For a
 //     DOTTED suffix ("1.2.0-rc.1") it INTENTIONALLY differs from them: the old

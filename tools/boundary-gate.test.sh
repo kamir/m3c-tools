@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# tools/boundary-gate.test.sh — fixtures for tools/boundary-gate.sh (SPEC-0358).
+# tools/boundary-gate.test.sh: fixtures for tools/boundary-gate.sh (SPEC-0358).
 #
 # A leak gate that stops flagging is worse than no gate, because it still reads
 # green. These fixtures assert the gate from the FAILING side: each pattern in
@@ -55,7 +55,7 @@ bad() { fail=$((fail+1)); printf '  FAIL %s\n' "$1"; }
 # run_gate -> prints output, returns the gate's exit code
 run_gate() { git add -A >/dev/null 2>&1; bash tools/boundary-gate.sh >"$TMP/out" 2>&1; }
 
-# blocks DESC FILE CONTENT   — the gate must FAIL and name the file
+# blocks DESC FILE CONTENT: the gate must FAIL and name the file
 blocks() {
   local d=$1 f=$2 c=$3
   printf '%s\n' "$c" > "$f"
@@ -65,7 +65,7 @@ blocks() {
   rm -f "$f"
 }
 
-# allows DESC FILE CONTENT   — the gate must PASS
+# allows DESC FILE CONTENT: the gate must PASS
 allows() {
   local d=$1 f=$2 c=$3
   printf '%s\n' "$c" > "$f"
@@ -95,7 +95,7 @@ blocks "ops-exempt scope: the PLM API path is blocked" \
 # --- the scope split holds -----------------------------------------------------
 allows "ops-exempt scope is skipped on the tool's own surface" \
   "cmd/client.go" 'const defaultURL = "http://127.0.0.1:8081" // the ER1 client ships this'
-blocks "always scope is NOT skipped there — a private path is blocked everywhere" \
+blocks "always scope is NOT skipped there. A private path is blocked everywhere" \
   "cmd/notes.go" '// see m3c-tools-maintenance/SPEC/SPEC-0001-x.md'
 
 # --- ID-only references stay legal (the point of the rule) ---------------------

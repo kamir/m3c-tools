@@ -1,6 +1,6 @@
 package main
 
-// SPEC-0276 R5 — tests for `skillctl compliance report`.
+// SPEC-0276 R5: tests for `skillctl compliance report`.
 
 import (
 	"bytes"

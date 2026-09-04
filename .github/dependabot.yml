@@ -1,4 +1,4 @@
-# SPEC-0251 §5 supply-chain hygiene — automated dependency + action updates.
+# SPEC-0251 §5 supply-chain hygiene: automated dependency + action updates.
 # Dependabot opens PRs only (never merges); each PR is validated by the same CI
 # hardened in this change (lint, unit, skillctl-race, govulncheck, gitleaks).
 version: 2

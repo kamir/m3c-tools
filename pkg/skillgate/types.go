@@ -5,7 +5,7 @@
 // The gateway is COOPERATIVE: it pre-checks subprocess / egress / capability
 // requests against the envelope baked into a verified token, refuses any
 // request that escapes the envelope, and posts an audit event. It does not
-// sandbox forcibly — the wrapped binary is trusted to consult the gate
+// sandbox forcibly. The wrapped binary is trusted to consult the gate
 // before it acts.
 //
 // SPEC reference: SPEC-0202 §5 (verifier), §7 (Go gateway shim), §8 (refusal
@@ -13,7 +13,7 @@
 package skillgate
 
 // DataSource mirrors the Python `DataSource` model. It is advisory metadata
-// in v1 — not part of the canonical signed message — but the gateway carries
+// in v1, not part of the canonical signed message, but the gateway carries
 // it through verbatim for downstream consumers.
 type DataSource struct {
 	Name string `json:"name"`
@@ -61,7 +61,7 @@ type Attenuation struct {
 
 // Token is the on-wire representation of a SPEC-0202 capability token (v1).
 //
-// Field tags match the Python pydantic CapabilityToken — `schema` (not
+// Field tags match the Python pydantic CapabilityToken: `schema` (not
 // `schema_`), `signature_b64` is the registry detached ed25519 signature
 // over the canonical bytes (registry_signature_b64 in the Python wire shape;
 // kept consistent here via JSON tag).
@@ -83,7 +83,7 @@ type Token struct {
 	Attenuations   []Attenuation `json:"attenuations,omitempty"`
 	SignatureB64   string        `json:"registry_signature_b64"`
 
-	// Advisory metadata — NOT part of the v1 canonical signed message.
+	// Advisory metadata: NOT part of the v1 canonical signed message.
 	FederationChain   []string         `json:"federation_chain,omitempty"`
 	ImportedFrom      string           `json:"imported_from,omitempty"`
 	ThirdPartyCaveats []map[string]any `json:"third_party_caveats,omitempty"`

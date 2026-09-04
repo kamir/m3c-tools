@@ -1,6 +1,6 @@
 package git
 
-// SPEC-0356 §6a — Git Wire Format v1 (FROZEN).
+// SPEC-0356 §6a: Git Wire Format v1 (FROZEN).
 //
 // The on-disk layout of a git skill registry is a permanent, externally-pinned
 // contract the moment real skills land in it (tags, events/<digesthex>/ paths,
@@ -8,7 +8,7 @@ package git
 // version anchor and the byte-safety attribute that keeps the .skb digest intact
 // across platforms.
 //
-// The anchor is a DEDICATED, WRITE-ONCE marker — `.skillctl/registry.json` —
+// The anchor is a DEDICATED, WRITE-ONCE marker: `.skillctl/registry.json`:
 // created at first publish and never rewritten afterwards. It is deliberately
 // NOT the generated digest→ref index (a churned, write-contended, derived file):
 // a format-stability contract must live on the most stable object in the repo,
@@ -28,7 +28,7 @@ import (
 
 // WireFormatVersion is the git carrier layout version this build writes and can
 // read. A repo marked with a HIGHER version is refused (fail closed); an ABSENT
-// marker is treated as compatible (a fresh or pre-marker repo — first publish
+// marker is treated as compatible (a fresh or pre-marker repo. First publish
 // stamps it), so the freeze is backward-compatible.
 const WireFormatVersion = 1
 
@@ -37,7 +37,7 @@ const (
 	gitAttributes = ".gitattributes"          // *.skb byte-safety
 	// skbAttrLine pins *.skb as binary with EOL normalization OFF. Without this a
 	// Windows checkout (autocrlf) rewrites LF→CRLF inside the gzip-tar and the
-	// recomputed sha256 no longer matches the pinned digest — silent corruption.
+	// recomputed sha256 no longer matches the pinned digest: silent corruption.
 	skbAttrLine = "*.skb binary -text\n"
 )
 
@@ -132,7 +132,7 @@ func checkMarkerCompatible(dir string) error {
 
 // ensureFormatFiles stamps the write-once marker + the .gitattributes byte-safety
 // line if they are absent. Idempotent: it never rewrites an existing marker (that
-// is what "write-once" means — the version rides the most stable object in the
+// is what "write-once" means: the version rides the most stable object in the
 // repo). Returns whether it changed anything, so the caller can note it; the git
 // `add -A` in Publish commits the new files either way. now is injected so tests
 // stay deterministic.

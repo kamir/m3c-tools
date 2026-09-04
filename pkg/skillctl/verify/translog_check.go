@@ -5,7 +5,7 @@ package verify
 // This composes the translog primitives into the §7 verifier surface:
 // after the signature/governance chain passes, the verifier can ALSO
 // confirm that the event (identified by its digest) is INCLUDED under a
-// Signed Tree Head the machine trusts — entirely offline, against the STH
+// Signed Tree Head the machine trusts: entirely offline, against the STH
 // pinned in ~/.claude/skill-trust-roots.yaml. No network call to any single
 // company's server is made; that is the Round-A offline property preserved
 // across the cross-org boundary.
@@ -14,7 +14,7 @@ package verify
 // whose head you trust. It makes a log that later tries to withhold or
 // equivocate about this event DETECTABLE (the head you pinned, plus a
 // cross-witnessed head, would diverge). It does NOT prove the log operator
-// is honest in general — only L2 (the deferred BFT consortium ledger) could
+// is honest in general, only L2 (the deferred BFT consortium ledger) could
 // prevent a single operator from equivocating.
 
 import (
@@ -29,7 +29,7 @@ import (
 // ErrLogInclusionMissing and ExitLogInclusionMissing (23) are the canonical
 // SPEC-0278 L1 sentinel/exit-code pair; they are declared in errors.go
 // alongside the rest of the §7 verifier exit codes (20=ExitSelfAttested,
-// 21=agentid-expired, 22=ExitRevocationStale are taken — log inclusion is 23)
+// 21=agentid-expired, 22=ExitRevocationStale are taken. Log inclusion is 23)
 // and wired into ExitCode(). This file consumes them.
 
 // LogInclusionInput is the material a caller hands the inclusion check: the
@@ -37,7 +37,7 @@ import (
 // inclusion proof. These come from the local log (translog.Log.ProveInclusion)
 // or are shipped alongside the bundle as a "log receipt."
 type LogInclusionInput struct {
-	// Entry is the logged event (its canonical leaf is recomputed here —
+	// Entry is the logged event (its canonical leaf is recomputed here:
 	// we never trust a caller-supplied leaf hash).
 	Entry translog.LogEntry
 

@@ -91,7 +91,7 @@ func (s *Server) Start() error {
 	}
 	s.sealStore = store
 
-	// SEC-M3: defend in depth — pin the listener to loopback even if Addr
+	// SEC-M3: defend in depth: pin the listener to loopback even if Addr
 	// was tampered with after construction.
 	s.Addr = loopbackAddr(s.Addr)
 
@@ -157,7 +157,7 @@ func (s *Server) guard(next http.Handler) http.Handler {
 
 // tokenOK reports whether the request carries the per-launch token, supplied
 // as an X-M3C-Token header or a "token" query parameter. An empty server token
-// (RNG failure) rejects everything — fail closed.
+// (RNG failure) rejects everything: fail closed.
 func (s *Server) tokenOK(r *http.Request) bool {
 	if s.token == "" {
 		return false

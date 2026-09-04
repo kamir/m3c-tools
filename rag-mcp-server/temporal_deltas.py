@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""temporal_deltas — monthly graph-layer evolution + local/global deltas (SPEC-0270).
+"""temporal_deltas: monthly graph-layer evolution + local/global deltas (SPEC-0270).
 
 Slices the SPEC-0269 distilled knowledge graph into monthly layers (by note date),
 clusters each layer (Louvain), and computes two delta series of "adding month m_k":
-  V1 local  — baseline = the previous month only (sliding 2-month window)
-  V2 global — baseline = the whole cumulative history so far
+  V1 local, baseline = the previous month only (sliding 2-month window)
+  V2 global, baseline = the whole cumulative history so far
 Each delta carries scalar metrics + a cluster correspondence; V2 also yields
 per-cluster size-over-month trajectories.
 

@@ -134,7 +134,7 @@ func TestScanSecrets(t *testing.T) {
 }
 
 // newIdentReal builds an Ident with a real (empty) m3cproject.Descriptor by
-// resolving a temp dir — so CommitSHAFromGit()/RepoRoot are real method calls.
+// resolving a temp dir, so CommitSHAFromGit()/RepoRoot are real method calls.
 func newIdentReal(t *testing.T) *Ident {
 	t.Helper()
 	dir := t.TempDir()
@@ -149,7 +149,7 @@ func newIdentReal(t *testing.T) *Ident {
 }
 
 // ---------------------------------------------------------------------------
-// Open — integration against an httptest ER1
+// Open: integration against an httptest ER1
 // ---------------------------------------------------------------------------
 
 func TestOpen_AgainstFakeER1(t *testing.T) {

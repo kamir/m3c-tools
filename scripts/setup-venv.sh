@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup-venv.sh — Create a dedicated Python virtual environment for m3c-tools
+# setup-venv.sh: Create a dedicated Python virtual environment for m3c-tools
 # Installs openai-whisper and its dependencies into ~/.m3c-tools/venv/
 #
 # Usage: ./scripts/setup-venv.sh [--force]
@@ -38,7 +38,7 @@ if [ -d "$VENV_DIR" ] && [ "$FORCE" = false ]; then
         info "To recreate, run: $0 --force"
         exit 0
     else
-        warn "Venv exists but whisper not found — reinstalling dependencies..."
+        warn "Venv exists but whisper not found: reinstalling dependencies..."
     fi
 fi
 

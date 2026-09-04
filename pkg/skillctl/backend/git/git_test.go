@@ -15,7 +15,7 @@ import (
 )
 
 // TestGitBackendConformance runs the shared SPEC-0356 backend conformance suite
-// (D8) against a bare-repo git backend — the SAME assertions run against ER1.
+// (D8) against a bare-repo git backend: the SAME assertions run against ER1.
 func TestGitBackendConformance(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
@@ -211,7 +211,7 @@ func TestGitCredNoLeak(t *testing.T) {
 	}
 	gb := b.(*gitBackend)
 	// The token must NEVER appear in Describe() or the stored remote (which IS
-	// the clone/push argv — no userinfo, no '@').
+	// the clone/push argv, no userinfo, no '@').
 	if strings.Contains(gb.Describe().Display, tok) || strings.Contains(gb.remote, tok) || strings.Contains(gb.remote, "@") {
 		t.Fatalf("token leaked: display=%q remote=%q", gb.Describe().Display, gb.remote)
 	}
@@ -234,7 +234,7 @@ func TestGitDefaultUserOauth2(t *testing.T) {
 	}
 }
 
-// TestGitCredModeSplit — CD-13: with a distinct read-only and write token, a read
+// TestGitCredModeSplit. CD-13: with a distinct read-only and write token, a read
 // operation's credential env carries the READ token and a write operation's
 // carries the WRITE token. A verifying pull (clone under ModeRead) therefore never
 // transmits the write-scoped registry token.
@@ -261,7 +261,7 @@ func TestGitCredModeSplit(t *testing.T) {
 	}
 }
 
-// TestGitAuthHeaderScopedAndNoRedirect — CD-14: the credential is injected as a
+// TestGitAuthHeaderScopedAndNoRedirect. CD-14: the credential is injected as a
 // URL-SCOPED http.<remote>.extraHeader (NOT a global http.extraHeader) and
 // http.followRedirects is forced false, so a cross-host redirect on the auth path
 // drops the credential instead of resending it.
@@ -281,7 +281,7 @@ func TestGitAuthHeaderScopedAndNoRedirect(t *testing.T) {
 	// The bare, GLOBAL header key must NOT be used (that is the pre-CD-14 leak).
 	for _, e := range env {
 		if e == "GIT_CONFIG_KEY_0=http.extraHeader" {
-			t.Error("credential injected via a GLOBAL http.extraHeader — a cross-host redirect would resend it")
+			t.Error("credential injected via a GLOBAL http.extraHeader: a cross-host redirect would resend it")
 		}
 	}
 	if !strings.Contains(joined, "GIT_CONFIG_KEY_1=http.followRedirects") ||
@@ -293,7 +293,7 @@ func TestGitAuthHeaderScopedAndNoRedirect(t *testing.T) {
 	}
 }
 
-// TestGitTokenNotInError — regression for the challenge-gate CRITICAL: a failing
+// TestGitTokenNotInError: regression for the challenge-gate CRITICAL: a failing
 // git operation must never return the token in its error string.
 func TestGitTokenNotInError(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
@@ -310,7 +310,7 @@ func TestGitTokenNotInError(t *testing.T) {
 	}
 }
 
-// TestGitPathTraversalRejected — regression for the challenge-gate CRITICAL: a
+// TestGitPathTraversalRejected: regression for the challenge-gate CRITICAL: a
 // malicious name/version/digest is rejected before any filesystem write.
 func TestGitPathTraversalRejected(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
@@ -335,7 +335,7 @@ func TestGitPathTraversalRejected(t *testing.T) {
 		}
 	}
 	if _, statErr := os.Stat("/tmp/pwn/1.0.0/bundle.skb"); statErr == nil {
-		t.Fatal("path traversal wrote /tmp/pwn — SEC-M9 breach")
+		t.Fatal("path traversal wrote /tmp/pwn: SEC-M9 breach")
 	}
 }
 

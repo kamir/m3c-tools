@@ -5,7 +5,7 @@ import (
 	"unicode"
 )
 
-// Obfuscation rules (SPEC-0246 §4.2) — YELLOW on their own, escalated to RED
+// Obfuscation rules (SPEC-0246 §4.2): YELLOW on their own, escalated to RED
 // when adjacent to an exfiltration finding (see escalateObfuscationNearExfil).
 // These detect encodings/tricks used to hide payloads from a human reviewer.
 var (
@@ -13,17 +13,17 @@ var (
 	// non-base64 boundary so we measure the whole run, not a window of it.
 	reObfBase64 = regexp.MustCompile(`(?:^|[^A-Za-z0-9+/])([A-Za-z0-9+/]{40,}={0,2})`)
 
-	// \xNN escape runs (>= 4 in a row) — classic hex-encoded payload.
+	// \xNN escape runs (>= 4 in a row): classic hex-encoded payload.
 	reObfHexRun = regexp.MustCompile(`(?:\\x[0-9A-Fa-f]{2}){4,}`)
 
-	// literal atob( — JS base64 decode, a smuggling primitive.
+	// literal atob(: JS base64 decode, a smuggling primitive.
 	reObfAtob = regexp.MustCompile(`\batob\s*\(`)
 
 	// zero-width / BOM characters used to hide text
 	// (U+200B..U+200D zero-width space/non-joiner/joiner, U+FEFF BOM).
 	reObfZeroWidth = regexp.MustCompile(`[\x{200B}-\x{200D}\x{FEFF}]`)
 
-	// HTML comments — checked for embedded injection prose.
+	// HTML comments: checked for embedded injection prose.
 	reHTMLComment = regexp.MustCompile(`(?s)<!--.*?-->`)
 )
 
@@ -162,7 +162,7 @@ func init() {
 			Category: CategoryObfuscation,
 			Verdict:  VerdictYellow,
 			Pattern:  reObfAtob,
-			Message:  "obfuscation: literal atob( — base64 decode primitive",
+			Message:  "obfuscation: literal atob(: base64 decode primitive",
 		},
 		Rule{
 			ID:       "OBF-004",
@@ -176,7 +176,7 @@ func init() {
 			Category: CategoryObfuscation,
 			Verdict:  VerdictYellow,
 			Match:    matchObfHomoglyph,
-			Message:  "obfuscation: homoglyph — ASCII word contains a Cyrillic/Greek look-alike letter",
+			Message:  "obfuscation: homoglyph: ASCII word contains a Cyrillic/Greek look-alike letter",
 		},
 		Rule{
 			ID:       "OBF-006",

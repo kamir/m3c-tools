@@ -1,10 +1,10 @@
 package verify
 
-// SPEC-0279 R2 + R3 — freshness policy + staleness fail-policy core tests.
+// SPEC-0279 R2 + R3, freshness policy + staleness fail-policy core tests.
 //
-// AC1 — a lower-epoch revocation list is refused (rollback test; regression of
+// AC1, a lower-epoch revocation list is refused (rollback test; regression of
 //        the R1 floor that this SPEC builds on).
-// AC2 — past max_staleness a HIGH-risk action fails closed; a LOW-risk action
+// AC2: past max_staleness a HIGH-risk action fails closed; a LOW-risk action
 //        follows fail_policy (both branches).
 // Plus: policy parsing/validation, action-risk classification (incl. the
 // red-team "downgrade high→low" guard), and the clock-injection property.
@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-// --- AC1: rollback (lower epoch refused) — regression of the R1 floor ---
+// --- AC1: rollback (lower epoch refused): regression of the R1 floor ---
 
 func TestAC1_LowerEpochRevocationListRefused(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
@@ -218,7 +218,7 @@ func TestFreshness_FutureDatedIssuedAtIsStale(t *testing.T) {
 
 	// Far future + LOW-risk + fail_policy=closed → DENIED: the forged-future
 	// timestamp is now treated as STALE (not fresh), so the fail-policy applies
-	// instead of being bypassed. This is the core of the fix — the future date no
+	// instead of being bypassed. This is the core of the fix: the future date no
 	// longer "looks fresh forever".
 	pClosed := freshPolicy(t, "24h", "closed", nil)
 	if decLow, errLow := EvaluateFreshness(3, farFuture, pClosed, RiskLow, now); !errors.Is(errLow, ErrRevocationStale) || !decLow.Stale {
@@ -275,17 +275,17 @@ func TestClassifyActionRisk(t *testing.T) {
 
 // Clock-injection property: the SAME list is fresh at one `now` and stale at a
 // later `now`. Proves staleness is measured against the injected clock, not the
-// list's self-asserted freshness — an adversary replaying a stale list cannot
+// list's self-asserted freshness. An adversary replaying a stale list cannot
 // present it as fresh.
 func TestFreshness_ClockInjectionDrivesVerdict(t *testing.T) {
 	p := freshPolicy(t, "1h", "closed", nil)
 	issued := "2026-06-22T00:00:00Z"
 
-	early := mustTime(t, "2026-06-22T00:30:00Z") // 30m — fresh
+	early := mustTime(t, "2026-06-22T00:30:00Z") // 30m: fresh
 	if dec, err := EvaluateFreshness(1, issued, p, RiskHigh, early); err != nil || !dec.Allowed {
 		t.Fatalf("at +30m must be fresh, got err=%v dec=%+v", err, dec)
 	}
-	late := mustTime(t, "2026-06-22T02:00:00Z") // 2h — stale
+	late := mustTime(t, "2026-06-22T02:00:00Z") // 2h: stale
 	if _, err := EvaluateFreshness(1, issued, p, RiskHigh, late); !errors.Is(err, ErrRevocationStale) {
 		t.Fatalf("at +2h must be stale-denied, got: %v", err)
 	}

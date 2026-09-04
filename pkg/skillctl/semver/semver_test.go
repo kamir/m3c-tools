@@ -14,7 +14,7 @@ func TestCompare(t *testing.T) {
 		{"1.0.0", "1.0.0", 0},
 		// THE BUG FIX: a leading "v" is stripped, so these are EQUAL. The prior
 		// registry/install_trust_mode copy did NOT strip "v" and returned
-		// "v1.2.0" < "1.2.0" (v1.2.0 parsed as major 0) — this case bites it.
+		// "v1.2.0" < "1.2.0" (v1.2.0 parsed as major 0): this case bites it.
 		{"v1.2.0", "1.2.0", 0},
 		{"v2.0.0", "1.9.9", 1}, // old registry impl: "v2..."→0 → wrongly -1
 		{"1.2.0", "v1.2.1", -1},
@@ -27,10 +27,10 @@ func TestCompare(t *testing.T) {
 		// from the old ones. The old copies split the whole string on '.' first, so
 		// "1.2.0-rc.1" leaked the trailing ".1" as a 4th field → parsed [1,2,0,1] and
 		// ranked the pre-release ABOVE its GA. We cut at the first '-'/'+' so the
-		// whole suffix drops: "1.2.0-rc.1" == "1.2.0" (more correct — a pre-release
+		// whole suffix drops: "1.2.0-rc.1" == "1.2.0" (more correct: a pre-release
 		// must not outrank its GA). Not reachable via the normal X.Y.Z pipeline.
 		{"1.0.0-rc.1", "1.0.0", 0},
-		{"1.2.0-rc.2", "1.2.0-rc.1", 0}, // pre-release identifiers not ordered — both are "a pre-release of 1.2.0"
+		{"1.2.0-rc.2", "1.2.0-rc.1", 0}, // pre-release identifiers not ordered, both are "a pre-release of 1.2.0"
 		{"1.2.0+build.5", "1.2.0", 0},
 		// Zero-extend shorter forms.
 		{"1.2", "1.2.0", 0},

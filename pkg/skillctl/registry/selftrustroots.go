@@ -1,6 +1,6 @@
 package registry
 
-// SPEC-0225 trust-roots for the `self` tenant — minimal, ER1-specific.
+// SPEC-0225 trust-roots for the `self` tenant: minimal, ER1-specific.
 //
 // The existing pkg/skillctl/verify TrustRoots schema assumes an HTTP registry
 // URL (SPEC-0188's admission server) and refuses non-URL values. For the
@@ -10,9 +10,9 @@ package registry
 //   # ~/.claude/trust-roots.yaml (or wherever)
 //   registry: self
 //   pubkey_b64: BASE64-OF-RAW-ED25519-PUBLIC-KEY
-//   fingerprint: sha256:<lowercase-hex>      # optional — recomputed on load if absent
+//   fingerprint: sha256:<lowercase-hex>      # optional: recomputed on load if absent
 //   governance_minimum: green                # green | yellow  ("red" is NOT a
-//                                            # valid floor — it would admit
+//                                            # valid floor: it would admit
 //                                            # everything; rejected on load)
 //
 // `10-keygen-and-trustroots.sh` writes this file on machine 1 and prints the
@@ -43,7 +43,7 @@ type SelfTrustRoots struct {
 	Fingerprint       string `yaml:"fingerprint,omitempty"`
 	GovernanceMinimum string `yaml:"governance_minimum,omitempty"`
 
-	// SPEC-0359 D3 (federation) — N-of-M co-attestation. GovernanceQuorum is the
+	// SPEC-0359 D3 (federation): N-of-M co-attestation. GovernanceQuorum is the
 	// number of DISTINCT pinned signer keys whose attestation must meet the floor
 	// (default 1 → today's single-attestation behaviour). Signers is the pinned
 	// reviewer key set; empty → one implicit signer {"", pub} matching any
@@ -74,7 +74,7 @@ func (t *SelfTrustRoots) quorum() int {
 
 // signerSet returns the pinned reviewer keys, or a single implicit signer bound
 // to the primary key (ReviewerID "" matches any reviewer_id) when none are
-// pinned — the D3-off default that reproduces the single-key gauntlet exactly.
+// pinned: the D3-off default that reproduces the single-key gauntlet exactly.
 func (t *SelfTrustRoots) signerSet() []Signer {
 	if len(t.Signers) > 0 {
 		return t.Signers
@@ -199,11 +199,11 @@ func (t *SelfTrustRoots) PubKey() ed25519.PublicKey {
 //	green (strictest)  >  yellow  >  red (most permissive)
 //
 // So a minimum of "green" admits only green attestations; "yellow" admits
-// green or yellow. A loaded floor is always "green" or "yellow" — LoadSelfTrustRoots
+// green or yellow. A loaded floor is always "green" or "yellow": LoadSelfTrustRoots
 // rejects "red" (and any other value) because "red" as a floor would admit
 // everything. The rank for "red" below remains, but only as a ranking of an
 // incoming attestation level, never as a configured minimum. (We still reject
-// the empty string — "no attestation yet" — at a higher layer.)
+// the empty string, "no attestation yet", at a higher layer.)
 func (t *SelfTrustRoots) MeetsFloor(level string) bool {
 	rank := map[string]int{"green": 3, "yellow": 2, "red": 1}
 	have := rank[govlevel.Normalize(level)]

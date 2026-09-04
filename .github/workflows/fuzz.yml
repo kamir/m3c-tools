@@ -3,7 +3,7 @@ name: Nightly Fuzz (trust-layer parsers)
 # Nightly Go native-fuzzing sweep over the untrusted-input surfaces of the
 # skillctl trust layer (archive readers, semver comparator, event envelope,
 # revocation list, trust-roots + SKILL.md parsers). Each target runs for a bounded
-# time and FAILS the job on any NEW crasher — an input that panics or violates the
+# time and FAILS the job on any NEW crasher. An input that panics or violates the
 # target's invariant oracle (a path escape, a fail-open verify, an ordering
 # inconsistency).
 #

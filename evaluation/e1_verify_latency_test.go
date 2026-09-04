@@ -1,6 +1,6 @@
 package evaluation
 
-// E1 — Offline `verify` latency (SPEC-0280 §2).
+// E1: Offline `verify` latency (SPEC-0280 §2).
 //
 // Method: synthesize N=10^4 signed bundles (synth.MintPopulation, deterministic
 // seed), then measure the SHIPPED verify.Verify() over them in pinned-author
@@ -15,7 +15,7 @@ package evaluation
 // verify.Verify reads the .skb once (SHA-256 over the bytes), checks the author
 // signature against the pinned key, the registry signature against the pinned
 // registry key, the governance gate, and surfaces the signed-manifest data-scope
-// — the full SPEC-0188 §7 algorithm, no network.
+//: the full SPEC-0188 §7 algorithm, no network.
 //
 // Single core: run with `-cpu 1`. The harness records median + p99 via a
 // dedicated latency driver (TestE1Latency) that the runner invokes; the

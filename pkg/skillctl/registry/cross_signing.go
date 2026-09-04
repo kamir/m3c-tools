@@ -1,16 +1,16 @@
 package registry
 
-// SPEC-0359 D3(i) — federation via cross-signing.
+// SPEC-0359 D3(i): federation via cross-signing.
 //
 // A GOVERNANCE ROOT key signs a member reviewer's key, so trusting the root
 // transitively admits the member as an N-of-M co-attestation signer. The record
 // is an envelope-signed map[string]any on the SAME canonical wire as every other
 // event (Sign/VerifyEnvelopeSignature unchanged), so this only expands WHICH keys
-// are consulted — never how a signature is checked. It carries a hard, signed
+// are consulted, never how a signature is checked. It carries a hard, signed
 // not_after; an expired cross-signature must NOT admit its member (fail-closed).
 //
 // Trust model (SPEC-0359 §9, confirmed): verified against a PINNED governance root
-// ONLY — never a fetched one. Only members admitted this way may contribute to a
+// ONLY: never a fetched one. Only members admitted this way may contribute to a
 // registry's revoke union (D5(b)); a bare-pinned peer's feed is advisory.
 
 import (
@@ -94,7 +94,7 @@ func VerifyCrossSignature(governanceRootPub ed25519.PublicKey, ev map[string]any
 
 // DeriveCrossSignedSigners returns the member signers admitted by verified,
 // unexpired cross-signatures from the pinned governance root. Invalid/expired
-// records are silently dropped (fail-closed — they simply do not admit a member).
+// records are silently dropped (fail-closed. They simply do not admit a member).
 func DeriveCrossSignedSigners(governanceRootPub ed25519.PublicKey, records []map[string]any, now time.Time) []Signer {
 	var out []Signer
 	for _, ev := range records {

@@ -1,16 +1,16 @@
 ---
 layout: default
-title: Quickstart — skillctl
+title: Quickstart: skillctl
 ---
 
 # Quickstart: skillctl
 
-Package, sign and verify your first agent skill in about five minutes — entirely offline,
+Package, sign and verify your first agent skill in about five minutes: entirely offline,
 no server required. Then see how the same bundle flows through admit → install → revoke.
 
 > **What is skillctl?** The trust-and-governance CLI for agent skills. It gives every skill
-> a verifiable identity and a full lifecycle — **author → pack → sign → admit → attest →
-> verify / install → use → audit → revoke** — so nothing an agent runs is unauthorized or
+> a verifiable identity and a full lifecycle, **author → pack → sign → admit → attest →
+> verify / install → use → audit → revoke**, so nothing an agent runs is unauthorized or
 > unprovable. The trust-chain check is **offline-verifiable**: no hosted CA sits in the
 > verification path. For every command and flag, see the [skillctl manual](manual-skillctl.md).
 
@@ -23,7 +23,7 @@ no server required. Then see how the same bundle flows through admit → install
 macOS, Linux and Windows.
 
 The **one-liner installers** fetch the right binary for your host, **verify cosign provenance
-(GitHub OIDC) and the SHA-256 integrity digest**, then install to a **user-scoped** bin dir —
+(GitHub OIDC) and the SHA-256 integrity digest**, then install to a **user-scoped** bin dir,
 no admin rights required.
 
 **Windows (PowerShell):**
@@ -33,7 +33,7 @@ irm https://raw.githubusercontent.com/kamir/m3c-tools/82c832882e8683fa3824ce65db
 
 Installs to `%LOCALAPPDATA%\Programs\skillctl` after verifying cosign provenance + SHA-256.
 Override the target dir or the release with `$env:INSTALL_DIR` and `$env:RELEASE_BASE` before
-running. This is the **light, user-scoped, no-admin** path — distinct from the machine-wide
+running. This is the **light, user-scoped, no-admin** path: distinct from the machine-wide
 `M3C-Tools-Setup.exe` installer; use **one or the other**, not both, so you don't end up with
 two `skillctl.exe` on your `PATH`.
 
@@ -46,7 +46,7 @@ Override the target dir or the release with `INSTALL_DIR=…` / `RELEASE_BASE=�
 
 **Bootstrap integrity.** The one-liner URLs are pinned to the **immutable commit `82c8328`**
 (not the mutable `master` branch, where one rewrite could swap the bootstrap script *and* every
-pin inside it). Verify the fetched bytes out-of-band before trusting them — expected SHA-256:
+pin inside it). Verify the fetched bytes out-of-band before trusting them, expected SHA-256:
 `tools/skillctl-install.ps1` → `9e8ceec9d2c87b4f5a7136653e8ca69224fa6579a55da221d9e2fe875f9924c8`;
 `tools/skillctl-install.sh` → `adf9d768a376ee921f9df728546de072a2b3f14e9616e10bf3419fef520034a9`.
 The [README Install section](../README.md#install) has a copy-paste verify-then-run recipe. On
@@ -55,18 +55,18 @@ each new signed release, bump the pinned commit **and** these hashes together.
 **Manual install (signed release, raw binary):** the **only** skillctl distribution channel is
 the signed `skillctl/v*` release (cosign/OIDC + SLSA provenance, plus a pinned ed25519 fallback).
 The unsigned per-arch skillctl assets that used to ride along on the `v*` product release have
-been **retired** — don't look for them there. To install by hand, pull the raw binary and its
+been **retired**: don't look for them there. To install by hand, pull the raw binary and its
 `SHA256SUMS` from the signed release and verify integrity *before* moving it onto your `PATH`:
 ```bash
 BASE="https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.3.1"   # latest signed tag
 curl -sLO "$BASE/skillctl-darwin-arm64"     # or darwin-amd64 / linux-amd64 / linux-arm64 / windows-amd64.exe
 curl -sLO "$BASE/SHA256SUMS"
-grep ' skillctl-darwin-arm64$' SHA256SUMS | shasum -a 256 -c -     # integrity gate — fails closed on mismatch
+grep ' skillctl-darwin-arm64$' SHA256SUMS | shasum -a 256 -c -     # integrity gate. Fails closed on mismatch
 sudo install skillctl-darwin-arm64 /usr/local/bin/skillctl
 ```
 
 For full provenance verification (cosign bundle / ed25519 signature), prefer the one-liner
-installers above — they do it for you. Or build from source: `go build -o build/skillctl ./cmd/skillctl`.
+installers above. They do it for you, or build from source: `go build -o build/skillctl ./cmd/skillctl`.
 
 ```bash
 skillctl version
@@ -85,8 +85,8 @@ skillctl keygen --out ~/.config/m3c/skill-keys/mykey
 
 This writes:
 
-- `~/.config/m3c/skill-keys/mykey.priv` — your **private** key (mode `0600`, keep it secret)
-- `~/.config/m3c/skill-keys/mykey.pub` — your **public** key (share this so others can verify)
+- `~/.config/m3c/skill-keys/mykey.priv`: your **private** key (mode `0600`, keep it secret)
+- `~/.config/m3c/skill-keys/mykey.pub`: your **public** key (share this so others can verify)
 
 Both are PEM-wrapped ed25519 (PKCS#8 / SPKI).
 
@@ -111,7 +111,7 @@ Useful optional manifest fields:
 |------|---------|
 | `--source-repo` / `--source-commit` / `--source-path` | Provenance: where the skill came from |
 | `--depends-on kind:name:constraint` | Declare dependencies, e.g. `python:requests:>=2.31` (repeatable) |
-| `--author-intent green\|yellow\|red` | Advisory governance hint (the verifier ignores it — signed **attestations** are what bind) |
+| `--author-intent green\|yellow\|red` | Advisory governance hint (the verifier ignores it. Signed **attestations** are what bind) |
 | `--data-scopes <json>` | Author-signed declared data-scope, bound into the bundle |
 
 ---
@@ -127,7 +127,7 @@ signature next to the bundle: `my-skill.skb.<digest>.author.sig`.
 
 ---
 
-## 5. Verify it — offline
+## 5. Verify it: offline
 
 ```bash
 skillctl verify-sig --pubkey ~/.config/m3c/skill-keys/mykey.pub my-skill.skb
@@ -154,7 +154,7 @@ skillctl trust add --registry <url> --pubkey <registry.pub>   # pin a key (optio
 skillctl trust list                                           # show pinned registries
 ```
 
-Then install — this pulls the bundle, runs the full trust-chain verifier, and installs
+Then install: this pulls the bundle, runs the full trust-chain verifier, and installs
 atomically under `~/.claude/skills/<name>/`, refusing if **any** step fails:
 
 ```bash
@@ -198,7 +198,7 @@ stale or rolled-back revocation list is rejected rather than silently trusted.
 `skillctl` can gate every skill invocation in Claude Code, failing **closed**:
 
 ```bash
-# As a PreToolUse(Skill) hook — reads the hook event on stdin, verifies the chain,
+# As a PreToolUse(Skill) hook: reads the hook event on stdin, verifies the chain,
 # and emits allow/deny. Wire it in settings, don't run it by hand:
 skillctl verify-hook
 
@@ -219,7 +219,7 @@ skillctl agentid show   --bundle agent.mandate              # owner, grant, expi
 ```
 
 An **AgentID** is an owner-signed mandate that says *this agent may use these skills for these
-intents* — and it verifies offline, no authority in the path.
+intents*, and it verifies offline, no authority in the path.
 
 ---
 
@@ -227,6 +227,6 @@ intents* — and it verifies offline, no authority in the path.
 
 - **Every command, flag and exit code:** [skillctl manual](manual-skillctl.md)
 - **Capture the memory your agents reason over:** [Quickstart: m3c-tools](quickstart-m3c-tools.md)
-- **The full lifecycle & governance model** lives behind `skillctl help` — it groups commands
+- **The full lifecycle & governance model** lives behind `skillctl help`: it groups commands
   by capability (signing, trust roots, install, agent identity, registry, transparency log,
   sessions, PLM project context).

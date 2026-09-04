@@ -17,7 +17,7 @@ import (
 const devAPIBase = "https://platform.plaud.ai/developer/api"
 
 // devOAuthClientID is the @plaud-ai/mcp app's PUBLIC OAuth client id (a public
-// identifier, NOT a secret — the app is a public/PKCE client). It is required to
+// identifier, NOT a secret. The app is a public/PKCE client). It is required to
 // refresh the third-party access token. Baked default from @plaud-ai/mcp.
 const devOAuthClientID = "client_37d250cb-50f8-4af1-8cd6-bc6711c5d684"
 
@@ -52,7 +52,7 @@ type DevTokenFile struct {
 }
 
 // DevClient talks to the Plaud developer API using the OAuth access token minted
-// by the official MCP login. This is the durable, SSO-native capture path — no
+// by the official MCP login. This is the durable, SSO-native capture path, no
 // localStorage scraping, no ephemeral browser token, no consumer API.
 type DevClient struct {
 	token        string
@@ -69,11 +69,11 @@ type DevClient struct {
 func NewDevClientFromFile(path string) (*DevClient, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("plaud: read %s: %w — run: node tools/plaud-mcp-login.mjs", path, err)
+		return nil, fmt.Errorf("plaud: read %s: %w, run: node tools/plaud-mcp-login.mjs", path, err)
 	}
 	var t DevTokenFile
 	if json.Unmarshal(data, &t) != nil || t.AccessToken == "" {
-		return nil, fmt.Errorf("plaud: no access_token in %s — run: node tools/plaud-mcp-login.mjs", path)
+		return nil, fmt.Errorf("plaud: no access_token in %s, run: node tools/plaud-mcp-login.mjs", path)
 	}
 	expired := t.ExpiresAt > 0 && time.Now().After(time.UnixMilli(t.ExpiresAt))
 	nearExpiry := t.ExpiresAt > 0 && time.Now().After(time.UnixMilli(t.ExpiresAt).Add(-devRefreshMargin))
@@ -84,10 +84,10 @@ func NewDevClientFromFile(path string) (*DevClient, error) {
 			_ = saveDevTokenFile(path, t)
 			fmt.Fprintln(os.Stderr, "  [plaud] developer token refreshed (no re-login needed)")
 		} else if expired {
-			return nil, fmt.Errorf("plaud: developer token expired and refresh failed (%v) — re-run: node tools/plaud-mcp-login.mjs", rerr)
+			return nil, fmt.Errorf("plaud: developer token expired and refresh failed (%v), re-run: node tools/plaud-mcp-login.mjs", rerr)
 		}
 	case expired:
-		return nil, fmt.Errorf("plaud: developer token expired — re-run: node tools/plaud-mcp-login.mjs")
+		return nil, fmt.Errorf("plaud: developer token expired, re-run: node tools/plaud-mcp-login.mjs")
 	}
 	return &DevClient{
 		token: t.AccessToken, refreshToken: t.RefreshToken, tokenPath: path,
@@ -150,7 +150,7 @@ func saveDevTokenFile(path string, t DevTokenFile) error {
 	return os.Rename(tmp, path)
 }
 
-// AccessToken returns the bearer this client uses — for deriving the shared
+// AccessToken returns the bearer this client uses, for deriving the shared
 // plaud-sync account id (DeriveAccountID) so status/register are self-consistent.
 func (c *DevClient) AccessToken() string { return c.token }
 
@@ -192,7 +192,7 @@ func (c *DevClient) get(path string) ([]byte, error) {
 	case 200:
 		return body, nil
 	case 401, 403:
-		return nil, fmt.Errorf("plaud: developer token rejected (HTTP %d) — re-run: node tools/plaud-mcp-login.mjs", status)
+		return nil, fmt.Errorf("plaud: developer token rejected (HTTP %d), re-run: node tools/plaud-mcp-login.mjs", status)
 	default:
 		return nil, fmt.Errorf("plaud: developer API %s: HTTP %d: %.200s", path, status, strings.TrimSpace(string(body)))
 	}
@@ -212,8 +212,8 @@ type DevRecording struct {
 // reports whether it could.
 //
 // The zone-less layout is deliberate and correct: Plaud emits UTC WITHOUT a
-// suffix — "2026-09-03T13:44:14" is a recording made at 15:44 Berlin time during
-// CEST — and time.Parse assigns UTC to a layout that carries no zone, so the
+// suffix, "2026-09-03T13:44:14" is a recording made at 15:44 Berlin time during
+// CEST, and time.Parse assigns UTC to a layout that carries no zone, so the
 // returned INSTANT is right. Only its rendering zone is still open: every caller
 // that shows the value to a human, or writes it into a zone-less field such as
 // ER1's current_time, must call .Local() first. RFC3339 stays in the list so a
@@ -228,7 +228,7 @@ func ParseDevTime(s string) (time.Time, bool) {
 }
 
 // StartedAtLocal returns the recording's true start time in the machine's local
-// zone — the moment the button was pressed, not the upload or the transcription.
+// zone. The moment the button was pressed, not the upload or the transcription.
 func (r DevRecording) StartedAtLocal() (time.Time, bool) {
 	t, ok := ParseDevTime(r.StartAt)
 	if !ok {

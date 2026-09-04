@@ -1,6 +1,6 @@
 package main
 
-// Stream S2-M2 (Sprint 2 / Stream M2) — `skillctl intent declare` subcommand.
+// Stream S2-M2 (Sprint 2 / Stream M2): `skillctl intent declare` subcommand.
 //
 // Closes the post-hoc author-intent declaration path for SPEC-0195 awareness
 // admissions. The 50 bundles admitted by `skillctl awareness sync` carry
@@ -67,7 +67,7 @@ func (s *stringSliceFlag) Get() any           { return []string(*s) }
 
 // intentDeclareReq is the wire shape of `PATCH /api/skills/bundles/<digest>/intent`.
 // The endpoint expects the new (proposed) `intent` block plus an explicit
-// `data_dependencies` list — Stream A's PATCH handler re-validates the
+// `data_dependencies` list: Stream A's PATCH handler re-validates the
 // triplet (intent, governance_intent, data_dependencies) using the same
 // `_validate_intent_data_cross_rules` helper as `/admit-from-scan`.
 type intentDeclareReq struct {
@@ -143,7 +143,7 @@ func runIntentDeclare(args []string, stdout, stderr io.Writer) int {
 	hrFlag := fs.String("human-review-required", "", "Author claim: skill requires human review beyond governance attestation. true|false.")
 	subprocessFlag := fs.String("subprocess", "", "Comma-separated subprocess allowlist (e.g. pandoc,git).")
 	summaryFlag := fs.String("summary", "", "One-line plain-English summary of the skill's intent.")
-	governanceFlag := fs.String("governance-intent", "", "Bundle governance intent (green|yellow|red) — checked against the §3.3 destructive_green cross-rule.")
+	governanceFlag := fs.String("governance-intent", "", "Bundle governance intent (green|yellow|red): checked against the §3.3 destructive_green cross-rule.")
 	var dataScopeFlag stringSliceFlag
 	fs.Var(&dataScopeFlag, "data-scopes", "Typed SPEC-0196 data-scope JSON declaration; repeatable. Validated client-side through pkg/skillctl/datascope before the PATCH.")
 	var dataDepFlag stringSliceFlag
@@ -201,7 +201,7 @@ func runIntentDeclare(args []string, stdout, stderr io.Writer) int {
 	}
 
 	// Build the intent block from flags or --from-yaml. The two are
-	// mutually exclusive only by convention — if both are passed, the
+	// mutually exclusive only by convention. If both are passed, the
 	// per-flag values win on a key-by-key basis (so a YAML file can
 	// provide a base + a flag patches one field).
 	intentBlock, dataDeps, err := buildIntentFromInputs(
@@ -254,7 +254,7 @@ func runIntentDeclare(args []string, stdout, stderr io.Writer) int {
 func runIntentDeclareWithClient(opts intentDeclareOpts, stdout, stderr io.Writer) int {
 	// CLIENT-SIDE data-scope validation (SPEC-0196 §3 + §3.3), fail-closed.
 	// This runs BEFORE the dry-run print and BEFORE any network access, so an
-	// inconsistent declaration is rejected locally — without ever leaking a
+	// inconsistent declaration is rejected locally, without ever leaking a
 	// half-baked PATCH to the registry. A §3.3 cross-rule failure maps to the
 	// SAME exit 18 the server returns, so CI cannot tell client refusal from
 	// server refusal (the red-team relies on this: the binding cannot be
@@ -265,7 +265,7 @@ func runIntentDeclareWithClient(opts intentDeclareOpts, stdout, stderr io.Writer
 
 	// --dry-run prints the payload + exits 0 BEFORE any network access,
 	// even before digest resolution. This keeps `--dry-run` strictly
-	// non-side-effecting (no scan, no HTTP) — useful for fixture tests
+	// non-side-effecting (no scan, no HTTP): useful for fixture tests
 	// and for preview-in-CI workflows.
 	payload := intentDeclareReq{
 		Intent:           opts.intent,
@@ -346,13 +346,13 @@ func runIntentDeclareWithClient(opts intentDeclareOpts, stdout, stderr io.Writer
 			if rule == "" {
 				rule = "<unspecified>"
 			}
-			fmt.Fprintf(stderr, "skillctl intent declare: rejected by registry — failed_rule=%s\n", rule)
+			fmt.Fprintf(stderr, "skillctl intent declare: rejected by registry: failed_rule=%s\n", rule)
 			if e.Detail != "" {
 				fmt.Fprintf(stderr, "detail: %s\n", e.Detail)
 			}
 			return verify.ExitCode(fmt.Errorf("rule=%s: %w", rule, verify.ErrIntentInconsistent))
 		}
-		// Generic 400 — request shape was bad; surface as usage.
+		// Generic 400: request shape was bad; surface as usage.
 		fmt.Fprintf(stderr, "skillctl intent declare: registry returned 400\n")
 		if len(respBody) > 0 {
 			fmt.Fprintf(stderr, "response body: %s\n", string(respBody))
@@ -369,7 +369,7 @@ func runIntentDeclareWithClient(opts intentDeclareOpts, stdout, stderr io.Writer
 
 // runIntentShow implements `skillctl intent show <skill-name|@digest>`. It
 // resolves the bundle, fetches its registry meta, and prints the declared
-// intent + data_dependencies (the SPEC-0196 §3 fields). Read-only — no PATCH,
+// intent + data_dependencies (the SPEC-0196 §3 fields). Read-only: no PATCH,
 // no --confirm. Useful for the CISO to read what a skill says it does before
 // authorizing a data dependency (SPEC-0196 §8).
 func runIntentShow(args []string, stdout, stderr io.Writer) int {
@@ -392,7 +392,7 @@ func runIntentShow(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "Provenance (SECURITY): a scope is shown as signed-manifest / AUTHORITATIVE")
 		fmt.Fprintln(stderr, "ONLY when the local .skb's AUTHOR SIGNATURE is cryptographically verified")
 		fmt.Fprintln(stderr, "against a PINNED trust-root author key (the full `skillctl verify` chain).")
-		fmt.Fprintln(stderr, "A bare digest match against the registry-advertised digest is NOT enough —")
+		fmt.Fprintln(stderr, "A bare digest match against the registry-advertised digest is NOT enough. ")
 		fmt.Fprintln(stderr, "that field is unsigned and registry-supplied, so a malicious registry could")
 		fmt.Fprintln(stderr, "serve its own .skb + digest. Without a verifiable author signature the scope")
 		fmt.Fprintln(stderr, "is digest-matched / UNVERIFIED. The registry's own scope view is always")
@@ -435,13 +435,13 @@ func runIntentShow(args []string, stdout, stderr io.Writer) int {
 		return exitGeneric
 	}
 
-	// The registry response is UNTRUSTED — its parsed manifest and bundle row are
+	// The registry response is UNTRUSTED. Its parsed manifest and bundle row are
 	// labeled registry-reported / bundle-row, NEVER author-signed.
 	view := extractDeclaredView(meta)
 
 	// AUTHORITATIVE path (P2b re-challenge fix): a scope is signed-manifest /
 	// AUTHORITATIVE ONLY when the bundle's AUTHOR SIGNATURE verifies against a
-	// PINNED trust-root author key — i.e. the full verify.Verify chain (digest
+	// PINNED trust-root author key, i.e. the full verify.Verify chain (digest
 	// recompute + stepVerifyAuthor ed25519 + registry sig + governance + tenant)
 	// succeeds. A bare digest match against the registry-advertised, UNSIGNED
 	// `bundle.bundle_digest` is NOT author-signature verification: a malicious
@@ -449,7 +449,7 @@ func runIntentShow(args []string, stdout, stderr io.Writer) int {
 	// without any pinned author having signed them (Attack-d). On any verify
 	// failure (no trust-roots, from-registry root with no pinned author, author sig
 	// invalid, digest mismatch, governance/revocation failure) we DOWNGRADE to
-	// digest-matched / UNVERIFIED — we never print AUTHORITATIVE and never fail the
+	// digest-matched / UNVERIFIED: we never print AUTHORITATIVE and never fail the
 	// whole command, so the CISO still sees the (untrusted) scope with the right
 	// label. The signed bundle.json bytes are always read from the digest-verified
 	// .skb path (verify.ReadDigestVerifiedManifest), never from the registry copy.
@@ -474,7 +474,7 @@ func runIntentShow(args []string, stdout, stderr io.Writer) int {
 		// (UNVERIFIED) and bundle-row (advisory) without scraping text.
 		// `authoritative` is true ONLY when the author signature was cryptographically
 		// verified against a pinned trust-root key (provSignedManifest).
-		digestTrust := "UNVERIFIED (digest matched the advertised digest, but author signature NOT verified — configure trust-roots or run `skillctl verify --bundle`)"
+		digestTrust := "UNVERIFIED (digest matched the advertised digest, but author signature NOT verified: configure trust-roots or run `skillctl verify --bundle`)"
 		if view.digestDetail != "" {
 			digestTrust = "UNVERIFIED (author signature NOT verified: " + view.digestDetail + ")"
 		}
@@ -517,21 +517,21 @@ func runIntentShow(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "governance: %s\n", dashOrValue(meta.CurrentGovernance))
 	switch authProv {
 	case provSignedManifest:
-		fmt.Fprintln(stdout, "provenance: signed-manifest (AUTHORITATIVE — author signature verified against a pinned trust-root key)")
+		fmt.Fprintln(stdout, "provenance: signed-manifest (AUTHORITATIVE, author signature verified against a pinned trust-root key)")
 	case provDigestMatched:
-		fmt.Fprintln(stdout, "provenance: digest-matched (author signature NOT verified — configure trust-roots or run `skillctl verify --bundle`)")
+		fmt.Fprintln(stdout, "provenance: digest-matched (author signature NOT verified, configure trust-roots or run `skillctl verify --bundle`)")
 		if view.digestDetail != "" {
 			fmt.Fprintf(stdout, "            reason: %s\n", view.digestDetail)
 		}
 	case provRegistryReported:
-		fmt.Fprintln(stdout, "provenance: registry-reported (UNVERIFIED — run `intent show --bundle <file.skb>` with pinned trust-roots for authoritative)")
+		fmt.Fprintln(stdout, "provenance: registry-reported (UNVERIFIED, run `intent show --bundle <file.skb>` with pinned trust-roots for authoritative)")
 	case provBundleRow:
-		fmt.Fprintln(stdout, "provenance: bundle-row (ADVISORY — mutable post-admit PATCH, NOT author-signed)")
+		fmt.Fprintln(stdout, "provenance: bundle-row (ADVISORY, mutable post-admit PATCH, NOT author-signed)")
 	default:
 		fmt.Fprintln(stdout, "provenance: (none declared)")
 	}
 	if !view.hasSigned() && (view.hasDigestMatched() || view.hasRegistry() || view.hasRow()) {
-		fmt.Fprintln(stdout, "warning:    NO author-signature-verified scope shown — the displayed scope is UNTRUSTED.")
+		fmt.Fprintln(stdout, "warning:    NO author-signature-verified scope shown: the displayed scope is UNTRUSTED.")
 		fmt.Fprintln(stdout, "            Pass --bundle <file.skb> with pinned trust-roots to verify the author signature cryptographically.")
 	}
 
@@ -563,7 +563,7 @@ type bundleScopeParams struct {
 // `intent show --bundle` path and overlays the resulting scope onto view with the
 // correct trust label (P2b re-challenge fix).
 //
-// It gates AUTHORITATIVE on verify.Verify success — the SAME §7 chain
+// It gates AUTHORITATIVE on verify.Verify success: the SAME §7 chain
 // (stepRecomputeDigest + stepCompareDigest + stepVerifyAuthor ed25519 against the
 // PINNED trust-root author key + registry sig + governance + tenant) the rest of
 // the CLI runs. The registry-supplied `bundle.bundle_digest` alone is never
@@ -587,7 +587,7 @@ func verifyBundleAuthorScope(p bundleScopeParams, meta *registry.BundleMeta, dig
 	// Read the bundle.json from the DIGEST-VERIFIED .skb up front. This both (a)
 	// confirms the on-disk bytes reproduce the advertised digest and (b) gives us
 	// the scope to surface regardless of the author-sig outcome. If the digest does
-	// NOT match, the bundle is not the one the registry described — surface nothing
+	// NOT match, the bundle is not the one the registry described: surface nothing
 	// signed and let the registry-reported view stand (it is already UNVERIFIED).
 	signedManifest, derr := verify.ReadDigestVerifiedManifest(p.bundlePath, advertised)
 	if derr != nil {
@@ -630,7 +630,7 @@ func verifyBundleAuthor(p bundleScopeParams, regMeta *registry.BundleMeta, c *re
 		return "no BundleMeta envelope (signatures) available", false
 	}
 
-	// 2. The PINNED trust-roots — this is where the author key comes from. With no
+	// 2. The PINNED trust-roots: this is where the author key comes from. With no
 	//    pinned author key there is nothing to verify the author signature against,
 	//    so the bundle is UNVERIFIED (configure trust-roots).
 	tr, root, err := loadAndPickRootFromPath(p.trustRootsPath, p.registryURL)
@@ -669,7 +669,7 @@ func verifyBundleAuthor(p bundleScopeParams, regMeta *registry.BundleMeta, c *re
 // --bundle path: the registry-advertised `bundle.bundle_digest` (the value the
 // author signature covers). Falls back to the digest the caller resolved (e.g. an
 // @sha256 pin) when the registry row omits it. Either way the comparison is
-// against a value the bundle.json bytes must reproduce — a malicious registry that
+// against a value the bundle.json bytes must reproduce. A malicious registry that
 // lies about the digest can only cause a fail-closed mismatch, never an
 // authoritative display of an unsigned scope.
 func advertisedDigest(meta *registry.BundleMeta, resolved string) string {
@@ -710,7 +710,7 @@ func printIntentSource(stdout io.Writer, provenance, marker string, intentBlock 
 //
 // SECURITY INVARIANT (P2b re-challenge fix): a scope may be labeled
 // provSignedManifest / AUTHORITATIVE *only* when the bundle's AUTHOR SIGNATURE was
-// cryptographically verified against a PINNED trust-root author key — i.e. the
+// cryptographically verified against a PINNED trust-root author key, i.e. the
 // full `verify.Verify` chain (digest recompute + stepVerifyAuthor ed25519 +
 // registry sig + governance + revocation) succeeded. A bare digest match against
 // the registry-advertised `bundle.bundle_digest` is NOT author-signature
@@ -721,7 +721,7 @@ func printIntentSource(stdout io.Writer, provenance, marker string, intentBlock 
 // When the .skb digest-matches the advertised digest but the author signature
 // could NOT be verified (no trust-roots, from-registry root with no pinned
 // author, author sig invalid, governance/revocation failure, or any verify
-// error), the scope is labeled provDigestMatched / UNVERIFIED — NEVER
+// error), the scope is labeled provDigestMatched / UNVERIFIED, NEVER
 // AUTHORITATIVE. The registry's parsed `manifest` copy (meta.Manifest) is
 // provRegistryReported / UNVERIFIED and the mutable post-admit PATCH row
 // (meta.Bundle) is provBundleRow / advisory. Mirrors verify.ScopeProvenance for
@@ -738,20 +738,20 @@ const (
 //
 //   - signed:   read from a local .skb whose AUTHOR SIGNATURE was cryptographically
 //     verified against a pinned trust-root key (full verify.Verify chain succeeded).
-//     AUTHORITATIVE — author-signature-covered. Populated ONLY when
+//     AUTHORITATIVE: author-signature-covered. Populated ONLY when
 //     `intent show --bundle <file.skb>` ran the real verify chain to success.
 //     NEVER populated from a bare digest match or the registry response.
 //   - digestMatched: read from a local .skb whose digest matched the advertised
 //     digest, but whose author signature could NOT be verified (no trust-roots,
 //     from-registry root with no pinned author, author sig invalid, or any verify
-//     failure). UNVERIFIED — a digest match against a registry-supplied, unsigned
+//     failure). UNVERIFIED: a digest match against a registry-supplied, unsigned
 //     `bundle_digest` is NOT author-signature verification (Attack-d).
 //   - registry: read from the registry's parsed `manifest` copy (meta.Manifest).
-//     UNVERIFIED — plain HTTP, no digest recompute, no signature check. A
+//     UNVERIFIED: plain HTTP, no digest recompute, no signature check. A
 //     malicious registry can put anything here, so it is NOT authoritative.
 //   - row:      read from the mutable post-admit PATCH row (meta.Bundle). Advisory.
 //
-// ALL present sources are surfaced — a CISO must see what is author-signed vs what
+// ALL present sources are surfaced. A CISO must see what is author-signed vs what
 // the registry merely claims, not just the winning one.
 type declaredView struct {
 	signedIntent map[string]any
@@ -778,7 +778,7 @@ func (v declaredView) hasDigestMatched() bool {
 }
 
 // hasRegistry reports whether the untrusted registry-manifest copy carried a
-// declaration. Present ≠ authoritative — see provRegistryReported.
+// declaration. Present ≠ authoritative: see provRegistryReported.
 func (v declaredView) hasRegistry() bool {
 	return v.regIntent != nil || len(v.regDeps) > 0
 }
@@ -835,7 +835,7 @@ func pickDeclared(src map[string]any) (map[string]any, []map[string]any) {
 // `manifest` copy (meta.Manifest) is tagged registry-reported / UNVERIFIED and the
 // post-admit PATCH row (meta.Bundle) is tagged bundle-row / advisory. The
 // author-signed scope is populated SEPARATELY, only from a digest-verified local
-// .skb via overlaySignedScope — see runIntentShow's `--bundle` path. This is the
+// .skb via overlaySignedScope. See runIntentShow's `--bundle` path. This is the
 // SAME trust boundary `verify` enforces (verify.go collectDeclaredScopes:
 // "deliberately do NOT read scope from meta.Manifest").
 func extractDeclaredView(meta *registry.BundleMeta) declaredView {
@@ -849,7 +849,7 @@ func extractDeclaredView(meta *registry.BundleMeta) declaredView {
 // from a local .skb whose AUTHOR SIGNATURE was cryptographically verified against a
 // pinned trust-root key (the full verify.Verify chain succeeded). This is the ONLY
 // path that may set provSignedManifest. The caller MUST have run verify.Verify to
-// success before calling this — a bare digest match is NOT sufficient.
+// success before calling this. A bare digest match is NOT sufficient.
 func (v *declaredView) overlaySignedScope(signedIntent map[string]any, signedDeps []map[string]any) {
 	v.signedIntent = signedIntent
 	v.signedDeps = signedDeps
@@ -894,7 +894,7 @@ func validateDeclarationLocally(opts intentDeclareOpts, stderr io.Writer) (int, 
 		var ve *datascope.ValidationError
 		if errors.As(verr, &ve) && ve.FailedRule != "" {
 			// A real §3.3 cross-rule fired → exit 18, same as the server.
-			fmt.Fprintf(stderr, "skillctl intent declare: rejected locally — failed_rule=%s\n", ve.FailedRule)
+			fmt.Fprintf(stderr, "skillctl intent declare: rejected locally: failed_rule=%s\n", ve.FailedRule)
 			fmt.Fprintf(stderr, "detail: %s\n", ve.Detail)
 			return verify.ExitCode(fmt.Errorf("rule=%s: %w", ve.FailedRule, verify.ErrIntentInconsistent)), false
 		}
@@ -912,7 +912,7 @@ func validateDeclarationLocally(opts intentDeclareOpts, stderr io.Writer) (int, 
 // individual keys. This lets an operator hand-edit the YAML for the
 // repetitive bits (data_dependencies) and use flags for the toggles.
 //
-// Returns ("", nil) if no input was supplied — the caller treats that as
+// Returns ("", nil) if no input was supplied: the caller treats that as
 // a usage error.
 func buildIntentFromInputs(
 	fromYAML, sideEffects, destructive, network, hr, subprocess, summary string,
@@ -1055,7 +1055,7 @@ func splitCommaTrim(s string) []string {
 // starts with non-"-" but it follows a token that DOES start with "-",
 // so we know to skip the value.
 //
-// We treat ONLY the first non-flag positional as the skill — everything
+// We treat ONLY the first non-flag positional as the skill: everything
 // else (a stray second positional) bubbles through to fs.NArg() so the
 // usage check can refuse cleanly.
 //
@@ -1079,7 +1079,7 @@ func extractSkillPositional(args []string) (skill string, rest []string) {
 			// when the flag is a known non-bool name. Safer: just
 			// always pass through. The flag parser will then handle
 			// "--registry URL" correctly because the URL doesn't start
-			// with "-" but it ALSO won't be the first positional —
+			// with "-" but it ALSO won't be the first positional,
 			// because we only pick the FIRST non-flag-prefixed token,
 			// and that's "URL" only if there's no skill positional
 			// before it.
@@ -1090,7 +1090,7 @@ func extractSkillPositional(args []string) (skill string, rest []string) {
 			// non-bool flags this command accepts.
 			name := strings.TrimLeft(a, "-")
 			if eq := strings.IndexByte(name, '='); eq >= 0 {
-				// "--flag=value" — value is in-line, no skip.
+				// "--flag=value": value is in-line, no skip.
 				continue
 			}
 			switch name {
@@ -1114,7 +1114,7 @@ func extractSkillPositional(args []string) (skill string, rest []string) {
 	return skill, rest
 }
 
-// printIntentUsage is the help text for `skillctl intent`. Kept short —
+// printIntentUsage is the help text for `skillctl intent`. Kept short:
 // the per-subcommand `--help` carries the detailed flag table.
 func printIntentUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: skillctl intent <subcommand> [flags]")

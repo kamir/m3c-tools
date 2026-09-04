@@ -18,13 +18,13 @@ timeline with you. Please give us a reasonable window to remediate before any pu
 
 ## Supported versions
 
-Security fixes target the **latest** release of each line — `vX.Y.Z` (product) and
+Security fixes target the **latest** release of each line: `vX.Y.Z` (product) and
 `skillctl/vX.Y.Z` (the signed trust CLI). Older tags are not maintained; upgrade to the latest
 release.
 
 ## Supply-chain guarantees
 
-Every release is built and signed in GitHub Actions — there is **no long-lived signing key** in
+Every release is built and signed in GitHub Actions. There is **no long-lived signing key** in
 the repository:
 
 - **Keyless cosign signatures** over the release checksums, via GitHub OIDC. The signing job
@@ -57,7 +57,7 @@ slsa-verifier verify-artifact <asset> \
   --source-uri github.com/kamir/m3c-tools
 ```
 
-**Skills you install with `skillctl`** are verified **offline** — the ed25519 trust chain is
+**Skills you install with `skillctl`** are verified **offline**. The ed25519 trust chain is
 checked with no server and no hosted CA in the verification path, and revocation is signed,
 offline and fail-closed:
 

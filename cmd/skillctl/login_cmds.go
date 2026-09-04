@@ -1,6 +1,6 @@
 package main
 
-// `skillctl login` + the device-token autoload bootstrap — FR-0043.
+// `skillctl login` + the device-token autoload bootstrap: FR-0043.
 //
 // Problem (the reported bug): `m3c-tools login` persisted a device token, but
 // skillctl only ever read ER1_DEVICE_TOKEN from the environment, so a user who
@@ -8,10 +8,10 @@ package main
 //
 // Fix, two halves:
 //   - login:    `skillctl login` runs the browser device-pairing flow itself
-//               (so a box with only the skillctl binary — e.g. Eric's — is
+//               (so a box with only the skillctl binary, e.g. Eric's. Is
 //               self-sufficient) and persists the token via pkg/auth.
 //   - autoload: before any ER1-bound command, if ER1_DEVICE_TOKEN is unset, load
-//               the persisted token and export it for the process — mirroring
+//               the persisted token and export it for the process. Mirroring
 //               what cmd/m3c-tools/main.go already does for the product binary.
 
 import (
@@ -27,7 +27,7 @@ import (
 )
 
 // networkCommands are the subcommands that talk to ER1 and therefore need a
-// device token. Only these trigger autoloadDeviceToken — so offline commands
+// device token. Only these trigger autoloadDeviceToken, so offline commands
 // (version, keygen, sign, verify-sig, trust, …) never touch the OS keychain.
 var networkCommands = map[string]bool{
 	"publish":   true,
@@ -48,7 +48,7 @@ var networkCommands = map[string]bool{
 // autoloadDeviceToken implements the read-back half of FR-0043. If
 // ER1_DEVICE_TOKEN is already set it is left untouched (explicit wins). The
 // keychain backend ignores the userID; the encrypted-file backend derives its
-// key from it, so we pass ER1_USER_ID — or the sub parsed from ER1_CONTEXT_ID —
+// key from it, so we pass ER1_USER_ID, or the sub parsed from ER1_CONTEXT_ID,
 // as a best-effort hint for headless/file-backed hosts.
 func autoloadDeviceToken(stderr io.Writer) {
 	if os.Getenv("ER1_DEVICE_TOKEN") != "" {
@@ -65,12 +65,12 @@ func autoloadDeviceToken(stderr io.Writer) {
 	case token != "":
 		_ = os.Setenv("ER1_DEVICE_TOKEN", token)
 	case expired:
-		fmt.Fprintln(stderr, "[skillctl] your saved device token has expired — run 'skillctl login' to refresh.")
+		fmt.Fprintln(stderr, "[skillctl] your saved device token has expired: run 'skillctl login' to refresh.")
 	}
 }
 
 // publicER1Base is the default login target. `skillctl login` is the publisher
-// pairing flow against the public SaaS — NOT the local dev server. A local
+// pairing flow against the public SaaS, NOT the local dev server. A local
 // developer overrides via --base-url or by setting ER1_API_URL.
 const publicER1Base = "https://onboarding.guide"
 
@@ -107,15 +107,15 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 		if auth.HasStoredToken() {
 			tok, expired := auth.PersistedBearer(strings.SplitN(os.Getenv("ER1_CONTEXT_ID"), "___", 2)[0])
 			if tok != "" {
-				fmt.Fprintf(stdout, "Logged in — device token stored (%s).\n", auth.ActiveStoreName())
+				fmt.Fprintf(stdout, "Logged in, device token stored (%s).\n", auth.ActiveStoreName())
 				return 0
 			}
 			if expired {
-				fmt.Fprintln(stdout, "A device token is stored but has expired — run 'skillctl login'.")
+				fmt.Fprintln(stdout, "A device token is stored but has expired, run 'skillctl login'.")
 				return 0
 			}
 		}
-		fmt.Fprintln(stdout, "Not logged in — run 'skillctl login'.")
+		fmt.Fprintln(stdout, "Not logged in: run 'skillctl login'.")
 		return 0
 	}
 
@@ -124,13 +124,13 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "logout: %v\n", err)
 			return 1
 		}
-		fmt.Fprintln(stdout, "Logged out — device token removed.")
+		fmt.Fprintln(stdout, "Logged out: device token removed.")
 		return 0
 	}
 
 	base := resolveLoginBase(*baseFlag, os.Getenv("ER1_API_URL"))
 	if base == "" {
-		fmt.Fprintln(stderr, "login: cannot determine ER1 base URL — set ER1_API_URL or pass --base-url.")
+		fmt.Fprintln(stderr, "login: cannot determine ER1 base URL: set ER1_API_URL or pass --base-url.")
 		return 1
 	}
 
@@ -157,7 +157,7 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "login: token received but could not be saved: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "✓ Logged in as %s — device token saved (%s). skillctl will use it automatically.\n",
+	fmt.Fprintf(stdout, "✓ Logged in as %s: device token saved (%s). skillctl will use it automatically.\n",
 		firstNonEmpty(res.UserEmail, res.UserID, res.ContextID, "unknown"), auth.ActiveStoreName())
 	return 0
 }

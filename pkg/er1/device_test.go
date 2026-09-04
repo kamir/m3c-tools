@@ -169,7 +169,7 @@ func TestListDevices_ParsesResponse(t *testing.T) {
 }
 
 func TestPairDevice_Idempotent(t *testing.T) {
-	// Server returns 200 OK (already paired) — should not be an error.
+	// Server returns 200 OK (already paired). Should not be an error.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))

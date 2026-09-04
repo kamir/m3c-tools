@@ -1,8 +1,8 @@
-// commands_shared.go — portable m3c-tools subcommands (SPEC-0251 §5 multi-platform parity).
+// commands_shared.go: portable m3c-tools subcommands (SPEC-0251 §5 multi-platform parity).
 //
 // This file has NO build tags, so it compiles on darwin AND non-darwin. Every
 // command body here uses only portable packages (no pkg/menubar, pkg/recorder,
-// pkg/screenshot), so these subcommands are available on Linux and Windows too —
+// pkg/screenshot), so these subcommands are available on Linux and Windows too,
 // not just macOS. Genuinely darwin-only commands (menubar/record/devices/
 // screenshot) stay in main.go behind //go:build darwin.
 //
@@ -121,9 +121,9 @@ func cmdRetry(args []string) {
 		if retryErr == nil {
 			fmt.Printf("[retry] SUCCESS: %s (removed from queue)\n", entry.ID)
 		} else if removed {
-			fmt.Printf("[retry] DROPPED: %s — max retries exceeded\n", entry.ID)
+			fmt.Printf("[retry] DROPPED: %s, max retries exceeded\n", entry.ID)
 		} else {
-			fmt.Printf("[retry] FAILED: %s — attempt %d: %v\n", entry.ID, entry.RetryCount+1, retryErr)
+			fmt.Printf("[retry] FAILED: %s, attempt %d: %v\n", entry.ID, entry.RetryCount+1, retryErr)
 		}
 	}
 
@@ -616,14 +616,14 @@ type plaudSyncState struct {
 	ItemURL string // ER1 memory-viewer URL, if the doc_id is known
 }
 
-// plaudStateSynced reports whether a recording is already in ER1 — true when the
+// plaudStateSynced reports whether a recording is already in ER1: true when the
 // server marked it "synced" OR the local ledger has an ER1 doc_id (status
 // "uploaded"). The doc_id is the reliable signal; both tools set it on success.
 func plaudStateSynced(st plaudSyncState) bool {
 	return st.DocID != "" || st.Status == "synced"
 }
 
-// resolvePlaudSyncStates returns, per Plaud recording ID, the ingestion state —
+// resolvePlaudSyncStates returns, per Plaud recording ID, the ingestion state:
 // merging the LOCAL tracking DB (plaud://<id> -> UploadDocID/status) with the
 // SPEC-0117 SERVER-side sync check. The server is authoritative for
 // cross-machine visibility (an item synced from another Mac shows as synced
@@ -647,7 +647,7 @@ func resolvePlaudSyncStates(recIDs []string, plaudToken string) map[string]plaud
 		log.Printf("[plaud] warning: cannot open tracking DB: %v", err)
 	}
 
-	// Server-side sync check — authoritative, cross-machine (SPEC-0117).
+	// Server-side sync check: authoritative, cross-machine (SPEC-0117).
 	if er1Cfg.APIKey != "" && plaudToken != "" {
 		syncAPI := plaud.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, er1Cfg.ContextID, !er1Cfg.VerifySSL)
 		accountID := plaud.DeriveAccountIDFromToken(plaudToken)
@@ -699,13 +699,13 @@ func cmdPlaudCheck() {
 	}
 	unsynced := len(recordings) - synced
 
-	fmt.Printf("Plaud sync check — %d recordings: %d synced, %d unsynced\n", len(recordings), synced, unsynced)
+	fmt.Printf("Plaud sync check, %d recordings: %d synced, %d unsynced\n", len(recordings), synced, unsynced)
 	if er1Cfg := er1.LoadConfig(); er1Cfg.APIKey == "" {
-		fmt.Println("(note: no ER1 API key — coverage is from the LOCAL tracking DB only, not server-authoritative)")
+		fmt.Println("(note: no ER1 API key, coverage is from the LOCAL tracking DB only, not server-authoritative)")
 	}
 
 	if unsynced > 0 {
-		fmt.Printf("\nUnsynced (%d) — run: m3c-tools plaud sync <#>   or   plaud sync --all\n", unsynced)
+		fmt.Printf("\nUnsynced (%d), run: m3c-tools plaud sync <#>   or   plaud sync --all\n", unsynced)
 		for i, r := range recordings {
 			st := states[r.ID]
 			if st.Status != "synced" {
@@ -715,13 +715,13 @@ func cmdPlaudCheck() {
 		}
 	}
 	if synced > 0 {
-		fmt.Printf("\nSynced (%d) — recording -> ER1 item:\n", synced)
+		fmt.Printf("\nSynced (%d): recording -> ER1 item:\n", synced)
 		for i, r := range recordings {
 			st := states[r.ID]
 			if st.Status == "synced" {
 				docShown := st.DocID
 				if docShown == "" {
-					docShown = "(doc_id unknown — server-synced from another device)"
+					docShown = "(doc_id unknown: server-synced from another device)"
 				}
 				fmt.Printf("  [%3d] %-40s  doc_id=%s\n", i+1, r.Title, docShown)
 				if st.ItemURL != "" {
@@ -735,12 +735,12 @@ func cmdPlaudCheck() {
 // cmdPlaudFixTimes backfills the real recording time onto already-synced Plaud
 // items: it PATCHes each synced item's ER1 current_time to its Plaud start_at,
 // rendered in LOCAL time, so they sit at the moment the button was pressed
-// rather than at the upload moment — or, since FR-0095, two hours before it.
+// rather than at the upload moment: or, since FR-0095, two hours before it.
 //
 // It runs on the DEVELOPER API (the same durable token as `plaud dev` and the
 // menubar). The previous version used the retired consumer client and its
 // CreatedAt field: it could not see start_at at all, and on a machine without a
-// consumer token it exited before doing anything — which is why the UTC drift
+// consumer token it exited before doing anything, which is why the UTC drift
 // stayed in the corpus unnoticed.
 //
 // Dry-run by default. `since` (YYYY-MM-DD, local) and `limit` narrow the set;
@@ -817,9 +817,9 @@ func cmdPlaudFixTimes(apply bool, since string, limit int) {
 		}
 	}
 
-	fmt.Printf("Plaud fix-times — %d synced item(s) to set to their real recording time (local)\n", len(toFix))
+	fmt.Printf("Plaud fix-times, %d synced item(s) to set to their real recording time (local)\n", len(toFix))
 	if skippedNoDoc > 0 {
-		fmt.Printf("  (%d synced items skipped: doc_id not known locally — run on the device that synced them)\n", skippedNoDoc)
+		fmt.Printf("  (%d synced items skipped: doc_id not known locally, run on the device that synced them)\n", skippedNoDoc)
 	}
 	if skippedNoTime > 0 {
 		fmt.Printf("  (%d skipped: no parsable recording time from Plaud)\n", skippedNoTime)
@@ -829,7 +829,7 @@ func cmdPlaudFixTimes(apply bool, since string, limit int) {
 	}
 
 	if !apply {
-		fmt.Println("\nDRY-RUN — pass --apply to write. recording -> doc_id -> current_time (was UTC -> now local):")
+		fmt.Println("\nDRY-RUN: pass --apply to write. recording -> doc_id -> current_time (was UTC -> now local):")
 		for _, f := range toFix {
 			fmt.Printf("  %-38s  doc_id=%s  %s  ->  %s\n", truncateStr(f.title, 38), f.docID, f.wasUTC, f.target)
 		}

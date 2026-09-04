@@ -1,4 +1,4 @@
-// Package importer — configuration for audio import pipeline.
+// Package importer: configuration for audio import pipeline.
 package importer
 
 import (

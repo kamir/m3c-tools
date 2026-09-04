@@ -5,7 +5,7 @@ package main
 // that take args + io.Writers + return numeric exit codes, so they're
 // trivially unit-testable without spawning a subprocess.
 //
-// All non-trivial logic lives in pkg/skillctl/verify/ — this file is
+// All non-trivial logic lives in pkg/skillctl/verify/, this file is
 // flag plumbing + IO.
 //
 // Subcommands:
@@ -71,7 +71,7 @@ var trustConfigPath = func() string {
 // runTrustList prints every configured registry + key. Loads the file
 // best-effort: if it doesn't exist, prints a short "no trust roots
 // configured yet" message and exits 0 (this is informational, not a
-// failure — `trust list` on a fresh machine is expected).
+// failure. `trust list` on a fresh machine is expected).
 func runTrustList(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("trust list", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -91,7 +91,7 @@ func runTrustList(args []string, stdout, stderr io.Writer) int {
 	path := trustConfigPath()
 	tr, err := verify.Load(path)
 	if errors.Is(err, os.ErrNotExist) {
-		// Bootstrap path — print friendly message, exit 0.
+		// Bootstrap path: print friendly message, exit 0.
 		fmt.Fprintf(stdout, "trust roots: %s (does not exist yet)\n", path)
 		fmt.Fprintln(stdout, "no trust roots configured")
 		fmt.Fprintln(stdout, "configure one with: skillctl trust add --registry <url> --pubkey <path>")
@@ -104,7 +104,7 @@ func runTrustList(args []string, stdout, stderr io.Writer) int {
 
 	fmt.Fprintf(stdout, "trust roots: %s\n", tr.Path)
 	if len(tr.Roots) == 0 {
-		fmt.Fprintln(stdout, "(empty — no registries pinned)")
+		fmt.Fprintln(stdout, "(empty: no registries pinned)")
 		return exitOK
 	}
 	for _, root := range tr.Roots {
@@ -153,7 +153,7 @@ func runTrustAdd(args []string, stdout, stderr io.Writer) int {
 	path := trustConfigPath()
 	tr, err := verify.Load(path)
 	if errors.Is(err, os.ErrNotExist) {
-		// First time — Load returned an empty TrustRoots with Path set.
+		// First time: Load returned an empty TrustRoots with Path set.
 		// Continue with that.
 	} else if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -197,7 +197,7 @@ func runTrustRemove(args []string, stdout, stderr io.Writer) int {
 	path := trustConfigPath()
 	tr, err := verify.Load(path)
 	if err != nil {
-		// Including the "file does not exist" case — there's nothing
+		// Including the "file does not exist" case. There's nothing
 		// to remove, surface the error.
 		fmt.Fprintln(stderr, err)
 		return exitGeneric

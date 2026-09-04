@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// helper — build a token signed by the given key.
+// helper: build a token signed by the given key.
 func newSignedToken(t *testing.T, priv ed25519.PrivateKey, keyID string, env TokenEnvelope, expiresIn time.Duration) *Token {
 	t.Helper()
 	now := time.Now().UTC()
@@ -90,7 +90,7 @@ func TestGate_Subprocess_NotInAllowlist(t *testing.T) {
 func TestGate_Subprocess_MissingCapability(t *testing.T) {
 	_, priv, _ := ed25519.GenerateKey(nil)
 	tok := newSignedToken(t, priv, "k1", TokenEnvelope{
-		// No subprocess_run capability — even with allowlist, must refuse
+		// No subprocess_run capability: even with allowlist, must refuse
 		Capabilities:        []string{},
 		SubprocessAllowlist: []string{"git"},
 	}, time.Hour)

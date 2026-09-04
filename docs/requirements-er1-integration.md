@@ -1,13 +1,13 @@
 ---
 layout: default
-title: ER1 Integration — Requirements
+title: ER1 Integration: Requirements
 ---
 
-# ER1 Integration — Requirements & Implementation
+# ER1 Integration: Requirements & Implementation
 
 ## Context
 
-The project [audio-checklist-checker-py](https://github.com/kamir/my-ai-X) establishes a pattern for capturing audio impulses and pushing them into **ER1** — a personal knowledge/memory management system with a REST API. The workflow is:
+The project [audio-checklist-checker-py](https://github.com/kamir/my-ai-X) establishes a pattern for capturing audio impulses and pushing them into **ER1**: a personal knowledge/memory management system with a REST API. The workflow is:
 
 ```
 Source (capture) → Metadata extraction → Whisper transcription
@@ -31,7 +31,7 @@ M3C Tools brings this pattern to four capture channels: YouTube transcripts, scr
 
 ## Requirements
 
-### R1 — ER1 Upload (IMPLEMENTED)
+### R1: ER1 Upload (IMPLEMENTED)
 
 **R1.1** The system uploads multimodal observations to ER1 via `POST /upload_2` with:
 - Header: `X-API-KEY`
@@ -44,7 +44,7 @@ M3C Tools brings this pattern to four capture channels: YouTube transcripts, scr
 
 ---
 
-### R2 — Impression Capture (IMPLEMENTED)
+### R2: Impression Capture (IMPLEMENTED)
 
 **R2.1** All 4 capture channels flow through the unified Observation Window pipeline.
 
@@ -75,7 +75,7 @@ Model: {whisper_model}
 
 ---
 
-### R3 — Configuration (IMPLEMENTED)
+### R3: Configuration (IMPLEMENTED)
 
 ER1 connection settings via environment variables (`.env`):
 
@@ -95,7 +95,7 @@ ER1 connection settings via environment variables (`.env`):
 
 ---
 
-### R4 — ER1 Login Linking (IMPLEMENTED)
+### R4: ER1 Login Linking (IMPLEMENTED)
 
 **R4.1** Menu items: "Login to ER1..." and "Logout from ER1".
 
@@ -109,7 +109,7 @@ ER1 connection settings via environment variables (`.env`):
 
 ---
 
-### R5 — Post-Processing (FUTURE)
+### R5: Post-Processing (FUTURE)
 
 **R5.1** The system SHOULD support tag-to-prompt mapping for post-processing via Gemini, following the `tag_promptKey_map` pattern from audio-checklist-checker.
 
@@ -117,7 +117,7 @@ ER1 connection settings via environment variables (`.env`):
 
 ---
 
-### R6 — Offline Resilience (IMPLEMENTED)
+### R6: Offline Resilience (IMPLEMENTED)
 
 **R6.1** Failed ER1 uploads are enqueued in a JSON-backed persistent queue (`~/.m3c-tools/retry/`).
 

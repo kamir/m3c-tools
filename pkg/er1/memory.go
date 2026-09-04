@@ -63,7 +63,7 @@ func CreateMemoryFolder(rootDir string, t time.Time) (*MemoryFolder, error) {
 	memID := MemoryID(t)
 	folderPath := filepath.Join(rootDir, memID)
 
-	// MkdirAll is idempotent — succeeds if directory already exists
+	// MkdirAll is idempotent. Succeeds if directory already exists
 	if err := os.MkdirAll(folderPath, 0700); err != nil {
 		return nil, fmt.Errorf("create memory folder %s: %w", folderPath, err)
 	}

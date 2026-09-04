@@ -1,6 +1,6 @@
 //go:build darwin
 
-// fetch.go — Transcript fetch integration for the menu bar app.
+// fetch.go: Transcript fetch integration for the menu bar app.
 //
 // TranscriptFetcher bridges pkg/transcript with the menu bar, providing
 // a high-level FetchAndDisplay method that fetches a YouTube transcript,
@@ -131,7 +131,7 @@ func (tf *TranscriptFetcher) Fetch(videoID string) (*FetchResult, error) {
 		// Graceful degradation: on rate limit, return partial result.
 		var rateLimitErr *transcript.TooManyRequestsError
 		if errors.As(err, &rateLimitErr) {
-			log.Printf("[menubar] rate limited — proceeding without transcript for video=%s", videoID)
+			log.Printf("[menubar] rate limited: proceeding without transcript for video=%s", videoID)
 			return &FetchResult{
 				VideoID:     videoID,
 				RateLimited: true,
@@ -143,7 +143,7 @@ func (tf *TranscriptFetcher) Fetch(videoID string) (*FetchResult, error) {
 		// (subtitles disabled / none in requested languages / none at all).
 		// Proceed so we still capture the thumbnail and link.
 		if transcript.IsTranscriptUnavailable(err) {
-			log.Printf("[menubar] no transcript available — proceeding with thumbnail + link for video=%s", videoID)
+			log.Printf("[menubar] no transcript available: proceeding with thumbnail + link for video=%s", videoID)
 			return &FetchResult{
 				VideoID:      videoID,
 				NoTranscript: true,
@@ -197,13 +197,13 @@ func (tf *TranscriptFetcher) FetchAndDisplay(app *App, videoID string) {
 
 	// Handle rate-limited result (graceful degradation).
 	if result.RateLimited {
-		app.notify("Rate Limited", fmt.Sprintf("YouTube rate limit for %s — proceeding without transcript", videoID))
+		app.notify("Rate Limited", fmt.Sprintf("YouTube rate limit for %s: proceeding without transcript", videoID))
 	}
 
 	// Handle no-transcript result (graceful degradation): the video exists but
 	// has no usable subtitles. We still capture the thumbnail and link.
 	if result.NoTranscript {
-		app.notify("No Transcript", fmt.Sprintf("No subtitles for %s — capturing thumbnail + link", videoID))
+		app.notify("No Transcript", fmt.Sprintf("No subtitles for %s: capturing thumbnail + link", videoID))
 	}
 
 	// Copy transcript text to clipboard (skip if rate-limited/empty).
@@ -234,10 +234,10 @@ func (tf *TranscriptFetcher) FetchAndDisplay(app *App, videoID string) {
 	transcriptText := result.Text
 	switch {
 	case result.RateLimited:
-		transcriptText = "[Transcript unavailable — YouTube rate limit (429). Try again later or configure YT_PROXY_URL in .env]\n\nSource: " + videoURL
+		transcriptText = "[Transcript unavailable: YouTube rate limit (429). Try again later or configure YT_PROXY_URL in .env]\n\nSource: " + videoURL
 	case result.NoTranscript:
 		transcriptText = fmt.Sprintf(
-			"[No transcript available — %s]\n\nThe video has no usable subtitles, but the thumbnail and link were captured. Add your own notes above.\n\nSource: %s",
+			"[No transcript available: %s]\n\nThe video has no usable subtitles, but the thumbnail and link were captured. Add your own notes above.\n\nSource: %s",
 			result.Reason, videoURL)
 		meta.Source = "YouTube (no transcript)"
 	}
@@ -256,24 +256,24 @@ func (tf *TranscriptFetcher) FetchAndDisplay(app *App, videoID string) {
 	// Notify user
 	if result.RateLimited {
 		app.notify("Observation Ready",
-			fmt.Sprintf("⚠️ %s — rate limited, no transcript", result.VideoID))
+			fmt.Sprintf("⚠️ %s, rate limited, no transcript", result.VideoID))
 	} else if result.NoTranscript {
 		app.notify("Observation Ready",
-			fmt.Sprintf("📄 %s — no transcript, captured thumbnail + link", result.VideoID))
+			fmt.Sprintf("📄 %s, no transcript, captured thumbnail + link", result.VideoID))
 	} else {
 		source := ""
 		if result.FromCache {
 			source = " (cached)"
 		}
 		app.notify("Transcript Ready",
-			fmt.Sprintf("%s %s%s — %d snippets, %d chars copied to clipboard",
+			fmt.Sprintf("%s %s%s: %d snippets, %d chars copied to clipboard",
 				result.Flag, result.VideoID, source, result.SnippetCount, result.CharCount))
 	}
 }
 
 // FetchAndSaveThumbnail downloads the YouTube video thumbnail and saves it
 // to a temporary file. Returns the file path, or empty string if the
-// thumbnail could not be fetched (non-fatal — the window opens without image).
+// thumbnail could not be fetched (non-fatal: the window opens without image).
 func (tf *TranscriptFetcher) FetchAndSaveThumbnail(videoID string) string {
 	log.Printf("[menubar] fetching thumbnail for video=%s", videoID)
 	data, err := tf.api.FetchThumbnail(videoID)

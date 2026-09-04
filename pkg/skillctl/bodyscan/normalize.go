@@ -24,7 +24,7 @@ type normalized struct {
 	// can always be mapped, including End == len(Text).
 	offsets []int
 	// Changed is true when folding altered the text (a zero-width strip or a
-	// fullwidth fold happened) — an obfuscation signal in its own right.
+	// fullwidth fold happened): an obfuscation signal in its own right.
 	Changed bool
 }
 
@@ -66,7 +66,7 @@ const (
 
 // isIgnorable reports whether r is a default-ignorable / invisible code point we
 // strip before matching. Targeted stdlib fold (no x/text):
-//   - the entire Unicode Format (Cf) category — one table lookup that covers the
+//   - the entire Unicode Format (Cf) category: one table lookup that covers the
 //     whole invisible family: soft hyphen, zero-width space/joiners, word joiner,
 //     BOM, LRM/RLM (U+200E/200F), the bidi embedding/override controls
 //     (U+202A-202E), invisible separators (U+2061-2064) and isolates
@@ -128,21 +128,21 @@ var confusableFold = map[rune]rune{
 }
 
 // normalizeBody folds body for matching and records the offset map back to the
-// original bytes. Stripped (ignorable) runes leave a "hole" — the next
+// original bytes. Stripped (ignorable) runes leave a "hole", the next
 // surviving normalized byte maps to the original index just past the stripped
-// rune — so adjacent characters re-join (defeating soft-hyphen / zero-width
+// rune, so adjacent characters re-join (defeating soft-hyphen / zero-width
 // splitting) while every surviving byte still resolves to a real original
 // offset.
 //
-// LINE-ENDING AGNOSTIC (security): the body is FIRST EOL-normalized — every
-// "\r\n" (Windows CRLF) collapses to "\n" — before any folding or matching.
+// LINE-ENDING AGNOSTIC (security): the body is FIRST EOL-normalized, every
+// "\r\n" (Windows CRLF) collapses to "\n", before any folding or matching.
 // Without this, a skill authored with Windows line endings could WEAKEN
 // detection: a rule that treats a single "\n" as a base64-chunk separator
 // (EXF-004) sees "\r\n" and fails to stitch the split blob, so a "split base64
 // near a network sink" exfil evades the scanner purely by virtue of its EOL
 // style. EOL normalization makes the verdict identical regardless of line
 // endings. We fold ONLY CRLF; a LONE "\r" is left as an ordinary character
-// (exactly as on non-Windows platforms) — folding it to "\n" would terminate
+// (exactly as on non-Windows platforms). Folding it to "\n" would terminate
 // the sentence-bounded `[^.\n]{0,40}` gaps in INJ-003/005/009 and EXF-003 and
 // let a "word<CR>word" payload split a sink phrase to GREEN (red-team P54-B1).
 // CRLF folding is DELIBERATELY NOT an obfuscation signal (it does not set
@@ -178,7 +178,7 @@ func normalizeBody(body string) *normalized {
 	for i := 0; i < len(body); {
 		// EOL normalization (security; see doc comment). Collapse ONLY "\r\n"
 		// (Windows CRLF) to a single "\n" by DROPPING the "\r" so the following
-		// "\n" emits with its own original offset. We fold ONLY CRLF — a LONE
+		// "\n" emits with its own original offset. We fold ONLY CRLF: a LONE
 		// "\r" is left as a normal character (exactly as on non-Windows
 		// platforms / master). Folding a lone "\r" to "\n" would terminate the
 		// sentence-bounded `[^.\n]{0,40}` gap that INJ-003/005/009 and EXF-003

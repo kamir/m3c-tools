@@ -7,9 +7,9 @@
 //
 // Two strategies:
 //
-//   report  — structured markdown per prompt tmpl.artifact.report.v1
+//   report (structured markdown per prompt tmpl.artifact.report.v1
 //             content: {title, sections:[{heading, body}], key_points:[]}
-//   summary — compact JSON per prompt tmpl.artifact.summary.v1
+//   summary) compact JSON per prompt tmpl.artifact.summary.v1
 //             content: {tl_dr, bullets:[], sources:[]}
 //
 // Both gather I-layer inputs from the command's context.scope.entities
@@ -82,7 +82,7 @@ func (p *Processor) Start(ctx context.Context) error {
 		}
 		_ = p.deps.Orc.EmitStepCompleted(ctx, cmd.ProcessID, cmd.StepIndex, cmd.Step.Layer, detail)
 
-		// Last step — close out the process.
+		// Last step: close out the process.
 		if cmd.StepIndex == len(cmd.Spec.Steps)-1 {
 			var artifactIDs []string
 			if id, ok := detail["artifact_id"].(string); ok && id != "" {
@@ -227,7 +227,7 @@ func renderUserInput(cmd schema.ProcessCommand, ids []string, strName string) st
 }
 
 // parseReportContent shape: {title, sections:[{heading, body}], key_points:[]}.
-// The first section's body must be non-empty — the engine's acceptance
+// The first section's body must be non-empty. The engine's acceptance
 // criterion asserts that.
 func parseReportContent(raw string) (map[string]interface{}, error) {
 	var obj struct {

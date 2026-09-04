@@ -13,7 +13,7 @@ import (
 // toolRef pairs a canonical tool name with the regexp that recognises a prose
 // reference to it. Recognition is conservative: it matches the tool used as an
 // imperative / capability, e.g. "run Bash", "use WebFetch", a `curl …` command,
-// fenced ```bash blocks, or backticked `Edit` — not the bare English word.
+// fenced ```bash blocks, or backticked `Edit`, not the bare English word.
 type toolRef struct {
 	Tool    string
 	Pattern *regexp.Regexp
@@ -26,7 +26,7 @@ type toolRef struct {
 }
 
 var toolRefs = []toolRef{
-	// Claude Code capability tools — referenced by name (often capitalised or
+	// Claude Code capability tools: referenced by name (often capitalised or
 	// backticked) as an instruction to invoke them. A fenced ```bash block is
 	// deliberately NOT matched: it is example code, not an instruction to use
 	// the Bash tool. The signal is the capitalised tool name or `bash -c`.
@@ -36,25 +36,25 @@ var toolRefs = []toolRef{
 	{Tool: "Edit", Pattern: regexp.MustCompile(`\bEdit\b\s+(?:the\s+)?(?:file|tool)|\buse\s+(?:the\s+)?Edit\b|\bEdit\(`)},
 	{Tool: "WebFetch", Pattern: regexp.MustCompile(`\bWebFetch\b`)},
 	{Tool: "WebSearch", Pattern: regexp.MustCompile(`\bWebSearch\b`)},
-	// Shell network/file tools — referenced as commands. Case-INSENSITIVE
+	// Shell network/file tools: referenced as commands. Case-INSENSITIVE
 	// (SPEC-0246 §4, evasion #4): "CURL"/"Wget" were slipping past.
 	{Tool: "curl", Pattern: regexp.MustCompile(`(?i)(?:^|[^A-Za-z])curl\s+[-\w]`)},
 	{Tool: "wget", Pattern: regexp.MustCompile(`(?i)(?:^|[^A-Za-z])wget\s+[-\w]`)},
 	// Capability synonyms / indirection (SPEC-0246 §4, evasion #4): a body that
 	// reaches the shell or the network WITHOUT naming the tool. These map to the
-	// "Bash" capability — flagged unless Bash (a shell) is declared. Prose
+	// "Bash" capability: flagged unless Bash (a shell) is declared. Prose
 	// synonyms are negation-guarded so a reassuring "we do NOT shell out" does
 	// not score.
 	{Tool: "Bash", negationGuarded: true, Pattern: regexp.MustCompile(`(?i)\bsub-?process(?:es)?\b|\bshell\s+out\b|\bspawn\s+a\s+shell\b|\bopen\s+a\s+terminal\b|\bover\s+the\s+network\b`)},
 	// Interpreter -exec forms (python -c, sh -c, node -e, bash -c, perl -e,
-	// ruby -e) execute arbitrary code and are shell-equivalent — a literal
+	// ruby -e) execute arbitrary code and are shell-equivalent: a literal
 	// command, not guarded.
 	{Tool: "Bash", Pattern: regexp.MustCompile(`(?i)\b(?:python[0-9.]*|sh|bash|zsh|node|perl|ruby|deno|php)\s+-(?:c|e)\b`)},
 }
 
 // reNegationBefore detects a negation cue ("not", "n't", "never", "no", "don't",
 // "without", "cannot") within a short window immediately preceding a soft
-// synonym match — the sign of a reassuring sentence rather than an instruction.
+// synonym match: the sign of a reassuring sentence rather than an instruction.
 var reNegationBefore = regexp.MustCompile(`(?i)\b(?:not|never|no|don'?t|does\s*n'?t|do\s*n'?t|cannot|can'?t|without|n'?t)\b[^.\n]{0,30}$`)
 
 // toolImpliesNetwork lists tools whose use means the skill reaches the network.
@@ -68,7 +68,7 @@ var toolImpliesNetwork = map[string]bool{
 // toolCoveredBy reports whether a prose tool reference is satisfied by the
 // declared allowed-tools. Shell network commands (curl/wget) are covered when
 // the skill already has a shell (Bash) OR a declared network capability
-// (WebFetch/WebSearch) — a skill that legitimately fetches over the network and
+// (WebFetch/WebSearch): a skill that legitimately fetches over the network and
 // merely *documents* the equivalent curl command is not escalating. The named
 // Claude tools must be present by name.
 func toolCoveredBy(tool string, allowed map[string]bool) bool {

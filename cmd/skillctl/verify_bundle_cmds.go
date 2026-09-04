@@ -1,15 +1,15 @@
 package main
 
-// SPEC-0276 R4.2 — `skillctl verify --bundle <file.skb>`.
+// SPEC-0276 R4.2: `skillctl verify --bundle <file.skb>`.
 //
 // The trustless third-party path: verify a standalone .skb FILE with NO
 // install state and NO network, against locally pinned trust-roots. This is
 // the property a hosted-CA rival markets ("anyone can verify, no trust
-// required") but cannot deliver — their verify is a call to their server; ours
+// required") but cannot deliver. Their verify is a call to their server; ours
 // runs on the verifier's machine against a key they pinned out-of-band.
 //
 // Inputs:
-//   - the .skb blob (digest recomputed from its bytes — repack → exit 10)
+//   - the .skb blob (digest recomputed from its bytes: repack → exit 10)
 //   - a BundleMeta envelope sidecar (<file>.skbmeta.json or --meta) carrying
 //     the author + registry signatures and the governance verdict
 //   - a pinned trust-roots file (default or --trust-roots) whose matched root
@@ -18,7 +18,7 @@ package main
 //
 // Everything routes through verify.Verify, so the §7 chain, the exit codes,
 // and the content-binding (digest recompute vs advertised) are identical to
-// the installed-skill path — only the inputs and the "no fetcher" wiring differ.
+// the installed-skill path, only the inputs and the "no fetcher" wiring differ.
 
 import (
 	"context"
@@ -39,7 +39,7 @@ type verifyBundleParams struct {
 	metaPath        string
 	trustRootsPath  string
 	revocationsPath string
-	// SPEC-0279 R4/R5 — optional signed freshness checkpoint + emergency deny-list.
+	// SPEC-0279 R4/R5: optional signed freshness checkpoint + emergency deny-list.
 	checkpointPath string
 	emergencyPath  string
 	registryURL    string
@@ -60,14 +60,14 @@ type bundleVerifyResult struct {
 	Governance    string `json:"governance_level,omitempty"`
 	// GovernanceVerified (SPEC-0281) lets machine consumers distinguish a
 	// cryptographically re-verified "attested" level from an unsigned advisory
-	// one — without scraping chain_summary free text.
+	// one, without scraping chain_summary free text.
 	GovernanceVerified bool `json:"governance_verified"`
 	// SelfAttested (SPEC-0246 §5) surfaces whether the binding governance
 	// attestation was reviewed by the bundle's own author. Pointer-valued:
 	// true (self), false (independent), null (unknown / no binding attestation).
 	SelfAttested *bool `json:"self_attested"`
 	// DataScopes (SPEC-0196 §12 Q1 / P2b) surfaces the declared data-scope with
-	// provenance — "signed-manifest" (author-signature-covered, authoritative)
+	// provenance: "signed-manifest" (author-signature-covered, authoritative)
 	// vs "bundle-row" (mutable post-admit PATCH, advisory). A CISO consumer can
 	// branch on `.data_scopes[].provenance` to tell author-bound from post-admit.
 	DataScopes   []verify.DeclaredScope `json:"data_scopes,omitempty"`
@@ -148,7 +148,7 @@ func runVerifyBundle(p verifyBundleParams, stdout, stderr io.Writer) int {
 		snap, revErr = checkBundleRevoked(p.revocationsPath, root, res.Digest)
 	}
 
-	// SPEC-0279 R3/R4/R5/R6 — the freshness contract, evaluated AFTER the chain +
+	// SPEC-0279 R3/R4/R5/R6: the freshness contract, evaluated AFTER the chain +
 	// revocation checks pass (a stale-but-not-revoked snapshot still gates a
 	// high-risk action). The emergency channel (R5) is consulted FIRST inside
 	// evaluateFreshness; a stale snapshot fails closed for a high-risk action
@@ -166,7 +166,7 @@ func runVerifyBundle(p verifyBundleParams, stdout, stderr io.Writer) int {
 			risk:            bundleActionRisk(res.DataScopes),
 			emergencyTokens: []string{res.Digest, res.AuthorIdentity},
 		})
-		// R6 — record EVERY freshness decision to the gate-audit trail, allow or
+		// R6: record EVERY freshness decision to the gate-audit trail, allow or
 		// deny, so we never fail open (or closed) without a durable record.
 		auditFreshnessDecision("verify-bundle", res.Digest, fresh)
 	}
@@ -311,7 +311,7 @@ func checkBundleRevoked(path string, root *verify.TrustRoot, digest string) (rev
 // A write/transform/delete access OR any high-risk side-effect → HIGH, REGARDLESS
 // of how the other axis is labelled (the access-vs-side_effects split the review
 // flagged: side_effects:["fs:write"] under access:"read" is now HIGH). No declared
-// scopes at all is HIGH (an unknown surface cannot be proven read-only) — and
+// scopes at all is HIGH (an unknown surface cannot be proven read-only), and
 // ClassifyActionRisk's empty-surface case is ALSO HIGH, so the two are aligned.
 func bundleActionRisk(scopes []verify.DeclaredScope) verify.ActionRisk {
 	if len(scopes) == 0 {
@@ -342,7 +342,7 @@ func bundleActionRisk(scopes []verify.DeclaredScope) verify.ActionRisk {
 }
 
 // rawSideEffects extracts the `side_effects` token list from a data-dependency's
-// raw map (an []any of strings), if present. Tolerant of absence/type mismatch —
+// raw map (an []any of strings), if present. Tolerant of absence/type mismatch:
 // a missing/garbled field yields no tokens (the access axis still classifies).
 func rawSideEffects(raw map[string]any) []string {
 	v, ok := raw["side_effects"]
@@ -380,7 +380,7 @@ func defaultMetaSidecar(bundlePath string) string {
 }
 
 // loadBundleMetaSidecar reads and JSON-decodes the BundleMeta envelope. Lenient
-// on unknown fields (a registry may attach extras we don't model) — the
+// on unknown fields (a registry may attach extras we don't model). The
 // security-relevant fields are validated cryptographically downstream by
 // verify.Verify, not by the JSON shape here.
 func loadBundleMetaSidecar(path string) (*registry.BundleMeta, error) {

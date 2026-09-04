@@ -1,12 +1,12 @@
 package main
 
-// agentid_gate.go — SPEC-0277 P1 runtime authorization for the SPEC-0247
+// agentid_gate.go: SPEC-0277 P1 runtime authorization for the SPEC-0247
 // PreToolUse(Skill) gate.
 //
 // The skill-verification chain (verify_hook_cmds.go) answers "is this skill a
 // genuine, admitted, non-revoked bundle?". THIS file answers the genuinely-new
 // SPEC-0277 question layered on top: "is the ACTING AGENT authorized to invoke
-// this skill?" — i.e. is there an active AgentID mandate, does it VERIFY (owner
+// this skill?": i.e. is there an active AgentID mandate, does it VERIFY (owner
 // sig vs a pinned key, the approver floor if set, not expired, not revoked), and
 // is the skill WITHIN its grant? Outside-grant → DENY. Fail-closed.
 //
@@ -76,7 +76,7 @@ type agentAuthzResult struct {
 	Reason string
 
 	// GrantRestricting / GrantNamesSkill are set only on the VERIFIED-mandate path
-	// (FR-0090 IS-RS-02). GrantRestricting mirrors grantIsRestricting(grant) — the
+	// (FR-0090 IS-RS-02). GrantRestricting mirrors grantIsRestricting(grant): the
 	// grant bounds capability intents / data-scopes / limits, so a scope check is
 	// owed. GrantNamesSkill mirrors grant.AllowsSkill(skill). Together they let the
 	// gate deny an UNMANAGED skill (all provenance stripped → no digest-verified
@@ -94,7 +94,7 @@ var agentIDVerifyForGateFn = verifyActiveAgentID
 // gateRequireAgentMandate reports whether the ROOT-OWNED managed settings engage
 // the SPEC-0277 IS-06 require-mandate floor (`skillctlRequireAgentMandate: true`).
 // When set, a MISSING ~/.claude/skillctl/agentid.json is a DENY at the gate rather
-// than the silent opt-out default — a non-privileged user cannot delete the mandate
+// than the silent opt-out default. A non-privileged user cannot delete the mandate
 // to escape agent authorization. Same conservative, never-brick contract as
 // gateManagedEnterprise: a missing/unreadable/malformed managed file → false (an
 // unreadable managed file must never itself deny every skill). Seam: tests set it.
@@ -161,7 +161,7 @@ func authorizeAgentForSkill(home, skill string) agentAuthzResult {
 
 	// FR-0090 IS-RS-02: expose the grant shape now that the mandate has VERIFIED, so
 	// the gate can refuse an UNMANAGED (provenance-stripped) skill that a restricting
-	// grant names — which would otherwise slip through the unmanaged=allow branch,
+	// grant names: which would otherwise slip through the unmanaged=allow branch,
 	// skipping the IS-T7 scope check. Only meaningful on the verified path (a forged
 	// mandate already denies via allow()).
 	res.GrantRestricting = grantIsRestricting(doc.Payload.Grant)
@@ -180,7 +180,7 @@ func authorizeAgentForSkill(home, skill string) agentAuthzResult {
 		// grant that is a fail-closed DENY: a same-uid actor could otherwise delete the
 		// provenance files (`.m3c-provenance.json` / `.skillctl-offline.json`) or the
 		// stashed `*.skb` to strip scope enforcement down to name-only and slip an
-		// over-scoped skill through. We refuse to authorize a scope we cannot confirm —
+		// over-scoped skill through. We refuse to authorize a scope we cannot confirm:
 		// mirroring the IS-T6 deleted-mandate → deny posture. A NON-restricting grant
 		// keeps the name-only never-brick path; a skill NOT named in the grant falls
 		// through to the AuthorizeSkillScoped name check below (skill_not_in_grant).
@@ -198,7 +198,7 @@ func authorizeAgentForSkill(home, skill string) agentAuthzResult {
 }
 
 // grantIsRestricting reports whether the grant bounds anything BEYOND the skill
-// name — i.e. it names capability intents, data-scopes, or resource limits. When it
+// name, i.e. it names capability intents, data-scopes, or resource limits. When it
 // does, an UNRESOLVABLE signed manifest (a digest is on record but its .skb can't be
 // read) must fail closed rather than silently degrade to name-only enforcement.
 func grantIsRestricting(g agentid.Grant) bool {
@@ -223,17 +223,17 @@ var skillRequirementsFn = resolveInstalledSkillRequirements
 //
 // The bytes are trustworthy ONLY because verify.ReadDigestVerifiedManifest
 // recomputes the on-disk .skb digest and constant-time-compares it against the
-// provenance sidecar's recorded bundle_digest before returning the manifest map — a
+// provenance sidecar's recorded bundle_digest before returning the manifest map: a
 // tampered manifest breaks the digest and yields nothing.
 //
 // The (req, resolved) contract distinguishes the "empty" cases the gate must treat
-// differently. The anchor is whether a MANAGED BASIS exists — a stashed .skb — and
+// differently. The anchor is whether a MANAGED BASIS exists, a stashed .skb, and
 // whether its digest is resolvable from any recorded basis (provenance sidecar OR
 // the `skillctl install` offline stash, see installedSkillDigest):
 //   - NO managed basis at all (no stashed .skb, no digest on record) → a genuine
 //     legacy/unmanaged skill → (empty, TRUE): name-only is correct; never-brick.
 //   - a stashed .skb IS present but NO digest resolves from any basis (both the
-//     provenance sidecar and the offline stash are absent/unreadable — e.g. a
+//     provenance sidecar and the offline stash are absent/unreadable, e.g. a
 //     same-uid actor deleted them to strip enforcement) → (empty, FALSE): a bundle
 //     demonstrably exists but its scope cannot be confirmed.
 //   - a digest IS on record but the .skb is absent/unreadable, or the manifest
@@ -309,12 +309,12 @@ func requirementsFromManifest(m map[string]any) agentid.SkillRequirements {
 		}
 	}
 
-	// (2) The SIGNED `intent` block is ITSELF a capability declaration — the exact
+	// (2) The SIGNED `intent` block is ITSELF a capability declaration: the exact
 	// class operators most want to restrict (network egress, subprocess/shell,
 	// destructive ops, arbitrary side-effects). A skill can declare these with NO
 	// data_dependencies entry (e.g. an http-egress or shell-spawning skill whose only
 	// declared "data" is read-shaped), so reading data_dependencies ALONE let such a
-	// skill pass a grant that never granted those capabilities — a false-security
+	// skill pass a grant that never granted those capabilities. A false-security
 	// overclaim. Union the intent block's declared tokens into the required intents so
 	// the grant must cover them. side_effects are the authoritative SPEC-0196 §5
 	// vocabulary ("fs:write", "network:outbound", "subprocess", "llm:call", …); the
@@ -430,7 +430,7 @@ func verifyActiveAgentID(home string, doc *agentid.AgentID) (bool, string) {
 		return false, "agentid_trust_roots_unavailable"
 	}
 
-	// SPEC-0279 R5 — emergency deny-list FIRST: a compromise event denies on sight,
+	// SPEC-0279 R5. Emergency deny-list FIRST: a compromise event denies on sight,
 	// before revocation/expiry/freshness are even considered. A present-but-forged
 	// list is fail-closed (we refuse rather than ignore an operator-placed list).
 	if ep := emergencyDenyPath(home); fileExists(ep) {
@@ -472,7 +472,7 @@ func verifyActiveAgentID(home string, doc *agentid.AgentID) (bool, string) {
 		return false, agentDenyReason(verr)
 	}
 
-	// SPEC-0279 R3/R4/R6 — the freshness contract on the agent-revocation snapshot.
+	// SPEC-0279 R3/R4/R6: the freshness contract on the agent-revocation snapshot.
 	// Engaged only when a snapshot was present OR a checkpoint is on disk. A stale
 	// snapshot fails the gate closed for a high-risk grant; the checkpoint can
 	// reset the clock. EVERY decision is audited (R6).
@@ -503,7 +503,7 @@ func verifyActiveAgentID(home string, doc *agentid.AgentID) (bool, string) {
 type emergencyVerdict struct {
 	// Deny is true when the skill must be refused: either a digest/author token is
 	// on the verified emergency deny-list, OR the present emergency file failed to
-	// verify (fail-closed — never ignore an operator-placed list).
+	// verify (fail-closed, never ignore an operator-placed list).
 	Deny bool
 	// Token is the matched deny token (when a real entry matched), for the message.
 	Token string
@@ -516,8 +516,8 @@ type emergencyVerdict struct {
 // an installed skill's BUNDLE DIGEST and AUTHOR IDENTITY at the runtime gate.
 //
 // This is the headline emergency guarantee at the SPEC-0247 PreToolUse path:
-// it runs UNCONDITIONALLY — independent of any AgentID mandate, BEFORE the
-// freshness/cache cadence — so a compromised digest/author is denied on sight
+// it runs UNCONDITIONALLY (independent of any AgentID mandate, BEFORE the
+// freshness/cache cadence) so a compromised digest/author is denied on sight
 // even when no mandate is configured (the common case) and even when the
 // SPEC-0266 sweep cache is fresh (the cadence cannot keep a burned bundle alive).
 //
@@ -543,7 +543,7 @@ func emergencyDeniesInstalledSkill(home, skill string) emergencyVerdict {
 	digest := installedSkillDigest(home, skill)
 	author := installedSkillAuthor(home, skill)
 
-	// (1) SPEC-0279 R5 — the local signed emergency-deny.json. Opt-in per machine:
+	// (1) SPEC-0279 R5: the local signed emergency-deny.json. Opt-in per machine:
 	// absent → skip. Present → any inability to VERIFY it is fail-closed.
 	if ep := emergencyDenyPath(home); fileExists(ep) {
 		_, root, err := loadRootsFn("")
@@ -564,7 +564,7 @@ func emergencyDeniesInstalledSkill(home, skill string) emergencyVerdict {
 		}
 	}
 
-	// (2) FR-0045 Fix C / finding F4 — the ADOPTED signed HEAD's emergency list.
+	// (2) FR-0045 Fix C / finding F4: the ADOPTED signed HEAD's emergency list.
 	// A digest the registry placed in the signed HEAD.emergency MUST deny at the
 	// gate, authenticated by the same registry key (headEmergencyDeniesDigest
 	// re-verifies the HEAD envelope), even with NO local emergency-deny.json.

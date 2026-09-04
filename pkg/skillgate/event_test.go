@@ -120,7 +120,7 @@ func TestVerify_TamperRejected(t *testing.T) {
 	r := sampleRecord()
 	_ = SignInvocationRecord(r, func(m []byte) []byte { return ed25519.Sign(priv, m) }, base64.StdEncoding.EncodeToString)
 
-	// Tamper with a signed field — verification MUST fail (the signature no
+	// Tamper with a signed field: verification MUST fail (the signature no
 	// longer covers the canonical bytes).
 	tampered := *r
 	tampered.Tool = "attacker.example"
@@ -175,7 +175,7 @@ func TestCanonicalize_RejectsNewlineSmuggling(t *testing.T) {
 
 func TestReplay_DuplicateEventIDDetectable(t *testing.T) {
 	// Replay defence lives at the trail level (dedup by event_id), but it is
-	// only sound if event_id is BOUND into the signed bytes — so a replayed
+	// only sound if event_id is BOUND into the signed bytes, so a replayed
 	// signature can't be re-pointed at a fresh event_id without breaking the
 	// signature. Prove: changing event_id changes the canonical bytes.
 	a := sampleRecord()
@@ -184,7 +184,7 @@ func TestReplay_DuplicateEventIDDetectable(t *testing.T) {
 	ca, _ := CanonicalizeInvocationRecord(a)
 	cb, _ := CanonicalizeInvocationRecord(b)
 	if string(ca) == string(cb) {
-		t.Fatalf("event_id is not bound into the canonical bytes — replay protection unsound")
+		t.Fatalf("event_id is not bound into the canonical bytes: replay protection unsound")
 	}
 
 	// And a naive replay tracker dedups by event_id.

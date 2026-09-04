@@ -40,7 +40,7 @@ func TestResolverAnonymousWhenNothingSet(t *testing.T) {
 	}
 }
 
-// TestResolverReadWriteSplit — CD-13: with BOTH a write PAT and a distinct
+// TestResolverReadWriteSplit, CD-13: with BOTH a write PAT and a distinct
 // read-only token provisioned, ModeRead resolves the read-only token and ModeWrite
 // resolves the write PAT, so a verifying pull never transmits the write token.
 func TestResolverReadWriteSplit(t *testing.T) {
@@ -57,7 +57,7 @@ func TestResolverReadWriteSplit(t *testing.T) {
 	}
 }
 
-// TestResolverReadFallsBackToWrite — CD-13 backward compatibility: an operator who
+// TestResolverReadFallsBackToWrite, CD-13 backward compatibility: an operator who
 // provisioned ONLY a write token still gets it on the read path (no RO token set),
 // so a single-token setup is unchanged.
 func TestResolverReadFallsBackToWrite(t *testing.T) {

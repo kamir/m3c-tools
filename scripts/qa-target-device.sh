@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# qa-target-device.sh — Runnable QA acceptance track for a FRESH m3c-tools install
+# qa-target-device.sh: Runnable QA acceptance track for a FRESH m3c-tools install
 # ON THE TARGET DEVICE (macOS or Linux). Ships WITH the tool; safe to re-run.
 #
 # Companion doc:   docs/QA-target-device-setup.md
@@ -29,7 +29,7 @@ ONLINE=0
 # ---- CLI -------------------------------------------------------------------
 usage() {
   cat <<'EOF'
-qa-target-device.sh — QA acceptance track for a fresh m3c-tools install (macOS/Linux)
+qa-target-device.sh: QA acceptance track for a fresh m3c-tools install (macOS/Linux)
 
   --online        also run the network stages (check-er1, transcript smoke, plaud dev)
   -h, --help      show this help
@@ -82,14 +82,14 @@ trap cleanup EXIT
 OS="$(uname -s 2>/dev/null || echo unknown)"
 SCRIPT_DIR="$(cd "$(dirname "$0")" >/dev/null 2>&1 && pwd)"
 
-printf '%sm3c-tools — QA target-device acceptance track%s\n' "$C_B" "$C_0"
+printf '%sm3c-tools: QA target-device acceptance track%s\n' "$C_B" "$C_0"
 printf 'platform=%s  mode=%s  expect-version=%s\n' \
        "$OS" "$( [ "$ONLINE" = "1" ] && echo ONLINE || echo offline )" "$EXPECT_VERSION"
 
 # ===========================================================================
-# Stage A — Binary integrity & runs
+# Stage A, Binary integrity & runs
 # ===========================================================================
-stage "Stage A — Binary integrity & runs"
+stage "Stage A, Binary integrity & runs"
 
 # A1: locate binary. An explicit $M3C override is authoritative (no fallback to a
 # different binary); otherwise PATH, then ./build, then repo build/.
@@ -105,15 +105,15 @@ else
   elif [ -x "./build/m3c-tools" ]; then BIN="$(cd build && pwd)/m3c-tools"
   elif [ -x "$SCRIPT_DIR/../build/m3c-tools" ]; then BIN="$(cd "$SCRIPT_DIR/.." && pwd)/build/m3c-tools"
   else
-    fail "A1 binary located" "not on PATH, not at ./build/m3c-tools — install v2.10.0 or set M3C=<path>"
+    fail "A1 binary located" "not on PATH, not at ./build/m3c-tools: install v2.10.0 or set M3C=<path>"
   fi
 fi
 if [ -z "$BIN" ]; then
-  # Cannot proceed without a binary — print the summary and bail cleanly.
+  # Cannot proceed without a binary: print the summary and bail cleanly.
   printf '\n%s== SUMMARY ==%s\n' "$C_B" "$C_0"
   printf '  required: %d passed / %s%d FAILED%s   soft: %d ok / %d warn   skipped: %d\n' \
          "$REQ_PASS" "$C_R" "$REQ_FAIL" "$C_0" "$SOFT_PASS" "$SOFT_WARN" "$SKIPPED"
-  printf '  %sRESULT: FAIL%s (m3c-tools binary not found — nothing else could run)\n' "$C_R" "$C_0"
+  printf '  %sRESULT: FAIL%s (m3c-tools binary not found: nothing else could run)\n' "$C_R" "$C_0"
   exit 1
 fi
 pass "A1 binary located: $BIN"
@@ -134,13 +134,13 @@ if run_to 20 "$BIN" version >"$TMP/ver.out" 2>"$TMP/ver.err"; then
     fail "A2 version output not recognized" "expected a line like 'm3c-tools $EXPECT_VERSION (commit=…, built=…)'"
   fi
 else
-  fail "A2 version command failed (exit $?)" "binary may be the wrong platform/arch — re-check A1 / re-download"
+  fail "A2 version command failed (exit $?)" "binary may be the wrong platform/arch: re-check A1 / re-download"
 fi
 
 # ===========================================================================
-# Stage B — Config present & valid  (never echoes values)
+# Stage B, Config present & valid  (never echoes values)
 # ===========================================================================
-stage "Stage B — Config present & valid"
+stage "Stage B, Config present & valid"
 
 # Build candidate config-source list (existing files only), in resolution order.
 # Canonicalize paths and skip duplicates so the same file is not listed twice.
@@ -173,7 +173,7 @@ else
   fail "B1 config source exists" "copy .env.example -> .env, or run 'm3c-tools login', or 'm3c-tools config create'"
 fi
 
-# key_present KEY — true if KEY has a NON-empty, non-comment value in ANY existing source.
+# key_present KEY: true if KEY has a NON-empty, non-comment value in ANY existing source.
 # Uses grep -q: never prints the matched line (no secret leakage).
 key_present() {
   local key="$1" f
@@ -193,13 +193,13 @@ if key_present ER1_API_KEY; then
   soft "B4 ER1_API_KEY set"
 else
   warn "B4 ER1_API_KEY not in config (OK if device-token auth is active)" \
-       "run 'm3c-tools login' for a device token, or set ER1_API_KEY=… — see doctor Authentication"
+       "run 'm3c-tools login' for a device token, or set ER1_API_KEY=…: see doctor Authentication"
 fi
 
 # ===========================================================================
-# Stage C — Offline self-check (doctor)
+# Stage C, Offline self-check (doctor)
 # ===========================================================================
-stage "Stage C — Offline self-check (doctor)"
+stage "Stage C, Offline self-check (doctor)"
 # doctor exits non-zero when the Connectivity section fails (expected offline),
 # so offline we grade on "did it produce the diagnostics report".
 DOC_RC=0
@@ -207,7 +207,7 @@ run_to 40 "$BIN" doctor >"$TMP/doc.out" 2>"$TMP/doc.err" || DOC_RC=$?
 if grep -q "Config Consistency" "$TMP/doc.out"; then
   pass "C1 doctor produced a diagnostics report"
 else
-  fail "C1 doctor did not produce a report" "profile likely broken — 'm3c-tools config list' / 'config switch <name>'"
+  fail "C1 doctor did not produce a report" "profile likely broken: 'm3c-tools config list' / 'config switch <name>'"
 fi
 if [ "$ONLINE" = "1" ]; then
   if [ "$DOC_RC" = "0" ] && grep -q "ALL CHECKS PASSED" "$TMP/doc.out"; then
@@ -217,13 +217,13 @@ if [ "$ONLINE" = "1" ]; then
     fail "C2 doctor full pass (exit $DOC_RC)" "first issue: ${FIRSTBAD:-see doctor output}; fix the named subsystem then re-run"
   fi
 else
-  skip "C2 doctor full pass — ONLINE only (re-run with --online)"
+  skip "C2 doctor full pass: ONLINE only (re-run with --online)"
 fi
 
 # ===========================================================================
-# Stage D — Online ER1 connectivity  (ONLINE only)
+# Stage D, Online ER1 connectivity  (ONLINE only)
 # ===========================================================================
-stage "Stage D — Online ER1 connectivity"
+stage "Stage D, Online ER1 connectivity"
 if [ "$ONLINE" = "1" ]; then
   DRC=0
   run_to 45 "$BIN" check-er1 >"$TMP/er1.out" 2>"$TMP/er1.err" || DRC=$?
@@ -232,18 +232,18 @@ if [ "$ONLINE" = "1" ]; then
   elif grep -q "UNREACHABLE" "$TMP/er1.out" 2>/dev/null; then
     fail "D1 check-er1 UNREACHABLE" "check network/VPN + ER1_API_URL; 'm3c-tools doctor' localizes DNS/TLS/health"
   elif grep -q "Auth check: FAILED" "$TMP/er1.out" 2>/dev/null; then
-    fail "D1 check-er1 auth FAILED" "token/API-key invalid or expired — run 'm3c-tools login' or fix ER1_API_KEY"
+    fail "D1 check-er1 auth FAILED" "token/API-key invalid or expired, run 'm3c-tools login' or fix ER1_API_KEY"
   else
-    fail "D1 check-er1 failed (exit $DRC)" "possible transient network error — re-run; if it persists check connectivity"
+    fail "D1 check-er1 failed (exit $DRC)" "possible transient network error, re-run; if it persists check connectivity"
   fi
 else
-  skip "D1 check-er1 — ONLINE only (re-run with --online)"
+  skip "D1 check-er1: ONLINE only (re-run with --online)"
 fi
 
 # ===========================================================================
-# Stage E — Core capture smoke test
+# Stage E, Core capture smoke test
 # ===========================================================================
-stage "Stage E — Core capture smoke test"
+stage "Stage E, Core capture smoke test"
 # E1: transcript smoke (ONLINE)
 if [ "$ONLINE" = "1" ]; then
   ERC=0
@@ -251,10 +251,10 @@ if [ "$ONLINE" = "1" ]; then
   if [ "$ERC" = "0" ] && [ -s "$TMP/tr.out" ]; then
     pass "E1 transcript --list smoke ($(wc -l <"$TMP/tr.out" | tr -d ' ') track(s))"
   else
-    fail "E1 transcript --list smoke (exit $ERC)" "YouTube 429/network? tool degrades gracefully — retry later or set YT_PROXY_URL"
+    fail "E1 transcript --list smoke (exit $ERC)" "YouTube 429/network? tool degrades gracefully, retry later or set YT_PROXY_URL"
   fi
 else
-  skip "E1 transcript smoke — ONLINE only (re-run with --online)"
+  skip "E1 transcript smoke, ONLINE only (re-run with --online)"
 fi
 # E2: whisper presence (OFFLINE, soft). setup --check exits 1 when venv absent even if
 # a system whisper exists, so grade on the 'Whisper:' line, not the exit code.
@@ -262,16 +262,16 @@ run_to 20 "$BIN" setup --check >"$TMP/setup.out" 2>"$TMP/setup.err" || true
 if grep -E '^[[:space:]]*Whisper:' "$TMP/setup.out" 2>/dev/null | grep -vq '(not installed)'; then
   soft "E2 whisper present"
 else
-  warn "E2 whisper not installed (optional — only for local audio transcription)" \
+  warn "E2 whisper not installed (optional, only for local audio transcription)" \
        "run 'm3c-tools setup' or put a 'whisper' binary on PATH"
 fi
 
 # ===========================================================================
-# Stage F — Platform-specific
+# Stage F, Platform-specific
 # ===========================================================================
-stage "Stage F — Platform-specific"
+stage "Stage F, Platform-specific"
 if [ "$OS" = "Darwin" ]; then
-  # F-mac-1: audio input devices (soft — needs PortAudio + a device)
+  # F-mac-1: audio input devices (soft: needs PortAudio + a device)
   FRC=0
   run_to 20 "$BIN" devices >"$TMP/dev.out" 2>"$TMP/dev.err" || FRC=$?
   if [ "$FRC" = "0" ] && grep -q "Audio input devices" "$TMP/dev.out"; then
@@ -279,9 +279,9 @@ if [ "$OS" = "Darwin" ]; then
   else
     warn "F-mac-1 devices did not list inputs (exit $FRC)" "grant mic permission; check System Settings > Sound"
   fi
-  # F-mac-2 / F-mac-3: recording + menubar are interactive — manual per the doc
-  skip "F-mac-2 record (live audio) — manual step, see docs/QA-target-device-setup.md"
-  skip "F-mac-3 menubar launch — manual step, see docs/QA-target-device-setup.md"
+  # F-mac-2 / F-mac-3: recording + menubar are interactive, manual per the doc
+  skip "F-mac-2 record (live audio), manual step, see docs/QA-target-device-setup.md"
+  skip "F-mac-3 menubar launch: manual step, see docs/QA-target-device-setup.md"
   # F-mac-4: plaud dev status (ONLINE, soft)
   if [ "$ONLINE" = "1" ]; then
     PRC=0
@@ -290,19 +290,19 @@ if [ "$OS" = "Darwin" ]; then
       soft "F-mac-4 plaud dev status reachable"
     else
       warn "F-mac-4 plaud dev status not reachable (exit $PRC)" \
-           "run 'm3c-tools plaud auth mcp'; Plaud API can return transient HTTP 400 — re-run"
+           "run 'm3c-tools plaud auth mcp'; Plaud API can return transient HTTP 400, re-run"
     fi
   else
-    skip "F-mac-4 plaud dev status — ONLINE only (re-run with --online)"
+    skip "F-mac-4 plaud dev status, ONLINE only (re-run with --online)"
   fi
 else
   # Linux (and any non-Darwin): mac-only capture is not built in; legacy plaud only.
-  skip "F-mac-* checks — not applicable on $OS (record/devices/screenshot are macOS-only)"
+  skip "F-mac-* checks: not applicable on $OS (record/devices/screenshot are macOS-only)"
   if run_to 20 "$BIN" help >"$TMP/help.out" 2>/dev/null; then
     if grep -q "plaud auth" "$TMP/help.out" && grep -q "plaud list" "$TMP/help.out"; then
       soft "F-lin legacy plaud surface present (auth/list/check/sync/fix-times)"
     else
-      warn "F-lin legacy plaud surface not found in help" "wrong/old binary — reinstall v$EXPECT_VERSION"
+      warn "F-lin legacy plaud surface not found in help" "wrong/old binary: reinstall v$EXPECT_VERSION"
     fi
   fi
 fi
@@ -315,13 +315,13 @@ printf '  required: %d passed / %s%d FAILED%s   soft: %d ok / %d warn   skipped:
        "$REQ_PASS" "$( [ "$REQ_FAIL" -gt 0 ] && printf '%s' "$C_R" )" "$REQ_FAIL" "$C_0" \
        "$SOFT_PASS" "$SOFT_WARN" "$SKIPPED"
 if [ "$ONLINE" != "1" ]; then
-  printf '  %snote:%s offline mode — online stages (C2/D1/E1%s) were skipped; re-run with --online\n' \
+  printf '  %snote:%s offline mode: online stages (C2/D1/E1%s) were skipped; re-run with --online\n' \
          "$C_Y" "$C_0" "$( [ "$OS" = "Darwin" ] && echo /F-mac-4 )"
 fi
 if [ "$REQ_FAIL" -gt 0 ]; then
-  printf '  %sRESULT: FAIL%s — %d required check(s) failed\n' "$C_R" "$C_0" "$REQ_FAIL"
+  printf '  %sRESULT: FAIL%s, %d required check(s) failed\n' "$C_R" "$C_0" "$REQ_FAIL"
   exit 1
 fi
-printf '  %sRESULT: PASS%s — all required checks passed%s\n' "$C_G" "$C_0" \
+printf '  %sRESULT: PASS%s, all required checks passed%s\n' "$C_G" "$C_0" \
        "$( [ "$SOFT_WARN" -gt 0 ] && echo " (with $SOFT_WARN warning(s))" )"
 exit 0

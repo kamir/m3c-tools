@@ -94,7 +94,7 @@ type BulkRunState struct {
 }
 
 // BulkProgressEvent is emitted by the bulk runner to synchronize logs + UI.
-// Aliased to the portable pkg/bulkprogress.Event (SPEC-0251 §5) — same fields,
+// Aliased to the portable pkg/bulkprogress.Event (SPEC-0251 §5): same fields,
 // shared with the platform-neutral audio-import pipeline.
 type BulkProgressEvent = bulkprogress.Event
 
@@ -159,12 +159,12 @@ const MenuBarFallbackTitle = "m3c"
 // ResolveMenuBarTitle decides the text shown next to (or instead of) the menu
 // bar icon. It guarantees the menu bar item is never invisible:
 //
-//   - envOverride (M3C_MENUBAR_TITLE), when non-empty, always wins — this lets
+//   - envOverride (M3C_MENUBAR_TITLE), when non-empty, always wins: this lets
 //     a user force a visible text label when the icon will not render on their
 //     system (e.g. after a macOS update, or when the item hides under the
 //     MacBook notch and a text label makes it easier to find).
 //   - otherwise, when an icon was applied, the configured title is kept as-is
-//     (usually "" — icon-only is the intended look).
+//     (usually "". Icon-only is the intended look).
 //   - otherwise a short fallback label is used so the item stays reachable.
 func ResolveMenuBarTitle(configured string, iconApplied bool, envOverride string) string {
 	if strings.TrimSpace(envOverride) != "" {

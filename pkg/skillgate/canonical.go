@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// CanonicalDomainSeparator is the first line of the canonical message —
+// CanonicalDomainSeparator is the first line of the canonical message:
 // distinct from the SPEC-0188 attestation domain so a captured attestation
 // signature can never replay as a capability-token signature.
 const CanonicalDomainSeparator = "capability_v1"
@@ -38,11 +38,11 @@ func canonicalCSV(items []string) string {
 // an Encoder with SetEscapeHTML(false).
 //
 // Set-semantics rules ("shrink_egress_allowlist", "shrink_subprocess_allowlist")
-// require sorting the slice value before marshaling — mirrors the Python
+// require sorting the slice value before marshaling: mirrors the Python
 // behavior at canonicalize time.
 func canonicalAttenuationValue(rule string, value any) (string, error) {
 	// BUG-0143: Value is `any` since 2026-05-11 (was map[string]any). The
-	// wire shape carries whatever Python serialized — scalar/list/dict/null.
+	// wire shape carries whatever Python serialized: scalar/list/dict/null.
 	// Back-compat: pre-BUG-0143 Go callers wrap non-dict values under a
 	// sentinel "_value" key; still recognised here for fixtures already
 	// in flight.
@@ -129,7 +129,7 @@ func marshalCanonical(v any) (string, error) {
 // SPEC-0202 §4.1 (top-level fields), §6 (attenuation chain suffix).
 // Every line is terminated with LF, including the last.
 //
-// Field order — line by line — MUST match Python verbatim:
+// Field order, line by line, MUST match Python verbatim:
 //
 //	capability_v1
 //	schema=...
@@ -175,7 +175,7 @@ func CanonicalizeToken(t *Token) ([]byte, error) {
 	w("bundle_digest=" + t.BundleDigest)
 	w("skill_name=" + t.SkillName)
 	w("skill_version=" + t.SkillVersion)
-	w("tenant_scope=" + t.TenantScope) // empty string when absent — matches Python's None→""
+	w("tenant_scope=" + t.TenantScope) // empty string when absent: matches Python's None→""
 	w("caller_identity=" + t.CallerIdentity)
 	w("caller_session=" + t.CallerSession)
 	w("envelope_capabilities=" + canonicalCSV(t.Envelope.Capabilities))

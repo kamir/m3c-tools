@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""rag — local workspace RAG CLI (SPEC-0268).
+"""rag: local workspace RAG CLI (SPEC-0268).
 
     rag index  -w <workspace>
     rag sync   -w <workspace>
@@ -40,7 +40,7 @@ def _git_root(ws):
         r = subprocess.run(["git", "-C", str(ws), "rev-parse", "--show-toplevel"],
                            capture_output=True, text=True, timeout=5)
         return Path(r.stdout.strip()).resolve() if r.stdout.strip() else None
-    except Exception:  # noqa: BLE001 — no git, no worktree: nothing to arrange
+    except Exception:  # noqa: BLE001: no git, no worktree: nothing to arrange
         return None
 
 
@@ -85,14 +85,14 @@ def ensure_git_tracking(ws, track=True):
     * **The workspace is not the git root.** Indexing a SUBDIRECTORY of a repo
       (e.g. an app inside a monorepo) otherwise leaves tens of megabytes of
       untracked index sitting in the PARENT repo's `git status`, one `git add -A`
-      away from being committed there — plus an LFS rule for a file that repo was
+      away from being committed there, plus an LFS rule for a file that repo was
       never going to carry. This is detected, not configured.
     * **`track=False`** (`index --no-track`), for a repo whose index is
       deliberately a machine-local artifact. Committing a rebuilt index costs a
       new LFS object every time; when a second machine can just rebuild, the
       index is cheaper than its transport.
 
-    Idempotent either way, and it converts between the two states — flipping a
+    Idempotent either way, and it converts between the two states: flipping a
     workspace to untracked removes the LFS attribute it previously added.
     """
     ws = Path(ws).resolve()
@@ -141,7 +141,7 @@ def resolve_workspaces(arg):
         # profile) is shared across machines that do not all have every repo
         # checked out. A missing one must not take the whole server down.
         if not pw.is_dir():
-            print(f"rag: warning — skipping missing workspace {w}", file=sys.stderr)
+            print(f"rag: warning: skipping missing workspace {w}", file=sys.stderr)
             continue
         r = str(pw)
         if r not in seen:
@@ -159,7 +159,7 @@ def _search_many(workspaces, query, k, path_prefix, since_days, get_indexer=None
       copy of the model; `Indexer(ws, cfg, embedder=...)` lets them share it, so
       the query vector is computed exactly once.
     * **`get_indexer` lets a caller supply CACHED indexers.** A long-lived host
-      (the MCP server) must not rebuild them per call — without this the model is
+      (the MCP server) must not rebuild them per call, without this the model is
       re-loaded on every fan-out search, which costs seconds each time.
     * **Scores are only comparable under the same model.** Cosine scores from two
       different embedders mean nothing side by side, so a model mismatch is a hard
@@ -178,7 +178,7 @@ def _search_many(workspaces, query, k, path_prefix, since_days, get_indexer=None
 
     widths = {c.get("bit_width") for c in cfgs.values()}
     if len(widths) > 1:
-        print(f"rag: warning — mixed bit_width across workspaces ({sorted(widths)}); "
+        print(f"rag: warning: mixed bit_width across workspaces ({sorted(widths)}); "
               f"ranking carries extra quantization noise", file=sys.stderr)
 
     if get_indexer is None:
@@ -200,7 +200,7 @@ def _search_many(workspaces, query, k, path_prefix, since_days, get_indexer=None
             hits = ix.search(query, k=max(k * 3, 30), path_prefix=path_prefix,
                              since_days=since_days, mode=mode)
         except Exception as e:  # a broken/absent index must not sink the whole fan-out
-            print(f"rag: warning — {Path(w).name}: {e}", file=sys.stderr)
+            print(f"rag: warning: {Path(w).name}: {e}", file=sys.stderr)
             continue
         label = Path(w).name
         for h in hits:
@@ -212,7 +212,7 @@ def _search_many(workspaces, query, k, path_prefix, since_days, get_indexer=None
     # Treffer bringen, wegen derer die lexikalische Haelfte existiert. Deshalb
     # wird ueber die Workspaces erneut per RRF fusioniert.
     # Global nach dem Fusionswert sortieren, den jeder Workspace SELBST vergeben
-    # hat — nicht die Workspaces gegeneinander round-robin interleaven. Ein stark
+    # hat: nicht die Workspaces gegeneinander round-robin interleaven. Ein stark
     # fusionierter Treffer aus einem Repo schlaegt damit die schwache Spitze eines
     # anderen, was der ganze Punkt des Verbundes ist.
     if any(h.get("rrf") for h in merged):
@@ -242,7 +242,7 @@ def main():
     ss.add_argument("--since-days", type=int, default=0)
     ss.add_argument("--mode", choices=["hybrid", "dense", "lexical"], default="hybrid",
                     help="hybrid (default): dense + BM25, fused by rank. dense: wie bisher. "
-                         "lexical: nur BM25 — nuetzlich, um einen exakten Begriff zu pruefen.")
+                         "lexical: nur BM25: nuetzlich, um einen exakten Begriff zu pruefen.")
     ss.add_argument("--json", action="store_true")
     a = ap.parse_args()
 

@@ -1,13 +1,13 @@
 ---
 layout: default
-title: "Runbook — two-person ER1 exchange (Mirko → Eric, prod)"
+title: "Runbook: two-person ER1 exchange (Mirko → Eric, prod)"
 ---
 
-# Runbook — two-person ER1 exchange (Mirko → Eric)
+# Runbook: two-person ER1 exchange (Mirko → Eric)
 
 Execute this together to stamp **SPEC-0246 AC1–AC4 green on prod ER1**: Mirko publishes a
 signed, attested skill into his own ER1 context; Eric, a *different* ER1 login, trusts, pulls,
-verifies, uses it — with **no write-back** to Mirko's registry. This is the one piece the
+verifies, uses it, with **no write-back** to Mirko's registry. This is the one piece the
 single-machine Windows smoke does not cover.
 
 > Why this and not the automated harness: `demo/kup-training/` is single-machine. A true
@@ -22,7 +22,7 @@ single-machine Windows smoke does not cover.
 |-------------|------------------|
 | skillctl installed, real version | `skillctl version` → a real `skillctl/vX.Y.Z` (not `dev`) |
 | Logged in to **prod** ER1 | `skillctl login --base-url https://onboarding.guide` then `skillctl login --status` |
-| Agree a **room** label out-of-band | e.g. `aims-basics` — the co-learning room you share through |
+| Agree a **room** label out-of-band | e.g. `aims-basics`: the co-learning room you share through |
 | **Eric is a member of that room** | arranged in the **onboarding.guide console** (room membership is server-side; there is no `skillctl` join verb) |
 
 Trust-roots file path used below (ER1 `self` path):
@@ -31,13 +31,13 @@ Trust-roots file path used below (ER1 `self` path):
 
 ---
 
-## Lane 1 — Mirko (author / publisher)
+## Lane 1: Mirko (author / publisher)
 
 ```bash
 # M1. One-time: author keypair (keep .priv secret; only .pub leaves your machine).
 skillctl keygen --out ~/.config/m3c/skill-registry-self          # -> .priv + .pub
 
-# M2. Pack the skill (deterministic — pack twice, must be byte-identical).
+# M2. Pack the skill (deterministic: pack twice, must be byte-identical).
 skillctl pack --skill ~/.claude/skills/<name> -o <name>@<ver>.skb \
   --name <name> --version <ver> \
   --author-intent green --author-intent-rationale "what it does; no network; writes only ./out"
@@ -48,7 +48,7 @@ skillctl verify-sig <name>@<ver>.skb --pubkey ~/.config/m3c/skill-registry-self.
 
 # M4. Publish (admit) into YOUR OWN context, shared into the agreed room.
 #     --er1-context skills is auto-prefixed to <your-sub>___skills (you can only publish
-#     into your own context — 403 / BUG-0165 otherwise).
+#     into your own context: 403 / BUG-0165 otherwise).
 skillctl publish <name>@<ver> --bundle <name>@<ver>.skb --registry self \
   --er1-target prod --er1-context skills \
   --key ~/.config/m3c/skill-registry-self.priv --identity id:mirko@m3c \
@@ -64,7 +64,7 @@ skillctl publish --attest <name>@<ver> --level green \
   --identity id:reviewer@m3c --key ~/.config/m3c/skill-reviewer.priv --yes
 ```
 
-**Hand Eric, out-of-band (voice/Signal — never the same channel as the bundle):**
+**Hand Eric, out-of-band (voice/Signal: never the same channel as the bundle):**
 
 ```bash
 # (a) your context to read from:
@@ -77,7 +77,7 @@ openssl pkey -pubin -in ~/.config/m3c/skill-registry-self.pub -outform DER | tai
 
 ---
 
-## Lane 2 — Eric (consumer)
+## Lane 2: Eric (consumer)
 
 ```bash
 # E1. Verify Mirko's fingerprint OUT-OF-BAND first, then pin his key by hand-writing the
@@ -90,13 +90,13 @@ fingerprint: sha256:<the hex you verified out-of-band>
 governance_minimum: green
 YAML
 
-# E2. G-23 step 1 — dry-run the install to review the plan + get a 5-minute token.
+# E2. G-23 step 1: dry-run the install to review the plan + get a 5-minute token.
 skillctl pull --registry self --er1-target prod --er1-context <mirko-sub>___skills \
   --skill <name> --install --trust-mode --dry-run-install --no-checkpoint
 #   -> prints the create/overwrite plan + "dry-run-install token (5-minute TTL): <TOK>"
 
 # --- review the plan, then confirm ---
-# E3. G-23 step 2 — READ-ONLY consumer install (no --key, no --emit-installed → no write-back).
+# E3. G-23 step 2: READ-ONLY consumer install (no --key, no --emit-installed → no write-back).
 skillctl pull --registry self --er1-target prod --er1-context <mirko-sub>___skills \
   --skill <name> --install --trust-mode \
   --confirm-install --dry-run-install-token <TOK> --no-checkpoint
@@ -132,12 +132,12 @@ All four green ⇒ the two-person ER1 exchange is validated on this release.
 | Eric's pull returns nothing | Eric isn't a member of `<room>`, or wrong `--er1-context` | add Eric to the room in the onboarding.guide console; confirm `<mirko-sub>___skills` is exact |
 | pull **exit 13** (`governance_below_min`) | no green attestation at/above the floor | Mirko posts the green attestation (M5) |
 | pull **exit 12** (`registry_not_trusted`) | key mismatch / wrong `trust-roots.yaml` | re-check `pubkey_b64` + `fingerprint` against Mirko's key; ensure you edited `~/.claude/trust-roots.yaml` (not `skill-trust-roots.yaml`) |
-| pull **exit 11 / 10** | signature / digest mismatch | the bundle or key doesn't match — do not proceed; re-fetch from Mirko |
+| pull **exit 11 / 10** | signature / digest mismatch | the bundle or key doesn't match. Do not proceed; re-fetch from Mirko |
 | pull rejects the trust-roots file | wrong schema (used the hosted `skill-trust-roots.yaml`) | the self path uses the flat `~/.claude/trust-roots.yaml` |
 
 ---
 
 ## See also
 
-- [Acceptance & Handover: the skill lifecycle](acceptance-skillctl-lifecycle.md) — the why + full success criteria (SPEC-0246 §10).
-- [Manual: skillctl](manual-skillctl.md) — every command/flag; [Trust roots & registries](manual-skillctl.md#trust-roots--registries--which-file-when).
+- [Acceptance & Handover: the skill lifecycle](acceptance-skillctl-lifecycle.md): the why + full success criteria (SPEC-0246 §10).
+- [Manual: skillctl](manual-skillctl.md): every command/flag; [Trust roots & registries](manual-skillctl.md#trust-roots--registries--which-file-when).

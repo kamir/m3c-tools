@@ -1,6 +1,6 @@
-// caches.go — typed accessors for the table-backed trust/policy/revocation
+// caches.go: typed accessors for the table-backed trust/policy/revocation
 // caches (R-2.3). The tables are created in P0; they are POPULATED in P2 (the
-// loose files — verdicts.json / gate-policy.yaml / revoked-*.json — remain the
+// loose files, verdicts.json / gate-policy.yaml / revoked-*.json, remain the
 // migration source and the fallback read per R-2.3). The accessors here carry
 // the epoch-monotonic guarantee (R-7): a Put with an epoch LOWER than the stored
 // one is rejected in Go, so a rollback to a stale, previously-valid signed HEAD
@@ -29,7 +29,7 @@ type CacheEntry struct {
 }
 
 // ErrEpochRegression is returned by a Put whose epoch is strictly lower than the
-// stored epoch for the same key — the monotonicity floor (R-7).
+// stored epoch for the same key: the monotonicity floor (R-7).
 var ErrEpochRegression = errors.New("outbox: cache epoch regression (stored epoch is newer)")
 
 type cacheTable struct {

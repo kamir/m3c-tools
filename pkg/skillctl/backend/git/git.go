@@ -28,8 +28,8 @@ import (
 // (maxBlobBytes / maxManifestBytes) so the two carriers fail closed identically
 // (IS-09 / IS-T10).
 const (
-	maxGitBlobBytes     = 128 << 20 // 128 MiB — the .skb bundle layer (mirror OCI maxBlobBytes)
-	maxGitManifestBytes = 4 << 20   // 4 MiB — event JSON + bundle.json (mirror OCI maxManifestBytes)
+	maxGitBlobBytes     = 128 << 20 // 128 MiB, the .skb bundle layer (mirror OCI maxBlobBytes)
+	maxGitManifestBytes = 4 << 20   // 4 MiB, event JSON + bundle.json (mirror OCI maxManifestBytes)
 )
 
 // readCapped reads a regular file from the untrusted clone with a hard byte
@@ -94,7 +94,7 @@ func init() {
 
 // openGitLab maps gitlab://<host>/<group>/<proj>[@ref] → https://…/….git.
 // Credential injection is via opts.Creds (SPEC-0356 D5). Publishing PUSHES, so
-// it needs a WRITE-capable credential — a GitLab **Project Access Token** (or a
+// it needs a WRITE-capable credential: a GitLab **Project Access Token** (or a
 // personal access token / write deploy key), NOT a Deploy Token: GitLab rejects
 // write_repository as a deploy-token scope, and the default branch is protected
 // at Maintainer (push level 40). The oauth2:<token>@host form used below works
@@ -145,7 +145,7 @@ func gitRemoteFromSpec(spec, scheme string) (string, error) {
 // wire-format, and (for writes) pushes. Correct and simple for v1; a cached
 // clone + fetch is the efficiency follow-up.
 type gitBackend struct {
-	remote string // clean remote URL (NO secret) — used for Describe/display AND git argv
+	remote string // clean remote URL (NO secret): used for Describe/display AND git argv
 	scheme string // "gitlab" | "github"
 	// Write-capable credential (Publish/attest/revoke push). Supplied to git via a
 	// URL-scoped env http.extraHeader ONLY (never argv/URL/.git/config/error).
@@ -165,7 +165,7 @@ func newGitBackend(remote, scheme string) *gitBackend {
 
 // applyCreds resolves this backend's host credentials via opts.Creds (read-only,
 // SPEC-0356 D5) and stores them for out-of-band, URL-scoped header injection
-// (authEnvForMode) — never in the URL. CD-13: it resolves the write tier AND the
+// (authEnvForMode), never in the URL. CD-13: it resolves the write tier AND the
 // optional read-only tier separately, so a verifying pull can use a narrower
 // token. Best-effort for the no-token case: no creds / a resolve error just leaves
 // that tier anonymous (ambient git credentials or a public repo still work). No
@@ -175,7 +175,7 @@ func newGitBackend(remote, scheme string) *gitBackend {
 // write token would ride cleartext HTTP to a host that is not provably
 // loopback/RFC1918. Base64(user:token) in an Authorization header is encoding,
 // not encryption, so an on-path attacker on a public network would capture a
-// write-scoped registry token — the same failure class as the OCI plain-HTTP
+// write-scoped registry token: the same failure class as the OCI plain-HTTP
 // guard and ER1_VERIFY_SSL=false. M3C_GIT_HTTP=1 (the only way b.remote becomes
 // http://) is for a LAN/test registry; sending a token to a public http:// host
 // is never legitimate. HTTPS and loopback/private HTTP are fine. When there is no
@@ -193,7 +193,7 @@ func (b *gitBackend) applyCreds(opts artifact.OpenOptions) error {
 	// resolve error or an empty token for a tier just leaves that tier anonymous
 	// (ambient git credentials or a public repo still work). A single-token
 	// operator's ModeRead falls back to the write token inside the resolver, so
-	// readToken may equal token — that is the backward-compatible case.
+	// readToken may equal token, that is the backward-compatible case.
 	if wc, werr := opts.Creds.Credential(context.Background(), b.scheme, host, artifact.ModeWrite); werr == nil && wc.Token != "" {
 		b.token, b.tokenUser = wc.Token, wc.User
 	}
@@ -201,13 +201,13 @@ func (b *gitBackend) applyCreds(opts artifact.OpenOptions) error {
 		b.readToken, b.readUser = rc.Token, rc.User
 	}
 	// CD-03/WIN-12 egress guard: refuse if ANY resolved token would ride cleartext
-	// HTTP to a host that is not provably loopback/RFC1918 — base64(user:token) in
+	// HTTP to a host that is not provably loopback/RFC1918. base64(user:token) in
 	// an Authorization header is encoding, not encryption, so an on-path attacker
 	// would capture it. HTTPS and loopback/private HTTP are fine; a token-less
 	// (anonymous) http fetch of a public repo is the caller's choice.
 	if (b.token != "" || b.readToken != "") &&
 		strings.HasPrefix(b.remote, "http://") && !netguard.IsLoopbackOrPrivate(host) {
-		fmt.Fprintf(os.Stderr, "skillctl: SECURITY: REFUSING to attach a %s token over cleartext HTTP to non-loopback host %q — an on-path attacker would capture it. Use https, or a loopback/RFC1918 registry (M3C_GIT_HTTP is for LAN/test only).\n", b.scheme, host)
+		fmt.Fprintf(os.Stderr, "skillctl: SECURITY: REFUSING to attach a %s token over cleartext HTTP to non-loopback host %q. An on-path attacker would capture it. Use https, or a loopback/RFC1918 registry (M3C_GIT_HTTP is for LAN/test only).\n", b.scheme, host)
 		b.token, b.tokenUser, b.readToken, b.readUser = "", "", "", ""
 		return fmt.Errorf("git: refusing to send credential over plain HTTP to non-loopback host %q; use https or unset M3C_GIT_HTTP", host)
 	}
@@ -242,7 +242,7 @@ func (b *gitBackend) tokenFor(mode artifact.AccessMode) (user, token string) {
 }
 
 // authEnvForMode injects the mode-appropriate credential as an HTTP Authorization
-// header via git's env config — NEVER in the clone/push argv or the on-disk
+// header via git's env config, NEVER in the clone/push argv or the on-disk
 // .git/config (SPEC-0356 §6.2; challenge-gate fix for the token-in-URL /
 // token-in-error leaks). Returns nil when anonymous for this mode.
 //
@@ -250,7 +250,7 @@ func (b *gitBackend) tokenFor(mode artifact.AccessMode) (user, token string) {
 // (git applies it by longest-prefix urlmatch), and `http.followRedirects=false` is
 // forced whenever a token is attached. So if the auth path is redirected to a
 // DIFFERENT host, git (a) would not follow the redirect at all, and (b) even if it
-// did, the URL-scoped header would not match the redirect target — the credential
+// did, the URL-scoped header would not match the redirect target. The credential
 // is DROPPED rather than resent cross-host. GIT_CONFIG_* is process-scoped and not
 // persisted.
 func (b *gitBackend) authEnvForMode(mode artifact.AccessMode) []string {
@@ -270,7 +270,7 @@ func (b *gitBackend) authEnvForMode(mode artifact.AccessMode) []string {
 	}
 }
 
-// authEnv is the WRITE-mode credential env — Publish's push and the redact/
+// authEnv is the WRITE-mode credential env. Publish's push and the redact/
 // regression surface use it.
 func (b *gitBackend) authEnv() []string { return b.authEnvForMode(artifact.ModeWrite) }
 
@@ -325,7 +325,7 @@ func (b *gitBackend) Close() error { return nil }
 
 // --- git exec plumbing ---
 
-// git runs a LOCAL git subcommand (no network) against an already-cloned dir —
+// git runs a LOCAL git subcommand (no network) against an already-cloned dir:
 // add/commit/tag/tag -l. These need no credential, so the token is NEVER attached
 // to them (least exposure; CD-13/CD-14 keep auth on the two network ops only).
 func (b *gitBackend) git(dir string, args ...string) (string, error) {
@@ -387,7 +387,7 @@ func (b *gitBackend) withClone(mode artifact.AccessMode, fn func(dir string) err
 		return err
 	}
 	// SPEC-0356 §6a: refuse a repo whose wire-format version this build cannot
-	// understand — BEFORE reading or writing anything (fail closed). Absent
+	// understand: BEFORE reading or writing anything (fail closed). Absent
 	// marker (fresh/pre-marker repo) is compatible; first publish stamps it.
 	if err := checkMarkerCompatible(dir); err != nil {
 		return err
@@ -416,7 +416,7 @@ func (b *gitBackend) Publish(ctx context.Context, req artifact.PublishRequest) (
 		return nil, fmt.Errorf("git: unsupported event kind %q", req.Kind)
 	}
 	name, ver, dig := req.Meta.Name, req.Meta.Version, req.Meta.Digest
-	// SEC-M9: these become filesystem paths + git operands — validate BEFORE any use.
+	// SEC-M9: these become filesystem paths + git operands: validate BEFORE any use.
 	if err := validateName(name); err != nil {
 		return nil, err
 	}
@@ -444,7 +444,7 @@ func (b *gitBackend) Publish(ctx context.Context, req artifact.PublishRequest) (
 		}
 
 		// SPEC-0356 §6a: stamp the write-once version marker + *.skb byte-safety
-		// on the first publish into the repo. Idempotent — never rewrites an
+		// on the first publish into the repo. Idempotent: never rewrites an
 		// existing marker. `git add -A` below commits any new format files.
 		if _, err := ensureFormatFiles(dir, "skillctl", time.Now()); err != nil {
 			return err
@@ -483,7 +483,7 @@ func (b *gitBackend) Publish(ctx context.Context, req artifact.PublishRequest) (
 			if _, err := b.git(dir, "tag", "--", tag); err != nil {
 				return err
 			}
-			// Atomic: branch + tag land together or neither does — no
+			// Atomic: branch + tag land together or neither does, no
 			// half-published skill (blob present, tag missing) on a partial push.
 			if _, err := b.gitAuth(artifact.ModeWrite, dir, "push", "--quiet", "--atomic", "origin", "HEAD", "refs/tags/"+tag); err != nil {
 				return err
@@ -688,7 +688,7 @@ func (b *gitBackend) Events(ctx context.Context, filter artifact.ListFilter, pag
 				}
 				// Untrusted clone: skip a symlinked/irregular event file rather than
 				// follow it (lstatRegular fails closed on a symlink). A skipped file
-				// simply never influences a verdict — the same as a malformed one.
+				// simply never influences a verdict: the same as a malformed one.
 				ep := filepath.Join(edir, e.Name())
 				if ok, lerr := lstatRegular(ep); lerr != nil || !ok {
 					continue
@@ -704,7 +704,7 @@ func (b *gitBackend) Events(ctx context.Context, filter artifact.ListFilter, pag
 				// FR-0090 IS-T1: derive Kind + Digest from the SIGNED envelope, NEVER
 				// from the unsigned carrier projection. The file name ("<seq>-<kind>.json")
 				// and the events/<digesthex>/ directory are attacker-controllable path
-				// projections — a signed revoke of X committed at events/<Yhex>/NNNN-
+				// projections: a signed revoke of X committed at events/<Yhex>/NNNN-
 				// installed.json must surface as {revoke, X}, not {install, Y}, or a
 				// hostile registry could relabel a revoke to suppress it or rebind its
 				// digest onto an innocent skill. The filename is kept only as NativeID
@@ -778,7 +778,7 @@ func (b *gitBackend) targetDigestHexes(dir, name string) ([]string, error) {
 // FR-0090 IS-T1: Events() now classifies from the SIGNED envelope via
 // trustcore.KindFromSignedEnvelope, and the "<seq>-<kind>.json" name is advisory
 // (NativeID) only. isRevoked() below still reads the filename, but purely for the
-// List/Resolve DISPLAY status column — never for a trust decision (parity with the
+// List/Resolve DISPLAY status column, never for a trust decision (parity with the
 // OCI backend's advisory digestRevoked; the authoritative revoke gate is the pull
 // gauntlet's signed-envelope path).
 

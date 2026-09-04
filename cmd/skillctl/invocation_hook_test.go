@@ -1,6 +1,6 @@
 package main
 
-// Tests for SPEC-0202 §9 — the verify-hook deferred block emits ONE
+// Tests for SPEC-0202 §9: the verify-hook deferred block emits ONE
 // device-signed invocation record per gated skill, for BOTH allow AND deny,
 // into the separate signed trail. Asserts the record is written AND verifies.
 

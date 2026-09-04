@@ -1,4 +1,4 @@
-// wav.go — Pure Go WAV encoding and audio utilities.
+// wav.go: Pure Go WAV encoding and audio utilities.
 // No cgo, no platform dependencies. Used by all platforms.
 package recorder
 
@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	SampleRate    = 16000 // 16kHz — whisper's native sample rate
+	SampleRate    = 16000 // 16kHz: whisper's native sample rate
 	Channels      = 1     // mono
 	BitsPerSample = 16
 )

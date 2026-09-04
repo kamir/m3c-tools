@@ -1,6 +1,6 @@
 package main
 
-// SPEC-0275 — skill-bundled runbooks: pack inclusion, descriptor parsing, and
+// SPEC-0275, skill-bundled runbooks: pack inclusion, descriptor parsing, and
 // the best-effort auto-register hook.
 
 import (
@@ -16,7 +16,7 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillbundle"
 )
 
-// T2/T5 — the sidecar descriptor: required fields + version override (pure).
+// T2/T5, the sidecar descriptor: required fields + version override (pure).
 func TestParseRunbookDescriptor(t *testing.T) {
 	// happy path: version overridden by the skill version
 	d, err := parseRunbookDescriptor([]byte(`{"runbook_id":"rb-x","title":"X","version":"9.9.9"}`), "1.2.3")
@@ -44,7 +44,7 @@ func TestParseRunbookDescriptor(t *testing.T) {
 	}
 }
 
-// T1 — pack includes runbook.html + runbook.meta.json (WalkDir packs the whole dir).
+// T1: pack includes runbook.html + runbook.meta.json (WalkDir packs the whole dir).
 func TestPackIncludesRunbook(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, body string) {
@@ -69,7 +69,7 @@ func TestPackIncludesRunbook(t *testing.T) {
 	}
 }
 
-// T4 + pairing — the auto-register hook is always best-effort: it never panics
+// T4 + pairing: the auto-register hook is always best-effort: it never panics
 // and never blocks the caller, whatever the catalog / filesystem state.
 func TestMaybeRegisterRunbook_BestEffort(t *testing.T) {
 	// flag off → immediate no-op even with files present

@@ -75,7 +75,7 @@ func TestEstimateOpenAICostShape(t *testing.T) {
 	if !(cheap < pricey) {
 		t.Errorf("expected gpt-4o-mini cheaper than gpt-4o: %f vs %f", cheap, pricey)
 	}
-	// Unknown model uses default rates — still positive.
+	// Unknown model uses default rates: still positive.
 	other := EstimateOpenAICost("some-new-model", 1000, 1000)
 	if other <= 0 {
 		t.Errorf("default cost should be positive")

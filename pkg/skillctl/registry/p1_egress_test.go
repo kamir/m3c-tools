@@ -8,13 +8,13 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/homeroot"
 )
 
-// TestER1TLSGuardNonLoopback — CD-T10 (CD-11): the registry ER1 client must
+// TestER1TLSGuardNonLoopback: CD-T10 (CD-11): the registry ER1 client must
 // refuse to disable TLS verification (VerifySSL=false) against a non-loopback
 // host, as defense-in-depth behind the er1.Config LoadConfig-time sanitizer (a
 // programmatically-built Config can carry VerifySSL=false + a public APIURL and
 // would otherwise slip an InsecureSkipVerify transport straight onto the wire).
 // Verification stays enabled (guard returns nil, nothing skipped) or is refused
-// (error) — it is never silently bypassed for a public host.
+// (error). It is never silently bypassed for a public host.
 func TestER1TLSGuardNonLoopback(t *testing.T) {
 	// VerifySSL on → never refused, whatever the host.
 	if err := er1TLSGuard("https://onboarding.guide/upload_2", true); err != nil {
@@ -27,7 +27,7 @@ func TestER1TLSGuardNonLoopback(t *testing.T) {
 	// forces verification back on for it. A public host is likewise refused.
 	for _, base := range []string{
 		"https://onboarding.guide/upload_2", // public
-		"https://192.168.1.10:8081",         // RFC1918 — no longer permitted (FIX 2)
+		"https://192.168.1.10:8081",         // RFC1918, no longer permitted (FIX 2)
 		"https://10.0.0.5:8081",             // RFC1918
 	} {
 		if err := er1TLSGuard(base, false); err == nil {
@@ -48,10 +48,10 @@ func TestER1TLSGuardNonLoopback(t *testing.T) {
 	}
 }
 
-// TestUserHome_HonorsSharedDecision — WIN-T8 (WIN-09) parity: registry.userHome
+// TestUserHome_HonorsSharedDecision, WIN-T8 (WIN-09) parity: registry.userHome
 // must apply the SINGLE shared $HOME-on-Windows decision
-// (homeroot.OverrideAllowed) — the same one the verify package and the
-// cmd/skillctl binary use — so the three former copies can no longer drift into
+// (homeroot.OverrideAllowed), the same one the verify package and the
+// cmd/skillctl binary use, so the three former copies can no longer drift into
 // separate policies. The pure (goos, compiledIn) matrix is pinned in the homeroot
 // package's own test; this proves THIS site delegates to it behaviorally. No
 // runtime.GOOS skip → the windows/linux executed-test parity stays even for the

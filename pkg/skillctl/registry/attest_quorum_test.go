@@ -43,7 +43,7 @@ const qd = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 var qnow = time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC)
 
 // TestAccumulatorK1Parity: the default (empty Signers, quorum 1) reproduces the
-// single-attestation gauntlet — a green attestation from tr.pub qualifies; a
+// single-attestation gauntlet: a green attestation from tr.pub qualifies; a
 // yellow one under a green floor does not (and is noted below-floor).
 func TestAccumulatorK1Parity(t *testing.T) {
 	priv, pub := genEd(t)
@@ -67,7 +67,7 @@ func TestAccumulatorK1Parity(t *testing.T) {
 }
 
 // TestAccumulatorOneKeyCannotFakeQuorum: two attestations from the SAME key dedup
-// to one signer slot — the core anti-forgery property of N-of-M.
+// to one signer slot: the core anti-forgery property of N-of-M.
 func TestAccumulatorOneKeyCannotFakeQuorum(t *testing.T) {
 	priv, pub := genEd(t)
 	tr := &SelfTrustRoots{GovernanceMinimum: "green", GovernanceQuorum: 2,
@@ -151,7 +151,7 @@ func TestAccumulatorFreshness(t *testing.T) {
 
 // TestAccumulatorExpiryNotShadowed is the challenge-gate regression: a signer's
 // NEWER expired attestation must sunset the digest even when an OLDER non-expiring
-// green exists — the reviewer's latest word governs, never a fall-back.
+// green exists. The reviewer's latest word governs, never a fall-back.
 func TestAccumulatorExpiryNotShadowed(t *testing.T) {
 	priv, pub := genEd(t)
 	tr := &SelfTrustRoots{GovernanceMinimum: "green", pub: pub}
@@ -161,7 +161,7 @@ func TestAccumulatorExpiryNotShadowed(t *testing.T) {
 	acc.OfferAttest(signedAttest(t, priv, "id", qd, "green", "2026-08-01T00:00:00Z", nil))   // OLD, no expiry
 	acc.OfferAttest(signedAttest(t, priv, "id", qd, "green", "2026-08-15T00:00:00Z", &past)) // NEWER, expired
 	if len(acc.Qualifying(qd)) != 0 {
-		t.Error("a newer EXPIRED attestation must sunset the digest — an older non-expiring green must not shadow it")
+		t.Error("a newer EXPIRED attestation must sunset the digest. An older non-expiring green must not shadow it")
 	}
 	// Order-independent.
 	acc2 := NewAttestAccumulator(tr, qnow)
@@ -217,7 +217,7 @@ func TestAccumulatorRevoke(t *testing.T) {
 }
 
 // signedAdmit is a genuinely-signed ADMIT envelope (admitted_by_identity, no
-// revoked_by, no reviewer_id) — a signed event of the WRONG shape for a revoke or an
+// revoked_by, no reviewer_id): a signed event of the WRONG shape for a revoke or an
 // attestation, used to prove the accumulator gates on signed shape, not "it verifies".
 func signedAdmit(t *testing.T, priv ed25519.PrivateKey, digest string) map[string]any {
 	t.Helper()
@@ -235,7 +235,7 @@ func signedAdmit(t *testing.T, priv ed25519.PrivateKey, digest string) map[strin
 }
 
 // TestOfferRevokeRequiresSignedRevokedBy is the FR-0090 IS-T3 regression: an
-// admit/attest envelope — correctly signed by the pinned key — must NOT mark its
+// admit/attest envelope, correctly signed by the pinned key, must NOT mark its
 // digest revoked when fed to OfferRevoke. A revoke is the SIGNED revoked_by shape,
 // not merely a signature that verifies. Against the old code (which revoked on any
 // verifying envelope with a bundle_digest) both cases below would have revoked qd,
@@ -275,7 +275,7 @@ func TestOfferRevokeRequiresSignedRevokedBy(t *testing.T) {
 // TestOfferAttestRequiresSignedReviewerAndLevel is the attestation half of IS-T3: a
 // signed revoke/admit envelope must never occupy a governance slot. Against the old
 // code a signed revoke (which has a bundle_digest and verifies) would be recorded as
-// an attestation with an empty governance_level — a shape-confusion the floor should
+// an attestation with an empty governance_level. A shape-confusion the floor should
 // never see.
 func TestOfferAttestRequiresSignedReviewerAndLevel(t *testing.T) {
 	priv, pub := genEd(t)

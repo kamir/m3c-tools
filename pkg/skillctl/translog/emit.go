@@ -10,7 +10,7 @@ import (
 // CONTRACT (mirrors the SPEC-0202 audit-trail pattern): logging an event is
 // BEST-EFFORT and MUST NEVER alter the primary decision. A caller appends
 // to the log AFTER the signed event already exists; if the append fails
-// (disk full, permission, etc.) the caller logs the error and proceeds —
+// (disk full, permission, etc.) the caller logs the error and proceeds:
 // the absence of a log entry is later surfaced by the verifier's inclusion
 // check (advisory by default, hard only under require_log_inclusion), not
 // by breaking the admit/attest/revoke operation itself.

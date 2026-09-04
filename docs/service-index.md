@@ -6,7 +6,7 @@ title: Service Index
 # Service Index
 
 **What stays running.** Long-lived processes in the `m3c-tools` ecosystem, each
-paired with its **runtime wrapper** — the `deploy/*` stack, Dockerfile, compose
+paired with its **runtime wrapper**: the `deploy/*` stack, Dockerfile, compose
 file, or MCP registration that turns a [program](program-index) into a running
 service.
 
@@ -21,7 +21,7 @@ model) via an LLM, with a replayable, auditable log.
 
 | Aspect | Detail |
 |--------|--------|
-| Program | `thinking-engine` (`cmd/thinking-engine/`) — see [Program Index](program-index) |
+| Program | `thinking-engine` (`cmd/thinking-engine/`): see [Program Index](program-index) |
 | Runtime wrapper | `deploy/thinking-engine/` |
 | Listen / health | `:7140`, `GET /v1/health` |
 | Launch (local) | `make thinking-up` → `make thinking-topics` → `make thinking-build` and run; or `tools/thinking-engine-start.sh` |
@@ -44,7 +44,7 @@ Internals: [Component Index → Thinking Engine internals](component-index#g-thi
 
 The pure-Go skill **trust plane** packaged as an OCI image, and `.skb` skill
 bundles published to a registry (SPEC-0354). The capture-plane (recorder,
-menubar — cgo + macOS-only) is deliberately **excluded**.
+menubar: cgo + macOS-only) is deliberately **excluded**.
 
 | Aspect | Detail |
 |--------|--------|
@@ -66,14 +66,14 @@ query, import, and track skills.
 
 ## 4. rag-mcp-server (Claude Code MCP)
 
-Local, air-gapped semantic search over a GitHub-backed workspace (SPEC-0268) —
+Local, air-gapped semantic search over a GitHub-backed workspace (SPEC-0268):
 the local twin of the ER1/aims-core memory search.
 
 | Aspect | Detail |
 |--------|--------|
 | Program | `rag-mcp-server/rag_mcp_server.py` |
 | Transport | stdio (also a `rag.py` CLI) |
-| Engine | `turbovec` (TurboQuant) + local `BAAI/bge-m3` embedder — no data leaves the machine |
+| Engine | `turbovec` (TurboQuant) + local `BAAI/bge-m3` embedder: no data leaves the machine |
 | State | per-repo, gitignored `.rag/` |
 | Tools | `rag_search`, `rag_stats`, `rag_sync`, `rag_verify` |
 
@@ -89,7 +89,7 @@ the Observation Window pipeline, and ER1 upload.
 | UI stack | `menuet` (menu bar) + native Cocoa via cgo |
 | Details | [Menu Bar App](menubar-app) |
 
-## External dependency — ER1 / aims-core
+## External dependency: ER1 / aims-core
 
 Not built in this repo, but the **server every capture flows into**. `m3c-tools`
 uploads multimodal observations to it (`pkg/er1`), the Thinking Engine sinks
