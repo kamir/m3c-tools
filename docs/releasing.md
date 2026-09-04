@@ -156,14 +156,30 @@ slsa-verifier verify-artifact <asset> --provenance-path multiple.intoto.jsonl \
 The `README.md` and `docs/quickstart-skillctl*.md` one‑liners pin the bootstrap
 scripts to an **immutable commit hash** (not `master`), plus the expected SHA‑256
 of each script: a TOFU defence, since `master` could be rewritten to swap the
-script *and* its inner pins at once. On **each** signed release, bump the commit
-**and** both hashes together:
+script *and* its inner pins at once.
+
+**This is automated.** Publishing a `skillctl/v*` release fires
+[`.github/workflows/pin-bump.yml`](../.github/workflows/pin-bump.yml), which
+resolves the tag, rewrites the pin and both digests, verifies the result and
+opens a pull request. Your job is to review and merge that PR, not to edit the
+hashes by hand.
+
+> It fires on **published**, not on the tag push: the release workflow cuts a
+> *draft*, and a pin must not move to a release nobody has released yet.
+
+If you ever need it by hand, or want to check whether the docs are current:
 
 ```bash
-NEWPIN=$(git rev-parse origin/master)
-shasum -a 256 tools/skillctl-install.sh tools/skillctl-install.ps1
-# → update the pinned commit + both SHAs in README.md and docs/quickstart-skillctl.md
+./scripts/bump-install-pins.sh skillctl/vX.Y.Z --check   # exit 1 = stale
+./scripts/bump-install-pins.sh skillctl/vX.Y.Z           # rewrite
+./scripts/check-install-pins.sh                          # the gate
 ```
+
+**Never `git rev-parse <tag>` on its own.** An annotated tag resolves to a tag
+object, and `raw.githubusercontent.com` serves commits only. Pinning a tag
+object once put a 404 behind every published install one-liner, on Windows and
+Unix alike, until a user reported it from the field (BUG-0215). Both scripts
+above resolve `^{commit}`, which is why the mistake is no longer reachable.
 
 ---
 
