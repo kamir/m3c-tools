@@ -67,6 +67,18 @@ build-skillctl:
 
 # Build the skillctl-demo tool. It shells out to skillctl (auto-resolved from
 # ./build/skillctl first), so build that too.
+# Build the trust-plane simulation. It drives the real skillctl, so it needs one.
+.PHONY: build-skillctl-sim
+build-skillctl-sim: build-skillctl
+	@echo "Building skillctl-sim..."
+	go build -ldflags="$(GO_LDFLAGS)" -o $(BUILD_DIR)/skillctl-sim ./cmd/skillctl-sim
+	@echo "Built $(BUILD_DIR)/skillctl-sim, run: $(BUILD_DIR)/skillctl-sim run -n 100"
+
+# The simulation as a gate: theory against measurement, exit 1 on any residual.
+.PHONY: sim
+sim: build-skillctl-sim
+	$(BUILD_DIR)/skillctl-sim run -n 100 -skillctl $(BUILD_DIR)/skillctl
+
 .PHONY: build-skillctl-demo
 build-skillctl-demo: build-skillctl
 	@echo "Building skillctl-demo..."
