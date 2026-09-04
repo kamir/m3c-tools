@@ -223,12 +223,16 @@ run "pack" 0 "$SKILLCTL" pack \
   --name hello-kup --version 0.1.0 --summary "Uebungsskill" \
   --author-intent green --author-intent-rationale "kein Netzwerk; schreibt nur ./out"
 expect_in "pack nennt einen bundle_digest" "bundle_digest:"
+expect_in "pack sagt, dass es NICHT der Digest fuer attest ist" "manifest digest"
 PACK_DIGEST="$(printf '%s' "$LAST_OUT" | awk '/^bundle_digest:/ {print $2}')"
 
 run "sign" 0 "$SKILLCTL" sign \
   --key "$WS/keys/mitarbeiter.priv" --identity-id id:mitarbeiter@kup \
   "$WS/hello-kup@0.1.0.skb"
 expect_in "sign nennt einen digest" "digest:"
+# BUG-0213: die Ausgabe muss selbst sagen, welcher der beiden Digests gilt. Genau
+# das ist die Zusage, die das Tutorial an dieser Stelle macht.
+expect_in "sign sagt, wofuer der Digest gilt" "use this for"
 DIGEST_HEX="$(printf '%s' "$LAST_OUT" | awk '/^digest:/ {print $2}')"
 DIGEST="sha256:$DIGEST_HEX"
 note "pack: $PACK_DIGEST"
