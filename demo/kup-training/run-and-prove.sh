@@ -7,6 +7,7 @@
 #   ./run-and-prove.sh                # full chain, fail-fast on first red
 #   ./run-and-prove.sh --keep-going   # run all steps even if some fail
 #   ./run-and-prove.sh --skip-online  # skip P0+02 (offline-only chain)
+#   ./run-and-prove.sh --chain-only   # trust chain only: no PDF (G1), no release (G2)
 #   ./run-and-prove.sh --json out.json  # emit a release-gate-form-compatible summary
 #
 # Output:
@@ -32,11 +33,13 @@ source "$SCRIPT_DIR/lib/common.sh"
 # Args
 KEEP_GOING=0
 SKIP_ONLINE=0
+CHAIN_ONLY=0
 JSON_OUT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --keep-going)  KEEP_GOING=1; shift ;;
     --skip-online) SKIP_ONLINE=1; shift ;;
+    --chain-only)  CHAIN_ONLY=1; shift ;;
     --json)        JSON_OUT="$2"; shift 2 ;;
     -h|--help)
       sed -n '2,21p' "$0"; exit 0 ;;
@@ -412,8 +415,19 @@ fi
 finished
 
 # ============================================================================
-# G1: PDFs
+# G1: PDFs   (maintainer gate, skipped by --chain-only)
 # ============================================================================
+#
+# G1 renders a manual that lives on the PRIVATE maintenance plane, so it needs
+# $M3C_MAINTENANCE_DIR. A learner running the Test Ride (TUTORIAL.md) does not
+# have that checkout, and this used to ABORT the whole proof at rc=1 after every
+# trust check had passed: a red verdict for a missing document, on a run whose
+# subject is the trust chain. --chain-only skips G1 and G2 for that case; a
+# maintainer running the release gate still gets both, unskipped and blocking.
+if [ "$CHAIN_ONLY" -eq 1 ]; then
+  record G1 yellow "skipped by --chain-only (PDF render needs the private manual)"
+  record G2 yellow "skipped by --chain-only (cross-platform release build)"
+else
 run_step G1 "Print user guide as PDF" bash make-pdf.sh
 assert_file_min G1 "$ARTIFACTS_DIR/USER-MANUAL.pdf" 50000      "USER-MANUAL.pdf"
 assert_file_min G1 "$ARTIFACTS_DIR/SKILLCTL-MANUAL.pdf" 50000  "SKILLCTL-MANUAL.pdf"
@@ -447,6 +461,7 @@ if [ -d "$RELEASE_DIR" ]; then
     fi
   fi
 fi
+fi   # end of the --chain-only guard around G1 + G2
 
 # ============================================================================
 # G3, synthesis: skill transfer Mirko → Eric (steps 01–05 all green AND hello.txt)

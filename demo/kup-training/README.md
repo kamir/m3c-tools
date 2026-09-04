@@ -1,5 +1,12 @@
 # KuP Skill-Manager Training: End-to-End Demo
 
+> **Looking for the tutorial? It is [TUTORIAL.md](TUTORIAL.md).**
+> This directory serves two audiences and they want different things.
+> **Learner:** you want the 20-minute guided ride that ends with you having broken a
+> bundle and watched the tool refuse it. That is `TUTORIAL.md`.
+> **Maintainer:** you want the release gate below, which asserts the four contractual
+> outputs before a cohort session. That is this file.
+
 Every claim in the Skill-Manager USER-MANUAL (on the private maintenance plane) is proven here by an executable shell script. The orchestrator (`run-all.sh`) is the **release gate**: it asserts the four contractually required outputs.
 
 ## Release-gate items
@@ -14,7 +21,7 @@ Every claim in the Skill-Manager USER-MANUAL (on the private maintenance plane) 
 ## Quick start
 
 ```bash
-cd /Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training
+cd demo/kup-training             # from the repository root
 ./run-all.sh                    # full demo + PDF + release build
 ./run-all.sh --offline-only     # skip aims-core round-trip (chain proof still runs)
 ./run-all.sh --no-pdf           # skip PDF render
@@ -22,6 +29,19 @@ cd /Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training
 ```
 
 The orchestrator prints a final report mapping every gate item to its proof artifact.
+
+`run-and-prove.sh` is the assertion-level twin: it runs the same chain and checks each step's
+load-bearing artifact, not just its exit code.
+
+```bash
+./run-and-prove.sh                                  # full chain, fail-fast
+./run-and-prove.sh --skip-online --chain-only       # trust chain only: skips G1 (PDF) + G2 (release)
+./run-and-prove.sh --keep-going --json out.json     # run everything, emit a summary
+```
+
+`--chain-only` exists for the Test Ride: G1 renders a manual from the private maintenance
+plane, and without that checkout the whole proof used to abort with rc=1 after every trust
+check had passed.
 
 ## Steps in order
 
@@ -37,6 +57,29 @@ The orchestrator prints a final report mapping every gate item to its proof arti
 | `07-invalid-wrong-key.sh` | Attacker signs a parallel bundle with their own key, claims Mirko's identity. | `verify-sig` against Mirko's pinned pubkey: exit **11**; control: same bundle exit 0 against attacker's key |
 | `08-invalid-no-signature.sh` | Bundle delivered without the matching `<digest>.author.sig`. | `verify-sig` non-zero refusal (no fail-open) |
 | `09-invalid-edited-install.sh` | Edits an installed file in place, compares against `CHECKSUMS`. | Mismatch detected; repair restores from signed bundle |
+
+### Steps 10 to 12: the demand side (NOT run by `run-all.sh`)
+
+`run-all.sh` stops after `09`. The three steps below close the supply/demand loop against a
+live aims-core and are run by hand; each checks `GET $REGISTRY_URL/api/skills/health` first
+and skips itself with a warning when the registry or `ER1_API_KEY` is missing.
+
+| File | What it does | Asserts |
+|---|---|---|
+| `10-scan-and-sync.sh` | Lifecycle phase SCAN. Projects what is installed on disk into `_user_skill_profiles` via `/api/v2/skills/profile/import`. `--operator` scans the trainer's REAL `~/.claude/skills/` instead of the demo home. | The profile surface reflects installed reality |
+| `11-use-skill.sh` | Lifecycle phase USE. Posts five usage events to `/api/v2/skills/usage`. Needs `ER1_CONTEXT_ID` (from `~/.m3c-tools.env`). | `use_count` rises, `last_used` is stamped, mastery moves aware -> practiced |
+| `12-decay.sh` | Lifecycle phase DECAY. `POST /api/v2/skills/profile/recalculate-all`. | An unpractised skill decays (admin auth required) |
+
+### The workspace is generated, not committed
+
+`artifacts/` is git-ignored and every file under it is produced by a run. It used to be
+checked in, including `keys/{mirko,reviewer,attacker}.priv`. Git does not preserve mode
+`0600`, so every fresh clone landed a world-readable private key, `skillctl sign` fail-closed
+on it ("insecure mode 0644"), and step `01` died taking `05`, `06` and `09` with it: the demo
+was broken for everyone except the machine that had generated the keys locally. The keys are
+regenerated per machine now, `00-preflight.sh` enforces `0600`, and the old committed pair is
+retired. If you need a signed demo bundle to look at, run the demo and take it from
+`artifacts/bundles/`.
 
 ## What gets touched
 

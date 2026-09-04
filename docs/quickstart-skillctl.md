@@ -197,6 +197,32 @@ the twin of the Windows
 
 ---
 
+## 1d. The human half: the Test Ride
+
+Stages 1 and 2 prove the machine. They say nothing about whether **you** can operate the
+tool. The ride does: about twenty minutes in which you seal a skill, pin a key, install it
+as somebody else, and then break it four different ways and watch each attempt refused.
+
+```bash
+git clone https://github.com/kamir/m3c-tools.git
+cd m3c-tools/demo/kup-training && ./run-all.sh --offline-only --no-pdf --no-release
+```
+
+The guide is [`demo/kup-training/TUTORIAL.md`](https://github.com/kamir/m3c-tools/blob/master/demo/kup-training/TUTORIAL.md):
+what each step proves, what the exit codes mean, and the one lesson people get wrong (a valid
+signature means "this is what that key sealed", never "this is safe"). Everything runs
+offline under `demo/kup-training/artifacts/`, with a sandboxed fake home, so your real
+`~/.claude/` is untouched; three further steps ride the online SCAN / USE / DECAY loop if you
+have an ER1 account.
+
+End it with evidence rather than a feeling:
+`./run-and-prove.sh --skip-online --json ride-report.json`.
+
+Then keep the muscle with [`skillctl-demo --mode kata`](quickstart-skillctl-demo.md#5-training-mode-kata-shipped),
+five drills whose every beat is a real exit code.
+
+---
+
 ## 2. Create your author identity
 
 A skill is trusted because it's **signed**. Generate your ed25519 keypair once:
@@ -350,6 +376,7 @@ intents*, and it verifies offline, no authority in the path.
 - **Every command, flag and exit code:** [skillctl manual](manual-skillctl.md)
 - **Build it yourself and run the suite:** the [source self-test](#1b-optional-prove-it-on-your-own-machine-source-self-test) one-liners above
 - **Run our CI on your own machine:** the [enterprise gate](#1c-stage-2-run-our-ci-on-your-own-machine-enterprise-gate) and its trust report
+- **Prove you can operate it, not just that it builds:** the [Test Ride](#1d-the-human-half-the-test-ride)
 - **Capture the memory your agents reason over:** [Quickstart: m3c-tools](quickstart-m3c-tools.md)
 - **The full lifecycle & governance model** lives behind `skillctl help`: it groups commands
   by capability (signing, trust roots, install, agent identity, registry, transparency log,

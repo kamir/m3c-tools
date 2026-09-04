@@ -120,14 +120,18 @@ Two traps worth naming, because both have already bitten this tree:
 (`10&ndash;19`, `Mon&ndash;Fri`) and wrong as sentence punctuation. The gate
 reports a count and never fails on it.
 
-**Exemptions**, both about bytes rather than about prose:
+**Exemption**, about bytes rather than about prose:
 
 | Path | Reason |
 |---|---|
 | `pkg/skillctl/bodyscan/testdata/` | The corpus IS the input under test, and `.expected.json` pins finding offsets. |
-| `demo/kup-training/artifacts/` | Checked-in generated demo output, including signed bundles and digests that a text edit would invalidate. |
 
-Adding a third exemption means writing the reason here first.
+`demo/kup-training/artifacts/` was a second exemption while that tree was checked in.
+It is untracked now (it carried three ed25519 private keys, and git does not preserve
+mode 0600, so a fresh clone broke the demo at `skillctl sign`), and `.gitignore` keeps
+it out of the scanned file list, so the exemption had nothing left to exempt.
+
+Adding a second exemption means writing the reason here first.
 
 ### The gate
 
