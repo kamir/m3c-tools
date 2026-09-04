@@ -18,13 +18,11 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -407,8 +405,20 @@ func resolveTenant(cliFlag string, tr *verify.TrustRoots) string {
 // nowhere else, and re-anchoring without it would fail closed on a perfectly good
 // install.
 func verifySidecarTier(name, homeOverride, governanceMin string, verbose bool, stdout, stderr io.Writer) (int, bool) {
-	side, serr := readProvenanceSidecar(name, homeOverride)
-	if serr != nil {
+	home := homeOverride
+	if home == "" {
+		h, herr := userHome()
+		if herr != nil {
+			return 0, false
+		}
+		home = h
+	}
+	canon, cerr := install.CanonicalSkillName(name) // the same fixed point the gate + loader use
+	if cerr != nil {
+		return 0, false
+	}
+	side, ok := loadInstalledSidecar(home, canon)
+	if !ok {
 		return 0, false // no sidecar (or unreadable): not our tier
 	}
 
@@ -445,29 +455,4 @@ func verifySidecarTier(name, homeOverride, governanceMin string, verbose bool, s
 	fmt.Fprintf(stdout, "%s: content bound to the signed bundle, governance %s, anchored on %s (offline)\n",
 		name, strOr(side.GovernanceLevel, "unknown"), src)
 	return exitOK, true
-}
-
-// readProvenanceSidecar reads .m3c-provenance.json for an installed skill.
-func readProvenanceSidecar(name, homeOverride string) (*registry.ProvenanceSidecar, error) {
-	home := homeOverride
-	if home == "" {
-		h, err := userHome()
-		if err != nil {
-			return nil, err
-		}
-		home = h
-	}
-	canon, err := install.CanonicalSkillName(name)
-	if err != nil {
-		return nil, err
-	}
-	b, err := os.ReadFile(filepath.Join(home, ".claude", "skills", canon, registry.ProvenanceSidecarName))
-	if err != nil {
-		return nil, err
-	}
-	var side registry.ProvenanceSidecar
-	if err := json.Unmarshal(b, &side); err != nil {
-		return nil, err
-	}
-	return &side, nil
 }
