@@ -145,12 +145,37 @@ func (a *AttestAccumulator) OfferRevoke(ev map[string]any) {
 	if rb, _ := ev["revoked_by"].(string); rb == "" {
 		return
 	}
+	// A revoke is issued by the REGISTRY, not by a reviewer, so the registry key
+	// must be accepted here. Before pinned signers existed, the signer set WAS the
+	// registry key (the implicit single signer), so the loop below covered it by
+	// accident. The moment a peer pins a separate reviewer key (FR-0115), the set
+	// no longer contains the registry key, and a publisher-signed revoke stopped
+	// verifying: the kill switch went silently dead while everything else looked
+	// green. That is a fail-OPEN, the one direction this code must never take, and
+	// it was found by replaying user scenario 01 end to end.
+	//
+	// Governance-trusted signers keep their say (SPEC-0359 D5 lets a peer
+	// contribute revokes), so the accepted set is the union: the registry key OR
+	// any pinned signer. That is strictly the old behaviour plus the federated one,
+	// never less.
+	if pub := a.registryPub(); len(pub) > 0 && VerifyEnvelopeSignature(pub, ev) == nil {
+		a.revoked[digest] = struct{}{}
+		return
+	}
 	for _, s := range a.signers {
 		if VerifyEnvelopeSignature(s.pub, ev) == nil {
 			a.revoked[digest] = struct{}{}
 			return
 		}
 	}
+}
+
+// registryPub is the trust-root's own key: the issuer of admits and revokes.
+func (a *AttestAccumulator) registryPub() ed25519.PublicKey {
+	if a == nil || a.tr == nil {
+		return nil
+	}
+	return a.tr.PubKey()
 }
 
 // Qualifying returns the accepted attestations from DISTINCT signers whose NEWEST

@@ -111,6 +111,39 @@ func (c *AttestationContext) Reverify(pub ed25519.PublicKey, stashedSkb []byte) 
 // gate + tests are deterministic; the expiry check is a no-op when expires_at is
 // absent (legacy stashes byte-identical).
 func (c *AttestationContext) ReverifyAt(pub ed25519.PublicKey, stashedSkb []byte, now time.Time) (string, error) {
+	return c.reverifyAt(pub, nil, stashedSkb, now)
+}
+
+// ReverifyWithRoots re-anchors against a full trust-root: the registry key for
+// the admit envelope and the bundle signatures, and the pinned SIGNER SET for the
+// governance attestation.
+//
+// This exists because the two are not the same key any more. Once `peer add
+// --signer` (FR-0115) let a publisher and a reviewer hold DIFFERENT keys, which is
+// what makes a separation of duties cryptographic rather than organisational, the
+// single-key re-anchor started refusing perfectly good installs: the pull admitted
+// them (its gauntlet checks every attestation against every pinned signer) and the
+// later `verify` said "digest mismatch". A false alarm, and a tool that cries wolf
+// on a correct setup gets switched off.
+//
+// The signer rule is the pull's rule, not a second one: the envelope must verify
+// against a pinned signer's key, and when that signer declares a reviewer_id the
+// event's reviewer_id must match it (key/id binding, fail closed).
+func (c *AttestationContext) ReverifyWithRoots(tr *SelfTrustRoots, stashedSkb []byte) (string, error) {
+	return c.ReverifyWithRootsAt(tr, stashedSkb, time.Now())
+}
+
+// ReverifyWithRootsAt is ReverifyWithRoots with an injectable clock.
+func (c *AttestationContext) ReverifyWithRootsAt(tr *SelfTrustRoots, stashedSkb []byte, now time.Time) (string, error) {
+	if tr == nil {
+		return "", fmt.Errorf("%w: no trust roots", ErrAttestationReanchor)
+	}
+	return c.reverifyAt(tr.PubKey(), tr.signerSet(), stashedSkb, now)
+}
+
+// reverifyAt does the work. signers == nil keeps the pre-FR-0115 behaviour: the
+// governance envelope is verified against the registry key itself.
+func (c *AttestationContext) reverifyAt(pub ed25519.PublicKey, signers []Signer, stashedSkb []byte, now time.Time) (string, error) {
 	if c == nil || c.AdmitEvent == nil {
 		return "", fmt.Errorf("%w: missing admit event", ErrAttestationReanchor)
 	}
@@ -136,7 +169,7 @@ func (c *AttestationContext) ReverifyAt(pub ed25519.PublicKey, stashedSkb []byte
 	if c.GovernanceAttestation == nil {
 		return "", fmt.Errorf("%w: missing governance attestation", ErrAttestationReanchor)
 	}
-	if err := VerifyEnvelopeSignature(pub, c.GovernanceAttestation); err != nil {
+	if err := verifyGovernanceSigner(pub, signers, c.GovernanceAttestation); err != nil {
 		return "", fmt.Errorf("%w: governance envelope: %v", ErrAttestationReanchor, err)
 	}
 	govDigest, _ := c.GovernanceAttestation["bundle_digest"].(string)
@@ -153,4 +186,29 @@ func (c *AttestationContext) ReverifyAt(pub ed25519.PublicKey, stashedSkb []byte
 		return "", fmt.Errorf("%w: governance attestation expired (expires_at lapsed)", ErrAttestationReanchor)
 	}
 	return level, nil
+}
+
+// verifyGovernanceSigner checks the governance attestation against the pinned
+// signer set, mirroring AttestAccumulator.OfferAttest so the runtime re-anchor and
+// the pull gauntlet cannot drift into two different answers for the same event.
+//
+// With no signers pinned the registry key is the implicit signer, which is the
+// D2 single-key model and the behaviour every existing install relies on.
+func verifyGovernanceSigner(pub ed25519.PublicKey, signers []Signer, ev map[string]any) error {
+	if len(signers) == 0 {
+		return VerifyEnvelopeSignature(pub, ev)
+	}
+	reviewerID, _ := ev["reviewer_id"].(string)
+	for _, s := range signers {
+		if s.pub == nil || VerifyEnvelopeSignature(s.pub, ev) != nil {
+			continue // not this signer's key
+		}
+		// Key/id binding: a pinned signer that names a reviewer_id only vouches
+		// for THAT reviewer. A mismatch is fail-closed, never "close enough".
+		if s.ReviewerID != "" && reviewerID != s.ReviewerID {
+			continue
+		}
+		return nil
+	}
+	return fmt.Errorf("registry: envelope_signature does not verify against any of the %d pinned signer(s)", len(signers))
 }
