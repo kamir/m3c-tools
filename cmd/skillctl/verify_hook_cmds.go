@@ -519,12 +519,21 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	if home != "" {
 		revset, fresh := readRevokedCache(home, revokedCacheTTL)
 		if !fresh {
-			// Stale/empty cache. Only MANAGED hosts refresh + fail-closed here; an
-			// UNMANAGED/dev host keeps the ORIGINAL behaviour — a stale cache is NOT
-			// used (the sweep is the authority) — so first-run and offline dev are
-			// untouched (no spurious deny). selfTrustPosture is a local file read.
-			if _, managed := selfTrustPosture(); !managed {
-				revset = nil // unmanaged: do not enforce a stale cache
+			// Stale/empty cache. The managed fail-closed refresh engages ONLY for a
+			// MANAGED host that has ADOPTED a revocation feed (a revoked-cache file
+			// exists — the sweep pulled one at least once). Two exemptions keep a stale
+			// cache from being used AND skip the fetch entirely (no deny, no latency):
+			//   - UNMANAGED/dev — the sweep is the authority; first-run/offline dev
+			//     must stay working;
+			//   - UN-ADOPTED managed (no revoked-cache file at all) — pre-D2 /
+			//     kill-switch-only hosts that never subscribed to a feed have NOTHING
+			//     to suppress, so failing them closed would brick them (the pre-D2
+			//     brick the kill-switch tests guard). A blackholed ADOPTED host still
+			//     has its (now-stale) cache FILE → adopted → the fail-closed engages,
+			//     so R01-A is preserved. Mirrors revocationSnapshotStale's "no-op
+			//     unless a signed anchor exists" precondition below.
+			if _, managed := selfTrustPosture(); !managed || !revocationAdopted(home) {
+				revset = nil // unmanaged, or un-adopted managed: do not enforce / do not fetch
 			} else {
 				// hotPathRevokedFn returns errRevokedSetUnavailable ONLY under managed
 				// config with no authenticated grace (see fetchRevokedOnline /

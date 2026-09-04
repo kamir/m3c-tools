@@ -101,19 +101,21 @@ func TestSweep_UnmanagedCleanFetch_NoSpuriousDeny(t *testing.T) {
 // R01-A — verify-hook HOT PATH
 // ---------------------------------------------------------------------------
 
-// R01-A (crux) — a KNOWN-revoked managed skill is DENIED per-invocation on a
-// stale/empty cache, because the hot path now refreshes the revoked set instead of
-// skipping the check between sweeps. BITE: revert the R01-A block → stale cache is
-// skipped → the (stubbed-allow) skill is ALLOWED → assertDeny fails.
+// R01-A (crux) — a KNOWN-revoked managed skill is DENIED per-invocation on a stale
+// cache, because the hot path refreshes the revoked set instead of skipping the
+// check between sweeps. The host is ADOPTED (a revoked-cache file exists, gone
+// stale) — the scenario the fix must catch. BITE: revert the R01-A block → the
+// stale cache is skipped → the (stubbed-allow) skill is ALLOWED → assertDeny fails.
 func TestVerifyHook_HotPath_RevokedOnStaleCache_Denied(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	setUserProfile(t, home)
 	writeSelfTrustRoots(t, home) // MANAGED → the hot path consults the fetch
 	writeSidecarDigest(t, home, "er1-push", "sha256:beef")
-	stubHookVerifyAllow(t) // the ONLY possible deny is the revocation check
+	writeStaleRevokedCache(t, home, "sha256:old") // ADOPTED (feed pulled once) but stale
+	stubHookVerifyAllow(t)                        // the ONLY possible deny is the revocation check
 
-	// No fresh cache on disk → hot path refreshes; the fetch reports the digest revoked.
+	// Adopted + stale → hot path refreshes; the fetch reports the digest revoked.
 	orig := hotPathRevokedFn
 	hotPathRevokedFn = func(string) (map[string]struct{}, bool, error) {
 		return map[string]struct{}{"sha256:beef": {}}, true, nil
@@ -124,14 +126,16 @@ func TestVerifyHook_HotPath_RevokedOnStaleCache_Denied(t *testing.T) {
 	assertDeny(t, code, out, "revoked")
 }
 
-// R01-A (fail-closed on unavailable) — a managed host whose hot-path refresh is
-// UNAVAILABLE denies rather than runs against an unprovable revocation state.
+// R01-A (fail-closed on unavailable) — an ADOPTED managed host whose hot-path
+// refresh is UNAVAILABLE (feed blackholed: stale cache file still present) denies
+// rather than runs against an unprovable revocation state.
 func TestVerifyHook_HotPath_UnavailableUnderManaged_Denied(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	setUserProfile(t, home)
 	writeSelfTrustRoots(t, home)
 	writeSidecarDigest(t, home, "er1-push", "sha256:beef")
+	writeStaleRevokedCache(t, home, "sha256:old") // ADOPTED but stale (blackholed feed)
 	stubHookVerifyAllow(t)
 
 	orig := hotPathRevokedFn
@@ -142,6 +146,36 @@ func TestVerifyHook_HotPath_UnavailableUnderManaged_Denied(t *testing.T) {
 
 	code, out, _ := feed(t, `{"tool_name":"Skill","tool_input":{"skill":"er1-push"}}`)
 	assertDeny(t, code, out, "revocation authority unavailable")
+}
+
+// R01-A (pre-D2 NOT bricked) — an UN-ADOPTED managed host (self-trust-roots present
+// but NO revoked-cache file: kill-switch-only / never pulled a feed) must ALLOW and
+// must NOT even attempt the fetch — nothing to suppress, so no brick and no latency.
+// This is the exact regression the hermetic CI caught (managed + no cache → the old
+// code fetched → unreachable → deny). BITE: drop the `!revocationAdopted` guard →
+// the fetch runs → errRevokedSetUnavailable → DENY → this test fails.
+func TestVerifyHook_HotPath_UnadoptedManaged_NoBrick(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	setUserProfile(t, home)
+	writeSelfTrustRoots(t, home) // MANAGED
+	writeSidecarDigest(t, home, "er1-push", "sha256:beef")
+	stubHookVerifyAllow(t)
+	// NO revoked-cache file written → un-adopted.
+
+	called := false
+	orig := hotPathRevokedFn
+	hotPathRevokedFn = func(string) (map[string]struct{}, bool, error) {
+		called = true
+		return map[string]struct{}{}, false, errRevokedSetUnavailable
+	}
+	t.Cleanup(func() { hotPathRevokedFn = orig })
+
+	code, out, _ := feed(t, `{"tool_name":"Skill","tool_input":{"skill":"er1-push"}}`)
+	assertAllow(t, code, out)
+	if called {
+		t.Fatalf("an UN-ADOPTED managed host must NOT fetch on the hot path (nothing to suppress; must not brick pre-D2)")
+	}
 }
 
 // R01-A (no spurious deny + latency guard) — a FRESH cache within grace allows and
@@ -346,6 +380,23 @@ func TestFetchRevokedOnline_ManagedUnavailable_EndToEnd(t *testing.T) {
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
+
+// writeStaleRevokedCache writes a revoked-cache file with a long-past fetched_at,
+// so the host reads as ADOPTED (the file exists — a feed was pulled at least once)
+// but the cache is STALE (past revokedCacheTTL → readRevokedCache !fresh). Used to
+// reproduce the "adopted host, feed gone stale/blackholed" scenario R01-A must
+// still fail closed on.
+func writeStaleRevokedCache(t *testing.T, home string, digests ...string) {
+	t.Helper()
+	p := revokedCachePath(home)
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(revokedCacheFile{Digests: digests, FetchedAt: "2000-01-01T00:00:00Z"})
+	if err := os.WriteFile(p, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
 
 // writeSelfTrustRootsKey writes a minimal-but-valid ~/.claude/trust-roots.yaml
 // pinning `pub` → the host is treated as MANAGED and `pub` is the verification key.

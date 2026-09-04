@@ -284,6 +284,28 @@ func readRevokedCache(home string, ttl time.Duration) (map[string]struct{}, bool
 	return set, fresh
 }
 
+// revocationAdopted reports whether this host has EVER pulled revocation data —
+// i.e. a revoked-cache file exists on disk (fresh OR stale). It distinguishes an
+// ADOPTED host (subscribed to a revocation feed, whose cache may have gone stale)
+// from an UN-ADOPTED host — pre-D2 / kill-switch-only / first-run — that never
+// pulled a feed at all.
+//
+// It is the precondition that scopes the R01-A hot-path fail-closed: only an
+// ADOPTED managed host fails closed on a stale/unavailable revoked set (it HAS a
+// feed that could be blackholed to suppress a revoke). An un-adopted host has
+// nothing to suppress, so failing it closed would brick a managed install that
+// never subscribed — exactly the pre-D2 brick the kill-switch tests guard. This
+// mirrors revocationSnapshotStale's "no-op unless a signed anchor exists" gating.
+//
+// readRevokedCache collapses "file absent" and "file present-but-stale" into a
+// single !fresh, so a dedicated existence check is required here. NOTE: a same-uid
+// DELETE of the cache file looks un-adopted → fail-open; that is the already-
+// accepted same-uid trust-substrate residual (R01-C delete), NOT a new
+// non-same-uid hole (a network blackhole leaves the file in place → still adopted).
+func revocationAdopted(home string) bool {
+	return fileExists(revokedCachePath(home))
+}
+
 // errRevokedSetUnavailable is the typed fail-CLOSED signal (WF-001 H-F1 / R01):
 // under MANAGED config (self-trust-roots configured) the live revoked-set fetch
 // was unavailable AND there is no fresh last-known-good cache to bound staleness,
