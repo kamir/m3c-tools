@@ -1,10 +1,10 @@
 package main
 
-// agentid_revoke_cmds.go — SPEC-0277 P1 `skillctl agentid revoke`.
+// agentid_revoke_cmds.go: SPEC-0277 P1 `skillctl agentid revoke`.
 //
 // Writes/updates a SPEC-0276-style SIGNED revocation list keyed agent:<id>,
 // reusing verify.NewSignedAgentRevocationList (the same canonical+epoch+ed25519
-// machinery as the bundle list). The list is a LOCAL FILE — offline by
+// machinery as the bundle list). The list is a LOCAL FILE, offline by
 // construction: every `agentid verify --revocations` and every runtime gate that
 // loads it enforces it with NO network, so one API-free write kills the agent
 // everywhere the list reaches (SPEC-0277 §4 step 5).
@@ -107,14 +107,14 @@ func runAgentIDRevoke(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "skillctl agentid revoke: write %s: %v\n", *out, err)
 		return exitGeneric
 	}
-	fmt.Fprintf(stdout, "revoked %s (reason: %s) — list now has %d agent(s), epoch %d → %s\n",
+	fmt.Fprintf(stdout, "revoked %s (reason: %s): list now has %d agent(s), epoch %d → %s\n",
 		agentid.NormalizeID(agentArg), strings.TrimSpace(*reason), len(merged), newEpoch, *out)
 	fmt.Fprintln(stdout, "enforced OFFLINE by `agentid verify --revocations` and the SPEC-0247 runtime gate.")
 	return exitOK
 }
 
 // readExistingAgentRevocations reads the revoked agents + epoch from an existing
-// list file. A missing/unparseable file is a fresh start (nil, 0) — we don't
+// list file. A missing/unparseable file is a fresh start (nil, 0): we don't
 // fail revocation because the operator pointed at a new path.
 func readExistingAgentRevocations(path string) ([]string, int) {
 	data, err := os.ReadFile(path)

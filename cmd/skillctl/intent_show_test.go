@@ -1,6 +1,6 @@
 package main
 
-// SPEC-0196 §12 Q1 / P2b — `skillctl intent show` provenance (P2b challenge-gate fix).
+// SPEC-0196 §12 Q1 / P2b: `skillctl intent show` provenance (P2b challenge-gate fix).
 //
 // A CISO must NEVER see an UNVERIFIED registry-served scope labeled as
 // author-signed. The registry response (meta.Manifest = its parsed manifest copy,
@@ -125,7 +125,7 @@ func metaServer(t *testing.T, meta registry.BundleMeta) *httptest.Server {
 // `keychain://*` scope that is in NO signed artifact, stuffed into BOTH the parsed
 // manifest copy AND the mutable row, hoping `intent show` displays it to a CISO as
 // author-signed. With NO --bundle, the tool has only the untrusted registry view,
-// so the scope MUST print registry-reported / UNVERIFIED — never AUTHORITATIVE /
+// so the scope MUST print registry-reported / UNVERIFIED, never AUTHORITATIVE /
 // author-signature-covered.
 func TestIntentShow_MaliciousRegistryScopeIsUnverified(t *testing.T) {
 	evil := map[string]any{
@@ -257,7 +257,7 @@ func packIntentBundle(t *testing.T, deps []skillbundle.DataDependency) (string, 
 // a real packed .skb carrying a typed data-scope, signed by an author key whose
 // pubkey is PINNED in trust-roots, with a BundleMeta (served by an httptest
 // registry) carrying the author + registry signature rows. This is the (b)
-// scenario the re-challenge requires — and the substrate the Attack-d test
+// scenario the re-challenge requires, and the substrate the Attack-d test
 // perturbs by swapping in an attacker-signed bundle the pinned author never
 // signed.
 type signedIntentFixture struct {
@@ -344,7 +344,7 @@ func servePinnedMeta(t *testing.T, meta registry.BundleMeta) *httptest.Server {
 
 // TestIntentShow_PinnedAuthorSignedBundleIsAuthoritative (re-challenge scenario b):
 // a genuinely author-signed bundle whose author key IS pinned in trust-roots is
-// shown as signed-manifest / AUTHORITATIVE — and ONLY because the author signature
+// shown as signed-manifest / AUTHORITATIVE, and ONLY because the author signature
 // verified, not because a digest happened to match.
 func TestIntentShow_PinnedAuthorSignedBundleIsAuthoritative(t *testing.T) {
 	deps := []skillbundle.DataDependency{
@@ -385,7 +385,7 @@ func TestIntentShow_PinnedAuthorSignedBundleIsAuthoritative(t *testing.T) {
 
 // TestIntentShow_AttackD_MaliciousRegistryUnsignedBundle (re-challenge scenario a,
 // the MERGE-BLOCKER): an attacker packs their OWN .skb (carrying a scope the pinned
-// author never signed) and a malicious registry advertises ITS digest — but there
+// author never signed) and a malicious registry advertises ITS digest, but there
 // is NO valid pinned-author signature over those bytes. `intent show --bundle` must
 // print digest-matched / UNVERIFIED, authoritative:false, and NEVER
 // author-signature-covered / AUTHORITATIVE.
@@ -471,7 +471,7 @@ func TestIntentShow_AttackD_MaliciousRegistryUnsignedBundle(t *testing.T) {
 
 // TestIntentShow_AttackD_NoTrustRootsIsUnverified (re-challenge scenario d): an
 // honest @sha256 out-of-band digest pin WITHOUT trust-roots configured is NOT
-// author-signature verification — it is a user-asserted digest. Without a pinned
+// author-signature verification. It is a user-asserted digest. Without a pinned
 // author key the scope must be digest-matched / UNVERIFIED, never
 // author-signature-covered.
 func TestIntentShow_AttackD_NoTrustRootsIsUnverified(t *testing.T) {
@@ -512,7 +512,7 @@ func TestIntentShow_AttackD_NoTrustRootsIsUnverified(t *testing.T) {
 
 // TestIntentShow_AttackD_DigestMismatchNotAuthoritative (re-challenge scenario c):
 // a --bundle whose digest does NOT match the registry-advertised digest (the
-// adversary swapped bytes after signing) fails closed — the swapped scope is NEVER
+// adversary swapped bytes after signing) fails closed. The swapped scope is NEVER
 // shown as authoritative; only the UNVERIFIED registry view stands.
 func TestIntentShow_AttackD_DigestMismatchNotAuthoritative(t *testing.T) {
 	deps := []skillbundle.DataDependency{

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# skill-usage-tracker.sh — Claude Code PostToolUse / SkillEnd hook.
+# skill-usage-tracker.sh: Claude Code PostToolUse / SkillEnd hook.
 #
 # Posts a single skill-usage event to aims-core so the user's skill
 # profile (SPEC-0121) accumulates use_count + last_used + auto-mastery
@@ -12,16 +12,16 @@
 # so the host session is never broken.
 #
 # Inputs (env vars set by Claude Code):
-#   CLAUDE_TOOL_NAME           — the tool that just ran (often "Skill")
-#   CLAUDE_SKILL_NAME          — the invoked skill (preferred id)
-#   CLAUDE_HOOK_EVENT          — the hook trigger ("PostToolUse" etc.)
+#   CLAUDE_TOOL_NAME, the tool that just ran (often "Skill")
+#   CLAUDE_SKILL_NAME, the invoked skill (preferred id)
+#   CLAUDE_HOOK_EVENT: the hook trigger ("PostToolUse" etc.)
 #
 # Optional environment overrides (read from ~/.claude/skill-usage-tracker.env
 # or set directly in the shell):
-#   AIMS_CORE                  — base URL, default https://onboarding.guide
-#   ER1_API_KEY                — server-side API key (REQUIRED to send)
-#   ER1_USER_ID                — caller identity (REQUIRED to send)
-#   SKILL_USAGE_TRACKER_OFF=1  — kill switch for the operator
+#   AIMS_CORE (base URL, default https://onboarding.guide
+#   ER1_API_KEY) server-side API key (REQUIRED to send)
+#   ER1_USER_ID, caller identity (REQUIRED to send)
+#   SKILL_USAGE_TRACKER_OFF=1, kill switch for the operator
 #
 # Exit status is always 0 (we never block the parent invocation).
 

@@ -1,6 +1,6 @@
 package main
 
-// threat_r10_test.go — closes the R10 gap in THREAT_MODEL.md (§R10 — credential
+// threat_r10_test.go, closes the R10 gap in THREAT_MODEL.md (§R10, credential
 // leakage). The existing coverage (TestSignBundle_DoesNotLeakKeyInError,
 // TestGitCredNoLeak) only proves ERROR-PATH / in-flight leakage. Nothing asserts
 // that secret material stays OUT of the DURABLE state skillctl writes. This test
@@ -49,14 +49,14 @@ func secretReprs(name string, secret []byte) []secretRepr {
 	}
 }
 
-// TestNoSecretAtRest_PersistedArtifacts drives a full secret-handling cycle —
+// TestNoSecretAtRest_PersistedArtifacts drives a full secret-handling cycle (
 // device-signing the invocation trail, HMAC-signing the verdict cache, and
-// ed25519-signing a transparency-log head — then sweeps EVERY durable artifact
+// ed25519-signing a transparency-log head) then sweeps EVERY durable artifact
 // those operations wrote and asserts that none of the private key material used
 // to produce them landed at rest in the persisted state.
 //
 // THREAT-R10: A signing key / device token / HMAC key must never leak into the
-// evidence and state files a later reader can harvest — the invocation/audit
+// evidence and state files a later reader can harvest: the invocation/audit
 // trail (cmd/skillctl/invocation_trail.go), the verdict cache
 // (cmd/skillctl/verdict_cache.go), and the transparency log
 // (pkg/skillctl/translog). Secrets may live ONLY in their own 0600 key files
@@ -84,7 +84,7 @@ func TestNoSecretAtRest_PersistedArtifacts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load device priv: %v", err)
 	}
-	deviceSeed := devPriv.Seed() // 32 bytes — the actual secret
+	deviceSeed := devPriv.Seed() // 32 bytes: the actual secret
 
 	// --- drive the invocation trail (writes invocation-trail.jsonl + .hwm) -----
 	for i, ev := range []string{"01HZR10EVENT0000000000000A", "01HZR10EVENT0000000000000B", "01HZR10EVENT0000000000000C"} {
@@ -155,12 +155,12 @@ func TestNoSecretAtRest_PersistedArtifacts(t *testing.T) {
 
 	// Positive control: the search mechanism actually detects a present secret.
 	// verdict.key holds the raw HMAC key, so its raw representation MUST be found
-	// in that (excluded) key file — proving a non-detection below is a real
+	// in that (excluded) key file: proving a non-detection below is a real
 	// absence, not a broken matcher.
 	if rawKeyFile, err := os.ReadFile(verdictKeyPath(home)); err != nil {
 		t.Fatalf("positive-control read verdict.key: %v", err)
 	} else if !bytes.Contains(rawKeyFile, verdictKey) {
-		t.Fatal("positive control failed: raw HMAC key not found in its own key file — matcher is broken")
+		t.Fatal("positive control failed: raw HMAC key not found in its own key file, matcher is broken")
 	}
 
 	// Files that legitimately HOLD secret material (their whole purpose) are the
@@ -181,7 +181,7 @@ func TestNoSecretAtRest_PersistedArtifacts(t *testing.T) {
 			return nil
 		}
 		if secretKeyFiles[d.Name()] {
-			return nil // the secret's own protected home — not evidence state
+			return nil // the secret's own protected home, not evidence state
 		}
 		data, rerr := os.ReadFile(p)
 		if rerr != nil {
@@ -218,7 +218,7 @@ func TestNoSecretAtRest_PersistedArtifacts(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Errorf("expected durable artifact %q was not written/swept — the no-leak assertion over it is vacuous", want)
+			t.Errorf("expected durable artifact %q was not written/swept. The no-leak assertion over it is vacuous", want)
 		}
 	}
 

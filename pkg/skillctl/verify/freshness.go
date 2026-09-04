@@ -1,25 +1,25 @@
 package verify
 
-// SPEC-0279 R2 + R3 — the offline-revocation FRESHNESS contract.
+// SPEC-0279 R2 + R3: the offline-revocation FRESHNESS contract.
 //
 // SPEC-0276 (R1, shipped) gave the signed RevocationList a monotonic `epoch`
 // and the rollback floor. But a verifier that has not synced cannot see a
 // revocation it never received: "signed revocation propagates" is only honest
 // with a DEFINED freshness contract + a fail-policy. This file is that contract:
 //
-//   - FreshnessPolicy — the relying-party knobs (max_staleness / cache_ttl /
+//   - FreshnessPolicy: the relying-party knobs (max_staleness / cache_ttl /
 //     fail_policy / per-risk override), parsed from the trust-root (R2).
-//   - ActionRisk      — the high-risk vs low-risk classification, derived from
+//   - ActionRisk: the high-risk vs low-risk classification, derived from
 //     the SPEC-0196 intent/datascope side-effect vocabulary (R3).
-//   - EvaluateFreshness — the decision: given a snapshot's issued_at, `now`
-//     (INJECTABLE — never time.Now() in the core), and the action's risk, decide
+//   - EvaluateFreshness, the decision: given a snapshot's issued_at, `now`
+//     (INJECTABLE, never time.Now() in the core), and the action's risk, decide
 //     allow vs deny and PRODUCE AN AUDITABLE RECORD (R6).
 //
 // The load-bearing rule (SPEC-0279 R3 + Modes §4): past max_staleness, a
 // HIGH-RISK action ALWAYS fails closed (deny) regardless of fail_policy; a
 // LOW-RISK / read-only action follows fail_policy (closed default, open
 // configurable). The clock is a parameter so an adversary cannot replay a stale
-// list past max_staleness for a high-risk action — the verifier computes
+// list past max_staleness for a high-risk action. The verifier computes
 // staleness against the caller's `now`, not the list's self-asserted freshness.
 
 import (
@@ -32,7 +32,7 @@ import (
 const defaultCacheTTL = 12 * time.Hour
 
 // managedDefaultMaxStaleness is the FR-0090 IS-T5 fail-closed staleness ceiling a
-// MANAGED (enterprise) trust root receives when max_staleness is unset — as both a
+// MANAGED (enterprise) trust root receives when max_staleness is unset, as both a
 // Go duration (used by EvaluateFreshness as the effective ceiling) and its string
 // form (stamped by the trust-roots loader's applyManagedDefaults). A managed host
 // must never trust an unbounded-age revocation snapshot: past this ceiling a
@@ -45,7 +45,7 @@ const (
 // maxFutureClockSkew is how far a snapshot's issued_at may sit in the FUTURE
 // (relative to the verifier's clock) before it is treated as DISHONEST. A small
 // skew (NTP jitter, sub-second rounding) is tolerated; anything beyond it is a
-// forged/future-dated timestamp that would otherwise "look fresh forever" — so
+// forged/future-dated timestamp that would otherwise "look fresh forever", so
 // past this bound we treat the snapshot as INFINITELY STALE (fail-safe), exactly
 // like a missing/unparseable issued_at (SPEC-0279 P4 review finding #4).
 const maxFutureClockSkew = 5 * time.Minute
@@ -57,7 +57,7 @@ type FailPolicy string
 const (
 	// FailClosed denies the action when the snapshot is stale. The default.
 	FailClosed FailPolicy = "closed"
-	// FailOpen allows the action when the snapshot is stale — ONLY honored for a
+	// FailOpen allows the action when the snapshot is stale, ONLY honored for a
 	// low-risk action, and only ever with an audited record (never silent).
 	FailOpen FailPolicy = "open"
 )
@@ -68,11 +68,11 @@ const (
 type ActionRisk string
 
 const (
-	// RiskHigh — a state-mutating / consequential action: fs:write, fs:delete,
+	// RiskHigh: a state-mutating / consequential action: fs:write, fs:delete,
 	// git:write, network:outbound, subprocess, a destructive intent, a spend, or a
 	// prod target. Classified via the SPEC-0196 side-effect vocabulary.
 	RiskHigh ActionRisk = "high"
-	// RiskLow — a read-only / low-consequence action: fs:read, git:read,
+	// RiskLow: a read-only / low-consequence action: fs:read, git:read,
 	// secrets:read, llm:call, or no declared side-effects. Follows fail_policy.
 	RiskLow ActionRisk = "low"
 )
@@ -82,8 +82,8 @@ const (
 // by hand outside tests. All durations are real time.Duration here (the YAML
 // strings are parsed once at Load).
 type FreshnessPolicy struct {
-	// MaxStaleness is the staleness ceiling. Zero means "no ceiling" — the
-	// pre-SPEC-0279 behaviour (a synced snapshot is trusted at any age) — but ONLY
+	// MaxStaleness is the staleness ceiling. Zero means "no ceiling", the
+	// pre-SPEC-0279 behaviour (a synced snapshot is trusted at any age), but ONLY
 	// for a non-managed root (see Managed below). When non-zero, a snapshot older
 	// than this triggers the fail-policy.
 	MaxStaleness time.Duration
@@ -92,7 +92,7 @@ type FreshnessPolicy struct {
 	// (TrustRoot.IsManaged, FR-0090 IS-T5). A managed policy NEVER has "no ceiling":
 	// if MaxStaleness is 0, EvaluateFreshness applies the fail-closed managed default
 	// (48h) instead of trusting the snapshot at any age. This is belt-and-suspenders
-	// to the loader, which already defaults max_staleness to 48h for a managed root —
+	// to the loader, which already defaults max_staleness to 48h for a managed root,
 	// so even a hand-constructed managed policy cannot dodge the ceiling.
 	Managed bool
 
@@ -109,7 +109,7 @@ type FreshnessPolicy struct {
 
 // PolicyFor returns the effective fail-policy for a risk class: the per-risk
 // override when present, else the default FailPolicy. A HIGH-risk action is
-// floored to FailClosed regardless of any configuration — the R3 invariant lives
+// floored to FailClosed regardless of any configuration. The R3 invariant lives
 // HERE as well as in validation, so even a hand-constructed policy cannot make a
 // high-risk action fail open.
 func (p FreshnessPolicy) PolicyFor(risk ActionRisk) FailPolicy {
@@ -225,16 +225,16 @@ func parseFailPolicy(label, raw string, def FailPolicy) (FailPolicy, error) {
 // The AUTHORITATIVE risk classifier is allowlist-known-low (knownLowRiskTokens):
 // anything NOT PROVEN low is HIGH. The unambiguously-high SPEC-0196 §5 tokens
 // (fs:write, fs:delete, git:write, network:outbound, subprocess) are simply NOT
-// on the allowlist, so they classify HIGH by exclusion — there is no separate
+// on the allowlist, so they classify HIGH by exclusion. There is no separate
 // high-list to keep in sync (a denylist-known-high model was the review's
 // finding #2 fail-safe gap).
 //
 // knownLowRiskTokens is the CLOSED ALLOWLIST of tokens that are PROVEN low-risk
-// for freshness purposes — read-only / non-egress / non-mutating. The fail-safe
+// for freshness purposes: read-only / non-egress / non-mutating. The fail-safe
 // inverts the old denylist-known-high model (SPEC-0279 P4 review finding #2):
 // a token must be on THIS list to be treated as low. An unknown / mis-typed /
 // future token, or the SPEC-0196 §7 "UNKNOWN" awareness sentinel, is therefore
-// HIGH — so a red-team cannot DOWNGRADE a high-risk action to low simply by
+// HIGH, so a red-team cannot DOWNGRADE a high-risk action to low simply by
 // using a token the classifier does not recognise.
 //
 // It spans BOTH the SPEC-0196 §5 side-effect vocabulary (fs:read, git:read,
@@ -257,7 +257,7 @@ var knownLowRiskTokens = map[string]struct{}{
 // ALLOWLIST-KNOWN-LOW rule (SPEC-0279 P4 review finding #2):
 //
 //   - an EMPTY surface (no side-effects, no extra signals, not destructive) is
-//     HIGH — we cannot PROVE it read-only, so we must not assume it (matching
+//     HIGH. We cannot PROVE it read-only, so we must not assume it (matching
 //     bundleActionRisk, whose empty-scopes case is already HIGH);
 //
 //   - a `destructive` flag, OR any extra "spend"/"prod"/write/egress signal, is
@@ -269,11 +269,11 @@ var knownLowRiskTokens = map[string]struct{}{
 //   - only when EVERY supplied token is in the known-low allowlist (and nothing
 //     is destructive) is the action LOW.
 //
-//   - sideEffects — the SPEC-0196 §5 side_effects tokens (fs:write, …).
+//   - sideEffects: the SPEC-0196 §5 side_effects tokens (fs:write, …).
 //
-//   - destructive — the intent.destructive flag.
+//   - destructive: the intent.destructive flag.
 //
-//   - extraSignals — free-form action tags ("spend", "prod", "destructive",
+//   - extraSignals: free-form action tags ("spend", "prod", "destructive",
 //     grant-intent tokens, …) the caller wants to fold in.
 //
 // The function never DOWNGRADES: once any signal says high, the result is high.
@@ -339,21 +339,21 @@ type FreshnessDecision struct {
 // Algorithm:
 //  1. staleness = now - issued_at (clamped ≥ 0; an unparseable/empty issued_at
 //     with a ceiling set is treated as INFINITELY stale → the ceiling fires,
-//     fail-safe — a list with no honest timestamp cannot dodge the contract).
+//     fail-safe. A list with no honest timestamp cannot dodge the contract).
 //  2. if no ceiling (MaxStaleness == 0) OR staleness ≤ ceiling → allowed (fresh).
 //  3. stale + HIGH-risk → DENY (fail-closed), ErrRevocationStale, always.
 //  4. stale + LOW-risk  → follow PolicyFor(low): closed → DENY; open → ALLOW
 //     (audited, never silent).
 //
 // The clock is a parameter, NOT time.Now(): the caller injects it so a replayed
-// stale list cannot present itself as fresh — staleness is measured against the
+// stale list cannot present itself as fresh. Staleness is measured against the
 // verifier's clock, and a high-risk action past the ceiling is denied no matter
 // what the list claims.
 func EvaluateFreshness(epoch int, issuedAt string, policy FreshnessPolicy, risk ActionRisk, now time.Time) (FreshnessDecision, error) {
 	// FR-0090 IS-T5: a MANAGED (enterprise) policy never has "no ceiling". If
 	// max_staleness is unset (0) on a managed root, apply the fail-closed managed
 	// default (48h). The trust-roots loader already stamps 48h for a managed root, so
-	// this only bites a hand-constructed managed policy — the "no ceiling" allow below
+	// this only bites a hand-constructed managed policy. The "no ceiling" allow below
 	// is thereby reachable ONLY for non-managed roots.
 	effectiveMax := policy.MaxStaleness
 	if effectiveMax == 0 && policy.Managed {
@@ -368,7 +368,7 @@ func EvaluateFreshness(epoch int, issuedAt string, policy FreshnessPolicy, risk 
 
 	staleness, parsedOK := snapshotStaleness(issuedAt, now)
 	// A FUTURE issued_at (negative staleness) more than maxFutureClockSkew ahead of
-	// the verifier's clock is a dishonest/forged timestamp — it would otherwise
+	// the verifier's clock is a dishonest/forged timestamp. It would otherwise
 	// clamp to staleness 0 and "look fresh forever". Treat it as unparseable →
 	// infinitely stale (fail-safe), so the ceiling fires (SPEC-0279 P4 finding #4).
 	if parsedOK && staleness < -maxFutureClockSkew {
@@ -390,7 +390,7 @@ func EvaluateFreshness(epoch int, issuedAt string, policy FreshnessPolicy, risk 
 	}
 
 	// A list whose issued_at is missing/unparseable is treated as infinitely
-	// stale once a ceiling is set — it cannot prove freshness, so it must not
+	// stale once a ceiling is set. It cannot prove freshness, so it must not
 	// dodge the contract (fail-safe).
 	if !parsedOK {
 		dec.Stale = true
@@ -428,7 +428,7 @@ func EvaluateFreshness(epoch int, issuedAt string, policy FreshnessPolicy, risk 
 }
 
 // snapshotStaleness computes now - issued_at. The second return reports whether
-// issued_at parsed as RFC3339 — an empty/garbage timestamp returns (0, false) so
+// issued_at parsed as RFC3339: an empty/garbage timestamp returns (0, false) so
 // the caller can apply the fail-safe "treat as stale" rule.
 func snapshotStaleness(issuedAt string, now time.Time) (time.Duration, bool) {
 	issuedAt = strings.TrimSpace(issuedAt)

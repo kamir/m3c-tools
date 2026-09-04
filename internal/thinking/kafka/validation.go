@@ -1,4 +1,4 @@
-// validation.go — JSON Schema validators for every Kafka payload.
+// validation.go: JSON Schema validators for every Kafka payload.
 //
 // SPEC-0167 §Data Model requires every produced message to validate
 // against its JSON Schema before it hits the wire, and every consumed
@@ -7,7 +7,7 @@
 // SPEC/schemas/ once at process start, and exposes a typed
 // ValidatingBus wrapper + SchemaValidationError.
 //
-// Malformed messages are REJECTED with a typed error — no silent
+// Malformed messages are REJECTED with a typed error, no silent
 // drops anywhere in the hot path.
 package kafka
 
@@ -215,7 +215,7 @@ func (v *Validator) Validate(s SchemaName, body []byte) error {
 
 // SchemaForSuffix picks the right schema for a topic suffix. Returns
 // empty string for topics that do not have a schema gate (e.g.
-// process.commands, process.events — those are internal to the
+// process.commands, process.events: those are internal to the
 // engine and have their own Go types, not externally-validated).
 func SchemaForSuffix(suffix TopicSuffix) SchemaName {
 	switch suffix {
@@ -235,7 +235,7 @@ func SchemaForSuffix(suffix TopicSuffix) SchemaName {
 // to its SchemaName. Returns "" if the topic has no schema gate.
 func SchemaForTopic(topic string) SchemaName {
 	// The suffix is everything after "m3c.<hash>.".
-	// We don't need to parse the hash — just match the known suffixes.
+	// We don't need to parse the hash: just match the known suffixes.
 	for _, s := range AllTopics() {
 		if strings.HasSuffix(topic, "."+string(s)) {
 			return SchemaForSuffix(s)

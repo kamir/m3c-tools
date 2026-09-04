@@ -984,7 +984,7 @@
 									"endColumn": 21,
 									"endLine": 2109,
 									"snippet": {
-										"text": "// Safe to call from any goroutine — dispatches to the main thread internally."
+										"text": "// Safe to call from any goroutine: dispatches to the main thread internally."
 									},
 									"sourceLanguage": "go",
 									"startColumn": 21,
@@ -1173,7 +1173,7 @@
 					"ruleId": "G402",
 					"suppressions": [
 						{
-							"justification": "gated: default is ER1_VERIFY_SSL=true (verifies). VerifySSL=false\nis honored only for loopback — er1TLSGuard above fails closed for any non-loopback\nhost, and pkg/er1.applyTLSVerificationPolicy forces verification back on at load\ntime for non-loopback. Reaching here implies a loopback dev target.",
+							"justification": "gated: default is ER1_VERIFY_SSL=true (verifies). VerifySSL=false\nis honored only for loopback: er1TLSGuard above fails closed for any non-loopback\nhost, and pkg/er1.applyTLSVerificationPolicy forces verification back on at load\ntime for non-loopback. Reaching here implies a loopback dev target.",
 							"kind": "inSource"
 						}
 					]
@@ -1205,7 +1205,7 @@
 					"ruleId": "G402",
 					"suppressions": [
 						{
-							"justification": "gated: default is ER1_VERIFY_SSL=true (verifies). VerifySSL=false\nis honored only for loopback — er1TLSGuard above fails closed for any non-loopback\nhost, and pkg/er1.applyTLSVerificationPolicy forces verification back on at load\ntime for non-loopback. Reaching here implies a loopback dev target.",
+							"justification": "gated: default is ER1_VERIFY_SSL=true (verifies). VerifySSL=false\nis honored only for loopback: er1TLSGuard above fails closed for any non-loopback\nhost, and pkg/er1.applyTLSVerificationPolicy forces verification back on at load\ntime for non-loopback. Reaching here implies a loopback dev target.",
 							"kind": "inSource"
 						}
 					]
@@ -14967,7 +14967,7 @@
 									"endColumn": 14,
 									"endLine": 6007,
 									"snippet": {
-										"text": "log.Printf(\"[plaud] upload %s FAIL: %v — saving locally\", recID, upErr)"
+										"text": "log.Printf(\"[plaud] upload %s FAIL: %v: saving locally\", recID, upErr)"
 									},
 									"sourceLanguage": "go",
 									"startColumn": 14,
@@ -14993,7 +14993,7 @@
 									"endColumn": 15,
 									"endLine": 5971,
 									"snippet": {
-										"text": "log.Printf(\"[plaud] %s: no transcript — transcription off, audio only\", recID)"
+										"text": "log.Printf(\"[plaud] %s: no transcript: transcription off, audio only\", recID)"
 									},
 									"sourceLanguage": "go",
 									"startColumn": 15,
@@ -15019,7 +15019,7 @@
 									"endColumn": 15,
 									"endLine": 5969,
 									"snippet": {
-										"text": "log.Printf(\"[plaud] %s: no transcript — tagged todo.transcribe (lazy mode)\", recID)"
+										"text": "log.Printf(\"[plaud] %s: no transcript: tagged todo.transcribe (lazy mode)\", recID)"
 									},
 									"sourceLanguage": "go",
 									"startColumn": 15,
@@ -15045,7 +15045,7 @@
 									"endColumn": 15,
 									"endLine": 5966,
 									"snippet": {
-										"text": "log.Printf(\"[plaud] %s: no transcript — requesting server transcription (queue mode)\", recID)"
+										"text": "log.Printf(\"[plaud] %s: no transcript: requesting server transcription (queue mode)\", recID)"
 									},
 									"sourceLanguage": "go",
 									"startColumn": 15,
@@ -15097,7 +15097,7 @@
 									"endColumn": 14,
 									"endLine": 5927,
 									"snippet": {
-										"text": "log.Printf(\"[plaud] no Plaud transcript for %s: %v — transcribe_mode=%s\", recID, txErr, cfg.TranscribeMode)"
+										"text": "log.Printf(\"[plaud] no Plaud transcript for %s: %v: transcribe_mode=%s\", recID, txErr, cfg.TranscribeMode)"
 									},
 									"sourceLanguage": "go",
 									"startColumn": 14,

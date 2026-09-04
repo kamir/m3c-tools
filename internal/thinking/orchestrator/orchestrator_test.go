@@ -1,4 +1,4 @@
-// orchestrator_test.go — unit tests for the Week-3 step-barrier.
+// orchestrator_test.go: unit tests for the Week-3 step-barrier.
 //
 // Covers:
 //   - semi_linear: step N+1 is NOT dispatched until StepCompleted for
@@ -8,7 +8,7 @@
 //     step 0 until max_iterations is reached.
 //
 // Tests use the in-memory bus directly and drive step completion by
-// calling EmitStepCompleted / EmitProcessFailed from the test — no
+// calling EmitStepCompleted / EmitProcessFailed from the test, no
 // real processors are started.
 package orchestrator
 
@@ -153,7 +153,7 @@ func TestSemiLinearAdvancesOnStepCompleted(t *testing.T) {
 		t.Errorf("second dispatch = %d, want 1", got[1])
 	}
 
-	// Complete step 1 — expect step 2 to dispatch.
+	// Complete step 1: expect step 2 to dispatch.
 	_ = orc.EmitStepCompleted(context.Background(), spec.ProcessID, 1, schema.LayerI, map[string]interface{}{})
 	deadline = time.Now().Add(500 * time.Millisecond)
 	for time.Now().Before(deadline) {
@@ -241,7 +241,7 @@ func TestLoopModeIteratesUpToCap(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	// After iteration 2 completes the cap is reached — NO further
+	// After iteration 2 completes the cap is reached, NO further
 	// step-0 dispatch should happen even if we try to complete again.
 	_ = orc.EmitStepCompleted(context.Background(), spec.ProcessID, 1, schema.LayerI, nil)
 	time.Sleep(50 * time.Millisecond)
@@ -295,7 +295,7 @@ func TestLoopModeUsesDefaultCapWhenNoTrigger(t *testing.T) {
 		_ = orc.EmitStepCompleted(context.Background(), spec.ProcessID, 0, schema.LayerR, nil)
 		time.Sleep(40 * time.Millisecond)
 	}
-	// Extra completion — should NOT advance past the cap.
+	// Extra completion: should NOT advance past the cap.
 	_ = orc.EmitStepCompleted(context.Background(), spec.ProcessID, 0, schema.LayerR, nil)
 	time.Sleep(40 * time.Millisecond)
 

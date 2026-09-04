@@ -1,4 +1,4 @@
-// driver_hook_cgo.go — cgo (mattn/go-sqlite3) hot-path handle.
+// driver_hook_cgo.go: cgo (mattn/go-sqlite3) hot-path handle.
 //
 //go:build cgo
 
@@ -13,7 +13,7 @@ import (
 
 // hotPathDriverName is a DISTINCT driver registration wrapping mattn with a
 // ConnectHook. We cannot pin busy_timeout via a DSN param alone: mattn parses
-// `_busy_timeout` while modernc parses `_pragma=busy_timeout(250)` — a DSN-only
+// `_busy_timeout` while modernc parses `_pragma=busy_timeout(250)`. A DSN-only
 // pin silently fails on one driver. Registering our own driver with a
 // ConnectHook makes the pin fire on EVERY physical connection (R-2.4).
 const hotPathDriverName = "sqlite3_m3c_outbox"

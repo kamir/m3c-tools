@@ -51,7 +51,7 @@ type Summarization struct {
 
 // APIRecording matches the live heypocketai schema (verified 2026-04-27).
 // Note: legacy field names (TranscriptText, AudioURL, SpeakerCount, WordCount, Summary)
-// from the prior broken Phase-2 client have been REMOVED — the API does not return them.
+// from the prior broken Phase-2 client have been REMOVED. The API does not return them.
 type APIRecording struct {
 	ID             string                   `json:"id"`
 	Title          string                   `json:"title"`

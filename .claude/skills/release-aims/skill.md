@@ -161,15 +161,15 @@ Build and deploy to the specified environment. This delegates to the `/deploy-gc
 
 Orchestrate the complete release pipeline. Ask the user to confirm before each major step.
 
-1. **Commit** — Run COMMIT subcommand
-2. **Push** — Push the branch: `git push origin $(git branch --show-current)`
-3. **PR** — Run PR subcommand
-4. **Wait** — Tell the user: "PR created. Review and merge it, then say 'continue' to proceed with tagging."
+1. **Commit**: Run COMMIT subcommand
+2. **Push**, Push the branch: `git push origin $(git branch --show-current)`
+3. **PR**: Run PR subcommand
+4. **Wait**, Tell the user: "PR created. Review and merge it, then say 'continue' to proceed with tagging."
    - Use AskUserQuestion to wait for confirmation
-5. **Tag** — Run TAG subcommand (checks out main, pulls, tags)
-6. **Deploy staging** — Run DEPLOY with `stage-legacy`
-7. **Verify** — Check health endpoint, report status
-8. **Deploy production** — Ask: "Staging looks good. Deploy to production?" If yes, run DEPLOY with `production`
+5. **Tag**: Run TAG subcommand (checks out main, pulls, tags)
+6. **Deploy staging**: Run DEPLOY with `stage-legacy`
+7. **Verify**: Check health endpoint, report status
+8. **Deploy production**, Ask: "Staging looks good. Deploy to production?" If yes, run DEPLOY with `production`
 
 ## Pre-deploy checks
 
@@ -178,7 +178,7 @@ Before any deploy, verify:
 ```bash
 cd /Users/kamir/GITHUB.active/my-ai-X/aims-core
 
-# 1. Import check — ensure the Flask app loads without import errors
+# 1. Import check: ensure the Flask app loads without import errors
 cd flask && python -c "
 import sys; sys.path.insert(0, '.')
 try:
@@ -196,9 +196,9 @@ test -f VERSION || { echo "FAIL: VERSION file missing"; exit 1; }
 ## Image tagging
 
 When building images, use these tags:
-- `:latest` — always points to newest build
-- `:v${VERSION}` — e.g., `:v4.0.0`
-- `:v${VERSION}-$(date +%Y%m%d)` — dated snapshot, e.g., `:v4.0.0-20260313`
+- `:latest`: always points to newest build
+- `:v${VERSION}`: e.g., `:v4.0.0`
+- `:v${VERSION}-$(date +%Y%m%d)`: dated snapshot, e.g., `:v4.0.0-20260313`
 
 ## Important notes
 

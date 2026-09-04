@@ -1,11 +1,11 @@
 package verify
 
-// SPEC-0276 R4.4 — signed, offline-distributable revocation list.
+// SPEC-0276 R4.4: signed, offline-distributable revocation list.
 //
 // A hosted CA enforces revocation by making every verifier call its OCSP/CRL
 // endpoint. That re-introduces the network dependency we removed: "verify"
 // becomes "ask the issuer". Instead we distribute a SIGNED list of revoked
-// bundle digests that a third party can pin and check entirely offline — the
+// bundle digests that a third party can pin and check entirely offline. The
 // signature is ed25519 over a canonical payload, verifiable against the same
 // pinned registry keys that admit bundles. A forged or unsigned list cannot
 // block (or silently fail-open) a bundle: it must verify against an active
@@ -120,8 +120,8 @@ func NewSignedRevocationList(registryURL, issuedAt string, epoch int, digests []
 
 // VerifyRevocationList checks the list's signature against an active registry
 // key in root and returns the set of revoked digests (lowercased). Fail-closed:
-// a list whose signature matches no active key returns ErrRegistryNotTrusted —
-// an attacker cannot drop a revocation by stripping its signature, nor forge
+// a list whose signature matches no active key returns ErrRegistryNotTrusted.
+// An attacker cannot drop a revocation by stripping its signature, nor forge
 // one to block a healthy bundle.
 // minEpoch (SPEC-0279 R1) is the rollback floor: a list whose signed Epoch is
 // below minEpoch is refused even if its signature is valid, so an attacker
@@ -158,7 +158,7 @@ func VerifyRevocationList(list *RevocationList, root *TrustRoot, minEpoch int) (
 	if !matched {
 		return nil, fmt.Errorf("revocation list: signature did not match any active registry key in %s: %w", root.RegistryURL, ErrRegistryNotTrusted)
 	}
-	// SPEC-0279 R1 — rollback protection: refuse a signed-but-stale list.
+	// SPEC-0279 R1, rollback protection: refuse a signed-but-stale list.
 	if list.Epoch < minEpoch {
 		return nil, fmt.Errorf("revocation list: epoch %d is below the pinned floor %d (rollback): %w", list.Epoch, minEpoch, ErrRegistryNotTrusted)
 	}

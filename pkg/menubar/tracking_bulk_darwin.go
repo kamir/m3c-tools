@@ -1,4 +1,4 @@
-// tracking_bulk_darwin.go — Go callback for tracking window bulk actions.
+// tracking_bulk_darwin.go: Go callback for tracking window bulk actions.
 //
 // This file is separate from tracking_darwin.go because //export requires
 // that the cgo preamble contain only declarations, not definitions.

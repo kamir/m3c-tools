@@ -1,8 +1,8 @@
 package main
 
-// SPEC-0277 P0+P1 — end-to-end tests for `skillctl agentid`. They drive the real
+// SPEC-0277 P0+P1: end-to-end tests for `skillctl agentid`. They drive the real
 // CLI runners with on-disk ed25519 keys + a pinned trust-roots file and assert
-// the canonical exit codes. NO HTTP server is ever started — the whole point is
+// the canonical exit codes. NO HTTP server is ever started. The whole point is
 // the offline, pinned-key path (AC-P0: "verify --offline passes with a nil
 // network"). The approver floor + offline revocation cases cover AC-P1.
 
@@ -128,7 +128,7 @@ func (f agentFixture) verify(t *testing.T, bundle string, extra ...string) (int,
 	return code, so.String(), se.String()
 }
 
-// TestAgentID_IssueVerifyOffline — AC-P0: issue → verify --offline passes.
+// TestAgentID_IssueVerifyOffline, AC-P0: issue → verify --offline passes.
 func TestAgentID_IssueVerifyOffline(t *testing.T) {
 	f := buildAgentFixture(t, false)
 	f.issue(t, "agent:ok", "ok.json", "--expires", "2099-12-31T00:00:00Z")
@@ -141,7 +141,7 @@ func TestAgentID_IssueVerifyOffline(t *testing.T) {
 	}
 }
 
-// TestAgentID_TamperFails — AC-P0: tamper the payload → exit 11.
+// TestAgentID_TamperFails, AC-P0: tamper the payload → exit 11.
 func TestAgentID_TamperFails(t *testing.T) {
 	f := buildAgentFixture(t, false)
 	f.issue(t, "agent:tamper", "t.json")
@@ -161,7 +161,7 @@ func TestAgentID_TamperFails(t *testing.T) {
 	}
 }
 
-// TestAgentID_WrongKeyExit11 — AC-P0: sign with a non-pinned key → exit 11.
+// TestAgentID_WrongKeyExit11, AC-P0: sign with a non-pinned key → exit 11.
 func TestAgentID_WrongKeyExit11(t *testing.T) {
 	f := buildAgentFixture(t, false)
 	// Issue using the REGISTRY key (not the pinned owner key) but claim the owner id.
@@ -180,7 +180,7 @@ func TestAgentID_WrongKeyExit11(t *testing.T) {
 	}
 }
 
-// TestAgentID_OwnerNotPinnedExit11 — AC-P0: an owner with no pin → exit 11.
+// TestAgentID_OwnerNotPinnedExit11, AC-P0: an owner with no pin → exit 11.
 func TestAgentID_OwnerNotPinnedExit11(t *testing.T) {
 	f := buildAgentFixture(t, false)
 	out := filepath.Join(f.dir, "unpinned.json")
@@ -198,7 +198,7 @@ func TestAgentID_OwnerNotPinnedExit11(t *testing.T) {
 	}
 }
 
-// TestAgentID_ExpiredExit21 — AC-P0: expired → distinct exit 21.
+// TestAgentID_ExpiredExit21, AC-P0: expired → distinct exit 21.
 func TestAgentID_ExpiredExit21(t *testing.T) {
 	f := buildAgentFixture(t, false)
 	f.issue(t, "agent:exp", "exp.json", "--expires", "2020-01-01T00:00:00Z")
@@ -211,7 +211,7 @@ func TestAgentID_ExpiredExit21(t *testing.T) {
 	}
 }
 
-// TestAgentID_ApproverFloorMet — AC-P1: owner+approver passes under the floor.
+// TestAgentID_ApproverFloorMet, AC-P1: owner+approver passes under the floor.
 func TestAgentID_ApproverFloorMet(t *testing.T) {
 	f := buildAgentFixture(t, true)
 	f.issue(t, "agent:two", "two.json",
@@ -225,7 +225,7 @@ func TestAgentID_ApproverFloorMet(t *testing.T) {
 	}
 }
 
-// TestAgentID_ApproverFloorRefusesOwnerOnly — AC-P1: owner-only refused (exit 20).
+// TestAgentID_ApproverFloorRefusesOwnerOnly, AC-P1: owner-only refused (exit 20).
 func TestAgentID_ApproverFloorRefusesOwnerOnly(t *testing.T) {
 	f := buildAgentFixture(t, true)
 	f.issue(t, "agent:solo", "solo.json") // no approver
@@ -235,11 +235,11 @@ func TestAgentID_ApproverFloorRefusesOwnerOnly(t *testing.T) {
 	}
 }
 
-// TestAgentID_ApproverFloorRefusesApproverEqualsOwner — AC-P1: approver==owner refused.
+// TestAgentID_ApproverFloorRefusesApproverEqualsOwner, AC-P1: approver==owner refused.
 func TestAgentID_ApproverFloorRefusesApproverEqualsOwner(t *testing.T) {
 	f := buildAgentFixture(t, true)
 	// Owner co-signs an approver row under their OWN id (and owner is pinned as an
-	// author, not a reviewer, so the approver lookup also fails — both guards bite).
+	// author, not a reviewer, so the approver lookup also fails, both guards bite).
 	f.issue(t, "agent:self", "self.json",
 		"--approver", f.ownerID, "--approver-key", f.ownerKeyPath)
 	code, _, _ := f.verify(t, "self.json")
@@ -248,7 +248,7 @@ func TestAgentID_ApproverFloorRefusesApproverEqualsOwner(t *testing.T) {
 	}
 }
 
-// TestAgentID_RevokedOffline — AC-P1: a revoked agent is denied offline (exit 17).
+// TestAgentID_RevokedOffline. AC-P1: a revoked agent is denied offline (exit 17).
 func TestAgentID_RevokedOffline(t *testing.T) {
 	f := buildAgentFixture(t, false)
 	f.issue(t, "agent:doomed", "doomed.json", "--expires", "2099-12-31T00:00:00Z")
@@ -275,7 +275,7 @@ func TestAgentID_RevokedOffline(t *testing.T) {
 	}
 }
 
-// TestAgentID_BareCustomIDRevocable — P3 challenge gate (security LOW #1): a
+// TestAgentID_BareCustomIDRevocable: P3 challenge gate (security LOW #1): a
 // custom --agent-id issued WITHOUT the agent: scheme must still be revocable.
 // Before the fix, `issue --agent-id custombot` stored payload id "custombot"
 // while `revoke custombot` keyed "agent:custombot", so the revocation silently
@@ -302,11 +302,11 @@ func TestAgentID_BareCustomIDRevocable(t *testing.T) {
 		t.Fatalf("revoke: exit %d, stderr=%s", rc, se.String())
 	}
 	if code, _, _ := f.verify(t, "cb.json", "--revocations", listPath); code != exitBundleRevoked {
-		t.Fatalf("want exit %d (revoked) for a bare custom id, got %d — silent revocation miss", exitBundleRevoked, code)
+		t.Fatalf("want exit %d (revoked) for a bare custom id, got %d: silent revocation miss", exitBundleRevoked, code)
 	}
 }
 
-// TestAgentID_ForgedRevocationListRefused — a revocation list signed by a key NOT
+// TestAgentID_ForgedRevocationListRefused: a revocation list signed by a key NOT
 // pinned in trust-roots is refused (exit 12), never silently "not revoked".
 func TestAgentID_ForgedRevocationListRefused(t *testing.T) {
 	f := buildAgentFixture(t, false)

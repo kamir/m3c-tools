@@ -155,7 +155,7 @@ func TestHistoryStore(t *testing.T) {
 		t.Errorf("entries[1].VideoID = %q, want vid2", entries[1].VideoID)
 	}
 
-	// All() returns a snapshot — mutating it doesn't affect the store
+	// All() returns a snapshot: mutating it doesn't affect the store
 	entries[0].VideoID = "mutated"
 	fresh := store.All()
 	if fresh[0].VideoID != "vid1" {
@@ -518,8 +518,8 @@ func TestUploadER1WithoutHandler(t *testing.T) {
 
 // TestLoggedInMenuPreservesAllFeatures locks in the post-redesign invariant
 // that no feature was dropped during the Mac-Like menu cleanup. Each item
-// has a known reachable location — either at the top level, or inside a
-// known submenu — and the mapping is asserted by walking one level deep.
+// has a known reachable location (either at the top level, or inside a
+// known submenu) and the mapping is asserted by walking one level deep.
 func TestLoggedInMenuPreservesAllFeatures(t *testing.T) {
 	app := NewAppWithConfig(DefaultConfig(), Handlers{
 		ListProfiles: func() ([]ConfigProfile, string, error) {
@@ -552,7 +552,7 @@ func TestLoggedInMenuPreservesAllFeatures(t *testing.T) {
 		"Fetch Transcript",          // top-level capture
 		"Capture Screenshot",        // top-level capture
 		"Quick Impulse",             // top-level capture
-		"Recordings",                // cabinet — folds Audio Import + Tracking DB
+		"Recordings",                // cabinet: folds Audio Import + Tracking DB
 		"Tracking database",         // inside Recordings
 		"Sync",                      // cabinet
 		"Plaud Sync",                // inside Sync
@@ -584,7 +584,7 @@ func TestLoggedInMenuPreservesAllFeatures(t *testing.T) {
 }
 
 // TestIdentityLabel_Format pins the closed-state label to traffic-light +
-// profile name. No truncated user id, no status word — the dot is the
+// profile name. No truncated user id, no status word: the dot is the
 // status, and "idle" is jargon noise.
 func TestIdentityLabel_Format(t *testing.T) {
 	cases := []struct {
@@ -610,7 +610,7 @@ func TestIdentityLabel_Format(t *testing.T) {
 }
 
 // TestStatusMessage_OnlySpeaksWhenSomethingToSay verifies that the idle
-// state produces no status row in the submenu — that's the whole point
+// state produces no status row in the submenu. That's the whole point
 // of the "why 'idle'?" complaint.
 func TestStatusMessage_OnlySpeaksWhenSomethingToSay(t *testing.T) {
 	if got := statusMessage(StatusIdle); got != "" {

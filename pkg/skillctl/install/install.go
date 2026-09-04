@@ -39,7 +39,7 @@ import (
 )
 
 // MaxExtractedBytes / MaxExtractedFiles are the install-package spelling of the
-// canonical extraction caps, which now live in pkg/skillbundle (SPEC-0252 §3.3 —
+// canonical extraction caps, which now live in pkg/skillbundle (SPEC-0252 §3.3,
 // one source of truth). Aliases, not duplicate literals; the gzip/tar-bomb
 // guards in skillbundle.Unpack enforce them. MaxExtractedBytes stays the default
 // for Opts.MaxExtractedBytes (0 → this); kept so existing call sites and tests
@@ -165,7 +165,7 @@ func Install(opts Opts) (*Result, error) {
 	// SPEC-0188 §11: --allow-yellow and --ignore-deps require an
 	// auditable trail. Failure to record the audit is a refuse-to-install
 	// signal; we don't want to ship "yellow override happened, but the
-	// audit row never landed" — that's exactly the silent footgun the
+	// audit row never landed". That's exactly the silent footgun the
 	// gate is supposed to prevent.
 	if opts.AllowYellow || opts.IgnoreDeps {
 		if opts.AuditPoster == nil {
@@ -276,7 +276,7 @@ func Install(opts Opts) (*Result, error) {
 	}
 
 	// ----- atomic install + archive prior version if any -----
-	canonName, err := CanonicalSkillName(opts.Name) // SEC F12: one fixed point — install writes the same dir the gate/verifier resolve
+	canonName, err := CanonicalSkillName(opts.Name) // SEC F12: one fixed point: install writes the same dir the gate/verifier resolve
 	if err != nil {
 		return nil, err
 	}
@@ -372,7 +372,7 @@ func VerifyInstalled(opts Opts) (*verify.VerifyResult, error) {
 	}
 
 	// Recompute digest from the on-disk blob; then fetch fresh metadata.
-	// We don't trust the local meta (if any) — the whole point of verify
+	// We don't trust the local meta (if any): the whole point of verify
 	// is to ask the registry.
 	dRaw, dStr, err := computeDigestForVerify(skbPath)
 	if err != nil {
@@ -407,7 +407,7 @@ func VerifyInstalled(opts Opts) (*verify.VerifyResult, error) {
 	// verify.Verify proved the .skb's own signature + digest, but NOT that the
 	// extracted on-disk files (the SKILL.md Claude actually loads) still match
 	// that signed .skb. Re-assert the binding here so an edited body on the
-	// ONLINE path is caught as verify.ErrDigestMismatch (exit 10) — the same
+	// ONLINE path is caught as verify.ErrDigestMismatch (exit 10): the same
 	// guarantee the offline / sidecar tiers already enforce.
 	if err := verifyExtractedMatchesBlob(skbPath, target); err != nil {
 		return nil, err
@@ -507,14 +507,14 @@ var ErrUnsafeSkillName = errors.New("skill name is unsafe (path separator, trave
 // CanonicalSkillName is the ONE skill-name fixed point shared by the load-time
 // gate (classification + verdict-cache key) and the verifier (on-disk dir
 // resolution). SEC F12: the gate classifies/caches/loads by the RAW invoked
-// name while the verifier resolved sanitizeFilename(name) — a LOSSY transform
+// name while the verifier resolved sanitizeFilename(name): a LOSSY transform
 // that DROPS unsafe chars. So an attacker who created both a malicious dir `X`
 // and a clean sibling `Y == sanitizeFilename(X)` could get the gate to verify
 // the clean `Y` and PASS while Claude loaded the malicious `X`.
 //
 // CanonicalSkillName closes that by REJECTING any name that is not already a
 // single safe component (it never silently rewrites): a valid name is returned
-// verbatim, so the gate and the verifier resolve the SAME directory — the one
+// verbatim, so the gate and the verifier resolve the SAME directory: the one
 // Claude actually loads. Mirrors registry.sanitizeBundleName's strictness.
 func CanonicalSkillName(name string) (string, error) {
 	if name == "" {
@@ -543,8 +543,8 @@ func CanonicalSkillName(name string) (string, error) {
 // CanonicalPath is the ONE realpath fixed point for path classification (SPEC-0317
 // R-6.2). The `skillctl guard-path` side-channel guard MUST resolve BOTH the
 // access target and the skills root through THIS function before comparing them,
-// so a lexical HasPrefix check (which the skills dir's own symlinks — browse →
-// gstack/browse, find-skills → ../../.agents/skills — would both false-negative
+// so a lexical HasPrefix check (which the skills dir's own symlinks (browse →
+// gstack/browse, find-skills → ../../.agents/skills) would both false-negative
 // and false-positive) is never the classifier. It is the path analogue of
 // CanonicalSkillName: one resolution both classify and any future enforce share,
 // so they cannot diverge.
@@ -552,7 +552,7 @@ func CanonicalSkillName(name string) (string, error) {
 // It expands a leading ~, makes the path absolute + lexically clean, then resolves
 // symlinks (filepath.EvalSymlinks) to a single fixed point. A target that does not
 // yet exist (e.g. a Write creating a new file) has no realpath, so the LONGEST
-// EXISTING ANCESTOR is resolved and the not-yet-existing tail is re-appended —
+// EXISTING ANCESTOR is resolved and the not-yet-existing tail is re-appended:
 // this still defeats a symlinked-in ancestor while classifying a create-in-place.
 func CanonicalPath(p string) (string, error) {
 	if strings.TrimSpace(p) == "" {
@@ -575,8 +575,8 @@ func CanonicalPath(p string) (string, error) {
 	return evalSymlinksLongestPrefix(abs), nil
 }
 
-// evalSymlinksLongestPrefix resolves symlinks on abs, or — when abs does not
-// exist — on its deepest existing ancestor, re-joining the non-existent tail.
+// evalSymlinksLongestPrefix resolves symlinks on abs, or, when abs does not
+// exist, on its deepest existing ancestor, re-joining the non-existent tail.
 // Never fails: an unresolvable path degrades to the lexically-cleaned abs (still
 // a deterministic fixed point for the classify comparison).
 func evalSymlinksLongestPrefix(abs string) string {
@@ -647,7 +647,7 @@ func sanitizeDigest(d string) string {
 //
 // SPEC-0252 C4: StripWrapper is FALSE here on purpose. The HTTP install path
 // extracts WITH any single top-level wrapper dir and relocates the bundle
-// afterwards via resolveBundleTopLevel + the atomic rename into place — unlike
+// afterwards via resolveBundleTopLevel + the atomic rename into place: unlike
 // registry.extractSkb, which strips the wrapper inline. Keeping StripWrapper
 // off preserves that flow exactly. maxBytes is the caller's per-install override
 // (0 → the core default); the blob bytes are passed directly so we don't re-read
@@ -670,7 +670,7 @@ func extractTGZ(blob []byte, destDir string, maxBytes int64) error {
 // Missing CHECKSUMS file → success (some bundles may omit it). Mismatches
 // → ErrDigestMismatch (per SPEC §7 step 8).
 func validateChecksumsIfPresent(extractDir string) error {
-	// SPEC §3.1 puts CHECKSUMS at the bundle ROOT — but the tar has the
+	// SPEC §3.1 puts CHECKSUMS at the bundle ROOT, but the tar has the
 	// bundle's <name>-<version>/ as its top-level dir. Walk one level
 	// down to find it.
 	root := extractDir
@@ -799,7 +799,7 @@ func resolveBundleTopLevel(extractDir string) (string, error) {
 		return "", fmt.Errorf("install: readdir %s: %w", extractDir, err)
 	}
 	// SPEC §3.1: tar has exactly one top-level dir <name>-<version>/.
-	// We don't enforce the name here — we just take the single entry if
+	// We don't enforce the name here: we just take the single entry if
 	// there is one.
 	if len(entries) == 1 && entries[0].IsDir() {
 		return filepath.Join(extractDir, entries[0].Name()), nil
@@ -843,7 +843,7 @@ func HTTPClientOf(timeout time.Duration) *http.Client {
 	return httpClientOf(timeout)
 }
 
-// logStep mirrors verify.logStep — kept private here so install lines are
+// logStep mirrors verify.logStep: kept private here so install lines are
 // labeled "install step=..." rather than "verify step=...".
 func logStep(w io.Writer, event, format string, args ...any) {
 	if w == nil {

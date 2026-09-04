@@ -18,7 +18,7 @@ import (
 )
 
 // SyncAPIClient talks to the aims-core pocket-sync API for cross-device dedup.
-// Mirrors plaud.SyncAPIClient (SPEC-0117) — same shape, swapped paths/fields.
+// Mirrors plaud.SyncAPIClient (SPEC-0117): same shape, swapped paths/fields.
 type SyncAPIClient struct {
 	baseURL    string
 	apiKey     string
@@ -176,7 +176,7 @@ func (s *SyncAPIClient) RegisterMapping(mapping SyncMapping) error {
 }
 
 // setHeaders applies authentication and identity headers.
-// Mirrors plaud.SyncAPIClient.setHeaders — uses the shared auth helper.
+// Mirrors plaud.SyncAPIClient.setHeaders: uses the shared auth helper.
 func (s *SyncAPIClient) setHeaders(req *http.Request) {
 	auth.ApplyAuth(req, s.apiKey)
 	if s.userID != "" {

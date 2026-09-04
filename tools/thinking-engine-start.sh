@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Start the m3c Thinking Engine against the ER1-DUMP2DATALAKE cluster.
-# SPEC-0167 Phase 1 dogfood — Kamir's ctx, single-user, local dev only.
+# SPEC-0167 Phase 1 dogfood: Kamir's ctx, single-user, local dev only.
 #
 # Prereqs (must be true before running):
 #   - er1-thought-bridge running (ADR-0002), topic populated

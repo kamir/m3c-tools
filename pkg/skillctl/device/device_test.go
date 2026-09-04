@@ -21,7 +21,7 @@ func TestEnsureKey_LazyCreate(t *testing.T) {
 	if !fileExists(privPath(home)) || !fileExists(pubPath(home)) {
 		t.Fatalf("key files not written")
 	}
-	// Private key file must be 0600 (POSIX only — Windows synthesizes modes).
+	// Private key file must be 0600 (POSIX only: Windows synthesizes modes).
 	if runtime.GOOS != "windows" {
 		fi, _ := os.Stat(privPath(home))
 		if perm := fi.Mode().Perm(); perm&0o077 != 0 {

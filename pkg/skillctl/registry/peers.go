@@ -1,10 +1,10 @@
 package registry
 
-// SPEC-0359 D2 — peer discovery + trust pinning.
+// SPEC-0359 D2: peer discovery + trust pinning.
 //
 // A peer is 1:1 a NAMED SelfTrustRoots keyed by its registry locator: {name,
 // locator, pinned ed25519 pubkey, fingerprint, governance floor}. Pulling from a
-// peer verifies against THAT peer's pinned key — the pull gauntlet is already
+// peer verifies against THAT peer's pinned key. The pull gauntlet is already
 // parameterized by *SelfTrustRoots, so a Peer.AsTrustRoots() adapter feeds it
 // unchanged. The peer store is ~/.claude/skill-peers.yaml, mirroring the
 // selftrustroots.go + verify.TrustRoots file mechanics (strict KnownFields YAML,
@@ -12,7 +12,7 @@ package registry
 //
 // Trust model (SPEC-0359 §9, confirmed 2026-08-31): fingerprint-REQUIRED, no
 // trust-on-first-use. `peer add` takes the peer's pubkey AND its out-of-band
-// fingerprint and refuses unless sha256(pubkey) matches the pin — the operator
+// fingerprint and refuses unless sha256(pubkey) matches the pin: the operator
 // has independently confirmed the fingerprint over a trusted channel. The
 // fingerprint (sha256:hex(sha256(rawPub))) is the same derivation as
 // selfFingerprint / verify.authorFingerprint, so a fingerprint printed by any
@@ -41,7 +41,7 @@ type Peer struct {
 	Fingerprint       string `yaml:"fingerprint"`
 	GovernanceMinimum string `yaml:"governance_minimum,omitempty"`
 
-	// D3 (federation) — omitempty, unused in D2; documented for schema stability.
+	// D3 (federation): omitempty, unused in D2; documented for schema stability.
 	GovernanceQuorum        int    `yaml:"governance_quorum,omitempty"`
 	GovernanceRootPubKeyB64 string `yaml:"governance_root_pubkey_b64,omitempty"`
 	CrossSignPath           string `yaml:"cross_sign_path,omitempty"`
@@ -167,8 +167,8 @@ func (p *Peers) RemovePeer(name string) bool {
 }
 
 // AsTrustRoots builds the exact *SelfTrustRoots the pull gauntlet consumes from a
-// pinned peer — the D2 adapter. It decodes the pubkey, recomputes and MATCHES the
-// pinned fingerprint (fail closed on mismatch — no TOFU), and normalizes the
+// pinned peer: the D2 adapter. It decodes the pubkey, recomputes and MATCHES the
+// pinned fingerprint (fail closed on mismatch, no TOFU), and normalizes the
 // floor. The resulting struct flows into PullBundles/PullBundlesFromBackend with
 // zero downstream change; the peer's key becomes the verification anchor.
 func (pe *Peer) AsTrustRoots() (*SelfTrustRoots, error) {

@@ -1,6 +1,6 @@
 package main
 
-// pin_cmds.go — SPEC-0247 §7.3 P1.3: managed-settings pinning.
+// pin_cmds.go: SPEC-0247 §7.3 P1.3: managed-settings pinning.
 //
 //	skillctl pin generate  → emit the Claude Code managed-settings.json that
 //	                         wires the trust gate (SPEC-0247 §7.1) un-deletably.
@@ -20,7 +20,7 @@ package main
 //	0  ok / pinned
 //	1  usage or I/O error
 //	2  not pinned (status: absent / partial / tampered)
-//	3  needs privilege — a manual sudo step is required (install, non-root)
+//	3  needs privilege. A manual sudo step is required (install, non-root)
 
 import (
 	"encoding/json"
@@ -78,7 +78,7 @@ const pinUsage = `Usage: skillctl pin <generate|status|install> [flags]
   install    Stage the file and print the sudo runbook (root+--confirm writes it).
              Flags: --binary <path>, --strict, --harden, --enterprise, --require-local-audit, --state-gate-fallback, --path <target>, --confirm
 
---strict adds "allowManagedHooksOnly: true" — the full CISO lockdown that also
+--strict adds "allowManagedHooksOnly: true": the full CISO lockdown that also
 DISABLES every other user/project hook. Without it the gate is already
 un-deletable by non-privileged (non-root) users and its deny is absolute; the
 operator's own hooks keep working. Root, or anyone with write access to the
@@ -103,9 +103,9 @@ func runPinGenerate(args []string, stdout, stderr io.Writer) int {
 	binary := fs.String("binary", "", "absolute path to skillctl (default: this binary)")
 	strict := fs.Bool("strict", false, "add allowManagedHooksOnly:true (disables ALL user hooks)")
 	harden := fs.Bool("harden", false, "imply --strict and block --dangerously-skip-permissions")
-	enterprise := fs.Bool("enterprise", false, "add skillctlEnterprise:true — enables the R-7.2 offline `locked` state")
-	requireLocalAudit := fs.Bool("require-local-audit", false, "add skillctlRequireLocalAudit:true (implies --enterprise) — R-8.2 fail-closed on un-recordable allow")
-	stateGateFallback := fs.Bool("state-gate-fallback", false, "add skillctlStateGateFallback:true (implies --enterprise) — R-1.4 P2 keep the hot path strictly local (no online fallback while disconnected)")
+	enterprise := fs.Bool("enterprise", false, "add skillctlEnterprise:true, enables the R-7.2 offline `locked` state")
+	requireLocalAudit := fs.Bool("require-local-audit", false, "add skillctlRequireLocalAudit:true (implies --enterprise), R-8.2 fail-closed on un-recordable allow")
+	stateGateFallback := fs.Bool("state-gate-fallback", false, "add skillctlStateGateFallback:true (implies --enterprise): R-1.4 P2 keep the hot path strictly local (no online fallback while disconnected)")
 	out := fs.String("out", "", "write to file instead of stdout")
 	if err := fs.Parse(args); err != nil {
 		return pinExitError
@@ -162,7 +162,7 @@ func runPinStatus(args []string, stdout, stderr io.Writer) int {
 	if readErr != nil {
 		if os.IsNotExist(readErr) {
 			res = pin.StatusResult{Level: pin.LevelAbsent, Findings: []string{
-				"no managed-settings file at " + path + " — the gate is ADVISORY (a user can delete the user-level hook). Run `skillctl pin install`.",
+				"no managed-settings file at " + path + ": the gate is ADVISORY (a user can delete the user-level hook). Run `skillctl pin install`.",
 			}}
 		} else {
 			fmt.Fprintf(stderr, "skillctl pin status: read %s: %v\n", path, readErr)
@@ -215,9 +215,9 @@ func runPinInstall(args []string, stdout, stderr io.Writer) int {
 	binary := fs.String("binary", "", "absolute path to skillctl (default: this binary)")
 	strict := fs.Bool("strict", false, "add allowManagedHooksOnly:true (disables ALL user hooks)")
 	harden := fs.Bool("harden", false, "imply --strict and block --dangerously-skip-permissions")
-	enterprise := fs.Bool("enterprise", false, "add skillctlEnterprise:true — enables the R-7.2 offline `locked` state")
-	requireLocalAudit := fs.Bool("require-local-audit", false, "add skillctlRequireLocalAudit:true (implies --enterprise) — R-8.2 fail-closed on un-recordable allow")
-	stateGateFallback := fs.Bool("state-gate-fallback", false, "add skillctlStateGateFallback:true (implies --enterprise) — R-1.4 P2 keep the hot path strictly local (no online fallback while disconnected)")
+	enterprise := fs.Bool("enterprise", false, "add skillctlEnterprise:true, enables the R-7.2 offline `locked` state")
+	requireLocalAudit := fs.Bool("require-local-audit", false, "add skillctlRequireLocalAudit:true (implies --enterprise), R-8.2 fail-closed on un-recordable allow")
+	stateGateFallback := fs.Bool("state-gate-fallback", false, "add skillctlStateGateFallback:true (implies --enterprise): R-1.4 P2 keep the hot path strictly local (no online fallback while disconnected)")
 	pathOverride := fs.String("path", "", "target managed-settings path override")
 	confirm := fs.Bool("confirm", false, "when run as root, actually write the file")
 	if err := fs.Parse(args); err != nil {
@@ -242,7 +242,7 @@ func runPinInstall(args []string, stdout, stderr io.Writer) int {
 	// may already carry other managed hooks / permission rules. Read it and MERGE
 	// our gate in, preserving everything else. If it exists but we cannot read it
 	// (permission), we can only produce a gate-only file the human must merge by
-	// hand — never a blind copy.
+	// hand, never a blind copy.
 	existing, readErr := os.ReadFile(target)
 	var content []byte
 	targetExists := false
@@ -272,7 +272,7 @@ func runPinInstall(args []string, stdout, stderr io.Writer) int {
 	root := geteuid() == 0 // -1 (Windows/unsupported) → not root → runbook path
 	if root && *confirm {
 		if !safeToCopy {
-			fmt.Fprintf(stderr, "skillctl pin install: %s exists but is unreadable — refusing to overwrite; merge manually.\n", target)
+			fmt.Fprintf(stderr, "skillctl pin install: %s exists but is unreadable: refusing to overwrite; merge manually.\n", target)
 			return pinExitError
 		}
 		return pinRootWrite(target, content, targetExists, existing, stdout, stderr)
@@ -295,7 +295,7 @@ func runPinInstall(args []string, stdout, stderr io.Writer) int {
 // disk and verify what actually landed (not the in-memory buffer).
 func pinRootWrite(target string, content []byte, targetExists bool, existing []byte, stdout, stderr io.Writer) int {
 	if fi, err := os.Lstat(target); err == nil && fi.Mode()&os.ModeSymlink != 0 {
-		fmt.Fprintf(stderr, "skillctl pin install: %s is a symlink — refusing to write through it.\n", target)
+		fmt.Fprintf(stderr, "skillctl pin install: %s is a symlink: refusing to write through it.\n", target)
 		return pinExitError
 	}
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
@@ -305,7 +305,7 @@ func pinRootWrite(target string, content []byte, targetExists bool, existing []b
 	if targetExists {
 		backup := target + ".bak-" + time.Now().UTC().Format("20060102-150405")
 		if fi, err := os.Lstat(backup); err == nil && fi.Mode()&os.ModeSymlink != 0 {
-			fmt.Fprintf(stderr, "skillctl pin install: backup path %s is a symlink — refusing.\n", backup)
+			fmt.Fprintf(stderr, "skillctl pin install: backup path %s is a symlink: refusing.\n", backup)
 			return pinExitError
 		}
 		if err := os.WriteFile(backup, existing, 0o644); err != nil {
@@ -327,7 +327,7 @@ func pinRootWrite(target string, content []byte, targetExists bool, existing []b
 	res := pin.Verify(back)
 	fmt.Fprintf(stdout, "installed managed settings at %s (verified on disk: %s)\n", target, res.Level)
 	if !res.Pinned() {
-		fmt.Fprintln(stderr, "skillctl pin install: post-write verification did NOT read back as pinned — check the target.")
+		fmt.Fprintln(stderr, "skillctl pin install: post-write verification did NOT read back as pinned: check the target.")
 		return pinExitNotPinned
 	}
 	return pinExitOK
@@ -346,7 +346,7 @@ func stagePinFile(content []byte) (string, error) {
 	}
 	staged := filepath.Join(dir, "managed-settings.staged.json")
 	if fi, err := os.Lstat(staged); err == nil && fi.Mode()&os.ModeSymlink != 0 {
-		return "", fmt.Errorf("%s is a symlink — refusing to write through it", staged)
+		return "", fmt.Errorf("%s is a symlink: refusing to write through it", staged)
 	}
 	if err := os.WriteFile(staged, content, 0o600); err != nil {
 		return "", err
@@ -360,17 +360,17 @@ func printPinRunbook(w io.Writer, staged, target string, targetExists, safeToCop
 	dir := filepath.Dir(target)
 	fmt.Fprintln(w, "Staged the managed-settings content at:")
 	fmt.Fprintf(w, "  %s\n\n", staged)
-	fmt.Fprintln(w, "This is a privileged (🔴 red-governance) step — a human installs it with admin rights.")
+	fmt.Fprintln(w, "This is a privileged (🔴 red-governance) step: a human installs it with admin rights.")
 	if targetExists && !safeToCopy {
 		fmt.Fprintf(w, "\nNOTE: %s already exists but could not be read here, so the staged file\n", target)
-		fmt.Fprintln(w, "contains ONLY the gate. Do NOT blindly copy it — MERGE the two SessionStart/")
+		fmt.Fprintln(w, "contains ONLY the gate. Do NOT blindly copy it: MERGE the two SessionStart/")
 		fmt.Fprintln(w, "PreToolUse gate hooks into the existing file to avoid destroying other policy.")
 		fmt.Fprintln(w, "")
 		fmt.Fprintln(w, "Then verify:  skillctl pin status")
 		return
 	}
 	if targetExists {
-		fmt.Fprintln(w, "(The staged file already MERGES your existing managed settings — other policy is preserved.)")
+		fmt.Fprintln(w, "(The staged file already MERGES your existing managed settings, other policy is preserved.)")
 	}
 	fmt.Fprintln(w, "Review the staged file, then run:")
 	fmt.Fprintln(w, "")

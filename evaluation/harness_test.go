@@ -9,9 +9,9 @@
 //
 // Honesty contract (SPEC-0280 §1 + the user's standard):
 //   - no claim without a number;
-//   - the population is SYNTHETIC except E4 (real committed corpus) — every row
+//   - the population is SYNTHETIC except E4 (real committed corpus): every row
 //     records pop=synthetic|real;
-//   - E6 (OIDC/JWKS offline verify) is N/A — deferred (gated P3-P2): it is NOT
+//   - E6 (OIDC/JWKS offline verify) is N/A. Deferred (gated P3-P2): it is NOT
 //     measured and NOT faked; the harness records it as N/A with the reason.
 //
 // Run the full measured harness:

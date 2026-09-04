@@ -1,6 +1,6 @@
 package install
 
-// offline_verify.go — network-free §7 verification (SPEC-0247 P1.x).
+// offline_verify.go: network-free §7 verification (SPEC-0247 P1.x).
 //
 // VerifyInstalled (install.go) re-fetches BundleMeta + the author identity from
 // the registry on every call. For a per-invocation gate that is too slow and
@@ -13,7 +13,7 @@ package install
 // extracted on-disk files (the SKILL.md Claude actually loads) still match that
 // signed .skb. So editing the body post-install would pass verify alone.
 // verifyExtractedMatchesBlob re-reads the signature-verified .skb and asserts
-// every on-disk file byte-matches it — making "edited body → exit 10"
+// every on-disk file byte-matches it: making "edited body → exit 10"
 // (SPEC-0247 AC-1) actually hold. SEC-M4: install.VerifyInstalled (the ONLINE
 // path) now calls it unconditionally too, so the binding is enforced online +
 // offline + sidecar.
@@ -62,7 +62,7 @@ type identityResolver interface {
 	GetIdentity(ctx context.Context, id string) (*registry.Identity, error)
 }
 
-// staticIdentityFetcher serves identities from the stash — satisfies the
+// staticIdentityFetcher serves identities from the stash: satisfies the
 // verify package's identityFetcher interface with no network.
 type staticIdentityFetcher struct{ m map[string]*registry.Identity }
 
@@ -127,13 +127,13 @@ func readOfflineMeta(target string) (*OfflineMeta, error) {
 // NOT a `.m3c-provenance.json` sidecar; only the trust-mode `skillctl pull` path
 // writes the sidecar. The agent-mandate gate (SPEC-0277 IS-T7) therefore uses
 // this as the FALLBACK basis for resolving a skill's digest-verified signed
-// scope — without it, every install-path skill resolves no digest and silently
+// scope, without it, every install-path skill resolves no digest and silently
 // degrades to name-only scope enforcement.
 //
 // The digest is only a lookup key: the caller (verify.ReadDigestVerifiedManifest)
 // recomputes the on-disk .skb digest and constant-time-compares it against this
 // value before trusting any manifest bytes, so a tampered stash cannot forge a
-// smaller scope — it can at most make the digest fail to match (→ fail closed).
+// smaller scope. It can at most make the digest fail to match (→ fail closed).
 func InstalledBundleDigest(homeDir, name string) (string, bool) {
 	home, err := resolveHomeDir(homeDir)
 	if err != nil {
@@ -204,7 +204,7 @@ func VerifyInstalledOffline(opts Opts) (*verify.VerifyResult, error) {
 }
 
 // VerifyInstalledSidecar verifies a skill installed via the self/ER1 pull path
-// (SPEC-0225) — which writes a `.m3c-provenance.json` sidecar rather than the
+// (SPEC-0225), which writes a `.m3c-provenance.json` sidecar rather than the
 // SPEC-0188 registry envelope. With no signature bytes on hand (the sidecar
 // stores only fingerprints), the offline checks available are:
 //
@@ -244,8 +244,8 @@ func VerifyInstalledSidecar(opts Opts) error {
 	}
 
 	// SEC-M5: content-binding is MANDATORY for any sidecar PASS. Without a
-	// stashed .skb the on-disk body is fully unverified — there is no canonical
-	// blob to compare against — so we FAIL CLOSED (exit 10) instead of trusting
+	// stashed .skb the on-disk body is fully unverified, there is no canonical
+	// blob to compare against, so we FAIL CLOSED (exit 10) instead of trusting
 	// governance + fingerprint alone. A present .skb is byte-matched against the
 	// extraction; any mismatch is verify.ErrDigestMismatch.
 	skbPath, err := findStashedSkb(target)
@@ -263,14 +263,14 @@ func VerifyInstalledSidecar(opts Opts) error {
 
 	// SPEC-0266 F2/F19: re-anchor to the PINNED key. Content-binding above proves
 	// the on-disk body matches the stashed .skb, but NOT that that .skb is the one
-	// a pinned key signed — a local-write attacker can repack a self-consistent
+	// a pinned key signed. A local-write attacker can repack a self-consistent
 	// .skb + sidecar (and flip governance). When the SIGNED attestation stash is
 	// present we replay the pull gates against the pinned self trust-root: a
 	// repacked .skb fails (no valid signature over its bytes) and governance is
 	// taken from the SIGNED attestation, never the attacker-writable sidecar.
 	//
 	// governanceLevel defaults to the (unsigned) sidecar value only on the LEGACY
-	// path (installs predating the re-anchor) — those WARN + reinstall-to-anchor.
+	// path (installs predating the re-anchor): those WARN + reinstall-to-anchor.
 	governanceLevel := side.GovernanceLevel
 	if ac, aerr := registry.ReadAttestationStash(target); aerr == nil {
 		// Trust-roots are MANDATORY to re-anchor (policy: parity with the HTTP
@@ -295,7 +295,7 @@ func VerifyInstalledSidecar(opts Opts) error {
 		// Legacy install (predates the re-anchor): WARN + content-binding only,
 		// and keep the optional fingerprint check below. Reinstall re-anchors it.
 		if opts.Logger != nil {
-			fmt.Fprintf(opts.Logger, "verify-sidecar: WARN %q is not re-anchored (no signed attestation stash) — verified by content-binding only; run `skillctl install %s` to re-anchor (SPEC-0266)\n", opts.Name, opts.Name)
+			fmt.Fprintf(opts.Logger, "verify-sidecar: WARN %q is not re-anchored (no signed attestation stash): verified by content-binding only; run `skillctl install %s` to re-anchor (SPEC-0266)\n", opts.Name, opts.Name)
 		}
 		// Registry-trust gate (SPEC-0247 OQ-5), legacy path: if the provenance
 		// records a fingerprint and local self trust-roots exist, they MUST match
@@ -313,7 +313,7 @@ func VerifyInstalledSidecar(opts Opts) error {
 		return fmt.Errorf("verify-sidecar: read attestation stash: %w", aerr)
 	}
 
-	// Governance floor — checked against the SIGNED level when re-anchored.
+	// Governance floor: checked against the SIGNED level when re-anchored.
 	floor := opts.GovernanceMin
 	if floor == "" && opts.TrustRoot != nil {
 		floor = opts.TrustRoot.GovernanceMinimum
@@ -367,14 +367,14 @@ func findStashedSkb(target string) (string, error) {
 	case 1:
 		return filepath.Join(target, found[0]), nil
 	default:
-		return "", fmt.Errorf("verify-offline: %d top-level .skb files in %s (ambiguous stash) — refusing: %w", len(found), target, verify.ErrDigestMismatch)
+		return "", fmt.Errorf("verify-offline: %d top-level .skb files in %s (ambiguous stash), refusing: %w", len(found), target, verify.ErrDigestMismatch)
 	}
 }
 
 // verifyExtractedMatchesBlob asserts every regular file in the signed .skb
 // byte-matches the on-disk extraction, and that no unexpected regular file was
 // added. Any mismatch / missing / extra maps to verify.ErrDigestMismatch (exit
-// 10) — i.e. "the body Claude would load is not what was signed."
+// 10): i.e. "the body Claude would load is not what was signed."
 //
 // SPEC-0252 C3: this runs on the HOT per-invocation gate path (every skill
 // use), and the gzip/tar walk, the decompression-bomb caps, the path-escape
@@ -427,7 +427,7 @@ func verifyExtractedMatchesBlob(skbPath, target string) error {
 		rel, _ := filepath.Rel(target, p)
 		relSlash := filepath.ToSlash(filepath.Clean(rel))
 		// SEC F5: skip the stash/metadata files only at the EXACT top-level
-		// relpath — NOT by basename anywhere in the tree. A nested file named
+		// relpath, NOT by basename anywhere in the tree. A nested file named
 		// `.m3c-provenance.json`, `.skillctl-offline.json`, `.skillctl-attest.json`
 		// or `*.skb` (e.g. `scripts/payload.skb`) must still be flagged as
 		// unexpected; the old basename skip let an attacker plant such files

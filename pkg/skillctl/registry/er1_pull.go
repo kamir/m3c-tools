@@ -4,14 +4,14 @@ package registry
 //
 // Three exported entry points:
 //
-//   ListRegistry  — query ER1, build a per-skill registry view (admit history
+//   ListRegistry: query ER1, build a per-skill registry view (admit history
 //                   + attestations + installs + revocations), dedupe by digest.
 //                   Implements `skillctl registry ls [--latest]`.
 //
-//   ShowSkill     — return the full timeline for one skill (all events,
+//   ShowSkill: return the full timeline for one skill (all events,
 //                   sorted by occurred_at). Implements `registry show <name>`.
 //
-//   PullBundles   — for each `admitted` event matching the query, run the
+//   PullBundles: for each `admitted` event matching the query, run the
 //                   five-gate verification gauntlet (envelope sig vs
 //                   trust-roots → digest → bundle author+registry sigs →
 //                   governance floor → not-revoked) and stage the .skb to
@@ -47,7 +47,7 @@ import (
 
 // ─── Errors ────────────────────────────────────────────────────────────────
 
-// Gate-failure sentinels — `pull` reports the specific gate that rejected
+// Gate-failure sentinels: `pull` reports the specific gate that rejected
 // each bundle so the operator sees what to fix.
 var (
 	ErrGateEnvelope    = errors.New("gate 1: envelope_signature does not verify against trust-roots")
@@ -92,7 +92,7 @@ type RegistryListing struct {
 type ListOpts struct {
 	OnlySkill  string // empty → all skills
 	OnlyLatest bool   // collapse to newest non-revoked digest per skill
-	Since      string // RFC3339 lower bound (matched against occurred_at) — optional
+	Since      string // RFC3339 lower bound (matched against occurred_at): optional
 }
 
 // ListRegistry queries ER1 for m3c-skill-bundle items, groups by skill, dedupes
@@ -238,7 +238,7 @@ type PullOpts struct {
 	Since      string    // RFC3339; pass to the search query (best-effort filter)
 	Now        time.Time // injectable clock for attestation freshness (D5); zero → time.Now()
 
-	// FR-0090 IS-RS-01 — signed revoke-HEAD consultation. Gate 5's revoked set is
+	// FR-0090 IS-RS-01: signed revoke-HEAD consultation. Gate 5's revoked set is
 	// built only from tag DISCOVERY (searchByTagsRaw, limit=500, range=year), which
 	// a hostile/compromised tenant can truncate so a revoke never enters the
 	// accumulator (strip a tag, age it past a year, or flood past 500). The signed
@@ -334,7 +334,7 @@ func consultRevokeHead(tr *SelfTrustRoots, opts PullOpts, discoveredRevoked []st
 	capFallback := func() {
 		if opts.RequireRevocationHead {
 			dec.discoveryIncomplete = true
-			dec.reason = fmt.Sprintf("revocation HEAD required but unavailable/unverifiable and discovery hit the %d-item cap — completeness cannot be proven", searchTagsLimit)
+			dec.reason = fmt.Sprintf("revocation HEAD required but unavailable/unverifiable and discovery hit the %d-item cap. Completeness cannot be proven", searchTagsLimit)
 			return
 		}
 		if discoveryCapHit {
@@ -366,14 +366,14 @@ func consultRevokeHead(tr *SelfTrustRoots, opts PullOpts, discoveredRevoked []st
 		return dec
 	}
 
-	// (2) Epoch monotonicity — the IS-RS-01 replay/rollback fix, enforced at EVERY
+	// (2) Epoch monotonicity: the IS-RS-01 replay/rollback fix, enforced at EVERY
 	// policy level. A signature-only check accepted a replayed OLD-but-validly-signed
 	// HEAD (e.g. the genesis head: epoch 0, empty set) whose stale revoked_set_root
 	// matched a hostile-truncated discovery, silently un-revoking everything. A HEAD
 	// whose epoch is below the persisted/pinned floor is an unambiguous active-attack
 	// signal → fail closed. (Residual, documented honestly: a brand-new self host
 	// that has never synced AND pins no min_revocation_epoch has floor 0, so a
-	// first-contact genesis replay still passes here — inherent TOFU; the sweep
+	// first-contact genesis replay still passes here: inherent TOFU; the sweep
 	// advances the floor after the first legitimate sync, and on `self` the tenant is
 	// the author/trust-root owner anyway. A managed root closes it via
 	// min_revocation_epoch.) A same-epoch-but-stale HEAD cannot omit a revoke the
@@ -381,14 +381,14 @@ func consultRevokeHead(tr *SelfTrustRoots, opts PullOpts, discoveredRevoked []st
 	// binds); the issued_at freshness in step (3) is the defense-in-depth against it
 	// and fires only under a max_staleness policy (managed roots default 48h; a self
 	// host with no policy relies on the epoch floor + set-root binding). We do NOT
-	// persist the epoch here — the pull is read-only.
+	// persist the epoch here. The pull is read-only.
 	if err := CheckEpochMonotonic(head, opts.RevocationHeadFloorEpoch); err != nil {
 		dec.discoveryIncomplete = true
 		dec.reason = "revocation HEAD epoch rolled back below the accepted floor (replay/rollback): " + err.Error()
 		return dec
 	}
 
-	// (3) Freshness — a validly-signed, monotonic, but stale HEAD must not prove
+	// (3) Freshness: a validly-signed, monotonic, but stale HEAD must not prove
 	// completeness when a max_staleness policy is set.
 	if opts.RevocationHeadMaxStaleness > 0 {
 		if ia, e := HeadIssuedAt(head); e != nil || opts.now().Sub(ia) > opts.RevocationHeadMaxStaleness {
@@ -449,7 +449,7 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 	// from a single secondary query. SEC-H1: the trust-roots public key is
 	// passed in so loadAttestRevoke verifies the envelope_signature of EVERY
 	// attest/revoke event before trusting its governance_level / revoked status
-	// — mirroring Gate 1's admit-envelope verification (~:297). An unsigned or
+	//. Mirroring Gate 1's admit-envelope verification (~:297). An unsigned or
 	// forged governance verdict is otherwise free to forge.
 	acc, discoveryCapHit, err := loadAttestAccumulator(cfg, ctxID, tr, opts.now())
 	if err != nil {
@@ -512,12 +512,12 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 			case headDec.denies(strings.ToLower(strings.TrimSpace(digest))):
 				detail = "digest is on the signed revocation HEAD emergency burn list but was ABSENT from tag discovery (IS-RS-01)"
 			default:
-				detail = "revocation discovery could not be proven complete — failing closed (IS-RS-01): " + headDec.reason
+				detail = "revocation discovery could not be proven complete: failing closed (IS-RS-01): " + headDec.reason
 			}
 			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, DocID: docID, Gate: ErrGateRevoked, Detail: detail})
 			continue
 		}
-		// Gate 4: governance floor — N-of-M signed, fresh attestations ≥ floor from
+		// Gate 4: governance floor: N-of-M signed, fresh attestations ≥ floor from
 		// DISTINCT pinned signers (default quorum 1 == a single attestation).
 		qual := acc.Qualifying(digest)
 		if len(qual) < tr.quorum() {
@@ -548,7 +548,7 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, DocID: docID, Gate: ErrGateBundleSigs, Detail: err.Error()})
 			continue
 		}
-		// All gates passed — stage.
+		// All gates passed: stage.
 		dir := filepath.Join(cacheRoot, strings.TrimPrefix(digest, "sha256:"))
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return nil, fmt.Errorf("pull: mkdir %s: %w", dir, err)
@@ -596,7 +596,7 @@ func verifyBundleSignatures(event map[string]any, pub ed25519.PublicKey, recompu
 	// 32-byte digest; verifying over the caller's recomputed digest (and
 	// asserting the event's declared digest equals it) makes this check
 	// intrinsically sound rather than safe only because a separate digest-match
-	// gate happened to run first — so a future reorder / new caller can't
+	// gate happened to run first, so a future reorder / new caller can't
 	// silently regress to verifying over an attacker-declared digest.
 	if recomputedDigest != "" && digestStr != recomputedDigest {
 		return fmt.Errorf("bundle_digest %s does not match recomputed %s", digestStr, recomputedDigest)
@@ -637,13 +637,13 @@ func verifyBundleSignatures(event map[string]any, pub ed25519.PublicKey, recompu
 }
 
 // loadAttestRevoke fetches the attest + revoke items for the WHOLE registry (never
-// narrowed by skill — see the discovery note below) and returns:
+// narrowed by skill: see the discovery note below) and returns:
 //   - the latest governance_level per digest (newest occurred_at wins)
 //   - the set of digests that carry any (verified) BundleRevokedEvent
 //
 // SEC-H1: a governance verdict (attestation green/yellow/red, or a revocation)
 // is only trusted if its event ENVELOPE signature verifies against the
-// trust-roots public key `pub` — exactly like Gate 1 verifies the admit
+// trust-roots public key `pub`: exactly like Gate 1 verifies the admit
 // envelope. Unsigned/invalid events are skipped (fail-closed): a forged green
 // attestation over a yellow bundle never reaches the governance floor, and a
 // forged revocation can't suppress a legitimately-attested bundle. (Skipping
@@ -654,8 +654,8 @@ func verifyBundleSignatures(event map[string]any, pub ed25519.PublicKey, recompu
 // "revocation authority" the per-invocation offline gate cannot be: the
 // SessionStart sweep calls this to quarantine installed skills whose bundle was
 // revoked AFTER install. Each revoke event's envelope signature MUST verify
-// against `pub` (a forged revoke can't be used to suppress, and — more to the
-// point here — a forged revoke can't be used to quarantine a good bundle).
+// against `pub` (a forged revoke can't be used to suppress, and, more to the
+// point here, a forged revoke can't be used to quarantine a good bundle).
 func FetchRevokedDigests(cfg *er1.Config, ctxID string, pub ed25519.PublicKey) (map[string]struct{}, error) {
 	_, revoked, _, err := loadAttestRevoke(cfg, ctxID, pub)
 	if err != nil {
@@ -674,13 +674,13 @@ func loadAttestRevoke(cfg *er1.Config, ctxID string, pub ed25519.PublicKey) (map
 	// skill-event:<kind> tag. The old per-kind loop searched
 	// skill-event:{attested,revoked} only, so a signed revoke re-tagged
 	// skill-event:installed (or tag-stripped) was dropped at DISCOVERY, BEFORE the
-	// signed-shape classifier ever saw it — a hostile ER1 tenant could suppress a
+	// signed-shape classifier ever saw it: a hostile ER1 tenant could suppress a
 	// revoke by retagging it. We now search only the STABLE bundle tags every
 	// skill-event item carries regardless of kind (the registry/context tags) and
 	// classify each item by the SIGNED envelope shape after its signature verifies.
 	//
 	// IS-T4b (scoped-pull residual, challenge-gate LOW): this AUTHORITATIVE revocation
-	// sweep also does NOT narrow on skill:<name> — a skill: tag is equally
+	// sweep also does NOT narrow on skill:<name>. A skill: tag is equally
 	// writer-controlled, so a revoke with that one tag stripped must not be able to
 	// hide from a scoped pull. Correctness is preserved because every verdict is keyed
 	// on the SIGNED bundle_digest (unique per bundle), so seeing OTHER skills' events
@@ -733,19 +733,19 @@ func loadAttestRevoke(cfg *er1.Config, ctxID string, pub ed25519.PublicKey) (map
 }
 
 // loadAttestAccumulator fetches the attest + revoke events for the registry and
-// feeds them into an AttestAccumulator (SPEC-0359 D3/D5) — the shared N-of-M +
+// feeds them into an AttestAccumulator (SPEC-0359 D3/D5): the shared N-of-M +
 // freshness path used by both carriers. Mirrors loadAttestRevoke's fetch; the
 // accumulator performs the SEC-H1 envelope verification against each pinned signer.
 func loadAttestAccumulator(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, now time.Time) (*AttestAccumulator, bool, error) {
 	acc := NewAttestAccumulator(tr, now)
 	// FR-0090 IS-T4b: search the STABLE bundle tags every skill-event item carries
-	// (registry/context), NOT skill-event:<kind> and NOT skill:<name> — so a signed
+	// (registry/context), NOT skill-event:<kind> and NOT skill:<name>, so a signed
 	// revoke/attest re-tagged to another kind, tag-stripped, OR with its skill tag
 	// stripped is still DISCOVERED, even on a scoped pull (challenge-gate LOW: the
 	// authoritative sweep must not be narrowable by an attacker-strippable skill tag).
 	// The accumulator's OfferRevoke/OfferAttest re-check the signed discriminator
 	// fields (IS-T3) and key every verdict on the SIGNED bundle_digest, so seeing
-	// other skills' events only adds their own digests — never mis-attributing a
+	// other skills' events only adds their own digests, never mis-attributing a
 	// verdict to the digest a caller is pulling. Admit/install fall through to the
 	// default (never a governance verdict). One comprehensive search.
 	tags := []string{"m3c-skill-bundle", "skill-registry:self"}
@@ -825,7 +825,7 @@ func itemBody(item map[string]any) string {
 }
 
 // tagValueFromItem extracts the value of a `prefix<v>` tag from an item's
-// `tags` field. Tags can be a comma-separated string or a list — try both.
+// `tags` field. Tags can be a comma-separated string or a list: try both.
 func tagValueFromItem(item map[string]any, prefix string) string {
 	switch tags := item["tags"].(type) {
 	case string:
@@ -861,7 +861,7 @@ func parseRowFromItem(item map[string]any) (EventRow, string, string, string, er
 	digest, _ := ev["bundle_digest"].(string)
 	name, _ := ev["name"].(string)
 	version, _ := ev["version"].(string)
-	// Attestation/revocation events carry only the digest in the event body —
+	// Attestation/revocation events carry only the digest in the event body:
 	// recover the skill name/version from the `skill:` / `skill-version:` tags.
 	if name == "" {
 		name = tagValueFromItem(item, "skill:")
@@ -926,14 +926,14 @@ func sha256Sum(b []byte) []byte {
 
 // searchByTagsRaw is the shared "give me all items with this set of tags"
 // query path. Returns a list of raw item maps (whatever shape the server
-// gives) — callers do the field extraction.
+// gives), callers do the field extraction.
 //
 // SPEC-0225 P5: prod ER1 doesn't expose a tag-filtered list endpoint that
 // accepts X-API-KEY (the SPEC-0222 `/api/memory/<ctx>/search` is session-
 // cookie-only). We use maindrec's dual-auth `GET /memory/<ctx>?limit=…
 // &range=year` and filter client-side. The `limit` is large by design (500)
 // since the personal registry is tens-to-hundreds of events, not thousands.
-// Tag matching is "all of `tags` are in the item's `tags` field" — same
+// Tag matching is "all of `tags` are in the item's `tags` field": same
 // semantics the (non-existent) /search route would have had.
 func searchByTagsRaw(cfg *er1.Config, ctxID string, tags []string) ([]map[string]any, error) {
 	out, _, err := searchByTagsRawCapped(cfg, ctxID, tags)
@@ -976,7 +976,7 @@ func searchByTagsRawCapped(cfg *er1.Config, ctxID string, tags []string) (items 
 
 // itemMatchesAllTags returns true iff every tag in `want` appears in the
 // item's `tags` field. The tags field can be a comma-separated string OR a
-// list — both are handled. Matching is exact string equality on the tag
+// list, both are handled. Matching is exact string equality on the tag
 // token (no prefix-match, no substring-match).
 func itemMatchesAllTags(item map[string]any, want []string) bool {
 	have := make(map[string]struct{}, 32)

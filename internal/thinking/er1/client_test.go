@@ -298,7 +298,7 @@ func TestHMACSymmetryWithFlaskCanonical(t *testing.T) {
 
 // verifyFakeSig re-implements Flask's verify_request for the test
 // fake server. Any drift between this and signRequest will cause
-// every HTTP test to fail, which is the point — it is the symmetry
+// every HTTP test to fail, which is the point. It is the symmetry
 // check the SPEC requires.
 func verifyFakeSig(r *http.Request, wantCtx string, secret, body []byte) error {
 	ctx := r.Header.Get("X-M3C-Ctx")

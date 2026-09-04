@@ -93,7 +93,7 @@ func TestVerifyHook_NoSkillField_Allows(t *testing.T) {
 func TestVerifyHook_PathTraversalName_Denies(t *testing.T) {
 	code, out, _ := feed(t, `{"tool_name":"Skill","tool_input":{"skill":"../../etc/passwd"}}`)
 	// SEC F12: the name now fails the canonical fixed point; the deny reason
-	// announces an unsafe name (was "path traversal") — the behavior (deny,
+	// announces an unsafe name (was "path traversal"). The behavior (deny,
 	// exit 2) is unchanged; the wording converged on the shared validator.
 	assertDeny(t, code, out, "unsafe skill name")
 }
@@ -113,7 +113,7 @@ func TestVerifyHook_UnmanagedPolicyDeny_Blocks(t *testing.T) {
 }
 
 func TestVerifyHook_ManagedBadSignature_Denies(t *testing.T) {
-	// exit 11 = author signature invalid — the headline case (SPEC-0247 §10).
+	// exit 11 = author signature invalid: the headline case (SPEC-0247 §10).
 	withManagedSkill(t, "evil-skill", 11, "author signature invalid")
 	code, out, errb := feed(t, `{"tool_name":"Skill","tool_input":{"skill":"evil-skill"}}`)
 	assertDeny(t, code, out, "author signature invalid")
@@ -283,7 +283,7 @@ func TestVerifyHook_PanicInGate_FailsClosedDeny(t *testing.T) {
 	hookPreflight = func() { panic("boom: simulated internal gate failure") }
 	t.Cleanup(func() { hookPreflight = orig })
 
-	// A perfectly valid allow-shaped event — without the recover this would have
+	// A perfectly valid allow-shaped event: without the recover this would have
 	// returned exit 0; the injected panic must instead force a DENY.
 	code, out, errb := feed(t, `{"tool_name":"Skill","tool_input":{"skill":"anything"}}`)
 	assertDeny(t, code, out, "internal error")

@@ -11,7 +11,7 @@
   <rect x="0" y="0" width="960" height="86" fill="#2ea043"/>
   <circle cx="46" cy="43" r="24" fill="#ffffff" opacity="0.18"/>
   <text x="46" y="52" font-size="26" font-weight="700" fill="#ffffff" text-anchor="middle">5</text>
-  <text x="88" y="38" font-size="24" font-weight="700" fill="#ffffff">Governance actions are reversible — and cannot be forced</text>
+  <text x="88" y="38" font-size="24" font-weight="700" fill="#ffffff">Governance actions are reversible, and cannot be forced</text>
   <text x="88" y="66" font-size="15" fill="#ffffff" opacity="0.92">Even our kill-switch has a safety and an undo</text>
   <rect x="726" y="26" width="60" height="26" rx="13" fill="#ffffff" opacity="0.22"/>
   <text x="756" y="44" font-size="14" font-weight="700" fill="#ffffff" text-anchor="middle">G7</text>
@@ -54,18 +54,18 @@
   <!-- no force + reversible -->
   <rect x="40" y="388" width="430" height="72" rx="10" fill="#f6f8fa" stroke="#57606a" stroke-width="1.4"/>
   <text x="60" y="414" font-size="14" font-weight="700" fill="#24292f">🚫  NO --force bypass</text>
-  <text x="60" y="437" font-size="12.5" fill="#57606a">a one-shot script still writes BOTH audit rows —</text>
+  <text x="60" y="437" font-size="12.5" fill="#57606a">a one-shot script still writes BOTH audit rows: </text>
   <text x="60" y="453" font-size="12.5" fill="#57606a">the two-step is never invisible</text>
 
   <rect x="494" y="388" width="430" height="72" rx="10" fill="#eef7ff" stroke="#1f6feb" stroke-width="1.4"/>
   <text x="514" y="414" font-size="14" font-weight="700" fill="#0a3069">↩  Reversible</text>
   <text x="514" y="437" font-size="12.5" fill="#24292f">a bad revocation is rolled back by publishing a</text>
-  <text x="514" y="453" font-size="12.5" fill="#24292f">higher-epoch HEAD without the digest — auditable</text>
+  <text x="514" y="453" font-size="12.5" fill="#24292f">higher-epoch HEAD without the digest: auditable</text>
 
   <!-- without -->
   <rect x="40" y="476" width="884" height="66" rx="12" fill="#fff5f5" stroke="#e5484d" stroke-width="1.5"/>
   <text x="60" y="502" font-size="14" font-weight="700" fill="#e5484d" letter-spacing="1">⚠  WITHOUT skillctl</text>
-  <text x="60" y="526" font-size="14" fill="#24292f">A one-shot <tspan font-weight="600" fill="#b62324">--force delete</tspan> — no plan, no audit trail, no undo. A trust system whose own ops are one-shot is not trustworthy.</text>
+  <text x="60" y="526" font-size="14" fill="#24292f">A one-shot <tspan font-weight="600" fill="#b62324">--force delete</tspan>, no plan, no audit trail, no undo. A trust system whose own ops are one-shot is not trustworthy.</text>
 
   <text x="924" y="576" font-size="11" fill="#8c959f" text-anchor="end">m3c skill-trust · G-23 two-step (SPEC-0188 §11b) · SPEC-0279 rollback · KuP demo scenario 5</text>
 </svg>

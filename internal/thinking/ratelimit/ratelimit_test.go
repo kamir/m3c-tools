@@ -1,4 +1,4 @@
-// ratelimit_test.go — sanity tests for the keyed hourly limiter.
+// ratelimit_test.go: sanity tests for the keyed hourly limiter.
 package ratelimit
 
 import (

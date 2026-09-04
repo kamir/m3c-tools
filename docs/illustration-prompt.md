@@ -1,13 +1,13 @@
 ---
 layout: default
-title: Illustration Prompt — m3c-tools
+title: Illustration Prompt: m3c-tools
 ---
 
 # Illustration prompt kit
 
 Paste one of these into your image model of choice (Midjourney, DALL·E, Ideogram, Flux,
 Nano Banana, etc.) to generate a hero/cover illustration for the README and docs site.
-The **story to convey**: two halves of one system — a pipeline that turns the messy world
+The **story to convey**: two halves of one system: a pipeline that turns the messy world
 (video, audio, screenshots, voice) into structured *memory*, and a *trust plane* that
 signs and governs the agent skills acting on that memory. Sovereign, offline, yours.
 
@@ -16,16 +16,16 @@ signs and governs the agent skills acting on that memory. Sovereign, offline, yo
 ## 1. Primary hero image (recommended)
 
 > A sleek, modern technical illustration in a clean isometric style. On the **left**, a
-> "capture pipeline": stylized streams of raw signals — a YouTube play button, a sound
-> waveform, a screenshot frame, a microphone — flowing rightward and being distilled into
+> "capture pipeline": stylized streams of raw signals (a YouTube play button, a sound
+> waveform, a screenshot frame, a microphone) flowing rightward and being distilled into
 > neat, glowing memory cards stacked in a personal vault. On the **right**, a "capability
 > plane": a translucent horizontal layer where small autonomous agent figures reach toward
 > the memory vault, but each agent's hand passes through a glowing verification gate marked
-> with a **checkmark, a key, and a signature seal** — some pass (green), one is stopped
+> with a **checkmark, a key, and a signature seal**: some pass (green), one is stopped
 > (amber). A thin luminous line connects both halves, labeled implicitly by flow, not text.
 > Palette: deep indigo and slate background, electric teal and cyan accents, warm amber for
 > the "denied" gate, soft white highlights. Subtle grid floor, faint circuit textures,
-> volumetric glow. Confident, trustworthy, high-tech but human-scale — not corporate stock.
+> volumetric glow. Confident, trustworthy, high-tech but human-scale: not corporate stock.
 > Crisp vector-adjacent shading, 4k, generous negative space at top for a title.
 > **Aspect ratio 16:9. No text, no logos, no watermarks.**
 
@@ -78,7 +78,7 @@ cheesy stock-photo people, no cluttered UI screenshots, not skeuomorphic, not ne
 - Keep **negative space at the top** if you'll overlay the project title.
 - Generate the emblem (#2) on a transparent background for reuse.
 - Ask for `16:9` for the site hero, `3:1` for the GitHub social/banner, `1:1` for the badge.
-- If the model renders garbled text, re-run with "no text" emphasized — labels should be
+- If the model renders garbled text, re-run with "no text" emphasized. Labels should be
   added later in a vector editor, not baked into the image.
 
 ---
@@ -88,15 +88,15 @@ cheesy stock-photo people, no cluttered UI screenshots, not skeuomorphic, not ne
 A first-pass "package manager" infographic looked great but baked in wrong facts
 (a `github.com/skillctl/skillctl` URL, a `get.skillctl.dev` installer, and invented
 `skillctl search` / `pdf-extract` commands). Use this prompt instead when you want an
-infographic that renders **real** text — so it can go in the repo without misleading anyone.
+infographic that renders **real** text, so it can go in the repo without misleading anyone.
 
 > A polished dark-mode developer infographic for a CLI tool called **skillctl**, the
 > trust-and-governance CLI for AI-agent skills. Left column: four labeled feature rows with
-> line icons — **Sign** (a key + signature seal), **Verify** (a shield with a checkmark),
+> line icons: **Sign** (a key + signature seal), **Verify** (a shield with a checkmark),
 > **Install** (a download arrow into a box), **Revoke** (a circular arrow with a stop). Center:
-> a realistic macOS-style terminal window titled `skillctl` showing the real command flow —
+> a realistic macOS-style terminal window titled `skillctl` showing the real command flow:
 > `skillctl keygen`, `skillctl pack`, `skillctl sign`, then `skillctl verify-sig ✓ ok (offline)`,
-> then `skillctl install my-skill@1.0.0 ✓ installed`. Right column: a small ecosystem diagram —
+> then `skillctl install my-skill@1.0.0 ✓ installed`. Right column: a small ecosystem diagram:
 > a "personal registry (ER1)" node and a "git repos" node feeding into the skillctl hexagon,
 > which fans out to "verify → install → use" with a small robot labeled "AI agent". Deep navy
 > background, electric teal + violet accents, green for the ✓ success states, single-weight line
@@ -107,10 +107,10 @@ else should be "no text"):
 
 - Tool name: `skillctl`  ·  Tagline: *the trust layer for agent skills*
 - Real commands only: `keygen`, `pack`, `sign`, `verify-sig`, `trust`, `install`, `verify`,
-  `publish`, `pull`, `registry`, `agentid`, `revoke` — **never** `search`, `init`, `build`, `run`.
-- Repo URL (footer): `github.com/kamir/m3c-tools`  — **not** `skillctl/skillctl`.
+  `publish`, `pull`, `registry`, `agentid`, `revoke`: **never** `search`, `init`, `build`, `run`.
+- Repo URL (footer): `github.com/kamir/m3c-tools`: **not** `skillctl/skillctl`.
 - Install line (if shown): `curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/master/tools/skillctl-install.sh | bash`
-  (the signed installer — skillctl ships **only** from the signed `skillctl/v*` release) — **not** `get.skillctl.dev`.
+  (the signed installer, skillctl ships **only** from the signed `skillctl/v*` release), **not** `get.skillctl.dev`.
 - License (footer, correct): `Apache-2.0`.
-- Trust phrasing: *offline-verifiable — no hosted CA in the verification path* (evidence-led, no overclaim).
+- Trust phrasing: *offline-verifiable: no hosted CA in the verification path* (evidence-led, no overclaim).
 - Do **not** invent a public skill marketplace or named skills (no `pdf-extract`, `web-search`, `skillhub`).

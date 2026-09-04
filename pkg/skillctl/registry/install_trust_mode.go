@@ -5,7 +5,7 @@ package registry
 // Takes a verified, staged .skb (output of PullBundles) and writes it into
 // ~/.claude/skills/<name>/ together with a .m3c-provenance.json sidecar. The
 // sidecar is what `skillctl audit` re-reads later to confirm the bytes on
-// disk are still the trusted bytes — the bridge to SPEC-0202 runtime
+// disk are still the trusted bytes: the bridge to SPEC-0202 runtime
 // verification.
 //
 // Overwriting an existing skill follows the G-23 two-step destructive-op
@@ -38,7 +38,7 @@ import (
 )
 
 // MaxExtractedBytes / MaxExtractedFiles are the registry-package spelling of the
-// canonical extraction caps, which now live in pkg/skillbundle (SPEC-0252 §3.3 —
+// canonical extraction caps, which now live in pkg/skillbundle (SPEC-0252 §3.3,
 // one source of truth). They are aliases, not duplicate literals: the value is
 // defined once in skillbundle and the gzip/tar-bomb guards in skillbundle.Unpack
 // enforce it. Retained so existing call sites and tests read the same number.
@@ -121,7 +121,7 @@ type PlanRow struct {
 	OldVersion string `json:"old_version,omitempty"`
 }
 
-// TokenTTL bounds how long a dry-run-install token is valid (5 minutes —
+// TokenTTL bounds how long a dry-run-install token is valid (5 minutes:
 // SPEC-0188 §11b convention).
 const TokenTTL = 5 * time.Minute
 
@@ -148,7 +148,7 @@ func PlanInstall(bundles []*StagedBundle, skillsDir string) (*InstallPlan, error
 			}
 			plan.Overwrites = append(plan.Overwrites, row)
 		} else if _, err := os.Stat(target); err == nil {
-			// Skill dir exists but no sidecar — treat as overwrite (untracked).
+			// Skill dir exists but no sidecar: treat as overwrite (untracked).
 			plan.Overwrites = append(plan.Overwrites, row)
 		} else {
 			plan.Creates = append(plan.Creates, row)
@@ -175,7 +175,7 @@ func ConfirmInstall(bundles []*StagedBundle, providedToken string, opts InstallO
 	// SEC-M9: reject path-traversal / unsafe bundle names BEFORE the G-23
 	// overwrite/token gate. PlanInstall joins each name onto the skills dir, so a
 	// traversal name (e.g. "..") resolves to an existing parent dir and lands in
-	// plan.Overwrites — which would otherwise trip ErrTokenRequired and mask the
+	// plan.Overwrites, which would otherwise trip ErrTokenRequired and mask the
 	// real ErrUnsafeBundleName. Sanitizing first makes the name guard fail closed
 	// the instant a crafted name is seen, regardless of token state.
 	for _, b := range bundles {
@@ -212,10 +212,10 @@ func ConfirmInstall(bundles []*StagedBundle, providedToken string, opts InstallO
 
 // Errors specific to the G-23 path.
 var (
-	ErrTokenRequired = errors.New("install: this would overwrite an existing skill — pass the --dry-run-install-token issued by --dry-run-install")
+	ErrTokenRequired = errors.New("install: this would overwrite an existing skill: pass the --dry-run-install-token issued by --dry-run-install")
 	ErrTokenInvalid  = errors.New("install: --dry-run-install-token is malformed (expected <unix-seconds>.<base64url-signature> from --dry-run-install)")
-	ErrTokenExpired  = errors.New("install: --dry-run-install-token has expired (tokens live 5 minutes — re-run --dry-run-install)")
-	ErrPlanDrift     = errors.New("install: --dry-run-install-token does not match this install plan — it was forged/tampered, or the plan changed since --dry-run-install")
+	ErrTokenExpired  = errors.New("install: --dry-run-install-token has expired (tokens live 5 minutes, re-run --dry-run-install)")
+	ErrPlanDrift     = errors.New("install: --dry-run-install-token does not match this install plan, it was forged/tampered, or the plan changed since --dry-run-install")
 )
 
 // mintInstallToken HMACs the canonical plan summary with a process-stable key,
@@ -223,7 +223,7 @@ var (
 //
 //	<issued_at_unix_secs>.<base64-of-HMAC-SHA256(planSummary)>
 //
-// `planSummary` deliberately excludes NewSize (unstable across stat races) —
+// `planSummary` deliberately excludes NewSize (unstable across stat races):
 // we sign over the set of (name, version, new_digest, old_digest, skill_path)
 // rows, sorted by skill_path for determinism.
 func mintInstallToken(plan *InstallPlan) (string, error) {
@@ -282,7 +282,7 @@ func planSummary(p *InstallPlan) string {
 }
 
 // installTokenKey returns the HMAC key the install path uses to sign the
-// G-23 dry-run-install token. The two-step is intentionally cross-process —
+// G-23 dry-run-install token. The two-step is intentionally cross-process:
 // `--dry-run-install` mints the token in one CLI invocation and prints it, and
 // a SEPARATE `--confirm-install` invocation verifies it. A per-process random
 // key therefore made the token impossible to validate across the two calls
@@ -293,7 +293,7 @@ func planSummary(p *InstallPlan) string {
 //
 // SEC-L6: minting a fresh key requires real entropy. If crypto/rand fails we
 // FAIL CLOSED (return ErrInstallTokenKey) instead of degrading to a hardcoded,
-// world-known fallback key — a known key would let an attacker forge the
+// world-known fallback key. A known key would let an attacker forge the
 // overwrite token and defeat the destructive-op guard. With no usable key the
 // token cannot be minted/verified, so the overwrite is refused.
 var installTokenKeyValue []byte
@@ -305,14 +305,14 @@ var installTokenKeyValue []byte
 var installTokenRand io.Reader = rand.Reader
 
 // ErrInstallTokenKey is returned when the install-token HMAC key cannot be
-// established — specifically when the OS CSPRNG (crypto/rand) fails while
+// established. Specifically when the OS CSPRNG (crypto/rand) fails while
 // minting a fresh per-user key. SEC-L6: we FAIL CLOSED here. The install token
 // guards a DESTRUCTIVE overwrite (G-23 two-step); if we cannot mint a key with
-// real entropy we must NOT fall back to a hardcoded, world-known sentinel —
+// real entropy we must NOT fall back to a hardcoded, world-known sentinel,
 // that would let any attacker forge a valid token and defeat the overwrite
 // guard. With no usable key the token cannot be minted or verified, so the
 // overwrite is refused.
-var ErrInstallTokenKey = errors.New("install: cannot establish install-token HMAC key (crypto/rand failed) — refusing to mint/verify a token (overwrite is refused; fail-closed)")
+var ErrInstallTokenKey = errors.New("install: cannot establish install-token HMAC key (crypto/rand failed). Refusing to mint/verify a token (overwrite is refused; fail-closed)")
 
 func installTokenKey() ([]byte, error) {
 	if installTokenKeyValue != nil {
@@ -327,7 +327,7 @@ func installTokenKey() ([]byte, error) {
 	}
 	key := make([]byte, 32)
 	if _, err := io.ReadFull(installTokenRand, key); err != nil {
-		// SEC-L6: fail closed. NO hardcoded fallback key — a world-known key
+		// SEC-L6: fail closed. NO hardcoded fallback key: a world-known key
 		// would let anyone forge the overwrite token. Propagate the error so
 		// the destructive overwrite is refused.
 		return nil, fmt.Errorf("%w: %v", ErrInstallTokenKey, err)
@@ -338,7 +338,7 @@ func installTokenKey() ([]byte, error) {
 		// WIN-T7: 0600 is advisory on Windows/NTFS (inherited ACEs win). Lock the
 		// on-disk HMAC key to owner+SYSTEM only. This key guards the G-23
 		// destructive-overwrite token, so if hardening fails we DELETE the cache
-		// rather than leave the secret inheritable — the in-memory key still serves
+		// rather than leave the secret inheritable: the in-memory key still serves
 		// this process; the next run re-mints and re-caches. No-op on Unix.
 		if derr := secfile.SecureFileDACL(keyPath); derr != nil {
 			_ = os.Remove(keyPath)
@@ -463,7 +463,7 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 
 	// SPEC-0266 F2/F19: stash the SIGNED attestation context so the runtime gate
 	// can re-verify the bundle against the PINNED key (envelope + bundle sigs +
-	// digest) and read governance from the SIGNED attestation — not the
+	// digest) and read governance from the SIGNED attestation: not the
 	// attacker-writable sidecar. Best-effort: a legacy/dry-run path with no
 	// attestation still installs; the gate then WARNs + content-binds.
 	if b.Attestation != nil && b.Attestation.AdmitEvent != nil {
@@ -502,8 +502,8 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 }
 
 // extractSkb extracts a SPEC-0188 §3.1-shaped bundle (gzip + tar) into `target`.
-// Per pkg/skillbundle/pack.go the archive is FLAT — SKILL.md, bundle.json,
-// CHECKSUMS, scripts/…, references/… live at the archive root — but some
+// Per pkg/skillbundle/pack.go the archive is FLAT (SKILL.md, bundle.json,
+// CHECKSUMS, scripts/…, references/… live at the archive root) but some
 // producers wrap everything in one top-level dir; StripWrapper collapses that.
 // CanonicalizeMD normalizes a stored "skill.md" to the canonical "SKILL.md" so
 // Claude Code and the scanner (exact-match, case-sensitive on Linux) load the
@@ -513,10 +513,10 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 // SPEC-0252 C2: the gzip/tar walk, the bomb caps (one decompression pass,
 // running byte ceiling + file-count cap, per-entry io.LimitReader), the
 // symlink/hardlink/device refusal, the path-containment proof, and the O_EXCL
-// fail-closed write all live in the ONE hardened core now — this is a thin
+// fail-closed write all live in the ONE hardened core now. This is a thin
 // adapter over skillbundle.Unpack + ExtractTo. (Convergence note: scripts/* are
 // now written 0755 to match the producer's canonical mode and the HTTP install
-// path, where the old self/ER1 walk dropped them to 0644 — a fix, not a
+// path, where the old self/ER1 walk dropped them to 0644: a fix, not a
 // weakening; content-binding compares bytes, not mode.)
 func extractSkb(skb []byte, target string) error {
 	entries, err := skillbundle.Unpack(skb, skillbundle.UnpackOptions{
@@ -590,7 +590,7 @@ func AuditProvenance(skillDir string) error {
 
 // ErrNoSidecar is returned by AuditProvenance for skill dirs that aren't
 // trust-mode-installed. The caller surfaces this as ℹ️ "untracked provenance"
-// in `skillctl audit` (it's not an error condition — locally-authored skills
+// in `skillctl audit` (it's not an error condition, locally-authored skills
 // are fine).
 var ErrNoSidecar = errors.New("audit: no .m3c-provenance.json sidecar (not trust-mode-installed)")
 

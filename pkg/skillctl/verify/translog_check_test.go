@@ -126,7 +126,7 @@ func TestCheckLogInclusion_ForgedEvent(t *testing.T) {
 }
 
 // TestCheckLogInclusion_AdvisoryDefault: without the policy, a missing proof
-// is advisory — returns Included=false, no error.
+// is advisory. Returns Included=false, no error.
 func TestCheckLogInclusion_AdvisoryDefault(t *testing.T) {
 	tr, in, _ := buildPinnedLog(t, false)
 	in.Proof = nil

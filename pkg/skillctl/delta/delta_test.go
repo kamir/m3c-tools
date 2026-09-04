@@ -247,7 +247,7 @@ func TestGenerateUnifiedDiffIdentical(t *testing.T) {
 	content := "line1\nline2\n"
 	diff := GenerateUnifiedDiff(content, content, "a", "b")
 
-	// Should only contain header and context lines — no actual +/- diff lines.
+	// Should only contain header and context lines, no actual +/- diff lines.
 	// The headers (--- and +++) are expected; we check for non-header +/- lines.
 	lines := splitLines(diff)
 	for _, line := range lines {

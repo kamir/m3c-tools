@@ -1,10 +1,10 @@
 package main
 
-// kata.go — Kata training/onboarding mode (DEMO-TOOL-design.md §6b).
+// kata.go: Kata training/onboarding mode (DEMO-TOOL-design.md §6b).
 //
 // Frame (Toyota Kata): each trust capability is a Kata with a target condition;
 // the learner closes the gap with REAL skillctl runs; this tool is the Coach. A
-// "pass" (a Beat) is a REAL skillctl exit code — never self-reported, never
+// "pass" (a Beat) is a REAL skillctl exit code, never self-reported, never
 // faked. The five Katas reuse the hermetic Sandbox + Runner from the demo:
 //
 //   K1 Seal & prove      keygen→pack→sign→verify --bundle → exit 0   (3 reps)
@@ -58,7 +58,7 @@ type Kata struct {
 	ExperimentCmd string // human label of the next-step command
 	TargetExit    int    // the exit code / per-skill verdict a clean rep must observe
 	RequiredReps  int    // distinct clean reps to reach grün (sitzt)
-	Concept       bool   // K5 — concept/roadmap; label it, don't fake a live fleet
+	Concept       bool   // K5: concept/roadmap; label it, don't fake a live fleet
 	Roadmap       string // roadmap/read text (K5)
 
 	// setup runs the prerequisite steps for one rep (sandbox mutation + narrated
@@ -132,8 +132,8 @@ func Katas() []*Kata {
 			RequiredReps:  1,
 			Concept:       true,
 			Roadmap: "CONCEPT/ROADMAP: the OFFLINE revocation exit (17) below is real and run here (SPEC-0279). " +
-				"Fleet propagation — a signed revocation HEAD reaching every host, including one with its network cable " +
-				"pulled, and failing closed — is the remaining sprint work (FR-0045 D2/D4). `skillctl revoke` runs live " +
+				"Fleet propagation (a signed revocation HEAD reaching every host, including one with its network cable " +
+				"pulled, and failing closed) is the remaining sprint work (FR-0045 D2/D4). `skillctl revoke` runs live " +
 				"against a registry; this offline demo does not stand up a registry, so the FLEET result is NOT faked.",
 			setup:   setupK5,
 			observe: func(res RunResult) int { return res.ExitCode },
@@ -159,10 +159,10 @@ func setupK1(sb *Sandbox, run kataRunner, narrate func(Event), nonce string) (re
 	if err != nil {
 		return repPlan{}, err
 	}
-	narrate(Event{Kind: "step", Text: "ACTUAL — a freshly packed skill with NO signed admission envelope. Verify it to see where you are:"})
+	narrate(Event{Kind: "step", Text: "ACTUAL: a freshly packed skill with NO signed admission envelope. Verify it to see where you are:"})
 	narrate(Event{Kind: "cmd", Cmd: "skillctl verify --bundle <sealed.skb> --meta <missing> --trust-roots <pinned>"})
 	a := run.Run(linesTo(narrate), "", "verify", "--bundle", skb, "--meta", skb+".unsigned.json", "--trust-roots", sb.TrustRoots)
-	narrate(Event{Kind: "note", Text: fmt.Sprintf("OBSTACLE: exit %d — %s", a.ExitCode, obstacleForExit(a.ExitCode))})
+	narrate(Event{Kind: "note", Text: fmt.Sprintf("OBSTACLE: exit %d: %s", a.ExitCode, obstacleForExit(a.ExitCode))})
 	return repPlan{
 		Args:     []string{"verify", "--bundle", skb, "--trust-roots", sb.TrustRoots},
 		Cmd:      "skillctl verify --bundle <sealed.skb> --trust-roots <pinned>   (the signed sidecar now exists)",
@@ -174,10 +174,10 @@ func setupK2(sb *Sandbox, run kataRunner, narrate func(Event), nonce string) (re
 	if err := sb.PrepareS2A(); err != nil {
 		return repPlan{}, err
 	}
-	narrate(Event{Kind: "step", Text: "ACTUAL — kup-onboarding-greeting is installed and green. The load-time gate allows it:"})
+	narrate(Event{Kind: "step", Text: "ACTUAL: kup-onboarding-greeting is installed and green. The load-time gate allows it:"})
 	narrate(Event{Kind: "cmd", Cmd: "skillctl verify-hook   (PreToolUse(Skill) gate, clean skill)"})
 	a := run.Run(linesTo(narrate), hookEvent(demoSkillName), "verify-hook")
-	narrate(Event{Kind: "note", Text: fmt.Sprintf("current state: exit %d — clean, currently trusted.", a.ExitCode)})
+	narrate(Event{Kind: "note", Text: fmt.Sprintf("current state: exit %d: clean, currently trusted.", a.ExitCode)})
 	narrate(Event{Kind: "prep", Text: "An agent tampers the INSTALLED skill on disk (prompt-injection into SKILL.md)."})
 	if err := sb.TamperInstalledNonce(nonce); err != nil {
 		return repPlan{}, err
@@ -195,14 +195,14 @@ func setupK3(sb *Sandbox, run kataRunner, narrate func(Event), nonce string) (re
 	if err := sb.PrepareS5(); err != nil {
 		return repPlan{}, err
 	}
-	narrate(Event{Kind: "step", Text: "ACTUAL — two hand-installed unverified skills. Plan the destructive cleanup (dry-run yields a signed token):"})
+	narrate(Event{Kind: "step", Text: "ACTUAL: two hand-installed unverified skills. Plan the destructive cleanup (dry-run yields a signed token):"})
 	narrate(Event{Kind: "cmd", Cmd: "skillctl audit --cleanup --dry-run-cleanup --format json"})
 	dry := run.Run(linesTo(narrate), "", "audit", "--cleanup", "--dry-run-cleanup", "--format", "json")
 	token := jsonField(dry.Stdout, "token")
 	if token == "" {
 		return repPlan{}, fmt.Errorf("K3: could not read the dry-run token (exit %d)", dry.ExitCode)
 	}
-	narrate(Event{Kind: "note", Text: fmt.Sprintf("current state: exit %d — a signed token bound to the affected-set.", dry.ExitCode)})
+	narrate(Event{Kind: "note", Text: fmt.Sprintf("current state: exit %d: a signed token bound to the affected-set.", dry.ExitCode)})
 	driftName := "kup-kata-drift-" + nonce
 	narrate(Event{Kind: "prep", Text: "The affected-set DRIFTS: a third unverified skill (" + driftName + ") appears before you confirm."})
 	if err := sb.PlaceUnverifiedNamed(driftName); err != nil {
@@ -221,18 +221,18 @@ func setupK4(sb *Sandbox, run kataRunner, narrate func(Event), nonce string) (re
 	if err != nil {
 		return repPlan{}, err
 	}
-	narrate(Event{Kind: "step", Text: "ACTUAL — verify a signed bundle against trust-roots that pin the WRONG registry key:"})
+	narrate(Event{Kind: "step", Text: "ACTUAL: verify a signed bundle against trust-roots that pin the WRONG registry key:"})
 	narrate(Event{Kind: "cmd", Cmd: "skillctl verify --bundle <sealed.skb> --trust-roots <wrong-roots>"})
 	a := run.Run(linesTo(narrate), "", "verify", "--bundle", skb, "--trust-roots", sb.WrongTrustRoots)
-	narrate(Event{Kind: "note", Text: fmt.Sprintf("OBSTACLE: exit %d — %s", a.ExitCode, obstacleForExit(a.ExitCode))})
+	narrate(Event{Kind: "note", Text: fmt.Sprintf("OBSTACLE: exit %d: %s", a.ExitCode, obstacleForExit(a.ExitCode))})
 	narrate(Event{Kind: "prep", Text: "Pin the correct registry key (the admission root):"})
 	narrate(Event{Kind: "cmd", Cmd: "skillctl trust add --registry " + demoRegURL + " --pubkey <registry-pubkey.pem>"})
 	ta := run.Run(linesTo(narrate), "", "trust", "add", "--registry", demoRegURL, "--pubkey", sb.RegPubPEM)
 	pinMsg := "the registry is now pinned."
 	if ta.ExitCode != 0 {
-		pinMsg = "already pinned from an earlier rep (idempotent) — the experiment below uses the correctly-pinned roots regardless."
+		pinMsg = "already pinned from an earlier rep (idempotent), the experiment below uses the correctly-pinned roots regardless."
 	}
-	narrate(Event{Kind: "note", Text: fmt.Sprintf("trust add exit %d — %s", ta.ExitCode, pinMsg)})
+	narrate(Event{Kind: "note", Text: fmt.Sprintf("trust add exit %d, %s", ta.ExitCode, pinMsg)})
 	return repPlan{
 		Args:     []string{"verify", "--bundle", skb, "--trust-roots", sb.TrustRoots},
 		Cmd:      "skillctl verify --bundle <sealed.skb> --trust-roots <correctly-pinned>",
@@ -245,10 +245,10 @@ func setupK5(sb *Sandbox, run kataRunner, narrate func(Event), nonce string) (re
 	if err != nil {
 		return repPlan{}, err
 	}
-	narrate(Event{Kind: "step", Text: "ACTUAL — the bundle is healthy today. Verify it offline:"})
+	narrate(Event{Kind: "step", Text: "ACTUAL: the bundle is healthy today. Verify it offline:"})
 	narrate(Event{Kind: "cmd", Cmd: "skillctl verify --bundle <sealed.skb> --trust-roots <pinned>"})
 	a := run.Run(linesTo(narrate), "", "verify", "--bundle", skb, "--trust-roots", sb.TrustRoots)
-	narrate(Event{Kind: "note", Text: fmt.Sprintf("current state: exit %d — healthy. But how do you kill it fleet-wide tomorrow?", a.ExitCode)})
+	narrate(Event{Kind: "note", Text: fmt.Sprintf("current state: exit %d: healthy, but how do you kill it fleet-wide tomorrow?", a.ExitCode)})
 	rev, err := sb.KataRevocations(digest, nonce)
 	if err != nil {
 		return repPlan{}, err
@@ -310,11 +310,11 @@ func (c *Coach) Coach(k *Kata) {
 		dist := c.store.Distinct(k.ID)
 		st, rusted := c.store.State(k.ID, k.RequiredReps, c.stallDays, time.Now())
 		if st == StateGruen {
-			c.bus.Emit(Event{Kind: "note", Text: fmt.Sprintf("%s is grün (sitzt) — %d/%d distinct clean reps.", k.ID, dist, k.RequiredReps)})
+			c.bus.Emit(Event{Kind: "note", Text: fmt.Sprintf("%s is grün (sitzt), %d/%d distinct clean reps.", k.ID, dist, k.RequiredReps)})
 			return
 		}
-		// Step 1 — Target.
-		c.bus.Emit(Event{Kind: "step", Text: fmt.Sprintf("TARGET — %s   (%d/%d clean reps · state %s%s)",
+		// Step 1, Target.
+		c.bus.Emit(Event{Kind: "step", Text: fmt.Sprintf("TARGET: %s   (%d/%d clean reps · state %s%s)",
 			k.Target, dist, k.RequiredReps, st, rustedTag(rusted))})
 		nonce := newNonce()
 		if _, _, err := c.runRep(k, nonce, c.predict); err != nil {
@@ -322,7 +322,7 @@ func (c *Coach) Coach(k *Kata) {
 			return
 		}
 		if c.eof {
-			c.bus.Emit(Event{Kind: "note", Text: "stdin closed — pausing this Kata (progress saved)."})
+			c.bus.Emit(Event{Kind: "note", Text: "stdin closed: pausing this Kata (progress saved)."})
 			return
 		}
 	}
@@ -339,10 +339,10 @@ func (c *Coach) runRep(k *Kata, nonce string, predict func(k *Kata) int) (Beat, 
 	if err != nil {
 		return Beat{}, false, err
 	}
-	// Step 4 — Next experiment + expectation.
-	c.bus.Emit(Event{Kind: "step", Text: "EXPERIMENT — next step: " + plan.Cmd})
+	// Step 4, Next experiment + expectation.
+	c.bus.Emit(Event{Kind: "step", Text: "EXPERIMENT, next step: " + plan.Cmd})
 	predicted := predict(k)
-	// Step 5 — Go & see.
+	// Step 5: Go & see.
 	c.bus.Emit(Event{Kind: "cmd", Cmd: "skillctl " + strings.Join(plan.Args, " ")})
 	res := c.run.Run(func(stream, line string) { c.bus.Emit(Event{Kind: "line", Stream: stream, Text: line}) }, plan.Stdin, plan.Args...)
 	if res.Err != nil {
@@ -354,12 +354,12 @@ func (c *Coach) runRep(k *Kata, nonce string, predict func(k *Kata) int) (Beat, 
 	if predicted == observed {
 		c.bus.Emit(Event{Kind: "note", Text: fmt.Sprintf("your prediction (%d) matched the real result (%d).", predicted, observed)})
 	} else {
-		c.bus.Emit(Event{Kind: "note", Text: fmt.Sprintf("you predicted %d; the real result was %d — %s", predicted, observed, obstacleForExit(observed))})
+		c.bus.Emit(Event{Kind: "note", Text: fmt.Sprintf("you predicted %d; the real result was %d: %s", predicted, observed, obstacleForExit(observed))})
 	}
 
 	beat := Beat{Kata: k.ID, Signature: repSignature(k.ID, nonce, plan.Artifact), Observed: observed, Target: k.TargetExit, At: time.Now()}
 	if !ok {
-		c.bus.Emit(Event{Kind: "note", Text: "no beat recorded — the run did not meet the target (honesty rule)."})
+		c.bus.Emit(Event{Kind: "note", Text: "no beat recorded: the run did not meet the target (honesty rule)."})
 		return beat, false, nil
 	}
 	added := c.store.Record(beat)
@@ -393,7 +393,7 @@ func (c *Coach) predict(k *Kata) int {
 	}
 	n, perr := strconv.Atoi(s)
 	if perr != nil {
-		return -1 // an explicit non-number prediction (a "wrong guess") — still honest
+		return -1 // an explicit non-number prediction (a "wrong guess"): still honest
 	}
 	return n
 }
@@ -431,9 +431,9 @@ func BoardRows(store *KataStore, stallDays int, now time.Time) []KataBoardRow {
 }
 
 // PrintBoard renders the non-interactive text board (`--kata-list`). It never
-// blocks and never runs skillctl — it reflects only the local progress store.
+// blocks and never runs skillctl, it reflects only the local progress store.
 func PrintBoard(w io.Writer, store *KataStore, stallDays int, now time.Time) {
-	fmt.Fprintf(w, "\n  Kata board — %s\n", store.Path)
+	fmt.Fprintf(w, "\n  Kata board, %s\n", store.Path)
 	fmt.Fprintf(w, "  mastery: rot=new · gelb=practicing · gruen=sitzt · rust window %dd (KATA_STALL_DAYS)\n\n", stallDays)
 	for _, r := range BoardRows(store, stallDays, now) {
 		concept := ""
@@ -450,9 +450,9 @@ func PrintBoard(w io.Writer, store *KataStore, stallDays int, now time.Time) {
 func boardHint(k *Kata, dist int, st KataState, rusted bool, stallDays int) string {
 	switch {
 	case rusted:
-		return "rusting — one clean rep refreshes it (stall window " + strconv.Itoa(stallDays) + "d)"
+		return "rusting, one clean rep refreshes it (stall window " + strconv.Itoa(stallDays) + "d)"
 	case st == StateGruen:
-		return "sitzt — revisit before it rusts (stall window " + strconv.Itoa(stallDays) + "d)"
+		return "sitzt, revisit before it rusts (stall window " + strconv.Itoa(stallDays) + "d)"
 	case st == StateRot:
 		return "start: " + k.ExperimentCmd
 	default:
@@ -467,7 +467,7 @@ func boardHint(k *Kata, dist int, st KataState, rusted bool, stallDays int) stri
 func beatText(k *Kata, dist int, st KataState, rusted bool, added bool) string {
 	suffix := ""
 	if !added {
-		suffix = " (identical artifact — practiced, no new distinct rep)"
+		suffix = " (identical artifact: practiced, no new distinct rep)"
 	}
 	return fmt.Sprintf("%s beat: exit %d = target · %d/%d · %s%s%s",
 		k.ID, k.TargetExit, dist, k.RequiredReps, st, rustedTag(rusted), suffix)

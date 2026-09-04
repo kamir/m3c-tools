@@ -1,4 +1,4 @@
-// engine_flow_test.go — end-to-end test for the Thinking Engine.
+// engine_flow_test.go: end-to-end test for the Thinking Engine.
 //
 // Week 2 (Stream 2a): runs a linear ProcessSpec with real prompts
 // (resolved from a test-local in-memory registry) and a mock LLM
@@ -274,7 +274,7 @@ func TestLinearProcessEndToEnd(t *testing.T) {
 		t.Fatal("no artifact emitted")
 	}
 
-	// 3. Capture Reflection — the LLM mock's structured output should
+	// 3. Capture Reflection: the LLM mock's structured output should
 	// have propagated into the published R payload.
 	select {
 	case raw := <-reflectionCh:
@@ -297,7 +297,7 @@ func TestLinearProcessEndToEnd(t *testing.T) {
 		t.Fatal("no reflection emitted")
 	}
 
-	// 4. Listing endpoints served from cache — should include our data.
+	// 4. Listing endpoints served from cache: should include our data.
 	listURL := ts.URL + "/v1/artifacts"
 	lr, _ := http.NewRequest("GET", listURL, nil)
 	lr.Header.Set("Authorization", "Bearer "+tok)
@@ -311,7 +311,7 @@ func TestLinearProcessEndToEnd(t *testing.T) {
 		t.Fatalf("decode /v1/artifacts: %v", err)
 	}
 	if len(listed) == 0 {
-		t.Errorf("GET /v1/artifacts returned empty — cache not populated")
+		t.Errorf("GET /v1/artifacts returned empty: cache not populated")
 	}
 
 	// Snapshot LLM mock: every R/I step must have called it.
@@ -455,7 +455,7 @@ func TestHealthNoAuth(t *testing.T) {
 // TestSemiLinearHaltsOnStepFailure exercises the Week-3 step barrier.
 // A 3-step semi_linear spec deliberately fails in step 2 (the I-proc
 // receives a malformed JSON completion). Step 3 (A-proc) must NEVER
-// fire — if it did, the orchestrator's barrier is broken.
+// fire. If it did, the orchestrator's barrier is broken.
 func TestSemiLinearHaltsOnStepFailure(t *testing.T) {
 	if testing.Short() {
 		t.Skip("thinking e2e: skipped in -short mode")
@@ -495,7 +495,7 @@ func TestSemiLinearHaltsOnStepFailure(t *testing.T) {
 			case strings.Contains(sys, "compare-template"):
 				return `{"similarities":["x"],"differences":["y"]}`
 			case strings.Contains(sys, "pattern-template"):
-				// Deliberately malformed — I-proc parses this and fails.
+				// Deliberately malformed: I-proc parses this and fails.
 				return `garbage not json`
 			case strings.Contains(sys, "report-template"):
 				aCalls.Add(1)
@@ -586,7 +586,7 @@ func TestSemiLinearHaltsOnStepFailure(t *testing.T) {
 //   2. The feedback consumer picks that T off thoughts.raw, filters,
 //      rate-limits, and posts a default linear spec
 //      (R.clarify → I.decision → A.summary) back to the orchestrator.
-//   3. The downstream process produces a second Artifact —
+//   3. The downstream process produces a second Artifact:
 //      closing the cognitive loop.
 func TestContradictionFeedbackLoopProducesFollowupArtifact(t *testing.T) {
 	if testing.Short() {
@@ -686,7 +686,7 @@ func TestContradictionFeedbackLoopProducesFollowupArtifact(t *testing.T) {
 		}
 	}
 	if !foundFollowup {
-		t.Fatal("no follow-up question with parent_artifact_id seen — i-proc wiring regression")
+		t.Fatal("no follow-up question with parent_artifact_id seen: i-proc wiring regression")
 	}
 
 	// Expect an Artifact emitted by the feedback-driven process
@@ -707,6 +707,6 @@ func TestContradictionFeedbackLoopProducesFollowupArtifact(t *testing.T) {
 		}
 	}
 	if !gotSummary {
-		t.Fatal("feedback loop did not produce a summary artifact — loop is broken")
+		t.Fatal("feedback loop did not produce a summary artifact, loop is broken")
 	}
 }

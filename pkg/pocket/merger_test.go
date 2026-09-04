@@ -73,7 +73,7 @@ func TestBuildFileList_RejectsConcatInjection(t *testing.T) {
 }
 
 // TestBuildFileList_NoInjectionViaSilentForm proves the existing (non-error)
-// BuildFileList seam — exercised by MergeGroup's reference path — cannot be
+// BuildFileList seam, exercised by MergeGroup's reference path, cannot be
 // coerced into emitting the injected `file '/etc/passwd'` directive even when
 // fed a newline-bearing path.
 func TestBuildFileList_NoInjectionViaSilentForm(t *testing.T) {

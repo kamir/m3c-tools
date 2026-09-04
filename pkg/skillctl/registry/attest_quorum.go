@@ -7,7 +7,7 @@ package registry
 // carriers cannot drift. It:
 //   - verifies each attest envelope against each PINNED signer key (SEC-H1);
 //   - dedups per DISTINCT verifying key (newest occurred_at wins within a signer)
-//     — distinctness is anchored to the KEY, never the reviewer_id string, so one
+//. Distinctness is anchored to the KEY, never the reviewer_id string, so one
 //     key cannot mint a quorum;
 //   - binds reviewer_id to the signer it is pinned to (mismatch dropped, fail-closed);
 //   - drops an EXPIRED attestation (D5) before it can occupy a signer slot;
@@ -17,7 +17,7 @@ package registry
 // (one implicit signer {"", tr.pub} matching any reviewer_id) and no expires_at,
 // OfferAttest admits exactly the attestations that verify against tr.pub, dedups
 // to ONE via newest-occurred_at-wins (== the old attestTS), and Qualifying returns
-// 0 or 1 — reproducing `hasAttest && MeetsFloor(level)` byte-for-byte. ed25519
+// 0 or 1: reproducing `hasAttest && MeetsFloor(level)` byte-for-byte. ed25519
 // verification (VerifyEnvelopeSignature) is untouched.
 
 import (
@@ -91,7 +91,7 @@ func (a *AttestAccumulator) OfferAttest(ev map[string]any) {
 	if digest == "" {
 		return
 	}
-	// FR-0090 IS-T3: an attestation MUST carry BOTH signed discriminator fields —
+	// FR-0090 IS-T3: an attestation MUST carry BOTH signed discriminator fields:
 	// reviewer_id (who) and governance_level (what). A revoke/admit/install envelope
 	// (no reviewer_id) can therefore never occupy a governance slot, even if it
 	// verifies against a pinned key. The identity of a signed event is its signed
@@ -118,8 +118,8 @@ func (a *AttestAccumulator) OfferAttest(ev map[string]any) {
 		if a.byDigest[digest] == nil {
 			a.byDigest[digest] = map[string]attRec{}
 		}
-		// Record the signer's NEWEST-occurred_at attestation REGARDLESS of expiry —
-		// the reviewer's LATEST word governs. Qualifying then denies a slot whose
+		// Record the signer's NEWEST-occurred_at attestation REGARDLESS of expiry.
+		// The reviewer's LATEST word governs. Qualifying then denies a slot whose
 		// newest is expired, so an expiry cannot be shadowed by an older
 		// non-expiring sibling (challenge-gate fix; invariant "never fall back").
 		if prev, ok := a.byDigest[digest][key]; !ok || ts > prev.occurredAt {
@@ -138,8 +138,8 @@ func (a *AttestAccumulator) OfferRevoke(ev map[string]any) {
 		return
 	}
 	// FR-0090 IS-T3: a revoke MUST carry the signed revoked_by discriminator. Without
-	// this guard, ANY envelope that merely verifies against a pinned key — an admit or
-	// an attestation for `digest` — would mark `digest` revoked (a signed-but-wrong-
+	// this guard, ANY envelope that merely verifies against a pinned key, an admit or
+	// an attestation for `digest`, would mark `digest` revoked (a signed-but-wrong-
 	// shape confusion). revoked_by is the field BuildBundleRevokedEvent sets and the
 	// only thing that makes a signed envelope a revocation.
 	if rb, _ := ev["revoked_by"].(string); rb == "" {
@@ -239,7 +239,7 @@ func (a *AttestAccumulator) RepresentativeEvent(digest string) map[string]any {
 
 // attestationContextFor builds the stashed AttestationContext for a staged bundle:
 // the admit event + the representative qualifying attestation (singular, legacy /
-// k=1 path) plus the full qualifying set ONLY when a quorum of >1 qualified — so a
+// k=1 path) plus the full qualifying set ONLY when a quorum of >1 qualified, so a
 // single-attestation stash stays byte-identical (the plural field is omitempty).
 func attestationContextFor(admit map[string]any, acc *AttestAccumulator, digest string) *AttestationContext {
 	ctx := &AttestationContext{

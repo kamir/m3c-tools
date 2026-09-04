@@ -1,6 +1,6 @@
 package plaud
 
-// SPEC-0304 — pull the Plaud token from the ER1 Credential Vault instead of
+// SPEC-0304: pull the Plaud token from the ER1 Credential Vault instead of
 // harvesting it from a local browser. The token was captured once (any OS) via
 // the "Plaud verbinden" page and stored encrypted server-side; here the owner's
 // agent fetches it back with the same auth m3c-tools already uses for ER1
@@ -34,7 +34,7 @@ const ER1RevealPath = "/api/credentials/plaud/reveal"
 func FetchTokenFromER1() (token string, exp int64, err error) {
 	apiURL := strings.TrimSpace(os.Getenv("ER1_API_URL"))
 	if apiURL == "" {
-		return "", 0, fmt.Errorf("ER1_API_URL not set — activate a profile with 'm3c-tools config switch <name>'")
+		return "", 0, fmt.Errorf("ER1_API_URL not set: activate a profile with 'm3c-tools config switch <name>'")
 	}
 	base := apiURL
 	if idx := strings.LastIndex(base, "/upload"); idx > 0 {
@@ -51,7 +51,7 @@ func FetchTokenFromER1() (token string, exp int64, err error) {
 			headers["X-User-ID"] = uid // owner id for the X-API-KEY auth path
 		}
 	} else {
-		return "", 0, fmt.Errorf("no ER1 authentication (device token or ER1_API_KEY) — run 'm3c-tools login'")
+		return "", 0, fmt.Errorf("no ER1 authentication (device token or ER1_API_KEY): run 'm3c-tools login'")
 	}
 
 	client := &http.Client{Timeout: 15 * time.Second}
@@ -88,11 +88,11 @@ func FetchTokenFromER1() (token string, exp int64, err error) {
 		}
 		return out.Token, out.Exp, nil
 	case http.StatusUnauthorized:
-		return "", 0, fmt.Errorf("ER1 rejected the credentials (401) — run 'm3c-tools login'")
+		return "", 0, fmt.Errorf("ER1 rejected the credentials (401), run 'm3c-tools login'")
 	case http.StatusForbidden:
-		return "", 0, fmt.Errorf("ER1 credential reveal is disabled (403) — the server must set CREDENTIAL_ALLOW_CLIENT_REVEAL=1 (SPEC-0304 R1, spike-only)")
+		return "", 0, fmt.Errorf("ER1 credential reveal is disabled (403), the server must set CREDENTIAL_ALLOW_CLIENT_REVEAL=1 (SPEC-0304 R1, spike-only)")
 	case http.StatusNotFound:
-		return "", 0, fmt.Errorf("no Plaud credential stored in ER1 for this user — capture it first at <ER1>/v2/credentials/plaud")
+		return "", 0, fmt.Errorf("no Plaud credential stored in ER1 for this user: capture it first at <ER1>/v2/credentials/plaud")
 	default:
 		return "", 0, fmt.Errorf("ER1 reveal failed (HTTP %d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}

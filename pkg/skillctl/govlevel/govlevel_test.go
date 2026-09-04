@@ -15,7 +15,7 @@ func TestNormalize(t *testing.T) {
 }
 
 // ValidFloor is the SEC-L1 guard: a valid floor is exactly {green, yellow},
-// case/whitespace-insensitive. "red"/unknown are rejected REGARDLESS of case —
+// case/whitespace-insensitive. "red"/unknown are rejected REGARDLESS of case:
 // the property the two trust-root loaders previously spelled separately.
 func TestValidFloor(t *testing.T) {
 	accept := map[string]string{
@@ -28,7 +28,7 @@ func TestValidFloor(t *testing.T) {
 			t.Errorf("ValidFloor(%q) = (%q,%v), want (%q,true)", in, n, ok, want)
 		}
 	}
-	// red (any case/space) and unknown values must be rejected — a red floor
+	// red (any case/space) and unknown values must be rejected. A red floor
 	// would admit everything; a typo must fail loudly.
 	for _, in := range []string{"red", "RED", "Red", " red ", "", "greenish", "amber", "0"} {
 		if _, ok := ValidFloor(in); ok {

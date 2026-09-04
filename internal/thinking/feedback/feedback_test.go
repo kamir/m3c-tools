@@ -1,4 +1,4 @@
-// feedback_test.go — unit tests for the feedback consumer.
+// feedback_test.go: unit tests for the feedback consumer.
 //
 // Covers:
 //   - MatchFilter accepts contradiction follow-ups and rejects raw
@@ -259,7 +259,7 @@ func TestConsumerRateLimitDropsOverCap(t *testing.T) {
 	time.Sleep(150 * time.Millisecond)
 	n := col.read()
 	if n > 2 {
-		// Each launched process dispatches its step 0 command — with
+		// Each launched process dispatches its step 0 command: with
 		// cap=2 we should see at most 2 command dispatches from the
 		// feedback loop. Each linear process dispatches all 3 steps
 		// eagerly though. Allow up to 6 (2 processes × 3 steps).

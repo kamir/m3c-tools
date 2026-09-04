@@ -1,16 +1,16 @@
 package main
 
-// verify_all_cmds.go — `skillctl verify --all [--quarantine] [--json]`
+// verify_all_cmds.go: `skillctl verify --all [--quarantine] [--json]`
 // (SPEC-0247 P0.2: the SessionStart sweep).
 //
 // Iterates every ~/.claude/skills/<name>/ and re-runs the SPEC-0188 §7 chain.
-// Wired as a SessionStart hook, it runs BEFORE skill discovery — so a skill it
+// Wired as a SessionStart hook, it runs BEFORE skill discovery, so a skill it
 // quarantines (moves out of ~/.claude/skills/) never has its description
 // injected into the model's context this session (SPEC-0247 R-3.1). It is also
 // the structural fallback for the /slash path, which PreToolUse cannot gate
 // (§3.4): a skill that isn't on disk cannot be /slash-invoked.
 //
-// SAFETY — three dispositions, not one:
+// SAFETY: three dispositions, not one:
 //   - managed (has a stashed .skb) + TRUST failure (§7 exit ≥10) → quarantine
 //     (only with --quarantine). These are real signature/digest/governance/
 //     revocation failures.
@@ -129,7 +129,7 @@ func runVerifyAll(args []string, stdout, stderr io.Writer) int {
 	}
 
 	// Resolve trust roots once. If unavailable, managed skills cannot be
-	// verified — report that clearly and DO NOT quarantine anything.
+	// verified. Report that clearly and DO NOT quarantine anything.
 	tr, root, rootErr := loadRootsFn(*registryURL)
 	var sc sweepCtx
 	if rootErr == nil {
@@ -152,11 +152,11 @@ func runVerifyAll(args []string, stdout, stderr io.Writer) int {
 	// quarantined regardless of its §7 result, and the set is cached so the
 	// per-invocation offline gate denies it too until the next sweep.
 	//
-	// WF-001 H-F1 / R01 — a non-nil error is the MANAGED fail-CLOSED signal: under
+	// WF-001 H-F1 / R01: a non-nil error is the MANAGED fail-CLOSED signal: under
 	// self-trust-root config the revoked-set fetch was unavailable AND no fresh
 	// last-known-good cache bounds staleness, so we can no longer prove any managed
 	// bundle is un-revoked. We must NOT read the (empty/stale) set as "nothing
-	// revoked" — that is exactly the revocation-suppression the wave-1 challenge
+	// revoked": that is exactly the revocation-suppression the wave-1 challenge
 	// gate flagged (block the network / hostile 5xx → empty set → known-revoked
 	// digest runs). The UNMANAGED/dev path returns err==nil (best-effort fail-open),
 	// so this never bricks a default machine. See the per-skill fail-closed branch.
@@ -172,7 +172,7 @@ func runVerifyAll(args []string, stdout, stderr io.Writer) int {
 		// os.Stat FOLLOWS symlinks. A symlinked skill dir (common here:
 		// gstack symlinks like `browse → gstack/browse`) still has its
 		// description loaded into context, so the sweep MUST see it.
-		// e.IsDir() is lstat-based and would silently skip every symlink —
+		// e.IsDir() is lstat-based and would silently skip every symlink:
 		// an evasion gap for a security sweep.
 		info, statErr := os.Stat(dir)
 		if statErr != nil || !info.IsDir() {
@@ -187,15 +187,15 @@ func runVerifyAll(args []string, stdout, stderr io.Writer) int {
 				rep.Entries = append(rep.Entries, quarantineOrReport(home, name, *quarantine, "unmanaged (no .skb) and policy unmanaged_skills=deny", 0, &rep))
 			default: // allow | warn
 				rep.Skipped++
-				rep.Entries = append(rep.Entries, sweepEntry{Skill: name, State: "skipped", Reason: "unmanaged (no .skb) — not skillctl-installed"})
+				rep.Entries = append(rep.Entries, sweepEntry{Skill: name, State: "skipped", Reason: "unmanaged (no .skb): not skillctl-installed"})
 			}
 			continue
 		}
 
-		// WF-001 H-F1 / R01 — REVOCATION-SUPPRESSION FAIL-CLOSED. The managed
+		// WF-001 H-F1 / R01: REVOCATION-SUPPRESSION FAIL-CLOSED. The managed
 		// revoked-set fetch was unavailable AND no fresh last-known-good cache
 		// bounds staleness (see fetchRevokedOnline / revokedUnavailableUnderManaged),
-		// so we cannot prove THIS managed bundle is not revoked. Fail CLOSED — quar-
+		// so we cannot prove THIS managed bundle is not revoked. Fail CLOSED: quar-
 		// antine rather than let the empty/stale set read as "nothing revoked" (the
 		// pre-fix fail-open: block the network → known-revoked digest still runs).
 		// Only reached under managed config (self-trust-roots present); the unmanaged
@@ -205,7 +205,7 @@ func runVerifyAll(args []string, stdout, stderr io.Writer) int {
 		// set here is stale and cannot be trusted as authoritative.
 		if revUnavailable {
 			rep.Entries = append(rep.Entries, quarantineOrReport(home, name, *quarantine,
-				fmt.Sprintf("revocation authority unavailable under managed trust roots and no fresh cache — failing closed (cannot confirm this bundle is not revoked; WF-001 H-F1): %v", revErr),
+				fmt.Sprintf("revocation authority unavailable under managed trust roots and no fresh cache. Failing closed (cannot confirm this bundle is not revoked; WF-001 H-F1): %v", revErr),
 				exitRevocationStale, &rep))
 			recordVerdict(home, name, *sessionID, exitRevocationStale, "", sweepClockFn())
 			continue
@@ -224,7 +224,7 @@ func runVerifyAll(args []string, stdout, stderr io.Writer) int {
 		}
 
 		// Managed, but no SPEC-0188 trust roots. The online chain needs them;
-		// the offline/sidecar tiers (self/ER1 pull format) do NOT — so try
+		// the offline/sidecar tiers (self/ER1 pull format) do NOT, so try
 		// those before giving up. Without this, a pure self/ER1 machine (no
 		// SPEC-0188 roots, the common case) would never verify or quarantine
 		// any pull-installed skill.
@@ -232,7 +232,7 @@ func runVerifyAll(args []string, stdout, stderr io.Writer) int {
 			if !applyOfflineSweep(&rep, home, name, *sessionID, pol, *quarantine) {
 				rep.Unverified++
 				rep.Entries = append(rep.Entries, sweepEntry{Skill: name, State: "unverified",
-					Reason: "trust roots unavailable + no offline metadata — left in place"})
+					Reason: "trust roots unavailable + no offline metadata: left in place"})
 			}
 			continue
 		}
@@ -241,7 +241,7 @@ func runVerifyAll(args []string, stdout, stderr io.Writer) int {
 		remaining := *budget - sweepClockFn().Sub(start)
 		if remaining <= 0 {
 			rep.Unverified++
-			rep.Entries = append(rep.Entries, sweepEntry{Skill: name, State: "unverified", Reason: "sweep budget exceeded (freshness unknown) — left in place"})
+			rep.Entries = append(rep.Entries, sweepEntry{Skill: name, State: "unverified", Reason: "sweep budget exceeded (freshness unknown): left in place"})
 			continue
 		}
 
@@ -269,14 +269,14 @@ func runVerifyAll(args []string, stdout, stderr io.Writer) int {
 				// on unchanged bytes remains the offline-resilience path (§8).
 				rep.Unverified++
 				rep.Entries = append(rep.Entries, sweepEntry{Skill: name, State: "unverified", Exit: code,
-					Reason: "could not verify (registry unreachable; no offline stash): " + vErr.Error() + " — left in place"})
+					Reason: "could not verify (registry unreachable; no offline stash): " + vErr.Error() + ": left in place"})
 			}
 		}
 	}
 
 	// SPEC-0255 gate observability: emit one advisory audit event per swept skill
 	// (best-effort; appendGateEvent swallows all errors so it never affects the
-	// sweep result). online/cache_hit are hook-path signals — left false here.
+	// sweep result). online/cache_hit are hook-path signals: left false here.
 	for _, e := range rep.Entries {
 		appendGateEvent(home, gateEvent{
 			Source: "sweep", Skill: e.Skill, Decision: decisionForSweepState(e.State),
@@ -314,7 +314,7 @@ func applyOfflineSweep(rep *sweepReport, home, name, sessionID string, pol gateP
 	default:
 		rep.Unverified++
 		rep.Entries = append(rep.Entries, sweepEntry{Skill: name, State: "unverified", Exit: oc,
-			Reason: "offline verify inconclusive — left in place"})
+			Reason: "offline verify inconclusive: left in place"})
 	}
 	return true
 }
@@ -416,7 +416,7 @@ func printSweepHuman(w io.Writer, rep sweepReport, doQuarantine bool) {
 	}
 	if rep.RevocationUnavailable != "" {
 		fmt.Fprintf(w, "⛔ revocation authority unavailable under managed trust roots + no fresh cache: %s\n  → managed skills FAIL CLOSED (WF-001 H-F1)%s.\n",
-			rep.RevocationUnavailable, map[bool]string{true: " — quarantined", false: " — report-only, pass --quarantine to move them out"}[doQuarantine])
+			rep.RevocationUnavailable, map[bool]string{true: " (quarantined", false: ") report-only, pass --quarantine to move them out"}[doQuarantine])
 	}
 	for _, e := range rep.Entries {
 		var mark string
@@ -432,7 +432,7 @@ func printSweepHuman(w io.Writer, rep sweepReport, doQuarantine bool) {
 		}
 		line := fmt.Sprintf("  %s %-28s %s", mark, e.Skill, e.State)
 		if e.Reason != "" {
-			line += " — " + e.Reason
+			line += ": " + e.Reason
 		}
 		fmt.Fprintln(w, line)
 	}

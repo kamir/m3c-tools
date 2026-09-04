@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>skillctl — CISO-Onboarding-Deck</title>
+<title>skillctl: CISO-Onboarding-Deck</title>
 <style>
   :root{
     --bg:#0a0f1c; --panel:#111a2e; --panel2:#0d1424; --ink:#eaf0fb; --mut:#9db0d0;
@@ -64,7 +64,7 @@
 </head>
 <body>
 <div class="bar">
-  <span class="tag">CISO-Onboarding</span><b>skillctl — der Trust Layer für Agent-Skills</b>
+  <span class="tag">CISO-Onboarding</span><b>skillctl: der Trust Layer für Agent-Skills</b>
   <span class="sp"></span>
   <span class="pill">bewusst ehrlich</span>
 </div>
@@ -72,42 +72,42 @@
 <div class="wrap">
 
   <section class="slide" id="s0">
-    <h1 class="deck">Argumente für den CISO — gegen einen kritischen IT-Security-Experten <em>und</em> einen pingeligen CTO</h1>
-    <p class="key">Jeder Agent-Skill ist beliebiger Code, der mit den vollen Rechten deines Agenten läuft — und heute ist diese
+    <h1 class="deck">Argumente für den CISO (gegen einen kritischen IT-Security-Experten <em>und</em> einen pingeligen CTO</h1>
+    <p class="key">Jeder Agent-Skill ist beliebiger Code, der mit den vollen Rechten deines Agenten läuft) und heute ist diese
       Lieferkette unsigniert, ungeprüft und nicht widerrufbar. skillctl schließt die Hälfte des Problems um
-      <b>Provenance + Governance + Integrität + Revocation</b> — und ist bewusst ehrlich über die Hälfte, die es nicht
+      <b>Provenance + Governance + Integrität + Revocation</b>: und ist bewusst ehrlich über die Hälfte, die es nicht
       löst (den Runtime-Käfig). Der Trick: das echte Limit zuerst zugeben, dann den verteidigbaren Kern mit exaktem
       Beleg halten.</p>
     <div class="lead3">
-      <div class="card"><h3>Leit-Argument #1</h3><p><b>Keine gehostete CA im Verdict-Pfad.</b> Eine andere Partei verifiziert die gesamte Kette mit <em>deinen</em> gepinnten ed25519-Roots + den Bundle-Bytes allein — kein OCSP-/CRL-/Rekor-/Fulcio-Aufruf nötig. Verschwindet der Anbieter, funktioniert die Verifikation weiter.</p></div>
+      <div class="card"><h3>Leit-Argument #1</h3><p><b>Keine gehostete CA im Verdict-Pfad.</b> Eine andere Partei verifiziert die gesamte Kette mit <em>deinen</em> gepinnten ed25519-Roots + den Bundle-Bytes allein: kein OCSP-/CRL-/Rekor-/Fulcio-Aufruf nötig. Verschwindet der Anbieter, funktioniert die Verifikation weiter.</p></div>
       <div class="card"><h3>Leit-Argument #2</h3><p><b>reviewer≠author, kryptografisch erzwungen.</b> Funktionstrennung als gepinnter Key-Floor über <em>verschiedene</em> Principals. Ein gestohlener Author-Key kann kein grünes Review fälschen; ein rot→grün-Sidecar-Edit schlägt fail-closed fehl.</p></div>
-      <div class="card"><h3>Leit-Argument #3</h3><p><b>Ehrlicher, fail-closed Scope.</b> Wir verkaufen jetzt das <em>Schloss</em> (Provenance+Governance+Integrität+Revocation) und ausdrücklich <em>nicht</em> den Runtime-Käfig (FR-0044, Roadmap). Das PreToolUse-Gate verkleinert, was Ambient-Rechte erreicht — es sperrt es nicht ein.</p></div>
+      <div class="card"><h3>Leit-Argument #3</h3><p><b>Ehrlicher, fail-closed Scope.</b> Wir verkaufen jetzt das <em>Schloss</em> (Provenance+Governance+Integrität+Revocation) und ausdrücklich <em>nicht</em> den Runtime-Käfig (FR-0044, Roadmap). Das PreToolUse-Gate verkleinert, was Ambient-Rechte erreicht: es sperrt es nicht ein.</p></div>
     </div>
   </section>
 
   <section class="slide" id="s1">
     <h2><span class="n">1</span>Die Lücke: ein Skill ist Code mit den Schlüsseln deines Agenten</h2>
-    <p class="key">Ein Agent-Skill ist keine Library, die du <em>vielleicht</em> aufrufst — es ist beliebiger Code, den der Agent aus eigener Initiative ausführt, mit den vollen Rechten des Agenten. Heute ist diese Lieferkette unsigniert, ungeprüft und nicht widerrufbar.</p>
+    <p class="key">Ein Agent-Skill ist keine Library, die du <em>vielleicht</em> aufrufst: es ist beliebiger Code, den der Agent aus eigener Initiative ausführt, mit den vollen Rechten des Agenten. Heute ist diese Lieferkette unsigniert, ungeprüft und nicht widerrufbar.</p>
     <ul>
-      <li>Ein vergifteter oder ausgetauschter Skill = SolarWinds / xz / npm-Typosquat — nur läuft die Payload mit den <b>Ambient-Rechten des Agenten</b>, nicht deinen.</li>
+      <li>Ein vergifteter oder ausgetauschter Skill = SolarWinds / xz / npm-Typosquat: nur läuft die Payload mit den <b>Ambient-Rechten des Agenten</b>, nicht deinen.</li>
       <li>Der Default heute: keine Author-Identität, kein unabhängiges Review, keine Integritätsprüfung, keine Möglichkeit, einen bekannt-schlechten Skill flottenweit zu widerrufen.</li>
-      <li>Der realistische Vektor ist <b>datengetragen</b>: ein Skill aus einem Room, aus dem Internet importiert, cross-person geteilt — kein Code-Exec des Angreifers auf deiner Box nötig.</li>
+      <li>Der realistische Vektor ist <b>datengetragen</b>: ein Skill aus einem Room, aus dem Internet importiert, cross-person geteilt: kein Code-Exec des Angreifers auf deiner Box nötig.</li>
     </ul>
-    <div class="quote">"Wenn Dependency-Confusion eine echte Zeile in deinem Risk-Register ist, dann sind Agent-Skills genau diese Zeile — <b>mit ausgeschalteter Sicherung.</b>"</div>
+    <div class="quote">"Wenn Dependency-Confusion eine echte Zeile in deinem Risk-Register ist, dann sind Agent-Skills genau diese Zeile: <b>mit ausgeschalteter Sicherung.</b>"</div>
   </section>
 
   <section class="slide" id="s2">
     <h2><span class="n">2</span>Bedrohungsmodell: was tatsächlich bis zur Invocation kommt</h2>
-    <p class="key">Nach Wahrscheinlichkeit sortieren, nicht nach Kinofilm. Der häufige Vektor ist ein manipulierter / gefälschter / widerrufener / unzureichend geprüfter Skill, der als Daten eintritt — genau die Menge, die skillctl vom Tisch nimmt.</p>
+    <p class="key">Nach Wahrscheinlichkeit sortieren, nicht nach Kinofilm. Der häufige Vektor ist ein manipulierter / gefälschter / widerrufener / unzureichend geprüfter Skill, der als Daten eintritt: genau die Menge, die skillctl vom Tisch nimmt.</p>
     <svg class="diag" viewBox="0 0 720 250" role="img" aria-label="Bedrohungs-Wahrscheinlichkeits-Pyramide">
       <polygon points="360,20 90,205 630,205" fill="none" stroke="var(--line)"/>
       <line x1="150" y1="165" x2="570" y2="165" stroke="var(--line)" stroke-dasharray="4 3"/>
       <text x="360" y="120" text-anchor="middle" fill="var(--good)" font-size="13" font-weight="700">skillctl stoppt diese am Gate</text>
       <text x="360" y="140" text-anchor="middle" fill="var(--mut)" font-size="11">manipuliert · gefälschter Author · unvertraute Registry · Selbst-Review · rot→grün · widerrufen</text>
-      <text x="360" y="188" text-anchor="middle" fill="var(--mut)" font-size="11">außer Scope — OS-Grenze (FR-0044): Same-uid-Config-Manipulation · vollgeprüft-dann-bösartig zur Laufzeit</text>
+      <text x="360" y="188" text-anchor="middle" fill="var(--mut)" font-size="11">außer Scope: OS-Grenze (FR-0044): Same-uid-Config-Manipulation · vollgeprüft-dann-bösartig zur Laufzeit</text>
       <text x="360" y="45" text-anchor="middle" fill="var(--gold)" font-size="12" font-weight="700">selten / Spitze</text>
     </svg>
-    <p class="key" style="margin-top:6px">Ausdrücklich außer Scope: ein Angreifer, der <em>bereits</em> Same-uid-Schreibrechte im Config-Verzeichnis des Agenten hat — eine Binsenweisheit über die OS-Grenze, kein skillctl-Defekt.</p>
+    <p class="key" style="margin-top:6px">Ausdrücklich außer Scope: ein Angreifer, der <em>bereits</em> Same-uid-Schreibrechte im Config-Verzeichnis des Agenten hat: eine Binsenweisheit über die OS-Grenze, kein skillctl-Defekt.</p>
   </section>
 
   <section class="slide" id="s3">
@@ -116,57 +116,57 @@
     <svg class="diag" viewBox="0 0 720 210" role="img" aria-label="Drei-Signaturen-Kette">
       <g font-size="12" font-family="var(--mono)">
         <rect x="20" y="20" width="150" height="34" rx="8" fill="var(--panel2)" stroke="var(--line)"/><text x="95" y="41" text-anchor="middle" fill="var(--ink)">skill dir</text>
-        <text x="185" y="41" fill="var(--mut)">— pack →</text>
+        <text x="185" y="41" fill="var(--mut)">: pack →</text>
         <rect x="250" y="20" width="200" height="34" rx="8" fill="var(--panel2)" stroke="var(--accent)"/><text x="350" y="41" text-anchor="middle" fill="var(--ink)">sha256 DIGEST (Identität)</text>
-        <rect x="250" y="78" width="420" height="30" rx="7" fill="color-mix(in srgb,var(--good2) 45%,transparent)" stroke="var(--good)"/><text x="260" y="98" fill="var(--ink)">① AUTHOR ed25519 — wer es schrieb</text>
-        <rect x="250" y="116" width="420" height="30" rx="7" fill="color-mix(in srgb,var(--good2) 45%,transparent)" stroke="var(--good)"/><text x="260" y="136" fill="var(--ink)">② REGISTRY ed25519 — admittiert am Datum</text>
-        <rect x="250" y="154" width="420" height="30" rx="7" fill="color-mix(in srgb,var(--good2) 45%,transparent)" stroke="var(--good)"/><text x="260" y="174" fill="var(--ink)">③ GOVERNANCE ed25519 — reviewer≠author setzt Level</text>
+        <rect x="250" y="78" width="420" height="30" rx="7" fill="color-mix(in srgb,var(--good2) 45%,transparent)" stroke="var(--good)"/><text x="260" y="98" fill="var(--ink)">① AUTHOR ed25519: wer es schrieb</text>
+        <rect x="250" y="116" width="420" height="30" rx="7" fill="color-mix(in srgb,var(--good2) 45%,transparent)" stroke="var(--good)"/><text x="260" y="136" fill="var(--ink)">② REGISTRY ed25519: admittiert am Datum</text>
+        <rect x="250" y="154" width="420" height="30" rx="7" fill="color-mix(in srgb,var(--good2) 45%,transparent)" stroke="var(--good)"/><text x="260" y="174" fill="var(--ink)">③ GOVERNANCE ed25519: reviewer≠author setzt Level</text>
         <line x1="350" y1="54" x2="350" y2="78" stroke="var(--line)"/>
       </g>
     </svg>
     <ul>
-      <li>Dasselbe Primitiv, mit dem TUF und Sigstore signieren — <b>keine neue Kryptografie</b>. Die Aussage ist eng und wahr: drei <em>verschiedene gepinnte Principals</em>, nicht "drei Dateien auf einer Box" (das ist ein Bedienfehler, kein Design — siehe Slide 8).</li>
+      <li>Dasselbe Primitiv, mit dem TUF und Sigstore signieren: <b>keine neue Kryptografie</b>. Die Aussage ist eng und wahr: drei <em>verschiedene gepinnte Principals</em>, nicht "drei Dateien auf einer Box" (das ist ein Bedienfehler, kein Design: siehe Slide 8).</li>
       <li><b>Reproduzierbarer Digest, ehrlich eingegrenzt:</b> byte-für-byte reproduzierbar mit demselben <code>skillctl pack</code> (gepinnte Version, deterministischer PAX-Tar + <code>gzip --no-name</code>). Gzip-Output ist toolchain-abhängig, daher ist die <em>implementierungsübergreifende</em> Inhaltsprüfung das per-Datei-<code>CHECKSUMS</code>-Manifest.</li>
     </ul>
   </section>
 
   <section class="slide" id="s4">
-    <h2><span class="n">4</span>Differenzierer #1 — keine gehostete CA im Verifikationspfad</h2>
-    <p class="key">Eine andere Partei verifiziert die gesamte Kette mit gepinnten ed25519-Roots + den Bundle-Bytes <b>allein</b> — kein OCSP-, CRL-, Rekor- oder Fulcio-Aufruf für ein Verdict. Selbst Revocation ist eine signierte, pinnbare Offline-Liste, kein Netzwerk-Lookup.</p>
+    <h2><span class="n">4</span>Differenzierer #1, keine gehostete CA im Verifikationspfad</h2>
+    <p class="key">Eine andere Partei verifiziert die gesamte Kette mit gepinnten ed25519-Roots + den Bundle-Bytes <b>allein</b>, kein OCSP-, CRL-, Rekor- oder Fulcio-Aufruf für ein Verdict. Selbst Revocation ist eine signierte, pinnbare Offline-Liste, kein Netzwerk-Lookup.</p>
     <table>
       <tr><th>Hosted-CA-Modell</th><th>skillctl Offline-Modell</th></tr>
-      <tr><td>Eine dauerhaft online, dauerhaft angreifbare Ausgabe-Autorität, die an <em>jedem</em> Tag ein gültiges Zertifikat für deine Flotte ausstellen kann — nicht nur am Tag 0.</td>
-          <td>Der Trust-Root ist <b>deiner</b> — ein Key, den du erzeugst und hältst. <code>verify.go</code> pinned-author-Modus macht <code>ed25519.Verify</code> gegen einen lokalen Key mit null Registry-Aufrufen.</td></tr>
+      <tr><td>Eine dauerhaft online, dauerhaft angreifbare Ausgabe-Autorität, die an <em>jedem</em> Tag ein gültiges Zertifikat für deine Flotte ausstellen kann, nicht nur am Tag 0.</td>
+          <td>Der Trust-Root ist <b>deiner</b>, ein Key, den du erzeugst und hältst. <code>verify.go</code> pinned-author-Modus macht <code>ed25519.Verify</code> gegen einen lokalen Key mit null Registry-Aufrufen.</td></tr>
     </table>
     <div class="quote">"Sigstore beweist offen, woher ein öffentliches Binary kommt; skillctl beweist Provenance+Governance+Integrität eines Skills gegenüber einem <b>Offline</b>-Verifier, der seinen eigenen Root pinnt."</div>
     <p class="key" style="margin-top:8px"><b>In Einklang mit Revocation (Slide 6):</b> die Verdict-<em>Berechnung</em> ist offline. Revocation-<em>Frische</em> hat ein Distributions-SLO über jeden Kanal, den du ohnehin betreibst (MDM / git / S3); "Brick-on-Stale" für High-Risk-Aktionen ist gewolltes Fail-Closed, keine Netzwerkabhängigkeit in der Krypto. Low-/No-Risk-Verifikation bleibt voll offline.</p>
   </section>
 
   <section class="slide" id="s5">
-    <h2><span class="n">5</span>Differenzierer #2 — reviewer≠author, kryptografisch erzwungen</h2>
+    <h2><span class="n">5</span>Differenzierer #2: reviewer≠author, kryptografisch erzwungen</h2>
     <p class="key">Die "der einzige Reviewer ist der Author"-Schwäche wird durch eine signatur-verifizierte Attestation eines <b>gepinnten</b> Reviewers geschlossen, dessen ID sich vom verifizierten Author unterscheidet. Eine gefälschte unsignierte reviewer_id kommt nicht am Floor vorbei; ein gestohlener Author-Key kann kein grünes Review erzeugen.</p>
     <table>
       <tr><th>Angriff</th><th>Was passiert</th><th>Exit</th></tr>
       <tr><td>Selbst-Attestation (Author signiert "reviewed: green")</td><td><code>verifiedIndependentReviewer()</code> vertraut nur signierten Bytes; reviewer_id == author → fail-closed</td><td class="ex b">20</td></tr>
       <tr><td>Sidecar-Downgrade (unsignierte Registry-Governance rot→grün editiert)</td><td>Level neu-verifiziert über signiertes <code>(digest, level, attestedAt, reviewerID)</code> gegen den gepinnten Reviewer-Key</td><td class="ex b">13</td></tr>
     </table>
-    <p class="key" style="margin-top:6px">Kryptografische Funktionstrennung — die Lieblings-Kontrolle jedes Auditors (SOC 2 CC8.1, ISO/IEC 27001 A.5.23): erzwungen, keine Checkbox auf einem Formular.</p>
+    <p class="key" style="margin-top:6px">Kryptografische Funktionstrennung: die Lieblings-Kontrolle jedes Auditors (SOC 2 CC8.1, ISO/IEC 27001 A.5.23): erzwungen, keine Checkbox auf einem Formular.</p>
   </section>
 
   <section class="slide" id="s6">
-    <h2><span class="n">6</span>Differenzierer #3 — fail-closed Revocation + Frische mit Rollback-Floor</h2>
+    <h2><span class="n">6</span>Differenzierer #3: fail-closed Revocation + Frische mit Rollback-Floor</h2>
     <p class="key">Eine veraltete, wiedereingespielte oder zurückgerollte Revocation-Sicht kann keine High-Risk-Aktion autorisieren. Jenseits von <code>max_staleness</code> schlägt HIGH-Risk immer fail-closed fehl, unabhängig von der Config; ein monotoner signierter Epoch-Floor lehnt eine ältere, echt signierte Liste ab; die Uhr wird injiziert, damit eine replayte veraltete Liste nicht als frisch auftreten kann.</p>
     <ul>
-      <li><code>freshness.go PolicyFor()</code>: <b>RiskHigh → FailClosed ist eine Invariante</b> — die Validierung weigert sich, High-Risk <code>fail_policy=open</code> überhaupt zu konfigurieren.</li>
-      <li>Der Risk-Klassifizierer ist eine <b>geschlossene Allowlist</b> (<code>knownLowRiskTokens</code>): eine unbekannte / vertippte / kreativ benannte Aktion ist HIGH per Ausschluss — ein Author kann sich nicht "read-only" ins Fail-Open erklären.</li>
+      <li><code>freshness.go PolicyFor()</code>: <b>RiskHigh → FailClosed ist eine Invariante</b>: die Validierung weigert sich, High-Risk <code>fail_policy=open</code> überhaupt zu konfigurieren.</li>
+      <li>Der Risk-Klassifizierer ist eine <b>geschlossene Allowlist</b> (<code>knownLowRiskTokens</code>): eine unbekannte / vertippte / kreativ benannte Aktion ist HIGH per Ausschluss: ein Author kann sich nicht "read-only" ins Fail-Open erklären.</li>
       <li><code>revocation.go minEpoch</code>: eine Liste unter dem gepinnten Epoch-Floor wird selbst mit gültiger Signatur abgelehnt (TUF-Anti-Rollback-Idee).</li>
       <li>Zukunftsdatiertes / nicht parsbares <code>issued_at</code> → als unendlich veraltet behandelt (fail-safe, nicht fail-random).</li>
     </ul>
   </section>
 
   <section class="slide" id="s7">
-    <h2><span class="n">7</span>Jeder Fehler ist ein nummerierter Exit-Code — <small>CI-verzweigbar, SIEM-portabel</small></h2>
-    <p class="key">Der verify/install-CLI-Exit ist ein <b>stabiler Integer, auf den CI verzweigen kann</b> (<code>os.Exit(verify.ExitCode(err))</code>) — kein eigener stderr-Parser. Codes sind <em>nicht</em> injektiv: überladene Nummern (12, 17) werden per Label/Surface unterschieden; der PreToolUse-Hook exitet mit <code>2</code>, um zu blocken, und trägt den nummerierten Code in seiner Ausgabe.</p>
+    <h2><span class="n">7</span>Jeder Fehler ist ein nummerierter Exit-Code: <small>CI-verzweigbar, SIEM-portabel</small></h2>
+    <p class="key">Der verify/install-CLI-Exit ist ein <b>stabiler Integer, auf den CI verzweigen kann</b> (<code>os.Exit(verify.ExitCode(err))</code>): kein eigener stderr-Parser. Codes sind <em>nicht</em> injektiv: überladene Nummern (12, 17) werden per Label/Surface unterschieden; der PreToolUse-Hook exitet mit <code>2</code>, um zu blocken, und trägt den nummerierten Code in seiner Ausgabe.</p>
     <table>
       <tr><th>Angriff</th><th>Abwehr</th><th>Exit</th></tr>
       <tr><td>Bundle-Bytes nach dem Signieren verändert</td><td>sha256 neu berechnen + Constant-Time-Vergleich</td><td class="ex b">10</td></tr>
@@ -186,118 +186,118 @@
   </section>
 
   <section class="slide" id="s8">
-    <h2><span class="n">8</span>Einwände, die kommen — der Security-Experte</h2>
-    <p class="key">Gewinnen, indem man das echte Limit zuerst zugibt, dann den verteidigbaren Kern mit exaktem Beleg hält. Die Zugeständnisse machen die Entkräftungen glaubwürdig — niemals bluffen.</p>
+    <h2><span class="n">8</span>Einwände, die kommen: der Security-Experte</h2>
+    <p class="key">Gewinnen, indem man das echte Limit zuerst zugibt, dann den verteidigbaren Kern mit exaktem Beleg hält. Die Zugeständnisse machen die Entkräftungen glaubwürdig (niemals bluffen.</p>
     <table class="obj">
       <tr><th>Einwand</th><th class="c">Zugeständnis</th><th class="r">Entkräftung</th></tr>
-      <tr><td><b>Software-Keys, keine HSM</b> — drei Signaturen sind drei <code>cat</code>-bare Dateien</td>
+      <tr><td><b>Software-Keys, keine HSM</b>) drei Signaturen sind drei <code>cat</code>-bare Dateien</td>
         <td class="c">Stimmt: ed25519-PEM mit 0600; noch keine HSM/Threshold.</td>
-        <td class="r">Du verwechselst Key-<em>Speicherung</em> mit Key-<em>Ko-Lokation</em>. Der Wert sind drei <b>verschiedene Principals</b> — ein gestohlener <em>Author</em>-Key kann keine grüne <em>Reviewer</em>-Signatur fälschen. Die Release-Custody ist bereits keyless (Sigstore/OIDC, kein Laptop-Key). HSM/Threshold für den Registry-Root ist ein benanntes Roadmap-Gate, keine heutige Behauptung. <span class="e">verify.go verifiedIndependentReviewer()</span></td></tr>
-      <tr><td><b>Provenance ≠ Sicherheit</b> — ihr beweist <em>wer</em>, nie <em>was der Code tut</em></td>
+        <td class="r">Du verwechselst Key-<em>Speicherung</em> mit Key-<em>Ko-Lokation</em>. Der Wert sind drei <b>verschiedene Principals</b>: ein gestohlener <em>Author</em>-Key kann keine grüne <em>Reviewer</em>-Signatur fälschen. Die Release-Custody ist bereits keyless (Sigstore/OIDC, kein Laptop-Key). HSM/Threshold für den Registry-Root ist ein benanntes Roadmap-Gate, keine heutige Behauptung. <span class="e">verify.go verifiedIndependentReviewer()</span></td></tr>
+      <tr><td><b>Provenance ≠ Sicherheit</b>: ihr beweist <em>wer</em>, nie <em>was der Code tut</em></td>
         <td class="c">Absolut richtig: Krypto beweist wer signierte + dass Bytes unverändert sind, nicht das Laufzeitverhalten.</td>
-        <td class="r">Also kauf es nicht als Verhaltenssicherheit — kauf die Schicht, die Verhaltensabwehr <em>möglich &amp; nachvollziehbar</em> macht: (1) <b>Attribution</b> — wenn ein Schläfer zündet, weißt du genau, welcher Author+Reviewer welchen Digest signierte (ein Lookup, keine Forensik); (2) <b>Revocation hat Zähne</b> — fail-closed, getestet. (bodyscan ist beratend/unbewiesen — wir schreiben ihm keinen Kredit zu.)</td></tr>
-      <tr><td><b>Kein Runtime-Käfig</b> — ihr sichert das Messer und reicht es dann mit dem Griff voran</td>
+        <td class="r">Also kauf es nicht als Verhaltenssicherheit, kauf die Schicht, die Verhaltensabwehr <em>möglich &amp; nachvollziehbar</em> macht: (1) <b>Attribution</b>, wenn ein Schläfer zündet, weißt du genau, welcher Author+Reviewer welchen Digest signierte (ein Lookup, keine Forensik); (2) <b>Revocation hat Zähne</b>: fail-closed, getestet. (bodyscan ist beratend/unbewiesen, wir schreiben ihm keinen Kredit zu.)</td></tr>
+      <tr><td><b>Kein Runtime-Käfig</b>, ihr sichert das Messer und reicht es dann mit dem Griff voran</td>
         <td class="c">Zugestanden: FR-0044 ist PENDING; ein durchgelassener Skill läuft mit Ambient-Rechten.</td>
-        <td class="r">Die kompensierende Kontrolle ist real und fail-closed: der PreToolUse-Hook <b>härtet den Eintritt</b> — unsignierte/manipulierte/widerrufene/selbst-geprüfte Skills erreichen die Invocation nie (panic-safe DENY bei jedem Fehler). Er schützt sich <em>nicht</em> selbst gegen Same-uid-Manipulation <em>nach</em> der Ausführung — genau das ist die FR-0044-Lücke, benannt statt versteckt. Ein Siegel, das sich weigert zu öffnen, wenn es gebrochen ist, ist Geld wert, bevor die Mauern stehen.</td></tr>
-      <tr><td><b>TOFU-Root-Bootstrap</b> — euer Vertrauensanker ist eine YAML-Datei; wie kam sie an?</td>
+        <td class="r">Die kompensierende Kontrolle ist real und fail-closed: der PreToolUse-Hook <b>härtet den Eintritt</b>: unsignierte/manipulierte/widerrufene/selbst-geprüfte Skills erreichen die Invocation nie (panic-safe DENY bei jedem Fehler). Er schützt sich <em>nicht</em> selbst gegen Same-uid-Manipulation <em>nach</em> der Ausführung: genau das ist die FR-0044-Lücke, benannt statt versteckt. Ein Siegel, das sich weigert zu öffnen, wenn es gebrochen ist, ist Geld wert, bevor die Mauern stehen.</td></tr>
+      <tr><td><b>TOFU-Root-Bootstrap</b>: euer Vertrauensanker ist eine YAML-Datei; wie kam sie an?</td>
         <td class="c">Scharf und fair: der erste Pin ist Trust-on-First-Use; wir haben "vertraue der CA" auf "vertraue dem ersten Pin" verlagert.</td>
-        <td class="r">Aber TOFU-<em>einmal</em> schlägt eine stehende CA für eine Security-Org: eine gehostete CA muss ihren Root <em>auch</em> zum Endpoint bootstrappen — <b>und</b> fügt eine dauerhaft-online Autorität hinzu, die dich an jedem Tag verraten kann. Unser Pin reitet auf deinem bestehenden MDM- / signed-image- / Provisioning-Kanal — ein authentifizierter Moment vs. eine permanente Angriffsfläche.</td></tr>
-      <tr><td><b>Kein Transparency-Log</b> — offline = unentdeckbar kompromittierbar</td>
+        <td class="r">Aber TOFU-<em>einmal</em> schlägt eine stehende CA für eine Security-Org: eine gehostete CA muss ihren Root <em>auch</em> zum Endpoint bootstrappen: <b>und</b> fügt eine dauerhaft-online Autorität hinzu, die dich an jedem Tag verraten kann. Unser Pin reitet auf deinem bestehenden MDM- / signed-image- / Provisioning-Kanal: ein authentifizierter Moment vs. eine permanente Angriffsfläche.</td></tr>
+      <tr><td><b>Kein Transparency-Log</b>: offline = unentdeckbar kompromittierbar</td>
         <td class="c">Richtig in reiner Offline-Config: nur-gepinnte-Roots geben keinen externen Post-Compromise-Zeugen.</td>
-        <td class="r">Das ist eine <em>Konfiguration</em>, keine Obergrenze: Log-Inclusion ist ein <b>ausgeliefertes Opt-in</b> — setze <code>require_log_inclusion</code> und der Verifier schlägt fail-closed fehl (Exit 23) ohne gültigen Inclusion-Proof unter einem gepinnten Signed Tree Head. "Offline by default, log-bezeugt per Policy."</td></tr>
-      <tr><td><b>Registry-Key = seine eigene Revocation</b> — stiehl ihn, besitze den Kill-Switch</td>
+        <td class="r">Das ist eine <em>Konfiguration</em>, keine Obergrenze: Log-Inclusion ist ein <b>ausgeliefertes Opt-in</b>: setze <code>require_log_inclusion</code> und der Verifier schlägt fail-closed fehl (Exit 23) ohne gültigen Inclusion-Proof unter einem gepinnten Signed Tree Head. "Offline by default, log-bezeugt per Policy."</td></tr>
+      <tr><td><b>Registry-Key = seine eigene Revocation</b>: stiehl ihn, besitze den Kill-Switch</td>
         <td class="c">Der echte strukturelle Schwachpunkt, präzise benannt: der Revocation-Feed wird vom Key signiert, den er schützt.</td>
-        <td class="r">Der Epoch-Floor entschärft den 2-Uhr-Fall trotzdem: ein Angreifer mit dem Key kann eine Revocation <em>unterdrücken</em>, aber <b>eine bestehende Flotte nicht zurückrollen</b>, um zu ent-widerrufen (Clients, die Epoch N sahen, lehnen alles unter N ab). In-band Threshold/Timestamp-Rollen-Recovery (TUF-artig) ist auf der Roadmap, als Sign-off-Bedingung benannt — nicht als vorhanden behauptet.</td></tr>
-      <tr><td><b>Ihr habt TUF/in-toto neu erfunden</b> — unzitierte, un-analysierte Krypto</td>
+        <td class="r">Der Epoch-Floor entschärft den 2-Uhr-Fall trotzdem: ein Angreifer mit dem Key kann eine Revocation <em>unterdrücken</em>, aber <b>eine bestehende Flotte nicht zurückrollen</b>, um zu ent-widerrufen (Clients, die Epoch N sahen, lehnen alles unter N ab). In-band Threshold/Timestamp-Rollen-Recovery (TUF-artig) ist auf der Roadmap, als Sign-off-Bedingung benannt, nicht als vorhanden behauptet.</td></tr>
+      <tr><td><b>Ihr habt TUF/in-toto neu erfunden</b>, unzitierte, un-analysierte Krypto</td>
         <td class="c">Teilweise getroffen: eigene ed25519-Rahmung + Epoch-Schema, kein externes Formal-Analysis-Paper zu unserer exakten Komposition.</td>
         <td class="r">Die ehrliche Rahmung: "<b>schichtet auf, wo der Standard passt, weicht nur ab, wo ein zwingendes Online-Log ein Risiko ist, und wiederverwendet ihre geprüften Ideen</b>": Release-Provenance = Sigstore/cosign <em>direkt</em>; Drei-Sig = in-toto layered attestation; Epoch-Floor = TUF-Anti-Rollback; rohes ed25519 = dasselbe Primitiv. Externes Krypto-Review der Kanonisierung ist eine benannte Sign-off-Bedingung.</td></tr>
-      <tr><td><b>Governance-Theater</b> — eine Attestation ist eine Signatur über "vertrau mir"</td>
+      <tr><td><b>Governance-Theater</b>: eine Attestation ist eine Signatur über "vertrau mir"</td>
         <td class="c">Stimmt: eine Signatur beweist die Authentizität einer Aussage, nie ihre Wahrheit; die Attestation bettet heute kein Scan-/Diff-Beleg ein.</td>
-        <td class="r">Sie ist nicht nackt: das Verdict ist an den <b>exakten Digest</b> gebunden und gegen einen gepinnten Reviewer-Key neu-verifiziert — "vertrau mir, über <em>diesen</em> Digest, und ich kann nicht lügen, über welchen." Reicheren Beleg (Scan-Hash, Policy-ID) in die signierte Nachricht zu binden, ist eine benannte Erweiterung, keine Neuerfindung.</td></tr>
+        <td class="r">Sie ist nicht nackt: das Verdict ist an den <b>exakten Digest</b> gebunden und gegen einen gepinnten Reviewer-Key neu-verifiziert: "vertrau mir, über <em>diesen</em> Digest, und ich kann nicht lügen, über welchen." Reicheren Beleg (Scan-Hash, Policy-ID) in die signierte Nachricht zu binden, ist eine benannte Erweiterung, keine Neuerfindung.</td></tr>
     </table>
   </section>
 
   <section class="slide" id="s9">
-    <h2><span class="n">9</span>Einwände, die kommen — der CTO</h2>
+    <h2><span class="n">9</span>Einwände, die kommen: der CTO</h2>
     <p class="key">Der CTO prüft Kosten, Bus-Faktor, Lock-in und "warum nicht auf den Standard warten". Dieselbe Disziplin: die operative Wahrheit zugeben, dann zeigen, was das Offline-Design bewusst aus der TCO <em>streicht</em>.</p>
     <table class="obj">
       <tr><th>Einwand</th><th class="c">Zugeständnis</th><th class="r">Entkräftung</th></tr>
       <tr><td><b>Ein Maintainer / Bus-Faktor</b></td>
-        <td class="c">Stimmt — das git-Log zeigt einen Autor am Trust-Core; eine Ein-Maintainer-Abhängigkeit auf einem fail-closed Pfad ist ein echtes Risiko.</td>
-        <td class="r">Entschärft, ohne auf einen zweiten Committer zu warten: es ist ein <b>Offline-Verifier ohne Server, den man am Leben halten muss</b> — die Kern-Sig+Digest-Prüfung ist klein, und der vollständige Offline-Verifier (Frische, signierte Revocation, Rollback-Floor, Tenant, Trust-Roots, Transparency-Log) sind <b>~4,2k LOC testabgedecktes Stdlib-Krypto-Go</b>. Fork-and-Pin + ein zweiter Committer sind benannte Sign-off-Bedingungen. Verschwindet der Maintainer, verifiziert dein gepinnter Root weiter.</td></tr>
+        <td class="c">Stimmt: das git-Log zeigt einen Autor am Trust-Core; eine Ein-Maintainer-Abhängigkeit auf einem fail-closed Pfad ist ein echtes Risiko.</td>
+        <td class="r">Entschärft, ohne auf einen zweiten Committer zu warten: es ist ein <b>Offline-Verifier ohne Server, den man am Leben halten muss</b>: die Kern-Sig+Digest-Prüfung ist klein, und der vollständige Offline-Verifier (Frische, signierte Revocation, Rollback-Floor, Tenant, Trust-Roots, Transparency-Log) sind <b>~4,2k LOC testabgedecktes Stdlib-Krypto-Go</b>. Fork-and-Pin + ein zweiter Committer sind benannte Sign-off-Bedingungen. Verschwindet der Maintainer, verifiziert dein gepinnter Root weiter.</td></tr>
       <tr><td><b>Echte TCO ist nicht $0</b></td>
-        <td class="c">Zugestanden: Key-Custody/-Rotation für drei Tiers, eine zu betreibende Registry, Reviewer-Workflow, Responder-Training — ein operatives Programm, kein Download.</td>
-        <td class="r">Preise es ehrlich — dann sieh, was das Design <em>nicht</em> auf deine Bücher setzt: <b>keine immer-online HSM-gestützte CA, kein OCSP-Dienst</b>; die Registry ist <em>nicht</em> im Verifikationspfad, ein Registry-Ausfall blockt die Verifikation also nicht hart. Der teure Teil klassischer PKI ist herausdesignt.</td></tr>
+        <td class="c">Zugestanden: Key-Custody/-Rotation für drei Tiers, eine zu betreibende Registry, Reviewer-Workflow, Responder-Training (ein operatives Programm, kein Download.</td>
+        <td class="r">Preise es ehrlich) dann sieh, was das Design <em>nicht</em> auf deine Bücher setzt: <b>keine immer-online HSM-gestützte CA, kein OCSP-Dienst</b>; die Registry ist <em>nicht</em> im Verifikationspfad, ein Registry-Ausfall blockt die Verifikation also nicht hart. Der teure Teil klassischer PKI ist herausdesignt.</td></tr>
       <tr><td><b>Lock-in / Single-Vendor-Trust-Root</b></td>
         <td class="c">Eine Ebene höher fair: eure Operatoren lernen skillctl, Pipelines emittieren <code>.skb</code>, CI-Policy spricht seine Exit-Codes.</td>
-        <td class="r">Der Trust-Root ist <b>deiner</b>, nicht unserer — du pinnst deinen eigenen Key und verifizierst ohne Vendor-CA. <code>.skb</code> ist ein Standard-gzip-Tar + ed25519, re-serialisierbar; der Exit-Pfad ist CI-Glue, kein Rewrite. Der Transport ist carrier-agnostisch (ER1 / GCS-MinIO / OCI als Peers).</td></tr>
+        <td class="r">Der Trust-Root ist <b>deiner</b>, nicht unserer: du pinnst deinen eigenen Key und verifizierst ohne Vendor-CA. <code>.skb</code> ist ein Standard-gzip-Tar + ed25519, re-serialisierbar; der Exit-Pfad ist CI-Glue, kein Rewrite. Der Transport ist carrier-agnostisch (ER1 / GCS-MinIO / OCI als Peers).</td></tr>
       <tr><td><b>Warum nicht auf den OpenSSF/MCP-Standard warten?</b></td>
         <td class="c">Die Kategorie ist ~18 Monate alt; ein Standard-Attestation-Format kann konvergieren.</td>
-        <td class="r">Wir bauen <b>auf den Primitiven, die jeder Standard nutzen wird</b> (Inhaltsadressierung, Detached-Sigs, in-toto-Layering, TUF-Anti-Rollback) — wir sind die Low-Regret-Wette, nicht die gestrandete — und derweil läuft jeder unsignierte Skill <em>heute</em> mit Agent-Rechten. Adoptiere jetzt die reversiblen Teile (eigenen Root pinnen, CI-Exit-Codes); der <code>.skb</code>→SPDX/in-toto-Export ist ein benanntes Roadmap-Item.</td></tr>
+        <td class="r">Wir bauen <b>auf den Primitiven, die jeder Standard nutzen wird</b> (Inhaltsadressierung, Detached-Sigs, in-toto-Layering, TUF-Anti-Rollback) (wir sind die Low-Regret-Wette, nicht die gestrandete) und derweil läuft jeder unsignierte Skill <em>heute</em> mit Agent-Rechten. Adoptiere jetzt die reversiblen Teile (eigenen Root pinnen, CI-Exit-Codes); der <code>.skb</code>→SPDX/in-toto-Export ist ein benanntes Roadmap-Item.</td></tr>
       <tr><td><b>Bewegt es eine Audit-Zeile?</b> (SOC2 / AI-Act)</td>
         <td class="c">Es gibt keine Auditor-Checkbox namens "skillctl"; wir positionieren AI-Act als <em>Evidenz</em>, kein Compliance-Stempel.</td>
         <td class="r">Es mappt als Evidenz für den Auditor auf benannte Kontrollen: <b>SOC 2 CC8.1</b> (Change-Mgmt) + <b>CC7.x</b> (Erkennung unautorisierter Änderungen) über den tamper-evidenten Digest + Drei-Sig-Kette; kryptografisches reviewer≠author für Funktionstrennung. Stärker als Ad-hoc-Signieren auf den zwei Achsen, die Auditoren wirklich prüfen.</td></tr>
       <tr><td><b>Echtes Problem oder Theater?</b></td>
-        <td class="c">Ehrlich: ich kann keinen benannten öffentlichen Breach einer signierten-Skill-Lieferkette nennen, den das eindeutig gestoppt hätte — die Fläche ist neu.</td>
-        <td class="r">Das Risiko ist nur im <em>Label</em> theoretisch: es ist die Lieferketten-Klasse mit benannten öffentlichen Vorfällen (SolarWinds, xz/liblzma, npm/PyPI-Typosquats) — jetzt gerichtet auf eine Payload, die mit den <b>Rechten des Agenten</b> läuft. Der reversible Phase-1-Aufwand ist klein; der Nachteil des Wartens ist unsignierter Code mit Ambient-Rechten.</td></tr>
+        <td class="c">Ehrlich: ich kann keinen benannten öffentlichen Breach einer signierten-Skill-Lieferkette nennen, den das eindeutig gestoppt hätte, die Fläche ist neu.</td>
+        <td class="r">Das Risiko ist nur im <em>Label</em> theoretisch: es ist die Lieferketten-Klasse mit benannten öffentlichen Vorfällen (SolarWinds, xz/liblzma, npm/PyPI-Typosquats): jetzt gerichtet auf eine Payload, die mit den <b>Rechten des Agenten</b> läuft. Der reversible Phase-1-Aufwand ist klein; der Nachteil des Wartens ist unsignierter Code mit Ambient-Rechten.</td></tr>
     </table>
   </section>
 
   <section class="slide" id="s10">
-    <h2><span class="n">10</span>Ehrlicher Scope — was es IST, was es NICHT ist</h2>
+    <h2><span class="n">10</span>Ehrlicher Scope: was es IST, was es NICHT ist</h2>
     <p class="key">Das Deck gewinnt, indem es diese Linie in Tinte zieht. Überziehen verliert einen scharfen Prüfer.</p>
     <div class="ledger">
       <div class="is"><h3>✓ skillctl IST</h3>
         <ul>
-          <li>Eine <b>Provenance</b>-Schicht — inhaltsadressierte <code>.skb</code>-Identität bindet eine Version an signierenden Author + Admission.</li>
-          <li>Eine <b>Governance</b>-Schicht — das Ampel-Verdict eines Reviewers ist eine signierte Attestation, reviewer≠author kryptografisch erzwingbar.</li>
-          <li>Eine <b>Integritäts</b>-Schicht — jede Byte-Änderung nach dem Signieren bricht den Digest; tamper-evident, fail-closed.</li>
-          <li><b>Offline drittseitig verifizierbar</b> — gepinnte Roots + Bytes, keine gehostete CA / kein Log / kein Netz im Verdict.</li>
+          <li>Eine <b>Provenance</b>-Schicht, inhaltsadressierte <code>.skb</code>-Identität bindet eine Version an signierenden Author + Admission.</li>
+          <li>Eine <b>Governance</b>-Schicht, das Ampel-Verdict eines Reviewers ist eine signierte Attestation, reviewer≠author kryptografisch erzwingbar.</li>
+          <li>Eine <b>Integritäts</b>-Schicht (jede Byte-Änderung nach dem Signieren bricht den Digest; tamper-evident, fail-closed.</li>
+          <li><b>Offline drittseitig verifizierbar</b>) gepinnte Roots + Bytes, keine gehostete CA / kein Log / kein Netz im Verdict.</li>
           <li>Ein fail-closed <b>Revocation + Frische</b>-System (signierte Listen, Epoch-Floor, Staleness-Vertrag).</li>
-          <li>Eine CI-gatebare Fläche — nummerierte Exit-Codes (10–23).</li>
+          <li>Eine CI-gatebare Fläche, nummerierte Exit-Codes (10–23).</li>
         </ul></div>
       <div class="isnot"><h3>✕ skillctl ist NICHT</h3>
         <ul>
-          <li>Eine <b>Runtime-Sandbox / OS-Capability-Käfig</b> — das ist FR-0044, <b>PENDING</b>. Der Hook gatet, <em>ob</em> ein Skill invoked werden darf; er sperrt ihn nicht ein.</li>
-          <li>Ein <b>Verhaltenssicherheits-Beweis</b> — <code>bodyscan</code> ist eine statische Heuristik (≥95% TP / ≤5% FP <em>Ziel</em>, unbewiesen), keine Garantie.</li>
+          <li>Eine <b>Runtime-Sandbox / OS-Capability-Käfig</b>, das ist FR-0044, <b>PENDING</b>. Der Hook gatet, <em>ob</em> ein Skill invoked werden darf; er sperrt ihn nicht ein.</li>
+          <li>Ein <b>Verhaltenssicherheits-Beweis</b>: <code>bodyscan</code> ist eine statische Heuristik (≥95% TP / ≤5% FP <em>Ziel</em>, unbewiesen), keine Garantie.</li>
           <li>Ein <b>Hosted-CA / Online-CRL</b>-Modell.</li>
           <li>Noch <b>gehärtet für beliebiges untrusted Multi-Party-Fan-out</b> jenseits des pinned-key + Co-Learning-Room-Modells.</li>
-          <li>Ein <b>Ersatz</b> für Sigstore/SLSA/in-toto/TUF — es schichtet darauf auf (Slide 11).</li>
+          <li>Ein <b>Ersatz</b> für Sigstore/SLSA/in-toto/TUF: es schichtet darauf auf (Slide 11).</li>
         </ul></div>
     </div>
-    <div class="band"><b>Kompensierende Kontrolle heute:</b> der fail-closed PreToolUse-verify-Hook verkleinert die Menge, die Ambient-Rechte erreicht, auf genau die signierte + attestierte + nicht-widerrufene + attributierbare Menge. Er härtet den <em>Eintritt</em>; er schützt sich nicht selbst gegen Same-uid-Manipulation nach der Ausführung — das ist die FR-0044-Lücke.</div>
-    <div class="quote">"Ich verkaufe dir jetzt das <b>Gate</b> und den <b>Käfig</b> auf der Roadmap — und ich preise es als genau das."</div>
+    <div class="band"><b>Kompensierende Kontrolle heute:</b> der fail-closed PreToolUse-verify-Hook verkleinert die Menge, die Ambient-Rechte erreicht, auf genau die signierte + attestierte + nicht-widerrufene + attributierbare Menge. Er härtet den <em>Eintritt</em>; er schützt sich nicht selbst gegen Same-uid-Manipulation nach der Ausführung, das ist die FR-0044-Lücke.</div>
+    <div class="quote">"Ich verkaufe dir jetzt das <b>Gate</b> und den <b>Käfig</b> auf der Roadmap, und ich preise es als genau das."</div>
   </section>
 
   <section class="slide" id="s11">
-    <h2><span class="n">11</span>Wie es schichtet — Sigstore / SLSA / in-toto / TUF</h2>
+    <h2><span class="n">11</span>Wie es schichtet: Sigstore / SLSA / in-toto / TUF</h2>
     <p class="key">skillctl erfindet das Ökosystem nicht neu: es nutzt den Standard, wo ein öffentliches Artefakt passt, weicht nur ab, wo ein zwingendes Online-Log ein Risiko ist, und wiederverwendet die geprüften Ideen überall sonst.</p>
     <div class="grid g3">
       <div class="card"><h3>Öffentliches Release-Artefakt → Standards, direkt</h3><p>cosign keyless + GitHub OIDC (kein Key auf einem Laptop), SLSA-Build-Provenance (<code>gh attestation verify</code> → 0), CycloneDX-SBOM. Fließt direkt in dein bestehendes Supply-Chain-Tooling.</p></div>
-      <div class="card"><h3>Souveränes Skill-Bundle → weicht bewusst ab</h3><p>Die Bundle-Kette hängt bewusst <em>nicht</em> von Rekor/Fulcio im Verdict-Pfad ab (SPEC-0188 D1 — eine Entscheidung, kein Versehen). Das <em>ist</em> der Offline-souveräne Differenzierer.</p></div>
+      <div class="card"><h3>Souveränes Skill-Bundle → weicht bewusst ab</h3><p>Die Bundle-Kette hängt bewusst <em>nicht</em> von Rekor/Fulcio im Verdict-Pfad ab (SPEC-0188 D1: eine Entscheidung, kein Versehen). Das <em>ist</em> der Offline-souveräne Differenzierer.</p></div>
       <div class="card"><h3>Wiederverwendete Ideen</h3><p>Drei-Sig-Kette = in-toto layered attestation; monotoner Epoch-Floor = TUF-Anti-Rollback; rohes ed25519 = das Primitiv, mit dem beide signieren. Rekor-artige Transparency ist <b>Opt-in</b> (Exit 23) unter einem gepinnten Signed Tree Head.</p></div>
     </div>
   </section>
 
   <section class="slide" id="s12">
-    <h2><span class="n">12</span>Feldnachweis — es hat außerhalb der Folie funktioniert</h2>
+    <h2><span class="n">12</span>Feldnachweis: es hat außerhalb der Folie funktioniert</h2>
     <p class="key">"looks-verified ≠ is-verified" konkret gemacht: ein Cross-Person-Austausch, ein veröffentlichtes signiertes Release, und ein wiederholtes adversariales Gate, das das Tool ehrlich herabstuft, wo es nicht bereit ist.</p>
     <div class="grid g3">
-      <div class="card"><h3>Cross-Person-Austausch (SPEC-0246)</h3><p>Eine <em>andere</em> Partei pinnte den Anker out-of-band (Fingerprint per Sprache), zog Room-Skills über ein per-User-Device-Token, bestand die 5-Gate-Verifikation auf macOS + Ubuntu — ohne Write-back in die Registry des Authors.</p></div>
+      <div class="card"><h3>Cross-Person-Austausch (SPEC-0246)</h3><p>Eine <em>andere</em> Partei pinnte den Anker out-of-band (Fingerprint per Sprache), zog Room-Skills über ein per-User-Device-Token, bestand die 5-Gate-Verifikation auf macOS + Ubuntu: ohne Write-back in die Registry des Authors.</p></div>
       <div class="card"><h3>Signiertes Release v0.3.1</h3><p>Geschnitten &amp; veröffentlicht; <code>cosign verify-blob</code> → "Verified OK"; alle öffentlichen Asset-URLs 200; windows-gate + windows-smoke CI grün. Im Feld auf Windows PowerShell 5.1 installiert.</p></div>
-      <div class="card"><h3>Adversariale Disziplin</h3><p>Echte Defekte von echten Testern (z. B. BUG-0193) gefixt <em>und</em> CI-abgesichert. Reviews stufen die Reife ehrlich ein: <b>bei v0.3.1</b> — verteidigbar Single-Operator + Cross-Person nachgewiesen; <b>noch nicht</b> gehärtet für beliebiges untrusted Fan-out.</p></div>
+      <div class="card"><h3>Adversariale Disziplin</h3><p>Echte Defekte von echten Testern (z. B. BUG-0193) gefixt <em>und</em> CI-abgesichert. Reviews stufen die Reife ehrlich ein: <b>bei v0.3.1</b>: verteidigbar Single-Operator + Cross-Person nachgewiesen; <b>noch nicht</b> gehärtet für beliebiges untrusted Fan-out.</p></div>
     </div>
   </section>
 
   <section class="slide" id="s13">
-    <h2><span class="n">13</span>Die Entscheidung — jetzt das Schloss, den Käfig auf die Roadmap</h2>
-    <p class="key">Genehmige einen eingegrenzten, phasierten Rollout, der den realistischen Lieferketten-Vektor heute gatet, mit Reife-Bedingungen und dem Runtime-Käfig als nächster Schicht benannt — nicht als vorhanden überverkauft.</p>
+    <h2><span class="n">13</span>Die Entscheidung: jetzt das Schloss, den Käfig auf die Roadmap</h2>
+    <p class="key">Genehmige einen eingegrenzten, phasierten Rollout, der den realistischen Lieferketten-Vektor heute gatet, mit Reife-Bedingungen und dem Runtime-Käfig als nächster Schicht benannt, nicht als vorhanden überverkauft.</p>
     <div class="grid g3">
-      <div class="card"><h3>Phase 1 — jetzt adoptieren (reversibel)</h3><p>Eigenen ed25519-Root via MDM / signed-image pinnen; den fail-closed PreToolUse-Hook einschalten; Exit-Codes 10–23 in CI + SIEM verdrahten.</p></div>
+      <div class="card"><h3>Phase 1, jetzt adoptieren (reversibel)</h3><p>Eigenen ed25519-Root via MDM / signed-image pinnen; den fail-closed PreToolUse-Hook einschalten; Exit-Codes 10–23 in CI + SIEM verdrahten.</p></div>
       <div class="card"><h3>Sign-off-Bedingungen (owned, nicht versteckt)</h3><p>2. Committer + Fork-and-Pin-Runbook; ein 3-Jahres-TCO-Modell als Position; gemessene Block-Rate als SLI vor jedem Revenue-Path-Agenten; abgestufte Review-Policy.</p></div>
       <div class="card"><h3>Benannte nächste Schichten</h3><p>FR-0044 OS-Level-Käfig; TUF-artige Timestamp/Threshold-Rolle für Registry-Key-Recovery; externes Krypto-Review der Frische-Kanonisierung; <code>.skb</code> → SPDX/in-toto-Export.</p></div>
     </div>
-    <div class="quote">"skillctl hebt die Latte von <b>schlechten-Skill-ausliefern</b> auf <b>erst-Same-uid-Code-Exec-erreichen-dann-das-Gate-manipulieren</b> — eine strikt höhere Latte, und der Sprung dazwischen ist genau das, was der Käfig verwehren soll."</div>
+    <div class="quote">"skillctl hebt die Latte von <b>schlechten-Skill-ausliefern</b> auf <b>erst-Same-uid-Code-Exec-erreichen-dann-das-Gate-manipulieren</b>: eine strikt höhere Latte, und der Sprung dazwischen ist genau das, was der Käfig verwehren soll."</div>
   </section>
 
   <p class="foot">

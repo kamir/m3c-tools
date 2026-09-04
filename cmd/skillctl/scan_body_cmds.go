@@ -2,7 +2,7 @@ package main
 
 // SPEC-0246 §4.5 standalone verb: `skillctl scan --body [<skill-dir>]`.
 //
-// Runs the behavioural (prose) bodyscan over a single skill's SKILL.md body —
+// Runs the behavioural (prose) bodyscan over a single skill's SKILL.md body:
 // the prompt-injection / exfiltration / tool-escalation / policy-subversion /
 // obfuscation detector in pkg/skillctl/bodyscan. This is deliberately separate
 // from the SPEC-0189 inventory scan (`skillctl scan` with no --body): that one

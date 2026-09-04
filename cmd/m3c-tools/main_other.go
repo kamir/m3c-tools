@@ -1,4 +1,4 @@
-// main_other.go — CLI + system tray entry point for non-macOS platforms.
+// main_other.go: CLI + system tray entry point for non-macOS platforms.
 // The system tray (menubar command) uses fyne.io/systray via pkg/tray.
 // GUI features that require macOS (observation window, recording) are not available.
 //
@@ -44,7 +44,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// help/version need no config — handle them WITHOUT loading the profile or
+	// help/version need no config: handle them WITHOUT loading the profile or
 	// ER1 config, so they never emit the ER1 placeholder FATAL (which would
 	// pollute clean help output, e.g. on a fresh machine or CI runner).
 	switch os.Args[1] {
@@ -258,7 +258,7 @@ func captureER1ContextID(reader *bufio.Reader, er1URL string) string {
 	// Try to launch Chrome with CDP for context ID extraction.
 	chromePath := plaud.FindChrome()
 	if chromePath == "" {
-		// No Chrome — open in default browser and ask for manual entry.
+		// No Chrome: open in default browser and ask for manual entry.
 		_ = openURL(baseURL)
 		fmt.Println("  Please log in, then enter your User ID from the dashboard.")
 		fmt.Print("  User ID: ")
@@ -292,7 +292,7 @@ func captureER1ContextID(reader *bufio.Reader, er1URL string) string {
 	_, _ = reader.ReadString('\n')
 
 	// Try to extract context ID from the page.
-	// ER1 stores the user ID in various places — try common patterns.
+	// ER1 stores the user ID in various places: try common patterns.
 	expressions := []string{
 		`localStorage.getItem("user_id")`,
 		`localStorage.getItem("context_id")`,
@@ -307,7 +307,7 @@ func captureER1ContextID(reader *bufio.Reader, er1URL string) string {
 		}
 	}
 
-	// CDP extraction failed — fall back to manual entry.
+	// CDP extraction failed: fall back to manual entry.
 	fmt.Println("  Could not auto-detect User ID from browser.")
 	fmt.Println("  Your User ID is shown at the top of the dashboard after login.")
 	fmt.Print("  Enter your User ID: ")
@@ -455,7 +455,7 @@ func cmdPlaud(args []string) {
 //	plaud auth login                  extract token from Chrome (CDP)
 //	plaud auth --token-file <path>    read token from a file (secure)
 //	plaud auth                        read token from $M3C_PLAUD_TOKEN (secure)
-//	plaud auth <token>                bare argv token (DEPRECATED — leaks via ps)
+//	plaud auth <token>                bare argv token (DEPRECATED: leaks via ps)
 //
 // SEC-M8: the bare-argv form is retained for backward compatibility but emits a
 // loud deprecation warning, because argv is visible to other users via ps.
@@ -487,7 +487,7 @@ func cmdPlaudAuth(args []string) {
 	}
 
 	if len(args) > 0 && (args[0] == "--from-er1" || args[0] == "from-er1") {
-		// SPEC-0304 — pull the token from the ER1 Credential Vault (captured
+		// SPEC-0304: pull the token from the ER1 Credential Vault (captured
 		// once via the "Plaud verbinden" page, any OS) instead of harvesting a
 		// local browser. Resolves ER1 base + auth from the active profile.
 		fmt.Println("Fetching Plaud token from the ER1 credential vault...")
@@ -674,7 +674,7 @@ func cmdPlaudSync(recordingID string, force bool) {
 				if filesDB != nil {
 					if tracked, lookupErr := filesDB.GetByPath("plaud://" + rec.ID); lookupErr == nil && tracked != nil {
 						if tracked.UploadDocID == "" {
-							// Tracked but no doc_id — upload failed, retry
+							// Tracked but no doc_id: upload failed, retry
 							ids = append(ids, rec.ID)
 							retryCount++
 							continue
@@ -820,7 +820,7 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 		tx, txErr := client.GetTranscript(recID)
 		if txErr != nil {
 			fmt.Printf("%s %s -> transcript not available (audio only)\n", prefix, recID)
-			transcriptText = "[No transcript available — audio only]"
+			transcriptText = "[No transcript available: audio only]"
 		} else {
 			transcriptText = tx.Text
 			if tx.Summary != "" {
@@ -1150,7 +1150,7 @@ func truncateForLog(s string, maxLen int) string {
 }
 
 func printUsage() {
-	fmt.Println(`m3c-tools — Multi-Modal-Memory Tools (CLI mode)
+	fmt.Println(`m3c-tools: Multi-Modal-Memory Tools (CLI mode)
 
 Commands:
   setup                  Interactive ER1 onboarding wizard
@@ -1200,7 +1200,7 @@ var plaudChromeActive int32
 
 // trayExtractPlaudToken attempts to extract a Plaud token from Chrome via CDP.
 // This is the tray-friendly version that never blocks on stdin:
-//  1. First tries ExtractTokenCDP() — instant, works if Chrome is already
+//  1. First tries ExtractTokenCDP(): instant, works if Chrome is already
 //     running with plaud.ai open and --remote-debugging-port=9222.
 //  2. If that fails, launches Chrome with the debug port, opens plaud.ai,
 //     and polls for the token every 3 seconds for 60 seconds while the user
@@ -1212,7 +1212,7 @@ func trayExtractPlaudToken(app *tray.TrayApp) (string, error) {
 	// and ActionPlaudSync both calling this function simultaneously.
 	if !atomic.CompareAndSwapInt32(&plaudChromeActive, 0, 1) {
 		log.Println("[plaud-tray-auth] Chrome auth already in progress, skipping duplicate launch")
-		return "", fmt.Errorf("Plaud Chrome auth already in progress — please wait")
+		return "", fmt.Errorf("Plaud Chrome auth already in progress: please wait")
 	}
 	defer atomic.StoreInt32(&plaudChromeActive, 0)
 
@@ -1223,10 +1223,10 @@ func trayExtractPlaudToken(app *tray.TrayApp) (string, error) {
 		log.Println("[plaud-tray-auth] instant CDP extraction succeeded")
 		return token, nil
 	}
-	log.Printf("[plaud-tray-auth] instant CDP failed: %v — launching Chrome...", err)
+	log.Printf("[plaud-tray-auth] instant CDP failed: %v: launching Chrome...", err)
 
 	// Step 2: Launch Chrome with debug port + plaud.ai.
-	app.UpdateTooltip("M3C Tools — Launching Chrome for Plaud login...")
+	app.UpdateTooltip("M3C Tools: Launching Chrome for Plaud login...")
 	cleanup, launchErr := plaud.LaunchChromeForPlaud()
 	if launchErr != nil {
 		return "", fmt.Errorf("cannot launch Chrome: %w", launchErr)
@@ -1235,7 +1235,7 @@ func trayExtractPlaudToken(app *tray.TrayApp) (string, error) {
 
 	// Step 3: Wait for CDP to become ready (Chrome startup takes a few seconds).
 	cdpReady := plaud.WaitForCDPReady(30*time.Second, func(msg string) {
-		app.UpdateTooltip("M3C Tools — " + msg)
+		app.UpdateTooltip("M3C Tools: " + msg)
 	})
 	if !cdpReady {
 		return "", fmt.Errorf("Chrome started but CDP port 9222 is not responding")
@@ -1244,7 +1244,7 @@ func trayExtractPlaudToken(app *tray.TrayApp) (string, error) {
 	// Step 4: Poll for token while user logs in (60s timeout, 3s interval).
 	log.Println("[plaud-tray-auth] CDP ready, polling for Plaud token...")
 	token, pollErr := plaud.PollForPlaudToken(60*time.Second, 3*time.Second, func(msg string) {
-		app.UpdateTooltip("M3C Tools — " + msg)
+		app.UpdateTooltip("M3C Tools: " + msg)
 	})
 	if pollErr != nil {
 		return "", pollErr
@@ -1265,11 +1265,11 @@ func trayPlaudSync(app *tray.TrayApp) (*plaud.SyncStats, error) {
 	if loadErr != nil {
 		// Happy Maker 1: Auto-auth via CDP instead of failing with "use terminal".
 		log.Printf("[plaud-tray] no saved token, attempting CDP auto-auth: %v", loadErr)
-		app.UpdateTooltip("M3C Tools — No Plaud token, attempting Chrome auto-auth...")
+		app.UpdateTooltip("M3C Tools: No Plaud token, attempting Chrome auto-auth...")
 
 		token, authErr := trayExtractPlaudToken(app)
 		if authErr != nil {
-			return nil, fmt.Errorf("Plaud auto-auth failed: %w — open web.plaud.ai in Chrome, log in, then try again", authErr)
+			return nil, fmt.Errorf("Plaud auto-auth failed: %w: open web.plaud.ai in Chrome, log in, then try again", authErr)
 		}
 
 		// Save the extracted token for future use.
@@ -1279,7 +1279,7 @@ func trayPlaudSync(app *tray.TrayApp) (*plaud.SyncStats, error) {
 		} else {
 			log.Println("[plaud-tray] token extracted and saved via CDP auto-auth")
 		}
-		app.UpdateTooltip("M3C Tools — Plaud authenticated, syncing...")
+		app.UpdateTooltip("M3C Tools: Plaud authenticated, syncing...")
 	}
 
 	client := plaud.NewClient(cfg, session.Token)
@@ -1382,12 +1382,12 @@ func checkFirstRun() []tray.SetupIssue {
 			apiKey = ap.Vars["ER1_API_KEY"]
 		}
 	}
-	// SPEC-0127: device token replaces API key — only warn if neither exists.
+	// SPEC-0127: device token replaces API key: only warn if neither exists.
 	// Token may live in the OS keychain or the encrypted fallback file.
 	hasDeviceToken := auth.HasStoredToken()
 	if apiKey == "" && !hasDeviceToken {
 		issues = append(issues, tray.SetupIssue{
-			Key: "no_auth", Message: "Not authenticated — run 'm3c-tools login'",
+			Key: "no_auth", Message: "Not authenticated: run 'm3c-tools login'",
 		})
 	}
 
@@ -1484,26 +1484,26 @@ func cmdTrayApp(args []string) {
 				if !app.IsSetupComplete() {
 					for _, issue := range app.SetupIssues {
 						if issue.Key == "no_auth" || issue.Key == "no_api_key" {
-							app.Notify("Setup Required", "ER1 API key missing — open Settings in tray menu")
+							app.Notify("Setup Required", "ER1 API key missing, open Settings in tray menu")
 							return
 						}
 						if issue.Key == "no_plaud_token" {
-							app.Notify("Setup Required", "Plaud not connected — open Settings in tray menu")
+							app.Notify("Setup Required", "Plaud not connected, open Settings in tray menu")
 							return
 						}
 					}
-					app.Notify("Setup Required", "Configuration incomplete — open Settings in tray menu")
+					app.Notify("Setup Required", "Configuration incomplete: open Settings in tray menu")
 					return
 				}
 				// BUG-0092: Use tray-safe sync with feedback instead of
 				// cmdPlaudSync which calls os.Exit on errors, killing the tray.
 				if !app.ClaimPlaudSync() {
 					log.Println("[tray] plaud sync already running, ignoring click")
-					app.UpdateTooltip("M3C Tools — Plaud sync already running...")
+					app.UpdateTooltip("M3C Tools, Plaud sync already running...")
 					return
 				}
 				// Tooltip for immediate in-progress feedback (no notification spam).
-				app.UpdateTooltip("M3C Tools — Syncing Plaud recordings...")
+				app.UpdateTooltip("M3C Tools, Syncing Plaud recordings...")
 				log.Println("[tray] starting plaud sync (tray-safe)...")
 				go func() {
 					defer app.ReleasePlaudSync()
@@ -1518,7 +1518,7 @@ func cmdTrayApp(args []string) {
 						} else {
 							app.Notify("Plaud Sync Failed", errMsg)
 						}
-						app.UpdateTooltip(fmt.Sprintf("M3C Tools — Plaud sync failed: %v", err))
+						app.UpdateTooltip(fmt.Sprintf("M3C Tools, Plaud sync failed: %v", err))
 						go func() {
 							time.Sleep(10 * time.Second)
 							app.ResetTooltip()
@@ -1530,7 +1530,7 @@ func cmdTrayApp(args []string) {
 					log.Printf("[tray] plaud sync done: %s", notification)
 					// Native OS notification for completion (visible even if tray is hidden).
 					app.Notify("Plaud Sync Complete", notification)
-					app.UpdateTooltip("M3C Tools — " + notification)
+					app.UpdateTooltip("M3C Tools: " + notification)
 					// Reset tooltip after 10 seconds.
 					go func() {
 						time.Sleep(10 * time.Second)
@@ -1539,15 +1539,15 @@ func cmdTrayApp(args []string) {
 				}()
 			case tray.ActionPlaudAuth:
 				// Login to Plaud.ai via Chrome CDP
-				log.Println("[tray] Login Plaud.ai clicked — starting CDP auth...")
-				app.UpdateTooltip("M3C Tools — Connecting to Plaud via Chrome...")
+				log.Println("[tray] Login Plaud.ai clicked, starting CDP auth...")
+				app.UpdateTooltip("M3C Tools, Connecting to Plaud via Chrome...")
 				go func() {
 					token, authErr := trayExtractPlaudToken(app)
 					if authErr != nil {
 						log.Printf("[tray] Plaud auth failed: %v", authErr)
 						app.Notify("Plaud Auth Failed", "Open web.plaud.ai in Chrome, log in, then try again")
 						app.UpdatePlaudStatus(false, "auth failed")
-						app.UpdateTooltip(fmt.Sprintf("M3C Tools — Plaud auth failed"))
+						app.UpdateTooltip(fmt.Sprintf("M3C Tools: Plaud auth failed"))
 						go func() {
 							time.Sleep(10 * time.Second)
 							app.ResetTooltip()
@@ -1561,10 +1561,10 @@ func cmdTrayApp(args []string) {
 						app.Notify("Plaud Auth", "Token extracted but could not save")
 					} else {
 						log.Println("[tray] Plaud token saved")
-						app.Notify("Plaud Connected", "Token saved — you can now sync")
+						app.Notify("Plaud Connected", "Token saved, you can now sync")
 						app.UpdatePlaudStatus(true, "token OK")
 					}
-					app.UpdateTooltip("M3C Tools — Plaud connected")
+					app.UpdateTooltip("M3C Tools, Plaud connected")
 					go func() {
 						time.Sleep(10 * time.Second)
 						app.ResetTooltip()
@@ -1583,11 +1583,11 @@ func cmdTrayApp(args []string) {
 				// BUG-0088 fix: Use proper ER1 callback flow (same as macOS).
 				go trayLoginER1(app)
 			case tray.ActionSignOut:
-				// FEAT-0014: Sign out — clear runtime state.
+				// FEAT-0014: Sign out, clear runtime state.
 				log.Println("[tray] sign out")
 				os.Setenv("ER1_CONTEXT_ID", "")
 				app.UpdateLoginState(false, "")
-				app.UpdateTooltip("M3C Tools — Signed out")
+				app.UpdateTooltip("M3C Tools, Signed out")
 				go func() {
 					time.Sleep(5 * time.Second)
 					app.ResetTooltip()
@@ -1597,7 +1597,7 @@ func cmdTrayApp(args []string) {
 				os.Exit(0)
 			}
 		},
-		// Windows MVP: Plaud sync only — no profile/history/preferences handlers.
+		// Windows MVP: Plaud sync only: no profile/history/preferences handlers.
 	})
 
 	app.SetLogPath(logPath)
@@ -1613,7 +1613,7 @@ func cmdTrayApp(args []string) {
 		}
 		app.SetSetupIssues(setupIssues)
 	} else {
-		log.Println("[setup] first-run check passed — setup is complete")
+		log.Println("[setup] first-run check passed: setup is complete")
 	}
 
 	// Check Plaud token status on startup
@@ -1626,7 +1626,7 @@ func cmdTrayApp(args []string) {
 		}
 	}
 
-	// systray.Run() blocks — this must be the last call.
+	// systray.Run() blocks: this must be the last call.
 	app.Run()
 }
 
@@ -1640,7 +1640,7 @@ func openFileWithDefault(path string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		// SEC-M11: avoid "cmd /c start" — route through rundll32's
+		// SEC-M11: avoid "cmd /c start": route through rundll32's
 		// FileProtocolHandler so the path is never shell-interpreted.
 		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
 	case "linux":
@@ -1684,7 +1684,7 @@ func trayLoginER1(app *tray.TrayApp) {
 	baseURL := trayER1BaseURL(cfg.APIURL)
 	if baseURL == "" {
 		log.Println("[auth] cannot derive ER1 base URL from ER1_API_URL")
-		app.UpdateTooltip("M3C Tools — Login failed (no ER1 URL)")
+		app.UpdateTooltip("M3C Tools: Login failed (no ER1 URL)")
 		return
 	}
 
@@ -1692,7 +1692,7 @@ func trayLoginER1(app *tray.TrayApp) {
 	srv, callbackURL, resultCh, closeFn, err := startTrayLoginCallbackServer()
 	if err != nil {
 		log.Printf("[auth] login callback server start failed: %v", err)
-		app.UpdateTooltip("M3C Tools — Login failed (callback)")
+		app.UpdateTooltip("M3C Tools: Login failed (callback)")
 		return
 	}
 	defer func() {
@@ -1708,7 +1708,7 @@ func trayLoginER1(app *tray.TrayApp) {
 	loginURL := fmt.Sprintf("%s/v2/signin?next=%s", baseURL, neturl.QueryEscape(callbackURL))
 	log.Printf("[auth] login start base=%s callback=%s", baseURL, callbackURL)
 	openBrowserURL(loginURL)
-	app.UpdateTooltip("M3C Tools — Waiting for login...")
+	app.UpdateTooltip("M3C Tools: Waiting for login...")
 
 	// BUG-0096: 5-minute timeout (Google OAuth + Passkey can take time).
 	deadline := time.NewTimer(5 * time.Minute)
@@ -1719,7 +1719,7 @@ func trayLoginER1(app *tray.TrayApp) {
 		case result := <-resultCh:
 			if result.Err != nil {
 				log.Printf("[auth] callback received error: %v", result.Err)
-				app.UpdateTooltip("M3C Tools — Login failed")
+				app.UpdateTooltip("M3C Tools: Login failed")
 				return
 			}
 			ctxID := strings.TrimSpace(result.ContextID)
@@ -1731,7 +1731,7 @@ func trayLoginER1(app *tray.TrayApp) {
 			return
 		case <-deadline.C:
 			log.Printf("[auth] login timed out (5m) waiting for callback; addr=%s", srv.Addr)
-			app.UpdateTooltip("M3C Tools — Login timed out")
+			app.UpdateTooltip("M3C Tools: Login timed out")
 			go func() {
 				time.Sleep(10 * time.Second)
 				app.ResetTooltip()
@@ -1762,7 +1762,7 @@ func completeTrayLogin(app *tray.TrayApp, contextID string) {
 	// Update runtime state and menu.
 	os.Setenv("ER1_CONTEXT_ID", contextID)
 	app.UpdateLoginState(true, contextID)
-	app.UpdateTooltip(fmt.Sprintf("M3C Tools — Signed in (%s...)", contextID[:min(8, len(contextID))]))
+	app.UpdateTooltip(fmt.Sprintf("M3C Tools: Signed in (%s...)", contextID[:min(8, len(contextID))]))
 	go func() {
 		time.Sleep(15 * time.Second)
 		app.ResetTooltip()

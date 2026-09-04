@@ -7,8 +7,8 @@ import (
 )
 
 // TokenLifetimeShape is the SPEC-0167 A.4 reflector that tracks the
-// distribution of token lifetimes — how long each capability token
-// stayed active before invocation.completed — and emits a weekly
+// distribution of token lifetimes, how long each capability token
+// stayed active before invocation.completed, and emits a weekly
 // Reflection when the trailing 7-day distribution shifts more than
 // SigmaThreshold standard deviations from the trailing 30-day baseline.
 //
@@ -22,18 +22,18 @@ import (
 //     "baseline_std_seconds":  4.8,
 //     "z_score":              3.7,
 //     "sample_count":          124,
-//     "interpretation":       "tokens running longer than baseline — possible runaway skill"
+//     "interpretation":       "tokens running longer than baseline (possible runaway skill"
 //   }
 //
 // Privacy: the histogram is over ttl SECONDS, not over token contents.
 // No bundle digests, callers, or targets land in the Reflection
-// content — just aggregate statistics about timing.
+// content) just aggregate statistics about timing.
 type TokenLifetimeShape struct {
 	BaselineWindow time.Duration // default 30 days
 	CurrentWindow  time.Duration // default 7 days
-	EmitInterval   time.Duration // default 7 days — at most one emission per period
+	EmitInterval   time.Duration // default 7 days, at most one emission per period
 	SigmaThreshold float64       // default 2.0
-	MinSamples     int           // default 30 — refuse to emit on thin distributions
+	MinSamples     int           // default 30, refuse to emit on thin distributions
 
 	emitter ReflectionEmitter
 	idFn    func() string
@@ -141,7 +141,7 @@ func (r *TokenLifetimeShape) Tick(ctx context.Context, now time.Time) error {
 }
 
 func (r *TokenLifetimeShape) Drain(ctx context.Context) ([]Reflection, error) {
-	// On shutdown, do not flush partial windows — they'd mislead the
+	// On shutdown, do not flush partial windows. They'd mislead the
 	// next-run baseline. The state is recoverable from Kafka replay.
 	return nil, nil
 }
@@ -171,7 +171,7 @@ func (r *TokenLifetimeShape) makeReflection(now time.Time, current, baseline []l
 	periodStart := now.Add(-r.CurrentWindow)
 	interpretation := "tokens running shorter than baseline"
 	if z > 0 {
-		interpretation = "tokens running longer than baseline — possible runaway skill"
+		interpretation = "tokens running longer than baseline: possible runaway skill"
 	}
 	return Reflection{
 		SchemaVer:    1,

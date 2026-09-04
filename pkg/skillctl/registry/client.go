@@ -19,8 +19,8 @@ import (
 const DefaultTimeout = 30 * time.Second
 
 // MaxRedirects bounds how many redirects a single request will follow
-// before erroring. The spec doesn't require us to follow ANY — admission
-// endpoints are direct — but we accept a small number to survive load
+// before erroring. The spec doesn't require us to follow ANY, admission
+// endpoints are direct, but we accept a small number to survive load
 // balancers without enabling a redirect-bounce attack.
 const MaxRedirects = 5
 
@@ -29,7 +29,7 @@ const MaxRedirects = 5
 // realistic skill bundle (typical bundles measure in tens of KiB to a
 // few MiB) but small enough that a server-side bug or a hostile registry
 // can't OOM the verifier. S8 may choose to stream to a temp file
-// instead — that's its call; this client serves the in-memory case.
+// instead. That's its call; this client serves the in-memory case.
 const MaxBlobSize int64 = 256 << 20 // 256 MiB
 
 // ErrNotFound is returned by the high-level methods when the registry
@@ -139,7 +139,7 @@ func (c *Client) ResolveByName(ctx context.Context, name string) ([]BundleVersio
 // errors out so a hostile or buggy server can't blow up memory.
 //
 // digest must be the canonical "sha256:<hex>" form. We don't validate
-// here — the verify layer in S8 recomputes the digest from the returned
+// here: the verify layer in S8 recomputes the digest from the returned
 // bytes and refuses on mismatch, which is the authoritative check.
 func (c *Client) GetBundle(ctx context.Context, digest string) ([]byte, error) {
 	if digest == "" {
@@ -293,6 +293,6 @@ func validateNameSafe(name string) error {
 // interactively; a transient 5xx surfaces immediately so the user can
 // retry rather than the client silently masking a registry outage. If a
 // future requirement adds retries it should land at the call site (with
-// jitter, with idempotency keys for POSTs) — not transparently inside
+// jitter, with idempotency keys for POSTs), not transparently inside
 // these getters.
 var _ = struct{}{} // documentation anchor, intentionally empty

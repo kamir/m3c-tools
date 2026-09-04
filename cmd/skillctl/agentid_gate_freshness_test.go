@@ -1,6 +1,6 @@
 package main
 
-// SPEC-0279 P4 — runtime-gate freshness tests (the SPEC-0247 PreToolUse path).
+// SPEC-0279 P4: runtime-gate freshness tests (the SPEC-0247 PreToolUse path).
 //
 // These drive the REAL gate (runVerifyHook → authorizeAgentForSkill →
 // verifyActiveAgentID) with a configured AgentID mandate and the gate's
@@ -133,7 +133,7 @@ func TestGate_EmptyGrantIsHighRisk(t *testing.T) {
 	}
 }
 
-// AC3 (gate): an emergency deny-list entry denies BEFORE the cadence — even with
+// AC3 (gate): an emergency deny-list entry denies BEFORE the cadence: even with
 // no revocation snapshot at all.
 func TestGate_EmergencyDeniesAgent(t *testing.T) {
 	e := setupGate(t, "summarize", false)
@@ -189,8 +189,8 @@ func TestGate_CheckpointResetsAtGate(t *testing.T) {
 // Adversarial: a forged emergency deny-list at the gate path is fail-closed.
 //
 // SPEC-0279 P4 (review finding #1): the forged file is now caught by the
-// UNCONDITIONAL runtime emergency check (verify_hook_cmds.go), which runs FIRST —
-// before the mandate path — so the gate refuses rather than ignore an
+// UNCONDITIONAL runtime emergency check (verify_hook_cmds.go), which runs FIRST,
+// before the mandate path, so the gate refuses rather than ignore an
 // operator-placed list it cannot verify, EVEN with a mandate present. The deny
 // announces the emergency channel and fail-closes.
 func TestGate_ForgedEmergencyFailsClosed(t *testing.T) {

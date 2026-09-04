@@ -2,7 +2,7 @@ package parser
 
 // Native Go fuzz target for the SKILL.md frontmatter parser. The whole file
 // (delimiters + embedded YAML block) is untrusted author input. Oracle: Parse
-// never panics on any byte sequence — a malformed delimiter run or a hostile
+// never panics on any byte sequence: a malformed delimiter run or a hostile
 // YAML block must surface as an error/no-frontmatter, never a crash.
 
 import (

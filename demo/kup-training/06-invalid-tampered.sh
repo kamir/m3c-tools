@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# 06-invalid-tampered — Tamper one byte inside the bundle.
+# 06-invalid-tampered: Tamper one byte inside the bundle.
 # Expected: skillctl verify-sig exits 11 (signature invalid).
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 require_skillctl
 
-header "06 — INVALID: tampered bundle bytes"
+header "06, INVALID: tampered bundle bytes"
 
 DIGEST=$(cat "$ARTIFACTS_DIR/digest.txt")
 BUNDLE="$BUNDLES_DIR/${SKILL_NAME}-${SKILL_VERSION}.skb"
@@ -24,7 +24,7 @@ ok "tampered bundle: $TAMPERED"
 
 # Compute the new (tampered) digest so the .sig filename matches.
 # The attack scenario: an attacker who has the original signature renames
-# it to match the tampered bundle's digest — the verifier finds a sig but
+# it to match the tampered bundle's digest: the verifier finds a sig but
 # the cryptographic check refuses (exit 11). This is the "lying signature"
 # attack the chain protects against.
 TAMPERED_DIGEST=$(shasum -a 256 "$TAMPERED" | awk '{print $1}')
@@ -36,7 +36,7 @@ ok "tampered digest:  $TAMPERED_DIGEST"
 ok "sig renamed to match tampered digest: $(basename "$SIG_NEW")"
 
 # verify-sig MUST refuse with exit 11 (cryptographic verification fails).
-log "Eric: skillctl verify-sig (expecting exit 11 — signature invalid)"
+log "Eric: skillctl verify-sig (expecting exit 11: signature invalid)"
 assert_exit 11 -- "$SKILLCTL" verify-sig --pubkey "$KEYS_DIR/mirko.pub" "$TAMPERED"
 
-header "06 — done — TAMPER DETECTED, INVALID SKILL REFUSED ✓"
+header "06, done, TAMPER DETECTED, INVALID SKILL REFUSED ✓"

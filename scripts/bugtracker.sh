@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 #
-# scripts/bugtracker.sh — keep a bug's two planes in step (SPEC-0358,
+# scripts/bugtracker.sh, keep a bug's two planes in step (SPEC-0358,
 # "ship the code, keep the reasoning").
 #
 # It tracks the two kinds of item that live in bug-reports/:
-#   BUG-NNNN  a defect        — closed as `fixed`
-#   FR-NNNN   a feature request — closed as `implemented`
+#   BUG-NNNN  a defect, closed as `fixed`
+#   FR-NNNN   a feature request: closed as `implemented`
 #
-#   1. the REPORT — ${M3C_MAINTENANCE_DIR}/bug-reports/<KIND>-NNNN-<slug>.md
+#   1. the REPORT: ${M3C_MAINTENANCE_DIR}/bug-reports/<KIND>-NNNN-<slug>.md
 #      The source of truth. PRIVATE plane: root cause or rationale, file:line,
 #      customer context, SPEC references, whatever the analysis needs.
 #
-#   2. the ISSUE — a GitHub issue in this (PUBLIC) repository.
+#   2. the ISSUE: a GitHub issue in this (PUBLIC) repository.
 #      The tracker view other people can see. It is a REDACTED restatement,
 #      never a copy: observed behaviour, expected behaviour, reproduction,
-#      version. It refers to the private plane ID-ONLY ("BUG-0213") — never a
+#      version. It refers to the private plane ID-ONLY ("BUG-0213"): never a
 #      path, an internal endpoint, an ER1 context-id or a secret header.
 #
 # The issue is fail-closed on purpose. `open` refuses unless the report declares
@@ -24,13 +24,13 @@
 # never leave the private plane. A public issue cannot be un-published.
 #
 # Configuration:
-#   M3C_MAINTENANCE_DIR   required — the private maintenance repo's root
-#   M3C_BUG_REPO          optional — owner/repo fallback for an item that does
+#   M3C_MAINTENANCE_DIR   required, the private maintenance repo's root
+#   M3C_BUG_REPO          optional, owner/repo fallback for an item that does
 #                         not declare `- **Repo:**` and has no issue yet. The
 #                         target is NEVER inferred from the working directory.
 #
 # An item is named BUG-0213 / FR-0096, or fr-96, or a filename. A BARE NUMBER
-# means a BUG — the FR kind must be spelled out, so "96" can never silently
+# means a BUG. The FR kind must be spelled out, so "96" can never silently
 # resolve to the wrong item.
 #
 # Commands:
@@ -45,13 +45,13 @@
 #   sync   [<ID>]                 read-only: report/issue drift
 #
 # Closing an item as done requires a `- **Spec:**` line. Solving an issue means
-# serving the contract it belongs to, so the value may be `none — <reason>`, but
+# serving the contract it belongs to, so the value may be `none: <reason>`, but
 # the question has to have been ANSWERED rather than skipped.
 #
 # Exit: 0 ok · 1 a check failed (drift, leak, refusal) · 2 usage/config error.
 set -euo pipefail
 
-# The states that mean "done" — closing an issue as completed, and the states
+# The states that mean "done": closing an issue as completed, and the states
 # that require a Spec answer.
 DONE_STATES="fixed implemented"
 
@@ -68,7 +68,7 @@ bug_dir() {
   printf '%s\n' "$M3C_MAINTENANCE_DIR/bug-reports"
 }
 
-# repo_for FILE — which GitHub repository this item's issue lives in.
+# repo_for FILE: which GitHub repository this item's issue lives in.
 #
 # The target is a property of the ITEM, never of the working directory. Deriving
 # it from `git remote origin` was wrong in both directions: run from the private
@@ -78,9 +78,9 @@ bug_dir() {
 # several systems, so there is no single correct default to infer.
 #
 # Resolution order, most authoritative first:
-#   1. the recorded `- **Issue:** owner/repo#N` — after creation this IS the fact
-#   2. the declared `- **Repo:** owner/repo`    — before creation, reviewed in-file
-#   3. $M3C_BUG_REPO                            — a stated override for one-offs
+#   1. the recorded `- **Issue:** owner/repo#N`: after creation this IS the fact
+#   2. the declared `- **Repo:** owner/repo`: before creation, reviewed in-file
+#   3. $M3C_BUG_REPO: a stated override for one-offs
 #   4. refuse
 #
 # The file outranks the environment on purpose: an item that has declared its
@@ -148,7 +148,7 @@ $hits"
 
 public_body_path() { printf '%s\n' "${1%.md}.public.md"; }
 
-# claims KIND — every number of that kind anyone has already taken, as
+# claims KIND: every number of that kind anyone has already taken, as
 # "<number><TAB><where>" lines. The point is the SOURCES: reading max+1 out of
 # one working tree is why two sessions can be handed the same id. A claim is
 # real if it exists ANYWHERE another checkout could later push:
@@ -191,11 +191,11 @@ cmd_next_id() {
   statuses_for "$kind" >/dev/null      # rejects an unknown kind
   dir=$(bug_dir)
 
-  # Without a fetch the answer is only as fresh as your last pull — which is
+  # Without a fetch the answer is only as fresh as your last pull, which is
   # exactly how a number that someone else already pushed still looks free.
   if [ "$fetch" -eq 1 ] && git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
     git -C "$dir" fetch --quiet origin 2>/dev/null \
-      || note "next-id: could not fetch — the answer may be stale (use --no-fetch to silence)"
+      || note "next-id: could not fetch: the answer may be stale (use --no-fetch to silence)"
   fi
 
   all=$(claims "$kind" | sort -u)
@@ -210,7 +210,7 @@ EOF
   # that is the claim you would otherwise have walked straight into.
   case "$top" in
     ""|"local file") ;;
-    *) note "next-id: highest $kind claim is $(printf '%s-%04d' "$kind" "$max") in $top — not in your working tree" ;;
+    *) note "next-id: highest $kind claim is $(printf '%s-%04d' "$kind" "$max") in $top: not in your working tree" ;;
   esac
 
   printf '%s-%04d\n' "$kind" "$((max + 1))"
@@ -226,7 +226,7 @@ EOF
 # writing always produces the canonical form, so `sync` has something to parse.
 
 # BULLET_* match an optional markdown list marker ("- ", "* ", "+ ") and nothing
-# more — deliberately NOT a [-* ] character class, which would also swallow the
+# more: deliberately NOT a [-* ] character class, which would also swallow the
 # "**" that opens the bold field name.
 BULLET_BRE='[[:space:]]*\([-*+][[:space:]]\{1,\}\)\{0,1\}'
 BULLET_ERE='^[ \t]*([-*+][ \t]+)?'
@@ -291,7 +291,7 @@ cmd_spec()   { local f; f=$(report_path "$1"); printf '%s\n' "$(read_field "$f" 
 # tools/boundary-gate.sh, the CI commit gate. They are applied here because an
 # issue body is a public-plane artefact that NO CI job ever sees: the commit gate
 # cannot catch what is posted through the API. Every pattern applies, including
-# the ops-exempt ones — those are exempt for the tool's own SOURCE, never for
+# the ops-exempt ones: those are exempt for the tool's own SOURCE, never for
 # text we publish about it.
 
 leak_patterns_file() {
@@ -320,7 +320,7 @@ cmd_redact_check() {
   if redact_scan "$text"; then
     echo "redact-check: clean"
   else
-    note "redact-check: FAIL — this text carries private-plane content (SPEC-0358); it must not be posted publicly"
+    note "redact-check: FAIL: this text carries private-plane content (SPEC-0358); it must not be posted publicly"
     exit 1
   fi
 }
@@ -332,21 +332,21 @@ cmd_open() {
   id=$(item_id "$1"); file=$(report_path "$1")
 
   if [ -n "$(issue_ref "$file")" ]; then
-    note "$id already links $(read_field "$file" Issue) — nothing to do"
+    note "$id already links $(read_field "$file" Issue): nothing to do"
     return 0
   fi
 
   [ "$(canon_status "$(read_field "$file" Public)")" = "yes" ] && : || \
     die "refusing to publish $id: the report does not declare '- **Public:** yes'.
   Publishing is per-bug and deliberate. Declare it only for a bug in THIS
-  shipped artifact — never a security issue, a customer-specific detail, or a
+  shipped artifact, never a security issue, a customer-specific detail, or a
   bug in a system this repository does not ship." 1
 
   pub_file=$(public_body_path "$file")
   [ -f "$pub_file" ] || die "refusing to publish $id: no redacted body at
   $(basename "$pub_file")
-  Write the public-safe restatement there first — observed behaviour, expected
-  behaviour, reproduction, affected version — referring to the analysis ID-ONLY
+  Write the public-safe restatement there first (observed behaviour, expected
+  behaviour, reproduction, affected version) referring to the analysis ID-ONLY
   as '$id'." 1
 
   title=$(sed -n '1s/^#[[:space:]]*//p' "$pub_file")
@@ -388,12 +388,12 @@ cmd_close() {
   case " $allowed " in *" $status "*) ;; *) die "status '$status' is not valid for a $kind (use: $allowed)";; esac
 
   # Solving an issue means serving the contract it belongs to. The Spec line may
-  # legitimately say "none — <reason>"; what it may not do is be missing, which
+  # legitimately say "none: <reason>"; what it may not do is be missing, which
   # is how the question gets skipped rather than answered.
   case " $DONE_STATES " in
     *" $status "*)
       [ -n "$(read_field "$file" Spec)" ] || die "refusing to close $id as '$status': the report has no '- **Spec:**' line.
-  Record which SPEC this serves — or state 'none — <reason>' if it genuinely
+  Record which SPEC this serves, or state 'none: <reason>' if it genuinely
   serves none. Either is an answer; a missing line is not." 1
       ;;
   esac
@@ -402,7 +402,7 @@ cmd_close() {
   echo "$id: status -> $status"
 
   num=$(issue_ref "$file")
-  [ -n "$num" ] || { note "$id has no linked issue — the private plane is up to date, nothing to close"; return 0; }
+  [ -n "$num" ] || { note "$id has no linked issue. The private plane is up to date, nothing to close"; return 0; }
 
   local reason=completed
   case "$status" in wontfix|duplicate) reason="not planned" ;; esac

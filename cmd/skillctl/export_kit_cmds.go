@@ -1,6 +1,6 @@
 package main
 
-// SPEC-0276 R4.3 — `skillctl export-verification-kit`.
+// SPEC-0276 R4.3: `skillctl export-verification-kit`.
 //
 // Packages a signed bundle into a portable, self-contained directory (and
 // optional .zip) that a third party can verify OFFLINE with no access to our
@@ -128,7 +128,7 @@ func runExportKit(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	// Build the kit in a temp staging dir, scrub, then move into place — so a
+	// Build the kit in a temp staging dir, scrub, then move into place, so a
 	// scrub failure never leaves a half-written kit.
 	if err := os.MkdirAll(*outDir, 0o755); err != nil {
 		fmt.Fprintf(stderr, "export-verification-kit: mkdir %s: %v\n", *outDir, err)
@@ -141,7 +141,7 @@ func runExportKit(args []string, stdout, stderr io.Writer) int {
 
 	files := map[string][]byte{}
 
-	// .skb blob — copied verbatim; NOT scrubbed (it is the signed artifact, its
+	// .skb blob: copied verbatim; NOT scrubbed (it is the signed artifact, its
 	// integrity is cryptographically bound; an env-var NAME documented in a
 	// SKILL.md is not a secret leak).
 	skbBytes, err := os.ReadFile(*bundlePath)
@@ -181,7 +181,7 @@ func runExportKit(args []string, stdout, stderr io.Writer) int {
 	// Hard secret-scrub over every generated text file.
 	for name, data := range files {
 		if err := scrubSecrets(name, data); err != nil {
-			fmt.Fprintf(stderr, "export-verification-kit: refusing to emit — %v\n", err)
+			fmt.Fprintf(stderr, "export-verification-kit: refusing to emit: %v\n", err)
 			return exitGeneric
 		}
 	}
@@ -228,7 +228,7 @@ func authorIDOf(meta *registry.BundleMeta) string {
 
 // minimalPinnedTrustRootsYAML builds a trust-roots YAML containing ONLY the
 // matched registry's active keys and the single pinned author the bundle
-// references — the least the kit needs to verify, and no more. Reuses
+// references. The least the kit needs to verify, and no more. Reuses
 // verify.TrustRoots.Save so the YAML shape stays canonical.
 func minimalPinnedTrustRootsYAML(root *verify.TrustRoot, authorID string) ([]byte, error) {
 	ak := root.FindAuthor(authorID)
@@ -262,12 +262,12 @@ func minimalPinnedTrustRootsYAML(root *verify.TrustRoot, authorID string) ([]byt
 
 // renderVerifyMD produces the human VERIFY.md. It states the expected digest +
 // chain summary (so the verifier compares against a known-good string) and
-// instructs them to confirm the author fingerprint OUT-OF-BAND — the kit proves
+// instructs them to confirm the author fingerprint OUT-OF-BAND: the kit proves
 // integrity; the out-of-band fingerprint proves identity.
 func renderVerifyMD(res *verify.VerifyResult, skbName, authorID, authorFP string, hasRevocations bool) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# Verification kit — %s\n\n", skbName)
-	b.WriteString("This kit lets ANYONE verify this skill bundle **offline** — no network, and no\n")
+	fmt.Fprintf(&b, "# Verification kit, %s\n\n", skbName)
+	b.WriteString("This kit lets ANYONE verify this skill bundle **offline**, no network, and no\n")
 	b.WriteString("trust in the publisher beyond a public key you confirm out-of-band.\n\n")
 	b.WriteString("## One command\n\n```\nbash verify.sh\n```\n\n")
 	fmt.Fprintf(&b, "Expected: exit code 0 and the line:\n\n    %s\n\n", res.ChainSummary)
@@ -278,7 +278,7 @@ func renderVerifyMD(res *verify.VerifyResult, skbName, authorID, authorFP string
 	b.WriteString("## Confirm identity out-of-band (important)\n\n")
 	b.WriteString("The kit proves INTEGRITY. To also trust IDENTITY, confirm the author key\n")
 	b.WriteString("fingerprint below through a SEPARATE channel (a call, Signal, a known web\n")
-	b.WriteString("page) — NOT from this kit:\n\n")
+	b.WriteString("page): NOT from this kit:\n\n")
 	fmt.Fprintf(&b, "    author %s fingerprint: %s\n\n", authorID, authorFP)
 	b.WriteString("If that fingerprint matches AND verify.sh exits 0, the bundle is authentic and unmodified.\n")
 	if hasRevocations {
@@ -294,7 +294,7 @@ func renderVerifyMD(res *verify.VerifyResult, skbName, authorID, authorFP string
 func renderVerifyScript(skbName string, hasRevocations bool) string {
 	var b strings.Builder
 	b.WriteString("#!/usr/bin/env sh\n")
-	b.WriteString("# Trustless offline verification — no network; trust only the pinned key.\n")
+	b.WriteString("# Trustless offline verification: no network; trust only the pinned key.\n")
 	b.WriteString("set -eu\n")
 	b.WriteString("DIR=\"$(cd \"$(dirname \"$0\")\" && pwd)\"\n")
 	fmt.Fprintf(&b, "skillctl verify --bundle \"$DIR/%s\" --trust-roots \"$DIR/trust-roots.pinned.yaml\"", skbName)
@@ -315,12 +315,12 @@ var secretPatterns = []string{
 	"er1_api_key",
 	"device_token_secret",
 	"authorization: bearer",
-	// Provider token prefixes (widened per the SPEC-0276 red-team review — modern
+	// Provider token prefixes (widened per the SPEC-0276 red-team review: modern
 	// 2025/26 formats the original list missed). Lower-cased substring match. We
 	// deliberately include ONLY patterns containing '-' or '_' (which StdEncoding
 	// base64 never produces) so they cannot false-positive on the kit's own base64
 	// pubkeys/signatures; bare-alnum prefixes (AKIA…, AIza…) are intentionally
-	// omitted to avoid collisions — their secret *values* carry distinct markers.
+	// omitted to avoid collisions: their secret *values* carry distinct markers.
 	"sk_live_", "sk_test_", "sk-proj-", "sk-ant-",
 	"ghp_", "gho_", "ghs_", "github_pat_", "glpat-",
 	"xoxb-", "xoxp-", "xapp-",
@@ -329,7 +329,7 @@ var secretPatterns = []string{
 }
 
 // scrubSecrets refuses a kit file whose bytes contain an obvious secret. The
-// .skb blob is exempt (see runExportKit) — this scans only the text artifacts
+// .skb blob is exempt (see runExportKit): this scans only the text artifacts
 // the kit GENERATES, which must be safe to email/publish (SPEC-0276 R4.3.2).
 func scrubSecrets(name string, data []byte) error {
 	lower := bytes.ToLower(data)

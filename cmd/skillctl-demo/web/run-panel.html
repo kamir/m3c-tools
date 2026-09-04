@@ -1,7 +1,7 @@
-<!-- skillctl-demo run panel — thin, self-contained, offline (CSP-safe). -->
+<!-- skillctl-demo run panel: thin, self-contained, offline (CSP-safe). -->
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>skillctl-demo — skill-trust walkthrough</title>
+<title>skillctl-demo: skill-trust walkthrough</title>
 <style>
   :root {
     --bg: #0d1117; --panel: #161b22; --border: #30363d; --fg: #e6edf3;
@@ -77,14 +77,14 @@
       <div class="box">
         <h2 id="scTitle">Overview</h2>
         <div class="svgwrap"><img id="svg" src="/assets/infographic-overview.png" alt="overview" /></div>
-        <div class="story" id="story">A CISO buys containment they can see. Step through the deck — each LIVE card runs the real skillctl and shows its real exit code.</div>
+        <div class="story" id="story">A CISO buys containment they can see. Step through the deck: each LIVE card runs the real skillctl and shows its real exit code.</div>
         <div class="without" id="without"></div>
         <div class="roadmap" id="roadmap"></div>
       </div>
       <div class="box">
-        <h2>Live terminal — real skillctl</h2>
+        <h2>Live terminal, real skillctl</h2>
         <div id="term"></div>
-        <div style="margin-top:12px" id="badge" class="idle">— awaiting first verdict —</div>
+        <div style="margin-top:12px" id="badge" class="idle">, awaiting first verdict: </div>
         <div class="verdict" id="verdict"></div>
       </div>
     </div>
@@ -153,7 +153,7 @@
         line('l-note', '  ▸ ' + e.text);
         setBadge(e);
         break;
-      case 'reset': line('l-note', '\n— sandbox reset —'); break;
+      case 'reset': line('l-note', '\n, sandbox reset, '); break;
       case 'done': line('l-step', '\n✔ ' + (e.text || 'demo complete')); break;
     }
   };
@@ -166,7 +166,7 @@
     badge.textContent = (e.ok ? '✅ ' : '✗ ') + 'exit ' + e.code + '  ' + word;
     verdict.textContent = e.ok
       ? ('matched expected exit ' + e.expected)
-      : ('UNEXPECTED — wanted ' + e.expected);
+      : ('UNEXPECTED: wanted ' + e.expected);
   }
 })();
 </script>

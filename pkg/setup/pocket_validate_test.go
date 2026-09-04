@@ -144,7 +144,7 @@ func TestValidatePocketKey_KeyIsTrimmed(t *testing.T) {
 }
 
 func TestValidatePocketKey_DefaultURLWhenEmpty(t *testing.T) {
-	// Non-functional test — just verifies that an empty baseURL doesn't crash.
+	// Non-functional test: just verifies that an empty baseURL doesn't crash.
 	// Hits the real default URL, which will fail with network/DNS in CI but
 	// must classify as "unreachable" not panic.
 	v := ValidatePocketKey(&http.Client{Timeout: 1}, "", "pk_x")

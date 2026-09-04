@@ -1,6 +1,6 @@
 package registry
 
-// SPEC-0246 §7 — room mapping for already-published bundles.
+// SPEC-0246 §7: room mapping for already-published bundles.
 //
 // `skillctl publish --share-room <label>` stamps the room label at admit time.
 // This file backs `skillctl room share/unshare`, which maps (or un-maps)
@@ -186,7 +186,7 @@ func er1PostJSON(base string, cfg *er1.Config, path string, payload any) (any, e
 	client := &http.Client{Timeout: 30 * time.Second}
 	if !cfg.VerifySSL {
 		// #nosec G402 -- gated: default is ER1_VERIFY_SSL=true (verifies). VerifySSL=false
-		// is honored only for loopback — er1TLSGuard above fails closed for any non-loopback
+		// is honored only for loopback. Er1TLSGuard above fails closed for any non-loopback
 		// host, and pkg/er1.applyTLSVerificationPolicy forces verification back on at load
 		// time for non-loopback. Reaching here implies a loopback dev target.
 		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} // #nosec G402 -- loopback-only, gated by er1TLSGuard
@@ -200,7 +200,7 @@ func er1PostJSON(base string, cfg *er1.Config, path string, payload any) (any, e
 		req.Header.Set(k, v)
 	}
 	// BUG-0167: the maindrec tag endpoints (_auth_or_key_required) accept ONLY the
-	// master X-API-KEY or a browser session — NOT a device-token Bearer. So always
+	// master X-API-KEY or a browser session, NOT a device-token Bearer, so always
 	// send X-API-KEY when we have it, even alongside a device token (AuthHeaders
 	// prefers the Bearer, which these routes reject with 401). Mirrors er1_publish.
 	if cfg.APIKey != "" {

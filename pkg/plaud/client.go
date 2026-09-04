@@ -46,8 +46,8 @@ var (
 // isAllowedPlaudDomain validates that a URL points to an https *.plaud.ai host.
 // FIX-12: prevents SSRF via a malicious region-redirect response. The https
 // requirement (matching isAllowedS3URL) prevents an http downgrade that would
-// re-send the bearer in cleartext, and — because it also gates the configured
-// API base (see LoadConfig) — it prevents harvested tokens from being fanned out
+// re-send the bearer in cleartext, and, because it also gates the configured
+// API base (see LoadConfig), it prevents harvested tokens from being fanned out
 // to a non-plaud.ai host set via PLAUD_API_URL.
 func isAllowedPlaudDomain(rawURL string) bool {
 	parsed, err := url.Parse(rawURL)
@@ -162,7 +162,7 @@ type rawFile struct {
 
 func (f rawFile) toRecording() Recording {
 	title := f.FileName
-	// Duration is in milliseconds — convert to seconds.
+	// Duration is in milliseconds: convert to seconds.
 	dur := int(f.Duration / 1000)
 
 	var created time.Time
@@ -336,7 +336,7 @@ var allowedS3Hosts = map[string]bool{
 
 func isAllowedS3URL(rawURL string) bool {
 	u, err := url.Parse(rawURL)
-	// SEC L7: require https — a compromised/MITM'd Plaud API response must not be
+	// SEC L7: require https: a compromised/MITM'd Plaud API response must not be
 	// able to downgrade a content fetch to cleartext http.
 	if err != nil || u.Scheme != "https" {
 		return false
@@ -348,7 +348,7 @@ func isAllowedS3URL(rawURL string) bool {
 	// SEC L7: only accept S3 *bucket-style* hosts (`<bucket>.s3.amazonaws.com`,
 	// `<bucket>.s3.<region>.amazonaws.com`, `<bucket>.s3-<region>.amazonaws.com`).
 	// The previous `*.amazonaws.com` / `*.cloudfront.net` wildcards accepted any
-	// AWS subdomain (and any CloudFront distribution) — content-poisoning surface.
+	// AWS subdomain (and any CloudFront distribution). Content-poisoning surface.
 	// CloudFront is pinned to the explicit distribution in allowedS3Hosts.
 	if strings.HasSuffix(host, ".amazonaws.com") &&
 		(strings.Contains(host, ".s3.") || strings.Contains(host, ".s3-")) {
@@ -388,7 +388,7 @@ func (c *Client) fetchS3Content(rawURL string) ([]byte, error) {
 		reader = gz
 	}
 
-	return io.ReadAll(io.LimitReader(reader, 16<<20)) // SEC L7: 16 MB cap — transcript/summary JSON is small; tighter gzip-bomb ceiling
+	return io.ReadAll(io.LimitReader(reader, 16<<20)) // SEC L7: 16 MB cap: transcript/summary JSON is small; tighter gzip-bomb ceiling
 }
 
 // extractTranscriptText parses the Plaud transcript JSON and extracts speaker-diarized text.

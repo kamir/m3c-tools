@@ -20,12 +20,12 @@ When the user says "deploy to GCP", "deploy to cloud", "deploy stage", "deploy p
 
 ## What it does
 
-1. **Ask** — Reads defaults from `.deploy/gcp-defaults.env` and asks the user which environment to target, with option to override defaults.
-2. **Check** — Validates prerequisites (gcloud auth, Docker, aims-core checkout).
-3. **Build** — Builds the Docker image using the aims-core build pipeline.
-4. **Deploy** — Pushes the image and deploys to Cloud Run.
-5. **Verify** — Checks the Cloud Run service is healthy.
-6. **Record** — Updates `.deploy/gcp-state.json` with deployment details.
+1. **Ask**: Reads defaults from `.deploy/gcp-defaults.env` and asks the user which environment to target, with option to override defaults.
+2. **Check**: Validates prerequisites (gcloud auth, Docker, aims-core checkout).
+3. **Build**: Builds the Docker image using the aims-core build pipeline.
+4. **Deploy**: Pushes the image and deploys to Cloud Run.
+5. **Verify**: Checks the Cloud Run service is healthy.
+6. **Record**: Updates `.deploy/gcp-state.json` with deployment details.
 
 ## How to execute
 
@@ -35,15 +35,15 @@ Read `.deploy/gcp-defaults.env` and `.deploy/gcp-state.json` from the m3c-tools 
 
 Use the AskUserQuestion tool to present deployment options:
 
-**Question 1 — "Where should we deploy?"**
-- Options: `stage-legacy` (semanpix — default), `stage-new` (aims-core-stage / stage.onboarding.guide), `production` (aims-core-prod / api.maindset.academy)
+**Question 1: "Where should we deploy?"**
+- Options: `stage-legacy` (semanpix: default), `stage-new` (aims-core-stage / stage.onboarding.guide), `production` (aims-core-prod / api.maindset.academy)
 - Show the last deployment timestamp from gcp-state.json for each environment if available.
 
-**Question 2 — "What deploy action?"**
-- `Quick redeploy` — Rebuild app layer only (stages 4-5), push and deploy. Fast. (Recommended)
-- `Full rebuild` — Rebuild all 5 stages from scratch, push and deploy. Slow.
-- `Build only` — Build and push image but do not deploy to Cloud Run.
-- `Dry-run` — Check prerequisites, show resolved config and commands, but do not build or deploy.
+**Question 2: "What deploy action?"**
+- `Quick redeploy`: Rebuild app layer only (stages 4-5), push and deploy. Fast. (Recommended)
+- `Full rebuild`: Rebuild all 5 stages from scratch, push and deploy. Slow.
+- `Build only`: Build and push image but do not deploy to Cloud Run.
+- `Dry-run`: Check prerequisites, show resolved config and commands, but do not build or deploy.
 
 If the user selected `production`, add an extra confirmation: "You selected PRODUCTION. This affects live users. Type YES to confirm."
 
@@ -88,7 +88,7 @@ gcloud run services list --project=${GCP_PROJECT} --region=${GCP_REGION} \
     --format="table(metadata.name,status.url)" 2>&1
 ```
 
-**IMPORTANT — Service name mapping** (from dry-run 2026-03-12):
+**IMPORTANT: Service name mapping** (from dry-run 2026-03-12):
 - `stage-legacy`: actual service name is `aims-core-v4` (NOT `aims-core-v4-stage` as in env file)
 - `stage-new`: service name is `aims-core-stage`
 - `production`: service name is `aims-core`
@@ -99,7 +99,7 @@ Always use the service name from `.deploy/gcp-state.json` (which has the correct
 
 Navigate to the aims-core project root and run the build.
 
-**For Quick redeploy** (stages 4-5 only — the common case):
+**For Quick redeploy** (stages 4-5 only: the common case):
 ```bash
 cd ${AIMS_CORE_ROOT}
 
@@ -120,7 +120,7 @@ fi
 # Use the buildx builder
 docker buildx use aims-multiplatform
 
-# Build app image (stage 4) — uses cached base image
+# Build app image (stage 4): uses cached base image
 REGISTRY="gcr.io/${GCP_PROJECT}"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 
@@ -306,9 +306,9 @@ Use the Edit tool to update the JSON file.
 If the user asks to set up a new GCP project or the target project doesn't exist, the setup scripts are at:
 ```
 ${AIMS_CORE_ROOT}/tools/v4/gcp-setup/
-  setup_project_stage.sh      — Create GCP project, enable APIs, link billing
-  setup_secrets_stage.sh      — Create secrets in Secret Manager
-  setup_certificate_stage.sh  — Issue and upload SSL certificate
-  setup_loadbalancer_stage.sh — Configure HTTPS load balancer for custom domain
+  setup_project_stage.sh (Create GCP project, enable APIs, link billing
+  setup_secrets_stage.sh) Create secrets in Secret Manager
+  setup_certificate_stage.sh, Issue and upload SSL certificate
+  setup_loadbalancer_stage.sh, Configure HTTPS load balancer for custom domain
 ```
 Guide the user through these in order. Each script is interactive.

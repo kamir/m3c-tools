@@ -64,7 +64,7 @@ func handleSummarize(ctx context.Context, deps processors.Deps, cmd schema.Proce
 	if err != nil {
 		return nil, err
 	}
-	// C writes a "compilation artifact" in Week 1 — modeled as an
+	// C writes a "compilation artifact" in Week 1: modeled as an
 	// Artifact with format=summary, audience=system. Real C-proc
 	// will land a distinct compilation message type in Phase 2.
 	art := schema.Artifact{

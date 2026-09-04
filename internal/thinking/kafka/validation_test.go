@@ -238,7 +238,7 @@ func TestValidatingBusSubscribeRejectsInvalid(t *testing.T) {
 	}
 
 	// Bypass validation by producing via the raw inner bus with an
-	// invalid payload — simulates a malformed message hitting the
+	// invalid payload: simulates a malformed message hitting the
 	// wire from elsewhere.
 	badBody := []byte(`{"thought_id":"t","type":"not-an-enum"}`)
 	if err := inner.Produce(context.Background(), topic, "k", json.RawMessage(badBody)); err != nil {
@@ -270,7 +270,7 @@ func TestValidatingBusPassThroughNonSchemaTopic(t *testing.T) {
 	h := raw.Hash()
 	inner := NewMemBus(h)
 	vb, _ := NewValidatingBus(inner, nil)
-	// process.events has no schema gate — any shape allowed.
+	// process.events has no schema gate, any shape allowed.
 	topic := TopicName(h, TopicProcessEvents)
 	if err := vb.Produce(context.Background(), topic, "k", map[string]string{"anything": "goes"}); err != nil {
 		t.Fatalf("pass-through produce failed: %v", err)

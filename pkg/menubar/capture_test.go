@@ -265,7 +265,7 @@ func TestImageFilename(t *testing.T) {
 		t.Errorf("imageFilename = %q, want %q", got, "idea_20260310_143000.png")
 	}
 
-	// Without image path — defaults to .png.
+	// Without image path: defaults to .png.
 	data2 := &CaptureData{}
 	got2 := imageFilename(data2, "impulse", "20260310_143000")
 	if got2 != "impulse_20260310_143000.png" {
@@ -281,7 +281,7 @@ func TestImageFilename(t *testing.T) {
 }
 
 func TestStoreToER1_FailsGracefully(t *testing.T) {
-	// Set up a fake ER1 endpoint that doesn't exist — this tests graceful failure.
+	// Set up a fake ER1 endpoint that doesn't exist: this tests graceful failure.
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
 	t.Setenv("ER1_API_URL", "https://127.0.0.1:19999/nonexistent")

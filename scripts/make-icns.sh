@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# make-icns.sh — Convert a source PNG to a macOS .icns file
+# make-icns.sh: Convert a source PNG to a macOS .icns file
 # Usage: ./scripts/make-icns.sh [source.png] [output.icns]
 #
 # Requires macOS tools: sips, iconutil

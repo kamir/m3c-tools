@@ -103,7 +103,7 @@ def test_path_is_repeatable():
 def test_legacy_flags_only_with_source_projects():
     """`recursive=True` / `include_home=True` ONLY emit the legacy flags
     if `source='projects'` (SPEC-0115 mode). Under `source='claude'` they
-    must be silently ignored — otherwise we'd corrupt the new tier-aware
+    must be silently ignored: otherwise we'd corrupt the new tier-aware
     discovery path."""
     captured = {}
 

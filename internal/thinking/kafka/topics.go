@@ -68,7 +68,7 @@ func assertOwnedBy(topic string, owner mctx.Hash) {
 		panic(fmt.Sprintf(
 			"thinking/kafka: FATAL cross-tenant topic access "+
 				"(topic=%q owner_prefix=%q); this is a compile/config bug, "+
-				"refusing to proceed — SPEC-0167 §Isolation Model",
+				"refusing to proceed: SPEC-0167 §Isolation Model",
 			topic, prefix,
 		))
 	}

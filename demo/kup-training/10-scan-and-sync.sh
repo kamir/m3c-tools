@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 10-scan-and-sync — close the supply→demand loop (lifecycle phase 4: SCAN).
+# 10-scan-and-sync: close the supply→demand loop (lifecycle phase 4: SCAN).
 #
 # Steps 01–09 prove the SUPPLY chain (_skill_* collections):
 #   author → sign → admit → attest → install → trust enforcement.
@@ -8,8 +8,8 @@
 # (_user_skill_profiles), so the Skill Profile Admin page reflects adoption.
 #
 # Two modes:
-#   default   — scan Eric's isolated $HOME (artifacts/eric-home/) and import.
-#   --operator — scan the trainer's REAL ~/.claude/skills/ tree and import.
+#   default, scan Eric's isolated $HOME (artifacts/eric-home/) and import.
+#   --operator, scan the trainer's REAL ~/.claude/skills/ tree and import.
 #
 # Mechanics:
 #   skillctl awareness sync --dry-run --source claude  →  jsonl inventory
@@ -34,7 +34,7 @@ require_skillctl
 ensure_er1_api_key_from_keychain
 
 if ! online_mode_available; then
-  warn "online mode not available — skipping (this step requires the registry)"
+  warn "online mode not available: skipping (this step requires the registry)"
   exit 0
 fi
 
@@ -46,11 +46,11 @@ if [[ -z "$USER_ID" ]]; then
 fi
 
 if [ "$OPERATOR_MODE" -eq 1 ]; then
-  header "10 — SCAN + sync OPERATOR's skills (~/.claude/skills/)"
+  header "10, SCAN + sync OPERATOR's skills (~/.claude/skills/)"
   SCAN_HOME="$HOME"
   SESSION_TAG="kup-operator-$(date +%Y-%m-%d)"
 else
-  header "10 — SCAN + sync ERIC's installed skills (artifacts/eric-home/)"
+  header "10, SCAN + sync ERIC's installed skills (artifacts/eric-home/)"
   SCAN_HOME="$INSTALL_HOME"
   SESSION_TAG="kup-eric-$(date +%Y-%m-%d)"
 fi
@@ -116,12 +116,12 @@ print(f\"imported={d.get('imported', d.get('new_count', 0))} \"
       f\"already_known={d.get('already_known', 0)} \"
       f\"total={d.get('total_skills', 0)}\")
 " 2>/dev/null || head -c 200 "$RESP_FILE")
-  ok "profile import HTTP $HTTP — $SUMMARY"
+  ok "profile import HTTP $HTTP, $SUMMARY"
 else
-  warn "profile import returned HTTP $HTTP — see $RESP_FILE"
+  warn "profile import returned HTTP $HTTP, see $RESP_FILE"
 fi
 
-header "10 — done"
+header "10: done"
 note "Session tag:  $SESSION_TAG"
 note "User ID:      $USER_ID"
 note "Skills count: $COUNT"

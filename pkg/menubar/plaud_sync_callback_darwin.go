@@ -1,4 +1,4 @@
-// plaud_sync_callback_darwin.go — Go callback for Plaud Sync window actions.
+// plaud_sync_callback_darwin.go: Go callback for Plaud Sync window actions.
 //
 // This file is separate from plaud_sync_darwin.go because //export requires
 // that the cgo preamble contain only declarations, not definitions.

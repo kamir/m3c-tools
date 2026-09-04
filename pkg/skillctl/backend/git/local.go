@@ -1,15 +1,15 @@
 package git
 
-// SPEC-0359 D1: the `local://` scheme — a git skill registry on the LOCAL
+// SPEC-0359 D1: the `local://` scheme: a git skill registry on the LOCAL
 // filesystem, no remote service required. The FOLDER is the registry.
 //
 //   local://<path>       a bare git repo (read-write): publish/list/pull/attest/revoke
-//   local://<file.bundle> a git bundle (read-only snapshot): the offline "request" —
+//   local://<file.bundle> a git bundle (read-only snapshot): the offline "request":
 //                         a peer pulls + verifies from it, but cannot publish into it.
 //
 // It reuses the provider-neutral gitBackend verbatim (clone-then-write, the
 // core.symlinks=false + lstat symlink defense, the SEC-M9 validators, the §7
-// verifying pull) — only the remote is a path instead of an https URL. Because
+// verifying pull), only the remote is a path instead of an https URL. Because
 // the wire format is frozen and byte-exact, "work locally, push to a central
 // GitLab/GitHub later" is a plain `git push` (digests + signatures survive).
 
@@ -36,7 +36,7 @@ func openLocal(spec string, opts artifact.OpenOptions) (artifact.Backend, error)
 		return nil, err
 	}
 	if _, err := os.Stat(path); err != nil {
-		return nil, fmt.Errorf("local: registry path %q not found — run `skillctl registry init --registry %s` first (or check the .bundle path): %w", path, spec, err)
+		return nil, fmt.Errorf("local: registry path %q not found: run `skillctl registry init --registry %s` first (or check the .bundle path): %w", path, spec, err)
 	}
 	b := newGitBackend(path, "local")
 	_ = b.applyCreds(opts) // no-op for local (filesystem path, no token, never http://), kept for symmetry
@@ -92,7 +92,7 @@ func InitLocalRegistry(spec string) (string, error) {
 }
 
 // ensureInitTarget refuses to `git init --bare` over an existing NON-EMPTY,
-// NON-REPO directory — the classic `local://~` / `local://.` dropped-subpath typo
+// NON-REPO directory: the classic `local://~` / `local://.` dropped-subpath typo
 // that would otherwise scatter bare-repo plumbing (HEAD/config/objects/refs)
 // across $HOME or the cwd. Allowed: the path is absent, an empty dir, or already a
 // git repo (so idempotent re-init still works).
@@ -115,12 +115,12 @@ func ensureInitTarget(path string) error {
 		return err
 	}
 	if len(entries) > 0 {
-		return fmt.Errorf("local: refusing to init a registry over the non-empty directory %q (it is not a git repo) — point --registry at a new or empty path, e.g. local://%s", path, filepath.Join(path, "skills.git"))
+		return fmt.Errorf("local: refusing to init a registry over the non-empty directory %q (it is not a git repo): point --registry at a new or empty path, e.g. local://%s", path, filepath.Join(path, "skills.git"))
 	}
 	return nil
 }
 
-// isGitRepo reports whether path is already a git repository — a bare repo (HEAD
+// isGitRepo reports whether path is already a git repository: a bare repo (HEAD
 // + objects/ at the root) or a working repo (a .git directory).
 func isGitRepo(path string) bool {
 	if _, err := os.Stat(filepath.Join(path, "objects")); err == nil {
@@ -136,7 +136,7 @@ func isGitRepo(path string) bool {
 
 // ExportBundle writes a single-file git bundle of the local registry's full ref
 // set (--all: every branch + tag). The bundle is a portable, verifiable,
-// READ-ONLY snapshot — the decentralized "pull request" / air-gap handoff: a peer
+// READ-ONLY snapshot: the decentralized "pull request" / air-gap handoff: a peer
 // runs `skillctl pull --registry local://<bundle>` and the §7 gauntlet verifies
 // it against their own pinned trust roots.
 func ExportBundle(spec, outPath string) error {

@@ -12,21 +12,21 @@
 // The aims-core endpoints live in
 // `flask/modules/maindrec/core.py`:
 //
-//	GET  /memory/<ctx_id>                  — list items (JSON)
-//	GET  /memory/<ctx_id>/<memory_id>       — get one item (JSON)
-//	POST /memory/<ctx_id>                   — upload (multipart, AUDIO path)
+//	GET  /memory/<ctx_id>, list items (JSON)
+//	GET  /memory/<ctx_id>/<memory_id>, get one item (JSON)
+//	POST /memory/<ctx_id>: upload (multipart, AUDIO path)
 //
 // The existing POST is a multipart/form-data audio-upload path and
 // is NOT a good fit for persisting cognitive A-layer artifacts as
 // JSON. Until aims-core ships a dedicated JSON artifact endpoint the
 // thinking-engine client writes to:
 //
-//	POST /memory/<ctx_id>/artifacts        — thinking-engine artifact sink (JSON)
+//	POST /memory/<ctx_id>/artifacts: thinking-engine artifact sink (JSON)
 //
 // That route is consumed by the ER1 sinker's integration tests via a
 // fake HTTP server. In production, when aims-core has not yet landed
 // the JSON sink, the sinker will see 404 and the artifact stays on
-// Kafka (`artifacts.created` is truth per D2 — this is the graceful
+// Kafka (`artifacts.created` is truth per D2. This is the graceful
 // degradation the SPEC prescribes). See PLAN-0167 §Stream 3b and
 // SPEC-0167 §D2 for the design intent.
 package er1
@@ -148,7 +148,7 @@ func NewWithConfig(owner mctx.Raw, cfg Config) (Client, error) {
 		}
 	}
 	// Empty secret is legal in dev; CreateArtifact logs and still
-	// signs with a zero key. Flask rejects — loud failure is fine.
+	// signs with a zero key. Flask rejects: loud failure is fine.
 
 	h := cfg.HTTPClient
 	if h == nil {
@@ -198,7 +198,7 @@ func (c *errClient) checkCtx(called string) error {
 		return errors.New("er1: empty ctxID")
 	}
 	if called != c.owner.Value() {
-		return fmt.Errorf("er1: ctx mismatch — client bound to %s, call used %s",
+		return fmt.Errorf("er1: ctx mismatch: client bound to %s, call used %s",
 			redact(c.owner.Value()), redact(called))
 	}
 	return nil
@@ -212,7 +212,7 @@ func (c *httpClient) checkCtx(called string) error {
 	}
 	if called != c.ownerID {
 		return fmt.Errorf(
-			"er1: ctx mismatch — client bound to %s, call used %s",
+			"er1: ctx mismatch: client bound to %s, call used %s",
 			redact(c.ownerID), redact(called),
 		)
 	}
@@ -272,7 +272,7 @@ func (c *httpClient) CreateArtifact(ctxID string, a schema.Artifact) (string, er
 	if out.URI != "" {
 		return out.URI, nil
 	}
-	// Server didn't echo back a ref — construct canonical one.
+	// Server didn't echo back a ref: construct canonical one.
 	return fmt.Sprintf("er1://%s/items/%s", c.hash.Hex(), a.ArtifactID), nil
 }
 
@@ -374,7 +374,7 @@ func (c *httpClient) do(ctx context.Context, method, path string, body any, out 
 			return nil
 		}
 		if _, ok := lastErr.(*HTTPError); ok {
-			return lastErr // 4xx — do not retry
+			return lastErr // 4xx: do not retry
 		}
 	}
 	return lastErr

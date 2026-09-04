@@ -22,7 +22,7 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
         run: |
           set -euo pipefail
-          # Allowed prefixes — keep in sync with README.md and Makefile.
+          # Allowed prefixes: keep in sync with README.md and Makefile.
           # Any addition here must come with a README update in the same PR.
           regex='^(feat|feature|fix|chore|docs|test|refactor|spec-[0-9]+|s[0-9]+-m[0-9]+|r-[0-9]+|archive|rescue)\/[A-Za-z0-9._-]+$'
           if [[ "$HEAD_REF" =~ $regex ]]; then

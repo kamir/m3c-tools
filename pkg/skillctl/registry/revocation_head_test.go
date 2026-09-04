@@ -46,7 +46,7 @@ func TestRevocationHeadGoldenVector(t *testing.T) {
 	}
 	const golden = `{"emergency":["sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],"epoch":42,"event_id":"fixed-event-id-0001","issued_at":"2026-07-06T18:00:00Z","occurred_at":"2026-07-06T18:00:00Z","revoked_count":2,"revoked_set_root":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","schema_version":"m3c-revocation-head/v1","tenant_scope":null}`
 	if string(got) != golden {
-		t.Fatalf("golden vector mismatch — cross-language canonicalization would break.\n got: %s\nwant: %s", got, golden)
+		t.Fatalf("golden vector mismatch: cross-language canonicalization would break.\n got: %s\nwant: %s", got, golden)
 	}
 }
 

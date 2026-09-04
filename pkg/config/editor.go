@@ -102,7 +102,7 @@ func isLoopbackHost(hostHeader string) bool {
 // with a single click) or as an X-M3C-Token request header.
 func (s *EditorServer) guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// SEC-M3: the Host-header allowlist applies to EVERY request — it is
+		// SEC-M3: the Host-header allowlist applies to EVERY request. It is
 		// the DNS-rebinding / cross-host defence and has no exemptions.
 		if !isLoopbackHost(r.Host) {
 			http.Error(w, "forbidden: non-loopback Host", http.StatusForbidden)
@@ -127,7 +127,7 @@ func tokenExemptPath(p string) bool {
 }
 
 // tokenOK reports whether the request carries the per-launch token. An empty
-// server token (RNG failure) rejects everything — fail closed.
+// server token (RNG failure) rejects everything: fail closed.
 func (s *EditorServer) tokenOK(r *http.Request) bool {
 	if s.token == "" {
 		return false
@@ -162,7 +162,7 @@ func (s *EditorServer) browserURL() string {
 // (SEC-M3) and opens the browser automatically unless NoBrowser is set. Blocks
 // until shutdown.
 func (s *EditorServer) Start() error {
-	// SEC-M3: defend in depth — force the listener onto the loopback
+	// SEC-M3: defend in depth: force the listener onto the loopback
 	// interface even if Addr was tampered with after construction.
 	s.Addr = loopbackAddr(s.Addr)
 

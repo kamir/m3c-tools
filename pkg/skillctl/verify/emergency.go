@@ -1,18 +1,18 @@
 package verify
 
-// SPEC-0279 R5 — the EMERGENCY DENY-LIST channel.
+// SPEC-0279 R5: the EMERGENCY DENY-LIST channel.
 //
 // The normal revocation snapshot is bounded by max_staleness + cache_ttl: a
 // freshly-synced list (or a low-risk action under fail_policy=open) is trusted.
 // But a COMPROMISE event ("this key/agent/bundle is burned, NOW") must deny
-// IMMEDIATELY — it cannot wait for the next sweep, and it must override a fresh
+// IMMEDIATELY. It cannot wait for the next sweep, and it must override a fresh
 // snapshot and a low-risk fail-open. The emergency channel is a SEPARATE,
 // high-priority signed deny-list whose entries deny on sight, short-circuiting
 // the staleness/cache cadence entirely.
 //
 // Shape reuse, distinct domain: same signed/epoch/ed25519 machinery as
 // RevocationList, but a DISTINCT `type` ("skillctl-emergency-deny-list") so an
-// emergency entry can never be confused with — or replayed as — a normal
+// emergency entry can never be confused with, or replayed as, a normal
 // revocation list (and vice-versa). Entries are opaque deny tokens: a digest
 // ("sha256:<hex>"), an agent ("agent:<id>"), or an identity ("id:<who>"); the
 // channel does not validate the token SCHEME (a compromise list must be able to
@@ -31,7 +31,7 @@ import (
 	"strings"
 )
 
-// EmergencyDenyListType is the canonical type discriminator — the domain
+// EmergencyDenyListType is the canonical type discriminator: the domain
 // separator vs the revocation lists, the checkpoint, and the AgentID envelope.
 const EmergencyDenyListType = "skillctl-emergency-deny-list"
 
@@ -88,7 +88,7 @@ func CanonicalEmergencyDenyBytes(registryURL, issuedAt string, epoch int, tokens
 }
 
 // normalizeEmergencyTokens trims, lowercases, de-dups and sorts the token list.
-// Unlike the revocation/agent normalizers it does NOT enforce a scheme — a
+// Unlike the revocation/agent normalizers it does NOT enforce a scheme. A
 // compromise list must be able to name a digest, an agent, OR an identity.
 func normalizeEmergencyTokens(tokens []string) ([]string, error) {
 	seen := make(map[string]struct{}, len(tokens))
@@ -135,7 +135,7 @@ func NewSignedEmergencyDenyList(registryURL, issuedAt string, epoch int, tokens 
 // an epoch below minEpoch → ErrRegistryNotTrusted. Returns the normalized denied
 // token set (lowercased) on success.
 //
-// NOTE: the emergency channel is NOT subject to max_staleness — a compromise
+// NOTE: the emergency channel is NOT subject to max_staleness. A compromise
 // deny must apply even if the operator has not re-synced; an old-but-valid
 // emergency list still denies the tokens it names. The epoch floor still guards
 // against an attacker REPLACING a newer emergency list with an older one.
@@ -189,7 +189,7 @@ func VerifyEmergencyDenyList(list *EmergencyDenyList, root *TrustRoot, minEpoch 
 // verifies its signature against the pinned root (with the root's rollback
 // floor), and returns the denied-token set. The single read-+-verify entry point
 // the CLI verify path and the runtime gate both use. A MISSING file is NOT an
-// error (returns an empty set) — the emergency channel is opt-in per machine;
+// error (returns an empty set). The emergency channel is opt-in per machine;
 // only a PRESENT-but-untrusted file is fail-closed (the operator placed it).
 func LoadVerifiedEmergencyDenyList(path string, root *TrustRoot) (map[string]struct{}, error) {
 	data, err := os.ReadFile(path)
@@ -211,8 +211,8 @@ func LoadVerifiedEmergencyDenyList(path string, root *TrustRoot) (map[string]str
 }
 
 // EmergencyDenies reports whether ANY of the supplied tokens is in the verified
-// emergency deny set. The consumers call this FIRST — before staleness, before
-// risk, before the normal revocation set — so a compromise event denies on sight
+// emergency deny set. The consumers call this FIRST (before staleness, before
+// risk, before the normal revocation set) so a compromise event denies on sight
 // regardless of snapshot freshness or action risk. Tokens are normalized to
 // match the set's keying (trim+lower).
 func EmergencyDenies(set map[string]struct{}, tokens ...string) (string, bool) {

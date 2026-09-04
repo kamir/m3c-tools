@@ -214,11 +214,11 @@ func printGateReport(w io.Writer, r propose.Result) {
 			status = "FAIL"
 		}
 		if c.Skipped {
-			fmt.Fprintf(w, "  %s  #%-2d %s — %s\n", status, c.Number, c.Name, c.SkipReason)
+			fmt.Fprintf(w, "  %s  #%-2d %s, %s\n", status, c.Number, c.Name, c.SkipReason)
 		} else if c.Pass {
 			fmt.Fprintf(w, "  %s  #%-2d %s\n", status, c.Number, c.Name)
 		} else {
-			fmt.Fprintf(w, "  %s  #%-2d %s — %s\n", status, c.Number, c.Name, c.Reason)
+			fmt.Fprintf(w, "  %s  #%-2d %s, %s\n", status, c.Number, c.Name, c.Reason)
 		}
 	}
 }
@@ -262,7 +262,7 @@ func readSkillVersion(skillDir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// Tiny YAML scan — same shape as audit_cmds.go's trust-roots reader.
+	// Tiny YAML scan: same shape as audit_cmds.go's trust-roots reader.
 	// We don't pull a yaml dep here; the frontmatter parser would work
 	// but we want a focused single-field read.
 	in := false
@@ -292,7 +292,7 @@ func readSkillVersion(skillDir string) (string, error) {
 // newProposalID returns a 26-char ULID-shaped string suitable for an
 // idempotent proposal_id. Format: "01H" prefix + 23 uppercase hex chars
 // derived from a timestamp + 12 bytes of randomness. Server treats it
-// as opaque, so byte-perfect ULID compliance isn't required — we only
+// as opaque, so byte-perfect ULID compliance isn't required. We only
 // need uniqueness within the registry's lifetime.
 func newProposalID() (string, error) {
 	rnd := make([]byte, 12)

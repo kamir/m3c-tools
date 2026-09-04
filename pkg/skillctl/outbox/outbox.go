@@ -1,20 +1,20 @@
 // Package outbox is the SPEC-0317 (P0) transactional audit outbox: the single
 // AUTHORITATIVE, write-once store of signed skill-invocation evidence.
 //
-// It is a trust-critical LEAF package — stdlib + internal/dbdriver only; it does
+// It is a trust-critical LEAF package. Stdlib + internal/dbdriver only; it does
 // NOT import pkg/skillctl/registry (or any heavy skillctl surface) so it can be
 // depended on from the hot path without pulling the world.
 //
 // Each row wraps the existing device-signed skillgate.InvocationRecord
 // (canonical invocation_event_v1, detached ed25519, event_id =
 // inv:<unix-ms>:<10-byte-hex>). payload_hash = sha256(canonical bytes) is stored
-// as a COLUMN (R-4.1) — not folded into the signed canonical, so no format bump.
+// as a COLUMN (R-4.1), not folded into the signed canonical, so no format bump.
 // event_id is the ONLY dedup key end-to-end.
 //
 // HOT-PATH SAFETY (R-2.4, the hard constraint): the handle pins
 // busy_timeout≈250ms per connection (driver_hook_*.go) and SetMaxOpenConns(1).
 // On SQLITE_BUSY / open failure Append returns the error so the CALLER spools
-// (spool.go) — the decision returns regardless (R-2.4 / R-8.1 default). Append
+// (spool.go). The decision returns regardless (R-2.4 / R-8.1 default). Append
 // itself stays pure and testable.
 package outbox
 
@@ -44,7 +44,7 @@ type Store struct {
 
 // Event is one materialized audit_events row (the non-authoritative index view).
 // Consumers that ENFORCE or DISPLAY a decision must reconstruct the canonical
-// bytes from PayloadJSON and re-verify SignatureB64 (R-2.6) — the flat columns
+// bytes from PayloadJSON and re-verify SignatureB64 (R-2.6), the flat columns
 // are indices only.
 type Event struct {
 	EventID      string
@@ -146,7 +146,7 @@ func (s *Store) migrate() error {
 
 // RecordPayload derives the two stored derivations of a record: the full JSON
 // (payload_json, the authoritative bytes we can re-verify) and payload_hash =
-// hex(sha256(canonical bytes)) (R-4.1 — a COLUMN, NOT part of the signed
+// hex(sha256(canonical bytes)) (R-4.1: a COLUMN, NOT part of the signed
 // canonical; the "sha256:" prefix is added by translog anchoring, so this is
 // stored bare-hex). Returns an error if the record refuses canonicalization
 // (e.g. a newline-smuggled field).
@@ -165,7 +165,7 @@ func RecordPayload(rec skillgate.InvocationRecord) (payloadJSON, payloadHash str
 
 // deriveDecision maps a record to the non-authoritative decision index: a
 // present refusal_code means the invocation was denied, otherwise allowed. This
-// is an INDEX only (R-2.6) — enforcement re-derives from the signed payload.
+// is an INDEX only (R-2.6): enforcement re-derives from the signed payload.
 func deriveDecision(rec skillgate.InvocationRecord) string {
 	if strings.TrimSpace(rec.RefusalCode) != "" {
 		return "deny"
@@ -174,8 +174,8 @@ func deriveDecision(rec skillgate.InvocationRecord) string {
 }
 
 // Append inserts one decided evidence row. It is the hot-path write: a single
-// INSERT OR IGNORE keyed on event_id (a replay/reconcile duplicate is a no-op —
-// this is where the trail's Replays signal moves to, AC-11). It is PURE: on
+// INSERT OR IGNORE keyed on event_id (a replay/reconcile duplicate is a no-op.
+// This is where the trail's Replays signal moves to, AC-11). It is PURE: on
 // SQLITE_BUSY / any db error it returns the error so the caller spools
 // (Spool / AppendOrSpool). It performs no I/O beyond the single INSERT.
 //
@@ -217,7 +217,7 @@ func (s *Store) AppendOrSpool(rec skillgate.InvocationRecord, payloadJSON, paylo
 }
 
 // PendingBatch returns up to limit unsynced rows (sync_status=0) in occurred_at
-// order (oldest first) — the drain order the P1 sync uses. limit<=0 defaults to
+// order (oldest first): the drain order the P1 sync uses. limit<=0 defaults to
 // 100. Read-only.
 func (s *Store) PendingBatch(limit int) ([]Event, error) {
 	if limit <= 0 {
@@ -242,7 +242,7 @@ LIMIT ?`, limit)
 // for a (re)post: a row is EXCLUDED while it still has a delivery_attempts row
 // whose next_retry_at is in the future, mirroring retryqueue.go's
 // `next_retry_at <= now` due gate. A row with no attempts (never posted) is always
-// due. Ordered oldest-first by occurred_at — the drain order the P1 sync uses.
+// due. Ordered oldest-first by occurred_at: the drain order the P1 sync uses.
 //
 // This is the backoff-aware variant of PendingBatch: without it the sync daemon
 // re-POSTs every unsynced row each interval regardless of its deferral, and a
@@ -353,8 +353,8 @@ func (s *Store) MarkSynced(eventID, syncedAt string) error {
 // forbids a NULL→value→other-value rewrite), so a re-anchor cannot silently
 // move an already-anchored row (R-4.2).
 //
-// NOT-YET-WIRED (AC-5a): no production path calls this yet — the sync/enforce
-// drain does not anchor — so translog_seq is NULL in production. It exists (and is
+// NOT-YET-WIRED (AC-5a): no production path calls this yet, the sync/enforce
+// drain does not anchor, so translog_seq is NULL in production. It exists (and is
 // unit-tested) as the one-shot backfill the future per-batch anchor will use; do
 // not read the schema comments as a claim that anchoring runs today.
 func (s *Store) BackfillTranslogSeq(eventID string, seq int64) error {
@@ -367,7 +367,7 @@ func (s *Store) BackfillTranslogSeq(eventID string, seq int64) error {
 }
 
 // RecordAttempt inserts one delivery attempt row (the retryqueue.go backoff
-// lane: 30s→1h, cap 10, scale 2.0 — computed by the P1 caller). Keyed on
+// lane: 30s→1h, cap 10, scale 2.0: computed by the P1 caller). Keyed on
 // (event_id, attempt) so a replayed attempt number is an INSERT OR IGNORE no-op.
 // httpStatus<=0 stores NULL. This is bookkeeping on the SEPARATE
 // delivery_attempts table; it never mutates the write-once evidence row.

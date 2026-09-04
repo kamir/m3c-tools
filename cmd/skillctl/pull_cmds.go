@@ -1,11 +1,11 @@
 package main
 
-// `skillctl pull` — SPEC-0225 P2.2.
+// `skillctl pull`: SPEC-0225 P2.2.
 //
 // Query ER1 for `m3c-skill-bundle,skill-registry:self,skill-event:admitted`
 // items, run the 5-gate verification gauntlet (envelope sig → digest →
 // bundle sigs → governance floor → not-revoked), and stage verified bundles
-// under ~/.cache/m3c/skill-bundles/<digest>/. No install yet — that's P3.
+// under ~/.cache/m3c/skill-bundles/<digest>/. No install yet: that's P3.
 //
 // Usage:
 //   skillctl pull [--registry self] [--skill <name>] [--digest sha256:...]
@@ -46,7 +46,7 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		since        = fs.String("since", "", "Best-effort lower bound on occurred_at (RFC3339).")
 		verbose      = fs.Bool("verbose", false, "Print one line per per-gate decision.")
 
-		// P3 — install (G-23 two-step + provenance + --emit-installed)
+		// P3: install (G-23 two-step + provenance + --emit-installed)
 		install          = fs.Bool("install", false, "Install verified bundles into ~/.claude/skills/<name>/ with a provenance sidecar.")
 		trustMode        = fs.Bool("trust-mode", false, "Required for --install: re-affirm that you want the trust-mode path (writes a .m3c-provenance.json sidecar).")
 		dryRunInstall    = fs.Bool("dry-run-install", false, "G-23 step 1: print the create/overwrite plan + a token; do NOT write.")
@@ -67,7 +67,7 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if !registry.IsER1Registry(*registryName) && !artifact.Registered(*registryName) {
-		fmt.Fprintf(stderr, "pull: unsupported registry %q — use \"self\"/\"er1://…\" or \"gitlab://host/group/proj\"; HTTP admission registries route through `skillctl install`\n", *registryName)
+		fmt.Fprintf(stderr, "pull: unsupported registry %q: use \"self\"/\"er1://…\" or \"gitlab://host/group/proj\"; HTTP admission registries route through `skillctl install`\n", *registryName)
 		return 2
 	}
 
@@ -80,7 +80,7 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 
 	// Get the VERIFIED staging result from the selected carrier. The §7 gauntlet,
 	// the cache/staging layout, StagedBundle, and the whole install path below are
-	// identical for ER1 and git — only the SOURCE of the signed events + the .skb
+	// identical for ER1 and git, only the SOURCE of the signed events + the .skb
 	// bytes differs (SPEC-0356). A git registry requires a signed attestation ≥
 	// governance_minimum per digest, exactly like the ER1 self tenant.
 	var res *registry.PullResult
@@ -107,7 +107,7 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		// configured leaves the URL empty (HEAD not consulted); a MANAGED enterprise
 		// root additionally REQUIRES the HEAD (fail closed if unreachable) AND, via
 		// the resolved epoch floor + max_staleness, rejects a replayed OLD or STALE
-		// signed HEAD (SPEC-0279 R1 rollback + R3 freshness — mirror IS-T5).
+		// signed HEAD (SPEC-0279 R1 rollback + R3 freshness: mirror IS-T5).
 		headURL, headTenant, headRequired, headFloor, headStaleness := resolveRevokeHeadSource()
 		res, err = registry.PullBundles(cfg, *er1Context, tr, registry.PullOpts{
 			OnlySkill: *skillName, OnlyDigest: *digestArg, Since: *since,
@@ -150,7 +150,7 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		// Even one skip is a hard fail. If the operator asked to install, say
 		// plainly WHY nothing was installed and HOW to proceed.
 		if *install || *dryRunInstall || *confirmInstall {
-			fmt.Fprintf(stderr, "\npull: NOT installing — %d bundle(s) were skipped (the ❌ rows above).\n", len(res.Skipped))
+			fmt.Fprintf(stderr, "\npull: NOT installing: %d bundle(s) were skipped (the ❌ rows above).\n", len(res.Skipped))
 			fmt.Fprintln(stderr, "  why: a skip means a bundle failed a gate (bad signature, revoked, governance below minimum, or unmet depends_on).")
 			fmt.Fprintln(stderr, "       install aborts on ANY skip so a broken or revoked bundle can't ride in next to the good ones.")
 			fmt.Fprintln(stderr, "  fix: install a known-good subset with --skill <name> or --digest <sha256:…>, or remove/replace the skipped bundles.")
@@ -202,29 +202,29 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		// Per-class diagnostics: every token failure states WHY and the exact FIX.
 		switch {
 		case errors.Is(err, registry.ErrTokenRequired):
-			fmt.Fprintln(stderr, "pull --install: BLOCKED — installing would overwrite an existing skill and no install token was given.")
+			fmt.Fprintln(stderr, "pull --install: BLOCKED: installing would overwrite an existing skill and no install token was given.")
 			fmt.Fprintln(stderr, "  why: the G-23 two-step stops you clobbering a skill without first reviewing the plan.")
 			fmt.Fprintln(stderr, "  fix: 1) re-run with --dry-run-install  → prints the create/overwrite plan + a token (5-min TTL)")
 			fmt.Fprintln(stderr, "       2) re-run with --confirm-install --dry-run-install-token <that exact token>")
 			return 2
 		case errors.Is(err, registry.ErrTokenExpired):
-			fmt.Fprintf(stderr, "pull --install: BLOCKED — the --dry-run-install-token has EXPIRED (tokens live %s).\n", registry.TokenTTL)
+			fmt.Fprintf(stderr, "pull --install: BLOCKED: the --dry-run-install-token has EXPIRED (tokens live %s).\n", registry.TokenTTL)
 			fmt.Fprintln(stderr, "  why: a stale token could confirm a plan that no longer matches what's on disk.")
 			fmt.Fprintln(stderr, "  fix: re-run --dry-run-install for a fresh token, then run --confirm-install right away.")
 			return 2
 		case errors.Is(err, registry.ErrTokenInvalid):
-			fmt.Fprintln(stderr, "pull --install: BLOCKED — the --dry-run-install-token is MALFORMED.")
+			fmt.Fprintln(stderr, "pull --install: BLOCKED: the --dry-run-install-token is MALFORMED.")
 			fmt.Fprintf(stderr, "  detail: %v\n", err)
 			fmt.Fprintln(stderr, "  why: a valid token looks like <unix-seconds>.<base64url-signature>, exactly as printed by --dry-run-install.")
-			fmt.Fprintln(stderr, "  fix: re-run --dry-run-install and paste the WHOLE token verbatim — no added/removed characters, no line breaks.")
+			fmt.Fprintln(stderr, "  fix: re-run --dry-run-install and paste the WHOLE token verbatim, no added/removed characters, no line breaks.")
 			return 2
 		case errors.Is(err, registry.ErrPlanDrift):
-			fmt.Fprintln(stderr, "pull --install: BLOCKED — the token does NOT match this install plan (forged/tampered, or the plan changed since the dry-run).")
+			fmt.Fprintln(stderr, "pull --install: BLOCKED, the token does NOT match this install plan (forged/tampered, or the plan changed since the dry-run).")
 			fmt.Fprintln(stderr, "  why: the token is an HMAC over the exact create/overwrite set; any mismatch fails closed.")
 			fmt.Fprintln(stderr, "  fix: re-run --dry-run-install to see the CURRENT plan + a fresh token, then --confirm-install with THAT token.")
 			return 2
 		case errors.Is(err, registry.ErrUnsafeBundleName):
-			fmt.Fprintf(stderr, "pull --install: REFUSED — a staged bundle has an unsafe name.\n  detail: %v\n", err)
+			fmt.Fprintf(stderr, "pull --install: REFUSED: a staged bundle has an unsafe name.\n  detail: %v\n", err)
 			return 2
 		default:
 			fmt.Fprintf(stderr, "pull --install: %v\n", err)
@@ -242,7 +242,7 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 	if *emitInstalled {
 		if artifact.SchemeOf(*registryName) != "er1" {
 			// Route the BundleInstalledEvent to the ACTIVE backend (git/GitLab),
-			// not silently into ER1 — cross-machine install visibility on the same
+			// not silently into ER1: cross-machine install visibility on the same
 			// carrier the bundle came from.
 			emitInstalledEventsViaBackend(stdout, stderr, res.Staged, *registryName, *keyPath, *identity, tr.Fingerprint)
 		} else {
@@ -255,7 +255,7 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 
 // emitInstalledEventsViaBackend is the git/GitLab peer of emitInstalledEvents:
 // it builds + signs the SAME BundleInstalledEvent and appends it to the active
-// artifact backend via Publish(KindInstall) — ZERO signing changes, the git
+// artifact backend via Publish(KindInstall): ZERO signing changes, the git
 // backend commits it under events/<digesthex>/. Failures are non-fatal (the
 // install already succeeded); each is reported and the loop continues.
 func emitInstalledEventsViaBackend(stdout, stderr io.Writer, staged []*registry.StagedBundle, spec, keyPath, identity, trustRootsFP string) {
@@ -366,8 +366,8 @@ func strOr(s, fb string) string {
 }
 
 // resolveRevokeHeadSource resolves the signed revoke-HEAD source for the ER1 pull
-// gauntlet (FR-0090 IS-RS-01). It reuses loadRootsFn — the SAME verify.TrustRoot
-// resolver the quarantine sweep's fetchRevocationHeadOnline uses — so the HEAD
+// gauntlet (FR-0090 IS-RS-01). It reuses loadRootsFn, the SAME verify.TrustRoot
+// resolver the quarantine sweep's fetchRevocationHeadOnline uses, so the HEAD
 // endpoint + freshness posture are configured in one place. Never-brick: any
 // failure (no verify.TrustRoot, multiple registries pinned, …) yields an empty
 // URL, so a default self-ER1 / air-gapped host consults no HEAD and behaves as
@@ -399,9 +399,9 @@ func resolveRevokeHeadSource() (url, tenant string, required bool, floorEpoch in
 
 // resolvePullTrustRoots picks the verification key for a pull (SPEC-0359 D2). For
 // self / er1:// / empty it loads the self trust-roots VERBATIM (byte-identical to
-// pre-D2 — the no-regression guarantee). For any other locator it consults the
+// pre-D2: the no-regression guarantee). For any other locator it consults the
 // peer store: a PINNED peer verifies against THAT peer's pinned key; an unpinned
-// locator falls through to the self roots (unchanged — a gitlab:// mirror of your
+// locator falls through to the self roots (unchanged: a gitlab:// mirror of your
 // OWN skills still verifies against your own key). Returns the peer name when a
 // pin was used ("" otherwise).
 func resolvePullTrustRoots(registryName, trustPath string) (*registry.SelfTrustRoots, string, error) {

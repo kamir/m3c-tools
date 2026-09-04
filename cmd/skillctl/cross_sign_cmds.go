@@ -1,6 +1,6 @@
 package main
 
-// `skillctl cross-sign` — SPEC-0359 D3(i) producer side. A GOVERNANCE ROOT key
+// `skillctl cross-sign`: SPEC-0359 D3(i) producer side. A GOVERNANCE ROOT key
 // signs a member reviewer's key, admitting them as an N-of-M co-attestation
 // signer for anyone who pins that root. Output is a signed JSON record dropped
 // into a peer's/trust-root's cross_sign_path.

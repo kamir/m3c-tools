@@ -160,7 +160,7 @@ func TestEngineRecoverOrphanedContextsRestore(t *testing.T) {
 		t.Fatalf("RecoverOrphanedContexts: %v", err)
 	}
 
-	// Should NOT generate a deactivation event — project is restored.
+	// Should NOT generate a deactivation event, project is restored.
 	now := time.Now().UTC()
 	events, _ := s.ListAllEvents(now.Add(-time.Hour), now.Add(time.Minute))
 	if len(events) != 0 {

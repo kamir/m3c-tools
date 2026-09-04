@@ -25,7 +25,7 @@ func TestER1Config(t *testing.T) {
 func TestER1Reachable(t *testing.T) {
 	cfg := er1.LoadConfig()
 	if !er1.IsReachable(cfg) {
-		t.Skip("ER1 server not reachable — skipping upload tests")
+		t.Skip("ER1 server not reachable: skipping upload tests")
 	}
 	t.Log("ER1 server is reachable")
 }

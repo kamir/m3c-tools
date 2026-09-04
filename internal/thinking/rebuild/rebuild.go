@@ -208,7 +208,7 @@ func DefaultProcessSpec(thoughtID string) schema.ProcessSpec {
 	}
 }
 
-// Guard against accidental concurrent rebuilds on the same Service —
+// Guard against accidental concurrent rebuilds on the same Service:
 // cheap lock, loud refusal rather than queueing.
 var runningMu sync.Mutex
 var running = map[*Service]bool{}

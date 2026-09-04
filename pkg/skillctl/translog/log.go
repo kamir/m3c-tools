@@ -37,13 +37,13 @@ type Log struct {
 
 // Errors specific to the log container.
 var (
-	// ErrLogIDRequired — a Log needs a non-empty, well-formed log id.
+	// ErrLogIDRequired: a Log needs a non-empty, well-formed log id.
 	ErrLogIDRequired = errors.New("translog: log_id is required")
 )
 
 // OpenLog loads (or initialises) the append-only log at path for the given
 // logID. A missing file yields an empty log ready to Append; a malformed
-// line aborts the load (we never silently skip corrupt history — that would
+// line aborts the load (we never silently skip corrupt history, that would
 // hide tampering). logID must satisfy logIDPattern.
 func OpenLog(path, logID string) (*Log, error) {
 	if path == "" {
@@ -178,7 +178,7 @@ func (l *Log) Root() ([HashSize]byte, error) {
 
 // SignHead builds and signs an STH over the current tree state with the
 // log's ed25519 private key, stamped at time t (UTC seconds). Errors with
-// ErrEmptyTree on an empty log — there is nothing to commit.
+// ErrEmptyTree on an empty log: there is nothing to commit.
 func (l *Log) SignHead(logKey ed25519.PrivateKey, t time.Time) (STH, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()

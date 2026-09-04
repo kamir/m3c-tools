@@ -26,7 +26,7 @@ const (
 type keyringStore struct{}
 
 // newKeyringStore returns the keychain backend, unless the operator has opted
-// out via M3C_TOKEN_STORE=file (force the encrypted-file backend — useful on a
+// out via M3C_TOKEN_STORE=file (force the encrypted-file backend. Useful on a
 // macOS box where keychain prompts are unwanted, in CI, or to keep tests off
 // the real OS keychain). Any other value ("", "keychain", "auto") keeps the
 // keychain-first behaviour.
@@ -59,7 +59,7 @@ func (keyringStore) Save(t *DeviceToken) error {
 		// back to the weaker file backend (orchestration in store.go), which
 		// would otherwise be silent.
 		if errors.Is(err, keyring.ErrSetDataTooBig) {
-			log.Printf("[auth] WARNING: device token too large for the OS keychain — storing in the encrypted file backend instead")
+			log.Printf("[auth] WARNING: device token too large for the OS keychain: storing in the encrypted file backend instead")
 		}
 		return fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}

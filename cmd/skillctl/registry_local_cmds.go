@@ -1,6 +1,6 @@
 package main
 
-// `skillctl registry init` + `registry export` — SPEC-0359 local-folder registry.
+// `skillctl registry init` + `registry export`: SPEC-0359 local-folder registry.
 // Manage a skill registry in a local folder with NO remote service; push to a
 // central GitLab/GitHub later (plain `git push`), or hand off a verifiable
 // snapshot (git bundle) for someone to review/request.

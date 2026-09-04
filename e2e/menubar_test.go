@@ -95,12 +95,12 @@ func TestMenubarFetchAndDisplayStatus(t *testing.T) {
 	app := menubar.NewAppWithConfig(menubar.DefaultConfig(), menubar.Handlers{
 		Notify: func(title, message string) {
 			// Capture notifications silently in test
-			t.Logf("notification: %s — %s", title, message)
+			t.Logf("notification: %s: %s", title, message)
 		},
 	})
 	tf := menubar.NewTranscriptFetcher()
 
-	// Fetch with an invalid video ID — should fail and set status to error
+	// Fetch with an invalid video ID: should fail and set status to error
 	tf.FetchAndDisplay(app, "!!!invalid!!!")
 
 	if app.GetStatus() != menubar.StatusError {

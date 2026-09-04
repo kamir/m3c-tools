@@ -197,7 +197,7 @@ func verifyAttenuationChain(t *Token) (bool, string) {
 }
 
 // ---------------------------------------------------------------------------
-// helpers — extract typed values out of an `any` Attenuation.Value.
+// helpers: extract typed values out of an `any` Attenuation.Value.
 //
 // BUG-0143: Attenuation.Value is `any` since 2026-05-11. Wire shapes:
 //   - direct scalar/list (canonical, what Python emits)

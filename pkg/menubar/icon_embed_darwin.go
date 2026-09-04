@@ -5,13 +5,13 @@ package menubar
 import "embed"
 
 // embeddedIcons carries the menu-bar template icons compiled into the binary, so
-// icons resolve in EVERY run mode — the dev bare binary from any directory, and
+// icons resolve in EVERY run mode: the dev bare binary from any directory, and
 // (crucially) inside the .app bundle, where the on-disk design/icons/ tree is not
 // shipped and FindIcon returns "". Both the top-level menu-bar icon (app.Run)
 // and the per-item icons (registerMenuIcons) fall back to these bytes when the
 // on-disk design-system file is not reachable.
 //
-// Source of truth: design/icons/*.png — these are build-time copies; refresh with:
+// Source of truth: design/icons/*.png: these are build-time copies; refresh with:
 //
 //	cp design/icons/menubar-icon.png design/icons/menu-*.png pkg/menubar/assets/
 //

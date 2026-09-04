@@ -67,8 +67,8 @@ func hashChildren(left, right [HashSize]byte) [HashSize]byte {
 //
 //	MTH(D[0:n]) = HASH( 0x01 || MTH(D[0:k]) || MTH(D[k:n]) )
 //
-// where k is the LARGEST power of two strictly less than n. This split —
-// not a simple round-up — is the load-bearing detail that makes inclusion
+// where k is the LARGEST power of two strictly less than n. This split,
+// not a simple round-up, is the load-bearing detail that makes inclusion
 // and consistency proofs interoperate with every other RFC-6962
 // implementation.
 //
@@ -90,7 +90,7 @@ func MerkleTreeHash(leaves [][HashSize]byte) ([HashSize]byte, error) {
 func merkleTreeHash(leaves [][HashSize]byte) [HashSize]byte {
 	n := len(leaves)
 	if n == 1 {
-		// A single leaf's tree hash is the leaf hash itself — NOT a
+		// A single leaf's tree hash is the leaf hash itself, NOT a
 		// re-hash. RFC-6962 §2.1: MTH(D[0:1]) = the leaf's hash.
 		return leaves[0]
 	}

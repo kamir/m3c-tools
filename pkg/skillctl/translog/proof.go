@@ -10,22 +10,22 @@ import (
 // (and the adversarial gate) can branch on the failure class without
 // parsing strings.
 var (
-	// ErrIndexOutOfRange — a leaf index is not in [0, size).
+	// ErrIndexOutOfRange, a leaf index is not in [0, size).
 	ErrIndexOutOfRange = errors.New("translog: leaf index out of range")
-	// ErrBadProofSize — a proof has the wrong number of hashes for the
+	// ErrBadProofSize, a proof has the wrong number of hashes for the
 	// (index, size) it claims to prove. A forged or truncated proof trips
 	// this before any hashing happens.
 	ErrBadProofSize = errors.New("translog: proof has wrong length for tree size")
-	// ErrInclusionMismatch — the root recomputed from the leaf + proof
+	// ErrInclusionMismatch: the root recomputed from the leaf + proof
 	// does not equal the expected root. This is the catch-all rejection
 	// for a tampered leaf, a wrong index, or a forged proof path.
 	ErrInclusionMismatch = errors.New("translog: inclusion proof does not reconstruct the root")
-	// ErrConsistencyMismatch — a consistency proof failed to reconstruct
+	// ErrConsistencyMismatch: a consistency proof failed to reconstruct
 	// BOTH the old and the new root. A log that dropped or rewrote an
-	// entry between the two sizes trips this — the append-only property
+	// entry between the two sizes trips this. The append-only property
 	// is violated and the rewrite is DETECTED.
 	ErrConsistencyMismatch = errors.New("translog: consistency proof failed (log is not a pure append)")
-	// ErrBadConsistencyArgs — nonsensical sizes (e.g. first > second, or
+	// ErrBadConsistencyArgs: nonsensical sizes (e.g. first > second, or
 	// a zero first size with a non-empty proof).
 	ErrBadConsistencyArgs = errors.New("translog: invalid consistency proof arguments")
 )
@@ -37,7 +37,7 @@ var (
 // `leaves` MUST be the full ordered set of leaf hashes for the tree of the
 // given size (len(leaves) must equal size). Production callers hold these
 // in the local log file; the proof is computed once and can be checked
-// later by VerifyInclusion WITHOUT the leaf set — only the single leaf
+// later by VerifyInclusion WITHOUT the leaf set, only the single leaf
 // hash, the proof, and the trusted root are needed.
 func InclusionProof(index, size int, leaves [][HashSize]byte) ([][HashSize]byte, error) {
 	if size <= 0 {
@@ -75,7 +75,7 @@ func inclusionPath(m int, leaves [][HashSize]byte) [][HashSize]byte {
 // and the audit path, then compares (constant-time) against the expected
 // root.
 //
-// No network, no leaf set, no log operator is consulted — this is the
+// No network, no leaf set, no log operator is consulted. This is the
 // property that lets a verifier confirm "this event is committed under the
 // STH I already trust" without trusting any server. A tampered leaf, a
 // wrong index, a wrong size, or a forged path all reduce to a
@@ -169,7 +169,7 @@ func inclusionProofLen(index, size int) int {
 }
 
 // ConsistencyProof returns the RFC-6962 §2.1.2 consistency proof that a
-// tree of `second` leaves is a pure APPEND of a tree of `first` leaves —
+// tree of `second` leaves is a pure APPEND of a tree of `first` leaves,
 // i.e. the first `first` leaves are unchanged and nothing was rewritten.
 //
 // `leaves` must be the full ordered leaf-hash set of the LARGER (second)
@@ -232,7 +232,7 @@ func consistencySubproof(m int, leaves [][HashSize]byte, b bool) [][HashSize]byt
 //
 // A log that dropped, reordered, or rewrote any of the first `first`
 // entries cannot produce a proof that reconstructs the original
-// `firstRoot` AND the advertised `secondRoot` — so the rewrite is DETECTED
+// `firstRoot` AND the advertised `secondRoot`, so the rewrite is DETECTED
 // as ErrConsistencyMismatch. This is the anti-rewrite property.
 func VerifyConsistency(first, second int, firstRoot, secondRoot [HashSize]byte, proof [][HashSize]byte) error {
 	if first < 0 || second < 0 || first > second {
@@ -260,7 +260,7 @@ func VerifyConsistency(first, second int, firstRoot, secondRoot [HashSize]byte, 
 
 	// firstIsPowerOfTwo: when the old size is an exact power of two, its
 	// root is a clean subtree of the new tree and is NOT carried in the
-	// proof — the verifier seeds it from firstRoot. Otherwise the first
+	// proof: the verifier seeds it from firstRoot. Otherwise the first
 	// proof element is the old tree's left-spine node.
 	firstIsPow2 := isPowerOfTwo(first)
 
@@ -302,7 +302,7 @@ func rebuildConsistencyRoots(first, second int, firstRoot [HashSize]byte, proof 
 
 	fn := first - 1
 	sn := second - 1
-	// Shift fn,sn right until fn is odd (or zero) — aligns to the rightmost
+	// Shift fn,sn right until fn is odd (or zero): aligns to the rightmost
 	// node of the old tree on the shared left spine.
 	for fn&1 == 1 {
 		fn >>= 1

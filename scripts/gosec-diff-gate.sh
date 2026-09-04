@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #############################################################################
-# gosec-diff-gate.sh — in-CI "no-new-findings" diff gate for gosec.
+# gosec-diff-gate.sh, in-CI "no-new-findings" diff gate for gosec.
 #
 # WHY THIS EXISTS
 #   gosec.yml uploads SARIF to GitHub Code Scanning and does the new-vs-baseline
-#   diff NATIVELY — but that only BLOCKS a PR once the repo-level branch
+#   diff NATIVELY, but that only BLOCKS a PR once the repo-level branch
 #   protection "Require the code scanning results check to pass" is enabled
 #   (Settings, admin-only). This script blocks a PR DIRECTLY from CI, without
 #   that toggle: it exits non-zero the moment a change introduces a gosec
@@ -17,7 +17,7 @@
 #     * gosec is PINNED at v2.29.0 (same as gosec.yml), so rule ids and the
 #       code-snippet rendering do not drift under us.
 #     * the per-finding SIGNATURE is  rule_id <TAB> repo-relative-file <TAB>
-#       normalized-code-snippet  — it deliberately EXCLUDES line and column, and
+#       normalized-code-snippet: it deliberately EXCLUDES line and column, and
 #       strips the "<lineno>: " prefix gosec embeds on every snippet line, so a
 #       finding that merely SHIFTS DOWN (an edit elsewhere in the file) keeps the
 #       exact same signature and is NOT reported as new.
@@ -34,7 +34,7 @@
 #   `go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0`.
 #
 # NOTE ON SCOPE: findings whose file is OUTSIDE the repo (cgo-generated code in
-#   the go-build cache, whose path is a machine-specific hash) are excluded — they
+#   the go-build cache, whose path is a machine-specific hash) are excluded. They
 #   are not repo source and cannot be relativized deterministically, so keeping
 #   them would make the baseline machine-dependent. They are dropped identically
 #   from both the baseline and every run, so the gate stays sound.
@@ -67,7 +67,7 @@ command -v jq    >/dev/null 2>&1 || { echo "ERROR: jq not on PATH" >&2; exit 2; 
 # Emits TAB-separated:  rule_id  relfile  snippet  line  details
 # The first three fields ARE the signature; line+details are for human output.
 # `snippet` = code with per-line "<n>: " prefixes stripped, all whitespace
-# collapsed to single spaces, trimmed — so it is single-line and TSV-safe.
+# collapsed to single spaces, trimmed, so it is single-line and TSV-safe.
 # shellcheck disable=SC2016  # $pwd/$rel/$snip/$det are jq variables, not shell
 JQ_DETAIL='
   (.Issues // [])[]
@@ -121,7 +121,7 @@ if [ "$MODE" = "update" ]; then
   build_detail "$tmp_detail"
   count="$(sigs_from_detail "$tmp_detail" | wc -l | tr -d ' ')"
   {
-    echo "# gosec in-CI diff-gate signature baseline — pinned gosec@v2.29.0."
+    echo "# gosec in-CI diff-gate signature baseline: pinned gosec@v2.29.0."
     echo "# One signature per line:  rule_id <TAB> repo-relative-file <TAB> normalized-code-snippet"
     echo "# (line/column deliberately excluded; snippet line-number prefixes stripped)."
     echo "# Regenerate after intentionally accepting a finding:  scripts/gosec-diff-gate.sh --update"
@@ -167,7 +167,7 @@ echo "  removed vs baseline : $removed_n"
 
 if [ "$removed_n" -gt 0 ]; then
   echo ""
-  echo "NOTE: $removed_n baseline finding(s) no longer present — nice. Once merged,"
+  echo "NOTE: $removed_n baseline finding(s) no longer present: nice. Once merged,"
   echo "      shrink the baseline so it keeps blocking their reintroduction:"
   echo "        scripts/gosec-diff-gate.sh --update"
 fi

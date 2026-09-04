@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>YT Multimodal Memory Manager — UI Mockup</title>
+<title>YT Multimodal Memory Manager: UI Mockup</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -175,8 +175,8 @@
 </head>
 <body>
 
-<h1>M3C — Multi-Modal-Memory Tools</h1>
-<h2>macOS Menu Bar App — Go Rewrite UI Design (m3c-tools)</h2>
+<h1>M3C, Multi-Modal-Memory Tools</h1>
+<h2>macOS Menu Bar App, Go Rewrite UI Design (m3c-tools)</h2>
 
 <!-- ========== CONCEPT ========== -->
 <div class="section">
@@ -222,7 +222,7 @@
 <div class="mockup-row">
 
 <div class="mockup-card">
-  <div class="card-title">Main Menu — Idle State</div>
+  <div class="card-title">Main Menu: Idle State</div>
   <div class="menubar">
     <div class="menubar-header">📺 YT Multimodal Memory</div>
     <div class="menu-item">📋 Fetch Transcript...</div>
@@ -243,7 +243,7 @@
 </div>
 
 <div class="mockup-card">
-  <div class="card-title">Main Menu — After Fetch</div>
+  <div class="card-title">Main Menu: After Fetch</div>
   <div class="menubar">
     <div class="menubar-header">📋 YT Multimodal Memory</div>
     <div class="menu-item">📋 Fetch Transcript...</div>
@@ -274,10 +274,10 @@
 <div class="mockup-card">
   <div class="card-title">History Submenu</div>
   <div class="submenu">
-    <div class="menu-item">🇬🇧 dQw4w9WgXcQ — 2026-03-09 21:30</div>
-    <div class="menu-item">🇩🇪 eJg0k5qWLKs — 2026-03-09 18:15</div>
-    <div class="menu-item">🇯🇵 abc123def45 — 2026-03-08 14:20</div>
-    <div class="menu-item">🇬🇧 xyz789uvw12 — 2026-03-07 09:45</div>
+    <div class="menu-item">🇬🇧 dQw4w9WgXcQ, 2026-03-09 21:30</div>
+    <div class="menu-item">🇩🇪 eJg0k5qWLKs, 2026-03-09 18:15</div>
+    <div class="menu-item">🇯🇵 abc123def45, 2026-03-08 14:20</div>
+    <div class="menu-item">🇬🇧 xyz789uvw12, 2026-03-07 09:45</div>
     <div class="menu-sep"></div>
     <div class="menu-item disabled" style="font-size:11px; color:#666;">Each entry expands to:</div>
     <div class="menu-item" style="padding-left:28px;">📋 Copy Transcript</div>
@@ -308,7 +308,7 @@
     <div class="menu-item" style="color:#0a84ff;">🔄 Retry All Now</div>
     <div class="menu-item" style="color:#ff453a;">🗑 Clear All</div>
     <div class="menu-sep"></div>
-    <div class="menu-item">📡 eJg0k5qWLKs — attempt 2/10 — network</div>
+    <div class="menu-item">📡 eJg0k5qWLKs, attempt 2/10, network</div>
     <div class="menu-item" style="padding-left:28px; font-size:11px; color:#888;">Queued: 2026-03-09 18:15</div>
     <div class="menu-item" style="padding-left:28px; font-size:11px; color:#888;">Error: Connection refused</div>
     <div class="menu-item" style="padding-left:28px;">🔄 Retry Now</div>
@@ -380,7 +380,7 @@
 <div class="section">
 <h3>Data Flow: Desktop → ER1</h3>
 <div class="flow-diagram"><span class="hl-blue">┌─────────────────────────────────────────────────────────────────┐</span>
-<span class="hl-blue">│</span>  <span class="hl-green">DESKTOP CAPTURE LAYER</span> (macOS Menu Bar App — Go/menuet)       <span class="hl-blue">│</span>
+<span class="hl-blue">│</span>  <span class="hl-green">DESKTOP CAPTURE LAYER</span> (macOS Menu Bar App: Go/menuet)       <span class="hl-blue">│</span>
 <span class="hl-blue">│</span>                                                                 <span class="hl-blue">│</span>
 <span class="hl-blue">│</span>  <span class="hl-orange">[Fetch Transcript]</span>  →  YouTube InnerTube API  →  Caption XML   <span class="hl-blue">│</span>
 <span class="hl-blue">│</span>  <span class="hl-orange">[Record Impression]</span> →  PortAudio mic capture  →  WAV (16kHz)   <span class="hl-blue">│</span>
@@ -436,7 +436,7 @@
 <h3>Observation Types</h3>
 <div class="mockup-row">
   <div class="mockup-card">
-    <div class="card-title">📺 Progress — YouTube Impression</div>
+    <div class="card-title">📺 Progress: YouTube Impression</div>
     <table style="font-size:12px; width:100%; border-collapse:collapse;">
       <tr><td style="color:#888; padding:3px 8px;">Trigger</td><td style="padding:3px 0;">Fetch Transcript → Record Impression</td></tr>
       <tr><td style="color:#888; padding:3px 8px;">Text</td><td style="padding:3px 0;">✅ YouTube captions + user impression</td></tr>
@@ -446,7 +446,7 @@
     </table>
   </div>
   <div class="mockup-card">
-    <div class="card-title">💡 Idea — Screenshot Observation</div>
+    <div class="card-title">💡 Idea: Screenshot Observation</div>
     <table style="font-size:12px; width:100%; border-collapse:collapse;">
       <tr><td style="color:#888; padding:3px 8px;">Trigger</td><td style="padding:3px 0;">Capture Screenshot</td></tr>
       <tr><td style="color:#888; padding:3px 8px;">Text</td><td style="padding:3px 0;">✅ User annotation + whisper transcription</td></tr>
@@ -456,7 +456,7 @@
     </table>
   </div>
   <div class="mockup-card">
-    <div class="card-title">⚡ Impulse — Quick Capture</div>
+    <div class="card-title">⚡ Impulse: Quick Capture</div>
     <table style="font-size:12px; width:100%; border-collapse:collapse;">
       <tr><td style="color:#888; padding:3px 8px;">Trigger</td><td style="padding:3px 0;">Quick Impulse (one-click)</td></tr>
       <tr><td style="color:#888; padding:3px 8px;">Text</td><td style="padding:3px 0;">✅ Auto-generated from voice/context</td></tr>
@@ -468,7 +468,7 @@
 </div>
 <div class="mockup-row">
   <div class="mockup-card">
-    <div class="card-title">🎵 Audio Import — Batch Processing</div>
+    <div class="card-title">🎵 Audio Import: Batch Processing</div>
     <table style="font-size:12px; width:100%; border-collapse:collapse;">
       <tr><td style="color:#888; padding:3px 8px;">Trigger</td><td style="padding:3px 0;">Audio Import menu → file or batch</td></tr>
       <tr><td style="color:#888; padding:3px 8px;">Text</td><td style="padding:3px 0;">✅ Whisper transcription of audio</td></tr>

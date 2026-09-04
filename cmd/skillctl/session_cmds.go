@@ -1,6 +1,6 @@
 package main
 
-// `skillctl session` — the SPEC-0213 "session-state in ER1" model for callers
+// `skillctl session`: the SPEC-0213 "session-state in ER1" model for callers
 // outside Claude Code (CI jobs, the menubar app, scripts). The Go mirror of the
 // `/session-state` skill; reuses pkg/session (which reuses pkg/er1 + pkg/m3cproject).
 //
@@ -41,7 +41,7 @@ func runSession(args []string, stdout, stderr io.Writer) int {
 	intent := fs.String("intent", "", "session intent (open only)")
 	continues := fs.String("continues", "", "<ctx>/<doc_id> of a prior session-state item to thread the chain (open only)")
 	note := fs.String("note", "", "checkpoint note prose")
-	summary := fs.String("summary", "", "close summary (verbatim — your words)")
+	summary := fs.String("summary", "", "close summary (verbatim: your words)")
 	auto := fs.Bool("auto", false, "checkpoint: build a git-diff/todo snapshot rather than prose (skips if nothing changed)")
 	distill := fs.Bool("distill", false, "close: mark the close-checkpoint auto:generated (agent-authored summary, SPEC-0210)")
 	todos := fs.String("todos", "", "open-items text for the checkpoint body")
@@ -69,7 +69,7 @@ func runSession(args []string, stdout, stderr io.Writer) int {
 		if r.AlreadyExists {
 			state = "already open"
 		}
-		fmt.Fprintf(stdout, "session %s — %s — ER1 doc %s — project %s (%s) — host %s%s — er1 %s\n",
+		fmt.Fprintf(stdout, "session %s, %s, ER1 doc %s, project %s (%s), host %s%s: er1 %s\n",
 			r.Ident.SessionID, state, r.DocID, r.Ident.Project, r.Ident.ProjectSrc, r.Ident.Host,
 			deviceSuffix(r.Ident.Device), r.Ident.ER1Target)
 		return 0
@@ -89,10 +89,10 @@ func runSession(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		if r.Skipped {
-			fmt.Fprintf(stdout, "session %s — checkpoint skipped: %s\n", *sid, r.SkipReason)
+			fmt.Fprintf(stdout, "session %s, checkpoint skipped: %s\n", *sid, r.SkipReason)
 			return 0
 		}
-		fmt.Fprintf(stdout, "session %s — checkpoint ER1 doc %s (parent %s)\n", *sid, r.DocID, r.SessionDocID)
+		fmt.Fprintf(stdout, "session %s, checkpoint ER1 doc %s (parent %s)\n", *sid, r.DocID, r.SessionDocID)
 		return 0
 
 	case "close":
@@ -105,7 +105,7 @@ func runSession(args []string, stdout, stderr io.Writer) int {
 		noteText := *summary
 		distilled := *distill
 		if noteText == "" && !distilled {
-			// bare close: a short auto wrap — treat as distill-lite
+			// bare close: a short auto wrap: treat as distill-lite
 			noteText = "Session closed (auto wrap). Branch " + "" // body fills git state
 			distilled = true
 		}
@@ -126,7 +126,7 @@ func runSession(args []string, stdout, stderr io.Writer) int {
 		if r.Ident.Ahead > 0 {
 			ahead = fmt.Sprintf("  ⚠ %d commit(s) not pushed", r.Ident.Ahead)
 		}
-		fmt.Fprintf(stdout, "session %s — closed — close-checkpoint ER1 doc %s (parent %s)%s%s\n",
+		fmt.Fprintf(stdout, "session %s, closed, close-checkpoint ER1 doc %s (parent %s)%s%s\n",
 			*sid, r.DocID, r.SessionDocID, dirty, ahead)
 		return 0
 
@@ -153,7 +153,7 @@ func runSession(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "usage: skillctl session show <session_id|doc_id>")
 			return 2
 		}
-		// minimal: list and filter — full flatten-with-checkpoints is the
+		// minimal: list and filter: full flatten-with-checkpoints is the
 		// /session-state skill's job (it has the richer ER1 read path).
 		rows, err := session.List(session.ListOpts{WorkingDir: *dir, ER1Target: *er1Target})
 		if err != nil {
@@ -182,7 +182,7 @@ func runSession(args []string, stdout, stderr io.Writer) int {
 		}
 		_ = latest // (newest-first ordering is server-dependent; we just print what we got)
 		r := rows[0]
-		fmt.Fprintf(stdout, "resume candidate — doc %s\ntags: %s\n", r.DocID, strings.Join(r.Tags, ", "))
+		fmt.Fprintf(stdout, "resume candidate: doc %s\ntags: %s\n", r.DocID, strings.Join(r.Tags, ", "))
 		fmt.Fprintln(stdout, "")
 		fmt.Fprintln(stdout, "To continue here, run:")
 		fmt.Fprintf(stdout, "  skillctl session open --continues <ctx>/%s\n", r.DocID)

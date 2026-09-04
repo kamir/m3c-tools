@@ -18,13 +18,13 @@ All recipes run the same command and log JSON to `~/.claude/skillctl/`:
 skillctl verify --all --quarantine --json
 ```
 
-The sample files below are **inert until you install them** — review, edit the
+The sample files below are **inert until you install them**: review, edit the
 absolute `skillctl` path for your machine, then enable. Fail-closed: nothing
 auto-installs.
 
 ---
 
-## macOS — launchd (per-user LaunchAgent)
+## macOS: launchd (per-user LaunchAgent)
 
 ```sh
 # 1. Edit guide.m3c.skillctl-sweep.plist: set the absolute path to skillctl.
@@ -34,7 +34,7 @@ launchctl load -w ~/Library/LaunchAgents/guide.m3c.skillctl-sweep.plist
 # Runs daily + once at load. Disable: launchctl unload -w ~/Library/LaunchAgents/guide.m3c.skillctl-sweep.plist
 ```
 
-## Linux — systemd timer (per-user)
+## Linux: systemd timer (per-user)
 
 ```sh
 # Edit skillctl-sweep.service: set the absolute ExecStart path to skillctl.
@@ -49,11 +49,11 @@ systemctl --user enable --now skillctl-sweep.timer
 ### cron fallback (any POSIX)
 
 ```cron
-# ~/crontab — daily at 09:00; adjust the skillctl path.
+# ~/crontab: daily at 09:00; adjust the skillctl path.
 0 9 * * *  $HOME/.local/bin/skillctl verify --all --quarantine --json >> $HOME/.claude/skillctl/sweep.log 2>&1
 ```
 
-## Windows — Task Scheduler
+## Windows: Task Scheduler
 
 ```powershell
 # Edit the path to skillctl.exe, then register a daily task:

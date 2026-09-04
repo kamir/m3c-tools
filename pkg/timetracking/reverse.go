@@ -98,13 +98,13 @@ func (rt *ReverseTracker) ProcessObservation(obsTime time.Time, tagStr string, d
 	}
 
 	if hasExplicitCoverage(events, obsTime.UTC()) {
-		log.Printf("[reverse-tracking] explicit session covers t=%s project=%s — skip",
+		log.Printf("[reverse-tracking] explicit session covers t=%s project=%s: skip",
 			obsTime.Format(time.RFC3339), match.ProjectID)
 		return nil
 	}
 
 	if hasInferredNearby(events, obsTime.UTC(), halfBlock) {
-		log.Printf("[reverse-tracking] inferred block nearby t=%s project=%s — skip",
+		log.Printf("[reverse-tracking] inferred block nearby t=%s project=%s: skip",
 			obsTime.Format(time.RFC3339), match.ProjectID)
 		return nil
 	}
@@ -146,7 +146,7 @@ func (rt *ReverseTracker) ProcessObservation(obsTime time.Time, tagStr string, d
 // ProcessObservation immediately. This is the primary entry point for
 // upload hooks (REQ-10).
 func (rt *ReverseTracker) RecordAndProcess(obsTime time.Time, tagStr, docID, obsType string) error {
-	// Always record, even if reverse tracking is disabled — enables future backfill.
+	// Always record, even if reverse tracking is disabled: enables future backfill.
 	obs := Observation{
 		ObsID:     uuid.New().String(),
 		Timestamp: obsTime,

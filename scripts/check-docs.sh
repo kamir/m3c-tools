@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check-docs.sh — Validate documentation consistency with implementation.
+# check-docs.sh: Validate documentation consistency with implementation.
 #
 # Checks that key references in docs/ match the current codebase, and runs the
 # BLOCKING CLI/manual gate (cmd/docaudit) as section 4.

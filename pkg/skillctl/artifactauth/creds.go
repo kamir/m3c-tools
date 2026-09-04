@@ -30,7 +30,7 @@ var _ artifact.CredentialSource = (*Resolver)(nil)
 // tiers (CD-13, least-privilege split):
 //
 //   - WRITE tier (env / kcService): a write-capable credential (Publishing
-//     pushes) — for gitlab a Project Access Token or PAT (NOT a read-only Deploy
+//     pushes): for gitlab a Project Access Token or PAT (NOT a read-only Deploy
 //     Token), for github a PAT with repo write. This is the historical default.
 //   - READ tier (roEnv / roKcService): an OPTIONAL read-only credential the
 //     operator MAY provision so a verifying PULL (Fetch/List/Resolve/Events)
@@ -49,7 +49,7 @@ var backendCred = map[string]struct{ env, roEnv, kcService, roKcService, user st
 //
 // CD-13: for ModeRead we consult the OPTIONAL read-only credential sources FIRST
 // (roEnv → ro Keychain → ro OS store); only if none is provisioned do we fall
-// back to the write tier — so an operator who provisioned a read-only Deploy
+// back to the write tier, so an operator who provisioned a read-only Deploy
 // Token gets least privilege on pulls, while a single-write-token setup is
 // unchanged. ModeWrite always resolves the write tier.
 func (r *Resolver) Credential(ctx context.Context, scheme, host string, mode artifact.AccessMode) (artifact.Credential, error) {
@@ -82,7 +82,7 @@ func (r *Resolver) lookup(scheme, env, kcService, host string) string {
 	if kcService == "" {
 		return ""
 	}
-	// macOS Keychain — only on darwin. keychain() shells out to `security`, which
+	// macOS Keychain: only on darwin. keychain() shells out to `security`, which
 	// exists only on macOS; guarding the call keeps a Windows/Linux box from
 	// spawning (or, worse, PATH-resolving) a non-existent `security` binary.
 	if runtime.GOOS == "darwin" {

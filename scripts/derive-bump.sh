@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #############################################################################
-# derive-bump.sh — leitet die Semver-Stufe aus den COMMITS ab, statt sie zu
+# derive-bump.sh: leitet die Semver-Stufe aus den COMMITS ab, statt sie zu
 # raten. Gibt `major`, `minor` oder `patch` auf stdout aus.
 #
 # Warum es das gibt: `make release` war fest auf `release-patch` verdrahtet,
 # und der /ship-Skill entschied nach DIFF-GROESSE ("50+ Zeilen -> patch"). So
-# ist der Fleet-Kill-Switch (FR-0045) als v2.8.1 ausgeliefert worden — eine
+# ist der Fleet-Kill-Switch (FR-0045) als v2.8.1 ausgeliefert worden: eine
 # Patch-Nummer fuer ein Feature. Die Information, welche Stufe richtig ist,
 # lag die ganze Zeit vor: die Commits tragen konsequent feat:/fix:-Praefixe.
 #

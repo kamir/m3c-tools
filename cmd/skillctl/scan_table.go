@@ -1,8 +1,8 @@
 // Tabwriter-based renderer for `skillctl scan` per SPEC-0189 §5.
 //
 // Two output formats live here:
-//   - renderScanTable — TTY-friendly aligned columns
-//   - renderScanTSV   — tab-separated for grep/awk pipelines
+//   - renderScanTable: TTY-friendly aligned columns
+//   - renderScanTSV: tab-separated for grep/awk pipelines
 package main
 
 import (
@@ -88,7 +88,7 @@ func tabRows(inv *model.Inventory, withTrust bool) []string {
 				switch sk.Bundle.TrustChain {
 				case "verified":
 					// The scanner only checked that a 64-byte detached sig is
-					// present — not that it verifies. Say so; real trust is
+					// present, not that it verifies. Say so; real trust is
 					// established by `skillctl verify`, not this scan.
 					trusted = "sig-only"
 				case "broken":

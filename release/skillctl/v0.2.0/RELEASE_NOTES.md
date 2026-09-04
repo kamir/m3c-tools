@@ -1,6 +1,6 @@
 # skillctl v0.2.0
 
-Trust-and-governance CLI for AI-agent skills. Single static Go binary — no Node.
+Trust-and-governance CLI for AI-agent skills. Single static Go binary: no Node.
 
 ## Install (verifies signature + checksum)
 
@@ -10,11 +10,11 @@ curl -fsSL https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.2.0/
 ```
 
 ## What's new
-- `skillctl publish --share-room <label>` — map a bundle into a SPEC-0096
+- `skillctl publish --share-room <label>`: map a bundle into a SPEC-0096
   co-learning room at admit time (repeatable; `$SKILL_SHARE_ROOMS`).
-- `skillctl room share|unshare <skill> --room <label>` — back-fill / remove the
+- `skillctl room share|unshare <skill> --room <label>`: back-fill / remove the
   room mapping on already-published bundles.
-- `skillctl version` — prints the stamped release tag.
+- `skillctl version`: prints the stamped release tag.
 
 ## Provenance
 Binaries are checksummed (`SHA256SUMS`) and the manifest is ed25519-signed

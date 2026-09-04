@@ -38,7 +38,7 @@ param(
     [switch]$Online,
     [switch]$Help
 )
-# NB: deliberately NOT [CmdletBinding()] — a plain script collects unmatched tokens
+# NB: deliberately NOT [CmdletBinding()]: a plain script collects unmatched tokens
 # (e.g. -h / --help) into $args instead of throwing a parameter-binding error.
 
 $ErrorActionPreference = 'Continue'   # a native non-zero exit must not abort the run

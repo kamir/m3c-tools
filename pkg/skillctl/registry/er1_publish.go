@@ -38,7 +38,7 @@ import (
 //
 // LOOPBACK-ONLY on purpose: this mirrors pkg/er1.applyTLSVerificationPolicy, which
 // honors ER1_VERIFY_SSL=false only for 127.0.0.1/localhost and forces verification
-// back on for every other host — RFC1918 LAN hosts included. Permitting an
+// back on for every other host: RFC1918 LAN hosts included. Permitting an
 // RFC1918 TLS-skip here that the core ER1 client forbids would be an inconsistency
 // an attacker could target, so the registry client uses netguard.IsLoopback (not
 // IsLoopbackOrPrivate). The git/OCI *credential* guards keep the wider predicate.
@@ -51,7 +51,7 @@ func er1TLSGuard(base string, verifySSL bool) error {
 		host = u.Host
 	}
 	if !netguard.IsLoopback(host) {
-		return fmt.Errorf("er1: refusing to disable TLS verification (VerifySSL=false) for non-loopback host %q — only 127.0.0.1/localhost may skip certificate verification", host)
+		return fmt.Errorf("er1: refusing to disable TLS verification (VerifySSL=false) for non-loopback host %q: only 127.0.0.1/localhost may skip certificate verification", host)
 	}
 	return nil
 }
@@ -67,7 +67,7 @@ var ErrAlreadyPublished = errors.New("registry: bundle already published (idempo
 // size exceeds InlineMaxBytes and the operator hasn't supplied a ClaimCheckFn.
 // The MinIO overflow path is P1.x / P2 future work; until it lands, the
 // runbook keeps bundles inline (the P5 starter manifest is all-inline).
-var ErrClaimCheckNotImplemented = errors.New("registry: claim-check (MinIO overflow) path not implemented yet — keep bundles ≤ ER1_INLINE_MAX_BYTES for v1")
+var ErrClaimCheckNotImplemented = errors.New("registry: claim-check (MinIO overflow) path not implemented yet: keep bundles ≤ ER1_INLINE_MAX_BYTES for v1")
 
 // ─── PublishOpts: everything the transport needs, none of it resolved here ─
 
@@ -87,7 +87,7 @@ type SkillMeta struct {
 	// Each entry is a room's *room_label* (e.g. "aims-basics") and is stamped as
 	// a BARE tag on every event item, so room members can read the bundle via
 	// the room tier (room_access.can_view_item: room_label ∈ item.tags). Bare,
-	// not `room:<label>` — the ACL matches the label verbatim.
+	// not `room:<label>`: the ACL matches the label verbatim.
 	ShareRooms []string
 }
 
@@ -147,7 +147,7 @@ func PublishAdmitted(opts PublishAdmittedOpts) (*PublishAdmittedResult, error) {
 		return nil, errors.New("PublishAdmitted: Event required")
 	}
 	if _, ok := opts.Event[EnvelopeSignatureField].(string); !ok {
-		return nil, errors.New("PublishAdmitted: Event missing envelope_signature — sign first")
+		return nil, errors.New("PublishAdmitted: Event missing envelope_signature: sign first")
 	}
 	if opts.Skill.BundleDigest == "" || opts.Skill.Name == "" || opts.Skill.Version == "" {
 		return nil, errors.New("PublishAdmitted: Skill.{Name,Version,BundleDigest} required")
@@ -158,7 +158,7 @@ func PublishAdmitted(opts PublishAdmittedOpts) (*PublishAdmittedResult, error) {
 
 	// Idempotency: does an `admitted` item for this digest already exist?
 	if existing, err := findAdmittedByDigest(opts.ER1Cfg, opts.ContextID, opts.Skill.BundleDigest); err != nil {
-		// best-effort — log via error return; the caller decides whether to
+		// best-effort: log via error return; the caller decides whether to
 		// continue. For now we surface the error so the operator sees it.
 		return nil, fmt.Errorf("idempotency check: %w", err)
 	} else if existing != "" {
@@ -277,7 +277,7 @@ func PublishInstalled(opts PublishInstalledOpts) (string, error) {
 		now = time.Now().UTC()
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "# skill %s@%s — installed on %s\n\n", opts.Skill.Name, opts.Skill.Version, opts.InstalledOnHost)
+	fmt.Fprintf(&b, "# skill %s@%s: installed on %s\n\n", opts.Skill.Name, opts.Skill.Version, opts.InstalledOnHost)
 	fmt.Fprintf(&b, "| | |\n|---|---|\n| digest | `%s` |\n| installed_on | `%s` |\n| installed_at | `%s` |\n| registry | `self` |\n\n",
 		opts.Skill.BundleDigest, opts.InstalledOnHost, now.UTC().Format(time.RFC3339))
 	b.WriteString("```json\n")
@@ -389,7 +389,7 @@ func renderAdmittedBody(opts PublishAdmittedOpts, transport, blobURI string, inl
 		now = time.Now().UTC()
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "# skill %s@%s — admitted\n\n", opts.Skill.Name, opts.Skill.Version)
+	fmt.Fprintf(&b, "# skill %s@%s: admitted\n\n", opts.Skill.Name, opts.Skill.Version)
 	fmt.Fprintf(&b, "| | |\n|---|---|\n")
 	fmt.Fprintf(&b, "| digest | `%s` |\n", opts.Skill.BundleDigest)
 	fmt.Fprintf(&b, "| governance | `%s` |\n", opts.Skill.GovernanceLevel)
@@ -423,7 +423,7 @@ func renderAttestedBody(opts PublishAttestedOpts) (string, error) {
 		now = time.Now().UTC()
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "# skill %s@%s — attested\n\n", opts.Skill.Name, opts.Skill.Version)
+	fmt.Fprintf(&b, "# skill %s@%s: attested\n\n", opts.Skill.Name, opts.Skill.Version)
 	fmt.Fprintf(&b, "| | |\n|---|---|\n")
 	fmt.Fprintf(&b, "| digest | `%s` |\n", opts.Skill.BundleDigest)
 	fmt.Fprintf(&b, "| governance | `%s` |\n", gov)
@@ -447,7 +447,7 @@ func renderRevokedBody(opts PublishRevokedOpts) (string, error) {
 	rc, _ := opts.Event["reason_code"].(string)
 	rat, _ := opts.Event["rationale"].(string)
 	var b strings.Builder
-	fmt.Fprintf(&b, "# skill %s@%s — revoked\n\n", opts.Skill.Name, opts.Skill.Version)
+	fmt.Fprintf(&b, "# skill %s@%s: revoked\n\n", opts.Skill.Name, opts.Skill.Version)
 	fmt.Fprintf(&b, "| | |\n|---|---|\n")
 	fmt.Fprintf(&b, "| digest | `%s` |\n", opts.Skill.BundleDigest)
 	fmt.Fprintf(&b, "| reason | `%s` |\n", rc)
@@ -546,7 +546,7 @@ func er1Get(base string, cfg *er1.Config, path string) (any, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
 	if !cfg.VerifySSL {
 		// #nosec G402 -- gated: default is ER1_VERIFY_SSL=true (verifies). VerifySSL=false
-		// is honored only for loopback — er1TLSGuard above fails closed for any non-loopback
+		// is honored only for loopback. Er1TLSGuard above fails closed for any non-loopback
 		// host, and pkg/er1.applyTLSVerificationPolicy forces verification back on at load
 		// time for non-loopback. Reaching here implies a loopback dev target.
 		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} // #nosec G402 -- loopback-only, gated by er1TLSGuard
@@ -568,12 +568,12 @@ func er1Get(base string, cfg *er1.Config, path string) (any, error) {
 	defer resp.Body.Close()
 	// SPEC-0225 P5: the maindrec GET /memory/<ctx>?limit=500&range=year
 	// response can hit 13+ MiB on contexts with a year of activity. Cap at
-	// 64 MiB — enough headroom for personal scale, still bounded against an
+	// 64 MiB: enough headroom for personal scale, still bounded against an
 	// adversarial server pumping unbounded bytes at us.
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 	// 404 = the search endpoint exists but has no matches OR the endpoint
 	// itself is absent. Either way, "no items" is the safe semantic for the
-	// idempotency and list paths — fail open (return empty list, no error).
+	// idempotency and list paths: fail open (return empty list, no error).
 	// The publish path treats this as "no prior item, proceed"; the registry
 	// view treats it as "registry empty under this filter".
 	if resp.StatusCode == 404 {

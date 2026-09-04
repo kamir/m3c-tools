@@ -66,7 +66,7 @@ type Sinker struct {
 	stopped bool
 }
 
-// New builds a Sinker. Does not start consuming — call Start.
+// New builds a Sinker. Does not start consuming: call Start.
 func New(cfg Config) *Sinker {
 	if cfg.Logger == nil {
 		cfg.Logger = log.Default()
@@ -119,7 +119,7 @@ func (s *Sinker) handle(ctx context.Context, m tkafka.Message) error {
 		return nil
 	}
 	if art.ArtifactID == "" {
-		s.cfg.Logger.Printf("sink: artifact missing id — dropping")
+		s.cfg.Logger.Printf("sink: artifact missing id: dropping")
 		return nil
 	}
 

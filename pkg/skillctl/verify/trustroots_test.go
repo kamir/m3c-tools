@@ -165,7 +165,7 @@ func TestLoad_RejectsUnknownField(t *testing.T) {
 	dir := filepath.Dir(path)
 	_, rawPub := writePubkeyPEM(t, dir, "k.pub")
 	b64 := base64.StdEncoding.EncodeToString(rawPub)
-	// `governnce_minimum` (typo) is unknown — strict mode should refuse.
+	// `governnce_minimum` (typo) is unknown. Strict mode should refuse.
 	yaml := `trust_roots:
   - registry_url: https://aims.example.com/api/skills
     registry_keys:
@@ -233,7 +233,7 @@ func TestLoad_RejectsInvalidGovernance(t *testing.T) {
 
 // SPEC-0252 §6: the SAME shared govlevel.ValidFloor guard the self loader uses
 // rejects a "red" floor case/whitespace-insensitively in the SPEC-0188 loader
-// too — proving both loaders reject RED / Red / " red " identically from ONE
+// too: proving both loaders reject RED / Red / " red " identically from ONE
 // helper (closes the SEC-L1 case-collapse class in both, not just registry).
 func TestLoad_RejectsRedFloorAnyCase(t *testing.T) {
 	for _, floor := range []string{"RED", "Red", " red ", "rEd"} {
@@ -363,7 +363,7 @@ func TestRemoveRegistry(t *testing.T) {
 	if len(tr.Roots) != 0 {
 		t.Errorf("Roots len after remove = %d, want 0", len(tr.Roots))
 	}
-	// Idempotent? No — we WANT the second remove to error so the user
+	// Idempotent? No: we WANT the second remove to error so the user
 	// notices a typo.
 	if err := tr.RemoveRegistry("https://r.example.com/api/skills"); err == nil {
 		t.Errorf("second RemoveRegistry should error")
@@ -408,7 +408,7 @@ func TestSave_RefusesInvalid(t *testing.T) {
 	tr := &TrustRoots{
 		Path: filepath.Join(t.TempDir(), "trust.yaml"),
 		Roots: []TrustRoot{{
-			RegistryURL:            "http://nasty-public-host.example.com/", // public HTTP — invalid
+			RegistryURL:            "http://nasty-public-host.example.com/", // public HTTP, invalid
 			IdentityKeysAuthorized: "from-registry",
 			GovernanceMinimum:      "green",
 			RegistryKeys: []RegistryKey{
@@ -476,7 +476,7 @@ func TestRegistryKey_IsActive(t *testing.T) {
 	}
 }
 
-// SPEC-0277 §11.5 — require_agent_approver is a KNOWN field (strict loader
+// SPEC-0277 §11.5: require_agent_approver is a KNOWN field (strict loader
 // accepts it) and is rejected fail-OPEN: setting it without a reviewers list
 // (the approver/sign-off-human pin) must refuse, mirroring
 // require_independent_review.

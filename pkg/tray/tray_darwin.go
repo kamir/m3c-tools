@@ -1,4 +1,4 @@
-// tray_darwin.go — Darwin compile stub for the tray package.
+// tray_darwin.go: Darwin compile stub for the tray package.
 //
 // On macOS we use pkg/menubar (menuet) instead of fyne.io/systray.
 // This stub ensures the package compiles on darwin so that other packages
@@ -40,7 +40,7 @@ type SetupIssue struct {
 	Message string
 }
 
-// TrayHandlers groups the callback functions (stub — unused on macOS).
+// TrayHandlers groups the callback functions (stub: unused on macOS).
 type TrayHandlers struct {
 	OnAction func(action ActionType, data string)
 }

@@ -80,7 +80,7 @@ func writeAPIKey(t *testing.T, dir, key string) string {
 // fetchReplayEvents instead.
 //
 // For end-to-end runReplay-level tests we accept a `--target stage` and rely
-// on env STAGE_URL not being set — but it's simpler to test fetchReplayEvents
+// on env STAGE_URL not being set, but it's simpler to test fetchReplayEvents
 // + renderReplayTable directly. We do that here.
 func TestFetchReplayEvents_EnvelopedShape(t *testing.T) {
 	events := fixtureEvents()
@@ -324,7 +324,7 @@ func TestReplayHTTPClient_TLSPolicy(t *testing.T) {
 			t.Fatalf("target %q must verify TLS (InsecureSkipVerify must be false)", target)
 		}
 	}
-	// local skips verification — but only because its base URL is loopback.
+	// local skips verification, but only because its base URL is loopback.
 	local := newReplayHTTPClient("local")
 	tr, ok := local.Transport.(*http.Transport)
 	if !ok || tr.TLSClientConfig == nil || !tr.TLSClientConfig.InsecureSkipVerify {

@@ -164,7 +164,7 @@ func TestRetryRunnerBackoffSkip(t *testing.T) {
 	tmpPath := t.TempDir() + "/retry-backoff-queue.json"
 	q := er1.NewQueue(tmpPath)
 
-	// Add entry that was just retried — should be skipped due to backoff
+	// Add entry that was just retried. Should be skipped due to backoff
 	q.Add(er1.QueueEntry{ID: "recent-1", Tags: "test"})
 	// Simulate a recent retry by updating
 	q.UpdateRetry("recent-1", fmt.Errorf("previous error"))
@@ -183,7 +183,7 @@ func TestRetryRunnerBackoffSkip(t *testing.T) {
 	successes, failures, dropped := runner.ProcessOnce(ctx)
 
 	if successes != 0 || failures != 0 || dropped != 0 {
-		t.Errorf("Expected 0/0/0, got %d/%d/%d — entry should have been skipped", successes, failures, dropped)
+		t.Errorf("Expected 0/0/0, got %d/%d/%d: entry should have been skipped", successes, failures, dropped)
 	}
 	if atomic.LoadInt32(&called) != 0 {
 		t.Error("Upload function should not have been called for a skipped entry")

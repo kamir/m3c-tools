@@ -1,4 +1,4 @@
-// auth.go — HMAC bearer middleware.
+// auth.go: HMAC bearer middleware.
 //
 // SPEC-0167 §Service Components §api requires tokens be HMAC-signed
 // and encode user_context_id + expiry; engine rejects any token

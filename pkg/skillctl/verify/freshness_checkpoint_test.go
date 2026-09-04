@@ -1,6 +1,6 @@
 package verify
 
-// SPEC-0279 R4 — signed freshness checkpoint tests.
+// SPEC-0279 R4: signed freshness checkpoint tests.
 //
 // A valid fresh checkpoint at epoch ≥ the synced list's epoch resets the
 // staleness clock; a forged / stale / rollback checkpoint is refused fail-closed.
@@ -102,7 +102,7 @@ func TestCheckpoint_ResetsStalenessClock(t *testing.T) {
 }
 
 // A checkpoint vouching for an OLDER epoch than the synced list cannot advance
-// the clock (it does not prove the current set is fresh) — but it is not an
+// the clock (it does not prove the current set is fresh), but it is not an
 // attack, so it is silently ignored (anchor unchanged), not an error.
 func TestCheckpoint_OlderEpochDoesNotAdvance(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
@@ -119,7 +119,7 @@ func TestCheckpoint_OlderEpochDoesNotAdvance(t *testing.T) {
 }
 
 // A present-but-bad checkpoint (forged) is fail-closed in ApplyCheckpoint: it
-// must ERROR, never silently fall back to the (older) list anchor — otherwise an
+// must ERROR, never silently fall back to the (older) list anchor: otherwise an
 // attacker who plants a bad checkpoint goes undetected.
 func TestCheckpoint_ApplyForgedFailsClosed(t *testing.T) {
 	_, attacker, _ := ed25519.GenerateKey(rand.Reader)

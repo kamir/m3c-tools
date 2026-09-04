@@ -9,7 +9,7 @@ import (
 
 // TestSealFilesAreOwnerOnly pins the challenge-gate MED fix: the scanner's
 // SealStore.Seal writes trust artifacts (the seal record AND the full installed
-// inventory) owner-only (0600), in an owner-only store dir (0700) — never
+// inventory) owner-only (0600), in an owner-only store dir (0700): never
 // world-readable, matching the review-server seal path.
 func TestSealFilesAreOwnerOnly(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "seals") // fresh → NewSealStoreAt MkdirAll's it

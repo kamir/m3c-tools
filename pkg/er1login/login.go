@@ -83,7 +83,7 @@ func DeviceLogin(baseURL string, openBrowser bool, out io.Writer, timeout time.D
 		}:
 		default:
 		}
-		// SEC: lock the throwaway page down — no scripts, no remote fetches.
+		// SEC: lock the throwaway page down: no scripts, no remote fetches.
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -103,7 +103,7 @@ func DeviceLogin(baseURL string, openBrowser bool, out io.Writer, timeout time.D
 	fmt.Fprintf(out, "Opening browser for login…\nIf it does not open, visit:\n  %s\n\n", loginURL)
 	if openBrowser {
 		if err := openURL(loginURL); err != nil {
-			fmt.Fprintf(out, "(could not open a browser automatically: %v — open the URL above)\n", err)
+			fmt.Fprintf(out, "(could not open a browser automatically: %v: open the URL above)\n", err)
 		}
 	}
 	fmt.Fprintf(out, "Waiting for login to complete (timeout %s)…\n", timeout)
@@ -120,14 +120,14 @@ func DeviceLogin(baseURL string, openBrowser bool, out io.Writer, timeout time.D
 }
 
 const successHTML = `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
-	`<title>skillctl — logged in</title>` +
+	`<title>skillctl: logged in</title>` +
 	`<style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;` +
 	`background:#0b0d11;color:#e8eaed;display:grid;place-items:center;height:100vh;margin:0}` +
 	`.c{text-align:center}.c h1{color:#16c79a;margin:0 0 8px}.c p{color:#9aa3b2}</style></head>` +
 	`<body><div class="c"><h1>✓ Logged in</h1><p>You can close this tab and return to the terminal.</p></div></body></html>`
 
-// openURL best-effort launches the platform browser. Failure is non-fatal —
-// the caller has already printed the URL for manual navigation.
+// openURL best-effort launches the platform browser. Failure is non-fatal.
+// The caller has already printed the URL for manual navigation.
 func openURL(u string) error {
 	var name string
 	var args []string

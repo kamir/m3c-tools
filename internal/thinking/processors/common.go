@@ -2,7 +2,7 @@
 // processors. Each sub-package is a Kafka consumer+producer with a
 // strategy-dispatch map.
 //
-// Week 2: handlers are real — they resolve a prompt from the
+// Week 2: handlers are real: they resolve a prompt from the
 // registry (AP-06), enforce D4 budget caps, call an LLM adapter,
 // parse the structured completion, and publish a typed message.
 package processors
@@ -41,7 +41,7 @@ type Deps struct {
 	LLM     llm.Adapter
 	Budgets func(processID string, spec schema.ProcessSpec) *budget.Controller
 
-	// Metrics is the optional observability surface. Nil is safe —
+	// Metrics is the optional observability surface. Nil is safe:
 	// every call site guards on nil so processors remain usable in
 	// tests without an active Prometheus registry.
 	Metrics observability.Metrics
@@ -188,7 +188,7 @@ func RunLLMStep(ctx context.Context, deps Deps, cmd schema.ProcessCommand, opts 
 		Format:      opts.Format,
 	}
 
-	// D4 budget enforcement — estimate before dispatch. Tag the spend
+	// D4 budget enforcement: estimate before dispatch. Tag the spend
 	// with (layer, strategy) so /v1/budget/today can surface top
 	// consumers (PLAN-0168 P1).
 	if deps.Budgets != nil {

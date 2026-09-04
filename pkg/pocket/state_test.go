@@ -126,7 +126,7 @@ func TestFindGroupByStagedPathNilState(t *testing.T) {
 		RawDir:     filepath.Join(tmpDir, "raw"),
 	}
 
-	// No groups.json exists — should not panic
+	// No groups.json exists, should not panic
 	rec := Recording{
 		FilePath: "/Volumes/Pocket/RECORD/2026-04-02/20260402163416.mp3",
 		Date:     "2026-04-02",

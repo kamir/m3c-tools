@@ -50,7 +50,7 @@ func YTCallsAllowed() bool {
 	if os.Getenv("M3C_YT_CALLS_ENFORCE_ALL") != "" {
 		return true
 	}
-	// Flag check (nil-safe — if RegisterYTFlag was never called, flag is not set)
+	// Flag check (nil-safe: if RegisterYTFlag was never called, flag is not set)
 	if ytCallsEnforceAll != nil && *ytCallsEnforceAll {
 		return true
 	}

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# tools/id-xref-lint.test.sh — self-contained fixtures for tools/id-xref-lint.sh
+# tools/id-xref-lint.test.sh: self-contained fixtures for tools/id-xref-lint.sh
 # (SPEC-0358 WF-001 W4). Builds a throwaway git repo + a fake private registry, then
 # asserts the lint's three behaviours: resolvable→pass, dangling→fail, path-glued→fail,
 # plus the public-CI degrade mode (registry absent → resolution skipped).

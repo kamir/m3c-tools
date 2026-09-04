@@ -6,7 +6,7 @@ import (
 )
 
 // TestFetchRevokedDigests proves SPEC-0266 F1: a verified BundleRevokedEvent's
-// digest is returned, and an UNSIGNED (forged) revoke is ignored — a forged
+// digest is returned, and an UNSIGNED (forged) revoke is ignored. A forged
 // revoke must not be usable to quarantine a good bundle.
 func TestFetchRevokedDigests(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(nil)

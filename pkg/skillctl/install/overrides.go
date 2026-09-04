@@ -4,7 +4,7 @@ package install
 //
 // Both flags lower the install gate from its default (refuse-on-anything-
 // less-than-pinned-minimum). SPEC-0188 §11 requires that the override be
-// audit-logged BEFORE the install proceeds — not after, because a
+// audit-logged BEFORE the install proceeds, not after, because a
 // post-hoc audit creates a window where a successful override-install
 // happened but the registry never saw it. We refuse the install if the
 // audit POST itself fails (see Install in install.go).
@@ -12,7 +12,7 @@ package install
 // The endpoint shape mirrors SPEC-0115's existing /api/skills/audit
 // surface. If the production server's signature differs at integration
 // time, plug the right URL via Opts.AuditPoster and adjust the wire
-// shape in HTTPAuditPoster — the contract we expose to the rest of the
+// shape in HTTPAuditPoster: the contract we expose to the rest of the
 // code (AuditPoster func) stays stable.
 
 import (
@@ -63,7 +63,7 @@ type AuditEntry struct {
 // responds non-2xx (Install translates that into a refuse-to-proceed).
 //
 // The base URL is the same registry root that the trust-root already
-// pinned, so we don't ask for a separate audit URL — keeping the
+// pinned, so we don't ask for a separate audit URL: keeping the
 // configuration surface narrow.
 func HTTPAuditPoster(httpClient *http.Client, baseURL string) func(ctx context.Context, entry AuditEntry) error {
 	if httpClient == nil {

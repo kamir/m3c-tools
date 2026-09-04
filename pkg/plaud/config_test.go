@@ -14,7 +14,7 @@ func TestResolveAuthToken_PrefersTokenFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte("  file-token-12345\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	// Env and argv both set — token-file must win and must NOT be flagged leaked.
+	// Env and argv both set: token-file must win and must NOT be flagged leaked.
 	t.Setenv(PlaudTokenEnvVar, "env-token")
 	tok, leaked, err := ResolveAuthToken(path, "argv-token")
 	if err != nil {

@@ -4,7 +4,7 @@ import "testing"
 
 // TestIsLoopbackOrPrivate pins the ONE audited egress predicate shared by the
 // OCI, git, and ER1 guards. Loopback + RFC1918/ULA + "localhost" are local; a
-// public IP and any bare DNS name (fail-closed — a name resolves anywhere) are
+// public IP and any bare DNS name (fail-closed, a name resolves anywhere) are
 // NOT.
 func TestIsLoopbackOrPrivate(t *testing.T) {
 	local := []string{

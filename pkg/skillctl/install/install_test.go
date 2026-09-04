@@ -153,7 +153,7 @@ func newFakeRegistry(t *testing.T) (*httptest.Server, *fakeRegistry) {
 	})
 	mux.HandleFunc("/api/skills/bundles/", func(w http.ResponseWriter, r *http.Request) {
 		seg := strings.TrimPrefix(r.URL.Path, "/api/skills/bundles/")
-		// /bundles/<digest>/manifest is also possible — this test fixture
+		// /bundles/<digest>/manifest is also possible: this test fixture
 		// doesn't exercise it.
 		seg = strings.SplitN(seg, "/", 2)[0]
 		if r.URL.Query().Get("meta") == "1" {
@@ -584,7 +584,7 @@ func TestInstall_ArchivesPriorVersion(t *testing.T) {
 		t.Fatalf("write sentinel: %v", err)
 	}
 
-	// Second install (same digest) — should archive the prior install.
+	// Second install (same digest): should archive the prior install.
 	res2, err := Install(Opts{Name: "fetch-contract", Version: "1.0.0", Client: c, TrustRoot: tr, HomeDir: homeDir})
 	if err != nil {
 		t.Fatalf("install 2: %v", err)
@@ -732,7 +732,7 @@ func TestVerifyInstalled_OK(t *testing.T) {
 // SEC-M4: content-binding is UNCONDITIONAL on the ONLINE managed-verify path.
 // After a clean install + a registry-PASS re-verify, editing the on-disk
 // SKILL.md (the body Claude actually loads) must be caught as ErrDigestMismatch
-// (exit 10) even though the registry-side §7 chain still passes — proving the
+// (exit 10) even though the registry-side §7 chain still passes: proving the
 // online path binds the extracted content to the signed .skb.
 func TestVerifyInstalled_EditedBody_Exit10(t *testing.T) {
 	srv, fr := newFakeRegistry(t)

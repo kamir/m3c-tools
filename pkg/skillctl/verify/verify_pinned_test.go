@@ -1,9 +1,9 @@
 package verify
 
-// Tests for SPEC-0276 R4.1 — pinned author identities. The point of the
+// Tests for SPEC-0276 R4.1: pinned author identities. The point of the
 // feature is fully-offline, third-party verification: the author signature is
 // checked against a key pinned LOCALLY in trust-roots, with NO registry call.
-// These tests therefore pass a nil IdentityFetcher on the happy path — if the
+// These tests therefore pass a nil IdentityFetcher on the happy path. If the
 // verifier reached for the registry it would nil-panic, which is the strongest
 // possible proof that pinned mode is network-free.
 
@@ -119,7 +119,7 @@ func TestVerify_Pinned_AuthorNotPinned(t *testing.T) {
 
 func TestVerify_Pinned_WrongKey(t *testing.T) {
 	opts, _ := pinnedOpts(t)
-	// Pin a DIFFERENT key under the right id — signature won't verify.
+	// Pin a DIFFERENT key under the right id: signature won't verify.
 	other := mustKeypair(t)
 	opts.TrustRoot.Authors[0].Pubkey = []byte(other.pub)
 	opts.TrustRoot.Authors[0].PubkeyB64 = other.b64

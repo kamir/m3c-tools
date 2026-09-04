@@ -44,7 +44,7 @@ func TestReverify_HappyPath(t *testing.T) {
 }
 
 // TestReverify_RepackedSkb proves F2: a self-consistent repack (different .skb
-// bytes than the signed digest) is rejected — content-binding alone would miss
+// bytes than the signed digest) is rejected. Content-binding alone would miss
 // this because the attacker also repacks the sidecar/digest.
 func TestReverify_RepackedSkb(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(nil)
@@ -78,7 +78,7 @@ func TestReverify_ForgedGovernance(t *testing.T) {
 }
 
 // TestReverify_DigestBindingAcrossEvents proves the governance attestation must
-// be bound to the SAME digest as the admit event — splicing a validly-signed
+// be bound to the SAME digest as the admit event: splicing a validly-signed
 // green attestation for a DIFFERENT digest onto this bundle is rejected.
 func TestReverify_DigestBindingAcrossEvents(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(nil)

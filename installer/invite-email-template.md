@@ -1,12 +1,12 @@
 # Invite Email Template
 
-**Subject:** Your M3C Tools Setup — Plaud Sync for [Customer Name]
+**Subject:** Your M3C Tools Setup: Plaud Sync for [Customer Name]
 
 ---
 
 Hallo [Name],
 
-willkommen bei **M3C Tools** — deinem persönlichen Sync-Tool für Plaud-Aufnahmen.
+willkommen bei **M3C Tools**: deinem persönlichen Sync-Tool für Plaud-Aufnahmen.
 
 ## Setup in 3 Schritten
 

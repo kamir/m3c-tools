@@ -31,7 +31,7 @@ import (
 
 // fakeRegistry is the in-test stand-in for aims-core's attestation
 // endpoint. It intentionally re-implements the canonical byte assembly
-// from scratch (not via the same Go helper the CLI uses) — that's the
+// from scratch (not via the same Go helper the CLI uses). That's the
 // whole point: if the CLI's bytes don't match what an independent
 // implementation builds from the same fields, the test fails.
 type fakeRegistry struct {
@@ -79,7 +79,7 @@ func (f *fakeRegistry) handler(w http.ResponseWriter, r *http.Request) {
 
 	if f.wantSig {
 		// Rebuild the canonical bytes here from the parsed JSON. This is
-		// the cross-language gate — if the CLI builds different bytes
+		// the cross-language gate: if the CLI builds different bytes
 		// than this independently constructed sequence, ed25519.Verify
 		// will reject the signature.
 		canonical, err := signing.CanonicalizeAttestationMessage(
@@ -313,7 +313,7 @@ func TestAttest_RegistryUnreachable_ExitGeneric(t *testing.T) {
 		"--rationale", "x",
 		"--reviewer-id", "id:test@s9",
 		"--key", priv,
-		// 127.0.0.1 with a port we'd never bind to — connection refused.
+		// 127.0.0.1 with a port we'd never bind to: connection refused.
 		"--registry", "http://127.0.0.1:1/api/skills",
 		"--timeout", "2s",
 	}

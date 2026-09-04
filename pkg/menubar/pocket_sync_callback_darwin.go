@@ -1,4 +1,4 @@
-// pocket_sync_callback_darwin.go — Go callback for Pocket Sync window actions.
+// pocket_sync_callback_darwin.go: Go callback for Pocket Sync window actions.
 //
 // Separate from pocket_sync_darwin.go because //export requires the cgo
 // preamble to contain only declarations, not definitions.
@@ -38,7 +38,7 @@ func goPocketSyncAction(cAction *C.char) {
 			}
 		}
 	}
-	// For toggle_group actions, the group ID is in the action string — no selection needed
+	// For toggle_group actions, the group ID is in the action string, no selection needed
 	if len(paths) == 0 && !strings.HasPrefix(action, "toggle_group:") {
 		return
 	}

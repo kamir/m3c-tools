@@ -1,4 +1,4 @@
-// tray.go — Cross-platform system tray app using fyne.io/systray.
+// tray.go: Cross-platform system tray app using fyne.io/systray.
 //
 // This file builds on Windows and Linux (!darwin). On macOS, the menuet-based
 // pkg/menubar is used instead; see tray_darwin.go for the compile stub.
@@ -136,10 +136,10 @@ func (t *TrayApp) UpdateTooltip(msg string) {
 // if the setup is incomplete.
 func (t *TrayApp) ResetTooltip() {
 	if len(t.SetupIssues) > 0 {
-		systray.SetTooltip(fmt.Sprintf("M3C Tools — Setup needed: %s", t.SetupIssues[0].Message))
+		systray.SetTooltip(fmt.Sprintf("M3C Tools, Setup needed: %s", t.SetupIssues[0].Message))
 		return
 	}
-	systray.SetTooltip("M3C Tools — Multi-Modal-Memory Capture")
+	systray.SetTooltip("M3C Tools, Multi-Modal-Memory Capture")
 }
 
 // UpdateLoginState toggles the menu between signed-in and signed-out views.
@@ -258,7 +258,7 @@ func (t *TrayApp) Run() {
 }
 
 // onReady is called by systray.Run when the tray is initialized.
-// Windows MVP: Plaud sync only — 5 items signed-in, 2 signed-out.
+// Windows MVP: Plaud sync only: 5 items signed-in, 2 signed-out.
 func (t *TrayApp) onReady() {
 	if runtime.GOOS == "windows" {
 		systray.SetIcon(iconICO)
@@ -266,7 +266,7 @@ func (t *TrayApp) onReady() {
 		systray.SetIcon(iconPNG)
 	}
 	systray.SetTitle("M3C Tools")
-	systray.SetTooltip("M3C Tools — Plaud Sync")
+	systray.SetTooltip("M3C Tools: Plaud Sync")
 
 	// --- Status lines (disabled, dynamic) ---
 	t.mIdentity = systray.AddMenuItem("Not connected", "")
@@ -365,7 +365,7 @@ func (t *TrayApp) onReady() {
 
 	// First-run toast notification.
 	if !t.IsSetupComplete() {
-		t.UpdateTooltip(fmt.Sprintf("M3C Tools — Setup needed: %s", t.SetupIssues[0].Message))
+		t.UpdateTooltip(fmt.Sprintf("M3C Tools, Setup needed: %s", t.SetupIssues[0].Message))
 		go func() {
 			time.Sleep(3 * time.Second)
 			t.Notify("M3C Tools", fmt.Sprintf("Run 'm3c-tools setup' to configure: %s", t.SetupIssues[0].Message))
@@ -387,11 +387,11 @@ func (t *TrayApp) fireAction(action ActionType, data string) {
 	}
 }
 
-// (Profile menu and history submenu removed for Windows MVP — Plaud sync only)
+// (Profile menu and history submenu removed for Windows MVP: Plaud sync only)
 
 // openURL opens a URL in the default browser.
 // SEC-M11: Windows uses rundll32 url.dll,FileProtocolHandler (URL as a separate
-// argv element) — NOT `cmd /c start`, which shell-interprets &, |, ^, %% chars in the URL.
+// argv element), NOT `cmd /c start`, which shell-interprets &, |, ^, %% chars in the URL.
 func (t *TrayApp) openURL(url string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {

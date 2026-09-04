@@ -1,4 +1,4 @@
-// config_cmd.go — "m3c-tools config" subcommand implementation.
+// config_cmd.go: "m3c-tools config" subcommand implementation.
 //
 // This file has no build tags so it compiles on both darwin and non-darwin platforms.
 package main
@@ -67,7 +67,7 @@ func cmdConfig(args []string) {
 }
 
 func printConfigUsage() {
-	fmt.Println(`m3c-tools config — Configuration profile management
+	fmt.Println(`m3c-tools config: Configuration profile management
 
 Subcommands:
   list                 List all profiles with active marker
@@ -250,7 +250,7 @@ func cmdConfigTest(name string) {
 	fmt.Printf("  API Key: %s\n", config.MaskAPIKey(p.Vars["ER1_API_KEY"]))
 
 	if err := pm.TestConnection(p); err != nil {
-		fmt.Fprintf(os.Stderr, "  Connection: FAILED — %v\n", err)
+		fmt.Fprintf(os.Stderr, "  Connection: FAILED: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Println("  Connection: OK")

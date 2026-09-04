@@ -1,4 +1,4 @@
-# docaudit exemptions — flags intentionally NOT matched by the code↔manual gate.
+# docaudit exemptions: flags intentionally NOT matched by the code↔manual gate.
 #
 # Format:  --flag            # reason
 #     or:  <cli>:--flag      # reason   (scope the exemption to one CLI)
@@ -9,7 +9,7 @@
 # § "CLI ↔ manual consistency".
 
 # ── skillctl ────────────────────────────────────────────────────────────────
-# Documented to state the flag's ABSENCE, not its presence — the manual says
+# Documented to state the flag's ABSENCE, not its presence. The manual says
 # there is deliberately no --force (no bypass of the re-verification gate).
 skillctl:--force            # documented-as-absent: "there is no --force"
 
@@ -18,7 +18,7 @@ skillctl:--force            # documented-as-absent: "there is no --force"
 # cannot see it as an fs.* registration, but it IS documented under advanced.
 skillctl:--allow-overwrite  # hidden advanced flag, documented in the advanced section
 
-# `skillctl invoke-replay` (replay_cmds.go) is NOT dispatched from main.go — the
+# `skillctl invoke-replay` (replay_cmds.go) is NOT dispatched from main.go. The
 # command is unreachable, so documenting its flags would document a command
 # users cannot run. Same class as the `run` / `import-public` commands removed
 # in PR #117; these two exemptions retire when replay_cmds.go does.

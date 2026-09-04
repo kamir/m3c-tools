@@ -138,7 +138,7 @@ func TestHTTPRegistryOfflineFallback(t *testing.T) {
 	if _, err := reg.Get(context.Background(), "tmpl.reflect.compare.v1"); err != nil {
 		t.Fatal(err)
 	}
-	// Kill the server and try again — should serve stale with warning.
+	// Kill the server and try again: should serve stale with warning.
 	ts.Close()
 	time.Sleep(2 * time.Millisecond)
 	p, err := reg.Get(context.Background(), "tmpl.reflect.compare.v1")
@@ -211,7 +211,7 @@ func TestHTTPRegistryMirrorsToSQLiteAndWarms(t *testing.T) {
 		t.Errorf("etag not persisted: %+v", rows[0])
 	}
 
-	// Second client warmed from SQLite — serves from cache without hitting server.
+	// Second client warmed from SQLite: serves from cache without hitting server.
 	// Block the server so we prove no fetch happened.
 	reg2, _ := NewHTTPRegistry(HTTPConfig{
 		BaseURL: ts.URL + "/api/prompts/",
@@ -239,6 +239,6 @@ func TestRegistryConstructorAddsTrailingSlash(t *testing.T) {
 	}
 }
 
-// Helper used in debugging locally — left in for completeness.
+// Helper used in debugging locally: left in for completeness.
 var _ = fmt.Sprintf
 var _ = io.Discard

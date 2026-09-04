@@ -166,7 +166,7 @@ func runAwarenessSync(args []string, stdout, stderr io.Writer) int {
 			// Distinct exit code for the §6.1 short-circuit so CI
 			// can detect "tried to push dev-seed to prod" without
 			// parsing strings. Map to exitUsage for now (caller
-			// misuse) — a future SPEC-0195 numbered code matrix
+			// misuse): a future SPEC-0195 numbered code matrix
 			// would slot in here.
 			return exitUsage
 		}
@@ -353,7 +353,7 @@ func resolveOnDiskAuthor(keyPath, identityOverride string) (signer func([]byte) 
 	priv, err := signing.LoadPrivateKey(keyPath)
 	if err != nil {
 		return nil, "", "", fmt.Errorf(
-			"awareness: no authoring key at %s — run `skillctl keygen --out ~/.claude/skillctl-keys/author` "+
+			"awareness: no authoring key at %s: run `skillctl keygen --out ~/.claude/skillctl-keys/author` "+
 				"or set SKILLCTL_DEV_SEED for a dev keypair: %w", keyPath, err)
 	}
 	pub := priv.Public().(ed25519.PublicKey)

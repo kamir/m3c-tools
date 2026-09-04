@@ -1,4 +1,4 @@
-// budget_test.go — HTTP contract tests for /v1/budget/today + /history.
+// budget_test.go: HTTP contract tests for /v1/budget/today + /history.
 //
 // Covers PLAN-0168 P1 acceptance gates:
 //   - HMAC enforcement (missing/foreign token → 401).
@@ -202,7 +202,7 @@ func TestBudgetTodayReflectsSpend(t *testing.T) {
 
 func TestBudgetTodayFractionClampedOnBreach(t *testing.T) {
 	srv, secret, ctxID, st := newBudgetTestServer(t)
-	// Overspend — $10 against a $5 cap.
+	// Overspend: $10 against a $5 cap.
 	if err := st.AddBudgetSpend(9999, 10.00); err != nil {
 		t.Fatal(err)
 	}
@@ -320,7 +320,7 @@ func TestBudgetHistoryReturnsEmptyArrayNotNull(t *testing.T) {
 		t.Fatalf("want 200, got %d", rec.Code)
 	}
 	body := strings.TrimSpace(rec.Body.String())
-	// Must be a JSON array literal — UI iterates unconditionally.
+	// Must be a JSON array literal: UI iterates unconditionally.
 	if !strings.HasPrefix(body, "[") || !strings.HasSuffix(body, "]") {
 		t.Errorf("body must be JSON array, got %q", body)
 	}

@@ -16,7 +16,7 @@ package main
 // In-process tests (install_cmds_test.go) cover the same paths via the
 // runInstall() function, but ONLY the subprocess form proves that
 // runWithExit + os.Exit translate the verifier's sentinel error into the
-// numbered process exit code. CI consumers branch on $? — we test that
+// numbered process exit code. CI consumers branch on $?: we test that
 // surface directly.
 //
 // Skipped codes: none. All eight (0/10/11/12/13/14/15/16/17) are exercised.
@@ -55,7 +55,7 @@ var (
 
 // skillctlBin builds the skillctl binary once per test process and returns
 // its path. Subsequent tests reuse the same binary; t.Cleanup is per-test
-// so we cannot tie the binary lifetime to a single t — the build happens
+// so we cannot tie the binary lifetime to a single t. The build happens
 // in TestMain via the once.Do guard, the binary lives until the test
 // process exits and is tidied by the OS temp-dir reaper.
 func skillctlBin(t *testing.T) string {
@@ -329,7 +329,7 @@ func TestInstall_BadAuthorSig_Exit11(t *testing.T) {
 	})
 	mux.HandleFunc("/api/skills/identities/", func(w http.ResponseWriter, r *http.Request) {
 		// Identity advertises the GOOD authorPub; the signature is over
-		// digest by a DIFFERENT key — verify must reject.
+		// digest by a DIFFERENT key. Verify must reject.
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":          "id:a",
 			"pubkey_b64":  base64.StdEncoding.EncodeToString(f.authorPub),
@@ -389,7 +389,7 @@ func TestInstall_UntrustedRegistry_Exit12(t *testing.T) {
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	// Trust-roots pins f.regPub — the registry signed with otherRegPriv,
+	// Trust-roots pins f.regPub: the registry signed with otherRegPriv,
 	// so no active trust-root key matches → ErrRegistryNotTrusted (12).
 	f.pinTrust(t, home, srv.URL, "")
 
@@ -504,7 +504,7 @@ func TestInstall_TenantBlocked_Exit16(t *testing.T) {
 // The identity endpoint returns a row with `revoked_at` set; the verifier
 // must refuse with ErrIdentityRevoked (exit 17). Pre-BUG-0144 the same
 // row produced exit 11 (ErrAuthorSigInvalid) which conflated revocation
-// with cryptographic tampering — operators couldn't distinguish.
+// with cryptographic tampering: operators couldn't distinguish.
 
 func TestInstall_RevokedAuthor_Exit17(t *testing.T) {
 	home := t.TempDir()
@@ -535,7 +535,7 @@ func TestInstall_RevokedAuthor_Exit17(t *testing.T) {
 		_, _ = w.Write(f.blob)
 	})
 	mux.HandleFunc("/api/skills/identities/", func(w http.ResponseWriter, r *http.Request) {
-		// Identity row carries revoked_at — the verifier MUST surface
+		// Identity row carries revoked_at. The verifier MUST surface
 		// ErrIdentityRevoked (exit 17), not ErrAuthorSigInvalid (exit 11).
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":               "id:revoked-author",

@@ -1,4 +1,4 @@
-// SPEC-0189 S1 tests — tier resolution, plugin walker, shadow merge,
+// SPEC-0189 S1 tests: tier resolution, plugin walker, shadow merge,
 // SKILL.md anchoring, symlink-loop guard.
 package scanner
 
@@ -16,7 +16,7 @@ import (
 // makeSkillDir creates a Claude Code-conventional skill directory:
 //
 //	<root>/<name>/SKILL.md   (with optional frontmatter body)
-//	<root>/<name>/scripts/foo.sh   (loose file — must NOT be a separate skill)
+//	<root>/<name>/scripts/foo.sh   (loose file: must NOT be a separate skill)
 func makeSkillDir(t *testing.T, root, name, frontmatterBody string) {
 	t.Helper()
 	dir := filepath.Join(root, name)
@@ -255,7 +255,7 @@ func TestResolveDefaults_SourceClaude_IncludesUserAndPlugin(t *testing.T) {
 }
 
 // TestResolveDefaults_SourceUser_OnlyUser verifies SourceUser does NOT
-// include plugin tier (matches SPEC-0189 §4 — user-only on demand).
+// include plugin tier (matches SPEC-0189 §4: user-only on demand).
 func TestResolveDefaults_SourceUser_OnlyUser(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", tmp)
@@ -274,7 +274,7 @@ func TestResolveDefaults_SourceUser_OnlyUser(t *testing.T) {
 }
 
 // TestSymlinkLoop_NoInfiniteWalk creates a symlink that points back into
-// the scanned tree and asserts the scanner does not loop. macOS-only —
+// the scanned tree and asserts the scanner does not loop. macOS-only:
 // Windows symlinks need elevated perms in some configurations.
 func TestSymlinkLoop_NoInfiniteWalk(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -285,7 +285,7 @@ func TestSymlinkLoop_NoInfiniteWalk(t *testing.T) {
 	if err := os.Symlink(filepath.Join(tmp, "real"), filepath.Join(tmp, "loop")); err != nil {
 		t.Fatalf("symlink: %v", err)
 	}
-	// Add another symlink that points up — this would loop without guard.
+	// Add another symlink that points up: this would loop without guard.
 	if err := os.Symlink(tmp, filepath.Join(tmp, "self")); err != nil {
 		t.Fatalf("symlink self: %v", err)
 	}
@@ -307,7 +307,7 @@ func TestSymlinkLoop_NoInfiniteWalk(t *testing.T) {
 	case err := <-errc:
 		t.Fatalf("scan errored: %v", err)
 	case <-time.After(5 * time.Second):
-		t.Fatalf("scan did not complete within 5s — symlink-loop guard regressed")
+		t.Fatalf("scan did not complete within 5s: symlink-loop guard regressed")
 	}
 }
 

@@ -1,4 +1,4 @@
-# CODEOWNERS — an ownership MAP, not an enforced review gate
+# CODEOWNERS: an ownership MAP, not an enforced review gate
 #
 # This file exists for REVIEW-ROUTING and ACCOUNTABILITY: it records who is
 # responsible for the trust-critical and release-critical surfaces of this
@@ -6,7 +6,7 @@
 # for review and there is a named owner of record for each path.
 #
 # It is deliberately a MAP and nothing more. Mandatory two-person review is
-# intentionally NOT (yet) enforced via GitHub branch protection — this is a
+# intentionally NOT (yet) enforced via GitHub branch protection: this is a
 # small team, and a required-reviewer rule with a single effective maintainer
 # blocks its own releases with no second reviewer to unblock them. That is a
 # documented, revisitable decision (H6d), not an oversight. When the team grows
@@ -15,7 +15,7 @@
 #
 # Because review is not force-blocked, the release runbook documents the
 # emergency / break-glass release path a solo maintainer uses (the local
-# scripted-release path and the rollback procedure) — see docs/releasing.md.
+# scripted-release path and the rollback procedure): see docs/releasing.md.
 #
 # Syntax: gitignore-style patterns, most-specific-last wins. A leading "/"
 # anchors to the repo root; a trailing "/" matches a directory tree.

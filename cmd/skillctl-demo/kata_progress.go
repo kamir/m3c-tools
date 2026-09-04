@@ -1,17 +1,17 @@
 package main
 
-// kata_progress.go — the local-first mastery store for Kata training mode.
+// kata_progress.go: the local-first mastery store for Kata training mode.
 //
 // This file is the PURE, unit-testable core of the Kata coach: the beat model,
 // the distinct-rep counter, the N/3 → sitzt progression, the rust stall-window
 // state machine, the exit-code → obstacle mapping, and the per-rep signature.
 // It mirrors the CEW SPEC-0303 three-state machine (rot / gelb / grün) and the
-// SPEC-0121 skillprofile mastery ladder, kept local for now (a later bridge —
-// out of scope here — posts beats to cew_kata_events + the skillprofile ladder).
+// SPEC-0121 skillprofile mastery ladder, kept local for now (a later bridge,
+// out of scope here, posts beats to cew_kata_events + the skillprofile ladder).
 //
 // Honesty rule (non-negotiable): a Beat is only ever recorded for a REAL
 // skillctl run whose observed exit code matched the Kata's target. Nothing in
-// this file can invent a pass — Record simply refuses to count anything else.
+// this file can invent a pass: Record simply refuses to count anything else.
 
 import (
 	"crypto/sha256"
@@ -28,9 +28,9 @@ import (
 type KataState string
 
 const (
-	StateRot   KataState = "rot"   // new — never practiced (0 distinct clean reps)
-	StateGelb  KataState = "gelb"  // practicing — some reps, but not yet sitzt (or rusting)
-	StateGruen KataState = "gruen" // sitzt — required distinct clean reps met and fresh
+	StateRot   KataState = "rot"   // new, never practiced (0 distinct clean reps)
+	StateGelb  KataState = "gelb"  // practicing, some reps, but not yet sitzt (or rusting)
+	StateGruen KataState = "gruen" // sitzt: required distinct clean reps met and fresh
 )
 
 // DefaultStallDays is the rust window when KATA_STALL_DAYS is unset (SPEC-0303).
@@ -48,7 +48,7 @@ type Beat struct {
 }
 
 // OK reports whether the beat's observed result met the Kata target. Record
-// only accepts OK beats — this is the honesty gate in data form.
+// only accepts OK beats: this is the honesty gate in data form.
 func (b Beat) OK() bool { return b.Observed == b.Target }
 
 // kataRecord is the persisted per-Kata state: every distinct clean beat plus the
@@ -176,7 +176,7 @@ func (s *KataStore) Record(b Beat) (added bool) {
 	}
 	for _, e := range rec.Beats {
 		if e.Signature == b.Signature {
-			return false // duplicate artifact — practiced, but no new distinct rep
+			return false // duplicate artifact: practiced, but no new distinct rep
 		}
 	}
 	rec.Beats = append(rec.Beats, b)
@@ -274,32 +274,32 @@ func repSignature(kataID, nonce, artifact string) string {
 func obstacleForExit(code int) string {
 	switch code {
 	case 0:
-		return "clean — the target condition is met (nothing blocked you)"
+		return "clean, the target condition is met (nothing blocked you)"
 	case 1:
-		return "generic error — a precondition wasn't ready (e.g. no signed admission envelope / sidecar)"
+		return "generic error, a precondition wasn't ready (e.g. no signed admission envelope / sidecar)"
 	case 2:
-		return "usage / precondition refusal — a wrong flag, or a G-23 two-step confirm that RE-CHECKED the live set and refused on drift (no --force)"
+		return "usage / precondition refusal, a wrong flag, or a G-23 two-step confirm that RE-CHECKED the live set and refused on drift (no --force)"
 	case 10:
-		return "digest mismatch — the bytes changed after signing (tamper); the signature no longer covers them"
+		return "digest mismatch, the bytes changed after signing (tamper); the signature no longer covers them"
 	case 11:
-		return "author signature invalid — not signed by a key pinned in trust-roots (unsigned, or the wrong author key)"
+		return "author signature invalid, not signed by a key pinned in trust-roots (unsigned, or the wrong author key)"
 	case 12:
-		return "registry not in trust-roots — the registry that admitted this bundle isn't pinned (or its key doesn't match)"
+		return "registry not in trust-roots, the registry that admitted this bundle isn't pinned (or its key doesn't match)"
 	case 13:
-		return "governance below minimum — the attested level is under the trust-root's floor"
+		return "governance below minimum, the attested level is under the trust-root's floor"
 	case 14:
-		return "depends_on unsatisfied — a required dependency isn't admitted"
+		return "depends_on unsatisfied, a required dependency isn't admitted"
 	case 15:
-		return "blob missing — the bundle payload the meta points at isn't present"
+		return "blob missing, the bundle payload the meta points at isn't present"
 	case 17:
-		return "revoked — a signed revocation list covers this digest; it fails closed offline"
+		return "revoked, a signed revocation list covers this digest; it fails closed offline"
 	case 22:
-		return "stale + high-risk — the freshness snapshot is too old for a high-risk action, so it fails closed"
+		return "stale + high-risk (the freshness snapshot is too old for a high-risk action, so it fails closed"
 	case 32:
-		return "runtime envelope violation — an out-of-envelope egress was attempted (roadmap surface, not run here)"
+		return "runtime envelope violation) an out-of-envelope egress was attempted (roadmap surface, not run here)"
 	case -1:
-		return "exec failure — skillctl could not be run at all (binary missing / sandbox error)"
+		return "exec failure, skillctl could not be run at all (binary missing / sandbox error)"
 	default:
-		return "unexpected exit " + strconv.Itoa(code) + " — see `skillctl <cmd> --help` for the numbered codes"
+		return "unexpected exit " + strconv.Itoa(code) + ", see `skillctl <cmd> --help` for the numbered codes"
 	}
 }

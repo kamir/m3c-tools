@@ -99,7 +99,7 @@ func ValidatePocketKey(httpClient *http.Client, baseURL, key string) PocketKeyVe
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return PocketKeyVerdict{
 			State:        "unreachable",
-			HumanMessage: "Pocket returned an unexpected error. The service may be down — saving anyway, retry later.",
+			HumanMessage: "Pocket returned an unexpected error. The service may be down: saving anyway, retry later.",
 			Detail:       fmt.Sprintf("HTTP %d", resp.StatusCode),
 		}
 	}
@@ -139,7 +139,7 @@ func ValidatePocketKey(httpClient *http.Client, baseURL, key string) PocketKeyVe
 		count = env.Pagination.Total
 	}
 
-	msg := fmt.Sprintf("Looks good — %d recording%s on this account", count, plural(count))
+	msg := fmt.Sprintf("Looks good: %d recording%s on this account", count, plural(count))
 	return PocketKeyVerdict{
 		State:          "valid",
 		RecordingCount: count,

@@ -2,7 +2,7 @@ package artifact
 
 // Capabilities is a backend's declarative statement of what it can do. Callers
 // branch on these flags BEFORE offering a CLI flag or calling an optional
-// sub-interface — never by probing a method and catching an error. The flag
+// sub-interface, never by probing a method and catching an error. The flag
 // that mirrors an optional interface (ServerEventLog ⇔ GovernanceLog) MUST
 // agree with the type assertion; that invariant is what the conformance suite
 // checks.
@@ -21,7 +21,7 @@ type Capabilities struct {
 	// Where the governance verdict comes from.
 	Governance GovernanceSource
 
-	// Explicit "latest" semantics — designs out the compareSemver guesswork.
+	// Explicit "latest" semantics: designs out the compareSemver guesswork.
 	LatestPolicy LatestPolicy
 
 	// ClaimCheck is true when the bundle blob is stored out-of-line (MinIO

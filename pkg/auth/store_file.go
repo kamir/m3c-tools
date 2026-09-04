@@ -14,7 +14,7 @@ import (
 // fileStore persists the token as a host-bound AES-256-GCM blob under
 // ~/.m3c-tools/device-token.enc. It is the fallback for hosts without a usable
 // OS keychain. The encryption key is derived from device + user material, so
-// the file cannot be decrypted on a different machine — but note this is
+// the file cannot be decrypted on a different machine, but note this is
 // host-binding, not true secrecy against a same-user process (which can
 // re-derive the key). The keychain backend is preferred for that reason.
 type fileStore struct{}

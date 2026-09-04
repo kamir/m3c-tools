@@ -4,7 +4,7 @@ package main
 //
 // Resolves an INSTALLED skill (~/.claude/skills/<name>/ by default), runs the
 // behavioural bodyscan over its SKILL.md body, prints the report, and surfaces
-// `self_attested` (SPEC-0246 §5.3 — "signed by author, reviewed by author" vs.
+// `self_attested` (SPEC-0246 §5.3: "signed by author, reviewed by author" vs.
 // independent review) by inspecting the install provenance:
 //
 //   - the signed attestation stash (.skillctl-attest.json): self_attested is
@@ -160,7 +160,7 @@ func runAuditSecurity(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "  author_id:   %s\n", emptyDash(author))
 	}
 	if bodyscan.NotScanned(rep) {
-		fmt.Fprintln(stdout, "note:          body NOT scanned (oversized) — verdict is advisory, not a clean signal")
+		fmt.Fprintln(stdout, "note:          body NOT scanned (oversized): verdict is advisory, not a clean signal")
 	}
 	fmt.Fprintln(stdout, "")
 	renderBodyScanTable(stdout, skillMD, rep)
@@ -172,7 +172,7 @@ func runAuditSecurity(args []string, stdout, stderr io.Writer) int {
 // the tri-state plus the reviewer_id and author_id it compared (for display).
 func resolveSelfAttested(skillDir string) (state selfAttestState, reviewerID, authorID string) {
 	// 1. Signed attestation stash (.skillctl-attest.json): the most authoritative
-	//    source — reviewer_id from the governance attestation, author from the
+	//    source: reviewer_id from the governance attestation, author from the
 	//    admit event.
 	if ctx, err := registry.ReadAttestationStash(skillDir); err == nil && ctx != nil {
 		reviewerID = mapString(ctx.GovernanceAttestation, "reviewer_id")
@@ -189,7 +189,7 @@ func resolveSelfAttested(skillDir string) (state selfAttestState, reviewerID, au
 	}
 
 	// 2. Provenance sidecar (.m3c-provenance.json): per-role signatures. In the
-	//    self tenant the author and registry roles share one identity — that IS
+	//    self tenant the author and registry roles share one identity, that IS
 	//    a self-attestation signal (no independent reviewer recorded).
 	sidecarPath := filepath.Join(skillDir, registry.ProvenanceSidecarName)
 	if data, err := os.ReadFile(sidecarPath); err == nil {
@@ -253,7 +253,7 @@ func firstSignatureIdentity(ev map[string]any, role string) string {
 
 func emptyDash(s string) string {
 	if s == "" {
-		return "—"
+		return ": "
 	}
 	return s
 }

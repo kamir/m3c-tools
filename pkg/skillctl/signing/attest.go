@@ -45,13 +45,13 @@ const AttestationDomain = "attestation"
 
 // AttestationTimestampLayout is the exact format we write attested_at in.
 // RFC 3339, UTC, second precision, "Z" suffix. No fractional seconds, no
-// numeric offset — those would change the byte length and break parity
+// numeric offset: those would change the byte length and break parity
 // with the Python serializer.
 const AttestationTimestampLayout = "2006-01-02T15:04:05Z"
 
 // digestPattern matches the canonical bundle digest form.
 //
-// Lowercase hex only — Go's hex.EncodeToString already returns lowercase,
+// Lowercase hex only: Go's hex.EncodeToString already returns lowercase,
 // but a caller could feed us any string. Reject mixed-case to keep the
 // canonical bytes deterministic.
 var digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
@@ -78,7 +78,7 @@ func FormatAttestationTimestamp(t time.Time) string {
 
 // CanonicalizeAttestationMessage returns the exact bytes that will be
 // signed for a governance attestation. Performs strict input validation
-// BEFORE assembling — a malformed CLI invocation should never produce a
+// BEFORE assembling: a malformed CLI invocation should never produce a
 // signature over malformed bytes.
 //
 // On any validation failure the returned []byte is nil and err is set.
@@ -96,13 +96,13 @@ func CanonicalizeAttestationMessage(bundleDigest, governanceLevel, attestedAtISO
 		return nil, errors.New("attestation: reviewer_id must not be empty")
 	}
 	if strings.ContainsAny(reviewerID, "\n\r") {
-		// CR is rejected too — even though our format uses LF only, a
+		// CR is rejected too, even though our format uses LF only, a
 		// stray CR would corrupt cross-platform byte equality.
 		return nil, errors.New("attestation: reviewer_id must not contain newline characters")
 	}
 
 	// Assemble. We build via a byte slice rather than fmt.Sprintf to
-	// keep the format obviously trivial — there are no escape sequences,
+	// keep the format obviously trivial. There are no escape sequences,
 	// no width specifiers, just literal concatenation with single \n.
 	var b strings.Builder
 	// Pre-size: 11 + 1 + len(digest) + 1 + len(level) + 1 + len(ts) + 1 + len(rid) + 1.
@@ -128,7 +128,7 @@ func CanonicalizeAttestationMessage(bundleDigest, governanceLevel, attestedAtISO
 func SignAttestation(privKey ed25519.PrivateKey, msg []byte) []byte {
 	sig := ed25519.Sign(privKey, msg)
 	if len(sig) != ed25519.SignatureSize {
-		// stdlib invariant; panicking here is correct — a wrong-length
+		// stdlib invariant; panicking here is correct. A wrong-length
 		// signature returned silently would corrupt the registry.
 		panic(fmt.Sprintf("attestation: ed25519.Sign returned %d bytes (want %d)", len(sig), ed25519.SignatureSize))
 	}

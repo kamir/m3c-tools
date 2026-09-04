@@ -38,7 +38,7 @@ type Request struct {
 	Messages    []Message // ordered system/user messages
 	MaxTokens   int       // optional upper bound on completion tokens
 	Temperature float32   // 0 → deterministic
-	Format      string    // "" | "json" — hint to force JSON output where supported
+	Format      string    // "" | "json": hint to force JSON output where supported
 }
 
 // Response is one completion.
@@ -202,7 +202,7 @@ func NewAdapterFromEnv() (Adapter, error) {
 	case haveOllama:
 		return NewOllama()
 	default:
-		return nil, errors.New("llm: no LLM configured — set OPENAI_API_KEY or OLLAMA_URL")
+		return nil, errors.New("llm: no LLM configured: set OPENAI_API_KEY or OLLAMA_URL")
 	}
 }
 

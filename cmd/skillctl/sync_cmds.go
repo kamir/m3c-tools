@@ -1,12 +1,12 @@
 package main
 
-// sync_cmds.go — SPEC-0317 §R-5 (P1): the sync agent.
+// sync_cmds.go: SPEC-0317 §R-5 (P1): the sync agent.
 //
 //	skillctl sync --once     drain audit_events → the KafShield ingest, then exit.
 //	skillctl sync --daemon   loop the same drain on an interval with a
 //	                         signal-handled graceful shutdown.
 //
-// This is a SEPARATE process. It is NEVER invoked on the PreToolUse hook path —
+// This is a SEPARATE process. It is NEVER invoked on the PreToolUse hook path:
 // the hot path only writes the outbox (P0) and, at most, best-effort "nudges" a
 // sync. Draining, HTTPS egress, backoff and dedup all live here, off the hot
 // path, so decision latency (AC-3) and decision-invariance (SPEC-0255) are
@@ -15,7 +15,7 @@ package main
 // Contract (R-5.3 / AC-4): a row is marked synced ONLY on a VALID signed
 // durable-seq ack. A bare-2xx from a non-durable stub does NOT mark synced. A
 // replay of an already-acked event_id is a client-side no-op (dedup by the
-// signature-bound event_id — an already-synced row never re-enters the drain
+// signature-bound event_id: an already-synced row never re-enters the drain
 // set, and the outbox INSERT/MarkSynced are idempotent). Transient 5xx →
 // delivery_attempts row with retryqueue-shaped backoff. A 4xx auth reject →
 // exit 29 (ingest_rejected).
@@ -23,7 +23,7 @@ package main
 // Egress posture (R-9.1): the drain is DEFAULT-OFF. With no endpoint configured
 // the command reports "local-only evidence" and exits 0 without egress. The
 // enforcement-evidence records ship verbatim (they are device-signed; mutating
-// them for data-minimisation would break verifiability) — cwd/host_id/session_id
+// them for data-minimisation would break verifiability). cwd/host_id/session_id
 // minimisation is a property of the SEPARATE PII telemetry stream (sync-usage),
 // not this signed-evidence stream (R-9.2).
 //
@@ -63,7 +63,7 @@ const (
 	syncExitOK             = 0
 	syncExitError          = 1
 	syncExitUsage          = 2
-	syncExitIngestRejected = 29 // exitcode.SyncIngestRejected — auth/validation reject (4xx)
+	syncExitIngestRejected = 29 // exitcode.SyncIngestRejected: auth/validation reject (4xx)
 )
 
 // syncDefaultBatch is the default drain batch size (R-5.1).
@@ -256,7 +256,7 @@ func reportDrain(stdout io.Writer, r drainResult) {
 
 // drainAll runs the full drain: reconcile the spool, then post batches until no
 // forward progress is made (an empty pending set, or a batch where nothing could
-// be marked synced — the bare-2xx stub case, which must not loop forever). It
+// be marked synced. The bare-2xx stub case, which must not loop forever). It
 // returns an exit code and the accumulated counters.
 func drainAll(ctx context.Context, store *outbox.Store, client *outbox.IngestClient, home string, batch int, stderr io.Writer) (int, drainResult) {
 	var res drainResult
@@ -264,14 +264,14 @@ func drainAll(ctx context.Context, store *outbox.Store, client *outbox.IngestCli
 	// Rows backed off during THIS drain: never re-posted within the same cycle.
 	// The PendingBatchDue due-gate excludes deferred rows ACROSS cycles (their
 	// next_retry_at is in the future); this in-memory set is the belt-and-suspenders
-	// guard for the same cycle — chiefly the capped-attempt case whose next_retry_at
+	// guard for the same cycle: chiefly the capped-attempt case whose next_retry_at
 	// no longer advances (INSERT OR IGNORE at the attempt ceiling), which would
 	// otherwise re-enter the drain set behind a marked row.
 	deferred := map[string]struct{}{}
 
 	// R-5.1 / R-2.5: reconcile the spool BEFORE the first batch so spilled rows are
 	// drained into audit_events in occurred_at order ahead of fresh evidence.
-	// (Per-batch translog anchoring — AC-5a — is NOT-YET-BUILT: nothing stamps
+	// (Per-batch translog anchoring, AC-5a, is NOT-YET-BUILT: nothing stamps
 	// translog_seq, so there is no local-monotonicity claim here.)
 	if n, err := store.Reconcile(); err != nil {
 		fmt.Fprintf(stderr, "skillctl sync: reconcile spool: %v\n", err)
@@ -284,7 +284,7 @@ func drainAll(ctx context.Context, store *outbox.Store, client *outbox.IngestCli
 			return syncExitOK, res
 		}
 		// Backoff-aware drain set (R-5.3): a row whose delivery_attempts.next_retry_at
-		// is still in the future is NOT due and is excluded — so a deferred row is not
+		// is still in the future is NOT due and is excluded, so a deferred row is not
 		// re-POSTed before its backoff elapses.
 		pending, err := store.PendingBatchDue(batch, syncNow().UTC().Format(time.RFC3339))
 		if err != nil {
@@ -335,7 +335,7 @@ func drainAll(ctx context.Context, store *outbox.Store, client *outbox.IngestCli
 			}
 			return syncExitOK, res
 		case status/100 == 4:
-			// Auth / validation reject — not transient. Surface the numbered
+			// Auth / validation reject: not transient. Surface the numbered
 			// code so an operator (non-hot-path) sees it.
 			fmt.Fprintf(stderr, "skillctl sync: ingest rejected batch with status %d (%s)\n",
 				status, exitcode.SyncIngestRejected.Label)
@@ -400,13 +400,13 @@ func transientMsg(err error, status int) string {
 }
 
 // recordBackoff appends one delivery_attempts row with retryqueue-shaped backoff
-// (30s→1h, cap 10 attempts, scale 2.0 — reused from pkg/tracking). The attempt
+// (30s→1h, cap 10 attempts, scale 2.0. Reused from pkg/tracking). The attempt
 // number is monotonic per event_id; next_retry_at = now + backoff(attempt-1),
 // mirroring RetryQueueDB.UpdateAttempt. The attempt is CAPPED at the intended
 // ceiling (DefaultMaxAttempts=10) so a chronically-failing row cannot grow an
-// unbounded number of delivery_attempts rows — at the ceiling the (event_id,
+// unbounded number of delivery_attempts rows, at the ceiling the (event_id,
 // attempt) INSERT OR IGNORE is a no-op. Best-effort: a bookkeeping failure never
-// blocks the drain (the evidence row itself is untouched — write-once).
+// blocks the drain (the evidence row itself is untouched: write-once).
 func recordBackoff(store *outbox.Store, eventID string, httpStatus int, errMsg string) {
 	prior, _ := store.Attempts(eventID)
 	attempt := len(prior) + 1
@@ -443,8 +443,8 @@ func syncBackoff(attempt int) time.Duration {
 }
 
 // reVerifyRow reconstructs the canonical bytes from the row's payload_json and
-// asserts (a) the recomputed sha256 equals the stored payload_hash column — the
-// column↔payload divergence tamper check (R-2.6), which needs no key — and
+// asserts (a) the recomputed sha256 equals the stored payload_hash column, the
+// column↔payload divergence tamper check (R-2.6), which needs no key, and
 // (b) when the device pubkey is resolvable, the detached signature verifies. A
 // row that fails EITHER available check is not shipped.
 func reVerifyRow(home string, ev outbox.Event) bool {
@@ -461,7 +461,7 @@ func reVerifyRow(home string, ev outbox.Event) bool {
 	}
 	sum := sha256.Sum256(canon)
 	if hex.EncodeToString(sum[:]) != ev.PayloadHash {
-		return false // column↔payload divergence — tamper signal
+		return false // column↔payload divergence: tamper signal
 	}
 	if pub, ok := syncResolveDevicePub(home, rec.DeviceKeyID); ok {
 		if !skillgate.VerifyInvocationRecord(&rec, pub, base64.StdEncoding.DecodeString) {

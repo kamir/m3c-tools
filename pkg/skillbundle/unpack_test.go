@@ -111,9 +111,9 @@ func TestUnpack_RejectsTraversalAbsolute(t *testing.T) {
 
 // sanitizeArchivePath is the guard; test every rejection class directly (the
 // high-level tar.Writer normalises NUL/volume names, so they can't be injected
-// through makeArchive — but a hand-rolled or foreign tar can carry them).
+// through makeArchive, but a hand-rolled or foreign tar can carry them).
 func TestSanitizeArchivePath(t *testing.T) {
-	// "README:payload" — a mid-name colon (NTFS ADS separator) must be rejected on
+	// "README:payload", a mid-name colon (NTFS ADS separator) must be rejected on
 	// ALL platforms (WIN-05); pre-fix it passed because filepath.VolumeName only
 	// catches a leading single-letter drive prefix. "a:b" pins the general case.
 	reject := []string{"../evil", "a/../../b", "/etc/passwd", "..", `a\b`, "a\x00b", "README:payload", "a:b", "dir/file:stream"}
@@ -180,7 +180,7 @@ func TestUnpack_FileCountCap(t *testing.T) {
 }
 
 func TestUnpack_WrapperStrip_RecomputesScriptMode(t *testing.T) {
-	// Everything under one wrapper dir; scripts/* must be 0755 AFTER strip — the
+	// Everything under one wrapper dir; scripts/* must be 0755 AFTER strip: the
 	// regression the separate helpers risked.
 	blob := makeArchive(t, []titem{
 		reg("mybundle/SKILL.md", "# s"),

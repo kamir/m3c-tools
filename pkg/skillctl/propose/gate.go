@@ -3,7 +3,7 @@
 // a file" and "I think this is ready to ship": fail loud here rather
 // than admit half-baked skills.
 //
-// The 11 checks (S3-DECISIONS S3.1 Q1=A — print all results inline):
+// The 11 checks (S3-DECISIONS S3.1 Q1=A: print all results inline):
 //
 //  1. SKILL.md exists at the source path
 //  2. Frontmatter is valid YAML
@@ -16,7 +16,7 @@
 //  9. Smoke-test marker present (tests/smoke.sh OR last_smoke_passed
 //     in metadata OR --skip-smoke)
 //  10. Proposed version > last admitted version (registry round-trip,
-//     OPTIONAL — see CheckOptions.RegistryClient).
+//     OPTIONAL: see CheckOptions.RegistryClient).
 //  11. bodyscan clean or rationale (SPEC-0246 §4.5/§4.6): the rendered
 //     SKILL.md body is scanned by pkg/skillctl/bodyscan for prompt
 //     injection / exfiltration / tool-escalation / policy-subversion /
@@ -86,7 +86,7 @@ type CheckOptions struct {
 	// (yellow) bodyscan verdict (SPEC-0246 §4.6: "a 🟡 requires an explicit
 	// attested rationale"). It is consulted ONLY by check #11 and ONLY when
 	// the bodyscan verdict is yellow: a yellow with a non-empty rationale
-	// passes; a yellow without it fails. A 🔴 (red) verdict always fails —
+	// passes; a yellow without it fails. A 🔴 (red) verdict always fails,
 	// no rationale can override it (fail-closed per §4.6).
 	BodyScanRationale string
 }
@@ -113,7 +113,7 @@ func Run(opts CheckOptions) Result {
 	} else {
 		checks = append(checks, fail(1, "SKILL.md present",
 			fmt.Sprintf("missing %s", skillMD)))
-		// Without SKILL.md, downstream checks are unrunnable — but we
+		// Without SKILL.md, downstream checks are unrunnable, but we
 		// still emit placeholder rows so the trainer sees the full
 		// 11-row report (S3.1 Q1=A).
 		for _, n := range []int{2, 3, 4, 5, 6, 7, 9} {
@@ -121,7 +121,7 @@ func Run(opts CheckOptions) Result {
 		}
 		runOptional(&checks, opts)
 		// Check #11 (bodyscan): unrunnable without a body to scan.
-		checks = append(checks, fail(11, gateName(11), "SKILL.md missing — body could not be scanned"))
+		checks = append(checks, fail(11, gateName(11), "SKILL.md missing: body could not be scanned"))
 		return finalize(checks)
 	}
 
@@ -256,7 +256,7 @@ func bodyScanCheck(skillMDPath string, opts CheckOptions) CheckResult {
 	}
 	fm, body, perr := parser.Parse(raw)
 	if perr != nil {
-		// Frontmatter is unparseable — check #2 already reported that. We can
+		// Frontmatter is unparseable. Check #2 already reported that. We can
 		// still scan the raw bytes (a malformed frontmatter is itself a yellow
 		// signal upstream); fall back to scanning the whole file as the body.
 		body = string(raw)
@@ -274,7 +274,7 @@ func bodyScanCheck(skillMDPath string, opts CheckOptions) CheckResult {
 	// --bodyscan-rationale). Refuse hard, like a 🔴, ignoring any rationale.
 	if bodyscan.NotScanned(rep) {
 		return fail(11, name,
-			fmt.Sprintf("bodyscan did not run (body too large to scan: %s) — cannot be overridden by --bodyscan-rationale (fail-closed)",
+			fmt.Sprintf("bodyscan did not run (body too large to scan: %s): cannot be overridden by --bodyscan-rationale (fail-closed)",
 				firstFindingSummary(rep.Findings)))
 	}
 
@@ -290,7 +290,7 @@ func bodyScanCheck(skillMDPath string, opts CheckOptions) CheckResult {
 				len(rep.Findings), firstFindingSummary(rep.Findings)))
 	default: // VerdictRed
 		return fail(11, name,
-			fmt.Sprintf("bodyscan 🔴 (%d finding(s)) blocks promotion — cannot be overridden: %s",
+			fmt.Sprintf("bodyscan 🔴 (%d finding(s)) blocks promotion; cannot be overridden: %s",
 				len(rep.Findings), firstFindingSummary(rep.Findings)))
 	}
 }

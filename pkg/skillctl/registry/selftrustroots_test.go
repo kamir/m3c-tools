@@ -2,7 +2,7 @@ package registry
 
 // SEC-L1 regression tests for the `self`-tenant trust-roots loader.
 //
-//   (a) governance_minimum: "red" (and any non-floor value) must be REJECTED —
+//   (a) governance_minimum: "red" (and any non-floor value) must be REJECTED.
 //       "red" as a floor would silently admit everything, defeating the gate.
 //       Only "green" and "yellow" are valid floors.
 //   (b) the loader must use STRICT YAML decoding (KnownFields(true)) so an

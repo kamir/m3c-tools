@@ -110,7 +110,7 @@ func TestTrackerAdd(t *testing.T) {
 		t.Fatalf("NewTracker: %v", err)
 	}
 
-	// Add entries — should create the file with header.
+	// Add entries: should create the file with header.
 	if err := tr.Add("alpha.mp3", "beta.wav"); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestTrackerAdd(t *testing.T) {
 		t.Errorf("Count = %d, want 2", count)
 	}
 
-	// Add duplicate — should not write again.
+	// Add duplicate: should not write again.
 	if err := tr.Add("alpha.mp3"); err != nil {
 		t.Fatalf("Add duplicate: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestTrackerAdd(t *testing.T) {
 		t.Errorf("Count after duplicate = %d, want 2", count)
 	}
 
-	// Add new entry — should append.
+	// Add new entry: should append.
 	if err := tr.Add("gamma.flac"); err != nil {
 		t.Fatalf("Add gamma: %v", err)
 	}
@@ -173,7 +173,7 @@ func TestTrackerAddEmpty(t *testing.T) {
 	tmp := filepath.Join(t.TempDir(), "tracker.md")
 	tr, _ := NewTracker(tmp)
 
-	// Add empty and whitespace-only entries — should be no-ops.
+	// Add empty and whitespace-only entries: should be no-ops.
 	if err := tr.Add("", "  ", "\t"); err != nil {
 		t.Fatalf("Add empty: %v", err)
 	}

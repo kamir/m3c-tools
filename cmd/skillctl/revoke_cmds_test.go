@@ -18,7 +18,7 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
 )
 
-// marshalPrivateKeyPEM mirrors signing.GenerateKeyPair's encoding —
+// marshalPrivateKeyPEM mirrors signing.GenerateKeyPair's encoding:
 // PKCS#8 DER wrapped in `BEGIN PRIVATE KEY` PEM. Test-local helper.
 func marshalPrivateKeyPEM(priv ed25519.PrivateKey) ([]byte, error) {
 	der, err := x509.MarshalPKCS8PrivateKey(priv)

@@ -142,7 +142,7 @@ func TestLoadConfig_PlaceholderKeySilentWhenDeviceTokenPresent(t *testing.T) {
 
 // BUG-0163: when LoadConfig is called multiple times during startup (PLM
 // sync, retry scheduler, menubar init), the FATAL line for a placeholder
-// key without device token MUST fire at most once — not once per call.
+// key without device token MUST fire at most once, not once per call.
 func TestLoadConfig_PlaceholderFatalFiresAtMostOnce(t *testing.T) {
 	t.Setenv("ER1_DEVICE_TOKEN", "")
 	os.Unsetenv("ER1_DEVICE_TOKEN")

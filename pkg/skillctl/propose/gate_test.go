@@ -229,7 +229,7 @@ func TestRun_BugReportsCheck8(t *testing.T) {
 	dir := writeSkill(t, validSkillMD, map[string]string{"tests/smoke.sh": "#!/bin/sh\nexit 0\n"})
 	bugDir := t.TempDir()
 
-	// One unrelated bug report — should not match.
+	// One unrelated bug report: should not match.
 	if err := os.WriteFile(filepath.Join(bugDir, "BUG-0001-something-else.md"),
 		[]byte("# BUG\nunrelated to the skill"), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
@@ -364,7 +364,7 @@ func TestRun_BodyScanRedBlocksRationaleOverride(t *testing.T) {
 // TestRun_BodyScanOversizedFailsClosedEvenWithRationale is the P1b adversarial
 // case (SPEC-0246 §4.5): a >1 MiB SKILL.md body carrying a prompt injection is
 // returned by bodyscan as "oversized, not scanned" (a 🟡 with rule SIZE-001).
-// That must NOT be slip-through-able — even with --bodyscan-rationale, check #11
+// That must NOT be slip-through-able, even with --bodyscan-rationale, check #11
 // must FAIL, because a body the scanner never actually read carries no evidence
 // it is safe. (Without the fix, the injection would launder through the
 // yellow-with-rationale path.)

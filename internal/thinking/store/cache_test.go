@@ -101,7 +101,7 @@ func TestCacheParentFilter(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	// Filter for reflections by thought_id t-2 — must only return r-1.
+	// Filter for reflections by thought_id t-2: must only return r-1.
 	out := c.List("R", time.Time{}, "t-2", 10)
 	if len(out) != 1 {
 		t.Fatalf("expected 1, got %d", len(out))

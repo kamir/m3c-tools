@@ -1,4 +1,4 @@
-// autoreflect_test.go — unit tests for the auto-reflect consumer.
+// autoreflect_test.go: unit tests for the auto-reflect consumer.
 //
 // Covered invariants (one test per line, see TestXxx names below):
 //
@@ -267,10 +267,10 @@ func TestWindowTriggerAfterNThoughts(t *testing.T) {
 
 func TestHeartbeatNoNewThoughtsNoFire(t *testing.T) {
 	e := newEnv(t)
-	e.cfg.HeartbeatMin = 60 // irrelevant — we call forceHeartbeat
+	e.cfg.HeartbeatMin = 60 // irrelevant: we call forceHeartbeat
 	e.start()
 
-	// no publishes — window is empty
+	// no publishes: window is empty
 	e.forceHeartbeat()
 
 	// tryFire with empty window emits Skipped(no_eligible_ts) rather
@@ -279,7 +279,7 @@ func TestHeartbeatNoNewThoughtsNoFire(t *testing.T) {
 		t.Fatalf("expected Skipped(no_eligible_ts); got events=%+v", e.sink.events)
 	}
 	if len(e.sink.byName(EventAutoReflectTriggered)) != 0 {
-		t.Fatalf("no T arrived — must not fire; events=%+v", e.sink.events)
+		t.Fatalf("no T arrived: must not fire; events=%+v", e.sink.events)
 	}
 	skipped := e.sink.byName(EventAutoReflectSkipped)
 	if len(skipped) != 1 {
@@ -322,7 +322,7 @@ func TestRateLimitSkipsOverCap(t *testing.T) {
 	e.start()
 
 	// Fire 11 distinct windows. Use unique ids so dedup does not
-	// intervene — the limiter is the subject under test here.
+	// intervene. The limiter is the subject under test here.
 	for i := 0; i < 11; i++ {
 		e.publish(observation(fmt.Sprintf("t-rl-%d", i), "x"))
 		// Wait for each fire to land before publishing the next.
@@ -367,7 +367,7 @@ func TestDedupSuppressesRepeatWindow(t *testing.T) {
 
 	// Force the exact same id-set by poking the window state and
 	// calling tryFire manually. This simulates a true duplicate window
-	// (same sorted id list) — the brief's definition of dedup.
+	// (same sorted id list). The brief's definition of dedup.
 	e.consumer.mu.Lock()
 	e.consumer.eligibleIDs = []string{"t-dedup-a", "t-dedup-b"}
 	e.consumer.mu.Unlock()
@@ -396,7 +396,7 @@ func TestDedupSuppressesRepeatWindow(t *testing.T) {
 func TestBudgetPauseSkipsBelowThreshold(t *testing.T) {
 	e := newEnv(t)
 	e.cfg.WindowN = 1
-	// Remaining fraction is only 0.15 — well under the 0.20 floor
+	// Remaining fraction is only 0.15: well under the 0.20 floor
 	// (1 - BudgetPauseFraction), so the next fire must skip.
 	e.ledger.remaining = 0.15
 	e.start()
@@ -486,7 +486,7 @@ func TestAllPlaceholderHeartbeatEmitsNoEligibleTs(t *testing.T) {
 
 func TestQuestionThoughtsExcluded(t *testing.T) {
 	// Feedback-loop follow-ups (type=question) must never count
-	// toward the auto-reflect window — otherwise the engine ping-pongs
+	// toward the auto-reflect window: otherwise the engine ping-pongs
 	// on its own output.
 	e := newEnv(t)
 	e.cfg.WindowN = 1
