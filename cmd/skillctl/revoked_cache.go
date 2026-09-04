@@ -9,9 +9,20 @@ package main
 // short-TTL cache the offline gate consults so revocation also propagates to the
 // fast per-invocation path until the next sweep.
 //
-// Fail-OPEN on fetch: if the registry is unreachable / unconfigured we fall back
-// to the cache (or empty). We only ever quarantine a digest that is DEFINITELY
-// in a verified revoked set — a fetch failure never false-quarantines.
+// Fail policy on fetch depends on TRUST POSTURE (WF-001 H-F1 / R01):
+//   - UNMANAGED (no self-trust-roots configured — local dev / first run): best-
+//     effort fail-OPEN. Fall back to the cache (possibly empty), no error. Keeps
+//     the keygen/pack/sign/verify-sig offline flows and first-run working.
+//   - MANAGED (self-trust-roots configured): a fetch failure with NO fresh last-
+//     known-good cache to bound staleness surfaces errRevokedSetUnavailable, so
+//     the trust-decision caller (the sweep) fails CLOSED instead of treating
+//     "no revokes fetched" as "nothing revoked". That closes the revocation-
+//     SUPPRESSION hole where blocking the network / a hostile 5xx / a dead-host
+//     redirect hid a KNOWN-revoked digest. A within-TTL cache is the grace
+//     window: while fresh, revocation is still bounded, so we stay fail-open.
+// We only quarantine a digest DEFINITELY in a verified revoked set — OR, under
+// managed config with the revoked set unavailable and no fresh cache, every
+// managed bundle we can no longer prove is un-revoked.
 
 import (
 	"crypto/ed25519"
@@ -273,8 +284,77 @@ func readRevokedCache(home string, ttl time.Duration) (map[string]struct{}, bool
 	return set, fresh
 }
 
+// revocationAdopted reports whether this host has EVER pulled revocation data —
+// i.e. a revoked-cache file exists on disk (fresh OR stale). It distinguishes an
+// ADOPTED host (subscribed to a revocation feed, whose cache may have gone stale)
+// from an UN-ADOPTED host — pre-D2 / kill-switch-only / first-run — that never
+// pulled a feed at all.
+//
+// It is the precondition that scopes the R01-A hot-path fail-closed: only an
+// ADOPTED managed host fails closed on a stale/unavailable revoked set (it HAS a
+// feed that could be blackholed to suppress a revoke). An un-adopted host has
+// nothing to suppress, so failing it closed would brick a managed install that
+// never subscribed — exactly the pre-D2 brick the kill-switch tests guard. This
+// mirrors revocationSnapshotStale's "no-op unless a signed anchor exists" gating.
+//
+// readRevokedCache collapses "file absent" and "file present-but-stale" into a
+// single !fresh, so a dedicated existence check is required here. NOTE: a same-uid
+// DELETE of the cache file looks un-adopted → fail-open; that is the already-
+// accepted same-uid trust-substrate residual (R01-C delete), NOT a new
+// non-same-uid hole (a network blackhole leaves the file in place → still adopted).
+func revocationAdopted(home string) bool {
+	return fileExists(revokedCachePath(home))
+}
+
+// errRevokedSetUnavailable is the typed fail-CLOSED signal (WF-001 H-F1 / R01):
+// under MANAGED config (self-trust-roots configured) the live revoked-set fetch
+// was unavailable AND there is no fresh last-known-good cache to bound staleness,
+// so a trust-decision consumer MUST NOT treat "no revokes fetched" as "nothing
+// revoked". It is NEVER returned on the unmanaged/dev path (best-effort fail-open)
+// nor while a within-TTL cache still bounds staleness (the grace window).
+var errRevokedSetUnavailable = errors.New("revoked-set unavailable under managed trust roots and no fresh cache (fail-closed)")
+
+// selfTrustPosture classifies the host's REVOCATION trust posture from
+// ~/.claude/trust-roots.yaml (WF-001 R01-C), distinguishing three states:
+//
+//   - ABSENT  → unmanaged (genuine dev / first-run): returns (nil, false). The
+//     caller may fail-OPEN. This is correct by design for first-run/dev.
+//   - PRESENT + valid → managed: returns (tr, true) with the pinned key loaded.
+//   - PRESENT but unparseable/invalid (tampering) → managed: returns (nil, true).
+//     The caller must fail-CLOSED even though no key could be loaded — mirroring
+//     loadGatePolicyW's present-but-broken gate-policy.yaml rule.
+//
+// SCOPE OF THE GUARANTEE (no overclaim): this closes CORRUPTION as a downgrade
+// vector — a same-uid actor who mangles the file cannot flip a managed host to
+// fail-open, it fails CLOSED instead. It does NOT close DELETION: `rm
+// trust-roots.yaml` yields the ABSENT (unmanaged → fail-open) state, indistinguish-
+// able here from a genuine first-run. A same-uid DELETE of the trust-roots file is
+// therefore the ACCEPTED same-uid-substrate residual (consistent with FR-0045 / the
+// g5 same-uid scope), NOT claimed closed. Tombstone-based delete-detection is a
+// possible future hardening, deliberately out of scope here.
+func selfTrustPosture() (*registry.SelfTrustRoots, bool) {
+	tr, err := registry.LoadSelfTrustRoots("")
+	if err == nil && tr != nil && len(tr.PubKey()) != 0 {
+		return tr, true // present + valid → managed
+	}
+	if trustRootsAbsent(err) {
+		return nil, false // absent → unmanaged (fail-open OK)
+	}
+	// present-but-unparseable/invalid, or a degenerate load with no usable key →
+	// treat as managed so corruption cannot downgrade to fail-open.
+	return nil, true
+}
+
+// trustRootsAbsent reports whether a LoadSelfTrustRoots error means the file is
+// simply NOT THERE (absent) — as opposed to present-but-broken. LoadSelfTrustRoots
+// wraps the os error with %w, so errors.Is sees through it.
+func trustRootsAbsent(err error) bool {
+	return err != nil && (errors.Is(err, os.ErrNotExist) || errors.Is(err, registry.ErrTrustRootsMissing))
+}
+
 // sweepRevokedFn is the seam the sweep uses to obtain the revoked set; tests
-// stub it. Production = fetchRevokedWithGossip. Returns (set, fetchedOnline).
+// stub it. Production = fetchRevokedWithGossip. Returns (set, fetchedOnline, err)
+// where a non-nil err is the managed fail-closed signal (errRevokedSetUnavailable).
 var sweepRevokedFn = fetchRevokedWithGossip
 
 // fetchRevokedWithGossip is the production seam: the online/cached revoked set
@@ -282,8 +362,12 @@ var sweepRevokedFn = fetchRevokedWithGossip
 // revoked by any governance-contributing peer is enforced even without pulling
 // from it. Union is the fail-closed direction; the gossip set only grows, so an
 // HTTP refresh can never drop a gossiped revoke.
-func fetchRevokedWithGossip(home string) (map[string]struct{}, bool) {
-	set, online := fetchRevokedOnline(home)
+//
+// The online-fetch error is PROPAGATED unchanged: gossip only UNIONS additional
+// revokes (it never repairs an unavailable online set), so a managed-unavailable
+// online fetch stays fail-closed even when the gossip union is non-empty.
+func fetchRevokedWithGossip(home string) (map[string]struct{}, bool, error) {
+	set, online, err := fetchRevokedOnline(home)
 	out := make(map[string]struct{}, len(set))
 	for d := range set {
 		out[d] = struct{}{}
@@ -291,7 +375,48 @@ func fetchRevokedWithGossip(home string) (map[string]struct{}, bool) {
 	for d := range loadGossipedRevoked(home) {
 		out[d] = struct{}{}
 	}
-	return out, online
+	return out, online, err
+}
+
+// hotPathRevokedTimeout is the HARD wall-clock bound the verify-hook HOT PATH gives
+// a stale-cache revoked-set refresh (WF-001 R01-A). It is deliberately shorter than
+// er1Get's own 15s client timeout: the underlying fetch may keep running (a bounded,
+// self-terminating background goroutine) but the tool call itself never blocks
+// longer than this.
+const hotPathRevokedTimeout = 3 * time.Second
+
+// hotPathRevokedFn is the seam the verify-hook hot path uses to refresh the revoked
+// set when the cache is STALE. Production = boundedHotPathRevoked. Returns
+// (set, online, err); err==errRevokedSetUnavailable is the managed fail-closed
+// signal the caller denies on. Tests stub it to exercise the deny/allow paths
+// without a network.
+var hotPathRevokedFn = boundedHotPathRevoked
+
+// boundedHotPathRevoked wraps fetchRevokedWithGossip in hotPathRevokedTimeout so a
+// slow / hostile / dead registry cannot stall a per-invocation tool call. A timeout
+// is treated as "revocation unavailable": fail CLOSED (errRevokedSetUnavailable)
+// ONLY under managed config — mirroring fetchRevokedOnline — and best-effort empty
+// otherwise, so a dev/unmanaged host is never blocked by a slow network.
+func boundedHotPathRevoked(home string) (map[string]struct{}, bool, error) {
+	type res struct {
+		set    map[string]struct{}
+		online bool
+		err    error
+	}
+	ch := make(chan res, 1) // buffered: the goroutine never blocks even after we time out
+	go func() {
+		s, o, e := fetchRevokedWithGossip(home)
+		ch <- res{s, o, e}
+	}()
+	select {
+	case r := <-ch:
+		return r.set, r.online, r.err
+	case <-time.After(hotPathRevokedTimeout):
+		if _, managed := selfTrustPosture(); managed {
+			return map[string]struct{}{}, false, errRevokedSetUnavailable
+		}
+		return map[string]struct{}{}, false, nil
+	}
 }
 
 // fetchRevocationHeadFn is the seam that fetches a signed revocation HEAD from
@@ -302,29 +427,120 @@ func fetchRevokedWithGossip(home string) (map[string]struct{}, bool) {
 var fetchRevocationHeadFn func(cfg *er1.Config, ctx string, pub ed25519.PublicKey) (map[string]any, bool)
 
 // fetchRevokedOnline fetches the live verified revoked-digest set and refreshes
-// the cache. Fail-OPEN on availability: any fetch error → the cached set
-// (possibly stale/empty), online=false. Never returns an error — revocation
-// enforcement is best-effort availability, exactly as the offline-verify tradeoff
-// documents. When a signed HEAD is available it is adopted (freshness +
-// rollback), and its epoch/issued_at are persisted for the gate (FR-0045 D3/D4).
-func fetchRevokedOnline(home string) (map[string]struct{}, bool) {
-	tr, err := registry.LoadSelfTrustRoots("")
-	if err != nil || tr == nil || len(tr.PubKey()) == 0 {
+// the cache. Its FAIL POLICY is trust-posture-dependent (WF-001 H-F1 / R01 — see
+// the file header):
+//
+//   - UNMANAGED (self-trust-roots absent/unreadable → local dev / first run):
+//     best-effort fail-OPEN. Return the cache (possibly empty), online=false, and
+//     NO error, so offline keygen/pack/sign/verify-sig and first-run keep working.
+//   - MANAGED (self-trust-roots configured): on ANY fetch/config failure — or a
+//     fetched set the signed HEAD proves truncated/forged (F1) — return the fail-
+//     CLOSED signal errRevokedSetUnavailable, UNLESS a within-TTL last-known-good
+//     cache still bounds staleness (the grace window), in which case that cached
+//     set stands (online=false, no error). The sole trust-decision caller (the
+//     sweep) treats a non-nil error as deny/quarantine rather than "nothing
+//     revoked", closing the revocation-suppression hole.
+//
+// On the happy path a signed HEAD is adopted (freshness + rollback) and its
+// epoch/issued_at persisted for the gate (FR-0045 D3/D4).
+func fetchRevokedOnline(home string) (map[string]struct{}, bool, error) {
+	tr, managed := selfTrustPosture()
+	if !managed {
+		// UNMANAGED / dev / first-run: the trust-roots file is ABSENT → best-effort
+		// fail-open (return the cache, possibly empty, no error).
 		cached, _ := readRevokedCache(home, revokedCacheTTL)
-		return cached, false
+		return cached, false, nil
 	}
+	if tr == nil {
+		// MANAGED via a PRESENT-BUT-CORRUPT trust-roots file (WF-001 R01-C): the file
+		// exists but is unparseable/invalid, so we cannot load the pinned key. A same-
+		// uid attacker must NOT be able to downgrade a managed host to fail-open by
+		// corrupting trust-roots.yaml (mirrors gate-policy.yaml's present-but-broken →
+		// fail-closed rule). Fail CLOSED (grace-bounded) rather than fetch/verify.
+		return revokedUnavailableUnderManaged(home)
+	}
+	// MANAGED + valid pinned key from here: a fetch failure must fail CLOSED (bounded
+	// by the AUTHENTICATED grace window) rather than degrade to an empty/stale set.
 	cfg, err := resolveER1Config(envOr("ER1_TARGET", "prod"))
 	if err != nil {
-		cached, _ := readRevokedCache(home, revokedCacheTTL)
-		return cached, false
+		return revokedUnavailableUnderManaged(home)
 	}
 	ctx := envOr("ER1_CONTEXT", "skills")
 	set, err := registry.FetchRevokedDigests(cfg, ctx, tr.PubKey())
 	if err != nil {
-		cached, _ := readRevokedCache(home, revokedCacheTTL)
-		return cached, false
+		return revokedUnavailableUnderManaged(home)
 	}
-	return applyFetchedRevokedSet(home, cfg, ctx, tr.PubKey(), set)
+	set, online := applyFetchedRevokedSet(home, cfg, ctx, tr.PubKey(), set)
+	if !online {
+		// applyFetchedRevokedSet REFUSED the fetched set: the signed HEAD verified
+		// but bound a different revoked_set_root (F1), i.e. the fetched set is
+		// truncated/forged. Under managed config that is a fail-closed condition,
+		// subject to the same grace window as an unreachable registry.
+		return revokedUnavailableUnderManaged(home)
+	}
+	return set, true, nil
+}
+
+// revokedUnavailableUnderManaged is the MANAGED fail-closed path. The live fetch
+// was unavailable (or the fetched set was refused). A within-TTL last-known-good
+// cache is the GRACE WINDOW: while it is fresh, revocation staleness is still
+// bounded (same revokedCacheTTL the offline gate trusts a cached revoked set for),
+// so we return it with online=false and NO error. Only once the cache is also
+// STALE/ABSENT — no bounded snapshot at all — do we surface errRevokedSetUnavailable
+// so the trust-decision caller fails closed. (The cache's FetchedAt is refreshed
+// only on a SUCCESSFUL fetch, so continuous failure ages it out of the window.)
+func revokedUnavailableUnderManaged(home string) (map[string]struct{}, bool, error) {
+	cached, fresh := readRevokedCache(home, revokedCacheTTL)
+	// WF-001 R01-B — the grace window must be AUTHENTICATED. readRevokedCache's
+	// `fresh` derives purely from the UNSIGNED, same-uid-writable fetched_at, so a
+	// forged {digests:[],fetched_at:now} would ride grace forever with an EMPTY set,
+	// suppressing every revoke. Require, in addition to the plain-TTL freshness, a
+	// pinned-key-authenticated basis (graceAuthenticated) before opening the window.
+	if fresh && graceAuthenticated(home, cached) {
+		return cached, false, nil // grace window: AUTHENTICATED last-known-good stands
+	}
+	return cached, false, errRevokedSetUnavailable
+}
+
+// graceAuthenticated reports whether the last-known-good cache may ride the managed
+// grace window on an AUTHENTICATED basis (WF-001 R01-B). It defeats a forged plain
+// fetched_at (and a stripped revoked set under an otherwise-valid HEAD). ALL of:
+//
+//  1. a signed revocation HEAD is present and RE-VERIFIES against the pinned key
+//     (verifiedAdoptedHead) — an unsigned/forged timestamp alone never opens grace;
+//  2. its AUTHENTICATED issued_at is within revokedCacheTTL of now (recent SIGNED
+//     contact, not merely a recent local write);
+//  3. the cached revoked set BINDS to the HEAD's revoked_set_root (the digests were
+//     not stripped/truncated under an otherwise-valid HEAD);
+//  4. its epoch is NOT below the persisted monotonic high-water floor (WF-001 R01-B
+//     rollback guard) — a validly-signed but ROLLED-BACK HEAD (older epoch, issued_at
+//     still <12h) must not open grace and undo an already-adopted revoke. This is the
+//     same high-water clamp readRevokedCacheHead applies (~:257-262).
+//
+// A pre-D2 install with no signed HEAD therefore gets NO grace (fail-closed once
+// the cache is stale + fetch unavailable) — the coordinator-accepted "require a
+// verified signed HEAD present, else fail-closed" posture.
+func graceAuthenticated(home string, cached map[string]struct{}) bool {
+	head, ok := verifiedAdoptedHead(home)
+	if !ok {
+		return false // no pinned-key-verified HEAD → no authenticated freshness
+	}
+	issued, err := registry.HeadIssuedAt(head)
+	if err != nil || sweepClockFn().UTC().Sub(issued) > revokedCacheTTL {
+		return false // stale (or unparseable) AUTHENTICATED anchor
+	}
+	// Rollback guard: a signed-but-replayed OLDER HEAD (epoch below the persisted
+	// high-water) must not ride grace, or it would resurrect a revoked bundle for a
+	// TTL window. Reuse the high-water floor readRevokedCacheHead maintains.
+	if epoch, herr := registry.HeadEpoch(head); herr != nil {
+		return false // unreadable epoch → cannot prove monotonicity → fail-closed
+	} else if floor, _ := readRevokedCacheHead(home); epoch < floor {
+		return false // rolled-back HEAD below the high-water floor
+	}
+	if registry.VerifyRevocationHeadSet(head, setToSortedSlice(cached)) != nil {
+		return false // cached set does not bind to the signed HEAD (stripped digests)
+	}
+	return true
 }
 
 // applyFetchedRevokedSet reconciles a freshly-fetched revoked set with the signed

@@ -202,6 +202,11 @@ func refusalCodeForHook(exitCode int, reason string) string {
 	// mandate stale case so the Art.12 trail separates the two channels.
 	case strings.Contains(reason, "bundle_revocation_stale"):
 		return "bundle_revocation_stale"
+	// WF-001 H-F1 / R01-A — the managed revoked-set was unavailable on the hot path
+	// with no authenticated grace (fail-closed). Distinct from the plain-stale case:
+	// here we had NO trustworthy snapshot at all, not merely an old one.
+	case strings.Contains(reason, "bundle_revocation_unavailable_managed"):
+		return "bundle_revocation_unavailable"
 	// Both the mandate path ("agentid_emergency_list_untrusted") and the
 	// unconditional runtime path ("agent_emergency_list_untrusted") match this
 	// common substring → a present-but-forged emergency file's fail-closed deny.
@@ -502,14 +507,51 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 			fmt.Sprintf("skillctl: BLOCKED '%s' — offline 'locked' state (exit %d): the host is managed-enterprise but has NO trust basis (no trust roots, self/ER1 roots, or provenance sidecar), so offline_policy denies all non-allowlisted managed skills. Restore a trust root or a signed offline checkpoint.", skill, exitOfflineLocked))
 	}
 
-	// SPEC-0266 F1: a bundle revoked AFTER install is denied by the offline gate
-	// too, via the sweep-maintained revoked-digest cache (consulted only while
-	// fresh — the sweep is the authority that refreshes it online).
+	// SPEC-0266 F1 + WF-001 H-F1 / R01-A — bundle-revocation at the HOT PATH.
+	// A bundle revoked AFTER install must be denied PER-INVOCATION, not only at the
+	// SessionStart sweep. The cache is consulted while FRESH (the sweep refreshes
+	// it); the pre-fix code SKIPPED the check on a stale/empty cache, so a revoked
+	// skill kept executing between sweeps (the crux R01-A the challenge gate found).
+	// Close that under MANAGED config: on a stale/empty cache attempt ONE BOUNDED
+	// online refresh on the hot path, and fail CLOSED when the managed revoked set
+	// is unavailable (no authenticated grace). The refresh runs ONLY when the cache
+	// is stale — the fresh path adds ZERO latency to a normal invocation.
 	if home != "" {
-		if revset, fresh := readRevokedCache(home, revokedCacheTTL); fresh {
+		revset, fresh := readRevokedCache(home, revokedCacheTTL)
+		if !fresh {
+			// Stale/empty cache. The managed fail-closed refresh engages ONLY for a
+			// MANAGED host that has ADOPTED a revocation feed (a revoked-cache file
+			// exists — the sweep pulled one at least once). Two exemptions keep a stale
+			// cache from being used AND skip the fetch entirely (no deny, no latency):
+			//   - UNMANAGED/dev — the sweep is the authority; first-run/offline dev
+			//     must stay working;
+			//   - UN-ADOPTED managed (no revoked-cache file at all) — pre-D2 /
+			//     kill-switch-only hosts that never subscribed to a feed have NOTHING
+			//     to suppress, so failing them closed would brick them (the pre-D2
+			//     brick the kill-switch tests guard). A blackholed ADOPTED host still
+			//     has its (now-stale) cache FILE → adopted → the fail-closed engages,
+			//     so R01-A is preserved. Mirrors revocationSnapshotStale's "no-op
+			//     unless a signed anchor exists" precondition below.
+			if _, managed := selfTrustPosture(); !managed || !revocationAdopted(home) {
+				revset = nil // unmanaged, or un-adopted managed: do not enforce / do not fetch
+			} else {
+				// hotPathRevokedFn returns errRevokedSetUnavailable ONLY under managed
+				// config with no authenticated grace (see fetchRevokedOnline /
+				// revokedUnavailableUnderManaged / boundedHotPathRevoked). On success it
+				// also refreshes the cache, so the next invocation rides the fresh path.
+				set, _, ferr := hotPathRevokedFn(home)
+				if errors.Is(ferr, errRevokedSetUnavailable) {
+					audReason = "bundle_revocation_unavailable_managed"
+					return emitDeny(stdout, stderr,
+						fmt.Sprintf("skillctl: BLOCKED '%s' — revocation authority unavailable under managed trust roots and no fresh signed snapshot (exit %d, fail-closed, WF-001 H-F1): refusing to run against a revocation state we cannot prove current. Restore registry reachability or refresh the signed revocation HEAD (`skillctl revoke feed --refresh`).", skill, exitRevocationStale))
+				}
+				revset = set
+			}
+		}
+		if revset != nil {
 			if dig := installedSkillDigest(home, skill); dig != "" {
 				if _, bad := revset[dig]; bad {
-					audReason = "revoked (BundleRevokedEvent; offline cache)"
+					audReason = "revoked (BundleRevokedEvent)"
 					return emitDeny(stdout, stderr,
 						fmt.Sprintf("skillctl: BLOCKED '%s' — bundle revoked (exit %d); a BundleRevokedEvent was published for this digest. Run `skillctl verify --all` to refresh + quarantine.", skill, exitBundleRevoked))
 				}

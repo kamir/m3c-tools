@@ -74,14 +74,18 @@ type sweepEntry struct {
 }
 
 type sweepReport struct {
-	SkillsDir   string       `json:"skills_dir"`
-	Total       int          `json:"total"`
-	Verified    int          `json:"verified"`
-	Quarantined int          `json:"quarantined"`
-	Unverified  int          `json:"unverified"`
-	Skipped     int          `json:"skipped"`
-	RootsError  string       `json:"roots_error,omitempty"`
-	Entries     []sweepEntry `json:"entries"`
+	SkillsDir   string `json:"skills_dir"`
+	Total       int    `json:"total"`
+	Verified    int    `json:"verified"`
+	Quarantined int    `json:"quarantined"`
+	Unverified  int    `json:"unverified"`
+	Skipped     int    `json:"skipped"`
+	RootsError  string `json:"roots_error,omitempty"`
+	// RevocationUnavailable is the WF-001 H-F1 fail-closed signal: under managed
+	// self-trust-root config the revoked-set fetch was unavailable AND no fresh
+	// cache bounds staleness, so managed skills are failed CLOSED this sweep.
+	RevocationUnavailable string       `json:"revocation_unavailable,omitempty"`
+	Entries               []sweepEntry `json:"entries"`
 }
 
 // runVerifyAll implements `skillctl verify --all`.
@@ -143,12 +147,24 @@ func runVerifyAll(args []string, stdout, stderr io.Writer) int {
 	pol := loadGatePolicy()
 	start := sweepClockFn()
 
-	// SPEC-0266 F1: fetch the live revoked-digest set once (fail-open — a fetch
-	// failure yields the cached/empty set, never a false quarantine). The sweep
-	// is the revocation authority: a managed skill whose bundle digest is revoked
-	// is quarantined regardless of its §7 result, and the set is cached so the
+	// SPEC-0266 F1: fetch the live revoked-digest set once. The sweep is the
+	// revocation authority: a managed skill whose bundle digest is revoked is
+	// quarantined regardless of its §7 result, and the set is cached so the
 	// per-invocation offline gate denies it too until the next sweep.
-	revoked, _ := sweepRevokedFn(home)
+	//
+	// WF-001 H-F1 / R01 — a non-nil error is the MANAGED fail-CLOSED signal: under
+	// self-trust-root config the revoked-set fetch was unavailable AND no fresh
+	// last-known-good cache bounds staleness, so we can no longer prove any managed
+	// bundle is un-revoked. We must NOT read the (empty/stale) set as "nothing
+	// revoked" — that is exactly the revocation-suppression the wave-1 challenge
+	// gate flagged (block the network / hostile 5xx → empty set → known-revoked
+	// digest runs). The UNMANAGED/dev path returns err==nil (best-effort fail-open),
+	// so this never bricks a default machine. See the per-skill fail-closed branch.
+	revoked, _, revErr := sweepRevokedFn(home)
+	revUnavailable := revErr != nil
+	if revUnavailable {
+		rep.RevocationUnavailable = revErr.Error()
+	}
 
 	for _, e := range entries {
 		name := e.Name()
@@ -173,6 +189,25 @@ func runVerifyAll(args []string, stdout, stderr io.Writer) int {
 				rep.Skipped++
 				rep.Entries = append(rep.Entries, sweepEntry{Skill: name, State: "skipped", Reason: "unmanaged (no .skb) — not skillctl-installed"})
 			}
+			continue
+		}
+
+		// WF-001 H-F1 / R01 — REVOCATION-SUPPRESSION FAIL-CLOSED. The managed
+		// revoked-set fetch was unavailable AND no fresh last-known-good cache
+		// bounds staleness (see fetchRevokedOnline / revokedUnavailableUnderManaged),
+		// so we cannot prove THIS managed bundle is not revoked. Fail CLOSED — quar-
+		// antine rather than let the empty/stale set read as "nothing revoked" (the
+		// pre-fix fail-open: block the network → known-revoked digest still runs).
+		// Only reached under managed config (self-trust-roots present); the unmanaged
+		// path returns err==nil, so a default/dev machine never lands here. In report-
+		// only mode this is advisory (quarantineOrReport does not move anything until
+		// --quarantine). Placed BEFORE the definite-revoke check because the cached
+		// set here is stale and cannot be trusted as authoritative.
+		if revUnavailable {
+			rep.Entries = append(rep.Entries, quarantineOrReport(home, name, *quarantine,
+				fmt.Sprintf("revocation authority unavailable under managed trust roots and no fresh cache — failing closed (cannot confirm this bundle is not revoked; WF-001 H-F1): %v", revErr),
+				exitRevocationStale, &rep))
+			recordVerdict(home, name, *sessionID, exitRevocationStale, "", sweepClockFn())
 			continue
 		}
 
@@ -378,6 +413,10 @@ func emitSweepJSON(w io.Writer, rep sweepReport) {
 func printSweepHuman(w io.Writer, rep sweepReport, doQuarantine bool) {
 	if rep.RootsError != "" {
 		fmt.Fprintf(w, "⚠ trust roots unavailable: %s\n  → managed skills reported 'unverified' (not quarantined).\n", rep.RootsError)
+	}
+	if rep.RevocationUnavailable != "" {
+		fmt.Fprintf(w, "⛔ revocation authority unavailable under managed trust roots + no fresh cache: %s\n  → managed skills FAIL CLOSED (WF-001 H-F1)%s.\n",
+			rep.RevocationUnavailable, map[bool]string{true: " — quarantined", false: " — report-only, pass --quarantine to move them out"}[doQuarantine])
 	}
 	for _, e := range rep.Entries {
 		var mark string
