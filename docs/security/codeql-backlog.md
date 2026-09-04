@@ -96,9 +96,16 @@ modelling the guard above it.
 | `go/zipslip` | `pkg/skillbundle/unpack.go` | **False positive.** `sanitizeArchivePath` rejects NUL bytes, backslashes, colons (the NTFS ADS and drive separator), absolute paths, `..` traversal and Windows volume prefixes, and the extraction joins under a resolved destination root. CodeQL does not model the custom sanitizer, so it sees an unsanitized `tar.Header.Name` reaching a file operation. Rewriting working, well-reasoned traversal defence to satisfy a query that cannot see it would trade real safety for a green tick. |
 | `go/weak-sensitive-data-hashing` | `pkg/pocket/syncapi.go` | **Misclassification, and changing it would cost data.** `DeriveAccountID` derives a stable identifier from a high-entropy `pk_` API key with SHA-256. It is not password storage, so "not computationally expensive" does not apply; brute-forcing a `pk_` key through the hash is not a practical attack. More importantly the derived id is **persisted in existing sync ledgers**, so switching to HMAC or a slow KDF would orphan every already-synced account. The alert is accepted, not fixed. |
 
-Both need a human to dismiss them in the GitHub Code Scanning UI with a reason.
-Dismissal is a UI action; no code change removes an alert that CodeQL believes
-in. Until someone does, the check stays red, and this section is why.
+Both are now **dismissed** in Code Scanning with those reasons recorded on the
+alert (`go/zipslip` as "false positive", `go/weak-sensitive-data-hashing` as
+"won't fix"). Dismissal is an account action, not a code change: no commit
+removes an alert that CodeQL believes in. If either is ever reopened, this
+section is the reason it was closed.
+
+A third alert, `go/disabled-certificate-check` on `cmd/skillctl/replay_cmds.go`,
+is dismissed once the restructure above is on the default branch: the loopback
+property is checked at runtime on the URL being requested, and CodeQL flags the
+`InsecureSkipVerify` literal without seeing the guard.
 
 ---
 
@@ -177,15 +184,28 @@ These need repository-admin rights and cannot be done from a pull request.
    gosec no-new-findings (in-CI diff gate)
    Ratchet coverage (skillctl trust surface)
    Validate branch name
+   CodeQL
    ```
 
-2. **Require code scanning results** (Settings, Code security), so
-   `Code scanning results / CodeQL` blocks rather than warns. Do this **after**
-   dismissing the two alerts named above, otherwise it blocks every PR on
-   findings that are documented as accepted.
+   These are the check-run names exactly as reported. Two traps: the code
+   scanning check is called plain **`CodeQL`**, not "Code scanning results /
+   CodeQL"; and the `gosec` check run reports **skipped** on most runs, so it is
+   deliberately not in the list.
 
-3. **Turn on secret-scanning push protection.** It refuses a push that contains
-   a recognised credential, which is strictly earlier than the gitleaks job.
+   `CodeQL` only belongs in that list **after** the accepted alerts are
+   dismissed, otherwise it blocks every pull request on findings this file
+   documents as accepted.
+
+   Verify with:
+
+   ```bash
+   gh api repos/<owner>/<repo>/branches/master/protection \
+     --jq '{required: .required_status_checks.contexts, strict: .required_status_checks.strict, admins: .enforce_admins.enabled}'
+   ```
+
+2. **Turn on secret-scanning push protection** (Settings, Code security). It
+   refuses a push that contains a recognised credential, which is strictly
+   earlier than the gitleaks job.
 
 ---
 
