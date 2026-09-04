@@ -293,19 +293,23 @@ func readRevokedCache(home string, ttl time.Duration) (map[string]struct{}, bool
 var errRevokedSetUnavailable = errors.New("revoked-set unavailable under managed trust roots and no fresh cache (fail-closed)")
 
 // selfTrustPosture classifies the host's REVOCATION trust posture from
-// ~/.claude/trust-roots.yaml (WF-001 R01-C), distinguishing three states so a
-// same-uid attacker cannot downgrade a managed host to fail-open by corrupting
-// the file:
+// ~/.claude/trust-roots.yaml (WF-001 R01-C), distinguishing three states:
 //
 //   - ABSENT  → unmanaged (genuine dev / first-run): returns (nil, false). The
-//     caller may fail-OPEN.
+//     caller may fail-OPEN. This is correct by design for first-run/dev.
 //   - PRESENT + valid → managed: returns (tr, true) with the pinned key loaded.
 //   - PRESENT but unparseable/invalid (tampering) → managed: returns (nil, true).
 //     The caller must fail-CLOSED even though no key could be loaded — mirroring
 //     loadGatePolicyW's present-but-broken gate-policy.yaml rule.
 //
-// Only an ABSENT file yields the fail-open posture; every other outcome is treated
-// as managed.
+// SCOPE OF THE GUARANTEE (no overclaim): this closes CORRUPTION as a downgrade
+// vector — a same-uid actor who mangles the file cannot flip a managed host to
+// fail-open, it fails CLOSED instead. It does NOT close DELETION: `rm
+// trust-roots.yaml` yields the ABSENT (unmanaged → fail-open) state, indistinguish-
+// able here from a genuine first-run. A same-uid DELETE of the trust-roots file is
+// therefore the ACCEPTED same-uid-substrate residual (consistent with FR-0045 / the
+// g5 same-uid scope), NOT claimed closed. Tombstone-based delete-detection is a
+// possible future hardening, deliberately out of scope here.
 func selfTrustPosture() (*registry.SelfTrustRoots, bool) {
 	tr, err := registry.LoadSelfTrustRoots("")
 	if err == nil && tr != nil && len(tr.PubKey()) != 0 {
@@ -485,7 +489,11 @@ func revokedUnavailableUnderManaged(home string) (map[string]struct{}, bool, err
 //  2. its AUTHENTICATED issued_at is within revokedCacheTTL of now (recent SIGNED
 //     contact, not merely a recent local write);
 //  3. the cached revoked set BINDS to the HEAD's revoked_set_root (the digests were
-//     not stripped/truncated under an otherwise-valid HEAD).
+//     not stripped/truncated under an otherwise-valid HEAD);
+//  4. its epoch is NOT below the persisted monotonic high-water floor (WF-001 R01-B
+//     rollback guard) — a validly-signed but ROLLED-BACK HEAD (older epoch, issued_at
+//     still <12h) must not open grace and undo an already-adopted revoke. This is the
+//     same high-water clamp readRevokedCacheHead applies (~:257-262).
 //
 // A pre-D2 install with no signed HEAD therefore gets NO grace (fail-closed once
 // the cache is stale + fetch unavailable) — the coordinator-accepted "require a
@@ -498,6 +506,14 @@ func graceAuthenticated(home string, cached map[string]struct{}) bool {
 	issued, err := registry.HeadIssuedAt(head)
 	if err != nil || sweepClockFn().UTC().Sub(issued) > revokedCacheTTL {
 		return false // stale (or unparseable) AUTHENTICATED anchor
+	}
+	// Rollback guard: a signed-but-replayed OLDER HEAD (epoch below the persisted
+	// high-water) must not ride grace, or it would resurrect a revoked bundle for a
+	// TTL window. Reuse the high-water floor readRevokedCacheHead maintains.
+	if epoch, herr := registry.HeadEpoch(head); herr != nil {
+		return false // unreadable epoch → cannot prove monotonicity → fail-closed
+	} else if floor, _ := readRevokedCacheHead(home); epoch < floor {
+		return false // rolled-back HEAD below the high-water floor
 	}
 	if registry.VerifyRevocationHeadSet(head, setToSortedSlice(cached)) != nil {
 		return false // cached set does not bind to the signed HEAD (stripped digests)

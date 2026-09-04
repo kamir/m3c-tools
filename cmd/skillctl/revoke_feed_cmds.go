@@ -71,11 +71,12 @@ func runRevokeFeed(args []string, stdout, stderr io.Writer) int {
 			len(set), epoch, issuedAt, online)
 		if ferr != nil {
 			// WF-001 H-F1 — MANAGED fail-closed: the revoked-set fetch was unavailable
-			// and no fresh cache bounds staleness. Surface it (non-zero exit) so an
-			// operator refreshing the feed sees revocation could NOT be confirmed and
-			// the sweep will fail managed skills closed — rather than a misleading OK.
-			fmt.Fprintf(stderr, "skillctl revoke feed --refresh: revocation unavailable under managed trust roots (fail-closed): %v\n", ferr)
-			return exitGeneric
+			// and no fresh cache bounds staleness. Surface it with the SAME semantic
+			// exit code the sweep + hook use (exitRevocationStale / 22), not the generic
+			// 1, so an operator script keying on 22 catches this fail-closed signal at
+			// all three sites — rather than a misleading OK.
+			fmt.Fprintf(stderr, "skillctl revoke feed --refresh: revocation unavailable under managed trust roots (fail-closed, exit %d): %v\n", exitRevocationStale, ferr)
+			return exitRevocationStale
 		}
 		return exitOK
 	}

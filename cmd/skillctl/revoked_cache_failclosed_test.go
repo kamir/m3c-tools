@@ -238,6 +238,30 @@ func TestRevokedUnavailableUnderManaged_AuthenticatedGrace(t *testing.T) {
 			t.Fatalf("a signed HEAD older than the TTL must NOT open grace; got %v", err)
 		}
 	})
+
+	// R01-B rollback BITE — a validly-signed but ROLLED-BACK HEAD (epoch below the
+	// persisted high-water, issued_at still <12h, set binds) must NOT open grace, or
+	// it would resurrect an already-adopted revoke for a TTL window. Everything else
+	// is deliberately valid so the ONLY thing keeping grace shut is the epoch clamp:
+	// remove the clamp in graceAuthenticated and this test opens grace (err==nil) and
+	// FAILS.
+	t.Run("rolled-back HEAD below high-water floor -> fail closed", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		setUserProfile(t, home)
+		pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+		writeSelfTrustRootsKey(t, home, pub)
+		dg := headTestDigest('a')
+		set := map[string]struct{}{dg: {}}
+		// Establish high-water epoch 2 in the unsigned json (also writes a FRESH
+		// fetched_at + the {dg} set that binds to the head below).
+		writeRevokedCacheHead(home, set, 2, sweepClockFn().UTC().Format(time.RFC3339))
+		// Present a validly-signed epoch-1 HEAD with a fresh issued_at (the replay).
+		installSignedHead(t, home, priv, 1, sweepClockFn().UTC(), []string{dg})
+		if _, _, err := revokedUnavailableUnderManaged(home); !errors.Is(err, errRevokedSetUnavailable) {
+			t.Fatalf("a rolled-back (epoch 1 < high-water 2) signed HEAD must NOT open grace; got %v", err)
+		}
+	})
 }
 
 // ---------------------------------------------------------------------------
