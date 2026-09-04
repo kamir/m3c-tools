@@ -229,7 +229,7 @@ G304	cmd/skillctl/intent_cmds.go	if fromYAML != "" { raw, err := os.ReadFile(fro
 G304	cmd/skillctl/invocation_trail.go	func readLastTrailLine(path string) []byte { f, err := os.Open(path) if err != nil {
 G304	cmd/skillctl/invocation_trail.go	} f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) if err != nil {
 G304	cmd/skillctl/pin_cmds.go	// Honest re-verify: read back what actually landed on disk and verify THAT. back, rerr := os.ReadFile(target) if rerr != nil {
-G304	cmd/skillctl/pin_cmds.go	// hand: never a blind copy. existing, readErr := os.ReadFile(target) var content []byte
+G304	cmd/skillctl/pin_cmds.go	// hand, never a blind copy. existing, readErr := os.ReadFile(target) var content []byte
 G304	cmd/skillctl/pin_cmds.go	data, readErr := os.ReadFile(path) var res pin.StatusResult
 G304	cmd/skillctl/propose_cmds.go	path := filepath.Join(dir, "notify-queue.jsonl") f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) if err != nil {
 G304	cmd/skillctl/propose_cmds.go	skillMD := filepath.Join(skillDir, "SKILL.md") body, err := os.ReadFile(skillMD) if err != nil {
@@ -435,7 +435,7 @@ G704	pkg/plaud/er1source.go	req, err := http.NewRequest("GET", endpoint, nil) if
 G704	pkg/plaud/er1source.go	} resp, err := client.Do(req) if err != nil {
 G705	internal/thinking/api/auth.go	w.WriteHeader(http.StatusUnauthorized) _, _ = w.Write([]byte(fmt.Sprintf(`{"error":"unauthorized","detail":%q}`, msg))) }
 G705	internal/thinking/api/server.go	} _, _ = w.Write(row) }
-G706	cmd/m3c-tools/main.go	case plaud.TranscribeModeOff: log.Printf("[plaud] %s: no transcript, transcription off, audio only", recID) }
+G706	cmd/m3c-tools/main.go	case plaud.TranscribeModeOff: log.Printf("[plaud] %s: no transcript: transcription off, audio only", recID) }
 G706	cmd/m3c-tools/main.go	doTranscribe = true log.Printf("[plaud] %s: no transcript, requesting server transcription (queue mode)", recID) case plaud.TranscribeModeLazy:
 G706	cmd/m3c-tools/main.go	if dlErr != nil { log.Printf("[plaud] download %s FAIL: %v", recID, dlErr) summary.Failed++
 G706	cmd/m3c-tools/main.go	if err != nil { log.Printf("[screenshot] invalid M3C_SCREENSHOT_CLIPBOARD_TIMEOUT_SEC=%q; using default %ds", raw, int(defaultTimeout/time.Second)) return defaultTimeout
@@ -445,15 +445,15 @@ G706	cmd/m3c-tools/main.go	if plmBase != "" && (er1Cfg.APIKey != "" || deviceTok
 G706	cmd/m3c-tools/main.go	if raw == "0" || raw == "false" || raw == "off" || raw == "no" { log.Printf("[whisper] preload disabled by M3C_WHISPER_PRELOAD=%q", raw) return
 G706	cmd/m3c-tools/main.go	if recErr != nil { log.Printf("[plaud] get recording %s FAIL: %v", recID, recErr) summary.Failed++
 G706	cmd/m3c-tools/main.go	if serverSynced > 0 { log.Printf("[plaud] server check: %d/%d already synced remotely", serverSynced, len(recordingIDs)) var filtered []string
-G706	cmd/m3c-tools/main.go	if txErr != nil { log.Printf("[plaud] no Plaud transcript for %s: %v, transcribe_mode=%s", recID, txErr, cfg.TranscribeMode) } else {
-G706	cmd/m3c-tools/main.go	if upErr != nil { log.Printf("[plaud] upload %s FAIL: %v, saving locally", recID, upErr) // Fallback: save to ~/plaud-sync/<recID>/ for later re-upload.
+G706	cmd/m3c-tools/main.go	if txErr != nil { log.Printf("[plaud] no Plaud transcript for %s: %v: transcribe_mode=%s", recID, txErr, cfg.TranscribeMode) } else {
+G706	cmd/m3c-tools/main.go	if upErr != nil { log.Printf("[plaud] upload %s FAIL: %v: saving locally", recID, upErr) // Fallback: save to ~/plaud-sync/<recID>/ for later re-upload.
 G706	cmd/m3c-tools/main.go	log.Printf("Launching menu bar app (title=%q, icon=%q, log=%q)", cfg.Title, cfg.IconPath, cfg.LogPath) app.Run()
-G706	cmd/m3c-tools/main.go	tags = "todo.transcribe," + tags log.Printf("[plaud] %s: no transcript: tagged todo.transcribe (lazy mode)", recID) case plaud.TranscribeModeOff:
+G706	cmd/m3c-tools/main.go	tags = "todo.transcribe," + tags log.Printf("[plaud] %s: no transcript, tagged todo.transcribe (lazy mode)", recID) case plaud.TranscribeModeOff:
 G706	cmd/m3c-tools/main.go	} else { log.Printf("[timetracking] PLM sync disabled (base=%q key_set=%v device_token=%v)", plmBase, er1Cfg.APIKey != "", deviceToken != "")
 G706	cmd/m3c-tools/main.go	} log.Printf("[plaud] downloaded %d bytes (%s)", len(audioData), audioFmt)
 G706	cmd/m3c-tools/main.go	} log.Printf("[plaud] downloading audio for %s (%s)...", recID, rec.Title) audioData, audioFmt, dlErr := client.DownloadAudio(recID)
 G706	cmd/m3c-tools/main.go	} log.Printf("[plaud] got Plaud transcript for %s (%d chars, summary %d chars)", recID, len(tx.Text), len(tx.Summary)) }
 G706	cmd/m3c-tools/main.go	} log.Printf("[plaud] saved locally to ~/plaud-sync/%s/", recID[:8]) // Record in tracking DB as locally saved.
 G706	cmd/m3c-tools/main.go	} log.Printf("[plaud] upload %s DONE doc_id=%s", recID, resp.DocID)
-G706	pkg/menubar/app.go	// registered at runtime: the decisive signal when "no icon" is reported. log.Printf("[menubar] menu bar state: icon_applied=%v image=%q title=%q icon_path=%q", iconApplied, state.Image, state.Title, a.Config.IconPath)
+G706	pkg/menubar/app.go	// registered at runtime. The decisive signal when "no icon" is reported. log.Printf("[menubar] menu bar state: icon_applied=%v image=%q title=%q icon_path=%q", iconApplied, state.Image, state.Title, a.Config.IconPath)
 G706	pkg/menubar/fetch.go	} log.Printf("[fetch] using proxy: %s", redacted) return api
