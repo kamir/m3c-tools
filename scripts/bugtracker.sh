@@ -34,7 +34,8 @@
 # resolve to the wrong item.
 #
 # Commands:
-#   next-id [BUG|FR]              next free id of that kind (default BUG)
+#   next-id [BUG|FR] [--no-fetch] next free id of that kind (default BUG)
+#   claim  <ID>                   record the id in the shared slot table
 #   path   <ID>                   resolve the report file
 #   status <ID> [STATUS]          read, or set, the canonical status
 #   issue  <ID>                   print the linked issue reference
@@ -47,6 +48,17 @@
 # Closing an item as done requires a `- **Spec:**` line. Solving an issue means
 # serving the contract it belongs to, so the value may be `none: <reason>`, but
 # the question has to have been ANSWERED rather than skipped.
+#
+# ALLOCATION IS A WRITE, NOT A READ. `next-id` only READS: it takes the ceiling
+# from every claim it can see, which still lets two sessions asking at the same
+# moment receive the same number — that is how FR-0096 was handed out twice.
+# `claim` is the write. Until an id is recorded in the shared slot table
+# ($M3C_SLOT_TABLE) it is not allocated.
+#
+# Why `claim` is a separate verb and not part of `next-id`: a slot row carries the
+# FILENAME, which does not exist until the report is written. Claiming at next-id
+# time could only reserve a placeholder, and the checker would need a special case
+# for it. So the order is: next-id -> write the file -> claim.
 #
 # Exit: 0 ok · 1 a check failed (drift, leak, refusal) · 2 usage/config error.
 set -euo pipefail
@@ -213,7 +225,10 @@ EOF
     *) note "next-id: highest $kind claim is $(printf '%s-%04d' "$kind" "$max") in $top: not in your working tree" ;;
   esac
 
-  printf '%s-%04d\n' "$kind" "$((max + 1))"
+  local next; next=$(printf '%s-%04d' "$kind" "$((max + 1))")
+  note "next-id: $next is NOT yet allocated — reading a ceiling is not a claim.
+  Write the report, then: $(basename "$0") claim $next"
+  printf '%s\n' "$next"
 }
 
 # ---------------------------------------------------------------- fields ----
@@ -369,6 +384,45 @@ cmd_open() {
   echo "$repo#$num  $url"
 }
 
+# ----------------------------------------------------------------- claim ----
+
+slot_table() {
+  local t=${M3C_SLOT_TABLE:-}
+  [ -n "$t" ] || die "M3C_SLOT_TABLE is not set — there is nowhere to record the claim.
+  Point it at the shared slot table, the same file the slot checker reads.
+  Until a number is written there it is NOT allocated: a number that exists only
+  in your working copy, or in a conversation, is one someone else can be handed a
+  moment later." 1
+  [ -f "$t" ] || die "the slot table does not exist: $t" 1
+  printf '%s\n' "$t"
+}
+
+cmd_claim() {
+  local id file table num kind base row existing
+  id=$(item_id "$1"); file=$(report_path "$1"); table=$(slot_table)
+  kind=$(kind_of "$id"); num=${id#*-}; base=$(basename "$file")
+
+  # Already taken? The same file means nothing to do; a different one is the
+  # collision this whole mechanism exists to surface.
+  existing=$(sed -n -E "s/^\|[[:space:]]*$num[[:space:]]*\|[[:space:]]*\`($kind-[^\`]+)\`.*/\1/p" \
+             "$table" | head -1)
+  if [ -n "$existing" ]; then
+    if [ "$existing" = "$base" ]; then
+      echo "$id already claimed by this file — nothing to do"
+      return 0
+    fi
+    die "$id is already claimed by '$existing'.
+  Yours is '$base'. One of them has to move, and the later one yields.
+  Get a fresh number with: $(basename "$0") next-id $kind" 1
+  fi
+
+  row="| $num | \`$base\` | angelegt $(date +%Y-%m-%d) | belegt via bugtracker.sh claim |"
+  printf '%s\n' "$row" >> "$table"
+  echo "$id claimed in $(basename "$table")"
+  note "claim: durable only once the slot table is COMMITTED — until then it lives
+  in one working copy, which is the narrower carrier the rule warns about."
+}
+
 # ----------------------------------------------------------------- close ----
 
 cmd_close() {
@@ -446,6 +500,7 @@ usage() { sed -n '3,50p' "$0" | sed 's/^#\{1,\} \{0,1\}//'; }
 
 case "${1:-}" in
   next-id)      shift; cmd_next_id "$@" ;;
+  claim)        shift; [ $# -ge 1 ] || die "claim needs an item id"; cmd_claim "$1" ;;
   path)         shift; [ $# -ge 1 ] || die "path needs an item id"; report_path "$1" ;;
   status)       shift; [ $# -ge 1 ] || die "status needs an item id"; cmd_status "$@" ;;
   issue)        shift; [ $# -ge 1 ] || die "issue needs an item id"; cmd_issue "$1" ;;
