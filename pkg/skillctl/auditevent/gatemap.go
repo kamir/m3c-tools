@@ -13,7 +13,10 @@ package auditevent
 // gate-stats dual-read of pre-migration lines, O6) is FR-0110. GateEvent is
 // mirrored here rather than imported because gateEvent lives in package main.
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // GateEvent mirrors cmd/skillctl's gateEvent, one line of gate-audit.jsonl
 // (SPEC-0255). The JSON tags match the on-disk field names so a real recorded
@@ -74,6 +77,63 @@ func FromGateEvent(g GateEvent, producer string) (*Event, error) {
 		return nil, err
 	}
 	return e, nil
+}
+
+// ToGateEvent reconstructs the SPEC-0255 gate view from a skillctl.audit.v1
+// envelope that FromGateEvent produced. It is the reader half of the O6 clean-cut
+// (SPEC-0403 §13-O6): `gate-stats` consumes ONLY this new format. ok is false for
+// anything that is not a gate policy event on the current schema. an old flat
+// gate-audit.jsonl line unmarshals into an Event with an empty Schema / nil
+// Policy and is therefore rejected here (abandoned, not migrated, not read).
+func ToGateEvent(e *Event) (GateEvent, bool) {
+	if e == nil || e.Schema != SchemaV1 || e.Policy == nil || e.Policy.Decision == "" {
+		return GateEvent{}, false
+	}
+	g := GateEvent{
+		Ts:        e.Timestamp,
+		Decision:  e.Policy.Decision,
+		Reason:    e.Message,
+		SessionID: e.SessionID,
+	}
+	if e.Actor != nil {
+		g.Source = e.Actor.ID
+	}
+	if e.Skill != nil {
+		g.Skill = e.Skill.Name
+		g.ContentDigest = e.Skill.Digest
+	}
+	g.ExitCode = extInt(e, "gate.exit_code")
+	g.Online = extBool(e, "gate.online")
+	g.CacheHit = extBool(e, "gate.cache_hit")
+	return g, true
+}
+
+// extInt reads an integer extension field, returning 0 if it is absent or not an
+// integer (a tolerant read: a missing gate telemetry field is a zero, not a fault).
+func extInt(e *Event, key string) int {
+	raw, ok := e.Ext[key]
+	if !ok {
+		return 0
+	}
+	var n int
+	if err := json.Unmarshal(raw, &n); err != nil {
+		return 0
+	}
+	return n
+}
+
+// extBool reads a boolean extension field, returning false if it is absent or not
+// a bool.
+func extBool(e *Event, key string) bool {
+	raw, ok := e.Ext[key]
+	if !ok {
+		return false
+	}
+	var b bool
+	if err := json.Unmarshal(raw, &b); err != nil {
+		return false
+	}
+	return b
 }
 
 // classifyGateDecision maps a SPEC-0255 verdict to (event_type, outcome,

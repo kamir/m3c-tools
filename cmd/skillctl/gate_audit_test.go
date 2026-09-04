@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/skillctl/auditevent"
 )
 
 func mkManagedSkill(t *testing.T, home, name string) {
@@ -28,8 +30,10 @@ func mkManagedSkill(t *testing.T, home, name string) {
 	}
 }
 
-// readGateAudit parses every line of the live log, FAILING the test if any line
-// is not valid JSON (catches torn/interleaved writes).
+// readGateAudit parses every line of the live log as a skillctl.audit.v1 envelope
+// (SPEC-0403 FR-0110a), FAILING the test if any line is not valid JSON (catches
+// torn/interleaved writes), and returns the reconstructed SPEC-0255 gate view of
+// each gate-policy line (auditevent.ToGateEvent). Non-gate lines are skipped.
 func readGateAudit(t *testing.T, home string) []gateEvent {
 	t.Helper()
 	b, err := os.ReadFile(gateAuditPath(home))
@@ -41,16 +45,33 @@ func readGateAudit(t *testing.T, home string) []gateEvent {
 		if line == "" {
 			continue
 		}
-		var e gateEvent
+		var e auditevent.Event
 		if err := json.Unmarshal([]byte(line), &e); err != nil {
 			t.Fatalf("gate-audit line is not valid JSON (torn write?): %q (%v)", line, err)
 		}
-		evs = append(evs, e)
+		g, ok := auditevent.ToGateEvent(&e)
+		if !ok {
+			continue
+		}
+		evs = append(evs, gateEvent(g))
 	}
 	return evs
 }
 
-func mustJSON(ev gateEvent) string { b, _ := json.Marshal(ev); return string(b) }
+// mustEnvelope maps a flat gate line onto the skillctl.audit.v1 envelope and
+// returns its canonical JSON line, the format the gate now writes (FR-0110a).
+func mustEnvelope(t *testing.T, ev gateEvent) string {
+	t.Helper()
+	e, err := auditevent.FromGateEvent(auditevent.GateEvent(ev), "skillctl/test")
+	if err != nil {
+		t.Fatalf("FromGateEvent(%+v): %v", ev, err)
+	}
+	b, err := json.Marshal(e)
+	if err != nil {
+		t.Fatalf("marshal envelope: %v", err)
+	}
+	return string(b)
+}
 
 // A hook decision appends exactly one schema-valid event.
 func TestGateAudit_HookEmitsOneEventPerDecision(t *testing.T) {
@@ -142,7 +163,9 @@ func TestGateAudit_RotatesAtCap(t *testing.T) {
 		t.Fatalf("expected rotation to %s.1: %v", live, err)
 	}
 	fi, _ := os.Stat(live)
-	if fi.Size() > gateAuditMaxBytes+256 {
+	// The slack is one line past the cap. A skillctl.audit.v1 envelope line is
+	// larger than the old flat gate line (FR-0110a), so the per-line slack grows.
+	if fi.Size() > gateAuditMaxBytes+1024 {
 		t.Errorf("live log not bounded by the cap: %d bytes (cap %d)", fi.Size(), gateAuditMaxBytes)
 	}
 }
@@ -156,11 +179,14 @@ func TestGateStats_SummarisesAndSkipsMalformed(t *testing.T) {
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	lines := []string{
-		mustJSON(gateEvent{Ts: now, Source: "hook", Skill: "a", Decision: "allow", CacheHit: true}),
-		mustJSON(gateEvent{Ts: now, Source: "hook", Skill: "a", Decision: "allow", CacheHit: false}),
-		`{ not valid json ]`, // malformed → must be skipped, not fatal
-		mustJSON(gateEvent{Ts: now, Source: "hook", Skill: "evil", Decision: "deny", Reason: "author sig", ExitCode: 11}),
-		mustJSON(gateEvent{Ts: now, Source: "sweep", Skill: "evil", Decision: "quarantine", Reason: "revoked", ExitCode: 15}),
+		mustEnvelope(t, gateEvent{Ts: now, Source: "hook", Skill: "a", Decision: "allow", CacheHit: true}),
+		mustEnvelope(t, gateEvent{Ts: now, Source: "hook", Skill: "a", Decision: "allow", CacheHit: false}),
+		`{ not valid json ]`, // malformed: must be skipped, not fatal
+		// An OLD flat gate-audit line (pre-FR-0110a). O6 clean-cut: it has no
+		// skillctl.audit.v1 envelope, so gate-stats must abandon it (not counted).
+		`{"ts":"` + now + `","source":"hook","skill":"legacy","decision":"deny","reason":"old format","exit_code":11}`,
+		mustEnvelope(t, gateEvent{Ts: now, Source: "hook", Skill: "evil", Decision: "deny", Reason: "author sig", ExitCode: 11}),
+		mustEnvelope(t, gateEvent{Ts: now, Source: "sweep", Skill: "evil", Decision: "quarantine", Reason: "revoked", ExitCode: 15}),
 	}
 	if err := os.WriteFile(gateAuditPath(home), []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -189,6 +215,12 @@ func TestGateStats_SummarisesAndSkipsMalformed(t *testing.T) {
 	if len(sum.TopDenied) == 0 || sum.TopDenied[0].Skill != "evil" || sum.TopDenied[0].Count != 2 {
 		t.Errorf("top_denied=%v, want evil×2", sum.TopDenied)
 	}
+	// O6 clean-cut: the old flat "legacy" deny line must have been abandoned.
+	for _, sc := range sum.TopDenied {
+		if sc.Skill == "legacy" {
+			t.Errorf("old flat gate line was read (O6 clean-cut violated): %v", sum.TopDenied)
+		}
+	}
 
 	// --json must be deterministic across runs.
 	var out2 bytes.Buffer
@@ -208,8 +240,8 @@ func TestGateStats_SinceFilter(t *testing.T) {
 	old := time.Now().UTC().Add(-48 * time.Hour).Format(time.RFC3339)
 	recent := time.Now().UTC().Format(time.RFC3339)
 	lines := []string{
-		mustJSON(gateEvent{Ts: old, Source: "hook", Skill: "old", Decision: "allow"}),
-		mustJSON(gateEvent{Ts: recent, Source: "hook", Skill: "new", Decision: "allow"}),
+		mustEnvelope(t, gateEvent{Ts: old, Source: "hook", Skill: "old", Decision: "allow"}),
+		mustEnvelope(t, gateEvent{Ts: recent, Source: "hook", Skill: "new", Decision: "allow"}),
 	}
 	_ = os.WriteFile(gateAuditPath(home), []byte(strings.Join(lines, "\n")+"\n"), 0o600)
 
