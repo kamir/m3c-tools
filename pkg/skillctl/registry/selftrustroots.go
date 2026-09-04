@@ -148,31 +148,8 @@ func LoadSelfTrustRoots(path string) (*SelfTrustRoots, error) {
 	}
 	tr.pub = ed25519.PublicKey(pubBytes)
 
-	// D3: resolve each pinned signer key + ensure the quorum is satisfiable.
-	for i := range tr.Signers {
-		sb, derr := base64.StdEncoding.DecodeString(strings.TrimSpace(tr.Signers[i].PubKeyB64))
-		if derr != nil {
-			return nil, fmt.Errorf("trust-roots: signer %q pubkey_b64 not valid base64: %w", tr.Signers[i].ReviewerID, derr)
-		}
-		if len(sb) != ed25519.PublicKeySize {
-			return nil, fmt.Errorf("trust-roots: signer %q pubkey size %d, want %d", tr.Signers[i].ReviewerID, len(sb), ed25519.PublicKeySize)
-		}
-		tr.Signers[i].pub = ed25519.PublicKey(sb)
-	}
-	// D3(i): admit cross-signed members from the PINNED governance root.
-	if tr.GovernanceRootPubKeyB64 != "" && tr.CrossSignPath != "" {
-		gpub, gerr := base64.StdEncoding.DecodeString(strings.TrimSpace(tr.GovernanceRootPubKeyB64))
-		if gerr != nil || len(gpub) != ed25519.PublicKeySize {
-			return nil, fmt.Errorf("trust-roots: governance_root_pubkey_b64 invalid in %s", path)
-		}
-		records, rerr := loadCrossSignRecords(tr.CrossSignPath)
-		if rerr != nil {
-			return nil, fmt.Errorf("trust-roots: cross_sign_path %s: %w", tr.CrossSignPath, rerr)
-		}
-		tr.Signers = append(tr.Signers, DeriveCrossSignedSigners(ed25519.PublicKey(gpub), records, time.Now())...)
-	}
-	if tr.GovernanceQuorum > 1 && len(tr.Signers) < tr.GovernanceQuorum {
-		return nil, fmt.Errorf("trust-roots: governance_quorum %d exceeds the %d pinned signers in %s", tr.GovernanceQuorum, len(tr.Signers), path)
+	if err := tr.resolveSigners(path); err != nil {
+		return nil, err
 	}
 
 	// Compute fingerprint (or check the one the file declares).
@@ -186,6 +163,48 @@ func LoadSelfTrustRoots(path string) (*SelfTrustRoots, error) {
 }
 
 // PubKey returns the loaded ed25519 public key.
+// resolveSigners turns the DECLARED D3 fields into verifying keys: it decodes
+// each pinned signer key, admits cross-signed members from the pinned governance
+// root, and refuses a quorum the pinned set cannot satisfy.
+//
+// It is one shared method because there are now TWO carriers of the same
+// declaration: the hand-written trust-roots file (LoadSelfTrustRoots) and a
+// pinned peer (Peer.AsTrustRoots, FR-0115). A second copy would be a second
+// place for the two to drift, and the drift would be SILENT: an unresolved
+// signer key does not fail, it simply never matches an attestation, so the pull
+// reports "no attestation at or above the governance_minimum" while the
+// attestation sits right there in the registry.
+//
+// source names the origin (a file path, or a peer name) for error messages.
+func (t *SelfTrustRoots) resolveSigners(source string) error {
+	for i := range t.Signers {
+		sb, derr := base64.StdEncoding.DecodeString(strings.TrimSpace(t.Signers[i].PubKeyB64))
+		if derr != nil {
+			return fmt.Errorf("trust-roots: signer %q pubkey_b64 not valid base64: %w", t.Signers[i].ReviewerID, derr)
+		}
+		if len(sb) != ed25519.PublicKeySize {
+			return fmt.Errorf("trust-roots: signer %q pubkey size %d, want %d", t.Signers[i].ReviewerID, len(sb), ed25519.PublicKeySize)
+		}
+		t.Signers[i].pub = ed25519.PublicKey(sb)
+	}
+	// D3(i): admit cross-signed members from the PINNED governance root.
+	if t.GovernanceRootPubKeyB64 != "" && t.CrossSignPath != "" {
+		gpub, gerr := base64.StdEncoding.DecodeString(strings.TrimSpace(t.GovernanceRootPubKeyB64))
+		if gerr != nil || len(gpub) != ed25519.PublicKeySize {
+			return fmt.Errorf("trust-roots: governance_root_pubkey_b64 invalid in %s", source)
+		}
+		records, rerr := loadCrossSignRecords(t.CrossSignPath)
+		if rerr != nil {
+			return fmt.Errorf("trust-roots: cross_sign_path %s: %w", t.CrossSignPath, rerr)
+		}
+		t.Signers = append(t.Signers, DeriveCrossSignedSigners(ed25519.PublicKey(gpub), records, time.Now())...)
+	}
+	if t.GovernanceQuorum > 1 && len(t.Signers) < t.GovernanceQuorum {
+		return fmt.Errorf("trust-roots: governance_quorum %d exceeds the %d pinned signers in %s", t.GovernanceQuorum, len(t.Signers), source)
+	}
+	return nil
+}
+
 func (t *SelfTrustRoots) PubKey() ed25519.PublicKey {
 	if t == nil {
 		return nil
