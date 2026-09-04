@@ -90,6 +90,11 @@ func (f *FileSink) Write(e *Event) error {
 // Write so a rotation or external truncation is always observed).
 func (f *FileSink) Close() error { return nil }
 
+// localSink marks FileSink as a LocalSink (REQ-6.10b): it writes only to a local
+// file, no network. It is therefore an acceptable fulfillment sink under
+// ModeRequired.
+func (f *FileSink) localSink() {}
+
 // WriterSink emits redacted audit events as JSON Lines to any io.Writer; the
 // stderr / stdout targets of REQ-5.2. It never closes the underlying writer
 // (stderr/stdout are process-owned). Safe for concurrent Write via a mutex.
@@ -127,3 +132,7 @@ func (s *WriterSink) Write(e *Event) error {
 
 // Close is a no-op: the underlying writer is process-owned and not closed here.
 func (s *WriterSink) Close() error { return nil }
+
+// localSink marks WriterSink as a LocalSink (REQ-6.10b): it writes to a
+// process-owned stream (stderr/stdout), no network. Acceptable under ModeRequired.
+func (s *WriterSink) localSink() {}

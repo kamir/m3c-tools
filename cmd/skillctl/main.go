@@ -142,6 +142,15 @@ func main() {
 	case "gate-stats":
 		os.Exit(runGateStats(os.Args[2:], os.Stdout, os.Stderr))
 	// === END SPEC-0255 ===
+	// === SPEC-0403 §8 (FR-0111): audit-subsystem observability CLI. ===
+	// OWN verb stem with its OWN exit space 0/1 (REQ-8.6): distinct from `audit`
+	// (SPEC-0189 §14 posture verdicts, 0/2/3, above) so a health finding is never
+	// read as a posture finding. `auditlog` is intended to be the first entry in the
+	// FR-0113 verb register (REQ-8.7); that register is not built yet, so it is
+	// registered here the same hand-rolled way as every other verb.
+	case "auditlog":
+		os.Exit(runAuditlog(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0403 §8 ===
 	// === SPEC-0247 §7.3 P1.3: managed-settings pinning (make the gate un-deletable). ===
 	case "pin":
 		os.Exit(runPin(os.Args[2:], os.Stdout, os.Stderr))
@@ -269,6 +278,8 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "               write-once outbox for durable, drainable audit (SPEC-0317). Fail-closed.")
 	fmt.Fprintln(w, "  gate-stats   Summarise the gate-audit.jsonl (decisions, top blocks, cache-hit rate).")
 	fmt.Fprintln(w, "               Flags: --since <168h|YYYY-MM-DD>, --json.")
+	fmt.Fprintln(w, "  auditlog     Audit-subsystem observability (SPEC-0403 §8). OWN exit space 0/1,")
+	fmt.Fprintln(w, "               distinct from `audit` above. Subcommands: status | test | flush [--json].")
 	fmt.Fprintln(w, "  pin          Pin the trust gate into Claude Code managed settings so a")
 	fmt.Fprintln(w, "               non-privileged user cannot delete it (SPEC-0247 §7.3).")
 	fmt.Fprintln(w, "               Subcommands: generate | status | install. --strict for CISO lockdown.")

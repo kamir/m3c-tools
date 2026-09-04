@@ -111,6 +111,7 @@ Additional codes surface in specific commands:
 
 | Code | Command(s) | Meaning |
 |-----:|------------|---------|
+| `1` | `auditlog status`, `auditlog test`, `auditlog flush` | subsystem unhealthy / sink refused / drain error (own `0/1` health space, SPEC-0403 §8; distinct from `audit`'s `0/2/3`). |
 | `3` | `audit` | at least one skill is `BROKEN`. |
 | `4` | `import-public` | pin required (input validation). |
 | `5` | `import-public` | scanner refuse (scanner / policy hit). |
@@ -721,6 +722,44 @@ Summarises `gate-audit.jsonl`: decisions, top blocks, cache-hit rate.
 ```bash
 skillctl gate-stats --since 168h
 skillctl gate-stats --since 2026-06-01 --json
+```
+
+---
+
+### `auditlog`: audit-subsystem observability (SPEC-0403 §8)
+
+```bash
+skillctl auditlog <status|test|flush> [--json]
+```
+
+The observability CLI for the audit event layer. It has its **own verb stem** and its
+**own exit space `0/1`** (`0` healthy/accepted/drained, `1` unhealthy/refused/drain error;
+`2` is a usage error). This is deliberate: `skillctl audit` (above) is the antivirus-style
+**posture** verb with exit codes `0/2/3`, and a health finding must never be read as a
+posture finding. `auditlog` is intended to be the first entry in the FR-0113 verb register.
+
+| Subcommand | Purpose |
+|------------|---------|
+| `status` | Report subsystem health: enabled, mode, sink type + path, outbox pending, spool pending, last event. Exit `0` healthy / `1` unhealthy. |
+| `test` | Emit ONE clearly-synthetic `skillctl.audit.v1` event through the real default sink and confirm it was accepted. Exit `0` accepted / `1` refused. |
+| `flush` | Reconcile the local spool queue into the durable outbox (the local half of `sync`, no broker egress) and report pending before/after. Exit `0` / `1`. |
+
+| Flag | Purpose |
+|------|---------|
+| `-json` | Emit the result as stable JSON. |
+
+There is **no Kafka**: a direct broker sink is FR-0112 and EC-blocked (§7.2), so `status`
+reports only the sink and outbox/spool that exist today and never fabricates a broker
+endpoint. `flush` reaches only the local spool (REQ-6.10b); network egress is `skillctl sync`
+(default-OFF). A transport failure is surfaced as an observable `audit.sink.fail` /
+`audit.queue.flush` event on stderr, never re-reported through the sink that failed (no
+recursive error loop, REQ-8.2).
+
+```bash
+skillctl auditlog status
+skillctl auditlog status --json
+skillctl auditlog test
+skillctl auditlog flush
 ```
 
 ---

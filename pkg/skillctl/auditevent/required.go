@@ -200,17 +200,42 @@ func (c RequiredConfig) BuildPolicy() (*RequiredPolicy, error) {
 	return &RequiredPolicy{allow: allow, policyAllowOK: c.ConfirmPolicyAllow}, nil
 }
 
+// ErrNonLocalSink is the sentinel NewDispatcherRequired returns when it is handed
+// a sink that is not a LocalSink. It exists so a caller can errors.Is it rather
+// than match on message text.
+var ErrNonLocalSink = errors.New("auditevent: required-mode dispatcher rejects a non-local sink")
+
 // NewDispatcherRequired builds a ModeRequired Dispatcher that ENFORCES fail-close
 // for the event types on policy (SPEC-0403 §6b). Obtain policy from
 // RequiredConfig.BuildPolicy (which rejects an empty allow-list, REQ-6.6). A nil
 // policy is accepted but fail-closes NOTHING (it degrades to durable-equivalent):
 // pass a validated, non-nil policy for real enforcement.
 //
-// sinks SHOULD be a SINGLE durable sink (OutboxSink). Under required, "durably
-// accepted" is every configured sink accepting the write, which for the OutboxSink
-// is spool acceptance (REQ-6.10b), never a network ack.
-func NewDispatcherRequired(policy *RequiredPolicy, r Redactor, sinks ...Sink) *Dispatcher {
+// REQ-6.10b ENFORCED IN CODE. Under required, "durably accepted" is every
+// configured sink accepting the write, and for a required Dispatcher the
+// fulfillment point MUST be the local spool, NEVER a broker ack: otherwise every
+// covered skill load path would hang on a remote promise, the DoS the positive
+// list exists to bound. This is no longer only a caller contract: every sink MUST
+// be a LocalSink (FileSink / WriterSink / OutboxSink, or another in-package
+// no-network sink). A sink that is not local, a network-egress sink such as a
+// future Kafka sink (FR-0112), is REJECTED here with ErrNonLocalSink. At least one
+// sink is required (a required Dispatcher with no sink can never be durably
+// accepted, so it would fail-close every covered event, which is a mis-config, not
+// a policy).
+func NewDispatcherRequired(policy *RequiredPolicy, r Redactor, sinks ...Sink) (*Dispatcher, error) {
+	if len(sinks) == 0 {
+		return nil, fmt.Errorf("%w: a required-mode dispatcher needs at least one local sink (spool acceptance is the fulfillment point, REQ-6.10b)", ErrNonLocalSink)
+	}
+	for _, s := range sinks {
+		if !isLocalSink(s) {
+			name := "<nil>"
+			if s != nil {
+				name = s.Name()
+			}
+			return nil, fmt.Errorf("%w: sink %q does network I/O; under required, fulfillment MUST be the local spool, never a broker ack (REQ-6.10b)", ErrNonLocalSink, name)
+		}
+	}
 	d := NewDispatcherMode(ModeRequired, r, sinks...)
 	d.required = policy
-	return d
+	return d, nil
 }
