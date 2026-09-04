@@ -9,14 +9,21 @@ package main
 // revoked digest was not blocked: revocation was silently suppressed by making the
 // fetch fail.
 //
-// The fix makes the revoked-set consumers fail CLOSED under MANAGED (self-trust-
-// root) config while keeping the UNMANAGED/dev path fail-open. These tests pin
-// both halves so the fail-open cannot regress.
+// The full closure has four parts, each pinned below and each verified to BITE
+// (the test fails when its fix is reverted):
+//   R01-A  hot-path (verify-hook) fails closed under managed on a stale/empty cache
+//   R01-B  the grace window is AUTHENTICATED (signed HEAD), not a forgeable timestamp
+//   R01-C  a present-but-corrupt trust-roots.yaml fails closed (not fail-open)
+//   sweep  the sweep consumer fails closed (test-theater fixed to assert exit 22)
+//
+// while the UNMANAGED/dev path stays fail-open (no spurious hard-deny).
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -24,64 +31,53 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 )
 
-// THREAT-R01 (consumer / sweep) — the trust-decision caller fails CLOSED.
-//
-// With a MANAGED host whose revoked-set fetch is unavailable and whose cache is
-// empty (sweepRevokedFn returns errRevokedSetUnavailable), the sweep must
-// QUARANTINE the managed skill rather than read the empty set as "nothing
-// revoked". This is the exact suppression vector the wave-1 challenge gate
-// flagged: a KNOWN-revoked digest must NOT be allowed to keep running just
-// because the fetch was made to fail.
+// ---------------------------------------------------------------------------
+// sweep consumer (test-theater FIXED)
+// ---------------------------------------------------------------------------
+
+// THREAT-R01 (consumer / sweep) — the trust-decision caller fails CLOSED, and the
+// assertion now BITES: it requires the quarantine to come from the R01 fail-closed
+// branch (exit 22 / reason names the cause), not from the fixture's incidental
+// blob-vs-sidecar digest mismatch (exit 10). Both the offline path and the online
+// verify are stubbed to PASS, so ONLY the R01 branch can quarantine — reverting it
+// makes the skill verify clean and the test FAIL.
 func TestSweep_RevocationUnavailableUnderManaged_FailsClosed(t *testing.T) {
 	home := t.TempDir()
-	// A managed, otherwise-fine skill whose digest is NOT in any (empty) local set.
 	writeSidecarDigest(t, home, "er1-push", "sha256:beef")
 
-	// Simulate MANAGED + revoked-set fetch unavailable + empty cache.
+	stubRootsOK(t)
+	stubVerify(t, exitOK, "ok", nil) // sweepVerifyManagedFn → clean
+	origOffline := verifyManagedOfflineFn
+	verifyManagedOfflineFn = func(string, gatePolicy, string) (int, string, bool) { return exitOK, "verified", true }
+	t.Cleanup(func() { verifyManagedOfflineFn = origOffline })
+
 	orig := sweepRevokedFn
 	sweepRevokedFn = func(string) (map[string]struct{}, bool, error) {
-		return map[string]struct{}{}, false, errRevokedSetUnavailable
+		return map[string]struct{}{}, false, errRevokedSetUnavailable // managed + unavailable + empty
 	}
 	t.Cleanup(func() { sweepRevokedFn = orig })
 
-	code, out := runSweep(t, home, "--quarantine")
-	_ = code
+	rep := runSweepReport(t, home, "--quarantine")
+	e := findEntry(t, rep, "er1-push")
+	if e.State != "quarantined" || e.Exit != exitRevocationStale {
+		t.Fatalf("managed skill must FAIL CLOSED via the R01 branch (state=quarantined exit=%d); got state=%q exit=%d reason=%q",
+			exitRevocationStale, e.State, e.Exit, e.Reason)
+	}
+	if !containsAll(e.Reason, "revocation", "WF-001") {
+		t.Fatalf("quarantine reason must name the fail-closed cause; got %q", e.Reason)
+	}
 	if q, _ := quarantined(t, home, "er1-push"); !q {
-		t.Fatalf("managed skill must FAIL CLOSED (be quarantined) when revocation is unavailable under managed trust roots; not quarantined.\nout=\n%s", out)
+		t.Fatalf("--quarantine must physically move the skill")
 	}
 }
 
-// THREAT-R01 (report-only) — the fail-closed is advisory without --quarantine, so
-// the SessionStart sweep does not destructively move skills, but the state IS
-// surfaced (RevocationUnavailable) for observability.
-func TestSweep_RevocationUnavailableUnderManaged_ReportOnly(t *testing.T) {
-	home := t.TempDir()
-	writeSidecarDigest(t, home, "er1-push", "sha256:beef")
-
-	orig := sweepRevokedFn
-	sweepRevokedFn = func(string) (map[string]struct{}, bool, error) {
-		return map[string]struct{}{}, false, errRevokedSetUnavailable
-	}
-	t.Cleanup(func() { sweepRevokedFn = orig })
-
-	// No --quarantine → report-only: NOT physically moved, but reported closed.
-	_, out := runSweep(t, home) // report-only
-	if q, _ := quarantined(t, home, "er1-push"); q {
-		t.Fatalf("report-only sweep must NOT physically move the skill; it was quarantined")
-	}
-	if !containsAll(out, "fail", "revocation") {
-		t.Fatalf("report-only sweep must SURFACE the fail-closed state; out=\n%s", out)
-	}
-}
-
-// THREAT-R01 (negative / no spurious deny) — UNMANAGED / dev must still work.
-//
-// When the revoked-set fetch returns cleanly with nothing revoked and NO error
-// (the unmanaged/dev best-effort path), a managed-looking skill must NOT be
-// quarantined. Guards against the fix over-reaching into a hard deny that would
-// break first-run / offline dev.
+// THREAT-R01 (negative / no spurious deny) — UNMANAGED / clean fetch must NOT
+// quarantine a managed-looking skill.
 func TestSweep_UnmanagedCleanFetch_NoSpuriousDeny(t *testing.T) {
 	home := t.TempDir()
 	writeSidecarDigest(t, home, "er1-push", "sha256:beef")
@@ -91,97 +87,211 @@ func TestSweep_UnmanagedCleanFetch_NoSpuriousDeny(t *testing.T) {
 
 	orig := sweepRevokedFn
 	sweepRevokedFn = func(string) (map[string]struct{}, bool, error) {
-		return map[string]struct{}{}, false, nil // unmanaged/clean: nothing revoked, no error
+		return map[string]struct{}{}, false, nil // clean: nothing revoked, no error
 	}
 	t.Cleanup(func() { sweepRevokedFn = orig })
 
 	_, out := runSweep(t, home, "--quarantine")
 	if q, _ := quarantined(t, home, "er1-push"); q {
-		t.Fatalf("clean unmanaged fetch must NOT quarantine (no spurious hard-deny); out=\n%s", out)
+		t.Fatalf("clean fetch must NOT quarantine (no spurious hard-deny); out=\n%s", out)
 	}
 }
 
-// fetchRevokedOnline (real function) — UNMANAGED branch stays fail-OPEN.
-//
-// No self-trust-roots.yaml under $HOME → fetchRevokedOnline must return the cache
-// with online=false and NO error, so offline keygen/pack/sign/verify-sig + first
-// run keep working.
-func TestFetchRevokedOnline_UnmanagedFailOpen(t *testing.T) {
+// ---------------------------------------------------------------------------
+// R01-A — verify-hook HOT PATH
+// ---------------------------------------------------------------------------
+
+// R01-A (crux) — a KNOWN-revoked managed skill is DENIED per-invocation on a
+// stale/empty cache, because the hot path now refreshes the revoked set instead of
+// skipping the check between sweeps. BITE: revert the R01-A block → stale cache is
+// skipped → the (stubbed-allow) skill is ALLOWED → assertDeny fails.
+func TestVerifyHook_HotPath_RevokedOnStaleCache_Denied(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)  // no ~/.claude/trust-roots.yaml here → unmanaged
-	setUserProfile(t, home) // WIN-T8: keep a shipping-style resolve scoped to temp
+	t.Setenv("HOME", home)
+	setUserProfile(t, home)
+	writeSelfTrustRoots(t, home) // MANAGED → the hot path consults the fetch
+	writeSidecarDigest(t, home, "er1-push", "sha256:beef")
+	stubHookVerifyAllow(t) // the ONLY possible deny is the revocation check
+
+	// No fresh cache on disk → hot path refreshes; the fetch reports the digest revoked.
+	orig := hotPathRevokedFn
+	hotPathRevokedFn = func(string) (map[string]struct{}, bool, error) {
+		return map[string]struct{}{"sha256:beef": {}}, true, nil
+	}
+	t.Cleanup(func() { hotPathRevokedFn = orig })
+
+	code, out, _ := feed(t, `{"tool_name":"Skill","tool_input":{"skill":"er1-push"}}`)
+	assertDeny(t, code, out, "revoked")
+}
+
+// R01-A (fail-closed on unavailable) — a managed host whose hot-path refresh is
+// UNAVAILABLE denies rather than runs against an unprovable revocation state.
+func TestVerifyHook_HotPath_UnavailableUnderManaged_Denied(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	setUserProfile(t, home)
+	writeSelfTrustRoots(t, home)
+	writeSidecarDigest(t, home, "er1-push", "sha256:beef")
+	stubHookVerifyAllow(t)
+
+	orig := hotPathRevokedFn
+	hotPathRevokedFn = func(string) (map[string]struct{}, bool, error) {
+		return map[string]struct{}{}, false, errRevokedSetUnavailable
+	}
+	t.Cleanup(func() { hotPathRevokedFn = orig })
+
+	code, out, _ := feed(t, `{"tool_name":"Skill","tool_input":{"skill":"er1-push"}}`)
+	assertDeny(t, code, out, "revocation authority unavailable")
+}
+
+// R01-A (no spurious deny + latency guard) — a FRESH cache within grace allows and
+// the hot path does NOT fetch (zero added latency on the normal path). BITE for the
+// latency guard: if the fetch ran on a fresh cache, `called` trips.
+func TestVerifyHook_HotPath_FreshCache_NoFetch_Allowed(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	setUserProfile(t, home)
+	writeSelfTrustRoots(t, home)
+	writeSidecarDigest(t, home, "er1-push", "sha256:beef")
+	stubHookVerifyAllow(t)
+	writeRevokedCache(home, map[string]struct{}{"sha256:dead": {}}) // fresh; not our digest
+
+	called := false
+	orig := hotPathRevokedFn
+	hotPathRevokedFn = func(string) (map[string]struct{}, bool, error) {
+		called = true
+		return map[string]struct{}{}, false, errRevokedSetUnavailable
+	}
+	t.Cleanup(func() { hotPathRevokedFn = orig })
+
+	code, out, _ := feed(t, `{"tool_name":"Skill","tool_input":{"skill":"er1-push"}}`)
+	assertAllow(t, code, out)
+	if called {
+		t.Fatalf("hot path fetched despite a FRESH cache — must add no latency to normal invocations")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// R01-B — AUTHENTICATED grace window
+// ---------------------------------------------------------------------------
+
+func TestRevokedUnavailableUnderManaged_AuthenticatedGrace(t *testing.T) {
+	t.Run("empty cache -> fail closed", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		setUserProfile(t, home)
+		if _, online, err := revokedUnavailableUnderManaged(home); !errors.Is(err, errRevokedSetUnavailable) || online {
+			t.Fatalf("empty cache must fail closed; got online=%v err=%v", online, err)
+		}
+	})
+
+	// R01-B BITE — a forged {digests:[],fetched_at:now} (unsigned, same-uid-writable)
+	// must NOT open the grace window: without a pinned-key-verified signed HEAD, an
+	// attacker could otherwise ride grace forever with an EMPTY set. Reverting R01-B
+	// (grace = plain fetched_at freshness) makes this return nil and the test FAIL.
+	t.Run("R01-B forged fresh fetched_at, no signed HEAD -> fail closed", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		setUserProfile(t, home)
+		writeSelfTrustRoots(t, home)                   // MANAGED, but no signed HEAD persisted
+		writeRevokedCache(home, map[string]struct{}{}) // fresh fetched_at, EMPTY set (the forgery)
+		if _, _, err := revokedUnavailableUnderManaged(home); !errors.Is(err, errRevokedSetUnavailable) {
+			t.Fatalf("forged fresh timestamp without a signed HEAD must NOT open grace; got %v", err)
+		}
+	})
+
+	// Positive — an AUTHENTICATED basis (verified signed HEAD, recent issued_at,
+	// cached set binds to the HEAD's revoked_set_root) DOES open grace.
+	t.Run("verified signed HEAD + bound fresh set -> grace open", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		setUserProfile(t, home)
+		pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+		writeSelfTrustRootsKey(t, home, pub)
+		dg := headTestDigest('a')
+		set := map[string]struct{}{dg: {}}
+		installSignedHead(t, home, priv, 1, sweepClockFn().UTC(), []string{dg})
+		writeRevokedCache(home, set) // fresh + set binds to the HEAD root
+		got, _, err := revokedUnavailableUnderManaged(home)
+		if err != nil {
+			t.Fatalf("authenticated grace must open; got %v", err)
+		}
+		if _, ok := got[dg]; !ok {
+			t.Fatalf("grace path must return the last-known-good set")
+		}
+	})
+
+	// A verified signed HEAD whose authenticated issued_at is PAST the TTL does not
+	// open grace (freshness is judged on the AUTHENTICATED anchor, not fetched_at).
+	t.Run("signed HEAD past TTL -> fail closed", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		setUserProfile(t, home)
+		pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+		writeSelfTrustRootsKey(t, home, pub)
+		dg := headTestDigest('a')
+		set := map[string]struct{}{dg: {}}
+		old := sweepClockFn().UTC().Add(-2 * revokedCacheTTL)
+		installSignedHead(t, home, priv, 1, old, []string{dg})
+		writeRevokedCache(home, set) // fetched_at fresh, but the SIGNED anchor is old
+		if _, _, err := revokedUnavailableUnderManaged(home); !errors.Is(err, errRevokedSetUnavailable) {
+			t.Fatalf("a signed HEAD older than the TTL must NOT open grace; got %v", err)
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// R01-C — present-but-corrupt trust-roots.yaml
+// ---------------------------------------------------------------------------
+
+// R01-C — a PRESENT-but-unparseable trust-roots.yaml is tampering, not "unmanaged":
+// it must fail CLOSED, not silently downgrade to fail-open. BITE: reverting R01-C
+// (treating any LoadSelfTrustRoots error as unmanaged) returns nil and this FAILS.
+func TestFetchRevokedOnline_CorruptTrustRoots_FailsClosed(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	setUserProfile(t, home)
+	dir := filepath.Join(home, ".claude")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "trust-roots.yaml"), []byte("{{{ not: [valid yaml"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := fetchRevokedOnline(home); !errors.Is(err, errRevokedSetUnavailable) {
+		t.Fatalf("present-but-corrupt trust-roots must fail CLOSED (not fail-open); got %v", err)
+	}
+}
+
+// The ABSENT case stays fail-OPEN (genuine unmanaged / first-run) — the counterpart
+// to R01-C that guards against over-reaching into a hard deny.
+func TestFetchRevokedOnline_AbsentTrustRoots_FailOpen(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home) // no ~/.claude/trust-roots.yaml
+	setUserProfile(t, home)
 	_, online, err := fetchRevokedOnline(home)
 	if err != nil {
-		t.Fatalf("unmanaged fetch must be fail-OPEN (nil error); got %v", err)
+		t.Fatalf("absent trust-roots (unmanaged) must be fail-OPEN (nil error); got %v", err)
 	}
 	if online {
 		t.Fatalf("unmanaged fetch cannot be 'online' with no trust roots")
 	}
 }
 
-// revokedUnavailableUnderManaged (helper) — the GRACE WINDOW.
-//
-//   - empty/absent cache → fail-CLOSED (errRevokedSetUnavailable);
-//   - fresh cache (within TTL) → fail-OPEN (nil error): last-known-good still
-//     bounds staleness;
-//   - stale cache (past TTL) → fail-CLOSED again.
-func TestRevokedUnavailableUnderManaged_GraceWindow(t *testing.T) {
-	t.Run("empty cache -> fail closed", func(t *testing.T) {
-		home := t.TempDir()
-		_, online, err := revokedUnavailableUnderManaged(home)
-		if !errors.Is(err, errRevokedSetUnavailable) {
-			t.Fatalf("empty cache must fail closed; got err=%v", err)
-		}
-		if online {
-			t.Fatalf("must not report online on the fail-closed path")
-		}
-	})
+// ---------------------------------------------------------------------------
+// fetchRevokedOnline — MANAGED branch end-to-end (real code path, unreachable reg)
+// ---------------------------------------------------------------------------
 
-	t.Run("fresh cache -> grace window (fail open)", func(t *testing.T) {
-		home := t.TempDir()
-		writeRevokedCache(home, map[string]struct{}{"sha256:beef": {}}) // fetched_at = now → fresh
-		set, _, err := revokedUnavailableUnderManaged(home)
-		if err != nil {
-			t.Fatalf("a within-TTL last-known-good cache is the grace window; must not fail closed; got %v", err)
-		}
-		if _, ok := set["sha256:beef"]; !ok {
-			t.Fatalf("grace-window path must return the cached last-known-good set")
-		}
-	})
-
-	t.Run("stale cache -> fail closed", func(t *testing.T) {
-		home := t.TempDir()
-		p := revokedCachePath(home)
-		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		// A long-past fetched_at → outside revokedCacheTTL → no grace.
-		stale := `{"digests":["sha256:beef"],"fetched_at":"2000-01-01T00:00:00Z"}`
-		if err := os.WriteFile(p, []byte(stale), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if _, _, err := revokedUnavailableUnderManaged(home); !errors.Is(err, errRevokedSetUnavailable) {
-			t.Fatalf("a stale (past-TTL) cache must fail closed; got err=%v", err)
-		}
-	})
-}
-
-// fetchRevokedOnline (real function) — MANAGED branch, end-to-end.
-//
-// With a real self-trust-roots.yaml (managed) and a registry that is unreachable,
-// the live fetch fails: with an empty cache fetchRevokedOnline must surface
-// errRevokedSetUnavailable (fail-closed); with a fresh cache it must ride the
-// grace window (nil error, last-known-good returned). This proves the managed-vs-
-// unmanaged distinction on the REAL code path, not just the helper.
-func TestFetchRevokedOnline_ManagedUnavailable_FailsClosed(t *testing.T) {
+func TestFetchRevokedOnline_ManagedUnavailable_EndToEnd(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	setUserProfile(t, home)
-	writeSelfTrustRoots(t, home) // → MANAGED
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	writeSelfTrustRootsKey(t, home, pub) // MANAGED
 
 	// A guaranteed-dead registry endpoint (a just-closed httptest port → dial
-	// refused, no hang), reached via ER1_TARGET. An API key is present so
-	// resolveER1Config succeeds and the failure is at the fetch, not the config.
+	// refused, no hang). An API key is present so resolveER1Config succeeds and the
+	// failure is at the fetch, not the config.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	dead := srv.URL
 	srv.Close()
@@ -190,34 +300,33 @@ func TestFetchRevokedOnline_ManagedUnavailable_FailsClosed(t *testing.T) {
 
 	t.Run("empty cache -> fail closed", func(t *testing.T) {
 		if _, _, err := fetchRevokedOnline(home); !errors.Is(err, errRevokedSetUnavailable) {
-			t.Fatalf("managed + unreachable registry + empty cache must fail closed; got err=%v", err)
+			t.Fatalf("managed + unreachable registry + empty cache must fail closed; got %v", err)
 		}
 	})
 
-	t.Run("fresh cache -> grace window", func(t *testing.T) {
-		writeRevokedCache(home, map[string]struct{}{"sha256:beef": {}}) // fresh
-		set, _, err := fetchRevokedOnline(home)
+	t.Run("authenticated fresh snapshot -> grace window", func(t *testing.T) {
+		dg := headTestDigest('b')
+		set := map[string]struct{}{dg: {}}
+		installSignedHead(t, home, priv, 2, sweepClockFn().UTC(), []string{dg})
+		writeRevokedCache(home, set)
+		got, _, err := fetchRevokedOnline(home)
 		if err != nil {
-			t.Fatalf("managed + unreachable registry + FRESH cache must ride the grace window (nil err); got %v", err)
+			t.Fatalf("managed + unreachable registry + AUTHENTICATED fresh snapshot must ride grace (nil err); got %v", err)
 		}
-		if _, ok := set["sha256:beef"]; !ok {
-			t.Fatalf("grace-window path must return the cached last-known-good set")
+		if _, ok := got[dg]; !ok {
+			t.Fatalf("grace path must return the last-known-good set")
 		}
 	})
 }
 
-// --- helpers ---
+// ---------------------------------------------------------------------------
+// helpers
+// ---------------------------------------------------------------------------
 
-// writeSelfTrustRoots writes a minimal-but-valid ~/.claude/trust-roots.yaml so
-// LoadSelfTrustRoots succeeds → the host is treated as MANAGED. Only pubkey_b64
-// is required (registry defaults to "self", governance to "green", fingerprint is
-// recomputed on load).
-func writeSelfTrustRoots(t *testing.T, home string) {
+// writeSelfTrustRootsKey writes a minimal-but-valid ~/.claude/trust-roots.yaml
+// pinning `pub` → the host is treated as MANAGED and `pub` is the verification key.
+func writeSelfTrustRootsKey(t *testing.T, home string, pub ed25519.PublicKey) {
 	t.Helper()
-	pub, _, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
 	dir := filepath.Join(home, ".claude")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
@@ -228,11 +337,71 @@ func writeSelfTrustRoots(t *testing.T, home string) {
 	}
 }
 
+// writeSelfTrustRoots pins a throwaway key (when the test does not need to sign a HEAD).
+func writeSelfTrustRoots(t *testing.T, home string) {
+	t.Helper()
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeSelfTrustRootsKey(t, home, pub)
+}
+
+// installSignedHead builds, signs (with priv), and PERSISTS a revocation HEAD to
+// ~/.claude/skillctl/revoked-head.signed.json so verifiedAdoptedHead re-verifies it
+// against the pinned key. Digests must be full sha256 tokens (validateDigest).
+func installSignedHead(t *testing.T, home string, priv ed25519.PrivateKey, epoch int, issuedAt time.Time, digests []string) {
+	t.Helper()
+	head, err := registry.BuildRevocationHead(registry.RevocationHeadInput{Epoch: epoch, IssuedAt: issuedAt, Digests: digests})
+	if err != nil {
+		t.Fatalf("build head: %v", err)
+	}
+	if _, err := registry.SignEnvelopeSignature(priv, head); err != nil {
+		t.Fatalf("sign head: %v", err)
+	}
+	persistSignedHead(home, head)
+}
+
 // setUserProfile mirrors HOME into USERPROFILE (WIN-T8) so the temp home is honored
 // on every platform's userHome() resolution. Inert on non-Windows.
 func setUserProfile(t *testing.T, home string) {
 	t.Helper()
 	t.Setenv("USERPROFILE", home)
+}
+
+// stubHookVerifyAllow makes the managed verify chain PASS so the ONLY possible deny
+// in a verify-hook test is the revocation check under test.
+func stubHookVerifyAllow(t *testing.T) {
+	t.Helper()
+	ov, oo := verifyManagedFn, verifyManagedOfflineFn
+	verifyManagedFn = func(string, gatePolicy) (int, string) { return exitOK, "ok" }
+	verifyManagedOfflineFn = func(string, gatePolicy, string) (int, string, bool) { return exitOK, "ok", true }
+	t.Cleanup(func() { verifyManagedFn = ov; verifyManagedOfflineFn = oo })
+}
+
+// runSweepReport runs `verify --all --json ...` and returns the parsed report
+// (stdout captured separately so the JSON parses cleanly).
+func runSweepReport(t *testing.T, home string, args ...string) sweepReport {
+	t.Helper()
+	t.Setenv("HOME", home)
+	var out, errb bytes.Buffer
+	_ = runVerify(append([]string{"--all", "--json"}, args...), &out, &errb)
+	var rep sweepReport
+	if err := json.Unmarshal(out.Bytes(), &rep); err != nil {
+		t.Fatalf("sweep --json not parseable: %v\nstdout=%s\nstderr=%s", err, out.String(), errb.String())
+	}
+	return rep
+}
+
+func findEntry(t *testing.T, rep sweepReport, name string) sweepEntry {
+	t.Helper()
+	for _, e := range rep.Entries {
+		if e.Skill == name {
+			return e
+		}
+	}
+	t.Fatalf("no sweep entry for %q; entries=%+v", name, rep.Entries)
+	return sweepEntry{}
 }
 
 func containsAll(s string, subs ...string) bool {
