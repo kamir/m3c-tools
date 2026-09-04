@@ -11,6 +11,27 @@
 #
 set -euo pipefail
 
+# Fixtures legen Wegwerf-git-Repos an. Als Hook geerbte GIT_*-Variablen wuerden
+# jeden git-Aufruf hier auf das AUFRUFENDE Repo umlenken — in
+# m3c-tools-maintenance hat genau das 3076 Loeschungen in einen echten Index
+# geschrieben (BUG-0213, zurueckgenommen, kein Datenverlust). Ein Fixture, das
+# ein echtes Repo anfassen kann, ist eine Waffe, kein Test.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
+      GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX
+
+# in_throwaway DIR — bricht ab, wenn git auf ein FREMDES Repo zeigt. Muss VOR
+# dem ersten Schreibbefehl laufen: schon `git init` und `git config` schreiben,
+# und `git config user.email` landete beim ersten Anlauf in der Config des
+# echten Repos. "Noch kein Repo" ist in Ordnung — das ist der Normalfall vor
+# `git init`. Pfade aufgeloest vergleichen (macOS: /var -> /private/var).
+in_throwaway() {
+  local want have
+  want=$(cd "$1" 2>/dev/null && pwd -P) || { echo "FATAL: $1 fehlt" >&2; exit 2; }
+  have=$(git rev-parse --show-toplevel 2>/dev/null) || return 0
+  [ "$have" = "$want" ] || { echo "FATAL: git zeigt auf $have, nicht auf $want" >&2; exit 2; }
+}
+
+
 BT="$(cd "$(dirname "$0")" && pwd)/bugtracker.sh"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -65,7 +86,9 @@ is "next-id FR on an empty tree" "$("$BT" next-id FR)" "FR-0001"
 GITBUGS="$TMP/gitmaint"
 mkdir -p "$GITBUGS/bug-reports"
 ( cd "$GITBUGS"
+  in_throwaway "$GITBUGS"     # VOR dem ersten Schreibbefehl
   git init -q -b master; git config user.email t@t; git config user.name t
+  in_throwaway "$GITBUGS"
   printf '# FR-0001\n' > bug-reports/FR-0001-on-master.md
   git add -A >/dev/null; git commit -qm one
   # someone else's unmerged work: a file that exists on no other checkout
@@ -250,7 +273,7 @@ is "the FR issue closed as completed" "$(grep -c 'issue close 88 .* --reason com
 
 # a throwaway checkout whose origin is a DIFFERENT repository
 OTHER="$TMP/other-checkout"
-mkdir -p "$OTHER"; ( cd "$OTHER"; git init -q; git remote add origin https://github.com/someone/unrelated.git )
+mkdir -p "$OTHER"; ( cd "$OTHER"; in_throwaway "$OTHER"; git init -q; in_throwaway "$OTHER"; git remote add origin https://github.com/someone/unrelated.git )
 
 : > "$GH_CALLS"
 ( cd "$OTHER" && M3C_BUG_REPO= "$BT" close 213 --status wontfix >/dev/null 2>&1 )
