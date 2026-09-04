@@ -28,12 +28,25 @@ func policyAllowConfirmed(t *testing.T) *RequiredPolicy {
 	return p
 }
 
+// mustRequired builds a required-mode Dispatcher and fails the test if construction
+// is rejected. NewDispatcherRequired now returns an error (it rejects a non-local
+// sink, REQ-6.10b); these tests all pass a local sink (failingSink or a spool-only
+// OutboxSink), so construction must succeed.
+func mustRequired(t *testing.T, policy *RequiredPolicy, sinks ...Sink) *Dispatcher {
+	t.Helper()
+	d, err := NewDispatcherRequired(policy, Redactor{}, sinks...)
+	if err != nil {
+		t.Fatalf("NewDispatcherRequired: unexpected construction error: %v", err)
+	}
+	return d
+}
+
 // (1) required + allow-listed policy.allow + a spool write that FAILS → the
 // operation fails closed (IsFailClosed true, with a clear reason).
 // BITE: delete the `d.required.failCloseable(...)` branch in deliver (making every
 // residual error advisory) and IsFailClosed goes false → this fails.
 func TestRequired_PolicyAllow_SpoolFails_FailsClosed(t *testing.T) {
-	d := NewDispatcherRequired(policyAllowConfirmed(t), Redactor{}, &failingSink{}) // failingSink models a full-disk/unwritable spool.
+	d := mustRequired(t, policyAllowConfirmed(t), &failingSink{}) // failingSink models a full-disk/unwritable spool.
 	err := d.Dispatch(New(EventPolicyAllow, OutcomeSuccess, SeverityInfo, "skillctl/x"))
 	if !IsFailClosed(err) {
 		t.Fatalf("policy.allow that could not be durably accepted must fail closed; got err=%v (IsFailClosed=false)", err)
@@ -50,7 +63,7 @@ func TestRequired_PolicyAllow_SpoolFails_FailsClosed(t *testing.T) {
 func TestRequired_PolicyAllow_SpoolSucceeds_Proceeds(t *testing.T) {
 	home := t.TempDir()
 	sink := NewOutboxSinkWithStore(nil, home) // nil store → spool-only, no db, no network.
-	d := NewDispatcherRequired(policyAllowConfirmed(t), Redactor{}, sink)
+	d := mustRequired(t, policyAllowConfirmed(t), sink)
 
 	e := New(EventPolicyAllow, OutcomeSuccess, SeverityInfo, "skillctl/x")
 	e.EventID = "aud-required-ok-1"
@@ -79,7 +92,7 @@ func TestRequired_DenialEvents_NeverFailClosed(t *testing.T) {
 		if pol.failCloseable(dt) {
 			t.Fatalf("denial type %q must be exempt from required fail-close even when listed (REQ-6.7)", dt)
 		}
-		d := NewDispatcherRequired(pol, Redactor{}, &failingSink{})
+		d := mustRequired(t, pol, &failingSink{})
 		// A denial event carries a deny/failure outcome; use one the taxonomy accepts.
 		out := OutcomeDeny
 		if dt == EventSignatureReject {
@@ -153,7 +166,7 @@ func TestRequired_PolicyAllow_NeedsSeparateConfirmation(t *testing.T) {
 	if unconf.failCloseable(EventPolicyAllow) {
 		t.Fatal("unconfirmed policy.allow must not be fail-closeable (REQ-6.10a)")
 	}
-	if IsFailClosed(NewDispatcherRequired(unconf, Redactor{}, &failingSink{}).Dispatch(New(EventPolicyAllow, OutcomeSuccess, SeverityInfo, "skillctl/x"))) {
+	if IsFailClosed(mustRequired(t, unconf, &failingSink{}).Dispatch(New(EventPolicyAllow, OutcomeSuccess, SeverityInfo, "skillctl/x"))) {
 		t.Fatal("dispatching policy.allow under an unconfirmed policy must not fail closed")
 	}
 	// Confirmed: it IS fail-closeable and DOES fail-close on a failing sink.
@@ -161,7 +174,7 @@ func TestRequired_PolicyAllow_NeedsSeparateConfirmation(t *testing.T) {
 	if !conf.failCloseable(EventPolicyAllow) {
 		t.Fatal("confirmed policy.allow must be fail-closeable")
 	}
-	if !IsFailClosed(NewDispatcherRequired(conf, Redactor{}, &failingSink{}).Dispatch(New(EventPolicyAllow, OutcomeSuccess, SeverityInfo, "skillctl/x"))) {
+	if !IsFailClosed(mustRequired(t, conf, &failingSink{}).Dispatch(New(EventPolicyAllow, OutcomeSuccess, SeverityInfo, "skillctl/x"))) {
 		t.Fatal("confirmed policy.allow with a failing spool must fail closed")
 	}
 }
@@ -176,12 +189,12 @@ func TestRequired_SkillExecute_FailClosesWithoutExtraConfirm(t *testing.T) {
 	if err != nil || p == nil {
 		t.Fatalf("skill.execute required config must build without a policy.allow confirmation; got p=%v err=%v", p, err)
 	}
-	if !IsFailClosed(NewDispatcherRequired(p, Redactor{}, &failingSink{}).Dispatch(New(EventSkillExecute, OutcomeSuccess, SeverityInfo, "skillctl/x"))) {
+	if !IsFailClosed(mustRequired(t, p, &failingSink{}).Dispatch(New(EventSkillExecute, OutcomeSuccess, SeverityInfo, "skillctl/x"))) {
 		t.Fatal("skill.execute that could not be durably accepted must fail closed")
 	}
 	// Spool success → proceeds.
 	home := t.TempDir()
-	d := NewDispatcherRequired(p, Redactor{}, NewOutboxSinkWithStore(nil, home))
+	d := mustRequired(t, p, NewOutboxSinkWithStore(nil, home))
 	e := New(EventSkillExecute, OutcomeSuccess, SeverityInfo, "skillctl/x")
 	e.EventID = "aud-skexec-ok-1"
 	if err := d.Dispatch(e); err != nil {

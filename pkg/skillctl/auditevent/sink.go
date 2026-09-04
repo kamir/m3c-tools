@@ -34,6 +34,29 @@ type Sink interface {
 	Close() error
 }
 
+// LocalSink marks a Sink that performs NO network I/O: its Write reaches only the
+// local machine (a file, a process stream, or the local outbox/spool). It exists
+// to enforce REQ-6.10b in CODE: under ModeRequired, "durably accepted" is spool
+// acceptance, NEVER a broker ack, so NewDispatcherRequired refuses any sink that is
+// not a LocalSink. A required policy can then never hang a skill load path on a
+// remote promise (the DoS the positive list exists to bound, §6b).
+//
+// The marker method is UNEXPORTED on purpose: only a Sink defined in THIS package
+// can claim localness. A network-egress sink in another package (a future Kafka
+// sink, FR-0112, or any HTTP poster) physically cannot implement it, so it is
+// rejected at construction rather than trusted by a caller-side contract.
+type LocalSink interface {
+	Sink
+	localSink()
+}
+
+// isLocalSink reports whether s satisfies the LocalSink marker (a no-network,
+// spool-only fulfillment sink, REQ-6.10b).
+func isLocalSink(s Sink) bool {
+	_, ok := s.(LocalSink)
+	return ok
+}
+
 // Dispatcher redacts an event, validates it, and fans it out to every configured
 // sink. Its delivery MODE (best-effort / durable / required, §6) decides what a
 // sink failure means (delivery.go). It never panics and never blocks, which

@@ -34,6 +34,11 @@ func (f *failingSink) Write(*Event) error {
 }
 func (f *failingSink) Close() error { f.closed = true; return nil }
 
+// failingSink models a full-disk / unwritable LOCAL spool: it is a LocalSink (no
+// network) whose Write fails, so it is an accepted sink under NewDispatcherRequired
+// (the fail-close comes from the WRITE failing, not from the sink being non-local).
+func (f *failingSink) localSink() {}
+
 // TestDispatchFanOutAndErrorCollection proves an event reaches every sink and a
 // single sink failure is collected (not swallowed, not fatal to the others).
 func TestDispatchFanOutAndErrorCollection(t *testing.T) {

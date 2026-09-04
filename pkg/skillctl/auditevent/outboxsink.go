@@ -70,6 +70,13 @@ func NewOutboxSinkWithStore(st *outbox.Store, home string) *OutboxSink {
 // Name identifies the sink for observability (FR-0111).
 func (o *OutboxSink) Name() string { return "outbox" }
 
+// localSink marks OutboxSink as a LocalSink (REQ-6.10b): it persists to the local
+// SPEC-0317 outbox (SQLite + spool.jsonl) and reaches NO broker; the network drain
+// is the SEPARATE `skillctl sync` process. It is therefore the recommended
+// fulfillment sink under ModeRequired, where "durably accepted" is exactly spool
+// acceptance, never a remote ack.
+func (o *OutboxSink) localSink() {}
+
 // Close closes the underlying store (if this sink opened one). A spool-only sink
 // holds nothing to close.
 func (o *OutboxSink) Close() error {

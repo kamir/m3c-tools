@@ -43,6 +43,68 @@ var ErrRequiredNotDurable = errors.New("auditevent: required audit event not dur
 // should treat that as its own hard stop, but it is not this contract.
 func IsFailClosed(err error) bool { return errors.Is(err, ErrRequiredNotDurable) }
 
+// DispatchRequired dispatches e and, for a MANDATORY event, fail-closes on ANY
+// non-nil Dispatch error, not only ErrRequiredNotDurable (SPEC-0403 §6b, AUD-01).
+//
+// WHY THIS EXISTS. IsFailClosed reports ONLY the durability fail-close
+// (ErrRequiredNotDurable). But a mandatory event can fail Dispatch for a SECOND
+// reason: it is MALFORMED (ErrInvalidEvent from Validate), in which case Dispatch
+// returns before any sink is written and the event is never recorded. A required
+// caller that gates solely on IsFailClosed would then let a malformed mandatory
+// event proceed UN-AUDITED, which is exactly the false assurance §6b/AUD-01 forbid
+// (a consequential operation reported successful while its mandatory audit event
+// was silently dropped). DispatchRequired closes that gap: for a mandatory event,
+// a validation error is as fail-closing as a durability error.
+//
+// It changes NOTHING for a non-mandatory event: a denial type (REQ-6.7, exempt), a
+// type not on the positive list, an unconfirmed policy.allow, a nil/absent policy,
+// or any non-required mode all return Dispatch's error verbatim, so the SPEC-0255 /
+// REQ-6.4 decision-invariance default is untouched. Use plain Dispatch on the gate
+// hot path; use DispatchRequired at a consequential producer that has opted into
+// required for e's type.
+func (d *Dispatcher) DispatchRequired(e *Event) error {
+	err := d.Dispatch(e)
+	if err == nil || IsFailClosed(err) {
+		return err // success, or already load-bearing (durability fail-close).
+	}
+	if d.isMandatory(e) {
+		// A mandatory event that did not go through (a malformed ErrInvalidEvent, or
+		// any other non-durability delivery error) MUST fail the caller closed: the
+		// operation cannot be reported audited when its required event was not
+		// recorded (AUD-01). Wrap in the load-bearing sentinel so IsFailClosed==true.
+		// Two %w: the result satisfies IsFailClosed (ErrRequiredNotDurable) AND still
+		// carries the underlying cause (e.g. ErrInvalidEvent) for an operator.
+		return fmt.Errorf("%w: a MANDATORY audit event was not recorded (event_type=%s): %w",
+			ErrRequiredNotDurable, mandatoryTypeOf(e), err)
+	}
+	return err // not a mandatory event: advisory, decision-invariant (REQ-6.4).
+}
+
+// isMandatory reports whether e is an event this Dispatcher's required policy would
+// fail-close on: required mode, a non-nil policy, and (for a non-nil event) a
+// fail-closeable type (on the positive list, not a denial type, and, for
+// policy.allow, confirmed). A NIL event under an active required policy is treated
+// as mandatory: the caller invoked the required variant, so a nil event is the
+// worst un-audited case and must not slip through as merely advisory.
+func (d *Dispatcher) isMandatory(e *Event) bool {
+	if d.mode != ModeRequired || d.required == nil {
+		return false
+	}
+	if e == nil {
+		return true
+	}
+	return d.required.failCloseable(e.EventType)
+}
+
+// mandatoryTypeOf renders the event type for a fail-close message, tolerating a
+// nil event.
+func mandatoryTypeOf(e *Event) EventType {
+	if e == nil {
+		return "<nil>"
+	}
+	return e.EventType
+}
+
 // Mode is the SPEC-0403 §6 delivery semantics selector (REQ-6.1).
 type Mode string
 
