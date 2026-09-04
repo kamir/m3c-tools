@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MCP Skill Server — exposes the skill lifecycle as Claude Code tools.
+"""MCP Skill Server: exposes the skill lifecycle as Claude Code tools.
 
 Wraps skillctl (Go CLI) and aims-core (REST API) into native MCP tools
 so Claude Code can directly browse, query, import, and track skills.
@@ -56,7 +56,7 @@ if not API_KEY:
 
 mcp = FastMCP(
     "skill-server",
-    instructions="Skill lifecycle tools — browse, query, import, track, discover skills across all projects.",
+    instructions="Skill lifecycle tools: browse, query, import, track, discover skills across all projects.",
 )
 
 
@@ -75,16 +75,16 @@ async def skill_scan(
     """Scan Claude Code skill surfaces (user, project, plugin) per SPEC-0189.
 
     Args:
-        source: One of "claude" (default — user + plugin tiers, matches what
+        source: One of "claude" (default, user + plugin tiers, matches what
             Claude Code resolves at runtime), "user" (user tier only),
-            "projects" (legacy SPEC-0115 mode — requires path), "plugins"
+            "projects" (legacy SPEC-0115 mode, requires path), "plugins"
             (plugin tier only), or "all" (union).
         path: Additional roots to scan as project tier (repeatable).
         with_trust: If True, cross-reference each skill against SPEC-0188
             install state via the sibling .skb. Adds Bundle{TrustChain}
             block per skill.
         include_shadowed: If True, emit ALL occurrences across tiers
-            (default emits winners only — project > user > plugin).
+            (default emits winners only: project > user > plugin).
 
     Returns a summary by type/project + tier breakdown. JSON output is
     available via the `skillctl scan --format json` CLI directly.
@@ -196,7 +196,7 @@ async def skill_browse(
     for row in rows:
         id_, label, kind, stype, proj, desc, cat, degree = row
         desc_short = (desc or "")[:80].replace("\n", " ").strip()
-        lines.append(f"  {label} [{stype}] — {proj} (degree:{degree})")
+        lines.append(f"  {label} [{stype}]: {proj} (degree:{degree})")
         if cat:
             lines.append(f"    category: {cat}")
         if desc_short:
@@ -232,7 +232,7 @@ async def skill_search(query: str, limit: int = 20) -> str:
     for row in rows:
         id_, label, kind, stype, proj, desc, cat, degree = row
         desc_short = (desc or "")[:80].replace("\n", " ").strip()
-        lines.append(f"  {label} [{stype}] — {proj}")
+        lines.append(f"  {label} [{stype}]: {proj}")
         if desc_short:
             lines.append(f"    {desc_short}")
 
@@ -381,7 +381,7 @@ async def skill_profile() -> str:
     categories = data.get("categories", {})
 
     lines = [
-        f"Skill Profile — {data.get('display_name', 'You')}",
+        f"Skill Profile: {data.get('display_name', 'You')}",
         f"Total skills: {data.get('skill_count', len(skills))}",
         f"Fluent: {summary.get('fluent', 0)}  |  Practiced: {summary.get('practiced', 0)}  |  Aware: {summary.get('aware', 0)}\n",
     ]
@@ -395,7 +395,7 @@ async def skill_profile() -> str:
     if skills:
         lines.append("Skills:")
         for s in sorted(skills, key=lambda x: {"fluent": 0, "practiced": 1, "aware": 2}.get(x.get("status", "aware"), 3)):
-            lines.append(f"  [{s.get('status', '?'):9}] {s.get('name', '?')} ({s.get('category', '-')}) — {s.get('use_count', 0)} uses")
+            lines.append(f"  [{s.get('status', '?'):9}] {s.get('name', '?')} ({s.get('category', '-')}): {s.get('use_count', 0)} uses")
 
     return "\n".join(lines)
 
@@ -468,7 +468,7 @@ async def skill_discover(limit: int = 10) -> str:
     lines = [f"Skill Suggestions ({len(suggestions)}):\n"]
     for s in suggestions:
         score = s.get("score", 0)
-        lines.append(f"  {s.get('name', '?')} [{s.get('category', '-')}] — score: {score:.1f}")
+        lines.append(f"  {s.get('name', '?')} [{s.get('category', '-')}], score: {score:.1f}")
         lines.append(f"    {s.get('reason', '')}")
         lines.append(f"    Strategy: {s.get('strategy', '?')}")
 
@@ -517,7 +517,7 @@ async def _api_get(path: str) -> dict | str:
         with urllib.request.urlopen(req, timeout=10) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
-        return f"API error: HTTP {e.code} — {e.read().decode()[:200]}"
+        return f"API error: HTTP {e.code}: {e.read().decode()[:200]}"
     except Exception as e:
         return f"API unreachable: {e}"
 
@@ -536,7 +536,7 @@ async def _api_post(path: str, body: dict) -> dict | str:
         with urllib.request.urlopen(req, timeout=15) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
-        return f"API error: HTTP {e.code} — {e.read().decode()[:200]}"
+        return f"API error: HTTP {e.code}: {e.read().decode()[:200]}"
     except Exception as e:
         return f"API unreachable: {e}"
 
@@ -622,7 +622,7 @@ _VALID_LEVELS = frozenset({"green", "yellow", "red"})
 
 # stdout parsers. The CLI prints a deterministic chain-summary one-liner
 # of the form "<digest>: signed by <author>, admitted by <reg-key>,
-# attested <level>" — see pkg/skillctl/verify/verify.go:201. We parse it
+# attested <level>": see pkg/skillctl/verify/verify.go:201. We parse it
 # back out so the MCP tool response is structured rather than free-text.
 _CHAIN_SUMMARY_RE = re.compile(
     r"^(?P<digest>sha256:[0-9a-f]{64}):\s+"
@@ -944,7 +944,7 @@ async def skill_verify(
     timeout: int = 120,
 ) -> dict:
     """Re-run the SPEC-0188 §7 trust-chain check against an already-installed
-    skill. No filesystem mutation — useful for catching post-install
+    skill. No filesystem mutation: useful for catching post-install
     registry revocations or trust-root rotations.
 
     Same response shape as skill_install minus install_path.
@@ -1049,11 +1049,11 @@ async def skill_attest(
 # === SPEC-0122 v1.2 (S6.3 closure 2026-05-07): MCP coverage for every CLI ===
 #
 # Five new tools wrap the CLI surfaces shipped in S2/S3/S5:
-#   skill_awareness_sync     — SPEC-0195 awareness sync
-#   skill_audit              — SPEC-0189 §14 audit antivirus mode
-#   skill_propose            — SPEC-0194 propose + 10-check gate
-#   skill_revoke             — SPEC-0188 §4.5 bundle revocation
-#   skill_data_source_query  — SPEC-0196 §4.2 chip state lookup
+#   skill_awareness_sync, SPEC-0195 awareness sync
+#   skill_audit, SPEC-0189 §14 audit antivirus mode
+#   skill_propose, SPEC-0194 propose + 10-check gate
+#   skill_revoke, SPEC-0188 §4.5 bundle revocation
+#   skill_data_source_query: SPEC-0196 §4.2 chip state lookup
 #
 # All five follow the existing pattern: validate args → exec skillctl
 # (or REST GET) → classify by exit code → return structured dict.
@@ -1139,7 +1139,7 @@ async def skill_audit(
     exit code (0 = clean, 2 = unverified/below_min, 3 = broken).
 
     Cleanup mode requires either dry_run_cleanup=true (Step 1: produces
-    a token; no deletion) — confirming the deletion via MCP is NOT
+    a token; no deletion): confirming the deletion via MCP is NOT
     supported (the second step requires a live `--dry-run-cleanup-token`
     that only the operator's terminal session has).
     """
@@ -1327,7 +1327,7 @@ async def skill_data_source_query(
                 "remediation": "Pass a canonical ds:... id."}
 
     base = (registry_url or API_URL).rstrip("/")
-    # ds:... ids contain ':' and '/' — both URL-safe in path segments per
+    # ds:... ids contain ':' and '/': both URL-safe in path segments per
     # RFC 3986 §3.3, but we still pass via path-component-encode to be safe
     # against future schemes that introduce reserved characters.
     encoded_id = urllib.parse.quote(data_source_id, safe=":/.{}")

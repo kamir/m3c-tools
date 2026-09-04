@@ -1,28 +1,28 @@
 name: gosec (SAST)
 
-# Gate 1 (H1) — gosec static analysis, baseline-then-block.
+# Gate 1 (H1): gosec static analysis, baseline-then-block.
 #
 # MECHANISM: gosec runs over the whole module, emits SARIF, and uploads it to
 # GitHub Code Scanning. Code Scanning fingerprints each result and does the
-# new-vs-baseline diff NATIVELY — the first upload establishes the baseline (the
+# new-vs-baseline diff NATIVELY: the first upload establishes the baseline (the
 # ~500 pre-existing findings triaged in docs/security/gosec-baseline.md), and
 # every later run surfaces only findings that are NEW relative to that history.
 # The gosec step itself uses `-no-fail`, so this job is ALWAYS green on the
-# existing backlog — it never blocks a build on its own.
+# existing backlog: it never blocks a build on its own.
 #
 # THE BLOCKING KNOB IS A REPO SETTING, not this file: enable branch protection
 # "Require the code scanning results check to pass" (Settings → Branches, or
 # Settings → Code security → Code scanning → Protection rules) and point it at
 # the `gosec` tool. That is what turns "a new finding appeared" into "the PR is
-# blocked" — exactly like CODEOWNERS, it lives in repo settings, not in YAML.
+# blocked". Exactly like CODEOWNERS, it lives in repo settings, not in YAML.
 # Until it is set, this job still gives you the Code Scanning dashboard + alerts.
 #
 # COMPLEMENTARY IN-CI GATE (now exists): gosec-diff-gate.yml runs a self-contained
-# hard diff against a committed baseline and BLOCKS a PR directly — no repo toggle
+# hard diff against a committed baseline and BLOCKS a PR directly, no repo toggle
 # required. The brittleness once cited here is defeated on two fronts: gosec is
 # PINNED at v2.29.0 (rule ids + snippet rendering don't drift under it), and the
 # per-finding signature keys on (rule_id, repo-relative-file, normalized-code)
-# with line/column EXCLUDED and the "<lineno>: " snippet prefixes stripped — so an
+# with line/column EXCLUDED and the "<lineno>: " snippet prefixes stripped, so an
 # existing finding that merely shifts lines keeps its signature and is not a false
 # "new". (gosec's SARIF still carries no partialFingerprints; the diff gate uses
 # gosec's JSON + a stable signature instead.) This Code-Scanning upload stays as
@@ -61,7 +61,7 @@ jobs:
 
       # Pinned gosec release (CD-T2: an exact version tag, never a floating ref).
       # Installed via `go install` like golangci-lint/govulncheck in ci.yml (keeps
-      # the third-party ACTION surface minimal — only the SARIF uploader below is
+      # the third-party ACTION surface minimal, only the SARIF uploader below is
       # a pinned external action).
       - name: Install gosec (pinned)
         run: go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
@@ -85,7 +85,7 @@ jobs:
 
       # best-effort: the gosec RUN above is the substance; Code Scanning ingestion
       # is a bonus over CodeQL (the primary Go SAST here). A residual SARIF quirk
-      # must not red-block the whole build — verify ingestion in the dashboard.
+      # must not red-block the whole build: verify ingestion in the dashboard.
       - name: Upload SARIF to Code Scanning
         continue-on-error: true
         uses: github/codeql-action/upload-sarif@6f5948dfacef28e207b48d0905cf90c03365536d # v3.37.9

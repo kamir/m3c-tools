@@ -106,7 +106,7 @@ func runInstall(args []string, stdout, stderr io.Writer) int {
 	c := registry.New(root.RegistryURL, httpClient)
 
 	// Audit poster targets the same registry. The CLI does NOT carry a
-	// separate audit URL — keeping the configuration surface narrow.
+	// separate audit URL: keeping the configuration surface narrow.
 	auditPoster := install.HTTPAuditPoster(httpClient, root.RegistryURL)
 
 	var logger io.Writer
@@ -192,7 +192,7 @@ func runVerify(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "revocations or trust-root rotations. --offline skips the registry.")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "--bundle verifies a standalone .skb FILE with NO install state and NO network,")
-		fmt.Fprintln(stderr, "against locally pinned trust-roots — the trustless third-party path.")
+		fmt.Fprintln(stderr, "against locally pinned trust-roots: the trustless third-party path.")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Exit codes are the same as `install` (see SPEC-0188 §11).")
 		fs.PrintDefaults()
@@ -203,7 +203,7 @@ func runVerify(args []string, stdout, stderr io.Writer) int {
 	}
 
 	// --bundle: standalone, fully-offline verification of a .skb FILE against
-	// pinned trust-roots (SPEC-0276 R4.2). No install state, no network — the
+	// pinned trust-roots (SPEC-0276 R4.2). No install state, no network: the
 	// path a third party runs to reproduce our verdict without trusting us.
 	if *bundlePath != "" {
 		if fs.NArg() != 0 {

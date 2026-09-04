@@ -111,7 +111,7 @@ func TestReadAndVerifyTrail_DetectsReplay(t *testing.T) {
 // TestReadAndVerifyTrail_HashChainDetectsMiddleDeletion is the IS-T8 acceptance
 // test: append three signed records, delete the MIDDLE line, and assert the
 // hash-chain contiguity check reports a break. Before IS-T8 this excision passed
-// clean — each surviving line still carries a valid per-line device signature, so
+// clean: each surviving line still carries a valid per-line device signature, so
 // nothing flagged the removed record. The seq + prev_hash chain now bites.
 func TestReadAndVerifyTrail_HashChainDetectsMiddleDeletion(t *testing.T) {
 	home := t.TempDir()
@@ -183,7 +183,7 @@ func TestReadAndVerifyTrail_ChainedTrailWithoutDeviceKeyIsUnverified(t *testing.
 		t.Fatalf("baseline intact chain should be signed+verified, got %+v", tv)
 	}
 
-	// Remove the device key material (both priv + pub) — the state after a same-uid
+	// Remove the device key material (both priv + pub): the state after a same-uid
 	// key wipe. readAndVerifyTrail loads the key directly, so this forces havePub=false.
 	_ = os.Remove(device.PrivPath(home))
 	_ = os.Remove(device.PubPath(home))
@@ -203,7 +203,7 @@ func TestReadAndVerifyTrail_ChainedTrailWithoutDeviceKeyIsUnverified(t *testing.
 // TestReadAndVerifyTrail_ChainSignatureDetectsKeylessRewrite is the hardening
 // bite-test for the SECOND (chain-link) device signature. A same-uid attacker
 // with NO key deletes the middle record and rewrites the survivor's seq/prev_hash
-// so the KEYLESS contiguity check passes again — but cannot re-sign the link, so
+// so the KEYLESS contiguity check passes again, but cannot re-sign the link, so
 // the chain-signature layer must still report a break. Case B covers the downgrade
 // where the attacker strips the signature entirely to fall back to keyless-only.
 func TestReadAndVerifyTrail_ChainSignatureDetectsKeylessRewrite(t *testing.T) {
@@ -250,7 +250,7 @@ func TestReadAndVerifyTrail_ChainSignatureDetectsKeylessRewrite(t *testing.T) {
 		}
 	}
 
-	// Case A — rewrite seq/prev_hash to look contiguous, keep the OLD signature
+	// Case A: rewrite seq/prev_hash to look contiguous, keep the OLD signature
 	// (which signed seq=2). The device-signature check must catch it.
 	home, rec0, rec2 := buildTrail(t)
 	h0, ok := invocationChainHash(rec0.InvocationRecord)
@@ -270,7 +270,7 @@ func TestReadAndVerifyTrail_ChainSignatureDetectsKeylessRewrite(t *testing.T) {
 		t.Errorf("keyless seq/prev_hash rewrite not caught by the chain signature: %+v", tv)
 	}
 
-	// Case B — same rewrite but STRIP the signature (downgrade to keyless-only).
+	// Case B: same rewrite but STRIP the signature (downgrade to keyless-only).
 	home2, rec0b, rec2b := buildTrail(t)
 	h0b, _ := invocationChainHash(rec0b.InvocationRecord)
 	one2 := uint64(1)
@@ -316,7 +316,7 @@ func TestReadAndVerifyTrail_OversizedLineIsFailClosed(t *testing.T) {
 	_ = os.Remove(trailHWMPath(home))
 
 	// A single line > 4 MiB (the scanner's per-line cap) inserted AFTER the genesis
-	// record. Scan() reads record0, then errors on the oversized line and stops —
+	// record. Scan() reads record0, then errors on the oversized line and stops,
 	// records 1 and 2 (after it) are never read.
 	giant := strings.Repeat("x", (4<<20)+1024)
 	rewritten := lines[0] + "\n" + giant + "\n" + lines[1] + "\n" + lines[2] + "\n"
@@ -326,7 +326,7 @@ func TestReadAndVerifyTrail_OversizedLineIsFailClosed(t *testing.T) {
 
 	tv := readAndVerifyTrail(home)
 	// The oversized line stopped the scan: only the genesis record was read (the two
-	// records after it were dropped) — proof the scan halted mid-file.
+	// records after it were dropped): proof the scan halted mid-file.
 	if tv.Total != 1 {
 		t.Fatalf("scan should have stopped after the genesis record, Total=%d (%+v)", tv.Total, tv)
 	}
@@ -368,7 +368,7 @@ func TestReadAndVerifyTrail_OversizedFileIsRefused(t *testing.T) {
 	if !tv.Oversize {
 		t.Errorf("oversized trail not flagged Oversize: %+v", tv)
 	}
-	// Load-bearing: the file was REFUSED, not slurped — no records counted and the
+	// Load-bearing: the file was REFUSED, not slurped, no records counted and the
 	// trail is not reported as a clean verify. Pre-fix Total would be > 0 and
 	// ChainVerified true.
 	if tv.Total != 0 {
@@ -381,12 +381,12 @@ func TestReadAndVerifyTrail_OversizedFileIsRefused(t *testing.T) {
 
 // TestReadAndVerifyTrail_TailTruncationDetectedViaHWM is the IS-RS-04 bite-test.
 // Deleting the trailing records leaves a VALID, contiguous, fully-signed prefix:
-// the hash chain re-verifies clean (ChainVerified stays true — even keyless), so
+// the hash chain re-verifies clean (ChainVerified stays true, even keyless), so
 // the chain alone cannot see tail truncation. The local high-water-mark sidecar
 // remembers how far the trail once reached and flags the regression.
 //
 // HONEST SCOPE: this is LOCAL, cross-run, and best-effort. It is NOT tamper-proof
-// — a same-uid actor who truncates the trail can also edit/delete the sidecar to
+//. A same-uid actor who truncates the trail can also edit/delete the sidecar to
 // erase the high-water-mark; the non-repudiable close is an EXTERNAL SPEC-0358
 // head anchor, not this sidecar.
 func TestReadAndVerifyTrail_TailTruncationDetectedViaHWM(t *testing.T) {
@@ -426,7 +426,7 @@ func TestReadAndVerifyTrail_TailTruncationDetectedViaHWM(t *testing.T) {
 	}
 
 	tv := readAndVerifyTrail(home)
-	// The surviving prefix is a VALID signed chain — the hash-chain check cannot see
+	// The surviving prefix is a VALID signed chain. The hash-chain check cannot see
 	// the tail deletion. This is exactly the gap IS-RS-04 fills.
 	if !tv.ChainVerified {
 		t.Fatalf("truncated prefix should still be a clean hash chain (the chain cannot see tail truncation): %+v", tv)

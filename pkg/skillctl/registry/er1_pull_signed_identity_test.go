@@ -12,15 +12,15 @@ import (
 // prefilter only:
 //
 //   - a genuinely-signed REVOKE re-tagged skill-event:attested must STILL revoke
-//     (and must NOT be counted as an attestation) — otherwise a writer could hide a
+//     (and must NOT be counted as an attestation): otherwise a writer could hide a
 //     revocation among the attestations and keep a compromised bundle installable;
 //   - a genuinely-signed ATTEST re-tagged skill-event:revoked must NOT revoke (and
-//     must be counted as the attestation it is) — otherwise a writer could suppress a
+//     must be counted as the attestation it is): otherwise a writer could suppress a
 //     good bundle by forging a revocation from a re-tagged attestation.
 //
 // Against the old code (which trusted the skill-event:<kind> tag) the revoke would
 // have been recorded as an empty-level attestation and the attest would have revoked
-// its digest — exactly inverted from the signed truth.
+// its digest: exactly inverted from the signed truth.
 func TestER1LoadAttestRevokeSignedIdentity(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(nil)
 	f := newPullFake(t)
@@ -93,7 +93,7 @@ func TestER1LoadAttestRevokeSignedIdentity(t *testing.T) {
 // TestER1LoadAttestRevokeDiscoveryDeGate is the FR-0090 IS-T4b regression (the
 // IS-03 residual). loadAttestRevoke's DISCOVERY must not be prefiltered on the
 // attacker-controlled skill-event:<kind> tag: a genuinely-signed REVOKE must still
-// be found — and still revoke — when its ER1 item is
+// be found, and still revoke, when its ER1 item is
 //
 //   - re-tagged to an UNsearched kind (skill-event:installed), or
 //   - stripped of the skill-event tag entirely.
@@ -110,7 +110,7 @@ func TestER1LoadAttestRevokeDiscoveryDeGate(t *testing.T) {
 	digestInstalledTag := "sha256:" + strings.Repeat("c", 64)
 	digestNoTag := "sha256:" + strings.Repeat("d", 64)
 
-	// (1) A signed REVOKE whose ER1 item is TAGGED skill-event:installed — a kind
+	// (1) A signed REVOKE whose ER1 item is TAGGED skill-event:installed: a kind
 	// the old two-search DISCOVERY never queried.
 	revInstalled, err := BuildBundleRevokedEvent(RevokedEventInput{
 		BundleDigest: digestInstalledTag, ReasonCode: "key-compromise", RevokedBy: "id:test@m3c", OccurredAt: testTime(),
@@ -147,7 +147,7 @@ func TestER1LoadAttestRevokeDiscoveryDeGate(t *testing.T) {
 		"tags": strings.Join([]string{
 			"m3c-skill-bundle", "skill-registry:self",
 			"skill:pdf", "skill-digest:" + digestNoTag,
-			// no skill-event:<kind> tag — the old search would never find this item
+			// no skill-event:<kind> tag. The old search would never find this item
 		}, ","),
 		"transcript": renderTestEventBody(revNoTag, "revoked"),
 	})

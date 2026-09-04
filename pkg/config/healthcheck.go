@@ -20,7 +20,7 @@ var healthCheckInsecureWarnOnce sync.Once
 
 // isLoopbackHealthURL reports whether the host component of rawURL is a literal
 // loopback address (127.0.0.0/8, ::1, or "localhost"). It is a self-contained
-// copy of er1.isLoopbackURL — pkg/config cannot import pkg/er1 (that would form
+// copy of er1.isLoopbackURL. pkg/config cannot import pkg/er1 (that would form
 // an import cycle, since er1 imports config), so the SEC-M7 gate is duplicated
 // here rather than shared. Pure (no DNS): a hostname that merely *resolves* to
 // loopback is NOT treated as loopback.
@@ -43,7 +43,7 @@ func isLoopbackHealthURL(rawURL string) bool {
 // the TestConnection health check, applying the SEC-M7 fail-closed rule: a
 // request to disable TLS verification (ER1_VERIFY_SSL in {false,0,no}) is only
 // honoured for a loopback target. For any non-loopback host the request is
-// REFUSED (verification forced back on) with a one-time loud WARN — identical
+// REFUSED (verification forced back on) with a one-time loud WARN: identical
 // policy to er1.applyTLSVerificationPolicy so this third path can no longer
 // silently MITM-test a remote profile.
 func healthCheckSkipVerify(apiURL, verifySSLStr string) bool {
@@ -62,7 +62,7 @@ func healthCheckSkipVerify(apiURL, verifySSLStr string) bool {
 		return true
 	}
 	healthCheckInsecureWarnOnce.Do(func() {
-		log.Printf("[config] SECURITY: REFUSING to disable TLS verification (ER1_VERIFY_SSL=false) for NON-loopback host %q during Test Connection — testing over a verified channel instead. ER1_VERIFY_SSL=false is only honoured for 127.0.0.1/localhost.", apiURL)
+		log.Printf("[config] SECURITY: REFUSING to disable TLS verification (ER1_VERIFY_SSL=false) for NON-loopback host %q during Test Connection: testing over a verified channel instead. ER1_VERIFY_SSL=false is only honoured for 127.0.0.1/localhost.", apiURL)
 	})
 	return false
 }

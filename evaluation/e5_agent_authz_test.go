@@ -1,15 +1,15 @@
 package evaluation
 
-// E5 — Agent-grant AUTHORIZATION overhead (SPEC-0280 §2; SPEC-0247 + SPEC-0277).
+// E5: Agent-grant AUTHORIZATION overhead (SPEC-0280 §2; SPEC-0247 + SPEC-0277).
 //
 // Method: measure the added cost of the per-invocation authorization gate vs a
 // no-gate baseline. The gate has two shipped parts:
 //
-//  1. agentid.Verify(mandate) — the full OFFLINE cryptographic verification of
+//  1. agentid.Verify(mandate): the full OFFLINE cryptographic verification of
 //     the agent's signed mandate against PINNED keys (owner signature, validity
 //     window, revocation set). A relying party that re-verifies the mandate each
 //     invocation pays this.
-//  2. Grant.AuthorizeSkill(skill, intents) — the per-call membership predicate
+//  2. Grant.AuthorizeSkill(skill, intents): the per-call membership predicate
 //     (skill in grant AND every required intent in grant). A relying party that
 //     caches the verified mandate pays ONLY this per invocation.
 //

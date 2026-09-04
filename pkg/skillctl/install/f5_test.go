@@ -12,7 +12,7 @@ import (
 
 // TestContentBinding_NestedStashName_Flagged proves SEC F5: a NESTED file named
 // like a top-level stash file (here .m3c-provenance.json under scripts/) is no
-// longer skipped by basename — it is flagged as an unexpected installed file.
+// longer skipped by basename. It is flagged as an unexpected installed file.
 func TestContentBinding_NestedStashName_Flagged(t *testing.T) {
 	dir := t.TempDir()
 	skb := makeSkb(t, dir, map[string]string{"SKILL.md": "# hello"})
@@ -44,7 +44,7 @@ func TestContentBinding_NestedSkb_Flagged(t *testing.T) {
 }
 
 // TestContentBinding_TopLevelDSStore_StillSkipped confirms .DS_Store stays
-// benign (skipped anywhere) — the F5 tightening must not flag macOS noise.
+// benign (skipped anywhere). The F5 tightening must not flag macOS noise.
 func TestContentBinding_NestedDSStore_StillSkipped(t *testing.T) {
 	dir := t.TempDir()
 	skb := makeSkb(t, dir, map[string]string{"SKILL.md": "# hello", "sub/x.txt": "d"})

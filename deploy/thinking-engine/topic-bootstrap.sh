@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# topic-bootstrap.sh — create the 8 Thinking Engine topics for one user.
+# topic-bootstrap.sh: create the 8 Thinking Engine topics for one user.
 #
 # SPEC-0167 §Kafka Topology. Refuses to run without --ctx-hash; all
 # topics are prefixed m3c.<ctx_hash>.  RF=1 in Phase 1 (dev only).
@@ -54,7 +54,7 @@ TOPICS=(
 )
 
 if ! command -v kafka-topics >/dev/null 2>&1; then
-  echo "kafka-topics not in PATH — invoke via docker:" >&2
+  echo "kafka-topics not in PATH: invoke via docker:" >&2
   echo "  docker compose -f docker-compose.yml exec broker kafka-topics --help" >&2
   echo "Or set PATH to your Confluent CLI install." >&2
   exit 1

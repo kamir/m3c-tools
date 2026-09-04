@@ -7,11 +7,11 @@ title: "Feature Spec: Plaud.ai Integration"
 
 **Status:** Draft
 **Date:** 2026-03-13
-**Observation Type:** Import (Channel D) — extends existing audio import pipeline
+**Observation Type:** Import (Channel D): extends existing audio import pipeline
 
 ## Problem
 
-m3c-tools currently captures observations from YouTube (video transcripts), screenshots, voice recordings, and batch audio files. The user also captures field observations (customer visits, sales calls, consulting sessions) using a **Plaud.ai** voice recorder device. These recordings are uploaded to Plaud's cloud, transcribed, and summarized — but there is no way to pull them into the m3c-tools → ER1 knowledge pipeline.
+m3c-tools currently captures observations from YouTube (video transcripts), screenshots, voice recordings, and batch audio files. The user also captures field observations (customer visits, sales calls, consulting sessions) using a **Plaud.ai** voice recorder device. These recordings are uploaded to Plaud's cloud, transcribed, and summarized, but there is no way to pull them into the m3c-tools → ER1 knowledge pipeline.
 
 The gap: field recordings captured via Plaud sit in a separate silo, disconnected from the user's ER1 knowledge base.
 
@@ -29,11 +29,11 @@ Add a new capture source: **Plaud.ai cloud recordings**. The integration should:
 ### Option A: Official Partner API (docs.plaud.ai)
 
 - **Base URLs:** `https://platform.plaud.ai/developer/api` (US), `https://platform-eu.plaud.ai/developer/api` (EU)
-- **Auth:** OAuth2 — partner `client_id:secret_key` → partner access token → per-user token
+- **Auth:** OAuth2: partner `client_id:secret_key` → partner access token → per-user token
 - **Capabilities:** Submit audio for transcription, retrieve transcription results
 - **Limitations:** No file listing, no audio download, no access to existing Plaud cloud recordings
 - **Access:** Requires partner agreement with Plaud (contact support@plaud.ai)
-- **Verdict:** Designed for SaaS partners embedding Plaud transcription — does NOT provide access to the user's own recording library
+- **Verdict:** Designed for SaaS partners embedding Plaud transcription. Does NOT provide access to the user's own recording library
 
 ### Option B: Plaud Web API (unofficial, used by openplaud)
 
@@ -170,7 +170,7 @@ m3c-tools plaud auth <token>
 ### Menu Bar Integration
 
 Add a new menu item under the existing menu:
-- **"Plaud Sync"** — opens a list of recent Plaud recordings (like the "Recent files" view in the screenshot)
+- **"Plaud Sync"**: opens a list of recent Plaud recordings (like the "Recent files" view in the screenshot)
 - Checkbox selection for which recordings to import
 - "Import Selected" button → builds composite docs → uploads to ER1
 - Status indicator showing sync state and last sync time
@@ -241,7 +241,7 @@ Text of second speaker segment...
 
 ## Cross-Platform Notes (ST-002)
 
-- `pkg/plaud/` is pure Go HTTP client — **cross-platform ready** from day one
+- `pkg/plaud/` is pure Go HTTP client: **cross-platform ready** from day one
 - Token extraction works in any browser (not macOS-specific)
 - CLI commands work on Windows/Ubuntu/Android(gomobile) without changes
 - Menu bar UI is platform-specific (Phase 2 follows ST-002 GUI framework choice)
@@ -255,7 +255,7 @@ Text of second speaker segment...
 ## Open Questions
 
 1. **Token refresh:** How long do Plaud web tokens last? Need to test expiry and re-auth flow.
-2. **Rate limits:** Plaud web API rate limits are undocumented — need to add conservative backoff.
+2. **Rate limits:** Plaud web API rate limits are undocumented: need to add conservative backoff.
 3. **Observation type:** New `Fieldnote` (Channel E) vs reuse `Import` (Channel D) with `source:plaud` tag?
 4. **Partner API migration:** Worth applying for partner access to get stable, documented endpoints?
 5. **Audio format:** Store original MP3 from Plaud or convert to WAV (whisper-compatible)?
@@ -265,6 +265,6 @@ Text of second speaker segment...
 - [Plaud Developer Platform](https://www.plaud.ai/pages/developer-platform)
 - [Plaud Partner API Docs](https://docs.plaud.ai/documentation/get_started/quickstart)
 - [Plaud SDK (GitHub)](https://github.com/Plaud-AI/plaud-sdk)
-- [OpenPlaud — self-hosted alternative](https://github.com/openplaud/openplaud)
+- [OpenPlaud: self-hosted alternative](https://github.com/openplaud/openplaud)
 - [Plaud Exporter Chrome Extension](https://github.com/josephhyatt/plaud-exporter)
 - [Plaud Web Export Guide](https://support.plaud.ai/hc/en-us/articles/10976177688975)

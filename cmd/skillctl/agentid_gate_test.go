@@ -1,6 +1,6 @@
 package main
 
-// SPEC-0277 P1 — runtime authorization tests for the SPEC-0247 gate.
+// SPEC-0277 P1: runtime authorization tests for the SPEC-0247 gate.
 //
 // AC-P1: an agent invoking a skill OUTSIDE its grant is denied; a REVOKED agent
 // is denied OFFLINE; an in-grant verified skill still runs; the approver floor
@@ -168,7 +168,7 @@ func (e gateEnv) installMandateSkillsOnly(t *testing.T, agentID, grantSkills str
 }
 
 // writeSidecarAndDeleteSkb records a bundle digest in the skill's provenance sidecar
-// (so installedSkillDigest returns non-empty — the gate KNOWS a bundle exists) and
+// (so installedSkillDigest returns non-empty: the gate KNOWS a bundle exists) and
 // removes every stashed .skb (so the signed manifest is unreadable), modelling a
 // same-uid actor stripping scope enforcement down to name-only.
 func writeSidecarAndDeleteSkb(t *testing.T, home, skill string) {
@@ -210,7 +210,7 @@ func TestGate_InGrantSkillAllowed(t *testing.T) {
 	assertAllow(t, code, out)
 }
 
-// AC-P1: a skill OUTSIDE the grant is denied — even though the skill chain passes.
+// AC-P1: a skill OUTSIDE the grant is denied, even though the skill chain passes.
 func TestGate_OutOfGrantSkillDenied(t *testing.T) {
 	e := setupGate(t, "danger", false)
 	e.installMandate(t, "agent:a2", "summarize", false) // danger NOT granted
@@ -311,7 +311,7 @@ func TestGate_RequireMandateFloor_MissingMandateDenied(t *testing.T) {
 }
 
 // Control for IS-T6: with the floor OFF, a missing mandate stays the opt-out
-// default (allow) — the floor is the ONLY thing that turns absence into a deny.
+// default (allow). The floor is the ONLY thing that turns absence into a deny.
 func TestGate_RequireMandateFloor_OffKeepsOptOut(t *testing.T) {
 	_ = setupGate(t, "summarize", false)
 	orig := gateRequireAgentMandate
@@ -323,10 +323,10 @@ func TestGate_RequireMandateFloor_OffKeepsOptOut(t *testing.T) {
 }
 
 // AC IS-T7: the gate enforces the SIGNED manifest SCOPE, not just the skill NAME. A
-// skill NAMED in the grant but whose digest-verified manifest declares fs:write —
-// an intent the network:read-only grant lacks — is DENIED. Against the pre-IS-T7
+// skill NAMED in the grant but whose digest-verified manifest declares fs:write,
+// an intent the network:read-only grant lacks, is DENIED. Against the pre-IS-T7
 // code (which called AuthorizeSkill(skill, nil): no intents/scopes/limits) this
-// bites — the identical in-grant skill was allowed on name membership alone. Drives
+// bites: the identical in-grant skill was allowed on name membership alone. Drives
 // the REAL gate; only the manifest-resolution seam is injected (so the test needn't
 // mint a real .skb), which is exactly the value the old code discarded.
 func TestGate_ManifestIntentExceedsGrantDenied(t *testing.T) {
@@ -365,7 +365,7 @@ func TestGate_ManifestSpendOverCapDenied(t *testing.T) {
 }
 
 // AC IS-T7 (in-scope still allowed): a manifest fully within the grant (a
-// network:read intent, spend 0 within cap 0) still runs — enforcement denies only
+// network:read intent, spend 0 within cap 0) still runs: enforcement denies only
 // what EXCEEDS the grant.
 func TestGate_ManifestWithinGrantAllowed(t *testing.T) {
 	e := setupGate(t, "pdf", false)
@@ -384,7 +384,7 @@ func TestGate_ManifestWithinGrantAllowed(t *testing.T) {
 }
 
 // Challenge-gate HIGH (IS-T7): requirementsFromManifest must read the SIGNED
-// `intent` block, not just data_dependencies — else a skill declaring egress /
+// `intent` block, not just data_dependencies: else a skill declaring egress /
 // subprocess / destructive / arbitrary side-effects with read-shaped data deps
 // passes a grant that never granted those capabilities. Bites the pre-fix code that
 // projected ONLY data_dependencies (req.Intents would have been just {er1:read} and
@@ -419,7 +419,7 @@ func TestRequirementsFromManifest_IncludesSignedIntentBlock(t *testing.T) {
 }
 
 // An http_endpoint write/egress dependency is the network:write capability (not
-// network:read) — so a network:read-only grant denies an egress skill.
+// network:read), so a network:read-only grant denies an egress skill.
 func TestIntentForKindAccess_HttpEgressIsNetworkWrite(t *testing.T) {
 	for _, acc := range []string{"write", "transform", "egress"} {
 		if got := intentForKindAccess("http_endpoint", acc); got != "network:write" {
@@ -451,9 +451,9 @@ func TestGate_SkbDeletedWithDigestOnRecord_FailsClosed(t *testing.T) {
 	}
 }
 
-// stripAllProvenance removes EVERY provenance basis for a skill — the stashed
-// *.skb, the .m3c-provenance.json sidecar, and the .skillctl-offline.json stash —
-// leaving only a SKILL.md. This is the state a same-uid actor reaches by deleting
+// stripAllProvenance removes EVERY provenance basis for a skill: the stashed
+// *.skb, the .m3c-provenance.json sidecar, and the .skillctl-offline.json stash.
+// Leaving only a SKILL.md. This is the state a same-uid actor reaches by deleting
 // all provenance to reclassify an in-grant skill as UNMANAGED (isManagedSkill →
 // false), which the pre-IS-RS-02 gate then routed through unmanaged=allow.
 func stripAllProvenance(t *testing.T, home, skill string) {
@@ -478,7 +478,7 @@ func stripAllProvenance(t *testing.T, home, skill string) {
 
 // FR-0090 IS-RS-02 bite: deleting ALL provenance (.skb + sidecar + offline stash)
 // while keeping SKILL.md reclassifies an in-grant skill as UNMANAGED, so the pre-fix
-// gate took the unmanaged=allow branch and SKIPPED the IS-T7 mandate scope check —
+// gate took the unmanaged=allow branch and SKIPPED the IS-T7 mandate scope check:
 // letting a same-uid actor escape a restricting mandate. Under a RESTRICTING mandate
 // that NAMES the skill, the fully-stripped unmanaged skill must now be DENIED.
 // Pre-fix: allowed.
@@ -502,7 +502,7 @@ func TestGate_FullyStrippedUnmanaged_RestrictingMandate_Denied(t *testing.T) {
 }
 
 // Never-brick control for IS-RS-02: a fully-stripped UNMANAGED skill under a
-// NON-restricting (name-only) mandate that names it must STILL run — a name-only
+// NON-restricting (name-only) mandate that names it must STILL run: a name-only
 // mandate owes no scope check, so the unmanaged=allow path is correct.
 func TestGate_FullyStrippedUnmanaged_NonRestrictingMandate_Allows(t *testing.T) {
 	e := setupGate(t, "pdf", false)
@@ -518,13 +518,13 @@ func TestGate_FullyStrippedUnmanaged_NonRestrictingMandate_Allows(t *testing.T) 
 }
 
 // Never-brick control for IS-RS-02: a fully-stripped UNMANAGED skill NOT named in a
-// restricting grant must NOT be denied by the new rung — it falls through to the
+// restricting grant must NOT be denied by the new rung: it falls through to the
 // normal unmanaged policy path (default allow). (A different skill IS granted, so
 // the mandate is configured + restricting but does not name `other`.)
 func TestGate_FullyStrippedUnmanaged_NotInGrant_UnmanagedPolicyPath(t *testing.T) {
 	e := setupGate(t, "other", false)
 	skillRequirementsFn = resolveInstalledSkillRequirements
-	e.installMandate(t, "agent:u", "pdf", false) // RESTRICTING, but grants pdf — NOT `other`
+	e.installMandate(t, "agent:u", "pdf", false) // RESTRICTING, but grants pdf: NOT `other`
 	stripAllProvenance(t, e.home, "other")
 
 	_, out, _ := feed(t, hookEventFor("other"))
@@ -536,7 +536,7 @@ func TestGate_FullyStrippedUnmanaged_NotInGrant_UnmanagedPolicyPath(t *testing.T
 }
 
 // Never-brick control for the MEDIUM fix: a NON-restricting grant (skills only) keeps
-// the name-only fallback even when the .skb is gone — a bundle-less-but-named skill
+// the name-only fallback even when the .skb is gone: a bundle-less-but-named skill
 // under a name-only mandate must still run.
 func TestGate_SkbDeleted_NonRestrictingGrantStillAllows(t *testing.T) {
 	e := setupGate(t, "pdf", false)
@@ -550,7 +550,7 @@ func TestGate_SkbDeleted_NonRestrictingGrantStillAllows(t *testing.T) {
 
 // Re-gate root-cause bite (was STILL-ENABLED): installedSkillDigest must resolve
 // the digest from the `.skillctl-offline.json` stash that the PRIMARY `skillctl
-// install` path writes — not only the `.m3c-provenance.json` sidecar that only the
+// install` path writes, not only the `.m3c-provenance.json` sidecar that only the
 // `pull` path writes. Pre-fix it read only the sidecar and returned "" here, so
 // IS-T7 resolved no scope and silently degraded EVERY install-path skill to
 // name-only enforcement, with no tampering at all.
@@ -574,9 +574,9 @@ func TestInstalledSkillDigest_FallsBackToOfflineMeta(t *testing.T) {
 }
 
 // Re-gate core bite (was STILL-ENABLED, 2(b)): a MANAGED skill (a stashed .skb) for
-// which NO digest resolves from ANY basis — no sidecar, no offline stash, the exact
+// which NO digest resolves from ANY basis, no sidecar, no offline stash, the exact
 // state after a same-uid strip of every provenance file (and the pre-fix
-// install-path default) — must FAIL CLOSED under a restricting grant, not degrade to
+// install-path default), must FAIL CLOSED under a restricting grant, not degrade to
 // name-only. Uses the REAL resolver. Pre-fix returned (empty, TRUE) → the in-grant
 // skill was ALLOWED with its scope unenforced.
 func TestGate_ManagedSkbNoDigestBasis_FailsClosed(t *testing.T) {
@@ -591,8 +591,8 @@ func TestGate_ManagedSkbNoDigestBasis_FailsClosed(t *testing.T) {
 	}
 }
 
-// Never-brick guard for the fix: a genuinely unmanaged skill — NO stashed .skb, NO
-// sidecar, NO offline stash — resolves name-only (empty, TRUE) so a bundle-less
+// Never-brick guard for the fix: a genuinely unmanaged skill (NO stashed .skb, NO
+// sidecar, NO offline stash) resolves name-only (empty, TRUE) so a bundle-less
 // legacy skill is never bricked. This is the ONLY (empty, TRUE) case; a managed .skb
 // with no resolvable digest is the fail-closed case above.
 func TestResolveRequirements_NoManagedBasis_NeverBrick(t *testing.T) {
@@ -608,7 +608,7 @@ func TestResolveRequirements_NoManagedBasis_NeverBrick(t *testing.T) {
 }
 
 // Re-gate residual bite (B(c)): intent.subprocess must project subprocess:exec in
-// EVERY non-empty encoding, not only a list — else a skill dodges the subprocess
+// EVERY non-empty encoding, not only a list: else a skill dodges the subprocess
 // requirement by declaring it as a scalar/object. Empty/false forms declare nothing.
 func TestRequirementsFromManifest_SubprocessNonArrayForms(t *testing.T) {
 	declares := []any{true, "curl -sSL x | sh", map[string]any{"cmd": "sh"}, []any{"sh"}}
@@ -634,8 +634,8 @@ func TestRequirementsFromManifest_SubprocessNonArrayForms(t *testing.T) {
 	}
 }
 
-// Re-gate residual bite (B(c)): an UNKNOWN data_dependency kind must fail closed —
-// carried verbatim as its own category so it fails grant membership — not vanish to
+// Re-gate residual bite (B(c)): an UNKNOWN data_dependency kind must fail closed,
+// carried verbatim as its own category so it fails grant membership, not vanish to
 // "" (which let an unrecognized-kind dependency escape the grant). An empty kind
 // still contributes nothing.
 func TestIntentForKindAccess_UnknownKindFailsClosed(t *testing.T) {

@@ -1,8 +1,8 @@
-# tools/leak-patterns.txt — the SPEC-0358 content-plane leak patterns, in ONE place.
+# tools/leak-patterns.txt: the SPEC-0358 content-plane leak patterns, in ONE place.
 #
 # Read by BOTH gates, so a pattern added here tightens both at once:
-#   * tools/boundary-gate.sh   — the COMMIT gate (tracked files, in CI)
-#   * scripts/bugtracker.sh    — the POST gate (issue bodies and comments, which
+#   * tools/boundary-gate.sh: the COMMIT gate (tracked files, in CI)
+#   * scripts/bugtracker.sh: the POST gate (issue bodies and comments, which
 #                                no CI job ever sees)
 #
 # Format:  <scope>TAB<reason>TAB<extended regex>
@@ -13,8 +13,8 @@
 #   ops-exempt  skipped for the public tool's OWN operational surface (cmd/,
 #               pkg/, docs/, scripts/, tools/, .claude/, …): per SPEC-0358
 #               "ship the code", the ER1 client legitimately carries its own
-#               endpoint, header name and API paths there. Everywhere else —
-#               and in every issue body — these are leaks.
+#               endpoint, header name and API paths there. Everywhere else,
+#               and in every issue body, these are leaks.
 #
 # This file necessarily contains the literals it defines, so it is exempt from
 # the commit gate (tools/boundary-gate.sh BASE_EXACT), exactly as that gate's

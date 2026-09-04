@@ -35,7 +35,7 @@ type RetryRunner struct {
 	MaxRetries int
 
 	// OnRetry is called after each retry attempt (success or failure).
-	// Optional — used for testing/logging.
+	// Optional: used for testing/logging.
 	OnRetry func(entry QueueEntry, err error, removed bool)
 
 	// sleepFunc can be overridden in tests to avoid real sleeps.
@@ -70,7 +70,7 @@ func contextSleep(ctx context.Context, d time.Duration) error {
 // Entries exceeding MaxRetries are removed (dropped).
 // Returns the number of successful uploads and errors encountered.
 func (r *RetryRunner) ProcessOnce(ctx context.Context) (successes int, failures int, dropped int) {
-	entries := r.Queue.Entries() // FIFO order — oldest first
+	entries := r.Queue.Entries() // FIFO order: oldest first
 
 	for _, entry := range entries {
 		// Check context before processing
@@ -102,7 +102,7 @@ func (r *RetryRunner) ProcessOnce(ctx context.Context) (successes int, failures 
 		// Attempt upload
 		err := r.UploadFunc(entry)
 		if err == nil {
-			// Success — remove from queue
+			// Success: remove from queue
 			if rerr := r.Queue.Remove(entry.ID); rerr != nil {
 				fmt.Fprintf(os.Stderr, "retry: could not persist removal of %s: %v\n", entry.ID, rerr)
 			}
@@ -111,7 +111,7 @@ func (r *RetryRunner) ProcessOnce(ctx context.Context) (successes int, failures 
 				r.OnRetry(entry, nil, true)
 			}
 		} else {
-			// Failure — update retry count
+			// Failure: update retry count
 			if uerr := r.Queue.UpdateRetry(entry.ID, err); uerr != nil {
 				fmt.Fprintf(os.Stderr, "retry: could not persist retry update of %s: %v\n", entry.ID, uerr)
 			}

@@ -8,9 +8,9 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/homeroot"
 )
 
-// TestUserHome_HonorsSharedDecision — WIN-T8 (WIN-09) parity: verify.userHome must
-// apply the SINGLE shared $HOME-on-Windows decision (homeroot.OverrideAllowed) —
-// the same one the registry package and the cmd/skillctl binary use — so the
+// TestUserHome_HonorsSharedDecision: WIN-T8 (WIN-09) parity: verify.userHome must
+// apply the SINGLE shared $HOME-on-Windows decision (homeroot.OverrideAllowed),
+// the same one the registry package and the cmd/skillctl binary use, so the
 // three former copies can no longer drift into separate policies. The pure
 // (goos, compiledIn) matrix is pinned in the homeroot package's own test; this
 // proves THIS site delegates to it behaviorally. No runtime.GOOS skip → the

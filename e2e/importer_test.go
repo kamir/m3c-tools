@@ -516,7 +516,7 @@ func TestImporterScanFromEnvFilterNoDot(t *testing.T) {
 		}
 	}
 
-	// Filter with extensions without leading dot — should still work
+	// Filter with extensions without leading dot: should still work
 	result, err := importer.ScanFromEnv([]string{"mp3", "wav"})
 	if err != nil {
 		t.Fatalf("ScanFromEnv error: %v", err)

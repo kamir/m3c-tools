@@ -1,16 +1,16 @@
 package exitcode_test
 
-// SPEC-0251 §5 — exit-code single source of truth (guard, not refactor).
+// SPEC-0251 §5: exit-code single source of truth (guard, not refactor).
 //
 // pkg/skillctl/exitcode is the registry of every skillctl exit number. The
 // numbers are ALSO declared as consts in pkg/skillctl/verify (the §7 verifier)
 // and in cmd/skillctl. Rather than refactor the security-sensitive verifier to
 // import the registry (which would force the untyped exit consts to become
-// typed vars — a real regression surface), this guard fails CI the moment the
+// typed vars. A real regression surface), this guard fails CI the moment the
 // two sides drift. The 10–19 ladder that SPEC-0188 §11 and the SPEC-0254
 // operator docs depend on therefore cannot silently diverge: drift == red CI.
 //
-// This test is also the registry's first real consumer — exitcode is no longer
+// This test is also the registry's first real consumer, exitcode is no longer
 // a dead package.
 
 import (
@@ -40,13 +40,13 @@ func TestExitCode_VerifyRegistryParity(t *testing.T) {
 	}
 	for _, c := range cases {
 		if c.reg != c.got {
-			t.Errorf("exit-code drift for %q: exitcode registry=%d, verify const=%d — update both", c.name, c.reg, c.got)
+			t.Errorf("exit-code drift for %q: exitcode registry=%d, verify const=%d: update both", c.name, c.reg, c.got)
 		}
 	}
 }
 
-// SPEC-0198 / BUG-0144: an explicitly revoked author identity maps to 17 — the
-// SAME number + theme as data-source-denied — and ExitCode checks revoke FIRST
+// SPEC-0198 / BUG-0144: an explicitly revoked author identity maps to 17, the
+// SAME number + theme as data-source-denied, and ExitCode checks revoke FIRST
 // so it wins. Pin both the value and the deliberate overload so a future edit
 // can't quietly split or renumber them.
 func TestExitCode_IdentityRevokedMapsTo17(t *testing.T) {
@@ -64,7 +64,7 @@ func TestExitCode_IdentityRevokedMapsTo17(t *testing.T) {
 }
 
 // Completeness: every Family=="verify" registry Code must land on a pinned
-// 10–19 number, and all ten must be present — so a new verify row can't be
+// 10–19 number, and all ten must be present, so a new verify row can't be
 // added (or one dropped) without this guard noticing.
 func TestExitCode_VerifyFamilyCompleteness(t *testing.T) {
 	want := map[int]bool{10: true, 11: true, 12: true, 13: true, 14: true, 15: true, 16: true, 17: true, 18: true, 19: true}
@@ -73,7 +73,7 @@ func TestExitCode_VerifyFamilyCompleteness(t *testing.T) {
 			continue
 		}
 		if !want[c.Number] {
-			t.Errorf("registry has Family==verify Code %+v outside the pinned 10–19 set — wire verify + extend this guard", c)
+			t.Errorf("registry has Family==verify Code %+v outside the pinned 10–19 set: wire verify + extend this guard", c)
 			continue
 		}
 		delete(want, c.Number)

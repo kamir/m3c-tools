@@ -1,6 +1,6 @@
 package main
 
-// enforce_cmds.go — `skillctl enforce` (SPEC-0317 P0).
+// enforce_cmds.go: `skillctl enforce` (SPEC-0317 P0).
 //
 // enforce is the enterprise-evidence twin of `verify-hook`: for a PreToolUse
 // Skill event it makes the EXACT SAME allow/deny decision (AC-1 byte-parity),
@@ -8,12 +8,12 @@ package main
 // authoritative SPEC-0317 outbox (audit_events, write-once) so the evidence is
 // durable and later drainable to the KafShield ingest (P1 `skillctl sync`).
 //
-// Design — a pure silent router (the load-bearing byte-parity point):
+// Design: a pure silent router (the load-bearing byte-parity point):
 //   - enforce does NOT re-classify, re-decide, or emit anything of its own. It
 //     installs the outbox sink into the existing post-decision, fire-and-forget
 //     emit seam (invocationOutboxSink, fed from appendSignedInvocation) and then
 //     delegates the WHOLE decision to runVerifyHook. stdout, stderr, and the exit
-//     code are therefore produced entirely by runVerifyHook — byte-identical to
+//     code are therefore produced entirely by runVerifyHook: byte-identical to
 //     `verify-hook` for an allow and for every deny class (AC-1).
 //   - The outbox write rides the SAME seam that writes invocation-trail.jsonl,
 //     never the hot decision path, and is fed the identical fully-signed record
@@ -22,12 +22,12 @@ package main
 //     runVerifyHook's deferred logger, which completes before the return value
 //     propagates out through runEnforce.
 //
-// Decision-invariance (SPEC-0255, a LANDED contract — AC-2a): the sink is
+// Decision-invariance (SPEC-0255, a LANDED contract: AC-2a): the sink is
 // fire-and-forget. A forced outbox failure (SQLITE_BUSY at the ~250ms pin, a full
 // disk, an open error, or an outright panic) is swallowed inside
 // appendSignedInvocation's recover and its result is discarded, so exit + stdout
 // + stderr stay byte-identical to the no-outbox path. On Append failure the row
-// is spooled (AppendOrSpool) so the evidence is not lost either — but even a total
+// is spooled (AppendOrSpool) so the evidence is not lost either, but even a total
 // double failure never alters the decision.
 
 import (
@@ -41,7 +41,7 @@ import (
 )
 
 // enforceOutboxSink is the outbox-write seam. It returns whether the record was
-// DURABLY recorded (outbox row OR spool line — AppendOrSpool==nil). The bool is
+// DURABLY recorded (outbox row OR spool line. AppendOrSpool==nil). The bool is
 // consumed ONLY by the R-8.2 require_local_audit path in runEnforce; the default
 // (flag unset) ignores it, so the fire-and-forget contract is untouched. The
 // decision-invariance test injects a failing / panicking sink to prove exit+output
@@ -50,7 +50,7 @@ var enforceOutboxSink = defaultEnforceOutboxSink
 
 // gateRequireLocalAudit reports whether the ROOT-OWNED managed settings enable the
 // SPEC-0317 R-8.2 require_local_audit posture (enterprise-gated). Same source as
-// the R-7.2 enterprise flag — one managed tier for both knobs. A missing/unreadable/
+// the R-7.2 enterprise flag: one managed tier for both knobs. A missing/unreadable/
 // malformed managed file → false (the carve-out is opt-in; absence is the default
 // fire-and-forget behaviour). Seam: tests set it directly.
 var gateRequireLocalAudit = func() bool {
@@ -66,20 +66,20 @@ var gateRequireLocalAudit = func() bool {
 }
 
 // runEnforce is the entrypoint for `skillctl enforce`. It returns the process
-// exit code (0 = allow, 2 = deny/block) — the very same value runVerifyHook
+// exit code (0 = allow, 2 = deny/block). The very same value runVerifyHook
 // would return for the same event.
 //
 // It installs the outbox sink for the duration of the call and restores the
 // previous value on return. Restoring matters only for tests (which run enforce
 // and verify-hook in one process); in production each invocation is its own
 // process. Setting the package-level seam is safe because skillctl handles one
-// hook event per process — there is no concurrent gate in-process.
+// hook event per process. There is no concurrent gate in-process.
 func runEnforce(stdin io.Reader, stdout, stderr io.Writer) int {
 	reqAudit := gateRequireLocalAudit()
 
 	// The sink is invoked once per GATED SKILL (from appendSignedInvocation, after
 	// the decision). sinkCalled therefore distinguishes a real skill decision from a
-	// non-Skill / no-skill passthrough allow — for which nothing is gated and
+	// non-Skill / no-skill passthrough allow, for which nothing is gated and
 	// require_local_audit must NOT apply. durable = the record landed (outbox row or
 	// spool line). Both are captured for the R-8.2 override below and otherwise ignored.
 	var sinkCalled, durable bool
@@ -94,7 +94,7 @@ func runEnforce(stdin io.Reader, stdout, stderr io.Writer) int {
 
 	code := runVerifyHook(stdin, stdout, stderr)
 
-	// SPEC-0317 R-8.2 — require_local_audit inverts the SPEC-0255 fire-and-forget
+	// SPEC-0317 R-8.2: require_local_audit inverts the SPEC-0255 fire-and-forget
 	// contract, OPT-IN via managed settings. It escalates a skill ALLOW whose
 	// evidence could not be durably recorded (outbox row AND spool line both failed)
 	// into a fail-closed deny (exit 26). A deny already stands (fail-closed); the
@@ -103,7 +103,7 @@ func runEnforce(stdin io.Reader, stdout, stderr io.Writer) int {
 	// deny now is clean.
 	//
 	// SCOPE (breadth): "a skill ALLOW" means EVERY audited Skill decision the gate
-	// allowed — managed, UNMANAGED (default-allow plugins / namespaced skills), AND
+	// allowed: managed, UNMANAGED (default-allow plugins / namespaced skills), AND
 	// allowlisted. audActive is set before those branches, so all reach the sink.
 	// So on a host whose outbox is unrecordable, turning on require_local_audit
 	// denies the whole plugin ecosystem + the operator's allowlisted escapes too.
@@ -112,16 +112,16 @@ func runEnforce(stdin io.Reader, stdout, stderr io.Writer) int {
 	// The load-bearing store is the OUTBOX (+ its spool); the signed trail is a
 	// best-effort projection. Because the sink spools even when outbox.Open fails
 	// (defaultEnforceOutboxSink), durability tracks the SAME writable-dir condition
-	// the trail write depends on — so the two land together or fail together, and a
+	// the trail write depends on, so the two land together or fail together, and a
 	// fail-closed deny never coexists with a trail that recorded the allow.
 	//
 	// KNOWN NON-ESCALATED gaps (sink never reached → sinkCalled=false): home
 	// unavailable, device key unavailable, sign-refusal (e.g. a newline-smuggled
 	// field), or record marshal failure. A gated allow on such a degraded host is
-	// NOT escalated — rare, and out of the disk-full case R-8.2 targets.
+	// NOT escalated, rare, and out of the disk-full case R-8.2 targets.
 	if reqAudit && code == exitOK && sinkCalled && !durable {
 		return emitDeny(stdout, stderr,
-			fmt.Sprintf("skillctl: BLOCKED — require_local_audit is set but the enforcement event could not be durably recorded (outbox + spool both failed); refusing to allow un-audited (exit %d local_audit_unavailable, SPEC-0317 R-8.2).", exitLocalAuditUnavailable))
+			fmt.Sprintf("skillctl: BLOCKED, require_local_audit is set but the enforcement event could not be durably recorded (outbox + spool both failed); refusing to allow un-audited (exit %d local_audit_unavailable, SPEC-0317 R-8.2).", exitLocalAuditUnavailable))
 	}
 	return code
 }
@@ -153,7 +153,7 @@ func defaultEnforceOutboxSink(home string, rec skillgate.InvocationRecord) (dura
 	}
 	st, err := outbox.Open(home)
 	if err != nil {
-		// Open ITSELF failed — e.g. a corrupt outbox.db on an otherwise-WRITABLE
+		// Open ITSELF failed: e.g. a corrupt outbox.db on an otherwise-WRITABLE
 		// dir. Do NOT give up: spool the row directly (no db I/O). This keeps
 		// durability tracking the same writable-dir condition the signed trail
 		// write depends on, so R-8.2 never fires a spurious deny (spool would have

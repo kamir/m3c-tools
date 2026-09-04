@@ -9,7 +9,7 @@ and 1-based line ranges, so search results can cite `path:line`.
 - Other files: treated as a single section keyed by the file path, then windowed.
 
 A single physical line longer than max_chars is hard-wrapped into pieces (all
-sharing that line number) so no chunk grossly exceeds max_chars — this both
+sharing that line number) so no chunk grossly exceeds max_chars: this both
 keeps the embedder's sequence length bounded and avoids pathological chunks.
 """
 from __future__ import annotations

@@ -1,6 +1,6 @@
 package main
 
-// agentid_cmds.go — SPEC-0277 P0+P1 `skillctl agentid` verb surface.
+// agentid_cmds.go: SPEC-0277 P0+P1 `skillctl agentid` verb surface.
 //
 //	agentid issue  --owner <plm-id> --owner-key <path> --for-agent <ref>
 //	               --skills <set> --intents <set> [--data-scopes <set>]
@@ -15,7 +15,7 @@ package main
 // `verify` deliberately MIRRORS `verify --bundle` (SPEC-0276): same exit codes
 // (0 / 10–17, plus 21 for the distinct "expired" verdict), same offline +
 // --revocations semantics. An AgentID is "just another signed thing" to the
-// verifier — the only difference is the role it verifies (owner/approver instead
+// verifier. The only difference is the role it verifies (owner/approver instead
 // of author/registry) and the payload it canonicalizes.
 //
 // The crypto + authorization live in pkg/skillctl/agentid (pure, stdlib-only).
@@ -37,10 +37,10 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 )
 
-// exitAgentIDExpired (21) — the AgentID's not_after is in the past (or its
+// exitAgentIDExpired (21): the AgentID's not_after is in the past (or its
 // created_at is in the future). A DISTINCT code from a signature failure (11) so
 // an operator/CI can tell "the mandate lapsed" from "the signature is wrong"
-// (AC-P0). Picks 21 — the next free code after SPEC-0246's ExitSelfAttested(20).
+// (AC-P0). Picks 21: the next free code after SPEC-0246's ExitSelfAttested(20).
 const exitAgentIDExpired = 21
 
 // agentIDExitCode maps an agentid verifier error to the mirror of the SPEC-0188
@@ -178,7 +178,7 @@ func runAgentIDIssue(args []string, stdout, stderr io.Writer) int {
 		// Normalize a custom --agent-id to the agent: scheme, exactly as `revoke`
 		// does, so the issue and revoke key-spaces always agree. Without this a
 		// bare custom id (payload "custombot") would never match a revocation
-		// entry ("agent:custombot") — a silent revocation miss (P3 challenge gate).
+		// entry ("agent:custombot"): a silent revocation miss (P3 challenge gate).
 		id = "agent:" + id
 	}
 
@@ -302,7 +302,7 @@ func runAgentIDVerify(args []string, stdout, stderr io.Writer) int {
 	})
 	code := agentIDExitCode(verr)
 
-	// SPEC-0279 R3/R4/R5/R6 — the freshness contract, evaluated once the mandate
+	// SPEC-0279 R3/R4/R5/R6: the freshness contract, evaluated once the mandate
 	// itself verified (a stale snapshot still gates a high-risk grant). Emergency
 	// channel first (R5); a stale snapshot fails closed for a high-risk grant
 	// (R3); the checkpoint can reset the clock (R4). Risk is classified from the
@@ -372,7 +372,7 @@ func runAgentIDVerify(args []string, stdout, stderr io.Writer) int {
 	if !res.NotAfter.IsZero() {
 		summary += ", expires " + res.NotAfter.Format(time.RFC3339)
 	}
-	summary += fmt.Sprintf(" — grant: %d skills, %d intents (offline)", len(res.Grant.Skills), len(res.Grant.Intents))
+	summary += fmt.Sprintf(", grant: %d skills, %d intents (offline)", len(res.Grant.Skills), len(res.Grant.Intents))
 	fmt.Fprintln(stdout, summary)
 	if freshActive {
 		printFreshness(stdout, fresh, *checkpointPath, *emergencyPath)
@@ -461,7 +461,7 @@ func runAgentIDShow(args []string, stdout, stderr io.Writer) int {
 // ---- pinned-key adapter (the load-bearing reuse) ----
 
 // rootPins adapts a *verify.TrustRoot to agentid.PinnedKeys. The owner key is
-// the principal pinned in the root's `authors:` list (reusing FindAuthor — the
+// the principal pinned in the root's `authors:` list (reusing FindAuthor: the
 // SAME pin that admits bundles, SPEC-0277 §3); the approver/sign-off human is
 // pinned in `reviewers:` (reusing FindReviewer). This GENERALIZES the verified
 // role from author→owner WITHOUT forking the verifier: agentid.Verify asks for
@@ -548,7 +548,7 @@ func newAgentID() string {
 // against the pinned root (reusing verify.VerifyRevocationList), and returns the
 // set of revoked agent ids (NormalizeID-keyed). The list reuses the SPEC-0276
 // RevocationList format; agent ids occupy the RevokedDigests slot under the
-// agent: scheme — see runAgentIDRevoke for how the list is produced. Because the
+// agent: scheme: see runAgentIDRevoke for how the list is produced. Because the
 // SPEC-0276 normalizer enforces sha256:<hex> digests, this loader reads the raw
 // JSON's revoked_digests verbatim AND verifies the signature, so an agent: key
 // is carried without weakening the digest validator for bundles.
@@ -576,7 +576,7 @@ func loadAgentRevocationsWithMeta(path string, root *verify.TrustRoot) (map[stri
 	}
 	// Re-read the verified list's metadata (epoch/issued_at). The file already
 	// passed signature + epoch-floor verification inside loadAgentRevocations, so
-	// re-decoding here only extracts the freshness anchor — a parse failure is
+	// re-decoding here only extracts the freshness anchor. A parse failure is
 	// surfaced (fail-closed), never silently treated as "no freshness".
 	data, rerr := os.ReadFile(path)
 	if rerr != nil {

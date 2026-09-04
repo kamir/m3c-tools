@@ -1,8 +1,9 @@
 package main
 
-// gate_stats_cmds.go: SPEC-0255 `skillctl gate-stats` summarises the append-only
-// gate-audit.jsonl that the hook + sweep write. Read-only; the log is advisory
-// telemetry, never a trust input. Malformed/tampered lines are skipped, not fatal.
+// gate_stats_cmds.go, SPEC-0255: `skillctl gate-stats` summarises the
+// append-only gate-audit.jsonl that the hook + sweep write. Read-only; the log
+// is advisory telemetry, never a trust input. Malformed/tampered lines are
+// skipped, not fatal.
 //
 // SPEC-0403 §13-O6 clean-cut: the reader now consumes ONLY the new
 // skillctl.audit.v1 envelope (via auditevent.ToGateEvent). Old flat gate lines
@@ -50,7 +51,7 @@ type gateStatsSummary struct {
 func runGateStats(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("gate-stats", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	since := fs.String("since", "", "Only events newer than this — a Go duration (e.g. 168h) or a date (YYYY-MM-DD).")
+	since := fs.String("since", "", "Only events newer than this: a Go duration (e.g. 168h) or a date (YYYY-MM-DD).")
 	jsonOut := fs.Bool("json", false, "Emit the summary as stable JSON.")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -197,13 +198,13 @@ func topReasons(m map[string]int, n int) []reasonCount {
 }
 
 func printGateStatsHuman(w io.Writer, s gateStatsSummary) {
-	fmt.Fprintf(w, "gate-audit summary — %d event(s)", s.Total)
+	fmt.Fprintf(w, "gate-audit summary, %d event(s)", s.Total)
 	if s.Since != "" {
 		fmt.Fprintf(w, " since %s", s.Since)
 	}
 	fmt.Fprintln(w)
 	if s.Total == 0 {
-		fmt.Fprintln(w, "  (no events — the gate hasn't logged anything in this window)")
+		fmt.Fprintln(w, "  (no events, the gate hasn't logged anything in this window)")
 		return
 	}
 	fmt.Fprintf(w, "  decisions: ")
@@ -225,7 +226,7 @@ func printGateStatsHuman(w io.Writer, s gateStatsSummary) {
 	if len(s.RecentDenials) > 0 {
 		fmt.Fprintln(w, "  recent blocks:")
 		for _, e := range s.RecentDenials {
-			fmt.Fprintf(w, "    %s  %-10s %s — %s (exit %d)\n", e.Ts, e.Decision, e.Skill, e.Reason, e.ExitCode)
+			fmt.Fprintf(w, "    %s  %-10s %s: %s (exit %d)\n", e.Ts, e.Decision, e.Skill, e.Reason, e.ExitCode)
 		}
 	}
 }

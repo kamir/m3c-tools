@@ -1,12 +1,12 @@
 package main
 
-// SPEC-0359 D5(b) — git-native revoke-feed gossip.
+// SPEC-0359 D5(b): git-native revoke-feed gossip.
 //
 // Peers are git/gitlab/local registries; they do NOT serve the HTTP signed
 // revocation-HEAD. Their revocations live as SIGNED SPEC-0190 BundleRevokedEvents
 // in events/<digesthex>/. Gossip reads each CONTRIBUTING peer's revoke events,
 // verifies them against that peer's PINNED key, and unions the revoked digests
-// into a durable GROW-ONLY local cache — so a peer that later omits a revoke can
+// into a durable GROW-ONLY local cache, so a peer that later omits a revoke can
 // never un-revoke it (the anti-rollback for append-only event gossip). The union
 // is consulted by the revocation sweep (fetchRevokedWithGossip), so a digest
 // revoked by ANY trusted peer is denied even without pulling from that peer.
@@ -106,7 +106,7 @@ func gossipRevokedDigests(peers *registry.Peers) (map[string]struct{}, []peerGos
 		}
 		tr, err := pe.AsTrustRoots()
 		if err != nil {
-			rep.Status = "bad pin — skipped: " + err.Error()
+			rep.Status = "bad pin, skipped: " + err.Error()
 			reports = append(reports, rep)
 			continue
 		}
@@ -146,7 +146,7 @@ func gossipRevokedDigests(peers *registry.Peers) (map[string]struct{}, []peerGos
 // EventRecord.Kind / .Digest carrier projection a hostile peer controls. Without
 // this, a peer could relabel a signed revoke of X as EventRecord{Digest:Y} to
 // revoke an innocent digest Y, or wrap a signed ATTEST in EventRecord{Kind:revoke}
-// to forge a revocation — both defeated here because the union only ever trusts the
+// to forge a revocation, both defeated here because the union only ever trusts the
 // bytes the peer's key actually signed.
 func unionVerifiedRevokes(events []artifact.EventRecord, pub ed25519.PublicKey, into map[string]struct{}) int {
 	n := 0

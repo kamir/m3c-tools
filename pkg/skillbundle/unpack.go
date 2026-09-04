@@ -1,6 +1,6 @@
 package skillbundle
 
-// unpack.go — the ONE hardened gzip+tar reader for skill bundles (SPEC-0252).
+// unpack.go: the ONE hardened gzip+tar reader for skill bundles (SPEC-0252).
 //
 // Before this, three call sites each walked a SPEC-0188 §3.1 archive with their
 // own path-sanitiser, wrapper-strip, cap mechanism, and mode logic:
@@ -13,14 +13,14 @@ package skillbundle
 // separate code; two duplicated cap consts; a sanitiser that *rewrote* traversal
 // vs two that *rejected* it). Every tar-hardening fix had to be applied 2–3×.
 //
-// Unpack is the single tar reader. It NEVER touches the filesystem — it returns
+// Unpack is the single tar reader. It NEVER touches the filesystem: it returns
 // a validated, bounded, in-memory entry list. ExtractTo writes that list with
 // O_EXCL. SafeJoin is the one path-containment guard both ExtractTo and the
 // comparator use. The package owns the canonical cap constants. New hardening
 // now lands once, here, and drift is impossible by construction.
 //
 // Equivalence discipline (SPEC-0252 §4): this encodes the STRICTEST union of the
-// three originals — traversal/absolute/volume names are REJECTED (not silently
+// three originals: traversal/absolute/volume names are REJECTED (not silently
 // rewritten), symlinks/hardlinks/devices refused, byte ceiling + file-count cap
 // enforced per-entry, O_EXCL on write. unpack_test.go pins every input class.
 
@@ -38,7 +38,7 @@ import (
 	"strings"
 )
 
-// Canonical caps — the single source of truth (SPEC-0252 §3.3). The duplicated
+// Canonical caps: the single source of truth (SPEC-0252 §3.3). The duplicated
 // install.MaxExtractedBytes / registry.MaxExtractedBytes consts collapse onto
 // these during the C2–C4 migration.
 const (
@@ -72,7 +72,7 @@ type UnpackOptions struct {
 // absolute / `..`-escaping / volume-prefixed / backslash / NUL paths, refuses
 // symlinks, hardlinks, devices and fifos, and (when asked) strips a single
 // common top-level wrapper dir and canonicalises the skill anchor. It does not
-// write anything — callers decide (ExtractTo writes; the comparator hashes).
+// write anything, callers decide (ExtractTo writes; the comparator hashes).
 func Unpack(archive []byte, opts UnpackOptions) ([]Entry, error) {
 	maxBytes := opts.MaxBytes
 	if maxBytes <= 0 {
@@ -139,10 +139,10 @@ func Unpack(archive []byte, opts UnpackOptions) ([]Entry, error) {
 			entries = append(entries, Entry{Rel: rel, Content: buf.Bytes()})
 		case tar.TypeSymlink, tar.TypeLink:
 			// SPEC-0188 v1: symlinks/hardlinks point into / out of the install
-			// dir post-rename — refused.
+			// dir post-rename: refused.
 			return nil, fmt.Errorf("skillbundle: tar entry %q is a symlink/hardlink (refused)", hdr.Name)
 		default:
-			// Devices, fifos, etc. — refused.
+			// Devices, fifos, etc.: refused.
 			return nil, fmt.Errorf("skillbundle: tar entry %q has unsupported type 0x%x", hdr.Name, hdr.Typeflag)
 		}
 	}
@@ -298,7 +298,7 @@ func modeFor(rel string, isDir bool) fs.FileMode {
 // sanitizeArchivePath turns a raw tar header name into a clean relative
 // forward-slash path, or rejects it. Returns ("", nil) for entries that carry
 // nothing ("" / "."). REJECTS (does not silently rewrite) anything that escapes
-// the archive root — the strictest of the three original sanitisers.
+// the archive root: the strictest of the three original sanitisers.
 func sanitizeArchivePath(name string) (string, error) {
 	if name == "" {
 		return "", nil
@@ -307,14 +307,14 @@ func sanitizeArchivePath(name string) (string, error) {
 		return "", fmt.Errorf("skillbundle: tar entry name contains NUL")
 	}
 	// POSIX tar names use forward slashes. A backslash is a Windows traversal
-	// vector and the producer never emits one — reject rather than guess.
+	// vector and the producer never emits one: reject rather than guess.
 	if strings.ContainsRune(name, '\\') {
 		return "", fmt.Errorf("skillbundle: tar entry %q contains a backslash", name)
 	}
 	// A colon is the NTFS Alternate-Data-Stream separator ("name:stream") and the
 	// Windows drive separator. A mid-name colon like "README:payload" would create
 	// a hidden ADS on Windows, and filepath.VolumeName below only catches a
-	// leading single-letter drive prefix — not a colon in a later position. The
+	// leading single-letter drive prefix, not a colon in a later position. The
 	// producer never emits a colon in any segment, so reject it on ALL platforms.
 	if strings.ContainsRune(name, ':') {
 		return "", fmt.Errorf("skillbundle: tar entry %q contains a colon (NTFS ADS / drive separator)", name)

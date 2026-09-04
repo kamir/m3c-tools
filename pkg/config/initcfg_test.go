@@ -83,7 +83,7 @@ func TestCheckAndApplyInitCfg_DefaultsApplied(t *testing.T) {
 	defer os.Remove(initPath)
 	defer os.Remove(consumedPath)
 
-	// Minimal init file — only API key, everything else should get defaults
+	// Minimal init file: only API key, everything else should get defaults
 	content := "ER1_API_KEY=minimal-key\n"
 	os.WriteFile(initPath, []byte(content), 0600)
 

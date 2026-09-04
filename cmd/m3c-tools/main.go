@@ -1,6 +1,6 @@
 //go:build darwin
 
-// m3c-tools — Multi-Modal-Memory Tools
+// m3c-tools: Multi-Modal-Memory Tools
 //
 // CLI entry point for transcript fetching, voice recording,
 // and ER1 upload. Also serves as the menu bar app when run with --menubar.
@@ -85,7 +85,7 @@ func runningInAppBundle() bool {
 func main() {
 	if len(os.Args) < 2 {
 		// When launched from the .app bundle (double-click / `open`), macOS
-		// passes no subcommand — default to the menu bar app instead of
+		// passes no subcommand: default to the menu bar app instead of
 		// printing usage and exiting immediately.
 		if runningInAppBundle() {
 			os.Args = append(os.Args, "menubar")
@@ -97,7 +97,7 @@ func main() {
 
 	// Load config: layered per SPEC-0175.
 	//   1. Active profile (account-scoped: ER1_*, POCKET_API_KEY, etc)
-	//   2. Global preferences (~/.m3c-tools/preferences.env — Whisper, retry, …)
+	//   2. Global preferences (~/.m3c-tools/preferences.env: Whisper, retry, …)
 	//      with back-compat fallback to the legacy ~/.m3c-tools.env file
 	//   3. Project-local .env (development overrides)
 	//
@@ -185,7 +185,7 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Println(`m3c-tools — Multi-Modal-Memory Tools
+	fmt.Println(`m3c-tools: Multi-Modal-Memory Tools
 
 Commands:
   transcript <video_id>  Fetch YouTube transcript
@@ -257,7 +257,7 @@ Commands:
                          [--since YYYY-MM-DD] [--limit N] [--apply]   dry-run by default
   plaud sync <id>        Sync a Plaud recording to ER1
   plaud sync --all       Sync all new Plaud recordings to ER1
-  plaud auth mcp         Import the official OAuth token (npx @plaud-ai/mcp login) — durable, no DevTools
+  plaud auth mcp         Import the official OAuth token (npx @plaud-ai/mcp login): durable, no DevTools
   plaud auth paste       Import the Authorization header from the clipboard (SSO stopgap)
   plaud auth password    Email+password login → ~300-day token (password accounts)
   plaud auth login       Extract token from Chrome (legacy/fragile)
@@ -335,7 +335,7 @@ func er1SessionPersistenceEnabled() bool {
 	case "0", "false", "no", "off":
 		return false
 	default:
-		return true // persist by default — login survives restart until explicit logout
+		return true // persist by default: login survives restart until explicit logout
 	}
 }
 
@@ -565,7 +565,7 @@ func openProfileEditor() {
 
 	if alreadyRunning {
 		// Just reopen the browser; server is already serving.
-		log.Printf("[config] editor already running at %s — reopening browser", url)
+		log.Printf("[config] editor already running at %s: reopening browser", url)
 		_ = exec.Command("open", url).Start()
 		return
 	}
@@ -629,7 +629,7 @@ func cmdSetupPocketKey(args []string) {
 		os.Exit(1)
 	case "unreachable":
 		fmt.Fprintf(os.Stderr, "⚠ %s\n  (%s)\n", verdict.HumanMessage, verdict.Detail)
-		// Unreachable is non-fatal — we save the key anyway (per SPEC-0175 §3.3).
+		// Unreachable is non-fatal: we save the key anyway (per SPEC-0175 §3.3).
 	}
 
 	if noWrite {
@@ -662,7 +662,7 @@ func cmdSetupPocketKey(args []string) {
 		vars["POCKET_API_URL"] = setup.DefaultPocketBaseURL
 	}
 
-	// CreateProfile is idempotent — overwrites if name exists.
+	// CreateProfile is idempotent: overwrites if name exists.
 	if err := pm.CreateProfile(profileName, prof.Description, vars); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to write profile %q: %v\n", profileName, err)
 		os.Exit(1)
@@ -748,7 +748,7 @@ func cmdSetup(args []string) {
 	if ffmpegPath, err := exec.LookPath("ffmpeg"); err == nil {
 		fmt.Printf("  ffmpeg:      %s\n", ffmpegPath)
 	} else {
-		fmt.Printf("  ffmpeg:      (not found — install with: brew install ffmpeg)\n")
+		fmt.Printf("  ffmpeg:      (not found, install with: brew install ffmpeg)\n")
 	}
 
 	// Check ER1 config
@@ -771,7 +771,7 @@ func cmdSetup(args []string) {
 		if venvExists && whisperFound {
 			fmt.Println("Status: ready")
 		} else {
-			fmt.Println("Status: setup needed — run 'm3c-tools setup'")
+			fmt.Println("Status: setup needed: run 'm3c-tools setup'")
 			os.Exit(1)
 		}
 		return
@@ -877,7 +877,7 @@ func cmdCheckER1() {
 
 	// SPEC-0143: Validate authentication (device token or API key).
 	if err := cfg.HealthCheck(); err != nil {
-		fmt.Printf("Auth check: FAILED — %v\n", err)
+		fmt.Printf("Auth check: FAILED: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("Auth check: OK (%s)\n", auth.AuthMethod())
@@ -940,7 +940,7 @@ func cmdRecord(args []string) {
 	fmt.Printf("  Peak amplitude: %d (%.1f%%)\n", stats.PeakAmplitude, float64(stats.PeakAmplitude)/32768.0*100)
 
 	if stats.PeakAmplitude < 100 {
-		fmt.Println("  WARNING: Very low audio levels — check microphone permissions")
+		fmt.Println("  WARNING: Very low audio levels: check microphone permissions")
 	}
 
 	if err := recorder.WriteWAV(output, samples); err != nil {
@@ -1438,7 +1438,7 @@ func reprocessAudioFile(srcPath, dbPath string, app *menubar.App, onProgress fun
 
 	// Ensure a DB record exists for this file (upsert).
 	if existing == nil {
-		// No existing record — create one.
+		// No existing record: create one.
 		if _, recErr := filesDB.RecordFile(absPath, hash, info.Size(), "audio", memoryID); recErr != nil {
 			return fmt.Errorf("record file: %w", recErr)
 		}
@@ -1566,7 +1566,7 @@ func cmdImportRetry() {
 		os.Exit(1)
 	}
 	if len(folders) == 0 {
-		fmt.Println("No MEMORY folders found — nothing to retry.")
+		fmt.Println("No MEMORY folders found: nothing to retry.")
 		return
 	}
 
@@ -1586,22 +1586,22 @@ func cmdImportRetry() {
 	for _, mf := range folders {
 		payload, loadErr := mf.LoadPayload()
 		if loadErr != nil {
-			fmt.Printf("  SKIP %s — %v\n", mf.MemoryID, loadErr)
+			fmt.Printf("  SKIP %s: %v\n", mf.MemoryID, loadErr)
 			skipped++
 			continue
 		}
 
-		fmt.Printf("  RETRY %s — transcript=%s audio=%s tags=%s\n",
+		fmt.Printf("  RETRY %s: transcript=%s audio=%s tags=%s\n",
 			mf.MemoryID, payload.TranscriptFilename, payload.AudioFilename, payload.Tags)
 
 		resp, upErr := er1.Upload(er1Cfg, payload)
 		if upErr != nil {
-			fmt.Printf("  FAIL %s — %v\n", mf.MemoryID, upErr)
+			fmt.Printf("  FAIL %s: %v\n", mf.MemoryID, upErr)
 			failed++
 			continue
 		}
 
-		fmt.Printf("  OK   %s — doc_id=%s\n", mf.MemoryID, resp.DocID)
+		fmt.Printf("  OK   %s: doc_id=%s\n", mf.MemoryID, resp.DocID)
 		uploaded++
 
 		// Update tracking DB if possible.
@@ -1798,7 +1798,7 @@ func cmdMenubar(args []string) {
 
 	// Check whisper availability at startup.
 	if whisperPath, err := whisper.FindBinary(); err != nil {
-		log.Printf("[startup] WARNING: whisper not found — voice transcription unavailable")
+		log.Printf("[startup] WARNING: whisper not found: voice transcription unavailable")
 		log.Printf("[startup] Run 'm3c-tools setup' to install whisper in a dedicated venv")
 		fmt.Fprintf(os.Stderr, "Warning: whisper not found. Run 'm3c-tools setup' to install.\n")
 	} else {
@@ -1916,7 +1916,7 @@ func cmdMenubar(args []string) {
 			return nil
 		},
 		OpenProfileEditor: func() {
-			// SPEC-0175 §3.2: idempotent — first click starts the server +
+			// SPEC-0175 §3.2: idempotent: first click starts the server +
 			// auto-opens the browser; subsequent clicks just re-open the
 			// browser tab (server is already listening on :9116).
 			openProfileEditor()
@@ -1938,7 +1938,7 @@ func cmdMenubar(args []string) {
 	// "useless until set up" state. Open the Settings editor automatically
 	// so they don't have to discover it under "Edit Profiles…".
 	if !signedIn && er1.LoadConfig().APIKey == "" {
-		log.Printf("[onboarding] no auth configured — opening Settings editor (first-launch detection)")
+		log.Printf("[onboarding] no auth configured: opening Settings editor (first-launch detection)")
 		go func() {
 			// Brief delay so the menubar finishes initialising before we
 			// pop the browser. Without this, the user sees the editor open
@@ -1954,7 +1954,7 @@ func cmdMenubar(args []string) {
 	maybePreloadWhisper()
 
 	// Register dynamic Pocket Sync menu label.
-	// SPEC-0174 §3.1: auto-detected mode (api / usb / both / off) — no env-var dance.
+	// SPEC-0174 §3.1: auto-detected mode (api / usb / both / off): no env-var dance.
 	menubar.SetPocketLabelFunc(func() string {
 		cfg := pocket.LoadConfig()
 		switch cfg.Mode() {
@@ -1968,7 +1968,7 @@ func cmdMenubar(args []string) {
 			// `m3c-tools pocket usb-sync` until the submenu lands (§3.4).
 			return "Pocket Sync (Cloud + USB)"
 		}
-		// ModeUSB — fall through to scan-based count for the existing window.
+		// ModeUSB: fall through to scan-based count for the existing window.
 		recordings, err := pocket.Scan(cfg.RecordPath)
 		if err != nil || len(recordings) == 0 {
 			return "Pocket Sync"
@@ -1996,7 +1996,7 @@ func cmdMenubar(args []string) {
 	var ttEngine *timetracking.Engine
 	var ttSyncer *timetracking.Syncer
 	if ttErr != nil {
-		log.Printf("[timetracking] store open failed: %v — time tracking disabled", ttErr)
+		log.Printf("[timetracking] store open failed: %v: time tracking disabled", ttErr)
 	} else {
 		ttEngine = timetracking.NewEngine(ttStore, func(title, msg string) {
 			app.Notify(title, msg)
@@ -2017,7 +2017,7 @@ func cmdMenubar(args []string) {
 			plmBase = er1BaseURL(er1Cfg.APIURL)
 		}
 		// PLM needs an ER1 credential. The API key OR a device token is
-		// sufficient — plmclient.doRequest sends whichever is present (Bearer
+		// sufficient. plmclient.doRequest sends whichever is present (Bearer
 		// device-token preferred, X-API-KEY fallback). Gating on APIKey alone
 		// silently disabled PLM for device-token-only logins (e.g. a fresh
 		// `m3c-tools login` whose profile still holds a placeholder key).
@@ -2025,7 +2025,7 @@ func cmdMenubar(args []string) {
 		if plmBase != "" && (er1Cfg.APIKey != "" || deviceToken != "") {
 			log.Printf("[timetracking] PLM connection: base=%s context=%s ssl=%v",
 				plmBase, truncateForLog(er1Cfg.ContextID, 32), er1Cfg.VerifySSL)
-			// Strip ___mft suffix from context ID — PLM uses the raw Google UID.
+			// Strip ___mft suffix from context ID: PLM uses the raw Google UID.
 			plmContextID := er1Cfg.ContextID
 			if idx := strings.Index(plmContextID, "___"); idx > 0 {
 				plmContextID = plmContextID[:idx]
@@ -2062,7 +2062,7 @@ func cmdMenubar(args []string) {
 			log.Printf("[timetracking] PLM sync disabled (base=%q key_set=%v device_token=%v)",
 				plmBase, er1Cfg.APIKey != "", deviceToken != "")
 			// Don't leave the Projects submenu stuck on "Loading projects..."
-			// forever — tell the user why it's empty. LoadConfig blanks a
+			// forever. Tell the user why it's empty. LoadConfig blanks a
 			// placeholder API key, so inspect the raw env value for the reason.
 			menubar.SetTimeTrackingError(plmDisabledReason(plmBase, os.Getenv("ER1_API_KEY")))
 		}
@@ -2310,7 +2310,7 @@ func cmdMenubar(args []string) {
 // BUG-0124 Layer 3: distinguishes auth-failure / network / generic errors so
 // the user is not left staring at "No projects loaded" while the log says 401.
 //
-// Match strings come from pkg/timetracking/plmclient.go HealthCheck() — keep
+// Match strings come from pkg/timetracking/plmclient.go HealthCheck(): keep
 // in sync if those error formats change.
 func classifyPLMHealthCheckError(err error) string {
 	if err == nil {
@@ -2319,38 +2319,38 @@ func classifyPLMHealthCheckError(err error) string {
 	s := err.Error()
 	switch {
 	case strings.Contains(s, "HTTP 401"):
-		return "ER1 key invalid (401) — open Settings to update"
+		return "ER1 key invalid (401), open Settings to update"
 	case strings.Contains(s, "HTTP 403"):
-		return "ER1 key rejected (403) — check permissions"
+		return "ER1 key rejected (403), check permissions"
 	case strings.Contains(s, "no such host"),
 		strings.Contains(s, "connection refused"),
 		strings.Contains(s, "network is unreachable"):
-		return "Server unreachable — check network"
+		return "Server unreachable, check network"
 	case strings.Contains(s, "timeout"),
 		strings.Contains(s, "deadline exceeded"),
 		strings.Contains(s, "i/o timeout"):
-		return "Server timeout — try again"
+		return "Server timeout, try again"
 	case strings.Contains(s, "x509"),
 		strings.Contains(s, "certificate"):
-		return "TLS certificate error — check ER1_VERIFY_SSL"
+		return "TLS certificate error, check ER1_VERIFY_SSL"
 	default:
-		return "PLM auth check failed — see log"
+		return "PLM auth check failed, see log"
 	}
 }
 
 // plmDisabledReason returns a short, user-facing diagnostic for the Projects
 // submenu when PLM sync can't start at all, so the menu never sits on
 // "Loading projects..." forever. rawKey is the pre-sanitization ER1_API_KEY
-// env value — LoadConfig blanks placeholders, so the reason must be derived
+// env value. LoadConfig blanks placeholders, so the reason must be derived
 // from the raw value here, not from the sanitized Config.APIKey.
 func plmDisabledReason(plmBase, rawKey string) string {
 	switch {
 	case plmBase == "":
-		return "ER1 URL not set — configure ER1_API_URL"
+		return "ER1 URL not set, configure ER1_API_URL"
 	case config.IsPlaceholderKey(rawKey):
-		return "ER1_API_KEY is a placeholder — fix the active profile"
+		return "ER1_API_KEY is a placeholder, fix the active profile"
 	default:
-		return "Not signed in — run 'm3c-tools login' or set ER1_API_KEY"
+		return "Not signed in: run 'm3c-tools login' or set ER1_API_KEY"
 	}
 }
 
@@ -2366,7 +2366,7 @@ func startTimeTrackingProjectRefresher(plmClient *timetracking.PLMClient, ttStor
 			menubar.SetTimeTrackingError(classifyPLMHealthCheckError(err))
 			return
 		}
-		// A successful fetch clears any prior diagnostic — even for an empty
+		// A successful fetch clears any prior diagnostic: even for an empty
 		// account (SetTimeTrackingProjects only clears on a non-empty list).
 		menubar.SetTimeTrackingError("")
 		var ttProjects []menubar.TimeTrackingProject
@@ -3261,7 +3261,7 @@ func startER1LoginCallbackServer() (*http.Server, string, <-chan loginCallbackRe
 		default:
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		// SEC M10: lock the throwaway callback page down — no scripts, no remote
+		// SEC M10: lock the throwaway callback page down: no scripts, no remote
 		// fetches; only the page's own inline <style> is allowed. Defends the
 		// (now-escaped) reflected query params against any residual injection.
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'")
@@ -3319,7 +3319,7 @@ func buildDeviceHubHTML(contextID, baseURL string) string {
 		userID = userID[:i]
 	}
 	// SEC M10: contextID arrives raw from the login-callback query string and is
-	// interpolated into HTML below — escape it (and baseURL, which lands in href
+	// interpolated into HTML below: escape it (and baseURL, which lands in href
 	// attributes) so a malicious/MITM'd ER1 redirect can't inject markup. Paired
 	// with the restrictive CSP set on the response.
 	userID = html.EscapeString(userID)
@@ -3521,7 +3521,7 @@ func menubarFetchTranscriptAndTrack(app *menubar.App, fetcher *menubar.Transcrip
 		meta.Source = "YouTube (cached)"
 	}
 
-	title := fmt.Sprintf("Observation — YouTube [%s]", result.VideoID)
+	title := fmt.Sprintf("Observation: YouTube [%s]", result.VideoID)
 	ok := menubar.ShowObservationWindowWithMeta(title, thumbnailPath, menubar.ChannelTypeProgress, meta)
 	if !ok {
 		app.SetStatus(menubar.StatusError)
@@ -3537,10 +3537,10 @@ func menubarFetchTranscriptAndTrack(app *menubar.App, fetcher *menubar.Transcrip
 	menubar.SetObservationTitle(result.VideoID)
 
 	if result.Text != "" {
-		statusText := fmt.Sprintf("Transcript loaded — %d chars", len(result.Text))
+		statusText := fmt.Sprintf("Transcript loaded, %d chars", len(result.Text))
 		menubar.SetReviewTranscript(result.Text, statusText)
 	} else if result.RateLimited {
-		menubar.SetReviewTranscript("[Transcript unavailable — YouTube rate limit (429). Voice note recording is still available.]", "Transcript pull needed")
+		menubar.SetReviewTranscript("[Transcript unavailable, YouTube rate limit (429). Voice note recording is still available.]", "Transcript pull needed")
 	}
 
 	// NOTE: Do NOT load transcript into the Notes field. The Notes field is
@@ -3614,14 +3614,14 @@ func menubarFetchTranscriptAndTrack(app *menubar.App, fetcher *menubar.Transcrip
 	})
 
 	if result.RateLimited {
-		app.Notify("Observation Ready", fmt.Sprintf("⚠️ %s — transcript-pull-needed, voice tracker active", result.VideoID))
+		app.Notify("Observation Ready", fmt.Sprintf("⚠️ %s, transcript-pull-needed, voice tracker active", result.VideoID))
 		return
 	}
 	if result.FromCache {
-		app.Notify("Observation Ready", fmt.Sprintf("%s %s (cached) — voice tracker active", result.Flag, result.VideoID))
+		app.Notify("Observation Ready", fmt.Sprintf("%s %s (cached), voice tracker active", result.Flag, result.VideoID))
 		return
 	}
-	app.Notify("Observation Ready", fmt.Sprintf("%s %s — transcript loaded, voice tracker active", result.Flag, result.VideoID))
+	app.Notify("Observation Ready", fmt.Sprintf("%s %s: transcript loaded, voice tracker active", result.Flag, result.VideoID))
 }
 
 // menubarUploadER1 performs the full ER1 upload workflow for a video ID:
@@ -3770,7 +3770,7 @@ func menubarRecordImpression(app *menubar.App, videoID string) {
 		log.Printf("[record] thumbnail fetch failed video=%s error=%v (non-fatal)", videoID, err)
 	}
 
-	title := fmt.Sprintf("Observation — YouTube [%s]", videoID)
+	title := fmt.Sprintf("Observation: YouTube [%s]", videoID)
 	_ = menubar.ShowObservationWindow(title, imgPath, menubar.ChannelTypeProgress)
 	menubar.SetObservationTags(fmt.Sprintf("progress, youtube, %s", videoID))
 	menubar.SetObservationTitle(videoID)
@@ -3884,7 +3884,7 @@ func observationRecordAndUpload(app *menubar.App, label string, imgPath string, 
 		}
 		defer os.Remove(wavPath)
 
-		// Transcribe via whisper — show animated progress bar
+		// Transcribe via whisper: show animated progress bar
 		menubar.SetReviewTranscript("Transcribing...", "Whisper processing")
 		menubar.ShowWhisperProgress()
 		model := menubarWhisperModel()
@@ -3913,7 +3913,7 @@ func observationRecordAndUpload(app *menubar.App, label string, imgPath string, 
 		var memo string
 		if obsCtx.TranscriptText != "" {
 			// Preserve the original transcript (e.g. YouTube) and add the
-			// voice comment as a separate section — do NOT overwrite.
+			// voice comment as a separate section: do NOT overwrite.
 			memo = fmt.Sprintf(
 				"--- Metadata ---\nChannel: %s\nDate: %s\nRecording: %.1fs, %.1f KB, peak %.0f%%\nWhisper: %s model, %d chars in %s\n\n--- Voice Comment ---\n%s\n\n--- Original Transcript ---\n%s\n\n--- Notes ---\n",
 				label,
@@ -3933,7 +3933,7 @@ func observationRecordAndUpload(app *menubar.App, label string, imgPath string, 
 				text,
 			)
 		}
-		statusText := fmt.Sprintf("Memo — %d chars (editable)", len(memo))
+		statusText := fmt.Sprintf("Memo: %d chars (editable)", len(memo))
 		menubar.SetReviewTranscript(memo, statusText)
 	})
 
@@ -3951,7 +3951,7 @@ func observationRecordAndUpload(app *menubar.App, label string, imgPath string, 
 			app.SetStatus(menubar.StatusRecording)
 			return
 		}
-		// Allow storing without audio — ER1 Upload sends a placeholder WAV automatically.
+		// Allow storing without audio: ER1 Upload sends a placeholder WAV automatically.
 
 		now := time.Now()
 		ts := now.Format("20060102_150405")
@@ -4095,7 +4095,7 @@ func captureScreenshotForMenu(app *menubar.App, flow string) (string, string, er
 	mode := screenshotCaptureMode()
 	switch mode {
 	case "clipboard-first":
-		// Check if there's already an image on the clipboard — use it directly.
+		// Check if there's already an image on the clipboard: use it directly.
 		if imgType, _ := screenshot.DetectClipboardImage(); imgType != screenshot.ClipboardNoImage {
 			outPath := filepath.Join(
 				os.TempDir(),
@@ -4294,7 +4294,7 @@ func maybePreloadWhisper() {
 		start := time.Now()
 
 		// Warm the OS disk cache by reading the model file into memory.
-		// Each whisper subprocess loads the model from scratch — the old approach
+		// Each whisper subprocess loads the model from scratch: the old approach
 		// of running full inference on a silent WAV took 3+ minutes on CPU and
 		// the in-process model cache was discarded when the subprocess exited.
 		// Reading the file is enough to populate the OS page cache.
@@ -4343,7 +4343,7 @@ func menubarWhisperModel() string {
 	if model != "" {
 		return model
 	}
-	// Deprecated fallback — use M3C_WHISPER_MODEL instead.
+	// Deprecated fallback: use M3C_WHISPER_MODEL instead.
 	model = strings.TrimSpace(os.Getenv("YT_WHISPER_MODEL"))
 	if model != "" {
 		return model
@@ -4356,7 +4356,7 @@ func menubarWhisperLanguage() string {
 	if language != "" {
 		return language
 	}
-	// Deprecated fallback — use M3C_WHISPER_LANGUAGE instead.
+	// Deprecated fallback: use M3C_WHISPER_LANGUAGE instead.
 	language = strings.TrimSpace(os.Getenv("YT_WHISPER_LANGUAGE"))
 	if language != "" {
 		return language
@@ -4365,11 +4365,11 @@ func menubarWhisperLanguage() string {
 }
 
 func menubarWhisperTimeout() time.Duration {
-	const defaultTimeout = 86400 * time.Second // 24 hours — large model on CPU needs time for long recordings
+	const defaultTimeout = 86400 * time.Second // 24 hours: large model on CPU needs time for long recordings
 
 	raw := strings.TrimSpace(os.Getenv("M3C_WHISPER_TIMEOUT"))
 	if raw == "" {
-		// Deprecated fallback — use M3C_WHISPER_TIMEOUT instead.
+		// Deprecated fallback: use M3C_WHISPER_TIMEOUT instead.
 		raw = strings.TrimSpace(os.Getenv("YT_WHISPER_TIMEOUT"))
 	}
 	if raw == "" {
@@ -4499,7 +4499,7 @@ func cmdPlaudAuthLogin() {
 	token, err := plaud.ExtractTokenFromChrome()
 	if err != nil {
 		fmt.Printf("Could not extract token: %v\n", err)
-		fmt.Println("\nOpening web.plaud.ai — please log in, then run this command again.")
+		fmt.Println("\nOpening web.plaud.ai: please log in, then run this command again.")
 		_ = plaud.OpenPlaudLogin()
 		os.Exit(1)
 	}
@@ -4522,7 +4522,7 @@ func cmdPlaudAuthLogin() {
 }
 
 // cmdPlaudAuthFromER1 pulls the Plaud token from the ER1 Credential Vault
-// (SPEC-0304) — captured once via the "Plaud verbinden" page, any OS — and
+// (SPEC-0304) (captured once via the "Plaud verbinden" page, any OS) and
 // saves it locally so `plaud sync` works. Replaces browser harvesting for the
 // common case (BUG-0168): capture once, use anywhere.
 func cmdPlaudAuthFromER1() {
@@ -4553,7 +4553,7 @@ func cmdPlaudAuthFromER1() {
 
 // cmdPlaudAuthPassword logs in with an email + password (Plaud's consumer
 // password grant) and stores the resulting long-lived (~300-day) token. This is
-// the robust replacement for browser token-scraping — no Chrome, no CDP, no
+// the robust replacement for browser token-scraping, no Chrome, no CDP, no
 // localStorage. Credentials come from $PLAUD_EMAIL / $PLAUD_PASSWORD when set
 // (for automation), otherwise from an interactive prompt (password read without
 // echo). Only the resulting token is stored, never the password.
@@ -4612,7 +4612,7 @@ func cmdPlaudAuthMCP() {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		fmt.Fprintln(os.Stderr, "First, mint the token once (opens a browser for Google/Apple sign-in):")
 		fmt.Fprintln(os.Stderr, "  node tools/plaud-mcp-login.mjs")
-		fmt.Fprintln(os.Stderr, "(In @plaud-ai/mcp, 'login' is an MCP tool, not a CLI command — `npx … login` just")
+		fmt.Fprintln(os.Stderr, "(In @plaud-ai/mcp, 'login' is an MCP tool, not a CLI command: `npx … login` just")
 		fmt.Fprintln(os.Stderr, " starts the server and hangs; the driver script invokes the tool for you.)")
 		fmt.Fprintln(os.Stderr, "then re-run:  m3c-tools plaud auth mcp")
 		os.Exit(1)
@@ -4620,12 +4620,12 @@ func cmdPlaudAuthMCP() {
 	// Verify BEFORE saving so an incompatible token can never clobber a working
 	// one. (The @plaud-ai/mcp token authenticates against the DEVELOPER API
 	// platform.plaud.ai/developer/api, not the consumer api.plaud.ai this client
-	// speaks — so this check currently fails for it; a developer-API client is
+	// speaks, so this check currently fails for it; a developer-API client is
 	// the durable fix. See SPEC-0341.)
 	recordings, err := plaud.NewClient(cfg, session.Token).ListRecordings()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "The @plaud-ai/mcp token is a DEVELOPER-API token (platform.plaud.ai), not a consumer token.\n")
-		fmt.Fprintln(os.Stderr, "Don't import it here — use the durable developer-API path directly:")
+		fmt.Fprintln(os.Stderr, "Don't import it here: use the durable developer-API path directly:")
 		fmt.Fprintln(os.Stderr, "  m3c-tools plaud dev sync --all      (capture → ER1, no browser, no daily re-auth)")
 		fmt.Fprintln(os.Stderr, "Your existing consumer token was left untouched.")
 		os.Exit(1)
@@ -4643,7 +4643,7 @@ func cmdPlaudAuthMCP() {
 }
 
 // cmdPlaudAuthPaste imports the Plaud bearer from the macOS clipboard (falling
-// back to stdin) — the reliable path for Google/Apple-SSO accounts whose token
+// back to stdin): the reliable path for Google/Apple-SSO accounts whose token
 // never lands in localStorage. Copy the `authorization` request-header value
 // from DevTools → Network (a live api.plaud.ai call), then run `plaud auth paste`.
 func cmdPlaudAuthPaste() {
@@ -4689,10 +4689,10 @@ func readSecret(prompt string) string {
 // handler. Supported forms:
 //
 //	plaud auth password                  email+password login → ~300-day token (recommended)
-//	plaud auth login                     extract token from Chrome (CDP) — legacy/fragile
+//	plaud auth login                     extract token from Chrome (CDP): legacy/fragile
 //	plaud auth --token-file <path>       read token from a file (secure)
 //	plaud auth                           read token from $M3C_PLAUD_TOKEN (secure)
-//	plaud auth <token>                   bare argv token (DEPRECATED — leaks via ps)
+//	plaud auth <token>                   bare argv token (DEPRECATED: leaks via ps)
 //
 // SEC-M8: the bare-argv form is kept for backward compatibility but emits a
 // loud deprecation warning, because command-line arguments are visible to other
@@ -4745,9 +4745,9 @@ func cmdPlaudAuthDispatch(args []string) {
 	token, argvLeaked, err := plaud.ResolveAuthToken(tokenFile, bareToken)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
-		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud auth paste            (import the Authorization header from the clipboard — best for SSO accounts)")
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools plaud auth paste            (import the Authorization header from the clipboard: best for SSO accounts)")
 		fmt.Fprintln(os.Stderr, "       m3c-tools plaud auth password         (email+password login → ~300-day token)")
-		fmt.Fprintln(os.Stderr, "       m3c-tools plaud auth login            (Chrome auto-capture — fragile vs Plaud's app)")
+		fmt.Fprintln(os.Stderr, "       m3c-tools plaud auth login            (Chrome auto-capture. Fragile vs Plaud's app)")
 		fmt.Fprintln(os.Stderr, "       m3c-tools plaud auth --from-er1        (pull from the ER1 vault, SPEC-0304)")
 		fmt.Fprintln(os.Stderr, "       m3c-tools plaud auth --token-file <path>")
 		fmt.Fprintf(os.Stderr, "       %s=<token> m3c-tools plaud auth\n", plaud.PlaudTokenEnvVar)
@@ -4763,7 +4763,7 @@ func cmdPlaudAuthDispatch(args []string) {
 func cmdPlaudAuth(token string) {
 	cfg := plaud.LoadConfig()
 	// Normalize a pasted value (strip "Bearer "/quotes) and record the JWT's real
-	// expiry — this is the reliable path for Google/Apple-SSO accounts, whose
+	// expiry. This is the reliable path for Google/Apple-SSO accounts, whose
 	// bearer never lands in localStorage: copy the Authorization header from the
 	// DevTools Network tab of a logged-in web.plaud.ai.
 	session := plaud.NewImportedTokenSession(token)
@@ -4979,7 +4979,7 @@ func migratePlaudDevLedger(filesDB *tracking.FilesDB) {
 // MacPro processing queue draining is visible after a `plaud dev sync` that left
 // transcripts to the server. The endpoint (`GET /transcription-queue`) is
 // @auth_required but resolves the tenant from `?user_id=` (session or query), NOT
-// from the Bearer — so we pass the device-token user id as the query param.
+// from the Bearer, so we pass the device-token user id as the query param.
 func cmdPlaudDevStatus() {
 	er1Cfg := er1.LoadConfig()
 	applyRuntimeER1Context(er1Cfg)
@@ -5039,11 +5039,11 @@ func formatTranscriptionQueue(body []byte) string {
 	}
 
 	if len(q.Queue) == 0 && q.FailedCount == 0 {
-		return "Server-side transcription queue: empty — nothing pending, nothing failed. ✅\n"
+		return "Server-side transcription queue: empty: nothing pending, nothing failed. ✅\n"
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "Server-side transcription queue — %d active · %d failed\n", q.QueueCount, q.FailedCount)
+	fmt.Fprintf(&b, "Server-side transcription queue: %d active · %d failed\n", q.QueueCount, q.FailedCount)
 	byStatus := map[string]int{}
 	for _, it := range q.Queue {
 		byStatus[strings.ToLower(it.Status)]++
@@ -5086,7 +5086,7 @@ func newPlaudDevClient() *plaud.DevClient {
 }
 
 // sortDevNewestFirst orders recordings newest-first by StartAt (ISO-8601 strings
-// sort chronologically), so list number #1 is the most recent — "the last items".
+// sort chronologically), so list number #1 is the most recent: "the last items".
 func sortDevNewestFirst(recs []plaud.DevRecording) {
 	sort.SliceStable(recs, func(i, j int) bool { return recs[i].StartAt > recs[j].StartAt })
 }
@@ -5095,7 +5095,7 @@ func sortDevNewestFirst(recs []plaud.DevRecording) {
 //
 // FR-0095: the API emits a zone-less ISO string that is UTC ("2026-09-03T13:44:14"
 // for a recording made at 15:44 CEST). Slicing those 16 characters printed the UTC
-// wall clock as if it were local time — every row an hour (CET) or two (CEST) too
+// wall clock as if it were local time: every row an hour (CET) or two (CEST) too
 // early. Parse, then convert; an unparsable value is shown RAW rather than guessed,
 // so a format change from Plaud is visible instead of silently plausible.
 func devWhen(iso string) string {
@@ -5124,7 +5124,7 @@ func stripCtrl(s string) string {
 func firstWords(s string, max int) string {
 	s = stripCtrl(strings.Join(strings.Fields(s), " "))
 	if s == "" {
-		return "—"
+		return ": "
 	}
 	r := []rune(s)
 	if len(r) <= max {
@@ -5134,7 +5134,7 @@ func firstWords(s string, max int) string {
 }
 
 // cmdPlaudDevList prints the numbered, newest-first recording list with each
-// item's ER1 sync status + doc_id (from the local tracking DB — no API calls).
+// item's ER1 sync status + doc_id (from the local tracking DB, no API calls).
 // --preview additionally fetches each shown item's transcript first-words (one
 // API call per item, so it is bounded to --limit, default 25).
 func cmdPlaudDevList(preview bool, limit int) {
@@ -5150,7 +5150,7 @@ func cmdPlaudDevList(preview bool, limit int) {
 	if limit > 0 && limit < len(recs) {
 		recs = recs[:limit]
 	} else if preview && limit == 0 && len(recs) > 25 {
-		fmt.Fprintln(os.Stderr, "  (transcript preview does one API call per item — showing the 25 most recent; use --limit N for more)")
+		fmt.Fprintln(os.Stderr, "  (transcript preview does one API call per item: showing the 25 most recent; use --limit N for more)")
 		recs = recs[:25]
 	}
 
@@ -5169,7 +5169,7 @@ func cmdPlaudDevList(preview bool, limit int) {
 	}
 	fmt.Printf("  %4s  %-16s  %6s  %-7s  %-20s  %s\n", "#", "Recorded", "Dur", "Status", "ER1 Doc", lastCol)
 	for i, r := range recs {
-		status, docID := "new", "—"
+		status, docID := "new", ": "
 		if st, ok := states[r.ID]; ok {
 			if st.DocID != "" {
 				docID = st.DocID
@@ -5182,7 +5182,7 @@ func cmdPlaudDevList(preview bool, limit int) {
 		}
 		last := r.ID
 		if preview {
-			last = "—"
+			last = ": "
 			if d, derr := client.GetDetail(r.ID); derr == nil {
 				txt := d.TranscriptText()
 				if txt == "" {
@@ -5280,7 +5280,7 @@ type devSyncTotals struct {
 // localWhisperTranscript transcribes MP3 bytes on THIS Mac via the whisper CLI.
 // Returns "" if whisper is unavailable or fails (caller falls back to audio-only).
 // plaudMaxAudioBytes is the largest audio clip attached to an ER1 upload. Bigger
-// clips are dropped (transcript-only) to stay under the ER1 ingress limit — Cloud
+// clips are dropped (transcript-only) to stay under the ER1 ingress limit: Cloud
 // Run / GFE reject requests over ~32 MiB with HTTP 413. Raise PLAUD_MAX_AUDIO_MB to
 // mirror important long recordings (up to the ~32MB server cap); lower it if a
 // stricter proxy sits in front. Default 30 MB leaves headroom for the multipart
@@ -5326,10 +5326,10 @@ func localWhisperTranscript(audio []byte, id string) string {
 // syncOneDevRecording uploads ONE recording to ER1 and returns the ER1 doc_id +
 // a disposition describing how the transcript was handled:
 //
-//	"plaud"   — used Plaud's own server transcript
-//	"queued"  — no transcript → enqueued for SERVER-SIDE whisper (SPEC-0111, DEFAULT)
-//	"whisper" — no transcript → transcribed LOCALLY (--whisper override)
-//	"audio"   — no transcript and no server-side transcription (audio only)
+//	"plaud", used Plaud's own server transcript
+//	"queued", no transcript → enqueued for SERVER-SIDE whisper (SPEC-0111, DEFAULT)
+//	"whisper", no transcript → transcribed LOCALLY (--whisper override)
+//	"audio", no transcript and no server-side transcription (audio only)
 func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentType string,
 	filesDB *tracking.FilesDB, syncAPI *plaud.SyncAPIClient, accountID string,
 	r plaud.DevRecording, tags string, useWhisper bool, existingDocID string) (string, string, error) {
@@ -5345,8 +5345,8 @@ func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentTyp
 			audio = nil
 		}
 	}
-	// LOCAL, not UTC: both consumers of this instant — ER1's `current_time` and the
-	// composite doc's "Date:" line — format with a ZONE-LESS layout, so whatever
+	// LOCAL, not UTC: both consumers of this instant, ER1's `current_time` and the
+	// composite doc's "Date:" line, format with a ZONE-LESS layout, so whatever
 	// zone the time.Time carries becomes the stored wall clock. The other producer
 	// of the same ER1 field (the file import, ~line 1261) uses os.FileInfo.ModTime,
 	// which is local; without this the two producers disagree by 1-2 h and the
@@ -5357,7 +5357,7 @@ func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentTyp
 
 	// Cap the attached audio: the ER1 ingress (Cloud Run / Google Front End)
 	// rejects requests over ~32 MiB with HTTP 413. Audio is OPTIONAL whenever we
-	// have a transcript, so an oversized clip is dropped from the upload — the
+	// have a transcript, so an oversized clip is dropped from the upload. The
 	// transcript still lands and the recording stays in Plaud. PLAUD_MAX_AUDIO_MB
 	// tunes the cap so important long recordings can still be mirrored (default 30).
 	maxAudio := plaudMaxAudioBytes()
@@ -5377,7 +5377,7 @@ func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentTyp
 				disposition = "whisper"
 			} else if oversized {
 				return "", "", fmt.Errorf(
-					"audio %s exceeds the %s upload cap and no transcript is available — "+
+					"audio %s exceeds the %s upload cap and no transcript is available: "+
 						"install whisper for a local fallback (see `doctor`) or raise "+
 						"PLAUD_MAX_AUDIO_MB (ER1 accepts up to ~32MB)",
 					humanMB(len(audio)), humanMB(maxAudio))
@@ -5398,10 +5398,10 @@ func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentTyp
 		}
 	}
 
-	// Drop oversized audio from the payload — by here we either had Plaud's
+	// Drop oversized audio from the payload: by here we either had Plaud's
 	// transcript or just produced a local one, so the bytes add nothing but 413s.
 	if oversized && len(audio) > 0 {
-		log.Printf("[plaud-dev] %s audio %s exceeds cap %s — uploading transcript only; "+
+		log.Printf("[plaud-dev] %s audio %s exceeds cap %s. Uploading transcript only; "+
 			"recording stays in Plaud (raise PLAUD_MAX_AUDIO_MB to mirror it, ER1 cap ~32MB)",
 			r.ID, humanMB(len(audio)), humanMB(maxAudio))
 		audio = nil
@@ -5427,7 +5427,7 @@ func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentTyp
 		payload.AudioData = audio
 		payload.AudioFilename = r.ID + ".mp3"
 	}
-	// Send a transcript body EXCEPT when deferring to the server queue — there the
+	// Send a transcript body EXCEPT when deferring to the server queue: there the
 	// server writes transcript_text itself (matches the consumer path).
 	if !doTranscribe {
 		impText := fmt.Sprintf("Plaud recording: %s", r.Name)
@@ -5447,7 +5447,7 @@ func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentTyp
 		return "", "", fmt.Errorf("upload: %w", upErr)
 	}
 	// SHARED local ledger (plaud://<id>, importType "plaud") + SPEC-0117 server
-	// mapping — identical to the menubar/consumer sync, so both share one truth.
+	// mapping: identical to the menubar/consumer sync, so both share one truth.
 	if filesDB != nil {
 		h := sha256.Sum256(audio)
 		if len(audio) == 0 {
@@ -5610,7 +5610,7 @@ func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force, whi
 }
 
 // parseDevTime parses the developer API's timestamps (falls back to now).
-// The zone handling lives in plaud.ParseDevTime — see FR-0095.
+// The zone handling lives in plaud.ParseDevTime: see FR-0095.
 func parseDevTime(s string) time.Time {
 	if t, ok := plaud.ParseDevTime(s); ok {
 		return t
@@ -5763,7 +5763,7 @@ func cmdPlaudSync(recordingID string, force bool, customTags string, filter stri
 				if filesDB != nil {
 					if tracked, lookupErr := filesDB.GetByPath("plaud://" + rec.ID); lookupErr == nil && tracked != nil {
 						if tracked.UploadDocID == "" {
-							// Tracked but no doc_id — upload failed previously, retry
+							// Tracked but no doc_id: upload failed previously, retry
 							ids = append(ids, rec.ID)
 							titleByID[rec.ID] = rec.Title
 							retryCount++
@@ -5797,7 +5797,7 @@ func cmdPlaudSync(recordingID string, force bool, customTags string, filter stri
 		for i, id := range ids {
 			title := titleByID[id]
 			if title == "" {
-				title = "(title unknown — single-ID mode)"
+				title = "(title unknown: single-ID mode)"
 			}
 			fmt.Printf("  %3d. %s\n       %s\n", i+1, id, title)
 		}
@@ -5832,7 +5832,7 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 	applyRuntimeER1Context(er1Cfg)
 	er1Cfg.ContentType = cfg.ContentType
 
-	// Server-side dedup check (SPEC-0117) — skipped in force mode
+	// Server-side dedup check (SPEC-0117): skipped in force mode
 	var syncAPI *plaud.SyncAPIClient
 	var plaudAccountID string
 	serverSyncAvailable := false
@@ -5931,7 +5931,7 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 		hasPlaudTranscript := false
 		tx, txErr := client.GetTranscript(recID)
 		if txErr != nil {
-			log.Printf("[plaud] no Plaud transcript for %s: %v — transcribe_mode=%s", recID, txErr, cfg.TranscribeMode)
+			log.Printf("[plaud] no Plaud transcript for %s: %v: transcribe_mode=%s", recID, txErr, cfg.TranscribeMode)
 		} else {
 			hasPlaudTranscript = true
 			transcriptText = tx.Text
@@ -5970,12 +5970,12 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 			switch cfg.TranscribeMode {
 			case plaud.TranscribeModeQueue:
 				doTranscribe = true
-				log.Printf("[plaud] %s: no transcript — requesting server transcription (queue mode)", recID)
+				log.Printf("[plaud] %s: no transcript, requesting server transcription (queue mode)", recID)
 			case plaud.TranscribeModeLazy:
 				tags = "todo.transcribe," + tags
-				log.Printf("[plaud] %s: no transcript — tagged todo.transcribe (lazy mode)", recID)
+				log.Printf("[plaud] %s: no transcript, tagged todo.transcribe (lazy mode)", recID)
 			case plaud.TranscribeModeOff:
-				log.Printf("[plaud] %s: no transcript — transcription off, audio only", recID)
+				log.Printf("[plaud] %s: no transcript: transcription off, audio only", recID)
 			}
 		}
 
@@ -6011,7 +6011,7 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 
 		resp, upErr := er1.Upload(er1Cfg, payload)
 		if upErr != nil {
-			log.Printf("[plaud] upload %s FAIL: %v — saving locally", recID, upErr)
+			log.Printf("[plaud] upload %s FAIL: %v: saving locally", recID, upErr)
 			// Fallback: save to ~/plaud-sync/<recID>/ for later re-upload.
 			localErr := savePlaudLocally(recID, rec, audioData, audioFmt, compositeDoc, transcriptText, tags)
 			if localErr != nil {
@@ -6174,15 +6174,15 @@ func menubarHandlePlaudSync(app *menubar.App) {
 	// truth with `plaud dev`. No more Chrome scraping / consumer API.
 	client, err := plaud.NewDevClientFromFile(plaud.DefaultMCPTokenPath())
 	if err != nil {
-		// Surface the exact recovery command in the log — this fires whether the
+		// Surface the exact recovery command in the log: this fires whether the
 		// token is missing entirely, expired, or its refresh failed, so the user
 		// always sees how to get a new one without digging.
 		log.Printf("[plaud] no usable developer token: %v", err)
 		log.Printf("[plaud] ── To get a new token, run this once, then sync again: ──")
 		log.Printf("[plaud]     node tools/plaud-mcp-login.mjs")
-		log.Printf("[plaud]   (opens the browser for Plaud SSO; writes ~/.plaud/tokens-mcp.json —")
+		log.Printf("[plaud]   (opens the browser for Plaud SSO; writes ~/.plaud/tokens-mcp.json, ")
 		log.Printf("[plaud]    a ~300-day self-refreshing token, so no daily re-auth after this)")
-		app.Notify("Plaud Sync — sign-in needed",
+		app.Notify("Plaud Sync, sign-in needed",
 			"Run:  node tools/plaud-mcp-login.mjs   then sync again")
 		return
 	}
@@ -6227,9 +6227,9 @@ func menubarHandlePlaudSync(app *menubar.App) {
 		})
 	}
 
-	menubar.ShowPlaudSyncWindow(records, fmt.Sprintf("Plaud — %d recordings", len(recs)), cfg.DefaultTags)
+	menubar.ShowPlaudSyncWindow(records, fmt.Sprintf("Plaud: %d recordings", len(recs)), cfg.DefaultTags)
 
-	// Register sync callback — runs the SHARED dev-sync core, so the menubar and
+	// Register sync callback: runs the SHARED dev-sync core, so the menubar and
 	// `plaud dev` never diverge (same ledger, same dedup, same server mapping).
 	menubar.SetPlaudSyncCallback(func(action string, recordingIDs []string, customTags string) {
 		if action != "sync" || len(recordingIDs) == 0 {
@@ -6293,7 +6293,7 @@ func truncate(s string, maxLen int) string {
 }
 
 // menubarHandlePocketCloudSync opens the Pocket cloud-mode sync window
-// (SPEC-0174 §3.2) — same NSTableView UX as the USB window, backed by
+// (SPEC-0174 §3.2): same NSTableView UX as the USB window, backed by
 // the heypocketai REST API + the SPEC-0173 mapping endpoints.
 //
 // Reuses pkg/menubar's existing PocketSync* surface (ShowPocketSyncWindow,
@@ -6308,7 +6308,7 @@ func menubarHandlePocketCloudSync(app *menubar.App) {
 	}
 	er1Cfg := er1.LoadConfig()
 	if er1Cfg.ContextID == "" {
-		log.Printf("[pocket-cloud] ER1_CONTEXT_ID not set — sign in via the menubar first")
+		log.Printf("[pocket-cloud] ER1_CONTEXT_ID not set: sign in via the menubar first")
 		return
 	}
 
@@ -6373,7 +6373,7 @@ func menubarHandlePocketCloudSync(app *menubar.App) {
 			Date:     r.RecordingAt.Format("2006-01-02 15:04"),
 			Time:     "",
 			Duration: menubar.FormatPocketDuration(r.Duration),
-			Size:     "—",
+			Size:     ": ",
 			Status:   status,
 			FilePath: key,
 		})
@@ -6514,7 +6514,7 @@ func menubarHandlePocketSync(app *menubar.App) {
 
 	switch cfg.Mode() {
 	case pocket.ModeOff:
-		log.Printf("[pocket] no source configured — set POCKET_API_KEY in your profile or plug in a Pocket USB device")
+		log.Printf("[pocket] no source configured: set POCKET_API_KEY in your profile or plug in a Pocket USB device")
 		return
 	case pocket.ModeAPI, pocket.ModeBoth:
 		// SPEC-0174 §3.2: open a native window for cloud-mode recordings.
@@ -6627,7 +6627,7 @@ func menubarHandlePocketSync(app *menubar.App) {
 		}
 	}
 
-	// Apply grouping — collapsed by default
+	// Apply grouping: collapsed by default
 	windowRecords := menubar.BuildGroupedRecords(rawRecords, groupInfos, nil)
 
 	deviceInfo := fmt.Sprintf("Pocket: %d recordings (%d new)", len(recordings), newCount)
@@ -6653,7 +6653,7 @@ func menubarHandlePocketSync(app *menubar.App) {
 	menubar.SetPocketSyncCallback(func(action string, filePaths []string, customTags string) {
 		log.Printf("[pocket] callback action=%s files=%d tags=%q", action, len(filePaths), customTags)
 
-		// Handle toggle_group FIRST — no selection needed
+		// Handle toggle_group FIRST: no selection needed
 		if strings.HasPrefix(action, "toggle_group:group:") {
 			gid := strings.TrimPrefix(action, "toggle_group:group:")
 			expandedGroupIDs[gid] = !expandedGroupIDs[gid]
@@ -7125,7 +7125,7 @@ func cmdPocketBackfill(args []string) {
 		fmt.Fprintf(os.Stderr, "backfill failed: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("OK — registered pocket://%s → %s (account=%s)\n", rid, docID, accountID)
+	fmt.Printf("OK: registered pocket://%s → %s (account=%s)\n", rid, docID, accountID)
 }
 
 // cmdPocketMappings dumps the current contents of _pocket_sync_map for the
@@ -7148,7 +7148,7 @@ func cmdPocketMappings(_ []string) {
 	}
 	// R-01 / Release It! "Integration Points": ohne Timeout blockiert Do()
 	// unbegrenzt, wenn der Server die Verbindung annimmt und nicht antwortet.
-	// Die uebrigen 40+ Clients in diesem Repo setzen es korrekt — diese Stelle
+	// Die uebrigen 40+ Clients in diesem Repo setzen es korrekt: diese Stelle
 	// war die einzige Ausnahme (Scan ueber alle *.go, 2026-09-01).
 	client := &http.Client{Transport: transport, Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
@@ -7237,7 +7237,7 @@ func cmdPocketAPI(args []string) {
 		}
 
 	case "search":
-		fmt.Fprintln(os.Stderr, "Error: 'search' subcommand removed — Pocket REST search endpoint returns 404 on personal API keys.")
+		fmt.Fprintln(os.Stderr, "Error: 'search' subcommand removed: Pocket REST search endpoint returns 404 on personal API keys.")
 		fmt.Fprintln(os.Stderr, "Use the Pocket MCP server instead: claude mcp add pocket --transport http https://public.heypocketai.com/mcp --header \"Authorization: Bearer $POCKET_API_KEY\"")
 		os.Exit(1)
 
@@ -7276,7 +7276,7 @@ func cmdPocketCloudSync(args []string) {
 func runPocketCloudSync(dryRun bool) error {
 	pcfg := pocket.LoadConfig()
 	if pcfg.APIKey == "" {
-		return fmt.Errorf("POCKET_API_KEY not set — get your key from the Pocket app: Settings → Developer → API Keys")
+		return fmt.Errorf("POCKET_API_KEY not set: get your key from the Pocket app: Settings → Developer → API Keys")
 	}
 
 	er1Cfg := er1.LoadConfig()
@@ -7284,7 +7284,7 @@ func runPocketCloudSync(dryRun bool) error {
 		return fmt.Errorf("ER1_CONTEXT_ID not set (or no active sign-in)")
 	}
 	if er1Cfg.APIKey == "" && os.Getenv("ER1_DEVICE_TOKEN") == "" {
-		return fmt.Errorf("no ER1 authentication configured — run 'm3c-tools setup' or sign in via the menubar")
+		return fmt.Errorf("no ER1 authentication configured: run 'm3c-tools setup' or sign in via the menubar")
 	}
 
 	minDuration := 10.0
@@ -7303,7 +7303,7 @@ func runPocketCloudSync(dryRun bool) error {
 	syncClient := pocket.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, "", !er1Cfg.VerifySSL)
 	accountID := pocket.DeriveAccountID(pcfg.APIKey)
 
-	fmt.Printf("Pocket Cloud Sync — account=%s\n", accountID)
+	fmt.Printf("Pocket Cloud Sync: account=%s\n", accountID)
 	fmt.Printf("ER1 base URL:    %s\n", syncClient.BaseURL())
 	fmt.Printf("Min duration:    %.0fs\n", minDuration)
 	if dryRun {

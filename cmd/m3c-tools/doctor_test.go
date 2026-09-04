@@ -1,4 +1,4 @@
-// doctor_test.go — Unit tests for the doctor command section functions.
+// doctor_test.go: Unit tests for the doctor command section functions.
 //
 // These tests run in package main and exercise the individual diagnostic
 // section builders without requiring a running ER1 server.
@@ -103,7 +103,7 @@ func TestDoctorAuth_NoAuth(t *testing.T) {
 			if c.Status != diag.Fail {
 				t.Errorf("auth method status = %v, want Fail", c.Status)
 			}
-			if c.Detail != "NO AUTH — run 'm3c-tools login' or set ER1_API_KEY" {
+			if c.Detail != "NO AUTH: run 'm3c-tools login' or set ER1_API_KEY" {
 				t.Errorf("auth method detail = %q", c.Detail)
 			}
 		}
@@ -223,7 +223,7 @@ func TestDoctorDevices_NoAuth(t *testing.T) {
 	os.Unsetenv("ER1_API_KEY")
 	// FR-0096: LoadConfig now falls back to the `aims-core-er1` Keychain item.
 	// On a machine that HAS it, "no auth" is no longer producible by clearing the
-	// environment alone — and HOME=t.TempDir() cannot isolate the Keychain.
+	// environment alone, and HOME=t.TempDir() cannot isolate the Keychain.
 	t.Setenv("M3C_ER1_KEYCHAIN", "off")
 
 	s := doctorDevices()

@@ -131,7 +131,7 @@ func TestBuildTraceReturnsFullTree(t *testing.T) {
 
 func TestBuildTraceMissingIntermediate(t *testing.T) {
 	cache, _ := seedCacheWithChain(t)
-	// Walker for a non-existent Insight reference — we simulate by
+	// Walker for a non-existent Insight reference: we simulate by
 	// asking for an artifact that doesn't exist in the cache.
 	_, ok := buildTrace(cache, "does-not-exist")
 	if ok {
@@ -141,7 +141,7 @@ func TestBuildTraceMissingIntermediate(t *testing.T) {
 
 func TestBuildTraceGracefulMissingChild(t *testing.T) {
 	// Seed an artifact whose i_ids reference an insight that was never
-	// published — walker should return an I leaf with error=missing,
+	// published. Walker should return an I leaf with error=missing,
 	// never crash.
 	raw, _ := mctx.NewRaw("trace-user-2")
 	hash := raw.Hash()

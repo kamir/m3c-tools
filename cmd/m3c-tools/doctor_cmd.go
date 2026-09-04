@@ -1,4 +1,4 @@
-// doctor_cmd.go — "m3c-tools doctor" connectivity & config diagnostics (SPEC-0143).
+// doctor_cmd.go: "m3c-tools doctor" connectivity & config diagnostics (SPEC-0143).
 //
 // This file has no build tags so it compiles on both darwin and non-darwin platforms.
 package main
@@ -47,7 +47,7 @@ func doctorProfile() diag.Section {
 	name := pm.ActiveProfileName()
 	if name == "" {
 		s.Checks = append(s.Checks, diag.Check{
-			Name: "Active profile", Status: diag.Fail, Detail: "no active profile — run 'm3c-tools config switch <name>'",
+			Name: "Active profile", Status: diag.Fail, Detail: "no active profile: run 'm3c-tools config switch <name>'",
 		})
 		return s
 	}
@@ -77,13 +77,13 @@ func doctorAuth() diag.Section {
 	// Check device token (loaded into env at startup from keychain or file).
 	tokenEnv := os.Getenv("ER1_DEVICE_TOKEN")
 	if tokenEnv != "" {
-		// Token was loaded at startup — check for expiration info.
+		// Token was loaded at startup: check for expiration info.
 		dt := loadTokenForDoctor()
 		if dt != nil {
 			if dt.IsExpired() {
 				s.Checks = append(s.Checks, diag.Check{
 					Name: "Device token", Status: diag.Fail,
-					Detail: fmt.Sprintf("expired (%s) — run 'm3c-tools login' to refresh", dt.ExpiresAt),
+					Detail: fmt.Sprintf("expired (%s): run 'm3c-tools login' to refresh", dt.ExpiresAt),
 				})
 			} else {
 				if dt.ExpiresAt != "" {
@@ -94,7 +94,7 @@ func doctorAuth() diag.Section {
 						if remaining < 7*24*time.Hour {
 							s.Checks = append(s.Checks, diag.Check{
 								Name: "Device token", Status: diag.Warn,
-								Detail: fmt.Sprintf("expiring soon (%s) — consider re-login", dt.ExpiresAt[:10]),
+								Detail: fmt.Sprintf("expiring soon (%s): consider re-login", dt.ExpiresAt[:10]),
 							})
 						} else {
 							s.Checks = append(s.Checks, diag.Check{
@@ -118,10 +118,10 @@ func doctorAuth() diag.Section {
 			})
 		}
 	} else if auth.HasStoredToken() {
-		// Stored but wasn't loaded — likely decryption failed or expired at startup.
+		// Stored but wasn't loaded, likely decryption failed or expired at startup.
 		s.Checks = append(s.Checks, diag.Check{
 			Name: "Device token", Status: diag.Warn,
-			Detail: fmt.Sprintf("stored in %s but not loaded — may be expired or wrong device", auth.ActiveStoreName()),
+			Detail: fmt.Sprintf("stored in %s but not loaded, may be expired or wrong device", auth.ActiveStoreName()),
 		})
 	} else {
 		s.Checks = append(s.Checks, diag.Check{
@@ -143,7 +143,7 @@ func doctorAuth() diag.Section {
 	// Check API key.
 	apiKey := os.Getenv("ER1_API_KEY")
 	if tokenEnv != "" {
-		// Token is active — API key is optional.
+		// Token is active, API key is optional.
 		if apiKey != "" {
 			s.Checks = append(s.Checks, diag.Check{
 				Name: "API key", Status: diag.Skipped, Detail: "set but not needed (token active)",
@@ -156,7 +156,7 @@ func doctorAuth() diag.Section {
 	} else if apiKey != "" {
 		s.Checks = append(s.Checks, diag.Check{
 			Name: "API key", Status: diag.Warn,
-			Detail: fmt.Sprintf("active (%d chars) — consider pairing device for token auth", len(apiKey)),
+			Detail: fmt.Sprintf("active (%d chars): consider pairing device for token auth", len(apiKey)),
 		})
 	} else {
 		s.Checks = append(s.Checks, diag.Check{
@@ -177,7 +177,7 @@ func doctorAuth() diag.Section {
 		})
 	default:
 		s.Checks = append(s.Checks, diag.Check{
-			Name: "Auth method", Status: diag.Fail, Detail: "NO AUTH — run 'm3c-tools login' or set ER1_API_KEY",
+			Name: "Auth method", Status: diag.Fail, Detail: "NO AUTH: run 'm3c-tools login' or set ER1_API_KEY",
 		})
 	}
 
@@ -281,7 +281,7 @@ func doctorConfigConsistency() diag.Section {
 	if _, err := os.Stat(initPath); err == nil {
 		s.Checks = append(s.Checks, diag.Check{
 			Name: "Init config", Status: diag.Warn,
-			Detail: fmt.Sprintf("%s exists but was not imported — run 'm3c-tools config import'", initPath),
+			Detail: fmt.Sprintf("%s exists but was not imported: run 'm3c-tools config import'", initPath),
 		})
 	}
 
@@ -291,7 +291,7 @@ func doctorConfigConsistency() diag.Section {
 			if info.Mode().Perm()&0077 != 0 {
 				s.Checks = append(s.Checks, diag.Check{
 					Name: "File perms", Status: diag.Warn,
-					Detail: fmt.Sprintf("%s is world-readable (%04o) — run 'chmod 600 %s'", sv.name, info.Mode().Perm(), sv.name),
+					Detail: fmt.Sprintf("%s is world-readable (%04o): run 'chmod 600 %s'", sv.name, info.Mode().Perm(), sv.name),
 				})
 			}
 		}
@@ -330,7 +330,7 @@ func doctorConnectivity() diag.Section {
 	elapsed := time.Since(start)
 	if err != nil {
 		s.Checks = append(s.Checks, diag.Check{
-			Name: "DNS resolve", Status: diag.Fail, Detail: fmt.Sprintf("%s — %v", host, err),
+			Name: "DNS resolve", Status: diag.Fail, Detail: fmt.Sprintf("%s: %v", host, err),
 		})
 		return s // no point testing further
 	}
@@ -349,7 +349,7 @@ func doctorConnectivity() diag.Section {
 		elapsed = time.Since(start)
 		if err != nil {
 			s.Checks = append(s.Checks, diag.Check{
-				Name: "TLS handshake", Status: diag.Fail, Detail: fmt.Sprintf("%s — %v", tlsAddr, err),
+				Name: "TLS handshake", Status: diag.Fail, Detail: fmt.Sprintf("%s: %v", tlsAddr, err),
 			})
 		} else {
 			conn.Close() //nolint:errcheck // best-effort close of a diagnostic-only TLS connection
@@ -373,7 +373,7 @@ func doctorConnectivity() diag.Section {
 	elapsed = time.Since(start)
 	if err != nil {
 		s.Checks = append(s.Checks, diag.Check{
-			Name: "ER1 /health", Status: diag.Fail, Detail: fmt.Sprintf("unreachable — %v", err),
+			Name: "ER1 /health", Status: diag.Fail, Detail: fmt.Sprintf("unreachable: %v", err),
 		})
 		return s
 	}
@@ -390,7 +390,7 @@ func doctorConnectivity() diag.Section {
 		})
 	}
 
-	// Authenticated endpoint — tests actual auth.
+	// Authenticated endpoint: tests actual auth.
 	if !auth.HasAuth(cfg.APIKey) {
 		s.Checks = append(s.Checks, diag.Check{
 			Name: "Auth endpoint", Status: diag.Skipped, Detail: "no credentials to test",
@@ -421,7 +421,7 @@ func doctorConnectivity() diag.Section {
 	elapsed = time.Since(start)
 	if err != nil {
 		s.Checks = append(s.Checks, diag.Check{
-			Name: "Auth endpoint", Status: diag.Fail, Detail: fmt.Sprintf("unreachable — %v", err),
+			Name: "Auth endpoint", Status: diag.Fail, Detail: fmt.Sprintf("unreachable: %v", err),
 		})
 		return s
 	}
@@ -437,12 +437,12 @@ func doctorConnectivity() diag.Section {
 	case http.StatusUnauthorized:
 		s.Checks = append(s.Checks, diag.Check{
 			Name: "Auth endpoint", Status: diag.Fail,
-			Detail: fmt.Sprintf("HTTP 401 — %s is invalid or expired", auth.AuthMethod()),
+			Detail: fmt.Sprintf("HTTP 401: %s is invalid or expired", auth.AuthMethod()),
 		})
 	case http.StatusForbidden:
 		s.Checks = append(s.Checks, diag.Check{
 			Name: "Auth endpoint", Status: diag.Fail,
-			Detail: fmt.Sprintf("HTTP 403 — %s rejected", auth.AuthMethod()),
+			Detail: fmt.Sprintf("HTTP 403: %s rejected", auth.AuthMethod()),
 		})
 	default:
 		s.Checks = append(s.Checks, diag.Check{
@@ -519,7 +519,7 @@ func doctorPlaud() diag.Section {
 	if _, err := os.Stat(tokenPath); os.IsNotExist(err) {
 		s.Checks = append(s.Checks, diag.Check{
 			Name: "Plaud token", Status: diag.Skipped,
-			Detail: "not configured — run 'm3c-tools plaud auth login'",
+			Detail: "not configured: run 'm3c-tools plaud auth login'",
 		})
 	} else {
 		// Try to load and validate the token.
@@ -544,7 +544,7 @@ func doctorPlaud() diag.Section {
 	if baseURL == "" || !auth.HasAuth(cfg.APIKey) {
 		s.Checks = append(s.Checks, diag.Check{
 			Name: "Plaud sync API", Status: diag.Skipped,
-			Detail: "no ER1 auth — cannot check sync endpoint",
+			Detail: "no ER1 auth: cannot check sync endpoint",
 		})
 	} else {
 		client := &http.Client{Timeout: 10 * time.Second}
@@ -600,7 +600,7 @@ func doctorDevices() diag.Section {
 	if !auth.HasAuth(cfg.APIKey) {
 		s.Checks = append(s.Checks, diag.Check{
 			Name: "Paired devices", Status: diag.Skipped,
-			Detail: "no auth — run 'm3c-tools login' first",
+			Detail: "no auth: run 'm3c-tools login' first",
 		})
 		return s
 	}
@@ -620,7 +620,7 @@ func doctorDevices() diag.Section {
 	if len(devices) == 0 {
 		s.Checks = append(s.Checks, diag.Check{
 			Name: "Paired devices", Status: diag.Warn,
-			Detail: "none — run 'm3c-tools login' to pair this device",
+			Detail: "none: run 'm3c-tools login' to pair this device",
 		})
 	} else {
 		s.Checks = append(s.Checks, diag.Check{

@@ -174,11 +174,11 @@ func emitInsight(ctx context.Context, deps processors.Deps, cmd schema.ProcessCo
 // type=question, carrying the two contradicting claims. Week 3 sets
 // provenance.parent_artifact_id so the feedback consumer can
 // distinguish machine-generated questions from raw user questions
-// (SPEC-0167 §Stream 3a — "T messages with type=question AND
+// (SPEC-0167 §Stream 3a: "T messages with type=question AND
 // parent_artifact_id != null").
 //
 // The parent reference is synthesized from the process id because the
-// i-proc doesn't have an artifact id at this point — the artifact is
+// i-proc doesn't have an artifact id at this point. The artifact is
 // produced downstream by A-proc. What matters for the filter is that
 // the field is non-nil and traceable back to the engine run that
 // emitted the contradiction.

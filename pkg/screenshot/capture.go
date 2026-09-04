@@ -89,7 +89,7 @@ func CaptureWith(cmd Commander, opts Options) (string, error) {
 
 	_, runErr := cmd.Run("screencapture", args...)
 
-	// Check if the output file was actually created — screencapture may
+	// Check if the output file was actually created. Screencapture may
 	// return a non-zero exit code on some macOS versions even on success.
 	// The file existing is the definitive success signal.
 	if _, err := os.Stat(outPath); err != nil {

@@ -1,4 +1,4 @@
-// gantt_darwin.go — Native macOS Gantt chart Time Tracker window via Cocoa/cgo.
+// gantt_darwin.go: Native macOS Gantt chart Time Tracker window via Cocoa/cgo.
 //
 // Creates an NSWindow with a custom GanttView that renders project time
 // tracking sessions as horizontal bars on a time grid. Supports week and
@@ -421,7 +421,7 @@ static void reloadGanttChartUI(void) {
 	[g_ganttChartView setNeedsDisplay:YES];
 }
 
-// reloadGanttChart is thread-safe — dispatches to main thread.
+// reloadGanttChart is thread-safe: dispatches to main thread.
 static void reloadGanttChart(void) {
 	dispatch_async(dispatch_get_main_queue(), ^{
 		reloadGanttChartUI();

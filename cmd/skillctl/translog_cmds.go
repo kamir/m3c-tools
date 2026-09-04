@@ -7,7 +7,7 @@ package main
 //	append <type> <digest> [--subject S] [--log PATH] [--log-id ID]
 //	    Append an event (admit|attest|revoke|agentid-issue|agentid-revoke)
 //	    to the local append-only transparency log. Logs the DIGEST of an
-//	    already-signed event — data stays OFF the log (SPEC-0278 §5).
+//	    already-signed event: data stays OFF the log (SPEC-0278 §5).
 //
 //	sth [--log PATH] [--log-id ID] [--key PATH.priv]
 //	    Show the current tree head. With --key, sign it into an STH (JSON).
@@ -32,7 +32,7 @@ package main
 // Honesty: L1 makes equivocation/withholding DETECTABLE, not impossible.
 // Only the DEFERRED L2 (BFT consortium ledger) could PREVENT a single
 // operator from equivocating. The Kafka/SPEC-0190 gossip transport is also
-// DEFERRED — these verbs operate on locally-held STHs/proofs.
+// DEFERRED: these verbs operate on locally-held STHs/proofs.
 
 import (
 	"crypto/ed25519"
@@ -55,7 +55,7 @@ import (
 // ALREADY produced and (for attest/revoke) posted the signed event; we only
 // mirror its DIGEST into the local append-only log so the verifier can later
 // prove inclusion. Any error is written to stderr as a non-fatal note and
-// swallowed — mirroring the SPEC-0202 audit-trail pattern.
+// swallowed: mirroring the SPEC-0202 audit-trail pattern.
 //
 // Disabled by default unless the operator opts in via M3C_TRANSLOG=1 (so the
 // existing commands' behaviour and output are unchanged for users who have
@@ -537,7 +537,7 @@ func runTranslogWitness(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return exitGeneric
 	}
-	// Verify each STH against the pinned key — an unsigned/unpinned head is
+	// Verify each STH against the pinned key: an unsigned/unpinned head is
 	// not admissible evidence and could otherwise hide or fabricate a split.
 	for i, s := range sths {
 		if err := translog.VerifySTH(ed25519.PublicKey(pub), s); err != nil {
@@ -556,7 +556,7 @@ func runTranslogWitness(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return exitGeneric
 	}
-	fmt.Fprintf(stdout, "OK: %d witnessed STH(s) are consistent — no split view detected.\n", len(sths))
+	fmt.Fprintf(stdout, "OK: %d witnessed STH(s) are consistent, no split view detected.\n", len(sths))
 	fmt.Fprintln(stdout, "note: L1 detects equivocation; only L2 (deferred BFT ledger) prevents it.")
 	return exitOK
 }

@@ -236,7 +236,7 @@ func TestStatusCheckerPathOnlyNoDuplicateDetection(t *testing.T) {
 }
 
 // TestStatusCheckerImportTypeScoping verifies that status checks are scoped
-// by import type — a file tracked as "audio" should appear as new for "screenshot".
+// by import type. A file tracked as "audio" should appear as new for "screenshot".
 func TestStatusCheckerImportTypeScoping(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
@@ -257,7 +257,7 @@ func TestStatusCheckerImportTypeScoping(t *testing.T) {
 	// Record as "audio" import type.
 	db.RecordFile(audioFile, hash, info.Size(), "audio", "")
 
-	// Check with "audio" type — should be imported.
+	// Check with "audio" type: should be imported.
 	audioChecker := importer.StatusCheckerFromDB(db, "audio")
 	status, err := audioChecker(audioFile)
 	if err != nil {
@@ -267,7 +267,7 @@ func TestStatusCheckerImportTypeScoping(t *testing.T) {
 		t.Errorf("expected StatusImported for audio type, got %q", status)
 	}
 
-	// Check with "screenshot" type — same path is in DB, but GetByPath
+	// Check with "screenshot" type: same path is in DB, but GetByPath
 	// doesn't filter by type, so it will find the record. However, the
 	// hash lookup is scoped by type. Since GetByPath returns the record
 	// regardless of type, we still get the DB status.
@@ -300,7 +300,7 @@ func TestStatusCheckerNonexistentFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// File doesn't exist and isn't in DB — should be StatusNew.
+	// File doesn't exist and isn't in DB. Should be StatusNew.
 	if status != importer.StatusNew {
 		t.Errorf("expected StatusNew for nonexistent file, got %q", status)
 	}
@@ -327,7 +327,7 @@ func TestStatusCheckerDefaultImportType(t *testing.T) {
 	// Record with default import type (audio).
 	db.RecordFile(audioFile, hash, info.Size(), "", "")
 
-	// Check with empty import type — should default to "audio".
+	// Check with empty import type: should default to "audio".
 	checker := importer.StatusCheckerFromDB(db, "")
 	status, err := checker(audioFile)
 	if err != nil {

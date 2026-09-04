@@ -1,4 +1,4 @@
-# M3C Tools — Design System
+# M3C Tools: Design System
 
 **Date:** 2026-04-02
 **Scope:** Go desktop app (menubar, native windows, web-based review UIs)
@@ -71,7 +71,7 @@ All icons use the same base properties:
 | Log File | `log-file.svg` | `menu-log-file.png` | Open Log File |
 | User Account | `user-account.svg` | `menu-user-account.png` | Mein Nutzerkonto / Login |
 | Star | `star.svg` | `menu-star.png` | Star on GitHub |
-| App Icon | `app-icon-128.svg` | — | macOS app icon (gradient) |
+| App Icon | `app-icon-128.svg` | n/a | macOS app icon (gradient) |
 
 ## Menubar Icon Requirements
 

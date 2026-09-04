@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run-all — Master orchestrator. Walks every step in the demo and asserts
+# run-all: Master orchestrator. Walks every step in the demo and asserts
 # the four release-gate items.
 #
 # Usage:
@@ -107,10 +107,10 @@ Release-gate items vs proofs
   G4  Prove a valid skill works for Eric AND an invalid skill fails
         proof:
           VALID:        step 05 ✓ (chain accepted, file produced)
-          INVALID #1:   step 06 ✓ (tampered bytes — exit 11)
-          INVALID #2:   step 07 ✓ (wrong key — exit 11)
-          INVALID #3:   step 08 ✓ (no signature — non-zero refusal)
-          INVALID #4:   step 09 ✓ (post-install edit — CHECKSUMS detected)
+          INVALID #1:   step 06 ✓ (tampered bytes, exit 11)
+          INVALID #2:   step 07 ✓ (wrong key, exit 11)
+          INVALID #3:   step 08 ✓ (no signature, non-zero refusal)
+          INVALID #4:   step 09 ✓ (post-install edit, CHECKSUMS detected)
 
 EOF
 

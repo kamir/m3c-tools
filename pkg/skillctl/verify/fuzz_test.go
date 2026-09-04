@@ -2,7 +2,7 @@ package verify
 
 // Native Go fuzz targets for two untrusted-input surfaces in the verify package:
 //   - VerifyRevocationList (+ CanonicalRevocationBytes): a signed, offline
-//     revocation snapshot pulled from a registry. It must never fail OPEN — a
+//     revocation snapshot pulled from a registry. It must never fail OPEN. A
 //     forged/unsigned list can neither block a healthy bundle nor be accepted
 //     without a valid signature over the canonical bytes.
 //   - ParseTrustRoots: the strict YAML trust-roots decoder+validator (the
@@ -19,7 +19,7 @@ import (
 // FuzzVerifyRevocationList feeds fuzzed JSON → RevocationList → VerifyRevocationList
 // against a fixed active registry key. Oracles: never panics; a revoked set is
 // returned ONLY together with a signature that genuinely verifies over the
-// canonical bytes (re-checked independently) — anything else is fail-open.
+// canonical bytes (re-checked independently). Anything else is fail-open.
 func FuzzVerifyRevocationList(f *testing.F) {
 	seed := make([]byte, ed25519.SeedSize)
 	for i := range seed {

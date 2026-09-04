@@ -66,7 +66,7 @@ func runGP(t *testing.T, args []string, stdinJSON string) (int, string, string) 
 	return code, out.String(), errB.String()
 }
 
-// TestGuardPath_SymlinkedSkillPathResolves — R-6.2/AC-6: a Read reaching a skill
+// TestGuardPath_SymlinkedSkillPathResolves: R-6.2/AC-6: a Read reaching a skill
 // through a symlink resolves to the real skill dir (a hit), NOT missed by a
 // lexical check.
 func TestGuardPath_SymlinkedSkillPathResolves(t *testing.T) {
@@ -83,7 +83,7 @@ func TestGuardPath_SymlinkedSkillPathResolves(t *testing.T) {
 	code, _, _ := runGP(t, []string{"--home", home, "--deny"},
 		readEvent("Read", filepath.Join(alias, "SKILL.md")))
 	if code != exitHookBlock {
-		t.Fatalf("symlinked skill Read: exit=%d, want %d (deny — the symlink must resolve to a hit)", code, exitHookBlock)
+		t.Fatalf("symlinked skill Read: exit=%d, want %d (deny: the symlink must resolve to a hit)", code, exitHookBlock)
 	}
 	if len(*lines) != 1 {
 		t.Fatalf("expected 1 guard event, got %d", len(*lines))
@@ -101,7 +101,7 @@ func TestGuardPath_SymlinkedSkillPathResolves(t *testing.T) {
 	}
 }
 
-// TestGuardPath_SelfReadNotDenied — R-6.3/AC-6: skillctl's own inventory read is
+// TestGuardPath_SelfReadNotDenied: R-6.3/AC-6: skillctl's own inventory read is
 // never denied, even in deny mode.
 func TestGuardPath_SelfReadNotDenied(t *testing.T) {
 	home := guardTestHome(t)
@@ -118,7 +118,7 @@ func TestGuardPath_SelfReadNotDenied(t *testing.T) {
 	}
 }
 
-// TestGuardPath_CompoundSkillctlStillHits — R-6.3: self-exemption whitelists ONLY
+// TestGuardPath_CompoundSkillctlStillHits: R-6.3: self-exemption whitelists ONLY
 // a SOLE skillctl command. A compound command (`skillctl …; cat <victim>`)
 // forfeits the exemption, so the victim read still emits a skill-dir hit and,
 // under --deny, is blocked (the escape must not defeat --deny nor blind the audit).
@@ -144,7 +144,7 @@ func TestGuardPath_CompoundSkillctlStillHits(t *testing.T) {
 	}
 }
 
-// TestGuardPath_DenyOnlyInOptInMode — R-6.1/AC-6: a skill-dir Read is
+// TestGuardPath_DenyOnlyInOptInMode: R-6.1/AC-6: a skill-dir Read is
 // audited-allowed by default and denied ONLY in opt-in deny mode.
 func TestGuardPath_DenyOnlyInOptInMode(t *testing.T) {
 	home := guardTestHome(t)
@@ -184,7 +184,7 @@ func TestGuardPath_DenyOnlyInOptInMode(t *testing.T) {
 	}
 }
 
-// TestGuardPath_EnvOptInDeny — the SKILLCTL_GUARD_PATH env switch also engages
+// TestGuardPath_EnvOptInDeny: the SKILLCTL_GUARD_PATH env switch also engages
 // deny mode (the enterprise-profile wiring reuses this switch).
 func TestGuardPath_EnvOptInDeny(t *testing.T) {
 	home := guardTestHome(t)
@@ -198,7 +198,7 @@ func TestGuardPath_EnvOptInDeny(t *testing.T) {
 	}
 }
 
-// TestGuardPath_NonHitSilent — R-6.1 volume-bounding: a non-skill file op is a
+// TestGuardPath_NonHitSilent: R-6.1 volume-bounding: a non-skill file op is a
 // silent allow that emits NOTHING (even in deny mode).
 func TestGuardPath_NonHitSilent(t *testing.T) {
 	home := guardTestHome(t)
@@ -217,7 +217,7 @@ func TestGuardPath_NonHitSilent(t *testing.T) {
 	}
 }
 
-// TestGuardPath_SkillToolNotGuarded — the Skill tool is verify-hook's job; guard
+// TestGuardPath_SkillToolNotGuarded: the Skill tool is verify-hook's job; guard
 // silently allows it so it never overrides the Skill decision.
 func TestGuardPath_SkillToolNotGuarded(t *testing.T) {
 	home := guardTestHome(t)
@@ -229,7 +229,7 @@ func TestGuardPath_SkillToolNotGuarded(t *testing.T) {
 	}
 }
 
-// TestGuardPath_UnreadableFailsOpen — a malformed/empty event is a silent allow
+// TestGuardPath_UnreadableFailsOpen: a malformed/empty event is a silent allow
 // (fail-open; the guard is not a seal and must not block on its own parse fail).
 func TestGuardPath_UnreadableFailsOpen(t *testing.T) {
 	home := guardTestHome(t)
@@ -241,7 +241,7 @@ func TestGuardPath_UnreadableFailsOpen(t *testing.T) {
 	}
 }
 
-// TestGuardPath_BashPathExtraction — a Bash command touching a skill file is
+// TestGuardPath_BashPathExtraction: a Bash command touching a skill file is
 // classified from the extracted path arg.
 func TestGuardPath_BashPathExtraction(t *testing.T) {
 	home := guardTestHome(t)
@@ -267,7 +267,7 @@ func TestGuardPath_Explain(t *testing.T) {
 	}
 }
 
-// TestGuardPath_EventReusesSignedVocabulary — the emitted event embeds a valid
+// TestGuardPath_EventReusesSignedVocabulary: the emitted event embeds a valid
 // signed InvocationRecord with an inv: event id (no new vocabulary).
 func TestGuardPath_EventReusesSignedVocabulary(t *testing.T) {
 	home := guardTestHome(t)

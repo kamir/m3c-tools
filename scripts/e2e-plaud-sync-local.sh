@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# e2e-plaud-sync-local.sh — End-to-end Plaud sync API test against local Docker
+# e2e-plaud-sync-local.sh: End-to-end Plaud sync API test against local Docker
 #
 # Tests the server-side APIs that m3c-tools calls during Plaud sync:
 #   1. Build m3c-tools, create sandbox profile
@@ -102,7 +102,7 @@ fi
 _section "Phase 2: Fresh profile setup"
 
 cat > "$M3C_HOME/profiles/e2e-local.env" <<EOF
-# E2E test profile — local Docker
+# E2E test profile, local Docker
 # Description: E2E test against local aims-core
 ER1_API_URL=${BASE_URL}/upload_2
 ER1_API_KEY=${API_KEY}
@@ -192,7 +192,7 @@ print('yes' if d.get('plaud_recording_id') == '${PLAUD_REC_ID}' else 'no')
 if [[ "$MAP_HAS_ID" == "yes" ]]; then
   _pass "sync mapping registered: ${PLAUD_REC_ID} -> ${DOC_ID}"
 else
-  _fail "sync mapping failed — response: $(echo "$MAP_RESPONSE" | head -c 300)"
+  _fail "sync mapping failed, response: $(echo "$MAP_RESPONSE" | head -c 300)"
 fi
 
 # ── Phase 6: Verify dedup check ──────────────────────────────────────────────
@@ -212,10 +212,10 @@ print(rec.get('er1_doc_id', ''))
 if [[ "$FOUND_DOC" == "$DOC_ID" ]]; then
   _pass "dedup check found mapping: ${PLAUD_REC_ID} -> ${DOC_ID}"
 else
-  _fail "dedup check did not find mapping — response: $(echo "$CHECK_RESPONSE" | head -c 300)"
+  _fail "dedup check did not find mapping, response: $(echo "$CHECK_RESPONSE" | head -c 300)"
 fi
 
-# Check with an unknown recording — should be in 'unsynced' list
+# Check with an unknown recording: should be in 'unsynced' list
 UNKNOWN_REC_ID="e2eunknown${RUN_TS}"
 CHECK_UNKNOWN=$(_curl "${BASE_URL}/api/plaud-sync/check?plaud_account_id=${PLAUD_ACCOUNT_ID}&recording_ids=${UNKNOWN_REC_ID}" 2>/dev/null || echo '{}')
 
@@ -256,7 +256,7 @@ print(d.get('device_type', ''))
 if [[ "$PAIR_DEVICE_TYPE" == "plaud" ]]; then
   _pass "device paired: plaud/${HOSTNAME}"
 else
-  _fail "device pairing failed — $(echo "$PAIR_RESPONSE" | head -c 300)"
+  _fail "device pairing failed: $(echo "$PAIR_RESPONSE" | head -c 300)"
 fi
 
 # Heartbeat
@@ -280,7 +280,7 @@ print(d.get('items_synced', -1))
 if [[ "$HB_ITEMS" -ge 1 ]]; then
   _pass "heartbeat sent: items_synced=${HB_ITEMS}"
 else
-  _fail "heartbeat failed — $(echo "$HEARTBEAT_RESPONSE" | head -c 300)"
+  _fail "heartbeat failed: $(echo "$HEARTBEAT_RESPONSE" | head -c 300)"
 fi
 
 # Device list

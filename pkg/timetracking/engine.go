@@ -235,7 +235,7 @@ func (e *Engine) RecoverOrphanedContexts() error {
 		now := time.Now().UTC()
 
 		if now.Before(ctx.ExpiresAt.UTC()) {
-			// Still within timeout — restore the project as active.
+			// Still within timeout: restore the project as active.
 			remaining := ctx.ExpiresAt.UTC().Sub(now)
 			projectID := ctx.ProjectID
 			projectName := ctx.ProjectName
@@ -257,7 +257,7 @@ func (e *Engine) RecoverOrphanedContexts() error {
 			continue
 		}
 
-		// Expired — deactivate with duration capped at expiry time.
+		// Expired: deactivate with duration capped at expiry time.
 		deactivateAt := ctx.ExpiresAt.UTC()
 		durSec := int(deactivateAt.Sub(ctx.ActivatedAt).Seconds())
 

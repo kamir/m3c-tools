@@ -1,4 +1,4 @@
-// Tier-aware scanning + shadow detection — SPEC-0189 Phase 1.
+// Tier-aware scanning + shadow detection: SPEC-0189 Phase 1.
 //
 // Scans a ScanRoot anchored on SKILL.md (not loose *.md), then runs a
 // shadow-merge across the union of inventories from all roots so that
@@ -99,13 +99,13 @@ func (s *Scanner) addClaudeSkillTiered(skillMDPath string, tier Tier, inv *model
 		SkillMDPath:      skillMDPath,
 	}
 
-	// Parse frontmatter — same path as the legacy mode.
+	// Parse frontmatter: same path as the legacy mode.
 	fm, _, parseErr := parser.Parse(data)
 	if parseErr == nil && fm != nil {
 		desc.Frontmatter = fm
 		desc.HasYAMLFrontmatter = true
 		// For tiered scans we deliberately do NOT override desc.Name from
-		// fm.Name — the directory name is the canonical identifier in
+		// fm.Name. The directory name is the canonical identifier in
 		// Claude Code resolution. fm.Name often duplicates the dir name.
 		if fm.GovernanceLevel == "" {
 			// Backwards-compat: lift governance_level out of legacy

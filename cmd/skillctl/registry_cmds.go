@@ -1,6 +1,6 @@
 package main
 
-// `skillctl registry ls` + `skillctl registry show` — SPEC-0225 P2.1.
+// `skillctl registry ls` + `skillctl registry show`: SPEC-0225 P2.1.
 //
 // Pure read paths against the ER1 `self` registry. No verification; ls/show
 // just render the picture so the operator can decide what to pull. Verification
@@ -55,7 +55,7 @@ func printRegistryUsage(w io.Writer) {
 	fmt.Fprintln(w, "         Create a BARE local git registry (a folder you can publish into,")
 	fmt.Fprintln(w, "         offline). Push to a central GitLab/GitHub later with `git push`.")
 	fmt.Fprintln(w, "  export --registry local://<path> --out <file.bundle>")
-	fmt.Fprintln(w, "         Write a portable, verifiable one-file snapshot (git bundle) — the")
+	fmt.Fprintln(w, "         Write a portable, verifiable one-file snapshot (git bundle): the")
 	fmt.Fprintln(w, "         offline handoff: a peer runs `pull --registry local://<file.bundle>`.")
 }
 
@@ -97,13 +97,13 @@ func runRegistryLs(args []string, stdout, stderr io.Writer) int {
 		if s.IsRevoked {
 			status = "REVOKED"
 		}
-		fmt.Fprintf(stdout, "%-32s %-10s %-72s %-8s %s\n", safeCell(s.Name), strOr(safeCell(s.LatestVersion), "?"), safeCell(s.LatestDigest), strOr(safeCell(s.LatestGovernance), "—"), status)
+		fmt.Fprintf(stdout, "%-32s %-10s %-72s %-8s %s\n", safeCell(s.Name), strOr(safeCell(s.LatestVersion), "?"), safeCell(s.LatestDigest), strOr(safeCell(s.LatestGovernance), ": "), status)
 	}
 	return 0
 }
 
 // runRegistryLsBackend renders `registry ls` from a SPEC-0356 artifact backend
-// (gitlab:// / github://) via artifact.Open + Backend.List — the same view as the
+// (gitlab:// / github://) via artifact.Open + Backend.List: the same view as the
 // ER1 path, sourced from the git registry. Read-only.
 func runRegistryLsBackend(spec, skillName string, latest bool, stdout, stderr io.Writer) int {
 	be, err := artifact.Open(spec, artifact.OpenOptions{Creds: artifactauth.New()})
@@ -128,7 +128,7 @@ func runRegistryLsBackend(spec, skillName string, latest bool, stdout, stderr io
 		if s.IsRevoked {
 			status = "REVOKED"
 		}
-		fmt.Fprintf(stdout, "%-32s %-10s %-72s %-8s %s\n", safeCell(s.Name), strOr(safeCell(s.LatestVersion), "?"), safeCell(s.LatestDigest), strOr(safeCell(s.LatestGovernance), "—"), status)
+		fmt.Fprintf(stdout, "%-32s %-10s %-72s %-8s %s\n", safeCell(s.Name), strOr(safeCell(s.LatestVersion), "?"), safeCell(s.LatestDigest), strOr(safeCell(s.LatestGovernance), ": "), status)
 	}
 	return 0
 }
@@ -162,7 +162,7 @@ func runRegistryShow(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "skill:           %s\n", view.Name)
 	fmt.Fprintf(stdout, "latest version:  %s\n", strOr(view.LatestVersion, "?"))
 	fmt.Fprintf(stdout, "latest digest:   %s\n", view.LatestDigest)
-	fmt.Fprintf(stdout, "latest gov:      %s\n", strOr(view.LatestGovernance, "—"))
+	fmt.Fprintf(stdout, "latest gov:      %s\n", strOr(view.LatestGovernance, ": "))
 	if view.IsRevoked {
 		fmt.Fprintln(stdout, "status:          REVOKED")
 	} else {
@@ -189,7 +189,7 @@ func runRegistryShow(args []string, stdout, stderr io.Writer) int {
 }
 
 // runRegistryShowBackend renders `registry show` for a SPEC-0356 artifact backend
-// (gitlab:// / github://) from its GovernanceLog event timeline — the git-native
+// (gitlab:// / github://) from its GovernanceLog event timeline: the git-native
 // peer of ShowSkill, sourced from events/<digesthex>/ in the repo. Read-only; no
 // verification (that is `pull`). Accepts a skill name or a sha256:<hex> digest.
 func runRegistryShowBackend(spec, key string, stdout, stderr io.Writer) int {
@@ -267,7 +267,7 @@ func runRegistryShowBackend(spec, key string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "latest version:  %s\n", safeCell(latestVer))
 	}
 	fmt.Fprintf(stdout, "latest digest:   %s\n", strOr(safeCell(latestDig), "?"))
-	fmt.Fprintf(stdout, "latest gov:      %s\n", strOr(safeCell(latestGov), "—"))
+	fmt.Fprintf(stdout, "latest gov:      %s\n", strOr(safeCell(latestGov), ": "))
 	if revoked {
 		fmt.Fprintln(stdout, "status:          REVOKED")
 	} else {
@@ -313,7 +313,7 @@ func shortDigest(d string) string {
 // safeCell strips control characters from a repo-sourced string and caps its
 // length before it reaches a terminal. The git host is UNTRUSTED (SPEC-0356 §6):
 // an event/bundle.json field (name, governance, host, rationale, digest) can
-// carry ANSI escape sequences that rewrite earlier output — e.g. overwrite a
+// carry ANSI escape sequences that rewrite earlier output, e.g. overwrite a
 // printed `status: REVOKED` with `ok` in the operator's decide-what-to-pull view.
 // Display-only defense; the authoritative pull gauntlet re-verifies independently
 // of the terminal. Mirrors the install path's control-char rejection.

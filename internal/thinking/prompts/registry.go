@@ -43,7 +43,7 @@ type memRegistry struct {
 }
 
 // NewMemoryRegistry returns a registry seeded with one prompt per
-// processor strategy. These are *stubs* — they describe the intent
+// processor strategy. These are *stubs*. They describe the intent
 // of the prompt, they are not production prompts.
 func NewMemoryRegistry() Registry {
 	r := &memRegistry{prompts: map[string]Prompt{}}
@@ -63,7 +63,7 @@ func NewMemoryRegistry() Registry {
 		// StrategyPromptID, not DefaultStrategyPromptID). Seed them too
 		// so local dev with the memory registry works out of the box.
 		{ID: "tmpl.artifact.report.v1", Version: 1, Model: "stub", Body: "Produce a JSON object {\"title\":\"...\",\"sections\":[{\"heading\":\"...\",\"body\":\"...\"}],\"key_points\":[]} for a human reader."},
-		{ID: "tmpl.artifact.summary.v1", Version: 1, Model: "stub", Body: "Produce a JSON object {\"tl_dr\":\"...\",\"bullets\":[],\"sources\":[]} — keep it compact."},
+		{ID: "tmpl.artifact.summary.v1", Version: 1, Model: "stub", Body: "Produce a JSON object {\"tl_dr\":\"...\",\"bullets\":[],\"sources\":[]}: keep it compact."},
 		{ID: "tmpl.reflect.clarify.v1", Version: 1, Model: "stub", Body: "Reformulate the question and list sub-questions as JSON {\"question\":\"...\",\"sub_questions\":[],\"context\":\"\"}."},
 		{ID: "tmpl.insight.decision.v1", Version: 1, Model: "stub", Body: "Recommend a decision as JSON {\"decision\":\"...\",\"rationale\":\"...\",\"confidence\":0.5}."},
 		// C-proc strategies (Week 1: summarize)

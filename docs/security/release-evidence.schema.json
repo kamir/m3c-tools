@@ -52,7 +52,7 @@
         }
       }
     },
-    "produced_at": { "type": "string", "format": "date-time", "description": "T — when this bundle was assembled (UTC, RFC3339)." },
+    "produced_at": { "type": "string", "format": "date-time", "description": "T: when this bundle was assembled (UTC, RFC3339)." },
     "generated_by": {
       "type": "object",
       "description": "What assembled the bundle (for reproducibility / non-repudiation).",

@@ -1,5 +1,5 @@
 // Package m3cproject resolves the PLM project context for the current working
-// directory by reading the SPEC-0214 descriptor file `.m3c/project.yaml` — a
+// directory by reading the SPEC-0214 descriptor file `.m3c/project.yaml`: a
 // generated, version-controlled projection of the PLM project object that
 // aims-core commits into the repo. Skills (e.g. /session-state, SPEC-0213) use
 // this to learn "which PLM project am I in, which ER1 do I talk to, what's the
@@ -12,7 +12,7 @@
 //     /er1-progress-report), ER1 target = "prod", context = "main", no filter.
 //  3. Explicit overrides (handled by the caller) beat both.
 //
-// The ER1 *credential* is never read from here — it resolves via ADR-0003
+// The ER1 *credential* is never read from here: it resolves via ADR-0003
 // (Keychain → Secret Manager → env), keyed by ER1.Target.
 package m3cproject
 
@@ -44,7 +44,7 @@ func KnownSchema(s string) bool {
 	return false
 }
 
-// DescriptorChannel is one entry of the v2 `channels:` block — the shallow,
+// DescriptorChannel is one entry of the v2 `channels:` block: the shallow,
 // committed projection of a PLM channel (SPEC-0217). Extra keys the server may
 // emit (target_path, folder_id, last_commit_sha, …) are ignored here.
 type DescriptorChannel struct {
@@ -66,7 +66,7 @@ const (
 )
 
 // Descriptor mirrors `.m3c/project.yaml` (SPEC-0214 §3 + SPEC-0217 §7's
-// `channels:` block in v2). Unknown future fields are ignored on parse —
+// `channels:` block in v2). Unknown future fields are ignored on parse:
 // forward compatible.
 type Descriptor struct {
 	Schema string `yaml:"schema"`
@@ -148,7 +148,7 @@ func (d *Descriptor) CommitSHAFromGit() string {
 	return strings.TrimSpace(string(out))
 }
 
-// FreshnessUnverified reports whether we can even check staleness — true when
+// FreshnessUnverified reports whether we can even check staleness. True when
 // we have no descriptor or no way to reach the PLM API (the caller decides).
 // The actual stale/fresh check (GET /api/plm/projects/<id> vs source
 // plm_doc_updated_at) lives in the consumer (SPEC-0214 §6); this package only
@@ -210,7 +210,7 @@ func DirSlug(dir string) string {
 //   - Otherwise a synthesized Descriptor is returned: Plm.ProjectID = DirSlug,
 //     ER1.Target = "prod", ER1.Context = "main", IDSource = SourceDirSlug.
 //
-// Load never errors on "no descriptor" — only on a present-but-unparseable file.
+// Load never errors on "no descriptor": only on a present-but-unparseable file.
 func Load(workingDir string) (*Descriptor, error) {
 	if workingDir == "" {
 		wd, _ := os.Getwd()

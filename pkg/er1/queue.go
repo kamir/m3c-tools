@@ -80,7 +80,7 @@ func (q *Queue) Len() int {
 }
 
 // Remove removes an entry by ID and persists. Returns the persistence error, if
-// any (nil when the id was not present — nothing changed).
+// any (nil when the id was not present: nothing changed).
 func (q *Queue) Remove(id string) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()

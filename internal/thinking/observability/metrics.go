@@ -5,7 +5,7 @@
 // modifies cognitive-pipeline semantics; both are strict observers.
 //
 // Import-rule invariant: this package does not import any LLM SDK.
-// Metrics and log lines record what happened — they never make the
+// Metrics and log lines record what happened: they never make the
 // pipeline happen.
 package observability
 
@@ -244,7 +244,7 @@ func NewMetrics(cfg Config) *Registry {
 // scrapes pull from here.
 func (m *Registry) Handler() http.Handler {
 	return promhttp.HandlerFor(m.reg, promhttp.HandlerOpts{
-		// Keep errors out of the scrape response — Prometheus treats
+		// Keep errors out of the scrape response: Prometheus treats
 		// them as a scrape failure. Log them via promhttp's default
 		// logger instead.
 		ErrorHandling: promhttp.ContinueOnError,

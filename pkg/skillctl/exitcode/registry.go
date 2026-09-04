@@ -38,13 +38,13 @@ type Code struct {
 	// "audit", "propose", "revoke", ...).
 	Family string
 	// Label is the surface-specific mnemonic the operator sees
-	// (e.g. "data_source_denied" vs "no_source_policy" — same Number,
+	// (e.g. "data_source_denied" vs "no_source_policy": same Number,
 	// same Theme, different per-surface label).
 	Label string
 }
 
 // ---------------------------------------------------------------------------
-// Tier 1 — verifier exit codes (pkg/skillctl/verify/errors.go).
+// Tier 1: verifier exit codes (pkg/skillctl/verify/errors.go).
 // SPEC-0188 §11. These are the canonical "trust chain failed at step N"
 // signals that propagate up from install/verify.
 // ---------------------------------------------------------------------------
@@ -63,7 +63,7 @@ var (
 )
 
 // ---------------------------------------------------------------------------
-// Tier 2 — import-public surface (SPEC-0201 §11; cmd/skillctl/import_public_cmds.go).
+// Tier 2: import-public surface (SPEC-0201 §11; cmd/skillctl/import_public_cmds.go).
 // Numerically shares 17/18/19 with verify; theme intentionally identical.
 // ---------------------------------------------------------------------------
 
@@ -76,7 +76,7 @@ var (
 )
 
 // ---------------------------------------------------------------------------
-// Tier 3 — signing surface (cmd/skillctl/signing_cmds.go).
+// Tier 3: signing surface (cmd/skillctl/signing_cmds.go).
 // ---------------------------------------------------------------------------
 
 var (
@@ -84,11 +84,11 @@ var (
 )
 
 // ---------------------------------------------------------------------------
-// Tier 4 — revoke surface (SPEC-0198).
+// Tier 4: revoke surface (SPEC-0198).
 // SPEC-0198 §11 reserves exit 17 for the verifier's "author key revoked"
 // signal. The theme is intentionally "data-source / source-policy" because
 // a revoked author identity behaves at the trust boundary the same way as
-// a denied data source — the verifier refuses to trust the bundle's
+// a denied data source. The verifier refuses to trust the bundle's
 // provenance chain.
 // ---------------------------------------------------------------------------
 
@@ -97,7 +97,7 @@ var (
 )
 
 // ---------------------------------------------------------------------------
-// Tier 5 — sync agent / KafShield ingest surface (SPEC-0317 R-5, P1).
+// Tier 5: sync agent / KafShield ingest surface (SPEC-0317 R-5, P1).
 // 29 is a fresh, uniquely-themed egress code; it does not share a Number with
 // any existing surface, so the Number↔Theme invariant holds trivially.
 // ---------------------------------------------------------------------------
@@ -107,7 +107,7 @@ var (
 )
 
 // ---------------------------------------------------------------------------
-// Tier 6 — side-channel path guard (SPEC-0317 R-6, P2; cmd/skillctl/guardpath_cmds.go).
+// Tier 6: side-channel path guard (SPEC-0317 R-6, P2; cmd/skillctl/guardpath_cmds.go).
 // 27 is a fresh, uniquely-themed code carried in the signed refusal_code of a
 // `skillctl guard-path` opt-in deny (the PROCESS still exits 2 to block the
 // PreToolUse call, mirroring verify-hook's exitBundleRevoked/exitRevocationStale
@@ -120,7 +120,7 @@ var (
 )
 
 // ---------------------------------------------------------------------------
-// Tier 7 — offline state machine + audit-durability (SPEC-0317 R-7.2 / R-8.2 /
+// Tier 7: offline state machine + audit-durability (SPEC-0317 R-7.2 / R-8.2 /
 // R-1.4 P2, P2). 28 `offline_locked`: the `locked` state (enterprise opt-in via
 // managed settings + NO trust basis) denies a managed skill. 26
 // `local_audit_unavailable`: require_local_audit is set and an ALLOW's evidence
@@ -151,23 +151,23 @@ var (
 // that emits the SKILLCTL-MANUAL.md exit-code table.
 func AllCodes() []Code {
 	return []Code{
-		// Tier 1 — verify
+		// Tier 1: verify
 		VerifyDigestMismatch, VerifyAuthorSigInvalid, VerifyRegistryNotTrusted,
 		VerifyGovernanceBelowMin, VerifyDepsUnsatisfied, VerifyBlobMissing,
 		VerifyTenantBlocked, VerifyDataSourceDenied, VerifyIntentInconsistent,
 		VerifyIdentityMismatch,
-		// Tier 2 — import-public
+		// Tier 2 (import-public
 		ImportPinRequired, ImportScannerRefuse, ImportNoSourcePolicy,
 		ImportIntentCapped, ImportSourceBlocked,
-		// Tier 3 — signing
+		// Tier 3) signing
 		SignInvalid,
-		// Tier 4 — revoke
+		// Tier 4 (revoke
 		RevokeIdentityRevoked,
-		// Tier 5 — sync / ingest
+		// Tier 5) sync / ingest
 		SyncIngestRejected,
-		// Tier 6 — guard-path side channel
+		// Tier 6 (guard-path side channel
 		GuardPathSidechannelDenied,
-		// Tier 7 — offline state machine (locked + unverifiable) + audit-durability
+		// Tier 7) offline state machine (locked + unverifiable) + audit-durability
 		OfflineLocked, LocalAuditUnavailable, OfflineUnverifiable,
 	}
 }

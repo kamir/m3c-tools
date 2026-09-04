@@ -15,7 +15,7 @@ func TestAPIRecording_IsCompleted(t *testing.T) {
 		{"completed", true},
 		{"pending", false},
 		{"", false},
-		{"COMPLETED", false}, // case-sensitive — Pocket uses lowercase
+		{"COMPLETED", false}, // case-sensitive: Pocket uses lowercase
 		{"failed", false},
 	}
 	for _, tc := range cases {
@@ -88,7 +88,7 @@ func TestAPIRecording_SummaryMarkdown(t *testing.T) {
 }
 
 func TestAPIRecording_JSONRoundTrip(t *testing.T) {
-	// Real-shape JSON from the api-probe — verifies our types decode cleanly.
+	// Real-shape JSON from the api-probe: verifies our types decode cleanly.
 	raw := `{
 		"id": "ac4e7b92-40ca-46c0-bafe-e70111c3dbd0",
 		"title": "Cuffscale Smoke Test und Blueprints",

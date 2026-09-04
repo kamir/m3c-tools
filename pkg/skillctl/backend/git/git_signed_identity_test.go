@@ -13,7 +13,7 @@ import (
 )
 
 // TestGitEventsSignedIdentity is the FR-0090 IS-T1 regression: a genuinely signed
-// revoke of digest X is committed at events/<Yhex>/0001-installed.json — the
+// revoke of digest X is committed at events/<Yhex>/0001-installed.json: the
 // FILENAME lies ("installed") and the DIRECTORY lies (Y). Events() must derive the
 // event identity from the SIGNED envelope: Kind = revoke, Digest = X. Against the
 // old code it would report {install, sha256:Y} (filename + dirname projections), so
@@ -85,7 +85,7 @@ func TestGitEventsSignedIdentity(t *testing.T) {
 }
 
 // TestGitEventsDropsAnchorlessEnvelope: an envelope with no signed discriminator
-// (or no well-formed bundle_digest) is DROPPED — it can never influence a verdict.
+// (or no well-formed bundle_digest) is DROPPED. It can never influence a verdict.
 func TestGitEventsDropsAnchorlessEnvelope(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")

@@ -1,10 +1,10 @@
 package main
 
-// selftest.go — `skillctl-demo --selftest`.
+// selftest.go: `skillctl-demo --selftest`.
 //
 // Runs the three LIVE scenarios non-interactively against the real skillctl and
 // asserts the observed exit codes match the scenario expectations. Prints a
-// PASS/FAIL table and exits non-zero if any assertion fails — the CI-friendly
+// PASS/FAIL table and exits non-zero if any assertion fails: the CI-friendly
 // proof that the honest core actually blocks.
 
 import (

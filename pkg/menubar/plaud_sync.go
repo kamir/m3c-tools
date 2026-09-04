@@ -1,4 +1,4 @@
-// plaud_sync.go — Non-darwin stubs for cross-platform compilation.
+// plaud_sync.go: Non-darwin stubs for cross-platform compilation.
 //
 //go:build !darwin
 

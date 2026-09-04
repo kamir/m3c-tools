@@ -70,7 +70,7 @@ func (c *PLMClient) doRequest(method, path string, body io.Reader) (*http.Respon
 	}
 	// BUG-0124 (server-side fix landed 2026-05-02 in modules/plm/api.py):
 	// /api/plm/* now accepts BOTH Authorization: Bearer <device-token> AND
-	// X-API-KEY. We send whichever is available — both at once is safe, the
+	// X-API-KEY. We send whichever is available, both at once is safe, the
 	// server checks Bearer first then falls back to API key. This means a
 	// menubar with only a device token (no API key in profile, e.g. fresh
 	// `m3c-tools login`) works against PLM out-of-the-box.

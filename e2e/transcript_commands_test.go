@@ -1,25 +1,25 @@
 // End-to-end tests for transcript library commands: import, list, search, export.
 //
 // Offline tests (no network):
-//   - TestTranscriptImportFromSnippets — construct transcript from known snippets
-//   - TestTranscriptListSearchByLanguage — FindTranscript language search
-//   - TestTranscriptListSearchGenerated — FindGeneratedTranscript search
-//   - TestTranscriptListSearchManual — FindManualTranscript search
-//   - TestTranscriptSearchNotFound — search with no matching language
-//   - TestTranscriptExportText — export as plain text
-//   - TestTranscriptExportSRT — export as SRT subtitle
-//   - TestTranscriptExportJSON — export as JSON
-//   - TestTranscriptExportWebVTT — export as WebVTT subtitle
-//   - TestTranscriptExportPretty — export as pretty-printed output
-//   - TestTranscriptExportAllFormats — round-trip all formatters via FormatterLoader
-//   - TestTranscriptExportToFile — write transcript export to temp file
-//   - TestTranscriptListString — TranscriptList.String() representation
+//   - TestTranscriptImportFromSnippets: construct transcript from known snippets
+//   - TestTranscriptListSearchByLanguage: FindTranscript language search
+//   - TestTranscriptListSearchGenerated: FindGeneratedTranscript search
+//   - TestTranscriptListSearchManual: FindManualTranscript search
+//   - TestTranscriptSearchNotFound: search with no matching language
+//   - TestTranscriptExportText: export as plain text
+//   - TestTranscriptExportSRT: export as SRT subtitle
+//   - TestTranscriptExportJSON: export as JSON
+//   - TestTranscriptExportWebVTT: export as WebVTT subtitle
+//   - TestTranscriptExportPretty: export as pretty-printed output
+//   - TestTranscriptExportAllFormats: round-trip all formatters via FormatterLoader
+//   - TestTranscriptExportToFile: write transcript export to temp file
+//   - TestTranscriptListString: TranscriptList.String() representation
 //
 // Network tests:
-//   - TestTranscriptCLIImport — run CLI binary to import transcript
-//   - TestTranscriptCLIList — run CLI binary with --list flag
-//   - TestTranscriptCLIExportSRT — run CLI binary with --format srt
-//   - TestTranscriptCLIExportJSON — run CLI binary with --format json
+//   - TestTranscriptCLIImport: run CLI binary to import transcript
+//   - TestTranscriptCLIList: run CLI binary with --list flag
+//   - TestTranscriptCLIExportSRT: run CLI binary with --format srt
+//   - TestTranscriptCLIExportJSON: run CLI binary with --format json
 //
 // Run offline:  go test -v ./e2e/ -run "TestTranscriptImport|TestTranscriptListSearch|TestTranscriptSearch|TestTranscriptExport|TestTranscriptListString"
 // Run network:  go test -v ./e2e/ -run "TestTranscriptCLI"

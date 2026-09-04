@@ -72,7 +72,7 @@ func (s *Store) migrate() error {
 		return err
 	}
 
-	// Add tags column (safe to call multiple times — ignore "duplicate column" error).
+	// Add tags column (safe to call multiple times: ignore "duplicate column" error).
 	s.db.Exec("ALTER TABLE projects ADD COLUMN tags TEXT DEFAULT ''") //nolint:errcheck // idempotent migration; a "duplicate column" error on re-run is expected and intentionally ignored
 
 	_, err = s.db.Exec(`

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# skillctl-smoke.sh — Smoke-test a PUBLISHED skillctl release build.
+# skillctl-smoke.sh: Smoke-test a PUBLISHED skillctl release build.
 #
 # Runs the full install → verify → execute → uninstall lifecycle against the
 # artifact users actually download:
@@ -17,11 +17,11 @@
 #   1. SMOKE_ASSET_DIR   a locally-staged dir holding the release assets. The H9
 #                        release gate stages the SAME-RUN build artifacts here
 #                        (the exact bytes the release attaches) via
-#                        actions/download-artifact — so the gate needs only
+#                        actions/download-artifact, so the gate needs only
 #                        contents:read and never has to read a DRAFT release.
-#   2. gh                authenticated GitHub API (GH_TOKEN/GITHUB_TOKEN) — resolves
+#   2. gh                authenticated GitHub API (GH_TOKEN/GITHUB_TOKEN): resolves
 #                        a published release's assets for standalone/manual runs.
-#   3. curl              the public download URL — local dev against a published tag.
+#   3. curl              the public download URL: local dev against a published tag.
 #
 # Usage:  scripts/skillctl-smoke.sh [skillctl/vX.Y.Z]   (defaults to the latest skillctl tag)
 set -euo pipefail
@@ -44,7 +44,7 @@ warn() { echo -e "  ${YEL}!${NC} $1"; }
 FAILED=0
 
 # Fetch a single release asset into the CWD. Tries, per asset: (1) a locally-staged
-# SMOKE_ASSET_DIR (the release gate stages the same-run build artifacts there —
+# SMOKE_ASSET_DIR (the release gate stages the same-run build artifacts there:
 # contents:read, no draft read needed), (2) the authenticated `gh` API for a
 # published release, (3) the public download URL via curl.
 dl() {
@@ -96,7 +96,7 @@ if command -v cosign >/dev/null 2>&1 && [ -f SHA256SUMS.cosign.bundle ]; then
     fail "cosign verify-blob FAILED for SHA256SUMS"
   fi
 else
-  warn "cosign not available — skipped provenance check (SHA-256 above is the integrity anchor)"
+  warn "cosign not available: skipped provenance check (SHA-256 above is the integrity anchor)"
 fi
 
 # ── 4. Execute: the shipped binary runs, end to end, offline ─────────────────
@@ -112,7 +112,7 @@ fi
 mkdir -p smoke-skill
 printf -- '---\nname: smoke\ndescription: skillctl release smoke-test skill.\n---\n# smoke\n' > smoke-skill/SKILL.md
 # Note: sign/verify-sig use the Go flag package, which stops at the first
-# positional — so flags MUST precede the BUNDLE.skb positional.
+# positional, so flags MUST precede the BUNDLE.skb positional.
 if "$BIN" keygen --out ./smk >/dev/null 2>&1 \
    && "$BIN" pack --skill ./smoke-skill -o ./s.skb --name smoke --version 1.0.0 >/dev/null 2>&1 \
    && "$BIN" sign --key ./smk.priv ./s.skb >/dev/null 2>&1 \
@@ -126,15 +126,15 @@ fi
 echo "5. Uninstall (remove the binary, verify it is gone)"
 rm -f "${BIN}"
 if [ ! -e "${BIN}" ]; then
-  pass "uninstalled — ${ASSET} removed"
+  pass "uninstalled, ${ASSET} removed"
 else
-  fail "uninstall failed — ${ASSET} still present"
+  fail "uninstall failed, ${ASSET} still present"
 fi
 
 echo "─────────────────────────────"
 if [ "$FAILED" -eq 0 ]; then
-  echo -e "${GREEN}SMOKE PASS${NC}: ${TAG} — the published build downloads, verifies and runs."
+  echo -e "${GREEN}SMOKE PASS${NC}: ${TAG} (the published build downloads, verifies and runs."
 else
-  echo -e "${RED}SMOKE FAIL${NC}: ${TAG} — the published build is broken; roll it back (see /release-skillctl Phase 6)."
+  echo -e "${RED}SMOKE FAIL${NC}: ${TAG}) the published build is broken; roll it back (see /release-skillctl Phase 6)."
   exit 1
 fi

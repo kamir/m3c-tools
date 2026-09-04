@@ -42,7 +42,7 @@ func (s *TokenSession) IsExpired(maxAge time.Duration) bool {
 		return time.Now().After(s.ExpiresAt.Add(-tokenExpiryMargin))
 	}
 	if s.SavedAt.IsZero() {
-		return true // No saved timestamp — treat as expired
+		return true // No saved timestamp: treat as expired
 	}
 	return time.Since(s.SavedAt) > maxAge
 }
@@ -68,7 +68,7 @@ func LoadToken(path string) (*TokenSession, error) {
 	if s.IsExpired(DefaultMaxTokenAge) {
 		age := time.Since(s.SavedAt).Round(time.Hour)
 		// FIX C-H02: Refuse expired tokens instead of just warning.
-		return nil, fmt.Errorf("plaud: token expired (%s old, saved %s) — run 'plaud auth login' to re-authenticate", age, s.SavedAt.Format(time.RFC3339))
+		return nil, fmt.Errorf("plaud: token expired (%s old, saved %s): run 'plaud auth login' to re-authenticate", age, s.SavedAt.Format(time.RFC3339))
 	}
 	return &s, nil
 }
@@ -109,13 +109,13 @@ func ExtractTokenFromChrome() (string, error) {
 		// Fall through to CDP if osascript fails.
 	}
 
-	// Try CDP first — Chrome may already be running with debug port.
+	// Try CDP first: Chrome may already be running with debug port.
 	token, err := extractTokenCDP()
 	if err == nil {
 		return token, nil
 	}
 
-	// CDP failed — try to launch Chrome automatically.
+	// CDP failed: try to launch Chrome automatically.
 	fmt.Printf("  Chrome debug port not available: %v\n", err)
 	return extractTokenWithAutoLaunch()
 }
@@ -208,7 +208,7 @@ func extractTokenWithAutoLaunch() (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("could not extract token after login: %w — "+
+	return "", fmt.Errorf("could not extract token after login: %w: "+
 		"make sure you are fully logged in to app.plaud.ai and the page has loaded", lastErr)
 }
 
@@ -223,7 +223,7 @@ type ProgressFunc func(msg string)
 func LaunchChromeForPlaud() (cleanup func(), err error) {
 	chromePath := findChrome()
 	if chromePath == "" {
-		return nil, fmt.Errorf("chrome not found — please install Google Chrome")
+		return nil, fmt.Errorf("chrome not found: please install Google Chrome")
 	}
 
 	debugDir, err := os.MkdirTemp("", "m3c-chrome-debug-*")
@@ -276,7 +276,7 @@ func WaitForCDPReady(timeout time.Duration, progress ProgressFunc) bool {
 // PollForPlaudToken polls CDP every pollInterval for up to timeout, trying to
 // extract the Plaud token. Calls progress (if non-nil) with status updates.
 // This is the tray-friendly alternative to extractTokenWithAutoLaunch which
-// blocks on stdin — here we just poll until the user logs in.
+// blocks on stdin, here we just poll until the user logs in.
 func PollForPlaudToken(timeout, pollInterval time.Duration, progress ProgressFunc) (string, error) {
 	deadline := time.Now().Add(timeout)
 	var lastErr error
@@ -310,7 +310,7 @@ func findChrome() string {
 			filepath.Join(os.Getenv("ProgramFiles"), "Google", "Chrome", "Application", "chrome.exe"),
 			filepath.Join(os.Getenv("ProgramFiles(x86)"), "Google", "Chrome", "Application", "chrome.exe"),
 			filepath.Join(os.Getenv("LOCALAPPDATA"), "Google", "Chrome", "Application", "chrome.exe"),
-			// Edge as fallback — supports CDP with the same flags.
+			// Edge as fallback: supports CDP with the same flags.
 			filepath.Join(os.Getenv("ProgramFiles"), "Microsoft", "Edge", "Application", "msedge.exe"),
 			filepath.Join(os.Getenv("ProgramFiles(x86)"), "Microsoft", "Edge", "Application", "msedge.exe"),
 		}
@@ -429,7 +429,7 @@ func ExtractTokenCDP() (string, error) {
 // extractTokenCDP is the internal implementation of ExtractTokenCDP.
 func extractTokenCDP() (string, error) {
 	// 1. Discover available tabs via /json endpoint.
-	// Use 127.0.0.1 explicitly — on Windows, "localhost" may resolve to IPv6 [::1]
+	// Use 127.0.0.1 explicitly: on Windows, "localhost" may resolve to IPv6 [::1]
 	// while Chrome's debug port binds to IPv4 only, causing "connection refused".
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get("http://127.0.0.1:9222/json")
@@ -450,13 +450,13 @@ func extractTokenCDP() (string, error) {
 	// BUG-0168 diagnostics. The Plaud token lives in the localStorage of the
 	// profile where the user actually completed the login. If CDP on port 9222
 	// is attached to a DIFFERENT Chrome instance than the one the user logged in
-	// to — e.g. a leftover debug Chrome from a previous attempt still holding
+	// to, e.g. a leftover debug Chrome from a previous attempt still holding
 	// 9222, or the user logged in to their normal browser instead of the launched
-	// debug window — then no plaud.ai tab visible here carries `tokenstr`.
+	// debug window, then no plaud.ai tab visible here carries `tokenstr`.
 	// Set M3C_PLAUD_DEBUG=1 to inspect what CDP sees. The dump is deliberately
 	// SECRET-SAFE so the output can be shared in a bug report: per-target ORIGIN
-	// only (never full URLs — query strings can carry tokens) and, per plaud.ai
-	// tab, only whether `tokenstr` exists and its length — never localStorage
+	// only (never full URLs, query strings can carry tokens) and, per plaud.ai
+	// tab, only whether `tokenstr` exists and its length, never localStorage
 	// key names or values (a Plaud key name can itself embed a bearer JWT, e.g.
 	// `PLADU_bearer <JWT>_...`).
 	debug := os.Getenv("M3C_PLAUD_DEBUG") != ""
@@ -483,7 +483,7 @@ func extractTokenCDP() (string, error) {
 				firstWS = t.WebSocketURL
 			}
 			// Pick a real PAGE (not a service-worker/iframe target) to capture on,
-			// preferring web.plaud.ai — the logged-in origin that issues the
+			// preferring web.plaud.ai: the logged-in origin that issues the
 			// api.plaud.ai calls. BUG-0168: the launcher opens app.plaud.ai but the
 			// session/API traffic lives on web.plaud.ai.
 			if t.Type == "page" {
@@ -518,17 +518,17 @@ func extractTokenCDP() (string, error) {
 			}
 		}
 	}
-	// Phase 1 — storage candidates (fast path for accounts that keep the bearer
+	// Phase 1: storage candidates (fast path for accounts that keep the bearer
 	// in localStorage/sessionStorage).
 	if len(allCands) > 0 {
 		if tok, err := finishTokenSelection(allCands); err == nil {
 			return tok, nil
 		}
 		// None authenticated (renamed key / SSO account / token moved out of
-		// JS-readable storage) — fall through to live network capture.
+		// JS-readable storage): fall through to live network capture.
 	}
 
-	// Phase 2 — live capture (SSO-safe): reload the logged-in plaud.ai PAGE and read
+	// Phase 2: live capture (SSO-safe): reload the logged-in plaud.ai PAGE and read
 	// the Authorization header straight off an api.plaud.ai request. Works no matter
 	// where Plaud keeps the token, because it reads exactly what the app sends.
 	capWS := captureWS
@@ -547,11 +547,11 @@ func extractTokenCDP() (string, error) {
 	// was present but carried no token (wrong profile / renamed key) vs. no
 	// plaud.ai tab at all on this CDP instance (reading a different Chrome).
 	if plaudTabs > 0 {
-		return "", fmt.Errorf("found %d plaud.ai tab(s) among %d target(s), but none had a 'tokenstr' in localStorage — "+
+		return "", fmt.Errorf("found %d plaud.ai tab(s) among %d target(s), but none had a 'tokenstr' in localStorage: "+
 			"log in on the debug window that just opened (not another Chrome window), "+
 			"or Plaud may have changed its token storage; re-run with M3C_PLAUD_DEBUG=1 to inspect", plaudTabs, len(targets))
 	}
-	return "", fmt.Errorf("no plaud.ai tab found among %d Chrome target(s) — "+
+	return "", fmt.Errorf("no plaud.ai tab found among %d Chrome target(s). "+
 		"the debug Chrome on port 9222 may be a different instance than the one you logged in to; "+
 		"close any leftover Chrome debug windows and re-run (M3C_PLAUD_DEBUG=1 to inspect)", len(targets))
 }
@@ -571,7 +571,7 @@ func plaudURLOrigin(raw string) string {
 }
 
 // cdpEvaluate sends a Runtime.evaluate command over a WebSocket to Chrome.
-// This is a minimal CDP client — no external dependencies needed.
+// This is a minimal CDP client, no external dependencies needed.
 func cdpEvaluate(wsURL, expression string) (string, error) {
 	// Establish WebSocket connection to Chrome tab.
 	conn, err := cdpDial(wsURL)
@@ -622,7 +622,7 @@ func cdpDial(wsURL string) (net.Conn, error) {
 
 	// BUG-0102: Chrome CDP returns ws://localhost:9222/... but on Windows,
 	// "localhost" may resolve to IPv6 [::1] while Chrome binds to IPv4 127.0.0.1
-	// only — causing "connection refused". Force IPv4 to match the /json endpoint.
+	// only: causing "connection refused". Force IPv4 to match the /json endpoint.
 	host = strings.ReplaceAll(host, "localhost", "127.0.0.1")
 
 	conn, err := net.DialTimeout("tcp", host, 5*time.Second)

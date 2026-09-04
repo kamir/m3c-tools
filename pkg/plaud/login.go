@@ -23,7 +23,7 @@ var jwtPattern = regexp.MustCompile(`eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A
 func findJWT(s string) string { return jwtPattern.FindString(s) }
 
 // Login performs a Plaud consumer password-grant login and returns a session
-// holding the access token — a long-lived (~300-day) Bearer JWT. This is the
+// holding the access token. A long-lived (~300-day) Bearer JWT. This is the
 // robust replacement for browser token-scraping: it POSTs form-encoded
 // username/password to /auth/access-token exactly as the Plaud web app does, so
 // it does not depend on any localStorage/cookie implementation detail.
@@ -41,7 +41,7 @@ func Login(cfg *Config, email, password string) (*TokenSession, error) {
 		return nil, fmt.Errorf("plaud: login requires both an email and a password")
 	}
 	if !isAllowedPlaudDomain(cfg.APIURL) {
-		return nil, fmt.Errorf("plaud: refusing to send credentials — API base is not an https *.plaud.ai host")
+		return nil, fmt.Errorf("plaud: refusing to send credentials: API base is not an https *.plaud.ai host")
 	}
 
 	access, err := postAccessToken(cfg.APIURL, email, password)
@@ -139,14 +139,14 @@ func postAccessToken(base, email, password string) (string, error) {
 }
 
 // NewImportedTokenSession builds a session from a raw token value the user
-// pasted or imported — e.g. the `Authorization` value copied from the DevTools
+// pasted or imported, e.g. the `Authorization` value copied from the DevTools
 // Network tab of a logged-in web.plaud.ai (the reliable path for Google/Apple
 // SSO accounts, whose bearer never lands in localStorage). It strips an optional
 // "Bearer " scheme prefix and surrounding quotes, and records the JWT's real
 // expiry when present so a long-lived token is not capped at the 7-day
 // scraped-token age.
 func NewImportedTokenSession(raw string) *TokenSession {
-	// Recover the JWT from anywhere in the input — a bare token, "Bearer eyJ…",
+	// Recover the JWT from anywhere in the input: a bare token, "Bearer eyJ…",
 	// a full "authorization: …" header line, a quoted value, or a copied
 	// Network-table row with tabs. Plaud's bearer is always a JWT, so a single
 	// pattern match both extracts it and validates the shape.
@@ -218,7 +218,7 @@ func pickJWTField(m map[string]json.RawMessage, keys []string) string {
 }
 
 // jwtClaimString returns a string claim from a JWT payload (unverified decode);
-// "" on any failure. Used for a STABLE account id — the `sub` survives a token
+// "" on any failure. Used for a STABLE account id: the `sub` survives a token
 // refresh, unlike a hash of the whole (rotating) token.
 func jwtClaimString(jwt, claim string) string {
 	parts := strings.Split(jwt, ".")
@@ -242,7 +242,7 @@ func jwtClaimString(jwt, claim string) string {
 }
 
 // jwtExpiry decodes a JWT's `exp` claim into a time. Returns the zero time on any
-// parse failure — callers then fall back to the age-based expiry heuristic.
+// parse failure: callers then fall back to the age-based expiry heuristic.
 func jwtExpiry(jwt string) time.Time {
 	parts := strings.Split(jwt, ".")
 	if len(parts) != 3 {

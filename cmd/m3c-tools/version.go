@@ -1,4 +1,4 @@
-// version.go — Build metadata injected via ldflags at release time.
+// version.go: Build metadata injected via ldflags at release time.
 //
 // No build tags: compiles on all platforms (darwin + !darwin).
 //

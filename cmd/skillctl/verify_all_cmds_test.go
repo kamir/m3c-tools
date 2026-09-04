@@ -3,8 +3,8 @@ package main
 // Tests for `skillctl verify --all` (SPEC-0247 P0.2 sweep).
 //
 // The registry-dependent verification is behind the seams loadRootsFn /
-// sweepVerifyManagedFn, stubbed here so the sweep — including the real
-// filesystem quarantine move — runs offline.
+// sweepVerifyManagedFn, stubbed here so the sweep, including the real
+// filesystem quarantine move, runs offline.
 
 import (
 	"bytes"
@@ -174,7 +174,7 @@ func TestSweep_AvailabilityFailure_NotQuarantined(t *testing.T) {
 		t.Fatalf("exit=%d", code)
 	}
 	if !skillExists(home, "good") {
-		t.Fatal("a network/availability failure must NEVER quarantine — would nuke skills when offline")
+		t.Fatal("a network/availability failure must NEVER quarantine, would nuke skills when offline")
 	}
 	if !strings.Contains(out, "unverified") {
 		t.Fatalf("want 'unverified', got %q", out)

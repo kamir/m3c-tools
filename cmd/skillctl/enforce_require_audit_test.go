@@ -1,6 +1,6 @@
 package main
 
-// Tests for SPEC-0317 R-8.2 — require_local_audit, the OPT-IN inversion of the
+// Tests for SPEC-0317 R-8.2: require_local_audit, the OPT-IN inversion of the
 // SPEC-0255 fire-and-forget contract.
 //
 // When require_local_audit is set (managed settings, enterprise-gated), a skill
@@ -86,7 +86,7 @@ func TestRequireLocalAudit_DurableAllowPasses(t *testing.T) {
 	}
 }
 
-// A DENY is never re-escalated — it keeps its own reason (not exit 26).
+// A DENY is never re-escalated. It keeps its own reason (not exit 26).
 func TestRequireLocalAudit_DenyIsUnchanged(t *testing.T) {
 	withRequireLocalAudit(t, true)
 	withOutboxDurable(t, false) // even with a failed write
@@ -103,7 +103,7 @@ func TestRequireLocalAudit_DenyIsUnchanged(t *testing.T) {
 }
 
 // THE critical false-positive guard: a non-Skill tool (Bash/Read/…) and a
-// no-skill-field event are passthrough allows — nothing is gated, so
+// no-skill-field event are passthrough allows. Nothing is gated, so
 // require_local_audit must NOT escalate them even with a failing outbox.
 // Breaking this would deny every file op on an enterprise host.
 func TestRequireLocalAudit_PassthroughNotEscalated(t *testing.T) {
@@ -125,11 +125,11 @@ func TestRequireLocalAudit_PassthroughNotEscalated(t *testing.T) {
 
 // F1 regression: a CORRUPT outbox.db on a WRITABLE dir must NOT spuriously deny.
 // The real sink spools directly (no db I/O) when Open fails → durable → the allow
-// stands, and the evidence lands — so a fail-closed deny can never coexist with a
+// stands, and the evidence lands, so a fail-closed deny can never coexist with a
 // trail that recorded the allow.
 func TestRequireLocalAudit_OpenFailSpoolsNotSpuriousDeny(t *testing.T) {
 	withRequireLocalAudit(t, true)
-	// NOTE: exercise the REAL enforceOutboxSink here — do NOT stub it.
+	// NOTE: exercise the REAL enforceOutboxSink here: do NOT stub it.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	mkManagedSkill(t, home, "subject")
@@ -161,7 +161,7 @@ func TestRequireLocalAudit_OpenFailSpoolsNotSpuriousDeny(t *testing.T) {
 	}
 }
 
-// F2: require_local_audit escalates UNMANAGED (default-allow) skill allows too —
+// F2: require_local_audit escalates UNMANAGED (default-allow) skill allows too:
 // on an unrecordable outbox it denies the plugin ecosystem. Documented posture.
 func TestRequireLocalAudit_UnmanagedAllowEscalated(t *testing.T) {
 	withRequireLocalAudit(t, true)

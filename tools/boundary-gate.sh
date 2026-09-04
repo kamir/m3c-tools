@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# tools/boundary-gate.sh — SPEC-0358 content-plane leak gate
+# tools/boundary-gate.sh: SPEC-0358 content-plane leak gate
 # ("ship the code, keep the reasoning")
 #
 # m3c-tools is the PUBLIC / open-source plane. Its private sibling plane holds the
@@ -19,7 +19,7 @@
 # -------------
 # Defined ONCE in tools/leak-patterns.txt (scope TAB reason TAB regex) and read by
 # this gate AND by scripts/bugtracker.sh, which applies the same rules to GitHub
-# issue bodies — text no CI job would ever see. Adding a pattern there tightens
+# issue bodies. Text no CI job would ever see. Adding a pattern there tightens
 # both; that is the whole point of not writing them out twice.
 #
 #   scope "always"      checked everywhere, no exceptions (the private-repo path).
@@ -27,15 +27,15 @@
 #
 # ID-only markers are fine on purpose: a bare "SPEC-1234" / "ADR-1234" matches no
 # pattern here, so referencing the private reasoning plane by identifier never trips
-# the gate — only a concrete private path/endpoint/secret/context does.
+# the gate, only a concrete private path/endpoint/secret/context does.
 #
 # Two scoped allowlists (see arrays below), both documented and reviewable:
-#   * OPS_EXEMPT — the public tool's own operational surface (its source, tests,
+#   * OPS_EXEMPT: the public tool's own operational surface (its source, tests,
 #     config, API/user docs, demo, templates). Per SPEC-0358 "ship the code", the ER1
 #     client legitimately carries its own localhost endpoint, header name, API paths
 #     and default context there, so patterns 2-5 are not checked on those paths.
 #     Pattern 1 (a path into the private repo) is ALWAYS checked, everywhere.
-#   * PRIV_BASELINE — now EMPTY. Former machine-local bridges were resolved for real:
+#   * PRIV_BASELINE: now EMPTY. Former machine-local bridges were resolved for real:
 #     .claude/settings.json is git-ignored, and the skills + demo build resolve the
 #     private plane via $M3C_MAINTENANCE_DIR. Rule 1 has no exceptions.
 #
@@ -63,7 +63,7 @@ match_exact()  { local p=$1; shift; local x; for x in "$@"; do [ "$p" = "$x" ] &
 
 # ---- Base allowlist: skipped by every rule -------------------------------------
 # Files that DEFINE or EXERCISE the leak rules necessarily contain the literals
-# themselves — the pattern table and the two fixture suites, exactly like this
+# themselves: the pattern table and the two fixture suites, exactly like this
 # gate's own source. Nothing else belongs on this list: an exemption here is a
 # blind spot, so it is granted only to files whose whole purpose is the rule.
 BASE_EXACT=(
@@ -80,13 +80,13 @@ OPS_EXEMPT_PREFIX=(cmd/ pkg/ e2e/ docs/ demo/ installer/ mcp-skill-server/ rag-m
 OPS_EXEMPT_EXACT=(.env.example)
 
 # ---- Private-path baseline: pattern 1 only (documented local bridges) ----------
-# EMPTY: every former bridge has been resolved for real — .claude/settings.json is
+# EMPTY: every former bridge has been resolved for real. .claude/settings.json is
 # now git-ignored (machine-local), and the skills + demo build resolve the private
 # plane via $M3C_MAINTENANCE_DIR instead of a literal path. Keep this empty; the
 # private-repo-path rule now applies to every tracked file with no exceptions.
 PRIV_BASELINE=()
 
-# scan_pattern FILE REASON PATTERN — emit "file:line: reason: text" per match
+# scan_pattern FILE REASON PATTERN: emit "file:line: reason: text" per match
 scan_pattern() {
   local f=$1 reason=$2 pat=$3 m ln txt
   while IFS= read -r m; do
@@ -124,7 +124,7 @@ while IFS= read -r f; do
 done < <(git ls-files)
 
 if [ "$fail" -ne 0 ]; then
-  echo "boundary-gate: FAIL — public-plane file(s) embed private-plane content (SPEC-0358)" >&2
+  echo "boundary-gate: FAIL: public-plane file(s) embed private-plane content (SPEC-0358)" >&2
   exit 1
 fi
 echo "boundary-gate: clean"

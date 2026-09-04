@@ -1,11 +1,11 @@
 // Package session implements the SPEC-0213 "session-state in ER1" model for
-// non-Claude-Code callers — the Go mirror of the `/session-state` skill, exposed
+// non-Claude-Code callers: the Go mirror of the `/session-state` skill, exposed
 // as `skillctl session <open|checkpoint|close|resume|list|show>`. It reuses
 // pkg/er1 (upload) and pkg/m3cproject (project-context resolution, SPEC-0214).
 //
 // A session-state item is one ER1 memory item per working session, written via
 // /upload_2. Checkpoints are linked child items (link/parent/<ctx>/<id> +
-// link/checkpoint/<ctx>/<id>). The transcript stays local — only a
+// link/checkpoint/<ctx>/<id>). The transcript stays local, only a
 // local-session://<host>/<session_id> pointer is written.
 package session
 
@@ -34,7 +34,7 @@ import (
 // identity / environment
 // ---------------------------------------------------------------------------
 
-// Ident is the resolved identity for a session — descriptor-derived where
+// Ident is the resolved identity for a session: descriptor-derived where
 // possible, with the SPEC-0213 fallbacks.
 type Ident struct {
 	SessionID  string
@@ -125,7 +125,7 @@ func gitOut(dir string, args ...string) string {
 }
 
 // ResolveIdent gathers the session identity for workingDir, applying explicit
-// overrides (sessionID/project/er1Target/er1Context — any may be "" to skip).
+// overrides (sessionID/project/er1Target/er1Context, any may be "" to skip).
 func ResolveIdent(workingDir, sessionID, project, er1Target, er1Context string) (*Ident, error) {
 	if workingDir == "" {
 		wd, _ := os.Getwd()
@@ -263,7 +263,7 @@ func (id *Ident) er1Config() (*er1.Config, error) {
 		cfg.APIKey = resolveAPIKey()
 	}
 	if cfg.APIKey == "" && os.Getenv("ER1_DEVICE_TOKEN") == "" {
-		return nil, fmt.Errorf("no ER1 credential — set ER1_API_KEY or add the `aims-core-er1` Keychain item (ADR-0003)")
+		return nil, fmt.Errorf("no ER1 credential: set ER1_API_KEY or add the `aims-core-er1` Keychain item (ADR-0003)")
 	}
 	return cfg, nil
 }
@@ -317,7 +317,7 @@ func httpGetJSON(target, path string) (any, error) {
 	return v, nil
 }
 
-// searchByTags queries ER1 for items carrying ALL of tags. Best-effort — returns
+// searchByTags queries ER1 for items carrying ALL of tags. Best-effort: returns
 // a list of item maps (whatever shape the server gives) or an error.
 func searchByTags(ctxID, target string, tags []string) ([]map[string]any, error) {
 	q := url.Values{}
@@ -380,11 +380,11 @@ func (id *Ident) SessionStateBody(intent, continuesFrom, model string) string {
 		id.transcriptPointer(), time.Now().UTC().Format(time.RFC3339), ynull(continuesFrom))
 	fmt.Fprintf(&b, "git: { branch: %s, head: %s, dirty: %v, ahead: %d }\nopened_by: %s\ncw: %s\n---\n\n",
 		id.Branch, id.Head, id.Dirty, id.Ahead, model, cw)
-	fmt.Fprintf(&b, "# Session — %s @ %s — %s\n\n", id.Project, id.Host, time.Now().UTC().Format("2006-01-02"))
+	fmt.Fprintf(&b, "# Session, %s @ %s, %s\n\n", id.Project, id.Host, time.Now().UTC().Format("2006-01-02"))
 	fmt.Fprintf(&b, "**Opened:** %s · **Branch:** %s @ %s (dirty: %v) · **Transcript:** `%s`\n",
 		time.Now().UTC().Format("2006-01-02 15:04 UTC"), id.Branch, id.Head, id.Dirty, id.transcriptPointer())
-	fmt.Fprintf(&b, "**Continues from:** %s\n\n## Intent\n%s\n\n## Checkpoints\n_(linked child items — see the memory viewer's Comments card)_\n",
-		orVal(continuesFrom, "_(none)_"), orVal(intent, "—"))
+	fmt.Fprintf(&b, "**Continues from:** %s\n\n## Intent\n%s\n\n## Checkpoints\n_(linked child items, see the memory viewer's Comments card)_\n",
+		orVal(continuesFrom, "_(none)_"), orVal(intent, ", "))
 	return b.String()
 }
 
@@ -416,7 +416,7 @@ func (id *Ident) CheckpointBody(note string, closing bool, gitDiffStat, todos, f
 	if closing {
 		title = "Checkpoint (close)"
 	}
-	fmt.Fprintf(&b, "# %s — %s — %s @ %s\n\n", title, time.Now().UTC().Format("2006-01-02 15:04 UTC"), id.Project, id.Host)
+	fmt.Fprintf(&b, "# %s, %s, %s @ %s\n\n", title, time.Now().UTC().Format("2006-01-02 15:04 UTC"), id.Project, id.Host)
 	fmt.Fprintf(&b, "**git:** { branch: %s, head: %s, dirty: %v, ahead: %d }\n\n", id.Branch, id.Head, id.Dirty, id.Ahead)
 	if note != "" {
 		fmt.Fprintf(&b, "## Note\n%s\n\n", note)
@@ -481,7 +481,7 @@ type OpenResult struct {
 }
 
 // Open creates the session-state item (idempotent on session:<uuid>). It does
-// NOT itself secret-scan the body — there's nothing user-authored that isn't a
+// NOT itself secret-scan the body. There's nothing user-authored that isn't a
 // harness fact; callers that pass a free-form --intent should sanitize it.
 func Open(o OpenOpts) (*OpenResult, error) {
 	id, err := ResolveIdent(o.WorkingDir, o.SessionID, o.Project, o.ER1Target, o.ER1Context)
@@ -500,21 +500,21 @@ func Open(o OpenOpts) (*OpenResult, error) {
 	}
 	body := id.SessionStateBody(o.Intent, o.ContinuesFrom, o.Model)
 	if hits := scanSecrets(body); len(hits) > 0 {
-		return nil, fmt.Errorf("refusing to write session-state item — secret-shaped content: %v", hits)
+		return nil, fmt.Errorf("refusing to write session-state item, secret-shaped content: %v", hits)
 	}
 	tags := id.SessionStateTags(o.ContinuesFrom)
 	doc, err := uploadItem(cfg, body, "session-"+id.SessionID+".md", strings.Join(tags, ","), "text-note")
 	if err != nil {
 		return nil, err
 	}
-	appendWlogPointer(id, fmt.Sprintf("session %s opened — ER1 doc %s @ %s", id.SessionID, doc, id.ER1Target))
+	appendWlogPointer(id, fmt.Sprintf("session %s opened: ER1 doc %s @ %s", id.SessionID, doc, id.ER1Target))
 	return &OpenResult{DocID: doc, Ident: id}, nil
 }
 
 // CheckpointOpts configures Checkpoint / Close.
 type CheckpointOpts struct {
 	WorkingDir string
-	SessionID  string // override (else env / new uuid won't match an existing session — caller should pass it)
+	SessionID  string // override (else env / new uuid won't match an existing session, caller should pass it)
 	Project    string
 	ER1Target  string
 	ER1Context string
@@ -548,7 +548,7 @@ func Checkpoint(o CheckpointOpts) (*CheckpointResult, error) {
 	existing, _ := searchByTags(cfg.ContextID, id.ER1Target, []string{"claude-code.session", "session:" + id.SessionID})
 	sessionDoc := firstDocID(existing)
 	if sessionDoc == "" {
-		return nil, fmt.Errorf("no open session-state item for session:%s — run `skillctl session open` first", id.SessionID)
+		return nil, fmt.Errorf("no open session-state item for session:%s: run `skillctl session open` first", id.SessionID)
 	}
 
 	var gitDiffStat, filesTouched string
@@ -565,7 +565,7 @@ func Checkpoint(o CheckpointOpts) (*CheckpointResult, error) {
 	}
 	body := id.CheckpointBody(o.Note, o.Closing, gitDiffStat, o.Todos, filesTouched)
 	if hits := scanSecrets(body); len(hits) > 0 {
-		return nil, fmt.Errorf("refusing to write checkpoint — secret-shaped content: %v", hits)
+		return nil, fmt.Errorf("refusing to write checkpoint, secret-shaped content: %v", hits)
 	}
 	tags := id.CheckpointTags(cfg.ContextID, sessionDoc, o.Closing, o.Distilled)
 	doc, err := uploadItem(cfg, body, "checkpoint-"+id.SessionID+"-"+time.Now().UTC().Format("20060102T150405")+".md", strings.Join(tags, ","), "text-note")
@@ -593,7 +593,7 @@ type SessionRow struct {
 }
 
 // List returns the session-state items matching the filter. Best-effort over the
-// ER1 search endpoint — returns an error (with a hint) if the endpoint is down.
+// ER1 search endpoint: returns an error (with a hint) if the endpoint is down.
 func List(o ListOpts) ([]SessionRow, error) {
 	id, err := ResolveIdent(o.WorkingDir, "", o.Project, o.ER1Target, "")
 	if err != nil {
@@ -612,7 +612,7 @@ func List(o ListOpts) ([]SessionRow, error) {
 	}
 	items, err := searchByTags(cfg.ContextID, id.ER1Target, tags)
 	if err != nil {
-		return nil, fmt.Errorf("%w (the ER1 search endpoint may be unavailable — for interactive browsing use the `/session-state` skill or the memory viewer)", err)
+		return nil, fmt.Errorf("%w (the ER1 search endpoint may be unavailable, for interactive browsing use the `/session-state` skill or the memory viewer)", err)
 	}
 	rows := make([]SessionRow, 0, len(items))
 	for _, it := range items {
@@ -672,7 +672,7 @@ func hasTag(tags []string, t string) bool {
 	return false
 }
 
-// scanSecrets — a small belt-and-suspenders check (mirrors the server-side
+// scanSecrets: a small belt-and-suspenders check (mirrors the server-side
 // project_descriptor.scan_for_secrets patterns). Returns matched pattern names.
 var secretPats = []struct {
 	name string

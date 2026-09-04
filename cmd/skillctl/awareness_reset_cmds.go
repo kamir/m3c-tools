@@ -1,6 +1,6 @@
 package main
 
-// Stream S2-M2 (Sprint 2 / Stream M2) — `skillctl awareness reset` subcommand.
+// Stream S2-M2 (Sprint 2 / Stream M2): `skillctl awareness reset` subcommand.
 //
 // Pairs with the `DELETE /api/skills/admit-from-scan?session_tag=<tag>`
 // endpoint that Stream A builds aims-core-side. SPEC-0195 §4 + §7
@@ -19,7 +19,7 @@ package main
 //
 // File location: this is a NEW file specifically to avoid the merge
 // conflict with Stream M1's `awareness_cmds.go` (which owns sync/verify).
-// The `awareness` dispatch case in main.go fans out by subcommand —
+// The `awareness` dispatch case in main.go fans out by subcommand.
 // `reset` lands here, `sync` and `verify` will land in M1's file.
 
 import (
@@ -289,7 +289,7 @@ func classifyResetError(status int, body []byte, stderr io.Writer) int {
 	_ = json.Unmarshal(body, &e)
 	switch {
 	case status == http.StatusForbidden && e.Reason == "identity_mismatch":
-		fmt.Fprintf(stderr, "skillctl awareness reset: refused — client identity does not match the identity that admitted this session.\n")
+		fmt.Fprintf(stderr, "skillctl awareness reset: refused: client identity does not match the identity that admitted this session.\n")
 		if e.Detail != "" {
 			fmt.Fprintf(stderr, "detail: %s\n", e.Detail)
 		}
@@ -330,7 +330,7 @@ func isAwarenessResetTokenExpired(token string, now time.Time) (bool, error) {
 	// IS-T11: parse the issued-at with explicit bounds instead of the old
 	// hand-rolled `issued = issued*10 + (r-'0')` loop, which silently OVERFLOWS
 	// int64 on a long numeric prefix. On overflow the value could wrap to a large
-	// number that lands time.Unix() far in the FUTURE — the `age < 0` branch below
+	// number that lands time.Unix() far in the FUTURE: the `age < 0` branch below
 	// would then treat an absurd token as FRESH, silently skipping the client-side
 	// TTL guard (a non-numeric-or-overflowed prefix must fail closed, not pass).
 	//
@@ -348,7 +348,7 @@ func isAwarenessResetTokenExpired(token string, now time.Time) (bool, error) {
 	age := now.UTC().Sub(issuedTime)
 	if age < 0 {
 		// Clock skew: token claims to be from the future. Treat as
-		// fresh — server will reject it if it's actually invalid.
+		// fresh: server will reject it if it's actually invalid.
 		return false, nil
 	}
 	return age > awarenessResetMaxTokenAge, nil
@@ -371,5 +371,5 @@ var _ = context.Background
 // shape gives M1 a one-line edit to wire their commands in without
 // touching this file or main.go.
 // (M1's `runAwareness` + `printAwarenessUsage` in awareness_cmds.go now
-// dispatches all three subcommands — sync, verify, reset. The M2 stub
+// dispatches all three subcommands: sync, verify, reset. The M2 stub
 // versions that lived here were removed during the master merge.)

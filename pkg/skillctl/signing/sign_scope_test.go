@@ -1,12 +1,12 @@
 package signing
 
-// SPEC-0196 P2b re-challenge finding #2 — the SIGN-BOUNDARY scope gate.
+// SPEC-0196 P2b re-challenge finding #2: the SIGN-BOUNDARY scope gate.
 //
 // Pack already refuses to produce bytes for an invalid declared scope. But
 // SignBundle is a SECOND author-sign entrypoint: a hand-built .skb (assembled
 // WITHOUT Pack) can carry a Pack-rejected, §3.3-contradictory scope and still
 // reach the signer. The author signature covers manifest.Intent +
-// manifest.DataDependencies, so SignBundle MUST refuse such a bundle — otherwise
+// manifest.DataDependencies, so SignBundle MUST refuse such a bundle. Otherwise
 // "no unvalidated scope is ever author-signed" does not hold at every sign
 // boundary. These tests drive the real SignBundle with hand-built archives that
 // bypass Pack.
@@ -26,7 +26,7 @@ import (
 )
 
 // makeBundleWithManifest hand-builds a .skb (gzip tar) carrying a SKILL.md plus a
-// bundle.json marshaled from m — deliberately NOT via skillbundle.Pack, so a
+// bundle.json marshaled from m: deliberately NOT via skillbundle.Pack, so a
 // scope Pack would reject can still be assembled and handed to the signer.
 func makeBundleWithManifest(t *testing.T, dir, name string, m skillbundle.BundleManifest) string {
 	t.Helper()
@@ -109,7 +109,7 @@ func TestSignBundle_RefusesContradictoryScope(t *testing.T) {
 	}
 }
 
-// TestSignBundle_AcceptsValidScope: the gate is a guard, not a wall — a hand-built
+// TestSignBundle_AcceptsValidScope: the gate is a guard, not a wall. A hand-built
 // .skb whose manifest carries a CONSISTENT scope still signs (proves the gate does
 // not reject everything with a scope).
 func TestSignBundle_AcceptsValidScope(t *testing.T) {

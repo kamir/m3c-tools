@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// authorize.go — the SPEC-0277 §3 authorization predicate ("skill is verified
+// authorize.go: the SPEC-0277 §3 authorization predicate ("skill is verified
 // AND within the agent's grant"). The crypto half (the AgentID verifies) lives
 // in verify.go; THIS file is the pure set-membership half the runtime gate uses
 // to DENY anything outside the grant (fail-closed). It is deliberately tiny and
@@ -14,7 +14,7 @@ import (
 // SkillName extracts the matchable skill NAME from a grant entry or an invoked
 // skill reference: the component before the first '@' (the version constraint).
 // "fetch-contract@>=1.0.0" → "fetch-contract"; "fetch-contract" → "fetch-contract".
-// Matching is by name in P0/P1 — version-constraint satisfaction is a P2 refinement
+// Matching is by name in P0/P1. Version-constraint satisfaction is a P2 refinement
 // (the grant entry's constraint is preserved verbatim in the signed payload so a
 // later version-aware check needs no format change).
 func SkillName(ref string) string {
@@ -28,7 +28,7 @@ func SkillName(ref string) string {
 // AllowsSkill reports whether the grant permits invoking skill (by name). The
 // match is case-sensitive on the name component (skill names are case-sensitive
 // directories under ~/.claude/skills). An empty grant.skills denies everything
-// (fail-closed) — an AgentID with no skills granted can invoke no skills.
+// (fail-closed): an AgentID with no skills granted can invoke no skills.
 func (g Grant) AllowsSkill(skill string) bool {
 	want := SkillName(skill)
 	if want == "" {
@@ -63,7 +63,7 @@ func (g Grant) AllowsIntent(intent string) bool {
 // data-scope id (e.g. "ds:er1/plm/skill-creations"). Set-membership,
 // case-sensitive, mirroring AllowsIntent. An empty required scope is permitted (no
 // scope to check). NOTE: unlike intents, an EMPTY grant.data_scopes does NOT deny a
-// declared scope — AuthorizeSkillScoped enforces data-scopes only when the grant
+// declared scope: AuthorizeSkillScoped enforces data-scopes only when the grant
 // RESTRICTS them (see there), so this predicate is only consulted when the grant is
 // non-empty.
 func (g Grant) AllowsDataScope(scope string) bool {
@@ -84,7 +84,7 @@ func (g Grant) AllowsDataScope(scope string) bool {
 // skill declares a value for the SAME key, the declared value must be numerically
 // <= the cap. A key the grant does not cap is unrestricted here (the grant only
 // bounds what it names). A cap or a declared value that does not parse as a number
-// fails CLOSED (returns that key, false) — a malformed ceiling can never be shown
+// fails CLOSED (returns that key, false). A malformed ceiling can never be shown
 // "satisfied". Returns ("", true) when every capped, declared value is within its
 // ceiling. Example (Estonia's ask): grant {"spend_eur_max":"0"} + a skill declaring
 // {"spend_eur_max":"5"} → ("spend_eur_max", false); a skill declaring nothing → ok.
@@ -114,7 +114,7 @@ type SkillRequirements struct {
 	// "fs:write", "network:read"), checked against Grant.Intents (strict allowlist).
 	Intents []string
 	// DataScopes are the data-scope ids the skill declares (data_dependencies[].id),
-	// checked against Grant.DataScopes — but only when the grant restricts scopes.
+	// checked against Grant.DataScopes, but only when the grant restricts scopes.
 	DataScopes []string
 	// Limits are the skill's declared resource ceilings, keyed like Grant.Limits
 	// (e.g. {"spend_eur_max":"5"}), each checked against the grant's cap.
@@ -127,13 +127,13 @@ type SkillRequirements struct {
 // mandate's grant. Returns ("", true) when authorized; otherwise
 // ("<reason>", false) with a stable reason token (skill_not_in_grant |
 // intent_not_in_grant | data_scope_not_in_grant | limit_exceeded). Fail-closed by
-// construction — any miss is a deny.
+// construction: any miss is a deny.
 //
 // Data-scope enforcement is GUARDED on a restricting grant (len(DataScopes) > 0):
 // Grant.DataScopes is an optional, fine-grained allowlist, so a grant that names no
 // scopes does not bound them here (they stay bounded by the skill's own SPEC-0202
 // data-scope layer); otherwise every scope-declaring skill under a scope-silent
-// grant would be denied. Intents and limits have no such guard — an empty
+// grant would be denied. Intents and limits have no such guard: an empty
 // grant.intents denies any declared intent (fail-closed allowlist), and an absent
 // cap simply does not restrict that resource.
 func (g Grant) AuthorizeSkillScoped(skill string, req SkillRequirements) (string, bool) {

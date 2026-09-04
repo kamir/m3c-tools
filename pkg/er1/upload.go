@@ -20,17 +20,17 @@ import (
 type UploadPayload struct {
 	TranscriptData     []byte // composite document content (nil = no transcript provided)
 	TranscriptFilename string // e.g. "videoID_transcript.txt"
-	AudioData          []byte // WAV audio data (optional — placeholder if nil)
+	AudioData          []byte // WAV audio data (optional: placeholder if nil)
 	AudioFilename      string // e.g. "videoID_audio.wav"
-	ImageData          []byte // JPEG/PNG image data (optional — placeholder if nil)
+	ImageData          []byte // JPEG/PNG image data (optional: placeholder if nil)
 	ImageFilename      string // e.g. "videoID_thumbnail.jpg"
 	Tags               string // comma-separated tags
 	ContentType        string // per-observation content type (overrides cfg.ContentType if set)
 	DocID              string // if set, request ER1 to overwrite this existing document
-	DoTranscribe       bool   // if true, send DO_TRANSCRIBE=true — server transcribes audio
+	DoTranscribe       bool   // if true, send DO_TRANSCRIBE=true: server transcribes audio
 	CurrentTime        string // real capture time "2006-01-02 15:04:05"; empty → server stamps now.
 	// Positions the item at its true creation time in the memory viewer instead
-	// of the import time — important for multi-device capture (SPEC-0117).
+	// of the import time: important for multi-device capture (SPEC-0117).
 }
 
 // UploadResponse is the parsed response from ER1 on success.
@@ -50,7 +50,7 @@ type UploadResponse struct {
 func Upload(cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
 	hasToken := os.Getenv("ER1_DEVICE_TOKEN") != ""
 	if cfg.APIKey == "" && !hasToken {
-		return nil, fmt.Errorf("no authentication configured — log in with 'Sign In' or set ER1_API_KEY. " +
+		return nil, fmt.Errorf("no authentication configured: log in with 'Sign In' or set ER1_API_KEY. " +
 			"Run 'm3c-tools setup' to configure")
 	}
 
@@ -72,11 +72,11 @@ func Upload(cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
 		_ = writer.WriteField("DO_TRANSCRIBE", "true")
 	}
 	if payload.CurrentTime != "" {
-		// Real capture time — the server positions the item here instead of "now".
+		// Real capture time: the server positions the item here instead of "now".
 		_ = writer.WriteField("current_time", payload.CurrentTime)
 	}
 
-	// Transcript (optional — omit to let server handle transcription)
+	// Transcript (optional: omit to let server handle transcription)
 	if payload.TranscriptData != nil {
 		txPart, err := writer.CreateFormFile("transcript_file_ext", payload.TranscriptFilename)
 		if err != nil {
@@ -98,7 +98,7 @@ func Upload(cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
 	}
 	_, _ = audioPart.Write(audioData)
 
-	// Image (required by ER1 server — crashes without it)
+	// Image (required by ER1 server: crashes without it)
 	imgData := payload.ImageData
 	imgName := payload.ImageFilename
 	if imgData == nil {
@@ -203,7 +203,7 @@ func truncate(s string, n int) string {
 // PatchMemoryCurrentTime updates an already-stored ER1 memory item's
 // `current_time` (the memory-viewer sort position) via
 // PATCH /memory/<ctx>/<docID>. Used by `plaud fix-times` to backfill the real
-// recording time onto items that were synced before capture-time support —
+// recording time onto items that were synced before capture-time support,
 // no audio re-upload, no transcription disruption. currentTime must be
 // "2006-01-02 15:04:05".
 func PatchMemoryCurrentTime(cfg *Config, docID, currentTime string) error {
@@ -226,7 +226,7 @@ func PatchMemoryCurrentTime(cfg *Config, docID, currentTime string) error {
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	// The /memory PATCH route enforces CSRF for a Bearer-only (session-style)
-	// request but exempts API-key clients — so send X-API-KEY (not just the
+	// request but exempts API-key clients, so send X-API-KEY (not just the
 	// device-token Bearer that AuthHeaders() prefers), else every PATCH 400s
 	// with "CSRF token missing". Both headers are safe; the server accepts the key.
 	if cfg.APIKey != "" {
@@ -236,7 +236,7 @@ func PatchMemoryCurrentTime(cfg *Config, docID, currentTime string) error {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	if cfg.APIKey == "" {
-		// No API key — fall back to the standard headers (may hit CSRF; the
+		// No API key: fall back to the standard headers (may hit CSRF; the
 		// real fix is a server-side CSRF exemption for token auth on this route).
 		for k, v := range cfg.AuthHeaders() {
 			req.Header.Set(k, v)

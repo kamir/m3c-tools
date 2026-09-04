@@ -236,7 +236,7 @@ def test_verify_success_returns_chain_summary(fake_skillctl):
 
 
 def test_verify_rejects_at_version(fake_skillctl):
-    """name with @<version> is rejected before exec — verify checks the
+    """name with @<version> is rejected before exec: verify checks the
     installed copy, not a registry version."""
     with patch("subprocess.run") as mock_run:
         out = _run(server.skill_verify("foo@1.0.0"))

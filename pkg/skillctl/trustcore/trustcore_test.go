@@ -9,7 +9,7 @@ import (
 
 // TestKindFromSignedEnvelope pins the classifier over the four signed shapes plus
 // the unclassifiable (empty / no-discriminator) case. The kind is derived ONLY
-// from the signed discriminator field — the classifier never sees a carrier tag,
+// from the signed discriminator field: the classifier never sees a carrier tag,
 // filename, or annotation.
 func TestKindFromSignedEnvelope(t *testing.T) {
 	cases := []struct {
@@ -26,7 +26,7 @@ func TestKindFromSignedEnvelope(t *testing.T) {
 		{"empty", map[string]any{}, ""},
 		{"no-discriminator", map[string]any{"bundle_digest": "sha256:x", "occurred_at": "2026-01-01T00:00:00Z"}, ""},
 		// An empty-string discriminator is treated as ABSENT (carrier can't neuter a
-		// classification by blanking the field either — it just becomes unknown).
+		// classification by blanking the field either. It just becomes unknown).
 		{"blank-revoked_by", map[string]any{"revoked_by": ""}, ""},
 		{"nil-env", nil, ""},
 		// revoke takes precedence (fail-safe toward DENY) if a degenerate envelope

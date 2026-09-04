@@ -7,7 +7,7 @@ import (
 
 // TestParseDevTimeIsUTC pins the fact FR-0095 turned on: the developer API's
 // zone-less timestamps are UTC, so the parsed instant rendered in Europe/Berlin
-// must move forward — two hours in CEST, ONE in CET. The winter case is in here
+// must move forward. Two hours in CEST, ONE in CET. The winter case is in here
 // deliberately: the bug was half as large in winter and correspondingly easier
 // to dismiss as "close enough".
 func TestParseDevTimeIsUTC(t *testing.T) {
@@ -56,7 +56,7 @@ func TestParseDevTimeRejectsGarbage(t *testing.T) {
 }
 
 // TestStartedAtLocal proves the helper the backfill relies on returns the local
-// rendering of start_at — the value that must end up in ER1's zone-less
+// rendering of start_at. The value that must end up in ER1's zone-less
 // current_time field.
 func TestStartedAtLocal(t *testing.T) {
 	prev := time.Local

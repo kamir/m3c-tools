@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# tools/id-xref-lint.test.sh — self-contained fixtures for tools/id-xref-lint.sh
+# tools/id-xref-lint.test.sh: self-contained fixtures for tools/id-xref-lint.sh
 # (SPEC-0358 WF-001 W4). Builds a throwaway git repo + a fake private registry, then
 # asserts the lint's three behaviours: resolvable→pass, dangling→fail, path-glued→fail,
 # plus the public-CI degrade mode (registry absent → resolution skipped).
@@ -8,6 +8,27 @@
 # No network, no deps beyond git + grep. Exit 0 = all assertions passed.
 #
 set -euo pipefail
+
+# Fixtures legen Wegwerf-git-Repos an. Als Hook geerbte GIT_*-Variablen wuerden
+# jeden git-Aufruf hier auf das AUFRUFENDE Repo umlenken — in
+# m3c-tools-maintenance hat genau das 3076 Loeschungen in einen echten Index
+# geschrieben (BUG-0213, zurueckgenommen, kein Datenverlust). Ein Fixture, das
+# ein echtes Repo anfassen kann, ist eine Waffe, kein Test.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
+      GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX
+
+# in_throwaway DIR — bricht ab, wenn git auf ein FREMDES Repo zeigt. Muss VOR
+# dem ersten Schreibbefehl laufen: schon `git init` und `git config` schreiben,
+# und `git config user.email` landete beim ersten Anlauf in der Config des
+# echten Repos. "Noch kein Repo" ist in Ordnung — das ist der Normalfall vor
+# `git init`. Pfade aufgeloest vergleichen (macOS: /var -> /private/var).
+in_throwaway() {
+  local want have
+  want=$(cd "$1" 2>/dev/null && pwd -P) || { echo "FATAL: $1 fehlt" >&2; exit 2; }
+  have=$(git rev-parse --show-toplevel 2>/dev/null) || return 0
+  [ "$have" = "$want" ] || { echo "FATAL: git zeigt auf $have, nicht auf $want" >&2; exit 2; }
+}
+
 
 LINT="$(cd "$(dirname "$0")" && pwd)/id-xref-lint.sh"
 TMP="$(mktemp -d)"
@@ -23,8 +44,10 @@ mkdir -p "$TMP/registry/SPEC" "$TMP/registry/ADR"
 REPO="$TMP/repo"
 mkdir -p "$REPO/docs"
 cd "$REPO"
+in_throwaway "$REPO"          # VOR dem ersten Schreibbefehl
 git init -q
 git config user.email t@t; git config user.name t
+in_throwaway "$REPO"
 
 # resolvable + id-only + benign compounds/sub-refs  -> PASS (no finding)
 cat > docs/good.md <<'EOF'

@@ -1,9 +1,9 @@
 package skillbundle
 
-// SPEC-0196 §12 Q1 / P2b — LIBRARY-BOUNDARY scope gate (challenge-gate finding #2).
+// SPEC-0196 §12 Q1 / P2b: LIBRARY-BOUNDARY scope gate (challenge-gate finding #2).
 //
 // The author signature covers manifest.Intent + manifest.DataDependencies, so the
-// validation gate MUST live at the pack/sign boundary itself — not only in the CLI.
+// validation gate MUST live at the pack/sign boundary itself, not only in the CLI.
 // A programmatic producer that calls skillbundle.Pack directly (e.g.
 // publish_cmds.go ensureBundle) must be bound by the SAME datascope.Validate rule.
 // These tests prove Pack fails CLOSED on an invalid/contradictory scope and writes
@@ -74,7 +74,7 @@ func TestPack_RejectsContradictoryCrossRule_Exit18Mappable(t *testing.T) {
 }
 
 // TestPack_AcceptsValidScope: the consistent scope from scopedManifest still packs
-// successfully — the gate is fail-closed, not break-everything.
+// successfully. The gate is fail-closed, not break-everything.
 func TestPack_AcceptsValidScope(t *testing.T) {
 	src := writeFixtureSkill(t)
 	out := filepath.Join(t.TempDir(), "ok.skb")
@@ -87,7 +87,7 @@ func TestPack_AcceptsValidScope(t *testing.T) {
 }
 
 // TestPack_NoScopeUnchanged: a manifest with neither intent nor data deps packs
-// exactly as before (back-compat — the gate is a no-op when there is nothing to
+// exactly as before (back-compat. The gate is a no-op when there is nothing to
 // validate).
 func TestPack_NoScopeUnchanged(t *testing.T) {
 	src := writeFixtureSkill(t)

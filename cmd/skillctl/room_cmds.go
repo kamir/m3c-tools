@@ -1,6 +1,6 @@
 package main
 
-// SPEC-0246 §7 — `skillctl room` maps already-published bundles into (or out
+// SPEC-0246 §7: `skillctl room` maps already-published bundles into (or out
 // of) a SPEC-0096 co-learning room by adding/removing the room's bare
 // room_label tag on their ER1 event items. Publishing fresh? Prefer
 // `skillctl publish --share-room <label>` (stamps at admit time). This verb is
@@ -135,7 +135,7 @@ func runRoomShare(args []string, stdout, stderr io.Writer, unshare bool) int {
 		return 1
 	}
 	if res == nil || len(res.ItemIDs) == 0 {
-		fmt.Fprintln(stdout, "    no matching items found — nothing changed.")
+		fmt.Fprintln(stdout, "    no matching items found: nothing changed.")
 		return 0
 	}
 	fmt.Fprintf(stdout, "    %sed %d item(s) %s room %q\n", verb, len(res.ItemIDs),

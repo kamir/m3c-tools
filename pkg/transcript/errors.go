@@ -35,8 +35,8 @@ func NewTranscriptsDisabledError(videoID string) *TranscriptsDisabledError {
 
 // IsTranscriptUnavailable reports whether err means the video exists but has
 // no usable transcript: subtitles disabled, none in the requested languages,
-// or none at all. Callers use this to degrade gracefully — proceeding with the
-// thumbnail and link instead of failing — as opposed to errors that mean the
+// or none at all. Callers use this to degrade gracefully, proceeding with the
+// thumbnail and link instead of failing, as opposed to errors that mean the
 // video itself is inaccessible (invalid ID, unavailable, rate limit).
 func IsTranscriptUnavailable(err error) bool {
 	var disabled *TranscriptsDisabledError

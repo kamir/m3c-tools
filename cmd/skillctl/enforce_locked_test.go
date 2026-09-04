@@ -1,11 +1,11 @@
 package main
 
-// Tests for SPEC-0317 R-7.2 — the `locked` state wired into the runtime gate.
+// Tests for SPEC-0317 R-7.2: the `locked` state wired into the runtime gate.
 //
 // locked = a MANAGED-ENTERPRISE host (opt-in via the root-owned managed settings)
 // with NO trust basis at all (no trust roots, self/ER1 roots, or provenance
 // sidecar) denies non-allowlisted managed skills (exit 28 `offline_locked`). It must:
-//   - be REACHABLE (the whole point — the old file-existence trust-basis check
+//   - be REACHABLE (the whole point: the old file-existence trust-basis check
 //     made it dead by construction);
 //   - be INERT on every non-enterprise host (byte-parity preserved, never-brick);
 //   - NEVER affect unmanaged skills.
@@ -49,7 +49,7 @@ func TestGate_LockedInertPreservesParity(t *testing.T) {
 		`{"tool_name":"Skill","tool_input":{"skill":"subject"}}`, 11, "author signature invalid")
 }
 
-// locked must NEVER touch unmanaged skills — they return via the unmanaged policy
+// locked must NEVER touch unmanaged skills: they return via the unmanaged policy
 // BEFORE the rung.
 func TestGate_LockedNeverAffectsUnmanaged(t *testing.T) {
 	withGateLocked(t, true) // even fully locked
@@ -87,7 +87,7 @@ func TestGate_LockedReachable_RealPath(t *testing.T) {
 	t.Cleanup(func() { gateManagedEnterprise = origEnt })
 
 	// Stub the §7 chain to an ALLOW, so if the locked rung did NOT fire we would
-	// wrongly see exit 0 — the test then only passes because locked denied first.
+	// wrongly see exit 0: the test then only passes because locked denied first.
 	of, oo := verifyManagedFn, verifyManagedOfflineFn
 	verifyManagedFn = func(string, gatePolicy) (int, string) { return exitOK, "" }
 	verifyManagedOfflineFn = func(string, gatePolicy, string) (int, string, bool) { return exitOK, "", true }

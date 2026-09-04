@@ -92,7 +92,7 @@ func mintBundleBytes(content string) (skb []byte, digest string, digestBytes []b
 func mintAdmitItem(t *testing.T, priv ed25519.PrivateKey, name, version, content string) (item map[string]any, digest string) {
 	t.Helper()
 	skb, d, dbytes := mintBundleBytes(content)
-	// Real signature over the digest bytes — gate 3 must pass.
+	// Real signature over the digest bytes: gate 3 must pass.
 	sig := ed25519.Sign(priv, dbytes)
 	sigB64 := base64.StdEncoding.EncodeToString(sig)
 	pubFP := selfFingerprint(priv.Public().(ed25519.PublicKey))
@@ -231,7 +231,7 @@ func writeTrustRoots(t *testing.T, pub ed25519.PublicKey) string {
 
 // SPEC-0252 §6: the shared govlevel.ValidFloor guard rejects a "red" floor
 // case/whitespace-insensitively. Prove the self loader refuses RED / Red /
-// " red " / rEd identically — the SEC-L1 class (a mixed-case floor must never
+// " red " / rEd identically. The SEC-L1 class (a mixed-case floor must never
 // slip through and silently admit everything).
 func TestLoadSelfTrustRoots_RejectsRedFloorAnyCase(t *testing.T) {
 	pub, _, _ := ed25519.GenerateKey(nil)
@@ -405,7 +405,7 @@ func TestPullBundles_ScopedPull_FindsRevokeWithStrippedSkillTag(t *testing.T) {
 		"tags": strings.Join([]string{
 			"m3c-skill-bundle", "skill-registry:self",
 			"skill-digest:" + digest, "skill-event:" + EventKindRevoked,
-			// deliberately NO skill:pdf tag — the old scoped search would miss this
+			// deliberately NO skill:pdf tag. The old scoped search would miss this
 		}, ","),
 		"transcript": renderTestEventBody(revEv, "revoked"),
 	})
@@ -473,7 +473,7 @@ func TestListRegistry_LatestSkipsRevoked(t *testing.T) {
 		t.Error("expected `good` in --latest listing")
 	}
 	if names["bad"] {
-		t.Error("`bad` is revoked — must NOT appear in --latest listing")
+		t.Error("`bad` is revoked, must NOT appear in --latest listing")
 	}
 }
 
@@ -519,7 +519,7 @@ func mintForgedAttestItem(t *testing.T, priv ed25519.PrivateKey, name, version, 
 	if _, err := SignEnvelopeSignature(priv, ev); err != nil {
 		t.Fatalf("Sign attest: %v", err)
 	}
-	// Tamper AFTER signing — the envelope_signature now covers signedLevel, not
+	// Tamper AFTER signing: the envelope_signature now covers signedLevel, not
 	// forgedLevel.
 	ev["governance_level"] = forgedLevel
 	body := renderTestEventBody(ev, "attested")
@@ -571,7 +571,7 @@ func mintUnsignedRevokeItem(t *testing.T, name, version, digest, reason string) 
 }
 
 // SEC-H1: a forged green attestation (envelope_signature does not verify) over
-// a bundle must NOT satisfy the governance floor — the verdict is dropped and
+// a bundle must NOT satisfy the governance floor. The verdict is dropped and
 // the bundle is rejected at Gate 4.
 func TestPullBundles_ForgedGreenAttestation_RejectedAtGate4(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(nil)
@@ -599,7 +599,7 @@ func TestPullBundles_ForgedGreenAttestation_RejectedAtGate4(t *testing.T) {
 }
 
 // SEC-H1: a forged green attestation must not even shadow a real, lower-rank
-// signed attestation — only signed verdicts count toward the floor.
+// signed attestation, only signed verdicts count toward the floor.
 func TestPullBundles_OnlySignedAttestationsCountTowardFloor(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(nil)
 	f := newPullFake(t)
@@ -628,7 +628,7 @@ func TestPullBundles_OnlySignedAttestationsCountTowardFloor(t *testing.T) {
 }
 
 // SEC-H1 (revoke side): an UNSIGNED revocation must not suppress a legitimately
-// attested bundle — the forged revoke is dropped and the bundle still stages.
+// attested bundle. The forged revoke is dropped and the bundle still stages.
 func TestPullBundles_UnsignedRevoke_DoesNotSuppress(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(nil)
 	f := newPullFake(t)

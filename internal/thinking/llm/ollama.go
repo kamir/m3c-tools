@@ -1,4 +1,4 @@
-// Ollama adapter — local, zero-cost LLM provider for Thinking Engine
+// Ollama adapter: local, zero-cost LLM provider for Thinking Engine
 // dev cycles. Talks to the Ollama HTTP server at $OLLAMA_URL (default
 // http://localhost:11434) via its /api/chat endpoint.
 //
@@ -10,7 +10,7 @@
 //
 // Token accounting limitation: Ollama's /api/chat response includes
 // prompt_eval_count and eval_count, but those are tokenizer-dependent
-// and not reliable across all model families — especially for custom
+// and not reliable across all model families: especially for custom
 // or quantized builds. Rather than mix two accounting modes, we always
 // estimate both TokensIn and TokensOut from character length (chars/4),
 // matching the heuristic used by openaiAdapter.EstimateCost. CostUSD
@@ -52,7 +52,7 @@ type ollamaAdapter struct {
 // NewOllama builds an adapter pointed at $OLLAMA_URL (default
 // http://localhost:11434) using $OLLAMA_MODEL as the default model
 // (default llama3.1:8b). Unlike NewOpenAI this does not fail if the
-// env var is missing — the URL has a sensible default — but it does
+// env var is missing, the URL has a sensible default, but it does
 // trim whitespace so an empty-string env var is treated as unset.
 func NewOllama() (Adapter, error) {
 	base := strings.TrimSpace(os.Getenv("OLLAMA_URL"))

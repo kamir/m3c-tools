@@ -1,6 +1,6 @@
 //go:build darwin
 
-// findsetup_test.go — SEC-M12 regression tests for findSetupScript.
+// findsetup_test.go: SEC-M12 regression tests for findSetupScript.
 //
 // findSetupScript must anchor to the running binary's directory and must NOT
 // pick up a cwd-relative scripts/setup-venv.sh (working-dir hijack). The result
@@ -39,10 +39,10 @@ func TestFindSetupScript_IgnoresCwdRelativeScript(t *testing.T) {
 
 	got := findSetupScript()
 	if got == planted {
-		t.Fatalf("findSetupScript returned the cwd-relative planted script %q — working-dir hijack not closed", got)
+		t.Fatalf("findSetupScript returned the cwd-relative planted script %q, working-dir hijack not closed", got)
 	}
 	if got == "scripts/setup-venv.sh" {
-		t.Fatalf("findSetupScript returned a relative cwd path %q — must be anchored to the binary", got)
+		t.Fatalf("findSetupScript returned a relative cwd path %q, must be anchored to the binary", got)
 	}
 	// Whatever it returns (likely "" in the test env, since no script sits next
 	// to the test binary) must never be the planted cwd path.
@@ -69,7 +69,7 @@ func TestFindSetupScript_FindsScriptNextToBinary(t *testing.T) {
 		t.Skipf("a setup-venv.sh already exists next to the test binary: %s", target)
 	}
 	if err := os.MkdirAll(scriptsDir, 0700); err != nil {
-		t.Skipf("cannot create scripts dir next to test binary (%v) — read-only test dir", err)
+		t.Skipf("cannot create scripts dir next to test binary (%v): read-only test dir", err)
 	}
 	if err := os.WriteFile(target, []byte("#!/bin/sh\n"), 0700); err != nil {
 		t.Skipf("cannot write script next to test binary: %v", err)

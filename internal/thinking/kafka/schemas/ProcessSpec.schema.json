@@ -8,7 +8,7 @@
   "properties": {
     "schema_ver": { "type": "integer", "const": 1 },
     "process_id": { "type": "string" },
-    "intent": { "type": "string", "description": "depth 1 — what the user wants" },
+    "intent": { "type": "string", "description": "depth 1: what the user wants" },
     "mode": { "enum": ["linear", "semi_linear", "guided", "loop"] },
     "depth": { "enum": [1, 2, 3], "description": "highest delegation depth the user touched" },
     "steps": {

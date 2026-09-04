@@ -27,7 +27,7 @@ static int registerImageFromFile(const char *name, const char *path, int isTempl
 
 // registerImageFromBytes loads an image from an in-memory buffer (e.g. a PNG
 // embedded in the binary) and registers it as a named NSImage, so it works
-// without any on-disk file — including inside a .app bundle. Returns 1 on
+// without any on-disk file, including inside a .app bundle. Returns 1 on
 // success, 0 on failure.
 static int registerImageFromBytes(const char *name, const void *bytes, int len, int isTemplate) {
 	if (bytes == NULL || len <= 0) {

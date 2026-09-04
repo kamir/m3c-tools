@@ -210,7 +210,7 @@ func TestUploadFailureCreatesMemoryFolder(t *testing.T) {
 }
 
 // TestUploadFailureQueueAndMemoryBothExist verifies that both queue.json
-// and MEMORY folder exist after a simulated failure — the complete failure path.
+// and MEMORY folder exist after a simulated failure: the complete failure path.
 func TestUploadFailureQueueAndMemoryBothExist(t *testing.T) {
 	tmpDir := t.TempDir()
 	queuePath := filepath.Join(tmpDir, "queue.json")
@@ -262,7 +262,7 @@ func TestUploadFailureNoMemoryOnSuccess(t *testing.T) {
 	tmpDir := t.TempDir()
 	memoryRoot := filepath.Join(tmpDir, "MEMORY")
 
-	// Don't call HandleUploadFailure — simulate success path
+	// Don't call HandleUploadFailure: simulate success path
 	// Verify MEMORY root was never created
 	if _, err := os.Stat(memoryRoot); !os.IsNotExist(err) {
 		t.Errorf("MEMORY root should not exist on success path, but stat returned: %v", err)

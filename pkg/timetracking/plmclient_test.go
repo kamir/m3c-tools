@@ -13,7 +13,7 @@ import (
 //
 // History: the v2.7.0 contract was "X-API-KEY only, never Authorization"
 // because PLM rejected Bearer with HTTP 401. Once the server learned Bearer,
-// the client started sending both — Bearer for users who only have
+// the client started sending both. Bearer for users who only have
 // `m3c-tools login` (no API key in profile), API key as a fallback.
 func TestPLMClient_SendsAPIKeyAndBearerWhenBothAvailable(t *testing.T) {
 	t.Setenv("ER1_DEVICE_TOKEN", "device-token-abcdef")
@@ -52,7 +52,7 @@ func TestPLMClient_SendsAPIKeyAndBearerWhenBothAvailable(t *testing.T) {
 
 // TestPLMClient_BearerOnlyWorksWithoutAPIKey covers the original motivation
 // for the May 2 follow-up: a user signed in via `m3c-tools login` carries a
-// device token but no API key in the profile. PLM must still be reachable —
+// device token but no API key in the profile. PLM must still be reachable:
 // otherwise the menubar Projects submenu silently empties out.
 func TestPLMClient_BearerOnlyWorksWithoutAPIKey(t *testing.T) {
 	t.Setenv("ER1_DEVICE_TOKEN", "device-token-only")
@@ -84,7 +84,7 @@ func TestPLMClient_BearerOnlyWorksWithoutAPIKey(t *testing.T) {
 	}
 }
 
-// TestPLMClient_APIKeyOnlyWhenNoDeviceToken — symmetric to the Bearer-only
+// TestPLMClient_APIKeyOnlyWhenNoDeviceToken: symmetric to the Bearer-only
 // case. CI machines and headless installs typically have an API key in the
 // profile but no device token; the client must work without Bearer.
 func TestPLMClient_APIKeyOnlyWhenNoDeviceToken(t *testing.T) {

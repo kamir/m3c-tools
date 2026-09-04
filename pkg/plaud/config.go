@@ -16,7 +16,7 @@ const PlaudTokenEnvVar = "M3C_PLAUD_TOKEN"
 //
 //  1. --token-file <path> (tokenFile arg): read the token from a file (trimmed).
 //  2. $M3C_PLAUD_TOKEN environment variable.
-//  3. argvToken: the bare command-line argument (DEPRECATED — leaks via ps/argv).
+//  3. argvToken: the bare command-line argument (DEPRECATED: leaks via ps/argv).
 //
 // When the bare-argv form is used and a secure source was available, callers
 // should warn. ResolveAuthToken itself returns argvLeaked=true whenever the
@@ -24,7 +24,7 @@ const PlaudTokenEnvVar = "M3C_PLAUD_TOKEN"
 // deprecation warning. An empty argvToken is ignored.
 //
 // tokenFile takes precedence over the env var, which takes precedence over
-// argv — so an explicit --token-file always wins.
+// argv, so an explicit --token-file always wins.
 func ResolveAuthToken(tokenFile, argvToken string) (token string, argvLeaked bool, err error) {
 	if tokenFile != "" {
 		data, readErr := os.ReadFile(tokenFile)
@@ -59,11 +59,11 @@ func ResolveAuthToken(tokenFile, argvToken string) (token string, argvLeaked boo
 type TranscribeMode string
 
 const (
-	// TranscribeModeQueue sends DO_TRANSCRIBE=true — server transcribes immediately.
+	// TranscribeModeQueue sends DO_TRANSCRIBE=true, server transcribes immediately.
 	TranscribeModeQueue TranscribeMode = "queue"
-	// TranscribeModeLazy adds todo.transcribe tag — background workers pick it up.
+	// TranscribeModeLazy adds todo.transcribe tag, background workers pick it up.
 	TranscribeModeLazy TranscribeMode = "lazy"
-	// TranscribeModeOff sends no transcription signal — audio stored as-is.
+	// TranscribeModeOff sends no transcription signal: audio stored as-is.
 	TranscribeModeOff TranscribeMode = "off"
 )
 
@@ -85,12 +85,12 @@ const defaultPlaudAPIURL = "https://api.plaud.ai"
 // project-local `.env` in the current working directory (LoadDotenv → os.Setenv),
 // so an untrusted repo could otherwise redirect those secrets to an attacker
 // host. We therefore refuse any base that is not an https *.plaud.ai host and
-// fall back to the default, warning secret-safely (origin only — never the token
+// fall back to the default, warning secret-safely (origin only, never the token
 // a hostile value might smuggle in the path/query).
 func LoadConfig() *Config {
 	apiURL := envOr("PLAUD_API_URL", defaultPlaudAPIURL)
 	if !isAllowedPlaudDomain(apiURL) {
-		fmt.Fprintf(os.Stderr, "  [plaud] refusing PLAUD_API_URL=%s (not an https *.plaud.ai host) — "+
+		fmt.Fprintf(os.Stderr, "  [plaud] refusing PLAUD_API_URL=%s (not an https *.plaud.ai host): "+
 			"using %s; the API base receives your bearer token\n", plaudURLOrigin(apiURL), defaultPlaudAPIURL)
 		apiURL = defaultPlaudAPIURL
 	}

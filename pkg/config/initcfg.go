@@ -1,18 +1,18 @@
-// Package config — Init Config Bootstrap
+// Package config (Init Config Bootstrap
 //
-// On first start, m3c-tools looks for ~/m3c-tools.init.cfg — a file sent
+// On first start, m3c-tools looks for ~/m3c-tools.init.cfg) a file sent
 // by the admin as an email attachment. If found, it auto-configures the
 // user's profile and deletes the init file (one-time bootstrap).
 //
 // File format (simple key=value, same as .env):
 //
-//   # m3c-tools configuration — sent by your admin
+//   # m3c-tools configuration: sent by your admin
 //   ER1_API_URL=https://onboarding.guide/upload_2
 //   ER1_API_KEY=kup-abc123def456
 //   ER1_CONTEXT_ID=
 //   PROFILE_NAME=cloud
 //
-// The ER1_CONTEXT_ID is intentionally blank — it gets filled in after
+// The ER1_CONTEXT_ID is intentionally blank: it gets filled in after
 // the user signs in with Google (OAuth callback sets it).
 package config
 
@@ -116,7 +116,7 @@ func CheckAndApplyInitCfg() InitCfgResult {
 	consumedPath := initPath + InitCfgConsumedSuffix
 	if err := os.Rename(initPath, consumedPath); err != nil {
 		log.Printf("[config] warning: could not rename init config: %v", err)
-		// Not fatal — profile was created successfully
+		// Not fatal: profile was created successfully
 	} else {
 		log.Printf("[config] init config consumed: %s -> %s", initPath, consumedPath)
 	}
@@ -145,7 +145,7 @@ func GenerateInitCfg(apiKey, serverURL, profileName string) string {
 # Windows: C:\Users\YourName\m3c-tools.init.cfg
 # macOS:   /Users/YourName/m3c-tools.init.cfg
 #
-# Then start m3c-tools — it will configure itself automatically.
+# Then start m3c-tools: it will configure itself automatically.
 
 PROFILE_NAME=%s
 ER1_API_URL=%s

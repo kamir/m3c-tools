@@ -2,7 +2,7 @@ package bodyscan
 
 import "regexp"
 
-// Policy-subversion rules (SPEC-0246 §4.2) — all YELLOW. These detect prose
+// Policy-subversion rules (SPEC-0246 §4.2): all YELLOW. These detect prose
 // that steers the agent around safety/quality gates: disabling tests, skipping
 // review, bypassing gates, dependency steering, or destructive ops without
 // confirmation.
@@ -55,7 +55,7 @@ func init() {
 			Category: CategoryPolicySubvert,
 			Verdict:  VerdictYellow,
 			Pattern:  rePolDepSteer,
-			Message:  "policy-subversion: dependency steering — pushes a specific package/library",
+			Message:  "policy-subversion: dependency steering: pushes a specific package/library",
 		},
 		Rule{
 			ID:       "POL-005",

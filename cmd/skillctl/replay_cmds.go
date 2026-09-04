@@ -1,4 +1,4 @@
-// replay_cmds.go — `skillctl invoke-replay` (SPEC-0202 P9).
+// replay_cmds.go: `skillctl invoke-replay` (SPEC-0202 P9).
 //
 // Read-only operator tool. Pulls invocation events from
 //
@@ -27,7 +27,7 @@ import (
 
 // printReplayUsage prints the help text for `skillctl invoke-replay`.
 func printReplayUsage() {
-	fmt.Print(`skillctl invoke-replay — pull invocation events from aims-core
+	fmt.Print(`skillctl invoke-replay: pull invocation events from aims-core
 
 Usage:
   skillctl invoke-replay --tenant <id> [--token-id <id>] [--limit 200]
@@ -293,7 +293,7 @@ func renderReplayTable(w io.Writer, events []replayEvent, colorize bool) {
 	fmt.Fprintln(w, strings.Repeat("-", 100))
 	fmt.Fprintf(w, "Total: %d events  |  first: %s  |  last: %s\n", len(events), first, last)
 
-	// Per-type breakdown — stable order.
+	// Per-type breakdown: stable order.
 	keys := make([]string, 0, len(typeCounts))
 	for k := range typeCounts {
 		keys = append(keys, k)
@@ -406,8 +406,8 @@ func newReplayHTTPClient(target string) *http.Client {
 		// #nosec G402 -- gated: TLS verification is skipped ONLY for target=="local",
 		// whose base URL is the hardcoded loopback https://127.0.0.1:8081
 		// (defaultReplayBaseURL). prod/stage targets fall through to the verifying
-		// client below. The base URL is not caller-overridable — only the --target
-		// selector is — so a public host can never inherit this transport.
+		// client below. The base URL is not caller-overridable, only the --target
+		// selector is, so a public host can never inherit this transport.
 		tr := &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // #nosec G402 -- loopback-only (target=="local" ⇒ 127.0.0.1)
 		}

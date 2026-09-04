@@ -165,7 +165,7 @@ func TestEndToEndEmitsArtifactPersisted(t *testing.T) {
 	}
 	defer s.Stop()
 
-	// Publish an Artifact to artifacts.created — the schema-validating
+	// Publish an Artifact to artifacts.created: the schema-validating
 	// bus will validate, and the sinker will pick it up.
 	art := schema.Artifact{
 		SchemaVer: schema.CurrentSchemaVer, ArtifactID: "a-42",
@@ -284,7 +284,7 @@ func TestEnabledToggle(t *testing.T) {
 }
 
 // TestCtxGuardPassesThrough asserts the sinker uses the configured
-// OwnerID (not anything from the artifact payload) — so ctx-guard on
+// OwnerID (not anything from the artifact payload), so ctx-guard on
 // the ER1 client stays symmetric with the engine's own ctx.
 func TestSinkUsesConfiguredCtx(t *testing.T) {
 	raw, _ := mctx.NewRaw("user-A")

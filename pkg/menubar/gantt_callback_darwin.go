@@ -1,11 +1,11 @@
-// gantt_callback_darwin.go — Go callback for Gantt chart navigation actions.
+// gantt_callback_darwin.go: Go callback for Gantt chart navigation actions.
 //
 // This file is separate from gantt_darwin.go because //export requires
 // that the cgo preamble contain only declarations, not definitions.
 package menubar
 
 /*
-// No C definitions — only Go exports in this file.
+// No C definitions: only Go exports in this file.
 */
 import "C"
 

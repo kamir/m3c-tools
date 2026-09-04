@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# tools/boundary-gate.test.sh — fixtures for tools/boundary-gate.sh (SPEC-0358).
+# tools/boundary-gate.test.sh: fixtures for tools/boundary-gate.sh (SPEC-0358).
 #
 # A leak gate that stops flagging is worse than no gate, because it still reads
 # green. These fixtures assert the gate from the FAILING side: each pattern in
@@ -11,6 +11,27 @@
 # Builds a throwaway git repo; no network. Exit 0 = all assertions passed.
 #
 set -euo pipefail
+
+# Fixtures legen Wegwerf-git-Repos an. Als Hook geerbte GIT_*-Variablen wuerden
+# jeden git-Aufruf hier auf das AUFRUFENDE Repo umlenken — in
+# m3c-tools-maintenance hat genau das 3076 Loeschungen in einen echten Index
+# geschrieben (BUG-0213, zurueckgenommen, kein Datenverlust). Ein Fixture, das
+# ein echtes Repo anfassen kann, ist eine Waffe, kein Test.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
+      GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX
+
+# in_throwaway DIR — bricht ab, wenn git auf ein FREMDES Repo zeigt. Muss VOR
+# dem ersten Schreibbefehl laufen: schon `git init` und `git config` schreiben,
+# und `git config user.email` landete beim ersten Anlauf in der Config des
+# echten Repos. "Noch kein Repo" ist in Ordnung — das ist der Normalfall vor
+# `git init`. Pfade aufgeloest vergleichen (macOS: /var -> /private/var).
+in_throwaway() {
+  local want have
+  want=$(cd "$1" 2>/dev/null && pwd -P) || { echo "FATAL: $1 fehlt" >&2; exit 2; }
+  have=$(git rev-parse --show-toplevel 2>/dev/null) || return 0
+  [ "$have" = "$want" ] || { echo "FATAL: git zeigt auf $have, nicht auf $want" >&2; exit 2; }
+}
+
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 GATE="$HERE/boundary-gate.sh"
@@ -23,7 +44,9 @@ mkdir -p "$REPO/tools" "$REPO/cmd" "$REPO/docs"
 cp "$GATE" "$REPO/tools/boundary-gate.sh"
 cp "$PATTERNS" "$REPO/tools/leak-patterns.txt"
 cd "$REPO"
+in_throwaway "$REPO"          # VOR dem ersten Schreibbefehl
 git init -q; git config user.email t@t; git config user.name t
+in_throwaway "$REPO"
 
 pass=0; fail=0
 ok()  { pass=$((pass+1)); printf '  ok   %s\n' "$1"; }
@@ -32,7 +55,7 @@ bad() { fail=$((fail+1)); printf '  FAIL %s\n' "$1"; }
 # run_gate -> prints output, returns the gate's exit code
 run_gate() { git add -A >/dev/null 2>&1; bash tools/boundary-gate.sh >"$TMP/out" 2>&1; }
 
-# blocks DESC FILE CONTENT   — the gate must FAIL and name the file
+# blocks DESC FILE CONTENT: the gate must FAIL and name the file
 blocks() {
   local d=$1 f=$2 c=$3
   printf '%s\n' "$c" > "$f"
@@ -42,7 +65,7 @@ blocks() {
   rm -f "$f"
 }
 
-# allows DESC FILE CONTENT   — the gate must PASS
+# allows DESC FILE CONTENT: the gate must PASS
 allows() {
   local d=$1 f=$2 c=$3
   printf '%s\n' "$c" > "$f"
@@ -72,7 +95,7 @@ blocks "ops-exempt scope: the PLM API path is blocked" \
 # --- the scope split holds -----------------------------------------------------
 allows "ops-exempt scope is skipped on the tool's own surface" \
   "cmd/client.go" 'const defaultURL = "http://127.0.0.1:8081" // the ER1 client ships this'
-blocks "always scope is NOT skipped there — a private path is blocked everywhere" \
+blocks "always scope is NOT skipped there. A private path is blocked everywhere" \
   "cmd/notes.go" '// see m3c-tools-maintenance/SPEC/SPEC-0001-x.md'
 
 # --- ID-only references stay legal (the point of the rule) ---------------------

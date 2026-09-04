@@ -23,7 +23,7 @@ import (
 type WatcherConfig struct {
 	Tenant         string // e.g. "kup-berlin"
 	UserContextID  string // engine's --user-context-id flag value
-	CallerIdentity string // e.g. "id:kamir@m3c" — the filter key
+	CallerIdentity string // e.g. "id:kamir@m3c": the filter key
 	CtxHash        string // first 16 hex of SHA-256(UserContextID), per SPEC-0167
 
 	// Backpressure (SPEC-0167 A.6).
@@ -121,7 +121,7 @@ func (w *Watcher) Run(ctx context.Context) error {
 			for _, r := range w.cfg.Reflectors {
 				if err := r.Tick(ctx, now); err != nil {
 					// TODO: structured log; do not abort the loop on a
-					// single reflector failure — the others must keep
+					// single reflector failure. The others must keep
 					// running. SPEC-0167 A.9 #6.
 					_ = err
 				}
@@ -139,7 +139,7 @@ func (w *Watcher) consumerLoop(ctx context.Context) error {
 			if errors.Is(err, context.Canceled) {
 				return nil
 			}
-			// TODO: log + retry policy. SPEC-0167 A.9 #6 — degrade to
+			// TODO: log + retry policy. SPEC-0167 A.9 #6: degrade to
 			// "no runtime Insights" rather than crash.
 			return fmt.Errorf("consumer.Next: %w", err)
 		}
@@ -205,7 +205,7 @@ func (w *Watcher) project(ev InvocationEvent) (Thought, bool) {
 		// Pure routing; no reflective value (A.3).
 		return Thought{}, false
 	default:
-		// Unknown event_type — forward-compat: log + drop.
+		// Unknown event_type, forward-compat: log + drop.
 		// TODO: emit `watcher.unknown_event_type` once.
 		return Thought{}, false
 	}
@@ -270,7 +270,7 @@ func (w *Watcher) takeBudget(ev InvocationEvent) bool {
 	// Always-allow classes (signal): refused, revoked, completed-fail.
 	switch ev.EventType {
 	case EventGateRefused, EventCapabilityRevoked, EventInvocationCompleted:
-		// Decrement budget but never refuse — overflow is recorded as
+		// Decrement budget but never refuse: overflow is recorded as
 		// budget debt; tick refills.
 		w.budgetRemaining--
 		return true

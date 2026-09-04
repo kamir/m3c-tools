@@ -8,16 +8,16 @@ new (`old is None`), so the removal branch never runs and `add_with_ids()` raise
     ValueError: id <n> already present in index
 
 which is self-perpetuating: every following pass drifts the store further from
-the index. Observed on mirkos-braindump 2026-08-28..31 — 5 consecutive nightly
+the index. Observed on mirkos-braindump 2026-08-28..31: 5 consecutive nightly
 failures on the same id, the store down to 5758 files / 50679 chunks against a
 persisted index of 6173 / 58954.
 
 Fixed in 05a98f5 ("incremental sync self-heals interrupted index"): dedup the
 batch, then drop any already-resident id before `add_with_ids`. These tests pin
-that behaviour down — they fail with the original ValueError against the parent
+that behaviour down: they fail with the original ValueError against the parent
 commit and pass against the fix.
 
-A fake embedder keeps these tests model-free — no weights, no GPU, milliseconds.
+A fake embedder keeps these tests model-free, no weights, no GPU, milliseconds.
 
 Run:
     cd rag-mcp-server
@@ -91,7 +91,7 @@ def test_sync_heals_orphaned_index_ids(ws, cfg):
 
     assert res["added"] == 1
     assert res["embedded"] == len(ids_before)
-    # chunk ids are sha1(path#i) — a re-index must reproduce them exactly
+    # chunk ids are sha1(path#i). A re-index must reproduce them exactly
     assert set(ix.store.chunk_ids_for_file(victim)) == set(ids_before)
 
 

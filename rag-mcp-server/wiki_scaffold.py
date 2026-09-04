@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""wiki_scaffold — turn frontmatter-tagged notes into a Karpathy-wiki index.md
+"""wiki_scaffold: turn frontmatter-tagged notes into a Karpathy-wiki index.md
 so Understand-Anything's /understand-knowledge can build a real knowledge graph
 (SPEC-0268 companion; the RAG->graph bridge).
 
@@ -87,7 +87,7 @@ def main():
 
     ordered = sorted(cats.items(), key=lambda kv: (-len(kv[1]), kv[0]))
 
-    lines = ["# Mirko's Braindump — Knowledge Index", "",
+    lines = ["# Mirko's Braindump: Knowledge Index", "",
              f"> Auto-generated category catalog for `/understand-knowledge` "
              f"(SPEC-0268 RAG→graph bridge). {len(notes)} notes · "
              f"{len([c for c in cats if c != 'Uncategorized'])} themed categories. "
@@ -96,7 +96,7 @@ def main():
     for cat, items in ordered:
         lines.append(f"## {cat.replace('-', ' ').title()}")
         for rel, title in sorted(items, key=lambda x: x[1].lower()):
-            lines.append(f"- [[{rel}]] — {title}")
+            lines.append(f"- [[{rel}]]: {title}")
             wl += 1
         lines.append("")
 

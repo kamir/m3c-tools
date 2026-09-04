@@ -214,7 +214,7 @@ func TestSignAttestation_RoundTripsAgainstStdlib(t *testing.T) {
 }
 
 func TestSignAttestation_DeterministicForSameInputs(t *testing.T) {
-	// ed25519 is deterministic — same key + same message → same signature.
+	// ed25519 is deterministic: same key + same message → same signature.
 	// This guards against accidentally introducing nonces or other
 	// non-determinism in our wrapper.
 	dir := t.TempDir()

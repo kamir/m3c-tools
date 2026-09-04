@@ -9,7 +9,7 @@ import (
 // TestOverrideAllowed_DecisionMatrix pins the canonical, single-sourced WIN-T8
 // decision that verify, registry and the cmd/skillctl binary all now delegate to
 // (WIN-09). It is a pure function of (goos, compiledIn), so it runs identically
-// on every host — no runtime.GOOS skip, which keeps the windows/linux
+// on every host, no runtime.GOOS skip, which keeps the windows/linux
 // executed-test parity even for the windows-gate drift-guard.
 func TestOverrideAllowed_DecisionMatrix(t *testing.T) {
 	// Non-Windows: always honor $HOME, regardless of the compiled-in flag.

@@ -1,15 +1,15 @@
 package main
 
-// session_baseline_cmds.go — SPEC-0317 R-7 (P2) `skillctl session-baseline`.
+// session_baseline_cmds.go, SPEC-0317 R-7 (P2) `skillctl session-baseline`.
 //
 // SessionStart INFORMATIONAL context: it prints the current named offline state
-// (online / degraded / offline / locked — pkg/skillctl/statemachine) computed
+// (online / degraded / offline / locked, pkg/skillctl/statemachine) computed
 // from (connectivity × cache ages × anchor presence × trust-basis presence), and
-// — the AC-8 fallback — a RED "advisory-only until SPEC-0247 P1.3 pinned" banner
+//, the AC-8 fallback, a RED "advisory-only until SPEC-0247 P1.3 pinned" banner
 // whenever the managed-settings gate is NOT pinned.
 //
 // It is a PURE READ. It gates NOTHING, blocks NOTHING, and (by default) reaches
-// NO network — a SessionStart hook must be fast and must never wedge a session.
+// NO network: a SessionStart hook must be fast and must never wedge a session.
 // The state it prints only NAMES the posture; the authoritative decision ladder
 // still lives in verify-hook (R-7.4). Because it is off the hot path it is not
 // fail-closed: an IO/usage error is exit 1, never a gate deny.
@@ -17,7 +17,7 @@ package main
 // The three never-brick invariants are inherited from the statemachine package:
 // trust-basis breadth (self/ER1 roots + .m3c-provenance sidecar, not only the
 // SPEC-0188 roots), locked is enterprise-opt-in only, and the emergency channel
-// is exempt — this verb only DISPLAYS them.
+// is exempt: this verb only DISPLAYS them.
 
 import (
 	"encoding/json"
@@ -79,12 +79,12 @@ func runSessionBaseline(args []string, stdout, stderr io.Writer) int {
 		home = h
 	}
 
-	// Resolve the offline policy from the trust roots (best-effort — a missing or
+	// Resolve the offline policy from the trust roots (best-effort. A missing or
 	// malformed trust-roots file must not wedge SessionStart; we surface a note
 	// and fall back to the shipped default, which never locks).
 	pol, polNote := resolveSessionOfflinePolicy(home, *trustRootsPath)
 	// SPEC-0317 R-7.2 (Option B): the `enterprise` opt-in that permits `locked` is
-	// sourced from the ROOT-OWNED managed settings, never the trust-roots file —
+	// sourced from the ROOT-OWNED managed settings, never the trust-roots file,
 	// so the displayed posture matches what the runtime gate actually enforces.
 	pol.Enterprise = gateManagedEnterprise()
 	// R-1.4 P2 opt-in (state-gate the online fallback), from the same managed tier,
@@ -148,7 +148,7 @@ func runSessionBaseline(args []string, stdout, stderr io.Writer) int {
 	// AC-8: the RED advisory-until-pinned banner when the gate is not pinned.
 	fmt.Fprintf(stdout, "  gate pinning:         %s\n", pinStatus.Level)
 	if !pinStatus.Pinned() {
-		fmt.Fprintf(stdout, "%s  [!] %s — without managed-settings pinning (SPEC-0247 P1.3) this whole enforcement layer is ADVISORY: an operator can delete the hooks. Run `skillctl pin install`.%s\n",
+		fmt.Fprintf(stdout, "%s  [!] %s: without managed-settings pinning (SPEC-0247 P1.3) this whole enforcement layer is ADVISORY: an operator can delete the hooks. Run `skillctl pin install`.%s\n",
 			ansiRed, advisoryUntilPinnedMsg, ansiReset)
 	}
 	return 0
@@ -159,7 +159,7 @@ func runSessionBaseline(args []string, stdout, stderr io.Writer) int {
 // enterprise profile is machine-wide and the most consequential); otherwise the
 // first declared offline_policy; otherwise the zero policy (the shipped default,
 // which never locks). A missing/malformed trust-roots file returns the zero
-// policy plus a human note — SessionStart must never wedge on config trouble.
+// policy plus a human note. SessionStart must never wedge on config trouble.
 func resolveSessionOfflinePolicy(home, pathOverride string) (statemachine.OfflinePolicy, string) {
 	path := pathOverride
 	if path == "" {
@@ -168,9 +168,9 @@ func resolveSessionOfflinePolicy(home, pathOverride string) (statemachine.Offlin
 	tr, err := verify.Load(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return statemachine.OfflinePolicy{}, "no trust-roots file — using the shipped default (unmanaged=allow, never locks)"
+			return statemachine.OfflinePolicy{}, "no trust-roots file, using the shipped default (unmanaged=allow, never locks)"
 		}
-		return statemachine.OfflinePolicy{}, fmt.Sprintf("trust-roots unreadable (%v) — using the shipped default", err)
+		return statemachine.OfflinePolicy{}, fmt.Sprintf("trust-roots unreadable (%v), using the shipped default", err)
 	}
 
 	var firstDeclared *statemachine.OfflinePolicy
@@ -200,7 +200,7 @@ func resolveSessionOfflinePolicy(home, pathOverride string) (statemachine.Offlin
 // defaultSessionBaselineGather assembles the inputs from the local filesystem.
 // Cache ages are derived from the mtime of the loose cache files (the P2 tables
 // are not yet populated; R-2.3 keeps the loose files as the fallback read). All
-// of it is best-effort: a missing file yields a zero age (treated fresh — and
+// of it is best-effort: a missing file yields a zero age (treated fresh, and
 // under the shipped no-ceiling default, age is not consulted anyway).
 func defaultSessionBaselineGather(home string, forceOnline bool, now time.Time) statemachine.Inputs {
 	return statemachine.Inputs{
@@ -217,7 +217,7 @@ func defaultSessionBaselineGather(home string, forceOnline bool, now time.Time) 
 // trustBasisPresent folds the BROAD R-7.1 trust-basis definition: a trust basis
 // exists if ANY of the SPEC-0188 skill-trust-roots.yaml, the SPEC-0225 self/ER1
 // trust-roots, OR a .m3c-provenance sidecar under ~/.claude/skills is present.
-// This breadth is the never-brick guard — a self/ER1 sidecar-only host counts.
+// This breadth is the never-brick guard: a self/ER1 sidecar-only host counts.
 func trustBasisPresent(home string) bool {
 	if fileExists(filepath.Join(home, verify.DefaultTrustRootsPath)) {
 		return true // SPEC-0188 skill-trust-roots.yaml
@@ -226,7 +226,7 @@ func trustBasisPresent(home string) bool {
 		return true // SPEC-0225 self/ER1 trust-roots (registry.DefaultSelfTrustRootsPath)
 	}
 	// SPEC-0225 install-trust-mode writes a .m3c-provenance.json sidecar next to
-	// each installed skill body — a legitimate trust basis on self/ER1 hosts that
+	// each installed skill body. A legitimate trust basis on self/ER1 hosts that
 	// have no skill-trust-roots.yaml at all (SPEC-0247 §10c).
 	matches, _ := filepath.Glob(filepath.Join(home, ".claude", "skills", "*", ".m3c-provenance.json"))
 	return len(matches) > 0
@@ -244,7 +244,7 @@ func transparencyLogPath(home string) string {
 }
 
 // fileAge returns now - mtime for path, or 0 when the file is missing/unstattable
-// (treated fresh — under the shipped no-ceiling default the age is not consulted).
+// (treated fresh. Under the shipped no-ceiling default the age is not consulted).
 func fileAge(now time.Time, path string) time.Duration {
 	fi, err := os.Stat(path)
 	if err != nil {
@@ -255,7 +255,7 @@ func fileAge(now time.Time, path string) time.Duration {
 
 // defaultSessionBaselinePinStatus reads the managed-settings file and reports the
 // pin level (mirrors `pin status`). A missing file is LevelAbsent (advisory); an
-// unreadable/other error is treated as absent for the informational banner — the
+// unreadable/other error is treated as absent for the informational banner. The
 // safe reading for "is the gate pinned?" is NO.
 func defaultSessionBaselinePinStatus(pathOverride string) pin.StatusResult {
 	path := pathOverride
@@ -286,9 +286,9 @@ func allowedBlocked(b bool) string {
 // when off (the shipped default) the runtime still falls back for such installs.
 func onlineFallbackNote(optedIn bool) string {
 	if optedIn {
-		return "ENFORCED (R-1.4 P2) by verify-hook/enforce: a legacy managed install with no offline metadata fails closed (offline_unverifiable_managed, exit 25) — the hot path stays strictly local (offline-first; no connectivity probe), so the fallback is suppressed regardless of connectivity"
+		return "ENFORCED (R-1.4 P2) by verify-hook/enforce: a legacy managed install with no offline metadata fails closed (offline_unverifiable_managed, exit 25), the hot path stays strictly local (offline-first; no connectivity probe), so the fallback is suppressed regardless of connectivity"
 	}
-	return "INFORMATIONAL — state-gating the online fallback (R-1.4 P2) is OPT-IN and OFF: the runtime still falls back for legacy installs. Enable with `skillctl pin --state-gate-fallback`"
+	return "INFORMATIONAL, state-gating the online fallback (R-1.4 P2) is OPT-IN and OFF: the runtime still falls back for legacy installs. Enable with `skillctl pin --state-gate-fallback`"
 }
 
 func yesNoPad(b bool) string {

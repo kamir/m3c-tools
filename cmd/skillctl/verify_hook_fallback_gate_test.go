@@ -1,6 +1,6 @@
 package main
 
-// Tests for SPEC-0317 R-1.4 P2 — state-gating the verify-hook ONLINE fallback.
+// Tests for SPEC-0317 R-1.4 P2: state-gating the verify-hook ONLINE fallback.
 //
 // The online §7 fallback (verifyManagedFn) runs ONLY for a LEGACY managed install
 // with no stashed offline metadata (verifyManagedOfflineFn returns ok=false). When
@@ -43,7 +43,7 @@ func withGateSkipFallback(t *testing.T, v bool) {
 }
 
 // onlineSpy stubs the two §7 seams: the offline chain returns (0,"",ok) and the
-// online chain records whether it was reached before returning an ALLOW — so a test
+// online chain records whether it was reached before returning an ALLOW, so a test
 // can prove the gate blocked WITHOUT the online call even though it would allow.
 func onlineSpy(t *testing.T, offlineOK bool) *bool {
 	t.Helper()
@@ -84,7 +84,7 @@ func TestGate_StateGateFallback_SuppressesOnlineFallback(t *testing.T) {
 }
 
 // The shipped default (opt-out) still reaches the online fallback for a legacy
-// install — byte-parity / never-brick for disconnected non-enterprise hosts.
+// install: byte-parity / never-brick for disconnected non-enterprise hosts.
 func TestGate_StateGateFallback_DefaultRunsOnlineFallback(t *testing.T) {
 	withGateSkipFallback(t, false)
 	home := t.TempDir()
@@ -191,7 +191,7 @@ func TestGate_StateGateFallback_LockedWins(t *testing.T) {
 
 // TestGate_StateGateFallback_UnmanagedNotEscalated pins scope: even fully opted in,
 // an UNMANAGED skill follows the unmanaged policy (default allow) and is NEVER
-// escalated to the R-1.4 P2 deny — the suppression is structurally reachable only
+// escalated to the R-1.4 P2 deny. The suppression is structurally reachable only
 // on the managed legacy branch.
 func TestGate_StateGateFallback_UnmanagedNotEscalated(t *testing.T) {
 	home := t.TempDir()
@@ -213,7 +213,7 @@ func TestGate_StateGateFallback_UnmanagedNotEscalated(t *testing.T) {
 	}
 }
 
-// Never-brick: with the opt-in OFF, the REAL compute path must NOT suppress — a
+// Never-brick: with the opt-in OFF, the REAL compute path must NOT suppress. A
 // disconnected non-enterprise host keeps its online fallback. This pins that
 // gateStateGatesFallback is the sole switch (its false fast-paths before compute).
 func TestGate_StateGateFallback_RealPath_OptOutKeepsFallback(t *testing.T) {
@@ -263,7 +263,7 @@ func TestExitConsts_MatchRegistry(t *testing.T) {
 		{"local_audit_unavailable", exitLocalAuditUnavailable, exitcode.LocalAuditUnavailable},
 	} {
 		if c.got != c.want.Number {
-			t.Errorf("%s: const %d != registry %d (%s) — messages would misreport the code",
+			t.Errorf("%s: const %d != registry %d (%s): messages would misreport the code",
 				c.name, c.got, c.want.Number, c.want.Label)
 		}
 	}

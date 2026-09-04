@@ -1,6 +1,6 @@
 //go:build darwin
 
-// app.go — menuet-based macOS menu bar application runner.
+// app.go: menuet-based macOS menu bar application runner.
 //
 // This file depends on github.com/caseymrm/menuet and must be built
 // on macOS (darwin) with cgo enabled.
@@ -274,7 +274,7 @@ func (a *App) Run() {
 		log.Printf("[menubar] using embedded menu bar icon (on-disk icon %q unavailable)", a.Config.IconPath)
 	default:
 		log.Printf("[menubar] WARNING: could not load menu bar icon "+
-			"(on-disk %q and embedded copy both failed) — falling back to a text title", a.Config.IconPath)
+			"(on-disk %q and embedded copy both failed): falling back to a text title", a.Config.IconPath)
 	}
 	if a.Config.IconPath != "" {
 		// Also set the NSApp icon for Cmd+Tab/Dock when we temporarily switch
@@ -288,7 +288,7 @@ func (a *App) Run() {
 	state.Title = ResolveMenuBarTitle(a.Config.Title, iconApplied, os.Getenv("M3C_MENUBAR_TITLE"))
 
 	// Diagnostic: this single line tells us whether the icon actually
-	// registered at runtime — the decisive signal when "no icon" is reported.
+	// registered at runtime. The decisive signal when "no icon" is reported.
 	log.Printf("[menubar] menu bar state: icon_applied=%v image=%q title=%q icon_path=%q",
 		iconApplied, state.Image, state.Title, a.Config.IconPath)
 
@@ -335,7 +335,7 @@ func (a *App) registerMenuIcons() {
 	for name, file := range icons {
 		// Prefer the on-disk design-system icon (dev); fall back to the copy
 		// embedded in the binary so per-item icons also render inside the .app
-		// bundle and from any cwd (where FindIcon returns "" — BUG-0192).
+		// bundle and from any cwd (where FindIcon returns "": BUG-0192).
 		if path := FindIcon(file); path != "" {
 			RegisterImage(name, path)
 		} else if b := embeddedIconBytes(file); b != nil {
@@ -371,13 +371,13 @@ func (a *App) buildMenuItems() []menuet.MenuItem {
 	}
 	// Mac-style layout (BUG-0124 follow-up, Mac-Like menu redesign):
 	//   1. Identity row (account · profile · status) with submenu containing
-	//      Account / Status / Open Profile / Sign Out — destructive action
+	//      Account / Status / Open Profile / Sign Out: destructive action
 	//      tucked inside, not at top level.
 	//   2. Primary capture actions, no internal separators.
 	//   3. Recordings (folds Audio Import + Tracking DB).
 	//   4. Sync (folds Plaud + Pocket).
-	//   5. Projects, History — top-level because they're the daily glance.
-	//   6. Settings, Help — secondary.
+	//   5. Projects, History: top-level because they're the daily glance.
+	//   6. Settings, Help: secondary.
 	//   menuet auto-appends "Start at Login" + "Quit" at the very bottom.
 	items := []menuet.MenuItem{
 		a.buildIdentityMenu(auth),
@@ -418,7 +418,7 @@ func (a *App) buildMenuItems() []menuet.MenuItem {
 // buildIdentityMenu renders the top-of-menu identity row.
 //
 // Closed-state label is intentionally minimal: a traffic-light dot +
-// profile name. A truncated user id at the top is noise — the user
+// profile name. A truncated user id at the top is noise: the user
 // already knows who they are, and the dot conveys all the runtime state
 // you need to glance at. Detail (full context id, descriptive status,
 // destructive actions) lives one level deeper, only paid for on open.
@@ -430,7 +430,7 @@ func (a *App) buildIdentityMenu(auth AuthSession) menuet.MenuItem {
 		Text: profileLabel,
 		Children: func() []menuet.MenuItem {
 			items := []menuet.MenuItem{
-				// Full, untruncated context id — Cmd-C-friendly when the
+				// Full, untruncated context id: Cmd-C-friendly when the
 				// user actually opens the menu to grab it.
 				{Text: auth.UserID},
 			}
@@ -559,7 +559,7 @@ func (a *App) buildHelpMenu() menuet.MenuItem {
 
 // activeProfileName looks up the currently-active profile via the
 // Handlers.ListProfiles callback. Returns "" when no callback is wired or
-// no profiles exist — the identity row degrades gracefully in that case.
+// no profiles exist: the identity row degrades gracefully in that case.
 func (a *App) activeProfileName() string {
 	if a.Handlers.ListProfiles == nil {
 		return ""
@@ -575,7 +575,7 @@ func (a *App) activeProfileName() string {
 //
 // Format: "<dot> <profile>". The dot encodes runtime state (green = OK,
 // yellow = working, red = error); the profile name tells the user which
-// account they're signed in to. No truncated context id at the top — the
+// account they're signed in to. No truncated context id at the top: the
 // user already knows who they are, and a 4+4 char hash of their UID adds
 // noise without information. Detail moves into the submenu.
 func identityLabel(profile string, status Status) string {
@@ -601,7 +601,7 @@ func statusDot(s Status) string {
 // statusMessage returns a human-readable status line for the identity
 // submenu, or "" when the state is "everything's fine and there is
 // nothing to say". The green dot at the top already communicates the
-// healthy state — repeating it as the literal word "idle" is jargon
+// healthy state. Repeating it as the literal word "idle" is jargon
 // noise.
 func statusMessage(s Status) string {
 	switch s {
@@ -610,7 +610,7 @@ func statusMessage(s Status) string {
 	case StatusUploading:
 		return "Uploading…"
 	case StatusError:
-		return "Connection error — see log"
+		return "Connection error: see log"
 	default:
 		return ""
 	}
@@ -679,7 +679,7 @@ func (a *App) buildAudioImportMenu() menuet.MenuItem {
 			}
 			items = append(items, menuet.MenuItem{Type: menuet.Separator})
 
-			// Show only untracked ("new") files — already imported files are hidden.
+			// Show only untracked ("new") files: already imported files are hidden.
 			var newItems []AudioImportItem
 			for _, it := range state.Items {
 				if strings.EqualFold(strings.TrimSpace(it.Status), "new") {
@@ -1071,7 +1071,7 @@ func (a *App) buildSignInMenu() menuet.MenuItem {
 		}
 	}
 
-	// Single profile or no profiles — simple Sign In button.
+	// Single profile or no profiles: simple Sign In button.
 	return menuet.MenuItem{
 		Text:  "Sign In...",
 		Image: iconUser,
@@ -1107,7 +1107,7 @@ func (a *App) buildProfileMenu() menuet.MenuItem {
 				prof := p // capture
 				label := prof.Name
 				if prof.Description != "" {
-					label = fmt.Sprintf("%s — %s", prof.Name, prof.Description)
+					label = fmt.Sprintf("%s: %s", prof.Name, prof.Description)
 				}
 				if prof.IsActive {
 					label = "* " + label

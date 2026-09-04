@@ -11,7 +11,7 @@ import (
 )
 
 func TestScreenshotBuildArgs(t *testing.T) {
-	// Unit-level test for arg construction — runs anywhere.
+	// Unit-level test for arg construction: runs anywhere.
 	// The buildArgs function is unexported, so we test via Capture behavior.
 	// This test validates that Capture returns an appropriate error on
 	// non-macOS or headless environments.
@@ -32,7 +32,7 @@ func TestScreenshotCapture(t *testing.T) {
 		Silent: true,
 	})
 	if err != nil {
-		// May fail in headless CI — not a hard failure.
+		// May fail in headless CI, not a hard failure.
 		t.Skipf("screenshot capture failed (likely headless): %v", err)
 	}
 	defer os.Remove(path)

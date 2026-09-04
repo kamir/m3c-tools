@@ -2,19 +2,19 @@
 
 ## Onboarding runbook generator (release-prep standard)
 
-Every skillctl release ships a **version-matched onboarding runbook** — a
+Every skillctl release ships a **version-matched onboarding runbook**: a
 self-contained, CSP-safe HTML worksheet that walks a new publisher through
 install → keygen → login → package → publish → upgrade for *that exact version*.
 
-- **Template:** `skillctl-publisher-runbook.template.html` — single source of
+- **Template:** `skillctl-publisher-runbook.template.html`: single source of
   truth. Versioned tokens use the `__SKILLCTL_VERSION__` placeholder.
-- **Generator:** `tools/skillctl-runbook.sh <tag> [out.html]` — stamps the
+- **Generator:** `tools/skillctl-runbook.sh <tag> [out.html]`: stamps the
   version, then gates on (a) no unresolved placeholder and (b) no external
   resource (CSP-safe / offline).
 - **Wired into release prep:** `tools/skillctl-release.sh <tag>` calls the
   generator automatically, dropping `skillctl-publisher-runbook.html` into
   `release/<tag>/` alongside the binaries. So cutting a release always produces
-  the matching runbook — no manual step.
+  the matching runbook: no manual step.
 
 ### Manual use
 ```sh

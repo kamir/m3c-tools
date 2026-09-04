@@ -58,7 +58,7 @@ func main() {
 
 	cpu := os.Getenv("EVAL_CPU")
 	if cpu == "" {
-		cpu = "(unrecorded — set EVAL_CPU to stamp the CPU model)"
+		cpu = "(unrecorded: set EVAL_CPU to stamp the CPU model)"
 	}
 	b.WriteString("## Run environment\n\n")
 	fmt.Fprintf(&b, "- CPU: %s\n", cpu)
@@ -77,8 +77,8 @@ func main() {
 		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s |\n",
 			md(r[0]), md(r[1]), md(r[2]), md(r[3]), md(r[4]), md(r[5]))
 	}
-	b.WriteString("\nE6 is recorded as `N/A — deferred (gated P3-P2)`: the OIDC/JWKS binding ")
-	b.WriteString("(SPEC-0277 P2) is not built, so there is no path to measure — no number is fabricated.\n")
+	b.WriteString("\nE6 is recorded as `N/A, deferred (gated P3-P2)`: the OIDC/JWKS binding ")
+	b.WriteString("(SPEC-0277 P2) is not built, so there is no path to measure, no number is fabricated.\n")
 
 	if err := os.WriteFile(mdPath, []byte(b.String()), 0o644); err != nil {
 		fmt.Fprintf(os.Stderr, "results-md: write %s: %v\n", mdPath, err)

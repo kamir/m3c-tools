@@ -1,9 +1,9 @@
-<!-- skillctl-demo Kata board — self-contained, offline (CSP-safe). One card per
+<!-- skillctl-demo Kata board: self-contained, offline (CSP-safe). One card per
      Kata: rot/gelb/grün state + N/required chip + next-step hint. Reflects the
      local progress store; live-updates on each real skillctl beat over SSE. -->
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>skillctl-demo — Kata board</title>
+<title>skillctl-demo: Kata board</title>
 <style>
   :root {
     --bg: #0d1117; --panel: #161b22; --border: #30363d; --fg: #e6edf3;
@@ -98,7 +98,7 @@
         '</div>' +
         '<div class="row" style="margin-top:6px">' +
           '<span class="state ' + esc(r.state) + '">' + esc(stateWord) + '</span>' +
-          (r.rusted ? '<span class="rust" style="font-size:11px">rusting — refresh it</span>' : '') +
+          (r.rusted ? '<span class="rust" style="font-size:11px">rusting: refresh it</span>' : '') +
         '</div>' +
         '<div class="why">' + esc(r.why) + '</div>' +
         '<div class="bar"><span style="width:' + pct + '%"></span></div>' +

@@ -111,7 +111,7 @@ func TestSTH_CrossDomain_SignatureReuseRefused(t *testing.T) {
 
 	// 1) Take a real STH and try to pass its signed bytes off as an
 	//    attestation: the attestation canonical message starts with
-	//    "attestation\n", the STH with "skillctl-sth-v1\n" — they can
+	//    "attestation\n", the STH with "skillctl-sth-v1\n". They can
 	//    never be equal, so an STH signature can't satisfy an attestation
 	//    verify and vice versa. We assert the messages are byte-distinct
 	//    AND that signatures don't cross-verify.
@@ -138,7 +138,7 @@ func TestSTH_CrossDomain_SignatureReuseRefused(t *testing.T) {
 
 	// The signed-byte spaces must be disjoint (different domain prefix).
 	if string(sthMsg) == string(attMsg) {
-		t.Fatal("STH and attestation canonical messages collided — domain separation broken")
+		t.Fatal("STH and attestation canonical messages collided: domain separation broken")
 	}
 
 	// Sign the ATTESTATION with this key, then try to use that signature
@@ -153,7 +153,7 @@ func TestSTH_CrossDomain_SignatureReuseRefused(t *testing.T) {
 	// attestation → ed25519.Verify over attMsg must fail.
 	sthSig := ed25519.Sign(priv, sthMsg)
 	if ed25519.Verify(pub, attMsg, sthSig) {
-		t.Fatal("STH signature verified as an attestation — cross-domain reuse possible")
+		t.Fatal("STH signature verified as an attestation: cross-domain reuse possible")
 	}
 }
 

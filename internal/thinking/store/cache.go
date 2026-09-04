@@ -1,9 +1,9 @@
-// cache.go — consumer-side read cache.
+// cache.go: consumer-side read cache.
 //
 // The Thinking Engine publishes T/R/I/A onto dedicated topics.
 // Listing endpoints (/v1/thoughts, /v1/reflections, /v1/insights,
 // /v1/artifacts) and the Trace walker (Week 3) need fast,
-// indexed access — not a full Kafka log replay.
+// indexed access: not a full Kafka log replay.
 //
 // This cache subscribes to the four topics, maintains a capped
 // in-memory windowed index, and mirrors to SQLite (store.msg_cache)
@@ -12,7 +12,7 @@
 //
 // Design notes:
 //   - Ordering: we key on id, so late messages overwrite earlier
-//     (shouldn't happen in practice — Kafka is append-only — but
+//     (shouldn't happen in practice, Kafka is append-only, but
 //     if it does the later write wins).
 //   - Validation is the ValidatingBus's job. This cache trusts
 //     payloads because it subscribed via the validated bus.
@@ -198,7 +198,7 @@ func (c *Cache) ingest(layer string, m tkafka.Message, parentFn func(map[string]
 
 // List returns raw payloads for the given layer, newest first,
 // optionally filtered by timestamp-since and/or parentID. Payloads
-// are the JSON wire-format — the caller decodes into schema types.
+// are the JSON wire-format: the caller decodes into schema types.
 func (c *Cache) List(layer string, since time.Time, parentID string, limit int) [][]byte {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -251,7 +251,7 @@ func (c *Cache) Get(layer, id string) []byte {
 		}
 	}
 	c.mu.RUnlock()
-	// Miss — try SQLite. ListMsgCache with a parentID filter won't
+	// Miss: try SQLite. ListMsgCache with a parentID filter won't
 	// help here; fetch the single row via a targeted query.
 	if c.store == nil {
 		return nil

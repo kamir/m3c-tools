@@ -7,14 +7,14 @@
 //
 // This package is a LEAF by design: it imports nothing from
 // pkg/skillctl/registry or any backend package, so those packages can implement
-// the interface without an import cycle — the database/sql driver pattern.
+// the interface without an import cycle: the database/sql driver pattern.
 // Backends Register themselves from init(); callers reach them only via Open.
 //
 // The trust core is deliberately NOT part of this interface. A Backend's only
 // trust job is to carry the same signed event bytes and the same .skb bytes,
 // and to make them available for the (unchanged) SPEC-0188 §7 verifier. Trust
 // lives in the detached Ed25519 signature chain + the pinned trust-roots, never
-// in the backend — verify.Verify recomputes the digest and re-checks every
+// in the backend: verify.Verify recomputes the digest and re-checks every
 // signature against pinned keys, so "backends are untrusted-but-available."
 package artifact
 
@@ -28,13 +28,13 @@ import (
 // er1_pull.go); the git/OCI backends implement the same shape natively.
 type Backend interface {
 	// Describe returns the backend's identity + declared capability set.
-	// Callers read this to know which flags are legal and how to degrade —
+	// Callers read this to know which flags are legal and how to degrade,
 	// never by probing methods and catching errors.
 	Describe() Descriptor
 
 	// Publish emits ONE lifecycle event. For KindAdmit the .skb Blob is
 	// required (it is the artifact); other kinds carry only the signed
-	// envelope. KindAdmit MUST be idempotent on Meta.Digest — re-admitting the
+	// envelope. KindAdmit MUST be idempotent on Meta.Digest. Re-admitting the
 	// same digest is a safe no-op that sets PublishResult.AlreadyExists. The
 	// governance events (KindAttest/KindRevoke/KindInstall) are APPEND-ONLY by
 	// design (the event history is the record): a repeat appends another signed
@@ -49,12 +49,12 @@ type Backend interface {
 
 	// Resolve maps a human handle (name, name@version) or a digest pin
 	// (sha256:<hex>) to a concrete, digest-pinned ArtifactRef. "Latest"
-	// resolution follows Describe().Capabilities.LatestPolicy — never a
+	// resolution follows Describe().Capabilities.LatestPolicy: never a
 	// hard-coded guess.
 	Resolve(ctx context.Context, q RefQuery) (*ArtifactRef, error)
 
 	// Fetch returns the raw .skb bytes for a digest-pinned ref. The caller
-	// recomputes sha256 and refuses on mismatch — that recomputation, not the
+	// recomputes sha256 and refuses on mismatch: that recomputation, not the
 	// backend, is the integrity check.
 	Fetch(ctx context.Context, ref ArtifactRef) ([]byte, error)
 

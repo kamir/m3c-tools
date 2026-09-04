@@ -139,7 +139,7 @@ func TestParseFilenameIntegrationWithBuildImportTags(t *testing.T) {
 	tags := impression.BuildImportTags(info.Tags)
 	parsed := impression.ParseTagLine(tags)
 
-	// Should contain: audio-import, braindump, standup (no bare "import" — see BUG-0004)
+	// Should contain: audio-import, braindump, standup (no bare "import": see BUG-0004)
 	if len(parsed) < 3 {
 		t.Errorf("Expected at least 3 tags, got %d: %v", len(parsed), parsed)
 	}

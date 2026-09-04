@@ -444,7 +444,7 @@ func TestLegacyFallbackWhenNoProfilesDir(t *testing.T) {
 	// ActiveProfile should return an error, signaling the caller
 	// to fall back to legacy .env loading.
 	dir := t.TempDir()
-	// Do NOT call EnsureDefaults — simulate pre-profile installation.
+	// Do NOT call EnsureDefaults: simulate pre-profile installation.
 	pm := &ProfileManager{BaseDir: dir}
 
 	_, err := pm.ActiveProfile()

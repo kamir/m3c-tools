@@ -3,7 +3,7 @@ layout: default
 title: Bug & feature tracking
 ---
 
-# Bug & feature tracking — the two planes
+# Bug & feature tracking: the two planes
 
 A bug or a feature request lives in **two places**, and `scripts/bugtracker.sh` keeps them
 in step.
@@ -23,7 +23,7 @@ Two kinds of item, differing on exactly one word:
 | `BUG-NNNN` | `fixed` | `bug` |
 | `FR-NNNN` | `implemented` | `enhancement` |
 
-Ids resolve by kind — `BUG-0213`, `FR-0096`, `fr-96`, or a filename. A **bare number means
+Ids resolve by kind: `BUG-0213`, `FR-0096`, `fr-96`, or a filename. A **bare number means
 a BUG**, so `96` can never silently resolve to the wrong item.
 
 ---
@@ -35,7 +35,7 @@ export M3C_MAINTENANCE_DIR="$HOME/path/to/your-maintenance-repo"
 ```
 
 That is the only variable you need. The target repository for an issue is **not** taken
-from the environment or from your working directory — see
+from the environment or from your working directory. See
 [Which repository an issue goes to](#which-repository-an-issue-goes-to).
 
 ---
@@ -50,11 +50,11 @@ humans.
 | `- **Status:**` | `open` · `in-progress` · `fixed` (BUG) / `implemented` (FR) · `wontfix` · `duplicate` |
 | `- **Public:**` | `yes` opts this item into a public issue. Anything else keeps it private. |
 | `- **Repo:**` | `owner/repo` the issue belongs in. Declared here because it is reviewed here. |
-| `- **Spec:**` | Which SPEC this serves. `none — <reason>` is a valid answer; a missing line is not. |
+| `- **Spec:**` | Which SPEC this serves. `none: <reason>` is a valid answer; a missing line is not. |
 | `- **Issue:**` | Written back by `open`: `owner/repo#42`. After that it is the authoritative target. |
 
-Reading tolerates the corpus as it stands — `**Status:** Fixed (2026-03-21)` reads as
-`fixed` — while writing is always canonical, so `sync` has something to parse.
+Reading tolerates the corpus as it stands, `**Status:** Fixed (2026-03-21)` reads as
+`fixed`, while writing is always canonical, so `sync` has something to parse.
 
 ---
 
@@ -67,6 +67,7 @@ scripts/bugtracker.sh <command> [args]
 | Command | Purpose |
 |---------|---------|
 | `next-id [BUG\|FR] [--no-fetch]` | Next free id of that kind (default `BUG`). Use it instead of counting files — see [Allocating an id](#allocating-an-id). |
+| `claim <ID>` | Record the id in the shared slot table. **This** is what allocates it. |
 | `path <ID>` | Resolve the analysis file. |
 | `status <ID> [STATUS]` | Read, or set, the canonical status. |
 | `issue <ID>` | The linked issue reference, or empty for a private-only item. |
@@ -87,7 +88,7 @@ error.
 already be claimed:
 
 1. a file in the local `bug-reports/`
-2. a file on **any** local or remote branch — someone else's unmerged work
+2. a file on **any** local or remote branch: someone else's unmerged work
 3. a **branch name** like `docs/fr-0096-…`
 
 The third matters more than it looks: a branch is usually named before its file
@@ -96,18 +97,35 @@ from outside your working tree, `next-id` says so on stderr rather than silently
 handing you a number someone else is already using.
 
 ```
-next-id: highest FR claim is FR-0005 in branch docs/fr-0005-… — not in your working tree
+next-id: highest FR claim is FR-0005 in branch docs/fr-0005-…, not in your working tree
 FR-0006
 ```
 
 `--no-fetch` skips the network; the answer is then only as fresh as your last
 pull.
 
-> **This is mitigation, not a fix.** Allocation is still a *read*: two sessions
-> asking in the same moment still get the same number, because nothing records
-> that the first one took it. The durable answer is to make allocation a write —
-> the slot table that already governs SPEC ids does exactly that, and extending
-> it to FR and BUG is tracked separately.
+### Claiming it
+
+`next-id` only **reads**. Two sessions asking in the same moment still get the
+same number, because reading a ceiling records nothing — that is exactly how one
+id was handed out twice. The write is a separate step:
+
+```bash
+scripts/bugtracker.sh next-id FR          # FR-0105  (a ceiling, not a claim)
+# … write the report file …
+scripts/bugtracker.sh claim FR-0105       # now it is allocated
+```
+
+`claim` appends the id and its **filename** to the shared slot table named by
+`$M3C_SLOT_TABLE`, and refuses when the number already belongs to a different
+file — naming who holds it, and that the later one yields.
+
+Two honest limits:
+
+- It is a separate verb because a slot row carries the **filename**, which does
+  not exist at `next-id` time. Claiming earlier could only reserve a placeholder.
+- The claim is durable only once the slot table is **committed**. Until then it
+  lives in one working copy — the narrower carrier the rule warns about.
 
 ---
 
@@ -121,7 +139,7 @@ Write `$M3C_MAINTENANCE_DIR/bug-reports/BUG-0213-<slug>.md` with the five fields
 the analysis. If it stays private, you are done.
 
 For a public bug, write the redacted body next to it as
-`BUG-0213-<slug>.public.md` — **line 1 is the issue title**, the rest is the body — then:
+`BUG-0213-<slug>.public.md` (**line 1 is the issue title**, the rest is the body) then:
 
 ```bash
 scripts/bugtracker.sh open BUG-0213
@@ -138,7 +156,7 @@ scripts/bugtracker.sh next-id FR                 # -> FR-0096
 Same shape, with two differences worth knowing:
 
 - A proposal is rarely **one** request. Split it where the asks could be accepted,
-  rejected, scheduled or built independently — and keep the author's own numbering out of
+  rejected, scheduled or built independently, and keep the author's own numbering out of
   this repository's id space; record it in the body instead.
 - Several FRs from one proposal usually share **one** contract. Prefer a single SPEC with a
   section per area over one SPEC per FR: a contract scattered across seven documents has
@@ -149,7 +167,7 @@ The `/feature-request` skill runs that flow.
 ## Closing
 
 ```bash
-scripts/bugtracker.sh close BUG-0213 --comment "Fixed in v2.11.1 — see BUG-0213."
+scripts/bugtracker.sh close BUG-0213 --comment "Fixed in v2.11.1: see BUG-0213."
 scripts/bugtracker.sh sync  BUG-0213
 ```
 
@@ -162,18 +180,18 @@ issue as *not planned*. `sync` exits `0` when the file and the issue tell the sa
 ## The refusals, and why they exist
 
 A public issue is indexed the moment it is created and cannot be un-published. Every guard
-below therefore fails **closed** — it stops rather than guesses.
+below therefore fails **closed**, it stops rather than guesses.
 
 | `open` refuses when | Fix it by |
 |---------------------|-----------|
 | the item does not declare `- **Public:** yes` | deciding the plane deliberately, per item |
 | there is no `.public.md` body | writing the redacted restatement |
-| the body carries private-plane content | rewriting the body — **never** by working around the refusal |
+| the body carries private-plane content | rewriting the body: **never** by working around the refusal |
 | no repository is named | adding the `- **Repo:**` line |
 
 | `close` refuses when | Fix it by |
 |----------------------|-----------|
-| the item has no `- **Spec:**` line and is being closed as done | answering the question — including `none — <reason>` |
+| the item has no `- **Spec:**` line and is being closed as done | answering the question, including `none, <reason>` |
 | a `--comment` carries private-plane content | rewriting the comment |
 
 The Spec rule is the mechanical form of a working rule: **solving an issue means serving
@@ -194,10 +212,10 @@ sense with the internal document open, it is not finished.
 | reproduction, affected version | internal endpoints and API paths |
 | the user-visible command and its output | ER1 context-ids, secret header names |
 | acceptance criteria | customer or tenant names |
-| ID-only references (`BUG-0213`, `SPEC-0401`) | SPEC *paths* — the id alone is fine |
+| ID-only references (`BUG-0213`, `SPEC-0401`) | SPEC *paths*: the id alone is fine |
 
 The patterns are not a second opinion: they live in `tools/leak-patterns.txt` and are read
-by **both** gates —
+by **both** gates
 
 - `tools/boundary-gate.sh`, the **commit** gate that runs in CI over tracked files, and
 - `scripts/bugtracker.sh`, the **post** gate over issue bodies and comments.
@@ -220,16 +238,16 @@ printf 'Observed: the last frame is dropped. See BUG-0213.\n' \
 The target is a property of the **item**, never of your working directory. Resolution runs
 most-authoritative-first:
 
-1. the recorded `- **Issue:** owner/repo#N` — after creation, this *is* the fact
-2. the declared `- **Repo:** owner/repo` — before creation, reviewed in the file
-3. `$M3C_BUG_REPO` — a stated override for a one-off
+1. the recorded `- **Issue:** owner/repo#N`: after creation, this *is* the fact
+2. the declared `- **Repo:** owner/repo`: before creation, reviewed in the file
+3. `$M3C_BUG_REPO`: a stated override for a one-off
 4. otherwise it **refuses**, naming the line to add
 
 The file outranks the environment on purpose: an item that has declared its target must
 not be redirected elsewhere by a stray variable.
 
 > **Why there is no fallback to `git remote origin`.** `bug-reports/` holds items for
-> several systems, so there is no single correct default to infer — and a default that
+> several systems, so there is no single correct default to infer, and a default that
 > varies with where you happen to stand is exactly how an issue lands in the wrong
 > repository, including someone else's public one.
 
@@ -253,5 +271,5 @@ guards above are: publishing cannot be undone.
 
 ## See also
 
-- [Manual: m3c-tools](manual-m3c-tools.md) — the capture toolkit, command by command
-- [Manual: skillctl](manual-skillctl.md) — the agent-skill trust lifecycle
+- [Manual: m3c-tools](manual-m3c-tools.md): the capture toolkit, command by command
+- [Manual: skillctl](manual-skillctl.md): the agent-skill trust lifecycle

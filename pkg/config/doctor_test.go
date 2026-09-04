@@ -182,7 +182,7 @@ func TestValidateAll_DuplicateKey(t *testing.T) {
 
 // TestValidateAll_ReproducesFieldBug locks in the *current* failure mode the
 // user reported: active profile with placeholder key + missing context_id.
-// If someone "fixes" the profile in the future, this test will pass — but if
+// If someone "fixes" the profile in the future, this test will pass, but if
 // someone re-introduces the bug shape it will fire.
 func TestValidateProfile_FieldBugShape(t *testing.T) {
 	// once-test.env shape from ~/.m3c-tools/profiles

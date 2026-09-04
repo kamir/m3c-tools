@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# release.sh — Automated version bumping, tagging, and GitHub release creation
+# release.sh: Automated version bumping, tagging, and GitHub release creation
 # Usage: ./scripts/release.sh [patch|minor|major]
 set -euo pipefail
 

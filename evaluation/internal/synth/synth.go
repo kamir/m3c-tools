@@ -37,7 +37,7 @@ import (
 const RegistryURL = "https://registry.eval.example/api/skills"
 
 // seededReader is a deterministic byte stream for ed25519 key derivation. It is
-// a counter-mode SHA-256 KDF over a 64-bit seed: never use for production keys —
+// a counter-mode SHA-256 KDF over a 64-bit seed: never use for production keys:
 // it exists only so the benchmark population is reproducible from a seed.
 type seededReader struct {
 	seed    uint64
@@ -126,7 +126,7 @@ func buildSKB(i int) []byte {
 //
 //   - The registry keypair is derived from seed (one per population).
 //   - Each bundle's author keypair is derived from seed+1+i (one per bundle), so
-//     every bundle has a distinct pinned author — the realistic case where the
+//     every bundle has a distinct pinned author: the realistic case where the
 //     trust root pins many authors.
 //   - All n authors are pinned in the returned TrustRoot (pinned mode → offline).
 //

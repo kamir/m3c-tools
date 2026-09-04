@@ -25,7 +25,7 @@ func findFFmpeg() (string, error) {
 			return path, nil
 		}
 	}
-	return "", fmt.Errorf("ffmpeg not found — install with: brew install ffmpeg")
+	return "", fmt.Errorf("ffmpeg not found, install with: brew install ffmpeg")
 }
 
 // errUnsafeConcatPath is returned when a recording path cannot be safely
@@ -37,7 +37,7 @@ var errUnsafeConcatPath = errors.New("unsafe path for ffmpeg concat list")
 // "file '...'" directive. The ffmpeg concat demuxer is LINE-oriented: a newline
 // (or carriage return) terminates the directive regardless of quoting, so a
 // path carrying \n/\r could split the token and inject a second, attacker-chosen
-// "file '/etc/passwd'" line — and we run with -safe 0, which disables ffmpeg's
+// "file '/etc/passwd'" line, and we run with -safe 0, which disables ffmpeg's
 // own path guard. Single-quote escaping ('\'') alone does NOT stop this. We
 // therefore reject any path containing a newline, carriage return, or NUL (none
 // of which can appear in a legitimate Pocket recording path) and only then apply
@@ -110,7 +110,7 @@ func MergeGroup(group RecordingGroup, outputDir string) (string, error) {
 }
 
 // BuildFileList generates the ffmpeg concat file list content (for testing).
-// Unsafe paths (containing newline/CR/NUL) are silently dropped — callers that
+// Unsafe paths (containing newline/CR/NUL) are silently dropped. Callers that
 // need to detect rejection should use BuildFileListChecked. This keeps the
 // generated list free of injected directives even if used outside MergeGroup.
 func BuildFileList(recordings []Recording) string {

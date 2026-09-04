@@ -17,7 +17,7 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustcore"
 )
 
-// ociStore builds an offline OCI layout in t.TempDir() — a real content store
+// ociStore builds an offline OCI layout in t.TempDir(): a real content store
 // (oci.Store implements the same push/tag/referrer protocol as a live registry),
 // so the whole suite runs with no network and no `docker`/registry:2.
 func ociStore(t *testing.T) *orasoci.Store {
@@ -29,7 +29,7 @@ func ociStore(t *testing.T) *orasoci.Store {
 	return s
 }
 
-// skbDig is the REAL sha256 of the deterministic test blob — because the OCI
+// skbDig is the REAL sha256 of the deterministic test blob, because the OCI
 // backend stores the .skb as a blob whose descriptor digest IS our identity, a
 // test must advertise the digest the bytes actually hash to (production invariant:
 // Meta.Digest == ComputeBundleDigest(Blob)).
@@ -43,7 +43,7 @@ func admitEvent(name, ver, dig string) artifact.PublishRequest {
 		Kind: artifact.KindAdmit,
 		Event: map[string]any{
 			// The SIGNED discriminator (admitted_by_identity) is what Events() reads to
-			// classify the kind — never the OCI annotation. bundle_digest is the anchor.
+			// classify the kind, never the OCI annotation. bundle_digest is the anchor.
 			"kind": "admitted", "name": name, "version": ver, "bundle_digest": dig,
 			"admitted_by_identity": "id:test", "author_intent": "green",
 			"schema_version": "1.0.0",
@@ -53,12 +53,12 @@ func admitEvent(name, ver, dig string) artifact.PublishRequest {
 	}
 }
 
-// dig makes a well-formed but content-UNRELATED digest — for negative tests
+// dig makes a well-formed but content-UNRELATED digest, for negative tests
 // (validation, digest-mismatch) where the blob deliberately does not match.
 func dig(seed byte) string { return "sha256:" + strings.Repeat(string(rune('a'+seed)), 64) }
 
 // TestOCIBackendConformance runs the shared SPEC-0356 D8 conformance suite against
-// the OCI backend — the SAME assertions that gate ER1 and git. Enterprise/container
+// the OCI backend: the SAME assertions that gate ER1 and git. Enterprise/container
 // parity is proven here, offline.
 func TestOCIBackendConformance(t *testing.T) {
 	conformance.Run(t, newOCIBackend(ociStore(t), "oci://test.local/skills"))
@@ -101,7 +101,7 @@ func TestOCIBackendLifecycle(t *testing.T) {
 		t.Fatalf("Resolve pdf = %+v / %v, want 1.2.0/%s", ref, err, digPdf2)
 	}
 
-	// Fetch by ref — the descriptor digest IS our sha256, so O(1) content-address.
+	// Fetch by ref: the descriptor digest IS our sha256, so O(1) content-address.
 	blob, err := b.Fetch(ctx, *ref)
 	if err != nil || string(blob) != "SKB:pdf@1.2.0" {
 		t.Fatalf("Fetch = %q / %v", blob, err)
@@ -171,7 +171,7 @@ func TestOCIEventsAsReferrers(t *testing.T) {
 	}
 }
 
-// TestOCIValidationRejectsMalice — name/version/digest become tags + annotations,
+// TestOCIValidationRejectsMalice: name/version/digest become tags + annotations,
 // so a hostile value must be refused before any push (SEC-M9).
 func TestOCIValidationRejectsMalice(t *testing.T) {
 	ctx := context.Background()
@@ -194,7 +194,7 @@ func TestOCIValidationRejectsMalice(t *testing.T) {
 	}
 }
 
-// TestOCIDigestMismatchRejected — the .skb pushed as an OCI blob must hash to the
+// TestOCIDigestMismatchRejected: the .skb pushed as an OCI blob must hash to the
 // digest we advertise; a lying Meta.Digest is caught before the manifest is tagged.
 func TestOCIDigestMismatchRejected(t *testing.T) {
 	ctx := context.Background()
@@ -299,7 +299,7 @@ func TestOCIAnnotationRelabelDefeated(t *testing.T) {
 	}
 }
 
-// TestOCIResolveFullyRevoked — BUG-1: when every version is revoked, Resolve errors
+// TestOCIResolveFullyRevoked. BUG-1: when every version is revoked, Resolve errors
 // rather than returning a revoked bundle as "latest".
 func TestOCIResolveFullyRevoked(t *testing.T) {
 	ctx := context.Background()
@@ -323,7 +323,7 @@ func TestOCIResolveFullyRevoked(t *testing.T) {
 	}
 }
 
-// TestOCIEventsSince — the --since filter (previously claimed but untested).
+// TestOCIEventsSince: the --since filter (previously claimed but untested).
 func TestOCIEventsSince(t *testing.T) {
 	ctx := context.Background()
 	b := newOCIBackend(ociStore(t), "oci://test.local/skills")
@@ -355,7 +355,7 @@ func TestOCIEventsSince(t *testing.T) {
 	}
 }
 
-// TestOCIInstallRequiresPriorAdmit — BUG-2 documented semantics: because an OCI
+// TestOCIInstallRequiresPriorAdmit. BUG-2 documented semantics: because an OCI
 // event is a REFERRER (it needs a subject manifest), recording a governance event
 // for a digest never admitted on THIS target is refused. Cross-target install-event
 // recording (federation "install from A, record on B") is a tracked follow-up.
@@ -372,7 +372,7 @@ func TestOCIInstallRequiresPriorAdmit(t *testing.T) {
 	}
 }
 
-// TestOCIResolveByDigestFullRef — BUG-4: digest-only Resolve returns the full ref.
+// TestOCIResolveByDigestFullRef. BUG-4: digest-only Resolve returns the full ref.
 func TestOCIResolveByDigestFullRef(t *testing.T) {
 	ctx := context.Background()
 	b := newOCIBackend(ociStore(t), "oci://test.local/skills")
@@ -390,7 +390,7 @@ func TestOCIResolveByDigestFullRef(t *testing.T) {
 	}
 }
 
-// TestOCIPublishTagOccupied — MED-3: a second admit of the same name@version with
+// TestOCIPublishTagOccupied. MED-3: a second admit of the same name@version with
 // DIFFERENT content is refused (not a silent no-op that drops the real bundle).
 func TestOCIPublishTagOccupied(t *testing.T) {
 	ctx := context.Background()

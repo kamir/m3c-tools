@@ -14,9 +14,9 @@ import (
 // SPEC-0188 §11 numeric exit codes. The mapping is deliberately the SAME family
 // the bundle verifier uses (so `agentid verify` mirrors `verify --bundle`):
 //
-//	ErrOwnerSigInvalid     → exit 11 (ExitAuthorSigInvalid) — owner sig failed
+//	ErrOwnerSigInvalid     → exit 11 (ExitAuthorSigInvalid), owner sig failed
 //	                          OR owner identity not pinned (AC-P0: exit 11).
-//	ErrApproverFloor       → exit 20 (ExitSelfAttested theme) — the
+//	ErrApproverFloor       → exit 20 (ExitSelfAttested theme), the
 //	                          require_agent_approver floor is unmet (no approver,
 //	                          or approver == owner). Reuses the reviewer≠author
 //	                          family so the "two-person admit" gate reads the same.
@@ -24,38 +24,38 @@ import (
 //	                          operator can tell "expired" from "bad signature".
 //	ErrRevoked             → exit 17 (the SPEC-0198 revoke theme; same as a
 //	                          revoked bundle).
-//	ErrNotYetValid         → ErrExpired's sibling (created_at in the future) —
+//	ErrNotYetValid         → ErrExpired's sibling (created_at in the future),
 //	                          also mapped to ExitAgentIDExpired (a clock/validity
 //	                          problem, not a signature problem).
 var (
-	// ErrOwnerSigInvalid — the owner ed25519 signature did not verify against
+	// ErrOwnerSigInvalid, the owner ed25519 signature did not verify against
 	// the PINNED owner key, OR the owner identity is not pinned at all. Both are
 	// "this mandate is not authorized by a key I trust" → exit 11.
 	ErrOwnerSigInvalid = errors.New("agentid: owner signature invalid or owner not pinned")
 
-	// ErrApproverFloor — a require_agent_approver policy floor is set but the
+	// ErrApproverFloor: a require_agent_approver policy floor is set but the
 	// AgentID lacks a valid, independent (approver != owner) approver signature.
 	ErrApproverFloor = errors.New("agentid: approver floor unmet (require owner+approver, approver != owner, both pinned)")
 
-	// ErrExpired — not_after is in the past (or created_at is in the future). A
+	// ErrExpired: not_after is in the past (or created_at is in the future). A
 	// DISTINCT error from a signature failure (AC-P0).
 	ErrExpired = errors.New("agentid: expired (not_after is in the past)")
 
-	// ErrNotYetValid — created_at is in the future relative to now. Same code
+	// ErrNotYetValid: created_at is in the future relative to now. Same code
 	// family as ErrExpired (a validity-window problem).
 	ErrNotYetValid = errors.New("agentid: not yet valid (created_at is in the future)")
 
-	// ErrRevoked — the agent id is present in the signed revocation list.
+	// ErrRevoked: the agent id is present in the signed revocation list.
 	ErrRevoked = errors.New("agentid: revoked")
 
-	// ErrMalformed — the envelope is structurally broken (missing required
+	// ErrMalformed: the envelope is structurally broken (missing required
 	// signature row, malformed base64, etc.).
 	ErrMalformed = errors.New("agentid: malformed envelope")
 )
 
 // PinnedKey is one pinned principal: an identity id bound to a raw ed25519
 // pubkey. The CLI adapts verify.TrustRoot's Authors/Reviewers lists into these
-// (the SAME pins that admit bundles) — this package never reaches for a registry
+// (the SAME pins that admit bundles): this package never reaches for a registry
 // or a network, so the owner key is pinned, not fetched (SPEC-0277 §3 reuse map).
 type PinnedKey struct {
 	// ID is the principal identity id, e.g. "id:kamir@m3c". Matched case-
@@ -68,7 +68,7 @@ type PinnedKey struct {
 
 // PinnedKeys resolves a principal id to its pinned ed25519 key for a given role.
 // FindOwner / FindApprover GENERALIZE the verified role from `author` (the only
-// role the bundle verifier knew) to the AgentID roles — without forking the
+// role the bundle verifier knew) to the AgentID roles, without forking the
 // verifier: the CLI's adapter simply maps `owner` → the pinned authors list and
 // `approver` → the pinned reviewers list, reusing FindAuthor/FindReviewer.
 type PinnedKeys interface {
@@ -139,14 +139,14 @@ type Result struct {
 //     ErrOwnerSigInvalid (exit 11).
 //  3. approver floor (when RequireApprover): an approver signature must exist,
 //     verify against the PINNED approver key, and approver != owner (normalized).
-//     The unsigned `identity_id` is NEVER trusted to satisfy the floor — the
+//     The unsigned `identity_id` is NEVER trusted to satisfy the floor. The
 //     approver key must be pinned AND verify, exactly like the SPEC-0246/0281
 //     reviewer≠author machinery. Unmet → ErrApproverFloor (exit 20).
 //  4. validity window: created_at not in the future, not_after not in the past.
 //     A clock failure → ErrExpired / ErrNotYetValid (distinct code).
 //  5. revocation: id present in RevokedAgentIDs → ErrRevoked (exit 17).
 //
-// Steps 2/3 reuse stdlib ed25519 + the pinned-identity lookup — NO new crypto,
+// Steps 2/3 reuse stdlib ed25519 + the pinned-identity lookup: NO new crypto,
 // NO network. The role is parameterized (owner / approver) so the same verifier
 // covers both without forking.
 func Verify(a *AgentID, opts VerifyOpts) (*Result, error) {
@@ -157,7 +157,7 @@ func Verify(a *AgentID, opts VerifyOpts) (*Result, error) {
 		return nil, errors.New("agentid: Verify requires pinned keys")
 	}
 
-	// Step 1 — structure. Exactly one owner row; payload id/owner present.
+	// Step 1: structure. Exactly one owner row; payload id/owner present.
 	canon, err := CanonicalAgentIDBytes(a.Payload)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
@@ -167,14 +167,14 @@ func Verify(a *AgentID, opts VerifyOpts) (*Result, error) {
 		return nil, fmt.Errorf("%w: want exactly one owner signature row", ErrOwnerSigInvalid)
 	}
 	if !strings.EqualFold(strings.TrimSpace(ownerRow.IdentityID), strings.TrimSpace(a.Payload.Owner)) {
-		// The owner SIGNATURE row's identity must be the payload owner — otherwise
+		// The owner SIGNATURE row's identity must be the payload owner: otherwise
 		// a valid signature by some other pinned principal could masquerade as the
 		// owner's authorization.
 		return nil, fmt.Errorf("%w: owner signature identity %q != payload owner %q",
 			ErrOwnerSigInvalid, ownerRow.IdentityID, a.Payload.Owner)
 	}
 
-	// Step 2 — owner signature vs PINNED owner key (offline, no fetch).
+	// Step 2: owner signature vs PINNED owner key (offline, no fetch).
 	ownerPin := opts.Pins.FindOwner(ownerRow.IdentityID)
 	if ownerPin == nil {
 		return nil, fmt.Errorf("%w: owner %q is not pinned", ErrOwnerSigInvalid, ownerRow.IdentityID)
@@ -189,7 +189,7 @@ func Verify(a *AgentID, opts VerifyOpts) (*Result, error) {
 		Grant:   a.Payload.Grant,
 	}
 
-	// Step 3 — approver. Verify any present approver signature; ENFORCE the floor
+	// Step 3: approver. Verify any present approver signature; ENFORCE the floor
 	// when RequireApprover. Independence (approver != owner) is established
 	// CRYPTOGRAPHICALLY: the approver key is pinned to its id AND verifies, so a
 	// forged approver `identity_id` with no pinned key / valid signature cannot
@@ -215,7 +215,7 @@ func Verify(a *AgentID, opts VerifyOpts) (*Result, error) {
 		}
 	}
 
-	// Step 4 — validity window.
+	// Step 4: validity window.
 	now := opts.Now
 	if now.IsZero() {
 		now = nowFn()
@@ -239,7 +239,7 @@ func Verify(a *AgentID, opts VerifyOpts) (*Result, error) {
 		}
 	}
 
-	// Step 5 — revocation (offline).
+	// Step 5: revocation (offline).
 	if opts.RevokedAgentIDs != nil {
 		if _, bad := opts.RevokedAgentIDs[NormalizeID(a.Payload.ID)]; bad {
 			return nil, fmt.Errorf("%w: %s is in the signed revocation list", ErrRevoked, a.Payload.ID)

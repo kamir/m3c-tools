@@ -13,7 +13,7 @@ import (
 // Match wins (it may consult Pattern itself).
 //
 // Pattern-based rules run against the NORMALIZED body (Unicode-folded,
-// zero-width-stripped — see normalize.go) and their match spans are mapped back
+// zero-width-stripped. See normalize.go) and their match spans are mapped back
 // to ORIGINAL byte offsets before becoming Findings, so an injection hidden
 // behind fullwidth Latin or soft hyphens is caught yet the reported span still
 // points at the bytes the user can see. Custom Match functions receive the full
@@ -101,7 +101,7 @@ type byteRange struct{ Start, End int }
 // such line.
 //
 // SECURITY (SPEC-0246 §4, evasion #2): an UNCLOSED fence is NOT treated as a
-// fence — otherwise a single trailing "```" would suppress all content to EOF.
+// fence. Otherwise a single trailing "```" would suppress all content to EOF.
 // Only properly closed fences produce a range, so trailing injection prose after
 // a dangling fence is still scanned.
 func fencedCodeRanges(body string) []byteRange {
@@ -149,7 +149,7 @@ func fencedCodeRanges(body string) []byteRange {
 // Downgrading instead means: a security-prose skill that *quotes* attacks
 // (benign) scores yellow (a "needs rationale" outcome, not an install-blocking
 // red), while a real injection smuggled in a fence still surfaces for a human.
-// Exfiltration / tool / policy / obfuscation findings are NOT touched — code
+// Exfiltration / tool / policy / obfuscation findings are NOT touched. Code
 // that *does* the dangerous thing is dangerous regardless of fencing.
 func downgradeInjectionInFences(body string, findings []Finding) []Finding {
 	ranges := fencedCodeRanges(body)
@@ -166,7 +166,7 @@ func downgradeInjectionInFences(body string, findings []Finding) []Finding {
 		if findings[i].Verdict == VerdictRed {
 			findings[i].Verdict = VerdictYellow
 			findings[i].Message = findings[i].Message +
-				" [downgraded: quoted inside a fenced code block — flag for review, not a live instruction]"
+				" [downgraded: quoted inside a fenced code block: flag for review, not a live instruction]"
 		}
 	}
 	return findings

@@ -1,4 +1,4 @@
-# SPEC-0280 — Trust-Layer Evaluation Harness (E1–E10)
+# SPEC-0280: Trust-Layer Evaluation Harness (E1–E10)
 
 A reproducible, committed harness that measures the **shipped** m3c-tools trust
 layer (`pkg/skillctl/{verify,signing,translog,agentid,bodyscan,datascope}` + the
@@ -8,7 +8,7 @@ into `results/RESULTS.csv` + `results/RESULTS.md`.
 
 **Honesty contract (the project standard):** no claim without a number; every row
 is labelled `synthetic` (generated population) or `real` (the committed corpus);
-**E6 is `N/A — deferred`**, never fabricated.
+**E6 is `N/A: deferred`**, never fabricated.
 
 ## What is measured
 
@@ -19,7 +19,7 @@ is labelled `synthetic` (generated population) or `real` (the committed corpus);
 | E3  | Revocation-list verify vs size           | `e3_revocation_scale_test.go`      | time-vs-size curve (10 → 10⁶) |
 | E4  | Behaviour-scan TP/FP (**real corpus**)   | `e4_bodyscan_corpus_test.go`       | TP%, FP% |
 | E5  | Agent-grant authorization overhead       | `e5_agent_authz_test.go`           | added ms/invocation |
-| E6  | OIDC/JWKS offline verify                  | `e6_oidc_deferred_test.go`         | **N/A — deferred (gated P3-P2)** |
+| E6  | OIDC/JWKS offline verify                  | `e6_oidc_deferred_test.go`         | **N/A: deferred (gated P3-P2)** |
 | E7  | Transparency-log inclusion-proof verify  | `e7_inclusion_proof_test.go`       | time/event (µs) curve |
 | E8  | Trust-root scale (N pinned authors)      | `e8_trustroot_scale_test.go`       | time-vs-N curve (1 → 10³) |
 | E9  | Kit size + reproducibility               | `e2_e9_kit_test.go`                | bytes; byte-identical? |
@@ -27,12 +27,12 @@ is labelled `synthetic` (generated population) or `real` (the committed corpus);
 
 Shared pieces:
 
-- `internal/synth/synth.go` — deterministic issuer (the white-paper
+- `internal/synth/synth.go`: deterministic issuer (the white-paper
   `mint-evidence.go` pattern, made reproducible via seeded ed25519 keys). Mints N
   signed `.skb` bundles + `BundleMeta` + a pinned `TrustRoot` that verifies fully
   offline.
-- `harness_test.go` — the result sink → `results/RESULTS.csv`.
-- `scripts/mint_kit_fixture.go` — `go:build ignore` issuer used by E2/E9 to feed
+- `harness_test.go`: the result sink → `results/RESULTS.csv`.
+- `scripts/mint_kit_fixture.go`: `go:build ignore` issuer used by E2/E9 to feed
   the real `skillctl export-verification-kit` a deterministic fixture.
 
 ## Running
@@ -42,7 +42,7 @@ Shared pieces:
 # These run in plain CI and fail the build on a regression.
 go test ./evaluation/
 
-# Full measured harness — produces results/RESULTS.csv (overwrite is gated on
+# Full measured harness: produces results/RESULTS.csv (overwrite is gated on
 # RUN_EVAL so a plain `go test ./...` never clobbers committed numbers).
 RUN_EVAL=1 go test ./evaluation/ -run 'TestE|TestZZZ' -v -timeout 30m
 

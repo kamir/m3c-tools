@@ -1,6 +1,6 @@
 package main
 
-// skillctl-demo — a self-contained, offline demo binary that shows a CISO the
+// skillctl-demo: a self-contained, offline demo binary that shows a CISO the
 // skillctl trust plane CONTAINING an attack, live, with the real exit codes.
 //
 // P0: an interactive CLI that steps three LIVE scenarios (S1, S2A, S5) against
@@ -124,7 +124,7 @@ func main() {
 	runDeck(d, scenarios, pause)
 	bus.Emit(Event{Kind: "done", Text: "Every LIVE verdict above is a real skillctl exit code."})
 	if url != "" {
-		fmt.Fprintln(os.Stdout, "\n  Web mirror still serving at "+url+" — Ctrl-C to exit.")
+		fmt.Fprintln(os.Stdout, "\n  Web mirror still serving at "+url+": Ctrl-C to exit.")
 		select {} // block until Ctrl-C (signal handler cleans up)
 	}
 }
@@ -148,7 +148,7 @@ func runKata(cfg config, sb *Sandbox, skctl string, bus *Bus, srv *Server, url s
 	if kataURL != "" && !cfg.noBrowser {
 		openBrowser(kataURL)
 	}
-	ready := "KATA mode — hands-on. Every beat is a real skillctl exit code."
+	ready := "KATA mode: hands-on. Every beat is a real skillctl exit code."
 	if kataURL != "" {
 		ready += "  ·  board " + kataURL
 	}
@@ -169,7 +169,7 @@ func runKata(cfg config, sb *Sandbox, skctl string, bus *Bus, srv *Server, url s
 
 	PrintBoard(os.Stdout, store, stall, time.Now())
 	if url != "" {
-		fmt.Fprintln(os.Stdout, "\n  Kata board still serving at "+kataURL+" — Ctrl-C to exit.")
+		fmt.Fprintln(os.Stdout, "\n  Kata board still serving at "+kataURL+": Ctrl-C to exit.")
 		select {} // hold so the browser board stays live (signal handler cleans up)
 	}
 }
@@ -183,7 +183,7 @@ func runDeck(d *Driver, scenarios []Scenario, pause func()) {
 			pause()
 			s.Run(d)
 		} else {
-			d.note("Roadmap panel — nothing is run here (honesty rule). See the note above.")
+			d.note("Roadmap panel: nothing is run here (honesty rule). See the note above.")
 		}
 		pause()
 	}

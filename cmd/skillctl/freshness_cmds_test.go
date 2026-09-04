@@ -1,6 +1,6 @@
 package main
 
-// SPEC-0279 P4 — CLI-level integration tests for the freshness contract on the
+// SPEC-0279 P4: CLI-level integration tests for the freshness contract on the
 // `agentid verify` consumer. They drive the real runner with on-disk ed25519
 // keys + a pinned trust-roots file carrying a freshness policy, and assert the
 // canonical exit codes (22 stale fail-closed, 17 emergency deny, 12 forged
@@ -100,7 +100,7 @@ func (f freshFixture) issueGrant(t *testing.T, agentID, out, intents string) {
 }
 
 // writeAgentRevList writes a signed agent-revocation list (empty revoked set is
-// fine — we only care about its issued_at/epoch for freshness) at the given age.
+// fine: we only care about its issued_at/epoch for freshness) at the given age.
 func (f freshFixture) writeAgentRevList(t *testing.T, name string, epoch int, issuedAt string, agents ...string) string {
 	t.Helper()
 	list, err := verify.NewSignedAgentRevocationList(f.regURL, issuedAt, epoch, agents, f.regPriv)
@@ -224,7 +224,7 @@ func TestCLI_ForgedCheckpointRefused(t *testing.T) {
 
 // Adversarial: a rollback checkpoint (epoch below the pinned floor) cannot reset
 // the clock. We pin min_revocation_epoch via a high-epoch list and a low-epoch
-// checkpoint — the checkpoint epoch < the list epoch is silently ignored (cannot
+// checkpoint. The checkpoint epoch < the list epoch is silently ignored (cannot
 // advance), so the stale list still fails closed.
 func TestCLI_RollbackCheckpointCannotReset(t *testing.T) {
 	f := buildFreshFixture(t, "24h", "closed")
@@ -239,7 +239,7 @@ func TestCLI_RollbackCheckpointCannotReset(t *testing.T) {
 
 // --- R5 (consumer): emergency deny short-circuits even fresh + low-risk ---
 
-// AC3: an emergency deny-list entry denies BEFORE the cadence — fresh snapshot,
+// AC3: an emergency deny-list entry denies BEFORE the cadence: fresh snapshot,
 // low-risk, fail_policy=open (which would otherwise ALLOW).
 func TestCLI_EmergencyDeniesFreshLowRisk(t *testing.T) {
 	f := buildFreshFixture(t, "24h", "open")

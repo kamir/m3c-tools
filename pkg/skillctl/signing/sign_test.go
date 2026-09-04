@@ -16,7 +16,7 @@ import (
 
 // makeFakeBundle writes a small gzipped tar to dir and returns its path.
 // It deliberately does NOT depend on pkg/skillbundle (which isn't on
-// this stream's base branch) — sign/verify-sig only care about file
+// this stream's base branch): sign/verify-sig only care about file
 // bytes' SHA-256, not the bundle's internal structure.
 func makeFakeBundle(t *testing.T, dir, name string) string {
 	t.Helper()
@@ -174,7 +174,7 @@ func TestSignaturePath_StaysInBundleDir(t *testing.T) {
 
 func TestSignBundle_DoesNotLeakKeyInError(t *testing.T) {
 	// If the private key file is malformed we want the error to say
-	// what's wrong — but it must NOT contain the (would-be) key bytes.
+	// what's wrong, but it must NOT contain the (would-be) key bytes.
 	dir := t.TempDir()
 	bundle := makeFakeBundle(t, dir, "demo.skb")
 

@@ -1,6 +1,6 @@
 package main
 
-// SPEC-0279 P4 (review finding #1, the merge-blocker) — the EMERGENCY DENY-LIST
+// SPEC-0279 P4 (review finding #1, the merge-blocker): the EMERGENCY DENY-LIST
 // is consulted for the installed bundle DIGEST + AUTHOR at the runtime SPEC-0247
 // gate, FIRST and UNCONDITIONALLY:
 //
@@ -10,8 +10,8 @@ package main
 //   - a present-but-forged emergency file fails CLOSED;
 //   - a non-listed digest/author is still ALLOWED (no false-deny).
 //
-// These drive the REAL gate (runVerifyHook) — the emergency check runs before the
-// revoked-cache, the verdict cache and the chain — with a managed skill carrying
+// These drive the REAL gate (runVerifyHook) (the emergency check runs before the
+// revoked-cache, the verdict cache and the chain) with a managed skill carrying
 // a provenance sidecar (digest + author) and a signed emergency list at the
 // conventional gate path (~/.claude/skillctl/emergency-deny.json).
 
@@ -45,7 +45,7 @@ func setupEmergencyGate(t *testing.T, skill, digest, author string) emergencyGat
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home) // Windows: os.UserHomeDir() reads %USERPROFILE%, not $HOME — without this loadRootsFn("") misses the test trust-root and fails closed.
+	t.Setenv("USERPROFILE", home) // Windows: os.UserHomeDir() reads %USERPROFILE%, not $HOME, without this loadRootsFn("") misses the test trust-root and fails closed.
 
 	f := buildAgentFixture(t, false)
 	defaultTR := filepath.Join(home, ".claude", "skill-trust-roots.yaml")
@@ -109,7 +109,7 @@ func (e emergencyGateEnv) regKey(t *testing.T) ed25519.PrivateKey {
 }
 
 // (a) An emergency-listed DIGEST is denied at the runtime gate with NO AgentID
-// mandate configured — the common case the old code skipped entirely.
+// mandate configured: the common case the old code skipped entirely.
 func TestVerifyHookEmergency_DigestDenied_NoMandate(t *testing.T) {
 	e := setupEmergencyGate(t, "er1-push", "sha256:beef", "id:author@m3c")
 	// Pre-emergency: allowed (no mandate, chain passes).
@@ -135,7 +135,7 @@ func TestVerifyHookEmergency_AuthorDenied_NoMandate(t *testing.T) {
 }
 
 // (b) An emergency-listed digest is denied even when the SPEC-0266 sweep cache is
-// STALE — the cadence (which SKIPS the revoked-digest check when not fresh) can
+// STALE: the cadence (which SKIPS the revoked-digest check when not fresh) can
 // NOT keep a burned bundle alive. This is the exact hole the merge-blocker named.
 func TestVerifyHookEmergency_DigestDenied_StaleSweepCache(t *testing.T) {
 	e := setupEmergencyGate(t, "er1-push", "sha256:beef", "id:author@m3c")
@@ -157,11 +157,11 @@ func TestVerifyHookEmergency_DigestDenied_StaleSweepCache(t *testing.T) {
 }
 
 // A forged emergency file (signed by an unpinned key) at the gate path fails
-// CLOSED — the gate refuses the skill rather than ignore an operator-placed list.
+// CLOSED: the gate refuses the skill rather than ignore an operator-placed list.
 func TestVerifyHookEmergency_ForgedFile_FailsClosed(t *testing.T) {
 	e := setupEmergencyGate(t, "er1-push", "sha256:beef", "id:author@m3c")
 	_, forged, _ := ed25519.GenerateKey(rand.Reader)
-	// The forged list does not even name our digest — fail-closed must deny anyway.
+	// The forged list does not even name our digest. Fail-closed must deny anyway.
 	e.writeEmergencyAt(t, forged, "sha256:someoneelse")
 	code, out, _ := feed(t, hookEventFor("er1-push"))
 	assertDeny(t, code, out, "emergency deny-list")

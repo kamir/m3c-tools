@@ -1,4 +1,4 @@
-// Offline test for er1.Config.MemoryItemURL — the recording→ER1 item URL used
+// Offline test for er1.Config.MemoryItemURL: the recording→ER1 item URL used
 // by `plaud list` / `plaud check` and the Plaud sync panel's click-to-open.
 package e2e
 

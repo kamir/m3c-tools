@@ -1,6 +1,6 @@
 ---
 name: bug-fix
-description: Fix a reported bug, feed the lesson back into the SPECs, and close both planes — the private analysis file and its public GitHub issue. Use after /bug-report has created a structured bug report.
+description: Fix a reported bug, feed the lesson back into the SPECs, and close both planes: the private analysis file and its public GitHub issue. Use after /bug-report has created a structured bug report.
 argument-hint: "BUG-NNNN (e.g. BUG-0213)"
 metadata:
   version: 2.0.0
@@ -16,7 +16,7 @@ You are a bug-fixing assistant for the **m3c-tools** project.
 
 **Bug reference:** $ARGUMENTS
 
-A bug id (`BUG-0213`), a bare number (`213`), or a filename — `scripts/bugtracker.sh`
+A bug id (`BUG-0213`), a bare number (`213`), or a filename: `scripts/bugtracker.sh`
 normalises all three.
 
 > Set `M3C_MAINTENANCE_DIR` before running this skill. If it is unset, say so and
@@ -24,8 +24,8 @@ normalises all three.
 
 ## Your Task
 
-Fix the bug, feed the lesson into the specs, and leave **both planes** — the
-private analysis file and, if one exists, its public issue — in agreement.
+Fix the bug, feed the lesson into the specs, and leave **both planes** (the
+private analysis file and, if one exists, its public issue) in agreement.
 
 ### Step 1: Load the report
 
@@ -49,7 +49,7 @@ Mark that you have started:
 - Read the files and functions named in "Root Cause Analysis", plus enough
   surrounding context to see the flow.
 - Verify the analysis against what the code actually does. **If the report is
-  wrong or incomplete, correct it** — a report that misdiagnoses is worse than
+  wrong or incomplete, correct it**. A report that misdiagnoses is worse than
   none, and the correction is the most valuable thing you will write today.
 
 ### Step 3: Implement the fix
@@ -63,7 +63,7 @@ Mark that you have started:
 
 - Run the relevant tests: `go test -v -count=1 ./e2e/ -run <test>` (or the
   package's own tests).
-- `go build ./cmd/m3c-tools/` — and `go vet ./...` if the change is non-trivial.
+- `go build ./cmd/m3c-tools/`, and `go vet ./...` if the change is non-trivial.
 - If a CLI flag was added, removed or renamed, the manual must move with it:
   `go run ./cmd/docaudit -cli all` (the release gate; `-scaffold` drafts entries).
 - If no test covers this bug, **say so plainly**. Do not write one unless asked.
@@ -116,17 +116,17 @@ Append to `BUG-NNNN-<slug>.md`:
 
 **Date:** YYYY-MM-DD
 **Files changed:**
-- `<path>:<line>` — <what changed>
+- `<path>:<line>`: <what changed>
 
 **SPEC updated:** SPEC-NNNN (or "new SPEC created")
 
 **Verification:**
 - Builds: `go build ./cmd/m3c-tools/`
-- Tests: `<command>` — <result>
+- Tests: `<command>`: <result>
 - Manual: <what the user should check by hand, if anything>
 ```
 
-Also fill in "Lessons Learned" — the assumption that allowed the bug, not a
+Also fill in "Lessons Learned": the assumption that allowed the bug, not a
 restatement of the fix.
 
 ### Step 7: Close both planes
@@ -140,12 +140,12 @@ comments and closes it. Use `--status wontfix` or `--status duplicate` when that
 is the honest outcome; those close the issue as *not planned*.
 
 `close` **refuses** unless the report carries a `- **Spec:**` line: solving a bug
-means serving the contract it belongs to. `none — <reason>` is a valid answer
+means serving the contract it belongs to. `none: <reason>` is a valid answer
 when a bug genuinely changes no contract; a missing line is not, because that is
 how Step 5 gets skipped rather than decided.
 
 The comment is **public-plane text**: the script runs the SPEC-0358 leak check on
-it and refuses rather than post. Write it for a stranger — what changed and in
+it and refuses rather than post. Write it for a stranger: what changed and in
 which version, referring to the analysis ID-only.
 
 If the bug is private-only, the command still updates the file and simply reports

@@ -10,7 +10,7 @@ import (
 // SPEC-0202 per-invocation runtime envelope. It is DISTINCT from
 // CanonicalDomainSeparator ("capability_v1") and from the SPEC-0188
 // attestation domain ("attestation"), so a signature captured under one family
-// can never replay as a signature under another — even with the same key.
+// can never replay as a signature under another, even with the same key.
 //
 // SPEC reference: SPEC-0202 §9 (per-host-signed invocation events).
 const InvocationDomainSeparator = "invocation_event_v1"
@@ -26,7 +26,7 @@ const InvocationSchema = "m3c-skill-invocation/v1"
 // recorded LOCALLY in the append-only invocation trail (the durable system of
 // record; any HTTP upload is best-effort on top).
 //
-// IMPORTANT — emission is ALWAYS-ON: every invocation produces one of these,
+// IMPORTANT. Emission is ALWAYS-ON: every invocation produces one of these,
 // regardless of whether enforcement (capability tokens) is active. That is what
 // makes the EU AI Act Art.12 trail complete by construction.
 //
@@ -39,7 +39,7 @@ type InvocationRecord struct {
 	// --- signed fields (fixed canonical order) ---
 
 	Schema    string `json:"schema"`     // InvocationSchema
-	EventID   string `json:"event_id"`   // ULID / random nonce — the replay key
+	EventID   string `json:"event_id"`   // ULID / random nonce: the replay key
 	EventType string `json:"event_type"` // e.g. "skill.invocation", "gate.allowed", "gate.refused"
 
 	SkillDigest  string `json:"skill_digest"`  // sha256:<hex> of the invoked bundle ("" if unknown)
@@ -49,7 +49,7 @@ type InvocationRecord struct {
 	Action    string `json:"action"`     // the action surface (e.g. "subprocess", "egress", "invoke")
 	Tool      string `json:"tool"`       // the tool/binary/host the action targeted
 	TokenID   string `json:"token_id"`   // capability token id if enforcement was active ("" otherwise)
-	SessionID string `json:"session_id"` // Claude Code session id — the P3 join key
+	SessionID string `json:"session_id"` // Claude Code session id: the P3 join key
 
 	OccurredAt string `json:"occurred_at"` // RFC3339 UTC seconds, e.g. 2026-06-23T14:03:11Z
 
@@ -57,10 +57,10 @@ type InvocationRecord struct {
 	// PLACEHOLDERS. In v1 they are ALWAYS the empty string, but the canonical
 	// message ALWAYS emits their lines (present-but-empty). This is the
 	// load-bearing forward-compat property: when P3 populates them, the change
-	// is a VALUE change at a fixed line — NOT a format break. Omitting the
+	// is a VALUE change at a fixed line, NOT a format break. Omitting the
 	// lines now would force a domain/version bump later. DO NOT remove them.
-	AgentIdentity string `json:"agent_identity"` // SPEC-0277 P3 — present-but-empty in v1
-	OwnerIdentity string `json:"owner_identity"` // SPEC-0277 P3 — present-but-empty in v1
+	AgentIdentity string `json:"agent_identity"` // SPEC-0277 P3, present-but-empty in v1
+	OwnerIdentity string `json:"owner_identity"` // SPEC-0277 P3, present-but-empty in v1
 
 	DeviceKeyID string `json:"device_key_id"` // the signing device key's fingerprint
 	ExitCode    int    `json:"exit_code"`     // child / action exit code (0 on allow)
@@ -76,7 +76,7 @@ type InvocationRecord struct {
 // attestation canonical: domain-separated first line, LF-terminated lines
 // (including the last), fixed field order, no JSON, no escaping ambiguity.
 //
-// Field order — line by line — is FIXED. Changing it (reorder, add, drop,
+// Field order, line by line, is FIXED. Changing it (reorder, add, drop,
 // alter a separator) is a breaking change and MUST come with a domain/version
 // bump. The golden-bytes test pins this exact output.
 //
@@ -100,7 +100,7 @@ type InvocationRecord struct {
 //
 // Every value is written verbatim after the "<key>=" prefix. Callers MUST reject
 // any field containing a newline BEFORE signing (see validateNoNewlines) so the
-// LF-delimited framing is unambiguous — a smuggled "\n" could otherwise forge a
+// LF-delimited framing is unambiguous: a smuggled "\n" could otherwise forge a
 // field boundary. The detached device_signature_b64 is excluded.
 func CanonicalizeInvocationRecord(r *InvocationRecord) ([]byte, error) {
 	if r == nil {
@@ -124,7 +124,7 @@ func CanonicalizeInvocationRecord(r *InvocationRecord) ([]byte, error) {
 	w("token_id=" + r.TokenID)
 	w("session_id=" + r.SessionID)
 	w("occurred_at=" + r.OccurredAt)
-	// SPEC-0277 P3 placeholders — ALWAYS emitted, empty in v1. See struct doc.
+	// SPEC-0277 P3 placeholders: ALWAYS emitted, empty in v1. See struct doc.
 	w("agent_identity=" + r.AgentIdentity)
 	w("owner_identity=" + r.OwnerIdentity)
 	w("device_key_id=" + r.DeviceKeyID)
@@ -137,7 +137,7 @@ func CanonicalizeInvocationRecord(r *InvocationRecord) ([]byte, error) {
 // validateNoNewlines refuses any signed string field that contains a CR or LF.
 // The canonical format is LF-delimited; a value with an embedded newline would
 // let an attacker forge field boundaries inside the signed bytes. Fail-closed:
-// we never sign over ambiguous bytes. (exit_code is an int — no check needed.)
+// we never sign over ambiguous bytes. (exit_code is an int, no check needed.)
 func validateNoNewlines(r *InvocationRecord) error {
 	fields := map[string]string{
 		"schema":         r.Schema,
@@ -169,7 +169,7 @@ func validateNoNewlines(r *InvocationRecord) error {
 // (base64 std). The record's DeviceKeyID should already be set to the signing
 // key's id so a verifier can look up the right public key.
 //
-// signFn is the device key's Sign method (k.Sign) — taking it as a closure keeps
+// signFn is the device key's Sign method (k.Sign). Taking it as a closure keeps
 // this package free of an import on pkg/skillctl/device (device imports skillgate
 // indirectly via the record type at the call site, not vice-versa) and lets the
 // gate use whatever signer it holds. b64 is injected too so the caller controls

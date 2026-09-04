@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""windows-trust-parity.py — drift guard for the opt-out Windows trust surface.
+"""windows-trust-parity.py: drift guard for the opt-out Windows trust surface.
 
 Compares two `go test -json` event streams (a Linux run and a Windows run of the
 SAME package set: ./pkg/skillctl/... ./cmd/skillctl/... ./evaluation/...) and
@@ -16,7 +16,7 @@ opt-out.
 
 What counts as "executed"
 -------------------------
-Every top-level test that reaches a terminal action — pass, fail, OR skip — is
+Every top-level test that reaches a terminal action (pass, fail, OR skip) is
 counted as executed. A platform-gated test that calls t.Skip("…windows…") STILL
 COUNTS: it ran, made its decision, and skipped. So legitimate platform self-skips
 do NOT widen the gap; only a test that never ran at all (missing/!build) does.
@@ -104,7 +104,7 @@ def main(argv):
         print(
             f"\n::error::Windows trust surface executed {gap} fewer tests than "
             f"Linux (allowance {ALLOWANCE}). Tests are silently not running on "
-            f"Windows — investigate a build break or an over-broad build tag.",
+            f"Windows: investigate a build break or an over-broad build tag.",
             file=sys.stderr,
         )
         return 1

@@ -4,7 +4,7 @@ package main
 //
 // runWithExit is the single audit point that sits between a runner function
 // (runInstall, runVerify, ...) and os.Exit: the runner returns an integer exit
-// code and runWithExit passes it to os.Exit verbatim — so usage errors (2),
+// code and runWithExit passes it to os.Exit verbatim, so usage errors (2),
 // generic errors (1), and ok (0) flow through unchanged.
 //
 // Why a single helper: SPEC-0188 §11 mandates that `skillctl install` and
@@ -20,7 +20,7 @@ import "os"
 // surface verbatim through the process boundary.
 //
 // The runner is responsible for printing diagnostics to stderr; this helper
-// does NOT print anything additional — it just translates int → os.Exit.
+// does NOT print anything additional: it just translates int → os.Exit.
 func runWithExit(fn func() int) {
 	os.Exit(fn())
 }

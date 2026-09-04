@@ -93,7 +93,7 @@ func BuildGroupedRecords(
 	for _, rec := range recordings {
 		gi, isGrouped := fileToGroup[rec.FilePath]
 		if !isGrouped {
-			// Ungrouped recording — show as-is
+			// Ungrouped recording: show as-is
 			result = append(result, rec)
 			continue
 		}

@@ -95,20 +95,20 @@ type InvocationEvent struct {
 // SignedSink records ONE device-signed, action-level InvocationRecord into the
 // durable signed trail (SPEC-0202 §9). It is OPTIONAL on a Gate: when nil, the
 // gate only posts the legacy unsigned InvocationEvent to AuditPoster. When set,
-// every allow/refuse ALSO produces a signed record — so action-level events
+// every allow/refuse ALSO produces a signed record, so action-level events
 // (subprocess / egress / capability checks inside a running skill) join the same
 // Art.12 trail the hook writes. The sink owns signing + appending and MUST be
 // fire-and-forget (the cooperative model never lets a logging failure block
 // enforcement); the gate calls it as a bare statement.
 type SignedSink func(InvocationRecord)
 
-// Gate enforces a verified token's envelope. It is COOPERATIVE — see the
+// Gate enforces a verified token's envelope. It is COOPERATIVE: see the
 // package doc.
 type Gate struct {
 	Token       *Token
 	AuditPoster InvocationPoster
 	// SignedSink, when non-nil, receives one signed action-level record per
-	// allow/refuse. Optional — see SignedSink.
+	// allow/refuse. Optional: see SignedSink.
 	SignedSink SignedSink
 	// SessionID is stamped into signed records so action events join the same
 	// session join-key the hook uses (SPEC-0277 P3 forward-compat). Optional.
@@ -144,7 +144,7 @@ func (g *Gate) Allow(action GateAction) error {
 		return g.refuse(RefusalCapabilityMissing, ExitCapabilityMissing,
 			"no token attached to gate", "")
 	}
-	// Expiry pre-check — Verify() should already have caught this, but a
+	// Expiry pre-check: Verify() should already have caught this, but a
 	// caller invoking Allow() far after Verify() may cross the boundary.
 	if exp, err := time.Parse("2006-01-02T15:04:05Z", g.Token.ExpiresAt); err == nil {
 		if !g.nowFn().Before(exp) {
@@ -259,7 +259,7 @@ func (g *Gate) checkCapability(c Capability) error {
 		fmt.Sprintf("capability %q not in envelope", c.Name), c.Name)
 }
 
-// checkDestructive — refuses unless envelope.destructive=true.
+// checkDestructive: refuses unless envelope.destructive=true.
 func (g *Gate) checkDestructive() error {
 	if g.Token.Envelope.Destructive {
 		g.audit("gate.allowed", "", "destructive")
@@ -295,9 +295,9 @@ func (g *Gate) audit(eventType, refusalCode, requestedCmd string) {
 		_ = g.AuditPoster.PostInvocation(ev) // best-effort
 	}
 	if g.SignedSink != nil {
-		// Action-level signed record — the durable Art.12 evidence for what the
+		// Action-level signed record: the durable Art.12 evidence for what the
 		// running skill actually did. exit_code carries the gate verdict: 0 on
-		// allow, the refusal exit (30..39 — not known here) is left to the sink's
+		// allow, the refusal exit (30..39: not known here) is left to the sink's
 		// caller; we encode allow/refuse via refusal_code (empty = allowed).
 		exit := 0
 		if refusalCode != "" {

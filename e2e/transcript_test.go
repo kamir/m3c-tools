@@ -1,5 +1,5 @@
 // End-to-end tests for the transcript library.
-// These tests hit the real YouTube API — network required.
+// These tests hit the real YouTube API: network required.
 //
 // Run: go test -v -tags e2e ./e2e/ -run TestTranscript
 package e2e
@@ -11,7 +11,7 @@ import (
 	"github.com/kamir/m3c-tools/pkg/transcript"
 )
 
-const testVideoID = "dQw4w9WgXcQ" // Rick Astley — always available
+const testVideoID = "dQw4w9WgXcQ" // Rick Astley: always available
 
 func TestTranscriptList(t *testing.T) {
 	SkipIfNoYTCalls(t)
@@ -215,7 +215,7 @@ func TestTranscriptFilterEmptyList(t *testing.T) {
 }
 
 func TestTranscriptFilterAllSameType(t *testing.T) {
-	// All generated — exclude generated should yield empty
+	// All generated: exclude generated should yield empty
 	allGen := &transcript.TranscriptList{
 		VideoID: "allgen",
 		Transcripts: []transcript.TranscriptInfo{
@@ -259,7 +259,7 @@ func TestTranscriptFetchNMSHcSq8nMs(t *testing.T) {
 
 // TestIsTranscriptUnavailable verifies the degrade-vs-fail classification used
 // by the menu bar to decide whether to proceed with thumbnail + link when a
-// transcript can't be fetched. Offline — constructs error values directly.
+// transcript can't be fetched. Offline: constructs error values directly.
 func TestIsTranscriptUnavailable(t *testing.T) {
 	vid := "VLUfEWN0NY8"
 

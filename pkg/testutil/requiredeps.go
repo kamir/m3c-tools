@@ -3,11 +3,11 @@
 // External-dependency skip helpers (the opt-out trust-test mechanism)
 //
 // The trust-layer test surface (pkg/skillctl/..., cmd/skillctl/...,
-// evaluation/...) runs WHOLE-PACKAGE on the windows-latest CI runner — there
+// evaluation/...) runs WHOLE-PACKAGE on the windows-latest CI runner. There
 // is no hand-maintained -run allow-list. To make that durable, any test that
 // depends on something the Windows CI job (or a routine `go test`) does not
-// provide — a live ER1 server, the whisper binary, real network egress, a
-// microphone, or the Plaud cloud API — must call one of the Require* helpers
+// provide (a live ER1 server, the whisper binary, real network egress, a
+// microphone, or the Plaud cloud API) must call one of the Require* helpers
 // below at its top. Each helper calls t.Skip(reason) when the dependency is
 // absent, on EVERY platform. Because the Windows CI job sets none of the
 // gating envs, those tests skip there cleanly with a clear reason and no
@@ -16,15 +16,15 @@
 //
 // Env / probe convention (reuses the existing M3C_TEST_* scheme):
 //
-//	M3C_TEST_ER1=1        — a live ER1 server is available (ER1_API_URL points at it)
-//	M3C_TEST_NETWORK=1    — outbound network egress is permitted
-//	M3C_TEST_WHISPER=1    — the whisper binary is installed (also probed via PATH)
-//	M3C_TEST_MIC=1        — a recording microphone + PortAudio are available
-//	M3C_TEST_PLAUD=1      — the Plaud cloud API is reachable with a valid token
+//	M3C_TEST_ER1=1, a live ER1 server is available (ER1_API_URL points at it)
+//	M3C_TEST_NETWORK=1, outbound network egress is permitted
+//	M3C_TEST_WHISPER=1, the whisper binary is installed (also probed via PATH)
+//	M3C_TEST_MIC=1, a recording microphone + PortAudio are available
+//	M3C_TEST_PLAUD=1. The Plaud cloud API is reachable with a valid token
 //
 // New trust tests are covered by the windows job automatically. The ONLY tests
 // excluded from the Windows run are the ones that self-skip through these
-// helpers — never via a CI allow-list. Do not reintroduce an allow-list.
+// helpers, never via a CI allow-list. Do not reintroduce an allow-list.
 package testutil
 
 import (
@@ -42,7 +42,7 @@ func envEnabled(name string) bool {
 }
 
 // RequireER1 skips the test unless a live ER1 server is available. Tests that
-// exercise an in-process httptest fake do NOT need this — only tests that dial
+// exercise an in-process httptest fake do NOT need this, only tests that dial
 // a real aims-core / ER1 instance. Enable with M3C_TEST_ER1=1 (and point
 // ER1_API_URL at the server).
 func RequireER1(t *testing.T) {
@@ -80,7 +80,7 @@ func RequireWhisper(t *testing.T) {
 
 // RequireMic skips the test unless a microphone + PortAudio are available.
 // There is no portable host probe for an input device, so this gates purely on
-// M3C_TEST_MIC=1 — set it on the (Unix) runner that actually has hardware.
+// M3C_TEST_MIC=1. Set it on the (Unix) runner that actually has hardware.
 func RequireMic(t *testing.T) {
 	t.Helper()
 	if !envEnabled("M3C_TEST_MIC") {

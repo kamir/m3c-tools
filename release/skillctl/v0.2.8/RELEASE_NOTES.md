@@ -1,9 +1,9 @@
-# skillctl v0.2.8 — keyless provenance (cosign/OIDC)
+# skillctl v0.2.8: keyless provenance (cosign/OIDC)
 
-Trust-and-governance CLI for AI-agent skills. Single static Go binary — no Node.
+Trust-and-governance CLI for AI-agent skills. Single static Go binary: no Node.
 
 > First skillctl release **built and signed entirely in CI** with **keyless
-> Sigstore cosign + GitHub OIDC** (no long-lived signing key) — plus a SLSA build
+> Sigstore cosign + GitHub OIDC** (no long-lived signing key), plus a SLSA build
 > provenance attestation. The pinned-ed25519 track is retained so existing
 > installs keep verifying. No code changes vs v0.2.7; this is the provenance
 > upgrade (SPEC-0253). Recommended upgrade.
@@ -20,7 +20,7 @@ keyless bundle against the release workflow's OIDC identity; otherwise it falls
 back to the pinned-ed25519 signature. A present-but-invalid cosign bundle
 fails closed (no downgrade). `SKILLCTL_REQUIRE_COSIGN=1` forces cosign-only.
 
-## Provenance — two tracks
+## Provenance: two tracks
 
 **Keyless (cosign + GitHub OIDC):**
 ```sh

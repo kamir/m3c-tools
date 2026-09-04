@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# plaud-e2e-check.sh — end-to-end proof that Plaud login → capture works.
+# plaud-e2e-check.sh (end-to-end proof that Plaud login → capture works.
 #
 # Two paths, checked in priority order:
-#   DURABLE  — official OAuth token (tools/plaud-mcp-login.mjs → ~/.plaud/tokens-mcp.json)
+#   DURABLE) official OAuth token (tools/plaud-mcp-login.mjs → ~/.plaud/tokens-mcp.json)
 #              → developer API → `plaud dev sync`.   ← recommended, hands-off.
-#   LEGACY   — ephemeral consumer token (`plaud auth paste`/scrape) → `plaud list/sync`.
+#   LEGACY: ephemeral consumer token (`plaud auth paste`/scrape) → `plaud list/sync`.
 #
 # Exits 0 only if a WORKING capture path is proven. Read-only (dry-run; `dev list`
 # does not upload). A one-item real upload proof is `plaud dev sync --limit 1`.
@@ -24,7 +24,7 @@ info(){ printf '  \033[36mℹ\033[0m       %s\n' "$1"; }
 soft(){ if (( DURABLE_OK == 1 )); then info "$1"; else no "$1"; fi; }
 
 echo
-echo "  Plaud login → capture — end-to-end validation"
+echo "  Plaud login → capture: end-to-end validation"
 echo "  binary: $BIN"
 echo "  ────────────────────────────────────────────────────────────"
 
@@ -33,14 +33,14 @@ if [[ -f "$DEVTOK" ]]; then
   DEV="$("$BIN" plaud dev list 2>&1)"
   DC="$(grep -oE "developer API \(([0-9]+)" <<<"$DEV" | grep -oE '[0-9]+' | head -1)"
   if [[ -n "$DC" && "$DC" -gt 0 ]]; then
-    ok "DURABLE path works — 'plaud dev' lists $DC recordings via the official OAuth token"; DURABLE_OK=1
+    ok "DURABLE path works, 'plaud dev' lists $DC recordings via the official OAuth token"; DURABLE_OK=1
   elif grep -qiE "expired|rejected|refresh" <<<"$DEV"; then
-    no "durable token present but stale — refresh: node tools/plaud-mcp-login.mjs"
+    no "durable token present but stale, refresh: node tools/plaud-mcp-login.mjs"
   else
     no "durable dev-API path failed: $(grep -iE 'error|http' <<<"$DEV" | head -1)"
   fi
 else
-  info "no durable token yet — for hands-off capture: node tools/plaud-mcp-login.mjs  (then 'plaud dev sync --all')"
+  info "no durable token yet, for hands-off capture: node tools/plaud-mcp-login.mjs  (then 'plaud dev sync --all')"
 fi
 
 echo "  ── legacy consumer path (ephemeral) ─────────────────────────"
@@ -70,7 +70,7 @@ case "$LIFE" in
   NOEXP)     info "consumer token lifetime unknown";;
   *) h="${LIFE%.*}"
      if   (( h < 0 ));  then info "consumer token past its exp"
-     elif (( h < 48 )); then info "consumer token is EPHEMERAL (~${LIFE}h ≈ 1 day) — the durable path avoids this"
+     elif (( h < 48 )); then info "consumer token is EPHEMERAL (~${LIFE}h ≈ 1 day): the durable path avoids this"
      else                    info "consumer token exp ~$(( h/24 ))d"; fi;;
 esac
 
@@ -78,26 +78,26 @@ esac
 LIST="$("$BIN" plaud list 2>&1)"
 COUNT="$(grep -oE "Plaud recordings \(([0-9]+)\)" <<<"$LIST" | grep -oE '[0-9]+' | head -1)"
 if [[ -n "$COUNT" && "$COUNT" -gt 0 ]]; then
-  ok "consumer API authenticated — listed $COUNT recordings"
+  ok "consumer API authenticated: listed $COUNT recordings"
   SYNC="$("$BIN" plaud sync --all --dry-run 2>&1)"
   if REG="$(grep -oE "region redirect: \S+ -> \S+" <<<"$SYNC" | head -1)"; then info "region: ${REG#region redirect: }"; fi
   if grep -qiE "found [0-9]+ recordings" <<<"$SYNC"; then
     N="$(grep -oE "Syncing ([0-9]+) new" <<<"$SYNC" | grep -oE '[0-9]+' | head -1)"
-    ok "consumer capture→ER1 resolved (dry-run)${N:+ — ${N} new would upload}"
+    ok "consumer capture→ER1 resolved (dry-run)${N:+. ${N} new would upload}"
   else soft "consumer sync dry-run did not resolve: $(grep -iE 'error|fail' <<<"$SYNC" | head -1)"; fi
 elif grep -qiE "invalid auth header|status=-3900" <<<"$LIST"; then
-  soft "consumer API rejected the saved token (stale/dev token) — use the durable 'plaud dev' path"
+  soft "consumer API rejected the saved token (stale/dev token): use the durable 'plaud dev' path"
 else
   soft "consumer path could not list: $(grep -iE 'error|expired' <<<"$LIST" | head -1)"; fi
 
 # ── verdict ──────────────────────────────────────────────────────────
 echo "  ────────────────────────────────────────────────────────────"
 if (( fail == 0 )); then
-  printf '  \033[1;32mVERDICT: PASS\033[0m — %d checks green. A working capture path is proven.\n' "$pass"
+  printf '  \033[1;32mVERDICT: PASS\033[0m: %d checks green. A working capture path is proven.\n' "$pass"
   (( DURABLE_OK == 1 )) && printf '  \033[32m✔ durable path ready:\033[0m  %s plaud dev sync --all\n' "$BIN"
   echo; exit 0
 else
-  printf '  \033[1;31mVERDICT: FAIL\033[0m — %d passed, %d failed. Do NOT claim it works.\n' "$pass" "$fail"
+  printf '  \033[1;31mVERDICT: FAIL\033[0m: %d passed, %d failed. Do NOT claim it works.\n' "$pass" "$fail"
   (( DURABLE_OK == 0 )) && printf '  \033[33m→ for a durable, hands-off login:\033[0m  node tools/plaud-mcp-login.mjs  &&  %s plaud dev sync --all\n' "$BIN"
   echo; exit 1
 fi

@@ -15,7 +15,7 @@ func TestPerProcessCapEnforced(t *testing.T) {
 	defer s.Close()
 
 	c := New("p-1", 1000, 100.0, s, StubEstimator{})
-	// stub returns 500 tokens for inputTokens<250 — two should push over cap 1000? Actually 500+500=1000, third exceeds.
+	// stub returns 500 tokens for inputTokens<250. Two should push over cap 1000? Actually 500+500=1000, third exceeds.
 	if err := c.Reserve("pid", "stub", 100); err != nil {
 		t.Fatal(err)
 	}

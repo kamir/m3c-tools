@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cluster_graph — community detection + interactive cluster viewer (SPEC-0269).
+"""cluster_graph: community detection + interactive cluster viewer (SPEC-0269).
 
 Runs Louvain community detection (networkx) on the distilled knowledge graph,
 writes the cluster id + color back onto every node, emits `clusters.json`

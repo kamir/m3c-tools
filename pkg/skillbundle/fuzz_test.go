@@ -1,8 +1,8 @@
 package skillbundle
 
 // Native Go fuzz targets for the skill-bundle archive readers (SPEC-0252). Both
-// surfaces take fully untrusted input — a downloaded/pulled bundle blob and the
-// per-entry relative paths derived from it — so the invariant we care about is
+// surfaces take fully untrusted input, a downloaded/pulled bundle blob and the
+// per-entry relative paths derived from it, so the invariant we care about is
 // containment: nothing a hostile archive says may ever escape the archive root
 // (Unpack) or the destination directory (ExtractTo). The oracle is the escape
 // itself: any returned entry / on-disk write outside the sandbox is a t.Fatal,
@@ -25,7 +25,7 @@ import (
 
 // buildFuzzTGZ assembles a gzip+tar blob from items verbatim (no sanitisation)
 // so seeds can carry hostile headers. It panics on the (impossible for static
-// seeds) writer error — it is only ever called with the constant corpora below.
+// seeds) writer error: it is only ever called with the constant corpora below.
 func buildFuzzTGZ(items []titem) []byte {
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
@@ -132,7 +132,7 @@ func FuzzUnpack(f *testing.F) {
 // FuzzExtractTo drives ExtractTo directly with an Entry whose Rel is fully
 // fuzzed (bypassing Unpack's sanitiser) to exercise the SafeJoin write guard in
 // isolation. Oracle: whatever ExtractTo does, no filesystem entry is ever
-// created OUTSIDE destDir — checked after the fact by walking the sandbox root.
+// created OUTSIDE destDir: checked after the fact by walking the sandbox root.
 func FuzzExtractTo(f *testing.F) {
 	seeds := []struct {
 		rel     string

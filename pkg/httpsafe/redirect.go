@@ -3,7 +3,7 @@
 //
 // SEC F25 (2026-06-13 security review): Go's stdlib redirect policy strips
 // Authorization/Cookie/WWW-Authenticate when a redirect crosses to a different
-// host — but it does NOT strip custom credential headers like X-API-KEY or
+// host, but it does NOT strip custom credential headers like X-API-KEY or
 // X-Context-ID. A hostile or compromised ER1 server can therefore answer any
 // request with `302 Location: https://collector.attacker.tld/` and harvest the
 // long-lived ER1 API key + context id. This package centralizes the fix so all
@@ -22,17 +22,17 @@ const MaxRedirects = 10
 // Stored in canonical (textproto) form so Header.Del matches regardless of the
 // case the caller used when setting them.
 var sensitiveHeaders = []string{
-	"X-Api-Key",     // X-API-KEY (ER1 long-lived key — the exposed credential)
+	"X-Api-Key",     // X-API-KEY (ER1 long-lived key, the exposed credential)
 	"X-Context-Id",  // X-Context-ID
-	"Authorization", // Bearer device token; stdlib also strips this — belt & suspenders
+	"Authorization", // Bearer device token; stdlib also strips this, belt & suspenders
 	"Cookie",
 }
 
 // NoCredentialRedirect returns a CheckRedirect that (1) caps the chain at
 // MaxRedirects and (2) deletes sensitiveHeaders from the upcoming request
 // whenever its host differs from the ORIGINATING request's host. Host
-// comparison uses the hostname only (a same-host port change — e.g. a local
-// load balancer — keeps the headers; a different hostname does not).
+// comparison uses the hostname only (a same-host port change, e.g. a local
+// load balancer: keeps the headers; a different hostname does not).
 func NoCredentialRedirect(req *http.Request, via []*http.Request) error {
 	if len(via) >= MaxRedirects {
 		return fmt.Errorf("stopped after %d redirects", MaxRedirects)

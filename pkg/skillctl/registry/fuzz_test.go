@@ -4,7 +4,7 @@ package registry
 // signature verification. Event JSON is the untrusted item body on the ER1/bus
 // transport. The two invariants: neither CanonicalEventBytes nor
 // VerifyEnvelopeSignature ever panics on arbitrary JSON, and verification never
-// fails OPEN — a pubkey the fuzzer cannot have signed for must never accept a
+// fails OPEN. A pubkey the fuzzer cannot have signed for must never accept a
 // forged/non-matching signature.
 
 import (
@@ -18,12 +18,12 @@ import (
 // FuzzEventEnvelope feeds raw JSON → map[string]any → CanonicalEventBytes +
 // VerifyEnvelopeSignature against a fixed, deterministic pubkey. Oracles: never
 // panics; if VerifyEnvelopeSignature returns nil, the signature MUST actually
-// verify against that key (re-checked independently) — otherwise it is a
+// verify against that key (re-checked independently), otherwise it is a
 // fail-open bug.
 func FuzzEventEnvelope(f *testing.F) {
 	// Deterministic, valid ed25519 key. The fuzzer cannot produce a signature
 	// that verifies against it, so a nil verify error is either a genuine (and
-	// astronomically unlikely) forgery or a fail-open bug — both are t.Fatal.
+	// astronomically unlikely) forgery or a fail-open bug: both are t.Fatal.
 	seed := make([]byte, ed25519.SeedSize)
 	for i := range seed {
 		seed[i] = byte(i + 1)

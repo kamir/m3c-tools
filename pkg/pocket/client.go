@@ -1,11 +1,11 @@
-// Package pocket — Pocket Cloud API client (Phase 2 / SPEC-0173).
+// Package pocket: Pocket Cloud API client (Phase 2 / SPEC-0173).
 //
 // REST client for https://public.heypocketai.com/api/v1
 // Verified 2026-04-27 against the live API (see Pocket-PoC api-probe).
 //
 // Endpoints honored: list + get + tags + auth probe.
 // Endpoints REMOVED (404 on personal pk_ keys): /audio, /recordings/search.
-// MCP server: https://public.heypocketai.com/mcp — out of scope here.
+// MCP server: https://public.heypocketai.com/mcp: out of scope here.
 package pocket
 
 import (

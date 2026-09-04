@@ -51,37 +51,54 @@ transcript.Fetcher.FetchThumbnail()  →  JPEG bytes
 
 ### Package Responsibilities
 
-- **pkg/transcript/** — Complete port of Python's youtube-transcript-api. Uses YouTube's InnerTube API (no official API key needed). Handles: video page fetch → API key extraction → InnerTube POST → caption XML parsing → snippet extraction. Supports 4 output formats (Text, SRT, JSON, WebVTT), proxy configs, and 10+ error types. Also handles thumbnail fetching with size fallback.
+- **pkg/transcript/**: Complete port of Python's youtube-transcript-api. Uses YouTube's InnerTube API (no official API key needed). Handles: video page fetch → API key extraction → InnerTube POST → caption XML parsing → snippet extraction. Supports 4 output formats (Text, SRT, JSON, WebVTT), proxy configs, and 10+ error types. Also handles thumbnail fetching with size fallback.
 
-- **pkg/er1/** — ER1 knowledge server integration. Multipart HTTP upload with `transcript_file_ext`, `audio_data_ext`, `image_data` fields. ER1 requires all three fields — system sends placeholder audio (1s silence WAV) or placeholder image (1x1 red PNG) when real data is unavailable. Includes JSON-backed retry queue with mutex synchronization.
+- **pkg/er1/**: ER1 knowledge server integration. Multipart HTTP upload with `transcript_file_ext`, `audio_data_ext`, `image_data` fields. ER1 requires all three fields: system sends placeholder audio (1s silence WAV) or placeholder image (1x1 red PNG) when real data is unavailable. Includes JSON-backed retry queue with mutex synchronization.
 
-- **pkg/impression/** — Composite document builder and tag system. Builds structured text documents combining video transcript + user commentary. Tags auto-generated from observation type.
+- **pkg/impression/**: Composite document builder and tag system. Builds structured text documents combining video transcript + user commentary. Tags auto-generated from observation type.
 
-- **pkg/whisper/** — Wraps the whisper CLI binary as a subprocess (not C bindings). Finds binary in PATH or standard locations, runs with `--output_format json`, parses segments.
+- **pkg/whisper/**: Wraps the whisper CLI binary as a subprocess (not C bindings). Finds binary in PATH or standard locations, runs with `--output_format json`, parses segments.
 
-- **pkg/recorder/** — PortAudio microphone recording via cgo. Records 16kHz/16-bit PCM mono WAV (whisper-compatible format).
+- **pkg/recorder/**: PortAudio microphone recording via cgo. Records 16kHz/16-bit PCM mono WAV (whisper-compatible format).
 
 ### Entry Points
 
-- **cmd/m3c-tools/** — Main CLI with subcommands: transcript, upload, whisper, thumbnail, check-er1, record, devices.
-- **cmd/poc-*/** — Four validated proof-of-concept binaries (menubar, transcript, whisper, recorder). These are reference implementations, not production code.
+- **cmd/m3c-tools/**. Main CLI with subcommands: transcript, upload, whisper, thumbnail, check-er1, record, devices.
+- **cmd/poc-*/**: Four validated proof-of-concept binaries (menubar, transcript, whisper, recorder). These are reference implementations, not production code.
 
 ### Key Technical Details
 
-- **Zero external deps for core logic** — transcript, er1, impression packages use only Go stdlib. External deps (menuet, portaudio) are only for POC features.
+- **Zero external deps for core logic**: transcript, er1, impression packages use only Go stdlib. External deps (menuet, portaudio) are only for POC features.
 - **InnerTube API**: Uses Android client context to avoid age-restriction issues. Must set `CONSENT=YES+cb` cookie. Must strip `&fmt=srv3` from caption baseUrl to get XML format.
 - **PoToken check**: If caption URLs contain `&exp=xpe`, raise an error (YouTube anti-bot measure).
 - **CLI flag parsing**: Uses manual `os.Args` parsing (no cobra/flag). Follow the existing pattern in `cmdTranscript()` when adding commands.
 
+## Writing style (binding, machine-enforced)
+
+Before writing ANY text into this repository (code, comments, docs, YAML, commit
+messages, PR bodies, CLI strings), read
+[`.claude/rules/prose-style.md`](.claude/rules/prose-style.md).
+
+The short version: **never emit U+2014 EM DASH**, and do not substitute a spaced
+hyphen or a double hyphen for it. Choose the punctuation the sentence needs, a
+colon for a label and its expansion, a period for two statements, a semicolon
+for two clauses too close to split, commas or parentheses for an aside. A lone
+dash in a table cell is `n/a`.
+
+Enforced three ways: a `PreToolUse` hook (`.claude/hooks/no-emdash-guard.sh`)
+that refuses the write, `./scripts/check-no-emdash.sh` locally and in
+`make ci`, and the blocking `prose-gate` CI job. Rationale and the two byte-level
+exemptions: [CODESTYLE.md](CODESTYLE.md#prose-no-em-dashes).
+
 ## Configuration
 
 Settings loaded from `.env` or `~/.m3c-tools.env` (see `.env.example`). Key variables:
-- `ER1_API_URL`, `ER1_API_KEY`, `ER1_CONTEXT_ID` — server connection
-- `ER1_VERIFY_SSL` — set `false` for local dev with self-signed certs
+- `ER1_API_URL`, `ER1_API_KEY`, `ER1_CONTEXT_ID`: server connection
+- `ER1_VERIFY_SSL`: set `false` for local dev with self-signed certs
 
 ## Current Status
 
-Core MVP complete: transcript fetching, ER1 upload, composite docs, whisper, recording, thumbnails — all implemented and tested. Stubbed: `record` and `devices` CLI commands, background retry scheduler, menu bar integration into main binary, screenshot capture, batch audio importer.
+Core MVP complete: transcript fetching, ER1 upload, composite docs, whisper, recording, thumbnails, all implemented and tested. Stubbed: `record` and `devices` CLI commands, background retry scheduler, menu bar integration into main binary, screenshot capture, batch audio importer.
 
 See the private maintenance plane (SPEC repo) for the full migration spec and ER1 requirements.
 
@@ -91,7 +108,7 @@ Treat conversation history as **disposable working memory**. Durable project sta
 
 **Before reading large files:**
 1. Search for the relevant symbol / section / filename first (grep/glob), then open it.
-2. Read only the relevant line ranges — not the whole file "to be safe".
+2. Read only the relevant line ranges: not the whole file "to be safe".
 3. Do not load generated files, logs, lock files, or large datasets unless the task requires it.
 4. **Never inspect the whole repo recursively** unless repository-wide discovery is genuinely needed.
 
@@ -100,7 +117,7 @@ Treat conversation history as **disposable working memory**. Durable project sta
 2. Do not carry rejected reasoning or abandoned approaches.
 3. Write a checkpoint and start a **fresh session** before a substantially different task.
 
-**Answers & tools:** ask for / produce exactly what's needed (paragraph, JSON, 5 bullets). Output costs twice — once when written, then in every later turn as input. Load only the tools the task needs (least-context access: `coding` = filesystem + git + shell).
+**Answers & tools:** ask for / produce exactly what's needed (paragraph, JSON, 5 bullets). Output costs twice: once when written, then in every later turn as input. Load only the tools the task needs (least-context access: `coding` = filesystem + git + shell).
 
 **At task completion**, produce a compact handoff (no transcript): objective · facts established · decisions made · files changed · tests/results · open questions · next action · relevant files (name 3–10, don't load broadly).
 

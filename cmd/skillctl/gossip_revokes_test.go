@@ -37,7 +37,7 @@ func signedRevoke(t *testing.T, priv ed25519.PrivateKey, digest string) map[stri
 }
 
 // signedAttestEvent is a genuinely-signed ATTESTATION (reviewer_id + governance_level,
-// no revoked_by) — used to prove a signed non-revoke unions nothing even when the
+// no revoked_by): used to prove a signed non-revoke unions nothing even when the
 // carrier relabels its EventRecord.Kind to revoke.
 func signedAttestEvent(t *testing.T, priv ed25519.PrivateKey, digest string) map[string]any {
 	t.Helper()
@@ -91,7 +91,7 @@ func TestUnionVerifiedRevokes(t *testing.T) {
 //     must union NOTHING (it is not a signed revoke).
 //
 // Against the old code (which keyed on ev.Digest and filtered on ev.Kind) BOTH
-// events would have unioned Y — revoking an innocent digest and honouring a forged
+// events would have unioned Y: revoking an innocent digest and honouring a forged
 // revocation. The signed-identity union defeats both.
 func TestUnionVerifiedRevokesSignedIdentity(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
@@ -115,7 +115,7 @@ func TestUnionVerifiedRevokesSignedIdentity(t *testing.T) {
 	}
 }
 
-// TestGossipedRevokedGrowOnly: the durable gossip cache only grows — a later merge
+// TestGossipedRevokedGrowOnly: the durable gossip cache only grows: a later merge
 // that omits a digest cannot un-revoke it (anti-rollback).
 func TestGossipedRevokedGrowOnly(t *testing.T) {
 	home := t.TempDir()
@@ -137,7 +137,7 @@ func TestGossipedRevokedGrowOnly(t *testing.T) {
 			t.Errorf("digest %s missing after grow-only merge", d)
 		}
 	}
-	// Perms: 0600 (POSIX only — Windows does not model unix mode bits).
+	// Perms: 0600 (POSIX only: Windows does not model unix mode bits).
 	if runtime.GOOS != "windows" {
 		if fi, err := os.Stat(gossipedRevokedPath(home)); err == nil && fi.Mode().Perm() != 0o600 {
 			t.Errorf("gossip cache perms = %o, want 600", fi.Mode().Perm())

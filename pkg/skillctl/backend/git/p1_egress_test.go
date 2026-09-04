@@ -8,9 +8,9 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
 )
 
-// TestGitPlaintextCredRefused — CD-T8 / WIN-T10 (closes CD-03 HIGH + WIN-12): a
+// TestGitPlaintextCredRefused: CD-T8 / WIN-T10 (closes CD-03 HIGH + WIN-12): a
 // write token must never ride cleartext HTTP to a non-loopback host, because
-// base64(user:token) in an Authorization header is encoding, not encryption — an
+// base64(user:token) in an Authorization header is encoding, not encryption. An
 // on-path attacker on a public network would capture a write-scoped registry
 // token. Mirrors the OCI backend's TestOCIPlaintextCredRefused. The token IS
 // attached over https:// (TLS protects it) and over http:// to a
@@ -54,7 +54,7 @@ func TestGitPlaintextCredRefused(t *testing.T) {
 	}
 }
 
-// TestReadCappedBounded — IS-T10 (IS-09 OOM DoS): a git clone is untrusted, so a
+// TestReadCappedBounded: IS-T10 (IS-09 OOM DoS): a git clone is untrusted, so a
 // hostile repo could commit a multi-GiB blob/event/bundle. readCapped mirrors the
 // OCI fetchCapped bound: an under-cap file reads back exactly, an over-cap file
 // returns a bounded-read ERROR (never a truncated success, never an OOM), and a

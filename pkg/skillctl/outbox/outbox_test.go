@@ -99,7 +99,7 @@ func TestAppendDedupOnEventID(t *testing.T) {
 	}
 }
 
-// TestPendingBatchDueExcludesFutureBackoff — the backoff-aware drain set: a row
+// TestPendingBatchDueExcludesFutureBackoff. The backoff-aware drain set: a row
 // whose delivery_attempts.next_retry_at is in the future is EXCLUDED until the
 // backoff elapses, while a row with no attempts (or an elapsed next_retry_at) is
 // due. This is what stops the sync daemon re-posting a just-deferred row.
@@ -115,11 +115,11 @@ func TestPendingBatchDueExcludesFutureBackoff(t *testing.T) {
 	}
 
 	const now = "2026-07-08T12:00:00Z"
-	// A: deferred into the future — must be excluded.
+	// A: deferred into the future, must be excluded.
 	if err := s.RecordAttempt(recA.EventID, 1, "2026-07-08T11:59:00Z", 500, "5xx", "2026-07-08T12:30:00Z"); err != nil {
 		t.Fatal(err)
 	}
-	// B: an elapsed backoff — must be due again.
+	// B: an elapsed backoff, must be due again.
 	if err := s.RecordAttempt(recB.EventID, 1, "2026-07-08T11:00:00Z", 500, "5xx", "2026-07-08T11:30:00Z"); err != nil {
 		t.Fatal(err)
 	}

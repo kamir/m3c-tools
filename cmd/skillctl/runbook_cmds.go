@@ -1,11 +1,11 @@
 package main
 
-// `skillctl runbook publish` — SPEC-0272: push a generated onboarding runbook
+// `skillctl runbook publish`, SPEC-0272: push a generated onboarding runbook
 // into the THOH catalog (POST <base>/api/thoh/runbooks).
 //
 // Why this exists (vs. the tools/skillctl-runbook-publish.sh curl bridge): the
 // device token comes from skillctl's OWN keychain item via the FR-0043 autoload
-// (autoloadDeviceToken set ER1_DEVICE_TOKEN before we ran) — no `security` CLI
+// (autoloadDeviceToken set ER1_DEVICE_TOKEN before we ran), no `security` CLI
 // prompt, no token echoed into shell history. Plus a --dry-run plan and a
 // governed confirm pause before the prod write. The descriptor matches the
 // bridge's (rb-skillctl-publisher) so either path yields the same catalog entry.
@@ -35,7 +35,7 @@ func runRunbook(args []string, stdout, stderr io.Writer) int {
 	tag := fs.String("tag", "", "Release tag the runbook belongs to (e.g. skillctl/v0.2.11-rc3). Version = last path segment. Required.")
 	base := fs.String("base", envOr("ER1_API_BASE", "https://onboarding.guide"), "THOH catalog base URL.")
 	rbID := fs.String("id", "rb-skillctl-publisher", "Runbook id in the catalog.")
-	title := fs.String("title", "skillctl — sign & publish a skill", "Catalog title.")
+	title := fs.String("title", "skillctl: sign & publish a skill", "Catalog title.")
 	purpose := fs.String("purpose", "Turn a person into a verified skill publisher", "One-line purpose.")
 	goal := fs.String("goal", "A signed, green-attested skill published to the room", "Completion goal.")
 	dryRun := fs.Bool("dry-run", false, "Print the plan + descriptor; do not POST.")
@@ -80,19 +80,19 @@ func runRunbook(args []string, stdout, stderr io.Writer) int {
 		"html_url": fmt.Sprintf("https://github.com/kamir/m3c-tools/releases/download/%s/skillctl-publisher-runbook.html", *tag),
 	}
 
-	fmt.Fprintf(stdout, "Runbook : %s@%s — %q\n", *rbID, version, *title)
+	fmt.Fprintf(stdout, "Runbook : %s@%s: %q\n", *rbID, version, *title)
 	fmt.Fprintf(stdout, "HTML    : %s (%d bytes)\n", htmlPath, len(html))
 	fmt.Fprintf(stdout, "Catalog : POST %s\n", endpoint)
 
 	if *dryRun {
 		pretty, _ := json.MarshalIndent(descriptor, "", "  ")
-		fmt.Fprintf(stdout, "\n--dry-run — descriptor that would be posted:\n%s\n", pretty)
+		fmt.Fprintf(stdout, "\n--dry-run: descriptor that would be posted:\n%s\n", pretty)
 		return 0
 	}
 
 	token := os.Getenv("ER1_DEVICE_TOKEN")
 	if token == "" {
-		fmt.Fprintln(stderr, "runbook publish: no device token — run 'skillctl login' first.")
+		fmt.Fprintln(stderr, "runbook publish: no device token: run 'skillctl login' first.")
 		return 13
 	}
 
@@ -116,10 +116,10 @@ func runRunbook(args []string, stdout, stderr io.Writer) int {
 
 	switch code {
 	case 200, 201:
-		fmt.Fprintf(stdout, "✓ runbook in catalog — assign it from the THOH board (%s/thoh).\n", strings.TrimRight(*base, "/"))
+		fmt.Fprintf(stdout, "✓ runbook in catalog, assign it from the THOH board (%s/thoh).\n", strings.TrimRight(*base, "/"))
 		return 0
 	case 401, 403:
-		fmt.Fprintln(stderr, "auth rejected — token invalid/expired (re-run 'skillctl login') or not permitted on this catalog.")
+		fmt.Fprintln(stderr, "auth rejected, token invalid/expired (re-run 'skillctl login') or not permitted on this catalog.")
 		return 13
 	default:
 		fmt.Fprintln(stderr, "publish failed.")
@@ -152,7 +152,7 @@ func postRunbookToCatalog(base, token string, descriptor map[string]any, html []
 // `skillctl publish` admit, if the skill dir carries BOTH runbook.html and the
 // sidecar runbook.meta.json (and --no-runbook-publish wasn't passed), it posts
 // them to the THOH catalog. Best-effort: every failure warns but NEVER fails the
-// publish — the admit is already done and the runbook bytes are in the signed
+// publish. The admit is already done and the runbook bytes are in the signed
 // .skb regardless. The descriptor is the sidecar; version is overridden by the
 // authoritative skill version (single source of truth).
 //
@@ -174,27 +174,27 @@ func maybeRegisterRunbook(stdout, stderr io.Writer, a publishAdmitArgs, ver stri
 	_, htmlErr := os.Stat(htmlPath)
 	_, metaErr := os.Stat(metaPath)
 	if htmlErr != nil && metaErr != nil {
-		return // skill ships no runbook — nothing to do
+		return // skill ships no runbook, nothing to do
 	}
 	if htmlErr != nil || metaErr != nil {
-		fmt.Fprintln(stderr, "    [runbook] runbook.html / runbook.meta.json present without its pair — not registered.")
+		fmt.Fprintln(stderr, "    [runbook] runbook.html / runbook.meta.json present without its pair, not registered.")
 		return
 	}
 
 	html, err := os.ReadFile(htmlPath)
 	if err != nil {
-		fmt.Fprintf(stderr, "    [runbook] read %s: %v — not registered.\n", htmlPath, err)
+		fmt.Fprintf(stderr, "    [runbook] read %s: %v, not registered.\n", htmlPath, err)
 		return
 	}
 	descriptor, err := loadRunbookDescriptor(metaPath, ver)
 	if err != nil {
-		fmt.Fprintf(stderr, "    [runbook] %v — not registered.\n", err)
+		fmt.Fprintf(stderr, "    [runbook] %v, not registered.\n", err)
 		return
 	}
 
 	token := os.Getenv("ER1_DEVICE_TOKEN")
 	if token == "" {
-		fmt.Fprintln(stderr, "    [runbook] no device token — skipping catalog register (run 'skillctl login').")
+		fmt.Fprintln(stderr, "    [runbook] no device token: skipping catalog register (run 'skillctl login').")
 		return
 	}
 	base, _ := er1Endpoint(a.er1Target)

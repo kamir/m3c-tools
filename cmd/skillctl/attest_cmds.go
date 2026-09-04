@@ -11,7 +11,7 @@ package main
 //   2. Load private key (S1 helper, refuses non-0600 modes).
 //   3. attested_at = time.Now().UTC().Truncate(time.Second), formatted via S9 helper.
 //   4. Build canonical message bytes via signing.CanonicalizeAttestationMessage.
-//      Validation happens here BEFORE signing — a malformed CLI invocation can never
+//      Validation happens here BEFORE signing. A malformed CLI invocation can never
 //      produce an ed25519 signature over malformed bytes.
 //   5. Sign with stdlib ed25519 (constant-time, deterministic).
 //   6. POST JSON to <registry>/attestations.
@@ -21,7 +21,7 @@ package main
 // Network policy:
 //   - 30s HTTP timeout (configurable via --timeout but defaults to 30s).
 //   - TLS verification on by default (stdlib default).
-//   - Plain HTTP allowed only for localhost / RFC1918 — needed for the homelab
+//   - Plain HTTP allowed only for localhost / RFC1918: needed for the homelab
 //     MinIO-style registry at 192.168.0.131:9100. See isPrivateRegistryURL below.
 
 import (
@@ -68,7 +68,7 @@ type attestRequest struct {
 	// attestation is the bundle's own author (reviewer_id == author_id,
 	// normalized). The server records it on the attestation row so the verifier
 	// and inspect/audit can enforce / surface the reviewer≠author floor. The
-	// field is NOT folded into the signed bytes (same as rationale) — it is an
+	// field is NOT folded into the signed bytes (same as rationale). It is an
 	// honest derived label, and the server is the authority that re-derives it
 	// from its own author record where one exists.
 	SelfAttested bool `json:"self_attested"`
@@ -162,7 +162,7 @@ func runAttestWithClient(
 		fmt.Fprintf(stderr, "skillctl attest: invalid --level %q (want green|yellow|red)\n", *level)
 		return exitUsage
 	}
-	// Reject malformed digests up front — easier to reason about than a
+	// Reject malformed digests up front: easier to reason about than a
 	// canonicalize error after we've already loaded the key.
 	if _, err := signing.CanonicalizeAttestationMessage(bundleDigest, *level, "1970-01-01T00:00:00Z", *reviewerID); err != nil {
 		// This canonicalize call is purely a validator (we'll throw the
@@ -191,7 +191,7 @@ func runAttestWithClient(
 
 	// ----- SPEC-0246 §5.1: derive self_attested BEFORE signing -----
 	// self_attested := normalize(reviewer_id) == normalize(author_id). The
-	// author identity comes from --author-id (offline) — when the server has an
+	// author identity comes from --author-id (offline). When the server has an
 	// admit record it re-derives authoritatively, but we send our honest local
 	// computation so the offline path still records the right label. When
 	// --author-id is absent we cannot compute it locally; the server decides.
@@ -202,7 +202,7 @@ func runAttestWithClient(
 	}
 	if selfAttested {
 		fmt.Fprintf(stderr,
-			"skillctl attest: NOTE — self-attestation: reviewer %q is the bundle author. "+
+			"skillctl attest: self-attestation NOTE: reviewer %q is the bundle author. "+
 				"This attestation is self_attested=true; a trust root with "+
 				"require_independent_review will REFUSE the bundle (SPEC-0246 §5).\n",
 			*reviewerID)
@@ -293,7 +293,7 @@ func runAttestWithClient(
 
 	// SPEC-0278 L1: best-effort mirror of this signed attestation's digest
 	// into the local transparency log (opt-in via M3C_TRANSLOG=1). Never
-	// alters the attest decision above — the attestation already succeeded.
+	// alters the attest decision above: the attestation already succeeded.
 	bestEffortTranslogAppend(translogEventAttest, bundleDigest, *level, stderr)
 	return exitOK
 }
@@ -324,8 +324,8 @@ func extractDigestPositional(args []string) (digest string, rest []string) {
 		return picked, rest
 	}
 	// Either no digest-shaped positional (caller may have placed it at
-	// the trailing slot — fs.Arg(0) handles that path) or multiple
-	// (ambiguous — bail with empty so downstream usage check fires).
+	// the trailing slot, fs.Arg(0) handles that path) or multiple
+	// (ambiguous, bail with empty so downstream usage check fires).
 	return "", args
 }
 
@@ -343,7 +343,7 @@ func isKnownLevel(level string) bool {
 
 // validateRegistryURL refuses obviously broken URLs and enforces the TLS
 // policy: HTTPS is always allowed; HTTP is allowed only for localhost or
-// RFC1918 ranges (homelab registries — 192.168.0.131:9100 must work).
+// RFC1918 ranges (homelab registries, 192.168.0.131:9100 must work).
 //
 // Returns nil if the URL passes; an error explaining the reason otherwise.
 func validateRegistryURL(raw string) error {
@@ -363,7 +363,7 @@ func validateRegistryURL(raw string) error {
 	if u.Scheme == "https" {
 		return nil
 	}
-	// Plain HTTP — only allow loopback or RFC1918 hosts.
+	// Plain HTTP: only allow loopback or RFC1918 hosts.
 	if !isPrivateOrLoopbackHost(u.Hostname()) {
 		return fmt.Errorf("--registry %q uses plain HTTP against a non-private host; use HTTPS or point at localhost / RFC1918", raw)
 	}
@@ -376,7 +376,7 @@ func validateRegistryURL(raw string) error {
 //   - "localhost" string literal
 //   - any literal IP that's loopback or in the private/link-local ranges
 //
-// We deliberately do NOT do DNS lookups here — that would be a TOCTOU
+// We deliberately do NOT do DNS lookups here, that would be a TOCTOU
 // risk (an attacker could change DNS between our check and net/http's
 // dial). For named hosts that aren't "localhost", we require HTTPS.
 func isPrivateOrLoopbackHost(host string) bool {

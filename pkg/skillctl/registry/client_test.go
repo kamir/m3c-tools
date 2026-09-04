@@ -218,7 +218,7 @@ func TestGetBundle_ExceedsMaxSize(t *testing.T) {
 func TestGetBundleMeta_OK(t *testing.T) {
 	fs := newFixtureServer(t)
 	fs.install("/api/skills/bundles/", func(w http.ResponseWriter, r *http.Request) {
-		// Only the meta variant should be hit by GetBundleMeta — assert.
+		// Only the meta variant should be hit by GetBundleMeta: assert.
 		if r.URL.Query().Get("meta") != "1" {
 			t.Errorf("expected ?meta=1, got %q", r.URL.RawQuery)
 		}
@@ -385,7 +385,7 @@ func TestRedirectCap(t *testing.T) {
 	hits := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits++
-		// Bounce forever — the client should give up.
+		// Bounce forever: the client should give up.
 		http.Redirect(w, r, r.URL.String()+"x", http.StatusFound)
 	}))
 	defer srv.Close()

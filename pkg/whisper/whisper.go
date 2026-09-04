@@ -215,7 +215,7 @@ func TranscribeWithProgress(ctx context.Context, audioPath string, model string,
 		}
 	}()
 
-	// Parse stderr for warnings and errors — log everything.
+	// Parse stderr for warnings and errors: log everything.
 	stderrDone := make(chan struct{})
 	go func() {
 		defer close(stderrDone)

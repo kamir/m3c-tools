@@ -29,7 +29,7 @@ func (s *stubRunner) Run(emit func(stream, line string), stdin string, args ...s
 }
 
 // testKata is a minimal Kata whose setup needs no sandbox and whose experiment
-// observes the runner's process exit — so runRep can be driven with a stub.
+// observes the runner's process exit, so runRep can be driven with a stub.
 func testKata(target, required int) *Kata {
 	return &Kata{
 		ID: "KT", Title: "test kata", Target: "t", TargetExit: target, RequiredReps: required,

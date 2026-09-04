@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestSafeCell — the git-registry render paths must strip terminal-escape and
+// TestSafeCell: the git-registry render paths must strip terminal-escape and
 // control bytes from untrusted repo-sourced fields (challenge-gate finding:
 // a malicious rationale could rewrite `status: REVOKED` -> `ok`).
 func TestSafeCell(t *testing.T) {
@@ -16,7 +16,7 @@ func TestSafeCell(t *testing.T) {
 		t.Errorf("control chars survived: %q", got)
 	}
 	// The ESC + CR are dropped (so the cursor cannot move); the printable "[3A"
-	// remnant stays as inert text — that is the correct, safe outcome.
+	// remnant stays as inert text, that is the correct, safe outcome.
 	if got != "green[3A    status:          ok" {
 		t.Errorf("safeCell = %q", got)
 	}

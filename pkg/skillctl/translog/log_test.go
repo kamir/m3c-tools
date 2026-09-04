@@ -84,7 +84,7 @@ func TestLog_PersistAndReload(t *testing.T) {
 	}
 	rootAfter, _ := l2.Root()
 	if rootBefore != rootAfter {
-		t.Fatal("root changed across reload — persistence is not faithful")
+		t.Fatal("root changed across reload: persistence is not faithful")
 	}
 }
 

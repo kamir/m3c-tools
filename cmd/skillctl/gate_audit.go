@@ -1,6 +1,6 @@
 package main
 
-// gate_audit.go — SPEC-0255 gate observability: an append-only, advisory record
+// gate_audit.go, SPEC-0255 gate observability: an append-only, advisory record
 // of every gate decision (PreToolUse hook + SessionStart sweep).
 //
 // CRITICAL CONTRACT: this is fire-and-forget telemetry, NOT a trust input.
@@ -8,7 +8,7 @@ package main
 // failure (read-only home, full disk, marshal panic) can never change the gate
 // decision or exit code. The gate calls it as a bare statement and never branches
 // on a result. Reading a tampered audit log can mislead an operator but can never
-// allow a bad skill — the trust boundary stays the binary + trust roots + §3.2.
+// allow a bad skill. The trust boundary stays the binary + trust roots + §3.2.
 
 import (
 	"encoding/json"
@@ -44,7 +44,7 @@ var gateAuditMaxBytes int64 = 5 << 20 // 5 MiB
 // identical to the verdict cache.
 func gateAuditPath(home string) string { return filepath.Join(verdictDir(home), "gate-audit.jsonl") }
 
-// gateAuditSink is the write seam — tests inject a failing sink to prove the
+// gateAuditSink is the write seam: tests inject a failing sink to prove the
 // gate decision is unchanged when logging fails.
 var gateAuditSink = defaultGateAuditSink
 
@@ -55,7 +55,7 @@ func defaultGateAuditSink(home string, line []byte) error {
 	}
 	path := gateAuditPath(home)
 	// Best-effort size rotation BEFORE the append. A lost rotation race just
-	// means one extra line in the old generation — advisory, never load-bearing.
+	// means one extra line in the old generation: advisory, never load-bearing.
 	if fi, err := os.Stat(path); err == nil && fi.Size() >= gateAuditMaxBytes {
 		_ = os.Rename(path, path+".1")
 	}

@@ -3,7 +3,7 @@ layout: default
 title: Menu Bar App
 ---
 
-# M3C Tools — macOS Menu Bar App
+# M3C Tools: macOS Menu Bar App
 
 A native macOS menu bar app for capturing multimodal observations. Built in Go using `caseymrm/menuet` for the menu bar and native Cocoa (NSWindow, NSTabView) via cgo for the Observation Window.
 
@@ -46,7 +46,7 @@ make menubar
 
 ## Capture Channels
 
-### Channel A — YouTube
+### Channel A: YouTube
 
 1. Click **Fetch Transcript...** in the menu bar
 2. Paste a YouTube URL or video ID
@@ -55,7 +55,7 @@ make menubar
 5. Record a voice impression about the video
 6. Review transcribed text, edit tags, Store or Cancel
 
-### Channel B — Screenshot
+### Channel B: Screenshot
 
 1. Click **Capture Screenshot** in the menu bar
 2. Screen is captured (clipboard-first, falls back to interactive)
@@ -63,7 +63,7 @@ make menubar
 4. Record your observations about what you see
 5. Review, tag, Store or Cancel
 
-### Channel C — Quick Impulse
+### Channel C: Quick Impulse
 
 1. Click **Quick Impulse** in the menu bar
 2. Interactive region selection appears
@@ -72,7 +72,7 @@ make menubar
 5. Record a quick voice note about the impulse
 6. Review, tag, Store or Cancel
 
-### Channel D — Audio Import
+### Channel D: Audio Import
 
 1. Click **Import Audio** in the menu bar
 2. Scans preconfigured folder (`IMPORT_AUDIO_SOURCE`) for audio files
@@ -110,18 +110,18 @@ The Observation Window is a native NSWindow with NSTabView, shared by all captur
 
 ### Tags Tab
 - Pre-filled tags per channel (editable comma-separated field)
-- **[Store]** — upload to ER1 (queues on failure for retry)
-- **[Cancel]** — save draft to `~/.m3c-tools/drafts/`, return to idle
+- **[Store]**: upload to ER1 (queues on failure for retry)
+- **[Cancel]**: save draft to `~/.m3c-tools/drafts/`, return to idle
 
 ## Menu Items
 
 | Item | Action |
 |------|--------|
 | Status line | Current app state (Idle, Fetching, Recording...) |
-| Fetch Transcript... | Channel A — YouTube |
-| Capture Screenshot | Channel B — Screenshot |
-| Quick Impulse | Channel C — Interactive region capture |
-| Import Audio | Channel D — Batch audio import |
+| Fetch Transcript... | Channel A: YouTube |
+| Capture Screenshot | Channel B: Screenshot |
+| Quick Impulse | Channel C: Interactive region capture |
+| Import Audio | Channel D: Batch audio import |
 | Login to ER1... | Open ER1 login in Chrome |
 | Logout from ER1 | Clear runtime ER1 session |
 | History submenu | Last 20 transcripts (click to re-copy) |
@@ -131,12 +131,12 @@ The Observation Window is a native NSWindow with NSTabView, shared by all captur
 ## Project Time Tracking
 
 m3c-tools maintains a per-project time ledger so you can see, retroactively,
-how much time you spent on which project — even if you forgot to start a
+how much time you spent on which project, even if you forgot to start a
 timer. Two complementary mechanisms feed the ledger:
 
-1. **Explicit sessions** — start/stop a project from the **Projects ▶**
+1. **Explicit sessions**: start/stop a project from the **Projects ▶**
    submenu. Time accumulates between activate and deactivate events.
-2. **Reverse time tracking** — every observation you capture (transcript,
+2. **Reverse time tracking**: every observation you capture (transcript,
    screenshot, voice impulse, audio import) is examined; if its tags
    match a project, a 15-minute time block centred on the observation
    timestamp is added to that project automatically.
@@ -145,14 +145,14 @@ Both feed the same store (`~/.m3c-tools/timetracking.db`) and both are
 visible in the Gantt chart (open via **Projects ▶ Show Time Tracker…**).
 
 > **Specifications:**
-> **SPEC-0007 — Project Time Tracking** (private maintenance plane)
+> **SPEC-0007: Project Time Tracking** (private maintenance plane)
 > covers the full design, including the requirements referenced below.
 
 ### How reverse tracking works
 
 When you store an observation, the menubar app:
 
-1. **Extracts the observation's tags** from the upload payload — built by
+1. **Extracts the observation's tags** from the upload payload: built by
    `impression.BuildTags`, `BuildVideoTags`, or `ParseMetadataTags`
    depending on capture type.
 2. **Compares those tags against every active/validating project** loaded
@@ -168,7 +168,7 @@ When you store an observation, the menubar app:
 3. **Picks the best-matching project.** Ties are broken by the project's
    `updated_at` (most recently active wins). If no project matches, no
    block is created and you'll see a `[reverse-tracking] no project
-   match` line in the log — that's diagnostic, not an error.
+   match` line in the log. That's diagnostic, not an error.
 4. **Creates an inferred time block** (15 min default, centred on the
    observation timestamp) with `trigger="observation_inferred"` and
    `content_ref=<doc_id>`. The Gantt chart renders inferred blocks with
@@ -176,7 +176,7 @@ When you store an observation, the menubar app:
    from explicit sessions.
 5. **Skips if covered.** If you already had an explicit session active
    for the matched project at that timestamp, no inferred block is
-   created — the explicit session already accounts for the time.
+   created: the explicit session already accounts for the time.
 6. **Skips a nearby duplicate.** If an inferred block for the matched
    project already sits within **half the block duration** of the
    observation (default ±7.5 min, i.e. `M3C_REVERSE_BLOCK_DURATION`/2),
@@ -184,7 +184,7 @@ When you store an observation, the menubar app:
    captures in a short window shows up as one block, not several
    overlapping fragments.
 
-### Backfill — replaying past observations
+### Backfill: replaying past observations
 
 Tag rules and project lists change over time. To make sure historical
 observations still get credited when their target project is added or
@@ -197,7 +197,7 @@ SPEC-0007 REQ-10):
 | App start | All observations from the **current calendar month** |
 | Gantt navigation | Observations from the period the user navigates to |
 
-Replay is **idempotent** — observations already credited to a project
+Replay is **idempotent**. Observations already credited to a project
 are skipped on re-run, so leaving the app to backfill repeatedly costs
 nothing.
 
@@ -220,7 +220,7 @@ overlap**. Two ways to fix it:
    (≤ 5 min) plus the next backfill will pick them up.
 2. **Tag your captures with project anchors.** Include a
    `project:<slug>` or `client:<name>` tag when you capture. Strong
-   matches always win — one explicit anchor is more reliable than
+   matches always win: one explicit anchor is more reliable than
    relying on weak overlap.
 
 ### Configuration
@@ -239,10 +239,10 @@ profile (`~/.m3c-tools/profiles/<name>.env`) or in `~/.m3c-tools/preferences.env
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Projects submenu is empty | PLM auth failed at startup | `m3c-tools doctor` — the device-token / API-key check there will pinpoint it. See also BUG-0124 (private maintenance plane) for the v2.7.0 fix. |
+| Projects submenu is empty | PLM auth failed at startup | `m3c-tools doctor`. The device-token / API-key check there will pinpoint it. See also BUG-0124 (private maintenance plane) for the v2.7.0 fix. |
 | Many `no project match` log lines, no inferred blocks | Project tag patterns don't overlap with capture tags | See "How to make reverse tracking work" above. |
-| Inferred blocks appear at wrong project | Tag overlap is too generic | Add a `project:<slug>` anchor to either the project's tags or your capture tags — strong matches override weak overlap. |
-| Profile is mis-configured (placeholder API key etc.) | Init wizard left a `once-only` / `minimal-key` placeholder | `m3c-tools config doctor` — the profile validator (see SPEC-0177 on the private maintenance plane) flags placeholder keys, missing context ids, malformed URLs, and duplicate keys across profiles. |
+| Inferred blocks appear at wrong project | Tag overlap is too generic | Add a `project:<slug>` anchor to either the project's tags or your capture tags. Strong matches override weak overlap. |
+| Profile is mis-configured (placeholder API key etc.) | Init wizard left a `once-only` / `minimal-key` placeholder | `m3c-tools config doctor`: the profile validator (see SPEC-0177 on the private maintenance plane) flags placeholder keys, missing context ids, malformed URLs, and duplicate keys across profiles. |
 
 ## Logs
 
@@ -270,7 +270,7 @@ Or manually:
 ```bash
 rm -f /usr/local/bin/m3c-tools
 rm -rf /Applications/M3C-Tools.app
-# Data preserved at ~/.m3c-tools/ — remove manually if desired
+# Data preserved at ~/.m3c-tools/: remove manually if desired
 ```
 
 ---

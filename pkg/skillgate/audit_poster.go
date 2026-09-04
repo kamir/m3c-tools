@@ -17,7 +17,7 @@ import (
 //
 // Cooperative model: PostInvocation MUST NOT block the gate. Any error
 // (network down, 5xx, timeout) is returned to the caller but the caller
-// is expected to ignore it — see Gate.audit().
+// is expected to ignore it: see Gate.audit().
 type HTTPInvocationPoster struct {
 	AuditURL string       // e.g. https://aims-core/api/skills/runtime/invocations
 	APIKey   string       // optional API key; sent as `X-API-KEY: <key>` to match the rest of the skill-registry API surface
@@ -37,7 +37,7 @@ func NewHTTPInvocationPoster(url, apiKey string) *HTTPInvocationPoster {
 		// SPEC-0202 §17 AC-11: api_auth_required (skill_registry/api.py)
 		// rejects requests that lack X-User-ID even when the API key is
 		// correct. Without this default the cooperative gate.refused
-		// post returned 401 silently and the audit row never landed —
+		// post returned 401 silently and the audit row never landed:
 		// the E2E saw count=0 and failed.
 		UserID:  "m3c-skillgate-host",
 		Client:  &http.Client{Timeout: 2 * time.Second},
@@ -91,7 +91,7 @@ func (p *HTTPInvocationPoster) PostInvocation(ev InvocationEvent) error {
 	if p.UserID != "" {
 		// SPEC-0202 §17 AC-11: api_auth_required requires X-User-ID
 		// alongside X-API-KEY. Without it the registry returns 401 and
-		// the audit row never lands — the cooperative-refusal flow
+		// the audit row never lands: the cooperative-refusal flow
 		// looks like it succeeded (probe still exits 33 from gate.Allow)
 		// but the operator has no record of why a refusal occurred.
 		req.Header.Set("X-User-ID", p.UserID)

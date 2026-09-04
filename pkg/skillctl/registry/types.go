@@ -44,7 +44,7 @@ type BundleVersion struct {
 
 	// AuthorIntent is the bundle's declared `governance_intent`
 	// (🟢🟡🔴 self-classification per SPEC-0130). The verifier MUST
-	// NOT trust this for the gate decision — only signed governance
+	// NOT trust this for the gate decision, only signed governance
 	// attestations bind the verdict (SPEC-0188 §7 step 6).
 	AuthorIntent string `json:"author_intent,omitempty"`
 
@@ -97,7 +97,7 @@ type BundleMeta struct {
 	// per SPEC-0188 §4.3 ("the most-recent signed governance attestation
 	// by a reviewer with the required role"). One of "green" | "yellow" |
 	// "red"; empty string means the registry didn't compute it (treat as
-	// "red" / below-minimum — fail-closed).
+	// "red" / below-minimum: fail-closed).
 	//
 	// The verifier MUST gate on this field (and NOT on Manifest's
 	// `author_governance_intent` per SPEC-0188 §3.2 + §7 step 6).
@@ -108,7 +108,7 @@ type BundleMeta struct {
 // `_skill_attestations` Firestore document shape in compact form.
 //
 // In v1 the verifier does NOT independently re-verify each governance
-// signature — it gates on BundleMeta.CurrentGovernance, which the registry
+// signature: it gates on BundleMeta.CurrentGovernance, which the registry
 // computed by validating attestations server-side. Attestations are kept
 // here so verbose chain summaries can show "which reviewer signed which
 // level when." A future tightening could drop the trust in the registry
@@ -116,7 +116,7 @@ type BundleMeta struct {
 // SPEC-0188 §7 step 6 explicitly leaves room for that.
 type AttestationRow struct {
 	// AttestationID is the registry-assigned id of this attestation,
-	// e.g. `att:01H…`. Surface only — used in chain summaries / audit
+	// e.g. `att:01H…`. Surface only: used in chain summaries / audit
 	// trails, never matched against signature material.
 	AttestationID string `json:"attestation_id,omitempty"`
 
@@ -179,7 +179,7 @@ type AttestationRow struct {
 // attestation, and (if present) governance attestation.
 type SignatureRow struct {
 	// Role is "author" | "registry" | "governance". The verifier
-	// branches on this — string match must be exact (lowercased on
+	// branches on this: string match must be exact (lowercased on
 	// both sides at the verify layer if needed; we don't normalize
 	// here so callers see the wire form).
 	Role string `json:"role"`

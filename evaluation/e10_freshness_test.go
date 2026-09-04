@@ -1,26 +1,26 @@
 package evaluation
 
-// E10 — Revocation FRESHNESS correctness (SPEC-0280 §2; SPEC-0279 + SPEC-0278).
+// E10: Revocation FRESHNESS correctness (SPEC-0280 §2; SPEC-0279 + SPEC-0278).
 //
 // This is a CORRECTNESS matrix, not a latency curve: for each adversarial case
 // the harness drives the SHIPPED logic and asserts it produces the SAFE verdict.
 // We report a pass/fail per case (and an aggregate pass-rate). The cases:
 //
-//   rollback      — an attacker substitutes an OLDER signed revocation list (lower
+//   rollback: an attacker substitutes an OLDER signed revocation list (lower
 //                   epoch) to drop a revocation. Driven through the real
 //                   verify.VerifyRevocationList with a pinned epoch floor; the
 //                   stale-epoch list MUST be refused (ErrRegistryNotTrusted).
-//   stale-high    — a synced snapshot is older than max_staleness and the action
+//   stale-high: a synced snapshot is older than max_staleness and the action
 //                   is HIGH-risk. EvaluateFreshness MUST deny (fail-closed) with
 //                   ErrRevocationStale, regardless of fail_policy.
 //   stale-low-open- a stale snapshot + LOW-risk action + fail_policy=open MUST be
 //                   ALLOWED but produce an auditable record (never silent).
-//   fresh         — a within-ceiling snapshot MUST be allowed.
-//   future-dated  — a forged future issued_at MUST be treated as infinitely stale
+//   fresh, a within-ceiling snapshot MUST be allowed.
+//   future-dated, a forged future issued_at MUST be treated as infinitely stale
 //                   (fail-safe), so a high-risk action is denied.
-//   split-view    — the log shows two STHs at the same tree_size with different
+//   split-view: the log shows two STHs at the same tree_size with different
 //                   roots. DetectSplitView MUST flag it (ErrSplitView).
-//   consistency   — a genuine append between two sizes MUST verify
+//   consistency: a genuine append between two sizes MUST verify
 //                   (VerifyConsistency ok); a rewritten history MUST fail.
 //
 // Each case is also a standalone Test* so `go test ./evaluation/` (no RUN_EVAL)
@@ -75,11 +75,11 @@ func caseRollback(t *testing.T) bool {
 	_, vErr := verify.VerifyRevocationList(old, root, 5) // minEpoch=5
 	// Safe verdict: refused (rollback caught).
 	if vErr == nil {
-		t.Logf("E10 rollback: FAIL — stale-epoch list was accepted")
+		t.Logf("E10 rollback: FAIL, stale-epoch list was accepted")
 		return false
 	}
 	if !errors.Is(vErr, verify.ErrRegistryNotTrusted) {
-		t.Logf("E10 rollback: FAIL — wrong error: %v", vErr)
+		t.Logf("E10 rollback: FAIL, wrong error: %v", vErr)
 		return false
 	}
 	// And the SAME list at/above the floor must be accepted (no false positive).
@@ -88,7 +88,7 @@ func caseRollback(t *testing.T) bool {
 		t.Fatalf("sign current list: %v", err)
 	}
 	if _, err := verify.VerifyRevocationList(current, root, 5); err != nil {
-		t.Logf("E10 rollback: FAIL — at-floor list wrongly refused: %v", err)
+		t.Logf("E10 rollback: FAIL, at-floor list wrongly refused: %v", err)
 		return false
 	}
 	return true
@@ -102,11 +102,11 @@ func caseStaleHighRisk(t *testing.T) bool {
 	issued := e10Now.Add(-100 * time.Hour).Format(time.RFC3339)
 	dec, err := verify.EvaluateFreshness(5, issued, policy, verify.RiskHigh, e10Now)
 	if err == nil || dec.Allowed {
-		t.Logf("E10 stale-high: FAIL — stale high-risk action was allowed (dec=%+v err=%v)", dec, err)
+		t.Logf("E10 stale-high: FAIL, stale high-risk action was allowed (dec=%+v err=%v)", dec, err)
 		return false
 	}
 	if !errors.Is(err, verify.ErrRevocationStale) {
-		t.Logf("E10 stale-high: FAIL — wrong error: %v", err)
+		t.Logf("E10 stale-high: FAIL, wrong error: %v", err)
 		return false
 	}
 	return true
@@ -119,16 +119,16 @@ func caseStaleLowOpen(t *testing.T) bool {
 	issued := e10Now.Add(-100 * time.Hour).Format(time.RFC3339)
 	risk := verify.ClassifyActionRisk([]string{"fs:read"}, false) // proven low
 	if risk != verify.RiskLow {
-		t.Logf("E10 stale-low-open: FAIL — fs:read should classify low, got %s", risk)
+		t.Logf("E10 stale-low-open: FAIL: fs:read should classify low, got %s", risk)
 		return false
 	}
 	dec, err := verify.EvaluateFreshness(5, issued, policy, risk, e10Now)
 	if err != nil || !dec.Allowed {
-		t.Logf("E10 stale-low-open: FAIL — stale low-risk fail-open was denied (dec=%+v err=%v)", dec, err)
+		t.Logf("E10 stale-low-open: FAIL, stale low-risk fail-open was denied (dec=%+v err=%v)", dec, err)
 		return false
 	}
 	if !dec.Stale || dec.Reason != "stale_low_risk_fail_open" {
-		t.Logf("E10 stale-low-open: FAIL — missing audit record (dec=%+v)", dec)
+		t.Logf("E10 stale-low-open: FAIL, missing audit record (dec=%+v)", dec)
 		return false
 	}
 	return true
@@ -141,7 +141,7 @@ func caseFresh(t *testing.T) bool {
 	issued := e10Now.Add(-1 * time.Hour).Format(time.RFC3339)
 	dec, err := verify.EvaluateFreshness(5, issued, policy, verify.RiskHigh, e10Now)
 	if err != nil || !dec.Allowed || dec.Stale {
-		t.Logf("E10 fresh: FAIL — fresh snapshot wrongly denied (dec=%+v err=%v)", dec, err)
+		t.Logf("E10 fresh: FAIL: fresh snapshot wrongly denied (dec=%+v err=%v)", dec, err)
 		return false
 	}
 	return true
@@ -151,11 +151,11 @@ func caseFresh(t *testing.T) bool {
 func caseFutureDated(t *testing.T) bool {
 	t.Helper()
 	policy := verify.FreshnessPolicy{MaxStaleness: 24 * time.Hour, FailPolicy: verify.FailClosed}
-	// 1000h in the FUTURE — would "look fresh forever" if not fail-safed.
+	// 1000h in the FUTURE: would "look fresh forever" if not fail-safed.
 	issued := e10Now.Add(1000 * time.Hour).Format(time.RFC3339)
 	dec, err := verify.EvaluateFreshness(5, issued, policy, verify.RiskHigh, e10Now)
 	if err == nil || dec.Allowed || !dec.Stale {
-		t.Logf("E10 future-dated: FAIL — future-dated snapshot looked fresh (dec=%+v err=%v)", dec, err)
+		t.Logf("E10 future-dated: FAIL: future-dated snapshot looked fresh (dec=%+v err=%v)", dec, err)
 		return false
 	}
 	return true
@@ -204,11 +204,11 @@ func caseSplitView(t *testing.T) bool {
 	pins := e10PinnedLog{id: "eval-log", pub: logPub}
 	conflict, err := translog.DetectSplitView(pins, []translog.STH{sthA, sthB})
 	if err == nil || conflict == nil {
-		t.Logf("E10 split-view: FAIL — equivocation not detected (conflict=%v err=%v)", conflict, err)
+		t.Logf("E10 split-view: FAIL, equivocation not detected (conflict=%v err=%v)", conflict, err)
 		return false
 	}
 	if !errors.Is(err, translog.ErrSplitView) {
-		t.Logf("E10 split-view: FAIL — wrong error: %v", err)
+		t.Logf("E10 split-view: FAIL, wrong error: %v", err)
 		return false
 	}
 	return true
@@ -237,14 +237,14 @@ func caseConsistency(t *testing.T) bool {
 		t.Fatalf("prove consistency: %v", err)
 	}
 	if err := translog.VerifyConsistency(5, second, firstRoot, secondRoot, proof); err != nil {
-		t.Logf("E10 consistency: FAIL — genuine append wrongly rejected: %v", err)
+		t.Logf("E10 consistency: FAIL, genuine append wrongly rejected: %v", err)
 		return false
 	}
 	// A rewritten history: corrupt the firstRoot so the proof can't reconstruct it.
 	bad := firstRoot
 	bad[0] ^= 0xFF
 	if err := translog.VerifyConsistency(5, second, bad, secondRoot, proof); err == nil {
-		t.Logf("E10 consistency: FAIL — rewritten history wrongly accepted")
+		t.Logf("E10 consistency: FAIL: rewritten history wrongly accepted")
 		return false
 	}
 	return true

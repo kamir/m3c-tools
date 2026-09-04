@@ -1,4 +1,4 @@
-// sink_trace_test.go — Week 3 Stream 3b e2e coverage.
+// sink_trace_test.go: Week 3 Stream 3b e2e coverage.
 //
 // Covers:
 //   - Running a linear process with the ER1 sinker enabled emits
@@ -165,7 +165,7 @@ func TestSinkerDisabledMeansZeroER1Calls(t *testing.T) {
 	bus, _ := tkafka.NewValidatingBus(innerBus, nil)
 	_ = orchestrator.New(hash, bus, st)
 
-	// Sinker is NOT started — mirrors ENABLE_ER1_SINK=0 behaviour.
+	// Sinker is NOT started: mirrors ENABLE_ER1_SINK=0 behaviour.
 	// Publish the artifact anyway.
 	art := schema.Artifact{
 		SchemaVer: schema.CurrentSchemaVer, ArtifactID: "a-no-sink",

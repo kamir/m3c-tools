@@ -15,7 +15,7 @@ type OpenFunc func(spec string, opts OpenOptions) (Backend, error)
 // drivers maps a normalized scheme (SchemeOf) to its constructor. It is
 // populated from each backend package's init() via Register; the CLI blank-
 // imports those packages to trigger registration. This is the database/sql
-// driver pattern — the factory stays decoupled from the implementations.
+// driver pattern. The factory stays decoupled from the implementations.
 var drivers = map[string]OpenFunc{}
 
 // Register wires a scheme to its constructor. Called from a backend package's
@@ -108,11 +108,11 @@ type OpenOptions struct {
 }
 
 // AccessMode distinguishes a read-only credential resolution (a verifying PULL:
-// Fetch/List/Resolve/Events) from a write resolution (Publish/attest/revoke — a
+// Fetch/List/Resolve/Events) from a write resolution (Publish/attest/revoke: a
 // push). CD-13: the mode lets a resolver hand back a NARROWER, read-only token on
 // the read path when the operator provisioned one, so a verifying pull never
 // transmits a write-scoped registry token. A resolver that ignores the mode stays
-// correct — it just returns the same token for both — so the interface remains
+// correct, it just returns the same token for both, so the interface remains
 // backward-compatible.
 type AccessMode int
 
@@ -134,7 +134,7 @@ func (m AccessMode) String() string {
 
 // CredentialSource resolves backend credentials keyed on scheme+host (the
 // git-credential.<url> / npm-per-registry-token shape) and an access mode
-// (read vs write — CD-13). Read-only by contract: implementations MUST NOT write
+// (read vs write: CD-13). Read-only by contract: implementations MUST NOT write
 // or delete any credential store.
 type CredentialSource interface {
 	Credential(ctx context.Context, scheme, host string, mode AccessMode) (Credential, error)

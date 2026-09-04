@@ -3,7 +3,7 @@
 package homeroot
 
 // CompiledIn gates whether an explicit $HOME may override the per-user security
-// root on Windows (WIN-T8 / WIN-09). It is a COMPILE-TIME constant — deliberately
+// root on Windows (WIN-T8 / WIN-09). It is a COMPILE-TIME constant: deliberately
 // NOT an env var, which an attacker who controls the process environment could
 // set (the exact WIN-09 re-open the challenge gate flagged). It is true here on
 // every non-Windows build (where UserHome's goos short-circuit governs anyway)

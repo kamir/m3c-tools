@@ -22,7 +22,7 @@ const (
 // The watcher reads these from the tenant-scope topic
 // `m3c.<tenant>.skill_invocations`.
 //
-// Not every field is populated for every event_type — see SPEC-0202 §9
+// Not every field is populated for every event_type: see SPEC-0202 §9
 // and the per-event projection rules in SPEC-0167 A.3.
 type InvocationEvent struct {
 	EventType    InvocationEventType `json:"event_type"`
@@ -60,7 +60,7 @@ type InvocationEvent struct {
 
 	// Per-event signature; producer key bound at SPEC-0188 identity time.
 	// The watcher may verify (defense in depth) but the topic ACL is the
-	// primary integrity control — only the registry and per-host gateways
+	// primary integrity control, only the registry and per-host gateways
 	// can produce.
 	SignatureB64 string `json:"signature_b64,omitempty"`
 }
@@ -69,7 +69,7 @@ type InvocationEvent struct {
 // See SPEC/schemas/T.schema.json and SPEC-0167 §T-layer.
 //
 // We deliberately reuse `source.kind: "agent"` and structured `content`
-// rather than introducing a new T-schema kind — the amendment (A.7) is
+// rather than introducing a new T-schema kind. The amendment (A.7) is
 // non-breaking by design; a future T-schema v2 may add a dedicated
 // `runtime_invocation` kind.
 type Thought struct {
@@ -113,7 +113,7 @@ type ThoughtProvenance struct {
 // See SPEC/schemas/R.schema.json and SPEC-0167 §R-layer.
 //
 // In v1 the runtime reflectors emit strategy="classify" with
-// objective="runtime_pattern_detection" — A.4. R-schema v2 may add a
+// objective="runtime_pattern_detection". A.4. R-schema v2 may add a
 // dedicated `runtime_pattern` strategy; that bump is out of scope for
 // this amendment.
 type Reflection struct {
@@ -151,7 +151,7 @@ type Reflector interface {
 
 	// Observe is called for every projected Thought. Reflectors that
 	// don't care about a given Thought (wrong source.kind, wrong type)
-	// MUST return without doing work — Observe is on the hot path.
+	// MUST return without doing work. Observe is on the hot path.
 	Observe(ctx context.Context, t Thought) error
 
 	// Tick is called on a periodic timer (1m default) and lets
@@ -167,7 +167,7 @@ type Reflector interface {
 // ReflectionEmitter is what reflectors call to publish a Reflection
 // onto the engine's per-context reflections topic. The watcher injects
 // an implementation that writes to
-// `m3c.<ctx_hash>.reflections.generated` — reflectors NEVER write
+// `m3c.<ctx_hash>.reflections.generated`: reflectors NEVER write
 // directly to Kafka.
 type ReflectionEmitter interface {
 	Emit(ctx context.Context, r Reflection) error
@@ -187,7 +187,7 @@ type EventConsumer interface {
 
 // ThoughtPublisher abstracts the per-context Kafka producer that
 // writes onto `m3c.<ctx_hash>.thoughts.raw`. Same rationale as
-// EventConsumer — the watcher does not pin a Kafka client.
+// EventConsumer: the watcher does not pin a Kafka client.
 type ThoughtPublisher interface {
 	Publish(ctx context.Context, t Thought) error
 	Close() error

@@ -4,7 +4,7 @@ package registry
 // ListRegistry / ShowSkill / searchByTagsRaw free functions) to the
 // artifact.Backend interface, so ER1 is a first-class peer of the git/OCI
 // backends and the SAME conformance suite (pkg/skillctl/artifact/conformance)
-// drives it. It is a THIN adapter over the existing, tested free functions — no
+// drives it. It is a THIN adapter over the existing, tested free functions, no
 // signing/verify logic moves here. Construct with NewER1Backend; the CLI still
 // uses the free-function ER1 path directly (unchanged), so this adapter is used
 // by conformance/tests and future unification, not the shipped ER1 command flow.
@@ -46,7 +46,7 @@ func (b *ER1Backend) Describe() artifact.Descriptor {
 			Paginated:      false,                     // single-shot list today (the known limit=500 fetch)
 			HonoursSince:   true,                      // Events applies ListFilter.Since on occurred_at
 			Governance:     artifact.GovFromEventLog,  // newest signed attestation
-			LatestPolicy:   artifact.LatestMostRecent, // admit-time newest (NOT semver-max — a real ER1↔git difference)
+			LatestPolicy:   artifact.LatestMostRecent, // admit-time newest (NOT semver-max: a real ER1↔git difference)
 			ClaimCheck:     false,                     // inline-only today; the MinIO ClaimCheckFn seam is not wired
 		},
 	}
@@ -193,7 +193,7 @@ func (b *ER1Backend) Events(ctx context.Context, filter artifact.ListFilter, pag
 	// attacker-controlled skill-event:<kind> tag. Each event's Kind + Digest are then
 	// taken from the SIGNED envelope, so a hostile ER1 tenant retagging a signed
 	// revoke to skill-event:installed (or stripping the tag) can no longer drop it
-	// from discovery — matching git's structural enumeration of every event. This
+	// from discovery. Matching git's structural enumeration of every event. This
 	// closes the IS-T4b residual: an intra-set retag AND a cross-kind/strip retag are
 	// both defeated because discovery no longer keys on the tag at all. One search
 	// replaces the three per-kind searches; install envelopes now surface too (a

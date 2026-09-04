@@ -21,7 +21,7 @@ func TestRevokedCacheHead_RoundTrip(t *testing.T) {
 	if ep, iss := readRevokedCacheHead(home); ep != 7 || iss != "2026-07-06T18:00:00Z" {
 		t.Fatalf("head round-trip = %d,%q", ep, iss)
 	}
-	// A legacy set-only write (pre-HEAD) reads back as 0,"" — backward compatible.
+	// A legacy set-only write (pre-HEAD) reads back as 0,"": backward compatible.
 	writeRevokedCache(home, set)
 	if ep, iss := readRevokedCacheHead(home); ep != 0 || iss != "" {
 		t.Errorf("legacy head = %d,%q, want 0,\"\"", ep, iss)
@@ -77,7 +77,7 @@ func TestAdoptHeadOrKeepFloor(t *testing.T) {
 		}
 	})
 
-	// FR-0045 Fix B / finding F1 — a signed HEAD that binds a DIFFERENT set-root
+	// FR-0045 Fix B / finding F1: a signed HEAD that binds a DIFFERENT set-root
 	// than the fetched set signals setRejected=true (the fetched set is
 	// truncated/forged) and keeps the prior floor.
 	t.Run("set-root mismatch is signalled and keeps floor", func(t *testing.T) {

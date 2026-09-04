@@ -1,6 +1,6 @@
 ---
 name: feature-request
-description: Turn a proposal or design critique into tracked feature requests — an FR file per request in the maintenance repo, the SPEC section each one answers to, and a public GitHub issue linked to both. Use when someone proposes a capability, challenges an architecture, or when an audio/meeting note contains several distinct asks.
+description: Turn a proposal or design critique into tracked feature requests: an FR file per request in the maintenance repo, the SPEC section each one answers to, and a public GitHub issue linked to both. Use when someone proposes a capability, challenges an architecture, or when an audio/meeting note contains several distinct asks.
 argument-hint: "<paste the proposal, critique, or transcript>"
 metadata:
   version: 1.0.0
@@ -24,7 +24,7 @@ $ARGUMENTS
 | **Issue** (public) | a GitHub issue in the repo the FR's `Repo:` line names | *What will change for a user of this tool.* Redacted; refers to the FR and SPEC **ID-only**. |
 
 The FR is the **ask**; the SPEC is the **contract**; the issue is the **public
-commitment**. Closing an issue means the contract is served — `bugtracker.sh`
+commitment**. Closing an issue means the contract is served: `bugtracker.sh`
 enforces that mechanically by refusing to close an item whose `- **Spec:**`
 line is missing.
 
@@ -35,7 +35,7 @@ line is missing.
 
 ### Step 1: Split the proposal into distinct asks
 
-A proposal is rarely one feature request. Read for the **seams** — a separate FR
+A proposal is rarely one feature request. Read for the **seams**: a separate FR
 is warranted where the asks could be accepted, rejected, scheduled or built
 *independently*.
 
@@ -53,7 +53,7 @@ is the step where a wrong reading is cheapest to correct.
 ### Step 2: Find the contract underneath
 
 Several FRs from one proposal usually share **one** contract. Prefer a single
-SPEC with a section per area over one SPEC per FR — fragmenting a contract
+SPEC with a section per area over one SPEC per FR. Fragmenting a contract
 across seven documents is how it stops being a contract.
 
 Check `${M3C_MAINTENANCE_DIR}/SPEC/` first: an existing SPEC that already owns
@@ -71,7 +71,7 @@ ls ${M3C_MAINTENANCE_DIR}/SPEC | sed -nE 's/^SPEC-0*([0-9]+).*/\1/p' | sort -n |
 
 Follow the house format: purpose, numbered requirements with rationale,
 constraints, non-goals, and a history table. Each requirement must be **testable**
-— "the manifest declares data requirements semantically" is a wish; "`validate`
+: "the manifest declares data requirements semantically" is a wish; "`validate`
 exits non-zero when a declared requirement has no binding" is a requirement.
 
 Mark anything not yet decided as an open question rather than inventing an
@@ -81,13 +81,22 @@ that names it.
 ### Step 4: Write the FR files
 
 ```bash
-./scripts/bugtracker.sh next-id FR      # -> FR-0096
+./scripts/bugtracker.sh next-id FR      # -> FR-0096  (a ceiling, not a claim)
 ```
+
+Write the file, then **claim the number** — reading a ceiling allocates nothing,
+and two sessions asking at the same moment get the same answer:
+
+```bash
+./scripts/bugtracker.sh claim FR-0096
+```
+
+The claim is durable only once the slot table is committed.
 
 One file per ask, `${M3C_MAINTENANCE_DIR}/bug-reports/FR-NNNN-<slug>.md`:
 
 ```markdown
-# FR-NNNN — <what is being asked, in one line>
+# FR-NNNN: <what is being asked, in one line>
 
 - **Date:** YYYY-MM-DD
 - **Status:** open
@@ -116,7 +125,7 @@ without this section is advocacy, not analysis.>
 
 ## Acceptance
 
-<What must be true to close this — pointing at the SPEC requirements it serves>
+<What must be true to close this: pointing at the SPEC requirements it serves>
 ```
 
 ### Step 5: Decide the plane
@@ -133,7 +142,7 @@ Otherwise `- **Public:** no`, say why, and stop after Step 4.
 
 ### Step 6: Write the redacted issue bodies
 
-`${M3C_MAINTENANCE_DIR}/bug-reports/FR-NNNN-<slug>.public.md` — line 1 is the
+`${M3C_MAINTENANCE_DIR}/bug-reports/FR-NNNN-<slug>.public.md`: line 1 is the
 title, the rest the body. Write it for a **contributor**, not for the internal
 reader:
 
@@ -150,7 +159,7 @@ it is not finished.
 ### Step 7: Show, then open
 
 Show the user every redacted body **before** creating anything. A GitHub issue on
-a public repository is indexed immediately and cannot be un-published — this
+a public repository is indexed immediately and cannot be un-published. This
 confirmation is the last reversible moment.
 
 ```bash
@@ -170,7 +179,7 @@ An FR closes as **implemented**, and only once the contract is served:
 ./scripts/bugtracker.sh sync FR-NNNN
 ```
 
-`close` refuses when the `- **Spec:**` line is missing — solving an issue means
+`close` refuses when the `- **Spec:**` line is missing. Solving an issue means
 serving the SPEC it belongs to. Update the SPEC's history table in the same
 change, and record in the FR what was actually built versus what was asked;
 where they differ, that difference is the most useful thing in the file.

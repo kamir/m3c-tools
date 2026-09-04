@@ -26,7 +26,7 @@ func TestGenerate_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("pub stat: %v", err)
 	}
-	// SEC-WIN: POSIX mode bits do not reflect Windows ACLs — Go reports a
+	// SEC-WIN: POSIX mode bits do not reflect Windows ACLs: Go reports a
 	// 0600-written file back as 0666 there. Keep the perm assertion at full
 	// strength on Unix (it is a real security check on the private key); only
 	// the Windows path, where the OS cannot honour these bits, is gated out.
@@ -120,7 +120,7 @@ func TestGenerate_RefusesOverwrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(before) != string(after) {
-		t.Fatal("private key bytes changed after refused-overwrite Generate — keygen MUST never touch existing key files")
+		t.Fatal("private key bytes changed after refused-overwrite Generate. Keygen MUST never touch existing key files")
 	}
 }
 

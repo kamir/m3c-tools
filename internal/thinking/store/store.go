@@ -1,11 +1,11 @@
 // Package store owns the engine's local SQLite state.
 //
 // Scope (SPEC-0167 §Service Components, `internal/store`):
-//   - processes       — process registry + snapshot for idempotency/dedup
-//   - sse_subscribers — connected SSE clients and their cursors
-//   - budget_counters — D4 per-day-per-user USD spend tracking
+//   - processes: process registry + snapshot for idempotency/dedup
+//   - sse_subscribers: connected SSE clients and their cursors
+//   - budget_counters, D4 per-day-per-user USD spend tracking
 //
-// NOT a source of truth for T/R/I/A — all cognitive data lives in
+// NOT a source of truth for T/R/I/A, all cognitive data lives in
 // Kafka + ER1. This store is engine-local operational state only.
 package store
 
@@ -36,7 +36,7 @@ type ProcessRow struct {
 	State        ProcessState
 	CurrentStep  string
 	StepIndex    int // last step known to have completed; -1 means "none yet"
-	IterationIdx int // loop-mode iteration counter (D6 — Week 3 loop cap)
+	IterationIdx int // loop-mode iteration counter (D6: Week 3 loop cap)
 	ArtifactIDs  []string
 	SpecJSON     []byte
 	CreatedAt    time.Time
@@ -92,7 +92,7 @@ func (s *Store) migrate() error {
 			created_at    TIMESTAMP NOT NULL,
 			updated_at    TIMESTAMP NOT NULL
 		)`,
-		// Week 3 — feedback loop rate limiting (10/hour per user).
+		// Week 3: feedback loop rate limiting (10/hour per user).
 		// Keyed by hour bucket (UTC RFC3339 truncated to hour) so the
 		// table stays small and we can reset counters by age.
 		`CREATE TABLE IF NOT EXISTS feedback_counters (
@@ -133,7 +133,7 @@ func (s *Store) migrate() error {
 			cost_usd      REAL    NOT NULL DEFAULT 0.0,
 			updated_at    TIMESTAMP NOT NULL
 		)`,
-		// llm_ledger (SPEC-0167 P1 — PLAN-0168) disaggregates the daily
+		// llm_ledger (SPEC-0167 P1: PLAN-0168) disaggregates the daily
 		// spend recorded in budget_counters by (layer, strategy) so the
 		// /v1/budget/today top_consumers field can be populated without
 		// re-walking the R/I/A Kafka topics. Empty-string layer/strategy
@@ -141,7 +141,7 @@ func (s *Store) migrate() error {
 		// they are summed into totals but skipped in top_consumers.
 		//
 		// day_utc is the UTC YYYY-MM-DD bucket matching budget_counters.
-		// count is the number of Reserve() calls that landed here — used
+		// count is the number of Reserve() calls that landed here: used
 		// by top_consumers to display per-strategy call frequency.
 		//
 		// NOTE on the PK: SQLite treats NULL as non-unique in composite
@@ -159,7 +159,7 @@ func (s *Store) migrate() error {
 			PRIMARY KEY (day_utc, layer, strategy)
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_llm_ledger_day ON llm_ledger(day_utc)`,
-		// D1 — ETag-mirrored prompt cache. Survives engine restarts.
+		// D1: ETag-mirrored prompt cache. Survives engine restarts.
 		`CREATE TABLE IF NOT EXISTS prompt_cache (
 			prompt_id    TEXT PRIMARY KEY,
 			version      INTEGER NOT NULL DEFAULT 0,
@@ -313,7 +313,7 @@ func (s *Store) IncrementIteration(processID string) (int, error) {
 // IncrementFeedbackCounter atomically increments the feedback
 // rate-limit counter for the current UTC hour bucket. Returns the
 // post-increment value so the caller can compare against the cap
-// (SPEC-0167 §Stream 3a — 10/hour).
+// (SPEC-0167 §Stream 3a: 10/hour).
 func (s *Store) IncrementFeedbackCounter() (int, error) {
 	hour := time.Now().UTC().Format("2006-01-02T15")
 	now := time.Now().UTC()
@@ -423,7 +423,7 @@ func (s *Store) ListBudgetSpendSince(sinceDay string) ([]BudgetDayRow, error) {
 }
 
 // InsertBudgetDayForTest writes a budget_counters row for an arbitrary
-// UTC day. TEST-ONLY — production code must go through AddBudgetSpend
+// UTC day. TEST-ONLY: production code must go through AddBudgetSpend
 // which pins the day bucket to time.Now().UTC(). Exported (with the
 // _ForTest suffix) so package-external tests can seed historical days
 // when exercising Ledger.History without monkey-patching the clock.
@@ -473,7 +473,7 @@ type LayerSpendRow struct {
 // TopLLMConsumers returns the top-N (layer, strategy) tuples ordered
 // by descending cost_usd over the UTC day range [sinceDay, today].
 // sinceDay is "YYYY-MM-DD" inclusive. Rows with empty layer+strategy
-// (untagged legacy spend) are excluded — their cost still appears in
+// (untagged legacy spend) are excluded: their cost still appears in
 // budget_counters, just not as a named consumer.
 func (s *Store) TopLLMConsumers(sinceDay string, limit int) ([]LayerSpendRow, error) {
 	if limit <= 0 {

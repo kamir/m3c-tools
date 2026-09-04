@@ -7,8 +7,8 @@ import (
 
 // TestApplyProfilePlaceholderDoesNotClobber pins FR-0096: a profile entry that is
 // a PLACEHOLDER must not overwrite a value someone deliberately exported. A
-// placeholder is the profile saying "nothing stored here" — usually on purpose,
-// because the real key belongs in the Keychain — and letting it win replaced a
+// placeholder is the profile saying "nothing stored here" (usually on purpose,
+// because the real key belongs in the Keychain) and letting it win replaced a
 // working credential with one the very next function recognises as unusable.
 func TestApplyProfilePlaceholderDoesNotClobber(t *testing.T) {
 	pm := NewProfileManager()
@@ -64,7 +64,7 @@ func TestApplyProfilePlaceholderDoesNotClobber(t *testing.T) {
 		}}); err != nil {
 			t.Fatalf("ApplyProfile: %v", err)
 		}
-		// Nothing was displaced, so the profile value lands as before — doctor
+		// Nothing was displaced, so the profile value lands as before: doctor
 		// still gets to see and report the placeholder.
 		if got := os.Getenv("ER1_API_KEY"); got != "changeme" {
 			t.Errorf("profile value did not land on an unset variable: got %q", got)

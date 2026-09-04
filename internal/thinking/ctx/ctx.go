@@ -9,7 +9,7 @@
 //     in any runtime identifier.
 //
 // To prevent accidental use of the raw id where a hash is required,
-// this package exports two distinct types — Raw and Hash — and
+// this package exports two distinct types, Raw and Hash, and
 // forces a hash computation step between them. Using a Raw where a
 // Hash is expected (e.g. as a topic prefix) is a COMPILE ERROR.
 package ctx
@@ -45,7 +45,7 @@ func NewRaw(s string) (Raw, error) {
 }
 
 // Value returns the raw context string. Intentionally unexported in
-// formatting to discourage accidental logging — callers must opt in.
+// formatting to discourage accidental logging. Callers must opt in.
 func (r Raw) Value() string { return r.value }
 
 // String intentionally redacts. Any stringification of Raw yields

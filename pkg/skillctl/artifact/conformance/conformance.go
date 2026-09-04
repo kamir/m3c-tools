@@ -1,13 +1,13 @@
 // Package conformance is the backend-agnostic lifecycle suite every SPEC-0356
 // artifact.Backend must pass (D8). The SAME assertions run against the git
-// backend (bare repo), the ER1 backend, and the in-memory fake — so "does ER1
+// backend (bare repo), the ER1 backend, and the in-memory fake, so "does ER1
 // implement the same feature set as GitLab" is answered by a test, not a claim.
 //
 // It uses a self-generated ed25519 key and REAL signed SPEC-0190 events, so it
 // works for backends that validate the envelope (ER1) as well as those that only
 // carry the bytes (git). Governance/verify semantics are tested separately (the
 // §7 gauntlet); this suite tests the Backend CONTRACT: Publish (admit/revoke),
-// List, Resolve, Fetch, idempotency, and — when implemented — GovernanceLog.Events.
+// List, Resolve, Fetch, idempotency, and, when implemented, GovernanceLog.Events.
 package conformance
 
 import (
@@ -149,7 +149,7 @@ func Run(t *testing.T, be artifact.Backend) {
 		t.Fatalf("Resolve after revoke: %v", err)
 	}
 	// Revoke VISIBILITY is a universal contract (checked via Events below); the
-	// LATEST-after-revoke depends on the backend's declared LatestPolicy — a
+	// LATEST-after-revoke depends on the backend's declared LatestPolicy: a
 	// semver-max backend falls back to 1.0.0, whereas a most-recent-admit backend
 	// may still report 1.2.0 as latest (but must still surface it as revoked).
 	if be.Describe().Capabilities.LatestPolicy == artifact.LatestSemverMax && ref2.Version != "1.0.0" {

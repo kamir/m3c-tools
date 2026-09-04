@@ -420,7 +420,7 @@ func TestResolveTenant_CLIBeatsTrustRoots(t *testing.T) {
 	}
 }
 
-// TestResolveTenant_NilTrustRoots: defensive — if the CLI ever calls
+// TestResolveTenant_NilTrustRoots: defensive: if the CLI ever calls
 // resolveTenant before loadAndPickRoot returns a valid TrustRoots, the
 // helper must not panic.
 func TestResolveTenant_NilTrustRoots(t *testing.T) {

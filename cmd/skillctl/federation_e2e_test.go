@@ -1,6 +1,6 @@
 package main
 
-// SPEC-0359 §8 — offline federation end-to-end. Two local:// registries prove the
+// SPEC-0359 §8: offline federation end-to-end. Two local:// registries prove the
 // whole D1→D5 chain compose without any network: node A publishes + attests a
 // signed skill; node B PINS A as a peer and its verifying pull succeeds against
 // A's key but FAILS against a wrong key (D2); A revokes; a re-pull is denied at
@@ -133,7 +133,7 @@ func TestFederationEndToEnd(t *testing.T) {
 		t.Fatalf("publish revoke: %v", err)
 	}
 
-	// Gate-5: a re-pull is now DENIED (revoked) — the git registry's revoke is honored.
+	// Gate-5: a re-pull is now DENIED (revoked). The git registry's revoke is honored.
 	res2, err := registry.PullBundlesFromBackend(ctx, beA, trA, registry.PullOpts{})
 	if err != nil {
 		t.Fatal(err)

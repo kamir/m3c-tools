@@ -1,6 +1,6 @@
 package main
 
-// SPEC-0251 §5 — exit-code single source of truth, cmd side.
+// SPEC-0251 §5: exit-code single source of truth, cmd side.
 //
 // The unexported exit consts in cmd/skillctl (signing + guard-path surfaces)
 // must stay in lockstep with the exitcode registry. An external _test package

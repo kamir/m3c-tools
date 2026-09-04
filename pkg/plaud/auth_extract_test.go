@@ -162,7 +162,7 @@ func TestPlaudTokenCandidatesJS_Shape(t *testing.T) {
 	js := plaudTokenCandidatesJS
 	for _, must := range []string{"localStorage", "sessionStorage", "candidates", "JSON.stringify"} {
 		if !strings.Contains(js, must) {
-			t.Errorf("plaudTokenCandidatesJS missing %q — a harvest path was lost", must)
+			t.Errorf("plaudTokenCandidatesJS missing %q: a harvest path was lost", must)
 		}
 	}
 	if strings.ContainsAny(js, "\n\r") {

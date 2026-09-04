@@ -154,7 +154,7 @@ func TestCLIResultAssertions(t *testing.T) {
 
 // TestRunCLIWithEnv verifies env vars are passed to subprocess.
 func TestRunCLIWithEnv(t *testing.T) {
-	// Use help command — env vars shouldn't break anything
+	// Use help command: env vars shouldn't break anything
 	result := RunCLIWithEnv(t, []string{"M3C_TEST_CUSTOM_VAR=1"}, "help")
 	result.AssertSuccess(t)
 	result.AssertContains(t, "m3c-tools")

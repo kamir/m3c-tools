@@ -20,9 +20,9 @@ When the user says "deploy", "rebuild backend", "restart ER1", "rebuild Docker",
 
 ## What it does
 
-1. **Build** — Rebuilds stages 4-5 of the aims-core Docker image (app layer only, reuses base image cache). This is fast because only the `COPY ./flask` layer changes.
-2. **Restart** — Stops the old container, removes it, and starts a fresh one with the new image using the existing `run_image.sh` script.
-3. **Verify** — Checks the container is running and the PLM health endpoint responds.
+1. **Build**: Rebuilds stages 4-5 of the aims-core Docker image (app layer only, reuses base image cache). This is fast because only the `COPY ./flask` layer changes.
+2. **Restart**: Stops the old container, removes it, and starts a fresh one with the new image using the existing `run_image.sh` script.
+3. **Verify**: Checks the container is running and the PLM health endpoint responds.
 
 ## How to execute
 
@@ -36,8 +36,8 @@ cd /Users/kamir/GITHUB.active/my-ai-X/aims-core
 ```
 
 This builds:
-- Stage 4: `gcr.io/semanpix/aims-core:latest` (Dockerfile — copies flask app)
-- Stage 5: `gcr.io/semanpix/aims-core-v4-final:latest` (Dockerfile.refine.pdfs — adds PDFs)
+- Stage 4: `gcr.io/semanpix/aims-core:latest` (Dockerfile: copies flask app)
+- Stage 5: `gcr.io/semanpix/aims-core-v4-final:latest` (Dockerfile.refine.pdfs: adds PDFs)
 
 ### Step 2: Restart the container
 
@@ -54,7 +54,7 @@ This automatically:
 - Mounts `flask/__sec__` and `data/temp_data_stage` volumes
 - Starts the new container on port 8081
 
-**Note:** The run_image.sh script tails the logs at the end. The user can Ctrl+C to detach — the container keeps running.
+**Note:** The run_image.sh script tails the logs at the end. The user can Ctrl+C to detach, the container keeps running.
 
 ### Step 3: Verify
 
@@ -78,4 +78,4 @@ Expected: JSON responses (not HTML redirects).
 - The container name is always `aims-core-local`.
 - The container runs on port 8081 with HTTPS (self-signed cert).
 - Flask code is baked into the image (not volume-mounted), so any code change in `flask/` requires a rebuild.
-- Do NOT use `--all` flag unless base image dependencies changed — it rebuilds everything from scratch.
+- Do NOT use `--all` flag unless base image dependencies changed: it rebuilds everything from scratch.

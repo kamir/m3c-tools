@@ -1,21 +1,21 @@
-// preferences.go — global preferences layer (SPEC-0175 P0 §3 "profile cliff" fix).
+// preferences.go: global preferences layer (SPEC-0175 P0 §3 "profile cliff" fix).
 //
 // The m3c-tools config is layered:
 //
-//   1. Constants            — hardcoded in Go, never user-set (e.g. default
+//   1. Constants: hardcoded in Go, never user-set (e.g. default
 //                             API URLs, content-type prefixes).
-//   2. Global preferences   — settings that DON'T switch with the active
+//   2. Global preferences: settings that DON'T switch with the active
 //                             profile because they describe the user's
 //                             machine, not their account: Whisper model,
 //                             screenshot capture mode, retry behaviour.
 //                             Stored at ~/.m3c-tools/preferences.env.
-//   3. Active profile       — settings that DO switch when the user picks a
+//   3. Active profile: settings that DO switch when the user picks a
 //                             different account: ER1 server URL + auth +
 //                             context_id, Plaud session, Pocket API key.
 //                             Stored at ~/.m3c-tools/profiles/<name>.env.
-//   4. Project .env         — local overrides for development.
+//   4. Project .env: local overrides for development.
 //
-// This file owns layer (2). It does NOT touch layers (3) or (4) — the
+// This file owns layer (2). It does NOT touch layers (3) or (4): the
 // existing ProfileManager + er1.LoadDotenv handle those.
 package config
 
@@ -74,18 +74,18 @@ func MigrateLegacyPreferences() (string, error) {
 	}
 
 	if _, err := os.Stat(canonical); err == nil {
-		// Canonical already exists — nothing to migrate.
+		// Canonical already exists, nothing to migrate.
 		return canonical, nil
 	}
 	if _, err := os.Stat(legacy); err != nil {
-		// Legacy doesn't exist either — fresh install. Canonical is the path
+		// Legacy doesn't exist either, fresh install. Canonical is the path
 		// to use even though it doesn't exist yet (write on first save).
 		return canonical, nil
 	}
 
 	// Migrate. Create parent dir if missing.
 	if err := os.MkdirAll(filepath.Dir(canonical), 0o700); err != nil {
-		// Migration failed — fall back to reading the legacy path.
+		// Migration failed: fall back to reading the legacy path.
 		return legacy, err
 	}
 
@@ -96,9 +96,9 @@ func MigrateLegacyPreferences() (string, error) {
 	if err := os.WriteFile(canonical, data, 0o600); err != nil {
 		return legacy, err
 	}
-	// Don't delete the legacy file — leave it as a back-compat read. Annotate
+	// Don't delete the legacy file: leave it as a back-compat read. Annotate
 	// it instead so a curious user knows the migration happened.
-	annotation := []byte("\n# (Migrated to ~/.m3c-tools/preferences.env on first launch — see SPEC-0175.)\n# This file is still read for back-compat but the canonical location is the new one.\n")
+	annotation := []byte("\n# (Migrated to ~/.m3c-tools/preferences.env on first launch. See SPEC-0175.)\n# This file is still read for back-compat but the canonical location is the new one.\n")
 	_ = os.WriteFile(legacy, append(data, annotation...), 0o600)
 
 	return canonical, nil

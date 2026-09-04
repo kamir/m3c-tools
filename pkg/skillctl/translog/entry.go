@@ -9,25 +9,25 @@ import (
 
 // EventType enumerates the kinds of already-signed events whose DIGESTS get
 // committed to the transparency log. We log the digest of the signed event,
-// never the event payload itself (SPEC-0278 §5 — data stays off-log; only
+// never the event payload itself (SPEC-0278 §5. Data stays off-log; only
 // hashes/commitments are logged for EU data sovereignty).
 type EventType string
 
 const (
-	// EventAdmit — a registry admit decision (a skill bundle was admitted).
+	// EventAdmit, a registry admit decision (a skill bundle was admitted).
 	EventAdmit EventType = "admit"
-	// EventAttest — a governance attestation (green/yellow/red verdict).
+	// EventAttest, a governance attestation (green/yellow/red verdict).
 	EventAttest EventType = "attest"
-	// EventRevoke — a revocation of a bundle/attestation.
+	// EventRevoke, a revocation of a bundle/attestation.
 	EventRevoke EventType = "revoke"
-	// EventAgentIDIssue — an AgentID lifecycle issue/sign-off (SPEC-0277).
+	// EventAgentIDIssue, an AgentID lifecycle issue/sign-off (SPEC-0277).
 	EventAgentIDIssue EventType = "agentid-issue"
-	// EventAgentIDRevoke — an AgentID revocation (SPEC-0277).
+	// EventAgentIDRevoke: an AgentID revocation (SPEC-0277).
 	EventAgentIDRevoke EventType = "agentid-revoke"
 )
 
 // validEventTypes is the closed acceptance set. An unknown event type is
-// refused before it can be hashed into a leaf — the log's vocabulary is
+// refused before it can be hashed into a leaf. The log's vocabulary is
 // fixed, not open-ended.
 var validEventTypes = map[EventType]struct{}{
 	EventAdmit:         {},
@@ -56,12 +56,12 @@ var entryTimestampPattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\
 
 // LogEntry errors.
 var (
-	// ErrEntryInvalid — a LogEntry failed structural validation.
+	// ErrEntryInvalid: a LogEntry failed structural validation.
 	ErrEntryInvalid = errors.New("translog: invalid log entry")
 )
 
 // LogEntry is one append to the transparency log. It records WHAT KIND of
-// signed event happened and the DIGEST of that event — never the event
+// signed event happened and the DIGEST of that event, never the event
 // body. The canonical encoding (see Canonical) is what gets leaf-hashed
 // (HashLeaf) into the Merkle tree.
 //
@@ -125,7 +125,7 @@ func (e LogEntry) Validate() error {
 //	<subject>\n        (may be empty, but the line is always present)
 //
 // Determinism: every field is a closed-vocabulary or strictly-patterned
-// value, so the same logical event always yields identical bytes — a
+// value, so the same logical event always yields identical bytes: a
 // requirement for reproducible inclusion proofs across machines.
 func (e LogEntry) Canonical() ([]byte, error) {
 	if err := e.Validate(); err != nil {

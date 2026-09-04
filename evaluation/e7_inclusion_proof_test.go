@@ -1,6 +1,6 @@
 package evaluation
 
-// E7 — Transparency-log INCLUSION-PROOF verify (SPEC-0280 §2; SPEC-0278).
+// E7: Transparency-log INCLUSION-PROOF verify (SPEC-0280 §2; SPEC-0278).
 //
 // Method: build a transparency log of N entries, sign a tree head (STH) with a
 // deterministic log key, produce a per-event inclusion proof, then measure the
@@ -9,7 +9,7 @@ package evaluation
 //   translog.VerifyInclusion(leafHash, index, size, proof, root)
 //
 // This is the RFC-6962 audit-path check a relying party runs to confirm an event
-// (admit / revoke / attest) is committed in the log it pinned — no log server
+// (admit / revoke / attest) is committed in the log it pinned, no log server
 // contacted. We report time/event in microseconds across a range of tree sizes
 // (the proof length is O(log N), so the curve is the interesting artifact).
 

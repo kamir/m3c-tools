@@ -58,7 +58,7 @@ func BuildEnvelope(opts Opts) (SyncEnvelope, []SkippedRow, error) {
 	var localSkipped []SkippedRow
 
 	for _, sk := range opts.Inventory.Skills {
-		// SkillEntry only ships when we have a content hash — the
+		// SkillEntry only ships when we have a content hash. The
 		// server's `local_digest` derivation depends on it, and a
 		// bundle with no hash is malformed enough to refuse on the
 		// client side. Mirror the Python reference's "if not

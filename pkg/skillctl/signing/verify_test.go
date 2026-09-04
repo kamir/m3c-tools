@@ -35,8 +35,8 @@ func TestVerifyDetached_TamperedBundle(t *testing.T) {
 	}
 
 	// Flip a single byte in the bundle. The digest changes, so the
-	// signature lookup either misses or — if the attacker fabricates
-	// a sig file at the new digest path — verifies as invalid.
+	// signature lookup either misses or, if the attacker fabricates
+	// a sig file at the new digest path, verifies as invalid.
 	raw, err := os.ReadFile(bundle)
 	if err != nil {
 		t.Fatal(err)
@@ -89,7 +89,7 @@ func TestVerifyDetached_MissingSigFile(t *testing.T) {
 	if err := Generate(keyOut); err != nil {
 		t.Fatal(err)
 	}
-	// Don't sign — just try to verify.
+	// Don't sign: just try to verify.
 	err := VerifyDetached(bundle, keyOut+".pub")
 	if err == nil {
 		t.Fatal("VerifyDetached accepted missing sig file")
@@ -121,7 +121,7 @@ func TestVerifyDetached_MalformedSigLength(t *testing.T) {
 	if err == nil {
 		t.Fatal("VerifyDetached accepted malformed sig length")
 	}
-	// Must NOT be ErrSignatureInvalid — that's reserved for crypto
+	// Must NOT be ErrSignatureInvalid. That's reserved for crypto
 	// failure, not structural failure. Tests downstream branch on this.
 	if errors.Is(err, ErrSignatureInvalid) {
 		t.Errorf("malformed-sig-length error misclassified as ErrSignatureInvalid: %v", err)
@@ -138,7 +138,7 @@ func TestVerifyDetached_RequiresPaths(t *testing.T) {
 }
 
 // hexLower exists only because importing encoding/hex in a test file
-// here would require the same import path — but we already use it
+// here would require the same import path, but we already use it
 // transitively. This local helper keeps the test focused.
 func hexLower(b []byte) string {
 	const hexChars = "0123456789abcdef"

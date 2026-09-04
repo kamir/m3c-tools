@@ -1,16 +1,16 @@
 package registry
 
-// attestation_stash.go — SPEC-0266 F2/F19: re-anchor the self/ER1 sidecar gate
+// attestation_stash.go, SPEC-0266 F2/F19: re-anchor the self/ER1 sidecar gate
 // to the PINNED key by stashing the SIGNED attestation context at install and
 // replaying the pull gates at runtime.
 //
 // The provenance sidecar (.m3c-provenance.json) records only fingerprints +
-// governance, with NO signature bytes — so the runtime gate could prove the
+// governance, with NO signature bytes, so the runtime gate could prove the
 // on-disk body matched the stashed .skb (content-binding) but NOT that the
 // stashed .skb was the one a pinned key signed. A local-write attacker who
 // repacks a self-consistent .skb + sidecar (and flips governance) therefore
 // passed. This stash carries the actual SIGNED events so the gate re-verifies
-// against the pinned key — exactly the pull-time gates, minus the network.
+// against the pinned key: exactly the pull-time gates, minus the network.
 //
 // VerifyEnvelopeSignature verifies over CanonicalEventBytes(map), not raw JSON,
 // so storing the parsed event and re-parsing after a JSON round-trip is safe.
@@ -46,7 +46,7 @@ type AttestationContext struct {
 	AdmitEvent map[string]any `json:"admit_event"`
 	// GovernanceAttestation is the latest envelope-signed attestation event for
 	// the SAME digest; its governance_level is the authentic, non-forgeable
-	// governance verdict (replaces the unsigned sidecar field — F19). Kept as the
+	// governance verdict (replaces the unsigned sidecar field: F19). Kept as the
 	// singular field for legacy stashes + the k=1 path.
 	GovernanceAttestation map[string]any `json:"governance_attestation"`
 	// GovernanceAttestations is the full N-of-M qualifying signed attestation set
@@ -127,12 +127,12 @@ func (c *AttestationContext) ReverifyAt(pub ed25519.PublicKey, stashedSkb []byte
 	if got != signedDigest {
 		return "", fmt.Errorf("%w: stashed .skb digest %s != signed %s (repacked bundle)", ErrAttestationReanchor, got, signedDigest)
 	}
-	// G3: author + registry signatures over the RECOMPUTED digest (F4/F9 — `got`
+	// G3: author + registry signatures over the RECOMPUTED digest (F4/F9: `got`
 	// is sha256(stashedSkb), already asserted == signedDigest at G2).
 	if err := verifyBundleSignatures(c.AdmitEvent, pub, got); err != nil {
 		return "", fmt.Errorf("%w: bundle signatures: %v", ErrAttestationReanchor, err)
 	}
-	// G4: governance from the SIGNED attestation (F19) — never the sidecar.
+	// G4: governance from the SIGNED attestation (F19): never the sidecar.
 	if c.GovernanceAttestation == nil {
 		return "", fmt.Errorf("%w: missing governance attestation", ErrAttestationReanchor)
 	}
@@ -148,7 +148,7 @@ func (c *AttestationContext) ReverifyAt(pub ed25519.PublicKey, stashedSkb []byte
 		return "", fmt.Errorf("%w: governance attestation has no governance_level", ErrAttestationReanchor)
 	}
 	// D5: a signed attestation whose expires_at has lapsed is DENIED at runtime,
-	// exactly as a missing attestation — never a fall-back to a stale approval.
+	// exactly as a missing attestation, never a fall-back to a stale approval.
 	if attestationExpired(c.GovernanceAttestation, now) {
 		return "", fmt.Errorf("%w: governance attestation expired (expires_at lapsed)", ErrAttestationReanchor)
 	}

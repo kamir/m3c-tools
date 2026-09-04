@@ -2,8 +2,8 @@ package registry
 
 // SPEC-0190 event types + envelope signing for the ER1 bundle transport
 // (SPEC-0225). Three event shapes are SPEC-0190 verbatim (BundleAdmittedEvent
-// §3.1, AttestationPublishedEvent §3.2, BundleRevokedEvent §3.3); a fourth —
-// BundleInstalledEvent — is new in SPEC-0225 §6.3 (proposed into SPEC-0190 as
+// §3.1, AttestationPublishedEvent §3.2, BundleRevokedEvent §3.3); a fourth,
+// BundleInstalledEvent, is new in SPEC-0225 §6.3 (proposed into SPEC-0190 as
 // §3.4 on adoption).
 //
 // Wire-format invariant: the item body IS the event JSON, verbatim. A future
@@ -13,7 +13,7 @@ package registry
 // Canonical bytes. Events are represented as map[string]any so that JSON
 // marshaling produces alphabetically-sorted keys at every level (Go's
 // encoding/json marshals map keys alphabetically since Go 1.12; structs would
-// marshal in declaration order — wrong). The canonical bytes are the
+// marshal in declaration order. Wrong). The canonical bytes are the
 // JSON-marshal of the event *with envelope_signature removed*, HTML-escape off,
 // no trailing newline. This is what the producer signs and what the consumer
 // re-marshals before Verify.
@@ -149,7 +149,7 @@ func BuildBundleAdmittedEvent(in AdmittedEventInput) (map[string]any, error) {
 // AttestedEventInput is the typed input for BuildAttestationPublishedEvent.
 type AttestedEventInput struct {
 	BundleDigest    string
-	AttestationID   string // optional — generated if empty
+	AttestationID   string // optional: generated if empty
 	ReviewerID      string // "id:kamir@m3c" for the self tenant
 	GovernanceLevel string // "green" | "yellow" | "red"
 	Rationale       string
@@ -158,7 +158,7 @@ type AttestedEventInput struct {
 	// ExpiresAt (SPEC-0359 D5) is an OPT-IN signed expiry. When nil the field is
 	// omitted entirely, so legacy attestations' canonical bytes + signature are
 	// byte-identical. When set, a pull/runtime past this instant fails closed
-	// (DENY — treated as a missing attestation, never a fall-back to an older one).
+	// (DENY: treated as a missing attestation, never a fall-back to an older one).
 	ExpiresAt *time.Time
 }
 
@@ -229,7 +229,7 @@ func BuildBundleRevokedEvent(in RevokedEventInput) (map[string]any, error) {
 }
 
 // InstalledEventInput is the typed input for BuildBundleInstalledEvent
-// (SPEC-0225 §6.3 — the one event shape new in this SPEC; proposed into
+// (SPEC-0225 §6.3: the one event shape new in this SPEC; proposed into
 // SPEC-0190 as §3.4 on adoption).
 type InstalledEventInput struct {
 	BundleDigest          string

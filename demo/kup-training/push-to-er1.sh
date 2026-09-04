@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# push-to-er1 — Take a release-gate JSON exported by release-gate-form.html
+# push-to-er1: Take a release-gate JSON exported by release-gate-form.html
 # and push each step (plus a summary item) into the ER1 memory layer with
 # the right tags so the thinker's main view filters them out by default.
 #
@@ -9,7 +9,7 @@
 #   ./push-to-er1.sh <session-export.json> --base URL    # override $REGISTRY_URL
 #
 # Required env:
-#   ER1_API_KEY    — dual-auth API key
+#   ER1_API_KEY: dual-auth API key
 #
 # What it does:
 #   - Splits the document into one POST per step (item body = intent + commands + observation).
@@ -45,7 +45,7 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 2
 fi
 if [[ "$DRY_RUN" -eq 0 && -z "${ER1_API_KEY:-}" ]]; then
-  fail "ER1_API_KEY not set — required for live push (or pass --dry-run)"
+  fail "ER1_API_KEY not set: required for live push (or pass --dry-run)"
   exit 2
 fi
 
@@ -116,7 +116,7 @@ jq -c '.items[]' "$INPUT" | while IFS= read -r item; do
   captured=$(echo "$item"  | jq -r '.captured_at // "unset"')
 
   body=$(cat <<EOF
-**Release-gate step:** ${step_id} — ${title}
+**Release-gate step:** ${step_id}: ${title}
 
 **Verdict:** \`${verdict}\`
 **Captured at:** ${captured}
@@ -140,7 +140,7 @@ EOF
 )
 
   tags=$(echo "$item" | jq -c '.tags + ["session:'"$SESSION"'", "cohort:'"$COHORT"'"]')
-  full_title="release-gate / $SESSION / $step_id — $title"
+  full_title="release-gate / $SESSION / $step_id: $title"
 
   if ! post_one "$full_title" "$body" "$tags"; then
     FAILED=$(( FAILED + 1 ))
@@ -156,7 +156,7 @@ SUMMARY_BODY=$(cat <<EOF
 
 This is the system-generated summary of a KuP release-gate run. The
 per-step insights live in sibling memory items tagged with the same
-\`session:${SESSION}\` tag — pull them as a bundle to see the full chronology.
+\`session:${SESSION}\` tag: pull them as a bundle to see the full chronology.
 
 \`\`\`json
 $(jq '.counts' "$INPUT")
@@ -181,4 +181,4 @@ if [[ "$FAILED" -gt 0 ]]; then
 fi
 ok "all items pushed to ER1"
 note "search them later via tag intersection: \`session:${SESSION}\` + \`system:insight\`"
-note "the thinker's main view does NOT show these by default — toggle 'Show system insights' to surface."
+note "the thinker's main view does NOT show these by default: toggle 'Show system insights' to surface."
