@@ -3,6 +3,8 @@ package registry
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
+	"strings"
 	"testing"
 	"time"
 )
@@ -304,5 +306,67 @@ func TestOfferAttestRequiresSignedReviewerAndLevel(t *testing.T) {
 	accC.OfferAttest(signedAttest(t, priv, "id:kamir@m3c", qd, "green", "2026-08-01T00:00:00Z", nil))
 	if len(accC.Qualifying(qd)) != 1 {
 		t.Error("a genuine signed attestation must still qualify")
+	}
+}
+
+// The fail-OPEN that pinning a reviewer key introduced: a revoke is issued by the
+// REGISTRY, but OfferRevoke only accepted the pinned SIGNER set. Before signers
+// existed the set WAS the registry key, so it worked by accident; the moment a
+// peer pinned a separate reviewer, publisher-signed revokes were silently
+// dropped and a revoked bundle installed clean. Found by replaying user scenario
+// 01 end to end (FR-0115).
+func TestOfferRevoke_RegistryKeyCountsAlongsidePinnedSigners(t *testing.T) {
+	regPub, regPriv, _ := ed25519.GenerateKey(nil)
+	revPub, _, _ := ed25519.GenerateKey(nil) // a DIFFERENT pinned reviewer
+	tr := &SelfTrustRoots{
+		Registry: "github://kup/reg", PubKeyB64: base64.StdEncoding.EncodeToString(regPub),
+		GovernanceMinimum: "green", pub: regPub,
+		Signers: []Signer{{ReviewerID: "id:rev@org", PubKeyB64: base64.StdEncoding.EncodeToString(revPub)}},
+	}
+	if err := tr.resolveSigners("test"); err != nil {
+		t.Fatalf("resolveSigners: %v", err)
+	}
+
+	digest := "sha256:" + strings.Repeat("b", 64)
+	ev := map[string]any{
+		"schema_version": "1.0.0",
+		"bundle_digest":  digest,
+		"revoked_by":     "id:registry@kup",
+		"reason_code":    "superseded",
+		"occurred_at":    time.Now().UTC().Format(time.RFC3339),
+	}
+	if _, err := SignEnvelopeSignature(regPriv, ev); err != nil {
+		t.Fatalf("sign revoke: %v", err)
+	}
+
+	acc := NewAttestAccumulator(tr, time.Now())
+	acc.OfferRevoke(ev)
+	if !acc.IsRevoked(digest) {
+		t.Fatal("a revoke signed by the REGISTRY key must count even when reviewer keys are pinned")
+	}
+}
+
+// Not a widening: an envelope signed by a key that is neither the registry key
+// nor a pinned signer still cannot revoke anything.
+func TestOfferRevoke_ForeignKeyStillCannotRevoke(t *testing.T) {
+	regPub, _, _ := ed25519.GenerateKey(nil)
+	_, foreignPriv, _ := ed25519.GenerateKey(nil)
+	tr := &SelfTrustRoots{
+		Registry: "github://kup/reg", PubKeyB64: base64.StdEncoding.EncodeToString(regPub),
+		GovernanceMinimum: "green", pub: regPub,
+	}
+	digest := "sha256:" + strings.Repeat("c", 64)
+	ev := map[string]any{
+		"schema_version": "1.0.0", "bundle_digest": digest,
+		"revoked_by": "id:attacker@evil", "reason_code": "lol",
+		"occurred_at": time.Now().UTC().Format(time.RFC3339),
+	}
+	if _, err := SignEnvelopeSignature(foreignPriv, ev); err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	acc := NewAttestAccumulator(tr, time.Now())
+	acc.OfferRevoke(ev)
+	if acc.IsRevoked(digest) {
+		t.Fatal("a revoke from an unpinned key must be ignored (revoke-DoS bound)")
 	}
 }
