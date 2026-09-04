@@ -1,0 +1,55 @@
+name: gosec no-new-findings (in-CI diff gate)
+
+# Gate 1 (H1), in-CI BLOCKING half — the complement to gosec.yml.
+#
+# gosec.yml uploads SARIF to GitHub Code Scanning and lets Code Scanning do the
+# new-vs-baseline diff, but it only BLOCKS a PR once the repo-level branch
+# protection "Require the code scanning results check to pass" is enabled (an
+# admin-only Settings toggle). THIS workflow blocks a PR DIRECTLY from CI, with
+# no repo setting required: scripts/gosec-diff-gate.sh exits non-zero the moment
+# a change introduces a gosec finding that is NEW relative to the committed
+# signature baseline (docs/security/gosec-inci-baseline.txt).
+#
+# BRITTLENESS IS HANDLED (see the script header for detail): gosec is PINNED at
+# v2.29.0 and the signature is (rule_id, repo-relative-file, normalized-code)
+# with line/column excluded — stable under line shifts and within the pinned
+# version. This is the diff gosec.yml's header once called "rejected as brittle";
+# the pin + line-independent signature is what makes it robust.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+# CD-T6: least-privilege default token — read-only, no writes needed (this gate
+# uploads nothing; the Code Scanning dashboard is gosec.yml's job).
+permissions:
+  contents: read
+
+jobs:
+  gosec-diff-gate:
+    name: gosec no-new-findings (in-CI diff gate)
+    # gosec type-checks the packages it scans; the cgo packages (recorder,
+    # menubar) need PortAudio to typecheck, so run on macOS exactly like
+    # gosec.yml and match how the committed baseline was generated (./...).
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.26.6"
+
+      - name: Install PortAudio (cgo packages must typecheck)
+        run: brew install portaudio
+
+      # Pinned gosec release — SAME version the baseline was generated with, so
+      # rule ids and snippet rendering do not drift under the gate.
+      - name: Install gosec (pinned)
+        run: go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
+
+      # BLOCKING: no -no-fail swallowing, no continue-on-error. A NEW finding vs
+      # the committed baseline fails this step and the PR check.
+      - name: gosec diff gate (fail on new findings)
+        run: bash scripts/gosec-diff-gate.sh

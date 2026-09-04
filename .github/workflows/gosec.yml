@@ -17,11 +17,16 @@ name: gosec (SAST)
 # blocked" — exactly like CODEOWNERS, it lives in repo settings, not in YAML.
 # Until it is set, this job still gives you the Code Scanning dashboard + alerts.
 #
-# ALTERNATIVE (not used): an in-CI hard diff against the committed baseline
-# SARIF. Rejected because gosec's SARIF carries no partialFingerprints, so a
-# self-contained diff would have to key on (rule, file, snippet) and would drift
-# across gosec versions (docs/security/gosec-baseline.md flags this). Code
-# Scanning's native fingerprinting is the robust path and adds a dashboard.
+# COMPLEMENTARY IN-CI GATE (now exists): gosec-diff-gate.yml runs a self-contained
+# hard diff against a committed baseline and BLOCKS a PR directly — no repo toggle
+# required. The brittleness once cited here is defeated on two fronts: gosec is
+# PINNED at v2.29.0 (rule ids + snippet rendering don't drift under it), and the
+# per-finding signature keys on (rule_id, repo-relative-file, normalized-code)
+# with line/column EXCLUDED and the "<lineno>: " snippet prefixes stripped — so an
+# existing finding that merely shifts lines keeps its signature and is not a false
+# "new". (gosec's SARIF still carries no partialFingerprints; the diff gate uses
+# gosec's JSON + a stable signature instead.) This Code-Scanning upload stays as
+# the complementary dashboard; the two are intended to run together.
 
 on:
   push:
