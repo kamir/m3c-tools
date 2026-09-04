@@ -94,8 +94,11 @@ irm https://raw.githubusercontent.com/kamir/m3c-tools/master/scripts/skillctl-te
 curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/master/scripts/skillctl-test.sh | bash
 ```
 
-Prerequisites: **git** and **Go 1.25+** on `PATH`. Nothing else. The scripts never touch your
-trust roots, never write outside the checkout, and exit non-zero if any step fails.
+Prerequisites: **git** and **Go 1.25+** on `PATH`. Nothing else. Missing either, or on a
+fresh Windows box, see [Prerequisites](prerequisites.md): one `winget` line per tool, the
+PATH reload that makes them visible in the session you already have open, and the
+no-admin-rights path. The scripts never touch your trust roots, never write outside the
+checkout, and exit non-zero if any step fails.
 
 Prefer to read before you run? The scripts are
 [`scripts/skillctl-test.ps1`](https://github.com/kamir/m3c-tools/blob/master/scripts/skillctl-test.ps1)
@@ -166,6 +169,11 @@ curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/master/scripts/skil
 | `trust-surface` | the whole trust surface, whole-package, no allow-list | `windows-gate.yml` |
 | `lifecycle` | author, sign, verify, trust, and a tampered bundle **refused** | `skillctl-windows-smoke.yml` |
 
+On Windows, three gates (`pins`, `boundary`, `gosec`) need a POSIX shell. Git for Windows
+already ships one and this script finds it next to `git.exe`, even though the recommended
+install leaves `bash.exe` off your PATH; [Prerequisites](prerequisites.md) explains that
+trap, and why a `bash` that IS on your PATH is usually WSL and the wrong one.
+
 Flags: `--full` / `-Full` widens the Go gates from the skillctl trust surface to `./...`,
 `--no-install` / `-NoInstall` forbids installing a missing tool, `--strict` / `-Strict` makes a
 skipped gate fail the run, `--skip-stage1` / `-SkipStage1` skips the build-and-test stage.
@@ -207,6 +215,10 @@ as somebody else, and then break it four different ways and watch each attempt r
 git clone https://github.com/kamir/m3c-tools.git
 cd m3c-tools/demo/kup-training && ./run-all.sh --offline-only --no-pdf --no-release
 ```
+
+On Windows, run the demo scripts with Git's bash: `& "$env:ProgramFiles\Git\bin\bash.exe"
+run-all.sh --offline-only --no-pdf --no-release`, or from the Start menu's Git Bash. See
+[Prerequisites](prerequisites.md).
 
 The guide is [`demo/kup-training/TUTORIAL.md`](https://github.com/kamir/m3c-tools/blob/master/demo/kup-training/TUTORIAL.md):
 what each step proves, what the exit codes mean, and the one lesson people get wrong (a valid

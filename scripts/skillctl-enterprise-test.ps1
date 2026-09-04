@@ -49,9 +49,10 @@
   SHA-256, and a convenience script should not fake that.
 
   POSIX GATES. prose, pins, boundary and the gosec diff gate are shell scripts.
-  prose is reimplemented here natively. The others run only if a working `bash`
-  is on PATH (Git for Windows provides one; the gosec diff gate also needs jq),
-  and report SKIP otherwise.
+  prose is reimplemented here natively. The others need a working `bash`: Git
+  for Windows ships one, and this script finds it next to git.exe even though
+  the recommended install leaves it off PATH. The gosec diff gate also needs jq.
+  Missing either, the gate reports SKIP. See docs/prerequisites.md.
 
 .PARAMETER RepoDir
   Where the checkout lives. Default: $HOME\m3c-tools.
@@ -195,18 +196,43 @@ function Test-Tool($command, $module) {
 # A usable POSIX shell? Git for Windows ships one. A WSL stub with no distro
 # installed answers `bash --version` with an error, which is why this probes
 # rather than testing for the file.
+#
+# Git for Windows SHIPS a bash, but its recommended install puts only
+# ...\Git\cmd on PATH (git.exe), not ...\Git\bin (bash.exe), so `Get-Command
+# bash` finds nothing on a perfectly well-equipped machine and three gates would
+# report SKIP for no reason. So look for Git's own bash FIRST, derived from
+# wherever git.exe actually is, then fall back to PATH.
+#
+# Order matters for a second reason: a PATH `bash` on Windows is usually WSL's
+# System32\bash.exe. With a distro installed it answers `--version` happily and
+# then runs our shell gates inside Linux, against /mnt/c paths and a different
+# git. Git for Windows' bash is the one that shares this filesystem view.
+$BashCandidates = @()
+$gitCmd = Get-Command git -ErrorAction SilentlyContinue
+if ($gitCmd) {
+  # ...\Git\cmd\git.exe  ->  ...\Git\bin\bash.exe   (also covers ...\Git\bin\git.exe)
+  $gitRoot = Split-Path -Parent (Split-Path -Parent $gitCmd.Source)
+  $BashCandidates += (Join-Path $gitRoot 'bin\bash.exe')
+  $BashCandidates += (Join-Path $gitRoot 'usr\bin\bash.exe')
+}
+foreach ($root in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, "$env:LOCALAPPDATA\Programs")) {
+  if ($root) { $BashCandidates += (Join-Path $root 'Git\bin\bash.exe') }
+}
+$pathBash = Get-Command bash -ErrorAction SilentlyContinue
+if ($pathBash) { $BashCandidates += $pathBash.Source }
+
 $Bash = $null
-$bashCmd = Get-Command bash -ErrorAction SilentlyContinue
-if ($bashCmd) {
-  & $bashCmd.Source -c 'exit 0' 2>&1 | Out-Null
-  if ($LASTEXITCODE -eq 0) { $Bash = $bashCmd.Source }
+foreach ($cand in $BashCandidates) {
+  if (-not $cand -or -not (Test-Path -LiteralPath $cand)) { continue }
+  & $cand -c 'exit 0' 2>&1 | Out-Null
+  if ($LASTEXITCODE -eq 0) { $Bash = $cand; break }
 }
 
 $Scope = if ($Full) { @('./...') } else { @('./cmd/skillctl/...', './pkg/skillctl/...') }
 
 Write-Host "  repo   : $RepoDir"
 Write-Host "  scope  : $($Scope -join ' ')"
-Write-Host "  bash   : $(if ($Bash) { $Bash } else { 'not available (POSIX gates will be skipped)' })"
+Write-Host "  bash   : $(if ($Bash) { $Bash } else { 'not found (POSIX gates will be skipped; see docs/prerequisites.md)' })"
 
 # --- 1. stage 1 -------------------------------------------------------------
 if ($SkipStage1) {
@@ -280,8 +306,8 @@ if ($Bash) {
   Invoke-Gate 'pins'     { & $Bash ./scripts/check-install-pins.sh }
   Invoke-Gate 'boundary' { & $Bash ./tools/boundary-gate.sh }
 } else {
-  Skip-Gate 'pins'     'no working bash on PATH'
-  Skip-Gate 'boundary' 'no working bash on PATH'
+  Skip-Gate 'pins'     'no working bash found (Git for Windows ships one)'
+  Skip-Gate 'boundary' 'no working bash found (Git for Windows ships one)'
 }
 
 # --- 8. coverage ratchet ----------------------------------------------------
@@ -307,7 +333,7 @@ Invoke-Gate 'govulncheck' { & go run "golang.org/x/vuln/cmd/govulncheck@$Govulnc
 # findings (docs\security\gosec-baseline.md), so an absolute count says nothing.
 # What must never happen is a NEW finding.
 if (-not $Bash) {
-  Skip-Gate 'gosec' 'the diff gate is a POSIX shell script; no working bash on PATH'
+  Skip-Gate 'gosec' 'the diff gate is a POSIX shell script; no working bash found'
 } elseif (-not (Get-Command jq -ErrorAction SilentlyContinue)) {
   Skip-Gate 'gosec' 'jq is not installed (the diff gate needs it)'
 } elseif (Test-Tool 'gosec' "github.com/securego/gosec/v2/cmd/gosec@$GosecVersion") {
