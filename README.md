@@ -75,7 +75,7 @@ m3c-tools doctor                        # verify connectivity & config
 ```bash
 # macOS / Linux / Windows, signed installer: fetches the right binary from the
 # signed skillctl/v* release and verifies cosign/OIDC provenance + SHA-256 first.
-curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/82c832882e8683fa3824ce65db01d945af639c50/tools/skillctl-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/f43eb496685a9f9cbc5b9a28046f568e70ee7dd9/tools/skillctl-install.sh | bash
 
 skillctl keygen --out ~/.config/m3c/skill-keys/mykey            # ed25519 → mykey.priv + mykey.pub
 skillctl pack --skill ./my-skill -o my-skill.skb --name my-skill --version 1.0.0
@@ -171,7 +171,7 @@ The **scripted one-liners** fetch the right binary for your host, **verify cosig
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/kamir/m3c-tools/82c832882e8683fa3824ce65db01d945af639c50/tools/skillctl-install.ps1 | iex
+irm https://raw.githubusercontent.com/kamir/m3c-tools/f43eb496685a9f9cbc5b9a28046f568e70ee7dd9/tools/skillctl-install.ps1 | iex
 ```
 
 Installs `skillctl` to `%LOCALAPPDATA%\Programs\skillctl` after verifying cosign provenance +
@@ -181,7 +181,7 @@ use **one or the other**, not both, so you don't end up with two `skillctl.exe` 
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/82c832882e8683fa3824ce65db01d945af639c50/tools/skillctl-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/f43eb496685a9f9cbc5b9a28046f568e70ee7dd9/tools/skillctl-install.sh | bash
 ```
 
 Override the target dir or release with `INSTALL_DIR=…` / `RELEASE_BASE=…` (default `~/.local/bin`).
@@ -190,7 +190,7 @@ digest, with an **ed25519 fallback** for hosts without cosign, see the
 [skillctl quickstart](docs/quickstart-skillctl.md#1-install).
 
 **Bootstrap integrity.** The one-liner URLs are pinned to the **immutable commit
-`82c8328`**, not the mutable `master` branch, where a single rewrite could swap the
+`f43eb49`**, not the mutable `master` branch, where a single rewrite could swap the
 bootstrap script *and* every pin inside it (a TOFU trap). Verify the fetched bytes
 out-of-band before trusting them. Expected SHA-256:
 
@@ -203,7 +203,7 @@ Verify-then-run instead of piping straight to `iex` / `bash`:
 
 ```powershell
 # Windows
-$u = 'https://raw.githubusercontent.com/kamir/m3c-tools/82c832882e8683fa3824ce65db01d945af639c50/tools/skillctl-install.ps1'
+$u = 'https://raw.githubusercontent.com/kamir/m3c-tools/f43eb496685a9f9cbc5b9a28046f568e70ee7dd9/tools/skillctl-install.ps1'
 $f = "$env:TEMP\skillctl-install.ps1"; irm $u -OutFile $f
 if ((Get-FileHash $f -Algorithm SHA256).Hash -ne '9E8CEEC9D2C87B4F5A7136653E8CA69224FA6579A55DA221D9E2FE875F9924C8') { throw 'SHA-256 mismatch' }
 & $f
@@ -211,7 +211,7 @@ if ((Get-FileHash $f -Algorithm SHA256).Hash -ne '9E8CEEC9D2C87B4F5A7136653E8CA6
 
 ```bash
 # macOS / Linux
-u='https://raw.githubusercontent.com/kamir/m3c-tools/82c832882e8683fa3824ce65db01d945af639c50/tools/skillctl-install.sh'
+u='https://raw.githubusercontent.com/kamir/m3c-tools/f43eb496685a9f9cbc5b9a28046f568e70ee7dd9/tools/skillctl-install.sh'
 f=$(mktemp); curl -fsSL "$u" -o "$f"
 echo 'adf9d768a376ee921f9df728546de072a2b3f14e9616e10bf3419fef520034a9  '"$f" | shasum -a 256 -c - && bash "$f"
 ```

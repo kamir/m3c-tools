@@ -46,3 +46,10 @@ jobs:
 
       - name: id-xref-lint fixtures (including the registry-absent degrade)
         run: bash tools/id-xref-lint.test.sh
+
+      # Lives here rather than in the prose gate because it needs the FULL
+      # history: a pin is by definition an older commit, and a shallow clone
+      # cannot tell a commit from a tag object. That distinction is the whole
+      # check (BUG-0215).
+      - name: install pins resolve to commits, digests match
+        run: bash scripts/check-install-pins.sh
