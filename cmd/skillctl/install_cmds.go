@@ -18,11 +18,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -237,8 +239,19 @@ func runVerify(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 
+	// FR-0116: the HTTP trust-roots file is only ONE of the two carriers. A skill
+	// pulled from a self/ER1 or a git registry is anchored by
+	// ~/.claude/trust-roots.yaml or by a pinned peer, and it carries the signed
+	// material to prove it (.m3c-provenance.json + .skillctl-attest.json). Before
+	// this, a missing skill-trust-roots.yaml ended the whole command with advice
+	// that is wrong for those installs ("run skillctl trust add", which takes an
+	// HTTP URL). The gate has always fallen through to the sidecar tier here;
+	// `verify <name>` now does the same.
 	tr, root, err := loadAndPickRoot(*registryURL)
 	if err != nil {
+		if code, handled := verifySidecarTier(name, *homeOverride, *governanceMin, *verboseFlag, stdout, stderr); handled {
+			return code
+		}
 		fmt.Fprintln(stderr, err)
 		return exitGeneric
 	}
@@ -380,4 +393,81 @@ func resolveTenant(cliFlag string, tr *verify.TrustRoots) string {
 		return ""
 	}
 	return strings.TrimSpace(tr.TenantScope)
+}
+
+// verifySidecarTier verifies a skill installed by the self/ER1 or git pull path,
+// which anchors on ~/.claude/trust-roots.yaml or on a pinned peer rather than on
+// the HTTP trust-roots file. It reports handled=false when the skill has no
+// provenance sidecar, so the caller can fall back to its own error.
+//
+// The trust root is resolved the way `pull` resolves it (FR-0116): the peer whose
+// locator matches the registry recorded in the provenance sidecar, else the
+// hand-written self trust-roots file. Using the peer matters, because a git
+// registry pinned with `skillctl peer add` has its key in skill-peers.yaml and
+// nowhere else, and re-anchoring without it would fail closed on a perfectly good
+// install.
+func verifySidecarTier(name, homeOverride, governanceMin string, verbose bool, stdout, stderr io.Writer) (int, bool) {
+	side, serr := readProvenanceSidecar(name, homeOverride)
+	if serr != nil {
+		return 0, false // no sidecar (or unreadable): not our tier
+	}
+
+	opts := install.Opts{
+		Name:          name,
+		HomeDir:       homeOverride,
+		GovernanceMin: governanceMin,
+	}
+	if verbose {
+		opts.Logger = stderr
+	}
+	// A pinned peer wins, exactly as in `pull`. Not fatal when absent: the file
+	// path below is the other legitimate carrier.
+	if peers, perr := registry.LoadPeers(peersConfigPath); perr == nil && side.Registry != "" {
+		if pe, ok := peers.FindPeerByLocator(side.Registry); ok {
+			if str, aerr := pe.AsTrustRoots(); aerr == nil {
+				opts.SelfTrustRoots = str
+			}
+		}
+	}
+
+	err := install.VerifyInstalledSidecar(opts)
+	if errors.Is(err, registry.ErrNoSidecar) {
+		return 0, false
+	}
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return verify.ExitCode(err), true
+	}
+	src := side.Registry
+	if src == "" {
+		src = "self"
+	}
+	fmt.Fprintf(stdout, "%s: content bound to the signed bundle, governance %s, anchored on %s (offline)\n",
+		name, strOr(side.GovernanceLevel, "unknown"), src)
+	return exitOK, true
+}
+
+// readProvenanceSidecar reads .m3c-provenance.json for an installed skill.
+func readProvenanceSidecar(name, homeOverride string) (*registry.ProvenanceSidecar, error) {
+	home := homeOverride
+	if home == "" {
+		h, err := userHome()
+		if err != nil {
+			return nil, err
+		}
+		home = h
+	}
+	canon, err := install.CanonicalSkillName(name)
+	if err != nil {
+		return nil, err
+	}
+	b, err := os.ReadFile(filepath.Join(home, ".claude", "skills", canon, registry.ProvenanceSidecarName))
+	if err != nil {
+		return nil, err
+	}
+	var side registry.ProvenanceSidecar
+	if err := json.Unmarshal(b, &side); err != nil {
+		return nil, err
+	}
+	return &side, nil
 }

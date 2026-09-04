@@ -390,6 +390,14 @@ skillctl verify --bundle <file.skb> [--trust-roots <file>] [--json]
 
 Re-runs the SPEC-0188 §7 trust-chain check against an already-installed skill: useful for
 catching post-install revocations or trust-root rotations. `--all` re-verifies everything.
+
+**Two carriers, one command** (FR-0116). A skill installed by `install` is anchored on the
+HTTP trust-roots file; one installed by `pull --install` (self/ER1 or a git registry) is
+anchored on `~/.claude/trust-roots.yaml` or on a peer pinned with `peer add`, and carries
+`.m3c-provenance.json` + `.skillctl-attest.json` to prove it. `verify <name>` tries the HTTP
+model first and falls back to that sidecar tier, resolving the peer whose locator matches the
+registry recorded in the provenance. A missing `skill-trust-roots.yaml` is therefore no longer
+the end of the command: it is the end of only one of the two paths.
 `--bundle` verifies a **standalone `.skb` file** with no install state and no network, against
 locally pinned trust-roots: the trustless third-party path (requires a `<file>.skbmeta.json`
 sidecar or `--meta`).

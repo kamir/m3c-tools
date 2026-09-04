@@ -85,6 +85,14 @@ type Opts struct {
 	// registry-trust check (SPEC-0247 OQ-5). Empty = default. Tests inject one.
 	SelfTrustRootsPath string
 
+	// SelfTrustRoots hands VerifyInstalledSidecar an ALREADY-RESOLVED self
+	// trust-root instead of a path (FR-0116). It exists because the second
+	// legitimate carrier of that anchor is not a file at all: a registry pinned
+	// with `skillctl peer add` keeps its key in skill-peers.yaml, so a caller
+	// that resolved the peer must be able to pass the result straight in. When
+	// set it WINS over SelfTrustRootsPath; when nil, nothing changes.
+	SelfTrustRoots *registry.SelfTrustRoots
+
 	// MaxExtractedBytes overrides the gzip-bomb cap. 0 = use default.
 	MaxExtractedBytes int64
 

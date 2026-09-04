@@ -197,6 +197,7 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		TrustRootsFingerprint: tr.Fingerprint,
 		ContextID:             *er1Context,
 		AllowDowngrade:        *allowDowngrade,
+		RegistrySpec:          *registryName,
 	})
 	if err != nil {
 		// Per-class diagnostics: every token failure states WHY and the exact FIX.

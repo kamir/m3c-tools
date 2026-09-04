@@ -568,12 +568,13 @@ sondern rechnet nach.
 
 Zwei Dinge, die Sie wissen müssen, bevor Sie den Betrieb darauf aufsetzen:
 
-- `skillctl verify <name>` und `verify --offline <name>` antworten nach einer Installation aus
-  einem Git-Registry mit „trust roots not configured; run `skillctl trust add …`" und zeigen
-  auf `~/.claude/skill-trust-roots.yaml`, also auf die Datei des HTTP-Modells. Das Nachprüfen
-  eines installierten Skills ist an dieses Modell gebunden und für Peer- und Git-Registries
-  noch nicht verdrahtet. Der belastbare Nachweis bleibt vorerst der Pull selbst (die
-  `✅`-Zeilen) plus `skillctl registry show`.
+- `skillctl verify <name>` prüft einen aus dem Git-Registry installierten Skill jetzt selbst:
+  es bindet den Inhalt auf der Platte an das signierte Bundle und rechnet die Attestierung
+  gegen den gepinnten Schlüssel nach. Erwartet ist `0` plus eine Zeile, die nennt, worauf der
+  Skill verankert ist. Eine nachträglich veränderte Datei ergibt `10`. Zwei Dinge dazu: der
+  Pfad braucht die Beilagen aus dem verwalteten Install (ein von Hand entpackter Skill bleibt
+  stumm, siehe 3.3), und er verlangt, dass Sie den Herausgeber gepinnt haben, in der
+  `trust-roots.yaml` oder über `peer add`.
 - `skillctl verify --all` fällt unter verwalteten Trust-Roots ohne erreichbare
   Revocation-Quelle **fail-closed** und würde installierte Skills quarantänisieren. Bevor der
   Sweep in den Alltag geht, muss der Widerrufskanal stehen; bis dahin ohne `--quarantine`
