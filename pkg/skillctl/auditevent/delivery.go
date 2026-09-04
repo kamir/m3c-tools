@@ -1,23 +1,47 @@
 package auditevent
 
-// delivery.go: the FR-0110a delivery semantics (SPEC-0403 §6). Stiller Verlust
-// darf nicht das Standardverhalten sein (REQ-6.1): the delivery MODE is an
-// explicit, selectable Dispatcher property, NOT a Sink concern (a Sink only
-// reports whether its Write succeeded; the Dispatcher decides what a failure
-// means, sink.go).
+// delivery.go: the FR-0110a delivery semantics (SPEC-0403 §6) PLUS the FR-0110b
+// `required` fail-close (§6b). Stiller Verlust darf nicht das Standardverhalten
+// sein (REQ-6.1): the delivery MODE is an explicit, selectable Dispatcher
+// property, NOT a Sink concern (a Sink only reports whether its Write succeeded;
+// the Dispatcher decides what a failure means, sink.go).
 //
-// SCOPE (FR-0110a). This file implements `best-effort` and `durable`. `required`
-// (REQ-6.1 / §6b, the hot-path fail-close for the positive-list event types) is
-// MODELED here so a producer can already name it, but its ENFORCEMENT is
-// explicitly OUT OF SCOPE: it is FR-0110b, a separate challenge-gated PR. See
-// writeToSinks: `required` currently behaves like `durable` and NEVER fails the
-// caller, so the SPEC-0255 / REQ-6.4 decision-invariance default is untouched by
-// this PR.
+// SCOPE. This file implements `best-effort`, `durable`, and now the `required`
+// ENFORCEMENT: for an event whose type is on an explicitly configured positive
+// list (REQ-6.6/6.9) and is NOT a denial type (REQ-6.7), a delivery that was not
+// durably accepted returns the load-bearing sentinel ErrRequiredNotDurable, and
+// a caller that opted in (IsFailClosed) fails its consequential operation closed.
+// The positive-list policy + its validation live in required.go. Every OTHER
+// path (any non-required mode, a required Dispatcher with no policy, an event not
+// on the list, a denial type, or a durable success) returns only an ADVISORY
+// error, so the SPEC-0255 / REQ-6.4 decision-invariance default is byte-identical
+// to FR-0110a on every path a required policy does not explicitly cover.
 
 import (
 	"errors"
 	"fmt"
 )
+
+// ErrRequiredNotDurable is the sentinel a Dispatch returns when a MANDATORY audit
+// event (an allow-listed, non-denial type under an active RequiredPolicy, §6b)
+// could not be durably accepted. It is the ONLY error class the Dispatcher marks
+// load-bearing: a caller on a consequential path MUST fail its operation closed
+// when IsFailClosed reports true (REQ-6.6, AUD-01). Every other delivery error
+// stays advisory, so a caller that never checks IsFailClosed (the gate hot path)
+// keeps its byte-identical default decision (REQ-6.4).
+var ErrRequiredNotDurable = errors.New("auditevent: required audit event not durably accepted")
+
+// IsFailClosed reports whether err carries the required-mode fail-close signal
+// (ErrRequiredNotDurable). It is the caller's opt-in: a caller that ignores
+// Dispatch's error entirely (as the gate hot path does today) sees no behavior
+// change from FR-0110b, which is exactly what REQ-6.4 requires. A required-mode
+// caller wraps its consequential step so that IsFailClosed(err) == fail closed.
+//
+// NOTE ON SCOPE: this is the DURABILITY fail-close only (REQ-6.6/6.10b, "not
+// durably accepted"). A validation error (ErrInvalidEvent) is a producer bug, not
+// a durability failure, and is returned distinctly; a mandatory-event producer
+// should treat that as its own hard stop, but it is not this contract.
+func IsFailClosed(err error) bool { return errors.Is(err, ErrRequiredNotDurable) }
 
 // Mode is the SPEC-0403 §6 delivery semantics selector (REQ-6.1).
 type Mode string
@@ -33,13 +57,15 @@ const (
 	// ModeRequired: a consequential operation MUST fail if its mandatory audit
 	// event was not durably accepted (REQ-6.1, high-security policy).
 	//
-	// TODO(FR-0110b): ENFORCEMENT (hot-path fail-close for the §6b/REQ-6.9
-	// positive list: policy.allow, skill.execute, capability.grant,
-	// trustroot.change, config.change, with deny-class events exempt per REQ-6.7,
-	// and the getrennte Bestaetigung for policy.allow per REQ-6.10) is a SEPARATE,
-	// challenge-gated PR. It is NOT implemented here: this PR must not fail-close
-	// anywhere. Until FR-0110b lands, ModeRequired is accepted by Valid() and
-	// behaves exactly like ModeDurable (never fails the caller).
+	// FR-0110b ENFORCEMENT: a required Dispatcher fail-closes ONLY for the event
+	// types on an explicitly configured positive list (REQ-6.6/6.9: policy.allow,
+	// skill.execute, capability.grant, trustroot.change, config.change), with
+	// denial types exempt even if listed (REQ-6.7) and policy.allow requiring a
+	// separate confirmation (REQ-6.10a). Build a required Dispatcher via
+	// NewDispatcherRequired with a policy from RequiredConfig.BuildPolicy
+	// (required.go); a required Dispatcher built WITHOUT a policy (via
+	// NewDispatcherMode) never fail-closes and behaves like ModeDurable, so no
+	// path silently gains fail-close.
 	ModeRequired Mode = "required"
 )
 
@@ -91,10 +117,25 @@ func (d *Dispatcher) WithDurableRetries(n int) *Dispatcher {
 }
 
 // deliver fans e out to every sink and joins the per-sink errors. It is the
-// single fan-out point Dispatch calls after redaction and validation. The
-// returned error is advisory in best-effort/durable; a caller on the decision hot
-// path (the gate) ignores it (REQ-6.4). It NEVER panics and NEVER fails-closed
-// here: required-mode enforcement is FR-0110b (see writeToSinks).
+// single fan-out point Dispatch calls after redaction and validation. It NEVER
+// panics.
+//
+// FR-0110b fail-close: under ModeRequired with an active RequiredPolicy, if the
+// event type is fail-closeable (on the positive list, not a denial type, and, for
+// policy.allow, confirmed) AND delivery did not durably succeed (any configured
+// sink failed to accept the write), the joined error is wrapped in
+// ErrRequiredNotDurable so IsFailClosed reports true and the caller fails closed.
+//
+// "Durably accepted" is defined as EVERY configured sink accepting the write. The
+// recommended required wiring is a SINGLE durable sink (OutboxSink), for which
+// that is exactly spool acceptance (REQ-6.10b), never a network ack: the OutboxSink
+// reaches no broker, so a required policy can never hang a load path on a remote
+// promise. Adding a flaky best-effort sink alongside the durable one is a
+// mis-config that fails SAFE (closed), not open.
+//
+// On every OTHER path (any non-required mode, no policy, a non-listed type, a
+// denial type, or a durable success) deliver returns only the advisory joined
+// error, which a gate-hot-path caller ignores (REQ-6.4).
 func (d *Dispatcher) deliver(e *Event) error {
 	var errs []error
 	for _, s := range d.sinks {
@@ -102,19 +143,24 @@ func (d *Dispatcher) deliver(e *Event) error {
 			errs = append(errs, fmt.Errorf("sink %q: %w", s.Name(), err))
 		}
 	}
-	return errors.Join(errs...)
+	joined := errors.Join(errs...)
+	if joined != nil && d.mode == ModeRequired && d.required.failCloseable(e.EventType) {
+		return fmt.Errorf("%w (event_type=%s, spool acceptance is the fulfillment point, REQ-6.10b): %v",
+			ErrRequiredNotDurable, e.EventType, joined)
+	}
+	return joined
 }
 
 // writeToSinks performs one sink Write under the Dispatcher's mode.
 //
 //   - best-effort: exactly one Write attempt; the error (if any) is returned
 //     advisory (byte-for-byte the FR-0109 landed behavior).
-//   - durable: up to durableRetries in-process attempts to ride out a transient
-//     failure; the durable sink (OutboxSink) additionally spools so the row
-//     survives restart and is deduped on event_id (REQ-6.2).
-//   - required: TODO(FR-0110b). The hot-path fail-close is a separate PR. Until
-//     then this behaves EXACTLY like durable and never fails the caller, so
-//     decision-invariance (REQ-6.4 / SPEC-0255) is preserved by this PR.
+//   - durable / required: up to durableRetries in-process attempts to ride out a
+//     transient failure; the durable sink (OutboxSink) additionally spools so the
+//     row survives restart and is deduped on event_id (REQ-6.2). writeToSinks
+//     itself is identical for durable and required: the FR-0110b fail-close
+//     decision (whether a residual failure is load-bearing) is made ONCE in
+//     deliver, from the event type and the policy, not per sink here.
 func (d *Dispatcher) writeToSinks(s Sink, e *Event) error {
 	switch d.mode {
 	case ModeDurable, ModeRequired:

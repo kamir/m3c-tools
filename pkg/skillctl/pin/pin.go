@@ -83,6 +83,18 @@ type GenerateOptions struct {
 	// On a host with an unrecordable outbox it therefore denies the plugin ecosystem
 	// and the operator's allowlisted escapes too; that is the intended "no un-audited
 	// allow" posture, not a bug. Enable it deliberately.
+	//
+	// SPEC-0403 §6b / REQ-6.10c OPERATIONAL DUTY. This flag is the separate,
+	// explicit confirmation (REQ-6.10a) that puts `policy.allow` on the `required`
+	// positive list: it couples SKILL EXECUTION to a durable audit write. Whoever
+	// sets it takes on a SPOOL-PATH AVAILABILITY duty (disk space, permissions,
+	// inode reserve): a FULL DISK becomes a SKILL-EXECUTION FAILURE (the allow can
+	// no longer be spooled, so it fails closed, exit 26). That is the deliberate
+	// trade for "no un-audited allow"; it is fulfilled at the LOCAL SPOOL, never a
+	// broker (REQ-6.10b), so a skill start never hangs on a remote promise. Setting
+	// it is only an unbypassable POLICY (not merely a request) when the
+	// managed-settings file is pinned root-owned per SPEC-0247 P1.3; until then a
+	// same-uid user can flip it and it is advisory (AUD-07).
 	RequireLocalAudit bool
 	// StateGateFallback emits `skillctlStateGateFallback: true`: the SPEC-0317
 	// R-1.4 P2 opt-in that state-gates the verify-hook's ONLINE fallback (the §7
