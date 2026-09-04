@@ -44,6 +44,33 @@ jobs:
       - name: No U+2014 EM DASH in the tracked tree
         run: ./scripts/check-no-emdash.sh
 
+      # A workflow file that does not PARSE never runs, so no guard living
+      # inside .github/workflows can catch its own file being broken. This step
+      # lives in ci.yml and parses its siblings, which is the only arrangement
+      # that works. It exists because a punctuation sweep once turned seven step
+      # names into `name: Guard: ...`, invalid YAML, and pin-guard.yml plus
+      # windows-gate.yml silently stopped running for four merges.
+      - name: Every workflow file is valid YAML
+        run: |
+          python3 - <<'PY'
+          import glob, sys, yaml
+          files = sorted(glob.glob(".github/workflows/*.yml") + glob.glob(".github/workflows/*.yaml"))
+          if not files:
+              sys.exit("no workflow files found: the glob is wrong, not the tree")
+          bad = 0
+          for f in files:
+              try:
+                  yaml.safe_load(open(f, encoding="utf-8"))
+              except Exception as e:
+                  print(f"INVALID {f}: {str(e).splitlines()[0]}")
+                  bad += 1
+          print(f"{len(files)} workflow files checked, {bad} invalid")
+          if bad:
+              print("An unquoted colon in a step name is the usual cause: "
+                    'name: Foo: bar  ->  name: "Foo: bar"')
+              sys.exit(1)
+          PY
+
   docs-gate:
     name: CLI/manual consistency (docaudit)
     # Pure-stdlib AST gate: it only PARSES cmd/m3c-tools and cmd/skillctl, so it

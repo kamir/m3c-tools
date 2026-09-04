@@ -74,7 +74,7 @@ jobs:
           echo "OK: every 'uses:' ref is pinned to a 40-hex commit SHA."
 
       # (2) CD-T2: no floating @latest anywhere in the workflows.
-      - name: Guard: no @latest refs
+      - name: "Guard: no @latest refs"
         run: |
           set -euo pipefail
           # Exclude this guard file: it contains the literal token by necessity.
@@ -96,7 +96,7 @@ jobs:
       # `permissions: { contents: write, id-token: write }` (indented under a job)
       # is never examined. Allowed top-level values: `read`, `none`, `{}`,
       # `read-all`. Rejected: `write-all` and any `: write` scope.
-      - name: Guard: top-level permissions present AND read-only (least privilege)
+      - name: "Guard: top-level permissions present AND read-only (least privilege)"
         run: |
           set -euo pipefail
           bad=""
@@ -131,7 +131,7 @@ jobs:
           echo "OK: every workflow declares a read-only top-level permissions block (writes are per-job)."
 
       # (4) CD-T7: every upload-artifact step sets retention-days.
-      - name: Guard: upload-artifact steps set retention-days
+      - name: "Guard: upload-artifact steps set retention-days"
         run: |
           set -euo pipefail
           bad=""

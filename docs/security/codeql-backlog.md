@@ -143,6 +143,27 @@ The baseline was regenerated with the pinned `gosec@v2.29.0`, not hand-edited.
 
 ---
 
+## A gate that could not see itself
+
+The em dash sweep quoted one step name in `pin-guard.yml` and one in
+`windows-gate.yml` (a `:` inserted into an unquoted YAML scalar changes the
+document), but left five more of the same shape unquoted. Both files became
+invalid YAML, so **both workflows silently stopped running for four merges**.
+The verification that was supposed to catch it used
+`glob.glob("**/*.yml", recursive=True)`, which does not descend into
+dot-directories, so `.github/workflows/` was never re-checked.
+
+Two lessons, both now enforced rather than remembered:
+
+- A workflow file that does not parse never runs, so no guard inside
+  `.github/workflows` can catch its own file being broken. The
+  "Every workflow file is valid YAML" step therefore lives in `ci.yml` and
+  parses its siblings.
+- When a glob returns nothing, that is a bug in the glob, not a clean tree. The
+  step exits non-zero if it finds zero workflow files.
+
+---
+
 ## Repository posture, as measured
 
 Two facts worth stating plainly, because they change what "the gate is green"
