@@ -6,9 +6,11 @@
 //	skillctl-sim run [-n 100]         execute it and compare theory with reality
 //	skillctl-sim run -md report.md    also write the report as a document
 //
-// Exit: 0 when every claimed prediction held and no invariant was violated,
-// 1 otherwise. A run that ends 1 has found either a bug or a wrong specification,
-// and the report says which steps disagreed.
+// Exit: 0 when every claimed prediction held, no invariant was violated and the
+// harness itself ran clean; 1 otherwise. A run that ends 1 has found a bug, a
+// wrong specification, or a broken harness, and the report says which. A residual
+// alone does not fail the run: part of it comes from the out-of-model attacks the
+// corpus carries on purpose.
 package main
 
 import (
