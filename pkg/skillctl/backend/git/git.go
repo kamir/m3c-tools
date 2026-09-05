@@ -525,7 +525,16 @@ func (b *gitBackend) Publish(ctx context.Context, req artifact.PublishRequest) (
 }
 
 func (b *gitBackend) ref(name, ver, dig string) artifact.ArtifactRef {
-	return artifact.ArtifactRef{Name: name, Version: ver, Digest: dig, Locator: tagName(name, ver), Scheme: b.scheme}
+	// A digest-bound event (attest, revoke, install) carries no version, and the
+	// tag is the publish unit of an ADMIT. Naming one here would mint the same
+	// nonsense "<name>/v" that Publish deliberately keeps out of NativeID: an
+	// address that resolves to nothing. A versionless event is addressed by its
+	// digest, which the Digest field already carries.
+	loc := ""
+	if ver != "" {
+		loc = tagName(name, ver)
+	}
+	return artifact.ArtifactRef{Name: name, Version: ver, Digest: dig, Locator: loc, Scheme: b.scheme}
 }
 
 // --- List ---

@@ -400,7 +400,7 @@ func loadBundleMetaSidecar(path string) (*registry.BundleMeta, error) {
 					"  (`skillctl registry show <digest>`), or pass an existing one with --meta <file>.\n"+
 					"  A bundle that has never been through a registry can only be checked with\n"+
 					"  `skillctl verify-sig --pubkey <author.pub> <file.skb>`, which proves authorship\n"+
-					"  and nothing about governance, revocation or tenant scope.", path)
+					"  and nothing about governance, revocation or tenant scope", path)
 		}
 		return nil, fmt.Errorf("verify --bundle: read sidecar %s: %w", path, err)
 	}
