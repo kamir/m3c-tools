@@ -107,8 +107,11 @@ func StateAt(p Params, afterRevoke bool) State {
 		// REWRITES the signature does change it, and that is the only move in this
 		// alphabet which can.
 		EnvelopeSigned: p.Adv != AdvForgeEnvelope,
-		SigsVerify:     true,
-		DigestMatches:  p.Adv != AdvStoredBundle,
+		// The malicious publisher is the only move that can put this bit to zero.
+		// Every other actor in the alphabet has to break the envelope to reach the
+		// signature rows, and then gate 1 speaks first.
+		SigsVerify:    p.Adv != AdvPublisherBadSigs,
+		DigestMatches: p.Adv != AdvStoredBundle,
 	}
 
 	// x_rev. A revoke is visible when it was issued and the store still shows it.

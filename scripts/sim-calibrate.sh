@@ -61,10 +61,40 @@ trap cleanup EXIT
 MUTANTS=(
   "gate5-revocation|pkg/skillctl/registry/backend_pull.go|s|if acc.IsRevoked(digest) {|if false \&\& acc.IsRevoked(digest) {|"
   "gate4-governance|pkg/skillctl/registry/backend_pull.go|s|if len(qual) < tr.quorum() {|if false \&\& len(qual) < tr.quorum() {|"
+  "gate1-envelope|pkg/skillctl/registry/backend_pull.go|s|if err := VerifyEnvelopeSignature(pub, event); err != nil {|if err := VerifyEnvelopeSignature(pub, event); false \&\& err != nil {|"
+  "gate2-digest|pkg/skillctl/registry/backend_pull.go|s|if gotDigest != digest {|if false \&\& gotDigest != digest {|"
+  "silent-noop-install|pkg/skillctl/registry/install_trust_mode.go|s|if err := os.Rename(tmp, target); err != nil {|if err := func() error { _ = tmp; _ = target; return nil }(); err != nil {|"
 )
+
+# The last one is not a gate. It is the defect class an external reviewer named on
+# 2026-09-05: report success, write nothing. Every check that reads an exit code or
+# a printed gate passes it, which is why INV-7 had to stop asking the tool how it
+# went and read the consumer's disk instead. If this mutant is ever NOT detected,
+# the disk-based invariants have stopped working and every accept bin in every
+# report on this project is unbacked.
 
 echo "sim-calibrate: building the simulator"
 go build -o "$WORK/skillctl-sim" ./cmd/skillctl-sim || exit 1
+
+# THE BASELINE, and it comes first on purpose.
+#
+# Every statement below is of the form "the mutant was rejected". That is only
+# evidence if the UNMUTATED build is accepted: otherwise the run rejects
+# everything, every mutant looks detected, and the detection rate is 100 percent
+# of nothing. Measure the zero before measuring the deflection.
+echo "sim-calibrate: baseline, the unmutated build must PASS"
+if ! go build -o "$WORK/skillctl-base" ./cmd/skillctl; then
+  echo "sim-calibrate: the unmutated build does not compile; nothing can be calibrated" >&2
+  exit 1
+fi
+if ! "$WORK/skillctl-sim" run -t "$T" -n "$N" -jobs 8 -skillctl "$WORK/skillctl-base" >"$WORK/baseline.log" 2>&1; then
+  echo "sim-calibrate: the BASELINE run failed. Calibration is meaningless until it passes." >&2
+  echo "  A run that rejects the unmutated build rejects every mutant too, and would" >&2
+  echo "  report perfect sensitivity while measuring nothing." >&2
+  tail -20 "$WORK/baseline.log" >&2
+  exit 1
+fi
+echo "  baseline: PASS"
 
 detected=0
 total=0
@@ -76,7 +106,14 @@ for m in "${MUTANTS[@]}"; do
   total=$((total + 1))
 
   wt="$WORK/mutant-$name"
-  git worktree add --detach "$wt" HEAD >/dev/null 2>&1 || { echo "  $name: worktree failed"; continue; }
+  # A worktree that never came up is a mutant that never ran. It used to `continue`
+  # without a trace, so the final success branch could be reached with mutants that
+  # were never tested. An untested control is not a passed one.
+  if ! git worktree add --detach "$wt" HEAD >/dev/null 2>&1; then
+    echo "  $name: worktree failed; the mutant never ran, counting as MISSED"
+    MISSED+=("$name (worktree could not be created)")
+    continue
+  fi
 
   if ! sed -i '' "$expr" "$wt/$file" 2>/dev/null && ! sed -i "$expr" "$wt/$file" 2>/dev/null; then
     echo "  $name: the mutation did not apply (the code moved); treating as MISSED"
@@ -97,16 +134,52 @@ for m in "${MUTANTS[@]}"; do
     continue
   fi
 
-  # The instrument reading: a non-zero exit means the simulation refused to accept
-  # this build. That is exactly what detection means here.
-  if "$WORK/skillctl-sim" run -t "$T" -n "$N" -jobs 8 -skillctl "$WORK/skillctl-$name" >"$WORK/$name.log" 2>&1; then
+  # THE READING, and it is deliberately not the exit code.
+  #
+  # It used to be: non-zero exit means detected. That is wrong in the most
+  # dangerous direction, and an external reviewer found it on 2026-09-05. The
+  # simulator also exits non-zero when its own harness breaks, so a mutant whose
+  # build merely fails to run scored as CAUGHT. A calibration that counts its own
+  # breakage as sensitivity is precisely the false green this whole exercise
+  # exists to prevent, sitting inside the instrument that is supposed to rule it
+  # out.
+  #
+  # Detection now requires a POSITIVE, behavioural reading: at least one conflict
+  # or one invariant violation, AND no harness failure. Anything else is reported
+  # under its own name and counts as MISSED, because "we could not tell" is not
+  # "we caught it".
+  "$WORK/skillctl-sim" run -t "$T" -n "$N" -jobs 8 -skillctl "$WORK/skillctl-$name" >"$WORK/$name.log" 2>&1
+  rc=$?
+
+  nconf=$(grep -oE '[0-9]+ conflicts' "$WORK/$name.log" | head -1 | grep -oE '^[0-9]+')
+  nviol=$(grep -oE 'INVARIANT VIOLATIONS \(([0-9]+)\)' "$WORK/$name.log" | grep -oE '[0-9]+' | head -1)
+  nharn=$(grep -oE '[0-9]+ harness failure' "$WORK/$name.log" | head -1 | grep -oE '^[0-9]+')
+  nconf=${nconf:-0}; nviol=${nviol:-0}; nharn=${nharn:-0}
+
+  # ORDER MATTERS HERE, and getting it wrong in either direction is a bug.
+  #
+  # A behavioural finding comes FIRST: a mutant that breaks the product will often
+  # also make a later step fail, and that follow-on failure must not erase the
+  # finding that preceded it. The silent-noop-install mutant is exactly this shape,
+  # it raises ten INV-7 violations and then two later verifies cannot run.
+  #
+  # But a harness failure WITHOUT any behavioural finding is not detection. That
+  # was the old bug: every non-zero exit counted, so a mutant that merely failed to
+  # run scored as caught.
+  if [ "$nconf" -gt 0 ] || [ "$nviol" -gt 0 ]; then
+    extra=""
+    [ "$nharn" -gt 0 ] && extra=", $nharn follow-on harness failure(s)"
+    echo "  $name: detected  ($nconf conflicts, $nviol invariant violations, exit $rc$extra)"
+    detected=$((detected + 1))
+  elif [ "$nharn" -gt 0 ]; then
+    echo "  $name: HARNESS FAILURE ($nharn) and no behavioural finding; nothing was measured, counting as MISSED"
+    MISSED+=("$name (harness failure, not a behavioural reading)")
+  elif [ "$rc" -ne 0 ]; then
+    echo "  $name: exit $rc but NO conflict and NO invariant violation; that is not a reading, counting as MISSED"
+    MISSED+=("$name (non-zero exit without a behavioural finding)")
+  else
     echo "  $name: NOT DETECTED"
     MISSED+=("$name")
-  else
-    conflicts=$(grep -oE '[0-9]+ conflicts' "$WORK/$name.log" | head -1)
-    viol=$(grep -oE 'INVARIANT VIOLATIONS \([0-9]+\)' "$WORK/$name.log" | head -1)
-    echo "  $name: detected  ($conflicts, $viol)"
-    detected=$((detected + 1))
   fi
 done
 

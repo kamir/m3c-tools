@@ -62,6 +62,24 @@ const (
 	// action alphabet had no move that could set the envelope bit to zero, so no
 	// number of scenarios could ever have demonstrated that gate.
 	AdvForgeEnvelope AdvKind = "forge-envelope"
+
+	// AdvPublisherBadSigs is the MALICIOUS PUBLISHER, and it exists because an
+	// information theorist showed on 2026-09-05 that the model could not express
+	// him, and that his absence was quietly doing the work of a proof.
+	//
+	// The argument the poster used to make was: the bundle signature rows sit
+	// inside the signed envelope, so breaking them breaks the envelope, so gate 1
+	// always speaks before gate 3, so gate 3 is structurally unreachable. That
+	// argument silently assumes nobody RE-SEALS the envelope. The publisher holds
+	// the registry key and can. Whether the tool lets him is a question about the
+	// product, and it was never asked, because the alphabet had no move for it.
+	//
+	// So the move exists now: the bundle's signature is replaced by a well-formed
+	// but wrong one BEFORE the publisher admits, and the publisher admits anyway.
+	// If the admit succeeds, gate 3 becomes reachable and the structural claim was
+	// an assumption. If the admit refuses, the claim is grounded in a measurement
+	// instead of an argument. Either answer is worth more than the argument was.
+	AdvPublisherBadSigs AdvKind = "publisher-bad-sigs"
 )
 
 // Params is one point in the corpus.
@@ -78,16 +96,61 @@ type Params struct {
 // mathematical closure: a cross product over every flag would produce thousands
 // of runs, most of them the same decision reached twice. The filter below keeps
 // the points where a DIFFERENT gate decides, and drops the rest.
+// The axes of the experiment, in one place.
+//
+// They used to be written out twice, once here and once in the covering array's
+// factor table, and the second copy was silently one level short when a new
+// adversary was added: the design kept planning over ten moves while the corpus
+// carried eleven. That is the third duplication of a definition to bite this
+// package in two days, after the two prediction oracles and the two prune rules.
+// The pattern is always the same, so the remedy is always the same: one source,
+// read by everyone who needs it.
+func AllCasts() []Cast { return []Cast{CastSolo, CastDuo, CastTrio} }
+
+// AllKeyings lists the key-layout levels.
+func AllKeyings() []Keying { return []Keying{KeyShared, KeySeparateOpen, KeySeparatePin} }
+
+// AllGovs lists the governance levels.
+func AllGovs() []Gov { return []Gov{GovGreen, GovYellow, GovNone} }
+
+// AllAdvKinds lists every adversary move the alphabet contains. Every statement
+// this package makes about unreachability is a statement about THIS list, which
+// is why it is exported and why the report prints it.
+// IncludeOpenFindings admits the adversary moves that are QUARANTINED: moves
+// whose measured behaviour is under an open finding, where the simulation has
+// observed something real but nobody has yet ruled whether the tool or the
+// specification should move.
+//
+// They are out of the blocking gate on purpose and they are NOT hidden: the
+// report names every quarantined move and its finding on every run, so the cost
+// of leaving one there keeps being paid in visibility. Turn them on with
+// `skillctl-sim run -open`, which is how the finding gets re-measured after a
+// decision.
+//
+// The alternative was to teach the model to predict what the binary happens to
+// do, which would have made the gate green by fitting the theory to the
+// observation. That is the one move this whole framework exists to refuse.
+var IncludeOpenFindings bool
+
+// QuarantinedAdvKinds maps a quarantined move to the finding that holds it there.
+func QuarantinedAdvKinds() map[AdvKind]string {
+	return map[AdvKind]string{
+		AdvPublisherBadSigs: "FR-0120: the pull refuses a bundle whose signature rows do not " +
+			"verify, correctly and with exit 1, but names no gate; SPEC-0188 §7 declares gate 3",
+	}
+}
+
+func AllAdvKinds() []AdvKind {
+	return []AdvKind{
+		AdvNone, AdvTransitChecked, AdvTransitSkipped, AdvStoredBundle,
+		AdvForgeAttest, AdvStripRevoke, AdvRelabelRevoke, AdvTamperInstalled,
+		AdvStolenKey, AdvForgeEnvelope, AdvPublisherBadSigs,
+	}
+}
+
 func Generate(limit int) []Scenario {
 	var out []Scenario
-	casts := []Cast{CastSolo, CastDuo, CastTrio}
-	keys := []Keying{KeyShared, KeySeparateOpen, KeySeparatePin}
-	govs := []Gov{GovGreen, GovYellow, GovNone}
-	advs := []AdvKind{
-		AdvNone, AdvTransitChecked, AdvTransitSkipped, AdvStoredBundle,
-		AdvForgeAttest, AdvStripRevoke, AdvRelabelRevoke, AdvTamperInstalled, AdvStolenKey,
-		AdvForgeEnvelope,
-	}
+	casts, keys, govs, advs := AllCasts(), AllKeyings(), AllGovs(), AllAdvKinds()
 
 	for _, c := range casts {
 		for _, k := range keys {
@@ -156,6 +219,16 @@ func meaningful(p Params) bool {
 	// they carry a broken envelope together with broken governance. A reviewer caught
 	// this being described as one reason on 2026-09-05, by recomputing the bits.
 	if p.Adv == AdvForgeEnvelope && (p.Gov != GovGreen || p.Key != KeySeparatePin) {
+		return false
+	}
+	// Same shape as R2 and for the same reason: the interesting question is which
+	// gate speaks, not how many ways the other axes can fail first.
+	if p.Adv == AdvPublisherBadSigs && (p.Gov != GovGreen || p.Key != KeySeparatePin) {
+		return false
+	}
+	// Quarantined moves stay out of the blocking corpus until their finding is
+	// decided. The report says which ones and why, every run.
+	if _, open := QuarantinedAdvKinds()[p.Adv]; open && !IncludeOpenFindings {
 		return false
 	}
 	// The transit attacks are about the publisher's own discipline; the governance
@@ -270,6 +343,16 @@ func build(p Params) Scenario {
 			Step{Action: Action{Kind: ActTamperTransit, Actor: Adversary, Skill: skill},
 				Expect: Expectation{Outcome: NoEffect, Exit: -1, Claimed: true,
 					Why: "the attacker controls the artifact, not the key"}},
+		)
+	case AdvPublisherBadSigs:
+		// The bundle keeps a signature FILE with the right name, so the verifier
+		// finds one and has to do real cryptography to reject it. That is the
+		// difference between "no signature" (exit 1) and "a signature that does not
+		// verify" (gate 3), and only the second one reaches the gate under test.
+		sc.Steps = append(sc.Steps,
+			Step{Action: Action{Kind: ActLyingSignature, Actor: Publisher, Skill: skill},
+				Expect: Expectation{Outcome: NoEffect, Exit: -1, Claimed: true,
+					Why: "the publisher controls the artifact AND the registry key"}},
 		)
 	}
 

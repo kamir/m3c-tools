@@ -43,16 +43,24 @@ func factors() []struct {
 		name   string
 		levels []string
 	}{
-		{"cast", []string{string(CastSolo), string(CastDuo), string(CastTrio)}},
-		{"key", []string{string(KeyShared), string(KeySeparateOpen), string(KeySeparatePin)}},
-		{"gov", []string{string(GovGreen), string(GovYellow), string(GovNone)}},
-		{"adv", []string{
-			string(AdvNone), string(AdvTransitChecked), string(AdvTransitSkipped),
-			string(AdvStoredBundle), string(AdvForgeAttest), string(AdvStripRevoke),
-			string(AdvRelabelRevoke), string(AdvTamperInstalled), string(AdvStolenKey),
-			string(AdvForgeEnvelope)}},
+		{"cast", strsOf(AllCasts())},
+		{"key", strsOf(AllKeyings())},
+		{"gov", strsOf(AllGovs())},
+		{"adv", strsOf(AllAdvKinds())},
 		{"revoke", []string{"false", "true"}},
 	}
+}
+
+// strsOf renders any axis of named string constants as its levels. It exists so
+// the design reads the SAME list the generator enumerates: a factor table that
+// keeps its own copy of the levels will eventually plan over a space the corpus
+// no longer has, and it did.
+func strsOf[T ~string](vals []T) []string {
+	out := make([]string, 0, len(vals))
+	for _, v := range vals {
+		out = append(out, string(v))
+	}
+	return out
 }
 
 // levelsOf projects a corpus point onto the design axes.

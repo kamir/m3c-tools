@@ -164,14 +164,17 @@ func CheckTheory(corpus []Scenario) TheoryReport {
 // allParams is the full factor space, before the usefulness filter. Reachability
 // has to be judged against everything the model CAN express, not against the
 // subset a corpus happens to select.
+// allParams enumerates the whole factor space. It reads the shared axis lists,
+// because it used to keep a fourth copy of them and that copy is how a newly added
+// adversary reached the corpus, the design and the model while remaining invisible
+// to the enumeration: the run reported eleven moves on its axis line and zero
+// scenarios carrying the eleventh.
 func allParams() []Params {
 	var out []Params
-	for _, c := range []Cast{CastSolo, CastDuo, CastTrio} {
-		for _, k := range []Keying{KeyShared, KeySeparateOpen, KeySeparatePin} {
-			for _, g := range []Gov{GovGreen, GovYellow, GovNone} {
-				for _, a := range []AdvKind{AdvNone, AdvTransitChecked, AdvTransitSkipped,
-					AdvStoredBundle, AdvForgeAttest, AdvStripRevoke, AdvRelabelRevoke,
-					AdvTamperInstalled, AdvStolenKey, AdvForgeEnvelope} {
+	for _, c := range AllCasts() {
+		for _, k := range AllKeyings() {
+			for _, g := range AllGovs() {
+				for _, a := range AllAdvKinds() {
 					for _, r := range []bool{false, true} {
 						out = append(out, Params{Cast: c, Key: k, Gov: g, Adv: a, Revoke: r})
 					}

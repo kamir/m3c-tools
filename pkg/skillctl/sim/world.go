@@ -24,6 +24,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -332,7 +333,19 @@ func (w *World) LyingSignature(skill string) error {
 	}
 	// #nosec G703 -- newSig is built from the sandbox path plus a hex digest this
 	// function just computed. Nothing from a scenario definition reaches it.
-	return os.WriteFile(newSig, sig, 0o600)
+	if err := os.WriteFile(newSig, sig, 0o600); err != nil {
+		return err
+	}
+	// The world now tracks the NEW digest, so everything the publisher does next
+	// (admit, attest, revoke) refers to the bytes that actually exist.
+	//
+	// Without this line the attestation stayed bound to the pre-tamper digest, the
+	// admitted bytes carried no governance, and the pull died at gate 4 with gate 3
+	// never consulted. That is a real behaviour and it is worth knowing, but it is
+	// not the question this move was added to ask. A malicious publisher signs off
+	// on what he actually published.
+	b.digest = "sha256:" + hex.EncodeToString(sum[:])
+	return nil
 }
 
 // TamperInstalled edits a file inside an installed skill: the same-uid attacker,
@@ -396,4 +409,129 @@ func flipByte(path string, off int64) error {
 	buf[0] ^= 0xff
 	_, err = f.WriteAt(buf, off)
 	return err
+}
+
+// ---------------------------------------------------------------------------
+// The independent oracle: what is ON DISK, not what the process said.
+//
+// Everything above this line reads the trust plane through its own output: an
+// exit code, a line of text, a gate name. That is a real oracle and it catches
+// real defects, but it shares a failure mode with the thing it measures. A build
+// that reports "refused" and writes the file anyway passes every check in this
+// file, because every check asked the build how it went.
+//
+// An external reviewer put it plainly on 2026-09-05: "Fehler gemeldet, aber
+// vorher trotzdem geschrieben" muss rot werden. It cannot go red while the only
+// witness is the accused. So the harness now takes its own reading of the
+// consumer's install target, before and after every pull, and the invariants
+// compare the two without asking anybody.
+
+// InstallSnapshot is what the consumer's skill directory actually contains: the
+// set of file paths and the SHA-256 of each. Comparing two snapshots answers
+// "did anything change, and into what" without trusting a single word the tool
+// printed.
+type InstallSnapshot struct {
+	Files map[string]string // path relative to the skills root -> sha256 hex
+}
+
+// Equal reports whether two snapshots describe the same bytes on disk.
+func (s InstallSnapshot) Equal(o InstallSnapshot) bool {
+	if len(s.Files) != len(o.Files) {
+		return false
+	}
+	for k, v := range s.Files {
+		if o.Files[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
+// Describe renders a snapshot difference for a violation message, so a report
+// says WHICH file appeared or changed rather than only that something did.
+func (s InstallSnapshot) Describe(o InstallSnapshot) string {
+	var added, changed, removed []string
+	for k, v := range o.Files {
+		if old, ok := s.Files[k]; !ok {
+			added = append(added, k)
+		} else if old != v {
+			changed = append(changed, k)
+		}
+	}
+	for k := range s.Files {
+		if _, ok := o.Files[k]; !ok {
+			removed = append(removed, k)
+		}
+	}
+	sort.Strings(added)
+	sort.Strings(changed)
+	sort.Strings(removed)
+	parts := []string{}
+	if len(added) > 0 {
+		parts = append(parts, "added "+strings.Join(added, ","))
+	}
+	if len(changed) > 0 {
+		parts = append(parts, "changed "+strings.Join(changed, ","))
+	}
+	if len(removed) > 0 {
+		parts = append(parts, "removed "+strings.Join(removed, ","))
+	}
+	if len(parts) == 0 {
+		return "no change"
+	}
+	return strings.Join(parts, "; ")
+}
+
+// SnapshotInstall walks the consumer's skills root and hashes everything under
+// it. A missing root is not an error: it is the empty snapshot, which is exactly
+// the state before the first successful install.
+func (w *World) SnapshotInstall() InstallSnapshot {
+	root := filepath.Join(w.consumerHome, ".claude", "skills")
+	snap := InstallSnapshot{Files: map[string]string{}}
+	_ = filepath.Walk(root, func(p string, fi os.FileInfo, err error) error {
+		if err != nil || fi == nil || fi.IsDir() {
+			return nil //nolint:nilerr // an unreadable entry is absence, not a harness failure
+		}
+		rel, rerr := filepath.Rel(root, p)
+		if rerr != nil {
+			return nil
+		}
+		// #nosec G304 -- p comes from Walk over a directory this process created
+		// inside its own throwaway root; there is no user-supplied path here.
+		b, rerr := os.ReadFile(p)
+		if rerr != nil {
+			return nil
+		}
+		sum := sha256.Sum256(b)
+		snap.Files[filepath.ToSlash(rel)] = hex.EncodeToString(sum[:])
+		return nil
+	})
+	return snap
+}
+
+// InstalledDigestMatches reports whether the skill's installed bytes hash to the
+// digest that was signed. It is the difference between "the tool said it
+// installed the right thing" and "the right thing is there".
+//
+// It returns false when nothing is installed, which is why the invariant that
+// uses it fires only after an accepted pull.
+func (w *World) InstalledDigestMatches(skill string) (bool, string) {
+	b := w.bundles[skill]
+	if b == nil {
+		return false, "nothing packed"
+	}
+	p := filepath.Join(w.consumerHome, ".claude", "skills", skill, "SKILL.md")
+	// #nosec G304 -- path is built from the harness's own throwaway home.
+	got, err := os.ReadFile(p)
+	if err != nil {
+		return false, "no installed SKILL.md: " + err.Error()
+	}
+	src, err := os.ReadFile(filepath.Join(w.Root, "src", skill, "SKILL.md"))
+	if err != nil {
+		return false, "source unreadable: " + err.Error()
+	}
+	if sha256.Sum256(got) != sha256.Sum256(src) {
+		return false, "installed bytes differ from the packed source"
+	}
+	return true, ""
 }

@@ -64,10 +64,12 @@ Flags (run):
 func runList(args []string) int {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	n := fs.Int("n", 0, "how many scenarios to print when -t 0")
+	open := fs.Bool("open", false, "include adversary moves quarantined by an open finding")
 	strength := fs.Int("t", 2, "covering-array strength (0 = no design, use -n)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	sim.IncludeOpenFindings = *open
 	corpus := sim.Generate(*n)
 	if *strength > 0 {
 		corpus, _ = sim.GenerateCovering(*strength)
@@ -94,6 +96,7 @@ func runList(args []string) int {
 func runRun(args []string) int {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	n := fs.Int("n", 0, "how many scenarios when -t 0 (0 = the whole corpus)")
+	open := fs.Bool("open", false, "include adversary moves quarantined by an open finding")
 	strength := fs.Int("t", 2, "covering-array strength: 2 = the gate, 3 = the weekly run, 0 = no design, use -n")
 	bin := fs.String("skillctl", "", "path to the skillctl binary under test")
 	jobs := fs.Int("jobs", runtime.NumCPU()/2, "parallel scenarios")
@@ -101,6 +104,7 @@ func runRun(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	sim.IncludeOpenFindings = *open
 	skillctl, err := resolveBinary(*bin)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -213,10 +217,12 @@ func resolveBinary(flagVal string) (string, error) {
 func runTheory(args []string) int {
 	fs := flag.NewFlagSet("theory", flag.ContinueOnError)
 	n := fs.Int("n", 0, "corpus size to judge coverage against when -t 0")
+	open := fs.Bool("open", false, "include adversary moves quarantined by an open finding")
 	strength := fs.Int("t", 2, "covering-array strength (0 = no design, use -n)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	sim.IncludeOpenFindings = *open
 	corpus := sim.Generate(*n)
 	if *strength > 0 {
 		corpus, _ = sim.GenerateCovering(*strength)

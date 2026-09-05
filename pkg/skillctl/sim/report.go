@@ -197,6 +197,7 @@ func (rep Report) Write(w io.Writer) {
 		fmt.Fprintf(w, "  exit %-3d %d time(s)\n", c, exits[c])
 	}
 
+	rep.WriteQuarantine(w)
 	rep.WriteExperiment(w)
 	rep.WriteMixture(w)
 
@@ -412,6 +413,33 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// WriteQuarantine names every adversary move held out of the blocking corpus by
+// an open finding. It prints on EVERY run, including green ones, because a
+// quarantine that stops being mentioned is indistinguishable from a capability
+// that was never built.
+func (rep Report) WriteQuarantine(w io.Writer) {
+	q := QuarantinedAdvKinds()
+	if len(q) == 0 {
+		return
+	}
+	keys := make([]string, 0, len(q))
+	for k := range q {
+		keys = append(keys, string(k))
+	}
+	sort.Strings(keys)
+	state := "EXCLUDED from this run"
+	if IncludeOpenFindings {
+		state = "INCLUDED in this run via -open"
+	}
+	fmt.Fprintf(w, "\nquarantined adversary moves (%d), %s\n", len(q), state)
+	for _, k := range keys {
+		fmt.Fprintf(w, "  %-22s %s\n", k, q[AdvKind(k)])
+	}
+	fmt.Fprintf(w, "  A quarantined move has been MEASURED and is waiting on a human decision,\n")
+	fmt.Fprintf(w, "  not on more code. It is out of the gate so the gate stays meaningful, and\n")
+	fmt.Fprintf(w, "  named here so the exclusion stays expensive.\n")
 }
 
 // Residual is the total disagreement between the closed form and the measurement,
