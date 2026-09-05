@@ -261,11 +261,23 @@ func build(p Params) Scenario {
 			Step{Action: Action{Kind: ActTamperTransit, Actor: Adversary, Skill: skill},
 				Expect: Expectation{Outcome: NoEffect, Exit: -1, Claimed: true,
 					Why: "the attacker controls the artifact, not the key"}},
-			// The publisher's own check is the control here. Without a matching
-			// signature file the verifier cannot even find one: exit 1, not 11.
+			// The publisher's own check is the control here.
+			//
+			// This expectation was Exit 1 with the reason "the signature filename
+			// carries the digest, so altered bytes have no signature at all". That
+			// reason was the tool's OLD diagnosis, and WF-005 B1 found it to be a
+			// description of a side effect rather than of the fault. It is changed
+			// here because the SPECIFICATION changed (SPEC-0406 AC-08, decided
+			// 2026-09-05), not because the binary now prints something else: the
+			// decision is that a refusal names the violated condition, and 10 is
+			// the number the trust chain already uses for that condition.
+			//
+			// The distinction matters for this package's whole method. Fitting the
+			// model to an observation is the one move this simulation exists to
+			// forbid; following a recorded decision is not that move.
 			Step{Action: Action{Kind: ActVerifySig, Actor: Publisher, Skill: skill},
-				Expect: Expectation{Outcome: Refuse, Exit: 1, Claimed: true,
-					Why: "SPEC-0188 §11: the signature filename carries the digest, so altered bytes have no signature at all"}},
+				Expect: Expectation{Outcome: Refuse, Exit: 10, Claimed: true,
+					Why: "SPEC-0406 AC-08: the bytes changed after signing, and the refusal names that rather than the missing signature file it causes"}},
 		)
 	case AdvTransitSkipped:
 		sc.Steps = append(sc.Steps,
