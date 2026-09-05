@@ -54,6 +54,42 @@ func (rep Report) Coverage() (gates map[string]int, exits map[int]int) {
 	return
 }
 
+// HarnessFailures collects the runs that produced no evidence: a scenario that
+// never started, and a step whose action errored before the system under test
+// could answer. It is listed FIRST and it fails the run, because the alternative
+// is the worst outcome a benchmark can have. A harness that cannot execute
+// reports zero conflicts, and zero conflicts reads as success.
+//
+// This is not hypothetical. With the binary path passed relative, every exec
+// failed, all 100 scenarios were abandoned before their first step, and the run
+// printed "conflicts: none" and exited 0. The residual said 121 on the same page.
+func (rep Report) HarnessFailures() []string {
+	var out []string
+	for _, r := range rep.Results {
+		if r.Err != "" {
+			out = append(out, fmt.Sprintf("%s: the scenario never started: %s", r.Scenario.ID, r.Err))
+		}
+		for i, v := range r.Verdicts {
+			if v != VerdictSkipped || i >= len(r.Steps) {
+				continue
+			}
+			out = append(out, fmt.Sprintf("%s step %d %s: the action failed, so nothing was measured: %s",
+				r.Scenario.ID, i, r.Steps[i].Step.Action.Kind,
+				strings.TrimSpace(firstLine(r.Steps[i].Stderr))))
+		}
+	}
+	return out
+}
+
+// firstLine keeps the harness list readable: the cause is on line one, and a git
+// error carries a paragraph of branch status after it.
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return s[:i]
+	}
+	return s
+}
+
 // Violations collects every invariant breach across the corpus. These outrank
 // exit-code conflicts: a conflict is usually drift between docs and code, a
 // violation is a hole in the trust model.
@@ -132,6 +168,17 @@ func (rep Report) Write(w io.Writer) {
 	fmt.Fprintf(w, "  steps     : %d matched, %d conflicts, %d out-of-model, %d skipped\n",
 		match, conflict, unclaimed, skipped)
 
+	// Listed before any coverage or experiment number, because those numbers are
+	// only meaningful if the corpus actually ran. A reader who sees this section
+	// should stop reading the rest.
+	if hf := rep.HarnessFailures(); len(hf) > 0 {
+		fmt.Fprintf(w, "\nHARNESS FAILURES (%d): these steps produced NO evidence\n", len(hf))
+		fmt.Fprintf(w, "  Every number below is computed over a corpus that did not fully run.\n")
+		for _, f := range hf {
+			fmt.Fprintf(w, "  %s\n", f)
+		}
+	}
+
 	fmt.Fprintf(w, "\ncoverage: which gate actually refused\n")
 	if len(gates) == 0 {
 		fmt.Fprintf(w, "  (none: the corpus never reached a refusal, which is itself a finding)\n")
@@ -202,6 +249,14 @@ func (rep Report) Markdown() string {
 	fmt.Fprintf(&b, "| out of model | %d |\n", unclaimed)
 	fmt.Fprintf(&b, "| skipped | %d |\n", skipped)
 	fmt.Fprintf(&b, "| invariant violations | %d |\n\n", len(rep.Violations()))
+	if hf := rep.HarnessFailures(); len(hf) > 0 {
+		fmt.Fprintf(&b, "## Harness failures (%d): no evidence was produced\n\n", len(hf))
+		fmt.Fprintf(&b, "Every number in this document is computed over a corpus that did not fully run.\n\n")
+		for _, f := range hf {
+			fmt.Fprintf(&b, "- %s\n", f)
+		}
+		fmt.Fprintf(&b, "\n")
+	}
 	fmt.Fprintf(&b, "## Gates reached\n\n")
 	for _, g := range sortedKeys(gates) {
 		fmt.Fprintf(&b, "- `%s`: %d\n", g, gates[g])

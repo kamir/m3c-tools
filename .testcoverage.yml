@@ -82,7 +82,18 @@ override:
   - { path: '^pkg/skillctl/install$',      threshold: 64 } # measured 64.6
   - { path: '^pkg/skillctl/registry$',     threshold: 63 } # measured 63.5
   - { path: '^pkg/skillctl/report$',       threshold: 63 } # measured 63.0
-  # Low-coverage QA helper: floored at current so it cannot regress further.
+  # Low-coverage QA helpers: floored at current so they cannot regress further.
+  # `sim` is the trust-plane simulation harness: it drives the real binary against
+  # a real git registry and compares the outcome with an analytic oracle. It is
+  # gated like any other package rather than excluded, because the harness failing
+  # silently is precisely the defect it was built to expose: with the binary path
+  # taken relative, all 100 scenarios were abandoned before their first step and
+  # the run still reported "conflicts: none" and exited 0. Its tests pin that a
+  # run which measures nothing can no longer be scored as a success.
+  # Floored at 42 rather than the usual floor(measured): the measured value is
+  # 43.0037% (347/807), which would leave the gate one statement from red and
+  # flake on any rounding difference between machines.
+  - { path: '^pkg/skillctl/sim$',          threshold: 42 } # measured 43.0
   - { path: '^pkg/skillctl/browse$',       threshold: 17 } # measured 17.1
   # CLI-glue blob: one big package, files span 0%..95% (main.go, session_cmds.go,
   # peer_cmds.go etc. are 0%). Per H3d it gets NO aspirational target: floored at

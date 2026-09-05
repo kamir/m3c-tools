@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sync"
 
@@ -139,6 +140,13 @@ func runRun(args []string) int {
 		fmt.Printf("report written: %s\n", *mdOut)
 	}
 
+	// A harness failure outranks everything else: it means the corpus did not run,
+	// so "no conflicts" says nothing. Counting only conflicts and violations let a
+	// run in which NOTHING executed exit 0.
+	if hf := rep.HarnessFailures(); len(hf) > 0 {
+		fmt.Fprintf(os.Stderr, "\nskillctl-sim: %d harness failure(s): this run measured nothing and is not a result\n", len(hf))
+		return 1
+	}
 	_, conflicts, _, _ := rep.Summary()
 	if conflicts > 0 || len(rep.Violations()) > 0 {
 		return 1
@@ -146,18 +154,36 @@ func runRun(args []string) int {
 	return 0
 }
 
+// resolveBinary returns an ABSOLUTE path to the binary under test. Absolute is
+// not a nicety here: every scenario executes in its own throwaway world with its
+// own working directory, so a relative path resolves against a directory that no
+// longer holds the binary. `make sim` passes `build/skillctl`, and with the path
+// taken verbatim every exec failed with "no such file or directory", every
+// scenario was abandoned before its first step, and the run still ended 0.
 func resolveBinary(flagVal string) (string, error) {
-	if flagVal != "" {
-		return flagVal, nil
+	cand := flagVal
+	if cand == "" {
+		if fi, err := os.Stat("build/skillctl"); err == nil && !fi.IsDir() {
+			cand = "build/skillctl"
+		} else if p, err := exec.LookPath("skillctl"); err == nil {
+			cand = p
+		} else {
+			return "", fmt.Errorf("skillctl-sim: no skillctl found; build one with `make build-skillctl` or pass -skillctl <path>")
+		}
 	}
-	if fi, err := os.Stat("build/skillctl"); err == nil && !fi.IsDir() {
-		abs, _ := os.Getwd()
-		return abs + "/build/skillctl", nil
+	abs, err := filepath.Abs(cand)
+	if err != nil {
+		return "", fmt.Errorf("skillctl-sim: resolve %s: %w", cand, err)
 	}
-	if p, err := exec.LookPath("skillctl"); err == nil {
-		return p, nil
+	// Fail here, with the path in hand, rather than 100 times inside the workers.
+	fi, err := os.Stat(abs)
+	if err != nil {
+		return "", fmt.Errorf("skillctl-sim: %s is not usable as the binary under test: %w", abs, err)
 	}
-	return "", fmt.Errorf("skillctl-sim: no skillctl found; build one with `make build-skillctl` or pass -skillctl <path>")
+	if fi.IsDir() || fi.Mode()&0o111 == 0 {
+		return "", fmt.Errorf("skillctl-sim: %s is not an executable file", abs)
+	}
+	return abs, nil
 }
 
 // runTheory answers the question that has to come first: is the specification

@@ -173,7 +173,11 @@ const (
 	VerdictMatch     Verdict = "MATCH"     // theory and reality agree
 	VerdictConflict  Verdict = "CONFLICT"  // they disagree: spec or code is wrong, a human decides
 	VerdictUnclaimed Verdict = "UNCLAIMED" // an attack outside the model; recorded, never scored as a win
-	VerdictSkipped   Verdict = "SKIPPED"   // the step could not run (missing precondition)
+	// VerdictSkipped means the HARNESS failed, not the system under test: the
+	// action returned an error before any verdict could be formed. It is never
+	// evidence. Every step downstream of it ran against a world that is not the
+	// one the scenario describes, so a run carrying one is not a measurement.
+	VerdictSkipped Verdict = "SKIPPED"
 )
 
 // ScenarioResult is one executed scenario.

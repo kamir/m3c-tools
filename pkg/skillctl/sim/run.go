@@ -104,8 +104,15 @@ func Execute(skillctl, rootDir string, sc Scenario) ScenarioResult {
 		}
 
 		if aerr != nil {
+			// The HARNESS failed, so there is no observation to score. Do not call
+			// this a refusal: the system under test never spoke. Recording it as
+			// one put a phantom "exit 0" into the coverage table (the zero value of
+			// ExitCode) and let a mutation that silently did nothing be reported as
+			// an observed threat-model limit. ExitCode -1 keeps it out of the
+			// coverage counts; the report names it and the run ends non-zero.
 			sr.Stderr = aerr.Error()
-			sr.Outcome = Refuse
+			sr.ExitCode = -1
+			sr.Outcome = NoEffect
 			res.Steps = append(res.Steps, sr)
 			res.Verdicts = append(res.Verdicts, VerdictSkipped)
 			continue
