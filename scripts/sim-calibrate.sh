@@ -64,6 +64,7 @@ MUTANTS=(
   "gate1-envelope|pkg/skillctl/registry/backend_pull.go|s|if err := VerifyEnvelopeSignature(pub, event); err != nil {|if err := VerifyEnvelopeSignature(pub, event); false \&\& err != nil {|"
   "gate2-digest|pkg/skillctl/registry/backend_pull.go|s|if gotDigest != digest {|if false \&\& gotDigest != digest {|"
   "silent-noop-install|pkg/skillctl/registry/install_trust_mode.go|s|if err := os.Rename(tmp, target); err != nil {|if err := func() error { _ = tmp; _ = target; return nil }(); err != nil {|"
+  "gate3-bundlesigs|pkg/skillctl/registry/backend_pull.go|s|if err := verifyBundleSignatures(event, pub, gotDigest); err != nil {|if err := verifyBundleSignatures(event, pub, gotDigest); false \&\& err != nil {|"
   "early-fetch|pkg/skillctl/registry/backend_pull.go|s|if acc.IsRevoked(digest) {|if _, ferr := be.Fetch(ctx, artifact.ArtifactRef{Name: name, Version: ver, Digest: digest}); ferr != nil { res.Skipped = append(res.Skipped, \&PullSkip{Name: name, Version: ver, Digest: digest, Gate: ErrGateDigest, Detail: ferr.Error()}); continue } else if acc.IsRevoked(digest) {|"
 )
 
@@ -200,6 +201,28 @@ done
 
 echo ""
 echo "detection rate: $detected of $total"
+
+# A detection rate without an interval is a claim, not a measurement. With every
+# mutant detected, the one-sided 95 percent lower bound on the true detection rate
+# is 0.05^(1/n): for a handful of mutants that bound is far below the 100 percent a
+# reader infers from "n of n". An IEEE 1012 reviewer asked for this number on
+# 2026-09-05 and he was right to: it is the difference between "we saw everything
+# we built" and "we see everything".
+if [ "$detected" -eq "$total" ] && [ "$total" -gt 0 ]; then
+  bound=$(awk -v n="$total" 'BEGIN{printf "%.2f", exp(log(0.05)/n)}')
+  echo "one-sided 95% lower bound on the true detection rate: ${bound}"
+  echo "  n=${total} is small. This bound is what the evidence supports; 100% is not."
+fi
+
+# The calibration must be bindable to the run it certifies. Without the model and
+# corpus hashes it could have measured a different instrument entirely, and it is
+# the evidence that gives every other number its meaning.
+echo ""
+echo "provenance of this calibration"
+echo "  harness commit  $(git describe --always --dirty --tags 2>/dev/null || echo unknown)"
+echo "  platform        $(uname -s)/$(uname -m)"
+"$WORK/skillctl-sim" run -t "$T" -n "$N" -jobs 8 -skillctl "$WORK/skillctl-base" 2>/dev/null \
+  | grep -E "^  model hash|^  corpus hash" || true
 if [ ${#MISSED[@]} -gt 0 ]; then
   echo "MISSED mutants, each one a hole in the corpus:"
   for m in "${MISSED[@]}"; do echo "  $m"; done

@@ -170,29 +170,24 @@ const BinLabelOpen = "refuse, label open"
 func PredictHistogram(corpus []Scenario) map[string]int {
 	h := map[string]int{}
 	for _, sc := range corpus {
-		// A scenario contains one pull, or two when it exercises the kill switch.
-		pulls := 0
+		pull := 0
 		for _, st := range sc.Steps {
-			if st.Action.Kind == ActPull {
-				pulls++
+			if st.Action.Kind != ActPull {
+				continue
 			}
-		}
-		_, labelOpen := OpenDiagnostics()[sc.P.Adv]
-		for i := 0; i < pulls; i++ {
-			accept, g := StateAt(sc.P, i > 0).Decide()
-			switch {
-			case accept:
+			afterRevoke := pull > 0
+			pull++
+			// UNCLAIMED STEPS ARE NOT PREDICTED, and this is the fix for a finding
+			// an IEEE 1012 reviewer raised on 2026-09-05: a step the report lists as
+			// out of model cannot also be a confirming measurement. Counting it in
+			// both histograms made a residual of zero partly a construction rather
+			// than a result.
+			if !st.Expect.Claimed {
+				continue
+			}
+			if accept, g := StateAt(sc.P, afterRevoke).Decide(); accept {
 				h["accept"]++
-			case labelOpen:
-				// The decision is predicted and compared; the LABEL is under an
-				// open finding, so both sides bin it the same way rather than
-				// scoring a disagreement about a name as a disagreement about
-				// behaviour. Binning it as "gate 3" would have manufactured a
-				// residual out of a naming question, and binning it as whatever
-				// the binary happens to print would have fitted the theory to the
-				// observation. This third bin says what is actually known.
-				h[BinLabelOpen]++
-			default:
+			} else {
 				h[g]++
 			}
 		}
@@ -205,15 +200,13 @@ func (rep Report) MeasureHistogram() map[string]int {
 	h := map[string]int{}
 	for _, r := range rep.Results {
 		for _, s := range r.Steps {
-			if s.Step.Action.Kind != ActPull {
+			// Same population as PredictHistogram: claimed pull steps only.
+			if s.Step.Action.Kind != ActPull || !s.Step.Expect.Claimed {
 				continue
 			}
-			_, labelOpen := OpenDiagnostics()[r.Scenario.P.Adv]
 			switch {
 			case s.Outcome == Accept:
 				h["accept"]++
-			case labelOpen:
-				h[BinLabelOpen]++
 			case s.Gate != "":
 				h[s.Gate]++
 			default:

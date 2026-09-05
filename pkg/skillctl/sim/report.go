@@ -22,7 +22,8 @@ type Report struct {
 	// artifact a release would keep, carried none of it. An external reviewer read
 	// a branch on which the documented commands did not exist. The fix is not more
 	// hashes, it is naming the commit.
-	Commit     string
+	Commit     string // the HARNESS source tree, not the binary under test
+	SUTVersion string // what the binary under test reports about itself
 	BinaryPath string
 	Platform   string
 	StartedAt  string
@@ -213,6 +214,8 @@ func (rep Report) Write(w io.Writer) {
 	rep.WriteStanding(w)
 	rep.WriteTraceability(w)
 	rep.WriteOutputCoverage(w)
+	rep.WriteUnlabelled(w)
+	rep.WriteDiscrimination(w)
 	rep.WriteOpenDiagnostics(w)
 	rep.WriteExperiment(w)
 	rep.WriteMixture(w)

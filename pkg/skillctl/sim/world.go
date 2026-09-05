@@ -686,3 +686,35 @@ func hashTreeRooted(dir string) (map[string]string, error) {
 	}
 	return out, nil
 }
+
+// CorruptSignature damages the detached signature and leaves the artifact alone.
+//
+// This replaces a move that did not do what its name said. The first version of
+// the malicious publisher flipped a byte inside the .skb and renamed the signature
+// to match the new digest. The digest then agreed with the bytes, so gate 2 was
+// satisfied, and the intent was that gate 3 would refuse the signature. It never
+// got there: flipping a byte in a tar archive breaks the tar header, and the
+// installer refused with "archive/tar: invalid tar header" long before any
+// signature was checked.
+//
+// Nobody noticed for two days, because the report showed only that the refusal
+// carried no gate label, and a finding was filed on that basis (FR-0120, "gate 3
+// fires but is not named"). It was wrong. An IEEE reviewer asked why there was no
+// gate-3 mutant; building it showed that disabling gate 3 changed nothing, which
+// is only possible if gate 3 was never the reason.
+//
+// So the move now edits the SIGNATURE, not the artifact: the bundle stays a valid
+// archive whose bytes hash to the admitted digest, and the only thing wrong with
+// it is that the signature over that digest does not verify. That is the case
+// SPEC-0188 §7 gate 3 exists for.
+func (w *World) CorruptSignature(skill string) error {
+	b := w.bundles[skill]
+	if b == nil {
+		return fmt.Errorf("sim: %s not packed", skill)
+	}
+	sig := b.path + "." + strings.TrimPrefix(b.digest, "sha256:") + ".author.sig"
+	if _, err := os.Stat(sig); err != nil {
+		return fmt.Errorf("sim: no author signature at %s: %w", sig, err)
+	}
+	return flipByte(sig, 8)
+}

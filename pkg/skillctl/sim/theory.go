@@ -324,20 +324,64 @@ type UnreachReason struct {
 // becomes an argument. A state this function cannot explain is reported as
 // missing-move with the bits that no action varies, which is the honest default:
 // absence of an explanation is not evidence of impossibility.
+// ClassifyUnreachable says WHY each unreachable state is unreachable, and it
+// derives the answer from the action alphabet instead of asserting it.
+//
+// The previous version pattern-matched two bits and printed a sentence: any state
+// with sig=0 and env=1 was called "structural", because breaking the signature
+// rows was supposed to break the envelope with them. An IEEE 1012 reviewer showed
+// on 2026-09-05 that the run refuted its own rule: 10010 and 11010 are REACHABLE
+// with exactly that bit pattern, and 10110 is not only reachable but visited. The
+// sentence had been true when written, before the malicious publisher existed as a
+// move, and nothing forced it to be re-derived when the alphabet grew.
+//
+// So it is derived now. Every point of the FULL factor space is mapped to its
+// state; a state nobody produces is a missing move, and a state produced only by
+// points the corpus excludes is named with the rule that excluded it and with the
+// KIND of that rule. That last distinction is the one that matters to a reader:
+// "the world cannot produce this" and "we left it out" are different sentences,
+// and only one of them is a property of the system.
+//
+// The class "structural" is gone. It claimed a property of the artifact format,
+// which is a statement about the world that this enumeration cannot make. If such
+// a claim is wanted it belongs in a specification, where it can be reviewed.
 func ClassifyUnreachable(rep TheoryReport) []UnreachReason {
+	// Which points of the full space produce which state, and whether any of them
+	// is admissible.
+	producedBy := map[string][]Params{}
+	for _, p := range allParams() {
+		producedBy[StateAt(p, false).Key()] = append(producedBy[StateAt(p, false).Key()], p)
+		if p.Revoke {
+			producedBy[StateAt(p, true).Key()] = append(producedBy[StateAt(p, true).Key()], p)
+		}
+	}
+
 	var out []UnreachReason
 	for _, k := range rep.Unreachable {
-		env, sig := k[0] == '1', k[4] == '1'
-		switch {
-		case !sig && env:
-			out = append(out, UnreachReason{k, "structural",
-				"signature rows sit inside the signed envelope: breaking them breaks the envelope too, so sig=0 forces env=0"})
-		case !sig && !env:
+		points := producedBy[k]
+		if len(points) == 0 {
 			out = append(out, UnreachReason{k, "missing-move",
-				"no action corrupts the bundle signature rows independently; reaching this needs a malicious PUBLISHER, not a store attacker"})
-		default:
-			out = append(out, UnreachReason{k, "missing-move",
-				"the alphabet has no action that produces this combination; either add a capability or record why it cannot occur"})
+				"no point of the factor space maps to this state: the action alphabet " +
+					"has no move that produces this combination"})
+			continue
+		}
+		// Every producing point is excluded. Name the rule, and say which kind it is.
+		rule, kind := "", ExclusionKind("")
+		for _, p := range points {
+			if ex := excludedBy(p); ex != nil {
+				rule, kind = ex.Rule, ex.Kind
+				if ex.Kind == KindImpossible {
+					break // an impossibility outranks an economy cut as the reason
+				}
+			}
+		}
+		if kind == KindImpossible {
+			out = append(out, UnreachReason{k, "rule-impossible",
+				"produced only by points the world cannot realise: " + rule})
+		} else {
+			out = append(out, UnreachReason{k, "rule-economy",
+				"produced by points the world CAN realise, left out of the corpus by: " + rule +
+					". This is a judgement, not a property"})
 		}
 	}
 	return out
@@ -348,17 +392,13 @@ func ClassifyUnreachable(rep TheoryReport) []UnreachReason {
 // that is mostly MISSING-MOVE is a to-do list.
 func (rep TheoryReport) WriteUnreachable(w io.Writer) {
 	cls := ClassifyUnreachable(rep)
-	nStruct, nMove := 0, 0
+	byKind := map[string]int{}
 	for _, c := range cls {
-		if c.Kind == "structural" {
-			nStruct++
-		} else {
-			nMove++
-		}
+		byKind[c.Kind]++
 	}
 	fmt.Fprintf(w, "\nwhy the unreachable states are unreachable\n")
-	fmt.Fprintf(w, "  %d structural (the world cannot produce them), %d missing-move (the corpus cannot yet)\n",
-		nStruct, nMove)
+	fmt.Fprintf(w, "  %d no move in the alphabet, %d excluded as impossible, %d excluded for economy\n",
+		byKind["missing-move"], byKind["rule-impossible"], byKind["rule-economy"])
 	for _, c := range cls {
 		fmt.Fprintf(w, "  %-6s %-13s %s\n", c.State, c.Kind, c.Detail)
 	}

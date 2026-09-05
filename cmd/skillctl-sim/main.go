@@ -153,6 +153,7 @@ func runRun(args []string) int {
 		BinaryID:   sim.BinaryHash(skillctl),
 		Design:     design,
 		Commit:     gitDescribe(),
+		SUTVersion: sutVersion(skillctl),
 		BinaryPath: skillctl,
 		Platform:   runtime.GOOS + "/" + runtime.GOARCH,
 		StartedAt:  started.UTC().Format(time.RFC3339),
@@ -249,6 +250,17 @@ func runTheory(args []string) int {
 // tell.
 func gitDescribe() string {
 	out, err := exec.Command("git", "describe", "--always", "--dirty", "--tags").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// sutVersion asks the binary under test what it is. It is the only source
+// identity the harness can obtain without being told, and when it answers "dev"
+// that is itself the finding: the measured artifact is not a released one.
+func sutVersion(bin string) string {
+	out, err := exec.Command(bin, "--version").Output()
 	if err != nil {
 		return ""
 	}

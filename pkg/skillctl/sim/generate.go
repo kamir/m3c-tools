@@ -140,9 +140,10 @@ func AllGovs() []Gov { return []Gov{GovGreen, GovYellow, GovNone} }
 // any other.
 func OpenDiagnostics() map[AdvKind]string {
 	return map[AdvKind]string{
-		AdvPublisherBadSigs: "FR-0120: the pull refuses a bundle whose signature rows do not " +
-			"verify, correctly and with exit 1, but names no gate; SPEC-0188 §7 declares gate 3. " +
-			"The DECISION is claimed and scored; only the label is left open",
+		AdvPublisherBadSigs: "FR-0120 (revised 2026-09-05): gate 3 is UNVERIFIED. Three attempts " +
+			"to construct a bundle that reaches it failed for three different reasons, and the " +
+			"gate-3 mutant is NOT DETECTED by this corpus, which is the same fact seen from the " +
+			"other side. The step is recorded, not scored",
 	}
 }
 
@@ -190,83 +191,6 @@ func Generate(limit int) []Scenario {
 }
 
 // meaningful drops combinations that cannot teach anything new.
-func meaningful(p Params) bool {
-	// A revoke only says something once there is something to revoke, and the
-	// revoke-suppression attacks only make sense together with a revoke.
-	needsRevoke := p.Adv == AdvStripRevoke || p.Adv == AdvRelabelRevoke
-	if needsRevoke && !p.Revoke {
-		return false
-	}
-	// R1 IS GONE, and the reason is worth more than the rule was.
-	//
-	// It said: a revoke presupposes a release, because nothing installs without
-	// governance, so a kill switch would have no subject. An external reviewer
-	// pointed out on 2026-09-05 that this is false in the direction that matters.
-	// A digest that exists can be blocked PRE-EMPTIVELY, before anybody attests or
-	// installs it, and that is one of the more useful things a kill switch does.
-	//
-	// The rule was not merely unnecessary. It removed the region where a revoke
-	// competes with a missing release, which is exactly where a wrong answer would
-	// be expensive, and it did so under the name of a process invariant. Anything
-	// that keeps a corpus away from a contested area needs a better warrant than
-	// "we do not do it that way".
-	// A shared key cannot express "the reviewer key was not pinned": there is only
-	// one key, and it is the registry pin.
-	if p.Key == KeyShared && p.Adv == AdvForgeAttest {
-		return true // still meaningful: a foreign key attests against a single-key pin
-	}
-	// The post-install tamper needs an install to exist.
-	if p.Adv == AdvTamperInstalled && p.Gov != GovGreen {
-		return false
-	}
-	// A stolen key with no governance never gets far enough to be interesting.
-	if p.Adv == AdvStolenKey && p.Gov == GovNone {
-		return false
-	}
-	// INVARIANT R2, a SEPARATE reason from R1 and often confused with it. The
-	// envelope forgery is decided by the FIRST gate, so the other axes cannot change
-	// the outcome and would only add duplicate rows. This, not R1, is why 00011 and
-	// 01011 are never visited: those two are NOT revoked (their revoked bit is zero),
-	// they carry a broken envelope together with broken governance. A reviewer caught
-	// this being described as one reason on 2026-09-05, by recomputing the bits.
-	if p.Adv == AdvForgeEnvelope && (p.Gov != GovGreen || p.Key != KeySeparatePin) {
-		return false
-	}
-	// Same shape as R2 and for the same reason: the interesting question is which
-	// gate speaks, not how many ways the other axes can fail first.
-	if p.Adv == AdvPublisherBadSigs && (p.Gov != GovGreen || p.Key != KeySeparatePin) {
-		return false
-	}
-	// The transit attacks are about the publisher's own discipline; the governance
-	// axis adds nothing there, so pin it to green and drop the rest.
-	if (p.Adv == AdvTransitChecked || p.Adv == AdvTransitSkipped) && p.Gov != GovGreen {
-		return false
-	}
-	// The cast only changes WHO holds which key; combined with KeyShared, duo and
-	// trio collapse onto solo for every adversary except none.
-	if p.Key == KeyShared && p.Cast != CastSolo && p.Adv != AdvNone {
-		return false
-	}
-	// There used to be a rule here that dropped a revoke variant whenever the pull
-	// was going to refuse anyway, on the grounds that the extra step is a duplicate.
-	// It is removed, and the reason is worth keeping.
-	//
-	// That rule pruned by OUTCOME. The corpus is a state-coverage instrument, and
-	// two points with the same outcome can sit in different states: a revoked bundle
-	// with a broken envelope (01111) refuses exactly like an unrevoked one with a
-	// broken envelope (00111), yet only the first one asks the question this whole
-	// exercise is about, which is WHICH gate speaks first when two of them have
-	// something to say. Pruning by outcome deleted the only point that can catch a
-	// gate-ORDER regression, and the measurement showed it: state coverage fell from
-	// 7 of 12 to 6 of 12 while the design got broader.
-	//
-	// So meaningful() now encodes only IMPOSSIBILITY: what the world cannot produce
-	// (R1, R2, and the structural rules above). Economy is no longer its job, because
-	// the covering array does that better and says out loud how much it dropped. That
-	// division did not exist before the design was introduced; one function was doing
-	// both, and the cheap half was quietly eating the expensive half.
-	return true
-}
 
 // installExpected is the per-step prediction for a pull. It does NOT reimplement
 // the decision; it ASKS the analytic model, so there is exactly one place where
@@ -433,12 +357,48 @@ func build(p Params) Scenario {
 	// An open DIAGNOSTIC finding suppresses the label comparison and nothing else.
 	// judge() only compares Gate when it is non-empty, so clearing it leaves the
 	// outcome and the exit code fully claimed and fully scored.
-	if note, open := OpenDiagnostics()[p.Adv]; open {
-		gate, why = "", note
+	// The exemption is narrower than it looks and has to be. It suppresses the
+	// label comparison ONLY where the open finding is actually the cause, that is
+	// where the model says gate 3. A publisher-bad-sigs bundle that is also revoked
+	// refuses at gate 5, and that label is settled: blanket-suppressing it hid a
+	// decided contract behind an undecided one.
+	//
+	// Found by the cause-discrimination measure on its first run, which reported one
+	// signal standing for two causes and turned out to be describing this bug rather
+	// than the product.
+	// The malicious publisher is UNCLAIMED, and the reason is a finding rather than
+	// a convenience.
+	//
+	// Three attempts have been made to construct a bundle that reaches gate 3, and
+	// all three failed for different reasons:
+	//   1. flip a byte in the .skb and rename the signature to match: the tar header
+	//      breaks and the installer refuses while parsing, before any signature is
+	//      read.
+	//   2. corrupt the detached .author.sig: the pull ACCEPTS. The detached file is
+	//      apparently not what the pull consults; the signature rows travel inside
+	//      the admit event.
+	//   3. edit the rows inside the admit event: that breaks the envelope, so gate 1
+	//      decides first, which is the original structural argument.
+	//
+	// So the honest statement is not "gate 3 fires without a label" (that was
+	// FR-0120's premise and it is withdrawn) but "this harness cannot yet construct
+	// the case". The move stays in the corpus because its DECISION is still worth
+	// observing, and its outcome is not scored, because the simulation has no
+	// warranted expectation to score it against.
+	if _, open := OpenDiagnostics()[p.Adv]; open {
+		gate, why = "", "OPEN: the harness cannot construct a bundle that reaches gate 3. "+
+			"Three attempts failed for three different reasons; see FR-0120. Until one "+
+			"succeeds, gate 3 is UNVERIFIED and UNCALIBRATED, and this step is recorded "+
+			"rather than scored"
 	}
 	pullExpect := Expectation{Outcome: Accept, Exit: 0, Claimed: true, Why: why}
+	if _, open := OpenDiagnostics()[p.Adv]; open {
+	}
 	if !ok {
 		pullExpect = Expectation{Outcome: Refuse, Gate: gate, Exit: 1, Claimed: true, Why: why}
+	}
+	if _, open := OpenDiagnostics()[p.Adv]; open {
+		pullExpect.Claimed = false
 	}
 	if p.Adv == AdvStolenKey && ok {
 		pullExpect.Claimed = false
@@ -514,12 +474,13 @@ func build(p Params) Scenario {
 			// to make.
 			_, g2 := StateAt(p, true).Decide()
 			gate2, why2 := g2, whyGate(g2, p)
+			claimed2 := true
 			if note, open := OpenDiagnostics()[p.Adv]; open {
-				gate2, why2 = "", note
+				gate2, why2, claimed2 = "", note, false
 			}
 			sc.Steps = append(sc.Steps, Step{
 				Action: Action{Kind: ActPull, Actor: Consumer, Skill: skill},
-				Expect: Expectation{Outcome: Refuse, Gate: gate2, Exit: 1, Claimed: true,
+				Expect: Expectation{Outcome: Refuse, Gate: gate2, Exit: 1, Claimed: claimed2,
 					Why: why2},
 			})
 		}
