@@ -39,6 +39,8 @@ func main() {
 		os.Exit(runRun(os.Args[2:]))
 	case "theory":
 		os.Exit(runTheory(os.Args[2:]))
+	case "freeze":
+		os.Exit(runFreeze(os.Args[2:]))
 	case "-h", "--help", "help":
 		usage()
 		return
@@ -289,4 +291,26 @@ func orUnknownStr(s string) string {
 		return "unknown"
 	}
 	return s
+}
+
+// runFreeze prints the freeze manifest for a planned measurement.
+func runFreeze(args []string) int {
+	fs := flag.NewFlagSet("freeze", flag.ContinueOnError)
+	strength := fs.Int("t", 2, "covering-array strength to freeze")
+	plan := fs.String("plan", "", "path to the validation plan document to hash")
+	scope := fs.String("scope", "", "comma-separated support scope being frozen")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	var sc []string
+	if *scope != "" {
+		sc = strings.Split(*scope, ",")
+	}
+	m, err := sim.BuildFreeze(*strength, *plan, sc)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "freeze:", err)
+		return 1
+	}
+	m.Write(os.Stdout)
+	return 0
 }
