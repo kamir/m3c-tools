@@ -112,6 +112,25 @@ if ! "$WORK/skillctl-sim" run -t "$T" -n "$N" -jobs 8 -skillctl "$WORK/skillctl-
 fi
 echo "  baseline: PASS"
 
+# THE BASELINE IS NOT JUST A PRECONDITION, IT IS THE COMPARISON.
+#
+# Detection used to mean "conflicts > 0 or violations > 0". With a waiver register
+# in the corpus the unmutated run already carries findings, so a mutant that
+# changes nothing at all inherited them and scored as detected. Measured on
+# 2026-09-05: gate3-bundlesigs produced 2 conflicts, 1 invariant violation and
+# exit 0, which is byte for byte the baseline signature, and the run reported
+# 7 of 7. The true rate was 6 of 7.
+#
+# So a mutant is detected only if it produces MORE than the baseline does. That is
+# the third time in this project that a check compared against zero when it should
+# have compared against a reference, and it is the same lesson every time: a
+# measurement without its blank is not a measurement.
+BASE_CONF=$(grep -oE '[0-9]+ conflicts' "$WORK/baseline.log" | head -1 | grep -oE '^[0-9]+')
+BASE_VIOL=$(grep -oE 'INVARIANT VIOLATIONS \(([0-9]+)\)' "$WORK/baseline.log" | grep -oE '[0-9]+' | head -1)
+BASE_CONF=${BASE_CONF:-0}; BASE_VIOL=${BASE_VIOL:-0}
+echo "  baseline signature: ${BASE_CONF} conflict(s), ${BASE_VIOL} invariant violation(s)"
+echo "  a mutant counts as detected only if it exceeds this"
+
 detected=0
 total=0
 declare -a MISSED=()
@@ -182,10 +201,10 @@ for m in "${MUTANTS[@]}"; do
   # But a harness failure WITHOUT any behavioural finding is not detection. That
   # was the old bug: every non-zero exit counted, so a mutant that merely failed to
   # run scored as caught.
-  if [ "$nconf" -gt 0 ] || [ "$nviol" -gt 0 ]; then
+  if [ "$nconf" -gt "$BASE_CONF" ] || [ "$nviol" -gt "$BASE_VIOL" ]; then
     extra=""
     [ "$nharn" -gt 0 ] && extra=", $nharn follow-on harness failure(s)"
-    echo "  $name: detected  ($nconf conflicts, $nviol invariant violations, exit $rc$extra)"
+    echo "  $name: detected  ($nconf conflicts vs baseline $BASE_CONF, $nviol violations vs $BASE_VIOL, exit $rc$extra)"
     detected=$((detected + 1))
   elif [ "$nharn" -gt 0 ]; then
     echo "  $name: HARNESS FAILURE ($nharn) and no behavioural finding; nothing was measured, counting as MISSED"
@@ -194,8 +213,8 @@ for m in "${MUTANTS[@]}"; do
     echo "  $name: exit $rc but NO conflict and NO invariant violation; that is not a reading, counting as MISSED"
     MISSED+=("$name (non-zero exit without a behavioural finding)")
   else
-    echo "  $name: NOT DETECTED"
-    MISSED+=("$name")
+    echo "  $name: NOT DETECTED (${nconf} conflicts, ${nviol} violations: the baseline signature, indistinguishable)"
+    MISSED+=("$name (indistinguishable from the unmutated baseline)")
   fi
 done
 

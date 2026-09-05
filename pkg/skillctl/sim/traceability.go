@@ -63,32 +63,47 @@ type TraceItem struct {
 
 // TraceMatrix is the whole set. Order is fixed so two reports are comparable.
 //
+// THE SOURCES WERE WRONG UNTIL 2026-09-05, and the correction is worth keeping.
+// Every gate cited "SPEC-0188 §7". An adversarial review traced the actual path
+// and found that §7 governs the ER1/HTTP install (`pkg/skillctl/install`), whose
+// first two steps are literally `/api/skills/by-name` and `GET
+// /api/skills/bundles/<digest>`. The path this simulation measures, `pull
+// --trust-mode`, is specified in SPEC-0225 §9.1, "The verification gauntlet
+// (every bundle, every install)", and that clause lists exactly these five
+// checks and closes with "Only a bundle that clears all five gets written".
+//
+// The five gates were therefore never unspecified, as an earlier finding of mine
+// claimed. They were specified in the other document, and the code comment
+// "runs the SPEC-0188 §7 gauntlet" sent everybody, me included, to the wrong
+// clause. A traceability matrix whose sources point at the wrong specification is
+// worse than one with no sources: it looks checked.
+//
 // Every entry here was written by reading the clause or the decision it cites. An
 // entry whose Source cannot be checked by a reader is worse than no entry, because
 // it looks like provenance and is not.
 func TraceMatrix() []TraceItem {
 	return []TraceItem{
 		{
-			ID: "gate 1", What: "the admit envelope signature verifies before any field of the event is used",
-			Source: "SPEC-0188 §7", Prov: ProvNormative,
+			ID: "gate 1", What: "the admit envelope signature verifies against a key in trust-roots whose id matches the producing registry",
+			Source: "SPEC-0225 §9.1 step 1", Prov: ProvNormative,
 		},
 		{
-			ID: "gate 2", What: "the digest is recomputed from the fetched bytes and compared",
-			Source: "SPEC-0188 §7", Prov: ProvNormative,
+			ID: "gate 2", What: "SHA-256 of the fetched .skb equals the digest tag and the envelope's bundle_digest",
+			Source: "SPEC-0225 §9.1 step 2", Prov: ProvNormative,
 		},
 		{
-			ID: "gate 3", What: "the bundle signature rows verify over the recomputed digest",
-			Source: "SPEC-0188 §7", Prov: ProvNormative,
-			Note: "fires but never names itself: disabling it flips the affected pull from " +
-				"refuse to accept, so the control is live. Observed 0 times BY NAME (FR-0121)",
+			ID: "gate 3", What: "the author AND registry signatures on the .skb each verify against trust-roots",
+			Source: "SPEC-0225 §9.1 step 3", Prov: ProvNormative,
+			Note: "UNVERIFIED. Observed 0 times by name, and its mutant is indistinguishable " +
+				"from the unmutated baseline, so nothing in this corpus depends on it (FR-0121)",
 		},
 		{
 			ID: "gate 4", What: "a quorum of attestations at or above the floor, from pinned signers, bound to the admitted digest",
-			Source: "SPEC-0188 §7, SPEC-0359 D3", Prov: ProvNormative,
+			Source: "SPEC-0225 §9.1 step 4, SPEC-0359 D3", Prov: ProvNormative,
 		},
 		{
-			ID: "gate 5", What: "a digest carrying a signed revoke is refused",
-			Source: "SPEC-0188 §7", Prov: ProvNormative,
+			ID: "gate 5", What: "no BundleRevokedEvent exists for this digest",
+			Source: "SPEC-0225 §9.1 step 5", Prov: ProvNormative,
 		},
 		{
 			ID: "order: phases", What: "authenticate, then decide from signed metadata, then decide from bytes",
@@ -113,20 +128,20 @@ func TraceMatrix() []TraceItem {
 		},
 		{
 			ID: "verb: verify-sig", What: "a detached signature over altered bytes cannot be found or does not verify",
-			Source: "SPEC-0188 §11", Prov: ProvNormative,
+			Source: "SPEC-0225 §9.1 step 3", Prov: ProvNormative,
 			Note: "the publisher's own check before admit; observed as exit 1 four times",
 		},
 		{
 			ID: "INV-1", What: "bytes that do not match the signed digest are never installed",
-			Source: "SPEC-0188 §7 gate 2, restated as a run-wide property", Prov: ProvDerived,
+			Source: "SPEC-0225 §9.1 step 2, restated as a run-wide property", Prov: ProvDerived,
 		},
 		{
 			ID: "INV-2", What: "once a signed revoke is visible, that digest is never staged again",
-			Source: "SPEC-0188 §7 gate 5, restated as a run-wide property", Prov: ProvDerived,
+			Source: "SPEC-0225 §9.1 step 5, restated as a run-wide property", Prov: ProvDerived,
 		},
 		{
 			ID: "INV-3", What: "no install without a qualifying attestation from a pinned signer",
-			Source: "SPEC-0188 §7 gate 4, SPEC-0359 D3", Prov: ProvDerived,
+			Source: "SPEC-0225 §9.1 step 4, SPEC-0359 D3", Prov: ProvDerived,
 		},
 		{
 			ID: "INV-4", What: "every refusal is loud: non-zero exit AND a named reason",

@@ -231,7 +231,7 @@ func checkInvariants(sc Scenario, i int, r StepResult, w *World) []InvariantViol
 			if sc.P.Adv != AdvStoredBundle {
 				if ok, why := w.InstalledDigestMatches("simskill"); !ok {
 					v = append(v, InvariantViolation{InvAcceptDelivers, i,
-						"a pull reported success but the install target does not hold the signed bytes: " + why})
+						"a pull reported success and the installed tree differs from the packed source: " + why})
 				}
 			}
 		}

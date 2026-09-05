@@ -44,8 +44,8 @@ func (rep Report) WriteStanding(w io.Writer) {
 	fmt.Fprintf(w, "    - an independent re-derivation of the model from SPEC-0188 by somebody who\n")
 	fmt.Fprintf(w, "      has not read backend_pull.go, and a diff of the two models\n")
 	fmt.Fprintf(w, "    - structural coverage of the trust path, with an MC/DC argument for the\n")
-	fmt.Fprintf(w, "      five-predicate conjunction. Currently zero: only model and outcome\n")
-	fmt.Fprintf(w, "      coverage are measured\n")
+	fmt.Fprintf(w, "      five-predicate conjunction. MC/DC is at zero; statement coverage is\n")
+	fmt.Fprintf(w, "      measured and is NOT zero, see scripts/trust-coverage.sh\n")
 	fmt.Fprintf(w, "    - at least one run per supported backend against a real one, and one on\n")
 	fmt.Fprintf(w, "      Windows\n")
 	fmt.Fprintf(w, "    - test plan, test design and anomaly register as dated artifacts baselined\n")
@@ -72,9 +72,10 @@ func (rep Report) WriteStanding(w io.Writer) {
 	fmt.Fprintf(w, "      measured, and no arrangement of machine checks measures it.\n")
 	fmt.Fprintf(w, "    That the tested binary is the shipped artifact. The hash identifies what\n")
 	fmt.Fprintf(w, "      ran, not what is released, and the SUT reports its own version as \"dev\".\n")
-	fmt.Fprintf(w, "    Gate 3 BY NAME. The control is live: disabling it flips the affected\n")
-	fmt.Fprintf(w, "      pull from refuse to accept. What is missing is the label, so a caller\n")
-	fmt.Fprintf(w, "      cannot attribute the refusal (FR-0121). The waiver register carries it.\n")
+	fmt.Fprintf(w, "    Gate 3, at all. Observed zero times by name, and its mutant is\n")
+	fmt.Fprintf(w, "      indistinguishable from the unmutated baseline: same conflicts, same\n")
+	fmt.Fprintf(w, "      violation, same exit. Nothing in this corpus depends on it, so one fifth\n")
+	fmt.Fprintf(w, "      of the decision function is unverified (FR-0121).\n")
 }
 
 // OutputCoverage is the second coverage measure, and the one that answers the

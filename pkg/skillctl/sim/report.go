@@ -563,13 +563,13 @@ func (rep Report) WriteMixture(w io.Writer) {
 
 	if len(m.MissedGate) > 0 {
 		fmt.Fprintf(w, "\n  HOLES: declared gates never seen BY NAME in this corpus: %s\n", strings.Join(m.MissedGate, ", "))
-		fmt.Fprintf(w, "  Gate 3 is on this list because it is never seen BY NAME, not because it\n")
-		fmt.Fprintf(w, "  never fires. Disabling it flips the affected pull from refuse to accept, so\n")
-		fmt.Fprintf(w, "  the control is live and its label is missing (FR-0121).\n")
-		fmt.Fprintf(w, "  This paragraph has now been wrong in both directions. It first claimed the\n")
-		fmt.Fprintf(w, "  gate fired unnamed, then that the case was not constructible. The second\n")
-		fmt.Fprintf(w, "  claim was an artefact of suppressing the step that shows the difference,\n")
-		fmt.Fprintf(w, "  which is what a waiver instead of a suppression now prevents.\n")
+		fmt.Fprintf(w, "  Gate 3 is on this list, and it is not merely a naming question. Its mutant\n")
+		fmt.Fprintf(w, "  is indistinguishable from the unmutated baseline, so no scenario here\n")
+		fmt.Fprintf(w, "  depends on it.\n")
+		fmt.Fprintf(w, "  This paragraph has now been wrong in three directions: the gate fires\n")
+		fmt.Fprintf(w, "  unnamed, then the case is not constructible, then the control is live. All\n")
+		fmt.Fprintf(w, "  three were artefacts of how the case was scored. What holds is the\n")
+		fmt.Fprintf(w, "  measurement: unverified, and its mutant undetectable (FR-0121).\n")
 		fmt.Fprintf(w, "  A gate on this list is a decision the simulation says nothing about.\n")
 	} else {
 		fmt.Fprintf(w, "\n  every declared gate was reached at least once\n")
