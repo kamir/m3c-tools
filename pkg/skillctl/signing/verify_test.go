@@ -1,9 +1,11 @@
 package signing
 
 import (
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -148,4 +150,107 @@ func hexLower(b []byte) string {
 		out[i*2+1] = hexChars[x&0x0f]
 	}
 	return string(out)
+}
+
+// SPEC-0406 AC-08 for this surface: a refusal must name the condition that was
+// violated, not its side effect.
+//
+// The detached signature is stored under a filename containing the digest it
+// covers. Change a byte and the lookup misses, and the tool used to answer
+// "signature file not found": true, useless, and it sends the reader after a
+// missing file instead of a broken seal.
+func TestTamperedBundleNamesTheCauseNotTheSideEffect(t *testing.T) {
+	dir := t.TempDir()
+	bundle := makeFakeBundle(t, dir, "b.skb")
+	keyOut := filepath.Join(dir, "k")
+	if err := Generate(keyOut); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := SignBundle(bundle, keyOut+".priv", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	// The digest the signature actually covers, captured before the tamper.
+	digest, err := ComputeBundleDigest(bundle)
+	if err != nil {
+		t.Fatalf("digest: %v", err)
+	}
+	signedHex := hex.EncodeToString(digest[:])
+
+	// Anti-vacuity: if the clean bundle does not verify, everything below is
+	// measuring a broken fixture rather than the property under test.
+	if err := VerifyDetached(bundle, keyOut+".pub"); err != nil {
+		t.Fatalf("the untampered bundle must verify first, or this test proves nothing: %v", err)
+	}
+
+	// The tamper. The signature stays where it is, under its old name: exactly
+	// what a recipient sees when a signed file is altered in transit.
+	if err := os.WriteFile(bundle, []byte("ALTERED, and not a valid archive"), 0o600); err != nil {
+		t.Fatalf("tamper: %v", err)
+	}
+
+	err = VerifyDetached(bundle, keyOut+".pub")
+	if err == nil {
+		t.Fatal("a tampered bundle verified")
+	}
+	if !errors.Is(err, ErrDigestChanged) {
+		t.Errorf("the refusal does not carry ErrDigestChanged, so the CLI cannot map it to exit 10: %v", err)
+	}
+	// It still IS a signature failure; the specific cause simply wins.
+	if !errors.Is(err, ErrSignatureInvalid) {
+		t.Errorf("the refusal dropped ErrSignatureInvalid: %v", err)
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "not found") {
+		t.Errorf("the message still reports a missing file rather than altered bytes: %v", msg)
+	}
+	if !strings.Contains(msg, signedHex) {
+		t.Errorf("the message does not name the digest the signature covers, so the reader cannot see the two differ: %v", msg)
+	}
+}
+
+// The opposite case must stay distinguishable: a bundle nobody ever signed here
+// is a forgotten packaging step, not a broken seal, and it calls for a different
+// action (ask the sender for the signature).
+func TestUnsignedBundleIsNotReportedAsTampering(t *testing.T) {
+	dir := t.TempDir()
+	bundle := makeFakeBundle(t, dir, "never-signed.skb")
+	keyOut := filepath.Join(dir, "k")
+	if err := Generate(keyOut); err != nil {
+		t.Fatal(err)
+	}
+
+	err := VerifyDetached(bundle, keyOut+".pub")
+	if err == nil {
+		t.Fatal("an unsigned bundle verified")
+	}
+	if errors.Is(err, ErrDigestChanged) {
+		t.Errorf("an unsigned bundle was reported as tampering: %v", err)
+	}
+	if !strings.Contains(err.Error(), "never to have been signed") {
+		t.Errorf("the message does not say what is actually the case: %v", err)
+	}
+}
+
+// The sibling scan reads filenames from a directory an attacker may influence in
+// exactly the scenario it runs in. It must not put arbitrary text into an error
+// message, so anything that is not a sha256 hex digest is ignored.
+func TestSiblingScanIgnoresNonDigestFilenames(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "b.skb")
+	if err := os.WriteFile(bundle, []byte("x"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	for _, name := range []string{
+		"b.skb.not-a-digest.author.sig",
+		"b.skb.deadbeef.author.sig", // hex, but too short
+		"b.skb." + strings.Repeat("z", 64) + ".author.sig",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("junk"), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	if got := siblingSignatureDigests(bundle); len(got) != 0 {
+		t.Errorf("non-digest filenames leaked into the scan result: %v", got)
+	}
 }
