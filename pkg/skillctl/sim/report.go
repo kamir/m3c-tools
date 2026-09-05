@@ -274,8 +274,10 @@ func (rep Report) Markdown() string {
 	fmt.Fprintf(&b, "> its own ability to see a defect. It says nothing about fitness for the\n")
 	fmt.Fprintf(&b, "> intended use, the operational environment (github://, gitlab://, ER1,\n")
 	fmt.Fprintf(&b, "> Windows), human understanding of the output, or field failure rates.\n")
-	fmt.Fprintf(&b, "> Integrity level claimed: **high**. Independence: **none**, one author read\n")
-	fmt.Fprintf(&b, "> the specification, built the model, wrote the oracle and produced this report.\n\n")
+	fmt.Fprintf(&b, "> Integrity level: the component warrants **high**; this V&V supports **medium**\n")
+	fmt.Fprintf(&b, "> at most. Independence: **none**, one author read the specification, built the\n")
+	fmt.Fprintf(&b, "> model, wrote the oracle and produced this report. Gate 3 of five is\n")
+	fmt.Fprintf(&b, "> **unverified and uncalibrated**.\n\n")
 
 	fmt.Fprintf(&b, "## Provenance\n\n| | |\n|---|---|\n")
 	for _, kv := range rep.Provenance() {

@@ -40,6 +40,13 @@ const (
 	// behaviour CHANGED, not that it is wrong. This is a characterisation test and
 	// it must never be reported as conformance.
 	ProvObserved Provenance = "beobachtet"
+	// ProvAdopted: accepted as a requirement on this project's own record, from a
+	// review, and NOT yet written into any specification. It binds here and it has
+	// no clause behind it, which is a different standing from both normativ and
+	// abgeleitet. It existed as a category before it had a name: two invariants
+	// carried the mark "normativ" while their own footnote said "not in SPEC-0188",
+	// and an IEEE 1012 reviewer called that a category error on 2026-09-05.
+	ProvAdopted Provenance = "uebernommen"
 	// ProvOpen: the rule is under an undecided question. It is checked, and what
 	// its result means is not yet settled.
 	ProvOpen Provenance = "ungeklaert"
@@ -72,7 +79,8 @@ func TraceMatrix() []TraceItem {
 		{
 			ID: "gate 3", What: "the bundle signature rows verify over the recomputed digest",
 			Source: "SPEC-0188 §7", Prov: ProvNormative,
-			Note: "declared but never observed BY NAME: the refusal happens and carries no label (FR-0120)",
+			Note: "UNVERIFIED: observed 0 times, and its mutant is NOT detected. Three attempts to " +
+				"construct the case failed for three different reasons (FR-0120, revised)",
 		},
 		{
 			ID: "gate 4", What: "a quorum of attestations at or above the floor, from pinned signers, bound to the admitted digest",
@@ -90,7 +98,8 @@ func TraceMatrix() []TraceItem {
 		{
 			ID: "order: 5 before 4", What: "a revoked bundle reports the revoke, not the missing governance",
 			Source: "FR-0119 D2, decided 2026-09-05", Prov: ProvNormative,
-			Note: "diagnosis contract; depends on the phase model under D1",
+			Note: "diagnosis contract; its justification (\"the more actionable statement\") is a " +
+				"fitness-for-use argument, and it depends on the phase model still open under D1",
 		},
 		{
 			ID: "order: 2 before 3", What: "wrong bytes are reported as the cause, not the signature that follows from them",
@@ -112,7 +121,8 @@ func TraceMatrix() []TraceItem {
 		{
 			ID: "INV-4", What: "every refusal is loud: non-zero exit AND a named reason",
 			Source: "no specification clause found", Prov: ProvObserved,
-			Note: "asserted because a silent refusal is unusable, not because a document requires it",
+			Note: "the justification (\"a silent refusal is unusable\") is a FITNESS-FOR-USE argument, " +
+				"which is validation reasoning in a verification report; it is asserted, not derived",
 		},
 		{
 			ID: "INV-5", What: "an adversary move never improves the attacker's outcome",
@@ -121,13 +131,13 @@ func TraceMatrix() []TraceItem {
 		},
 		{
 			ID: "INV-6", What: "a refusal leaves the install target byte-identical",
-			Source: "side-effect requirement, raised by external review 2026-09-05", Prov: ProvNormative,
-			Note: "not in SPEC-0188; accepted as a requirement on this project's own record",
+			Source: "side-effect requirement, raised by external review 2026-09-05", Prov: ProvAdopted,
+			Note: "binds here, has no specification clause behind it; that is what adopted means",
 		},
 		{
 			ID: "INV-7", What: "an acceptance delivers exactly the packed file set",
-			Source: "side-effect requirement, raised by external review 2026-09-05", Prov: ProvNormative,
-			Note: "checked against the SOURCE tree, not against the signed bundle manifest: that binding is still open",
+			Source: "side-effect requirement, raised by external review 2026-09-05", Prov: ProvAdopted,
+			Note: "no specification clause; and checked against the SOURCE tree, not the signed bundle manifest",
 		},
 		{
 			ID: "INV-8", What: "a decision available from signed metadata does not fetch artifact bytes",
@@ -144,10 +154,12 @@ func (p Provenance) prio() int {
 		return 0
 	case ProvDerived:
 		return 1
-	case ProvOpen:
+	case ProvAdopted:
 		return 2
-	default:
+	case ProvOpen:
 		return 3
+	default:
+		return 4
 	}
 }
 
@@ -193,6 +205,7 @@ func (rep Report) WriteTraceability(w io.Writer) {
 		}
 	}
 	fmt.Fprintf(w, "  normativ = in einer SPEC; abgeleitet = hergeleitet, Herleitung ist Teil der\n")
+	fmt.Fprintf(w, "  Evidenz; uebernommen = bindet hier, hat aber keine Klausel hinter sich;\n")
 	fmt.Fprintf(w, "  Evidenz; beobachtet = aus dem Verhalten gewonnen, ein Fehlschlag heisst\n")
 	fmt.Fprintf(w, "  GEAENDERT und nicht FALSCH; ungeklaert = wird geprueft, Bedeutung offen.\n")
 	fmt.Fprintf(w, "  Eine Zeile mit normativer Quelle und null Beobachtungen ist DEKLARIERT,\n")
