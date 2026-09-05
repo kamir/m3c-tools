@@ -366,39 +366,9 @@ func build(p Params) Scenario {
 	// Found by the cause-discrimination measure on its first run, which reported one
 	// signal standing for two causes and turned out to be describing this bug rather
 	// than the product.
-	// The malicious publisher is UNCLAIMED, and the reason is a finding rather than
-	// a convenience.
-	//
-	// Three attempts have been made to construct a bundle that reaches gate 3, and
-	// all three failed for different reasons:
-	//   1. flip a byte in the .skb and rename the signature to match: the tar header
-	//      breaks and the installer refuses while parsing, before any signature is
-	//      read.
-	//   2. corrupt the detached .author.sig: the pull ACCEPTS. The detached file is
-	//      apparently not what the pull consults; the signature rows travel inside
-	//      the admit event.
-	//   3. edit the rows inside the admit event: that breaks the envelope, so gate 1
-	//      decides first, which is the original structural argument.
-	//
-	// So the honest statement is not "gate 3 fires without a label" (that was
-	// FR-0121's premise and it is withdrawn) but "this harness cannot yet construct
-	// the case". The move stays in the corpus because its DECISION is still worth
-	// observing, and its outcome is not scored, because the simulation has no
-	// warranted expectation to score it against.
-	if _, open := OpenDiagnostics()[p.Adv]; open {
-		gate, why = "", "OPEN: the harness cannot construct a bundle that reaches gate 3. "+
-			"Three attempts failed for three different reasons; see FR-0121. Until one "+
-			"succeeds, gate 3 is UNVERIFIED and UNCALIBRATED, and this step is recorded "+
-			"rather than scored"
-	}
 	pullExpect := Expectation{Outcome: Accept, Exit: 0, Claimed: true, Why: why}
-	if _, open := OpenDiagnostics()[p.Adv]; open {
-	}
 	if !ok {
 		pullExpect = Expectation{Outcome: Refuse, Gate: gate, Exit: 1, Claimed: true, Why: why}
-	}
-	if _, open := OpenDiagnostics()[p.Adv]; open {
-		pullExpect.Claimed = false
 	}
 	if p.Adv == AdvStolenKey && ok {
 		pullExpect.Claimed = false
@@ -475,9 +445,6 @@ func build(p Params) Scenario {
 			_, g2 := StateAt(p, true).Decide()
 			gate2, why2 := g2, whyGate(g2, p)
 			claimed2 := true
-			if note, open := OpenDiagnostics()[p.Adv]; open {
-				gate2, why2, claimed2 = "", note, false
-			}
 			sc.Steps = append(sc.Steps, Step{
 				Action: Action{Kind: ActPull, Actor: Consumer, Skill: skill},
 				Expect: Expectation{Outcome: Refuse, Gate: gate2, Exit: 1, Claimed: claimed2,

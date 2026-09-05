@@ -63,8 +63,10 @@ func TestNoTraceEntryIsOrphaned(t *testing.T) {
 		}
 	}
 	for _, it := range TraceMatrix() {
-		if strings.HasPrefix(it.ID, "order: ") {
-			continue // ordering claims are not single checks; they are properties of the composition
+		if strings.HasPrefix(it.ID, "order: ") || strings.HasPrefix(it.ID, "verb: ") {
+			// Ordering claims are properties of the composition, not single checks;
+			// verb claims are checked by scenario steps rather than by the gauntlet.
+			continue
 		}
 		if !known[it.ID] {
 			t.Errorf("the matrix traces %q, which nothing in the model evaluates", it.ID)

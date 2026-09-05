@@ -107,6 +107,16 @@ func TraceMatrix() []TraceItem {
 			Note: "diagnosis contract; depends on the phase model under D1",
 		},
 		{
+			ID: "verb: verify", What: "re-verification of an installed skill detects post-install tampering",
+			Source: "SPEC-0266", Prov: ProvNormative,
+			Note: "observed as exit 10 twice; it was in the run and missing from this table until 2026-09-05",
+		},
+		{
+			ID: "verb: verify-sig", What: "a detached signature over altered bytes cannot be found or does not verify",
+			Source: "SPEC-0188 §11", Prov: ProvNormative,
+			Note: "the publisher's own check before admit; observed as exit 1 four times",
+		},
+		{
 			ID: "INV-1", What: "bytes that do not match the signed digest are never installed",
 			Source: "SPEC-0188 §7 gate 2, restated as a run-wide property", Prov: ProvDerived,
 		},

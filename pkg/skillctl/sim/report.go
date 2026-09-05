@@ -52,12 +52,23 @@ func (rep Report) Summary() (match, conflict, unclaimed, skipped int) {
 // Coverage reports which decision points the corpus actually reached: the gates
 // that refused, and the exit codes observed. A gate that never appears is a hole
 // in the corpus, not a property of the system.
+// Coverage counts gates over CLAIMED PULL steps and exits over every step that
+// actually ran a process.
+//
+// The gate half used to count every step, while the outcome table beside it
+// counted pulls, so the same named quantity appeared twice with different values
+// (gate 4 as 36 here and 30 there). A validation reviewer called that unusable on
+// 2026-09-05 and was right: a document that gives one measurement two values is
+// not evidence at that point, whichever value is correct.
+//
+// The two halves still have different populations, because they answer different
+// questions, and the report now says so where each is printed.
 func (rep Report) Coverage() (gates map[string]int, exits map[int]int) {
 	gates = map[string]int{}
 	exits = map[int]int{}
 	for _, r := range rep.Results {
 		for _, s := range r.Steps {
-			if s.Gate != "" {
+			if s.Gate != "" && s.Step.Action.Kind == ActPull && s.Step.Expect.Claimed {
 				gates[s.Gate]++
 			}
 			if s.ExitCode >= 0 {
@@ -66,6 +77,26 @@ func (rep Report) Coverage() (gates map[string]int, exits map[int]int) {
 		}
 	}
 	return
+}
+
+// ExitsByAction attributes process exits to the verb that produced them, so no
+// observed exit code is left without an owner. A trust tool with documented exit
+// codes that reports an unattributed one in its own evidence has an open point,
+// not a rounding error.
+func (rep Report) ExitsByAction() map[int]map[string]int {
+	out := map[int]map[string]int{}
+	for _, r := range rep.Results {
+		for _, s := range r.Steps {
+			if s.ExitCode < 0 {
+				continue
+			}
+			if out[s.ExitCode] == nil {
+				out[s.ExitCode] = map[string]int{}
+			}
+			out[s.ExitCode][string(s.Step.Action.Kind)]++
+		}
+	}
+	return out
 }
 
 // HarnessFailures collects the runs that produced no evidence: a scenario that
@@ -193,27 +224,51 @@ func (rep Report) Write(w io.Writer) {
 		}
 	}
 
-	fmt.Fprintf(w, "\ncoverage: which gate actually refused\n")
+	fmt.Fprintf(w, "\ncoverage: which gate actually refused (claimed pull steps)\n")
 	if len(gates) == 0 {
 		fmt.Fprintf(w, "  (none: the corpus never reached a refusal, which is itself a finding)\n")
 	}
 	for _, g := range sortedKeys(gates) {
 		fmt.Fprintf(w, "  %-8s %d time(s)\n", g, gates[g])
 	}
-	fmt.Fprintf(w, "\ncoverage: observed process exits\n")
+	fmt.Fprintf(w, "\ncoverage: observed process exits, by the verb that produced them\n")
+	steps := 0
+	noProc := 0
+	for _, r := range rep.Results {
+		for _, st := range r.Steps {
+			steps++
+			if st.ExitCode < 0 {
+				noProc++
+			}
+		}
+	}
+	ran := 0
+	for _, n := range exits {
+		ran += n
+	}
+	fmt.Fprintf(w, "  Population: every step that ran a process.\n")
+	fmt.Fprintf(w, "  Bridge to the step count: %d steps = %d that ran a process + %d world\n", steps, ran, noProc)
+	fmt.Fprintf(w, "  mutations that ran none. Without this line a reader has to rebuild the\n")
+	fmt.Fprintf(w, "  arithmetic from the source, which is not a reader's job.\n")
 	var codes []int
 	for c := range exits {
 		codes = append(codes, c)
 	}
 	sort.Ints(codes)
 	for _, c := range codes {
-		fmt.Fprintf(w, "  exit %-3d %d time(s)\n", c, exits[c])
+		byAct := rep.ExitsByAction()[c]
+		var verbs []string
+		for _, v := range sortedKeys(byAct) {
+			verbs = append(verbs, fmt.Sprintf("%s x%d", v, byAct[v]))
+		}
+		fmt.Fprintf(w, "  exit %-3d %3d time(s)   %s\n", c, exits[c], strings.Join(verbs, ", "))
 	}
 
 	rep.WriteProvenance(w)
 	rep.WriteStanding(w)
 	rep.WriteTraceability(w)
 	rep.WriteOutputCoverage(w)
+	rep.WriteWaivers(w)
 	rep.WriteUnlabelled(w)
 	rep.WriteDiscrimination(w)
 	rep.WriteOpenDiagnostics(w)
@@ -302,10 +357,14 @@ func (rep Report) Markdown() string {
 	// Traceability. The table an IEEE 1012 reviewer asks for first: every claim
 	// with its origin and whether this run exercised it.
 	fmt.Fprintf(&b, "## Traceability\n\n")
+	// The legend defines every mark the table can carry, and only those. It once
+	// defined a mark that never appeared and omitted one that appeared twice, which
+	// a reviewer found before any reader did.
 	fmt.Fprintf(&b, "`normativ` = written in a specification · `abgeleitet` = derived, and the\n")
-	fmt.Fprintf(&b, "derivation is part of the evidence · `beobachtet` = read off the running\n")
-	fmt.Fprintf(&b, "system, so a failure means CHANGED and not WRONG · `ungeklaert` = checked,\n")
-	fmt.Fprintf(&b, "meaning still open.\n\n")
+	fmt.Fprintf(&b, "derivation is part of the evidence · `uebernommen` = binds here, accepted from\n")
+	fmt.Fprintf(&b, "a review, with no specification clause behind it · `beobachtet` = read off the\n")
+	fmt.Fprintf(&b, "running system, so a failure means CHANGED and not WRONG · `ungeklaert` =\n")
+	fmt.Fprintf(&b, "checked, meaning still open.\n\n")
 	fmt.Fprintf(&b, "| claim | provenance | observed | source | note |\n|---|---|---|---|---|\n")
 	gv := map[string]int{}
 	for _, v := range rep.Violations() {
@@ -465,9 +524,20 @@ func (rep Report) WriteMixture(w io.Writer) {
 		fmt.Fprintf(w, "\n  design: covering array of strength t=%d over %s\n", d.Strength, DesignAxes())
 		fmt.Fprintf(w, "  %d rows instead of %d exhaustive: EVERY admissible %d-way combination appears\n",
 			d.Rows, d.FullEnumeration, d.Strength)
-		fmt.Fprintf(w, "  %d combinations covered; %d of the %d in the unconstrained space are excluded\n",
+		fmt.Fprintf(w, "  %d combinations covered; %d of the %d in the unconstrained space are not\n",
 			d.Admissible, d.Uncoverable, d.Total)
-		fmt.Fprintf(w, "  by the model's own rules and are therefore not coverable, not missing.\n")
+		fmt.Fprintf(w, "  covered, and they are NOT all the same kind. Point census over the factor\n")
+		c := Census()
+		fmt.Fprintf(w, "  space: %d admissible, %d impossible (the world cannot produce them),\n",
+			c.Admissible, c.Impossible)
+		fmt.Fprintf(w, "  %d left out for economy (the world CAN produce them; the corpus judges\n", c.Economy)
+		fmt.Fprintf(w, "  them redundant, and that judgement can be wrong).\n")
+		for _, r := range sortedKeys(c.ByRule) {
+			fmt.Fprintf(w, "    %-52s %d\n", r, c.ByRule[r])
+		}
+		fmt.Fprintf(w, "  An earlier version of this line called all of them \"not coverable, not\n")
+		fmt.Fprintf(w, "  missing\". For the economy share that was false, and reporting a judgement\n")
+		fmt.Fprintf(w, "  as an impossibility is the more expensive of the two mistakes.\n")
 	}
 
 	fmt.Fprintf(w, "\n  distinct decision paths: %d over %d scenarios (yield %.2f)\n",
@@ -493,12 +563,12 @@ func (rep Report) WriteMixture(w io.Writer) {
 
 	if len(m.MissedGate) > 0 {
 		fmt.Fprintf(w, "\n  HOLES: declared gates never seen BY NAME in this corpus: %s\n", strings.Join(m.MissedGate, ", "))
-		fmt.Fprintf(w, "  A gate can be absent from this list in two very different ways, and the\n")
-		fmt.Fprintf(w, "  distinction is worth a line: unreached, meaning no scenario produces the\n")
-		fmt.Fprintf(w, "  condition, or reached but unnamed, meaning the refusal happens and carries\n")
-		fmt.Fprintf(w, "  no label. Gate 3 is the second kind: the bundle IS refused, with exit 1 and\n")
-		fmt.Fprintf(w, "  an untouched install target, and the label is open under FR-0121.\n")
-		fmt.Fprintf(w, "  Each one is a decision the simulation currently says nothing about.\n")
+		fmt.Fprintf(w, "  For gate 3 the honest statement is that this harness cannot construct a\n")
+		fmt.Fprintf(w, "  bundle that reaches it. Three attempts failed for three different reasons,\n")
+		fmt.Fprintf(w, "  and the gate-3 mutant is NOT detected, which is the same fact from the\n")
+		fmt.Fprintf(w, "  other side. An earlier version of this paragraph said the gate WAS reached\n")
+		fmt.Fprintf(w, "  and merely unnamed; that was withdrawn on 2026-09-05 (FR-0121).\n")
+		fmt.Fprintf(w, "  A gate on this list is a decision the simulation says nothing about.\n")
 	} else {
 		fmt.Fprintf(w, "\n  every declared gate was reached at least once\n")
 	}

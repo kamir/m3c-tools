@@ -307,11 +307,20 @@ func (rep TheoryReport) Sound() bool {
 //	                 defend against on this path: the answer is that a different
 //	                 ACTOR would be needed.
 //
-// The structural rule this model knows, derived from the wire format rather than
-// invented here: the signature rows live INSIDE the signed envelope, so changing
-// them breaks the envelope signature too. Formally sig=0 implies env=0. Every
-// state with sig=0 and env=1 is therefore structurally impossible, and gate 3 sits
-// entirely inside that region: no store or transport attacker can ever exhibit it.
+// THIS PARAGRAPH USED TO STATE A STRUCTURAL RULE, and it was wrong.
+//
+// It said: the signature rows live inside the signed envelope, so sig=0 implies
+// env=0, so every state with sig=0 and env=1 is structurally impossible and gate 3
+// sits entirely inside that region. The run refutes it. 10010 and 11010 are
+// reachable with exactly that pattern, and 10110, the one state where gate 3
+// speaks, is reachable and visited.
+//
+// The rule was true when it was written, before the alphabet contained a publisher
+// who can re-seal what he altered, and nothing forced it to be re-derived when the
+// alphabet grew. That is the whole lesson: a claim about the world, parked in a
+// comment, does not notice when the world changes. Unreachability is now derived
+// mechanically from the alphabet, and no structural claim is made here at all. If
+// one is wanted, it belongs in a specification where it can be reviewed.
 
 // UnreachReason classifies one unreachable state.
 type UnreachReason struct {

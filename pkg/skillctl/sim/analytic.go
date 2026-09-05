@@ -163,7 +163,7 @@ func StateAt(p Params, afterRevoke bool) State {
 // BinLabelOpen is the outcome bin for a refusal whose gate name is under an open
 // diagnostic finding. It exists so that a question about a LABEL cannot show up
 // as a residual, which is a claim about BEHAVIOUR.
-const BinLabelOpen = "refuse, label open"
+const BinLabelOpen = "waived (see waivers)"
 
 // PredictHistogram is the analytical result: how many pulls in a corpus end at
 // each outcome, computed from the theory alone. Nothing is executed.
@@ -185,7 +185,14 @@ func PredictHistogram(corpus []Scenario) map[string]int {
 			if !st.Expect.Claimed {
 				continue
 			}
-			if accept, g := StateAt(sc.P, afterRevoke).Decide(); accept {
+			accept, g := StateAt(sc.P, afterRevoke).Decide()
+			// A waived disagreement is binned apart on BOTH sides, so it neither
+			// hides in the residual nor pretends to be agreement. The conflict count
+			// above still carries it; this bin only keeps it out of a number that
+			// means "the closed form reproduced the distribution".
+			if isWaivedPrediction(sc.P, g) {
+				h[BinLabelOpen]++
+			} else if accept {
 				h["accept"]++
 			} else {
 				h[g]++
@@ -205,6 +212,8 @@ func (rep Report) MeasureHistogram() map[string]int {
 				continue
 			}
 			switch {
+			case waiverFor(r.Scenario, s) != nil:
+				h[BinLabelOpen]++
 			case s.Outcome == Accept:
 				h["accept"]++
 			case s.Gate != "":
@@ -291,4 +300,17 @@ func BinaryHash(path string) string {
 		return "unreadable"
 	}
 	return hex.EncodeToString(h.Sum(nil))[:16]
+}
+
+// isWaivedPrediction reports whether the model's prediction for this point is one
+// a waiver covers. It exists so the prediction side and the measurement side put
+// the waived case in the same bin without either of them consulting the other's
+// result.
+func isWaivedPrediction(p Params, gate string) bool {
+	for _, w := range Waivers() {
+		if p.Adv == w.Adv && gate == w.Expected {
+			return true
+		}
+	}
+	return false
 }

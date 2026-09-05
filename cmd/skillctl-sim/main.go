@@ -177,13 +177,20 @@ func runRun(args []string) int {
 		return 1
 	}
 	_, conflicts, _, _ := rep.Summary()
+	waived, unwaived := rep.WaivedConflicts()
 	res := rep.Residual()
 	viol := len(rep.Violations())
-	if conflicts > 0 || viol > 0 || res != 0 {
+	if unwaived > 0 || viol > 0 || res != 0 {
 		fmt.Fprintf(os.Stderr,
-			"\nFAIL: %d conflict(s), %d invariant violation(s), residual %d.\n"+
-				"The pass condition is all three at zero.\n", conflicts, viol, res)
+			"\nFAIL: %d conflict(s) of which %d waived, %d invariant violation(s), residual %d.\n"+
+				"The pass condition is: no UNWAIVED conflict, no invariant violation, residual\n"+
+				"zero. A waived conflict is counted and printed with its finding; it is not\n"+
+				"removed from the comparison.\n", conflicts, waived, viol, res)
 		return 1
+	}
+	if waived > 0 {
+		fmt.Fprintf(os.Stdout,
+			"\nPASS with %d waived conflict(s). See the waiver register above.\n", waived)
 	}
 	return 0
 }
@@ -224,6 +231,15 @@ func resolveBinary(flagVal string) (string, error) {
 // sound on its own? It needs no skillctl, no registry and no network, because it
 // reasons over the state space rather than over a run.
 func runTheory(args []string) int {
+	// A theory report without provenance cannot be bound to the run it explains.
+	// It was the one artifact of the three that carried none.
+	defer func() {
+		fmt.Printf("\nprovenance of this theory check\n")
+		fmt.Printf("  harness commit  %s\n", orUnknownStr(gitDescribe()))
+		fmt.Printf("  model hash      %s\n", sim.ModelHash())
+		fmt.Printf("  platform        %s/%s\n", runtime.GOOS, runtime.GOARCH)
+		fmt.Printf("  generated       %s\n", time.Now().UTC().Format(time.RFC3339))
+	}()
 	fs := flag.NewFlagSet("theory", flag.ContinueOnError)
 	n := fs.Int("n", 0, "corpus size to judge coverage against when -t 0")
 	strength := fs.Int("t", 2, "covering-array strength (0 = no design, use -n)")
@@ -265,4 +281,12 @@ func sutVersion(bin string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
+}
+
+// orUnknownStr keeps a provenance field honest when it cannot be determined.
+func orUnknownStr(s string) string {
+	if strings.TrimSpace(s) == "" {
+		return "unknown"
+	}
+	return s
 }
