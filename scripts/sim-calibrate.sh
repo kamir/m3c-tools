@@ -208,10 +208,24 @@ echo "detection rate: $detected of $total"
 # reader infers from "n of n". An IEEE 1012 reviewer asked for this number on
 # 2026-09-05 and he was right to: it is the difference between "we saw everything
 # we built" and "we see everything".
-if [ "$detected" -eq "$total" ] && [ "$total" -gt 0 ]; then
-  bound=$(awk -v n="$total" 'BEGIN{printf "%.2f", exp(log(0.05)/n)}')
-  echo "one-sided 95% lower bound on the true detection rate: ${bound}"
-  echo "  n=${total} is small. This bound is what the evidence supports; 100% is not."
+if [ "$total" -gt 0 ]; then
+  # Wilson score interval at 95 percent. It is used rather than the normal
+  # approximation because at this n the normal one is simply wrong, and rather
+  # than a bare point estimate because "6 of 7" invites a reader to think 86
+  # percent when the evidence supports a range roughly twice as wide as that
+  # number's precision suggests.
+  read -r lo hi <<EOF2
+$(awk -v k="$detected" -v n="$total" 'BEGIN{
+  z=1.96; p=k/n; d=1+z*z/n;
+  c=(p+z*z/(2*n))/d;
+  m=z*sqrt(p*(1-p)/n + z*z/(4*n*n))/d;
+  lo=c-m; hi=c+m; if(lo<0)lo=0; if(hi>1)hi=1;
+  printf "%.2f %.2f", lo, hi}')
+EOF2
+  echo "detection rate ${detected}/${total}, Wilson 95% interval [${lo}, ${hi}]"
+  echo "  A rate without an interval is a claim, not a measurement. At this n the"
+  echo "  interval is wide, and that width IS the result: it says how much of the"
+  echo "  instrument's sensitivity is still unmeasured."
 fi
 
 # The calibration must be bindable to the run it certifies. Without the model and

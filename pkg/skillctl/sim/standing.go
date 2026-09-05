@@ -72,11 +72,9 @@ func (rep Report) WriteStanding(w io.Writer) {
 	fmt.Fprintf(w, "      measured, and no arrangement of machine checks measures it.\n")
 	fmt.Fprintf(w, "    That the tested binary is the shipped artifact. The hash identifies what\n")
 	fmt.Fprintf(w, "      ran, not what is released, and the SUT reports its own version as \"dev\".\n")
-	fmt.Fprintf(w, "    Gate 3. It is declared in SPEC-0188 §7, observed zero times, and its\n")
-	fmt.Fprintf(w, "      mutant is NOT detected by this corpus. Three attempts to construct the\n")
-	fmt.Fprintf(w, "      case failed for three different reasons. One fifth of the decision\n")
-	fmt.Fprintf(w, "      function is unverified, and the calibration says so rather than\n")
-	fmt.Fprintf(w, "      rounding it away.\n")
+	fmt.Fprintf(w, "    Gate 3 BY NAME. The control is live: disabling it flips the affected\n")
+	fmt.Fprintf(w, "      pull from refuse to accept. What is missing is the label, so a caller\n")
+	fmt.Fprintf(w, "      cannot attribute the refusal (FR-0121). The waiver register carries it.\n")
 }
 
 // OutputCoverage is the second coverage measure, and the one that answers the

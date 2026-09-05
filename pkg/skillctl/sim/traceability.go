@@ -79,8 +79,8 @@ func TraceMatrix() []TraceItem {
 		{
 			ID: "gate 3", What: "the bundle signature rows verify over the recomputed digest",
 			Source: "SPEC-0188 §7", Prov: ProvNormative,
-			Note: "UNVERIFIED: observed 0 times, and its mutant is NOT detected. Three attempts to " +
-				"construct the case failed for three different reasons (FR-0121, revidiert)",
+			Note: "fires but never names itself: disabling it flips the affected pull from " +
+				"refuse to accept, so the control is live. Observed 0 times BY NAME (FR-0121)",
 		},
 		{
 			ID: "gate 4", What: "a quorum of attestations at or above the floor, from pinned signers, bound to the admitted digest",

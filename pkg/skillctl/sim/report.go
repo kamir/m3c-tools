@@ -563,11 +563,13 @@ func (rep Report) WriteMixture(w io.Writer) {
 
 	if len(m.MissedGate) > 0 {
 		fmt.Fprintf(w, "\n  HOLES: declared gates never seen BY NAME in this corpus: %s\n", strings.Join(m.MissedGate, ", "))
-		fmt.Fprintf(w, "  For gate 3 the honest statement is that this harness cannot construct a\n")
-		fmt.Fprintf(w, "  bundle that reaches it. Three attempts failed for three different reasons,\n")
-		fmt.Fprintf(w, "  and the gate-3 mutant is NOT detected, which is the same fact from the\n")
-		fmt.Fprintf(w, "  other side. An earlier version of this paragraph said the gate WAS reached\n")
-		fmt.Fprintf(w, "  and merely unnamed; that was withdrawn on 2026-09-05 (FR-0121).\n")
+		fmt.Fprintf(w, "  Gate 3 is on this list because it is never seen BY NAME, not because it\n")
+		fmt.Fprintf(w, "  never fires. Disabling it flips the affected pull from refuse to accept, so\n")
+		fmt.Fprintf(w, "  the control is live and its label is missing (FR-0121).\n")
+		fmt.Fprintf(w, "  This paragraph has now been wrong in both directions. It first claimed the\n")
+		fmt.Fprintf(w, "  gate fired unnamed, then that the case was not constructible. The second\n")
+		fmt.Fprintf(w, "  claim was an artefact of suppressing the step that shows the difference,\n")
+		fmt.Fprintf(w, "  which is what a waiver instead of a suppression now prevents.\n")
 		fmt.Fprintf(w, "  A gate on this list is a decision the simulation says nothing about.\n")
 	} else {
 		fmt.Fprintf(w, "\n  every declared gate was reached at least once\n")

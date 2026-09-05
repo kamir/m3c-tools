@@ -41,9 +41,8 @@ func Waivers() []Waiver {
 			Adv: AdvPublisherBadSigs, Expected: "gate 3", Observed: "",
 			Finding: "FR-0121",
 			Why: "the model predicts gate 3 and the binary refuses without naming a gate. " +
-				"Three attempts to construct a bundle that reaches gate 3 failed for three " +
-				"different reasons, and the gate-3 mutant is NOT detected, so which side is " +
-				"wrong is genuinely open. The refusal itself, its exit code and the untouched " +
+				"The control is live: disabling gate 3 flips this pull from refuse to accept. " +
+				"What is waived is only the LABEL; the refusal, its exit code and the untouched " +
 				"install target are compared and hold",
 		},
 	}
