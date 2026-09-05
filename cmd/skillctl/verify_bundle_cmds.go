@@ -387,9 +387,20 @@ func loadBundleMetaSidecar(path string) (*registry.BundleMeta, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
+			// BUG-0215: the old text said "produce one with
+			// `skillctl export-verification-kit`", and that command fails with THIS
+			// SAME message, so the advice was a circle. No CLI verb produces the
+			// envelope: it carries the author, registry and governance signatures
+			// and comes into existence when the bundle is ADMITTED to a registry.
+			// That is the model working as intended, the hint was simply wrong.
 			return nil, fmt.Errorf(
-				"verify --bundle: BundleMeta sidecar not found at %s "+
-					"(produce one with `skillctl export-verification-kit`, or pass --meta <file>)", path)
+				"verify --bundle: BundleMeta sidecar not found at %s\n"+
+					"  It is produced when a bundle is ADMITTED to a registry, not locally: no skillctl\n"+
+					"  verb creates one. Fetch it from the registry the bundle was admitted to\n"+
+					"  (`skillctl registry show <digest>`), or pass an existing one with --meta <file>.\n"+
+					"  A bundle that has never been through a registry can only be checked with\n"+
+					"  `skillctl verify-sig --pubkey <author.pub> <file.skb>`, which proves authorship\n"+
+					"  and nothing about governance, revocation or tenant scope", path)
 		}
 		return nil, fmt.Errorf("verify --bundle: read sidecar %s: %w", path, err)
 	}
