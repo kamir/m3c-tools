@@ -172,6 +172,7 @@ func runTheory(args []string) int {
 	corpus := sim.Generate(*n)
 	rep := sim.CheckTheory(corpus)
 	rep.WriteTheory(os.Stdout, corpus)
+	rep.WriteUnreachable(os.Stdout)
 	if !rep.Sound() {
 		fmt.Fprintln(os.Stderr, "the specification did not pass its own check: fix the model before testing any code against it")
 		return 1
