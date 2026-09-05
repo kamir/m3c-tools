@@ -57,6 +57,7 @@ same way `cmd/docaudit` gates the flag surface.
 | --- | --- | --- |
 | `login` | FR-0043 | 0/1/2 |
 | `version` (`--version`, `-v`) | built-in | 0 |
+| `doctor` | SPEC-0406 D1 | 0/1/2 |
 | `pack` | SPEC-0188 (Phase 1 PoC) | 0/1/2, 18 |
 | `keygen` | SPEC-0188 §11 | 0/1/2 |
 | `sign` | SPEC-0188 §11 | 0/1/2 |
