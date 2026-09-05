@@ -146,9 +146,10 @@ func AllGovs() []Gov { return []Gov{GovGreen, GovYellow, GovNone} }
 // any other.
 func OpenDiagnostics() map[AdvKind]string {
 	return map[AdvKind]string{
-		AdvPublisherBadSigs: "FR-0121: gate 3 fires and does not name itself. Disabling it " +
-			"flips this pull from refuse to accept, so the control is live; only the label " +
-			"is missing. The decision is compared and scored, the label is waived",
+		AdvPublisherBadSigs: "FR-0121: gate 3 is UNVERIFIED. Its mutant is indistinguishable " +
+			"from the unmutated baseline, so nothing in this corpus depends on it. An earlier " +
+			"claim that disabling it flips this pull from refuse to accept is WITHDRAWN: the " +
+			"unmutated binary already accepts this case",
 	}
 }
 

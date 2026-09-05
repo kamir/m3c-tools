@@ -60,9 +60,11 @@ func Waivers() []Waiver {
 				"both refusing without a gate name and accepting, across successive harness " +
 				"revisions on the same product build. One clean re-measurement on a frozen " +
 				"harness is owed before anything is concluded from it. Originally: " +
-				"The control is live: disabling gate 3 flips this pull from refuse to accept. " +
-				"What is waived is only the LABEL; the refusal, its exit code and the untouched " +
-				"install target are compared and hold",
+				"The mutant for gate 3 is indistinguishable from the unmutated baseline, so " +
+				"nothing here depends on that control and it is UNVERIFIED. Two earlier " +
+				"descriptions of this case, both withdrawn, are recorded in FR-0121. What is " +
+				"waived is the outcome comparison; INV-6 still asserts that the refusal, where " +
+				"one happens, leaves the install target untouched",
 		},
 	}
 }
