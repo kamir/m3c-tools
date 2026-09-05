@@ -67,6 +67,22 @@ build-skillctl:
 
 # Build the skillctl-demo tool. It shells out to skillctl (auto-resolved from
 # ./build/skillctl first), so build that too.
+# Build the trust-plane simulation. It drives the real skillctl, so it needs one.
+.PHONY: build-skillctl-sim
+build-skillctl-sim: build-skillctl
+	@echo "Building skillctl-sim..."
+	go build -ldflags="$(GO_LDFLAGS)" -o $(BUILD_DIR)/skillctl-sim ./cmd/skillctl-sim
+	@echo "Built $(BUILD_DIR)/skillctl-sim, run: $(BUILD_DIR)/skillctl-sim run -n 100"
+
+# The simulation as a gate: theory against measurement. Exit 1 on a conflict, an
+# invariant violation, or a harness failure. A residual on its own does NOT fail
+# the run: part of it comes from the attacks the corpus carries on purpose and
+# does not claim to stop (a stolen key, a withheld revoke), and scoring those as
+# failures would make the honest record unreportable.
+.PHONY: sim
+sim: build-skillctl-sim
+	$(BUILD_DIR)/skillctl-sim run -n 100 -skillctl $(BUILD_DIR)/skillctl
+
 .PHONY: build-skillctl-demo
 build-skillctl-demo: build-skillctl
 	@echo "Building skillctl-demo..."
