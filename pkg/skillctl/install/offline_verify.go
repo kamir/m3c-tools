@@ -84,13 +84,21 @@ func StashOfflineMeta(ctx context.Context, resolver identityResolver, target str
 		now = time.Now
 	}
 	idents := map[string]*registry.Identity{}
-	for _, s := range meta.Signatures {
-		if s.Role == "author" && s.IdentityID != "" {
-			id, err := resolver.GetIdentity(ctx, s.IdentityID)
-			if err != nil {
-				return fmt.Errorf("stash: fetch author identity %s: %w", s.IdentityID, err)
+	// A nil resolver means there is no registry to ask, which is the normal state
+	// for an offline install from a local .skb (SPEC-0406 D2). The stash is still
+	// worth writing: it carries the BundleMeta a later `verify --offline` needs.
+	// The author KEY is not missing in that case, it simply comes from the pinned
+	// trust root instead, which is the stronger source anyway. Fetching it here
+	// would have meant trusting a registry to tell us who the author was.
+	if resolver != nil {
+		for _, s := range meta.Signatures {
+			if s.Role == "author" && s.IdentityID != "" {
+				id, err := resolver.GetIdentity(ctx, s.IdentityID)
+				if err != nil {
+					return fmt.Errorf("stash: fetch author identity %s: %w", s.IdentityID, err)
+				}
+				idents[s.IdentityID] = id
 			}
-			idents[s.IdentityID] = id
 		}
 	}
 	om := OfflineMeta{BundleMeta: meta, Identities: idents, StashedAt: now().UTC().Format(time.RFC3339)}

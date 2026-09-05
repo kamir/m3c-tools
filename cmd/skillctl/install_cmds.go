@@ -51,9 +51,13 @@ func runInstall(args []string, stdout, stderr io.Writer) (code int) {
 	timeout := fs.Duration("timeout", registry.DefaultTimeout, "HTTP timeout for registry calls.")
 	verboseFlag := fs.Bool("verbose", false, "Print structured per-step log lines to stderr.")
 	homeOverride := fs.String("home", "", "Override the install root (advanced; defaults to $HOME).")
+	bundlePath := fs.String("bundle", "", "Install a standalone .skb FILE that arrived over an untrusted transport (SPEC-0406). Offline, against pinned trust-roots. Requires a sidecar <file>.skbmeta.json (or --meta).")
+	metaPath := fs.String("meta", "", "Path to the BundleMeta envelope JSON for --bundle (default: the .skbmeta.json sidecar next to the .skb).")
+	trustRootsPath := fs.String("trust-roots", "", "Path to a trust-roots YAML to use instead of the default. Pair with --bundle for a portable verification kit.")
 
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: skillctl install <name>[@<version>] [flags]")
+		fmt.Fprintln(stderr, "   or: skillctl install --bundle <file.skb> [--meta <f>] [--trust-roots <f>]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Pulls a skill bundle from the registry, runs the SPEC-0188 §7 verifier,")
 		fmt.Fprintln(stderr, "and atomically installs it under ~/.claude/skills/<name>/. Refuses if any")
@@ -79,6 +83,29 @@ func runInstall(args []string, stdout, stderr io.Writer) (code int) {
 	if err := fs.Parse(args); err != nil {
 		return exitUsage
 	}
+
+	// --bundle: install a local .skb, fully offline, against pinned trust-roots.
+	// The name positional is NOT accepted here: where the skill lands is decided
+	// by the signed bundle.json, never by the command line (see InstallBundle).
+	if *bundlePath != "" {
+		if fs.NArg() != 0 {
+			fmt.Fprintln(stderr, "skillctl install --bundle <file.skb>: do not also pass a <name> positional arg.")
+			return exitUsage
+		}
+		return runInstallBundle(installBundleParams{
+			bundlePath:     *bundlePath,
+			metaPath:       *metaPath,
+			trustRootsPath: *trustRootsPath,
+			registryURL:    *registryURL,
+			governanceMin:  *governanceMin,
+			allowYellow:    *allowYellow,
+			ignoreDeps:     *ignoreDeps,
+			tenantFlag:     *tenantFlag,
+			homeOverride:   *homeOverride,
+			verbose:        *verboseFlag,
+		}, stdout, stderr)
+	}
+
 	if fs.NArg() != 1 {
 		fs.Usage()
 		return exitUsage
