@@ -187,11 +187,32 @@ func CorpusStates(corpus []Scenario) map[string]bool {
 	seen := map[string]bool{}
 	for _, sc := range corpus {
 		seen[StateAt(sc.P, false).Key()] = true
-		if sc.P.Revoke {
+		// The post-revoke state counts only when the scenario ACTUALLY pulls a
+		// second time. It used to be counted whenever the revoke PARAMETER was
+		// set, and that overstated the coverage: build() attaches the revoke steps
+		// only where the first install succeeds, so a scenario whose pull is
+		// refused carries Revoke=true and never revokes anything. Its post-revoke
+		// state was reported as visited on the strength of a flag.
+		//
+		// A coverage figure has to be derived from what the corpus RUNS, never from
+		// what its parameters imply, or it measures the generator's intentions.
+		if pulls(sc) > 1 {
 			seen[StateAt(sc.P, true).Key()] = true
 		}
 	}
 	return seen
+}
+
+// pulls counts the pull steps in a scenario: the number of decisions it puts to
+// the gauntlet, which is what a state visit is made of.
+func pulls(sc Scenario) int {
+	n := 0
+	for _, st := range sc.Steps {
+		if st.Action.Kind == ActPull {
+			n++
+		}
+	}
+	return n
 }
 
 // WriteTheory renders the specification check. It runs with no binary present,

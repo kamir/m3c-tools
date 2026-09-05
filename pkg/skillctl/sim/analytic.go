@@ -115,8 +115,25 @@ func StateAt(p Params, afterRevoke bool) State {
 	// Deleting the event hides it (withholding is not detectable here); RENAMING
 	// it does not, because identity comes from the signed envelope and not from
 	// the path.
+	//
+	// A revoke is BOUND TO A DIGEST, and that is the whole of it. It covers the
+	// pulled bundle only when the digest the publisher revokes is the digest that
+	// was admitted. Transit tampering breaks exactly that equality: the bytes
+	// change after signing, so the admitted digest is not the one the publisher
+	// holds, and a revoke issued in good faith against the publisher's own record
+	// misses the artifact in the registry.
+	//
+	// This clause is here because the experiment produced it. The model used to
+	// assume a revoke always lands, predicted gate 5 for the two transit scenarios,
+	// and measured gate 4. The measurement was right and the theory was wrong, which
+	// is the direction that costs something to admit. It is not a fit to the
+	// observation: the justification is independent, a revoke names a digest, and a
+	// digest that nobody admitted revokes nothing.
 	if afterRevoke && p.Revoke {
-		s.Revoked = p.Adv != AdvStripRevoke
+		landed := p.Adv != AdvStripRevoke && // withheld: the consumer never sees it
+			p.Adv != AdvTransitChecked && // admitted digest differs from the revoked one
+			p.Adv != AdvTransitSkipped
+		s.Revoked = landed
 	}
 
 	// x_gov. Three independent ways to fail, and they compose:

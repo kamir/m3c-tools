@@ -367,7 +367,19 @@ func build(p Params) Scenario {
 	}
 
 	// 8. The kill switch.
-	if p.Revoke && ok {
+	//
+	// The condition used to be `p.Revoke && ok`: revoke only where the install had
+	// succeeded. That is the SAME prune-by-outcome that was removed from
+	// meaningful(), one layer lower, and removing it there while leaving it here
+	// bought nothing. Worse, it made the coverage figure look as if it had: the
+	// post-revoke state was counted from the Revoke flag, so three states were
+	// reported as visited by scenarios that never revoked anything.
+	//
+	// A revoke is a PUBLISHER action against a digest. It does not need anybody to
+	// have installed first, and the interesting case is exactly the one the old
+	// condition removed: a bundle that is both revoked and otherwise broken, where
+	// the question is which gate speaks first.
+	if p.Revoke {
 		sc.Steps = append(sc.Steps, Step{
 			Action: Action{Kind: ActRevoke, Actor: Publisher, Skill: skill},
 			Expect: Expectation{Outcome: Accept, Exit: 0, Claimed: true,
