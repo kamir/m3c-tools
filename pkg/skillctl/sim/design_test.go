@@ -87,10 +87,13 @@ func TestCoveringArrayIsDeterministic(t *testing.T) {
 func TestExcludedPointsAreExcludedForAStatedReason(t *testing.T) {
 	for _, p := range allParams() {
 		if meaningful(p) {
-			// R1: a revoke presupposes a release.
-			if p.Revoke && p.Gov != GovGreen {
-				t.Errorf("R1 violated: %+v is admissible but revokes without a release", p)
-			}
+			// R1 IS NOT ASSERTED HERE ANY MORE, and its absence is the point.
+			//
+			// It said a revoke presupposes a release. An external reviewer showed on
+			// 2026-09-05 that a digest can be blocked pre-emptively, before anyone
+			// attests or installs it, so the rule excluded a region that is both real
+			// and worth testing. The corpus now enters it, which is why this test
+			// checks that such points ARE admissible rather than that they are not.
 			// R2: the envelope forgery is decided by the first gate.
 			if p.Adv == AdvForgeEnvelope && (p.Gov != GovGreen || p.Key != KeySeparatePin) {
 				t.Errorf("R2 violated: %+v is admissible but varies axes the first gate makes moot", p)
@@ -113,6 +116,70 @@ func TestStepOracleAgreesWithTheAnalyticModel(t *testing.T) {
 		if ok != accept || (!ok && gate != g) {
 			t.Errorf("%+v: step oracle says (accept=%v, %q), model says (accept=%v, %q)",
 				p, ok, gate, accept, g)
+		}
+	}
+}
+
+// TestRevokeWithoutReleaseIsAdmissible is the positive form of the rule that was
+// removed. A pre-emptive block is a legitimate use of a kill switch, so the corpus
+// must be able to express it; if this ever fails, R1 has crept back.
+func TestRevokeWithoutReleaseIsAdmissible(t *testing.T) {
+	p := Params{Cast: CastSolo, Key: KeySeparatePin, Gov: GovNone, Adv: AdvNone, Revoke: true}
+	if !meaningful(p) {
+		t.Error("a revoke without a prior release is excluded from the corpus again; " +
+			"that region is where a pre-emptive block lives")
+	}
+}
+
+// TestGateSeedsIsolateTheirGate pins the property the seeds exist for: each one
+// must make ITS gate the first to fail, judged by the analytic model rather than
+// by the author's intention.
+//
+// Without this, a seed can quietly stop isolating its gate when the model changes,
+// and the design would keep carrying a row that no longer buys what it was added
+// for. That is how gate 2 became unobservable in the first place.
+func TestGateSeedsIsolateTheirGate(t *testing.T) {
+	want := []string{"gate 1", "gate 2", "gate 3", "gate 4", "gate 5"}
+	seeds := gateSeeds()
+	if len(seeds) != len(want) {
+		t.Fatalf("%d seeds for %d gates", len(seeds), len(want))
+	}
+	for i, p := range seeds {
+		if !meaningful(p) {
+			t.Errorf("%s seed %+v is not admissible, so it can never enter the design", want[i], p)
+			continue
+		}
+		accept, gate := StateAt(p, p.Revoke).Decide()
+		if accept {
+			t.Errorf("%s seed %+v is accepted, so it isolates nothing", want[i], p)
+			continue
+		}
+		if gate != want[i] {
+			t.Errorf("%s seed %+v fails at %s instead: an earlier gate masks the one under test",
+				want[i], p, gate)
+		}
+	}
+}
+
+// TestEveryGateIsSeeded is the coverage guarantee itself: the design must contain
+// a row for every gate the specification declares, whatever the greedy fill does
+// with the rest of the space.
+func TestEveryGateIsSeeded(t *testing.T) {
+	rows, _ := CoveringArray(2)
+	seen := map[string]bool{}
+	for _, p := range rows {
+		if accept, gate := StateAt(p, false).Decide(); !accept {
+			seen[gate] = true
+		}
+		if p.Revoke {
+			if accept, gate := StateAt(p, true).Decide(); !accept {
+				seen[gate] = true
+			}
+		}
+	}
+	for _, g := range []string{"gate 1", "gate 2", "gate 3", "gate 4", "gate 5"} {
+		if !seen[g] {
+			t.Errorf("%s is not reached by any row of the design; that control is unobservable", g)
 		}
 	}
 }

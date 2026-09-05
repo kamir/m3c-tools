@@ -145,7 +145,36 @@ func CoveringArray(t int) ([]Params, CoverageStats) {
 		uncovered[k] = true
 	}
 
+	// SEEDING, and it is not an optimisation.
+	//
+	// A covering array guarantees input coverage: every admissible pair of factor
+	// levels appears. It guarantees nothing about OUTPUT coverage, and the two came
+	// apart the moment R1 was removed. The greedy fill picked a set in which no row
+	// reached gate 2 in isolation, the digest control became unobservable, and the
+	// mutation calibration reported it immediately as NOT DETECTED. That is the
+	// calibration working, and it is also a design gap: an external reviewer had
+	// already asked for "jeder relevante Ablehnungsgrund einmal isoliert, damit
+	// fruehere Tore ihn nicht verdecken".
+	//
+	// So the design starts from one row per declared gate, chosen so that gate is
+	// the FIRST one to fail, and the greedy fill covers the remaining pairs around
+	// them. Cost: a handful of rows. Benefit: every control stays observable no
+	// matter how the rest of the space is sampled, which is the difference between
+	// a corpus that covers its inputs and one that can see its outputs.
 	var chosen []Params
+	for _, sp := range gateSeeds() {
+		for i, c := range candidates {
+			if c == sp {
+				chosen = append(chosen, c)
+				for _, tp := range tuplesOf(levelsOf(c), t) {
+					delete(uncovered, tp)
+				}
+				candidates = append(candidates[:i], candidates[i+1:]...)
+				break
+			}
+		}
+	}
+
 	for len(uncovered) > 0 {
 		best, bestGain := -1, 0
 		for i, p := range candidates {
@@ -176,6 +205,25 @@ func CoveringArray(t int) ([]Params, CoverageStats) {
 		Total:           len(all),
 		Uncoverable:     len(all) - len(target),
 		FullEnumeration: countAdmissible(),
+	}
+}
+
+// gateSeeds names one corpus point per declared gate, chosen so that the gate in
+// question is the first one to fail. They are asserted by a test against the
+// analytic model, so a point that stops isolating its gate is a test failure and
+// not a silent loss of coverage.
+func gateSeeds() []Params {
+	return []Params{
+		// gate 1: the envelope is broken, everything else is clean.
+		{Cast: CastSolo, Key: KeySeparatePin, Gov: GovGreen, Adv: AdvForgeEnvelope, Revoke: false},
+		// gate 2: the stored bytes no longer hash to the admitted digest.
+		{Cast: CastSolo, Key: KeySeparatePin, Gov: GovGreen, Adv: AdvStoredBundle, Revoke: false},
+		// gate 3: the signature rows do not verify (label under FR-0120).
+		{Cast: CastSolo, Key: KeySeparatePin, Gov: GovGreen, Adv: AdvPublisherBadSigs, Revoke: false},
+		// gate 4: no attestation at all, nothing else wrong.
+		{Cast: CastSolo, Key: KeySeparatePin, Gov: GovNone, Adv: AdvNone, Revoke: false},
+		// gate 5: a clean bundle, revoked.
+		{Cast: CastSolo, Key: KeySeparatePin, Gov: GovGreen, Adv: AdvNone, Revoke: true},
 	}
 }
 

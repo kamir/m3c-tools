@@ -197,7 +197,7 @@ func (rep Report) Write(w io.Writer) {
 		fmt.Fprintf(w, "  exit %-3d %d time(s)\n", c, exits[c])
 	}
 
-	rep.WriteQuarantine(w)
+	rep.WriteOpenDiagnostics(w)
 	rep.WriteExperiment(w)
 	rep.WriteMixture(w)
 
@@ -388,7 +388,12 @@ func (rep Report) WriteMixture(w io.Writer) {
 	}
 
 	if len(m.MissedGate) > 0 {
-		fmt.Fprintf(w, "\n  HOLES: declared gates this corpus never reached: %s\n", strings.Join(m.MissedGate, ", "))
+		fmt.Fprintf(w, "\n  HOLES: declared gates never seen BY NAME in this corpus: %s\n", strings.Join(m.MissedGate, ", "))
+		fmt.Fprintf(w, "  A gate can be absent from this list in two very different ways, and the\n")
+		fmt.Fprintf(w, "  distinction is worth a line: unreached, meaning no scenario produces the\n")
+		fmt.Fprintf(w, "  condition, or reached but unnamed, meaning the refusal happens and carries\n")
+		fmt.Fprintf(w, "  no label. Gate 3 is the second kind: the bundle IS refused, with exit 1 and\n")
+		fmt.Fprintf(w, "  an untouched install target, and the label is open under FR-0120.\n")
 		fmt.Fprintf(w, "  Each one is a decision the simulation currently says nothing about.\n")
 	} else {
 		fmt.Fprintf(w, "\n  every declared gate was reached at least once\n")
@@ -415,12 +420,12 @@ func max(a, b int) int {
 	return b
 }
 
-// WriteQuarantine names every adversary move held out of the blocking corpus by
-// an open finding. It prints on EVERY run, including green ones, because a
-// quarantine that stops being mentioned is indistinguishable from a capability
-// that was never built.
-func (rep Report) WriteQuarantine(w io.Writer) {
-	q := QuarantinedAdvKinds()
+// WriteOpenDiagnostics names every adversary move whose security behaviour is
+// scored but whose error LABEL is under an open finding. It prints on every run,
+// green ones included, because an exemption that stops being mentioned is
+// indistinguishable from a check that was never written.
+func (rep Report) WriteOpenDiagnostics(w io.Writer) {
+	q := OpenDiagnostics()
 	if len(q) == 0 {
 		return
 	}
@@ -429,17 +434,13 @@ func (rep Report) WriteQuarantine(w io.Writer) {
 		keys = append(keys, string(k))
 	}
 	sort.Strings(keys)
-	state := "EXCLUDED from this run"
-	if IncludeOpenFindings {
-		state = "INCLUDED in this run via -open"
-	}
-	fmt.Fprintf(w, "\nquarantined adversary moves (%d), %s\n", len(q), state)
+	fmt.Fprintf(w, "\nopen diagnostic findings (%d): the DECISION is scored, the LABEL is not\n", len(q))
 	for _, k := range keys {
 		fmt.Fprintf(w, "  %-22s %s\n", k, q[AdvKind(k)])
 	}
-	fmt.Fprintf(w, "  A quarantined move has been MEASURED and is waiting on a human decision,\n")
-	fmt.Fprintf(w, "  not on more code. It is out of the gate so the gate stays meaningful, and\n")
-	fmt.Fprintf(w, "  named here so the exclusion stays expensive.\n")
+	fmt.Fprintf(w, "  These moves stay in the blocking corpus. Refusal, exit code and the\n")
+	fmt.Fprintf(w, "  untouched install target are all still asserted; only the gate name is\n")
+	fmt.Fprintf(w, "  left uncompared until somebody rules on the finding.\n")
 }
 
 // Residual is the total disagreement between the closed form and the measurement,
@@ -478,6 +479,20 @@ func (rep Report) WriteExperiment(w io.Writer) {
 	}
 	pred := PredictHistogram(corpus)
 	obs := rep.MeasureHistogram()
+
+	fmt.Fprintf(w, "\nwhat each comparison is worth\n")
+	fmt.Fprintf(w, "  Three different test goals live in this report and they rest on different\n")
+	fmt.Fprintf(w, "  ground. Reading them as one number is how a characterisation test gets\n")
+	fmt.Fprintf(w, "  mistaken for a specification proof.\n")
+	fmt.Fprintf(w, "    may this bundle install?    SECURITY: independent requirement, binding\n")
+	fmt.Fprintf(w, "    which gate is reported?     CHARACTERISATION: SPEC-0188 declares the gates\n")
+	fmt.Fprintf(w, "                                but not their order, so the order below is read\n")
+	fmt.Fprintf(w, "                                off the binary. It detects a later change; it\n")
+	fmt.Fprintf(w, "                                does not show the behaviour is required (FR-0119)\n")
+	fmt.Fprintf(w, "    was anything written?       SIDE EFFECT: independent requirement, binding\n")
+	fmt.Fprintf(w, "  For a side-effect-free conjunction the order changes the first error LABEL,\n")
+	fmt.Fprintf(w, "  not the accept condition. Once a check processes data or writes, its order\n")
+	fmt.Fprintf(w, "  becomes security-relevant too, and INV-6 is what watches for that.\n")
 
 	fmt.Fprintf(w, "\nexperiment: analytical prediction vs measurement (pull outcomes)\n")
 	fmt.Fprintf(w, "  %-26s %9s %9s %9s\n", "bin", "predicted", "observed", "residual")

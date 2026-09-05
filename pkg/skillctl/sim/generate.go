@@ -116,27 +116,28 @@ func AllGovs() []Gov { return []Gov{GovGreen, GovYellow, GovNone} }
 // AllAdvKinds lists every adversary move the alphabet contains. Every statement
 // this package makes about unreachability is a statement about THIS list, which
 // is why it is exported and why the report prints it.
-// IncludeOpenFindings admits the adversary moves that are QUARANTINED: moves
-// whose measured behaviour is under an open finding, where the simulation has
-// observed something real but nobody has yet ruled whether the tool or the
-// specification should move.
+// OpenDiagnostics names adversary moves whose SECURITY behaviour is settled and
+// measured, but whose DIAGNOSTIC label is under an open finding.
 //
-// They are out of the blocking gate on purpose and they are NOT hidden: the
-// report names every quarantined move and its finding on every run, so the cost
-// of leaving one there keeps being paid in visibility. Turn them on with
-// `skillctl-sim run -open`, which is how the finding gets re-measured after a
-// decision.
+// The distinction was forced by an external reviewer on 2026-09-05, and he was
+// right in a way that mattered. The first attempt held the whole move out of the
+// blocking corpus because one thing about it was undecided. That removed, along
+// with the undecided label, three security assertions that were perfectly
+// decidable: the install is refused, the install target is untouched, and the
+// exit code is non-zero. Quarantining an attack because its error message is
+// unclear throws away the part that was working.
 //
-// The alternative was to teach the model to predict what the binary happens to
-// do, which would have made the gate green by fitting the theory to the
-// observation. That is the one move this whole framework exists to refuse.
-var IncludeOpenFindings bool
-
-// QuarantinedAdvKinds maps a quarantined move to the finding that holds it there.
-func QuarantinedAdvKinds() map[AdvKind]string {
+// So the exemption is now surgical. For a move listed here the simulation still
+// claims and scores the decision, and it declines to compare only the gate name,
+// with the finding printed on every run. Nothing else changes: the move sits in
+// the covering array, INV-6 checks that the refusal wrote nothing, and a
+// regression that turned the refusal into an acceptance would fail the gate like
+// any other.
+func OpenDiagnostics() map[AdvKind]string {
 	return map[AdvKind]string{
 		AdvPublisherBadSigs: "FR-0120: the pull refuses a bundle whose signature rows do not " +
-			"verify, correctly and with exit 1, but names no gate; SPEC-0188 §7 declares gate 3",
+			"verify, correctly and with exit 1, but names no gate; SPEC-0188 §7 declares gate 3. " +
+			"The DECISION is claimed and scored; only the label is left open",
 	}
 }
 
@@ -191,14 +192,19 @@ func meaningful(p Params) bool {
 	if needsRevoke && !p.Revoke {
 		return false
 	}
-	// INVARIANT R1, decided by the operator on 2026-09-05: a revoke presupposes a
-	// release. Nothing installs without governance, so a kill switch would have no
-	// subject. This is a statement about the PROCESS, not a convenience: it is why
-	// the three states 11001, 11011 and 11101 are never visited, and it belongs in
-	// the model rather than in a footnote on a poster.
-	if p.Revoke && p.Gov != GovGreen {
-		return false
-	}
+	// R1 IS GONE, and the reason is worth more than the rule was.
+	//
+	// It said: a revoke presupposes a release, because nothing installs without
+	// governance, so a kill switch would have no subject. An external reviewer
+	// pointed out on 2026-09-05 that this is false in the direction that matters.
+	// A digest that exists can be blocked PRE-EMPTIVELY, before anybody attests or
+	// installs it, and that is one of the more useful things a kill switch does.
+	//
+	// The rule was not merely unnecessary. It removed the region where a revoke
+	// competes with a missing release, which is exactly where a wrong answer would
+	// be expensive, and it did so under the name of a process invariant. Anything
+	// that keeps a corpus away from a contested area needs a better warrant than
+	// "we do not do it that way".
 	// A shared key cannot express "the reviewer key was not pinned": there is only
 	// one key, and it is the registry pin.
 	if p.Key == KeyShared && p.Adv == AdvForgeAttest {
@@ -224,11 +230,6 @@ func meaningful(p Params) bool {
 	// Same shape as R2 and for the same reason: the interesting question is which
 	// gate speaks, not how many ways the other axes can fail first.
 	if p.Adv == AdvPublisherBadSigs && (p.Gov != GovGreen || p.Key != KeySeparatePin) {
-		return false
-	}
-	// Quarantined moves stay out of the blocking corpus until their finding is
-	// decided. The report says which ones and why, every run.
-	if _, open := QuarantinedAdvKinds()[p.Adv]; open && !IncludeOpenFindings {
 		return false
 	}
 	// The transit attacks are about the publisher's own discipline; the governance
@@ -416,6 +417,12 @@ func build(p Params) Scenario {
 	})
 
 	ok, gate, why := installExpected(p)
+	// An open DIAGNOSTIC finding suppresses the label comparison and nothing else.
+	// judge() only compares Gate when it is non-empty, so clearing it leaves the
+	// outcome and the exit code fully claimed and fully scored.
+	if note, open := OpenDiagnostics()[p.Adv]; open {
+		gate, why = "", note
+	}
 	pullExpect := Expectation{Outcome: Accept, Exit: 0, Claimed: true, Why: why}
 	if !ok {
 		pullExpect = Expectation{Outcome: Refuse, Gate: gate, Exit: 1, Claimed: true, Why: why}
@@ -493,11 +500,37 @@ func build(p Params) Scenario {
 			// a turn: assuming otherwise is exactly the mistake this function used
 			// to make.
 			_, g2 := StateAt(p, true).Decide()
+			gate2, why2 := g2, whyGate(g2, p)
+			if note, open := OpenDiagnostics()[p.Adv]; open {
+				gate2, why2 = "", note
+			}
 			sc.Steps = append(sc.Steps, Step{
 				Action: Action{Kind: ActPull, Actor: Consumer, Skill: skill},
-				Expect: Expectation{Outcome: Refuse, Gate: g2, Exit: 1, Claimed: true,
-					Why: whyGate(g2, p)},
+				Expect: Expectation{Outcome: Refuse, Gate: gate2, Exit: 1, Claimed: true,
+					Why: why2},
 			})
+		}
+
+		// THE TEMPORAL CASE, requested by an external reviewer on 2026-09-05 and
+		// the reason R1 had to go: revoke first, attest AFTERWARDS, pull again.
+		//
+		// A revoke is a statement about a digest, not about a moment. An attestation
+		// that arrives later must not resurrect it, and nothing in the gate order
+		// says so on its own: gate 5 runs before gate 4, so the only way this can go
+		// wrong is if a fresh attestation somehow clears the revocation state. That
+		// is a question about how the two records combine over TIME, which no
+		// single-shot scenario asks.
+		if p.Adv == AdvNone {
+			sc.Steps = append(sc.Steps,
+				Step{Action: Action{Kind: ActAttest, Actor: Reviewer, Skill: skill,
+					Params: map[string]string{"level": string(GovGreen)}},
+					Expect: Expectation{Outcome: Accept, Exit: 0, Claimed: true,
+						Why: "posting an attestation is never gated; it is worth what the pull says it is worth"}},
+				Step{Action: Action{Kind: ActPull, Actor: Consumer, Skill: skill},
+					Expect: Expectation{Outcome: Refuse, Gate: "gate 5", Exit: 1, Claimed: true,
+						Why: "SPEC-0188 §7: a revoke is bound to a digest and outlives any later attestation; " +
+							"governance is not even consulted"}},
+			)
 		}
 	}
 	return sc

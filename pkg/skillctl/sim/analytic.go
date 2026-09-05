@@ -154,6 +154,11 @@ func StateAt(p Params, afterRevoke bool) State {
 	return s
 }
 
+// BinLabelOpen is the outcome bin for a refusal whose gate name is under an open
+// diagnostic finding. It exists so that a question about a LABEL cannot show up
+// as a residual, which is a claim about BEHAVIOUR.
+const BinLabelOpen = "refuse, label open"
+
 // PredictHistogram is the analytical result: how many pulls in a corpus end at
 // each outcome, computed from the theory alone. Nothing is executed.
 func PredictHistogram(corpus []Scenario) map[string]int {
@@ -166,11 +171,22 @@ func PredictHistogram(corpus []Scenario) map[string]int {
 				pulls++
 			}
 		}
+		_, labelOpen := OpenDiagnostics()[sc.P.Adv]
 		for i := 0; i < pulls; i++ {
 			accept, g := StateAt(sc.P, i > 0).Decide()
-			if accept {
+			switch {
+			case accept:
 				h["accept"]++
-			} else {
+			case labelOpen:
+				// The decision is predicted and compared; the LABEL is under an
+				// open finding, so both sides bin it the same way rather than
+				// scoring a disagreement about a name as a disagreement about
+				// behaviour. Binning it as "gate 3" would have manufactured a
+				// residual out of a naming question, and binning it as whatever
+				// the binary happens to print would have fitted the theory to the
+				// observation. This third bin says what is actually known.
+				h[BinLabelOpen]++
+			default:
 				h[g]++
 			}
 		}
@@ -186,9 +202,12 @@ func (rep Report) MeasureHistogram() map[string]int {
 			if s.Step.Action.Kind != ActPull {
 				continue
 			}
+			_, labelOpen := OpenDiagnostics()[r.Scenario.P.Adv]
 			switch {
 			case s.Outcome == Accept:
 				h["accept"]++
+			case labelOpen:
+				h[BinLabelOpen]++
 			case s.Gate != "":
 				h[s.Gate]++
 			default:

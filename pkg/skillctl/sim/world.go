@@ -432,10 +432,27 @@ func flipByte(path string, off int64) error {
 // printed.
 type InstallSnapshot struct {
 	Files map[string]string // path relative to the skills root -> sha256 hex
+
+	// Err is set when the reading itself failed: a directory that exists but
+	// cannot be walked, an entry that cannot be hashed. It is NOT set for an
+	// absent skills root, which is a real and expected state before the first
+	// install.
+	//
+	// The distinction is the whole point. The first version treated an unreadable
+	// entry as an absent one, so two failed readings compared equal and INV-6
+	// concluded "nothing changed" from having measured nothing twice. An external
+	// reviewer named it on 2026-09-05: an unexpected measurement error has to
+	// produce NOT EVALUABLE and stop the run, never a quiet pass.
+	Err string
 }
 
 // Equal reports whether two snapshots describe the same bytes on disk.
 func (s InstallSnapshot) Equal(o InstallSnapshot) bool {
+	// A snapshot that failed to read is never equal to anything, including another
+	// failed snapshot. "We could not look, twice" is not evidence of sameness.
+	if s.Err != "" || o.Err != "" {
+		return false
+	}
 	if len(s.Files) != len(o.Files) {
 		return false
 	}
@@ -488,24 +505,48 @@ func (s InstallSnapshot) Describe(o InstallSnapshot) string {
 func (w *World) SnapshotInstall() InstallSnapshot {
 	root := filepath.Join(w.consumerHome, ".claude", "skills")
 	snap := InstallSnapshot{Files: map[string]string{}}
-	_ = filepath.Walk(root, func(p string, fi os.FileInfo, err error) error {
-		if err != nil || fi == nil || fi.IsDir() {
-			return nil //nolint:nilerr // an unreadable entry is absence, not a harness failure
+
+	// An absent root is the empty snapshot and nothing is wrong: that is the state
+	// before the first install. Anything else that goes wrong while reading is a
+	// failure to measure, and it is recorded as one.
+	if _, err := os.Stat(root); err != nil {
+		if !os.IsNotExist(err) {
+			snap.Err = "install root not readable: " + err.Error()
+		}
+		return snap
+	}
+
+	werr := filepath.Walk(root, func(p string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return fmt.Errorf("walk %s: %w", p, err)
+		}
+		if fi == nil || fi.IsDir() {
+			return nil
 		}
 		rel, rerr := filepath.Rel(root, p)
 		if rerr != nil {
+			return fmt.Errorf("relpath %s: %w", p, rerr)
+		}
+		if fi.Mode()&os.ModeSymlink != 0 {
+			// Record the link itself rather than following it: a snapshot that
+			// silently resolves links can be told that nothing changed by an
+			// attacker who only moved a target.
+			snap.Files[filepath.ToSlash(rel)] = "symlink"
 			return nil
 		}
 		// #nosec G304 -- p comes from Walk over a directory this process created
 		// inside its own throwaway root; there is no user-supplied path here.
 		b, rerr := os.ReadFile(p)
 		if rerr != nil {
-			return nil
+			return fmt.Errorf("read %s: %w", p, rerr)
 		}
 		sum := sha256.Sum256(b)
 		snap.Files[filepath.ToSlash(rel)] = hex.EncodeToString(sum[:])
 		return nil
 	})
+	if werr != nil {
+		snap.Err = werr.Error()
+	}
 	return snap
 }
 
@@ -516,22 +557,126 @@ func (w *World) SnapshotInstall() InstallSnapshot {
 // It returns false when nothing is installed, which is why the invariant that
 // uses it fires only after an accepted pull.
 func (w *World) InstalledDigestMatches(skill string) (bool, string) {
-	b := w.bundles[skill]
-	if b == nil {
-		return false, "nothing packed"
-	}
-	p := filepath.Join(w.consumerHome, ".claude", "skills", skill, "SKILL.md")
-	// #nosec G304 -- path is built from the harness's own throwaway home.
-	got, err := os.ReadFile(p)
+	want, err := w.SourceManifest(skill)
 	if err != nil {
-		return false, "no installed SKILL.md: " + err.Error()
+		return false, "source manifest unreadable: " + err.Error()
 	}
-	src, err := os.ReadFile(filepath.Join(w.Root, "src", skill, "SKILL.md"))
-	if err != nil {
-		return false, "source unreadable: " + err.Error()
+	got := w.installedManifest(skill)
+	if got.Err != "" {
+		return false, "NOT EVALUABLE: " + got.Err
 	}
-	if sha256.Sum256(got) != sha256.Sum256(src) {
-		return false, "installed bytes differ from the packed source"
+
+	var missing, differing, extra []string
+	for path, sum := range want {
+		switch g, ok := got.Files[path]; {
+		case !ok:
+			missing = append(missing, path)
+		case g != sum:
+			differing = append(differing, path)
+		}
+	}
+	for path := range got.Files {
+		if _, ok := want[path]; ok {
+			continue
+		}
+		if installSidecars[path] {
+			continue
+		}
+		extra = append(extra, path)
+	}
+	sort.Strings(missing)
+	sort.Strings(differing)
+	sort.Strings(extra)
+
+	var parts []string
+	if len(missing) > 0 {
+		parts = append(parts, "missing "+strings.Join(missing, ","))
+	}
+	if len(differing) > 0 {
+		parts = append(parts, "wrong bytes in "+strings.Join(differing, ","))
+	}
+	if len(extra) > 0 {
+		parts = append(parts, "unexpected "+strings.Join(extra, ","))
+	}
+	if len(parts) > 0 {
+		return false, strings.Join(parts, "; ")
 	}
 	return true, ""
+}
+
+// installSidecars are the files the install itself writes into the skill
+// directory, on top of the packed content. They are listed by name rather than
+// tolerated by a pattern, so a file that is genuinely unexpected still fails.
+//
+// Measuring them was not planned. The manifest check was written to catch a
+// missing file, and the first run reported five "unexpected" ones, which turned
+// out to be the provenance sidecar, the attestation, the checksums, the bundle
+// metadata and the .skb the verifier needs later. That is the check doing its
+// job: it described the install more completely than the person who wrote it
+// could, and the correct response was to write down what belongs there.
+var installSidecars = map[string]bool{
+	"bundle.json":            true,
+	"CHECKSUMS":              true,
+	"simskill.skb":           true,
+	".m3c-provenance.json":   true,
+	".skillctl-attest.json":  true,
+	".skillctl-install.json": true,
+	".skillctl-provenance":   true,
+}
+
+// SourceManifest is the set of paths and hashes the packed skill consists of,
+// taken from the source tree BEFORE anything is published.
+//
+// It replaces a single-file comparison that checked only SKILL.md against its
+// source. That check was useful for the small test artifact and it was named as
+// if it proved more: an external reviewer pointed out on 2026-09-05 that it
+// verified neither the complete installed file set nor its binding to the signed
+// bundle. A file that goes missing, and a file that appears which nobody signed,
+// both passed it. The manifest catches both directions.
+//
+// What it still does NOT do is verify against the bundle's own signed manifest.
+// The source tree is the harness's own record, so this is an independent reading
+// of the install, not a cryptographic one. That gap is named rather than papered
+// over, and closing it means reading the .skb.
+func (w *World) SourceManifest(skill string) (map[string]string, error) {
+	root := filepath.Join(w.Root, "src", skill)
+	out := map[string]string{}
+	err := filepath.Walk(root, func(p string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if fi == nil || fi.IsDir() {
+			return nil
+		}
+		rel, rerr := filepath.Rel(root, p)
+		if rerr != nil {
+			return rerr
+		}
+		// #nosec G304 -- the harness's own source tree inside its throwaway root.
+		b, rerr := os.ReadFile(p)
+		if rerr != nil {
+			return rerr
+		}
+		sum := sha256.Sum256(b)
+		out[filepath.ToSlash(rel)] = hex.EncodeToString(sum[:])
+		return nil
+	})
+	return out, err
+}
+
+// installedManifest reads what is actually under the consumer's skill directory,
+// with the same not-evaluable discipline as SnapshotInstall.
+func (w *World) installedManifest(skill string) InstallSnapshot {
+	full := w.SnapshotInstall()
+	if full.Err != "" {
+		return full
+	}
+	out := InstallSnapshot{Files: map[string]string{}}
+	prefix := skill + "/"
+	for path, sum := range full.Files {
+		if strings.HasPrefix(path, prefix) {
+			out.Files[strings.TrimPrefix(path, prefix)] = sum
+		}
+	}
+	return out
 }
