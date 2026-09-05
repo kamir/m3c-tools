@@ -321,7 +321,12 @@ type finishOpts struct {
 func finishInstall(o finishOpts) (*Result, error) {
 	// ----- extract -----
 	extractDir := filepath.Join(o.stagingDir, "extracted")
-	if err := os.MkdirAll(extractDir, 0o755); err != nil {
+	// 0750, not 0755. Nothing outside this user needs to traverse a staging
+	// directory, and the world-execute bit was never justified: it was simply the
+	// default anyone reaches for. gosec G301 was already flagging it before this
+	// code moved; the move is what surfaced it, and tightening it is cheaper than
+	// carrying it in a baseline.
+	if err := os.MkdirAll(extractDir, 0o750); err != nil {
 		return nil, fmt.Errorf("install: mkdir extract dir: %w", err)
 	}
 	cap := o.maxBytes
@@ -354,7 +359,10 @@ func finishInstall(o finishOpts) (*Result, error) {
 	// re-fetching from the registry. We copy bytes (rather than rename
 	// the staged file) because the staging dir is about to be removed.
 	stashedSkb := filepath.Join(target, filepath.Base(o.blobPath))
-	if err := os.WriteFile(stashedSkb, o.blob, 0o644); err != nil {
+	// 0600 for the same reason: the stashed .skb exists so THIS user's later
+	// `verify <name>` can recompute the digest without a registry call. No other
+	// principal reads it. Pre-existing G306, tightened rather than baselined.
+	if err := os.WriteFile(stashedSkb, o.blob, 0o600); err != nil {
 		return nil, fmt.Errorf("install: stash .skb in target: %w", err)
 	}
 
