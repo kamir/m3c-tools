@@ -229,9 +229,9 @@ func (rep Report) WriteTraceability(w io.Writer) {
 			fmt.Fprintf(w, "  %-18s %-12s %-9s   ^ %s\n", "", "", "", it.Note)
 		}
 	}
-	fmt.Fprintf(w, "  normativ = in einer SPEC; abgeleitet = hergeleitet, Herleitung ist Teil der\n")
-	fmt.Fprintf(w, "  Evidenz; uebernommen = bindet hier, hat aber keine Klausel hinter sich;\n")
-	fmt.Fprintf(w, "  Evidenz; beobachtet = aus dem Verhalten gewonnen, ein Fehlschlag heisst\n")
+	fmt.Fprintf(w, "  normativ = in einer SPEC; abgeleitet = hergeleitet, die Herleitung ist Teil\n")
+	fmt.Fprintf(w, "  der Evidenz; uebernommen = bindet hier, hat aber keine Klausel hinter sich;\n")
+	fmt.Fprintf(w, "  beobachtet = aus dem Verhalten gewonnen, ein Fehlschlag heisst\n")
 	fmt.Fprintf(w, "  GEAENDERT und nicht FALSCH; ungeklaert = wird geprueft, Bedeutung offen.\n")
 	fmt.Fprintf(w, "  Eine Zeile mit normativer Quelle und null Beobachtungen ist DEKLARIERT,\n")
 	fmt.Fprintf(w, "  nicht geprueft.\n")
