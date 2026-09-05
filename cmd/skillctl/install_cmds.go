@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/skillctl/auditevent"
 	"github.com/kamir/m3c-tools/pkg/skillctl/install"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
@@ -38,7 +39,7 @@ import (
 // builds the registry client, and runs install.Install.
 //
 // Returns the SPEC-0188 §11 numeric exit code on failure; 0 on success.
-func runInstall(args []string, stdout, stderr io.Writer) int {
+func runInstall(args []string, stdout, stderr io.Writer) (code int) {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
@@ -89,6 +90,28 @@ func runInstall(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 
+	// SPEC-0406 AC-07: emit exactly one lifecycle audit event for this run, on
+	// EVERY path that reached a trust decision. A single deferred emitter rather
+	// than a call at each return, because the returns are many and one forgotten
+	// branch is a silently missing record, which is the failure mode this whole
+	// feature exists to prevent.
+	//
+	// Registered here, after the name resolves, so a usage error never reaches
+	// it: a mistyped command is not a trust decision and does not belong in an
+	// evidence log. Fire-and-forget, so nothing below can change `code`.
+	var audErr error
+	var audDigest string
+	defer func() {
+		appendLifecycleEvent(auditHomeOf(*homeOverride), auditevent.LifecycleEvent{
+			Op:       auditevent.OpInstall,
+			Skill:    name,
+			Version:  version,
+			Digest:   audDigest,
+			Reason:   lifecycleReasonFor(code, audErr),
+			ExitCode: code,
+		})
+	}()
+
 	tr, root, err := loadAndPickRoot(*registryURL)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -130,9 +153,11 @@ func runInstall(args []string, stdout, stderr io.Writer) int {
 		Ctx:           context.Background(),
 	})
 	if err != nil {
+		audErr = err
 		fmt.Fprintln(stderr, err)
 		return verify.ExitCode(err)
 	}
+	audDigest = res.Verify.Digest
 
 	// One-line chain summary on success, plus the install path so the
 	// user can find what just landed.
@@ -153,7 +178,7 @@ func runInstall(args []string, stdout, stderr io.Writer) int {
 // `--all` switches to the SPEC-0247 P0.2 sweep (runVerifyAll): verify every
 // installed skill, optionally quarantining trust-failures. Detected before
 // flag parsing because the sweep takes a different flag set.
-func runVerify(args []string, stdout, stderr io.Writer) int {
+func runVerify(args []string, stdout, stderr io.Writer) (code int) {
 	for _, a := range args {
 		if a == "--" {
 			break
@@ -237,6 +262,25 @@ func runVerify(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 
+	// SPEC-0406 AC-07, the verify half. Same single-deferred-emitter reasoning as
+	// runInstall: verify has more return paths than install (sidecar tier,
+	// offline, online), and each one is a trust verdict a reader may later need.
+	//
+	// Re-verification is where AC-06 lives: a skill that was installed cleanly
+	// and tampered with afterwards is caught HERE, and without this event that
+	// detection left no trace at all.
+	var audErr error
+	var audDigest string
+	defer func() {
+		appendLifecycleEvent(auditHomeOf(*homeOverride), auditevent.LifecycleEvent{
+			Op:       auditevent.OpVerify,
+			Skill:    name,
+			Digest:   audDigest,
+			Reason:   lifecycleReasonFor(code, audErr),
+			ExitCode: code,
+		})
+	}()
+
 	// FR-0116: the HTTP trust-roots file is only ONE of the two carriers. A skill
 	// pulled from a self/ER1 or a git registry is anchored by
 	// ~/.claude/trust-roots.yaml or by a pinned peer, and it carries the signed
@@ -276,9 +320,11 @@ func runVerify(args []string, stdout, stderr io.Writer) int {
 			Ctx:           context.Background(),
 		})
 		if err != nil {
+			audErr = err
 			fmt.Fprintln(stderr, err)
 			return verify.ExitCode(err)
 		}
+		audDigest = res.Digest
 		fmt.Fprintln(stdout, res.ChainSummary+" (offline)")
 		return exitOK
 	}
@@ -298,9 +344,11 @@ func runVerify(args []string, stdout, stderr io.Writer) int {
 		Ctx:           context.Background(),
 	})
 	if err != nil {
+		audErr = err
 		fmt.Fprintln(stderr, err)
 		return verify.ExitCode(err)
 	}
+	audDigest = res.Digest
 	fmt.Fprintln(stdout, res.ChainSummary)
 	return exitOK
 }
@@ -455,4 +503,19 @@ func verifySidecarTier(name, homeOverride, governanceMin string, verbose bool, s
 	fmt.Fprintf(stdout, "%s: content bound to the signed bundle, governance %s, anchored on %s (offline)\n",
 		name, strOr(side.GovernanceLevel, "unknown"), src)
 	return exitOK, true
+}
+
+// auditHomeOf resolves the root the lifecycle audit log lives under: the
+// --home override when given, else the user's home. An unresolvable home
+// returns "", which appendLifecycleEvent treats as "nowhere to write" and
+// skips. Never returns an error: a missing home must not affect a decision.
+func auditHomeOf(override string) string {
+	if override != "" {
+		return override
+	}
+	h, err := userHome()
+	if err != nil {
+		return ""
+	}
+	return h
 }
