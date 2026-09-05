@@ -50,6 +50,10 @@ func main() {
 	case "login":
 		os.Exit(runLogin(os.Args[2:], os.Stdout, os.Stderr))
 	// === END FR-0043 ===
+	// === SPEC-0406 D1: environment readiness in one command ===
+	case "doctor":
+		os.Exit(runDoctor(os.Args[2:], os.Stdout, os.Stderr))
+	// === END SPEC-0406 D1 ===
 	case "version", "--version", "-v":
 		fmt.Println(version)
 		os.Exit(0)
