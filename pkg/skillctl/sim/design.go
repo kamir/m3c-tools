@@ -162,7 +162,7 @@ func CoveringArray(t int) ([]Params, CoverageStats) {
 	// matter how the rest of the space is sampled, which is the difference between
 	// a corpus that covers its inputs and one that can see its outputs.
 	var chosen []Params
-	for _, sp := range gateSeeds() {
+	for _, sp := range append(gateSeeds(), specSeeds()...) {
 		for i, c := range candidates {
 			if c == sp {
 				chosen = append(chosen, c)
@@ -224,6 +224,22 @@ func gateSeeds() []Params {
 		{Cast: CastSolo, Key: KeySeparatePin, Gov: GovNone, Adv: AdvNone, Revoke: false},
 		// gate 5: a clean bundle, revoked.
 		{Cast: CastSolo, Key: KeySeparatePin, Gov: GovGreen, Adv: AdvNone, Revoke: true},
+	}
+}
+
+// specSeeds are points for SPECIFIED checks that the five-bit state vector does
+// not represent, and which therefore cannot be reached through gateSeeds.
+//
+// SPEC-0188 §7 step 8 is the first of them: the CHECKSUMS file inside the bundle.
+// Without a seed the covering array selected only rows where governance already
+// failed, so the check never got a turn and the test case existed without ever
+// being exercised. That is the same trap the gate seeds exist for, one level up:
+// covering the inputs does not cover the outcomes.
+func specSeeds() []Params {
+	return []Params{
+		// SPEC-0188 §7 step 8: everything outside the bundle is correct, so only the
+		// internal manifest can decide.
+		{Cast: CastSolo, Key: KeySeparatePin, Gov: GovGreen, Adv: AdvStaleChecksums, Revoke: false},
 	}
 }
 

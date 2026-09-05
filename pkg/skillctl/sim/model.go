@@ -65,6 +65,7 @@ const (
 	ActTamperTransit    ActionKind = "adv:tamper-transit"      // flip bytes in the .skb before the victim sees it
 	ActLyingSignature   ActionKind = "adv:lying-signature"     // flip bytes AND rename the sig to match the new digest
 	ActWithholdArtifact ActionKind = "probe:withhold-artifact" // remove the stored .skb, keep every signed event
+	ActStaleChecksums   ActionKind = "adv:stale-checksums"     // alter a payload file, leave the bundle CHECKSUMS stale, re-sign
 	ActForgeAttest      ActionKind = "adv:forge-attest"        // attest with a key nobody pinned
 	ActTamperInstalled  ActionKind = "adv:tamper-installed"    // edit an installed file (same-uid, post-install)
 	ActStripRevoke      ActionKind = "adv:strip-revoke"        // hostile registry deletes the revoke event

@@ -85,6 +85,12 @@ const (
 	// the bytes, while every signed event stays in place. It is how FR-0119 D3
 	// becomes measurable from outside the process. See WithholdArtifact.
 	AdvArtifactWithheld AdvKind = "artifact-withheld"
+
+	// AdvStaleChecksums is the test case for SPEC-0188 §7 step 8, which had none.
+	// Everything outside the bundle is correct: the digest matches, the signature
+	// verifies, the governance holds. Inside, the bundle's own manifest of file
+	// hashes no longer describes its contents.
+	AdvStaleChecksums AdvKind = "stale-checksums"
 )
 
 // Params is one point in the corpus.
@@ -151,6 +157,7 @@ func AllAdvKinds() []AdvKind {
 		AdvNone, AdvTransitChecked, AdvTransitSkipped, AdvStoredBundle,
 		AdvForgeAttest, AdvStripRevoke, AdvRelabelRevoke, AdvTamperInstalled,
 		AdvStolenKey, AdvForgeEnvelope, AdvPublisherBadSigs, AdvArtifactWithheld,
+		AdvStaleChecksums,
 	}
 }
 
@@ -273,6 +280,21 @@ func build(p Params) Scenario {
 				Expect: Expectation{Outcome: NoEffect, Exit: -1, Claimed: true,
 					Why: "the attacker controls the artifact, not the key"}},
 		)
+	case AdvStaleChecksums:
+		// BEFORE the admit, so the admitted digest is the digest of the altered
+		// bundle. Everything outside then holds: the recomputed digest matches, the
+		// signature verifies, the attestation is bound to what was admitted. The
+		// only defect is internal, which is the whole point of SPEC-0188 §7 step 8.
+		//
+		// Placing it after the admit, as the first attempt did, produced a different
+		// scenario altogether: the attestation stayed bound to the pre-change digest
+		// and the pull died at governance, so the case under test was never reached.
+		// The run said so immediately, with a conflict naming the wrong gate.
+		sc.Steps = append(sc.Steps,
+			Step{Action: Action{Kind: ActStaleChecksums, Actor: Adversary, Skill: skill},
+				Expect: Expectation{Outcome: NoEffect, Exit: -1, Claimed: true,
+					Why: "the bundle stays properly signed; only its internal manifest goes stale"}},
+		)
 	case AdvPublisherBadSigs:
 		// The bundle keeps a signature FILE with the right name, so the verifier
 		// finds one and has to do real cryptography to reject it. That is the
@@ -366,6 +388,16 @@ func build(p Params) Scenario {
 	// signal standing for two causes and turned out to be describing this bug rather
 	// than the product.
 	pullExpect := Expectation{Outcome: Accept, Exit: 0, Claimed: true, Why: why}
+	// SPEC-0188 §7 step 8 asserts a check the five-bit state vector does not
+	// represent: the CHECKSUMS file INSIDE the bundle. So this expectation comes
+	// straight from the clause rather than from the model, and the traceability
+	// matrix says so. A specified check with no representation in the abstract
+	// model is exactly what the backwards pass exists to surface.
+	if p.Adv == AdvStaleChecksums && ok {
+		pullExpect = Expectation{Outcome: Refuse, Exit: 1, Claimed: true,
+			Why: "SPEC-0188 §7 step 8: the CHECKSUMS file inside the bundle is verified " +
+				"after extraction, and any failure in steps 3 to 8 means no write"}
+	}
 	if !ok {
 		pullExpect = Expectation{Outcome: Refuse, Gate: gate, Exit: 1, Claimed: true, Why: why}
 	}

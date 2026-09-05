@@ -97,13 +97,14 @@ type TheoryReport struct {
 	Decided     int
 	Accepting   []string
 	Findings    []TheoryFinding
-	Reachable   map[string]bool
+	Reachable   map[string]bool // the CORPUS can produce it
+	Producible  map[string]bool // the WORLD can produce it, corpus rules aside
 	Unreachable []string
 }
 
 // CheckTheory runs the four questions over the complete state space.
 func CheckTheory(corpus []Scenario) TheoryReport {
-	rep := TheoryReport{Reachable: map[string]bool{}}
+	rep := TheoryReport{Reachable: map[string]bool{}, Producible: map[string]bool{}}
 
 	for _, s := range AllStates() {
 		rep.Total++
@@ -145,8 +146,31 @@ func CheckTheory(corpus []Scenario) TheoryReport {
 		}
 	}
 
-	// 3. REACHABILITY. Which states can the action alphabet produce at all?
+	// 3. REACHABILITY, and it is two questions that were one until 2026-09-05.
+	//
+	// An IEEE 1012 reviewer showed that the classification could only ever return
+	// one answer: reachability was computed over the full factor space, and so was
+	// the classifier, so an unreachable state had no producing point by
+	// construction and every one came out as "no move in the alphabet". The other
+	// two classes were dead code and the summary line was a tautology dressed as a
+	// measurement.
+	//
+	// The two questions are different and both matter:
+	//
+	//	producible by the WORLD  the alphabet can make it, if no corpus rule says no
+	//	reachable by the CORPUS  a point the corpus actually admits makes it
+	//
+	// A state the world can produce and the corpus excludes is neither impossible
+	// nor an oversight; it is a decision, and it is the class the reviewer asked to
+	// see separately.
 	for _, p := range allParams() {
+		rep.Producible[StateAt(p, false).Key()] = true
+		if p.Revoke {
+			rep.Producible[StateAt(p, true).Key()] = true
+		}
+		if !meaningful(p) {
+			continue
+		}
 		rep.Reachable[StateAt(p, false).Key()] = true
 		if p.Revoke {
 			rep.Reachable[StateAt(p, true).Key()] = true
@@ -355,8 +379,6 @@ type UnreachReason struct {
 // which is a statement about the world that this enumeration cannot make. If such
 // a claim is wanted it belongs in a specification, where it can be reviewed.
 func ClassifyUnreachable(rep TheoryReport) []UnreachReason {
-	// Which points of the full space produce which state, and whether any of them
-	// is admissible.
 	producedBy := map[string][]Params{}
 	for _, p := range allParams() {
 		producedBy[StateAt(p, false).Key()] = append(producedBy[StateAt(p, false).Key()], p)
@@ -374,23 +396,23 @@ func ClassifyUnreachable(rep TheoryReport) []UnreachReason {
 					"has no move that produces this combination"})
 			continue
 		}
-		// Every producing point is excluded. Name the rule, and say which kind it is.
+		// The world can produce it and the corpus does not. Name the rule and its
+		// kind, preferring an impossibility over an economy cut as the reason.
 		rule, kind := "", ExclusionKind("")
 		for _, p := range points {
 			if ex := excludedBy(p); ex != nil {
-				rule, kind = ex.Rule, ex.Kind
-				if ex.Kind == KindImpossible {
-					break // an impossibility outranks an economy cut as the reason
+				if kind != KindImpossible {
+					rule, kind = ex.Rule, ex.Kind
 				}
 			}
 		}
 		if kind == KindImpossible {
 			out = append(out, UnreachReason{k, "rule-impossible",
-				"produced only by points the world cannot realise: " + rule})
+				"the world cannot realise the points that would produce it: " + rule})
 		} else {
 			out = append(out, UnreachReason{k, "rule-economy",
-				"produced by points the world CAN realise, left out of the corpus by: " + rule +
-					". This is a judgement, not a property"})
+				"the world CAN produce it; the corpus leaves it out by: " + rule +
+					". A judgement, not a property"})
 		}
 	}
 	return out
