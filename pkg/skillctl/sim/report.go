@@ -15,6 +15,18 @@ type Report struct {
 	Results  []ScenarioResult
 	BinaryID string         // sha256 prefix of the binary under test (EV-1)
 	Design   *CoverageStats // set when the corpus came from a covering array
+
+	// Provenance. ISO/IEC/IEEE 29119-3 wants a test report to identify the items
+	// under test with their versions, the environment and the configuration. The
+	// terminal output carried three hashes; the Markdown export, which is the
+	// artifact a release would keep, carried none of it. An external reviewer read
+	// a branch on which the documented commands did not exist. The fix is not more
+	// hashes, it is naming the commit.
+	Commit     string
+	BinaryPath string
+	Platform   string
+	StartedAt  string
+	Config     string
 }
 
 // Summary counts the verdicts.
@@ -197,6 +209,10 @@ func (rep Report) Write(w io.Writer) {
 		fmt.Fprintf(w, "  exit %-3d %d time(s)\n", c, exits[c])
 	}
 
+	rep.WriteProvenance(w)
+	rep.WriteStanding(w)
+	rep.WriteTraceability(w)
+	rep.WriteOutputCoverage(w)
 	rep.WriteOpenDiagnostics(w)
 	rep.WriteExperiment(w)
 	rep.WriteMixture(w)
@@ -243,7 +259,26 @@ func (rep Report) Markdown() string {
 	var b strings.Builder
 	match, conflict, unclaimed, skipped := rep.Summary()
 	gates, _ := rep.Coverage()
-	fmt.Fprintf(&b, "# skillctl trust-plane simulation\n\n")
+	fmt.Fprintf(&b, "# skillctl trust-plane verification run\n\n")
+
+	// The heading says verification, not validation, and that is the first thing a
+	// reader should see. IEEE 1012 separates conformance to specified requirements
+	// from fitness for the intended use; this document produces the first kind of
+	// evidence only. It used to be titled "simulation" and read as if it produced
+	// both.
+	fmt.Fprintf(&b, "> **Scope: verification, not validation.** This run compares the shipped\n")
+	fmt.Fprintf(&b, "> binary against a model derived from SPEC-0188 and SPEC-0359, and calibrates\n")
+	fmt.Fprintf(&b, "> its own ability to see a defect. It says nothing about fitness for the\n")
+	fmt.Fprintf(&b, "> intended use, the operational environment (github://, gitlab://, ER1,\n")
+	fmt.Fprintf(&b, "> Windows), human understanding of the output, or field failure rates.\n")
+	fmt.Fprintf(&b, "> Integrity level claimed: **high**. Independence: **none**, one author read\n")
+	fmt.Fprintf(&b, "> the specification, built the model, wrote the oracle and produced this report.\n\n")
+
+	fmt.Fprintf(&b, "## Provenance\n\n| | |\n|---|---|\n")
+	for _, kv := range rep.Provenance() {
+		fmt.Fprintf(&b, "| %s | `%s` |\n", kv[0], kv[1])
+	}
+	fmt.Fprintf(&b, "\n## Result\n\n")
 	fmt.Fprintf(&b, "| | |\n|---|---|\n")
 	fmt.Fprintf(&b, "| scenarios | %d |\n", len(rep.Results))
 	fmt.Fprintf(&b, "| steps matched | %d |\n", match)
@@ -259,6 +294,70 @@ func (rep Report) Markdown() string {
 		}
 		fmt.Fprintf(&b, "\n")
 	}
+	// Traceability. The table an IEEE 1012 reviewer asks for first: every claim
+	// with its origin and whether this run exercised it.
+	fmt.Fprintf(&b, "## Traceability\n\n")
+	fmt.Fprintf(&b, "`normativ` = written in a specification · `abgeleitet` = derived, and the\n")
+	fmt.Fprintf(&b, "derivation is part of the evidence · `beobachtet` = read off the running\n")
+	fmt.Fprintf(&b, "system, so a failure means CHANGED and not WRONG · `ungeklaert` = checked,\n")
+	fmt.Fprintf(&b, "meaning still open.\n\n")
+	fmt.Fprintf(&b, "| claim | provenance | observed | source | note |\n|---|---|---|---|---|\n")
+	gv := map[string]int{}
+	for _, v := range rep.Violations() {
+		for _, item := range TraceMatrix() {
+			if strings.Contains(v, item.ID) {
+				gv[item.ID]++
+				break
+			}
+		}
+	}
+	for _, it := range TraceMatrix() {
+		obs := "n/a"
+		if n, ok := gates[it.ID]; ok {
+			obs = fmt.Sprintf("%d", n)
+		} else if strings.HasPrefix(it.ID, "gate ") {
+			obs = "0"
+		} else if strings.HasPrefix(it.ID, "INV-") {
+			obs = fmt.Sprintf("%d viol", gv[it.ID])
+		}
+		note := it.Note
+		if note == "" {
+			note = "n/a"
+		}
+		fmt.Fprintf(&b, "| `%s` | %s | %s | %s | %s |\n", it.ID, it.Prov, obs, it.Source, note)
+	}
+
+	// Outcome coverage against a target declared before the run. Input coverage
+	// cannot substitute for it: a corpus can cover every pair of factor levels and
+	// still never reach a gate, which is exactly what happened once.
+	oc := rep.OutputCoverage()
+	fmt.Fprintf(&b, "\n## Coverage of outcomes\n\n")
+	fmt.Fprintf(&b, "Target, declared before the run: every specified decision observed at least %d time(s).\n\n", oc.Target)
+	fmt.Fprintf(&b, "| decision | observed | |\n|---|---|---|\n")
+	for _, d := range oc.Declared {
+		mark := "n/a"
+		if oc.Seen[d] < oc.Target {
+			mark = "**below target**"
+		}
+		fmt.Fprintf(&b, "| `%s` | %d | %s |\n", d, oc.Seen[d], mark)
+	}
+
+	// Theory against measurement, with the residual per bin.
+	var corpus []Scenario
+	for _, r := range rep.Results {
+		corpus = append(corpus, r.Scenario)
+	}
+	pred, obs := PredictHistogram(corpus), rep.MeasureHistogram()
+	fmt.Fprintf(&b, "\n## Prediction versus measurement\n\n")
+	fmt.Fprintf(&b, "| bin | predicted | observed | residual |\n|---|---|---|---|\n")
+	for _, bin := range Bins(pred, obs) {
+		fmt.Fprintf(&b, "| `%s` | %d | %d | %+d |\n", bin, pred[bin], obs[bin], obs[bin]-pred[bin])
+	}
+	fmt.Fprintf(&b, "| **total** | | | **%d** |\n\n", rep.Residual())
+	fmt.Fprintf(&b, "A residual of zero means the closed form reproduced the measured\n")
+	fmt.Fprintf(&b, "DISTRIBUTION. The per-step comparison above is what decides behavioural\n")
+	fmt.Fprintf(&b, "conformance; equal histograms are not equal behaviour.\n\n")
+
 	fmt.Fprintf(&b, "## Gates reached\n\n")
 	for _, g := range sortedKeys(gates) {
 		fmt.Fprintf(&b, "- `%s`: %d\n", g, gates[g])

@@ -20,7 +20,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/sim"
 )
@@ -110,6 +112,7 @@ func runRun(args []string) int {
 		*jobs = 1
 	}
 
+	started := time.Now()
 	root, err := os.MkdirTemp("", "skillctl-sim-*")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -145,7 +148,16 @@ func runRun(args []string) int {
 	wg.Wait()
 	fmt.Println()
 
-	rep := sim.Report{Results: results, BinaryID: sim.BinaryHash(skillctl), Design: design}
+	rep := sim.Report{
+		Results:    results,
+		BinaryID:   sim.BinaryHash(skillctl),
+		Design:     design,
+		Commit:     gitDescribe(),
+		BinaryPath: skillctl,
+		Platform:   runtime.GOOS + "/" + runtime.GOARCH,
+		StartedAt:  started.UTC().Format(time.RFC3339),
+		Config:     strings.Join(os.Args[1:], " "),
+	}
 	rep.Write(os.Stdout)
 
 	if *mdOut != "" {
@@ -229,4 +241,16 @@ func runTheory(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+// gitDescribe names the source tree that produced the model. It is best effort:
+// a report from outside a checkout says "unknown" rather than inventing a value,
+// because a provenance field that guesses is worse than one that admits it cannot
+// tell.
+func gitDescribe() string {
+	out, err := exec.Command("git", "describe", "--always", "--dirty", "--tags").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
