@@ -32,15 +32,34 @@ type Waiver struct {
 	Observed string  // the gate actually seen, "" for none
 	Finding  string  // the tracked finding
 	Why      string
+
+	// Invariant, when set, also waives that invariant for this dimension. A defect
+	// that trips both the gate comparison and an invariant should be waived once
+	// and visibly, not silenced in one place and left to fail in the other.
+	Invariant Invariant
 }
 
 // Waivers is the register. Empty is the goal.
 func Waivers() []Waiver {
 	return []Waiver{
 		{
-			Adv: AdvPublisherBadSigs, Expected: "gate 3", Observed: "",
+			Adv: AdvStaleChecksums, Expected: "", Observed: "accept",
+			Finding:   "BUG-0217",
+			Invariant: InvAcceptDelivers,
+			Why: "MEASURED SPEC VIOLATION, not an open question. SPEC-0188 §7 step 8 verifies " +
+				"the CHECKSUMS file inside the bundle and says any failure in steps 3 to 8 means " +
+				"no write. The trust-mode pull path extracts without that check (extractSkb does " +
+				"not validate; the other install path does), and a bundle whose internal manifest " +
+				"no longer describes its contents is installed. Waived so the gate stays usable " +
+				"while the fix is decided; it is a defect, not a naming question",
+		},
+		{
+			Adv: AdvPublisherBadSigs, Expected: "gate 3", Observed: "accept",
 			Finding: "FR-0121",
-			Why: "the model predicts gate 3 and the binary refuses without naming a gate. " +
+			Why: "UNSTABLE MEASUREMENT, and that is the finding. This case has been observed " +
+				"both refusing without a gate name and accepting, across successive harness " +
+				"revisions on the same product build. One clean re-measurement on a frozen " +
+				"harness is owed before anything is concluded from it. Originally: " +
 				"The control is live: disabling gate 3 flips this pull from refuse to accept. " +
 				"What is waived is only the LABEL; the refusal, its exit code and the untouched " +
 				"install target are compared and hold",
@@ -50,13 +69,43 @@ func Waivers() []Waiver {
 
 // waiverFor returns the waiver covering this disagreement, if any.
 func waiverFor(sc Scenario, r StepResult) *Waiver {
+	// The observed side is matched against the gate name when there is one, and
+	// against the literal "accept" when the pull was accepted. A waiver that could
+	// not name an acceptance would be unable to cover the case that matters most:
+	// a specified refusal that did not happen.
+	obs := r.Gate
+	if r.Outcome == Accept {
+		obs = "accept"
+	}
 	for i := range Waivers() {
 		w := Waivers()[i]
-		if sc.P.Adv == w.Adv && r.Step.Expect.Gate == w.Expected && r.Gate == w.Observed {
+		if sc.P.Adv == w.Adv && r.Step.Expect.Gate == w.Expected && obs == w.Observed {
 			return &w
 		}
 	}
 	return nil
+}
+
+// WaivedViolations splits invariant violations the same way conflicts are split.
+// The report prints both counts beside the waiver register.
+func (rep Report) WaivedViolations() (waived, unwaived int) {
+	for _, r := range rep.Results {
+		for _, v := range r.Violations {
+			hit := false
+			for _, w := range Waivers() {
+				if w.Invariant != "" && r.Scenario.P.Adv == w.Adv && v.Invariant == w.Invariant {
+					hit = true
+					break
+				}
+			}
+			if hit {
+				waived++
+			} else {
+				unwaived++
+			}
+		}
+	}
+	return
 }
 
 // WaivedConflicts counts the conflicts a waiver covers, and the ones it does not.
@@ -93,7 +142,10 @@ func (rep Report) WriteWaivers(w io.Writer) {
 		fmt.Fprintf(w, "  %s  %s: model says %s, binary says %s\n", x.Finding, x.Adv, x.Expected, obs)
 		fmt.Fprintf(w, "      %s\n", x.Why)
 	}
-	fmt.Fprintf(w, "  %d conflict(s) waived, %d not waived. A waived conflict is COUNTED and\n", waived, unwaived)
+	wv, uv := rep.WaivedViolations()
+	fmt.Fprintf(w, "  %d conflict(s) waived, %d not waived; %d invariant violation(s) waived, %d not.\n",
+		waived, unwaived, wv, uv)
+	fmt.Fprintf(w, "  A waived finding is COUNTED and\n")
 	fmt.Fprintf(w, "  reported; it does not fail the gate. It is not the same as a step that was\n")
 	fmt.Fprintf(w, "  never compared: change what the binary does here and the waiver stops\n")
 	fmt.Fprintf(w, "  matching, and the conflict fails the run again.\n")

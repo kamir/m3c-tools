@@ -97,6 +97,9 @@ func Execute(skillctl, rootDir string, sc Scenario) ScenarioResult {
 		case ActTamperInstalled:
 			aerr = w.TamperInstalled(skill)
 			code = -1
+		case ActStaleChecksums:
+			aerr = w.StaleChecksums(skill)
+			code = -1
 		case ActWithholdArtifact:
 			aerr = w.WithholdArtifact(skill)
 			code = -1

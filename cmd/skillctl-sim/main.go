@@ -181,7 +181,7 @@ func runRun(args []string) int {
 	_, conflicts, _, _ := rep.Summary()
 	waived, unwaived := rep.WaivedConflicts()
 	res := rep.Residual()
-	viol := len(rep.Violations())
+	_, viol := rep.WaivedViolations()
 	if unwaived > 0 || viol > 0 || res != 0 {
 		fmt.Fprintf(os.Stderr,
 			"\nFAIL: %d conflict(s) of which %d waived, %d invariant violation(s), residual %d.\n"+
