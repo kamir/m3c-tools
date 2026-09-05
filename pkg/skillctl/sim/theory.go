@@ -19,11 +19,25 @@ package sim
 //     A state with no verdict is a specification hole: the system would have to
 //     invent behaviour there, and every implementation would invent a different one.
 //
-//  2. ENTAILMENT. Do the safety invariants FOLLOW from the gate composition?
-//     This is the question the whole trust story rests on. If accepting a state
-//     does not imply "the digest matched", then the composition is missing a gate,
-//     and no amount of testing an implementation would reveal that: the code would
-//     faithfully implement an unsafe specification.
+//  2. COMPOSITION COMPLETENESS. Does every safety-relevant predicate actually
+//     appear in the accepting condition?
+//
+//     This check was originally called ENTAILMENT and announced as a proof that
+//     the safety invariants follow from the composition. An external reviewer took
+//     that claim apart on 2026-09-05 and was right: as long as the invariants are
+//     stated in terms of the SAME five bits the gates test, "accepting implies the
+//     invariants" reduces to "the conjunction of five conditions implies those five
+//     conditions". Circular, and therefore worthless as a safety proof.
+//
+//     What the check really does, and all it may claim: it detects a MISSING GATE.
+//     Delete the revoked predicate from the composition and some accepting state
+//     will carry Revoked=true, and this check fires with no code running. That is
+//     genuinely useful and it is genuinely not a proof of safety.
+//
+//     A real entailment proof needs invariants formulated over the WORLD (the bytes
+//     on disk, the keys a human pinned, the events a registry holds), independent of
+//     the predicates the gauntlet happens to read. That model does not exist yet;
+//     saying so is more useful than a circular claim dressed as a theorem.
 //
 //  3. REACHABILITY. Which of the 32 states can the action alphabet actually
 //     produce? An unreachable state is either a missing adversary capability (the
@@ -109,25 +123,25 @@ func CheckTheory(corpus []Scenario) TheoryReport {
 		}
 		rep.Accepting = append(rep.Accepting, s.Key())
 
-		// 2. ENTAILMENT. Acceptance must IMPLY each safety invariant. Checked here
-		// against the state itself rather than against a run, because that is the
-		// difference between "we did not observe a violation" and "a violation
-		// cannot be expressed in this model".
+		// 2. COMPOSITION COMPLETENESS, not entailment. See the package comment: with
+		// the invariants written over the same bits the gates read, this cannot prove
+		// safety. It proves something narrower and still worth having: that no
+		// safety-relevant predicate has fallen OUT of the accepting condition.
 		if !s.DigestMatches {
-			rep.Findings = append(rep.Findings, TheoryFinding{"entailment", s.Key(),
-				"INV-1: the composition accepts a state whose artifact does not match the signed digest"})
+			rep.Findings = append(rep.Findings, TheoryFinding{"completeness", s.Key(),
+				"the accepting condition no longer contains the digest predicate"})
 		}
 		if s.Revoked {
-			rep.Findings = append(rep.Findings, TheoryFinding{"entailment", s.Key(),
-				"INV-2: the composition accepts a state that carries a visible revoke"})
+			rep.Findings = append(rep.Findings, TheoryFinding{"completeness", s.Key(),
+				"the accepting condition no longer contains the revoked predicate"})
 		}
 		if !s.GovQualifies {
-			rep.Findings = append(rep.Findings, TheoryFinding{"entailment", s.Key(),
-				"INV-3: the composition accepts a state with no qualifying attestation"})
+			rep.Findings = append(rep.Findings, TheoryFinding{"completeness", s.Key(),
+				"the accepting condition no longer contains the governance predicate"})
 		}
 		if !s.EnvelopeSigned || !s.SigsVerify {
-			rep.Findings = append(rep.Findings, TheoryFinding{"entailment", s.Key(),
-				"INV-1: the composition accepts a state whose signatures do not verify"})
+			rep.Findings = append(rep.Findings, TheoryFinding{"completeness", s.Key(),
+				"the accepting condition no longer contains a signature predicate"})
 		}
 	}
 
@@ -191,16 +205,17 @@ func (rep TheoryReport) WriteTheory(w io.Writer, corpus []Scenario) {
 
 	entail := 0
 	for _, f := range rep.Findings {
-		if f.Kind == "entailment" {
+		if f.Kind == "completeness" {
 			entail++
 		}
 	}
 	if entail == 0 {
-		fmt.Fprintf(w, "  entailment   : every accepting state satisfies INV-1, INV-2 and INV-3\n")
-		fmt.Fprintf(w, "                 Proven over the whole space, not sampled: a violating state\n")
-		fmt.Fprintf(w, "                 cannot be expressed by this composition.\n")
+		fmt.Fprintf(w, "  completeness : the accepting condition still contains all five predicates\n")
+		fmt.Fprintf(w, "                 Checked over the whole space. This detects a DELETED gate; it is\n")
+		fmt.Fprintf(w, "                 NOT a safety proof: the invariants are written over the same bits\n")
+		fmt.Fprintf(w, "                 the gates read, so a stronger claim would be circular.\n")
 	} else {
-		fmt.Fprintf(w, "  entailment   : %d VIOLATION(S). The specification itself is unsafe.\n", entail)
+		fmt.Fprintf(w, "  completeness : %d PREDICATE(S) missing from the accepting condition.\n", entail)
 	}
 
 	reach := len(rep.Reachable)
@@ -243,9 +258,86 @@ func (rep TheoryReport) WriteTheory(w io.Writer, corpus []Scenario) {
 // an over-parameterised model is a modelling smell rather than an unsafe one.
 func (rep TheoryReport) Sound() bool {
 	for _, f := range rep.Findings {
-		if f.Kind == "entailment" || f.Kind == "totality" {
+		if f.Kind == "completeness" || f.Kind == "totality" {
 			return false
 		}
 	}
 	return true
+}
+
+// --- classifying the unreachable states -----------------------------------
+//
+// An external reviewer put the sharpest finding of 2026-09-05 like this: the
+// poster calls the distinction between the two causes of unreachability "the
+// actual work", then demonstrates it on two of twenty states and stops. Correct.
+// A count of unreachable states is not an analysis; the analysis is the REASON,
+// per state, and it has to be mechanical rather than anecdotal.
+//
+// Two causes, and they lead to opposite actions:
+//
+//	MISSING-MOVE     no action in the alphabet can set this bit combination.
+//	                 The hole is in the CORPUS. Add the capability. This is how
+//	                 forge-envelope came to exist.
+//	STRUCTURAL       the combination cannot occur in the world at all, because
+//	                 one fact forces another. Nothing to add, and nothing to
+//	                 defend against on this path: the answer is that a different
+//	                 ACTOR would be needed.
+//
+// The structural rule this model knows, derived from the wire format rather than
+// invented here: the signature rows live INSIDE the signed envelope, so changing
+// them breaks the envelope signature too. Formally sig=0 implies env=0. Every
+// state with sig=0 and env=1 is therefore structurally impossible, and gate 3 sits
+// entirely inside that region: no store or transport attacker can ever exhibit it.
+
+// UnreachReason classifies one unreachable state.
+type UnreachReason struct {
+	State  string
+	Kind   string // "structural" | "missing-move"
+	Detail string
+}
+
+// ClassifyUnreachable gives a reason for EVERY unreachable state, so the count
+// becomes an argument. A state this function cannot explain is reported as
+// missing-move with the bits that no action varies, which is the honest default:
+// absence of an explanation is not evidence of impossibility.
+func ClassifyUnreachable(rep TheoryReport) []UnreachReason {
+	var out []UnreachReason
+	for _, k := range rep.Unreachable {
+		env, sig := k[0] == '1', k[4] == '1'
+		switch {
+		case !sig && env:
+			out = append(out, UnreachReason{k, "structural",
+				"signature rows sit inside the signed envelope: breaking them breaks the envelope too, so sig=0 forces env=0"})
+		case !sig && !env:
+			out = append(out, UnreachReason{k, "missing-move",
+				"no action corrupts the bundle signature rows independently; reaching this needs a malicious PUBLISHER, not a store attacker"})
+		default:
+			out = append(out, UnreachReason{k, "missing-move",
+				"the alphabet has no action that produces this combination; either add a capability or record why it cannot occur"})
+		}
+	}
+	return out
+}
+
+// WriteUnreachable prints the classification. It leads with the counts because the
+// ratio is the point: a space that is mostly STRUCTURAL is a system statement, one
+// that is mostly MISSING-MOVE is a to-do list.
+func (rep TheoryReport) WriteUnreachable(w io.Writer) {
+	cls := ClassifyUnreachable(rep)
+	nStruct, nMove := 0, 0
+	for _, c := range cls {
+		if c.Kind == "structural" {
+			nStruct++
+		} else {
+			nMove++
+		}
+	}
+	fmt.Fprintf(w, "\nwhy the unreachable states are unreachable\n")
+	fmt.Fprintf(w, "  %d structural (the world cannot produce them), %d missing-move (the corpus cannot yet)\n",
+		nStruct, nMove)
+	for _, c := range cls {
+		fmt.Fprintf(w, "  %-6s %-13s %s\n", c.State, c.Kind, c.Detail)
+	}
+	fmt.Fprintf(w, "  A missing-move entry is a to-do, not a property. It stays provisional until\n")
+	fmt.Fprintf(w, "  somebody either adds the capability or proves the combination impossible.\n")
 }
