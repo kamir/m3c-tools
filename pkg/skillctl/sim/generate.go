@@ -128,8 +128,12 @@ func meaningful(p Params) bool {
 	if needsRevoke && !p.Revoke {
 		return false
 	}
+	// INVARIANT R1, decided by the operator on 2026-09-05: a revoke presupposes a
+	// release. Nothing installs without governance, so a kill switch would have no
+	// subject. This is a statement about the PROCESS, not a convenience: it is why
+	// the three states 11001, 11011 and 11101 are never visited, and it belongs in
+	// the model rather than in a footnote on a poster.
 	if p.Revoke && p.Gov != GovGreen {
-		// Nothing installs without governance, so the kill switch has no subject.
 		return false
 	}
 	// A shared key cannot express "the reviewer key was not pinned": there is only
@@ -145,8 +149,12 @@ func meaningful(p Params) bool {
 	if p.Adv == AdvStolenKey && p.Gov == GovNone {
 		return false
 	}
-	// The envelope forgery is decided by the FIRST gate, so the other axes add
-	// nothing: one point per cast is the whole lesson.
+	// INVARIANT R2, a SEPARATE reason from R1 and often confused with it. The
+	// envelope forgery is decided by the FIRST gate, so the other axes cannot change
+	// the outcome and would only add duplicate rows. This, not R1, is why 00011 and
+	// 01011 are never visited: those two are NOT revoked (their revoked bit is zero),
+	// they carry a broken envelope together with broken governance. A reviewer caught
+	// this being described as one reason on 2026-09-05, by recomputing the bits.
 	if p.Adv == AdvForgeEnvelope && (p.Gov != GovGreen || p.Key != KeySeparatePin) {
 		return false
 	}
@@ -160,64 +168,70 @@ func meaningful(p Params) bool {
 	if p.Key == KeyShared && p.Cast != CastSolo && p.Adv != AdvNone {
 		return false
 	}
-	// A revoke only adds steps when something was installed to revoke. Where the
-	// pull is expected to refuse anyway, the -rev variant is a byte-identical
-	// duplicate of its sibling: pure corpus inflation, and exactly the kind of
-	// padding that makes a benchmark look broader than it is.
-	if p.Revoke {
-		if ok, _, _ := installExpected(p); !ok {
-			return false
-		}
-	}
+	// There used to be a rule here that dropped a revoke variant whenever the pull
+	// was going to refuse anyway, on the grounds that the extra step is a duplicate.
+	// It is removed, and the reason is worth keeping.
+	//
+	// That rule pruned by OUTCOME. The corpus is a state-coverage instrument, and
+	// two points with the same outcome can sit in different states: a revoked bundle
+	// with a broken envelope (01111) refuses exactly like an unrevoked one with a
+	// broken envelope (00111), yet only the first one asks the question this whole
+	// exercise is about, which is WHICH gate speaks first when two of them have
+	// something to say. Pruning by outcome deleted the only point that can catch a
+	// gate-ORDER regression, and the measurement showed it: state coverage fell from
+	// 7 of 12 to 6 of 12 while the design got broader.
+	//
+	// So meaningful() now encodes only IMPOSSIBILITY: what the world cannot produce
+	// (R1, R2, and the structural rules above). Economy is no longer its job, because
+	// the covering array does that better and says out loud how much it dropped. That
+	// division did not exist before the design was introduced; one function was doing
+	// both, and the cheap half was quietly eating the expensive half.
 	return true
 }
 
-// installExpected is the theory for the honest path: does the consumer end up
-// with the skill installed, and if not, which gate refused?
+// installExpected is the per-step prediction for a pull. It does NOT reimplement
+// the decision; it ASKS the analytic model, so there is exactly one place where
+// the theory lives.
 //
-// GATE ORDER matters and is easy to get wrong. The pull applies, in this order:
-// envelope signature, revoked, governance floor, digest, bundle signatures
-// (SPEC-0188 §7 as the gauntlet implements it). The FIRST gate that refuses is
-// the one the report shows, so a scenario that would fail two gates only ever
-// demonstrates the earlier one.
-//
-// This function was WRONG on its first draft in two ways, and the run said so.
-// Both corrections are kept visible here rather than quietly patched, because the
-// point of the exercise is that writing the theory is where you find out what you
-// did not understand:
-//
-//  1. It predicted the digest gate for a swapped artifact even when governance
-//     was also failing. Governance comes FIRST, so the digest gate is only
-//     reachable when the attestation is otherwise sound.
-//  2. It predicted that a forged attestation blocks the install. It does not: a
-//     forgery from an unpinned key is simply not counted, and the GENUINE
-//     attestation next to it still qualifies. A forgery removes nothing.
+// It used to be a second hand-written switch, and that cost a lesson worth keeping:
+// when the envelope forgery was added to the state mapping, this function was not
+// updated, and the two halves of the same theory quietly disagreed. Every scenario
+// with that capability then predicted "accept" while the model said "gate 1". The
+// covering array found all seven within a minute of being switched on, which is
+// precisely what a designed experiment is for and what the hand-picked sample had
+// missed. Deleting the duplicate is the actual fix; noticing it was luck.
 func installExpected(p Params) (ok bool, gate string, why string) {
-	switch {
-	// Governance is evaluated before the digest, so it wins whenever both fail.
-	case p.Gov == GovNone:
-		return false, "gate 4", "SPEC-0188 §7: no attestation at or above the governance floor"
-	case p.Gov == GovYellow:
-		return false, "gate 4", "SPEC-0252 §6: yellow is below a green floor; the floor is enforced, not advisory"
-	case p.Key == KeySeparateOpen:
-		return false, "gate 4", "SPEC-0359 D3: an attestation counts only from a PINNED signer"
-
-	// Tampering in transit changes the bytes BEFORE the admit, so the publisher
-	// admits a different digest than the one the reviewer attested. The refusal
-	// therefore arrives at the governance gate, not at the digest gate: there is
-	// no attestation for the digest that was actually admitted. Worth stating
-	// plainly, because the intuitive answer ("digest mismatch") is wrong and the
-	// real one is stronger, the binding between an attestation and a digest does
-	// the work.
-	case p.Adv == AdvTransitChecked || p.Adv == AdvTransitSkipped:
-		return false, "gate 4", "the attestation is bound to the pre-tamper digest, so the admitted bytes have no governance"
-
-	// A swapped artifact AFTER a clean admit is the digest gate's own case: the
-	// events are sound, only the bytes are not.
-	case p.Adv == AdvStoredBundle:
-		return false, "gate 2", "SPEC-0188 §7: the digest is recomputed from the bytes, never taken from the store"
+	accept, g := StateAt(p, false).Decide()
+	if accept {
+		return true, "", "SPEC-0188 §7: every gate passes"
 	}
-	return true, "", "SPEC-0188 §7: every gate passes"
+	return false, g, whyGate(g, p)
+}
+
+// whyGate names the SPEC clause behind a refusal, so a conflict report tells the
+// reader which rule the prediction came from rather than only that it was wrong.
+func whyGate(gate string, p Params) string {
+	switch gate {
+	case "gate 1":
+		return "SPEC-0188 §7: the admit envelope no longer verifies against the pinned key"
+	case "gate 5":
+		return "SPEC-0188 §7: a revoked digest is refused before governance is even consulted"
+	case "gate 4":
+		switch {
+		case p.Gov == GovNone:
+			return "SPEC-0188 §7: no attestation at or above the governance floor"
+		case p.Gov == GovYellow:
+			return "SPEC-0252 §6: yellow is below a green floor; the floor is enforced, not advisory"
+		case p.Key == KeySeparateOpen:
+			return "SPEC-0359 D3: an attestation counts only from a PINNED signer"
+		}
+		return "the attestation is bound to the pre-tamper digest, so the admitted bytes have no governance"
+	case "gate 2":
+		return "SPEC-0188 §7: the digest is recomputed from the bytes, never taken from the store"
+	case "gate 3":
+		return "SPEC-0188 §7: the bundle signature rows do not verify"
+	}
+	return "SPEC-0188 §7"
 }
 
 func build(p Params) Scenario {
@@ -379,10 +393,15 @@ func build(p Params) Scenario {
 						Why: "FR-0090 IS-T1: identity comes from the SIGNED envelope, never from the path, so a relabelled revoke still revokes"}},
 			)
 		default:
+			// Ask the model for the SECOND pull too, rather than assuming gate 5.
+			// With a broken envelope, gate 1 speaks first and the revoke never gets
+			// a turn: assuming otherwise is exactly the mistake this function used
+			// to make.
+			_, g2 := StateAt(p, true).Decide()
 			sc.Steps = append(sc.Steps, Step{
 				Action: Action{Kind: ActPull, Actor: Consumer, Skill: skill},
-				Expect: Expectation{Outcome: Refuse, Gate: "gate 5", Exit: 1, Claimed: true,
-					Why: "SPEC-0188 §7: a revoked digest is refused before governance is even consulted"},
+				Expect: Expectation{Outcome: Refuse, Gate: g2, Exit: 1, Claimed: true,
+					Why: whyGate(g2, p)},
 			})
 		}
 	}

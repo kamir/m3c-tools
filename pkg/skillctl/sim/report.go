@@ -13,7 +13,8 @@ import (
 // Report is the aggregate of one corpus run.
 type Report struct {
 	Results  []ScenarioResult
-	BinaryID string // sha256 prefix of the binary under test (EV-1)
+	BinaryID string         // sha256 prefix of the binary under test (EV-1)
+	Design   *CoverageStats // set when the corpus came from a covering array
 }
 
 // Summary counts the verdicts.
@@ -354,6 +355,15 @@ func (rep Report) Compose() Mixture {
 func (rep Report) WriteMixture(w io.Writer) {
 	m := rep.Compose()
 	fmt.Fprintf(w, "\nmixture: is this corpus broad, or just long?\n")
+	if rep.Design != nil {
+		d := rep.Design
+		fmt.Fprintf(w, "\n  design: covering array of strength t=%d over %s\n", d.Strength, DesignAxes())
+		fmt.Fprintf(w, "  %d rows instead of %d exhaustive: EVERY admissible %d-way combination appears\n",
+			d.Rows, d.FullEnumeration, d.Strength)
+		fmt.Fprintf(w, "  %d combinations covered; %d of the %d in the unconstrained space are excluded\n",
+			d.Admissible, d.Uncoverable, d.Total)
+		fmt.Fprintf(w, "  by the model's own rules and are therefore not coverable, not missing.\n")
+	}
 
 	fmt.Fprintf(w, "\n  distinct decision paths: %d over %d scenarios (yield %.2f)\n",
 		len(m.Paths), m.Scenarios, float64(len(m.Paths))/float64(max(m.Scenarios, 1)))
@@ -402,6 +412,30 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// Residual is the total disagreement between the closed form and the measurement,
+// summed over the bins. Zero means the analytical model describes the running
+// binary exactly on this corpus.
+//
+// It is exported and checked separately from the conflict count because the two
+// can come apart: a step-level conflict is a named scenario failing, while a
+// residual is a shift in the DISTRIBUTION, and a defect that moves four pulls out
+// of one bin and into another can in principle do so without any single step being
+// judged a conflict. The operator set the pass condition as "residual zero" on
+// 2026-09-05, so the exit code has to read this number and not a proxy for it.
+func (rep Report) Residual() int {
+	var corpus []Scenario
+	for _, r := range rep.Results {
+		corpus = append(corpus, r.Scenario)
+	}
+	pred := PredictHistogram(corpus)
+	obs := rep.MeasureHistogram()
+	total := 0
+	for _, b := range Bins(pred, obs) {
+		total += abs(obs[b] - pred[b])
+	}
+	return total
 }
 
 // WriteExperiment is the theory-versus-measurement comparison: the analytically

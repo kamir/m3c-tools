@@ -63,11 +63,15 @@ Flags (run):
 
 func runList(args []string) int {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
-	n := fs.Int("n", 0, "how many scenarios to print (0 = all)")
+	n := fs.Int("n", 0, "how many scenarios to print when -t 0")
+	strength := fs.Int("t", 2, "covering-array strength (0 = no design, use -n)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	corpus := sim.Generate(*n)
+	if *strength > 0 {
+		corpus, _ = sim.GenerateCovering(*strength)
+	}
 	fmt.Printf("corpus: %d scenarios\n\n", len(corpus))
 	for _, sc := range corpus {
 		fmt.Printf("%s\n  %s\n", sc.ID, sc.Title)
@@ -89,7 +93,8 @@ func runList(args []string) int {
 
 func runRun(args []string) int {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
-	n := fs.Int("n", 0, "how many scenarios (0 = all)")
+	n := fs.Int("n", 0, "how many scenarios when -t 0 (0 = the whole corpus)")
+	strength := fs.Int("t", 2, "covering-array strength: 2 = the gate, 3 = the weekly run, 0 = no design, use -n")
 	bin := fs.String("skillctl", "", "path to the skillctl binary under test")
 	jobs := fs.Int("jobs", runtime.NumCPU()/2, "parallel scenarios")
 	mdOut := fs.String("md", "", "write the report as Markdown to this file")
@@ -112,7 +117,16 @@ func runRun(args []string) int {
 	}
 	defer os.RemoveAll(root)
 
-	corpus := sim.Generate(*n)
+	var corpus []sim.Scenario
+	var design *sim.CoverageStats
+	if *strength > 0 {
+		c, st := sim.GenerateCovering(*strength)
+		corpus, design = c, &st
+		fmt.Printf("covering array t=%d: %d scenarios (exhaustive would be %d)\n",
+			st.Strength, st.Rows, st.FullEnumeration)
+	} else {
+		corpus = sim.Generate(*n)
+	}
 	fmt.Printf("running %d scenarios against %s (%d parallel)\n", len(corpus), skillctl, *jobs)
 
 	results := make([]sim.ScenarioResult, len(corpus))
@@ -131,7 +145,7 @@ func runRun(args []string) int {
 	wg.Wait()
 	fmt.Println()
 
-	rep := sim.Report{Results: results, BinaryID: sim.BinaryHash(skillctl)}
+	rep := sim.Report{Results: results, BinaryID: sim.BinaryHash(skillctl), Design: design}
 	rep.Write(os.Stdout)
 
 	if *mdOut != "" {
@@ -150,7 +164,12 @@ func runRun(args []string) int {
 		return 1
 	}
 	_, conflicts, _, _ := rep.Summary()
-	if conflicts > 0 || len(rep.Violations()) > 0 {
+	res := rep.Residual()
+	viol := len(rep.Violations())
+	if conflicts > 0 || viol > 0 || res != 0 {
+		fmt.Fprintf(os.Stderr,
+			"\nFAIL: %d conflict(s), %d invariant violation(s), residual %d.\n"+
+				"The pass condition is all three at zero.\n", conflicts, viol, res)
 		return 1
 	}
 	return 0
@@ -193,11 +212,15 @@ func resolveBinary(flagVal string) (string, error) {
 // reasons over the state space rather than over a run.
 func runTheory(args []string) int {
 	fs := flag.NewFlagSet("theory", flag.ContinueOnError)
-	n := fs.Int("n", 0, "corpus size to judge coverage against (0 = the whole corpus)")
+	n := fs.Int("n", 0, "corpus size to judge coverage against when -t 0")
+	strength := fs.Int("t", 2, "covering-array strength (0 = no design, use -n)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	corpus := sim.Generate(*n)
+	if *strength > 0 {
+		corpus, _ = sim.GenerateCovering(*strength)
+	}
 	rep := sim.CheckTheory(corpus)
 	rep.WriteTheory(os.Stdout, corpus)
 	rep.WriteUnreachable(os.Stdout)

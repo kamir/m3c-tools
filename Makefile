@@ -72,16 +72,44 @@ build-skillctl:
 build-skillctl-sim: build-skillctl
 	@echo "Building skillctl-sim..."
 	go build -ldflags="$(GO_LDFLAGS)" -o $(BUILD_DIR)/skillctl-sim ./cmd/skillctl-sim
-	@echo "Built $(BUILD_DIR)/skillctl-sim, run: $(BUILD_DIR)/skillctl-sim run -n 100"
+	@echo "Built $(BUILD_DIR)/skillctl-sim, run: $(BUILD_DIR)/skillctl-sim run -t 2"
 
-# The simulation as a gate: theory against measurement. Exit 1 on a conflict, an
-# invariant violation, or a harness failure. A residual on its own does NOT fail
-# the run: part of it comes from the attacks the corpus carries on purpose and
-# does not claim to stop (a stolen key, a withheld revoke), and scoring those as
-# failures would make the honest record unreportable.
+# The simulation as a blocking gate: theory against measurement.
+#
+# The corpus is a COVERING ARRAY of strength 2, not a sample: every admissible
+# pair of factor levels appears in at least one scenario, so the breadth of the
+# run is an arithmetic property rather than a judgement call. It costs about four
+# seconds and is hermetic, a throwaway HOME against a bare local git registry.
+#
+# Pass means conflicts, invariant violations AND residual are all zero.
+#
+# The residual used to be excluded from that condition, on the grounds that the
+# corpus carries attacks it does not claim to stop (a stolen key, a withheld
+# revoke), so some disagreement was permanent and unreportable. That reasoning is
+# superseded and the reason is worth recording: the analytic model now PREDICTS
+# those outcomes instead of being surprised by them. A withheld revoke leaves the
+# revoked bit clear because withholding is genuinely undetectable here, and a
+# stolen key produces a chain that is genuinely valid. Both are honest zero-residual
+# predictions, so a residual is once again evidence of a real disagreement.
+#
+# Keeping it out would have cost something concrete: a defect that moves pulls
+# from one outcome bin to another without any single step being judged a conflict
+# is invisible to the conflict count and shows up only here.
 .PHONY: sim
 sim: build-skillctl-sim
-	$(BUILD_DIR)/skillctl-sim run -n 100 -skillctl $(BUILD_DIR)/skillctl
+	$(BUILD_DIR)/skillctl-sim run -t 2 -skillctl $(BUILD_DIR)/skillctl
+
+# Strength 3: where a defect that needs three things to line up at once shows up.
+# Too slow for every commit, hence weekly rather than in the commit gate.
+.PHONY: sim-deep
+sim-deep: build-skillctl-sim
+	$(BUILD_DIR)/skillctl-sim run -t 3 -skillctl $(BUILD_DIR)/skillctl
+
+# The specification alone, with no binary in the loop. It fails on a specification
+# that has become unsound before anybody builds anything.
+.PHONY: sim-theory
+sim-theory: build-skillctl-sim
+	$(BUILD_DIR)/skillctl-sim theory -t 2
 
 .PHONY: build-skillctl-demo
 build-skillctl-demo: build-skillctl

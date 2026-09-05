@@ -14,15 +14,22 @@
 # Nothing here touches the working tree: every mutant lives in its own worktree
 # and is removed afterwards, whether the run succeeds or not.
 #
-# Usage:  ./scripts/sim-calibrate.sh [-n <scenarios>]
+# Usage:  ./scripts/sim-calibrate.sh [-t <strength>] [-n <scenarios>]
+#
+# The default is the same covering array the CI gate runs, so a detection rate
+# measured here is a statement about the gate and not about some other corpus.
+# Calibrating a broader corpus than the one that actually guards the branch would
+# report a sensitivity nobody ever gets.
 # Exit:   0 when every mutant was detected, 1 otherwise.
 
 set -uo pipefail
 
 N=100
+T=2
 while [ $# -gt 0 ]; do
   case "$1" in
-    -n) N="${2:-100}"; shift 2 ;;
+    -n) N="${2:-100}"; T=0; shift 2 ;;
+    -t) T="${2:-2}"; shift 2 ;;
     -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "sim-calibrate: unknown flag $1" >&2; exit 2 ;;
   esac
@@ -92,7 +99,7 @@ for m in "${MUTANTS[@]}"; do
 
   # The instrument reading: a non-zero exit means the simulation refused to accept
   # this build. That is exactly what detection means here.
-  if "$WORK/skillctl-sim" run -n "$N" -jobs 8 -skillctl "$WORK/skillctl-$name" >"$WORK/$name.log" 2>&1; then
+  if "$WORK/skillctl-sim" run -t "$T" -n "$N" -jobs 8 -skillctl "$WORK/skillctl-$name" >"$WORK/$name.log" 2>&1; then
     echo "  $name: NOT DETECTED"
     MISSED+=("$name")
   else
