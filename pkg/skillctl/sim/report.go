@@ -497,7 +497,7 @@ func (rep Report) WriteMixture(w io.Writer) {
 		fmt.Fprintf(w, "  distinction is worth a line: unreached, meaning no scenario produces the\n")
 		fmt.Fprintf(w, "  condition, or reached but unnamed, meaning the refusal happens and carries\n")
 		fmt.Fprintf(w, "  no label. Gate 3 is the second kind: the bundle IS refused, with exit 1 and\n")
-		fmt.Fprintf(w, "  an untouched install target, and the label is open under FR-0120.\n")
+		fmt.Fprintf(w, "  an untouched install target, and the label is open under FR-0121.\n")
 		fmt.Fprintf(w, "  Each one is a decision the simulation currently says nothing about.\n")
 	} else {
 		fmt.Fprintf(w, "\n  every declared gate was reached at least once\n")

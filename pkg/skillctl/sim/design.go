@@ -218,7 +218,7 @@ func gateSeeds() []Params {
 		{Cast: CastSolo, Key: KeySeparatePin, Gov: GovGreen, Adv: AdvForgeEnvelope, Revoke: false},
 		// gate 2: the stored bytes no longer hash to the admitted digest.
 		{Cast: CastSolo, Key: KeySeparatePin, Gov: GovGreen, Adv: AdvStoredBundle, Revoke: false},
-		// gate 3: the signature rows do not verify (label under FR-0120).
+		// gate 3: the signature rows do not verify (label under FR-0121).
 		{Cast: CastSolo, Key: KeySeparatePin, Gov: GovGreen, Adv: AdvPublisherBadSigs, Revoke: false},
 		// gate 4: no attestation at all, nothing else wrong.
 		{Cast: CastSolo, Key: KeySeparatePin, Gov: GovNone, Adv: AdvNone, Revoke: false},

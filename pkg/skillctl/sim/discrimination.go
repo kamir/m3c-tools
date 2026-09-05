@@ -105,7 +105,7 @@ func (d Discrimination) Collapsed() []CauseSignal {
 // WriteUnlabelled shows what an unlabelled refusal actually said.
 //
 // It exists because of a mistake this project made and then repeated in a filed
-// finding. FR-0120 recorded that "gate 3 fires but carries no label". When the
+// finding. FR-0121 recorded that "gate 3 fires but carries no label". When the
 // missing gate-3 mutant was finally built, on an IEEE reviewer's insistence,
 // disabling gate 3 changed nothing: the corpus stayed green. So the refusal was
 // never gate 3. Something else refuses, and nobody had looked, because the report
@@ -211,7 +211,7 @@ func (rep Report) WriteDiscrimination(w io.Writer) {
 	fmt.Fprintf(w, "  cause. Where one signal stands for several causes, they cannot tell them\n")
 	fmt.Fprintf(w, "  apart. pkg/skillctl/exitcode defines typed codes for exactly this and the\n")
 	fmt.Fprintf(w, "  pull path does not use them yet; its own header calls that an unfinished\n")
-	fmt.Fprintf(w, "  migration. Tracked as FR-0121.\n")
+	fmt.Fprintf(w, "  migration. Tracked as FR-0122.\n")
 	fmt.Fprintf(w, "  This is a measurement of the OUTPUT CONTRACT. It says nothing about whether\n")
 	fmt.Fprintf(w, "  a human understands the message, which is not measured anywhere here.\n")
 }

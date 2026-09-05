@@ -698,7 +698,7 @@ func hashTreeRooted(dir string) (map[string]string, error) {
 // signature was checked.
 //
 // Nobody noticed for two days, because the report showed only that the refusal
-// carried no gate label, and a finding was filed on that basis (FR-0120, "gate 3
+// carried no gate label, and a finding was filed on that basis (FR-0121, "gate 3
 // fires but is not named"). It was wrong. An IEEE reviewer asked why there was no
 // gate-3 mutant; building it showed that disabling gate 3 changed nothing, which
 // is only possible if gate 3 was never the reason.

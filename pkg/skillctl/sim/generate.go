@@ -140,7 +140,7 @@ func AllGovs() []Gov { return []Gov{GovGreen, GovYellow, GovNone} }
 // any other.
 func OpenDiagnostics() map[AdvKind]string {
 	return map[AdvKind]string{
-		AdvPublisherBadSigs: "FR-0120 (revised 2026-09-05): gate 3 is UNVERIFIED. Three attempts " +
+		AdvPublisherBadSigs: "FR-0121 (2026-09-05, revidiert): gate 3 is UNVERIFIED. Three attempts " +
 			"to construct a bundle that reaches it failed for three different reasons, and the " +
 			"gate-3 mutant is NOT DETECTED by this corpus, which is the same fact seen from the " +
 			"other side. The step is recorded, not scored",
@@ -381,13 +381,13 @@ func build(p Params) Scenario {
 	//      decides first, which is the original structural argument.
 	//
 	// So the honest statement is not "gate 3 fires without a label" (that was
-	// FR-0120's premise and it is withdrawn) but "this harness cannot yet construct
+	// FR-0121's premise and it is withdrawn) but "this harness cannot yet construct
 	// the case". The move stays in the corpus because its DECISION is still worth
 	// observing, and its outcome is not scored, because the simulation has no
 	// warranted expectation to score it against.
 	if _, open := OpenDiagnostics()[p.Adv]; open {
 		gate, why = "", "OPEN: the harness cannot construct a bundle that reaches gate 3. "+
-			"Three attempts failed for three different reasons; see FR-0120. Until one "+
+			"Three attempts failed for three different reasons; see FR-0121. Until one "+
 			"succeeds, gate 3 is UNVERIFIED and UNCALIBRATED, and this step is recorded "+
 			"rather than scored"
 	}

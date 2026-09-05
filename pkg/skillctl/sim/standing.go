@@ -166,7 +166,7 @@ func (rep Report) WriteOutputCoverage(w io.Writer) {
 		fmt.Fprintf(w, "    %-10s %4d%s\n", d, oc.Seen[d], mark)
 	}
 	if oc.Unlabelled > 0 {
-		fmt.Fprintf(w, "    %-10s %4d   (claimed refusals that named no gate; see FR-0120)\n",
+		fmt.Fprintf(w, "    %-10s %4d   (claimed refusals that named no gate; see FR-0121)\n",
 			"unlabelled", oc.Unlabelled)
 	}
 	fmt.Fprintf(w, "  Population: pull steps whose outcome the model claims. One denominator for\n")
