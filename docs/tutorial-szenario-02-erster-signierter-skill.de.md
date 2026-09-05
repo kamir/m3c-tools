@@ -193,16 +193,32 @@ Ihnen, was fehlt, bevor ein Mensch seine Zeit darauf verwendet.
 
 Zuerst der Unfall: jemand ändert das Bundle nach dem Signieren.
 
+So kommt ein signiertes Bundle wirklich an: die Datei **und** ihre Signatur. Beide werden
+kopiert, dann werden die Bytes verändert.
+
 ```bash
 cp hello-kup@0.1.0.skb kaputt.skb
+for sig in hello-kup@0.1.0.skb.*.author.sig; do
+  cp "$sig" "kaputt.skb.${sig#hello-kup@0.1.0.skb.}"
+done
 printf '\xff' | dd of=kaputt.skb bs=1 seek=200 count=1 conv=notrunc 2>/dev/null
 skillctl verify-sig --pubkey "$WS/keys/mitarbeiter.pub" kaputt.skb
 echo "rc=$?"
 ```
 
-Erwartet: `signature file not found …`, `rc=1`. Die Begründung ist wörtlich zu nehmen: der
-Name der Signaturdatei enthält den Digest, und zu diesen neuen Bytes existiert schlicht keine
-Signatur.
+Erwartet: `bundle bytes changed after signing …`, `rc=10`. Die Meldung nennt beide Digests:
+den, zu dem die Datei jetzt hasht, und den, den die Signatur daneben deckt. Genau dieser
+Unterschied ist der Befund.
+
+Früher stand hier `signature file not found`, `rc=1`. Das war technisch wahr und praktisch
+irreführend: der Name der Signaturdatei enthält den Digest, eine Änderung an den Bytes lässt
+die Suche daher ins Leere laufen. Gemeldet wurde damit die *Nebenwirkung* der Manipulation
+statt ihrer Ursache, und wer der Meldung folgte, suchte eine fehlende Datei statt ein
+gebrochenes Siegel.
+
+Liegt tatsächlich **gar keine** Signatur neben der Datei, sagt das Werkzeug jetzt genau das:
+`no signature found … It appears never to have been signed here`, `rc=1`. Das ist eine andere
+Lage und verlangt eine andere Handlung, nämlich beim Absender nach der Signatur zu fragen.
 
 Jetzt der Angriff: derselbe Byte-Tausch, aber der Angreifer benennt die Originalsignatur so
 um, dass sie zu den neuen Bytes zu gehören scheint.

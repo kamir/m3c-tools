@@ -173,7 +173,6 @@ G301	pkg/skillbundle/unpack.go	} if err := os.MkdirAll(filepath.Dir(full), 0o755
 G301	pkg/skillctl/backend/git/git.go	p := filepath.Join(dir, rel) if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil { return err
 G301	pkg/skillctl/install/install.go	// Make sure the parent of `target` exists. if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil { return "", fmt.Errorf("install: mkdir target parent: %w", err)
 G301	pkg/skillctl/install/install.go	archDir := filepath.Join(homeDir, installRoot, ".archive") if err := os.MkdirAll(archDir, 0o755); err != nil { return "", fmt.Errorf("install: mkdir archive dir: %w", err)
-G301	pkg/skillctl/install/install.go	extractDir := filepath.Join(stagingDir, "extracted") if err := os.MkdirAll(extractDir, 0o755); err != nil { return nil, fmt.Errorf("install: mkdir extract dir: %w", err)
 G301	pkg/skillctl/registry/backend_pull.go	cacheRoot := defaultCacheRoot() if err := os.MkdirAll(cacheRoot, 0o755); err != nil { return nil, fmt.Errorf("pull: mkdir cache: %w", err)
 G301	pkg/skillctl/registry/backend_pull.go	dir := filepath.Join(cacheRoot, strings.TrimPrefix(digest, "sha256:")) if err := os.MkdirAll(dir, 0o755); err != nil { return nil, fmt.Errorf("pull: mkdir %s: %w", dir, err)
 G301	pkg/skillctl/registry/er1_pull.go	cacheRoot := defaultCacheRoot() if err := os.MkdirAll(cacheRoot, 0o755); err != nil { return nil, fmt.Errorf("pull: mkdir cache: %w", err)
@@ -358,7 +357,6 @@ G306	pkg/recorder/wav.go	func writeFile(path string, data []byte) error { return
 G306	pkg/skillbundle/pack.go	if err := os.WriteFile(outFile, finalArchive, 0644); err != nil { return "", fmt.Errorf("writing %s: %w", outFile, err)
 G306	pkg/skillctl/backend/git/git.go	} return os.WriteFile(p, data, 0o644) }
 G306	pkg/skillctl/install/install.go	blobPath := filepath.Join(stagingDir, sanitizeFilename(opts.Name)+"-"+sanitizeFilename(resolvedVersion)+".skb") if err := os.WriteFile(blobPath, blob, 0o644); err != nil { return nil, fmt.Errorf("install: write staged blob: %w", err)
-G306	pkg/skillctl/install/install.go	stashedSkb := filepath.Join(target, filepath.Base(blobPath)) if err := os.WriteFile(stashedSkb, blob, 0o644); err != nil { return nil, fmt.Errorf("install: stash .skb in target: %w", err)
 G306	pkg/skillctl/install/offline_verify.go	} return os.WriteFile(filepath.Join(target, offlineMetaFile), b, 0o644) }
 G306	pkg/skillctl/registry/attestation_stash.go	} return os.WriteFile(filepath.Join(dir, AttestationStashName), b, 0o644) }
 G306	pkg/skillctl/registry/backend_pull.go	skbPath := filepath.Join(dir, "bundle.skb") if err := os.WriteFile(skbPath, skbBytes, 0o644); err != nil { return nil, fmt.Errorf("pull: write %s: %w", skbPath, err)
