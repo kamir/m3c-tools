@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -136,8 +137,14 @@ func TestLifecycleEventIsWrittenAndParses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("no lifecycle audit file at %s: %v", path, err)
 	}
-	if perm := fi.Mode().Perm(); perm != 0o600 {
-		t.Errorf("lifecycle audit file mode = %o, want 600", perm)
+	// 0600 file (POSIX). Windows has no Unix permission bits: Go reports 0666
+	// there regardless, and access is governed by ACLs instead. Asserting the
+	// bits on Windows would test Go's mapping, not our security property. Same
+	// guard as invocation_trail_test.go.
+	if runtime.GOOS != "windows" {
+		if perm := fi.Mode().Perm(); perm != 0o600 {
+			t.Errorf("lifecycle audit file mode = %o, want 600", perm)
+		}
 	}
 	if got := filepath.Base(path); got != "lifecycle-audit.jsonl" {
 		t.Errorf("audit file is named %q; it must stay separate from gate-audit.jsonl", got)

@@ -189,13 +189,13 @@ func FromLifecycleEvent(l LifecycleEvent, producer string) (*Event, error) {
 		e.Message = l.Message
 	}
 
-	switch {
-	case l.Reason == ReasonOK:
+	switch l.Reason {
+	case ReasonOK:
 		e.EventType = successTypeFor(l.Op)
 		e.Outcome = OutcomeSuccess
 		e.Severity = SeverityInfo
 
-	case l.Reason == ReasonInternalError:
+	case ReasonInternalError:
 		// Not a refusal. The operation did not reach a verdict, and saying
 		// otherwise would let an outage read as a wall of denials.
 		e.EventType = successTypeFor(l.Op)

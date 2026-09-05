@@ -65,6 +65,11 @@ func defaultLifecycleAuditSink(home string, line []byte) error {
 	if fi, err := os.Stat(path); err == nil && fi.Size() >= lifecycleAuditMaxBytes {
 		_ = os.Rename(path, path+".1")
 	}
+	// #nosec G304 -- `path` is lifecycleAuditPath(home) under the caller's OWN
+	// resolved home (the --home flag or $HOME). It is the operator choosing where
+	// their own audit log lives on their own machine, not attacker-controlled
+	// input crossing a boundary: anyone who can set --home can already write the
+	// file directly. Same construction as gate_audit.go and invocation_trail.go.
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
