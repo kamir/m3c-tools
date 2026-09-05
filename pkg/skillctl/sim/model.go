@@ -62,14 +62,15 @@ const (
 
 	// Adversary capabilities. Each one names what the attacker is assumed to
 	// control, because "hacked" is not a threat model.
-	ActTamperTransit   ActionKind = "adv:tamper-transit"   // flip bytes in the .skb before the victim sees it
-	ActLyingSignature  ActionKind = "adv:lying-signature"  // flip bytes AND rename the sig to match the new digest
-	ActForgeAttest     ActionKind = "adv:forge-attest"     // attest with a key nobody pinned
-	ActTamperInstalled ActionKind = "adv:tamper-installed" // edit an installed file (same-uid, post-install)
-	ActStripRevoke     ActionKind = "adv:strip-revoke"     // hostile registry deletes the revoke event
-	ActRelabelRevoke   ActionKind = "adv:relabel-revoke"   // hostile registry renames a revoke to look like an install
-	ActStolenKey       ActionKind = "adv:stolen-key"       // attacker holds the publisher's private key
-	ActForgeEnvelope   ActionKind = "adv:forge-envelope"   // hostile store rewrites an event's envelope signature
+	ActTamperTransit    ActionKind = "adv:tamper-transit"      // flip bytes in the .skb before the victim sees it
+	ActLyingSignature   ActionKind = "adv:lying-signature"     // flip bytes AND rename the sig to match the new digest
+	ActWithholdArtifact ActionKind = "probe:withhold-artifact" // remove the stored .skb, keep every signed event
+	ActForgeAttest      ActionKind = "adv:forge-attest"        // attest with a key nobody pinned
+	ActTamperInstalled  ActionKind = "adv:tamper-installed"    // edit an installed file (same-uid, post-install)
+	ActStripRevoke      ActionKind = "adv:strip-revoke"        // hostile registry deletes the revoke event
+	ActRelabelRevoke    ActionKind = "adv:relabel-revoke"      // hostile registry renames a revoke to look like an install
+	ActStolenKey        ActionKind = "adv:stolen-key"          // attacker holds the publisher's private key
+	ActForgeEnvelope    ActionKind = "adv:forge-envelope"      // hostile store rewrites an event's envelope signature
 )
 
 // Action is one step with its parameters. Params stay stringly-typed: a scenario
@@ -149,6 +150,17 @@ const (
 	// sentence the tool printed, not an event that happened, and every accept bin
 	// in every histogram on this project rests on it.
 	InvAcceptDelivers Invariant = "INV-7-accept-delivers"
+
+	// INV-8: a decision that can be made from SIGNED METADATA must not depend on
+	// artifact bytes. Decided as FR-0119 D3 on 2026-09-05.
+	//
+	// It is a side-effect requirement, not a diagnosis contract: a pull must not
+	// fetch bytes from an untrusted backend about which it has already decided.
+	// You cannot observe a fetch that did not happen, so the corpus takes the bytes
+	// away instead. If the revocation and governance decisions are genuinely made
+	// without them, they are still reached; an implementation that fetched first
+	// would report the fetch failure instead, which surfaces as the digest gate.
+	InvMetadataDecidesAlone Invariant = "INV-8-metadata-decides-alone"
 )
 
 // Scenario is one generated experiment.

@@ -64,7 +64,22 @@ MUTANTS=(
   "gate1-envelope|pkg/skillctl/registry/backend_pull.go|s|if err := VerifyEnvelopeSignature(pub, event); err != nil {|if err := VerifyEnvelopeSignature(pub, event); false \&\& err != nil {|"
   "gate2-digest|pkg/skillctl/registry/backend_pull.go|s|if gotDigest != digest {|if false \&\& gotDigest != digest {|"
   "silent-noop-install|pkg/skillctl/registry/install_trust_mode.go|s|if err := os.Rename(tmp, target); err != nil {|if err := func() error { _ = tmp; _ = target; return nil }(); err != nil {|"
+  "early-fetch|pkg/skillctl/registry/backend_pull.go|s|if acc.IsRevoked(digest) {|if _, ferr := be.Fetch(ctx, artifact.ArtifactRef{Name: name, Version: ver, Digest: digest}); ferr != nil { res.Skipped = append(res.Skipped, \&PullSkip{Name: name, Version: ver, Digest: digest, Gate: ErrGateDigest, Detail: ferr.Error()}); continue } else if acc.IsRevoked(digest) {|"
 )
+
+# The last two are not disabled gates. They are the two SIDE-EFFECT requirements,
+# and each exists because the defect it models is invisible to everything that
+# reads an exit code or a gate name.
+#
+#   silent-noop-install  reports success and writes nothing        -> caught by INV-7
+#   early-fetch          fetches the artifact BEFORE deciding      -> caught by INV-8
+#
+# early-fetch is the calibration for FR-0119 D3, decided 2026-09-05. You cannot
+# observe a fetch that did not happen, so the corpus withholds the artifact and
+# checks that the revocation and governance decisions are still reached. This
+# mutant is the proof that the check has teeth: it fetches first, the fetch fails
+# because the bytes are gone, and the pull reports the digest gate for a bundle it
+# should have refused on signed metadata alone.
 
 # The last one is not a gate. It is the defect class an external reviewer named on
 # 2026-09-05: report success, write nothing. Every check that reads an exit code or

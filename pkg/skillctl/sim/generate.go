@@ -80,6 +80,11 @@ const (
 	// an assumption. If the admit refuses, the claim is grounded in a measurement
 	// instead of an argument. Either answer is worth more than the argument was.
 	AdvPublisherBadSigs AdvKind = "publisher-bad-sigs"
+
+	// AdvArtifactWithheld is a PROBE, not an attack: the backend no longer serves
+	// the bytes, while every signed event stays in place. It is how FR-0119 D3
+	// becomes measurable from outside the process. See WithholdArtifact.
+	AdvArtifactWithheld AdvKind = "artifact-withheld"
 )
 
 // Params is one point in the corpus.
@@ -145,7 +150,7 @@ func AllAdvKinds() []AdvKind {
 	return []AdvKind{
 		AdvNone, AdvTransitChecked, AdvTransitSkipped, AdvStoredBundle,
 		AdvForgeAttest, AdvStripRevoke, AdvRelabelRevoke, AdvTamperInstalled,
-		AdvStolenKey, AdvForgeEnvelope, AdvPublisherBadSigs,
+		AdvStolenKey, AdvForgeEnvelope, AdvPublisherBadSigs, AdvArtifactWithheld,
 	}
 }
 
@@ -400,6 +405,14 @@ func build(p Params) Scenario {
 	}
 
 	// 5. The artifact swap happens after a clean admit.
+	if p.Adv == AdvArtifactWithheld {
+		sc.Steps = append(sc.Steps, Step{
+			Action: Action{Kind: ActWithholdArtifact, Actor: Adversary, Skill: skill},
+			Expect: Expectation{Outcome: NoEffect, Exit: -1, Claimed: true,
+				Why: "FR-0119 D3 probe: the events stay, the bytes go. A decision that does " +
+					"not need the artifact must still be reachable"},
+		})
+	}
 	if p.Adv == AdvStoredBundle {
 		sc.Steps = append(sc.Steps, Step{
 			Action: Action{Kind: ActTamperTransit, Actor: Adversary, Skill: skill,

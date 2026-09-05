@@ -97,6 +97,9 @@ func Execute(skillctl, rootDir string, sc Scenario) ScenarioResult {
 		case ActTamperInstalled:
 			aerr = w.TamperInstalled(skill)
 			code = -1
+		case ActWithholdArtifact:
+			aerr = w.WithholdArtifact(skill)
+			code = -1
 		case ActLyingSignature:
 			aerr = w.LyingSignature(skill)
 			code = -1
@@ -158,6 +161,14 @@ func Execute(skillctl, rootDir string, sc Scenario) ScenarioResult {
 	return res
 }
 
+// strOr keeps a violation message readable when the tool named no gate at all.
+func strOr(s, fallback string) string {
+	if s == "" {
+		return fallback
+	}
+	return s
+}
+
 // judge compares one prediction with one observation.
 func judge(e Expectation, r StepResult) Verdict {
 	if !e.Claimed {
@@ -183,6 +194,19 @@ func checkInvariants(sc Scenario, i int, r StepResult, w *World) []InvariantViol
 	b := w.bundles["simskill"]
 	if b == nil {
 		return nil
+	}
+
+	// INV-8: with the artifact withheld, a bundle that is revoked or ungoverned must
+	// STILL be refused by its own gate. Reaching the digest gate instead would mean
+	// the fetch happened before the decision, which is what FR-0119 D3 forbids.
+	if r.Step.Action.Kind == ActPull && sc.P.Adv == AdvArtifactWithheld {
+		_, want := StateAt(sc.P, b.revoked).Decide()
+		if (want == "gate 5" || want == "gate 4") && r.Gate != want {
+			v = append(v, InvariantViolation{InvMetadataDecidesAlone, i,
+				"the artifact was withheld and a " + want + " decision was expected from signed " +
+					"metadata alone, but the pull reported " + strOr(r.Gate, "no gate") +
+					": the bytes were needed before the decision"})
+		}
 	}
 
 	// The two disk-based invariants first, because they are the only ones that do

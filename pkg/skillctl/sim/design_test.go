@@ -183,3 +183,62 @@ func TestEveryGateIsSeeded(t *testing.T) {
 		}
 	}
 }
+
+// TestWithheldArtifactProbeStillDiscriminates guards FR-0119 D3.
+//
+// The probe only proves something if the metadata gates are still expected to
+// speak when the bytes are gone. If a model change ever made the withheld case
+// predict the digest gate everywhere, the probe would keep running, keep passing,
+// and stop testing the requirement. That failure mode is silent, so it gets a
+// test of its own.
+func TestWithheldArtifactProbeStillDiscriminates(t *testing.T) {
+	cases := []struct {
+		name       string
+		p          Params
+		afterRev   bool
+		wantGate   string
+		wantReason string
+	}{
+		{
+			name:       "no governance, bytes withheld",
+			p:          Params{Cast: CastSolo, Key: KeySeparatePin, Gov: GovNone, Adv: AdvArtifactWithheld},
+			wantGate:   "gate 4",
+			wantReason: "governance is decided from signed attestations, not from the artifact",
+		},
+		{
+			name:       "revoked, bytes withheld",
+			p:          Params{Cast: CastSolo, Key: KeySeparatePin, Gov: GovGreen, Adv: AdvArtifactWithheld, Revoke: true},
+			afterRev:   true,
+			wantGate:   "gate 5",
+			wantReason: "a revoke is decided from a signed event, not from the artifact",
+		},
+		{
+			name:       "clean, bytes withheld",
+			p:          Params{Cast: CastSolo, Key: KeySeparatePin, Gov: GovGreen, Adv: AdvArtifactWithheld},
+			wantGate:   "gate 2",
+			wantReason: "with nothing else wrong the fetch itself is the failure, and it must show",
+		},
+	}
+	for _, c := range cases {
+		accept, gate := StateAt(c.p, c.afterRev).Decide()
+		if accept {
+			t.Errorf("%s: accepted; the probe cannot discriminate if the bundle installs", c.name)
+			continue
+		}
+		if gate != c.wantGate {
+			t.Errorf("%s: got %s, want %s (%s)", c.name, gate, c.wantGate, c.wantReason)
+		}
+	}
+}
+
+// TestWithheldProbeIsInTheDesign: a probe that the covering array never selects
+// tests nothing at all.
+func TestWithheldProbeIsInTheDesign(t *testing.T) {
+	rows, _ := CoveringArray(2)
+	for _, p := range rows {
+		if p.Adv == AdvArtifactWithheld {
+			return
+		}
+	}
+	t.Error("no row of the design withholds the artifact, so FR-0119 D3 is unmeasured")
+}

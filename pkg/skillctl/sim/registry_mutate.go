@@ -151,3 +151,48 @@ func (w *World) ForgeEnvelope(skill string) error {
 		return os.WriteFile(full, out, 0o600)
 	})
 }
+
+// WithholdArtifact removes the stored .skb from the registry while leaving every
+// signed event in place. It is not an attack: it is the PROBE for FR-0119 D3.
+//
+// The requirement decided on 2026-09-05 says a pull must not fetch artifact bytes
+// from an untrusted backend once it has already decided against the bundle from
+// signed metadata alone. That is a statement about side effects, and it is hard to
+// check from outside a process: you cannot see a fetch that did not happen.
+//
+// Taking the bytes away turns it into something observable. If the decision truly
+// does not need them, a revoked bundle still refuses at gate 5 and an ungoverned
+// one still refuses at gate 4. An implementation that fetched first would instead
+// report a fetch failure, which surfaces as gate 2, and the gate-order prediction
+// catches it as a conflict. No instrumentation of the product, no privileged view:
+// the absence of a side effect is measured by removing what the side effect would
+// have touched.
+func (w *World) WithholdArtifact(skill string) error {
+	b := w.bundles[skill]
+	if b == nil {
+		return fmt.Errorf("sim: %s not packed", skill)
+	}
+	bare := strings.TrimPrefix(w.Registry, "local://")
+	clone, err := os.MkdirTemp(w.Root, "withhold-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(clone) }()
+	if out, err := git(clone, "clone", "--quiet", bare, "."); err != nil {
+		return fmt.Errorf("clone: %v: %s", err, out)
+	}
+	blob := filepath.Join(clone, "skills", skill, b.version, "bundle.skb")
+	if err := os.Remove(blob); err != nil {
+		return fmt.Errorf("remove stored artifact: %w", err)
+	}
+	if out, err := git(clone, "add", "-A"); err != nil {
+		return fmt.Errorf("add: %v: %s", err, out)
+	}
+	if out, err := git(clone, "commit", "--quiet", "-m", "probe: the backend cannot serve the artifact"); err != nil {
+		return fmt.Errorf("commit: %v: %s", err, out)
+	}
+	if out, err := git(clone, "push", "--quiet", "origin", "HEAD"); err != nil {
+		return fmt.Errorf("push: %v: %s", err, out)
+	}
+	return nil
+}
