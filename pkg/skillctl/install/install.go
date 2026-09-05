@@ -264,19 +264,74 @@ func Install(opts Opts) (*Result, error) {
 		return nil, err
 	}
 
+	res, err := finishInstall(finishOpts{
+		blob:       blob,
+		blobPath:   blobPath,
+		stagingDir: stagingDir,
+		homeDir:    homeDir,
+		name:       opts.Name,
+		digest:     digest,
+		meta:       meta,
+		resolver:   opts.Client,
+		verRes:     verRes,
+		maxBytes:   opts.MaxExtractedBytes,
+		logger:     opts.Logger,
+		ctx:        ctx,
+		now:        now,
+	})
+	if err != nil {
+		return nil, err
+	}
+	cleanedUp = true
+	return res, nil
+}
+
+// finishOpts is the input to the shared post-verification sequence.
+type finishOpts struct {
+	blob       []byte
+	blobPath   string
+	stagingDir string
+	homeDir    string
+	name       string
+	digest     string
+	meta       *registry.BundleMeta
+	resolver   identityResolver // may be nil: offline installs have no registry
+	verRes     *verify.VerifyResult
+	maxBytes   int64
+	logger     io.Writer
+	ctx        context.Context
+	now        func() time.Time
+}
+
+// finishInstall is everything that happens AFTER the trust chain has passed:
+// extract, validate checksums, atomic install, stash the .skb and the offline
+// metadata.
+//
+// It exists as one function because there are now two ways to reach it, a
+// registry pull and a local .skb (SPEC-0406 D2), and this sequence is the part
+// that actually writes to the user's machine. Two copies of it would be two
+// implementations of one theory, and they drift: this project has already paid
+// for that lesson twice in the simulation package, where a second prediction
+// oracle and a second prune rule each silently disagreed with the original.
+// Here the cost of drift would not be a wrong number in a report, it would be
+// one install path missing a defence the other one has.
+//
+// The caller owns the staging directory's lifetime; this function removes it on
+// success only.
+func finishInstall(o finishOpts) (*Result, error) {
 	// ----- extract -----
-	extractDir := filepath.Join(stagingDir, "extracted")
+	extractDir := filepath.Join(o.stagingDir, "extracted")
 	if err := os.MkdirAll(extractDir, 0o755); err != nil {
 		return nil, fmt.Errorf("install: mkdir extract dir: %w", err)
 	}
-	cap := opts.MaxExtractedBytes
+	cap := o.maxBytes
 	if cap <= 0 {
 		cap = MaxExtractedBytes
 	}
-	if err := extractTGZ(blob, extractDir, cap); err != nil {
+	if err := extractTGZ(o.blob, extractDir, cap); err != nil {
 		return nil, err
 	}
-	logStep(opts.Logger, "extracted", "dir=%s", extractDir)
+	logStep(o.logger, "extracted", "dir=%s", extractDir)
 
 	// ----- validate CHECKSUMS if present -----
 	if err := validateChecksumsIfPresent(extractDir); err != nil {
@@ -284,12 +339,12 @@ func Install(opts Opts) (*Result, error) {
 	}
 
 	// ----- atomic install + archive prior version if any -----
-	canonName, err := CanonicalSkillName(opts.Name) // SEC F12: one fixed point: install writes the same dir the gate/verifier resolve
+	canonName, err := CanonicalSkillName(o.name) // SEC F12: one fixed point: install writes the same dir the gate/verifier resolve
 	if err != nil {
 		return nil, err
 	}
-	target := filepath.Join(homeDir, installRoot, canonName)
-	archivedPath, err := atomicInstall(extractDir, target, homeDir, canonName, digest)
+	target := filepath.Join(o.homeDir, installRoot, canonName)
+	archivedPath, err := atomicInstall(extractDir, target, o.homeDir, canonName, o.digest)
 	if err != nil {
 		return nil, err
 	}
@@ -298,27 +353,26 @@ func Install(opts Opts) (*Result, error) {
 	// `skillctl verify <name>` can recompute the digest later without
 	// re-fetching from the registry. We copy bytes (rather than rename
 	// the staged file) because the staging dir is about to be removed.
-	stashedSkb := filepath.Join(target, filepath.Base(blobPath))
-	if err := os.WriteFile(stashedSkb, blob, 0o644); err != nil {
+	stashedSkb := filepath.Join(target, filepath.Base(o.blobPath))
+	if err := os.WriteFile(stashedSkb, o.blob, 0o644); err != nil {
 		return nil, fmt.Errorf("install: stash .skb in target: %w", err)
 	}
 
 	// Stash BundleMeta + author identity for network-free re-verification
 	// (SPEC-0247). Best-effort: a failure here just means offline verify
 	// falls back to the online path; the install itself still succeeded.
-	if err := StashOfflineMeta(ctx, opts.Client, target, meta, now); err != nil {
-		logStep(opts.Logger, "offline_meta_warn", "offline verify will fall back to online: %v", err)
+	if err := StashOfflineMeta(o.ctx, o.resolver, target, o.meta, o.now); err != nil {
+		logStep(o.logger, "offline_meta_warn", "offline verify will fall back to online: %v", err)
 	}
 
-	cleanedUp = true
 	// Best-effort cleanup of the staging dir (the extract sub-dir was
 	// renamed away, so what's left is just the .skb blob plus the
 	// staging dir itself).
-	_ = os.RemoveAll(stagingDir)
+	_ = os.RemoveAll(o.stagingDir)
 
-	logStep(opts.Logger, "installed", "path=%s archived=%s", target, archivedPath)
+	logStep(o.logger, "installed", "path=%s archived=%s", target, archivedPath)
 	return &Result{
-		Verify:        verRes,
+		Verify:        o.verRes,
 		InstalledPath: target,
 		ArchivedPath:  archivedPath,
 	}, nil

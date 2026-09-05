@@ -975,7 +975,9 @@ func readSignedManifestScopes(bundlePath string) ([]map[string]any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read bundle: %w", err)
 	}
-	entries, err := skillbundle.Unpack(blob, skillbundle.UnpackOptions{})
+	// StripWrapper: same reason as ReadDigestVerifiedManifest. A wrapped bundle
+	// previously yielded no signed scopes at all, which reads as "none declared".
+	entries, err := skillbundle.Unpack(blob, skillbundle.UnpackOptions{StripWrapper: true})
 	if err != nil {
 		return nil, fmt.Errorf("unpack bundle: %w", err)
 	}
@@ -1039,7 +1041,15 @@ func ReadDigestVerifiedManifest(bundlePath, expectedDigest string) (map[string]a
 	if err != nil {
 		return nil, fmt.Errorf("read bundle: %w", err)
 	}
-	entries, err := skillbundle.Unpack(blob, skillbundle.UnpackOptions{})
+	// StripWrapper collapses the single top-level dir of a SPEC-0188 §3.1 wrapped
+	// bundle. Without it this lookup only ever found bundle.json in a FLAT archive
+	// (what our own `pack` writes), and silently found nothing in a wrapped one,
+	// which the unpacker, the installer and the spec all support. "Found nothing"
+	// is the dangerous outcome here: for the data-scope caller it reads as "the
+	// author declared no scopes" rather than "we could not look". It collapses
+	// only when there is exactly one common top-level dir, so a flat archive is
+	// unaffected.
+	entries, err := skillbundle.Unpack(blob, skillbundle.UnpackOptions{StripWrapper: true})
 	if err != nil {
 		return nil, fmt.Errorf("unpack bundle: %w", err)
 	}
