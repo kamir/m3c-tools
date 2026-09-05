@@ -20,6 +20,8 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -515,38 +517,12 @@ func (w *World) SnapshotInstall() InstallSnapshot {
 		}
 		return snap
 	}
-
-	werr := filepath.Walk(root, func(p string, fi os.FileInfo, err error) error {
-		if err != nil {
-			return fmt.Errorf("walk %s: %w", p, err)
-		}
-		if fi == nil || fi.IsDir() {
-			return nil
-		}
-		rel, rerr := filepath.Rel(root, p)
-		if rerr != nil {
-			return fmt.Errorf("relpath %s: %w", p, rerr)
-		}
-		if fi.Mode()&os.ModeSymlink != 0 {
-			// Record the link itself rather than following it: a snapshot that
-			// silently resolves links can be told that nothing changed by an
-			// attacker who only moved a target.
-			snap.Files[filepath.ToSlash(rel)] = "symlink"
-			return nil
-		}
-		// #nosec G304 -- p comes from Walk over a directory this process created
-		// inside its own throwaway root; there is no user-supplied path here.
-		b, rerr := os.ReadFile(p)
-		if rerr != nil {
-			return fmt.Errorf("read %s: %w", p, rerr)
-		}
-		sum := sha256.Sum256(b)
-		snap.Files[filepath.ToSlash(rel)] = hex.EncodeToString(sum[:])
-		return nil
-	})
-	if werr != nil {
-		snap.Err = werr.Error()
+	files, err := hashTreeRooted(root)
+	if err != nil {
+		snap.Err = err.Error()
+		return snap
 	}
+	snap.Files = files
 	return snap
 }
 
@@ -639,29 +615,7 @@ var installSidecars = map[string]bool{
 // of the install, not a cryptographic one. That gap is named rather than papered
 // over, and closing it means reading the .skb.
 func (w *World) SourceManifest(skill string) (map[string]string, error) {
-	root := filepath.Join(w.Root, "src", skill)
-	out := map[string]string{}
-	err := filepath.Walk(root, func(p string, fi os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if fi == nil || fi.IsDir() {
-			return nil
-		}
-		rel, rerr := filepath.Rel(root, p)
-		if rerr != nil {
-			return rerr
-		}
-		// #nosec G304 -- the harness's own source tree inside its throwaway root.
-		b, rerr := os.ReadFile(p)
-		if rerr != nil {
-			return rerr
-		}
-		sum := sha256.Sum256(b)
-		out[filepath.ToSlash(rel)] = hex.EncodeToString(sum[:])
-		return nil
-	})
-	return out, err
+	return hashTreeRooted(filepath.Join(w.Root, "src", skill))
 }
 
 // installedManifest reads what is actually under the consumer's skill directory,
@@ -679,4 +633,56 @@ func (w *World) installedManifest(skill string) InstallSnapshot {
 		}
 	}
 	return out
+}
+
+// hashTreeRooted walks dir and hashes every regular file under it, reading through
+// an os.Root handle so a symlink cannot carry the read outside the directory.
+//
+// The plain form (filepath.Walk plus os.ReadFile on the callback path) is exactly
+// the TOCTOU shape gosec flags as G122, and here the warning is not academic: the
+// directory being measured is written by the binary under test, and one of the
+// mutants in the calibration suite exists to write things it should not. An oracle
+// that can be walked out of its own root by a planted symlink is not an oracle.
+//
+// A symlink is recorded as the literal value "symlink" rather than followed, so a
+// swapped target still shows up as a change.
+func hashTreeRooted(dir string) (map[string]string, error) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = root.Close() }()
+
+	out := map[string]string{}
+	err = fs.WalkDir(root.FS(), ".", func(rel string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return fmt.Errorf("walk %s: %w", rel, err)
+		}
+		if rel == "." || d.IsDir() {
+			return nil
+		}
+		switch {
+		case d.Type()&fs.ModeSymlink != 0:
+			out[rel] = "symlink"
+			return nil
+		case !d.Type().IsRegular():
+			out[rel] = "irregular:" + d.Type().String()
+			return nil
+		}
+		f, oerr := root.Open(rel)
+		if oerr != nil {
+			return fmt.Errorf("open %s: %w", rel, oerr)
+		}
+		defer func() { _ = f.Close() }()
+		h := sha256.New()
+		if _, cerr := io.Copy(h, f); cerr != nil {
+			return fmt.Errorf("read %s: %w", rel, cerr)
+		}
+		out[rel] = hex.EncodeToString(h.Sum(nil))
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
