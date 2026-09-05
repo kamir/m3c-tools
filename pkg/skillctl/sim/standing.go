@@ -168,8 +168,10 @@ func (rep Report) WriteOutputCoverage(w io.Writer) {
 		fmt.Fprintf(w, "    %-10s %4d   (claimed refusals that named no gate; see FR-0121)\n",
 			"unlabelled", oc.Unlabelled)
 	}
-	fmt.Fprintf(w, "  Population: pull steps whose outcome the model claims. One denominator for\n")
-	fmt.Fprintf(w, "  the whole table, so these rows and the histogram below are the same quantity.\n")
+	fmt.Fprintf(w, "  Population: pull steps whose outcome the model claims. Same population as\n")
+	fmt.Fprintf(w, "  the histogram below, but a DIFFERENT partition of it: a waived outcome is\n")
+	fmt.Fprintf(w, "  counted here under the decision it reached and there under \"waived\". So\n")
+	fmt.Fprintf(w, "  accept can read 8 here and 6 plus 2 waived there, and both are right.\n")
 	if s := oc.Short(); len(s) > 0 {
 		fmt.Fprintf(w, "  %d declared decision(s) below target. Input coverage cannot substitute:\n", len(s))
 		fmt.Fprintf(w, "  a corpus can cover every pair of inputs and still never reach a gate.\n")
