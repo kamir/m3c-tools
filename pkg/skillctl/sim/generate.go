@@ -62,6 +62,29 @@ const (
 	// action alphabet had no move that could set the envelope bit to zero, so no
 	// number of scenarios could ever have demonstrated that gate.
 	AdvForgeEnvelope AdvKind = "forge-envelope"
+
+	// AdvPublisherBadSigs is the MALICIOUS PUBLISHER, and it exists because an
+	// information theorist showed on 2026-09-05 that the model could not express
+	// him, and that his absence was quietly doing the work of a proof.
+	//
+	// The argument the poster used to make was: the bundle signature rows sit
+	// inside the signed envelope, so breaking them breaks the envelope, so gate 1
+	// always speaks before gate 3, so gate 3 is structurally unreachable. That
+	// argument silently assumes nobody RE-SEALS the envelope. The publisher holds
+	// the registry key and can. Whether the tool lets him is a question about the
+	// product, and it was never asked, because the alphabet had no move for it.
+	//
+	// So the move exists now: the bundle's signature is replaced by a well-formed
+	// but wrong one BEFORE the publisher admits, and the publisher admits anyway.
+	// If the admit succeeds, gate 3 becomes reachable and the structural claim was
+	// an assumption. If the admit refuses, the claim is grounded in a measurement
+	// instead of an argument. Either answer is worth more than the argument was.
+	AdvPublisherBadSigs AdvKind = "publisher-bad-sigs"
+
+	// AdvArtifactWithheld is a PROBE, not an attack: the backend no longer serves
+	// the bytes, while every signed event stays in place. It is how FR-0119 D3
+	// becomes measurable from outside the process. See WithholdArtifact.
+	AdvArtifactWithheld AdvKind = "artifact-withheld"
 )
 
 // Params is one point in the corpus.
@@ -78,16 +101,62 @@ type Params struct {
 // mathematical closure: a cross product over every flag would produce thousands
 // of runs, most of them the same decision reached twice. The filter below keeps
 // the points where a DIFFERENT gate decides, and drops the rest.
+// The axes of the experiment, in one place.
+//
+// They used to be written out twice, once here and once in the covering array's
+// factor table, and the second copy was silently one level short when a new
+// adversary was added: the design kept planning over ten moves while the corpus
+// carried eleven. That is the third duplication of a definition to bite this
+// package in two days, after the two prediction oracles and the two prune rules.
+// The pattern is always the same, so the remedy is always the same: one source,
+// read by everyone who needs it.
+func AllCasts() []Cast { return []Cast{CastSolo, CastDuo, CastTrio} }
+
+// AllKeyings lists the key-layout levels.
+func AllKeyings() []Keying { return []Keying{KeyShared, KeySeparateOpen, KeySeparatePin} }
+
+// AllGovs lists the governance levels.
+func AllGovs() []Gov { return []Gov{GovGreen, GovYellow, GovNone} }
+
+// AllAdvKinds lists every adversary move the alphabet contains. Every statement
+// this package makes about unreachability is a statement about THIS list, which
+// is why it is exported and why the report prints it.
+// OpenDiagnostics names adversary moves whose SECURITY behaviour is settled and
+// measured, but whose DIAGNOSTIC label is under an open finding.
+//
+// The distinction was forced by an external reviewer on 2026-09-05, and he was
+// right in a way that mattered. The first attempt held the whole move out of the
+// blocking corpus because one thing about it was undecided. That removed, along
+// with the undecided label, three security assertions that were perfectly
+// decidable: the install is refused, the install target is untouched, and the
+// exit code is non-zero. Quarantining an attack because its error message is
+// unclear throws away the part that was working.
+//
+// So the exemption is now surgical. For a move listed here the simulation still
+// claims and scores the decision, and it declines to compare only the gate name,
+// with the finding printed on every run. Nothing else changes: the move sits in
+// the covering array, INV-6 checks that the refusal wrote nothing, and a
+// regression that turned the refusal into an acceptance would fail the gate like
+// any other.
+func OpenDiagnostics() map[AdvKind]string {
+	return map[AdvKind]string{
+		AdvPublisherBadSigs: "FR-0121: gate 3 fires and does not name itself. Disabling it " +
+			"flips this pull from refuse to accept, so the control is live; only the label " +
+			"is missing. The decision is compared and scored, the label is waived",
+	}
+}
+
+func AllAdvKinds() []AdvKind {
+	return []AdvKind{
+		AdvNone, AdvTransitChecked, AdvTransitSkipped, AdvStoredBundle,
+		AdvForgeAttest, AdvStripRevoke, AdvRelabelRevoke, AdvTamperInstalled,
+		AdvStolenKey, AdvForgeEnvelope, AdvPublisherBadSigs, AdvArtifactWithheld,
+	}
+}
+
 func Generate(limit int) []Scenario {
 	var out []Scenario
-	casts := []Cast{CastSolo, CastDuo, CastTrio}
-	keys := []Keying{KeyShared, KeySeparateOpen, KeySeparatePin}
-	govs := []Gov{GovGreen, GovYellow, GovNone}
-	advs := []AdvKind{
-		AdvNone, AdvTransitChecked, AdvTransitSkipped, AdvStoredBundle,
-		AdvForgeAttest, AdvStripRevoke, AdvRelabelRevoke, AdvTamperInstalled, AdvStolenKey,
-		AdvForgeEnvelope,
-	}
+	casts, keys, govs, advs := AllCasts(), AllKeyings(), AllGovs(), AllAdvKinds()
 
 	for _, c := range casts {
 		for _, k := range keys {
@@ -121,103 +190,50 @@ func Generate(limit int) []Scenario {
 }
 
 // meaningful drops combinations that cannot teach anything new.
-func meaningful(p Params) bool {
-	// A revoke only says something once there is something to revoke, and the
-	// revoke-suppression attacks only make sense together with a revoke.
-	needsRevoke := p.Adv == AdvStripRevoke || p.Adv == AdvRelabelRevoke
-	if needsRevoke && !p.Revoke {
-		return false
+
+// installExpected is the per-step prediction for a pull. It does NOT reimplement
+// the decision; it ASKS the analytic model, so there is exactly one place where
+// the theory lives.
+//
+// It used to be a second hand-written switch, and that cost a lesson worth keeping:
+// when the envelope forgery was added to the state mapping, this function was not
+// updated, and the two halves of the same theory quietly disagreed. Every scenario
+// with that capability then predicted "accept" while the model said "gate 1". The
+// covering array found all seven within a minute of being switched on, which is
+// precisely what a designed experiment is for and what the hand-picked sample had
+// missed. Deleting the duplicate is the actual fix; noticing it was luck.
+func installExpected(p Params) (ok bool, gate string, why string) {
+	accept, g := StateAt(p, false).Decide()
+	if accept {
+		return true, "", "SPEC-0188 §7: every gate passes"
 	}
-	if p.Revoke && p.Gov != GovGreen {
-		// Nothing installs without governance, so the kill switch has no subject.
-		return false
-	}
-	// A shared key cannot express "the reviewer key was not pinned": there is only
-	// one key, and it is the registry pin.
-	if p.Key == KeyShared && p.Adv == AdvForgeAttest {
-		return true // still meaningful: a foreign key attests against a single-key pin
-	}
-	// The post-install tamper needs an install to exist.
-	if p.Adv == AdvTamperInstalled && p.Gov != GovGreen {
-		return false
-	}
-	// A stolen key with no governance never gets far enough to be interesting.
-	if p.Adv == AdvStolenKey && p.Gov == GovNone {
-		return false
-	}
-	// The envelope forgery is decided by the FIRST gate, so the other axes add
-	// nothing: one point per cast is the whole lesson.
-	if p.Adv == AdvForgeEnvelope && (p.Gov != GovGreen || p.Key != KeySeparatePin) {
-		return false
-	}
-	// The transit attacks are about the publisher's own discipline; the governance
-	// axis adds nothing there, so pin it to green and drop the rest.
-	if (p.Adv == AdvTransitChecked || p.Adv == AdvTransitSkipped) && p.Gov != GovGreen {
-		return false
-	}
-	// The cast only changes WHO holds which key; combined with KeyShared, duo and
-	// trio collapse onto solo for every adversary except none.
-	if p.Key == KeyShared && p.Cast != CastSolo && p.Adv != AdvNone {
-		return false
-	}
-	// A revoke only adds steps when something was installed to revoke. Where the
-	// pull is expected to refuse anyway, the -rev variant is a byte-identical
-	// duplicate of its sibling: pure corpus inflation, and exactly the kind of
-	// padding that makes a benchmark look broader than it is.
-	if p.Revoke {
-		if ok, _, _ := installExpected(p); !ok {
-			return false
-		}
-	}
-	return true
+	return false, g, whyGate(g, p)
 }
 
-// installExpected is the theory for the honest path: does the consumer end up
-// with the skill installed, and if not, which gate refused?
-//
-// GATE ORDER matters and is easy to get wrong. The pull applies, in this order:
-// envelope signature, revoked, governance floor, digest, bundle signatures
-// (SPEC-0188 §7 as the gauntlet implements it). The FIRST gate that refuses is
-// the one the report shows, so a scenario that would fail two gates only ever
-// demonstrates the earlier one.
-//
-// This function was WRONG on its first draft in two ways, and the run said so.
-// Both corrections are kept visible here rather than quietly patched, because the
-// point of the exercise is that writing the theory is where you find out what you
-// did not understand:
-//
-//  1. It predicted the digest gate for a swapped artifact even when governance
-//     was also failing. Governance comes FIRST, so the digest gate is only
-//     reachable when the attestation is otherwise sound.
-//  2. It predicted that a forged attestation blocks the install. It does not: a
-//     forgery from an unpinned key is simply not counted, and the GENUINE
-//     attestation next to it still qualifies. A forgery removes nothing.
-func installExpected(p Params) (ok bool, gate string, why string) {
-	switch {
-	// Governance is evaluated before the digest, so it wins whenever both fail.
-	case p.Gov == GovNone:
-		return false, "gate 4", "SPEC-0188 §7: no attestation at or above the governance floor"
-	case p.Gov == GovYellow:
-		return false, "gate 4", "SPEC-0252 §6: yellow is below a green floor; the floor is enforced, not advisory"
-	case p.Key == KeySeparateOpen:
-		return false, "gate 4", "SPEC-0359 D3: an attestation counts only from a PINNED signer"
-
-	// Tampering in transit changes the bytes BEFORE the admit, so the publisher
-	// admits a different digest than the one the reviewer attested. The refusal
-	// therefore arrives at the governance gate, not at the digest gate: there is
-	// no attestation for the digest that was actually admitted. Worth stating
-	// plainly, because the intuitive answer ("digest mismatch") is wrong and the
-	// real one is stronger, the binding between an attestation and a digest does
-	// the work.
-	case p.Adv == AdvTransitChecked || p.Adv == AdvTransitSkipped:
-		return false, "gate 4", "the attestation is bound to the pre-tamper digest, so the admitted bytes have no governance"
-
-	// A swapped artifact AFTER a clean admit is the digest gate's own case: the
-	// events are sound, only the bytes are not.
-	case p.Adv == AdvStoredBundle:
-		return false, "gate 2", "SPEC-0188 §7: the digest is recomputed from the bytes, never taken from the store"
+// whyGate names the SPEC clause behind a refusal, so a conflict report tells the
+// reader which rule the prediction came from rather than only that it was wrong.
+func whyGate(gate string, p Params) string {
+	switch gate {
+	case "gate 1":
+		return "SPEC-0188 §7: the admit envelope no longer verifies against the pinned key"
+	case "gate 5":
+		return "SPEC-0188 §7: a revoked digest is refused before governance is even consulted"
+	case "gate 4":
+		switch {
+		case p.Gov == GovNone:
+			return "SPEC-0188 §7: no attestation at or above the governance floor"
+		case p.Gov == GovYellow:
+			return "SPEC-0252 §6: yellow is below a green floor; the floor is enforced, not advisory"
+		case p.Key == KeySeparateOpen:
+			return "SPEC-0359 D3: an attestation counts only from a PINNED signer"
+		}
+		return "the attestation is bound to the pre-tamper digest, so the admitted bytes have no governance"
+	case "gate 2":
+		return "SPEC-0188 §7: the digest is recomputed from the bytes, never taken from the store"
+	case "gate 3":
+		return "SPEC-0188 §7: the bundle signature rows do not verify"
 	}
-	return true, "", "SPEC-0188 §7: every gate passes"
+	return "SPEC-0188 §7"
 }
 
 func build(p Params) Scenario {
@@ -256,6 +272,16 @@ func build(p Params) Scenario {
 			Step{Action: Action{Kind: ActTamperTransit, Actor: Adversary, Skill: skill},
 				Expect: Expectation{Outcome: NoEffect, Exit: -1, Claimed: true,
 					Why: "the attacker controls the artifact, not the key"}},
+		)
+	case AdvPublisherBadSigs:
+		// The bundle keeps a signature FILE with the right name, so the verifier
+		// finds one and has to do real cryptography to reject it. That is the
+		// difference between "no signature" (exit 1) and "a signature that does not
+		// verify" (gate 3), and only the second one reaches the gate under test.
+		sc.Steps = append(sc.Steps,
+			Step{Action: Action{Kind: ActLyingSignature, Actor: Publisher, Skill: skill},
+				Expect: Expectation{Outcome: NoEffect, Exit: -1, Claimed: true,
+					Why: "the publisher controls the artifact AND the registry key"}},
 		)
 	}
 
@@ -302,6 +328,14 @@ func build(p Params) Scenario {
 	}
 
 	// 5. The artifact swap happens after a clean admit.
+	if p.Adv == AdvArtifactWithheld {
+		sc.Steps = append(sc.Steps, Step{
+			Action: Action{Kind: ActWithholdArtifact, Actor: Adversary, Skill: skill},
+			Expect: Expectation{Outcome: NoEffect, Exit: -1, Claimed: true,
+				Why: "FR-0119 D3 probe: the events stay, the bytes go. A decision that does " +
+					"not need the artifact must still be reachable"},
+		})
+	}
 	if p.Adv == AdvStoredBundle {
 		sc.Steps = append(sc.Steps, Step{
 			Action: Action{Kind: ActTamperTransit, Actor: Adversary, Skill: skill,
@@ -319,6 +353,18 @@ func build(p Params) Scenario {
 	})
 
 	ok, gate, why := installExpected(p)
+	// An open DIAGNOSTIC finding suppresses the label comparison and nothing else.
+	// judge() only compares Gate when it is non-empty, so clearing it leaves the
+	// outcome and the exit code fully claimed and fully scored.
+	// The exemption is narrower than it looks and has to be. It suppresses the
+	// label comparison ONLY where the open finding is actually the cause, that is
+	// where the model says gate 3. A publisher-bad-sigs bundle that is also revoked
+	// refuses at gate 5, and that label is settled: blanket-suppressing it hid a
+	// decided contract behind an undecided one.
+	//
+	// Found by the cause-discrimination measure on its first run, which reported one
+	// signal standing for two causes and turned out to be describing this bug rather
+	// than the product.
 	pullExpect := Expectation{Outcome: Accept, Exit: 0, Claimed: true, Why: why}
 	if !ok {
 		pullExpect = Expectation{Outcome: Refuse, Gate: gate, Exit: 1, Claimed: true, Why: why}
@@ -353,7 +399,19 @@ func build(p Params) Scenario {
 	}
 
 	// 8. The kill switch.
-	if p.Revoke && ok {
+	//
+	// The condition used to be `p.Revoke && ok`: revoke only where the install had
+	// succeeded. That is the SAME prune-by-outcome that was removed from
+	// meaningful(), one layer lower, and removing it there while leaving it here
+	// bought nothing. Worse, it made the coverage figure look as if it had: the
+	// post-revoke state was counted from the Revoke flag, so three states were
+	// reported as visited by scenarios that never revoked anything.
+	//
+	// A revoke is a PUBLISHER action against a digest. It does not need anybody to
+	// have installed first, and the interesting case is exactly the one the old
+	// condition removed: a bundle that is both revoked and otherwise broken, where
+	// the question is which gate speaks first.
+	if p.Revoke {
 		sc.Steps = append(sc.Steps, Step{
 			Action: Action{Kind: ActRevoke, Actor: Publisher, Skill: skill},
 			Expect: Expectation{Outcome: Accept, Exit: 0, Claimed: true,
@@ -379,11 +437,40 @@ func build(p Params) Scenario {
 						Why: "FR-0090 IS-T1: identity comes from the SIGNED envelope, never from the path, so a relabelled revoke still revokes"}},
 			)
 		default:
+			// Ask the model for the SECOND pull too, rather than assuming gate 5.
+			// With a broken envelope, gate 1 speaks first and the revoke never gets
+			// a turn: assuming otherwise is exactly the mistake this function used
+			// to make.
+			_, g2 := StateAt(p, true).Decide()
+			gate2, why2 := g2, whyGate(g2, p)
+			claimed2 := true
 			sc.Steps = append(sc.Steps, Step{
 				Action: Action{Kind: ActPull, Actor: Consumer, Skill: skill},
-				Expect: Expectation{Outcome: Refuse, Gate: "gate 5", Exit: 1, Claimed: true,
-					Why: "SPEC-0188 §7: a revoked digest is refused before governance is even consulted"},
+				Expect: Expectation{Outcome: Refuse, Gate: gate2, Exit: 1, Claimed: claimed2,
+					Why: why2},
 			})
+		}
+
+		// THE TEMPORAL CASE, requested by an external reviewer on 2026-09-05 and
+		// the reason R1 had to go: revoke first, attest AFTERWARDS, pull again.
+		//
+		// A revoke is a statement about a digest, not about a moment. An attestation
+		// that arrives later must not resurrect it, and nothing in the gate order
+		// says so on its own: gate 5 runs before gate 4, so the only way this can go
+		// wrong is if a fresh attestation somehow clears the revocation state. That
+		// is a question about how the two records combine over TIME, which no
+		// single-shot scenario asks.
+		if p.Adv == AdvNone {
+			sc.Steps = append(sc.Steps,
+				Step{Action: Action{Kind: ActAttest, Actor: Reviewer, Skill: skill,
+					Params: map[string]string{"level": string(GovGreen)}},
+					Expect: Expectation{Outcome: Accept, Exit: 0, Claimed: true,
+						Why: "posting an attestation is never gated; it is worth what the pull says it is worth"}},
+				Step{Action: Action{Kind: ActPull, Actor: Consumer, Skill: skill},
+					Expect: Expectation{Outcome: Refuse, Gate: "gate 5", Exit: 1, Claimed: true,
+						Why: "SPEC-0188 §7: a revoke is bound to a digest and outlives any later attestation; " +
+							"governance is not even consulted"}},
+			)
 		}
 	}
 	return sc

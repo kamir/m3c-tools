@@ -107,16 +107,42 @@ func StateAt(p Params, afterRevoke bool) State {
 		// REWRITES the signature does change it, and that is the only move in this
 		// alphabet which can.
 		EnvelopeSigned: p.Adv != AdvForgeEnvelope,
-		SigsVerify:     true,
-		DigestMatches:  p.Adv != AdvStoredBundle,
+		// The malicious publisher is the only move that can put this bit to zero.
+		// Every other actor in the alphabet has to break the envelope to reach the
+		// signature rows, and then gate 1 speaks first.
+		SigsVerify: p.Adv != AdvPublisherBadSigs,
+		// Withholding the bytes is indistinguishable from a digest failure AT THE
+		// POINT WHERE THE BYTES ARE NEEDED: the fetch fails and the pull reports the
+		// digest gate. The point of the probe is that a revoked or ungoverned bundle
+		// never gets that far, because those two gates decide from signed metadata
+		// alone. That is FR-0119 D3, made observable by taking away what an early
+		// fetch would have touched.
+		DigestMatches: p.Adv != AdvStoredBundle && p.Adv != AdvArtifactWithheld,
 	}
 
 	// x_rev. A revoke is visible when it was issued and the store still shows it.
 	// Deleting the event hides it (withholding is not detectable here); RENAMING
 	// it does not, because identity comes from the signed envelope and not from
 	// the path.
+	//
+	// A revoke is BOUND TO A DIGEST, and that is the whole of it. It covers the
+	// pulled bundle only when the digest the publisher revokes is the digest that
+	// was admitted. Transit tampering breaks exactly that equality: the bytes
+	// change after signing, so the admitted digest is not the one the publisher
+	// holds, and a revoke issued in good faith against the publisher's own record
+	// misses the artifact in the registry.
+	//
+	// This clause is here because the experiment produced it. The model used to
+	// assume a revoke always lands, predicted gate 5 for the two transit scenarios,
+	// and measured gate 4. The measurement was right and the theory was wrong, which
+	// is the direction that costs something to admit. It is not a fit to the
+	// observation: the justification is independent, a revoke names a digest, and a
+	// digest that nobody admitted revokes nothing.
 	if afterRevoke && p.Revoke {
-		s.Revoked = p.Adv != AdvStripRevoke
+		landed := p.Adv != AdvStripRevoke && // withheld: the consumer never sees it
+			p.Adv != AdvTransitChecked && // admitted digest differs from the revoked one
+			p.Adv != AdvTransitSkipped
+		s.Revoked = landed
 	}
 
 	// x_gov. Three independent ways to fail, and they compose:
@@ -134,21 +160,39 @@ func StateAt(p Params, afterRevoke bool) State {
 	return s
 }
 
+// BinLabelOpen is the outcome bin for a refusal whose gate name is under an open
+// diagnostic finding. It exists so that a question about a LABEL cannot show up
+// as a residual, which is a claim about BEHAVIOUR.
+const BinLabelOpen = "waived (see waivers)"
+
 // PredictHistogram is the analytical result: how many pulls in a corpus end at
 // each outcome, computed from the theory alone. Nothing is executed.
 func PredictHistogram(corpus []Scenario) map[string]int {
 	h := map[string]int{}
 	for _, sc := range corpus {
-		// A scenario contains one pull, or two when it exercises the kill switch.
-		pulls := 0
+		pull := 0
 		for _, st := range sc.Steps {
-			if st.Action.Kind == ActPull {
-				pulls++
+			if st.Action.Kind != ActPull {
+				continue
 			}
-		}
-		for i := 0; i < pulls; i++ {
-			accept, g := StateAt(sc.P, i > 0).Decide()
-			if accept {
+			afterRevoke := pull > 0
+			pull++
+			// UNCLAIMED STEPS ARE NOT PREDICTED, and this is the fix for a finding
+			// an IEEE 1012 reviewer raised on 2026-09-05: a step the report lists as
+			// out of model cannot also be a confirming measurement. Counting it in
+			// both histograms made a residual of zero partly a construction rather
+			// than a result.
+			if !st.Expect.Claimed {
+				continue
+			}
+			accept, g := StateAt(sc.P, afterRevoke).Decide()
+			// A waived disagreement is binned apart on BOTH sides, so it neither
+			// hides in the residual nor pretends to be agreement. The conflict count
+			// above still carries it; this bin only keeps it out of a number that
+			// means "the closed form reproduced the distribution".
+			if isWaivedPrediction(sc.P, g) {
+				h[BinLabelOpen]++
+			} else if accept {
 				h["accept"]++
 			} else {
 				h[g]++
@@ -163,10 +207,13 @@ func (rep Report) MeasureHistogram() map[string]int {
 	h := map[string]int{}
 	for _, r := range rep.Results {
 		for _, s := range r.Steps {
-			if s.Step.Action.Kind != ActPull {
+			// Same population as PredictHistogram: claimed pull steps only.
+			if s.Step.Action.Kind != ActPull || !s.Step.Expect.Claimed {
 				continue
 			}
 			switch {
+			case waiverFor(r.Scenario, s) != nil:
+				h[BinLabelOpen]++
 			case s.Outcome == Accept:
 				h["accept"]++
 			case s.Gate != "":
@@ -253,4 +300,17 @@ func BinaryHash(path string) string {
 		return "unreadable"
 	}
 	return hex.EncodeToString(h.Sum(nil))[:16]
+}
+
+// isWaivedPrediction reports whether the model's prediction for this point is one
+// a waiver covers. It exists so the prediction side and the measurement side put
+// the waived case in the same bin without either of them consulting the other's
+// result.
+func isWaivedPrediction(p Params, gate string) bool {
+	for _, w := range Waivers() {
+		if p.Adv == w.Adv && gate == w.Expected {
+			return true
+		}
+	}
+	return false
 }

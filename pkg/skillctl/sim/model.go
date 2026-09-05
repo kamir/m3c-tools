@@ -62,14 +62,15 @@ const (
 
 	// Adversary capabilities. Each one names what the attacker is assumed to
 	// control, because "hacked" is not a threat model.
-	ActTamperTransit   ActionKind = "adv:tamper-transit"   // flip bytes in the .skb before the victim sees it
-	ActLyingSignature  ActionKind = "adv:lying-signature"  // flip bytes AND rename the sig to match the new digest
-	ActForgeAttest     ActionKind = "adv:forge-attest"     // attest with a key nobody pinned
-	ActTamperInstalled ActionKind = "adv:tamper-installed" // edit an installed file (same-uid, post-install)
-	ActStripRevoke     ActionKind = "adv:strip-revoke"     // hostile registry deletes the revoke event
-	ActRelabelRevoke   ActionKind = "adv:relabel-revoke"   // hostile registry renames a revoke to look like an install
-	ActStolenKey       ActionKind = "adv:stolen-key"       // attacker holds the publisher's private key
-	ActForgeEnvelope   ActionKind = "adv:forge-envelope"   // hostile store rewrites an event's envelope signature
+	ActTamperTransit    ActionKind = "adv:tamper-transit"      // flip bytes in the .skb before the victim sees it
+	ActLyingSignature   ActionKind = "adv:lying-signature"     // flip bytes AND rename the sig to match the new digest
+	ActWithholdArtifact ActionKind = "probe:withhold-artifact" // remove the stored .skb, keep every signed event
+	ActForgeAttest      ActionKind = "adv:forge-attest"        // attest with a key nobody pinned
+	ActTamperInstalled  ActionKind = "adv:tamper-installed"    // edit an installed file (same-uid, post-install)
+	ActStripRevoke      ActionKind = "adv:strip-revoke"        // hostile registry deletes the revoke event
+	ActRelabelRevoke    ActionKind = "adv:relabel-revoke"      // hostile registry renames a revoke to look like an install
+	ActStolenKey        ActionKind = "adv:stolen-key"          // attacker holds the publisher's private key
+	ActForgeEnvelope    ActionKind = "adv:forge-envelope"      // hostile store rewrites an event's envelope signature
 )
 
 // Action is one step with its parameters. Params stay stringly-typed: a scenario
@@ -132,6 +133,34 @@ const (
 	// INV-5: an adversary action never IMPROVES the outcome for the attacker
 	// compared with the same scenario without it (no silent downgrade).
 	InvNoDowngrade Invariant = "INV-5-no-downgrade"
+
+	// INV-6 and INV-7 are the two invariants that do NOT ask the tool how it went.
+	// Every invariant above reads an exit code, a gate name or a scenario
+	// parameter, which means every one of them shares a failure mode with the
+	// thing it measures: a build that refuses loudly and writes the file anyway
+	// satisfies all five. These two look at the consumer's disk instead.
+	//
+	// INV-6: a refusal changes nothing. If the pull said no, the install target
+	// must hold exactly the bytes it held before the pull started. This is the
+	// one an external reviewer asked for by name on 2026-09-05, and it is the
+	// difference between a report and evidence.
+	InvRefusalIsInert Invariant = "INV-6-refusal-is-inert"
+	// INV-7: an acceptance actually delivers. If the pull said yes, the skill is
+	// on disk and its bytes hash to what was signed. Otherwise "accept" is a
+	// sentence the tool printed, not an event that happened, and every accept bin
+	// in every histogram on this project rests on it.
+	InvAcceptDelivers Invariant = "INV-7-accept-delivers"
+
+	// INV-8: a decision that can be made from SIGNED METADATA must not depend on
+	// artifact bytes. Decided as FR-0119 D3 on 2026-09-05.
+	//
+	// It is a side-effect requirement, not a diagnosis contract: a pull must not
+	// fetch bytes from an untrusted backend about which it has already decided.
+	// You cannot observe a fetch that did not happen, so the corpus takes the bytes
+	// away instead. If the revocation and governance decisions are genuinely made
+	// without them, they are still reached; an implementation that fetched first
+	// would report the fetch failure instead, which surfaces as the digest gate.
+	InvMetadataDecidesAlone Invariant = "INV-8-metadata-decides-alone"
 )
 
 // Scenario is one generated experiment.
@@ -164,6 +193,13 @@ type StepResult struct {
 	Stderr   string
 	Gate     string // parsed from the output, e.g. "gate 4"
 	Outcome  Outcome
+
+	// Before and After are the harness's OWN reading of the consumer's install
+	// target, taken around a pull. They are what INV-6 and INV-7 compare, and
+	// they exist because every other field in this struct is the tool describing
+	// itself. Nil for steps where a snapshot says nothing.
+	Before *InstallSnapshot
+	After  *InstallSnapshot
 }
 
 // Verdict compares theory with observation.

@@ -13,7 +13,21 @@ import (
 // Report is the aggregate of one corpus run.
 type Report struct {
 	Results  []ScenarioResult
-	BinaryID string // sha256 prefix of the binary under test (EV-1)
+	BinaryID string         // sha256 prefix of the binary under test (EV-1)
+	Design   *CoverageStats // set when the corpus came from a covering array
+
+	// Provenance. ISO/IEC/IEEE 29119-3 wants a test report to identify the items
+	// under test with their versions, the environment and the configuration. The
+	// terminal output carried three hashes; the Markdown export, which is the
+	// artifact a release would keep, carried none of it. An external reviewer read
+	// a branch on which the documented commands did not exist. The fix is not more
+	// hashes, it is naming the commit.
+	Commit     string // the HARNESS source tree, not the binary under test
+	SUTVersion string // what the binary under test reports about itself
+	BinaryPath string
+	Platform   string
+	StartedAt  string
+	Config     string
 }
 
 // Summary counts the verdicts.
@@ -38,12 +52,23 @@ func (rep Report) Summary() (match, conflict, unclaimed, skipped int) {
 // Coverage reports which decision points the corpus actually reached: the gates
 // that refused, and the exit codes observed. A gate that never appears is a hole
 // in the corpus, not a property of the system.
+// Coverage counts gates over CLAIMED PULL steps and exits over every step that
+// actually ran a process.
+//
+// The gate half used to count every step, while the outcome table beside it
+// counted pulls, so the same named quantity appeared twice with different values
+// (gate 4 as 36 here and 30 there). A validation reviewer called that unusable on
+// 2026-09-05 and was right: a document that gives one measurement two values is
+// not evidence at that point, whichever value is correct.
+//
+// The two halves still have different populations, because they answer different
+// questions, and the report now says so where each is printed.
 func (rep Report) Coverage() (gates map[string]int, exits map[int]int) {
 	gates = map[string]int{}
 	exits = map[int]int{}
 	for _, r := range rep.Results {
 		for _, s := range r.Steps {
-			if s.Gate != "" {
+			if s.Gate != "" && s.Step.Action.Kind == ActPull && s.Step.Expect.Claimed {
 				gates[s.Gate]++
 			}
 			if s.ExitCode >= 0 {
@@ -52,6 +77,26 @@ func (rep Report) Coverage() (gates map[string]int, exits map[int]int) {
 		}
 	}
 	return
+}
+
+// ExitsByAction attributes process exits to the verb that produced them, so no
+// observed exit code is left without an owner. A trust tool with documented exit
+// codes that reports an unattributed one in its own evidence has an open point,
+// not a rounding error.
+func (rep Report) ExitsByAction() map[int]map[string]int {
+	out := map[int]map[string]int{}
+	for _, r := range rep.Results {
+		for _, s := range r.Steps {
+			if s.ExitCode < 0 {
+				continue
+			}
+			if out[s.ExitCode] == nil {
+				out[s.ExitCode] = map[string]int{}
+			}
+			out[s.ExitCode][string(s.Step.Action.Kind)]++
+		}
+	}
+	return out
 }
 
 // HarnessFailures collects the runs that produced no evidence: a scenario that
@@ -179,23 +224,54 @@ func (rep Report) Write(w io.Writer) {
 		}
 	}
 
-	fmt.Fprintf(w, "\ncoverage: which gate actually refused\n")
+	fmt.Fprintf(w, "\ncoverage: which gate actually refused (claimed pull steps)\n")
 	if len(gates) == 0 {
 		fmt.Fprintf(w, "  (none: the corpus never reached a refusal, which is itself a finding)\n")
 	}
 	for _, g := range sortedKeys(gates) {
 		fmt.Fprintf(w, "  %-8s %d time(s)\n", g, gates[g])
 	}
-	fmt.Fprintf(w, "\ncoverage: observed process exits\n")
+	fmt.Fprintf(w, "\ncoverage: observed process exits, by the verb that produced them\n")
+	steps := 0
+	noProc := 0
+	for _, r := range rep.Results {
+		for _, st := range r.Steps {
+			steps++
+			if st.ExitCode < 0 {
+				noProc++
+			}
+		}
+	}
+	ran := 0
+	for _, n := range exits {
+		ran += n
+	}
+	fmt.Fprintf(w, "  Population: every step that ran a process.\n")
+	fmt.Fprintf(w, "  Bridge to the step count: %d steps = %d that ran a process + %d world\n", steps, ran, noProc)
+	fmt.Fprintf(w, "  mutations that ran none. Without this line a reader has to rebuild the\n")
+	fmt.Fprintf(w, "  arithmetic from the source, which is not a reader's job.\n")
 	var codes []int
 	for c := range exits {
 		codes = append(codes, c)
 	}
 	sort.Ints(codes)
 	for _, c := range codes {
-		fmt.Fprintf(w, "  exit %-3d %d time(s)\n", c, exits[c])
+		byAct := rep.ExitsByAction()[c]
+		var verbs []string
+		for _, v := range sortedKeys(byAct) {
+			verbs = append(verbs, fmt.Sprintf("%s x%d", v, byAct[v]))
+		}
+		fmt.Fprintf(w, "  exit %-3d %3d time(s)   %s\n", c, exits[c], strings.Join(verbs, ", "))
 	}
 
+	rep.WriteProvenance(w)
+	rep.WriteStanding(w)
+	rep.WriteTraceability(w)
+	rep.WriteOutputCoverage(w)
+	rep.WriteWaivers(w)
+	rep.WriteUnlabelled(w)
+	rep.WriteDiscrimination(w)
+	rep.WriteOpenDiagnostics(w)
 	rep.WriteExperiment(w)
 	rep.WriteMixture(w)
 
@@ -241,7 +317,28 @@ func (rep Report) Markdown() string {
 	var b strings.Builder
 	match, conflict, unclaimed, skipped := rep.Summary()
 	gates, _ := rep.Coverage()
-	fmt.Fprintf(&b, "# skillctl trust-plane simulation\n\n")
+	fmt.Fprintf(&b, "# skillctl trust-plane verification run\n\n")
+
+	// The heading says verification, not validation, and that is the first thing a
+	// reader should see. IEEE 1012 separates conformance to specified requirements
+	// from fitness for the intended use; this document produces the first kind of
+	// evidence only. It used to be titled "simulation" and read as if it produced
+	// both.
+	fmt.Fprintf(&b, "> **Scope: verification, not validation.** This run compares the shipped\n")
+	fmt.Fprintf(&b, "> binary against a model derived from SPEC-0188 and SPEC-0359, and calibrates\n")
+	fmt.Fprintf(&b, "> its own ability to see a defect. It says nothing about fitness for the\n")
+	fmt.Fprintf(&b, "> intended use, the operational environment (github://, gitlab://, ER1,\n")
+	fmt.Fprintf(&b, "> Windows), human understanding of the output, or field failure rates.\n")
+	fmt.Fprintf(&b, "> Integrity level: the component warrants **high**; this V&V supports **medium**\n")
+	fmt.Fprintf(&b, "> at most. Independence: **none**, one author read the specification, built the\n")
+	fmt.Fprintf(&b, "> model, wrote the oracle and produced this report. Gate 3 of five is\n")
+	fmt.Fprintf(&b, "> **unverified and uncalibrated**.\n\n")
+
+	fmt.Fprintf(&b, "## Provenance\n\n| | |\n|---|---|\n")
+	for _, kv := range rep.Provenance() {
+		fmt.Fprintf(&b, "| %s | `%s` |\n", kv[0], kv[1])
+	}
+	fmt.Fprintf(&b, "\n## Result\n\n")
 	fmt.Fprintf(&b, "| | |\n|---|---|\n")
 	fmt.Fprintf(&b, "| scenarios | %d |\n", len(rep.Results))
 	fmt.Fprintf(&b, "| steps matched | %d |\n", match)
@@ -257,6 +354,74 @@ func (rep Report) Markdown() string {
 		}
 		fmt.Fprintf(&b, "\n")
 	}
+	// Traceability. The table an IEEE 1012 reviewer asks for first: every claim
+	// with its origin and whether this run exercised it.
+	fmt.Fprintf(&b, "## Traceability\n\n")
+	// The legend defines every mark the table can carry, and only those. It once
+	// defined a mark that never appeared and omitted one that appeared twice, which
+	// a reviewer found before any reader did.
+	fmt.Fprintf(&b, "`normativ` = written in a specification · `abgeleitet` = derived, and the\n")
+	fmt.Fprintf(&b, "derivation is part of the evidence · `uebernommen` = binds here, accepted from\n")
+	fmt.Fprintf(&b, "a review, with no specification clause behind it · `beobachtet` = read off the\n")
+	fmt.Fprintf(&b, "running system, so a failure means CHANGED and not WRONG · `ungeklaert` =\n")
+	fmt.Fprintf(&b, "checked, meaning still open.\n\n")
+	fmt.Fprintf(&b, "| claim | provenance | observed | source | note |\n|---|---|---|---|---|\n")
+	gv := map[string]int{}
+	for _, v := range rep.Violations() {
+		for _, item := range TraceMatrix() {
+			if strings.Contains(v, item.ID) {
+				gv[item.ID]++
+				break
+			}
+		}
+	}
+	for _, it := range TraceMatrix() {
+		obs := "n/a"
+		if n, ok := gates[it.ID]; ok {
+			obs = fmt.Sprintf("%d", n)
+		} else if strings.HasPrefix(it.ID, "gate ") {
+			obs = "0"
+		} else if strings.HasPrefix(it.ID, "INV-") {
+			obs = fmt.Sprintf("%d viol", gv[it.ID])
+		}
+		note := it.Note
+		if note == "" {
+			note = "n/a"
+		}
+		fmt.Fprintf(&b, "| `%s` | %s | %s | %s | %s |\n", it.ID, it.Prov, obs, it.Source, note)
+	}
+
+	// Outcome coverage against a target declared before the run. Input coverage
+	// cannot substitute for it: a corpus can cover every pair of factor levels and
+	// still never reach a gate, which is exactly what happened once.
+	oc := rep.OutputCoverage()
+	fmt.Fprintf(&b, "\n## Coverage of outcomes\n\n")
+	fmt.Fprintf(&b, "Target, declared before the run: every specified decision observed at least %d time(s).\n\n", oc.Target)
+	fmt.Fprintf(&b, "| decision | observed | |\n|---|---|---|\n")
+	for _, d := range oc.Declared {
+		mark := "n/a"
+		if oc.Seen[d] < oc.Target {
+			mark = "**below target**"
+		}
+		fmt.Fprintf(&b, "| `%s` | %d | %s |\n", d, oc.Seen[d], mark)
+	}
+
+	// Theory against measurement, with the residual per bin.
+	var corpus []Scenario
+	for _, r := range rep.Results {
+		corpus = append(corpus, r.Scenario)
+	}
+	pred, obs := PredictHistogram(corpus), rep.MeasureHistogram()
+	fmt.Fprintf(&b, "\n## Prediction versus measurement\n\n")
+	fmt.Fprintf(&b, "| bin | predicted | observed | residual |\n|---|---|---|---|\n")
+	for _, bin := range Bins(pred, obs) {
+		fmt.Fprintf(&b, "| `%s` | %d | %d | %+d |\n", bin, pred[bin], obs[bin], obs[bin]-pred[bin])
+	}
+	fmt.Fprintf(&b, "| **total** | | | **%d** |\n\n", rep.Residual())
+	fmt.Fprintf(&b, "A residual of zero means the closed form reproduced the measured\n")
+	fmt.Fprintf(&b, "DISTRIBUTION. The per-step comparison above is what decides behavioural\n")
+	fmt.Fprintf(&b, "conformance; equal histograms are not equal behaviour.\n\n")
+
 	fmt.Fprintf(&b, "## Gates reached\n\n")
 	for _, g := range sortedKeys(gates) {
 		fmt.Fprintf(&b, "- `%s`: %d\n", g, gates[g])
@@ -354,6 +519,26 @@ func (rep Report) Compose() Mixture {
 func (rep Report) WriteMixture(w io.Writer) {
 	m := rep.Compose()
 	fmt.Fprintf(w, "\nmixture: is this corpus broad, or just long?\n")
+	if rep.Design != nil {
+		d := rep.Design
+		fmt.Fprintf(w, "\n  design: covering array of strength t=%d over %s\n", d.Strength, DesignAxes())
+		fmt.Fprintf(w, "  %d rows instead of %d exhaustive: EVERY admissible %d-way combination appears\n",
+			d.Rows, d.FullEnumeration, d.Strength)
+		fmt.Fprintf(w, "  %d combinations covered; %d of the %d in the unconstrained space are not\n",
+			d.Admissible, d.Uncoverable, d.Total)
+		fmt.Fprintf(w, "  covered, and they are NOT all the same kind. Point census over the factor\n")
+		c := Census()
+		fmt.Fprintf(w, "  space: %d admissible, %d impossible (the world cannot produce them),\n",
+			c.Admissible, c.Impossible)
+		fmt.Fprintf(w, "  %d left out for economy (the world CAN produce them; the corpus judges\n", c.Economy)
+		fmt.Fprintf(w, "  them redundant, and that judgement can be wrong).\n")
+		for _, r := range sortedKeys(c.ByRule) {
+			fmt.Fprintf(w, "    %-52s %d\n", r, c.ByRule[r])
+		}
+		fmt.Fprintf(w, "  An earlier version of this line called all of them \"not coverable, not\n")
+		fmt.Fprintf(w, "  missing\". For the economy share that was false, and reporting a judgement\n")
+		fmt.Fprintf(w, "  as an impossibility is the more expensive of the two mistakes.\n")
+	}
 
 	fmt.Fprintf(w, "\n  distinct decision paths: %d over %d scenarios (yield %.2f)\n",
 		len(m.Paths), m.Scenarios, float64(len(m.Paths))/float64(max(m.Scenarios, 1)))
@@ -377,8 +562,15 @@ func (rep Report) WriteMixture(w io.Writer) {
 	}
 
 	if len(m.MissedGate) > 0 {
-		fmt.Fprintf(w, "\n  HOLES: declared gates this corpus never reached: %s\n", strings.Join(m.MissedGate, ", "))
-		fmt.Fprintf(w, "  Each one is a decision the simulation currently says nothing about.\n")
+		fmt.Fprintf(w, "\n  HOLES: declared gates never seen BY NAME in this corpus: %s\n", strings.Join(m.MissedGate, ", "))
+		fmt.Fprintf(w, "  Gate 3 is on this list because it is never seen BY NAME, not because it\n")
+		fmt.Fprintf(w, "  never fires. Disabling it flips the affected pull from refuse to accept, so\n")
+		fmt.Fprintf(w, "  the control is live and its label is missing (FR-0121).\n")
+		fmt.Fprintf(w, "  This paragraph has now been wrong in both directions. It first claimed the\n")
+		fmt.Fprintf(w, "  gate fired unnamed, then that the case was not constructible. The second\n")
+		fmt.Fprintf(w, "  claim was an artefact of suppressing the step that shows the difference,\n")
+		fmt.Fprintf(w, "  which is what a waiver instead of a suppression now prevents.\n")
+		fmt.Fprintf(w, "  A gate on this list is a decision the simulation says nothing about.\n")
 	} else {
 		fmt.Fprintf(w, "\n  every declared gate was reached at least once\n")
 	}
@@ -404,6 +596,53 @@ func max(a, b int) int {
 	return b
 }
 
+// WriteOpenDiagnostics names every adversary move whose security behaviour is
+// scored but whose error LABEL is under an open finding. It prints on every run,
+// green ones included, because an exemption that stops being mentioned is
+// indistinguishable from a check that was never written.
+func (rep Report) WriteOpenDiagnostics(w io.Writer) {
+	q := OpenDiagnostics()
+	if len(q) == 0 {
+		return
+	}
+	keys := make([]string, 0, len(q))
+	for k := range q {
+		keys = append(keys, string(k))
+	}
+	sort.Strings(keys)
+	fmt.Fprintf(w, "\nopen diagnostic findings (%d): the DECISION is scored, the LABEL is not\n", len(q))
+	for _, k := range keys {
+		fmt.Fprintf(w, "  %-22s %s\n", k, q[AdvKind(k)])
+	}
+	fmt.Fprintf(w, "  These moves stay in the blocking corpus. Refusal, exit code and the\n")
+	fmt.Fprintf(w, "  untouched install target are all still asserted; only the gate name is\n")
+	fmt.Fprintf(w, "  left uncompared until somebody rules on the finding.\n")
+}
+
+// Residual is the total disagreement between the closed form and the measurement,
+// summed over the bins. Zero means the analytical model describes the running
+// binary exactly on this corpus.
+//
+// It is exported and checked separately from the conflict count because the two
+// can come apart: a step-level conflict is a named scenario failing, while a
+// residual is a shift in the DISTRIBUTION, and a defect that moves four pulls out
+// of one bin and into another can in principle do so without any single step being
+// judged a conflict. The operator set the pass condition as "residual zero" on
+// 2026-09-05, so the exit code has to read this number and not a proxy for it.
+func (rep Report) Residual() int {
+	var corpus []Scenario
+	for _, r := range rep.Results {
+		corpus = append(corpus, r.Scenario)
+	}
+	pred := PredictHistogram(corpus)
+	obs := rep.MeasureHistogram()
+	total := 0
+	for _, b := range Bins(pred, obs) {
+		total += abs(obs[b] - pred[b])
+	}
+	return total
+}
+
 // WriteExperiment is the theory-versus-measurement comparison: the analytically
 // predicted histogram of pull outcomes next to the measured one, with the residual
 // per bin. A residual of zero everywhere means the closed form describes the
@@ -416,6 +655,29 @@ func (rep Report) WriteExperiment(w io.Writer) {
 	}
 	pred := PredictHistogram(corpus)
 	obs := rep.MeasureHistogram()
+
+	fmt.Fprintf(w, "\nwhat each comparison is worth\n")
+	fmt.Fprintf(w, "  Three different test goals live in this report and they rest on different\n")
+	fmt.Fprintf(w, "  ground. Reading them as one number is how a characterisation test gets\n")
+	fmt.Fprintf(w, "  mistaken for a specification proof.\n")
+	fmt.Fprintf(w, "    may this bundle install?    SECURITY: independent requirement, binding\n")
+	fmt.Fprintf(w, "    which gate is reported?     MIXED, since FR-0119 was decided on 2026-09-05.\n")
+	fmt.Fprintf(w, "                                Gate 5 before gate 4, and gate 2 before gate 3,\n")
+	fmt.Fprintf(w, "                                are now a binding DIAGNOSIS CONTRACT (D2): the\n")
+	fmt.Fprintf(w, "                                revoke is the more actionable statement, and the\n")
+	fmt.Fprintf(w, "                                cause comes before the consequence.\n")
+	fmt.Fprintf(w, "                                The PHASE BOUNDARIES that put gate 1 first and the\n")
+	fmt.Fprintf(w, "                                metadata gates before the byte gates are derived\n")
+	fmt.Fprintf(w, "                                but not yet normative (D1 open), so they are still\n")
+	fmt.Fprintf(w, "                                checked as CHARACTERISATION.\n")
+	fmt.Fprintf(w, "    was anything written?       SIDE EFFECT: independent requirement, binding\n")
+	fmt.Fprintf(w, "    were bytes fetched at all?  SIDE EFFECT: binding since FR-0119 D3. A pull must\n")
+	fmt.Fprintf(w, "                                not fetch from an untrusted backend once it has\n")
+	fmt.Fprintf(w, "                                decided against the bundle from signed metadata.\n")
+	fmt.Fprintf(w, "                                Measured by withholding the artifact: INV-8.\n")
+	fmt.Fprintf(w, "  For a side-effect-free conjunction the order changes the first error LABEL,\n")
+	fmt.Fprintf(w, "  not the accept condition. Once a check processes data or writes, its order\n")
+	fmt.Fprintf(w, "  becomes security-relevant too, and INV-6 is what watches for that.\n")
 
 	fmt.Fprintf(w, "\nexperiment: analytical prediction vs measurement (pull outcomes)\n")
 	fmt.Fprintf(w, "  %-26s %9s %9s %9s\n", "bin", "predicted", "observed", "residual")

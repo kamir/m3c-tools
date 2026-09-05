@@ -55,6 +55,13 @@ func Execute(skillctl, rootDir string, sc Scenario) ScenarioResult {
 		var code int
 		var aerr error
 
+		// Read the consumer's disk BEFORE a pull, so INV-6 and INV-7 have
+		// something to compare against that the tool did not write for them.
+		if st.Action.Kind == ActPull {
+			before := w.SnapshotInstall()
+			sr.Before = &before
+		}
+
 		switch st.Action.Kind {
 		case ActPackSign:
 			out, code, aerr = w.PackSign(skill, "author", "id:author@sim")
@@ -89,6 +96,12 @@ func Execute(skillctl, rootDir string, sc Scenario) ScenarioResult {
 			code = -1
 		case ActTamperInstalled:
 			aerr = w.TamperInstalled(skill)
+			code = -1
+		case ActWithholdArtifact:
+			aerr = w.WithholdArtifact(skill)
+			code = -1
+		case ActLyingSignature:
+			aerr = w.CorruptSignature(skill)
 			code = -1
 		case ActForgeEnvelope:
 			aerr = w.ForgeEnvelope(skill)
@@ -136,11 +149,24 @@ func Execute(skillctl, rootDir string, sc Scenario) ScenarioResult {
 			sr.Outcome = Refuse
 		}
 
+		if st.Action.Kind == ActPull {
+			after := w.SnapshotInstall()
+			sr.After = &after
+		}
+
 		res.Steps = append(res.Steps, sr)
 		res.Verdicts = append(res.Verdicts, judge(st.Expect, sr))
 		res.Violations = append(res.Violations, checkInvariants(sc, i, sr, w)...)
 	}
 	return res
+}
+
+// strOr keeps a violation message readable when the tool named no gate at all.
+func strOr(s, fallback string) string {
+	if s == "" {
+		return fallback
+	}
+	return s
 }
 
 // judge compares one prediction with one observation.
@@ -168,6 +194,44 @@ func checkInvariants(sc Scenario, i int, r StepResult, w *World) []InvariantViol
 	b := w.bundles["simskill"]
 	if b == nil {
 		return nil
+	}
+
+	// INV-8: with the artifact withheld, a bundle that is revoked or ungoverned must
+	// STILL be refused by its own gate. Reaching the digest gate instead would mean
+	// the fetch happened before the decision, which is what FR-0119 D3 forbids.
+	if r.Step.Action.Kind == ActPull && sc.P.Adv == AdvArtifactWithheld {
+		_, want := StateAt(sc.P, b.revoked).Decide()
+		if (want == "gate 5" || want == "gate 4") && r.Gate != want {
+			v = append(v, InvariantViolation{InvMetadataDecidesAlone, i,
+				"the artifact was withheld and a " + want + " decision was expected from signed " +
+					"metadata alone, but the pull reported " + strOr(r.Gate, "no gate") +
+					": the bytes were needed before the decision"})
+		}
+	}
+
+	// The two disk-based invariants first, because they are the only ones that do
+	// not take the tool's word for anything. r.Before and r.After are snapshots of
+	// the consumer's skills directory taken around the step.
+	if r.Step.Action.Kind == ActPull && r.Before != nil && r.After != nil {
+		switch r.Outcome {
+		case Refuse:
+			// INV-6. A refusal that still wrote something is the worst class of
+			// defect this harness can look for: it looks green in every log.
+			if !r.Before.Equal(*r.After) {
+				v = append(v, InvariantViolation{InvRefusalIsInert, i,
+					"a pull refused and the install target changed anyway: " + r.Before.Describe(*r.After)})
+			}
+		case Accept:
+			// INV-7. An accept has to have delivered the signed bytes. The stored
+			// bundle attack is excluded: there the point of the scenario is that
+			// the bytes SHOULD not match, and the refusal is what is under test.
+			if sc.P.Adv != AdvStoredBundle {
+				if ok, why := w.InstalledDigestMatches("simskill"); !ok {
+					v = append(v, InvariantViolation{InvAcceptDelivers, i,
+						"a pull reported success but the install target does not hold the signed bytes: " + why})
+				}
+			}
+		}
 	}
 
 	// INV-2: once a revoke is visible, nothing may install that digest again. The

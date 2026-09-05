@@ -20,10 +20,13 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -332,7 +335,19 @@ func (w *World) LyingSignature(skill string) error {
 	}
 	// #nosec G703 -- newSig is built from the sandbox path plus a hex digest this
 	// function just computed. Nothing from a scenario definition reaches it.
-	return os.WriteFile(newSig, sig, 0o600)
+	if err := os.WriteFile(newSig, sig, 0o600); err != nil {
+		return err
+	}
+	// The world now tracks the NEW digest, so everything the publisher does next
+	// (admit, attest, revoke) refers to the bytes that actually exist.
+	//
+	// Without this line the attestation stayed bound to the pre-tamper digest, the
+	// admitted bytes carried no governance, and the pull died at gate 4 with gate 3
+	// never consulted. That is a real behaviour and it is worth knowing, but it is
+	// not the question this move was added to ask. A malicious publisher signs off
+	// on what he actually published.
+	b.digest = "sha256:" + hex.EncodeToString(sum[:])
+	return nil
 }
 
 // TamperInstalled edits a file inside an installed skill: the same-uid attacker,
@@ -396,4 +411,310 @@ func flipByte(path string, off int64) error {
 	buf[0] ^= 0xff
 	_, err = f.WriteAt(buf, off)
 	return err
+}
+
+// ---------------------------------------------------------------------------
+// The independent oracle: what is ON DISK, not what the process said.
+//
+// Everything above this line reads the trust plane through its own output: an
+// exit code, a line of text, a gate name. That is a real oracle and it catches
+// real defects, but it shares a failure mode with the thing it measures. A build
+// that reports "refused" and writes the file anyway passes every check in this
+// file, because every check asked the build how it went.
+//
+// An external reviewer put it plainly on 2026-09-05: "Fehler gemeldet, aber
+// vorher trotzdem geschrieben" muss rot werden. It cannot go red while the only
+// witness is the accused. So the harness now takes its own reading of the
+// consumer's install target, before and after every pull, and the invariants
+// compare the two without asking anybody.
+
+// InstallSnapshot is what the consumer's skill directory actually contains: the
+// set of file paths and the SHA-256 of each. Comparing two snapshots answers
+// "did anything change, and into what" without trusting a single word the tool
+// printed.
+type InstallSnapshot struct {
+	Files map[string]string // path relative to the skills root -> sha256 hex
+
+	// Err is set when the reading itself failed: a directory that exists but
+	// cannot be walked, an entry that cannot be hashed. It is NOT set for an
+	// absent skills root, which is a real and expected state before the first
+	// install.
+	//
+	// The distinction is the whole point. The first version treated an unreadable
+	// entry as an absent one, so two failed readings compared equal and INV-6
+	// concluded "nothing changed" from having measured nothing twice. An external
+	// reviewer named it on 2026-09-05: an unexpected measurement error has to
+	// produce NOT EVALUABLE and stop the run, never a quiet pass.
+	Err string
+}
+
+// Equal reports whether two snapshots describe the same bytes on disk.
+func (s InstallSnapshot) Equal(o InstallSnapshot) bool {
+	// A snapshot that failed to read is never equal to anything, including another
+	// failed snapshot. "We could not look, twice" is not evidence of sameness.
+	if s.Err != "" || o.Err != "" {
+		return false
+	}
+	if len(s.Files) != len(o.Files) {
+		return false
+	}
+	for k, v := range s.Files {
+		if o.Files[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
+// Describe renders a snapshot difference for a violation message, so a report
+// says WHICH file appeared or changed rather than only that something did.
+func (s InstallSnapshot) Describe(o InstallSnapshot) string {
+	var added, changed, removed []string
+	for k, v := range o.Files {
+		if old, ok := s.Files[k]; !ok {
+			added = append(added, k)
+		} else if old != v {
+			changed = append(changed, k)
+		}
+	}
+	for k := range s.Files {
+		if _, ok := o.Files[k]; !ok {
+			removed = append(removed, k)
+		}
+	}
+	sort.Strings(added)
+	sort.Strings(changed)
+	sort.Strings(removed)
+	parts := []string{}
+	if len(added) > 0 {
+		parts = append(parts, "added "+strings.Join(added, ","))
+	}
+	if len(changed) > 0 {
+		parts = append(parts, "changed "+strings.Join(changed, ","))
+	}
+	if len(removed) > 0 {
+		parts = append(parts, "removed "+strings.Join(removed, ","))
+	}
+	if len(parts) == 0 {
+		return "no change"
+	}
+	return strings.Join(parts, "; ")
+}
+
+// SnapshotInstall walks the consumer's skills root and hashes everything under
+// it. A missing root is not an error: it is the empty snapshot, which is exactly
+// the state before the first successful install.
+func (w *World) SnapshotInstall() InstallSnapshot {
+	root := filepath.Join(w.consumerHome, ".claude", "skills")
+	snap := InstallSnapshot{Files: map[string]string{}}
+
+	// An absent root is the empty snapshot and nothing is wrong: that is the state
+	// before the first install. Anything else that goes wrong while reading is a
+	// failure to measure, and it is recorded as one.
+	if _, err := os.Stat(root); err != nil {
+		if !os.IsNotExist(err) {
+			snap.Err = "install root not readable: " + err.Error()
+		}
+		return snap
+	}
+	files, err := hashTreeRooted(root)
+	if err != nil {
+		snap.Err = err.Error()
+		return snap
+	}
+	snap.Files = files
+	return snap
+}
+
+// InstalledDigestMatches reports whether the skill's installed bytes hash to the
+// digest that was signed. It is the difference between "the tool said it
+// installed the right thing" and "the right thing is there".
+//
+// It returns false when nothing is installed, which is why the invariant that
+// uses it fires only after an accepted pull.
+func (w *World) InstalledDigestMatches(skill string) (bool, string) {
+	want, err := w.SourceManifest(skill)
+	if err != nil {
+		return false, "source manifest unreadable: " + err.Error()
+	}
+	got := w.installedManifest(skill)
+	if got.Err != "" {
+		return false, "NOT EVALUABLE: " + got.Err
+	}
+
+	var missing, differing, extra []string
+	for path, sum := range want {
+		switch g, ok := got.Files[path]; {
+		case !ok:
+			missing = append(missing, path)
+		case g != sum:
+			differing = append(differing, path)
+		}
+	}
+	for path := range got.Files {
+		if _, ok := want[path]; ok {
+			continue
+		}
+		if installSidecars[path] {
+			continue
+		}
+		extra = append(extra, path)
+	}
+	sort.Strings(missing)
+	sort.Strings(differing)
+	sort.Strings(extra)
+
+	var parts []string
+	if len(missing) > 0 {
+		parts = append(parts, "missing "+strings.Join(missing, ","))
+	}
+	if len(differing) > 0 {
+		parts = append(parts, "wrong bytes in "+strings.Join(differing, ","))
+	}
+	if len(extra) > 0 {
+		parts = append(parts, "unexpected "+strings.Join(extra, ","))
+	}
+	if len(parts) > 0 {
+		return false, strings.Join(parts, "; ")
+	}
+	return true, ""
+}
+
+// installSidecars are the files the install itself writes into the skill
+// directory, on top of the packed content. They are listed by name rather than
+// tolerated by a pattern, so a file that is genuinely unexpected still fails.
+//
+// Measuring them was not planned. The manifest check was written to catch a
+// missing file, and the first run reported five "unexpected" ones, which turned
+// out to be the provenance sidecar, the attestation, the checksums, the bundle
+// metadata and the .skb the verifier needs later. That is the check doing its
+// job: it described the install more completely than the person who wrote it
+// could, and the correct response was to write down what belongs there.
+var installSidecars = map[string]bool{
+	"bundle.json":            true,
+	"CHECKSUMS":              true,
+	"simskill.skb":           true,
+	".m3c-provenance.json":   true,
+	".skillctl-attest.json":  true,
+	".skillctl-install.json": true,
+	".skillctl-provenance":   true,
+}
+
+// SourceManifest is the set of paths and hashes the packed skill consists of,
+// taken from the source tree BEFORE anything is published.
+//
+// It replaces a single-file comparison that checked only SKILL.md against its
+// source. That check was useful for the small test artifact and it was named as
+// if it proved more: an external reviewer pointed out on 2026-09-05 that it
+// verified neither the complete installed file set nor its binding to the signed
+// bundle. A file that goes missing, and a file that appears which nobody signed,
+// both passed it. The manifest catches both directions.
+//
+// What it still does NOT do is verify against the bundle's own signed manifest.
+// The source tree is the harness's own record, so this is an independent reading
+// of the install, not a cryptographic one. That gap is named rather than papered
+// over, and closing it means reading the .skb.
+func (w *World) SourceManifest(skill string) (map[string]string, error) {
+	return hashTreeRooted(filepath.Join(w.Root, "src", skill))
+}
+
+// installedManifest reads what is actually under the consumer's skill directory,
+// with the same not-evaluable discipline as SnapshotInstall.
+func (w *World) installedManifest(skill string) InstallSnapshot {
+	full := w.SnapshotInstall()
+	if full.Err != "" {
+		return full
+	}
+	out := InstallSnapshot{Files: map[string]string{}}
+	prefix := skill + "/"
+	for path, sum := range full.Files {
+		if strings.HasPrefix(path, prefix) {
+			out.Files[strings.TrimPrefix(path, prefix)] = sum
+		}
+	}
+	return out
+}
+
+// hashTreeRooted walks dir and hashes every regular file under it, reading through
+// an os.Root handle so a symlink cannot carry the read outside the directory.
+//
+// The plain form (filepath.Walk plus os.ReadFile on the callback path) is exactly
+// the TOCTOU shape gosec flags as G122, and here the warning is not academic: the
+// directory being measured is written by the binary under test, and one of the
+// mutants in the calibration suite exists to write things it should not. An oracle
+// that can be walked out of its own root by a planted symlink is not an oracle.
+//
+// A symlink is recorded as the literal value "symlink" rather than followed, so a
+// swapped target still shows up as a change.
+func hashTreeRooted(dir string) (map[string]string, error) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = root.Close() }()
+
+	out := map[string]string{}
+	err = fs.WalkDir(root.FS(), ".", func(rel string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return fmt.Errorf("walk %s: %w", rel, err)
+		}
+		if rel == "." || d.IsDir() {
+			return nil
+		}
+		switch {
+		case d.Type()&fs.ModeSymlink != 0:
+			out[rel] = "symlink"
+			return nil
+		case !d.Type().IsRegular():
+			out[rel] = "irregular:" + d.Type().String()
+			return nil
+		}
+		f, oerr := root.Open(rel)
+		if oerr != nil {
+			return fmt.Errorf("open %s: %w", rel, oerr)
+		}
+		defer func() { _ = f.Close() }()
+		h := sha256.New()
+		if _, cerr := io.Copy(h, f); cerr != nil {
+			return fmt.Errorf("read %s: %w", rel, cerr)
+		}
+		out[rel] = hex.EncodeToString(h.Sum(nil))
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// CorruptSignature damages the detached signature and leaves the artifact alone.
+//
+// This replaces a move that did not do what its name said. The first version of
+// the malicious publisher flipped a byte inside the .skb and renamed the signature
+// to match the new digest. The digest then agreed with the bytes, so gate 2 was
+// satisfied, and the intent was that gate 3 would refuse the signature. It never
+// got there: flipping a byte in a tar archive breaks the tar header, and the
+// installer refused with "archive/tar: invalid tar header" long before any
+// signature was checked.
+//
+// Nobody noticed for two days, because the report showed only that the refusal
+// carried no gate label, and a finding was filed on that basis (FR-0121, "gate 3
+// fires but is not named"). It was wrong. An IEEE reviewer asked why there was no
+// gate-3 mutant; building it showed that disabling gate 3 changed nothing, which
+// is only possible if gate 3 was never the reason.
+//
+// So the move now edits the SIGNATURE, not the artifact: the bundle stays a valid
+// archive whose bytes hash to the admitted digest, and the only thing wrong with
+// it is that the signature over that digest does not verify. That is the case
+// SPEC-0188 §7 gate 3 exists for.
+func (w *World) CorruptSignature(skill string) error {
+	b := w.bundles[skill]
+	if b == nil {
+		return fmt.Errorf("sim: %s not packed", skill)
+	}
+	sig := b.path + "." + strings.TrimPrefix(b.digest, "sha256:") + ".author.sig"
+	if _, err := os.Stat(sig); err != nil {
+		return fmt.Errorf("sim: no author signature at %s: %w", sig, err)
+	}
+	return flipByte(sig, 8)
 }

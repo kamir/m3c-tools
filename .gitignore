@@ -11,9 +11,17 @@
 # Test binary, built with `go test -c`
 *.test
 
-# Code coverage profiles and other test artifacts
+# Code coverage profiles and other test artifacts.
+#
+# `coverage.*` used to stand where these three lines are. It was written for
+# coverage.out and coverage.html and it also swallowed pkg/skillctl/sim/coverage.go,
+# a source file, silently: the tree built locally because the file was there, and
+# only CI would have missed it. An ignore pattern that can hide source is worth
+# narrowing, so these name the artifacts they mean.
 *.out
-coverage.*
+coverage.html
+coverage.txt
+coverage.xml
 *.coverprofile
 profile.cov
 # SAST output (gosec SARIF is generated in CI and uploaded to Code Scanning)
