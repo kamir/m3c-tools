@@ -134,7 +134,7 @@ func runVerifyAll(args []string, stdout, stderr io.Writer) int {
 	var sc sweepCtx
 	if rootErr == nil {
 		sc = sweepCtx{
-			client: registry.New(root.RegistryURL, install.HTTPClientOf(verifyHookTimeout)),
+			client: newRegistryClient(root.RegistryURL, install.HTTPClientOf(verifyHookTimeout)),
 			root:   root,
 			tenant: resolveTenant("", tr),
 			govMin: *governanceMin,

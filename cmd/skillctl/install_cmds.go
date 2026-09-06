@@ -153,7 +153,7 @@ func runInstall(args []string, stdout, stderr io.Writer) (code int) {
 
 	// Build a registry HTTP client targeting the matched trust root.
 	httpClient := install.HTTPClientOf(*timeout)
-	c := registry.New(root.RegistryURL, httpClient)
+	c := newRegistryClient(root.RegistryURL, httpClient)
 
 	// Audit poster targets the same registry. The CLI does NOT carry a
 	// separate audit URL: keeping the configuration surface narrow.
@@ -357,7 +357,7 @@ func runVerify(args []string, stdout, stderr io.Writer) (code int) {
 	}
 
 	httpClient := install.HTTPClientOf(*timeout)
-	c := registry.New(root.RegistryURL, httpClient)
+	c := newRegistryClient(root.RegistryURL, httpClient)
 
 	res, err := install.VerifyInstalled(install.Opts{
 		Name:          name,

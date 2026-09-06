@@ -673,7 +673,7 @@ func verifyManagedSkill(name string, pol gatePolicy) (int, string) {
 	}
 	tenant := resolveTenant("", tr)
 	httpClient := install.HTTPClientOf(verifyHookTimeout)
-	c := registry.New(root.RegistryURL, httpClient)
+	c := newRegistryClient(root.RegistryURL, httpClient)
 
 	_, err = install.VerifyInstalled(install.Opts{
 		Name:          name,

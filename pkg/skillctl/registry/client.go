@@ -42,6 +42,15 @@ const MaxBlobSize int64 = 256 << 20 // 256 MiB
 // a generic install failure. Translation lives in S8, not here.
 var ErrNotFound = errors.New("registry: not found")
 
+// ErrUnauthorized marks an HTTP 401 or 403 from the registry, so a caller can
+// say what is missing instead of printing a bare status code.
+//
+// It exists because "HTTP 401" is a true statement that helps nobody: the person
+// at the terminal may be perfectly entitled and simply have no token provisioned
+// on this machine. The gate is real; what was missing was a message that names
+// the next action (FR-0117).
+var ErrUnauthorized = errors.New("registry: not authorized")
+
 // Client is the HTTP client for the aims-core skill-registry endpoints.
 // Construct via New(); zero-value Client is not usable (BaseURL would be
 // empty).
@@ -61,6 +70,15 @@ type Client struct {
 	// UserAgent is sent on every request. Defaults to "skillctl/<version>"
 	// per stream S7 brief; callers can override for diagnostic tags.
 	UserAgent string
+
+	// Token, when set, is sent as `Authorization: Bearer <token>` (FR-0117).
+	//
+	// Empty means anonymous, which is the previous behaviour and the correct one
+	// for a public instance. The field is deliberately plain and the RESOLUTION
+	// lives with the caller: this package does not read environments, keychains
+	// or config files, so a test can drive it and a future credential source can
+	// change without touching the transport.
+	Token string
 }
 
 // New constructs a Client with sane defaults. Pass nil for httpClient to
@@ -119,6 +137,9 @@ func (c *Client) ResolveByName(ctx context.Context, name string) ([]BundleVersio
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("registry: by-name %q: %w", name, ErrNotFound)
 	}
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return nil, fmt.Errorf("registry: GET %s: HTTP %d: %w", u, resp.StatusCode, ErrUnauthorized)
+	}
 	if resp.StatusCode/100 != 2 {
 		return nil, fmt.Errorf("registry: GET %s: HTTP %d", u, resp.StatusCode)
 	}
@@ -161,6 +182,9 @@ func (c *Client) GetBundle(ctx context.Context, digest string) ([]byte, error) {
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("registry: bundle %s: %w", digest, ErrNotFound)
+	}
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return nil, fmt.Errorf("registry: GET %s: HTTP %d: %w", u, resp.StatusCode, ErrUnauthorized)
 	}
 	if resp.StatusCode/100 != 2 {
 		return nil, fmt.Errorf("registry: GET %s: HTTP %d", u, resp.StatusCode)
@@ -208,6 +232,9 @@ func (c *Client) GetBundleMeta(ctx context.Context, digest string) (*BundleMeta,
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("registry: bundle %s meta: %w", digest, ErrNotFound)
 	}
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return nil, fmt.Errorf("registry: GET %s: HTTP %d: %w", u, resp.StatusCode, ErrUnauthorized)
+	}
 	if resp.StatusCode/100 != 2 {
 		return nil, fmt.Errorf("registry: GET %s: HTTP %d", u, resp.StatusCode)
 	}
@@ -244,6 +271,9 @@ func (c *Client) GetIdentity(ctx context.Context, id string) (*Identity, error) 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("registry: identity %s: %w", id, ErrNotFound)
 	}
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return nil, fmt.Errorf("registry: GET %s: HTTP %d: %w", u, resp.StatusCode, ErrUnauthorized)
+	}
 	if resp.StatusCode/100 != 2 {
 		return nil, fmt.Errorf("registry: GET %s: HTTP %d", u, resp.StatusCode)
 	}
@@ -269,6 +299,9 @@ func (c *Client) setHeaders(req *http.Request, accept string) {
 	}
 	if accept != "" {
 		req.Header.Set("Accept", accept)
+	}
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
 }
 

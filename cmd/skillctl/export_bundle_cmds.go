@@ -96,7 +96,7 @@ func runExportBundle(args []string, stdout, stderr io.Writer) int {
 	}
 
 	ctx := context.Background()
-	c := registry.New(root.RegistryURL, install.HTTPClientOf(*timeout))
+	c := newRegistryClient(root.RegistryURL, install.HTTPClientOf(*timeout))
 
 	digest, resolvedVersion, err := resolveExportDigest(ctx, c, name, wantVersion)
 	if err != nil {

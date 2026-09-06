@@ -42,6 +42,13 @@ var _ artifact.CredentialSource = (*Resolver)(nil)
 var backendCred = map[string]struct{ env, roEnv, kcService, roKcService, user string }{
 	"gitlab": {"M3C_GITLAB_TOKEN", "M3C_GITLAB_RO_TOKEN", "m3c-skillctl-gitlab", "m3c-skillctl-gitlab-ro", "oauth2"},
 	"github": {"M3C_GITHUB_TOKEN", "M3C_GITHUB_RO_TOKEN", "m3c-skillctl-github", "m3c-skillctl-github-ro", "oauth2"},
+
+	// The HTTP registry (SPEC-0188 /api/skills), added 2026-09-06 for FR-0117.
+	// It is not a git remote, so it carries no git username: the token rides in
+	// an `Authorization: Bearer` header, not in a URL. Same two tiers as the git
+	// backends, and the same anonymous fallback, so a public instance keeps
+	// working for someone who provisioned nothing.
+	"registry": {"M3C_REGISTRY_TOKEN", "M3C_REGISTRY_RO_TOKEN", "m3c-skillctl-registry", "m3c-skillctl-registry-ro", ""},
 }
 
 // Credential resolves the token for (scheme, host, mode). host lets one machine
