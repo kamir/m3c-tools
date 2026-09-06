@@ -40,11 +40,24 @@ type Waiver struct {
 
 	// Kind restricts the waiver to one action. Without it the match was on the
 	// adversary dimension plus an expected gate plus an observed outcome, and an
-	// EMPTY expected gate matches every step that predicts a refusal without
-	// naming one: the verify-sig steps, among others. A waiver for a pull defect
-	// would then have covered an unrelated regression elsewhere in the same
-	// scenario, silently, which is the exact failure mode the register exists to
-	// prevent. Required, so a new waiver cannot be written without saying where.
+	// EMPTY expected gate matches every step of that dimension's scenarios whose
+	// prediction carries no gate name: pack, admit, attest, pin. So a waiver for a
+	// defect in the PULL also covered the admit and the attestation beside it, and
+	// a regression in either would have been swallowed under a finding that has
+	// nothing to do with them.
+	//
+	// The reach was bounded by the adversary dimension and never crossed into
+	// another one; an earlier note here claimed it reached the verify-sig steps,
+	// and that was wrong, because those belong to AdvTransitChecked and the
+	// dimension is compared first. Complete within one dimension is bad enough:
+	// the register's whole purpose is that an accepted disagreement stays the size
+	// it was accepted at.
+	//
+	// Found by the MEASURED lines below, on their first run: eighteen where one
+	// was expected. The over-match had been silent for as long as it existed and
+	// became visible the moment something had to print what it covered.
+	//
+	// Required, so a new waiver cannot be written without saying where it applies.
 	Kind ActionKind
 }
 
