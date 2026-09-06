@@ -19,7 +19,9 @@ package verify
 // The verifier accepts ANY non-retired key during overlap.
 
 import (
+	"crypto/subtle"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -1233,4 +1235,114 @@ func deriveKeyID(rawPub []byte) string {
 // data-model file's hot path.
 var todayISO = func() string {
 	return nowISO()
+}
+
+// AddAuthor pins an AUTHOR key into a trust root's `authors:` list, refusing
+// unless the caller's out-of-band fingerprint matches the key.
+//
+// WHY IT EXISTS. `AddRegistry` pins the key that signs the registry's
+// statements; the offline paths (`verify --bundle`, `install --bundle`) check
+// the AUTHOR signature against `authors:`, and nothing wrote that list. Until
+// now the file had to be hand-written, which is the one place in this system
+// where a typo becomes a wrong pin that nobody notices, because a wrong pin
+// looks exactly like a correct one until the day it matters.
+//
+// THE FINGERPRINT IS REQUIRED, and that is the whole design. A key that arrives
+// with the artifact proves nothing: it came down the same untrusted channel. The
+// caller confirms sha256(pubkey) over a SECOND channel (a phone call, a video
+// call, in person) and passes it here; a mismatch is refused rather than
+// reported, because a fingerprint the operator did not actually compare is worse
+// than none at all. This is SPEC-0406 §3.2, and it is what makes AC-02 ("the
+// recipient need not trust the transport") a fact rather than a claim.
+//
+// The root is created with identity_keys_authorized: pinned, because a root that
+// carries a pinned author key and then fetches identities from a registry would
+// answer the author question two ways.
+func (t *TrustRoots) AddAuthor(registryURL, identityID, pubkeyPath, fingerprint string) error {
+	if t == nil {
+		return errors.New("trust-roots: AddAuthor called on nil")
+	}
+	registryURL = strings.TrimRight(strings.TrimSpace(registryURL), "/")
+	switch {
+	case registryURL == "":
+		return errors.New("trust-roots: --registry is required")
+	case strings.TrimSpace(identityID) == "":
+		return errors.New("trust-roots: --identity is required (the id in the bundle's author signature row)")
+	case pubkeyPath == "":
+		return errors.New("trust-roots: --pubkey is required")
+	case strings.TrimSpace(fingerprint) == "":
+		return errors.New("trust-roots: --pin is required; confirm sha256(pubkey) over a SECOND channel first (no trust-on-first-use)")
+	}
+	if err := validateRegistryURL(registryURL); err != nil {
+		return fmt.Errorf("trust-roots: %w", err)
+	}
+
+	pub, err := signing.LoadPublicKey(pubkeyPath)
+	if err != nil {
+		return fmt.Errorf("trust-roots: load pubkey %s: %w", pubkeyPath, err)
+	}
+	if len(pub) != pubkeyRawSize {
+		return fmt.Errorf("trust-roots: pubkey %s is %d bytes, want %d", pubkeyPath, len(pub), pubkeyRawSize)
+	}
+	raw := make([]byte, len(pub))
+	copy(raw, pub)
+
+	sum := sha256.Sum256(raw)
+	want := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(fingerprint, "sha256:")))
+	got := hex.EncodeToString(sum[:])
+	if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
+		return fmt.Errorf(
+			"trust-roots: the key in %s does not match the fingerprint you confirmed.\n"+
+				"  confirmed: sha256:%s\n"+
+				"  this key:  sha256:%s\n"+
+				"  Refusing. Do not re-send the key over the same channel: go back to the second "+
+				"channel and read the fingerprint again, because a mismatch here is either a typo "+
+				"or the one case this check exists for",
+			pubkeyPath, want, got)
+	}
+
+	ak := AuthorKey{ID: strings.TrimSpace(identityID), Pubkey: raw, PubkeyB64: base64.StdEncoding.EncodeToString(raw)}
+
+	if existing := t.findRegistry(registryURL); existing != nil {
+		for _, a := range existing.Authors {
+			if a.ID == ak.ID {
+				if a.PubkeyB64 == ak.PubkeyB64 {
+					return fmt.Errorf("trust-roots: author %s is already pinned with this exact key", ak.ID)
+				}
+				// A DIFFERENT key under the same identity is the interesting case:
+				// either a legitimate rotation or someone substituting an identity.
+				// Both are decisions, and neither is ours to make silently.
+				return fmt.Errorf(
+					"trust-roots: author %s is already pinned with a DIFFERENT key under %s.\n"+
+						"  Refusing to overwrite. If this is a key rotation, remove the old entry "+
+						"deliberately; if it is not, you have just been handed a second key for one identity",
+					ak.ID, registryURL)
+			}
+		}
+		existing.Authors = append(existing.Authors, ak)
+		if existing.IdentityKeysAuthorized != "pinned" {
+			existing.IdentityKeysAuthorized = "pinned"
+		}
+		return nil
+	}
+
+	// No entry for this registry yet, and an author key alone cannot make one.
+	//
+	// The chain checks the REGISTRY signature as well as the author's, so a root
+	// with only an author key would be refused later, during a verification, with
+	// a message about the chain. Saying it here instead costs the operator one
+	// command and saves them a failure they would have to trace backwards.
+	//
+	// The first version of this function created the entry anyway and let the
+	// schema validator reject it. The validator was right, but it answered with
+	// "registry_keys is empty (a registry with no keys is useless)", which names
+	// an invariant rather than an action. That is precisely the AC-08 failure this
+	// project has already corrected once, in verify-sig.
+	return fmt.Errorf(
+		"trust-roots: no entry for %s yet, and an author key alone is not enough.\n"+
+			"  why: the chain checks the REGISTRY signature too, so a root with only an\n"+
+			"       author key would be refused later, when you verify something.\n"+
+			"  fix: pin the registry key first, then re-run this command:\n"+
+			"       skillctl trust add --registry %s --pubkey <registry-key.pub>",
+		registryURL, registryURL)
 }

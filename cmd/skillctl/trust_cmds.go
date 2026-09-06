@@ -19,9 +19,12 @@ package main
 // also surfaces them.
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
 	"io"
 	"os"
 	"strings"
@@ -43,6 +46,10 @@ func runTrust(args []string, stdout, stderr io.Writer) int {
 		return runTrustList(args[1:], stdout, stderr)
 	case "add":
 		return runTrustAdd(args[1:], stdout, stderr)
+	case "add-author":
+		return runTrustAddAuthor(args[1:], stdout, stderr)
+	case "fingerprint":
+		return runTrustFingerprint(args[1:], stdout, stderr)
 	case "remove", "rm":
 		return runTrustRemove(args[1:], stdout, stderr)
 	case "help", "--help", "-h":
@@ -172,6 +179,101 @@ func runTrustAdd(args []string, stdout, stderr io.Writer) int {
 	return exitOK
 }
 
+// runTrustAddAuthor implements `skillctl trust add-author`.
+//
+// The Phase-0 command of SPEC-0406: it is what makes "the recipient need not
+// trust the transport" true instead of asserted.
+//
+// It is a SEPARATE verb rather than a flag on `trust add` because the two pin
+// different things and one of them requires an out-of-band step. `trust add`
+// pins the key that signs a registry's statements. This pins the key of a
+// PERSON, and it refuses without a fingerprint the operator confirmed over a
+// second channel. Folding that requirement into an existing verb as an optional
+// flag would make the strict path look like the variant of the loose one; it is
+// the other way round.
+func runTrustAddAuthor(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("trust add-author", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	registryURL := fs.String("registry", "", "Registry URL this author publishes under. Required. It is a NAME here, not an endpoint: the offline paths never call it.")
+	identityID := fs.String("identity", "", "The author identity id exactly as it appears in the bundle's author signature row (e.g. id:eric@kup). Required.")
+	pubkeyPath := fs.String("pubkey", "", "Path to the author's PEM SPKI ed25519 public key. Required.")
+	pin := fs.String("pin", "", "sha256:<hex> of the key, CONFIRMED OVER A SECOND CHANNEL. Required; there is no trust-on-first-use.")
+	fs.Usage = func() {
+		fmt.Fprintln(stderr, "Usage: skillctl trust add-author --registry <url> --identity <id> --pubkey <path> --pin sha256:<hex>")
+		fmt.Fprintln(stderr, "")
+		fmt.Fprintln(stderr, "Pin an AUTHOR's key so `verify --bundle` and `install --bundle` will accept")
+		fmt.Fprintln(stderr, "artifacts they signed. This is the step that has to happen BEFORE anything")
+		fmt.Fprintln(stderr, "arrives, and it is the reason the transport does not have to be trusted.")
+		fmt.Fprintln(stderr, "")
+		fmt.Fprintln(stderr, "--pin is REQUIRED and is not a formality. Get the key by any convenient")
+		fmt.Fprintln(stderr, "means, then have the sender read the fingerprint to you on a call. A key")
+		fmt.Fprintln(stderr, "that arrives with its own fingerprint down one channel proves nothing.")
+		fmt.Fprintln(stderr, "")
+		fmt.Fprintln(stderr, "Print a key's fingerprint with:  skillctl trust fingerprint <key.pub>")
+		fs.PrintDefaults()
+	}
+	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+	if *registryURL == "" || *identityID == "" || *pubkeyPath == "" || *pin == "" {
+		fs.Usage()
+		return exitUsage
+	}
+
+	path := trustConfigPath()
+	tr, err := verify.Load(path)
+	if errors.Is(err, os.ErrNotExist) {
+		// First time: Load returned an empty TrustRoots with Path set.
+	} else if err != nil {
+		fmt.Fprintln(stderr, err)
+		return exitGeneric
+	}
+
+	if err := tr.AddAuthor(*registryURL, *identityID, *pubkeyPath, *pin); err != nil {
+		fmt.Fprintln(stderr, err)
+		return exitGeneric
+	}
+	if err := tr.Save(); err != nil {
+		fmt.Fprintln(stderr, err)
+		return exitGeneric
+	}
+	fmt.Fprintf(stdout, "pinned author %s under %s in %s\n", *identityID, strings.TrimRight(*registryURL, "/"), tr.Path)
+	fmt.Fprintln(stdout, "You can now verify and install bundles this author signed, offline.")
+	return exitOK
+}
+
+// runTrustFingerprint prints the sha256 of a public key: the value one side
+// reads aloud and the other passes to `trust add-author --pin`.
+//
+// It exists so the fingerprint comes from the tool on BOTH ends rather than from
+// a human transcribing 64 hex characters out of a key file. The comparison is
+// the security step; making it easy is how it actually gets done.
+func runTrustFingerprint(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("trust fingerprint", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fs.Usage = func() {
+		fmt.Fprintln(stderr, "Usage: skillctl trust fingerprint <key.pub>")
+		fmt.Fprintln(stderr, "")
+		fmt.Fprintln(stderr, "Print sha256:<hex> of an ed25519 public key. Read this value aloud on a")
+		fmt.Fprintln(stderr, "call; the other side passes it to `trust add-author --pin`.")
+	}
+	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+	if fs.NArg() != 1 {
+		fs.Usage()
+		return exitUsage
+	}
+	pub, err := signing.LoadPublicKey(fs.Arg(0))
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return exitGeneric
+	}
+	sum := sha256.Sum256(pub)
+	fmt.Fprintf(stdout, "sha256:%s\n", hex.EncodeToString(sum[:]))
+	return exitOK
+}
+
 // runTrustRemove implements `skillctl trust remove --registry <url>`.
 // Deletes the entire entry (including all its keys). Convenience verb;
 // a future `skillctl trust retire --registry <url> --id <k>` would mark
@@ -225,6 +327,8 @@ func printTrustUsage(w io.Writer) {
 	fmt.Fprintln(w, "Verbs:")
 	fmt.Fprintln(w, "  list     Print configured registries and their pinned keys.")
 	fmt.Fprintln(w, "  add      Pin a registry public key.")
+	fmt.Fprintln(w, "  add-author   Pin an AUTHOR key, with a fingerprint confirmed out-of-band.")
+	fmt.Fprintln(w, "  fingerprint  Print sha256:<hex> of a public key, to read aloud on a call.")
 	fmt.Fprintln(w, "  remove   Unpin a registry (alias: rm).")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Trust roots config: ~/.claude/skill-trust-roots.yaml (per SPEC-0188 §4.4).")
