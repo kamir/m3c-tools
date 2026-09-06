@@ -67,20 +67,31 @@ var (
 	// meaning changes silently is worse than a number that was never allocated:
 	// a caller that reads 15 as "revoked" would treat a transport failure as a
 	// security verdict, and one that reads it as "blob missing" would retry a
-	// revocation. Decided 2026-09-06: bundle_revoked takes 20, the specification
-	// is corrected, and 15 keeps the meaning every existing caller already has.
+	// revocation. Decided 2026-09-06: bundle_revoked gets its own number, the
+	// specification is corrected, and 15 keeps the meaning every existing caller
+	// already has.
 	//
 	// It sits outside the 10-19 verify ladder deliberately, and its family is
 	// "pull", not "verify". TestExitCode_VerifyFamilyCompleteness pins the verify
 	// family to exactly those ten numbers, and that pin is worth more than the
 	// convenience of reusing the name: the code is emitted by `pull --trust-mode`,
 	// which is the surface FR-0122 is about, so "pull" is also simply what is
-	// true. 20 is free, and below the skillgate band at 30-39.
+	// true.
+	//
+	// NUMBER: 6, the lowest number no exit surface claims (census 2026-09-07:
+	// 0-2 generic, 3 pin, 4-5 import-public, 10-29 the ladders and their chain
+	// extensions, 30-39 the skillgate band). The first FR-0122 cut took 20 on
+	// the claim "20 is free"; that claim was measured against this register
+	// only, not against the exit surfaces outside it, and verify.ExitSelfAttested
+	// (SPEC-0246 §5.2) had been shipping 20 for weeks, documented in the manual
+	// and CLI-VERBS. The one-day-old, unreleased side yields (Befund 1.4).
+	// Tier 8 below registers the out-of-register numbers so the next "N is
+	// free" claim collides in TestCodes_NumberTheme instead of in the field.
 	//
 	// Its theme is its own because a revocation is not a failed check. The chain
 	// verified. Someone withdrew the bundle afterwards, and a caller has to be
 	// able to tell those two apart: one is retried, the other never is.
-	RevokedBundle = Code{20, "trust-chain revocation", "pull", "bundle_revoked"}
+	RevokedBundle = Code{6, "trust-chain revocation", "pull", "bundle_revoked"}
 )
 
 // ---------------------------------------------------------------------------
@@ -167,6 +178,45 @@ var (
 	OfflineUnverifiable   = Code{25, "offline / no-policy-basis", "state-machine", "offline_unverifiable_managed"}
 )
 
+// ---------------------------------------------------------------------------
+// Tier 8: out-of-register exit surfaces (census 2026-09-07, Befund 1.4).
+// These numbers were allocated in pkg/skillctl/verify/errors.go (SPEC-0246
+// §5.2, SPEC-0279 R3, SPEC-0278 L1), cmd/skillctl/agentid_cmds.go,
+// cmd/skillctl/translog_cmds.go and cmd/skillctl/pin_cmds.go, but never
+// entered here, so TestCodes_NumberTheme could not see them. That blindness
+// is how bundle_revoked briefly claimed 20: "20 is free" was measured
+// against this register only, while verify.ExitSelfAttested had been
+// shipping 20 for weeks. Registered so that every number an exit surface
+// holds is visible to the invariant, and the next "N is free" claim
+// collides in CI instead of in the field.
+//
+// FAMILY NOTE: 20/22/23 are emitted by the §7 verifier (verify.ExitCode),
+// but their Family is NOT "verify": TestExitCode_VerifyFamilyCompleteness
+// pins Family=="verify" to exactly the 10-19 ladder, and that pin is
+// load-bearing. The SPEC-0246/0277/0278/0279 checks layered on the chain
+// therefore carry the family "verify-chain"; agentid, translog and pin are
+// named after the subcommand surfaces that actually exit with them.
+//
+// KNOWN LEGACY COLLISION ON 25: TranslogRewrite (a real process exit of
+// `skillctl translog`, shipped since v0.3.0) and OfflineUnverifiable (a
+// message-borne refusal_code, shipped since v0.3.1) both hold 25 with
+// different themes. Both sides are in releases, so neither can yield the
+// way the unreleased bundle_revoked-20 did. The pair is pinned as the ONLY
+// tolerated violation in TestCodes_KnownLegacyCollision25 and excluded from
+// TestCodes_NumberTheme; resolving it needs a release-level decision.
+// ---------------------------------------------------------------------------
+
+var (
+	PinNeedPrivMsg        = Code{3, "pin privacy confirmation", "pin", "need_priv_msg"}
+	ChainSelfAttested     = Code{20, "attestation reviewer-independence", "verify-chain", "self_attested"}
+	AgentIDExpired        = Code{21, "agent-identity expiry", "agentid", "agentid_expired"}
+	ChainRevocationStale  = Code{22, "revocation freshness", "verify-chain", "revocation_stale"}
+	ChainInclusionMissing = Code{23, "log inclusion", "verify-chain", "inclusion_missing"}
+	TranslogNotIncluded   = Code{23, "log inclusion", "translog", "not_included"}
+	TranslogSplitView     = Code{24, "log equivocation", "translog", "split_view"}
+	TranslogRewrite       = Code{25, "log rewrite", "translog", "translog_rewrite"}
+)
+
 // AllCodes returns every Code currently registered. Used by the
 // CI invariant test (TestCodes_NumberTheme) and by the generator
 // that emits the SKILLCTL-MANUAL.md exit-code table.
@@ -190,5 +240,8 @@ func AllCodes() []Code {
 		GuardPathSidechannelDenied,
 		// Tier 7) offline state machine (locked + unverifiable) + audit-durability
 		OfflineLocked, LocalAuditUnavailable, OfflineUnverifiable,
+		// Tier 8: out-of-register surfaces (pin, verify-chain, agentid, translog)
+		PinNeedPrivMsg, ChainSelfAttested, AgentIDExpired, ChainRevocationStale,
+		ChainInclusionMissing, TranslogNotIncluded, TranslogSplitView, TranslogRewrite,
 	}
 }
