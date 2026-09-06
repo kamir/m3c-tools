@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/kamir/m3c-tools/pkg/skillctl/artifactauth"
 )
 
 // The secret comes from stdin and only the first line of it. A token has no line
@@ -85,5 +87,58 @@ func TestTokenUnknownSubcommandIsUsage(t *testing.T) {
 	}
 	if !strings.Contains(errb.String(), "unknown subcommand") {
 		t.Errorf("message: %q", errb.String())
+	}
+}
+
+// The tier flag maps to the two named tiers. A bool whose polarity has to be
+// looked up is exactly what the named type avoids, so the mapping is pinned.
+func TestTokenTierMapping(t *testing.T) {
+	if tokenTier(true) != artifactauth.TierRead {
+		t.Error("--read-only must select the read tier")
+	}
+	if tokenTier(false) != artifactauth.TierWrite {
+		t.Error("without --read-only it must be the write tier")
+	}
+}
+
+func TestTokenRmRequiresBackendAndHost(t *testing.T) {
+	var out, errb bytes.Buffer
+	if rc := runTokenRm([]string{"--backend", "gitlab"}, &out, &errb); rc != exitUsage {
+		t.Errorf("rc = %d, want exitUsage", rc)
+	}
+	if !strings.Contains(errb.String(), "--backend and --host are required") {
+		t.Errorf("message: %q", errb.String())
+	}
+}
+
+// rm must say, in its own output, that it did not revoke anything. An operator
+// who believes a local delete stopped a leaked token has been actively misled.
+func TestTokenRmSaysItIsNotRevocation(t *testing.T) {
+	var out, errb bytes.Buffer
+	if rc := runTokenRm([]string{"--backend", "gitlab", "--host", "nothing.invalid"}, &out, &errb); rc != exitOK {
+		t.Fatalf("rc = %d (stderr %s)", rc, errb.String())
+	}
+	if !strings.Contains(out.String(), "not revocation") {
+		t.Errorf("the output must not let a local delete pass for a revocation: %q", out.String())
+	}
+}
+
+// A set against a host that reads as an option is refused before anything is
+// stored, and the message says which flag is wrong.
+func TestTokenSetRefusesAHostThatReadsAsAnOption(t *testing.T) {
+	var out, errb bytes.Buffer
+	rc := runTokenSetFrom([]string{"--backend", "gitlab", "--host", "-S"}, strings.NewReader("glpat-x\n"), &out, &errb)
+	if rc == exitOK {
+		t.Fatal("a host beginning with a dash must be refused")
+	}
+}
+
+func TestTokenHelpMentionsStdin(t *testing.T) {
+	var out bytes.Buffer
+	if rc := runToken([]string{"--help"}, &out, &out); rc != exitOK {
+		t.Fatalf("rc = %d", rc)
+	}
+	if !strings.Contains(out.String(), "stdin") {
+		t.Error("the help must say where the token comes from; that is the property this verb exists for")
 	}
 }

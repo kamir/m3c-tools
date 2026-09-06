@@ -75,6 +75,12 @@ func tokenTier(readOnly bool) artifactauth.Tier {
 }
 
 func runTokenSet(args []string, stdout, stderr io.Writer) int {
+	return runTokenSetFrom(args, os.Stdin, stdout, stderr)
+}
+
+// runTokenSetFrom is runTokenSet with the secret source injected, so a test can
+// drive the whole path without a terminal. The production caller passes os.Stdin.
+func runTokenSetFrom(args []string, in io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("token set", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	backend := fs.String("backend", "", "credential backend (gitlab, github, registry)")
@@ -95,7 +101,7 @@ func runTokenSet(args []string, stdout, stderr io.Writer) int {
 		return exitGeneric
 	}
 
-	secret, err := readSecret(os.Stdin)
+	secret, err := readSecret(in)
 	if err != nil {
 		fmt.Fprintf(stderr, "skillctl token set: read token from stdin: %v\n", err)
 		return exitGeneric

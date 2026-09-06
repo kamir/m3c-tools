@@ -50,6 +50,12 @@ func platformStore(service, account, secret string) error {
 
 // platformDelete removes the item. A missing item is not an error.
 func platformDelete(service, account string) error {
+	// #nosec G204 -- no shell is involved, so there is nothing to inject, and both
+	// arguments are constrained before they get here: `service` comes from the
+	// internal backendCred table (fixed strings, never user input) and `account`
+	// has passed validHost, which rejects a leading dash, whitespace and control
+	// characters. The leading dash is the case that actually mattered: `security`
+	// would have read it as a flag and acted on the wrong item, silently.
 	cmd := exec.Command("/usr/bin/security", "delete-generic-password", "-s", service, "-a", account)
 	var errBuf bytes.Buffer
 	cmd.Stderr = &errBuf

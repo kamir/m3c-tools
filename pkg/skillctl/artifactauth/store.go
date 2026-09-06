@@ -79,8 +79,8 @@ func Store(backend string, tier Tier, host, secret string) error {
 	if service == "" {
 		return fmt.Errorf("artifactauth: backend %q has no %s tier", backend, tier)
 	}
-	if host == "" {
-		return fmt.Errorf("artifactauth: a host is required; it is what lets one machine hold tokens for several instances")
+	if err := validHost(host); err != nil {
+		return err
 	}
 	if secret == "" {
 		return fmt.Errorf("artifactauth: refusing to store an empty token")
@@ -107,6 +107,9 @@ func Delete(backend string, tier Tier, host string) error {
 	if service == "" {
 		return fmt.Errorf("artifactauth: backend %q has no %s tier", backend, tier)
 	}
+	if err := validHost(host); err != nil {
+		return err
+	}
 	return platformDelete(service, host)
 }
 
@@ -132,4 +135,30 @@ func Provisioned(backend string, tier Tier, host string) string {
 		return "protected store " + service
 	}
 	return ""
+}
+
+// validHost rejects a host that could be mistaken for an option by the tool that
+// stores the credential.
+//
+// The macOS store shells out to `security`, and although exec.Command uses no
+// shell (so there is nothing to inject), a value beginning with "-" would be read
+// by `security` as a FLAG rather than as an account name. That is not a code
+// injection, it is worse in one respect: it would silently act on the wrong item.
+// Whitespace and control characters are rejected for the same reason, plus the
+// `security -i` line format, which splits on whitespace.
+//
+// A host is a hostname, optionally with a port. Nothing legitimate is lost.
+func validHost(host string) error {
+	if host == "" {
+		return fmt.Errorf("artifactauth: a host is required; it is what lets one machine hold tokens for several instances")
+	}
+	if strings.HasPrefix(host, "-") {
+		return fmt.Errorf("artifactauth: refusing host %q: a leading dash would be read as an option, not as a host", host)
+	}
+	for _, r := range host {
+		if r < 0x21 || r == 0x7f {
+			return fmt.Errorf("artifactauth: refusing host %q: it contains whitespace or a control character", host)
+		}
+	}
+	return nil
 }

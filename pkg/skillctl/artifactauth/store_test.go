@@ -93,3 +93,43 @@ func TestBackendsIsSorted(t *testing.T) {
 		}
 	}
 }
+
+// A host that could be read as an option is refused, and that is the case worth
+// pinning: `security` would have taken a leading dash as a flag and acted on the
+// wrong item, without saying so.
+func TestValidHostRejectsWhatWouldBeMisread(t *testing.T) {
+	for _, tc := range []struct{ host, want string }{
+		{"", "a host is required"},
+		{"-S", "leading dash"},
+		{"host with space", "whitespace or a control character"},
+		{"host\ttab", "whitespace or a control character"},
+		{"host\x00null", "whitespace or a control character"},
+	} {
+		if err := validHost(tc.host); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("validHost(%q) = %v, want it to mention %q", tc.host, err, tc.want)
+		}
+	}
+	for _, ok := range []string{"git.kieback-peter.de", "192.168.0.135:8929", "localhost"} {
+		if err := validHost(ok); err != nil {
+			t.Errorf("validHost(%q) = %v, want nil", ok, err)
+		}
+	}
+}
+
+// Delete validates the same way Store does. A delete that acts on the wrong item
+// is quieter than a write that does, and therefore worse.
+func TestDeleteValidatesToo(t *testing.T) {
+	if err := Delete("nonesuch", TierWrite, "h"); err == nil || !strings.Contains(err.Error(), "unknown backend") {
+		t.Errorf("unknown backend: %v", err)
+	}
+	if err := Delete("gitlab", TierWrite, "-S"); err == nil || !strings.Contains(err.Error(), "leading dash") {
+		t.Errorf("a host that reads as an option must be refused: %v", err)
+	}
+}
+
+// The store has a name a human can read, whatever the platform.
+func TestProtectedStoreNameIsNotEmpty(t *testing.T) {
+	if ProtectedStoreName() == "" {
+		t.Error("the store needs a name for the message that tells an operator where the token went")
+	}
+}
