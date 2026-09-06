@@ -106,6 +106,10 @@ func main() {
 		runWithExit(func() int { return runVerify(os.Args[2:], os.Stdout, os.Stderr) })
 	// === END SPEC-0188 S8 ===
 	// === SPEC-0276 R4.3: portable, offline, trust-nothing verification kit ===
+	// === SPEC-0406 Phase 2: produce a sendable artifact + envelope ===
+	case "export-bundle":
+		runWithExit(func() int { return runExportBundle(os.Args[2:], os.Stdout, os.Stderr) })
+	// === END SPEC-0406 Phase 2 ===
 	case "export-verification-kit":
 		runWithExit(func() int { return runExportKit(os.Args[2:], os.Stdout, os.Stderr) })
 	// === END SPEC-0276 R4.3 ===
