@@ -61,38 +61,28 @@ type Waiver struct {
 	Kind ActionKind
 }
 
-// Waivers is the register. Empty is the goal, and it now holds one entry, not two.
+// Waivers is the register, and it is EMPTY.
 //
-// The FR-0121 entry is GONE, and its removal is the substance of this change
-// rather than housekeeping. It waived the case "model says gate 3, binary says
-// accept" and described it as an unstable measurement owing one clean re-run.
-// The re-run happened on 2026-09-06 and found a cause: the adversary move edited
-// the detached "<bundle>.<digest>.author.sig" file, which the trust-mode pull
-// path never opens. Gate 3 was never reached, so the acceptance was correct behaviour
-// against a case that did not test it, and the disagreement was the MODEL's. With
-// a move that reaches the gate (see ForgeBundleSignatures) the prediction holds
-// and there is nothing left to waive.
+// It held two entries and both are gone for opposite reasons, which is the whole
+// argument for keeping a register rather than deleting tests.
 //
-// What remains is BUG-0217, and it is a different animal: a measured violation of
-// a written requirement, waived so the gate stays usable while the fix is decided.
-// Keeping the two apart is the point of the register. One was a defect in the
-// instrument, the other is a defect in the product, and a register that cannot
-// tell them apart will eventually be used to hide the second behind the first.
+// FR-0121 was withdrawn on 2026-09-06 because it was wrong: the adversary move it
+// covered edited a detached signature file the pull path never opens, so gate 3
+// was never reached and the acceptance it waived was correct behaviour against a
+// case that did not test it. The defect was in the instrument.
+//
+// BUG-0217 was a real defect in the PRODUCT, and it is fixed. The trust-mode pull
+// path now verifies the bundle's own CHECKSUMS manifest after extraction and
+// before any write, as SPEC-0188 §7 step 8 requires. The waiver stopped matching
+// by itself the first time the corpus ran against the fixed build, which is
+// exactly what it promised: "change what the binary does here and the waiver
+// stops matching, and the conflict fails the run again."
+//
+// The mechanism stays. An empty register is evidence that nothing needs waiving;
+// no register at all would force the next disagreement to be resolved by deleting
+// the test that found it.
 func Waivers() []Waiver {
-	return []Waiver{
-		{
-			Adv: AdvStaleChecksums, Kind: ActPull, Expected: "", Observed: "accept",
-			Finding:   "BUG-0217",
-			Invariant: InvAcceptDelivers,
-			Why: "A DEFECT, not an open question, and the line above is the measurement of it. " +
-				"SPEC-0188 §7 step 8 verifies " +
-				"the CHECKSUMS file inside the bundle and says any failure in steps 3 to 8 means " +
-				"no write. The trust-mode pull path extracts without that check (extractSkb does " +
-				"not validate; the other install path does), and a bundle whose internal manifest " +
-				"no longer describes its contents is installed. Waived so the gate stays usable " +
-				"while the fix is decided; it is a defect, not a naming question",
-		},
-	}
+	return nil
 }
 
 // waiverFor returns the waiver covering this disagreement, if any.
