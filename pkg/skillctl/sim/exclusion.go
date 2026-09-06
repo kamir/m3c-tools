@@ -57,6 +57,11 @@ func excludedBy(p Params) *Exclusion {
 		return &Exclusion{"transit attacks pinned to green", KindEconomy,
 			"the governance axis adds no distinct outcome for these moves"}
 	}
+	if p.Adv == AdvDigestAndSigs && (p.Gov != GovGreen || p.Key != KeySeparatePin) {
+		return &Exclusion{"digest-and-sigs pinned to green and pinned", KindEconomy,
+			"the move exists to ask which of gate 2 and gate 3 speaks first; a pull that " +
+				"dies at governance never reaches either, so the other axes add nothing"}
+	}
 	if p.Key == KeyShared && p.Cast != CastSolo && p.Adv != AdvNone {
 		return &Exclusion{"shared key collapses duo and trio onto solo", KindImpossible,
 			"with one key there is no second key holder to distinguish the casts"}

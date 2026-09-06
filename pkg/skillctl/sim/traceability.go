@@ -229,6 +229,21 @@ func (rep Report) WriteTraceability(w io.Writer) {
 		}
 	}
 
+	// How often each ORDER claim was exercised: the scenarios where BOTH gates it
+	// orders had a reason to fire. A claim that no scenario can falsify is not a
+	// verified claim, and until 2026-09-06 this column said "n/a" for all three,
+	// which hid that "gate 2 before gate 3" was exercised zero times.
+	order := map[string]int{}
+	for _, r := range rep.Results {
+		st := StateAt(r.Scenario.P, r.Scenario.P.Revoke)
+		if st.Revoked && !st.GovQualifies {
+			order["order: 5 before 4"]++
+		}
+		if !st.DigestMatches && !st.SigsVerify {
+			order["order: 2 before 3"]++
+		}
+	}
+
 	items := append([]TraceItem(nil), TraceMatrix()...)
 	sort.SliceStable(items, func(i, j int) bool {
 		return items[i].Prov.prio() < items[j].Prov.prio()
@@ -238,7 +253,13 @@ func (rep Report) WriteTraceability(w io.Writer) {
 	fmt.Fprintf(w, "  %-18s %-12s %-9s %s\n", "claim", "provenance", "observed", "source")
 	for _, it := range items {
 		obs := "n/a"
-		if n, ok := gates[it.ID]; ok {
+		if n, ok := order[it.ID]; ok {
+			if n == 0 {
+				obs = "NEVER RUN"
+			} else {
+				obs = fmt.Sprintf("%d exerc", n)
+			}
+		} else if n, ok := gates[it.ID]; ok {
 			obs = fmt.Sprintf("%d", n)
 		} else if strings.HasPrefix(it.ID, "gate ") {
 			obs = "0"

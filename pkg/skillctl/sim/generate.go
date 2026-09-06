@@ -81,6 +81,21 @@ const (
 	// instead of an argument. Either answer is worth more than the argument was.
 	AdvPublisherBadSigs AdvKind = "publisher-bad-sigs"
 
+	// AdvDigestAndSigs breaks the digest AND the signature rows at once, and it
+	// exists for one reason: the diagnosis contract "gate 2 before gate 3"
+	// (FR-0119 D2, decided 2026-09-05) was never exercised. Measured over the
+	// strength-2 array on 2026-09-06: nine scenarios reach the pair (5, 4), and
+	// ZERO reach the pair (2, 3), because no single move in the alphabet broke
+	// both the bytes and the rows. A normative ordering claim that no scenario can
+	// violate is a rule the report cannot say anything about.
+	//
+	// The two halves come from different actors and that is fine: the publisher
+	// posts rows that do not verify, the store swaps the bytes afterwards. Both
+	// capabilities exist separately in this alphabet; the scenario simply grants
+	// them at the same time, which is the weakest assumption under which the
+	// ordering question can be asked at all.
+	AdvDigestAndSigs AdvKind = "digest-and-sigs"
+
 	// AdvArtifactWithheld is a PROBE, not an attack: the backend no longer serves
 	// the bytes, while every signed event stays in place. It is how FR-0119 D3
 	// becomes measurable from outside the process. See WithholdArtifact.
@@ -159,6 +174,7 @@ func AllAdvKinds() []AdvKind {
 		AdvNone, AdvTransitChecked, AdvTransitSkipped, AdvStoredBundle,
 		AdvForgeAttest, AdvStripRevoke, AdvRelabelRevoke, AdvTamperInstalled,
 		AdvStolenKey, AdvForgeEnvelope, AdvPublisherBadSigs, AdvArtifactWithheld,
+		AdvDigestAndSigs,
 		AdvStaleChecksums,
 	}
 }
@@ -342,6 +358,21 @@ func build(p Params) Scenario {
 			Expect: Expectation{Outcome: Accept, Exit: 0, Claimed: true,
 				Why: "anyone may WRITE an attestation; only a pinned signer's counts"},
 		})
+	}
+
+	// 5a-ter. Both at once: rows that do not verify AND bytes that do not hash to
+	// the admitted digest. The prediction is gate 2, and it is the ONLY row in the
+	// corpus that can falsify "gate 2 before gate 3".
+	if p.Adv == AdvDigestAndSigs {
+		sc.Steps = append(sc.Steps,
+			Step{Action: Action{Kind: ActForgeBundleSigs, Actor: Publisher, Skill: skill},
+				Expect: Expectation{Outcome: NoEffect, Exit: -1, Claimed: true,
+					Why: "the publisher posts rows that do not verify beneath a valid envelope"}},
+			Step{Action: Action{Kind: ActTamperTransit, Actor: Adversary, Skill: skill,
+				Params: map[string]string{"where": "registry"}},
+				Expect: Expectation{Outcome: NoEffect, Exit: -1, Claimed: true,
+					Why: "and the store swaps the bytes, so both gate 2 and gate 3 have a reason to fire"}},
+		)
 	}
 
 	// 5a-bis. The bad signature rows. This step sits AFTER the admit on purpose:
