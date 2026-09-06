@@ -283,9 +283,8 @@ func (rep Report) Write(w io.Writer) {
 		for _, v := range vs {
 			fmt.Fprintf(w, "  %s\n", v)
 		}
-	} else {
-		fmt.Fprintf(w, "\ninvariants: no violation across the corpus\n")
 	}
+	rep.WriteInvariantCoverage(w)
 
 	if cs := rep.Conflicts(); len(cs) > 0 {
 		fmt.Fprintf(w, "\nCONFLICTS theory vs reality (%d). One of the two is wrong; a human decides.\n", len(cs))
@@ -589,6 +588,55 @@ func (rep Report) Compose() Mixture {
 }
 
 // WriteMixture renders the composition view.
+// WriteInvariantCoverage prints each invariant with the number of steps it was
+// EVALUATED on, beside the number of violations.
+//
+// "invariants: no violation across the corpus" was the whole section until
+// 2026-09-06, and it could not tell an invariant that held everywhere from one
+// whose precondition never occurred. Both print as silence.
+//
+// The rule it comes from is owed to a parallel session that hit the same shape in
+// an entirely different corpus: a figure names its population on the same line.
+// A figure without one is not wrong, it is unreadable, and it will then reliably
+// refute the wrong thing. Their case was a median of 0 over a set where half the
+// members had no value at all; this one is the same omission with the count in
+// the denominator instead of the numerator.
+//
+// INV-5 is why this is not hypothetical. It is declared in model.go, it appears
+// in the traceability matrix, and nothing evaluates it. While the section said
+// "no violation", that read as a check that passed.
+func (rep Report) WriteInvariantCoverage(w io.Writer) {
+	declared := []Invariant{
+		InvIntegrity, InvRevocation, InvGovernance, InvLoudRefusal, InvNoDowngrade,
+		InvRefusalIsInert, InvAcceptDelivers, InvMetadataDecidesAlone,
+	}
+	seen := map[Invariant]int{}
+	hurt := map[Invariant]int{}
+	for _, r := range rep.Results {
+		for _, e := range r.Evaluated {
+			seen[e]++
+		}
+		for _, v := range r.Violations {
+			hurt[v.Invariant]++
+		}
+	}
+	fmt.Fprintf(w, "\ninvariants: on how many steps was each one actually evaluated\n")
+	dead := 0
+	for _, inv := range declared {
+		mark := ""
+		if seen[inv] == 0 {
+			mark = "   <-- NEVER EVALUATED; this row is not a pass"
+			dead++
+		}
+		fmt.Fprintf(w, "    %-28s evaluated %4d   violations %d%s\n", inv, seen[inv], hurt[inv], mark)
+	}
+	fmt.Fprintf(w, "  Population per row: the steps where that invariant's precondition held.\n")
+	if dead > 0 {
+		fmt.Fprintf(w, "  %d declared invariant(s) were never evaluated. Such a row says NOTHING\n", dead)
+		fmt.Fprintf(w, "  about the property. It is a gap in the corpus, not a green light.\n")
+	}
+}
+
 func (rep Report) WriteMixture(w io.Writer) {
 	m := rep.Compose()
 	fmt.Fprintf(w, "\nmixture: is this corpus broad, or just long?\n")

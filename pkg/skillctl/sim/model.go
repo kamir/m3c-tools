@@ -223,7 +223,12 @@ type ScenarioResult struct {
 	Steps      []StepResult
 	Verdicts   []Verdict
 	Violations []InvariantViolation
-	Err        string
+
+	// Evaluated lists every invariant whose precondition held somewhere in this
+	// scenario, whether or not it was violated. It is the DENOMINATOR for the
+	// invariant section: "no violation" over a population of zero is not a result.
+	Evaluated []Invariant
+	Err       string
 }
 
 // InvariantViolation is the finding type that matters most. An exit-code mismatch

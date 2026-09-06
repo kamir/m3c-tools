@@ -155,7 +155,10 @@ func TraceMatrix() []TraceItem {
 		{
 			ID: "INV-5", What: "an adversary move never improves the attacker's outcome",
 			Source: "no specification clause found", Prov: ProvDerived,
-			Note: "a monotonicity property of the model, not a product requirement",
+			Note: "NEVER EVALUATED. Declared here and in model.go, checked by nothing. It " +
+				"needs a pair of runs, with and without the move, and the harness runs each " +
+				"scenario once. Reported as 0 evaluations rather than as a silent pass " +
+				"(FR-0125); a monotonicity property of the model, not a product requirement",
 		},
 		{
 			ID: "INV-6", What: "a refusal leaves the install target byte-identical",
@@ -211,6 +214,21 @@ func (rep Report) WriteTraceability(w io.Writer) {
 		}
 	}
 
+	// How often each invariant's precondition actually held. Keyed by the short id
+	// the matrix uses ("INV-5"), which is the prefix of the runtime name.
+	evaluated := map[string]int{}
+	for _, r := range rep.Results {
+		for _, e := range r.Evaluated {
+			name := string(e)
+			if i := strings.Index(name, "-"); i > 0 {
+				if j := strings.Index(name[i+1:], "-"); j > 0 {
+					name = name[:i+1+j]
+				}
+			}
+			evaluated[name]++
+		}
+	}
+
 	items := append([]TraceItem(nil), TraceMatrix()...)
 	sort.SliceStable(items, func(i, j int) bool {
 		return items[i].Prov.prio() < items[j].Prov.prio()
@@ -225,7 +243,15 @@ func (rep Report) WriteTraceability(w io.Writer) {
 		} else if strings.HasPrefix(it.ID, "gate ") {
 			obs = "0"
 		} else if strings.HasPrefix(it.ID, "INV-") {
-			obs = fmt.Sprintf("%d viol", viol[it.ID])
+			// "0 viol" for an invariant nothing ever evaluated is the same false
+			// green this column exists to prevent, so the two are printed
+			// differently. The evaluation count comes from the run, not from the
+			// declaration.
+			if evaluated[it.ID] == 0 {
+				obs = "NEVER RUN"
+			} else {
+				obs = fmt.Sprintf("%d viol/%d", viol[it.ID], evaluated[it.ID])
+			}
 		}
 		fmt.Fprintf(w, "  %-18s %-12s %-9s %s\n", it.ID, it.Prov, obs, it.Source)
 		if it.Note != "" {
