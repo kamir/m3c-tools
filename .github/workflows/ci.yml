@@ -95,6 +95,18 @@ jobs:
       - name: Every dispatched verb registered (FR-0113)
         run: go run ./cmd/verbaudit
 
+      # SPEC-0406: the acceptance REHEARSAL, the Unix half of the twin pair.
+      # Its Windows twin runs in skillctl-windows-smoke.yml with the same step
+      # ids, so a report from each machine compares line by line.
+      #
+      # Running both halves in CI is what keeps them a PAIR. A twin script that
+      # only ever runs on one platform is a claim about the other, not a check
+      # of it, and the pair exists precisely so Eric runs what CI runs.
+      - name: Acceptance rehearsal (SPEC-0406, Unix half)
+        run: |
+          go build -o build/skillctl ./cmd/skillctl
+          bash scripts/skillctl-acceptance.sh --skillctl ./build/skillctl
+
   test:
     name: Unit Tests
     runs-on: macos-latest
