@@ -293,7 +293,7 @@ func runIntentDeclareWithClient(opts intentDeclareOpts, stdout, stderr io.Writer
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: opts.timeout}
 	}
-	c := registry.New(opts.registryURL, httpClient)
+	c := newRegistryClient(opts.registryURL, httpClient)
 
 	// Resolve digest. `@sha256:...` short-circuits; otherwise call the
 	// resolver (default = ResolveByName, picks newest admitted).
@@ -422,7 +422,7 @@ func runIntentShow(args []string, stdout, stderr io.Writer) int {
 	}
 
 	httpClient := &http.Client{Timeout: *timeout}
-	c := registry.New(*registryURL, httpClient)
+	c := newRegistryClient(*registryURL, httpClient)
 	ctx := context.Background()
 	digest, err := resolveSkillDigest(ctx, c, skill, nil)
 	if err != nil {

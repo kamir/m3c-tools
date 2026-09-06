@@ -39,6 +39,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
 	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
 )
 
@@ -249,6 +250,14 @@ func runAttestWithClient(
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "skillctl/spec-0188")
 
+	// FR-0117. attest is the WRITE surface of the HTTP registry, so it asks for
+	// the write tier. Empty stays anonymous, which is what a public instance
+	// wants and what every existing test drives.
+	tok := registryToken(*registry, artifact.ModeWrite)
+	if tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
+	}
+
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: *timeoutFlag}
 	}
@@ -265,6 +274,13 @@ func runAttestWithClient(
 		return exitGeneric
 	}
 
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		// Say which of the two it is. "401" alone cannot distinguish a machine
+		// with no credential from a credential that was refused, and the two
+		// have different next actions.
+		_ = explainUnauthorized(stderr, *registry, tok != "", fmt.Errorf("%s: %w", resp.Status, errRegistryUnauthorized))
+		return exitGeneric
+	}
 	if resp.StatusCode != http.StatusCreated {
 		fmt.Fprintf(stderr, "skillctl attest: registry returned %s\n", resp.Status)
 		if len(respBody) > 0 {
