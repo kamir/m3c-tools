@@ -554,8 +554,20 @@ func resolveDigest(ctx context.Context, c *registry.Client, name, version string
 }
 
 // makeStagingDir creates ~/.claude/skills/.tmp/<name>-<digest>/.
+// StagingDirName is the ONE name of the tool's own staging directory inside the
+// skills root. It lives there on purpose: the final step is an atomic rename,
+// and a rename is only atomic within one filesystem.
+//
+// It is exported because every READER of the skills root has to skip it, and
+// before this there was no single place that said so. `verify --all` counted it
+// as an installed skill, found no .skb inside, and applied the unmanaged-skill
+// gate policy to the tool's own scratch space; `doctor` counted it in "N
+// installed". A reserved name that only some readers know about is a name that
+// will be forgotten by the next reader.
+const StagingDirName = ".tmp"
+
 func makeStagingDir(homeDir, name, digest string) (string, error) {
-	tmpRoot := filepath.Join(homeDir, installRoot, ".tmp")
+	tmpRoot := filepath.Join(homeDir, installRoot, StagingDirName)
 	if err := os.MkdirAll(tmpRoot, 0o700); err != nil {
 		return "", fmt.Errorf("install: mkdir tmp root: %w", err)
 	}

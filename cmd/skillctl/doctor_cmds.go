@@ -37,6 +37,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/kamir/m3c-tools/pkg/skillctl/install"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 )
@@ -218,7 +219,10 @@ func checkSkillsDir(override string) check {
 	n := 0
 	if entries, err := os.ReadDir(dir); err == nil {
 		for _, e := range entries {
-			if e.IsDir() {
+			// Same reservation as the sweep: our own staging directory is not an
+			// installed skill, and reporting it as one would make the count
+			// disagree with `verify --all` for no reason a reader could guess.
+			if e.IsDir() && e.Name() != install.StagingDirName {
 				n++
 			}
 		}

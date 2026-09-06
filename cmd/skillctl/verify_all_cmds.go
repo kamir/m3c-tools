@@ -168,6 +168,12 @@ func runVerifyAll(args []string, stdout, stderr io.Writer) int {
 
 	for _, e := range entries {
 		name := e.Name()
+		// The tool's own staging directory is not a skill. Counting it made the
+		// sweep apply the unmanaged-skill policy to our own scratch space, which
+		// under a deny policy is noise at best and a wrong verdict at worst.
+		if name == install.StagingDirName {
+			continue
+		}
 		dir := filepath.Join(skillsDir, name)
 		// os.Stat FOLLOWS symlinks. A symlinked skill dir (common here:
 		// gstack symlinks like `browse → gstack/browse`) still has its
