@@ -87,6 +87,67 @@ jobs:
       - name: No U+2014 EM DASH in the tracked tree (CODESTYLE.md)
         run: ./scripts/check-no-emdash.sh
 
+  # 0b) ACCEPTANCE GATE (SPEC-0406 REQ-9.1 / REQ-9.2). BLOCKING, and placed
+  #     BEFORE the build on purpose: a failure has to stop the release, not be
+  #     reported next to a finished artifact. A gate that runs last is a report.
+  #
+  #     REQ-9.1 requires green on macOS AND Windows with the SAME build, so this
+  #     is a matrix over both and not a single runner. "The same version on both"
+  #     is only half the claim when one side is Windows and the other macOS: the
+  #     refusal paths are where the platforms actually differ (mode bits, path
+  #     handling, the WIN-09 home confinement).
+  #
+  #     Two things run, and they answer different questions. The Go test is the
+  #     two-party exchange with separate homes, keys and trust-roots, including
+  #     the tampering and the audit record (T01..T15). The twin script is what a
+  #     human runs by hand; running it here is what keeps the pair honest, since
+  #     a twin that only ever runs on the author's machine is a claim about the
+  #     other platform rather than a check of it.
+  #
+  #     Holds no signing identity (contents: read), so it does not touch the
+  #     SLSA L3 isolation argument below.
+  acceptance-gate:
+    name: "SPEC-0406 acceptance gate (${{ matrix.os }})"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false # report BOTH platforms: which one failed is the finding
+      matrix:
+        os: [macos-latest, windows-latest]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.26.6"
+
+      # The matrix rows must exercise the same code, so the binary is built the
+      # same way on both and the scripts are pointed at it explicitly rather
+      # than at whatever happens to be on PATH.
+      - name: Build skillctl
+        shell: bash
+        run: go build -o build/skillctl ./cmd/skillctl
+
+      - name: "T01..T15: the two-party exchange, hermetic"
+        shell: bash
+        run: go test -count=1 -run TestAcceptance_TwoParty ./cmd/skillctl/
+
+      - name: "Both install paths refuse the same artifact (BUG-0217)"
+        shell: bash
+        run: go test -count=1 -run TestBothInstallPaths ./pkg/skillctl/install/
+
+      - name: "Acceptance rehearsal, Unix twin"
+        if: runner.os != 'Windows'
+        run: bash scripts/skillctl-acceptance.sh --skillctl ./build/skillctl
+
+      - name: "Acceptance rehearsal, Windows twin"
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          powershell -ExecutionPolicy Bypass -File scripts\skillctl-acceptance.ps1 -Skillctl .\build\skillctl.exe
+          if ($LASTEXITCODE -ne 0) { Write-Error "acceptance rehearsal failed (exit $LASTEXITCODE)"; exit $LASTEXITCODE }
+
   # 1) BUILD: compiles the 5 arches and emits their digests. Holds NO signing
   #    identity (contents: read only): it CANNOT sign provenance, an attestation,
   #    or a blob. The only thing it hands the trusted generator is a base64 string
@@ -94,7 +155,7 @@ jobs:
   build:
     name: Build 5 arches + digests
     runs-on: ubuntu-latest
-    needs: [docs-gate]
+    needs: [docs-gate, acceptance-gate]
     permissions:
       contents: read
     outputs:
@@ -419,7 +480,7 @@ jobs:
   #    consumer recomputes it again. This job never trusts a stored bool.
   evidence:
     name: Assemble release-evidence bundle (Trust Binder)
-    needs: [docs-gate, build, provenance, cosign, verify, release, smoke]
+    needs: [docs-gate, acceptance-gate, build, provenance, cosign, verify, release, smoke]
     # Run whenever the draft was cut (release succeeded) EVEN IF the post-draft
     # smoke gate failed: a red smoke must be recorded as platform-smoke:fail /
     # enterprise_ready:false, not suppress the evidence entirely.
@@ -447,6 +508,7 @@ jobs:
           PROV_NAME: ${{ needs.provenance.outputs.provenance-name }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           DOCAUDIT_RESULT: ${{ needs['docs-gate'].result }}
+          ACCEPTANCE_RESULT: ${{ needs['acceptance-gate'].result }}
           SBOM_RESULT: ${{ needs.build.result }}
           SLSA_RESULT: ${{ needs.verify.result }}
           COSIGN_RESULT: ${{ needs.cosign.result }}
@@ -486,6 +548,7 @@ jobs:
             -gate "govulncheck-cve=$(resolve 'govulncheck (reachable CVEs)')"
             -gate "gitleaks-secret=$(resolve 'gitleaks (secret scan)')"
             -gate "docaudit=${DOCAUDIT_RESULT}"
+            -gate "two-party-acceptance=${ACCEPTANCE_RESULT},note=SPEC-0406 T01..T15 on macOS AND Windows, blocking before the build (REQ-9.1/9.2). Covers the machine half only: whether two people on two machines compared a fingerprint out-of-band is Phase 0 and stays human"
             -gate "sbom=${SBOM_RESULT},note=CycloneDX SBOM is a blocking step of the build job"
             -gate "slsa-provenance=${SLSA_RESULT},note=slsa-verifier verify-artifact gate over the isolated L3 generator provenance"
             -gate "cosign-signature=${COSIGN_RESULT}"
