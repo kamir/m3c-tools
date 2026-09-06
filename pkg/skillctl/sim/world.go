@@ -313,46 +313,6 @@ func (w *World) TamperTransit(skill string) error {
 	return flipByte(b.path, 200)
 }
 
-// LyingSignature flips a byte AND renames the signature to match the new digest,
-// so the verifier FINDS a signature and has to do real cryptography to refuse.
-func (w *World) LyingSignature(skill string) error {
-	b := w.bundles[skill]
-	if b == nil {
-		return fmt.Errorf("sim: %s not packed", skill)
-	}
-	oldSig := b.path + "." + strings.TrimPrefix(b.digest, "sha256:") + ".author.sig"
-	if err := flipByte(b.path, 300); err != nil {
-		return err
-	}
-	// #nosec G304 -- re-reading the sandbox artifact the harness just wrote.
-	data, err := os.ReadFile(b.path)
-	if err != nil {
-		return err
-	}
-	sum := sha256.Sum256(data)
-	newSig := b.path + "." + hex.EncodeToString(sum[:]) + ".author.sig"
-	// #nosec G304 -- the detached signature the harness produced a moment ago.
-	sig, err := os.ReadFile(oldSig)
-	if err != nil {
-		return err
-	}
-	// #nosec G703 -- newSig is built from the sandbox path plus a hex digest this
-	// function just computed. Nothing from a scenario definition reaches it.
-	if err := os.WriteFile(newSig, sig, 0o600); err != nil {
-		return err
-	}
-	// The world now tracks the NEW digest, so everything the publisher does next
-	// (admit, attest, revoke) refers to the bytes that actually exist.
-	//
-	// Without this line the attestation stayed bound to the pre-tamper digest, the
-	// admitted bytes carried no governance, and the pull died at gate 4 with gate 3
-	// never consulted. That is a real behaviour and it is worth knowing, but it is
-	// not the question this move was added to ask. A malicious publisher signs off
-	// on what he actually published.
-	b.digest = "sha256:" + hex.EncodeToString(sum[:])
-	return nil
-}
-
 // TamperInstalled edits a file inside an installed skill: the same-uid attacker,
 // after the install. What the model claims here is narrow and stated in the
 // oracle, not here.
@@ -690,37 +650,21 @@ func hashTreeRooted(dir string) (map[string]string, error) {
 	return out, nil
 }
 
-// CorruptSignature damages the detached signature and leaves the artifact alone.
+// Two signature-corruption moves used to live here, and both are gone.
 //
-// This replaces a move that did not do what its name said. The first version of
-// the malicious publisher flipped a byte inside the .skb and renamed the signature
-// to match the new digest. The digest then agreed with the bytes, so gate 2 was
-// satisfied, and the intent was that gate 3 would refuse the signature. It never
-// got there: flipping a byte in a tar archive breaks the tar header, and the
-// installer refused with "archive/tar: invalid tar header" long before any
-// signature was checked.
+// LyingSignature flipped a byte in the .skb and renamed the detached signature to
+// match the new digest; the tar header broke first and the installer never reached
+// a signature check. CorruptSignature flipped a byte inside the detached
+// `<bundle>.<digest>.author.sig` file; the trust-mode pull path never opens that
+// file, so it never reached a signature check either. The second one nonetheless
+// produced a conflict that was filed as FR-0121 and then waived on a diagnosis
+// that had not been measured.
 //
-// Nobody noticed for two days, because the report showed only that the refusal
-// carried no gate label, and a finding was filed on that basis (FR-0121, "gate 3
-// fires but is not named"). It was wrong. An IEEE reviewer asked why there was no
-// gate-3 mutant; building it showed that disabling gate 3 changed nothing, which
-// is only possible if gate 3 was never the reason.
-//
-// So the move now edits the SIGNATURE, not the artifact: the bundle stays a valid
-// archive whose bytes hash to the admitted digest, and the only thing wrong with
-// it is that the signature over that digest does not verify. That is the case
-// SPEC-0188 §7 gate 3 exists for.
-func (w *World) CorruptSignature(skill string) error {
-	b := w.bundles[skill]
-	if b == nil {
-		return fmt.Errorf("sim: %s not packed", skill)
-	}
-	sig := b.path + "." + strings.TrimPrefix(b.digest, "sha256:") + ".author.sig"
-	if _, err := os.Stat(sig); err != nil {
-		return fmt.Errorf("sim: no author signature at %s: %w", sig, err)
-	}
-	return flipByte(sig, 8)
-}
+// What replaced them is ForgeBundleSignatures in registry_mutate.go, which edits
+// the signature rows the path actually verifies. Kept as a comment rather than in
+// git history alone because the mistake is easy to make again: the question to ask
+// of any adversary move is not "did I damage a signature" but "does the path under
+// test read the thing I damaged".
 
 // StaleChecksums rewrites a file inside the bundle and leaves the bundle's own
 // CHECKSUMS listing untouched, then re-signs so the outer chain stays valid.

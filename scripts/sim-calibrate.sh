@@ -209,6 +209,13 @@ for m in "${MUTANTS[@]}"; do
   elif [ "$nharn" -gt 0 ]; then
     echo "  $name: HARNESS FAILURE ($nharn) and no behavioural finding; nothing was measured, counting as MISSED"
     MISSED+=("$name (harness failure, not a behavioural reading)")
+  elif [ "$nconf" -gt 0 ] || [ "$nviol" -gt 0 ]; then
+    # The case the comparison above exists for, spelled out rather than folded
+    # into "NOT DETECTED". A mutant that reproduces the baseline reading exactly
+    # is the most misleading result this script can produce, because every number
+    # on the line looks like evidence.
+    echo "  $name: NOT DETECTED; $nconf conflict(s) and $nviol violation(s) is the BASELINE reading ($BASE_CONF, $BASE_VIOL), so nothing here separates the mutant from the unmutated build"
+    MISSED+=("$name (reading equals the baseline signature)")
   elif [ "$rc" -ne 0 ]; then
     echo "  $name: exit $rc but NO conflict and NO invariant violation; that is not a reading, counting as MISSED"
     MISSED+=("$name (non-zero exit without a behavioural finding)")

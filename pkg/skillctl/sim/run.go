@@ -103,8 +103,8 @@ func Execute(skillctl, rootDir string, sc Scenario) ScenarioResult {
 		case ActWithholdArtifact:
 			aerr = w.WithholdArtifact(skill)
 			code = -1
-		case ActLyingSignature:
-			aerr = w.CorruptSignature(skill)
+		case ActForgeBundleSigs:
+			aerr = w.ForgeBundleSignatures(skill)
 			code = -1
 		case ActForgeEnvelope:
 			aerr = w.ForgeEnvelope(skill)

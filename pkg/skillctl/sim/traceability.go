@@ -94,8 +94,9 @@ func TraceMatrix() []TraceItem {
 		{
 			ID: "gate 3", What: "the author AND registry signatures on the .skb each verify against trust-roots",
 			Source: "SPEC-0225 §9.1 step 3", Prov: ProvNormative,
-			Note: "UNVERIFIED. Observed 0 times by name, and its mutant is indistinguishable " +
-				"from the unmutated baseline, so nothing in this corpus depends on it (FR-0121)",
+			Note: "observed once, by name, since 2026-09-06. Reaching it needs a publisher " +
+				"holding the registry key: a store without it cannot edit a signature row " +
+				"without breaking the envelope, so gate 1 would decide first",
 		},
 		{
 			ID: "gate 4", What: "a quorum of attestations at or above the floor, from pinned signers, bound to the admitted digest",

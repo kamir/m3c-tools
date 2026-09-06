@@ -39,7 +39,23 @@ type Waiver struct {
 	Invariant Invariant
 }
 
-// Waivers is the register. Empty is the goal.
+// Waivers is the register. Empty is the goal, and it now holds one entry, not two.
+//
+// The FR-0121 entry is GONE, and its removal is the substance of this change
+// rather than housekeeping. It waived the case "model says gate 3, binary says
+// accept" and described it as an unstable measurement owing one clean re-run.
+// The re-run happened on 2026-09-06 and found a cause: the adversary move edited
+// the detached "<bundle>.<digest>.author.sig" file, which the trust-mode pull
+// path never opens. Gate 3 was never reached, so the acceptance was correct behaviour
+// against a case that did not test it, and the disagreement was the MODEL's. With
+// a move that reaches the gate (see ForgeBundleSignatures) the prediction holds
+// and there is nothing left to waive.
+//
+// What remains is BUG-0217, and it is a different animal: a measured violation of
+// a written requirement, waived so the gate stays usable while the fix is decided.
+// Keeping the two apart is the point of the register. One was a defect in the
+// instrument, the other is a defect in the product, and a register that cannot
+// tell them apart will eventually be used to hide the second behind the first.
 func Waivers() []Waiver {
 	return []Waiver{
 		{
@@ -52,19 +68,6 @@ func Waivers() []Waiver {
 				"not validate; the other install path does), and a bundle whose internal manifest " +
 				"no longer describes its contents is installed. Waived so the gate stays usable " +
 				"while the fix is decided; it is a defect, not a naming question",
-		},
-		{
-			Adv: AdvPublisherBadSigs, Expected: "gate 3", Observed: "accept",
-			Finding: "FR-0121",
-			Why: "UNSTABLE MEASUREMENT, and that is the finding. This case has been observed " +
-				"both refusing without a gate name and accepting, across successive harness " +
-				"revisions on the same product build. One clean re-measurement on a frozen " +
-				"harness is owed before anything is concluded from it. Originally: " +
-				"The mutant for gate 3 is indistinguishable from the unmutated baseline, so " +
-				"nothing here depends on that control and it is UNVERIFIED. Two earlier " +
-				"descriptions of this case, both withdrawn, are recorded in FR-0121. What is " +
-				"waived is the outcome comparison; INV-6 still asserts that the refusal, where " +
-				"one happens, leaves the install target untouched",
 		},
 	}
 }

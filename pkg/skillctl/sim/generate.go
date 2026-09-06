@@ -144,13 +144,14 @@ func AllGovs() []Gov { return []Gov{GovGreen, GovYellow, GovNone} }
 // the covering array, INV-6 checks that the refusal wrote nothing, and a
 // regression that turned the refusal into an acceptance would fail the gate like
 // any other.
+//
+// The register is empty since 2026-09-06. Its only entry claimed gate 3 fired
+// without naming itself; the gate was in fact never reached, because the move
+// that was supposed to trigger it edited a file the pull path does not read.
+// An exemption written on a wrong diagnosis is worse than no exemption: it makes
+// the report assert the thing it failed to measure.
 func OpenDiagnostics() map[AdvKind]string {
-	return map[AdvKind]string{
-		AdvPublisherBadSigs: "FR-0121: gate 3 is UNVERIFIED. Its mutant is indistinguishable " +
-			"from the unmutated baseline, so nothing in this corpus depends on it. An earlier " +
-			"claim that disabling it flips this pull from refuse to accept is WITHDRAWN: the " +
-			"unmutated binary already accepts this case",
-	}
+	return map[AdvKind]string{}
 }
 
 func AllAdvKinds() []AdvKind {
@@ -308,16 +309,6 @@ func build(p Params) Scenario {
 				Expect: Expectation{Outcome: NoEffect, Exit: -1, Claimed: true,
 					Why: "the bundle stays properly signed; only its internal manifest goes stale"}},
 		)
-	case AdvPublisherBadSigs:
-		// The bundle keeps a signature FILE with the right name, so the verifier
-		// finds one and has to do real cryptography to reject it. That is the
-		// difference between "no signature" (exit 1) and "a signature that does not
-		// verify" (gate 3), and only the second one reaches the gate under test.
-		sc.Steps = append(sc.Steps,
-			Step{Action: Action{Kind: ActLyingSignature, Actor: Publisher, Skill: skill},
-				Expect: Expectation{Outcome: NoEffect, Exit: -1, Claimed: true,
-					Why: "the publisher controls the artifact AND the registry key"}},
-		)
 	}
 
 	// 3. Admit. With a stolen key the ATTACKER performs it, and the chain that
@@ -350,6 +341,20 @@ func build(p Params) Scenario {
 			Action: Action{Kind: ActForgeAttest, Actor: Adversary, Skill: skill},
 			Expect: Expectation{Outcome: Accept, Exit: 0, Claimed: true,
 				Why: "anyone may WRITE an attestation; only a pinned signer's counts"},
+		})
+	}
+
+	// 5a-bis. The bad signature rows. This step sits AFTER the admit on purpose:
+	// the rows it rewrites live inside the admitted event, so before the admit
+	// there is nothing to rewrite. Its predecessor ran here at position 2, against
+	// a detached signature file the pull path never opens, and therefore never
+	// reached the gate it was written for (FR-0121).
+	if p.Adv == AdvPublisherBadSigs {
+		sc.Steps = append(sc.Steps, Step{
+			Action: Action{Kind: ActForgeBundleSigs, Actor: Publisher, Skill: skill},
+			Expect: Expectation{Outcome: NoEffect, Exit: -1, Claimed: true,
+				Why: "the publisher holds the registry key, so the envelope verifies; " +
+					"the rows beneath it do not, and that is the case gate 3 exists for"},
 		})
 	}
 

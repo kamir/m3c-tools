@@ -10,8 +10,12 @@ package sim
 // nothing about the real one.
 
 import (
+	"bytes"
+	"crypto/ed25519"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"os/exec"
@@ -195,4 +199,123 @@ func (w *World) WithholdArtifact(skill string) error {
 		return fmt.Errorf("push: %v: %s", err, out)
 	}
 	return nil
+}
+
+// ForgeBundleSignatures posts an admit event whose SIGNATURE ROWS do not verify,
+// with an envelope that does. It is the move that reaches gate 3, and building it
+// took three attempts because the first two could not get there at all.
+//
+// Attempt one flipped a byte inside the .skb and renamed the detached signature to
+// match the new digest. The tar header broke and the installer refused before any
+// signature was read. Attempt two corrupted the detached `<bundle>.<digest>.author.sig`
+// file. That one ran green for two days and produced the conflict that FR-0121 was
+// filed on, because nobody checked WHICH file the pull path reads: it reads the
+// signature rows carried INSIDE the signed event, and never opens the sidecar. A
+// move against a file the path does not read cannot exercise a gate on that path.
+//
+// The reachability argument is what makes the third attempt necessary. The rows
+// live under the envelope signature, so a hostile STORE cannot touch them: any
+// edit invalidates the envelope and gate 1 decides first. Only a party holding the
+// registry key can present rows that do not verify beneath an envelope that does,
+// which is why this move re-signs. That party is not a rational attacker (holding
+// the key, he would simply sign correctly); he is a broken or hostile publishing
+// TOOL, and gate 3 is the consumer's protection against admitting its output.
+//
+// The re-signing deliberately does NOT call the product's own signing code. The
+// canonical form is re-implemented here from the format, the way an attacker's
+// tooling would have to. If the two ever disagree the envelope stops verifying,
+// gate 1 fires instead of gate 3, and the gate-order prediction reports it as a
+// conflict rather than hiding it.
+func (w *World) ForgeBundleSignatures(skill string) error {
+	priv, err := loadSimKey(w.keyPath("publisher") + ".priv")
+	if err != nil {
+		return err
+	}
+	return w.mutateRegistry(skill, func(dir, evPath string) error {
+		if !strings.Contains(evPath, "admitted") {
+			return nil
+		}
+		full := filepath.Join(dir, evPath)
+		// #nosec G304 -- a path this function just enumerated inside its own clone.
+		data, err := os.ReadFile(full)
+		if err != nil {
+			return err
+		}
+		var ev map[string]any
+		if err := json.Unmarshal(data, &ev); err != nil {
+			return err
+		}
+		rows, _ := ev["signatures"].([]any)
+		if len(rows) == 0 {
+			return fmt.Errorf("sim: admit event carries no signature rows; the move cannot reach gate 3")
+		}
+		// Well-formed and wrong: correct length, correct base64, verifies against
+		// nothing. The PARSER must not be what refuses, or the test would pass on a
+		// build whose cryptography was gone.
+		for _, r := range rows {
+			m, ok := r.(map[string]any)
+			if !ok {
+				return fmt.Errorf("sim: signature row is not an object")
+			}
+			m["signature_b64"] = base64.StdEncoding.EncodeToString(make([]byte, ed25519.SignatureSize))
+		}
+		canon, err := simCanonicalEvent(ev)
+		if err != nil {
+			return err
+		}
+		ev["envelope_signature"] = base64.StdEncoding.EncodeToString(ed25519.Sign(priv, canon))
+		out, err := json.MarshalIndent(ev, "", "  ")
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(full, out, 0o600)
+	})
+}
+
+// simCanonicalEvent is the adversary's own copy of the canonical form: every
+// field except the envelope signature, JSON-encoded with HTML escaping off and no
+// trailing newline. See ForgeBundleSignatures for why this is not a call into the
+// product.
+func simCanonicalEvent(ev map[string]any) ([]byte, error) {
+	cp := make(map[string]any, len(ev))
+	for k, v := range ev {
+		if k == "envelope_signature" {
+			continue
+		}
+		cp[k] = v
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(cp); err != nil {
+		return nil, err
+	}
+	out := buf.Bytes()
+	if n := len(out); n > 0 && out[n-1] == '\n' {
+		out = out[:n-1]
+	}
+	return out, nil
+}
+
+// loadSimKey reads a PEM/PKCS8 ed25519 private key. The harness holds the key
+// because the SCENARIO says the publisher does; nothing here reaches the consumer.
+func loadSimKey(path string) (ed25519.PrivateKey, error) {
+	// #nosec G304 -- a key this harness generated inside its own sandbox.
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("sim: read publisher key: %w", err)
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return nil, fmt.Errorf("sim: %s holds no PEM block", path)
+	}
+	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("sim: parse publisher key: %w", err)
+	}
+	priv, ok := parsed.(ed25519.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("sim: publisher key is %T, not ed25519", parsed)
+	}
+	return priv, nil
 }

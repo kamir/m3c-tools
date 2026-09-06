@@ -72,10 +72,10 @@ func (rep Report) WriteStanding(w io.Writer) {
 	fmt.Fprintf(w, "      measured, and no arrangement of machine checks measures it.\n")
 	fmt.Fprintf(w, "    That the tested binary is the shipped artifact. The hash identifies what\n")
 	fmt.Fprintf(w, "      ran, not what is released, and the SUT reports its own version as \"dev\".\n")
-	fmt.Fprintf(w, "    Gate 3, at all. Observed zero times by name, and its mutant is\n")
-	fmt.Fprintf(w, "      indistinguishable from the unmutated baseline: same conflicts, same\n")
-	fmt.Fprintf(w, "      violation, same exit. Nothing in this corpus depends on it, so one fifth\n")
-	fmt.Fprintf(w, "      of the decision function is unverified (FR-0121).\n")
+	fmt.Fprintf(w, "    Gate 3 under a HOSTILE STORE. The corpus reaches gate 3 with a publisher\n")
+	fmt.Fprintf(w, "      who holds the registry key. A store that does not hold it cannot reach\n")
+	fmt.Fprintf(w, "      the gate at all: editing a signature row breaks the envelope, so gate 1\n")
+	fmt.Fprintf(w, "      decides first. That is an argument from the format, not a measurement.\n")
 }
 
 // OutputCoverage is the second coverage measure, and the one that answers the
@@ -165,7 +165,7 @@ func (rep Report) WriteOutputCoverage(w io.Writer) {
 		fmt.Fprintf(w, "    %-10s %4d%s\n", d, oc.Seen[d], mark)
 	}
 	if oc.Unlabelled > 0 {
-		fmt.Fprintf(w, "    %-10s %4d   (claimed refusals that named no gate; see FR-0121)\n",
+		fmt.Fprintf(w, "    %-10s %4d   (claimed refusals that named no gate)\n",
 			"unlabelled", oc.Unlabelled)
 	}
 	fmt.Fprintf(w, "  Population: pull steps whose outcome the model claims. Same population as\n")

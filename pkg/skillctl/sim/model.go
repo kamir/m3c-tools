@@ -63,7 +63,7 @@ const (
 	// Adversary capabilities. Each one names what the attacker is assumed to
 	// control, because "hacked" is not a threat model.
 	ActTamperTransit    ActionKind = "adv:tamper-transit"      // flip bytes in the .skb before the victim sees it
-	ActLyingSignature   ActionKind = "adv:lying-signature"     // flip bytes AND rename the sig to match the new digest
+	ActForgeBundleSigs  ActionKind = "adv:forge-bundle-sigs"   // signature rows that do not verify, under an envelope that does
 	ActWithholdArtifact ActionKind = "probe:withhold-artifact" // remove the stored .skb, keep every signed event
 	ActStaleChecksums   ActionKind = "adv:stale-checksums"     // alter a payload file, leave the bundle CHECKSUMS stale, re-sign
 	ActForgeAttest      ActionKind = "adv:forge-attest"        // attest with a key nobody pinned
