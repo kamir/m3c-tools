@@ -47,6 +47,62 @@ jobs:
       # this is not a "mutable tag" hole. The exception is scoped to that exact
       # repo + workflows dir + a full 3-part semver tag; everything else (incl.
       # slsa-verifier's own installer action) must still be a 40-hex SHA.
+      # (0) A workflow file GitHub will not even parse is worse than a failing
+      #     job: no job is created, the run dies before any step, and the only
+      #     message is "This run likely failed because of a workflow file issue".
+      #
+      #     This gate exists because that happened on 2026-09-06: a duplicated
+      #     `shell:` key slipped into skillctl-windows-smoke.yml, GitHub rejected
+      #     the file, and 14 runs failed across every branch for three and a half
+      #     hours while nine PRs were merged. Nobody noticed, for two reasons
+      #     worth writing down.
+      #
+      #     FIRST, the author validated with `yaml.safe_load`, which ACCEPTS
+      #     duplicate keys and silently keeps the last one. The check reported
+      #     "YAML OK" and could not have said anything else: it was the right
+      #     tool answering a different question. Only a parser that REFUSES
+      #     duplicates can see this class, which is why the one below refuses.
+      #
+      #     SECOND, the affected run is not a required check, so a red workflow
+      #     blocked nothing. A gate nobody has to pass is a report.
+      - name: "Guard: every workflow parses, with NO duplicate keys"
+        run: |
+          python3 - <<'PY'
+          import glob, sys, yaml
+
+          class Strict(yaml.SafeLoader):
+              pass
+
+          def no_duplicate_keys(loader, node, deep=False):
+              seen, out = set(), {}
+              for k, v in node.value:
+                  key = loader.construct_object(k, deep=deep)
+                  if key in seen:
+                      raise ValueError(
+                          f"duplicate key {key!r} at line {k.start_mark.line + 1}")
+                  seen.add(key)
+                  out[key] = loader.construct_object(v, deep=deep)
+              return out
+
+          Strict.add_constructor(
+              yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, no_duplicate_keys)
+
+          bad = 0
+          for f in sorted(glob.glob(".github/workflows/*.yml")):
+              try:
+                  yaml.load(open(f), Strict)
+              except Exception as e:
+                  print(f"FAIL {f}: {e}")
+                  bad += 1
+          if bad:
+              print("")
+              print("A duplicate key is silently accepted by most YAML readers and")
+              print("rejected by GitHub. Fix the file; do not re-check with a loader")
+              print("that tolerates it.")
+              sys.exit(1)
+          print("OK: every workflow parses and carries no duplicate key.")
+          PY
+
       - name: "Guard: all `uses:` refs are pinned to a 40-hex SHA"
         run: |
           set -euo pipefail
