@@ -215,9 +215,12 @@ func (rep Report) WriteDiscrimination(w io.Writer) {
 	}
 	fmt.Fprintf(w, "  A caller, an audit record and any automated policy see the SIGNAL, not the\n")
 	fmt.Fprintf(w, "  cause. Where one signal stands for several causes, they cannot tell them\n")
-	fmt.Fprintf(w, "  apart. pkg/skillctl/exitcode defines typed codes for exactly this and the\n")
-	fmt.Fprintf(w, "  pull path does not use them yet; its own header calls that an unfinished\n")
-	fmt.Fprintf(w, "  migration. Tracked as FR-0122.\n")
+	fmt.Fprintf(w, "  apart. Since FR-0122 was implemented on 2026-09-06 the pull path reports a\n")
+	fmt.Fprintf(w, "  typed code per gate (12, 10, 11, 13, 20), so an overload left here is no\n")
+	fmt.Fprintf(w, "  longer a missing code. Read the remaining ones as questions about the\n")
+	fmt.Fprintf(w, "  THREAT MODEL: a suppressed revoke makes a bundle ungoverned, and gate 4 is\n")
+	fmt.Fprintf(w, "  then the honest answer, because nothing in a plain git registry can tell a\n")
+	fmt.Fprintf(w, "  deleted event from one that was never written.\n")
 	fmt.Fprintf(w, "  This is a measurement of the OUTPUT CONTRACT. It says nothing about whether\n")
 	fmt.Fprintf(w, "  a human understands the message, which is not measured anywhere here.\n")
 }

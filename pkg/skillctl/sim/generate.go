@@ -261,6 +261,36 @@ func whyGate(gate string, p Params) string {
 	return "SPEC-0188 §7"
 }
 
+// gateExit is the exit code the pull surface reports for each gate, decided on
+// 2026-09-06 under FR-0122 and pinned here.
+//
+// It is a DECISION carried into the model, not a reading taken off the binary.
+// The distinction is the one this package exists to keep: when the mapping landed,
+// the corpus went red with 59 conflicts, every one of them an exit code that had
+// changed from 1. That is what a pinned expectation is for. The numbers below were
+// then written from the decision record, and the conflicts cleared because the
+// binary agrees with the decision, not because the model was fitted to it.
+//
+// Gate 5 is 20 rather than the 15 SPEC-0188 named, because 15 has meant
+// blob_missing in every shipped build (BUG-0216) and a number whose meaning
+// changes silently is worse than one that was never allocated.
+func gateExit(gate string) int {
+	switch gate {
+	case "gate 1":
+		return 12 // registry_not_trusted
+	case "gate 2":
+		return 10 // digest_mismatch
+	case "gate 3":
+		return 11 // author_sig_invalid
+	case "gate 4":
+		return 13 // governance_below_min
+	case "gate 5":
+		return 20 // bundle_revoked
+	default:
+		return 1
+	}
+}
+
 func build(p Params) Scenario {
 	id := fmt.Sprintf("S-%s-%s-%s-%s%s", p.Cast, p.Key, p.Gov, p.Adv, map[bool]string{true: "-rev", false: ""}[p.Revoke])
 	sc := Scenario{
@@ -443,12 +473,14 @@ func build(p Params) Scenario {
 	// matrix says so. A specified check with no representation in the abstract
 	// model is exactly what the backwards pass exists to surface.
 	if p.Adv == AdvStaleChecksums && ok {
-		pullExpect = Expectation{Outcome: Refuse, Exit: 1, Claimed: true,
+		pullExpect = Expectation{Outcome: Refuse, Exit: 10, Claimed: true,
 			Why: "SPEC-0188 §7 step 8: the CHECKSUMS file inside the bundle is verified " +
-				"after extraction, and any failure in steps 3 to 8 means no write"}
+				"after extraction, and any failure in steps 3 to 8 means no write. Exit 10 " +
+				"(digest_mismatch) because it is an integrity failure, and because the other " +
+				"install path already reports it that way"}
 	}
 	if !ok {
-		pullExpect = Expectation{Outcome: Refuse, Gate: gate, Exit: 1, Claimed: true, Why: why}
+		pullExpect = Expectation{Outcome: Refuse, Gate: gate, Exit: gateExit(gate), Claimed: true, Why: why}
 	}
 	if p.Adv == AdvStolenKey && ok {
 		pullExpect.Claimed = false
@@ -521,7 +553,7 @@ func build(p Params) Scenario {
 					Expect: Expectation{Outcome: NoEffect, Exit: -1, Claimed: true,
 						Why: "the filename is an unsigned projection the store controls"}},
 				Step{Action: Action{Kind: ActPull, Actor: Consumer, Skill: skill},
-					Expect: Expectation{Outcome: Refuse, Gate: "gate 5", Exit: 1, Claimed: true,
+					Expect: Expectation{Outcome: Refuse, Gate: "gate 5", Exit: gateExit("gate 5"), Claimed: true,
 						Why: "FR-0090 IS-T1: identity comes from the SIGNED envelope, never from the path, so a relabelled revoke still revokes"}},
 			)
 		default:
@@ -534,7 +566,7 @@ func build(p Params) Scenario {
 			claimed2 := true
 			sc.Steps = append(sc.Steps, Step{
 				Action: Action{Kind: ActPull, Actor: Consumer, Skill: skill},
-				Expect: Expectation{Outcome: Refuse, Gate: gate2, Exit: 1, Claimed: claimed2,
+				Expect: Expectation{Outcome: Refuse, Gate: gate2, Exit: gateExit(gate2), Claimed: claimed2,
 					Why: why2},
 			})
 		}
@@ -555,7 +587,7 @@ func build(p Params) Scenario {
 					Expect: Expectation{Outcome: Accept, Exit: 0, Claimed: true,
 						Why: "posting an attestation is never gated; it is worth what the pull says it is worth"}},
 				Step{Action: Action{Kind: ActPull, Actor: Consumer, Skill: skill},
-					Expect: Expectation{Outcome: Refuse, Gate: "gate 5", Exit: 1, Claimed: true,
+					Expect: Expectation{Outcome: Refuse, Gate: "gate 5", Exit: gateExit("gate 5"), Claimed: true,
 						Why: "SPEC-0188 §7: a revoke is bound to a digest and outlives any later attestation; " +
 							"governance is not even consulted"}},
 			)
