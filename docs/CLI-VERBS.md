@@ -71,6 +71,7 @@ same way `cmd/docaudit` gates the flag surface.
 | `propose` | SPEC-0194 | 0/1/2 |
 | `install` | SPEC-0188 §11 (S8) | 0/1/2, 10..16 |
 | `verify` | SPEC-0188 §11 (S8) | 0/1/2, 10..17 |
+| `export-bundle` | SPEC-0406 Phase 2 | 0/1/2, 10..17 |
 | `export-verification-kit` | SPEC-0276 R4.3 | 0/1/2, 10..19 |
 | `compliance` | SPEC-0276 R5 | 0/1/2 |
 | `verify-hook` | SPEC-0247 P0.1 | 0/2 (25/26/28 in refusal_code) |
