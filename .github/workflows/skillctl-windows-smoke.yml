@@ -19,6 +19,7 @@ on:
       - "pkg/skillctl/**"
       - "pkg/skillbundle/**"
       - "scripts/skillctl-quickstart-windows.ps1"
+      - "scripts/skillctl-acceptance.ps1"
       - "tools/skillctl-install.ps1"
       - ".github/workflows/skillctl-windows-smoke.yml"
 
@@ -58,6 +59,19 @@ jobs:
         run: |
           powershell -ExecutionPolicy Bypass -File scripts\skillctl-quickstart-windows.ps1
           if ($LASTEXITCODE -ne 0) { Write-Error "quickstart smoke failed (exit $LASTEXITCODE)"; exit $LASTEXITCODE }
+
+      # SPEC-0406: the acceptance REHEARSAL, the Windows half of the twin pair.
+      # Its Unix twin is scripts/skillctl-acceptance.sh; the two carry the same
+      # step ids so a report from each machine compares line by line.
+      #
+      # Running it here is what keeps the PowerShell twin honest. A script that
+      # only ever runs on the author's Mac is a claim about Windows, not a check
+      # of it, and the twin exists precisely so Eric runs what CI runs.
+      - name: Run acceptance rehearsal (SPEC-0406)
+        run: |
+          powershell -ExecutionPolicy Bypass -File scripts\skillctl-acceptance.ps1 -Skillctl $env:SKILLCTL
+          if ($LASTEXITCODE -ne 0) { Write-Error "acceptance rehearsal failed (exit $LASTEXITCODE)"; exit $LASTEXITCODE }
+        shell: pwsh
         shell: pwsh
 
   # BUG-0193 regression guard: reproduce the FIELD environment, Windows PowerShell
