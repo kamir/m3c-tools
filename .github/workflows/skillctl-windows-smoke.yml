@@ -59,6 +59,7 @@ jobs:
         run: |
           powershell -ExecutionPolicy Bypass -File scripts\skillctl-quickstart-windows.ps1
           if ($LASTEXITCODE -ne 0) { Write-Error "quickstart smoke failed (exit $LASTEXITCODE)"; exit $LASTEXITCODE }
+        shell: pwsh
 
       # SPEC-0406: the acceptance REHEARSAL, the Windows half of the twin pair.
       # Its Unix twin is scripts/skillctl-acceptance.sh; the two carry the same
@@ -71,7 +72,6 @@ jobs:
         run: |
           powershell -ExecutionPolicy Bypass -File scripts\skillctl-acceptance.ps1 -Skillctl $env:SKILLCTL
           if ($LASTEXITCODE -ne 0) { Write-Error "acceptance rehearsal failed (exit $LASTEXITCODE)"; exit $LASTEXITCODE }
-        shell: pwsh
         shell: pwsh
 
   # BUG-0193 regression guard: reproduce the FIELD environment, Windows PowerShell
