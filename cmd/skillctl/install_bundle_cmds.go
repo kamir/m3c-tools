@@ -29,13 +29,21 @@ type installBundleParams struct {
 	bundlePath     string
 	metaPath       string
 	trustRootsPath string
-	registryURL    string
-	governanceMin  string
-	allowYellow    bool
-	ignoreDeps     bool
-	tenantFlag     string
-	homeOverride   string
-	verbose        bool
+	// Offline revocation enforcement (SPEC-0276 R4.4) + freshness contract
+	// (SPEC-0279 R4/R5), same three inputs as the verify twin: a signed
+	// revocation list, an optional signed freshness checkpoint, an optional
+	// signed emergency deny-list. All optional; when empty the behavior is
+	// unchanged.
+	revocationsPath string
+	checkpointPath  string
+	emergencyPath   string
+	registryURL     string
+	governanceMin   string
+	allowYellow     bool
+	ignoreDeps      bool
+	tenantFlag      string
+	homeOverride    string
+	verbose         bool
 }
 
 func runInstallBundle(p installBundleParams, stdout, stderr io.Writer) (code int) {
@@ -95,6 +103,55 @@ func runInstallBundle(p installBundleParams, stdout, stderr io.Writer) (code int
 		logger = stderr
 	}
 
+	// Offline revocation + freshness gate (SPEC-0276 R4.4, SPEC-0279 R3/R4/R5),
+	// the SAME checks the verify twin runs, in the same order and with the same
+	// exit codes: forged/untrusted list → 12, revoked digest → 17, emergency hit
+	// → 17, stale snapshot for a high-risk bundle → 22. It runs as InstallBundle's
+	// PostVerify hook so it binds to the digest of the verified blob and refuses
+	// BEFORE anything is staged or written. Fail-closed: an unreadable list is an
+	// error, never a pass. gateCode carries the twin's exit code out of the hook;
+	// gateFresh carries the freshness decision for the twin's diagnostics.
+	var gateCode int
+	var gateFresh *freshnessOutcome
+	postVerify := func(res *verify.VerifyResult) error {
+		// The digest is signed-verified the moment the hook runs; record it even
+		// on a refusal, so the audit trail names WHAT was refused.
+		audDigest = res.Digest
+		var snap revocationSnapshot
+		if p.revocationsPath != "" {
+			var revErr error
+			snap, revErr = checkBundleRevoked(p.revocationsPath, root, res.Digest)
+			if revErr != nil {
+				gateCode = verify.ExitCode(revErr)
+				return revErr
+			}
+			if snap.revoked {
+				gateCode = exitBundleRevoked
+				return fmt.Errorf("REVOKED: %s is in the signed revocation list (%s); refusing to install", res.Digest, p.revocationsPath)
+			}
+		}
+		if p.revocationsPath != "" || p.checkpointPath != "" || p.emergencyPath != "" {
+			fresh := evaluateFreshness(freshnessInputs{
+				root:            root,
+				checkpointPath:  p.checkpointPath,
+				emergencyPath:   p.emergencyPath,
+				syncedEpoch:     snap.epoch,
+				syncedIssuedAt:  snap.issuedAt,
+				risk:            bundleActionRisk(res.DataScopes),
+				emergencyTokens: []string{res.Digest, res.AuthorIdentity},
+			})
+			// SPEC-0279 R6: every freshness decision leaves a durable record,
+			// allow or deny.
+			auditFreshnessDecision("install-bundle", res.Digest, fresh)
+			if fresh.Err != nil {
+				gateCode = freshnessExitCode(fresh)
+				gateFresh = &fresh
+				return fresh.Err
+			}
+		}
+		return nil
+	}
+
 	res, err := install.InstallBundle(install.BundleOpts{
 		BundlePath:    p.bundlePath,
 		Meta:          meta,
@@ -105,11 +162,18 @@ func runInstallBundle(p installBundleParams, stdout, stderr io.Writer) (code int
 		IgnoreDeps:    p.ignoreDeps,
 		Tenant:        resolveTenant(p.tenantFlag, tr),
 		Logger:        logger,
+		PostVerify:    postVerify,
 		Ctx:           context.Background(),
 	})
 	if err != nil {
 		audErr = err
 		fmt.Fprintln(stderr, err)
+		if gateFresh != nil {
+			printFreshness(stderr, *gateFresh, p.checkpointPath, p.emergencyPath)
+		}
+		if gateCode != 0 {
+			return gateCode
+		}
 		return verify.ExitCode(err)
 	}
 	audDigest = res.Verify.Digest
