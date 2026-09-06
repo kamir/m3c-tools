@@ -350,11 +350,12 @@ pause
 step "NEGATIVPROBE A: derselbe Pull ohne den gepinnten Reviewer"
 why "Die Attestierung liegt weiter im Repository, sie ist gueltig, und sie zaehlt
    trotzdem nicht. Vertrauen entsteht beim Empfaenger, nicht beim Sender.
-   Erwartet: gate 4 und Prozess-Exit 1."
+   Erwartet: gate 4 und Prozess-Exit 13 (FR-0122: der Pull-Pfad sendet seit dem
+   2026-09-06 typisierte Codes je Tor, statt jede Ablehnung als 1 zu melden)."
 
 write_trust_roots without-signers
 rm -rf "$CONSUMER_HOME/.claude/skills/hello-kup"
-run "pull ohne signers" 1 env HOME="$CONSUMER_HOME" "$SKILLCTL" pull \
+run "pull ohne signers" 13 env HOME="$CONSUMER_HOME" "$SKILLCTL" pull \
   --registry "local://$WS/registry.git" --skill hello-kup \
   --install --trust-mode --dry-run-install --no-checkpoint
 expect_in "die Ablehnung nennt das Governance-Tor" "gate 4"
