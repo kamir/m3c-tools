@@ -37,6 +37,15 @@ type Waiver struct {
 	// that trips both the gate comparison and an invariant should be waived once
 	// and visibly, not silenced in one place and left to fail in the other.
 	Invariant Invariant
+
+	// Kind restricts the waiver to one action. Without it the match was on the
+	// adversary dimension plus an expected gate plus an observed outcome, and an
+	// EMPTY expected gate matches every step that predicts a refusal without
+	// naming one: the verify-sig steps, among others. A waiver for a pull defect
+	// would then have covered an unrelated regression elsewhere in the same
+	// scenario, silently, which is the exact failure mode the register exists to
+	// prevent. Required, so a new waiver cannot be written without saying where.
+	Kind ActionKind
 }
 
 // Waivers is the register. Empty is the goal, and it now holds one entry, not two.
@@ -59,10 +68,11 @@ type Waiver struct {
 func Waivers() []Waiver {
 	return []Waiver{
 		{
-			Adv: AdvStaleChecksums, Expected: "", Observed: "accept",
+			Adv: AdvStaleChecksums, Kind: ActPull, Expected: "", Observed: "accept",
 			Finding:   "BUG-0217",
 			Invariant: InvAcceptDelivers,
-			Why: "MEASURED SPEC VIOLATION, not an open question. SPEC-0188 §7 step 8 verifies " +
+			Why: "A DEFECT, not an open question, and the line above is the measurement of it. " +
+				"SPEC-0188 §7 step 8 verifies " +
 				"the CHECKSUMS file inside the bundle and says any failure in steps 3 to 8 means " +
 				"no write. The trust-mode pull path extracts without that check (extractSkb does " +
 				"not validate; the other install path does), and a bundle whose internal manifest " +
@@ -84,11 +94,64 @@ func waiverFor(sc Scenario, r StepResult) *Waiver {
 	}
 	for i := range Waivers() {
 		w := Waivers()[i]
-		if sc.P.Adv == w.Adv && r.Step.Expect.Gate == w.Expected && obs == w.Observed {
+		if w.Kind == "" {
+			// A waiver without an action would match across the whole scenario.
+			// Refusing it here is cheaper than discovering later which unrelated
+			// step it swallowed.
+			continue
+		}
+		if sc.P.Adv == w.Adv && r.Step.Action.Kind == w.Kind &&
+			r.Step.Expect.Gate == w.Expected && obs == w.Observed {
 			return &w
 		}
 	}
 	return nil
+}
+
+// waiverEvidence returns what the run actually observed at the steps this waiver
+// covers: scenario, outcome, exit code and gate, verbatim from the comparison.
+//
+// It exists because the register's own Expected and Observed fields are AUTHOR
+// input, not measurement. A waiver whose fields drift from the behaviour will
+// simply stop matching, which is the safety net, but the fields still describe
+// the case in the author's words. Printing the run's values beside them means a
+// wrong description is visible next to what it describes rather than three
+// sections away.
+func (rep Report) waiverEvidence(x Waiver) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, r := range rep.Results {
+		for i := range r.Steps {
+			// Only the steps this waiver actually SUPPRESSED. Listing every step
+			// it merely matches would bury the one line that matters under the
+			// scenario's ordinary accepts, which is how the last misleading
+			// waiver stayed readable for two days.
+			if i >= len(r.Verdicts) || r.Verdicts[i] != VerdictConflict {
+				continue
+			}
+			if waiverFor(r.Scenario, r.Steps[i]) == nil || r.Scenario.P.Adv != x.Adv {
+				continue
+			}
+			st := r.Steps[i]
+			gate := st.Gate
+			if gate == "" {
+				gate = "no gate named"
+			}
+			line := fmt.Sprintf("%s step %d: %s exit=%d gate=%q",
+				r.Scenario.ID, i+1, st.Outcome, st.ExitCode, gate)
+			if seen[line] {
+				continue
+			}
+			seen[line] = true
+			out = append(out, line)
+		}
+	}
+	sort.Strings(out)
+	if len(out) > 3 {
+		rest := len(out) - 3
+		out = append(out[:3], fmt.Sprintf("(and %d more step(s) with the same shape)", rest))
+	}
+	return out
 }
 
 // WaivedViolations splits invariant violations the same way conflicts are split.
@@ -130,7 +193,20 @@ func (rep Report) WaivedConflicts() (waived, unwaived int) {
 	return
 }
 
-// WriteWaivers prints the register beside the numbers it modifies.
+// WriteWaivers prints the register beside the numbers it modifies, and marks its
+// prose as prose.
+//
+// The marking is not decoration. On 2026-09-05 this section carried the sentence
+// "The control is live: disabling gate 3 flips this pull from refuse to accept."
+// Nobody had measured that. It was an author's explanation, printed every run in
+// the same column as measured counts, and two readers in two different sessions
+// quoted it back as though it were output. One of them used it to contradict a
+// measurement, and was reasoning from the report exactly as the report invited.
+//
+// A number in this report comes from the run. Everything after "WHY (not measured)"
+// comes from whoever wrote the waiver, and it is only as good as the argument it
+// makes. Same page, different epistemic status, so the page has to say which is
+// which.
 func (rep Report) WriteWaivers(w io.Writer) {
 	ws := Waivers()
 	if len(ws) == 0 {
@@ -144,12 +220,26 @@ func (rep Report) WriteWaivers(w io.Writer) {
 		if obs == "" {
 			obs = "no gate named"
 		}
-		fmt.Fprintf(w, "  %s  %s: model says %s, binary says %s\n", x.Finding, x.Adv, x.Expected, obs)
+		exp := x.Expected
+		if exp == "" {
+			exp = "no refusal at all"
+		}
+		fmt.Fprintf(w, "  %s  %s: model says %s, binary says %s\n", x.Finding, x.Adv, exp, obs)
+		for _, ln := range rep.waiverEvidence(x) {
+			fmt.Fprintf(w, "      MEASURED  %s\n", ln)
+		}
+		fmt.Fprintf(w, "      WHY (not measured, this is the waiver author's argument):\n")
 		fmt.Fprintf(w, "      %s\n", x.Why)
 	}
 	wv, uv := rep.WaivedViolations()
 	fmt.Fprintf(w, "  %d conflict(s) waived, %d not waived; %d invariant violation(s) waived, %d not.\n",
 		waived, unwaived, wv, uv)
+	fmt.Fprintf(w, "  The MEASURED lines come from this run. The WHY beneath them does not: it is\n")
+	fmt.Fprintf(w, "  the argument of whoever wrote the waiver, and it is only as good as that\n")
+	fmt.Fprintf(w, "  argument. They are printed adjacently so a WHY that contradicts the values\n")
+	fmt.Fprintf(w, "  beside it refutes itself at a glance. The one this register used to carry did\n")
+	fmt.Fprintf(w, "  exactly that, and it survived two days because the contradiction sat three\n")
+	fmt.Fprintf(w, "  sections apart and had to be held in a reader's head.\n")
 	fmt.Fprintf(w, "  A waived finding is COUNTED and\n")
 	fmt.Fprintf(w, "  reported; it does not fail the gate. It is not the same as a step that was\n")
 	fmt.Fprintf(w, "  never compared: change what the binary does here and the waiver stops\n")
