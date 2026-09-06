@@ -50,6 +50,7 @@ import (
 	"github.com/kamir/m3c-tools/pkg/auth"
 	"github.com/kamir/m3c-tools/pkg/config"
 	"github.com/kamir/m3c-tools/pkg/er1"
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 	"github.com/kamir/m3c-tools/pkg/importer"
 	"github.com/kamir/m3c-tools/pkg/impression"
 	"github.com/kamir/m3c-tools/pkg/menubar"
@@ -4999,7 +5000,7 @@ func cmdPlaudDevStatus() {
 		os.Exit(1)
 	}
 	auth.ApplyAuth(req, er1Cfg.APIKey)
-	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	resp, err := (&http.Client{Timeout: 30 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect}).Do(req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error reaching transcription queue: %v\n", err)
 		os.Exit(1)
@@ -7150,7 +7151,7 @@ func cmdPocketMappings(_ []string) {
 	// unbegrenzt, wenn der Server die Verbindung annimmt und nicht antwortet.
 	// Die uebrigen 40+ Clients in diesem Repo setzen es korrekt: diese Stelle
 	// war die einzige Ausnahme (Scan ueber alle *.go, 2026-09-01).
-	client := &http.Client{Transport: transport, Timeout: 30 * time.Second}
+	client := &http.Client{Transport: transport, Timeout: 30 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect}
 	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "request failed: %v\n", err)

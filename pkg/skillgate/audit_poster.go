@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 )
 
 // HTTPInvocationPoster posts gate.allowed / gate.refused events to the
@@ -19,10 +21,10 @@ import (
 // (network down, 5xx, timeout) is returned to the caller but the caller
 // is expected to ignore it: see Gate.audit().
 type HTTPInvocationPoster struct {
-	AuditURL string       // e.g. https://aims-core/api/skills/runtime/invocations
-	APIKey   string       // optional API key; sent as `X-API-KEY: <key>` to match the rest of the skill-registry API surface
-	UserID   string       // optional user id; sent as `X-User-ID: <id>` (api_auth_required requires both)
-	Client   *http.Client // optional; default: 2s-timeout client
+	AuditURL string        // e.g. https://aims-core/api/skills/runtime/invocations
+	APIKey   string        // optional API key; sent as `X-API-KEY: <key>` to match the rest of the skill-registry API surface
+	UserID   string        // optional user id; sent as `X-User-ID: <id>` (api_auth_required requires both)
+	Client   *http.Client  // optional; default: 2s-timeout client
 	Timeout  time.Duration // optional; default: 2 * time.Second
 }
 
@@ -40,7 +42,7 @@ func NewHTTPInvocationPoster(url, apiKey string) *HTTPInvocationPoster {
 		// post returned 401 silently and the audit row never landed:
 		// the E2E saw count=0 and failed.
 		UserID:  "m3c-skillgate-host",
-		Client:  &http.Client{Timeout: 2 * time.Second},
+		Client:  &http.Client{Timeout: 2 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect},
 		Timeout: 2 * time.Second,
 	}
 }
@@ -99,7 +101,7 @@ func (p *HTTPInvocationPoster) PostInvocation(ev InvocationEvent) error {
 
 	client := p.Client
 	if client == nil {
-		client = &http.Client{Timeout: timeout}
+		client = &http.Client{Timeout: timeout, CheckRedirect: httpsafe.NoCredentialRedirect}
 	}
 	resp, err := client.Do(req)
 	if err != nil {

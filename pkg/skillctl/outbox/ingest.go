@@ -32,6 +32,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 )
 
 // IngestPath is the enforcement-events ingest route (R-5.3). Appended to the
@@ -159,7 +161,7 @@ func (c *IngestClient) PostBatch(ctx context.Context, records [][]byte) (*Ingest
 
 	client := c.Client
 	if client == nil {
-		client = &http.Client{Timeout: 15 * time.Second}
+		client = &http.Client{Timeout: 15 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect}
 	}
 	resp, err := client.Do(req)
 	if err != nil {

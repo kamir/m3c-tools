@@ -19,6 +19,7 @@ import (
 	"github.com/kamir/m3c-tools/pkg/config"
 	"github.com/kamir/m3c-tools/pkg/diag"
 	"github.com/kamir/m3c-tools/pkg/er1"
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 	"github.com/kamir/m3c-tools/pkg/plaud"
 )
 
@@ -361,7 +362,7 @@ func doctorConnectivity() diag.Section {
 	}
 
 	// ER1 /health endpoint (no auth required).
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect}
 	if !cfg.VerifySSL {
 		client.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
@@ -547,7 +548,7 @@ func doctorPlaud() diag.Section {
 			Detail: "no ER1 auth: cannot check sync endpoint",
 		})
 	} else {
-		client := &http.Client{Timeout: 10 * time.Second}
+		client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect}
 		if !cfg.VerifySSL {
 			client.Transport = &http.Transport{
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},

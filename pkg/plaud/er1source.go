@@ -21,6 +21,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 )
 
 // ER1RevealPath is the SPEC-0304 owner-retrieval endpoint (relative to the ER1 base).
@@ -54,7 +56,7 @@ func FetchTokenFromER1() (token string, exp int64, err error) {
 		return "", 0, fmt.Errorf("no ER1 authentication (device token or ER1_API_KEY): run 'm3c-tools login'")
 	}
 
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := &http.Client{Timeout: 15 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect}
 	if verifyDisabled(os.Getenv("ER1_VERIFY_SSL")) && isLoopbackURL(endpoint) {
 		// SEC: only for loopback + self-signed dev cert.
 		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
