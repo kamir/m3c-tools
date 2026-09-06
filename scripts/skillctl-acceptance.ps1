@@ -173,16 +173,23 @@ Says -Id "R2" -Needle $Version -Label "the build under test is named in the repo
 # checks it, then a tampered copy is checked too.
 function Exchange {
   param([string]$Who, [string]$Skill, [string]$Px)
-  $home = Join-Path $Work $Who
+  # NOT $home. That is a PowerShell AUTOMATIC variable and it is read-only: the
+  # assignment fails with VariableNotWritable, the variable keeps pointing at the
+  # real user profile, and every path built from it silently leaves the sandbox.
+  # The failure looked like a missing SKILL.md in C:\Users\runneradmin, four steps
+  # later. The Unix twin has no such collision, which is why only a Windows run
+  # could find it, and no Windows run had ever happened (the workflow file was
+  # rejected for a duplicate key).
+  $partyHome = Join-Path $Work $Who
   $key  = Join-Path $Work "$Who\keys\$Who"
-  $skb  = Join-Path $home "$Skill@1.0.0.skb"
-  $src  = Join-Path $home "src\$Skill"
+  $skb  = Join-Path $partyHome "$Skill@1.0.0.skb"
+  $src  = Join-Path $partyHome "src\$Skill"
 
-  Step -Id "$($Px)a" -Want 0 -Label "$Who`: packs the skill" -HomeDir $home `
+  Step -Id "$($Px)a" -Want 0 -Label "$Who`: packs the skill" -HomeDir $partyHome `
     -ArgList @("pack","--skill",$src,"-o",$skb,"--name",$Skill,"--version","1.0.0")
-  Step -Id "$($Px)b" -Want 0 -Label "$Who`: signs it" -HomeDir $home `
+  Step -Id "$($Px)b" -Want 0 -Label "$Who`: signs it" -HomeDir $partyHome `
     -ArgList @("sign","--key","$key.priv",$skb)
-  Step -Id "$($Px)c" -Want 0 -Label "$Who`: checks their OWN work before sending" -HomeDir $home `
+  Step -Id "$($Px)c" -Want 0 -Label "$Who`: checks their OWN work before sending" -HomeDir $partyHome `
     -ArgList @("verify-sig","--pubkey","$key.pub",$skb)
 
   # The artifact travels. Its signature travels with it, which is what actually
@@ -192,7 +199,7 @@ function Exchange {
     ForEach-Object { Copy-Item $_.FullName (Join-Path $Transport $_.Name) }
   $arrived = Join-Path $Transport (Split-Path $skb -Leaf)
 
-  Step -Id "$($Px)d" -Want 0 -Label "the unaltered artifact still verifies after transport" -HomeDir $home `
+  Step -Id "$($Px)d" -Want 0 -Label "the unaltered artifact still verifies after transport" -HomeDir $partyHome `
     -ArgList @("verify-sig","--pubkey","$key.pub",$arrived)
 
   # Now the tamper: a copy, altered, with the signature NOT re-made.
@@ -207,7 +214,7 @@ function Exchange {
   $bytes[200] = $bytes[200] -bxor 0xFF
   [System.IO.File]::WriteAllBytes($bad, $bytes)
 
-  Step -Id "$($Px)e" -Want 10 -Label "the altered artifact is REFUSED" -HomeDir $home `
+  Step -Id "$($Px)e" -Want 10 -Label "the altered artifact is REFUSED" -HomeDir $partyHome `
     -ArgList @("verify-sig","--pubkey","$key.pub",$bad)
   Says -Id "$($Px)f" -Needle "changed after signing" -Label "the refusal names the cause, not a missing file"
 }
