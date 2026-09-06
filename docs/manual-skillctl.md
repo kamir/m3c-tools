@@ -1638,6 +1638,48 @@ aims-core registry (`POST /api/skills/identities` with an operator bearer token)
 
 ---
 
+## `token`: the credential store for registries
+
+Puts a registry token into the platform's protected store, shows what is
+provisioned, and removes one. It is the write side of the credential resolution
+that `pull`, `verify`, `install` and `attest` already read.
+
+**The secret is read from STDIN and never from an argument.** An argument is
+visible to every process on the machine through `ps` while the call runs, and it
+lands in the shell history of whoever repeats the command by hand.
+
+```bash
+skillctl token set --backend gitlab --host git.example.de --read-only
+# paste the token, then Ctrl-D. Or: echo "$TOK" | skillctl token set …
+```
+
+| Flag | Meaning |
+|------|---------|
+| `--backend <name>` | Which credential family: `gitlab`, `github` or `registry` (the HTTP registry). **Required** for `set` and `rm`. |
+| `--host <host>` | The registry host, e.g. `git.example.de`. **Required.** A credential is stored per host so one machine can hold tokens for several instances. |
+| `--read-only` | Store the **read** tier instead of the write tier. A pull prefers the read tier and only falls back to the write one, so an operator who provisions both never transmits a write token on a read. |
+
+`token list --host <host>` prints, per backend and tier, **where** a credential
+comes from, and never the credential. The source column is the interesting one:
+an environment variable beats the protected store, so a stale export explains a
+failure the stored token would not have caused.
+
+`token rm` removes the local copy. That is **hygiene, not revocation**: the token
+stays valid wherever it was issued until it is revoked there, which is the only
+step that actually stops it.
+
+| Platform | Protected store |
+|---|---|
+| macOS | Keychain (`security`), one generic-password item per service and host |
+| Windows | DPAPI, ciphertext bound to the user account, under `%LOCALAPPDATA%\m3c\artifactauth` |
+| Linux | none here. `set` refuses and names the environment variable instead of writing the token somewhere unprotected. |
+
+The routine around all of this, including which token to ask GitLab for and why
+a write token belongs to the project rather than to a person:
+[Ops-Routine: Zugangstoken](ops-registry-tokens.de).
+
+---
+
 ## Files & locations
 
 | Path | Contents |

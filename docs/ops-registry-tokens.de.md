@@ -48,26 +48,33 @@ Der Token wird **einmal** angezeigt. Danach nie wieder.
 
 **2. Token ablegen.**
 
-macOS:
+macOS und Windows, ein Kommando:
 
 ```bash
-security add-generic-password -s m3c-skillctl-gitlab-ro -a <gitlab-host> -w '<token>' -U
+skillctl token set --backend gitlab --host git.kieback-peter.de --read-only
 ```
 
-Wobei `<gitlab-host>` genau der Host aus dem Registry-Locator ist, also z. B.
-`gitlab.example.de` bei `gitlab://gitlab.example.de/gruppe/skill-registry`.
+Danach den Token einfügen und mit Ctrl-D abschliessen. **Der Token wird von stdin
+gelesen und steht nie in der Kommandozeile**, also nicht in `ps` und nicht in der
+Shell-Historie. Er landet im Keychain (macOS) beziehungsweise DPAPI-verschlüsselt
+je Benutzerkonto (Windows).
 
-Für ein HTTP-Registry (`--registry https://…/api/skills`) heisst der Dienst
-`m3c-skillctl-registry-ro` statt `m3c-skillctl-gitlab-ro`.
+Für ein HTTP-Registry (`--registry https://…/api/skills`) lautet das Backend
+`registry` statt `gitlab`.
 
-Windows: siehe "Offener Punkt" am Ende. Heute bleibt dort nur die Umgebungsvariable.
-
-Alternativ, auf jeder Plattform und für CI der Normalfall:
+Auf Linux gibt es keinen geschützten Speicher; das Kommando sagt das und nennt
+die Umgebungsvariable, statt den Token irgendwohin ungeschützt zu schreiben. Für
+CI ist die Variable ohnehin der Normalfall:
 
 ```bash
 export M3C_GITLAB_RO_TOKEN='<token>'      # Git-Registry
 export M3C_REGISTRY_RO_TOKEN='<token>'    # HTTP-Registry
 ```
+
+Was wo liegt, zeigt `skillctl token list --host git.kieback-peter.de`, und zwar
+**ohne den Token auszugeben**. Die interessante Spalte ist die Quelle: eine
+gesetzte Umgebungsvariable schlägt den geschützten Speicher, und ein vergessenes
+`export` erklärt einen Fehlschlag, den der abgelegte Token nicht verursacht hätte.
 
 **3. Prüfen.**
 
@@ -100,12 +107,10 @@ Kein Inhalt, kein README: `skillctl registry init` schreibt die Struktur.
 nicht zu, und der Standard-Branch ist auf Maintainer-Ebene geschützt. Ein Deploy
 Token scheitert beim Push, und die Fehlermeldung sagt nicht, warum.
 
-**3. Ablegen wie in Teil A**, aber unter dem Schreib-Dienst:
+**3. Ablegen wie in Teil A**, aber ohne `--read-only`, also im Schreib-Tier:
 
 ```bash
-security add-generic-password -s m3c-skillctl-gitlab -a <gitlab-host> -w '<token>' -U
-# oder
-export M3C_GITLAB_TOKEN='<token>'
+skillctl token set --backend gitlab --host git.kieback-peter.de
 ```
 
 **4. Prüfen.**
@@ -209,16 +214,25 @@ gegen einen alten Stand.
 Drei Prinzipale, drei Maschinen (P3). Zwei Prinzipale auf derselben Maschine sind
 ein Trockenlauf und als solcher zu protokollieren, nicht als D-8.
 
-## Offener Punkt: Windows
+## Windows
 
-Auf Windows gibt es heute **keinen** Weg, den Token in den geschützten Speicher zu
-legen. Die Funktion dafür ist gebaut (DPAPI, je Benutzerkonto verschlüsselt), aber
-kein Kommando ruft sie auf. Es bleibt die Umgebungsvariable, also ein
-Schreibtoken im Klartext im Prozessumfeld, vererbt an jeden Kindprozess.
+Seit `skillctl token set` existiert, ist Windows gleichwertig: der Token liegt
+DPAPI-verschlüsselt je Benutzerkonto, nicht im Prozessumfeld. Vorher war die
+Umgebungsvariable dort der einzige Weg, also ein schreibfähiger Token im Klartext,
+vererbt an jeden Kindprozess. Bis zum 2026-09-06 stand hier deshalb die
+Empfehlung, ein Registry nur von macOS oder Linux aus zu bedienen. Sie ist
+hinfällig.
 
-Für Lesetoken ist das vertretbar. Für den Schreibtoken eines Registry ist es das
-nicht, und deshalb sollte das Registry vorerst von einer macOS- oder
-Linux-Maschine aus bedient werden, bis ein `skillctl token set` existiert.
+Der Lesepfad konnte den geschützten Speicher immer schon; was fehlte, war ein Weg,
+ihn zu füllen. Das ist die Art Lücke, die von beiden Seiten aus vollständig
+aussieht.
 
-Diese Einschränkung ist der einzige Punkt, an dem diese Routine heute nicht auf
-beiden Betriebssystemen gleich gut ist.
+## Was diese Routine nicht löst
+
+**Ablaufwarnungen.** GitLab warnt nicht vorab, und `skillctl` kennt das
+Ablaufdatum nicht: es steht in keinem Token. Deshalb das Register in Teil C, und
+deshalb ist die Zeile dort wichtiger, als sie aussieht.
+
+**Widerruf.** `skillctl token rm` entfernt die lokale Kopie, und das ist Hygiene.
+Wer einen Token wirklich stoppen will, widerruft ihn in GitLab. Das wirkt sofort
+und ohne Zutun der betroffenen Maschine.
