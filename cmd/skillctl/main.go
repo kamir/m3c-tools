@@ -53,6 +53,10 @@ func main() {
 	// === SPEC-0406 D1: environment readiness in one command ===
 	case "doctor":
 		os.Exit(runDoctor(os.Args[2:], os.Stdout, os.Stderr))
+	// FR-0117 follow-up: fill the protected credential store the resolver already
+	// reads. Without it a Windows operator had no option but a plaintext env var.
+	case "token":
+		os.Exit(runToken(os.Args[2:], os.Stdout, os.Stderr))
 	// === END SPEC-0406 D1 ===
 	case "version", "--version", "-v":
 		fmt.Println(version)

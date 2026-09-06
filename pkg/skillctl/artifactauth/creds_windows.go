@@ -157,3 +157,22 @@ func localFree(p *byte) {
 		_, _ = windows.LocalFree(windows.Handle(unsafe.Pointer(p)))
 	}
 }
+
+// DeleteCred removes the DPAPI blob for (service, account). A missing file is not
+// an error: the caller asked for it to be gone, and it is.
+//
+// This is HYGIENE, not revocation. The token stays valid at the issuer until it
+// is revoked there.
+func DeleteCred(service, account string) error {
+	if account == "" {
+		return errors.New("artifactauth: DeleteCred needs a non-empty account (registry host)")
+	}
+	p, err := credPath(service, account)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
