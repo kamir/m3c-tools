@@ -129,7 +129,9 @@ func TraceMatrix() []TraceItem {
 		{
 			ID: "verb: verify-sig", What: "a detached signature over altered bytes cannot be found or does not verify",
 			Source: "SPEC-0225 §9.1 step 3", Prov: ProvNormative,
-			Note: "the publisher's own check before admit; observed as exit 1 four times",
+			Note: "the publisher's own check before admit; observed as exit 10 four times. " +
+				"PR #216 changed that code from 1 and updated this expectation in the same " +
+				"commit, which is what a pinned expectation is for",
 		},
 		{
 			ID: "INV-1", What: "bytes that do not match the signed digest are never installed",
