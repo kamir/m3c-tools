@@ -801,7 +801,7 @@ print the sudo runbook (as root, `--confirm` writes it). Both take:
 | `--strict` | Add `allowManagedHooksOnly: true`: the full CISO lockdown, which also **disables every other user/project hook**. |
 | `--harden` | Imply `--strict` **and** block `claude --dangerously-skip-permissions`. |
 | `--enterprise` | Add `skillctlEnterprise: true`: enables the R-7.2 offline `locked` state. |
-| `--require-local-audit` | Add `skillctlRequireLocalAudit: true` (implies `--enterprise`): R-8.2: fail closed when an allow cannot be recorded. |
+| `--require-local-audit` | Add `skillctlRequireLocalAudit: true` (implies `--enterprise`) and wire the PreToolUse gate to `skillctl enforce`, the only verb that consumes the flag: R-8.2, fail closed (exit 26) when an allow cannot be recorded. |
 | `--state-gate-fallback` | Add `skillctlStateGateFallback: true` (implies `--enterprise`): R-1.4 P2: keep the hot path strictly local, with no online fallback while disconnected. |
 | `--out <file>` | Write the JSON to a file instead of stdout (`generate`). |
 | `--path <file>` | Target managed-settings path (`install`), or the path to inspect (`status`). |
