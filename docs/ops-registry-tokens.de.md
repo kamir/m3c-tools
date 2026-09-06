@@ -6,6 +6,17 @@ Gedacht für den echten Betrieb bei einem Kunden mit eigener GitLab-Instanz.
 Zielgruppe: die Person, die eine Maschine einrichtet, und die Person, die das
 Registry betreibt. Beide brauchen jeweils nur ihren eigenen Abschnitt.
 
+**Die Instanz.** Entschieden am 2026-09-06: produktiv ist `git.kieback-peter.de`.
+Der Registry-Locator lautet dort
+
+```
+gitlab://git.kieback-peter.de/<gruppe>/skill-registry
+```
+
+und `<gitlab-host>` in allen Kommandos unten ist entsprechend
+`git.kieback-peter.de`. Die Instanz spricht HTTPS, also bleibt `M3C_GIT_HTTP`
+ungesetzt; die Variable ist nur fuer eine LAN-Instanz ohne TLS gedacht.
+
 ## Die Grundregel in einem Satz
 
 **Der Token entscheidet, wer die Bytes bewegen darf. Der Schlüssel entscheidet,
@@ -136,12 +147,13 @@ Löschen (Keychain-Eintrag entfernen) ist Hygiene, keine Sicherheitsmassnahme.
 ## Teil C: das Token-Register
 
 Ohne Register läuft ein Token ab, und niemand weiss, welcher es war. Eine Zeile
-je ausgestelltem Token, im Wartungsrepo unter `OPS/token-register.md`:
+je ausgestelltem Token, im Wartungsrepo unter `OPS/token-register.md` (Pfad
+entschieden am 2026-09-06):
 
 | Registry | Zweck | Inhaber | Ausgestellt | Läuft ab | Widerrufen am |
 |---|---|---|---|---|---|
-| `gitlab://…/skill-registry` | lesen, Laptop Anna | Anna | 2026-09-06 | 2027-09-01 | n/a |
-| `gitlab://…/skill-registry` | schreiben, publish | Projekt | 2026-09-06 | 2027-09-01 | n/a |
+| `gitlab://git.kieback-peter.de/<gruppe>/skill-registry` | lesen, Laptop Anna | Anna | 2026-09-06 | 2027-09-01 | n/a |
+| `gitlab://git.kieback-peter.de/<gruppe>/skill-registry` | schreiben, publish | Projekt | 2026-09-06 | 2027-09-01 | n/a |
 
 Kein Token im Register, nur die Tatsache seiner Existenz. Wer das Register liest,
 soll wissen, **was abläuft**, nicht **womit man sich anmeldet**.
@@ -165,6 +177,37 @@ Findet `skillctl` nichts, arbeitet es anonym weiter. Das ist Absicht: eine
 Auf einem Lesepfad wird zuerst der Lesetoken gesucht und nur ersatzweise der
 Schreibtoken genommen. Wer beide hinterlegt hat, schickt auf einem `pull` nie den
 Schreibtoken über die Leitung.
+
+## Teil D: der Nachweislauf D-8
+
+Einmalig, und danach ist REQ-3.5 ausserhalb eines lokalen Repos bestaetigt. Bis
+dahin ist jede Aussage ueber den produktiven Weg eine Aussage ueber `local://`.
+
+Die Reihenfolge zaehlt: **erst der Token, dann die Datei.** Ein Projekt ohne
+Schreibtoken laesst `registry init` an einer Stelle scheitern, die nach einem
+Netzproblem aussieht.
+
+| # | Wer | Was | Ergebnis |
+|---|---|---|---|
+| 1 | Registry-Betreiber | leeres Projekt `<gruppe>/skill-registry` auf `git.kieback-peter.de` | leeres Repo, kein README |
+| 2 | Registry-Betreiber | Project Access Token, Maintainer, `write_repository`, Ablauf setzen | Teil B, Schritt 2 |
+| 3 | Registry-Betreiber | Registerzeile schreiben, **bevor** der Token benutzt wird | `OPS/token-register.md` |
+| 4 | Registry-Betreiber | `skillctl registry init --registry gitlab://git.kieback-peter.de/<gruppe>/skill-registry` | die Struktur liegt im Repo |
+| 5 | Autor | `pack` + `sign` mit dem eigenen Schluessel | `.skb` und `.author.sig` |
+| 6 | Herausgeber | `publish` (Admit) | `transport=git` |
+| 7 | Freigeber | `publish --attest --level green` mit einem **anderen** Schluessel | AC-2 |
+| 8 | Konsument, zweite Maschine | eigener Lesetoken nach Teil A, **kein** `.priv` auf dieser Maschine | AC-5 |
+| 9 | Konsument | `pull --install --trust-mode` | fuenf Tore, `.m3c-provenance.json` und `.skillctl-attest.json` |
+| 10 | Konsument | `signers:`-Eintrag entfernen, denselben Pull erneut | `gate 4`, Exit **13**, nichts installiert (AC-3) |
+| 11 | alle | Evidenzblock schreiben | AC-7, siehe Tutorial Szenario 02 |
+
+Schritt 10 ist die wichtigste Zeile. Ein Lauf, der nur den Erfolgsfall zeigt,
+belegt, dass die Kette **durchlaesst**, und nicht, dass sie **haelt**. Der Exit
+ist seit FR-0122 die 13 und nicht mehr die 1; wer noch eine 1 erwartet, prueft
+gegen einen alten Stand.
+
+Drei Prinzipale, drei Maschinen (P3). Zwei Prinzipale auf derselben Maschine sind
+ein Trockenlauf und als solcher zu protokollieren, nicht als D-8.
 
 ## Offener Punkt: Windows
 
