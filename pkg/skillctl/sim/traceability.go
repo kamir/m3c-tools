@@ -158,7 +158,7 @@ func TraceMatrix() []TraceItem {
 			Note: "NEVER EVALUATED. Declared here and in model.go, checked by nothing. It " +
 				"needs a pair of runs, with and without the move, and the harness runs each " +
 				"scenario once. Reported as 0 evaluations rather than as a silent pass " +
-				"(FR-0125); a monotonicity property of the model, not a product requirement",
+				"(FR-0140); a monotonicity property of the model, not a product requirement",
 		},
 		{
 			ID: "INV-6", What: "a refusal leaves the install target byte-identical",

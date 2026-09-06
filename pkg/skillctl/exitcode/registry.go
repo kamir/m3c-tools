@@ -60,6 +60,27 @@ var (
 	VerifyDataSourceDenied   = Code{17, "data-source / source-policy", "verify", "data_source_denied"}
 	VerifyIntentInconsistent = Code{18, "intent contradiction", "verify", "intent_inconsistent"}
 	VerifyIdentityMismatch   = Code{19, "identity / source-block", "verify", "identity_mismatch"}
+
+	// RevokedBundle is the code SPEC-0188 §7 describes and the register did not
+	// have (BUG-0216). The specification named 15 for it, but 15 has meant
+	// blob_missing in shipped builds since the ladder existed, and a number whose
+	// meaning changes silently is worse than a number that was never allocated:
+	// a caller that reads 15 as "revoked" would treat a transport failure as a
+	// security verdict, and one that reads it as "blob missing" would retry a
+	// revocation. Decided 2026-09-06: bundle_revoked takes 20, the specification
+	// is corrected, and 15 keeps the meaning every existing caller already has.
+	//
+	// It sits outside the 10-19 verify ladder deliberately, and its family is
+	// "pull", not "verify". TestExitCode_VerifyFamilyCompleteness pins the verify
+	// family to exactly those ten numbers, and that pin is worth more than the
+	// convenience of reusing the name: the code is emitted by `pull --trust-mode`,
+	// which is the surface FR-0122 is about, so "pull" is also simply what is
+	// true. 20 is free, and below the skillgate band at 30-39.
+	//
+	// Its theme is its own because a revocation is not a failed check. The chain
+	// verified. Someone withdrew the bundle afterwards, and a caller has to be
+	// able to tell those two apart: one is retried, the other never is.
+	RevokedBundle = Code{20, "trust-chain revocation", "pull", "bundle_revoked"}
 )
 
 // ---------------------------------------------------------------------------
@@ -155,7 +176,7 @@ func AllCodes() []Code {
 		VerifyDigestMismatch, VerifyAuthorSigInvalid, VerifyRegistryNotTrusted,
 		VerifyGovernanceBelowMin, VerifyDepsUnsatisfied, VerifyBlobMissing,
 		VerifyTenantBlocked, VerifyDataSourceDenied, VerifyIntentInconsistent,
-		VerifyIdentityMismatch,
+		VerifyIdentityMismatch, RevokedBundle,
 		// Tier 2 (import-public
 		ImportPinRequired, ImportScannerRefuse, ImportNoSourcePolicy,
 		ImportIntentCapped, ImportSourceBlocked,

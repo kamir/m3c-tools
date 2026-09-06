@@ -26,8 +26,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifactauth"
+	"github.com/kamir/m3c-tools/pkg/skillctl/exitcode"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
 )
@@ -155,7 +157,7 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "       install aborts on ANY skip so a broken or revoked bundle can't ride in next to the good ones.")
 			fmt.Fprintln(stderr, "  fix: install a known-good subset with --skill <name> or --digest <sha256:…>, or remove/replace the skipped bundles.")
 		}
-		return 1
+		return skipExitCode(res.Skipped, stderr)
 	}
 
 	// ── P3 install path ──────────────────────────────────────────────────
@@ -227,6 +229,16 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		case errors.Is(err, registry.ErrUnsafeBundleName):
 			fmt.Fprintf(stderr, "pull --install: REFUSED: a staged bundle has an unsafe name.\n  detail: %v\n", err)
 			return 2
+		case errors.Is(err, skillbundle.ErrChecksumMismatch):
+			// SPEC-0188 §7 step 8. The chain verified and the bytes are the signed
+			// ones; the bundle's own manifest no longer describes them, which is an
+			// integrity failure and reported as one. Leaving it at a bare 1 would
+			// have reintroduced FR-0122 at the last step of the very path that
+			// motivated it: one refusal a caller still could not attribute.
+			fmt.Fprintf(stderr, "pull --install: REFUSED: the bundle's CHECKSUMS manifest does not describe its contents.\n  detail: %v\n", err)
+			fmt.Fprintln(stderr, "  why: SPEC-0188 §7 step 8 verifies the manifest after extraction; any failure in steps 3 to 8 means no write.")
+			fmt.Fprintln(stderr, "  fix: this is not a transport problem and retrying will not help. Ask the publisher to repack and re-sign.")
+			return exitcode.VerifyDigestMismatch.Number
 		default:
 			fmt.Fprintf(stderr, "pull --install: %v\n", err)
 			return 1
@@ -424,4 +436,57 @@ func resolvePullTrustRoots(registryName, trustPath string) (*registry.SelfTrustR
 	}
 	tr, lerr := registry.LoadSelfTrustRoots(trustPath)
 	return tr, "", lerr
+}
+
+// skipExitCode turns the gates that refused into a process exit code (FR-0122).
+//
+// The path used to return a bare 1 for every refusal. A caller, an audit record
+// and any automated policy see the SIGNAL, not the cause, so a revoked bundle and
+// an unsigned one were the same event to everything downstream. That matters most
+// for the case it matters most in: a revocation is never retried, and a transient
+// fetch failure always is.
+//
+// Four gates map onto the numbers SPEC-0188 §11 already assigns. The fifth had no
+// number at all: the specification named 15 for bundle_revoked, but 15 has meant
+// blob_missing in every shipped build (BUG-0216). Decided 2026-09-06: revocation
+// takes 20, the specification is corrected, and 15 keeps the meaning callers have.
+//
+// MIXED refusals stay 1, deliberately. One number cannot describe two causes, and
+// picking the "worst" would invent a ranking nothing else in this tool uses. The
+// caller is told, in words, that the rows differ and that the codes are per-gate.
+func skipExitCode(skipped []*registry.PullSkip, stderr io.Writer) int {
+	codes := map[int]bool{}
+	for _, k := range skipped {
+		codes[gateExit(k.Gate)] = true
+	}
+	if len(codes) == 1 {
+		for c := range codes {
+			return c
+		}
+	}
+	fmt.Fprintf(stderr, "\npull: %d bundle(s) were skipped for DIFFERENT reasons, so no single exit code describes the run.\n", len(skipped))
+	fmt.Fprintln(stderr, "  exit 1 here means \"more than one cause\"; the per-bundle gate is on each ❌ row above.")
+	return 1
+}
+
+// gateExit maps one gate to its code. An unrecognised or absent gate is 1: a
+// refusal whose cause this function does not know must not borrow a number that
+// promises a specific one.
+func gateExit(gate error) int {
+	switch {
+	case gate == nil:
+		return 1
+	case errors.Is(gate, registry.ErrGateEnvelope):
+		return exitcode.VerifyRegistryNotTrusted.Number
+	case errors.Is(gate, registry.ErrGateDigest):
+		return exitcode.VerifyDigestMismatch.Number
+	case errors.Is(gate, registry.ErrGateBundleSigs):
+		return exitcode.VerifyAuthorSigInvalid.Number
+	case errors.Is(gate, registry.ErrGateGovernance):
+		return exitcode.VerifyGovernanceBelowMin.Number
+	case errors.Is(gate, registry.ErrGateRevoked):
+		return exitcode.RevokedBundle.Number
+	default:
+		return 1
+	}
 }
