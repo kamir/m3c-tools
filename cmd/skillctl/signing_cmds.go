@@ -62,6 +62,10 @@ const (
 	exitGeneric  = 1
 	exitUsage    = 2
 	exitSigInval = 11
+	// exitDigestChanged is verify.ExitDigestMismatch. It is spelled out here
+	// rather than imported so this file keeps its flat list of the codes it can
+	// return; the two MUST stay equal, and a test pins them together.
+	exitDigestChanged = 10
 )
 
 // runKeygen implements `skillctl keygen --out PATH`. Writes
@@ -160,7 +164,7 @@ func runVerifySig(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Recomputes the bundle's SHA-256 digest, locates the matching")
 		fmt.Fprintln(stderr, "<BUNDLE.skb>.<digest_hex>.author.sig file, and verifies it.")
-		fmt.Fprintln(stderr, "Exit codes: 0 ok | 11 signature invalid | 1 other error | 2 usage.")
+		fmt.Fprintln(stderr, "Exit codes: 0 ok | 10 bytes changed after signing | 11 signature invalid | 1 other error | 2 usage.")
 		fmt.Fprintln(stderr, "BUNDLE.skb may appear before or after the flags.")
 		fs.PrintDefaults()
 	}
@@ -180,6 +184,17 @@ func runVerifySig(args []string, stdout, stderr io.Writer) int {
 
 	if err := signing.VerifyDetached(bundlePath, *pubPath); err != nil {
 		fmt.Fprintln(stderr, err)
+		// Checked BEFORE ErrSignatureInvalid, which this error also wraps: an
+		// altered bundle is a digest mismatch first and a signature failure as a
+		// consequence, and the more specific cause has to win.
+		//
+		// Exit 10, the SAME code `verify --bundle` gives for the same situation
+		// (verify.ExitDigestMismatch). SPEC-0406 has two people compare results
+		// across two machines and two commands; reading a different number for the
+		// same cause is precisely the confusion the numbered codes exist to prevent.
+		if errors.Is(err, signing.ErrDigestChanged) {
+			return exitDigestChanged
+		}
 		if errors.Is(err, signing.ErrSignatureInvalid) {
 			return exitSigInval
 		}

@@ -2,10 +2,14 @@ package signing
 
 import (
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 )
 
 // ErrSignatureInvalid is returned by VerifyDetached when the cryptographic
@@ -13,6 +17,22 @@ import (
 // code 11 in the CLI and is sentinel-comparable so tests and downstream
 // callers can branch on it without parsing strings.
 var ErrSignatureInvalid = errors.New("signature is invalid")
+
+// ErrDigestChanged means the bundle carries a signature, but for DIFFERENT
+// bytes than the ones on disk now. In other words: it was signed, and then it
+// changed.
+//
+// It exists because the previous message for this case was actively misleading.
+// The detached signature is stored under a filename that contains the digest it
+// covers (SignaturePath). Tamper with a byte and the recomputed digest changes,
+// so the lookup misses and the tool said "signature file not found". That is
+// true and useless: it describes a consequence of the tampering, and it reads
+// like a packaging mistake rather than a broken seal. An operator following it
+// would go looking for a missing file.
+//
+// SPEC-0406 AC-08 asks that a refusal name the condition that was violated
+// rather than its side effect, and this is the case that forced the rule.
+var ErrDigestChanged = errors.New("bundle bytes changed after signing")
 
 // VerifyDetached recomputes the bundle's SHA-256 digest, locates the
 // matching `<bundle>.<digest_hex>.author.sig` file, and verifies it
@@ -50,11 +70,23 @@ func VerifyDetached(bundlePath, pubkeyPath string) error {
 	sigPath := SignaturePath(bundlePath, digestHex)
 	sig, err := os.ReadFile(sigPath)
 	if err != nil {
-		// A missing sig file is the most common cause of "verify
-		// fails" in practice: say so explicitly. Don't reveal
-		// anything that wasn't already on the filesystem.
 		if errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("verify-sig: signature file not found at %s (digest %s)", sigPath, digestHex)
+			// Two very different situations reach this line, and the whole point
+			// of separating them is that they call for opposite actions.
+			//
+			// If signatures exist for this bundle under OTHER digests, the bundle
+			// was signed and then its bytes changed. Say that, and say which
+			// digest was signed, so the reader can see the two values differ.
+			//
+			// If there are none at all, it was simply never signed here. That is
+			// a packaging step someone forgot, not a broken seal.
+			if others := siblingSignatureDigests(bundlePath); len(others) > 0 {
+				return fmt.Errorf(
+					"verify-sig: %w: this file now hashes to %s, but the signature next to it covers %s. "+
+						"The signature was not re-made, so the bytes were altered after signing: %w",
+					ErrDigestChanged, digestHex, strings.Join(others, ", "), ErrSignatureInvalid)
+			}
+			return fmt.Errorf("verify-sig: no signature found for %s (looked for %s). It appears never to have been signed here", bundlePath, sigPath)
 		}
 		return fmt.Errorf("verify-sig: read signature %s: %w", sigPath, err)
 	}
@@ -68,4 +100,43 @@ func VerifyDetached(bundlePath, pubkeyPath string) error {
 		return fmt.Errorf("verify-sig: %w (digest=%s, sig=%s, pubkey=%s)", ErrSignatureInvalid, digestHex, sigPath, pubkeyPath)
 	}
 	return nil
+}
+
+// siblingSignatureDigests returns the digests of every detached author signature
+// sitting next to bundlePath, whatever content they cover.
+//
+// It reads only file NAMES, never their contents, and it is used only to choose
+// between two error messages. Nothing about a trust decision depends on it: a
+// wrong answer here changes the wording of a refusal, never the refusal itself.
+// That is deliberate, because the directory it scans is attacker-influenced in
+// exactly the scenario this function exists for.
+func siblingSignatureDigests(bundlePath string) []string {
+	dir := filepath.Dir(bundlePath)
+	prefix := filepath.Base(bundlePath) + "."
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		n := e.Name()
+		if !strings.HasPrefix(n, prefix) || !strings.HasSuffix(n, authorSigSuffix) {
+			continue
+		}
+		d := strings.TrimSuffix(strings.TrimPrefix(n, prefix), authorSigSuffix)
+		// Only accept something that actually looks like a sha256 hex digest, so a
+		// crafted filename cannot put arbitrary text into our error message.
+		if len(d) != sha256.Size*2 {
+			continue
+		}
+		if _, err := hex.DecodeString(d); err != nil {
+			continue
+		}
+		out = append(out, d)
+	}
+	sort.Strings(out)
+	return out
 }

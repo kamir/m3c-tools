@@ -131,9 +131,10 @@ echo "rc=$?"          # 0 = OK: signature verified
 ```
 
 Exit `0` heißt: diese Bytes wurden von diesem Schlüssel versiegelt. Exit `11` heißt: die
-Signatur passt nicht zu den Bytes. Exit `1` mit „signature file not found" heißt: zu diesen
-Bytes existiert überhaupt keine Signatur, meist weil die Datei nach dem Signieren verändert
-wurde (der Signaturdateiname enthält den Digest).
+Signatur passt nicht zu den Bytes. Exit `10` heißt: die Datei hasht jetzt anders, als die
+Signatur daneben deckt, sie wurde also nach dem Signieren verändert; die Meldung nennt beide
+Digests, damit Sie den Unterschied sehen. Exit `1` heißt: es liegt überhaupt keine Signatur
+neben der Datei, sie wurde hier vermutlich nie signiert.
 
 ### A5. Publizieren und attestieren
 
@@ -570,7 +571,8 @@ Alles oben gilt, mit drei Unterschieden:
 | `pull` Exit `13` | keine grüne Attestierung | A5 zweiter Block |
 | `publish` HTTP 403 | Publish in einen fremden Kontext | nur in den **eigenen** `--er1-context skills` publizieren |
 | `verify <name>`: „no .skb found" | der Skill wurde von Hand entpackt | über `pull --install` oder `install` neu installieren |
-| `verify-sig` Exit `1`, „signature file not found" | die Bytes wurden nach dem Signieren verändert | Bundle neu beziehen |
+| `verify-sig` Exit `10`, „bundle bytes changed after signing" | die Bytes wurden nach dem Signieren verändert | Bundle neu beziehen |
+| `verify-sig` Exit `1`, „no signature found" | es liegt keine Signatur daneben, vermutlich nie signiert | beim Absender nach der `.sig` fragen |
 
 ---
 

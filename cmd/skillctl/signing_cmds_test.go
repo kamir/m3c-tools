@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 	"os"
 	"path/filepath"
 	"strings"
@@ -233,5 +234,17 @@ func TestExtractBundlePositional(t *testing.T) {
 				t.Errorf("bundle=%q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// The two exit codes for "the bytes changed after signing" must be the SAME
+// number on both paths that can report it. SPEC-0406 has two people compare
+// results across two machines and two commands; reading 10 from one and
+// something else from the other is exactly the confusion the numbered codes
+// exist to prevent.
+func TestVerifySigDigestExitMatchesTheVerifierExit(t *testing.T) {
+	if exitDigestChanged != verify.ExitDigestMismatch {
+		t.Errorf("verify-sig reports %d for altered bytes, the trust chain reports %d",
+			exitDigestChanged, verify.ExitDigestMismatch)
 	}
 }

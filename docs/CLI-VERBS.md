@@ -61,7 +61,7 @@ same way `cmd/docaudit` gates the flag surface.
 | `pack` | SPEC-0188 (Phase 1 PoC) | 0/1/2, 18 |
 | `keygen` | SPEC-0188 §11 | 0/1/2 |
 | `sign` | SPEC-0188 §11 | 0/1/2 |
-| `verify-sig` | SPEC-0188 §11 | 0/1/2, 11 |
+| `verify-sig` | SPEC-0188 §11 | 0/1/2, 10, 11 |
 | `trust` | SPEC-0188 (S7) | 0/1/2 |
 | `peer` | SPEC-0359 (D2) | 0/1/2 |
 | `cross-sign` | SPEC-0359 (D3) | 0/1/2 |

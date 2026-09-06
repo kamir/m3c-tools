@@ -364,15 +364,25 @@ pause
 # ----------------------------------------------- 10. Negativprobe B: tamper --
 step "NEGATIVPROBE B: ein veraendertes Bundle mit umbenannter Signatur"
 why "Zuerst der Unfall: Bytes veraendert, Signatur unter altem Namen. Das ergibt
-   Exit 1, 'signature file not found', denn der Dateiname traegt den Digest.
+   Exit 10, denn die Datei hasht jetzt anders als die Signatur daneben deckt.
+   Die Meldung nennt die Ursache (die Bytes wurden nach dem Signieren geaendert)
+   und nicht ihre Nebenwirkung (eine Datei wurde nicht gefunden), SPEC-0406 AC-08.
    Dann der Angriff: die Signatur wird auf den neuen Digest umbenannt, damit sie
    dazuzugehoeren scheint. Jetzt greift die Kryptografie, Exit 11."
 
+# So kommt ein signiertes Bundle wirklich an: die Datei UND ihre Signatur.
+# Beide werden kopiert, dann werden die Bytes veraendert. Genau das ist der Fall,
+# den ein Empfaenger sieht, und er ist aussagekraeftiger als eine nackte Kopie
+# ohne Signatur, denn nur hier laesst sich der Bruch am Digest zeigen.
 cp "$WS/hello-kup@0.1.0.skb" "$WS/kaputt.skb"
+for sig in "$WS/hello-kup@0.1.0.skb".*.author.sig; do
+  [ -e "$sig" ] || continue
+  cp "$sig" "$WS/kaputt.skb.$(basename "$sig" | sed 's/^hello-kup@0.1.0.skb.//')"
+done
 printf '\xff' | dd of="$WS/kaputt.skb" bs=1 seek=200 count=1 conv=notrunc 2>/dev/null
-run "verify-sig auf veraenderten Bytes (ohne passende Signatur)" 1 \
+run "verify-sig auf veraenderten Bytes (Signatur liegt daneben)" 10 \
   "$SKILLCTL" verify-sig --pubkey "$WS/keys/mitarbeiter.pub" "$WS/kaputt.skb"
-expect_in "die Meldung sagt, dass es zu diesen Bytes keine Signatur gibt" "signature file not found"
+expect_in "die Meldung nennt die Ursache, nicht die Nebenwirkung" "changed after signing"
 
 cp "$WS/hello-kup@0.1.0.skb" "$WS/boese.skb"
 SIZE="$(wc -c < "$WS/boese.skb" | tr -d ' ')"
