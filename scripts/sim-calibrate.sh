@@ -65,9 +65,16 @@ MUTANTS=(
   "gate2-digest|pkg/skillctl/registry/backend_pull.go|s|if gotDigest != digest {|if false \&\& gotDigest != digest {|"
   "silent-noop-install|pkg/skillctl/registry/install_trust_mode.go|s|if err := os.Rename(tmp, target); err != nil {|if err := func() error { _ = tmp; _ = target; return nil }(); err != nil {|"
   "gate3-bundlesigs|pkg/skillctl/registry/backend_pull.go|s|if err := verifyBundleSignatures(event, pub, gotDigest); err != nil {|if err := verifyBundleSignatures(event, pub, gotDigest); false \&\& err != nil {|"
+  "step8-checksums|pkg/skillctl/registry/install_trust_mode.go|s|if err := skillbundle.ValidateChecksums(tmp); err != nil {|if err := skillbundle.ValidateChecksums(tmp); false \&\& err != nil {|"
   "early-fetch|pkg/skillctl/registry/backend_pull.go|s|if acc.IsRevoked(digest) {|if _, ferr := be.Fetch(ctx, artifact.ArtifactRef{Name: name, Version: ver, Digest: digest}); ferr != nil { res.Skipped = append(res.Skipped, \&PullSkip{Name: name, Version: ver, Digest: digest, Gate: ErrGateDigest, Detail: ferr.Error()}); continue } else if acc.IsRevoked(digest) {|"
 )
 
+# step8-checksums is the mutant for the control added on 2026-09-06 (BUG-0217).
+# It is here because of what gate 3 cost: a control with no mutant is a control
+# nobody has watched fail, and for two days the report described gate 3 in three
+# different wrong ways precisely because nothing had ever disabled it. A new check
+# arrives with its mutant or it arrives unverified.
+#
 # The last two are not disabled gates. They are the two SIDE-EFFECT requirements,
 # and each exists because the defect it models is invisible to everything that
 # reads an exit code or a gate name.

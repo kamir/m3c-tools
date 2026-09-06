@@ -20,7 +20,6 @@
 package install
 
 import (
-	"bufio"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -742,87 +741,25 @@ func extractTGZ(blob []byte, destDir string, maxBytes int64) error {
 	return skillbundle.ExtractTo(entries, destDir)
 }
 
-// validateChecksumsIfPresent reads the bundle's CHECKSUMS file (if it
-// exists) and verifies every entry's SHA-256 against the on-disk content.
+// validateChecksumsIfPresent verifies the bundle's own CHECKSUMS manifest.
 //
-// Format: each line is "<sha256-hex>  <relative-path>" (two spaces, per
-// the GNU coreutils sha256sum convention SPEC §3.1 follows). Lines with a
-// '#' prefix or empty lines are skipped.
+// The implementation moved to pkg/skillbundle on 2026-09-06 and this is now a
+// thin adapter. It moved because the OTHER installer, the trust-mode pull path in
+// pkg/skillctl/registry, could not call it: that package cannot import this one,
+// and the check was therefore simply absent there for as long as the path existed
+// (BUG-0217). A control that only one of two entry points can reach is a control
+// on one entry point.
 //
-// Missing CHECKSUMS file → success (some bundles may omit it). Mismatches
-// → ErrDigestMismatch (per SPEC §7 step 8).
+// The wrapping stays: callers here match on verify.ErrDigestMismatch, and the
+// bundle package has no reason to know about that sentinel.
 func validateChecksumsIfPresent(extractDir string) error {
-	// SPEC §3.1 puts CHECKSUMS at the bundle ROOT, but the tar has the
-	// bundle's <name>-<version>/ as its top-level dir. Walk one level
-	// down to find it.
-	root := extractDir
-	if entries, err := os.ReadDir(extractDir); err == nil && len(entries) == 1 && entries[0].IsDir() {
-		root = filepath.Join(extractDir, entries[0].Name())
-	}
-	checksumPath := filepath.Join(root, "CHECKSUMS")
-	f, err := os.Open(checksumPath)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("install: open CHECKSUMS: %w", err)
-	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
+	if err := skillbundle.ValidateChecksums(extractDir); err != nil {
+		if errors.Is(err, skillbundle.ErrChecksumMismatch) {
+			return fmt.Errorf("install: %w: %w", verify.ErrDigestMismatch, err)
 		}
-		// Accept "<hex>  <path>" or "<hex> <path>" (one or two spaces).
-		var wantHex, rel string
-		if i := strings.Index(line, "  "); i >= 0 {
-			wantHex = line[:i]
-			rel = strings.TrimSpace(line[i+2:])
-		} else if i := strings.Index(line, " "); i >= 0 {
-			wantHex = line[:i]
-			rel = strings.TrimSpace(line[i+1:])
-		} else {
-			return fmt.Errorf("install: CHECKSUMS malformed line %q: %w", line, verify.ErrDigestMismatch)
-		}
-		if rel == "" {
-			return fmt.Errorf("install: CHECKSUMS missing path on line %q: %w", line, verify.ErrDigestMismatch)
-		}
-		// Refuse path-traversal on relative paths inside CHECKSUMS too.
-		cleanRel := filepath.Clean(rel)
-		if strings.HasPrefix(cleanRel, "..") || filepath.IsAbs(cleanRel) {
-			return fmt.Errorf("install: CHECKSUMS entry %q escapes root: %w", rel, verify.ErrDigestMismatch)
-		}
-		if cleanRel == "CHECKSUMS" {
-			continue
-		}
-		fp := filepath.Join(root, cleanRel)
-		got, err := fileSHA256Hex(fp)
-		if err != nil {
-			return fmt.Errorf("install: hash %s: %w", fp, errors.Join(verify.ErrDigestMismatch, err))
-		}
-		if !strings.EqualFold(got, wantHex) {
-			return fmt.Errorf("install: CHECKSUMS mismatch for %s (got %s, want %s): %w", rel, got, wantHex, verify.ErrDigestMismatch)
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("install: read CHECKSUMS: %w", err)
+		return fmt.Errorf("install: %w", err)
 	}
 	return nil
-}
-
-func fileSHA256Hex(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // atomicInstall moves extractDir to ~/.claude/skills/<name>/. If a prior

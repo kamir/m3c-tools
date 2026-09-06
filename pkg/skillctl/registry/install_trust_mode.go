@@ -431,6 +431,25 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 		return nil, fmt.Errorf("install: extract: %w", err)
 	}
 
+	// SPEC-0188 §7 step 8, and it was missing from this path entirely (BUG-0217).
+	//
+	// The outer chain proves the bytes are the ones that were signed and admitted.
+	// It says nothing about whether the bundle is internally consistent: a manifest
+	// that no longer describes the files beside it is a bundle that was altered
+	// before it was signed, and every gate upstream passes it happily. The other
+	// installer checked this from the day it existed; this one could not, because
+	// the function lived in a package this one cannot import. It now lives in
+	// pkg/skillbundle, where both reach it.
+	//
+	// Placed here on purpose: after extraction into the temp directory, before the
+	// provenance sidecar is written and long before the rename into place. §7 says
+	// any failure in steps 3 to 8 means NO WRITE, so the failure has to happen
+	// while the only thing on disk is a directory this function is about to delete.
+	if err := skillbundle.ValidateChecksums(tmp); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("install: %w", err)
+	}
+
 	// Write the sidecar inside the unpacked dir.
 	side := ProvenanceSidecar{
 		SchemaVersion:         ProvenanceSchemaVersion,

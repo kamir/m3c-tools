@@ -186,17 +186,30 @@ func PredictHistogram(corpus []Scenario) map[string]int {
 			if !st.Expect.Claimed {
 				continue
 			}
-			accept, g := StateAt(sc.P, afterRevoke).Decide()
+			// The bin comes from the STEP EXPECTATION, not from a second derivation
+			// of the state vector.
+			//
+			// It used to call StateAt(...).Decide() again here, and that was a second
+			// oracle: the five-bit model knows the five gates and nothing else, so a
+			// requirement outside it, SPEC-0188 §7 step 8, was predicted as an accept
+			// while the expectation the comparison actually uses said refuse. The two
+			// disagreed by construction and the residual reported it as a finding
+			// about the product. The generator's expectation is the one oracle; this
+			// reads it.
+			_, g := StateAt(sc.P, afterRevoke).Decide()
 			// A waived disagreement is binned apart on BOTH sides, so it neither
 			// hides in the residual nor pretends to be agreement. The conflict count
 			// above still carries it; this bin only keeps it out of a number that
 			// means "the closed form reproduced the distribution".
-			if isWaivedPrediction(sc.P, g) {
+			switch {
+			case isWaivedPrediction(sc.P, g):
 				h[BinLabelOpen]++
-			} else if accept {
+			case st.Expect.Outcome == Accept:
 				h["accept"]++
-			} else {
-				h[g]++
+			case st.Expect.Gate != "":
+				h[st.Expect.Gate]++
+			default:
+				h["refused, no gate named"]++
 			}
 		}
 	}

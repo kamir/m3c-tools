@@ -460,7 +460,14 @@ func build(p Params) Scenario {
 	})
 
 	// 7. Re-verification of what was installed.
-	if ok {
+	//
+	// The guard is whether the PULL accepted, not whether the five gates passed.
+	// Those came apart the moment SPEC-0188 §7 step 8 was implemented: a bundle can
+	// clear every gate and still be refused for an internal defect, and then there
+	// is nothing installed to re-verify. The old guard read `ok` and predicted a
+	// successful verify against an empty install target.
+	installed := pullExpect.Outcome == Accept
+	if installed {
 		if p.Adv == AdvTamperInstalled {
 			sc.Steps = append(sc.Steps,
 				Step{Action: Action{Kind: ActTamperInstalled, Actor: Adversary, Skill: skill},
