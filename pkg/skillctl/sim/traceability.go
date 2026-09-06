@@ -63,32 +63,48 @@ type TraceItem struct {
 
 // TraceMatrix is the whole set. Order is fixed so two reports are comparable.
 //
+// THE SOURCES WERE WRONG UNTIL 2026-09-05, and the correction is worth keeping.
+// Every gate cited "SPEC-0188 §7". An adversarial review traced the actual path
+// and found that §7 governs the ER1/HTTP install (`pkg/skillctl/install`), whose
+// first two steps are literally `/api/skills/by-name` and `GET
+// /api/skills/bundles/<digest>`. The path this simulation measures, `pull
+// --trust-mode`, is specified in SPEC-0225 §9.1, "The verification gauntlet
+// (every bundle, every install)", and that clause lists exactly these five
+// checks and closes with "Only a bundle that clears all five gets written".
+//
+// The five gates were therefore never unspecified, as an earlier finding of mine
+// claimed. They were specified in the other document, and the code comment
+// "runs the SPEC-0188 §7 gauntlet" sent everybody, me included, to the wrong
+// clause. A traceability matrix whose sources point at the wrong specification is
+// worse than one with no sources: it looks checked.
+//
 // Every entry here was written by reading the clause or the decision it cites. An
 // entry whose Source cannot be checked by a reader is worse than no entry, because
 // it looks like provenance and is not.
 func TraceMatrix() []TraceItem {
 	return []TraceItem{
 		{
-			ID: "gate 1", What: "the admit envelope signature verifies before any field of the event is used",
-			Source: "SPEC-0188 §7", Prov: ProvNormative,
+			ID: "gate 1", What: "the admit envelope signature verifies against a key in trust-roots whose id matches the producing registry",
+			Source: "SPEC-0225 §9.1 step 1", Prov: ProvNormative,
 		},
 		{
-			ID: "gate 2", What: "the digest is recomputed from the fetched bytes and compared",
-			Source: "SPEC-0188 §7", Prov: ProvNormative,
+			ID: "gate 2", What: "SHA-256 of the fetched .skb equals the digest tag and the envelope's bundle_digest",
+			Source: "SPEC-0225 §9.1 step 2", Prov: ProvNormative,
 		},
 		{
-			ID: "gate 3", What: "the bundle signature rows verify over the recomputed digest",
-			Source: "SPEC-0188 §7", Prov: ProvNormative,
-			Note: "fires but never names itself: disabling it flips the affected pull from " +
-				"refuse to accept, so the control is live. Observed 0 times BY NAME (FR-0121)",
+			ID: "gate 3", What: "the author AND registry signatures on the .skb each verify against trust-roots",
+			Source: "SPEC-0225 §9.1 step 3", Prov: ProvNormative,
+			Note: "observed once, by name, since 2026-09-06. Reaching it needs a publisher " +
+				"holding the registry key: a store without it cannot edit a signature row " +
+				"without breaking the envelope, so gate 1 would decide first",
 		},
 		{
 			ID: "gate 4", What: "a quorum of attestations at or above the floor, from pinned signers, bound to the admitted digest",
-			Source: "SPEC-0188 §7, SPEC-0359 D3", Prov: ProvNormative,
+			Source: "SPEC-0225 §9.1 step 4, SPEC-0359 D3", Prov: ProvNormative,
 		},
 		{
-			ID: "gate 5", What: "a digest carrying a signed revoke is refused",
-			Source: "SPEC-0188 §7", Prov: ProvNormative,
+			ID: "gate 5", What: "no BundleRevokedEvent exists for this digest",
+			Source: "SPEC-0225 §9.1 step 5", Prov: ProvNormative,
 		},
 		{
 			ID: "order: phases", What: "authenticate, then decide from signed metadata, then decide from bytes",
@@ -113,20 +129,22 @@ func TraceMatrix() []TraceItem {
 		},
 		{
 			ID: "verb: verify-sig", What: "a detached signature over altered bytes cannot be found or does not verify",
-			Source: "SPEC-0188 §11", Prov: ProvNormative,
-			Note: "the publisher's own check before admit; observed as exit 1 four times",
+			Source: "SPEC-0225 §9.1 step 3", Prov: ProvNormative,
+			Note: "the publisher's own check before admit; observed as exit 10 four times. " +
+				"PR #216 changed that code from 1 and updated this expectation in the same " +
+				"commit, which is what a pinned expectation is for",
 		},
 		{
 			ID: "INV-1", What: "bytes that do not match the signed digest are never installed",
-			Source: "SPEC-0188 §7 gate 2, restated as a run-wide property", Prov: ProvDerived,
+			Source: "SPEC-0225 §9.1 step 2, restated as a run-wide property", Prov: ProvDerived,
 		},
 		{
 			ID: "INV-2", What: "once a signed revoke is visible, that digest is never staged again",
-			Source: "SPEC-0188 §7 gate 5, restated as a run-wide property", Prov: ProvDerived,
+			Source: "SPEC-0225 §9.1 step 5, restated as a run-wide property", Prov: ProvDerived,
 		},
 		{
 			ID: "INV-3", What: "no install without a qualifying attestation from a pinned signer",
-			Source: "SPEC-0188 §7 gate 4, SPEC-0359 D3", Prov: ProvDerived,
+			Source: "SPEC-0225 §9.1 step 4, SPEC-0359 D3", Prov: ProvDerived,
 		},
 		{
 			ID: "INV-4", What: "every refusal is loud: non-zero exit AND a named reason",
@@ -137,7 +155,10 @@ func TraceMatrix() []TraceItem {
 		{
 			ID: "INV-5", What: "an adversary move never improves the attacker's outcome",
 			Source: "no specification clause found", Prov: ProvDerived,
-			Note: "a monotonicity property of the model, not a product requirement",
+			Note: "NEVER EVALUATED. Declared here and in model.go, checked by nothing. It " +
+				"needs a pair of runs, with and without the move, and the harness runs each " +
+				"scenario once. Reported as 0 evaluations rather than as a silent pass " +
+				"(FR-0125); a monotonicity property of the model, not a product requirement",
 		},
 		{
 			ID: "INV-6", What: "a refusal leaves the install target byte-identical",
@@ -193,6 +214,36 @@ func (rep Report) WriteTraceability(w io.Writer) {
 		}
 	}
 
+	// How often each invariant's precondition actually held. Keyed by the short id
+	// the matrix uses ("INV-5"), which is the prefix of the runtime name.
+	evaluated := map[string]int{}
+	for _, r := range rep.Results {
+		for _, e := range r.Evaluated {
+			name := string(e)
+			if i := strings.Index(name, "-"); i > 0 {
+				if j := strings.Index(name[i+1:], "-"); j > 0 {
+					name = name[:i+1+j]
+				}
+			}
+			evaluated[name]++
+		}
+	}
+
+	// How often each ORDER claim was exercised: the scenarios where BOTH gates it
+	// orders had a reason to fire. A claim that no scenario can falsify is not a
+	// verified claim, and until 2026-09-06 this column said "n/a" for all three,
+	// which hid that "gate 2 before gate 3" was exercised zero times.
+	order := map[string]int{}
+	for _, r := range rep.Results {
+		st := StateAt(r.Scenario.P, r.Scenario.P.Revoke)
+		if st.Revoked && !st.GovQualifies {
+			order["order: 5 before 4"]++
+		}
+		if !st.DigestMatches && !st.SigsVerify {
+			order["order: 2 before 3"]++
+		}
+	}
+
 	items := append([]TraceItem(nil), TraceMatrix()...)
 	sort.SliceStable(items, func(i, j int) bool {
 		return items[i].Prov.prio() < items[j].Prov.prio()
@@ -202,21 +253,35 @@ func (rep Report) WriteTraceability(w io.Writer) {
 	fmt.Fprintf(w, "  %-18s %-12s %-9s %s\n", "claim", "provenance", "observed", "source")
 	for _, it := range items {
 		obs := "n/a"
-		if n, ok := gates[it.ID]; ok {
+		if n, ok := order[it.ID]; ok {
+			if n == 0 {
+				obs = "NEVER RUN"
+			} else {
+				obs = fmt.Sprintf("%d exerc", n)
+			}
+		} else if n, ok := gates[it.ID]; ok {
 			obs = fmt.Sprintf("%d", n)
 		} else if strings.HasPrefix(it.ID, "gate ") {
 			obs = "0"
 		} else if strings.HasPrefix(it.ID, "INV-") {
-			obs = fmt.Sprintf("%d viol", viol[it.ID])
+			// "0 viol" for an invariant nothing ever evaluated is the same false
+			// green this column exists to prevent, so the two are printed
+			// differently. The evaluation count comes from the run, not from the
+			// declaration.
+			if evaluated[it.ID] == 0 {
+				obs = "NEVER RUN"
+			} else {
+				obs = fmt.Sprintf("%d viol/%d", viol[it.ID], evaluated[it.ID])
+			}
 		}
 		fmt.Fprintf(w, "  %-18s %-12s %-9s %s\n", it.ID, it.Prov, obs, it.Source)
 		if it.Note != "" {
 			fmt.Fprintf(w, "  %-18s %-12s %-9s   ^ %s\n", "", "", "", it.Note)
 		}
 	}
-	fmt.Fprintf(w, "  normativ = in einer SPEC; abgeleitet = hergeleitet, Herleitung ist Teil der\n")
-	fmt.Fprintf(w, "  Evidenz; uebernommen = bindet hier, hat aber keine Klausel hinter sich;\n")
-	fmt.Fprintf(w, "  Evidenz; beobachtet = aus dem Verhalten gewonnen, ein Fehlschlag heisst\n")
+	fmt.Fprintf(w, "  normativ = in einer SPEC; abgeleitet = hergeleitet, die Herleitung ist Teil\n")
+	fmt.Fprintf(w, "  der Evidenz; uebernommen = bindet hier, hat aber keine Klausel hinter sich;\n")
+	fmt.Fprintf(w, "  beobachtet = aus dem Verhalten gewonnen, ein Fehlschlag heisst\n")
 	fmt.Fprintf(w, "  GEAENDERT und nicht FALSCH; ungeklaert = wird geprueft, Bedeutung offen.\n")
 	fmt.Fprintf(w, "  Eine Zeile mit normativer Quelle und null Beobachtungen ist DEKLARIERT,\n")
 	fmt.Fprintf(w, "  nicht geprueft.\n")

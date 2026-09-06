@@ -44,8 +44,8 @@ func (rep Report) WriteStanding(w io.Writer) {
 	fmt.Fprintf(w, "    - an independent re-derivation of the model from SPEC-0188 by somebody who\n")
 	fmt.Fprintf(w, "      has not read backend_pull.go, and a diff of the two models\n")
 	fmt.Fprintf(w, "    - structural coverage of the trust path, with an MC/DC argument for the\n")
-	fmt.Fprintf(w, "      five-predicate conjunction. Currently zero: only model and outcome\n")
-	fmt.Fprintf(w, "      coverage are measured\n")
+	fmt.Fprintf(w, "      five-predicate conjunction. MC/DC is at zero; statement coverage is\n")
+	fmt.Fprintf(w, "      measured and is NOT zero, see scripts/trust-coverage.sh\n")
 	fmt.Fprintf(w, "    - at least one run per supported backend against a real one, and one on\n")
 	fmt.Fprintf(w, "      Windows\n")
 	fmt.Fprintf(w, "    - test plan, test design and anomaly register as dated artifacts baselined\n")
@@ -72,9 +72,10 @@ func (rep Report) WriteStanding(w io.Writer) {
 	fmt.Fprintf(w, "      measured, and no arrangement of machine checks measures it.\n")
 	fmt.Fprintf(w, "    That the tested binary is the shipped artifact. The hash identifies what\n")
 	fmt.Fprintf(w, "      ran, not what is released, and the SUT reports its own version as \"dev\".\n")
-	fmt.Fprintf(w, "    Gate 3 BY NAME. The control is live: disabling it flips the affected\n")
-	fmt.Fprintf(w, "      pull from refuse to accept. What is missing is the label, so a caller\n")
-	fmt.Fprintf(w, "      cannot attribute the refusal (FR-0121). The waiver register carries it.\n")
+	fmt.Fprintf(w, "    Gate 3 under a HOSTILE STORE. The corpus reaches gate 3 with a publisher\n")
+	fmt.Fprintf(w, "      who holds the registry key. A store that does not hold it cannot reach\n")
+	fmt.Fprintf(w, "      the gate at all: editing a signature row breaks the envelope, so gate 1\n")
+	fmt.Fprintf(w, "      decides first. That is an argument from the format, not a measurement.\n")
 }
 
 // OutputCoverage is the second coverage measure, and the one that answers the
@@ -164,11 +165,13 @@ func (rep Report) WriteOutputCoverage(w io.Writer) {
 		fmt.Fprintf(w, "    %-10s %4d%s\n", d, oc.Seen[d], mark)
 	}
 	if oc.Unlabelled > 0 {
-		fmt.Fprintf(w, "    %-10s %4d   (claimed refusals that named no gate; see FR-0121)\n",
+		fmt.Fprintf(w, "    %-10s %4d   (claimed refusals that named no gate)\n",
 			"unlabelled", oc.Unlabelled)
 	}
-	fmt.Fprintf(w, "  Population: pull steps whose outcome the model claims. One denominator for\n")
-	fmt.Fprintf(w, "  the whole table, so these rows and the histogram below are the same quantity.\n")
+	fmt.Fprintf(w, "  Population: pull steps whose outcome the model claims. Same population as\n")
+	fmt.Fprintf(w, "  the histogram below, but a DIFFERENT partition of it: a waived outcome is\n")
+	fmt.Fprintf(w, "  counted here under the decision it reached and there under \"waived\". So\n")
+	fmt.Fprintf(w, "  accept can read 8 here and 6 plus 2 waived there, and both are right.\n")
 	if s := oc.Short(); len(s) > 0 {
 		fmt.Fprintf(w, "  %d declared decision(s) below target. Input coverage cannot substitute:\n", len(s))
 		fmt.Fprintf(w, "  a corpus can cover every pair of inputs and still never reach a gate.\n")

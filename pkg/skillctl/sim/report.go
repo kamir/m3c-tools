@@ -224,7 +224,10 @@ func (rep Report) Write(w io.Writer) {
 		}
 	}
 
-	fmt.Fprintf(w, "\ncoverage: which gate actually refused (claimed pull steps)\n")
+	fmt.Fprintf(w, "\ncoverage: which gate the MODEL claimed, over claimed pull steps\n")
+	fmt.Fprintf(w, "  Not what a caller observed: an out-of-model refusal can carry a gate name\n")
+	fmt.Fprintf(w, "  too and is not counted here. The header said \"actually refused\" until a\n")
+	fmt.Fprintf(w, "  consistency sweep pointed out that it counts the opposite.\n")
 	if len(gates) == 0 {
 		fmt.Fprintf(w, "  (none: the corpus never reached a refusal, which is itself a finding)\n")
 	}
@@ -280,9 +283,8 @@ func (rep Report) Write(w io.Writer) {
 		for _, v := range vs {
 			fmt.Fprintf(w, "  %s\n", v)
 		}
-	} else {
-		fmt.Fprintf(w, "\ninvariants: no violation across the corpus\n")
 	}
+	rep.WriteInvariantCoverage(w)
 
 	if cs := rep.Conflicts(); len(cs) > 0 {
 		fmt.Fprintf(w, "\nCONFLICTS theory vs reality (%d). One of the two is wrong; a human decides.\n", len(cs))
@@ -343,7 +345,7 @@ func (rep Report) Markdown() string {
 	fmt.Fprintf(&b, "| scenarios | %d |\n", len(rep.Results))
 	fmt.Fprintf(&b, "| steps matched | %d |\n", match)
 	fmt.Fprintf(&b, "| conflicts | %d |\n", conflict)
-	fmt.Fprintf(&b, "| out of model | %d |\n", unclaimed)
+	fmt.Fprintf(&b, "| out of model (occurrences) | %d |\n", unclaimed)
 	fmt.Fprintf(&b, "| skipped | %d |\n", skipped)
 	fmt.Fprintf(&b, "| invariant violations | %d |\n\n", len(rep.Violations()))
 	if hf := rep.HarnessFailures(); len(hf) > 0 {
@@ -396,7 +398,9 @@ func (rep Report) Markdown() string {
 	// still never reach a gate, which is exactly what happened once.
 	oc := rep.OutputCoverage()
 	fmt.Fprintf(&b, "\n## Coverage of outcomes\n\n")
-	fmt.Fprintf(&b, "Target, declared before the run: every specified decision observed at least %d time(s).\n\n", oc.Target)
+	fmt.Fprintf(&b, "Target, declared before the run: every DECLARED decision observed at least %d time(s).\n", oc.Target)
+	fmt.Fprintf(&b, "Declared, not specified: `accept` is a decision this report declares, not one\n")
+	fmt.Fprintf(&b, "SPEC-0225 §9.1 names.\n\n")
 	fmt.Fprintf(&b, "| decision | observed | |\n|---|---|---|\n")
 	for _, d := range oc.Declared {
 		mark := "n/a"
@@ -422,15 +426,83 @@ func (rep Report) Markdown() string {
 	fmt.Fprintf(&b, "DISTRIBUTION. The per-step comparison above is what decides behavioural\n")
 	fmt.Fprintf(&b, "conformance; equal histograms are not equal behaviour.\n\n")
 
-	fmt.Fprintf(&b, "## Gates reached\n\n")
-	for _, g := range sortedKeys(gates) {
-		fmt.Fprintf(&b, "- `%s`: %d\n", g, gates[g])
+	// THE VERDICT AND THE FINDINGS, in the artifact a release would keep.
+	//
+	// A consistency sweep on 2026-09-05 listed what this document was missing
+	// against the terminal report: the waiver register, the conflict records, the
+	// verdict itself, and the sentence saying no result is citable while the SUT
+	// calls itself dev. A release artifact that omits its own findings and its own
+	// verdict is a summary of the good news.
+	{
+		_, unwaivedC := rep.WaivedConflicts()
+		_, unwaivedV := rep.WaivedViolations()
+		verdict := "PASS"
+		if unwaivedC > 0 || unwaivedV > 0 || rep.Residual() != 0 || len(rep.HarnessFailures()) > 0 {
+			verdict = "FAIL"
+		}
+		if ws := Waivers(); len(ws) > 0 {
+			wc, uc := rep.WaivedConflicts()
+			wv, uv := rep.WaivedViolations()
+			fmt.Fprintf(&b, "\n## Waivers\n\n")
+			fmt.Fprintf(&b, "%d conflict(s) waived, %d not; %d invariant violation(s) waived, %d not.\n\n", wc, uc, wv, uv)
+			fmt.Fprintf(&b, "A waived finding is **counted and printed**. It is not the same as a step\n")
+			fmt.Fprintf(&b, "that was never compared: change what the binary does and the waiver stops\n")
+			fmt.Fprintf(&b, "matching, and the run fails again.\n")
+			fmt.Fprintf(&b, "\n| finding | dimension | model says | binary says | why |\n|---|---|---|---|---|\n")
+			for _, x := range ws {
+				exp := x.Expected
+				if exp == "" {
+					exp = "refuse, no gate"
+				}
+				obs := x.Observed
+				if obs == "" {
+					obs = "no gate named"
+				}
+				fmt.Fprintf(&b, "| %s | `%s` | %s | %s | %s |\n", x.Finding, x.Adv, exp, obs, x.Why)
+			}
+		}
+		fmt.Fprintf(&b, "\n## Verdict: **%s**\n\n", verdict)
+		fmt.Fprintf(&b, "Pass means: no unwaived conflict, no unwaived invariant violation, residual\n")
+		fmt.Fprintf(&b, "zero, no harness failure. It does NOT mean the declared coverage target was\n")
+		fmt.Fprintf(&b, "met; that is reported separately above and is currently short.\n")
 	}
+
 	if vs := rep.Violations(); len(vs) > 0 {
-		fmt.Fprintf(&b, "\n## Invariant violations\n\n")
+		fmt.Fprintf(&b, "\n## Invariant violations (%d)\n\n", len(vs))
 		for _, v := range vs {
 			fmt.Fprintf(&b, "- %s\n", v)
 		}
+	}
+
+	if cs := rep.Conflicts(); len(cs) > 0 {
+		fmt.Fprintf(&b, "\n## Conflicts (%d)\n\n", len(cs))
+		fmt.Fprintf(&b, "One of the two sides is wrong in each case; a human decides which.\n")
+		fmt.Fprintf(&b, "\n")
+		for _, c := range cs {
+			fmt.Fprintf(&b, "- %s\n", c)
+		}
+	}
+
+	fmt.Fprintf(&b, "\n## Not claimed\n\n")
+	fmt.Fprintf(&b, "- No failure rate: there is no operational profile.\n")
+	fmt.Fprintf(&b, "- No statement about the operational environment. Every scenario runs against\n")
+	fmt.Fprintf(&b, "  a bare local git repository; `github://`, `gitlab://`, ER1 and Windows are\n")
+	fmt.Fprintf(&b, "  untested assumptions.\n")
+	fmt.Fprintf(&b, "- No claim about human understanding of the output.\n")
+	fmt.Fprintf(&b, "- **No citability against a release.** Where the SUT version in Provenance\n")
+	fmt.Fprintf(&b, "  reads `dev`, this run has no source identity for what it measured.\n")
+	fmt.Fprintf(&b, "- Gate 3 is unverified: observed zero times, and its mutant is\n")
+	fmt.Fprintf(&b, "  indistinguishable from the unmutated baseline.\n")
+
+	fmt.Fprintf(&b, "\n## Sensitivity is NOT in this document\n\n")
+	fmt.Fprintf(&b, "Produced by `scripts/sim-calibrate.sh` and required alongside this report.\n")
+	fmt.Fprintf(&b, "Every zero above is meaningless without it: a run that cannot see a defect\n")
+	fmt.Fprintf(&b, "also reports no conflicts. A mutant counts as detected only if it exceeds the\n")
+	fmt.Fprintf(&b, "unmutated baseline signature, which the calibration prints.\n")
+
+	fmt.Fprintf(&b, "## Gates reached\n\n")
+	for _, g := range sortedKeys(gates) {
+		fmt.Fprintf(&b, "- `%s`: %d\n", g, gates[g])
 	}
 	if ls := rep.Limits(); len(ls) > 0 {
 		fmt.Fprintf(&b, "\n## Out of model, stated on purpose\n\n")
@@ -516,28 +588,91 @@ func (rep Report) Compose() Mixture {
 }
 
 // WriteMixture renders the composition view.
+// WriteInvariantCoverage prints each invariant with the number of steps it was
+// EVALUATED on, beside the number of violations.
+//
+// "invariants: no violation across the corpus" was the whole section until
+// 2026-09-06, and it could not tell an invariant that held everywhere from one
+// whose precondition never occurred. Both print as silence.
+//
+// The rule it comes from is owed to a parallel session that hit the same shape in
+// an entirely different corpus: a figure names its population on the same line.
+// A figure without one is not wrong, it is unreadable, and it will then reliably
+// refute the wrong thing. Their case was a median of 0 over a set where half the
+// members had no value at all; this one is the same omission with the count in
+// the denominator instead of the numerator.
+//
+// INV-5 is why this is not hypothetical. It is declared in model.go, it appears
+// in the traceability matrix, and nothing evaluates it. While the section said
+// "no violation", that read as a check that passed.
+func (rep Report) WriteInvariantCoverage(w io.Writer) {
+	declared := []Invariant{
+		InvIntegrity, InvRevocation, InvGovernance, InvLoudRefusal, InvNoDowngrade,
+		InvRefusalIsInert, InvAcceptDelivers, InvMetadataDecidesAlone,
+	}
+	seen := map[Invariant]int{}
+	hurt := map[Invariant]int{}
+	for _, r := range rep.Results {
+		for _, e := range r.Evaluated {
+			seen[e]++
+		}
+		for _, v := range r.Violations {
+			hurt[v.Invariant]++
+		}
+	}
+	fmt.Fprintf(w, "\ninvariants: on how many steps was each one actually evaluated\n")
+	dead := 0
+	for _, inv := range declared {
+		mark := ""
+		if seen[inv] == 0 {
+			mark = "   <-- NEVER EVALUATED; this row is not a pass"
+			dead++
+		}
+		fmt.Fprintf(w, "    %-28s evaluated %4d   violations %d%s\n", inv, seen[inv], hurt[inv], mark)
+	}
+	fmt.Fprintf(w, "  Population per row: the steps where that invariant's precondition held.\n")
+	if dead > 0 {
+		fmt.Fprintf(w, "  %d declared invariant(s) were never evaluated. Such a row says NOTHING\n", dead)
+		fmt.Fprintf(w, "  about the property. It is a gap in the corpus, not a green light.\n")
+	}
+}
+
 func (rep Report) WriteMixture(w io.Writer) {
 	m := rep.Compose()
 	fmt.Fprintf(w, "\nmixture: is this corpus broad, or just long?\n")
 	if rep.Design != nil {
 		d := rep.Design
 		fmt.Fprintf(w, "\n  design: covering array of strength t=%d over %s\n", d.Strength, DesignAxes())
-		fmt.Fprintf(w, "  %d rows instead of %d exhaustive: EVERY admissible %d-way combination appears\n",
-			d.Rows, d.FullEnumeration, d.Strength)
-		fmt.Fprintf(w, "  %d combinations covered; %d of the %d in the unconstrained space are not\n",
-			d.Admissible, d.Uncoverable, d.Total)
-		fmt.Fprintf(w, "  covered, and they are NOT all the same kind. Point census over the factor\n")
+		// TWO POPULATIONS LIVE HERE and they were printed as one until 2026-09-05,
+		// when a consistency sweep counted them apart. The design's numbers are
+		// 2-WAY PAIRS; the census counts POINTS of the factor space. Six exclusion
+		// rules listed under a sentence about pairs summed to 320, which is a point
+		// count, and no reader could have known which denominator applied.
 		c := Census()
-		fmt.Fprintf(w, "  space: %d admissible, %d impossible (the world cannot produce them),\n",
-			c.Admissible, c.Impossible)
-		fmt.Fprintf(w, "  %d left out for economy (the world CAN produce them; the corpus judges\n", c.Economy)
-		fmt.Fprintf(w, "  them redundant, and that judgement can be wrong).\n")
+		producible := c.Admissible + c.Economy
+		fmt.Fprintf(w, "  %d rows, out of %d points the factor space holds in total.\n",
+			d.Rows, c.Total)
+		fmt.Fprintf(w, "\n  PAIRS (what the covering array promises):\n")
+		fmt.Fprintf(w, "    %d of the %d two-way combinations are covered; %d are not.\n",
+			d.Admissible, d.Total, d.Uncoverable)
+		fmt.Fprintf(w, "    The uncovered ones are not all of a kind, and the promise is therefore\n")
+		fmt.Fprintf(w, "    narrower than \"every combination appears\": it is every combination the\n")
+		fmt.Fprintf(w, "    corpus admits.\n")
+		fmt.Fprintf(w, "\n  POINTS (what the corpus admits, and why it leaves the rest out):\n")
+		fmt.Fprintf(w, "    %d total = %d in the corpus + %d the world cannot realise + %d the\n",
+			c.Total, c.Admissible, c.Impossible, c.Economy)
+		fmt.Fprintf(w, "    corpus omits for economy. So %d points are PRODUCIBLE and %d are used.\n",
+			producible, c.Admissible)
+		fmt.Fprintf(w, "    The economy share is a judgement and can be wrong; reporting it as an\n")
+		fmt.Fprintf(w, "    impossibility, as an earlier version did, is the costlier mistake.\n")
 		for _, r := range sortedKeys(c.ByRule) {
-			fmt.Fprintf(w, "    %-52s %d\n", r, c.ByRule[r])
+			fmt.Fprintf(w, "      %-50s %d points\n", r, c.ByRule[r])
 		}
-		fmt.Fprintf(w, "  An earlier version of this line called all of them \"not coverable, not\n")
-		fmt.Fprintf(w, "  missing\". For the economy share that was false, and reporting a judgement\n")
-		fmt.Fprintf(w, "  as an impossibility is the more expensive of the two mistakes.\n")
+		fmt.Fprintf(w, "\n  Do not read these point counts against the STATE classification in\n")
+		fmt.Fprintf(w, "  `theory`, which says zero states are impossible. Points and states are\n")
+		fmt.Fprintf(w, "  different objects: a state can be unreachable because no admitted point\n")
+		fmt.Fprintf(w, "  maps to it, while the points excluded as impossible are excluded by a\n")
+		fmt.Fprintf(w, "  precondition of a move. The two numbers disagreed in print for a day.\n")
 	}
 
 	fmt.Fprintf(w, "\n  distinct decision paths: %d over %d scenarios (yield %.2f)\n",
@@ -563,14 +698,12 @@ func (rep Report) WriteMixture(w io.Writer) {
 
 	if len(m.MissedGate) > 0 {
 		fmt.Fprintf(w, "\n  HOLES: declared gates never seen BY NAME in this corpus: %s\n", strings.Join(m.MissedGate, ", "))
-		fmt.Fprintf(w, "  Gate 3 is on this list because it is never seen BY NAME, not because it\n")
-		fmt.Fprintf(w, "  never fires. Disabling it flips the affected pull from refuse to accept, so\n")
-		fmt.Fprintf(w, "  the control is live and its label is missing (FR-0121).\n")
-		fmt.Fprintf(w, "  This paragraph has now been wrong in both directions. It first claimed the\n")
-		fmt.Fprintf(w, "  gate fired unnamed, then that the case was not constructible. The second\n")
-		fmt.Fprintf(w, "  claim was an artefact of suppressing the step that shows the difference,\n")
-		fmt.Fprintf(w, "  which is what a waiver instead of a suppression now prevents.\n")
-		fmt.Fprintf(w, "  A gate on this list is a decision the simulation says nothing about.\n")
+		fmt.Fprintf(w, "  A gate on this list is a decision the simulation says NOTHING about. It is\n")
+		fmt.Fprintf(w, "  not evidence that the gate is dead, and it is not evidence that it works.\n")
+		fmt.Fprintf(w, "  Gate 3 sat on this list for two days under three different explanations,\n")
+		fmt.Fprintf(w, "  each asserted without a measurement, until the move meant to trigger it was\n")
+		fmt.Fprintf(w, "  found to edit a file the pull path never opens. The rule that came out of\n")
+		fmt.Fprintf(w, "  that: an entry here is a question, never an account of why it is fine.\n")
 	} else {
 		fmt.Fprintf(w, "\n  every declared gate was reached at least once\n")
 	}
@@ -693,7 +826,9 @@ func (rep Report) WriteExperiment(w io.Writer) {
 	}
 	fmt.Fprintf(w, "  %-26s %9s %9s %9d\n", "sum |residual|", "", "", total)
 	if total == 0 {
-		fmt.Fprintf(w, "  The closed form describes the running system exactly on this corpus.\n")
+		fmt.Fprintf(w, "  The closed form reproduced the measured DISTRIBUTION on this corpus. It is\n")
+		fmt.Fprintf(w, "  not a statement about behaviour: the per-step comparison above decides\n")
+		fmt.Fprintf(w, "  that, and it currently carries waived conflicts.\n")
 	} else {
 		fmt.Fprintf(w, "  Non-zero: the model and the binary disagree somewhere. The conflict list below\n")
 		fmt.Fprintf(w, "  names the scenarios; a human decides which of the two is wrong.\n")

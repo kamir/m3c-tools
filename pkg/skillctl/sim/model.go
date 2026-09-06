@@ -63,8 +63,9 @@ const (
 	// Adversary capabilities. Each one names what the attacker is assumed to
 	// control, because "hacked" is not a threat model.
 	ActTamperTransit    ActionKind = "adv:tamper-transit"      // flip bytes in the .skb before the victim sees it
-	ActLyingSignature   ActionKind = "adv:lying-signature"     // flip bytes AND rename the sig to match the new digest
+	ActForgeBundleSigs  ActionKind = "adv:forge-bundle-sigs"   // signature rows that do not verify, under an envelope that does
 	ActWithholdArtifact ActionKind = "probe:withhold-artifact" // remove the stored .skb, keep every signed event
+	ActStaleChecksums   ActionKind = "adv:stale-checksums"     // alter a payload file, leave the bundle CHECKSUMS stale, re-sign
 	ActForgeAttest      ActionKind = "adv:forge-attest"        // attest with a key nobody pinned
 	ActTamperInstalled  ActionKind = "adv:tamper-installed"    // edit an installed file (same-uid, post-install)
 	ActStripRevoke      ActionKind = "adv:strip-revoke"        // hostile registry deletes the revoke event
@@ -222,7 +223,12 @@ type ScenarioResult struct {
 	Steps      []StepResult
 	Verdicts   []Verdict
 	Violations []InvariantViolation
-	Err        string
+
+	// Evaluated lists every invariant whose precondition held somewhere in this
+	// scenario, whether or not it was violated. It is the DENOMINATOR for the
+	// invariant section: "no violation" over a population of zero is not a result.
+	Evaluated []Invariant
+	Err       string
 }
 
 // InvariantViolation is the finding type that matters most. An exit-code mismatch

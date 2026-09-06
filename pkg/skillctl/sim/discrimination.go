@@ -111,6 +111,12 @@ func (d Discrimination) Collapsed() []CauseSignal {
 // never gate 3. Something else refuses, and nobody had looked, because the report
 // showed the ABSENCE of a label and not the message that was there instead.
 //
+// Looking, on 2026-09-06, ended it: there was no refusal. The step was ACCEPTED,
+// exit 0, printed three sections below the waiver that described it as a refusal.
+// The adversary move edited a detached signature file the pull path never reads.
+// This function is kept because the same shape can recur at any gate: whenever a
+// label is missing, print what was actually said before explaining the absence.
+//
 // A refusal a reader cannot attribute is not a detail. It is the case where the
 // tool and the specification have drifted apart without anybody noticing.
 func (rep Report) WriteUnlabelled(w io.Writer) {

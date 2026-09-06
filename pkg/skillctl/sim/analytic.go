@@ -110,14 +110,15 @@ func StateAt(p Params, afterRevoke bool) State {
 		// The malicious publisher is the only move that can put this bit to zero.
 		// Every other actor in the alphabet has to break the envelope to reach the
 		// signature rows, and then gate 1 speaks first.
-		SigsVerify: p.Adv != AdvPublisherBadSigs,
+		SigsVerify: p.Adv != AdvPublisherBadSigs && p.Adv != AdvDigestAndSigs,
 		// Withholding the bytes is indistinguishable from a digest failure AT THE
 		// POINT WHERE THE BYTES ARE NEEDED: the fetch fails and the pull reports the
 		// digest gate. The point of the probe is that a revoked or ungoverned bundle
 		// never gets that far, because those two gates decide from signed metadata
 		// alone. That is FR-0119 D3, made observable by taking away what an early
 		// fetch would have touched.
-		DigestMatches: p.Adv != AdvStoredBundle && p.Adv != AdvArtifactWithheld,
+		DigestMatches: p.Adv != AdvStoredBundle && p.Adv != AdvArtifactWithheld &&
+			p.Adv != AdvDigestAndSigs,
 	}
 
 	// x_rev. A revoke is visible when it was issued and the store still shows it.

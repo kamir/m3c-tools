@@ -97,11 +97,14 @@ func Execute(skillctl, rootDir string, sc Scenario) ScenarioResult {
 		case ActTamperInstalled:
 			aerr = w.TamperInstalled(skill)
 			code = -1
+		case ActStaleChecksums:
+			aerr = w.StaleChecksums(skill)
+			code = -1
 		case ActWithholdArtifact:
 			aerr = w.WithholdArtifact(skill)
 			code = -1
-		case ActLyingSignature:
-			aerr = w.CorruptSignature(skill)
+		case ActForgeBundleSigs:
+			aerr = w.ForgeBundleSignatures(skill)
 			code = -1
 		case ActForgeEnvelope:
 			aerr = w.ForgeEnvelope(skill)
@@ -156,7 +159,9 @@ func Execute(skillctl, rootDir string, sc Scenario) ScenarioResult {
 
 		res.Steps = append(res.Steps, sr)
 		res.Verdicts = append(res.Verdicts, judge(st.Expect, sr))
-		res.Violations = append(res.Violations, checkInvariants(sc, i, sr, w)...)
+		vs, ev := checkInvariants(sc, i, sr, w)
+		res.Violations = append(res.Violations, vs...)
+		res.Evaluated = append(res.Evaluated, ev...)
 	}
 	return res
 }
@@ -189,17 +194,25 @@ func judge(e Expectation, r StepResult) Verdict {
 // checkInvariants asserts the properties that hold over the whole run. This is
 // where the two bugs of 2026-09-04 would have been caught: both produced a
 // plausible exit code and an impossible STATE.
-func checkInvariants(sc Scenario, i int, r StepResult, w *World) []InvariantViolation {
+// The second return value is every invariant whose PRECONDITION held at this
+// step, violated or not. Without it the report can only say "no violation", and
+// an invariant that never got a chance to fire is indistinguishable from one that
+// passed. That is the same false green as a mutant reproducing the baseline, one
+// level up, and INV-5 is currently the case in point: it is declared and never
+// evaluated anywhere.
+func checkInvariants(sc Scenario, i int, r StepResult, w *World) ([]InvariantViolation, []Invariant) {
 	var v []InvariantViolation
+	var ev []Invariant
 	b := w.bundles["simskill"]
 	if b == nil {
-		return nil
+		return nil, nil
 	}
 
 	// INV-8: with the artifact withheld, a bundle that is revoked or ungoverned must
 	// STILL be refused by its own gate. Reaching the digest gate instead would mean
 	// the fetch happened before the decision, which is what FR-0119 D3 forbids.
 	if r.Step.Action.Kind == ActPull && sc.P.Adv == AdvArtifactWithheld {
+		ev = append(ev, InvMetadataDecidesAlone)
 		_, want := StateAt(sc.P, b.revoked).Decide()
 		if (want == "gate 5" || want == "gate 4") && r.Gate != want {
 			v = append(v, InvariantViolation{InvMetadataDecidesAlone, i,
@@ -215,6 +228,7 @@ func checkInvariants(sc Scenario, i int, r StepResult, w *World) []InvariantViol
 	if r.Step.Action.Kind == ActPull && r.Before != nil && r.After != nil {
 		switch r.Outcome {
 		case Refuse:
+			ev = append(ev, InvRefusalIsInert)
 			// INV-6. A refusal that still wrote something is the worst class of
 			// defect this harness can look for: it looks green in every log.
 			if !r.Before.Equal(*r.After) {
@@ -226,9 +240,10 @@ func checkInvariants(sc Scenario, i int, r StepResult, w *World) []InvariantViol
 			// bundle attack is excluded: there the point of the scenario is that
 			// the bytes SHOULD not match, and the refusal is what is under test.
 			if sc.P.Adv != AdvStoredBundle {
+				ev = append(ev, InvAcceptDelivers)
 				if ok, why := w.InstalledDigestMatches("simskill"); !ok {
 					v = append(v, InvariantViolation{InvAcceptDelivers, i,
-						"a pull reported success but the install target does not hold the signed bytes: " + why})
+						"a pull reported success and the installed tree differs from the packed source: " + why})
 				}
 			}
 		}
@@ -238,6 +253,9 @@ func checkInvariants(sc Scenario, i int, r StepResult, w *World) []InvariantViol
 	// strip attack legitimately removes the revoke, so it is excluded: there the
 	// registry is no longer showing what was published, and that limit is recorded
 	// as UNCLAIMED rather than hidden here.
+	if r.Step.Action.Kind == ActPull && b.revoked && sc.P.Adv != AdvStripRevoke {
+		ev = append(ev, InvRevocation)
+	}
 	if r.Step.Action.Kind == ActPull && b.revoked && sc.P.Adv != AdvStripRevoke && r.Outcome == Accept {
 		v = append(v, InvariantViolation{InvRevocation, i,
 			"a pull staged a digest that carries a signed revoke"})
@@ -245,6 +263,7 @@ func checkInvariants(sc Scenario, i int, r StepResult, w *World) []InvariantViol
 
 	// INV-3: no install without a qualifying attestation from a pinned signer.
 	if r.Step.Action.Kind == ActPull && r.Outcome == Accept {
+		ev = append(ev, InvGovernance)
 		switch {
 		case sc.P.Gov == GovNone:
 			v = append(v, InvariantViolation{InvGovernance, i,
@@ -261,6 +280,9 @@ func checkInvariants(sc Scenario, i int, r StepResult, w *World) []InvariantViol
 	// INV-1: an artifact that no longer hashes to the signed digest must never be
 	// installed. A stolen key is excluded: there the signature is genuine and the
 	// bytes ARE what the key signed, which is the limit, not a violation.
+	if r.Step.Action.Kind == ActPull && sc.P.Adv == AdvStoredBundle {
+		ev = append(ev, InvIntegrity)
+	}
 	if r.Step.Action.Kind == ActPull && sc.P.Adv == AdvStoredBundle && r.Outcome == Accept {
 		v = append(v, InvariantViolation{InvIntegrity, i,
 			"a pull installed bytes that do not match the signed digest"})
@@ -268,11 +290,14 @@ func checkInvariants(sc Scenario, i int, r StepResult, w *World) []InvariantViol
 
 	// INV-4: a refusal has to be legible. A silent non-zero exit is nearly as bad
 	// as a wrong one, because the operator cannot act on it.
-	if r.Outcome == Refuse && strings.TrimSpace(r.Stdout+r.Stderr) == "" {
-		v = append(v, InvariantViolation{InvLoudRefusal, i,
-			"the step refused without printing a reason"})
+	if r.Outcome == Refuse {
+		ev = append(ev, InvLoudRefusal)
+		if strings.TrimSpace(r.Stdout+r.Stderr) == "" {
+			v = append(v, InvariantViolation{InvLoudRefusal, i,
+				"the step refused without printing a reason"})
+		}
 	}
-	return v
+	return v, ev
 }
 
 func parseGate(out string) string {

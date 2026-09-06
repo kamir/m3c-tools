@@ -81,10 +81,31 @@ const (
 	// instead of an argument. Either answer is worth more than the argument was.
 	AdvPublisherBadSigs AdvKind = "publisher-bad-sigs"
 
+	// AdvDigestAndSigs breaks the digest AND the signature rows at once, and it
+	// exists for one reason: the diagnosis contract "gate 2 before gate 3"
+	// (FR-0119 D2, decided 2026-09-05) was never exercised. Measured over the
+	// strength-2 array on 2026-09-06: nine scenarios reach the pair (5, 4), and
+	// ZERO reach the pair (2, 3), because no single move in the alphabet broke
+	// both the bytes and the rows. A normative ordering claim that no scenario can
+	// violate is a rule the report cannot say anything about.
+	//
+	// The two halves come from different actors and that is fine: the publisher
+	// posts rows that do not verify, the store swaps the bytes afterwards. Both
+	// capabilities exist separately in this alphabet; the scenario simply grants
+	// them at the same time, which is the weakest assumption under which the
+	// ordering question can be asked at all.
+	AdvDigestAndSigs AdvKind = "digest-and-sigs"
+
 	// AdvArtifactWithheld is a PROBE, not an attack: the backend no longer serves
 	// the bytes, while every signed event stays in place. It is how FR-0119 D3
 	// becomes measurable from outside the process. See WithholdArtifact.
 	AdvArtifactWithheld AdvKind = "artifact-withheld"
+
+	// AdvStaleChecksums is the test case for SPEC-0188 §7 step 8, which had none.
+	// Everything outside the bundle is correct: the digest matches, the signature
+	// verifies, the governance holds. Inside, the bundle's own manifest of file
+	// hashes no longer describes its contents.
+	AdvStaleChecksums AdvKind = "stale-checksums"
 )
 
 // Params is one point in the corpus.
@@ -138,12 +159,14 @@ func AllGovs() []Gov { return []Gov{GovGreen, GovYellow, GovNone} }
 // the covering array, INV-6 checks that the refusal wrote nothing, and a
 // regression that turned the refusal into an acceptance would fail the gate like
 // any other.
+//
+// The register is empty since 2026-09-06. Its only entry claimed gate 3 fired
+// without naming itself; the gate was in fact never reached, because the move
+// that was supposed to trigger it edited a file the pull path does not read.
+// An exemption written on a wrong diagnosis is worse than no exemption: it makes
+// the report assert the thing it failed to measure.
 func OpenDiagnostics() map[AdvKind]string {
-	return map[AdvKind]string{
-		AdvPublisherBadSigs: "FR-0121: gate 3 fires and does not name itself. Disabling it " +
-			"flips this pull from refuse to accept, so the control is live; only the label " +
-			"is missing. The decision is compared and scored, the label is waived",
-	}
+	return map[AdvKind]string{}
 }
 
 func AllAdvKinds() []AdvKind {
@@ -151,6 +174,8 @@ func AllAdvKinds() []AdvKind {
 		AdvNone, AdvTransitChecked, AdvTransitSkipped, AdvStoredBundle,
 		AdvForgeAttest, AdvStripRevoke, AdvRelabelRevoke, AdvTamperInstalled,
 		AdvStolenKey, AdvForgeEnvelope, AdvPublisherBadSigs, AdvArtifactWithheld,
+		AdvDigestAndSigs,
+		AdvStaleChecksums,
 	}
 }
 
@@ -285,15 +310,20 @@ func build(p Params) Scenario {
 				Expect: Expectation{Outcome: NoEffect, Exit: -1, Claimed: true,
 					Why: "the attacker controls the artifact, not the key"}},
 		)
-	case AdvPublisherBadSigs:
-		// The bundle keeps a signature FILE with the right name, so the verifier
-		// finds one and has to do real cryptography to reject it. That is the
-		// difference between "no signature" (exit 1) and "a signature that does not
-		// verify" (gate 3), and only the second one reaches the gate under test.
+	case AdvStaleChecksums:
+		// BEFORE the admit, so the admitted digest is the digest of the altered
+		// bundle. Everything outside then holds: the recomputed digest matches, the
+		// signature verifies, the attestation is bound to what was admitted. The
+		// only defect is internal, which is the whole point of SPEC-0188 §7 step 8.
+		//
+		// Placing it after the admit, as the first attempt did, produced a different
+		// scenario altogether: the attestation stayed bound to the pre-change digest
+		// and the pull died at governance, so the case under test was never reached.
+		// The run said so immediately, with a conflict naming the wrong gate.
 		sc.Steps = append(sc.Steps,
-			Step{Action: Action{Kind: ActLyingSignature, Actor: Publisher, Skill: skill},
+			Step{Action: Action{Kind: ActStaleChecksums, Actor: Adversary, Skill: skill},
 				Expect: Expectation{Outcome: NoEffect, Exit: -1, Claimed: true,
-					Why: "the publisher controls the artifact AND the registry key"}},
+					Why: "the bundle stays properly signed; only its internal manifest goes stale"}},
 		)
 	}
 
@@ -327,6 +357,35 @@ func build(p Params) Scenario {
 			Action: Action{Kind: ActForgeAttest, Actor: Adversary, Skill: skill},
 			Expect: Expectation{Outcome: Accept, Exit: 0, Claimed: true,
 				Why: "anyone may WRITE an attestation; only a pinned signer's counts"},
+		})
+	}
+
+	// 5a-ter. Both at once: rows that do not verify AND bytes that do not hash to
+	// the admitted digest. The prediction is gate 2, and it is the ONLY row in the
+	// corpus that can falsify "gate 2 before gate 3".
+	if p.Adv == AdvDigestAndSigs {
+		sc.Steps = append(sc.Steps,
+			Step{Action: Action{Kind: ActForgeBundleSigs, Actor: Publisher, Skill: skill},
+				Expect: Expectation{Outcome: NoEffect, Exit: -1, Claimed: true,
+					Why: "the publisher posts rows that do not verify beneath a valid envelope"}},
+			Step{Action: Action{Kind: ActTamperTransit, Actor: Adversary, Skill: skill,
+				Params: map[string]string{"where": "registry"}},
+				Expect: Expectation{Outcome: NoEffect, Exit: -1, Claimed: true,
+					Why: "and the store swaps the bytes, so both gate 2 and gate 3 have a reason to fire"}},
+		)
+	}
+
+	// 5a-bis. The bad signature rows. This step sits AFTER the admit on purpose:
+	// the rows it rewrites live inside the admitted event, so before the admit
+	// there is nothing to rewrite. Its predecessor ran here at position 2, against
+	// a detached signature file the pull path never opens, and therefore never
+	// reached the gate it was written for (FR-0121).
+	if p.Adv == AdvPublisherBadSigs {
+		sc.Steps = append(sc.Steps, Step{
+			Action: Action{Kind: ActForgeBundleSigs, Actor: Publisher, Skill: skill},
+			Expect: Expectation{Outcome: NoEffect, Exit: -1, Claimed: true,
+				Why: "the publisher holds the registry key, so the envelope verifies; " +
+					"the rows beneath it do not, and that is the case gate 3 exists for"},
 		})
 	}
 
@@ -378,6 +437,16 @@ func build(p Params) Scenario {
 	// signal standing for two causes and turned out to be describing this bug rather
 	// than the product.
 	pullExpect := Expectation{Outcome: Accept, Exit: 0, Claimed: true, Why: why}
+	// SPEC-0188 §7 step 8 asserts a check the five-bit state vector does not
+	// represent: the CHECKSUMS file INSIDE the bundle. So this expectation comes
+	// straight from the clause rather than from the model, and the traceability
+	// matrix says so. A specified check with no representation in the abstract
+	// model is exactly what the backwards pass exists to surface.
+	if p.Adv == AdvStaleChecksums && ok {
+		pullExpect = Expectation{Outcome: Refuse, Exit: 1, Claimed: true,
+			Why: "SPEC-0188 §7 step 8: the CHECKSUMS file inside the bundle is verified " +
+				"after extraction, and any failure in steps 3 to 8 means no write"}
+	}
 	if !ok {
 		pullExpect = Expectation{Outcome: Refuse, Gate: gate, Exit: 1, Claimed: true, Why: why}
 	}
