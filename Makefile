@@ -521,6 +521,14 @@ check-emdash:
 check-gofmt:
 	@./scripts/check-gofmt.sh
 
+# Python-Tor (AUDIT-0001 Befund N.2): ruff plus pytest fuer die beiden
+# MCP-Server. Bewusst NICHT in `make ci`: das wuerde den Go-Baum von einer
+# Python-Toolchain abhaengig machen. Blockierend ist der CI-Job python-gate,
+# der ruff, pytest und mcp exakt gepinnt installiert.
+.PHONY: check-python
+check-python:
+	@./scripts/check-python.sh
+
 # Redirect guard (AUDIT-0001 Befund 1.1): credential-bearing files must give
 # every http.Client a CheckRedirect policy. Heuristic; limits in the script header.
 .PHONY: check-redirect-guard

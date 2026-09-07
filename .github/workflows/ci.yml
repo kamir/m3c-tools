@@ -90,6 +90,37 @@ jobs:
               sys.exit(1)
           PY
 
+  python-gate:
+    name: Python servers (ruff + pytest)
+    # AUDIT-0001 Befund N.2. Gemessen am 2026-09-07: mcp-skill-server/server.py
+    # sind 1379 Zeilen, die den kompletten Skill-Lifecycle als
+    # Claude-Code-Werkzeuge anbieten, und daneben liegen 25 Tests. Ein grep ueber
+    # alle 16 Workflows, das Makefile und scripts/ nach "mcp-skill-server" oder
+    # "rag-mcp-server" fand 0 Treffer: die Tests sind nie gelaufen, gelintet
+    # wurde nie. Dieser Job ist blockierend.
+    #
+    # Reines Python, kein Go, kein cgo, kein PortAudio: der billige Runner.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12.14"
+
+      # Exakt gepinnt, damit derselbe Baum morgen dasselbe Ergebnis liefert.
+      # Die Pins stehen hier und nicht in einer requirements.txt, weil
+      # mcp-skill-server keine hat; siehe PR-Text, offener Punkt 1.
+      - name: Install pinned Python toolchain
+        run: |
+          python -m pip install --disable-pip-version-check \
+            "ruff==0.9.6" "pytest==8.3.5" "mcp==1.21.0"
+
+      - name: ruff + pytest over the tracked Python tree
+        run: ./scripts/check-python.sh
+
   docs-gate:
     name: CLI/manual consistency (docaudit)
     # Pure-stdlib AST gate: it only PARSES cmd/m3c-tools and cmd/skillctl, so it

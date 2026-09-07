@@ -1,0 +1,19 @@
+# Ruff-Konfiguration fuer den Python-Anteil des Repos (AUDIT-0001 Befund N.2).
+#
+# Der Baum ist ueberwiegend Go; Python steckt in den beiden MCP-Servern
+# (mcp-skill-server, rag-mcp-server) und in drei Hilfsskripten unter scripts/.
+# Bis zu diesem Gate lief darauf kein Linter und kein Test.
+#
+# Bewusst MINIMAL: kein `select`, also Ruffs Standardmenge E4, E7, E9, F.
+# Das sind Syntaxfehler und Pyflakes, keine Stilmeinung. Eine handverlesene
+# Regelliste waere eine Liste, die genau zu dem passt, was heute schon gruen
+# ist; die Standardmenge ist es nicht.
+#
+# Pruefen: ./scripts/check-python.sh --lint
+
+# Untergrenze der Sprachversion: server.py nutzt `list[str] | None` in
+# Signaturen ohne `from __future__ import annotations`, das braucht 3.10.
+# Der CI-Job laeuft auf einer gepinnten 3.12.
+target-version = "py310"
+
+extend-exclude = ["__pycache__", ".venv", "venv"]

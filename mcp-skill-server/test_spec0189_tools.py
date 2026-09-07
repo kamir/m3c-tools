@@ -18,13 +18,29 @@ from __future__ import annotations
 
 import asyncio
 import json
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch
+
+import pytest
 
 import server  # noqa: E402
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    """asyncio.run, not get_event_loop().run_until_complete: the latter raises
+    a DeprecationWarning on 3.12 and a RuntimeError from 3.14 on."""
+    return asyncio.run(coro)
+
+
+@pytest.fixture(autouse=True)
+def fake_skillctl(tmp_path, monkeypatch):
+    """Pin SKILLCTL_BIN to a real-but-fake executable so `skill_scan` resolves
+    the binary deterministically. Without it the tool short-circuits on hosts
+    that have no skillctl installed, which is every CI runner."""
+    fake = tmp_path / "skillctl"
+    fake.write_text("#!/bin/sh\nexit 0\n")
+    fake.chmod(0o755)
+    monkeypatch.setenv("SKILLCTL_BIN", str(fake))
+    return str(fake)
 
 
 def _ok(payload: dict) -> dict:
@@ -186,5 +202,28 @@ def test_runner_error_is_surfaced():
     with patch("server._run_skillctl", side_effect=fake_runner):
         out = _run(server.skill_scan(source="claude"))
 
+    assert out.startswith("Scan failed:")
+    assert "skillctl not found" in out
+
+
+def test_scan_reports_a_missing_binary_instead_of_exec_ing_it(monkeypatch):
+    """AUDIT-0001 Befund N.2: with no skillctl anywhere, `skill_scan` returns
+    the remediation message and never reaches the subprocess layer."""
+    monkeypatch.delenv("SKILLCTL_BIN", raising=False)
+    monkeypatch.setattr(server.shutil, "which", lambda _n: None)
+    monkeypatch.setattr(server, "_SKILLCTL_INSTALL_DIRS", ())
+    monkeypatch.setattr(server, "SKILLCTL", "")
+
+    called = False
+
+    async def fake_runner(argv):
+        nonlocal called
+        called = True
+        return _ok({"total_count": 0, "by_type": {}, "by_project": {}, "skills": []})
+
+    with patch("server._run_skillctl", side_effect=fake_runner):
+        out = _run(server.skill_scan())
+
+    assert called is False
     assert out.startswith("Scan failed:")
     assert "skillctl not found" in out
