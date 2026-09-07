@@ -1,12 +1,71 @@
 #!/usr/bin/env bash
-# release.sh: Automated version bumping, tagging, and GitHub release creation
-# Usage: ./scripts/release.sh [patch|minor|major]
+# release.sh: leitet die naechste Produktversion ab, taggt origin/master BY HASH
+# und schiebt das Tag. Mehr nicht.
+#
+# Usage: ./scripts/release.sh [patch|minor|major] [--yes]
+#
+# Publikation findet AUSSCHLIESSLICH in .github/workflows/release.yml statt.
+#
+# Vorher hat dieses Skript die Working Copy mit `git add -A` committet, lokal auf
+# dem Laptop gebaut, eine DMG erzeugt und beides mit `gh release create --latest`
+# hochgeladen. Der checksums-Job in release.yml hasht aber nur die CI-Artefakte
+# (*.tar.gz, *.zip, *.exe): das nackte Binary und die DMG standen damit weder in
+# checksums.txt noch in den SLSA-Subjects. Nachweis: v2.9.0 traegt die Assets
+# `m3c-tools` und `M3C-Tools-2.9.0.dmg`, und seine checksums.txt kennt beide
+# nicht. Ein signierter Kanal, auf dem unattestierte Assets liegen, ist als
+# Ganzes nicht mehr pruefbar: der Nutzer sieht denselben v*-Download und kann an
+# der Oberflaeche nicht unterscheiden, was durch die Gates lief.
+#
+# Was daraus folgt: dieses Skript baut nichts, laedt nichts hoch und committet
+# nichts. Es setzt genau einen Zeiger, und alles Weitere entsteht in CI, wo die
+# Signatur- und Provenance-Kette haengt.
 set -euo pipefail
 
-BUMP_TYPE="${1:-patch}"
-BINARY="m3c-tools"
-BUILD_DIR="./build"
+BUMP_TYPE=""
+ASSUME_YES=0
+
+for arg in "$@"; do
+    case "$arg" in
+        patch|minor|major)
+            BUMP_TYPE="$arg"
+            ;;
+        --yes|-y)
+            ASSUME_YES=1
+            ;;
+        *)
+            echo "Error: unknown argument '$arg'"
+            echo "Usage: ./scripts/release.sh [patch|minor|major] [--yes]"
+            exit 1
+            ;;
+    esac
+done
+BUMP_TYPE="${BUMP_TYPE:-patch}"
+
 BASE_VERSION="1.4.1"
+
+# --- Pre-flight: remote + a fresh view of it ---
+if ! git remote get-url origin >/dev/null 2>&1; then
+    echo "Error: No git remote 'origin' configured."
+    echo "  Add one with: git remote add origin https://github.com/<owner>/m3c-tools.git"
+    exit 1
+fi
+
+echo "Fetching origin (tags + master)..."
+git fetch --tags --quiet origin
+
+# Ein schmutziger Baum wird NICHT mehr committet. Frueher hat `git add -A` genau
+# das getan und damit unreviewten Inhalt in ein Release gehoben. Getaggt wird
+# ohnehin origin/master, also traegt der lokale Stand nichts zum Release bei:
+# die Warnung existiert, damit niemand glaubt, seine offenen Aenderungen seien
+# mit ausgeliefert worden. Untracked-Dateien blockieren bewusst nicht.
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+    echo ""
+    echo "Error: tracked files are modified in this working copy."
+    echo "  This script tags origin/master, so local changes would NOT be released."
+    echo "  Commit them, get them reviewed and merged to master, then run again:"
+    git status --short --untracked-files=no | sed 's/^/    /'
+    exit 1
+fi
 
 # --- Determine current version from git tags ---
 LATEST_TAG=$(git tag --list 'v*' --sort=-v:refname | head -1)
@@ -46,94 +105,67 @@ esac
 
 NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
 NEW_TAG="v${NEW_VERSION}"
-echo "New version: ${NEW_TAG}"
 
-# --- Pre-flight checks ---
-if ! command -v gh >/dev/null 2>&1; then
-    echo "Error: GitHub CLI (gh) is required. Install: brew install gh"
+# --- Refuse to re-tag ---
+if git rev-parse -q --verify "refs/tags/${NEW_TAG}" >/dev/null; then
+    echo "Error: tag ${NEW_TAG} already exists locally. See docs/releasing.md (Rollback)."
+    exit 1
+fi
+if git ls-remote --exit-code --tags origin "refs/tags/${NEW_TAG}" >/dev/null 2>&1; then
+    echo "Error: tag ${NEW_TAG} already exists on origin. See docs/releasing.md (Rollback)."
     exit 1
 fi
 
-if ! git remote get-url origin >/dev/null 2>&1; then
-    echo "Error: No git remote 'origin' configured."
-    echo "  Add one with: git remote add origin https://github.com/<owner>/m3c-tools.git"
+# --- The commit that will be tagged: origin/master, by hash ---
+# Working copies drift onto feature branches and worktrees, deshalb wird nie
+# "der aktuelle Branch" getaggt, sondern der reviewte Stand auf master.
+if ! HASH=$(git rev-parse -q --verify 'origin/master^{commit}'); then
+    echo "Error: origin/master not found after fetch."
     exit 1
 fi
 
-# --- Commit all changes if working directory is dirty ---
-if [ -n "$(git status --porcelain)" ]; then
-    echo ""
-    echo "Committing all changes..."
-    git add -A
-    git commit -m "Release ${NEW_TAG}"
+echo ""
+echo "New version:  ${NEW_TAG}   (bump: ${BUMP_TYPE})"
+echo "Tagging:      origin/master @ ${HASH}"
+echo "              $(git log -1 --format='%s' "$HASH")"
+echo "              $(git log -1 --format='%an, %ad' --date=short "$HASH")"
+echo ""
+echo "Release approval (docs/releasing.md, 'Release approval'):"
+echo "  the tag push is the point of no return. The SPEC-0406 acceptance gate"
+echo "  covers the machine half; the two-person half is a human step and is not"
+echo "  observable from here. If you are releasing alone, record it as break-glass."
+echo ""
+echo "This script will NOT build, upload or commit anything."
+echo "Publication happens in .github/workflows/release.yml, triggered by this tag."
+echo ""
+
+# --- Point of no return: confirm ---
+if [ "$ASSUME_YES" -ne 1 ]; then
+    if [ ! -t 0 ]; then
+        echo "Error: no terminal to confirm on. Re-run with --yes if this is intended."
+        exit 1
+    fi
+    printf 'Push tag %s and start the release workflow? [y/N] ' "$NEW_TAG"
+    read -r reply
+    case "$reply" in
+        y|Y|yes|YES) ;;
+        *)
+            echo "Aborted. Nothing was tagged or pushed."
+            exit 1
+            ;;
+    esac
 fi
 
-# --- Build binary ---
+# --- Tag + push ---
 echo ""
-echo "Building ${BINARY}..."
-mkdir -p "${BUILD_DIR}"
-COMMIT=$(git rev-parse --short HEAD)
-BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-go build -ldflags "-s -w -X main.version=${NEW_VERSION} -X main.commit=${COMMIT} -X main.date=${BUILD_DATE}" -o "${BUILD_DIR}/${BINARY}" ./cmd/m3c-tools
-echo "Built ${BUILD_DIR}/${BINARY}"
+echo "Creating tag ${NEW_TAG} on ${HASH}..."
+git tag -a "${NEW_TAG}" "${HASH}" -m "Release ${NEW_TAG}"
 
-# --- Build app bundle + DMG ---
-echo ""
-echo "Building app bundle..."
-APP_VERSION="${NEW_VERSION}" make build-app
-echo "Building DMG..."
-./scripts/make-dmg.sh "${NEW_VERSION}"
-DMG_PATH="${BUILD_DIR}/M3C-Tools-${NEW_VERSION}.dmg"
-
-# --- Push commits to origin ---
-echo ""
-CURRENT_BRANCH=$(git branch --show-current)
-echo "Pushing ${CURRENT_BRANCH} to origin..."
-git push origin "${CURRENT_BRANCH}"
-
-# --- Tag ---
-echo ""
-echo "Creating tag ${NEW_TAG}..."
-git tag -a "${NEW_TAG}" -m "Release ${NEW_TAG}"
-
-# --- Push tag ---
 echo "Pushing tag to origin..."
 git push origin "${NEW_TAG}"
 
-# --- Create GitHub release ---
 echo ""
-echo "Creating GitHub release ${NEW_TAG}..."
-# Build release assets list
-RELEASE_ASSETS=("${BUILD_DIR}/${BINARY}")
-if [ -f "$DMG_PATH" ]; then
-    RELEASE_ASSETS+=("$DMG_PATH")
-    DMG_SHA=$(shasum -a 256 "$DMG_PATH" | awk '{print $1}')
-    DMG_SIZE=$(du -h "$DMG_PATH" | awk '{print $1}')
-    DMG_NOTES="
-### macOS Installer
-- **${DMG_PATH##*/}** (${DMG_SIZE})
-- SHA-256: \`${DMG_SHA}\`
-
-### First-time setup
-\`\`\`bash
-# After dragging to /Applications:
-/Applications/M3C-Tools.app/Contents/MacOS/m3c-tools setup
-\`\`\`"
-else
-    DMG_NOTES=""
-fi
-
-gh release create "${NEW_TAG}" \
-    "${RELEASE_ASSETS[@]}" \
-    --title "Release ${NEW_TAG}" \
-    --notes "## ${BINARY} ${NEW_TAG}
-
-### Changes since ${LATEST_TAG:-initial}
-$(git log ${LATEST_TAG:+${LATEST_TAG}..}HEAD --oneline --no-decorate 2>/dev/null || echo "- Initial release")
-${DMG_NOTES}
-" \
-    --latest
-
-echo ""
-echo "Release ${NEW_TAG} created successfully!"
-echo "  View: $(gh release view ${NEW_TAG} --json url -q .url)"
+echo "Tag ${NEW_TAG} pushed. CI now builds, signs, attests and publishes."
+echo "  Watch:  gh run watch \"\$(gh run list --workflow=release.yml --limit 1 --json databaseId -q '.[0].databaseId')\""
+echo "  Assets: gh release view ${NEW_TAG} --json assets -q '.assets[].name'"
+echo "  Undo:   docs/releasing.md, section 'Rollback'"
