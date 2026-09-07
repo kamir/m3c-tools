@@ -54,10 +54,14 @@ func runInstall(args []string, stdout, stderr io.Writer) (code int) {
 	bundlePath := fs.String("bundle", "", "Install a standalone .skb FILE that arrived over an untrusted transport (SPEC-0406). Offline, against pinned trust-roots. Requires a sidecar <file>.skbmeta.json (or --meta).")
 	metaPath := fs.String("meta", "", "Path to the BundleMeta envelope JSON for --bundle (default: the .skbmeta.json sidecar next to the .skb).")
 	trustRootsPath := fs.String("trust-roots", "", "Path to a trust-roots YAML to use instead of the default. Pair with --bundle for a portable verification kit.")
+	revocationsPath := fs.String("revocations", "", "Path to a signed revocation list (JSON) to enforce offline for --bundle. A revoked digest → exit 17; an untrusted/forged list → exit 12.")
+	checkpointPath := fs.String("checkpoint", "", "Path to a signed freshness checkpoint (SPEC-0279 R4) that can reset the staleness clock for --revocations without a full re-sync. A forged/stale/rollback checkpoint → exit 12.")
+	emergencyPath := fs.String("emergency", "", "Path to a signed emergency deny-list (SPEC-0279 R5). A named digest denies immediately (exit 17), short-circuiting the staleness cadence; a forged list → exit 12.")
 
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: skillctl install <name>[@<version>] [flags]")
 		fmt.Fprintln(stderr, "   or: skillctl install --bundle <file.skb> [--meta <f>] [--trust-roots <f>]")
+		fmt.Fprintln(stderr, "                        [--revocations <f>] [--checkpoint <f>] [--emergency <f>]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Pulls a skill bundle from the registry, runs the SPEC-0188 §7 verifier,")
 		fmt.Fprintln(stderr, "and atomically installs it under ~/.claude/skills/<name>/. Refuses if any")
@@ -93,17 +97,31 @@ func runInstall(args []string, stdout, stderr io.Writer) (code int) {
 			return exitUsage
 		}
 		return runInstallBundle(installBundleParams{
-			bundlePath:     *bundlePath,
-			metaPath:       *metaPath,
-			trustRootsPath: *trustRootsPath,
-			registryURL:    *registryURL,
-			governanceMin:  *governanceMin,
-			allowYellow:    *allowYellow,
-			ignoreDeps:     *ignoreDeps,
-			tenantFlag:     *tenantFlag,
-			homeOverride:   *homeOverride,
-			verbose:        *verboseFlag,
+			bundlePath:      *bundlePath,
+			metaPath:        *metaPath,
+			trustRootsPath:  *trustRootsPath,
+			revocationsPath: *revocationsPath,
+			checkpointPath:  *checkpointPath,
+			emergencyPath:   *emergencyPath,
+			registryURL:     *registryURL,
+			governanceMin:   *governanceMin,
+			allowYellow:     *allowYellow,
+			ignoreDeps:      *ignoreDeps,
+			tenantFlag:      *tenantFlag,
+			homeOverride:    *homeOverride,
+			verbose:         *verboseFlag,
 		}, stdout, stderr)
+	}
+
+	// The offline enforcement inputs belong to the --bundle path. On the
+	// registry path they would be silently unused, and a security input that is
+	// accepted but not enforced is worse than one that is refused: the operator
+	// believes a gate is active that is not. Refuse rather than ignore.
+	// (Before these flags existed, the same invocation failed flag parsing with
+	// the same exit code, so no working call changes behavior.)
+	if *revocationsPath != "" || *checkpointPath != "" || *emergencyPath != "" {
+		fmt.Fprintln(stderr, "skillctl install: --revocations/--checkpoint/--emergency require --bundle; the registry path checks revocation via the registry itself.")
+		return exitUsage
 	}
 
 	if fs.NArg() != 1 {

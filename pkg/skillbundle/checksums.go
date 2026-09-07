@@ -37,7 +37,20 @@ var ErrChecksumMismatch = errors.New("bundle CHECKSUMS does not describe the ext
 // Two layouts are accepted because two producers exist: the flat archive that
 // skillbundle.Pack emits, and the one wrapped in a single <name>-<version>/
 // directory. The single-entry directory heuristic is what tells them apart.
+//
+// The manifest is attacker-influenced input, so the work it can demand is
+// budgeted (AUDIT-0001 finding 1.8): the entry count is capped by
+// DefaultMaxExtractedFiles, the total bytes hashed by DefaultMaxExtractedBytes,
+// the same limits the extraction path already enforces, and a path named twice
+// is refused outright. Without those caps a small bundle could demand gigabytes
+// of hashing through sheer line repetition.
 func ValidateChecksums(extractDir string) error {
+	return validateChecksums(extractDir, DefaultMaxExtractedBytes, DefaultMaxExtractedFiles)
+}
+
+// validateChecksums is the budget-parameterised body; tests override the limits
+// so the budget branches are reachable without gigabyte fixtures.
+func validateChecksums(extractDir string, maxBytes int64, maxEntries int) error {
 	root := extractDir
 	if entries, err := os.ReadDir(extractDir); err == nil && len(entries) == 1 && entries[0].IsDir() {
 		root = filepath.Join(extractDir, entries[0].Name())
@@ -54,10 +67,18 @@ func ValidateChecksums(extractDir string) error {
 	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
+	seen := make(map[string]struct{})
+	var lineCount int
+	var hashedBytes int64
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
+		}
+		lineCount++
+		if lineCount > maxEntries {
+			return fmt.Errorf("CHECKSUMS lists more than %d entries: %w",
+				maxEntries, ErrChecksumMismatch)
 		}
 		// Accept "<hex>  <path>" or "<hex> <path>" (one or two spaces).
 		var wantHex, rel string
@@ -80,11 +101,23 @@ func ValidateChecksums(extractDir string) error {
 		if strings.HasPrefix(cleanRel, "..") || filepath.IsAbs(cleanRel) {
 			return fmt.Errorf("CHECKSUMS entry %q escapes root: %w", rel, ErrChecksumMismatch)
 		}
+		// A manifest that names the same file twice is not a valid manifest: the
+		// second line either repeats the first (wasted work an attacker can
+		// multiply) or contradicts it. Either way, refuse.
+		if _, dup := seen[cleanRel]; dup {
+			return fmt.Errorf("CHECKSUMS names %q twice: %w", cleanRel, ErrChecksumMismatch)
+		}
+		seen[cleanRel] = struct{}{}
 		if cleanRel == "CHECKSUMS" {
 			continue
 		}
 		fp := filepath.Join(root, cleanRel)
-		got, err := fileSHA256Hex(fp)
+		got, n, err := fileSHA256Hex(fp, maxBytes-hashedBytes)
+		hashedBytes += n
+		if errors.Is(err, errHashBudgetExceeded) {
+			return fmt.Errorf("CHECKSUMS verification exceeds the %d byte hashing budget at %q: %w",
+				maxBytes, rel, ErrChecksumMismatch)
+		}
 		if err != nil {
 			return fmt.Errorf("hash %s: %w", fp, errors.Join(ErrChecksumMismatch, err))
 		}
@@ -99,17 +132,30 @@ func ValidateChecksums(extractDir string) error {
 	return nil
 }
 
-func fileSHA256Hex(path string) (string, error) {
+// errHashBudgetExceeded is the internal signal that a hash run hit the byte
+// budget; the caller maps it onto ErrChecksumMismatch with the limit named.
+var errHashBudgetExceeded = errors.New("hash byte budget exceeded")
+
+// fileSHA256Hex hashes at most budget bytes of path and reports how many bytes
+// it consumed. Reading past the budget aborts with errHashBudgetExceeded
+// instead of finishing the file: the budget bounds work, not just output.
+func fileSHA256Hex(path string, budget int64) (string, int64, error) {
 	// #nosec G304 -- a path inside the caller's extraction directory, cleaned and
 	// checked for escape above.
 	f, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	defer func() { _ = f.Close() }()
 	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
+	// budget+1 so a file that is exactly one byte over is detected, not
+	// silently truncated into a wrong (and then "mismatching") hash.
+	n, err := io.Copy(h, io.LimitReader(f, budget+1))
+	if err != nil {
+		return "", n, err
 	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+	if n > budget {
+		return "", n, errHashBudgetExceeded
+	}
+	return hex.EncodeToString(h.Sum(nil)), n, nil
 }
