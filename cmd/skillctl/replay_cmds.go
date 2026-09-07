@@ -24,6 +24,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 )
 
 // printReplayUsage prints the help text for `skillctl invoke-replay`.
@@ -426,9 +428,9 @@ func newReplayHTTPClient(baseURL string) *http.Client {
 			// there is no network path for a man in the middle.
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // #nosec G402
 		}
-		return &http.Client{Transport: tr, Timeout: 10 * time.Second}
+		return &http.Client{Transport: tr, Timeout: 10 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect}
 	}
-	return &http.Client{Timeout: 10 * time.Second}
+	return &http.Client{Timeout: 10 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect}
 }
 
 // replayBaseIsLoopback reports whether base is an https(s) URL whose host is

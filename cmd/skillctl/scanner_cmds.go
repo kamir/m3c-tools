@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/kamir/m3c-tools/internal/dbdriver"
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 	"github.com/kamir/m3c-tools/pkg/skillctl/awareness"
 	"github.com/kamir/m3c-tools/pkg/skillctl/browse"
 	"github.com/kamir/m3c-tools/pkg/skillctl/consolidate"
@@ -1311,7 +1312,7 @@ func cmdSyncUsage(args []string) {
 
 	fmt.Fprintf(os.Stderr, "Found %d unsynced usage events. Syncing to %s ...\n", len(pending), target)
 
-	httpClient := &http.Client{Timeout: 10 * time.Second}
+	httpClient := &http.Client{Timeout: 10 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect}
 	synced := 0
 
 	for _, r := range pending {

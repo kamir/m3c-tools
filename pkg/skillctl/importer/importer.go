@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/auth"
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 	"github.com/kamir/m3c-tools/pkg/skillctl/model"
 )
 
@@ -58,6 +59,9 @@ func NewClient(baseURL, apiKey, userID string) (*Client, error) {
 		UserID:  userID,
 		HTTPClient: &http.Client{
 			Timeout: 30 * time.Second,
+			// AUDIT-0001 Befund 1.1: X-API-KEY survives stdlib cross-host
+			// redirects; strip credentials on any host change.
+			CheckRedirect: httpsafe.NoCredentialRedirect,
 		},
 	}, nil
 }

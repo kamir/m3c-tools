@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 )
 
 // DefaultTimeout is the per-request deadline applied if the caller hasn't
@@ -90,15 +92,17 @@ type Client struct {
 // the URL has already passed through trust-roots validation.
 func New(baseURL string, httpClient *http.Client) *Client {
 	if httpClient == nil {
-		httpClient = &http.Client{
-			Timeout: DefaultTimeout,
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				if len(via) >= MaxRedirects {
-					return fmt.Errorf("registry: stopped after %d redirects", MaxRedirects)
-				}
-				return nil
-			},
-		}
+		httpClient = &http.Client{Timeout: DefaultTimeout}
+	}
+	if httpClient.CheckRedirect == nil {
+		// AUDIT-0001 Befund 1.3: the redirect policy is an UNCONDITIONAL
+		// default, not a nil-client courtesy. An injected client without its
+		// own CheckRedirect used to follow stdlib redirects carrying the
+		// Bearer token, including a same-host https to http downgrade. Now
+		// every such client refuses cross-host redirects and scheme
+		// downgrades and caps the chain at MaxRedirects. A caller that needs
+		// a different policy must set its own CheckRedirect explicitly.
+		httpClient.CheckRedirect = httpsafe.NoCrossHostRedirectMax(MaxRedirects)
 	}
 	return &Client{
 		BaseURL:    strings.TrimRight(baseURL, "/"),

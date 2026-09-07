@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/er1"
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 )
 
 // RoomShareSelector picks which published items to (un)map into a room.
@@ -183,7 +184,7 @@ func er1PostJSON(base string, cfg *er1.Config, path string, payload any) (any, e
 	if err := er1TLSGuard(base, cfg.VerifySSL); err != nil {
 		return nil, err
 	}
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := &http.Client{Timeout: 30 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect}
 	if !cfg.VerifySSL {
 		// #nosec G402 -- gated: default is ER1_VERIFY_SSL=true (verifies). VerifySSL=false
 		// is honored only for loopback. Er1TLSGuard above fails closed for any non-loopback

@@ -32,6 +32,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 	"github.com/kamir/m3c-tools/pkg/skillbundle"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
@@ -853,7 +854,13 @@ func httpClientOf(timeout time.Duration) *http.Client {
 	if timeout <= 0 {
 		timeout = registry.DefaultTimeout
 	}
-	return &http.Client{Timeout: timeout}
+	// AUDIT-0001 Befund 1.3: these clients carry the registry Bearer token,
+	// so refuse cross-host redirects and https to http downgrades and cap
+	// the chain, mirroring the registry.New default.
+	return &http.Client{
+		Timeout:       timeout,
+		CheckRedirect: httpsafe.NoCrossHostRedirectMax(registry.MaxRedirects),
+	}
 }
 
 // HTTPClientOf is exported for the CLI to share the same default-timeout

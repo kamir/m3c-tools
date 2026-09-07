@@ -52,8 +52,23 @@ func NoCredentialRedirect(req *http.Request, via []*http.Request) error {
 // cannot be bounced to an attacker-chosen host by a 30x from the registry (or a
 // MITM on a plain-HTTP RFC1918 hop). Same-host port changes are permitted.
 func NoCrossHostRedirect(req *http.Request, via []*http.Request) error {
-	if len(via) >= MaxRedirects {
-		return fmt.Errorf("stopped after %d redirects", MaxRedirects)
+	return noCrossHostRedirect(req, via, MaxRedirects)
+}
+
+// NoCrossHostRedirectMax returns a CheckRedirect with the same fail-closed
+// policy as NoCrossHostRedirect (refuse any cross-host hop, refuse an
+// https to http downgrade even on the same host) but a caller-chosen redirect
+// cap. Callers with a contractual cap (e.g. the skillctl registry client and
+// its documented limit of 5) use this instead of duplicating the policy.
+func NoCrossHostRedirectMax(max int) func(*http.Request, []*http.Request) error {
+	return func(req *http.Request, via []*http.Request) error {
+		return noCrossHostRedirect(req, via, max)
+	}
+}
+
+func noCrossHostRedirect(req *http.Request, via []*http.Request, max int) error {
+	if len(via) >= max {
+		return fmt.Errorf("stopped after %d redirects", max)
 	}
 	if len(via) > 0 {
 		if !sameHost(req, via[0]) {

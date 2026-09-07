@@ -7,9 +7,14 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
+	"github.com/kamir/m3c-tools/pkg/skillctl/netguard"
 )
 
 // PLMConfig holds connection settings for the PLM API.
@@ -42,15 +47,34 @@ type PLMClient struct {
 	client *http.Client
 }
 
+// plmInsecureWarnOnce gates the one-time stderr notice emitted when a
+// non-loopback PLM base asks for VerifySSL=false and verification is forced
+// back on.
+var plmInsecureWarnOnce sync.Once
+
 // NewPLMClient creates a client for the PLM API.
+//
+// AUDIT-0001 Befund 1.2/2.8: cfg.VerifySSL comes from the ER1 config, whose
+// loopback-only policy (pkg/er1.applyTLSVerificationPolicy) was applied to
+// ER1_API_URL. M3C_PLM_BASE_URL can point THIS client at a different host, so
+// the loopback check must run again against the base actually used here. Only
+// a loopback base may skip TLS verification; every other host gets a
+// verifying transport, announced once on stderr.
 func NewPLMClient(cfg PLMConfig) *PLMClient {
 	timeout := cfg.Timeout
 	if timeout == 0 {
 		timeout = 30 * time.Second
 	}
+	insecure := !cfg.VerifySSL
+	if insecure && !plmBaseIsLoopback(cfg.BaseURL) {
+		plmInsecureWarnOnce.Do(func() {
+			fmt.Fprintf(os.Stderr, "[timetracking] SECURITY: REFUSING to disable TLS verification for non-loopback PLM base %q; certificate verification stays ON (only 127.0.0.1/localhost may skip it)\n", cfg.BaseURL)
+		})
+		insecure = false
+	}
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: !cfg.VerifySSL,
+			InsecureSkipVerify: insecure, // loopback-only, guarded above
 		},
 	}
 	return &PLMClient{
@@ -58,8 +82,21 @@ func NewPLMClient(cfg PLMConfig) *PLMClient {
 		client: &http.Client{
 			Timeout:   timeout,
 			Transport: transport,
+			// AUDIT-0001 Befund 1.1: X-API-KEY and X-Context-ID survive
+			// stdlib cross-host redirects; strip them on any host change.
+			CheckRedirect: httpsafe.NoCredentialRedirect,
 		},
 	}
+}
+
+// plmBaseIsLoopback reports whether base points at the loopback interface.
+// A parse failure or empty host answers false: unknown is not local.
+func plmBaseIsLoopback(base string) bool {
+	u, err := url.Parse(base)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	return netguard.IsLoopback(u.Host)
 }
 
 func (c *PLMClient) doRequest(method, path string, body io.Reader) (*http.Response, error) {
