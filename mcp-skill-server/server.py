@@ -15,7 +15,6 @@ import re
 import shutil
 import sqlite3
 import subprocess
-import sys
 import urllib.parse
 import urllib.request
 import urllib.error
@@ -28,10 +27,40 @@ logger = logging.getLogger("skill-server")
 
 # ── Configuration ──────────────────────────────────────────────────────
 
-SKILLCTL = os.environ.get(
-    "SKILLCTL_BIN",
-    str(Path.home() / "GITHUB.kamir" / "m3c-tools" / "build" / "skillctl"),
+# Standard install locations, searched in order AFTER $PATH. Until AUDIT-0001
+# the default was str(Path.home() / "GITHUB.kamir" / "m3c-tools" / "build" /
+# "skillctl"): one developer's unpinned dev-build directory, which resolves on
+# exactly one machine and fails silently everywhere else.
+_SKILLCTL_INSTALL_DIRS = (
+    Path("/usr/local/bin"),
+    Path("/opt/homebrew/bin"),
+    Path.home() / ".local" / "bin",
+    Path.home() / "bin",
+    Path.home() / ".claude" / "bin",
 )
+
+
+def _discover_skillctl() -> str:
+    """Best-effort skillctl path: $PATH first, then the standard install dirs.
+
+    Returns the empty string when nothing is found. Callers go through
+    _resolve_skillctl_bin(), which turns that into a remediation message
+    instead of exec'ing a path that does not exist.
+    """
+    on_path = shutil.which("skillctl")
+    if on_path:
+        return on_path
+    for directory in _SKILLCTL_INSTALL_DIRS:
+        candidate = directory / "skillctl"
+        try:
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return str(candidate)
+        except OSError:
+            continue
+    return ""
+
+
+SKILLCTL = os.environ.get("SKILLCTL_BIN") or _discover_skillctl()
 GRAPH_DB = os.environ.get(
     "SKILL_GRAPH_DB",
     str(Path.home() / ".m3c-tools" / "skill-graph.db"),
@@ -89,7 +118,10 @@ async def skill_scan(
     Returns a summary by type/project + tier breakdown. JSON output is
     available via the `skillctl scan --format json` CLI directly.
     """
-    args = [SKILLCTL, "scan", "--source", source, "--format", "json"]
+    skillctl, bin_err = _resolve_skillctl_bin()
+    if bin_err:
+        return f"Scan failed: {bin_err}"
+    args = [skillctl, "scan", "--source", source, "--format", "json"]
     if with_trust:
         args.append("--with-trust")
     if include_shadowed:
@@ -310,7 +342,10 @@ async def skill_detail(skill_name: str) -> str:
 @mcp.tool()
 async def skill_consolidate(path: str = "") -> str:
     """Analyze skill sprawl: duplicates, orphans, drift, annotation gaps."""
-    args = [SKILLCTL, "consolidate", "--report-only", "--output", "text"]
+    skillctl, bin_err = _resolve_skillctl_bin()
+    if bin_err:
+        return f"Consolidation failed: {bin_err}"
+    args = [skillctl, "consolidate", "--report-only", "--output", "text"]
     if path:
         args += ["--path", path]
     else:
@@ -353,7 +388,7 @@ async def skill_graph_stats() -> str:
     conn.close()
 
     lines = [
-        f"Skill Graph Statistics",
+        "Skill Graph Statistics",
         f"Built: {built_at or 'unknown'}",
         f"Total nodes: {total_nodes}  |  Total edges: {total_edges}\n",
         "Nodes by kind:",
@@ -411,7 +446,10 @@ async def skill_import(scan_json_path: str = "") -> str:
             inv = json.load(f)
     else:
         # Run a fresh scan
-        args = [SKILLCTL, "scan", "--path", str(Path.home()), "--recursive",
+        skillctl, bin_err = _resolve_skillctl_bin()
+        if bin_err:
+            return f"Scan failed: {bin_err}"
+        args = [skillctl, "scan", "--path", str(Path.home()), "--recursive",
                 "--include-home", "--output", "json"]
         result = await _run_skillctl(args)
         if result.get("error"):
@@ -446,7 +484,7 @@ async def skill_usage(skill_name: str) -> str:
     if isinstance(data, str):
         # Fallback: save locally
         _save_usage_local(event)
-        return f"Recorded locally (aims-core unreachable). Sync later with `skillctl sync-usage`."
+        return "Recorded locally (aims-core unreachable). Sync later with `skillctl sync-usage`."
 
     new_mastery = data.get("new_mastery", "?")
     return f"Usage recorded for '{skill_name}'. Current mastery: {new_mastery}"
@@ -492,7 +530,8 @@ async def _run_skillctl(args: list[str]) -> dict:
     except asyncio.TimeoutError:
         return {"error": "skillctl timed out after 120s", "stdout": "", "stderr": ""}
     except FileNotFoundError:
-        return {"error": f"skillctl not found at {SKILLCTL}", "stdout": "", "stderr": ""}
+        tried = args[0] if args else "<empty argv>"
+        return {"error": f"skillctl not found at {tried}", "stdout": "", "stderr": ""}
 
 
 def _open_graph_db() -> sqlite3.Connection | None:
@@ -575,10 +614,10 @@ def _save_usage_local(event: dict):
 # Design notes:
 #   - All three exec the skillctl Go binary via subprocess (no shell=True;
 #     args are passed as a list so user-supplied strings can never spawn
-#     extra commands). The binary is resolved via SKILLCTL_BIN env var,
-#     falling back to a PATH lookup, falling back to the historical
-#     SKILLCTL constant defined above. Each helper emits a structured
-#     error dict if the binary cannot be located.
+#     extra commands). The binary is resolved via the SKILLCTL_BIN env var,
+#     falling back to a PATH lookup, falling back to the standard install
+#     dirs probed at import time. Each helper emits a structured error dict
+#     if the binary cannot be located.
 #   - Inputs are validated BEFORE exec'ing (defense in depth): digests
 #     must match sha256:[0-9a-f]{64}; governance levels must be one of
 #     {green, yellow, red}; names/reviewer IDs must be free of newlines
@@ -639,8 +678,8 @@ _ATTEST_FIELD_RE = re.compile(r"^(?P<key>attestation_id|bundle_digest|level|atte
 def _resolve_skillctl_bin() -> tuple[str | None, str | None]:
     """Locate the skillctl binary.
 
-    Resolution order: SKILLCTL_BIN env var → PATH lookup → the historical
-    SKILLCTL fallback (build/skillctl in the repo).
+    Resolution order: SKILLCTL_BIN env var, then a $PATH lookup, then the
+    SKILLCTL value discovered at import time (see _discover_skillctl).
 
     Returns (path, error). On success, path is set and error is None. On
     failure, path is None and error is a human-readable message with a
@@ -658,12 +697,14 @@ def _resolve_skillctl_bin() -> tuple[str | None, str | None]:
     on_path = shutil.which("skillctl")
     if on_path:
         return on_path, None
-    # Historical fallback so existing installs keep working.
+    # Whatever _discover_skillctl found at import time. Re-checked here
+    # because tests patch it and because a binary can vanish between calls.
     if os.path.isfile(SKILLCTL) and os.access(SKILLCTL, os.X_OK):
         return SKILLCTL, None
+    searched = ", ".join(str(d / "skillctl") for d in _SKILLCTL_INSTALL_DIRS)
     return None, (
-        "skillctl not found. Set SKILLCTL_BIN=<path> or place skillctl on PATH "
-        f"(searched env, $PATH, and {SKILLCTL})."
+        "skillctl not found. Install it, put it on $PATH, or set SKILLCTL_BIN "
+        "to its absolute path. Searched: $SKILLCTL_BIN, $PATH, " + searched + "."
     )
 
 
@@ -1145,7 +1186,7 @@ async def skill_audit(
     """
     if source not in {"claude", "user", "plugins", "all"}:
         return {"ok": False, "exit_code": 2, "error_class": "validation_error",
-                "stderr": f"source must be claude|user|plugins|all",
+                "stderr": "source must be claude|user|plugins|all",
                 "remediation": "Use a known --source value."}
     if minimum_governance and minimum_governance not in _VALID_LEVELS:
         return {"ok": False, "exit_code": 2, "error_class": "validation_error",

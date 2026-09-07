@@ -63,7 +63,7 @@ def _overrides(ws):
     ov = set()
     for f in (HERE / "opus-overrides.txt", ws / ".understand-anything" / "opus-overrides.txt"):
         if f.exists():
-            ov |= {l.strip() for l in f.read_text().splitlines() if l.strip() and not l.startswith("#")}
+            ov |= {ln.strip() for ln in f.read_text().splitlines() if ln.strip() and not ln.startswith("#")}
     return ov
 
 
@@ -224,7 +224,7 @@ def cmd_merge_wave(a):
     edges = {(e["source"], e["target"], e.get("type")): e for e in graph["edges"]}
     ledger = (ua / "distill-ledger.jsonl").open("a")
 
-    merged, n_dist, n_ent, n_claim, n_edge = [], 0, 0, 0, 0
+    merged, n_dist, n_ent, n_claim = [], 0, 0, 0
     for dfile in sorted(wdir.glob("distilled-*.json")):
         bid = dfile.stem.split("distilled-")[1]
         dist = json.loads(dfile.read_text())
@@ -254,7 +254,7 @@ def cmd_merge_wave(a):
             # WIKI note
             rel = [e["target"] for e in analysis.get("edges", [])
                    if e.get("source") == nid and str(e.get("target", "")).startswith("article:")]
-            fm = [f"---", f"id: {note_id}", f"title: {json.dumps(d.get('title',''), ensure_ascii=False)}",
+            fm = ["---", f"id: {note_id}", f"title: {json.dumps(d.get('title',''), ensure_ascii=False)}",
                   f"source: {meta.get('path','')}", f"tags: {json.dumps(meta.get('tags',[]), ensure_ascii=False)}",
                   f"model: {man['items'].get(note_id,{}).get('tier','sonnet')}", f"distilled_at: {_now()}", "---", ""]
             body = [f"# {d.get('title','')}", "", d.get("summary", ""), "", "## Key points"]
@@ -351,9 +351,9 @@ def cmd_er1_sync(a):
     ER1 = "https://127.0.0.1:8081"
     man = json.loads((ua / "distill-manifest.json").read_text())
     led = ua / "distill-ledger.jsonl"
-    entries = [json.loads(l) for l in led.read_text().splitlines() if l.strip()] if led.exists() else []
+    entries = [json.loads(ln) for ln in led.read_text().splitlines() if ln.strip()] if led.exists() else []
     sledp = ua / "er1-sync-ledger.jsonl"
-    synced = {json.loads(l)["id"] for l in sledp.read_text().splitlines() if l.strip()} if sledp.exists() else set()
+    synced = {json.loads(ln)["id"] for ln in sledp.read_text().splitlines() if ln.strip()} if sledp.exists() else set()
 
     key = ""
     if a.confirm:
@@ -494,18 +494,24 @@ def cmd_export_gephi(a):
 def main():
     ap = argparse.ArgumentParser(prog="distill_backfill")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    m = sub.add_parser("manifest"); m.add_argument("-w", "--workspace", required=True)
-    m.add_argument("--notes-subdir", default="NOTES/mft"); m.add_argument("--batch-size", type=int, default=15)
+    m = sub.add_parser("manifest")
+    m.add_argument("-w", "--workspace", required=True)
+    m.add_argument("--notes-subdir", default="NOTES/mft")
+    m.add_argument("--batch-size", type=int, default=15)
     m.add_argument("--waves", type=int, default=5)
     for name in ("prepare-wave", "merge-wave"):
-        s = sub.add_parser(name); s.add_argument("-w", "--workspace", required=True)
+        s = sub.add_parser(name)
+        s.add_argument("-w", "--workspace", required=True)
         s.add_argument("--wave", type=int, required=True)
-    st = sub.add_parser("status"); st.add_argument("-w", "--workspace", required=True)
-    es = sub.add_parser("er1-sync"); es.add_argument("-w", "--workspace", required=True)
+    st = sub.add_parser("status")
+    st.add_argument("-w", "--workspace", required=True)
+    es = sub.add_parser("er1-sync")
+    es.add_argument("-w", "--workspace", required=True)
     es.add_argument("--confirm", action="store_true", help="actually POST (default: dry-run)")
     es.add_argument("--limit", type=int, default=0)
     es.add_argument("--ctx", default="107677460544181387647___mft")
-    eg = sub.add_parser("export-gephi"); eg.add_argument("-w", "--workspace", required=True)
+    eg = sub.add_parser("export-gephi")
+    eg.add_argument("-w", "--workspace", required=True)
     eg.add_argument("--format", choices=["gexf", "graphml", "both"], default="both")
     a = ap.parse_args()
     {"manifest": cmd_manifest, "prepare-wave": cmd_prepare_wave,

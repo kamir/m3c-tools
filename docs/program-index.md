@@ -29,6 +29,7 @@ See also: [Service Index](service-index) (what stays running) ·
 | **poc-whisper** | `cmd/poc-whisper/` | `make build-all` | Reference POC: Whisper transcription via CLI subprocess. |
 | **skillctl-sim** | `cmd/skillctl-sim/` | `make build-skillctl-sim` | Trust-plane simulation: a generated corpus of multi-principal scenarios, each with a SPEC-derived prediction, run against the real `skillctl` binary and a real git registry. `make sim`. |
 | **docaudit** | `cmd/docaudit/` | `go run ./cmd/docaudit` | Blocking gate: the CLI flag surface (AST-extracted) against its manual, in both directions, plus every dispatched verb against the binary's own `--help`. |
+| **exitaudit** | `cmd/exitaudit/` | `go run ./cmd/exitaudit` | Blocking gate: every exit code cited in the manual and in [CLI-VERBS](CLI-VERBS) against `pkg/skillctl/exitcode`, plus the `pull` gate read as code. Reports how many verb rows it could NOT compare. |
 | **verbaudit** | `cmd/verbaudit/` | `go run ./cmd/verbaudit` | Blocking gate: the dispatched `skillctl` verbs against the allocation table [CLI-VERBS](CLI-VERBS) (FR-0113). |
 | **structural** | `cmd/structural/` | `go run ./cmd/structural` | Inventories the decisions in the trust path and states the MC/DC obligation each one carries. Produces the obligation, not a coverage measurement. |
 | **release-evidence** | `cmd/release-evidence/` | `go run ./cmd/release-evidence` | Assembles the Release Evidence Bundle (the "Trust Binder"): an index that ties a set of release artifacts to a commit and a mandatory gate-set. |
@@ -80,7 +81,7 @@ Both run as long-lived services: see [Service Index](service-index).
 | Area | Location | Purpose |
 |------|----------|---------|
 | Build & packaging | `scripts/build-all.sh`, `scripts/build-windows.sh`, `scripts/build-portaudio-universal.sh`, `scripts/make-dmg.sh`, `scripts/make-icns.sh` | Cross-platform builds, macOS bundle/DMG, Windows binary. |
-| Installers | `installer/` (`m3c-tools.nsi`, `build.sh`), `scripts/installer.nsi`, `tools/skillctl-install.sh`, `tools/skillctl-install.ps1` | NSIS installer, skillctl install one-liners. |
+| Installers | `scripts/installer.nsi`, `tools/skillctl-install.sh`, `tools/skillctl-install.ps1` | NSIS installer, skillctl install one-liners. |
 | skillctl release/runbook | `tools/skillctl-release.sh`, `tools/skillctl-runbook.sh`, `tools/skillctl-runbook-publish.sh`, `scripts/publish-skb.sh` | Release + `.skb` publish + runbook automation. |
 | Thinking Engine launch | `tools/thinking-engine-start.sh` | Convenience launcher for a per-user engine stack. |
 | Capture-source login/checks | `tools/plaud-mcp-login.mjs`, `tools/plaud-e2e-check.sh`, `scripts/e2e-plaud-sync-local.sh` | Plaud OAuth login + E2E sync verification. |

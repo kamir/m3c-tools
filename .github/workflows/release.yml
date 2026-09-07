@@ -46,6 +46,12 @@ jobs:
       - name: Indexes match the tree (cmd/, pkg/, and the counts)
         run: ./scripts/check-index.sh
 
+      - name: exitaudit unit tests
+        run: go test -count=1 ./cmd/exitaudit/
+
+      - name: Documented exit codes match the register (AUDIT-0001 Befund 2.1)
+        run: go run ./cmd/exitaudit
+
       - name: No U+2014 EM DASH in the tracked tree (CODESTYLE.md)
         run: ./scripts/check-no-emdash.sh
 

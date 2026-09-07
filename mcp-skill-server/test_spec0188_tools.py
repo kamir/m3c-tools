@@ -15,9 +15,7 @@ Run:
 from __future__ import annotations
 
 import asyncio
-import os
 import subprocess
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -33,8 +31,13 @@ import server  # noqa: E402
 
 
 def _run(coro):
-    """Helper: run an async tool coroutine to completion."""
-    return asyncio.get_event_loop().run_until_complete(coro)
+    """Helper: run an async tool coroutine to completion.
+
+    asyncio.run, not get_event_loop().run_until_complete: the latter raises a
+    DeprecationWarning on 3.12 and a RuntimeError from 3.14 on, which would
+    have turned this suite red the first time the CI runner moved forward.
+    """
+    return asyncio.run(coro)
 
 
 def _completed(returncode: int, stdout: str = "", stderr: str = ""):
@@ -396,3 +399,69 @@ def test_attest_non_zero_exit_classified(fake_skillctl):
     assert out["exit_code"] == 1
     assert out["error_class"] == "generic_error"
     assert "POST failed" in out["stderr"]
+
+
+# ---------- binary discovery (AUDIT-0001 Befund N.2) ----------
+
+
+def test_discover_skillctl_prefers_path(monkeypatch, tmp_path):
+    """$PATH wins over every standard install dir."""
+    on_path = tmp_path / "from-path" / "skillctl"
+    on_path.parent.mkdir()
+    on_path.write_text("#!/bin/sh\nexit 0\n")
+    on_path.chmod(0o755)
+    monkeypatch.setattr(server.shutil, "which", lambda _n: str(on_path))
+    assert server._discover_skillctl() == str(on_path)
+
+
+def test_discover_skillctl_falls_back_to_install_dirs(monkeypatch, tmp_path):
+    """Nothing on $PATH: the standard install dirs are probed in order, and
+    only an executable regular file counts."""
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    installed = tmp_path / "usr-local-bin"
+    installed.mkdir()
+    binary = installed / "skillctl"
+    binary.write_text("#!/bin/sh\nexit 0\n")
+    binary.chmod(0o755)
+
+    monkeypatch.setattr(server.shutil, "which", lambda _n: None)
+    monkeypatch.setattr(server, "_SKILLCTL_INSTALL_DIRS", (empty, installed))
+    assert server._discover_skillctl() == str(binary)
+
+
+def test_discover_skillctl_ignores_non_executable(monkeypatch, tmp_path):
+    """A non-executable file named skillctl is not a skillctl."""
+    d = tmp_path / "bin"
+    d.mkdir()
+    (d / "skillctl").write_text("not a binary\n")
+    (d / "skillctl").chmod(0o644)
+
+    monkeypatch.setattr(server.shutil, "which", lambda _n: None)
+    monkeypatch.setattr(server, "_SKILLCTL_INSTALL_DIRS", (d,))
+    assert server._discover_skillctl() == ""
+
+
+def test_not_found_message_names_every_searched_place(monkeypatch, tmp_path):
+    """The remediation string tells the user WHERE we looked, so a missing
+    install is diagnosable without reading the source."""
+    monkeypatch.delenv("SKILLCTL_BIN", raising=False)
+    d = tmp_path / "some-bin-dir"
+    monkeypatch.setattr(server.shutil, "which", lambda _n: None)
+    monkeypatch.setattr(server, "_SKILLCTL_INSTALL_DIRS", (d,))
+    monkeypatch.setattr(server, "SKILLCTL", "")
+
+    path, err = server._resolve_skillctl_bin()
+    assert path is None
+    assert "SKILLCTL_BIN" in err
+    assert "$PATH" in err
+    assert str(d / "skillctl") in err
+
+
+def test_env_var_pointing_at_a_directory_is_rejected(monkeypatch, tmp_path):
+    """SKILLCTL_BIN set to something that is not an executable file fails
+    loudly rather than falling through to a different binary."""
+    monkeypatch.setenv("SKILLCTL_BIN", str(tmp_path))
+    path, err = server._resolve_skillctl_bin()
+    assert path is None
+    assert "not an executable file" in err
