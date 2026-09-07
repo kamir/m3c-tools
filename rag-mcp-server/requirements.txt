@@ -32,7 +32,7 @@
 #   mcp: see the note at its pin.
 
 turbovec==0.8.0
-sentence-transformers==5.5.1
+sentence-transformers==6.0.1
 
 # mcp is held at 1.x ON PURPOSE, and the pin is not stale. In mcp 2.x FastMCP
 # was renamed to MCPServer and the module moved, so `from mcp.server.fastmcp
