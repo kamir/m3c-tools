@@ -94,20 +94,38 @@ func wireManagedSeamsFromBytes(t *testing.T, b []byte) {
 // key/sign failure, are deliberately NOT what this test exercises).
 func brokenAuditHome(t *testing.T) {
 	t.Helper()
-	if os.Geteuid() == 0 {
-		t.Skip("needs a non-root euid: mode 0500 does not stop root writes")
-	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	if _, err := invocationDeviceKey(home); err != nil {
 		t.Fatalf("materialize device key: %v", err)
 	}
+	// A DIRECTORY where each artefact file would go, rather than chmod 0500 on
+	// the parent.
+	//
+	// The first version made the parent unwritable, which is a no-op on Windows:
+	// Go's Chmod there toggles the read-only ATTRIBUTE, and that does not stop a
+	// file being created inside a directory. The test passed on Unix, failed on
+	// windows-latest, and a GOOS skip would have been the wrong repair: an
+	// assertion that never runs on a platform says nothing about it, and R-8.2
+	// fail-closed is exactly the property a Windows operator relies on.
+	//
+	// O_CREATE|O_WRONLY against an existing directory fails on every OS this
+	// ships to (EISDIR on Unix, access denied on Windows), so the precondition
+	// "the artefact cannot be written" now holds identically everywhere, while
+	// the parent stays readable and the device key still loads: signing succeeds,
+	// recording does not, which is the seam under test.
 	dir := filepath.Join(home, ".claude", "skillctl")
-	if err := os.Chmod(dir, 0o500); err != nil {
-		t.Fatal(err)
+	for _, artefact := range []string{
+		"spool.jsonl",            // outbox spool (pkg/skillctl/outbox/spool.go)
+		"outbox.db",              // outbox store (pkg/skillctl/outbox/outbox.go)
+		"gate-audit.jsonl",       // gate decisions (cmd/skillctl/gate_audit.go)
+		"invocation-trail.jsonl", // signed trail (cmd/skillctl/invocation_trail.go)
+		"lifecycle-audit.jsonl",  // lifecycle sink
+	} {
+		if err := os.MkdirAll(filepath.Join(dir, artefact), 0o700); err != nil {
+			t.Fatalf("block artefact %s: %v", artefact, err)
+		}
 	}
-	// Registered AFTER t.TempDir's cleanup → runs BEFORE it, so RemoveAll works.
-	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
 }
 
 // gateEntrypointFor mirrors the main.go dispatch for the two gate verbs (see
