@@ -21,11 +21,11 @@ type titem struct {
 	link string
 }
 
-func reg(name, body string) titem  { return titem{name: name, typ: tar.TypeReg, body: body} }
-func dir(name string) titem        { return titem{name: name, typ: tar.TypeDir} }
-func sym(name, to string) titem    { return titem{name: name, typ: tar.TypeSymlink, link: to} }
-func hard(name, to string) titem   { return titem{name: name, typ: tar.TypeLink, link: to} }
-func chardev(name string) titem    { return titem{name: name, typ: tar.TypeChar} }
+func reg(name, body string) titem { return titem{name: name, typ: tar.TypeReg, body: body} }
+func dir(name string) titem       { return titem{name: name, typ: tar.TypeDir} }
+func sym(name, to string) titem   { return titem{name: name, typ: tar.TypeSymlink, link: to} }
+func hard(name, to string) titem  { return titem{name: name, typ: tar.TypeLink, link: to} }
+func chardev(name string) titem   { return titem{name: name, typ: tar.TypeChar} }
 
 // makeArchive builds a gzip+tar blob from items, verbatim (no sanitisation) so
 // tests can inject hostile headers.
@@ -324,4 +324,59 @@ func keys(m map[string]Entry) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// AUDIT-0001 finding 1.9: entry names count against the byte ceiling. Before
+// the fix, only TypeReg content was metered, so an archive of dir entries with
+// long PAX names (the audit probe: 41MiB archive, 11.7GiB heap) passed every
+// budget. Three dir entries carrying 600 name bytes must trip a 512-byte
+// ceiling; the same archive under a roomier ceiling still passes.
+func TestUnpack_NameBytesCountAgainstByteCeiling(t *testing.T) {
+	blob := makeArchive(t, []titem{
+		dir(strings.Repeat("a", 200)),
+		dir(strings.Repeat("b", 200)),
+		dir(strings.Repeat("c", 200)),
+	})
+	_, err := Unpack(blob, UnpackOptions{MaxBytes: 512})
+	if err == nil {
+		t.Fatal("600 bytes of dir-entry names must trip a 512-byte ceiling")
+	}
+	if !strings.Contains(err.Error(), "exceeds 512 bytes") {
+		t.Fatalf("the refusal must name the ceiling: %v", err)
+	}
+	if entries, err := Unpack(blob, UnpackOptions{MaxBytes: 2048}); err != nil || len(entries) != 3 {
+		t.Fatalf("the same names within the ceiling must pass: entries=%d err=%v", len(entries), err)
+	}
+}
+
+// AUDIT-0001 finding 1.9: a linkname is header-carried input of attacker-chosen
+// size, so it counts against the ceiling too. The budget refusal must come
+// BEFORE the symlink refusal: that is what proves the bytes were metered.
+func TestUnpack_LinknameCountsAgainstByteCeiling(t *testing.T) {
+	blob := makeArchive(t, []titem{sym("l", strings.Repeat("t", 600))})
+	_, err := Unpack(blob, UnpackOptions{MaxBytes: 512})
+	if err == nil {
+		t.Fatal("601 header bytes must trip a 512-byte ceiling")
+	}
+	if !strings.Contains(err.Error(), "exceeds 512 bytes") {
+		t.Fatalf("the linkname must be metered before the symlink refusal: %v", err)
+	}
+}
+
+// AUDIT-0001 finding 1.9: one entry name longer than 4096 bytes (PATH_MAX) is
+// refused outright; a name of exactly 4096 bytes still passes. Only PAX
+// long-name resource attacks live above that line, no legitimate bundle does.
+func TestUnpack_RejectsAnOversizedEntryName(t *testing.T) {
+	over := makeArchive(t, []titem{reg(strings.Repeat("n", 4097), "x")})
+	_, err := Unpack(over, UnpackOptions{})
+	if err == nil {
+		t.Fatal("a 4097-byte entry name must be refused")
+	}
+	if !strings.Contains(err.Error(), "4096 byte limit") {
+		t.Fatalf("the refusal must name the limit: %v", err)
+	}
+	at := makeArchive(t, []titem{reg(strings.Repeat("n", 4096), "x")})
+	if entries, err := Unpack(at, UnpackOptions{}); err != nil || len(entries) != 1 {
+		t.Fatalf("a name of exactly 4096 bytes must pass: entries=%d err=%v", len(entries), err)
+	}
 }
