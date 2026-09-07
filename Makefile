@@ -434,6 +434,13 @@ check-docs:
 
 # Release targets: code review + docs check run before release
 #
+# Alle vier Ziele TAGGEN nur. scripts/release.sh baut nichts, laedt nichts hoch
+# und committet nichts mehr: es taggt origin/master by hash und schiebt das Tag,
+# und .github/workflows/release.yml baut, signiert, attestiert und publiziert.
+# Frueher hat das Skript lokal gebaut und das nackte Binary plus eine DMG per
+# `gh release create` an denselben v*-Kanal gehaengt; der checksums-Job hasht
+# aber nur die CI-Artefakte, also lagen dort unattestierte Assets (v2.9.0).
+#
 # `release` LEITET die Stufe aus den Commits ab (scripts/derive-bump.sh), statt
 # sie zu raten. Vorher war es fest `release-patch` verdrahtet: deshalb ist der
 # Fleet-Kill-Switch (FR-0045) als v2.8.1 ausgeliefert worden: eine Patch-Nummer
@@ -683,7 +690,7 @@ help:
 	@echo "  build-skillctl-demo Build the offline skillctl-demo (+ skillctl)"
 	@echo "  build-all      Build all binaries (CLI + POCs + skillctl + demo)"
 	@echo "  build-app      Build macOS .app bundle"
-	@echo "  dmg            Build macOS DMG installer"
+	@echo "  dmg            Build macOS DMG installer LOCALLY (dev only, never a release asset)"
 	@echo "  setup-venv     Create Python venv and install whisper"
 	@echo "  e2e            Run all e2e tests"
 	@echo "  test-unit      Run offline unit tests only"
@@ -699,11 +706,12 @@ help:
 	@echo "  clean          Remove build artifacts"
 	@echo "  code-review    Run pre-release code review checks"
 	@echo "  check-docs     Check documentation consistency with implementation"
-	@echo "  release        Release; bump level DERIVED from commits (code-review + check-docs first)"
+	@echo "  release        Tag origin/master; bump level DERIVED from commits (code-review + check-docs first)"
 	@echo "  release-auto   Same derivation without the pre-checks"
-	@echo "  release-patch  Release with patch version bump"
-	@echo "  release-minor  Release with minor version bump"
-	@echo "  release-major  Release with major version bump"
+	@echo "  release-patch  Tag origin/master with a patch version bump"
+	@echo "  release-minor  Tag origin/master with a minor version bump"
+	@echo "  release-major  Tag origin/master with a major version bump"
+	@echo "                   All four only TAG + PUSH. CI (release.yml) builds, signs and publishes."
 	@echo "  menubar        Build + run the menu bar .app in the FOREGROUND (stdout logs, Ctrl-C)"
 	@echo "  menubar-app    Build + launch the .app DETACHED via 'open' (background, quit from menu)"
 	@echo "  build-windows  Cross-compile CLI + tray for Windows (amd64)"

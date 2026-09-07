@@ -47,6 +47,79 @@ see); `make release` aborts and demands the explicit `make release-major`.
 
 ---
 
+## Release approval: who signs off, and before what
+
+A tag push is the point of no return: it starts a workflow that builds, signs and
+publishes. Everything in this section happens **before** it.
+
+### The machine half is already a blocking gate
+
+The **SPEC-0406** two-party acceptance test runs in
+[`skillctl-release.yml`](../.github/workflows/skillctl-release.yml) as
+`acceptance-gate`, a matrix over **macOS and Windows**, placed *before* the build
+so a failure stops the release instead of annotating a finished artifact. It runs
+`TestAcceptance_TwoParty` (T01..T15) plus the twin rehearsal scripts
+[`scripts/skillctl-acceptance.sh`](../scripts/skillctl-acceptance.sh) and
+[`scripts/skillctl-acceptance.ps1`](../scripts/skillctl-acceptance.ps1);
+[`ci.yml`](../.github/workflows/ci.yml) runs the Unix twin on every push, so the
+gate is not first exercised at tag time.
+
+What it cannot see: whether **two people on two machines** compared a key
+fingerprint over a second channel (SPEC-0246 R6.3, Phase 0). That is a human act,
+and no CI job can observe it. The gate covers the machine half of SPEC-0406, and
+the workflow's own gate record says exactly that.
+
+### The human half: the second pair of eyes
+
+| # | Step | Who | What is checked | Where the result is recorded |
+|---|------|-----|-----------------|------------------------------|
+| 1 | Code review | someone who did not write the commits | the diff on `master` since the previous tag | the approving review on the pull request |
+| 2 | Fingerprint out of band (Phase 0) | the consumer, on their own machine | the author public key fingerprint, read back over a second channel | the [acceptance checklist](acceptance-skillctl-lifecycle.md#9-handover-checklist-for-erics-team) |
+| 3 | Consumer lane, Part B | the consumer, on their own machine | the **published** artifacts, never a local build | exit codes of `pull --install --trust-mode`, `verify`, `audit` |
+
+For the skillctl line step 3 has a natural home: `skillctl-release.yml` publishes a
+**draft**. Do not run `gh release edit skillctl/vX.Y.Z --draft=false` before step 3
+has been performed against that draft's artifacts. Promoting the draft *is* the
+sign-off, so treat it as one and not as a formality.
+
+Record the outcome in the release body, so the evidence sits next to the artifacts
+it is about:
+
+```bash
+gh release view skillctl/v0.5.0 --json body -q .body > /tmp/notes.md
+cat >> /tmp/notes.md <<'EOF'
+
+## Acceptance (SPEC-0406)
+- Second person: <name>, machine: <os/arch>, date: <YYYY-MM-DD>
+- Phase 0 fingerprint compared out of band: yes/no, channel: <...>
+- Part B exit codes: pull=0, verify=0, audit=0
+EOF
+gh release edit skillctl/v0.5.0 --notes-file /tmp/notes.md
+```
+
+The product line (`v*`) has no draft stage today, so its equivalent is: cut it,
+perform step 3 against the published assets, and use [Rollback](#rollback) if it
+fails.
+
+### Break-glass: the solo path
+
+**This repository has exactly one account with write access.** Steps 1 and 3 can
+therefore often not be filled by a different person, and naming a second reviewer
+who does not exist would be a decoration, not a control. The solo path is
+allowed, and it is **break-glass**:
+
+- it is a deliberate act, never the silent default;
+- the release body carries the same `## Acceptance (SPEC-0406)` heading, naming
+  who released, which of the three steps had no second person, and why;
+- the missing step is caught up afterwards. Either a second person performs it and
+  the result is appended under that heading, or the release is rolled back.
+
+> Written down because the alternative was already the practice: the last five
+> merged pull requests carried zero reviews, and `v2.9.0` was published from a
+> laptop. A solo path nobody documents is indistinguishable from a broken one.
+
+---
+
 ## The canonical path: tag `origin/master` by hash
 
 **Recommended, and what the maintainers actually use.** Because working copies
@@ -88,23 +161,57 @@ goreleaser check        # validate .goreleaser.yml before relying on it
 
 ---
 
-## The scripted path: `make release` (local, convenience)
+## The scripted path: `make release` (derive the level, tag, and stop)
 
 ```bash
-make release            # derive-bump → code-review → check-docs → release-auto
+make release            # derive-bump → code-review → check-docs → tag origin/master
 make release-minor      # force a level (also: release-patch / release-major)
 ```
 
-`make release` runs `code-review` + `check-docs` first, then
-[`scripts/release.sh`](../scripts/release.sh) bumps, tags and creates the release.
+`make release` runs `code-review` + `check-docs`, derives the bump level, and then
+[`scripts/release.sh`](../scripts/release.sh) **tags `origin/master` by hash and
+pushes the tag**. It prints the commit it is about to tag, plus its subject and
+author, and asks for a confirmation; `--yes` skips the prompt, and without a
+terminal it refuses rather than guessing. This is the canonical path above with
+the version arithmetic done for you.
 
-> ⚠️ **`scripts/release.sh` operates on your WORKING COPY.** It will
-> `git add -A && git commit` any dirty files, `git push` the **current** branch,
-> and create the release with **local macOS‑only** assets. Run it **only** from a
-> clean checkout of `master`: **never** from a feature branch or a worktree, or
-> you will publish the wrong branch. When in doubt, use the tag‑by‑hash path
-> above and let CI build every platform. The CI workflow then enriches the same
-> release with the full signed multi‑platform artifacts.
+It deliberately does **not** build, package, upload an asset, create a release, or
+commit anything: publication is `release.yml` alone. A modified tracked file makes
+it refuse, because it tags `origin/master` and your local changes would not be in
+the release either way.
+
+> **Why it used to be dangerous.** Until this change the script ran
+> `git add -A && git commit` over the working copy, built a macOS binary and a DMG
+> on the laptop, and uploaded both with `gh release create --latest`. The
+> `checksums` job in `release.yml` hashes only the CI artifacts (`*.tar.gz`,
+> `*.zip`, `*.exe`), so those two assets landed in neither `checksums.txt` nor the
+> SLSA subjects. `v2.9.0` still shows it: `m3c-tools` and `M3C-Tools-2.9.0.dmg`
+> are release assets, and its `checksums.txt` lists neither of them.
+
+### The macOS DMG is not a release asset
+
+`make dmg` still builds `build/M3C-Tools-<version>.dmg` locally, and that is now
+all it is: a development convenience. It is not published, because an asset CI
+does not build cannot be covered by `checksums.txt`, the cosign signature or the
+SLSA provenance, and an uncovered asset on a signed channel is worse than a
+missing one: a user cannot tell the two apart at the download page.
+
+Restoring it as a download is a CI job, not a script call. What it would take,
+deliberately **not** done here:
+
+1. a step in the existing `build-macos` job (already `macos-latest`, already with
+   PortAudio) that runs `make build-app` plus `scripts/make-dmg.sh` and uploads
+   the DMG as a workflow artifact. It would be arm64-only unless the two darwin
+   binaries are merged into a universal one with `lipo` first;
+2. `*.dmg` added to **both** globs in the `checksums` job (`checksums.txt` **and**
+   the base64 SLSA subjects) and to the loop in the `verify` job, or the DMG ships
+   unattested again, which is the defect this change removes;
+3. the asset added to the `files:` list of the `release` job;
+4. and the part that is not YAML: the `.app` bundle is neither codesigned nor
+   notarised (both are open items in [roadmap.md](roadmap.md)), so a downloaded
+   DMG is quarantined by Gatekeeper. Shipping an unsigned DMG through a signed
+   channel trades one trust problem for another; an Apple signing identity and a
+   notarisation step have to exist first.
 
 ---
 

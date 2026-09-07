@@ -30,7 +30,9 @@
 .NOTES
   Env overrides:
     $env:M3C                 path to m3c-tools.exe (wins over PATH/build)
-    $env:M3C_ENV             extra config file to inspect first
+    $env:M3C_ENV             extra file to inspect; the binary does not read it
+    $env:M3C_DOTENV = '1'    count the .env of the current directory as a config
+                             source (same opt-in the binary needs to apply it)
     $env:QA_ONLINE = '1'     same as -Online
     $env:M3C_EXPECT_VERSION  expected release version (default 2.10.0)
 #>
@@ -123,20 +125,37 @@ function Add-Cfg($p) {
         if (-not $cfgFiles.Contains($full)) { $cfgFiles.Add($full) }
     }
 }
-Add-Cfg $env:M3C_ENV
-Add-Cfg ".\.env"
-Add-Cfg (Join-Path $PSScriptRoot "..\.env")
-Add-Cfg (Join-Path $env:USERPROFILE ".m3c-tools.env")
+# Does the working-directory .env configure the binary at all? AUDIT-0001
+# finding 2.7 made it an opt-in source; the accepted values mirror
+# pkg/er1.LoadDotenvUntrusted, and anything unrecognized counts as off.
+function Test-DotenvOptIn {
+    $v = "$($env:M3C_DOTENV)".Trim().ToLowerInvariant()
+    return @('1','true','yes','on') -contains $v
+}
+
+Add-Cfg $env:M3C_ENV   # operator-named extra file: inspected here, NOT read by the binary
 $apFile = Join-Path $env:USERPROFILE ".m3c-tools\active-profile"
 if (Test-Path -LiteralPath $apFile -PathType Leaf) {
     $ap = (Get-Content -LiteralPath $apFile -TotalCount 1 -ErrorAction SilentlyContinue)
     if ($ap) { Add-Cfg (Join-Path $env:USERPROFILE (".m3c-tools\profiles\{0}.env" -f $ap.Trim())) }
 }
+Add-Cfg (Join-Path $env:USERPROFILE ".m3c-tools\preferences.env")
+Add-Cfg (Join-Path $env:USERPROFILE ".m3c-tools.env")
+# The .env of the CURRENT directory counts only with the opt-in. Without it the
+# binary ignores the file, so grading it green would be a green light on nothing.
+$cwdDotenvIgnored = $null
+if (Test-Path -LiteralPath ".\.env" -PathType Leaf) {
+    if (Test-DotenvOptIn) { Add-Cfg ".\.env" }
+    else { $cwdDotenvIgnored = (Resolve-Path -LiteralPath ".\.env").Path }
+}
 
 if ($cfgFiles.Count -gt 0) {
     Write-Pass ("B1 config source exists: {0}" -f ($cfgFiles -join ', '))
 } else {
-    Write-Fail "B1 config source exists" "copy .env.example -> .env, or run 'm3c-tools login', or 'm3c-tools config create'"
+    Write-Fail "B1 config source exists" "run 'm3c-tools login' or 'm3c-tools config create', or copy .env.example -> `$HOME\.m3c-tools.env"
+}
+if ($cwdDotenvIgnored) {
+    Write-Warn ("B1b {0} exists but does NOT configure m3c-tools" -f $cwdDotenvIgnored) "the working-directory .env is opt-in: move the settings to a profile or `$HOME\.m3c-tools.env, or re-run with `$env:M3C_DOTENV='1'"
 }
 
 # Key presence WITHOUT printing the value: Select-String -Quiet returns only a boolean.

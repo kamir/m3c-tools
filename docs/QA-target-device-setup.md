@@ -64,15 +64,24 @@ m3c-tools version
 
 ## Stage B: Config present & valid
 
-Configuration is resolved from the first of these that exists (the helper checks all of them):
-1. `$M3C_ENV` (explicit override), 2. repo `./.env`, 3. `~/.m3c-tools.env`,
-4. the active profile `~/.m3c-tools/profiles/<active-profile>.env`
-(🪟 `%USERPROFILE%\.m3c-tools\...`).
+The binary reads configuration from these sources (the helper checks all of them):
+1. the active profile `~/.m3c-tools/profiles/<active-profile>.env`,
+2. `~/.m3c-tools/preferences.env`, 3. the legacy `~/.m3c-tools.env`
+(🪟 `%USERPROFILE%\.m3c-tools\...`). Later sources only fill what is still empty.
+
+A `.env` in the directory you happen to run the tool in is **not** one of them by default:
+since AUDIT-0001 finding 2.7 it applies only with the `M3C_DOTENV=1` opt-in, because such a
+file can redirect uploads and credentials. See the manual, [The working-directory `.env` is
+opt-in](manual-m3c-tools.md#the-working-directory-env-is-opt-in). `$M3C_ENV` is a helper-only
+convenience: it adds a file to what this script inspects, the binary does not read it.
 
 ### B1 · A config source exists
-- **PASS:** at least one of the files above exists.
-- **FAIL → remediation.** Copy `.env.example` → `.env` and fill it in, **or** run
-  `m3c-tools login` (device-token onboarding, writes a profile), **or** `m3c-tools config create`.
+- **PASS:** at least one of the sources above exists.
+- **FAIL → remediation.** Run `m3c-tools login` (device-token onboarding, writes a profile),
+  **or** `m3c-tools config create`, **or** copy `.env.example` → `~/.m3c-tools.env` and fill it in.
+- **WARN B1b.** A `./.env` exists but the opt-in is missing, so it configures nothing. Move the
+  settings into a profile or `~/.m3c-tools.env`, or re-run with `M3C_DOTENV=1` if you trust this
+  directory. `m3c-tools setup --check` reports the same file as `present but ignored`.
 
 ### B2 · `ER1_API_URL` is set: **required**
 - **PASS:** a non-comment `ER1_API_URL=<value>` line exists in a config source.

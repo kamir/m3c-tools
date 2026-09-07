@@ -82,9 +82,10 @@ const defaultPlaudAPIURL = "https://api.plaud.ai"
 //
 // SECURITY: the API base receives the raw bearer token on every request (and,
 // during extraction, EVERY harvested candidate). PLAUD_API_URL can be set by a
-// project-local `.env` in the current working directory (LoadDotenv → os.Setenv),
-// so an untrusted repo could otherwise redirect those secrets to an attacker
-// host. We therefore refuse any base that is not an https *.plaud.ai host and
+// project-local `.env` in the current working directory (AUDIT-0001 finding 2.7
+// made that path opt-in, M3C_DOTENV=1, but an operator who exports the opt-in
+// once still carries it into every checkout), so an untrusted repo could
+// otherwise redirect those secrets to an attacker host. We therefore refuse any base that is not an https *.plaud.ai host and
 // fall back to the default, warning secret-safely (origin only, never the token
 // a hostile value might smuggle in the path/query).
 func LoadConfig() *Config {

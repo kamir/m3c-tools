@@ -94,6 +94,15 @@ These guarantees are not honour-system where a check exists:
 - **`.skb` format**: the `schema` version field is stamped into every bundle at pack
   time and is the explicit gate point for a format break; the registry/carrier
   wire-format versions add a fail-closed "newer than this build" refusal.
+- **N-1 read guarantee**: `TestWireFormatOlderReleaseStillReadable`
+  ([`cmd/skillctl/wire_format_compat_test.go`](cmd/skillctl/wire_format_compat_test.go))
+  runs the current build's full verifying pull, and then an offline install, over a
+  **committed byte fixture** that an older release produced
+  ([`cmd/skillctl/testdata/wireformat`](cmd/skillctl/testdata/wireformat)). The
+  registry-layout freeze next to it
+  ([`pkg/skillctl/backend/git/format_test.go`](pkg/skillctl/backend/git/format_test.go))
+  writes and reads with one build, so it pins self-consistency; only the fixture
+  test can fail when a change moves the writer and the reader together.
 
 See [docs/releasing.md](docs/releasing.md) for how a version is chosen and cut, and
 [SECURITY.md](SECURITY.md) for the supported-version and reporting policy this document
