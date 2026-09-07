@@ -2,7 +2,11 @@
 #
 # Der Baum ist ueberwiegend Go; Python steckt in den beiden MCP-Servern
 # (mcp-skill-server, rag-mcp-server) und in drei Hilfsskripten unter scripts/.
-# Bis zu diesem Gate lief darauf kein Linter und kein Test.
+# Bis zu diesem Gate lief darauf kein Linter und kein Test. Nicht ganz
+# ungeprueft war der Anteil trotzdem: CodeQL analysiert python im default
+# setup dieses Repos, und "Analyze (python)" ist ein required check auf
+# master. SAST ersetzt aber weder Pyflakes noch pytest, es sucht
+# Sicherheitsmuster.
 #
 # Bewusst MINIMAL: kein `select`, also Ruffs Standardmenge E4, E7, E9, F.
 # Das sind Syntaxfehler und Pyflakes, keine Stilmeinung. Eine handverlesene

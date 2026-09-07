@@ -523,8 +523,12 @@ check-gofmt:
 
 # Python-Tor (AUDIT-0001 Befund N.2): ruff plus pytest fuer die beiden
 # MCP-Server. Bewusst NICHT in `make ci`: das wuerde den Go-Baum von einer
-# Python-Toolchain abhaengig machen. Blockierend ist der CI-Job python-gate,
-# der ruff, pytest und mcp exakt gepinnt installiert.
+# Python-Toolchain abhaengig machen. Im CI haengt es am Job python-gate, der
+# ruff, pytest, mcp, turbovec, numpy und PyYAML exakt gepinnt installiert.
+# Der Job laeuft bei jedem Push und Pull Request; in den required status checks
+# von master steht sein Kontext "Python servers (ruff + pytest)" am 2026-09-07
+# noch nicht, er ist also sichtbar, aber noch nicht merge-blockierend. Der
+# Kopfkommentar von scripts/check-python.sh nennt die Messung dazu.
 .PHONY: check-python
 check-python:
 	@./scripts/check-python.sh
