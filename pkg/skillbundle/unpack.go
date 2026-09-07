@@ -46,6 +46,10 @@ const (
 	DefaultMaxExtractedBytes int64 = 100 << 20 // 100 MiB
 	// DefaultMaxExtractedFiles bounds the tar entry count (tar-bomb guard).
 	DefaultMaxExtractedFiles = 10000
+	// maxArchiveNameBytes bounds one tar entry name (AUDIT-0001 finding 1.9).
+	// Linux PATH_MAX is 4096; no legitimate bundle path is longer. Only
+	// PAX-long-name resource attacks are, so anything above is refused.
+	maxArchiveNameBytes = 4096
 )
 
 // Entry is one validated, in-memory archive member. By the time Unpack returns
@@ -104,6 +108,16 @@ func Unpack(archive []byte, opts UnpackOptions) ([]Entry, error) {
 		count++
 		if count > maxFiles {
 			return nil, fmt.Errorf("skillbundle: tar entry count exceeds %d (likely a tar bomb)", maxFiles)
+		}
+		// Header names are attacker-sized input too: a PAX long name or long
+		// linkname is decompressed and allocated by the tar reader before this
+		// loop ever sees the header, and dir entries carry no content that the
+		// TypeReg branch below would meter. Charge every entry's name bytes
+		// against the same global byte budget the file contents use
+		// (AUDIT-0001 finding 1.9).
+		written += int64(len(hdr.Name)) + int64(len(hdr.Linkname))
+		if written > maxBytes {
+			return nil, fmt.Errorf("skillbundle: extracted size exceeds %d bytes (likely a gzip bomb)", maxBytes)
 		}
 
 		rel, err := sanitizeArchivePath(hdr.Name)
@@ -302,6 +316,10 @@ func modeFor(rel string, isDir bool) fs.FileMode {
 func sanitizeArchivePath(name string) (string, error) {
 	if name == "" {
 		return "", nil
+	}
+	if len(name) > maxArchiveNameBytes {
+		return "", fmt.Errorf("skillbundle: tar entry name of %d bytes exceeds the %d byte limit",
+			len(name), maxArchiveNameBytes)
 	}
 	if strings.ContainsRune(name, 0) {
 		return "", fmt.Errorf("skillbundle: tar entry name contains NUL")

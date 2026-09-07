@@ -16,6 +16,16 @@ func TestCodes_NumberTheme(t *testing.T) {
 		if c.Number == 0 {
 			continue // 0 is "success": codes don't claim 0
 		}
+		if c.Number == 25 {
+			// The ONE tolerated legacy collision: translog rewrite (real
+			// process exit, shipped since v0.3.0) vs offline_unverifiable
+			// (message-borne refusal_code, shipped since v0.3.1). Both are
+			// released, so neither side can yield without breaking a shipped
+			// contract. TestCodes_KnownLegacyCollision25 pins the pair
+			// exactly; a third claimant of 25 (or a resolution of the pair)
+			// fails there, so nothing NEW hides behind this skip.
+			continue
+		}
 		if prev, ok := themeByNum[c.Number]; ok {
 			if prev != c.Theme {
 				t.Errorf("exit code %d theme collision: %q (%s/%s) vs %q (%s/%s)",
@@ -27,6 +37,41 @@ func TestCodes_NumberTheme(t *testing.T) {
 		} else {
 			themeByNum[c.Number] = c.Theme
 			originByNum[c.Number] = c
+		}
+	}
+}
+
+// TestCodes_KnownLegacyCollision25 pins the one tolerated Number-Theme
+// violation that TestCodes_NumberTheme skips. Exactly TWO codes may hold 25,
+// with exactly these families, labels and (differing) themes; both were in
+// releases before the register saw them (census 2026-09-07, Befund 1.4), so
+// unlike the unreleased bundle_revoked-20 neither side can be renumbered
+// without a release-level decision. If that decision is ever taken and one
+// side moves, this test fails, which forces the exemption in
+// TestCodes_NumberTheme to be deleted along with it. A third surface trying
+// to claim 25 fails here too.
+func TestCodes_KnownLegacyCollision25(t *testing.T) {
+	want := map[string]Code{
+		"state-machine/offline_unverifiable_managed": {25, "offline / no-policy-basis", "state-machine", "offline_unverifiable_managed"},
+		"translog/translog_rewrite":                  {25, "log rewrite", "translog", "translog_rewrite"},
+	}
+	got := map[string]Code{}
+	for _, c := range AllCodes() {
+		if c.Number == 25 {
+			got[c.Family+"/"+c.Label] = c
+		}
+	}
+	if len(got) != len(want) {
+		t.Errorf("exit code 25 is held by %d codes, the pinned legacy pair allows exactly %d: %v", len(got), len(want), got)
+	}
+	for k, w := range want {
+		g, ok := got[k]
+		if !ok {
+			t.Errorf("pinned legacy holder %q no longer holds 25: delete this exemption AND the Number==25 skip in TestCodes_NumberTheme", k)
+			continue
+		}
+		if g != w {
+			t.Errorf("pinned legacy holder %q drifted: got %+v want %+v", k, g, w)
 		}
 	}
 }

@@ -45,6 +45,29 @@ func TestExitCode_VerifyRegistryParity(t *testing.T) {
 	}
 }
 
+// Chain-extension parity: the Tier 8 registry rows for the codes the §7
+// verifier emits ABOVE the pinned 10-19 ladder (SPEC-0246 §5.2 / SPEC-0279 R3 /
+// SPEC-0278 L1) must equal their verify.Exit* consts, same drift logic as
+// TestExitCode_VerifyRegistryParity. The agentid/translog/pin consts live in
+// package main (cmd/skillctl) and are pinned there
+// (TestExitConsts_RegistryParity in exitcode_parity_test.go).
+func TestExitCode_ChainExtensionParity(t *testing.T) {
+	cases := []struct {
+		name string
+		reg  int // exitcode registry Number
+		got  int // verify package const
+	}{
+		{"self_attested", exitcode.ChainSelfAttested.Number, verify.ExitSelfAttested},
+		{"revocation_stale", exitcode.ChainRevocationStale.Number, verify.ExitRevocationStale},
+		{"inclusion_missing", exitcode.ChainInclusionMissing.Number, verify.ExitLogInclusionMissing},
+	}
+	for _, c := range cases {
+		if c.reg != c.got {
+			t.Errorf("exit-code drift for %q: exitcode registry=%d, verify const=%d: update both", c.name, c.reg, c.got)
+		}
+	}
+}
+
 // SPEC-0198 / BUG-0144: an explicitly revoked author identity maps to 17, the
 // SAME number + theme as data-source-denied, and ExitCode checks revoke FIRST
 // so it wins. Pin both the value and the deliberate overload so a future edit

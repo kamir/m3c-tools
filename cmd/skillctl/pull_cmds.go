@@ -448,8 +448,12 @@ func resolvePullTrustRoots(registryName, trustPath string) (*registry.SelfTrustR
 //
 // Four gates map onto the numbers SPEC-0188 §11 already assigns. The fifth had no
 // number at all: the specification named 15 for bundle_revoked, but 15 has meant
-// blob_missing in every shipped build (BUG-0216). Decided 2026-09-06: revocation
-// takes 20, the specification is corrected, and 15 keeps the meaning callers have.
+// blob_missing in every shipped build (BUG-0216). The first FR-0122 cut gave
+// revocation the 20 on the claim "20 is free"; true against the exitcode
+// register, false against the exit surfaces outside it (verify.ExitSelfAttested,
+// SPEC-0246 §5.2, has shipped 20 for weeks). Befund 1.4: the one-day-old,
+// unreleased side yields. Revocation is exitcode.RevokedBundle (6), the
+// specification is corrected, and 15 keeps the meaning callers have.
 //
 // MIXED refusals stay 1, deliberately. One number cannot describe two causes, and
 // picking the "worst" would invent a ranking nothing else in this tool uses. The

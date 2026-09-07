@@ -120,7 +120,7 @@ Additional codes surface in specific commands:
 | `19` | `awareness reset`, `import-public` | identity mismatch: `client_identity` ≠ `admitted_by_identity`; also source-blocked on import. |
 | `20` | `agentid verify` | self-attested / approver-floor not met (reviewer_id == author_id; SPEC-0246 §5.2). |
 | `21` | `agentid verify` | AgentID mandate expired. |
-| `22` | `agentid verify`, `verify --bundle`, `verify-hook` | revocation snapshot stale: freshness fail-closed (SPEC-0279 R3 / FR-0045 D4). |
+| `22` | `agentid verify`, `verify --bundle`, `install --bundle`, `verify-hook` | revocation snapshot stale: freshness fail-closed (SPEC-0279 R3 / FR-0045 D4). |
 | `23` | `translog verify`, `verify` | transparency-log inclusion missing / receipt not included (SPEC-0278 L1). |
 | `24` | `translog witness` | split-view (equivocation) detected. |
 | `25` | `translog consistency` | consistency / append-only rewrite violation detected. |
@@ -362,6 +362,7 @@ skillctl cross-sign --key governance-root.priv \
 
 ```bash
 skillctl install <name>[@<version>] [flags]
+skillctl install --bundle <file.skb> [--meta <f>] [--trust-roots <f>] [--revocations <f>] [--checkpoint <f>] [--emergency <f>]
 ```
 
 Pulls a bundle from the registry, runs the SPEC-0188 §7 verifier, and **atomically** installs
@@ -369,23 +370,41 @@ it under `~/.claude/skills/<name>/`. Refuses if *any* trust-chain step fails. `<
 be a human version string (`1.0.0`) or a digest pin (`sha256:<hex>`); omit it to install the
 newest admitted version.
 
+`--bundle` installs a **standalone `.skb` file** that arrived over an untrusted transport
+(SPEC-0406 D2): fully offline, against locally pinned trust-roots, with the sidecar
+`<file>.skbmeta.json` (or `--meta`) as the envelope. It refuses for exactly the reasons
+`verify --bundle` refuses, including the offline revocation inputs: a signed revocation
+list (`--revocations`), a signed freshness checkpoint (`--checkpoint`) and a signed
+emergency deny-list (`--emergency`) are enforced *before* anything is written, fail-closed
+(an unreadable or forged list is an error, never a pass). Where the skill lands is decided
+by the signed `bundle.json`, never by the file name. The three offline inputs require
+`--bundle`; on the registry path they are refused rather than silently ignored.
+
 | Flag | Purpose |
 |------|---------|
 | `-allow-yellow` | Lower the gate from green to yellow for this install (audited). |
+| `-bundle` | Install a standalone `.skb` file from an untrusted transport, fully offline against pinned trust-roots (SPEC-0406 D2). |
+| `-checkpoint` | Signed freshness checkpoint (SPEC-0279 R4) to reset the `--revocations` staleness clock (with `--bundle`). Forged/untrusted → `12`. |
+| `-emergency` | Signed emergency deny-list (SPEC-0279 R5, with `--bundle`). Named digest → `17`; forged list → `12`. |
 | `-governance-min green\|yellow` | Override the trust-root's `governance_minimum`. Empty = use trust-root. |
 | `-home` | Override the install root (advanced; defaults to `$HOME`). |
 | `-ignore-deps` | Skip `depends_on` resolution (audited). |
+| `-meta` | Path to the BundleMeta envelope JSON for `--bundle` (default: the sidecar `.skbmeta.json`). |
 | `-registry` | Registry base URL. Required only when trust-roots pins multiple registries. |
+| `-revocations` | Signed revocation list to enforce offline (with `--bundle`), same semantics as on `verify --bundle`. Revoked digest → `17`; forged list → `12`; stale snapshot for a high-risk bundle → `22`. |
 | `-tenant` | Pin this install to a tenant scope (§7 step 5.5). Overrides trust-roots `tenant_scope`. |
 | `-timeout` | HTTP timeout for registry calls (default `30s`). |
+| `-trust-roots` | Trust-roots YAML to use instead of the default. Pair with `--bundle` for a portable kit. |
 | `-verbose` | Print structured per-step log lines to stderr. |
 
 ```bash
 skillctl install my-skill@1.0.0
 skillctl install my-skill@sha256:<hex> --verbose
+skillctl install --bundle demo@1.0.0.skb --trust-roots roots.yaml --revocations revocations.json
 ```
 
-Exit: `0`, `1`, `2`, `10`–`16` (see [Exit codes](#exit-codes)).
+Exit: `0`, `1`, `2`, `10`–`16`; with `--bundle` also `17` (revoked / emergency-denied) and
+`22` (revocation snapshot stale) (see [Exit codes](#exit-codes)).
 
 ---
 
@@ -801,7 +820,7 @@ print the sudo runbook (as root, `--confirm` writes it). Both take:
 | `--strict` | Add `allowManagedHooksOnly: true`: the full CISO lockdown, which also **disables every other user/project hook**. |
 | `--harden` | Imply `--strict` **and** block `claude --dangerously-skip-permissions`. |
 | `--enterprise` | Add `skillctlEnterprise: true`: enables the R-7.2 offline `locked` state. |
-| `--require-local-audit` | Add `skillctlRequireLocalAudit: true` (implies `--enterprise`): R-8.2: fail closed when an allow cannot be recorded. |
+| `--require-local-audit` | Add `skillctlRequireLocalAudit: true` (implies `--enterprise`) and wire the PreToolUse gate to `skillctl enforce`, the only verb that consumes the flag: R-8.2, fail closed (exit 26) when an allow cannot be recorded. |
 | `--state-gate-fallback` | Add `skillctlStateGateFallback: true` (implies `--enterprise`): R-1.4 P2: keep the hot path strictly local, with no online fallback while disconnected. |
 | `--out <file>` | Write the JSON to a file instead of stdout (`generate`). |
 | `--path <file>` | Target managed-settings path (`install`), or the path to inspect (`status`). |
