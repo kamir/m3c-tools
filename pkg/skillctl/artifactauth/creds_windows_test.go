@@ -7,9 +7,23 @@ package artifactauth
 // until now it did not exist: the whole DPAPI store, StoreCred and DeleteCred
 // included, shipped with no test at all while the macOS twin had one.
 //
-// Everything here redirects %LOCALAPPDATA% to a temp dir and uses a service name
-// no backend maps to, so a run cannot read, overwrite or delete an operator's
-// real credential.
+// Isolation rests on ONE thing that holds for every test in this file: whichever
+// root credDir() will resolve from is redirected to a t.TempDir() first. For all
+// but one test that is %LOCALAPPDATA%, set by isolateCredDir. The exception is
+// TestCredDirFallsBackWhenLOCALAPPDATAIsUnset, which has to leave %LOCALAPPDATA%
+// empty to reach the fallback and therefore redirects %USERPROFILE% instead.
+// Either way every credential file a run writes lives and dies inside that temp
+// tree, and no path here can reach an operator's real profile.
+//
+// The service name is a second, WEAKER line, and it does not cover the whole
+// file. The DPAPI-level tests use selftestService, which none of the three
+// backends in creds.go maps to (they map to m3c-skillctl-{gitlab,github,
+// registry} and the -ro twins). TestPublicStorePathUsesTheProtectedStore is the
+// exception on purpose: it exercises the public Store / Provisioned / Delete
+// path, so it passes backend "gitlab" and therefore writes under the real
+// service name m3c-skillctl-gitlab. What keeps that test harmless is the
+// redirected %LOCALAPPDATA% plus an account, the reserved-TLD host
+// git.example.invalid, that no operator credential uses.
 //
 // These tests do NOT skip when DPAPI fails. CryptProtectData is available to any
 // interactive user account with a loaded profile, which is what the

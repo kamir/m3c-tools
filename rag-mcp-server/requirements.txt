@@ -10,17 +10,44 @@
 # Bumps arrive as reviewable Dependabot PRs (package-ecosystem "pip",
 # directory "/rag-mcp-server"), never as a silent drift at install time.
 #
+# What this file is NOT: a lockfile. Only the six DIRECT dependencies are
+# pinned, every transitive one still floats, so this constrains the stack
+# without reproducing it. Measured 2026-09-07 against rag-mcp-server/.venv,
+# the environment that produced the current index, versus what
+# `uv pip compile --python-version 3.13` makes of this file:
+#
+#   package         in that venv    resolved from this file
+#   torch           2.10.0          2.14.0
+#   transformers    5.12.1          5.16.1
+#   numpy           2.4.3           2.5.3
+#
+# So the venv is NOT frozen by these six lines. Reproducing it would take a
+# fully resolved lock, all 63 packages the compile emits, which is a separate
+# decision and not this one.
+#
 # Provenance of the numbers below, measured 2026-09-07:
-#   turbovec, sentence-transformers: the versions actually installed in the
-#     working venv (rag-mcp-server/.venv), so pinning changes nothing about the
-#     stack that produced the current index.
-#   mcp, PyYAML, numpy, networkx: latest stable on PyPI, because they are not
-#     present in that venv and there was nothing to preserve.
-# Resolution was checked with `uv pip compile` against python 3.13.
+#   turbovec, sentence-transformers, PyYAML, networkx: exactly the versions
+#     installed in that venv, so pinning does not move them.
+#   numpy: 2.5.3, one minor ahead of the venv's 2.4.3.
+#   mcp: see the note at its pin.
 
 turbovec==0.8.0
 sentence-transformers==5.5.1
-mcp==2.1.1
+
+# mcp is held at 1.x ON PURPOSE, and the pin is not stale. In mcp 2.x FastMCP
+# was renamed to MCPServer and the module moved, so `from mcp.server.fastmcp
+# import FastMCP`, the first import rag_mcp_server.py performs, no longer
+# resolves. Measured 2026-09-07 in two throwaway venvs, importing
+# rag_mcp_server.py itself:
+#   mcp==2.1.1   ModuleNotFoundError: No module named 'mcp.server.fastmcp'
+#   mcp==1.29.1  module imports, mcp attribute is an mcp.server.fastmcp FastMCP
+# mcp-skill-server/server.py performs the same v1 import and carries no
+# requirements file of its own, so moving to MCPServer is one code change for
+# both servers rather than a version bump. Dependabot will still propose the
+# 2.x major. That PR is expected to fail the Python job until the code moves,
+# and it must not be merged on the bump alone.
+mcp==1.29.1
+
 PyYAML==6.0.3
 numpy==2.5.3
 networkx==3.6.1
