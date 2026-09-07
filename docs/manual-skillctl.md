@@ -89,51 +89,93 @@ For the full two-person walkthrough over ER1, see
 
 ## Exit codes
 
-The verifier (`install`, `verify`, and the gate) returns **numbered** exit codes so
-automation can branch precisely. This is the authoritative table, sourced from
-`skillctl trust --help` / `install --help` / `verify --help`.
+`install`, `verify`, `verify-sig`, `pull` and the gates return **numbered** exit codes so
+automation can branch precisely. Two tables follow, and `cmd/exitaudit` checks both against
+`pkg/skillctl/exitcode` on every run of `scripts/check-docs.sh`: the first IS the register,
+the second lists the numbers that live outside it. A number written down anywhere in this
+manual, or in an Exit-Code cell of [docs/CLI-VERBS.md](CLI-VERBS.md), must appear in one of
+the two, so a code cannot be documented without first saying where it comes from.
 
-| Code | Meaning |
-|-----:|---------|
-| `0` | ok |
-| `1` | generic error (including network / non-2xx) |
-| `2` | usage / flag error |
-| `10` | digest mismatch |
-| `11` | author signature invalid |
-| `12` | registry not in trust roots |
-| `13` | governance below minimum |
-| `14` | `depends_on` unsatisfied |
-| `15` | blob missing |
-| `16` | tenant blocked (CISO console verdict) |
-| `17` | revoked / emergency deny (from a signed revocation or emergency list) |
+The **base space** is shared by every command: `0` ok, `1` generic error (network and
+non-2xx included), `2` usage or flag error. The three `PreToolUse` gates (`verify-hook`,
+`enforce`, `guard-path`) always exit `2` to block the tool call and carry their specific
+number in the decision's `refusal_code`, never in the process status. Codes that share a
+number share a theme (FR-0023), which is what lets a script branch on the number alone.
 
-Additional codes surface in specific commands:
+### The register
 
-| Code | Command(s) | Meaning |
-|-----:|------------|---------|
-| `1` | `auditlog status`, `auditlog test`, `auditlog flush` | subsystem unhealthy / sink refused / drain error (own `0/1` health space, SPEC-0403 §8; distinct from `audit`'s `0/2/3`). |
-| `3` | `audit` | at least one skill is `BROKEN`. |
-| `4` | `import-public` | pin required (input validation). |
-| `5` | `import-public` | scanner refuse (scanner / policy hit). |
-| `6` | `import-public` | bodyscan refuse. |
-| `18` | `intent declare`, `import-public` | intent inconsistent with `data_dependencies` (SPEC-0196 §3.3); also intent-capped on import. |
-| `19` | `awareness reset`, `import-public` | identity mismatch: `client_identity` ≠ `admitted_by_identity`; also source-blocked on import. |
-| `20` | `agentid verify` | self-attested / approver-floor not met (reviewer_id == author_id; SPEC-0246 §5.2). |
-| `21` | `agentid verify` | AgentID mandate expired. |
-| `22` | `agentid verify`, `verify --bundle`, `install --bundle`, `verify-hook` | revocation snapshot stale: freshness fail-closed (SPEC-0279 R3 / FR-0045 D4). |
-| `23` | `translog verify`, `verify` | transparency-log inclusion missing / receipt not included (SPEC-0278 L1). |
-| `24` | `translog witness` | split-view (equivocation) detected. |
-| `25` | `translog consistency` | consistency / append-only rewrite violation detected. |
-| `32` | *(ROADMAP: not implemented)* | runtime capability-envelope (egress) violation. Appears **only** in the demo's ROADMAP scenario; **no** current `skillctl` subcommand emits it (the Go-native OS-level cage is FR-0044, pending). |
+<!-- Generated block: run `go run ./cmd/exitaudit -write` after changing the register. -->
+The Code, Label, Surface and Theme columns come from `exitcode.AllCodes()`; only the
+Meaning column is written by hand, and `exitaudit -write` carries it forward. Editing the four
+generated columns by hand turns `check-docs.sh` red.
+
+<!-- exitaudit:register:begin -->
+
+| Code | Label | Surface | Theme | Meaning |
+|-----:|-------|---------|-------|---------|
+| `3` | `need_priv_msg` | `pin` | privileged write required | `pin install` staged the merged managed-settings file and printed a runbook. Nothing was written; re-run the printed command with administrator rights. |
+| `4` | `pin_required` | `import-public` | input validation | The import source carried no pin. Pin the exact commit or digest and retry. SPEC-0201; the surface is not built in this tree. |
+| `5` | `scanner_refuse` | `import-public` | scanner / policy | The scanner refused the imported skill. Read the finding; retrying unchanged cannot help. |
+| `6` | `bundle_revoked` | `pull` | trust-chain revocation | Every skipped bundle failed the revocation gate: a `BundleRevokedEvent` exists for that digest. Never retry. Run `skillctl verify --all` to refresh and quarantine. |
+| `10` | `digest_mismatch` | `verify` | trust-chain digest | The bytes are not the bytes that were signed. Also what `verify-sig` returns for an altered bundle, and what `pull --install` returns when the `CHECKSUMS` manifest stops describing the contents. Ask the publisher to repack and re-sign; this is not a transport fault. |
+| `11` | `sig_invalid` | `signing` | trust-chain signature | `verify-sig` could not verify the detached author signature with the key you gave it. Check you used the AUTHOR's public key. |
+| `11` | `author_sig_invalid` | `verify` | trust-chain signature | The author signature over the bundle does not verify. Same cause, reached through the §7 chain. |
+| `12` | `registry_not_trusted` | `verify` | trust-chain registry-root | The registry key is not in your trust roots. Pin it: `trust add` over HTTP, `trust-roots.yaml` for `self`. |
+| `13` | `governance_below_min` | `verify` | policy governance | No attestation meets the governance floor. Post a green attestation, or lower the floor deliberately. |
+| `14` | `deps_unsatisfied` | `verify` | policy dependency | A `depends_on` entry is absent or below its floor. Install the dependency first. |
+| `15` | `blob_missing` | `verify` | trust-chain blob | The registry lists the bundle but the blob does not fetch. A transport or registry fault, so retrying is reasonable. |
+| `16` | `tenant_blocked` | `verify` | policy tenant | The CISO console blocked this bundle for your tenant. |
+| `17` | `no_source_policy` | `import-public` | data-source / source-policy | No source policy admits the origin. SPEC-0201; the surface is not built in this tree. |
+| `17` | `identity_revoked` | `revoke` | data-source / source-policy | The author identity is revoked, so the bundle's provenance chain is refused (SPEC-0198 §11). Surfaced by `verify` and `install`, not by `revoke` itself. |
+| `17` | `data_source_denied` | `verify` | data-source / source-policy | A declared data source is denied by policy. Also the `refusal_code` a gate carries for a revoked bundle or an emergency deny. |
+| `18` | `intent_capped` | `import-public` | intent contradiction | The declared intent was capped on import. SPEC-0201; the surface is not built in this tree. |
+| `18` | `intent_inconsistent` | `verify` | intent contradiction | The declared intent contradicts `data_dependencies` (SPEC-0196 §3.3). Emitted by `intent declare` and by `pack`. |
+| `19` | `source_blocked` | `import-public` | identity / source-block | The import source is blocked. SPEC-0201; the surface is not built in this tree. |
+| `19` | `identity_mismatch` | `verify` | identity / source-block | `client_identity` is not `admitted_by_identity`, the refusal `awareness reset` gives. |
+| `20` | `self_attested` | `verify-chain` | attestation reviewer-independence | The attestation's reviewer IS the author (`reviewer_id` equals `author_id`), so the floor is not met independently (SPEC-0246 §5.2). |
+| `21` | `agentid_expired` | `agentid` | agent-identity expiry | The AgentID mandate is past its expiry. Re-issue it. |
+| `22` | `revocation_stale` | `verify-chain` | revocation freshness | The revocation snapshot is too old to trust for this action, and the answer fails closed (SPEC-0279 R3, FR-0045 D4). Run `skillctl revoke feed --refresh`. |
+| `23` | `not_included` | `translog` | log inclusion | `translog verify`: the receipt does not verify against the log head. |
+| `23` | `inclusion_missing` | `verify-chain` | log inclusion | The chain carries no transparency-log inclusion proof (SPEC-0278 L1). |
+| `24` | `split_view` | `translog` | log equivocation | `translog witness` saw two signed tree heads that cannot both be true. |
+| `25` | `offline_unverifiable_managed` | `state-machine` | offline / no-policy-basis | A `refusal_code`, not a process exit. A legacy managed install with no offline metadata, while `offline_policy` state-gates the online fallback. Re-run `skillctl install <skill>` to stash the metadata. Shares `25` with `translog`'s `translog_rewrite` under a different theme: the one tolerated legacy collision, both sides already shipped (see `TestCodes_KnownLegacyCollision25`). |
+| `25` | `translog_rewrite` | `translog` | log rewrite | `translog consistency`: an append-only violation, the log was rewritten. |
+| `26` | `local_audit_unavailable` | `enforce` | evidence / audit-durability | A `refusal_code`. `require_local_audit` is set and an allow could not be durably recorded, so the gate fails closed (SPEC-0317 R-8.2). |
+| `27` | `sidechannel_denied` | `guard-path` | side-channel / path-guard | A `refusal_code`. The opt-in `guard-path` deny of a skill-directory side-channel access (SPEC-0317 R-6). |
+| `28` | `offline_locked` | `state-machine` | offline / no-policy-basis | A `refusal_code`. The host is managed-enterprise with NO trust basis at all, so `offline_policy` denies every non-allowlisted managed skill. Restore a trust root or a signed offline checkpoint. |
+| `29` | `ingest_rejected` | `sync` | egress / ingest | The ingest endpoint rejected the batch (auth or validation, a 4xx). Not retryable unchanged. |
+
+<!-- exitaudit:register:end -->
+
+### Codes outside the register
+
+Not every exit number is a registered code, and the ones that are not have to be written
+down anyway: `bundle_revoked` briefly claimed a `20` that `verify.ExitSelfAttested` had
+been shipping for weeks, because the census had only ever been taken against the register.
+Each row names the file that owns the number, and `cmd/exitaudit` fails if that file is
+gone.
+
+<!-- exitaudit:outside:begin -->
+
+| Code | Surface | Source | Why it is not in the register |
+|-----:|---------|--------|-------------------------------|
+| `0` | all | `cmd/skillctl/signing_cmds.go` | Success. The register allocates failures; `0` is claimed by no code, and the invariant test skips it. |
+| `1` | all | `cmd/skillctl/signing_cmds.go` | Generic error, deliberately unspecific. `pull` also returns it when bundles were skipped for DIFFERENT reasons: one number cannot describe two causes, and the per-bundle gate is on each row of the output. |
+| `2` | all | `cmd/skillctl/signing_cmds.go` | Usage or flag error. Also the value a `PreToolUse` gate exits with to BLOCK a tool call (`exitHookBlock`), which is why gate refusals ride `refusal_code` instead. |
+| `3` | `audit` | `pkg/skillctl/audit/audit.go` | The posture verdict "at least one skill is BROKEN" (SPEC-0189 §14.2). It cannot enter the register: `3` is held there by `pin`'s `need_priv_msg` under a different theme, and the number-theme invariant is what makes the register worth having. The two surfaces never run inside one command. |
+| `6` | `import-public` | `(unimplemented)` | SPEC-0201 §11 assigns `6` to a bodyscan refuse. No such command exists in this tree, and `6` is now `pull`'s `bundle_revoked`. If `import-public` ever lands, it takes a free number. |
+| `32` | `skillgate` | `pkg/skillgate/gate.go` | The runtime capability-envelope band `30`-`39` (SPEC-0202 §8.2) is a library constant band in the Python-reference gateway. **No `skillctl` subcommand emits it**; the Go-native OS-level cage is FR-0044, pending. It appears in the demo's ROADMAP scenario only. |
+
+<!-- exitaudit:outside:end -->
 
 `audit` uses its own scale: `0` all OK · `2` at least one `UNVERIFIED`/`BELOW_MIN` (or a
-G-23 confirm-delete precondition refusal on drift) · `3` at least one `BROKEN`. `propose` uses
-`0` pass / `2` gate failed.
+G-23 confirm-delete precondition refusal on drift) · `3` at least one `BROKEN`. `propose`
+uses `0` pass / `2` gate failed. `auditlog` has its own `0/1` health space (SPEC-0403 §8),
+which is why a health finding must never be read as a posture verdict.
 
 > Some commands print flags with a **single dash** in their own help output (e.g. `-key`,
 > `-out`). Both `-<flag>` and `--<flag>` are accepted. This manual reproduces flag names as
 > the command prints them, and shows examples in the common `--<flag>` form.
-
 ---
 
 ## Command reference
@@ -167,7 +209,7 @@ Writes `<PATH>.priv` (mode `0600`) and `<PATH>.pub` (mode `0644`), both PEM-wrap
 skillctl keygen --out ~/.config/m3c/skill-keys/mykey
 ```
 
-Exit: `0` ok · `2` usage.
+Exit: `0` ok · `1` write / key-generation error · `2` usage.
 
 ---
 
@@ -209,7 +251,7 @@ skillctl pack \
   --data-scopes '{"id":"ds:fs/cwd","kind":"local_fs","access":"write","scope":"<cwd>/decks/**","reason":"write deck"}'
 ```
 
-Exit: `0` ok · `2` usage / validation error.
+Exit: `0` ok · `1` pack error · `2` usage / validation error · `18` the declared intent contradicts `data_dependencies` (SPEC-0196 §3.3, the same number `intent declare` gives).
 
 ---
 
@@ -231,7 +273,7 @@ a **detached** signature: `<BUNDLE.skb>.<digest_hex>.author.sig` (64 raw bytes, 
 skillctl sign --key ~/.config/m3c/skill-keys/mykey.priv my-skill.skb
 ```
 
-Exit: `0` ok · `2` usage.
+Exit: `0` ok · `1` signing error · `2` usage.
 
 ---
 
@@ -252,7 +294,7 @@ network, no CA.**
 skillctl verify-sig --pubkey ~/.config/m3c/skill-keys/mykey.pub my-skill.skb
 ```
 
-Exit: `0` ok · `11` signature invalid · `1` other error · `2` usage.
+Exit: `0` ok · `10` the bundle's bytes changed after signing (digest mismatch: checked BEFORE the signature, because an altered bundle is a digest failure first and the same `10` that `verify --bundle` gives for that cause) · `11` signature invalid · `1` other error · `2` usage.
 
 ---
 
@@ -403,8 +445,7 @@ skillctl install my-skill@sha256:<hex> --verbose
 skillctl install --bundle demo@1.0.0.skb --trust-roots roots.yaml --revocations revocations.json
 ```
 
-Exit: `0`, `1`, `2`, `10`–`16`; with `--bundle` also `17` (revoked / emergency-denied) and
-`22` (revocation snapshot stale) (see [Exit codes](#exit-codes)).
+Exit: `0`, `1`, `2`, plus every code `verify.ExitCode` maps out of the §7 chain: `10`–`17`, `20` (self-attested), `22` (revocation snapshot stale) and `23` (log inclusion missing). With `--bundle`, `17` also carries an emergency deny (see [Exit codes](#exit-codes)).
 
 ---
 
@@ -649,7 +690,7 @@ skillctl publish --attest my-skill --level green --rationale "reviewed"
 skillctl publish --revoke my-skill --digest sha256:<hex> --reason superseded
 ```
 
-Exit: `0` ok · `2` usage.
+Exit: `0` ok · `1` generic / network / ER1 error · `2` usage.
 
 ---
 
@@ -689,7 +730,7 @@ skillctl pull --install --trust-mode --dry-run-install
 skillctl pull --install --trust-mode --confirm-install --dry-run-install-token <sig>
 ```
 
-Exit: `0` ok · `2` usage.
+Exit: `0` all bundles staged · `2` usage or a refused `--install` precondition (missing `--trust-mode`, a missing / expired / forged G-23 token) · `1` bundles were skipped for MORE THAN ONE reason (no single number can name two causes; read the per-row gate) · one skipped gate maps to ITS number: `12` envelope / registry not trusted, `10` digest, `11` bundle signature, `13` governance below minimum, `6` revoked. `--install` returns `10` when the extracted bundle's `CHECKSUMS` manifest stops describing it (SPEC-0188 §7 step 8). Measured against `skipExitCode` / `gateExit` in `cmd/skillctl/pull_cmds.go`.
 
 ---
 
@@ -729,16 +770,42 @@ it by hand. Running it interactively prints a fail-closed deny (unreadable stdin
 **Revocation freshness is fail-closed at the gate too (FR-0045 D4).** Beyond the trust chain,
 the hook enforces the SPEC-0279 freshness contract: an **emergency deny**, or a revocation
 snapshot too stale to trust for the requested action (`bundle_revocation_stale` /
-`agent_revocation_stale`, SPEC-0279 R3/R5), denies rather than allows. The hook **process**
-always exits `2` to block the tool call; the deny message carries the underlying
-`refusal_code`: `17` (revoked / emergency deny) or `22` (revocation snapshot stale). This is
-the runtime edge of the FR-0045 kill-switch: because the revocation HEAD is checked against a
-pinned registry key, a tampered, rolled-back, or forged feed is refused, not silently trusted.
+`agent_revocation_stale`, SPEC-0279 R3/R5), denies rather than allows. This is the runtime
+edge of the FR-0045 kill-switch: because the revocation HEAD is checked against a pinned
+registry key, a tampered, rolled-back, or forged feed is refused, not silently trusted.
+
+**The process always exits `2`**, both for an allow-blocking deny and for the unreadable-stdin
+refusal, because `2` is what Claude Code reads as "block this tool call". The number that says
+WHY rides the decision's `refusal_code` instead, and it is one of exactly four, measured
+against `cmd/skillctl/verify_hook_cmds.go`:
+
+| `refusal_code` | Meaning |
+|---------------:|---------|
+| `17` | The bundle is revoked, or an emergency deny-list names it. |
+| `22` | The revocation snapshot is too stale (or its signed HEAD did not verify) to answer for a high-risk invocation. |
+| `25` | `offline_unverifiable_managed`: a legacy managed install with no offline metadata, while `offline_policy` state-gates the online fallback. |
+| `28` | `offline_locked`: a managed-enterprise host with NO trust basis at all. |
+
+`26` belongs to `enforce` and `27` to `guard-path`, not here: those two verbs are separate
+gates with the same exit-2-plus-`refusal_code` convention. A deny for any other cause carries
+the §7 chain's own code (`10`-`17`, `20`, `22`, `23`) in its message.
+
+**The network is touched at most once, for at most 8 seconds** (`verifyHookTimeout`,
+`cmd/skillctl/verify_hook_cmds.go`), and only on the narrow path where all of the following
+hold: the skill is managed, the verdict cache misses, the install has NO stashed offline
+verification metadata (a legacy install: `skillctl install <skill>` stashes it), and the
+enterprise offline state-gate does not suppress the fallback. Anything else, including every
+allow from the verdict cache or the offline chain, is decided without a registry round trip.
+The offline fast path is SPEC-0247 P1; the timeout is the bound on the P0.1 fallback that
+remains.
 
 ```json
 // settings.json (excerpt): wire it as a PreToolUse(Skill) hook
 { "hooks": { "PreToolUse": [ { "matcher": "Skill", "hooks": [ { "type": "command", "command": "skillctl verify-hook" } ] } ] } }
 ```
+
+Exit: `0` allow · `2` every deny, and the unreadable-stdin refusal. The cause rides the
+decision's `refusal_code`: `17`, `22`, `25` or `28`, per the table above.
 
 ---
 
@@ -855,6 +922,10 @@ break every unmanaged skill dir.
 skillctl guard-path --explain
 ```
 
+Exit: `0` allow (the default, and every allow) · `2` an opt-in `--deny` blocked the access, or
+a usage error. The signed guard event carries `27` (`sidechannel_denied`) as the refusal code;
+the process status stays `2`, because `2` is what blocks a `PreToolUse` call.
+
 ---
 
 ### `session-baseline`: informational SessionStart context (SPEC-0317 R-7)
@@ -961,7 +1032,7 @@ skillctl agentid revoke agent-42 --reason compromised --registry https://aims.ex
 ```
 
 Exit (`verify`): `0` ok · `11` owner-sig/not-pinned · `20` approver-floor · `21` expired ·
-`17` revoked/emergency · `12` registry-not-pinned · `22` revocation-stale · `1` other.
+`17` revoked/emergency · `12` registry-not-pinned · `22` revocation-stale · `1` other · `2` usage.
 
 ---
 
@@ -1031,6 +1102,7 @@ skillctl translog witness --sths sths.json --log-pubkey log.pub
 
 Exit: `translog verify` → `0` ok · `23` not-included · `1` other · `2` usage.
 `translog witness` → `0` consistent · `24` split-view-detected · `1` other · `2` usage.
+`translog consistency` → `0` consistent · `25` an append-only rewrite was detected · `1` other · `2` usage.
 
 ---
 
@@ -1206,7 +1278,7 @@ admitted.
 | `-registry` | Registry base URL (default `http://localhost:8080/api/skills`). |
 | `-bump major\|minor\|patch` | Auto-bump the `SKILL.md` version. **Parsed but not yet wired** in v1: it currently changes nothing. |
 
-Exit: `0` gate passed · `2` gate failed (one or more rows print `FAIL`). **`--dry-run` does
+Exit: `0` gate passed · `1` generic / network error · `2` gate failed (one or more rows print `FAIL`). **`--dry-run` does
 not force a `0`**: it skips the proposal POST, the verdict still rides the exit code. Measured,
 because the earlier wording ("0 gate passed (or --dry-run)") said otherwise and a script that
 believed it would treat every failed gate as a pass.
@@ -1361,7 +1433,7 @@ any inventory flag is parsed, so the two never interfere.
 | `--body` | Route to the bodyscan. **Required** to select this mode. |
 | `--format table\|json` / `--json` | Output format. |
 
-Exit: `0` green · `2` any finding.
+Exit: `0` green · `1` scan / IO error · `2` any finding, or usage.
 
 **`report`**: render a scan into a report.
 

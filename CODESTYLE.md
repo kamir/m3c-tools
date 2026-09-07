@@ -26,6 +26,7 @@ never by quietly loosening a rule.
 | Security (SAST) | Crypto, injection, hardcoded credentials | `gosec` |
 | Dependencies | Reachable CVEs, secret scan, `go mod tidy` is a no-op | `govulncheck`, `gitleaks`, CI job |
 | CLI surface | Every real flag documented, every documented flag real | `cmd/docaudit` (see below) |
+| Exit codes | Every documented number is registered or has a named owner; manual and verb register agree per verb | `cmd/exitaudit` (see below) |
 
 ### The honesty rule for comments
 
@@ -224,3 +225,43 @@ standard FlagSet, and the flags of a command that is not dispatched at all
 
 An exemption is never the right fix for "the extractor cannot see it". If the
 gate is blind to a real idiom, teach the extractor and add a test.
+
+---
+
+## Exit-code register consistency
+
+`cmd/exitaudit` is the sibling gate that keeps the **numbers** honest, the way
+`docaudit` keeps the flags honest. Its subject is `pkg/skillctl/exitcode`, and
+it exists because AUDIT-0001 measured what happens without it: `pull` mapped its
+five gates onto `12/10/11/13/6` while the manual said "0 ok, 2 usage" and
+`docs/CLI-VERBS.md` said "0/1/2"; `verify-sig` returned `10` for an altered
+bundle that no document mentioned; verify-hook's refusal space was `17/22/25/28`
+in code, `17/22` in the manual, `25/26/28` in the verb register. Twelve of the
+fourteen verbs that state an exit space in both documents stated two different
+ones.
+
+Four ways it goes red:
+
+- a `Code` in `exitcode.AllCodes()` with no row in the manual's generated
+  register table → **UNDOCUMENTED**
+- a row in that table that `AllCodes()` does not carry → **NOT REGISTERED**
+- a number written anywhere else in the manual (a per-command `Exit:` line) or
+  in a `docs/CLI-VERBS.md` Exit-Code cell that neither the register nor the
+  manual's "Codes outside the register" table accounts for → **UNACCOUNTED**
+- the manual's `Exit:` line and the verb register's cell naming different sets
+  for the same verb → **PER-VERB DRIFT**
+
+```bash
+go run ./cmd/exitaudit                 # the gate
+go run ./cmd/exitaudit -write          # regenerate the manual's register table
+go run ./cmd/exitaudit -scaffold       # print it instead of writing it
+./scripts/check-docs.sh                # section 6 runs the gate, blocking
+```
+
+The four generated columns (Code, Label, Surface, Theme) come from the register;
+the Meaning column is prose, and `-write` carries it forward, so regenerating
+costs no writing. **Exemptions live in the manual, not in a side file**: a
+number that is genuinely not a registered code (`0/1/2`, `audit`'s `3`, the
+`skillgate` `30`-`39` band) goes in the "Codes outside the register" table with
+the file that owns it, and the gate fails if that file disappears. A number
+nobody will name an owner for is a number nobody should document.

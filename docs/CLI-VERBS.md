@@ -26,7 +26,11 @@ Source: SPEC-0404 §7-K3 (REQ-7.8 .. REQ-7.10), decided 2026-09-04.
   something else. The trust chain owns `0` plus `10..17` (SPEC-0188 §11). A
   register that carried only names would have caught the ambiguity at
   `audit status` but not the real risk, that a script branching on `2` today
-  gets a wrong answer tomorrow.
+  gets a wrong answer tomorrow. Since AUDIT-0001 the cell is also **checked**:
+  `cmd/exitaudit` compares it against the same verb's `Exit:` statement in
+  [the manual](manual-skillctl.md#exit-codes) and against
+  `pkg/skillctl/exitcode`, so the two documents can no longer disagree in
+  silence (twelve of fourteen verbs did).
 
 Notation: `0/1/2` is the shared base space (`exitOK`=0, `exitGeneric`=1,
 `exitUsage`=2 from `cmd/skillctl/signing_cmds.go`). `10..17` is an inclusive
@@ -43,13 +47,19 @@ convention); it is not a distinct process exit.
    **Reserved** section instead.
 2. **Then implement.** Add the `case "<verb>":` to the top-level dispatch switch
    in `cmd/skillctl/main.go` and the handler.
+3. **Then state the exit space in both places.** The cell here and the `Exit:`
+   line in the manual's command section must name the same numbers, and any
+   number outside `0/1/2` must be a registered code in `pkg/skillctl/exitcode`
+   (or a documented exception in the manual's "Codes outside the register"
+   table). `go run ./cmd/exitaudit` says which of those is missing.
 
 A dispatched verb with **no** register row turns CI **red** (REQ-7.10): this is
 enforcement, not convention. The checker is `cmd/verbaudit`; it AST-parses the
 `switch os.Args[1]` dispatch, parses this file, and fails on any dispatched verb
 that is not registered, plus any main-table row with an empty Exit-Code cell. It
 is wired blocking into `scripts/check-docs.sh` and the `docs-gate` CI job, the
-same way `cmd/docaudit` gates the flag surface.
+same way `cmd/docaudit` gates the flag surface. Its sibling `cmd/exitaudit`
+gates the CONTENT of the Exit-Code column against the register and the manual.
 
 ## Verb register
 
@@ -70,20 +80,20 @@ same way `cmd/docaudit` gates the flag surface.
 | `revoke` | SPEC-0188 §4.5 | 0/1/2 |
 | `audit` | SPEC-0189 §14 | 0/2/3 |
 | `propose` | SPEC-0194 | 0/1/2 |
-| `install` | SPEC-0188 §11 (S8) | 0/1/2, 10..16 |
-| `verify` | SPEC-0188 §11 (S8) | 0/1/2, 10..17 |
+| `install` | SPEC-0188 §11 (S8) | 0/1/2, 10..17, 20, 22, 23 |
+| `verify` | SPEC-0188 §11 (S8) | 0/1/2, 10..17, 20, 22, 23 |
 | `export-bundle` | SPEC-0406 Phase 2 | 0/1/2, 10..17 |
 | `export-verification-kit` | SPEC-0276 R4.3 | 0/1/2, 10..19 |
 | `compliance` | SPEC-0276 R5 | 0/1/2 |
-| `verify-hook` | SPEC-0247 P0.1 | 0/2 (25/26/28 in refusal_code) |
+| `verify-hook` | SPEC-0247 P0.1 | 0/2 (17/22/25/28 in refusal_code) |
 | `enforce` | SPEC-0317 P0 | 0/2 (26 in refusal_code) |
 | `guard-path` | SPEC-0317 R-6 | 0/2 (27 in refusal_code) |
-| `agentid` | SPEC-0277 P0+P1 | 0/1/2, 11/12/17/20/21 |
+| `agentid` | SPEC-0277 P0+P1 | 0/1/2, 11/12/17/20/21/22 |
 | `gate-stats` | SPEC-0255 | 0/1/2 |
 | `auditlog` | SPEC-0403 §8 | 0/1 |
 | `pin` | SPEC-0247 §7.3 | 0/1/2 |
 | `session-baseline` | SPEC-0317 R-7 | 0/1/2 |
-| `scan` | SPEC-0189 (S0a) | 0/1 |
+| `scan` | SPEC-0189 (S0a) | 0/1/2 |
 | `report` | SPEC-0189 (S0a) | 0/1 |
 | `diff` | SPEC-0189 (S0a) | 0/1 |
 | `seal` | SPEC-0189 (S0a) | 0/1 |
@@ -94,13 +104,13 @@ same way `cmd/docaudit` gates the flag surface.
 | `consolidate` | SPEC-0189 (S0a) (?) | 0/1 |
 | `sync-usage` | SPEC-0189 (S0a) | 0/1 |
 | `sync` | SPEC-0317 R-5 | 0/1/2, 29 |
-| `awareness` | SPEC-0195 (S2 M1) | 0/1/2, 18/19 |
-| `intent` | SPEC-0195 (S2 M2) | 0/1/2, 18/19 |
-| `translog` | SPEC-0278 P5 | 0/1/2 |
+| `awareness` | SPEC-0195 (S2 M1) | 0/1/2, 19 |
+| `intent` | SPEC-0195 (S2 M2) | 0/1/2, 18 |
+| `translog` | SPEC-0278 P5 | 0/1/2, 23/24/25 |
 | `project` | SPEC-0214 | 0/1/2 |
 | `session` | SPEC-0213 | 0/1/2 |
 | `publish` | SPEC-0225 P1 | 0/1/2 |
-| `pull` | SPEC-0225 P2 | 0/1/2 |
+| `pull` | SPEC-0225 P2 | 0/1/2, 6, 10..13 |
 | `registry` | SPEC-0225 P2 | 0/1/2 |
 | `runbook` | SPEC-0272 | 0/1/2 |
 | `room` | SPEC-0246 §7 | 0/1/2 |
