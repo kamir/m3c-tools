@@ -31,7 +31,7 @@
 #   numpy: 2.5.3, one minor ahead of the venv's 2.4.3.
 #   mcp: see the note at its pin.
 
-turbovec==0.8.0
+turbovec==1.0.0
 sentence-transformers==5.5.1
 
 # mcp is held at 1.x ON PURPOSE, and the pin is not stale. In mcp 2.x FastMCP
