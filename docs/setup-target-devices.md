@@ -177,12 +177,15 @@ step that needs it will fail.
 ## Part 3: Configuration (both platforms)
 
 Copy the example config and fill in your ER1 credentials. m3c-tools reads, in order:
-the active profile, `~/.m3c-tools.env` (global), then a project-local `.env`.
+the active profile, `~/.m3c-tools/preferences.env`, then the legacy `~/.m3c-tools.env`
+(global). A project-local `.env` is **not** read unless you set `M3C_DOTENV=1`: it belongs
+to whatever directory you started the tool in, and it can redirect uploads and credentials.
+See [The working-directory `.env` is opt-in](manual-m3c-tools.md#the-working-directory-env-is-opt-in).
 
 **Intel Mac:**
 
 ```bash
-cp .env.example ~/.m3c-tools.env     # or ./.env in the repo dir
+cp .env.example ~/.m3c-tools.env
 $EDITOR ~/.m3c-tools.env
 ```
 
