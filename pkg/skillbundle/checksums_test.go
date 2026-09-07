@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -105,5 +106,67 @@ func TestValidateChecksumsHandlesTheWrappedLayout(t *testing.T) {
 	}
 	if err := ValidateChecksums(outer); !errors.Is(err, ErrChecksumMismatch) {
 		t.Fatalf("the wrapped layout must be checked, not skipped: %v", err)
+	}
+}
+
+// AUDIT-0001 finding 1.8: a manifest that names the same file twice is refused,
+// not re-hashed. Before the budget fix, 2000 duplicate VALID lines on a 10MiB
+// file made ValidateChecksums hash 19.5GiB and return nil; the small-scale
+// probe here (50 duplicates) must die on line two instead.
+func TestValidateChecksumsRefusesADuplicateEntry(t *testing.T) {
+	line := hashOf("body") + "  SKILL.md\n"
+	dir := write(t, map[string]string{"SKILL.md": "body"}, strings.Repeat(line, 50))
+	err := ValidateChecksums(dir)
+	if !errors.Is(err, ErrChecksumMismatch) {
+		t.Fatalf("a duplicated entry must be refused with ErrChecksumMismatch: %v", err)
+	}
+	if !strings.Contains(err.Error(), "twice") {
+		t.Fatalf("the refusal must say the path was named twice: %v", err)
+	}
+}
+
+// AUDIT-0001 finding 1.8: the total bytes hashed are capped by the same byte
+// budget the extraction path enforces. Three distinct 8-byte files against a
+// 16-byte override must refuse (24 > 16) and name the limit; the same layout
+// within a 32-byte budget must pass.
+func TestValidateChecksumsCapsTotalHashedBytes(t *testing.T) {
+	files := map[string]string{"a.md": "AAAAAAAA", "b.md": "BBBBBBBB", "c.md": "CCCCCCCC"}
+	manifest := hashOf("AAAAAAAA") + "  a.md\n" +
+		hashOf("BBBBBBBB") + "  b.md\n" +
+		hashOf("CCCCCCCC") + "  c.md\n"
+	dir := write(t, files, manifest)
+	err := validateChecksums(dir, 16, DefaultMaxExtractedFiles)
+	if !errors.Is(err, ErrChecksumMismatch) {
+		t.Fatalf("exceeding the hashing byte budget must carry ErrChecksumMismatch: %v", err)
+	}
+	if !strings.Contains(err.Error(), "16 byte") {
+		t.Fatalf("the refusal must name the budget: %v", err)
+	}
+	if err := validateChecksums(dir, 32, DefaultMaxExtractedFiles); err != nil {
+		t.Fatalf("the same manifest within the budget must pass: %v", err)
+	}
+}
+
+// AUDIT-0001 finding 1.8: the entry-line count is capped by the same file limit
+// the extraction path enforces. Five entries against a cap of three refuse and
+// name the limit; blank and comment lines do not count against it.
+func TestValidateChecksumsCapsEntryCount(t *testing.T) {
+	files := map[string]string{"a.md": "A", "b.md": "B", "c.md": "C", "d.md": "D", "e.md": "E"}
+	manifest := "# header comment\n\n" +
+		hashOf("A") + "  a.md\n" +
+		hashOf("B") + "  b.md\n" +
+		hashOf("C") + "  c.md\n"
+	dir := write(t, files, manifest)
+	if err := validateChecksums(dir, DefaultMaxExtractedBytes, 3); err != nil {
+		t.Fatalf("three entries plus comments within a cap of three must pass: %v", err)
+	}
+	longer := manifest + hashOf("D") + "  d.md\n" + hashOf("E") + "  e.md\n"
+	dir2 := write(t, files, longer)
+	err := validateChecksums(dir2, DefaultMaxExtractedBytes, 3)
+	if !errors.Is(err, ErrChecksumMismatch) {
+		t.Fatalf("exceeding the entry cap must carry ErrChecksumMismatch: %v", err)
+	}
+	if !strings.Contains(err.Error(), "more than 3 entries") {
+		t.Fatalf("the refusal must name the cap: %v", err)
 	}
 }

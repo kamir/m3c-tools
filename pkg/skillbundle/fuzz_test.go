@@ -16,6 +16,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -66,17 +67,17 @@ func FuzzUnpack(f *testing.F) {
 	seeds := [][]titem{
 		{reg("SKILL.md", "# s"), reg("scripts/run.sh", "echo hi"), reg("references/doc.md", "ref")},
 		{dir("bundle"), reg("bundle/SKILL.md", "# s"), reg("bundle/scripts/run.sh", "x")}, // wrapped
-		{reg("mybundle/Skill.md", "# s")},                                                 // canonicalize
-		{reg("../evil", "x")},                                                             // traversal
-		{reg("a/../../b", "x")},                                                           // deep escape
-		{reg("/etc/passwd", "x")},                                                         // absolute
-		{reg("..", "x")},                                                                  // bare dotdot
-		{reg(`a\..\..\evil`, "x")},                                                        // backslash
-		{sym("link", "/etc/passwd")},                                                      // symlink refused
-		{hard("hl", "/etc/passwd")},                                                       // hardlink refused
-		{chardev("dev")},                                                                  // device refused
-		{reg("big", strings.Repeat("A", 4096))},                                           // exercises the byte ceiling when opt bit set
-		{reg("a", "1"), reg("b", "2"), reg("c", "3")},                                     // exercises the file-count cap when opt bit set
+		{reg("mybundle/Skill.md", "# s")},             // canonicalize
+		{reg("../evil", "x")},                         // traversal
+		{reg("a/../../b", "x")},                       // deep escape
+		{reg("/etc/passwd", "x")},                     // absolute
+		{reg("..", "x")},                              // bare dotdot
+		{reg(`a\..\..\evil`, "x")},                    // backslash
+		{sym("link", "/etc/passwd")},                  // symlink refused
+		{hard("hl", "/etc/passwd")},                   // hardlink refused
+		{chardev("dev")},                              // device refused
+		{reg("big", strings.Repeat("A", 4096))},       // exercises the byte ceiling when opt bit set
+		{reg("a", "1"), reg("b", "2"), reg("c", "3")}, // exercises the file-count cap when opt bit set
 	}
 	// optBits: bit0 StripWrapper, bit1 CanonicalizeMD, bit2 tiny MaxBytes, bit3 tiny MaxFiles.
 	optCombos := []uint8{0, 1, 2, 3, 4, 8, 12}
@@ -179,5 +180,46 @@ func FuzzExtractTo(f *testing.F) {
 			t.Fatalf("ExtractTo wrote outside destDir: rel=%q created %q (dest=%q)", rel, p, absDest)
 			return nil
 		})
+	})
+}
+
+// FuzzValidateChecksums drives the CHECKSUMS verifier with an untrusted
+// manifest laid over a tiny fixed bundle (the manifest arrives inside the
+// attacker's archive, so it is as hostile as the archive itself). Oracles: the
+// verifier never panics, and every refusal is classifiable, either it carries
+// ErrChecksumMismatch (the contract callers map the whole class on) or it is
+// the one manifest-read failure (a line beyond the scanner's token limit).
+// Budgets are small overrides so a fuzzed manifest can never buy hashing time
+// (the AUDIT-0001 finding-1.8 class).
+func FuzzValidateChecksums(f *testing.F) {
+	goodHex := hashOf("body")
+	seeds := []string{
+		goodHex + "  SKILL.md\n",                            // honest, two-space form
+		"# comment\n\n" + goodHex + " SKILL.md\n",           // comment + one-space form
+		goodHex + "  SKILL.md\n" + goodHex + "  SKILL.md\n", // duplicate entry
+		goodHex + "  ../../etc/passwd\n",                    // escaping entry
+		"deadbeef  missing.md\n",                            // file not on disk
+		"nospace\n",                                         // malformed line
+		goodHex + "  \n",                                    // missing path
+		goodHex + "  CHECKSUMS\n",                           // self-entry
+		strings.Repeat(goodHex+"  SKILL.md\n", 80),          // line repetition
+	}
+	for _, s := range seeds {
+		f.Add([]byte(s))
+	}
+
+	f.Fuzz(func(t *testing.T, manifest []byte) {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("body"), 0o644); err != nil {
+			t.Fatalf("write SKILL.md: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "CHECKSUMS"), manifest, 0o644); err != nil {
+			t.Fatalf("write CHECKSUMS: %v", err)
+		}
+		err := validateChecksums(dir, 1<<12, 64) // must never panic
+		if err != nil && !errors.Is(err, ErrChecksumMismatch) &&
+			!strings.Contains(err.Error(), "read CHECKSUMS") {
+			t.Fatalf("unclassifiable refusal (callers map on ErrChecksumMismatch): %v", err)
+		}
 	})
 }

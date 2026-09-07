@@ -271,9 +271,13 @@ func whyGate(gate string, p Params) string {
 // then written from the decision record, and the conflicts cleared because the
 // binary agrees with the decision, not because the model was fitted to it.
 //
-// Gate 5 is 20 rather than the 15 SPEC-0188 named, because 15 has meant
-// blob_missing in every shipped build (BUG-0216) and a number whose meaning
-// changes silently is worse than one that was never allocated.
+// Gate 5 is 6, twice removed from the 15 SPEC-0188 named: 15 has meant
+// blob_missing in every shipped build (BUG-0216), and the 20 the first FR-0122
+// cut chose was "free" only in the exitcode register, not on the exit surfaces
+// (verify.ExitSelfAttested has shipped 20 since SPEC-0246 §5.2). Befund 1.4
+// renumbered the one-day-old, unreleased side to 6, the lowest number no
+// surface claims; the census now lives in exitcode.AllCodes(), which is why
+// this pinned decision changed a second time and should not change again.
 func gateExit(gate string) int {
 	switch gate {
 	case "gate 1":
@@ -285,7 +289,7 @@ func gateExit(gate string) int {
 	case "gate 4":
 		return 13 // governance_below_min
 	case "gate 5":
-		return 20 // bundle_revoked
+		return 6 // bundle_revoked (exitcode.RevokedBundle)
 	default:
 		return 1
 	}
