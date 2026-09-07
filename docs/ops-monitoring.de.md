@@ -6,6 +6,13 @@ andocken kann, und was mit den vorhandenen Mitteln **nicht** geht.
 Zielgruppe: die Person, die die Flotte betreibt, und die Person, die eine
 Überwachung dafür einrichten soll.
 
+**Wie weit dieses Runbook gemessen ist.** Die Blöcke, die mit "Gemessen"
+angekündigt sind, sind am 2026-09-07 gelaufen: gegen das Binary, gegen den
+Quellbaum, und die Zahlen zum Audit-Log gegen eine gewachsene Arbeitsmaschine.
+Absolute Zeilenzahlen gehören dieser einen Maschine und wandern weiter; als
+Befund gemeint ist immer das Verhältnis, und die Kommandos daneben sind der
+Selbsttest für die eigene. Gekürzt wird mit `/…/` (Pfade) und `[…]` (Ausgabe).
+
 ## Die ehrliche Zusammenfassung zuerst
 
 **Es gibt keine Metrik-Fläche.** Kein `/metrics`, kein Prometheus-Exporter, kein
@@ -195,12 +202,12 @@ Ein Auswerter schneidet deshalb ab der ersten `{`-Zeile, etwa mit
 `sed -n '/^{/,$p'`. `gate-stats --json` und `auditlog status --json` haben dieses
 Verhalten nicht; beide schreiben nur das Dokument.
 
-### `skillctl revoke feed --status`
+### `skillctl revoke feed`
 
 Ob die Maschine den signierten Widerruf-HEAD frisch hat:
 
 ```bash
-skillctl revoke feed --status --registry https://<host>/api/skills
+skillctl revoke feed --registry https://<host>/api/skills
 ```
 
 Prüft die Signatur des HEAD gegen den **gepinnten** Registry-Schlüssel und gibt
@@ -208,16 +215,118 @@ Epoche, Ausstellungszeit und Veraltung aus. `--refresh` holt ihn. Ohne diesen
 Aufruf altert die lokale Sicht, und die Alterung ist genau das, was eine
 Überwachung hier sehen soll.
 
+**Das in der Hilfe angebotene `--status` gibt es nicht.** Gemessen, Ausgabe bis
+zur Flag-Liste, danach `[…]`:
+
+```
+$ skillctl revoke feed --status --registry https://<host>/api/skills
+flag provided but not defined: -status
+Usage: skillctl revoke feed [--status] [--refresh] [--registry URL] [--tenant T]
+
+Inspect or refresh the signed revocation HEAD: the G5 kill-switch feed (FR-0045).
+  --status  (default) fetch + verify the HEAD against the pinned registry key
+  --refresh sweep now: adopt the HEAD into the local cache + freshness anchor
+[…]
+$ echo $?
+2
+```
+
+Der Hilfetext nennt `--status` zweimal, der Parser kennt es nicht, und derselbe
+Hilfetext sagt, was gilt: der Zustandsabruf ist die Vorgabe, also der Aufruf ohne
+weiteres Flag. Wer `--status` in eine geplante Aufgabe schreibt, baut sich einen
+Dauerfehler mit Exit 2, der wie ein Alarm aussieht und keiner ist.
+
+**Der Exit-Code des Zustandsabrufs taugt; der von `--refresh` hängt an der
+Verwaltungslage der Maschine.** Verwaltet heisst hier: die flache
+`~/.claude/trust-roots.yaml` ist vorhanden. Gemessen gegen einen Namen, den es
+nicht gibt:
+
+| Aufruf | Maschine | Ausgabe | Exit |
+|---|---|---|---|
+| `revoke feed --registry https://<unerreichbar>/api/skills` | beide | `fetch failed: … no such host` | 1 |
+| `revoke feed --refresh --registry https://<unerreichbar>/api/skills` | ohne flache `trust-roots.yaml` | `refreshed: 0 revoked digest(s), epoch=0 issued_at="" online=false` | 0 |
+| `revoke feed --refresh --registry https://<unerreichbar>/api/skills` | mit flacher `trust-roots.yaml` | dieselbe Zeile, dazu `revocation unavailable under managed trust roots (fail-closed, exit 22)` | 22 |
+
+Auf der unverwalteten Maschine meldet ein Refresh, der nichts erreicht hat,
+Erfolg; die ganze Auskunft steckt in `online=false`. Auf der verwalteten
+Maschine schliesst das Werkzeug zu, sobald kein frischer Cache die Alterung mehr
+begrenzt; innerhalb dieses Gnadenfensters bleibt es bei Exit 0 mit
+`online=false`.
+
+Eine Regel, die auf beiden Maschinen trägt: **auf `online=false` alarmieren**,
+und Exit 22 als Befund behandeln, nicht als Fehlaufruf. Wer nur den Exit-Code
+liest, sieht auf der unverwalteten Maschine nichts.
+
 ## 3. Die Dateien darunter
 
 | Datei | Was drinsteht |
 |---|---|
-| `~/.claude/skillctl/gate-audit.jsonl` | eine Zeile je Torentscheidung, Schema `skillctl.audit.v1` |
+| `~/.claude/skillctl/gate-audit.jsonl` | eine Zeile je Torentscheidung, in **zwei** Formaten, siehe unten |
 | `~/.claude/skillctl/gate-audit.jsonl.1` | die eine rotierte Generation |
 | der SPEC-0317-Outbox | dauerhafte, ausleitbare Nachweiszeilen |
 
-Das ist eine **strukturierte Zeilendatei**, also durchaus etwas, worauf ein
-Log-Versand andocken kann. Zwei Einschränkungen, beide gemessen im Code:
+**In derselben Datei liegen zwei Zeilenformate nebeneinander.** Das heutige
+Binary schreibt nur noch den Umschlag mit `"schema":"skillctl.audit.v1"`; die
+alte flache Zeile von vor der FR-0110a-Umstellung steht weiter in derselben
+Datei und wird nicht migriert. Gemessen am 2026-09-07 auf einer gewachsenen
+Arbeitsmaschine; die absoluten Zahlen gehören dieser einen Datei und wandern mit
+jedem Torlauf weiter, das Verhältnis ist der Befund:
+
+```
+$ wc -l < ~/.claude/skillctl/gate-audit.jsonl
+6375
+$ grep -c '"schema"' ~/.claude/skillctl/gate-audit.jsonl
+2327
+$ grep -vc '"schema"' ~/.claude/skillctl/gate-audit.jsonl
+4048
+```
+
+Diese drei Zeilen sind der Selbsttest: wer wissen will, wie gross das Loch auf
+seiner eigenen Maschine ist, lässt sie dort laufen. Ist die dritte Zahl grösser
+als null, liegen beide Formen vor.
+
+Die beiden Formen, wörtlich aus derselben Datei, und mit Absicht zweimal
+dieselbe Entscheidung, damit der Unterschied nur die Form ist:
+
+```
+{"ts":"2026-09-04T06:54:24Z","source":"hook","skill":"s","decision":"deny","reason":"freshness:stale_high_risk_fail_closed","exit_code":22,"content_digest":"s","online":false,"cache_hit":false}
+
+{"actor":{"type":"gate","id":"hook"},"event_id":"01M1XNP6DSCHEBDFFY6W7GRB9W","event_type":"policy.deny","gate.cache_hit":false,"gate.exit_code":22,"gate.online":false,"message":"freshness:stale_high_risk_fail_closed","outcome":"deny","policy":{"decision":"deny"},"producer":"dev","schema":"skillctl.audit.v1","severity":"warning","skill":{"name":"s","digest":"s"},"timestamp":"2026-09-07T10:12:43Z"}
+```
+
+Was in der flachen Zeile `decision` heisst, heisst im Umschlag
+`policy.decision`; `reason` heisst `message`, `exit_code` heisst
+`gate.exit_code`, und `skill` ist vom String zum Objekt geworden. Ein
+Auswerter, der nur die flachen Feldnamen kennt, findet im Umschlag nichts.
+
+Daraus folgen zwei Dinge für einen Log-Versand:
+
+* **Ein Filter auf `schema` verliert die alten Zeilen still.** Im gemessenen Log
+  sind das 4048 von 6375. Sie tragen kein `schema`-Feld, also fallen sie durch
+  jede Regel, die danach greift, ohne dass irgendwo etwas fehlt aussieht. Wer
+  filtern muss, filtert auf `decision` **oder** `policy.decision` und nimmt beide
+  Formen mit.
+* **`gate-stats` zeigt dasselbe Loch, absichtlich.** Es liest nur Zeilen mit
+  `schema: skillctl.audit.v1` **und** einer `policy.decision`; alles andere wird
+  übersprungen. Gemessen auf derselben Datei:
+
+```
+$ skillctl gate-stats --since 100000h --json | head -3
+{
+  "total": 2326,
+  "since": "100000h",
+```
+
+  2326 statt 6375, und die eine Differenz zu den 2327 Umschlagzeilen ist ein
+  Umschlag ohne Policy-Block. Auch das ist gemessen, nicht geschlossen: es ist
+  das synthetische Ereignis von `skillctl auditlog test`, das sich selbst als
+  `"synthetic":true` und "NOT a real audit record" ausweist. Eine Aussage von
+  `gate-stats` über einen Zeitraum vor der Umstellung ist damit keine Aussage
+  über die Torentscheidungen dieses Zeitraums.
+
+Davon abgesehen ist es eine **strukturierte Zeilendatei**, also durchaus etwas,
+worauf ein Log-Versand andocken kann. Zwei weitere Einschränkungen, beide
+gemessen im Code:
 
 1. **Rotation mit genau einer Generation.** Bei 5 MiB wird auf `.jsonl.1`
    rotiert; die vorherige `.1` ist dann weg. Ein Log-Versand, der langsamer ist

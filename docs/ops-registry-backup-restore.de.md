@@ -1,9 +1,18 @@
 # Ops-Runbook: Registry-Backup und Restore
 
 Wie ein Skill-Registry gesichert und wiederhergestellt wird, je Backend, mit
-einer Probe, die den Restore tatsächlich beweist statt ihn zu behaupten.
+einer Probe, die den Restore prüfbar macht, und mit der Voraussetzung, ohne die
+sie statt des Restores den Prüfenden misst.
 
 Zielgruppe: die Person, die das Registry betreibt.
+
+**Wie weit dieses Runbook gemessen ist.** Die Blöcke, die mit "Gemessen"
+angekündigt sind, sind am 2026-09-07 gegen das Binary gelaufen, gegen ein
+Wegwerf-Registry unter `local://` und ein Wegwerf-`$HOME`. Gekürzt sind Pfade
+(`/…/`) und Digests (`…` am Ende); wird darüber hinaus gekürzt, steht an der
+Stelle eine Zeile `[…]`. Vom ER1-Registry `self` ist nur gemessen, was das
+Werkzeug **ohne** erreichbare Instanz beantwortet, also die Verweigerungen in
+Abschnitt 4; eine ER1-Instanz stand nicht zur Verfügung.
 
 ## Die Grundregel in einem Satz
 
@@ -175,7 +184,8 @@ Der Nachweis fällt mit dem Lauf D-8 in
 Eine Sicherung, die nie zurückgespielt wurde, ist eine Vermutung. Die Probe
 läuft auf einer **Kopie**, nie auf dem produktiven Registry.
 
-Gemessen am 2026-09-07 gegen ein Wegwerf-Registry mit einem admittierten Bundle:
+Gemessen am 2026-09-07 gegen ein Wegwerf-Registry mit einem admittierten und
+attestierten Bundle:
 
 ```
 $ git clone --mirror /…/probe/skills.git /…/probe/backup-skills.git
@@ -189,12 +199,25 @@ Klone in Bare-Repository '/…/probe/skills.git' ...
 Fertig.
 
 $ skillctl registry ls --registry local:///…/probe/skills.git
-skill                            version    latest digest                                     gov      status
---------------------------------------------------------------------------------------------------------------
-demo-skill                       1.0.0      sha256:5b998c48a366…                              green    ok
+skill                            version    latest digest                                                            gov      status
+------------------------------------------------------------------------------------------------------------------------------------
+demo-skill                       1.0.0      sha256:22a21798c2839aa9667cae701a95a1a5bbd76559e8f7ab2d7b4f69fa1a70a9b9  green    ok
 $ echo $?
 0
+
+$ git -C /…/probe/skills.git config --get remote.origin.url
+/…/probe/backup-skills.git
+$ git -C /…/probe/skills.git remote remove origin
+Hinweis: Ein Branch außerhalb der refs/remotes/ Hierachie wurde nicht gelöscht;
+um diesen zu löschen, benutzen Sie:
+  git branch -d master
+$ git -C /…/probe/skills.git config --get remote.origin.url
+$ echo $?
+1
 ```
+
+Der Digest ist in dieser Ausgabe **vollständig**, nicht gekürzt: `registry ls`
+druckt ihn ungekürzt, und genau das braucht Prüfung 2.
 
 Als Abnahmekriterien:
 
@@ -203,13 +226,67 @@ Als Abnahmekriterien:
 | 1 | `skillctl registry ls --registry <wiederhergestellt>` | dieselbe Zeilenzahl wie vor dem Schaden |
 | 2 | Digest je Skill | **zeichengleich** mit dem Stand vor dem Schaden |
 | 3 | `skillctl registry show <name> --registry <wiederhergestellt>` | dieselbe Ereignisfolge, Widerrufe eingeschlossen |
-| 4 | `skillctl pull --registry <wiederhergestellt> --skill <name> --dry-run-install` | die Tore laufen durch |
-| 5 | `git -C <wiederhergestellt> config --get remote.origin.url` | **leer**, siehe der Fallstrick oben |
+| 4 | `skillctl pull …` **mit den Vertrauenswurzeln von vor dem Schaden** (siehe unten) | derselbe Ausgang wie vor dem Schaden: `staged=1` je Skill, Exit 0, gleicher Digest |
+| 5 | `git -C <wiederhergestellt> config --get remote.origin.url`, **nach** `remote remove origin` | keine Ausgabe, Exit 1; direkt nach dem Mirror-Klon steht dort noch die Sicherung, siehe der Fallstrick oben |
 
 Prüfung 2 ist die eigentliche. Ein Restore, der die Bundles hat, aber andere
 Digests, hat die Signaturen gebrochen, und jede Maschine der Flotte wird das
-Registry ab dann ablehnen. Prüfung 4 ist der einzige Schritt, der das
-tatsächlich zeigt, weil er dieselben Tore läuft wie eine Konsumentin.
+Registry ab dann ablehnen.
+
+### Prüfung 4 braucht eine Voraussetzung, sonst misst sie den Prüfenden
+
+Prüfung 4 läuft dieselben Tore wie eine Konsumentin, und genau deshalb hängt ihr
+Ausgang **nicht nur am Registry**, sondern an den Vertrauenswurzeln der Maschine,
+auf der sie läuft. Drei gemessene Ausgänge, alle drei gegen dasselbe, korrekt
+wiederhergestellte Registry:
+
+Alle drei Läufe sind derselbe Aufruf, nur das `$HOME` ist ein anderes:
+
+```bash
+skillctl pull --registry local://<wiederhergestellt> --skill demo-skill \
+  --install --trust-mode --dry-run-install
+```
+
+```
+# 1) HOME ohne trust-roots.yaml und ohne Peer-Pin
+pull: load trust-roots: trust-roots: open /…/.claude/trust-roots.yaml: open /…/.claude/trust-roots.yaml: no such file or directory
+       Carry ~/.claude/trust-roots.yaml from machine 1 (10-keygen-and-trustroots.sh), or pin the peer with `skillctl peer add`.
+$ echo $?
+2
+
+# 2) ein FREMDER Schlüssel gepinnt
+    ❌ demo-skill@1.0.0  digest=sha256:22a21798c283…  [gate 1: envelope_signature does not verify against trust-roots] registry: envelope_signature does not verify
+==> done. staged=0  skipped=1
+[…]
+$ echo $?
+12
+
+# 3) die Wurzeln von vor dem Schaden
+    ✅ demo-skill@1.0.0  digest=sha256:22a21798c283…  gov=green  →  /…/skill-bundles/22a21798c283…/bundle.skb
+==> done. staged=1  skipped=0
+$ echo $?
+0
+```
+
+Der Digest ist in allen drei Läufen derselbe, auch im abgelehnten: Tor 1 prüft
+die Signatur, nicht den Inhalt. Ein `❌` ist deshalb kein Beweis, dass der
+Restore die Bytes verloren hat.
+
+Nur der dritte Lauf sagt etwas über den Restore. Die ersten beiden sagen etwas
+über die Maschine des Prüfenden. Prüfung 4 ist deshalb nur dann ein Nachweis,
+wenn zwei Dinge gelten:
+
+1. Sie läuft mit **derselben** `~/.claude/trust-roots.yaml` beziehungsweise
+   demselben `skillctl peer add`-Pin wie vor dem Schaden. Ein frisches `$HOME`,
+   ein anderer Rechner oder eine geliehene Maschine erfüllen das nicht.
+2. Der Ausgang von **vor** dem Schaden ist notiert. "Die Tore laufen durch" ist
+   ohne diesen Vergleichswert eine Erwartung, kein Nachweis; und ein Pull, der
+   auch vorher schon an Tor 4 hängen blieb, tut es nachher genauso.
+
+Wer die Probe auf einer Maschine ohne diese Wurzeln fahren muss, protokolliert
+das Ergebnis von Prüfung 4 als **nicht erhoben** und stützt die Abnahme auf die
+Prüfungen 1 bis 3 und 5. Das ist ehrlicher als eine grüne Zeile, die den
+Prüfenden misst.
 
 Ein sinnvoller Takt: die Probe bei jeder Rotation eines Registry-Schlüssels und
 mindestens einmal je Quartal, protokolliert mit Datum und der Ausgabe von
