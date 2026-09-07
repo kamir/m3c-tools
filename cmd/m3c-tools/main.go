@@ -760,12 +760,19 @@ func cmdSetup(args []string) {
 	er1Cfg := er1.LoadConfig()
 	fmt.Printf("  ER1 API:     %s\n", er1Cfg.APIURL)
 
-	// Check .env
+	// Check .env. AUDIT-0001 follow-up to finding 2.7: name a file as the
+	// configuration only when it actually configured this process. The
+	// working-directory .env needs the M3C_DOTENV opt-in, so without it the
+	// truthful answer is "present and ignored", not "Config: .env (local)".
 	envPath := filepath.Join(home, ".m3c-tools.env")
 	if _, err := os.Stat(envPath); err == nil {
 		fmt.Printf("  Config:      %s\n", envPath)
 	} else if _, err := os.Stat(".env"); err == nil {
-		fmt.Printf("  Config:      .env (local)\n")
+		if er1.DotenvOptIn() {
+			fmt.Printf("  Config:      .env (local, applied via %s)\n", er1.EnvDotenvOptIn)
+		} else {
+			fmt.Printf("  Config:      .env present but ignored (set %s=1 to apply it)\n", er1.EnvDotenvOptIn)
+		}
 	} else {
 		fmt.Printf("  Config:      (no .env found)\n")
 	}

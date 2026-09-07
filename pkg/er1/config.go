@@ -417,10 +417,10 @@ func LoadDotenv(path string) error {
 // like a chosen one, and the security-relevant keys it actually contributed
 // are listed by NAME (never by value).
 func LoadDotenvUntrusted(path string) error {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvDotenvOptIn))) {
-	case "1", "true", "yes", "on":
+	switch dotenvOptInSetting() {
+	case dotenvOptInOn:
 		return loadDotenvFile(path, dotenvFound)
-	case "0", "false", "no", "off":
+	case dotenvOptInOff:
 		// Explicitly disabled: stay quiet, the operator already decided.
 		_, err := os.Stat(path)
 		return err
@@ -444,6 +444,33 @@ func LoadDotenvUntrusted(path string) error {
 	})
 	return nil
 }
+
+// The three states M3C_DOTENV can be in. An unrecognised value counts as
+// unset, so a typo lands on the safe side of the switch.
+const (
+	dotenvOptInUnset = ""
+	dotenvOptInOn    = "on"
+	dotenvOptInOff   = "off"
+)
+
+// dotenvOptInSetting classifies the M3C_DOTENV value. One reader for the whole
+// package: the loader and every caller that PRINTS where configuration came
+// from must agree, or the tool contradicts itself.
+func dotenvOptInSetting() string {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvDotenvOptIn))) {
+	case "1", "true", "yes", "on":
+		return dotenvOptInOn
+	case "0", "false", "no", "off":
+		return dotenvOptInOff
+	}
+	return dotenvOptInUnset
+}
+
+// DotenvOptIn reports whether the `.env` of the current working directory may
+// configure this process. Use it before naming that file as a configuration
+// source in output: without the opt-in LoadDotenvUntrusted did not apply a
+// single key, and calling it "the config" is then simply wrong.
+func DotenvOptIn() bool { return dotenvOptInSetting() == dotenvOptInOn }
 
 // dotenvNoticeOnce keeps the "ignoring the working-directory config" notice to
 // one line per process, however many startup paths call into the loader.

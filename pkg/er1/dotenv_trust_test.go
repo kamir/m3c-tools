@@ -115,3 +115,28 @@ func TestSensitiveDotenvKey(t *testing.T) {
 		}
 	}
 }
+
+// DotenvOptIn is the one reader three places depend on: LoadDotenvUntrusted,
+// the "Config:" line of `m3c-tools setup --check`, and the QA helpers
+// (scripts/qa-target-device.sh, scripts/qa-target-device.ps1) which repeat the
+// accepted values in shell and PowerShell. If this table ever changes, those
+// two scripts change with it, otherwise the helper grades a file the binary
+// ignored. An unrecognized value must count as OFF, so a typo lands on the
+// safe side.
+func TestDotenvOptInAcceptedValues(t *testing.T) {
+	cases := []struct {
+		value string
+		want  bool
+	}{
+		{"1", true}, {"true", true}, {"yes", true}, {"on", true},
+		{"TRUE", true}, {"On", true}, {" 1 ", true},
+		{"", false}, {"0", false}, {"false", false}, {"no", false}, {"off", false},
+		{"2", false}, {"maybe", false}, {"1 ja", false},
+	}
+	for _, tc := range cases {
+		t.Setenv(EnvDotenvOptIn, tc.value)
+		if got := DotenvOptIn(); got != tc.want {
+			t.Errorf("DotenvOptIn() with %s=%q = %v, want %v", EnvDotenvOptIn, tc.value, got, tc.want)
+		}
+	}
+}

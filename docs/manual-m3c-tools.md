@@ -48,9 +48,10 @@ m3c-tools <command> [args] [flags]
 - Every run prints two informational log lines first (`[config] profile: …` and
   `[auth] …`): these are diagnostics, not command output.
 
-**Where configuration comes from.** Settings load from `~/.m3c-tools.env` (the global
-config), from named **profiles** managed by `m3c-tools config`, and, only with the
-explicit `M3C_DOTENV=1` opt-in, from a project-local `.env`. See
+**Where configuration comes from.** Settings load from named **profiles** managed by
+`m3c-tools config`, from `~/.m3c-tools/preferences.env` and the legacy `~/.m3c-tools.env`
+(the global config), and, only with the explicit `M3C_DOTENV=1` opt-in, from a
+project-local `.env`. See
 [Configuration reference](#configuration-reference) for the full variable list and the
 [trust rule for a working-directory `.env`](#the-working-directory-env-is-opt-in), and
 copy `.env.example` as a starting template.
@@ -595,10 +596,11 @@ Prints the full command + flag listing. No flags.
 
 ## Configuration reference
 
-Variables are read from `~/.m3c-tools.env`, the active profile, or, with the opt-in
-described below, a project `.env`. Copy `.env.example` as a template. All examples below
-show the documented defaults; commented lines in `.env.example` mean the value is
-optional.
+Variables are read from the active profile, from `~/.m3c-tools/preferences.env` and the
+legacy `~/.m3c-tools.env`, or, with the opt-in described below, from a project `.env`.
+Earlier sources win; a later one only fills what is still empty. Copy `.env.example` as a
+template. All examples below show the documented defaults; commented lines in
+`.env.example` mean the value is optional.
 
 ### The working-directory `.env` is opt-in
 
