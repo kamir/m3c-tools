@@ -35,8 +35,13 @@ See also: [Service Index](service-index) (what stays running) ·
 
 > The four `poc-*` binaries are **validated reference implementations**, not
 > production code (see `CLAUDE.md`). The last four rows are the repository's own
-> gates and measurement tools: they ship no user-facing feature, they run in
-> `make ci` / `scripts/check-docs.sh` and in the release workflows.
+> gates and measurement tools; they ship no user-facing feature. Measured, they
+> run in different places: `docaudit` and `verbaudit` BLOCK, from
+> `scripts/check-docs.sh` and from the `docs-gate` job of `ci.yml`,
+> `release.yml` and `skillctl-release.yml`; `structural` only reports, because its
+> step in `ci.yml`'s `freeze-manifest` job pipes into `tail` and the workflow sets
+> no `pipefail`, so its exit status cannot fail the run; `release-evidence` runs in
+> `skillctl-release.yml`. None of the four runs in `make ci`.
 
 ### Subcommand surfaces
 
@@ -79,6 +84,6 @@ Both run as long-lived services: see [Service Index](service-index).
 | skillctl release/runbook | `tools/skillctl-release.sh`, `tools/skillctl-runbook.sh`, `tools/skillctl-runbook-publish.sh`, `scripts/publish-skb.sh` | Release + `.skb` publish + runbook automation. |
 | Thinking Engine launch | `tools/thinking-engine-start.sh` | Convenience launcher for a per-user engine stack. |
 | Capture-source login/checks | `tools/plaud-mcp-login.mjs`, `tools/plaud-e2e-check.sh`, `scripts/e2e-plaud-sync-local.sh` | Plaud OAuth login + E2E sync verification. |
-| CI / docs / review | `scripts/code-review.sh`, `scripts/check-docs.sh`, `scripts/e2e-device-token-proof.sh` | Local CI helpers. `check-docs.sh` also runs the docaudit / verbaudit / index gates. |
+| CI / docs / review | `scripts/code-review.sh`, `scripts/check-docs.sh`, `scripts/check-index.sh`, `scripts/e2e-device-token-proof.sh` | `check-docs.sh` runs the docaudit / verbaudit / tutorial / index gates locally; `check-index.sh` is the index gate itself, and the CI `docs-gate` job calls it directly. |
 
 Discover all build/test/run entry points with `make help`.

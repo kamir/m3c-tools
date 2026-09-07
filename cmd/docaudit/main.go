@@ -830,8 +830,16 @@ func printHuman(reports []report) {
 	)
 	fmt.Println("=== CLI ↔ Manual Consistency (docaudit) ===")
 	for _, r := range reports {
-		fmt.Printf("\n%s%s%s  %s(%d code flags · %d documented · %d verbs dispatched · %d in --help)%s\n",
-			"\033[1m", r.CLI, nc, dim, r.CodeFlags, r.DocFlags, r.Dispatched, r.UsageListed, nc)
+		// The verb half of this line reports an INTERSECTION, not a second size:
+		// "54 dispatched, 54 in --help" would be two independent counts that can
+		// coincide while naming different verbs, and the verdict below is computed
+		// from the set differences. Dispatched minus UsageMissing IS the
+		// intersection, exactly, because the usage check has no exemption list.
+		// The flag half stays two sizes on purpose: docs/docaudit-ignore.txt keeps
+		// exempt flags out of Undocumented, so the same subtraction would overstate
+		// the overlap there.
+		fmt.Printf("\n%s%s%s  %s(%d code flags · %d documented · %d verbs dispatched, %d of them in --help)%s\n",
+			"\033[1m", r.CLI, nc, dim, r.CodeFlags, r.DocFlags, r.Dispatched, r.Dispatched-len(r.UsageMissing), nc)
 		if r.clean() {
 			fmt.Printf("  %s✓%s consistent\n", green, nc)
 			continue

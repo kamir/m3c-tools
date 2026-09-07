@@ -26,7 +26,7 @@ never by quietly loosening a rule.
 | Security (SAST) | Crypto, injection, hardcoded credentials | `gosec` |
 | Dependencies | Reachable CVEs, secret scan, `go mod tidy` is a no-op | `govulncheck`, `gitleaks`, CI job |
 | CLI surface | Every real flag documented, every documented flag real, every dispatched verb named by `--help` | `cmd/docaudit` (see below) |
-| Index freshness | Every `cmd/` binary and `pkg/` package indexed, and every indexed one real | `scripts/check-docs.sh` section 7 |
+| Index freshness | Every `cmd/` binary and `pkg/` package indexed, every indexed one real, and both counts right | `scripts/check-index.sh` (CI `docs-gate` + `check-docs.sh` section 7) |
 
 ### The honesty rule for comments
 
@@ -275,19 +275,28 @@ gate is blind to a real idiom, teach the extractor and add a test.
 ## Index freshness
 
 `docs/program-index.md` claims to list *every buildable entry point* and
-`docs/component-index.md` the library packages. A prose claim about a directory
-can be checked against the directory, so section 7 of `scripts/check-docs.sh`
+`docs/component-index.md` the library packages, with a count. A prose claim about
+a directory can be checked against the directory, so `scripts/check-index.sh`
 does, in both directions:
 
 - a buildable `cmd/<name>` absent from the program index → **fail**
 - a `cmd/<name>` the program index names that no longer exists → **fail**
-- a Go package under `pkg/` absent from the component index → **fail**
+- a Go package under `pkg/` or `internal/` absent from the component index → **fail**
 - a package the component index names that is not in the tree → **fail**
+- a package COUNT in the component index that the directory contradicts → **fail**
 
 The reverse direction is the one that earns its keep: the component index
 documented a `skillimport` package that exists nowhere, while twelve real
-`pkg/skillctl` packages were missing.
+`pkg/skillctl` packages were missing. The count check is the second half of the
+same thought: a list check alone leaves the number free to rot, because a 41st
+package that arrives WITH its row satisfies the list and quietly falsifies
+"40 subpackages". Each count sentence must match exactly once, so rewording one
+out of the file turns the gate red instead of switching it off.
 
-The check is mechanical on purpose. It checks **presence**, never prose: a new
-package still needs a human-written responsibility line, and the failing gate is
-what makes the author notice that it is owed.
+It runs in `scripts/check-docs.sh` (section 7) and, because no workflow calls
+that script, as its own step in the `docs-gate` job of `ci.yml`, `release.yml`
+and `skillctl-release.yml`. A gate nothing calls is a report.
+
+The check is mechanical on purpose. It checks **presence** and **arithmetic**,
+never prose: a new package still needs a human-written responsibility line, and
+the failing gate is what makes the author notice that it is owed.

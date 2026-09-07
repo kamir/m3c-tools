@@ -72,9 +72,13 @@ Grouped by domain:
 ## F. skillctl trust subsystem (`pkg/skillctl/*` + siblings)
 
 The offline-verifiable skill **trust plane**: the library behind the
-[`skillctl`](program-index) CLI. 40 subpackages under `pkg/skillctl/`, plus two
-siblings, grouped by role. The count and the list are gated: `scripts/check-docs.sh`
-diffs `pkg/**` against this file, in both directions.
+[`skillctl`](program-index) CLI. 40 subpackages under `pkg/skillctl/`, plus the
+sibling top-level packages at the end of this section, grouped by role. The list
+and the number are both gated by `scripts/check-index.sh`: it diffs `pkg/**` and
+`internal/**` against this file in both directions AND re-counts the directories,
+so a new package cannot arrive with a row of its own and leave the count behind.
+It runs in `scripts/check-docs.sh` and in the `docs-gate` job of `ci.yml`,
+`release.yml` and `skillctl-release.yml`.
 
 **Inventory & parsing**
 
@@ -156,7 +160,9 @@ diffs `pkg/**` against this file, in both directions.
 ## G. Thinking Engine internals (`internal/thinking/*`)
 
 The 21 internal packages that make up the [Thinking Engine service](service-index),
-plus one shared internal package below. Grouped by role in the T→R→I→A→C pipeline:
+grouped by role in the T→R→I→A→C pipeline. Internal packages that belong to no
+engine layer are listed under **Other internal** at the end. The count is gated
+the same way as section F's:
 
 **Substrate**
 

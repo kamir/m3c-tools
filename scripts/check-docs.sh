@@ -137,71 +137,20 @@ fi
 
 # ─── 7. Index freshness: cmd/ and pkg/ vs the two indexes (BLOCKING) ───
 #
-# docs/program-index.md claims to list "every buildable entry point" and
-# docs/component-index.md claims to list the library packages. Both claims rotted
-# silently: five cmd/ binaries were absent from the program index and twelve
-# pkg/skillctl packages from the component index, while the component index still
-# documented a `skillimport` package that exists nowhere in the tree.
-#
-# A prose claim about a directory can be checked against the directory, so it is,
-# in BOTH directions: every buildable cmd/<name> must be named in the program
-# index and every cmd/ path the index names must exist; every Go package under
-# pkg/ must appear in the component index and every package the index names must
-# exist. The reverse direction is what catches the phantom row.
-#
-# Deliberately mechanical: it checks PRESENCE, never prose. A new package still
-# needs a human-written responsibility line, and this is what makes the writer
-# notice.
+# The check itself lives in scripts/check-index.sh, because it has to run in two
+# places: here, and in the docs-gate job of ci.yml, release.yml and
+# skillctl-release.yml. A gate that only ever runs in this script is not a gate:
+# no workflow calls this script, so a tag push (or any pull request) would pass
+# straight over it. That is the same bypass release.yml already names in its own
+# docs-gate comment.
 echo ""
 echo "7. Index freshness (cmd/ and pkg/ vs the indexes)"
-PROG_INDEX="docs/program-index.md"
-COMP_INDEX="docs/component-index.md"
-if [ ! -f "$PROG_INDEX" ] || [ ! -f "$COMP_INDEX" ]; then
-    fail "an index file is missing ($PROG_INDEX / $COMP_INDEX)"
+if ! [ -x "scripts/check-index.sh" ]; then
+    fail "scripts/check-index.sh is missing or not executable"
+elif ./scripts/check-index.sh; then
+    pass "every cmd/ binary and pkg/ package is indexed, every indexed one exists, and both counts match"
 else
-    INDEX_DRIFT=0
-    IDX_TMP="$(mktemp -d)"
-    # The cmd/ paths the program index names, and the package tokens the
-    # component index names (a first table cell in backticks). Extracted with
-    # sed rather than a quoted backtick, so the shell never has to escape one.
-    grep -oE 'cmd/[a-z0-9-]+/' "$PROG_INDEX" | sed 's|^cmd/||; s|/$||' | sort -u > "$IDX_TMP/prog"
-    grep -oE '^\| `[a-z0-9/]+`' "$COMP_INDEX" | sed -E 's/^\| .(.*).$/\1/' | sort -u > "$IDX_TMP/comp"
-
-    # cmd/<name> that has Go sources must be in the program index.
-    for d in cmd/*/; do
-        name="${d#cmd/}"; name="${name%/}"
-        ls "cmd/$name"/*.go >/dev/null 2>&1 || continue
-        if ! grep -qx "$name" "$IDX_TMP/prog"; then
-            fail "cmd/$name builds but is not listed in $PROG_INDEX"
-            INDEX_DRIFT=1
-        fi
-    done
-    # ... and nothing the program index points at may have been deleted.
-    for name in $(cat "$IDX_TMP/prog"); do
-        if [ ! -d "cmd/$name" ]; then
-            fail "$PROG_INDEX lists cmd/$name, which no longer exists"
-            INDEX_DRIFT=1
-        fi
-    done
-    # Every Go package under pkg/ must be in the component index.
-    for pkg in $(find pkg -name '*.go' ! -name '*_test.go' -exec dirname {} \; | sort -u | sed 's|^pkg/||'); do
-        if ! grep -qx "$pkg" "$IDX_TMP/comp"; then
-            fail "pkg/$pkg is a package but is not listed in $COMP_INDEX"
-            INDEX_DRIFT=1
-        fi
-    done
-    # ... and every package the component index names must exist. Tokens are
-    # written relative to pkg/ or to internal/, or as a full path.
-    for tok in $(cat "$IDX_TMP/comp"); do
-        if [ ! -d "pkg/$tok" ] && [ ! -d "internal/$tok" ] && [ ! -d "$tok" ]; then
-            fail "$COMP_INDEX documents \`$tok\`, which is not a package in this tree"
-            INDEX_DRIFT=1
-        fi
-    done
-    rm -rf "$IDX_TMP"
-    if [ "$INDEX_DRIFT" -eq 0 ]; then
-        pass "every cmd/ binary and pkg/ package is indexed, and every indexed one exists"
-    fi
+    fail "the indexes and the tree disagree (see the report above)"
 fi
 
 # ─── Summary ───

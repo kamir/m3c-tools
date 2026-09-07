@@ -43,6 +43,9 @@ jobs:
       - name: Every dispatched verb registered (FR-0113)
         run: go run ./cmd/verbaudit
 
+      - name: Indexes match the tree (cmd/, pkg/, and the counts)
+        run: ./scripts/check-index.sh
+
       - name: No U+2014 EM DASH in the tracked tree (CODESTYLE.md)
         run: ./scripts/check-no-emdash.sh
 
