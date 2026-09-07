@@ -7,10 +7,10 @@
 //
 // Two strategies:
 //
-//   report (structured markdown per prompt tmpl.artifact.report.v1
-//             content: {title, sections:[{heading, body}], key_points:[]}
-//   summary) compact JSON per prompt tmpl.artifact.summary.v1
-//             content: {tl_dr, bullets:[], sources:[]}
+//	report (structured markdown per prompt tmpl.artifact.report.v1
+//	          content: {title, sections:[{heading, body}], key_points:[]}
+//	summary) compact JSON per prompt tmpl.artifact.summary.v1
+//	          content: {tl_dr, bullets:[], sources:[]}
 //
 // Both gather I-layer inputs from the command's context.scope.entities
 // (written there by the preceding I-step in a semi_linear chain) and
@@ -231,8 +231,8 @@ func renderUserInput(cmd schema.ProcessCommand, ids []string, strName string) st
 // criterion asserts that.
 func parseReportContent(raw string) (map[string]interface{}, error) {
 	var obj struct {
-		Title     string   `json:"title"`
-		Sections  []struct {
+		Title    string `json:"title"`
+		Sections []struct {
 			Heading string `json:"heading"`
 			Body    string `json:"body"`
 		} `json:"sections"`

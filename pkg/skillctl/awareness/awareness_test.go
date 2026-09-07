@@ -37,13 +37,13 @@ func sampleInventory(t *testing.T) *model.Inventory {
 		TotalCount: 2,
 		Skills: []model.SkillDescriptor{
 			{
-				ID:           "didactic-session",
-				Name:         "didactic-session",
-				Type:         model.SkillTypeClaudeCodeSkill,
-				SourcePath:   "/Users/kamir/.claude/skills/didactic-session",
-				ContentHash:  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				ID:               "didactic-session",
+				Name:             "didactic-session",
+				Type:             model.SkillTypeClaudeCodeSkill,
+				SourcePath:       "/Users/kamir/.claude/skills/didactic-session",
+				ContentHash:      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 				ContentSizeBytes: 1024,
-				Tier:         "user",
+				Tier:             "user",
 				Frontmatter: &model.Frontmatter{
 					Name:            "didactic-session",
 					Version:         "1.0.0",

@@ -239,15 +239,15 @@ func TestRegisterMapping_Success(t *testing.T) {
 	}
 
 	mapping := SyncMapping{
-		PlaudAccountID:   "plaud-abc",
-		PlaudRecordingID: "rec-001",
-		ER1DocID:         "doc-xyz",
-		ER1ContextID:     "ctx-123",
-		RecordingTitle:   "Test Recording",
+		PlaudAccountID:    "plaud-abc",
+		PlaudRecordingID:  "rec-001",
+		ER1DocID:          "doc-xyz",
+		ER1ContextID:      "ctx-123",
+		RecordingTitle:    "Test Recording",
 		RecordingDuration: 120,
-		AudioFormat:      "ogg",
-		AudioSizeBytes:   1024,
-		TranscriptLength: 500,
+		AudioFormat:       "ogg",
+		AudioSizeBytes:    1024,
+		TranscriptLength:  500,
 	}
 
 	err := client.RegisterMapping(mapping)

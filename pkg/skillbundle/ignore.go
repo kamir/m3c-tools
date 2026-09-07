@@ -32,6 +32,7 @@ import (
 //   - a pattern with an interior or leading `/` is ANCHORED to the skill root and
 //     matched against the whole relative path;
 //   - globs use path.Match semantics (`*`, `?`, `[…]`): there is no `**`.
+//
 // Last matching rule wins (gitignore order). As in gitignore, a file cannot be
 // re-included once a parent directory is ignored (the walk prunes the subtree),
 // so negate the directory, not a file beneath it.

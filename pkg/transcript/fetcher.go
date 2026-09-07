@@ -114,8 +114,8 @@ func (f *Fetcher) FetchTranscriptViaInnerTube(videoID string, apiKey string) (ma
 	url := fmt.Sprintf(innertubeAPIURL, apiKey)
 
 	payload := map[string]any{
-		"context":     innertubeContext,
-		"videoId":     videoID,
+		"context": innertubeContext,
+		"videoId": videoID,
 	}
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {

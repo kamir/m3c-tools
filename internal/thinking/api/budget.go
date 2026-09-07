@@ -45,14 +45,14 @@ func (s *Server) now() time.Time {
 // populated in the order the UI expects; do not rename without
 // updating aims-core thinking_bridge.
 type BudgetTodayResponse struct {
-	Date          string              `json:"date"`
-	SpentUSD      float64             `json:"spent_usd"`
-	CapUSD        float64             `json:"cap_usd"`
-	RemainingUSD  float64             `json:"remaining_usd"`
-	FractionUsed  float64             `json:"fraction_used"`
-	Paused        bool                `json:"paused"`
-	ResetAt       string              `json:"reset_at"`
-	TopConsumers  []TopConsumerEntry  `json:"top_consumers"`
+	Date         string             `json:"date"`
+	SpentUSD     float64            `json:"spent_usd"`
+	CapUSD       float64            `json:"cap_usd"`
+	RemainingUSD float64            `json:"remaining_usd"`
+	FractionUsed float64            `json:"fraction_used"`
+	Paused       bool               `json:"paused"`
+	ResetAt      string             `json:"reset_at"`
+	TopConsumers []TopConsumerEntry `json:"top_consumers"`
 }
 
 // TopConsumerEntry is one row in the top_consumers aggregate.

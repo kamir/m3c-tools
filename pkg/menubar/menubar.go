@@ -100,11 +100,11 @@ type BulkProgressEvent = bulkprogress.Event
 
 // Observation represents a unified timeline entry from the tracking DB.
 type Observation struct {
-	Title       string    // display title (recording title, video ID, filename)
-	Type        string    // "plaud", "audio", "transcript", "screenshot", "impulse"
-	Status      string    // "imported", "uploaded", "failed"
-	DocID       string    // ER1 document ID (for deep-linking)
-	ProcessedAt time.Time // when it was processed
+	Title         string    // display title (recording title, video ID, filename)
+	Type          string    // "plaud", "audio", "transcript", "screenshot", "impulse"
+	Status        string    // "imported", "uploaded", "failed"
+	DocID         string    // ER1 document ID (for deep-linking)
+	ProcessedAt   time.Time // when it was processed
 	HasTranscript bool
 }
 

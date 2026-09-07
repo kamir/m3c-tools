@@ -30,8 +30,8 @@ type OrphanSkill struct {
 type DriftPair struct {
 	SkillName string
 	Source    model.SkillDescriptor // project copy (canonical)
-	Copy     model.SkillDescriptor // user-global copy
-	Diff     string                // unified diff
+	Copy      model.SkillDescriptor // user-global copy
+	Diff      string                // unified diff
 }
 
 // AnnotationGap flags a skill that lacks YAML frontmatter and suggests
@@ -213,8 +213,8 @@ func findDrift(groups []DuplicateGroup) []DriftPair {
 				result = append(result, DriftPair{
 					SkillName: g.Name,
 					Source:    pr,
-					Copy:     gl,
-					Diff:     diff,
+					Copy:      gl,
+					Diff:      diff,
 				})
 			}
 		}

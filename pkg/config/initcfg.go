@@ -6,11 +6,11 @@
 //
 // File format (simple key=value, same as .env):
 //
-//   # m3c-tools configuration: sent by your admin
-//   ER1_API_URL=https://onboarding.guide/upload_2
-//   ER1_API_KEY=kup-abc123def456
-//   ER1_CONTEXT_ID=
-//   PROFILE_NAME=cloud
+//	# m3c-tools configuration: sent by your admin
+//	ER1_API_URL=https://onboarding.guide/upload_2
+//	ER1_API_KEY=kup-abc123def456
+//	ER1_CONTEXT_ID=
+//	PROFILE_NAME=cloud
 //
 // The ER1_CONTEXT_ID is intentionally blank: it gets filled in after
 // the user signs in with Google (OAuth callback sets it).

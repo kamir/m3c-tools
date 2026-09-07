@@ -30,11 +30,12 @@
 //     is one-way (consume in, project local, write local).
 //
 // Phase mapping (SPEC-0167 A.8):
-//   Step 1 → watcher.go  (filter + project)
-//   Step 2 → refusal_cluster.go, egress_anomaly.go, token_lifetime_shape.go
-//   Step 3 → backpressure + sampling logic in watcher.go
-//   Step 4 → integration tests (separate file: watcher_integration_test.go)
-//   Step 5 → T-schema v2 proposal note (DRAFT only, no schema bump)
+//
+//	Step 1 → watcher.go  (filter + project)
+//	Step 2 → refusal_cluster.go, egress_anomaly.go, token_lifetime_shape.go
+//	Step 3 → backpressure + sampling logic in watcher.go
+//	Step 4 → integration tests (separate file: watcher_integration_test.go)
+//	Step 5 → T-schema v2 proposal note (DRAFT only, no schema bump)
 //
 // All files in this package are stubs: types and signatures land the
 // contract, function bodies are TODOs. Implementation kicks off as

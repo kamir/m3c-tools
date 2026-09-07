@@ -10,13 +10,13 @@ import (
 func TestThoughtMarshalRoundtrip(t *testing.T) {
 	ts := time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC)
 	in := Thought{
-		SchemaVer: CurrentSchemaVer,
-		ThoughtID: "t-1",
-		Type:      ThoughtObservation,
-		Content:   Content{Text: "hello"},
-		Source:    Source{Kind: SourceTyped, Ref: "manual"},
-		Tags:      []string{"demo"},
-		Timestamp: ts,
+		SchemaVer:  CurrentSchemaVer,
+		ThoughtID:  "t-1",
+		Type:       ThoughtObservation,
+		Content:    Content{Text: "hello"},
+		Source:     Source{Kind: SourceTyped, Ref: "manual"},
+		Tags:       []string{"demo"},
+		Timestamp:  ts,
 		Provenance: &Provenance{CapturedBy: "test"},
 	}
 	b, err := json.Marshal(in)

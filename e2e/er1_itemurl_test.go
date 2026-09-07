@@ -11,11 +11,11 @@ import (
 
 func TestMemoryItemURL(t *testing.T) {
 	tests := []struct {
-		name    string
-		apiURL  string
-		ctx     string
-		docID   string
-		want    string
+		name   string
+		apiURL string
+		ctx    string
+		docID  string
+		want   string
 	}{
 		{"upload_2 suffix stripped", "https://onboarding.guide/upload_2", "107677460544181387647___mft", "hzrCsrM0BGAThZ6lGd6y",
 			"https://onboarding.guide/memory/107677460544181387647___mft/hzrCsrM0BGAThZ6lGd6y"},

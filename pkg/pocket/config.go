@@ -28,11 +28,11 @@ func LoadConfig() *Config {
 	dataRoot := filepath.Join(home, "m3c-data", "pocket")
 
 	cfg := &Config{
-		RecordPath:   envOrDefault("POCKET_RECORD_PATH", "/Volumes/Pocket/RECORD"),
-		StagingDir:   envOrDefault("POCKET_STAGING_DIR", filepath.Join(dataRoot, "staging")),
-		RawDir:       envOrDefault("POCKET_RAW_DIR", filepath.Join(dataRoot, "raw")),
-		MergedDir:    envOrDefault("POCKET_MERGED_DIR", filepath.Join(dataRoot, "merged")),
-		ContentType:  envOrDefault("POCKET_CONTENT_TYPE", "Pocket-Fieldnote"),
+		RecordPath:  envOrDefault("POCKET_RECORD_PATH", "/Volumes/Pocket/RECORD"),
+		StagingDir:  envOrDefault("POCKET_STAGING_DIR", filepath.Join(dataRoot, "staging")),
+		RawDir:      envOrDefault("POCKET_RAW_DIR", filepath.Join(dataRoot, "raw")),
+		MergedDir:   envOrDefault("POCKET_MERGED_DIR", filepath.Join(dataRoot, "merged")),
+		ContentType: envOrDefault("POCKET_CONTENT_TYPE", "Pocket-Fieldnote"),
 		// SPEC-0175 P2: POCKET_WHISPER_MODEL overrides M3C_WHISPER_MODEL for
 		// Pocket recordings only. The fallback to M3C_WHISPER_MODEL is
 		// intentional: it lets a user configure Whisper once globally
@@ -41,10 +41,10 @@ func LoadConfig() *Config {
 		APIKey:       os.Getenv("POCKET_API_KEY"),
 		// SPEC-0175 P1: single source of truth: DefaultAPIBaseURL is the
 		// canonical default (was duplicated in 3 files until this commit).
-		APIURL:       envOrDefault("POCKET_API_URL", DefaultAPIBaseURL),
+		APIURL: envOrDefault("POCKET_API_URL", DefaultAPIBaseURL),
 		// SPEC-0174 §3.1: empty = auto-detect via Mode().
 		// Honoured values: "usb" (force USB-only opt-out), unset/"" (auto).
-		SyncMode:     os.Getenv("POCKET_SYNC_MODE"),
+		SyncMode: os.Getenv("POCKET_SYNC_MODE"),
 	}
 
 	// SPEC-0175 P1: warn when POCKET_SYNC_MODE is set to "api", that value

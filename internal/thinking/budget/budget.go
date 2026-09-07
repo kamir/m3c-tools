@@ -31,7 +31,7 @@ type Estimator interface {
 // the enforcement path without a real cost card.
 type StubEstimator struct{}
 
-func (StubEstimator) EstimateStep(_ , _ string, inputTokens int) (int, float64) {
+func (StubEstimator) EstimateStep(_, _ string, inputTokens int) (int, float64) {
 	// Assume output ~= input, $0.0001/1k tokens. Deterministic stub.
 	total := inputTokens * 2
 	if total < 500 {
@@ -42,13 +42,13 @@ func (StubEstimator) EstimateStep(_ , _ string, inputTokens int) (int, float64) 
 
 // Controller orchestrates the two caps for one process.
 type Controller struct {
-	mu              sync.Mutex
-	processID       string
-	processCapTok   int
-	processUsedTok  int
-	dailyCapUSD     float64
-	store           *store.Store
-	estimator       Estimator
+	mu             sync.Mutex
+	processID      string
+	processCapTok  int
+	processUsedTok int
+	dailyCapUSD    float64
+	store          *store.Store
+	estimator      Estimator
 }
 
 // New returns a fresh controller. processCapTok comes from
@@ -144,7 +144,7 @@ func (c *Controller) Used() int {
 //
 // Ledger is safe for concurrent use.
 type Ledger struct {
-	store   *store.Store
+	store    *store.Store
 	dailyUSD float64
 }
 
@@ -204,7 +204,7 @@ const PausedThreshold = 0.80
 // Paused reports whether autoreflect should currently be paused by
 // the D4 daily cap. Derived from fraction_used (= 1 - RemainingFraction)
 // against PausedThreshold; the paused flag is NOT separately persisted
-//: autoreflect recomputes it on every window tick. Exposing the same
+// : autoreflect recomputes it on every window tick. Exposing the same
 // derivation here means /v1/budget/today stays consistent with
 // autoreflect's own gating decision.
 func (l *Ledger) Paused() (bool, error) {
@@ -223,7 +223,7 @@ func (l *Ledger) Paused() (bool, error) {
 // does not currently persist per-day pause durations. The field is
 // reserved for Phase 2 when the observability sink records them.
 type DaySpend struct {
-	Date          string  // "YYYY-MM-DD" (UTC)
+	Date          string // "YYYY-MM-DD" (UTC)
 	SpentUSD      float64
 	CapUSD        float64
 	PausedMinutes int

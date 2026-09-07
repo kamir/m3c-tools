@@ -171,7 +171,7 @@ func (f *FilesDB) IsPathProcessed(filePath, importType string) (bool, error) {
 // GetByHash returns the processed file record for a given (file_hash, import_type).
 func (f *FilesDB) GetByHash(fileHash, importType string) (*ProcessedFile, error) {
 	row := f.db.QueryRow(`
-		SELECT ` + allColumns + `
+		SELECT `+allColumns+`
 		FROM processed_files WHERE file_hash = ? AND import_type = ?
 	`, fileHash, importType)
 	return scanFileRecord(row)
@@ -180,7 +180,7 @@ func (f *FilesDB) GetByHash(fileHash, importType string) (*ProcessedFile, error)
 // GetByPath returns the first processed file record matching the given path.
 func (f *FilesDB) GetByPath(filePath string) (*ProcessedFile, error) {
 	row := f.db.QueryRow(`
-		SELECT ` + allColumns + `
+		SELECT `+allColumns+`
 		FROM processed_files WHERE file_path = ? LIMIT 1
 	`, filePath)
 	return scanFileRecord(row)
@@ -208,7 +208,7 @@ func (f *FilesDB) ListFiles(limit int) ([]ProcessedFile, error) {
 		limit = 100
 	}
 	rows, err := f.db.Query(`
-		SELECT ` + allColumns + `
+		SELECT `+allColumns+`
 		FROM processed_files ORDER BY processed_at DESC LIMIT ?
 	`, limit)
 	if err != nil {
@@ -233,7 +233,7 @@ func (f *FilesDB) ListByStatus(status string, limit int) ([]ProcessedFile, error
 		limit = 100
 	}
 	rows, err := f.db.Query(`
-		SELECT ` + allColumns + `
+		SELECT `+allColumns+`
 		FROM processed_files WHERE status = ? ORDER BY processed_at DESC LIMIT ?
 	`, status, limit)
 	if err != nil {

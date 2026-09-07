@@ -302,7 +302,7 @@ var hookPreflight func()
 // Panic-safety by design (SPEC-0251 P1): this gate sits on the PreToolUse path,
 // so a panic anywhere below (a malformed cache row, a nil seam in a future
 // refactor, a registry client that dereferences nil) must NOT crash the process
-//. A crash exits non-2 and the harness may interpret a non-block exit as
+// . A crash exits non-2 and the harness may interpret a non-block exit as
 // "allow", silently opening the very hole the gate exists to close. The deferred
 // recover therefore converts any panic into the canonical three-way DENY (exit
 // 2 + decision JSON + stderr), failing closed. The named return `code` is what
@@ -894,7 +894,7 @@ func defaultGatePolicy() gatePolicy { return gatePolicy{Unmanaged: "allow"} }
 // loadGatePolicy reads ~/.claude/skillctl/gate-policy.yaml.
 //
 // A MISSING file yields safe defaults (unmanaged=allow, managed still verified)
-//. The gate must not brick a fresh machine that never wrote a policy.
+// . The gate must not brick a fresh machine that never wrote a policy.
 //
 // A PRESENT-BUT-BROKEN file (malformed YAML, or an unknown/misspelled field)
 // fails CLOSED (SPEC-0251 SEC-L2, mirroring the SPEC-0188 strict trust-roots

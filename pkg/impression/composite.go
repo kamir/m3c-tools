@@ -13,10 +13,10 @@ import (
 type ObservationType string
 
 const (
-	Progress ObservationType = "progress" // YouTube video impression
-	Idea     ObservationType = "idea"     // Screenshot observation
-	Impulse  ObservationType = "impulse"  // Quick capture
-	Import    ObservationType = "import"    // Batch audio import
+	Progress        ObservationType = "progress"         // YouTube video impression
+	Idea            ObservationType = "idea"             // Screenshot observation
+	Impulse         ObservationType = "impulse"          // Quick capture
+	Import          ObservationType = "import"           // Batch audio import
 	Fieldnote       ObservationType = "fieldnote"        // Plaud field recording
 	PocketFieldnote ObservationType = "pocket_fieldnote" // Pocket USB recorder
 	PocketGrouped   ObservationType = "pocket_grouped"   // Pocket grouped session
@@ -24,12 +24,12 @@ const (
 
 // CompositeDoc builds a composite text document for ER1 upload.
 type CompositeDoc struct {
-	VideoID        string
-	VideoURL       string
-	Language       string
-	LanguageCode   string
-	IsGenerated    bool
-	SnippetCount   int
+	VideoID           string
+	VideoURL          string
+	Language          string
+	LanguageCode      string
+	IsGenerated       bool
+	SnippetCount      int
 	TranscriptText    string
 	ImpressionText    string
 	ObsType           ObservationType

@@ -336,7 +336,9 @@ type ctxCaptor struct {
 	seen  *atomic.Value
 }
 
-func (c *ctxCaptor) GetItem(ctxID, docID string) (er1.Item, error) { return c.inner.GetItem(ctxID, docID) }
+func (c *ctxCaptor) GetItem(ctxID, docID string) (er1.Item, error) {
+	return c.inner.GetItem(ctxID, docID)
+}
 func (c *ctxCaptor) ListItemsSince(ctxID string, since time.Time, limit int) ([]er1.Item, error) {
 	return c.inner.ListItemsSince(ctxID, since, limit)
 }

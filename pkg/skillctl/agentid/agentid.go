@@ -37,7 +37,7 @@ import (
 // Domain is the literal first line of the canonical signed message for an
 // AgentID. It is the domain separator (SPEC-0277 §2): a signature produced over
 // these bytes can NEVER be replayed as a signature under another message family
-//: capability_v1 (SPEC-0202 tokens), attestation (SPEC-0188 governance),
+// : capability_v1 (SPEC-0202 tokens), attestation (SPEC-0188 governance),
 // invocation_event_v1 (SPEC-0202 runtime events), revoke (SPEC-0188 revocation),
 // or skillctl-revocation-list (SPEC-0276), even when the SAME key signs both.
 // Cross-domain signature reuse against any of those is the explicit red-team
@@ -287,7 +287,7 @@ func sortedDedup(in []string) []string {
 // Sign produces an owner (or approver) Signature over the canonical bytes of p,
 // using the provided ed25519 private key. The caller supplies role + identityID
 // (the principal id whose key this is). This is a thin wrapper over ed25519.Sign
-//. The stdlib primitive runs in constant time; we add only a length assertion.
+// . The stdlib primitive runs in constant time; we add only a length assertion.
 //
 // Reuse note: this mirrors signing.SignAttestation / SignRevocation exactly; no
 // new crypto. The detached signature is base64-std encoded into SignatureB64.

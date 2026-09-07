@@ -2,21 +2,21 @@
 //
 // Protocol (from PLAN-0167 §Contract: Prompt Registry HTTP API):
 //
-//   GET /api/prompts/<prompt_id>
-//     If-None-Match: <etag>   (optional)
-//   → 200 + ETag + body          | on fresh/changed
-//     304 Not Modified           | when ETag matches
-//     404 / 401                  | error paths
+//	GET /api/prompts/<prompt_id>
+//	  If-None-Match: <etag>   (optional)
+//	→ 200 + ETag + body          | on fresh/changed
+//	  304 Not Modified           | when ETag matches
+//	  404 / 401                  | error paths
 //
 // Client behaviour:
-//   * 5-minute TTL in-memory cache keyed by prompt_id.
-//   * SQLite mirror (store.PromptCache*) for cross-restart survival.
-//   * Cache-hit fresh (within TTL): serve from cache, no HTTP.
-//   * Cache-hit stale (past TTL): issue GET with If-None-Match; on
+//   - 5-minute TTL in-memory cache keyed by prompt_id.
+//   - SQLite mirror (store.PromptCache*) for cross-restart survival.
+//   - Cache-hit fresh (within TTL): serve from cache, no HTTP.
+//   - Cache-hit stale (past TTL): issue GET with If-None-Match; on
 //     304 refresh timestamp + serve; on 200 replace; on network
 //     failure within an extended window, serve stale with a warning
 //     log so reflections still run during Flask outages.
-//   * Auth: HMAC bearer via internal/thinking/api.SignToken so the
+//   - Auth: HMAC bearer via internal/thinking/api.SignToken so the
 //     engine signs the same way the Flask bridge does.
 package prompts
 
@@ -82,9 +82,9 @@ type httpRegistry struct {
 }
 
 type cacheEntry struct {
-	Prompt     Prompt
-	ETag       string
-	FetchedAt  time.Time
+	Prompt    Prompt
+	ETag      string
+	FetchedAt time.Time
 	// LastVerifiedAt is the last time we revalidated (either by hitting
 	// the server and getting 304, or by a fresh 200).
 	LastVerifiedAt time.Time

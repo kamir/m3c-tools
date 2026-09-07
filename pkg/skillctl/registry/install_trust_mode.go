@@ -599,7 +599,6 @@ func writeProvenance(path string, side ProvenanceSidecar) error {
 	return os.WriteFile(path, out, 0o644)
 }
 
-
 // AuditProvenance re-computes the skill-directory digest and compares it to
 // the sidecar's bundle_digest. Returns nil if they match, an error if drifted.
 // Skill dirs without a sidecar return ErrNoSidecar (caller decides whether

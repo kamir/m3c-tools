@@ -31,8 +31,8 @@ func (s Severity) String() string {
 // Issue is a single finding the doctor produces about a profile (or a
 // cross-profile relationship).
 type Issue struct {
-	Profile  string   // empty for cross-profile checks
-	Key      string   // env var key the issue is about, if any
+	Profile  string // empty for cross-profile checks
+	Key      string // env var key the issue is about, if any
 	Severity Severity
 	Code     string // short stable identifier
 	Message  string // human-readable description
@@ -89,13 +89,13 @@ var requiredKeys = []string{
 // placeholderKeys are values shipped in the "init template" / examples that
 // will never authenticate. They are the #1 cause of silent menubar failure.
 var placeholderKeys = map[string]struct{}{
-	"once-only":                 {},
-	"minimal-key":               {},
-	"test-key-abc123":           {},
+	"once-only":                  {},
+	"minimal-key":                {},
+	"test-key-abc123":            {},
 	"democredential-er1-api-key": {},
-	"your-api-key-here":         {},
-	"changeme":                  {},
-	"":                          {},
+	"your-api-key-here":          {},
+	"changeme":                   {},
+	"":                           {},
 }
 
 // IsPlaceholderKey reports whether the given API key matches a known
@@ -288,7 +288,7 @@ func ValidateAll(profiles []Profile, active string) DoctorReport {
 			sort.Strings(owners)
 			rep.CrossIssues = append(rep.CrossIssues, Issue{
 				Severity: SevWarn, Code: "key-duplicate",
-				Key:     "ER1_API_KEY",
+				Key: "ER1_API_KEY",
 				Message: fmt.Sprintf("API key (last4=%s) is reused across profiles: %s",
 					last4(k), strings.Join(owners, ", ")),
 			})

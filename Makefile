@@ -506,14 +506,20 @@ checksums:
 
 # Run CI checks locally (mirrors .github/workflows/ci.yml)
 .PHONY: ci
-ci: vet lint check-emdash check-redirect-guard test-unit build
+ci: vet lint check-emdash check-gofmt check-redirect-guard test-unit build
 	@echo ""
-	@echo "CI passed: vet ✓  lint ✓  prose ✓  redirect-guard ✓  test ✓  build ✓"
+	@echo "CI passed: vet ✓  lint ✓  prose ✓  gofmt ✓  redirect-guard ✓  test ✓  build ✓"
 
 # Prose gate: no U+2014 EM DASH anywhere in the tree (CODESTYLE.md).
 .PHONY: check-emdash
 check-emdash:
 	@./scripts/check-no-emdash.sh
+
+# Format gate: refuse a tree that gofmt would change (AUDIT-0001 Befund 1.11).
+# Fix with: ./scripts/check-gofmt.sh --fix
+.PHONY: check-gofmt
+check-gofmt:
+	@./scripts/check-gofmt.sh
 
 # Redirect guard (AUDIT-0001 Befund 1.1): credential-bearing files must give
 # every http.Client a CheckRedirect policy. Heuristic; limits in the script header.

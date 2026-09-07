@@ -223,7 +223,7 @@ func TestTraceEndpointReturnsFourLayerTree(t *testing.T) {
 		SchemaVer: schema.CurrentSchemaVer, InsightID: "i-e2e",
 		InputIDs: []string{"r-e2e"}, SynthesisMode: schema.SynthesisPattern,
 		Content: map[string]interface{}{"pattern": "deadline risk"}, Confidence: 0.8,
-		Trace:   schema.Trace{PromptID: "tmpl.i.pattern", Model: "mock"}, Timestamp: now,
+		Trace: schema.Trace{PromptID: "tmpl.i.pattern", Model: "mock"}, Timestamp: now,
 	}
 	art := schema.Artifact{
 		SchemaVer: schema.CurrentSchemaVer, ArtifactID: "a-e2e",

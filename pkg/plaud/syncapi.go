@@ -19,10 +19,10 @@ import (
 
 // SyncAPIClient talks to the aims-core plaud-sync API for cross-device dedup.
 type SyncAPIClient struct {
-	baseURL    string       // aims-core base URL (e.g. https://127.0.0.1:8081)
-	apiKey     string       // X-API-KEY header
-	userID     string       // X-User-ID header
-	deviceName string       // X-Device-ID header
+	baseURL    string // aims-core base URL (e.g. https://127.0.0.1:8081)
+	apiKey     string // X-API-KEY header
+	userID     string // X-User-ID header
+	deviceName string // X-Device-ID header
 	client     *http.Client
 }
 

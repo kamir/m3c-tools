@@ -31,13 +31,13 @@ func FuzzParse(f *testing.F) {
 	f.Add([]byte("---\nname: x\nversion: 1.0.0\n---\nbody text"))
 	f.Add([]byte("---\r\nname: x\r\n---\r\nbody"))       // CRLF
 	f.Add([]byte("---\nname: x\nno closing delimiter"))  // unterminated
-	f.Add([]byte("---\n: : :\n---\n"))                    // broken YAML block
-	f.Add([]byte("---\nmetadata:\n  a: [1,2,3]\n---\n"))  // nested
-	f.Add([]byte("---"))                                  // just the opener
-	f.Add([]byte("------\n---\n"))                        // dashes soup
+	f.Add([]byte("---\n: : :\n---\n"))                   // broken YAML block
+	f.Add([]byte("---\nmetadata:\n  a: [1,2,3]\n---\n")) // nested
+	f.Add([]byte("---"))                                 // just the opener
+	f.Add([]byte("------\n---\n"))                       // dashes soup
 	f.Add([]byte("no frontmatter here"))
 	f.Add([]byte(""))
-	f.Add([]byte("---\n\n---\n"))                         // empty YAML block
+	f.Add([]byte("---\n\n---\n")) // empty YAML block
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		_, _, _ = Parse(data) // must never panic

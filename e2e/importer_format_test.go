@@ -52,10 +52,10 @@ func TestBuildFileEntriesParsedTags(t *testing.T) {
 
 	// Files with embedded tags in their names
 	testFiles := map[string][]string{
-		"meeting-notes-2026-03-09.wav":    {"meeting", "notes"},
-		"project_alpha_draft.mp3":         {"project", "alpha", "draft"},
-		"20260310_143000_standup.flac":     {"standup"},
-		"interview.aac":                   {"interview"},
+		"meeting-notes-2026-03-09.wav": {"meeting", "notes"},
+		"project_alpha_draft.mp3":      {"project", "alpha", "draft"},
+		"20260310_143000_standup.flac": {"standup"},
+		"interview.aac":                {"interview"},
 	}
 
 	for name := range testFiles {

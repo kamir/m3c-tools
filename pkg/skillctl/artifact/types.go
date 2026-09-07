@@ -127,4 +127,3 @@ type EventRecord struct {
 	NativeID   string
 	Envelope   map[string]any // the raw signed event, for re-verification
 }
-

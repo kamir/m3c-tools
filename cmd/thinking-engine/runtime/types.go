@@ -10,12 +10,12 @@ import (
 type InvocationEventType string
 
 const (
-	EventCapabilityIssued    InvocationEventType = "capability.issued"
+	EventCapabilityIssued     InvocationEventType = "capability.issued"
 	EventCapabilityAttenuated InvocationEventType = "capability.attenuated"
-	EventCapabilityRevoked   InvocationEventType = "capability.revoked"
-	EventGateAllowed         InvocationEventType = "gate.allowed"
-	EventGateRefused         InvocationEventType = "gate.refused"
-	EventInvocationCompleted InvocationEventType = "invocation.completed"
+	EventCapabilityRevoked    InvocationEventType = "capability.revoked"
+	EventGateAllowed          InvocationEventType = "gate.allowed"
+	EventGateRefused          InvocationEventType = "gate.refused"
+	EventInvocationCompleted  InvocationEventType = "invocation.completed"
 )
 
 // InvocationEvent mirrors the SPEC-0202 §9 Avro shapes, deserialized.
@@ -25,29 +25,29 @@ const (
 // Not every field is populated for every event_type: see SPEC-0202 §9
 // and the per-event projection rules in SPEC-0167 A.3.
 type InvocationEvent struct {
-	EventType    InvocationEventType `json:"event_type"`
-	OccurredAt   time.Time           `json:"occurred_at"`
+	EventType  InvocationEventType `json:"event_type"`
+	OccurredAt time.Time           `json:"occurred_at"`
 
 	// Identity / scope
-	TokenID         string `json:"token_id"`
-	ParentTokenID   string `json:"parent_token_id,omitempty"`
-	BundleDigest    string `json:"bundle_digest,omitempty"`
-	SkillName       string `json:"skill_name,omitempty"`
-	SkillVersion    string `json:"skill_version,omitempty"`
-	Tenant          string `json:"tenant"`
-	CallerIdentity  string `json:"caller_identity"`
-	CallerSession   string `json:"caller_session,omitempty"`
+	TokenID        string `json:"token_id"`
+	ParentTokenID  string `json:"parent_token_id,omitempty"`
+	BundleDigest   string `json:"bundle_digest,omitempty"`
+	SkillName      string `json:"skill_name,omitempty"`
+	SkillVersion   string `json:"skill_version,omitempty"`
+	Tenant         string `json:"tenant"`
+	CallerIdentity string `json:"caller_identity"`
+	CallerSession  string `json:"caller_session,omitempty"`
 
 	// Gate-specific (gate.allowed / gate.refused)
-	Surface  string `json:"surface,omitempty"`  // e.g. "http_get", "subprocess_run"
-	Target   string `json:"target,omitempty"`   // URL, argv, path
+	Surface  string `json:"surface,omitempty"`   // e.g. "http_get", "subprocess_run"
+	Target   string `json:"target,omitempty"`    // URL, argv, path
 	ExitCode int    `json:"exit_code,omitempty"` // populated on gate.refused
 	RuleHit  string `json:"rule_hit,omitempty"`  // e.g. "egress_host_not_allowed"
 
 	// Invocation-completed-specific
-	ExitStatus    string `json:"exit_status,omitempty"` // ok | fail | killed
-	WallClockMS   int    `json:"wall_clock_ms,omitempty"`
-	EgressBytes   int64  `json:"egress_bytes,omitempty"`
+	ExitStatus  string `json:"exit_status,omitempty"` // ok | fail | killed
+	WallClockMS int    `json:"wall_clock_ms,omitempty"`
+	EgressBytes int64  `json:"egress_bytes,omitempty"`
 
 	// Attenuation-specific
 	AttenuationRule  string      `json:"rule,omitempty"`
@@ -105,8 +105,8 @@ type ThoughtContext struct {
 }
 
 type ThoughtProvenance struct {
-	CapturedBy        string `json:"captured_by"`           // "runtime-invocation-watcher/v1"
-	ParentArtifactID  string `json:"parent_artifact_id"`    // bundle_digest (A.3 graph edge)
+	CapturedBy       string `json:"captured_by"`        // "runtime-invocation-watcher/v1"
+	ParentArtifactID string `json:"parent_artifact_id"` // bundle_digest (A.3 graph edge)
 }
 
 // Reflection is the v1 R-schema target shape the reflectors emit.
@@ -132,8 +132,8 @@ type ReflectionTrace struct {
 	PromptID      string  `json:"prompt_id"`
 	PromptVersion int     `json:"prompt_version,omitempty"`
 	Model         string  `json:"model"` // "rule:refusal-cluster/v1" for non-LLM reflectors
-	DurationMS   int     `json:"duration_ms,omitempty"`
-	CostUSD      float64 `json:"cost_usd,omitempty"`
+	DurationMS    int     `json:"duration_ms,omitempty"`
+	CostUSD       float64 `json:"cost_usd,omitempty"`
 }
 
 // Reflector is the contract that refusal_cluster, egress_anomaly, and

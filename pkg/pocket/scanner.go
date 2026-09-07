@@ -15,9 +15,9 @@ import (
 // Recording represents a single MP3 file discovered on the Pocket device.
 type Recording struct {
 	FilePath    string    `json:"file_path"`
-	Date        string    `json:"date"`         // YYYY-MM-DD from folder
-	Time        string    `json:"time"`         // HH:mm:ss from filename
-	Timestamp   time.Time `json:"timestamp"`    // Parsed full datetime
+	Date        string    `json:"date"`      // YYYY-MM-DD from folder
+	Time        string    `json:"time"`      // HH:mm:ss from filename
+	Timestamp   time.Time `json:"timestamp"` // Parsed full datetime
 	SizeBytes   int64     `json:"size_bytes"`
 	DurationSec float64   `json:"duration_sec"` // Estimated from size (32kbps MP3)
 	FileHash    string    `json:"file_hash"`    // SHA-256

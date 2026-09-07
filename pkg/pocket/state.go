@@ -16,11 +16,11 @@ type GroupState struct {
 // GroupMapping links a local group to its ER1 document.
 type GroupMapping struct {
 	GroupID    string   `json:"group_id"`
-	DocID      string   `json:"doc_id"`       // ER1 document ID
+	DocID      string   `json:"doc_id"` // ER1 document ID
 	Title      string   `json:"title"`
 	CreatedAt  string   `json:"created_at"`
-	FilePaths  []string `json:"file_paths"`   // source recordings in this group
-	MergedPath string   `json:"merged_path"`  // local merged file
+	FilePaths  []string `json:"file_paths"`  // source recordings in this group
+	MergedPath string   `json:"merged_path"` // local merged file
 	Segments   int      `json:"segments"`
 	Tags       string   `json:"tags,omitempty"` // comma-separated tags used at upload
 }

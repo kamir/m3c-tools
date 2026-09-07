@@ -202,6 +202,7 @@ func CheckEpochMonotonic(head map[string]any, persistedMax int) error {
 //  1. the envelope signature against the pinned registry key (event.go),
 //  2. epoch monotonicity against the client's persisted floor (R1 rollback),
 //  3. that the separately-transported set binds to the head's revoked_set_root.
+//
 // On success it returns the epoch + issued_at to persist. On ANY failure the
 // client MUST NOT advance its epoch or treat the snapshot as fresh. The gate
 // (SPEC-0247 / FR-0045 D4) then applies the fail-closed staleness policy.

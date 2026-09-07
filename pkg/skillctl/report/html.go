@@ -20,11 +20,11 @@ var deltaHTMLTemplate string
 
 // funcMap provides template helper functions.
 var funcMap = template.FuncMap{
-	"badgeClass": badgeClass,
-	"barWidth":   barWidth,
+	"badgeClass":  badgeClass,
+	"barWidth":    barWidth,
 	"formatBytes": formatBytes,
-	"deref":      deref,
-	"string":     toString,
+	"deref":       deref,
+	"string":      toString,
 }
 
 // badgeClass returns a CSS class name for a skill type string.

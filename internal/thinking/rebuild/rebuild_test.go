@@ -127,7 +127,7 @@ func TestRebuildDedupsExistingThoughts(t *testing.T) {
 	pre := schema.Thought{
 		SchemaVer: schema.CurrentSchemaVer, ThoughtID: "t-a",
 		Type: schema.ThoughtObservation, Content: schema.Content{Text: "existing"},
-		Source: schema.Source{Kind: schema.SourceTyped, Ref: "pre"},
+		Source:    schema.Source{Kind: schema.SourceTyped, Ref: "pre"},
 		Timestamp: now.Add(-time.Hour),
 	}
 	if err := bus.Produce(context.Background(), tkafka.TopicName(hash, tkafka.TopicThoughtsRaw), "k", pre); err != nil {
@@ -233,7 +233,7 @@ func TestRebuildUsesLatestThoughtTimestamp(t *testing.T) {
 	pre := schema.Thought{
 		SchemaVer: schema.CurrentSchemaVer, ThoughtID: "t-x",
 		Type: schema.ThoughtObservation, Content: schema.Content{Text: "old"},
-		Source: schema.Source{Kind: schema.SourceTyped, Ref: "pre"},
+		Source:    schema.Source{Kind: schema.SourceTyped, Ref: "pre"},
 		Timestamp: ts,
 	}
 	if err := bus.Produce(context.Background(), tkafka.TopicName(hash, tkafka.TopicThoughtsRaw), "k", pre); err != nil {

@@ -17,12 +17,12 @@ import (
 
 // skipDirs lists directory names to skip during traversal.
 var skipDirs = map[string]bool{
-	".git":        true,
+	".git":         true,
 	"node_modules": true,
-	"__pycache__": true,
-	".venv":       true,
-	"vendor":      true,
-	"build":       true,
+	"__pycache__":  true,
+	".venv":        true,
+	"vendor":       true,
+	"build":        true,
 }
 
 // Scanner walks filesystem paths to discover skill sources.

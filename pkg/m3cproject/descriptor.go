@@ -108,10 +108,10 @@ type Descriptor struct {
 	} `yaml:"source"`
 
 	// runtime-populated (not in the file)
-	FoundPath    string `yaml:"-"` // absolute path of the descriptor file, or "" if synthesized
-	IDSource     Source `yaml:"-"`
-	RepoRoot     string `yaml:"-"` // git toplevel of the working dir, or "" if not a repo
-	WorkingDir   string `yaml:"-"`
+	FoundPath  string `yaml:"-"` // absolute path of the descriptor file, or "" if synthesized
+	IDSource   Source `yaml:"-"`
+	RepoRoot   string `yaml:"-"` // git toplevel of the working dir, or "" if not a repo
+	WorkingDir string `yaml:"-"`
 }
 
 // EffectiveER1Target returns ER1.Target or "prod" (ADR-0003 default).

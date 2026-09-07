@@ -2,18 +2,18 @@
 //
 // The m3c-tools config is layered:
 //
-//   1. Constants: hardcoded in Go, never user-set (e.g. default
-//                             API URLs, content-type prefixes).
-//   2. Global preferences: settings that DON'T switch with the active
-//                             profile because they describe the user's
-//                             machine, not their account: Whisper model,
-//                             screenshot capture mode, retry behaviour.
-//                             Stored at ~/.m3c-tools/preferences.env.
-//   3. Active profile: settings that DO switch when the user picks a
-//                             different account: ER1 server URL + auth +
-//                             context_id, Plaud session, Pocket API key.
-//                             Stored at ~/.m3c-tools/profiles/<name>.env.
-//   4. Project .env: local overrides for development.
+//  1. Constants: hardcoded in Go, never user-set (e.g. default
+//     API URLs, content-type prefixes).
+//  2. Global preferences: settings that DON'T switch with the active
+//     profile because they describe the user's
+//     machine, not their account: Whisper model,
+//     screenshot capture mode, retry behaviour.
+//     Stored at ~/.m3c-tools/preferences.env.
+//  3. Active profile: settings that DO switch when the user picks a
+//     different account: ER1 server URL + auth +
+//     context_id, Plaud session, Pocket API key.
+//     Stored at ~/.m3c-tools/profiles/<name>.env.
+//  4. Project .env: local overrides for development.
 //
 // This file owns layer (2). It does NOT touch layers (3) or (4): the
 // existing ProfileManager + er1.LoadDotenv handle those.

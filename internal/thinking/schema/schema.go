@@ -234,8 +234,8 @@ type StepFilters struct {
 
 // StepConstraints is ProcessSpec.steps[].context.constraints.
 type StepConstraints struct {
-	MaxItems       int `json:"max_items,omitempty"`
-	FreshnessDays  int `json:"freshness_days,omitempty"`
+	MaxItems      int `json:"max_items,omitempty"`
+	FreshnessDays int `json:"freshness_days,omitempty"`
 }
 
 // StepContext is ProcessSpec.steps[].context.
@@ -324,13 +324,13 @@ const (
 
 // ProcessEvent is what lands on process.events.
 type ProcessEvent struct {
-	SchemaVer  int                    `json:"schema_ver"`
-	ProcessID  string                 `json:"process_id"`
-	Event      ProcessEventName       `json:"event"`
-	StepLayer  *Layer                 `json:"step_layer,omitempty"`
-	StepIndex  *int                   `json:"step_index,omitempty"`
-	Detail     map[string]interface{} `json:"detail,omitempty"`
-	Timestamp  time.Time              `json:"timestamp"`
+	SchemaVer int                    `json:"schema_ver"`
+	ProcessID string                 `json:"process_id"`
+	Event     ProcessEventName       `json:"event"`
+	StepLayer *Layer                 `json:"step_layer,omitempty"`
+	StepIndex *int                   `json:"step_index,omitempty"`
+	Detail    map[string]interface{} `json:"detail,omitempty"`
+	Timestamp time.Time              `json:"timestamp"`
 }
 
 // ----- ProcessCommand (process.commands) -----

@@ -38,7 +38,7 @@ var errUnsafeConcatPath = errors.New("unsafe path for ffmpeg concat list")
 // (or carriage return) terminates the directive regardless of quoting, so a
 // path carrying \n/\r could split the token and inject a second, attacker-chosen
 // "file '/etc/passwd'" line, and we run with -safe 0, which disables ffmpeg's
-// own path guard. Single-quote escaping ('\'') alone does NOT stop this. We
+// own path guard. Single-quote escaping ('\”) alone does NOT stop this. We
 // therefore reject any path containing a newline, carriage return, or NUL (none
 // of which can appear in a legitimate Pocket recording path) and only then apply
 // the POSIX single-quote escape for the benign-but-quote-bearing case.

@@ -33,6 +33,25 @@ jobs:
       - name: golangci-lint
         run: golangci-lint run --timeout=5m
 
+  format-gate:
+    name: Format (gofmt)
+    # AUDIT-0001 Befund 1.11: gemessen am 2026-09-07 waren 108 von 786 Dateien
+    # nicht gofmt-konform, und durchgesetzt wurde es nirgends, weder in einem
+    # Workflow noch im Makefile noch als formatters-Block in .golangci.yml.
+    # Die Drift war nicht bloss Kosmetik: ein `gofmt -w` auf ein VERZEICHNIS zog
+    # acht unbeteiligte Dateien in einen fremden Commit, weil sie vorher schon
+    # unformatiert waren.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.26.6"
+
+      - name: gofmt over the tracked tree
+        run: ./scripts/check-gofmt.sh
+
   prose-gate:
     name: Prose (no em dash)
     # Pure shell over the tracked tree: no Go toolchain, no cgo, cheap runner.

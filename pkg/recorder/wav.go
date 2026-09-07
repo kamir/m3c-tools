@@ -16,10 +16,10 @@ const (
 
 // DeviceInfo holds information about an audio input device.
 type DeviceInfo struct {
-	Name             string
-	MaxInputChannels int
+	Name              string
+	MaxInputChannels  int
 	DefaultSampleRate float64
-	IsDefault        bool
+	IsDefault         bool
 }
 
 // AudioLevel represents real-time audio input levels for a single frame.

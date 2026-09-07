@@ -566,7 +566,7 @@ func applyFetchedRevokedSet(home string, cfg *er1.Config, ctx string, pub ed2551
 // adoptHeadOrKeepFloor tries to adopt a signed HEAD for the freshly-fetched set.
 // If there is no HEAD source, or the HEAD fails to verify (bad sig / rollback), it
 // KEEPS the previously-persisted epoch as the floor and returns the prior issued_at
-//, so the gate (D4) sees a non-advancing snapshot and applies its fail-closed
+// , so the gate (D4) sees a non-advancing snapshot and applies its fail-closed
 // staleness policy under trust-root config. A verified HEAD returns its epoch +
 // issued_at to persist AND persists the signed HEAD bytes (Fix A) for a later
 // authenticated re-verify.

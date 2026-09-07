@@ -21,12 +21,12 @@ const goldenDigest = "sha256:15fd20c2141d63d218cebe10e768a236f725756b1bc0c56f08e
 
 func fixtureManifest() BundleManifest {
 	return BundleManifest{
-		Name:                "fetch-contract",
-		Version:             "1.0.0",
-		Summary:             "Fetch m3c inter-agent contracts from ER1 by tag query.",
-		SourceRepo:          "kamir/m3c-tools-maintenance",
-		SourceCommit:        "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
-		SourcePath:          ".claude/skills/fetch-contract",
+		Name:                      "fetch-contract",
+		Version:                   "1.0.0",
+		Summary:                   "Fetch m3c inter-agent contracts from ER1 by tag query.",
+		SourceRepo:                "kamir/m3c-tools-maintenance",
+		SourceCommit:              "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+		SourcePath:                ".claude/skills/fetch-contract",
 		AuthorGovernanceIntent:    "green",
 		AuthorGovernanceRationale: "Read-only ER1 query; no writes; failure non-destructive.",
 		DependsOn: []Dependency{

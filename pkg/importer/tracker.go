@@ -40,10 +40,10 @@ const trackerHeader = `# M3C Import Tracker
 // It provides read, write, and check operations with an in-memory cache
 // for fast lookups. All methods are safe for concurrent use.
 type Tracker struct {
-	mu       sync.RWMutex
-	path     string            // Absolute path to the tracker file.
-	entries  map[string]bool   // In-memory set of tracked filenames.
-	loaded   bool              // Whether entries have been loaded from disk.
+	mu      sync.RWMutex
+	path    string          // Absolute path to the tracker file.
+	entries map[string]bool // In-memory set of tracked filenames.
+	loaded  bool            // Whether entries have been loaded from disk.
 }
 
 // NewTracker creates a Tracker for the given file path.

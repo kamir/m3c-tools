@@ -5,8 +5,8 @@
 // call the LLM adapter with JSON-formatted output, and publish a
 // Reflection carrying a strategy-specific structured content:
 //
-//   compare:  {"similarities": [...], "differences": [...]}
-//   classify: {"classification": "...", "confidence": float, "rationale": "..."}
+//	compare:  {"similarities": [...], "differences": [...]}
+//	classify: {"classification": "...", "confidence": float, "rationale": "..."}
 //
 // No hardcoded prompts live here.
 package r

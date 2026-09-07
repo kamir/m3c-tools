@@ -15,7 +15,7 @@ import (
 type Recording struct {
 	ID        string    `json:"id"`
 	Title     string    `json:"title"`
-	Status    string    `json:"status"` // e.g. "completed", "processing"
+	Status    string    `json:"status"`   // e.g. "completed", "processing"
 	Duration  int       `json:"duration"` // seconds
 	CreatedAt time.Time `json:"created_at"`
 	AudioURL  string    `json:"audio_url"`

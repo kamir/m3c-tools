@@ -14,9 +14,9 @@ import (
 
 func TestCanonicalEventBytes_SortedKeys_NoEnvelopeSignature_NoTrailingNL(t *testing.T) {
 	ev := map[string]any{
-		"zeta":               "last",
-		"alpha":              "first",
-		"middle":             42,
+		"zeta":                 "last",
+		"alpha":                "first",
+		"middle":               42,
 		EnvelopeSignatureField: "should-be-stripped",
 	}
 	got, err := CanonicalEventBytes(ev)

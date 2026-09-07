@@ -125,14 +125,14 @@ func (s *eventSink) waitFor(name schema.ProcessEventName, timeout time.Duration)
 // ----- environment helpers -----
 
 type env struct {
-	t       *testing.T
-	bus     tkafka.Bus
-	hash    mctx.Hash
-	store   *store.Store
-	sink    *eventSink
-	disp    *captureDispatcher
-	ledger  *fakeLedger
-	cfg     Config
+	t        *testing.T
+	bus      tkafka.Bus
+	hash     mctx.Hash
+	store    *store.Store
+	sink     *eventSink
+	disp     *captureDispatcher
+	ledger   *fakeLedger
+	cfg      Config
 	consumer *Consumer
 }
 
@@ -317,8 +317,8 @@ func TestHeartbeatWithThoughtFires(t *testing.T) {
 
 func TestRateLimitSkipsOverCap(t *testing.T) {
 	e := newEnv(t)
-	e.cfg.WindowN = 1            // every T fires
-	e.cfg.RateLimitPerHour = 10  // per brief: 11th call should be skipped
+	e.cfg.WindowN = 1           // every T fires
+	e.cfg.RateLimitPerHour = 10 // per brief: 11th call should be skipped
 	e.start()
 
 	// Fire 11 distinct windows. Use unique ids so dedup does not

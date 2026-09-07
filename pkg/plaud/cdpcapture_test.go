@@ -113,9 +113,9 @@ func TestCDPReadMessage_ReassemblesAndSkipsControl(t *testing.T) {
 	_ = c1.SetReadDeadline(time.Now().Add(2 * time.Second))
 
 	go func() {
-		c2.Write(buildServerFrame(true, 0x9, []byte("ping")))  // control frame → skipped
-		c2.Write(buildServerFrame(false, 0x1, []byte("he")))   // text, not final
-		c2.Write(buildServerFrame(true, 0x0, []byte("llo")))   // continuation, final
+		c2.Write(buildServerFrame(true, 0x9, []byte("ping"))) // control frame → skipped
+		c2.Write(buildServerFrame(false, 0x1, []byte("he")))  // text, not final
+		c2.Write(buildServerFrame(true, 0x0, []byte("llo")))  // continuation, final
 	}()
 
 	msg, err := cdpReadMessage(c1)

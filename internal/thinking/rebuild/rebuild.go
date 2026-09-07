@@ -44,11 +44,11 @@ type Service struct {
 
 // Result is the reply shape from Run.
 type Result struct {
-	RebuildID      string   `json:"rebuild_id"`
-	Scanned        int      `json:"scanned"`
-	NewThoughts    int      `json:"new_thoughts"`
+	RebuildID       string   `json:"rebuild_id"`
+	Scanned         int      `json:"scanned"`
+	NewThoughts     int      `json:"new_thoughts"`
 	QueuedProcesses []string `json:"queued_processes,omitempty"`
-	Since          string   `json:"since_iso,omitempty"`
+	Since           string   `json:"since_iso,omitempty"`
 }
 
 // Run executes one rebuild pass. Intended to be invoked from the

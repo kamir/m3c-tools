@@ -80,17 +80,17 @@ type Metrics interface {
 type Registry struct {
 	reg *prometheus.Registry
 
-	stepFailures         *prometheus.CounterVec
-	processFailures      *prometheus.CounterVec
-	autoreflectFires     *prometheus.CounterVec
-	autoreflectSkipped   *prometheus.CounterVec
-	budgetPauses         prometheus.Counter
-	llmTokens            *prometheus.CounterVec
-	artifactsCreated     *prometheus.CounterVec
-	er1SinkFailures      prometheus.Counter
-	hmacRotations        prometheus.Counter
-	llmLatencySeconds    *prometheus.HistogramVec
-	busConsumerLag       *prometheus.GaugeVec
+	stepFailures       *prometheus.CounterVec
+	processFailures    *prometheus.CounterVec
+	autoreflectFires   *prometheus.CounterVec
+	autoreflectSkipped *prometheus.CounterVec
+	budgetPauses       prometheus.Counter
+	llmTokens          *prometheus.CounterVec
+	artifactsCreated   *prometheus.CounterVec
+	er1SinkFailures    prometheus.Counter
+	hmacRotations      prometheus.Counter
+	llmLatencySeconds  *prometheus.HistogramVec
+	busConsumerLag     *prometheus.GaugeVec
 
 	stopMu sync.Mutex
 	stop   chan struct{}

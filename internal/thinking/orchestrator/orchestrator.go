@@ -55,11 +55,11 @@ type Orchestrator struct {
 
 // barrier carries the runtime state for one semi_linear or loop process.
 type barrier struct {
-	spec         schema.ProcessSpec
-	nextStep     int // the index the orchestrator will dispatch next
-	iteration    int // loop-mode counter
-	maxIters     int // loop cap (1 for semi_linear/linear, N for loop)
-	done         bool
+	spec      schema.ProcessSpec
+	nextStep  int // the index the orchestrator will dispatch next
+	iteration int // loop-mode counter
+	maxIters  int // loop cap (1 for semi_linear/linear, N for loop)
+	done      bool
 }
 
 // New builds an orchestrator bound to the engine's own hash.
