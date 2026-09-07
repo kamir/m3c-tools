@@ -513,7 +513,20 @@ func loadDotenvFile(path string, trust dotenvTrust) error {
 		if os.Getenv(k) != "" {
 			continue // already set by profile or preferences: they win
 		}
-		os.Setenv(k, v) //nolint:errcheck // best-effort .env->process env; a malformed key is simply skipped, same as an absent line
+		// Best effort into the process environment, but the applied list below
+		// must follow the WRITE, not the intention. Measured on darwin/arm64,
+		// os.Setenv refuses an empty key, a NUL in the key and a NUL in the
+		// VALUE ("setenv: invalid argument"); a space in the key is accepted.
+		// The third case is the one with teeth, because the key beside a
+		// rejected value can be a sensitive one, and a .env can carry a NUL.
+		// With the error discarded, such a key still reached the list and the
+		// NOTE announced "applied 2 security-relevant setting(s): ER1_API_URL,
+		// M3C_PLM_BASE_URL" when the process had received one. A false line in
+		// the one output whose entire job is provenance. Pinned by
+		// TestLoadDotenvSkipsValuesSetenvRejects, which fails on the old form.
+		if err := os.Setenv(k, v); err != nil {
+			continue
+		}
 		if trust == dotenvFound && sensitiveDotenvKey(k) {
 			applied = append(applied, k)
 		}
