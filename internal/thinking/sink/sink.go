@@ -32,11 +32,11 @@ import (
 
 // Config wires a new Sinker.
 type Config struct {
-	Hash   mctx.Hash
+	Hash    mctx.Hash
 	OwnerID string // raw user_context_id (required to pass ctx-guard)
-	Bus    tkafka.Bus
-	ER1    er1.Client
-	Logger *log.Logger
+	Bus     tkafka.Bus
+	ER1     er1.Client
+	Logger  *log.Logger
 
 	// MaxAttempts caps the retry loop. Zero → DefaultMaxAttempts.
 	MaxAttempts int

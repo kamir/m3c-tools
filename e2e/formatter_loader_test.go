@@ -44,16 +44,18 @@ func TestFormatterLoaderGet(t *testing.T) {
 	ft := sampleTranscript()
 
 	tests := []struct {
-		name    string
-		check   func(string) bool
-		desc    string
+		name  string
+		check func(string) bool
+		desc  string
 	}{
 		{"text", func(s string) bool { return strings.Contains(s, "Hello world") && !strings.Contains(s, "[") }, "text has content without brackets"},
 		{"json", func(s string) bool { return strings.HasPrefix(s, "[{") }, "json starts with [{"},
 		{"json-pretty", func(s string) bool { return strings.Contains(s, "  ") && strings.Contains(s, `"text"`) }, "json-pretty is indented"},
 		{"srt", func(s string) bool { return strings.Contains(s, "-->") }, "srt has --> separator"},
 		{"webvtt", func(s string) bool { return strings.HasPrefix(s, "WEBVTT") }, "webvtt has header"},
-		{"pretty", func(s string) bool { return strings.Contains(s, "00:00") && strings.Contains(s, "│") && strings.Contains(s, "Hello world") }, "pretty has timestamp and box-drawing separator"},
+		{"pretty", func(s string) bool {
+			return strings.Contains(s, "00:00") && strings.Contains(s, "│") && strings.Contains(s, "Hello world")
+		}, "pretty has timestamp and box-drawing separator"},
 	}
 
 	for _, tc := range tests {

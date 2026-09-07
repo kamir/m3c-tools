@@ -238,6 +238,7 @@ var skillRequirementsFn = resolveInstalledSkillRequirements
 //     demonstrably exists but its scope cannot be confirmed.
 //   - a digest IS on record but the .skb is absent/unreadable, or the manifest
 //     fails the digest check → (empty, FALSE): same "cannot confirm scope".
+//
 // The gate fails every (empty, FALSE) case CLOSED for a restricting grant, so a
 // same-uid actor cannot delete provenance to downgrade enforcement to name-only.
 func resolveInstalledSkillRequirements(home, skill string) (agentid.SkillRequirements, bool) {

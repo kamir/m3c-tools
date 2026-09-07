@@ -345,7 +345,7 @@ func TestCaptureClipboardFirstWithImage(t *testing.T) {
 		responses: []seqResponse{
 			{out: []byte(`«class PNGf», 42318`)}, // 1st clipboard info (CaptureClipboardFirstWith)
 			{out: []byte(`«class PNGf», 42318`)}, // 2nd clipboard info (ExtractClipboardImageWith)
-			{out: nil},                             // extract script → success
+			{out: nil},                           // extract script → success
 		},
 		outputDir: tmpDir,
 	}

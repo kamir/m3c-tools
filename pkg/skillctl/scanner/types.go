@@ -45,8 +45,10 @@ type ScanRoot struct {
 //
 // User tier:    $CLAUDE_CONFIG_DIR/skills/  or  ~/.claude/skills/
 // Plugin tier:  $CLAUDE_CONFIG_DIR/plugins/cache/<o>/<p>/<v>/skills/
-//               $CLAUDE_CONFIG_DIR/plugins/marketplaces/<m>/skills/
-//               $CLAUDE_CONFIG_DIR/plugins/marketplaces/<m>/plugins/<p>/skills/
+//
+//	$CLAUDE_CONFIG_DIR/plugins/marketplaces/<m>/skills/
+//	$CLAUDE_CONFIG_DIR/plugins/marketplaces/<m>/plugins/<p>/skills/
+//
 // Project tier: caller supplies via explicit path arg (not auto-resolved).
 //
 // SourceClaude expands to user + plugin (SPEC-0189 §10 D3).

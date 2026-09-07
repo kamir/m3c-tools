@@ -49,7 +49,7 @@ func FuzzEventEnvelope(f *testing.F) {
 			return // only well-formed JSON objects reach the functions
 		}
 
-		canon, cerr := CanonicalEventBytes(ev) // must never panic
+		canon, cerr := CanonicalEventBytes(ev)   // must never panic
 		verr := VerifyEnvelopeSignature(pub, ev) // must never panic
 		if verr == nil {
 			// Fail-open guard: an accepted event must carry a signature that

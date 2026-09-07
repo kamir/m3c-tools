@@ -22,7 +22,7 @@ type fakeER1 struct {
 	t          *testing.T
 	srv        *httptest.Server
 	mu         sync.Mutex
-	uploads    []uploadCapture     // every /upload_2 we received
+	uploads    []uploadCapture             // every /upload_2 we received
 	searchHits map[string][]map[string]any // path query → canned items
 	nextDocID  int
 }

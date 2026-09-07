@@ -38,10 +38,10 @@ import (
 	tkafka "github.com/kamir/m3c-tools/internal/thinking/kafka"
 	"github.com/kamir/m3c-tools/internal/thinking/llm"
 	"github.com/kamir/m3c-tools/internal/thinking/orchestrator"
+	"github.com/kamir/m3c-tools/internal/thinking/processors"
 	procA "github.com/kamir/m3c-tools/internal/thinking/processors/a"
 	procI "github.com/kamir/m3c-tools/internal/thinking/processors/i"
 	procR "github.com/kamir/m3c-tools/internal/thinking/processors/r"
-	"github.com/kamir/m3c-tools/internal/thinking/processors"
 	"github.com/kamir/m3c-tools/internal/thinking/prompts"
 	"github.com/kamir/m3c-tools/internal/thinking/schema"
 	"github.com/kamir/m3c-tools/internal/thinking/store"
@@ -581,13 +581,13 @@ func TestSemiLinearHaltsOnStepFailure(t *testing.T) {
 // TestContradictionFeedbackLoopProducesFollowupArtifact exercises the
 // Week-3 feedback loop end-to-end:
 //
-//   1. An initial I/contradiction step emits a follow-up Thought
-//      with provenance.parent_artifact_id set.
-//   2. The feedback consumer picks that T off thoughts.raw, filters,
-//      rate-limits, and posts a default linear spec
-//      (R.clarify → I.decision → A.summary) back to the orchestrator.
-//   3. The downstream process produces a second Artifact:
-//      closing the cognitive loop.
+//  1. An initial I/contradiction step emits a follow-up Thought
+//     with provenance.parent_artifact_id set.
+//  2. The feedback consumer picks that T off thoughts.raw, filters,
+//     rate-limits, and posts a default linear spec
+//     (R.clarify → I.decision → A.summary) back to the orchestrator.
+//  3. The downstream process produces a second Artifact:
+//     closing the cognitive loop.
 func TestContradictionFeedbackLoopProducesFollowupArtifact(t *testing.T) {
 	if testing.Short() {
 		t.Skip("thinking e2e: skipped in -short mode")

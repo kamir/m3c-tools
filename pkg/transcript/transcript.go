@@ -9,11 +9,11 @@ type Snippet struct {
 
 // TranscriptInfo holds metadata about a transcript without the actual content.
 type TranscriptInfo struct {
-	Language     string
-	LanguageCode string
-	IsGenerated  bool
-	IsTranslatable bool
-	BaseURL      string // caption track URL
+	Language             string
+	LanguageCode         string
+	IsGenerated          bool
+	IsTranslatable       bool
+	BaseURL              string // caption track URL
 	TranslationLanguages []TranslationLanguage
 }
 

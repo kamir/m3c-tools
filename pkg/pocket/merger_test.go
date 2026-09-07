@@ -10,7 +10,7 @@ import (
 // a recording FilePath that embeds a newline must NOT be allowed to split the
 // single-quoted concat token and inject a second `file '...'` directive into the
 // ffmpeg concat-demuxer list. Before the fix, the only escaping was for single
-// quotes (strings.ReplaceAll(path, "'", "'\\''")), which left newlines intact;
+// quotes (strings.ReplaceAll(path, "'", "'\\”")), which left newlines intact;
 // combined with `-safe 0` this let an attacker-controlled path component (e.g. a
 // parent directory name) smuggle a `file '/etc/passwd'` line into the list.
 func TestBuildFileList_RejectsConcatInjection(t *testing.T) {

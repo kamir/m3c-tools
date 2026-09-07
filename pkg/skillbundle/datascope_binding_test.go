@@ -18,7 +18,7 @@ import (
 
 // scopedManifest returns a manifest carrying one author-signed write-scope plus
 // the consistent intent (destructive=true so the §3.3 cross-rules are satisfied
-//. This test is about binding, not validation).
+// . This test is about binding, not validation).
 func scopedManifest() BundleManifest {
 	m := fixtureManifest()
 	m.AuthorGovernanceIntent = "yellow"

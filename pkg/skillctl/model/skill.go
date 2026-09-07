@@ -5,29 +5,29 @@ package model
 type SkillType string
 
 const (
-	SkillTypeClaudeCodeSkill  SkillType = "claude_code_skill"
-	SkillTypeSkillIndex       SkillType = "skill_index"
-	SkillTypeCommand          SkillType = "command"
-	SkillTypeMCPServer        SkillType = "mcp_server"
-	SkillTypeAgent            SkillType = "agent"
+	SkillTypeClaudeCodeSkill   SkillType = "claude_code_skill"
+	SkillTypeSkillIndex        SkillType = "skill_index"
+	SkillTypeCommand           SkillType = "command"
+	SkillTypeMCPServer         SkillType = "mcp_server"
+	SkillTypeAgent             SkillType = "agent"
 	SkillTypeSynthesisTemplate SkillType = "synthesis_template"
 )
 
 // Frontmatter holds parsed YAML frontmatter from skill markdown files.
 type Frontmatter struct {
-	Name         string                 `json:"name" yaml:"name"`
-	Version      string                 `json:"version,omitempty" yaml:"version"`
-	Description  string                 `json:"description,omitempty" yaml:"description"`
-	AllowedTools []string               `json:"allowed_tools,omitempty" yaml:"allowed-tools"`
-	Category     string                 `json:"category,omitempty" yaml:"category"`
-	Intent       string                 `json:"intent,omitempty" yaml:"intent"`
-	InputType    string                 `json:"input_type,omitempty" yaml:"input_type"`
-	OutputFormat string                 `json:"output_format,omitempty" yaml:"output_format"`
-	Tags         []string               `json:"tags,omitempty" yaml:"tags"`
-	Model        string                 `json:"model,omitempty" yaml:"model"`
+	Name         string   `json:"name" yaml:"name"`
+	Version      string   `json:"version,omitempty" yaml:"version"`
+	Description  string   `json:"description,omitempty" yaml:"description"`
+	AllowedTools []string `json:"allowed_tools,omitempty" yaml:"allowed-tools"`
+	Category     string   `json:"category,omitempty" yaml:"category"`
+	Intent       string   `json:"intent,omitempty" yaml:"intent"`
+	InputType    string   `json:"input_type,omitempty" yaml:"input_type"`
+	OutputFormat string   `json:"output_format,omitempty" yaml:"output_format"`
+	Tags         []string `json:"tags,omitempty" yaml:"tags"`
+	Model        string   `json:"model,omitempty" yaml:"model"`
 	// GovernanceLevel is the SPEC-0130 Ampel verdict (green | yellow | red).
 	// Promoted from Metadata to a typed field per SPEC-0189 §10 D2.
-	GovernanceLevel string `json:"governance_level,omitempty" yaml:"governance_level"`
+	GovernanceLevel string                 `json:"governance_level,omitempty" yaml:"governance_level"`
 	Metadata        map[string]interface{} `json:"metadata,omitempty" yaml:"metadata"`
 }
 
@@ -47,11 +47,11 @@ type SkillDescriptor struct {
 	ConflictsWith      []string     `json:"conflicts_with"`
 	DuplicateOf        *string      `json:"duplicate_of"`
 	// SPEC-0189 additions (all omitempty for wire-compat).
-	Tier        string             `json:"tier,omitempty"`           // project | user | plugin
-	SkillMDPath string             `json:"skill_md_path,omitempty"`  // path to the SKILL.md anchor file
-	Shadows     []string           `json:"shadows,omitempty"`        // ids of lower-tier skills shadowed by this one
-	ShadowedBy  []string           `json:"shadowed_by,omitempty"`    // id of the higher-tier winner that shadows this
-	Bundle      *BundleAttestation `json:"bundle,omitempty"`         // SPEC-0189 §6 trust cross-ref
+	Tier        string             `json:"tier,omitempty"`          // project | user | plugin
+	SkillMDPath string             `json:"skill_md_path,omitempty"` // path to the SKILL.md anchor file
+	Shadows     []string           `json:"shadows,omitempty"`       // ids of lower-tier skills shadowed by this one
+	ShadowedBy  []string           `json:"shadowed_by,omitempty"`   // id of the higher-tier winner that shadows this
+	Bundle      *BundleAttestation `json:"bundle,omitempty"`        // SPEC-0189 §6 trust cross-ref
 }
 
 // BundleAttestation is the SPEC-0189 §6 trust cross-reference block.
@@ -68,13 +68,13 @@ type BundleAttestation struct {
 
 // Inventory holds the complete results of a skill scan.
 type Inventory struct {
-	ScannedAt      string            `json:"scanned_at"`
-	ScanPaths      []string          `json:"scan_paths"`
-	Skills         []SkillDescriptor `json:"skills"`
-	TotalCount     int               `json:"total_count"`
-	ByType         map[string]int    `json:"by_type"`
-	ByProject      map[string]int    `json:"by_project"`
-	Duplicates     int               `json:"duplicates"`
-	NoFrontmatter  int               `json:"no_frontmatter"`
-	SkillIndexCount int              `json:"skill_index_count"`
+	ScannedAt       string            `json:"scanned_at"`
+	ScanPaths       []string          `json:"scan_paths"`
+	Skills          []SkillDescriptor `json:"skills"`
+	TotalCount      int               `json:"total_count"`
+	ByType          map[string]int    `json:"by_type"`
+	ByProject       map[string]int    `json:"by_project"`
+	Duplicates      int               `json:"duplicates"`
+	NoFrontmatter   int               `json:"no_frontmatter"`
+	SkillIndexCount int               `json:"skill_index_count"`
 }

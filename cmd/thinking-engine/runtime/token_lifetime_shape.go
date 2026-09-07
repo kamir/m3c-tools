@@ -13,17 +13,18 @@ import (
 // SigmaThreshold standard deviations from the trailing 30-day baseline.
 //
 // Output content shape (A.4):
-//   {
-//     "reflector":           "token-lifetime-shape",
-//     "period":              "2026-04-29..2026-05-06",
-//     "current_mean_seconds": 18.2,
-//     "baseline_mean_seconds": 11.4,
-//     "current_std_seconds":   9.1,
-//     "baseline_std_seconds":  4.8,
-//     "z_score":              3.7,
-//     "sample_count":          124,
-//     "interpretation":       "tokens running longer than baseline (possible runaway skill"
-//   }
+//
+//	{
+//	  "reflector":           "token-lifetime-shape",
+//	  "period":              "2026-04-29..2026-05-06",
+//	  "current_mean_seconds": 18.2,
+//	  "baseline_mean_seconds": 11.4,
+//	  "current_std_seconds":   9.1,
+//	  "baseline_std_seconds":  4.8,
+//	  "z_score":              3.7,
+//	  "sample_count":          124,
+//	  "interpretation":       "tokens running longer than baseline (possible runaway skill"
+//	}
 //
 // Privacy: the histogram is over ttl SECONDS, not over token contents.
 // No bundle digests, callers, or targets land in the Reflection
@@ -45,7 +46,7 @@ type TokenLifetimeShape struct {
 }
 
 type lifetimeSample struct {
-	tokenID    string
+	tokenID     string
 	completedAt time.Time
 	wallSeconds float64
 }

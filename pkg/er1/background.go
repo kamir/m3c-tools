@@ -40,8 +40,8 @@ func StartBackgroundRetry(queuePath string, cfg *Config, interval time.Duration,
 		// For background retries, we use placeholder data since the original
 		// payload data is not persisted in the queue (only filenames).
 		payload.TranscriptData = []byte(fmt.Sprintf("Retry upload for %s", entry.ID))
-		payload.AudioData = nil  // will use placeholder
-		payload.ImageData = nil  // will use placeholder
+		payload.AudioData = nil // will use placeholder
+		payload.ImageData = nil // will use placeholder
 		_, err := Upload(cfg, payload)
 		return err
 	}

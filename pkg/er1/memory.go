@@ -300,4 +300,3 @@ func splitTagsMemory(tagStr string) []string {
 	}
 	return result
 }
-

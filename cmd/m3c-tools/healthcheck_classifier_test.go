@@ -114,6 +114,7 @@ func TestClassifyPLMHealthCheckError_ConsistentWithPLMClient(t *testing.T) {
 		}
 	}
 }
+
 // TestPLMDisabledReason verifies the Projects-submenu diagnostic shown when
 // PLM sync can't start at all, so the menu never sits on "Loading projects..."
 // forever. Regression guard for the placeholder-key shadowing bug (active

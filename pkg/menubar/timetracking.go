@@ -28,10 +28,10 @@ type TimeTrackingEngine interface {
 
 // TimeTrackingState holds the current time tracking state for menu rendering.
 type TimeTrackingState struct {
-	Projects    []TimeTrackingProject
+	Projects     []TimeTrackingProject
 	TodaySummary map[string]time.Duration // project_id -> total today
-	Error       string
-	LastRefresh time.Time
+	Error        string
+	LastRefresh  time.Time
 }
 
 // SetTimeEngine sets the time tracking engine for the app.

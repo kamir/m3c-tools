@@ -23,10 +23,10 @@ func TestCleanVideoID(t *testing.T) {
 		{"https://www.youtube.com/shorts/fUy6EUdd6vA", "fUy6EUdd6vA"},               // FR-0037: the trigger Short
 		{"https://www.youtube.com/shorts/fUy6EUdd6vA?feature=share", "fUy6EUdd6vA"}, // FR-0037: Short + trailing query
 		{"https://youtube.com/shorts/dQw4w9WgXcQ", "dQw4w9WgXcQ"},                   // FR-0037: no-www Short
-		{"https://www.youtube.com/shorts/short", ""},                               // FR-0037: too-short id is rejected
-		{"https://www.youtube.com/watch?v=abc&list=PLxyz", ""},  // "abc" is not a valid 11-char video ID
+		{"https://www.youtube.com/shorts/short", ""},                                // FR-0037: too-short id is rejected
+		{"https://www.youtube.com/watch?v=abc&list=PLxyz", ""},                      // "abc" is not a valid 11-char video ID
 		{"", ""},
-		{"not-a-video-id!!", ""},                                // invalid characters
+		{"not-a-video-id!!", ""}, // invalid characters
 	}
 	for _, tt := range tests {
 		got := CleanVideoID(tt.input)
@@ -549,21 +549,21 @@ func TestLoggedInMenuPreservesAllFeatures(t *testing.T) {
 	// menu levels. Substring match because dynamic labels carry counts /
 	// state suffixes (e.g. "Recordings (35 new)", "History (20)").
 	mustReach := []string{
-		"Fetch Transcript",          // top-level capture
-		"Capture Screenshot",        // top-level capture
-		"Quick Impulse",             // top-level capture
-		"Recordings",                // cabinet: folds Audio Import + Tracking DB
-		"Tracking database",         // inside Recordings
-		"Sync",                      // cabinet
-		"Plaud Sync",                // inside Sync
-		"Pocket",                    // inside Sync (pocketMenuLabel may add state)
-		"Projects",                  // top-level
-		"History",                   // top-level
-		"Settings",                  // tail
-		"Help",                      // tail
-		"Open Log File",             // inside Help
-		"Star on GitHub",            // inside Help
-		"Sign Out",                  // inside identity submenu
+		"Fetch Transcript",   // top-level capture
+		"Capture Screenshot", // top-level capture
+		"Quick Impulse",      // top-level capture
+		"Recordings",         // cabinet: folds Audio Import + Tracking DB
+		"Tracking database",  // inside Recordings
+		"Sync",               // cabinet
+		"Plaud Sync",         // inside Sync
+		"Pocket",             // inside Sync (pocketMenuLabel may add state)
+		"Projects",           // top-level
+		"History",            // top-level
+		"Settings",           // tail
+		"Help",               // tail
+		"Open Log File",      // inside Help
+		"Star on GitHub",     // inside Help
+		"Sign Out",           // inside identity submenu
 	}
 	for _, label := range mustReach {
 		found := false

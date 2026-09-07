@@ -182,10 +182,10 @@ func TestRunRevoke_OriginalAuthorPath_SignsRequest(t *testing.T) {
 func TestRunRevoke_ServerErrorMapping(t *testing.T) {
 	digest := "sha256:" + strings.Repeat("d", 64)
 	cases := []struct {
-		name        string
-		serverCode  int
-		serverBody  string
-		wantExit    int
+		name       string
+		serverCode int
+		serverBody string
+		wantExit   int
 	}{
 		{"already_revoked_409", http.StatusConflict, `{"error":"already revoked","code":"CONFLICT","reason":"already_revoked"}`, 15},
 		{"not_admitted_404", http.StatusNotFound, `{"error":"not admitted","code":"NOT_FOUND","reason":"not_admitted"}`, 15},

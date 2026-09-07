@@ -21,9 +21,9 @@ const (
 
 // FileEntry combines a scanned audio file with its tracking status and parsed tags.
 type FileEntry struct {
-	File   AudioFile              // The scanned audio file.
-	Status FileStatus             // Tracking status from the DB.
-	Tags   []string               // Tags parsed from the filename.
+	File   AudioFile               // The scanned audio file.
+	Status FileStatus              // Tracking status from the DB.
+	Tags   []string                // Tags parsed from the filename.
 	Info   impression.FilenameInfo // Full parsed filename info.
 }
 
@@ -74,7 +74,7 @@ func FormatScanOutput(entries []FileEntry, scannedDir string) string {
 	fmt.Fprintf(&b, "Found %d audio file(s):\n\n", len(entries))
 
 	// Calculate column widths for alignment
-	maxNameLen := 4 // minimum "Name"
+	maxNameLen := 4   // minimum "Name"
 	maxStatusLen := 6 // minimum "Status"
 	for _, e := range entries {
 		if len(e.File.Name) > maxNameLen {

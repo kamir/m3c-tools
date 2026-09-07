@@ -229,7 +229,7 @@ func TestSweep_OnlineDown_OfflineCatchesBadSig_Quarantined(t *testing.T) {
 	mkSkill(t, home, "evil", true)
 	stubRootsOK(t)
 	stubVerify(t, exitGeneric, "", errors.New("connection refused")) // online availability fail
-	stubOffline(t, 11, "author signature invalid", true)            // offline trust fail
+	stubOffline(t, 11, "author signature invalid", true)             // offline trust fail
 	code, _ := runSweep(t, home, "--quarantine")
 	if code != exitOK {
 		t.Fatalf("exit=%d", code)

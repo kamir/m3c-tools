@@ -13,11 +13,12 @@ import (
 // new hosts cross the gateway in the trailing AlertWindow.
 //
 // Output content shape (A.4):
-//   {
-//     "new_hosts":           ["api.attacker.example", ...],
-//     "first_seen_at":       "2026-05-06T14:13:00Z",
-//     "related_skill_names": ["didactic-session", ...]
-//   }
+//
+//	{
+//	  "new_hosts":           ["api.attacker.example", ...],
+//	  "first_seen_at":       "2026-05-06T14:13:00Z",
+//	  "related_skill_names": ["didactic-session", ...]
+//	}
 //
 // State model:
 //   - knownHosts: every host this user has ever crossed (within
@@ -27,9 +28,9 @@ import (
 //     AlertWindow but not yet emitted. Flushed on Tick or when more
 //     than EmitThreshold candidates accumulate.
 type EgressAnomaly struct {
-	KnownWindow    time.Duration // default 30 days, how long a host stays "known"
-	AlertWindow    time.Duration // default 24 hours, anomaly horizon
-	EmitThreshold  int           // default 1: emit on first new host (sensitive)
+	KnownWindow   time.Duration // default 30 days, how long a host stays "known"
+	AlertWindow   time.Duration // default 24 hours, anomaly horizon
+	EmitThreshold int           // default 1: emit on first new host (sensitive)
 
 	emitter ReflectionEmitter
 	idFn    func() string

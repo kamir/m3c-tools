@@ -398,10 +398,10 @@ func buildSkillBundleTGZ(t *testing.T) []byte {
 // value. Both empty → empty (verifier treats as untenanted).
 func TestResolveTenant_CLIBeatsTrustRoots(t *testing.T) {
 	cases := []struct {
-		name    string
-		cli     string
-		yaml    string
-		want    string
+		name string
+		cli  string
+		yaml string
+		want string
 	}{
 		{"both-empty", "", "", ""},
 		{"cli-only", "kup-berlin", "", "kup-berlin"},

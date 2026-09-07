@@ -25,13 +25,13 @@ func writeInventoryFile(t *testing.T) string {
 		TotalCount: 2,
 		Skills: []model.SkillDescriptor{
 			{
-				ID:           "didactic-session",
-				Name:         "didactic-session",
-				Type:         model.SkillTypeClaudeCodeSkill,
-				SourcePath:   "/tmp/skills/didactic-session",
-				ContentHash:  strings.Repeat("a", 64),
+				ID:               "didactic-session",
+				Name:             "didactic-session",
+				Type:             model.SkillTypeClaudeCodeSkill,
+				SourcePath:       "/tmp/skills/didactic-session",
+				ContentHash:      strings.Repeat("a", 64),
 				ContentSizeBytes: 100,
-				Tier:         "user",
+				Tier:             "user",
 				Frontmatter: &model.Frontmatter{
 					Name:            "didactic-session",
 					Version:         "1.0.0",

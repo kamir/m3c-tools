@@ -47,8 +47,8 @@ func PlaceholderPNG() []byte {
 }
 
 var (
-	logoOnce     sync.Once
-	logoData     []byte
+	logoOnce      sync.Once
+	logoData      []byte
 	plaudLogoOnce sync.Once
 	plaudLogoData []byte
 )

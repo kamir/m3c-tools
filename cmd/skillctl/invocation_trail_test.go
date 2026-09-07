@@ -386,7 +386,7 @@ func TestReadAndVerifyTrail_OversizedFileIsRefused(t *testing.T) {
 // remembers how far the trail once reached and flags the regression.
 //
 // HONEST SCOPE: this is LOCAL, cross-run, and best-effort. It is NOT tamper-proof
-//. A same-uid actor who truncates the trail can also edit/delete the sidecar to
+// . A same-uid actor who truncates the trail can also edit/delete the sidecar to
 // erase the high-water-mark; the non-repudiable close is an EXTERNAL SPEC-0358
 // head anchor, not this sidecar.
 func TestReadAndVerifyTrail_TailTruncationDetectedViaHWM(t *testing.T) {

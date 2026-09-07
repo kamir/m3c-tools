@@ -27,14 +27,14 @@ type WatcherConfig struct {
 	CtxHash        string // first 16 hex of SHA-256(UserContextID), per SPEC-0167
 
 	// Backpressure (SPEC-0167 A.6).
-	MaxThoughtsPerMinute int   // default 60
-	GateAllowedSampleN   int   // default 50; 1-in-N sampling. 0 disables gate.allowed projection.
+	MaxThoughtsPerMinute int           // default 60
+	GateAllowedSampleN   int           // default 50; 1-in-N sampling. 0 disables gate.allowed projection.
 	TickInterval         time.Duration // default 1 * time.Minute
 
 	// Wired by the engine bootstrap; never nil at runtime.
-	Consumer  EventConsumer
-	Publisher ThoughtPublisher
-	Emitter   ReflectionEmitter
+	Consumer   EventConsumer
+	Publisher  ThoughtPublisher
+	Emitter    ReflectionEmitter
 	Reflectors []Reflector
 
 	// IDFn produces UUIDv7s for Thought.ThoughtID. Tests may inject a

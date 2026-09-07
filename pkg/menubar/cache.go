@@ -28,7 +28,7 @@ type transcriptCache struct {
 // cachedEntry wraps a FetchResult with a timestamp for TTL expiry.
 type cachedEntry struct {
 	Result    *FetchResult `json:"result"`
-	FetchedAt time.Time   `json:"fetched_at"`
+	FetchedAt time.Time    `json:"fetched_at"`
 }
 
 // newTranscriptCache creates a cache rooted at ~/.m3c-tools/cache/transcripts/.

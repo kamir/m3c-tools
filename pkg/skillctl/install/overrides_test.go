@@ -7,9 +7,9 @@ import (
 
 func TestOverrideAction(t *testing.T) {
 	cases := []struct {
-		name    string
-		opts    Opts
-		want    string
+		name string
+		opts Opts
+		want string
 	}{
 		{"no flags", Opts{}, "install"},
 		{"allow-yellow only", Opts{AllowYellow: true}, "install.allow-yellow"},

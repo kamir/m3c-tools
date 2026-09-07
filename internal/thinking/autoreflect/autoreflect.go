@@ -5,7 +5,7 @@
 //
 //   - Window-count: every N new T messages arrive (default 20).
 //   - Heartbeat:    every M minutes, iff at least 1 new T arrived
-//                   in the interval (default 60 min).
+//     in the interval (default 60 min).
 //
 // The two triggers are OR-combined. Whichever fires first resets
 // both counters so a busy day doesn't double-fire and a quiet day
@@ -67,9 +67,9 @@ const (
 	DefaultPlaceholderPattern = `^⏳`
 
 	// Custom ProcessEventName values emitted by this package.
-	EventAutoReflectTriggered     schema.ProcessEventName = "AutoReflectTriggered"
-	EventAutoReflectSkipped       schema.ProcessEventName = "AutoReflectSkipped"
-	EventAutoReflectBudgetPaused  schema.ProcessEventName = "AutoReflectBudgetPaused"
+	EventAutoReflectTriggered    schema.ProcessEventName = "AutoReflectTriggered"
+	EventAutoReflectSkipped      schema.ProcessEventName = "AutoReflectSkipped"
+	EventAutoReflectBudgetPaused schema.ProcessEventName = "AutoReflectBudgetPaused"
 
 	// CreatedByAutoReflect marks every auto-fired ProcessSpec so the
 	// UI can distinguish from user-initiated and feedback-loop runs.
@@ -147,10 +147,10 @@ type Consumer struct {
 	stop func()
 
 	// window state (guarded by mu)
-	mu           sync.Mutex
-	eligibleIDs  []string  // thought_ids accumulated this window
-	lastFireAt   time.Time // UTC, zero at boot
-	stopBG       chan struct{}
+	mu          sync.Mutex
+	eligibleIDs []string  // thought_ids accumulated this window
+	lastFireAt  time.Time // UTC, zero at boot
+	stopBG      chan struct{}
 }
 
 // New constructs a Consumer without subscribing. Run / Start start
@@ -583,18 +583,18 @@ func (c *Consumer) emit(ctx context.Context, processID string, name schema.Proce
 // auto-reflect consumer dispatches. The spec is pinned:
 //
 //   - mode:        semi_linear (step barrier is safer than eager
-//                  dispatch when token budget matters).
+//     dispatch when token budget matters).
 //   - steps:       R.compare → I.pattern → A.summary with
-//                  prompt_id references pointing at the Week-2
-//                  seeded template IDs. A T-scope step is expressed
-//                  on R/I/A via context.scope.entities (the list of
-//                  triggering thought_ids).
+//     prompt_id references pointing at the Week-2
+//     seeded template IDs. A T-scope step is expressed
+//     on R/I/A via context.scope.entities (the list of
+//     triggering thought_ids).
 //   - budget:      MaxTokens capped at hardCap (default 20_000: well
-//                  below the 50_000 interactive default).
+//     below the 50_000 interactive default).
 //   - created_by:  "thinking-engine/auto_reflect": distinguishes
-//                  from user-initiated runs in the UI without
-//                  requiring a new schema field (origin is packed in
-//                  the companion AutoReflectTriggered event).
+//     from user-initiated runs in the UI without
+//     requiring a new schema field (origin is packed in
+//     the companion AutoReflectTriggered event).
 func DefaultAutoReflectSpec(tIDs []string, hardCap int) schema.ProcessSpec {
 	if hardCap <= 0 {
 		hardCap = DefaultHardTokenCap
@@ -636,4 +636,3 @@ func dedupHash(ids []string) string {
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }
-

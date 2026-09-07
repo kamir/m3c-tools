@@ -136,7 +136,7 @@ func buildArgs(opts Options, outPath string) []string {
 		args = append(args, "-w")
 	case Region:
 		args = append(args, "-s")
-	// FullScreen is the default (no flag needed).
+		// FullScreen is the default (no flag needed).
 	}
 
 	if opts.HideCursor {

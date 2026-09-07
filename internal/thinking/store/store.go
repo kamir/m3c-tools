@@ -388,10 +388,10 @@ func (s *Store) GetBudgetSpend() (tokens int, costUSD float64, err error) {
 // BudgetDayRow is one row of the per-day budget ledger exposed to the
 // /v1/budget/history API (PLAN-0168 P1).
 type BudgetDayRow struct {
-	DayUTC   string // "YYYY-MM-DD"
-	Tokens   int
-	CostUSD  float64
-	Updated  time.Time
+	DayUTC  string // "YYYY-MM-DD"
+	Tokens  int
+	CostUSD float64
+	Updated time.Time
 }
 
 // ListBudgetSpendSince returns per-day aggregates from budget_counters

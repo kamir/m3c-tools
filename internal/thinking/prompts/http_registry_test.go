@@ -49,9 +49,9 @@ func newFakeServer(t *testing.T) *fakeRegistryServer {
 		t:    t,
 		etag: `"abc123"`,
 		prompt: httpPromptDTO{
-			PromptID: "tmpl.reflect.compare.v1",
-			Version:  1,
-			Template: "Compare the following inputs and list overlaps + differences.",
+			PromptID:  "tmpl.reflect.compare.v1",
+			Version:   1,
+			Template:  "Compare the following inputs and list overlaps + differences.",
 			Variables: []string{"inputs"},
 			ModelHint: "gpt-4o-mini",
 			UpdatedAt: time.Now().UTC().Format(time.RFC3339),

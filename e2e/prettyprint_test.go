@@ -189,9 +189,9 @@ func TestFormatTranscriptList(t *testing.T) {
 func TestFormatTranscriptInfo(t *testing.T) {
 	f := transcript.NewPrettyPrintFormatter()
 	info := &transcript.TranscriptInfo{
-		Language:     "German",
-		LanguageCode: "de",
-		IsGenerated:  false,
+		Language:       "German",
+		LanguageCode:   "de",
+		IsGenerated:    false,
 		IsTranslatable: true,
 		TranslationLanguages: []transcript.TranslationLanguage{
 			{Language: "English", LanguageCode: "en"},

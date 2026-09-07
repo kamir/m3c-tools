@@ -173,9 +173,10 @@ func (s *Server) createProcess(w http.ResponseWriter, r *http.Request) {
 }
 
 // processDispatch matches:
-//   GET  /v1/process/{id}
-//   GET  /v1/process/{id}/events
-//   POST /v1/process/{id}/cancel
+//
+//	GET  /v1/process/{id}
+//	GET  /v1/process/{id}/events
+//	POST /v1/process/{id}/cancel
 func (s *Server) processDispatch(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/v1/process/")
 	path = strings.Trim(path, "/")

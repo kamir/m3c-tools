@@ -143,7 +143,10 @@ func TestTopConsumersAggregatesAndOrders(t *testing.T) {
 
 func TestTopConsumersLimit(t *testing.T) {
 	s := mkStore(t)
-	for i, pair := range []struct{ l, st string; cost float64 }{
+	for i, pair := range []struct {
+		l, st string
+		cost  float64
+	}{
 		{"r", "compare", 0.50},
 		{"r", "contrast", 0.40},
 		{"i", "pattern", 0.30},
@@ -280,4 +283,3 @@ func TestHistoryMultipleDaysWithFakeClock(t *testing.T) {
 		t.Errorf("window wrong: %+v", rows)
 	}
 }
-

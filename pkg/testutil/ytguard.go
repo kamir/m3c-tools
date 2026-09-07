@@ -1,6 +1,6 @@
 // Package testutil provides shared test helpers for m3c-tools.
 //
-// YT API Rate-Limit Protection
+// # YT API Rate-Limit Protection
 //
 // Tests that call the YouTube API (InnerTube transcript fetches, thumbnail
 // downloads, etc.) are skipped by default to prevent accidental rate limiting

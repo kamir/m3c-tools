@@ -5,9 +5,9 @@
 // (anything failing, paused, skipped, or auto-reflect lifecycle).
 // Matching events become:
 //
-//   1. a severity-tagged structured JSON line on stdout (so
-//      docker/journalctl/Cloud Run logging can route them), and
-//   2. an increment on the corresponding Prometheus counter.
+//  1. a severity-tagged structured JSON line on stdout (so
+//     docker/journalctl/Cloud Run logging can route them), and
+//  2. an increment on the corresponding Prometheus counter.
 //
 // The sink is strictly read-only with respect to the cognitive
 // pipeline: it never produces to any topic, never mutates store

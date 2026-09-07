@@ -11,13 +11,14 @@ import (
 // emits a Reflection when count ≥ Threshold for the same rule.
 //
 // Output content shape (A.4):
-//   {
-//     "rule":           "egress_host_not_allowed",
-//     "count":          7,
-//     "window_start":   "2026-05-06T14:00:00Z",
-//     "window_end":     "2026-05-06T15:00:00Z",
-//     "sample_targets": ["https://attacker.example/...", ...]
-//   }
+//
+//	{
+//	  "rule":           "egress_host_not_allowed",
+//	  "count":          7,
+//	  "window_start":   "2026-05-06T14:00:00Z",
+//	  "window_end":     "2026-05-06T15:00:00Z",
+//	  "sample_targets": ["https://attacker.example/...", ...]
+//	}
 type RefusalCluster struct {
 	Window    time.Duration // default 1h
 	Threshold int           // default 5

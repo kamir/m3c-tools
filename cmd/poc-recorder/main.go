@@ -27,8 +27,8 @@ import (
 )
 
 const (
-	sampleRate = 16000 // 16kHz: whisper's native sample rate
-	channels   = 1     // mono
+	sampleRate    = 16000 // 16kHz: whisper's native sample rate
+	channels      = 1     // mono
 	bitsPerSample = 16
 )
 
@@ -197,7 +197,7 @@ func writeWAV(path string, samples []int16) error {
 
 	// fmt subchunk
 	_, _ = f.Write([]byte("fmt "))
-	_ = binary.Write(f, binary.LittleEndian, uint32(16))      // subchunk size
+	_ = binary.Write(f, binary.LittleEndian, uint32(16))       // subchunk size
 	_ = binary.Write(f, binary.LittleEndian, uint16(1))        // PCM format
 	_ = binary.Write(f, binary.LittleEndian, uint16(channels)) // channels
 	_ = binary.Write(f, binary.LittleEndian, uint32(sampleRate))

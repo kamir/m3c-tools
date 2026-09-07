@@ -102,4 +102,3 @@ func marshalEvent(event map[string]any) ([]byte, error) {
 }
 
 func marshalBundleJSON(b bundleJSON) ([]byte, error) { return json.MarshalIndent(b, "", "  ") }
-

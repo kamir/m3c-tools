@@ -41,13 +41,13 @@ const DefaultRateLimitPerHour = 10
 // follow-ups, enforces the hourly rate limit, and posts a default
 // ProcessSpec to the orchestrator.
 type Consumer struct {
-	hash    mctx.Hash
-	bus     tkafka.Bus
-	orc     *orchestrator.Orchestrator
-	store   *store.Store
-	log     *log.Logger
-	limit   int
-	stop    func()
+	hash  mctx.Hash
+	bus   tkafka.Bus
+	orc   *orchestrator.Orchestrator
+	store *store.Store
+	log   *log.Logger
+	limit int
+	stop  func()
 }
 
 // Config wires a new Consumer. RateLimit defaults to
@@ -117,10 +117,10 @@ func (c *Consumer) Stop() {
 }
 
 // onThought is the per-message handler. It:
-//   1. decodes the Thought,
-//   2. runs MatchFilter to decide whether this is a feedback-loop T,
-//   3. enforces the hourly rate limit in the store,
-//   4. constructs a default linear ProcessSpec and submits via orchestrator.
+//  1. decodes the Thought,
+//  2. runs MatchFilter to decide whether this is a feedback-loop T,
+//  3. enforces the hourly rate limit in the store,
+//  4. constructs a default linear ProcessSpec and submits via orchestrator.
 func (c *Consumer) onThought(ctx context.Context, m tkafka.Message) error {
 	var th schema.Thought
 	if err := json.Unmarshal(m.Value, &th); err != nil {

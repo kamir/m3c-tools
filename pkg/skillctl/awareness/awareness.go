@@ -95,19 +95,19 @@ func (l AttestLevel) IsCallable() bool {
 // rename here is a wire-contract break and should be reflected in
 // SPEC-0195 in the same change.
 type SkillEntry struct {
-	Name              string                 `json:"name"`
-	Version           string                 `json:"version,omitempty"`
-	Tier              string                 `json:"tier,omitempty"`
-	SkillMDSHA256     string                 `json:"skill_md_sha256"`
-	Frontmatter       map[string]interface{} `json:"frontmatter,omitempty"`
-	SourcePath        string                 `json:"source_path,omitempty"`
-	ClientSignatureB64 string                `json:"client_signature_b64,omitempty"`
+	Name               string                 `json:"name"`
+	Version            string                 `json:"version,omitempty"`
+	Tier               string                 `json:"tier,omitempty"`
+	SkillMDSHA256      string                 `json:"skill_md_sha256"`
+	Frontmatter        map[string]interface{} `json:"frontmatter,omitempty"`
+	SourcePath         string                 `json:"source_path,omitempty"`
+	ClientSignatureB64 string                 `json:"client_signature_b64,omitempty"`
 	// Intent / data_dependencies are SPEC-0196 §3 fields. We mirror them
 	// verbatim from the frontmatter so the registry can run its
 	// SPEC-0196 §3.3 cross-rule check; see envelope.go for the
 	// client-side mirror that also enforces them locally when
 	// --require-intent is set.
-	Intent          map[string]interface{}   `json:"intent,omitempty"`
+	Intent           map[string]interface{}   `json:"intent,omitempty"`
 	DataDependencies []map[string]interface{} `json:"data_dependencies,omitempty"`
 }
 
@@ -117,10 +117,10 @@ type SkillEntry struct {
 // order; tests assert this order to make the envelope-equivalence
 // acceptance check (#6) trivial to express.
 type SyncEnvelope struct {
-	SessionTag             string       `json:"session_tag"`
-	ClientIdentity         string       `json:"client_identity"`
-	ClientPubkeyFingerprint string      `json:"client_pubkey_fingerprint"`
-	Skills                 []SkillEntry `json:"skills"`
+	SessionTag              string       `json:"session_tag"`
+	ClientIdentity          string       `json:"client_identity"`
+	ClientPubkeyFingerprint string       `json:"client_pubkey_fingerprint"`
+	Skills                  []SkillEntry `json:"skills"`
 	// EnvelopeVersion is sent for forward-compat; the server may reject
 	// envelopes whose version it doesn't speak. v1 is the only value as
 	// of 2026-05-06.

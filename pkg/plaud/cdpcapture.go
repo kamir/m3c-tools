@@ -88,7 +88,7 @@ func cdpCaptureAuthHeader(wsURL string, timeout time.Duration) (string, error) {
 // authHeaderFromCDPEvent inspects one CDP message for the bearer. The
 // Authorization header can arrive in EITHER `Network.requestWillBeSent`
 // (headers the page set on the fetch) OR, for headers added lower in the stack
-//, only in `Network.requestWillBeSentExtraInfo`, which carries the real on-wire
+// , only in `Network.requestWillBeSentExtraInfo`, which carries the real on-wire
 // headers but no URL. So we remember which requestIds target *.plaud.ai from the
 // first event, and match the header from either. `plaudReqs` is shared across
 // calls to correlate the two events by requestId.

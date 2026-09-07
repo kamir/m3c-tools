@@ -5,9 +5,9 @@
 // with JSON-mode, and publish an Insight whose .content is
 // strategy-specific:
 //
-//   pattern:       {"pattern": "...", "occurrences": [...], "confidence": float}
-//   contradiction: {"claim_a": "...", "claim_b": "...",
-//                   "evidence_refs": [...], "severity": "low|medium|high"}
+//	pattern:       {"pattern": "...", "occurrences": [...], "confidence": float}
+//	contradiction: {"claim_a": "...", "claim_b": "...",
+//	                "evidence_refs": [...], "severity": "low|medium|high"}
 //
 // Extra behaviour: contradiction also emits a follow-up Thought of
 // type=question onto m3c.<ctx>.thoughts.raw, wiring Phase 2's

@@ -110,7 +110,7 @@ func TestOllama500Errors(t *testing.T) {
 func TestOllamaTokenEstimation(t *testing.T) {
 	// 24 chars in, 12 chars out → 6 tokens in, 3 tokens out (chars/4).
 	in := "0123456789012345678901234" // 25 chars
-	out := "abcdefghijkl"              // 12 chars
+	out := "abcdefghijkl"             // 12 chars
 	a, _ := newOllamaTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, `{"model":"test-model","message":{"role":"assistant","content":%q},"done":true}`, out)
 	})

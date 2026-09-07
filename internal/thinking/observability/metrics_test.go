@@ -207,7 +207,7 @@ func (f *fakeBusMetrics) ConsumerLag(topic string) (int64, error) {
 // gauge on its first sample.
 func TestBusConsumerLagPolls(t *testing.T) {
 	bus := &fakeBusMetrics{lag: map[string]int64{
-		"m3c.xyz.thoughts.raw": 42,
+		"m3c.xyz.thoughts.raw":   42,
 		"m3c.xyz.process.events": 7,
 	}}
 	m := NewMetrics(Config{

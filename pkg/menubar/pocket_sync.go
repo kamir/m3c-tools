@@ -29,4 +29,5 @@ func SetPocketStatusText(text string) {}
 func SetPocketSyncCallback(cb func(action string, filePaths []string, customTags string)) {}
 
 // CollapseGroupInTable is a no-op on non-darwin platforms.
-func CollapseGroupInTable(memberFilePaths []string, groupTitle, duration, size, status, docID string) {}
+func CollapseGroupInTable(memberFilePaths []string, groupTitle, duration, size, status, docID string) {
+}

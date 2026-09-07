@@ -153,7 +153,6 @@ func tagHash(name, version string) string {
 	return hex.EncodeToString(sum[:])[:12]
 }
 
-
 func versionStrings(rows []artifact.VersionRow) []string {
 	out := make([]string, 0, len(rows))
 	for _, r := range rows {

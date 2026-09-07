@@ -68,7 +68,7 @@ func seedCacheWithChain(t *testing.T) (*store.Cache, string) {
 		SchemaVer: schema.CurrentSchemaVer, InsightID: "i-1",
 		InputIDs: []string{"r-1"}, SynthesisMode: schema.SynthesisPattern,
 		Content: map[string]interface{}{"pattern": "deadline slip on thin weeks"}, Confidence: 0.8,
-		Trace:   schema.Trace{PromptID: "tmpl.i.pattern", Model: "mock"}, Timestamp: now,
+		Trace: schema.Trace{PromptID: "tmpl.i.pattern", Model: "mock"}, Timestamp: now,
 	}
 	if err := bus.Produce(context.Background(), tkafka.TopicName(hash, tkafka.TopicInsightsGenerated), "k", ins); err != nil {
 		t.Fatal(err)
