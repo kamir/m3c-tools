@@ -90,6 +90,23 @@ that refuses the write, `./scripts/check-no-emdash.sh` locally and in
 `make ci`, and the blocking `prose-gate` CI job. Rationale and the two byte-level
 exemptions: [CODESTYLE.md](CODESTYLE.md#prose-no-em-dashes).
 
+## Claims (binding)
+
+Before writing any sentence about behaviour (a doc line, a code comment, a
+commit message, a job name, a tool's help text), read
+[`.claude/rules/claims.md`](.claude/rules/claims.md).
+
+The short version: **the word "measured" is reserved for what was measured.**
+A promise in a header covers every line under it. Turning a behaviour off means
+hunting for whoever still claims it. And a search that finds nothing proves
+nothing until it has been shown to find a planted occurrence.
+
+Unlike the prose rule below, this one has no hook behind it. It was written
+after an adversarial re-read of nine changes found the same failure class in
+seven of them: a sentence printed beside measurements gets read as a
+measurement. Derivation and the five measures: `PLAN/QG-0001-fruehwarnung.md`
+in the maintenance repository.
+
 ## Configuration
 
 Settings loaded from `.env` or `~/.m3c-tools.env` (see `.env.example`). Key variables:
