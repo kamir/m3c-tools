@@ -193,7 +193,8 @@ var (
 // FAMILY NOTE: 20/22/23 are emitted by the §7 verifier (verify.ExitCode),
 // but their Family is NOT "verify": TestExitCode_VerifyFamilyCompleteness
 // pins Family=="verify" to exactly the 10-19 ladder, and that pin is
-// load-bearing. The SPEC-0246/0277/0278/0279 checks layered on the chain
+// load-bearing. The checks that SPEC-0246, SPEC-0277, SPEC-0278 and
+// SPEC-0279 layer on the chain
 // therefore carry the family "verify-chain"; agentid, translog and pin are
 // named after the subcommand surfaces that actually exit with them.
 //
