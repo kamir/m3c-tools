@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
 # check-python.sh: Linter und Tests fuer den Python-Anteil des Repos.
 #
-# AUDIT-0001 Befund N.2. Gemessen am 2026-09-07: mcp-skill-server/server.py sind
-# 1379 Zeilen, die den kompletten Skill-Lifecycle als Claude-Code-Werkzeuge
-# anbieten, und daneben liegen 25 Tests. Ein grep ueber alle 16 Workflows, das
-# Makefile und scripts/ nach "mcp-skill-server" oder "rag-mcp-server" fand
-# genau 0 Treffer: die Tests sind nie gelaufen, und kein Linter hat den
-# Python-Baum je angefasst.
+# AUDIT-0001 Befund N.2. Der Befund beschreibt den Stand VOR diesem Zweig. Auf
+# origin/master gemessen: mcp-skill-server/server.py hat dort 1379 Zeilen, die
+# den kompletten Skill-Lifecycle als Claude-Code-Werkzeuge anbieten, und daneben
+# liegen 25 Tests. Ein grep ueber alle 16 Workflows, das Makefile und scripts/
+# nach "mcp-skill-server" oder "rag-mcp-server" fand genau 0 Treffer: die Tests
+# sind nie gelaufen, und kein Linter hat den Python-Baum je angefasst.
+#
+# Diese beiden Zahlen gelten NICHT mehr fuer den Baum, in dem dieser Kommentar
+# steht: der erste Commit dieses Zweigs hat die ruff-Funde in server.py behoben
+# und Tests ergaenzt. Auf diesem Stand gemessen am 2026-09-07 sind es 1420
+# Zeilen und 31 gesammelte Tests, 22 in test_spec0188_tools.py und 9 in
+# test_spec0189_tools.py.
 #
 # Praezisierung dazu, denn "ungeprueft" waere zu absolut: CodeQL laeuft auf
 # diesem Repo im default setup, python steht in seiner Sprachliste, und
@@ -107,6 +113,15 @@ run_lint() {
 # require_modules <hinweis> <pip-name-liste> <modul> [modul ...]
 # Meldet ALLE fehlenden Module auf einmal, nicht das erste; wer eine venv
 # frisch aufsetzt, soll nicht dreimal nacheinander scheitern.
+#
+# Regel fuer die Modulliste: sondiert wird das TIEFSTE Modul, das der Code
+# wirklich importiert, nicht der Paketname und nicht das Wurzelpaket. Ein
+# Paket kann installiert sein, waehrend genau das Untermodul fehlt, an dem der
+# Server haengt; die Sonde ist dann gruen und der Fehler faellt erst als
+# pytest-Sammelfehler auf, also ohne die Handlungsanweisung, fuer die diese
+# Funktion da ist. Umgekehrt gilt die Regel nur bis zur Modulgrenze: ein
+# importierter NAME (eine Klasse, eine Funktion) laesst sich mit `import`
+# nicht sondieren.
 require_modules() {
   local what="$1" pip_line="$2"; shift 2
   local missing="" mod
@@ -127,12 +142,31 @@ run_tests() {
     return 1
   fi
 
-  # mcp-skill-server/server.py ist ohne das Paket mcp nicht importierbar.
-  require_modules "fuer mcp-skill-server" "mcp" mcp
+  # mcp-skill-server/server.py:24 macht `from mcp.server.fastmcp import FastMCP`.
+  # Sondiert wird deshalb mcp.server.fastmcp und nicht mcp: in mcp 2.x wurde
+  # FastMCP zu MCPServer umbenannt und dieses Modul entfernt, waehrend
+  # `import mcp` weiterhin gelingt. Gemessen am 2026-09-07 in zwei
+  # Wegwerf-venvs:
+  #   mcp==2.1.1   `import mcp` gruen, `import mcp.server.fastmcp` faellt mit
+  #                ModuleNotFoundError
+  #   mcp==1.30.0  beide gruen
+  # Mit der frueheren Sonde auf mcp waere diese Vorbedingung unter 2.x also
+  # gruen gewesen und pytest danach mit einem Sammelfehler gefallen. Der
+  # pip-Hinweis nennt 'mcp<2', weil `pip install mcp` erneut 2.x holen wuerde;
+  # 'mcp<2' loeste am 2026-09-07 zu 1.30.0 auf, und dort ist die Sonde gruen.
+  require_modules "fuer mcp-skill-server" "'mcp<2'" mcp.server.fastmcp
 
   # rag-mcp-server/test_sync_drift.py fuehrt Indexer.build() und .sync() aus;
   # beide importieren turbovec lazy in der Funktion. numpy kommt aus indexer.py,
   # yaml (PyYAML) laedt config.default.yaml in der Fixture.
+  #
+  # Hier fallen Sonde und tatsaechlicher Import bereits zusammen. indexer.py
+  # macht `from turbovec import IdMapIndex`, und IdMapIndex ist eine Klasse,
+  # kein Modul; `import turbovec.IdMapIndex` scheitert auch bei heiler
+  # Installation, gemessen am 2026-09-07 gegen turbovec 1.0.0. turbovec ist
+  # damit schon das tiefste sondierbare Modul, numpy und yaml ebenso. Der
+  # Unterschied zwischen Paketname und Modulname steht ebenfalls richtig:
+  # installiert wird PyYAML, importiert wird yaml.
   require_modules "fuer rag-mcp-server" "turbovec numpy PyYAML" turbovec numpy yaml
 
   ( cd mcp-skill-server && "$PYTHON" -m pytest -q )

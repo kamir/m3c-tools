@@ -92,12 +92,14 @@ jobs:
 
   python-gate:
     name: Python servers (ruff + pytest)
-    # AUDIT-0001 Befund N.2. Gemessen am 2026-09-07: mcp-skill-server/server.py
-    # sind 1379 Zeilen, die den kompletten Skill-Lifecycle als
-    # Claude-Code-Werkzeuge anbieten, und daneben liegen 25 Tests. Ein grep ueber
-    # alle 16 Workflows, das Makefile und scripts/ nach "mcp-skill-server" oder
-    # "rag-mcp-server" fand 0 Treffer: die Tests sind nie gelaufen, und kein
-    # Linter hat den Python-Baum je angefasst.
+    # AUDIT-0001 Befund N.2, gemessen am 2026-09-07 auf origin/master, also auf
+    # dem Stand VOR diesem Zweig: mcp-skill-server/server.py sind dort 1379
+    # Zeilen, die den kompletten Skill-Lifecycle als Claude-Code-Werkzeuge
+    # anbieten, und daneben liegen 25 Tests. Ein grep ueber alle 16 Workflows,
+    # das Makefile und scripts/ nach "mcp-skill-server" oder "rag-mcp-server"
+    # fand 0 Treffer: die Tests sind nie gelaufen, und kein Linter hat den
+    # Python-Baum je angefasst. Auf dem Stand dieses Zweigs sind es 1420 Zeilen
+    # und 31 Tests; der Kopf von scripts/check-python.sh nennt beide Messungen.
     #
     # Praezisierung, denn "ungeprueft" waere zu absolut: CodeQL laeuft auf
     # diesem Repo im default setup, python steht in seiner Sprachliste, und
