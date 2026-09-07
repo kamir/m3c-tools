@@ -289,9 +289,7 @@ G304	pkg/skillctl/consolidate/fixer.go	func extractDescription(path string) stri
 G304	pkg/skillctl/consolidate/fixer.go	func prependFrontmatter(path string, fm string) error { data, err := os.ReadFile(path) if err != nil {
 G304	pkg/skillctl/delta/seal.go	func (s *SealStore) loadInventory(path string) (*model.Inventory, error) { data, err := os.ReadFile(path) if err != nil {
 G304	pkg/skillctl/delta/seal.go	path := filepath.Join(s.BaseDir, e.Name()) data, err := os.ReadFile(path) if err != nil {
-G304	pkg/skillctl/install/install.go	checksumPath := filepath.Join(root, "CHECKSUMS") f, err := os.Open(checksumPath) if errors.Is(err, os.ErrNotExist) {
 G304	pkg/skillctl/install/install.go	func computeDigestForVerify(path string) ([sha256.Size]byte, string, error) { f, err := os.Open(path) if err != nil {
-G304	pkg/skillctl/install/install.go	func fileSHA256Hex(path string) (string, error) { f, err := os.Open(path) if err != nil {
 G304	pkg/skillctl/install/offline_verify.go	b, err := os.ReadFile(filepath.Join(target, registry.ProvenanceSidecarName)) if errors.Is(err, os.ErrNotExist) {
 G304	pkg/skillctl/install/offline_verify.go	func fileSHA(p string) ([]byte, error) { f, err := os.Open(p) if err != nil {
 G304	pkg/skillctl/install/offline_verify.go	func readOfflineMeta(target string) (*OfflineMeta, error) { b, err := os.ReadFile(filepath.Join(target, offlineMetaFile)) if errors.Is(err, os.ErrNotExist) {
@@ -374,7 +372,7 @@ G402	pkg/plaud/er1source.go	// SEC: only for loopback + self-signed dev cert. cl
 G402	pkg/plaud/syncapi.go	if skipTLSVerify { transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} }
 G402	pkg/pocket/syncapi.go	if skipTLSVerify { transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} }
 G402	pkg/session/session.go	if !verify { client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} }
-G402	pkg/timetracking/plmclient.go	TLSClientConfig: &tls.Config{ InsecureSkipVerify: !cfg.VerifySSL, },
+G402	pkg/timetracking/plmclient.go	TLSClientConfig: &tls.Config{ InsecureSkipVerify: insecure, // loopback-only, guarded above },
 G404	pkg/transcript/proxy.go	// Pick a random proxy chosen := c.Proxies[rand.Intn(len(c.Proxies))] proxyURL, err := url.Parse(chosen)
 G702	cmd/poc-whisper/main.go	// Run whisper with JSON output format cmd := exec.Command(whisperPath, audioFile,
 G703	cmd/docaudit/main.go	func loadConfig(path string) ([]target, error) { b, err := os.ReadFile(path) if err != nil {
