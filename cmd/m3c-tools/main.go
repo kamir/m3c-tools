@@ -100,7 +100,7 @@ func main() {
 	//   1. Active profile (account-scoped: ER1_*, POCKET_API_KEY, etc)
 	//   2. Global preferences (~/.m3c-tools/preferences.env: Whisper, retry, …)
 	//      with back-compat fallback to the legacy ~/.m3c-tools.env file
-	//   3. Project-local .env (development overrides)
+	//   3. Project-local .env (development overrides, opt-in via M3C_DOTENV=1)
 	//
 	// LoadDotenv does NOT overwrite vars that are already set, so the order
 	// here means: profile wins, then preferences fill gaps, then .env tops up.
@@ -113,11 +113,15 @@ func main() {
 		_ = pm.ApplyProfile(activeProfile)
 		log.Printf("[config] profile: %s", activeProfile.Name)
 	}
-	for _, p := range []string{config.PreferencesPath(), config.LegacyPreferencesPath(), ".env"} {
+	for _, p := range []string{config.PreferencesPath(), config.LegacyPreferencesPath()} {
 		if p != "" {
 			_ = er1.LoadDotenv(p)
 		}
 	}
+	// AUDIT-0001 finding 2.7: the project-local .env belongs to whatever
+	// directory the CLI was started in, which is not necessarily one the user
+	// owns. It only counts with an explicit M3C_DOTENV=1 opt-in.
+	_ = er1.LoadDotenvUntrusted(".env")
 
 	// Load saved device token if available (SPEC-0127).
 	// This enables uploads via Bearer auth without API key.

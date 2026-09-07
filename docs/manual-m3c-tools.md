@@ -49,9 +49,11 @@ m3c-tools <command> [args] [flags]
   `[auth] …`): these are diagnostics, not command output.
 
 **Where configuration comes from.** Settings load from `~/.m3c-tools.env` (the global
-config), from a project-local `.env`, and from named **profiles** managed by
-`m3c-tools config`. See [Configuration reference](#configuration-reference) for the full
-variable list and copy `.env.example` as a starting template.
+config), from named **profiles** managed by `m3c-tools config`, and, only with the
+explicit `M3C_DOTENV=1` opt-in, from a project-local `.env`. See
+[Configuration reference](#configuration-reference) for the full variable list and the
+[trust rule for a working-directory `.env`](#the-working-directory-env-is-opt-in), and
+copy `.env.example` as a starting template.
 
 **Authentication.** Uploads to ER1 authenticate with an **API key** (sent as the
 `X-API-KEY` header, from `ER1_API_KEY`) **and/or** a **device token** (paired via
@@ -593,9 +595,35 @@ Prints the full command + flag listing. No flags.
 
 ## Configuration reference
 
-Variables are read from `~/.m3c-tools.env`, a project `.env`, or the active profile. Copy
-`.env.example` as a template. All examples below show the documented defaults; commented
-lines in `.env.example` mean the value is optional.
+Variables are read from `~/.m3c-tools.env`, the active profile, or, with the opt-in
+described below, a project `.env`. Copy `.env.example` as a template. All examples below
+show the documented defaults; commented lines in `.env.example` mean the value is
+optional.
+
+### The working-directory `.env` is opt-in
+
+A `.env` in the directory you happen to run `m3c-tools` in is a file the tool **finds**,
+not one you **chose**: any checkout you cd into can carry one. Such a file can set
+`ER1_API_URL`, `M3C_PLM_BASE_URL`, `PLAUD_API_URL` or `YT_PROXY_URL`, and those are the
+addresses your API key and device token are sent to. It is therefore **ignored by
+default**, and the tool says so once on stderr.
+
+| `M3C_DOTENV` | Effect on `./.env` |
+|--------------|--------------------|
+| unset (default) | Ignored. One stderr line names the file and this switch. |
+| `1`, `true`, `yes`, `on` | Applied in full. Every security-relevant key it contributes (URL, token, key, secret, path shapes) is listed by **name** on stderr. |
+| `0`, `false`, `no`, `off` | Ignored, without the notice. |
+
+```bash
+M3C_DOTENV=1 m3c-tools plaud dev sync     # per invocation, in a repo you trust
+```
+
+Layering is unchanged: the active profile wins, `~/.m3c-tools/preferences.env` (and the
+legacy `~/.m3c-tools.env`) fill the gaps, and an opted-in `./.env` only sets what is
+still empty. Files under your home directory are never gated by this switch. If you find
+yourself exporting `M3C_DOTENV=1` permanently, put the settings in a profile
+(`m3c-tools config`) instead: that is the same convenience without carrying the opt-in
+into somebody else's repository.
 
 ### ER1 connection (required for uploads)
 

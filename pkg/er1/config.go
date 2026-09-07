@@ -341,8 +341,119 @@ func (c *Config) Summary() string {
 		c.APIURL, authInfo, c.ContextID, c.UploadTimeout, c.VerifySSL)
 }
 
-// LoadDotenv loads a .env file into os.Environ (does not override existing vars).
+// EnvDotenvOptIn names the variable that decides whether the `.env` of the
+// CURRENT WORKING DIRECTORY may configure this process.
+//
+//	unset       the file is IGNORED, and its existence is reported on stderr
+//	1|true|yes  the file is trusted and fully applied (opt-in)
+//	0|false|no  the file is ignored, silently (an explicit "off")
+//
+// AUDIT-0001 finding 2.7: a working-directory .env is a file the process
+// FINDS, not one the user CHOSE. Loading it silently let any repository you
+// happen to run m3c-tools in set ER1_API_URL, M3C_PLM_BASE_URL and friends,
+// which is where the API key and the device token get sent.
+const EnvDotenvOptIn = "M3C_DOTENV"
+
+// dotenvTrust records where a .env file came from.
+type dotenvTrust int
+
+const (
+	// dotenvChosen: the caller named this path, typically a file under the
+	// user's own home (~/.m3c-tools/preferences.env, ~/.m3c-tools.env) or a
+	// profile. Every key applies, no questions asked.
+	dotenvChosen dotenvTrust = iota
+	// dotenvFound: the process stumbled over the file in whatever directory
+	// it was started in. Only an explicit opt-in makes it count, and the
+	// security-relevant keys it carries are named on stderr.
+	dotenvFound
+)
+
+// dotenvDenyFragments lists the uppercase substrings that mark a variable as
+// security-relevant: it either steers where a request goes, carries the
+// secret that travels with it, or points at a file or binary the process
+// reads or runs. The match is deliberately coarse (substring, not suffix), so
+// a new ER1_*_TOKEN or M3C_*_PATH is covered the day it is introduced.
+var dotenvDenyFragments = []string{
+	// where credentials are sent
+	"URL", "URI", "ENDPOINT", "HOST", "PROXY",
+	// what is sent
+	"TOKEN", "KEY", "SECRET", "PASSWORD", "PASSWD", "CREDENTIAL", "AUTH", "COOKIE", "SESSION",
+	// what is read, written or executed
+	"PATH", "DIR", "FILE", "CERT", "CA_",
+}
+
+// sensitiveDotenvKey reports whether key can redirect traffic, carry a
+// credential, or point the process at a file. Used to NAME what an opted-in
+// working-directory .env contributes, so the risky habit (M3C_DOTENV=1
+// exported once in a shell profile) still leaves a visible trail when you cd
+// into somebody else's checkout.
+func sensitiveDotenvKey(key string) bool {
+	k := strings.ToUpper(strings.TrimSpace(key))
+	for _, frag := range dotenvDenyFragments {
+		if strings.Contains(k, frag) {
+			return true
+		}
+	}
+	return false
+}
+
+// LoadDotenv loads a CHOSEN .env file into os.Environ (it never overrides a
+// variable that is already set). Chosen means the caller named the path: the
+// home preferences file, the legacy ~/.m3c-tools.env, a profile, or a path a
+// user typed. Every key in the file applies.
+//
+// For the `.env` of the current working directory use LoadDotenvUntrusted.
 func LoadDotenv(path string) error {
+	return loadDotenvFile(path, dotenvChosen)
+}
+
+// LoadDotenvUntrusted loads a .env file the process FOUND rather than chose,
+// in practice the `.env` of the current working directory.
+//
+// Without M3C_DOTENV=1 the file is not applied at all (fail-closed), and a
+// single stderr line names it plus the switch that would enable it, so the
+// developer workflow "put ER1_API_URL in the repo .env" stays one variable
+// away instead of failing mysteriously. With the opt-in the file is applied
+// like a chosen one, and the security-relevant keys it actually contributed
+// are listed by NAME (never by value).
+func LoadDotenvUntrusted(path string) error {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvDotenvOptIn))) {
+	case "1", "true", "yes", "on":
+		return loadDotenvFile(path, dotenvFound)
+	case "0", "false", "no", "off":
+		// Explicitly disabled: stay quiet, the operator already decided.
+		_, err := os.Stat(path)
+		return err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		return fmt.Errorf("%s is a directory", path)
+	}
+	dotenvNoticeOnce.Do(func() {
+		abs, absErr := filepath.Abs(path)
+		if absErr != nil {
+			abs = path
+		}
+		fmt.Fprintf(os.Stderr, "[er1] NOTE: ignoring the working-directory config %s. "+
+			"A .env in the directory you happen to be in can redirect uploads and credentials, "+
+			"so it is off by default; run with %s=1 to apply it, or keep your settings in "+
+			"~/.m3c-tools/preferences.env or a profile.\n", abs, EnvDotenvOptIn)
+	})
+	return nil
+}
+
+// dotenvNoticeOnce keeps the "ignoring the working-directory config" notice to
+// one line per process, however many startup paths call into the loader.
+var dotenvNoticeOnce sync.Once
+
+// loadDotenvFile parses path and applies its keys to the process environment.
+// A variable that is already set is never overwritten, so the layering stays
+// as documented: profile wins, then preferences, then the working-directory
+// file fills what is still empty.
+func loadDotenvFile(path string, trust dotenvTrust) error {
 	info, statErr := os.Stat(path)
 	if statErr != nil {
 		return statErr
@@ -356,6 +467,7 @@ func LoadDotenv(path string) error {
 	if err != nil {
 		return err
 	}
+	var applied []string
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -371,9 +483,17 @@ func LoadDotenv(path string) error {
 		if len(v) >= 2 && ((v[0] == '"' && v[len(v)-1] == '"') || (v[0] == '\'' && v[len(v)-1] == '\'')) {
 			v = v[1 : len(v)-1]
 		}
-		if os.Getenv(k) == "" {
-			os.Setenv(k, v) //nolint:errcheck // best-effort .env->process env; a malformed key is simply skipped, same as an absent line
+		if os.Getenv(k) != "" {
+			continue // already set by profile or preferences: they win
 		}
+		os.Setenv(k, v) //nolint:errcheck // best-effort .env->process env; a malformed key is simply skipped, same as an absent line
+		if trust == dotenvFound && sensitiveDotenvKey(k) {
+			applied = append(applied, k)
+		}
+	}
+	if len(applied) > 0 {
+		fmt.Fprintf(os.Stderr, "[er1] NOTE: %s=1 applied %d security-relevant setting(s) from %s: %s\n",
+			EnvDotenvOptIn, len(applied), path, strings.Join(applied, ", "))
 	}
 	return nil
 }
