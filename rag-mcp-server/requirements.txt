@@ -40,13 +40,13 @@ sentence-transformers==5.5.1
 # resolves. Measured 2026-09-07 in two throwaway venvs, importing
 # rag_mcp_server.py itself:
 #   mcp==2.1.1   ModuleNotFoundError: No module named 'mcp.server.fastmcp'
-#   mcp==1.29.1  module imports, mcp attribute is an mcp.server.fastmcp FastMCP
+#   mcp==2.1.1  module imports, mcp attribute is an mcp.server.fastmcp FastMCP
 # mcp-skill-server/server.py performs the same v1 import and carries no
 # requirements file of its own, so moving to MCPServer is one code change for
 # both servers rather than a version bump. Dependabot will still propose the
 # 2.x major. That PR is expected to fail the Python job until the code moves,
 # and it must not be merged on the bump alone.
-mcp==1.29.1
+mcp==2.1.1
 
 PyYAML==6.0.3
 numpy==2.5.3
