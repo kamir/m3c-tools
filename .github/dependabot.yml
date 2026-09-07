@@ -21,3 +21,33 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+
+  # Python for the RAG/MCP server. Its requirements.txt was unpinned, which made
+  # it invisible here: with no version there is nothing to compare against, so
+  # no bump and no CVE match. It is pinned now, so this entry has something to
+  # work on.
+  - package-ecosystem: "pip"
+    directory: "/rag-mcp-server"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      python-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # Container base images. Both Dockerfiles are DIGEST-PINNED, which is the
+  # right default and also the reason they need Dependabot: a digest is
+  # immutable, so an unwatched digest pin never moves, not even for a critical
+  # base-image CVE. Dependabot keeps the tag and proposes the new digest.
+  # Dependabot's docker ecosystem is per directory, so one entry each.
+  - package-ecosystem: "docker"
+    directory: "/deploy/skillctl"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: "docker"
+    directory: "/deploy/thinking-engine"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
