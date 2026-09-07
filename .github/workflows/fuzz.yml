@@ -1,8 +1,8 @@
 name: Nightly Fuzz (trust-layer parsers)
 
 # Nightly Go native-fuzzing sweep over the untrusted-input surfaces of the
-# skillctl trust layer (archive readers, semver comparator, event envelope,
-# revocation list, trust-roots + SKILL.md parsers). Each target runs for a bounded
+# skillctl trust layer (archive readers, CHECKSUMS verifier, semver comparator,
+# event envelope, revocation list, trust-roots + SKILL.md parsers). Each target runs for a bounded
 # time and FAILS the job on any NEW crasher. An input that panics or violates the
 # target's invariant oracle (a path escape, a fail-open verify, an ordering
 # inconsistency).
@@ -39,6 +39,8 @@ jobs:
           - target: FuzzUnpack
             dir: pkg/skillbundle
           - target: FuzzExtractTo
+            dir: pkg/skillbundle
+          - target: FuzzValidateChecksums
             dir: pkg/skillbundle
           - target: FuzzCompare
             dir: pkg/skillctl/semver
