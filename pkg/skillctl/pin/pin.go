@@ -95,6 +95,11 @@ type GenerateOptions struct {
 	// it is only an unbypassable POLICY (not merely a request) when the
 	// managed-settings file is pinned root-owned per SPEC-0247 P1.3; until then a
 	// same-uid user can flip it and it is advisory (AUD-07).
+	//
+	// WIRING: setting it also switches the emitted PreToolUse gate command from
+	// `verify-hook` to `enforce`. Only `skillctl enforce` consumes this flag
+	// (the R-8.2 escalation lives in runEnforce; runVerifyHook never reads it),
+	// so a verify-hook wiring would emit a promise no hook enforces.
 	RequireLocalAudit bool
 	// StateGateFallback emits `skillctlStateGateFallback: true`: the SPEC-0317
 	// R-1.4 P2 opt-in that state-gates the verify-hook's ONLINE fallback (the §7
@@ -154,7 +159,13 @@ type managedSettings struct {
 // would turn every DENY into an ALLOW) are rejected.
 const (
 	verifyHookSub = "verify-hook"
-	sweepSub      = "verify" // + must carry --all and --quarantine
+	// enforceSub is the enterprise-evidence twin of verify-hook (SPEC-0317 P0):
+	// byte-identical decision (AC-1), plus the outbox mirror and the ONLY
+	// consumer of skillctlRequireLocalAudit (the R-8.2 exit-26 escalation lives
+	// in runEnforce, not in runVerifyHook). A managed file that sets the R-8.2
+	// flag MUST therefore wire enforce, or the flag is inert.
+	enforceSub = "enforce"
+	sweepSub   = "verify" // + must carry --all and --quarantine
 )
 
 func binaryOrDefault(p string) string {
@@ -176,8 +187,20 @@ func quoteIfNeeded(p string) string {
 
 // gateHooks builds the SessionStart sweep + PreToolUse(Skill) matchers for a
 // given binary, exactly per SPEC-0247 §7.1.
-func gateHooks(binary string) hooksBlock {
+//
+// requireLocalAudit switches the PreToolUse verb from verify-hook to enforce:
+// the R-8.2 escalation (fail-closed exit 26 on an un-recordable allow) is
+// implemented ONLY in `skillctl enforce` (runEnforce reads the managed flag;
+// runVerifyHook never does), so wiring verify-hook alongside
+// skillctlRequireLocalAudit:true would emit a flag no hook ever consumes.
+// The decision itself is unchanged either way (AC-1 byte-parity: enforce
+// delegates the whole decision to verify-hook).
+func gateHooks(binary string, requireLocalAudit bool) hooksBlock {
 	b := quoteIfNeeded(binaryOrDefault(binary))
+	preSub := verifyHookSub
+	if requireLocalAudit {
+		preSub = enforceSub
+	}
 	return hooksBlock{
 		SessionStart: []hookMatcher{{
 			Matcher: "*",
@@ -185,7 +208,7 @@ func gateHooks(binary string) hooksBlock {
 		}},
 		PreToolUse: []hookMatcher{{
 			Matcher: "Skill",
-			Hooks:   []hookCommand{{Type: "command", Command: b + " verify-hook", Timeout: 20}},
+			Hooks:   []hookCommand{{Type: "command", Command: b + " " + preSub, Timeout: 20}},
 		}},
 	}
 }
@@ -193,7 +216,7 @@ func gateHooks(binary string) hooksBlock {
 // Generate returns the pretty-printed managed-settings.json bytes for the given
 // options (trailing newline included).
 func Generate(opts GenerateOptions) ([]byte, error) {
-	ms := managedSettings{Hooks: gateHooks(opts.BinaryPath)}
+	ms := managedSettings{Hooks: gateHooks(opts.BinaryPath, opts.RequireLocalAudit)}
 	if opts.Enterprise {
 		ms.SkillctlEnterprise = true
 	}
@@ -266,9 +289,14 @@ func (l Level) String() string {
 // StatusResult reports what Verify found. It is a pure read; nothing here gates
 // a decision.
 type StatusResult struct {
-	Level                 Level    `json:"level"`
-	HasSweepHook          bool     `json:"has_sweep_hook"`  // SessionStart → verify --all --quarantine
-	HasVerifyHook         bool     `json:"has_verify_hook"` // PreToolUse(Skill) → verify-hook
+	Level        Level `json:"level"`
+	HasSweepHook bool  `json:"has_sweep_hook"` // SessionStart → verify --all --quarantine
+	// HasVerifyHook: PreToolUse(Skill) runs the gate decision, via EITHER
+	// verify-hook OR its decision-identical enterprise twin enforce.
+	HasVerifyHook bool `json:"has_verify_hook"`
+	// HasEnforceHook: the PreToolUse gate specifically runs `enforce`, the only
+	// verb that consumes skillctlRequireLocalAudit (R-8.2 exit-26 escalation).
+	HasEnforceHook        bool     `json:"has_enforce_hook"`
 	AllowManagedHooksOnly bool     `json:"allow_managed_hooks_only"`
 	DisableBypass         bool     `json:"disable_bypass_permissions_mode"`
 	Findings              []string `json:"findings,omitempty"`
@@ -359,7 +387,8 @@ func Verify(settings []byte) StatusResult {
 	res.AllowManagedHooksOnly = ms.AllowManagedHooksOnly
 	res.DisableBypass = ms.DisableBypassPermissionsMode == "disable"
 	res.HasSweepHook = hasGateHook(ms.Hooks.SessionStart, sessionStartCovers, isSweepCommand)
-	res.HasVerifyHook = hasGateHook(ms.Hooks.PreToolUse, preToolUseCovers, isVerifyHookCommand)
+	res.HasVerifyHook = hasGateHook(ms.Hooks.PreToolUse, preToolUseCovers, isGateHookCommand)
+	res.HasEnforceHook = hasGateHook(ms.Hooks.PreToolUse, preToolUseCovers, isEnforceCommand)
 
 	switch {
 	case res.HasSweepHook && res.HasVerifyHook && res.AllowManagedHooksOnly:
@@ -374,6 +403,14 @@ func Verify(settings []byte) StatusResult {
 	}
 	if !res.HasSweepHook {
 		res.Findings = append(res.Findings, "no SessionStart(*) → skillctl verify --all --quarantine (the discovery sweep)")
+	}
+	// R-8.2 drift detector: the flag is consumed ONLY by `skillctl enforce`
+	// (runEnforce reads it; runVerifyHook never does), so a file that sets it
+	// while wiring verify-hook promises an audit fail-close it never enforces.
+	// The level stays as classified (the gate itself IS pinned); the finding
+	// makes the inert promise visible in `pin status`.
+	if ms.SkillctlEnterprise && ms.SkillctlRequireLocalAudit && !res.HasEnforceHook {
+		res.Findings = append(res.Findings, "skillctlRequireLocalAudit is set but no PreToolUse(Skill) hook runs `skillctl enforce`: only enforce consumes that flag (R-8.2 fail-closed exit 26 on an un-recordable allow); with verify-hook it is inert. Re-run `skillctl pin install --require-local-audit` (or regenerate).")
 	}
 	if res.Pinned() && !res.AllowManagedHooksOnly {
 		res.Findings = append(res.Findings, "gate is un-deletable by non-root users, but not strict: a user may still run their own hooks (a managed deny still wins). Use --strict for the full CISO lockdown.")
@@ -435,6 +472,24 @@ func isVerifyHookCommand(cmd string) bool {
 		return false
 	}
 	return len(args) == 1 && args[0] == verifyHookSub
+}
+
+// isEnforceCommand requires exactly `<...>/skillctl enforce`, arg-locked and
+// shell-control-free like isVerifyHookCommand.
+func isEnforceCommand(cmd string) bool {
+	bin, args, ok := splitCommand(cmd)
+	if !ok || !isSkillctlBinary(bin) {
+		return false
+	}
+	return len(args) == 1 && args[0] == enforceSub
+}
+
+// isGateHookCommand accepts EITHER PreToolUse gate verb. `enforce` makes the
+// exact same allow/deny decision as `verify-hook` (AC-1 byte-parity; it
+// delegates to it) and additionally mirrors evidence + honors R-8.2, so either
+// form pins the gate.
+func isGateHookCommand(cmd string) bool {
+	return isVerifyHookCommand(cmd) || isEnforceCommand(cmd)
 }
 
 // isSweepCommand requires `<...>/skillctl verify --all --quarantine` (extra
@@ -527,14 +582,25 @@ func Merge(existing []byte, opts GenerateOptions) ([]byte, error) {
 	if err := json.Unmarshal(existing, &doc); err != nil {
 		return nil, fmt.Errorf("existing managed-settings is not valid JSON (refusing to overwrite): %w", err)
 	}
-	gh := gateHooks(opts.BinaryPath)
+	gh := gateHooks(opts.BinaryPath, opts.RequireLocalAudit)
 
 	hooks, _ := doc["hooks"].(map[string]any)
 	if hooks == nil {
 		hooks = map[string]any{}
 	}
 	hooks["SessionStart"] = mergeMatcher(hooks["SessionStart"], gh.SessionStart[0], sessionStartCovers, isSweepCommand)
-	hooks["PreToolUse"] = mergeMatcher(hooks["PreToolUse"], gh.PreToolUse[0], preToolUseCovers, isVerifyHookCommand)
+	// PreToolUse gate: either verb satisfies a plain pin (enforce is a decision-
+	// identical superset of verify-hook), so merging without the R-8.2 flag never
+	// appends a second gate next to an existing enforce hook. WITH the flag, a
+	// pre-existing verify-hook wiring would leave skillctlRequireLocalAudit inert
+	// (only enforce consumes it), so upgrade OUR OWN gate command in place first;
+	// only if no covering enforce hook exists afterwards is one appended.
+	preShape := isGateHookCommand
+	if opts.RequireLocalAudit {
+		upgradeGateCommandToEnforce(hooks["PreToolUse"])
+		preShape = isEnforceCommand
+	}
+	hooks["PreToolUse"] = mergeMatcher(hooks["PreToolUse"], gh.PreToolUse[0], preToolUseCovers, preShape)
 	doc["hooks"] = hooks
 
 	if opts.Strict || opts.Harden {
@@ -548,6 +614,39 @@ func Merge(existing []byte, opts GenerateOptions) ([]byte, error) {
 		return nil, err
 	}
 	return append(b, '\n'), nil
+}
+
+// upgradeGateCommandToEnforce rewrites, IN PLACE, the command of our own gate
+// hook (the exact `<...>/skillctl verify-hook` shape under a covering
+// PreToolUse matcher) into the enforce form, keeping the hook's binary path,
+// quoting, timeout and every other key. Only the shape-exact gate command is
+// touched; foreign hooks never match isVerifyHookCommand and are preserved
+// verbatim. Rewriting (instead of appending a second hook) keeps the gate
+// running ONCE per Skill event: two gate hooks would double the decision
+// latency and duplicate the signed evidence trail.
+func upgradeGateCommandToEnforce(existing any) {
+	arr, _ := existing.([]any)
+	for _, e := range arr {
+		em, _ := e.(map[string]any)
+		if em == nil {
+			continue
+		}
+		matcher, _ := em["matcher"].(string)
+		if !preToolUseCovers(matcher) {
+			continue
+		}
+		hs, _ := em["hooks"].([]any)
+		for _, h := range hs {
+			hm, _ := h.(map[string]any)
+			if hm == nil {
+				continue
+			}
+			if cmd, _ := hm["command"].(string); isVerifyHookCommand(cmd) {
+				bin, _, _ := splitCommand(cmd)
+				hm["command"] = quoteIfNeeded(bin) + " " + enforceSub
+			}
+		}
+	}
 }
 
 // mergeMatcher appends our gate matcher to an existing event array unless a
