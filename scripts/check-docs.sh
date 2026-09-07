@@ -100,7 +100,27 @@ else
     echo "    Register the verb first (add a row to docs/CLI-VERBS.md), then implement its case."
 fi
 
-# ─── 6. Tutorial chain (BLOCKING) ───
+# ─── 6. Exit-code register (BLOCKING) ───
+#
+# AUDIT-0001 Befund 2.1 / registry.go's own "Phase 2": exitaudit reconciles the
+# manual's exit-code tables with pkg/skillctl/exitcode.AllCodes(), fails on any
+# documented number that no table accounts for, and fails when the manual and
+# docs/CLI-VERBS.md state different exit spaces for the SAME verb. It blocks
+# because every number here is one a script branches on: `pull` mapped its five
+# gates onto 12/10/11/13/6 while both documents claimed a bare usage space, and
+# nothing turned red.
+echo "6. Exit-code register (exitaudit)"
+if ! command -v go >/dev/null 2>&1; then
+    fail "go toolchain not found - cannot run the exit-code gate"
+elif go run ./cmd/exitaudit; then
+    pass "the documented exit codes match the register, per verb and per number"
+else
+    fail "the exit-code register and the docs disagree (see the report above)"
+    echo "    Regenerate the manual's register table with:"
+    echo "      go run ./cmd/exitaudit -write"
+fi
+
+# ─── 7. Tutorial chain (BLOCKING) ───
 #
 # gate: scripts/tutorial-smoke.sh runs the chain the German scenario tutorials
 # describe (docs/tutorial-szenario-0*.de.md) against a bare local:// registry in
@@ -109,7 +129,7 @@ fi
 # tutorials, so a renamed flag or a changed message could make them wrong without
 # turning anything red. FR-0118, SPEC-0407 AC-11.
 echo ""
-echo "6. Tutorial chain (tutorial-smoke)"
+echo "7. Tutorial chain (tutorial-smoke)"
 if ! command -v go >/dev/null 2>&1; then
     warn "go toolchain not found - skipping the tutorial chain"
 elif [ ! -f "scripts/tutorial-smoke.sh" ]; then

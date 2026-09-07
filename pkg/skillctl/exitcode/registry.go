@@ -17,8 +17,15 @@
 //     constants in pkg/skillctl/verify/errors.go and
 //     cmd/skillctl/import_public_cmds.go reference the registry's
 //     Number field via short type aliases. No call-site changes yet.
-//   - Phase 2 (later): go:generate the SKILLCTL-MANUAL.md exit-code
-//     table from this file.
+//   - Phase 2 (DONE 2026-09-07, AUDIT-0001 Befund 2.1): the manual's
+//     exit-code table is generated from AllCodes() and checked against it.
+//     cmd/exitaudit renders the delimited block in docs/manual-skillctl.md
+//     (`go run ./cmd/exitaudit -write`), fails on any documented number that
+//     neither this register nor the manual's "outside the register" table
+//     accounts for, and fails when the manual and docs/CLI-VERBS.md claim
+//     different exit spaces for the same verb. It is wired blocking into
+//     scripts/check-docs.sh. Adding a Code here without running -write turns
+//     the docs gate red, which is the point.
 //   - Phase 3 (later): migrate all `os.Exit(<int>)` call sites to
 //     `os.Exit(exitcode.X.Number)` so the registry is the only source
 //     of truth.
@@ -95,8 +102,11 @@ var (
 )
 
 // ---------------------------------------------------------------------------
-// Tier 2: import-public surface (SPEC-0201 §11; cmd/skillctl/import_public_cmds.go).
-// Numerically shares 17/18/19 with verify; theme intentionally identical.
+// Tier 2: import-public surface (SPEC-0201 §11). The numbers are ALLOCATED, the
+// command is not built in this tree (census 2026-09-07: no import_public_cmds.go,
+// only the demo's scenario text refers to it), which is why SPEC-0201's sixth
+// number could quietly be taken by RevokedBundle above. Numerically shares
+// 17/18/19 with verify; theme intentionally identical.
 // ---------------------------------------------------------------------------
 
 var (
@@ -208,7 +218,7 @@ var (
 // ---------------------------------------------------------------------------
 
 var (
-	PinNeedPrivMsg        = Code{3, "pin privacy confirmation", "pin", "need_priv_msg"}
+	PinNeedPrivMsg        = Code{3, "privileged write required", "pin", "need_priv_msg"}
 	ChainSelfAttested     = Code{20, "attestation reviewer-independence", "verify-chain", "self_attested"}
 	AgentIDExpired        = Code{21, "agent-identity expiry", "agentid", "agentid_expired"}
 	ChainRevocationStale  = Code{22, "revocation freshness", "verify-chain", "revocation_stale"}
