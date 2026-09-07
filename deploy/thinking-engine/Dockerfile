@@ -17,7 +17,17 @@
 #   make thinking-image
 
 # ---- Stage 1: build ----------------------------------------------------
-FROM golang:1.25-alpine AS builder
+# CD-T11 / CD-06: base images are DIGEST-PINNED, not tag-floating, exactly as in
+# deploy/skillctl/Dockerfile. A tag like `golang:1.25-alpine` is mutable: the
+# registry can repoint it, so pinning the tag alone lets an upstream repoint (or
+# a registry compromise) swap the build toolchain under us. The @sha256 digest is
+# content-addressed and immutable; the tag stays as the human-readable label and
+# is what Dependabot keys on when it proposes the next digest. Refresh with:
+#   docker buildx imagetools inspect golang:1.25-alpine   # -> index Digest
+# Resolved 2026-09-07: golang:1.25-alpine == GOLANG_VERSION 1.25.14. The image
+# ships GOTOOLCHAIN=local, and 1.25.14 satisfies the go.mod `go 1.25.0`
+# directive, so the build uses the image toolchain and downloads nothing.
+FROM golang:1.25-alpine@sha256:1ae0735f00daffa3aaf1363a5184c0d2dc55c78e3db4ec70241cdac97bf84b59 AS builder
 
 # Build tooling. git is needed for VCS info when the toolchain pulls
 # build metadata; ca-certificates so `go mod download` against
@@ -47,7 +57,10 @@ RUN go build \
       ./cmd/thinking-engine
 
 # ---- Stage 2: runtime --------------------------------------------------
-FROM alpine:3.20
+# CD-T11 / CD-06: digest-pinned for the same reason as stage 1. Refresh with:
+#   docker buildx imagetools inspect alpine:3.20
+# Resolved 2026-09-07 (multi-arch index digest).
+FROM alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 
 # curl for the HTTP healthcheck; ca-certificates so the engine can
 # talk to HTTPS (prompt registry, ER1 API). Both are small.
