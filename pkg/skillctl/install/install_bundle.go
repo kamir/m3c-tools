@@ -58,6 +58,18 @@ type BundleOpts struct {
 	// is always decided by signed bytes. Empty is the normal case.
 	Name string
 
+	// PostVerify, when set, runs AFTER the trust chain passed and BEFORE
+	// anything is staged or written. A non-nil error aborts the install and is
+	// returned verbatim, so the caller keeps control of its exit-code mapping.
+	//
+	// This is the seam the CLI uses to enforce the offline revocation list and
+	// the SPEC-0279 freshness contract on `install --bundle`, the same checks
+	// `verify --bundle` runs. Without it, the two paths could not stay
+	// mirror-equal: the revocation verdict must bind to the digest of the very
+	// blob this call verified, not to a digest computed in a separate earlier
+	// pass over a file that may have changed in between.
+	PostVerify func(*verify.VerifyResult) error
+
 	HomeDir           string
 	GovernanceMin     string
 	AllowYellow       bool
@@ -119,6 +131,17 @@ func InstallBundle(opts BundleOpts) (*Result, error) {
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	// ----- caller's post-verify gate, still BEFORE any write -----
+	//
+	// Revocation and freshness are part of the trust decision, so they belong on
+	// this side of the staging line: a revoked bundle must leave the target
+	// directory untouched, not be installed and then complained about.
+	if opts.PostVerify != nil {
+		if err := opts.PostVerify(verRes); err != nil {
+			return nil, err
+		}
 	}
 
 	// ----- WHERE the skill lands is decided by SIGNED bytes -----
