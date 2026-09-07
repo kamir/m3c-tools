@@ -13,7 +13,7 @@ set -euo pipefail
 # SEC: an env-supplied release base relaxes the trust anchor. Honor it (legitimate
 # for testing) but warn loudly so a poisoned environment can't silently repoint us.
 [ -n "${RELEASE_BASE:-}" ] && echo "WARNING: RELEASE_BASE overrides the default release origin (${RELEASE_BASE})" >&2
-RELEASE_BASE="${RELEASE_BASE:-https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.3.1}"
+RELEASE_BASE="${RELEASE_BASE:-https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.4.0}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 
 # SEC-M2: pin the release-key fingerprint. The signature alone proves only that
@@ -102,7 +102,22 @@ fi
 # === Provenance track 2 (fallback / current default): pinned ed25519 (SEC-M2). ===
 # Reached when cosign is absent or the release carries no cosign bundle.
 if [ "$verified" != "1" ]; then
-  fetch SHA256SUMS.sig
+  # Attaching SHA256SUMS.sig to a release is a manual operator step with the
+  # private key, and it has been missed before. Unguarded, this fetch would die
+  # under `set -e` with a bare curl 404 and no hint what went wrong; guard it
+  # like the manifest fetch above and say what is missing and what to do.
+  if ! fetch SHA256SUMS.sig; then
+    echo "Could not fetch the fallback signature (SHA256SUMS.sig) from:" >&2
+    echo "  $RELEASE_BASE" >&2
+    echo "The cosign track did not verify here (cosign missing, or no bundle fetched) and" >&2
+    echo "this release does not (yet) carry the ed25519 fallback asset SHA256SUMS.sig," >&2
+    echo "so neither provenance track can verify." >&2
+    echo "Two ways out:" >&2
+    echo "  1. install cosign and re-run; track 1 verifies the keyless cosign bundle, or" >&2
+    echo "  2. ask the release operator to attach SHA256SUMS.sig to this release." >&2
+    echo "Refusing to install unverified binaries." >&2
+    exit 1
+  fi
   fetch skillctl-release.pub
 
   # SEC-M2: prefer the in-repo, version-controlled release key when this script

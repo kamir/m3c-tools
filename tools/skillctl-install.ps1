@@ -22,7 +22,7 @@
 
 .PARAMETER ReleaseBase
   Base URL of the release assets. Env fallback: $env:RELEASE_BASE. Default:
-  https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.3.1
+  https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.4.0
 
 .PARAMETER InstallDir
   Install directory. Env fallback: $env:INSTALL_DIR. Default:
@@ -98,7 +98,7 @@ $ASSET = 'skillctl-windows-amd64.exe'
 # ============================================================================
 if (-not $ReleaseBase) {
     $ReleaseBase = if ($env:RELEASE_BASE) { $env:RELEASE_BASE }
-                   else { 'https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.3.1' }
+                   else { 'https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.4.0' }
 }
 if (-not $InstallDir) {
     $InstallDir = if ($env:INSTALL_DIR) { $env:INSTALL_DIR }
