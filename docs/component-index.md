@@ -72,7 +72,9 @@ Grouped by domain:
 ## F. skillctl trust subsystem (`pkg/skillctl/*` + siblings)
 
 The offline-verifiable skill **trust plane**: the library behind the
-[`skillctl`](program-index) CLI. 30 focused subpackages, grouped by role:
+[`skillctl`](program-index) CLI. 40 subpackages under `pkg/skillctl/`, plus two
+siblings, grouped by role. The count and the list are gated: `scripts/check-docs.sh`
+diffs `pkg/**` against this file, in both directions.
 
 **Inventory & parsing**
 
@@ -92,6 +94,7 @@ The offline-verifiable skill **trust plane**: the library behind the
 | `skillctl/device` | Per-machine DEVICE KEY that signs SPEC-0202 invocations. |
 | `skillctl/agentid` | Pure, stdlib-only core of SPEC-0277 agent-instance identity. |
 | `skillctl/translog` | L1 transparency log (SPEC-0278). |
+| `skillctl/trustcore` | The signed-envelope trust primitives every backend and the pull/gossip/gauntlet paths share (FR-0090): a trust decision reads an event's kind and digest from INSIDE the signed envelope, never from an unsigned carrier projection. |
 
 **Lifecycle, admission & install**
 
@@ -103,6 +106,19 @@ The offline-verifiable skill **trust plane**: the library behind the
 | `skillctl/awareness` | SPEC-0195 admission bridge. |
 | `skillctl/propose` | SPEC-0194 §6 ready-to-promote gate. |
 | `skillctl/pin` | SPEC-0247 §7.3 managed-settings pinning. |
+| `skillctl/semver` | The one loose-semver comparator: picks the highest non-revoked version across every backend and gates version monotonicity at propose time. Replaced four copies that disagreed on a leading `v`. |
+| `skillctl/homeroot` | The one place that decides how skillctl resolves the per-user root. On a shipping Windows build `$HOME` is never honoured for security paths; `%USERPROFILE%` is the only root. |
+
+**Artifact backends (SPEC-0356)**
+
+| Package | Responsibility |
+|---------|----------------|
+| `skillctl/artifact` | The pluggable artifact-repository abstraction: ER1, git forges and OCI registries are peers behind one `Backend`. The invariant across all of them is the content digest; everything else is a backend-native projection of the same SPEC-0190 event envelope. |
+| `skillctl/artifact/conformance` | The backend-agnostic lifecycle suite every `artifact.Backend` must pass (D8), run against the git backend, the ER1 backend and the in-memory fake, so backend parity is a test rather than a claim. |
+| `skillctl/backend/git` | Git registry backend (`github://` / `gitlab://` / `local://`), including the frozen Git Wire Format v1 on-disk contract. |
+| `skillctl/backend/oci` | OCI-registry backend (D7): the `.skb` is a layer whose digest is its identity, lifecycle events ride as referrers. |
+| `skillctl/artifactauth` | Read-only per-backend credential resolution (D5): env override, then the OS keychain. It never writes or deletes a credential store. |
+| `skillctl/netguard` | The one audited "is this host provably local?" egress predicate that gates credentials and TLS-verification bypasses across the backends and the ER1 client. |
 
 **Governance & evidence**
 
@@ -114,6 +130,8 @@ The offline-verifiable skill **trust plane**: the library behind the
 | `skillctl/datascope` | Typed client-side contract for SPEC-0196. |
 | `skillctl/bodyscan` | SPEC-0246 §4 semantic danger-prose detector. |
 | `skillctl/exitcode` | Canonical registry of `skillctl` process exit codes. |
+| `skillctl/auditevent` | SPEC-0403 audit-event foundation: the shared envelope, the sinks, and the dispatcher that decides what a failed write means (silent loss is not the default). |
+| `skillctl/secfile` | Hardens the on-disk permissions of security-sensitive files. A no-op on Unix (0600 is enforced by the kernel); real DACL work on Windows, which does not honour the Unix perm bits. |
 
 **Analysis, reporting & UI**
 
@@ -126,6 +144,7 @@ The offline-verifiable skill **trust plane**: the library behind the
 | `skillctl/review` | Local HTTP server for reviewing delta reports. |
 | `skillctl/browse` | Interactive D3.js skill-graph browser. |
 | `skillctl/menubar` | macOS menu bar app for monitoring skillctl state. |
+| `skillctl/sim` | The trust-plane simulation library behind [`skillctl-sim`](program-index): the transition system, the generated scenario corpus, and the oracle that compares each SPEC-derived prediction with the observed run. |
 
 **Sibling top-level packages**
 
@@ -133,12 +152,11 @@ The offline-verifiable skill **trust plane**: the library behind the
 |---------|----------------|
 | `skillgate` | SPEC-0202 cooperative invocation gateway. |
 | `skillbundle` | Deterministic packing of `.skb` skill bundles. |
-| `skillimport` | SPEC-0201 import-from-internet: `parser` (reference syntax), `policy` (source-policy files), `scanner` (pre-flight static scanner). |
 
 ## G. Thinking Engine internals (`internal/thinking/*`)
 
-The 18 internal packages that make up the [Thinking Engine service](service-index).
-Grouped by role in the T→R→I→A→C pipeline:
+The 21 internal packages that make up the [Thinking Engine service](service-index),
+plus one shared internal package below. Grouped by role in the T→R→I→A→C pipeline:
 
 **Substrate**
 
@@ -154,7 +172,11 @@ Grouped by role in the T→R→I→A→C pipeline:
 | Package | Responsibility |
 |---------|----------------|
 | `thinking/orchestrator` | Accepts a ProcessSpec; publishes lifecycle events. |
-| `thinking/processors` | The R/I/A/C cognitive-layer processors. |
+| `thinking/processors` | Dispatch and shared plumbing for the R/I/A/C cognitive-layer processors. |
+| `thinking/processors/r` | The Reflection-layer processor. |
+| `thinking/processors/i` | The Insight-layer processor. |
+| `thinking/processors/a` | The Artifact-layer processor. |
+| `thinking/processors/c` | The Compilation-layer processor. |
 | `thinking/autoreflect` | Opt-in consumer that watches and triggers reflection. |
 | `thinking/feedback` | Closes the cognitive loop from the I-processor. |
 

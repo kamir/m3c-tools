@@ -1,9 +1,20 @@
 // Command docaudit is the code↔manual consistency gate for the CLI surface.
 //
-// It answers two release-gate questions, per CLI, in BOTH directions:
+// It answers three release-gate questions, per CLI, in BOTH directions:
 //
 //   - Is every real CLI flag documented?        (code flag with no manual entry = UNDOCUMENTED)
 //   - Is every documented flag real?             (manual entry with no code flag  = PHANTOM)
+//   - Does the binary's own `--help` name every verb it dispatches?
+//     (dispatched verb absent from printUsage = UNLISTED; a usage line for a verb
+//     the switch never dispatches = USAGE-PHANTOM)
+//
+// The third question is about the BINARY's self-description, not the manual, and
+// it is a different failure: a verb missing from the manual is a documentation
+// gap, a verb missing from `--help` is invisible to every user who never opens
+// the manual. When it was added, 33 of skillctl's 54 dispatched literals were
+// unlisted, `pack` (step 2 of the advertised lifecycle) among them. It is also
+// distinct from cmd/verbaudit, which reconciles the same dispatch against the
+// ALLOCATION TABLE docs/CLI-VERBS.md: registered is not the same as visible.
 //
 // The "real" surface is extracted mechanism-independently by the UNION of two
 // AST strategies, because the two CLIs use different idioms:
@@ -40,6 +51,16 @@
 // exemptions: a flag documented to state its ABSENCE, an internal debug flag:
 // live in docs/docaudit-ignore.txt, fail-closed with a written reason.
 //
+// The "self-described" surface is read from the package's own printUsage
+// function by AST, so a usage text assembled from many Fprintln calls (skillctl)
+// and one assembled from a single raw string (m3c-tools) are read the same way.
+// A usage line NAMES a verb when it starts with EXACTLY two spaces followed by
+// the verb; further aliases follow comma-separated (`help, --help, -h`). Deeper
+// indentation is a continuation line and column zero is a group header, so
+// neither can accidentally register as a verb. A CLI whose main package has no
+// `switch os.Args[1]` dispatch is skipped; one that HAS a dispatch but no
+// printUsage is an error, so the check cannot be disabled by a rename.
+//
 // Exit codes: 0 = consistent; 1 = drift found (the release gate blocks); 2 = a
 // usage/IO error. Pure Go stdlib + portable (runs on the Windows gate too).
 //
@@ -58,6 +79,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -100,6 +122,16 @@ var (
 // fenceRe matches a fenced-code-block delimiter line (``` or ~~~).
 var fenceRe = regexp.MustCompile("^\\s*(```|~~~)")
 
+// usageLeadRe matches the verb a usage line LEADS with: exactly two spaces, then
+// the verb. A deeper-indented line is a continuation and a column-zero line is a
+// group header, so neither can register as a verb.
+var usageLeadRe = regexp.MustCompile(`^  (-{0,2}[a-z][a-z0-9-]*)`)
+
+// usageAliasRe matches one further comma-separated alias directly after the verb
+// (the `help, --help, -h` form), so an alias the switch dispatches counts as
+// named without needing a line of its own.
+var usageAliasRe = regexp.MustCompile(`^,\s+(-{0,2}[a-z][a-z0-9-]*)`)
+
 // flagMethods are the *flag.FlagSet (and top-level flag.*) registration methods.
 // For every one, the flag NAME is the first string-literal argument: true for
 // the value-returning forms String(name,…), the *Var forms StringVar(&p,name,…),
@@ -121,9 +153,19 @@ type report struct {
 	DocFlags     int      `json:"doc_flags"`
 	Undocumented []string `json:"undocumented"` // in code, not in manual
 	Phantom      []string `json:"phantom"`      // in manual, not in code
+
+	// Dispatch vs the binary's own usage text (0 when the CLI has no
+	// `switch os.Args[1]` dispatch and the check is skipped).
+	Dispatched   int      `json:"dispatched"`
+	UsageListed  int      `json:"usage_listed"`
+	UsageMissing []string `json:"usage_missing"` // dispatched, not named in printUsage
+	UsagePhantom []string `json:"usage_phantom"` // named in printUsage, never dispatched
 }
 
-func (r report) clean() bool { return len(r.Undocumented) == 0 && len(r.Phantom) == 0 }
+func (r report) clean() bool {
+	return len(r.Undocumented) == 0 && len(r.Phantom) == 0 &&
+		len(r.UsageMissing) == 0 && len(r.UsagePhantom) == 0
+}
 
 func main() {
 	os.Exit(run(os.Args[1:]))
@@ -258,6 +300,27 @@ func audit(t target, ignore map[string]bool) (report, error) {
 	}
 	sort.Strings(r.Undocumented)
 	sort.Strings(r.Phantom)
+
+	// Third question: does the binary's own usage text name every verb it
+	// dispatches. Deliberately NOT exemptible via docs/docaudit-ignore.txt: a
+	// verb a user can type is a verb `--help` must name, with no exceptions.
+	dispatched, listed, err := usageAudit(t.PkgDir)
+	if err != nil {
+		return report{}, err
+	}
+	r.Dispatched, r.UsageListed = len(dispatched), len(listed)
+	for v := range dispatched {
+		if !listed[v] {
+			r.UsageMissing = append(r.UsageMissing, v)
+		}
+	}
+	for v := range listed {
+		if !dispatched[v] {
+			r.UsagePhantom = append(r.UsagePhantom, v)
+		}
+	}
+	sort.Strings(r.UsageMissing)
+	sort.Strings(r.UsagePhantom)
 	return r, nil
 }
 
@@ -606,6 +669,157 @@ func loadIgnore(path string) (map[string]bool, error) {
 	return out, nil
 }
 
+// usageAudit returns, for one command package, the verbs its top-level
+// `switch os.Args[1]` DISPATCHES and the verbs its printUsage function NAMES.
+//
+// Both surfaces are read by AST from the same package, so neither can be faked
+// by a comment or a doc file. A package with no dispatch switch is not an error:
+// it simply does not use this idiom, and both sets come back empty. A package
+// that HAS a dispatch but no printUsage IS an error, so the gate cannot be
+// switched off by renaming the function.
+func usageAudit(pkgDir string) (dispatched, listed map[string]bool, err error) {
+	entries, err := os.ReadDir(pkgDir)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read pkg dir: %w", err)
+	}
+	dispatched, listed = map[string]bool{}, map[string]bool{}
+	fset := token.NewFileSet()
+	foundSwitch, foundUsage := false, false
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, filepath.Join(pkgDir, name), nil, 0)
+		if err != nil {
+			return nil, nil, fmt.Errorf("parse %s: %w", name, err)
+		}
+		if sw := argsSwitch(f); sw != nil {
+			foundSwitch = true
+			for v := range switchLiterals(sw) {
+				dispatched[v] = true
+			}
+		}
+		if fn := funcDecl(f, "printUsage"); fn != nil {
+			foundUsage = true
+			for v := range usageVerbs(fn) {
+				listed[v] = true
+			}
+		}
+	}
+	if !foundSwitch {
+		return map[string]bool{}, map[string]bool{}, nil // not this idiom: nothing to reconcile
+	}
+	if !foundUsage {
+		return nil, nil, fmt.Errorf("%s dispatches on os.Args[1] but has no printUsage to reconcile it against", pkgDir)
+	}
+	return dispatched, listed, nil
+}
+
+// argsSwitch finds the `switch os.Args[1]` statement in f, or nil.
+func argsSwitch(f *ast.File) *ast.SwitchStmt {
+	var found *ast.SwitchStmt
+	ast.Inspect(f, func(n ast.Node) bool {
+		if found != nil {
+			return false
+		}
+		s, ok := n.(*ast.SwitchStmt)
+		if !ok || !isOsArgsIndex(s.Tag) {
+			return true
+		}
+		found = s
+		return false
+	})
+	return found
+}
+
+// isOsArgsIndex reports whether expr is the index expression `os.Args[1]`.
+func isOsArgsIndex(expr ast.Expr) bool {
+	idx, ok := expr.(*ast.IndexExpr)
+	if !ok {
+		return false
+	}
+	sel, ok := idx.X.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != "Args" {
+		return false
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	if !ok || pkg.Name != "os" {
+		return false
+	}
+	lit, ok := idx.Index.(*ast.BasicLit)
+	return ok && lit.Kind == token.INT && lit.Value == "1"
+}
+
+// switchLiterals returns the string literals of every case clause of sw: the
+// verbs (and aliases) the switch can actually route.
+func switchLiterals(sw *ast.SwitchStmt) map[string]bool {
+	out := map[string]bool{}
+	for _, stmt := range sw.Body.List {
+		cc, ok := stmt.(*ast.CaseClause)
+		if !ok {
+			continue // the default clause routes nothing by name
+		}
+		for _, e := range cc.List {
+			lit, ok := e.(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				continue
+			}
+			if v, err := strconv.Unquote(lit.Value); err == nil && v != "" {
+				out[v] = true
+			}
+		}
+	}
+	return out
+}
+
+// funcDecl returns the top-level function named name in f, or nil.
+func funcDecl(f *ast.File, name string) *ast.FuncDecl {
+	for _, d := range f.Decls {
+		fn, ok := d.(*ast.FuncDecl)
+		if ok && fn.Recv == nil && fn.Name != nil && fn.Name.Name == name && fn.Body != nil {
+			return fn
+		}
+	}
+	return nil
+}
+
+// usageVerbs returns the verbs the usage function NAMES. Every string literal in
+// its body is unquoted and split into lines, so it makes no difference whether
+// the text is one raw string or a hundred Fprintln arguments; each line then
+// contributes the verb it leads with plus its comma-separated aliases.
+func usageVerbs(fn *ast.FuncDecl) map[string]bool {
+	out := map[string]bool{}
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		lit, ok := n.(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
+			return true
+		}
+		text, err := strconv.Unquote(lit.Value)
+		if err != nil {
+			return true
+		}
+		for _, line := range strings.Split(text, "\n") {
+			m := usageLeadRe.FindStringSubmatchIndex(line)
+			if m == nil {
+				continue
+			}
+			out[line[m[2]:m[3]]] = true
+			rest := line[m[1]:]
+			for {
+				a := usageAliasRe.FindStringSubmatchIndex(rest)
+				if a == nil {
+					break
+				}
+				out[rest[a[2]:a[3]]] = true
+				rest = rest[a[1]:]
+			}
+		}
+		return true
+	})
+	return out
+}
+
 func printHuman(reports []report) {
 	const (
 		green  = "\033[0;32m"
@@ -616,7 +830,8 @@ func printHuman(reports []report) {
 	)
 	fmt.Println("=== CLI ↔ Manual Consistency (docaudit) ===")
 	for _, r := range reports {
-		fmt.Printf("\n%s%s%s  %s(%d code flags · %d documented)%s\n", "\033[1m", r.CLI, nc, dim, r.CodeFlags, r.DocFlags, nc)
+		fmt.Printf("\n%s%s%s  %s(%d code flags · %d documented · %d verbs dispatched · %d in --help)%s\n",
+			"\033[1m", r.CLI, nc, dim, r.CodeFlags, r.DocFlags, r.Dispatched, r.UsageListed, nc)
 		if r.clean() {
 			fmt.Printf("  %s✓%s consistent\n", green, nc)
 			continue
@@ -633,6 +848,18 @@ func printHuman(reports []report) {
 				fmt.Printf("      %s\n", f)
 			}
 		}
+		if len(r.UsageMissing) > 0 {
+			fmt.Printf("  %s✗ UNLISTED%s (dispatched, not named by printUsage: users cannot discover it):\n", red, nc)
+			for _, v := range r.UsageMissing {
+				fmt.Printf("      %s\n", v)
+			}
+		}
+		if len(r.UsagePhantom) > 0 {
+			fmt.Printf("  %s✗ USAGE-PHANTOM%s (named by printUsage, never dispatched: the verb is gone):\n", yellow, nc)
+			for _, v := range r.UsagePhantom {
+				fmt.Printf("      %s\n", v)
+			}
+		}
 	}
 	fmt.Println("\n─────────────────────────────")
 	bad := false
@@ -642,8 +869,9 @@ func printHuman(reports []report) {
 		}
 	}
 	if bad {
-		fmt.Printf("%sFAIL%s: CLI surface and manual disagree (release gate blocks).\n", red, nc)
+		fmt.Printf("%sFAIL%s: CLI surface, manual and --help disagree (release gate blocks).\n", red, nc)
 	} else {
-		fmt.Printf("%sPASS%s: every real flag is documented and every documented flag is real.\n", green, nc)
+		fmt.Printf("%sPASS%s: every real flag is documented, every documented flag is real, and\n", green, nc)
+		fmt.Println("      every dispatched verb is named by the binary's own --help.")
 	}
 }

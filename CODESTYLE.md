@@ -25,7 +25,8 @@ never by quietly loosening a rule.
 | Cleanliness | No redundant conversions, no leaked response bodies, no loop-var aliasing | `gocritic`, `unconvert`, `bodyclose`, `copyloopvar`, `nilerr`, `misspell` |
 | Security (SAST) | Crypto, injection, hardcoded credentials | `gosec` |
 | Dependencies | Reachable CVEs, secret scan, `go mod tidy` is a no-op | `govulncheck`, `gitleaks`, CI job |
-| CLI surface | Every real flag documented, every documented flag real | `cmd/docaudit` (see below) |
+| CLI surface | Every real flag documented, every documented flag real, every dispatched verb named by `--help` | `cmd/docaudit` (see below) |
+| Index freshness | Every `cmd/` binary and `pkg/` package indexed, and every indexed one real | `scripts/check-docs.sh` section 7 |
 
 ### The honesty rule for comments
 
@@ -156,7 +157,7 @@ refuses a `Write` or `Edit` whose payload contains U+2014 before it reaches disk
 
 ---
 
-## CLI ↔ manual consistency
+## CLI ↔ manual ↔ `--help` consistency
 
 `cmd/docaudit` is the release gate that keeps each CLI's **real** flag surface
 and its manual in agreement, in **both** directions:
@@ -164,7 +165,12 @@ and its manual in agreement, in **both** directions:
 - a flag in the code with no manual entry → **UNDOCUMENTED**
 - a manual entry with no flag in the code → **PHANTOM**
 
-Either one fails the gate (exit `1`); `2` is a usage/IO error. Run it with:
+and, separately, keeps the binary honest about **itself**:
+
+- a dispatched verb with no line in `printUsage` → **UNLISTED**
+- a `printUsage` line for a verb the switch never dispatches → **USAGE-PHANTOM**
+
+Any of the four fails the gate (exit `1`); `2` is a usage/IO error. Run it with:
 
 ```bash
 go run ./cmd/docaudit -cli all                      # the gate
@@ -213,6 +219,45 @@ Leading position is the definition signal. This is what makes the gate enforce
   span: `` `claude --dangerously-skip-permissions` ``, not `` `--dangerously-skip-permissions` ``.
 - To write a **meta-placeholder**, keep it non-flag-shaped: `` `--<flag> <value>` ``.
 
+### How the "self-described" surface is found
+
+The third question is not about the manual at all. A verb missing from the
+manual is a documentation gap; a verb missing from `--help` is invisible to
+every user who never opens the manual. When the check was added, 33 of
+`skillctl`'s 54 dispatched literals were unlisted, `pack` (step 2 of the
+advertised lifecycle) among them.
+
+Both surfaces are read out of the same command package by AST:
+
+- **Dispatched**: the string literals of the `switch os.Args[1]` case clauses,
+  aliases included. A verb the switch never names cannot be typed at runtime.
+- **Named**: every string literal inside the package's `printUsage` function,
+  unquoted and split into lines. That way one raw string (m3c-tools) and a
+  hundred `Fprintln` arguments (skillctl) are read identically.
+
+A usage line **names** the verb it leads with when it starts with **exactly two
+spaces**, and further aliases follow comma-separated:
+
+```text
+  help, --help, -h        Print this command list.     ← names help, --help, -h
+  pack                    Build a .skb bundle.          ← names pack
+                          ... continued, mentions seal  ← names nothing
+Getting started                                         ← names nothing
+```
+
+Deeper indentation is a continuation line and column zero is a group header, so
+prose can never register a verb by accident. Keep to that shape when you edit a
+usage text.
+
+A package with no `os.Args[1]` dispatch is skipped (it does not use the idiom).
+A package that **has** a dispatch and no `printUsage` is an error, so the check
+cannot be switched off by a rename. There are deliberately **no exemptions**:
+a verb a user can type is a verb `--help` must name.
+
+This is a different question from `cmd/verbaudit`, which reconciles the same
+dispatch against the allocation table `docs/CLI-VERBS.md`. Registered is not the
+same as visible: every verb was registered while 33 were invisible.
+
 ### Exemptions
 
 `docs/docaudit-ignore.txt`, fail-closed: a flag belongs there only **with a
@@ -224,3 +269,25 @@ standard FlagSet, and the flags of a command that is not dispatched at all
 
 An exemption is never the right fix for "the extractor cannot see it". If the
 gate is blind to a real idiom, teach the extractor and add a test.
+
+---
+
+## Index freshness
+
+`docs/program-index.md` claims to list *every buildable entry point* and
+`docs/component-index.md` the library packages. A prose claim about a directory
+can be checked against the directory, so section 7 of `scripts/check-docs.sh`
+does, in both directions:
+
+- a buildable `cmd/<name>` absent from the program index → **fail**
+- a `cmd/<name>` the program index names that no longer exists → **fail**
+- a Go package under `pkg/` absent from the component index → **fail**
+- a package the component index names that is not in the tree → **fail**
+
+The reverse direction is the one that earns its keep: the component index
+documented a `skillimport` package that exists nowhere, while twelve real
+`pkg/skillctl` packages were missing.
+
+The check is mechanical on purpose. It checks **presence**, never prose: a new
+package still needs a human-written responsibility line, and the failing gate is
+what makes the author notice that it is owed.
