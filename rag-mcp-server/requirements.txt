@@ -1,6 +1,26 @@
-turbovec
-sentence-transformers
-mcp
-PyYAML
-numpy
-networkx
+# rag-mcp-server runtime dependencies.
+#
+# Every line is pinned with `==`. An unpinned requirements file means two
+# machines that install on two days get two different stacks, and neither can
+# say which one produced an index. It also leaves nothing for Dependabot to
+# compare against: without a version there is no "outdated" and no CVE match,
+# so an unpinned file is silently exempt from the supply-chain gate that
+# .github/dependabot.yml applies to every other ecosystem here.
+#
+# Bumps arrive as reviewable Dependabot PRs (package-ecosystem "pip",
+# directory "/rag-mcp-server"), never as a silent drift at install time.
+#
+# Provenance of the numbers below, measured 2026-09-07:
+#   turbovec, sentence-transformers: the versions actually installed in the
+#     working venv (rag-mcp-server/.venv), so pinning changes nothing about the
+#     stack that produced the current index.
+#   mcp, PyYAML, numpy, networkx: latest stable on PyPI, because they are not
+#     present in that venv and there was nothing to preserve.
+# Resolution was checked with `uv pip compile` against python 3.13.
+
+turbovec==0.8.0
+sentence-transformers==5.5.1
+mcp==2.1.1
+PyYAML==6.0.3
+numpy==2.5.3
+networkx==3.6.1
