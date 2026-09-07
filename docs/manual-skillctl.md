@@ -92,9 +92,16 @@ For the full two-person walkthrough over ER1, see
 `install`, `verify`, `verify-sig`, `pull` and the gates return **numbered** exit codes so
 automation can branch precisely. Two tables follow, and `cmd/exitaudit` checks both against
 `pkg/skillctl/exitcode` on every run of `scripts/check-docs.sh`: the first IS the register,
-the second lists the numbers that live outside it. A number written down anywhere in this
-manual, or in an Exit-Code cell of [docs/CLI-VERBS.md](CLI-VERBS.md), must appear in one of
-the two, so a code cannot be documented without first saying where it comes from.
+the second lists the numbers that live outside it.
+
+What the gate reads, exactly: the `Exit:` statement under each command below, and the
+Exit-Code cells of [docs/CLI-VERBS.md](CLI-VERBS.md). Every number in those two places must
+appear in one of the two tables, so a code cannot be documented there without first saying
+where it comes from. Numbers in ordinary prose, and the numbers in the `verify-hook`
+`refusal_code` table, are **not** scanned; a wrong number in either would not turn the gate
+red, and both were measured going through green on 2026-09-07. `cmd/exitaudit` prints its own
+reach on every run, including how many verb rows state no `Exit:` line and are therefore never
+compared against the register.
 
 The **base space** is shared by every command: `0` ok, `1` generic error (network and
 non-2xx included), `2` usage or flag error. The three `PreToolUse` gates (`verify-hook`,
@@ -170,8 +177,9 @@ gone.
 
 `audit` uses its own scale: `0` all OK · `2` at least one `UNVERIFIED`/`BELOW_MIN` (or a
 G-23 confirm-delete precondition refusal on drift) · `3` at least one `BROKEN`. `propose`
-uses `0` pass / `2` gate failed. `auditlog` has its own `0/1` health space (SPEC-0403 §8),
-which is why a health finding must never be read as a posture verdict.
+uses `0` pass / `2` gate failed. `auditlog` has its own `0/1` HEALTH verdict (SPEC-0403 §8),
+which is why a health finding must never be read as a posture verdict; its `2` is the ordinary
+usage code, not part of that verdict.
 
 > Some commands print flags with a **single dash** in their own help output (e.g. `-key`,
 > `-out`). Both `-<flag>` and `--<flag>` are accepted. This manual reproduces flag names as
@@ -445,7 +453,9 @@ skillctl install my-skill@sha256:<hex> --verbose
 skillctl install --bundle demo@1.0.0.skb --trust-roots roots.yaml --revocations revocations.json
 ```
 
-Exit: `0`, `1`, `2`, plus every code `verify.ExitCode` maps out of the §7 chain: `10`–`17`, `20` (self-attested), `22` (revocation snapshot stale) and `23` (log inclusion missing). With `--bundle`, `17` also carries an emergency deny (see [Exit codes](#exit-codes)).
+Exit: `0`, `1`, `2`, plus every code `verify.ExitCode` maps out of the §7 chain that this path can actually raise: `10`–`17`, `20` (self-attested) and `22` (revocation snapshot stale). With `--bundle`, `17` also carries an emergency deny (see [Exit codes](#exit-codes)).
+
+`23` (log inclusion missing) is NOT in that set, although `verify.ExitCode` maps it: the only function that raises `ErrLogInclusionMissing`, `verify.CheckLogInclusion`, has no caller outside its own test file, so no `install` or `verify` run reaches it. `23` is reachable today through `translog verify` alone.
 
 ---
 
@@ -597,6 +607,22 @@ skillctl revoke feed --status
 skillctl revoke feed --refresh --registry https://aims.example.com/api/skills
 ```
 
+Exit: `0` the revocation was accepted · `1` generic / network / an HTTP 403 refusal · `2`
+usage, a bad flag, or an HTTP 400 from the registry · `15` the registry answered HTTP 404
+(this digest was never admitted) or HTTP 409 (it is already revoked) · `22` `revoke feed
+--refresh` could not obtain the revoked set on a managed host and failed closed.
+
+The `15` is the number only, not the theme: the register holds it under
+`verify`/`blob_missing`, so branch on it per verb and never read it as a chain failure.
+Measured at the binary against a local registry stub, and against
+`cmd/skillctl/revoke_cmds.go`.
+
+`revoke feed --refresh` adds one more: `22` when the host is MANAGED (a `trust-roots.yaml` is
+present) and the revoked-set fetch is unavailable with no authenticated grace cache. That is
+deliberately the same `revocation_stale` number the hook and the `verify --all` sweep use
+(`cmd/skillctl/revoke_feed_cmds.go`), so one script branch catches the fail-closed signal at all
+three sites. Measured at the binary with a present but unloadable `~/.claude/trust-roots.yaml`.
+
 Related paths: `publish --revoke` posts the same `BundleRevokedEvent` to your personal ER1
 `self` registry (see [`publish`](#publish--admit--attest--revoke-via-er1-self-registry)), and
 `agentid revoke` adds `agent:<id>` to a signed AgentID revocation list. All three produce
@@ -642,8 +668,14 @@ exits `2` (a usage / precondition refusal), deleting nothing. Both the plan and 
 are auditable, and there is **no `--force`** to bypass the re-check: a destructive op that no
 longer matches its approved plan simply does not run.
 
-Exit: `0` all OK · `2` ≥1 `UNVERIFIED`/`BELOW_MIN`, **or** a confirm-delete precondition
-refusal (drift/expiry/tamper) · `3` ≥1 `BROKEN`.
+Exit: `0` all OK · `1` an internal failure (the inventory scan failed, the cleanup token could
+not be built, or a `--confirm-delete` deleted only part of its plan) · `2` ≥1
+`UNVERIFIED`/`BELOW_MIN`, **or** a confirm-delete precondition refusal (drift/expiry/tamper),
+**or** a usage / flag error · `3` ≥1 `BROKEN`.
+
+Only `0/2/3` are the POSTURE verdict (`exitCodeFor`, `pkg/skillctl/audit/audit.go`); `1` is the
+ordinary internal-error code every verb has, measured at the binary with a confirm-delete into a
+read-only skills directory.
 
 ---
 
@@ -790,14 +822,21 @@ against `cmd/skillctl/verify_hook_cmds.go`:
 gates with the same exit-2-plus-`refusal_code` convention. A deny for any other cause carries
 the §7 chain's own code (`10`-`17`, `20`, `22`, `23`) in its message.
 
-**The network is touched at most once, for at most 8 seconds** (`verifyHookTimeout`,
-`cmd/skillctl/verify_hook_cmds.go`), and only on the narrow path where all of the following
-hold: the skill is managed, the verdict cache misses, the install has NO stashed offline
-verification metadata (a legacy install: `skillctl install <skill>` stashes it), and the
-enterprise offline state-gate does not suppress the fallback. Anything else, including every
-allow from the verdict cache or the offline chain, is decided without a registry round trip.
-The offline fast path is SPEC-0247 P1; the timeout is the bound on the P0.1 fallback that
-remains.
+**The network is touched only on one narrow path, and every request on it is bounded at 8
+seconds** (`verifyHookTimeout`, `cmd/skillctl/verify_hook_cmds.go`). The path is taken when
+all of the following hold: the skill is managed, the verdict cache misses, the install has NO
+stashed offline verification metadata (a legacy install: `skillctl install <skill>` stashes
+it), and the enterprise offline state-gate does not suppress the fallback. Anything else,
+including every allow from the verdict cache or the offline chain, is decided without a
+registry round trip. The offline fast path is SPEC-0247 P1; the timeout is the bound on the
+P0.1 fallback that remains.
+
+Read `verifyHookTimeout` as a per-request bound, not a budget for the call. It is the
+`Timeout` field of the `http.Client` that `install.HTTPClientOf` builds, so Go applies it to
+each request separately, and that path issues at least two: `GetBundleMeta`, then
+`GetIdentity` for the author, the second skipped only when the trust root sets
+`identity_keys_authorized: pinned` (`pkg/skillctl/verify/verify.go`, the pinned-author
+branch). Budget the worst case as 8 seconds per request, not 8 seconds in total.
 
 ```json
 // settings.json (excerpt): wire it as a PreToolUse(Skill) hook
@@ -858,6 +897,12 @@ endpoint. `flush` reaches only the local spool (REQ-6.10b); network egress is `s
 `audit.queue.flush` event on stderr, never re-reported through the sink that failed (no
 recursive error loop, REQ-8.2).
 
+Exit: `0` healthy / accepted / drained · `1` unhealthy / refused / drain error · `2` usage or
+flag error, including an unknown subcommand (`auditlogExitUsage`,
+`cmd/skillctl/auditlog_cmds.go`). The `0/1` half is the health verdict, and it is that half
+that must never be read as `audit`'s posture verdict; the `2` is the ordinary usage code every
+verb has.
+
 ```bash
 skillctl auditlog status
 skillctl auditlog status --json
@@ -894,6 +939,12 @@ print the sudo runbook (as root, `--confirm` writes it). Both take:
 | `--confirm` | `install` only, and only as root: actually write the file. |
 
 **`pin status`**: report whether the gate is pinned. Takes `--path <file>` and `--json`.
+
+Exit: `0` ok (`generate` printed, `status` found the gate pinned, `install --confirm` wrote
+it as root) · `1` any error, including an unknown subcommand · `2` `pin status` found the gate
+NOT pinned · `3` `pin install` as a non-privileged user: the merged file was staged and the
+sudo runbook printed, nothing was written. Measured at the binary against
+`pinExitNeedPrivMsg` in `cmd/skillctl/pin_cmds.go`.
 
 ```bash
 skillctl pin generate --harden --enterprise
@@ -944,6 +995,11 @@ advisory-until-pinned banner. It is a **pure read that gates nothing**.
 | `--trust-roots <file>` | Trust-roots path override (default `~/.claude/skill-trust-roots.yaml`). |
 | `--home <dir>` | Home-dir override. |
 | `--json` | Emit JSON. |
+
+Exit: `0` the state was printed · `1` every failure, INCLUDING a flag-parse error.
+
+There is no usage code here. The verb gates nothing, so it never separates a bad flag from any
+other failure; every path in `cmd/skillctl/session_baseline_cmds.go` returns one of the two.
 
 ---
 
@@ -1311,6 +1367,14 @@ authorship and nothing about governance, revocation or tenant scope (BUG-0215).
 | `-revocations` | Optional signed revocation list to include (validated against the pinned key before inclusion). |
 | `-registry` | Registry URL to disambiguate when trust-roots pins multiple. |
 | `-zip` | Also produce `<out>.zip`. |
+
+Exit: `0` the kit was written · `1` generic error · `2` usage / a missing required flag · plus
+every code `verify.ExitCode` maps out of the §7 chain, which the kit refuses to package a
+failing bundle past: `10`-`17` and `20`.
+
+That is the whole space: 18 and 19 are raised by intent and awareness, not by the chain, and
+22 and 23 come from the freshness and log-inclusion checks that `install` and `verify` run
+around the chain and this verb does not.
 
 ```bash
 skillctl export-verification-kit --bundle my-skill.skb --out ./kit --zip

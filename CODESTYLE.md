@@ -26,7 +26,7 @@ never by quietly loosening a rule.
 | Security (SAST) | Crypto, injection, hardcoded credentials | `gosec` |
 | Dependencies | Reachable CVEs, secret scan, `go mod tidy` is a no-op | `govulncheck`, `gitleaks`, CI job |
 | CLI surface | Every real flag documented, every documented flag real | `cmd/docaudit` (see below) |
-| Exit codes | Every documented number is registered or has a named owner; manual and verb register agree per verb | `cmd/exitaudit` (see below) |
+| Exit codes | Every documented number is registered or has a named owner; manual and verb register agree per verb; the `pull` gate is read as code | `cmd/exitaudit` (see below) |
 
 ### The honesty rule for comments
 
@@ -240,7 +240,7 @@ in code, `17/22` in the manual, `25/26/28` in the verb register. Twelve of the
 fourteen verbs that state an exit space in both documents stated two different
 ones.
 
-Four ways it goes red:
+Five ways it goes red:
 
 - a `Code` in `exitcode.AllCodes()` with no row in the manual's generated
   register table → **UNDOCUMENTED**
@@ -250,6 +250,30 @@ Four ways it goes red:
   manual's "Codes outside the register" table accounts for → **UNACCOUNTED**
 - the manual's `Exit:` line and the verb register's cell naming different sets
   for the same verb → **PER-VERB DRIFT**
+- `gateExit` in `cmd/skillctl/pull_cmds.go`, AST-parsed and resolved through
+  `pkg/skillctl/exitcode/registry.go`, returning a number the `pull` cell does
+  not list (or the cell claiming one it cannot produce) → **PULL GATE DRIFT**
+
+### What it does NOT check
+
+A gate that hides its edges is worse than no gate, so the boundary is named
+here and in the tool's own package comment, and `exitaudit` prints its reach on
+every run.
+
+- **Only `pull` is read as code.** Every other verb's cell is compared against
+  the MANUAL, never against its handler. A raw `return 13` added to
+  `cmd/skillctl/runbook_cmds.go` is invisible to this gate; that one was found
+  by hand. Widening the symbolic check to the other verbs means resolving
+  cross-file helpers (`verify.ExitCode`), raw literals and `os.Exit` call sites.
+  It is worth doing and it is not done.
+- **Only `Exit:` statements and Exit-Code cells are scanned for numbers.** A
+  number in ordinary prose, and a number in the manual's `verify-hook`
+  `refusal_code` table, are not: measured 2026-09-07, an invented `77` in prose
+  and an invented `88` in that table both left the gate green.
+- **A verb whose manual section states no `Exit:` line falls out of the
+  per-verb comparison entirely.** That is now counted and printed rather than
+  silent, because a wrong `pin` cell (`0/1/2` for a verb that exits `3`)
+  survived this gate's own first release exactly that way.
 
 ```bash
 go run ./cmd/exitaudit                 # the gate

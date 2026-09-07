@@ -319,3 +319,145 @@ func sameSet(a, b []int) bool {
 	}
 	return true
 }
+
+// ---------------------------------------------------------------------------
+// The reach of the gate, and the one check that reads Go.
+// ---------------------------------------------------------------------------
+
+// The shipped pull gate must agree with the shipped `pull` cell, and the check
+// must actually RUN against this tree: a skipped symbolic check is the failure
+// mode that let a symbol swap through.
+func TestShippedPullGate_IsReadAsCode(t *testing.T) {
+	root := filepath.Join("..", "..")
+	vb, err := os.ReadFile(filepath.Join(root, defaultVerbs))
+	if err != nil {
+		t.Fatalf("read verb register: %v", err)
+	}
+	nums, drift, skipped := pullSymbolDrift(root, string(vb))
+	if skipped != "" {
+		t.Fatalf("the symbolic check must run against this tree, it was skipped: %s", skipped)
+	}
+	if len(drift) != 0 {
+		t.Errorf("the pull gate drifted from the `pull` cell: %v", drift)
+	}
+	if len(nums) == 0 {
+		t.Error("gateExit resolved to no numbers at all; the parser stopped seeing the returns")
+	}
+}
+
+// A verb the manual states no Exit line for is reported as not compared, so the
+// reach of check 4 is a number a reader sees. `pin` shipped wrong exactly here.
+func TestShippedDocs_ReportTheirUncheckedVerbs(t *testing.T) {
+	root := filepath.Join("..", "..")
+	mb, err := os.ReadFile(filepath.Join(root, defaultManual))
+	if err != nil {
+		t.Fatalf("read manual: %v", err)
+	}
+	vb, err := os.ReadFile(filepath.Join(root, defaultVerbs))
+	if err != nil {
+		t.Fatalf("read verb register: %v", err)
+	}
+	drift, notChecked, rows := verbDrift(string(mb), string(vb))
+	if len(drift) != 0 {
+		t.Fatalf("shipped per-verb drift: %v", drift)
+	}
+	if rows == 0 {
+		t.Fatal("no verb rows parsed at all")
+	}
+	if len(notChecked) == 0 {
+		t.Skip("every verb row now states an Exit line; nothing left to report")
+	}
+	for _, v := range notChecked {
+		switch v {
+		// Corrected against the code in this change (pin 3, revoke 15 + 22,
+		// auditlog 2, session-baseline 0/1, audit 1, install without 23). Each
+		// states an Exit line now, so each MUST stay inside the per-verb
+		// comparison; dropping that line would silently return it to the
+		// unchecked set, which is how the wrong `pin` cell survived.
+		case "pin", "revoke", "auditlog", "session-baseline", "audit", "install":
+			t.Errorf("%q was corrected against the code and must stay compared per verb", v)
+		}
+	}
+}
+
+// The drift class the symbolic check exists for: a symbol swap inside gateExit
+// that still compiles and passes every document check.
+func TestPullSymbols_SwappedSymbolIsCaught(t *testing.T) {
+	root := t.TempDir()
+	writeFixtureSources(t, root, "return exitcode.VerifyBlobMissing.Number")
+	verbs := "| Verb | Owning SPEC | Exit-Code space |\n| --- | --- | --- |\n| `pull` | SPEC-0225 P2 | 0/1/2, 10 |\n"
+	nums, drift, skipped := pullSymbolDrift(root, verbs)
+	if skipped != "" {
+		t.Fatalf("check skipped: %s", skipped)
+	}
+	if len(drift) != 2 {
+		t.Fatalf("a swapped symbol must be reported in both directions, got %v", drift)
+	}
+	if !sameSet(nums, []int{15}) {
+		t.Errorf("gateExit resolves to %v, want [15]", nums)
+	}
+}
+
+// The same fixture with the RIGHT symbol is silent, so the check is not simply
+// always red.
+func TestPullSymbols_MatchingSymbolIsSilent(t *testing.T) {
+	root := t.TempDir()
+	writeFixtureSources(t, root, "return exitcode.VerifyDigestMismatch.Number")
+	verbs := "| Verb | Owning SPEC | Exit-Code space |\n| --- | --- | --- |\n| `pull` | SPEC-0225 P2 | 0/1/2, 10 |\n"
+	nums, drift, skipped := pullSymbolDrift(root, verbs)
+	if skipped != "" || len(drift) != 0 {
+		t.Fatalf("a matching gate must be silent, got skipped=%q drift=%v", skipped, drift)
+	}
+	if !sameSet(nums, []int{10}) {
+		t.Errorf("gateExit resolves to %v, want [10]", nums)
+	}
+}
+
+// A raw literal in the gate is resolved too: it is how `runbook` grew a 13.
+func TestPullSymbols_RawLiteralIsResolved(t *testing.T) {
+	root := t.TempDir()
+	writeFixtureSources(t, root, "return 13")
+	verbs := "| Verb | Owning SPEC | Exit-Code space |\n| --- | --- | --- |\n| `pull` | SPEC-0225 P2 | 0/1/2, 13 |\n"
+	nums, drift, skipped := pullSymbolDrift(root, verbs)
+	if skipped != "" || len(drift) != 0 {
+		t.Fatalf("a raw literal must resolve, got skipped=%q drift=%v", skipped, drift)
+	}
+	if !sameSet(nums, []int{13}) {
+		t.Errorf("gateExit resolves to %v, want [13]", nums)
+	}
+}
+
+// Absent sources say so instead of passing quietly: the fixtures in this file
+// carry no Go tree, and a green run there must not read as "checked".
+func TestPullSymbols_MissingSourceIsAnnounced(t *testing.T) {
+	_, drift, skipped := pullSymbolDrift(t.TempDir(), "| `pull` | x | 0/1/2 |\n")
+	if skipped == "" {
+		t.Error("a missing pull gate must be announced, not silently skipped")
+	}
+	if len(drift) != 0 {
+		t.Errorf("a missing source is not a drift finding, got %v", drift)
+	}
+}
+
+// writeFixtureSources lays down a minimal exitcode register and a pull gate
+// whose single return is the given statement.
+func writeFixtureSources(t *testing.T, root, ret string) {
+	t.Helper()
+	reg := filepath.Join(root, filepath.FromSlash(exitcodeSource))
+	gate := filepath.Join(root, filepath.FromSlash(pullGateSource))
+	for _, d := range []string{filepath.Dir(reg), filepath.Dir(gate)} {
+		if err := os.MkdirAll(d, 0o750); err != nil {
+			t.Fatalf("mkdir %s: %v", d, err)
+		}
+	}
+	regSrc := "package exitcode\n\ntype Code struct{ Number int }\n\nvar (\n" +
+		"\tVerifyDigestMismatch = Code{10, \"a\", \"verify\", \"digest_mismatch\"}\n" +
+		"\tVerifyBlobMissing    = Code{15, \"b\", \"verify\", \"blob_missing\"}\n)\n"
+	gateSrc := "package main\n\nfunc gateExit(gate error) int {\n\t" + ret + "\n}\n"
+	if err := os.WriteFile(reg, []byte(regSrc), 0o600); err != nil {
+		t.Fatalf("write register: %v", err)
+	}
+	if err := os.WriteFile(gate, []byte(gateSrc), 0o600); err != nil {
+		t.Fatalf("write gate: %v", err)
+	}
+}

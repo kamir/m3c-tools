@@ -34,6 +34,40 @@
 //     repo-relative file that EXISTS, or the literal token (unimplemented) for
 //     a number a specification assigns to a surface this tree does not build.
 //     A moved or deleted owner turns the row red instead of leaving folklore.
+//  4. PER-VERB AGREEMENT (fail). For a verb whose manual section states an
+//     Exit line, that line and the verb register's Exit-Code cell must name the
+//     same numbers.
+//  5. THE PULL GATE, READ AS CODE (fail). cmd/skillctl/pull_cmds.go's gateExit
+//     is AST-parsed, its exitcode.<Name>.Number selectors resolved through
+//     pkg/skillctl/exitcode/registry.go, and the resulting number set compared
+//     with the `pull` cell. This is the one check that reads Go rather than
+//     markdown, and it exists because a symbol swapped inside gateExit still
+//     compiles, still passes checks 1 to 4, and still moves the number a
+//     caller's script branches on.
+//
+// WHAT IS NOT CHECKED, said plainly because a gate that hides its edges is
+// worse than no gate:
+//
+//   - Only `pull` is read as code. Every other verb's cell is compared against
+//     the MANUAL, never against its handler, so a raw `return 13` added to
+//     cmd/skillctl/runbook_cmds.go is invisible here (that one was found by
+//     hand, 2026-09-07, after this tool shipped green). Widening check 5 to the
+//     other verbs means resolving cross-file helpers (verify.ExitCode), raw
+//     literals and os.Exit call sites; it is worth doing and it is not done.
+//   - Only per-command Exit statements and CLI-VERBS Exit-Code cells are
+//     scanned for numbers. A number in ordinary prose, or in the verify-hook
+//     refusal_code table, is NOT scanned: measured 2026-09-07, an invented 77
+//     in prose and an invented 88 in that table both left the gate green.
+//   - A verb whose manual section states no Exit line falls out of check 4
+//     entirely. That is now COUNTED and PRINTED rather than silent, because a
+//     wrong `pin` cell (0/1/2 for a verb that exits 3) survived this gate's
+//     own first release exactly that way.
+//   - Check 4 proves the two DOCUMENTS agree, never that either matches the
+//     handler. Two wrong-but-identical statements are green: `audit` claimed
+//     0/2/3 in both while its handler also returns 1, and `install`/`verify`
+//     claimed 23 in both while the only function that raises
+//     ErrLogInclusionMissing has no caller outside its own test file. Both were
+//     corrected by hand on 2026-09-07; nothing here would have caught either.
 //
 // Exit codes: 0 = consistent; 1 = a violation found (the gate blocks); 2 = a
 // usage/IO/parse error. Pure Go stdlib, portable, no network.
@@ -48,6 +82,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
 	"os"
 	"path/filepath"
@@ -72,6 +109,13 @@ const (
 	// outside-table row may carry: a number a specification allocates to a
 	// surface that this tree does not build (SPEC-0201's import-public).
 	unimplementedToken = "(unimplemented)"
+
+	// The two sources of the SYMBOLIC check (check 5). Kept narrow on purpose:
+	// see the WHAT IS NOT CHECKED note in the package comment.
+	pullGateSource = "cmd/skillctl/pull_cmds.go"
+	exitcodeSource = "pkg/skillctl/exitcode/registry.go"
+	pullGateFunc   = "gateExit"
+	pullVerb       = "pull"
 )
 
 // backtickRe captures the content of one inline backtick span (never spanning a
@@ -134,12 +178,29 @@ type report struct {
 	BadSource    []string   `json:"bad_source"`    // outside row whose Source does not exist (FAIL)
 	DuplicateOut []string   `json:"duplicate_out"` // two outside rows for the same number+surface (FAIL)
 	VerbDrift    []string   `json:"verb_drift"`    // manual and verb register disagree per verb (FAIL)
+	PullDrift    []string   `json:"pull_drift"`    // the pull gate's SYMBOLS vs the pull cell (FAIL)
+
+	// NotChecked is the census of verb rows the per-verb comparison never
+	// reaches, because their manual section states no Exit line (or has no
+	// section at all). Informational, never a failure: it is printed so the
+	// gate's reach is a number a reader can see rather than silence. A wrong
+	// `pin` cell survived this gate's first release precisely because nothing
+	// said out loud that `pin` was never compared.
+	NotChecked []string `json:"not_checked"`
+	// VerbRows is how many rows the verb register carries, so NotChecked can be
+	// printed as a fraction of the whole rather than a bare count.
+	VerbRows int `json:"verb_rows"`
+	// PullSymbols is what the pull gate can actually return, resolved from
+	// source. PullSkipped says why the symbolic check did not run.
+	PullSymbols []int  `json:"pull_symbols,omitempty"`
+	PullSkipped string `json:"pull_skipped,omitempty"`
 }
 
 func (r report) ok() bool {
 	return len(r.Undocumented) == 0 && len(r.Invented) == 0 &&
 		len(r.Unaccounted) == 0 && len(r.BadSource) == 0 &&
-		len(r.DuplicateOut) == 0 && len(r.VerbDrift) == 0
+		len(r.DuplicateOut) == 0 && len(r.VerbDrift) == 0 &&
+		len(r.PullDrift) == 0
 }
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
@@ -184,7 +245,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	manual, err := os.ReadFile(manualPath) // #nosec G304 -- a trusted CLI argument (the manual markdown), same trust model as cmd/verbaudit's register read.
+	manual, err := os.ReadFile(manualPath) // #nosec G304 G703 -- a trusted CLI argument (the manual markdown), same trust model as cmd/verbaudit's register read.
 	if err != nil {
 		fmt.Fprintf(stderr, "exitaudit: read manual: %v\n", err)
 		return 2
@@ -203,7 +264,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "exitaudit: %v\n", err)
 			return 2
 		}
-		if err := os.WriteFile(manualPath, []byte(updated), 0o644); err != nil { // #nosec G306 -- documentation, world-readable by design.
+		if err := os.WriteFile(manualPath, []byte(updated), 0o644); err != nil { // #nosec G306 G703 -- documentation, world-readable by design; the path is the same trusted CLI argument.
 			fmt.Fprintf(stderr, "exitaudit: write manual: %v\n", err)
 			return 2
 		}
@@ -211,7 +272,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	verbs, err := os.ReadFile(verbsPath) // #nosec G304 -- see above.
+	verbs, err := os.ReadFile(verbsPath) // #nosec G304 G703 -- see above.
 	if err != nil {
 		fmt.Fprintf(stderr, "exitaudit: read verb register: %v\n", err)
 		return 2
@@ -296,6 +357,10 @@ func reconcile(manualPath, verbsPath, root, manualText, verbsText string) (repor
 		if o.Source == unimplementedToken {
 			continue
 		}
+		// #nosec G703 -- o.Source is a repo-relative path READ OUT OF THE MANUAL that
+		// this gate is checking, joined under the -root the operator passed. The call
+		// only stats: it opens nothing, and the result decides one boolean (does the
+		// named owner file still exist).
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(o.Source))); err != nil {
 			rep.BadSource = append(rep.BadSource, fmt.Sprintf("exit %d (%s): source %q does not exist; name the file that owns the number, or %s",
 				o.Number, o.Surface, o.Source, unimplementedToken))
@@ -320,8 +385,13 @@ func reconcile(manualPath, verbsPath, root, manualText, verbsText string) (repor
 		seenCite[k] = true
 		rep.Unaccounted = append(rep.Unaccounted, c)
 	}
-	// 5. Per-verb agreement between the manual and the verb register.
-	rep.VerbDrift = verbDrift(manualText, verbsText)
+	// 5. Per-verb agreement between the manual and the verb register, plus the
+	// census of the verbs that comparison never reaches.
+	rep.VerbDrift, rep.NotChecked, rep.VerbRows = verbDrift(manualText, verbsText)
+
+	// 5b. The one SYMBOLIC check: the pull gate's own exit expressions against
+	// the pull cell. Everything above reads documents only.
+	rep.PullSymbols, rep.PullDrift, rep.PullSkipped = pullSymbolDrift(root, verbsText)
 
 	sort.Slice(rep.Unaccounted, func(i, j int) bool {
 		if rep.Unaccounted[i].Number != rep.Unaccounted[j].Number {
@@ -674,7 +744,7 @@ func renderRegisterBlock(codes []exitcode.Code, existing []regRow) string {
 // least one number are compared: a section that defers ("Exit: same as
 // `install`") states no set, and inventing one for it would be the very
 // guesswork this gate exists to end.
-func verbDrift(manualText, verbsText string) []string {
+func verbDrift(manualText, verbsText string) (drift []string, notChecked []string, verbRows int) {
 	want := map[string]map[int]bool{}
 	for _, line := range strings.Split(verbsText, "\n") {
 		trimmed := strings.TrimSpace(line)
@@ -747,17 +817,23 @@ func verbDrift(manualText, verbsText string) []string {
 		}
 	}
 
-	var out []string
 	for verb, have := range got {
 		w := want[verb]
 		if setsEqual(have, w) {
 			continue
 		}
-		out = append(out, fmt.Sprintf("%s: the manual says {%s}, the verb register says {%s}",
+		drift = append(drift, fmt.Sprintf("%s: the manual says {%s}, the verb register says {%s}",
 			verb, joinSet(have), joinSet(w)))
 	}
-	sort.Strings(out)
-	return out
+	sort.Strings(drift)
+
+	for verb := range want {
+		if _, ok := got[verb]; !ok {
+			notChecked = append(notChecked, verb)
+		}
+	}
+	sort.Strings(notChecked)
+	return drift, notChecked, len(want)
 }
 
 func setsEqual(a, b map[int]bool) bool {
@@ -833,6 +909,26 @@ func printHuman(out io.Writer, r report) {
 			fmt.Fprintf(out, "      %s\n", v)
 		}
 	}
+	if len(r.PullDrift) > 0 {
+		fmt.Fprintf(out, "  %sx PULL GATE DRIFT%s (%s in %s and the verb register's `pull` cell disagree):\n", red, nc, pullGateFunc, pullGateSource)
+		for _, v := range r.PullDrift {
+			fmt.Fprintf(out, "      %s\n", v)
+		}
+	}
+
+	// The reach of the gate, said out loud. Not a failure: a number.
+	if r.PullSkipped != "" {
+		fmt.Fprintf(out, "\n  %s- pull gate NOT read as code: %s%s\n", dim, r.PullSkipped, nc)
+	} else if len(r.PullSymbols) > 0 {
+		fmt.Fprintf(out, "\n  %s. pull gate read as code: %s returns {%s}%s\n", dim, pullGateFunc, joinInts(r.PullSymbols), nc)
+	}
+	if len(r.NotChecked) > 0 {
+		fmt.Fprintf(out, "  %s- %d of %d verb rows are NOT compared per verb (their manual section states no Exit line):%s\n",
+			dim, len(r.NotChecked), r.VerbRows, nc)
+		fmt.Fprintf(out, "      %s%s%s\n", dim, strings.Join(r.NotChecked, " "), nc)
+		fmt.Fprintf(out, "      %sTheir cells are still census-checked (every number must have an owner), but nothing\n", dim)
+		fmt.Fprintf(out, "      compares them with the manual. Add an `Exit:` line to that section to close the gap.%s\n", nc)
+	}
 
 	fmt.Fprintln(out, "\n─────────────────────────────")
 	if r.ok() {
@@ -842,4 +938,220 @@ func printHuman(out io.Writer, r report) {
 		fmt.Fprintln(out, "      Regenerate the register table with:  go run ./cmd/exitaudit -write")
 		fmt.Fprintln(out, "      Or print it for review with:         go run ./cmd/exitaudit -scaffold")
 	}
+}
+
+// ---------------------------------------------------------------------------
+// The symbolic check (5): the pull gate's own exit expressions.
+//
+// Checks 1 to 4 read two markdown files and stat a handful of paths. That is
+// blind to the change that started AUDIT-0001 in the first place: a symbol
+// swapped inside `gateExit` (say exitcode.VerifyDigestMismatch for
+// exitcode.VerifyBlobMissing) still compiles, still passes every doc check, and
+// silently moves the number a caller's script branches on. So `pull`, the verb
+// whose five gates were the original finding, is also read AS CODE.
+// ---------------------------------------------------------------------------
+
+// exitcodeVarNumbers AST-parses the register source and maps each `Code`
+// variable's Go name to its number. AllCodes() cannot answer this: a Code value
+// carries Number/Label/Family/Theme, never the identifier a call site writes.
+func exitcodeVarNumbers(path string) (map[string]int, error) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, path, nil, 0)
+	if err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	out := map[string]int{}
+	for _, decl := range f.Decls {
+		gd, ok := decl.(*ast.GenDecl)
+		if !ok || gd.Tok != token.VAR {
+			continue
+		}
+		for _, spec := range gd.Specs {
+			vs, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			for i, name := range vs.Names {
+				if i >= len(vs.Values) {
+					continue
+				}
+				cl, ok := vs.Values[i].(*ast.CompositeLit)
+				if !ok || len(cl.Elts) == 0 {
+					continue
+				}
+				if id, ok := cl.Type.(*ast.Ident); !ok || id.Name != "Code" {
+					continue
+				}
+				if n, ok := intLit(cl.Elts[0]); ok {
+					out[name.Name] = n
+				}
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("%s: no Code variables found", path)
+	}
+	return out, nil
+}
+
+// gateExitNumbers AST-parses one function and returns every exit number it can
+// return: bare integer literals, plus `exitcode.<Name>.Number` selectors
+// resolved through names. An expression it cannot resolve is reported rather
+// than skipped, because a silently skipped return is how the number moves.
+func gateExitNumbers(path, fn string, names map[string]int) (map[int]bool, []string, error) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, path, nil, 0)
+	if err != nil {
+		return nil, nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	var body *ast.BlockStmt
+	for _, decl := range f.Decls {
+		fd, ok := decl.(*ast.FuncDecl)
+		if ok && fd.Name != nil && fd.Name.Name == fn && fd.Recv == nil {
+			body = fd.Body
+			break
+		}
+	}
+	if body == nil {
+		return nil, nil, fmt.Errorf("%s: func %s not found", path, fn)
+	}
+
+	nums := map[int]bool{}
+	var unresolved []string
+	ast.Inspect(body, func(n ast.Node) bool {
+		ret, ok := n.(*ast.ReturnStmt)
+		if !ok || len(ret.Results) != 1 {
+			return true
+		}
+		switch e := ret.Results[0].(type) {
+		case *ast.BasicLit:
+			if v, ok := intLit(e); ok {
+				nums[v] = true
+				return true
+			}
+		case *ast.SelectorExpr:
+			// exitcode.<Name>.Number
+			if e.Sel != nil && e.Sel.Name == "Number" {
+				if inner, ok := e.X.(*ast.SelectorExpr); ok {
+					if pkg, ok := inner.X.(*ast.Ident); ok && pkg.Name == "exitcode" && inner.Sel != nil {
+						if v, ok := names[inner.Sel.Name]; ok {
+							nums[v] = true
+							return true
+						}
+						unresolved = append(unresolved, fmt.Sprintf("exitcode.%s is not a Code variable in %s", inner.Sel.Name, exitcodeSource))
+						return true
+					}
+				}
+			}
+		}
+		unresolved = append(unresolved, fmt.Sprintf("%s line %d returns an expression exitaudit cannot resolve to a number",
+			fn, fset.Position(ret.Pos()).Line))
+		return true
+	})
+	sort.Strings(unresolved)
+	return nums, unresolved, nil
+}
+
+// intLit reads an untyped integer literal.
+func intLit(e ast.Expr) (int, bool) {
+	bl, ok := e.(*ast.BasicLit)
+	if !ok || bl.Kind != token.INT {
+		return 0, false
+	}
+	n, err := strconv.Atoi(bl.Value)
+	if err != nil {
+		return 0, false
+	}
+	return n, true
+}
+
+// pullSymbolDrift compares what the pull gate can return with what the verb
+// register documents for `pull`. The base space 0/1/2 is exempt in the
+// documented direction: `runPull` reaches those outside gateExit (0 on success,
+// 2 on usage), so the cell may carry them without gateExit naming them.
+//
+// Returns the resolved numbers, the drift, and (when the sources are not on
+// disk, as in the unit fixtures) the reason the check did not run.
+func pullSymbolDrift(root, verbsText string) (nums []int, drift []string, skipped string) {
+	gatePath := filepath.Join(root, filepath.FromSlash(pullGateSource))
+	regPath := filepath.Join(root, filepath.FromSlash(exitcodeSource))
+	for _, p := range []string{gatePath, regPath} {
+		// #nosec G703 -- both paths are CONSTANTS in this file joined under the
+		// -root the operator passed; nothing here comes from a document or a
+		// network. The call only stats, and its result decides whether the
+		// symbolic check runs at all.
+		if _, err := os.Stat(p); err != nil {
+			return nil, nil, fmt.Sprintf("%s is not under -root %s, so the pull gate was NOT read as code", p, root)
+		}
+	}
+
+	names, err := exitcodeVarNumbers(regPath)
+	if err != nil {
+		return nil, []string{err.Error()}, ""
+	}
+	got, unresolved, err := gateExitNumbers(gatePath, pullGateFunc, names)
+	if err != nil {
+		return nil, []string{err.Error()}, ""
+	}
+	drift = append(drift, unresolved...)
+
+	want := map[int]bool{}
+	found := false
+	for _, line := range strings.Split(verbsText, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "|") {
+			continue
+		}
+		cells := splitRow(trimmed)
+		if len(cells) < 3 || isSeparatorRow(cells) {
+			continue
+		}
+		if unspan(cells[0]) != pullVerb {
+			continue
+		}
+		for _, n := range cellInts(cells[2]) {
+			want[n] = true
+		}
+		found = true
+		break
+	}
+	if !found {
+		drift = append(drift, fmt.Sprintf("the verb register has no `%s` row to check %s against", pullVerb, pullGateSource))
+		return sortedKeys(got), drift, ""
+	}
+
+	base := map[int]bool{0: true, 1: true, 2: true}
+	for _, n := range sortedKeys(got) {
+		if !want[n] {
+			drift = append(drift, fmt.Sprintf("%s can return %d, the `%s` cell in the verb register does not list it",
+				pullGateFunc, n, pullVerb))
+		}
+	}
+	for _, n := range sortedKeys(want) {
+		if base[n] || got[n] {
+			continue
+		}
+		drift = append(drift, fmt.Sprintf("the `%s` cell claims %d, but %s in %s cannot produce it",
+			pullVerb, n, pullGateFunc, pullGateSource))
+	}
+	return sortedKeys(got), drift, ""
+}
+
+// sortedKeys returns a set's members in ascending order.
+func sortedKeys(s map[int]bool) []int {
+	out := make([]int, 0, len(s))
+	for k := range s {
+		out = append(out, k)
+	}
+	sort.Ints(out)
+	return out
+}
+
+// joinInts renders a sorted number set for the human line.
+func joinInts(ns []int) string {
+	parts := make([]string, 0, len(ns))
+	for _, n := range ns {
+		parts = append(parts, strconv.Itoa(n))
+	}
+	return strings.Join(parts, " ")
 }
