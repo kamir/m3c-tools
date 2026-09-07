@@ -54,7 +54,7 @@ func main() {
 		// Load config: layered per SPEC-0175 (mirrors darwin main.go).
 		//   1. Active profile (account-scoped)
 		//   2. Global preferences (~/.m3c-tools/preferences.env, legacy fallback)
-		//   3. Project-local .env
+		//   3. Project-local .env (opt-in via M3C_DOTENV=1)
 		if _, migErr := config.MigrateLegacyPreferences(); migErr != nil {
 			log.Printf("[config] preferences migration warning: %v", migErr)
 		}
@@ -63,11 +63,15 @@ func main() {
 			_ = pm.ApplyProfile(activeProfile)
 			log.Printf("[config] profile: %s", activeProfile.Name)
 		}
-		for _, p := range []string{config.PreferencesPath(), config.LegacyPreferencesPath(), ".env"} {
+		for _, p := range []string{config.PreferencesPath(), config.LegacyPreferencesPath()} {
 			if p != "" {
 				_ = er1.LoadDotenv(p)
 			}
 		}
+		// AUDIT-0001 finding 2.7: the project-local .env belongs to whatever
+		// directory the CLI was started in, which is not necessarily one the user
+		// owns. It only counts with an explicit M3C_DOTENV=1 opt-in.
+		_ = er1.LoadDotenvUntrusted(".env")
 
 		// Load saved device token if available (SPEC-0127).
 		// This enables uploads via Bearer auth without API key.

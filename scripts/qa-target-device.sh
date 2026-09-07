@@ -16,7 +16,8 @@
 #   scripts/qa-target-device.sh [--online] [-h|--help]
 # Env:
 #   M3C=/path/to/m3c-tools    override binary location (takes precedence)
-#   M3C_ENV=/path/to/.env     extra config source to inspect first
+#   M3C_ENV=/path/to/.env     extra file to INSPECT (the binary does not read it)
+#   M3C_DOTENV=1              same opt-in the binary uses for the .env of this directory
 #   QA_ONLINE=1               same as --online
 #   M3C_EXPECT_VERSION=2.10.0 expected release version (default 2.10.0)
 #
@@ -36,7 +37,9 @@ qa-target-device.sh: QA acceptance track for a fresh m3c-tools install (macOS/Li
 
 Environment:
   M3C=<path>            override the m3c-tools binary location (wins over PATH/build/)
-  M3C_ENV=<path>        additional config file to inspect first
+  M3C_ENV=<path>        extra file to inspect; the binary does not read it
+  M3C_DOTENV=1          count the .env of the current directory as a config source
+                        (same opt-in the binary needs to apply it at all)
   QA_ONLINE=1           same as --online
   M3C_EXPECT_VERSION=X  expected release version string (default 2.10.0)
 
@@ -142,8 +145,10 @@ fi
 # ===========================================================================
 stage "Stage B, Config present & valid"
 
-# Build candidate config-source list (existing files only), in resolution order.
-# Canonicalize paths and skip duplicates so the same file is not listed twice.
+# Build candidate config-source list (existing files only), in the order the
+# BINARY resolves them: active profile, ~/.m3c-tools/preferences.env, then the
+# legacy ~/.m3c-tools.env. Canonicalize paths and skip duplicates so the same
+# file is not listed twice.
 CFG_FILES=""
 add_cfg() {
   [ -n "$1" ] && [ -f "$1" ] || return 0
@@ -156,28 +161,53 @@ $canon"*) return 0 ;; esac
   CFG_FILES="$CFG_FILES
 $canon"
 }
-add_cfg "${M3C_ENV:-}"
-add_cfg "./.env"
-add_cfg "$SCRIPT_DIR/../.env"
-add_cfg "$HOME/.m3c-tools.env"
+
+# dotenv_opted_in: does the working-directory .env configure the binary at all?
+# AUDIT-0001 finding 2.7 turned it into an opt-in source; the accepted values
+# mirror pkg/er1.LoadDotenvUntrusted, and anything unrecognized counts as off.
+dotenv_opted_in() {
+  local v
+  v="$(printf '%s' "${M3C_DOTENV:-}" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  case "$v" in 1|true|yes|on) return 0 ;; esac
+  return 1
+}
+
+add_cfg "${M3C_ENV:-}"   # operator-named extra file: inspected here, NOT read by the binary
 if [ -f "$HOME/.m3c-tools/active-profile" ]; then
   AP="$(head -n1 "$HOME/.m3c-tools/active-profile" 2>/dev/null | tr -d ' \r\n')"
   [ -n "$AP" ] && add_cfg "$HOME/.m3c-tools/profiles/$AP.env"
 fi
+add_cfg "$HOME/.m3c-tools/preferences.env"
+add_cfg "$HOME/.m3c-tools.env"
+# The .env of the CURRENT directory counts only with the opt-in. Without it the
+# binary ignores the file, so grading it green would be a green light on nothing.
+CWD_DOTENV_IGNORED=""
+if [ -f "./.env" ]; then
+  if dotenv_opted_in; then
+    add_cfg "./.env"
+  else
+    CWD_DOTENV_IGNORED="$(pwd)/.env"
+  fi
+fi
 
 if [ -n "$CFG_FILES" ]; then
   # show which sources exist (paths are not secret; values are never printed)
-  FOUND="$(printf '%s' "$CFG_FILES" | sed '/^$/d' | paste -sd',' - 2>/dev/null)"
+  FOUND="$(printf '%s\n' "$CFG_FILES" | sed '/^$/d' | paste -sd',' - 2>/dev/null)"
   pass "B1 config source exists: ${FOUND:-<found>}"
 else
-  fail "B1 config source exists" "copy .env.example -> .env, or run 'm3c-tools login', or 'm3c-tools config create'"
+  fail "B1 config source exists" "run 'm3c-tools login' or 'm3c-tools config create', or copy .env.example -> ~/.m3c-tools.env"
+fi
+if [ -n "$CWD_DOTENV_IGNORED" ]; then
+  warn "B1b $CWD_DOTENV_IGNORED exists but does NOT configure m3c-tools" \
+       "the working-directory .env is opt-in: move the settings to a profile or ~/.m3c-tools.env, or re-run with M3C_DOTENV=1"
 fi
 
-# key_present KEY: true if KEY has a NON-empty, non-comment value in ANY existing source.
-# Uses grep -q: never prints the matched line (no secret leakage).
+# key_present KEY: true if KEY has a NON-empty, non-comment value in ANY source
+# that actually counts. Uses grep -q: never prints the matched line (no secret
+# leakage). printf writes a trailing newline, else `read` drops the last path.
 key_present() {
   local key="$1" f
-  printf '%s' "$CFG_FILES" | sed '/^$/d' | while IFS= read -r f; do
+  printf '%s\n' "$CFG_FILES" | sed '/^$/d' | while IFS= read -r f; do
     [ -f "$f" ] || continue
     if grep -Eq "^[[:space:]]*${key}=[^[:space:]#]" "$f"; then echo yes; return 0; fi
   done | grep -q yes
