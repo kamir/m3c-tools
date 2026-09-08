@@ -60,9 +60,12 @@ env:
 jobs:
   # 0) DOCS GATE: a skillctl/v* tag push skips `make release` (and therefore
   #    scripts/check-docs.sh), so the CLI/manual gate is re-run here to close
-  #    that bypass. Scoped to `-cli skillctl`: this workflow releases skillctl,
-  #    so m3c-tools drift must not block it. Holds no signing identity, so it
-  #    does not touch the SLSA L3 isolation argument below.
+  #    that bypass. The docaudit step is scoped to `-cli skillctl`: this workflow
+  #    releases skillctl, so m3c-tools flag drift must not block it. The index
+  #    step is NOT scoped, and cannot be: it compares whole directories with the
+  #    two index files, and neither index has a skillctl-only half. Holds no
+  #    signing identity, so it does not touch the SLSA L3 isolation argument
+  #    below.
   docs-gate:
     name: skillctl CLI/manual consistency (docaudit)
     runs-on: ubuntu-latest
@@ -83,6 +86,9 @@ jobs:
 
       - name: Every dispatched verb registered (FR-0113)
         run: go run ./cmd/verbaudit
+
+      - name: Indexes match the tree (cmd/, pkg/, and the counts)
+        run: ./scripts/check-index.sh
 
       - name: exitaudit unit tests
         run: go test -count=1 ./cmd/exitaudit/
