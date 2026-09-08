@@ -46,15 +46,15 @@
 # Der Test braucht ausserdem weder sentence-transformers noch torch: er
 # reicht ueber den Konstruktor einen _FakeEmbedder herein.
 #
-# Wie weit "blockierend" heute traegt: der CI-Job "Python servers (ruff +
-# pytest)" laeuft bei jedem Push und jedem Pull Request und wird rot, wenn
-# dieses Skript rot wird. In der required-status-checks-Liste von master steht
-# er am 2026-09-07 noch NICHT. Gemessen:
+# Wie weit "blockierend" traegt: der CI-Job "Python servers (ruff + pytest)"
+# laeuft bei jedem Push und jedem Pull Request und wird rot, wenn dieses Skript
+# rot wird. Seit dem 2026-09-08 steht er auch in der
+# required-status-checks-Liste von master, haelt also einen Merge auf. Gemessen:
 #   gh api repos/kamir/m3c-tools/branches/master/protection \
 #     --jq '.required_status_checks.contexts' | grep -c "Python servers"
-#   -> 0
-# Bis dieser Kontext nachgetragen ist, sieht man den Fehlschlag, er haelt aber
-# keinen Merge auf. Das ist eine Repo-Einstellung, keine Zeile in diesem Baum.
+#   -> 1
+# Am 2026-09-07 war dieselbe Messung 0, und dieser Absatz sagte das mit Datum,
+# damit er auffaellt, sobald die Einstellung nachgezogen ist.
 #
 # Usage:
 #   ./scripts/check-python.sh            # lint + test
