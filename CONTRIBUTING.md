@@ -49,6 +49,15 @@ refactor is not.
 ## Branching & PRs
 
 - Branch off `master`; open a PR against `master`.
+- Branch names are enforced by the required `Validate branch name` check:
+  `<prefix>/<name>`, exactly one slash. The prefix list and the reasoning are in
+  README §"Branch & worktree workflow"; adding a prefix means updating that list
+  in the same pull request. Work in a `git worktree`, not in the shared checkout.
+- The **one exception** is pull requests authored by `dependabot[bot]` (owner
+  decision E1). Those also arm GitHub's auto-merge by themselves (E2), so a
+  green Dependabot bump merges with no human in the loop. To hold one back,
+  label it `hold`. Both are described under README §"The one exception:
+  Dependabot".
 - Keep PRs focused; a green `make ci` is the baseline for review.
 - Pushing changes under `.github/workflows/**` requires an **SSH** remote (the HTTPS OAuth token
   lacks the `workflow` scope).

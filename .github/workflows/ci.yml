@@ -90,6 +90,98 @@ jobs:
               sys.exit(1)
           PY
 
+  python-gate:
+    name: Python servers (ruff + pytest)
+    # AUDIT-0001 Befund N.2, gemessen am 2026-09-07 auf origin/master, also auf
+    # dem Stand VOR diesem Zweig: mcp-skill-server/server.py sind dort 1379
+    # Zeilen, die den kompletten Skill-Lifecycle als Claude-Code-Werkzeuge
+    # anbieten, und daneben liegen 25 Tests. Ein grep ueber alle 16 Workflows,
+    # das Makefile und scripts/ nach "mcp-skill-server" oder "rag-mcp-server"
+    # fand 0 Treffer: die Tests sind nie gelaufen, und kein Linter hat den
+    # Python-Baum je angefasst. Auf dem Stand dieses Zweigs sind es 1420 Zeilen
+    # und 31 Tests; der Kopf von scripts/check-python.sh nennt beide Messungen.
+    #
+    # Praezisierung, denn "ungeprueft" waere zu absolut: CodeQL laeuft auf
+    # diesem Repo im default setup, python steht in seiner Sprachliste, und
+    # "Analyze (python)" ist ein required check auf master. Der grep oben
+    # konnte das nicht sehen, weil default setup ohne Workflow-Datei laeuft.
+    # Der Befund bleibt trotzdem stehen: SAST ist weder ein Linter noch ein
+    # Testlauf. Nachpruefbar mit
+    # `gh api repos/kamir/m3c-tools/code-scanning/default-setup`.
+    #
+    # Reichweite dieses Jobs: er laeuft bei jedem Push und jedem Pull Request
+    # und wird rot, wenn check-python.sh rot wird. Seit dem 2026-09-08 steht
+    # sein Kontext "Python servers (ruff + pytest)" auch in der
+    # required-status-checks-Liste von master (29 Kontexte statt 28), er haelt
+    # einen Merge also auf. Nachpruefbar mit
+    # `gh api repos/kamir/m3c-tools/branches/master/protection
+    #  --jq .required_status_checks.contexts`. Bis dahin war er sichtbar, aber
+    # folgenlos; diese drei Zeilen trugen deshalb ein Datum.
+    #
+    # Reines Python, kein Go, kein cgo, kein PortAudio: der billige Runner.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12.14"
+
+      # Exakt gepinnt, damit derselbe Baum morgen dasselbe Ergebnis liefert.
+      # Die Pins stehen hier und nicht in einer requirements.txt, weil
+      # mcp-skill-server keine hat; siehe PR-Text, offener Punkt 1.
+      #
+      # turbovec, numpy und PyYAML gehoeren zu rag-mcp-server/test_sync_drift.py.
+      # Eine frueher hier notierte Begruendung, dieser Test sei auf Linux nicht
+      # ausfuehrbar, weil es fuer turbovec nur ein macOS-arm64-Rad gebe, war eine
+      # Fehlmessung: die Sonde benutzte das Plattform-Tag manylinux2014_x86_64,
+      # das Rad traegt manylinux_2_28_x86_64, und pip gleicht diese beiden Tags
+      # nicht aufeinander ab. Nachpruefbar mit
+      # `pip download turbovec --platform manylinux_2_28_x86_64
+      #  --python-version 3.12 --only-binary=:all: -d /tmp/x`.
+      # sentence-transformers und torch braucht der Test nicht, er reicht einen
+      # Fake-Embedder in den Konstruktor.
+      - name: Install pinned Python toolchain
+        shell: bash
+        run: |
+          # Werkzeuge: hier gepinnt, sie gehoeren zu keiner Laufzeit.
+          python -m pip install --disable-pip-version-check \
+            "ruff==0.9.6" "pytest==8.3.5"
+
+          # Laufzeit: NICHT hier wiederholt, sondern aus der Datei gezogen, die
+          # Dependabot pflegt. Vorher standen dieselben Pakete an beiden Stellen
+          # mit verschiedenen Zahlen (turbovec 1.0.0 hier gegen 0.8.0 dort, mcp
+          # 1.21.0 gegen 1.29.1), und die schlimmere Folge war nicht die
+          # Divergenz, sondern die Blindheit: ein Dependabot-PR aendert NUR
+          # requirements.txt, und diese Zeile las sie nicht.
+          #
+          # Gemessen an PR #250 (mcp 1.29.1 -> 2.1.1): das Tor blieb gruen,
+          # obwohl in einem Wegwerf-venv mit genau dieser Fassung
+          # `import mcp.server.fastmcp` scheitert ("This is mcp 2.x, where
+          # FastMCP was renamed to MCPServer"), was die Vorbedingung in
+          # scripts/check-python.sh korrekt verweigert haette.
+          req=rag-mcp-server/requirements.txt
+          pins=$(grep -E '^(mcp|turbovec|numpy|PyYAML)==' "$req" || true)
+          n=$(printf '%s\n' "$pins" | grep -c . || true)
+          if [ "$n" -ne 4 ]; then
+            echo "python-gate: FAIL, $req nennt $n der 4 Laufzeit-Pins, nicht 4." >&2
+            echo "  Ohne diese Zusicherung wuerde ein leeres Ergebnis nichts" >&2
+            echo "  installieren und das Tor still blind machen." >&2
+            exit 1
+          fi
+          # shellcheck disable=SC2086
+          python -m pip install --disable-pip-version-check $pins
+
+          # Was wirklich installiert wurde, ins Protokoll, damit der Log die
+          # Frage "gegen welche Fassungen lief das" selbst beantwortet.
+          python -m pip freeze | grep -iE '^(mcp|turbovec|numpy|PyYAML)=='
+
+
+      - name: ruff + pytest over the tracked Python tree
+        run: ./scripts/check-python.sh
+
   docs-gate:
     name: CLI/manual consistency (docaudit)
     # Pure-stdlib AST gate: it only PARSES cmd/m3c-tools and cmd/skillctl, so it
@@ -113,6 +205,18 @@ jobs:
 
       - name: Every dispatched verb registered (FR-0113)
         run: go run ./cmd/verbaudit
+
+      # The same claim, one level up: docs/program-index.md and
+      # docs/component-index.md say what cmd/ and pkg/ contain. It runs HERE and
+      # not only in scripts/check-docs.sh, because no workflow calls that script.
+      - name: Indexes match the tree (cmd/, pkg/, and the counts)
+        run: ./scripts/check-index.sh
+
+      - name: exitaudit unit tests
+        run: go test -count=1 ./cmd/exitaudit/
+
+      - name: Documented exit codes match the register (AUDIT-0001 Befund 2.1)
+        run: go run ./cmd/exitaudit
 
       # SPEC-0406: the acceptance REHEARSAL, the Unix half of the twin pair.
       # Its Windows twin runs in skillctl-windows-smoke.yml with the same step
@@ -240,7 +344,12 @@ jobs:
               -scope "github/macos,github/linux,github/windows,gitlab/macos,gitlab/linux,gitlab/windows"
           echo "recorded by run ${GITHUB_RUN_ID} at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
+      # shell: bash schaltet pipefail ein. Ohne den Schluessel laeuft ein
+      # run-Skript als `bash -e` OHNE pipefail, und die Pipe nach tail hat den
+      # Exit-Code von structural verschluckt: ein Schritt namens "obligation",
+      # der nicht fehlschlagen konnte (AUDIT-0001 N-8).
       - name: Structural coverage obligation
+        shell: bash
         run: |
           go build -o build/structural ./cmd/structural
           ./build/structural \

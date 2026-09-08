@@ -106,7 +106,6 @@ class Store:
 
         ident_hits = _run(idents, k * 4)
         ordered = ident_hits + _run(terms, k * 4)
-        n_ident = len(ident_hits)
         out, seen = [], set()
         for cid in ordered:
             if cid in seen:
