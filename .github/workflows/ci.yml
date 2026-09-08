@@ -176,6 +176,12 @@ jobs:
       - name: Every dispatched verb registered (FR-0113)
         run: go run ./cmd/verbaudit
 
+      # The same claim, one level up: docs/program-index.md and
+      # docs/component-index.md say what cmd/ and pkg/ contain. It runs HERE and
+      # not only in scripts/check-docs.sh, because no workflow calls that script.
+      - name: Indexes match the tree (cmd/, pkg/, and the counts)
+        run: ./scripts/check-index.sh
+
       - name: exitaudit unit tests
         run: go test -count=1 ./cmd/exitaudit/
 

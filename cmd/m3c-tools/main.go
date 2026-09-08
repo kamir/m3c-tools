@@ -290,6 +290,9 @@ Commands:
     --icon <path>          Menu bar icon PNG path
     --log <path>           Log file path (default: ~/.m3c-tools/m3c-tools.log)
 
+  help, --help, -h       Print this command list
+  version, --version, -v Print the build version
+
 Like m3c-tools? Star us on GitHub: https://github.com/kamir/m3c-tools`)
 }
 

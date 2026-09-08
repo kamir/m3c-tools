@@ -26,6 +26,13 @@ func runRevokeFeed(args []string, stdout, stderr io.Writer) int {
 	tenant := fs.String("tenant", "", "Tenant scope (optional; default global).")
 	timeout := fs.Duration("timeout", defaultHTTPTimeout, "HTTP timeout for the HEAD fetch.")
 	refresh := fs.Bool("refresh", false, "Run the revocation sweep now to refresh the local cache + freshness anchor.")
+	// --status is the DEFAULT mode, and it is registered anyway. Both this
+	// function's own usage text and docs/manual-skillctl.md have advertised
+	// `--status` since FR-0045, while no FlagSet defined it, so the documented
+	// command failed with "flag provided but not defined: -status". The flag gate
+	// did not catch it because it compares the flag names of a whole CLI, and
+	// `login --status` kept the name present somewhere in skillctl.
+	status := fs.Bool("status", false, "(default) Fetch + verify the signed revocation HEAD against the pinned registry key. Read-only.")
 	gossip := fs.Bool("gossip", false, "Gossip: union CONTRIBUTING pinned peers' SIGNED revoke events into the durable local revoked set (SPEC-0359 D5(b)).")
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: skillctl revoke feed [--status] [--refresh] [--registry URL] [--tenant T]")
@@ -37,6 +44,13 @@ func runRevokeFeed(args []string, stdout, stderr io.Writer) int {
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+	// Naming the default explicitly is fine; asking for the read-only mode AND a
+	// mode that writes is a contradiction, and guessing which one was meant is
+	// how an operator ends up adopting a HEAD they only wanted to look at.
+	if *status && (*refresh || *gossip) {
+		fmt.Fprintln(stderr, "revoke feed: --status is the read-only mode; it cannot be combined with --refresh or --gossip")
 		return exitUsage
 	}
 
@@ -81,7 +95,7 @@ func runRevokeFeed(args []string, stdout, stderr io.Writer) int {
 		return exitOK
 	}
 
-	// --status (default): fetch + verify the HEAD.
+	// --status (the default, and also accepted explicitly): fetch + verify the HEAD.
 	head, err := registry.FetchRevocationHead(*registryURL, *tenant, *timeout)
 	if err != nil {
 		fmt.Fprintf(stderr, "skillctl revoke feed: fetch failed: %v\n", err)
