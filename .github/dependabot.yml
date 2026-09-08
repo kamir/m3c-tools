@@ -34,6 +34,36 @@ updates:
     groups:
       python-minor-patch:
         update-types: ["minor", "patch"]
+    # OWNER DECISION E3 of 2026-09-08: the two Python MAJOR bumps stay parked.
+    # PR #251 raises sentence-transformers 5.5.1 to 6.0.1 and PR #252 raises
+    # turbovec 0.8.0 to 1.0.0 (`grep -nE 'turbovec|sentence-transformers'
+    # rag-mcp-server/requirements.txt` gives the current pins), so both are
+    # major, and both feed the RAG embedder and vector index.
+    #
+    # WHY THIS ENTRY EXISTS AND NOT ONLY THE `hold` LABEL. The label lives on a
+    # pull request object. Dependabot replaces a PR when a newer version of the
+    # same package appears: the old one is closed, a new one opened, and the new
+    # one carries only the labels Dependabot assigns. Measured 2026-09-08
+    # 06:21Z across the eight open bot PRs carrying no `hold`, that is exactly
+    # `dependencies` plus one ecosystem label, three distinct sets across the
+    # eight, and never `hold`. The successor would therefore fall straight under
+    # owner decision E2 and merge itself. E3 is about the PACKAGE, so it is
+    # written here, where Dependabot reads it, and it survives the PR it was
+    # decided on. The label stays as the short-term brake for anything else.
+    #
+    # SCOPE: majors only. Security and routine minor/patch updates for both
+    # packages keep flowing through the group above; parking a package outright
+    # is how a dependency quietly rots.
+    #
+    # EXPECTED SIDE EFFECT, not measured because it needs Dependabot's next run:
+    # an ignored update makes Dependabot close the matching open PR, so #251 and
+    # #252 will probably close on their own. That is the postponement taking
+    # effect, not a loss. Lift it by deleting the entry for that package.
+    ignore:
+      - dependency-name: "sentence-transformers"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "turbovec"
+        update-types: ["version-update:semver-major"]
 
   # Container base images. Both Dockerfiles are DIGEST-PINNED, which is the
   # right default and also the reason they need Dependabot: a digest is
