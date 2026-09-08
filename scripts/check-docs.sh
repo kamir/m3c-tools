@@ -2,7 +2,9 @@
 # check-docs.sh: Validate documentation consistency with implementation.
 #
 # Checks that key references in docs/ match the current codebase, and runs the
-# BLOCKING CLI/manual gate (cmd/docaudit) as section 4.
+# BLOCKING gates: the CLI/manual + CLI/--help gate (cmd/docaudit, section 4),
+# the verb register (cmd/verbaudit, section 5), the tutorial chain (section 6)
+# and the index directory-diff (section 7).
 #
 # Exit: 0 = ok (warnings allowed) - 1 = a blocking issue, the release stops.
 # Usage: ./scripts/check-docs.sh
@@ -64,20 +66,24 @@ else
     pass "No docs to check targets against"
 fi
 
-# ─── 4. CLI ↔ manual consistency (BLOCKING) ───
+# ─── 4. CLI ↔ manual ↔ --help consistency (BLOCKING) ───
 #
 # Sections 1-3 above are heuristics and only warn. This one is the release
 # gate: docaudit compares each CLI's REAL flag surface (AST-extracted) against
 # its manual, in both directions, and exits 1 on any drift. It blocks, because
 # a manual that disagrees with the binary is how a user ends up trusting a flag
-# that does not exist -- or missing one that does.
-echo "4. CLI/manual consistency (docaudit)"
+# that does not exist, or missing one that does.
+#
+# It also reconciles the dispatch switch against the binary's own printUsage, a
+# separate failure: a verb absent from the manual is a documentation gap, a verb
+# absent from `--help` is invisible to everyone who never opens the manual.
+echo "4. CLI/manual and CLI/--help consistency (docaudit)"
 if ! command -v go >/dev/null 2>&1; then
     fail "go toolchain not found - cannot run the CLI/manual gate"
 elif go run ./cmd/docaudit -cli all; then
-    pass "every real flag is documented and every documented flag is real"
+    pass "flags agree with the manuals, and --help names every dispatched verb"
 else
-    fail "CLI surface and manual disagree (see the report above)"
+    fail "CLI surface, manual and --help disagree (see the report above)"
     echo "    Draft the missing entries with:"
     echo "      go run ./cmd/docaudit -cli <m3c-tools|skillctl> -scaffold"
 fi
@@ -100,7 +106,27 @@ else
     echo "    Register the verb first (add a row to docs/CLI-VERBS.md), then implement its case."
 fi
 
-# ─── 6. Tutorial chain (BLOCKING) ───
+# ─── 6. Exit-code register (BLOCKING) ───
+#
+# AUDIT-0001 Befund 2.1 / registry.go's own "Phase 2": exitaudit reconciles the
+# manual's exit-code tables with pkg/skillctl/exitcode.AllCodes(), fails on any
+# documented number that no table accounts for, and fails when the manual and
+# docs/CLI-VERBS.md state different exit spaces for the SAME verb. It blocks
+# because every number here is one a script branches on: `pull` mapped its five
+# gates onto 12/10/11/13/6 while both documents claimed a bare usage space, and
+# nothing turned red.
+echo "6. Exit-code register (exitaudit)"
+if ! command -v go >/dev/null 2>&1; then
+    fail "go toolchain not found - cannot run the exit-code gate"
+elif go run ./cmd/exitaudit; then
+    pass "the documented exit codes match the register, per verb and per number"
+else
+    fail "the exit-code register and the docs disagree (see the report above)"
+    echo "    Regenerate the manual's register table with:"
+    echo "      go run ./cmd/exitaudit -write"
+fi
+
+# ─── 7. Tutorial chain (BLOCKING) ───
 #
 # gate: scripts/tutorial-smoke.sh runs the chain the German scenario tutorials
 # describe (docs/tutorial-szenario-0*.de.md) against a bare local:// registry in
@@ -109,7 +135,7 @@ fi
 # tutorials, so a renamed flag or a changed message could make them wrong without
 # turning anything red. FR-0118, SPEC-0407 AC-11.
 echo ""
-echo "6. Tutorial chain (tutorial-smoke)"
+echo "7. Tutorial chain (tutorial-smoke)"
 if ! command -v go >/dev/null 2>&1; then
     warn "go toolchain not found - skipping the tutorial chain"
 elif [ ! -f "scripts/tutorial-smoke.sh" ]; then
@@ -127,6 +153,24 @@ else
     fi
     rm -f "/tmp/tutorial-smoke.$$.log"
     rm -rf "$(dirname "$SMOKE_BIN")"
+fi
+
+# ─── 7. Index freshness: cmd/ and pkg/ vs the two indexes (BLOCKING) ───
+#
+# The check itself lives in scripts/check-index.sh, because it has to run in two
+# places: here, and in the docs-gate job of ci.yml, release.yml and
+# skillctl-release.yml. A gate that only ever runs in this script is not a gate:
+# no workflow calls this script, so a tag push (or any pull request) would pass
+# straight over it. That is the same bypass release.yml already names in its own
+# docs-gate comment.
+echo ""
+echo "7. Index freshness (cmd/ and pkg/ vs the indexes)"
+if ! [ -x "scripts/check-index.sh" ]; then
+    fail "scripts/check-index.sh is missing or not executable"
+elif ./scripts/check-index.sh; then
+    pass "every cmd/ binary and pkg/ package is indexed, every indexed one exists, and both counts match"
+else
+    fail "the indexes and the tree disagree (see the report above)"
 fi
 
 # ─── Summary ───

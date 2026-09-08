@@ -27,25 +27,39 @@ See also: [Service Index](service-index) (what stays running) ·
 | **poc-recorder** | `cmd/poc-recorder/` | `make build-all` | Reference POC: PortAudio microphone recording. |
 | **poc-transcript** | `cmd/poc-transcript/` | `make build-all` | Reference POC: YouTube transcript fetch (core library port). |
 | **poc-whisper** | `cmd/poc-whisper/` | `make build-all` | Reference POC: Whisper transcription via CLI subprocess. |
+| **skillctl-sim** | `cmd/skillctl-sim/` | `make build-skillctl-sim` | Trust-plane simulation: a generated corpus of multi-principal scenarios, each with a SPEC-derived prediction, run against the real `skillctl` binary and a real git registry. `make sim`. |
+| **docaudit** | `cmd/docaudit/` | `go run ./cmd/docaudit` | Blocking gate: the CLI flag surface (AST-extracted) against its manual, in both directions, plus every dispatched verb against the binary's own `--help`. |
+| **exitaudit** | `cmd/exitaudit/` | `go run ./cmd/exitaudit` | Blocking gate: every exit code cited in the manual and in [CLI-VERBS](CLI-VERBS) against `pkg/skillctl/exitcode`, plus the `pull` gate read as code. Reports how many verb rows it could NOT compare. |
+| **verbaudit** | `cmd/verbaudit/` | `go run ./cmd/verbaudit` | Blocking gate: the dispatched `skillctl` verbs against the allocation table [CLI-VERBS](CLI-VERBS) (FR-0113). |
+| **structural** | `cmd/structural/` | `go run ./cmd/structural` | Inventories the decisions in the trust path and states the MC/DC obligation each one carries. Produces the obligation, not a coverage measurement. |
+| **release-evidence** | `cmd/release-evidence/` | `go run ./cmd/release-evidence` | Assembles the Release Evidence Bundle (the "Trust Binder"): an index that ties a set of release artifacts to a commit and a mandatory gate-set. |
 
 > The four `poc-*` binaries are **validated reference implementations**, not
-> production code (see `CLAUDE.md`).
+> production code (see `CLAUDE.md`). The last four rows are the repository's own
+> gates and measurement tools; they ship no user-facing feature. Measured, they
+> run in different places: `docaudit` and `verbaudit` BLOCK, from
+> `scripts/check-docs.sh` and from the `docs-gate` job of `ci.yml`,
+> `release.yml` and `skillctl-release.yml`; `structural` only reports, because its
+> step in `ci.yml`'s `freeze-manifest` job pipes into `tail` and the workflow sets
+> no `pipefail`, so its exit status cannot fail the run; `release-evidence` runs in
+> `skillctl-release.yml`. None of the four runs in `make ci`.
 
-### `m3c-tools` subcommands
+### Subcommand surfaces
 
-Manual `os.Args` parsing (no cobra/flag). The dispatched subcommands are:
+Both CLIs parse `os.Args` by hand (no cobra/flag). Neither verb list is
+duplicated here: a copy in this file was how five subcommands that do not exist
+came to be documented while ten real ones were not. Each binary is its own
+source of truth, and both are gated:
 
-`transcript` · `upload` · `whisper` · `thumbnail` · `check-er1` · `record` ·
-`devices` · `screenshot` · `import` · `login` · `plaud` · `pocket` ·
-`session` · `progress` · `queue` · `tags` · `setup`
+- **m3c-tools**: run `m3c-tools help`. Full reference:
+  [Manual: m3c-tools](manual-m3c-tools).
+- **skillctl**: run `skillctl help`. Full reference:
+  [Manual: skillctl](manual-skillctl); the allocation table for the verb names
+  is [CLI-VERBS](CLI-VERBS).
 
-Full reference: [Manual: m3c-tools](manual-m3c-tools).
-
-### `skillctl` verb surface
-
-The trust lifecycle CLI: signing (`keygen` / `sign` / `verify-sig`),
-`agentid` (SPEC-0277 agent-instance identity), `audit`, `install`, admission,
-revocation, and reporting. Full reference: [Manual: skillctl](manual-skillctl).
+`cmd/docaudit` blocks a release when a dispatched verb is missing from the
+binary's own `--help`, or when a flag and its manual disagree; `cmd/verbaudit`
+blocks when a dispatched verb has no row in the allocation table.
 
 ## Python programs (MCP servers)
 
@@ -71,6 +85,6 @@ Both run as long-lived services: see [Service Index](service-index).
 | skillctl release/runbook | `tools/skillctl-release.sh`, `tools/skillctl-runbook.sh`, `tools/skillctl-runbook-publish.sh`, `scripts/publish-skb.sh` | Release + `.skb` publish + runbook automation. |
 | Thinking Engine launch | `tools/thinking-engine-start.sh` | Convenience launcher for a per-user engine stack. |
 | Capture-source login/checks | `tools/plaud-mcp-login.mjs`, `tools/plaud-e2e-check.sh`, `scripts/e2e-plaud-sync-local.sh` | Plaud OAuth login + E2E sync verification. |
-| CI / docs / review | `scripts/code-review.sh`, `scripts/check-docs.sh`, `scripts/e2e-device-token-proof.sh` | Local CI helpers. |
+| CI / docs / review | `scripts/code-review.sh`, `scripts/check-docs.sh`, `scripts/check-index.sh`, `scripts/e2e-device-token-proof.sh` | `check-docs.sh` runs the docaudit / verbaudit / tutorial / index gates locally; `check-index.sh` is the index gate itself, and the CI `docs-gate` job calls it directly. |
 
 Discover all build/test/run entry points with `make help`.
