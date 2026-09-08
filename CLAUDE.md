@@ -107,6 +107,20 @@ seven of them: a sentence printed beside measurements gets read as a
 measurement. Derivation and the five measures: `PLAN/QG-0001-fruehwarnung.md`
 in the maintenance repository.
 
+## Branching, and what merges without you
+
+Branch names are enforced by a required check: `<prefix>/<name>`, exactly one
+slash, prefix drawn from a fixed list. The list, the reasoning and the single
+named exception (pull requests authored by `dependabot[bot]`, owner decision E1
+of 2026-09-08) live in README §"Branch & worktree workflow". Work in your own
+`git worktree`, never in the shared checkout.
+
+Dependabot pull requests additionally arm GitHub's auto-merge on their own
+(`.github/workflows/dependabot-auto-merge.yml`, owner decision E2), so a green
+dependency bump lands in `master` with nobody reading it. Postponing one is a
+`hold` label for the short term and an `ignore:` entry in
+`.github/dependabot.yml` for anything that must outlive the pull request.
+
 ## Configuration
 
 Settings loaded from `.env` or `~/.m3c-tools.env` (see `.env.example`). Key variables:
