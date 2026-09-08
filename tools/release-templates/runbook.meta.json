@@ -1,0 +1,25 @@
+{
+  "runbook_id": "rb-skillctl-publisher",
+  "title": "skillctl: sign & publish a skill",
+  "purpose": "Turn a person into a verified skill publisher",
+  "goal": "A signed, green-attested skill published to the room",
+  "tags": ["skillctl", "onboarding", "publisher", "trust"],
+  "audience_roles": ["user", "learner", "coach"],
+  "governance_level": "green",
+  "steps": [
+    {"id": "s1", "title": "Install or update to this skillctl version", "required": true},
+    {"id": "s2", "title": "PATH check: make sure the new skillctl wins", "required": true},
+    {"id": "s3", "title": "Generate your signing key", "required": true},
+    {"id": "s4", "title": "Read your fingerprint to Kamir", "required": true},
+    {"id": "s5", "title": "Get the skill into ~/.claude/skills/", "required": true},
+    {"id": "s6", "title": "Authenticate, skillctl login", "required": true},
+    {"id": "s7", "title": "Publish and share (packs, signs, posts)", "required": true},
+    {"id": "s8", "title": "Attest it green", "required": true},
+    {"id": "s9", "title": "Hand the public key to Kamir", "required": true},
+    {"id": "s10", "title": "Bump the version in the skill", "required": true},
+    {"id": "s11", "title": "Re-validate the skill (optional)", "required": false},
+    {"id": "s12", "title": "Publish the next version", "required": true},
+    {"id": "s13", "title": "Attest the next version green and notify Kamir", "required": true},
+    {"id": "s14", "title": "Report back", "required": true}
+  ]
+}

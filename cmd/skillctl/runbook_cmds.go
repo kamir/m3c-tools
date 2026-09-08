@@ -25,7 +25,7 @@ import (
 
 func runRunbook(args []string, stdout, stderr io.Writer) int {
 	if len(args) < 1 || args[0] != "publish" {
-		fmt.Fprintln(stderr, "Usage: skillctl runbook publish <runbook.html> --tag <tag> [flags]")
+		fmt.Fprintln(stderr, "Usage: skillctl runbook publish <runbook.html> --tag <tag> [--meta <runbook.meta.json>] [flags]")
 		fmt.Fprintln(stderr, "  Publishes an onboarding runbook into the THOH catalog (SPEC-0272).")
 		return 2
 	}
@@ -38,6 +38,7 @@ func runRunbook(args []string, stdout, stderr io.Writer) int {
 	title := fs.String("title", "skillctl: sign & publish a skill", "Catalog title.")
 	purpose := fs.String("purpose", "Turn a person into a verified skill publisher", "One-line purpose.")
 	goal := fs.String("goal", "A signed, green-attested skill published to the room", "Completion goal.")
+	meta := fs.String("meta", "", "Path to a runbook.meta.json sidecar to use as the descriptor, steps[] included (SPEC-0275 G3). Default: the built-in publisher descriptor, which has no steps.")
 	dryRun := fs.Bool("dry-run", false, "Print the plan + descriptor; do not POST.")
 	yes := fs.Bool("yes", false, "Skip the 🟡 confirm pause (scripted runs).")
 	// stdlib flag.Parse stops at the first positional, dropping flags after it;
@@ -63,26 +64,55 @@ func runRunbook(args []string, stdout, stderr io.Writer) int {
 	}
 
 	endpoint := strings.TrimRight(*base, "/") + "/api/thoh/runbooks"
-	descriptor := map[string]any{
-		"runbook_id":       *rbID,
-		"version":          version,
-		"title":            *title,
-		"purpose":          *purpose,
-		"goal":             *goal,
-		"tags":             []string{"skillctl", "onboarding", "publisher", "trust"},
-		"audience_roles":   []string{"user", "learner", "coach"},
-		"governance_level": "green",
-		"source": map[string]string{
-			"repo":    "m3c-tools",
-			"path":    "tools/release-templates/skillctl-publisher-runbook.template.html",
-			"release": *tag,
-		},
-		"html_url": fmt.Sprintf("https://github.com/kamir/m3c-tools/releases/download/%s/skillctl-publisher-runbook.html", *tag),
-	}
 
-	fmt.Fprintf(stdout, "Runbook : %s@%s: %q\n", *rbID, version, *title)
+	// The descriptor. With --meta it is the sidecar (SPEC-0275 G3: one descriptor
+	// path, no second hardcoded copy); without it, the built-in publisher descriptor
+	// this command has always carried. The built-in one has no steps, which is
+	// exactly the BUG-0224 case, so it goes through the same warning check.
+	var (
+		descriptor map[string]any
+		warns      []string
+		srcPath    = "tools/release-templates/skillctl-publisher-runbook.template.html"
+	)
+	if metaPath := strings.TrimSpace(*meta); metaPath != "" {
+		d, w, err := loadRunbookDescriptor(metaPath, version)
+		if err != nil {
+			fmt.Fprintf(stderr, "runbook publish: %v\n", err)
+			return 1
+		}
+		descriptor, warns, srcPath = d, w, metaPath
+	} else {
+		descriptor = map[string]any{
+			"runbook_id":       *rbID,
+			"version":          version,
+			"title":            *title,
+			"purpose":          *purpose,
+			"goal":             *goal,
+			"tags":             []string{"skillctl", "onboarding", "publisher", "trust"},
+			"audience_roles":   []string{"user", "learner", "coach"},
+			"governance_level": "green",
+		}
+		warns = runbookDescriptorWarnings(descriptor)
+	}
+	// Stamped at publish time, never hand-authored (SPEC-0275 section 4).
+	descriptor["source"] = map[string]string{
+		"repo":    "m3c-tools",
+		"path":    srcPath,
+		"release": *tag,
+	}
+	descriptor["html_url"] = fmt.Sprintf("https://github.com/kamir/m3c-tools/releases/download/%s/skillctl-publisher-runbook.html", *tag)
+
+	rbIDOut, _ := descriptor["runbook_id"].(string)
+	titleOut, _ := descriptor["title"].(string)
+	fmt.Fprintf(stdout, "Runbook : %s@%s: %q\n", rbIDOut, version, titleOut)
 	fmt.Fprintf(stdout, "HTML    : %s (%d bytes)\n", htmlPath, len(html))
 	fmt.Fprintf(stdout, "Catalog : POST %s\n", endpoint)
+
+	// BUG-0224: a descriptor without steps used to pass through in silence. It still
+	// publishes (a catalog entry is legal), it is no longer quiet about what it is.
+	for _, w := range warns {
+		fmt.Fprintf(stderr, "runbook publish: warning: %s\n", w)
+	}
 
 	if *dryRun {
 		pretty, _ := json.MarshalIndent(descriptor, "", "  ")
@@ -186,10 +216,13 @@ func maybeRegisterRunbook(stdout, stderr io.Writer, a publishAdmitArgs, ver stri
 		fmt.Fprintf(stderr, "    [runbook] read %s: %v, not registered.\n", htmlPath, err)
 		return
 	}
-	descriptor, err := loadRunbookDescriptor(metaPath, ver)
+	descriptor, warns, err := loadRunbookDescriptor(metaPath, ver)
 	if err != nil {
 		fmt.Fprintf(stderr, "    [runbook] %v, not registered.\n", err)
 		return
+	}
+	for _, w := range warns {
+		fmt.Fprintf(stderr, "    [runbook] warning: %s\n", w) // BUG-0224: never fatal
 	}
 
 	token := os.Getenv("ER1_DEVICE_TOKEN")
@@ -214,25 +247,66 @@ func maybeRegisterRunbook(stdout, stderr io.Writer, a publishAdmitArgs, ver stri
 // loadRunbookDescriptor reads + validates the sidecar runbook.meta.json. Required:
 // runbook_id, title. version is always overridden by the skill version (ver) so the
 // skill stays the single source of truth. Pure (no I/O beyond the file read) → unit-tested.
-func loadRunbookDescriptor(metaPath, ver string) (map[string]any, error) {
+func loadRunbookDescriptor(metaPath, ver string) (map[string]any, []string, error) {
 	raw, err := os.ReadFile(metaPath)
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", metaPath, err)
+		return nil, nil, fmt.Errorf("read %s: %w", metaPath, err)
 	}
 	return parseRunbookDescriptor(raw, ver)
 }
 
-func parseRunbookDescriptor(raw []byte, ver string) (map[string]any, error) {
+func parseRunbookDescriptor(raw []byte, ver string) (map[string]any, []string, error) {
 	var d map[string]any
 	if err := json.Unmarshal(raw, &d); err != nil {
-		return nil, fmt.Errorf("runbook.meta.json is not valid JSON: %w", err)
+		return nil, nil, fmt.Errorf("runbook.meta.json is not valid JSON: %w", err)
 	}
 	if s, _ := d["runbook_id"].(string); strings.TrimSpace(s) == "" {
-		return nil, fmt.Errorf(`runbook.meta.json missing required "runbook_id"`)
+		return nil, nil, fmt.Errorf(`runbook.meta.json missing required "runbook_id"`)
 	}
 	if s, _ := d["title"].(string); strings.TrimSpace(s) == "" {
-		return nil, fmt.Errorf(`runbook.meta.json missing required "title"`)
+		return nil, nil, fmt.Errorf(`runbook.meta.json missing required "title"`)
 	}
 	d["version"] = ver // skill is the single source of truth for version
-	return d, nil
+	return d, runbookDescriptorWarnings(d), nil
+}
+
+// runbookDescriptorWarnings reports non-fatal gaps in a descriptor (BUG-0224,
+// SPEC-0275 section 4.1). It never rejects: a step-less descriptor is a legal
+// CATALOG ENTRY, and outlawing it would remove a kind the catalog is meant to
+// carry. What it breaks is the silence.
+//
+// Why a step-less entry matters: THOH derives completion from the required-step
+// list, and `_recompute_status` reaches "complete" only via
+// `if req and len(done) == len(req)` (aims-core thoh_manager/core.py:143). So an
+// execution created against a step-less entry can never leave "assigned". That is
+// an unreachable state, not a slow path, and until now nothing said so at publish.
+//
+// Warnings are RETURNED, not printed: the function stays pure and unit-testable,
+// and each caller picks its own channel and prefix.
+func runbookDescriptorWarnings(d map[string]any) []string {
+	var w []string
+	steps, isList := d["steps"].([]any)
+	switch {
+	case d["steps"] == nil:
+		w = append(w, `no "steps": this is a catalog entry, it cannot be assigned and worked to completion`)
+	case !isList:
+		w = append(w, `"steps" is not a list: it is ignored, so this is a catalog entry only`)
+	case len(steps) == 0:
+		w = append(w, `"steps" is empty: this is a catalog entry, it cannot be assigned and worked to completion`)
+	default:
+		seen := map[string]bool{}
+		for i, s := range steps {
+			m, _ := s.(map[string]any)
+			id, _ := m["id"].(string)
+			if strings.TrimSpace(id) == "" {
+				w = append(w, fmt.Sprintf(`steps[%d] has no "id": it is dropped from the required list`, i))
+				continue
+			}
+			if seen[id] {
+				w = append(w, fmt.Sprintf("duplicate step id %q: the catalog validator rejects the descriptor", id))
+			}
+			seen[id] = true
+		}
+	}
+	return w
 }
