@@ -45,7 +45,13 @@ name: Dependabot auto-merge
 # `actions/checkout` with the head ref, an attacker-authored dependency manifest
 # or build script runs with write credentials. That is poisoned pipeline
 # execution, and it is the standard way supply-chain automation gets turned into
-# a supply-chain hole. This workflow avoids the whole class by construction.
+# a supply-chain hole. This workflow avoids the whole class, and since
+# 2026-09-08 pin-guard's CD-T8 check ENFORCES that rather than asking for it: a
+# PR-triggered job holding `contents: write` or `pull-requests: write` may not
+# carry a single `uses:` step. Before CD-T8 existed, a copy of this file with a
+# checkout of `github.event.pull_request.head.sha` and a `pip install -r` of the
+# bumped requirements passed all four pin-guard checks with exit 0. The sentence
+# was true and nothing was keeping it true.
 #
 # THEREFORE, THREE RULES THIS FILE KEEPS
 #
@@ -83,15 +89,87 @@ name: Dependabot auto-merge
 # collides with none of the 14 labels this repository already carries (measured
 # with `gh label list` on 2026-09-08).
 #
-# The label is honoured in BOTH directions, which is the part that actually
-# makes E3 hold. Adding `hold` to a PR whose auto-merge is already armed fires a
-# `labeled` event and DISARMS it; removing the label fires `unlabeled` and arms
-# it again. A workflow that only checked the label when arming would leave an
-# already-armed PR to merge anyway, and the postponement would be decoration.
+# The label is honoured in BOTH directions. Adding `hold` to a PR whose
+# auto-merge is already armed fires a `labeled` event and DISARMS it; removing
+# the label fires `unlabeled` and arms it again. A workflow that only read the
+# label when arming would leave an already-armed PR to merge anyway.
+#
+# HOW FAR THAT GOES, stated exactly, because an earlier draft of this comment
+# and of the README promised more. Disarming is a workflow RUN, and GitHub
+# merges the moment the last required check reports. So the label wins the race
+# only while something is still outstanding. Measured on 2026-09-08: the twelve
+# most recent runs of this repository's two smallest workflows took 6, 22, 25,
+# 37, 45, 47, 88, 103, 118, 122, 125 and 182 seconds from `created_at` to
+# `updated_at` (`gh api .../actions/runs`), so that is the width of the window
+# in which a `labeled` event has to be picked up, scheduled and finished. If a
+# PR is already green and current when it is labelled, GitHub can merge first.
+# The reliable order is therefore: label BEFORE the PR goes green, or disarm by
+# hand with `gh pr merge --disable-auto <n>` right after labelling, or mark it
+# draft, which this script also honours.
+#
+# THE DURABLE HOME OF E3 IS .github/dependabot.yml, NOT THE LABEL. A label sits
+# on a pull request object. When a newer version of the same package appears,
+# Dependabot closes that PR and opens a new one, and the new one carries only
+# the labels Dependabot itself assigns (measured 2026-09-08 06:21Z across the
+# eight open bot PRs carrying no `hold`: exactly `dependencies` plus one
+# ecosystem label, three distinct sets across the eight, never `hold`). The
+# postponement would then last exactly until the next release of the package it
+# postpones. So E3 is written as an `ignore:` entry in `.github/dependabot.yml`
+# as well, keyed on the PACKAGE, which is what the owner decided about. The
+# label stays useful as the short-term brake for anything else.
+
+# WHAT ARMING DOES NOT DO TODAY, and it is the most important line in this file.
+#
+# Four of master's 29 required contexts, `Analyze (actions)`, `Analyze (go)`,
+# `Analyze (javascript-typescript)` and `Analyze (python)`, come from CodeQL
+# DEFAULT SETUP (`gh api repos/kamir/m3c-tools/code-scanning/default-setup`
+# reports state=configured), and default setup does not run on a commit
+# Dependabot created. Measured 2026-09-08 06:21Z over the WHOLE population of
+# open Dependabot pull requests (ten of them, #247 through #256; #246 and #257
+# were closed by hand earlier that morning), comparing each head SHA's
+# check-runs against master's required list:
+#
+#   9 of 10   head commit authored by dependabot[bot], all four Analyze
+#             contexts MISSING (and 0 runs with event=dynamic on that SHA)
+#   1 of 10   #250, nothing missing, and its head SHA 565d2c67 is a merge
+#             commit authored by a HUMAN via `gh pr update-branch`
+#
+# The split follows head-commit authorship exactly, with no exception either
+# way, which is what makes this a cause and not a coincidence.
+#
+# A required context that never reports leaves the PR at "Expected, waiting for
+# status to be reported" forever, so auto-merge arms and then waits. Together
+# with strict=true (every merge to master puts the other eleven BEHIND, and
+# Dependabot's own rebase produces another bot commit) the automation cannot
+# reach the end on its own. E2 therefore buys the click, not the wait, until the
+# owner picks one of three: move CodeQL to advanced setup so the Analyze jobs
+# live in this tree and run on bot events; or drop those four contexts from
+# master's required list and keep the `CodeQL` context, which does report on bot
+# commits; or accept that each bot PR needs one human `gh pr update-branch`.
+# That is an owner decision about branch protection, not something this file
+# may quietly change, so the step below NAMES the state in the job summary
+# instead of hiding it.
 
 on:
   pull_request:
+    # Same base-branch filter the gate workflows carry. Only master is
+    # protected (`gh api repos/kamir/m3c-tools/branches --jq
+    # 'select(.protected)'` returns master and nothing else, 2026-09-08), so
+    # without this line a Dependabot PR opened against any other base would be
+    # armed while not one of the 29 required checks applies to it.
+    branches: [master]
     types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
+
+# A `synchronize` (Dependabot rebasing) and a `labeled` (somebody adding `hold`)
+# can fire seconds apart, and two parallel runs would let the finishing ORDER
+# decide whether a held PR ends up armed. Cancelling the older run means the
+# youngest event wins, and the youngest event is the one whose label state is
+# current. Measured 2026-09-08: 0 of this repository's 17 workflows set
+# `concurrency`, so this is the first, and it is here because the missing group
+# changes a security-relevant outcome and not merely the runner bill.
+concurrency:
+  group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -109,12 +187,16 @@ jobs:
       - name: Arm or disarm GitHub auto-merge
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           IS_DRAFT: ${{ github.event.pull_request.draft }}
           HAS_HOLD: ${{ contains(github.event.pull_request.labels.*.name, 'hold') }}
         run: |
           set -euo pipefail
+
+          say() { echo "$1"; echo "$1" >> "$GITHUB_STEP_SUMMARY"; }
 
           # Second of the two author checks, deliberately redundant with the job
           # `if:`. If someone ever relaxes or deletes that condition, this one
@@ -125,25 +207,109 @@ jobs:
             exit 1
           fi
 
+          # PROVENANCE OF THE CONTENT, not only of the pull request.
+          #
+          # The Dependabot branches live in THIS repository, not in a fork
+          # (`gh api .../pulls/252 --jq .head.repo.fork` reports false), and they
+          # are unprotected (`.../branches/dependabot%2F.../protection` answers
+          # 404 "Branch not protected"). Anyone with push access can therefore
+          # put arbitrary commits on `dependabot/<...>`, and `.user.login` stays
+          # `dependabot[bot]` because the AUTHOR of the pull request never
+          # changes. That grants no privilege nobody had (master requires no
+          # review, so a human can already land anything that passes the 29
+          # checks) but it launders the attribution: the history would read as a
+          # bot bump. In a repository whose product is provenance that is the
+          # part worth closing.
+          #
+          # The rule is: every commit that CARRIES CONTENT must be authored by
+          # dependabot[bot]. Merge commits are exempt by parent count, because
+          # the documented recovery step `gh pr update-branch` creates one and it
+          # is authored by the human who ran it. Measured 2026-09-08 with
+          # `gh api repos/kamir/m3c-tools/pulls/<n>/commits`:
+          #   #257, #252  one commit, parents=1, author dependabot[bot]
+          #   #250        three commits: parents=1 by dependabot[bot], then two
+          #               parents=2 merges authored by kamir from update-branch
+          # So the rule passes a genuine bot PR both before and after a human
+          # refreshes it, and fails a branch somebody pushed content onto.
+          foreign="$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER/commits?per_page=100" \
+            --jq '.[] | select((.parents | length) < 2)
+                      | select(.author.login != "dependabot[bot]")
+                      | "  \(.sha[0:8]) authored by \(.author.login // "an unknown account"): \(.commit.message | split("\n")[0])"')"
+          if [ -n "$foreign" ]; then
+            echo "::error::refusing to arm: this branch carries content commit(s) not authored by dependabot[bot]"
+            printf '%s\n' "$foreign"
+            echo "A Dependabot branch lives in this repository and is unprotected, so this"
+            echo "is what somebody pushing to it looks like. Review and merge it by hand."
+            exit 1
+          fi
+
+          # WHAT IS ABOUT TO MERGE WITHOUT A HUMAN READING IT.
+          #
+          # E2 says every Dependabot PR merges automatically, and this workflow
+          # obeys that without exception; narrowing an owner decision quietly
+          # would be worse than the risk it removes. But master requires no
+          # review (`required_pull_request_reviews` is null, measured
+          # 2026-09-08), so for a `github-actions` bump the consequence is that a
+          # third-party action SHA enters the release and signing workflows with
+          # nobody having looked. PR #249 is the live example: its four changed
+          # files are release.yml, skillctl-release.yml, skillctl-smoke-matrix.yml
+          # and windows-gate.yml, and the first two carry the cosign and
+          # evidence-signing jobs. Four of the ten Dependabot PRs open at
+          # 2026-09-08 06:21Z carry the `github_actions` label (#248, #249,
+          # #255, #256). So the case gets NAMED in the run and in the
+          # summary, every time, and the owner can decide separately whether to
+          # add a CODEOWNERS rule on `.github/**` with one required approval.
+          touched="$(gh pr view "$PR_URL" --json files --jq '.files[].path' | grep '^\.github/workflows/' || true)"
+          if [ -n "$touched" ]; then
+            echo "::warning::this Dependabot PR changes workflow files and will merge without review (owner decision E2)"
+            say "**Workflow files in this bump** (merging with no human review, per E2):"
+            printf '%s\n' "$touched" | sed 's/^/  /' | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
           if [ "$HAS_HOLD" = "true" ]; then
-            echo "PR carries the 'hold' label (owner decision E3): auto-merge must not be armed."
-            # `--disable-auto` exits non-zero when auto-merge was never armed.
-            # That is the ordinary case, not a failure, so it is tolerated; what
-            # matters is that an ALREADY armed PR ends up disarmed.
-            if gh pr merge --disable-auto "$PR_URL"; then
-              echo "auto-merge was armed and is now disarmed."
-            else
-              echo "auto-merge was not armed; nothing to disarm."
+            say "PR carries the \`hold\` label (owner decision E3): auto-merge must not be armed."
+            # `--disable-auto` exits non-zero for two very different reasons:
+            # auto-merge was never armed (the ordinary case) or the call failed,
+            # for instance 403 because the token was not lifted. Treating both
+            # as success is how a postponement fails SILENTLY and OPEN, which is
+            # the wrong direction for the only path E3 depends on. So the exit
+            # code is not the verdict. The PR is asked afterwards what state it
+            # is actually in, and that answer decides.
+            gh pr merge --disable-auto "$PR_URL" || true
+            state="$(gh pr view "$PR_URL" --json autoMergeRequest --jq '.autoMergeRequest')"
+            if [ "$state" != "null" ]; then
+              echo "::error::hold label is set but auto-merge is STILL ARMED on this PR"
+              echo "  reported state: $state"
+              echo "Disarm it by hand: gh pr merge --disable-auto $PR_NUMBER"
+              exit 1
             fi
-            echo "Release it later with: gh pr edit <n> --remove-label hold"
+            say "Verified: auto-merge is not armed on this PR."
+            say "Release it later with: \`gh pr edit $PR_NUMBER --remove-label hold\`"
             exit 0
           fi
 
           if [ "$IS_DRAFT" = "true" ]; then
-            echo "PR is a draft: not arming auto-merge."
+            say "PR is a draft: not arming auto-merge."
             exit 0
           fi
 
           gh pr merge --auto --merge "$PR_URL"
-          echo "auto-merge armed. GitHub merges this PR once all required checks pass;"
-          echo "a red check leaves it sitting here, which is the point."
+
+          # Arming is only believed after the PR confirms it. A zero exit from
+          # `gh pr merge --auto` and an armed pull request are two claims, not
+          # one, and the second is the one that matters.
+          state="$(gh pr view "$PR_URL" --json autoMergeRequest --jq '.autoMergeRequest')"
+          if [ "$state" = "null" ]; then
+            echo "::error::gh reported success but this PR has no autoMergeRequest: auto-merge is NOT armed"
+            exit 1
+          fi
+          say "Verified: auto-merge is armed. GitHub merges once every required check passes;"
+          say "a red check leaves the PR sitting here, which is the point."
+
+          # Say out loud where the PR stands, so that "armed and waiting on a
+          # gate", "armed and waiting on a context that will never report" (see
+          # the CodeQL note in the header) and "not armed at all" stop looking
+          # alike from the outside. BLOCKED here usually means the four
+          # `Analyze (...)` contexts are still expected on a bot commit.
+          merge_state="$(gh pr view "$PR_URL" --json mergeStateStatus --jq '.mergeStateStatus')"
+          say "mergeStateStatus: \`$merge_state\`"

@@ -69,13 +69,25 @@ jobs:
             exit 0
           fi
 
-          # Allowed prefixes: keep in sync with README.md and Makefile.
-          # Any addition here must come with a README update in the same PR.
+          # Allowed prefixes: keep in sync with the list in README
+          # §"Branch & worktree workflow", which CONTRIBUTING.md §"Branching &
+          # PRs" points at. Any addition here must come with a README update in
+          # the same PR. (This line used to name the Makefile as the second
+          # address. It carries no prefix list: `git grep -nE
+          # 'rescue|archive|refactor' -- Makefile` is empty, measured
+          # 2026-09-08, so half of the obligation pointed at nothing.)
           regex='^(feat|feature|fix|chore|docs|test|refactor|spec-[0-9]+|s[0-9]+-m[0-9]+|r-[0-9]+|archive|rescue)\/[A-Za-z0-9._-]+$'
           if [[ "$HEAD_REF" =~ $regex ]]; then
             echo "✓ branch name '$HEAD_REF' matches convention"
             exit 0
           fi
+          # The delimiter stays UNQUOTED on purpose: $HEAD_REF and $regex below
+          # have to expand. The price is that backticks in here would be
+          # command substitution, so the body carries none. Before 2026-09-08 it
+          # did: the help line read "... or `gh pr edit`", and bash ran that.
+          # Measured in run 34177862768, whose log shows gh's own "set the
+          # GH_TOKEN environment variable" complaint followed by the mutilated
+          # line "(then update the PR head ref via the GitHub UI or )".
           cat <<EOF >&2
           ✗ branch name '$HEAD_REF' does not match convention
 
@@ -92,7 +104,7 @@ jobs:
           Rename your branch:
             git branch -m <new-name>
             git push origin :<old-name> && git push -u origin <new-name>
-            (then update the PR head ref via the GitHub UI or `gh pr edit`)
+            (then update the PR head ref via the GitHub UI or 'gh pr edit')
 
           Reasoning + full convention: README.md §"Branch & worktree workflow".
           EOF

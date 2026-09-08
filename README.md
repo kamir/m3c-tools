@@ -382,7 +382,51 @@ gh pr edit <n> --remove-label hold   # release it again
 ```
 
 The label is honoured in both directions, so labelling a pull request whose
-auto-merge is already armed disarms it rather than losing the race.
+auto-merge is already armed disarms it too. That disarming is a workflow run,
+though, and GitHub merges the moment the last required check reports, so **the
+label wins only while something is still outstanding.** Runs of this
+repository's smallest workflows took between 6 and 182 seconds end to end
+(twelve most recent, measured 2026-09-08), which is the width of the window. If
+a pull request is already green and current when you label it, add
+`gh pr merge --disable-auto <n>` right after, or mark it draft; the workflow
+honours drafts as well.
+
+A postponement that has to outlive the pull request belongs in
+`.github/dependabot.yml` instead. Dependabot replaces a PR when a newer version
+appears, and the successor carries only the labels Dependabot assigns, so a
+label-only hold lasts until the next release of the package it holds. The
+`ignore:` entries under the `pip` ecosystem are how owner decision E3 is
+recorded for `sentence-transformers` and `turbovec`.
+
+#### What auto-merge cannot finish on its own, today
+
+Four of master's 29 required contexts, `Analyze (actions)`, `Analyze (go)`,
+`Analyze (javascript-typescript)` and `Analyze (python)`, come from **CodeQL
+default setup**, and default setup does not run on a commit Dependabot created.
+Measured 2026-09-08 06:21Z across all ten open Dependabot pull requests, by
+comparing each head SHA's check-runs against master's required list: the four
+are missing on all nine bot-authored head SHAs and present on the single
+human-authored one, #250, whose head is a merge commit produced with
+`gh pr update-branch`. The split follows head-commit authorship with no
+exception either way.
+
+A required context that never reports leaves the pull request waiting forever,
+so auto-merge arms and then sits. With `strict=true` on master, every merge puts
+the remaining bot PRs behind, Dependabot rebases them itself, and the fresh
+commit is a bot commit again. Until one of three things happens, each Dependabot
+pull request still needs one human `gh pr update-branch`, which is also how the
+newer required contexts appear on an older branch at all:
+
+- move CodeQL to **advanced setup**, so the Analyze jobs live in this tree and
+  run on Dependabot events;
+- drop those four contexts from master's required list and keep the `CodeQL`
+  context, which does report on bot commits;
+- or keep the manual refresh, knowing E2 saves the click and not the wait.
+
+That is a branch-protection decision, so the workflow does not make it. It names
+the state in the job summary instead, together with the pull request's
+`mergeStateStatus`, so "armed and waiting on a gate", "armed and waiting on a
+context that will never report" and "not armed at all" stop looking alike.
 
 ### Releasing
 
