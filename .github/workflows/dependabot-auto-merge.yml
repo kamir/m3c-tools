@@ -1,0 +1,149 @@
+name: Dependabot auto-merge
+
+# Arms GitHub's OWN auto-merge on a Dependabot pull request, so the PR merges by
+# itself once every required check on master is green. This workflow never
+# merges anything, and it cannot: `gh pr merge --auto` only sets a flag that
+# GitHub honours after branch protection is satisfied. The merge DECISION stays
+# with the gates; what goes away is the hand work of clicking "Enable
+# auto-merge" on every single bump.
+#
+# Owner decision E2 of 2026-09-08: every Dependabot PR merges automatically once
+# it is green. Owner decision E3 of the same day postpones two of them (#251
+# sentence-transformers, #252 turbovec). E3 is honoured by the `hold` LABEL
+# below, deliberately not by the absence of this workflow: a postponement that
+# only works while no automation exists is not a postponement, it is a race.
+#
+# WHAT WAS MEASURED, 2026-09-08, against kamir/m3c-tools
+#
+#   allow_auto_merge=true, allow_merge_commit=true
+#     `gh api repos/kamir/m3c-tools`. Both are preconditions: with auto-merge
+#     disabled on the repository, `gh pr merge --auto` fails outright.
+#   29 required status checks on master, strict=true, required reviews=none
+#     `gh api repos/kamir/m3c-tools/branches/master/protection`. strict=true
+#     means the branch must also be current with master before it may merge;
+#     Dependabot rebases its own PRs when master moves. No required review means
+#     nothing else blocks the automatic merge once the checks pass.
+#   Dependabot PRs live in THIS repository, not in a fork
+#     `gh api repos/kamir/m3c-tools/pulls/252` reports head.repo and base.repo
+#     both kamir/m3c-tools, fork=false. That matters for the token, see below.
+#
+# WHY `pull_request` AND NOT `pull_request_target`
+#
+# GitHub's documentation states that runs triggered by Dependabot from `push`,
+# `pull_request`, `pull_request_review` or `pull_request_review_comment` are
+# "treated as if they were opened from a repository fork" and so "receive a
+# read-only GITHUB_TOKEN and do not have access to any secrets", AND that you
+# can "use the permissions key in your workflow to increase the access for the
+# token". So the read-only default is real but it is not a wall: the per-job
+# `permissions:` block below lifts it, which is exactly the shape of GitHub's
+# own documented Dependabot auto-merge example.
+#
+# That makes `pull_request_target` unnecessary here, and unnecessary is the
+# right word for it. `pull_request_target` runs with a write-scoped token in the
+# context of the base branch, which is safe only for as long as nobody ever
+# checks out or executes the pull request's own code; the moment someone adds an
+# `actions/checkout` with the head ref, an attacker-authored dependency manifest
+# or build script runs with write credentials. That is poisoned pipeline
+# execution, and it is the standard way supply-chain automation gets turned into
+# a supply-chain hole. This workflow avoids the whole class by construction.
+#
+# THEREFORE, THREE RULES THIS FILE KEEPS
+#
+#   1. NO CHECKOUT. There is no `actions/checkout` step and there must never be
+#      one. Nothing from the pull request is fetched, read or executed. The only
+#      inputs are event metadata fields and the PR URL.
+#   2. NO THIRD-PARTY ACTION. There is not a single `uses:` in this file, so
+#      there is no third-party code in a write-scoped job at all. The work is
+#      four lines of `gh`, which ships on the runner. (dependabot/fetch-metadata
+#      would be the usual companion; it is for filtering by semver bump type,
+#      and E2 says merge all, so it would buy nothing and cost an SHA to audit.)
+#   3. NARROWEST PERMISSIONS. Top-level is read-only, as pin-guard's CD-T6 check
+#      requires. The single job asks for `contents: write` plus
+#      `pull-requests: write`, which is what enabling auto-merge needs and what
+#      GitHub's documented example grants. Nothing else is requested.
+#
+# WHO IS ALLOWED THROUGH: same carrier as branch-name-check.yml, namely
+# `github.event.pull_request.user.login`, and NOT `github.actor`. Measured on
+# 2026-09-08: after a human ran `gh pr update-branch` on PR #250, the resulting
+# run recorded actor=kamir, so an actor-based guard would silently skip a real
+# Dependabot PR, and worse, a human-triggered event on any PR would be judged by
+# who clicked rather than by whose PR it is. The author field cannot be forged
+# from inside the repository: no human can make dependabot[bot] the author of a
+# pull request. The condition is enforced twice, once in the job `if:` and once
+# again in the script, so that an edit to either one alone cannot open the gate.
+#
+# POSTPONING A PULL REQUEST (owner decision E3)
+#
+#   Hold it back:  gh pr edit <n> --add-label hold
+#   Release it:    gh pr edit <n> --remove-label hold
+#
+# The label is named `hold` because it says only "not yet" and says nothing
+# about why, which keeps it reusable for any reason to wait; `blocked` or
+# `invalid` would assert the PR is broken, which is not what E3 means. It
+# collides with none of the 14 labels this repository already carries (measured
+# with `gh label list` on 2026-09-08).
+#
+# The label is honoured in BOTH directions, which is the part that actually
+# makes E3 hold. Adding `hold` to a PR whose auto-merge is already armed fires a
+# `labeled` event and DISARMS it; removing the label fires `unlabeled` and arms
+# it again. A workflow that only checked the label when arming would leave an
+# already-armed PR to merge anyway, and the postponement would be decoration.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  arm-auto-merge:
+    name: Arm auto-merge for Dependabot
+    runs-on: ubuntu-latest
+    # First of the two author checks. See "WHO IS ALLOWED THROUGH" above.
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Arm or disarm GitHub auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          IS_DRAFT: ${{ github.event.pull_request.draft }}
+          HAS_HOLD: ${{ contains(github.event.pull_request.labels.*.name, 'hold') }}
+        run: |
+          set -euo pipefail
+
+          # Second of the two author checks, deliberately redundant with the job
+          # `if:`. If someone ever relaxes or deletes that condition, this one
+          # still refuses, loudly, instead of quietly arming auto-merge on a
+          # human's pull request.
+          if [ "$PR_AUTHOR" != "dependabot[bot]" ]; then
+            echo "::error::refusing to act: pull request author is '$PR_AUTHOR', not dependabot[bot]"
+            exit 1
+          fi
+
+          if [ "$HAS_HOLD" = "true" ]; then
+            echo "PR carries the 'hold' label (owner decision E3): auto-merge must not be armed."
+            # `--disable-auto` exits non-zero when auto-merge was never armed.
+            # That is the ordinary case, not a failure, so it is tolerated; what
+            # matters is that an ALREADY armed PR ends up disarmed.
+            if gh pr merge --disable-auto "$PR_URL"; then
+              echo "auto-merge was armed and is now disarmed."
+            else
+              echo "auto-merge was not armed; nothing to disarm."
+            fi
+            echo "Release it later with: gh pr edit <n> --remove-label hold"
+            exit 0
+          fi
+
+          if [ "$IS_DRAFT" = "true" ]; then
+            echo "PR is a draft: not arming auto-merge."
+            exit 0
+          fi
+
+          gh pr merge --auto --merge "$PR_URL"
+          echo "auto-merge armed. GitHub merges this PR once all required checks pass;"
+          echo "a red check leaves it sitting here, which is the point."

@@ -3,6 +3,10 @@ name: Branch name check
 # Enforces the branch-naming convention from README §"Branch & worktree workflow".
 # Runs on PR open/reopen/edit; fails the check if the head ref doesn't match the regex.
 # Stage 3 deliverable from incident 2026-05-07 (m3c-tools master-drift).
+#
+# ONE named exception: pull requests authored by dependabot[bot] (owner
+# decision E1, 2026-09-08). Rationale, carrier choice and the measurements
+# behind it sit next to the check itself, below.
 
 on:
   pull_request:
@@ -20,8 +24,51 @@ jobs:
       - name: Check head ref matches convention
         env:
           HEAD_REF: ${{ github.head_ref }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
           set -euo pipefail
+
+          # NAMED EXCEPTION: Dependabot, and nothing else.
+          #
+          # Owner decision E1 of 2026-09-08: exempt the bot explicitly instead of
+          # widening the pattern. Dependabot names its branches
+          # `dependabot/<ecosystem>/<path>/<package>-<version>`, which breaks the
+          # convention twice over: `dependabot` is not an allowed prefix, and the
+          # name carries three slashes where the pattern allows exactly one. The
+          # bot's branch names are not configurable, so the choice was this line
+          # or a pattern loose enough to stop biting humans. For humans the
+          # pattern below is unchanged, character for character.
+          #
+          # THE CARRIER IS THE PR AUTHOR, NOT THE BRANCH NAME AND NOT github.actor.
+          # Two measurements, both taken against this repository on 2026-09-08.
+          #
+          #  (1) `github.actor` is the wrong carrier. On PR #250, branch
+          #      `dependabot/pip/rag-mcp-server/mcp-2.1.1`, a human ran
+          #      `gh pr update-branch`. The synchronize run of THIS workflow that
+          #      followed recorded actor=kamir and triggering_actor=kamir, not
+          #      dependabot[bot]. A test on `github.actor` would therefore go dark
+          #      exactly when the exception is needed. Measured with
+          #      `gh api repos/kamir/m3c-tools/actions/runs`, run of 2026-09-08
+          #      01:48:11Z, head_sha 565d2c67, conclusion failure.
+          #
+          #  (2) `github.event.pull_request.user.login` is stable. It reads
+          #      `dependabot[bot]` on #246, #250 and #252 no matter who pushed
+          #      last, because it names the pull request's AUTHOR, not the
+          #      event's trigger. Measured with
+          #      `gh api repos/kamir/m3c-tools/pulls/<n> --jq .user.login`.
+          #
+          # Abuse resistance follows from that same choice. A human with push
+          # access can create a branch called `dependabot/whatever`, so a
+          # branch-name carrier would hand every human a one-word opt-out of the
+          # convention. A human cannot make `dependabot[bot]` the author of a
+          # pull request, so the author carrier cannot be forged from inside the
+          # repository. Checked locally against this very script: HEAD_REF set to
+          # a real Dependabot branch with PR_AUTHOR=kamir still exits 1.
+          if [ "$PR_AUTHOR" = "dependabot[bot]" ]; then
+            echo "✓ branch name '$HEAD_REF' exempt: pull request authored by dependabot[bot] (owner decision E1, 2026-09-08)"
+            exit 0
+          fi
+
           # Allowed prefixes: keep in sync with README.md and Makefile.
           # Any addition here must come with a README update in the same PR.
           regex='^(feat|feature|fix|chore|docs|test|refactor|spec-[0-9]+|s[0-9]+-m[0-9]+|r-[0-9]+|archive|rescue)\/[A-Za-z0-9._-]+$'
