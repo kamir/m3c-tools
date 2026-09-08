@@ -316,3 +316,144 @@ func TestRepoSurfaceIsConsistent(t *testing.T) {
 		t.Errorf("docaudit -cli all = %d, want 0: the CLI surface and the manuals disagree; run `go run ./cmd/docaudit -cli <cli> -scaffold`", got)
 	}
 }
+
+// usageAudit must read BOTH surfaces out of the same package by AST, and must
+// treat a usage text made of many Fprintln calls exactly like one made of a
+// single raw string: the two CLIs in this repository use the two different
+// idioms, so a check that only understood one would silently pass the other.
+func TestUsageAuditReadsBothUsageIdioms(t *testing.T) {
+	fprintln := `package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func main() {
+	switch os.Args[1] {
+	case "pack":
+	case "sign":
+	case "help", "--help", "-h":
+		printUsage(os.Stdout)
+	}
+}
+
+func printUsage(w *os.File) {
+	fmt.Fprintln(w, "Usage: tool <command>")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Authoring")
+	fmt.Fprintln(w, "  pack                    Build a bundle.")
+	fmt.Fprintln(w, "                          Continuation: mentions sign but does not list it.")
+	fmt.Fprintln(w, "  sign                    Sign a bundle.")
+	fmt.Fprintln(w, "  help, --help, -h        Print this list.")
+}
+`
+	rawString := "package main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n)\n\nfunc main() {\n\tswitch os.Args[1] {\n\tcase \"pack\":\n\tcase \"sign\":\n\tcase \"help\", \"--help\", \"-h\":\n\t\tprintUsage()\n\t}\n}\n\nfunc printUsage() {\n\tfmt.Println(`Usage: tool <command>\n\nAuthoring\n  pack                    Build a bundle.\n                          Continuation: mentions sign but does not list it.\n  sign                    Sign a bundle.\n  help, --help, -h        Print this list.`)\n}\n"
+
+	for _, tc := range []struct{ name, src string }{
+		{"fprintln-per-line", fprintln},
+		{"one-raw-string", rawString},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, dir, "main.go", tc.src)
+			dispatched, listed, err := usageAudit(dir)
+			if err != nil {
+				t.Fatalf("usageAudit: %v", err)
+			}
+			want := []string{"--help", "-h", "help", "pack", "sign"}
+			if got := keys(dispatched); !equalStrings(got, want) {
+				t.Errorf("dispatched = %v, want %v", got, want)
+			}
+			if got := keys(listed); !equalStrings(got, want) {
+				t.Errorf("listed = %v, want %v", got, want)
+			}
+		})
+	}
+}
+
+// A dispatched verb with no usage line is the whole point of the check. The
+// continuation line that MENTIONS the verb must not count as naming it: only a
+// line indented exactly two spaces does.
+func TestUsageAuditFindsUnlistedAndPhantomVerbs(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "main.go", `package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func main() {
+	switch os.Args[1] {
+	case "pack":
+	case "revoke":
+	}
+}
+
+func printUsage(w *os.File) {
+	fmt.Fprintln(w, "Commands")
+	fmt.Fprintln(w, "  pack       Build a bundle.")
+	fmt.Fprintln(w, "             Superseded by revoke one day; this line must not list it.")
+	fmt.Fprintln(w, "  seal       A verb the switch no longer dispatches.")
+}
+`)
+	dispatched, listed, err := usageAudit(dir)
+	if err != nil {
+		t.Fatalf("usageAudit: %v", err)
+	}
+	if listed["revoke"] {
+		t.Error("a continuation line must not count as naming a verb")
+	}
+	if !dispatched["revoke"] || listed["revoke"] {
+		t.Error("revoke must be reported as dispatched-but-unlisted")
+	}
+	if dispatched["seal"] || !listed["seal"] {
+		t.Error("seal must be reported as listed-but-never-dispatched")
+	}
+}
+
+// The gate must not be disableable by a rename: a package that dispatches on
+// os.Args[1] and has no printUsage is an ERROR, not a silent skip. A package
+// that never dispatches is a legitimate skip.
+func TestUsageAuditFailsClosedOnAMissingUsageFunc(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "main.go", `package main
+
+import "os"
+
+func main() {
+	switch os.Args[1] {
+	case "pack":
+	}
+}
+`)
+	if _, _, err := usageAudit(dir); err == nil {
+		t.Fatal("want an error when a dispatching package has no printUsage, got nil")
+	}
+
+	skip := t.TempDir()
+	writeFile(t, skip, "main.go", `package main
+
+func main() {}
+`)
+	dispatched, listed, err := usageAudit(skip)
+	if err != nil {
+		t.Fatalf("a package without the dispatch idiom must be skipped, got %v", err)
+	}
+	if len(dispatched) != 0 || len(listed) != 0 {
+		t.Errorf("want both surfaces empty on a skip, got %v / %v", keys(dispatched), keys(listed))
+	}
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
