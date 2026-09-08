@@ -93,7 +93,10 @@ wurde. Das sind zwei verschiedene Fehler mit zwei verschiedenen nächsten Schrit
 Macht die Person, die das Registry betreibt. Einmal je Registry, nicht je Mensch.
 
 **1. Projekt anlegen.** Ein leeres GitLab-Projekt, z. B. `<gruppe>/skill-registry`.
-Kein Inhalt, kein README: `skillctl registry init` schreibt die Struktur.
+Kein README, keine Lizenzdatei, keine Initialisierung: die Struktur kommt in
+Schritt 4 als Spiegelung eines lokal angelegten Registry. `skillctl registry
+init` legt das Projekt **nicht** an und kann es auch nicht; es kennt nur
+`local://`.
 
 **2. Project Access Token erzeugen.**
 
@@ -113,12 +116,59 @@ Token scheitert beim Push, und die Fehlermeldung sagt nicht, warum.
 skillctl token set --backend gitlab --host git.kieback-peter.de
 ```
 
-**4. Prüfen.**
+**4. Struktur anlegen und hochspiegeln.**
+
+`skillctl registry init` legt **nur** ein lokales Registry an. Gegen einen
+`gitlab://`-Locator verweigert es die Arbeit, und zwar bevor irgendeine
+Verbindung aufgebaut wird:
+
+```
+$ skillctl registry init --registry gitlab://git.kieback-peter.de/<gruppe>/skill-registry
+registry init: only local:// registries are created locally (got "gitlab://…").
+  For gitlab://github:// create the project on the server; for ER1 use the self tenant.
+$ echo $?
+2
+```
+
+Das ist kein Mangel, sondern die Aufgabenteilung: das Projekt legt GitLab an,
+die Struktur legt git an. Der Weg ist der, den `registry init` selbst ausgibt:
 
 ```bash
-skillctl registry init --registry gitlab://<host>/<gruppe>/skill-registry
-skillctl publish <name>@<version> --bundle <datei>.skb --registry gitlab://… --yes
+# a) lokales Registry anlegen: ein bare-Repo mit dem Branch `main`
+skillctl registry init --registry local://~/registry/skill-registry.git
+
+# b) einmal in das leere GitLab-Projekt spiegeln
+git -C ~/registry/skill-registry.git push --mirror \
+  https://git.kieback-peter.de/<gruppe>/skill-registry.git
+
+# c) ab jetzt direkt gegen GitLab veröffentlichen
+skillctl publish <name> --bundle <datei>.skb --version <v> \
+  --registry gitlab://git.kieback-peter.de/<gruppe>/skill-registry \
+  --key <autor>.priv --identity id:<du>@m3c --yes
 ```
+
+**Die eine Stelle, an der das still schiefgeht.** `git push --mirror` überträgt
+Refs, nicht `HEAD`. Steht der Standard-Branch des GitLab-Projekts nicht auf
+`main`, sieht `skillctl` ein leeres Registry, und zwar ohne Fehler:
+
+```
+$ skillctl registry ls --registry <locator>
+(no skills in registry)
+$ echo $?
+0
+```
+
+Exit 0 auf ein wirklich leeres Registry ist richtig; hier ist es irreführend,
+weil das Registry nicht leer ist. Behebung in GitLab: Projekt → Einstellungen →
+Repository → Standard-Branch auf `main`. Lokal ist dasselbe
+`git -C <ziel>.git symbolic-ref HEAD refs/heads/main`. Danach listet
+`registry ls` die Bundles.
+
+**Was hier gemessen ist und was nicht.** Die Schritte (a) und (b) sind am 2026-09-07
+gegen ein lokales Ziel durchgespielt: `registry init`, `publish`, `push --mirror`,
+`registry ls` gegen das Ziel, einschliesslich des HEAD-Fallstricks oben. Schritt (c),
+der `gitlab://`-Transport über HTTPS, ist erst mit dem Nachweislauf D-8 in Teil D
+belegt; bis dahin ist er begründet, aber nicht gemessen.
 
 ## Warum Schreibtoken nicht persönlich sind
 
@@ -188,16 +238,19 @@ Schreibtoken über die Leitung.
 Einmalig, und danach ist REQ-3.5 ausserhalb eines lokalen Repos bestaetigt. Bis
 dahin ist jede Aussage ueber den produktiven Weg eine Aussage ueber `local://`.
 
-Die Reihenfolge zaehlt: **erst der Token, dann die Datei.** Ein Projekt ohne
-Schreibtoken laesst `registry init` an einer Stelle scheitern, die nach einem
-Netzproblem aussieht.
+Die Reihenfolge zaehlt weiterhin, **erst der Token, dann die Datei**, aber nicht
+aus dem Grund, der hier bis zum 2026-09-07 stand. `registry init` fasst weder Netz
+noch Token an: es prueft das Schema des Locators und bricht bei allem ausser
+`local://` mit Exit 2 ab, bevor eine Verbindung aufgebaut wird. Der Schreibtoken
+wird erst beim ersten `publish` gebraucht. Wer ihn vergisst, sieht deshalb keinen
+Netzfehler, sondern den Fehlschlag des git-Push.
 
 | # | Wer | Was | Ergebnis |
 |---|---|---|---|
 | 1 | Registry-Betreiber | leeres Projekt `<gruppe>/skill-registry` auf `git.kieback-peter.de` | leeres Repo, kein README |
 | 2 | Registry-Betreiber | Project Access Token, Maintainer, `write_repository`, Ablauf setzen | Teil B, Schritt 2 |
 | 3 | Registry-Betreiber | Registerzeile schreiben, **bevor** der Token benutzt wird | `OPS/token-register.md` |
-| 4 | Registry-Betreiber | `skillctl registry init --registry gitlab://git.kieback-peter.de/<gruppe>/skill-registry` | die Struktur liegt im Repo |
+| 4 | Registry-Betreiber | `registry init --registry local://…`, dann `git push --mirror` auf das GitLab-Projekt, danach den Standard-Branch pruefen | die Struktur liegt im Repo, siehe Teil B Schritt 4 |
 | 5 | Autor | `pack` + `sign` mit dem eigenen Schluessel | `.skb` und `.author.sig` |
 | 6 | Herausgeber | `publish` (Admit) | `transport=git` |
 | 7 | Freigeber | `publish --attest --level green` mit einem **anderen** Schluessel | AC-2 |
@@ -236,3 +289,11 @@ deshalb ist die Zeile dort wichtiger, als sie aussieht.
 **Widerruf.** `skillctl token rm` entfernt die lokale Kopie, und das ist Hygiene.
 Wer einen Token wirklich stoppen will, widerruft ihn in GitLab. Das wirkt sofort
 und ohne Zutun der betroffenen Maschine.
+
+## Verwandte Runbooks
+
+| Runbook | Wofür |
+|---|---|
+| [Incident Response](ops-incident-response.de.md) | ein Schlüssel oder ein Registry ist kompromittiert |
+| [Registry-Backup und Restore](ops-registry-backup-restore.de.md) | Sicherung je Backend, mit Wiederherstellungsprobe |
+| [Monitoring und Alarmierung](ops-monitoring.de.md) | was heute beobachtbar ist, und was nicht |

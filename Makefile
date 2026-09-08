@@ -528,6 +528,18 @@ check-emdash:
 check-gofmt:
 	@./scripts/check-gofmt.sh
 
+# Python-Tor (AUDIT-0001 Befund N.2): ruff plus pytest fuer die beiden
+# MCP-Server. Bewusst NICHT in `make ci`: das wuerde den Go-Baum von einer
+# Python-Toolchain abhaengig machen. Im CI haengt es am Job python-gate, der
+# ruff, pytest, mcp, turbovec, numpy und PyYAML exakt gepinnt installiert.
+# Der Job laeuft bei jedem Push und Pull Request, und seit dem 2026-09-08 steht
+# sein Kontext "Python servers (ruff + pytest)" in den required status checks
+# von master, er haelt also einen Merge auf. Der Kopfkommentar von
+# scripts/check-python.sh nennt die Messung dazu.
+.PHONY: check-python
+check-python:
+	@./scripts/check-python.sh
+
 # Redirect guard (AUDIT-0001 Befund 1.1): credential-bearing files must give
 # every http.Client a CheckRedirect policy. Heuristic; limits in the script header.
 .PHONY: check-redirect-guard
