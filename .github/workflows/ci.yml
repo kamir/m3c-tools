@@ -109,14 +109,14 @@ jobs:
     # Testlauf. Nachpruefbar mit
     # `gh api repos/kamir/m3c-tools/code-scanning/default-setup`.
     #
-    # Reichweite dieses Jobs am 2026-09-07: er laeuft bei jedem Push und jedem
-    # Pull Request und wird rot, wenn check-python.sh rot wird. In der
-    # required-status-checks-Liste von master steht der Kontext
-    # "Python servers (ruff + pytest)" noch NICHT, gemessen mit
+    # Reichweite dieses Jobs: er laeuft bei jedem Push und jedem Pull Request
+    # und wird rot, wenn check-python.sh rot wird. Seit dem 2026-09-08 steht
+    # sein Kontext "Python servers (ruff + pytest)" auch in der
+    # required-status-checks-Liste von master (29 Kontexte statt 28), er haelt
+    # einen Merge also auf. Nachpruefbar mit
     # `gh api repos/kamir/m3c-tools/branches/master/protection
-    #  --jq .required_status_checks.contexts`. Solange das so ist, ist der
-    # Fehlschlag sichtbar, aber er haelt keinen Merge auf. Das ist eine
-    # Repo-Einstellung, keine Zeile in diesem Baum, und sie wird nachgezogen.
+    #  --jq .required_status_checks.contexts`. Bis dahin war er sichtbar, aber
+    # folgenlos; diese drei Zeilen trugen deshalb ein Datum.
     #
     # Reines Python, kein Go, kein cgo, kein PortAudio: der billige Runner.
     runs-on: ubuntu-latest
@@ -144,10 +144,40 @@ jobs:
       # sentence-transformers und torch braucht der Test nicht, er reicht einen
       # Fake-Embedder in den Konstruktor.
       - name: Install pinned Python toolchain
+        shell: bash
         run: |
+          # Werkzeuge: hier gepinnt, sie gehoeren zu keiner Laufzeit.
           python -m pip install --disable-pip-version-check \
-            "ruff==0.9.6" "pytest==8.3.5" "mcp==1.21.0" \
-            "turbovec==1.0.0" "numpy==2.5.3" "PyYAML==6.0.3"
+            "ruff==0.9.6" "pytest==8.3.5"
+
+          # Laufzeit: NICHT hier wiederholt, sondern aus der Datei gezogen, die
+          # Dependabot pflegt. Vorher standen dieselben Pakete an beiden Stellen
+          # mit verschiedenen Zahlen (turbovec 1.0.0 hier gegen 0.8.0 dort, mcp
+          # 1.21.0 gegen 1.29.1), und die schlimmere Folge war nicht die
+          # Divergenz, sondern die Blindheit: ein Dependabot-PR aendert NUR
+          # requirements.txt, und diese Zeile las sie nicht.
+          #
+          # Gemessen an PR #250 (mcp 1.29.1 -> 2.1.1): das Tor blieb gruen,
+          # obwohl in einem Wegwerf-venv mit genau dieser Fassung
+          # `import mcp.server.fastmcp` scheitert ("This is mcp 2.x, where
+          # FastMCP was renamed to MCPServer"), was die Vorbedingung in
+          # scripts/check-python.sh korrekt verweigert haette.
+          req=rag-mcp-server/requirements.txt
+          pins=$(grep -E '^(mcp|turbovec|numpy|PyYAML)==' "$req" || true)
+          n=$(printf '%s\n' "$pins" | grep -c . || true)
+          if [ "$n" -ne 4 ]; then
+            echo "python-gate: FAIL, $req nennt $n der 4 Laufzeit-Pins, nicht 4." >&2
+            echo "  Ohne diese Zusicherung wuerde ein leeres Ergebnis nichts" >&2
+            echo "  installieren und das Tor still blind machen." >&2
+            exit 1
+          fi
+          # shellcheck disable=SC2086
+          python -m pip install --disable-pip-version-check $pins
+
+          # Was wirklich installiert wurde, ins Protokoll, damit der Log die
+          # Frage "gegen welche Fassungen lief das" selbst beantwortet.
+          python -m pip freeze | grep -iE '^(mcp|turbovec|numpy|PyYAML)=='
+
 
       - name: ruff + pytest over the tracked Python tree
         run: ./scripts/check-python.sh
@@ -314,7 +344,12 @@ jobs:
               -scope "github/macos,github/linux,github/windows,gitlab/macos,gitlab/linux,gitlab/windows"
           echo "recorded by run ${GITHUB_RUN_ID} at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
+      # shell: bash schaltet pipefail ein. Ohne den Schluessel laeuft ein
+      # run-Skript als `bash -e` OHNE pipefail, und die Pipe nach tail hat den
+      # Exit-Code von structural verschluckt: ein Schritt namens "obligation",
+      # der nicht fehlschlagen konnte (AUDIT-0001 N-8).
       - name: Structural coverage obligation
+        shell: bash
         run: |
           go build -o build/structural ./cmd/structural
           ./build/structural \

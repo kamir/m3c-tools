@@ -532,10 +532,10 @@ check-gofmt:
 # MCP-Server. Bewusst NICHT in `make ci`: das wuerde den Go-Baum von einer
 # Python-Toolchain abhaengig machen. Im CI haengt es am Job python-gate, der
 # ruff, pytest, mcp, turbovec, numpy und PyYAML exakt gepinnt installiert.
-# Der Job laeuft bei jedem Push und Pull Request; in den required status checks
-# von master steht sein Kontext "Python servers (ruff + pytest)" am 2026-09-07
-# noch nicht, er ist also sichtbar, aber noch nicht merge-blockierend. Der
-# Kopfkommentar von scripts/check-python.sh nennt die Messung dazu.
+# Der Job laeuft bei jedem Push und Pull Request, und seit dem 2026-09-08 steht
+# sein Kontext "Python servers (ruff + pytest)" in den required status checks
+# von master, er haelt also einen Merge auf. Der Kopfkommentar von
+# scripts/check-python.sh nennt die Messung dazu.
 .PHONY: check-python
 check-python:
 	@./scripts/check-python.sh
