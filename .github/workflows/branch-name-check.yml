@@ -64,6 +64,13 @@ jobs:
           # pull request, so the author carrier cannot be forged from inside the
           # repository. Checked locally against this very script: HEAD_REF set to
           # a real Dependabot branch with PR_AUTHOR=kamir still exits 1.
+          # NOT YET SEEN IN PRODUCTION. Measured 2026-09-08: of 91 runs of
+          # this workflow on `dependabot/` branches, 0 concluded success, so no
+          # bot pull request has taken the branch below even once. The carrier
+          # is measured (both points above) and the branch is tested locally
+          # over 21 cases in both directions, but the exception itself is
+          # expected to work, not observed working. The first bot run prints the
+          # line below; read it before calling this settled.
           if [ "$PR_AUTHOR" = "dependabot[bot]" ]; then
             echo "✓ branch name '$HEAD_REF' exempt: pull request authored by dependabot[bot] (owner decision E1, 2026-09-08)"
             exit 0

@@ -38,6 +38,19 @@ name: Dependabot auto-merge
 # `permissions:` block below lifts it, which is exactly the shape of GitHub's
 # own documented Dependabot auto-merge example.
 #
+# That elevation is not merely quoted from the documentation, it has happened
+# in this repository. Run 34178003664 of gosec.yml was triggered by
+# dependabot[bot] on head SHA d69de7e6, and while the repository default is
+# `default_workflow_permissions=read`, the run log's own
+# "##[group]GITHUB_TOKEN Permissions" block reads `SecurityEvents: write` under
+# "Secret source: Dependabot", and "Upload SARIF to Code Scanning" succeeded.
+# So the per-job key does lift a Dependabot-triggered token here. What that run
+# does NOT establish is the specific pair this file asks for, `contents: write`
+# plus `pull-requests: write`; that is expected, not measured, and the first
+# real arming is what settles it. Read the same
+# "##[group]GITHUB_TOKEN Permissions" block in the first bot run of this
+# workflow to close the question.
+#
 # That makes `pull_request_target` unnecessary here, and unnecessary is the
 # right word for it. `pull_request_target` runs with a write-scoped token in the
 # context of the base branch, which is safe only for as long as nobody ever
@@ -149,6 +162,23 @@ name: Dependabot auto-merge
 # That is an owner decision about branch protection, not something this file
 # may quietly change, so the step below NAMES the state in the job summary
 # instead of hiding it.
+
+# WHAT IS STILL EXPECTED RATHER THAN MEASURED, listed so nothing below reads as
+# a measurement it is not.
+#
+#   1. This workflow has never run for a real Dependabot pull request. Measured
+#      2026-09-08: `gh api .../workflows/branch-name-check.yml/runs` returns 91
+#      runs on `dependabot/` branches and 0 of them with conclusion success, so
+#      the exception's production path is untravelled in both files. The first
+#      bot run is the proof; until then this is a design, tested locally.
+#   2. Whether `gh pr merge --auto` succeeds with the lifted token, see above.
+#   3. What runs on master after an auto-merge. GitHub does not create new
+#      workflow runs from events a GITHUB_TOKEN caused, and six workflows here
+#      trigger only on push to master (ci, coverage-gate, gosec, gosec-diff-gate,
+#      windows-gate, skillctl-windows-smoke), two of which carry a baseline
+#      forward. After the first automatic merge, check with
+#      `gh api "repos/kamir/m3c-tools/actions/runs?branch=master&event=push"`
+#      whether that merge commit has runs. Do not rebuild anything before that.
 
 on:
   pull_request:
