@@ -213,3 +213,80 @@ jobs:
             exit 1
           fi
           echo "OK: every upload-artifact step sets retention-days."
+
+      # (5) CD-T8: a job that can be reached by a PULL REQUEST event and that
+      # holds a REPOSITORY-WRITE token (`contents: write` or
+      # `pull-requests: write`) must not run any `uses:` step.
+      #
+      # This gate exists because dependabot-auto-merge.yml states, in its own
+      # header, that it "avoids the whole class by construction": no checkout, no
+      # third-party action, so nothing from the pull request is ever executed
+      # beside a write-scoped token. That sentence was prose. Measured on
+      # 2026-09-08: a copy of that file with an `actions/checkout` of
+      # `github.event.pull_request.head.sha` plus a `pip install -r` of the
+      # bumped requirements passed all four checks above with exit 0, because a
+      # poisoned checkout is perfectly SHA-pinned and perfectly least-privileged
+      # at the top level. CD-T8 is what turns the header sentence into a claim
+      # the tree enforces.
+      #
+      # Why `uses:` and not just `actions/checkout`: fetching the head ref is the
+      # common way in, not the only one. Any third-party action in a
+      # write-scoped, PR-triggered job runs code the pull request's author can
+      # influence with a token that can push to the repository.
+      #
+      # SCOPE, stated so the number means something. Only jobs matching BOTH
+      # conditions are examined. `security-events: write` (gosec.yml) and
+      # `id-token: write` are NOT repository writes and are out of scope, which
+      # is why the SARIF upload keeps its checkout. Jobs that inherit the
+      # top-level block are covered by CD-T6, which already forces it read-only.
+      - name: "Guard: no `uses:` in a write-scoped, PR-triggered job"
+        run: |
+          python3 - <<'PY'
+          import glob, sys, yaml
+
+          WRITE_SCOPES = ("contents", "pull-requests")
+          PR_EVENTS = ("pull_request", "pull_request_target")
+
+          def triggers(doc):
+              # A bare `on:` is parsed as the boolean True by YAML 1.1.
+              on = doc.get("on", doc.get(True))
+              if isinstance(on, dict):
+                  return list(on)
+              if isinstance(on, list):
+                  return list(on)
+              return [on] if isinstance(on, str) else []
+
+          def repo_write(perms):
+              if perms == "write-all":
+                  return True
+              if not isinstance(perms, dict):
+                  return False
+              return any(perms.get(s) == "write" for s in WRITE_SCOPES)
+
+          bad, examined = [], []
+          for f in sorted(glob.glob(".github/workflows/*.yml")):
+              doc = yaml.safe_load(open(f)) or {}
+              if not any(e in triggers(doc) for e in PR_EVENTS):
+                  continue
+              for name, job in (doc.get("jobs") or {}).items():
+                  if not isinstance(job, dict) or not repo_write(job.get("permissions")):
+                      continue
+                  examined.append(f"{f}:{name}")
+                  for step in job.get("steps") or []:
+                      if isinstance(step, dict) and step.get("uses"):
+                          bad.append(f"{f}: job '{name}' step uses: {step['uses']}")
+
+          if bad:
+              print("::error::A write-scoped, PR-triggered job must not run any 'uses:' step (CD-T8):")
+              for b in bad:
+                  print(f"  {b}")
+              print("")
+              print("Such a job holds a token that can push to this repository, and a")
+              print("pull request decides what the checked-out code contains. That is")
+              print("poisoned pipeline execution. Drop the step, or drop the write scope.")
+              sys.exit(1)
+          print(f"OK: {len(examined)} PR-triggered job(s) hold a repository-write token, "
+                f"and none runs a 'uses:' step.")
+          for e in examined:
+              print(f"  in scope: {e}")
+          PY
