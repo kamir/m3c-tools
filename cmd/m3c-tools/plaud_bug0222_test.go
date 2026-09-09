@@ -1,3 +1,13 @@
+//go:build darwin
+
+// Diese Tests rufen plaudTranscriptPending auf, und die Funktion lebt in
+// cmd/m3c-tools/main.go hinter //go:build darwin. Ohne dieselbe Marke wird die
+// Datei auf Windows und Linux mituebersetzt und `go vet` bricht mit
+// "undefined: plaudTranscriptPending". Gemessen auf PR #263, Lauf 34196926495:
+//   vet.exe: cmd\m3c-tools\plaud_bug0222_test.go:32:19: undefined: plaudTranscriptPending
+// Der Fehlschlag trat NUR auf der anderen Plattform auf; auf macOS war go vet
+// gruen. Genau dafuer gibt es die Windows-Tore.
+
 package main
 
 import (
