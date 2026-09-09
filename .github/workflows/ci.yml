@@ -53,7 +53,7 @@ jobs:
         run: ./scripts/check-gofmt.sh
 
   prose-gate:
-    name: Prose (no em dash)
+    name: "Prose (no em dash, no real names)"
     # Pure shell over the tracked tree: no Go toolchain, no cgo, cheap runner.
     # The rule and its two exemptions are in CODESTYLE.md ("Prose: no em dashes").
     runs-on: ubuntu-latest
@@ -62,6 +62,14 @@ jobs:
 
       - name: No U+2014 EM DASH in the tracked tree
         run: ./scripts/check-no-emdash.sh
+
+      # Same job on purpose: same shape of rule, same cheap runner, and one
+      # required check to satisfy instead of two. A persona that is also a real
+      # colleague or customer turns example output into a statement about that
+      # person, and this tree is public AND mirrored into a customer's GitLab.
+      # Authorship is explicitly NOT in scope; the script says why.
+      - name: No real person's name in the tracked tree
+        run: ./scripts/check-no-real-names.sh
 
       # A workflow file that does not PARSE never runs, so no guard living
       # inside .github/workflows can catch its own file being broken. This step
@@ -224,7 +232,7 @@ jobs:
       #
       # Running both halves in CI is what keeps them a PAIR. A twin script that
       # only ever runs on one platform is a claim about the other, not a check
-      # of it, and the pair exists precisely so Eric runs what CI runs.
+      # of it, and the pair exists precisely so Alice runs what CI runs.
       - name: Acceptance rehearsal (SPEC-0406, Unix half)
         run: |
           go build -o build/skillctl ./cmd/skillctl

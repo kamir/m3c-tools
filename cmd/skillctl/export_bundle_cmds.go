@@ -3,7 +3,7 @@ package main
 // export_bundle_cmds.go: `skillctl export-bundle`, the command that produces a
 // sendable artifact (SPEC-0406 Phase 2, decided 2026-09-06).
 //
-// THE GAP IT CLOSES. SPEC-0406 has Eric hand Mirko a .skb over an untrusted
+// THE GAP IT CLOSES. SPEC-0406 has Alice hand Bob a .skb over an untrusted
 // transport, and `install --bundle` / `verify --bundle` both need the BundleMeta
 // envelope beside it. Nothing shipped produced that envelope. A search of the
 // whole tree found exactly three places that construct one, and all three are

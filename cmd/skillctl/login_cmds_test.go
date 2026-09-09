@@ -79,7 +79,7 @@ func TestNetworkCommandsGating(t *testing.T) {
 }
 
 func TestResolveLoginBase(t *testing.T) {
-	// default → public SaaS (the Eric bug: was localhost)
+	// default → public SaaS (the Alice bug: was localhost)
 	if got := resolveLoginBase("", ""); got != "https://onboarding.guide" {
 		t.Fatalf("default base = %q, want https://onboarding.guide", got)
 	}

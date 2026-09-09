@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 02-mirko-publish: Mirko publishes the bundle to the registry (online).
+# 02-bob-publish: Bob publishes the bundle to the registry (online).
 # This step is BEST-EFFORT. If the registry isn't reachable or
 # ER1_API_KEY isn't set, the demo continues offline (the cryptographic
 # chain is fully provable without it).
@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 require_skillctl
 
-header "02: Mirko publishes to the ER1 self registry"
+header "02: Bob publishes to the ER1 self registry"
 
 if ! online_mode_available; then
   warn "online mode not available: skipping the ER1 self publish"
@@ -29,12 +29,12 @@ BUNDLE="$BUNDLES_DIR/${SKILL_NAME}-${SKILL_VERSION}.skb"
 # core regardless. Targets `local` by default so demo items never land in prod
 # ER1: set ER1_TARGET=prod for a real run.
 ER1_TARGET="${ER1_TARGET:-local}"
-log "Mirko: skillctl publish $SKILL_NAME@$SKILL_VERSION --registry self --er1-target $ER1_TARGET"
+log "Bob: skillctl publish $SKILL_NAME@$SKILL_VERSION --registry self --er1-target $ER1_TARGET"
 set +e
 HOME="$INSTALL_HOME" "$SKILLCTL" publish "$SKILL_NAME@$SKILL_VERSION" \
     --bundle "$BUNDLE" --registry self \
     --er1-target "$ER1_TARGET" --er1-context skills \
-    --key "$KEYS_DIR/mirko.priv" --identity "$MIRKO_ID" --yes \
+    --key "$KEYS_DIR/bob.priv" --identity "$MIRKO_ID" --yes \
     >>"$LOG_DIR/full.log" 2>&1
 rc=$?
 set -e

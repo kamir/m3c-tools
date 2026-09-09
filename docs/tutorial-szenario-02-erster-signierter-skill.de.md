@@ -7,7 +7,7 @@ title: "Tutorial, Szenario 02: der erste signierte Skill, mit Prüfung durch ein
 
 **Für wen:** Sie haben mit Claude Code lokal einen Skill gebaut und wollen ihn erstmals
 signieren und veröffentlichen. Ihr Vorgesetzter oder eine Kollegin prüft ihn vorher.
-In diesem Text heißen die drei Rollen **Mitarbeiter** (Autor), **Eric** (Reviewer und
+In diesem Text heißen die drei Rollen **Mitarbeiter** (Autor), **Alice** (Reviewer und
 Herausgeber) und **Konsument** (jemand, der den Skill danach installiert).
 
 **Was Sie am Ende haben:** einen signierten Skill mit einer Attestierung, die **eine andere
@@ -48,12 +48,12 @@ der erste Versuch sonst an einer unverständlichen Fehlermeldung endet.
 | # | Punkt | Prüfen mit | Wer |
 |---|---|---|---|
 | 1 | `skillctl` aus einem **signierten Release**, nicht aus einem Quellbaum-Build, und auf allen beteiligten Maschinen **dieselbe** Version | `skillctl version` zeigt `skillctl/vX.Y.Z`, nicht `dev` | alle |
-| 2 | Ein eigenes Schlüsselpaar, privater Teil mit Modus `0600` | `skillctl keygen --out <pfad>` | Mitarbeiter, Eric |
-| 3 | Eine Identitäts-ID der Form `id:<name>@<org>`, die in jede Signatur eingestempelt wird und später nicht folgenlos wechselt | Absprache | Mitarbeiter, Eric |
+| 2 | Ein eigenes Schlüsselpaar, privater Teil mit Modus `0600` | `skillctl keygen --out <pfad>` | Mitarbeiter, Alice |
+| 3 | Eine Identitäts-ID der Form `id:<name>@<org>`, die in jede Signatur eingestempelt wird und später nicht folgenlos wechselt | Absprache | Mitarbeiter, Alice |
 | 4 | Ein **Registry, in das geschrieben werden darf**: bei Git ein leeres Repository plus ein Project Access Token für den Herausgeber (kein Deploy Token), beim HTTP-Registry zusätzlich eine serverseitig registrierte Identität, sonst `19 identity_mismatch` | `skillctl registry ls --registry <locator>` antwortet | Registry-Betreiber |
-| 5 | Der Reviewer ist **nicht** der Autor und hat einen **eigenen** Schlüssel | Absprache, siehe die Regel oben | Eric |
+| 5 | Der Reviewer ist **nicht** der Autor und hat einen **eigenen** Schlüssel | Absprache, siehe die Regel oben | Alice |
 | 6 | Beim Git-Weg: der Locator und die Token-Variablen sind gesetzt. Beim ER1-Weg: Anmeldung und eine serverseitig eingerichtete Raum-Mitgliedschaft (dafür gibt es **kein** `skillctl`-Verb) | `echo $REG`, `skillctl login --status` | alle |
-| 7 | Jede Seite hat den Fingerprint der anderen über einen **zweiten Kanal** bestätigt | Telefon, Videocall, persönlich | Mitarbeiter, Eric, Konsument |
+| 7 | Jede Seite hat den Fingerprint der anderen über einen **zweiten Kanal** bestätigt | Telefon, Videocall, persönlich | Mitarbeiter, Alice, Konsument |
 
 Zu Punkt 7, weil er der am leichtesten übersprungene ist: ein öffentlicher Schlüssel, der
 zusammen mit dem Bundle ankommt, beweist nichts. Er kam über denselben ungeprüften Weg wie
@@ -103,7 +103,7 @@ chmod +x src/hello-kup/scripts/hello.sh
 
 ```bash
 skillctl keygen --out "$WS/keys/mitarbeiter"
-skillctl keygen --out "$WS/keys/eric-reviewer"
+skillctl keygen --out "$WS/keys/alice-reviewer"
 ls -l "$WS/keys"
 ```
 
@@ -250,19 +250,19 @@ haben Sie den Produktivablauf einmal ganz gesehen, bevor Sie ihn gegen einen Ser
 
 ```bash
 cd "$WS"
-skillctl keygen --out "$WS/keys/eric-herausgeber"
+skillctl keygen --out "$WS/keys/alice-herausgeber"
 skillctl registry init --registry "local://$WS/registry.git"
 
-# Eric nimmt das Bundle des Mitarbeiters auf:
+# Alice nimmt das Bundle des Mitarbeiters auf:
 skillctl publish hello-kup@0.1.0 --bundle hello-kup@0.1.0.skb --version 0.1.0 \
   --registry "local://$WS/registry.git" \
-  --key "$WS/keys/eric-herausgeber.priv" --identity id:eric@kup --yes
+  --key "$WS/keys/alice-herausgeber.priv" --identity id:alice@kup --yes
 
-# Eric attestiert, mit dem ANDEREN Schlüssel:
+# Alice attestiert, mit dem ANDEREN Schlüssel:
 skillctl publish --attest hello-kup@0.1.0 --digest "$DIGEST" --level green \
   --rationale "geprueft im Trockenlauf" \
   --registry "local://$WS/registry.git" \
-  --identity id:eric-reviewer@kup --key "$WS/keys/eric-reviewer.priv" --yes
+  --identity id:alice-reviewer@kup --key "$WS/keys/alice-reviewer.priv" --yes
 
 skillctl registry ls --registry "local://$WS/registry.git"
 ```
@@ -275,13 +275,13 @@ Jetzt die Konsumentenseite, in einem eigenen Zuhause:
 mkdir -p "$WS/kunde/.claude"
 cat > "$WS/kunde/.claude/trust-roots.yaml" <<YAML
 registry: local://$WS/registry.git
-pubkey_b64: $(openssl pkey -pubin -in "$WS/keys/eric-herausgeber.pub" -outform DER | tail -c 32 | base64)
-fingerprint: sha256:$(openssl pkey -pubin -in "$WS/keys/eric-herausgeber.pub" -outform DER | tail -c 32 | shasum -a 256 | awk '{print $1}')
+pubkey_b64: $(openssl pkey -pubin -in "$WS/keys/alice-herausgeber.pub" -outform DER | tail -c 32 | base64)
+fingerprint: sha256:$(openssl pkey -pubin -in "$WS/keys/alice-herausgeber.pub" -outform DER | tail -c 32 | shasum -a 256 | awk '{print $1}')
 governance_minimum: green
 governance_quorum: 1
 signers:
-  - reviewer_id: id:eric-reviewer@kup
-    pubkey_b64: $(openssl pkey -pubin -in "$WS/keys/eric-reviewer.pub" -outform DER | tail -c 32 | base64)
+  - reviewer_id: id:alice-reviewer@kup
+    pubkey_b64: $(openssl pkey -pubin -in "$WS/keys/alice-reviewer.pub" -outform DER | tail -c 32 | base64)
 YAML
 
 HOME="$WS/kunde" skillctl pull --registry "local://$WS/registry.git" --skill hello-kup \
@@ -339,7 +339,7 @@ und zwei Arten von Ablehnung mit echten Exit-Codes gesehen.
 
 ## Teil 2: der echte Vorgang (Produktion: das Git-Registry)
 
-Drei Bahnen: Mitarbeiter, Eric, Konsument. **Produktiv ist das Registry ein Git-Repository.**
+Drei Bahnen: Mitarbeiter, Alice, Konsument. **Produktiv ist das Registry ein Git-Repository.**
 Die Kommandos unten benutzen `github://<owner>/<repo>`, weil das der Locator ist, der heute
 belastbar läuft. Die interne GitLab-Instanz (`gitlab://<host>/<gruppe>/<projekt>`) ist
 dieselbe Mechanik und derselbe Backend-Kern; sobald deren Sync steht, ändert sich genau zwei
@@ -361,7 +361,7 @@ Die Rollenteilung ist die, die auch organisatorisch gilt:
 | Rolle | Wer | Was er tut | Sein Schlüssel |
 |---|---|---|---|
 | **Autor** | der Mitarbeiter | packt und versiegelt | eigener Autorenschlüssel |
-| **Freigeber und Herausgeber** | Eric | prüft, nimmt auf, attestiert | Herausgeberschlüssel und Reviewer-Schlüssel |
+| **Freigeber und Herausgeber** | Alice | prüft, nimmt auf, attestiert | Herausgeberschlüssel und Reviewer-Schlüssel |
 | **Konsument** | Dritte | zieht und installiert | kein Schlüssel, nur ein Pin auf das Registry |
 
 Der Mitarbeiter publiziert **nicht selbst**, und er braucht keinen Schreibzugriff auf das
@@ -407,7 +407,7 @@ openssl pkey -pubin -in ~/.config/m3c/skill-keys/mitarbeiter.pub -outform DER \
 openssl pkey -pubin -in ~/.config/m3c/skill-keys/mitarbeiter.pub -outform DER \
   | tail -c 32 | shasum -a 256
 
-# M3. Selbstprüfung, bevor Eric Zeit investiert.
+# M3. Selbstprüfung, bevor Alice Zeit investiert.
 skillctl propose <skill-name> --intent green
 #   Exit 0: das Tor hält. Exit 2: es hat gegriffen, die FAIL-Zeilen abarbeiten.
 
@@ -428,21 +428,21 @@ skillctl verify-sig --pubkey ~/.config/m3c/skill-keys/mitarbeiter.pub \
   <skill-name>@<version>.skb        # -> 0
 ```
 
-**Was Sie Eric übergeben, und auf welchem Weg:**
+**Was Sie Alice übergeben, und auf welchem Weg:**
 
 | Was | Weg | Warum |
 |---|---|---|
 | `<skill-name>@<version>.skb` **und** die `.author.sig` daneben | beliebig (Mail, Freigabe, Ticket, Merge Request) | der Transportweg muss nicht vertrauenswürdig sein, beide Dateien werden gebraucht |
-| Der Digest aus M4 | derselbe Weg, aber **zusätzlich vorgelesen** | Eric muss prüfen, worüber er urteilt |
+| Der Digest aus M4 | derselbe Weg, aber **zusätzlich vorgelesen** | Alice muss prüfen, worüber er urteilt |
 | Ihr Fingerprint aus M2 | **anderer Kanal**, einmalig | siehe Teil 0, Punkt 7 |
 | Was der Skill tut, welche Daten er anfasst, was er ins Netz schickt | Text, Ticket, Merge Request | das ist der Gegenstand der Prüfung, nicht die Signatur |
 
-### Bahn 2: Eric (Freigeber und Herausgeber)
+### Bahn 2: Alice (Freigeber und Herausgeber)
 
 ```bash
 # E1. Einmalig: zwei Schlüssel mit zwei Aufgaben.
-skillctl keygen --out ~/.config/m3c/skill-keys/eric-herausgeber
-skillctl keygen --out ~/.config/m3c/skill-keys/eric-reviewer
+skillctl keygen --out ~/.config/m3c/skill-keys/alice-herausgeber
+skillctl keygen --out ~/.config/m3c/skill-keys/alice-reviewer
 
 # E2. Die Autorensignatur des Mitarbeiters prüfen. Vorher muss der Fingerprint
 #     aus M2 über den zweiten Kanal bestätigt sein.
@@ -474,8 +474,8 @@ skillctl publish <skill-name>@<version> \
   --bundle <skill-name>@<version>.skb \
   --version <version> \
   --registry "$REG" \
-  --key ~/.config/m3c/skill-keys/eric-herausgeber.priv \
-  --identity id:eric@kup \
+  --key ~/.config/m3c/skill-keys/alice-herausgeber.priv \
+  --identity id:alice@kup \
   --yes
 ```
 
@@ -490,8 +490,8 @@ skillctl publish --attest <skill-name>@<version> \
   --level green \
   --rationale "geprüft am <datum>; Autorensignatur id:mitarbeiter@kup verifiziert; kein Netzwerkzugriff; schreibt nur unter ./out" \
   --registry "$REG" \
-  --identity id:eric-reviewer@kup \
-  --key ~/.config/m3c/skill-keys/eric-reviewer.priv \
+  --identity id:alice-reviewer@kup \
+  --key ~/.config/m3c/skill-keys/alice-reviewer.priv \
   --yes
 ```
 
@@ -519,7 +519,7 @@ fingerprint: sha256:<über den zweiten Kanal bestätigt>
 governance_minimum: green
 governance_quorum: 1
 signers:
-  - reviewer_id: id:eric-reviewer@kup
+  - reviewer_id: id:alice-reviewer@kup
     pubkey_b64: <Erics Reviewer-Schlüssel, roh, base64>
 ```
 
@@ -529,7 +529,7 @@ signers:
 > ```bash
 > skillctl peer add kup "$REG" \
 >   --pubkey <Herausgeberschlüssel-b64> --pin sha256:<Fingerprint> \
->   --signer id:eric-reviewer@kup:<Reviewer-Schlüssel-b64> --quorum 1
+>   --signer id:alice-reviewer@kup:<Reviewer-Schlüssel-b64> --quorum 1
 > ```
 >
 > `peer add` **erzwingt** den Out-of-Band-Pin: es verweigert, wenn `--pin` nicht zum
@@ -585,7 +585,7 @@ Code-Pfad ist derselbe, nur der Locator ändert sich:
 ```bash
 skillctl registry init --registry local://$HOME/skill-registry.git
 skillctl publish <name>@<ver> --bundle <name>@<ver>.skb --version <ver> \
-  --registry local://$HOME/skill-registry.git --key <herausgeber.priv> --identity id:eric@kup --yes
+  --registry local://$HOME/skill-registry.git --key <herausgeber.priv> --identity id:alice@kup --yes
 # ... admit + attest wie oben ...
 
 git -C "$HOME/skill-registry.git" push --mirror https://github.com/<owner>/<repo>.git
@@ -600,16 +600,16 @@ demselben Torlauf.
 
 Sagen Sie es genau, sonst verspricht die Kette mehr, als sie hält:
 
-- **Geprüft:** dass Eric dieses Bundle aufgenommen hat (Herausgebersignatur über den Digest),
+- **Geprüft:** dass Alice dieses Bundle aufgenommen hat (Herausgebersignatur über den Digest),
   dass ein gepinnter Reviewer-Schlüssel grün attestiert hat, dass die Bytes unverändert sind,
   dass zu diesem Digest kein Widerruf im Repository liegt.
 - **Nicht geprüft:** die Autorensignatur des **Mitarbeiters**. Der Herausgeber signiert beide
   Rollen (Autor und Registry) mit seinem Schlüssel, und die losgelöste `.author.sig` des
   Mitarbeiters reist nicht mit ins Repository. Die Urheberangabe steht im Bundle und ist
   durch Erics Signatur gegen Veränderung geschützt, aber **wer den Skill wirklich geschrieben
-  hat, hat Eric in E2 geprüft, nicht der Konsument.**
+  hat, hat Alice in E2 geprüft, nicht der Konsument.**
 
-Genau deshalb ist E2 kein Formalismus. Der Konsument vertraut Eric; Eric vertraut niemandem,
+Genau deshalb ist E2 kein Formalismus. Der Konsument vertraut Alice; Alice vertraut niemandem,
 sondern rechnet nach.
 
 ### Nach der Installation, heute noch eine Baustelle
@@ -663,8 +663,8 @@ nicht mit einer Einschätzung:
 
 | # | Kriterium | Beleg |
 |---|---|---|
-| 1 | Der Mitarbeiter hat authentisch versiegelt | M5 und E2 `verify-sig` rc=0, und der Digest aus M4 ist derselbe, über den Eric in E6 geurteilt hat |
-| 2 | Ein Zweiter hat geprüft | E2 rc=0 (Eric hat die Autorensignatur selbst verifiziert), E6 angenommen mit einer `--identity` ungleich der aus M4, und E7 zeigt `gov=green status=ok` |
+| 1 | Der Mitarbeiter hat authentisch versiegelt | M5 und E2 `verify-sig` rc=0, und der Digest aus M4 ist derselbe, über den Alice in E6 geurteilt hat |
+| 2 | Ein Zweiter hat geprüft | E2 rc=0 (Alice hat die Autorensignatur selbst verifiziert), E6 angenommen mit einer `--identity` ungleich der aus M4, und E7 zeigt `gov=green status=ok` |
 | 3 | Ein Dritter kann installieren | K2 zeigt `✅ … gov=green`, K3 installiert mit Provenienz-Datei |
 | 4 | Ein manipuliertes Bundle wird abgelehnt | Trockenlauf 1.7, rc=11 mit umbenannter Signatur |
 
@@ -677,8 +677,8 @@ Die Evidenz in eine Datei, die man in sechs Monaten noch lesen kann:
   skillctl version
   echo "Autor:      id:mitarbeiter@kup"
   echo "Registry:   $REG"
-  echo "Herausgeber: id:eric@kup"
-  echo "Reviewer:   id:eric-reviewer@kup"
+  echo "Herausgeber: id:alice@kup"
+  echo "Reviewer:   id:alice-reviewer@kup"
   echo "Digest:     $DIGEST"
   echo "Fingerprint bestätigt über: <Telefon / Videocall / persönlich>, am <datum>"
   skillctl trust list
@@ -704,18 +704,18 @@ skillctl login --status
 # E5 (Admit) und E6 (Attest) laufen gegen den eigenen ER1-Kontext:
 skillctl publish <skill-name>@<version> --bundle <skill-name>@<version>.skb \
   --registry self --er1-target prod --er1-context skills \
-  --key ~/.config/m3c/skill-keys/eric-herausgeber.priv --identity id:eric@kup --yes
+  --key ~/.config/m3c/skill-keys/alice-herausgeber.priv --identity id:alice@kup --yes
 
 skillctl publish --attest <skill-name>@<version> --digest "$DIGEST" --level green \
   --rationale "geprüft am <datum>" \
   --registry self --er1-target prod --er1-context skills \
-  --identity id:eric-reviewer@kup --key ~/.config/m3c/skill-keys/eric-reviewer.priv --yes
+  --identity id:alice-reviewer@kup --key ~/.config/m3c/skill-keys/alice-reviewer.priv --yes
 
 # Sichtbar machen, damit der Konsument es findet:
 skillctl room share <skill-name> --room <raum-label> --yes
 
 # K2/K3 beim Konsumenten, aus ERICS Kontext:
-skillctl pull --registry self --er1-target prod --er1-context <eric-sub>___skills \
+skillctl pull --registry self --er1-target prod --er1-context <alice-sub>___skills \
   --skill <skill-name> --install --trust-mode --dry-run-install --no-checkpoint
 ```
 
@@ -749,14 +749,14 @@ deshalb heute nur gegen eine Instanz, die diese Endpunkte ohne Client-Auth bedie
 lokale Docker-Instanz aus `demo/kup-training/`.
 
 Wo dieser Weg läuft, ist er die sauberere Form von Teil 2, weil der Reviewer dort **selbst**
-postet und der Umweg über Eric als Herausgeber entfällt:
+postet und der Umweg über Alice als Herausgeber entfällt:
 
 ```bash
 # Reviewer, gegen eine Instanz, die den Endpunkt ohne Client-Auth bedient:
 skillctl attest "$DIGEST" --level green \
   --rationale "geprüft am <datum>" \
-  --reviewer-id id:eric@kup --author-id id:mitarbeiter@kup \
-  --key ~/.config/m3c/skill-keys/eric-reviewer.priv \
+  --reviewer-id id:alice@kup --author-id id:mitarbeiter@kup \
+  --key ~/.config/m3c/skill-keys/alice-reviewer.priv \
   --registry https://<host>/api/skills
 
 # Konsument:

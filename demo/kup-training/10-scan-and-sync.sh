@@ -8,7 +8,7 @@
 # (_user_skill_profiles), so the Skill Profile Admin page reflects adoption.
 #
 # Two modes:
-#   default, scan Eric's isolated $HOME (artifacts/eric-home/) and import.
+#   default, scan Alice's isolated $HOME (artifacts/alice-home/) and import.
 #   --operator, scan the trainer's REAL ~/.claude/skills/ tree and import.
 #
 # Mechanics:
@@ -50,9 +50,9 @@ if [ "$OPERATOR_MODE" -eq 1 ]; then
   SCAN_HOME="$HOME"
   SESSION_TAG="kup-operator-$(date +%Y-%m-%d)"
 else
-  header "10, SCAN + sync ERIC's installed skills (artifacts/eric-home/)"
+  header "10, SCAN + sync ALICE's installed skills (artifacts/alice-home/)"
   SCAN_HOME="$INSTALL_HOME"
-  SESSION_TAG="kup-eric-$(date +%Y-%m-%d)"
+  SESSION_TAG="kup-alice-$(date +%Y-%m-%d)"
 fi
 
 log "scanning skills under $SCAN_HOME/.claude/skills/"
@@ -64,7 +64,7 @@ INVENTORY=$(HOME="$SCAN_HOME" "$SKILLCTL" awareness sync \
 
 if [[ -z "$INVENTORY" ]]; then
   warn "no skills found under $SCAN_HOME/.claude/skills/"
-  warn "(if running for Eric, run 05-eric-install-and-run.sh first)"
+  warn "(if running for Alice, run 05-alice-install-and-run.sh first)"
   exit 0
 fi
 

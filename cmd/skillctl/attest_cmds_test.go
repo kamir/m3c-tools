@@ -491,8 +491,8 @@ func TestAttest_IndependentReview_NoNote(t *testing.T) {
 	args := []string{
 		validDigestForTest,
 		"--level", "green",
-		"--rationale", "independent review by Eric",
-		"--reviewer-id", "id:eric@m3c",
+		"--rationale", "independent review by Alice",
+		"--reviewer-id", "id:alice@m3c",
 		"--author-id", "id:kamir@m3c",
 		"--key", priv,
 		"--registry", srv.URL,

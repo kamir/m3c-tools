@@ -75,8 +75,8 @@ agent skills that act on it (sign, admit, verify, revoke: offline-verifiable).
 - [Manual: m3c-tools](manual-m3c-tools): every command, flag and config variable
 - [Manual: skillctl](manual-skillctl): the full trust lifecycle, command by command
 - [Bug & feature tracking](bug-tracking): the private analysis file, the public issue, and the guards between them
-- [Acceptance & Handover: skill lifecycle](acceptance-skillctl-lifecycle): the two-person (Mirko → Eric) procedure over ER1, with success criteria
-- [Runbook: two-person ER1 exchange](runbook-two-person-er1-exchange): copy-paste prod runbook (Mirko + Eric lanes) for the live exercise
+- [Acceptance & Handover: skill lifecycle](acceptance-skillctl-lifecycle): the two-person (Bob → Alice) procedure over ER1, with success criteria
+- [Runbook: two-person ER1 exchange](runbook-two-person-er1-exchange): copy-paste prod runbook (Bob + Alice lanes) for the live exercise
 - [Tutorial, Szenario 01 (Deutsch)](tutorial-szenario-01-eigene-skills-mehrere-maschinen.de): eigene Skills auf mehreren Maschinen, plus fremde signierte Skills
 - [Tutorial, Szenario 02 (Deutsch)](tutorial-szenario-02-erster-signierter-skill.de): der erste signierte Skill, mit Prüfung durch einen Zweiten
 - [Tutorial, Katas und Test Ride (Deutsch)](tutorial-katas-und-test-ride.de): üben statt zusehen, jeder Beat ein echter Exit-Code

@@ -42,7 +42,7 @@ func TestResolvePullTrustRoots(t *testing.T) {
 	// Peer store with ONE pinned peer using a DIFFERENT key.
 	peersPath := filepath.Join(dir, "skill-peers.yaml")
 	peers := &registry.Peers{}
-	pe := registry.Peer{Name: "eric", Locator: "gitlab://h/eric/skills", PubKeyB64: peerB64}
+	pe := registry.Peer{Name: "alice", Locator: "gitlab://h/alice/skills", PubKeyB64: peerB64}
 	pe.Fingerprint = fingerprintOf(peerPub) // required pin, derived from the key
 	if err := peers.AddPeer(pe); err != nil {
 		t.Fatal(err)
@@ -69,14 +69,14 @@ func TestResolvePullTrustRoots(t *testing.T) {
 	}
 
 	// The pinned peer locator → the PEER's key.
-	tr, peerName, err := resolvePullTrustRoots("gitlab://h/eric/skills", selfPath)
+	tr, peerName, err := resolvePullTrustRoots("gitlab://h/alice/skills", selfPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !tr.PubKey().Equal(peerPub) {
 		t.Error("pinned peer did not resolve to the peer's key")
 	}
-	if peerName != "eric" {
-		t.Errorf("peerName = %q, want eric", peerName)
+	if peerName != "alice" {
+		t.Errorf("peerName = %q, want alice", peerName)
 	}
 }

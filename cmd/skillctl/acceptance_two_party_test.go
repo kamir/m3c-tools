@@ -3,7 +3,7 @@ package main
 // acceptance_two_party_test.go: SPEC-0406, the two-party acceptance test as an
 // automated regression.
 //
-// WHAT IT IS. The machine-checked half of the procedure Mirko and Eric run by
+// WHAT IT IS. The machine-checked half of the procedure Bob and Alice run by
 // hand. It plays both parties in one process, but with NOTHING shared between
 // them except a directory that is explicitly declared to be the untrusted
 // transport: separate homes, separate keys, separate trust-roots files.
@@ -237,17 +237,17 @@ func (p *party) installedSkills(t *testing.T) []string {
 // is the contract and is therefore declared here; which members a run REACHES
 // is measured, not declared.
 var spec0406Criteria = []struct{ id, what string }{
-	{"T01", "Eric kann seinen Skill paketieren"},
-	{"T02", "Eric kann seinen Skill signieren"},
-	{"T03", "Eric kann sein eigenes Paket verifizieren"},
-	{"T04", "Mirko kann Erics Skill verifizieren"},
-	{"T05", "Mirko kann Erics Skill installieren"},
-	{"T06", "Mirko kann Erics Skill ausfuehren"},
-	{"T07", "Mirko kann seinen Skill paketieren und signieren"},
-	{"T08", "Eric kann Mirkos Skill verifizieren"},
-	{"T09", "Eric kann Mirkos Skill installieren"},
-	{"T10", "Eric kann Mirkos Skill ausfuehren"},
-	{"T11", "Manipuliertes Eric-Artefakt wird erkannt"},
+	{"T01", "Alice kann seinen Skill paketieren"},
+	{"T02", "Alice kann seinen Skill signieren"},
+	{"T03", "Alice kann sein eigenes Paket verifizieren"},
+	{"T04", "Bob kann Erics Skill verifizieren"},
+	{"T05", "Bob kann Erics Skill installieren"},
+	{"T06", "Bob kann Erics Skill ausfuehren"},
+	{"T07", "Bob kann seinen Skill paketieren und signieren"},
+	{"T08", "Alice kann Mirkos Skill verifizieren"},
+	{"T09", "Alice kann Mirkos Skill installieren"},
+	{"T10", "Alice kann Mirkos Skill ausfuehren"},
+	{"T11", "Manipuliertes Alice-Artefakt wird erkannt"},
 	{"T12", "Manipuliertes Artefakt wird nicht installiert"},
 	{"T13", "Bestand nach verweigertem Install unversehrt"},
 	{"T14", "Lokale Manipulation eines installierten Skills wird erkannt"},
@@ -328,21 +328,21 @@ func TestAcceptance_TwoParty(t *testing.T) {
 	l := newAcceptanceLedger(t)
 	transport := t.TempDir() // the untrusted channel: e-mail, USB, a shared folder
 
-	mirko := newParty(t, "mirko", "mirko-demo-skill", "Hello from Mirko")
-	eric := newParty(t, "eric", "eric-demo-skill", "Hello from Eric")
+	bob := newParty(t, "bob", "bob-demo-skill", "Hello from Bob")
+	alice := newParty(t, "alice", "alice-demo-skill", "Hello from Alice")
 
 	// Phase 0: each side pins the OTHER's author key. Out of band, before
 	// anything arrives. Without this the exchange proves nothing.
 	// The root names the SENDER's own registry. Nothing here ever calls it: the
 	// offline path passes no fetcher, which is exactly what makes the decision
 	// independent of the sender. The URL is a name, not an endpoint.
-	mirko.pinTrustRoots(t, eric, "https://eric.example/api/skills")
-	eric.pinTrustRoots(t, mirko, "https://mirko.example/api/skills")
+	bob.pinTrustRoots(t, alice, "https://alice.example/api/skills")
+	alice.pinTrustRoots(t, bob, "https://bob.example/api/skills")
 
-	// ---- T01..T06: Eric to Mirko ----
+	// ---- T01..T06: Alice to Bob ----
 	// seal() packages and signs, and fails the test itself if either step does
 	// not happen: reaching the next line IS the evaluation of T01 and T02.
-	fromEric := eric.seal(t, transport)
+	fromEric := alice.seal(t, transport)
 	l.reached("T01")
 	l.reached("T02")
 
@@ -353,43 +353,43 @@ func TestAcceptance_TwoParty(t *testing.T) {
 	// against its own trust root, which is what makes the sender able to notice
 	// a broken signing step before the recipient does.
 	var t03 bytes.Buffer
-	code := runVerifySig([]string{"--pubkey", eric.authorPubPath, fromEric.skb}, &t03, &t03)
+	code := runVerifySig([]string{"--pubkey", alice.authorPubPath, fromEric.skb}, &t03, &t03)
 	l.check("T03", code == exitOK, "the sender cannot verify his own package (exit %d): %s", code, t03.String())
 
-	code, out := mirko.verifyBundle(fromEric)
+	code, out := bob.verifyBundle(fromEric)
 	l.must("T04", code == exitOK, "verify failed (exit %d): %s", code, out)
 
-	code, out = mirko.installBundle(fromEric)
+	code, out = bob.installBundle(fromEric)
 	l.must("T05", code == exitOK, "install failed (exit %d): %s", code, out)
-	got := mirko.installedSkills(t)
-	l.must("T05", len(got) == 1 && got[0] == eric.skill, "installed %v, want [%s]", got, eric.skill)
+	got := bob.installedSkills(t)
+	l.must("T05", len(got) == 1 && got[0] == alice.skill, "installed %v, want [%s]", got, alice.skill)
 
 	// T06: the skill is USABLE, not merely present. Reading back the greeting
 	// from the installed tree is the closest this hermetic test gets to running
 	// it, and it is what distinguishes "delivered" from "verified".
 	l.reached("T06")
-	assertGreeting(t, l, "T06", mirko, eric)
+	assertGreeting(t, l, "T06", bob, alice)
 
 	// ---- T07..T10: the same in reverse. Symmetry is part of the claim: neither
 	// side holds a privileged role, and nothing depends on our machine.
-	fromMirko := mirko.seal(t, transport)
+	fromMirko := bob.seal(t, transport)
 	l.reached("T07")
 
-	code, out = eric.verifyBundle(fromMirko)
+	code, out = alice.verifyBundle(fromMirko)
 	l.must("T08", code == exitOK, "verify failed (exit %d): %s", code, out)
 
-	code, out = eric.installBundle(fromMirko)
+	code, out = alice.installBundle(fromMirko)
 	l.must("T09", code == exitOK, "install failed (exit %d): %s", code, out)
 
 	l.reached("T10")
-	assertGreeting(t, l, "T10", eric, mirko)
+	assertGreeting(t, l, "T10", alice, bob)
 
 	// ---- T11..T13: the tamper ----
 	//
 	// A COPY of the already-signed artifact, altered, with its envelope intact.
 	// The signature is deliberately NOT re-made: that is the whole test.
 	tampered := sealed{
-		skb:    filepath.Join(transport, "eric-demo-skill-tampered.skb"),
+		skb:    filepath.Join(transport, "alice-demo-skill-tampered.skb"),
 		digest: fromEric.digest,
 	}
 	blob, err := os.ReadFile(fromEric.skb) // #nosec G304 -- the test's own temp dir.
@@ -408,10 +408,10 @@ func TestAcceptance_TwoParty(t *testing.T) {
 		t.Fatalf("write tampered envelope: %v", err)
 	}
 
-	before := snapshotSkills(t, mirko)
+	before := snapshotSkills(t, bob)
 
 	// T11: detected, with the numbered code that names the cause.
-	code, out = mirko.verifyBundle(tampered)
+	code, out = bob.verifyBundle(tampered)
 	l.check("T11", code == verify.ExitDigestMismatch,
 		"verify exit = %d, want %d (digest mismatch): %s", code, verify.ExitDigestMismatch, out)
 	// A refusal must be legible. A silent non-zero exit is nearly as bad as a
@@ -419,7 +419,7 @@ func TestAcceptance_TwoParty(t *testing.T) {
 	l.check("T11", strings.TrimSpace(out) != "", "refused without printing a reason")
 
 	// T12: not installed.
-	code, out = mirko.installBundle(tampered)
+	code, out = bob.installBundle(tampered)
 	l.check("T12", code != exitOK, "a tampered artifact was INSTALLED: %s", out)
 	l.check("T12", code == verify.ExitDigestMismatch,
 		"install exit = %d, want %d: %s", code, verify.ExitDigestMismatch, out)
@@ -427,7 +427,7 @@ func TestAcceptance_TwoParty(t *testing.T) {
 	// T13: and the refusal changed nothing. This is INV-6 at the acceptance
 	// level: a build that refuses loudly and writes anyway looks green in every
 	// log, so the disk is asked directly.
-	after := snapshotSkills(t, mirko)
+	after := snapshotSkills(t, bob)
 	l.check("T13", equalSnapshots(before, after),
 		"a refused install changed the install target\n before: %v\n after:  %v", before, after)
 
@@ -436,17 +436,17 @@ func TestAcceptance_TwoParty(t *testing.T) {
 	// The most common real case: the artifact was fine on arrival and the file
 	// was edited afterwards. Nothing about the transport catches this; only
 	// re-verification does.
-	victim := filepath.Join(mirko.home, ".claude", "skills", eric.skill, "SKILL.md")
-	if err := os.WriteFile(victim, []byte("# "+eric.skill+"\n\nHello from Eric - LOCAL HACK\n"), 0o600); err != nil {
+	victim := filepath.Join(bob.home, ".claude", "skills", alice.skill, "SKILL.md")
+	if err := os.WriteFile(victim, []byte("# "+alice.skill+"\n\nHello from Alice - LOCAL HACK\n"), 0o600); err != nil {
 		t.Fatalf("local tamper: %v", err)
 	}
 	var vout bytes.Buffer
-	vcode := runVerify([]string{"--offline", "--trust-roots", mirko.trustRoots, "--home", mirko.home, eric.skill}, &vout, &vout)
+	vcode := runVerify([]string{"--offline", "--trust-roots", bob.trustRoots, "--home", bob.home, alice.skill}, &vout, &vout)
 	l.check("T14", vcode != exitOK, "a locally altered installed skill still verified: %s", vout.String())
 
 	// ---- T15: the audit trail ----
 	l.reached("T15")
-	assertRefusalWasRecorded(t, l, mirko)
+	assertRefusalWasRecorded(t, l, bob)
 }
 
 // assertGreeting checks the installed tree really carries the sender's content.

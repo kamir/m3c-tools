@@ -151,11 +151,11 @@ function OneParty {
 }
 
 Write-Host "== Phase 1: both sides check their installation =="
-OneParty -Who "mirko" -Skill "mirko-demo-skill" -Greeting "Hello from Mirko"
-OneParty -Who "eric"  -Skill "eric-demo-skill"  -Greeting "Hello from Eric"
+OneParty -Who "bob" -Skill "bob-demo-skill" -Greeting "Hello from Bob"
+OneParty -Who "alice"  -Skill "alice-demo-skill"  -Greeting "Hello from Alice"
 
-$MirkoHome = Join-Path $Work "mirko"
-$EricHome  = Join-Path $Work "eric"
+$MirkoHome = Join-Path $Work "bob"
+$EricHome  = Join-Path $Work "alice"
 
 # doctor is asked ONCE, about THIS machine, and deliberately not twice as if it
 # were two of them.
@@ -220,12 +220,12 @@ function Exchange {
 }
 
 Write-Host ""
-Write-Host "== Eric to Mirko =="
-Exchange -Who "eric" -Skill "eric-demo-skill" -Px "R3"
+Write-Host "== Alice to Bob =="
+Exchange -Who "alice" -Skill "alice-demo-skill" -Px "R3"
 
 Write-Host ""
-Write-Host "== Mirko to Eric (symmetry: neither side has a privileged role) =="
-Exchange -Who "mirko" -Skill "mirko-demo-skill" -Px "R4"
+Write-Host "== Bob to Alice (symmetry: neither side has a privileged role) =="
+Exchange -Who "bob" -Skill "bob-demo-skill" -Px "R4"
 
 # ---- summary -------------------------------------------------------------
 

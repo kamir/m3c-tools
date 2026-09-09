@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Runbook: Eric · sign, publish &amp; upgrade a skill</title>
+<title>Runbook: Alice · sign, publish &amp; upgrade a skill</title>
 <style>
   :root{
     --bg:#0b0d11; --panel:#171a21; --panel2:#23262e; --line:#2b3140;
@@ -108,7 +108,7 @@
 <body>
 <div class="wrap">
   <span class="tag">● SKILLCTL RUNBOOK · PUBLISHER</span>
-  <h1>Runbook (Eric: sign, publish &amp; upgrade a skill</h1>
+  <h1>Runbook (Alice: sign, publish &amp; upgrade a skill</h1>
   <p class="sub">Fill in the session inputs once at the top) every command below auto-fills with your values
   (shown <span style="color:var(--ok);font-weight:700">in green</span>). Work the four blocks top to bottom; each
   command has a ⧉ copy icon, a 📋 box for its output, and a 💬 feedback box.</p>
@@ -137,16 +137,16 @@
     <div class="cfg-grid">
       <div style="grid-column:1/-1"><label>Author) wer publisht? (setzt Identität + Kontext + Key)</label>
         <select data-step="cfg" data-field="author" onchange="applyAuthor()">
-          <option value="eric">Eric, id:eric@m3c · 105525022458397210134___skills</option>
-          <option value="kamir">Mirko (kamir), id:kamir@m3c · 107677460544181387647___skills</option>
+          <option value="alice">Alice, id:alice@m3c · 105525022458397210134___skills</option>
+          <option value="kamir">Bob (kamir), id:kamir@m3c · 107677460544181387647___skills</option>
         </select></div>
       <div><label>Skill name</label><input data-step="cfg" data-field="skill" value="field-note"></div>
       <div><label>Version (publish)</label><input data-step="cfg" data-field="ver" value="0.1.0"></div>
       <div><label>Next version (upgrade)</label><input data-step="cfg" data-field="nextver" value="0.2.0"></div>
       <div><label>Room label</label><input data-step="cfg" data-field="room" value="aims-basics"></div>
       <div><label>ER1 context (auto, vom Author)</label><input data-step="cfg" data-field="ctx" value="105525022458397210134___skills"></div>
-      <div><label>Author identity (auto, vom Author)</label><input data-step="cfg" data-field="identity" value="id:eric@m3c"></div>
-      <div style="grid-column:1/-1"><label>Key stem (auto · keygen --out · key = stem.priv)</label><input data-step="cfg" data-field="keystem" value="~/.config/m3c/skill-keys/eric"></div>
+      <div><label>Author identity (auto, vom Author)</label><input data-step="cfg" data-field="identity" value="id:alice@m3c"></div>
+      <div style="grid-column:1/-1"><label>Key stem (auto · keygen --out · key = stem.priv)</label><input data-step="cfg" data-field="keystem" value="~/.config/m3c/skill-keys/alice"></div>
     </div>
   </div>
 
@@ -421,8 +421,8 @@ skillctl publish {{skill}}@{{nextver}} \
 </dialog>
 
 <script>
-  const WS_ID = 'ws-eric-publisher-v2';
-  const WS_TITLE = 'Eric: publisher runbook';
+  const WS_ID = 'ws-alice-publisher-v2';
+  const WS_TITLE = 'Alice: publisher runbook';
   const KAMIR_EMAIL = 'mirko.kaempf@gmail.com';
   const k = (s,f)=>`${WS_ID}:${s}:${f}`;
   const $ = id => document.getElementById(id);
@@ -434,7 +434,7 @@ skillctl publish {{skill}}@{{nextver}} \
   // Author presets: pick the publisher; identity + ER1 context + key move together
   // (they must match the Google account used in `skillctl login`, else 403).
   const AUTHORS = {
-    eric:  { identity:'id:eric@m3c',  ctx:'105525022458397210134___skills', keystem:'~/.config/m3c/skill-keys/eric'  },
+    alice:  { identity:'id:alice@m3c',  ctx:'105525022458397210134___skills', keystem:'~/.config/m3c/skill-keys/alice'  },
     kamir: { identity:'id:kamir@m3c', ctx:'107677460544181387647___skills', keystem:'~/.config/m3c/skill-keys/kamir' }
   };
   function applyAuthor(){
@@ -493,17 +493,17 @@ skillctl publish {{skill}}@{{nextver}} \
     $('count').textContent = `${rd} / ${rt} required steps`;
     const ready = $('ready');
     if(rd===rt && rt>0){ ready.textContent='✓ all done'; ready.classList.add('go'); } else { ready.textContent='not ready yet'; ready.classList.remove('go'); }
-    $('mailbtn').href = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(KAMIR_EMAIL)}&su=${encodeURIComponent('skillctl runbook progress: Eric')}&body=${encodeURIComponent(buildReport())}`;
+    $('mailbtn').href = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(KAMIR_EMAIL)}&su=${encodeURIComponent('skillctl runbook progress: Alice')}&body=${encodeURIComponent(buildReport())}`;
     const pf = buildPreflight();
-    $('pfsend').href = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(KAMIR_EMAIL)}&su=${encodeURIComponent('Pre-flight readiness: Eric (skillctl)')}&body=${encodeURIComponent(pf)}`;
+    $('pfsend').href = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(KAMIR_EMAIL)}&su=${encodeURIComponent('Pre-flight readiness: Alice (skillctl)')}&body=${encodeURIComponent(pf)}`;
     const helpEl = document.querySelector('[data-step=pf][data-field=pf_help]');
     const helpTxt = helpEl ? (helpEl.value||'').trim() : '';
-    $('pfhelp').href = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(KAMIR_EMAIL)}&su=${encodeURIComponent('HELP before skillctl session: Eric')}&body=${encodeURIComponent(helpTxt||'(describe what you need help with before we start)')}`;
+    $('pfhelp').href = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(KAMIR_EMAIL)}&su=${encodeURIComponent('HELP before skillctl session: Alice')}&body=${encodeURIComponent(helpTxt||'(describe what you need help with before we start)')}`;
   }
 
   function buildPreflight(){
     const g = id => { const e = document.querySelector('[data-step=pf][data-field='+id+']'); return e ? (e.value||'').trim() : ''; };
-    return ['# Pre-flight readiness: Eric (skillctl publisher session)','when: '+new Date().toISOString(),'',
+    return ['# Pre-flight readiness: Alice (skillctl publisher session)','when: '+new Date().toISOString(),'',
       '- skillctl version : '+(g('pf_version')||'(no response)'),
       '- device token     : '+(g('pf_token')||'(no response)'),
       '- skill folder      : '+(g('pf_skill')||'(no response)'),

@@ -7,7 +7,7 @@ package install
 // digest, fetches the blob and the metadata, and verifies. That is the right
 // production path and it stays. But it cannot express the claim SPEC-0406 AC-02
 // actually makes, which is that the RECIPIENT DOES NOT HAVE TO TRUST THE
-// TRANSPORT. Eric mails Mirko a .skb; there is no registry in the middle. Until
+// TRANSPORT. Alice mails Bob a .skb; there is no registry in the middle. Until
 // now there was no way to install it, so the acceptance test could not run its
 // own scenario.
 //

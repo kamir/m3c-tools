@@ -69,7 +69,7 @@ func TestRunAuditSecurity_SelfAttested(t *testing.T) {
 func TestRunAuditSecurity_IndependentReview(t *testing.T) {
 	skillsDir := t.TempDir()
 	installSkill(t, skillsDir, "reviewed",
-		"This skill summarises a doc.", "id:kamir@m3c", "id:eric@m3c")
+		"This skill summarises a doc.", "id:kamir@m3c", "id:alice@m3c")
 
 	var stdout, stderr bytes.Buffer
 	code := runAuditSecurity([]string{"reviewed", "--skills-dir", skillsDir, "--json"}, &stdout, &stderr)

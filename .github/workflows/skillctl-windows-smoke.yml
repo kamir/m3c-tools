@@ -67,7 +67,7 @@ jobs:
       #
       # Running it here is what keeps the PowerShell twin honest. A script that
       # only ever runs on the author's Mac is a claim about Windows, not a check
-      # of it, and the twin exists precisely so Eric runs what CI runs.
+      # of it, and the twin exists precisely so Alice runs what CI runs.
       - name: Run acceptance rehearsal (SPEC-0406)
         run: |
           powershell -ExecutionPolicy Bypass -File scripts\skillctl-acceptance.ps1 -Skillctl $env:SKILLCTL

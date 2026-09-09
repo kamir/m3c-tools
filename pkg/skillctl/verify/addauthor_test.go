@@ -50,14 +50,14 @@ func rootWithRegistry(t *testing.T, dir, url string) *TrustRoots {
 // rather than reported, and there is no trust-on-first-use to fall back to.
 func TestAddAuthorRefusesAKeyThatDoesNotMatchTheConfirmedFingerprint(t *testing.T) {
 	dir := t.TempDir()
-	const url = "https://eric.example/api/skills"
+	const url = "https://alice.example/api/skills"
 	tr := rootWithRegistry(t, dir, url)
 
 	// The operator confirmed ONE key on the phone; a DIFFERENT key arrives.
 	_, confirmed := writePub(t, dir, "the-one-we-agreed")
 	arrived, _ := writePub(t, dir, "the-one-that-came")
 
-	err := tr.AddAuthor(url, "id:eric@kup", arrived, confirmed)
+	err := tr.AddAuthor(url, "id:alice@kup", arrived, confirmed)
 	if err == nil {
 		t.Fatal("a key that does not match the confirmed fingerprint was pinned")
 	}
@@ -78,11 +78,11 @@ func TestAddAuthorRefusesAKeyThatDoesNotMatchTheConfirmedFingerprint(t *testing.
 // becomes optional, trust-on-first-use is back and the whole Phase 0 is theatre.
 func TestAddAuthorRequiresAFingerprint(t *testing.T) {
 	dir := t.TempDir()
-	const url = "https://eric.example/api/skills"
+	const url = "https://alice.example/api/skills"
 	tr := rootWithRegistry(t, dir, url)
-	pub, _ := writePub(t, dir, "eric")
+	pub, _ := writePub(t, dir, "alice")
 
-	if err := tr.AddAuthor(url, "id:eric@kup", pub, ""); err == nil {
+	if err := tr.AddAuthor(url, "id:alice@kup", pub, ""); err == nil {
 		t.Fatal("an author was pinned with no fingerprint at all")
 	} else if !strings.Contains(err.Error(), "SECOND channel") {
 		t.Errorf("the refusal does not say why a fingerprint is required: %v", err)
@@ -95,20 +95,20 @@ func TestAddAuthorRequiresAFingerprint(t *testing.T) {
 // question two ways.
 func TestAddAuthorPinsAndSwitchesTheRootToPinned(t *testing.T) {
 	dir := t.TempDir()
-	const url = "https://eric.example/api/skills"
+	const url = "https://alice.example/api/skills"
 	tr := rootWithRegistry(t, dir, url)
 	if got := tr.Roots[0].IdentityKeysAuthorized; got != "from-registry" {
 		t.Fatalf("precondition: a fresh registry root should be %q, got %q", "from-registry", got)
 	}
 
-	pub, fp := writePub(t, dir, "eric")
-	if err := tr.AddAuthor(url, "id:eric@kup", pub, fp); err != nil {
+	pub, fp := writePub(t, dir, "alice")
+	if err := tr.AddAuthor(url, "id:alice@kup", pub, fp); err != nil {
 		t.Fatalf("AddAuthor: %v", err)
 	}
 	if n := len(tr.Roots[0].Authors); n != 1 {
 		t.Fatalf("authors = %d, want 1", n)
 	}
-	if got := tr.Roots[0].Authors[0].ID; got != "id:eric@kup" {
+	if got := tr.Roots[0].Authors[0].ID; got != "id:alice@kup" {
 		t.Errorf("identity = %q", got)
 	}
 	if got := tr.Roots[0].IdentityKeysAuthorized; got != "pinned" {
@@ -123,7 +123,7 @@ func TestAddAuthorPinsAndSwitchesTheRootToPinned(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if len(back.Roots) != 1 || len(back.Roots[0].Authors) != 1 || back.Roots[0].Authors[0].ID != "id:eric@kup" {
+	if len(back.Roots) != 1 || len(back.Roots[0].Authors) != 1 || back.Roots[0].Authors[0].ID != "id:alice@kup" {
 		t.Fatalf("the pin did not survive the round trip: %+v", back.Roots)
 	}
 }
@@ -133,15 +133,15 @@ func TestAddAuthorPinsAndSwitchesTheRootToPinned(t *testing.T) {
 // invisible, and the verifier would then accept either key.
 func TestAddAuthorRefusesASecondKeyForOneIdentity(t *testing.T) {
 	dir := t.TempDir()
-	const url = "https://eric.example/api/skills"
+	const url = "https://alice.example/api/skills"
 	tr := rootWithRegistry(t, dir, url)
 
-	first, fp1 := writePub(t, dir, "eric-1")
-	if err := tr.AddAuthor(url, "id:eric@kup", first, fp1); err != nil {
+	first, fp1 := writePub(t, dir, "alice-1")
+	if err := tr.AddAuthor(url, "id:alice@kup", first, fp1); err != nil {
 		t.Fatalf("first pin: %v", err)
 	}
-	second, fp2 := writePub(t, dir, "eric-2")
-	err := tr.AddAuthor(url, "id:eric@kup", second, fp2)
+	second, fp2 := writePub(t, dir, "alice-2")
+	err := tr.AddAuthor(url, "id:alice@kup", second, fp2)
 	if err == nil {
 		t.Fatal("a second key for one identity was accepted silently")
 	}
@@ -159,9 +159,9 @@ func TestAddAuthorRefusesASecondKeyForOneIdentity(t *testing.T) {
 func TestAddAuthorOnAnUnknownRegistryNamesTheFix(t *testing.T) {
 	dir := t.TempDir()
 	tr := &TrustRoots{Path: filepath.Join(dir, "roots.yaml")}
-	pub, fp := writePub(t, dir, "eric")
+	pub, fp := writePub(t, dir, "alice")
 
-	err := tr.AddAuthor("https://nobody.example/api/skills", "id:eric@kup", pub, fp)
+	err := tr.AddAuthor("https://nobody.example/api/skills", "id:alice@kup", pub, fp)
 	if err == nil {
 		t.Fatal("an author key alone created a trust root")
 	}

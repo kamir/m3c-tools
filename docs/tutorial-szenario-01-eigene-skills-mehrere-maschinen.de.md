@@ -61,17 +61,17 @@ Release. Installation: siehe [Quickstart §1](quickstart-skillctl.md#1-install).
 
 ```bash
 mkdir -p ~/.config/m3c/skill-keys
-skillctl keygen --out ~/.config/m3c/skill-keys/eric
+skillctl keygen --out ~/.config/m3c/skill-keys/alice
 ```
 
 Erwartete Ausgabe:
 
 ```
-wrote ~/.config/m3c/skill-keys/eric.priv (mode 0600)
-wrote ~/.config/m3c/skill-keys/eric.pub  (mode 0644)
+wrote ~/.config/m3c/skill-keys/alice.priv (mode 0600)
+wrote ~/.config/m3c/skill-keys/alice.pub  (mode 0644)
 ```
 
-`eric.priv` bleibt auf dieser Maschine. `eric.pub` darf überall hin.
+`alice.priv` bleibt auf dieser Maschine. `alice.pub` darf überall hin.
 
 ### A2. Den eigenen Fingerprint festhalten
 
@@ -79,8 +79,8 @@ Sie brauchen ihn auf jeder weiteren Maschine, und Sie brauchen ihn in einer Form
 vorlesen können:
 
 ```bash
-openssl pkey -pubin -in ~/.config/m3c/skill-keys/eric.pub -outform DER | tail -c 32 | base64
-openssl pkey -pubin -in ~/.config/m3c/skill-keys/eric.pub -outform DER | tail -c 32 | shasum -a 256
+openssl pkey -pubin -in ~/.config/m3c/skill-keys/alice.pub -outform DER | tail -c 32 | base64
+openssl pkey -pubin -in ~/.config/m3c/skill-keys/alice.pub -outform DER | tail -c 32 | shasum -a 256
 ```
 
 Die erste Zeile ist der rohe Schlüssel in Base64 (der Wert `pubkey_b64`), die zweite der
@@ -104,8 +104,8 @@ skillctl pack \
   --author-intent-rationale "kein Netzwerk; schreibt nur ./out"
 
 SIGN_OUT=$(skillctl sign \
-  --key ~/.config/m3c/skill-keys/eric.priv \
-  --identity-id id:eric@kup \
+  --key ~/.config/m3c/skill-keys/alice.priv \
+  --identity-id id:alice@kup \
   mein-skill@1.0.0.skb)
 echo "$SIGN_OUT"
 
@@ -126,7 +126,7 @@ gefahrlos wiederholen.
 ### A4. Sofort selbst gegenprüfen
 
 ```bash
-skillctl verify-sig --pubkey ~/.config/m3c/skill-keys/eric.pub mein-skill@1.0.0.skb
+skillctl verify-sig --pubkey ~/.config/m3c/skill-keys/alice.pub mein-skill@1.0.0.skb
 echo "rc=$?"          # 0 = OK: signature verified
 ```
 
@@ -148,8 +148,8 @@ skillctl login --status
 skillctl publish mein-skill@1.0.0 \
   --bundle mein-skill@1.0.0.skb \
   --registry self --er1-target prod --er1-context skills \
-  --key ~/.config/m3c/skill-keys/eric.priv \
-  --identity id:eric@kup \
+  --key ~/.config/m3c/skill-keys/alice.priv \
+  --identity id:alice@kup \
   --yes
 ```
 
@@ -163,14 +163,14 @@ Für eigene Skills auf eigenen Maschinen erzeugen Sie dafür einen zweiten Schl�
 Reviewer-Schlüssel:
 
 ```bash
-skillctl keygen --out ~/.config/m3c/skill-keys/eric-reviewer
+skillctl keygen --out ~/.config/m3c/skill-keys/alice-reviewer
 
 skillctl publish --attest mein-skill@1.0.0 \
   --level green \
   --rationale "eigener Skill; kein Netzwerk; Datenpfade geprüft" \
   --registry self --er1-target prod --er1-context skills \
-  --identity id:eric-reviewer@kup \
-  --key ~/.config/m3c/skill-keys/eric-reviewer.priv \
+  --identity id:alice-reviewer@kup \
+  --key ~/.config/m3c/skill-keys/alice-reviewer.priv \
   --yes
 ```
 
@@ -195,12 +195,12 @@ export M3C_GITHUB_TOKEN="<personal access token>"
 export REG="github://<owner>/<repo>"                # gitlab://<host>/<gruppe>/<projekt>, sobald der Sync steht
 
 skillctl publish mein-skill@1.0.0 --bundle mein-skill@1.0.0.skb --version 1.0.0 \
-  --registry "$REG" --key ~/.config/m3c/skill-keys/eric.priv --identity id:eric@kup --yes
+  --registry "$REG" --key ~/.config/m3c/skill-keys/alice.priv --identity id:alice@kup --yes
 
 skillctl publish --attest mein-skill@1.0.0 --digest "$DIGEST" --level green \
   --rationale "eigener Skill; kein Netzwerk; Datenpfade geprüft" \
-  --registry "$REG" --identity id:eric-reviewer@kup \
-  --key ~/.config/m3c/skill-keys/eric-reviewer.priv --yes
+  --registry "$REG" --identity id:alice-reviewer@kup \
+  --key ~/.config/m3c/skill-keys/alice-reviewer.priv --yes
 
 skillctl registry ls --registry "$REG"      # muss gov=green status=ok zeigen
 ```
@@ -247,7 +247,7 @@ fingerprint: sha256:<der Fingerprint aus Schritt A2>
 governance_minimum: green
 governance_quorum: 1
 signers:
-  - reviewer_id: id:eric-reviewer@kup
+  - reviewer_id: id:alice-reviewer@kup
     pubkey_b64: <der Base64-Wert Ihres REVIEWER-Schlüssels aus A5>
 YAML
 ```
@@ -264,7 +264,7 @@ Fingerprint-Abgleich erzwingt statt ihn Ihnen zu überlassen:
 ```bash
 skillctl peer add meins "$REG" \
   --pubkey <Signierschlüssel-b64> --pin sha256:<Fingerprint> \
-  --signer id:eric-reviewer@kup:<Reviewer-Schlüssel-b64> --quorum 1
+  --signer id:alice-reviewer@kup:<Reviewer-Schlüssel-b64> --quorum 1
 ```
 
 > **Die zwei Dateien, die man verwechselt.** `~/.claude/trust-roots.yaml` (flach, von Hand)
@@ -316,7 +316,7 @@ skillctl verify --all
 
 ## Teil C: fremde, bereits signierte Skills einsetzen
 
-Jetzt kommen Skills ins Spiel, die jemand anderes signiert hat, im Folgenden „Mirko".
+Jetzt kommen Skills ins Spiel, die jemand anderes signiert hat, im Folgenden „Bob".
 
 **Die Regel vorweg, sie spart Ihnen später Ärger.** Pinnen Sie nicht mehrere Registries
 nebeneinander. Ein fremder Skill wird geprüft und **in Ihr eigenes Registry aufgenommen**
@@ -336,37 +336,37 @@ Zeichen für Zeichen. Erst danach stimmt der Satz „ich muss dem Transportweg n
 ### C1. Weg 1: Re-Admit in Ihr eigenes Registry (Regelweg)
 
 Sie sind hier in genau der Rolle, die in [Szenario 02](tutorial-szenario-02-erster-signierter-skill.de.md)
-Eric hat: Sie sind Freigeber für einen Skill, den jemand anderes geschrieben hat.
+Alice hat: Sie sind Freigeber für einen Skill, den jemand anderes geschrieben hat.
 
 ```bash
 # 1. Mirkos Bundle und seine .author.sig entgegennehmen, Fingerprint vorher
 #    über den zweiten Kanal bestätigt haben (C0).
-skillctl verify-sig --pubkey ./mirko.pub mirko-skill@1.0.0.skb
+skillctl verify-sig --pubkey ./bob.pub bob-skill@1.0.0.skb
 echo "rc=$?"        # 0, sonst hier abbrechen
 
 # 2. Ansehen, worüber Sie urteilen.
-mkdir -p /tmp/review-mirko && tar -xzf mirko-skill@1.0.0.skb -C /tmp/review-mirko
-cat /tmp/review-mirko/SKILL.md && ls -R /tmp/review-mirko
+mkdir -p /tmp/review-bob && tar -xzf bob-skill@1.0.0.skb -C /tmp/review-bob
+cat /tmp/review-bob/SKILL.md && ls -R /tmp/review-bob
 
 # 3. In Ihr Registry aufnehmen und attestieren.
-skillctl publish mirko-skill@1.0.0 --bundle mirko-skill@1.0.0.skb --version 1.0.0 \
-  --registry "$REG" --key ~/.config/m3c/skill-keys/eric.priv --identity id:eric@kup --yes
+skillctl publish bob-skill@1.0.0 --bundle bob-skill@1.0.0.skb --version 1.0.0 \
+  --registry "$REG" --key ~/.config/m3c/skill-keys/alice.priv --identity id:alice@kup --yes
 
-skillctl publish --attest mirko-skill@1.0.0 --digest "<Digest aus Mirkos sign-Ausgabe>" \
-  --level green --rationale "Upstream id:mirko@m3c; Signatur verifiziert; Inhalt geprüft am <datum>" \
-  --registry "$REG" --identity id:eric-reviewer@kup \
-  --key ~/.config/m3c/skill-keys/eric-reviewer.priv --yes
+skillctl publish --attest bob-skill@1.0.0 --digest "<Digest aus Mirkos sign-Ausgabe>" \
+  --level green --rationale "Upstream id:bob@m3c; Signatur verifiziert; Inhalt geprüft am <datum>" \
+  --registry "$REG" --identity id:alice-reviewer@kup \
+  --key ~/.config/m3c/skill-keys/alice-reviewer.priv --yes
 ```
 
 Danach zieht **jede** Ihrer Maschinen den Skill mit demselben Kommando und demselben Pin wie
 Ihre eigenen Skills:
 
 ```bash
-skillctl pull --registry "$REG" --skill mirko-skill --install --trust-mode \
+skillctl pull --registry "$REG" --skill bob-skill --install --trust-mode \
   --dry-run-install --no-checkpoint
 ```
 
-Was Sie damit gewonnen haben: eine Quelle, ein Pin, und in `registry show mirko-skill` steht,
+Was Sie damit gewonnen haben: eine Quelle, ein Pin, und in `registry show bob-skill` steht,
 **wer** wann geurteilt hat, nämlich Sie. Mirkos Autorenschaft bleibt im Bundle sichtbar, aber
 die Verantwortung für „das läuft bei uns" liegt sichtbar dort, wo sie hingehört.
 
@@ -377,14 +377,14 @@ die Verantwortung für „das läuft bei uns" liegt sichtbar dort, wo sie hingeh
 
 ### C2. Weg 2: über einen ER1-Raum (Testpfad)
 
-Mirko publiziert in **seinen** Kontext und teilt den Skill in einen gemeinsamen Raum. Sie
+Bob publiziert in **seinen** Kontext und teilt den Skill in einen gemeinsamen Raum. Sie
 werden serverseitig Mitglied dieses Raums (dafür gibt es kein `skillctl`-Verb, das passiert
 in der onboarding.guide-Konsole). Dann ziehen Sie aus **seinem** Kontext:
 
 ```bash
 # Trust-Roots-Datei für Mirkos Schlüssel, gleiche Form wie in B2
-skillctl pull --registry self --er1-target prod --er1-context <mirko-sub>___skills \
-  --skill mirko-skill --install --trust-mode --dry-run-install --no-checkpoint
+skillctl pull --registry self --er1-target prod --er1-context <bob-sub>___skills \
+  --skill bob-skill --install --trust-mode --dry-run-install --no-checkpoint
 # ... Plan lesen, dann mit --confirm-install und dem Token bestätigen
 ```
 
@@ -407,19 +407,19 @@ Der ausführliche Zwei-Personen-Ablauf mit allen Feldern steht im
 ```bash
 skillctl trust add \
   --registry https://<registry-host>/api/skills \
-  --pubkey ./mirko.pub \
-  --id mirko-2026
+  --pubkey ./bob.pub \
+  --id bob-2026
 
 skillctl trust list
 ```
 
 `trust list` gibt den gepinnten Schlüssel als Base64 aus. Vergleichen Sie ihn mit dem, was
-Mirko Ihnen am Telefon vorgelesen hat. Dann:
+Bob Ihnen am Telefon vorgelesen hat. Dann:
 
 ```bash
-skillctl install mirko-skill@1.0.0
+skillctl install bob-skill@1.0.0
 echo "rc=$?"                     # 0 = installiert
-skillctl verify mirko-skill
+skillctl verify bob-skill
 ```
 
 Schlägt es fehl, sagt der Exit-Code, woran:
@@ -439,15 +439,15 @@ Wenn Sie nur ein `.skb` und die Signaturdatei bekommen, ist die einzige Aussage,
 offline prüfen können, die **Autorensignatur**:
 
 ```bash
-skillctl verify-sig --pubkey ./mirko.pub mirko-skill@1.0.0.skb
+skillctl verify-sig --pubkey ./bob.pub bob-skill@1.0.0.skb
 echo "rc=$?"        # 0 = von diesem Schlüssel versiegelt
 ```
 
 Erst wenn das `0` ist, entpacken Sie:
 
 ```bash
-mkdir -p ~/.claude/skills/mirko-skill
-tar -xzf mirko-skill@1.0.0.skb -C ~/.claude/skills/mirko-skill
+mkdir -p ~/.claude/skills/bob-skill
+tar -xzf bob-skill@1.0.0.skb -C ~/.claude/skills/bob-skill
 ```
 
 Seien Sie ehrlich darüber, was Sie damit **nicht** haben: kein Governance-Level, keine
@@ -513,7 +513,7 @@ skillctl publish --revoke mein-skill \
   --digest "$DIGEST" \
   --reason superseded \
   --registry self --er1-target prod --er1-context skills \
-  --key ~/.config/m3c/skill-keys/eric.priv --identity id:eric@kup --yes
+  --key ~/.config/m3c/skill-keys/alice.priv --identity id:alice@kup --yes
 ```
 
 Gegen ein Git-Registry heisst dasselbe Kommando `--registry "$REG"` statt
@@ -535,7 +535,7 @@ Nicht „hat funktioniert", sondern Zahlen:
   echo "Datum:        $(date -u +%FT%TZ)"
   echo "Host:         $(hostname)"
   skillctl version
-  echo "Fingerprint:  $(openssl pkey -pubin -in ~/.config/m3c/skill-keys/eric.pub \
+  echo "Fingerprint:  $(openssl pkey -pubin -in ~/.config/m3c/skill-keys/alice.pub \
                         -outform DER | tail -c 32 | shasum -a 256 | awk '{print $1}')"
   echo "Digest:       $DIGEST"
   skillctl trust list
