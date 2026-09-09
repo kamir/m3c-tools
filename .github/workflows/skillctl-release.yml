@@ -141,13 +141,17 @@ jobs:
         shell: bash
         run: go build -o build/skillctl ./cmd/skillctl
 
+      # NOT a bare `go test -run`: that exits 0 when the pattern matches
+      # nothing, so a renamed or deleted test turns this gate green while it
+      # certifies nothing. The wrapper fails unless each named test actually
+      # produced a run/pass/fail event. B6: the count comes from the run.
       - name: "T01..T15: the two-party exchange, hermetic"
         shell: bash
-        run: go test -count=1 -run TestAcceptance_TwoParty ./cmd/skillctl/
+        run: ./scripts/require-tests-ran.sh ./cmd/skillctl/ TestAcceptance_TwoParty
 
       - name: "Both install paths refuse the same artifact (BUG-0217)"
         shell: bash
-        run: go test -count=1 -run TestBothInstallPaths ./pkg/skillctl/install/
+        run: ./scripts/require-tests-ran.sh ./pkg/skillctl/install/ TestBothInstallPathsRefuseTheSameBadChecksums
 
       - name: "Acceptance rehearsal, Unix twin"
         if: runner.os != 'Windows'

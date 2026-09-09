@@ -44,6 +44,7 @@ import (
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/auditevent"
 	"github.com/kamir/m3c-tools/pkg/skillctl/install"
+	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 )
 
@@ -55,18 +56,34 @@ type party struct {
 	trustRoots string
 	authorPub  ed25519.PublicKey
 	authorPriv ed25519.PrivateKey
-	regPub     ed25519.PublicKey
-	regPriv    ed25519.PrivateKey
-	authorID   string
-	skill      string
-	greeting   string
+	// The same author key ALSO on disk, because the sender's own check
+	// (T03, `verify-sig --pubkey`) takes file paths, not in-memory keys.
+	authorPubPath  string
+	authorPrivPath string
+	regPub         ed25519.PublicKey
+	regPriv        ed25519.PrivateKey
+	authorID       string
+	skill          string
+	greeting       string
 }
 
 func newParty(t *testing.T, name, skill, greeting string) *party {
 	t.Helper()
-	aPub, aPriv, err := ed25519.GenerateKey(rand.Reader)
+	// The author key is generated THROUGH the product's own keygen and read
+	// back, so the bytes the test signs with are the bytes an operator would
+	// have on disk after `skillctl keygen`. Anything else would test a key
+	// format nobody ships.
+	keyBase := filepath.Join(t.TempDir(), name)
+	if err := signing.Generate(keyBase); err != nil {
+		t.Fatalf("%s author keygen: %v", name, err)
+	}
+	aPriv, err := signing.LoadPrivateKey(keyBase + ".priv")
 	if err != nil {
-		t.Fatalf("%s author key: %v", name, err)
+		t.Fatalf("%s load author priv: %v", name, err)
+	}
+	aPub, err := signing.LoadPublicKey(keyBase + ".pub")
+	if err != nil {
+		t.Fatalf("%s load author pub: %v", name, err)
 	}
 	rPub, rPriv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -74,6 +91,7 @@ func newParty(t *testing.T, name, skill, greeting string) *party {
 	}
 	return &party{
 		name: name, home: t.TempDir(), authorPub: aPub, authorPriv: aPriv,
+		authorPubPath: keyBase + ".pub", authorPrivPath: keyBase + ".priv",
 		regPub: rPub, regPriv: rPriv, authorID: "id:" + name + "@acceptance",
 		skill: skill, greeting: greeting,
 	}
@@ -153,6 +171,15 @@ func (p *party) seal(t *testing.T, transport string) sealed {
 	if err := os.WriteFile(metaPath, raw, 0o600); err != nil {
 		t.Fatalf("%s write envelope: %v", p.name, err)
 	}
+	// The detached signature beside the artifact. The envelope above is what
+	// the RECIPIENT verifies against a trust root; this is what the SENDER
+	// verifies against his own public key, and the runbook's step 4 shows
+	// exactly that pair of commands. Both are produced here because a sender
+	// who cannot check his own work finds a broken signing step only after it
+	// has already travelled.
+	if _, _, err := signing.SignBundle(base, p.authorPrivPath, p.authorID); err != nil {
+		t.Fatalf("%s sign bundle: %v", p.name, err)
+	}
 	return sealed{skb: base, meta: metaPath, digest: digest}
 }
 
@@ -190,8 +217,115 @@ func (p *party) installedSkills(t *testing.T) []string {
 	return out
 }
 
+// ---------------------------------------------------------------------------
+// The ledger: what this run actually evaluated
+// ---------------------------------------------------------------------------
+//
+// A bare PASS on this test answers "did anything fail". It does NOT answer the
+// question SPEC-0406 is about: WHICH of the fifteen criteria were exercised.
+// The two are not the same, and the gap is not hypothetical. Until 2026-09-08
+// this test reported green while T03 was never evaluated at all: nobody
+// verified their own package, because no call site existed.
+//
+// The criteria also depend on each other in a real way, so a t.Fatalf early in
+// the chain leaves the rest unreachable. WORKING-RULES B7 names that state: a
+// criterion whose precondition never occurs is "nie ausgewertet", not "passed".
+// The ledger reports it as such, and B6 is why the count comes from the run and
+// never from this list.
+
+// spec0406Criteria is the acceptance matrix of SPEC-0406, in its order. The SET
+// is the contract and is therefore declared here; which members a run REACHES
+// is measured, not declared.
+var spec0406Criteria = []struct{ id, what string }{
+	{"T01", "Eric kann seinen Skill paketieren"},
+	{"T02", "Eric kann seinen Skill signieren"},
+	{"T03", "Eric kann sein eigenes Paket verifizieren"},
+	{"T04", "Mirko kann Erics Skill verifizieren"},
+	{"T05", "Mirko kann Erics Skill installieren"},
+	{"T06", "Mirko kann Erics Skill ausfuehren"},
+	{"T07", "Mirko kann seinen Skill paketieren und signieren"},
+	{"T08", "Eric kann Mirkos Skill verifizieren"},
+	{"T09", "Eric kann Mirkos Skill installieren"},
+	{"T10", "Eric kann Mirkos Skill ausfuehren"},
+	{"T11", "Manipuliertes Eric-Artefakt wird erkannt"},
+	{"T12", "Manipuliertes Artefakt wird nicht installiert"},
+	{"T13", "Bestand nach verweigertem Install unversehrt"},
+	{"T14", "Lokale Manipulation eines installierten Skills wird erkannt"},
+	{"T15", "Manipulationsversuch ist im Audit-Trail sichtbar"},
+}
+
+type acceptanceLedger struct {
+	t         *testing.T
+	evaluated map[string]bool
+	violated  map[string]bool
+}
+
+func newAcceptanceLedger(t *testing.T) *acceptanceLedger {
+	t.Helper()
+	l := &acceptanceLedger{t: t, evaluated: map[string]bool{}, violated: map[string]bool{}}
+	// Cleanup, not a deferred call at the end of the body: a t.Fatalf ends the
+	// goroutine, and a report that only runs on the happy path would be silent
+	// in exactly the case worth reporting.
+	t.Cleanup(l.report)
+	return l
+}
+
+// check records that a criterion was exercised and, if it was violated, says so
+// and continues. Use it wherever later criteria remain reachable.
+func (l *acceptanceLedger) check(id string, ok bool, format string, args ...any) bool {
+	l.t.Helper()
+	l.evaluated[id] = true
+	if !ok {
+		l.violated[id] = true
+		l.t.Errorf(id+" "+format, args...)
+	}
+	return ok
+}
+
+// must is check for the cases where the chain genuinely cannot continue. What
+// follows is then unreachable, and the report says "nie ausgewertet" for it
+// rather than letting a green summary imply it passed.
+func (l *acceptanceLedger) must(id string, ok bool, format string, args ...any) {
+	l.t.Helper()
+	l.evaluated[id] = true
+	if !ok {
+		l.violated[id] = true
+		l.t.Fatalf(id+" "+format, args...)
+	}
+}
+
+// reached marks a criterion whose own assertions live in a helper.
+func (l *acceptanceLedger) reached(id string) {
+	l.t.Helper()
+	l.evaluated[id] = true
+}
+
+func (l *acceptanceLedger) violate(id string) {
+	l.t.Helper()
+	l.violated[id] = true
+}
+
+func (l *acceptanceLedger) report() {
+	var missing []string
+	for _, c := range spec0406Criteria {
+		if !l.evaluated[c.id] {
+			missing = append(missing, c.id+" "+c.what)
+		}
+	}
+	l.t.Logf("SPEC-0406: ausgewertet %d von %d, Verletzungen %d",
+		len(l.evaluated), len(spec0406Criteria), len(l.violated))
+	if len(missing) == 0 {
+		return
+	}
+	// Not a log line: a matrix that certifies fewer criteria than it claims is
+	// the failure this ledger exists for.
+	l.t.Errorf("SPEC-0406: %d Kriterien NIE AUSGEWERTET, das Tor darf dafuer nicht gruen melden:\n  %s",
+		len(missing), strings.Join(missing, "\n  "))
+}
+
 // TestAcceptance_TwoParty is the SPEC-0406 matrix, run end to end.
 func TestAcceptance_TwoParty(t *testing.T) {
+	l := newAcceptanceLedger(t)
 	transport := t.TempDir() // the untrusted channel: e-mail, USB, a shared folder
 
 	mirko := newParty(t, "mirko", "mirko-demo-skill", "Hello from Mirko")
@@ -206,33 +340,49 @@ func TestAcceptance_TwoParty(t *testing.T) {
 	eric.pinTrustRoots(t, mirko, "https://mirko.example/api/skills")
 
 	// ---- T01..T06: Eric to Mirko ----
+	// seal() packages and signs, and fails the test itself if either step does
+	// not happen: reaching the next line IS the evaluation of T01 and T02.
 	fromEric := eric.seal(t, transport)
+	l.reached("T01")
+	l.reached("T02")
 
-	if code, out := mirko.verifyBundle(fromEric); code != exitOK {
-		t.Fatalf("T04 verify failed (exit %d): %s", code, out)
-	}
-	code, out := mirko.installBundle(fromEric)
-	if code != exitOK {
-		t.Fatalf("T05 install failed (exit %d): %s", code, out)
-	}
-	if got := mirko.installedSkills(t); len(got) != 1 || got[0] != eric.skill {
-		t.Fatalf("T05 installed %v, want [%s]", got, eric.skill)
-	}
+	// T03: the sender verifies his OWN package before it leaves. Added
+	// 2026-09-08. It is in the SPEC-0406 matrix and had no call site, so the
+	// gate reported fifteen criteria and exercised fourteen. It is not a
+	// duplicate of T04: this one asks whether a party can check an artifact
+	// against its own trust root, which is what makes the sender able to notice
+	// a broken signing step before the recipient does.
+	var t03 bytes.Buffer
+	code := runVerifySig([]string{"--pubkey", eric.authorPubPath, fromEric.skb}, &t03, &t03)
+	l.check("T03", code == exitOK, "the sender cannot verify his own package (exit %d): %s", code, t03.String())
+
+	code, out := mirko.verifyBundle(fromEric)
+	l.must("T04", code == exitOK, "verify failed (exit %d): %s", code, out)
+
+	code, out = mirko.installBundle(fromEric)
+	l.must("T05", code == exitOK, "install failed (exit %d): %s", code, out)
+	got := mirko.installedSkills(t)
+	l.must("T05", len(got) == 1 && got[0] == eric.skill, "installed %v, want [%s]", got, eric.skill)
+
 	// T06: the skill is USABLE, not merely present. Reading back the greeting
 	// from the installed tree is the closest this hermetic test gets to running
 	// it, and it is what distinguishes "delivered" from "verified".
-	assertGreeting(t, mirko, eric)
+	l.reached("T06")
+	assertGreeting(t, l, "T06", mirko, eric)
 
 	// ---- T07..T10: the same in reverse. Symmetry is part of the claim: neither
 	// side holds a privileged role, and nothing depends on our machine.
 	fromMirko := mirko.seal(t, transport)
-	if code, out := eric.verifyBundle(fromMirko); code != exitOK {
-		t.Fatalf("T08 verify failed (exit %d): %s", code, out)
-	}
-	if code, out := eric.installBundle(fromMirko); code != exitOK {
-		t.Fatalf("T09 install failed (exit %d): %s", code, out)
-	}
-	assertGreeting(t, eric, mirko)
+	l.reached("T07")
+
+	code, out = eric.verifyBundle(fromMirko)
+	l.must("T08", code == exitOK, "verify failed (exit %d): %s", code, out)
+
+	code, out = eric.installBundle(fromMirko)
+	l.must("T09", code == exitOK, "install failed (exit %d): %s", code, out)
+
+	l.reached("T10")
+	assertGreeting(t, l, "T10", eric, mirko)
 
 	// ---- T11..T13: the tamper ----
 	//
@@ -262,30 +412,24 @@ func TestAcceptance_TwoParty(t *testing.T) {
 
 	// T11: detected, with the numbered code that names the cause.
 	code, out = mirko.verifyBundle(tampered)
-	if code != verify.ExitDigestMismatch {
-		t.Errorf("T11 verify exit = %d, want %d (digest mismatch): %s", code, verify.ExitDigestMismatch, out)
-	}
+	l.check("T11", code == verify.ExitDigestMismatch,
+		"verify exit = %d, want %d (digest mismatch): %s", code, verify.ExitDigestMismatch, out)
 	// A refusal must be legible. A silent non-zero exit is nearly as bad as a
 	// wrong one, because the operator cannot act on it.
-	if strings.TrimSpace(out) == "" {
-		t.Error("T11 refused without printing a reason")
-	}
+	l.check("T11", strings.TrimSpace(out) != "", "refused without printing a reason")
 
 	// T12: not installed.
 	code, out = mirko.installBundle(tampered)
-	if code == exitOK {
-		t.Errorf("T12 a tampered artifact was INSTALLED: %s", out)
-	}
-	if code != verify.ExitDigestMismatch {
-		t.Errorf("T12 install exit = %d, want %d: %s", code, verify.ExitDigestMismatch, out)
-	}
+	l.check("T12", code != exitOK, "a tampered artifact was INSTALLED: %s", out)
+	l.check("T12", code == verify.ExitDigestMismatch,
+		"install exit = %d, want %d: %s", code, verify.ExitDigestMismatch, out)
 
 	// T13: and the refusal changed nothing. This is INV-6 at the acceptance
 	// level: a build that refuses loudly and writes anyway looks green in every
 	// log, so the disk is asked directly.
-	if after := snapshotSkills(t, mirko); !equalSnapshots(before, after) {
-		t.Errorf("T13 a refused install changed the install target\n before: %v\n after:  %v", before, after)
-	}
+	after := snapshotSkills(t, mirko)
+	l.check("T13", equalSnapshots(before, after),
+		"a refused install changed the install target\n before: %v\n after:  %v", before, after)
 
 	// ---- T14: post-install tampering ----
 	//
@@ -297,34 +441,40 @@ func TestAcceptance_TwoParty(t *testing.T) {
 		t.Fatalf("local tamper: %v", err)
 	}
 	var vout bytes.Buffer
-	if code := runVerify([]string{"--offline", "--trust-roots", mirko.trustRoots, "--home", mirko.home, eric.skill}, &vout, &vout); code == exitOK {
-		t.Errorf("T14 a locally altered installed skill still verified: %s", vout.String())
-	}
+	vcode := runVerify([]string{"--offline", "--trust-roots", mirko.trustRoots, "--home", mirko.home, eric.skill}, &vout, &vout)
+	l.check("T14", vcode != exitOK, "a locally altered installed skill still verified: %s", vout.String())
 
 	// ---- T15: the audit trail ----
-	assertRefusalWasRecorded(t, mirko)
+	l.reached("T15")
+	assertRefusalWasRecorded(t, l, mirko)
 }
 
 // assertGreeting checks the installed tree really carries the sender's content.
-func assertGreeting(t *testing.T, recipient, sender *party) {
+// It takes the criterion id so a violation lands in the ledger too: a failure
+// counted only by the test framework would leave the summary claiming a clean
+// matrix.
+func assertGreeting(t *testing.T, l *acceptanceLedger, id string, recipient, sender *party) {
 	t.Helper()
 	body, err := os.ReadFile(filepath.Join(recipient.home, ".claude", "skills", sender.skill, "SKILL.md")) // #nosec G304 -- test temp dir.
 	if err != nil {
-		t.Fatalf("%s: installed skill has no SKILL.md: %v", recipient.name, err)
+		l.violate(id)
+		t.Fatalf("%s %s: installed skill has no SKILL.md: %v", id, recipient.name, err)
 	}
 	if !strings.Contains(string(body), sender.greeting) {
-		t.Errorf("%s installed %s but it does not carry %q:\n%s", recipient.name, sender.skill, sender.greeting, body)
+		l.violate(id)
+		t.Errorf("%s %s installed %s but it does not carry %q:\n%s", id, recipient.name, sender.skill, sender.greeting, body)
 	}
 }
 
 // T15. The refusal has to be findable afterwards, by someone who was not
 // watching the terminal. Without this, "we blocked it" is a claim about a moment
 // that has passed.
-func assertRefusalWasRecorded(t *testing.T, p *party) {
+func assertRefusalWasRecorded(t *testing.T, l *acceptanceLedger, p *party) {
 	t.Helper()
 	path := lifecycleAuditPath(p.home)
 	data, err := os.ReadFile(path) // #nosec G304 -- test temp dir.
 	if err != nil {
+		l.violate("T15")
 		t.Fatalf("T15 no lifecycle audit log at %s: %v", path, err)
 	}
 	var found bool
@@ -334,6 +484,7 @@ func assertRefusalWasRecorded(t *testing.T, p *party) {
 		}
 		var e auditevent.Event
 		if err := json.Unmarshal([]byte(line), &e); err != nil {
+			l.violate("T15")
 			t.Errorf("T15 unparseable audit line: %v", err)
 			continue
 		}
@@ -345,6 +496,7 @@ func assertRefusalWasRecorded(t *testing.T, p *party) {
 		}
 	}
 	if !found {
+		l.violate("T15")
 		t.Errorf("T15 the tampering attempt left no digest-mismatch record in %s:\n%s", path, data)
 	}
 }
