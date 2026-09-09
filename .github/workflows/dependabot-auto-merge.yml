@@ -306,8 +306,13 @@ jobs:
             # code is not the verdict. The PR is asked afterwards what state it
             # is actually in, and that answer decides.
             gh pr merge --disable-auto "$PR_URL" || true
-            state="$(gh pr view "$PR_URL" --json autoMergeRequest --jq '.autoMergeRequest')"
-            if [ "$state" != "null" ]; then
+            state="$(gh pr view "$PR_URL" --json autoMergeRequest --jq '(.autoMergeRequest != null)')"
+            # `--jq '.autoMergeRequest'` prints NOTHING when the field is null,
+            # not the word "null". The test therefore has to read a boolean the
+            # filter produces, not a string it never emits. Measured on this
+            # repository: disarmed gives "" for the old filter and "false" for
+            # the new one, armed gives a JSON object and "true".
+            if [ "$state" = "true" ]; then
               echo "::error::hold label is set but auto-merge is STILL ARMED on this PR"
               echo "  reported state: $state"
               echo "Disarm it by hand: gh pr merge --disable-auto $PR_NUMBER"
@@ -328,8 +333,8 @@ jobs:
           # Arming is only believed after the PR confirms it. A zero exit from
           # `gh pr merge --auto` and an armed pull request are two claims, not
           # one, and the second is the one that matters.
-          state="$(gh pr view "$PR_URL" --json autoMergeRequest --jq '.autoMergeRequest')"
-          if [ "$state" = "null" ]; then
+          state="$(gh pr view "$PR_URL" --json autoMergeRequest --jq '(.autoMergeRequest != null)')"
+          if [ "$state" != "true" ]; then
             echo "::error::gh reported success but this PR has no autoMergeRequest: auto-merge is NOT armed"
             exit 1
           fi
