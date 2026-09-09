@@ -60,7 +60,7 @@ RUN go build \
 # CD-T11 / CD-06: digest-pinned for the same reason as stage 1. Refresh with:
 #   docker buildx imagetools inspect alpine:3.20
 # Resolved 2026-09-07 (multi-arch index digest).
-FROM alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 
 # curl for the HTTP healthcheck; ca-certificates so the engine can
 # talk to HTTPS (prompt registry, ER1 API). Both are small.
