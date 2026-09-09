@@ -103,7 +103,7 @@ type Payload struct {
 	ID string `json:"id"`
 
 	// Owner is a PLM principal that HOLDS A KEY (not an email string), e.g.
-	// "id:kamir@m3c". The owner signature must verify against the key pinned for
+	// "id:bob@m3c". The owner signature must verify against the key pinned for
 	// THIS id in trust-roots.
 	Owner string `json:"owner"`
 
@@ -138,7 +138,7 @@ type Signature struct {
 	// Role is "owner" | "approver" | "issuer".
 	Role string `json:"role"`
 
-	// IdentityID is the principal id, e.g. "id:kamir@m3c". Matched against the
+	// IdentityID is the principal id, e.g. "id:bob@m3c". Matched against the
 	// pinned-key list for the resolved role.
 	IdentityID string `json:"identity_id"`
 

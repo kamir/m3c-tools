@@ -143,15 +143,15 @@ func TestEnvelopeVerify_NonBase64(t *testing.T) {
 func TestBuildAdmitted_RoundTripFields(t *testing.T) {
 	ts := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
 	sigs := []SignatureRef{
-		{Role: "author", IdentityID: "id:kamir@m3c", SignatureB64: "AAA=", PubKeyFingerprint: "sha256:abc"},
-		{Role: "registry", IdentityID: "id:kamir@m3c", SignatureB64: "BBB=", PubKeyFingerprint: "sha256:abc"},
+		{Role: "author", IdentityID: "id:bob@m3c", SignatureB64: "AAA=", PubKeyFingerprint: "sha256:abc"},
+		{Role: "registry", IdentityID: "id:bob@m3c", SignatureB64: "BBB=", PubKeyFingerprint: "sha256:abc"},
 	}
 	ev, err := BuildBundleAdmittedEvent(AdmittedEventInput{
 		BundleDigest:       "sha256:" + strings.Repeat("a", 64),
 		Name:               "fetch-contract",
 		Version:            "1.0.0",
 		AuthorIntent:       "green",
-		AdmittedByIdentity: "id:kamir@m3c",
+		AdmittedByIdentity: "id:bob@m3c",
 		AdmittedAt:         ts,
 		Signatures:         sigs,
 	})
@@ -181,7 +181,7 @@ func TestBuildAdmitted_RejectsBadDigest(t *testing.T) {
 		Name:               "x",
 		Version:            "1.0.0",
 		AuthorIntent:       "green",
-		AdmittedByIdentity: "id:kamir@m3c",
+		AdmittedByIdentity: "id:bob@m3c",
 		AdmittedAt:         time.Now(),
 		Signatures: []SignatureRef{
 			{Role: "author"}, {Role: "registry"},
@@ -198,7 +198,7 @@ func TestBuildAdmitted_RejectsBadGovernance(t *testing.T) {
 		Name:               "x",
 		Version:            "1.0.0",
 		AuthorIntent:       "purple",
-		AdmittedByIdentity: "id:kamir@m3c",
+		AdmittedByIdentity: "id:bob@m3c",
 		AdmittedAt:         time.Now(),
 		Signatures: []SignatureRef{
 			{Role: "author"}, {Role: "registry"},
@@ -215,7 +215,7 @@ func TestBuildAdmitted_RequiresTwoSignatures(t *testing.T) {
 		Name:               "x",
 		Version:            "1.0.0",
 		AuthorIntent:       "green",
-		AdmittedByIdentity: "id:kamir@m3c",
+		AdmittedByIdentity: "id:bob@m3c",
 		AdmittedAt:         time.Now(),
 		Signatures:         []SignatureRef{{Role: "author"}},
 	})
@@ -228,7 +228,7 @@ func TestBuildAttested_OK(t *testing.T) {
 	ts := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
 	ev, err := BuildAttestationPublishedEvent(AttestedEventInput{
 		BundleDigest:    "sha256:" + strings.Repeat("a", 64),
-		ReviewerID:      "id:kamir@m3c",
+		ReviewerID:      "id:bob@m3c",
 		GovernanceLevel: "green",
 		Rationale:       "read-only",
 		OccurredAt:      ts,
@@ -250,7 +250,7 @@ func TestBuildRevoked_OK(t *testing.T) {
 		BundleDigest: "sha256:" + strings.Repeat("a", 64),
 		ReasonCode:   "deprecated",
 		Rationale:    "superseded by v2",
-		RevokedBy:    "id:kamir@m3c",
+		RevokedBy:    "id:bob@m3c",
 		OccurredAt:   ts,
 	})
 	if err != nil {
@@ -293,11 +293,11 @@ func TestEndToEnd_BuildSignMarshalVerify(t *testing.T) {
 		Name:               "fetch-contract",
 		Version:            "1.0.0",
 		AuthorIntent:       "green",
-		AdmittedByIdentity: "id:kamir@m3c",
+		AdmittedByIdentity: "id:bob@m3c",
 		AdmittedAt:         ts,
 		Signatures: []SignatureRef{
-			{Role: "author", IdentityID: "id:kamir@m3c"},
-			{Role: "registry", IdentityID: "id:kamir@m3c"},
+			{Role: "author", IdentityID: "id:bob@m3c"},
+			{Role: "registry", IdentityID: "id:bob@m3c"},
 		},
 	})
 	if err != nil {

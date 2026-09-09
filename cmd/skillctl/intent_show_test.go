@@ -286,7 +286,7 @@ func buildSignedIntentFixture(t *testing.T, deps []skillbundle.DataDependency) s
 	if err != nil {
 		t.Fatalf("reg keygen: %v", err)
 	}
-	authorID := "id:kamir@m3c"
+	authorID := "id:bob@m3c"
 
 	dRaw := digestRaw(t, digest)
 	meta := registry.BundleMeta{
@@ -403,7 +403,7 @@ func TestIntentShow_AttackD_MaliciousRegistryUnsignedBundle(t *testing.T) {
 	authorPub, _, _ := ed25519.GenerateKey(rand.Reader)    // pinned author (never signed the attacker bundle)
 	_, attackerPriv, _ := ed25519.GenerateKey(rand.Reader) // attacker key (not pinned)
 	regPub, regPriv, _ := ed25519.GenerateKey(rand.Reader) // registry key (pinned, so the chain reaches author)
-	authorID := "id:kamir@m3c"
+	authorID := "id:bob@m3c"
 	dRaw := digestRaw(t, attackerDigest)
 
 	meta := registry.BundleMeta{

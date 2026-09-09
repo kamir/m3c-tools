@@ -458,8 +458,8 @@ func TestAttest_SelfAttested_NoteAndFlag(t *testing.T) {
 		validDigestForTest,
 		"--level", "green",
 		"--rationale", "self review for the personal tenant",
-		"--reviewer-id", "id:Kamir@m3c", // mixed case on purpose
-		"--author-id", " id:kamir@m3c ", // padded + lowercase: same principal
+		"--reviewer-id", "id:Bob@m3c", // mixed case on purpose
+		"--author-id", " id:bob@m3c ", // padded + lowercase: same principal
 		"--key", priv,
 		"--registry", srv.URL,
 	}
@@ -493,7 +493,7 @@ func TestAttest_IndependentReview_NoNote(t *testing.T) {
 		"--level", "green",
 		"--rationale", "independent review by Alice",
 		"--reviewer-id", "id:alice@m3c",
-		"--author-id", "id:kamir@m3c",
+		"--author-id", "id:bob@m3c",
 		"--key", priv,
 		"--registry", srv.URL,
 	}
@@ -527,7 +527,7 @@ func TestAttest_NoAuthorID_OmitsLocalSelfAttested(t *testing.T) {
 		validDigestForTest,
 		"--level", "green",
 		"--rationale", "no author id supplied",
-		"--reviewer-id", "id:kamir@m3c",
+		"--reviewer-id", "id:bob@m3c",
 		"--key", priv,
 		"--registry", srv.URL,
 	}

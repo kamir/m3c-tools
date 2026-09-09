@@ -125,7 +125,7 @@ const agentIDUsage = `Usage: skillctl agentid <issue|verify|show|revoke> [flags]
 func runAgentIDIssue(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("agentid issue", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	owner := fs.String("owner", "", "Owner PLM principal id that holds the signing key, e.g. id:kamir@m3c (required).")
+	owner := fs.String("owner", "", "Owner PLM principal id that holds the signing key, e.g. id:bob@m3c (required).")
 	ownerKey := fs.String("owner-key", "", "Path to the owner's ed25519 private key (PEM PKCS#8) (required).")
 	forAgent := fs.String("for-agent", "", "The agent this mandate is FOR: an agent ref or sha256:<digest> (FR-0060 agent bundle).")
 	agentIDFlag := fs.String("agent-id", "", "Stable agent id (default: agent:<random>).")

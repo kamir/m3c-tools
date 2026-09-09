@@ -44,7 +44,7 @@ func makeSkillDir(t *testing.T, root, name, version, govern, author string) {
 
 func TestCompliance_JSONReport(t *testing.T) {
 	root := t.TempDir()
-	makeSkillDir(t, root, "alpha", "1.0.0", "green", "id:kamir@m3c")
+	makeSkillDir(t, root, "alpha", "1.0.0", "green", "id:bob@m3c")
 	makeSkillDir(t, root, "beta", "", "", "") // present but unverified
 
 	var out, errBuf bytes.Buffer
@@ -67,14 +67,14 @@ func TestCompliance_JSONReport(t *testing.T) {
 	}
 	// alpha sorts first; should be green + offline-verifiable + author present.
 	a := rep.Skills[0]
-	if a.Name != "alpha" || a.Governance != "green" || !a.OfflineVerifiable || a.Author != "id:kamir@m3c" {
+	if a.Name != "alpha" || a.Governance != "green" || !a.OfflineVerifiable || a.Author != "id:bob@m3c" {
 		t.Errorf("alpha row wrong: %+v", a)
 	}
 }
 
 func TestCompliance_MDHasDisclaimerAndControls(t *testing.T) {
 	root := t.TempDir()
-	makeSkillDir(t, root, "alpha", "1.0.0", "green", "id:kamir@m3c")
+	makeSkillDir(t, root, "alpha", "1.0.0", "green", "id:bob@m3c")
 
 	var out, errBuf bytes.Buffer
 	code := runCompliance([]string{"report", "--framework", "eu-ai-act", "--skills-dir", root}, &out, &errBuf)

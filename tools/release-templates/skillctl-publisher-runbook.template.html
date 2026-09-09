@@ -138,12 +138,13 @@
       <div style="grid-column:1/-1"><label>Author) wer publisht? (setzt Identität + Kontext + Key)</label>
         <select data-step="cfg" data-field="author" onchange="applyAuthor()">
           <option value="alice">Alice, id:alice@m3c · 105525022458397210134___skills</option>
-          <option value="kamir">Bob (kamir), id:kamir@m3c · 107677460544181387647___skills</option>
+          <option value="kamir">Bob (kamir), id:bob@m3c · 107677460544181387647___skills</option>
         </select></div>
       <div><label>Skill name</label><input data-step="cfg" data-field="skill" value="field-note"></div>
       <div><label>Version (publish)</label><input data-step="cfg" data-field="ver" value="0.1.0"></div>
       <div><label>Next version (upgrade)</label><input data-step="cfg" data-field="nextver" value="0.2.0"></div>
       <div><label>Room label</label><input data-step="cfg" data-field="room" value="aims-basics"></div>
+      <div><label>Report to (email)</label><input data-step="cfg" data-field="report_email" value="" placeholder="wer die Berichte bekommt"></div>
       <div><label>ER1 context (auto, vom Author)</label><input data-step="cfg" data-field="ctx" value="105525022458397210134___skills"></div>
       <div><label>Author identity (auto, vom Author)</label><input data-step="cfg" data-field="identity" value="id:alice@m3c"></div>
       <div style="grid-column:1/-1"><label>Key stem (auto · keygen --out · key = stem.priv)</label><input data-step="cfg" data-field="keystem" value="~/.config/m3c/skill-keys/alice"></div>
@@ -423,7 +424,28 @@ skillctl publish {{skill}}@{{nextver}} \
 <script>
   const WS_ID = 'ws-alice-publisher-v2';
   const WS_TITLE = 'Alice: publisher runbook';
-  const KAMIR_EMAIL = 'mirko.kaempf@gmail.com';
+  // Kein fest verdrahteter Empfaenger mehr: diese Vorlage liegt in einem
+  // oeffentlichen Repository, das in ein Kunden-GitLab gespiegelt wird, und eine
+  // private Adresse hat dort nichts zu suchen. Wer die Berichte bekommt, traegt
+  // die ausfuehrende Person oben ein.
+  function reportEmail(){ const e = document.querySelector('[data-step=cfg][data-field=report_email]'); return e ? (e.value||'').trim() : ''; }
+
+  // Ein leeres Feld darf NICHT still zu einem mailto ohne Empfaenger fuehren:
+  // das oeffnet ein leeres Fenster, die Person tippt den Bericht ab und niemand
+  // bekommt ihn. Der Knopf sagt stattdessen, was fehlt.
+  function wireMail(id, subject, body){
+    const el = $(id); if(!el) return;
+    const to = reportEmail();
+    if(!to){
+      el.removeAttribute('href');
+      el.setAttribute('aria-disabled','true');
+      el.title = 'Bitte oben unter "Report to (email)" eintragen, wer den Bericht bekommt.';
+      return;
+    }
+    el.removeAttribute('aria-disabled');
+    el.title = 'An ' + to + ' senden';
+    el.href = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  }
   const k = (s,f)=>`${WS_ID}:${s}:${f}`;
   const $ = id => document.getElementById(id);
 
@@ -435,7 +457,7 @@ skillctl publish {{skill}}@{{nextver}} \
   // (they must match the Google account used in `skillctl login`, else 403).
   const AUTHORS = {
     alice:  { identity:'id:alice@m3c',  ctx:'105525022458397210134___skills', keystem:'~/.config/m3c/skill-keys/alice'  },
-    kamir: { identity:'id:kamir@m3c', ctx:'107677460544181387647___skills', keystem:'~/.config/m3c/skill-keys/kamir' }
+    kamir: { identity:'id:bob@m3c', ctx:'107677460544181387647___skills', keystem:'~/.config/m3c/skill-keys/kamir' }
   };
   function applyAuthor(){
     const sel=document.querySelector('[data-step=cfg][data-field=author]'); if(!sel) return;
@@ -493,12 +515,12 @@ skillctl publish {{skill}}@{{nextver}} \
     $('count').textContent = `${rd} / ${rt} required steps`;
     const ready = $('ready');
     if(rd===rt && rt>0){ ready.textContent='✓ all done'; ready.classList.add('go'); } else { ready.textContent='not ready yet'; ready.classList.remove('go'); }
-    $('mailbtn').href = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(KAMIR_EMAIL)}&su=${encodeURIComponent('skillctl runbook progress: Alice')}&body=${encodeURIComponent(buildReport())}`;
+    wireMail('mailbtn', 'skillctl runbook progress: Alice', buildReport());
     const pf = buildPreflight();
-    $('pfsend').href = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(KAMIR_EMAIL)}&su=${encodeURIComponent('Pre-flight readiness: Alice (skillctl)')}&body=${encodeURIComponent(pf)}`;
+    wireMail('pfsend', 'Pre-flight readiness: Alice (skillctl)', pf);
     const helpEl = document.querySelector('[data-step=pf][data-field=pf_help]');
     const helpTxt = helpEl ? (helpEl.value||'').trim() : '';
-    $('pfhelp').href = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(KAMIR_EMAIL)}&su=${encodeURIComponent('HELP before skillctl session: Alice')}&body=${encodeURIComponent(helpTxt||'(describe what you need help with before we start)')}`;
+    wireMail('pfhelp', 'HELP before skillctl session: Alice', helpTxt||'(describe what you need help with before we start)');
   }
 
   function buildPreflight(){

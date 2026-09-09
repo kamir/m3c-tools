@@ -45,7 +45,7 @@ func buildFreshFixture(t *testing.T, maxStaleness, failPolicy string) freshFixtu
 	writePrivKeyPEM(t, ownerKeyPath, ownerPriv)
 	writePrivKeyPEM(t, regKeyPath, regPriv)
 
-	ownerID := "id:kamir@m3c"
+	ownerID := "id:bob@m3c"
 	regURL := "https://reg.example/api/skills"
 
 	trPath := filepath.Join(dir, "trust-roots.yaml")

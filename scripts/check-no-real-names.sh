@@ -36,27 +36,37 @@ set -euo pipefail
 # boundaries, so "generic" does not trip on "eric".
 NAMES='Mirko|Eric|Kaempf|Kämpf|Frank'
 
-# Exempt LINES, not paths, because three of these four files also carry ordinary
-# example text that the gate must keep checking. Each pattern is anchored to
-# what makes the line legitimate, not merely to the name in it:
+# Exempt LINES, not paths, because both files also carry ordinary example text
+# that the gate must keep checking. Each pattern is anchored to what makes the
+# line legitimate, not merely to the name in it:
 #
 #   PRODUCT_PUBLISHER      the publisher of a signed Windows installer. This is
 #                          a legal attribution and it must match the signing
 #                          certificate; a persona here would be a false claim.
-#   GCP_ACCOUNT / GCP Account
-#                          a functional account id in the certificate-renewal
-#                          runbook. Not a persona: the procedure fails without
-#                          the real value, and it is needed under time pressure.
-#   KAMIR_EMAIL            the contact address the publisher runbook fills in.
 #   plaudDeferForTranscript
 #                          a transcript fixture. The string is INPUT to the
 #                          function under test, and it is a real sentence a real
 #                          person said, which is what makes it a good fixture.
 #
-# Every one of these is a candidate for removal rather than exemption, and the
-# first three carry a live address. They are listed here so the gate can go
-# green today without that decision being made silently.
-EXEMPT_LINES='(PRODUCT_PUBLISHER|GCP_ACCOUNT|GCP Account|KAMIR_EMAIL|plaudDeferForTranscript)'
+# Two entries that stood here earlier are GONE, not exempted: the GCP account in
+# the certificate runbook now comes from ${GCP_ACCOUNT:?...} and the publisher
+# runbook's recipient is a form field. An exemption postpones a decision; those
+# two are decided.
+EXEMPT_LINES='(PRODUCT_PUBLISHER|plaudDeferForTranscript)'
+
+# Two more classes that a name list alone would never catch, both found by
+# reading the tree rather than by trusting the first grep.
+#
+# IDENTITIES: a persona also hides in an identity id. `kamir` cannot go in the
+# NAMES list above, because it is also the GitHub namespace and appears 876
+# times in import paths that must not change. Anchoring on `id:<name>@` keeps
+# the import path untouched and still refuses the persona.
+BAD_IDS='id:(kamir|mirko|eric|frank)@'
+
+# ADDRESSES: a private mail address is a different class from a first name. It
+# is harvestable, it is not fixable by renaming, and this tree is public AND
+# mirrored into a customer GitLab. Nothing here should carry a personal inbox.
+BAD_MAIL='[A-Za-z0-9._%+-]+\.(kaempf|kämpf)@|(mirko|eric|frank)[._][A-Za-z]+@'
 
 # Exempt paths: this file names every forbidden name, by construction.
 EXEMPT_PATHS='^(scripts/check-no-real-names\.sh)$'
@@ -78,6 +88,14 @@ FILES=$(printf '%s\n' "$FILES" | grep -Ev "$EXEMPT_PATHS" || true)
 # can give. -w asks for the word boundary in a way both tools agree on.
 HITS=$(printf '%s\n' "$FILES" | tr '\n' '\0' \
   | xargs -0 grep -I -n -w -E -H -i -e "$NAMES" -- 2>/dev/null || true)
+
+# The identity and address checks are NOT word-anchored: `id:kamir@m3c` and an
+# address are already their own delimiters, and -w would refuse to match them.
+IDHITS=$(printf '%s\n' "$FILES" | tr '\n' '\0' \
+  | xargs -0 grep -I -n -E -H -i -e "$BAD_IDS" -- 2>/dev/null || true)
+MAILHITS=$(printf '%s\n' "$FILES" | tr '\n' '\0' \
+  | xargs -0 grep -I -n -E -H -i -e "$BAD_MAIL" -- 2>/dev/null || true)
+HITS=$(printf '%s\n%s\n%s\n' "$HITS" "$IDHITS" "$MAILHITS" | grep -v '^$' || true)
 
 [ "$MODE" = "--all" ] || HITS=$(printf '%s\n' "$HITS" | grep -Ev "$EXEMPT_LINES" || true)
 
@@ -106,6 +124,11 @@ Use the standard cast instead, and keep the roles stable across the tree:
   Eddy, Freddy, Gustav, Hans   further parties as needed
 
 An identity id follows the same rule: id:bob@example, id:alice@example.
+
+A personal mail address is not a naming problem at all: remove it. Where a real
+account is genuinely needed to run something, read it from the environment with
+${VAR:?why it is needed} so the procedure STOPS instead of continuing with an
+empty value.
 
 If the name belongs to AUTHORSHIP rather than to an example (a commit author, a
 copyright holder, the publisher of a signed installer), it does not belong to a

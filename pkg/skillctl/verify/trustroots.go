@@ -115,7 +115,7 @@ func (rk RegistryKey) IsActive() bool {
 // and no call to, our servers.
 type AuthorKey struct {
 	// ID is the author identity_id exactly as it appears in the bundle's
-	// author signature row (e.g. "id:kamir@m3c"). Matched verbatim.
+	// author signature row (e.g. "id:bob@m3c"). Matched verbatim.
 	ID string `yaml:"id"`
 
 	// Pubkey is the raw 32-byte ed25519 public key. Hydrated once by Load
