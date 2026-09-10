@@ -139,7 +139,15 @@ jobs:
       # than at whatever happens to be on PATH.
       - name: Build skillctl
         shell: bash
-        run: go build -o build/skillctl ./cmd/skillctl
+        # Windows braucht die .exe-Endung: `go build -o build/skillctl` erzeugt
+        # sie NICHT von selbst, und der Rehearsal-Schritt zeigt auf
+        # .\build\skillctl.exe. Beim ersten Release-Lauf dieses Tors
+        # (skillctl/v0.5.0, Run 34475469820) fand der Windows-Zwilling deshalb
+        # einen leeren Pfad vor: das Tor hat seine eigene Verdrahtung gefunden.
+        run: |
+          EXT=""
+          if [ "$RUNNER_OS" = "Windows" ]; then EXT=".exe"; fi
+          go build -o "build/skillctl$EXT" ./cmd/skillctl
 
       # NOT a bare `go test -run`: that exits 0 when the pattern matches
       # nothing, so a renamed or deleted test turns this gate green while it
