@@ -103,6 +103,34 @@ code, and CI reads the exit code. A tool can be honest in prose and still make a
 gate lie, which is why the wrapper checks for run events instead of reading the
 summary line.
 
+**A third kind, and it belongs to neither half: the binding is a name.** Here
+nothing is silent and nothing reports a false success. Both sides work
+perfectly; they simply talk past each other, because the channel between them is
+a string.
+
+A required status check is bound to a job by its NAME. A session renamed one,
+honestly, because the job had grown:
+
+    "Prose (no em dash)"  ->  "Prose (no em dash, no real names)"
+
+    branch protection requires   "Prose (no em dash)"
+    the pull request reports     "Prose (no em dash, no real names)"
+
+Two names, no match. The required context would never have reported again,
+enforcement would have vanished without a sound, and the surface showed
+thirty-two green ticks while it happened. A change whose entire purpose was a
+new gate would have unhooked an existing one.
+
+The rule: **a binding through a name breaks silently the moment either side
+changes the name.** It is a relative of `go test -run TestFoo` against a renamed
+test, except that there the pattern is what moves and here it is the target.
+
+Where this appears in this repository: workflow job names (branch protection),
+check names in `docs/security/required-checks.txt`, test-name patterns in CI
+steps, `#nosec` rule ids, exit-code identifiers quoted in documentation. Treat
+each of those strings as an interface: a rename is an API change, and it needs
+the other side changed in the same commit.
+
 The `jq` entry is the worst of the set and it is worth saying why. It sat inside
 the automation written to catch exactly this class, and it failed in both
 directions at once: it raised an alarm in the correct state and printed
