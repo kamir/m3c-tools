@@ -53,7 +53,21 @@ jobs:
         run: ./scripts/check-gofmt.sh
 
   prose-gate:
-    name: "Prose (no em dash, no real names)"
+    # DER NAME BLEIBT, auch wenn der Job inzwischen mehr prueft als Gedankenstriche.
+    #
+    # Ein erforderlicher Check wird ueber seinen NAMEN gebunden. Der Zweigschutz
+    # von master fordert woertlich "Prose (no em dash)". Haette dieser Job
+    # "Prose (no em dash, no real names)" geheissen, wuerde der geforderte Check
+    # nie mehr melden: die Durchsetzung waere still verschwunden, waehrend die
+    # Oberflaeche einen gruenen Haken zeigt.
+    #
+    # Es war beinahe passiert. Die Umbenennung stand schon im Zweig und die
+    # Pruefung meldete gruen, nur eben unter einem Namen, den niemand fordert.
+    #
+    # Was der Job WIRKLICH prueft, gehoert deshalb in die Schrittnamen, nicht in
+    # den Jobnamen. Der Jobname ist eine Schnittstelle zum Zweigschutz und wird
+    # wie eine behandelt.
+    name: Prose (no em dash)
     # Pure shell over the tracked tree: no Go toolchain, no cgo, cheap runner.
     # The rule and its two exemptions are in CODESTYLE.md ("Prose: no em dashes").
     runs-on: ubuntu-latest
