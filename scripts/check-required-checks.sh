@@ -308,9 +308,13 @@ def pr_capable(on):
     if "push" in on:
         spec = on["push"]
         if isinstance(spec, dict):
-            tagged = any(k in spec for k in ("tags", "tags-ignore"))
-            branched = any(k in spec for k in ("branches", "branches-ignore"))
-            if tagged and not branched:
+            # `tags:` is an allow-list, so a push filtered by it and nothing
+            # else runs for tag pushes only. `tags-ignore:` is the opposite, an
+            # exclusion, and a push carrying only that still runs for every
+            # branch: treating it as tag-only would be a FALSE red, which in a
+            # gate meant to be believed costs as much as a false green.
+            if "tags" in spec and not any(
+                    k in spec for k in ("branches", "branches-ignore")):
                 return False
         return True
     return False
