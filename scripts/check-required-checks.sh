@@ -24,7 +24,9 @@
 #
 # The rule, from .claude/rules/claims.md: a binding through a name breaks
 # silently the moment either side changes the name. This script is that rule
-# made mechanical for one instance of it, the workflow job names.
+# made mechanical for one instance of it, the workflow job names. The reference
+# names the file and not a section inside it, because a section title is itself
+# a binding through a string and would be the same mistake one level down.
 #
 # STATE ON THE DAY IT WAS WRITTEN
 #
@@ -36,18 +38,25 @@
 #
 # WHAT IT CHECKS
 #
-#   1. every `workflow` record resolves to a job name declared in
-#      .github/workflows/**, matrix names expanded
-#   2. the workflow owning such a job can report on a pull request head at all,
-#      that is, it triggers on push, pull_request, pull_request_target or
-#      workflow_call
+#   1. every `workflow` record resolves to a job name declared LITERALLY in the
+#      workflow files, matrix names expanded. A job name that still holds an
+#      unresolved `${{ }}` expression can never satisfy a required record: see
+#      MATRIX JOBS below for why that is fail-closed and not pedantry.
+#   2. at least one of the workflows declaring such a job can report on a pull
+#      request head at all. `pull_request`, `pull_request_target` and
+#      `workflow_call` always can; a `push` can, EXCEPT when it is filtered to
+#      tags alone, because a pull request head is never a tag.
 #   3. no record classified as produced OUTSIDE the tree is in fact produced by
 #      a job inside it, which would mean the classification is wrong and the
-#      gate is skipping a check it could have made
-#   4. the producer keyword agrees with the app id recorded beside it, so that
-#      relabelling a record cannot be used to walk around check 1
+#      gate is skipping a check it could have made.
+#   4. the producer keyword agrees with the app id recorded beside it, and every
+#      `actions-external` record names one of the contexts allow-listed in this
+#      script. What the app id can and cannot do is set out under HOW THE THREE
+#      PRODUCERS ARE TOLD APART; the allow-list is what actually stops a record
+#      being relabelled around check 1.
 #   5. the manifest is internally consistent: known keywords, no duplicate
-#      names, and the counts in its header equal what was parsed
+#      names, at least MIN_RECORDS records, and header counts equal to what was
+#      parsed.
 #
 # WHAT IT CANNOT CHECK, and this matters more than one further tick
 #
@@ -60,14 +69,32 @@
 #   c. check runs made through `workflow_call`. GitHub renames those to
 #      "<calling job> / <called job>"; this script resolves the called job's own
 #      name. No required context is produced that way today.
+#   d. whether every gate in this tree that OUGHT to be required actually is.
+#      This runs one way only: it asks whether every required name is
+#      satisfiable, never whether every gate is required. A new blocking job
+#      that nobody added to branch protection passes here in silence. That is
+#      not an oversight to be fixed with a warning: 42 of the 65 names this tree
+#      declares are deliberately not required, so the question is not
+#      mechanically decidable and belongs to a human.
 #
 # HOW THE THREE PRODUCERS ARE TOLD APART
 #
 # `gh api .../protection` returns an app id beside every required context, and
-# it is what separates the classes without guesswork. Measured on 2026-09-10:
+# it separates the code-scanning class without guesswork. Measured on
+# 2026-09-10:
 #
 #     app 15368  github-actions             27 of the 29 contexts
 #     app 57789  github-advanced-security     2, "CodeQL" and "gosec"
+#
+# The app id does exactly that much and no more. It tells `code-scanning` apart
+# from the other two; it does NOT tell `workflow` apart from `actions-external`,
+# because both of those are app 15368. Relabelling a record from `workflow` to
+# `actions-external` would therefore switch check 1 off for that context while
+# every app id still agreed, and a job renamed in the same commit would sail
+# through: precisely the failure of 2026-09-10, wearing the gate's own uniform.
+# ACTIONS_EXTERNAL_ALLOWED below is what closes that, by naming the four
+# contexts that may carry the keyword. Adding a fifth means editing this script,
+# which is a visible act in a reviewed diff, and that is the whole point.
 #
 # App 15368 alone does not mean "a job in this tree": the four "Analyze (...)"
 # contexts come from the CodeQL DEFAULT SETUP, which is a GitHub Actions
@@ -84,13 +111,35 @@
 # value, and a matrix job with no `name:` yields GitHub's default `<job-id> (v1,
 # v2)`. Where an expression survives expansion, because the matrix came from
 # `fromJSON` or the name interpolates something other than the matrix, the
-# template is kept as a PATTERN and required names are matched against it
-# instead of pretending to know the value. `--list` marks those rows `pattern`.
+# template is kept as a PATTERN, shown by `--list`, and it can never satisfy a
+# required record.
+#
+# That last clause is the load-bearing one. A pattern is matched by turning each
+# surviving `${{ ... }}` into `.*`, so a name that is nothing but an expression
+# collapses to `^.*$` and would answer to every required context at once. Read
+# as caution it sounds careful; measured, it is a blanket permission, and one
+# workflow file declaring one such job would have emptied check 1 for all 23
+# records. So a pattern is evidence for a human reading `--list` and never
+# evidence for the gate: a required context whose only candidate is a pattern is
+# reported as drift, with the remedy being to give that job a literal name.
+#
+# Today this machinery is exercised and inconsequential at once: all three
+# matrices in the tree expand to literals, zero rows stay patterns, and no
+# required context hangs off a matrix at all. The two required names that LOOK
+# matrix-shaped, "Binary Smoke Test (windows-latest)" and "Trust Surface
+# (windows-latest)", are typed out by hand in windows-gate.yml.
 #
 # The include/exclude merge implemented here is GitHub's rule in its ordinary
 # form: the cartesian product of the plain keys, minus `exclude`, then each
 # `include` entry merged into every combination it is compatible with, or
 # appended when it is compatible with none. Exotic overrides are not modelled.
+#
+# WHICH FILES ARE READ
+#
+# `.github/workflows/*.yml` and `.github/workflows/*.yaml`, because GitHub
+# accepts both extensions. The tree holds 17 files and all of them are `.yml`,
+# so reading the second extension changes nothing today; it is here so that a
+# `.yaml` file cannot become a place where check 3 stops looking.
 #
 # python3 with PyYAML does the parsing, and the loader REFUSES duplicate keys:
 # a loader that tolerates them answers "can I parse this somehow", and GitHub
@@ -103,8 +152,11 @@
 #   ./scripts/check-required-checks.sh --refresh  # rewrite the manifest from the API
 #
 # Exit: 0 clean, 1 drift or an inconsistent manifest, 2 usage error,
-#       3 --refresh could not complete (no gh, no permission, a name it will
-#         not classify on its own)
+#       3 the gate could not run at all, or --refresh could not complete (no
+#         python3, no PyYAML, no gh, no permission, a name it will not classify
+#         on its own). Exit 3 is a statement about the TOOLING and exit 1 a
+#         statement about the TREE, and keeping them apart is why a missing
+#         PyYAML is not allowed to look like drift.
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -118,6 +170,20 @@ case "$MODE" in
   ""|--list|--refresh) ;;
   *) echo "usage: $0 [--list|--refresh]" >&2; exit 2 ;;
 esac
+
+# The tooling before the tree. Without this, a missing PyYAML ends in a raw
+# traceback and exit 1, which is the code reserved for drift: "the gate could
+# not run" and "the gate found drift" would be the same signal.
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "FAIL: this gate needs python3, and it is not on PATH." >&2
+  exit 3
+fi
+if ! python3 -c 'import yaml' >/dev/null 2>&1; then
+  echo "FAIL: this gate needs python3 with PyYAML; 'import yaml' failed." >&2
+  echo "      That is a statement about the tooling and not about the tree," >&2
+  echo "      so this is exit 3 and not exit 1." >&2
+  exit 3
+fi
 
 if [ "$MODE" = "--refresh" ] && ! command -v gh >/dev/null 2>&1; then
   echo "FAIL: --refresh needs the gh CLI, and it is not on PATH." >&2
@@ -139,7 +205,7 @@ fi
 
 MANIFEST="$MANIFEST" MODE="$MODE" LIVE="$LIVE" REPO="$REPO" BRANCH="$BRANCH" \
 python3 - <<'PY'
-import glob, itertools, os, re, sys, yaml
+import collections, glob, itertools, os, re, sys, yaml
 
 MANIFEST = os.environ["MANIFEST"]
 MODE     = os.environ["MODE"]
@@ -155,7 +221,7 @@ APP_GHAS    = "57789"   # github-advanced-security (code scanning results)
 PRODUCERS = {
     "workflow": (
         APP_ACTIONS, True,
-        "a job in .github/workflows/**"),
+        "a job in the workflow files"),
     "actions-external": (
         APP_ACTIONS, False,
         "a GitHub Actions workflow with no file in this repository, "
@@ -164,7 +230,29 @@ PRODUCERS = {
         APP_GHAS, False,
         "the GitHub code scanning results check, one context per analysis tool"),
 }
-PR_CAPABLE = ("push", "pull_request", "pull_request_target", "workflow_call")
+
+# The closed list of contexts that may carry `actions-external`. It exists
+# because `workflow` and `actions-external` share app id 15368, so the app id
+# cannot tell them apart, and without this a record could be relabelled from
+# `workflow` to `actions-external` to switch its name check off. These four are
+# the CodeQL default setup's analyses, measured on 2026-09-10. A fifth external
+# context means editing this line, in a diff a reviewer sees.
+ACTIONS_EXTERNAL_ALLOWED = {
+    "Analyze (go)",
+    "Analyze (actions)",
+    "Analyze (python)",
+    "Analyze (javascript-typescript)",
+}
+
+# A floor that does not come from the file being checked. The header count
+# catches a TRUNCATED manifest, but it cannot catch a manifest emptied on
+# purpose with the header pulled down to match: that is internally consistent
+# and would print "OK: 0 required context(s)". Branch protection required 29
+# contexts on 2026-09-10; the floor sits below that so ordinary churn does not
+# trip it, and far enough above zero that gutting the file is a red build and a
+# deliberate edit here.
+MIN_RECORDS = 25
+
 EXPR = re.compile(r"\$\{\{.*?\}\}")
 
 
@@ -187,12 +275,45 @@ Strict.add_constructor(
     yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, no_duplicate_keys)
 
 
-def triggers(doc):
+def on_block(doc):
     # A bare `on:` is parsed as the boolean True by YAML 1.1.
     on = doc.get("on", doc.get(True))
-    if isinstance(on, (dict, list)):
-        return [str(e) for e in on]
-    return [on] if isinstance(on, str) else []
+    if isinstance(on, dict):
+        return on
+    if isinstance(on, list):
+        return {str(e): None for e in on}
+    if isinstance(on, str):
+        return {on: None}
+    return {}
+
+
+def pr_capable(on):
+    """Can a workflow with this `on:` block report on a PULL REQUEST head?
+
+    `pull_request`, `pull_request_target` and `workflow_call` always can. A
+    `push` normally can too, because pushing the branch behind a pull request
+    produces check runs on that same head commit. A push filtered to TAGS and
+    nothing else cannot, since a pull request head is never a tag.
+
+    That last case is not hypothetical. release.yml is `on: {push: {tags: v*}}`
+    and declares jobs named "CLI/manual consistency (docaudit)" and "Build macOS
+    (arm64 + amd64)", the same names ci.yml declares. Reading only the `push`
+    key, a rename of the ci.yml copy left this gate green, because the tag-only
+    copy went on carrying the name while the copy that actually reports on pull
+    requests had been renamed away.
+    """
+    for ev in ("pull_request", "pull_request_target", "workflow_call"):
+        if ev in on:
+            return True
+    if "push" in on:
+        spec = on["push"]
+        if isinstance(spec, dict):
+            tagged = any(k in spec for k in ("tags", "tags-ignore"))
+            branched = any(k in spec for k in ("branches", "branches-ignore"))
+            if tagged and not branched:
+                return False
+        return True
+    return False
 
 
 def combinations(matrix):
@@ -236,17 +357,24 @@ def substitute(template, combo):
     return EXPR.sub(one, template)
 
 
+def workflow_files():
+    """Both extensions GitHub accepts, so a .yaml file is not a blind spot."""
+    return sorted(glob.glob(".github/workflows/*.yml")
+                  + glob.glob(".github/workflows/*.yaml"))
+
+
 def resolve():
-    """Every check-run name this tree declares: (name, file, job, events, kind)."""
+    """Every check-run name declared: (name, file, job, events, kind, prcap)."""
     rows, parse_errors = [], []
-    for f in sorted(glob.glob(".github/workflows/*.yml")):
+    for f in workflow_files():
         try:
             with open(f, encoding="utf-8") as fh:
                 doc = yaml.load(fh, Strict) or {}
         except Exception as e:                       # noqa: BLE001
             parse_errors.append(f"{f}: {e}")
             continue
-        events = triggers(doc)
+        on = on_block(doc)
+        events, prcap = list(on), pr_capable(on)
         for jid, job in (doc.get("jobs") or {}).items():
             if not isinstance(job, dict):
                 continue
@@ -256,32 +384,44 @@ def resolve():
             if not combos:
                 nm = str(explicit) if explicit else jid
                 rows.append((nm, f, jid, events,
-                             "pattern" if EXPR.search(nm) else "literal"))
+                             "pattern" if EXPR.search(nm) else "literal", prcap))
                 continue
             for c in combos:
                 nm = (substitute(str(explicit), c) if explicit
                       else f"{jid} ({', '.join(str(v) for v in c.values())})")
                 rows.append((nm, f, jid, events,
-                             "pattern" if EXPR.search(nm) else "literal"))
+                             "pattern" if EXPR.search(nm) else "literal", prcap))
     return rows, parse_errors
 
 
 ROWS, PARSE_ERRORS = resolve()
-LITERALS = {r[0]: r for r in ROWS if r[4] == "literal"}
+
+# EVERY declaration of a name is kept, not the last one parsed. Two files
+# declaring the same job name is normal here (ci.yml and release.yml share
+# two), and a dict would have hidden all but one of them, which is exactly how
+# a tag-only copy came to answer for a renamed pull-request copy.
+LITERALS = collections.defaultdict(list)
+for _r in ROWS:
+    if _r[4] == "literal":
+        LITERALS[_r[0]].append(_r)
 PATTERNS = [r for r in ROWS if r[4] == "pattern"]
 
 
-def match(name):
-    """The job declaring this check name, or None."""
-    if name in LITERALS:
-        return LITERALS[name]
+def literal_hits(name):
+    """Every job declaring exactly this name. The only evidence the gate takes."""
+    return LITERALS.get(name, [])
+
+
+def pattern_hits(name):
+    """Jobs whose unresolved name COULD expand to this. Evidence for a human."""
+    out = []
     for r in PATTERNS:
         rx = "^" + "".join(
             ".*" if p.startswith("${{") else re.escape(p)
             for p in re.split(r"(\$\{\{.*?\}\})", r[0]) if p) + "$"
         if re.match(rx, name):
-            return r
-    return None
+            out.append(r)
+    return out
 
 
 def parse_manifest(path):
@@ -318,9 +458,10 @@ if MODE == "--list":
     print(f"{len(ROWS)} declared check name(s) from "
           f"{len(set((r[1], r[2]) for r in ROWS))} job(s) in "
           f"{len(set(r[1] for r in ROWS))} workflow file(s), matrix expanded:")
-    for name, f, jid, events, kind in sorted(ROWS):
+    for name, f, jid, events, kind, prcap in sorted(ROWS):
         print(f"  {kind:8} {name}")
-        print(f"           {f}  job:{jid}  on:{','.join(events)}")
+        print(f"           {f}  job:{jid}  on:{','.join(events)}"
+              f"  pr-head:{'yes' if prcap else 'no'}")
     for e in PARSE_ERRORS:
         print(f"  FAIL: workflow will not parse: {e}")
     sys.exit(1 if PARSE_ERRORS else 0)
@@ -350,18 +491,26 @@ HEADER = """# Required status checks on {branch}, as branch protection requires 
 # Whitespace around a name is stripped and is not part of it.
 #
 # Producer keywords. An unknown one is an error rather than an assumed external,
-# so a typo cannot become a silently skipped check. The app id is measured, not
-# chosen, and the gate refuses a record whose keyword and app id disagree:
+# so a typo cannot become a silently skipped check:
 #
-#   workflow          15368  a job in .github/workflows/**; the name is checked
+#   workflow          15368  a job in the workflow files; the name is checked
 #   actions-external  15368  a GitHub Actions workflow with NO file in this
 #                            repository, the CodeQL default setup
 #   code-scanning     57789  the GitHub code scanning results check, one context
 #                            per analysis tool
 #
+# The app id is measured rather than chosen, and the gate refuses a record whose
+# keyword and app id disagree. Note what that does and does not buy: it tells
+# `code-scanning` apart from the other two, and it does NOT tell `workflow`
+# apart from `actions-external`, because those two share app 15368. Relabelling
+# a record between them is therefore blocked by a second, independent fetter:
+# only the four CodeQL default-setup contexts allow-listed in
+# scripts/check-required-checks.sh may carry `actions-external`, and any other
+# name with that keyword is a hard error.
+#
 # Only `workflow` records can be held against the tree. The others are recorded
-# so the count is complete and so nobody reads their absence from
-# .github/workflows/** as drift. From the API, an `actions-external` record is
+# so the count is complete and so nobody reads their absence from the workflow
+# files as drift. From the API, an `actions-external` record is
 # indistinguishable from a renamed job, which is why a human classifies it once
 # and the gate then keeps that classification honest in both directions.
 #
@@ -392,10 +541,13 @@ if MODE == "--refresh":
                 old[name] = producer
     out, unknown = [], []
     for app, name in live:
-        if app == APP_ACTIONS and match(name):
+        keep = old.get(name)
+        if keep == "actions-external" and name not in ACTIONS_EXTERNAL_ALLOWED:
+            keep = None          # never carry an unvetted relabel forward
+        if app == APP_ACTIONS and literal_hits(name):
             out.append(("workflow", app, name))
-        elif name in old and old[name] in PRODUCERS and old[name] != "workflow":
-            out.append((old[name], app, name))
+        elif keep in PRODUCERS and keep != "workflow":
+            out.append((keep, app, name))
         elif app == APP_GHAS:
             out.append(("code-scanning", app, name))
         else:
@@ -405,16 +557,16 @@ if MODE == "--refresh":
         for app, name in unknown:
             print(f"  app {app}  {name}")
         print()
-        print("Each is required from GitHub Actions, no job in")
-        print(".github/workflows/** answers to that name, and none is already")
-        print(f"classified in {MANIFEST}.")
+        print("Each is required from GitHub Actions, no job in the workflow")
+        print("files answers to that name, and none is already classified in")
+        print(f"{MANIFEST} in a way this script will carry forward.")
         print()
         print("Two very different things look like this. One: a workflow that")
         print("lives outside the repository, such as the CodeQL default setup.")
         print("Two: a job in this tree that was RENAMED while branch protection")
-        print("kept asking for the old name. Only you can tell them apart. Add a")
-        print("line for each with the producer that really makes it, then run")
-        print("the gate to confirm.")
+        print("kept asking for the old name. Only you can tell them apart. An")
+        print("external context must ALSO be added to ACTIONS_EXTERNAL_ALLOWED")
+        print("in scripts/check-required-checks.sh, deliberately and in review.")
         sys.exit(3)
     per = {}
     for producer, _app, _name in out:
@@ -437,6 +589,19 @@ if not os.path.exists(MANIFEST):
 
 records, counts = parse_manifest(MANIFEST)
 problems, seen, per = [], {}, {}
+
+if not records:
+    problems.append(
+        f"{MANIFEST}: holds no records at all. An empty list of things to "
+        f"check is not a clean result, it is a gate with nothing to say.")
+elif len(records) < MIN_RECORDS:
+    problems.append(
+        f"{MANIFEST}: holds {len(records)} records, and this gate expects at "
+        f"least {MIN_RECORDS}. Branch protection required 29 contexts when the "
+        f"floor was set. Either protection was loosened on purpose, in which "
+        f"case lower MIN_RECORDS in scripts/check-required-checks.sh in the "
+        f"same commit, or the manifest was gutted and the header pulled down "
+        f"to match.")
 
 for lineno, producer, app, name, raw in records:
     if producer not in PRODUCERS:
@@ -465,24 +630,53 @@ for lineno, producer, app, name, raw in records:
             f"Relabelling a record does not change who produces it.")
         continue
 
-    hit = match(name)
+    if producer == "actions-external" and name not in ACTIONS_EXTERNAL_ALLOWED:
+        problems.append(
+            f"{MANIFEST}:{lineno}: {name!r} is recorded as 'actions-external', "
+            f"which switches OFF the check that a job of that name exists, but "
+            f"it is not one of the contexts allow-listed in "
+            f"scripts/check-required-checks.sh. 'workflow' and "
+            f"'actions-external' share app {APP_ACTIONS}, so the app id cannot "
+            f"tell them apart and this list is what stops a record being "
+            f"relabelled around the name check. If this context really is "
+            f"produced outside the repository, add it to "
+            f"ACTIONS_EXTERNAL_ALLOWED deliberately.")
+        continue
+
+    hits = literal_hits(name)
     if must_resolve:
-        if hit is None:
+        if not hits:
+            pats = pattern_hits(name)
+            if pats:
+                where = ", ".join(sorted({p[1] for p in pats}))
+                problems.append(
+                    f"{MANIFEST}:{lineno}: required check {name!r} has no job "
+                    f"of that name. It is matched only by a job whose `name:` "
+                    f"still holds an unresolved expression ({where}), and a "
+                    f"template is not a name: an expression is matched as '.*' "
+                    f"here, so accepting it would let one such job answer for "
+                    f"any required context at all. Give that job a literal "
+                    f"name, or correct this record.")
+            else:
+                problems.append(
+                    f"{MANIFEST}:{lineno}: required check {name!r} has NO job "
+                    f"of that name in the workflow files. Either a job was "
+                    f"renamed and branch protection still asks for the old "
+                    f"name, or the job was deleted. Both make the requirement "
+                    f"unsatisfiable, and the pull request waits for a context "
+                    f"that never arrives.")
+        elif not any(h[5] for h in hits):
+            where = "; ".join(f"{h[1]} on:{','.join(h[3])}" for h in hits)
             problems.append(
-                f"{MANIFEST}:{lineno}: required check {name!r} has NO job of "
-                f"that name in .github/workflows/**. Either a job was renamed "
-                f"and branch protection still asks for the old name, or the job "
-                f"was deleted. Both make the requirement unsatisfiable, and the "
-                f"pull request waits for a context that never arrives.")
-        elif not any(e in PR_CAPABLE for e in hit[3]):
-            problems.append(
-                f"{MANIFEST}:{lineno}: required check {name!r} is declared in "
-                f"{hit[1]}, which triggers on {hit[3]} and therefore cannot "
-                f"report on a pull request head.")
-    elif hit is not None:
+                f"{MANIFEST}:{lineno}: required check {name!r} is declared "
+                f"{len(hits)} time(s), and no declaration can report on a pull "
+                f"request head: {where}. A push filtered to tags alone never "
+                f"produces a check run on a pull request head.")
+    elif hits:
+        where = ", ".join(sorted({h[1] for h in hits}))
         problems.append(
             f"{MANIFEST}:{lineno}: {name!r} is recorded as '{producer}' "
-            f"({prose}), but {hit[1]} declares a job of exactly that name. One "
+            f"({prose}), but {where} declares a job of exactly that name. One "
             f"of the two is wrong, and while it is wrong this gate skips a "
             f"check it could make.")
 
@@ -490,7 +684,11 @@ if counts is None:
     problems.append(
         f"{MANIFEST}: the header line '# records: N (keyword N, ...)' is "
         f"missing. It is what catches a truncated file.")
-else:
+elif not problems:
+    # Only when no record is broken. A record skipped for a bad keyword or a
+    # missing name is not counted in `per` but is counted in `records`, so
+    # running this anyway would add a header-count complaint on top of the real
+    # one and send the next reader to --refresh instead of to the broken line.
     total, header_per = counts
     if total != len(records) or header_per != per:
         have = ", ".join(f"{k} {per[k]}" for k in sorted(per))
@@ -504,22 +702,25 @@ for e in PARSE_ERRORS:
     problems.append(f"workflow will not parse: {e}")
 
 if problems:
-    print(f"::error::required-check drift ({MANIFEST} vs .github/workflows/**)")
+    print(f"::error::required-check drift ({MANIFEST} vs the workflow files)")
     for p in problems:
         print(f"  {p}")
     print()
     print("A required status check is bound to a job by its NAME and by nothing")
     print("else. When the two names differ the context never reports again and")
-    print("the enforcement is gone without a sound. See .claude/rules/claims.md,")
-    print("section 'The tools that answer a different question'.")
+    print("the enforcement is gone without a sound. See .claude/rules/claims.md.")
     sys.exit(1)
 
 wf = per.get("workflow", 0)
 jobs = len(set((r[1], r[2]) for r in ROWS))
-print(f"OK: {len(records)} required context(s) in {MANIFEST}. {wf} are produced "
-      f"by a job in this tree, and every one of them has a job of exactly that "
-      f"name among the {len(ROWS)} check names this tree declares "
-      f"({jobs} jobs, matrix names expanded).")
+files = len(workflow_files())
+print(f"OK: {len(records)} context(s) recorded as required in {MANIFEST}. This "
+      f"is a statement about that file, not about branch protection; see limit "
+      f"(a) below.")
+print(f"    {wf} of them name a job in this tree. Each has a job of exactly "
+      f"that name, declared in a workflow that can report on a pull request "
+      f"head, among the {len(ROWS)} check names this tree declares "
+      f"({jobs} jobs in {files} files, matrix names expanded).")
 print(f"    {len(records) - wf} come from outside the tree and are recorded as "
       f"such, not checked:")
 for _, producer, _app, name, _ in records:
@@ -533,4 +734,9 @@ print("      b. whether a declared job is REACHED on a pull request; a path")
 print("         filter, an `if:` or a skipped `needs:` leaves it unreported.")
 print("      c. check runs made through `workflow_call`, which GitHub renames")
 print("         to '<calling job> / <called job>'.")
+print("      d. whether every gate that OUGHT to be required actually is. This")
+print("         gate runs one way only. Of the "
+      f"{len(ROWS)} names this tree declares, {len(ROWS) - wf} are")
+print("         deliberately not required, so a new blocking job that nobody")
+print("         added to branch protection passes here in silence.")
 PY

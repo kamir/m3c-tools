@@ -1,7 +1,7 @@
 name: Pin Guard (supply-chain)
 
 # CD-T1 keystone + CD-T2/T6/T7/T8 drift guard. Modeled on the drift-guard grep
-# block in windows-gate.yml. Seven cheap, robust checks keep the supply-chain
+# block in windows-gate.yml. Eight cheap, robust checks keep the supply-chain
 # hardening honest on every push/PR, in the order the steps below run them:
 #
 #   0. parse   every workflow file parses under a loader that REFUSES duplicate
@@ -16,10 +16,13 @@ name: Pin Guard (supply-chain)
 #              `uses:` step (poisoned pipeline execution).
 #   6. QG-0001 M4  every required status check still has a job of that exact
 #              name; a rename must not unhook the requirement.
+#   7. wiring  guard 6 is still wired up in both places it is meant to run:
+#              this file, and the `ci:` target in the Makefile.
 #
 # The header said "four" and listed four while the job ran six: guards 0 and 5
 # were added without the list following. Adding guard 6 on 2026-09-10 made the
-# arithmetic worth repairing rather than continuing.
+# arithmetic worth repairing rather than continuing, and guard 7 was added the
+# same day, so the count is checked again here: eight entries, eight steps.
 #
 # Self-reference: this file necessarily contains the tokens it searches for
 # ("uses:", "@latest", "upload-artifact", and now "write-all"/": write"). The
@@ -107,7 +110,8 @@ jobs:
               yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, no_duplicate_keys)
 
           bad = 0
-          for f in sorted(glob.glob(".github/workflows/*.yml")):
+          for f in sorted(glob.glob(".github/workflows/*.yml")
+                          + glob.glob(".github/workflows/*.yaml")):
               try:
                   yaml.load(open(f), Strict)
               except Exception as e:
@@ -126,7 +130,8 @@ jobs:
         run: |
           set -euo pipefail
           bad=""
-          for f in .github/workflows/*.yml; do
+          for f in .github/workflows/*.yml .github/workflows/*.yaml; do
+            [ -e "$f" ] || continue
             # Strip trailing comments, keep only real step/job-level `uses:` keys,
             # drop local (./) and docker:// refs, drop anything already pinned to
             # @<40 hex>, then drop the tag-pinned SLSA generator reusable workflow
@@ -175,7 +180,8 @@ jobs:
         run: |
           set -euo pipefail
           bad=""
-          for f in .github/workflows/*.yml; do
+          for f in .github/workflows/*.yml .github/workflows/*.yaml; do
+            [ -e "$f" ] || continue
             if ! grep -qE '^permissions:' "$f"; then
               bad="$bad$f: missing a top-level 'permissions:' block"$'\n'
               continue
@@ -210,7 +216,8 @@ jobs:
         run: |
           set -euo pipefail
           bad=""
-          for f in .github/workflows/*.yml; do
+          for f in .github/workflows/*.yml .github/workflows/*.yaml; do
+            [ -e "$f" ] || continue
             # For each real `uses: …upload-artifact…` step key, scan its block
             # (until the next `- ` step item) for a retention-days: key.
             out="$(awk '
@@ -283,7 +290,8 @@ jobs:
               return any(perms.get(s) == "write" for s in WRITE_SCOPES)
 
           bad, examined = [], []
-          for f in sorted(glob.glob(".github/workflows/*.yml")):
+          for f in sorted(glob.glob(".github/workflows/*.yml")
+                          + glob.glob(".github/workflows/*.yaml")):
               doc = yaml.safe_load(open(f)) or {}
               if not any(e in triggers(doc) for e in PR_EVENTS):
                   continue
@@ -333,3 +341,39 @@ jobs:
       # rather than leaving the reach to be guessed.
       - name: "Guard: required-check names still match the job names"
         run: ./scripts/check-required-checks.sh
+
+      # (7) The gate above hangs off ONE line in this file. Delete that line and
+      # the gate is gone with nothing turning red: this job keeps its name, so
+      # the required context goes on reporting success, which is the very shape
+      # of failure guard 6 exists to catch.
+      #
+      # Be exact about how far this reaches. Checking the Makefile from here is
+      # a real check: dropping the gate out of `ci:` is caught by CI. Checking
+      # THIS file from here is self-referential, and it only catches deleting
+      # the step while leaving this guard behind; delete both and CI notices
+      # nothing. What covers that case is not a check but a second place to run
+      # from: `make ci` still exercises the gate on any developer machine.
+      #
+      # Self-reference, as everywhere else in this file: the search below must
+      # not find ITSELF. It therefore anchors to a real YAML `run:` key holding
+      # the script and nothing else, which the grep program lines here can never
+      # look like. The first draft searched for the bare path, matched its own
+      # program text, and stayed green while the step it guards was deleted.
+      - name: "Guard: the required-check gate is still wired up"
+        run: |
+          set -euo pipefail
+          missing=""
+          grep -qE '^ +run: \./scripts/check-required-checks\.sh$' .github/workflows/pin-guard.yml \
+            || missing="$missing  .github/workflows/pin-guard.yml no longer runs the gate"$'\n'
+          grep -qE '^ci:.*[[:space:]]check-required-checks([[:space:]]|$)' Makefile \
+            || missing="$missing  the Makefile 'ci:' target no longer names check-required-checks"$'\n'
+          if [ -n "$missing" ]; then
+            echo "::error::the required-check gate lost a wiring:"
+            printf '%s' "$missing"
+            echo ""
+            echo "A gate that is not invoked reports nothing, and reporting"
+            echo "nothing looks exactly like passing. Restore the wiring, or"
+            echo "remove the gate deliberately and say so in the commit."
+            exit 1
+          fi
+          echo "OK: the required-check gate is wired up in this workflow and in 'make ci'."

@@ -22,18 +22,26 @@
 # Whitespace around a name is stripped and is not part of it.
 #
 # Producer keywords. An unknown one is an error rather than an assumed external,
-# so a typo cannot become a silently skipped check. The app id is measured, not
-# chosen, and the gate refuses a record whose keyword and app id disagree:
+# so a typo cannot become a silently skipped check:
 #
-#   workflow          15368  a job in .github/workflows/**; the name is checked
+#   workflow          15368  a job in the workflow files; the name is checked
 #   actions-external  15368  a GitHub Actions workflow with NO file in this
 #                            repository, the CodeQL default setup
 #   code-scanning     57789  the GitHub code scanning results check, one context
 #                            per analysis tool
 #
+# The app id is measured rather than chosen, and the gate refuses a record whose
+# keyword and app id disagree. Note what that does and does not buy: it tells
+# `code-scanning` apart from the other two, and it does NOT tell `workflow`
+# apart from `actions-external`, because those two share app 15368. Relabelling
+# a record between them is therefore blocked by a second, independent fetter:
+# only the four CodeQL default-setup contexts allow-listed in
+# scripts/check-required-checks.sh may carry `actions-external`, and any other
+# name with that keyword is a hard error.
+#
 # Only `workflow` records can be held against the tree. The others are recorded
-# so the count is complete and so nobody reads their absence from
-# .github/workflows/** as drift. From the API, an `actions-external` record is
+# so the count is complete and so nobody reads their absence from the workflow
+# files as drift. From the API, an `actions-external` record is
 # indistinguishable from a renamed job, which is why a human classifies it once
 # and the gate then keeps that classification honest in both directions.
 #

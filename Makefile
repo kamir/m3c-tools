@@ -534,10 +534,17 @@ checksums:
 	@cat $(BUILD_DIR)/checksums.txt
 
 # Run CI checks locally (mirrors .github/workflows/ci.yml)
+#
+# `check-required-checks` is in this list for a reason beyond tidiness. In CI
+# the gate hangs off ONE line, the step in .github/workflows/pin-guard.yml, and
+# deleting that line removes the gate without turning anything red: the job
+# keeps its name, so the required context goes on reporting success. Naming the
+# gate here gives it a second, independent place to be run from, so the local
+# one-liner still exercises it if the CI step ever goes missing.
 .PHONY: ci
-ci: vet lint check-emdash check-gofmt check-redirect-guard test-unit build
+ci: vet lint check-emdash check-gofmt check-redirect-guard check-required-checks test-unit build
 	@echo ""
-	@echo "CI passed: vet ✓  lint ✓  prose ✓  gofmt ✓  redirect-guard ✓  test ✓  build ✓"
+	@echo "CI passed: vet ✓  lint ✓  prose ✓  gofmt ✓  redirect-guard ✓  required-checks ✓  test ✓  build ✓"
 
 # Prose gate: no U+2014 EM DASH anywhere in the tree (CODESTYLE.md).
 .PHONY: check-emdash
