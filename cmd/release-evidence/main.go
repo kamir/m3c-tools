@@ -66,7 +66,10 @@ type gateMeta struct {
 // registry is the mandatory gate-set G (H10d). Order is presentational and
 // mirrors the H10p prototype. The `required` column IS policy G:
 //
-//	12 required (the now-real gates) + threat-model-delta advisory.
+//	13 required (the now-real gates) + threat-model-delta advisory.
+//	two-party-acceptance kam am 2026-09-10 dazu: das SPEC-0406-Tor meldete
+//	sich beim ersten Release-Lauf in die Evidenz, stand aber nicht in G;
+//	der Binder hat den Release zu Recht verweigert (Run 34491670456).
 //
 // If a gate id here drifts from the shipped JSON-schema enum, the -schema
 // cross-check fails the build (keeps schema and policy in lockstep).
@@ -83,6 +86,7 @@ var registry = []gateMeta{
 	{"slsa-provenance", "SLSA L3 provenance + slsa-verifier gate", "provenance", true, "re-verify", "attestation"},
 	{"cosign-signature", "cosign sign-blob SHA256SUMS (keyless OIDC)", "signature", true, "re-verify", "attestation"},
 	{"platform-smoke", "Per-platform runtime smoke of the signed binary", "smoke", true, "trust-ci", "ci-log"},
+	{"two-party-acceptance", "SPEC-0406 acceptance rehearsal (macOS + Windows twins)", "test", true, "trust-ci", "ci-log"},
 	{"threat-model-delta", "Threat-model / security-triad delta", "threat-model", false, "reference", "external"},
 }
 
