@@ -667,11 +667,17 @@ for lineno, producer, app, name, raw in records:
                     f"that never arrives.")
         elif not any(h[5] for h in hits):
             where = "; ".join(f"{h[1]} on:{','.join(h[3])}" for h in hits)
+            # Name the reason that actually applies. A message that explains
+            # the wrong cause sends the next reader to the wrong file, which is
+            # the failure mode this whole gate is about, one level down.
+            why = ("A push filtered to tags alone never produces a check run "
+                   "on a pull request head."
+                   if any("push" in h[3] for h in hits) else
+                   "None of those events fires on a pull request head.")
             problems.append(
                 f"{MANIFEST}:{lineno}: required check {name!r} is declared "
                 f"{len(hits)} time(s), and no declaration can report on a pull "
-                f"request head: {where}. A push filtered to tags alone never "
-                f"produces a check run on a pull request head.")
+                f"request head: {where}. {why}")
     elif hits:
         where = ", ".join(sorted({h[1] for h in hits}))
         problems.append(
