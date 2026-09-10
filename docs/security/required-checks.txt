@@ -1,0 +1,79 @@
+# Required status checks on master, as branch protection requires them.
+#
+# WHY THIS FILE IS COMMITTED
+#
+# A required status check is bound to a job by its NAME. Branch protection holds
+# one copy of that name, this tree holds the other, and nothing connects them
+# but the string. On 2026-09-10 a job was renamed for an honest reason, "Prose
+# (no em dash)" became "Prose (no em dash, no real names)", and the required
+# context would have stopped reporting for good while the pull request showed
+# thirty-two green ticks. A human caught that one.
+#
+# This file is the tree's copy of the branch-protection side, so that
+# scripts/check-required-checks.sh can hold the two names against each other on
+# every push and every pull request. A rename is an API change: change the job
+# name, this file and the branch-protection setting in the SAME commit.
+#
+# FORMAT
+#
+# One record per line: a producer keyword, whitespace, the app id GitHub
+# recorded for that context, whitespace, then the exact check name to the end of
+# the line. A '#' starts a comment only at column 0, so a name may contain one.
+# Whitespace around a name is stripped and is not part of it.
+#
+# Producer keywords. An unknown one is an error rather than an assumed external,
+# so a typo cannot become a silently skipped check. The app id is measured, not
+# chosen, and the gate refuses a record whose keyword and app id disagree:
+#
+#   workflow          15368  a job in .github/workflows/**; the name is checked
+#   actions-external  15368  a GitHub Actions workflow with NO file in this
+#                            repository, the CodeQL default setup
+#   code-scanning     57789  the GitHub code scanning results check, one context
+#                            per analysis tool
+#
+# Only `workflow` records can be held against the tree. The others are recorded
+# so the count is complete and so nobody reads their absence from
+# .github/workflows/** as drift. From the API, an `actions-external` record is
+# indistinguishable from a renamed job, which is why a human classifies it once
+# and the gate then keeps that classification honest in both directions.
+#
+# HOW TO REFRESH THIS FILE after a DELIBERATE change to branch protection:
+#
+#     make refresh-required-checks
+#     # or: ./scripts/check-required-checks.sh --refresh
+#
+# It rewrites the file from the live API and refuses to guess: a context that is
+# neither a job name in this tree nor already classified here stops the refresh
+# and asks you to classify it by hand.
+#
+# Generated from: gh api repos/kamir/m3c-tools/branches/master/protection
+# records: 29 (actions-external 4, code-scanning 2, workflow 23)
+workflow          15368  Unit Tests
+workflow          15368  Lint & Vet
+workflow          15368  boundary-gate
+workflow          15368  Prose (no em dash)
+workflow          15368  Trust-Plane Simulation (theory vs measurement)
+workflow          15368  CLI/manual consistency (docaudit)
+workflow          15368  Ratchet coverage (skillctl trust surface)
+code-scanning     57789  gosec
+workflow          15368  gosec SAST (SARIF -> Code Scanning)
+workflow          15368  gosec no-new-findings (in-CI diff gate)
+workflow          15368  govulncheck (reachable CVEs)
+workflow          15368  gitleaks (secret scan)
+workflow          15368  go mod tidy is a no-op
+workflow          15368  Enforce pinning + least-privilege + retention
+workflow          15368  Validate branch name
+workflow          15368  Drift Guard (opt-out parity)
+workflow          15368  Build Cross-Platform (Linux + Windows)
+workflow          15368  Build macOS (arm64 + amd64)
+workflow          15368  Windows Cross-Compile (ubuntu)
+workflow          15368  Binary Smoke Test (windows-latest)
+workflow          15368  Trust Surface (windows-latest)
+workflow          15368  skillctl Security Tests (-race)
+code-scanning     57789  CodeQL
+actions-external  15368  Analyze (go)
+actions-external  15368  Analyze (actions)
+actions-external  15368  Analyze (python)
+actions-external  15368  Analyze (javascript-typescript)
+workflow          15368  Format (gofmt)
+workflow          15368  Python servers (ruff + pytest)

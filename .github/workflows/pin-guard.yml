@@ -1,15 +1,25 @@
 name: Pin Guard (supply-chain)
 
-# CD-T1 keystone + CD-T2/T6/T7 drift guard. Modeled on the drift-guard grep
-# block in windows-gate.yml. Four cheap, robust checks keep the supply-chain
-# hardening honest on every push/PR:
+# CD-T1 keystone + CD-T2/T6/T7/T8 drift guard. Modeled on the drift-guard grep
+# block in windows-gate.yml. Seven cheap, robust checks keep the supply-chain
+# hardening honest on every push/PR, in the order the steps below run them:
 #
-#   1. CD-T1  every remote `uses:` must be pinned to a full 40-hex commit SHA.
-#   2. CD-T2  no `@latest` ref may appear in any workflow (pin tool versions).
-#   3. CD-T6  every workflow must declare a top-level `permissions:` block AND
-#             that block must be READ-ONLY (least privilege), no `write-all`,
-#             no top-level `: write` scope; writes are granted per-job.
-#   4. CD-T7  every actions/upload-artifact step must set `retention-days:`.
+#   0. parse   every workflow file parses under a loader that REFUSES duplicate
+#              keys, which is what GitHub does and what `yaml.safe_load` does not.
+#   1. CD-T1   every remote `uses:` must be pinned to a full 40-hex commit SHA.
+#   2. CD-T2   no `@latest` ref may appear in any workflow (pin tool versions).
+#   3. CD-T6   every workflow must declare a top-level `permissions:` block AND
+#              that block must be READ-ONLY (least privilege), no `write-all`,
+#              no top-level `: write` scope; writes are granted per-job.
+#   4. CD-T7   every actions/upload-artifact step must set `retention-days:`.
+#   5. CD-T8   a PR-triggered job holding a repository-write token runs no
+#              `uses:` step (poisoned pipeline execution).
+#   6. QG-0001 M4  every required status check still has a job of that exact
+#              name; a rename must not unhook the requirement.
+#
+# The header said "four" and listed four while the job ran six: guards 0 and 5
+# were added without the list following. Adding guard 6 on 2026-09-10 made the
+# arithmetic worth repairing rather than continuing.
 #
 # Self-reference: this file necessarily contains the tokens it searches for
 # ("uses:", "@latest", "upload-artifact", and now "write-all"/": write"). The
@@ -29,6 +39,15 @@ permissions:
 
 jobs:
   pin-guard:
+    # THIS NAME IS AN INTERFACE. "Enforce pinning + least-privilege + retention"
+    # is one of the contexts branch protection requires on master, and the only
+    # thing joining the two sides is this string. Rename it here and the
+    # required context stops reporting for good: the pull request goes on
+    # showing green ticks, and the requirement waits forever for a name that no
+    # longer exists. If this job must be renamed, the branch-protection setting
+    # and docs/security/required-checks.txt change in the SAME commit, and the
+    # step below is what turns a forgotten half into a red build. Fixing the
+    # gate by renaming the job would be precisely the failure it guards.
     name: Enforce pinning + least-privilege + retention
     runs-on: ubuntu-latest
     steps:
@@ -290,3 +309,27 @@ jobs:
           for e in examined:
               print(f"  in scope: {e}")
           PY
+
+      # (6) QG-0001 M4: a required status check is bound to a job by its NAME,
+      # and by nothing else. Branch protection holds one copy of the name and
+      # this tree holds the other, and no mechanism connects them.
+      #
+      # Measured on 2026-09-10 on pull request #265: a job was renamed for an
+      # honest reason, from "Prose (no em dash)" to "Prose (no em dash, no real
+      # names)", while branch protection went on requiring the old name. Two
+      # names, no match. The required context would never have reported again,
+      # the enforcement would have vanished without a sound, and the surface
+      # showed thirty-two green ticks while it happened. A pull request whose
+      # whole purpose was a new gate would have unhooked an existing one.
+      #
+      # This step holds docs/security/required-checks.txt, the tree's copy of
+      # the branch-protection side, against the job names the workflows declare,
+      # in both directions. It lives HERE, as a step of an already-required job,
+      # on purpose: a new job would carry a new name, that name would not be in
+      # the required list, and a gate nobody has to pass is a report.
+      #
+      # It cannot see the live branch-protection setting; only the human-run
+      # `--refresh` does, and the script prints that limit on every green run
+      # rather than leaving the reach to be guessed.
+      - name: "Guard: required-check names still match the job names"
+        run: ./scripts/check-required-checks.sh

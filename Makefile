@@ -432,6 +432,28 @@ code-review:
 check-docs:
 	@./scripts/check-docs.sh
 
+# The required status checks against the job names that must produce them.
+#
+# Two targets rather than one flag, because the two are not the same kind of
+# act. `check-required-checks` reads nothing but the tree and belongs in any
+# build; it is the same command the pin-guard job runs, so a red build can be
+# reproduced here verbatim. `refresh-required-checks` reaches out to the GitHub
+# API, needs admin rights on the repository, and REWRITES a committed file: it
+# is a deliberate human step after a deliberate change to branch protection,
+# never something a build does on its own. Giving them separate names keeps the
+# second one from being typed by accident.
+#
+# The modes live in the script and not in the Makefile, so the parsing and the
+# classification have one home and cannot drift apart. These targets only give
+# them a name a human can remember.
+.PHONY: check-required-checks
+check-required-checks:
+	@./scripts/check-required-checks.sh
+
+.PHONY: refresh-required-checks
+refresh-required-checks:
+	@./scripts/check-required-checks.sh --refresh
+
 # Release targets: code review + docs check run before release
 #
 # Alle vier Ziele TAGGEN nur. scripts/release.sh baut nichts, laedt nichts hoch
