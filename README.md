@@ -325,6 +325,109 @@ make vet           # go vet ./...
 Formatting is **`gofumpt` + `gci`** on top of golangci-lint (formatting is not negotiable in Go.
 It is built into the toolchain), and `.golangci.yml` is the enforced linter config.
 
+### Branch & worktree workflow
+
+Every branch that carries a pull request must be named
+`<prefix>/<name>`, with exactly one slash and a name drawn from
+`[A-Za-z0-9._-]`. The allowed prefixes are:
+
+`feat` · `feature` · `fix` · `chore` · `docs` · `test` · `refactor` ·
+`spec-<n>` · `s<n>-m<n>` · `r-<n>` · `archive` · `rescue`
+
+```bash
+feat/spec-0188-bundle-pack        # passes
+fix/bug-0124-time-tracking-auth   # passes
+s2-m1/awareness-sync              # passes
+r-01/tenant-aware-verifier        # passes
+wip/quick-thing                   # rejected: 'wip' is not an allowed prefix
+feat/foo/bar                      # rejected: two slashes
+```
+
+This is enforced by the required `Validate branch name` check
+(`.github/workflows/branch-name-check.yml`), a stage 3 deliverable from the
+master-drift incident of 2026-05-07. **Adding a prefix there means updating this
+list in the same pull request.** Work on a branch in its own `git worktree`, not
+in the shared checkout, so several sessions can build at once without fighting
+over one working tree.
+
+#### The one exception: Dependabot
+
+Pull requests **authored by `dependabot[bot]`** are exempt from the pattern
+(owner decision E1, 2026-09-08). Dependabot names its branches
+`dependabot/<ecosystem>/<path>/<package>-<version>`, which breaks the convention
+twice over: `dependabot` is not an allowed prefix, and the name carries three
+slashes where the pattern allows one. Those names are not configurable, so the
+choice was a named exception or a pattern too loose to bite humans. **For humans
+the pattern is unchanged, character for character.**
+
+The exception keys on the pull request's **author**, not on the branch name and
+not on `github.actor`. Both alternatives were measured and rejected: a human can
+create a branch called `dependabot/whatever`, which would turn a branch-name
+exception into a one-word opt-out for everybody, and `github.actor` reads as the
+human, not the bot, whenever a person runs `gh pr update-branch` on a Dependabot
+branch. Nobody can make `dependabot[bot]` the author of a pull request, so the
+author is the carrier that cannot be forged from inside the repository.
+
+#### Holding a Dependabot pull request back
+
+Dependabot pull requests arm GitHub's auto-merge automatically
+(`.github/workflows/dependabot-auto-merge.yml`, owner decision E2), so they
+merge themselves once the required checks are green. The gates still decide; a
+red check leaves the pull request sitting there. To postpone one anyway, label
+it `hold`:
+
+```bash
+gh pr edit <n> --add-label hold      # hold it back, and disarm auto-merge if already armed
+gh pr edit <n> --remove-label hold   # release it again
+```
+
+The label is honoured in both directions, so labelling a pull request whose
+auto-merge is already armed disarms it too. That disarming is a workflow run,
+though, and GitHub merges the moment the last required check reports, so **the
+label wins only while something is still outstanding.** Runs of this
+repository's smallest workflows took between 6 and 182 seconds end to end
+(twelve most recent, measured 2026-09-08), which is the width of the window. If
+a pull request is already green and current when you label it, add
+`gh pr merge --disable-auto <n>` right after, or mark it draft; the workflow
+honours drafts as well.
+
+A postponement that has to outlive the pull request belongs in
+`.github/dependabot.yml` instead. Dependabot replaces a PR when a newer version
+appears, and the successor carries only the labels Dependabot assigns, so a
+label-only hold lasts until the next release of the package it holds. The
+`ignore:` entries under the `pip` ecosystem are how owner decision E3 is
+recorded for `sentence-transformers` and `turbovec`.
+
+#### What auto-merge cannot finish on its own, today
+
+Four of master's 29 required contexts, `Analyze (actions)`, `Analyze (go)`,
+`Analyze (javascript-typescript)` and `Analyze (python)`, come from **CodeQL
+default setup**, and default setup does not run on a commit Dependabot created.
+Measured 2026-09-08 06:21Z across all ten open Dependabot pull requests, by
+comparing each head SHA's check-runs against master's required list: the four
+are missing on all nine bot-authored head SHAs and present on the single
+human-authored one, #250, whose head is a merge commit produced with
+`gh pr update-branch`. The split follows head-commit authorship with no
+exception either way.
+
+A required context that never reports leaves the pull request waiting forever,
+so auto-merge arms and then sits. With `strict=true` on master, every merge puts
+the remaining bot PRs behind, Dependabot rebases them itself, and the fresh
+commit is a bot commit again. Until one of three things happens, each Dependabot
+pull request still needs one human `gh pr update-branch`, which is also how the
+newer required contexts appear on an older branch at all:
+
+- move CodeQL to **advanced setup**, so the Analyze jobs live in this tree and
+  run on Dependabot events;
+- drop those four contexts from master's required list and keep the `CodeQL`
+  context, which does report on bot commits;
+- or keep the manual refresh, knowing E2 saves the click and not the wait.
+
+That is a branch-protection decision, so the workflow does not make it. It names
+the state in the job summary instead, together with the pull request's
+`mergeStateStatus`, so "armed and waiting on a gate", "armed and waiting on a
+context that will never report" and "not armed at all" stop looking alike.
+
 ### Releasing
 
 Releases are **tag-driven**: pushing a `vX.Y.Z` or `skillctl/vX.Y.Z` tag builds, signs and
