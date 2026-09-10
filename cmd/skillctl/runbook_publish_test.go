@@ -19,7 +19,7 @@ import (
 // T2/T5, the sidecar descriptor: required fields + version override (pure).
 func TestParseRunbookDescriptor(t *testing.T) {
 	// happy path: version overridden by the skill version
-	d, err := parseRunbookDescriptor([]byte(`{"runbook_id":"rb-x","title":"X","version":"9.9.9"}`), "1.2.3")
+	d, _, err := parseRunbookDescriptor([]byte(`{"runbook_id":"rb-x","title":"X","version":"9.9.9"}`), "1.2.3")
 	if err != nil {
 		t.Fatalf("valid meta: %v", err)
 	}
@@ -31,16 +31,67 @@ func TestParseRunbookDescriptor(t *testing.T) {
 	}
 
 	// missing runbook_id → error
-	if _, err := parseRunbookDescriptor([]byte(`{"title":"X"}`), "1.0.0"); err == nil {
+	if _, _, err := parseRunbookDescriptor([]byte(`{"title":"X"}`), "1.0.0"); err == nil {
 		t.Fatal("expected error for missing runbook_id")
 	}
 	// missing title → error
-	if _, err := parseRunbookDescriptor([]byte(`{"runbook_id":"rb-x"}`), "1.0.0"); err == nil {
+	if _, _, err := parseRunbookDescriptor([]byte(`{"runbook_id":"rb-x"}`), "1.0.0"); err == nil {
 		t.Fatal("expected error for missing title")
 	}
 	// invalid JSON → error
-	if _, err := parseRunbookDescriptor([]byte(`{not json`), "1.0.0"); err == nil {
+	if _, _, err := parseRunbookDescriptor([]byte(`{not json`), "1.0.0"); err == nil {
 		t.Fatal("expected error for bad JSON")
+	}
+}
+
+// T6 (BUG-0224): a descriptor without steps stays VALID and publishable, and stops
+// being silent about it. Silence was the bug: four of the five catalog entries were
+// step-less, and nothing at publish time said they could never be worked.
+//
+// Top-level function, not a subtest of TestParseRunbookDescriptor: the acceptance
+// criterion greps for the line "--- PASS: TestParseRunbookDescriptor_WarnsWithoutSteps".
+func TestParseRunbookDescriptor_WarnsWithoutSteps(t *testing.T) {
+	warnsFor := func(body string) []string {
+		t.Helper()
+		d, w, err := parseRunbookDescriptor([]byte(body), "1.0.0")
+		if err != nil {
+			t.Fatalf("a step-less descriptor is a legal catalog entry, want no error, got: %v", err)
+		}
+		if d["version"] != "1.0.0" {
+			t.Fatalf("version override lost: %v", d["version"])
+		}
+		return w
+	}
+
+	// The BUG-0224 case: no steps at all.
+	w := warnsFor(`{"runbook_id":"rb-x","title":"X"}`)
+	if len(w) != 1 {
+		t.Fatalf("missing steps: want exactly 1 warning, got %d: %v", len(w), w)
+	}
+	if !strings.Contains(w[0], "steps") {
+		t.Errorf("the warning must name the missing field, got %q", w[0])
+	}
+
+	// An empty list is the same defect written differently.
+	if w := warnsFor(`{"runbook_id":"rb-x","title":"X","steps":[]}`); len(w) != 1 {
+		t.Errorf("empty steps: want exactly 1 warning, got %d: %v", len(w), w)
+	}
+
+	// required_step_ids drops a step without an id, so the entry is short a step
+	// without anything failing. Warn instead.
+	if w := warnsFor(`{"runbook_id":"rb-x","title":"X","steps":[{"title":"no id"}]}`); len(w) != 1 {
+		t.Errorf("step without id: want exactly 1 warning, got %d: %v", len(w), w)
+	}
+
+	// validate_runbook_descriptor rejects duplicates server-side; catch them here.
+	if w := warnsFor(`{"runbook_id":"rb-x","title":"X","steps":[{"id":"s1"},{"id":"s1"}]}`); len(w) != 1 {
+		t.Errorf("duplicate step id: want exactly 1 warning, got %d: %v", len(w), w)
+	}
+
+	// An executable runbook warns about nothing. Without this case the test would
+	// pass on a function that warns unconditionally.
+	if w := warnsFor(`{"runbook_id":"rb-x","title":"X","steps":[{"id":"s1","required":true},{"id":"s2","required":false}]}`); len(w) != 0 {
+		t.Errorf("descriptor with steps must not warn, got %v", w)
 	}
 }
 

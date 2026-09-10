@@ -30,25 +30,38 @@ fi
 [ -n "$TOKEN" ] || { echo "no device token (export ER1_DEVICE_TOKEN or 'skillctl login')" >&2; exit 1; }
 
 # The skillctl publisher runbook descriptor (SPEC-0272 §4). The dogfood case.
-# Other runbooks pass their own descriptor; this bakes skillctl's for P0.
-PAYLOAD=$(python3 - "$VERSION" "$HTML" "$TAG" "$ER1_BASE" <<'PY'
+# Other runbooks pass their own descriptor; this reads the sidecar next to the
+# template (SPEC-0275 G3, one descriptor path) and falls back to the baked copy.
+# BUG-0224: the baked copy carries no steps[], so everything it published was a
+# catalog card nobody could work to completion.
+META="${META:-${REPO_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}/tools/release-templates/runbook.meta.json}"
+PAYLOAD=$(python3 - "$VERSION" "$HTML" "$TAG" "$ER1_BASE" "$META" <<'PY'
 import json, sys
-version, html_path, tag, base = sys.argv[1:5]
+version, html_path, tag, base, meta_path = sys.argv[1:6]
 html = open(html_path, encoding="utf-8").read()
 descriptor = {
     "runbook_id": "rb-skillctl-publisher",
-    "version": version,
     "title": "skillctl: sign & publish a skill",
     "purpose": "Turn a person into a verified skill publisher",
     "goal": "A signed, green-attested skill published to the room",
     "tags": ["skillctl", "onboarding", "publisher", "trust"],
     "audience_roles": ["user", "learner", "coach"],
     "governance_level": "green",
-    "source": {"repo": "m3c-tools",
-               "path": "tools/release-templates/skillctl-publisher-runbook.template.html",
-               "release": tag},
-    "html_url": f"{base.rstrip('/')}/../m3c-tools/releases/download/{tag}/skillctl-publisher-runbook.html",
 }
+src_path = "tools/release-templates/skillctl-publisher-runbook.template.html"
+try:
+    with open(meta_path, encoding="utf-8") as fh:
+        descriptor = json.load(fh)
+    src_path = "tools/release-templates/runbook.meta.json"
+except FileNotFoundError:
+    print(f"    (no sidecar at {meta_path}: using the baked descriptor, no steps)", file=sys.stderr)
+if not descriptor.get("steps"):
+    print('    warning: descriptor has no "steps": catalog entry only, it cannot be '
+          'assigned and worked to completion (BUG-0224)', file=sys.stderr)
+# Stamped at publish time, never hand-authored (SPEC-0275 section 4).
+descriptor["version"] = version
+descriptor["source"] = {"repo": "m3c-tools", "path": src_path, "release": tag}
+descriptor["html_url"] = f"{base.rstrip('/')}/../m3c-tools/releases/download/{tag}/skillctl-publisher-runbook.html"
 print(json.dumps({"descriptor": descriptor, "html": html}))
 PY
 )
