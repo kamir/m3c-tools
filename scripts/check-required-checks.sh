@@ -548,6 +548,12 @@ if MODE == "--refresh":
         keep = old.get(name)
         if keep == "actions-external" and name not in ACTIONS_EXTERNAL_ALLOWED:
             keep = None          # never carry an unvetted relabel forward
+        if keep in PRODUCERS and PRODUCERS[keep][0] != app:
+            # The recorded keyword and the live app id disagree, so the old
+            # classification is stale. Carrying it forward would write a record
+            # the gate rejects on the next run: --refresh would produce a red
+            # build and no explanation of it. Ask instead.
+            keep = None
         if app == APP_ACTIONS and literal_hits(name):
             out.append(("workflow", app, name))
         elif keep in PRODUCERS and keep != "workflow":
