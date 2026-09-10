@@ -15,6 +15,34 @@ version is ldflags-stamped (`skillctl version`). Release tags: `skillctl/vX.Y.Z`
   a verbatim move ships half-extracted shared state, so it needs a dedicated
   refactor pass, not a release-eve edit.
 
+## [skillctl/v0.5.0], 2026-09-10, executable runbooks + gates that name what they checked
+First train of the delivery channel's skillctl line (SPEC-0426).
+
+### Added
+- **`runbook publish --meta <sidecar>`** reads a `runbook.meta.json` with
+  `steps[]` (SPEC-0275 G3, one descriptor path); the publisher ships its own
+  descriptor with steps s1..s14, and BOTH publish paths now warn on a
+  step-less descriptor instead of passing it silently. Catalog cards without
+  steps stay legal; unworkable-looking ones no longer happen quietly (BUG-0224).
+- The acceptance gate says WHAT it checked (SPEC-0406).
+- QG-0001 M4: name binding to branch protection as a gate, with the three
+  bypass routes around it closed.
+- Prose gate: U+2014 em dashes are kept out of the tree.
+
+### Changed
+- `mcp` dependency moved to the 1.x line the server actually imports.
+- Exit-code documentation measured against the binary and gated (docaudit).
+
+### Fixed
+- The Python gate reads the file Dependabot actually changes; several QA-gate
+  refusal messages now name the cause that really applies.
+
+### Security
+- gosec in-CI baseline shrunk by two resolved findings so their
+  reintroduction keeps blocking; the one new G304 at the operator-supplied
+  `--meta` file read is accepted with a justified `#nosec` (reading the
+  caller's own file with the caller's privileges is the feature).
+
 ## [skillctl/v0.4.0], 2026-09-03, federated registries + the P1/P2 security-remediation wave
 ### Added
 - **Decentralized / federated registries (SPEC-0359).** The folder *is* the
