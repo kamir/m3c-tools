@@ -248,6 +248,10 @@ func maybeRegisterRunbook(stdout, stderr io.Writer, a publishAdmitArgs, ver stri
 // runbook_id, title. version is always overridden by the skill version (ver) so the
 // skill stays the single source of truth. Pure (no I/O beyond the file read) → unit-tested.
 func loadRunbookDescriptor(metaPath, ver string) (map[string]any, []string, error) {
+	// #nosec G304 -- metaPath is the operator-supplied --meta CLI flag (or the
+	// baked default beside the template): reading the caller's own descriptor
+	// file with the caller's own privileges IS the feature (SPEC-0275 G3,
+	// BUG-0224). No server-side or untrusted path reaches this.
 	raw, err := os.ReadFile(metaPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read %s: %w", metaPath, err)
