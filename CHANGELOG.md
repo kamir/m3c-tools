@@ -110,7 +110,7 @@ Recorded retroactively: this tag shipped without a changelog entry.
 - **Skill-bundled runbooks** (SPEC-0275 P0): auto-registered on publish.
 - **`skillctl runbook publish`**: push an onboarding runbook to the THOH catalog.
 - **Opt-in auto-publish** of a runbook on release (SPEC-0272).
-- **Author selector** (Eric / Mirko) coupling identity + context + key.
+- **Author selector** (Alice / Bob) coupling identity + context + key.
 ### Fixed
 - `publish --attest/--revoke` auto-resolve the digest from the packed `.skb`.
 - Release workflow stamps `install.sh`'s `RELEASE_BASE` to the tag.

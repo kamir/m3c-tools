@@ -82,7 +82,7 @@ func TestCanonicalize_EmptyPlaceholderLinesAlwaysPresent(t *testing.T) {
 	// confirm ONLY those two lines differ (line count identical, same order).
 	r2 := sampleRecord()
 	r2.AgentIdentity = "agent:inst-01"
-	r2.OwnerIdentity = "id:kamir@m3c"
+	r2.OwnerIdentity = "id:bob@m3c"
 	got2, _ := CanonicalizeInvocationRecord(r2)
 	l1 := strings.Split(string(got), "\n")
 	l2 := strings.Split(string(got2), "\n")

@@ -52,11 +52,11 @@ run_step() {
 }
 
 run_step "00 preflight"             "00-preflight.sh"
-run_step "01 mirko authors + signs" "01-mirko-author.sh"
-run_step "02 mirko publishes"       "02-mirko-publish.sh"
+run_step "01 bob authors + signs" "01-bob-author.sh"
+run_step "02 bob publishes"       "02-bob-publish.sh"
 run_step "03 reviewer attests"      "03-reviewer-attest.sh"
-run_step "04 eric pins trust"       "04-eric-trust-root.sh"
-run_step "05 eric installs + runs"  "05-eric-install-and-run.sh"
+run_step "04 alice pins trust"       "04-alice-trust-root.sh"
+run_step "05 alice installs + runs"  "05-alice-install-and-run.sh"
 run_step "06 invalid: tampered"     "06-invalid-tampered.sh"
 run_step "07 invalid: wrong key"    "07-invalid-wrong-key.sh"
 run_step "08 invalid: no sig"       "08-invalid-no-signature.sh"
@@ -98,13 +98,13 @@ Release-gate items vs proofs
               draft notes: RELEASE_NOTES.md
               gh CLI command: see "gh release create" in build-release.sh
 
-  G3  Run the skill transfer Mirko → Eric via aims
+  G3  Run the skill transfer Bob → Alice via aims
         proof: steps 01–05 above.
               valid path: 05 ends with $INSTALL_HOME/output/hello.txt
-              (a file ONLY produced by Eric running a skill that survived
+              (a file ONLY produced by Alice running a skill that survived
                keygen → pack → sign → verify-sig → atomic-extract).
 
-  G4  Prove a valid skill works for Eric AND an invalid skill fails
+  G4  Prove a valid skill works for Alice AND an invalid skill fails
         proof:
           VALID:        step 05 ✓ (chain accepted, file produced)
           INVALID #1:   step 06 ✓ (tampered bytes, exit 11)

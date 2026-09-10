@@ -52,7 +52,7 @@ func TestAccumulatorK1Parity(t *testing.T) {
 	tr := &SelfTrustRoots{GovernanceMinimum: "green", pub: pub}
 
 	acc := NewAttestAccumulator(tr, qnow)
-	acc.OfferAttest(signedAttest(t, priv, "id:kamir@m3c", qd, "green", "2026-08-01T00:00:00Z", nil))
+	acc.OfferAttest(signedAttest(t, priv, "id:bob@m3c", qd, "green", "2026-08-01T00:00:00Z", nil))
 	if got := acc.Qualifying(qd); len(got) != 1 {
 		t.Fatalf("k=1 green attestation should qualify, got %d", len(got))
 	}
@@ -62,7 +62,7 @@ func TestAccumulatorK1Parity(t *testing.T) {
 
 	// Below floor: yellow attestation under a green floor → 0 qualifying, noted.
 	acc2 := NewAttestAccumulator(tr, qnow)
-	acc2.OfferAttest(signedAttest(t, priv, "id:kamir@m3c", qd, "yellow", "2026-08-01T00:00:00Z", nil))
+	acc2.OfferAttest(signedAttest(t, priv, "id:bob@m3c", qd, "yellow", "2026-08-01T00:00:00Z", nil))
 	if len(acc2.Qualifying(qd)) != 0 || !acc2.HasBelowFloor(qd) {
 		t.Error("yellow under green floor must not qualify and must be noted below-floor")
 	}
@@ -183,7 +183,7 @@ func TestAccumulatorExpiryNotShadowed(t *testing.T) {
 
 // TestAttestationExpiresAtOptIn (D5 producer): expires_at is written only when set.
 func TestAttestationExpiresAtOptIn(t *testing.T) {
-	base := AttestedEventInput{BundleDigest: qd, ReviewerID: "id:kamir@m3c", GovernanceLevel: "green", OccurredAt: qnow}
+	base := AttestedEventInput{BundleDigest: qd, ReviewerID: "id:bob@m3c", GovernanceLevel: "green", OccurredAt: qnow}
 	noexp, err := BuildAttestationPublishedEvent(base)
 	if err != nil {
 		t.Fatal(err)
@@ -228,7 +228,7 @@ func signedAdmit(t *testing.T, priv ed25519.PrivateKey, digest string) map[strin
 		"event_id":             "adm-" + digest,
 		"occurred_at":          "2026-08-01T00:00:00Z",
 		"bundle_digest":        digest,
-		"admitted_by_identity": "id:kamir@m3c",
+		"admitted_by_identity": "id:bob@m3c",
 	}
 	if _, err := SignEnvelopeSignature(priv, ev); err != nil {
 		t.Fatal(err)
@@ -248,7 +248,7 @@ func TestOfferRevokeRequiresSignedRevokedBy(t *testing.T) {
 	tr := &SelfTrustRoots{GovernanceMinimum: "green", pub: pub}
 
 	// A signed ATTEST (reviewer_id + governance_level, no revoked_by) → not a revoke.
-	attest := signedAttest(t, priv, "id:kamir@m3c", qd, "green", "2026-08-01T00:00:00Z", nil)
+	attest := signedAttest(t, priv, "id:bob@m3c", qd, "green", "2026-08-01T00:00:00Z", nil)
 	accA := NewAttestAccumulator(tr, qnow)
 	accA.OfferRevoke(attest)
 	if accA.IsRevoked(qd) {
@@ -303,7 +303,7 @@ func TestOfferAttestRequiresSignedReviewerAndLevel(t *testing.T) {
 
 	// Sanity: a real attestation still qualifies.
 	accC := NewAttestAccumulator(tr, qnow)
-	accC.OfferAttest(signedAttest(t, priv, "id:kamir@m3c", qd, "green", "2026-08-01T00:00:00Z", nil))
+	accC.OfferAttest(signedAttest(t, priv, "id:bob@m3c", qd, "green", "2026-08-01T00:00:00Z", nil))
 	if len(accC.Qualifying(qd)) != 1 {
 		t.Error("a genuine signed attestation must still qualify")
 	}

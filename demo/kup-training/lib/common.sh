@@ -18,14 +18,14 @@ ARTIFACTS_DIR="${ARTIFACTS_DIR:-$DEMO_DIR/artifacts}"
 KEYS_DIR="$ARTIFACTS_DIR/keys"
 BUNDLES_DIR="$ARTIFACTS_DIR/bundles"
 TRUST_DIR="$ARTIFACTS_DIR/trust-roots"
-INSTALL_HOME="$ARTIFACTS_DIR/eric-home"          # used as $HOME for `skillctl install`
+INSTALL_HOME="$ARTIFACTS_DIR/alice-home"          # used as $HOME for `skillctl install`
 LOG_DIR="$ARTIFACTS_DIR/logs"
 
 mkdir -p "$KEYS_DIR" "$BUNDLES_DIR" "$TRUST_DIR" "$INSTALL_HOME/.claude" "$LOG_DIR"
 
 # Identities for the demo
-MIRKO_ID="${MIRKO_ID:-id:mirko@m3c}"
-ERIC_ID="${ERIC_ID:-id:eric@kup}"
+MIRKO_ID="${MIRKO_ID:-id:bob@m3c}"
+ERIC_ID="${ERIC_ID:-id:alice@kup}"
 REVIEWER_ID="${REVIEWER_ID:-id:reviewer@m3c}"
 
 # Skill under test

@@ -1,13 +1,13 @@
 ---
 layout: default
-title: "Acceptance & Handover: the skillctl skill lifecycle (Mirko → Eric)"
+title: "Acceptance & Handover: the skillctl skill lifecycle (Bob → Alice)"
 ---
 
 # Acceptance & Handover: the skillctl skill lifecycle
 
-**Audience:** Eric's team (a second organisation taking over `skillctl`).
+**Audience:** Alice's team (a second organisation taking over `skillctl`).
 **Goal:** validate the *full tool + skill lifecycle* end-to-end across **two people**:
-Mirko authors, signs and publishes a skill; Eric trusts, pulls, verifies and uses it,
+Bob authors, signs and publishes a skill; Alice trusts, pulls, verifies and uses it,
 and prove that invalid skills are refused. Functionality and the skill lifecycle come
 first; performance and scale are out of scope for this pass.
 
@@ -26,9 +26,9 @@ else is identical when the registry is later swapped for the skill-repo backend
 ## 1. The lifecycle at a glance
 
 ```
-  MIRKO (author / supply)                 ERIC (consumer / demand)
+  BOB (author / supply)                 ALICE (consumer / demand)
   ─────────────────────────               ─────────────────────────
-  keygen                                   (receive Mirko's public key
+  keygen                                   (receive Bob's public key
   pack        ─┐ trust core                 out-of-band + verify fingerprint)
   sign         │ (backend-agnostic)         trust root  ─┐ trust core
   verify-sig  ─┘                            pull         │ (5 gates)
@@ -49,8 +49,8 @@ and `pull` know it is ER1.
 
 | Role | Who | Machine | Holds |
 |------|-----|---------|-------|
-| **Author / publisher** | Mirko | Machine A | author key `~/.config/m3c/skill-registry-self.priv`, ER1 login |
-| **Consumer** | Eric | Machine B | Mirko's **public** key, ER1 login, a trust-roots file |
+| **Author / publisher** | Bob | Machine A | author key `~/.config/m3c/skill-registry-self.priv`, ER1 login |
+| **Consumer** | Alice | Machine B | Bob's **public** key, ER1 login, a trust-roots file |
 | **Reviewer** (governance) | a third identity | any | reviewer key; signs the green attestation |
 
 Prerequisites on **both** machines (see [manual §Installation](manual-skillctl.md#installation)):
@@ -81,7 +81,7 @@ skillctl login --status
 | **ER1 `self`** (this procedure) | `~/.claude/trust-roots.yaml` | **hand-written / carried out-of-band** (flat: `registry: self`, `pubkey_b64`, `fingerprint`, `governance_minimum`) | `pull` (default) |
 | HTTP `/api/skills` registry | `~/.claude/skill-trust-roots.yaml` | `skillctl trust add --registry <URL> --pubkey <path>` | `install`, `verify` |
 
-For this ER1 procedure, Eric uses **`~/.claude/trust-roots.yaml`** and does **not** run
+For this ER1 procedure, Alice uses **`~/.claude/trust-roots.yaml`** and does **not** run
 `skillctl trust add` (that is the HTTP-registry path). Do not mix the two files.
 
 ---
@@ -118,13 +118,13 @@ ER1 logins over prod and is run manually. This smoke validates the **tool + trus
 
 ---
 
-## 3. Part A: Mirko's lane (author → publish over ER1 `self`)
+## 3. Part A: Bob's lane (author → publish over ER1 `self`)
 
 ```bash
 # A1. One-time: generate the author keypair.
 skillctl keygen --out ~/.config/m3c/skill-registry-self
 #   → ~/.config/m3c/skill-registry-self.priv (0600) + .pub (0644)
-#   Keep .priv secret. .pub is what Eric will pin.
+#   Keep .priv secret. .pub is what Alice will pin.
 
 # A2. Pack the skill directory into a sealed .skb bundle (deterministic).
 skillctl pack --skill ~/.claude/skills/<name> -o <name>@<ver>.skb \
@@ -134,7 +134,7 @@ skillctl pack --skill ~/.claude/skills/<name> -o <name>@<ver>.skb \
 #   Determinism check (acceptance): pack a second time and diff: MUST be byte-identical.
 
 # A3. Sign the bundle (detached ed25519 author signature over the digest).
-skillctl sign --key ~/.config/m3c/skill-registry-self.priv --identity-id id:mirko@m3c <name>@<ver>.skb
+skillctl sign --key ~/.config/m3c/skill-registry-self.priv --identity-id id:bob@m3c <name>@<ver>.skb
 #   → sidecar <bundle>.<hex>.author.sig ; prints digest sha256:<hex>
 
 # A4. Local self-check BEFORE publishing.
@@ -145,7 +145,7 @@ skillctl verify-sig --pubkey ~/.config/m3c/skill-registry-self.pub <name>@<ver>.
 # A5. Publish (admit) into your own ER1 context, sharing it into a co-learning room.
 skillctl publish <name>@<ver> --bundle <name>@<ver>.skb --registry self \
               --er1-target prod --er1-context skills \
-              --key ~/.config/m3c/skill-registry-self.priv --identity id:mirko@m3c \
+              --key ~/.config/m3c/skill-registry-self.priv --identity id:bob@m3c \
               --share-room aims-basics
 #   NOTE: --er1-context skills is auto-prefixed to <your-sub>___skills (BUG-0165).
 #   Re-publishing the same digest is an idempotent no-op.
@@ -158,50 +158,50 @@ skillctl publish --attest <name>@<ver> --level green \
               --identity id:reviewer@m3c --key ~/.config/m3c/reviewer.priv
 ```
 
-**Hand-off to Eric (out-of-band).** Give Eric (a) your **public** key `skill-registry-self.pub`,
+**Hand-off to Alice (out-of-band).** Give Alice (a) your **public** key `skill-registry-self.pub`,
 (b) your ER1 **context** `<your-sub>___skills`, and (c) the **fingerprint** so he can verify it
 by voice/Signal (never trust a key that arrived over the same channel as the bundle):
 
 ```bash
 # fingerprint of your raw ed25519 public key:
 openssl pkey -pubin -in ~/.config/m3c/skill-registry-self.pub -outform DER | tail -c 32 | shasum -a 256
-# base64 of the same raw key (goes into Eric's trust-roots.yaml → pubkey_b64):
+# base64 of the same raw key (goes into Alice's trust-roots.yaml → pubkey_b64):
 openssl pkey -pubin -in ~/.config/m3c/skill-registry-self.pub -outform DER | tail -c 32 | base64
 ```
 
 ---
 
-## 4. Part B: Eric's lane (consumer: trust → pull → verify → use over ER1 `self`)
+## 4. Part B: Alice's lane (consumer: trust → pull → verify → use over ER1 `self`)
 
 ```bash
-# B1. Verify the fingerprint OUT-OF-BAND first (SPEC-0246 R6.3): read it back to Mirko.
+# B1. Verify the fingerprint OUT-OF-BAND first (SPEC-0246 R6.3): read it back to Bob.
 
 # B2. Hand-write the self trust-roots file (NOT `trust add`).
 cat > ~/.claude/trust-roots.yaml <<'YAML'
 registry: self
-pubkey_b64: <base64 of Mirko's raw ed25519 public key>
+pubkey_b64: <base64 of Bob's raw ed25519 public key>
 fingerprint: sha256:<hex you verified out-of-band>
 governance_minimum: green
 YAML
 
 # B3. G-23 step 1: dry-run the install to review the plan + get a 5-min token.
-skillctl pull --registry self --er1-target prod --er1-context <mirko-sub>___skills \
+skillctl pull --registry self --er1-target prod --er1-context <bob-sub>___skills \
               --dry-run-install
 #   Reads ~/.claude/trust-roots.yaml by default. Prints the create/overwrite plan + token.
 
 # --- HUMAN CHECKPOINT: review the plan, then confirm ---
 # B4. G-23 step 2: read-only consumer install (no --key, no --emit-installed).
-skillctl pull --registry self --er1-target prod --er1-context <mirko-sub>___skills \
+skillctl pull --registry self --er1-target prod --er1-context <bob-sub>___skills \
               --install --trust-mode \
               --confirm-install --dry-run-install-token <tok> --no-checkpoint
 #   The 5 ER1 gates run: envelope-sig → not-revoked → governance-floor → digest → bundle-sigs.
 #   Installs under ~/.claude/skills/<name>/ with a .m3c-provenance.json sidecar.
-#   Read-only ⇒ NO write-back to Mirko's registry (SPEC-0246 R6.4).
+#   Read-only ⇒ NO write-back to Bob's registry (SPEC-0246 R6.4).
 
 # B5. Re-verify the installed skill.
 skillctl verify <name>          # → EXIT 0 expected
 
-# B6. USE the skill (the load-bearing proof it actually works for Eric).
+# B6. USE the skill (the load-bearing proof it actually works for Alice).
 #   Invoke the skill through Claude Code / run its entrypoint; confirm it produces its output.
 
 # B7. Antivirus-style audit of everything installed.
@@ -217,9 +217,9 @@ table is in [manual §Exit codes](manual-skillctl.md#exit-codes)):
 
 | # | Attack | Command | Expect |
 |---|--------|---------|--------|
-| N1 | Tampered bundle (flip a byte) | `skillctl verify-sig --pubkey mirko.pub tampered.skb` | **exit 11** (author_sig_invalid) |
-| N2 | Wrong key / impersonation | `skillctl verify-sig --pubkey mirko.pub attacker.skb` | **exit 11** (control vs attacker.pub = 0) |
-| N3 | No signature | `skillctl verify-sig --pubkey mirko.pub no-sig.skb` | **non-zero** (11 or 1, never 0) |
+| N1 | Tampered bundle (flip a byte) | `skillctl verify-sig --pubkey bob.pub tampered.skb` | **exit 11** (author_sig_invalid) |
+| N2 | Wrong key / impersonation | `skillctl verify-sig --pubkey bob.pub attacker.skb` | **exit 11** (control vs attacker.pub = 0) |
+| N3 | No signature | `skillctl verify-sig --pubkey bob.pub no-sig.skb` | **non-zero** (11 or 1, never 0) |
 | N4 | Digest mismatch | installed bundle modified after signing | **exit 10** |
 | N5 | Registry not trusted / forged root | pull with an unpinned registry key | **exit 12** |
 | N6 | Governance below minimum | pull a skill with no green attestation | **exit 13** |
@@ -240,12 +240,12 @@ Cross-person acceptance is defined by **SPEC-0246 §10 (AC1–AC5)**. A handover
 |----|-----------|----------------------------|
 | **AC1** | Author can pack+sign+publish into their own ER1 context | A2–A5 succeed; `verify-sig` → 0; publish returns admitted/already-admitted |
 | **AC2** | Reviewer (≠ author) attestation is required and honoured | A6 green attestation present; governance floor `green` enforced |
-| **AC3** | **A *different principal* (Eric) completes a read-only consumer install end-to-end, all 5 gates pass, no write-back** | B3–B5: `pull --install --trust-mode` (no `--key`, no `--emit-installed`) → skill under `~/.claude/skills/<name>/`; `verify` → 0; Mirko's registry unchanged |
-| **AC4** | The installed skill actually runs for Eric | B6 produces the skill's expected output |
+| **AC3** | **A *different principal* (Alice) completes a read-only consumer install end-to-end, all 5 gates pass, no write-back** | B3–B5: `pull --install --trust-mode` (no `--key`, no `--emit-installed`) → skill under `~/.claude/skills/<name>/`; `verify` → 0; Bob's registry unchanged |
+| **AC4** | The installed skill actually runs for Alice | B6 produces the skill's expected output |
 | **AC5** | Invalid skills are refused with the correct exit code | Part C: N1–N3 (min bar) refuse; N4–N7 as coverage lands |
 
 **Minimum pass bar for the first handover:** AC1–AC4 green **and** N1–N3 refuse. AC5's
-full matrix (N4–N7) is the target as the harness converges (§8). Field status: the Eric
+full matrix (N4–N7) is the target as the harness converges (§8). Field status: the Alice
 consumer path was proven live on **2026-06-09** (SPEC-0246 §11).
 
 ---
@@ -276,14 +276,14 @@ seam `IsER1Registry` already draws in code, and the invariant SPEC-0248 §4 asse
 The `demo/kup-training/` scripts are the **automated regression** for the trust core:
 
 - **What they prove today:** the offline cryptographic chain (keygen→pack→sign→verify),
-  the Mirko→Eric transfer (G3 → `artifacts/eric-home/output/hello.txt`), and the negative
+  the Bob→Alice transfer (G3 → `artifacts/alice-home/output/hello.txt`), and the negative
   tests N1–N3 (G4): driven by `run-and-prove.sh` (exit 0 iff every check passes, `--json`
   summary) and `run-all.sh` (the four release gates G1–G4).
 - **The divergence:** that harness uses the older **HTTP `/api/skills/*` admission registry**,
-  not the **ER1 `self`** path this procedure (and Eric, in the field) use. So it proves the
+  not the **ER1 `self`** path this procedure (and Alice, in the field) use. So it proves the
   trust core, but not the ER1 transport of AC3.
 - **Convergence plan (tracked):**
-  1. **Done (best-effort):** `02-mirko-publish.sh` / `05-eric-install-and-run.sh` now attempt
+  1. **Done (best-effort):** `02-bob-publish.sh` / `05-alice-install-and-run.sh` now attempt
      the ER1 `self` transport (`publish` / `pull --registry self`, target `local` by default) as
      a **single-machine smoke**: the runner's ER1 login acts as the author. It needs a live
      local ER1 to actually exercise, and a true two-person cross-principal AC3 run needs two ER1
@@ -293,7 +293,7 @@ The `demo/kup-training/` scripts are the **automated regression** for the trust 
   3. Wire (or explicitly scope out) the orphaned demand-side steps `10-scan` / `11-use` /
      `12-decay` (not run by either driver today; `12`'s decay path is unimplemented).
   4. Remove the Mac-only assumptions (macOS keychain for credentials, `pandoc`+`xelatex`
-     for the PDF gate, `shasum` naming, hard-coded source paths) so Eric's team can run it
+     for the PDF gate, `shasum` naming, hard-coded source paths) so Alice's team can run it
      on Linux/Windows.
 
 Until convergence, the acceptance bar for the ER1 transport (AC3) is met by **running Part
@@ -301,16 +301,16 @@ B manually** and recording the result; the harness covers the trust core and neg
 
 ---
 
-## 9. Handover checklist for Eric's team
+## 9. Handover checklist for Alice's team
 
 - [ ] `skillctl` installed on both machines; `skillctl version` prints a real tag (not `dev`).
 - [ ] ER1 login works on both (`skillctl login --status`), against the correct `--base-url`.
-- [ ] Mirko's public key received **and fingerprint verified out-of-band**.
-- [ ] `~/.claude/trust-roots.yaml` written on Eric's box (self format), `governance_minimum: green`.
+- [ ] Bob's public key received **and fingerprint verified out-of-band**.
+- [ ] `~/.claude/trust-roots.yaml` written on Alice's box (self format), `governance_minimum: green`.
 - [ ] Part A (author) completes: `verify-sig` → 0, publish admitted, green attestation posted.
 - [ ] Part B (consumer) completes: `pull --install --trust-mode` → 0 gates, `verify` → 0, skill runs, `audit` → 0.
 - [ ] Part C: N1–N3 refuse with the expected exit codes.
-- [ ] No write-back appears in Mirko's registry (AC3/R6.4).
+- [ ] No write-back appears in Bob's registry (AC3/R6.4).
 - [ ] Result recorded (a `run-and-prove.sh --json` file, or the checklist above signed off).
 
 ---
@@ -320,7 +320,7 @@ B manually** and recording the result; the harness covers the trust core and neg
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | `skillctl version` prints `dev` | a stale binary earlier on `PATH` (e.g. `~/go/bin/skillctl` shadowing `~/.local/bin/skillctl`) | remove/rebuild the stale one; `which -a skillctl` to find shadows |
-| `403 not authorized for this context` on publish | publishing into a context whose `<sub>` ≠ your Google login (BUG-0165) | publish only into **your own** `<your-sub>___skills`; Eric *reads* Mirko's context |
+| `403 not authorized for this context` on publish | publishing into a context whose `<sub>` ≠ your Google login (BUG-0165) | publish only into **your own** `<your-sub>___skills`; Alice *reads* Bob's context |
 | `pull` rejects the trust-roots file | wrong file/schema: used `skill-trust-roots.yaml` (hosted) for the self path | use `~/.claude/trust-roots.yaml` (flat self format); see §2 table |
 | install one-liner 404s | targeting a release that isn't published yet | check the release is published; or set `RELEASE_BASE` to a published tag |
 | `exit 12` on install | registry key not pinned | pin it (HTTP path: `trust add`; self path: fix `trust-roots.yaml`) |
@@ -330,7 +330,7 @@ B manually** and recording the result; the harness covers the trust core and neg
 
 ## See also
 
-- [Runbook, two-person ER1 exchange (Mirko → Eric)](runbook-two-person-er1-exchange.md), the copy-paste prod runbook to actually execute Parts A/B together.
+- [Runbook, two-person ER1 exchange (Bob → Alice)](runbook-two-person-er1-exchange.md), the copy-paste prod runbook to actually execute Parts A/B together.
 - [manual-skillctl.md](manual-skillctl.md): the full command/flag/exit-code reference.
 - [quickstart-skillctl.md](quickstart-skillctl.md): the author happy-path in 5 minutes.
 - [quickstart-skillctl-demo.md](quickstart-skillctl-demo.md): the offline Kata demo.

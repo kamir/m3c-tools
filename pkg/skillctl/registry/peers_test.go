@@ -20,7 +20,7 @@ func testPeerKey(t *testing.T) (b64, fp string, pub ed25519.PublicKey) {
 
 func TestPeerAsTrustRoots(t *testing.T) {
 	b64, fp, pub := testPeerKey(t)
-	pe := Peer{Name: "eric", Locator: "gitlab://h/eric/skills", PubKeyB64: b64, Fingerprint: fp, GovernanceMinimum: "green"}
+	pe := Peer{Name: "alice", Locator: "gitlab://h/alice/skills", PubKeyB64: b64, Fingerprint: fp, GovernanceMinimum: "green"}
 	tr, err := pe.AsTrustRoots()
 	if err != nil {
 		t.Fatalf("AsTrustRoots: %v", err)
@@ -47,7 +47,7 @@ func TestPeerStoreAddFindRemove(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "skill-peers.yaml")
 	p := &Peers{}
 
-	if err := p.AddPeer(Peer{Name: "eric", Locator: "gitlab://h/eric/skills", PubKeyB64: b64, Fingerprint: fp}); err != nil {
+	if err := p.AddPeer(Peer{Name: "alice", Locator: "gitlab://h/alice/skills", PubKeyB64: b64, Fingerprint: fp}); err != nil {
 		t.Fatalf("AddPeer: %v", err)
 	}
 	// No pin → refused (fingerprint-required, no TOFU).
@@ -55,10 +55,10 @@ func TestPeerStoreAddFindRemove(t *testing.T) {
 		t.Error("a peer without --pin must be refused")
 	}
 	// Duplicate name / locator → refused.
-	if err := p.AddPeer(Peer{Name: "eric", Locator: "other://z", PubKeyB64: b64, Fingerprint: fp}); err == nil {
+	if err := p.AddPeer(Peer{Name: "alice", Locator: "other://z", PubKeyB64: b64, Fingerprint: fp}); err == nil {
 		t.Error("duplicate name must be refused")
 	}
-	if err := p.AddPeer(Peer{Name: "other", Locator: "gitlab://h/eric/skills", PubKeyB64: b64, Fingerprint: fp}); err == nil {
+	if err := p.AddPeer(Peer{Name: "other", Locator: "gitlab://h/alice/skills", PubKeyB64: b64, Fingerprint: fp}); err == nil {
 		t.Error("duplicate locator must be refused")
 	}
 
@@ -69,10 +69,10 @@ func TestPeerStoreAddFindRemove(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadPeers: %v", err)
 	}
-	if pe, ok := got.FindPeerByLocator("gitlab://h/eric/skills"); !ok || pe.Name != "eric" {
+	if pe, ok := got.FindPeerByLocator("gitlab://h/alice/skills"); !ok || pe.Name != "alice" {
 		t.Error("FindPeerByLocator failed")
 	}
-	if !got.RemovePeer("eric") || len(got.Peers) != 0 {
+	if !got.RemovePeer("alice") || len(got.Peers) != 0 {
 		t.Error("RemovePeer failed")
 	}
 }
@@ -93,7 +93,7 @@ func TestPeerAsTrustRootsCarriesSigners(t *testing.T) {
 	revB64, _, revPub := testPeerKey(t)
 
 	pe := Peer{
-		Name: "eric", Locator: "github://eric/skills",
+		Name: "alice", Locator: "github://alice/skills",
 		PubKeyB64: regB64, Fingerprint: fp, GovernanceMinimum: "green",
 		GovernanceQuorum: 1,
 		Signers:          []Signer{{ReviewerID: "id:rev@org", PubKeyB64: revB64}},
@@ -125,7 +125,7 @@ func TestPeerAsTrustRootsCarriesSigners(t *testing.T) {
 // behaviour that refuses a foreign reviewer's attestation.
 func TestPeerAsTrustRootsWithoutSignersKeepsD2(t *testing.T) {
 	regB64, fp, regPub := testPeerKey(t)
-	pe := Peer{Name: "eric", Locator: "github://eric/skills", PubKeyB64: regB64, Fingerprint: fp}
+	pe := Peer{Name: "alice", Locator: "github://alice/skills", PubKeyB64: regB64, Fingerprint: fp}
 	tr, err := pe.AsTrustRoots()
 	if err != nil {
 		t.Fatalf("AsTrustRoots: %v", err)
@@ -146,7 +146,7 @@ func TestPeerAsTrustRootsRefusesUnsatisfiableQuorum(t *testing.T) {
 	regB64, fp, _ := testPeerKey(t)
 	revB64, _, _ := testPeerKey(t)
 	pe := Peer{
-		Name: "eric", Locator: "github://eric/skills", PubKeyB64: regB64, Fingerprint: fp,
+		Name: "alice", Locator: "github://alice/skills", PubKeyB64: regB64, Fingerprint: fp,
 		GovernanceQuorum: 2,
 		Signers:          []Signer{{ReviewerID: "id:rev@org", PubKeyB64: revB64}},
 	}
@@ -165,7 +165,7 @@ func TestPeerAsTrustRootsRefusesUnsatisfiableQuorum(t *testing.T) {
 func TestPeerAsTrustRootsRefusesBrokenSignerKey(t *testing.T) {
 	regB64, fp, _ := testPeerKey(t)
 	pe := Peer{
-		Name: "eric", Locator: "github://eric/skills", PubKeyB64: regB64, Fingerprint: fp,
+		Name: "alice", Locator: "github://alice/skills", PubKeyB64: regB64, Fingerprint: fp,
 		Signers: []Signer{{ReviewerID: "id:rev@org", PubKeyB64: "not-base64!!"}},
 	}
 	if _, err := pe.AsTrustRoots(); err == nil {
@@ -179,7 +179,7 @@ func TestAddPeerValidatesSigners(t *testing.T) {
 	regB64, fp, _ := testPeerKey(t)
 	p := &Peers{}
 	err := p.AddPeer(Peer{
-		Name: "eric", Locator: "github://eric/skills", PubKeyB64: regB64, Fingerprint: fp,
+		Name: "alice", Locator: "github://alice/skills", PubKeyB64: regB64, Fingerprint: fp,
 		GovernanceQuorum: 3,
 		Signers:          []Signer{{ReviewerID: "id:rev@org", PubKeyB64: regB64}},
 	})

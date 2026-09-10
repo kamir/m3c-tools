@@ -23,7 +23,7 @@ import (
 type WatcherConfig struct {
 	Tenant         string // e.g. "kup-berlin"
 	UserContextID  string // engine's --user-context-id flag value
-	CallerIdentity string // e.g. "id:kamir@m3c": the filter key
+	CallerIdentity string // e.g. "id:bob@m3c": the filter key
 	CtxHash        string // first 16 hex of SHA-256(UserContextID), per SPEC-0167
 
 	// Backpressure (SPEC-0167 A.6).

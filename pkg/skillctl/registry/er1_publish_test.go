@@ -122,11 +122,11 @@ func newSignedAdmitted(t *testing.T, digest string) (map[string]any, ed25519.Pub
 		Name:               "fetch-contract",
 		Version:            "1.0.0",
 		AuthorIntent:       "green",
-		AdmittedByIdentity: "id:kamir@m3c",
+		AdmittedByIdentity: "id:bob@m3c",
 		AdmittedAt:         time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC),
 		Signatures: []SignatureRef{
-			{Role: "author", IdentityID: "id:kamir@m3c"},
-			{Role: "registry", IdentityID: "id:kamir@m3c"},
+			{Role: "author", IdentityID: "id:bob@m3c"},
+			{Role: "registry", IdentityID: "id:bob@m3c"},
 		},
 	})
 	if err != nil {
@@ -152,7 +152,7 @@ func TestPublishAdmitted_InlineHappyPath(t *testing.T) {
 			Name:            "fetch-contract",
 			Version:         "1.0.0",
 			BundleDigest:    digest,
-			AuthorIdentity:  "id:kamir@m3c",
+			AuthorIdentity:  "id:bob@m3c",
 			GovernanceLevel: "green",
 			PackedOnHost:    "workstation",
 		},
@@ -185,7 +185,7 @@ func TestPublishAdmitted_InlineHappyPath(t *testing.T) {
 		"skill-version:fetch-contract@1.0.0",
 		"skill-digest:" + digest,
 		"skill-registry:self",
-		"skill-author:id:kamir@m3c",
+		"skill-author:id:bob@m3c",
 		"governance:green",
 		"host:workstation",
 		"transport:er1-inline",
@@ -232,7 +232,7 @@ func TestPublishAdmitted_IdempotentOnDigest(t *testing.T) {
 			Name:            "fetch-contract",
 			Version:         "1.0.0",
 			BundleDigest:    digest,
-			AuthorIdentity:  "id:kamir@m3c",
+			AuthorIdentity:  "id:bob@m3c",
 			GovernanceLevel: "green",
 			PackedOnHost:    "workstation",
 		},
@@ -264,7 +264,7 @@ func TestPublishAdmitted_ClaimCheckOverflowRequiresFn(t *testing.T) {
 		Event:     ev,
 		Skill: SkillMeta{
 			Name: "x", Version: "1.0.0", BundleDigest: digest,
-			AuthorIdentity:  "id:kamir@m3c",
+			AuthorIdentity:  "id:bob@m3c",
 			GovernanceLevel: "green", PackedOnHost: "h",
 		},
 		SkbBytes:       skb,
@@ -288,7 +288,7 @@ func TestPublishAdmitted_ClaimCheckCallsFnAndOmitsInlineBlock(t *testing.T) {
 		Event:     ev,
 		Skill: SkillMeta{
 			Name: "big", Version: "1.0.0", BundleDigest: digest,
-			AuthorIdentity:  "id:kamir@m3c",
+			AuthorIdentity:  "id:bob@m3c",
 			GovernanceLevel: "green", PackedOnHost: "h",
 		},
 		SkbBytes:       skb,
@@ -339,7 +339,7 @@ func TestPublishAdmitted_RejectsUnsignedEvent(t *testing.T) {
 		Name:               "x",
 		Version:            "1.0.0",
 		AuthorIntent:       "green",
-		AdmittedByIdentity: "id:kamir@m3c",
+		AdmittedByIdentity: "id:bob@m3c",
 		AdmittedAt:         time.Now(),
 		Signatures: []SignatureRef{
 			{Role: "author"}, {Role: "registry"},
@@ -355,7 +355,7 @@ func TestPublishAdmitted_RejectsUnsignedEvent(t *testing.T) {
 		Event:     ev,
 		Skill: SkillMeta{
 			Name: "x", Version: "1.0.0", BundleDigest: digest,
-			AuthorIdentity:  "id:kamir@m3c",
+			AuthorIdentity:  "id:bob@m3c",
 			GovernanceLevel: "green", PackedOnHost: "h",
 		},
 		SkbBytes:       []byte("x"),
@@ -370,7 +370,7 @@ func TestBuildInstalledTags(t *testing.T) {
 	tags := BuildInstalledTags(SkillMeta{
 		Name: "fetch-contract", Version: "1.0.0",
 		BundleDigest:   "sha256:" + strings.Repeat("a", 64),
-		AuthorIdentity: "id:kamir@m3c",
+		AuthorIdentity: "id:bob@m3c",
 	}, "macbookpro-intel")
 	joined := strings.Join(tags, ",")
 	for _, want := range []string{

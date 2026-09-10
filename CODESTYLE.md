@@ -77,6 +77,45 @@ each with its own commit.
 
 ---
 
+## Names in examples: the standard cast
+
+Examples, fixtures, tutorials, demo scripts and test identities use a fixed cast
+of invented people. Never the name of an actual colleague, customer or contact.
+
+| Persona | Role, kept stable across the whole tree |
+|---|---|
+| Bob | the author: packs, signs, publishes |
+| Alice | the recipient: pins trust, verifies, installs |
+| Charlie | a reviewer or attester |
+| Diana | a registry or governance operator |
+| Eddy, Freddy, Gustav, Hans | further parties as needed |
+
+Identity ids follow the same rule: `id:bob@example`, `id:alice@example`. Keep a
+persona in one role everywhere, because a reader who learns that Bob signs will
+carry that across documents.
+
+**Authorship is not a persona.** A commit author, a copyright line and the
+`PRODUCT_PUBLISHER` field of a signed installer name a real legal person because
+that is their job. Replacing one of those with a persona does not anonymise
+anything; it falsifies provenance, which in this repository is the worse
+failure. The gate exempts those lines individually, with the reason written next
+to each.
+
+Why mechanical: this tree is public and it is mirrored into a customer's GitLab
+every thirty minutes. A name arrives through a hundred small additions, each
+harmless alone, and a reviewer who catches the ones in prose still misses the
+ones in a test fixture, a file name or a shell variable.
+
+```bash
+./scripts/check-no-real-names.sh            # whole tree, exit 1 on any hit
+./scripts/check-no-real-names.sh --staged   # only what you are about to commit
+```
+
+The gate checks file NAMES as well as contents, and it is wired into the
+blocking `prose-gate` CI job. One caution it encodes, learned the hard way:
+`git grep -E` does not understand `\b`, so it matches nothing and reports
+success. Use `-w`.
+
 ## Prose: no em dashes
 
 **Rule.** The character U+2014 EM DASH does not appear anywhere in this

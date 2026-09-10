@@ -8,7 +8,7 @@ package main
 //
 // Fix, two halves:
 //   - login:    `skillctl login` runs the browser device-pairing flow itself
-//               (so a box with only the skillctl binary, e.g. Eric's. Is
+//               (so a box with only the skillctl binary, e.g. Alice's. Is
 //               self-sufficient) and persists the token via pkg/auth.
 //   - autoload: before any ER1-bound command, if ER1_DEVICE_TOKEN is unset, load
 //               the persisted token and export it for the process. Mirroring

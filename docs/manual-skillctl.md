@@ -1870,7 +1870,7 @@ ER1 credentials for registry-backed commands resolve via Keychain → Secret Man
 ## See also
 
 - **[Quickstart: skillctl](quickstart-skillctl.md)**: the happy path in five minutes.
-- **[Acceptance & Handover: the skill lifecycle](acceptance-skillctl-lifecycle.md)**: the two-person (Mirko → Eric) acceptance procedure over ER1, with success criteria.
+- **[Acceptance & Handover: the skill lifecycle](acceptance-skillctl-lifecycle.md)**: the two-person (Bob → Alice) acceptance procedure over ER1, with success criteria.
 - **[Quickstart: the offline demo](quickstart-skillctl-demo.md)**: the `skillctl-demo` Kata walkthrough (CISO/booth).
 - **[Manual: m3c-tools](manual-m3c-tools.md)**: the memory-capture toolkit `skillctl` ships alongside.
 - **[Bug & feature tracking](bug-tracking.md)**: how a defect or a request is tracked across the private and public planes.

@@ -58,7 +58,7 @@ var (
 // (the SAME pins that admit bundles): this package never reaches for a registry
 // or a network, so the owner key is pinned, not fetched (SPEC-0277 §3 reuse map).
 type PinnedKey struct {
-	// ID is the principal identity id, e.g. "id:kamir@m3c". Matched case-
+	// ID is the principal identity id, e.g. "id:bob@m3c". Matched case-
 	// normalized (NormalizeID) so a re-cased id cannot dodge or impersonate a pin.
 	ID string
 

@@ -87,7 +87,7 @@ def main():
 
     ordered = sorted(cats.items(), key=lambda kv: (-len(kv[1]), kv[0]))
 
-    lines = ["# Mirko's Braindump: Knowledge Index", "",
+    lines = ["# Bob's Braindump: Knowledge Index", "",
              f"> Auto-generated category catalog for `/understand-knowledge` "
              f"(SPEC-0268 RAG→graph bridge). {len(notes)} notes · "
              f"{len([c for c in cats if c != 'Uncategorized'])} themed categories. "

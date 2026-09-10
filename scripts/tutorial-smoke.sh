@@ -200,8 +200,8 @@ why "Der Autor versiegelt, der Herausgeber nimmt auf, der Reviewer urteilt.
    selbst gepinnt hat."
 
 run "keygen (Autor)"       0 "$SKILLCTL" keygen --out "$WS/keys/mitarbeiter"
-run "keygen (Herausgeber)" 0 "$SKILLCTL" keygen --out "$WS/keys/eric-herausgeber"
-run "keygen (Reviewer)"    0 "$SKILLCTL" keygen --out "$WS/keys/eric-reviewer"
+run "keygen (Herausgeber)" 0 "$SKILLCTL" keygen --out "$WS/keys/alice-herausgeber"
+run "keygen (Reviewer)"    0 "$SKILLCTL" keygen --out "$WS/keys/alice-reviewer"
 
 if [ "$(stat -f '%Lp' "$WS/keys/mitarbeiter.priv" 2>/dev/null || stat -c '%a' "$WS/keys/mitarbeiter.priv" 2>/dev/null)" = "600" ]; then
   ok "der private Schluessel hat Modus 0600"
@@ -285,13 +285,13 @@ why "Der Herausgeber nimmt auf, der Reviewer urteilt. Ohne die Attestierung
 run "publish (Admit)" 0 "$SKILLCTL" publish "hello-kup@0.1.0" \
   --bundle "$WS/hello-kup@0.1.0.skb" --version 0.1.0 \
   --registry "local://$WS/registry.git" \
-  --key "$WS/keys/eric-herausgeber.priv" --identity id:eric@kup --yes
+  --key "$WS/keys/alice-herausgeber.priv" --identity id:alice@kup --yes
 expect_in "der Admit meldet den git-Transport" "transport=git"
 
 run "publish --attest (Reviewer)" 0 "$SKILLCTL" publish --attest "hello-kup@0.1.0" \
   --digest "$DIGEST" --level green --rationale "geprueft im tutorial-smoke" \
   --registry "local://$WS/registry.git" \
-  --identity id:eric-reviewer@kup --key "$WS/keys/eric-reviewer.priv" --yes
+  --identity id:alice-reviewer@kup --key "$WS/keys/alice-reviewer.priv" --yes
 
 run "registry ls" 0 "$SKILLCTL" registry ls --registry "local://$WS/registry.git"
 expect_in "das Registry zeigt den Skill als green/ok" "green"
@@ -304,9 +304,9 @@ why "In der trust-roots.yaml steht der Herausgeberschluessel als Registry-Pin UN
    die Gewaltenteilung hier kryptografisch ist und nicht bloss organisatorisch."
 
 b64_raw() { if base64 --help 2>&1 | grep -q -- "-w"; then base64 -w0; else base64; fi; }
-PUB_B64="$(openssl pkey -pubin -in "$WS/keys/eric-herausgeber.pub" -outform DER | tail -c 32 | b64_raw)"
-PUB_FP="$(openssl pkey -pubin -in "$WS/keys/eric-herausgeber.pub" -outform DER | tail -c 32 > "$WS/.fp.bin" && sha256_of "$WS/.fp.bin")"
-REV_B64="$(openssl pkey -pubin -in "$WS/keys/eric-reviewer.pub" -outform DER | tail -c 32 | b64_raw)"
+PUB_B64="$(openssl pkey -pubin -in "$WS/keys/alice-herausgeber.pub" -outform DER | tail -c 32 | b64_raw)"
+PUB_FP="$(openssl pkey -pubin -in "$WS/keys/alice-herausgeber.pub" -outform DER | tail -c 32 > "$WS/.fp.bin" && sha256_of "$WS/.fp.bin")"
+REV_B64="$(openssl pkey -pubin -in "$WS/keys/alice-reviewer.pub" -outform DER | tail -c 32 | b64_raw)"
 
 write_trust_roots() {  # $1 = with-signers | without-signers
   {
@@ -317,7 +317,7 @@ write_trust_roots() {  # $1 = with-signers | without-signers
     if [ "$1" = "with-signers" ]; then
       echo "governance_quorum: 1"
       echo "signers:"
-      echo "  - reviewer_id: id:eric-reviewer@kup"
+      echo "  - reviewer_id: id:alice-reviewer@kup"
       echo "    pubkey_b64: $REV_B64"
     fi
   } > "$CONSUMER_HOME/.claude/trust-roots.yaml"

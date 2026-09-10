@@ -58,7 +58,7 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		emitInstalled    = fs.Bool("emit-installed", false, "After install, POST a BundleInstalledEvent so the other machine sees the install.")
 		installSkillsDir = fs.String("skills-dir", "", "Where to install skills. Default: ~/.claude/skills.")
 		keyPath          = fs.String("key", defaultSelfKeyPath(), "[--emit-installed] Signing key for the BundleInstalledEvent envelope.")
-		identity         = fs.String("identity", "id:kamir@m3c", "[--emit-installed] Author/registry identity stamped into the install event.")
+		identity         = fs.String("identity", "id:bob@m3c", "[--emit-installed] Author/registry identity stamped into the install event.")
 		noCheckpoint     = fs.Bool("no-checkpoint", false, "Do not append a SPEC-0213 session checkpoint after install.")
 	)
 	fs.Usage = func() {

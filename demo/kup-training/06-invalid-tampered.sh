@@ -36,7 +36,7 @@ ok "tampered digest:  $TAMPERED_DIGEST"
 ok "sig renamed to match tampered digest: $(basename "$SIG_NEW")"
 
 # verify-sig MUST refuse with exit 11 (cryptographic verification fails).
-log "Eric: skillctl verify-sig (expecting exit 11: signature invalid)"
-assert_exit 11 -- "$SKILLCTL" verify-sig --pubkey "$KEYS_DIR/mirko.pub" "$TAMPERED"
+log "Alice: skillctl verify-sig (expecting exit 11: signature invalid)"
+assert_exit 11 -- "$SKILLCTL" verify-sig --pubkey "$KEYS_DIR/bob.pub" "$TAMPERED"
 
 header "06, done, TAMPER DETECTED, INVALID SKILL REFUSED ✓"

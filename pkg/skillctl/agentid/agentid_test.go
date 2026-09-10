@@ -41,7 +41,7 @@ func mustKey(t *testing.T) (ed25519.PublicKey, ed25519.PrivateKey) {
 func samplePayload() Payload {
 	return Payload{
 		ID:                "agent:9f2c",
-		Owner:             "id:kamir@m3c",
+		Owner:             "id:bob@m3c",
 		DisplayName:       "ResearchAgent",
 		AgentBundleDigest: "sha256:" + strings.Repeat("a", 64),
 		CreatedAt:         "2026-06-22T10:00:00Z",
@@ -67,7 +67,7 @@ func TestGoldenCanonicalBytes(t *testing.T) {
 		t.Fatalf("canon: %v", err)
 	}
 	want := `agentid_v1
-{"type":"skillctl-agentid","version":1,"id":"agent:9f2c","owner":"id:kamir@m3c","display_name":"ResearchAgent","agent_bundle_digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","created_at":"2026-06-22T10:00:00Z","not_after":"2026-12-31T00:00:00Z","trust_root":"https://onboarding.guide/api/skills","grant":{"skills":["alpha-skill","fetch-contract@>=1.0.0"],"intents":["fs:read","network:read"],"data_scopes":["ctx:107677460544181387647___skills"],"limits":[["calls_max","100"],["spend_eur_max","0"]]}}`
+{"type":"skillctl-agentid","version":1,"id":"agent:9f2c","owner":"id:bob@m3c","display_name":"ResearchAgent","agent_bundle_digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","created_at":"2026-06-22T10:00:00Z","not_after":"2026-12-31T00:00:00Z","trust_root":"https://onboarding.guide/api/skills","grant":{"skills":["alpha-skill","fetch-contract@>=1.0.0"],"intents":["fs:read","network:read"],"data_scopes":["ctx:107677460544181387647___skills"],"limits":[["calls_max","100"],["spend_eur_max","0"]]}}`
 	if string(got) != want {
 		t.Fatalf("canonical bytes drift:\n got=%q\nwant=%q", got, want)
 	}

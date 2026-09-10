@@ -195,7 +195,7 @@ func runTrustAddAuthor(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("trust add-author", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	registryURL := fs.String("registry", "", "Registry URL this author publishes under. Required. It is a NAME here, not an endpoint: the offline paths never call it.")
-	identityID := fs.String("identity", "", "The author identity id exactly as it appears in the bundle's author signature row (e.g. id:eric@kup). Required.")
+	identityID := fs.String("identity", "", "The author identity id exactly as it appears in the bundle's author signature row (e.g. id:alice@kup). Required.")
 	pubkeyPath := fs.String("pubkey", "", "Path to the author's PEM SPKI ed25519 public key. Required.")
 	pin := fs.String("pin", "", "sha256:<hex> of the key, CONFIRMED OVER A SECOND CHANNEL. Required; there is no trust-on-first-use.")
 	fs.Usage = func() {

@@ -15,8 +15,8 @@ Every claim in the Skill-Manager USER-MANUAL (on the private maintenance plane) 
 |---|---|---|
 | **G1** | Print user guide as PDF | `make-pdf.sh` → `artifacts/{USER-MANUAL,SKILLCTL-MANUAL,KuP-skill-manager-handbook}.pdf` |
 | **G2** | Release skillctl via GitHub download + installer | `build-release.sh` → `artifacts/release/{skillctl-*,SHA256SUMS,install.sh,RELEASE_NOTES.md,gh-release-create.sh}` |
-| **G3** | Run skill transfer Mirko → Eric via aims | `01–05` step scripts; `05` ends with `artifacts/eric-home/output/hello.txt` produced by Eric running a chain-verified skill |
-| **G4** | Valid skill works for Eric, invalid skill fails | `05` (valid ✓) + `06`/`07`/`08`/`09` (four distinct invalid scenarios, each asserting the expected non-zero exit) |
+| **G3** | Run skill transfer Bob → Alice via aims | `01–05` step scripts; `05` ends with `artifacts/alice-home/output/hello.txt` produced by Alice running a chain-verified skill |
+| **G4** | Valid skill works for Alice, invalid skill fails | `05` (valid ✓) + `06`/`07`/`08`/`09` (four distinct invalid scenarios, each asserting the expected non-zero exit) |
 
 ## Quick start
 
@@ -48,13 +48,13 @@ check had passed.
 | File | What it does | Asserts |
 |---|---|---|
 | `00-preflight.sh` | Builds skillctl from source into `artifacts/bin/`. Probes for online registry. Cleans workspace. | Tools present; binary builds clean |
-| `01-mirko-author.sh` | Mirko: `keygen` → `pack` → `sign` → local `verify-sig`. Confirms determinism (two packs are byte-identical). | Verify-sig exit 0; bundle bytes deterministic |
-| `02-mirko-publish.sh` | Mirko: `POST /api/skills/identities` + `POST /api/skills/bundles` (best-effort online). | Online: HTTP 200/201 or 409. Offline: skipped cleanly. |
+| `01-bob-author.sh` | Bob: `keygen` → `pack` → `sign` → local `verify-sig`. Confirms determinism (two packs are byte-identical). | Verify-sig exit 0; bundle bytes deterministic |
+| `02-bob-publish.sh` | Bob: `POST /api/skills/identities` + `POST /api/skills/bundles` (best-effort online). | Online: HTTP 200/201 or 409. Offline: skipped cleanly. |
 | `03-reviewer-attest.sh` | Reviewer: `skillctl attest <digest> --level green`. Writes a local `attestation.json` for offline mode. | Online: registry accepts. Offline: attestation.json present, level=green. |
-| `04-eric-trust-root.sh` | Eric: `skillctl trust add` to pin Mirko's pubkey. | `~/.claude/skill-trust-roots.yaml` contains the pinned key |
-| `05-eric-install-and-run.sh` | **Eric: install + verify-sig + extract + run.** Online attempts `skillctl install` first; offline path always runs as the load-bearing chain proof. | `output/hello.txt` produced ✓ |
+| `04-alice-trust-root.sh` | Alice: `skillctl trust add` to pin Bob's pubkey. | `~/.claude/skill-trust-roots.yaml` contains the pinned key |
+| `05-alice-install-and-run.sh` | **Alice: install + verify-sig + extract + run.** Online attempts `skillctl install` first; offline path always runs as the load-bearing chain proof. | `output/hello.txt` produced ✓ |
 | `06-invalid-tampered.sh` | Flips one byte in the bundle, keeps the original signature. | `verify-sig` exit **11** (signature invalid) |
-| `07-invalid-wrong-key.sh` | Attacker signs a parallel bundle with their own key, claims Mirko's identity. | `verify-sig` against Mirko's pinned pubkey: exit **11**; control: same bundle exit 0 against attacker's key |
+| `07-invalid-wrong-key.sh` | Attacker signs a parallel bundle with their own key, claims Bob's identity. | `verify-sig` against Bob's pinned pubkey: exit **11**; control: same bundle exit 0 against attacker's key |
 | `08-invalid-no-signature.sh` | Bundle delivered without the matching `<digest>.author.sig`. | `verify-sig` non-zero refusal (no fail-open) |
 | `09-invalid-edited-install.sh` | Edits an installed file in place, compares against `CHECKSUMS`. | Mismatch detected; repair restores from signed bundle |
 
@@ -73,7 +73,7 @@ and skips itself with a warning when the registry or `ER1_API_KEY` is missing.
 ### The workspace is generated, not committed
 
 `artifacts/` is git-ignored and every file under it is produced by a run. It used to be
-checked in, including `keys/{mirko,reviewer,attacker}.priv`. Git does not preserve mode
+checked in, including `keys/{bob,reviewer,attacker}.priv`. Git does not preserve mode
 `0600`, so every fresh clone landed a world-readable private key, `skillctl sign` fail-closed
 on it ("insecure mode 0644"), and step `01` died taking `05`, `06` and `09` with it: the demo
 was broken for everyone except the machine that had generated the keys locally. The keys are
@@ -83,7 +83,7 @@ retired. If you need a signed demo bundle to look at, run the demo and take it f
 
 ## What gets touched
 
-The demo is **isolated**. It only writes under `artifacts/` (relative to this directory). It uses `artifacts/eric-home/` as a fake `$HOME` for `skillctl trust add` and the install path so your real `~/.claude/` is never modified.
+The demo is **isolated**. It only writes under `artifacts/` (relative to this directory). It uses `artifacts/alice-home/` as a fake `$HOME` for `skillctl trust add` and the install path so your real `~/.claude/` is never modified.
 
 ## Online vs offline
 
@@ -105,7 +105,7 @@ After `./run-all.sh`:
 ```
 artifacts/
 ├── bin/skillctl                              # the binary (matches release/skillctl-*)
-├── keys/{mirko,reviewer,attacker}.{priv,pub} # ed25519 keypairs
+├── keys/{bob,reviewer,attacker}.{priv,pub} # ed25519 keypairs
 ├── bundles/
 │   ├── kup-hello-0.1.0.skb                   # the deterministic bundle
 │   ├── kup-hello-0.1.0.skb.<digest>.author.sig
@@ -113,8 +113,8 @@ artifacts/
 │   ├── attacker-kup-hello-0.1.0.skb (+sig)   # step 07
 │   ├── no-sig/kup-hello-0.1.0.skb            # step 08 (no sig sidecar)
 │   └── src/kup-hello/                        # the staged source
-├── trust-roots/                              # (handed to Eric in step 04)
-├── eric-home/
+├── trust-roots/                              # (handed to Alice in step 04)
+├── alice-home/
 │   ├── .claude/skill-trust-roots.yaml        # pinned by step 04
 │   ├── .claude/skills/kup-hello/             # installed by step 05
 │   └── output/hello.txt                      # produced by step 05 ✓
