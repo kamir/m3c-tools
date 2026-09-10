@@ -683,8 +683,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          # Dieser Job hat KEIN checkout; gh wuerde das Repo sonst aus dem
+          # nicht vorhandenen git-Kontext raten ("not a git repository",
+          # Run 34494178085). Das Repo steht deshalb explizit am Aufruf.
           gh release upload "${GITHUB_REF_NAME}" \
             dist/release-evidence.json \
             dist/release-evidence.json.cosign.bundle \
             dist/release-evidence.intoto.json \
-            --clobber
+            --clobber --repo "${GITHUB_REPOSITORY}"
