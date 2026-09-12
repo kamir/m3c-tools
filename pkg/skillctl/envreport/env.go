@@ -22,7 +22,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"strings"
 )
 
@@ -35,12 +34,12 @@ const HostHashLen = 16
 const Prefix = "env:"
 
 var (
-	ErrKeinPrefix     = errors.New("ENV-Adresse beginnt nicht mit \"env:\"")
-	ErrMandantFehlt   = errors.New("ENV-Adresse ohne Mandant")
-	ErrPrinzipalFehlt = errors.New("ENV-Adresse ohne Prinzipal")
-	ErrHostFehlt      = errors.New("ENV-Adresse ohne Host")
-	ErrZuVieleTeile   = errors.New("ENV-Adresse hat mehr als drei Segmente")
-	ErrLeeresSegment  = errors.New("ENV-Adresse hat ein leeres Segment")
+	ErrKeinPrefix     = errors.New(`env address: missing "env:" prefix`)
+	ErrMandantFehlt   = errors.New("env address: missing tenant")
+	ErrPrinzipalFehlt = errors.New("env address: missing principal")
+	ErrHostFehlt      = errors.New("env address: missing host")
+	ErrZuVieleTeile   = errors.New("env address: more than three segments")
+	ErrLeeresSegment  = errors.New("env address: empty segment")
 )
 
 // ENV ist die aufgeloeste Adresse. HostHash ist bereits gehasht; ein
@@ -68,7 +67,7 @@ func NeueENV(mandant, prinzipal, hostKlartext string) (ENV, error) {
 		return ENV{}, ErrHostFehlt
 	}
 	if strings.ContainsAny(mandant+prinzipal, "/ ") {
-		return ENV{}, fmt.Errorf("Mandant und Prinzipal duerfen weder / noch Leerzeichen enthalten")
+		return ENV{}, errors.New("env address: tenant and principal must not contain \"/\" or spaces")
 	}
 	return ENV{Mandant: mandant, Prinzipal: prinzipal, HostHash: HashHost(mandant, hostKlartext)}, nil
 }

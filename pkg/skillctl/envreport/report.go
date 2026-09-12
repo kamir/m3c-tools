@@ -39,13 +39,13 @@ const (
 )
 
 var (
-	ErrENVFehlt      = errors.New("Bericht ohne env")
-	ErrTakenAtFehlt  = errors.New("Bericht ohne taken_at")
-	ErrSeqFehlt      = errors.New("Bericht ohne report_seq")
-	ErrFristFehlt    = errors.New("Bericht ohne Aufbewahrungsfrist")
-	ErrPostureUnbek  = errors.New("Bericht mit unbekannter posture")
-	ErrFremdesFeld   = errors.New("Rumpfzeile traegt ein Feld, das posture.snapshot nicht kennt")
-	ErrZeileOhneName = errors.New("Rumpfzeile ohne skill.name")
+	ErrENVFehlt      = errors.New("report: missing env")
+	ErrTakenAtFehlt  = errors.New("report: missing taken_at")
+	ErrSeqFehlt      = errors.New("report: missing report_seq")
+	ErrFristFehlt    = errors.New("report: missing retention deadline")
+	ErrPostureUnbek  = errors.New("report: unknown posture")
+	ErrFremdesFeld   = errors.New("report row: field not in the posture.snapshot schema")
+	ErrZeileOhneName = errors.New("report row: missing skill.name")
 )
 
 // Trust ist der `trust`-Block aus SPEC-0351 Abschnitt 5.1.
@@ -138,7 +138,7 @@ func (r Report) Validate() error {
 	}
 	for i, z := range r.Zeilen {
 		if strings.TrimSpace(z.Skill.Name) == "" {
-			return fmt.Errorf("Zeile %d: %w", i, ErrZeileOhneName)
+			return fmt.Errorf("row %d: %w", i, ErrZeileOhneName)
 		}
 	}
 	return nil
@@ -150,7 +150,7 @@ func (r Report) Validate() error {
 func PruefeRumpf(rohZeile []byte) error {
 	var m map[string]json.RawMessage
 	if err := json.Unmarshal(rohZeile, &m); err != nil {
-		return fmt.Errorf("Rumpfzeile ist kein Objekt: %w", err)
+		return fmt.Errorf("report row is not an object: %w", err)
 	}
 	fremde := []string{}
 	for k := range m {

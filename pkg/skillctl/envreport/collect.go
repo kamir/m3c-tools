@@ -12,6 +12,7 @@
 package envreport
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -53,14 +54,14 @@ type Optionen struct {
 // Faehigkeiten ist nicht verdaechtig, sie ist leer.
 func AusAudit(r audit.Report, o Optionen) (Report, error) {
 	if o.Seq == nil {
-		return Report{}, fmt.Errorf("Erhebung ohne SeqQuelle: die Nummer kommt aus der Ablage")
+		return Report{}, errors.New("collect: no SeqQuelle; the sequence number comes from the store")
 	}
 	if o.AufbewahrungBis.IsZero() {
 		return Report{}, ErrFristFehlt
 	}
 	seq, err := o.Seq.NaechsteSeq(o.ENV.String())
 	if err != nil {
-		return Report{}, fmt.Errorf("naechste report_seq: %w", err)
+		return Report{}, fmt.Errorf("next report_seq: %w", err)
 	}
 
 	zeilen := make([]Zeile, 0, len(r.Verdicts))
