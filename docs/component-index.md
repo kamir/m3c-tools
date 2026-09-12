@@ -72,7 +72,7 @@ Grouped by domain:
 ## F. skillctl trust subsystem (`pkg/skillctl/*` + siblings)
 
 The offline-verifiable skill **trust plane**: the library behind the
-[`skillctl`](program-index) CLI. 40 subpackages under `pkg/skillctl/`, plus the
+[`skillctl`](program-index) CLI. 41 subpackages under `pkg/skillctl/`, plus the
 sibling top-level packages at the end of this section, grouped by role. The list
 and the number are both gated by `scripts/check-index.sh`: it diffs `pkg/**` and
 `internal/**` against this file in both directions AND re-counts the directories,
@@ -144,6 +144,7 @@ It runs in `scripts/check-docs.sh` and in the `docs-gate` job of `ci.yml`,
 | `skillctl/audit` | Per-skill verdicts for `skillctl audit`. |
 | `skillctl/consolidate` | Duplicate/orphan analysis over an inventory. |
 | `skillctl/delta` | Diffs two inventories. |
+| `skillctl/envreport` | SPEC-0428 skill-env reports: the ENV address (hashed host), the immutable per-environment report, and its collection from an `audit` run. Retention is the point, not collection. |
 | `skillctl/report` | HTML + Markdown reports from inventories. |
 | `skillctl/review` | Local HTTP server for reviewing delta reports. |
 | `skillctl/browse` | Interactive D3.js skill-graph browser. |
