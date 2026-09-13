@@ -10,6 +10,7 @@
 package envreport
 
 import (
+	"crypto/ed25519"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,6 +31,10 @@ type Uploader interface {
 // Uploader, weil Lesen und Schreiben verschiedene Rechte sind.
 type Lister interface {
 	ListByTags(contextID string, tags []string) ([]RohPosten, error)
+	// LadeRumpf holt den Rumpf EINES Postens. Getrennt von ListByTags, weil
+	// Zaehlen und Nachpruefen verschiedene Kosten und verschiedene Rechte
+	// haben: die Liste laeuft oft, der Rumpf nur, wenn jemand etwas belegen will.
+	LadeRumpf(contextID, docID string) (string, error)
 }
 
 // RohPosten ist ein ER1-Posten, so weit dieses Paket ihn braucht.
@@ -91,6 +96,10 @@ func (s *ER1Store) Ablegen(r Report, e Einwilligung) (Abgelegt, error) {
 	if s.Up == nil {
 		return Abgelegt{}, errors.New("ER1Store: Uploader required")
 	}
+	// Die Einwilligung wandert in den Rumpf, bevor irgendetwas geprueft oder
+	// gesendet wird: das abgelegte Personendatum traegt den Beleg seines
+	// eigenen Rechtsgrunds.
+	r.Einwilligung = &e
 	// Die Grenzen laufen VOR dem Netzaufruf.
 	if err := PruefeAblage(r, e, s.jetzt()); err != nil {
 		return Abgelegt{}, err
@@ -159,6 +168,42 @@ func (s *ER1Store) Liste(env string) ([]Abgelegt, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Seq < out[j].Seq })
 	return out, nil
+}
+
+// Hole liest EINEN Bericht zurueck und PRUEFT ihn, statt ihm zu glauben
+// (E-I, T-03).
+//
+// Liste() liest nur Marken. Das genuegt, um zu zaehlen, aber nicht, um etwas
+// zu behaupten: die Marken stehen NEBEN dem Rumpf und stammen von derselben
+// Partei. Wer den Rumpf nach dem Schreiben aendert, aendert die Marke mit.
+//
+// Deshalb prueft dieser Weg zweierlei, und ein Bruch ist ein FEHLER und kein
+// Hinweis: der Digest gegen den Rumpf, und die Signatur gegen den Digest.
+// Ohne oeffentlichen Schluessel wird nur der Digest geprueft und die fehlende
+// Signaturpruefung ausdruecklich gemeldet, damit niemand die schwaechere
+// Auskunft fuer die staerkere haelt.
+func (s *ER1Store) Hole(docID string, pub ed25519.PublicKey) (Report, error) {
+	if s.Ls == nil {
+		return Report{}, errors.New("ER1Store: Lister required to read a report")
+	}
+	roh, err := s.Ls.LadeRumpf(s.ContextID, docID)
+	if err != nil {
+		return Report{}, fmt.Errorf("load report %s: %w", docID, err)
+	}
+	var r Report
+	if err := json.Unmarshal([]byte(roh), &r); err != nil {
+		return Report{}, fmt.Errorf("parse report %s: %w", docID, err)
+	}
+	if err := r.Validate(); err != nil {
+		return Report{}, fmt.Errorf("report %s: %w", docID, err)
+	}
+	if len(pub) == 0 {
+		return r, ErrSignaturUngeprueft
+	}
+	if err := PruefeSignatur(pub, r); err != nil {
+		return Report{}, fmt.Errorf("report %s: %w", docID, err)
+	}
+	return r, nil
 }
 
 // NaechsteSeq macht den ER1Store zur SeqQuelle.

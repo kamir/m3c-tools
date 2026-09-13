@@ -21,6 +21,7 @@ func opts(seq int) Optionen {
 		Jetzt:           time.Date(2026, 9, 13, 9, 0, 0, 0, time.UTC),
 		AufbewahrungBis: time.Date(2027, 9, 13, 0, 0, 0, 0, time.UTC),
 		Seq:             FesteSeq(seq),
+		Einwilligung:    consent("kamir"),
 	}
 }
 

@@ -109,7 +109,18 @@ type Report struct {
 	// ohne Ende: eine Aussage ueber das Arbeitsverhalten eines Menschen, die
 	// nie verfaellt, ist keine Aufbewahrung, sondern ein Archiv ueber ihn.
 	AufbewahrungBis time.Time `json:"aufbewahrung_bis"`
-	Zeilen          []Zeile   `json:"zeilen"`
+	// Einwilligung ist der Beleg des Rechtsgrunds, und sie steht IM Bericht.
+	//
+	// Bis 2026-09-13 wurde sie in `Ablegen` geprueft und danach weggeworfen:
+	// das abgelegte Personendatum trug den Beleg seines eigenen Rechtsgrunds
+	// nicht. Wer den Posten spaeter liest, konnte nicht sagen, warum er
+	// existieren darf, und ein Nachtragen von aussen waere keine Einwilligung,
+	// sondern eine Behauptung ueber eine.
+	Einwilligung *Einwilligung `json:"einwilligung,omitempty"`
+	// SignerID und Signatur machen aus der Aussage einen Beweis (E1).
+	SignerID string  `json:"signer_id,omitempty"`
+	Signatur string  `json:"envelope_signature,omitempty"`
+	Zeilen   []Zeile `json:"zeilen"`
 }
 
 // Validate prueft die Pflichtfelder (AC-01, AC-12) und nennt das FEHLENDE
@@ -130,6 +141,15 @@ func (r Report) Validate() error {
 	}
 	if r.AufbewahrungBis.IsZero() {
 		return ErrFristFehlt
+	}
+	// Der Beleg des Rechtsgrunds ist Pflicht, beim Schreiben wie beim Lesen.
+	// Ein Altposten ohne ihn ist nicht ungueltig geworden, er war es immer;
+	// er wird jetzt nur nicht mehr stillschweigend als gueltig gefuehrt.
+	if r.Einwilligung == nil {
+		return ErrEinwilligungNichtImRumpf
+	}
+	if err := r.Einwilligung.Gueltig(r.Principal, r.TakenAt); err != nil {
+		return err
 	}
 	switch r.Posture {
 	case PostureOK, PostureDrift, PostureContaminated:

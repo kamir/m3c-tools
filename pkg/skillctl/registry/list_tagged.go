@@ -13,6 +13,7 @@ package registry
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/kamir/m3c-tools/pkg/er1"
 )
@@ -66,4 +67,35 @@ func ListItemsByTags(cfg *er1.Config, ctxID string, tags []string) ([]TaggedItem
 // nicht versehentlich im persoenlichen Vorgabekontext landet (SPEC-0225 P5).
 func UploadTextItem(cfg *er1.Config, body, filename, tags, contentType, ctxID string) (string, error) {
 	return uploadText(cfg, body, filename, tags, contentType, ctxID)
+}
+
+// LoadItemBody holt den Rumpf EINES Postens.
+//
+// Getrennt von ListItemsByTags, weil Zaehlen und Nachpruefen verschiedene
+// Kosten haben: die Liste laeuft oft und traegt nur Marken, der Rumpf nur
+// dann, wenn jemand etwas belegen will.
+func LoadItemBody(cfg *er1.Config, ctxID, docID string) (string, error) {
+	if ctxID == "" || docID == "" {
+		return "", errNoTags
+	}
+	raw, err := searchByTagsRaw(cfg, ctxID, nil)
+	if err != nil {
+		return "", err
+	}
+	for _, it := range raw {
+		id, _ := it["id"].(string)
+		if id == "" {
+			id, _ = it["doc_id"].(string)
+		}
+		if id != docID {
+			continue
+		}
+		for _, k := range []string{"transcript", "description", "body"} {
+			if v, ok := it[k].(string); ok && v != "" {
+				return v, nil
+			}
+		}
+		return "", fmt.Errorf("item %s has no readable body", docID)
+	}
+	return "", fmt.Errorf("item %s not found in %s", docID, ctxID)
 }

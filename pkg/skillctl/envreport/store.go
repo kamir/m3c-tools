@@ -89,6 +89,11 @@ type Store interface {
 	Anker(env string) (string, error)
 	// Ablegen schreibt einen Bericht. Anhaengend: eine bereits vergebene
 	// (env, seq) wird abgelehnt, nicht ueberschrieben.
+	//
+	// Die uebergebene Einwilligung wird IN den Bericht eingebettet, bevor
+	// geprueft wird. Der Parameter ist die eine Quelle; ein davon
+	// abweichendes Feld im Bericht wird ueberschrieben und nicht etwa
+	// bevorzugt. Zwei Quellen fuer denselben Rechtsgrund waeren eine zu viel.
 	Ablegen(r Report, e Einwilligung) (Abgelegt, error)
 	// Liste nennt die abgelegten Berichte EINER Umgebung, aufsteigend nach Seq.
 	Liste(env string) ([]Abgelegt, error)
@@ -199,6 +204,7 @@ func (m *MemStore) Anker(env string) (string, error) {
 }
 
 func (m *MemStore) Ablegen(r Report, e Einwilligung) (Abgelegt, error) {
+	r.Einwilligung = &e
 	if err := PruefeAblage(r, e, time.Now().UTC()); err != nil {
 		return Abgelegt{}, err
 	}
