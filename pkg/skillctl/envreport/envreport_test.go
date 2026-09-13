@@ -18,6 +18,12 @@ func gueltigerBericht() Report {
 		TakenAt:         time.Date(2026, 9, 13, 8, 0, 0, 0, time.UTC),
 		Posture:         PostureOK,
 		AufbewahrungBis: time.Date(2027, 9, 13, 0, 0, 0, 0, time.UTC),
+		Einwilligung: &Einwilligung{
+			Principal: "kamir",
+			Erteilt:   time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC),
+			Art:       "selbst",
+			Beleg:     "Testvorrichtung",
+		},
 		Zeilen: []Zeile{{
 			Skill: SkillRef{Name: "durchdenken", Tier: "user", Digest: "sha256:aa"},
 			Trust: Trust{State: "OK"},

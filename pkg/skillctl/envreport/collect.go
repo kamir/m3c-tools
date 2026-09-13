@@ -39,6 +39,10 @@ type Optionen struct {
 	Jetzt           time.Time
 	AufbewahrungBis time.Time
 	Seq             SeqQuelle
+	// Einwilligung gehoert in den Bericht, sobald es ihn gibt, nicht erst bei
+	// der Ablage: ein Bericht ohne Rechtsgrundbeleg soll gar nicht erst
+	// entstehen koennen.
+	Einwilligung Einwilligung
 }
 
 // AusAudit uebersetzt einen audit.Report in einen Skill-Env-Report.
@@ -94,6 +98,7 @@ func AusAudit(r audit.Report, o Optionen) (Report, error) {
 		TakenAt:         o.Jetzt.UTC(),
 		Posture:         lageAus(zeilen),
 		AufbewahrungBis: o.AufbewahrungBis.UTC(),
+		Einwilligung:    &o.Einwilligung,
 		Zeilen:          zeilen,
 	}
 	if err := rep.Validate(); err != nil {

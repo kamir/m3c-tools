@@ -23,7 +23,9 @@ import (
 
 	er1cfgpkg "github.com/kamir/m3c-tools/pkg/er1"
 	"github.com/kamir/m3c-tools/pkg/skillctl/audit"
+	"github.com/kamir/m3c-tools/pkg/skillctl/device"
 	"github.com/kamir/m3c-tools/pkg/skillctl/envreport"
+	"github.com/kamir/m3c-tools/pkg/skillctl/homeroot"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/scanner"
 )
@@ -113,6 +115,9 @@ func runEnvreport(args []string, stdout, stderr io.Writer) int {
 	ar := audit.Compute(inv, resolveMinimum(""))
 
 	jetzt := time.Now().UTC()
+	ein := envreport.Einwilligung{
+		Principal: *prinzipal, Erteilt: jetzt, Art: *art, Beleg: *beleg,
+	}
 	// Im Trockenlauf ist die Nummer 1: sie kommt sonst aus der Ablage, und
 	// die wird hier absichtlich nicht befragt.
 	rep, err := envreport.AusAudit(ar, envreport.Optionen{
@@ -121,15 +126,13 @@ func runEnvreport(args []string, stdout, stderr io.Writer) int {
 		Jetzt:           jetzt,
 		AufbewahrungBis: jetzt.AddDate(0, 0, *tage),
 		Seq:             envreport.FesteSeq(1),
+		Einwilligung:    ein,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "skillctl envreport: %v\n", err)
 		return exitGeneric
 	}
 
-	ein := envreport.Einwilligung{
-		Principal: *prinzipal, Erteilt: jetzt, Art: *art, Beleg: *beleg,
-	}
 	// Die Grenzen laufen auch im Trockenlauf. Ein Trockenlauf, der andere
 	// Regeln kennt als der Ernstfall, belegt nichts ueber den Ernstfall.
 	if err := envreport.PruefeAblage(rep, ein, jetzt); err != nil {
@@ -181,6 +184,29 @@ func runEnvreport(args []string, stdout, stderr io.Writer) int {
 		Ls:        er1Adapter{cfg},
 		Jetzt:     func() time.Time { return time.Now().UTC() },
 	}
+	// Signieren, BEVOR die Nummer gezogen wird: ein Bericht, den wir nicht
+	// unterschreiben koennen, soll auch keine Nummer verbrauchen.
+	//
+	// Signierer ist der Geraeteschluessel. Das ist die richtige Zurechnung:
+	// die Aussage lautet "diese Maschine hat das zu diesem Zeitpunkt so
+	// vorgefunden", nicht "ein Mensch behauptet es".
+	hd, herr := homeroot.UserHome()
+	if herr != nil {
+		fmt.Fprintf(stderr, "skillctl envreport: home: %v\n", herr)
+		return exitGeneric
+	}
+	dk, err := device.Load(hd)
+	if err != nil {
+		fmt.Fprintf(stderr, "skillctl envreport: kein Geraeteschluessel: %v\n"+
+			"Ein Bericht ohne Signatur ist eine Behauptung (SPEC-0428 E1). "+
+			"Lege einen an, bevor du schreibst.\n", err)
+		return exitGeneric
+	}
+	if err := envreport.Signiere(dk, &rep, dk.KeyID()); err != nil {
+		fmt.Fprintf(stderr, "skillctl envreport: signieren: %v\n", err)
+		return exitGeneric
+	}
+
 	// Die Nummer kommt jetzt aus der Ablage und nicht mehr aus dem Trockenlauf.
 	seq, err := store.NaechsteSeq(env.String())
 	if err != nil {
@@ -188,6 +214,12 @@ func runEnvreport(args []string, stdout, stderr io.Writer) int {
 		return exitGeneric
 	}
 	rep.Seq = seq
+	// Die Seq geht in die Signatur ein, also nach dem Setzen erneut
+	// unterschreiben. Sonst signierten wir einen Bericht, den es nie gab.
+	if err := envreport.Signiere(dk, &rep, dk.KeyID()); err != nil {
+		fmt.Fprintf(stderr, "skillctl envreport: signieren: %v\n", err)
+		return exitGeneric
+	}
 
 	fmt.Fprintf(stdout, "\nSchreibe nach ER1: Kontext %s, report_seq %d.\n", ctxID, seq)
 	abgelegt, err := store.Ablegen(rep, ein)
@@ -226,6 +258,10 @@ type er1Adapter struct{ cfg *er1cfgpkg.Config }
 
 func (a er1Adapter) UploadText(body, filename, tags, contentType, contextID string) (string, error) {
 	return registry.UploadTextItem(a.cfg, body, filename, tags, contentType, contextID)
+}
+
+func (a er1Adapter) LadeRumpf(contextID, docID string) (string, error) {
+	return registry.LoadItemBody(a.cfg, contextID, docID)
 }
 
 func (a er1Adapter) ListByTags(contextID string, tags []string) ([]envreport.RohPosten, error) {

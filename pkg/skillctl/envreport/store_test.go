@@ -22,14 +22,16 @@ func consent(principal string) Einwilligung {
 }
 
 func bericht(seq int) Report {
-	e, _ := NeueENV("kup", "kamir", "MacBook-Pro-von-Mirko")
+	env, _ := NeueENV("kup", "kamir", "MacBook-Pro-von-Mirko")
+	e := consent("kamir")
 	return Report{
-		ENV:             e.String(),
+		ENV:             env.String(),
 		Principal:       "kamir",
 		Seq:             seq,
 		TakenAt:         time.Date(2026, 9, 13, 8, 0, 0, 0, time.UTC).Add(time.Duration(seq) * time.Hour),
 		Posture:         PostureOK,
 		AufbewahrungBis: time.Date(2027, 9, 13, 0, 0, 0, 0, time.UTC),
+		Einwilligung:    &e,
 		Zeilen:          []Zeile{{Skill: SkillRef{Name: "durchdenken"}, Trust: Trust{State: "OK"}}},
 	}
 }

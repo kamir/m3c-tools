@@ -7,6 +7,7 @@
 package envreport
 
 import (
+	"crypto/ed25519"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -27,7 +28,17 @@ func (f *fakeUp) UploadText(body, filename, tags, contentType, ctxID string) (st
 	return "doc-" + filename, nil
 }
 
-type fakeLs struct{ items []RohPosten }
+type fakeLs struct {
+	items   []RohPosten
+	koerper map[string]string
+}
+
+func (f *fakeLs) LadeRumpf(ctxID, docID string) (string, error) {
+	if b, ok := f.koerper[docID]; ok {
+		return b, nil
+	}
+	return "", errors.New("kein Rumpf fuer " + docID)
+}
 
 func (f *fakeLs) ListByTags(ctxID string, tags []string) ([]RohPosten, error) {
 	var out []RohPosten
@@ -206,4 +217,78 @@ func TestER1_ErfuelltDenStoreVertrag(t *testing.T) {
 	var _ Store = (*MemStore)(nil)
 	var _ SeqQuelle = (*ER1Store)(nil)
 	var _ SeqQuelle = (*MemStore)(nil)
+}
+
+// --- T-03: die Leseseite prueft, statt zu glauben ------------------------
+
+func signierterRumpf(t *testing.T, priv ed25519.PrivateKey, mutieren func(*Report)) string {
+	t.Helper()
+	r := bericht(1)
+	if err := Signiere(RohSchluessel(priv), &r, "id:kamir@m3c"); err != nil {
+		t.Fatal(err)
+	}
+	if mutieren != nil {
+		mutieren(&r) // NACH dem Signieren: genau der Angriff, um den es geht
+	}
+	b, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func TestT03_UnveraenderterPostenLiestSichZurueck(t *testing.T) {
+	pub, priv := schluessel(t)
+	ls := &fakeLs{koerper: map[string]string{"doc-1": signierterRumpf(t, priv, nil)}}
+	r, err := store(&fakeUp{}, ls).Hole("doc-1", pub)
+	if err != nil {
+		t.Fatalf("gueltiger Posten abgelehnt: %v", err)
+	}
+	if r.Seq != 1 {
+		t.Fatalf("falscher Bericht geladen: %+v", r.Seq)
+	}
+}
+
+func TestT03_NachtraeglichGeaenderterRumpfWirdAbgelehnt(t *testing.T) {
+	pub, priv := schluessel(t)
+	faelle := map[string]func(*Report){
+		"Vertrauenszustand gedreht": func(r *Report) { r.Zeilen[0].Trust.State = "BROKEN" },
+		"Skill hinzugefuegt": func(r *Report) {
+			r.Zeilen = append(r.Zeilen, Zeile{Skill: SkillRef{Name: "x"}, Trust: Trust{State: "OK"}})
+		},
+		"Prinzipal getauscht":    func(r *Report) { r.Principal = "jemand-anders" },
+		"Einwilligung geschoent": func(r *Report) { r.Einwilligung.Beleg = "angeblich zugestimmt" },
+	}
+	for name, mut := range faelle {
+		t.Run(name, func(t *testing.T) {
+			ls := &fakeLs{koerper: map[string]string{"doc-1": signierterRumpf(t, priv, mut)}}
+			if _, err := store(&fakeUp{}, ls).Hole("doc-1", pub); err == nil {
+				t.Fatal("der manipulierte Posten wurde angenommen")
+			}
+		})
+	}
+}
+
+func TestT03_OhneSchluesselWirdDieSchwaechereAuskunftGemeldet(t *testing.T) {
+	_, priv := schluessel(t)
+	ls := &fakeLs{koerper: map[string]string{"doc-1": signierterRumpf(t, priv, nil)}}
+	r, err := store(&fakeUp{}, ls).Hole("doc-1", nil)
+	if !errors.Is(err, ErrSignaturUngeprueft) {
+		t.Fatalf("ohne Schluessel: %v, erwartet ErrSignaturUngeprueft", err)
+	}
+	if r.Seq != 1 {
+		t.Fatal("der Bericht wurde trotz Einschraenkung nicht geliefert")
+	}
+}
+
+func TestT03_AltpostenOhneEinwilligungWirdAbgelehnt(t *testing.T) {
+	pub, _ := schluessel(t)
+	alt := `{"env":"env:kup/kamir/0123456789abcdef","principal":"kamir","report_seq":1,` +
+		`"taken_at":"2026-09-13T08:00:00Z","posture":"drift",` +
+		`"aufbewahrung_bis":"2027-09-13T00:00:00Z","zeilen":[]}`
+	ls := &fakeLs{koerper: map[string]string{"alt": alt}}
+	_, err := store(&fakeUp{}, ls).Hole("alt", pub)
+	if !errors.Is(err, ErrEinwilligungNichtImRumpf) {
+		t.Fatalf("Altposten: %v, erwartet ErrEinwilligungNichtImRumpf", err)
+	}
 }
