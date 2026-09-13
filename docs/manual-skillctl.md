@@ -706,9 +706,18 @@ different rules than the real thing proves nothing about the real thing.
 | `-source claude\|user\|plugins\|all` | Collection scope (default: all). |
 | `-json` | Report as JSON instead of a table. |
 | `-schreiben` | Store the report. Without it: dry run. |
+| `-er1-target prod\|stage\|local` | Which ER1 to write to (default: prod). Only read with `-schreiben`. |
+| `-er1-context <id>` | ER1 context (default: `<mandant>___skillenv`). Only read with `-schreiben`. |
 
 The host never appears in clear text: the environment address carries a salted
 hash, and there is deliberately no function that resolves it back.
+
+With `-schreiben` the report is stored as an ER1 item carrying the eight marks of
+SPEC-0428 E3, hung off the environment's anchor item via `link/parent`. The store
+is **append-only**: an already-used `(env, seq)` is refused, never overwritten.
+After the write the verb **reads the report back** and fails if it cannot find it,
+because a write that only claims to have written is the expensive failure in this
+class.
 
 ### `publish`: admit / attest / revoke via ER1 (`self` registry)
 
