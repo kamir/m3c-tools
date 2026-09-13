@@ -19,6 +19,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/skillctl/govlevel"
 )
 
 var (
@@ -168,7 +170,22 @@ type Verstoss struct {
 	Info  string
 }
 
-var ampelRang = map[string]int{"green": 3, "yellow": 2, "red": 1}
+// ampelRang bewertet die KANONISCHEN Stufen. Die Normalisierung kommt aus
+// pkg/skillctl/govlevel, dem einen Wortschatz (SPEC-0188 Abschnitt 4.4); dieses
+// Paket fuehrt bewusst keinen zweiten.
+//
+// Ein Wert, den govlevel nicht kennt, gilt als UNBEURTEILT und nicht als
+// "unter dem Boden". Gemessen am 2026-09-13 auf einer echten Maschine: von 16
+// Faehigkeiten mit gesetzter Stufe tragen drei die Emoji-Form (zwei mal 🟡,
+// einmal 🟢), die govlevel.Normalize nicht aufloest. Sie als Unterschreitung
+// zu melden waere ein Fehlalarm; unbeurteilt ist die wahre Aussage, denn das
+// System kann sie tatsaechlich nicht beurteilen. Die Abweichung selbst ist ein
+// eigener Befund und gehoert nicht hierher repariert.
+var ampelRang = map[string]int{
+	govlevel.Green:  3,
+	govlevel.Yellow: 2,
+	govlevel.Red:    1,
+}
 
 // Pruefe haelt einen Bericht gegen ein Regelwerk.
 func Pruefe(r Report, w Regelwerk) []Verstoss {
@@ -187,10 +204,13 @@ func Pruefe(r Report, w Regelwerk) []Verstoss {
 	if w.AmpelBoden != "" {
 		boden := ampelRang[w.AmpelBoden]
 		for _, z := range r.Zeilen {
-			stufe := z.Policy.GovernanceFloor
-			if stufe == "" {
-				out = append(out, Verstoss{Art: "unbeurteilt", Skill: z.Skill.Name,
-					Info: "no governance level; unassessed is not green"})
+			stufe := govlevel.Normalize(z.Policy.GovernanceFloor)
+			if _, bekannt := ampelRang[stufe]; stufe == "" || !bekannt {
+				grund := "no governance level; unassessed is not green"
+				if stufe != "" {
+					grund = fmt.Sprintf("governance level %q is outside the canonical vocabulary; unassessed is not green", z.Policy.GovernanceFloor)
+				}
+				out = append(out, Verstoss{Art: "unbeurteilt", Skill: z.Skill.Name, Info: grund})
 				continue
 			}
 			if ampelRang[stufe] < boden {

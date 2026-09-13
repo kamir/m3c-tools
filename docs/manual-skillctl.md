@@ -679,6 +679,37 @@ read-only skills directory.
 
 ---
 
+### `envreport`: skill-env report for one regulated environment
+
+```bash
+skillctl envreport --mandant <id> --prinzipal <id> --einwilligung-art <selbst|eingesetzt> \
+                   --einwilligung-beleg <text> --aufbewahrung-tage <n> [flags]
+```
+
+Collects what `audit` sees into a **skill-env report** (SPEC-0428): one immutable,
+dated statement of what a single environment held at one moment. The body is the
+SPEC-0351 §5.1 `posture.snapshot` payload, verbatim.
+
+**A dry run is the default.** Without `-schreiben` nothing is stored. The usual
+default is the other way round; it is wrong here, because a slip creates personal
+data and not merely a file. The report boundaries (hashed host, no source text
+off-box, consent, retention deadline) run in the dry run too: a dry run that knows
+different rules than the real thing proves nothing about the real thing.
+
+| Flag | Purpose |
+|------|---------|
+| `-mandant <id>` | Tenant of the environment. Required; salts the host hash. |
+| `-prinzipal <id>` | The person whose environment this is. Required. |
+| `-einwilligung-art selbst\|eingesetzt` | Consent kind. Required: whoever is observed must know. |
+| `-einwilligung-beleg <text>` | What the consent or notification hangs on. Required; consent without evidence is not consent. |
+| `-aufbewahrung-tage <n>` | Retention in days. Required, no default: a statement about a person's working behaviour that never expires is not retention. |
+| `-source claude\|user\|plugins\|all` | Collection scope (default: all). |
+| `-json` | Report as JSON instead of a table. |
+| `-schreiben` | Store the report. Without it: dry run. |
+
+The host never appears in clear text: the environment address carries a salted
+hash, and there is deliberately no function that resolves it back.
+
 ### `publish`: admit / attest / revoke via ER1 (`self` registry)
 
 ```bash
