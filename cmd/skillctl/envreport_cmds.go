@@ -18,10 +18,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
+	er1cfgpkg "github.com/kamir/m3c-tools/pkg/er1"
 	"github.com/kamir/m3c-tools/pkg/skillctl/audit"
 	"github.com/kamir/m3c-tools/pkg/skillctl/envreport"
+	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/scanner"
 )
 
@@ -58,6 +61,8 @@ func runEnvreport(args []string, stdout, stderr io.Writer) int {
 	source := fs.String("source", "all", "claude | user | plugins | all")
 	alsJSON := fs.Bool("json", false, "Bericht als JSON")
 	schreiben := fs.Bool("schreiben", false, "ablegen statt nur zeigen")
+	er1Target := fs.String("er1-target", "prod", "prod | stage | local")
+	er1Context := fs.String("er1-context", "", "ER1-Kontext (Vorgabe: <mandant>___skillenv)")
 
 	if err := fs.Parse(args); err != nil {
 		return exitUsage
@@ -145,11 +150,94 @@ func runEnvreport(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	fmt.Fprintf(stderr, "skillctl envreport: --schreiben ist noch nicht verdrahtet.\n"+
-		"Der Ablagepfad (pkg/skillctl/envreport.ER1Store) ist gebaut und geprueft,\n"+
-		"die Verdrahtung an die ER1-Zugangsdaten fehlt bewusst noch: der erste\n"+
-		"echte Bericht ist ein Checkpoint und kein Nebeneffekt eines Flags.\n")
-	return exitGeneric
+	// --- Ab hier verlaesst ein Personendatum die Maschine. ---------------
+	cfg, err := resolveER1Config(*er1Target)
+	if err != nil {
+		fmt.Fprintf(stderr, "skillctl envreport: %v\n", err)
+		return exitGeneric
+	}
+	// Der ER1-Kontext ist NICHT der Mandant der ENV-Adresse. Der Mandant sagt,
+	// zu welcher Organisation die Umgebung gehoert; der Kontext sagt, wessen
+	// Speicher sie benutzt, und der gehoert in ER1 immer dem angemeldeten
+	// Nutzer: `_owner(ctx_id)` ist alles vor "___" und wird gegen den
+	// Prinzipal geprueft (aims-core memory_authz).
+	//
+	// Erster Lauf am 2026-09-13 lief genau hier auf: die Vorgabe war
+	// `<mandant>___skillenv`, also `kup___skillenv`, und der Besitzer waere
+	// damit "kup" gewesen statt der angemeldete Nutzer. Der Server antwortete
+	// mit HTTP 500 statt mit 403 (eigener Befund, siehe Bericht).
+	ctxID := ownerPrefixedContext(*er1Context)
+	if ctxID == "" {
+		ctxID = ownerPrefixedContext("skillenv")
+	}
+	if !strings.Contains(ctxID, "___") {
+		fmt.Fprintf(stderr, "skillctl envreport: kein ER1-Besitzer aufloesbar fuer den Kontext %q. "+
+			"Setze --er1-context <besitzer>___skillenv oder ER1_USER_ID.\n", ctxID)
+		return exitUsage
+	}
+	store := &envreport.ER1Store{
+		ContextID: ctxID,
+		Up:        er1Adapter{cfg},
+		Ls:        er1Adapter{cfg},
+		Jetzt:     func() time.Time { return time.Now().UTC() },
+	}
+	// Die Nummer kommt jetzt aus der Ablage und nicht mehr aus dem Trockenlauf.
+	seq, err := store.NaechsteSeq(env.String())
+	if err != nil {
+		fmt.Fprintf(stderr, "skillctl envreport: naechste report_seq: %v\n", err)
+		return exitGeneric
+	}
+	rep.Seq = seq
+
+	fmt.Fprintf(stdout, "\nSchreibe nach ER1: Kontext %s, report_seq %d.\n", ctxID, seq)
+	abgelegt, err := store.Ablegen(rep, ein)
+	if err != nil {
+		fmt.Fprintf(stderr, "skillctl envreport: %v\n", err)
+		return exitGeneric
+	}
+	fmt.Fprintf(stdout, "Abgelegt: %s (seq %d, %s)\n", abgelegt.DocID, abgelegt.Seq, abgelegt.Digest)
+
+	// Nachpruefen statt melden: ein Schreibvorgang, der nur behauptet
+	// geschrieben zu haben, ist in dieser Klasse der teuerste Fehler.
+	zurueck, err := store.Liste(env.String())
+	if err != nil {
+		fmt.Fprintf(stderr, "skillctl envreport: Nachpruefung fehlgeschlagen: %v\n", err)
+		return exitGeneric
+	}
+	gefunden := false
+	for _, a := range zurueck {
+		if a.Seq == abgelegt.Seq {
+			gefunden = true
+		}
+	}
+	if !gefunden {
+		fmt.Fprintf(stderr, "skillctl envreport: der abgelegte Bericht liest sich nicht zurueck. "+
+			"Der Schreibvorgang meldete Erfolg; die Ablage kennt ihn nicht.\n")
+		return exitGeneric
+	}
+	fmt.Fprintf(stdout, "Nachgeprueft: %d Bericht(e) in dieser Umgebung.\n", len(zurueck))
+	return 0
+}
+
+// er1Adapter verbindet den ER1Store mit dem Transport der Registry. Er ist
+// bewusst duenn: der Store kennt kein HTTP, und die Registry kennt keine
+// Berichte.
+type er1Adapter struct{ cfg *er1cfgpkg.Config }
+
+func (a er1Adapter) UploadText(body, filename, tags, contentType, contextID string) (string, error) {
+	return registry.UploadTextItem(a.cfg, body, filename, tags, contentType, contextID)
+}
+
+func (a er1Adapter) ListByTags(contextID string, tags []string) ([]envreport.RohPosten, error) {
+	items, err := registry.ListItemsByTags(a.cfg, contextID, tags)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]envreport.RohPosten, 0, len(items))
+	for _, it := range items {
+		out = append(out, envreport.RohPosten{DocID: it.DocID, Tags: it.Tags})
+	}
+	return out, nil
 }
 
 func emitEnvreport(r envreport.Report, w io.Writer) {
