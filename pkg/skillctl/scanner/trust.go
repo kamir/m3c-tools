@@ -1,10 +1,17 @@
 // Trust cross-reference for SPEC-0189 §6 (`--with-trust`).
 //
-// For each scanned skill, look for a sibling <name>-<version>.skb in the
-// same parent directory (or in ../.archive/) per Decision D1: the on-disk
-// `.skb` is the canonical signal. There is no separate per-machine
-// install ledger. Recompute the bundle digest, look for the matching
-// detached author signature, and annotate the descriptor.
+// For each scanned skill, look for a sibling bundle in the same parent
+// directory (or in ../.archive/) per Decision D1: the on-disk `.skb` is the
+// canonical signal. There is no separate per-machine install ledger.
+// Recompute the bundle digest, look for the matching detached author
+// signature, and annotate the descriptor.
+//
+// Two spellings, one meaning (BUG-0253): `install` writes
+// <name>-<version>.skb, while `export-bundle`, `export-kit` and
+// `publish --pack` write <name>@<version>.skb. Both are this tool's own
+// output, so the scanner reads both. Until 2026-09-13 it read only the
+// hyphen form and reported every @-form bundle on disk as "no sibling
+// .skb", which is why a machine full of bundles audited as UNVERIFIED.
 //
 // "verified": .skb present, digest matches the digest in the sig
 // filename, and the sig file is the expected 64 raw bytes. The author
@@ -134,14 +141,21 @@ func annotateSkillTrust(sk *model.SkillDescriptor) *model.BundleAttestation {
 	}
 }
 
-// findSiblingSKB looks for `<name>-*.skb` in `parent` and `parent/../.archive/`.
-// Returns the first match. If multiple versions exist, picks the
-// lex-largest (a rough proxy for "newest" without parsing semver).
+// findSiblingSKB looks for `<name>-<version>.skb` or `<name>@<version>.skb`
+// in `parent` and `parent/../.archive/`. Both separators are accepted because
+// this tool writes both (BUG-0253); which one a file carries says only which
+// command produced it, never anything about its trustworthiness.
+//
+// If several versions exist the lex-largest VERSION TOKEN wins, a rough proxy
+// for "newest" without parsing semver. The comparison is on the token and not
+// on the whole filename on purpose: `@` sorts above `-`, so comparing whole
+// names would let `foo@0.0.1.skb` beat `foo-9.9.9.skb` on the separator alone.
+// Equal tokens fall back to the filename so the result stays deterministic.
 func findSiblingSKB(parent, name string) (string, bool) {
 	candidates := []string{parent, filepath.Join(filepath.Dir(parent), ".archive")}
-	pattern := regexp.MustCompile(`^` + regexp.QuoteMeta(name) + `-.*\.skb$`)
+	pattern := regexp.MustCompile(`^` + regexp.QuoteMeta(name) + `[-@](.+)\.skb$`)
 
-	var best string
+	var best, bestToken string
 	for _, dir := range candidates {
 		entries, err := os.ReadDir(dir)
 		if err != nil {
@@ -151,19 +165,58 @@ func findSiblingSKB(parent, name string) (string, bool) {
 			if e.IsDir() {
 				continue
 			}
-			if !pattern.MatchString(e.Name()) {
+			m := pattern.FindStringSubmatch(e.Name())
+			if m == nil || !isSKBVersionToken(m[1]) {
 				continue
 			}
+			token := m[1]
 			candidate := filepath.Join(dir, e.Name())
-			if best == "" || strings.Compare(e.Name(), filepath.Base(best)) > 0 {
-				best = candidate
+			switch {
+			case best == "":
+			case strings.Compare(token, bestToken) > 0:
+			case token == bestToken && strings.Compare(e.Name(), filepath.Base(best)) > 0:
+			default:
+				continue
 			}
+			best, bestToken = candidate, token
 		}
 	}
 	if best == "" {
 		return "", false
 	}
 	return best, true
+}
+
+// isSKBVersionToken reports whether tok, the part of a bundle filename between
+// the separator and `.skb`, is a version or a digest rather than the
+// continuation of a LONGER skill name.
+//
+// Without this guard a prefix match binds a skill to its neighbour's bundle:
+// the skill `review` would claim `review-plan@0.0.0.skb`, and `deploy` would
+// claim `deploy-verified@0.0.0.skb`. Both pairs exist in the shipped skill set,
+// so this is not a theoretical case; it would have handed one skill a digest
+// computed over another skill's bytes.
+//
+// The three writers in this tool produce exactly three token shapes: a semver
+// (`0.0.0`, `1.2.3-rc1`), a `v`-prefixed semver (`v0.5.0`), and the sanitized
+// digest `sha256_<hex>` that install stages. A skill-name continuation starts
+// with a letter that is none of these.
+func isSKBVersionToken(tok string) bool {
+	if tok == "" {
+		return false
+	}
+	if strings.HasPrefix(tok, "sha256_") {
+		return len(tok) > len("sha256_")
+	}
+	c := tok[0]
+	if c >= '0' && c <= '9' {
+		return true
+	}
+	// `v1.2.3`, but not `verified`.
+	if (c == 'v' || c == 'V') && len(tok) > 1 && tok[1] >= '0' && tok[1] <= '9' {
+		return true
+	}
+	return false
 }
 
 // computeSKBDigest streams the file through SHA-256 and returns the
