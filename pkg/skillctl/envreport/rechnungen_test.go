@@ -289,3 +289,37 @@ func TestSelbstvergleichBrauchtKeineFreigabe(t *testing.T) {
 		t.Fatalf("der Vergleich zweier eigener Maschinen verlangte eine Freigabe: %v", err)
 	}
 }
+
+// --- Der Befund vom 2026-09-13: die Emoji-Form ------------------------
+
+// Auf einer echten Maschine tragen drei von 16 Faehigkeiten mit gesetzter
+// Stufe die Emoji-Form. govlevel.Normalize loest sie nicht auf. Sie als
+// Unterschreitung zu melden waere ein Fehlalarm.
+func TestUnbekannteAmpelformIstUnbeurteiltUndKeinVerstoss(t *testing.T) {
+	r := berichtMit(1, Zeile{
+		Skill:  SkillRef{Name: "braindump-sync"},
+		Trust:  Trust{State: "OK"},
+		Policy: Policy{GovernanceFloor: "\U0001F7E1"}, // gelber Kreis
+	})
+	v := Pruefe(r, Regelwerk{AmpelBoden: "green"})
+	if len(v) != 1 {
+		t.Fatalf("erwartet genau einen Befund, sind %d: %+v", len(v), v)
+	}
+	if v[0].Art != "unbeurteilt" {
+		t.Fatalf("Emoji-Stufe als %q gemeldet, erwartet unbeurteilt", v[0].Art)
+	}
+	if !strings.Contains(v[0].Info, "canonical vocabulary") {
+		t.Fatalf("die Meldung nennt den Grund nicht: %q", v[0].Info)
+	}
+}
+
+func TestAmpelIstSchreibungsunabhaengig(t *testing.T) {
+	r := berichtMit(1, Zeile{
+		Skill:  SkillRef{Name: "x"},
+		Trust:  Trust{State: "OK"},
+		Policy: Policy{GovernanceFloor: "  GREEN "},
+	})
+	if v := Pruefe(r, Regelwerk{AmpelBoden: "green"}); len(v) != 0 {
+		t.Fatalf("GREEN mit Leerzeichen nicht erkannt: %+v", v)
+	}
+}
