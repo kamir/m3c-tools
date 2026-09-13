@@ -115,32 +115,70 @@ func lageAus(zeilen []Zeile) Posture {
 	return lage
 }
 
-// FehlendeSeq nennt die Luecken in einer Folge erhobener Nummern (AC-07).
+// FehlendeSeq nennt die Luecken INNERHALB des aufbewahrten Fensters (AC-07).
 //
-// Eine Luecke bedeutet: ein Bericht fehlt. Das ist erkennbar, OHNE die
-// Berichte zu zaehlen, und genau darum gibt es die laufende Nummer. Ein
-// Aufbewahrungssystem, dem man das Fehlen nicht ansieht, belegt nichts.
+// Nur innerhalb: alles unterhalb der niedrigsten vorhandenen Nummer ist nicht
+// fehlend, sondern NICHT MEHR AUFBEWAHRT, und das ist eine andere Aussage.
 //
-// geloescht nennt die Nummern, die absichtlich entfernt wurden (T-05). Eine
-// Loeschung ist KEINE fehlende Erhebung, sonst meldete jede rechtmaessige
-// Loeschung fuer immer einen Defekt.
+// Der Unterschied ist nicht theoretisch. Die erste Fassung lief von 1 bis zur
+// hoechsten Nummer und meldete nach jedem rechtmaessigen Aufbewahrungslauf den
+// gesamten verfallenen Anfang als Luecke: aus [3 4 5] wurde die Meldung [1 2].
+// Ein Pruefer, der bei ordnungsgemaessem Betrieb rot meldet, wird nach dem
+// dritten Mal ignoriert, und dann faellt die echte Luecke auch nicht mehr auf.
+//
+// Nebenwirkung, und sie ist erwuenscht: fuer den Normalfall braucht es KEIN
+// Loeschprotokoll. Ein Verzeichnis darueber, was von wem geloescht wurde, waere
+// selbst ein Personendatum, und zwar eines, das die Loeschung ueberlebt.
+//
+// geloescht bleibt fuer den Fall, dass mitten im Fenster etwas absichtlich
+// entfernt wurde und ein Beleg dafuer vorliegt.
 func FehlendeSeq(vorhanden []int, geloescht map[int]bool) []int {
 	if len(vorhanden) == 0 {
 		return nil
 	}
+	niedrigste, hoechste := vorhanden[0], vorhanden[0]
 	hat := make(map[int]bool, len(vorhanden))
-	hoechste := 0
 	for _, s := range vorhanden {
 		hat[s] = true
+		if s < niedrigste {
+			niedrigste = s
+		}
 		if s > hoechste {
 			hoechste = s
 		}
 	}
 	var luecken []int
-	for i := 1; i < hoechste; i++ {
+	for i := niedrigste + 1; i < hoechste; i++ {
 		if !hat[i] && !geloescht[i] {
 			luecken = append(luecken, i)
 		}
 	}
 	return luecken
+}
+
+// Fenster beschreibt, was von einer Umgebung noch aufbewahrt wird.
+type Fenster struct {
+	Von, Bis int   // niedrigste und hoechste aufbewahrte Nummer, 0 wenn leer
+	Luecken  []int // fehlende Nummern INNERHALB des Fensters
+	Anzahl   int
+}
+
+// FensterAus bildet das Aufbewahrungsfenster ab. Es macht die Unterscheidung
+// sichtbar, die FehlendeSeq intern trifft: was fehlt, und was nur nicht mehr
+// aufbewahrt wird.
+func FensterAus(vorhanden []int, geloescht map[int]bool) Fenster {
+	f := Fenster{Anzahl: len(vorhanden), Luecken: FehlendeSeq(vorhanden, geloescht)}
+	if len(vorhanden) == 0 {
+		return f
+	}
+	f.Von, f.Bis = vorhanden[0], vorhanden[0]
+	for _, s := range vorhanden {
+		if s < f.Von {
+			f.Von = s
+		}
+		if s > f.Bis {
+			f.Bis = s
+		}
+	}
+	return f
 }
