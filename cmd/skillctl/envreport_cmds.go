@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	er1cfgpkg "github.com/kamir/m3c-tools/pkg/er1"
@@ -155,9 +156,24 @@ func runEnvreport(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "skillctl envreport: %v\n", err)
 		return exitGeneric
 	}
-	ctxID := *er1Context
+	// Der ER1-Kontext ist NICHT der Mandant der ENV-Adresse. Der Mandant sagt,
+	// zu welcher Organisation die Umgebung gehoert; der Kontext sagt, wessen
+	// Speicher sie benutzt, und der gehoert in ER1 immer dem angemeldeten
+	// Nutzer: `_owner(ctx_id)` ist alles vor "___" und wird gegen den
+	// Prinzipal geprueft (aims-core memory_authz).
+	//
+	// Erster Lauf am 2026-09-13 lief genau hier auf: die Vorgabe war
+	// `<mandant>___skillenv`, also `kup___skillenv`, und der Besitzer waere
+	// damit "kup" gewesen statt der angemeldete Nutzer. Der Server antwortete
+	// mit HTTP 500 statt mit 403 (eigener Befund, siehe Bericht).
+	ctxID := ownerPrefixedContext(*er1Context)
 	if ctxID == "" {
-		ctxID = *mandant + "___skillenv"
+		ctxID = ownerPrefixedContext("skillenv")
+	}
+	if !strings.Contains(ctxID, "___") {
+		fmt.Fprintf(stderr, "skillctl envreport: kein ER1-Besitzer aufloesbar fuer den Kontext %q. "+
+			"Setze --er1-context <besitzer>___skillenv oder ER1_USER_ID.\n", ctxID)
+		return exitUsage
 	}
 	store := &envreport.ER1Store{
 		ContextID: ctxID,
