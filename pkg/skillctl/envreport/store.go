@@ -252,3 +252,33 @@ func Luecken(s Store, env string, geloescht map[int]bool) ([]int, error) {
 	}
 	return FehlendeSeq(seqs, geloescht), nil
 }
+
+// Entferne loescht einen Bericht aus dem MemStore (Loescher-Schnittstelle).
+func (m *MemStore) Entferne(env string, seq int) error {
+	items := m.items[env]
+	for i, a := range items {
+		if a.Seq == seq {
+			m.items[env] = append(items[:i:i], items[i+1:]...)
+			return nil
+		}
+	}
+	return fmt.Errorf("MemStore: env %s has no seq %d", env, seq)
+}
+
+// Umgebungen nennt die Umgebungen eines Prinzipals. Die einzige Stelle, an der
+// ueber Umgebungen hinweg gelesen wird, und sie dient allein der Loeschung:
+// eine Loeschung, die nicht alles findet, ist keine.
+func (m *MemStore) Umgebungen(principal string) ([]string, error) {
+	var out []string
+	for env := range m.items {
+		e, err := ParseENV(env)
+		if err != nil {
+			continue
+		}
+		if e.Prinzipal == principal {
+			out = append(out, env)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
