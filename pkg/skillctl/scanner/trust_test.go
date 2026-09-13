@@ -12,8 +12,17 @@ import (
 )
 
 // makeBundleDir builds a Claude Code-conventional skill dir at <tier-root>/<name>
-// with SKILL.md frontmatter, plus optionally a sibling .skb + .author.sig.
+// with SKILL.md frontmatter, plus optionally a sibling .skb + .author.sig in
+// the hyphen spelling that `skillctl install` writes.
 func makeBundleDir(t *testing.T, tierRoot, name string, withBundle, validSig bool) {
+	t.Helper()
+	makeBundleDirSep(t, tierRoot, name, "-", withBundle, validSig)
+}
+
+// makeBundleDirSep is makeBundleDir with the separator spelled out: "-" is what
+// `install` writes, "@" is what `export-bundle`, `export-kit` and
+// `publish --pack` write. Both are this tool's own output (BUG-0253).
+func makeBundleDirSep(t *testing.T, tierRoot, name, sep string, withBundle, validSig bool) {
 	t.Helper()
 	skillDir := filepath.Join(tierRoot, name)
 	if err := os.MkdirAll(skillDir, 0o755); err != nil {
@@ -28,7 +37,7 @@ func makeBundleDir(t *testing.T, tierRoot, name string, withBundle, validSig boo
 	// Make a fake .skb (just some bytes: content doesn't matter for the
 	// digest-pattern check).
 	skbContent := []byte("fake .skb content for " + name)
-	skbPath := filepath.Join(tierRoot, name+"-1.0.0.skb")
+	skbPath := filepath.Join(tierRoot, name+sep+"1.0.0.skb")
 	if err := os.WriteFile(skbPath, skbContent, 0o644); err != nil {
 		t.Fatalf("write .skb: %v", err)
 	}
@@ -177,4 +186,170 @@ func TestAnnotateTrust_CacheByContentHash(t *testing.T) {
 	}
 	// Suppress unused-var warning.
 	_ = model.SkillTypeClaudeCodeSkill
+}
+
+// TestFindSiblingSKB_Spellings pins the matcher itself: both separators this
+// tool writes are found, and a bundle belonging to a LONGER skill name is not
+// claimed by the shorter one. The last case is why the match cannot be a plain
+// prefix: `review` and `review-plan` are both real skills that ship together.
+func TestFindSiblingSKB_Spellings(t *testing.T) {
+	cases := []struct {
+		desc  string
+		skill string
+		files []string
+		want  string // "" means: expect no match
+	}{
+		{
+			desc:  "hyphen spelling as written by install",
+			skill: "fetch-contract",
+			files: []string{"fetch-contract-1.0.0.skb"},
+			want:  "fetch-contract-1.0.0.skb",
+		},
+		{
+			desc:  "at spelling as written by export-bundle and publish --pack",
+			skill: "fetch-contract",
+			files: []string{"fetch-contract@1.0.0.skb"},
+			want:  "fetch-contract@1.0.0.skb",
+		},
+		{
+			desc:  "staged digest form from install_bundle",
+			skill: "fetch-contract",
+			files: []string{"fetch-contract-sha256_deadbeef.skb"},
+			want:  "fetch-contract-sha256_deadbeef.skb",
+		},
+		{
+			desc:  "another skill's bundle is not claimed, at spelling",
+			skill: "review",
+			files: []string{"review-plan@0.0.0.skb", "review-spec@0.0.0.skb"},
+			want:  "",
+		},
+		{
+			desc:  "another skill's bundle is not claimed, hyphen spelling",
+			skill: "deploy",
+			files: []string{"deploy-verified-0.0.0.skb"},
+			want:  "",
+		},
+		{
+			desc:  "no bundle at all",
+			skill: "hand-authored",
+			files: nil,
+			want:  "",
+		},
+		{
+			desc:  "newest version wins across the two spellings",
+			skill: "twin",
+			files: []string{"twin-0.1.0.skb", "twin@9.9.9.skb"},
+			want:  "twin@9.9.9.skb",
+		},
+		{
+			desc:  "and the separator alone does not decide it",
+			skill: "twin",
+			files: []string{"twin-9.9.9.skb", "twin@0.1.0.skb"},
+			want:  "twin-9.9.9.skb",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.desc, func(t *testing.T) {
+			root := t.TempDir()
+			parent := filepath.Join(root, "skills")
+			if err := os.MkdirAll(filepath.Join(parent, tc.skill), 0o755); err != nil {
+				t.Fatalf("mkdir: %v", err)
+			}
+			for _, f := range tc.files {
+				if err := os.WriteFile(filepath.Join(parent, f), []byte("bundle bytes"), 0o644); err != nil {
+					t.Fatalf("write %s: %v", f, err)
+				}
+			}
+			got, found := findSiblingSKB(parent, tc.skill)
+			if tc.want == "" {
+				if found {
+					t.Fatalf("findSiblingSKB matched %q, want no match", got)
+				}
+				return
+			}
+			if !found {
+				t.Fatalf("findSiblingSKB found nothing, want %q", tc.want)
+			}
+			if filepath.Base(got) != tc.want {
+				t.Errorf("findSiblingSKB = %q, want %q", filepath.Base(got), tc.want)
+			}
+		})
+	}
+}
+
+// TestAnnotateTrust_AtSpelling: the @-form reaches the same verdicts as the
+// hyphen form. Before BUG-0253 the @-form fell out one step earlier, at "no
+// sibling .skb on disk", and a bundle that was on disk read as absent.
+func TestAnnotateTrust_AtSpelling(t *testing.T) {
+	t.Run("signature present", func(t *testing.T) {
+		tmp := t.TempDir()
+		makeBundleDirSep(t, tmp, "fetch-contract", "@", true, true)
+
+		s := &Scanner{Roots: []ScanRoot{{Path: tmp, Tier: TierUser}}, WithTrust: true}
+		inv, err := s.Scan()
+		if err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		sk := inv.Skills[0]
+		if sk.Bundle == nil || sk.Bundle.TrustChain != TrustSignaturePresent {
+			t.Fatalf("trust_chain = %+v, want verified", sk.Bundle)
+		}
+		if filepath.Base(sk.Bundle.SKBPath) != "fetch-contract@1.0.0.skb" {
+			t.Errorf("SKBPath = %q, want the @-form bundle", sk.Bundle.SKBPath)
+		}
+	})
+
+	t.Run("signature missing", func(t *testing.T) {
+		// The state every locally exported bundle is actually in: the bundle
+		// is there, the detached author signature never was.
+		tmp := t.TempDir()
+		makeBundleDirSep(t, tmp, "accept", "@", false, false)
+		if err := os.WriteFile(filepath.Join(tmp, "accept@0.0.0.skb"), []byte("bundle bytes"), 0o644); err != nil {
+			t.Fatalf("write skb: %v", err)
+		}
+
+		s := &Scanner{Roots: []ScanRoot{{Path: tmp, Tier: TierUser}}, WithTrust: true}
+		inv, err := s.Scan()
+		if err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		sk := inv.Skills[0]
+		if sk.Bundle == nil || sk.Bundle.TrustChain != TrustBroken {
+			t.Fatalf("trust_chain = %+v, want broken", sk.Bundle)
+		}
+		if sk.Bundle.BundleDigest == "" {
+			t.Errorf("BundleDigest empty: the bundle was found, so it should have been hashed")
+		}
+	})
+}
+
+// TestAnnotateTrust_NeighbourBundleNotClaimed is the negative case end to end:
+// `review` sits next to `review-plan`'s bundle and must still report
+// unverified, not a digest computed over someone else's bytes.
+func TestAnnotateTrust_NeighbourBundleNotClaimed(t *testing.T) {
+	tmp := t.TempDir()
+	makeBundleDirSep(t, tmp, "review", "@", false, false)
+	makeBundleDirSep(t, tmp, "review-plan", "@", true, true)
+
+	s := &Scanner{Roots: []ScanRoot{{Path: tmp, Tier: TierUser}}, WithTrust: true}
+	inv, err := s.Scan()
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	for _, sk := range inv.Skills {
+		switch sk.Name {
+		case "review":
+			if sk.Bundle == nil || sk.Bundle.TrustChain != TrustUnverified {
+				t.Errorf("review trust_chain = %+v, want unverified", sk.Bundle)
+			}
+			if sk.Bundle != nil && sk.Bundle.SKBPath != "" {
+				t.Errorf("review claimed %q, which belongs to review-plan", sk.Bundle.SKBPath)
+			}
+		case "review-plan":
+			if sk.Bundle == nil || sk.Bundle.TrustChain != TrustSignaturePresent {
+				t.Errorf("review-plan trust_chain = %+v, want verified", sk.Bundle)
+			}
+		}
+	}
 }
