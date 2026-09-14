@@ -92,6 +92,20 @@ func annotateSkillTrust(sk *model.SkillDescriptor) *model.BundleAttestation {
 	parent := filepath.Dir(sk.SourcePath) // ~/.claude/skills/<name>'s parent (skills/)
 	skbPath, found := findSiblingSKB(parent, sk.Name)
 	if !found {
+		// BUG-0253 B2: der Installierer legt das Buendel NICHT neben den
+		// Ordner, sondern HINEIN (install.go stasht es als
+		// <name>/<name>-<ver>.skb mit 0600). findSiblingSKB sucht daneben
+		// und ueberspringt Verzeichnisse, also hat dieser Scanner bis zum
+		// 2026-09-14 an einer Stelle gesucht, an die kein Installierer je
+		// geschrieben hat.
+		//
+		// verify-installed liest laengst richtig und sagt es in der eigenen
+		// Fehlermeldung ("was this skill installed by skillctl install?").
+		// Hier wird dieselbe Stelle nachgeschaut, statt Dateinamen zu
+		// aendern, auf die anderes zeigt.
+		skbPath, found = findInstalledSKB(sk.SourcePath)
+	}
+	if !found {
 		return &model.BundleAttestation{
 			Signed:     false,
 			TrustChain: TrustUnverified,
@@ -108,16 +122,42 @@ func annotateSkillTrust(sk *model.SkillDescriptor) *model.BundleAttestation {
 		}
 	}
 
-	// Look for sibling sig file: <skbPath>.<digest>.author.sig.
+	// BUG-0253 B3: `verified` hatte keinen Erzeuger.
+	//
+	// Die detached `<skb>.<digest>.author.sig` schreibt AUSSCHLIESSLICH
+	// `skillctl sign`. Weder `install` noch `pull --install --trust-mode`
+	// legt sie an; trust-mode schreibt stattdessen einen Provenance-Abzug
+	// (`.m3c-provenance.json` und Geschwister, siehe
+	// install/offline_verify.go). Ein Zustand, den kein Weg erzeugen kann,
+	// ist kein Zustand, sondern ein Versprechen.
+	//
+	// Entschieden am 2026-09-13 (E-B): der vorhandene Abzug wird als Beleg
+	// akzeptiert, statt eine zweite Signaturdatei einzufuehren. Er wird
+	// ohnehin geschrieben, und ein zweiter Beleg fuer dieselbe Sache ist
+	// einer zu viel.
+	//
+	// Reihenfolge mit Absicht: die detached Signatur wird ZUERST gesucht.
+	// Sie ist die staerkere Aussage (sie deckt die Bytes des Buendels), der
+	// Abzug die schwaechere (er bezeugt einen gelaufenen Installationspfad).
+	// Wer beides hat, soll die staerkere gemeldet bekommen.
 	expectedSig := fmt.Sprintf("%s.%s.author.sig", skbPath, digest)
 	sigInfo, err := os.Stat(expectedSig)
 	if err != nil {
+		if prov, ok := findProvenance(sk.SourcePath); ok {
+			return &model.BundleAttestation{
+				SKBPath:        skbPath,
+				BundleDigest:   "sha256:" + digest,
+				Signed:         true,
+				TrustChain:     TrustSignaturePresent,
+				ProvenancePath: prov,
+			}
+		}
 		return &model.BundleAttestation{
 			SKBPath:       skbPath,
 			BundleDigest:  "sha256:" + digest,
 			Signed:        false,
 			TrustChain:    TrustBroken,
-			VerifierError: fmt.Sprintf("expected sig file missing: %s", expectedSig),
+			VerifierError: fmt.Sprintf("no author sig and no provenance sidecar: %s", expectedSig),
 		}
 	}
 	// Sig file must be exactly 64 raw bytes (ed25519 detached).
@@ -241,4 +281,55 @@ func computeSKBDigest(path string) (string, error) {
 		out[2*i+1] = hex[b&0x0f]
 	}
 	return string(out), nil
+}
+
+// findInstalledSKB sucht das Buendel dort, wo der INSTALLIERER es ablegt:
+// innerhalb des Skillordners (install.go stasht es als
+// <target>/<name>-<ver>.skb mit 0600, damit ein spaeteres `verify <name>`
+// den Digest ohne Registry-Aufruf nachrechnen kann).
+//
+// Bewusst ohne Namensmuster: der Installierer schreibt genau EIN .skb in den
+// Ordner, und dessen Name stammt aus dem Bundle-Blob, nicht aus dem
+// Skillnamen. Ein Muster hier waere eine zweite Annahme ueber eine
+// Schreibweise, die dem Installierer gehoert.
+func findInstalledSKB(skillDir string) (string, bool) {
+	entries, err := os.ReadDir(skillDir)
+	if err != nil {
+		return "", false
+	}
+	var best string
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".skb") {
+			continue
+		}
+		// Bei mehreren gewinnt der lexikografisch groesste Name, wie bei
+		// findSiblingSKB: derselbe Tiebreak, damit zwei Wege nicht zwei
+		// verschiedene Buendel derselben Faehigkeit melden.
+		if best == "" || strings.Compare(e.Name(), filepath.Base(best)) > 0 {
+			best = filepath.Join(skillDir, e.Name())
+		}
+	}
+	return best, best != ""
+}
+
+// provenanceNames sind die Abzuege, die der trust-mode-Pfad schreibt
+// (install/offline_verify.go). Ausgeschrieben statt geraten, damit ein
+// zusaetzlicher Abzug hier auffaellt, statt stillschweigend mitzuzaehlen.
+var provenanceNames = []string{
+	".m3c-provenance.json",
+	".skillctl-attest.json",
+	".skillctl-offline.json",
+}
+
+// findProvenance meldet den ersten vorhandenen Provenance-Abzug im
+// Skillordner. Er bezeugt, dass ein pruefender Installationspfad gelaufen
+// ist; er ersetzt keine Signatur ueber die Bundle-Bytes.
+func findProvenance(skillDir string) (string, bool) {
+	for _, n := range provenanceNames {
+		p := filepath.Join(skillDir, n)
+		if fi, err := os.Stat(p); err == nil && !fi.IsDir() && fi.Size() > 0 {
+			return p, true
+		}
+	}
+	return "", false
 }
