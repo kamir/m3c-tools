@@ -64,6 +64,14 @@ type BundleAttestation struct {
 	TrustChain             string `json:"trust_chain"`
 	VerifierExitCode       int    `json:"verifier_exit_code,omitempty"`
 	VerifierError          string `json:"verifier_error,omitempty"`
+	// ProvenancePath nennt den Abzug, auf den sich das Urteil stuetzt, wenn
+	// keine detached Signatur vorliegt (BUG-0253 B3, Entscheidung E-B).
+	//
+	// Er steht hier, damit ein Leser die SCHWAECHERE Grundlage erkennen kann:
+	// eine Signatur deckt die Bytes des Buendels, ein Abzug bezeugt einen
+	// gelaufenen Installationspfad. Beides fuehrt zu trust_chain "verified";
+	// wer den Unterschied braucht, liest dieses Feld.
+	ProvenancePath string `json:"provenance_path,omitempty"`
 }
 
 // Inventory holds the complete results of a skill scan.
