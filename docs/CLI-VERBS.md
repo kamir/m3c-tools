@@ -111,7 +111,7 @@ gates the CONTENT of the Exit-Code column against the register and the manual.
 | `project` | SPEC-0214 | 0/1/2 |
 | `session` | SPEC-0213 | 0/1/2 |
 | `publish` | SPEC-0225 P1 | 0/1/2 |
-| `pull` | SPEC-0225 P2 | 0/1/2, 6, 10..13 |
+| `pull` | SPEC-0225 P2 | 0/1/2, 6, 7, 10..13 |
 | `registry` | SPEC-0225 P2 | 0/1/2 |
 | `runbook` | SPEC-0272 | 0/1/2, 13 |
 | `room` | SPEC-0246 §7 | 0/1/2 |
