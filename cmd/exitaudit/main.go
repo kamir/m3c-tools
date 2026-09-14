@@ -1120,7 +1120,16 @@ func pullSymbolDrift(root, verbsText string) (nums []int, drift []string, skippe
 		return sortedKeys(got), drift, ""
 	}
 
-	base := map[int]bool{0: true, 1: true, 2: true}
+	// Die Codes, die `pull` NEBEN gateExit zurueckgibt. Sie stammen nicht aus
+	// einem Tor-Fehlschlag, also kann die symbolische Lesung von gateExit sie
+	// nicht finden; ohne diese Liste meldete der Pruefer sie als "die Zelle
+	// behauptet N, aber gateExit kann es nicht erzeugen".
+	//
+	// 7 kam am 2026-09-14 dazu (BUG-0254): ein Nulltreffer ist kein
+	// Tor-Fehlschlag, sondern eine Aussage ueber die Abfrage. Er gehoert
+	// deshalb hierher und nicht in gateExit, denn gateExit bildet Tore auf
+	// Nummern ab, und ein Nulltreffer ist kein Tor.
+	base := map[int]bool{0: true, 1: true, 2: true, 7: true}
 	for _, n := range sortedKeys(got) {
 		if !want[n] {
 			drift = append(drift, fmt.Sprintf("%s can return %d, the `%s` cell in the verb register does not list it",

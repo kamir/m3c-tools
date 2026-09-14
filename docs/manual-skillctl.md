@@ -124,6 +124,7 @@ generated columns by hand turns `check-docs.sh` red.
 | `4` | `pin_required` | `import-public` | input validation | The import source carried no pin. Pin the exact commit or digest and retry. SPEC-0201; the surface is not built in this tree. |
 | `5` | `scanner_refuse` | `import-public` | scanner / policy | The scanner refused the imported skill. Read the finding; retrying unchanged cannot help. |
 | `6` | `bundle_revoked` | `pull` | trust-chain revocation | Every skipped bundle failed the revocation gate: a `BundleRevokedEvent` exists for that digest. Never retry. Run `skillctl verify --all` to refresh and quarantine. |
+| `7` | `no_matches` | `pull` | query yielded nothing | TODO: say what an operator should DO about it. |
 | `10` | `digest_mismatch` | `verify` | trust-chain digest | The bytes are not the bytes that were signed. Also what `verify-sig` returns for an altered bundle, and what `pull --install` returns when the `CHECKSUMS` manifest stops describing the contents. Ask the publisher to repack and re-sign; this is not a transport fault. |
 | `11` | `sig_invalid` | `signing` | trust-chain signature | `verify-sig` could not verify the detached author signature with the key you gave it. Check you used the AUTHOR's public key. |
 | `11` | `author_sig_invalid` | `verify` | trust-chain signature | The author signature over the bundle does not verify. Same cause, reached through the §7 chain. |
@@ -707,7 +708,7 @@ different rules than the real thing proves nothing about the real thing.
 | `-json` | Report as JSON instead of a table. |
 | `-schreiben` | Store the report. Without it: dry run. |
 | `-er1-target prod\|stage\|local` | Which ER1 to write to (default: prod). Only read with `-schreiben`. |
-| `-er1-context <id>` | ER1 context (default: `<mandant>___skillenv`). Only read with `-schreiben`. |
+| `-er1-context <id>` | ER1 context (default: `<owner-sub>___skillenv`). The owner is the authenticated user, NOT the tenant of the env address: `_owner(ctx_id)` in aims-core is everything before `___` and is checked against the principal. Only read with `-schreiben`. |
 
 The host never appears in clear text: the environment address carries a salted
 hash, and there is deliberately no function that resolves it back.
@@ -802,7 +803,7 @@ skillctl pull --install --trust-mode --dry-run-install
 skillctl pull --install --trust-mode --confirm-install --dry-run-install-token <sig>
 ```
 
-Exit: `0` all bundles staged · `2` usage or a refused `--install` precondition (missing `--trust-mode`, a missing / expired / forged G-23 token) · `1` bundles were skipped for MORE THAN ONE reason (no single number can name two causes; read the per-row gate) · one skipped gate maps to ITS number: `12` envelope / registry not trusted, `10` digest, `11` bundle signature, `13` governance below minimum, `6` revoked. `--install` returns `10` when the extracted bundle's `CHECKSUMS` manifest stops describing it (SPEC-0188 §7 step 8). Measured against `skipExitCode` / `gateExit` in `cmd/skillctl/pull_cmds.go`.
+Exit: `0` all bundles staged · `7` NULLTREFFER: the query matched nothing, which is deliberately not success (BUG-0254: an empty run was indistinguishable from a run with nothing to do, and a gate that reports green while checking nothing creates trust nothing answers to) · `2` usage or a refused `--install` precondition (missing `--trust-mode`, a missing / expired / forged G-23 token) · `1` bundles were skipped for MORE THAN ONE reason (no single number can name two causes; read the per-row gate) · one skipped gate maps to ITS number: `12` envelope / registry not trusted, `10` digest, `11` bundle signature, `13` governance below minimum, `6` revoked. `--install` returns `10` when the extracted bundle's `CHECKSUMS` manifest stops describing it (SPEC-0188 §7 step 8). Measured against `skipExitCode` / `gateExit` in `cmd/skillctl/pull_cmds.go`.
 
 ---
 
