@@ -22,12 +22,14 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/kamir/m3c-tools/pkg/er1"
 	"github.com/kamir/m3c-tools/pkg/httpsafe"
 	"github.com/kamir/m3c-tools/pkg/m3cproject"
+	"github.com/kamir/m3c-tools/pkg/skillctl/netguard"
 )
 
 // ---------------------------------------------------------------------------
@@ -221,19 +223,59 @@ func ER1Endpoint(target string) (baseURL string, verifySSL bool) {
 		return "https://127.0.0.1:8081", false
 	}
 	if strings.HasPrefix(target, "http") {
-		return strings.TrimRight(target, "/"), !strings.Contains(target, "127.0.0.1") && !strings.Contains(target, "localhost")
+		base := strings.TrimRight(target, "/")
+		return base, sessionVerifyTLS(base, false)
 	}
 	// stage / unknown: fall back to whatever ER1_API_URL says, else prod
 	if u := os.Getenv("ER1_API_URL"); u != "" {
 		base := strings.TrimRight(strings.TrimSuffix(u, "/upload_2"), "/")
-		verify := os.Getenv("ER1_VERIFY_SSL") != "false"
-		// SEC-M7: only honour insecure for loopback; force verification on for remote.
-		if !verify && !strings.Contains(base, "127.0.0.1") && !strings.Contains(base, "localhost") {
-			verify = true
-		}
-		return base, verify
+		return base, sessionVerifyTLS(base, os.Getenv("ER1_VERIFY_SSL") != "false")
 	}
 	return "https://onboarding.guide", true
+}
+
+// sessionInsecureWarnOnce gates the one-time stderr notice emitted when a
+// non-loopback base asks to skip TLS verification and it is forced back on.
+var sessionInsecureWarnOnce sync.Once
+
+// sessionIsLoopback reports whether base names a loopback HOST. It PARSES the
+// URL instead of searching the string, and that distinction is the whole bug
+// this function was written for (BUG-0444).
+//
+// The predecessor asked `!strings.Contains(target, "127.0.0.1")`, which is true
+// of `https://127.0.0.1.angreifer.example/` and of any URL carrying the text in
+// its path or query. Four probes, four bypasses; TestER1Endpoint_LoopbackWache
+// keeps them. Every other guard in this tree already parses
+// (netguard.IsLoopback, pkg/er1.isLoopbackURL, pkg/plaud.isLoopbackURL), so the
+// fix is to join them rather than to write a fourth variant.
+//
+// Pure, no DNS: a name that merely RESOLVES to loopback is not loopback here,
+// matching pkg/er1.applyTLSVerificationPolicy exactly.
+func sessionIsLoopback(base string) bool {
+	u, err := url.Parse(strings.TrimSpace(base))
+	if err != nil || u == nil || u.Host == "" {
+		return false
+	}
+	return netguard.IsLoopback(u.Host)
+}
+
+// sessionVerifyTLS applies the SEC-M7 fail-closed rule: skipping verification is
+// honoured only for a loopback host. `wanted` is what the caller asked for;
+// the answer is what it gets, and any downgrade is announced once.
+//
+// httpGetJSON attaches X-API-KEY and Authorization: Bearer to the connection
+// this decides, so a wrong answer here hands both to whoever is listening.
+func sessionVerifyTLS(base string, wanted bool) bool {
+	if wanted {
+		return true
+	}
+	if sessionIsLoopback(base) {
+		return false
+	}
+	sessionInsecureWarnOnce.Do(func() {
+		fmt.Fprintf(os.Stderr, "[session] SECURITY: REFUSING to disable TLS verification for non-loopback ER1 base %q; certificate verification stays ON (only 127.0.0.1/localhost may skip it)\n", base)
+	})
+	return true
 }
 
 // resolveAPIKey: env ER1_API_KEY → macOS Keychain `aims-core-er1` (ADR-0003).
@@ -289,6 +331,11 @@ func httpGetJSON(target, path string) (any, error) {
 	apiKey := resolveAPIKey()
 	client := &http.Client{Timeout: 15 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect} // SEC F25
 	if !verify {
+		// #nosec G402 -- gegated: verify stammt aus sessionVerifyTLS, das ein
+		// Ueberspringen nur fuer einen GEPARSTEN Loopback-Host zulaesst und fuer
+		// jeden anderen fail-closed auf true zwingt (BUG-0444, SEC-M7, gleiche
+		// Regel wie pkg/er1.applyTLSVerificationPolicy). Festgehalten von
+		// TestER1Endpoint_LoopbackWacheParstDenHost.
 		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
 	}
 	req, err := http.NewRequest("GET", base+path, nil)

@@ -364,7 +364,6 @@ G402	pkg/er1/upload.go	if !cfg.VerifySSL { client.Transport = &http.Transport{TL
 G402	pkg/plaud/er1source.go	// SEC: only for loopback + self-signed dev cert. client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} }
 G402	pkg/plaud/syncapi.go	if skipTLSVerify { transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} }
 G402	pkg/pocket/syncapi.go	if skipTLSVerify { transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} }
-G402	pkg/session/session.go	if !verify { client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} }
 G402	pkg/timetracking/plmclient.go	TLSClientConfig: &tls.Config{ InsecureSkipVerify: insecure, // loopback-only, guarded above },
 G404	pkg/transcript/proxy.go	// Pick a random proxy chosen := c.Proxies[rand.Intn(len(c.Proxies))] proxyURL, err := url.Parse(chosen)
 G703	cmd/docaudit/main.go	func loadConfig(path string) ([]target, error) { b, err := os.ReadFile(path) if err != nil {
