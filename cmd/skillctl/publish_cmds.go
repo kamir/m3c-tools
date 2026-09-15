@@ -497,6 +497,12 @@ func runPublishAttest(stdout, stderr io.Writer, a publishAttestArgs) int {
 	}
 
 	skill := registry.SkillMeta{
+		// Kind decides the SHELF the event is filed on (SPEC-0432 E-6). Without
+		// it an agent's attestation lands on the skill shelf while the bundle
+		// itself sits on the agent shelf, and a reader scoped to one shelf then
+		// sees a bundle with no governance verdict, or worse, a REVOKED agent
+		// that still looks valid.
+		Kind:           a.kind,
 		Name:           a.name,
 		Version:        a.version,
 		BundleDigest:   digest,
@@ -542,6 +548,7 @@ func runPublishAttest(stdout, stderr io.Writer, a publishAttestArgs) int {
 
 type publishRevokeArgs struct {
 	name, version, reason, rationale, digestArg, bundlePath, identity, keyPath string
+	kind                                                                       string
 	er1Target, er1Context                                                      string
 	yes, dryRun, noCheckpoint                                                  bool
 	shareRooms                                                                 []string
@@ -583,6 +590,12 @@ func runPublishRevoke(stdout, stderr io.Writer, a publishRevokeArgs) int {
 	}
 
 	skill := registry.SkillMeta{
+		// Kind decides the SHELF the event is filed on (SPEC-0432 E-6). Without
+		// it an agent's attestation lands on the skill shelf while the bundle
+		// itself sits on the agent shelf, and a reader scoped to one shelf then
+		// sees a bundle with no governance verdict, or worse, a REVOKED agent
+		// that still looks valid.
+		Kind:           a.kind,
 		Name:           a.name,
 		Version:        a.version,
 		BundleDigest:   digest,

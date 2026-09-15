@@ -176,3 +176,45 @@ func TestAgentIsInvisibleToAnOldClient(t *testing.T) {
 		}
 	}
 }
+
+// TestEveryEventKindLandsOnTheSameShelf. The admit, attest and revoke events of
+// one bundle MUST share a shelf. They did not: T-08 published 19 agents whose
+// bundles sat on the agent shelf while their attestations sat on the skill
+// shelf, and `registry show agent:<name>` reported no governance verdict at
+// all. The dangerous half is the revocation: a revoked agent filed on the wrong
+// shelf still looks valid to a reader scoped to its own.
+func TestEveryEventKindLandsOnTheSameShelf(t *testing.T) {
+	agent := SkillMeta{
+		Kind: skillbundle.KindAgent, Name: "helper", Version: "1.0.0",
+		BundleDigest: "sha256:ab", AuthorIdentity: "id:t",
+		GovernanceLevel: "yellow", PackedOnHost: "h",
+	}
+	shelfOf := func(tags []string) string {
+		for _, tg := range tags {
+			if tg == AgentShelfTag || tg == SkillShelfTag {
+				return tg
+			}
+		}
+		return "<none>"
+	}
+	ev := map[string]any{"governance_level": "yellow"}
+	for name, tags := range map[string][]string{
+		"admitted": buildAdmittedTags(agent, "er1-inline", ""),
+		"attested": buildAttestedTags(agent, ev, ""),
+	} {
+		if got := shelfOf(tags); got != AgentShelfTag {
+			t.Errorf("the %s event of an agent is on shelf %q, want %q", name, got, AgentShelfTag)
+		}
+	}
+
+	skill := agent
+	skill.Kind = ""
+	for name, tags := range map[string][]string{
+		"admitted": buildAdmittedTags(skill, "er1-inline", ""),
+		"attested": buildAttestedTags(skill, ev, ""),
+	} {
+		if got := shelfOf(tags); got != SkillShelfTag {
+			t.Errorf("the %s event of a skill is on shelf %q, want %q", name, got, SkillShelfTag)
+		}
+	}
+}
