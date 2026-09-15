@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -223,5 +225,63 @@ func TestSchreibendeBefehleSindNochNichtDa(t *testing.T) {
 		if !strings.Contains(errBuf.String(), "not built yet") {
 			t.Errorf("%s sagt nicht, dass es ihn noch nicht gibt: %q", c, errBuf.String())
 		}
+	}
+}
+
+// TestUnerreichbarIstNichtAbwesend haelt die Unterscheidung fest, die das
+// Werkzeug beim ersten echten Einsatz nicht hatte.
+//
+// Am 2026-09-15 meldeten zwei aufeinanderfolgende Laeufe fuer dieselben vier
+// Orte auf macpro2 erst Werte und dann "fehlt", weil der zweite Lauf keine
+// ssh-Verbindung bekam und JEDER Transportfehler auf ErrAbsent abgebildet
+// wurde.
+//
+// Das ist der gefaehrlichste Fehler, den ein Inventar machen kann: bei einer
+// Rotation liest sich "haelt keinen Wert" als "hier ist nichts zu tun", und der
+// Ort behaelt den kompromittierten Wert, waehrend die Tabelle Vollzug meldet.
+// Dieselbe Gestalt wie BUG-0437: eine unbeantwortbare Frage darf nie als
+// verneinende Antwort erscheinen.
+func TestUnerreichbarIstNichtAbwesend(t *testing.T) {
+	var absent error = ErrAbsent{Where: "irgendwo"}
+	var unreach error = ErrUnreachable{Where: "irgendwo", Reason: "ssh failed"}
+
+	var a ErrAbsent
+	var u ErrUnreachable
+
+	if !errors.As(absent, &a) {
+		t.Error("ErrAbsent wird nicht als ErrAbsent erkannt")
+	}
+	if errors.As(absent, &u) {
+		t.Error("eine Abwesenheit gilt als Unerreichbarkeit")
+	}
+	if !errors.As(unreach, &u) {
+		t.Error("ErrUnreachable wird nicht als ErrUnreachable erkannt")
+	}
+	if errors.As(unreach, &a) {
+		t.Fatal("eine Unerreichbarkeit gilt als Abwesenheit; genau das war der Fehler")
+	}
+	if !strings.Contains(unreach.Error(), "ssh failed") {
+		t.Error("der Grund der Unerreichbarkeit geht verloren")
+	}
+}
+
+// TestTransportfehlerWirdErkannt: ssh meldet 255 fuer eigenes Versagen und
+// reicht sonst den entfernten Rueckgabewert durch. grep sagt 1 fuer "nichts
+// gefunden" und 2 fuer "nicht lesbar", und beides sind echte Antworten einer
+// Maschine, die erreicht wurde.
+func TestTransportfehlerWirdErkannt(t *testing.T) {
+	for code, wantTransport := range map[int]bool{255: true, 1: false, 2: false, 0: false} {
+		err := exec.Command("bash", "-c", fmt.Sprintf("exit %d", code)).Run()
+		if code == 0 {
+			continue
+		}
+		if got := isTransportFailure(err); got != wantTransport {
+			t.Errorf("Rueckgabewert %d: isTransportFailure = %v, erwartet %v", code, got, wantTransport)
+		}
+	}
+	// Ein Befehl, den es gar nicht gibt, ist ebenfalls ein Transportfehler:
+	// die Frage konnte nicht gestellt werden.
+	if !isTransportFailure(exec.Command("gibt-es-nicht-4711").Run()) {
+		t.Error("ein nicht startbarer Befehl gilt nicht als Transportfehler")
 	}
 }

@@ -60,7 +60,7 @@ func cmdInventory(args []string, stdout, stderr io.Writer) int {
 
 	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "ORT\tART\tMASCHINE\tFINGERABDRUCK\tSTAND")
-	veraltet, fehlend, unlesbar := 0, 0, 0
+	veraltet, fehlend, unlesbar, unerreichbar := 0, 0, 0, 0
 	for _, s := range states {
 		host := s.Holder.Host
 		if host == "" {
@@ -75,6 +75,8 @@ func cmdInventory(args []string, stdout, stderr io.Writer) int {
 			fehlend++
 		case "unlesbar":
 			unlesbar++
+		case "unerreichbar":
+			unerreichbar++
 		}
 	}
 	_ = tw.Flush()
@@ -86,11 +88,17 @@ func cmdInventory(args []string, stdout, stderr io.Writer) int {
 	}
 
 	fmt.Fprintf(stdout, "\n%d Orte gefuehrt", len(states))
-	if veraltet+fehlend+unlesbar > 0 {
-		fmt.Fprintf(stdout, ", davon %d veraltet, %d ohne Wert, %d unlesbar", veraltet, fehlend, unlesbar)
+	if veraltet+fehlend+unlesbar+unerreichbar > 0 {
+		fmt.Fprintf(stdout, ", davon %d veraltet, %d ohne Wert, %d unlesbar, %d unerreichbar",
+			veraltet, fehlend, unlesbar, unerreichbar)
 	}
 	fmt.Fprintln(stdout, ".")
 
+	if unerreichbar > 0 {
+		fmt.Fprintf(stdout, "\n%d Ort(e) konnten nicht befragt werden. Das Inventar ist damit UNVOLLSTAENDIG,\n", unerreichbar)
+		fmt.Fprintln(stdout, "und kein Schritt einer Rotation darf auf dieser Grundlage als erledigt gelten.")
+		return 1
+	}
 	if veraltet > 0 || fehlend > 0 {
 		fmt.Fprintln(stdout, "\nEine Rotation ist erst abgeschlossen, wenn hier kein Ort mehr veraltet ist.")
 		return 1
@@ -124,7 +132,14 @@ func inspect(entry *Entry, active Secret, haveSource bool) []holderState {
 
 		val, err := ReadHolder(h)
 		var absent ErrAbsent
+		var unreach ErrUnreachable
 		switch {
+		case errors.As(err, &unreach):
+			// NOT "fehlt". A place that could not be asked is an open
+			// question, and an open question must never be counted as a
+			// finished one.
+			st.FP, st.Status = "?", "unerreichbar"
+			st.Detail = unreach.Reason + ". Solange dieser Ort nicht befragt werden kann, ist das Inventar unvollstaendig."
 		case errors.As(err, &absent):
 			st.FP, st.Status = "<leer>", "fehlt"
 		case err != nil:

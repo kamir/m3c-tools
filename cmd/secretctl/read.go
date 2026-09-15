@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,11 +16,32 @@ import (
 // Reading a value out of a holder. Every function here returns a Secret, never
 // a string, so a value cannot reach an output stream by accident.
 
-// ErrAbsent says the holder exists but carries nothing. Different from an
-// error: a place that holds no value is a finding, not a failure.
+// ErrAbsent says the holder was REACHED and carries nothing. A place that holds
+// no value is a finding, not a failure.
 type ErrAbsent struct{ Where string }
 
 func (e ErrAbsent) Error() string { return "no value at " + e.Where }
+
+// ErrUnreachable says the question could not be asked at all. It exists as its
+// own type because conflating it with ErrAbsent is the single most dangerous
+// mistake an inventory can make: during a rotation, "holds no value" reads as
+// "nothing to do here", and the place then keeps the compromised value while
+// the table says the rotation is complete.
+//
+// Measured on 2026-09-15: two consecutive runs disagreed about the same four
+// places on macpro2, because the second run could not open an ssh connection
+// and every transport error was being mapped to ErrAbsent. Same shape as
+// BUG-0437, where an unknown registry context produced an empty list instead
+// of an error. An unanswerable question must never be reported as a negative
+// answer.
+type ErrUnreachable struct {
+	Where  string
+	Reason string
+}
+
+func (e ErrUnreachable) Error() string {
+	return "could not reach " + e.Where + ": " + e.Reason
+}
 
 // ReadHolder fetches the value one holder currently carries.
 func ReadHolder(h Holder) (Secret, error) {
@@ -68,6 +90,9 @@ func readKeychain(h Holder) (Secret, error) {
 	// and "this machine will not give it to me from here" are different
 	// findings and must not share a word.
 	if _, existsErr := capture(host, "security", "find-generic-password", "-s", h.Service); existsErr != nil {
+		if host != "" && isTransportFailure(existsErr) {
+			return "", ErrUnreachable{Where: h.ID, Reason: "ssh to " + host + " failed"}
+		}
 		return "", ErrAbsent{Where: h.ID}
 	}
 	out, err := capture(host, "security", "find-generic-password", "-s", h.Service, "-w")
@@ -99,7 +124,16 @@ func readFile(h Holder) (Secret, error) {
 	// grep, not cat: the whole file must not travel just because one line is
 	// wanted, and a file may hold more than one secret.
 	out, err := capture(host, "grep", "-m1", "^"+h.Key+"=", path)
-	if err != nil || out == "" {
+	if err != nil {
+		// grep says 1 when it found nothing and 2 when it could not read the
+		// file; ssh says 255 when it could not connect at all. Only the first
+		// is an absence.
+		if host != "" && isTransportFailure(err) {
+			return "", ErrUnreachable{Where: h.ID, Reason: "ssh to " + host + " failed"}
+		}
+		return "", ErrAbsent{Where: h.ID}
+	}
+	if out == "" {
 		return "", ErrAbsent{Where: h.ID}
 	}
 	_, value, ok := strings.Cut(out, "=")
@@ -205,4 +239,19 @@ func (p Probe) Ask(value Secret) (int, error) {
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, resp.Body)
 	return resp.StatusCode, nil
+}
+
+// isTransportFailure reports whether an error is ssh failing to connect rather
+// than the remote command answering "no".
+//
+// ssh exits 255 for its own failures and passes the remote exit code through
+// otherwise. grep answers 1 for "no match" and 2 for "cannot read", both of
+// which are real answers from a machine that was reached.
+func isTransportFailure(err error) bool {
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		return ee.ExitCode() == 255
+	}
+	// Not an ExitError at all: the process could not even be started.
+	return true
 }
