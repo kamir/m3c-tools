@@ -98,3 +98,81 @@ func TestSameNameDifferentKind(t *testing.T) {
 		t.Fatalf("helper resolved to (%q, %q)", k, n)
 	}
 }
+
+// The shelf (SPEC-0432 E-6). A client asks for a shelf as part of a
+// conjunction, so an agent on its own shelf is not merely labelled
+// differently: an older client cannot see it at all.
+
+func TestShelfTagFor(t *testing.T) {
+	for _, tc := range []struct{ kind, want string }{
+		{"", SkillShelfTag},
+		{skillbundle.KindSkill, SkillShelfTag},
+		{skillbundle.KindAgent, AgentShelfTag},
+	} {
+		if got := shelfTagFor(tc.kind); got != tc.want {
+			t.Errorf("shelfTagFor(%q) = %q, want %q", tc.kind, got, tc.want)
+		}
+	}
+}
+
+// TestShelvesFor: an unrestricted query visits BOTH shelves, as two queries.
+// Loosening the conjunction to one broader query would hand old clients the
+// agents back, which is the whole thing this prevents.
+func TestShelvesFor(t *testing.T) {
+	if got := shelvesFor(skillbundle.KindAgent); len(got) != 1 || got[0] != AgentShelfTag {
+		t.Errorf("shelvesFor(agent) = %v", got)
+	}
+	if got := shelvesFor(skillbundle.KindSkill); len(got) != 1 || got[0] != SkillShelfTag {
+		t.Errorf("shelvesFor(skill) = %v", got)
+	}
+	got := shelvesFor("")
+	if len(got) != 2 {
+		t.Fatalf("shelvesFor(\"\") = %v, want both shelves", got)
+	}
+}
+
+// TestAgentIsInvisibleToAnOldClient is the point of E-6, stated as the query
+// an old client actually runs. It has no notion of kinds and asks for the
+// skill shelf; the agent's tag set must fail that conjunction.
+func TestAgentIsInvisibleToAnOldClient(t *testing.T) {
+	base := SkillMeta{
+		Name: "helper", Version: "1.0.0", BundleDigest: "sha256:ab",
+		AuthorIdentity: "id:t", GovernanceLevel: "yellow", PackedOnHost: "h",
+	}
+	agent := base
+	agent.Kind = skillbundle.KindAgent
+
+	oldClientQuery := []string{"m3c-skill-bundle", SkillShelfTag, "skill-event:" + EventKindAdmitted}
+	has := func(tags []string, want string) bool {
+		for _, t := range tags {
+			if t == want {
+				return true
+			}
+		}
+		return false
+	}
+	agentTags := buildAdmittedTags(agent, "er1-inline", "")
+	for _, want := range oldClientQuery {
+		if want == SkillShelfTag {
+			if has(agentTags, want) {
+				t.Fatalf("the agent carries the skill shelf tag; an old client would see it: %v", agentTags)
+			}
+			continue
+		}
+		if !has(agentTags, want) {
+			t.Errorf("agent tags miss %q, which the NEW client needs too", want)
+		}
+	}
+	if !has(agentTags, AgentShelfTag) {
+		t.Errorf("the agent is on no shelf at all: %v", agentTags)
+	}
+
+	// Counter-probe: a skill must still satisfy the old query completely,
+	// otherwise this change would hide the existing 78 bundles.
+	skillTags := buildAdmittedTags(base, "er1-inline", "")
+	for _, want := range oldClientQuery {
+		if !has(skillTags, want) {
+			t.Errorf("a skill lost %q; the old clients would stop seeing skills", want)
+		}
+	}
+}

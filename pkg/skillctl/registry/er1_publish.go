@@ -290,7 +290,11 @@ func tagPrefixCommon(s SkillMeta, ctxID string) []string {
 		"skill:" + s.Name,
 		"skill-version:" + s.Name + "@" + s.Version,
 		"skill-digest:" + s.BundleDigest,
-		"skill-registry:self",
+		// The shelf, not a label. Every reader queries the shelf tag as part
+		// of a CONJUNCTION, so an agent on the agent shelf is invisible to a
+		// client that asks for the skill shelf, including every client built
+		// before agents existed (SPEC-0432 E-6).
+		shelfTagFor(s.Kind),
 		"skill-author:" + s.AuthorIdentity,
 		"claude-code.skill-registry",
 	}
@@ -498,15 +502,22 @@ func uploadText(cfg *er1.Config, body, filename, tags, contentType, ctxID string
 // this is fine; if the registry ever has thousands of events a paginated
 // fetch is the follow-up.
 func findAdmittedByDigest(cfg *er1.Config, ctxID, digest string) (string, error) {
-	want := []string{
-		"m3c-skill-bundle",
-		"skill-registry:self",
-		"skill-event:" + EventKindAdmitted,
-		"skill-digest:" + digest,
-	}
-	items, err := searchByTagsRaw(cfg, ctxID, want)
-	if err != nil {
-		return "", err
+	// A digest names exactly one bundle but says nothing about its kind, so
+	// both shelves are searched. Looking only on the skill shelf would report
+	// an admitted agent as "never admitted", and the idempotency check that
+	// depends on this would then admit it a second time.
+	var items []map[string]any
+	for _, shelf := range shelvesFor("") {
+		got, err := searchByTagsRaw(cfg, ctxID, []string{
+			"m3c-skill-bundle",
+			shelf,
+			"skill-event:" + EventKindAdmitted,
+			"skill-digest:" + digest,
+		})
+		if err != nil {
+			return "", err
+		}
+		items = append(items, got...)
 	}
 	for _, item := range items {
 		if id, _ := item["doc_id"].(string); id != "" {

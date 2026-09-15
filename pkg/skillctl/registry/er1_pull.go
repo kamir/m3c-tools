@@ -94,6 +94,45 @@ type RegistryListing struct {
 // bundle admitted before it.
 const KindTagPrefix = "kind:"
 
+// The shelf tags. Every reader queries these as a CONJUNCTION, so an item that
+// carries the agent shelf instead of the skill shelf is not merely labelled
+// differently: a client that asks for the skill shelf cannot see it at all.
+//
+// That is the point (SPEC-0432 E-6). A client built before agents existed
+// would otherwise list an agent bundle, pull it, unpack it into
+// ~/.claude/skills/<name>/ and report success, and nobody would notice. The
+// schema guard added in T-06 only protects clients from this version onward;
+// the shelf protects every client that ever existed, because it does not rely
+// on the old one checking anything.
+const (
+	SkillShelfTag = "skill-registry:self"
+	AgentShelfTag = "agent-registry:self"
+)
+
+// shelfTagFor returns the shelf an item of this kind lives on. The empty kind
+// is a skill, like everywhere else.
+func shelfTagFor(kind string) string {
+	if kind == skillbundle.KindAgent {
+		return AgentShelfTag
+	}
+	return SkillShelfTag
+}
+
+// shelvesFor returns the shelves a query must visit for a requested kind. An
+// empty kind means "everything", and that is TWO queries, not one broader one:
+// the conjunction is what keeps old clients out, so it must not be loosened
+// for our own convenience.
+func shelvesFor(kind string) []string {
+	switch kind {
+	case skillbundle.KindAgent:
+		return []string{AgentShelfTag}
+	case skillbundle.KindSkill:
+		return []string{SkillShelfTag}
+	default:
+		return []string{SkillShelfTag, AgentShelfTag}
+	}
+}
+
 // ItemKind reads the kind off a registry item, resolving an absent tag to
 // "skill". The ONE place that decides it on the registry side.
 func ItemKind(item map[string]any) string {
@@ -130,9 +169,13 @@ type ListOpts struct {
 var ErrNotInRegistry = errors.New("not found in registry")
 
 func ListRegistry(cfg *er1.Config, ctxID string, opts ListOpts) (*RegistryListing, error) {
-	rawItems, err := searchByTagsRaw(cfg, ctxID, []string{"m3c-skill-bundle", "skill-registry:self"})
-	if err != nil {
-		return nil, err
+	var rawItems []map[string]any
+	for _, shelf := range shelvesFor(opts.OnlyKind) {
+		items, err := searchByTagsRaw(cfg, ctxID, []string{"m3c-skill-bundle", shelf})
+		if err != nil {
+			return nil, err
+		}
+		rawItems = append(rawItems, items...)
 	}
 	rowsByDigest := map[string][]EventRow{}
 	skillOf := map[string]string{} // digest → skill name
@@ -279,6 +322,7 @@ type StagedBundle struct {
 
 // PullOpts bounds the pull.
 type PullOpts struct {
+	OnlyKind   string // empty → both shelves; "agent" → only the agent shelf
 	OnlySkill  string // empty → all skills
 	OnlyDigest string // empty → all admit items in scope
 	Since      string // RFC3339; pass to the search query (best-effort filter)
@@ -307,16 +351,24 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 	if tr == nil {
 		return nil, ErrTrustRootsMissing
 	}
-	tags := []string{"m3c-skill-bundle", "skill-registry:self", "skill-event:" + EventKindAdmitted}
-	if opts.OnlySkill != "" {
-		tags = append(tags, "skill:"+opts.OnlySkill)
+	var baseTags [][]string
+	for _, shelf := range shelvesFor(opts.OnlyKind) {
+		tags := []string{"m3c-skill-bundle", shelf, "skill-event:" + EventKindAdmitted}
+		if opts.OnlySkill != "" {
+			tags = append(tags, "skill:"+opts.OnlySkill)
+		}
+		if opts.OnlyDigest != "" {
+			tags = append(tags, "skill-digest:"+opts.OnlyDigest)
+		}
+		baseTags = append(baseTags, tags)
 	}
-	if opts.OnlyDigest != "" {
-		tags = append(tags, "skill-digest:"+opts.OnlyDigest)
-	}
-	admits, err := searchByTagsRaw(cfg, ctxID, tags)
-	if err != nil {
-		return nil, err
+	var admits []map[string]any
+	for _, tags := range baseTags {
+		got, err := searchByTagsRaw(cfg, ctxID, tags)
+		if err != nil {
+			return nil, err
+		}
+		admits = append(admits, got...)
 	}
 	// Pre-build a map of digest → highest attestation level + revocation flag
 	// from a single secondary query. SEC-H1: the trust-roots public key is
@@ -513,13 +565,20 @@ func loadAttestRevoke(cfg *er1.Config, ctxID, onlySkill string, pub ed25519.Publ
 	revokedDigests := map[string]struct{}{}
 
 	for _, kind := range []string{EventKindAttested, EventKindRevoked} {
-		tags := []string{"m3c-skill-bundle", "skill-registry:self", "skill-event:" + kind}
-		if onlySkill != "" {
-			tags = append(tags, "skill:"+onlySkill)
-		}
-		items, err := searchByTagsRaw(cfg, ctxID, tags)
-		if err != nil {
-			return nil, nil, nil, err
+		// Both shelves: an attestation for an agent lives on the agent shelf,
+		// and a governance verdict that cannot be found is a bundle that
+		// cannot be installed.
+		var items []map[string]any
+		for _, shelf := range shelvesFor("") {
+			tags := []string{"m3c-skill-bundle", shelf, "skill-event:" + kind}
+			if onlySkill != "" {
+				tags = append(tags, "skill:"+onlySkill)
+			}
+			got, err := searchByTagsRaw(cfg, ctxID, tags)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			items = append(items, got...)
 		}
 		for _, item := range items {
 			body := itemBody(item)
