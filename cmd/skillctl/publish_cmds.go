@@ -215,6 +215,7 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 		return runPublishAttest(stdout, stderr, publishAttestArgs{
 			name:         name,
 			version:      ver,
+			kind:         *kindFlag,
 			level:        *level,
 			rationale:    *rationale,
 			digestArg:    *digestArg,
@@ -425,12 +426,41 @@ func resolveBundleDigest(digestArg, bundlePath, name, version string) (string, e
 
 type publishAttestArgs struct {
 	name, version, level, rationale, digestArg, bundlePath, identity, keyPath string
+	kind                                                                      string
 	er1Target, er1Context                                                     string
 	yes, dryRun, noCheckpoint                                                 bool
 	shareRooms                                                                []string
 }
 
+// attestLevelAllowed enforces the SPEC-0432 §5.1 minimum: an agent carries at
+// least "yellow", because an agent EXECUTES on a machine nobody is sitting at,
+// while a skill only instructs. There is deliberately no --force: an exception
+// is a change to the spec.
+//
+// SCOPE, so nobody mistakes this for a complete barrier: it judges the kind the
+// CALLER claims via --kind, not the kind inside the bundle. Someone who omits
+// --kind while attesting an agent passes here. That is by design (§5.1): the
+// second gate is pull, which reads the bundle itself (AC-4). Two gates, one
+// minimum.
+func attestLevelAllowed(kind, level string) error {
+	if kind != skillbundle.KindAgent {
+		return nil
+	}
+	if level == "green" {
+		return fmt.Errorf("agent bundles need at least level %q (got %q); nothing attested",
+			"yellow", level)
+	}
+	return nil
+}
+
 func runPublishAttest(stdout, stderr io.Writer, a publishAttestArgs) int {
+	// First, before resolving a digest and before unlocking a private key: a
+	// refusal must leave no trace at all.
+	if err := attestLevelAllowed(a.kind, a.level); err != nil {
+		fmt.Fprintf(stderr, "publish --attest: %v\n", err)
+		return 2
+	}
+
 	digest, err := resolveBundleDigest(a.digestArg, a.bundlePath, a.name, a.version)
 	if err != nil {
 		fmt.Fprintf(stderr, "publish --attest: %v\n", err)
