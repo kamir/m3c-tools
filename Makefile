@@ -364,11 +364,13 @@ checksums:
 
 # Run CI checks locally (mirrors .github/workflows/ci.yml)
 .PHONY: ci
+# The summary below is built from $^, not typed out. A hand written list drifts
+# from the real prerequisites and then reports checks that never ran: it said
+# "vet lint test build" on the day check-emdash was added. The comment lives
+# here and not inside the recipe, because a recipe line without a leading @ is
+# echoed to the terminal.
 ci: vet lint check-emdash test-unit build
 	@echo ""
-	# The summary is built from $^, not typed out. A hand written list drifts
-	# from the real prerequisites and then reports checks that never ran: this
-	# line said "vet lint test build" on the day check-emdash was added.
 	@echo "CI passed: $(foreach t,$^,$(t) ✓ )"
 
 # Run golangci-lint
