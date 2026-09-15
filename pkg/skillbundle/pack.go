@@ -46,8 +46,20 @@ type fileEntry struct {
 func Pack(skillDir, outFile string, opts PackOptions) (digest string, err error) {
 	skillDir = filepath.Clean(skillDir)
 
-	if _, err := os.Stat(filepath.Join(skillDir, "SKILL.md")); err != nil {
-		return "", fmt.Errorf("skill dir %q must contain SKILL.md: %w", skillDir, err)
+	// The anchor file the source dir must contain. A skill anchors on SKILL.md,
+	// an agent on its own definition file (SPEC-0432 §3.1: an agent bundle
+	// carries exactly one content file, <name>.md). One check, parameterized by
+	// kind, so both kinds go through the same canonicalization and digest path.
+	anchor := "SKILL.md"
+	if opts.Manifest.EffectiveKind() == KindAgent {
+		if opts.Manifest.Name == "" {
+			return "", fmt.Errorf("agent bundle needs a manifest name; "+
+				"without it the anchor would be %q and no bundle is written", ".md")
+		}
+		anchor = opts.Manifest.Name + ".md"
+	}
+	if _, err := os.Stat(filepath.Join(skillDir, anchor)); err != nil {
+		return "", fmt.Errorf("source dir %q must contain %s: %w", skillDir, anchor, err)
 	}
 
 	// LIBRARY-BOUNDARY SCOPE GATE (P2b challenge-gate fix). The author signature

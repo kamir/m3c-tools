@@ -104,7 +104,9 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 	var (
 		// Selection
 		registryName = fs.String("registry", "self", "Registry spec. \"self\" (recommended) or \"er1://...\". HTTP registries route through the existing admission client, not this transport.")
+		kindFlag     = fs.String("kind", skillbundle.KindSkill, "Bundle kind: skill | agent (SPEC-0432). An agent bundle carries exactly one file, ~/.claude/agents/<name>.md.")
 		skillDir     = fs.String("skill-dir", "", "Path to the skill directory. Default: ~/.claude/skills/<name>.")
+		agentFile    = fs.String("agent-file", "", "[--kind agent] Path to the agent definition. Default: ~/.claude/agents/<name>.md.")
 		bundle       = fs.String("bundle", "", "Path to a pre-built .skb. If empty, the skill dir is packed in-place to ./<name>@<version>.skb.")
 		version      = fs.String("version", "", "Skill version (overrides the SKILL.md frontmatter). Required for admit; inferred from --bundle filename for attest.")
 		identity     = fs.String("identity", "id:kamir@m3c", "Author/registry identity id stamped into the event and tags.")
@@ -248,6 +250,8 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 	return runPublishAdmit(stdout, stderr, publishAdmitArgs{
 		name:             name,
 		version:          ver,
+		kind:             *kindFlag,
+		agentFile:        *agentFile,
 		skillDir:         *skillDir,
 		bundlePath:       *bundle,
 		identity:         *identity,
@@ -267,6 +271,7 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 
 type publishAdmitArgs struct {
 	name, version, skillDir, bundlePath, identity, keyPath string
+	kind, agentFile                                        string
 	er1Target, er1Context                                  string
 	inlineMax                                              int
 	yes, dryRun, noCheckpoint, noRunbookPublish            bool
@@ -716,20 +721,58 @@ func ensureBundle(a publishAdmitArgs, stderr io.Writer) (string, string, error) 
 		}
 		return a.bundlePath, v, nil
 	}
-	dir := a.skillDir
-	if dir == "" {
-		home, _ := os.UserHomeDir()
-		dir = filepath.Join(home, ".claude", "skills", a.name)
+	kind := a.kind
+	if kind == "" {
+		kind = skillbundle.KindSkill
 	}
-	if _, err := os.Stat(dir); err != nil {
-		return "", "", fmt.Errorf("skill dir not found: %s (try --skill-dir)", dir)
+	if !skillbundle.ValidKind(kind) {
+		return "", "", fmt.Errorf("bad kind %q (want %q or %q); no bundle written",
+			kind, skillbundle.KindSkill, skillbundle.KindAgent)
 	}
+
+	var dir string
+	man := skillbundle.BundleManifest{}
+	if kind == skillbundle.KindAgent {
+		// An agent is ONE file (SPEC-0432 §3.1). Stage it into a temp dir named
+		// <name>.md so it runs through the same packer as every skill: one
+		// canonicalization, one digest path, no special case inside Pack.
+		src := a.agentFile
+		if src == "" {
+			home, _ := os.UserHomeDir()
+			src = filepath.Join(home, ".claude", "agents", a.name+".md")
+		}
+		body, err := os.ReadFile(src)
+		if err != nil {
+			return "", "", fmt.Errorf("agent file not found: %s (try --agent-file)", src)
+		}
+		staged, err := os.MkdirTemp("", "skillctl-agent-")
+		if err != nil {
+			return "", "", fmt.Errorf("staging dir: %w", err)
+		}
+		defer os.RemoveAll(staged)
+		if err := os.WriteFile(filepath.Join(staged, a.name+".md"), body, 0644); err != nil {
+			return "", "", fmt.Errorf("staging %s: %w", a.name, err)
+		}
+		dir = staged
+		man.Kind = skillbundle.KindAgent
+		man.Name = a.name
+	} else {
+		dir = a.skillDir
+		if dir == "" {
+			home, _ := os.UserHomeDir()
+			dir = filepath.Join(home, ".claude", "skills", a.name)
+		}
+		if _, err := os.Stat(dir); err != nil {
+			return "", "", fmt.Errorf("skill dir not found: %s (try --skill-dir)", dir)
+		}
+	}
+
 	v := a.version
 	if v == "" {
 		v = "0.0.0"
 	}
 	out := filepath.Join(".", a.name+"@"+v+".skb")
-	if _, err := skillbundle.Pack(dir, out, skillbundle.PackOptions{}); err != nil {
+	if _, err := skillbundle.Pack(dir, out, skillbundle.PackOptions{Manifest: man}); err != nil {
 		return "", "", fmt.Errorf("pack %s: %w", dir, err)
 	}
 	fmt.Fprintf(stderr, "    packed: %s\n", out)

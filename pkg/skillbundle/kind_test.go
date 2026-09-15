@@ -14,6 +14,19 @@ import (
 // result. TestDigestStability in pack_test.go is the guard for that, pinned
 // against goldenDigest; the tests here cover the mechanism behind it.
 
+// writeFixtureAgent builds an agent source dir: exactly ONE file, <name>.md
+// (SPEC-0432 §3.1). Deliberately NOT the skill fixture: an agent that packs
+// from a skill dir would carry files nobody meant to ship.
+func writeFixtureAgent(t *testing.T, name string) string {
+	t.Helper()
+	dir := t.TempDir()
+	body := "---\nname: " + name + "\ndescription: fixture agent\n---\n\nDo the thing.\n"
+	if err := os.WriteFile(filepath.Join(dir, name+".md"), []byte(body), 0644); err != nil {
+		t.Fatalf("write agent fixture: %v", err)
+	}
+	return dir
+}
+
 // TestSkillManifestOmitsKind: a skill writes NO kind key at all, and stays on
 // schema v1. This is why goldenDigest survives the new field.
 func TestSkillManifestOmitsKind(t *testing.T) {
@@ -42,10 +55,10 @@ func TestSkillManifestOmitsKind(t *testing.T) {
 
 // TestAgentManifestCarriesKindAndSchemaV2: the agent side, SPEC-0432 AC-13.
 func TestAgentManifestCarriesKindAndSchemaV2(t *testing.T) {
-	src := writeFixtureSkill(t)
-	out := filepath.Join(t.TempDir(), "agent.skb")
 	man := fixtureManifest()
 	man.Kind = KindAgent
+	src := writeFixtureAgent(t, man.Name)
+	out := filepath.Join(t.TempDir(), "agent.skb")
 	if _, err := Pack(src, out, PackOptions{Manifest: man, BuiltAt: fixedTime}); err != nil {
 		t.Fatalf("pack: %v", err)
 	}
@@ -74,7 +87,7 @@ func TestSkillAndAgentDigestsDiffer(t *testing.T) {
 	}
 	man := fixtureManifest()
 	man.Kind = KindAgent
-	agentDigest, err := Pack(src, filepath.Join(out, "a.skb"),
+	agentDigest, err := Pack(writeFixtureAgent(t, man.Name), filepath.Join(out, "a.skb"),
 		PackOptions{Manifest: man, BuiltAt: fixedTime})
 	if err != nil {
 		t.Fatalf("pack agent: %v", err)
@@ -116,6 +129,48 @@ func TestValidKind(t *testing.T) {
 		if got := ValidKind(tc.in); got != tc.want {
 			t.Errorf("ValidKind(%q) = %v, want %v", tc.in, got, tc.want)
 		}
+	}
+}
+
+// TestAgentBundleCarriesExactlyOneFile: SPEC-0432 AC-14. Beside the two
+// synthesized entries the archive holds the definition file and nothing else.
+func TestAgentBundleCarriesExactlyOneFile(t *testing.T) {
+	man := fixtureManifest()
+	man.Kind = KindAgent
+	out := filepath.Join(t.TempDir(), "agent.skb")
+	if _, err := Pack(writeFixtureAgent(t, man.Name), out,
+		PackOptions{Manifest: man, BuiltAt: fixedTime}); err != nil {
+		t.Fatalf("pack: %v", err)
+	}
+	var content []string
+	for _, n := range readTarNames(t, out) {
+		if n != "bundle.json" && n != "CHECKSUMS" {
+			content = append(content, n)
+		}
+	}
+	if len(content) != 1 || content[0] != man.Name+".md" {
+		t.Fatalf("agent archive content = %v, want exactly [%s.md]", content, man.Name)
+	}
+}
+
+// TestPackRejectsAgentWithoutName: without a name the anchor would be ".md",
+// so the packer would check a filename nobody meant.
+func TestPackRejectsAgentWithoutName(t *testing.T) {
+	man := fixtureManifest()
+	man.Kind = KindAgent
+	src := writeFixtureAgent(t, man.Name)
+	man.Name = ""
+	out := filepath.Join(t.TempDir(), "nameless.skb")
+
+	_, err := Pack(src, out, PackOptions{Manifest: man, BuiltAt: fixedTime})
+	if err == nil {
+		t.Fatal("pack accepted an agent bundle without a name")
+	}
+	if !strings.Contains(err.Error(), "no bundle is written") {
+		t.Errorf("error %q does not say the bundle was not written", err)
+	}
+	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+		t.Fatalf("a bundle was written despite the error: %v", statErr)
 	}
 }
 
