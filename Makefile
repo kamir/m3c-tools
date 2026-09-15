@@ -364,7 +364,7 @@ checksums:
 
 # Run CI checks locally (mirrors .github/workflows/ci.yml)
 .PHONY: ci
-ci: vet lint test-unit build
+ci: vet lint check-emdash test-unit build
 	@echo ""
 	@echo "CI passed: vet ✓  lint ✓  test ✓  build ✓"
 
@@ -375,6 +375,14 @@ ci: vet lint test-unit build
 # different verdict for the same command, and then "locally green" says
 # nothing about the gate that decides. Change it in both places or in neither.
 GOLANGCI_VERSION ?= v2.13.2
+
+# Prose gate (BUG-0436). Diff scoped: main carries 2870 em dashes across 469 of
+# 624 Go files, so a tree wide check would be red on arrival, and a gate that
+# is red on arrival gets switched off.
+.PHONY: check-emdash
+check-emdash:
+	@./scripts/check-no-emdash.sh --selftest
+	@./scripts/check-no-emdash.sh
 
 lint:
 	@echo "Running golangci-lint..."

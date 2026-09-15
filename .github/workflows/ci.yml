@@ -7,6 +7,24 @@ on:
     branches: [main, master]
 
 jobs:
+  prose-gate:
+    name: Prose (no new em dashes)
+    runs-on: ubuntu-latest
+    steps:
+      # fetch-depth 0: the check compares against the merge base, and a shallow
+      # clone has no merge base to compare against.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prove the checker still bites
+        run: ./scripts/check-no-emdash.sh --selftest
+
+      - name: No new em dashes
+        env:
+          PROSE_BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+        run: ./scripts/check-no-emdash.sh
+
   lint:
     name: Lint & Vet
     runs-on: macos-latest
