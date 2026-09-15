@@ -11,7 +11,7 @@ func befuellt(t *testing.T, seqs ...int) *MemStore {
 	t.Helper()
 	s := NewMemStore("kup___skillenv")
 	for _, n := range seqs {
-		if _, err := s.Ablegen(bericht(n), consent("kamir")); err != nil {
+		if _, err := s.Ablegen(bericht(n), consent("bob")); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -104,7 +104,7 @@ func TestAufbewahrungslaufEntferntUndMeldetDasFenster(t *testing.T) {
 func TestAC11_LoeschungEntferntAllesUndMeldetKeineLuecke(t *testing.T) {
 	s := befuellt(t, 1, 2, 3)
 	env := bericht(1).ENV
-	erg, err := LoeschePrinzipal(s, "kamir", time.Now().UTC())
+	erg, err := LoeschePrinzipal(s, "bob", time.Now().UTC())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,16 +127,16 @@ func TestAC11_LoeschungEntferntAllesUndMeldetKeineLuecke(t *testing.T) {
 
 func TestAC11_LoeschungFindetAlleUmgebungenDerPerson(t *testing.T) {
 	s := NewMemStore("kup___skillenv")
-	if _, err := s.Ablegen(bericht(1), consent("kamir")); err != nil {
+	if _, err := s.Ablegen(bericht(1), consent("bob")); err != nil {
 		t.Fatal(err)
 	}
-	zweite, _ := NeueENV("kup", "kamir", "Intel-MBP")
+	zweite, _ := NeueENV("kup", "bob", "Intel-MBP")
 	r := bericht(1)
 	r.ENV = zweite.String()
-	if _, err := s.Ablegen(r, consent("kamir")); err != nil {
+	if _, err := s.Ablegen(r, consent("bob")); err != nil {
 		t.Fatal(err)
 	}
-	erg, err := LoeschePrinzipal(s, "kamir", time.Now().UTC())
+	erg, err := LoeschePrinzipal(s, "bob", time.Now().UTC())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,17 +147,17 @@ func TestAC11_LoeschungFindetAlleUmgebungenDerPerson(t *testing.T) {
 
 func TestAC11_LoeschungLaesstFremdeUnberuehrt(t *testing.T) {
 	s := NewMemStore("kup___skillenv")
-	if _, err := s.Ablegen(bericht(1), consent("kamir")); err != nil {
+	if _, err := s.Ablegen(bericht(1), consent("bob")); err != nil {
 		t.Fatal(err)
 	}
-	fremd, _ := NeueENV("kup", "eric", "ThinkPad")
+	fremd, _ := NeueENV("kup", "alice", "ThinkPad")
 	r := bericht(1)
 	r.ENV = fremd.String()
-	r.Principal = "eric"
-	if _, err := s.Ablegen(r, consent("eric")); err != nil {
+	r.Principal = "alice"
+	if _, err := s.Ablegen(r, consent("alice")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := LoeschePrinzipal(s, "kamir", time.Now().UTC()); err != nil {
+	if _, err := LoeschePrinzipal(s, "bob", time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
 	rest, _ := s.Liste(fremd.String())
@@ -169,7 +169,7 @@ func TestAC11_LoeschungLaesstFremdeUnberuehrt(t *testing.T) {
 // Das Loeschergebnis darf kein Verzeichnis des Geloeschten sein.
 func TestAC11_ErgebnisTraegtKeineInhalte(t *testing.T) {
 	s := befuellt(t, 1, 2)
-	erg, err := LoeschePrinzipal(s, "kamir", time.Now().UTC())
+	erg, err := LoeschePrinzipal(s, "bob", time.Now().UTC())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +185,7 @@ func TestAC11_ErgebnisTraegtKeineInhalte(t *testing.T) {
 }
 
 func TestLoeschungOhneLoescherIstEinFehler(t *testing.T) {
-	if _, err := LoeschePrinzipal(nil, "kamir", time.Now().UTC()); !errors.Is(err, ErrKeinLoescher) {
+	if _, err := LoeschePrinzipal(nil, "bob", time.Now().UTC()); !errors.Is(err, ErrKeinLoescher) {
 		t.Fatalf("Loeschung ohne Loescher: %v", err)
 	}
 }

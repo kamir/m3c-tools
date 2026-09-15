@@ -53,7 +53,7 @@ func pinnedOpts(t *testing.T) (VerifyOpts, keyMaterial) {
 	bundlePath, digestRaw, digestStr := writeBundle(t, []byte("pinned-mode bundle bytes"))
 	authorSig := signOver(t, authorKey.priv, digestRaw)
 	regSig := signOver(t, regKey.priv, digestRaw)
-	authorID := "id:kamir@m3c"
+	authorID := "id:bob@m3c"
 
 	opts := VerifyOpts{
 		BundlePath:      bundlePath,
@@ -73,8 +73,8 @@ func TestVerify_Pinned_HappyPath_NoFetcher(t *testing.T) {
 	if err != nil {
 		t.Fatalf("pinned verify should pass with no fetcher, got: %v", err)
 	}
-	if res.AuthorIdentity != "id:kamir@m3c" {
-		t.Errorf("author identity = %q, want id:kamir@m3c", res.AuthorIdentity)
+	if res.AuthorIdentity != "id:bob@m3c" {
+		t.Errorf("author identity = %q, want id:bob@m3c", res.AuthorIdentity)
 	}
 	if !bytes.Contains(log.Bytes(), []byte("source=pinned")) {
 		t.Errorf("verbose log should record source=pinned; got:\n%s", log.String())
@@ -183,14 +183,14 @@ func TestTrustRoots_Pinned_FingerprintMatch_Hydrates(t *testing.T) {
 		"    identity_keys_authorized: pinned\n" +
 		"    governance_minimum: green\n" +
 		"    authors:\n" +
-		"      - id: id:kamir@m3c\n" +
+		"      - id: id:bob@m3c\n" +
 		"        pubkey: " + authorKey.b64 + "\n" +
 		"        fingerprint: " + fp + "\n"
 	tr, err := Load(writeTrustRootsYAML(t, body))
 	if err != nil {
 		t.Fatalf("valid pinned config should load, got: %v", err)
 	}
-	ak := tr.Roots[0].FindAuthor("id:kamir@m3c")
+	ak := tr.Roots[0].FindAuthor("id:bob@m3c")
 	if ak == nil {
 		t.Fatal("FindAuthor should locate the pinned author")
 	}
@@ -212,7 +212,7 @@ func TestTrustRoots_Pinned_FingerprintMismatch_Refuses(t *testing.T) {
 		"    identity_keys_authorized: pinned\n" +
 		"    governance_minimum: green\n" +
 		"    authors:\n" +
-		"      - id: id:kamir@m3c\n" +
+		"      - id: id:bob@m3c\n" +
 		"        pubkey: " + authorKey.b64 + "\n" +
 		"        fingerprint: " + wrong + "\n"
 	_, err := Load(writeTrustRootsYAML(t, body))

@@ -60,7 +60,7 @@ func buildBundleFixture(t *testing.T) bundleFixture {
 	dRaw := sha256.Sum256(content)
 	digestStr := "sha256:" + hex.EncodeToString(dRaw[:])
 
-	authorID := "id:kamir@m3c"
+	authorID := "id:bob@m3c"
 	regURL := "https://reg.example/api/skills"
 
 	meta := registry.BundleMeta{

@@ -73,7 +73,7 @@ func store(up *fakeUp, ls *fakeLs) *ER1Store {
 
 func TestER1_AblageSchreibtAnkerUndBericht(t *testing.T) {
 	up, ls := &fakeUp{}, &fakeLs{}
-	a, err := store(up, ls).Ablegen(bericht(1), consent("kamir"))
+	a, err := store(up, ls).Ablegen(bericht(1), consent("bob"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,19 +105,19 @@ func TestER1_KeinNetzaufrufWennEineGrenzeFaellt(t *testing.T) {
 		{"fremde Einwilligung", func() Report { return bericht(1) }, consent("wer-anders")},
 		{"Klartext-Host", func() Report {
 			r := bericht(1)
-			r.ENV = "env:kup/kamir/MacBook-Pro-von-Mirko"
+			r.ENV = "env:kup/bob/MacBook-Pro-von-Bob"
 			return r
-		}, consent("kamir")},
+		}, consent("bob")},
 		{"ohne Aufbewahrungsfrist", func() Report {
 			r := bericht(1)
 			r.AufbewahrungBis = time.Time{}
 			return r
-		}, consent("kamir")},
+		}, consent("bob")},
 		{"Quelltext im Rumpf", func() Report {
 			r := bericht(1)
 			r.Zeilen[0].Trust.Reason = strings.Repeat("y", 600)
 			return r
-		}, consent("kamir")},
+		}, consent("bob")},
 	}
 	for _, f := range faelle {
 		t.Run(f.name, func(t *testing.T) {
@@ -135,12 +135,12 @@ func TestER1_KeinNetzaufrufWennEineGrenzeFaellt(t *testing.T) {
 func TestER1_ZweiterBerichtUeberschreibtNicht(t *testing.T) {
 	up := &fakeUp{}
 	ls := &fakeLs{items: []RohPosten{{DocID: "doc-alt", Tags: []string{
-		"skill-env-report", "env:kup/kamir/" + HashHost("kup", "MacBook-Pro-von-Mirko"),
+		"skill-env-report", "env:kup/bob/" + HashHost("kup", "MacBook-Pro-von-Bob"),
 		"report-seq:1",
 	}}}}
 	s := store(up, ls)
 	// seq 1 liegt schon: abgelehnt, und nichts gesendet.
-	_, err := s.Ablegen(bericht(1), consent("kamir"))
+	_, err := s.Ablegen(bericht(1), consent("bob"))
 	if !errors.Is(err, ErrSchonVorhanden) {
 		t.Fatalf("doppelte Seq: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestER1_ZweiterBerichtUeberschreibtNicht(t *testing.T) {
 		t.Fatalf("es wurde trotz vorhandener Seq gesendet: %d", len(up.calls))
 	}
 	// seq 2 geht durch.
-	if _, err := s.Ablegen(bericht(2), consent("kamir")); err != nil {
+	if _, err := s.Ablegen(bericht(2), consent("bob")); err != nil {
 		t.Fatalf("seq 2 abgelehnt: %v", err)
 	}
 }
@@ -156,7 +156,7 @@ func TestER1_ZweiterBerichtUeberschreibtNicht(t *testing.T) {
 func TestER1_AnkerWirdWiederverwendet(t *testing.T) {
 	up := &fakeUp{}
 	ls := &fakeLs{items: []RohPosten{{DocID: "anker-vorhanden", Tags: []string{
-		"skill-env-anchor", "env:kup/kamir/" + HashHost("kup", "MacBook-Pro-von-Mirko"),
+		"skill-env-anchor", "env:kup/bob/" + HashHost("kup", "MacBook-Pro-von-Bob"),
 	}}}}
 	s := store(up, ls)
 	id, err := s.Anker(bericht(1).ENV)
@@ -173,8 +173,8 @@ func TestER1_AnkerWirdWiederverwendet(t *testing.T) {
 
 func TestER1_NaechsteSeqKommtAusDerAblage(t *testing.T) {
 	ls := &fakeLs{items: []RohPosten{
-		{DocID: "a", Tags: []string{"skill-env-report", "env:kup/kamir/" + HashHost("kup", "MacBook-Pro-von-Mirko"), "report-seq:1"}},
-		{DocID: "b", Tags: []string{"skill-env-report", "env:kup/kamir/" + HashHost("kup", "MacBook-Pro-von-Mirko"), "report-seq:2"}},
+		{DocID: "a", Tags: []string{"skill-env-report", "env:kup/bob/" + HashHost("kup", "MacBook-Pro-von-Bob"), "report-seq:1"}},
+		{DocID: "b", Tags: []string{"skill-env-report", "env:kup/bob/" + HashHost("kup", "MacBook-Pro-von-Bob"), "report-seq:2"}},
 	}}
 	n, err := store(&fakeUp{}, ls).NaechsteSeq(bericht(1).ENV)
 	if err != nil {
@@ -188,7 +188,7 @@ func TestER1_NaechsteSeqKommtAusDerAblage(t *testing.T) {
 // Der geschriebene Rumpf traegt keinen Klarnamen und ist gueltiges JSON.
 func TestER1_RumpfIstJSONUndOhneKlarnamen(t *testing.T) {
 	up := &fakeUp{}
-	if _, err := store(up, &fakeLs{}).Ablegen(bericht(1), consent("kamir")); err != nil {
+	if _, err := store(up, &fakeLs{}).Ablegen(bericht(1), consent("bob")); err != nil {
 		t.Fatal(err)
 	}
 	rumpf := up.calls[1].Body
@@ -206,7 +206,7 @@ func TestER1_RumpfIstJSONUndOhneKlarnamen(t *testing.T) {
 
 func TestER1_OhneContextIDKeinSchreiben(t *testing.T) {
 	s := &ER1Store{Up: &fakeUp{}, Ls: &fakeLs{}}
-	if _, err := s.Ablegen(bericht(1), consent("kamir")); err == nil {
+	if _, err := s.Ablegen(bericht(1), consent("bob")); err == nil {
 		t.Fatal("ohne ContextID geschrieben")
 	}
 }
@@ -224,7 +224,7 @@ func TestER1_ErfuelltDenStoreVertrag(t *testing.T) {
 func signierterRumpf(t *testing.T, priv ed25519.PrivateKey, mutieren func(*Report)) string {
 	t.Helper()
 	r := bericht(1)
-	if err := Signiere(RohSchluessel(priv), &r, "id:kamir@m3c"); err != nil {
+	if err := Signiere(RohSchluessel(priv), &r, "id:bob@m3c"); err != nil {
 		t.Fatal(err)
 	}
 	if mutieren != nil {
@@ -283,7 +283,7 @@ func TestT03_OhneSchluesselWirdDieSchwaechereAuskunftGemeldet(t *testing.T) {
 
 func TestT03_AltpostenOhneEinwilligungWirdAbgelehnt(t *testing.T) {
 	pub, _ := schluessel(t)
-	alt := `{"env":"env:kup/kamir/0123456789abcdef","principal":"kamir","report_seq":1,` +
+	alt := `{"env":"env:kup/bob/0123456789abcdef","principal":"bob","report_seq":1,` +
 		`"taken_at":"2026-09-13T08:00:00Z","posture":"drift",` +
 		`"aufbewahrung_bis":"2027-09-13T00:00:00Z","zeilen":[]}`
 	ls := &fakeLs{koerper: map[string]string{"alt": alt}}

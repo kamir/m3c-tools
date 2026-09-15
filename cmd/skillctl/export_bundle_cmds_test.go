@@ -21,11 +21,11 @@ import (
 // registry plumbing, which the install tests already cover.
 func TestExportedSidecarIsWhatTheConsumerExpects(t *testing.T) {
 	dir := t.TempDir()
-	skb := filepath.Join(dir, "eric-demo-skill@1.0.0.skb")
+	skb := filepath.Join(dir, "alice-demo-skill@1.0.0.skb")
 
 	// The sidecar name is the ONE thing both sides must agree on without talking.
 	got := defaultMetaSidecar(skb)
-	want := filepath.Join(dir, "eric-demo-skill@1.0.0.skbmeta.json")
+	want := filepath.Join(dir, "alice-demo-skill@1.0.0.skbmeta.json")
 	if got != want {
 		t.Fatalf("sidecar path = %q, want %q: the sender and the recipient would look in different places", got, want)
 	}
@@ -36,12 +36,12 @@ func TestExportedSidecarIsWhatTheConsumerExpects(t *testing.T) {
 	meta := &registry.BundleMeta{
 		Bundle: map[string]any{
 			"bundle_digest": "sha256:" + strings.Repeat("ab", 32),
-			"name":          "eric-demo-skill",
+			"name":          "alice-demo-skill",
 			"version":       "1.0.0",
 			"status":        "admitted",
 		},
 		Signatures: []registry.SignatureRow{
-			{Role: "author", IdentityID: "id:eric@kup", SignatureB64: "AAAA", Status: "active"},
+			{Role: "author", IdentityID: "id:alice@kup", SignatureB64: "AAAA", Status: "active"},
 		},
 	}
 	raw, err := json.MarshalIndent(meta, "", "  ")
@@ -59,7 +59,7 @@ func TestExportedSidecarIsWhatTheConsumerExpects(t *testing.T) {
 	if len(back.Signatures) != 1 || back.Signatures[0].Role != "author" {
 		t.Errorf("the signature rows did not survive the round trip: %+v", back.Signatures)
 	}
-	if n, _ := back.Bundle["name"].(string); n != "eric-demo-skill" {
+	if n, _ := back.Bundle["name"].(string); n != "alice-demo-skill" {
 		t.Errorf("the bundle record did not survive the round trip: %v", back.Bundle)
 	}
 }

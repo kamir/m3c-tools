@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# 01-mirko-author: Mirko writes a skill, packs it, signs it.
+# 01-bob-author: Bob writes a skill, packs it, signs it.
 # Proves: keygen → pack → sign → verify-sig (local round-trip).
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 require_skillctl
 
-header "01: Mirko authors and signs the skill"
+header "01: Bob authors and signs the skill"
 
-# 1) Generate Mirko's signing key (idempotent across runs)
-# Reuse existing keys if present: the registry persists Mirko's identity
+# 1) Generate Bob's signing key (idempotent across runs)
+# Reuse existing keys if present: the registry persists Bob's identity
 # tied to a specific pubkey, so generating a new keypair every run would
 # produce signature_invalid on subsequent online publish attempts. Pass
 # --new-key to force regen (you'd then need to re-register the identity).
@@ -19,14 +19,14 @@ for arg in "$@"; do
     --new-key|--regen-keys) NEW_KEY=1 ;;
   esac
 done
-if [ "$NEW_KEY" -eq 1 ] || [ ! -f "$KEYS_DIR/mirko.priv" ] || [ ! -f "$KEYS_DIR/mirko.pub" ]; then
-  rm -f "$KEYS_DIR/mirko.priv" "$KEYS_DIR/mirko.pub"
-  log "Mirko: skillctl keygen --out $KEYS_DIR/mirko"
-  run_ok "$SKILLCTL" keygen --out "$KEYS_DIR/mirko" >/dev/null
-  test -f "$KEYS_DIR/mirko.priv" && test -f "$KEYS_DIR/mirko.pub"
-  ok "wrote mirko.priv (mode 0600) and mirko.pub (mode 0644)"
+if [ "$NEW_KEY" -eq 1 ] || [ ! -f "$KEYS_DIR/bob.priv" ] || [ ! -f "$KEYS_DIR/bob.pub" ]; then
+  rm -f "$KEYS_DIR/bob.priv" "$KEYS_DIR/bob.pub"
+  log "Bob: skillctl keygen --out $KEYS_DIR/bob"
+  run_ok "$SKILLCTL" keygen --out "$KEYS_DIR/bob" >/dev/null
+  test -f "$KEYS_DIR/bob.priv" && test -f "$KEYS_DIR/bob.pub"
+  ok "wrote bob.priv (mode 0600) and bob.pub (mode 0644)"
 else
-  ok "reusing existing mirko keypair (--new-key to force regen)"
+  ok "reusing existing bob keypair (--new-key to force regen)"
 fi
 
 # 2) Stage the skill source as a clean copy under bundles/src/
@@ -39,7 +39,7 @@ ok "staged skill source: $SRC"
 
 # 3) Pack into a deterministic .skb
 BUNDLE="$BUNDLES_DIR/${SKILL_NAME}-${SKILL_VERSION}.skb"
-log "Mirko: skillctl pack --skill $SRC -o $BUNDLE --name $SKILL_NAME --version $SKILL_VERSION"
+log "Bob: skillctl pack --skill $SRC -o $BUNDLE --name $SKILL_NAME --version $SKILL_VERSION"
 run_ok "$SKILLCTL" pack \
     --skill "$SRC" \
     -o "$BUNDLE" \
@@ -73,11 +73,11 @@ else
   exit 1
 fi
 
-# 5) Sign the bundle with Mirko's key (clear any prior .author.sig leftovers)
+# 5) Sign the bundle with Bob's key (clear any prior .author.sig leftovers)
 #    NOTE: skillctl sign requires flags BEFORE the bundle positional arg
 rm -f "${BUNDLE}".*.author.sig
-log "Mirko: skillctl sign --key mirko.priv --identity-id $MIRKO_ID $BUNDLE"
-SIGN_OUT=$("$SKILLCTL" sign --key "$KEYS_DIR/mirko.priv" --identity-id "$MIRKO_ID" "$BUNDLE" 2>>"$LOG_DIR/full.log")
+log "Bob: skillctl sign --key bob.priv --identity-id $MIRKO_ID $BUNDLE"
+SIGN_OUT=$("$SKILLCTL" sign --key "$KEYS_DIR/bob.priv" --identity-id "$MIRKO_ID" "$BUNDLE" 2>>"$LOG_DIR/full.log")
 echo "$SIGN_OUT" | tee -a "$LOG_DIR/full.log" | head -5 | sed 's/^/      /'
 DIGEST=$(echo "$SIGN_OUT" | awk '/^digest:/ {print $2}')
 [[ -n "$DIGEST" ]] || { fail "could not parse digest from sign output"; exit 1; }
@@ -87,11 +87,11 @@ echo "$DIGEST" > "$ARTIFACTS_DIR/digest.txt"
 ok "bundle digest: $DIGEST"
 
 # 6) Verify the signature locally (closes the loop without touching the registry)
-log "Mirko: skillctl verify-sig --pubkey mirko.pub $BUNDLE"
-assert_exit 0 -- "$SKILLCTL" verify-sig --pubkey "$KEYS_DIR/mirko.pub" "$BUNDLE"
+log "Bob: skillctl verify-sig --pubkey bob.pub $BUNDLE"
+assert_exit 0 -- "$SKILLCTL" verify-sig --pubkey "$KEYS_DIR/bob.pub" "$BUNDLE"
 
 header "01: done"
 note "Bundle:    $BUNDLE"
 note "Digest:    $DIGEST"
 note "Signature: ${BUNDLE}.${DIGEST#sha256:}.author.sig"
-note "Pubkey:    $KEYS_DIR/mirko.pub  (this is what Eric will pin)"
+note "Pubkey:    $KEYS_DIR/bob.pub  (this is what Alice will pin)"

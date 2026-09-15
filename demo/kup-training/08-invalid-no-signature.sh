@@ -24,11 +24,11 @@ test -f "$NAKED_DIR/$(basename "$BUNDLE_ORIG")"
 test ! -f "$NAKED_DIR/$(basename "$SIG_ORIG")"
 ok "staged $NAKED_DIR/: bundle present, signature ABSENT"
 
-log "Eric: skillctl verify-sig on a bundle with no sidecar signature"
+log "Alice: skillctl verify-sig on a bundle with no sidecar signature"
 # Allow either exit 11 (signature invalid) or exit 1 (generic: file not found).
 # Both prove the verifier refuses. Use a wrapper to map "anything non-zero" → ok.
 set +e
-"$SKILLCTL" verify-sig --pubkey "$KEYS_DIR/mirko.pub" \
+"$SKILLCTL" verify-sig --pubkey "$KEYS_DIR/bob.pub" \
     "$NAKED_DIR/$(basename "$BUNDLE_ORIG")" >>"$LOG_DIR/full.log" 2>&1
 rc=$?
 set -e

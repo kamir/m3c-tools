@@ -237,7 +237,7 @@
   <h2>Session metadata</h2>
   <div class="meta-grid">
     <label for="m-session">Session ID</label>          <input id="m-session"  type="text">
-    <label for="m-by">Captured by</label>              <input id="m-by"       type="text" placeholder="id:mirko@m3c">
+    <label for="m-by">Captured by</label>              <input id="m-by"       type="text" placeholder="id:bob@m3c">
     <label for="m-cohort">Cohort / context</label>     <input id="m-cohort"   type="text" placeholder="kup-berlin-001">
     <label for="m-mode">Mode</label>
     <select id="m-mode">
@@ -348,9 +348,9 @@ const START_DIR = "/Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training";
 const STEPS = [
   {
     id: "P0", title: "Prerequisite: register identities (one-time)", category: "setup", isGate: false,
-    intent: "Register id:mirko@m3c and id:reviewer@m3c in the local registry once. After 01 and 03 generate the keypairs, this is the missing setup step that unlocks fully-green online runs of 02 and 03. Idempotent (HTTP 409 on re-run).",
+    intent: "Register id:bob@m3c and id:reviewer@m3c in the local registry once. After 01 and 03 generate the keypairs, this is the missing setup step that unlocks fully-green online runs of 02 and 03. Idempotent (HTTP 409 on re-run).",
     commands: [
-      "./register-identity.sh id:mirko@m3c    artifacts/keys/mirko.pub    'Mirko (KuP demo author)'",
+      "./register-identity.sh id:bob@m3c    artifacts/keys/bob.pub    'Bob (KuP demo author)'",
       "./register-identity.sh id:reviewer@m3c artifacts/keys/reviewer.pub 'Reviewer (KuP demo)'"
     ],
     expected: "HTTP 201 first time, HTTP 409 (already_exists) on re-run. The script auto-resolves ER1_API_KEY from macOS keychain, X-User-ID from ~/.m3c-tools.env, and pubkey_b64 from the PEM file."
@@ -362,15 +362,15 @@ const STEPS = [
     expected: "skillctl binary at artifacts/bin/skillctl, clean workspace, online status reported."
   },
   {
-    id: "01", title: "Mirko authors and signs", category: "valid-path", isGate: false,
+    id: "01", title: "Bob authors and signs", category: "valid-path", isGate: false,
     intent: "Prove the cryptographic signing chain end-to-end locally. keygen (idempotent: reuses existing key) → pack (deterministic) → sign → verify-sig. Load-bearing offline proof.",
-    commands: [ "bash 01-mirko-author.sh" ],
-    expected: "mirko.{priv,pub} keypair, BUNDLE.skb (deterministic: two packs are byte-identical), .author.sig, digest.txt written. verify-sig exits 0."
+    commands: [ "bash 01-bob-author.sh" ],
+    expected: "bob.{priv,pub} keypair, BUNDLE.skb (deterministic: two packs are byte-identical), .author.sig, digest.txt written. verify-sig exits 0."
   },
   {
-    id: "02", title: "Mirko publishes to aims", category: "online-stretch", isGate: false,
-    intent: "Round-trip via aims-core registry. Requires P0 (Mirko registered). Identity-registration leg returns 403 by design (auth_curl uses id:mirko@m3c, not the admin user); bundle admit returns 200/201/409. ER1_API_KEY is auto-resolved from the macOS keychain by lib/common.sh on first call, no manual export needed.",
-    commands: [ "bash 02-mirko-publish.sh" ],
+    id: "02", title: "Bob publishes to aims", category: "online-stretch", isGate: false,
+    intent: "Round-trip via aims-core registry. Requires P0 (Bob registered). Identity-registration leg returns 403 by design (auth_curl uses id:bob@m3c, not the admin user); bundle admit returns 200/201/409. ER1_API_KEY is auto-resolved from the macOS keychain by lib/common.sh on first call, no manual export needed.",
+    commands: [ "bash 02-bob-publish.sh" ],
     expected: "Bundle admit HTTP 200/201/409. Without P0: signature_invalid (registered pubkey doesn't match local). Without SKILL_REGISTRY_KEY env: 500 storage_failed (acceptable per spec: chain proof in 05 doesn't depend on this)."
   },
   {
@@ -380,16 +380,16 @@ const STEPS = [
     expected: "reviewer.{priv,pub} keypair + attestation.json with level=green. Online with P0: registry returns 200/201."
   },
   {
-    id: "04", title: "Eric pins trust root", category: "valid-path", isGate: false,
-    intent: "Eric's $HOME has the trust-roots file with Mirko's pubkey. Demo uses an isolated fake $HOME so real ~/.claude is untouched.",
-    commands: [ "bash 04-eric-trust-root.sh" ],
-    expected: "artifacts/eric-home/.claude/skill-trust-roots.yaml contains the registry + pinned pubkey; trust list shows mirko-author-key."
+    id: "04", title: "Alice pins trust root", category: "valid-path", isGate: false,
+    intent: "Alice's $HOME has the trust-roots file with Bob's pubkey. Demo uses an isolated fake $HOME so real ~/.claude is untouched.",
+    commands: [ "bash 04-alice-trust-root.sh" ],
+    expected: "artifacts/alice-home/.claude/skill-trust-roots.yaml contains the registry + pinned pubkey; trust list shows bob-author-key."
   },
   {
-    id: "05", title: "Eric installs and runs (VALID)", category: "valid-path", isGate: false,
-    intent: "Full chain check passes: digest → author sig → registry sig (online) → governance ≥ minimum → atomic-extract → run. Eric produces a file ONLY producible if the chain accepted the bundle.",
-    commands: [ "bash 05-eric-install-and-run.sh" ],
-    expected: "artifacts/eric-home/output/hello.txt with the canonical greeting. **LOAD-BEARING VALID-PATH PROOF.**"
+    id: "05", title: "Alice installs and runs (VALID)", category: "valid-path", isGate: false,
+    intent: "Full chain check passes: digest → author sig → registry sig (online) → governance ≥ minimum → atomic-extract → run. Alice produces a file ONLY producible if the chain accepted the bundle.",
+    commands: [ "bash 05-alice-install-and-run.sh" ],
+    expected: "artifacts/alice-home/output/hello.txt with the canonical greeting. **LOAD-BEARING VALID-PATH PROOF.**"
   },
   {
     id: "06", title: "INVALID: tampered bytes", category: "invalid-path", isGate: false,
@@ -399,9 +399,9 @@ const STEPS = [
   },
   {
     id: "07", title: "INVALID) wrong key (impersonation)", category: "invalid-path", isGate: false,
-    intent: "Attacker generates their own keypair, packs an identical-looking bundle, signs it with the attacker key but claims --identity-id id:mirko@m3c. Eric's pinned pubkey is Mirko's; verify must refuse.",
+    intent: "Attacker generates their own keypair, packs an identical-looking bundle, signs it with the attacker key but claims --identity-id id:bob@m3c. Alice's pinned pubkey is Bob's; verify must refuse.",
     commands: [ "bash 07-invalid-wrong-key.sh" ],
-    expected: "verify-sig with mirko.pub: exit 11. Control: same bundle verifies fine against attacker.pub (proves the bundle is structurally valid and the failure is specifically the wrong-key signal)."
+    expected: "verify-sig with bob.pub: exit 11. Control: same bundle verifies fine against attacker.pub (proves the bundle is structurally valid and the failure is specifically the wrong-key signal)."
   },
   {
     id: "08", title: "INVALID: no signature delivered", category: "invalid-path", isGate: false,
@@ -432,13 +432,13 @@ const STEPS = [
     expected: "10 files in artifacts/release/. SHA256SUMS verified. install.sh works as `curl ... | bash` (auto-detects OS/arch, verifies checksum)."
   },
   {
-    id: "G3", title: "Gate 3: Skill transfer Mirko → Eric via aims", category: "release-gate", isGate: true,
+    id: "G3", title: "Gate 3: Skill transfer Bob → Alice via aims", category: "release-gate", isGate: true,
     intent: "End-to-end synthesis verdict: did the chain (steps 01–05) deliver a usable skill from author to consumer through the aims registry path? This is the integration verdict on top of the per-step pass/fail.",
     commands: [
       "# Synthesizes results from steps 01–05 (no separate script).",
-      "# Pass criterion: each of 01–05 is GREEN AND artifacts/eric-home/output/hello.txt exists with the canonical greeting."
+      "# Pass criterion: each of 01–05 is GREEN AND artifacts/alice-home/output/hello.txt exists with the canonical greeting."
     ],
-    expected: "Chain proof completed end-to-end. Eric ran a skill that Mirko authored, signed, and (online or offline) delivered through the trust + governance pipeline. README §Release-gate G3 contractual output."
+    expected: "Chain proof completed end-to-end. Alice ran a skill that Bob authored, signed, and (online or offline) delivered through the trust + governance pipeline. README §Release-gate G3 contractual output."
   },
   {
     id: "G4", title: "Gate 4: Valid works AND invalid fails", category: "release-gate", isGate: true,
@@ -481,7 +481,7 @@ function saveState() {
 function defaultMeta() {
   return {
     session_id: "kup-release-gate-" + new Date().toISOString().slice(0,10),
-    captured_by: "id:mirko@m3c",
+    captured_by: "id:bob@m3c",
     cohort: "kup-berlin-001",
     mode: "mixed",
     host: navigator.platform.toLowerCase() + "-" + (navigator.userAgent.match(/(arm|x86_64|amd64|aarch64)/i)?.[1] || "unknown")

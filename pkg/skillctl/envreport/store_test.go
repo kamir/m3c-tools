@@ -22,11 +22,11 @@ func consent(principal string) Einwilligung {
 }
 
 func bericht(seq int) Report {
-	env, _ := NeueENV("kup", "kamir", "MacBook-Pro-von-Mirko")
-	e := consent("kamir")
+	env, _ := NeueENV("kup", "bob", "MacBook-Pro-von-Bob")
+	e := consent("bob")
 	return Report{
 		ENV:             env.String(),
-		Principal:       "kamir",
+		Principal:       "bob",
 		Seq:             seq,
 		TakenAt:         time.Date(2026, 9, 13, 8, 0, 0, 0, time.UTC).Add(time.Duration(seq) * time.Hour),
 		Posture:         PostureOK,
@@ -43,8 +43,8 @@ func TestAC05_AchtMarken(t *testing.T) {
 	tags := Marken(r, "kup___skillenv", "anker-001")
 	will := []string{
 		"skill-env-report",
-		"env:kup/kamir/",
-		"principal:kamir",
+		"env:kup/bob/",
+		"principal:bob",
 		"report-seq:1",
 		"report-digest:sha256:",
 		"taken-at:2026-09-13",
@@ -75,11 +75,11 @@ func TestAC05_MarkenTragenNieDenKlarnamen(t *testing.T) {
 
 func TestAC06_AblageIstAnhaengend(t *testing.T) {
 	s := NewMemStore("kup___skillenv")
-	a1, err := s.Ablegen(bericht(1), consent("kamir"))
+	a1, err := s.Ablegen(bericht(1), consent("bob"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	a2, err := s.Ablegen(bericht(2), consent("kamir"))
+	a2, err := s.Ablegen(bericht(2), consent("bob"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,10 +97,10 @@ func TestAC06_AblageIstAnhaengend(t *testing.T) {
 
 func TestAC06_GleicheSeqWirdAbgelehntStattUeberschrieben(t *testing.T) {
 	s := NewMemStore("kup___skillenv")
-	if _, err := s.Ablegen(bericht(1), consent("kamir")); err != nil {
+	if _, err := s.Ablegen(bericht(1), consent("bob")); err != nil {
 		t.Fatal(err)
 	}
-	_, err := s.Ablegen(bericht(1), consent("kamir"))
+	_, err := s.Ablegen(bericht(1), consent("bob"))
 	if !errors.Is(err, ErrSchonVorhanden) {
 		t.Fatalf("doppelte Seq: %v, erwartet ErrSchonVorhanden", err)
 	}
@@ -116,7 +116,7 @@ func TestSeqKommtAusDerAblage(t *testing.T) {
 	if n, _ := s.NaechsteSeq(env); n != 1 {
 		t.Fatalf("erste Nummer ist %d, erwartet 1", n)
 	}
-	if _, err := s.Ablegen(bericht(1), consent("kamir")); err != nil {
+	if _, err := s.Ablegen(bericht(1), consent("bob")); err != nil {
 		t.Fatal(err)
 	}
 	if n, _ := s.NaechsteSeq(env); n != 2 {
@@ -130,7 +130,7 @@ func TestAC07_LueckeUeberDenStore(t *testing.T) {
 	s := NewMemStore("kup___skillenv")
 	env := bericht(1).ENV
 	for _, n := range []int{1, 2, 4} {
-		if _, err := s.Ablegen(bericht(n), consent("kamir")); err != nil {
+		if _, err := s.Ablegen(bericht(n), consent("bob")); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -152,8 +152,8 @@ func TestAC07_LueckeUeberDenStore(t *testing.T) {
 
 func TestGrenze1_KlartextHostWirdAbgelehnt(t *testing.T) {
 	r := bericht(1)
-	r.ENV = "env:kup/kamir/MacBook-Pro-von-Mirko"
-	err := PruefeAblage(r, consent("kamir"), time.Now().UTC())
+	r.ENV = "env:kup/bob/MacBook-Pro-von-Bob"
+	err := PruefeAblage(r, consent("bob"), time.Now().UTC())
 	if !errors.Is(err, ErrHostImKlartext) {
 		t.Fatalf("Klartext-Host durchgelassen: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestGrenze1_KlartextHostWirdAbgelehnt(t *testing.T) {
 func TestGrenze2_UeberlangerFreitextWirdAbgelehnt(t *testing.T) {
 	r := bericht(1)
 	r.Zeilen[0].Trust.Reason = strings.Repeat("x", 513)
-	err := PruefeAblage(r, consent("kamir"), time.Now().UTC())
+	err := PruefeAblage(r, consent("bob"), time.Now().UTC())
 	if !errors.Is(err, ErrQuelltextImRumpf) {
 		t.Fatalf("Quelltext durchgelassen: %v", err)
 	}
@@ -173,7 +173,7 @@ func TestGrenze2_UeberlangerFreitextWirdAbgelehnt(t *testing.T) {
 func TestGrenze2_KurzerGrundBleibtErlaubt(t *testing.T) {
 	r := bericht(1)
 	r.Zeilen[0].Trust.Reason = "no sibling .skb"
-	if err := PruefeAblage(r, consent("kamir"), time.Now().UTC()); err != nil {
+	if err := PruefeAblage(r, consent("bob"), time.Now().UTC()); err != nil {
 		t.Fatalf("normaler Grund abgelehnt: %v", err)
 	}
 }
@@ -197,34 +197,34 @@ func TestGrenze3_FremdeEinwilligungZaehltNicht(t *testing.T) {
 }
 
 func TestGrenze3_EinwilligungOhneBelegIstKeine(t *testing.T) {
-	e := consent("kamir")
+	e := consent("bob")
 	e.Beleg = ""
-	if err := e.Gueltig("kamir", time.Now().UTC()); !errors.Is(err, ErrEinwilligungFehlt) {
+	if err := e.Gueltig("bob", time.Now().UTC()); !errors.Is(err, ErrEinwilligungFehlt) {
 		t.Fatalf("Einwilligung ohne Beleg akzeptiert: %v", err)
 	}
 }
 
 func TestGrenze3_UnbekannteArtWirdAbgelehnt(t *testing.T) {
-	e := consent("kamir")
+	e := consent("bob")
 	e.Art = "angenommen"
-	if err := e.Gueltig("kamir", time.Now().UTC()); !errors.Is(err, ErrEinwilligungFehlt) {
+	if err := e.Gueltig("bob", time.Now().UTC()); !errors.Is(err, ErrEinwilligungFehlt) {
 		t.Fatalf("unbekannte Einwilligungsart akzeptiert: %v", err)
 	}
 }
 
 func TestGrenze3_EinsetzungMitBenachrichtigungZaehlt(t *testing.T) {
-	e := consent("kamir")
+	e := consent("bob")
 	e.Art = "eingesetzt"
 	e.Beleg = "Anordnung 2026-09-01, Benachrichtigung per Mail am selben Tag"
-	if err := e.Gueltig("kamir", time.Now().UTC()); err != nil {
+	if err := e.Gueltig("bob", time.Now().UTC()); err != nil {
 		t.Fatalf("Einsetzung mit Benachrichtigung abgelehnt: %v", err)
 	}
 }
 
 func TestGrenze3_ZukuenftigeEinwilligungZaehltNicht(t *testing.T) {
-	e := consent("kamir")
+	e := consent("bob")
 	e.Erteilt = time.Now().UTC().Add(48 * time.Hour)
-	if err := e.Gueltig("kamir", time.Now().UTC()); !errors.Is(err, ErrEinwilligungFehlt) {
+	if err := e.Gueltig("bob", time.Now().UTC()); !errors.Is(err, ErrEinwilligungFehlt) {
 		t.Fatalf("in der Zukunft erteilte Einwilligung akzeptiert: %v", err)
 	}
 }
@@ -235,7 +235,7 @@ func TestGrenze4_OhneFristKeineAblage(t *testing.T) {
 	s := NewMemStore("kup___skillenv")
 	r := bericht(1)
 	r.AufbewahrungBis = time.Time{}
-	_, err := s.Ablegen(r, consent("kamir"))
+	_, err := s.Ablegen(r, consent("bob"))
 	if !errors.Is(err, ErrFristFehlt) {
 		t.Fatalf("ohne Aufbewahrungsfrist geschrieben: %v", err)
 	}
@@ -245,14 +245,14 @@ func TestGrenze4_OhneFristKeineAblage(t *testing.T) {
 
 func TestGrenze5_ListeIstAufEineUmgebungBeschraenkt(t *testing.T) {
 	s := NewMemStore("kup___skillenv")
-	if _, err := s.Ablegen(bericht(1), consent("kamir")); err != nil {
+	if _, err := s.Ablegen(bericht(1), consent("bob")); err != nil {
 		t.Fatal(err)
 	}
-	andereENV, _ := NeueENV("kup", "eric", "ThinkPad")
+	andereENV, _ := NeueENV("kup", "alice", "ThinkPad")
 	r := bericht(1)
 	r.ENV = andereENV.String()
-	r.Principal = "eric"
-	if _, err := s.Ablegen(r, consent("eric")); err != nil {
+	r.Principal = "alice"
+	if _, err := s.Ablegen(r, consent("alice")); err != nil {
 		t.Fatal(err)
 	}
 	meine, _ := s.Liste(bericht(1).ENV)
@@ -289,7 +289,7 @@ func TestAnkerIstJeUmgebungStabil(t *testing.T) {
 	if a != b {
 		t.Fatalf("der Anker wechselt: %s != %s", a, b)
 	}
-	andere, _ := NeueENV("kup", "eric", "ThinkPad")
+	andere, _ := NeueENV("kup", "alice", "ThinkPad")
 	c, _ := s.Anker(andere.String())
 	if c == a {
 		t.Fatal("zwei Umgebungen teilen einen Anker")

@@ -78,7 +78,7 @@ else
 fi
 
 # 6) Clean previous demo state (artifacts/ only: we never touch the host)
-# Keys are preserved by default so registered identities (Mirko, reviewer)
+# Keys are preserved by default so registered identities (Bob, reviewer)
 # stay valid across runs. The registry persists identities forever; if the
 # local key changes, signature_invalid is the resulting error class.
 # Pass --reset-all to wipe keys too (for first-run-from-scratch test).
@@ -97,7 +97,7 @@ rm -rf "$BUNDLES_DIR" "$TRUST_DIR" "$INSTALL_HOME"
 
 # Private keys must be 0600 or `skillctl sign` fail-closes ("insecure mode
 # 0644"). This is not paranoia about umask: the demo keys used to be COMMITTED,
-# and git does not carry 0600, so every fresh clone landed a 0644 mirko.priv and
+# and git does not carry 0600, so every fresh clone landed a 0644 bob.priv and
 # step 01 died at sign, taking 05, 06 and 09 with it. The keys are untracked now
 # (see .gitignore) and regenerated per machine; this line makes the invariant
 # hold whatever produced the file.
@@ -107,11 +107,11 @@ for k in "$KEYS_DIR"/*.priv; do
 done
 mkdir -p "$KEYS_DIR" "$BUNDLES_DIR" "$TRUST_DIR" "$INSTALL_HOME/.claude"
 : > "$LOG_DIR/full.log"
-ok "workspace clean$([ "$KEEP_KEYS" -eq 1 ] && [ -f "$KEYS_DIR/mirko.priv" ] && echo " (kept $(ls "$KEYS_DIR" | wc -l | tr -d ' ') existing key files)")"
+ok "workspace clean$([ "$KEEP_KEYS" -eq 1 ] && [ -f "$KEYS_DIR/bob.priv" ] && echo " (kept $(ls "$KEYS_DIR" | wc -l | tr -d ' ') existing key files)")"
 
 header "Preflight complete"
 note "Source:   $SOURCE_DIR"
 note "Binary:   $SKILLCTL"
 note "Workdir:  $ARTIFACTS_DIR"
-note "Eric \$HOME: $INSTALL_HOME"
+note "Alice \$HOME: $INSTALL_HOME"
 note "Online:   $(online_mode_available && echo yes || echo no)"
