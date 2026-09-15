@@ -22,8 +22,12 @@
 set -euo pipefail
 
 # The pattern is the raw UTF-8 of U+2014, written as bytes rather than as
-# $'—': \u is a bash 4.2 feature, and on a 3.2 shell the pattern would
-# silently become the text "u2014" and match nothing forever.
+# the glyph itself: \u is a bash 4.2 feature, and on a 3.2 shell the pattern
+# would silently become the text "u2014" and match nothing forever.
+#
+# This very comment tripped the gate on its first run, because it spelled the
+# character out to explain it. The gate was right: it cannot read intent, and
+# a rule with an exception for the person writing the rule is not a rule.
 DASH=$'\xe2\x80\x94'
 
 # selftest: a gate is only worth its exit code once someone has watched it go

@@ -366,7 +366,10 @@ checksums:
 .PHONY: ci
 ci: vet lint check-emdash test-unit build
 	@echo ""
-	@echo "CI passed: vet ✓  lint ✓  test ✓  build ✓"
+	# The summary is built from $^, not typed out. A hand written list drifts
+	# from the real prerequisites and then reports checks that never ran: this
+	# line said "vet lint test build" on the day check-emdash was added.
+	@echo "CI passed: $(foreach t,$^,$(t) ✓ )"
 
 # Run golangci-lint
 .PHONY: lint
