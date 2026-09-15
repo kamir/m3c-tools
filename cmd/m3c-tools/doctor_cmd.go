@@ -344,6 +344,10 @@ func doctorConnectivity() diag.Section {
 	if strings.HasPrefix(cfg.APIURL, "https://") {
 		tlsAddr := host + ":" + port
 		start = time.Now()
+		// #nosec G402 -- gegated durch pkg/er1.applyTLSVerificationPolicy (SEC-M7):
+		// die beim Laden der Config VerifySSL fuer JEDEN Nicht-Loopback-Host
+		// fail-closed auf true zwingt. Nach BUG-0445 nimmt kein Aufrufer diesen
+		// Wert mehr zurueck; wer es wieder tut, muss hier neu pruefen.
 		conn, err := tls.DialWithDialer(&net.Dialer{Timeout: 5 * time.Second}, "tcp", tlsAddr, &tls.Config{
 			InsecureSkipVerify: !cfg.VerifySSL,
 		})
@@ -364,6 +368,10 @@ func doctorConnectivity() diag.Section {
 	// ER1 /health endpoint (no auth required).
 	client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect}
 	if !cfg.VerifySSL {
+		// #nosec G402 -- gegated durch pkg/er1.applyTLSVerificationPolicy (SEC-M7),
+		// die beim Laden der Config VerifySSL fuer JEDEN Nicht-Loopback-Host
+		// fail-closed auf true zwingt. Nach BUG-0445 nimmt kein Aufrufer diesen
+		// Wert mehr nachtraeglich zurueck; wer es wieder tut, muss hier neu pruefen.
 		client.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
@@ -550,6 +558,10 @@ func doctorPlaud() diag.Section {
 	} else {
 		client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect}
 		if !cfg.VerifySSL {
+			// #nosec G402 -- gegated durch pkg/er1.applyTLSVerificationPolicy (SEC-M7),
+			// die beim Laden der Config VerifySSL fuer JEDEN Nicht-Loopback-Host
+			// fail-closed auf true zwingt. Nach BUG-0445 nimmt kein Aufrufer diesen
+			// Wert mehr nachtraeglich zurueck; wer es wieder tut, muss hier neu pruefen.
 			client.Transport = &http.Transport{
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 			}

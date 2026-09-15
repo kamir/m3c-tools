@@ -7269,6 +7269,10 @@ func cmdPocketMappings(_ []string) {
 	auth.ApplyAuth(req, er1Cfg.APIKey)
 	transport := &http.Transport{}
 	if !er1Cfg.VerifySSL {
+		// #nosec G402 -- gegated durch pkg/er1.applyTLSVerificationPolicy (SEC-M7),
+		// die beim Laden der Config VerifySSL fuer JEDEN Nicht-Loopback-Host
+		// fail-closed auf true zwingt. Nach BUG-0445 nimmt kein Aufrufer diesen
+		// Wert mehr nachtraeglich zurueck; wer es wieder tut, muss hier neu pruefen.
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 	// R-01 / Release It! "Integration Points": ohne Timeout blockiert Do()

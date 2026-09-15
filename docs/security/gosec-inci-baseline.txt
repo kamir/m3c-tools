@@ -354,17 +354,6 @@ G306	pkg/skillctl/registry/backend_pull.go	skbPath := filepath.Join(dir, "bundle
 G306	pkg/skillctl/registry/er1_pull.go	skbPath := filepath.Join(dir, "bundle.skb") if err := os.WriteFile(skbPath, skbBytes, 0o644); err != nil { return nil, fmt.Errorf("pull: write %s: %w", skbPath, err)
 G306	pkg/skillctl/registry/install_trust_mode.go	skbName := strings.ReplaceAll(b.Name, string(filepath.Separator), "_") + ".skb" if err := os.WriteFile(filepath.Join(tmp, skbName), skb, 0o644); err != nil { cleanup()
 G306	pkg/skillctl/registry/install_trust_mode.go	} return os.WriteFile(path, out, 0o644) }
-G402	cmd/m3c-tools/doctor_cmd.go	client.Transport = &http.Transport{ TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, }
-G402	cmd/m3c-tools/doctor_cmd.go	conn, err := tls.DialWithDialer(&net.Dialer{Timeout: 5 * time.Second}, "tcp", tlsAddr, &tls.Config{ InsecureSkipVerify: !cfg.VerifySSL, })
-G402	cmd/m3c-tools/main.go	if !er1Cfg.VerifySSL { transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} }
-G402	pkg/config/healthcheck.go	client.Transport = &http.Transport{ TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, }
-G402	pkg/er1/config.go	client.Transport = &http.Transport{ TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, }
-G402	pkg/er1/upload.go	client.Transport = &http.Transport{ TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, }
-G402	pkg/er1/upload.go	if !cfg.VerifySSL { client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} }
-G402	pkg/plaud/er1source.go	// SEC: only for loopback + self-signed dev cert. client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} }
-G402	pkg/plaud/syncapi.go	if skipTLSVerify { transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} }
-G402	pkg/pocket/syncapi.go	if skipTLSVerify { transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} }
-G402	pkg/timetracking/plmclient.go	TLSClientConfig: &tls.Config{ InsecureSkipVerify: insecure, // loopback-only, guarded above },
 G404	pkg/transcript/proxy.go	// Pick a random proxy chosen := c.Proxies[rand.Intn(len(c.Proxies))] proxyURL, err := url.Parse(chosen)
 G703	cmd/docaudit/main.go	func loadConfig(path string) ([]target, error) { b, err := os.ReadFile(path) if err != nil {
 G703	cmd/docaudit/main.go	out := map[string]bool{} b, err := os.ReadFile(path) if err != nil {
