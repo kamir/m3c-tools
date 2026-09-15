@@ -5,7 +5,12 @@
 // Phase 2 and lives in a separate package.
 package skillbundle
 
-import "time"
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"time"
+)
 
 // Schema is the canonical schema identifier embedded in every SKILL bundle
 // manifest. It stays at v1 forever: bumping it for all bundles would change the
@@ -131,4 +136,44 @@ func (m BundleManifest) EffectiveKind() string {
 func (m BundleManifest) withEmptyDigest() BundleManifest {
 	m.BundleDigest = ""
 	return m
+}
+
+// ReadManifest returns the bundle.json of a packed .skb archive.
+//
+// Callers on the INSTALL side need the manifest before they decide where the
+// bundle goes (SPEC-0432 §3.2): the kind names the target, and the schema says
+// whether this reader understands the bundle at all.
+func ReadManifest(archive []byte) (BundleManifest, error) {
+	var m BundleManifest
+	entries, err := Unpack(archive, UnpackOptions{})
+	if err != nil {
+		return m, fmt.Errorf("manifest: unpack: %w", err)
+	}
+	// Our own Pack puts bundle.json at the top level, but a bundle may arrive
+	// wrapped in a single directory (the shape WrapperDir exists for). Look in
+	// both places rather than declaring a wrapped bundle manifest-less.
+	want := "bundle.json"
+	if w := WrapperDir(entries); w != "" {
+		want = w + "/bundle.json"
+	}
+	for _, e := range entries {
+		if e.Rel != "bundle.json" && e.Rel != want {
+			continue
+		}
+		if err := json.Unmarshal(e.Content, &m); err != nil {
+			return m, fmt.Errorf("manifest: parse bundle.json: %w", err)
+		}
+		return m, nil
+	}
+	return m, errors.New("manifest: archive carries no bundle.json")
+}
+
+// KnownSchema reports whether this build understands a bundle's schema.
+//
+// Fail-closed on purpose. An unknown schema means the bundle was written by a
+// NEWER producer that may place its content somewhere this reader does not
+// know about; installing it anyway would put the artifact in the wrong place
+// while reporting success (SPEC-0432 §3.2).
+func KnownSchema(s string) bool {
+	return s == "" || s == Schema || s == SchemaAgent
 }

@@ -377,9 +377,34 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 	if err := sanitizeBundleName(b.Name); err != nil {
 		return nil, err
 	}
+	skb, err := os.ReadFile(b.StagedSkbPath)
+	if err != nil {
+		return nil, fmt.Errorf("install: read staged .skb: %w", err)
+	}
+
+	// SPEC-0432 §3.2: the bundle says what it is and where it goes. Read that
+	// BEFORE choosing a target, and refuse anything this build does not
+	// understand rather than guessing a location.
+	man, err := skillbundle.ReadManifest(skb)
+	if err != nil {
+		return nil, fmt.Errorf("install: %w", err)
+	}
+	if !skillbundle.KnownSchema(man.Schema) {
+		return nil, fmt.Errorf("install: %s carries schema %q, which this build does not know; "+
+			"upgrade skillctl (nothing was installed)", b.Name, man.Schema)
+	}
+	kind := man.EffectiveKind()
+	if !skillbundle.ValidKind(kind) {
+		return nil, fmt.Errorf("install: %s carries kind %q, which this build does not know; "+
+			"nothing was installed", b.Name, kind)
+	}
+
 	skillsDir := opts.SkillsDir
 	if skillsDir == "" {
 		skillsDir = defaultSkillsDir()
+	}
+	if kind == skillbundle.KindAgent {
+		return installAgent(b, man, skb, opts)
 	}
 	target := filepath.Join(skillsDir, b.Name)
 
@@ -390,11 +415,6 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 				return nil, fmt.Errorf("install: refusing to downgrade %s: have %s, new %s (use --allow-downgrade)", b.Name, pre.Version, b.Version)
 			}
 		}
-	}
-
-	skb, err := os.ReadFile(b.StagedSkbPath)
-	if err != nil {
-		return nil, fmt.Errorf("install: read staged .skb: %w", err)
 	}
 
 	// Extract into a temp dir, then atomically rename onto target.
@@ -413,28 +433,7 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 	}
 
 	// Write the sidecar inside the unpacked dir.
-	side := ProvenanceSidecar{
-		SchemaVersion:         ProvenanceSchemaVersion,
-		Skill:                 b.Name,
-		Version:               b.Version,
-		BundleDigest:          b.Digest,
-		Registry:              "self",
-		SourceER1ItemID:       b.SourceDocID,
-		SourceER1Context:      opts.ContextID,
-		PulledAt:              time.Now().UTC().Format(time.RFC3339),
-		PulledOnHost:          hostnameShort(),
-		TrustRootsFingerprint: opts.TrustRootsFingerprint,
-		// For the `self` tenant the author and registry roles share the
-		// single K-self key, so both pubkey_fingerprints equal the
-		// trust-roots fingerprint that just verified the bundle. (A
-		// future multi-key registry will record per-signature
-		// fingerprints from the bundle event's signatures[] array.)
-		Signatures: []SignatureSidecar{
-			{Role: "author", IdentityID: b.AuthorIdentity, PubKeyFingerprint: opts.TrustRootsFingerprint},
-			{Role: "registry", IdentityID: b.AuthorIdentity, PubKeyFingerprint: opts.TrustRootsFingerprint},
-		},
-		GovernanceLevel: b.Governance,
-	}
+	side := provenanceFor(b, opts)
 	if err := writeProvenance(filepath.Join(tmp, ProvenanceSidecarName), side); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("install: write provenance: %w", err)
@@ -647,4 +646,139 @@ func skillDirDigest(dir string) (string, error) {
 		h.Write([]byte("\n"))
 	}
 	return "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// defaultAgentsDir is the second install location introduced by SPEC-0432.
+// An agent is ONE file, ~/.claude/agents/<name>.md, not a directory: measured
+// on 2026-09-15, the dir held 20 files and 0 directories.
+func defaultAgentsDir() string {
+	return filepath.Join(userHome(), ".claude", "agents")
+}
+
+// agentsDirFor derives the agents dir from the skills dir so a test (or an
+// operator) that redirects one redirects both. They are siblings under
+// ~/.claude, and splitting them would let a test write into the real home.
+func agentsDirFor(skillsDir string) string {
+	if skillsDir == "" {
+		return defaultAgentsDir()
+	}
+	return filepath.Join(filepath.Dir(skillsDir), "agents")
+}
+
+// installAgent writes the ONE definition file of an agent bundle to
+// <agents>/<name>.md (SPEC-0432 §3.1, AC-2).
+//
+// Written to a temp file in the same directory and then renamed, so a reader
+// never sees a half-written agent; the same reason the skill path stages into
+// a temp dir before renaming.
+func installAgent(b *StagedBundle, man skillbundle.BundleManifest, skb []byte, opts InstallOpts) (*InstallResult, error) {
+	entries, err := skillbundle.Unpack(skb, skillbundle.UnpackOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("install: unpack agent %s: %w", b.Name, err)
+	}
+	want := b.Name + ".md"
+	var body []byte
+	extra := 0
+	for _, e := range entries {
+		if e.IsDir || e.Rel == "bundle.json" || e.Rel == "CHECKSUMS" {
+			continue
+		}
+		if e.Rel == want {
+			body = e.Content
+			continue
+		}
+		extra++
+	}
+	if body == nil {
+		return nil, fmt.Errorf("install: agent bundle %s carries no %s; nothing was installed", b.Name, want)
+	}
+	if extra > 0 {
+		// AC-14 on the receiving side. A bundle that admits more than the one
+		// file was not built by this contract, and silently dropping the rest
+		// would hide that.
+		return nil, fmt.Errorf("install: agent bundle %s carries %d file(s) besides %s; "+
+			"nothing was installed", b.Name, extra, want)
+	}
+
+	agentsDir := agentsDirFor(opts.SkillsDir)
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		return nil, fmt.Errorf("install: mkdir %s: %w", agentsDir, err)
+	}
+	target := filepath.Join(agentsDir, want)
+	_, statErr := os.Stat(target)
+	existed := statErr == nil
+
+	tmp, err := os.CreateTemp(agentsDir, "."+b.Name+"-*.md")
+	if err != nil {
+		return nil, fmt.Errorf("install: mktmp in %s: %w", agentsDir, err)
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(body); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return nil, fmt.Errorf("install: write %s: %w", target, err)
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return nil, fmt.Errorf("install: close %s: %w", target, err)
+	}
+	if err := os.Chmod(tmpName, 0o644); err != nil {
+		os.Remove(tmpName)
+		return nil, fmt.Errorf("install: chmod %s: %w", target, err)
+	}
+	if err := os.Rename(tmpName, target); err != nil {
+		os.Remove(tmpName)
+		return nil, fmt.Errorf("install: place %s: %w", target, err)
+	}
+	// An agent is a FILE, so its provenance cannot live inside it the way a
+	// skill's lives inside its directory. It goes to
+	// <agents>/.provenance/<name>.json: a dotted directory, therefore
+	// invisible to the agent loader that globs *.md, and beside the file it
+	// describes rather than far away from it.
+	//
+	// Not optional. Without it an agent would be the ONE artifact on the
+	// machine whose digest cannot be checked after the fact, and SPEC-0432 §5
+	// asks for more care with agents than with skills, not less.
+	provDir := filepath.Join(agentsDir, ".provenance")
+	if err := os.MkdirAll(provDir, 0o755); err != nil {
+		return nil, fmt.Errorf("install: mkdir %s: %w", provDir, err)
+	}
+	provPath := filepath.Join(provDir, b.Name+".json")
+	if err := writeProvenance(provPath, provenanceFor(b, opts)); err != nil {
+		return nil, fmt.Errorf("install: write provenance: %w", err)
+	}
+
+	return &InstallResult{
+		SkillPath:      target,
+		ProvenancePath: provPath,
+		CreatedFresh:   !existed,
+		OverwroteOld:   existed,
+	}, nil
+}
+
+// provenanceFor builds the sidecar for one staged bundle. Shared by the skill
+// and the agent path so an agent is provably no less traceable than a skill:
+// SPEC-0432 §5 demands MORE care for agents, not less, and a second copy of
+// this literal would be the place where that quietly stopped being true.
+func provenanceFor(b *StagedBundle, opts InstallOpts) ProvenanceSidecar {
+	return ProvenanceSidecar{
+		SchemaVersion:         ProvenanceSchemaVersion,
+		Skill:                 b.Name,
+		Version:               b.Version,
+		BundleDigest:          b.Digest,
+		Registry:              "self",
+		SourceER1ItemID:       b.SourceDocID,
+		SourceER1Context:      opts.ContextID,
+		PulledAt:              time.Now().UTC().Format(time.RFC3339),
+		PulledOnHost:          hostnameShort(),
+		TrustRootsFingerprint: opts.TrustRootsFingerprint,
+		// For the `self` tenant the author and registry roles share the
+		// single K-self key, so both pubkey_fingerprints equal the
+		// trust-roots fingerprint that just verified the bundle.
+		Signatures: []SignatureSidecar{
+			{Role: "author", IdentityID: b.AuthorIdentity, PubKeyFingerprint: opts.TrustRootsFingerprint},
+			{Role: "registry", IdentityID: b.AuthorIdentity, PubKeyFingerprint: opts.TrustRootsFingerprint},
+		},
+		GovernanceLevel: b.Governance,
+	}
 }
