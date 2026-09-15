@@ -38,6 +38,7 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		digestArg    = fs.String("digest", "", "Filter: only this exact bundle digest (sha256:<hex>).")
 		er1Target    = fs.String("er1-target", envOr("ER1_TARGET", "prod"), "ER1 target: prod | stage | local.")
 		er1Context   = fs.String("er1-context", envOr("ER1_CONTEXT", "skills"), "ER1 context to query.")
+		kindFlag     = fs.String("kind", "", "Restrict to one bundle kind: skill | agent. Empty pulls both (SPEC-0432).")
 		trustPath    = fs.String("trust-roots", envOr("M3C_TRUST_ROOTS", ""), "Path to the SPEC-0225 trust-roots YAML. Default: ~/.claude/trust-roots.yaml.")
 		since        = fs.String("since", "", "Best-effort lower bound on occurred_at (RFC3339).")
 		verbose      = fs.Bool("verbose", false, "Print one line per per-gate decision.")
@@ -81,6 +82,9 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 	}
 
 	res, err := registry.PullBundles(cfg, *er1Context, tr, registry.PullOpts{
+		// Empty means both shelves. Pulling everything when only the agents
+		// are wanted would overwrite 78 skills for no reason.
+		OnlyKind:   *kindFlag,
 		OnlySkill:  *skillName,
 		OnlyDigest: *digestArg,
 		Since:      *since,
