@@ -14,14 +14,14 @@ func auditReport(v ...audit.Verdict) audit.Report {
 }
 
 func opts(seq int) Optionen {
-	e, _ := NeueENV("kup", "kamir", "MacBook-Pro-von-Mirko")
+	e, _ := NeueENV("kup", "bob", "MacBook-Pro-von-Bob")
 	return Optionen{
 		ENV:             e,
-		Principal:       "kamir",
+		Principal:       "bob",
 		Jetzt:           time.Date(2026, 9, 13, 9, 0, 0, 0, time.UTC),
 		AufbewahrungBis: time.Date(2027, 9, 13, 0, 0, 0, 0, time.UTC),
 		Seq:             FesteSeq(seq),
-		Einwilligung:    consent("kamir"),
+		Einwilligung:    consent("bob"),
 	}
 }
 
