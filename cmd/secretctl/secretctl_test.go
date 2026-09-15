@@ -124,6 +124,8 @@ secrets:
   - name: er1-api-key
     summary: Geteilter Dienstschluessel
     source: {kind: gcp-secret-manager, project: semanpix, secret: er1-api-key}
+    roles:
+      - {id: dienstauth, was: X-API-KEY gegen den Lesepfad, bei_rotation: keine Nachwirkung bei Ueberlappung}
     holders:
       - {id: m4-keychain, kind: macos-keychain, service: aims-core-er1}
       - {id: m4-profil, kind: file, path: ~/.m3c-tools/er1.env, key: ER1_API_KEY}
@@ -283,5 +285,45 @@ func TestTransportfehlerWirdErkannt(t *testing.T) {
 	// die Frage konnte nicht gestellt werden.
 	if !isTransportFailure(exec.Command("gibt-es-nicht-4711").Run()) {
 		t.Error("ein nicht startbarer Befehl gilt nicht als Transportfehler")
+	}
+}
+
+// TestRegistryVerlangtRollen ist die Lehre vom 2026-09-15, als Pruefung.
+//
+// Das Inventar hatte alle fuenfzehn Halteorte von er1-api-key gefunden und
+// KEINE der Folgen: der Wert signierte ueber einen nicht erklaerten Rueckfall
+// auch die Geraetetoken, und die Rotation entwertete sie alle. Ein Halteort ist
+// ein ORT, das war eine VERWENDUNG, und ein Inventar, das nur Orte kennt, kann
+// die Folgen einer Rotation nicht nennen.
+func TestRegistryVerlangtRollen(t *testing.T) {
+	ohneRollen := strings.Replace(gute, "    roles:\n", "", 1)
+	if !strings.Contains(gute, "roles:") {
+		ohneRollen = gute // die Vorlage hat noch keine, dann ist der Fall genau dieser
+	}
+	if _, err := LoadRegistry(schreibRegistry(t, ohneRollen)); err == nil {
+		t.Error("eine Registry ohne Rollen wurde angenommen")
+	}
+}
+
+// TestRolleOhneRotationsfolgeIstEinEtikett: eine Rolle, die nicht sagt, was
+// eine Rotation mit ihr macht, beantwortet die Frage nicht, fuer die es sie
+// gibt.
+func TestRolleOhneRotationsfolgeIstEinEtikett(t *testing.T) {
+	mitLueckenhafterRolle := `schema: m3c-secret-registry/v1
+secrets:
+  - name: x
+    source: {kind: gcp-secret-manager, project: p, secret: s}
+    roles:
+      - {id: irgendwas, was: tut etwas}
+    holders:
+      - {id: kc, kind: macos-keychain, service: svc}
+    probe: {kind: http, url: https://example.invalid/, header: X-API-KEY, expect_ok: 200, expect_revoked: 401}
+`
+	_, err := LoadRegistry(schreibRegistry(t, mitLueckenhafterRolle))
+	if err == nil {
+		t.Fatal("eine Rolle ohne bei_rotation wurde angenommen")
+	}
+	if !strings.Contains(err.Error(), "bei_rotation") {
+		t.Errorf("die Meldung nennt nicht das fehlende Feld: %v", err)
 	}
 }

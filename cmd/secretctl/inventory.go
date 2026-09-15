@@ -58,6 +58,17 @@ func cmdInventory(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintln(stdout)
 
+	// Die Rollen stehen VOR der Ortstabelle, nicht dahinter. Wer eine Rotation
+	// plant, muss zuerst lesen, was sie kaputtmacht, und nicht erst nachdem er
+	// die Halteorte durchgezaehlt hat (SPEC-0438 8b).
+	fmt.Fprintf(stdout, "Wofuer der Wert benutzt wird, und was eine Rotation damit macht:\n\n")
+	for _, r := range entry.Roles {
+		fmt.Fprintf(stdout, "  %s\n", r.ID)
+		fmt.Fprintf(stdout, "      was:           %s\n", r.Was)
+		fmt.Fprintf(stdout, "      bei Rotation:  %s\n", r.BeiRotation)
+	}
+	fmt.Fprintln(stdout)
+
 	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "ORT\tART\tMASCHINE\tFINGERABDRUCK\tSTAND")
 	veraltet, fehlend, unlesbar, unerreichbar := 0, 0, 0, 0

@@ -40,11 +40,20 @@ type Holder struct {
 	Path string `yaml:"path,omitempty"`
 	Key  string `yaml:"key,omitempty"` // NAME= prefix inside the file
 
-	// cloud-run
+	// cloud-run and cloud-scheduler
 	Project  string `yaml:"project,omitempty"`
 	Region   string `yaml:"region,omitempty"`
 	Service_ string `yaml:"service_name,omitempty"`
 	Env      string `yaml:"env,omitempty"`
+
+	// cloud-scheduler: the job carries the value in a request header, in
+	// plaintext, inside the job definition. Found on 2026-09-15: all five
+	// jobs did, and none of them was in the first inventory.
+	Job    string `yaml:"job,omitempty"`
+	Header string `yaml:"header,omitempty"`
+
+	// docker: a running container carries it in its environment. Two did.
+	Container string `yaml:"container,omitempty"`
 }
 
 // Probe says how to ask a service whether a value is accepted.
@@ -56,12 +65,31 @@ type Probe struct {
 	ExpectRevoked int    `yaml:"expect_revoked"`
 }
 
+// Role is what a secret is USED FOR, and what happens to that use when the
+// value changes (SPEC-0438 §8b).
+//
+// The inventory alone answers "who holds this". That is not enough, and
+// 2026-09-15 proved it: ER1_API_KEY authenticated service clients AND, through
+// an undeclared fallback in get_token_secret(), signed every device token.
+// Rotating it silently invalidated every token issued before. The inventory had
+// found all fifteen holders and none of the consequences, because a holder is a
+// PLACE and this was a USE.
+//
+// A role is therefore not documentation. It is the answer to "what breaks when
+// I turn this", asked before turning it rather than after.
+type Role struct {
+	ID          string `yaml:"id"`
+	Was         string `yaml:"was"`          // what the secret does in this role
+	BeiRotation string `yaml:"bei_rotation"` // what a rotation does to it
+}
+
 // Entry is one managed secret.
 type Entry struct {
 	Name    string   `yaml:"name"`
 	Summary string   `yaml:"summary"`
 	Prefix  string   `yaml:"prefix,omitempty"` // SPEC-0438 §5, e.g. "m3cer1_"
 	Source  Source   `yaml:"source"`
+	Roles   []Role   `yaml:"roles"`
 	Holders []Holder `yaml:"holders"`
 	Probe   Probe    `yaml:"probe"`
 }
@@ -134,6 +162,16 @@ func (r *Registry) Validate() error {
 		if len(e.Holders) == 0 {
 			return fmt.Errorf("secret %q lists no holders; a secret with no known holders cannot be rotated", e.Name)
 		}
+		if len(e.Roles) == 0 {
+			return fmt.Errorf("secret %q names no roles; without them a rotation cannot say what it breaks "+
+				"(SPEC-0438 §8b: ER1_API_KEY silently signed device tokens, and the inventory did not know)", e.Name)
+		}
+		for _, r := range e.Roles {
+			if r.ID == "" || r.Was == "" || r.BeiRotation == "" {
+				return fmt.Errorf("secret %q: role %q needs id, was and bei_rotation; "+
+					"a role without its rotation consequence is a label, not a warning", e.Name, r.ID)
+			}
+		}
 		seenHolder := map[string]bool{}
 		for _, h := range e.Holders {
 			if h.ID == "" {
@@ -168,6 +206,14 @@ func (h Holder) validate(secretName string) error {
 	case "file":
 		if h.Path == "" || h.Key == "" {
 			return fmt.Errorf("secret %q: holder %q needs both path and key", secretName, h.ID)
+		}
+	case "cloud-scheduler":
+		if h.Project == "" || h.Region == "" || h.Job == "" || h.Header == "" {
+			return fmt.Errorf("secret %q: holder %q needs project, region, job and header", secretName, h.ID)
+		}
+	case "docker":
+		if h.Container == "" || h.Env == "" {
+			return fmt.Errorf("secret %q: holder %q needs container and env", secretName, h.ID)
 		}
 	case "cloud-run":
 		if h.Project == "" || h.Service_ == "" || h.Env == "" || h.Region == "" {
