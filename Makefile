@@ -364,14 +364,45 @@ checksums:
 
 # Run CI checks locally (mirrors .github/workflows/ci.yml)
 .PHONY: ci
-ci: vet lint test-unit build
+# The summary below is built from $^, not typed out. A hand written list drifts
+# from the real prerequisites and then reports checks that never ran: it said
+# "vet lint test build" on the day check-emdash was added. The comment lives
+# here and not inside the recipe, because a recipe line without a leading @ is
+# echoed to the terminal.
+ci: vet lint check-emdash test-unit build
 	@echo ""
-	@echo "CI passed: vet ✓  lint ✓  test ✓  build ✓"
+	@echo "CI passed: $(foreach t,$^,$(t) ✓ )"
 
 # Run golangci-lint
 .PHONY: lint
+# GOLANGCI_VERSION is pinned to the SAME version the CI job installs
+# (.github/workflows/ci.yml). A local linter of a different version gives a
+# different verdict for the same command, and then "locally green" says
+# nothing about the gate that decides. Change it in both places or in neither.
+GOLANGCI_VERSION ?= v2.13.2
+
+# Prose gate (BUG-0436). Diff scoped: main carries 2870 em dashes across 469 of
+# 624 Go files, so a tree wide check would be red on arrival, and a gate that
+# is red on arrival gets switched off.
+.PHONY: check-emdash
+check-emdash:
+	@./scripts/check-no-emdash.sh --selftest
+	@./scripts/check-no-emdash.sh
+
 lint:
 	@echo "Running golangci-lint..."
+	@have=$$(golangci-lint --version 2>/dev/null | grep -o 'version [0-9.]*' | cut -d' ' -f2); \
+	want=$$(echo $(GOLANGCI_VERSION) | tr -d v); \
+	if [ -z "$$have" ]; then \
+		echo "golangci-lint not installed. Install the pinned version:"; \
+		echo "  go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION)"; \
+		exit 1; \
+	elif [ "$$have" != "$$want" ]; then \
+		echo "golangci-lint $$have is installed, CI runs $$want."; \
+		echo "Their verdicts differ, so a green run here would prove nothing. Install the pinned one:"; \
+		echo "  go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION)"; \
+		exit 1; \
+	fi
 	golangci-lint run --timeout=5m
 
 # SPEC-0280 trust-layer evaluation harness (E1–E10).

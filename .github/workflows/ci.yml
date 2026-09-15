@@ -7,6 +7,24 @@ on:
     branches: [main, master]
 
 jobs:
+  prose-gate:
+    name: Prose (no new em dashes)
+    runs-on: ubuntu-latest
+    steps:
+      # fetch-depth 0: the check compares against the merge base, and a shallow
+      # clone has no merge base to compare against.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prove the checker still bites
+        run: ./scripts/check-no-emdash.sh --selftest
+
+      - name: No new em dashes
+        env:
+          PROSE_BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+        run: ./scripts/check-no-emdash.sh
+
   lint:
     name: Lint & Vet
     runs-on: macos-latest
@@ -15,7 +33,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
 
       - name: Install PortAudio
         run: brew install portaudio
@@ -24,7 +42,11 @@ jobs:
         run: go vet ./...
 
       - name: Install golangci-lint
-        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+        # Pinned, NOT @latest. With @latest the gate changes its verdict without
+        # anyone touching the code: a PR green yesterday is red today because
+        # someone else shipped a release. The same version is pinned in the
+        # Makefile so a local `make lint` and this job run the same checker.
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
 
       - name: golangci-lint
         run: golangci-lint run --timeout=5m
@@ -37,7 +59,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
 
       - name: Install PortAudio
         run: brew install portaudio
@@ -63,7 +85,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
 
       - name: Install PortAudio
         run: brew install portaudio
@@ -87,7 +109,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
 
       # The cgo packages (recorder/menubar) need PortAudio to typecheck, so run
       # on macOS like the other jobs rather than a pure-Go ubuntu runner.
@@ -132,7 +154,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
 
       - name: Install PortAudio (Homebrew, for native arm64 build)
         run: brew install portaudio pkg-config
@@ -181,7 +203,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
 
       - name: Build linux/amd64
         run: |
