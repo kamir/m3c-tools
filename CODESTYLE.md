@@ -66,8 +66,19 @@ so the gap is a known quantity rather than a vague aspiration:
 | `unconvert` / `godot` | 3 each |
 | `copyloopvar` | 2 findings |
 | `bodyclose` | 1 finding |
-| `gosec` | not yet measured (tool not installed in CI) |
+| `gosec` | n/a as a golangci-lint linter: gosec runs standalone in CI instead (see below) |
 | Coverage floor | not yet measured; **never** set a floor above what the suite already meets |
+
+The `gosec` row said "not yet measured (tool not installed in CI)" from
+2026-09-03 until 2026-09-15. Both halves were false almost immediately.
+`.github/workflows/gosec.yml` was added the same day and
+`gosec-diff-gate.yml` the day after; three required contexts on master carry
+gosec in their name (`gosec`, `gosec SAST (SARIF -> Code Scanning)`,
+`gosec no-new-findings (in-CI diff gate)`). And it is measured: the committed
+baseline `docs/security/gosec-inci-baseline.txt` has held 454 signatures since
+2026-09-10, and a run on 2026-09-15 reported 525 findings. Enabling gosec
+INSIDE golangci-lint would duplicate a tool that already gates, which is why
+the row now reads n/a rather than a cost.
 
 These are not enabled yet because a 186-file format sweep and ~128 lint findings
 must land as their own reviewable change. Riding along in an unrelated PR would
