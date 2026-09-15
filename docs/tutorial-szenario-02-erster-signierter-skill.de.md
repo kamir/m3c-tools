@@ -514,13 +514,13 @@ Der Konsument pinnt **das Registry**, und zwar von Hand, in `~/.claude/trust-roo
 
 ```yaml
 registry: github://<owner>/<repo>
-pubkey_b64: <Erics Herausgeberschlüssel, roh, base64>
+pubkey_b64: <Alices Herausgeberschlüssel, roh, base64>
 fingerprint: sha256:<über den zweiten Kanal bestätigt>
 governance_minimum: green
 governance_quorum: 1
 signers:
   - reviewer_id: id:alice-reviewer@kup
-    pubkey_b64: <Erics Reviewer-Schlüssel, roh, base64>
+    pubkey_b64: <Alices Reviewer-Schlüssel, roh, base64>
 ```
 
 > **Der kürzere Weg, und warum er der bessere ist.** Dieselbe Aussage können Sie
@@ -606,7 +606,7 @@ Sagen Sie es genau, sonst verspricht die Kette mehr, als sie hält:
 - **Nicht geprüft:** die Autorensignatur des **Mitarbeiters**. Der Herausgeber signiert beide
   Rollen (Autor und Registry) mit seinem Schlüssel, und die losgelöste `.author.sig` des
   Mitarbeiters reist nicht mit ins Repository. Die Urheberangabe steht im Bundle und ist
-  durch Erics Signatur gegen Veränderung geschützt, aber **wer den Skill wirklich geschrieben
+  durch Alices Signatur gegen Veränderung geschützt, aber **wer den Skill wirklich geschrieben
   hat, hat Alice in E2 geprüft, nicht der Konsument.**
 
 Genau deshalb ist E2 kein Formalismus. Der Konsument vertraut Alice; Alice vertraut niemandem,
@@ -714,7 +714,7 @@ skillctl publish --attest <skill-name>@<version> --digest "$DIGEST" --level gree
 # Sichtbar machen, damit der Konsument es findet:
 skillctl room share <skill-name> --room <raum-label> --yes
 
-# K2/K3 beim Konsumenten, aus ERICS Kontext:
+# K2/K3 beim Konsumenten, aus ALICES Kontext:
 skillctl pull --registry self --er1-target prod --er1-context <alice-sub>___skills \
   --skill <skill-name> --install --trust-mode --dry-run-install --no-checkpoint
 ```

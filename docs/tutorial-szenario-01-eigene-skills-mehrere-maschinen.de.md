@@ -339,7 +339,7 @@ Sie sind hier in genau der Rolle, die in [Szenario 02](tutorial-szenario-02-erst
 Alice hat: Sie sind Freigeber für einen Skill, den jemand anderes geschrieben hat.
 
 ```bash
-# 1. Mirkos Bundle und seine .author.sig entgegennehmen, Fingerprint vorher
+# 1. Bobs Bundle und seine .author.sig entgegennehmen, Fingerprint vorher
 #    über den zweiten Kanal bestätigt haben (C0).
 skillctl verify-sig --pubkey ./bob.pub bob-skill@1.0.0.skb
 echo "rc=$?"        # 0, sonst hier abbrechen
@@ -352,7 +352,7 @@ cat /tmp/review-bob/SKILL.md && ls -R /tmp/review-bob
 skillctl publish bob-skill@1.0.0 --bundle bob-skill@1.0.0.skb --version 1.0.0 \
   --registry "$REG" --key ~/.config/m3c/skill-keys/alice.priv --identity id:alice@kup --yes
 
-skillctl publish --attest bob-skill@1.0.0 --digest "<Digest aus Mirkos sign-Ausgabe>" \
+skillctl publish --attest bob-skill@1.0.0 --digest "<Digest aus Bobs sign-Ausgabe>" \
   --level green --rationale "Upstream id:bob@m3c; Signatur verifiziert; Inhalt geprüft am <datum>" \
   --registry "$REG" --identity id:alice-reviewer@kup \
   --key ~/.config/m3c/skill-keys/alice-reviewer.priv --yes
@@ -367,7 +367,7 @@ skillctl pull --registry "$REG" --skill bob-skill --install --trust-mode \
 ```
 
 Was Sie damit gewonnen haben: eine Quelle, ein Pin, und in `registry show bob-skill` steht,
-**wer** wann geurteilt hat, nämlich Sie. Mirkos Autorenschaft bleibt im Bundle sichtbar, aber
+**wer** wann geurteilt hat, nämlich Sie. Bobs Autorenschaft bleibt im Bundle sichtbar, aber
 die Verantwortung für „das läuft bei uns" liegt sichtbar dort, wo sie hingehört.
 
 > **Ausnahme, kein Regelweg.** Auf einer einzelnen Maschine, für einen einmaligen Versuch,
@@ -382,14 +382,14 @@ werden serverseitig Mitglied dieses Raums (dafür gibt es kein `skillctl`-Verb, 
 in der onboarding.guide-Konsole). Dann ziehen Sie aus **seinem** Kontext:
 
 ```bash
-# Trust-Roots-Datei für Mirkos Schlüssel, gleiche Form wie in B2
+# Trust-Roots-Datei für Bobs Schlüssel, gleiche Form wie in B2
 skillctl pull --registry self --er1-target prod --er1-context <bob-sub>___skills \
   --skill bob-skill --install --trust-mode --dry-run-install --no-checkpoint
 # ... Plan lesen, dann mit --confirm-install und dem Token bestätigen
 ```
 
 Wichtig: **kein** `--key` und **kein** `--emit-installed`. Sie sind hier reiner Konsument,
-und nichts von Ihnen soll in Mirkos Registry zurückgeschrieben werden.
+und nichts von Ihnen soll in Bobs Registry zurückgeschrieben werden.
 
 Der ausführliche Zwei-Personen-Ablauf mit allen Feldern steht im
 [Runbook Zwei-Personen-Austausch](runbook-two-person-er1-exchange.md).

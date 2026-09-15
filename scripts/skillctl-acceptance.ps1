@@ -154,8 +154,8 @@ Write-Host "== Phase 1: both sides check their installation =="
 OneParty -Who "bob" -Skill "bob-demo-skill" -Greeting "Hello from Bob"
 OneParty -Who "alice"  -Skill "alice-demo-skill"  -Greeting "Hello from Alice"
 
-$MirkoHome = Join-Path $Work "bob"
-$EricHome  = Join-Path $Work "alice"
+$BobHome   = Join-Path $Work "bob"
+$AliceHome = Join-Path $Work "alice"
 
 # doctor is asked ONCE, about THIS machine, and deliberately not twice as if it
 # were two of them.

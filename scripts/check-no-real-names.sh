@@ -36,6 +36,28 @@ set -euo pipefail
 # boundaries, so "generic" does not trip on "eric".
 NAMES='Mirko|Eric|Kaempf|Kämpf|Frank'
 
+# The German genitive is the SAME name, and `-w` alone does not think so:
+# "Mirkos Skill" has a word character after the name, so the word-anchored pass
+# reports nothing. That is not a hypothetical. The first rename pass left 18
+# such lines standing (6 in the acceptance matrix, 11 in the tutorials, and one
+# doc anchor left dangling by a heading that WAS renamed), and the gate called
+# the tree clean.
+# The trailing `s` stays INSIDE the -w match, so both ends are still anchored
+# and "generics" is still not a hit.
+NAMES_WORD="($NAMES)s?"
+
+# A name also hides inside an identifier, where there is no word boundary at
+# all: `fromMirko`, `$MirkoHome`. Those two forms need their own pass, and that
+# pass is deliberately case-SENSITIVE. Case-insensitively, `[a-z]eric` would
+# match "generic" and "numeric" on every line of prose in the tree; anchored to
+# the capital that a camelCase name must carry, the same pattern matched
+# exactly 12 lines here (10 Go, 2 PowerShell) and nothing innocent.
+#
+# The name must also END the identifier part, or "getFrankfurtData" becomes a
+# hit: a lowercase letter directly after the name means the name was never
+# there. Measured, not assumed: without that guard the pattern flagged it.
+CAMEL="[a-z0-9_]($NAMES)([^a-z]|$)|($NAMES)[A-Z]"
+
 # Exempt LINES, not paths, because both files also carry ordinary example text
 # that the gate must keep checking. Each pattern is anchored to what makes the
 # line legitimate, not merely to the name in it:
@@ -47,12 +69,17 @@ NAMES='Mirko|Eric|Kaempf|Kämpf|Frank'
 #                          a transcript fixture. The string is INPUT to the
 #                          function under test, and it is a real sentence a real
 #                          person said, which is what makes it a good fixture.
+#   mirkos-braindump       the NAME of the repository the distiller reads, and
+#                          a name is how a pointer finds its target. Renaming it
+#                          would not anonymise anything, it would break the
+#                          pointer: the same argument that keeps the `kamir`
+#                          namespace out of NAMES below.
 #
 # Two entries that stood here earlier are GONE, not exempted: the GCP account in
 # the certificate runbook now comes from ${GCP_ACCOUNT:?...} and the publisher
 # runbook's recipient is a form field. An exemption postpones a decision; those
 # two are decided.
-EXEMPT_LINES='(PRODUCT_PUBLISHER|plaudDeferForTranscript)'
+EXEMPT_LINES='(PRODUCT_PUBLISHER|plaudDeferForTranscript|mirkos-braindump)'
 
 # Two more classes that a name list alone would never catch, both found by
 # reading the tree rather than by trusting the first grep.
@@ -87,7 +114,12 @@ FILES=$(printf '%s\n' "$FILES" | grep -Ev "$EXEMPT_PATHS" || true)
 # matches nothing and reports success, which is the most dangerous answer a gate
 # can give. -w asks for the word boundary in a way both tools agree on.
 HITS=$(printf '%s\n' "$FILES" | tr '\n' '\0' \
-  | xargs -0 grep -I -n -w -E -H -i -e "$NAMES" -- 2>/dev/null || true)
+  | xargs -0 grep -I -n -w -E -H -i -e "$NAMES_WORD" -- 2>/dev/null || true)
+
+# No -i here, on purpose: the capital IS the signal that distinguishes the
+# persona in `fromMirko` from the "eric" inside "generic". See CAMEL above.
+CAMELHITS=$(printf '%s\n' "$FILES" | tr '\n' '\0' \
+  | xargs -0 grep -I -n -E -H -e "$CAMEL" -- 2>/dev/null || true)
 
 # The identity and address checks are NOT word-anchored: `id:kamir@m3c` and an
 # address are already their own delimiters, and -w would refuse to match them.
@@ -95,7 +127,8 @@ IDHITS=$(printf '%s\n' "$FILES" | tr '\n' '\0' \
   | xargs -0 grep -I -n -E -H -i -e "$BAD_IDS" -- 2>/dev/null || true)
 MAILHITS=$(printf '%s\n' "$FILES" | tr '\n' '\0' \
   | xargs -0 grep -I -n -E -H -i -e "$BAD_MAIL" -- 2>/dev/null || true)
-HITS=$(printf '%s\n%s\n%s\n' "$HITS" "$IDHITS" "$MAILHITS" | grep -v '^$' || true)
+HITS=$(printf '%s\n%s\n%s\n%s\n' "$HITS" "$CAMELHITS" "$IDHITS" "$MAILHITS" \
+  | grep -v '^$' | sort -u -t: -k1,1 -k2,2n || true)
 
 [ "$MODE" = "--all" ] || HITS=$(printf '%s\n' "$HITS" | grep -Ev "$EXEMPT_LINES" || true)
 

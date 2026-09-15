@@ -237,16 +237,16 @@ func (p *party) installedSkills(t *testing.T) []string {
 // is the contract and is therefore declared here; which members a run REACHES
 // is measured, not declared.
 var spec0406Criteria = []struct{ id, what string }{
-	{"T01", "Alice kann seinen Skill paketieren"},
-	{"T02", "Alice kann seinen Skill signieren"},
-	{"T03", "Alice kann sein eigenes Paket verifizieren"},
-	{"T04", "Bob kann Erics Skill verifizieren"},
-	{"T05", "Bob kann Erics Skill installieren"},
-	{"T06", "Bob kann Erics Skill ausfuehren"},
-	{"T07", "Bob kann seinen Skill paketieren und signieren"},
-	{"T08", "Alice kann Mirkos Skill verifizieren"},
-	{"T09", "Alice kann Mirkos Skill installieren"},
-	{"T10", "Alice kann Mirkos Skill ausfuehren"},
+	{"T01", "Alice kann den eigenen Skill paketieren"},
+	{"T02", "Alice kann den eigenen Skill signieren"},
+	{"T03", "Alice kann das eigene Paket verifizieren"},
+	{"T04", "Bob kann Alices Skill verifizieren"},
+	{"T05", "Bob kann Alices Skill installieren"},
+	{"T06", "Bob kann Alices Skill ausfuehren"},
+	{"T07", "Bob kann den eigenen Skill paketieren und signieren"},
+	{"T08", "Alice kann Bobs Skill verifizieren"},
+	{"T09", "Alice kann Bobs Skill installieren"},
+	{"T10", "Alice kann Bobs Skill ausfuehren"},
 	{"T11", "Manipuliertes Alice-Artefakt wird erkannt"},
 	{"T12", "Manipuliertes Artefakt wird nicht installiert"},
 	{"T13", "Bestand nach verweigertem Install unversehrt"},
@@ -342,7 +342,7 @@ func TestAcceptance_TwoParty(t *testing.T) {
 	// ---- T01..T06: Alice to Bob ----
 	// seal() packages and signs, and fails the test itself if either step does
 	// not happen: reaching the next line IS the evaluation of T01 and T02.
-	fromEric := alice.seal(t, transport)
+	fromAlice := alice.seal(t, transport)
 	l.reached("T01")
 	l.reached("T02")
 
@@ -353,13 +353,13 @@ func TestAcceptance_TwoParty(t *testing.T) {
 	// against its own trust root, which is what makes the sender able to notice
 	// a broken signing step before the recipient does.
 	var t03 bytes.Buffer
-	code := runVerifySig([]string{"--pubkey", alice.authorPubPath, fromEric.skb}, &t03, &t03)
+	code := runVerifySig([]string{"--pubkey", alice.authorPubPath, fromAlice.skb}, &t03, &t03)
 	l.check("T03", code == exitOK, "the sender cannot verify his own package (exit %d): %s", code, t03.String())
 
-	code, out := bob.verifyBundle(fromEric)
+	code, out := bob.verifyBundle(fromAlice)
 	l.must("T04", code == exitOK, "verify failed (exit %d): %s", code, out)
 
-	code, out = bob.installBundle(fromEric)
+	code, out = bob.installBundle(fromAlice)
 	l.must("T05", code == exitOK, "install failed (exit %d): %s", code, out)
 	got := bob.installedSkills(t)
 	l.must("T05", len(got) == 1 && got[0] == alice.skill, "installed %v, want [%s]", got, alice.skill)
@@ -372,13 +372,13 @@ func TestAcceptance_TwoParty(t *testing.T) {
 
 	// ---- T07..T10: the same in reverse. Symmetry is part of the claim: neither
 	// side holds a privileged role, and nothing depends on our machine.
-	fromMirko := bob.seal(t, transport)
+	fromBob := bob.seal(t, transport)
 	l.reached("T07")
 
-	code, out = alice.verifyBundle(fromMirko)
+	code, out = alice.verifyBundle(fromBob)
 	l.must("T08", code == exitOK, "verify failed (exit %d): %s", code, out)
 
-	code, out = alice.installBundle(fromMirko)
+	code, out = alice.installBundle(fromBob)
 	l.must("T09", code == exitOK, "install failed (exit %d): %s", code, out)
 
 	l.reached("T10")
@@ -390,9 +390,9 @@ func TestAcceptance_TwoParty(t *testing.T) {
 	// The signature is deliberately NOT re-made: that is the whole test.
 	tampered := sealed{
 		skb:    filepath.Join(transport, "alice-demo-skill-tampered.skb"),
-		digest: fromEric.digest,
+		digest: fromAlice.digest,
 	}
-	blob, err := os.ReadFile(fromEric.skb) // #nosec G304 -- the test's own temp dir.
+	blob, err := os.ReadFile(fromAlice.skb) // #nosec G304 -- the test's own temp dir.
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
@@ -400,7 +400,7 @@ func TestAcceptance_TwoParty(t *testing.T) {
 	if err := os.WriteFile(tampered.skb, blob, 0o600); err != nil {
 		t.Fatalf("write tampered: %v", err)
 	}
-	metaRaw, err := os.ReadFile(fromEric.meta) // #nosec G304 -- the test's own temp dir.
+	metaRaw, err := os.ReadFile(fromAlice.meta) // #nosec G304 -- the test's own temp dir.
 	if err != nil {
 		t.Fatalf("read envelope: %v", err)
 	}

@@ -64,10 +64,10 @@ Zehn Schritte, in dieser Reihenfolge:
 | `01` | Bob (Autor) | `keygen`, `pack`, `sign`, `verify-sig`; zweimal packen ist byteidentisch | Exit `0`, Determinismus belegt |
 | `02` | Bob | Identität und Bundle ins Registry (nur online) | offline sauber übersprungen |
 | `03` | Reviewer | Attestierung `green` auf den Digest | Urteil liegt vor |
-| `04` | Alice | pinnt Mirkos Schlüssel in seine Trust-Roots | Schlüssel steht in der Datei |
+| `04` | Alice | pinnt Bobs Schlüssel in die eigenen Trust-Roots | Schlüssel steht in der Datei |
 | `05` | Alice | prüft, installiert, **führt den Skill aus** | `output/hello.txt` entsteht |
 | `06` | Angreifer | ein Byte im Bundle geändert, Signatur passend umbenannt | Exit **`11`**, Signatur ungültig |
-| `07` | Angreifer | fremder Schlüssel, fremde Signatur, Mirkos Identität behauptet | Exit **`11`** gegen Mirkos Pin, `0` gegen den eigenen |
+| `07` | Angreifer | fremder Schlüssel, fremde Signatur, Bobs Identität behauptet | Exit **`11`** gegen Bobs Pin, `0` gegen den eigenen |
 | `08` | Angreifer | Bundle ganz ohne Signatur | Verweigerung, kein Durchrutschen |
 | `09` | Angreifer | installierte Datei nachträglich editiert | Abweichung erkannt, Reparatur aus dem Bundle |
 
