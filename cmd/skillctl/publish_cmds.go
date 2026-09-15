@@ -46,6 +46,7 @@ import (
 	"github.com/kamir/m3c-tools/pkg/er1"
 	"github.com/kamir/m3c-tools/pkg/session"
 	"github.com/kamir/m3c-tools/pkg/skillbundle"
+	"github.com/kamir/m3c-tools/pkg/skillctl/parser"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
 )
@@ -104,7 +105,9 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 	var (
 		// Selection
 		registryName = fs.String("registry", "self", "Registry spec. \"self\" (recommended) or \"er1://...\". HTTP registries route through the existing admission client, not this transport.")
+		kindFlag     = fs.String("kind", skillbundle.KindSkill, "Bundle kind: skill | agent (SPEC-0432). An agent bundle carries exactly one file, ~/.claude/agents/<name>.md.")
 		skillDir     = fs.String("skill-dir", "", "Path to the skill directory. Default: ~/.claude/skills/<name>.")
+		agentFile    = fs.String("agent-file", "", "[--kind agent] Path to the agent definition. Default: ~/.claude/agents/<name>.md.")
 		bundle       = fs.String("bundle", "", "Path to a pre-built .skb. If empty, the skill dir is packed in-place to ./<name>@<version>.skb.")
 		version      = fs.String("version", "", "Skill version (overrides the SKILL.md frontmatter). Required for admit; inferred from --bundle filename for attest.")
 		identity     = fs.String("identity", "id:kamir@m3c", "Author/registry identity id stamped into the event and tags.")
@@ -213,6 +216,7 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 		return runPublishAttest(stdout, stderr, publishAttestArgs{
 			name:         name,
 			version:      ver,
+			kind:         *kindFlag,
 			level:        *level,
 			rationale:    *rationale,
 			digestArg:    *digestArg,
@@ -248,6 +252,8 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 	return runPublishAdmit(stdout, stderr, publishAdmitArgs{
 		name:             name,
 		version:          ver,
+		kind:             *kindFlag,
+		agentFile:        *agentFile,
 		skillDir:         *skillDir,
 		bundlePath:       *bundle,
 		identity:         *identity,
@@ -267,10 +273,14 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 
 type publishAdmitArgs struct {
 	name, version, skillDir, bundlePath, identity, keyPath string
-	er1Target, er1Context                                  string
-	inlineMax                                              int
-	yes, dryRun, noCheckpoint, noRunbookPublish            bool
-	shareRooms                                             []string
+	kind, agentFile                                        string
+	// catalogLookup is injected by tests. nil means "build the real one from
+	// er1Target/er1Context" (SPEC-0432 §8).
+	catalogLookup                               catalogLookup
+	er1Target, er1Context                       string
+	inlineMax                                   int
+	yes, dryRun, noCheckpoint, noRunbookPublish bool
+	shareRooms                                  []string
 }
 
 func runPublishAdmit(stdout, stderr io.Writer, a publishAdmitArgs) int {
@@ -332,6 +342,7 @@ func runPublishAdmit(stdout, stderr io.Writer, a publishAdmitArgs) int {
 	}
 
 	skill := registry.SkillMeta{
+		Kind:            a.kind,
 		Name:            a.name,
 		Version:         ver,
 		BundleDigest:    digest,
@@ -420,12 +431,41 @@ func resolveBundleDigest(digestArg, bundlePath, name, version string) (string, e
 
 type publishAttestArgs struct {
 	name, version, level, rationale, digestArg, bundlePath, identity, keyPath string
+	kind                                                                      string
 	er1Target, er1Context                                                     string
 	yes, dryRun, noCheckpoint                                                 bool
 	shareRooms                                                                []string
 }
 
+// attestLevelAllowed enforces the SPEC-0432 §5.1 minimum: an agent carries at
+// least "yellow", because an agent EXECUTES on a machine nobody is sitting at,
+// while a skill only instructs. There is deliberately no --force: an exception
+// is a change to the spec.
+//
+// SCOPE, so nobody mistakes this for a complete barrier: it judges the kind the
+// CALLER claims via --kind, not the kind inside the bundle. Someone who omits
+// --kind while attesting an agent passes here. That is by design (§5.1): the
+// second gate is pull, which reads the bundle itself (AC-4). Two gates, one
+// minimum.
+func attestLevelAllowed(kind, level string) error {
+	if kind != skillbundle.KindAgent {
+		return nil
+	}
+	if level == "green" {
+		return fmt.Errorf("agent bundles need at least level %q (got %q); nothing attested",
+			"yellow", level)
+	}
+	return nil
+}
+
 func runPublishAttest(stdout, stderr io.Writer, a publishAttestArgs) int {
+	// First, before resolving a digest and before unlocking a private key: a
+	// refusal must leave no trace at all.
+	if err := attestLevelAllowed(a.kind, a.level); err != nil {
+		fmt.Fprintf(stderr, "publish --attest: %v\n", err)
+		return 2
+	}
+
 	digest, err := resolveBundleDigest(a.digestArg, a.bundlePath, a.name, a.version)
 	if err != nil {
 		fmt.Fprintf(stderr, "publish --attest: %v\n", err)
@@ -716,20 +756,77 @@ func ensureBundle(a publishAdmitArgs, stderr io.Writer) (string, string, error) 
 		}
 		return a.bundlePath, v, nil
 	}
-	dir := a.skillDir
-	if dir == "" {
-		home, _ := os.UserHomeDir()
-		dir = filepath.Join(home, ".claude", "skills", a.name)
+	kind := a.kind
+	if kind == "" {
+		kind = skillbundle.KindSkill
 	}
-	if _, err := os.Stat(dir); err != nil {
-		return "", "", fmt.Errorf("skill dir not found: %s (try --skill-dir)", dir)
+	if !skillbundle.ValidKind(kind) {
+		return "", "", fmt.Errorf("bad kind %q (want %q or %q); no bundle written",
+			kind, skillbundle.KindSkill, skillbundle.KindAgent)
 	}
+
+	var dir string
+	man := skillbundle.BundleManifest{}
+	if kind == skillbundle.KindAgent {
+		// An agent is ONE file (SPEC-0432 §3.1). Stage it into a temp dir named
+		// <name>.md so it runs through the same packer as every skill: one
+		// canonicalization, one digest path, no special case inside Pack.
+		src := a.agentFile
+		if src == "" {
+			home, _ := os.UserHomeDir()
+			src = filepath.Join(home, ".claude", "agents", a.name+".md")
+		}
+		body, err := os.ReadFile(src)
+		if err != nil {
+			return "", "", fmt.Errorf("agent file not found: %s (try --agent-file)", src)
+		}
+
+		// SPEC-0432 §8: what the agent declares, and what it only mentions.
+		fm, _, fmErr := parser.Parse(body)
+		var declared []skillbundle.Dependency
+		if fmErr == nil && fm != nil {
+			declared, err = parseDeclaredDeps(fm.DependsOn)
+			if err != nil {
+				return "", "", err
+			}
+		}
+		lookup := a.catalogLookup
+		if lookup == nil && len(declared) > 0 {
+			lookup = er1CatalogLookup(a.er1Target, a.er1Context)
+		}
+		if err := checkAgentDeps(src, body, declared, lookup, stderr); err != nil {
+			return "", "", err
+		}
+		man.DependsOn = declared
+
+		staged, err := os.MkdirTemp("", "skillctl-agent-")
+		if err != nil {
+			return "", "", fmt.Errorf("staging dir: %w", err)
+		}
+		defer os.RemoveAll(staged)
+		if err := os.WriteFile(filepath.Join(staged, a.name+".md"), body, 0644); err != nil {
+			return "", "", fmt.Errorf("staging %s: %w", a.name, err)
+		}
+		dir = staged
+		man.Kind = skillbundle.KindAgent
+		man.Name = a.name
+	} else {
+		dir = a.skillDir
+		if dir == "" {
+			home, _ := os.UserHomeDir()
+			dir = filepath.Join(home, ".claude", "skills", a.name)
+		}
+		if _, err := os.Stat(dir); err != nil {
+			return "", "", fmt.Errorf("skill dir not found: %s (try --skill-dir)", dir)
+		}
+	}
+
 	v := a.version
 	if v == "" {
 		v = "0.0.0"
 	}
 	out := filepath.Join(".", a.name+"@"+v+".skb")
-	if _, err := skillbundle.Pack(dir, out, skillbundle.PackOptions{}); err != nil {
+	if _, err := skillbundle.Pack(dir, out, skillbundle.PackOptions{Manifest: man}); err != nil {
 		return "", "", fmt.Errorf("pack %s: %w", dir, err)
 	}
 	fmt.Fprintf(stderr, "    packed: %s\n", out)
