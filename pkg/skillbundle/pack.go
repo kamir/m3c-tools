@@ -70,8 +70,23 @@ func Pack(skillDir, outFile string, opts PackOptions) (digest string, err error)
 	}
 
 	manifest := opts.Manifest
+
+	// Fail closed on an unknown kind: write nothing (SPEC-0432 AC-12). Same
+	// line as the ValidateManifestDataScope gate above, and deliberately
+	// BEFORE any file is produced.
+	if !ValidKind(manifest.Kind) {
+		return "", fmt.Errorf("bad kind %q (want %q or %q); no bundle written",
+			manifest.Kind, KindSkill, KindAgent)
+	}
 	if manifest.Schema == "" {
-		manifest.Schema = Schema
+		// Only an agent bundle moves to v2. A skill keeps v1 so its canonical
+		// bytes, and therefore its digest, stay exactly as before
+		// (SPEC-0432 §3.2, AC-13).
+		if manifest.Kind == KindAgent {
+			manifest.Schema = SchemaAgent
+		} else {
+			manifest.Schema = Schema
+		}
 	}
 	switch {
 	case !opts.BuiltAt.IsZero():

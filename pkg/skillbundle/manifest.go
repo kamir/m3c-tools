@@ -7,8 +7,31 @@ package skillbundle
 
 import "time"
 
-// Schema is the canonical schema identifier embedded in every bundle manifest.
+// Schema is the canonical schema identifier embedded in every SKILL bundle
+// manifest. It stays at v1 forever: bumping it for all bundles would change the
+// re-serialized manifest bytes of every unchanged skill, and pack.go hashes
+// those bytes, so each skill would report a new digest without a content change
+// (SPEC-0432 §3.2).
 const Schema = "m3c-skill-bundle/v1"
+
+// SchemaAgent is the schema identifier for bundles carrying Kind == KindAgent.
+// A v1-only reader must REJECT such a bundle rather than install it at the skill
+// location (SPEC-0432 §3.2).
+const SchemaAgent = "m3c-skill-bundle/v2"
+
+// The bundle kinds. KindSkill is the implied default for a manifest that carries
+// no Kind at all: all 78 bundles admitted before SPEC-0432 are skills, so the
+// default is measured, not guessed.
+const (
+	KindSkill = "skill"
+	KindAgent = "agent"
+)
+
+// ValidKind reports whether k is a kind this packer accepts. The empty string is
+// valid and means KindSkill.
+func ValidKind(k string) bool {
+	return k == "" || k == KindSkill || k == KindAgent
+}
 
 // Dependency declares a runtime or build-time requirement for the skill.
 // Mirrors SPEC-0188 §3.2 `depends_on[]`.
@@ -60,7 +83,14 @@ type DataDependency struct {
 // which matters for canonicalization: BundleDigest is positioned last among
 // the digest-relevant fields and is always serialized empty for the digest pass.
 type BundleManifest struct {
-	Schema       string `json:"schema"`
+	Schema string `json:"schema"`
+	// Kind is the bundle kind ("agent"), absent for skills. It MUST stay
+	// `omitempty` and this packer MUST never write "skill" explicitly: an
+	// emitted `"kind":"skill"` would be new bytes in the canonical manifest,
+	// and every unchanged skill would re-pack to a different digest
+	// (SPEC-0432 §3.2). Reading an explicit "skill" from a foreign bundle is
+	// fine; writing it is not. Use EffectiveKind to read.
+	Kind         string `json:"kind,omitempty"`
 	Name         string `json:"name"`
 	Version      string `json:"version"`
 	Summary      string `json:"summary"`
@@ -84,6 +114,16 @@ type BundleManifest struct {
 	BundleDigest     string           `json:"bundle_digest"`
 	BuiltAt          time.Time        `json:"built_at"`
 	BuiltBy          string           `json:"built_by"`
+}
+
+// EffectiveKind returns the manifest's kind, resolving an absent Kind to
+// KindSkill. This is the ONE place that encodes "missing means skill"
+// (SPEC-0432 §3.2); no caller may re-derive it.
+func (m BundleManifest) EffectiveKind() string {
+	if m.Kind == "" {
+		return KindSkill
+	}
+	return m.Kind
 }
 
 // withEmptyDigest returns a shallow copy of m with BundleDigest cleared.
