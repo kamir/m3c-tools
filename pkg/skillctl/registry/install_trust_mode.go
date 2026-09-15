@@ -132,7 +132,13 @@ func PlanInstall(bundles []*StagedBundle, skillsDir string) (*InstallPlan, error
 	}
 	plan := &InstallPlan{IssuedAt: time.Now().UTC().Unix()}
 	for _, b := range bundles {
+		// An agent is one file beside the skills, not a directory among them
+		// (SPEC-0432 §3.1). The plan must say so, because the plan is what a
+		// human approves.
 		target := filepath.Join(skillsDir, b.Name)
+		if b.Kind == skillbundle.KindAgent {
+			target = filepath.Join(agentsDirFor(skillsDir), b.Name+".md")
+		}
 		row := PlanRow{
 			Name:      b.Name,
 			Version:   b.Version,

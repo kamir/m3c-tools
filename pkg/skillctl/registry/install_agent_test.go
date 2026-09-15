@@ -184,3 +184,30 @@ func TestInstallSkillUnaffected(t *testing.T) {
 		t.Error("installing a skill created an agents dir")
 	}
 }
+
+// TestPlanNamesTheAgentsDir. The G-23 two step asks a human to approve a plan
+// before anything is written. While running T-08 that plan offered to put 19
+// agents into ~/.claude/skills/, because PlanInstall did not know about kinds
+// and only installOne did. The install would have been right and the review
+// wrong, which is the worse of the two: a review of the wrong thing is not a
+// review.
+func TestPlanNamesTheAgentsDir(t *testing.T) {
+	skillsDir, agentsDir := homeWith(t)
+	plan, err := PlanInstall([]*StagedBundle{
+		{Kind: skillbundle.KindAgent, Name: "release-agent", Version: "1.0.0", Digest: "sha256:a"},
+		{Name: "plain-skill", Version: "1.0.0", Digest: "sha256:b"},
+	}, skillsDir)
+	if err != nil {
+		t.Fatalf("PlanInstall: %v", err)
+	}
+	got := map[string]string{}
+	for _, r := range append(append([]PlanRow{}, plan.Creates...), plan.Overwrites...) {
+		got[r.Name] = r.SkillPath
+	}
+	if want := filepath.Join(agentsDir, "release-agent.md"); got["release-agent"] != want {
+		t.Errorf("the plan sends the agent to %q, want %q", got["release-agent"], want)
+	}
+	if want := filepath.Join(skillsDir, "plain-skill"); got["plain-skill"] != want {
+		t.Errorf("the plan sends the skill to %q, want %q", got["plain-skill"], want)
+	}
+}

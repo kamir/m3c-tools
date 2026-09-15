@@ -304,6 +304,12 @@ func ShowSkill(cfg *er1.Config, ctxID, nameOrDigest string) (*SkillView, error) 
 // StagedBundle is one verified bundle, with the .skb bytes (decoded inline or
 // fetched from MinIO) cached on disk under ~/.cache/m3c/skill-bundles/<digest>/.
 type StagedBundle struct {
+	// Kind decides WHERE this bundle goes, so it must be known at PLAN time,
+	// not only at install time. The install plan is what a human reviews in
+	// the G-23 two step, and a plan that names the wrong directory turns the
+	// review into theatre (found while running T-08: the plan offered to put
+	// 19 agents into ~/.claude/skills/).
+	Kind           string
 	Name           string
 	Version        string
 	Digest         string // sha256:<hex>
@@ -455,7 +461,12 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 			packedHost = tagValueFromItem(item, "host:")
 		}
 		admittedAt, _ := event["admitted_at"].(string)
+		// The item's shelf tag says the kind without unpacking anything. The
+		// manifest inside the bundle stays the binding source at install time
+		// (installOne re-reads it); this is the cheap early read so the PLAN
+		// can name the right directory.
 		res.Staged = append(res.Staged, &StagedBundle{
+			Kind:           ItemKind(item),
 			Name:           name,
 			Version:        ver,
 			Digest:         digest,
