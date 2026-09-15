@@ -164,7 +164,7 @@ fi
 # straight over it. That is the same bypass release.yml already names in its own
 # docs-gate comment.
 echo ""
-echo "7. Index freshness (cmd/ and pkg/ vs the indexes)"
+echo "8. Index freshness (cmd/ and pkg/ vs the indexes)"
 if ! [ -x "scripts/check-index.sh" ]; then
     fail "scripts/check-index.sh is missing or not executable"
 elif ./scripts/check-index.sh; then
