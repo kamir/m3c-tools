@@ -7,9 +7,25 @@
 #
 # FR-0118, SPEC-0407 AC-11. Two modes, one script:
 #
-#   (default)  hermetic, non-interactive, assert-only. This is the CI gate.
+#   (default)  hermetic, non-interactive, assert-only. This is the RELEASE
+#              gate, and the distinction is not pedantry, see below.
 #   --walk     the same chain, one step at a time, with the WHY printed and a
 #              pause between steps. This is the tutorial, run by a human.
+#
+# WHERE THIS ACTUALLY BLOCKS. This line used to read "This is the CI gate". It
+# is not. No workflow runs this script and no Makefile target runs it directly.
+# The only path to it is scripts/check-docs.sh, which `make release` calls
+# (Makefile: `release: code-review check-docs release-auto`). ci.yml records
+# the same fact from the other side, in the step that re-implements a different
+# check-docs duty: "It runs HERE and not only in scripts/check-docs.sh, because
+# no workflow calls that script."
+#
+# So a renamed CLI flag does NOT turn a pull request red. It turns `make
+# release` red, which is later and rarer. SPEC-0407 AC-11 states this
+# correctly ("laeuft in check-docs.sh und blockiert bei Abweichung"); FR-0118
+# wants the CI half and is still open. The script was the only place claiming
+# the reach it does not have, and a claim about where enforcement lives is
+# exactly the kind that nobody re-checks.
 #
 # Everything happens in a throwaway workspace with a throwaway HOME, against a
 # bare local:// git registry. No network, no server, no admin rights, and your
