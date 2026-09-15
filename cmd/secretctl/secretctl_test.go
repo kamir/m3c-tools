@@ -44,8 +44,14 @@ func TestSecretNeverPrints(t *testing.T) {
 	log.New(&logBuf, "", 0).Printf("wert=%v struct=%+v", s, env)
 
 	wege := map[string]string{
-		"String()":     s.String(),
-		"%v":           fmt.Sprintf("%v", s),
+		"String()": s.String(),
+		"%v":       fmt.Sprintf("%v", s),
+		// staticcheck schlaegt hier String() vor. Das waere ein anderer Test:
+		// String() direkt zu rufen prueft die Methode, %s prueft den WEG, auf
+		// dem fmt sie findet. Genau dieser Weg ist es, den jemand aus
+		// Versehen nimmt. Den Test der Regel anzupassen hiesse, das Tor an
+		// den Fehler anzupassen, den es finden soll.
+		//nolint:staticcheck,gosimple // S1025 ist hier der Gegenstand der Pruefung
 		"%s":           fmt.Sprintf("%s", s),
 		"%q":           fmt.Sprintf("%q", s),
 		"%#v":          fmt.Sprintf("%#v", s),
