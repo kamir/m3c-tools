@@ -782,3 +782,12 @@ func provenanceFor(b *StagedBundle, opts InstallOpts) ProvenanceSidecar {
 		GovernanceLevel: b.Governance,
 	}
 }
+
+// LoadProvenanceFile reads a provenance sidecar from an explicit path.
+//
+// Exported for `skillctl drift`, which must read sidecars from BOTH install
+// locations: inside a skill directory, and in the dotted directory beside an
+// agent file. The unexported loadProvenance stays for the install path.
+func LoadProvenanceFile(path string) (*ProvenanceSidecar, error) {
+	return loadProvenance(path)
+}
