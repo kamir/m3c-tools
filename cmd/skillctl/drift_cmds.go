@@ -205,10 +205,10 @@ func compareDrift(local map[string]driftRow, remote map[string]registry.SkillVie
 			continue
 		}
 		row.Remote = short(rv.LatestDigest)
-		switch {
-		case row.Local == driftUnvouched:
+		switch row.Local {
+		case driftUnvouched:
 			row.State = driftUnvouched
-		case row.Local == row.Remote:
+		case row.Remote:
 			row.State = driftCurrent
 		default:
 			row.State = driftStale
