@@ -75,12 +75,23 @@ returns an error by documented contract; the return pair exists only because
 `hash.Hash` is an `io.Writer`. It now carries a `#nosec G104` naming that
 contract, which stays correct if G104 is ever switched back on.
 
-## What is left: 390 findings
+## What is left: 277 findings
 
-The eleven sharp singletons named below were assessed and annotated on
-2026-09-15, which took the count from 401 to 390. The table is the state BEFORE
-that pass, because it is the one the ordering was derived from; the four rules
-it starts with now read zero.
+Three passes on 2026-09-15 took the count from 401 to 277: the eleven sharp
+singletons, then G402 (13 to 0, which produced BUG-0444 and BUG-0445 on the
+way), then the class decisions for G301, G306 and the G204 openers. The table
+below is the state BEFORE all of them, because it is the one the ordering was
+derived from.
+
+```
+401  after the G104 exclusion
+390  minus the eleven sharp singletons
+374  minus G402, once its 13 carried their own guard
+277  minus G301 (37), G306 (34) and the 26 G204 openers
+```
+
+Still open: G304 (147), G204 without the openers (15), G706 (25), G115 (22),
+and the small rules below.
 
 | Rule | Findings | Files | Severity | Confidence | What it reports |
 |---|---:|---:|---|---|---|
@@ -137,11 +148,22 @@ finding.
 actual review, not a class verdict, because "is this path attacker-controlled"
 is a per-site question. Concentrated in CLI entry points.
 
-**4. The mechanical classes, 261 findings.** `G304` (148), `G204` (42),
-`G301` (37), `G306` (34). These want ONE written class decision each, not 261
-individual ones. The question per class is the same shape: is the variable
-reachable from untrusted input in this program, and if not, what makes that
-structurally true rather than currently true.
+**4. The mechanical classes. PARTLY DONE 2026-09-15.** `G301` (37) and `G306`
+(34) are decided and annotated, see "Klassenentscheidung G301/G306"; so are the
+26 platform openers inside `G204`, see "Klassenentscheidung G204 Oeffner".
+
+**What is left here, and why it did not get a class decision:** `G304` (147)
+and the remaining `G204` (15). Measured, `G304` is NOT homogeneous the way the
+permission classes were: 124 of the 147 pass a bare variable to
+`os.Open`/`os.ReadFile`, 14 build the path through `filepath.Join`, 9 have
+another shape. "Is this variable reachable from untrusted input" is therefore a
+per-site question, and a blanket answer would be the shortcut that nearly
+buried BUG-0445.
+
+The promising move is to look for a STRUCTURE first: if the tree grew a helper
+that resolves paths against an allowed root (`os.Root` or an own SafeJoin),
+that one fact would explain 147 sites at once. If it has not, the 147 stay
+individual, and the honest thing is to say so rather than to wave.
 
 **5. `G706` log injection (25) and `G115` integer overflow (22).** Low severity
 or medium confidence. Worth a class decision, last.
@@ -150,6 +172,53 @@ Note on `G115`: 23 further findings exist that can never appear here at all.
 They sit in cgo-generated Go, which has no repository file to name, so they
 carry an empty `artifactLocation` and are dropped by
 `scripts/sarif-for-code-scanning.py`. They are counted in its log, not here.
+
+## Klassenentscheidung G301/G306, 2026-09-15
+
+**Decision: 0755 directories and 0644 files stay, for non-secret local artefacts.**
+
+The class is homogeneous, which is what made a class decision legitimate here:
+
+```
+G301   37 findings   ALL of them 0755 directories   (28x 0o755, 9x 0755)
+G306   34 findings   ALL of them 0644 files         (28x 0o644, 6x 0644)
+```
+
+The tree already draws the line deliberately: **36 writes use 0600 and 45
+directories use 0700**, and a search of all 71 sites for anything key, token,
+secret, credential or trust-root shaped returns **zero**. The 0644/0755 sites
+are the complement of the tight ones, not the ones somebody forgot.
+
+What this decision is NOT: a claim that 0755 is right everywhere. It says that
+on a single-user workstation a world-readable cache, bundle or report is
+conventional, and that this tree keeps secrets out of that set on purpose.
+
+**What would reopen it:** a deployment on a shared multi-user machine, where
+every local account can read skill bundles, reports and caches. Then the answer
+is 0750/0640 and a run against `tutorial-smoke.sh` plus
+`skillctl-acceptance.sh`, because tightening modes breaks quietly and only in
+operation.
+
+## Klassenentscheidung G204 Oeffner, 2026-09-15
+
+**Decision: the platform file openers are fine; 26 of the 41 G204 are that.**
+
+`exec.Command("open"|"xdg-open"|"rundll32", …)` appears 26 times. Every single
+argument was traced, and each is one of three things: a compile-time constant
+(`GitHubRepoURL`), the tool's OWN local server address (`http://<addr>` from
+the listener it just started), or `baseURL + "/fixed/path"` where `baseURL` is
+the operator's configured ER1 endpoint.
+
+**No URL from foreign data reaches an opener.** That was the question worth
+asking, and it is the same question as BUG-0444 through a different channel: an
+opener handed an attacker's URL launches the user's browser at it.
+
+**What would reopen it:** an opener fed a URL out of a bundle, a registry
+answer, an ER1 item or any other data a third party can write. The class
+decision covers provenance, not the literal call.
+
+The remaining 15 G204 (`git`, `/usr/bin/security`, named binaries, a debugging
+port flag) are NOT covered by this and stay open.
 
 ## The eleven sharp singletons, assessed 2026-09-15
 

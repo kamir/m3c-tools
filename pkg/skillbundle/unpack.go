@@ -191,11 +191,13 @@ func ExtractTo(entries []Entry, destDir string) error {
 			return err
 		}
 		if e.IsDir {
+			// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 			if err := os.MkdirAll(full, 0o755); err != nil {
 				return fmt.Errorf("skillbundle: mkdir %s: %w", full, err)
 			}
 			continue
 		}
+		// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			return fmt.Errorf("skillbundle: mkdir parent %s: %w", full, err)
 		}

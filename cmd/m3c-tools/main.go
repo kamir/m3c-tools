@@ -3777,6 +3777,7 @@ func menubarRecordImpression(app *menubar.App, videoID string) {
 	if data, err := fetcher.FetchThumbnail(videoID); err == nil && len(data) > 0 {
 		imgData = data
 		imgPath = filepath.Join(os.TempDir(), fmt.Sprintf("m3c-thumb-%s.jpg", videoID))
+		// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 		if writeErr := os.WriteFile(imgPath, data, 0o644); writeErr != nil {
 			log.Printf("[record] thumbnail write failed video=%s error=%v", videoID, writeErr)
 			imgPath = ""
@@ -4095,13 +4096,17 @@ func menubarUploadPayload(app *menubar.App, label string, payload *er1.UploadPay
 func openURL(url string) error {
 	switch runtime.GOOS {
 	case "windows":
+		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
 		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
 	case "linux":
+		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
 		return exec.Command("xdg-open", url).Start()
 	default: // darwin
+		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
 		if err := exec.Command("open", "-a", "Google Chrome", url).Start(); err == nil {
 			return nil
 		}
+		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
 		return exec.Command("open", url).Start()
 	}
 }

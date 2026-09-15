@@ -96,6 +96,7 @@ func WithBackoffScale(s float64) RetryQueueOption {
 // and ensures the er1_retry_queue table exists.
 func OpenRetryQueueDB(dbPath string, opts ...RetryQueueOption) (*RetryQueueDB, error) {
 	dir := filepath.Dir(dbPath)
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}

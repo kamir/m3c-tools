@@ -807,5 +807,6 @@ func writeJSON(path string, v any) error {
 		return err
 	}
 	data = append(data, '\n')
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	return os.WriteFile(path, data, 0o644)
 }

@@ -382,6 +382,7 @@ func runTranslogProve(args []string, stdout, stderr io.Writer) int {
 		return exitGeneric
 	}
 	if *outPath != "" {
+		// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 		if err := os.WriteFile(*outPath, append(data, '\n'), 0o644); err != nil { //nolint:gosec // receipt is public
 			fmt.Fprintln(stderr, err)
 			return exitGeneric

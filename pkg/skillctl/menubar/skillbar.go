@@ -448,6 +448,7 @@ func (sb *SkillBar) openReport() {
 	tmpFile.Close() //nolint:errcheck // best-effort close of an ephemeral temp report file opened only for browser display
 
 	// Open in default browser.
+	// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
 	if err := exec.Command("open", tmpFile.Name()).Start(); err != nil {
 		log.Printf("[skillbar] open browser: %v", err)
 		sb.showNotification("Skill Monitor", fmt.Sprintf("Error opening report: %v", err))
@@ -493,6 +494,7 @@ func (sb *SkillBar) openReviewUI() {
 
 	// Open in default browser.
 	url := fmt.Sprintf("http://%s", addr)
+	// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
 	if err := exec.Command("open", url).Start(); err != nil {
 		log.Printf("[skillbar] open browser: %v", err)
 	}

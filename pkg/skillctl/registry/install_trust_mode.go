@@ -417,6 +417,7 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 	}
 
 	// Extract into a temp dir, then atomically rename onto target.
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(skillsDir, 0o755); err != nil {
 		return nil, fmt.Errorf("install: mkdir %s: %w", skillsDir, err)
 	}
@@ -483,6 +484,7 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 	// on-disk body to the signed bundle (catches post-install tampering). The
 	// gate finds any top-level *.skb; the name is cosmetic.
 	skbName := strings.ReplaceAll(b.Name, string(filepath.Separator), "_") + ".skb"
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.WriteFile(filepath.Join(tmp, skbName), skb, 0o644); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("install: stash .skb: %w", err)
@@ -596,6 +598,7 @@ func writeProvenance(path string, side ProvenanceSidecar) error {
 	if err != nil {
 		return err
 	}
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	return os.WriteFile(path, out, 0o644)
 }
 

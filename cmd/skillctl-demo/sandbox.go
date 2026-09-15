@@ -93,6 +93,7 @@ func NewSandbox() (*Sandbox, error) {
 }
 
 func (sb *Sandbox) build() error {
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(filepath.Join(sb.Home, ".claude", "skills"), 0o755); err != nil {
 		return err
 	}
@@ -125,6 +126,7 @@ func (sb *Sandbox) build() error {
 
 	// 4. Pack the clean bundle + build its offline verification material.
 	s1 := filepath.Join(sb.Base, "s1")
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(filepath.Join(s1, "poisoned"), 0o755); err != nil {
 		return err
 	}
@@ -227,6 +229,7 @@ func (sb *Sandbox) wipeSkills() error {
 	}
 	// Also clear any prior quarantine so repeated runs start clean.
 	_ = os.RemoveAll(filepath.Join(sb.Home, ".claude", "skillctl", "quarantine"))
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	return os.MkdirAll(d, 0o755)
 }
 
@@ -235,6 +238,7 @@ func (sb *Sandbox) wipeSkills() error {
 // the lifecycle-tamper e2e fixture so the offline trust chain has real state.
 func (sb *Sandbox) installManaged(name string) error {
 	skb := filepath.Join(sb.Base, "install", name+".skb")
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(filepath.Dir(skb), 0o755); err != nil {
 		return err
 	}
@@ -254,6 +258,7 @@ func (sb *Sandbox) installManaged(name string) error {
 	if err := skillbundle.ExtractTo(entries, dst); err != nil {
 		return fmt.Errorf("extract install: %w", err)
 	}
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.WriteFile(filepath.Join(dst, name+".skb"), blob, 0o644); err != nil {
 		return err
 	}
@@ -267,15 +272,18 @@ func (sb *Sandbox) installManaged(name string) error {
 		PulledAt:        time.Now().UTC().Format(time.RFC3339),
 	}
 	b, _ := json.MarshalIndent(side, "", "  ")
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	return os.WriteFile(filepath.Join(dst, registry.ProvenanceSidecarName), b, 0o644)
 }
 
 func (sb *Sandbox) placeUnverified(name string) error {
 	dir := filepath.Join(sb.skillsDir(), name)
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 	body := fmt.Sprintf("---\nname: %s\nversion: 0.1.0\ndescription: hand-installed skill (no signed bundle)\n---\n\n# %s\n\nInstalled by copying a folder, no `.skb`, no provenance, unverifiable.\n", name, name)
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	return os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(body), 0o644)
 }
 
@@ -302,6 +310,7 @@ func (sb *Sandbox) writeMeta(path, digestStr string) error {
 	if err != nil {
 		return err
 	}
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	return os.WriteFile(path, b, 0o644)
 }
 
@@ -409,12 +418,14 @@ func extractEmbedded(efs embed.FS, root, dest string) error {
 		}
 		target := filepath.Join(dest, rel)
 		if d.IsDir() {
+			// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 			return os.MkdirAll(target, 0o755)
 		}
 		data, err := efs.ReadFile(p)
 		if err != nil {
 			return err
 		}
+		// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return err
 		}
@@ -441,8 +452,10 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	return os.WriteFile(dst, b, 0o644)
 }

@@ -398,9 +398,11 @@ func (b *gitBackend) withClone(mode artifact.AccessMode, fn func(dir string) err
 
 func writeRepoFile(dir, rel string, data []byte) error {
 	p := filepath.Join(dir, rel)
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return err
 	}
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	return os.WriteFile(p, data, 0o644)
 }
 
