@@ -27,7 +27,7 @@
 #   docker buildx imagetools inspect golang:1.26-alpine   # -> index Digest
 # Resolved 2026-09-02: golang:1.26-alpine == 1.26.8-alpine3.24 (>= go.mod
 # toolchain go1.26.6, so no toolchain re-download at build time).
-FROM golang:1.26-alpine@sha256:b6890e35ded5d19118c2bca3d7754dc4e6f694aac2d0aeb92f9807c2879e4230 AS builder
+FROM golang:1.27-alpine@sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125 AS builder
 
 # git for VCS build metadata; ca-certificates so `go mod download` over
 # https module proxies works.

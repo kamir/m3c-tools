@@ -5286,6 +5286,7 @@ type devSyncProgress func(recID, name, phase, disposition, docID string, err err
 // devSyncTotals summarizes a dev-sync run for a clear progress report.
 type devSyncTotals struct {
 	Synced, Skipped, Failed       int
+	Deferred                      int // BUG-0222: waiting for Plaud's cloud transcript
 	Plaud, Queued, Whisper, Audio int // transcript disposition of the synced items
 }
 
@@ -5294,6 +5295,58 @@ type devSyncTotals struct {
 // importType "plaud") + the SPEC-0117 server mapping. Returns the ER1 doc_id.
 // localWhisperTranscript transcribes MP3 bytes on THIS Mac via the whisper CLI.
 // Returns "" if whisper is unavailable or fails (caller falls back to audio-only).
+
+// plaudTranscriptGrace is how long a recording with NO Plaud transcript is left
+// alone before we conclude Plaud will never produce one. BUG-0222: an empty
+// source_list means two different things, "there will never be a transcript" and
+// "the cloud ASR is not finished yet", and the hourly timer reliably hits the
+// second case: a recording that stops at :19:38 is read at :20:00, 22 seconds
+// later. Treating that as the first case burns the recording, because a synced
+// recording is never looked at again. Within the grace window we defer instead.
+// PLAUD_TRANSCRIPT_GRACE_MIN tunes it; 0 disables the wait (old behavior).
+func plaudTranscriptGrace() time.Duration {
+	graceMin := 30
+	if v := strings.TrimSpace(os.Getenv("PLAUD_TRANSCRIPT_GRACE_MIN")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			graceMin = n
+		}
+	}
+	return time.Duration(graceMin) * time.Minute
+}
+
+// plaudTranscriptPending reports whether a recording without a Plaud transcript
+// is merely still being processed. It measures from the END of the recording
+// (start + duration), not its start: a 40-minute recording started an hour ago
+// stopped 20 minutes ago, and the cloud has had 20 minutes, not 60.
+func plaudTranscriptPending(r plaud.DevRecording, grace time.Duration) (bool, time.Duration) {
+	if grace <= 0 {
+		return false, 0
+	}
+	start, ok := plaud.ParseDevTime(r.StartAt)
+	if !ok {
+		return false, 0 // an unreadable timestamp must not stall the recording
+	}
+	ready := start.Add(time.Duration(r.Duration) * time.Millisecond).Add(grace)
+	if wait := time.Until(ready); wait > 0 {
+		return true, wait
+	}
+	return false, 0
+}
+
+// plaudDeferForTranscript is THE decision "leave this recording alone for now".
+// Both the dry run and the real sync call it, so a preview can never promise a
+// sync the real run would defer. That divergence is how the dry run came to
+// report WOULD sync for exactly the recordings BUG-0222 was about.
+//
+// A recording is deferred only when all three hold: no Plaud transcript, the
+// caller did not force it, and the cloud has not yet had its grace period.
+func plaudDeferForTranscript(r plaud.DevRecording, transcript string, force bool, grace time.Duration) (bool, time.Duration) {
+	if force || strings.TrimSpace(transcript) != "" {
+		return false, 0
+	}
+	return plaudTranscriptPending(r, grace)
+}
+
 // plaudMaxAudioBytes is the largest audio clip attached to an ER1 upload. Bigger
 // clips are dropped (transcript-only) to stay under the ER1 ingress limit: Cloud
 // Run / GFE reject requests over ~32 MiB with HTTP 413. Raise PLAUD_MAX_AUDIO_MB to
@@ -5347,12 +5400,27 @@ func localWhisperTranscript(audio []byte, id string) string {
 //	"audio", no transcript and no server-side transcription (audio only)
 func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentType string,
 	filesDB *tracking.FilesDB, syncAPI *plaud.SyncAPIClient, accountID string,
-	r plaud.DevRecording, tags string, useWhisper bool, existingDocID string) (string, string, error) {
+	r plaud.DevRecording, tags string, useWhisper, force bool, existingDocID string) (string, string, error) {
 
 	detail, err := client.GetDetail(r.ID)
 	if err != nil {
 		return "", "", fmt.Errorf("detail: %w", err)
 	}
+	transcript := detail.TranscriptText()
+	notes := detail.NotesText()
+
+	// BUG-0222: read an empty Plaud transcript BEFORE spending an audio download,
+	// and do not mistake "not finished yet" for "never". Inside the grace window
+	// the recording is DEFERRED: nothing is uploaded, nothing is written to the
+	// ledger or the SPEC-0117 mapping, so it stays `new` and the next hourly pass
+	// takes it again, with the real text. --force means "do it now anyway".
+	if pending, wait := plaudDeferForTranscript(r, transcript, force, plaudTranscriptGrace()); pending {
+		log.Printf("[plaud-dev] %s: Plaud has no transcript yet. Deferring for ~%s "+
+			"so the cloud can finish; the recording stays unsynced and the next pass retries",
+			r.ID, wait.Round(time.Minute))
+		return "", "pending", nil
+	}
+
 	var audio []byte
 	if detail.PresignedURL != "" {
 		if audio, err = client.DownloadAudio(detail.PresignedURL); err != nil {
@@ -5367,8 +5435,6 @@ func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentTyp
 	// which is local; without this the two producers disagree by 1-2 h and the
 	// braindump corpus mixes both. FR-0095.
 	captureTime := parseDevTime(r.StartAt).Local()
-	transcript := detail.TranscriptText()
-	notes := detail.NotesText()
 
 	// Cap the attached audio: the ER1 ingress (Cloud Run / Google Front End)
 	// rejects requests over ~32 MiB with HTTP 413. Audio is OPTIONAL whenever we
@@ -5436,7 +5502,7 @@ func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentTyp
 		ContentType:        contentType,
 		CurrentTime:        er1.FormatCaptureTime(captureTime),
 		DoTranscribe:       doTranscribe,
-		DocID:              existingDocID, // overwrite on forced re-sync (no duplicate)
+		DocID:              existingDocID, // asks for an overwrite; NOT honored yet, see BUG-0223
 	}
 	if len(audio) > 0 {
 		payload.AudioData = audio
@@ -5528,11 +5594,20 @@ func runDevSyncByIDs(client *plaud.DevClient, recByID map[string]plaud.DevRecord
 			}
 			continue
 		}
-		docID, disp, err := syncOneDevRecording(client, er1Cfg, cfg.ContentType, filesDB, syncAPI, accountID, r, tags, whisper, states[id].DocID)
+		docID, disp, err := syncOneDevRecording(client, er1Cfg, cfg.ContentType, filesDB, syncAPI, accountID, r, tags, whisper, force, states[id].DocID)
 		if err != nil {
 			t.Failed++
 			if prog != nil {
 				prog(id, r.Name, "failed", "", "", err)
+			}
+			continue
+		}
+		// BUG-0222: deferred, not done. Nothing was uploaded and nothing was
+		// recorded, so the recording stays `new` and the next pass retries it.
+		if disp == "pending" {
+			t.Deferred++
+			if prog != nil {
+				prog(id, r.Name, "deferred", disp, "", nil)
 			}
 			continue
 		}
@@ -5591,15 +5666,32 @@ func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force, whi
 
 	if dryRun {
 		states := resolvePlaudSyncStates(ids, client.AccessToken())
-		would := 0
+		grace := plaudTranscriptGrace()
+		would, wait := 0, 0
 		for _, r := range todo {
 			if !force && plaudStateSynced(states[r.ID]) {
 				continue
 			}
+			// BUG-0222: a preview that promises a sync the real run would defer is
+			// the same misreport in a quieter place. Only recordings still inside
+			// the grace window can be deferred, so only those cost a detail call,
+			// and that is normally none or one.
+			// Only a recording still inside the grace window can be deferred, so
+			// only those cost a detail call: normally none or one.
+			if pending, _ := plaudTranscriptPending(r, grace); pending && !force {
+				if d, derr := client.GetDetail(r.ID); derr == nil {
+					if defer_, left := plaudDeferForTranscript(r, d.TranscriptText(), force, grace); defer_ {
+						fmt.Printf("  WOULD WAIT: %s  %s  (Plaud transcript not ready, ~%s left)\n",
+							r.ID, stripCtrl(r.Name), left.Round(time.Minute))
+						wait++
+						continue
+					}
+				}
+			}
 			fmt.Printf("  WOULD sync: %s  %s\n", r.ID, stripCtrl(r.Name))
 			would++
 		}
-		fmt.Printf("\nDone (dry-run). would_sync=%d of %d selected\n", would, len(todo))
+		fmt.Printf("\nDone (dry-run). would_sync=%d  would_wait=%d  of %d selected\n", would, wait, len(todo))
 		return
 	}
 
@@ -5609,12 +5701,22 @@ func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force, whi
 		case "done":
 			done++
 			fmt.Printf("  [%d/%d] ✓ %-7s  %s → %s\n", done, len(ids), disp, stripCtrl(name), docID)
+		case "deferred":
+			done++
+			fmt.Printf("  [%d/%d] … waiting   %s (Plaud transcript not ready, retried next pass)\n",
+				done, len(ids), stripCtrl(name))
 		case "failed":
 			done++
 			fmt.Fprintf(os.Stderr, "  [%d/%d] ✗ %s: %v\n", done, len(ids), stripCtrl(name), err)
 		}
 	})
-	fmt.Printf("\nDone. synced=%d  skipped(already)=%d  failed=%d\n", tot.Synced, tot.Skipped, tot.Failed)
+	fmt.Printf("\nDone. synced=%d  skipped(already)=%d  deferred=%d  failed=%d\n",
+		tot.Synced, tot.Skipped, tot.Deferred, tot.Failed)
+	if tot.Deferred > 0 {
+		fmt.Printf("  → %d waiting for Plaud's cloud transcript. They stay unsynced on purpose; "+
+			"the next pass takes them WITH the text (--force to sync one now, "+
+			"PLAUD_TRANSCRIPT_GRACE_MIN=0 to disable the wait).\n", tot.Deferred)
+	}
 	if tot.Synced > 0 {
 		fmt.Printf("  transcripts: %d Plaud · %d queued(server-side whisper) · %d local-whisper · %d audio-only\n",
 			tot.Plaud, tot.Queued, tot.Whisper, tot.Audio)
@@ -6273,6 +6375,11 @@ func menubarHandlePlaudSync(app *menubar.App) {
 				if docID != "" {
 					menubar.SetPlaudSyncRowDoc(id, docID, er1Cfg.MemoryItemURL(docID))
 				}
+			// BUG-0222: deferred is neither success nor failure. The row must NOT
+			// go green: nothing was uploaded, and the next pass takes it with the
+			// text. Showing it as synced is exactly the lie this bug was about.
+			case "deferred":
+				menubar.SetPlaudSyncStatus(id, "waiting")
 			case "failed":
 				failed++
 				menubar.SetPlaudSyncStatus(id, "failed")
@@ -6287,11 +6394,14 @@ func menubarHandlePlaudSync(app *menubar.App) {
 		}
 
 		tot := runDevSyncByIDs(client, recByID, recordingIDs, customTags, false, false, prog)
-		log.Printf("[plaud] dev sync DONE: %d synced (%d Plaud, %d queued server-side, %d whisper), %d skipped, %d failed",
-			tot.Synced, tot.Plaud, tot.Queued, tot.Whisper, tot.Skipped, tot.Failed)
+		log.Printf("[plaud] dev sync DONE: %d synced (%d Plaud, %d queued server-side, %d whisper), %d skipped, %d deferred, %d failed",
+			tot.Synced, tot.Plaud, tot.Queued, tot.Whisper, tot.Skipped, tot.Deferred, tot.Failed)
 		note := fmt.Sprintf("Fertig: %d synchronisiert, %d übersprungen, %d Fehler", tot.Synced, tot.Skipped, tot.Failed)
 		if tot.Queued > 0 {
 			note += fmt.Sprintf(" · %d in Server-Transkription", tot.Queued)
+		}
+		if tot.Deferred > 0 {
+			note += fmt.Sprintf(" · %d warten auf den Plaud-Text", tot.Deferred)
 		}
 		app.Notify("Plaud Sync", note)
 		menubar.SetPlaudSyncProgress(menubar.BulkRunState{

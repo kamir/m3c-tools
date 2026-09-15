@@ -60,7 +60,13 @@ jobs:
       matrix:
         include:
           - { name: macos-arm64,   os: macos-14 }
-          - { name: macos-amd64,   os: macos-13 }
+          # macos-13 war der letzte gehostete Intel-Pool und ist 2026 stillgelegt:
+          # ein Job mit totem Label laeuft nie an (Run 34476478698 stand 40 Minuten
+          # mit runner: null, waehrend alle anderen Beine fuhren). Das amd64-Binary
+          # wird deshalb auf macos-14 unter Rosetta 2 geraucht: es beweist weiterhin,
+          # dass das darwin-amd64-Artefakt startet und antwortet; was es NICHT mehr
+          # beweist, ist natives Intel-Verhalten, und das steht hiermit da.
+          - { name: macos-amd64,   os: macos-14 }
           - { name: linux-amd64,   os: ubuntu-latest }
           - { name: linux-arm64,   os: ubuntu-24.04-arm }
           - { name: windows-amd64, os: windows-latest }

@@ -61,9 +61,10 @@ func TestRecompute_AllRequiredPass_IsReady(t *testing.T) {
 	if b.Summary.RequiredPassed != b.Summary.RequiredTotal {
 		t.Fatalf("required_passed %d != required_total %d", b.Summary.RequiredPassed, b.Summary.RequiredTotal)
 	}
-	// Sanity: policy G currently has 12 required gates.
-	if b.Summary.RequiredTotal != 12 {
-		t.Fatalf("required_total = %d, want 12 (gate-set G)", b.Summary.RequiredTotal)
+	// Sanity: policy G currently has 13 required gates
+	// (two-party-acceptance seit 2026-09-10, SPEC-0406).
+	if b.Summary.RequiredTotal != 13 {
+		t.Fatalf("required_total = %d, want 13 (gate-set G)", b.Summary.RequiredTotal)
 	}
 }
 

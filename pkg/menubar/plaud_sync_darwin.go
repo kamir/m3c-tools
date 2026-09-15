@@ -281,6 +281,10 @@ extern void goPlaudSyncAction(char* action);
 				[cell setTextColor:[NSColor systemBlueColor]];
 			} else if ([st isEqualToString:@"syncing"]) {
 				[cell setTextColor:[NSColor systemOrangeColor]];
+			} else if ([st isEqualToString:@"waiting"]) {
+				// BUG-0222: deferred, waiting for Plaud's cloud transcript.
+				// Deliberately NOT green: nothing was uploaded yet.
+				[cell setTextColor:[NSColor systemOrangeColor]];
 			} else if ([st isEqualToString:@"failed"]) {
 				[cell setTextColor:[NSColor systemRedColor]];
 			}

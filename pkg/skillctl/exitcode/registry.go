@@ -189,6 +189,24 @@ var (
 )
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Tier 9: pull-Nulltreffer (BUG-0254, entschieden 2026-09-14).
+//
+// 7 war frei; geprueft gegen diesen Register, der seit dem Zensus vom
+// 2026-09-07 ausdruecklich alle Nummern fuehrt, die irgendeine Exit-Flaeche
+// haelt. Genau dafuer gibt es ihn: damit die naechste Behauptung "N ist frei"
+// in CI kollidiert und nicht im Feld.
+//
+// Warum ein eigener Code und nicht 1: ein Nulltreffer ist kein Fehler des
+// Laufs, sondern eine Aussage ueber die Abfrage. Wer 1 bekommt, weiss nicht,
+// ob der Abruf scheiterte oder ob nichts da war, und genau diese
+// Ununterscheidbarkeit war der Befund.
+// ---------------------------------------------------------------------------
+
+var (
+	PullNoMatches = Code{7, "query yielded nothing", "pull", "no_matches"}
+)
+
 // Tier 8: out-of-register exit surfaces (census 2026-09-07, Befund 1.4).
 // These numbers were allocated in pkg/skillctl/verify/errors.go (SPEC-0246
 // §5.2, SPEC-0279 R3, SPEC-0278 L1), cmd/skillctl/agentid_cmds.go,
@@ -233,6 +251,8 @@ var (
 // that emits the SKILLCTL-MANUAL.md exit-code table.
 func AllCodes() []Code {
 	return []Code{
+		// Tier 9: pull-Nulltreffer
+		PullNoMatches,
 		// Tier 1: verify
 		VerifyDigestMismatch, VerifyAuthorSigInvalid, VerifyRegistryNotTrusted,
 		VerifyGovernanceBelowMin, VerifyDepsUnsatisfied, VerifyBlobMissing,

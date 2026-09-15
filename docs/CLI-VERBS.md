@@ -79,6 +79,7 @@ gates the CONTENT of the Exit-Code column against the register and the manual.
 | `attest` | SPEC-0188 (S9) | 0/1/2 |
 | `revoke` | SPEC-0188 §4.5 | 0/1/2, 15, 22 |
 | `audit` | SPEC-0189 §14 | 0/1/2/3 |
+| `envreport` | SPEC-0428 | 0/1/2 |
 | `propose` | SPEC-0194 | 0/1/2 |
 | `install` | SPEC-0188 §11 (S8) | 0/1/2, 10..17, 20, 22 |
 | `verify` | SPEC-0188 §11 (S8) | 0/1/2, 10..17, 20, 22 |
@@ -110,7 +111,7 @@ gates the CONTENT of the Exit-Code column against the register and the manual.
 | `project` | SPEC-0214 | 0/1/2 |
 | `session` | SPEC-0213 | 0/1/2 |
 | `publish` | SPEC-0225 P1 | 0/1/2 |
-| `pull` | SPEC-0225 P2 | 0/1/2, 6, 10..13 |
+| `pull` | SPEC-0225 P2 | 0/1/2, 6, 7, 10..13 |
 | `registry` | SPEC-0225 P2 | 0/1/2 |
 | `runbook` | SPEC-0272 | 0/1/2, 13 |
 | `room` | SPEC-0246 §7 | 0/1/2 |

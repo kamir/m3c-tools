@@ -189,6 +189,21 @@ claims() {
   done
 }
 
+# The fourth source, and the one that was missing until 2026-09-15: the shared
+# slot table. A reservation lives there BEFORE any file or branch exists, which
+# is the whole point of reserving. Without it `next-id` hands out numbers that
+# were claimed days ago: measured on that date it answered BUG-0268 while the
+# table had held 0268 since 2026-09-14 and was unbroken up to 0281.
+#
+# Kept separate from claims() so a missing table cannot be mistaken for "no
+# claims": next-id says out loud that it read an incomplete set.
+slot_claims() {
+  local kind=$1 t=${M3C_SLOT_TABLE:-}
+  [ -n "$t" ] && [ -f "$t" ] || return 1
+  sed -E -n "s/^\\|[[:space:]]*0*([0-9]+)[[:space:]]*\\|[[:space:]]*\`$kind-[0-9]+-[^\`]*\`.*/\\1\\tslot table/p" "$t"
+  return 0
+}
+
 cmd_next_id() {
   local kind=${1:-BUG} fetch=1 dir n where max=0 top="" all
   while [ $# -gt 0 ]; do
@@ -210,7 +225,14 @@ cmd_next_id() {
       || note "next-id: could not fetch: the answer may be stale (use --no-fetch to silence)"
   fi
 
-  all=$(claims "$kind" | sort -u)
+  if [ -n "${M3C_SLOT_TABLE:-}" ] && [ -f "${M3C_SLOT_TABLE}" ]; then
+    all=$( { claims "$kind"; slot_claims "$kind"; } | sort -u )
+  else
+    all=$(claims "$kind" | sort -u)
+    note "next-id: M3C_SLOT_TABLE is not set or not readable.
+  The answer ignores every reservation that has no file and no branch yet, which
+  is exactly what a reservation IS. Point M3C_SLOT_TABLE at the shared table."
+  fi
   while IFS=$'\t' read -r n where; do
     [ -n "$n" ] || continue
     if [ "$n" -gt "$max" ]; then max=$n; top=$where; fi
@@ -417,7 +439,23 @@ cmd_claim() {
   fi
 
   row="| $num | \`$base\` | angelegt $(date +%Y-%m-%d) | belegt via bugtracker.sh claim |"
-  printf '%s\n' "$row" >> "$table"
+  # Under the ANKER row if the table has one, appended otherwise (older tables).
+  #
+  # Why the position matters, and it is not tidiness: git reports two concurrent
+  # insertions ONLY when they touch the same place. On 2026-09-15 two sessions
+  # claimed 0436 thirteen seconds apart, inserted at different lines of a 43 KB
+  # table, and git merged both without a word. Measured in a throwaway repo:
+  # same position gives a merge conflict, different positions merge silently.
+  # A conflict here is the WANTED signal, not an accident.
+  if grep -q '^| ANKER |' "$table"; then
+    awk -v row="$row" '{ print } /^\| ANKER \|/ && !done { print row; done=1 }' \
+        "$table" > "$table.tmp" && mv "$table.tmp" "$table"
+  else
+    printf '%s\n' "$row" >> "$table"
+    note "claim: this table has no ANKER row, so the claim was appended at the end.
+  Two sessions appending at different places merge without a conflict; add an
+  ANKER row at the top of the table to make git serialise claims."
+  fi
   echo "$id claimed in $(basename "$table")"
   note "claim: durable only once the slot table is COMMITTED; until then it lives
   in one working copy, which is the narrower carrier the rule warns about."

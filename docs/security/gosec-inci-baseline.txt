@@ -39,7 +39,6 @@ G104	pkg/config/healthcheck.go	defer resp.Body.Close() io.Copy(io.Discard, io.Li
 G104	pkg/config/profile.go	if _, err := f.WriteString(name + "\\n"); err != nil { f.Close() //nolint:errcheck // best-effort close on error path; the write error is already returned below return fmt.Errorf("write active-profile: %w", err)
 G104	pkg/config/profile.go	if err := f.Sync(); err != nil { f.Close() //nolint:errcheck // best-effort close on error path; the sync error is already returned below return fmt.Errorf("sync active-profile: %w", err)
 G104	pkg/er1/config.go	defer resp.Body.Close() io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20)) //nolint:errcheck // draining the response body for connection reuse; the data is discarded
-G104	pkg/er1/config.go	if os.Getenv(k) == "" { os.Setenv(k, v) //nolint:errcheck // best-effort .env->process env; a malformed key is simply skipped, same as an absent line }
 G104	pkg/er1/device.go	defer resp.Body.Close() io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20)) //nolint:errcheck // draining the response body for connection reuse; the data is discarded
 G104	pkg/menubar/app.go	Clicked: func() { CopyToClipboard("Transcript for " + entry.VideoID) //nolint:errcheck // best-effort UI clipboard write a.fireAction(ActionCopyTranscript, entry.VideoID)
 G104	pkg/menubar/app.go	Clicked: func() { exec.Command("open", a.Config.LogPath).Run() //nolint:errcheck // fire-and-forget UI action: open the log file in the default app a.fireAction(ActionOpenLog, a.Config.LogPath)
@@ -239,7 +238,6 @@ G304	cmd/skillctl/replay_cmds.go	for _, p := range candidates { data, err := os.
 G304	cmd/skillctl/replay_cmds.go	} data, err := os.ReadFile(path) if err != nil {
 G304	cmd/skillctl/revoked_cache.go	func loadInstalledSidecar(home, name string) (registry.ProvenanceSidecar, bool) { b, err := os.ReadFile(filepath.Join(home, ".claude", "skills", name, registry.ProvenanceSidecarName)) if err != nil {
 G304	cmd/skillctl/revoked_cache.go	} b, err := os.ReadFile(p) if err != nil {
-G304	cmd/skillctl/runbook_cmds.go	func loadRunbookDescriptor(metaPath, ver string) (map[string]any, error) { raw, err := os.ReadFile(metaPath) if err != nil {
 G304	cmd/skillctl/runbook_cmds.go	html, err := os.ReadFile(htmlPath) if err != nil {
 G304	cmd/skillctl/scan_body_cmds.go	func scanBodyFile(skillMD string) (bodyscan.BodyScanReport, error) { raw, err := os.ReadFile(skillMD) if err != nil {
 G304	cmd/skillctl/scanner_cmds.go	func loadInventory(path string) (*model.Inventory, error) { data, err := os.ReadFile(path) if err != nil {

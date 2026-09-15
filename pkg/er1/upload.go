@@ -26,9 +26,14 @@ type UploadPayload struct {
 	ImageFilename      string // e.g. "videoID_thumbnail.jpg"
 	Tags               string // comma-separated tags
 	ContentType        string // per-observation content type (overrides cfg.ContentType if set)
-	DocID              string // if set, request ER1 to overwrite this existing document
-	DoTranscribe       bool   // if true, send DO_TRANSCRIBE=true: server transcribes audio
-	CurrentTime        string // real capture time "2006-01-02 15:04:05"; empty → server stamps now.
+	// DocID ASKS the server to overwrite this existing document. BUG-0223: as of
+	// 2026-09-08 /upload_2 does NOT read this field. It creates a new document and
+	// answers 200 with the NEW id, so a caller that sets this gets a DUPLICATE, not
+	// an overwrite. The field is kept so the client is ready once the server honors
+	// it; until then do not describe a forced re-sync as duplicate-free.
+	DocID        string
+	DoTranscribe bool   // if true, send DO_TRANSCRIBE=true: server transcribes audio
+	CurrentTime  string // real capture time "2006-01-02 15:04:05"; empty → server stamps now.
 	// Positions the item at its true creation time in the memory viewer instead
 	// of the import time: important for multi-device capture (SPEC-0117).
 }

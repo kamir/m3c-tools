@@ -1,10 +1,17 @@
 // Trust cross-reference for SPEC-0189 §6 (`--with-trust`).
 //
-// For each scanned skill, look for a sibling <name>-<version>.skb in the
-// same parent directory (or in ../.archive/) per Decision D1: the on-disk
-// `.skb` is the canonical signal. There is no separate per-machine
-// install ledger. Recompute the bundle digest, look for the matching
-// detached author signature, and annotate the descriptor.
+// For each scanned skill, look for a sibling bundle in the same parent
+// directory (or in ../.archive/) per Decision D1: the on-disk `.skb` is the
+// canonical signal. There is no separate per-machine install ledger.
+// Recompute the bundle digest, look for the matching detached author
+// signature, and annotate the descriptor.
+//
+// Two spellings, one meaning (BUG-0253): `install` writes
+// <name>-<version>.skb, while `export-bundle`, `export-kit` and
+// `publish --pack` write <name>@<version>.skb. Both are this tool's own
+// output, so the scanner reads both. Until 2026-09-13 it read only the
+// hyphen form and reported every @-form bundle on disk as "no sibling
+// .skb", which is why a machine full of bundles audited as UNVERIFIED.
 //
 // "verified": .skb present, digest matches the digest in the sig
 // filename, and the sig file is the expected 64 raw bytes. The author
@@ -85,6 +92,20 @@ func annotateSkillTrust(sk *model.SkillDescriptor) *model.BundleAttestation {
 	parent := filepath.Dir(sk.SourcePath) // ~/.claude/skills/<name>'s parent (skills/)
 	skbPath, found := findSiblingSKB(parent, sk.Name)
 	if !found {
+		// BUG-0253 B2: der Installierer legt das Buendel NICHT neben den
+		// Ordner, sondern HINEIN (install.go stasht es als
+		// <name>/<name>-<ver>.skb mit 0600). findSiblingSKB sucht daneben
+		// und ueberspringt Verzeichnisse, also hat dieser Scanner bis zum
+		// 2026-09-14 an einer Stelle gesucht, an die kein Installierer je
+		// geschrieben hat.
+		//
+		// verify-installed liest laengst richtig und sagt es in der eigenen
+		// Fehlermeldung ("was this skill installed by skillctl install?").
+		// Hier wird dieselbe Stelle nachgeschaut, statt Dateinamen zu
+		// aendern, auf die anderes zeigt.
+		skbPath, found = findInstalledSKB(sk.SourcePath)
+	}
+	if !found {
 		return &model.BundleAttestation{
 			Signed:     false,
 			TrustChain: TrustUnverified,
@@ -101,16 +122,42 @@ func annotateSkillTrust(sk *model.SkillDescriptor) *model.BundleAttestation {
 		}
 	}
 
-	// Look for sibling sig file: <skbPath>.<digest>.author.sig.
+	// BUG-0253 B3: `verified` hatte keinen Erzeuger.
+	//
+	// Die detached `<skb>.<digest>.author.sig` schreibt AUSSCHLIESSLICH
+	// `skillctl sign`. Weder `install` noch `pull --install --trust-mode`
+	// legt sie an; trust-mode schreibt stattdessen einen Provenance-Abzug
+	// (`.m3c-provenance.json` und Geschwister, siehe
+	// install/offline_verify.go). Ein Zustand, den kein Weg erzeugen kann,
+	// ist kein Zustand, sondern ein Versprechen.
+	//
+	// Entschieden am 2026-09-13 (E-B): der vorhandene Abzug wird als Beleg
+	// akzeptiert, statt eine zweite Signaturdatei einzufuehren. Er wird
+	// ohnehin geschrieben, und ein zweiter Beleg fuer dieselbe Sache ist
+	// einer zu viel.
+	//
+	// Reihenfolge mit Absicht: die detached Signatur wird ZUERST gesucht.
+	// Sie ist die staerkere Aussage (sie deckt die Bytes des Buendels), der
+	// Abzug die schwaechere (er bezeugt einen gelaufenen Installationspfad).
+	// Wer beides hat, soll die staerkere gemeldet bekommen.
 	expectedSig := fmt.Sprintf("%s.%s.author.sig", skbPath, digest)
 	sigInfo, err := os.Stat(expectedSig)
 	if err != nil {
+		if prov, ok := findProvenance(sk.SourcePath); ok {
+			return &model.BundleAttestation{
+				SKBPath:        skbPath,
+				BundleDigest:   "sha256:" + digest,
+				Signed:         true,
+				TrustChain:     TrustSignaturePresent,
+				ProvenancePath: prov,
+			}
+		}
 		return &model.BundleAttestation{
 			SKBPath:       skbPath,
 			BundleDigest:  "sha256:" + digest,
 			Signed:        false,
 			TrustChain:    TrustBroken,
-			VerifierError: fmt.Sprintf("expected sig file missing: %s", expectedSig),
+			VerifierError: fmt.Sprintf("no author sig and no provenance sidecar: %s", expectedSig),
 		}
 	}
 	// Sig file must be exactly 64 raw bytes (ed25519 detached).
@@ -134,14 +181,21 @@ func annotateSkillTrust(sk *model.SkillDescriptor) *model.BundleAttestation {
 	}
 }
 
-// findSiblingSKB looks for `<name>-*.skb` in `parent` and `parent/../.archive/`.
-// Returns the first match. If multiple versions exist, picks the
-// lex-largest (a rough proxy for "newest" without parsing semver).
+// findSiblingSKB looks for `<name>-<version>.skb` or `<name>@<version>.skb`
+// in `parent` and `parent/../.archive/`. Both separators are accepted because
+// this tool writes both (BUG-0253); which one a file carries says only which
+// command produced it, never anything about its trustworthiness.
+//
+// If several versions exist the lex-largest VERSION TOKEN wins, a rough proxy
+// for "newest" without parsing semver. The comparison is on the token and not
+// on the whole filename on purpose: `@` sorts above `-`, so comparing whole
+// names would let `foo@0.0.1.skb` beat `foo-9.9.9.skb` on the separator alone.
+// Equal tokens fall back to the filename so the result stays deterministic.
 func findSiblingSKB(parent, name string) (string, bool) {
 	candidates := []string{parent, filepath.Join(filepath.Dir(parent), ".archive")}
-	pattern := regexp.MustCompile(`^` + regexp.QuoteMeta(name) + `-.*\.skb$`)
+	pattern := regexp.MustCompile(`^` + regexp.QuoteMeta(name) + `[-@](.+)\.skb$`)
 
-	var best string
+	var best, bestToken string
 	for _, dir := range candidates {
 		entries, err := os.ReadDir(dir)
 		if err != nil {
@@ -151,19 +205,58 @@ func findSiblingSKB(parent, name string) (string, bool) {
 			if e.IsDir() {
 				continue
 			}
-			if !pattern.MatchString(e.Name()) {
+			m := pattern.FindStringSubmatch(e.Name())
+			if m == nil || !isSKBVersionToken(m[1]) {
 				continue
 			}
+			token := m[1]
 			candidate := filepath.Join(dir, e.Name())
-			if best == "" || strings.Compare(e.Name(), filepath.Base(best)) > 0 {
-				best = candidate
+			switch {
+			case best == "":
+			case strings.Compare(token, bestToken) > 0:
+			case token == bestToken && strings.Compare(e.Name(), filepath.Base(best)) > 0:
+			default:
+				continue
 			}
+			best, bestToken = candidate, token
 		}
 	}
 	if best == "" {
 		return "", false
 	}
 	return best, true
+}
+
+// isSKBVersionToken reports whether tok, the part of a bundle filename between
+// the separator and `.skb`, is a version or a digest rather than the
+// continuation of a LONGER skill name.
+//
+// Without this guard a prefix match binds a skill to its neighbour's bundle:
+// the skill `review` would claim `review-plan@0.0.0.skb`, and `deploy` would
+// claim `deploy-verified@0.0.0.skb`. Both pairs exist in the shipped skill set,
+// so this is not a theoretical case; it would have handed one skill a digest
+// computed over another skill's bytes.
+//
+// The three writers in this tool produce exactly three token shapes: a semver
+// (`0.0.0`, `1.2.3-rc1`), a `v`-prefixed semver (`v0.5.0`), and the sanitized
+// digest `sha256_<hex>` that install stages. A skill-name continuation starts
+// with a letter that is none of these.
+func isSKBVersionToken(tok string) bool {
+	if tok == "" {
+		return false
+	}
+	if strings.HasPrefix(tok, "sha256_") {
+		return len(tok) > len("sha256_")
+	}
+	c := tok[0]
+	if c >= '0' && c <= '9' {
+		return true
+	}
+	// `v1.2.3`, but not `verified`.
+	if (c == 'v' || c == 'V') && len(tok) > 1 && tok[1] >= '0' && tok[1] <= '9' {
+		return true
+	}
+	return false
 }
 
 // computeSKBDigest streams the file through SHA-256 and returns the
@@ -188,4 +281,55 @@ func computeSKBDigest(path string) (string, error) {
 		out[2*i+1] = hex[b&0x0f]
 	}
 	return string(out), nil
+}
+
+// findInstalledSKB sucht das Buendel dort, wo der INSTALLIERER es ablegt:
+// innerhalb des Skillordners (install.go stasht es als
+// <target>/<name>-<ver>.skb mit 0600, damit ein spaeteres `verify <name>`
+// den Digest ohne Registry-Aufruf nachrechnen kann).
+//
+// Bewusst ohne Namensmuster: der Installierer schreibt genau EIN .skb in den
+// Ordner, und dessen Name stammt aus dem Bundle-Blob, nicht aus dem
+// Skillnamen. Ein Muster hier waere eine zweite Annahme ueber eine
+// Schreibweise, die dem Installierer gehoert.
+func findInstalledSKB(skillDir string) (string, bool) {
+	entries, err := os.ReadDir(skillDir)
+	if err != nil {
+		return "", false
+	}
+	var best string
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".skb") {
+			continue
+		}
+		// Bei mehreren gewinnt der lexikografisch groesste Name, wie bei
+		// findSiblingSKB: derselbe Tiebreak, damit zwei Wege nicht zwei
+		// verschiedene Buendel derselben Faehigkeit melden.
+		if best == "" || strings.Compare(e.Name(), filepath.Base(best)) > 0 {
+			best = filepath.Join(skillDir, e.Name())
+		}
+	}
+	return best, best != ""
+}
+
+// provenanceNames sind die Abzuege, die der trust-mode-Pfad schreibt
+// (install/offline_verify.go). Ausgeschrieben statt geraten, damit ein
+// zusaetzlicher Abzug hier auffaellt, statt stillschweigend mitzuzaehlen.
+var provenanceNames = []string{
+	".m3c-provenance.json",
+	".skillctl-attest.json",
+	".skillctl-offline.json",
+}
+
+// findProvenance meldet den ersten vorhandenen Provenance-Abzug im
+// Skillordner. Er bezeugt, dass ein pruefender Installationspfad gelaufen
+// ist; er ersetzt keine Signatur ueber die Bundle-Bytes.
+func findProvenance(skillDir string) (string, bool) {
+	for _, n := range provenanceNames {
+		p := filepath.Join(skillDir, n)
+		if fi, err := os.Stat(p); err == nil && !fi.IsDir() && fi.Size() > 0 {
+			return p, true
+		}
+	}
+	return "", false
 }
