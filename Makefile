@@ -85,6 +85,8 @@ e2e:
 	go test -v -count=1 ./e2e/ -run TestParseTagLine
 	go test -v -count=1 ./e2e/ -run TestER1Config
 	go test -v -count=1 ./e2e/ -run TestER1Queue
+	# Neue Befehle (skillctl, secretctl): netzfrei, laufen auch in der CI.
+	go test -v -count=1 ./e2e/ -run "TestE2E_|TestQuellwaechter_"
 	go test -v -count=1 ./e2e/ -run TestWhisper
 	go test -v -count=1 ./e2e/ -run TestRecorderEncodeWAV
 	go test -v -count=1 ./e2e/ -run TestRecorderStats
