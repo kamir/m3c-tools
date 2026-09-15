@@ -347,6 +347,7 @@ func quarantineOrReport(home, name string, doQuarantine bool, reason string, cod
 func quarantineSkill(home, name, reason string, code int) (string, error) {
 	src := filepath.Join(home, ".claude", "skills", name)
 	qbase := filepath.Join(home, ".claude", "skillctl", "quarantine")
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(qbase, 0o755); err != nil {
 		return "", err
 	}
@@ -371,6 +372,7 @@ To restore (only after you trust it again): move this directory back to
 	// Sibling, NOT inside dest: if the quarantined skill was a symlink, writing
 	// inside it would land in the shared target (e.g. gstack/browse). The note
 	// sits next to the moved item as <name>.<ts>.QUARANTINE.md.
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	_ = os.WriteFile(dest+".QUARANTINE.md", []byte(note), 0o644)
 	return dest, nil
 }

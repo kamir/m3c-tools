@@ -64,6 +64,7 @@ func WriteAttestationStash(dir string, ctx *AttestationContext) error {
 	if err != nil {
 		return err
 	}
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	return os.WriteFile(filepath.Join(dir, AttestationStashName), b, 0o644)
 }
 

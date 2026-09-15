@@ -83,6 +83,9 @@ func healthCheckER1(apiURL, verifySSLStr string) error {
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	if skipVerify {
+		// #nosec G402 -- gegated durch healthCheckSkipVerify oben, das fuer
+		// jeden REMOTE-Host fail-closed abweist; eine eigene Wache, damit
+		// dieser dritte Pfad nicht an applyTLSVerificationPolicy vorbeikommt.
 		client.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}

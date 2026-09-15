@@ -298,6 +298,10 @@ func (c *Config) HealthCheck() error {
 	client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect} // SEC F25
 	if !c.VerifySSL {
 		client.Transport = &http.Transport{
+			// #nosec G402 -- gegated durch pkg/er1.applyTLSVerificationPolicy (SEC-M7),
+			// die beim Laden der Config VerifySSL fuer JEDEN Nicht-Loopback-Host
+			// fail-closed auf true zwingt. Nach BUG-0445 nimmt kein Aufrufer diesen
+			// Wert mehr nachtraeglich zurueck; wer es wieder tut, muss hier neu pruefen.
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
 	}

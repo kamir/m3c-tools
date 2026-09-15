@@ -285,6 +285,7 @@ func (tf *TranscriptFetcher) FetchAndSaveThumbnail(videoID string) string {
 	// Save to temp file
 	tmpDir := os.TempDir()
 	thumbPath := filepath.Join(tmpDir, fmt.Sprintf("m3c-thumb-%s.jpg", videoID))
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.WriteFile(thumbPath, data, 0644); err != nil {
 		log.Printf("[menubar] thumbnail save failed path=%s error=%v (non-fatal)", thumbPath, err)
 		return ""

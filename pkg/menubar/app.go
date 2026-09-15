@@ -445,6 +445,7 @@ func (a *App) buildIdentityMenu(auth AuthSession) menuet.MenuItem {
 				menuet.MenuItem{
 					Text: "Open Profile",
 					Clicked: func() {
+						// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
 						_ = exec.Command("open", "-a", "Google Chrome", profURL).Start()
 					},
 				},
@@ -539,6 +540,7 @@ func (a *App) buildHelpMenu() menuet.MenuItem {
 					Text:  "Open Log File",
 					Image: iconLogFile,
 					Clicked: func() {
+						// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
 						exec.Command("open", a.Config.LogPath).Run() //nolint:errcheck // fire-and-forget UI action: open the log file in the default app
 						a.fireAction(ActionOpenLog, a.Config.LogPath)
 					},
@@ -866,6 +868,7 @@ func (a *App) buildObservationHistoryMenu(observations []Observation) menuet.Men
 							{
 								Text: "Open in Browser",
 								Clicked: func() {
+									// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
 									_ = exec.Command("open", docURL).Start()
 								},
 							},
@@ -884,6 +887,7 @@ func (a *App) buildObservationHistoryMenu(observations []Observation) menuet.Men
 					Text: "Open Dashboard...",
 					Clicked: func() {
 						url := baseURL + "/v2/my-personal-assistant"
+						// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
 						_ = exec.Command("open", url).Start()
 					},
 				},
@@ -1135,6 +1139,7 @@ func (a *App) buildProfileMenu() menuet.MenuItem {
 						} else {
 							// Fallback: open profiles directory in Finder.
 							home, _ := os.UserHomeDir()
+							// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
 							_ = exec.Command("open", filepath.Join(home, ".m3c-tools", "profiles")).Start()
 						}
 					},

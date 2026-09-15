@@ -74,6 +74,11 @@ func NewPLMClient(cfg PLMConfig) *PLMClient {
 	}
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{
+			// #nosec G402 -- gegated durch plmBaseIsLoopback oben, das den Host
+			// parst und bei einem Nicht-Loopback-Ziel insecure auf false zwingt
+			// UND die Abweisung auf stderr nennt. Eigene Wache, weil
+			// M3C_PLM_BASE_URL auf einen anderen Host zeigen kann als den, den
+			// applyTLSVerificationPolicy geprueft hat.
 			InsecureSkipVerify: insecure, // loopback-only, guarded above
 		},
 	}

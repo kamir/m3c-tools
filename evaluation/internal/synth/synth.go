@@ -147,6 +147,7 @@ func MintPopulation(dir string, n int, seed uint64) (*Population, error) {
 
 		skb := buildSKB(i)
 		path := filepath.Join(dir, fmt.Sprintf("eval-skill-%06d@1.0.0.skb", i))
+		// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 		if err := os.WriteFile(path, skb, 0o644); err != nil {
 			return nil, fmt.Errorf("synth: write %s: %w", path, err)
 		}

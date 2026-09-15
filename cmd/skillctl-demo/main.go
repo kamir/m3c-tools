@@ -261,10 +261,13 @@ func openBrowser(url string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
+		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
 		cmd = exec.Command("open", url)
 	case "windows":
+		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
 		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
 	default:
+		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
 		cmd = exec.Command("xdg-open", url)
 	}
 	_ = cmd.Start()

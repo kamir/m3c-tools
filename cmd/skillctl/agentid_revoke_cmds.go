@@ -103,6 +103,7 @@ func runAgentIDRevoke(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "skillctl agentid revoke: marshal: %v\n", err)
 		return exitGeneric
 	}
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.WriteFile(*out, append(blob, '\n'), 0o644); err != nil {
 		fmt.Fprintf(stderr, "skillctl agentid revoke: write %s: %v\n", *out, err)
 		return exitGeneric

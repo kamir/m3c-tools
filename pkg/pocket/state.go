@@ -58,6 +58,7 @@ func SaveGroupMapping(group RecordingGroup, docID string, cfg *Config, tags ...s
 		log.Printf("[pocket] marshal group state: %v", err)
 		return
 	}
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.WriteFile(statePath, data, 0644); err != nil {
 		log.Printf("[pocket] write group state: %v", err)
 		return

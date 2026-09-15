@@ -126,6 +126,7 @@ func (c *Config) Mode() SyncModeKind {
 // EnsureDirs creates the staging, raw, and merged directories if they don't exist.
 func (c *Config) EnsureDirs() error {
 	for _, dir := range []string{c.StagingDir, c.RawDir, c.MergedDir} {
+		// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return err
 		}

@@ -55,6 +55,7 @@ func DefaultDBPath() string {
 func OpenExportsDB(dbPath string) (*ExportsDB, error) {
 	// Ensure parent directory exists.
 	dir := filepath.Dir(dbPath)
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}

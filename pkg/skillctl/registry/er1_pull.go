@@ -463,6 +463,7 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 	headDec := consultRevokeHead(tr, opts, acc.RevokedDigests(), discoveryCapHit)
 
 	cacheRoot := defaultCacheRoot()
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(cacheRoot, 0o755); err != nil {
 		return nil, fmt.Errorf("pull: mkdir cache: %w", err)
 	}
@@ -550,10 +551,12 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 		}
 		// All gates passed: stage.
 		dir := filepath.Join(cacheRoot, strings.TrimPrefix(digest, "sha256:"))
+		// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return nil, fmt.Errorf("pull: mkdir %s: %w", dir, err)
 		}
 		skbPath := filepath.Join(dir, "bundle.skb")
+		// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 		if err := os.WriteFile(skbPath, skbBytes, 0o644); err != nil {
 			return nil, fmt.Errorf("pull: write %s: %w", skbPath, err)
 		}

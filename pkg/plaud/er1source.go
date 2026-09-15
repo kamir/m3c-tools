@@ -59,6 +59,10 @@ func FetchTokenFromER1() (token string, exp int64, err error) {
 	client := &http.Client{Timeout: 15 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect}
 	if verifyDisabled(os.Getenv("ER1_VERIFY_SSL")) && isLoopbackURL(endpoint) {
 		// SEC: only for loopback + self-signed dev cert.
+		// #nosec G402 -- gegated durch die Bedingung eine Zeile hoeher:
+		// verifyDisabled(...) UND isLoopbackURL(endpoint), wobei isLoopbackURL
+		// den Host PARST (url.Parse + net.ParseIP). Genau diese Parsung fehlte
+		// in BUG-0444/0445.
 		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
 	}
 
