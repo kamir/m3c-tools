@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 	"io"
 	"net/http"
 	"os"
@@ -43,13 +44,18 @@ var ErrClaimCheckNotImplemented = errors.New("registry: claim-check (MinIO overf
 // SPEC-0225 §6 tag set. It mirrors the fields the cmd handler already extracts
 // from the skill dir + signing step.
 type SkillMeta struct {
-	Name              string // skill name, used in `skill:` and `skill-version:` tags
-	Version           string // version string, used in `skill-version:` tag
-	BundleDigest      string // "sha256:<hex>", used in `skill-digest:` tag
-	AuthorIdentity    string // "id:kamir@m3c", used in `skill-author:` tag
-	GovernanceLevel   string // "green"|"yellow"|"red", used in `governance:` tag
-	PackedOnHost      string // short hostname, used in `host:` tag
-	ProjectID         string // optional; if set, stamps `project:<id>` for provenance
+	// Kind is the bundle kind (SPEC-0432 §4). Empty or "skill" stamps NO
+	// `kind:` tag, so the 78 bundles admitted before SPEC-0432 keep their exact
+	// tag set and a reader that does not know the field still sees them. Only
+	// "agent" is written, and a missing tag reads back as "skill".
+	Kind            string
+	Name            string // skill name, used in `skill:` and `skill-version:` tags
+	Version         string // version string, used in `skill-version:` tag
+	BundleDigest    string // "sha256:<hex>", used in `skill-digest:` tag
+	AuthorIdentity  string // "id:kamir@m3c", used in `skill-author:` tag
+	GovernanceLevel string // "green"|"yellow"|"red", used in `governance:` tag
+	PackedOnHost    string // short hostname, used in `host:` tag
+	ProjectID       string // optional; if set, stamps `project:<id>` for provenance
 
 	// ShareRooms maps the bundle into one or more SPEC-0096 co-learning rooms.
 	// Each entry is a room's *room_label* (e.g. "aims-basics") and is stamped as
@@ -215,12 +221,12 @@ type PublishRevokedOpts struct {
 
 // PublishInstalledOpts captures the inputs for the install-event publish path.
 type PublishInstalledOpts struct {
-	ER1Cfg            *er1.Config
-	ContextID         string
-	Event             map[string]any // signed BundleInstalledEvent
-	Skill             SkillMeta
-	InstalledOnHost   string
-	Now               time.Time
+	ER1Cfg          *er1.Config
+	ContextID       string
+	Event           map[string]any // signed BundleInstalledEvent
+	Skill           SkillMeta
+	InstalledOnHost string
+	Now             time.Time
 }
 
 // PublishInstalled POSTs a BundleInstalledEvent item with the install-event
@@ -287,6 +293,9 @@ func tagPrefixCommon(s SkillMeta, ctxID string) []string {
 		"skill-registry:self",
 		"skill-author:" + s.AuthorIdentity,
 		"claude-code.skill-registry",
+	}
+	if s.Kind == skillbundle.KindAgent {
+		t = append(t, KindTagPrefix+skillbundle.KindAgent)
 	}
 	if s.ProjectID != "" {
 		t = append(t, "project:"+s.ProjectID)

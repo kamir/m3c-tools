@@ -31,7 +31,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+
 	"fmt"
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -72,6 +74,7 @@ type EventRow struct {
 
 // SkillView is the registry-view entry for one skill.
 type SkillView struct {
+	Kind             string // SPEC-0432; "skill" for everything admitted before it
 	Name             string
 	LatestVersion    string
 	LatestDigest     string
@@ -86,7 +89,33 @@ type RegistryListing struct {
 }
 
 // ListOpts bounds the query.
+// KindTagPrefix is the ER1 tag that carries the bundle kind. Absent means
+// "skill" (SPEC-0432 §3.3), which is what makes the change invisible to every
+// bundle admitted before it.
+const KindTagPrefix = "kind:"
+
+// ItemKind reads the kind off a registry item, resolving an absent tag to
+// "skill". The ONE place that decides it on the registry side.
+func ItemKind(item map[string]any) string {
+	if k := tagValueFromItem(item, KindTagPrefix); k != "" {
+		return k
+	}
+	return skillbundle.KindSkill
+}
+
+// SplitKindName parses the SPEC-0432 §4 identifier "art:name". A bare name
+// means "skill:", so every call written before SPEC-0432 keeps its meaning.
+// A "sha256:" prefix is NOT an identifier and must be handled by the caller
+// before this is reached.
+func SplitKindName(s string) (kind, name string) {
+	if k, n, ok := strings.Cut(s, ":"); ok && (k == skillbundle.KindAgent || k == skillbundle.KindSkill) {
+		return k, n
+	}
+	return skillbundle.KindSkill, s
+}
+
 type ListOpts struct {
+	OnlyKind   string // empty → every kind; "skill" also matches untagged rows
 	OnlySkill  string // empty → all skills
 	OnlyLatest bool   // collapse to newest non-revoked digest per skill
 	Since      string // RFC3339 lower bound (matched against occurred_at) — optional
@@ -107,6 +136,7 @@ func ListRegistry(cfg *er1.Config, ctxID string, opts ListOpts) (*RegistryListin
 	}
 	rowsByDigest := map[string][]EventRow{}
 	skillOf := map[string]string{} // digest → skill name
+	kindOf := map[string]string{}  // digest → bundle kind (SPEC-0432)
 	verOf := map[string]string{}   // digest → version
 	for _, item := range rawItems {
 		row, digest, skillName, version, _ := parseRowFromItem(item)
@@ -116,6 +146,10 @@ func ListRegistry(cfg *er1.Config, ctxID string, opts ListOpts) (*RegistryListin
 		if opts.OnlySkill != "" && skillName != opts.OnlySkill {
 			continue
 		}
+		if opts.OnlyKind != "" && ItemKind(item) != opts.OnlyKind {
+			continue
+		}
+		kindOf[digest] = ItemKind(item)
 		rowsByDigest[digest] = append(rowsByDigest[digest], row)
 		if skillName != "" {
 			skillOf[digest] = skillName
@@ -137,6 +171,12 @@ func ListRegistry(cfg *er1.Config, ctxID string, opts ListOpts) (*RegistryListin
 		})
 		var view SkillView
 		view.Name = name
+		if len(digests) > 0 {
+			view.Kind = kindOf[digests[0]]
+		}
+		if view.Kind == "" {
+			view.Kind = skillbundle.KindSkill
+		}
 		for _, d := range digests {
 			rows := rowsByDigest[d]
 			isRevoked := false
@@ -198,7 +238,10 @@ func ShowSkill(cfg *er1.Config, ctxID, nameOrDigest string) (*SkillView, error) 
 		}
 		return nil, fmt.Errorf("show: digest %q: %w", nameOrDigest, ErrNotInRegistry)
 	}
-	opts.OnlySkill = nameOrDigest
+	kind, bare := SplitKindName(nameOrDigest)
+	opts.OnlyKind = kind
+	opts.OnlySkill = bare
+	nameOrDigest = bare
 	listing, err := ListRegistry(cfg, ctxID, opts)
 	if err != nil {
 		return nil, err

@@ -136,7 +136,13 @@ func er1CatalogLookup(target, context string) catalogLookup {
 		if err != nil {
 			return false, err
 		}
-		view, err := registry.ShowSkill(cfg, context, name)
+		// The identifier carries the kind (SPEC-0432 §4): looking an agent up
+		// by its bare name would find a same-named skill instead.
+		ref := name
+		if kind != "" && kind != skillbundle.KindSkill {
+			ref = kind + ":" + name
+		}
+		view, err := registry.ShowSkill(cfg, context, ref)
 		if err != nil {
 			// Telling "not there" from "could not ask" is the whole of E-5,
 			// so it hangs on a typed sentinel, never on an error string: a

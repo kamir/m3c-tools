@@ -342,6 +342,7 @@ func runPublishAdmit(stdout, stderr io.Writer, a publishAdmitArgs) int {
 	}
 
 	skill := registry.SkillMeta{
+		Kind:            a.kind,
 		Name:            a.name,
 		Version:         ver,
 		BundleDigest:    digest,
