@@ -85,9 +85,18 @@ EXEMPT_LINES='(PRODUCT_PUBLISHER|plaudDeferForTranscript|mirkos-braindump)'
 # reading the tree rather than by trusting the first grep.
 #
 # IDENTITIES: a persona also hides in an identity id. `kamir` cannot go in the
-# NAMES list above, because it is also the GitHub namespace and appears 876
-# times in import paths that must not change. Anchoring on `id:<name>@` keeps
-# the import path untouched and still refuses the persona.
+# NAMES list above, because it is also the GitHub namespace, and the namespace
+# is load-bearing: 774 occurrences across 358 Go files, 891 across 417 files of
+# every kind, measured 2026-09-15 on this branch head with
+#
+#     git grep -c 'github.com/kamir/' | awk -F: '{s+=$NF} END {print s, NR}'
+#
+# The command is here because the number will drift with the tree and a bare
+# figure rots silently; the earlier comment carried 876 from a run nobody could
+# repeat. What does NOT drift is the argument: a module path is how the compiler
+# finds code, so renaming it breaks the build rather than anonymising anyone.
+# Anchoring on `id:<name>@` keeps the import path untouched and still refuses
+# the persona.
 BAD_IDS='id:(kamir|mirko|eric|frank)@'
 
 # ADDRESSES: a private mail address is a different class from a first name. It
