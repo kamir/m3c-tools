@@ -22,14 +22,12 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/kamir/m3c-tools/pkg/er1"
 	"github.com/kamir/m3c-tools/pkg/httpsafe"
 	"github.com/kamir/m3c-tools/pkg/m3cproject"
-	"github.com/kamir/m3c-tools/pkg/skillctl/netguard"
 )
 
 // ---------------------------------------------------------------------------
@@ -215,67 +213,14 @@ func (id *Ident) transcriptPointer() string {
 // ---------------------------------------------------------------------------
 
 // ER1Endpoint resolves the ER1 base URL for a target (ADR-0003 matrix).
+//
+// Delegiert an er1.ResolveTarget. Die eigene Fassung hier war die Haelfte von
+// BUG-0444: sie entschied die TLS-Pruefung per strings.Contains statt am
+// geparsten Host. Nach der Reparatur stand dieselbe kaputte Kopie noch in
+// cmd/skillctl (BUG-0445), also liegt die Aufloesung jetzt einmal in pkg/er1
+// und hier nur noch der Name, den die Aufrufer kennen.
 func ER1Endpoint(target string) (baseURL string, verifySSL bool) {
-	switch strings.ToLower(strings.TrimSpace(target)) {
-	case "", "prod":
-		return "https://onboarding.guide", true
-	case "local":
-		return "https://127.0.0.1:8081", false
-	}
-	if strings.HasPrefix(target, "http") {
-		base := strings.TrimRight(target, "/")
-		return base, sessionVerifyTLS(base, false)
-	}
-	// stage / unknown: fall back to whatever ER1_API_URL says, else prod
-	if u := os.Getenv("ER1_API_URL"); u != "" {
-		base := strings.TrimRight(strings.TrimSuffix(u, "/upload_2"), "/")
-		return base, sessionVerifyTLS(base, os.Getenv("ER1_VERIFY_SSL") != "false")
-	}
-	return "https://onboarding.guide", true
-}
-
-// sessionInsecureWarnOnce gates the one-time stderr notice emitted when a
-// non-loopback base asks to skip TLS verification and it is forced back on.
-var sessionInsecureWarnOnce sync.Once
-
-// sessionIsLoopback reports whether base names a loopback HOST. It PARSES the
-// URL instead of searching the string, and that distinction is the whole bug
-// this function was written for (BUG-0444).
-//
-// The predecessor asked `!strings.Contains(target, "127.0.0.1")`, which is true
-// of `https://127.0.0.1.angreifer.example/` and of any URL carrying the text in
-// its path or query. Four probes, four bypasses; TestER1Endpoint_LoopbackWache
-// keeps them. Every other guard in this tree already parses
-// (netguard.IsLoopback, pkg/er1.isLoopbackURL, pkg/plaud.isLoopbackURL), so the
-// fix is to join them rather than to write a fourth variant.
-//
-// Pure, no DNS: a name that merely RESOLVES to loopback is not loopback here,
-// matching pkg/er1.applyTLSVerificationPolicy exactly.
-func sessionIsLoopback(base string) bool {
-	u, err := url.Parse(strings.TrimSpace(base))
-	if err != nil || u == nil || u.Host == "" {
-		return false
-	}
-	return netguard.IsLoopback(u.Host)
-}
-
-// sessionVerifyTLS applies the SEC-M7 fail-closed rule: skipping verification is
-// honoured only for a loopback host. `wanted` is what the caller asked for;
-// the answer is what it gets, and any downgrade is announced once.
-//
-// httpGetJSON attaches X-API-KEY and Authorization: Bearer to the connection
-// this decides, so a wrong answer here hands both to whoever is listening.
-func sessionVerifyTLS(base string, wanted bool) bool {
-	if wanted {
-		return true
-	}
-	if sessionIsLoopback(base) {
-		return false
-	}
-	sessionInsecureWarnOnce.Do(func() {
-		fmt.Fprintf(os.Stderr, "[session] SECURITY: REFUSING to disable TLS verification for non-loopback ER1 base %q; certificate verification stays ON (only 127.0.0.1/localhost may skip it)\n", base)
-	})
-	return true
+	return er1.ResolveTarget(target)
 }
 
 // resolveAPIKey: env ER1_API_KEY → macOS Keychain `aims-core-er1` (ADR-0003).

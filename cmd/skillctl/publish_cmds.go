@@ -898,27 +898,13 @@ func resolveER1Config(target string) (*er1.Config, error) {
 // er1Endpoint mirrors pkg/session.ER1Endpoint without taking a dependency on
 // that package. (Same matrix; if it drifts, sync explicitly.)
 func er1Endpoint(target string) (string, bool) {
-	switch strings.ToLower(target) {
-	case "prod":
-		return "https://onboarding.guide", true
-	case "local":
-		return "https://127.0.0.1:8081", false
-	}
-	if strings.HasPrefix(target, "http") {
-		return strings.TrimRight(target, "/"), !strings.Contains(target, "127.0.0.1") && !strings.Contains(target, "localhost")
-	}
-	if u := os.Getenv("ER1_API_URL"); u != "" {
-		base := strings.TrimRight(strings.TrimSuffix(u, "/upload_2"), "/")
-		verify := os.Getenv("ER1_VERIFY_SSL") != "false"
-		// SEC-M7: only honour ER1_VERIFY_SSL=false for a loopback host; force
-		// verification ON for any remote host so a stage/unknown target cannot
-		// silently disable TLS on a public endpoint.
-		if !verify && !strings.Contains(base, "127.0.0.1") && !strings.Contains(base, "localhost") {
-			verify = true
-		}
-		return base, verify
-	}
-	return "https://onboarding.guide", true
+	// Delegiert an er1.ResolveTarget. Diese Funktion war eine wortgleiche Kopie
+	// von pkg/session.ER1Endpoint und trug denselben Fehler (BUG-0445): die
+	// TLS-Pruefung per strings.Contains statt am geparsten Host, in beiden
+	// Zweigen. resolveER1Config setzt das Ergebnis NACH LoadConfig und nimmt
+	// damit applyTLSVerificationPolicy zurueck, deshalb traegt die Entscheidung
+	// hier genauso weit wie dort.
+	return er1.ResolveTarget(target)
 }
 
 func resolveAPIKeyFromKeychain() string {
