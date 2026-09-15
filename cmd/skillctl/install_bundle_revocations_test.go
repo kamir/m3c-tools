@@ -69,7 +69,7 @@ func buildInstallableFixture(t *testing.T) installableFixture {
 		t.Fatalf("write skb: %v", err)
 	}
 
-	authorID := "id:kamir@m3c"
+	authorID := "id:bob@m3c"
 	regURL := "https://reg.example/api/skills"
 
 	meta := registry.BundleMeta{

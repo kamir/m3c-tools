@@ -185,7 +185,7 @@ type SignatureRow struct {
 	Role string `json:"role"`
 
 	// IdentityID is the author/reviewer identifier, e.g.
-	// `id:kamir@m3c`. Resolves to a public key via GetIdentity.
+	// `id:bob@m3c`. Resolves to a public key via GetIdentity.
 	IdentityID string `json:"identity_id"`
 
 	// SignatureB64 is base64 of the raw 64-byte ed25519 signature.
@@ -212,7 +212,7 @@ type SignatureRow struct {
 // field name. Both forms are accepted; PubkeyB64 is the canonical Go
 // field.
 type Identity struct {
-	// ID is the canonical identity id, e.g. `id:kamir@m3c`. Mirrors
+	// ID is the canonical identity id, e.g. `id:bob@m3c`. Mirrors
 	// the path parameter the GetIdentity caller passed.
 	ID string `json:"id"`
 

@@ -86,7 +86,7 @@ func TestAC09_KeineAenderungKeineZeilen(t *testing.T) {
 func TestAC09_ZweiUmgebungenSindKeineEntwicklung(t *testing.T) {
 	a := berichtMit(1, z("x", "1.0", "OK"))
 	b := berichtMit(1, z("x", "1.0", "OK"))
-	andere, _ := NeueENV("kup", "eric", "ThinkPad")
+	andere, _ := NeueENV("kup", "alice", "ThinkPad")
 	b.ENV = andere.String()
 	if _, err := Entwicklung(a, b); !errors.Is(err, ErrFremdeUmgebung) {
 		t.Fatalf("zwei Umgebungen als Entwicklung akzeptiert: %v", err)
@@ -182,19 +182,19 @@ func TestKonformitaet_OhneBodenKeineAmpelpruefung(t *testing.T) {
 
 func gueltigeFreigabe() Freigabe {
 	return Freigabe{
-		Prinzipale: []string{"kamir", "eric"},
+		Prinzipale: []string{"bob", "alice"},
 		Zweck:      "Abgleich der Pflichtskills vor dem Windows-Rollout",
 		GueltigBis: time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC),
-		Erteiler:   "Mirko Kaempf",
+		Erteiler:   "Diana",
 	}
 }
 
 func zweiPersonen() (Report, Report) {
 	a := berichtMit(1, z("nur-bei-a", "1", "OK"), z("geteilt", "1", "OK"))
 	b := berichtMit(1, z("geteilt", "1", "OK"), z("nur-bei-b", "1", "OK"))
-	envB, _ := NeueENV("kup", "eric", "ThinkPad")
+	envB, _ := NeueENV("kup", "alice", "ThinkPad")
 	b.ENV = envB.String()
-	b.Principal = "eric"
+	b.Principal = "alice"
 	return a, b
 }
 
@@ -228,7 +228,7 @@ func TestAC10_MeldungNenntDenRechtsgrundNichtDieDaten(t *testing.T) {
 func TestAC10_FreigabeMussBeidePersonenNennen(t *testing.T) {
 	a, b := zweiPersonen()
 	f := gueltigeFreigabe()
-	f.Prinzipale = []string{"kamir"} // eric fehlt
+	f.Prinzipale = []string{"bob"} // alice fehlt
 	_, err := Vergleiche(a, b, f, time.Date(2026, 9, 13, 0, 0, 0, 0, time.UTC))
 	if !errors.Is(err, ErrFreigabeFehlt) {
 		t.Fatalf("halbe Freigabe akzeptiert: %v", err)
@@ -283,7 +283,7 @@ func TestAC10_MitFreigabeGehtEs(t *testing.T) {
 func TestSelbstvergleichBrauchtKeineFreigabe(t *testing.T) {
 	a := berichtMit(1, z("x", "1", "OK"))
 	b := berichtMit(1, z("y", "1", "OK"))
-	envB, _ := NeueENV("kup", "kamir", "Intel-MBP")
+	envB, _ := NeueENV("kup", "bob", "Intel-MBP")
 	b.ENV = envB.String()
 	if _, err := Vergleiche(a, b, Freigabe{}, time.Now().UTC()); err != nil {
 		t.Fatalf("der Vergleich zweier eigener Maschinen verlangte eine Freigabe: %v", err)

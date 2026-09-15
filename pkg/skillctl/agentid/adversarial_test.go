@@ -26,7 +26,7 @@ func TestAdversarial_CrossDomainAttestationReplay(t *testing.T) {
 	// Forge: sign the bytes of a DIFFERENT envelope family (an attestation-shaped
 	// message) and splice that signature into the AgentID's owner row.
 	attestationLikeBytes := []byte("attestation\nsha256:" +
-		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\ngreen\n2026-06-22T10:00:00Z\nid:kamir@m3c\n")
+		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\ngreen\n2026-06-22T10:00:00Z\nid:bob@m3c\n")
 	crossSig := ed25519.Sign(priv, attestationLikeBytes)
 	a := &AgentID{
 		Payload: p,
@@ -141,10 +141,10 @@ func TestAdversarial_RevocationStillBindsWithValidSignature(t *testing.T) {
 // re-casing the owner id in the approver row (and signing with the owner key).
 func TestAdversarial_ApproverFloorCaseTwins(t *testing.T) {
 	ownerPub, ownerPriv := mustKey(t)
-	p := samplePayload() // owner = id:kamir@m3c
+	p := samplePayload() // owner = id:bob@m3c
 	ownerSig, _ := Sign(p, RoleOwner, p.Owner, ownerPriv)
 	// Re-cased "approver" that is really the owner.
-	twin := "ID:KAMIR@M3C"
+	twin := "ID:BOB@M3C"
 	approverSig, _ := Sign(p, RoleApprover, twin, ownerPriv)
 	a := &AgentID{Payload: p, Signatures: []Signature{ownerSig, approverSig}}
 	pins := newFakePins()

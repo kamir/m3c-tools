@@ -79,7 +79,7 @@ type SkillMeta struct {
 	Name            string // skill name, used in `skill:` and `skill-version:` tags
 	Version         string // version string, used in `skill-version:` tag
 	BundleDigest    string // "sha256:<hex>", used in `skill-digest:` tag
-	AuthorIdentity  string // "id:kamir@m3c", used in `skill-author:` tag
+	AuthorIdentity  string // "id:bob@m3c", used in `skill-author:` tag
 	GovernanceLevel string // "green"|"yellow"|"red", used in `governance:` tag
 	PackedOnHost    string // short hostname, used in `host:` tag
 	ProjectID       string // optional; if set, stamps `project:<id>` for provenance

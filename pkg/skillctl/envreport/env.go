@@ -8,8 +8,8 @@
 // Ein Mensch arbeitet auf mehreren Maschinen, und dieselbe Maschine kann unter
 // verschiedenen Auflagen laufen. Der Bestand belegt die erste Haelfte direkt:
 // im ER1-Kontext ...___skills erscheint derselbe Autor unter zwei Hostnamen
-// (MacBook-Pro-von-Mirko mit 102 Posten, MBP-von-Mirko mit 17), weil der
-// Rechnername sich geaendert hat, und nichts verbindet die beiden heute.
+// (der eine mit 102 Posten, der andere mit 17), weil der Rechnername sich
+// geaendert hat, und nichts verbindet die beiden heute.
 //
 // Der Host wird GEHASHT gefuehrt (SPEC-0351 Abschnitt 5.1, SPEC-0427 E2). Die
 // Aufloesung auf den Klarnamen ist eine eigene Freigabe und kein Nebenprodukt

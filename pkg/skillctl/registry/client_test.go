@@ -232,7 +232,7 @@ func TestGetBundleMeta_OK(t *testing.T) {
 			"signatures": []map[string]any{
 				{
 					"role":          "author",
-					"identity_id":   "id:kamir@m3c",
+					"identity_id":   "id:bob@m3c",
 					"signature_b64": "AAAA",
 					"status":        "active",
 				},
@@ -284,17 +284,17 @@ func TestGetIdentity_OK_PubkeyB64Field(t *testing.T) {
 	fs.install("/api/skills/identities/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"id":          "id:kamir@m3c",
+			"id":          "id:bob@m3c",
 			"pubkey_b64":  "Zm9v",
 			"auth_source": "manual",
 		})
 	})
 	c := fs.client()
-	got, err := c.GetIdentity(context.Background(), "id:kamir@m3c")
+	got, err := c.GetIdentity(context.Background(), "id:bob@m3c")
 	if err != nil {
 		t.Fatalf("GetIdentity: %v", err)
 	}
-	if got.ID != "id:kamir@m3c" {
+	if got.ID != "id:bob@m3c" {
 		t.Errorf("ID = %q", got.ID)
 	}
 	if got.PubkeyB64 != "Zm9v" {
@@ -315,12 +315,12 @@ func TestGetIdentity_OK_PubkeyAltField(t *testing.T) {
 	fs.install("/api/skills/identities/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"id":     "id:kamir@m3c",
+			"id":     "id:bob@m3c",
 			"pubkey": "YmFy",
 		})
 	})
 	c := fs.client()
-	got, err := c.GetIdentity(context.Background(), "id:kamir@m3c")
+	got, err := c.GetIdentity(context.Background(), "id:bob@m3c")
 	if err != nil {
 		t.Fatalf("GetIdentity: %v", err)
 	}

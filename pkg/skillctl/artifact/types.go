@@ -23,7 +23,7 @@ type ArtifactMeta struct {
 	Name            string // "pdf"
 	Version         string // "1.2.0"
 	Digest          string // "sha256:<hex>": the invariant join key
-	AuthorIdentity  string // "id:kamir@m3c"
+	AuthorIdentity  string // "id:bob@m3c"
 	GovernanceLevel string // "green" | "yellow" | "red"
 	PackedOnHost    string
 	ProjectID       string

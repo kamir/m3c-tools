@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 09-invalid-edited-install: Eric's installed skill is modified after the
+# 09-invalid-edited-install: Alice's installed skill is modified after the
 # fact (someone "fixed" a script in place). The trust state is now broken:
 # a re-verify against the original signed bundle would fail.
 #
@@ -15,7 +15,7 @@ DIGEST=$(cat "$ARTIFACTS_DIR/digest.txt")
 INSTALL_TARGET="$INSTALL_HOME/.claude/skills/$SKILL_NAME"
 
 if [[ ! -d "$INSTALL_TARGET" ]]; then
-  fail "$INSTALL_TARGET does not exist: run 05-eric-install-and-run.sh first"
+  fail "$INSTALL_TARGET does not exist: run 05-alice-install-and-run.sh first"
   exit 2
 fi
 
@@ -37,7 +37,7 @@ ok "after:  $NEW_SHA"
 # `skillctl audit` will land this as a first-class verdict (`BROKEN`); until
 # that ships, we demonstrate the same proof using the same primitive. Read
 # CHECKSUMS, recompute, compare. This is the BUG-aware mode of the audit.
-log "Eric: comparing installed bytes vs CHECKSUMS"
+log "Alice: comparing installed bytes vs CHECKSUMS"
 CHECKSUMS_LINE=$(grep "scripts/hello.sh$" "$ORIG_CHECKSUMS" || true)
 RECORDED_SHA=$(echo "$CHECKSUMS_LINE" | awk '{print $1}')
 [[ -n "$RECORDED_SHA" ]] || { fail "scripts/hello.sh not in CHECKSUMS"; exit 1; }

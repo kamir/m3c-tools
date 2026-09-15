@@ -111,7 +111,7 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 		skillDir     = fs.String("skill-dir", "", "Path to the skill directory. Default: ~/.claude/skills/<name>.")
 		bundle       = fs.String("bundle", "", "Path to a pre-built .skb. If empty, the skill dir is packed in-place to ./<name>@<version>.skb.")
 		version      = fs.String("version", "", "Skill version (overrides the SKILL.md frontmatter). Required for admit; inferred from --bundle filename for attest.")
-		identity     = fs.String("identity", "id:kamir@m3c", "Author/registry identity id stamped into the event and tags.")
+		identity     = fs.String("identity", "id:bob@m3c", "Author/registry identity id stamped into the event and tags.")
 
 		// Key
 		keyPath = fs.String("key", defaultSelfKeyPath(), "Path to the ed25519 private key (PEM PKCS#8). Default: $SIGNING_KEY_LOCATION or ~/.config/m3c/skill-registry-self.key.")

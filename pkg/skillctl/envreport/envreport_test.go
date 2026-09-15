@@ -12,14 +12,14 @@ import (
 
 func gueltigerBericht() Report {
 	return Report{
-		ENV:             "env:kup/kamir/0123456789abcdef",
-		Principal:       "kamir",
+		ENV:             "env:kup/bob/0123456789abcdef",
+		Principal:       "bob",
 		Seq:             1,
 		TakenAt:         time.Date(2026, 9, 13, 8, 0, 0, 0, time.UTC),
 		Posture:         PostureOK,
 		AufbewahrungBis: time.Date(2027, 9, 13, 0, 0, 0, 0, time.UTC),
 		Einwilligung: &Einwilligung{
-			Principal: "kamir",
+			Principal: "bob",
 			Erteilt:   time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC),
 			Art:       "selbst",
 			Beleg:     "Testvorrichtung",
@@ -35,7 +35,7 @@ func gueltigerBericht() Report {
 
 func TestAC03_ENVRundlauf(t *testing.T) {
 	for i := 0; i < 100; i++ {
-		e, err := NeueENV("kup", "kamir", "MacBook-Pro-von-Mirko-"+string(rune('a'+i%26)))
+		e, err := NeueENV("kup", "bob", "MacBook-Pro-von-Bob-"+string(rune('a'+i%26)))
 		if err != nil {
 			t.Fatalf("NeueENV: %v", err)
 		}
@@ -59,8 +59,8 @@ func TestAC04_UngueltigeAdressenNennenDenGrund(t *testing.T) {
 	}{
 		{"fehlender Mandant", "env:", ErrPrinzipalFehlt},
 		{"fehlender Prinzipal", "env:kup", ErrPrinzipalFehlt},
-		{"fehlender Host", "env:kup/kamir", ErrHostFehlt},
-		{"zu viele Segmente", "env:kup/kamir/host/extra", ErrZuVieleTeile},
+		{"fehlender Host", "env:kup/bob", ErrHostFehlt},
+		{"zu viele Segmente", "env:kup/bob/host/extra", ErrZuVieleTeile},
 		{"leeres Segment", "env:kup//abc", ErrLeeresSegment},
 	}
 	for _, f := range faelle {
@@ -71,7 +71,7 @@ func TestAC04_UngueltigeAdressenNennenDenGrund(t *testing.T) {
 			}
 		})
 	}
-	if _, err := ParseENV("kup/kamir/abc"); !errors.Is(err, ErrKeinPrefix) {
+	if _, err := ParseENV("kup/bob/abc"); !errors.Is(err, ErrKeinPrefix) {
 		t.Fatalf("Adresse ohne Prefix muss ErrKeinPrefix liefern, war %v", err)
 	}
 }
@@ -79,8 +79,8 @@ func TestAC04_UngueltigeAdressenNennenDenGrund(t *testing.T) {
 // --- SPEC-0427 AC-05: der Host erscheint NIE im Klartext -----------------
 
 func TestAC05_HostErscheintNieImKlartext(t *testing.T) {
-	const klarname = "MacBook-Pro-von-Mirko"
-	e, err := NeueENV("kup", "kamir", klarname)
+	const klarname = "MacBook-Pro-von-Bob"
+	e, err := NeueENV("kup", "bob", klarname)
 	if err != nil {
 		t.Fatal(err)
 	}

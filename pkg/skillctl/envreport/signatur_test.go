@@ -27,10 +27,10 @@ func schluessel(t *testing.T) (ed25519.PublicKey, ed25519.PrivateKey) {
 func TestT01_SignierterBerichtVerifiziert(t *testing.T) {
 	pub, priv := schluessel(t)
 	r := gueltigerBericht()
-	if err := Signiere(RohSchluessel(priv), &r, "id:kamir@m3c"); err != nil {
+	if err := Signiere(RohSchluessel(priv), &r, "id:bob@m3c"); err != nil {
 		t.Fatal(err)
 	}
-	if r.Signatur == "" || r.SignerID != "id:kamir@m3c" {
+	if r.Signatur == "" || r.SignerID != "id:bob@m3c" {
 		t.Fatalf("Signatur oder Signierer fehlt: %+v", r.SignerID)
 	}
 	if err := PruefeSignatur(pub, r); err != nil {
@@ -58,7 +58,7 @@ func TestT01_EinGeaendertesZeichenBrichtDieSignatur(t *testing.T) {
 		t.Run(f.name, func(t *testing.T) {
 			r := gueltigerBericht()
 			r.Posture = PostureDrift // damit der Lage-Fall etwas aendert
-			if err := Signiere(RohSchluessel(priv), &r, "id:kamir@m3c"); err != nil {
+			if err := Signiere(RohSchluessel(priv), &r, "id:bob@m3c"); err != nil {
 				t.Fatal(err)
 			}
 			f.aendern(&r)
@@ -76,7 +76,7 @@ func TestT01_FehlendUndFalschSindVerschieden(t *testing.T) {
 	if err := PruefeSignatur(pub, r); err != ErrSignaturFehlt {
 		t.Fatalf("ohne Signatur: %v, erwartet ErrSignaturFehlt", err)
 	}
-	if err := Signiere(RohSchluessel(priv), &r, "id:kamir@m3c"); err != nil {
+	if err := Signiere(RohSchluessel(priv), &r, "id:bob@m3c"); err != nil {
 		t.Fatal(err)
 	}
 	fremd, _ := schluessel(t)
@@ -89,7 +89,7 @@ func TestT01_FehlendUndFalschSindVerschieden(t *testing.T) {
 func TestT01_SignaturUeberlebtDenRundlauf(t *testing.T) {
 	pub, priv := schluessel(t)
 	r := gueltigerBericht()
-	if err := Signiere(RohSchluessel(priv), &r, "id:kamir@m3c"); err != nil {
+	if err := Signiere(RohSchluessel(priv), &r, "id:bob@m3c"); err != nil {
 		t.Fatal(err)
 	}
 	b, err := json.Marshal(r)
@@ -116,11 +116,11 @@ func TestT01_SignaturUnterscheidetWasDerDigestGleichLaesst(t *testing.T) {
 	if a.Digest() != b.Digest() {
 		t.Fatal("Vorbedingung verletzt: der Digest sollte gleich sein")
 	}
-	if err := Signiere(RohSchluessel(priv), &a, "id:kamir@m3c"); err != nil {
+	if err := Signiere(RohSchluessel(priv), &a, "id:bob@m3c"); err != nil {
 		t.Fatal(err)
 	}
 	sigA := a.Signatur
-	if err := Signiere(RohSchluessel(priv), &b, "id:kamir@m3c"); err != nil {
+	if err := Signiere(RohSchluessel(priv), &b, "id:bob@m3c"); err != nil {
 		t.Fatal(err)
 	}
 	if sigA == b.Signatur {
@@ -145,7 +145,7 @@ func TestT02_AblageBettetDieEinwilligungEin(t *testing.T) {
 	s := NewMemStore("kup___skillenv")
 	r := bericht(1)
 	r.Einwilligung = nil // die Ablage muss sie selbst setzen
-	if _, err := s.Ablegen(r, consent("kamir")); err != nil {
+	if _, err := s.Ablegen(r, consent("bob")); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -155,7 +155,7 @@ func TestT02_DerParameterSchlaegtEinAbweichendesFeld(t *testing.T) {
 	// Parameter gewinnt, und zwar auch dann, wenn das Feld guenstiger aussieht.
 	s := NewMemStore("kup___skillenv")
 	r := bericht(1)
-	gut := consent("kamir")
+	gut := consent("bob")
 	r.Einwilligung = &gut
 	if _, err := s.Ablegen(r, Einwilligung{}); err == nil {
 		t.Fatal("das eingebettete Feld hat den leeren Parameter geschlagen")
@@ -183,7 +183,7 @@ func TestT04_EingebetteteEinwilligungMussZumPrinzipalPassen(t *testing.T) {
 // Der Altposten in ER1 traegt keine Einwilligung. Er wird nicht nachtraeglich
 // geheilt, er wird erkannt.
 func TestT04_AltpostenWirdErkanntUndNichtGeheilt(t *testing.T) {
-	alt := []byte(`{"env":"env:kup/kamir/0123456789abcdef","principal":"kamir",` +
+	alt := []byte(`{"env":"env:kup/bob/0123456789abcdef","principal":"bob",` +
 		`"report_seq":1,"taken_at":"2026-09-13T08:00:00Z","posture":"drift",` +
 		`"aufbewahrung_bis":"2027-09-13T00:00:00Z","zeilen":[]}`)
 	var r Report

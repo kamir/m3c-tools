@@ -37,7 +37,7 @@ There are two deployments with separate certificates:
 |---------|-------|
 | Domain | `onboarding.guide` + `*.onboarding.guide` |
 | GCP Project | `semanpix` |
-| GCP Account | `mirko.kaempf@gmail.com` |
+| GCP Account | aus `$GCP_ACCOUNT`, siehe "Was Sie setzen muessen" |
 | Target HTTPS Proxy | `my-url-map-target-proxy-2` |
 | URL Map | `my-url-map` |
 | Backend Service | `app-proxy-mvp-v1-0-2` |
@@ -51,10 +51,31 @@ There are two deployments with separate certificates:
 | Setting | Value |
 |---------|-------|
 | Domain | `maindset.academy` + `*.maindset.academy` |
-| GCP Account | `mirko.kaempf@gmail.com` |
+| GCP Account | aus `$GCP_ACCOUNT`, siehe "Was Sie setzen muessen" |
 | Target HTTPS Proxy | `my-url-map-ma-lb-target-proxy` |
 | Cert files (local) | `/Users/kamir/GITLAB.Celloon/sec/cert_NNNN.pem` / `key_NNNN.pem` |
 | Cert naming pattern | Numbered sequentially (e.g., `cert_0002.pem`) |
+
+## Was Sie setzen muessen
+
+Drei Werte sind maschinen- und personengebunden. Sie stehen nicht in diesem
+Repository, weil es oeffentlich ist und alle dreissig Minuten in ein
+Kunden-GitLab gespiegelt wird.
+
+```bash
+export GCLOUD="$(command -v gcloud)"      # oder der volle Pfad Ihrer Installation
+export GCP_ACCOUNT="ihr-konto@example.com" # das Konto, das die Zertifikate verwaltet
+export GCP_PROJECT="<projekt>"             # siehe die Tabelle unter "Deployments"
+```
+
+Das Skript weiter unten nutzt die Form `${VAR:?meldung}`. Fehlt einer der Werte
+oder ist er leer, bricht der Ablauf in der ersten Zeile ab und nennt den
+fehlenden Namen.
+
+Das ist Absicht und kein Komfortverlust. Dieses Runbook wird unter Zeitdruck
+gebraucht, naemlich wenn ein Zertifikat ablaeuft. Ein Ablauf, der mit einem
+falschen oder leeren Konto weiterlaeuft und erst am Ende auffaellt, kostet genau
+die Minuten, die dann keiner hat.
 
 ## How to execute
 
@@ -163,9 +184,17 @@ Generate a bash script the user can run. The script should:
 #!/bin/bash
 set -euo pipefail
 
-GCLOUD=/Users/kamir/bin/google-cloud-sdk/bin/gcloud
-GCP_ACCOUNT="mirko.kaempf@gmail.com"
-GCP_PROJECT="semanpix"
+# Diese drei Werte sind maschinen- und personengebunden und stehen deshalb NICHT
+# in diesem oeffentlichen Repository. Die Form ${VAR:?...} bricht bei leerem oder
+# fehlendem Wert SOFORT ab und nennt den fehlenden Namen.
+#
+# Warum fail-closed und keine Vorbelegung: dieses Runbook wird unter Zeitdruck
+# gebraucht, wenn ein Zertifikat ablaeuft. Ein Ablauf, der mit einem falschen
+# Konto weiterlaeuft und erst am Ende auffaellt, kostet genau die Minuten, die
+# dann keiner hat. Lieber in Zeile eins stehenbleiben.
+GCLOUD="${GCLOUD:?setze GCLOUD auf den Pfad deiner gcloud, z.B. \"$(command -v gcloud 2>/dev/null || echo /pfad/zu/gcloud)\"}"
+GCP_ACCOUNT="${GCP_ACCOUNT:?setze GCP_ACCOUNT auf das Google-Konto, das die Zertifikate verwaltet}"
+GCP_PROJECT="${GCP_PROJECT:?setze GCP_PROJECT auf das GCP-Projekt, z.B. das aus der Tabelle oben}"
 SEC_DIR=<path to sec dir>
 CERT_NAME="cert-$(date +%Y-%m)-${NEXT_NUM}-o-g"  # for onboarding.guide
 DOMAIN="<domain>"

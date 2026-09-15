@@ -68,7 +68,7 @@ func buildAgentFixture(t *testing.T, requireApprover bool) agentFixture {
 	writePrivKeyPEM(t, approverKeyPath, approverPriv)
 	writePrivKeyPEM(t, regKeyPath, regPriv)
 
-	ownerID := "id:kamir@m3c"
+	ownerID := "id:bob@m3c"
 	approverID := "id:approver@m3c"
 	regURL := "https://reg.example/api/skills"
 
@@ -336,7 +336,7 @@ func TestAgentID_Show(t *testing.T) {
 		t.Fatalf("show: exit %d %s", code, se.String())
 	}
 	out := so.String()
-	for _, want := range []string{"agent:shown", "id:kamir@m3c", "fetch-contract"} {
+	for _, want := range []string{"agent:shown", "id:bob@m3c", "fetch-contract"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("show output missing %q: %s", want, out)
 		}

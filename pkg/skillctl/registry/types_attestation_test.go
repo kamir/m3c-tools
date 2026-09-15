@@ -22,7 +22,7 @@ func TestBundleMeta_DecodesAttestationsAndCurrentGovernance(t *testing.T) {
 				"status":        "admitted",
 			},
 			"signatures": []map[string]any{
-				{"role": "author", "identity_id": "id:kamir@m3c", "signature_b64": "AAAA"},
+				{"role": "author", "identity_id": "id:bob@m3c", "signature_b64": "AAAA"},
 			},
 			// New: §S8 wire-shape extension.
 			"current_governance": "green",

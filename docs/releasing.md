@@ -74,7 +74,7 @@ the workflow's own gate record says exactly that.
 | # | Step | Who | What is checked | Where the result is recorded |
 |---|------|-----|-----------------|------------------------------|
 | 1 | Code review | someone who did not write the commits | the diff on `master` since the previous tag | the approving review on the pull request |
-| 2 | Fingerprint out of band (Phase 0) | the consumer, on their own machine | the author public key fingerprint, read back over a second channel | the [acceptance checklist](acceptance-skillctl-lifecycle.md#9-handover-checklist-for-erics-team) |
+| 2 | Fingerprint out of band (Phase 0) | the consumer, on their own machine | the author public key fingerprint, read back over a second channel | the [acceptance checklist](acceptance-skillctl-lifecycle.md#9-handover-checklist-for-alices-team) |
 | 3 | Consumer lane, Part B | the consumer, on their own machine | the **published** artifacts, never a local build | exit codes of `pull --install --trust-mode`, `verify`, `audit` |
 
 For the skillctl line step 3 has a natural home: `skillctl-release.yml` publishes a

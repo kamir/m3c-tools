@@ -76,7 +76,7 @@ var (
 // only). Mirrors SPEC-0190 §3.1.
 type SignatureRef struct {
 	Role              string // "author" | "registry"
-	IdentityID        string // e.g. "id:kamir@m3c"
+	IdentityID        string // e.g. "id:bob@m3c"
 	SignatureB64      string // base64 ed25519 detached signature over the bundle digest
 	PubKeyFingerprint string // "sha256:<hex>"
 }
@@ -96,7 +96,7 @@ type AdmittedEventInput struct {
 	Name               string         // skill name
 	Version            string         // skill version (semver-ish, no leading 'v')
 	AuthorIntent       string         // "green" | "yellow" | "red"
-	AdmittedByIdentity string         // "id:kamir@m3c" for the self tenant
+	AdmittedByIdentity string         // "id:bob@m3c" for the self tenant
 	AdmittedAt         time.Time      // event ts (UTC)
 	BlobURI            string         // empty for transport:er1-inline
 	Signatures         []SignatureRef // author + registry refs
@@ -150,7 +150,7 @@ func BuildBundleAdmittedEvent(in AdmittedEventInput) (map[string]any, error) {
 type AttestedEventInput struct {
 	BundleDigest    string
 	AttestationID   string // optional: generated if empty
-	ReviewerID      string // "id:kamir@m3c" for the self tenant
+	ReviewerID      string // "id:bob@m3c" for the self tenant
 	GovernanceLevel string // "green" | "yellow" | "red"
 	Rationale       string
 	OccurredAt      time.Time
