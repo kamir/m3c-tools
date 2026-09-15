@@ -376,6 +376,56 @@ OUT=$("$BT" next-id BUG 2>&1 >/dev/null)
 grep -q 'NOT yet allocated' <<<"$OUT" && ok "next-id sagt, dass die Zahl noch nicht belegt ist" \
   || bad "next-id verschweigt, dass die Zahl nicht belegt ist"
 
+# --- die Slot-Tabelle als vierte Quelle (2026-09-15) --------------------------
+# Eine Vormerkung existiert VOR jeder Datei und jedem Branch -- das ist ihr Zweck.
+# Bis hierher las claims() nur Dateien, Refs und Branchnamen, und next-id gab
+# deshalb Nummern aus, die seit Tagen vergeben waren: am 2026-09-15 antwortete es
+# BUG-0268, waehrend die Tabelle 0268 seit dem Vortag hielt.
+RESTAB="$TMP/reservierungen.md"
+cat > "$RESTAB" <<'EOF'
+| id | filename | proposal | allocate |
+|----|----------|----------|----------|
+| ANKER | **NEUE ANSPRUECHE DIREKT UNTER DIESE ZEILE** | n/a | Regel |
+| 0800 | `BUG-0800-nur-vorgemerkt.md` | x | y |
+EOF
+OUT=$(M3C_SLOT_TABLE=$RESTAB "$BT" next-id BUG --no-fetch 2>&1)
+grep -q 'BUG-0801' <<<"$OUT" \
+  && ok "next-id sieht eine Vormerkung ohne Datei und ohne Branch" \
+  || bad "next-id uebergeht die Slot-Tabelle (bekam: $(tail -1 <<<"$OUT"))"
+grep -q 'slot table' <<<"$OUT" \
+  && ok "und nennt die Tabelle als Quelle der Obergrenze" \
+  || bad "nennt die Quelle nicht"
+
+# Ohne Tabelle darf die Antwort nicht still unvollstaendig sein.
+OUT=$(env -u M3C_SLOT_TABLE "$BT" next-id BUG --no-fetch 2>&1)
+grep -q 'M3C_SLOT_TABLE is not set' <<<"$OUT" \
+  && ok "ohne Tabelle sagt next-id, dass es Vormerkungen uebersieht" \
+  || bad "ohne Tabelle schweigt next-id ueber die Luecke"
+
+# claim schreibt unter den ANKER. Die Stelle ist der Mechanismus: git meldet zwei
+# gleichzeitige Einfuegungen nur, wenn sie dieselbe Stelle betreffen.
+printf '# BUG-0802\n' > "$BUGS/BUG-0802-unter-den-anker.md"
+M3C_SLOT_TABLE=$RESTAB "$BT" claim 802 >/dev/null 2>&1
+ZEILE=$(grep -n '^| 0802 |' "$RESTAB" | cut -d: -f1)
+ANKZ=$(grep -n '^| ANKER |' "$RESTAB" | cut -d: -f1)
+[ -n "$ZEILE" ] && [ "$ZEILE" -eq "$((ANKZ + 1))" ] \
+  && ok "claim schreibt direkt unter den ANKER, nicht ans Dateiende" \
+  || bad "claim schrieb in Zeile ${ZEILE:-keine}, erwartet $((ANKZ + 1))"
+rm -f "$BUGS/BUG-0802-unter-den-anker.md"
+
+# Eine Tabelle ohne ANKER muss weiter funktionieren, aber es sagen.
+ALTTAB="$TMP/alte-tabelle.md"
+printf '| 0810 | `BUG-0810-alt.md` | x | y |\n' > "$ALTTAB"
+printf '# BUG-0811\n' > "$BUGS/BUG-0811-alte-tabelle.md"
+OUT=$(M3C_SLOT_TABLE=$ALTTAB "$BT" claim 811 2>&1)
+grep -q '^| 0811 |' "$ALTTAB" \
+  && ok "eine Tabelle ohne ANKER nimmt den Anspruch weiter an" \
+  || bad "alte Tabelle verliert den Anspruch"
+grep -q 'no ANKER row' <<<"$OUT" \
+  && ok "und sagt, dass git so nicht serialisiert" \
+  || bad "verschweigt den fehlenden ANKER"
+rm -f "$BUGS/BUG-0811-alte-tabelle.md"
+
 # --- sync ---------------------------------------------------------------------
 "$BT" status 213 fixed >/dev/null
 GH_ISSUE_STATE=CLOSED accepts "sync is quiet when both agree" "$BT" sync 213
