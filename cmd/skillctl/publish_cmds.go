@@ -46,6 +46,7 @@ import (
 	"github.com/kamir/m3c-tools/pkg/er1"
 	"github.com/kamir/m3c-tools/pkg/session"
 	"github.com/kamir/m3c-tools/pkg/skillbundle"
+	"github.com/kamir/m3c-tools/pkg/skillctl/parser"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
 )
@@ -273,10 +274,13 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 type publishAdmitArgs struct {
 	name, version, skillDir, bundlePath, identity, keyPath string
 	kind, agentFile                                        string
-	er1Target, er1Context                                  string
-	inlineMax                                              int
-	yes, dryRun, noCheckpoint, noRunbookPublish            bool
-	shareRooms                                             []string
+	// catalogLookup is injected by tests. nil means "build the real one from
+	// er1Target/er1Context" (SPEC-0432 §8).
+	catalogLookup                               catalogLookup
+	er1Target, er1Context                       string
+	inlineMax                                   int
+	yes, dryRun, noCheckpoint, noRunbookPublish bool
+	shareRooms                                  []string
 }
 
 func runPublishAdmit(stdout, stderr io.Writer, a publishAdmitArgs) int {
@@ -775,6 +779,25 @@ func ensureBundle(a publishAdmitArgs, stderr io.Writer) (string, string, error) 
 		if err != nil {
 			return "", "", fmt.Errorf("agent file not found: %s (try --agent-file)", src)
 		}
+
+		// SPEC-0432 §8: what the agent declares, and what it only mentions.
+		fm, _, fmErr := parser.Parse(body)
+		var declared []skillbundle.Dependency
+		if fmErr == nil && fm != nil {
+			declared, err = parseDeclaredDeps(fm.DependsOn)
+			if err != nil {
+				return "", "", err
+			}
+		}
+		lookup := a.catalogLookup
+		if lookup == nil && len(declared) > 0 {
+			lookup = er1CatalogLookup(a.er1Target, a.er1Context)
+		}
+		if err := checkAgentDeps(src, body, declared, lookup, stderr); err != nil {
+			return "", "", err
+		}
+		man.DependsOn = declared
+
 		staged, err := os.MkdirTemp("", "skillctl-agent-")
 		if err != nil {
 			return "", "", fmt.Errorf("staging dir: %w", err)

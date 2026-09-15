@@ -28,6 +28,11 @@ type Frontmatter struct {
 	// GovernanceLevel is the SPEC-0130 Ampel verdict (green | yellow | red).
 	// Promoted from Metadata to a typed field per SPEC-0189 §10 D2.
 	GovernanceLevel string `json:"governance_level,omitempty" yaml:"governance_level"`
+	// DependsOn lists what this artifact needs, each entry "art:name"
+	// (SPEC-0432 §4, e.g. "skill:didactic-session"). Carried at the AGENT only:
+	// the reverse direction (a skill naming its agents) would be the same edge
+	// written twice, and two lists that claim the same thing drift apart.
+	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on"`
 	Metadata        map[string]interface{} `json:"metadata,omitempty" yaml:"metadata"`
 }
 

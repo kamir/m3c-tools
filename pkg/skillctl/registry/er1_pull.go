@@ -94,6 +94,12 @@ type ListOpts struct {
 
 // ListRegistry queries ER1 for m3c-skill-bundle items, groups by skill, dedupes
 // by digest, and returns the registry view.
+// ErrNotInRegistry marks the one outcome a caller must be able to tell apart
+// from a transport failure: the registry answered, and the thing is not there.
+// SPEC-0432 §8 (E-5) turns exactly this distinction into different behaviour,
+// abort versus warn, so it must not be read off an error string.
+var ErrNotInRegistry = errors.New("not found in registry")
+
 func ListRegistry(cfg *er1.Config, ctxID string, opts ListOpts) (*RegistryListing, error) {
 	rawItems, err := searchByTagsRaw(cfg, ctxID, []string{"m3c-skill-bundle", "skill-registry:self"})
 	if err != nil {
@@ -190,7 +196,7 @@ func ShowSkill(cfg *er1.Config, ctxID, nameOrDigest string) (*SkillView, error) 
 				}
 			}
 		}
-		return nil, fmt.Errorf("show: digest %q not found in registry", nameOrDigest)
+		return nil, fmt.Errorf("show: digest %q: %w", nameOrDigest, ErrNotInRegistry)
 	}
 	opts.OnlySkill = nameOrDigest
 	listing, err := ListRegistry(cfg, ctxID, opts)
@@ -204,7 +210,7 @@ func ShowSkill(cfg *er1.Config, ctxID, nameOrDigest string) (*SkillView, error) 
 			return &s, nil
 		}
 	}
-	return nil, fmt.Errorf("show: skill %q not found in registry", nameOrDigest)
+	return nil, fmt.Errorf("show: skill %q: %w", nameOrDigest, ErrNotInRegistry)
 }
 
 // ─── Pull + 5-gate gauntlet ────────────────────────────────────────────────
