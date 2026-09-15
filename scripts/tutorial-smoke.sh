@@ -37,7 +37,9 @@ Usage: scripts/tutorial-smoke.sh [--walk] [--keep] [--skillctl <path>] [--worksp
   --walk              step through the chain with explanations and a pause
                       between steps (the tutorial, for a human).
   --keep              do not delete the workspace at the end; print its path.
-  --skillctl <path>   binary to drive. Default: ./build/skillctl, then $PATH.
+  --skillctl <path>   binary to drive. A relative path is resolved against the
+                      current directory BEFORE the sandbox is entered.
+                      Default: ./build/skillctl, then $PATH (with a warning).
   --workspace <dir>   where to build the sandbox. Default: a mktemp dir.
   -h, --help          this text.
 USAGE
@@ -57,16 +59,57 @@ done
 # ------------------------------------------------------------------ setup ----
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-if [ -z "$SKILLCTL" ]; then
-  if [ -x "$REPO_ROOT/build/skillctl" ]; then
-    SKILLCTL="$REPO_ROOT/build/skillctl"
-  elif command -v skillctl >/dev/null 2>&1; then
-    SKILLCTL="$(command -v skillctl)"
-  else
-    echo "tutorial-smoke: no skillctl found. Build one with 'make build-skillctl'," >&2
-    echo "                or pass --skillctl <path>." >&2
-    exit 1
-  fi
+# WHICH BINARY, and where it came from. Both halves of that sentence matter,
+# and both were wrong once on 2026-09-15 in a way that produced a confident,
+# completely false measurement.
+#
+#  (1) A RELATIVE --skillctl silently stops resolving. Every step below runs
+#      with the throwaway workspace as $PWD, so `--skillctl ./build/skillctl`
+#      points at nothing once the first step starts. Same tree, same binary,
+#      two invocations: 29 deviations with the relative path, 0 with the
+#      absolute one. Nothing in the old output said the path was the problem.
+#
+#  (2) The $PATH fallback tested a STRANGER. With no build/skillctl present the
+#      script picked up an installed skillctl from $PATH and asserted this
+#      tree's tutorials against someone else's build, reporting 19 deviations
+#      that said nothing about this tree. It was a fallback with no voice.
+#
+# So: make the path absolute, prove it is executable, and SAY which of the
+# three sources won. A smoke test whose subject is ambiguous measures nothing.
+SKILLCTL_ORIGIN=""
+if [ -n "$SKILLCTL" ]; then
+  case "$SKILLCTL" in
+    /*) ;;
+    *)
+      _dir="$(cd "$(dirname "$SKILLCTL")" 2>/dev/null && pwd)" || _dir=""
+      if [ -z "$_dir" ]; then
+        echo "tutorial-smoke: --skillctl '$SKILLCTL' does not resolve to a directory." >&2
+        exit 1
+      fi
+      SKILLCTL="$_dir/$(basename "$SKILLCTL")"
+      ;;
+  esac
+  SKILLCTL_ORIGIN="--skillctl"
+elif [ -x "$REPO_ROOT/build/skillctl" ]; then
+  SKILLCTL="$REPO_ROOT/build/skillctl"
+  SKILLCTL_ORIGIN="built from this tree"
+elif command -v skillctl >/dev/null 2>&1; then
+  SKILLCTL="$(command -v skillctl)"
+  SKILLCTL_ORIGIN="\$PATH, NOT built from this tree"
+  echo "tutorial-smoke: WARNING, no $REPO_ROOT/build/skillctl, falling back to" >&2
+  echo "                $SKILLCTL from \$PATH. That binary was built from some" >&2
+  echo "                other tree, so a deviation reported below may belong to" >&2
+  echo "                it and not to this checkout. Build one with" >&2
+  echo "                'make build-skillctl' before trusting a red result." >&2
+else
+  echo "tutorial-smoke: no skillctl found. Build one with 'make build-skillctl'," >&2
+  echo "                or pass --skillctl <path>." >&2
+  exit 1
+fi
+
+if [ ! -x "$SKILLCTL" ]; then
+  echo "tutorial-smoke: '$SKILLCTL' is not an executable file." >&2
+  exit 1
 fi
 
 if [ -z "$WS" ]; then
@@ -160,6 +203,7 @@ expect_in() {
 echo ""
 printf "${B}skillctl tutorial smoke${N}\n"
 note "binary:    $SKILLCTL"
+note "source:    $SKILLCTL_ORIGIN"
 note "version:   $("$SKILLCTL" version 2>&1 | head -1)"
 note "workspace: $WS"
 note "the chain from docs/tutorial-szenario-02-erster-signierter-skill.de.md"
