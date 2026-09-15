@@ -94,8 +94,6 @@ G115	pkg/recorder/wav.go	func EncodeWAV(samples []int16) []byte { dataSize := ui
 G115	pkg/skillctl/bodyscan/normalize.go	if v, good := parseHex(s[2:4]); good { return rune(v), 4, true }
 G115	pkg/skillctl/bodyscan/normalize.go	if v, good := parseHex(s[2:6]); good { return rune(v), 6, true }
 G115	pkg/timetracking/gantt.go	h.Write([]byte(projectID)) c := palette[h.Sum32()%uint32(len(palette))] return c[0], c[1], c[2]
-G117	pkg/plaud/devapi.go	func saveDevTokenFile(path string, t DevTokenFile) error { data, err := json.MarshalIndent(t, "", " ") if err != nil {
-G122	pkg/skillbundle/pack.go	data, readErr := os.ReadFile(path) if readErr != nil {
 G124	pkg/transcript/fetcher.go	jar.SetCookies(ytURL, []*http.Cookie{ {Name: "CONSENT", Value: "YES+cb", Path: "/", Domain: ".youtube.com"}, })
 G202	pkg/skillctl/browse/store.go	for _, table := range []string{"edges", "node_tags", "nodes", "graph_meta"} { if _, err := tx.Exec("DELETE FROM " + table); err != nil { return fmt.Errorf("clear %s: %w", table, err)
 G203	pkg/skillctl/report/html.go	} return template.HTML(b.String()) }
@@ -105,7 +103,6 @@ G204	cmd/m3c-tools/main.go	default: // darwin if err := exec.Command("open", "-a
 G204	cmd/m3c-tools/main.go	stty := func(arg string) error { c := exec.Command("stty", arg) c.Stdin = os.Stdin
 G204	cmd/m3c-tools/main.go	} cmd := exec.Command("bash", setupArgs...) cmd.Stdout = os.Stdout
 G204	cmd/m3c-tools/main.go	} return exec.Command("open", url).Start() }
-G204	cmd/poc-whisper/main.go	// Run whisper with JSON output format cmd := exec.Command(whisperPath, audioFile, "--model", model, "--output_format", "json", "--output_dir", tmpDir, ) cmd.Stdout = os.Stdout
 G204	cmd/skillctl-demo/main.go	case "darwin": cmd = exec.Command("open", url) case "windows":
 G204	cmd/skillctl-demo/main.go	case "windows": cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url) default:
 G204	cmd/skillctl-demo/main.go	default: cmd = exec.Command("xdg-open", url) }
@@ -276,7 +273,6 @@ G304	pkg/pocket/state.go	func loadGroupState(path string) *GroupState { data, er
 G304	pkg/session/session.go	} b, err := os.ReadFile(filepath.Join(dir, e.Name())) if err != nil {
 G304	pkg/session/session.go	} f, err := os.OpenFile(filepath.Join(wdir, "session-state.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644) if err != nil {
 G304	pkg/skillbundle/ignore.go	rules := parseIgnore(defaultIgnorePatterns) if data, err := os.ReadFile(filepath.Join(skillDir, ".skbignore")); err == nil { rules = append(rules, parseIgnore(strings.Split(string(data), "\\n"))...)
-G304	pkg/skillbundle/pack.go	data, readErr := os.ReadFile(path) if readErr != nil {
 G304	pkg/skillbundle/unpack.go	} f, err := os.OpenFile(full, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode) if err != nil {
 G304	pkg/skillctl/backend/git/format.go	func readBounded(p string) ([]byte, error) { f, err := os.Open(p) if err != nil {
 G304	pkg/skillctl/backend/git/git.go	func readCapped(p string, max int64) ([]byte, error) { f, err := os.Open(p) if err != nil {
@@ -371,7 +367,6 @@ G402	pkg/pocket/syncapi.go	if skipTLSVerify { transport.TLSClientConfig = &tls.C
 G402	pkg/session/session.go	if !verify { client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} }
 G402	pkg/timetracking/plmclient.go	TLSClientConfig: &tls.Config{ InsecureSkipVerify: insecure, // loopback-only, guarded above },
 G404	pkg/transcript/proxy.go	// Pick a random proxy chosen := c.Proxies[rand.Intn(len(c.Proxies))] proxyURL, err := url.Parse(chosen)
-G702	cmd/poc-whisper/main.go	// Run whisper with JSON output format cmd := exec.Command(whisperPath, audioFile,
 G703	cmd/docaudit/main.go	func loadConfig(path string) ([]target, error) { b, err := os.ReadFile(path) if err != nil {
 G703	cmd/docaudit/main.go	out := map[string]bool{} b, err := os.ReadFile(path) if err != nil {
 G703	cmd/m3c-tools/commands_shared.go	if audioPath != "" { audioData, err = os.ReadFile(audioPath) if err != nil {
@@ -420,14 +415,6 @@ G703	pkg/plaud/auth.go	} if _, err := os.Stat(p); err == nil { return p
 G703	pkg/session/session.go	} b, err := os.ReadFile(filepath.Join(dir, e.Name())) if err != nil {
 G703	pkg/skillctl/consolidate/fixer.go	if err := os.WriteFile(path, []byte(newContent), info.Mode()); err != nil { return fmt.Errorf("writing %s: %w", path, err)
 G703	pkg/skillctl/registry/install_trust_mode.go	skbName := strings.ReplaceAll(b.Name, string(filepath.Separator), "_") + ".skb" if err := os.WriteFile(filepath.Join(tmp, skbName), skb, 0o644); err != nil { cleanup()
-G704	cmd/skillctl/revoke_cmds.go	// an attacker-controlled taint source. httpReq, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body)) if err != nil {
-G704	cmd/skillctl/revoke_cmds.go	resp, err := client.Do(httpReq) if err != nil {
-G704	cmd/skillctl/scanner_cmds.go	resp, err := httpClient.Do(req) if err != nil {
-G704	cmd/skillctl/scanner_cmds.go	url := target + "/api/v2/skills/usage" req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body)) if err != nil {
-G704	pkg/config/healthcheck.go	req, err := http.NewRequest("GET", baseURL+"/health", nil) // BUG-0086: was /api/plm/projects (requires auth) if err != nil {
-G704	pkg/config/healthcheck.go	resp, err := client.Do(req) if err != nil {
-G704	pkg/plaud/er1source.go	req, err := http.NewRequest("GET", endpoint, nil) if err != nil {
-G704	pkg/plaud/er1source.go	} resp, err := client.Do(req) if err != nil {
 G705	internal/thinking/api/auth.go	w.WriteHeader(http.StatusUnauthorized) _, _ = w.Write([]byte(fmt.Sprintf(`{"error":"unauthorized","detail":%q}`, msg))) }
 G705	internal/thinking/api/server.go	} _, _ = w.Write(row) }
 G706	cmd/m3c-tools/main.go	case plaud.TranscribeModeOff: log.Printf("[plaud] %s: no transcript: transcription off, audio only", recID) }

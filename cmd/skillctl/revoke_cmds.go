@@ -219,7 +219,7 @@ func runRevoke(args []string, stdout, stderr io.Writer) int {
 		return exitGeneric
 	}
 
-	// #nosec G107 -- endpoint host+scheme validated by validateRegistryURL above and
+	// #nosec G107,G704 -- endpoint host+scheme validated by validateRegistryURL above and
 	// the client refuses cross-host redirects (httpsafe.NoCrossHostRedirect); not
 	// an attacker-controlled taint source.
 	httpReq, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
@@ -231,6 +231,9 @@ func runRevoke(args []string, stdout, stderr io.Writer) int {
 	httpReq.Header.Set("Accept", "application/json")
 	httpReq.Header.Set("User-Agent", "skillctl/spec-0188-s3.6")
 
+	// #nosec G704 -- dieselbe Stelle, zweite Haelfte: gosec markiert Bau UND
+	// Ausfuehrung der Anfrage. Begruendung am http.NewRequest oben
+	// (validateRegistryURL + NoCrossHostRedirect).
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		fmt.Fprintf(stderr, "skillctl revoke: POST %s: %v\n", endpoint, err)
