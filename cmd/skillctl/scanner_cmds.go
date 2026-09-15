@@ -1334,6 +1334,11 @@ func cmdSyncUsage(args []string) {
 		}
 
 		url := target + "/api/v2/skills/usage"
+		// #nosec G704 -- target stammt aus args[i] dieses Aufrufs, also von dem,
+		// der das Werkzeug startet. Der Client traegt NoCredentialRedirect.
+		// VORAUSSETZUNG: dieser Befehl wird nicht von einem Dienst mit fremder
+		// Eingabe aufgerufen. Gemessen 2026-09-15: die beiden Server im Baum
+		// binden loopback und rufen ihn nicht.
 		req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "  [SKIP] id=%d: request error: %v\n", r.ID, err)
@@ -1343,6 +1348,8 @@ func cmdSyncUsage(args []string) {
 		req.Header.Set("X-API-KEY", apiKey)
 		req.Header.Set("X-User-ID", r.UserID)
 
+		// #nosec G704 -- dieselbe Stelle, zweite Haelfte: gosec markiert Bau UND
+		// Ausfuehrung der Anfrage. Begruendung am http.NewRequest oben.
 		resp, err := httpClient.Do(req)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "  [FAIL] id=%d (%s): %v\n", r.ID, r.SkillID, err)

@@ -180,6 +180,15 @@ func collectFiles(skillDir string) ([]fileEntry, error) {
 			return nil // symlinks/devices/sockets out of scope for v1
 		}
 
+		// #nosec G122,G304 -- die Wettlauf-Luecke ist hier ohne Gewinn. Drei Zeilen
+		// darueber weist d.Type().IsRegular() Symlinks ab; wer sie zwischen
+		// Pruefung und Lesen austauschen will, braucht Schreibrecht im
+		// Quellverzeichnis des AUTORS, und mit dem koennte er den Inhalt direkt
+		// aendern. Das Verzeichnis kommt aus --skill (cmd/skillctl/pack.go:102).
+		// Faellt das Recht auseinander, etwa wenn je ein fremdes Verzeichnis
+		// gepackt wird, ist os.Root die Antwort, nicht diese Anmerkung. G304
+		// ("Dateizugriff ueber Variable") sitzt auf derselben Zeile und traegt
+		// dieselbe Begruendung: der Pfad stammt aus dem Verzeichnis des Autors.
 		data, readErr := os.ReadFile(path)
 		if readErr != nil {
 			return fmt.Errorf("reading %s: %w", rel, readErr)
