@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -136,7 +137,14 @@ func cmdRetry(args []string) {
 		cancel()
 	}()
 
-	if loopErr := runner.Run(ctx, time.Duration(interval)*time.Second); loopErr != nil && loopErr != context.Canceled {
+	// No nil check, and errors.Is rather than !=. RetryRunner.Run has no exit
+	// but the context ending (pkg/er1/retry.go: an endless loop whose only
+	// return is the sleep's error), so `loopErr != nil` is dead code and
+	// staticcheck says so (SA4023). What remains is the one question that
+	// carries meaning: did it stop because WE cancelled it? errors.Is, because
+	// a cancellation can arrive wrapped, and a bare comparison would then
+	// report an orderly shutdown as a failure and exit 1.
+	if loopErr := runner.Run(ctx, time.Duration(interval)*time.Second); !errors.Is(loopErr, context.Canceled) {
 		fmt.Fprintf(os.Stderr, "Retry loop error: %v\n", loopErr)
 		os.Exit(1)
 	}
@@ -381,7 +389,6 @@ func cmdCancel(args []string) {
 
 	fmt.Printf("Cancelled entry: %s\n", entryID)
 }
-
 
 func cmdUpload(args []string) {
 	if len(args) == 0 {
