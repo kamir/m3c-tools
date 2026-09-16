@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -185,8 +186,41 @@ func (r *Registry) Validate() error {
 				return err
 			}
 		}
+		if err := e.Probe.validate(e.Name); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// validate refuses a probe that would carry a live value over plaintext. The
+// probe request puts the secret into a header; over http:// it would repeat in
+// cleartext on EVERY verify (challenge-gate LOW-2). https is required; http is
+// allowed only for loopback, named explicitly.
+func (p Probe) validate(secretName string) error {
+	if p.Kind == "" {
+		return nil // no probe configured; verify reports that on its own
+	}
+	if p.Kind != "http" {
+		return fmt.Errorf("secret %q: probe kind %q is unknown (want %q)", secretName, p.Kind, "http")
+	}
+	u, err := url.Parse(p.URL)
+	if err != nil {
+		return fmt.Errorf("secret %q: probe url %q does not parse: %v", secretName, p.URL, err)
+	}
+	switch u.Scheme {
+	case "https":
+		return nil
+	case "http":
+		host := u.Hostname()
+		if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+			return nil
+		}
+		return fmt.Errorf("secret %q: probe url %q would send the live value over plaintext http; "+
+			"use https (http is allowed only for localhost)", secretName, p.URL)
+	default:
+		return fmt.Errorf("secret %q: probe url %q has scheme %q, want https", secretName, p.URL, u.Scheme)
+	}
 }
 
 func (h Holder) validate(secretName string) error {

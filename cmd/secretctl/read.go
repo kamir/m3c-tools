@@ -9,11 +9,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
-
-	"github.com/kamir/m3c-tools/pkg/httpsafe"
 )
+
+// envKeyShape is the shape a file holder's key must have before it may become
+// part of a grep pattern (see readFile).
+var envKeyShape = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
 
 // Reading a value out of a holder. Every function here returns a Secret, never
 // a string, so a value cannot reach an output stream by accident.
@@ -66,6 +69,24 @@ func ReadHolder(h Holder) (Secret, error) {
 	return "", fmt.Errorf("unknown holder kind %q", h.Kind)
 }
 
+// shellQuote wraps s in single quotes for the ONE remote login shell that ssh
+// runs. Inside single quotes everything is inert; only an embedded single
+// quote needs the close-escape-reopen sequence this function emits.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// shellQuoteRemote quotes one remote argument. The single deliberate expansion
+// in this file, the $HOME/ prefix readFile builds for remote paths, survives
+// as an unquoted "$HOME" prefix; the rest of the path and every other argument
+// is quoted whole.
+func shellQuoteRemote(s string) string {
+	if rest, ok := strings.CutPrefix(s, "$HOME/"); ok {
+		return `"$HOME"` + shellQuote("/"+rest)
+	}
+	return shellQuote(s)
+}
+
 // capture runs a command locally or over ssh and returns its stdout.
 // Named capture, not run: main.run is the command dispatcher, and two
 // functions of the same name in one package is a compile error waiting for
@@ -75,9 +96,17 @@ func capture(host string, name string, args ...string) (string, error) {
 	if host == "" {
 		cmd = exec.Command(name, args...)
 	} else {
-		// The remote command is assembled here rather than interpolated into a
-		// shell string, so a holder's fields cannot become shell syntax.
-		remote := append([]string{"-o", "BatchMode=yes", "-o", "ConnectTimeout=10", host, name}, args...)
+		// ssh joins its arguments into ONE string that the remote login shell
+		// evaluates. Locally exec.Command keeps the arguments apart; remotely
+		// nothing does, so a path with a space, ";" or "$(...)" WOULD become
+		// shell syntax there (challenge-gate LOW-1). Every remote argument is
+		// therefore shell-quoted before the join.
+		quoted := make([]string, 0, len(args)+1)
+		quoted = append(quoted, shellQuote(name))
+		for _, a := range args {
+			quoted = append(quoted, shellQuoteRemote(a))
+		}
+		remote := append([]string{"-o", "BatchMode=yes", "-o", "ConnectTimeout=10", host}, quoted...)
 		cmd = exec.Command("ssh", remote...)
 	}
 	out, err := cmd.Output()
@@ -126,6 +155,13 @@ func readFile(h Holder) (Secret, error) {
 			// Let the remote shell expand it; ssh runs a login shell.
 			path = "$HOME/" + path[2:]
 		}
+	}
+	// The key becomes part of a grep pattern; anything outside an env-style
+	// name would be regex syntax there (and shell-relevant on the remote leg
+	// before quoting existed). Refuse instead of escaping (LOW-1).
+	if !envKeyShape.MatchString(h.Key) {
+		return "", fmt.Errorf("holder %s: key %q is not an env-style name ([A-Za-z0-9_]); "+
+			"refusing to build a search pattern from it", h.ID, h.Key)
 	}
 	// grep, not cat: the whole file must not travel just because one line is
 	// wanted, and a file may hold more than one secret.
@@ -234,9 +270,16 @@ func (p Probe) Ask(value Secret) (int, error) {
 		return 0, err
 	}
 	req.Header.Set(p.Header, value.Reveal())
-	// The request carries the credential header, so the client refuses to
-	// follow a redirect with it (AUDIT-0001 1.1: see pkg/httpsafe).
-	client := &http.Client{Timeout: 20 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect}
+	// A probe has no legitimate redirect need: the 30x IS the answer. The
+	// client follows NO redirect at all (http.ErrUseLastResponse), so the
+	// credential header can neither travel to another host nor repeat over a
+	// downgraded scheme (challenge-gate F4).
+	client := &http.Client{
+		Timeout: 20 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		// The URL may carry a query; the value never does, but an error string

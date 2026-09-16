@@ -423,6 +423,15 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 		return nil, fmt.Errorf("install: %s carries kind %q, which this build does not know; "+
 			"nothing was installed", b.Name, kind)
 	}
+	// G-23 consent integrity: the PLAN the operator approved named a target
+	// derived from the registry tag (b.Kind, unsigned metadata); the write is
+	// routed by the manifest inside the digest-verified bundle. If the two
+	// disagree, the approved plan and the actual write name different places,
+	// so refuse instead of reconciling silently.
+	if b.Kind != "" && b.Kind != kind {
+		return nil, fmt.Errorf("install: %s: registry tag says kind %q but the bundle manifest says %q; "+
+			"the approved plan would not match the write, nothing was installed", b.Name, b.Kind, kind)
+	}
 
 	skillsDir := opts.SkillsDir
 	if skillsDir == "" {
@@ -735,6 +744,19 @@ func installAgent(b *StagedBundle, man skillbundle.BundleManifest, skb []byte, o
 	target := filepath.Join(agentsDir, want)
 	_, statErr := os.Stat(target)
 	existed := statErr == nil
+
+	// Downgrade gate, mirroring the skill path (SPEC-0432 §5: an agent gets no
+	// LESS protection than a skill). A replayed old admit item passes every
+	// signature gate legitimately; without this check it would overwrite a
+	// newer agent in place. The provenance sidecar beside the agent carries the
+	// installed version.
+	if !opts.AllowDowngrade {
+		if pre, err := loadProvenance(filepath.Join(agentsDir, ".provenance", b.Name+".json")); err == nil {
+			if semver.Compare(b.Version, pre.Version) < 0 {
+				return nil, fmt.Errorf("install: refusing to downgrade agent %s: have %s, new %s (use --allow-downgrade)", b.Name, pre.Version, b.Version)
+			}
+		}
+	}
 
 	tmp, err := os.CreateTemp(agentsDir, "."+b.Name+"-*.md")
 	if err != nil {

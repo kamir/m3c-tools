@@ -317,6 +317,18 @@ func runPublishAdmit(stdout, stderr io.Writer, a publishAdmitArgs) int {
 	digestHex, digestBytes := sha256Hex(skb)
 	digest := "sha256:" + digestHex
 
+	// SPEC-0432: the kind that is tagged onto the registry item (and with it
+	// the shelf every later verdict is filed on) comes from the manifest inside
+	// the digest-bound bundle, never from the flag alone. ensureBundle already
+	// refused a contradicting flag; this read makes the manifest the single
+	// source for the stamp (challenge-gate F2).
+	bundleMan, err := skillbundle.ReadManifest(skb)
+	if err != nil {
+		fmt.Fprintf(stderr, "publish: read manifest: %v\n", err)
+		return 1
+	}
+	bundleKind := bundleMan.EffectiveKind()
+
 	// 3. Load the key and produce the author+registry sigs. The personal
 	// tenant uses one key playing both roles: same sig bytes, two records.
 	priv, err := signing.LoadPrivateKey(a.keyPath)
@@ -355,7 +367,7 @@ func runPublishAdmit(stdout, stderr io.Writer, a publishAdmitArgs) int {
 	}
 
 	skill := registry.SkillMeta{
-		Kind:            a.kind,
+		Kind:            bundleKind,
 		Name:            a.name,
 		Version:         ver,
 		BundleDigest:    digest,
@@ -563,11 +575,12 @@ type publishAttestArgs struct {
 // while a skill only instructs. There is deliberately no --force: an exception
 // is a change to the spec.
 //
-// SCOPE, so nobody mistakes this for a complete barrier: it judges the kind the
-// CALLER claims via --kind, not the kind inside the bundle. Someone who omits
-// --kind while attesting an agent passes here. That is by design (§5.1): the
-// second gate is pull, which reads the bundle itself (AC-4). Two gates, one
-// minimum.
+// SCOPE, stated as measured: the kind judged here comes from attestKindFor,
+// which reads the manifest inside the .skb whenever the bundle bytes are at
+// hand (--bundle, or the ./<name>@<version>.skb fallback) and falls back to
+// --kind only for a digest-only attest. A digest-only attest without --kind is
+// judged as a skill; NO later gate re-checks the level against the kind, so
+// this function is the only barrier.
 func attestLevelAllowed(kind, level string) error {
 	if kind != skillbundle.KindAgent {
 		return nil
@@ -579,10 +592,52 @@ func attestLevelAllowed(kind, level string) error {
 	return nil
 }
 
+// attestKindFor resolves the kind the attest gate judges (challenge-gate F3).
+// The manifest inside the digest-bound .skb is the authoritative source
+// whenever the bundle bytes are at hand; the --kind flag must then agree or
+// the attest is refused. With only --digest there are no bytes to read, so the
+// (validated) flag is all this gate can judge.
+func attestKindFor(flagKind, digestArg, bundlePath, name, version string) (string, error) {
+	if flagKind != "" && !skillbundle.ValidKind(flagKind) {
+		return "", fmt.Errorf("bad --kind %q (want %q or %q); nothing attested",
+			flagKind, skillbundle.KindSkill, skillbundle.KindAgent)
+	}
+	if bundlePath == "" && strings.TrimSpace(digestArg) == "" {
+		// Mirror resolveBundleDigest's local-bundle fallback so both read the
+		// same bytes.
+		cand := fmt.Sprintf("%s@%s.skb", name, version)
+		if _, err := os.Stat(cand); err == nil {
+			bundlePath = cand
+		}
+	}
+	if bundlePath == "" {
+		return flagKind, nil
+	}
+	skb, err := os.ReadFile(bundlePath)
+	if err != nil {
+		return "", fmt.Errorf("read bundle %s: %w", bundlePath, err)
+	}
+	man, err := skillbundle.ReadManifest(skb)
+	if err != nil {
+		return "", fmt.Errorf("read manifest of %s: %w", bundlePath, err)
+	}
+	if flagKind != "" && flagKind != man.EffectiveKind() {
+		return "", fmt.Errorf("--kind %q contradicts the bundle manifest (%q); nothing attested",
+			flagKind, man.EffectiveKind())
+	}
+	return man.EffectiveKind(), nil
+}
+
 func runPublishAttest(stdout, stderr io.Writer, a publishAttestArgs) int {
 	// First, before resolving a digest and before unlocking a private key: a
-	// refusal must leave no trace at all.
-	if err := attestLevelAllowed(a.kind, a.level); err != nil {
+	// refusal must leave no trace at all. The kind comes from the bundle
+	// manifest when the bytes are at hand, not from the flag alone (F3).
+	kind, err := attestKindFor(a.kind, a.digestArg, a.bundlePath, a.name, a.version)
+	if err != nil {
+		fmt.Fprintf(stderr, "publish --attest: %v\n", err)
+		return 2
+	}
+	if err := attestLevelAllowed(kind, a.level); err != nil {
 		fmt.Fprintf(stderr, "publish --attest: %v\n", err)
 		return 2
 	}
@@ -632,7 +687,9 @@ func runPublishAttest(stdout, stderr io.Writer, a publishAttestArgs) int {
 		// itself sits on the agent shelf, and a reader scoped to one shelf then
 		// sees a bundle with no governance verdict, or worse, a REVOKED agent
 		// that still looks valid.
-		Kind:           a.kind,
+		// The resolved kind (manifest first, attestKindFor) is stamped, the
+		// same value the level gate above judged.
+		Kind:           kind,
 		Name:           a.name,
 		Version:        a.version,
 		BundleDigest:   digest,
@@ -899,7 +956,23 @@ func maybeCheckpoint(stdout io.Writer, noCheckpoint bool, er1Target, er1Context,
 
 func ensureBundle(a publishAdmitArgs, stderr io.Writer) (string, string, error) {
 	if a.bundlePath != "" {
-		// Reuse a pre-built .skb. Infer version from filename if not given.
+		// Reuse a pre-built .skb. The manifest inside it says what the bundle
+		// IS; the --kind flag is only a claim. Read the kind from the bundle
+		// and refuse a contradicting flag, so a forgotten or wrong flag cannot
+		// stamp an agent bundle onto the skill shelf (challenge-gate F2).
+		skb, err := os.ReadFile(a.bundlePath)
+		if err != nil {
+			return "", "", fmt.Errorf("read bundle %s: %w", a.bundlePath, err)
+		}
+		man, err := skillbundle.ReadManifest(skb)
+		if err != nil {
+			return "", "", fmt.Errorf("read manifest of %s: %w", a.bundlePath, err)
+		}
+		if a.kind != "" && a.kind != man.EffectiveKind() {
+			return "", "", fmt.Errorf("--kind %q contradicts the bundle manifest (%q); no bundle written",
+				a.kind, man.EffectiveKind())
+		}
+		// Infer version from filename if not given.
 		v := a.version
 		if v == "" {
 			v = versionFromBundleFilename(a.bundlePath)

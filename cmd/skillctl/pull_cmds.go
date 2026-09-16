@@ -78,6 +78,13 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "pull: unsupported registry %q: use \"self\"/\"er1://…\" or \"gitlab://host/group/proj\"; HTTP admission registries route through `skillctl install`\n", *registryName)
 		return 2
 	}
+	// SPEC-0432 (challenge-gate F5): an unknown --kind must refuse, not widen.
+	// shelvesFor treats every unknown value as "both shelves", so a typo like
+	// "agnet" would silently pull everything the help text promised to filter.
+	if *kindFlag != "" && !skillbundle.ValidKind(*kindFlag) {
+		fmt.Fprintf(stderr, "pull: bad --kind %q (want %q or %q)\n", *kindFlag, skillbundle.KindSkill, skillbundle.KindAgent)
+		return 2
+	}
 
 	tr, peerName, err := resolvePullTrustRoots(*registryName, *trustPath)
 	if err != nil {

@@ -868,11 +868,25 @@ func loadAttestAccumulator(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, no
 	// fields (IS-T3) and key every verdict on the SIGNED bundle_digest, so seeing
 	// other skills' events only adds their own digests, never mis-attributing a
 	// verdict to the digest a caller is pulling. Admit/install fall through to the
-	// default (never a governance verdict). One comprehensive search.
-	tags := []string{"m3c-skill-bundle", "skill-registry:self"}
-	items, hitCap, err := searchByTagsRawCapped(cfg, ctxID, tags)
-	if err != nil {
-		return nil, false, err
+	// default (never a governance verdict).
+	//
+	// SPEC-0432: the publisher stamps EVERY event of a bundle, attest and revoke
+	// included, onto the shelf of its kind, so the authoritative sweep covers
+	// BOTH shelves (same rule as loadAttestRevoke). A verdict that lives only on
+	// the agent shelf would otherwise be invisible to Gate 4 and Gate 5 of the
+	// pull gauntlet. hitCap is the OR over the shelves: one truncated shelf
+	// already means the discovered set is not provably complete.
+	var (
+		items  []map[string]any
+		hitCap bool
+	)
+	for _, shelf := range shelvesFor("") {
+		got, capped, err := searchByTagsRawCapped(cfg, ctxID, []string{"m3c-skill-bundle", shelf})
+		if err != nil {
+			return nil, false, err
+		}
+		items = append(items, got...)
+		hitCap = hitCap || capped
 	}
 	for _, item := range items {
 		ev, err := extractEvent(itemBody(item))
