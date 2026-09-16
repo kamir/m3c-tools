@@ -1,7 +1,15 @@
-# QA Acceptance Track: m3c-tools v2.10.0 (Target-Device Setup)
+# QA Acceptance Track: m3c-tools (Target-Device Setup)
 
-**Purpose.** Validate a *fresh* m3c-tools **v2.10.0** install **on the machine it will run on**.
+**Purpose.** Validate a *fresh* m3c-tools install **on the machine it will run on**.
 Run this right after checkout/install, on the actual target device.
+
+**Which version this track expects.** The single source is the runnable
+companion script `scripts/qa-target-device.sh` (Windows twin:
+`scripts/qa-target-device.ps1`): it pins `M3C_EXPECT_VERSION` with default
+`2.10.0` and takes an override, e.g. `M3C_EXPECT_VERSION=2.12.0` for a
+v2.12.0 acceptance (latest product tag on 2026-09-16: `v2.12.0`, from
+`git tag`). Version literals below read `2.10.0` because that is the
+script's default, not because newer releases are exempt.
 
 **Covered targets**
 
@@ -49,16 +57,26 @@ Verify the downloaded archive/binary against the release `checksums.txt` (sha256
 | 🪟 | `Get-FileHash .\m3c-tools.exe -Algorithm SHA256` then compare to the `checksums.txt` entry | hash matches the published line | strings equal |
 
 **FAIL → remediation.** Re-download the artifact (partial/corrupt transfer or wrong arch). Never
-run a binary whose checksum does not match the release notes for v2.10.0.
+run a binary whose checksum does not match the release notes of the version under test.
 
 ### A2 · Version prints a real version
 ```
 m3c-tools version
 ```
-- **Expected stdout:** `m3c-tools 2.10.0 (commit=<hash>, built=<date>)`
-- **PASS:** exit 0 **and** the version token is `2.10.0` (not `dev`).
-- **FAIL → remediation.** If it prints `dev` you are running a local/unreleased build: install
-  the official v2.10.0 artifact. If the command errors, the binary is the wrong platform (see A1).
+- **Expected stdout:** `m3c-tools <M3C_EXPECT_VERSION> (commit=<hash>, built=<date>)`,
+  version token **without** a leading `v` (that is what `scripts/qa-target-device.sh`
+  compares against).
+- **PASS:** exit 0 **and** the version token equals the expected version.
+- **FAIL → remediation.** Three known non-matching forms, plus the error case:
+  - `dev`: a local build where `git describe` failed entirely; install the official artifact.
+  - a `git describe` token such as `skillctl/v0.5.1-6-g307b414` (measured 2026-09-16 on a
+    `make build` binary): a local source build; the Makefile takes the nearest reachable tag
+    of ANY line, including `skillctl/*` and `archive/*`. Also a local/unreleased build:
+    install the official artifact. The script reports this form as a warn
+    ("confirm this is the intended release").
+  - a different release number: you are holding the wrong release; re-download, or set
+    `M3C_EXPECT_VERSION` if that release is the intended one.
+  - If the command errors, the binary is the wrong platform (see A1).
 
 ---
 

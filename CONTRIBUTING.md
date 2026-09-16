@@ -18,7 +18,7 @@ go build -o build/skillctl ./cmd/skillctl   # skillctl
 ## Before you open a PR: run the gates CI runs
 
 ```bash
-make ci            # vet · golangci-lint · unit tests · build (the gate CI enforces)
+make ci            # vet · lint · prose · gofmt · redirect-guard · required-checks · docpages · unit tests · build
 make code-review   # build, vet, tests, secret scan, dead code, deps
 make check-docs    # documentation ↔ implementation consistency
 ```
