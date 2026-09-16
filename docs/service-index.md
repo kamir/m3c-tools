@@ -87,7 +87,7 @@ the Observation Window pipeline, and ER1 upload.
 | Program | `m3c-tools --menubar` (production); `poc-menubar` (reference POC) |
 | Launch | `make menubar` / `make menubar-app` |
 | UI stack | `menuet` (menu bar) + native Cocoa via cgo |
-| Details | [Menu Bar App](menubar-app) |
+| Details | [Menu Bar App](old/menubar-app) |
 
 ## External dependency: ER1 / aims-core
 

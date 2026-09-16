@@ -3,10 +3,10 @@
 Wie eine Nutzerin von der leeren Maschine zur ersten eigenen Aufnahme kommt,
 und welche der bestehenden Seiten sie danach weiterfuehrt. Diese Seite
 konsolidiert den Einstiegsteil aus drei englischen Quellen
-([Quickstart: m3c-tools](../../quickstart-m3c-tools.md),
-[Getting Started](../../getting-started.md),
-[Prerequisites](../../prerequisites.md)); bei Widerspruch gilt das
-docaudit-getorte [Manual](../../manual-m3c-tools.md).
+([Quickstart: m3c-tools](../../old/quickstart-m3c-tools.md),
+[Getting Started](../../old/getting-started.md),
+[Prerequisites](../../old/prerequisites.md)); bei Widerspruch gilt das
+docaudit-getorte [Manual](../referenz/manual-m3c-tools.md).
 
 Zielgruppe: die Person, die m3c-tools benutzen will. Teil A reicht fuer alle,
 die nur das fertige Programm brauchen; Teil B ist fuer den Quell-Build auf
@@ -26,15 +26,15 @@ alles Weitere baut auf diesem Befund auf.
 |---|---|---|
 | Ich will das Werkzeug benutzen, egal auf welcher Plattform | fertiges Release-Binary | Teil A |
 | Ich will die macOS-Menueleisten-App mit Mikrofon und Screenshot | Quell-Build mit cgo | Teil B |
-| Ich will zuerst verstehen, was das Werkzeug tut | Lesen, dann Teil A | [Manual: m3c-tools](../../manual-m3c-tools.md) |
-| Meine Maschine hat weder git noch Go | nur fuer Teil B noetig | [Prerequisites](../../prerequisites.md) |
+| Ich will zuerst verstehen, was das Werkzeug tut | Lesen, dann Teil A | [Manual: m3c-tools](../referenz/manual-m3c-tools.md) |
+| Meine Maschine hat weder git noch Go | nur fuer Teil B noetig | [Prerequisites](../../old/prerequisites.md) |
 
 ## Teil A: das fertige Binary (alle Plattformen)
 
 1. Binary aus dem [aktuellen Release](https://github.com/kamir/m3c-tools/releases/latest)
    holen. Die Plattform-Einzeiler (macOS arm64/amd64, Linux amd64, Windows)
    stehen zum Kopieren in
-   [Quickstart: m3c-tools, Abschnitt 1](../../quickstart-m3c-tools.md#1-install).
+   [Quickstart: m3c-tools, Abschnitt 1](../../old/quickstart-m3c-tools.md#1-install).
 
 2. Pruefen, dass das Binary antwortet:
 
@@ -53,7 +53,7 @@ alles Weitere baut auf diesem Befund auf.
    Wer lieber von Hand konfiguriert, kopiert die Vorlage `.env.example` nach
    `~/.m3c-tools.env`; die drei Pflichtvariablen sind `ER1_API_URL`,
    `ER1_API_KEY`, `ER1_CONTEXT_ID`
-   ([volle Referenz](../../manual-m3c-tools.md#configuration-reference)).
+   ([volle Referenz](../referenz/manual-m3c-tools.md#configuration-reference)).
 
 4. Den Befund einholen:
 
@@ -70,13 +70,13 @@ alles Weitere baut auf diesem Befund auf.
    Eine vollstaendige Beobachtung (Transkript, Thumbnail, eigener Kommentar)
    geht mit `m3c-tools upload <video-id> --impression "..."` nach ER1; die
    Varianten stehen in
-   [Quickstart: m3c-tools, Abschnitt 4](../../quickstart-m3c-tools.md#4-your-first-capture).
+   [Quickstart: m3c-tools, Abschnitt 4](../../old/quickstart-m3c-tools.md#4-your-first-capture).
 
 ## Teil B: Quell-Build auf macOS (Menueleisten-App)
 
 Voraussetzungen: git und Go 1.25 oder neuer (`go.mod` verlangt 1.25.0), dazu
 die Homebrew-Pakete fuer cgo und Audio. Die Einzelheiten je Plattform stehen in
-[Prerequisites](../../prerequisites.md).
+[Prerequisites](../../old/prerequisites.md).
 
 ```bash
 git clone https://github.com/kamir/m3c-tools.git
@@ -88,22 +88,22 @@ make menubar       # startet die Menueleisten-App
 ```
 
 Was `make install` im Einzelnen tut (App-Bundle, Pfade, Info.plist) und wie man
-wieder deinstalliert, steht in [Getting Started](../../getting-started.md).
+wieder deinstalliert, steht in [Getting Started](../../old/getting-started.md).
 Die App selbst, ihre vier Capture-Kanaele und das Observation Window beschreibt
-[Menu Bar App](../../menubar-app.md).
+[Menu Bar App](../../old/menubar-app.md).
 
 ## Teil C: wie es weitergeht
 
 | Ich will ... | Seite | Sprache |
 |---|---|---|
-| ueben, mit echten Exit-Codes als Beleg | [Tutorial: Katas und Test Ride](../../tutorial-katas-und-test-ride.de.md) | DE |
-| eigene Skills auf mehreren Maschinen nutzen | [Tutorial, Szenario 01](../../tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md) | DE |
-| meinen ersten Skill signieren, mit Pruefung durch einen Zweiten | [Tutorial, Szenario 02](../../tutorial-szenario-02-erster-signierter-skill.de.md) | DE |
-| jedes Kommando und jedes Flag nachschlagen | [Manual: m3c-tools](../../manual-m3c-tools.md) | EN |
-| Audio-Ordner im Stapel importieren | [Audio Import & Tracking](../../audio-import-tracking.md) | EN |
-| ein Aufnahmegeraet (Plaud, Pocket) anbinden | [Quickstart: m3c-tools, Abschnitt 6](../../quickstart-m3c-tools.md#6-capture-devices-optional) | EN |
-| wissen, was auf meiner Plattform fehlt | [Platform differences](../../PLATFORM-DIFFERENCES.md) | EN |
+| ueben, mit echten Exit-Codes als Beleg | [Tutorial: Katas und Test Ride](tutorial-katas-und-test-ride.de.md) | DE |
+| eigene Skills auf mehreren Maschinen nutzen | [Tutorial, Szenario 01](tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md) | DE |
+| meinen ersten Skill signieren, mit Pruefung durch einen Zweiten | [Tutorial, Szenario 02](tutorial-szenario-02-erster-signierter-skill.de.md) | DE |
+| jedes Kommando und jedes Flag nachschlagen | [Manual: m3c-tools](../referenz/manual-m3c-tools.md) | EN |
+| Audio-Ordner im Stapel importieren | [Audio Import & Tracking](audio-import-tracking.md) | EN |
+| ein Aufnahmegeraet (Plaud, Pocket) anbinden | [Quickstart: m3c-tools, Abschnitt 6](../../old/quickstart-m3c-tools.md#6-capture-devices-optional) | EN |
+| wissen, was auf meiner Plattform fehlt | [Platform differences](../referenz/PLATFORM-DIFFERENCES.md) | EN |
 
 Wenn etwas klemmt: die Fehlertabelle in
-[Quickstart: m3c-tools, Troubleshooting](../../quickstart-m3c-tools.md#troubleshooting)
-und der Abschnitt Troubleshooting im [Manual](../../manual-m3c-tools.md#troubleshooting).
+[Quickstart: m3c-tools, Troubleshooting](../../old/quickstart-m3c-tools.md#troubleshooting)
+und der Abschnitt Troubleshooting im [Manual](../referenz/manual-m3c-tools.md#troubleshooting).

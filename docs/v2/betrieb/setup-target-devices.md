@@ -18,12 +18,12 @@ default `2.10.0`. Latest product tag at the time of this note, 2026-09-16:
 > (native menubar, voice recording, screenshot, and the durable `plaud dev` capture
 > workflow); Windows builds from `main_other.go` (CLI + `fyne` systray, no cgo).
 > The exact split is in the [Platform capability matrix](#platform-capability-matrix) below
-> and in [Platform differences](PLATFORM-DIFFERENCES.md).
+> and in [Platform differences](../referenz/PLATFORM-DIFFERENCES.md).
 
-Related docs: [Getting started](getting-started.md) ·
-[Quickstart: m3c-tools](quickstart-m3c-tools.md) ·
-[Manual: m3c-tools](manual-m3c-tools.md) (every command + flag) ·
-[Platform differences](PLATFORM-DIFFERENCES.md)
+Related docs: [Getting started](../../old/getting-started.md) ·
+[Quickstart: m3c-tools](../../old/quickstart-m3c-tools.md) ·
+[Manual: m3c-tools](../referenz/manual-m3c-tools.md) (every command + flag) ·
+[Platform differences](../referenz/PLATFORM-DIFFERENCES.md)
 
 **🍎 macOS only** marks features that exist **only** on the Intel Mac build. On Windows they
 either print a clear error (`record`, `devices`, `screenshot`) or are not compiled in
@@ -52,7 +52,7 @@ Verified against `cmd/m3c-tools/main.go` (darwin) and `cmd/m3c-tools/main_other.
 > **Windows Plaud is the LEGACY surface only.** `plaud dev …` (durable OAuth token,
 > server-side whisper, `dev list`/`dev sync`/`dev status`) is macOS-only today. Multi-platform
 > parity for the darwin-coupled commands (`import-audio`, `pocket`, and the `plaud dev` cluster)
-> is tracked under **Pending / SPEC-0251 §5** in [`../CHANGELOG.md`](../CHANGELOG.md).
+> is tracked under **Pending / SPEC-0251 §5** in [`../CHANGELOG.md`](../../../CHANGELOG.md).
 
 ---
 
@@ -169,7 +169,7 @@ go build .\cmd\m3c-tools           # → m3c-tools.exe
 | `record`, `devices` | Prints `Error: audio recording requires macOS with PortAudio`, exits 1 |
 | `screenshot` | Prints `Error: screenshot capture requires macOS`, exits 1 |
 | `plaud dev …` | Not compiled in: use `plaud sync` (legacy) instead |
-| `import-audio`, `pocket`, `token` | Not compiled in (darwin-coupled: SPEC-0251 §5, see [`../CHANGELOG.md`](../CHANGELOG.md)) |
+| `import-audio`, `pocket`, `token` | Not compiled in (darwin-coupled: SPEC-0251 §5, see [`../CHANGELOG.md`](../../../CHANGELOG.md)) |
 
 **Whisper on Windows** works **only if** a `whisper` executable is on your `PATH`
 (m3c-tools shells out to it. It is not bundled). Without it, `whisper` and any transcription
@@ -183,7 +183,7 @@ Copy the example config and fill in your ER1 credentials. m3c-tools reads, in or
 the active profile, `~/.m3c-tools/preferences.env`, then the legacy `~/.m3c-tools.env`
 (global). A project-local `.env` is **not** read unless you set `M3C_DOTENV=1`: it belongs
 to whatever directory you started the tool in, and it can redirect uploads and credentials.
-See [The working-directory `.env` is opt-in](manual-m3c-tools.md#the-working-directory-env-is-opt-in).
+See [The working-directory `.env` is opt-in](../referenz/manual-m3c-tools.md#the-working-directory-env-is-opt-in).
 
 **Intel Mac:**
 
@@ -298,8 +298,8 @@ m3c-tools settings       # open the profile settings editor in the browser (loca
 The menu-bar app also does **reverse time tracking**: it infers project time
 blocks from your capture tags (and logs `[reverse-tracking] no project match`
 when a capture matches no project). See
-[Menu Bar App → reverse tracking](menubar-app.md#how-reverse-tracking-works) and
-the `M3C_REVERSE_*` variables in [Manual → Time tracking](manual-m3c-tools.md#time-tracking--reverse-tracking-menu-bar-app).
+[Menu Bar App → reverse tracking](../../old/menubar-app.md#how-reverse-tracking-works) and
+the `M3C_REVERSE_*` variables in [Manual → Time tracking](../referenz/manual-m3c-tools.md#time-tracking--reverse-tracking-menu-bar-app).
 
 ### Voice & screen capture: 🍎 macOS only
 
@@ -357,7 +357,7 @@ legacy `plaud sync` there.
 
 ---
 
-*See also:* [Platform differences](PLATFORM-DIFFERENCES.md) ·
-[Getting started](getting-started.md) ·
-[Quickstart: m3c-tools](quickstart-m3c-tools.md) ·
-[Manual: m3c-tools](manual-m3c-tools.md)
+*See also:* [Platform differences](../referenz/PLATFORM-DIFFERENCES.md) ·
+[Getting started](../../old/getting-started.md) ·
+[Quickstart: m3c-tools](../../old/quickstart-m3c-tools.md) ·
+[Manual: m3c-tools](../referenz/manual-m3c-tools.md)

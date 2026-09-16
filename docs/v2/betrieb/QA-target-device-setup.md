@@ -90,7 +90,7 @@ The binary reads configuration from these sources (the helper checks all of them
 A `.env` in the directory you happen to run the tool in is **not** one of them by default:
 since AUDIT-0001 finding 2.7 it applies only with the `M3C_DOTENV=1` opt-in, because such a
 file can redirect uploads and credentials. See the manual, [The working-directory `.env` is
-opt-in](manual-m3c-tools.md#the-working-directory-env-is-opt-in). `$M3C_ENV` is a helper-only
+opt-in](../referenz/manual-m3c-tools.md#the-working-directory-env-is-opt-in). `$M3C_ENV` is a helper-only
 convenience: it adds a file to what this script inspects, the binary does not read it.
 
 ### B1 · A config source exists

@@ -320,7 +320,7 @@ capture plane is allowed cgo and macOS-only features.
 ER1 is the personal knowledge server every capture flows into: an external
 HTTP service (aims-core), not built in this repo, that stores multimodal
 observations; `pkg/er1` is its client
-([requirements](../../requirements-er1-integration.md),
+([requirements](../../old/requirements-er1-integration.md),
 [service-index](../../service-index.md#external-dependency-er1--aims-core)).
 The core flow, as `CLAUDE.md` states it and the packages implement it:
 
@@ -340,7 +340,7 @@ Three properties carry the design:
 2. **No YouTube API key.** `pkg/transcript` is a complete port of
    youtube-transcript-api on YouTube's InnerTube API (the internal API the
    YouTube clients themselves use, so no official key is needed); the port
-   surface is preserved in [go-rewrite-plan](../../go-rewrite-plan.md)
+   surface is preserved in [go-rewrite-plan](../../old/go-rewrite-plan.md)
    (historical).
 3. **ER1 wants all three fields.** Uploads are multipart with
    `transcript_file_ext`, `audio_data_ext`, `image_data`; the client sends
@@ -353,7 +353,7 @@ author, pack, sign, admit, attest, verify or install, use, audit, revoke
 (admit publishes a signed bundle into a registry; attest is a reviewer's
 signed governance verdict over the same digest). The
 chain verifies offline; no hosted authority sits in the verification path
-(head of [Manual: skillctl](../../manual-skillctl.md), threat model in
+(head of [Manual: skillctl](../referenz/manual-skillctl.md), threat model in
 [THREAT_MODEL.md](../../../THREAT_MODEL.md)). The library lives under
 `pkg/skillctl/` with the sibling packages `skillbundle` and `skillgate`;
 [component-index, section F](../../component-index.md#f-skillctl-trust-subsystem-pkgskillctl--siblings)
@@ -386,7 +386,7 @@ package-level responsibilities are the
 | Convention | Source |
 |---|---|
 | Both CLIs parse `os.Args` by hand; no cobra, no flag package. Follow the `cmdTranscript()` pattern | `CLAUDE.md`, "CLI flag parsing" |
-| A new skillctl verb is REGISTERED in [CLI-VERBS](../../CLI-VERBS.md) before it is implemented; `verbaudit` turns CI red otherwise | CLI-VERBS.md, decided 2026-09-04 |
+| A new skillctl verb is REGISTERED in [CLI-VERBS](../referenz/CLI-VERBS.md) before it is implemented; `verbaudit` turns CI red otherwise | CLI-VERBS.md, decided 2026-09-04 |
 | Exit codes are contract: the register row, the manual's `Exit:` line and `pkg/skillctl/exitcode` must agree; `exitaudit` checks all three | CLI-VERBS.md, "Columns" |
 | Tests live in `e2e/`; there are no package-level unit tests | `CLAUDE.md`, "Build & Test Commands" |
 | Public plane ships code, private plane keeps reasoning; cross-references by ID only (SPEC-NNNN) | [CONTENT-TOPOLOGY.md](../../../CONTENT-TOPOLOGY.md) |
@@ -394,13 +394,13 @@ package-level responsibilities are the
 ## Where to go next
 
 - Build, test and the gates: [developer setup](getting-started.md)
-- Every command and flag: [Manual: m3c-tools](../../manual-m3c-tools.md),
-  [Manual: skillctl](../../manual-skillctl.md)
-- What works on which OS: [PLATFORM-DIFFERENCES](../../PLATFORM-DIFFERENCES.md)
+- Every command and flag: [Manual: m3c-tools](../referenz/manual-m3c-tools.md),
+  [Manual: skillctl](../referenz/manual-skillctl.md)
+- What works on which OS: [PLATFORM-DIFFERENCES](../referenz/PLATFORM-DIFFERENCES.md)
 - Historical design notes that still explain code:
-  [go-rewrite-plan](../../go-rewrite-plan.md),
-  [spec-plaud-er1-sync](../../spec-plaud-er1-sync.md),
-  [requirements-er1-integration](../../requirements-er1-integration.md)
+  [go-rewrite-plan](../../old/go-rewrite-plan.md),
+  [spec-plaud-er1-sync](../../old/spec-plaud-er1-sync.md),
+  [requirements-er1-integration](../../old/requirements-er1-integration.md)
 </script>
 <!-- Integritaet ueber SRI: der Hash ist an den Bytes von cdnjs gerechnet
      (sha256 15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894).

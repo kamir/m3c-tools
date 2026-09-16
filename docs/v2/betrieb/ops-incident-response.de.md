@@ -180,7 +180,7 @@ auch auf dem git-Weg von Hand `key_compromise` und nichts anderes.
 ## 3. Rotieren
 
 Nie abrupt tauschen, wo ein Fenster möglich ist. Die Herleitung steht im
-[Manual, Abschnitt "Rotate the registry key"](manual-skillctl.md#rotate-the-registry-key-overlap-publish-window);
+[Manual, Abschnitt "Rotate the registry key"](../referenz/manual-skillctl.md#rotate-the-registry-key-overlap-publish-window);
 hier steht der Ablauf im Vorfall, und der hängt am Backend.
 
 Er hängt daran, weil die Vertrauenswurzeln in **drei verschiedenen Dateien**

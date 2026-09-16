@@ -65,4 +65,4 @@ offline and fail-closed:
 skillctl verify-sig my-skill.skb --pubkey trusted.pub   # no network
 ```
 
-See [docs/releasing.md](docs/releasing.md) for the full signing and provenance flow.
+See [docs/v2/betrieb/releasing.md](docs/v2/betrieb/releasing.md) for the full signing and provenance flow.

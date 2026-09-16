@@ -319,7 +319,7 @@ Massstab, an dem dieses Repository gemessen werden will.
 
 1. `skillctl` gibt jedem Agent-Skill eine pruefbare Identitaet und einen
    Lebenszyklus: author, pack, sign, admit, attest, verify/install, use,
-   audit, revoke ([Manual: skillctl](../../manual-skillctl.md)).
+   audit, revoke ([Manual: skillctl](../referenz/manual-skillctl.md)).
 2. Die Kette verifiziert offline; ein gehostetes Registry, ein Ledger oder
    ein Transparenz-Log ist komplementaer, nie Voraussetzung des Pruefpfads
    (Kopfabsatz des Manuals).
@@ -338,19 +338,19 @@ Massstab, an dem dieses Repository gemessen werden will.
 | 3 | [docs/security/required-checks.txt](../../security/required-checks.txt) | die Pflicht-Checks auf `master` und warum die Namensbindung im Baum liegt |
 | 4 | [gosec-backlog](../../security/gosec-backlog.md) und [codeql-backlog](../../security/codeql-backlog.md) | der offene Static-Analysis-Bestand, klassifiziert, mit Datum |
 | 5 | [gosec-diff-gate.yml](../../../.github/workflows/gosec-diff-gate.yml) | das blockierende no-new-findings-Tor: Pflicht-Check auf `master` (required-checks.txt), prueft gegen die Signatur-Baseline `gosec-inci-baseline.txt`; die aeltere SARIF-Punktaufnahme [gosec-baseline](../../security/gosec-baseline.md) ist ein anderes, unverdrahtetes Artefakt |
-| 6 | [Release flow, "What CI signs"](../../releasing.md) | was ein Release signiert und woran ein Installierender es prueft |
-| 7 | [Ops-Runbook: Incident Response](../../ops-incident-response.de.md) | kompromittierter Schluessel oder Registry: erkennen, widerrufen, rotieren, neu pinnen |
-| 8 | [Ops-Routine: Zugangstoken](../../ops-registry-tokens.de.md) | Token-Lebenszyklus inkl. Ausscheiden: Lese-Token endet mit dem Konto der Person, das Schreibtoken gehoert der Rolle und wird beim Personalwechsel rotiert |
-| 9 | Audit-Spur: [`audit`](../../manual-skillctl.md#audit-antivirus-style-verdict-per-skill), [`auditlog`](../../manual-skillctl.md#auditlog-audit-subsystem-observability-spec-0403-8), [`translog`](../../manual-skillctl.md#translog-l1-transparency-log) | drei Traeger im Manual: `audit` urteilt je Skill, `auditlog` zeigt das Audit-Subsystem (SPEC-0403 §8), `translog` ist das L1-Transparenz-Log; die Registry-Zeitleiste (admit, attest, revoke, install) liest das [Incident-Runbook, Abschnitt 1](../../ops-incident-response.de.md) |
+| 6 | [Release flow, "What CI signs"](../betrieb/releasing.md) | was ein Release signiert und woran ein Installierender es prueft |
+| 7 | [Ops-Runbook: Incident Response](../betrieb/ops-incident-response.de.md) | kompromittierter Schluessel oder Registry: erkennen, widerrufen, rotieren, neu pinnen |
+| 8 | [Ops-Routine: Zugangstoken](../betrieb/ops-registry-tokens.de.md) | Token-Lebenszyklus inkl. Ausscheiden: Lese-Token endet mit dem Konto der Person, das Schreibtoken gehoert der Rolle und wird beim Personalwechsel rotiert |
+| 9 | Audit-Spur: [`audit`](../referenz/manual-skillctl.md#audit-antivirus-style-verdict-per-skill), [`auditlog`](../referenz/manual-skillctl.md#auditlog-audit-subsystem-observability-spec-0403-8), [`translog`](../referenz/manual-skillctl.md#translog-l1-transparency-log) | drei Traeger im Manual: `audit` urteilt je Skill, `auditlog` zeigt das Audit-Subsystem (SPEC-0403 §8), `translog` ist das L1-Transparenz-Log; die Registry-Zeitleiste (admit, attest, revoke, install) liest das [Incident-Runbook, Abschnitt 1](../betrieb/ops-incident-response.de.md) |
 
 ## Vorfuehren statt behaupten
 
 | Format | Traeger | Sprache |
 |---|---|---|
-| Offline-Demo mit echten Exit-Codes: laut Quickstart wird ein vergiftetes Bundle mit Exit 10 abgewiesen und eine erzwungene Governance-Aktion mit Exit 2 verweigert | [Quickstart: skillctl-demo](../../quickstart-skillctl-demo.md) | EN |
-| Selbst nachvollziehen, offline, ohne Server | [Quickstart: skillctl](../../quickstart-skillctl.md) | EN |
-| Argumentation fuer Security-Expertin und CTO als Infografik | [CISO-Deck (EN)](../../skillctl-ciso-deck.html) · [CISO-Deck (DE)](../../skillctl-ciso-deck.de.html) | EN/DE |
-| Zwei-Personen-Nachweis ueber ER1, mit Pass-Kriterien | [Runbook: two-person ER1 exchange](../../runbook-two-person-er1-exchange.md) | EN |
+| Offline-Demo mit echten Exit-Codes: laut Quickstart wird ein vergiftetes Bundle mit Exit 10 abgewiesen und eine erzwungene Governance-Aktion mit Exit 2 verweigert | [Quickstart: skillctl-demo](../../old/quickstart-skillctl-demo.md) | EN |
+| Selbst nachvollziehen, offline, ohne Server | [Quickstart: skillctl](../../old/quickstart-skillctl.md) | EN |
+| Argumentation fuer Security-Expertin und CTO als Infografik | [CISO-Deck (EN)](../../old/skillctl-ciso-deck.html) · [CISO-Deck (DE)](../../old/skillctl-ciso-deck.de.html) | EN/DE |
+| Zwei-Personen-Nachweis ueber ER1, mit Pass-Kriterien | [Runbook: two-person ER1 exchange](../betrieb/runbook-two-person-er1-exchange.md) | EN |
 
 ## Grenzen, die diese Seite nicht verschweigt
 
