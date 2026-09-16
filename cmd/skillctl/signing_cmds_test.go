@@ -120,6 +120,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	// AC5: sign demo2 with key A, verify with key B → exit 11.
+	// THREAT-R09: a bundle signed with key A must fail verification against key B with exit 11.
 	bundle2 := makeBundleForCLI(t, dir, "demo2.skb")
 	if code := runKeygen([]string{"--out", keyB}, &stdout, &stderr); code != 0 {
 		t.Fatalf("AC5 keygen B exit=%d", code)

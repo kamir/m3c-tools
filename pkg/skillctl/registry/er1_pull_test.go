@@ -629,6 +629,7 @@ func TestPullBundles_OnlySignedAttestationsCountTowardFloor(t *testing.T) {
 
 // SEC-H1 (revoke side): an UNSIGNED revocation must not suppress a legitimately
 // attested bundle. The forged revoke is dropped and the bundle still stages.
+// THREAT-R05: an unsigned revocation must not suppress a legitimately attested bundle.
 func TestPullBundles_UnsignedRevoke_DoesNotSuppress(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(nil)
 	f := newPullFake(t)

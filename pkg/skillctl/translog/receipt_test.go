@@ -32,6 +32,7 @@ func buildReceipt(t *testing.T) (Receipt, ed25519.PublicKey, ed25519.PrivateKey)
 	return r, pub, priv
 }
 
+// THREAT-R12: a translog receipt must round-trip verify with no network.
 func TestReceipt_VerifyOfflineRoundTrip(t *testing.T) {
 	r, pub, _ := buildReceipt(t)
 	if err := r.VerifyOffline(pub); err != nil {

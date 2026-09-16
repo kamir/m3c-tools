@@ -108,6 +108,7 @@ func khInstallSkill(t *testing.T, home, skill, digest, author string) {
 // TestRevokedFloor_UnforgeableViaUnsignedJson: with a signed HEAD present, the
 // floor is derived from the RE-VERIFIED HEAD, so rewriting the unsigned json cannot
 // roll it back (finding F2).
+// THREAT-R05: the revoked floor must not be forgeable via the unsigned JSON projection.
 func TestRevokedFloor_UnforgeableViaUnsignedJson(t *testing.T) {
 	home := khSetupHome(t)
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)

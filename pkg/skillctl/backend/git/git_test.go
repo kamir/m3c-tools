@@ -313,6 +313,7 @@ func TestGitTokenNotInError(t *testing.T) {
 
 // TestGitPathTraversalRejected: regression for the challenge-gate CRITICAL: a
 // malicious name/version/digest is rejected before any filesystem write.
+// THREAT-R02: a hostile registry tree must not cause a write outside the target directory.
 func TestGitPathTraversalRejected(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
