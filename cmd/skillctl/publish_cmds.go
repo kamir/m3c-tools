@@ -40,6 +40,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -212,6 +213,21 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 	// the verifying pull (PullBundlesFromBackend) consumes for the §7 gauntlet.
 
 	name, ver := splitNameVersion(fs.Arg(0))
+	// Der Name wird zu einem Pfad, an zwei Stellen: die gepackte Datei heisst
+	// ./<name>@<version>.skb, und beim Packen eines Agenten wird nach
+	// <staging>/<name>.md geschrieben. Ungeprueft laesst sich damit aus beiden
+	// Verzeichnissen ausbrechen.
+	//
+	// Gemessen, nicht vermutet: `publish "../../ausbruch" --kind agent` hat
+	// "packed: ../../ausbruch@1.0.0.skb" gemeldet, also zwei Ebenen ueber dem
+	// Arbeitsverzeichnis geschrieben. Gefunden hat das die Taint-Analyse des
+	// gosec-Tors (G703), nachdem der Agentenpfad dazukam.
+	//
+	// Die Form ist dieselbe, die die Registry fuer Namen ohnehin annimmt.
+	if msg := pruefeArtefaktname(name); msg != "" {
+		fmt.Fprintf(stderr, "publish: %s\n", msg)
+		return 2
+	}
 	if *version != "" {
 		ver = *version
 	}
@@ -928,6 +944,9 @@ func ensureBundle(a publishAdmitArgs, stderr io.Writer) (string, string, error) 
 			home, _ := os.UserHomeDir()
 			src = filepath.Join(home, ".claude", "agents", a.name+".md")
 		}
+		// #nosec G304 -- der Pfad kommt vom Betreiber (--agent-file oder der Vorgabeort
+		// unter ~/.claude/agents). Dieselbe Klasse wie das Lesen eines Skillverzeichnisses:
+		// wer packt, benennt, was gepackt wird.
 		body, err := os.ReadFile(src)
 		if err != nil {
 			return "", "", fmt.Errorf("agent file not found: %s (try --agent-file)", src)
@@ -956,7 +975,24 @@ func ensureBundle(a publishAdmitArgs, stderr io.Writer) (string, string, error) 
 			return "", "", fmt.Errorf("staging dir: %w", err)
 		}
 		defer os.RemoveAll(staged)
-		if err := os.WriteFile(filepath.Join(staged, a.name+".md"), body, 0644); err != nil {
+		// filepath.Base zusaetzlich zur Namenspruefung weiter oben, und das ist
+		// keine Doppelung aus Vorsicht, sondern eine Eigenschaft an der Stelle,
+		// an der sie zaehlt: hier ist OERTLICH sichtbar, dass kein
+		// Verzeichnisanteil in den Pfad geraten kann, ohne dass man dafuer eine
+		// Pruefung zweihundert Zeilen weiter oben lesen muss. Die Taint-Analyse
+		// des gosec-Tors kann eine Regex-Pruefung nicht modellieren; sie kann
+		// filepath.Base modellieren. Beide haben denselben Grund.
+		// #nosec G306,G703 -- zwei Befunde, ein Grund, deshalb eine Direktive:
+		//   G306 (0644): Klassenentscheidung, nicht geheimes lokales Artefakt. Die
+		//   enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung:
+		//   docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
+		//   G703 (Taint): Falschmeldung. Der Name ist oben per Positivliste geprueft
+		//   (pruefeArtefaktname) UND hier durch filepath.Base von jedem
+		//   Verzeichnisanteil befreit; das Ziel ist ein frisches MkdirTemp. Die
+		//   Analyse kann eine Regex-Pruefung nicht modellieren. Festgenagelt in
+		//   TestPublishWeistPfadausbruchImNamenAb und
+		//   TestPublishSchreibtBeiAblehnungNichtsNachDraussen.
+		if err := os.WriteFile(filepath.Join(staged, filepath.Base(a.name)+".md"), body, 0644); err != nil {
 			return "", "", fmt.Errorf("staging %s: %w", a.name, err)
 		}
 		dir = staged
@@ -1187,3 +1223,27 @@ func isBoolFlag(fl *flag.Flag) bool {
 // reference-the-imports-we-need to keep linters happy across partial builds.
 var _ = http.MethodGet
 var _ = url.Values{}
+
+// artefaktnameRe ist die erlaubte Form eines Skill- oder Agentennamens:
+// Kleinbuchstaben, Ziffern, Bindestrich, Punkt und Unterstrich, beginnend mit
+// einem Buchstaben oder einer Ziffer.
+var artefaktnameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
+
+// pruefeArtefaktname gibt eine Meldung zurueck, wenn der Name nicht als
+// Pfadbestandteil taugen darf, sonst die leere Zeichenkette.
+//
+// Positivliste statt Verdachtssuche: geprueft wird, ob der Name die ERLAUBTE
+// Form hat, nicht ob er verdaechtige Zeichen enthaelt. Eine Suche nach ".."
+// und "/" haette den naechsten Fall (etwa eine kodierte Form) nicht gefunden.
+func pruefeArtefaktname(name string) string {
+	if name == "" {
+		return "der Name fehlt."
+	}
+	if !artefaktnameRe.MatchString(name) {
+		return fmt.Sprintf("%q ist kein zulaessiger Name.\n"+
+			"  Erlaubt sind Kleinbuchstaben, Ziffern, Bindestrich, Punkt und Unterstrich,\n"+
+			"  beginnend mit Buchstabe oder Ziffer. Der Name wird zu einem Dateipfad,\n"+
+			"  deshalb wird er nicht frei uebernommen.", name)
+	}
+	return ""
+}

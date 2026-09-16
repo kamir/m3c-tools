@@ -729,6 +729,7 @@ func installAgent(b *StagedBundle, man skillbundle.BundleManifest, skb []byte, o
 	}
 
 	agentsDir := agentsDirFor(opts.SkillsDir)
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
 		return nil, fmt.Errorf("install: mkdir %s: %w", agentsDir, err)
 	}
@@ -742,20 +743,21 @@ func installAgent(b *StagedBundle, man skillbundle.BundleManifest, skb []byte, o
 	}
 	tmpName := tmp.Name()
 	if _, err := tmp.Write(body); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
 		return nil, fmt.Errorf("install: write %s: %w", target, err)
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName)
 		return nil, fmt.Errorf("install: close %s: %w", target, err)
 	}
+	// #nosec G302 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.Chmod(tmpName, 0o644); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName)
 		return nil, fmt.Errorf("install: chmod %s: %w", target, err)
 	}
 	if err := os.Rename(tmpName, target); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName)
 		return nil, fmt.Errorf("install: place %s: %w", target, err)
 	}
 	// An agent is a FILE, so its provenance cannot live inside it the way a
@@ -768,6 +770,7 @@ func installAgent(b *StagedBundle, man skillbundle.BundleManifest, skb []byte, o
 	// machine whose digest cannot be checked after the fact, and SPEC-0432 §5
 	// asks for more care with agents than with skills, not less.
 	provDir := filepath.Join(agentsDir, ".provenance")
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(provDir, 0o755); err != nil {
 		return nil, fmt.Errorf("install: mkdir %s: %w", provDir, err)
 	}
@@ -790,11 +793,14 @@ func installAgent(b *StagedBundle, man skillbundle.BundleManifest, skb []byte, o
 // this literal would be the place where that quietly stopped being true.
 func provenanceFor(b *StagedBundle, opts InstallOpts) ProvenanceSidecar {
 	return ProvenanceSidecar{
-		SchemaVersion:         ProvenanceSchemaVersion,
-		Skill:                 b.Name,
-		Version:               b.Version,
-		BundleDigest:          b.Digest,
-		Registry:              "self",
+		SchemaVersion: ProvenanceSchemaVersion,
+		Skill:         b.Name,
+		Version:       b.Version,
+		BundleDigest:  b.Digest,
+		// strOrSelf, nicht das Literal "self": der Nachweis soll sagen, WOHER das
+		// Artefakt kam. Ein fest verdrahtetes "self" traegt fuer jede andere
+		// Registry eine falsche Herkunft ein, und genau diesen Wert liest drift.
+		Registry:              strOrSelf(opts.RegistrySpec),
 		SourceER1ItemID:       b.SourceDocID,
 		SourceER1Context:      opts.ContextID,
 		PulledAt:              time.Now().UTC().Format(time.RFC3339),

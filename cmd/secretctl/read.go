@@ -71,11 +71,17 @@ func ReadHolder(h Holder) (Secret, error) {
 func capture(host string, name string, args ...string) (string, error) {
 	var cmd *exec.Cmd
 	if host == "" {
+		// #nosec G204 -- Name und Argumente stammen aus der versionierten Registry,
+		// nicht aus einer Netzantwort, und werden als ARGUMENTE uebergeben statt in
+		// eine Shell-Zeichenkette interpoliert. Ein Halteort kann damit keine
+		// Shell-Syntax werden.
 		cmd = exec.Command(name, args...)
 	} else {
 		// The remote command is assembled here rather than interpolated into a
 		// shell string, so a holder's fields cannot become shell syntax.
 		remote := append([]string{"-o", "BatchMode=yes", "-o", "ConnectTimeout=10", host, name}, args...)
+		// #nosec G204 -- wie oben, und ausdruecklich ohne Shell auf der Gegenseite:
+		// die Fernbefehlszeile wird als Argumentliste gebaut.
 		cmd = exec.Command("ssh", remote...)
 	}
 	out, err := cmd.Output()

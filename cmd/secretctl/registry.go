@@ -111,6 +111,8 @@ func DefaultRegistryPath() string {
 
 // LoadRegistry reads and validates the file.
 func LoadRegistry(path string) (*Registry, error) {
+	// #nosec G304 -- der Pfad ist die Registry, die der Betreiber angibt (--registry
+	// oder SECRETCTL_REGISTRY). Ohne sie hat der Befehl keinen Gegenstand.
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("registry %s: %w", path, err)
