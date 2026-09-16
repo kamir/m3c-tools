@@ -737,7 +737,9 @@ Publishes to your personal ER1 `self` registry (SPEC-0225). Three modes: admit a
 | `-attest` | Mode: publish an `AttestationPublishedEvent` instead of admitting. |
 | `-revoke` | Mode: publish a `BundleRevokedEvent`. Requires `--digest` and `--reason`. |
 | `-all` | Publish every entry in `--manifest` (admit + attest as one batch). |
-| `-bundle` | Path to a pre-built `.skb`. If empty, the skill dir is packed in place. |
+| `-bundle` | Path to a pre-built `.skb`. If empty, the skill dir is packed in place. The manifest inside it decides the kind; a contradicting `--kind` is refused. |
+| `-kind skill\|agent` | Bundle kind (SPEC-0432). `agent` packs ONE definition file onto the agent shelf. Must agree with the bundle manifest when both are present. |
+| `-agent-file` | `[--kind agent]` Path to the agent definition. Default: `~/.claude/agents/<name>.md`. |
 | `-skill-dir` | Skill directory. Default: `~/.claude/skills/<name>`. |
 | `-version` | Skill version (overrides SKILL.md frontmatter). Required for admit. |
 | `-digest` | `[--attest\|--revoke]` existing bundle digest (`sha256:<hex>`). Derived from `--bundle` if empty. |
@@ -786,6 +788,7 @@ installing is a G-23 two-step (`--dry-run-install` → `--confirm-install`).
 | `-dry-run-install-token` | Token returned by `--dry-run-install`; required if any skill would be overwritten. |
 | `-allow-downgrade` | Allow installing an older version over a newer one. |
 | `-skill` | Filter: only this skill name. |
+| `-kind skill\|agent` | Restrict to one bundle kind (SPEC-0432). Empty pulls both shelves; an unknown value is refused with exit `2`; only the `er1` self registry supports it. |
 | `-digest` | Filter: only this exact bundle digest (`sha256:<hex>`). |
 | `-since` | Best-effort lower bound on `occurred_at` (RFC3339). |
 | `-skills-dir` | Where to install skills. Default `~/.claude/skills`. |
@@ -825,6 +828,38 @@ skillctl registry ls --latest
 skillctl registry show my-skill
 skillctl registry show sha256:<hex>
 ```
+
+---
+
+### `drift`: what this machine carries vs the catalog
+
+```bash
+skillctl drift [flags]
+```
+
+Compares every locally installed artifact (skills and agents, SPEC-0432) against the
+latest catalog entry in the `self` registry and prints one row per artifact with a
+verdict: `aktuell`, `veraltet`, `ohne Nachweis` (no provenance sidecar vouches for it;
+the normal case on the machine where artifacts are authored), `fehlt lokal`,
+`nicht im Katalog`. An artifact without a sidecar is reported as unvouched, never
+silently folded into "fine".
+
+| Flag | Purpose |
+|------|---------|
+| `-kind skill\|agent` | Restrict to one kind. Empty compares both. |
+| `-only-findings` | Print only rows that are not `aktuell`. |
+| `-er1-target prod\|stage\|local` | ER1 target (default `prod`). |
+| `-er1-context` | ER1 context (default `skills`). |
+
+```bash
+skillctl drift
+skillctl drift --kind agent --only-findings
+```
+
+Exit: `0` nothing stale, missing, or uncataloged · `1` at least one `veraltet` /
+`fehlt lokal` / `nicht im Katalog` row, or a transport error · `2` usage. `ohne
+Nachweis` alone does not fail the run: it is a statement about missing vouching,
+not about a mismatch. Measured against `runDrift` in `cmd/skillctl/drift_cmds.go`.
 
 ---
 
