@@ -1,3 +1,5 @@
+> Ueberholt, Beleg: die Datei markiert sich selbst als "Status: COMPLETE (v1.4.4)"; der Plan ist abgearbeitet. Archiviert nach docs/old am 2026-09-16.
+
 # M3C Tools: Go Rewrite Plan (COMPLETED)
 
 > **Status: COMPLETE (v1.4.4)**. This document is preserved as historical reference for the Python-to-Go migration. All phases are implemented and in production. See [Roadmap](roadmap) for current status.

@@ -3,6 +3,8 @@ layout: default
 title: Roadmap & Ideas
 ---
 
+> Ueberholt, Beleg: der Kopf dieser Datei sagt "Current state (v1.5)"; `git tag --list | sort -V | tail -1` ergab am 2026-09-16 `v2.12.0`. Archiviert nach docs/old.
+
 # Roadmap & Ideas
 
 This project is designed to grow. Below is the living roadmap: a place to track ideas, capture impulses, and plan next steps.

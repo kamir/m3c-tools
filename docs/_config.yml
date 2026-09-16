@@ -20,4 +20,4 @@ kramdown:
   hard_wrap: false
 
 exclude:
-  - ui-mockup.html
+  - old/ui-mockup.html
