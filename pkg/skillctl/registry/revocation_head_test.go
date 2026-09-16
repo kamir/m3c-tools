@@ -157,6 +157,7 @@ func TestRevocationHead_SignVerify_RoundTrip(t *testing.T) {
 	}
 }
 
+// THREAT-R08: a revocation HEAD modified after signing must be detected.
 func TestRevocationHead_TamperDetected(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 	h := mustHead(t, RevocationHeadInput{Epoch: 3, IssuedAt: time.Now().UTC(), Digests: []string{mkDigest('a')}})
@@ -186,6 +187,7 @@ func TestVerifyRevocationHeadSet(t *testing.T) {
 	}
 }
 
+// THREAT-R04: a lower revocation epoch must be refused; the epoch is monotonic.
 func TestCheckEpochMonotonic(t *testing.T) {
 	h := mustHead(t, RevocationHeadInput{Epoch: 10, IssuedAt: time.Now().UTC()})
 	if err := CheckEpochMonotonic(h, 10); err != nil {

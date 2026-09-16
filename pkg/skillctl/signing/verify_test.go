@@ -25,6 +25,7 @@ func TestVerifyDetached_HappyPath(t *testing.T) {
 	}
 }
 
+// THREAT-R08: a detached-signed bundle whose bytes changed must fail verification.
 func TestVerifyDetached_TamperedBundle(t *testing.T) {
 	dir := t.TempDir()
 	bundle := makeFakeBundle(t, dir, "demo.skb")

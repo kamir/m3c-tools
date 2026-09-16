@@ -95,6 +95,7 @@ func TestGovernance_NonPinnedReviewerRefused(t *testing.T) {
 }
 
 // AC3: a green attestation signed over a DIFFERENT bundle's digest (replay) fails.
+// THREAT-R03: a replayed attestation for another bundle's digest must be refused.
 func TestGovernance_ReplayedAttestationRefused(t *testing.T) {
 	other := digestOf("some other bundle entirely")
 	_, err := runGovCase(t, govCase{currentGov: "green", attLevel: "green", attSignDigest: other, pinReviewer: true, requireSigned: true, governanceMin: "green"})

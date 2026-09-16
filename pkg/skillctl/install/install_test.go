@@ -599,6 +599,7 @@ func TestInstall_ArchivesPriorVersion(t *testing.T) {
 
 // ----- tar bomb / path-traversal -----
 
+// THREAT-R02: a traversal entry in the bundle must not write outside the install root.
 func TestInstall_TarPathTraversal_Refused(t *testing.T) {
 	srv, fr := newFakeRegistry(t)
 
@@ -651,6 +652,7 @@ func TestInstall_TarPathTraversal_Refused(t *testing.T) {
 	}
 }
 
+// THREAT-R07: a decompression bomb must abort the install before exhausting the disk.
 func TestInstall_GzipBomb_Refused(t *testing.T) {
 	srv, fr := newFakeRegistry(t)
 

@@ -108,6 +108,7 @@ func signedRevokeHeadEpoch(t *testing.T, priv ed25519.PrivateKey, epoch int, dig
 // stale empty root matched the truncated (empty) discovery, so X staged. With the
 // epoch floor (the client already accepted epoch 5), the replayed epoch-0 head is a
 // rollback → the pull fails closed and X is refused.
+// THREAT-R03: a replayed stale revocation HEAD must be rejected by the epoch floor.
 func TestPullBundles_ReplayedStaleHead_RejectedByEpochFloor(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(nil)
 	f := newPullFake(t)
