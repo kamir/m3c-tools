@@ -271,5 +271,5 @@ guards above are: publishing cannot be undone.
 
 ## See also
 
-- [Manual: m3c-tools](manual-m3c-tools.md): the capture toolkit, command by command
-- [Manual: skillctl](manual-skillctl.md): the agent-skill trust lifecycle
+- [Manual: m3c-tools](../referenz/manual-m3c-tools.md): the capture toolkit, command by command
+- [Manual: skillctl](../referenz/manual-skillctl.md): the agent-skill trust lifecycle

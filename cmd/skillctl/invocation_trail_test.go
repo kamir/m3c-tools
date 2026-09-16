@@ -93,6 +93,7 @@ func TestReadAndVerifyTrail_DetectsTamper(t *testing.T) {
 	}
 }
 
+// THREAT-R03: a replayed invocation-trail entry must be detected on read.
 func TestReadAndVerifyTrail_DetectsReplay(t *testing.T) {
 	home := t.TempDir()
 	rec := sampleInvocation()

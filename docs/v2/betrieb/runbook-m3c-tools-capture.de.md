@@ -4,7 +4,7 @@ Was mit einem Upload passiert, der ER1 nicht erreicht: wo die Wartenden
 liegen, in welchem Format, und wie der Wiederanlauf funktioniert. Diese Seite
 deckt den Upload-Pfad und die Retry-Queue ab; die englische Kurzfassung fuer
 Nutzer steht im
-[Manual, "Exit behavior & the retry queue"](../../manual-m3c-tools.md#exit-behavior--the-retry-queue).
+[Manual, "Exit behavior & the retry queue"](../referenz/manual-m3c-tools.md#exit-behavior--the-retry-queue).
 
 Zielgruppe: die Person, die eine Maschine betreibt, auf der m3c-tools
 Beobachtungen nach ER1 laedt, und die nach einem Ausfall wissen muss, was
@@ -142,6 +142,6 @@ auf `cancelled` und verweigert bei bereits abgeschlossenen Eintraegen
    erreichbaren ER1-Server gemessen; Abschnitt 3 ist Code-Lektuere.
 2. Whisper-Transkription und der Batch-Import samt seiner eigenen
    Tracking-Tabellen sind nicht abgedeckt; dafuer
-   [Audio Import & Tracking](../../audio-import-tracking.md) (EN).
+   [Audio Import & Tracking](../nutzer/audio-import-tracking.md) (EN).
 3. Die skillctl-Seite (Registry, Trust, Widerruf) hat ihre eigenen Runbooks;
    der Einstieg ist die [Betriebs-Uebersicht](ueberblick.de.md).

@@ -19,10 +19,10 @@
 //     Number field via short type aliases. No call-site changes yet.
 //   - Phase 2 (DONE 2026-09-07, AUDIT-0001 Befund 2.1): the manual's
 //     exit-code table is generated from AllCodes() and checked against it.
-//     cmd/exitaudit renders the delimited block in docs/manual-skillctl.md
+//     cmd/exitaudit renders the delimited block in docs/v2/referenz/manual-skillctl.md
 //     (`go run ./cmd/exitaudit -write`), fails on any documented number that
 //     neither this register nor the manual's "outside the register" table
-//     accounts for, and fails when the manual and docs/CLI-VERBS.md claim
+//     accounts for, and fails when the manual and docs/v2/referenz/CLI-VERBS.md claim
 //     different exit spaces for the same verb. It is wired blocking into
 //     scripts/check-docs.sh. Adding a Code here without running -write turns
 //     the docs gate red, which is the point.

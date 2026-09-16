@@ -64,7 +64,7 @@ func tokenUsage(w io.Writer) {
 	fmt.Fprintln(w, "  (paste the token, then Ctrl-D)")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "The routine around this, including which token to ask GitLab for:")
-	fmt.Fprintln(w, "  docs/ops-registry-tokens.de.md")
+	fmt.Fprintln(w, "  docs/v2/betrieb/ops-registry-tokens.de.md")
 }
 
 func tokenTier(readOnly bool) artifactauth.Tier {

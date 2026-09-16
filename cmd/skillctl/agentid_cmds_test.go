@@ -129,6 +129,7 @@ func (f agentFixture) verify(t *testing.T, bundle string, extra ...string) (int,
 }
 
 // TestAgentID_IssueVerifyOffline, AC-P0: issue → verify --offline passes.
+// THREAT-R12: mandate issue and verify must reach a verdict with no network.
 func TestAgentID_IssueVerifyOffline(t *testing.T) {
 	f := buildAgentFixture(t, false)
 	f.issue(t, "agent:ok", "ok.json", "--expires", "2099-12-31T00:00:00Z")
@@ -162,6 +163,7 @@ func TestAgentID_TamperFails(t *testing.T) {
 }
 
 // TestAgentID_WrongKeyExit11, AC-P0: sign with a non-pinned key → exit 11.
+// THREAT-R09: a signature by a key that is not the pinned identity key must exit 11.
 func TestAgentID_WrongKeyExit11(t *testing.T) {
 	f := buildAgentFixture(t, false)
 	// Issue using the REGISTRY key (not the pinned owner key) but claim the owner id.

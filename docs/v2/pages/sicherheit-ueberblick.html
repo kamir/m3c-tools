@@ -319,15 +319,14 @@ Massstab, an dem dieses Repository gemessen werden will.
 
 1. `skillctl` gibt jedem Agent-Skill eine pruefbare Identitaet und einen
    Lebenszyklus: author, pack, sign, admit, attest, verify/install, use,
-   audit, revoke ([Manual: skillctl](../../manual-skillctl.md)).
+   audit, revoke ([Manual: skillctl](../referenz/manual-skillctl.md)).
 2. Die Kette verifiziert offline; ein gehostetes Registry, ein Ledger oder
    ein Transparenz-Log ist komplementaer, nie Voraussetzung des Pruefpfads
    (Kopfabsatz des Manuals).
-3. Der Bedrohungskatalog traegt zitierbare IDs (R01 bis R12). Heute zitieren
-   Testkommentare drei davon; gemessen am 2026-09-16 trifft
-   `grep -rn 'THREAT-R' pkg/ cmd/` genau R01, R06 und R10. Die Konvention,
-   nach der die uebrigen nachzuziehen sind, steht in
-   [THREAT_MODEL.md](../../../THREAT_MODEL.md), §6.
+3. Der Bedrohungskatalog traegt zitierbare IDs (R01 bis R12). Testkommentare
+   zitieren alle zwoelf; gemessen am 2026-09-16 trifft
+   `grep -rn 'THREAT-R' pkg/ cmd/` jede der zwoelf IDs R01 bis R12. Die
+   Konvention steht in [THREAT_MODEL.md](../../../THREAT_MODEL.md), §6.
 
 ## Leseweg fuer eine Pruefung
 
@@ -338,19 +337,19 @@ Massstab, an dem dieses Repository gemessen werden will.
 | 3 | [docs/security/required-checks.txt](../../security/required-checks.txt) | die Pflicht-Checks auf `master` und warum die Namensbindung im Baum liegt |
 | 4 | [gosec-backlog](../../security/gosec-backlog.md) und [codeql-backlog](../../security/codeql-backlog.md) | der offene Static-Analysis-Bestand, klassifiziert, mit Datum |
 | 5 | [gosec-diff-gate.yml](../../../.github/workflows/gosec-diff-gate.yml) | das blockierende no-new-findings-Tor: Pflicht-Check auf `master` (required-checks.txt), prueft gegen die Signatur-Baseline `gosec-inci-baseline.txt`; die aeltere SARIF-Punktaufnahme [gosec-baseline](../../security/gosec-baseline.md) ist ein anderes, unverdrahtetes Artefakt |
-| 6 | [Release flow, "What CI signs"](../../releasing.md) | was ein Release signiert und woran ein Installierender es prueft |
-| 7 | [Ops-Runbook: Incident Response](../../ops-incident-response.de.md) | kompromittierter Schluessel oder Registry: erkennen, widerrufen, rotieren, neu pinnen |
-| 8 | [Ops-Routine: Zugangstoken](../../ops-registry-tokens.de.md) | Token-Lebenszyklus inkl. Ausscheiden: Lese-Token endet mit dem Konto der Person, das Schreibtoken gehoert der Rolle und wird beim Personalwechsel rotiert |
-| 9 | Audit-Spur: [`audit`](../../manual-skillctl.md#audit-antivirus-style-verdict-per-skill), [`auditlog`](../../manual-skillctl.md#auditlog-audit-subsystem-observability-spec-0403-8), [`translog`](../../manual-skillctl.md#translog-l1-transparency-log) | drei Traeger im Manual: `audit` urteilt je Skill, `auditlog` zeigt das Audit-Subsystem (SPEC-0403 §8), `translog` ist das L1-Transparenz-Log; die Registry-Zeitleiste (admit, attest, revoke, install) liest das [Incident-Runbook, Abschnitt 1](../../ops-incident-response.de.md) |
+| 6 | [Release flow, "What CI signs"](../betrieb/releasing.md) | was ein Release signiert und woran ein Installierender es prueft |
+| 7 | [Ops-Runbook: Incident Response](../betrieb/ops-incident-response.de.md) | kompromittierter Schluessel oder Registry: erkennen, widerrufen, rotieren, neu pinnen |
+| 8 | [Ops-Routine: Zugangstoken](../betrieb/ops-registry-tokens.de.md) | Token-Lebenszyklus inkl. Ausscheiden: Lese-Token endet mit dem Konto der Person, das Schreibtoken gehoert der Rolle und wird beim Personalwechsel rotiert |
+| 9 | [Runbook: die Audit-Spur](audit-spur.de.md) | die drei Traeger konsolidiert: `audit` urteilt je Skill, `auditlog` zeigt das Audit-Subsystem (SPEC-0403 §8), `translog` ist das L1-Transparenz-Log; die Manual-Abschnitte sind dort verlinkt, die Registry-Zeitleiste (admit, attest, revoke, install) liest das [Incident-Runbook, Abschnitt 1](../betrieb/ops-incident-response.de.md) |
 
 ## Vorfuehren statt behaupten
 
 | Format | Traeger | Sprache |
 |---|---|---|
-| Offline-Demo mit echten Exit-Codes: laut Quickstart wird ein vergiftetes Bundle mit Exit 10 abgewiesen und eine erzwungene Governance-Aktion mit Exit 2 verweigert | [Quickstart: skillctl-demo](../../quickstart-skillctl-demo.md) | EN |
-| Selbst nachvollziehen, offline, ohne Server | [Quickstart: skillctl](../../quickstart-skillctl.md) | EN |
-| Argumentation fuer Security-Expertin und CTO als Infografik | [CISO-Deck (EN)](../../skillctl-ciso-deck.html) · [CISO-Deck (DE)](../../skillctl-ciso-deck.de.html) | EN/DE |
-| Zwei-Personen-Nachweis ueber ER1, mit Pass-Kriterien | [Runbook: two-person ER1 exchange](../../runbook-two-person-er1-exchange.md) | EN |
+| Offline-Demo mit echten Exit-Codes: laut Quickstart wird ein vergiftetes Bundle mit Exit 10 abgewiesen und eine erzwungene Governance-Aktion mit Exit 2 verweigert | [Quickstart: skillctl-demo](../../old/quickstart-skillctl-demo.md) | EN |
+| Selbst nachvollziehen, offline, ohne Server | [Quickstart: skillctl](../../old/quickstart-skillctl.md) | EN |
+| Argumentation fuer Security-Expertin und CTO als Infografik | [CISO-Deck (EN)](../../old/skillctl-ciso-deck.html) · [CISO-Deck (DE)](../../old/skillctl-ciso-deck.de.html) | EN/DE |
+| Zwei-Personen-Nachweis ueber ER1, mit Pass-Kriterien | [Runbook: two-person ER1 exchange](../betrieb/runbook-two-person-er1-exchange.md) | EN |
 
 ## Grenzen, die diese Seite nicht verschweigt
 
@@ -368,9 +367,9 @@ Massstab, an dem dieses Repository gemessen werden will.
    [required-checks.txt](../../security/required-checks.txt) selbst.
 4. Reaktionszeiten: [SECURITY.md](../../../SECURITY.md) nennt als Ziel eine
    Bestaetigung "within a few working days" und sagt keine feste Frist fuer
-   Fix oder Disclosure zu. Ob eine harte SLA zugesagt wird, ist eine offene
-   Owner-Entscheidung (Stand 2026-09-16); diese Seite weist das aus, statt
-   eine Frist zu erfinden.
+   Fix oder Disclosure zu. Entschieden am 2026-09-16: es bleibt bewusst bei
+   dem weichen Ziel, eine harte SLA wird nicht zugesagt; SECURITY.md traegt
+   die Entscheidung datiert.
 </script>
 <!-- Integritaet ueber SRI: der Hash ist an den Bytes von cdnjs gerechnet
      (sha256 15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894).

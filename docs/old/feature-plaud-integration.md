@@ -3,6 +3,8 @@ layout: default
 title: "Feature Spec: Plaud.ai Integration"
 ---
 
+> Ueberholt, Beleg: spec-plaud-er1-sync.md erklaert in seiner Kopfzeile "Supersedes: Sync section of feature-plaud-integration.md". Archiviert nach docs/old.
+
 # Feature Spec: Plaud.ai Integration
 
 **Status:** Draft

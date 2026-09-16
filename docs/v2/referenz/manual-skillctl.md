@@ -12,7 +12,7 @@ trust-chain check is **offline-verifiable: no external authority sits in the ver
 path.** A hosted registry, ledger, or transparency log is *complementary*, not required to
 prove a bundle authentic.
 
-> **New here?** The [Quickstart: skillctl](quickstart-skillctl.md) walks the happy path in
+> **New here?** The [Quickstart: skillctl](../../old/quickstart-skillctl.md) walks the happy path in
 > about five minutes. This manual is the exhaustive reference: every command, every flag,
 > every exit code, derived from `skillctl help` and each command's `--help`.
 
@@ -31,7 +31,7 @@ Windows. Grab the platform binary from a
 go build -o build/skillctl ./cmd/skillctl
 ```
 
-See the [Quickstart](quickstart-skillctl.md#1-install) for one-line install commands per
+See the [Quickstart](../../old/quickstart-skillctl.md#1-install) for one-line install commands per
 platform.
 
 ```bash
@@ -83,7 +83,7 @@ most common setup error, so pick deliberately:
   applies only when `--key` is omitted.
 
 For the full two-person walkthrough over ER1, see
-**[Acceptance & Handover: the skill lifecycle](acceptance-skillctl-lifecycle.md)**.
+**[Acceptance & Handover: the skill lifecycle](../betrieb/acceptance-skillctl-lifecycle.md)**.
 
 ---
 
@@ -95,7 +95,7 @@ automation can branch precisely. Two tables follow, and `cmd/exitaudit` checks b
 the second lists the numbers that live outside it.
 
 What the gate reads, exactly: the `Exit:` statement under each command below, and the
-Exit-Code cells of [docs/CLI-VERBS.md](CLI-VERBS.md). Every number in those two places must
+Exit-Code cells of [docs/v2/referenz/CLI-VERBS.md](CLI-VERBS.md). Every number in those two places must
 appear in one of the two tables, so a code cannot be documented there without first saying
 where it comes from. Numbers in ordinary prose, and the numbers in the `verify-hook`
 `refusal_code` table, are **not** scanned; a wrong number in either would not turn the gate
@@ -1765,7 +1765,7 @@ Wire the fail-closed gate so nothing runs unverified, it denies if it cannot ver
 ```
 
 Don't hand-edit an installed skill under `~/.claude/skills/`: `skillctl audit` flags the drift
-as `BROKEN`. See **[Acceptance & Handover: the skill lifecycle](acceptance-skillctl-lifecycle.md)**
+as `BROKEN`. See **[Acceptance & Handover: the skill lifecycle](../betrieb/acceptance-skillctl-lifecycle.md)**
 for the two-person hand-off procedure over ER1.
 
 ---
@@ -1872,7 +1872,7 @@ step that actually stops it.
 
 The routine around all of this, including which token to ask GitLab for and why
 a write token belongs to the project rather than to a person:
-[Ops-Routine: Zugangstoken](ops-registry-tokens.de).
+[Ops-Routine: Zugangstoken](../betrieb/ops-registry-tokens.de).
 
 ---
 
@@ -1910,8 +1910,8 @@ ER1 credentials for registry-backed commands resolve via Keychain → Secret Man
 
 ## See also
 
-- **[Quickstart: skillctl](quickstart-skillctl.md)**: the happy path in five minutes.
-- **[Acceptance & Handover: the skill lifecycle](acceptance-skillctl-lifecycle.md)**: the two-person (Bob → Alice) acceptance procedure over ER1, with success criteria.
-- **[Quickstart: the offline demo](quickstart-skillctl-demo.md)**: the `skillctl-demo` Kata walkthrough (CISO/booth).
+- **[Quickstart: skillctl](../../old/quickstart-skillctl.md)**: the happy path in five minutes.
+- **[Acceptance & Handover: the skill lifecycle](../betrieb/acceptance-skillctl-lifecycle.md)**: the two-person (Bob → Alice) acceptance procedure over ER1, with success criteria.
+- **[Quickstart: the offline demo](../../old/quickstart-skillctl-demo.md)**: the `skillctl-demo` Kata walkthrough (CISO/booth).
 - **[Manual: m3c-tools](manual-m3c-tools.md)**: the memory-capture toolkit `skillctl` ships alongside.
-- **[Bug & feature tracking](bug-tracking.md)**: how a defect or a request is tracked across the private and public planes.
+- **[Bug & feature tracking](../entwickler/bug-tracking.md)**: how a defect or a request is tracked across the private and public planes.

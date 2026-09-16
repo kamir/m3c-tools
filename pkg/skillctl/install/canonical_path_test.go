@@ -9,6 +9,7 @@ import (
 // TestCanonicalPath_ResolvesSymlink locks the R-6.2 fixed point: a path that
 // reaches its target through a symlink resolves to the symlink's real target, so
 // the guard classifier cannot be fooled by a symlinked-in body.
+// THREAT-R02: canonicalisation must resolve symlinks before any write decision.
 func TestCanonicalPath_ResolvesSymlink(t *testing.T) {
 	root := t.TempDir()
 	realDir := filepath.Join(root, "real")

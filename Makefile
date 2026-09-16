@@ -497,7 +497,7 @@ release-minor: code-review check-docs
 release-major: code-review check-docs
 	@./scripts/release.sh major
 
-# ── skillctl release chain (docs/releasing.md · skill: /release-skillctl) ──────
+# ── skillctl release chain (docs/v2/betrieb/releasing.md · skill: /release-skillctl) ──────
 # skillctl is a SEPARATE, tag-driven line (skillctl/vX.Y.Z → skillctl-release.yml);
 # `release-skillctl` runs every PRE-TAG gate for it, then prints the derived
 # version context + the next step. It deliberately does NOT tag. Tagging
@@ -513,7 +513,7 @@ release-skillctl: build-skillctl build-skillctl-demo vet lint check-docs
 	 echo "  commits since     : $$(git rev-list --count $$last..origin/master 2>/dev/null) on origin/master"; \
 	 echo ""; \
 	 echo "  ✓ pre-tag gates green. Next: sync CHANGELOG, then tag origin/master BY HASH"; \
-	 echo "    (skillctl/vX.Y.Z) + push: see docs/releasing.md / the /release-skillctl skill."
+	 echo "    (skillctl/vX.Y.Z) + push: see docs/v2/betrieb/releasing.md / the /release-skillctl skill."
 
 # Smoke-test a PUBLISHED skillctl release build (Phase 4). VERSION defaults to latest tag.
 #   make skillctl-smoke                     # smoke the latest published skillctl/v*
@@ -546,10 +546,10 @@ ci: vet lint check-emdash check-gofmt check-redirect-guard check-required-checks
 	@echo ""
 	@echo "CI passed: vet ✓  lint ✓  prose ✓  gofmt ✓  redirect-guard ✓  required-checks ✓  docpages ✓  test ✓  build ✓"
 
-# Doku-Seiten-Tor: jede erzeugte Seite unter docs/pages/ traegt eine Kopie
-# ihrer Markdown-Quelle. Dieses Ziel erzeugt jede neu und vergleicht, damit
-# die Kopie nicht still zu einer zweiten Aussage wird.
-# Neu erzeugen mit: tools/docpage.sh docs/<datei>.md
+# Doku-Seiten-Tor: jede erzeugte Seite unter docs/pages/ und docs/v2/pages/
+# traegt eine Kopie ihrer Markdown-Quelle. Dieses Ziel erzeugt jede neu und
+# vergleicht, damit die Kopie nicht still zu einer zweiten Aussage wird.
+# Neu erzeugen mit: tools/docpage.sh docs/<pfad>.md
 .PHONY: check-docpages
 check-docpages:
 	@./scripts/check-docpages.sh

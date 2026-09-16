@@ -29,8 +29,8 @@ See also: [Service Index](service-index) (what stays running) ·
 | **poc-whisper** | `cmd/poc-whisper/` | `make build-all` | Reference POC: Whisper transcription via CLI subprocess. |
 | **skillctl-sim** | `cmd/skillctl-sim/` | `make build-skillctl-sim` | Trust-plane simulation: a generated corpus of multi-principal scenarios, each with a SPEC-derived prediction, run against the real `skillctl` binary and a real git registry. `make sim`. |
 | **docaudit** | `cmd/docaudit/` | `go run ./cmd/docaudit` | Blocking gate: the CLI flag surface (AST-extracted) against its manual, in both directions, plus every dispatched verb against the binary's own `--help`. |
-| **exitaudit** | `cmd/exitaudit/` | `go run ./cmd/exitaudit` | Blocking gate: every exit code cited in the manual and in [CLI-VERBS](CLI-VERBS) against `pkg/skillctl/exitcode`, plus the `pull` gate read as code. Reports how many verb rows it could NOT compare. |
-| **verbaudit** | `cmd/verbaudit/` | `go run ./cmd/verbaudit` | Blocking gate: the dispatched `skillctl` verbs against the allocation table [CLI-VERBS](CLI-VERBS) (FR-0113). |
+| **exitaudit** | `cmd/exitaudit/` | `go run ./cmd/exitaudit` | Blocking gate: every exit code cited in the manual and in [CLI-VERBS](v2/referenz/CLI-VERBS) against `pkg/skillctl/exitcode`, plus the `pull` gate read as code. Reports how many verb rows it could NOT compare. |
+| **verbaudit** | `cmd/verbaudit/` | `go run ./cmd/verbaudit` | Blocking gate: the dispatched `skillctl` verbs against the allocation table [CLI-VERBS](v2/referenz/CLI-VERBS) (FR-0113). |
 | **structural** | `cmd/structural/` | `go run ./cmd/structural` | Inventories the decisions in the trust path and states the MC/DC obligation each one carries. Produces the obligation, not a coverage measurement. |
 | **release-evidence** | `cmd/release-evidence/` | `go run ./cmd/release-evidence` | Assembles the Release Evidence Bundle (the "Trust Binder"): an index that ties a set of release artifacts to a commit and a mandatory gate-set. |
 
@@ -52,10 +52,10 @@ came to be documented while ten real ones were not. Each binary is its own
 source of truth, and both are gated:
 
 - **m3c-tools**: run `m3c-tools help`. Full reference:
-  [Manual: m3c-tools](manual-m3c-tools).
+  [Manual: m3c-tools](v2/referenz/manual-m3c-tools).
 - **skillctl**: run `skillctl help`. Full reference:
-  [Manual: skillctl](manual-skillctl); the allocation table for the verb names
-  is [CLI-VERBS](CLI-VERBS).
+  [Manual: skillctl](v2/referenz/manual-skillctl); the allocation table for the verb names
+  is [CLI-VERBS](v2/referenz/CLI-VERBS).
 
 `cmd/docaudit` blocks a release when a dispatched verb is missing from the
 binary's own `--help`, or when a flag and its manual disagree; `cmd/verbaudit`

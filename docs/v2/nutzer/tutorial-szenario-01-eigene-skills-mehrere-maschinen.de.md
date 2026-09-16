@@ -16,8 +16,8 @@ Skill blockiert, bevor der Agent ihn lädt.
 
 **Dauer:** etwa 45 Minuten für den ersten Durchlauf, danach Minuten pro Skill.
 
-**Verwandte Dokumente:** [Quickstart skillctl](quickstart-skillctl.md) (Installation und
-Grundbegriffe), [Manual](manual-skillctl.md) (jedes Kommando, jedes Flag),
+**Verwandte Dokumente:** [Quickstart skillctl](../../old/quickstart-skillctl.md) (Installation und
+Grundbegriffe), [Manual](../referenz/manual-skillctl.md) (jedes Kommando, jedes Flag),
 [Szenario 02](tutorial-szenario-02-erster-signierter-skill.de.md) (zwei Personen, eine
 Freigabe).
 
@@ -51,7 +51,7 @@ skillctl version        # muss skillctl/vX.Y.Z zeigen, nicht "dev"
 ```
 
 Zeigt das `dev`, haben Sie einen Build aus dem Quellbaum vor sich und keinen signierten
-Release. Installation: siehe [Quickstart §1](quickstart-skillctl.md#1-install).
+Release. Installation: siehe [Quickstart §1](../../old/quickstart-skillctl.md#1-install).
 
 ---
 
@@ -392,7 +392,7 @@ Wichtig: **kein** `--key` und **kein** `--emit-installed`. Sie sind hier reiner 
 und nichts von Ihnen soll in Bobs Registry zurückgeschrieben werden.
 
 Der ausführliche Zwei-Personen-Ablauf mit allen Feldern steht im
-[Runbook Zwei-Personen-Austausch](runbook-two-person-er1-exchange.md).
+[Runbook Zwei-Personen-Austausch](../betrieb/runbook-two-person-er1-exchange.md).
 
 ### C3. Weg 3: über ein HTTP-Registry (heute nur gegen eine Instanz ohne Client-Auth)
 
@@ -557,7 +557,7 @@ Alles oben gilt, mit drei Unterschieden:
 - Ein ausgelieferter Windows-Build ignoriert `$HOME` für alle sicherheitsrelevanten Pfade
   absichtlich, weil eine Umgebungsvariable von einem Angreifer setzbar ist. Er liest
   `%USERPROFILE%`. Sandkasten-Tricks über `$HOME` funktionieren dort also nicht.
-- Installation über die PowerShell-Einzeile aus [Quickstart §1](quickstart-skillctl.md#1-install),
+- Installation über die PowerShell-Einzeile aus [Quickstart §1](../../old/quickstart-skillctl.md#1-install),
   und entweder diese **oder** den maschinenweiten Installer, nicht beide.
 
 ---
@@ -580,4 +580,4 @@ Alles oben gilt, mit drei Unterschieden:
 
 - Zwei Personen, eine Freigabe: [Szenario 02](tutorial-szenario-02-erster-signierter-skill.de.md)
 - Üben, bis es sitzt: [Katas und Test Ride](tutorial-katas-und-test-ride.de.md)
-- Jedes Kommando, jedes Flag: [Manual](manual-skillctl.md)
+- Jedes Kommando, jedes Flag: [Manual](../referenz/manual-skillctl.md)

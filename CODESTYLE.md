@@ -306,7 +306,7 @@ cannot be switched off by a rename. There are deliberately **no exemptions**:
 a verb a user can type is a verb `--help` must name.
 
 This is a different question from `cmd/verbaudit`, which reconciles the same
-dispatch against the allocation table `docs/CLI-VERBS.md`. Registered is not the
+dispatch against the allocation table `docs/v2/referenz/CLI-VERBS.md`. Registered is not the
 same as visible: every verb was registered while 33 were invisible.
 
 ### Exemptions
@@ -357,7 +357,7 @@ the failing gate is what makes the author notice that it is owed.
 `docaudit` keeps the flags honest. Its subject is `pkg/skillctl/exitcode`, and
 it exists because AUDIT-0001 measured what happens without it: `pull` mapped its
 five gates onto `12/10/11/13/6` while the manual said "0 ok, 2 usage" and
-`docs/CLI-VERBS.md` said "0/1/2"; `verify-sig` returned `10` for an altered
+`docs/v2/referenz/CLI-VERBS.md` said "0/1/2"; `verify-sig` returned `10` for an altered
 bundle that no document mentioned; verify-hook's refusal space was `17/22/25/28`
 in code, `17/22` in the manual, `25/26/28` in the verb register. Twelve of the
 fourteen verbs that state an exit space in both documents stated two different
@@ -369,7 +369,7 @@ Five ways it goes red:
   register table → **UNDOCUMENTED**
 - a row in that table that `AllCodes()` does not carry → **NOT REGISTERED**
 - a number written anywhere else in the manual (a per-command `Exit:` line) or
-  in a `docs/CLI-VERBS.md` Exit-Code cell that neither the register nor the
+  in a `docs/v2/referenz/CLI-VERBS.md` Exit-Code cell that neither the register nor the
   manual's "Codes outside the register" table accounts for → **UNACCOUNTED**
 - the manual's `Exit:` line and the verb register's cell naming different sets
   for the same verb → **PER-VERB DRIFT**

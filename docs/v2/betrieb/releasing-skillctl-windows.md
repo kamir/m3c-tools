@@ -20,7 +20,7 @@ publish the signed `skillctl/v0.3.1` release and to dry-run it on Windows.
 - `tools/skillctl-install.sh` `RELEASE_BASE` default raised to `skillctl/v0.3.1`.
 - `tools/skillctl-install.ps1` (cosign-primary, fail-closed) + release-workflow wiring +
   `scripts/skillctl-quickstart-windows.ps1` + `skillctl-windows-smoke.yml`.
-- One-liners in `README.md` + `docs/quickstart-skillctl.md`, served from raw `master`.
+- One-liners in `README.md` + `docs/old/quickstart-skillctl.md`, served from raw `master`.
 
 ## Step 2: cut + promote `skillctl/v0.3.1`
 
@@ -96,7 +96,7 @@ powershell -ExecutionPolicy Bypass -File $q
 > docs together**: this release doc is the natural place to remember it.
 
 **Interim (unsigned, works today, before Step 2):** see the interim block in
-[quickstart-skillctl.md](quickstart-skillctl.md), it pulls the current product-release zip
+[quickstart-skillctl.md](../../old/quickstart-skillctl.md), it pulls the current product-release zip
 (`skillctl-windows-amd64.zip` → `skillctl.exe`) without provenance verification.
 
 ## Next milestones

@@ -276,7 +276,7 @@ table.check tr.done td:not(:first-child){opacity:.5; text-decoration:line-throug
     <div class="brand">
       <p class="kicker">Ops-Runbook</p>
       <h1>Ein Mensch-Agent-Team einrichten</h1>
-      <p class="meta">docs/ops-human-agent-team.de.md</p>
+      <p class="meta">docs/v2/betrieb/ops-human-agent-team.de.md</p>
     </div>
     <div class="flavorbar" id="flavorbar" hidden>
       <button type="button" id="flavorbtn" aria-pressed="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4.5 6V2.6h7V6"/><rect x="2" y="6" width="12" height="5" rx="1.1"/><path d="M4.5 10h7v3.4h-7z"/></svg><span>Druckansicht</span></button>
@@ -307,7 +307,7 @@ Zielgruppe: die Person, die das Team einrichtet. Die Mitarbeiterin, die danach
 darin arbeitet, braucht dieses Dokument nicht. Das ist der Zweck.
 
 **Zum Lesen und Drucken** gibt es dieselbe Anleitung als Doku-Seite:
-[`docs/pages/ops-human-agent-team.html`](pages/ops-human-agent-team.html). Sie
+[`docs/v2/pages/ops-human-agent-team.html`](../pages/ops-human-agent-team.html). Sie
 hat eine Abschnittsschiene, einen Kopierknopf an jedem Kommando und einen
 Druck-Flavor, der jede Farbfläche auflöst. Erzeugt wird sie aus dieser Datei
 mit `tools/docpage.sh`; maßgeblich bleibt diese Datei.
@@ -433,7 +433,7 @@ sie durchzuleiten, erwartet diese SHA-256:
 - `tools/skillctl-install.ps1` → `d33f5344d30a6258281b0784c461ecc0dbe25b86444175a6f95c31dfe2c27f17`
 - `tools/skillctl-install.sh` → `5992c7f5770ced2d0ce1f43979e308b087e6a97d07a689eebf43230c28d88469`
 
-Der [README-Abschnitt Install](../README.md#install) hat das Rezept dafür zum
+Der [README-Abschnitt Install](../../../README.md#install) hat das Rezept dafür zum
 Kopieren. Wer den Einzeiler durchleitet, verzichtet auf diese Probe; das ist
 eine Entscheidung und kein Versehen.
 
@@ -1502,7 +1502,7 @@ stehengeblieben.
   apply();
 
   document.getElementById('foot').textContent =
-    'Erzeugt aus docs/ops-human-agent-team.de.md mit tools/docpage.sh. Diese Seite rendert die Datei; ' +
+    'Erzeugt aus docs/v2/betrieb/ops-human-agent-team.de.md mit tools/docpage.sh. Diese Seite rendert die Datei; ' +
     'massgeblich ist die Datei im Repository, nicht diese Fassung.';
 })();
 </script>

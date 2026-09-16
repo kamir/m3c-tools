@@ -17,8 +17,8 @@ its **own** workflow. Never assume they move together.
 
 | Line | Tag pattern | Workflow | Produces |
 |------|-------------|----------|----------|
-| **Product** (`m3c-tools` + bundled binaries) | `vX.Y.Z` | [`.github/workflows/release.yml`](../.github/workflows/release.yml) | macOS universal (arm64+amd64), Linux amd64/arm64, Windows amd64, the NSIS `M3C-Tools-Setup.exe`, `checksums.txt` + **cosign bundle** + **SLSA provenance** |
-| **skillctl** (the signed trust CLI) | `skillctl/vX.Y.Z` | [`.github/workflows/skillctl-release.yml`](../.github/workflows/skillctl-release.yml) | the 4 platform `skillctl` binaries + `.exe`, `install.sh`/`install.ps1`, `SHA256SUMS` + **cosign bundle** + **ed25519 fallback sig**, **CycloneDX SBOM**, SLSA provenance: published as a **draft** |
+| **Product** (`m3c-tools` + bundled binaries) | `vX.Y.Z` | [`.github/workflows/release.yml`](../../../.github/workflows/release.yml) | macOS universal (arm64+amd64), Linux amd64/arm64, Windows amd64, the NSIS `M3C-Tools-Setup.exe`, `checksums.txt` + **cosign bundle** + **SLSA provenance** |
+| **skillctl** (the signed trust CLI) | `skillctl/vX.Y.Z` | [`.github/workflows/skillctl-release.yml`](../../../.github/workflows/skillctl-release.yml) | the 4 platform `skillctl` binaries + `.exe`, `install.sh`/`install.ps1`, `SHA256SUMS` + **cosign bundle** + **ed25519 fallback sig**, **CycloneDX SBOM**, SLSA provenance: published as a **draft** |
 
 Example from the last cut: product `v2.11.0` and `skillctl/v0.4.0` were released
 from the **same** commit but as two separate tags.
@@ -28,7 +28,7 @@ from the **same** commit but as two separate tags.
 ## Choosing the version bump
 
 Semver level is **derived from the commits**, not guessed, by
-[`scripts/derive-bump.sh`](../scripts/derive-bump.sh) (Conventional Commits):
+[`scripts/derive-bump.sh`](../../../scripts/derive-bump.sh) (Conventional Commits):
 
 | Commit signal (highest wins) | Bump |
 |------|------|
@@ -55,13 +55,13 @@ publishes. Everything in this section happens **before** it.
 ### The machine half is already a blocking gate
 
 The **SPEC-0406** two-party acceptance test runs in
-[`skillctl-release.yml`](../.github/workflows/skillctl-release.yml) as
+[`skillctl-release.yml`](../../../.github/workflows/skillctl-release.yml) as
 `acceptance-gate`, a matrix over **macOS and Windows**, placed *before* the build
 so a failure stops the release instead of annotating a finished artifact. It runs
 `TestAcceptance_TwoParty` (T01..T15) plus the twin rehearsal scripts
-[`scripts/skillctl-acceptance.sh`](../scripts/skillctl-acceptance.sh) and
-[`scripts/skillctl-acceptance.ps1`](../scripts/skillctl-acceptance.ps1);
-[`ci.yml`](../.github/workflows/ci.yml) runs the Unix twin on every push, so the
+[`scripts/skillctl-acceptance.sh`](../../../scripts/skillctl-acceptance.sh) and
+[`scripts/skillctl-acceptance.ps1`](../../../scripts/skillctl-acceptance.ps1);
+[`ci.yml`](../../../.github/workflows/ci.yml) runs the Unix twin on every push, so the
 gate is not first exercised at tag time.
 
 What it cannot see: whether **two people on two machines** compared a key
@@ -169,7 +169,7 @@ make release-minor      # force a level (also: release-patch / release-major)
 ```
 
 `make release` runs `code-review` + `check-docs`, derives the bump level, and then
-[`scripts/release.sh`](../scripts/release.sh) **tags `origin/master` by hash and
+[`scripts/release.sh`](../../../scripts/release.sh) **tags `origin/master` by hash and
 pushes the tag**. It prints the commit it is about to tag, plus its subject and
 author, and asks for a confirmation; `--yes` skips the prompt, and without a
 terminal it refuses rather than guessing. This is the canonical path above with
@@ -208,7 +208,7 @@ deliberately **not** done here:
    unattested again, which is the defect this change removes;
 3. the asset added to the `files:` list of the `release` job;
 4. and the part that is not YAML: the `.app` bundle is neither codesigned nor
-   notarised (both are open items in [roadmap.md](roadmap.md)), so a downloaded
+   notarised (both are open items in [roadmap.md](../../old/roadmap.md)), so a downloaded
    DMG is quarantined by Gatekeeper. Shipping an unsigned DMG through a signed
    channel trades one trust problem for another; an Apple signing identity and a
    notarisation step have to exist first.
@@ -260,13 +260,13 @@ slsa-verifier verify-artifact <asset> --provenance-path multiple.intoto.jsonl \
 
 ### Bumping the pinned install one‑liners
 
-The `README.md` and `docs/quickstart-skillctl*.md` one‑liners pin the bootstrap
+The `README.md` and `docs/old/quickstart-skillctl*.md` one‑liners pin the bootstrap
 scripts to an **immutable commit hash** (not `master`), plus the expected SHA‑256
 of each script: a TOFU defence, since `master` could be rewritten to swap the
 script *and* its inner pins at once.
 
 **This is automated.** Publishing a `skillctl/v*` release fires
-[`.github/workflows/pin-bump.yml`](../.github/workflows/pin-bump.yml), which
+[`.github/workflows/pin-bump.yml`](../../../.github/workflows/pin-bump.yml), which
 resolves the tag, rewrites the pin and both digests, verifies the result and
 opens a pull request. Your job is to review and merge that PR, not to edit the
 hashes by hand.

@@ -13,7 +13,7 @@ minutes, on a locked-down, **offline** laptop. No install, no admin, no server.
 > `skillctl`** and drives it through real trust scenarios in a hermetic sandbox. Every LIVE
 > verdict you see is a **real `skillctl` exit code**. Nothing is simulated. A browser opens
 > to a live mirror (scenario graphics + a streaming terminal); the CLI runs the same deck.
-> For every underlying command and flag, see the [skillctl manual](manual-skillctl.md).
+> For every underlying command and flag, see the [skillctl manual](../v2/referenz/manual-skillctl.md).
 
 > **Honesty rule (non-negotiable).** LIVE scenarios run the real `skillctl` and show its real
 > exit code. ROADMAP / PARTIAL panels **run nothing** and are labelled as such: the demo
@@ -190,7 +190,7 @@ with a rot/gelb/grün state and the N/3 chip, updating live as beats land.
 
 ## Next steps
 
-- **Every `skillctl` command, flag and exit code:** [skillctl manual](manual-skillctl.md)
+- **Every `skillctl` command, flag and exit code:** [skillctl manual](../v2/referenz/manual-skillctl.md)
 - **Author, sign and verify your own skill in five minutes:** [Quickstart: skillctl](quickstart-skillctl.md)
 - **The scenarios' exit-code contracts** (`10` digest mismatch, `2` G-23 drift refusal, `17`
-  revoked, `22` freshness fail-closed) are the [manual's exit-code table](manual-skillctl.md#exit-codes).
+  revoked, `22` freshness fail-closed) are the [manual's exit-code table](../v2/referenz/manual-skillctl.md#exit-codes).
