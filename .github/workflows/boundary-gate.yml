@@ -32,6 +32,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          # check-installer-version.sh liest `git tag --list 'skillctl/v*'`.
+          # Ohne Tags faellt es mit exit 2 aus, also laut und nicht still, aber
+          # ein rotes Tor aus einem fehlenden Fetch waere ein Fehlalarm.
+          # Deshalb ausdruecklich, statt sich auf fetch-depth zu verlassen.
+          fetch-tags: true
       - name: Run boundary-gate
         run: bash tools/boundary-gate.sh
 
@@ -53,3 +58,10 @@ jobs:
       # check (BUG-0215).
       - name: install pins resolve to commits, digests match
         run: bash scripts/check-install-pins.sh
+
+      # Die Gegenfrage zum Schritt darueber. Jener prueft, ob ein Pin AUFLOEST;
+      # dieser, ob er die AKTUELLE Fassung ausliefert. Beim Schnitt von
+      # skillctl/v0.5.0 war Ersteres richtig und Letzteres falsch, sechs Tage
+      # lang, und der dokumentierte Einzeiler installierte v0.4.0.
+      - name: installer default is the newest skillctl tag
+        run: bash scripts/check-installer-version.sh
