@@ -323,11 +323,10 @@ Massstab, an dem dieses Repository gemessen werden will.
 2. Die Kette verifiziert offline; ein gehostetes Registry, ein Ledger oder
    ein Transparenz-Log ist komplementaer, nie Voraussetzung des Pruefpfads
    (Kopfabsatz des Manuals).
-3. Der Bedrohungskatalog traegt zitierbare IDs (R01 bis R12). Heute zitieren
-   Testkommentare drei davon; gemessen am 2026-09-16 trifft
-   `grep -rn 'THREAT-R' pkg/ cmd/` genau R01, R06 und R10. Die Konvention,
-   nach der die uebrigen nachzuziehen sind, steht in
-   [THREAT_MODEL.md](../../../THREAT_MODEL.md), §6.
+3. Der Bedrohungskatalog traegt zitierbare IDs (R01 bis R12). Testkommentare
+   zitieren alle zwoelf; gemessen am 2026-09-16 trifft
+   `grep -rn 'THREAT-R' pkg/ cmd/` jede der zwoelf IDs R01 bis R12. Die
+   Konvention steht in [THREAT_MODEL.md](../../../THREAT_MODEL.md), §6.
 
 ## Leseweg fuer eine Pruefung
 
@@ -368,9 +367,9 @@ Massstab, an dem dieses Repository gemessen werden will.
    [required-checks.txt](../../security/required-checks.txt) selbst.
 4. Reaktionszeiten: [SECURITY.md](../../../SECURITY.md) nennt als Ziel eine
    Bestaetigung "within a few working days" und sagt keine feste Frist fuer
-   Fix oder Disclosure zu. Ob eine harte SLA zugesagt wird, ist eine offene
-   Owner-Entscheidung (Stand 2026-09-16); diese Seite weist das aus, statt
-   eine Frist zu erfinden.
+   Fix oder Disclosure zu. Entschieden am 2026-09-16: es bleibt bewusst bei
+   dem weichen Ziel, eine harte SLA wird nicht zugesagt; SECURITY.md traegt
+   die Entscheidung datiert.
 </script>
 <!-- Integritaet ueber SRI: der Hash ist an den Bytes von cdnjs gerechnet
      (sha256 15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894).
