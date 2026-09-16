@@ -8,6 +8,26 @@ vertrauen muss.
 Zielgruppe: die Person, die das Team einrichtet. Die Mitarbeiterin, die danach
 darin arbeitet, braucht dieses Dokument nicht. Das ist der Zweck.
 
+**Wo anfangen.** Wer das zum ersten Mal macht, beginnt bei
+[Abschnitt 0, Voraussetzungen](#0-voraussetzungen), und arbeitet die Liste in
+0.6 ab, bevor er weiterliest. Jede Zeile dort hat ein Kommando und eine
+erwartete Ausgabe. Wer die Werkzeuge schon hat, springt zu Abschnitt 1.
+
+## Inhalt
+
+| Abschnitt | Für wen, wann |
+|---|---|
+| [0. Voraussetzungen](#0-voraussetzungen) | einmal je Maschine, vor allem anderen |
+| [1. Die Reihenfolge](#1-die-reihenfolge-an-der-alles-hängt) | einmal lesen, bevor jemand etwas installiert |
+| [2. Der Arbeitsraum](#2-der-arbeitsraum-auf-einer-maschine) | einmal je Person |
+| [3. Die Rubriken](#3-warum-die-rubriken-wörtlich-dastehen) | wer moderiert oder berichtet |
+| [4. Der Lebenszyklus A nach B](#4-der-skill-lebenszyklus-von-mensch-a-zu-mensch-b) | jedes Mal, wenn ein Skill übergeben wird |
+| [5. Das gemeinsame Repository](#5-das-gemeinsame-repository-vom-ordner-nach-gitlab) | sobald GitLab dazwischen liegt |
+| [6. Drei Dateien heißen Trust-Roots](#6-die-falle-drei-dateien-heißen-trust-roots) | wenn ein Pin da ist und trotzdem nichts geht |
+| [7. Der Takt](#7-der-takt-von-manuellen-schritten-zum-skill) | die Führungskraft, laufend |
+| [8. Wenn etwas fehlschlägt](#8-wenn-etwas-fehlschlägt) | im Fehlerfall, nach Exit-Code |
+| [9. Was offen bleibt](#9-was-offen-bleibt) | wer den Umfang einschätzen muss |
+
 ## Das Ziel, das dieses Runbook trägt
 
 **Enablement der Führungskraft und der Mitarbeiterin für Mensch-Agent-Zusammenarbeit
@@ -36,10 +56,10 @@ Werkzeug hier in Abschnitt 4 und nicht in Abschnitt 1.
 
 Es behauptet auch nicht, eine Governance-Schicht zu beschreiben. Signieren,
 Freigeben und Prüfen sind darin enthalten; die Anbindung an ein Policy-Gerüst,
-an ein Datenschutz-Inventar und an ein SIEM ist es nicht. Abschnitt 8 sagt,
+an ein Datenschutz-Inventar und an ein SIEM ist es nicht. Abschnitt 9 sagt,
 was offen ist.
 
-## 0. Wie weit dieses Runbook gemessen ist
+## Wie weit dieses Runbook gemessen ist
 
 Jeder Block, der mit "Gemessen" beginnt, ist am 2026-09-16 gelaufen. Das Binary
 war ein lokaler Bau aus `origin/master` (`af9e1d5`), es meldet sich als
@@ -55,6 +75,219 @@ Die Besetzung ist die des Hauses: **Bob** baut und gibt heraus, **Alice**
 bekommt. In einer echten Einführung ist Bob die Führungskraft, die ihre eigene
 Arbeitsweise zuerst an sich selbst erprobt, und Alice die Person, an die sie
 übergibt.
+
+## 0. Voraussetzungen
+
+Dieser Abschnitt ist für die Person geschrieben, die das noch nie gemacht hat.
+Er nennt jede Voraussetzung, wer sie herstellt, und das Kommando, mit dem man
+prüft, ob sie da ist. Wer alle Kästchen in 0.6 abhaken kann, kann bei
+Abschnitt 1 anfangen.
+
+### 0.1 Wer was tut
+
+Drei Rollen, und sie können auf zwei Personen fallen. Die dritte ist oft
+dieselbe Person wie die erste; sie ist trotzdem getrennt aufgeführt, weil sie
+eine andere Entscheidung trifft.
+
+| Rolle | Wer das typischerweise ist | Tut |
+|---|---|---|
+| **Autor** (A, im Text "Bob") | die Führungskraft, die ihre eigene Arbeitsweise zuerst selbst erprobt | Skill bauen, packen, signieren, aufnehmen |
+| **Freigeber** | im Vier-Augen-Prinzip eine zweite Person | `publish --attest`: sagt, auf welcher Stufe der Skill benutzt werden darf |
+| **Empfänger** (B, im Text "Alice") | die Mitarbeiterin | Schlüssel pinnen, ziehen, installieren, benutzen |
+
+Zusätzlich, einmalig und außerhalb dieses Runbooks: **die IT** legt das
+GitLab-Projekt an (0.3) und vergibt die Zugänge.
+
+### 0.2 Was auf jeder Maschine liegen muss
+
+| Was | Wofür | Prüfen mit | Erwartet |
+|---|---|---|---|
+| `git` | die Registry **ist** ein Git-Repository | `git --version` | eine Versionszeile |
+| `curl` und `openssl` | der Installer holt und prüft | `curl --version`, `openssl version` | je eine Versionszeile |
+| `skillctl` | alles in Abschnitt 4 | `skillctl version` | `skillctl/vX.Y.Z`, **nicht** `dev` |
+| Claude Code | der Agent, der die Skills benutzt | `claude --version` | eine Versionszeile |
+| Zugang zum GitLab-Projekt | ziehen und schieben | `git ls-remote <url>` | eine Liste von Refs, keine Passwortfrage ins Leere |
+
+**skillctl installieren.** Eine Zeile, sie holt das Binary, prüft die Signatur
+über `SHA256SUMS` und danach die Prüfsumme des Binaries selbst:
+
+```bash
+# macOS und Linux
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/1eeefc870a9be50ace33cbc537984c38801eb266/tools/skillctl-install.sh | bash
+```
+
+```powershell
+# Windows
+irm https://raw.githubusercontent.com/kamir/m3c-tools/1eeefc870a9be50ace33cbc537984c38801eb266/tools/skillctl-install.ps1 | iex
+```
+
+**Danach unbedingt `skillctl version` aufrufen und den Wert mit dem
+vergleichen, den das Team festgelegt hat.** Gemessen am 2026-09-16: der oben
+gepinnte Commit installiert `skillctl/v0.4.0`, während dieselbe Datei auf
+`master` auf `v0.5.1` steht. Der Pin-Prüfer des Repositories prüft, dass der
+Pin auflöst und die Bytes stimmen, nicht welche Fassung dabei herauskommt. Wer
+eine bestimmte Fassung braucht, gibt sie an:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/1eeefc870a9be50ace33cbc537984c38801eb266/tools/skillctl-install.sh \
+  | RELEASE_BASE=https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.5.1 bash
+```
+
+Der Installer warnt dann laut, dass `RELEASE_BASE` gesetzt wurde. Das ist
+Absicht und kein Fehler: die Zeile verschiebt den Vertrauensanker, und
+deswegen sagt sie es.
+
+Wenn `skillctl version` nach der Installation nicht gefunden wird, liegt das
+Binary in `~/.local/bin`, und dieses Verzeichnis fehlt im Suchpfad. Dann
+einmalig in die Shell-Konfiguration:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+### 0.3 Das Skill-Repository anlegen
+
+Die Registry ist ein Git-Repository. Für ein Team, das sie teilt, liegt sie
+auf der internen GitLab-Instanz.
+
+| Frage | Antwort |
+|---|---|
+| Wer legt es an | die IT oder wer im Namensraum Projekte anlegen darf |
+| Wo | die interne GitLab-Instanz, in einer Gruppe, die beide Seiten sehen |
+| Sichtbarkeit | privat |
+| Standardzweig | `main` |
+| Wer darf schreiben | nur der Autor. Alle anderen lesen |
+| Wie es heißen sollte | ein Name, der sagt, dass es eine Registry ist, zum Beispiel `ki-skill-registry` |
+
+> **Das Projekt muss leer sein, ohne README und ohne CI-Datei.** Das ist keine
+> Stilfrage. Der Weg vom lokalen Ordner nach GitLab ist `git push --mirror`,
+> und `--mirror` bedeutet: der Zustand des Ziels wird durch den der Quelle
+> **ersetzt**. Gemessen am 2026-09-16 gegen ein Projekt, das `README.md` und
+> `.gitlab-ci.yml` auf `main` hatte: nach dem Push meldete git
+> `+ ffbaeef...f0e85f1 main -> main (forced update)`, und beide Dateien waren
+> weg. Wer beim Anlegen "README hinzufügen" ankreuzt, hat sich diese Falle
+> gestellt.
+
+Ist das Projekt schon mit einer README angelegt worden, gibt es zwei saubere
+Auswege: ein zweites, leeres Projekt nur für die Registry, oder die vorhandenen
+Dateien löschen, bevor zum ersten Mal gespiegelt wird. Was **nicht** funktioniert,
+ist zu hoffen, dass `--mirror` sie stehen lässt.
+
+**Zugang.** Wer über HTTPS arbeitet, braucht ein Token; wer über SSH arbeitet,
+einen hinterlegten Schlüssel. Welches Token, wer es besorgt, wo es liegt und was
+beim Ausscheiden passiert, steht vollständig in
+[Ops-Routine: Zugangstoken](ops-registry-tokens.de.md). Dieses Runbook wiederholt
+es nicht.
+
+Die Probe, dass der Zugang steht, vor allem anderen:
+
+```bash
+git ls-remote https://git.example.internal/gruppe/ki-skill-registry.git
+```
+
+Eine Liste von Refs (oder bei einem frisch angelegten leeren Projekt gar keine
+Ausgabe bei Exit 0) heißt: der Zugang steht. Eine Fehlermeldung über
+Authentifizierung heißt: zurück zur Token-Routine, und nicht weiter.
+
+### 0.4 Die Identitäten festlegen
+
+Jede Person bekommt eine Identität in der Form `id:<name>@<organisation>`. Sie
+ist kein Etikett, sondern der Wert, unter dem der Empfänger den Schlüssel pinnt
+und den die Signaturzeile eines Bundles trägt. Stimmen beide nicht überein,
+findet der Prüfer den Schlüssel nicht und lehnt ab.
+
+Deshalb gilt: **die Identitäten werden einmal aufgeschrieben, bevor jemand
+einen Schlüssel erzeugt**, und beide Seiten lesen dieselbe Zeile.
+
+| Person | Identität | Wird gebraucht bei |
+|---|---|---|
+| Autor | `id:bob@example` | `sign --identity-id`, `publish --identity` |
+| Empfänger | `id:alice@example` | nur, wenn auch sie veröffentlicht |
+
+Ein Suffix, das die Zugehörigkeit sagt, ist eine gute Angewohnheit: wer als
+externer Partner auftritt, sollte nicht aussehen wie eine interne Rolle.
+
+### 0.5 Die Schlüssel erzeugen und den öffentlichen teilen
+
+Das Einrichtungsskript aus Abschnitt 2 erzeugt das Schlüsselpaar mit; wer es
+von Hand tun will, tut es so:
+
+```bash
+skillctl keygen --out ~/.config/m3c/mein-autorenschluessel
+```
+
+Zwei Dateien entstehen, und die Unterscheidung ist die wichtigste dieses
+Abschnitts:
+
+| Datei | Rechte | Was damit geschieht |
+|---|---|---|
+| `…priv` | 0600 | **bleibt auf der Maschine.** Niemals per Mail, Chat, Ticket oder in ein Repository |
+| `…pub` | 0644 | **darf jeden Weg nehmen.** Genau dafür ist er da |
+
+Die Übergabe läuft über **zwei Kanäle**, und das ist der Kern des Verfahrens:
+
+1. **Kanal 1, bequem:** die `.pub`-Datei per Mail, Teams, geteiltem Ordner oder
+   USB-Stick. Der Weg muss nicht sicher sein.
+2. **Kanal 2, mündlich:** der Autor lässt sich den Fingerabdruck anzeigen und
+   liest ihn am Telefon vor.
+
+```bash
+skillctl trust fingerprint ~/.config/m3c/mein-autorenschluessel.pub
+sha256:8e19d51c27db47f6851d54a4d4e206c668fd95cf13b29569a6b5c57a2cc8b471
+```
+
+Der Empfänger lässt sich denselben Wert aus der Datei anzeigen, die bei ihm
+angekommen ist, und vergleicht Zeichen für Zeichen.
+
+> **Stimmt der Wert nicht überein, wird abgebrochen und nachgefragt, nicht
+> "nochmal geschickt".** Eine Abweichung heißt, dass die Datei unterwegs eine
+> andere geworden ist. Genau dagegen ist der zweite Kanal da, und deshalb nimmt
+> `--pin` den Wert zwingend: es gibt kein Vertrauen beim ersten Kontakt.
+
+Eine Zahl reicht für beide Pins. Nachgeprüft am 2026-09-16: derselbe
+Fingerabdruck ging an `trust add-author --pin` und an `peer add --pin`, und
+beide bestätigten ihn als `matched`. Am Telefon wird also eine Zeile
+vorgelesen, nicht zwei.
+
+**Was der Autor sonst noch tut:** den privaten Schlüssel sichern, an einem Ort,
+der nicht dieselbe Platte ist. Geht er verloren, ist keine der bisherigen
+Signaturen ungültig, aber es kann nichts Neues mehr unter dieser Identität
+signiert werden, und der Empfänger muss einen neuen Schlüssel pinnen. Das ist
+kein Notfall, aber es ist ein Telefonat.
+
+### 0.6 Bereit, wenn
+
+Beide Seiten haken einzeln ab. Jede Zeile hat ein Kommando, keine Meinung.
+
+| # | Auf welcher Maschine | Prüfung | Erwartet |
+|---|---|---|---|
+| V1 | beide | `git --version` | eine Versionszeile |
+| V2 | beide | `skillctl version` | die Fassung, die das Team festgelegt hat |
+| V3 | beide | `skillctl doctor` | `USABLE`, offene Schritte sind erlaubt |
+| V4 | beide | `git ls-remote <registry-url>` | Exit 0 |
+| V5 | Autor | `ls -l …priv` | Modus `-rw-------` |
+| V6 | Autor | `skillctl trust fingerprint …pub` | ein `sha256:`-Wert |
+| V7 | Empfänger | derselbe Wert, am Telefon abgeglichen | zeichenweise gleich |
+| V8 | beide | die Identitäten liegen aufgeschrieben vor | zwei Zeilen `id:…@…` |
+
+`skillctl doctor` ist dabei der Freundlichste der acht: er sagt zu jeder Zeile,
+was zu tun ist, und `todo` ist kein Fehler.
+
+Das `dev` in der ersten Zeile gehört zum Messaufbau dieses Runbooks (Abschnitt
+"Wie weit dieses Runbook gemessen ist") und ist auf einer eingerichteten
+Maschine eine echte Fassungsnummer:
+
+```
+$ skillctl doctor
+ok    version      skillctl dev (darwin/arm64, go1.26.6)
+ok    home         /Users/… ($HOME)
+todo  skills dir   /…/.claude/skills does not exist yet
+                   -> it is created by the first `skillctl install`
+ok    trust roots  /…/.claude/skill-trust-roots.yaml (1 registry/ies, 1 pinned, 0 from-registry)
+todo  peers        no pinned peers
+--------------------------------------------------------------
+USABLE, 4 step(s) not done yet. Nothing here is broken.
+```
 
 ## 1. Die Reihenfolge, an der alles hängt
 
@@ -181,15 +414,21 @@ aufgeschrieben wird.
 
 ## 4. Der Skill-Lebenszyklus von Mensch A zu Mensch B
 
-Fünf Schritte. Der vorletzte ist der, an dem ein Mensch entscheidet.
+Sechs Schritte. Der viertletzte ist der, an dem ein Mensch entscheidet, und der
+letzte ist der, den ein Runbook gern vergisst.
 
-| Schritt | Kommando | Was es beweist |
-|---|---|---|
-| bauen | (kein Kommando) | der Skill entsteht aus `reflections/`, nicht am Reißbrett |
-| prüfen | `skillctl pack` zweimal | zwei Läufe, Byte für Byte gleich |
-| bündeln | `skillctl sign`, `skillctl verify-sig` | die eigene Arbeit ist geprüft, bevor sie weggeht |
-| herausgeben | `skillctl publish`, dann `publish --attest` | Aufnahme und Freigabe sind zwei Vorgänge |
-| übernehmen | `skillctl pull --install` | Herkunft und Freigabestufe liegen neben dem Skill |
+| # | Schritt | Wer | Kommando | Was es beweist |
+|---|---|---|---|---|
+| 1 | bauen | Autor | (kein Kommando) | der Skill entsteht aus `reflections/`, nicht am Reißbrett |
+| 2 | prüfen | Autor | `skillctl pack` zweimal | zwei Läufe, Byte für Byte gleich |
+| 3 | bündeln | Autor | `skillctl sign`, `skillctl verify-sig` | die eigene Arbeit ist geprüft, bevor sie weggeht |
+| 4 | herausgeben | Autor, dann Freigeber | `skillctl publish`, dann `publish --attest` | Aufnahme und Freigabe sind zwei Vorgänge |
+| 5 | übernehmen | Empfänger | `skillctl pull --install` | Herkunft und Freigabestufe liegen neben dem Skill |
+| 6 | benutzen | Empfänger | `/<name>` in Claude Code | der Skill läuft, statt nur auf der Platte zu liegen |
+
+Alles darunter setzt Abschnitt 0 voraus. Wer hier anfängt, ohne V1 bis V8
+abgehakt zu haben, scheitert an Schritt 3 oder an Schritt 5, und die Meldung
+sagt dann etwas über Schlüssel, nicht über die Voraussetzung, die fehlt.
 
 ### 4.1 Bauen und prüfen
 
@@ -258,6 +497,11 @@ Die letzte Zeile ist der Weg in den Betrieb: derselbe Ordner, auf eine interne
 GitLab-Instanz gespiegelt, ist die Skill-Ablage des Unternehmens. Damit gilt
 über Skills dieselbe Nachvollziehbarkeit wie über Quelltext, ohne dass dafür
 etwas Neues gebaut werden muss.
+
+Diese eine Zeile hat drei Fallen, und alle drei treffen den, der sie zum ersten
+Mal ausführt. [Abschnitt 5](#5-das-gemeinsame-repository-vom-ordner-nach-gitlab)
+fährt sie einzeln vor. Wer heute nur zu zweit auf einer Maschine übt, braucht
+sie noch nicht.
 
 **Aufnehmen und freigeben sind zwei Vorgänge.**
 
@@ -366,7 +610,156 @@ Neben dem Skill liegt danach seine Herkunft, und sie ist der Beleg für Z4:
 }
 ```
 
-## 5. Die Falle: drei Dateien heißen Trust-Roots
+### 4.5 Und dann benutzen
+
+Der Schritt, den kein Kommando abnimmt und den ein Runbook trotzdem nennen
+muss, sonst endet es beim Installieren.
+
+Nach dem Install liegt der Skill unter `~/.claude/skills/<name>/`. Was dort
+liegt, ist der Skill plus seine Belege:
+
+```
+$ ls -a ~/.claude/skills/wochenbericht/
+.m3c-provenance.json     woher er kommt, wer signiert hat, welche Stufe
+.skillctl-attest.json    die Freigabe, signiert
+CHECKSUMS                die Prüfsummen der Dateien
+SKILL.md                 der Skill selbst
+bundle.json              das Manifest
+wochenbericht.skb        das Bundle, aus dem entpackt wurde
+```
+
+Benutzt wird er in Claude Code unter seinem Namen aus dem `name:`-Feld der
+`SKILL.md`, also `/wochenbericht`. Claude Code liest die installierten Skills
+beim Sitzungsstart; eine laufende Sitzung sieht einen frisch installierten
+Skill also erst nach einem Neustart.
+
+Damit schließt sich die Schleife aus Abschnitt 7: die Mitarbeiterin ruft das
+auf, was aus ihrer eigenen dreimal gelaufenen Arbeitsweise geworden ist, und
+was sie beim Aufrufen stört, ist der Inhalt der nächsten Reflexion.
+
+## 5. Das gemeinsame Repository: vom Ordner nach GitLab
+
+Abschnitt 4 lief auf einer Maschine. Sobald zwei Menschen dieselbe Registry
+benutzen, kommt GitLab dazwischen, und dabei gibt es drei Stellen, an denen es
+still schiefgeht. Alle drei sind am 2026-09-16 gemessen, gegen ein
+nachgebautes GitLab-Projekt im Dateisystem.
+
+### 5.1 Der Autor schiebt hoch
+
+Der Ordner aus 4.3 wird zum ersten Mal gespiegelt. Das Kommando druckt
+`registry init` selbst:
+
+```bash
+git -C /pfad/zur/registry push --mirror https://git.example.internal/gruppe/ki-skill-registry.git
+```
+
+**`--mirror` ersetzt den Zustand des Ziels.** Wie das aussieht, wenn im Projekt
+schon etwas lag, steht in 0.3, samt der Zeile, die git dabei druckt. Ist das
+Projekt leer angelegt worden, ist der erste Push unauffällig, und jeder weitere
+auch:
+
+```
+   107efa7..bfc3d5f  main -> main
+ * [new tag]         wb/v1.2.0 -> wb/v1.2.0
+```
+
+Jede veröffentlichte Fassung bekommt ein eigenes Tag. Wer im GitLab-Web
+nachsehen will, was aufgenommen wurde, sieht unter `skills/` die Bundles und
+unter `events/` die signierten Ereignisse.
+
+### 5.2 Der Empfänger holt sie: `--mirror`, nicht `--bare`
+
+Der Empfänger braucht eine lokale Kopie der Registry. Es gibt zwei Arten, das
+zu tun, sie sehen gleich aus, und nur eine funktioniert dauerhaft.
+
+```bash
+# richtig
+git clone --mirror https://git.example.internal/gruppe/ki-skill-registry.git ~/skill-registry
+```
+
+**Warum nicht `--bare`.** Gemessen: nach einem `git clone --bare` trägt der Klon
+keinen `fetch`-Refspec. Ein späteres `git fetch` in diesem Klon aktualisiert
+`refs/heads/main` deshalb **nicht**, es setzt nur `FETCH_HEAD`. Der Empfänger
+sieht dann auf Dauer den Stand vom Tag des Klonens, und zwar ohne
+Fehlermeldung: `pull` meldet fröhlich grün, nur eben die alte Fassung. Ein
+`--mirror`-Klon trägt `+refs/*:refs/*`, und damit holt ein schlichtes
+`git fetch` alles.
+
+Nachgeprüft: Autor veröffentlicht `1.2.0` und schiebt hoch, Empfänger ruft nur
+`git fetch` auf, danach zeigt `pull` drei Fassungen statt zwei.
+
+```
+$ git -C ~/skill-registry fetch
+   107efa7..bfc3d5f  main       -> main
+ * [neues Tag]       wb/v1.2.0  -> wb/v1.2.0
+
+$ skillctl pull --registry local://$HOME/skill-registry
+    ✅ wb@1.0.0  …  gov=green
+    ✅ wb@1.1.0  …  gov=green
+    ✅ wb@1.2.0  …  gov=green
+==> done. staged=3  skipped=0  (context: skills)
+```
+
+**Die zweite stille Stelle: `HEAD` des Klons.** Die Registry liegt auf `main`.
+Zeigt `HEAD` des Klons auf einen Zweig, den es nicht gibt, findet `skillctl`
+nichts und sagt es deutlich:
+
+```
+pull: NULLTREFFER im Kontext "skills".
+  Das ist kein Erfolg: ein leerer Lauf ist von einem Lauf ohne Arbeit
+  nicht zu unterscheiden […]
+```
+
+Bei einem GitLab-Projekt mit Standardzweig `main` tritt das nicht auf, der Klon
+übernimmt `HEAD` vom Server. Die Prüfung kostet trotzdem eine Zeile, und sie
+beantwortet die Frage, die sonst eine halbe Stunde kostet:
+
+```bash
+git -C ~/skill-registry symbolic-ref HEAD      # erwartet: refs/heads/main
+git -C ~/skill-registry symbolic-ref HEAD refs/heads/main   # falls nicht
+```
+
+### 5.3 Der Pin hängt am Pfad, nicht am Projekt
+
+**Die dritte Stelle, und die überraschendste.** `peer add` pinnt einen
+**Locator**, also genau die Zeichenkette `local:///pfad/zur/registry`. Ein
+anderer Pfad auf derselben Maschine, der dasselbe GitLab-Projekt enthält, ist
+für skillctl ein anderer Peer und ist **nicht** gepinnt. Gemessen: nach dem
+Umziehen der Registry in einen zweiten Ordner brach `pull` mit der Meldung ab,
+es fehle `~/.claude/trust-roots.yaml`, obwohl der Autor längst gepinnt war.
+
+Daraus folgt die Reihenfolge, und sie ist der Grund, warum 0.3 nach einem Pfad
+fragt, bevor irgendjemand pinnt:
+
+1. Pfad festlegen und klonen. Ein Pfad, einmal, für immer.
+2. **Dann** pinnen, auf genau diesen Pfad.
+
+```bash
+tools/team-base-setup.sh member --author-id id:bob@example \
+    --author-key ~/bob.pub --pin sha256:<am-telefon-abgeglichen> \
+    --peer-registry local://$HOME/skill-registry
+```
+
+Zieht die Registry doch einmal um, wird neu gepinnt. Das ist ein Kommando, kein
+Drama, aber es passiert nicht von allein.
+
+### 5.4 Die Runde, auf einen Blick
+
+| # | Wer | Kommando |
+|---|---|---|
+| 1 | IT | leeres, privates GitLab-Projekt, Standardzweig `main` |
+| 2 | Autor | `skillctl registry init --registry local://$HOME/skill-registry` |
+| 3 | Autor | `publish`, dann `publish --attest` |
+| 4 | Autor | `git -C $HOME/skill-registry push --mirror <url>` |
+| 5 | Empfänger | `git clone --mirror <url> ~/skill-registry` |
+| 6 | Empfänger | `team-base-setup.sh member … --peer-registry local://$HOME/skill-registry` |
+| 7 | Empfänger | `skillctl pull --registry local://$HOME/skill-registry --install --trust-mode …` |
+| später | Empfänger | `git -C ~/skill-registry fetch`, dann Schritt 7 erneut |
+
+Schritt 4 und Schritt 5 sind derselbe Inhalt in zwei Richtungen. Ab Schritt 6
+ist der Transportweg gleichgültig: gepinnt ist der Schlüssel, nicht GitLab.
+
+## 6. Die Falle: drei Dateien heißen Trust-Roots
 
 Gemessen am 2026-09-16, an drei Ausgaben desselben Binaries:
 
@@ -392,7 +785,7 @@ Die dritte Zeile der Tabelle ist die unangenehme: `pull` fordert einen Namen an,
 den kein Kommando dieses Binaries schreibt. Wer diese Meldung sieht, hat keinen
 Peer gepinnt; der Rat lautet dann `peer add`, nicht die Datei anzulegen.
 
-## 6. Der Takt: von manuellen Schritten zum Skill
+## 7. Der Takt: von manuellen Schritten zum Skill
 
 Ein Skill entsteht nicht dadurch, dass jemand einen schreibt. Er entsteht, weil
 dieselbe Abfolge dreimal gelaufen ist und beim dritten Mal niemand mehr
@@ -415,7 +808,7 @@ zweitrangig und darf das Einfachste sein, was vorhanden ist; eine Serien-E-Mail
 aus dem eigenen Postfach ist eine vollständige Lösung. Ein Takt ohne Erinnerung
 ist eine Hoffnung, und die Auswertung beklagt später die Datenlage.
 
-## 7. Wenn etwas fehlschlägt
+## 8. Wenn etwas fehlschlägt
 
 | Exit | Bedeutung | Was zu tun ist |
 |---|---|---|
@@ -429,7 +822,7 @@ Ein `verify-sig`, das fehlschlägt, während der Fingerabdruck stimmt, ist fast
 immer die Identität: `--identity` beim Aufnehmen vergessen, Vorgabewert
 stehengeblieben.
 
-## 8. Was offen bleibt
+## 9. Was offen bleibt
 
 - **Audit.** Signieren und Freigeben erzeugen Ereignisse in der Registry. Eine
   Weiterleitung an ein SIEM ist damit nicht eingerichtet, und dieses Runbook
