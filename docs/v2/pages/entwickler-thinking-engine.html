@@ -2,7 +2,7 @@
      NICHT von Hand aendern: scripts/check-docpages.sh erzeugt diese Datei
      neu und vergleicht sie mit dem Baum. Eine Handaenderung faellt dort auf.
      Quelle der Form: tools/release-templates/docpage.template.html -->
-<title>Das Sicherheits- und Vertrauensmodell</title>
+<title>The thinking-engine, per-user cognitive runtime</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
 <style>
 :root{
@@ -275,8 +275,8 @@ table.check tr.done td:not(:first-child){opacity:.5; text-decoration:line-throug
   <aside class="rail">
     <div class="brand">
       <p class="kicker">Ops-Runbook</p>
-      <h1>Das Sicherheits- und Vertrauensmodell</h1>
-      <p class="meta">docs/v2/sicherheit/ueberblick.de.md</p>
+      <h1>The thinking-engine, per-user cognitive runtime</h1>
+      <p class="meta">docs/v2/entwickler/thinking-engine.md</p>
     </div>
     <div class="flavorbar" id="flavorbar" hidden>
       <button type="button" id="flavorbtn" aria-pressed="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4.5 6V2.6h7V6"/><rect x="2" y="6" width="12" height="5" rx="1.1"/><path d="M4.5 10h7v3.4h-7z"/></svg><span>Druckansicht</span></button>
@@ -296,81 +296,113 @@ table.check tr.done td:not(:first-child){opacity:.5; text-decoration:line-throug
   </main>
 </div>
 
-<script id="src" type="text/markdown"># Ueberblick: das Sicherheits- und Vertrauensmodell
+<script id="src" type="text/markdown"># Runbook: the thinking-engine, per-user cognitive runtime
 
-Was die Vertrauensschicht behauptet, wo jede Behauptung belegt ist, und in
-welcher Reihenfolge eine Sicherheitspruefung dieses Repository liest. Diese
-Seite bewertet nichts selbst; sie fuehrt zu den Dokumenten, die je einen Teil
-der Beweislast tragen.
+How to build, start, probe and test `cmd/thinking-engine`, the per-user
+cognitive runtime of SPEC-0167. Everything below was read from
+`cmd/thinking-engine/main.go`, `cmd/thinking-engine/README.md`, the `Makefile`
+(`thinking-*` targets) and `internal/thinking/` on 2026-09-16; where the code
+and a comment disagree, the code is quoted.
 
-Zielgruppe: eine CISO-Leserin oder ein Security-Reviewer vor einer Freigabe,
-und die Person, die einer solchen Pruefung zuarbeitet.
+Audience: a developer who wants a running engine on their own machine, or who
+has to judge what the binary refuses and why. The index entries are in the
+[Program-Index](../../program-index.md) (build), the
+[Service-Index](../../service-index.md) (runtime wrapper `deploy/thinking-engine/`)
+and the [Component-Index, section G](../../component-index.md) (internals).
 
-Rolle: Sicherheit · Sprache: DE · Stand: 2026-09-16
+Rolle: Entwickler · Sprache: EN · Stand: 2026-09-16
 
-## Die Grundregel in einem Satz
+## The one rule the binary enforces at startup
 
-**Jede Vertrauensaussage zeigt auf eine Mitigation und die Tests, die sie
-ausueben, oder sie ist als GAP markiert:** das ist der Massstab, den
-[THREAT_MODEL.md](../../../THREAT_MODEL.md) an sich selbst anlegt, und der
-Massstab, an dem dieses Repository gemessen werden will.
+**No user context, no engine.** `--user-context-id` is mandatory; without it
+the process prints an error and exits `2`
+(`cmd/thinking-engine/main.go`, the first check in `main`). Every later
+identifier (topic names, HMAC claims, log prefixes) derives from the hash of
+that context. This is SPEC-0167 §Isolation Model as a runtime refusal, not a
+convention.
 
-## Das Modell in drei Saetzen
+## Start it locally (in-memory bus, no broker)
 
-1. `skillctl` gibt jedem Agent-Skill eine pruefbare Identitaet und einen
-   Lebenszyklus: author, pack, sign, admit, attest, verify/install, use,
-   audit, revoke ([Manual: skillctl](../referenz/manual-skillctl.md)).
-2. Die Kette verifiziert offline; ein gehostetes Registry, ein Ledger oder
-   ein Transparenz-Log ist komplementaer, nie Voraussetzung des Pruefpfads
-   (Kopfabsatz des Manuals).
-3. Der Bedrohungskatalog traegt zitierbare IDs (R01 bis R12). Heute zitieren
-   Testkommentare drei davon; gemessen am 2026-09-16 trifft
-   `grep -rn 'THREAT-R' pkg/ cmd/` genau R01, R06 und R10. Die Konvention,
-   nach der die uebrigen nachzuziehen sind, steht in
-   [THREAT_MODEL.md](../../../THREAT_MODEL.md), §6.
+```bash
+make thinking-build
+export THINKING_ENGINE_SECRET=dev-secret-please-change
+./build/thinking-engine --user-context-id=demo --listen=:7140
+curl http://localhost:7140/v1/health
+```
 
-## Leseweg fuer eine Pruefung
+Two footnotes, both from `main.go`:
 
-| Schritt | Dokument | Was dort steht |
-|---|---|---|
-| 1 | [THREAT_MODEL.md](../../../THREAT_MODEL.md) | Laufzeit-Trust-Kette: Bedrohungen R01 bis R12 mit Mitigationen, Tests und den dokumentiert geschlossenen frueheren GAPs |
-| 2 | [SECURITY.md](../../../SECURITY.md) | Meldeweg (privat, GitHub Security Advisories), unterstuetzte Versionen, Supply-Chain-Zusagen |
-| 3 | [docs/security/required-checks.txt](../../security/required-checks.txt) | die Pflicht-Checks auf `master` und warum die Namensbindung im Baum liegt |
-| 4 | [gosec-backlog](../../security/gosec-backlog.md) und [codeql-backlog](../../security/codeql-backlog.md) | der offene Static-Analysis-Bestand, klassifiziert, mit Datum |
-| 5 | [gosec-diff-gate.yml](../../../.github/workflows/gosec-diff-gate.yml) | das blockierende no-new-findings-Tor: Pflicht-Check auf `master` (required-checks.txt), prueft gegen die Signatur-Baseline `gosec-inci-baseline.txt`; die aeltere SARIF-Punktaufnahme [gosec-baseline](../../security/gosec-baseline.md) ist ein anderes, unverdrahtetes Artefakt |
-| 6 | [Release flow, "What CI signs"](../betrieb/releasing.md) | was ein Release signiert und woran ein Installierender es prueft |
-| 7 | [Ops-Runbook: Incident Response](../betrieb/ops-incident-response.de.md) | kompromittierter Schluessel oder Registry: erkennen, widerrufen, rotieren, neu pinnen |
-| 8 | [Ops-Routine: Zugangstoken](../betrieb/ops-registry-tokens.de.md) | Token-Lebenszyklus inkl. Ausscheiden: Lese-Token endet mit dem Konto der Person, das Schreibtoken gehoert der Rolle und wird beim Personalwechsel rotiert |
-| 9 | [Runbook: die Audit-Spur](audit-spur.de.md) | die drei Traeger konsolidiert: `audit` urteilt je Skill, `auditlog` zeigt das Audit-Subsystem (SPEC-0403 §8), `translog` ist das L1-Transparenz-Log; die Manual-Abschnitte sind dort verlinkt, die Registry-Zeitleiste (admit, attest, revoke, install) liest das [Incident-Runbook, Abschnitt 1](../betrieb/ops-incident-response.de.md) |
+- **The HMAC secret is read from the env var named by `--secret-env`**
+  (default `THINKING_ENGINE_SECRET`). If it is empty, main derives a dev
+  fallback from the ctx hash, with a comment that marks it NOT suitable for
+  production.
+- **The LLM wiring of this binary is OpenAI-only.** `main` calls
+  `llm.NewOpenAI()` and, when `OPENAI_API_KEY` is unset, logs
+  `llm: not configured (...): R/I handlers will fail until configured` and
+  keeps running. The richer factory `llm.NewAdapterFromEnv()`
+  (OpenAI, else Ollama via `OLLAMA_URL`, optional `M3C_LLM_FALLBACK=ollama`)
+  exists in `internal/thinking/llm/llm.go` but is not called by this `main`.
 
-## Vorfuehren statt behaupten
+## Flags
 
-| Format | Traeger | Sprache |
-|---|---|---|
-| Offline-Demo mit echten Exit-Codes: laut Quickstart wird ein vergiftetes Bundle mit Exit 10 abgewiesen und eine erzwungene Governance-Aktion mit Exit 2 verweigert | [Quickstart: skillctl-demo](../../old/quickstart-skillctl-demo.md) | EN |
-| Selbst nachvollziehen, offline, ohne Server | [Quickstart: skillctl](../../old/quickstart-skillctl.md) | EN |
-| Argumentation fuer Security-Expertin und CTO als Infografik | [CISO-Deck (EN)](../../old/skillctl-ciso-deck.html) · [CISO-Deck (DE)](../../old/skillctl-ciso-deck.de.html) | EN/DE |
-| Zwei-Personen-Nachweis ueber ER1, mit Pass-Kriterien | [Runbook: two-person ER1 exchange](../betrieb/runbook-two-person-er1-exchange.md) | EN |
+Read from the `flag` definitions in `cmd/thinking-engine/main.go`:
 
-## Grenzen, die diese Seite nicht verschweigt
+| Flag | Purpose |
+|---|---|
+| `--user-context-id` | REQUIRED; the user context the engine is bound to. Missing: exit `2`. |
+| `--listen` | Listen address, default `:7140`. |
+| `--secret-env` | Name of the env var holding the HMAC secret, default `THINKING_ENGINE_SECRET`. |
+| `--state-path` | SQLite path, default `~/.m3c-tools/thinking/<hash>/state.db`. |
+| `--kafka` | Kafka bootstrap address; empty = in-memory bus. Connecting for real needs the `thinking_kafka` build tag. |
+| `--er1-credentials` | Path to an ER1 service-account key; the flag's own help text marks it unused in Phase 1. |
 
-1. Das Threat Model deckt die Laufzeit-Trust-Kette ab, nicht die
-   Capture-Pipeline von m3c-tools; die Abgrenzung steht in seinem Scope-Hinweis.
-2. Es gibt zwei gosec-Baselines, und nur eine traegt ein Tor: das blockierende
-   no-new-findings-Tor
-   ([gosec-diff-gate.yml](../../../.github/workflows/gosec-diff-gate.yml),
-   Pflicht-Check auf `master`) prueft gegen die Signatur-Baseline
-   `gosec-inci-baseline.txt`; die SARIF-Punktaufnahme
-   [gosec-baseline](../../security/gosec-baseline.md) (2026-09-03) ist
-   unverdrahtet und dient nur der Triage.
-3. Ein Pflicht-Check ist an einen Job-NAMEN gebunden; eine Umbenennung
-   entkoppelt die Durchsetzung lautlos. Die Begruendung steht in
-   [required-checks.txt](../../security/required-checks.txt) selbst.
-4. Reaktionszeiten: [SECURITY.md](../../../SECURITY.md) nennt als Ziel eine
-   Bestaetigung "within a few working days" und sagt keine feste Frist fuer
-   Fix oder Disclosure zu. Ob eine harte SLA zugesagt wird, ist eine offene
-   Owner-Entscheidung (Stand 2026-09-16); diese Seite weist das aus, statt
-   eine Frist zu erfinden.
+## HTTP surface
+
+Routes registered in `internal/thinking/api/` and `main.go`:
+`/v1/health`, `/v1/thoughts`, `/v1/process`, `/v1/process/`, `/v1/trace/`,
+`/v1/insights`, `/v1/reflections`, `/v1/artifacts`, `/v1/compile`,
+`/v1/replay`, `/v1/rebuild`, `/v1/budget/today`, `/v1/budget/history`,
+`/metrics`.
+
+## The real broker (build tag `thinking_kafka`)
+
+The franz-go driver lives in `internal/thinking/kafka/bus_franz.go` behind the
+`thinking_kafka` build tag; the in-memory driver implements the same `Bus`
+interface, so the swap is a build-tag flip:
+
+```bash
+export CTX_HASH=$(printf "demo" | shasum -a 256 | cut -c1-16)
+make thinking-up            # broker stack
+make thinking-topics        # the canonical topics
+go build -tags thinking_kafka -o build/thinking-engine ./cmd/thinking-engine
+export THINKING_ENGINE_SECRET=dev-secret-please-change
+./build/thinking-engine --user-context-id=demo --kafka=localhost:9092 --listen=:7140
+```
+
+**Isolation invariant:** every produce and subscribe passes
+`assertOwnedBy(topic, owner)` in `internal/thinking/kafka/topics.go`, which
+panics on any topic whose prefix does not match the engine's own ctx hash.
+Consumer groups are named `m3c-<ctx_hash>-<role>`, so two users' engines on
+one broker cannot share a group (`cmd/thinking-engine/README.md`,
+"Isolation invariant").
+
+## Tests
+
+```bash
+make thinking-test                                           # unit, in-memory bus
+M3C_KAFKA_URL=localhost:9092 make thinking-test-integration  # against a real broker
+```
+
+Without `M3C_KAFKA_URL` the integration test skips cleanly; that skip is the
+CI path for broker-less environments (`cmd/thinking-engine/README.md`).
+
+## Where the rest lives
+
+- Container topology and runtime wrapper: [Service-Index](../../service-index.md),
+  `deploy/thinking-engine/`.
+- The week-by-week plan and the spec: SPEC-0167 / PLAN-0167 on the private
+  maintenance plane, referenced by id (SPEC-0358: a public-plane file carries
+  no path into the private one).
 </script>
 <!-- Integritaet ueber SRI: der Hash ist an den Bytes von cdnjs gerechnet
      (sha256 15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894).
@@ -638,7 +670,7 @@ Massstab, an dem dieses Repository gemessen werden will.
   apply();
 
   document.getElementById('foot').textContent =
-    'Erzeugt aus docs/v2/sicherheit/ueberblick.de.md mit tools/docpage.sh. Diese Seite rendert die Datei; ' +
+    'Erzeugt aus docs/v2/entwickler/thinking-engine.md mit tools/docpage.sh. Diese Seite rendert die Datei; ' +
     'massgeblich ist die Datei im Repository, nicht diese Fassung.';
 })();
 </script>

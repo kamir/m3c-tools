@@ -43,7 +43,7 @@ Massstab, an dem dieses Repository gemessen werden will.
 | 6 | [Release flow, "What CI signs"](../betrieb/releasing.md) | was ein Release signiert und woran ein Installierender es prueft |
 | 7 | [Ops-Runbook: Incident Response](../betrieb/ops-incident-response.de.md) | kompromittierter Schluessel oder Registry: erkennen, widerrufen, rotieren, neu pinnen |
 | 8 | [Ops-Routine: Zugangstoken](../betrieb/ops-registry-tokens.de.md) | Token-Lebenszyklus inkl. Ausscheiden: Lese-Token endet mit dem Konto der Person, das Schreibtoken gehoert der Rolle und wird beim Personalwechsel rotiert |
-| 9 | Audit-Spur: [`audit`](../referenz/manual-skillctl.md#audit-antivirus-style-verdict-per-skill), [`auditlog`](../referenz/manual-skillctl.md#auditlog-audit-subsystem-observability-spec-0403-8), [`translog`](../referenz/manual-skillctl.md#translog-l1-transparency-log) | drei Traeger im Manual: `audit` urteilt je Skill, `auditlog` zeigt das Audit-Subsystem (SPEC-0403 §8), `translog` ist das L1-Transparenz-Log; die Registry-Zeitleiste (admit, attest, revoke, install) liest das [Incident-Runbook, Abschnitt 1](../betrieb/ops-incident-response.de.md) |
+| 9 | [Runbook: die Audit-Spur](audit-spur.de.md) | die drei Traeger konsolidiert: `audit` urteilt je Skill, `auditlog` zeigt das Audit-Subsystem (SPEC-0403 §8), `translog` ist das L1-Transparenz-Log; die Manual-Abschnitte sind dort verlinkt, die Registry-Zeitleiste (admit, attest, revoke, install) liest das [Incident-Runbook, Abschnitt 1](../betrieb/ops-incident-response.de.md) |
 
 ## Vorfuehren statt behaupten
 
