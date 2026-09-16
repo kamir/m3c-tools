@@ -23,6 +23,13 @@ cd "$ROOT"
 # markdown-quelle -> erzeugte seite
 REGISTER='
 docs/ops-human-agent-team.de.md|docs/pages/ops-human-agent-team.html
+docs/v2/index.md|docs/v2/pages/wegweiser.html
+docs/v2/nutzer/einstieg.de.md|docs/v2/pages/nutzer-einstieg.html
+docs/v2/entwickler/architecture.md|docs/v2/pages/entwickler-architecture.html
+docs/v2/entwickler/getting-started.md|docs/v2/pages/entwickler-getting-started.html
+docs/v2/betrieb/ueberblick.de.md|docs/v2/pages/betrieb-ueberblick.html
+docs/v2/betrieb/runbook-m3c-tools-capture.de.md|docs/v2/pages/betrieb-runbook-m3c-tools-capture.html
+docs/v2/sicherheit/ueberblick.de.md|docs/v2/pages/sicherheit-ueberblick.html
 '
 
 command -v python3 >/dev/null || { echo "check-docpages: python3 fehlt" >&2; exit 2; }
