@@ -620,6 +620,7 @@ func attestKindFor(flagKind, digestArg, bundlePath, name, version string) (strin
 	if bundlePath == "" {
 		return flagKind, nil
 	}
+	// #nosec G304 -- an operator-supplied path to the bundle they are attesting (--bundle, or the ./<name>@<version>.skb fallback above); read into memory and parsed as a manifest only, nothing written, no content printed.
 	skb, err := os.ReadFile(bundlePath)
 	if err != nil {
 		return "", fmt.Errorf("read bundle %s: %w", bundlePath, err)
