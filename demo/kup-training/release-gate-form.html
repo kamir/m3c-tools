@@ -55,6 +55,10 @@
     padding: 14px 22px;
     margin-bottom: 18px;
   }
+  section.start-dir-banner .start-dir-input {
+    font: inherit; padding: 2px 6px; border: 1px solid currentColor;
+    border-radius: 4px; background: transparent; color: inherit; opacity: .85;
+  }
   section.start-dir-banner .start-dir-row {
     display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
   }
@@ -252,8 +256,9 @@
 <section class="start-dir-banner" id="start-dir-banner">
   <div class="start-dir-row">
     <span class="banner-label">Start in this directory</span>
-    <code id="start-dir-cmd">cd /Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training</code>
+    <code id="start-dir-cmd">cd <pfad-zu>/m3c-tools/demo/kup-training</code>
     <button id="start-dir-copy" class="copy-btn">copy</button>
+    <input id="start-dir-input" class="start-dir-input" placeholder="Ihr Pfad zu demo/kup-training" size="44">
   </div>
   <div class="banner-hint">Each step also leads with this <code>cd</code> so any single step is safe to copy-paste into a fresh terminal.</div>
 </section>
@@ -343,7 +348,19 @@ override = explicit "Show system insights" toggle</pre>
 // =========================================================================
 // Data: the gate steps. Edit here to adjust what the form prompts for.
 // =========================================================================
-const START_DIR = "/Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training";
+// Das Startverzeichnis ist maschinengebunden und stand hier frueher fest
+// verdrahtet, mit dem Heimatpfad seines Autors. Dieses Repository ist
+// oeffentlich und wird in ein Kunden-GitLab gespiegelt, also darf es das nicht.
+//
+// Ein blosser Platzhalter waere aber schlimmer als der falsche Pfad: dieses
+// Formular lebt davon, dass man die Befehle KOPIEREN kann. Deshalb ist es ein
+// Eingabefeld, das sich merkt, was man eintraegt.
+const SD_KEY = "release-gate-start-dir";
+const SD_FALLBACK = "<pfad-zu>/m3c-tools/demo/kup-training";
+function startDir() {
+  try { return (localStorage.getItem(SD_KEY) || "").trim() || SD_FALLBACK; }
+  catch (e) { return SD_FALLBACK; }
+}
 
 const STEPS = [
   {
@@ -500,7 +517,7 @@ function render() {
 
   // Start-directory banner
   const sdEl = document.getElementById("start-dir-cmd");
-  if (sdEl) sdEl.textContent = `cd ${START_DIR}`;
+  if (sdEl) sdEl.textContent = `cd ${startDir()}`;
 
   // Form version (cache-staleness signal)
   const fvEl = document.getElementById("form-version");
@@ -525,7 +542,7 @@ function render() {
         ${(() => {
           // Always lead with the cd to the demo directory so each step is
           // self-contained: copy-paste from any terminal, any cwd.
-          const cdCmd = `cd ${START_DIR}`;
+          const cdCmd = `cd ${startDir()}`;
           const all = [cdCmd, ...step.commands];
           return all.map(cmd => {
             const isComment = cmd.trim().startsWith("#");
@@ -670,7 +687,7 @@ function buildExport() {
     captured_at_export: now,
     mode: state.meta.mode,
     host: state.meta.host,
-    start_dir: START_DIR,
+    start_dir: startDir(),
     overall_verdict: overall,
     counts: counts,
     items: items,
@@ -733,7 +750,7 @@ document.getElementById("btn-er1-recipe").addEventListener("click", () => {
   const filename = (state.meta.session_id || "release-gate") + ".json";
   const recipe = `# 1) Click "Download JSON" first → saves ${filename} to your Downloads folder
 # 2) Push to ER1 (one item per step):
-cd /Users/kamir/GITHUB.kamir/m3c-tools/demo/kup-training
+cd ${startDir()}
 mv ~/Downloads/${filename} ./
 ./push-to-er1.sh ./${filename}
 
@@ -758,9 +775,17 @@ document.getElementById("btn-clear").addEventListener("click", () => {
 // =========================================================================
 // Start-directory banner copy button
 // =========================================================================
+const sdInput = document.getElementById("start-dir-input");
+if (sdInput) {
+  try { sdInput.value = localStorage.getItem(SD_KEY) || ""; } catch (e) {}
+  sdInput.addEventListener("input", () => {
+    try { localStorage.setItem(SD_KEY, sdInput.value.trim()); } catch (e) {}
+    render();
+  });
+}
 document.getElementById("start-dir-copy").addEventListener("click", e => {
   const btn = e.currentTarget;
-  navigator.clipboard.writeText(`cd ${START_DIR}`).then(() => {
+  navigator.clipboard.writeText(`cd ${startDir()}`).then(() => {
     btn.classList.add("copied"); btn.textContent = "copied!";
     setTimeout(() => { btn.classList.remove("copied"); btn.textContent = "copy"; }, 1200);
   });

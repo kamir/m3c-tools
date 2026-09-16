@@ -16,7 +16,7 @@ python3 -m venv --system-site-packages .venv      # inherits your system torch
 ## CLI
 
 ```bash
-RAG=/Users/kamir/GITHUB.kamir/m3c-tools/rag-mcp-server
+RAG="$(git rev-parse --show-toplevel)/rag-mcp-server"
 WS=/path/to/repo
 
 $RAG/.venv/bin/python $RAG/rag.py index  -w "$WS"           # full build
@@ -76,9 +76,9 @@ Register in `<repo>/.mcp.json` so agents get `rag_search` / `rag_workspaces` /
 {
   "mcpServers": {
     "rag": {
-      "command": "/Users/kamir/GITHUB.kamir/m3c-tools/rag-mcp-server/.venv/bin/python",
+      "command": "<REPO>/rag-mcp-server/.venv/bin/python",
       "args": [
-        "/Users/kamir/GITHUB.kamir/m3c-tools/rag-mcp-server/rag_mcp_server.py",
+        "<REPO>/rag-mcp-server/rag_mcp_server.py",
         "--workspace", "/path/to/notes-repo",
         "--workspace", "/path/to/spec-repo",
         "--workspace", "/path/to/code-repo"

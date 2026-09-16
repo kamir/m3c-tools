@@ -34,7 +34,7 @@ Parse the user's input to determine which subcommand to run:
 
 ## Configuration
 
-- **aims-core repo**: `/Users/kamir/GITHUB.active/my-ai-X` (git root), app at `aims-core/`
+- **aims-core repo**: git root is `$(dirname "$AIMS_CORE_ROOT")`, the app itself is `$AIMS_CORE_ROOT` (from `.claude/local-paths.env`)
 - **VERSION file**: `aims-core/VERSION` (contains semver like `4.0.0`)
 - **State file**: `.deploy/gcp-state.json` in m3c-tools project root
 - **Release strategy**: See `${M3C_MAINTENANCE_DIR}/SPEC/release-strategy.md` if it exists (private maintenance plane; set `$M3C_MAINTENANCE_DIR`)
@@ -48,7 +48,7 @@ Gather and display release state:
 
 ```bash
 # 1. Current branch and version
-cd /Users/kamir/GITHUB.active/my-ai-X
+cd "$(dirname "$AIMS_CORE_ROOT")"
 BRANCH=$(git branch --show-current)
 VERSION=$(cat aims-core/VERSION 2>/dev/null || echo "unknown")
 
@@ -129,7 +129,7 @@ Tag a release on main after PR merge.
 2. Otherwise, read `aims-core/VERSION` for the version
 3. Verify we're on main or can checkout main:
    ```bash
-   cd /Users/kamir/GITHUB.active/my-ai-X
+   cd "$(dirname "$AIMS_CORE_ROOT")"
    git checkout main
    git pull origin main
    ```
@@ -176,7 +176,7 @@ Orchestrate the complete release pipeline. Ask the user to confirm before each m
 Before any deploy, verify:
 
 ```bash
-cd /Users/kamir/GITHUB.active/my-ai-X/aims-core
+cd "$AIMS_CORE_ROOT"
 
 # 1. Import check: ensure the Flask app loads without import errors
 cd flask && python -c "
