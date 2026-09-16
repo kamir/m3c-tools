@@ -111,7 +111,9 @@ func unsetAmbientEnv(t *testing.T) {
 			// t.Setenv registers the restore; the explicit Unsetenv
 			// leaves the variable ABSENT (not empty) during the test.
 			t.Setenv(k, v)
-			os.Unsetenv(k)
+			if err := os.Unsetenv(k); err != nil {
+				t.Fatalf("unset %s: %v", k, err)
+			}
 		}
 	}
 }
