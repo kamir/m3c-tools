@@ -40,6 +40,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -54,6 +55,12 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
 )
+
+// safeBundleName is the publish-side mirror of the install side's
+// sanitizeBundleName: a name that becomes a path segment must be one. One
+// segment of [A-Za-z0-9._-], not starting with a dot (which also excludes
+// "." and "..").
+var safeBundleName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
 // sessionCheckpoint is a thin wrapper around pkg/session.Checkpoint with the
 // CLAUDE_SESSION_ID-derived session id + the publish-supplied note.
@@ -994,11 +1001,21 @@ func ensureBundle(a publishAdmitArgs, stderr io.Writer) (string, string, error) 
 		// An agent is ONE file (SPEC-0432 §3.1). Stage it into a temp dir named
 		// <name>.md so it runs through the same packer as every skill: one
 		// canonicalization, one digest path, no special case inside Pack.
+		//
+		// The name becomes a path segment (here and at the anchor inside Pack),
+		// so it must BE one: a name like "../x" would write above the staging
+		// dir. The install side has sanitizeBundleName; this is the publish
+		// side's mirror of the same rule.
+		if !safeBundleName.MatchString(a.name) {
+			return "", "", fmt.Errorf("bad agent name %q: one path segment of [A-Za-z0-9._-], "+
+				"not starting with a dot; no bundle written", a.name)
+		}
 		src := a.agentFile
 		if src == "" {
 			home, _ := os.UserHomeDir()
 			src = filepath.Join(home, ".claude", "agents", a.name+".md")
 		}
+		// #nosec G304 -- an operator-supplied path to the agent definition they asked to publish.
 		body, err := os.ReadFile(src)
 		if err != nil {
 			return "", "", fmt.Errorf("agent file not found: %s (try --agent-file)", src)
@@ -1027,6 +1044,7 @@ func ensureBundle(a publishAdmitArgs, stderr io.Writer) (string, string, error) 
 			return "", "", fmt.Errorf("staging dir: %w", err)
 		}
 		defer os.RemoveAll(staged)
+		// #nosec G306 G703 -- Klassenentscheidung: nicht geheimes lokales Artefakt (0600/0700 bleibt Geheimnissen vorbehalten, Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306"); der Name ist oben gegen safeBundleName geprueft, ein Pfadsegment.
 		if err := os.WriteFile(filepath.Join(staged, a.name+".md"), body, 0644); err != nil {
 			return "", "", fmt.Errorf("staging %s: %w", a.name, err)
 		}

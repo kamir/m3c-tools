@@ -389,6 +389,7 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "  seal                    Snapshot the installed skills into a signed inventory seal.")
 	fmt.Fprintln(w, "  import                  Import a scan into a remote target (--target <url>).")
 	fmt.Fprintln(w, "  consolidate             Report duplicate / orphan / drifted skills across projects.")
+	fmt.Fprintln(w, "  drift                   Compare what this machine carries against the registry catalog (SPEC-0432).")
 	fmt.Fprintln(w, "  review                  Serve a local review UI for a delta report.")
 	fmt.Fprintln(w, "  browse                  Serve an interactive local skill-graph browser.")
 	fmt.Fprintln(w, "  menubar                 Launch the macOS menu-bar skill monitor (long-running).")

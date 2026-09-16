@@ -29,6 +29,12 @@ func TestDecideRevokedBeatsGovernance(t *testing.T) {
 func TestStateAtTransitTamperFailsGovernanceNotDigest(t *testing.T) {
 	// The intuitive answer is "digest mismatch". It is wrong: the reviewer attested
 	// the PRE-tamper digest, so the admitted bytes carry no governance at all.
+	//
+	// Since PR #319 F2 the corpus never measures this state: admit reads the
+	// manifest fail-closed and refuses transit-broken bytes at the door
+	// (generate.go, doorRefusesAdmit), so no such bundle is admitted. StateAt
+	// keeps the theory for the counterfactual "had such bytes been admitted",
+	// and this test pins that the model itself did not drift.
 	s := StateAt(Params{Gov: GovGreen, Key: KeySeparatePin, Adv: AdvTransitSkipped}, false)
 	ok, gate := s.Decide()
 	if ok || gate != "gate 4" {

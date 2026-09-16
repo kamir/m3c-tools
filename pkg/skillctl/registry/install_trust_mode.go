@@ -738,6 +738,7 @@ func installAgent(b *StagedBundle, man skillbundle.BundleManifest, skb []byte, o
 	}
 
 	agentsDir := agentsDirFor(opts.SkillsDir)
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
 		return nil, fmt.Errorf("install: mkdir %s: %w", agentsDir, err)
 	}
@@ -772,6 +773,7 @@ func installAgent(b *StagedBundle, man skillbundle.BundleManifest, skb []byte, o
 		_ = os.Remove(tmpName)
 		return nil, fmt.Errorf("install: close %s: %w", target, err)
 	}
+	// #nosec G302 -- Klassenentscheidung: nicht geheimes lokales Artefakt; die Agentendatei muss fuer den Loader lesbar sein. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.Chmod(tmpName, 0o644); err != nil {
 		_ = os.Remove(tmpName)
 		return nil, fmt.Errorf("install: chmod %s: %w", target, err)
@@ -790,6 +792,7 @@ func installAgent(b *StagedBundle, man skillbundle.BundleManifest, skb []byte, o
 	// machine whose digest cannot be checked after the fact, and SPEC-0432 §5
 	// asks for more care with agents than with skills, not less.
 	provDir := filepath.Join(agentsDir, ".provenance")
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(provDir, 0o755); err != nil {
 		return nil, fmt.Errorf("install: mkdir %s: %w", provDir, err)
 	}

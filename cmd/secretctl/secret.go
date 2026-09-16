@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/pbkdf2"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -38,9 +39,25 @@ func (s Secret) Reveal() string { return string(s) }
 // Empty reports whether nothing is held. Useful without revealing.
 func (s Secret) Empty() bool { return len(s) == 0 }
 
-// Fingerprint is how two values are compared and reported: the first 12
-// characters of sha256. Enough to tell two values apart in a table, far too
-// little to reconstruct one.
+// fingerprintSalt is a PUBLIC, FIXED domain-separation salt, by design: two
+// machines must derive the same fingerprint for the same value so their
+// reports are comparable. The protection is the work factor below, never the
+// salt's secrecy.
+const fingerprintSalt = "m3c-secretctl-fingerprint/v1"
+
+// fingerprintIters is the PBKDF2-HMAC-SHA256 iteration count. High enough
+// that a leaked 12-character tag is no cheap offline-guessing oracle for a
+// low-entropy value someone put into the registry; low enough that an
+// inventory over a few dozen holders stays interactive.
+const fingerprintIters = 600_000
+
+// Fingerprint is how two values are compared and reported: the first 12 hex
+// characters of a PBKDF2-HMAC-SHA256 derivation. Enough to tell two values
+// apart in a table, far too little to reconstruct one, and expensive enough
+// per guess that the tag is not a dictionary oracle (a plain sha256 here was
+// CodeQL finding go/weak-sensitive-data-hashing on PR #319: most managed
+// values are high-entropy keys, but nothing stops a registry from naming a
+// password, and the tag must not become the cheap way to test guesses).
 //
 // Every comparison in this tool runs over fingerprints, never over the values,
 // so that a diff, a log line or a failing assertion cannot carry the secret.
@@ -48,8 +65,13 @@ func (s Secret) Fingerprint() string {
 	if s.Empty() {
 		return "<leer>"
 	}
-	sum := sha256.Sum256([]byte(s))
-	return hex.EncodeToString(sum[:])[:12]
+	sum, err := pbkdf2.Key(sha256.New, string(s), []byte(fingerprintSalt), fingerprintIters, 32)
+	if err != nil {
+		// Reachable only with a broken parameterization, which is a compile-time
+		// constant above. No value is at risk; say so without printing anything.
+		return "<ableitung-fehlgeschlagen>"
+	}
+	return hex.EncodeToString(sum)[:12]
 }
 
 // SameAs compares two secrets in a way that reads as an intent, not as an

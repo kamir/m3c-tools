@@ -94,6 +94,7 @@ func shellQuoteRemote(s string) string {
 func capture(host string, name string, args ...string) (string, error) {
 	var cmd *exec.Cmd
 	if host == "" {
+		// #nosec G204 -- `name` is always a literal command of this file (security, grep, gcloud, docker); the args are fields of the operator's own registry, passed argv-wise without a shell.
 		cmd = exec.Command(name, args...)
 	} else {
 		// ssh joins its arguments into ONE string that the remote login shell
@@ -107,6 +108,7 @@ func capture(host string, name string, args ...string) (string, error) {
 			quoted = append(quoted, shellQuoteRemote(a))
 		}
 		remote := append([]string{"-o", "BatchMode=yes", "-o", "ConnectTimeout=10", host}, quoted...)
+		// #nosec G204 -- the binary is the literal "ssh"; host and fields come from the operator's own registry, and every remote argument is shell-quoted above (LOW-1).
 		cmd = exec.Command("ssh", remote...)
 	}
 	out, err := cmd.Output()

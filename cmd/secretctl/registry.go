@@ -112,6 +112,7 @@ func DefaultRegistryPath() string {
 
 // LoadRegistry reads and validates the file.
 func LoadRegistry(path string) (*Registry, error) {
+	// #nosec G304 -- the operator's own registry path (SECRETCTL_REGISTRY, --registry, or the default config location); the file holds locations, never values.
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("registry %s: %w", path, err)
