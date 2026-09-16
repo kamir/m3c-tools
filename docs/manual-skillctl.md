@@ -720,6 +720,39 @@ After the write the verb **reads the report back** and fails if it cannot find i
 because a write that only claims to have written is the expensive failure in this
 class.
 
+### `drift`: what this machine carries, and does it match the catalog
+
+`drift` compares the artefacts installed on this machine against the registry
+(FR-0278). It exists because a comparison nobody can repeat is not a check, it is
+an anecdote: two machines were once compared by hand over 110 checksums, and the
+two artefacts that had silently diverged were found by luck.
+
+| Flag | Purpose |
+|------|---------|
+| `-er1-target` | Registry target: `prod`, `stage`, `local`, or an explicit URL. |
+| `-er1-context` | ER1 context to query (default `skills`). |
+| `-kind skill\|agent` | Restrict to one kind. Empty compares both. |
+| `-only-findings` | Print only rows that are not `aktuell`, for use in a cron job. |
+
+Five verdicts, and the third is the one that matters:
+
+| Verdict | Meaning |
+|---------|---------|
+| `aktuell` | The local provenance digest equals the catalog's latest. |
+| `veraltet` | Both are known and they differ. |
+| `ohne Nachweis` | The artefact carries no provenance sidecar. |
+| `fehlt lokal` | In the catalog, not on this machine. |
+| `nicht im Katalog` | On this machine, unknown to the catalog. |
+
+**`ohne Nachweis` is not a failure and not a pass.** An artefact that arrived by
+any route other than `pull` has nothing vouching for it, so this command cannot
+say whether it matches; it only says that nothing vouches for it. On the machine
+where artefacts are authored, that is the normal case. It is reported as its own
+state and never folded into `aktuell`, because a drift detector that reports green
+when it could not compare is worse than none.
+
+Exit `1` on any `veraltet`, `fehlt lokal` or `nicht im Katalog`; `0` otherwise.
+
 ### `publish`: admit / attest / revoke via ER1 (`self` registry)
 
 ```bash
@@ -739,6 +772,8 @@ Publishes to your personal ER1 `self` registry (SPEC-0225). Three modes: admit a
 | `-all` | Publish every entry in `--manifest` (admit + attest as one batch). |
 | `-bundle` | Path to a pre-built `.skb`. If empty, the skill dir is packed in place. |
 | `-skill-dir` | Skill directory. Default: `~/.claude/skills/<name>`. |
+| `-kind skill\|agent` | Bundle kind (SPEC-0432). Empty means skill, and no `kind` is written, so skill bundles keep their exact bytes. |
+| `-agent-file` | Path to the agent definition. Default: `~/.claude/agents/<name>.md`. Only with `--kind agent`. |
 | `-version` | Skill version (overrides SKILL.md frontmatter). Required for admit. |
 | `-digest` | `[--attest\|--revoke]` existing bundle digest (`sha256:<hex>`). Derived from `--bundle` if empty. |
 | `-level green\|yellow\|red` | `[--attest]` governance level (default `green`). |

@@ -80,6 +80,7 @@ gates the CONTENT of the Exit-Code column against the register and the manual.
 | `revoke` | SPEC-0188 §4.5 | 0/1/2, 15, 22 |
 | `audit` | SPEC-0189 §14 | 0/1/2/3 |
 | `envreport` | SPEC-0428 | 0/1/2 |
+| `drift` | FR-0278 | 0/1/2 |
 | `propose` | SPEC-0194 | 0/1/2 |
 | `install` | SPEC-0188 §11 (S8) | 0/1/2, 10..17, 20, 22 |
 | `verify` | SPEC-0188 §11 (S8) | 0/1/2, 10..17, 20, 22 |

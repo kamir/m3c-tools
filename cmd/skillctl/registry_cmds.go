@@ -159,10 +159,11 @@ func runRegistryShow(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "registry show: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "skill:           %s\n", view.Name)
+	fmt.Fprintf(stdout, "kind:            %s\n", strOr(view.Kind, "skill"))
+	fmt.Fprintf(stdout, "name:            %s\n", view.Name)
 	fmt.Fprintf(stdout, "latest version:  %s\n", strOr(view.LatestVersion, "?"))
 	fmt.Fprintf(stdout, "latest digest:   %s\n", view.LatestDigest)
-	fmt.Fprintf(stdout, "latest gov:      %s\n", strOr(view.LatestGovernance, ": "))
+	fmt.Fprintf(stdout, "latest gov:      %s\n", strOr(view.LatestGovernance, "n/a"))
 	if view.IsRevoked {
 		fmt.Fprintln(stdout, "status:          REVOKED")
 	} else {

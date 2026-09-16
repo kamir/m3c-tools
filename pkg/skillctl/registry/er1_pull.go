@@ -41,6 +41,7 @@ import (
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/er1"
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustcore"
 )
@@ -75,6 +76,8 @@ type EventRow struct {
 
 // SkillView is the registry-view entry for one skill.
 type SkillView struct {
+	// Kind is the bundle kind (SPEC-0432). Empty reads back as "skill".
+	Kind             string
 	Name             string
 	LatestVersion    string
 	LatestDigest     string
@@ -90,6 +93,7 @@ type RegistryListing struct {
 
 // ListOpts bounds the query.
 type ListOpts struct {
+	OnlyKind   string // empty → both shelves; "agent" → only the agent shelf
 	OnlySkill  string // empty → all skills
 	OnlyLatest bool   // collapse to newest non-revoked digest per skill
 	Since      string // RFC3339 lower bound (matched against occurred_at): optional
@@ -97,6 +101,10 @@ type ListOpts struct {
 
 // ListRegistry queries ER1 for m3c-skill-bundle items, groups by skill, dedupes
 // by digest, and returns the registry view.
+// ErrNotInRegistry is a sentinel: abort versus warn is DIFFERENT behaviour
+// (SPEC-0432), and that distinction must not be read off an error string.
+var ErrNotInRegistry = errors.New("not found in registry")
+
 func ListRegistry(cfg *er1.Config, ctxID string, opts ListOpts) (*RegistryListing, error) {
 	rawItems, err := searchByTagsRaw(cfg, ctxID, []string{"m3c-skill-bundle", "skill-registry:self"})
 	if err != nil {
@@ -215,6 +223,8 @@ func ShowSkill(cfg *er1.Config, ctxID, nameOrDigest string) (*SkillView, error) 
 // StagedBundle is one verified bundle, with the .skb bytes (decoded inline or
 // fetched from MinIO) cached on disk under ~/.cache/m3c/skill-bundles/<digest>/.
 type StagedBundle struct {
+	// Kind is the bundle kind (SPEC-0432). Empty reads back as "skill".
+	Kind           string
 	Name           string
 	Version        string
 	Digest         string // sha256:<hex>
@@ -233,6 +243,8 @@ type StagedBundle struct {
 
 // PullOpts bounds the pull.
 type PullOpts struct {
+	// OnlyKind restricts the pull to one shelf. Empty pulls both.
+	OnlyKind   string
 	OnlySkill  string    // empty → all skills
 	OnlyDigest string    // empty → all admit items in scope
 	Since      string    // RFC3339; pass to the search query (best-effort filter)
@@ -1012,3 +1024,57 @@ func defaultCacheRoot() string {
 
 // unused-import dead-stores (keeps the linter quiet across partial builds).
 var _ = bytes.NewBuffer
+
+// KindTagPrefix is the ER1 tag that carries the bundle kind. Absent means
+// "skill" (SPEC-0432 §3.3), which is what makes the change invisible to every
+// bundle admitted before it.
+const KindTagPrefix = "kind:"
+
+const (
+	SkillShelfTag = "skill-registry:self"
+	AgentShelfTag = "agent-registry:self"
+)
+
+// shelfTagFor returns the shelf an item of this kind lives on. The empty kind
+// is a skill, like everywhere else.
+func shelfTagFor(kind string) string {
+	if kind == skillbundle.KindAgent {
+		return AgentShelfTag
+	}
+	return SkillShelfTag
+}
+
+// shelvesFor returns the shelves a query must visit for a requested kind. An
+// empty kind means "everything", and that is TWO queries, not one broader one:
+// the conjunction is what keeps old clients out, so it must not be loosened
+// for our own convenience.
+func shelvesFor(kind string) []string {
+	switch kind {
+	case skillbundle.KindAgent:
+		return []string{AgentShelfTag}
+	case skillbundle.KindSkill:
+		return []string{SkillShelfTag}
+	default:
+		return []string{SkillShelfTag, AgentShelfTag}
+	}
+}
+
+// ItemKind reads the kind off a registry item, resolving an absent tag to
+// "skill". The ONE place that decides it on the registry side.
+func ItemKind(item map[string]any) string {
+	if k := tagValueFromItem(item, KindTagPrefix); k != "" {
+		return k
+	}
+	return skillbundle.KindSkill
+}
+
+// SplitKindName parses the SPEC-0432 §4 identifier "art:name". A bare name
+// means "skill:", so every call written before SPEC-0432 keeps its meaning.
+// A "sha256:" prefix is NOT an identifier and must be handled by the caller
+// before this is reached.
+func SplitKindName(s string) (kind, name string) {
+	if k, n, ok := strings.Cut(s, ":"); ok && (k == skillbundle.KindAgent || k == skillbundle.KindSkill) {
+		return k, n
+	}
+	return skillbundle.KindSkill, s
+}

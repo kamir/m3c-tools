@@ -138,9 +138,13 @@ func cmdRetry(args []string) {
 		cancel()
 	}()
 
-	// RetryRunner.Run only returns on context cancellation (never nil), so a bare
-	// `!= nil` is always-true (SA4023); the meaningful check is whether it was a
-	// clean context-cancel vs a real error worth surfacing.
+	// No nil check, and errors.Is rather than !=. RetryRunner.Run has no exit
+	// but the context ending (pkg/er1/retry.go: an endless loop whose only
+	// return is the sleep's error), so `loopErr != nil` is dead code and
+	// staticcheck says so (SA4023). What remains is the one question that
+	// carries meaning: did it stop because WE cancelled it? errors.Is, because
+	// a cancellation can arrive wrapped, and a bare comparison would then
+	// report an orderly shutdown as a failure and exit 1.
 	if loopErr := runner.Run(ctx, time.Duration(interval)*time.Second); !errors.Is(loopErr, context.Canceled) {
 		fmt.Fprintf(os.Stderr, "Retry loop error: %v\n", loopErr)
 		os.Exit(1)

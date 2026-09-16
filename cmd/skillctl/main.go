@@ -108,6 +108,9 @@ func main() {
 	// Both routed through runWithExit so the SPEC-0188 §11 numbered exit
 	// codes (10..16) surface verbatim to the parent process: see
 	// cmd/skillctl/exit.go for the single audit point.
+	case "drift":
+		// FR-0278. Was traegt diese Maschine, und stimmt es mit dem Katalog?
+		os.Exit(runDrift(os.Args[2:], os.Stdout, os.Stderr))
 	case "install":
 		runWithExit(func() int { return runInstall(os.Args[2:], os.Stdout, os.Stderr) })
 	case "verify":
@@ -351,6 +354,7 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "Evidence and observability (SPEC-0189 §14, SPEC-0255, SPEC-0278, SPEC-0317, SPEC-0403)")
 	fmt.Fprintln(w, "  audit                   Antivirus-style trust verdict per installed skill. Exit space 0/2/3.")
 	fmt.Fprintln(w, "  envreport               Skill-Env-Report for one regulated environment (SPEC-0428). Dry run by default.")
+	fmt.Fprintln(w, "  drift                   Compare what this machine carries against the catalog (FR-0278).")
 	fmt.Fprintln(w, "  gate-stats              Summarise the gate-audit.jsonl (decisions, top blocks, cache-hit rate).")
 	fmt.Fprintln(w, "                          Flags: --since <168h|YYYY-MM-DD>, --json.")
 	fmt.Fprintln(w, "  auditlog                Audit-subsystem observability (SPEC-0403 §8). OWN exit space 0/1,")
