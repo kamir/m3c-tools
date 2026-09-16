@@ -70,6 +70,6 @@ Massstab, an dem dieses Repository gemessen werden will.
    [required-checks.txt](../../security/required-checks.txt) selbst.
 4. Reaktionszeiten: [SECURITY.md](../../../SECURITY.md) nennt als Ziel eine
    Bestaetigung "within a few working days" und sagt keine feste Frist fuer
-   Fix oder Disclosure zu. Ob eine harte SLA zugesagt wird, ist eine offene
-   Owner-Entscheidung (Stand 2026-09-16); diese Seite weist das aus, statt
-   eine Frist zu erfinden.
+   Fix oder Disclosure zu. Entschieden am 2026-09-16: es bleibt bewusst bei
+   dem weichen Ziel, eine harte SLA wird nicht zugesagt; SECURITY.md traegt
+   die Entscheidung datiert.

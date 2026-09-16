@@ -16,6 +16,10 @@ GitHub's **[Security Advisories](https://github.com/kamir/m3c-tools/security/adv
 We aim to acknowledge a report within a few working days and to coordinate a fix and disclosure
 timeline with you. Please give us a reasonable window to remediate before any public disclosure.
 
+Decided 2026-09-16: this stays a soft target by design. The project makes no fixed
+response-time commitment; the sentence above is a goal, not an SLA. Recorded here so the
+absence of an SLA reads as a decision, not an omission.
+
 ## Supported versions
 
 Security fixes target the **latest** release of each line: `vX.Y.Z` (product) and
