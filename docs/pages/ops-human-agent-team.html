@@ -1202,7 +1202,13 @@ stehengeblieben.
 - [Runbook: two-person ER1 exchange](runbook-two-person-er1-exchange.md): derselbe
   Austausch über eine ER1-Registry statt über einen Ordner.
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<!-- Integritaet ueber SRI: der Hash ist an den Bytes von cdnjs gerechnet
+     (sha256 15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894).
+     Stimmt die Auslieferung nicht damit ueberein, laedt der Browser sie NICHT,
+     und die Seite faellt auf ihre Rohtext-Darstellung zurueck. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"
+        integrity="sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
 (function () {
   var raw = document.getElementById('src').textContent;
@@ -1339,7 +1345,9 @@ stehengeblieben.
     if (/^##\s/m.test(txt)) label = 'vorlage';
     var strip = document.createElement('div');
     strip.className = 'strip';
-    strip.innerHTML = '<span>' + label + '</span>';
+    var tag = document.createElement('span');
+    tag.textContent = label;
+    strip.appendChild(tag);
     pre.parentNode.insertBefore(box, pre);
     box.appendChild(strip);
     box.appendChild(pre);
@@ -1368,7 +1376,11 @@ stehengeblieben.
     var hr = check.querySelector('thead tr');
     var th = document.createElement('th');
     th.setAttribute('scope', 'col');
-    th.innerHTML = '<span style="position:absolute;left:-9999px">erledigt</span>';
+    var sr = document.createElement('span');
+    sr.style.position = 'absolute';
+    sr.style.left = '-9999px';
+    sr.textContent = 'erledigt';
+    th.appendChild(sr);
     hr.insertBefore(th, hr.firstChild);
 
     var rows = Array.prototype.slice.call(check.querySelectorAll('tbody tr'));
@@ -1418,7 +1430,16 @@ stehengeblieben.
     var li = document.createElement('li');
     var a = document.createElement('a');
     a.href = '#' + h.id;
-    a.innerHTML = '<span class="n">' + (m ? m[1] : '·') + '</span><span>' + (m ? m[2] : t) + '</span>';
+    // Der Text kommt aus einer Ueberschrift und wird als TEXT gesetzt. Frueher
+    // stand hier innerHTML: eine Ueberschrift mit einem "<" haette die Schiene
+    // zerlegt, und CodeQL hat es als js/xss-through-dom gemeldet.
+    var num = document.createElement('span');
+    num.className = 'n';
+    num.textContent = m ? m[1] : '\u00b7';
+    var cap = document.createElement('span');
+    cap.textContent = m ? m[2] : t;
+    a.appendChild(num);
+    a.appendChild(cap);
     li.appendChild(a);
     list.appendChild(li);
     sections.push({ h: h, a: a });
