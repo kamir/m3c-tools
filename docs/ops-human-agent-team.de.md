@@ -150,6 +150,11 @@ export PATH="$HOME/.local/bin:$PATH"
 Die Registry ist ein Git-Repository. Für ein Team, das sie teilt, liegt sie
 auf der internen GitLab-Instanz.
 
+**Sie bekommt ein eigenes Projekt, und das Projekt ist leer.** Nicht ein
+vorhandenes mitbenutzen, nicht einen Ordner in einem Projekt, das noch etwas
+anderes tut. Der Grund steht im Kasten unten und ist nicht verhandelbar: der
+erste Push ersetzt alles, was im Zielzweig liegt.
+
 | Frage | Antwort |
 |---|---|
 | Wer legt es an | die IT oder wer im Namensraum Projekte anlegen darf |
@@ -157,7 +162,8 @@ auf der internen GitLab-Instanz.
 | Sichtbarkeit | privat |
 | Standardzweig | `main` |
 | Wer darf schreiben | nur der Autor. Alle anderen lesen |
-| Wie es heißen sollte | ein Name, der sagt, dass es eine Registry ist, zum Beispiel `ki-skill-registry` |
+| Wie es heißen sollte | ein Name, der sagt, dass es eine Registry ist, zum Beispiel `skill-registry` |
+| Was es sonst enthält | **nichts.** Kein README, keine CI-Datei, keine Issues-Vorlage |
 
 > **Das Projekt muss leer sein, ohne README und ohne CI-Datei.** Das ist keine
 > Stilfrage. Der Weg vom lokalen Ordner nach GitLab ist `git push --mirror`,
@@ -168,10 +174,19 @@ auf der internen GitLab-Instanz.
 > weg. Wer beim Anlegen "README hinzufügen" ankreuzt, hat sich diese Falle
 > gestellt.
 
-Ist das Projekt schon mit einer README angelegt worden, gibt es zwei saubere
-Auswege: ein zweites, leeres Projekt nur für die Registry, oder die vorhandenen
-Dateien löschen, bevor zum ersten Mal gespiegelt wird. Was **nicht** funktioniert,
-ist zu hoffen, dass `--mirror` sie stehen lässt.
+**Beim Anlegen in GitLab konkret:** im Formular *New project* bleibt
+"Initialize repository with a README" **ungekreuzt**, und die
+Sicherheits-Häkchen (SAST und Verwandte) bleiben es ebenfalls, denn sie legen
+eine `.gitlab-ci.yml` an. Sichtbarkeit privat, Standardzweig `main`. Das
+Projekt soll nach dem Anlegen die Seite "The repository for this project is
+empty" zeigen. Zeigt es stattdessen eine Dateiliste, ist es das falsche
+Projekt für diesen Zweck.
+
+Ist ein Projekt schon mit README oder CI angelegt worden, ist der saubere Weg
+**ein zweites, leeres Projekt nur für die Registry**. Die vorhandenen Dateien
+zu löschen funktioniert auch, verbraucht aber eine Entscheidung darüber, was
+mit dem alten Projekt geschieht, und die vergisst man. Was **nicht**
+funktioniert, ist zu hoffen, dass `--mirror` sie stehen lässt.
 
 **Zugang.** Wer über HTTPS arbeitet, braucht ein Token; wer über SSH arbeitet,
 einen hinterlegten Schlüssel. Welches Token, wer es besorgt, wo es liegt und was
@@ -185,9 +200,17 @@ Die Probe, dass der Zugang steht, vor allem anderen:
 git ls-remote https://git.example.internal/gruppe/ki-skill-registry.git
 ```
 
-Eine Liste von Refs (oder bei einem frisch angelegten leeren Projekt gar keine
-Ausgabe bei Exit 0) heißt: der Zugang steht. Eine Fehlermeldung über
-Authentifizierung heißt: zurück zur Token-Routine, und nicht weiter.
+Für ein frisch angelegtes, leeres Projekt ist die erwartete Ausgabe
+**gar keine**, bei Exit 0. Das ist zugleich die Probe aus 5.1: keine Ausgabe
+heißt leer, und leer heißt, dass der erste Push nichts überschreiben kann. Eine
+Fehlermeldung über Authentifizierung heißt: zurück zur Token-Routine, und nicht
+weiter.
+
+```
+$ git ls-remote https://git.example.internal/gruppe/skill-registry.git
+$ echo $?
+0
+```
 
 ### 0.4 Die Identitäten festlegen
 
@@ -650,8 +673,20 @@ Der Ordner aus 4.3 wird zum ersten Mal gespiegelt. Das Kommando druckt
 `registry init` selbst:
 
 ```bash
-git -C /pfad/zur/registry push --mirror https://git.example.internal/gruppe/ki-skill-registry.git
+git -C /pfad/zur/registry push --mirror https://git.example.internal/gruppe/skill-registry.git
 ```
+
+**Vor dem allerersten Push eine Zeile Vorsicht.** Sie kostet eine Sekunde und
+verhindert den einzigen Schaden, den dieser Weg anrichten kann:
+
+```bash
+git ls-remote https://git.example.internal/gruppe/skill-registry.git
+```
+
+Keine Ausgabe heißt: das Ziel ist leer, der Push kann nichts zerstören.
+Kommt eine Liste von Refs, ist das Projekt **nicht** leer, und dann wird nicht
+gepusht, sondern 0.3 zu Ende gelesen. Für jeden weiteren Push entfällt die
+Probe: ab dann ist der eigene Registry-Inhalt genau das, was dort stehen soll.
 
 **`--mirror` ersetzt den Zustand des Ziels.** Wie das aussieht, wenn im Projekt
 schon etwas lag, steht in 0.3, samt der Zeile, die git dabei druckt. Ist das
@@ -747,7 +782,8 @@ Drama, aber es passiert nicht von allein.
 
 | # | Wer | Kommando |
 |---|---|---|
-| 1 | IT | leeres, privates GitLab-Projekt, Standardzweig `main` |
+| 0 | IT | **eigenes, leeres**, privates GitLab-Projekt, Standardzweig `main`, ohne README und ohne CI |
+| 1 | Autor | `git ls-remote <url>` muss leer sein, bevor Schritt 4 kommt |
 | 2 | Autor | `skillctl registry init --registry local://$HOME/skill-registry` |
 | 3 | Autor | `publish`, dann `publish --attest` |
 | 4 | Autor | `git -C $HOME/skill-registry push --mirror <url>` |
