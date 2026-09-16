@@ -21,6 +21,7 @@ See also: [Service Index](service-index) (what stays running) ·
 |---------|-------------|-------|------------|
 | **m3c-tools** | `cmd/m3c-tools/` | `make build` | The main Multi-Modal-Memory CLI. Also launches the macOS menu bar app with `--menubar`. |
 | **skillctl** | `cmd/skillctl/` | `make build-skillctl` | The skill **trust** CLI: sign, admit, verify, revoke, audit skills (offline-verifiable). |
+| **secretctl** | `cmd/secretctl/` | `go build ./cmd/secretctl` | Das Leben eines geteilten Dienstgeheimnisses (SPEC-0438): `inventory` sagt, WER einen Wert haelt und ob es der aktuelle ist, `verify` fragt den Dienst, ob ein Wert noch angenommen wird. Nennt Orte und Fingerabdruecke, **niemals einen Wert**. |
 | **skillctl-demo** | `cmd/skillctl-demo/` | `make build-skillctl-demo` | Self-contained offline demo that shows a CISO the trust plane *containing an attack live* (scenarios S1/S2A/S5, real exit codes). |
 | **thinking-engine** | `cmd/thinking-engine/` | `make thinking-build` | Per-user cognitive runtime (SPEC-0167). Runs as a service: see [Service Index](service-index). |
 | **poc-menubar** | `cmd/poc-menubar/` | `make build-all` | Reference POC: macOS menu bar via `menuet`. |
