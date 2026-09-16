@@ -3,8 +3,9 @@
 #
 # Checks that key references in docs/ match the current codebase, and runs the
 # BLOCKING gates: the CLI/manual + CLI/--help gate (cmd/docaudit, section 4),
-# the verb register (cmd/verbaudit, section 5), the tutorial chain (section 6)
-# and the index directory-diff (section 7).
+# the verb register (cmd/verbaudit, section 5), the exit-code register
+# (cmd/exitaudit, section 6), the tutorial chain (section 7), the Katas
+# tutorial (section 7b) and the index directory-diff (section 8).
 #
 # Exit: 0 = ok (warnings allowed) - 1 = a blocking issue, the release stops.
 # Usage: ./scripts/check-docs.sh
@@ -153,6 +154,38 @@ else
     fi
     rm -f "/tmp/tutorial-smoke.$$.log"
     rm -rf "$(dirname "$SMOKE_BIN")"
+fi
+
+# ─── 7b. Katas tutorial (BLOCKING) ───
+#
+# gate: scripts/katas-smoke.sh runs what the Katas tutorial promises
+# (docs/v2/nutzer/tutorial-katas-und-test-ride.de.md): the Kata board, one
+# non-interactive rep of each of the five Katas against the real skillctl
+# (asserting the documented target exits 0/10/2/0/17), the selftest, and both
+# Test Ride entry commands with exactly the flags the tutorial quotes. Sibling
+# of section 7; the parts a server or a human would need are name-checked only,
+# the script says which.
+echo ""
+echo "7b. Katas tutorial (katas-smoke)"
+if ! command -v go >/dev/null 2>&1; then
+    warn "go toolchain not found - skipping the Katas tutorial"
+elif [ ! -f "scripts/katas-smoke.sh" ]; then
+    warn "scripts/katas-smoke.sh not found - skipping"
+else
+    KATAS_BIN_DIR="$(mktemp -d)"
+    if ! go build -o "$KATAS_BIN_DIR/skillctl" ./cmd/skillctl >/dev/null 2>&1 \
+       || ! go build -o "$KATAS_BIN_DIR/skillctl-demo" ./cmd/skillctl-demo >/dev/null 2>&1; then
+        fail "cannot build skillctl/skillctl-demo for the Katas tutorial"
+    elif ./scripts/katas-smoke.sh --skillctl "$KATAS_BIN_DIR/skillctl" \
+           --skillctl-demo "$KATAS_BIN_DIR/skillctl-demo" >/tmp/katas-smoke.$$.log 2>&1; then
+        pass "the Katas tutorial still behaves as documented"
+    else
+        fail "the Katas tutorial drifted from the tree (see below)"
+        grep -E "DRIFT|FAIL:" /tmp/katas-smoke.$$.log | head -12 | sed 's/^/      /'
+        echo "      full run: ./scripts/katas-smoke.sh --keep"
+    fi
+    rm -f "/tmp/katas-smoke.$$.log"
+    rm -rf "$KATAS_BIN_DIR"
 fi
 
 # ─── 7. Index freshness: cmd/ and pkg/ vs the two indexes (BLOCKING) ───

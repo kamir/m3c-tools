@@ -272,11 +272,22 @@ jobs:
       # goroutines, retry runner, bulk-progress) and the skillctl-demo
       # command (SSE event bus): previously only ./pkg/... and
       # ./cmd/skillctl/... (skillctl-race job) were exercised under -race.
+      # ./cmd/secretctl/... added by the PR #319 re-gate (R-CI/RG-4): its
+      # package tests ran on no CI job at all before this line named them.
       - name: Run unit tests (-race, ./pkg/... + m3c-tools/skillctl-demo cmds)
-        run: go test -race -count=1 ./pkg/... ./cmd/m3c-tools/... ./cmd/skillctl-demo/...
+        run: go test -race -count=1 ./pkg/... ./cmd/m3c-tools/... ./cmd/skillctl-demo/... ./cmd/secretctl/...
 
+      # Die Liste ist eine Positivliste, weil einige e2e-Tests Netz und
+      # API-Schluessel brauchen und auf dem Runner nicht laufen koennen.
+      #
+      # Die beiden Praefixe TestE2E_ und TestQuellwaechter_ sind bewusst
+      # Praefixe und keine Einzelnamen: sie sind die Zusage, dass ein neuer
+      # Test unter diesen Namen OHNE Netz auskommt und damit hier von selbst
+      # mitlaeuft. Ohne diesen Eintrag waere ein neuer e2e-Test auf dem Runner
+      # nie gelaufen: gruen auf der Maschine des Autors, blind in der CI.
+      # Genau das galt am 2026-09-15 fuer skillctl und secretctl.
       - name: Run e2e tests (allow-list)
-        run: go test -v -count=1 ./e2e/ -run "TestComposite|TestBuild|TestParseTagLine|TestER1Config|TestER1Queue|TestER1EnqueueFailure|TestUploadFailure|TestRecorderEncodeWAV|TestRecorderStats|TestExportsDB|TestFilesDB|TestHashFile|TestFormatterLoader|TestPrettyPrint|TestFormatTranscript|TestFormatSnippet|TestFormatKeyValue|TestFormatTable|TestFormatSection|TestFormatStatusLine|TestTranslateFlagParsing|TestTranslateNotTranslatable|TestTranslateTranslatable|TestRetryQueue|TestRetryBackoffTiming|TestRetryBackoffCustomBase|TestRetryProcessingOrder|TestRetryPartialFailure|TestRetryMaxRetriesDropsEntry|TestRetryDropCallback|TestRetryRespectsBackoffDelay|TestRetryProcessesAfterBackoffElapsed|TestRetryGracefulShutdownOnCancel|TestRetryRunStopsOnContextCancel|TestRetryRunProcessesMultipleCycles|TestRetryEmptyQueue|TestRetryOnRetryCallback|TestTranscriptFilter|TestProxy|TestRetryRunner|TestBackgroundRetry|TestTranscriptImport|TestTranscriptList|TestTranscriptExport|TestScheduleCommand|TestStatusCommand|TestCancelCommand|TestScheduleStatusCancelWorkflow|TestCLI|TestRepoRoot|TestWriteFixture|TestFixtureDir|TestTempDataDir|TestWithEnv|TestRunCLIWithEnv|TestImporter"
+        run: go test -v -count=1 ./e2e/ -run "TestComposite|TestBuild|TestParseTagLine|TestER1Config|TestER1Queue|TestER1EnqueueFailure|TestUploadFailure|TestRecorderEncodeWAV|TestRecorderStats|TestExportsDB|TestFilesDB|TestHashFile|TestFormatterLoader|TestPrettyPrint|TestFormatTranscript|TestFormatSnippet|TestFormatKeyValue|TestFormatTable|TestFormatSection|TestFormatStatusLine|TestTranslateFlagParsing|TestTranslateNotTranslatable|TestTranslateTranslatable|TestRetryQueue|TestRetryBackoffTiming|TestRetryBackoffCustomBase|TestRetryProcessingOrder|TestRetryPartialFailure|TestRetryMaxRetriesDropsEntry|TestRetryDropCallback|TestRetryRespectsBackoffDelay|TestRetryProcessesAfterBackoffElapsed|TestRetryGracefulShutdownOnCancel|TestRetryRunStopsOnContextCancel|TestRetryRunProcessesMultipleCycles|TestRetryEmptyQueue|TestRetryOnRetryCallback|TestTranscriptFilter|TestProxy|TestRetryRunner|TestBackgroundRetry|TestTranscriptImport|TestTranscriptList|TestTranscriptExport|TestScheduleCommand|TestStatusCommand|TestCancelCommand|TestScheduleStatusCancelWorkflow|TestCLI|TestRepoRoot|TestWriteFixture|TestFixtureDir|TestTempDataDir|TestWithEnv|TestRunCLIWithEnv|TestImporter|TestE2E_|TestQuellwaechter_"
 
   skillctl-race:
     name: skillctl Security Tests (-race)
