@@ -108,6 +108,9 @@ func main() {
 	// Both routed through runWithExit so the SPEC-0188 §11 numbered exit
 	// codes (10..16) surface verbatim to the parent process: see
 	// cmd/skillctl/exit.go for the single audit point.
+	case "drift":
+		// FR-0278. Was traegt diese Maschine, und stimmt es mit dem Katalog?
+		os.Exit(runDrift(os.Args[2:], os.Stdout, os.Stderr))
 	case "install":
 		runWithExit(func() int { return runInstall(os.Args[2:], os.Stdout, os.Stderr) })
 	case "verify":

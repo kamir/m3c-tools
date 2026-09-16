@@ -49,6 +49,7 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		// Aufgeloest wird unten durch ownerPrefixedContext, wie publish und
 		// room es laengst tun.
 		er1Context = fs.String("er1-context", envOr("ER1_CONTEXT", "skills"), "ER1 context to query. A bare name is prefixed with the owner id.")
+		kindFlag   = fs.String("kind", "", "Restrict to one bundle kind: skill | agent. Empty pulls both (SPEC-0432).")
 		trustPath  = fs.String("trust-roots", envOr("M3C_TRUST_ROOTS", ""), "Path to the SPEC-0225 trust-roots YAML. Default: ~/.claude/trust-roots.yaml.")
 		since      = fs.String("since", "", "Best-effort lower bound on occurred_at (RFC3339).")
 		verbose    = fs.Bool("verbose", false, "Print one line per per-gate decision.")
@@ -92,6 +93,13 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 	// governance_minimum per digest, exactly like the ER1 self tenant.
 	var res *registry.PullResult
 	if artifact.SchemeOf(*registryName) != "er1" {
+		// SPEC-0432: the kind shelves exist only on the ER1 self tenant. Refuse
+		// the flag here instead of ignoring it, so --kind never claims a filter
+		// this carrier does not apply.
+		if *kindFlag != "" {
+			fmt.Fprintf(stderr, "pull: --kind is only supported on the er1 self registry (got registry=%s)\n", *registryName)
+			return 2
+		}
 		be, oerr := artifact.Open(*registryName, artifact.OpenOptions{Creds: artifactauth.New()})
 		if oerr != nil {
 			fmt.Fprintf(stderr, "pull: open %s: %v\n", *registryName, oerr)
@@ -121,6 +129,9 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		// vollkommen regulaer null Treffer.
 		*er1Context = ownerPrefixedContext(*er1Context)
 		res, err = registry.PullBundles(cfg, *er1Context, tr, registry.PullOpts{
+			// Empty means both shelves. Pulling everything when only the agents
+			// are wanted would overwrite 78 skills for no reason (SPEC-0432).
+			OnlyKind:  *kindFlag,
 			OnlySkill: *skillName, OnlyDigest: *digestArg, Since: *since,
 			RevocationHeadURL:          headURL,
 			RevocationHeadTenant:       headTenant,
