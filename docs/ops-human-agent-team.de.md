@@ -206,6 +206,24 @@ zu löschen funktioniert auch, verbraucht aber eine Entscheidung darüber, was
 mit dem alten Projekt geschieht, und die vergisst man. Was **nicht**
 funktioniert, ist zu hoffen, dass `--mirror` sie stehen lässt.
 
+**Zwei Registries, und nur eine davon darf jemand abräumen.** Wer übt, übt
+nicht auf der Ablage, aus der Maschinen installieren. Deshalb gibt es zwei
+Projekte, und der Unterschied gehört in ihre Namen:
+
+| Projekt | Rolle | Darf geleert werden |
+|---|---|---|
+| `<name>-test` | zum Üben und für automatische Läufe; wird aus Tests neu befüllt | **ja**, jederzeit, das ist ihr Zweck |
+| `<name>` | der Betrieb; hieraus installieren die Maschinen | **nein** |
+
+Die Gefahr kommt aus derselben Ecke wie oben: `push --mirror` ersetzt das Ziel.
+Wer im Übungsordner steht und die Betriebs-URL angibt, ersetzt den Betrieb durch
+seinen Übungsstand, und der Push meldet dabei Erfolg. Die Gegenmaßnahme steht in
+5.1 und ist banal: die URL steht im Ordner, nicht in der Kommandozeile.
+
+Eine Test-Registry zu leeren ist kein Unfall, sondern ein Arbeitsschritt. Sie
+darf deshalb auch dann neu angelegt werden, wenn sie schon Inhalt hat: bei ihr
+ist der `--mirror`-Ersatz genau das Gewünschte.
+
 **Zugang.** Wer über HTTPS arbeitet, braucht ein Token; wer über SSH arbeitet,
 einen hinterlegten Schlüssel. Welches Token, wer es besorgt, wo es liegt und was
 beim Ausscheiden passiert, steht vollständig in
@@ -215,7 +233,7 @@ es nicht.
 Die Probe, dass der Zugang steht, vor allem anderen:
 
 ```bash
-git ls-remote https://git.example.internal/gruppe/ki-skill-registry.git
+git ls-remote https://git.example.internal/gruppe/skill-registry.git
 ```
 
 Für ein frisch angelegtes, leeres Projekt ist die erwartete Ausgabe
@@ -687,11 +705,22 @@ nachgebautes GitLab-Projekt im Dateisystem.
 
 ### 5.1 Der Autor schiebt hoch
 
-Der Ordner aus 4.3 wird zum ersten Mal gespiegelt. Das Kommando druckt
-`registry init` selbst:
+Der Ordner aus 4.3 wird zum ersten Mal gespiegelt. `registry init` druckt dafür
+eine Zeile mit der URL darin. Genau die schreibt man **einmal** in den Ordner
+und danach nie wieder in eine Kommandozeile:
 
 ```bash
-git -C /pfad/zur/registry push --mirror https://git.example.internal/gruppe/skill-registry.git
+git -C /pfad/zur/registry remote add origin https://git.example.internal/gruppe/skill-registry.git
+git -C /pfad/zur/registry push --mirror origin
+```
+
+Warum der Umweg über `remote add`: es gibt zwei Registries (0.3), und ein
+`--mirror` an die falsche URL ersetzt die andere. Steht die URL im Ordner, kann
+man sie nicht verwechseln, und eine Zeile sagt jederzeit, welcher Ordner wohin
+zeigt:
+
+```bash
+git -C /pfad/zur/registry remote -v
 ```
 
 **Vor dem allerersten Push eine Zeile Vorsicht.** Sie kostet eine Sekunde und
@@ -705,6 +734,11 @@ Keine Ausgabe heißt: das Ziel ist leer, der Push kann nichts zerstören.
 Kommt eine Liste von Refs, ist das Projekt **nicht** leer, und dann wird nicht
 gepusht, sondern 0.3 zu Ende gelesen. Für jeden weiteren Push entfällt die
 Probe: ab dann ist der eigene Registry-Inhalt genau das, was dort stehen soll.
+
+**Vor dem ersten `publish` geht der Push nicht.** Eine frisch angelegte Registry
+hat null Refs, und git sagt dann `Perhaps you should specify a branch`. Das ist
+kein Defekt, sondern die Reihenfolge: erst aufnehmen und freigeben, dann
+spiegeln.
 
 **`--mirror` ersetzt den Zustand des Ziels.** Wie das aussieht, wenn im Projekt
 schon etwas lag, steht in 0.3, samt der Zeile, die git dabei druckt. Ist das
@@ -727,7 +761,7 @@ zu tun, sie sehen gleich aus, und nur eine funktioniert dauerhaft.
 
 ```bash
 # richtig
-git clone --mirror https://git.example.internal/gruppe/ki-skill-registry.git ~/skill-registry
+git clone --mirror https://git.example.internal/gruppe/skill-registry.git ~/skill-registry
 ```
 
 **Warum nicht `--bare`.** Gemessen: nach einem `git clone --bare` trägt der Klon
@@ -804,7 +838,7 @@ Drama, aber es passiert nicht von allein.
 | 1 | Autor | `git ls-remote <url>` muss leer sein, bevor Schritt 4 kommt |
 | 2 | Autor | `skillctl registry init --registry local://$HOME/skill-registry` |
 | 3 | Autor | `publish`, dann `publish --attest` |
-| 4 | Autor | `git -C $HOME/skill-registry push --mirror <url>` |
+| 4 | Autor | einmal `git -C $HOME/skill-registry remote add origin <url>`, dann `git -C $HOME/skill-registry push --mirror origin` |
 | 5 | Empfänger | `git clone --mirror <url> ~/skill-registry` |
 | 6 | Empfänger | `team-base-setup.sh member … --peer-registry local://$HOME/skill-registry` |
 | 7 | Empfänger | `skillctl pull --registry local://$HOME/skill-registry --install --trust-mode …` |
