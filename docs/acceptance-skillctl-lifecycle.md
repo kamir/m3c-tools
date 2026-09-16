@@ -58,16 +58,16 @@ Prerequisites on **both** machines (see [manual §Installation](manual-skillctl.
 ```bash
 # Install skillctl (signed one-liner; verifies cosign provenance + SHA-256):
 #   macOS/Linux:
-curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/1eeefc870a9be50ace33cbc537984c38801eb266/tools/skillctl-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/6b62ec5fb75674a99580efddad20ca85530421a4/tools/skillctl-install.sh | bash
 #   Windows (PowerShell):
-#   irm https://raw.githubusercontent.com/kamir/m3c-tools/1eeefc870a9be50ace33cbc537984c38801eb266/tools/skillctl-install.ps1 | iex
+#   irm https://raw.githubusercontent.com/kamir/m3c-tools/6b62ec5fb75674a99580efddad20ca85530421a4/tools/skillctl-install.ps1 | iex
 
 skillctl version          # MUST print a real skillctl/vX.Y.Z, NOT "dev" (see Troubleshooting)
 skillctl login --base-url https://onboarding.guide   # ER1 device pairing (FR-0043)
 skillctl login --status
 ```
 
-> **Bootstrap integrity.** The installer URLs are pinned to the **immutable commit `1eeefc8`**
+> **Bootstrap integrity.** The installer URLs are pinned to the **immutable commit `6b62ec5`**
 > (not the mutable `master` branch: one rewrite there could swap the bootstrap script *and* every
 > pin inside it). Verify the fetched bytes out-of-band, expected SHA-256:
 > `tools/skillctl-install.ps1` → `d33f5344d30a6258281b0784c461ecc0dbe25b86444175a6f95c31dfe2c27f17`,
@@ -94,15 +94,15 @@ straight from here):
 
 ```powershell
 # 1) Install skillctl (verifies cosign provenance + SHA-256, no admin):
-irm https://raw.githubusercontent.com/kamir/m3c-tools/1eeefc870a9be50ace33cbc537984c38801eb266/tools/skillctl-install.ps1 | iex
+irm https://raw.githubusercontent.com/kamir/m3c-tools/6b62ec5fb75674a99580efddad20ca85530421a4/tools/skillctl-install.ps1 | iex
 
 # 2) Download + run the lifecycle smoke (keygen -> pack -> sign -> verify -> trust -> tamper):
 $q = "$env:TEMP\skillctl-quickstart.ps1"
-irm https://raw.githubusercontent.com/kamir/m3c-tools/1eeefc870a9be50ace33cbc537984c38801eb266/scripts/skillctl-quickstart-windows.ps1 -OutFile $q
+irm https://raw.githubusercontent.com/kamir/m3c-tools/6b62ec5fb75674a99580efddad20ca85530421a4/scripts/skillctl-quickstart-windows.ps1 -OutFile $q
 powershell -ExecutionPolicy Bypass -File $q
 ```
 
-> **Pinned + verifiable.** Both URLs above are pinned to the **immutable commit `1eeefc8`**.
+> **Pinned + verifiable.** Both URLs above are pinned to the **immutable commit `6b62ec5`**.
 > Expected SHA-256: `tools/skillctl-install.ps1` → `d33f5344d30a6258281b0784c461ecc0dbe25b86444175a6f95c31dfe2c27f17`;
 > `scripts/skillctl-quickstart-windows.ps1` → `74b8ca8dbc7b6cae932bb9c1e016628aaac9c678db3ac7cb9159204dc5d7e27c`.
 > Verify the fetched bytes (`Get-FileHash <file> -Algorithm SHA256`) before running.
