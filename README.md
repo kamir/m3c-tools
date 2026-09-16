@@ -6,7 +6,8 @@
 
 **Multi-Modal-Memory Tools** is a personal, sovereign toolkit for turning everything you
 see, hear and decide into durable, structured memory, and for governing the agent skills
-that act on it. Two command-line tools, one repository, zero mandatory cloud middleman.
+that act on it. Two command-line tools for those two jobs, plus a small third one for the
+shared service secrets underneath. One repository, zero mandatory cloud middleman.
 
 [![CI](https://github.com/kamir/m3c-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/kamir/m3c-tools/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/kamir/m3c-tools?sort=semver)](https://github.com/kamir/m3c-tools/releases/latest)
@@ -39,22 +40,26 @@ Autonomous agents need two things you can't buy off the shelf:
    verifiable identity, be revocable on demand, and be checkable **offline**, with no
    external authority in the verification path.
 
-This repository ships one focused tool for each half.
+This repository ships one focused tool for each half, and a third for the credential both
+of them sit on.
 
 | Tool | The one-liner | You use it to… |
 |------|---------------|----------------|
 | **`m3c-tools`** | *The capture pipeline.* | Turn YouTube videos, audio, screenshots and voice notes into multimodal memory on your own [ER1](https://er1.io) knowledge server. |
 | **`skillctl`** | *The capability plane.* | Sign, admit, verify and revoke the agent skills that read that memory and act, so nothing runs unless it's authorized and provable. |
+| **`secretctl`** | *The secret register.* | Name every place that holds a shared service secret, check whether each place carries the current value, and prove that the old one stopped being accepted. It never prints a value. |
 
-`m3c-tools` fills the memory. `skillctl` governs the hands. Together they're the
-personal-scale foundation for running agents you can actually trust in production.
+`m3c-tools` fills the memory. `skillctl` governs the hands. `secretctl` keeps the key
+underneath both of them accounted for. Together they're the personal-scale foundation for
+running agents you can actually trust in production.
 
 ---
 
 ## 60-second start
 
-Pick the tool you came for. Both ship as single static binaries in every
-[release](https://github.com/kamir/m3c-tools/releases/latest).
+Pick the tool you came for. `m3c-tools` and `skillctl` ship as single static binaries in
+every [release](https://github.com/kamir/m3c-tools/releases/latest); `secretctl` is built
+from source, see [Build from source](#build-from-source).
 
 ### `m3c-tools`: capture your first memory
 
@@ -142,6 +147,34 @@ author → pack → sign → admit → attest → verify / install → use → a
 `publish`, `pull`, `registry`; *audit & transparency:* `audit`, `seal`, `scan`, `review`,
 `propose`, `translog`, `gate-stats`; plus `project`, `session`.
 See the [skillctl manual](docs/v2/referenz/manual-skillctl.md).
+
+## What `secretctl` accounts for
+
+A shared service secret sits in more places than anyone remembers, and a rotation does not
+fail at the value; it fails at the copy nobody listed. `secretctl` (SPEC-0438) makes that
+list readable: a registry you can check into git because it holds locations, never values,
+naming every holder individually. Two commands read it.
+
+- **`secretctl inventory <name>`** prints what the value is used for and what a rotation
+  would break, then one row per holder: the place, its kind, the machine, a fingerprint,
+  and whether that fingerprint still matches the active version at the source.
+- **`secretctl verify <name>`** asks the service, per holder, whether the value that
+  holder carries is accepted. Per holder, because a global check stays green from the
+  first minute of a rotation to the last and so says nothing about progress. `--old`
+  inverts the expectation: the old value must be refused, which is the proof that a
+  rotation actually finished.
+
+**It never prints a secret.** Not in output, not in a command line, not in an error, and
+that is a type rather than a convention: the value is a `Secret`, which renders as
+`<redacted>` through `fmt`, `%v`, `%#v`, JSON and YAML alike, and the single method that
+yields it is called `Reveal()` so a review can grep for it. Reports carry places and
+fingerprints, and every comparison runs over those fingerprints. The registry loader
+refuses an entry that lists no holders and one that names no roles, because a rotation
+that cannot say what it breaks is not a plan.
+
+**Command surface:** `inventory`, `verify`. The writing half (`new`, `stage`,
+`distribute`, `retire`) is deliberately not built yet; those verbs exit 2 and say so.
+`secretctl` is not among the release binaries: build it from the source tree.
 
 ---
 
@@ -292,6 +325,7 @@ git clone https://github.com/kamir/m3c-tools.git && cd m3c-tools
 make build          # build the m3c-tools CLI → ./build/m3c-tools
 make build-all      # build the CLI + POC binaries
 go build -o build/skillctl ./cmd/skillctl   # build skillctl
+go build -o build/secretctl ./cmd/secretctl # build secretctl (not in the release)
 
 make install        # macOS: CLI + M3C-Tools.app + data dir + permission setup
 make menubar        # macOS: build + launch the menu bar app (dev mode)
@@ -442,6 +476,7 @@ SLSA signing, post-release steps and gotchas) is in **[docs/v2/betrieb/releasing
 ```
 cmd/m3c-tools/       m3c-tools CLI + macOS menu-bar app entry point
 cmd/skillctl/        skillctl trust-&-governance CLI entry point
+cmd/secretctl/       secretctl secret-registry CLI entry point (SPEC-0438)
 pkg/transcript/      YouTube InnerTube API client (pure Go, no API key)
 pkg/er1/             ER1 upload client + retry queue + health check
 pkg/impression/      Composite document builder + tag system

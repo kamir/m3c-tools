@@ -62,6 +62,7 @@ __pycache__/
 # Built binaries (root level)
 /skillctl
 /skillctl-demo
+/secretctl
 
 # macOS
 .DS_Store
