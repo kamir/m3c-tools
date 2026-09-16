@@ -439,10 +439,18 @@ eine Entscheidung und kein Versehen.
 
 **Danach unbedingt `skillctl version` aufrufen und den Wert mit dem
 vergleichen, den das Team festgelegt hat.** Gemessen am 2026-09-16: der oben
-gepinnte Commit installiert `skillctl/v0.4.0`, während dieselbe Datei auf
-`master` auf `v0.5.1` steht. Der Pin-Prüfer des Repositories prüft, dass der
-Pin auflöst und die Bytes stimmen, nicht welche Fassung dabei herauskommt. Wer
-eine bestimmte Fassung braucht, gibt sie an:
+gepinnte Commit installiert `skillctl/v0.4.0`. Dieselbe Datei auf `master`
+trägt keine eingebackene Fassungsvorgabe mehr: sie löst zur Laufzeit die
+neueste veröffentlichte `skillctl/v*`-Marke auf (über den Releases-Atom-Feed;
+ohne Token, ohne Rate-Limit, und bewusst nicht über `/releases/latest`, denn
+das liefert das neueste Release des ganzen Repositories, oft ein Produkt-`v*`
+und kein skillctl). Schlägt diese Auflösung fehl, bricht der Installer ab und
+verlangt eine ausdrückliche Fassung; auf eine ältere Marke fällt er nicht
+still zurück. Der gepinnte Commit und die SHA-256 oben ändern sich damit nur
+noch, wenn das Installer-Skript selbst sich ändert, nicht mehr bei jedem
+Release. Der Pin-Prüfer des Repositories prüft, dass der Pin auflöst und die
+Bytes stimmen, nicht welche Fassung dabei herauskommt. Wer eine bestimmte
+Fassung braucht, gibt sie an:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/1eeefc870a9be50ace33cbc537984c38801eb266/tools/skillctl-install.sh \
