@@ -8,9 +8,10 @@ import (
 
 // Die Identitaet wird nicht geraten (Entscheidung vom 2026-09-16).
 //
-// Vorgeschichte, weil sie die Form des Tests bestimmt: der Vorgabewert war
-// zuerst id:kamir@m3c, spaeter id:bob@m3c, also in beiden Faellen der Name
-// einer ANDEREN Person als der, die gerade veroeffentlicht. Wer ihn stehen
+// Vorgeschichte, weil sie die Form des Tests bestimmt: der Vorgabewert nannte
+// eine bestimmte Identitaet, wurde zwischendurch auf eine andere umbenannt, und
+// war in beiden Faellen der Name einer ANDEREN Partei als der, die gerade
+// veroeffentlicht. Wer ihn stehen
 // liess, stempelte einen fremden Namen in ein signiertes Ereignis, und die
 // Gegenseite lehnte spaeter mit der Begruendung ab, die Identitaet sei nicht
 // gepinnt, obwohl sie korrekt gepinnt war. Die Meldung zeigte auf die falsche
