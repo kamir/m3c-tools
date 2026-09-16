@@ -272,8 +272,10 @@ jobs:
       # goroutines, retry runner, bulk-progress) and the skillctl-demo
       # command (SSE event bus): previously only ./pkg/... and
       # ./cmd/skillctl/... (skillctl-race job) were exercised under -race.
+      # ./cmd/secretctl/... added by the PR #319 re-gate (R-CI/RG-4): its
+      # package tests ran on no CI job at all before this line named them.
       - name: Run unit tests (-race, ./pkg/... + m3c-tools/skillctl-demo cmds)
-        run: go test -race -count=1 ./pkg/... ./cmd/m3c-tools/... ./cmd/skillctl-demo/...
+        run: go test -race -count=1 ./pkg/... ./cmd/m3c-tools/... ./cmd/skillctl-demo/... ./cmd/secretctl/...
 
       # Die Liste ist eine Positivliste, weil einige e2e-Tests Netz und
       # API-Schluessel brauchen und auf dem Runner nicht laufen koennen.

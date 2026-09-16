@@ -58,6 +58,12 @@ var (
 	ErrGateGovernance  = errors.New("gate 4: no attestation at or above the trust-roots governance_minimum")
 	ErrGateRevoked     = errors.New("gate 5: bundle digest has a BundleRevokedEvent in the registry")
 	ErrBundleBytesMiss = errors.New("admitted item has no inline ```skb-base64 block and no blob_uri (claim-check not implemented yet)")
+	// ErrBundleManifest is deliberately NOT one of the five §7 gates: the
+	// bytes already proved digest and signatures. It refuses a bundle whose
+	// manifest cannot be read, because without it the KIND is unknown and the
+	// G-23 install plan could not name the target it writes to (re-gate
+	// R1/RG-1, backend carrier).
+	ErrBundleManifest = errors.New("bundle manifest unreadable; kind unknown, refusing to stage")
 )
 
 // ─── Listing / show types ──────────────────────────────────────────────────
