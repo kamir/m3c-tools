@@ -542,9 +542,17 @@ checksums:
 # gate here gives it a second, independent place to be run from, so the local
 # one-liner still exercises it if the CI step ever goes missing.
 .PHONY: ci
-ci: vet lint check-emdash check-gofmt check-redirect-guard check-required-checks test-unit build
+ci: vet lint check-emdash check-gofmt check-redirect-guard check-required-checks check-docpages test-unit build
 	@echo ""
-	@echo "CI passed: vet ✓  lint ✓  prose ✓  gofmt ✓  redirect-guard ✓  required-checks ✓  test ✓  build ✓"
+	@echo "CI passed: vet ✓  lint ✓  prose ✓  gofmt ✓  redirect-guard ✓  required-checks ✓  docpages ✓  test ✓  build ✓"
+
+# Doku-Seiten-Tor: jede erzeugte Seite unter docs/pages/ traegt eine Kopie
+# ihrer Markdown-Quelle. Dieses Ziel erzeugt jede neu und vergleicht, damit
+# die Kopie nicht still zu einer zweiten Aussage wird.
+# Neu erzeugen mit: tools/docpage.sh docs/<datei>.md
+.PHONY: check-docpages
+check-docpages:
+	@./scripts/check-docpages.sh
 
 # Prose gate: no U+2014 EM DASH anywhere in the tree (CODESTYLE.md).
 .PHONY: check-emdash
