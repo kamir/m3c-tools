@@ -108,6 +108,9 @@ func main() {
 	// Both routed through runWithExit so the SPEC-0188 §11 numbered exit
 	// codes (10..16) surface verbatim to the parent process: see
 	// cmd/skillctl/exit.go for the single audit point.
+	case "drift":
+		// FR-0278. Was traegt diese Maschine, und stimmt es mit dem Katalog?
+		os.Exit(runDrift(os.Args[2:], os.Stdout, os.Stderr))
 	case "install":
 		runWithExit(func() int { return runInstall(os.Args[2:], os.Stdout, os.Stderr) })
 	case "verify":
@@ -386,6 +389,7 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "  seal                    Snapshot the installed skills into a signed inventory seal.")
 	fmt.Fprintln(w, "  import                  Import a scan into a remote target (--target <url>).")
 	fmt.Fprintln(w, "  consolidate             Report duplicate / orphan / drifted skills across projects.")
+	fmt.Fprintln(w, "  drift                   Compare what this machine carries against the registry catalog (SPEC-0432).")
 	fmt.Fprintln(w, "  review                  Serve a local review UI for a delta report.")
 	fmt.Fprintln(w, "  browse                  Serve an interactive local skill-graph browser.")
 	fmt.Fprintln(w, "  menubar                 Launch the macOS menu-bar skill monitor (long-running).")

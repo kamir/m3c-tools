@@ -235,6 +235,30 @@ func installExpected(p Params) (ok bool, gate string, why string) {
 	return false, g, whyGate(g, p)
 }
 
+// doorRefusesAdmit is the admit-door rule, added by a recorded decision and not
+// by fitting the model to a run: challenge-gate F2 on PR #319 (2026-09-16)
+// made `publish` read the manifest OUT OF the .skb bytes fail-closed, because
+// the kind inside it decides the registry shelf and the install plan's target.
+// Bytes tampered in TRANSIT reach the publisher BEFORE the admit, and a
+// byte-flipped gzip archive has no readable manifest, so the door refuses them
+// (exit 1) and nothing enters the registry. The five-gate pull theory for such
+// bytes (gate 4: the attestation is bound to the pre-tamper digest) still holds
+// as stated in StateAt, but this corpus no longer produces an ADMITTED bundle
+// to measure it against: the pull's query matches nothing (exit 7, pull /
+// no_matches).
+func doorRefusesAdmit(p Params) bool {
+	return p.Adv == AdvTransitChecked || p.Adv == AdvTransitSkipped
+}
+
+// doorRefusedPullExpect is the pull expectation downstream of a door refusal:
+// nothing was admitted, so the query yields nothing. Shared by the first and
+// the post-revoke pull so the two cannot drift.
+func doorRefusedPullExpect() Expectation {
+	return Expectation{Outcome: Refuse, Exit: 7, Claimed: true,
+		Why: "PR #319 F2: the door refused the tampered bytes at admit, so nothing was " +
+			"admitted and the pull's query matches nothing (exit 7, pull/no_matches)"}
+}
+
 // whyGate names the SPEC clause behind a refusal, so a conflict report tells the
 // reader which rule the prediction came from rather than only that it was wrong.
 func whyGate(gate string, p Params) string {
@@ -366,15 +390,23 @@ func build(p Params) Scenario {
 	// to stop, and saying so is the point of including it.
 	admitActor := Publisher
 	admitClaim := true
-	admitWhy := "the publisher takes responsibility by admitting"
+	admitExpect := Expectation{Outcome: Accept, Exit: 0, Claimed: true,
+		Why: "the publisher takes responsibility by admitting"}
 	if p.Adv == AdvStolenKey {
 		admitActor = Adversary
 		admitClaim = false
-		admitWhy = "THREAT MODEL LIMIT: a stolen signing key produces a valid chain. The answer is revocation after detection, not prevention"
+		admitExpect.Why = "THREAT MODEL LIMIT: a stolen signing key produces a valid chain. The answer is revocation after detection, not prevention"
 	}
+	if doorRefusesAdmit(p) {
+		// See doorRefusesAdmit: a recorded decision (PR #319 F2), not a fit.
+		admitExpect = Expectation{Outcome: Refuse, Exit: 1, Claimed: true,
+			Why: "PR #319 F2: admit reads the manifest out of the bytes fail-closed; " +
+				"bytes broken in transit have no readable manifest and are refused at the door"}
+	}
+	admitExpect.Claimed = admitClaim
 	sc.Steps = append(sc.Steps, Step{
 		Action: Action{Kind: ActAdmit, Actor: admitActor, Skill: skill},
-		Expect: Expectation{Outcome: Accept, Exit: 0, Claimed: admitClaim, Why: admitWhy},
+		Expect: admitExpect,
 	})
 
 	// 4. Governance.
@@ -490,6 +522,10 @@ func build(p Params) Scenario {
 		pullExpect.Claimed = false
 		pullExpect.Why = "THREAT MODEL LIMIT: the chain is valid because the attacker holds the key"
 	}
+	// The door speaks before any gate: nothing was admitted (see doorRefusesAdmit).
+	if doorRefusesAdmit(p) {
+		pullExpect = doorRefusedPullExpect()
+	}
 	sc.Steps = append(sc.Steps, Step{
 		Action: Action{Kind: ActPull, Actor: Consumer, Skill: skill},
 		Expect: pullExpect,
@@ -568,10 +604,16 @@ func build(p Params) Scenario {
 			_, g2 := StateAt(p, true).Decide()
 			gate2, why2 := g2, whyGate(g2, p)
 			claimed2 := true
+			secondPull := Expectation{Outcome: Refuse, Gate: gate2, Exit: gateExit(gate2), Claimed: claimed2,
+				Why: why2}
+			// Same door rule as the first pull: nothing was admitted, so the
+			// revoke changes nothing the query could match.
+			if doorRefusesAdmit(p) {
+				secondPull = doorRefusedPullExpect()
+			}
 			sc.Steps = append(sc.Steps, Step{
 				Action: Action{Kind: ActPull, Actor: Consumer, Skill: skill},
-				Expect: Expectation{Outcome: Refuse, Gate: gate2, Exit: gateExit(gate2), Claimed: claimed2,
-					Why: why2},
+				Expect: secondPull,
 			})
 		}
 
