@@ -10,12 +10,8 @@ plugins:
 nav:
   - title: Home
     url: /
-  - title: Getting Started
-    url: /getting-started
-  - title: Menu Bar App
-    url: /menubar-app
-  - title: Roadmap
-    url: /roadmap
+  - title: Wegweiser (Doku nach Rollen)
+    url: /v2/pages/wegweiser.html
 
 # Build settings
 markdown: kramdown

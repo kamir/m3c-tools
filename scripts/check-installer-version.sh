@@ -3,7 +3,7 @@
 # check-installer-version.sh: die Vorgabe der beiden Installer muss die
 # NEUESTE skillctl-Fassung sein, die dieses Repositorium kennt.
 #
-# Warum es das gibt. docs/releasing-skillctl-windows.md fuehrt als Release-
+# Warum es das gibt. docs/v2/betrieb/releasing-skillctl-windows.md fuehrt als Release-
 # Schritt: "tools/skillctl-install.sh RELEASE_BASE default raised to
 # skillctl/vX.Y.Z". Beim Schnitt von skillctl/v0.5.0 am 2026-09-10 ist dieser
 # Handgriff ausgefallen, und nichts hat es gemerkt. Die Folge, am 2026-09-16
@@ -53,7 +53,7 @@ check() {   # <datei> <zeilennummer>
     echo "FEHLER  $f:$ln zeigt auf skillctl/v$got, neuester Tag ist skillctl/v$newest."
     echo "        Wer dem dokumentierten Einzeiler folgt, installiert damit die"
     echo "        aeltere Fassung. Das ist der Release-Schritt aus"
-    echo "        docs/releasing-skillctl-windows.md, der beim Schnitt ausfaellt."
+    echo "        docs/v2/betrieb/releasing-skillctl-windows.md, der beim Schnitt ausfaellt."
     echo "        Beheben: die Zeile auf skillctl/v$newest ziehen."
     printf '%s' "$NC"; fail=1; return
   fi

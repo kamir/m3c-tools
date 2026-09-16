@@ -2,7 +2,7 @@
 # qa-target-device.sh: Runnable QA acceptance track for a FRESH m3c-tools install
 # ON THE TARGET DEVICE (macOS or Linux). Ships WITH the tool; safe to re-run.
 #
-# Companion doc:   docs/QA-target-device-setup.md
+# Companion doc:   docs/v2/betrieb/QA-target-device-setup.md
 # Windows twin:    scripts/qa-target-device.ps1
 #
 # Design rules:
@@ -310,8 +310,8 @@ if [ "$OS" = "Darwin" ]; then
     warn "F-mac-1 devices did not list inputs (exit $FRC)" "grant mic permission; check System Settings > Sound"
   fi
   # F-mac-2 / F-mac-3: recording + menubar are interactive, manual per the doc
-  skip "F-mac-2 record (live audio), manual step, see docs/QA-target-device-setup.md"
-  skip "F-mac-3 menubar launch: manual step, see docs/QA-target-device-setup.md"
+  skip "F-mac-2 record (live audio), manual step, see docs/v2/betrieb/QA-target-device-setup.md"
+  skip "F-mac-3 menubar launch: manual step, see docs/v2/betrieb/QA-target-device-setup.md"
   # F-mac-4: plaud dev status (ONLINE, soft)
   if [ "$ONLINE" = "1" ]; then
     PRC=0

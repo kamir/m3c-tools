@@ -91,7 +91,7 @@ fi
 # ─── 5. skillctl verb register (BLOCKING) ───
 #
 # FR-0113 / SPEC-0404 §7-K3: verbaudit AST-reads the `switch os.Args[1]` dispatch
-# in cmd/skillctl/main.go and reconciles it against docs/CLI-VERBS.md. A
+# in cmd/skillctl/main.go and reconciles it against docs/v2/referenz/CLI-VERBS.md. A
 # dispatched verb with no register row turns this red (REQ-7.10), and a
 # main-table row must carry an exit-code space (REQ-7.9). It blocks for the same
 # reason the flag gate does: verb allocation must be a WRITE, so two collisions
@@ -100,10 +100,10 @@ echo "5. skillctl verb register (verbaudit)"
 if ! command -v go >/dev/null 2>&1; then
     fail "go toolchain not found - cannot run the verb-register gate"
 elif go run ./cmd/verbaudit; then
-    pass "every dispatched verb is registered in docs/CLI-VERBS.md"
+    pass "every dispatched verb is registered in docs/v2/referenz/CLI-VERBS.md"
 else
     fail "a dispatched verb is not registered (see the report above)"
-    echo "    Register the verb first (add a row to docs/CLI-VERBS.md), then implement its case."
+    echo "    Register the verb first (add a row to docs/v2/referenz/CLI-VERBS.md), then implement its case."
 fi
 
 # ─── 6. Exit-code register (BLOCKING) ───
@@ -111,7 +111,7 @@ fi
 # AUDIT-0001 Befund 2.1 / registry.go's own "Phase 2": exitaudit reconciles the
 # manual's exit-code tables with pkg/skillctl/exitcode.AllCodes(), fails on any
 # documented number that no table accounts for, and fails when the manual and
-# docs/CLI-VERBS.md state different exit spaces for the SAME verb. It blocks
+# docs/v2/referenz/CLI-VERBS.md state different exit spaces for the SAME verb. It blocks
 # because every number here is one a script branches on: `pull` mapped its five
 # gates onto 12/10/11/13/6 while both documents claimed a bare usage space, and
 # nothing turned red.
@@ -129,7 +129,7 @@ fi
 # ─── 7. Tutorial chain (BLOCKING) ───
 #
 # gate: scripts/tutorial-smoke.sh runs the chain the German scenario tutorials
-# describe (docs/tutorial-szenario-0*.de.md) against a bare local:// registry in
+# describe (docs/v2/nutzer/tutorial-szenario-0*.de.md) against a bare local:// registry in
 # a throwaway HOME, and asserts every documented exit code, INCLUDING the two
 # refusals. docaudit gates the flag surface of the two manuals; nothing gated the
 # tutorials, so a renamed flag or a changed message could make them wrong without

@@ -546,10 +546,10 @@ ci: vet lint check-emdash check-gofmt check-redirect-guard check-required-checks
 	@echo ""
 	@echo "CI passed: vet ✓  lint ✓  prose ✓  gofmt ✓  redirect-guard ✓  required-checks ✓  docpages ✓  test ✓  build ✓"
 
-# Doku-Seiten-Tor: jede erzeugte Seite unter docs/pages/ traegt eine Kopie
-# ihrer Markdown-Quelle. Dieses Ziel erzeugt jede neu und vergleicht, damit
-# die Kopie nicht still zu einer zweiten Aussage wird.
-# Neu erzeugen mit: tools/docpage.sh docs/<datei>.md
+# Doku-Seiten-Tor: jede erzeugte Seite unter docs/pages/ und docs/v2/pages/
+# traegt eine Kopie ihrer Markdown-Quelle. Dieses Ziel erzeugt jede neu und
+# vergleicht, damit die Kopie nicht still zu einer zweiten Aussage wird.
+# Neu erzeugen mit: tools/docpage.sh docs/<pfad>.md
 .PHONY: check-docpages
 check-docpages:
 	@./scripts/check-docpages.sh
