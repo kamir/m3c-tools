@@ -5,8 +5,11 @@ title: Setup & Operations: Intel Mac & Windows
 
 # Setup & Operations Guide: Intel Mac & Windows
 
-A practical, zero-to-operating runbook for deploying and running **m3c-tools v2.10.0**
-on two fresh target devices:
+A practical, zero-to-operating runbook for deploying and running **m3c-tools**
+(written against v2.10.0; the procedure is version-neutral, and the QA gate's
+expected version lives in `scripts/qa-target-device.sh` as `M3C_EXPECT_VERSION`,
+default `2.10.0`. Latest product tag at the time of this note, 2026-09-16:
+`v2.12.0`) on two fresh target devices:
 
 - **Intel Mac**: macOS, `x86_64` (`darwin/amd64`) → **full feature build**
 - **Windows PC**: `amd64` (`windows/amd64`) → **CLI core + system tray + settings web UI**
@@ -234,8 +237,13 @@ m3c-tools check-er1      # quick ER1 reachability probe (exit 1 if unreachable)
 
 `doctor` is the authoritative health check: it reports the active profile, auth method
 (Bearer device token vs API key), config conflicts, DNS/TLS, and the ER1 `/health` status.
-On a released build, `version` prints `m3c-tools v2.10.0 (commit=…, built=…)`; a local source
-build without release ldflags prints `m3c-tools dev (commit=none, built=unknown)`.
+On a released build, `version` prints the version **without** a leading `v`, e.g.
+`m3c-tools 2.10.0 (commit=…, built=…)` (config-read, not re-measured against a
+published artifact: `.goreleaser.yml` sets `main.version={{.Version}}`, and
+`scripts/qa-target-device.sh` expects exactly that token). A local source build
+takes its token from `git describe --tags`, so it prints whatever tag is nearest, e.g.
+`m3c-tools skillctl/v0.5.1-6-g307b414 (…)` (measured 2026-09-16 on a `make build`
+binary); `dev` appears only when `git describe` fails entirely.
 
 First-time onboarding (writes config, captures context id, checks reachability):
 

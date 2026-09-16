@@ -532,26 +532,24 @@ skillctl verify --all --json
 skillctl verify --all --quarantine
 ```
 
-**`--status` gibt es nicht, obwohl die Hilfe es aufführt.** Gemessen, Ausgabe
-bis zur Flag-Liste, danach `[…]`:
+**`--status` existiert inzwischen; der frueher hier beschriebene Parserfehler
+ist behoben.** Eine aeltere Fassung dieses Blocks (gemessen 2026-09-07) zeigte
+`flag provided but not defined: -status` mit Exit 2; seit Commit `b9a79d2` ist
+das Flag definiert (`cmd/skillctl/revoke_feed_cmds.go:35`, als "(default)").
+Gemessen am 2026-09-16, Binary aus diesem Baum
+(`skillctl/v0.5.1-6-g307b414`), gegen einen Namen, den es nicht gibt:
 
 ```
-$ skillctl revoke feed --status --registry https://<host>/api/skills
-flag provided but not defined: -status
-Usage: skillctl revoke feed [--status] [--refresh] [--registry URL] [--tenant T]
-
-Inspect or refresh the signed revocation HEAD: the G5 kill-switch feed (FR-0045).
-  --status  (default) fetch + verify the HEAD against the pinned registry key
-  --refresh sweep now: adopt the HEAD into the local cache + freshness anchor
-[…]
+$ skillctl revoke feed --status --registry https://<unerreichbar>/api/skills
+skillctl revoke feed: fetch failed: Get "https://<unerreichbar>/api/skills/revocations/head": dial tcp: lookup <unerreichbar>: no such host
 $ echo $?
-2
+1
 ```
 
-Der Hilfetext nennt `--status` also zweimal und der Parser kennt es nicht. Er
-sagt zugleich, was stattdessen gilt: der Zustandsabruf **ist** die Vorgabe, also
-`revoke feed --registry <url>` ohne weiteres Flag. Der Fehler liegt im Werkzeug,
-nicht im Aufruf.
+Das Flag wird angenommen und verhaelt sich wie der Aufruf ohne Flag: der
+Zustandsabruf **ist** die Vorgabe, `--status` schreibt sie nur aus. Auf einem
+Binary von vor `b9a79d2` kommt weiterhin der alte Exit 2; dann gilt die Zeile
+des eigenen Binaries.
 
 **Der Zustandsabruf endet bei einer unerreichbaren Gegenstelle mit Exit 1.**
 Gemessen gegen einen Namen, den es nicht gibt:

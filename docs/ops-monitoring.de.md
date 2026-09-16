@@ -215,26 +215,25 @@ Epoche, Ausstellungszeit und Veraltung aus. `--refresh` holt ihn. Ohne diesen
 Aufruf altert die lokale Sicht, und die Alterung ist genau das, was eine
 Überwachung hier sehen soll.
 
-**Das in der Hilfe angebotene `--status` gibt es nicht.** Gemessen, Ausgabe bis
-zur Flag-Liste, danach `[…]`:
+**`--status` existiert inzwischen; der frueher hier beschriebene Parserfehler
+ist behoben.** Eine aeltere Fassung dieses Blocks (gemessen 2026-09-07) zeigte
+`flag provided but not defined: -status` mit Exit 2; seit Commit `b9a79d2`
+ist das Flag definiert (`cmd/skillctl/revoke_feed_cmds.go:35`, als
+"(default)"). Gemessen am 2026-09-16, Binary aus diesem Baum
+(`skillctl/v0.5.1-6-g307b414`), gegen einen Namen, den es nicht gibt:
 
 ```
-$ skillctl revoke feed --status --registry https://<host>/api/skills
-flag provided but not defined: -status
-Usage: skillctl revoke feed [--status] [--refresh] [--registry URL] [--tenant T]
-
-Inspect or refresh the signed revocation HEAD: the G5 kill-switch feed (FR-0045).
-  --status  (default) fetch + verify the HEAD against the pinned registry key
-  --refresh sweep now: adopt the HEAD into the local cache + freshness anchor
-[…]
+$ skillctl revoke feed --status --registry https://<unerreichbar>/api/skills
+skillctl revoke feed: fetch failed: Get "https://<unerreichbar>/api/skills/revocations/head": dial tcp: lookup <unerreichbar>: no such host
 $ echo $?
-2
+1
 ```
 
-Der Hilfetext nennt `--status` zweimal, der Parser kennt es nicht, und derselbe
-Hilfetext sagt, was gilt: der Zustandsabruf ist die Vorgabe, also der Aufruf ohne
-weiteres Flag. Wer `--status` in eine geplante Aufgabe schreibt, baut sich einen
-Dauerfehler mit Exit 2, der wie ein Alarm aussieht und keiner ist.
+Das Flag wird angenommen, der Aufruf laeuft bis zum Fetch und verhaelt sich
+wie der Aufruf ohne Flag: der Zustandsabruf ist die Vorgabe. Eine geplante
+Aufgabe darf `--status` also ausschreiben; wer noch ein Binary von vor
+`b9a79d2` faehrt, sieht weiterhin den alten Exit 2, und dann gilt die Zeile
+des eigenen Binaries, nicht dieses Runbook.
 
 **Der Exit-Code des Zustandsabrufs taugt; der von `--refresh` hängt an der
 Verwaltungslage der Maschine.** Verwaltet heisst hier: die flache

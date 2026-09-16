@@ -3,8 +3,15 @@
 `gosec-baseline.sarif` is a point-in-time snapshot of the static-analysis
 findings from [gosec](https://github.com/securego/gosec) over the whole module.
 It exists so a **future** CI gate can start green (fail only on *new* findings)
-rather than drowning in the pre-existing backlog. **No CI job is wired yet**,
-that decision is pending; this is only the artifact + triage note.
+rather than drowning in the pre-existing backlog.
+
+**Superseded note (2026-09-16).** This file's original claim "No CI job is
+wired yet" was written 2026-09-03 and is stale: a blocking no-new-findings
+gate now runs (`.github/workflows/gosec-diff-gate.yml`, a required check on
+`master` per [required-checks.txt](required-checks.txt)). That gate checks
+against the SIGNATURE baseline [`gosec-inci-baseline.txt`](gosec-inci-baseline.txt),
+not against this SARIF file; the SARIF snapshot itself remains unwired and
+serves the triage below. Background: [gosec-backlog.md](gosec-backlog.md).
 
 ## How it was generated
 
@@ -56,7 +63,9 @@ default-verifies regression tests landed alongside this note.
 
 ## Not done here (deliberately)
 
-- No CI wiring. When a gate is added, run gosec against this baseline
+- No CI wiring **of this SARIF file** (the wired gate above uses the
+  signature baseline instead). If a SARIF-based gate is ever added, run gosec
+  against this baseline
   (`gosec -baseline docs/security/gosec-baseline.sarif ...` once regenerated
   under the same gosec version) so only regressions fail the build.
 - The G402/G704/G304/G104 backlog above is triaged-for-severity, not fixed. The
