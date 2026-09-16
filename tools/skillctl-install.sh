@@ -13,7 +13,7 @@ set -euo pipefail
 # SEC: an env-supplied release base relaxes the trust anchor. Honor it (legitimate
 # for testing) but warn loudly so a poisoned environment can't silently repoint us.
 [ -n "${RELEASE_BASE:-}" ] && echo "WARNING: RELEASE_BASE overrides the default release origin (${RELEASE_BASE})" >&2
-RELEASE_BASE="${RELEASE_BASE:-https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.4.0}"
+RELEASE_BASE="${RELEASE_BASE:-https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.5.1}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 
 # SEC-M2: pin the release-key fingerprint. The signature alone proves only that
