@@ -2,8 +2,8 @@
 # tutorial-smoke.sh: run the chain the German scenario tutorials describe, and
 # assert every step, so a tutorial cannot go stale without CI noticing.
 #
-#   docs/tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md
-#   docs/tutorial-szenario-02-erster-signierter-skill.de.md
+#   docs/v2/nutzer/tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md
+#   docs/v2/nutzer/tutorial-szenario-02-erster-signierter-skill.de.md
 #
 # FR-0118, SPEC-0407 AC-11. Two modes, one script:
 #
@@ -222,7 +222,7 @@ note "binary:    $SKILLCTL"
 note "source:    $SKILLCTL_ORIGIN"
 note "version:   $("$SKILLCTL" version 2>&1 | head -1)"
 note "workspace: $WS"
-note "the chain from docs/tutorial-szenario-02-erster-signierter-skill.de.md"
+note "the chain from docs/v2/nutzer/tutorial-szenario-02-erster-signierter-skill.de.md"
 
 # ------------------------------------------------------- 1. the skill source --
 step "Ein winziger Skill"

@@ -28,7 +28,7 @@ make check-docs    # documentation ↔ implementation consistency
 - **Tests bite.** Add tests with your change; the suite runs with `-race`. Offline tests live
   under `make test-unit`; networked / ER1 / whisper suites are opt-in (`make test-*`).
 - **Document CLI flags.** Every CLI flag must be described in its manual
-  (`docs/manual-m3c-tools.md` / `docs/manual-skillctl.md`), and only real flags may be
+  (`docs/v2/referenz/manual-m3c-tools.md` / `docs/v2/referenz/manual-skillctl.md`), and only real flags may be
   documented. Undocumented or phantom flags are treated as a defect.
 
 ## Commit messages: Conventional Commits
@@ -72,7 +72,7 @@ refactor is not.
 ## Releasing
 
 Releases are tag-driven and signed in CI. The full runbook is in
-**[docs/releasing.md](docs/releasing.md)**.
+**[docs/v2/betrieb/releasing.md](docs/v2/betrieb/releasing.md)**.
 
 ## Security
 

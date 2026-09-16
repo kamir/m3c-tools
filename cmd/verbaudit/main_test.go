@@ -228,7 +228,7 @@ func TestReconcile_StaleRowWarnsButPasses(t *testing.T) {
 // TestRun_RealTree pins the checker green against the actual repository tree, so
 // this test regresses if a future verb lands in main.go without a register row.
 func TestRun_RealTree(t *testing.T) {
-	code := run([]string{"-main", "../skillctl/main.go", "-register", "../../docs/CLI-VERBS.md"})
+	code := run([]string{"-main", "../skillctl/main.go", "-register", "../../docs/v2/referenz/CLI-VERBS.md"})
 	if code != 0 {
 		t.Fatalf("verbaudit on the real tree returned %d, want 0 (register out of sync with dispatch)", code)
 	}

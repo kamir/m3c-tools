@@ -27,7 +27,7 @@ func runRevokeFeed(args []string, stdout, stderr io.Writer) int {
 	timeout := fs.Duration("timeout", defaultHTTPTimeout, "HTTP timeout for the HEAD fetch.")
 	refresh := fs.Bool("refresh", false, "Run the revocation sweep now to refresh the local cache + freshness anchor.")
 	// --status is the DEFAULT mode, and it is registered anyway. Both this
-	// function's own usage text and docs/manual-skillctl.md have advertised
+	// function's own usage text and docs/v2/referenz/manual-skillctl.md have advertised
 	// `--status` since FR-0045, while no FlagSet defined it, so the documented
 	// command failed with "flag provided but not defined: -status". The flag gate
 	// did not catch it because it compares the flag names of a whole CLI, and

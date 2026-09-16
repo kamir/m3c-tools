@@ -18,8 +18,8 @@ Prüfung stattgefunden hat, nicht weil ihm jemand gesagt hat, sie habe stattgefu
 Vorgang) etwa eine Stunde beim ersten Mal, danach Minuten.
 
 **Verwandte Dokumente:** [Szenario 01](tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md)
-(eine Person, mehrere Maschinen), [Runbook Zwei-Personen-Austausch](runbook-two-person-er1-exchange.md)
-(derselbe Vorgang als Abnahmeprozedur), [Manual](manual-skillctl.md).
+(eine Person, mehrere Maschinen), [Runbook Zwei-Personen-Austausch](../betrieb/runbook-two-person-er1-exchange.md)
+(derselbe Vorgang als Abnahmeprozedur), [Manual](../referenz/manual-skillctl.md).
 
 ---
 
@@ -728,7 +728,7 @@ den eigenen Kontext (ein Publish in einen fremden endet mit `403`), die Raum-Mit
 wird serverseitig in der Konsole eingerichtet (es gibt kein `skillctl`-Verb dafür), und der
 Kontextname des Herausgebers muss dem Konsumenten exakt bekannt sein. Der ausführliche
 Zwei-Personen-Ablauf steht im
-[Runbook Zwei-Personen-Austausch](runbook-two-person-er1-exchange.md).
+[Runbook Zwei-Personen-Austausch](../betrieb/runbook-two-person-er1-exchange.md).
 
 ## Anhang B: das HTTP-Registry `/api/skills`, und warum es hier nicht der Hauptweg ist
 
@@ -777,7 +777,7 @@ nicht registriert (`POST /api/skills/identities`, Vorlage
   absichtlich und liest `%USERPROFILE%`. Der Sandkasten aus Teil 1 muss dort über
   `$env:USERPROFILE` gebaut werden.
 - Statt `shasum -a 256` nehmen Sie `Get-FileHash -Algorithm SHA256`.
-- Installation über die PowerShell-Einzeile aus [Quickstart §1](quickstart-skillctl.md#1-install).
+- Installation über die PowerShell-Einzeile aus [Quickstart §1](../../old/quickstart-skillctl.md#1-install).
 
 ---
 
@@ -785,4 +785,4 @@ nicht registriert (`POST /api/skills/identities`, Vorlage
 
 - Eigene Skills auf mehreren Maschinen: [Szenario 01](tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md)
 - Üben, bis es sitzt: [Katas und Test Ride](tutorial-katas-und-test-ride.de.md)
-- Jedes Kommando, jedes Flag, jeder Exit-Code: [Manual](manual-skillctl.md)
+- Jedes Kommando, jedes Flag, jeder Exit-Code: [Manual](../referenz/manual-skillctl.md)

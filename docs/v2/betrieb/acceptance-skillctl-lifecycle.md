@@ -18,7 +18,7 @@ else is identical when the registry is later swapped for the skill-repo backend
 (see [§7 Backend swap point](#7-backend-swap-point-er1--skill-repo)).
 
 > **Canonical reference:** every command below is documented in full in
-> [manual-skillctl.md](manual-skillctl.md). This page is the *procedure*; the manual is the
+> [manual-skillctl.md](../referenz/manual-skillctl.md). This page is the *procedure*; the manual is the
 > *reference*. Where they ever disagree, the manual wins.
 
 ---
@@ -53,7 +53,7 @@ and `pull` know it is ER1.
 | **Consumer** | Alice | Machine B | Bob's **public** key, ER1 login, a trust-roots file |
 | **Reviewer** (governance) | a third identity | any | reviewer key; signs the green attestation |
 
-Prerequisites on **both** machines (see [manual §Installation](manual-skillctl.md#installation)):
+Prerequisites on **both** machines (see [manual §Installation](../referenz/manual-skillctl.md#installation)):
 
 ```bash
 # Install skillctl (signed one-liner; verifies cosign provenance + SHA-256):
@@ -72,7 +72,7 @@ skillctl login --status
 > pin inside it). Verify the fetched bytes out-of-band, expected SHA-256:
 > `tools/skillctl-install.ps1` → `d33f5344d30a6258281b0784c461ecc0dbe25b86444175a6f95c31dfe2c27f17`,
 > `tools/skillctl-install.sh` → `5992c7f5770ced2d0ce1f43979e308b087e6a97d07a689eebf43230c28d88469`.
-> The [README Install section](../README.md#install) has a copy-paste verify-then-run recipe.
+> The [README Install section](../../../README.md#install) has a copy-paste verify-then-run recipe.
 
 ### The trust-root file: pick the right one (this is the #1 source of confusion)
 
@@ -213,7 +213,7 @@ skillctl audit --source all --minimum-governance green --format table   # → EX
 ## 5. Part C: Negative acceptance (invalid skills MUST be refused)
 
 Fail-closed is the whole point. Each case has a **specific** expected exit code (the full
-table is in [manual §Exit codes](manual-skillctl.md#exit-codes)):
+table is in [manual §Exit codes](../referenz/manual-skillctl.md#exit-codes)):
 
 | # | Attack | Command | Expect |
 |---|--------|---------|--------|
@@ -331,7 +331,7 @@ B manually** and recording the result; the harness covers the trust core and neg
 ## See also
 
 - [Runbook, two-person ER1 exchange (Bob → Alice)](runbook-two-person-er1-exchange.md), the copy-paste prod runbook to actually execute Parts A/B together.
-- [manual-skillctl.md](manual-skillctl.md): the full command/flag/exit-code reference.
-- [quickstart-skillctl.md](quickstart-skillctl.md): the author happy-path in 5 minutes.
-- [quickstart-skillctl-demo.md](quickstart-skillctl-demo.md): the offline Kata demo.
+- [manual-skillctl.md](../referenz/manual-skillctl.md): the full command/flag/exit-code reference.
+- [quickstart-skillctl.md](../../old/quickstart-skillctl.md): the author happy-path in 5 minutes.
+- [quickstart-skillctl-demo.md](../../old/quickstart-skillctl-demo.md): the offline Kata demo.
 - SPEC-0246 (cross-person exchange, AC1–AC5), SPEC-0248 (lifecycle umbrella), SPEC-0188 (trust chain + exit codes).

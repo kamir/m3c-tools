@@ -19,7 +19,7 @@
 #
 # Aufruf:
 #   tools/docpage.sh <markdown> [ausgabe.html]
-#   tools/docpage.sh docs/ops-human-agent-team.de.md
+#   tools/docpage.sh docs/v2/betrieb/ops-human-agent-team.de.md docs/v2/pages/ops-human-agent-team.html
 #
 # Vorgabe fuer die Ausgabe: docs/pages/<basisname-ohne-sprachsuffix>.html
 # Der eigene Ordner ist Absicht: Jekyll uebersetzt docs/x.md nach x.html, eine

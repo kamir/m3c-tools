@@ -48,6 +48,7 @@ func TestEmergency_ForgedSignatureRefused(t *testing.T) {
 	}
 }
 
+// THREAT-R04: an emergency rollback to a lower revocation epoch must be refused.
 func TestEmergency_RollbackEpochRefused(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 	root := revocationRoot(t, pub)

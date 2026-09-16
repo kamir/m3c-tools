@@ -407,5 +407,5 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "  session show            Show a session-state item by session_id or doc_id.")
 	fmt.Fprintln(w, "  session resume          Print a resume hint for a prior session.")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Full reference: docs/manual-skillctl.md. Verb allocation: docs/CLI-VERBS.md.")
+	fmt.Fprintln(w, "Full reference: docs/v2/referenz/manual-skillctl.md. Verb allocation: docs/v2/referenz/CLI-VERBS.md.")
 }

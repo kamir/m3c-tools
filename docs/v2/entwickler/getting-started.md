@@ -54,7 +54,7 @@ the main CLI even though the flagged tools are capture-runtime concerns; only
 `build-skillctl` is free of it. `make build-all` additionally builds
 `poc-recorder`, which imports PortAudio via cgo, so it needs
 `brew install portaudio` on top. Platform details:
-[Prerequisites](../../prerequisites.md).
+[Prerequisites](../../old/prerequisites.md).
 
 ## Part B: test
 
@@ -93,17 +93,17 @@ check-docpages test-unit build`.
 calls `golangci-lint run` directly (Makefile), so on a machine without it,
 `make ci` stops at step two. The stage 2 script
 (`scripts/skillctl-enterprise-test.sh`, described in
-[Prerequisites](../../prerequisites.md)) installs it at the version CI pins;
+[Prerequisites](../../old/prerequisites.md)) installs it at the version CI pins;
 installing by hand works too, the enforced config is `.golangci.yml`.
 
 The documentation gates live in `./scripts/check-docs.sh` and block a release:
 
 | Gate | Binary | Binds |
 |---|---|---|
-| CLI ↔ manual ↔ `--help` | `cmd/docaudit` | [manual-m3c-tools](../../manual-m3c-tools.md), [manual-skillctl](../../manual-skillctl.md), exemptions in [docaudit-ignore.txt](../../docaudit-ignore.txt) |
-| verb register | `cmd/verbaudit` | [CLI-VERBS](../../CLI-VERBS.md): register the verb BEFORE implementing it |
+| CLI ↔ manual ↔ `--help` | `cmd/docaudit` | [manual-m3c-tools](../referenz/manual-m3c-tools.md), [manual-skillctl](../referenz/manual-skillctl.md), exemptions in [docaudit-ignore.txt](../../docaudit-ignore.txt) |
+| verb register | `cmd/verbaudit` | [CLI-VERBS](../referenz/CLI-VERBS.md): register the verb BEFORE implementing it |
 | exit-code register | `cmd/exitaudit` | the manual's `Exit:` lines, the register column, `pkg/skillctl/exitcode` |
-| tutorial chain | `scripts/tutorial-smoke.sh` | `docs/tutorial-szenario-0*.de.md`, run against a throwaway registry (a bare `local://` git registry in a temporary HOME, created and deleted per run) |
+| tutorial chain | `scripts/tutorial-smoke.sh` | `docs/v2/nutzer/tutorial-szenario-0*.de.md`, run against a throwaway registry (a bare `local://` git registry in a temporary HOME, created and deleted per run) |
 | index freshness | `scripts/check-index.sh` | [program-index](../../program-index.md), [component-index](../../component-index.md), both directions plus the counts |
 | docpage drift | `scripts/check-docpages.sh` | every page registered in its `REGISTER` block, byte-compared against its markdown source |
 
@@ -122,11 +122,11 @@ config, and [CODESTYLE.md](../../../CODESTYLE.md) carries the reasoning.
 
 A bug or feature request lives on two planes, kept in step by
 `scripts/bugtracker.sh`; the workflow, the refusals and the redaction rules
-are in [bug-tracking](../../bug-tracking.md).
+are in [bug-tracking](bug-tracking.md).
 
 ## Part E: releasing
 
 Releases are tag-driven; there is no VERSION file, and the product line
 (`vX.Y.Z`) and the skillctl line (`skillctl/vX.Y.Z`) are cut independently.
-The operational runbook is [releasing](../../releasing.md); the human
+The operational runbook is [releasing](../betrieb/releasing.md); the human
 sign-off and acceptance gates are described there too.

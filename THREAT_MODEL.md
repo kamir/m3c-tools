@@ -365,9 +365,10 @@ nobody reads a covered row and assumes the whole surface is covered.
 
 ## 6. Keeping the model live
 
-These threat IDs are only useful if they stay wired to the code. The intended convention is a
+These threat IDs are only useful if they stay wired to the code. The convention is a
 one-line comment at the covering test, so a reader (or a future audit script) can walk from a
-threat to its proof and back:
+threat to its proof and back. Measured 2026-09-16: `grep -rn 'THREAT-R' pkg/ cmd/` finds such
+comments for all 12 register IDs (R01 to R12), at least one covering test per ID:
 
 ```go
 // THREAT-R05: an unsigned OCI annotation relabel must not suppress a signed revoke.

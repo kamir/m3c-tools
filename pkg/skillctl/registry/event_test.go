@@ -105,6 +105,7 @@ func TestEnvelopeVerify_MissingSignature(t *testing.T) {
 	}
 }
 
+// THREAT-R08: a signed event envelope modified after signing must fail verification.
 func TestEnvelopeVerify_TamperedAfterSign(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(nil)
 	ev := map[string]any{"original": "value"}

@@ -140,4 +140,4 @@ All four green ⇒ the two-person ER1 exchange is validated on this release.
 ## See also
 
 - [Acceptance & Handover: the skill lifecycle](acceptance-skillctl-lifecycle.md): the why + full success criteria (SPEC-0246 §10).
-- [Manual: skillctl](manual-skillctl.md): every command/flag; [Trust roots & registries](manual-skillctl.md#trust-roots--registries--which-file-when).
+- [Manual: skillctl](../referenz/manual-skillctl.md): every command/flag; [Trust roots & registries](../referenz/manual-skillctl.md#trust-roots--registries--which-file-when).

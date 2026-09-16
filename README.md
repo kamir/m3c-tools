@@ -16,8 +16,8 @@ that act on it. Two command-line tools, one repository, zero mandatory cloud mid
 [![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-[Quickstart: m3c-tools](docs/quickstart-m3c-tools.md) ·
-[Quickstart: skillctl](docs/quickstart-skillctl.md) ·
+[Quickstart: m3c-tools](docs/old/quickstart-m3c-tools.md) ·
+[Quickstart: skillctl](docs/old/quickstart-skillctl.md) ·
 [Full manuals](#-documentation) ·
 [Website](https://kamir.github.io/m3c-tools)
 
@@ -68,7 +68,7 @@ m3c-tools transcript dQw4w9WgXcQ        # fetch a YouTube transcript, right now
 m3c-tools doctor                        # verify connectivity & config
 ```
 
-→ **Full walkthrough:** [Quickstart: m3c-tools](docs/quickstart-m3c-tools.md)
+→ **Full walkthrough:** [Quickstart: m3c-tools](docs/old/quickstart-m3c-tools.md)
 
 ### `skillctl`: sign and verify your first skill
 
@@ -83,7 +83,7 @@ skillctl sign --key ~/.config/m3c/skill-keys/mykey.priv my-skill.skb
 skillctl verify-sig --pubkey ~/.config/m3c/skill-keys/mykey.pub my-skill.skb   # offline, no server
 ```
 
-→ **Full walkthrough:** [Quickstart: skillctl](docs/quickstart-skillctl.md)
+→ **Full walkthrough:** [Quickstart: skillctl](docs/old/quickstart-skillctl.md)
 
 ---
 
@@ -114,13 +114,13 @@ their **true recording time**, not the moment you synced them (`plaud fix-times`
 earlier imports), so captures from multiple devices land on the timeline where they
 actually happened. On **macOS**, `plaud dev` uses the official auto-refreshing OAuth token
 (no daily re-login) and, by default, leaves un-transcribed audio to **server-side**
-transcription: see [Setup & Operations](docs/setup-target-devices.md).
+transcription: see [Setup & Operations](docs/v2/betrieb/setup-target-devices.md).
 
 **Command surface:** `transcript`, `upload`, `whisper`, `thumbnail`, `record`, `screenshot`,
 `import-audio` (capture); `plaud` (`list` · `check` · `sync` · `fix-times` · `auth`; macOS `dev list/sync/status`) and
 `pocket` (field-recording sync); `retry`, `cancel`, `schedule`, `status` (ER1 queue);
 `doctor`, `check-er1`, `config` (incl. `doctor`), `settings`, `token`, `devices`, `login`,
-`setup`, `menubar` (setup & diagnostics). See the [m3c-tools manual](docs/manual-m3c-tools.md).
+`setup`, `menubar` (setup & diagnostics). See the [m3c-tools manual](docs/v2/referenz/manual-m3c-tools.md).
 
 ## What `skillctl` governs
 
@@ -141,7 +141,7 @@ author → pack → sign → admit → attest → verify / install → use → a
 `trust`, `install`, `verify`, `verify-hook`; *governance:* `attest`, `revoke`, `agentid`,
 `publish`, `pull`, `registry`; *audit & transparency:* `audit`, `seal`, `scan`, `review`,
 `propose`, `translog`, `gate-stats`; plus `project`, `session`.
-See the [skillctl manual](docs/manual-skillctl.md).
+See the [skillctl manual](docs/v2/referenz/manual-skillctl.md).
 
 ---
 
@@ -149,14 +149,15 @@ See the [skillctl manual](docs/manual-skillctl.md).
 
 | Page | For |
 |------|-----|
-| [**Quickstart: m3c-tools**](docs/quickstart-m3c-tools.md) | Capture your first memory in 5 minutes |
-| [**Quickstart: skillctl**](docs/quickstart-skillctl.md) | Sign, install and verify a skill in 5 minutes |
-| [**Quickstart: skillctl-demo**](docs/quickstart-skillctl-demo.md) | Run the skill-trust scenarios offline on your own machine, 3 run live with real exit codes (S1/S2A/S5); the remaining panels render their story but run nothing (S3 is a built-but-not-run PARTIAL, S2BC/S4 are ROADMAP), plus hands-on Kata training (shipped): five Katas, each beat a real skillctl exit code (K5 demonstrates the offline revocation deny live) |
-| [**Manual: m3c-tools**](docs/manual-m3c-tools.md) | Every command, flag and config variable |
-| [**Manual: skillctl**](docs/manual-skillctl.md) | The full trust lifecycle, command by command |
-| [Menu Bar App](docs/menubar-app.md) | Channels, Observation Window, menu items (macOS) |
-| [Setup & Operations: Intel Mac & Windows](docs/setup-target-devices.md) | Zero-to-operating runbook for fresh Intel Mac / Windows target devices |
-| [Platform differences](docs/PLATFORM-DIFFERENCES.md) | What works where |
+| [**Wegweiser: die Doku nach Rollen**](docs/v2/index.md) | The role-based entry point; canonical docs live under `docs/v2/` |
+| [**Quickstart: m3c-tools**](docs/old/quickstart-m3c-tools.md) | Capture your first memory in 5 minutes |
+| [**Quickstart: skillctl**](docs/old/quickstart-skillctl.md) | Sign, install and verify a skill in 5 minutes |
+| [**Quickstart: skillctl-demo**](docs/old/quickstart-skillctl-demo.md) | Run the skill-trust scenarios offline on your own machine, 3 run live with real exit codes (S1/S2A/S5); the remaining panels render their story but run nothing (S3 is a built-but-not-run PARTIAL, S2BC/S4 are ROADMAP), plus hands-on Kata training (shipped): five Katas, each beat a real skillctl exit code (K5 demonstrates the offline revocation deny live) |
+| [**Manual: m3c-tools**](docs/v2/referenz/manual-m3c-tools.md) | Every command, flag and config variable |
+| [**Manual: skillctl**](docs/v2/referenz/manual-skillctl.md) | The full trust lifecycle, command by command |
+| [Menu Bar App](docs/old/menubar-app.md) | Channels, Observation Window, menu items (macOS) |
+| [Setup & Operations: Intel Mac & Windows](docs/v2/betrieb/setup-target-devices.md) | Zero-to-operating runbook for fresh Intel Mac / Windows target devices |
+| [Platform differences](docs/v2/referenz/PLATFORM-DIFFERENCES.md) | What works where |
 | [Website](https://kamir.github.io/m3c-tools) | The rendered docs site |
 
 ---
@@ -187,7 +188,7 @@ curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/1eeefc870a9be50ace3
 Override the target dir or release with `INSTALL_DIR=…` / `RELEASE_BASE=…` (default `~/.local/bin`).
 These verify the **signed** `skillctl/v*` release, cosign provenance (GitHub OIDC) + the SHA-256
 digest, with an **ed25519 fallback** for hosts without cosign, see the
-[skillctl quickstart](docs/quickstart-skillctl.md#1-install).
+[skillctl quickstart](docs/old/quickstart-skillctl.md#1-install).
 
 **Bootstrap integrity.** The one-liner URLs are pinned to the **immutable commit
 `1eeefc8`**, not the mutable `master` branch, where a single rewrite could swap the
@@ -239,7 +240,7 @@ curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-l
 
 **Windows (manual / GUI):** download `m3c-tools-windows-amd64.zip` (or the `M3C-Tools-Setup.exe`
 installer) from the [latest release](https://github.com/kamir/m3c-tools/releases/latest) and add
-it to your `PATH`. See [Quickstart: m3c-tools](docs/quickstart-m3c-tools.md) for the full
+it to your `PATH`. See [Quickstart: m3c-tools](docs/old/quickstart-m3c-tools.md) for the full
 PowerShell setup.
 
 ### Platform support
@@ -276,7 +277,7 @@ others. **Evidence you can verify yourself, with no mandatory hosted authority i
 - **Pinned bootstrap.** The install one-liners pin an **immutable commit** + each script's
   SHA-256 (not the mutable `master`). Verify-then-run is documented under [Install](#install).
 
-The full release, signing and provenance flow is in **[docs/releasing.md](docs/releasing.md)**;
+The full release, signing and provenance flow is in **[docs/v2/betrieb/releasing.md](docs/v2/betrieb/releasing.md)**;
 **report a vulnerability** privately via **[SECURITY.md](SECURITY.md)**.
 
 ---
@@ -432,7 +433,7 @@ context that will never report" and "not armed at all" stop looking alike.
 
 Releases are **tag-driven**: pushing a `vX.Y.Z` or `skillctl/vX.Y.Z` tag builds, signs and
 publishes via GitHub Actions. The full runbook (bump derivation, the two release lines, cosign +
-SLSA signing, post-release steps and gotchas) is in **[docs/releasing.md](docs/releasing.md)**.
+SLSA signing, post-release steps and gotchas) is in **[docs/v2/betrieb/releasing.md](docs/v2/betrieb/releasing.md)**.
 
 ---
 

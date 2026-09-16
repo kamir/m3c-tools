@@ -13,7 +13,7 @@ import (
 // revocation_stale number the PreToolUse gate and the `verify --all` sweep use,
 // so one script branch catches the signal at all three sites.
 //
-// The number is documented in docs/CLI-VERBS.md and docs/manual-skillctl.md, and
+// The number is documented in docs/v2/referenz/CLI-VERBS.md and docs/v2/referenz/manual-skillctl.md, and
 // cmd/exitaudit cannot check it: exitaudit reads documents, and only `pull` is
 // read as code. This test is the missing half.
 func TestRevokeFeedRefresh_ManagedFetchUnavailable_Exits22(t *testing.T) {

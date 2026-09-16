@@ -11,7 +11,7 @@ audio + image) uploaded to *your* [ER1](https://er1.io) personal knowledge serve
 macOS it ships as a native menu-bar app **and** a full CLI; on Linux and Windows it is
 CLI-only. The core packages (`transcript`, `er1`, `impression`) use only the Go standard
 library. If you just want the 5-minute path, start with the
-[Quickstart](quickstart-m3c-tools.md). **This page is the exhaustive reference** for
+[Quickstart](../../old/quickstart-m3c-tools.md). **This page is the exhaustive reference** for
 every command, flag and configuration variable.
 
 ---
@@ -20,8 +20,8 @@ every command, flag and configuration variable.
 
 Grab the single binary from the
 [latest release](https://github.com/kamir/m3c-tools/releases/latest), or use the
-platform one-liners in the [Quickstart](quickstart-m3c-tools.md#1-install) and the
-[README](../README.md#build-from-source). To build from source (Go 1.25+):
+platform one-liners in the [Quickstart](../../old/quickstart-m3c-tools.md#1-install) and the
+[README](../../../README.md#build-from-source). To build from source (Go 1.25+):
 
 ```bash
 go build -o m3c-tools ./cmd/m3c-tools   # plain Go build
@@ -32,7 +32,7 @@ make menubar                            # build & launch the menu-bar app (macOS
 
 On macOS the menu-bar GUI additionally needs `brew install pkg-config portaudio ffmpeg`
 and `python3 -m pip install openai-whisper`. See the
-[README](../README.md#build-from-source) for the full install matrix.
+[README](../../../README.md#build-from-source) for the full install matrix.
 
 ---
 
@@ -560,7 +560,7 @@ m3c-tools menubar [flags]
 ```
 
 Launches the native menu-bar app (macOS only). See the
-[Menu Bar App guide](menubar-app.md) for every menu item.
+[Menu Bar App guide](../../old/menubar-app.md) for every menu item.
 
 | Flag | Argument | Default | Meaning |
 |------|----------|---------|---------|
@@ -712,7 +712,7 @@ observation is uploaded, its tags are matched against your PLM projects and a
 app** (the plain CLI does not track time). The full matching rules (strong
 `project:<slug>` / medium `client:<name>` / weak ≥2-tag overlap), the month-at-startup
 backfill, and the `[reverse-tracking] no project match` diagnostic are documented in
-**[Menu Bar App → How reverse tracking works](menubar-app.md#how-reverse-tracking-works)**.
+**[Menu Bar App → How reverse tracking works](../../old/menubar-app.md#how-reverse-tracking-works)**.
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
@@ -752,7 +752,7 @@ m3c-tools cancel vid-001
 | `whisper` command not found | Install it: `python3 -m pip install openai-whisper` (needs `ffmpeg`). Or run `m3c-tools setup`. |
 | `subtitles are disabled for this video` | Expected. The capture still keeps the **thumbnail + link**: add a voice note or `--impression`. |
 | "Projects" menu stuck on *Loading…* | No ER1 credential reached the app. Fix the active profile's key or run `login`, then **restart the menu-bar app**. |
-| `[reverse-tracking] no project match` in the log | Diagnostic, not an error: a capture's tags didn't overlap any PLM project. Add matching tags to the project, or capture with a `project:<slug>` / `client:<name>` tag: see [reverse tracking](menubar-app.md#how-to-make-reverse-tracking-work-for-your-captures). |
+| `[reverse-tracking] no project match` in the log | Diagnostic, not an error: a capture's tags didn't overlap any PLM project. Add matching tags to the project, or capture with a `project:<slug>` / `client:<name>` tag: see [reverse tracking](../../old/menubar-app.md#how-to-make-reverse-tracking-work-for-your-captures). |
 | Upload fails, then retries | Failed uploads queue at `~/.m3c-tools/queue.json`. Run `m3c-tools retry`, check `m3c-tools status`. |
 | YouTube 429 / rate limited | Set `YT_PROXY_URL`; transcripts are cached for 7 days and the app degrades gracefully without them. |
 | `plaud dev sync` → HTTP 413 | The recording's audio exceeds the ER1 ingress limit (~32 MiB). `plaud dev sync` already drops audio over `PLAUD_MAX_AUDIO_MB` (default 30) and uploads transcript-only. If you still see 413, lower `PLAUD_MAX_AUDIO_MB`; a stricter proxy may cap below 30 MB. |
@@ -761,9 +761,9 @@ m3c-tools cancel vid-001
 
 ## See also
 
-- [Quickstart: m3c-tools](quickstart-m3c-tools.md): the 5-minute path
-- [Menu Bar App](menubar-app.md): projects, the Gantt time tracker, and reverse tracking in depth
+- [Quickstart: m3c-tools](../../old/quickstart-m3c-tools.md): the 5-minute path
+- [Menu Bar App](../../old/menubar-app.md): projects, the Gantt time tracker, and reverse tracking in depth
 - [Manual: skillctl](manual-skillctl.md): the agent-skill trust lifecycle, command by command
-- [Menu Bar App](menubar-app.md): every menu item and the Observation Window
-- [Bug & feature tracking](bug-tracking.md): how a defect or a request is tracked across the private and public planes
+- [Menu Bar App](../../old/menubar-app.md): every menu item and the Observation Window
+- [Bug & feature tracking](../entwickler/bug-tracking.md): how a defect or a request is tracked across the private and public planes
 - [Platform differences](PLATFORM-DIFFERENCES.md): macOS vs Linux vs Windows behavior

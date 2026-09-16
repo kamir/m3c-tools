@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# check-docpages.sh: jede erzeugte Doku-Seite unter docs/pages/ muss zu ihrer
-# Markdown-Quelle passen.
+# check-docpages.sh: jede erzeugte Doku-Seite unter docs/pages/ und
+# docs/v2/pages/ muss zu ihrer Markdown-Quelle passen.
 #
 # Warum ein Tor und keine Gewohnheit: die Seite traegt eine Kopie der Markdown
 # in sich. Eine Kopie, die niemand vergleicht, ist nach der zweiten Aenderung
@@ -22,7 +22,7 @@ cd "$ROOT"
 
 # markdown-quelle -> erzeugte seite
 REGISTER='
-docs/ops-human-agent-team.de.md|docs/pages/ops-human-agent-team.html
+docs/v2/betrieb/ops-human-agent-team.de.md|docs/v2/pages/ops-human-agent-team.html
 docs/v2/index.md|docs/v2/pages/wegweiser.html
 docs/v2/nutzer/einstieg.de.md|docs/v2/pages/nutzer-einstieg.html
 docs/v2/entwickler/architecture.md|docs/v2/pages/entwickler-architecture.html
@@ -30,6 +30,9 @@ docs/v2/entwickler/getting-started.md|docs/v2/pages/entwickler-getting-started.h
 docs/v2/betrieb/ueberblick.de.md|docs/v2/pages/betrieb-ueberblick.html
 docs/v2/betrieb/runbook-m3c-tools-capture.de.md|docs/v2/pages/betrieb-runbook-m3c-tools-capture.html
 docs/v2/sicherheit/ueberblick.de.md|docs/v2/pages/sicherheit-ueberblick.html
+docs/v2/entwickler/thinking-engine.md|docs/v2/pages/entwickler-thinking-engine.html
+docs/v2/entwickler/skillctl-sim.md|docs/v2/pages/entwickler-skillctl-sim.html
+docs/v2/sicherheit/audit-spur.de.md|docs/v2/pages/sicherheit-audit-spur.html
 '
 
 command -v python3 >/dev/null || { echo "check-docpages: python3 fehlt" >&2; exit 2; }
@@ -49,7 +52,7 @@ while IFS='|' read -r src out; do
     continue
   fi
   if [ ! -f "$out" ]; then
-    echo "  FEHLT   Seite $out; erzeuge sie mit: tools/docpage.sh $src"
+    echo "  FEHLT   Seite $out; erzeuge sie mit: tools/docpage.sh $src $out"
     fail=1
     continue
   fi
@@ -59,21 +62,22 @@ while IFS='|' read -r src out; do
   else
     echo "  VERALTET $out"
     echo "          Die Seite und $src sagen Verschiedenes."
-    echo "          Erzeuge sie neu:  tools/docpage.sh $src"
+    echo "          Erzeuge sie neu:  tools/docpage.sh $src $out"
     fail=1
   fi
 done <<< "$(printf '%s\n' "$REGISTER" | sed '/^[[:space:]]*$/d')"
 
 # Eine Seite im Baum, die in keiner Registerzeile steht, wuerde nie geprueft.
-if [ -d docs/pages ]; then
-  for page in docs/pages/*.html; do
+for dir in docs/pages docs/v2/pages; do
+  [ -d "$dir" ] || continue
+  for page in "$dir"/*.html; do
     [ -e "$page" ] || continue
     case "$REGISTER" in
       *"|$page"*) ;;
       *) echo "  UNGEPRUEFT $page steht in keiner Registerzeile"; fail=1 ;;
     esac
   done
-fi
+done
 
 echo ""
 if [ "$fail" -eq 0 ]; then
