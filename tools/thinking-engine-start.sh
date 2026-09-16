@@ -18,7 +18,12 @@ CTX_HASH="${CTX_HASH:-c241d2aad2268287}"
 CTX_HASH_UPPER=$(echo "$CTX_HASH" | tr 'a-z' 'A-Z')
 ENGINE_PORT="${ENGINE_PORT:-7140}"
 KAFKA_URL="${KAFKA_URL:-localhost:9094}"
-AIMS_CORE_DIR="${AIMS_CORE_DIR:-/Users/kamir/GITHUB.active/my-ai-X/aims-core}"
+# Reihenfolge: gesetzte Umgebung, dann die lokale Konfiguration, dann Abbruch
+# mit benanntem Wert. Frueher stand hier der Heimatpfad eines Rechners als
+# Vorgabe, was auf jedem anderen still den falschen Ort traf.
+LOCAL_PATHS="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.claude/local-paths.env"
+[ -f "$LOCAL_PATHS" ] && . "$LOCAL_PATHS"
+AIMS_CORE_DIR="${AIMS_CORE_DIR:?setze AIMS_CORE_ROOT in .claude/local-paths.env (Vorlage: .claude/local-paths.env.example) oder AIMS_CORE_DIR in der Umgebung}"
 ENGINE_BIN="${ENGINE_BIN:-./build/thinking-engine}"
 
 # ---------------------------------------------------------------- pre-flight

@@ -74,7 +74,7 @@ follow these steps to establish the correct baseline.
 
 - The **authoritative tracker file** lists filenames that have already been
   uploaded to ER1 via the legacy Python tool. Default location:
-  `/Users/kamir/GITHUB.active/my-ai-X/experiments/audio-checklist-checker-py/bin/transcript_tracker.md`
+  `$AIMS_CORE_ROOT/../experiments/audio-checklist-checker-py/bin/transcript_tracker.md`
 - The **audio source folder** (`IMPORT_AUDIO_SOURCE`) contains all audio files.
 - Already-uploaded files are moved to a `DONE/` subfolder in the source.
 
@@ -93,8 +93,8 @@ follow these steps to establish the correct baseline.
 3. **Seed from the authoritative tracker**. For each file listed in the tracker,
    compute the SHA-256 hash and insert into the DB as `status='uploaded'`:
    ```bash
-   SOURCE_DIR="/Users/kamir/GDMirror/GCP-AUDIO-TRANSCRIPT-SERVICE"
-   TRACKER="/Users/kamir/GITHUB.active/my-ai-X/experiments/audio-checklist-checker-py/bin/transcript_tracker.md"
+   SOURCE_DIR="$AUDIO_SOURCE_DIR"   # aus .claude/local-paths.env
+   TRACKER="$AIMS_CORE_ROOT/../experiments/audio-checklist-checker-py/bin/transcript_tracker.md"
    DB="$HOME/.m3c-tools/tracking.db"
 
    # The app will create the schema on first open. Alternatively, start the

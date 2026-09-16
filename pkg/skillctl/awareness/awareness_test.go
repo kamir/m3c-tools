@@ -33,14 +33,14 @@ func sampleInventory(t *testing.T) *model.Inventory {
 	t.Helper()
 	return &model.Inventory{
 		ScannedAt:  "2026-05-06T10:00:00Z",
-		ScanPaths:  []string{"/Users/kamir/.claude/skills"},
+		ScanPaths:  []string{"/home/alice/.claude/skills"},
 		TotalCount: 2,
 		Skills: []model.SkillDescriptor{
 			{
 				ID:               "didactic-session",
 				Name:             "didactic-session",
 				Type:             model.SkillTypeClaudeCodeSkill,
-				SourcePath:       "/Users/kamir/.claude/skills/didactic-session",
+				SourcePath:       "/home/alice/.claude/skills/didactic-session",
 				ContentHash:      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 				ContentSizeBytes: 1024,
 				Tier:             "user",
@@ -55,7 +55,7 @@ func sampleInventory(t *testing.T) *model.Inventory {
 				ID:          "fetch-contract",
 				Name:        "fetch-contract",
 				Type:        model.SkillTypeClaudeCodeSkill,
-				SourcePath:  "/Users/kamir/.claude/skills/fetch-contract",
+				SourcePath:  "/home/alice/.claude/skills/fetch-contract",
 				ContentHash: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 				Tier:        "user",
 				Frontmatter: &model.Frontmatter{

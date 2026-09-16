@@ -31,7 +31,7 @@ When the user says "deploy", "rebuild backend", "restart ER1", "rebuild Docker",
 Run the existing build script from the aims-core project root. Use the default mode (no flags) which builds stages 4-5 only:
 
 ```bash
-cd /Users/kamir/GITHUB.active/my-ai-X/aims-core
+cd "$AIMS_CORE_ROOT"
 ./tools/RELEASE-v4/build_images_multi_platform_v4.sh
 ```
 
@@ -44,7 +44,7 @@ This builds:
 Use the existing run script:
 
 ```bash
-cd /Users/kamir/GITHUB.active/my-ai-X/aims-core
+cd "$AIMS_CORE_ROOT"
 ./tools/v4/run_image.sh
 ```
 
