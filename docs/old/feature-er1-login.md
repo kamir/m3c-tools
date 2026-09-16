@@ -1,3 +1,5 @@
+> Ueberholt, Beleg: `pkg/er1login` existiert im Baum (`ls pkg/`, gemessen 2026-09-16), und roadmap.md hakt "ER1 browser login linking" ab. Archiviert nach docs/old.
+
 # ER1 Browser Login Linking (Feature Track)
 
 ## Goal

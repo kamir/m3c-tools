@@ -105,7 +105,7 @@ ER1 connection settings via environment variables (`.env`):
 
 **R4.4** Optional session persistence via `M3C_ER1_SESSION_PERSIST=true` (stored in `~/.m3c-tools/er1_session.json`).
 
-**Implementation:** `pkg/menubar/app.go`, `cmd/m3c-tools/main.go`, `docs/feature-er1-login.md`
+**Implementation:** `pkg/menubar/app.go`, `cmd/m3c-tools/main.go`, `docs/old/feature-er1-login.md`
 
 ---
 

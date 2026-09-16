@@ -6,11 +6,12 @@
 //	skillctl-sim run [-n 100]         execute it and compare theory with reality
 //	skillctl-sim run -md report.md    also write the report as a document
 //
-// Exit: 0 when every claimed prediction held, no invariant was violated and the
-// harness itself ran clean; 1 otherwise. A run that ends 1 has found a bug, a
-// wrong specification, or a broken harness, and the report says which. A residual
-// alone does not fail the run: part of it comes from the out-of-model attacks the
-// corpus carries on purpose.
+// Exit: 0 when no unwaived conflict, no invariant violation, a residual of
+// zero and no harness failure; 1 otherwise. A run that ends 1 has found a bug,
+// a wrong specification, or a broken harness, and the report says which. The
+// residual is part of the pass condition (see the Makefile's `sim` comment for
+// why the earlier residual exemption is superseded); a waived conflict is
+// counted and printed with its finding, not removed from the comparison.
 package main
 
 import (

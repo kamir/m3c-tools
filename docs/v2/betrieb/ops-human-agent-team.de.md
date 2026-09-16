@@ -9,7 +9,7 @@ Zielgruppe: die Person, die das Team einrichtet. Die Mitarbeiterin, die danach
 darin arbeitet, braucht dieses Dokument nicht. Das ist der Zweck.
 
 **Zum Lesen und Drucken** gibt es dieselbe Anleitung als Doku-Seite:
-[`docs/pages/ops-human-agent-team.html`](pages/ops-human-agent-team.html). Sie
+[`docs/v2/pages/ops-human-agent-team.html`](../pages/ops-human-agent-team.html). Sie
 hat eine Abschnittsschiene, einen Kopierknopf an jedem Kommando und einen
 Druck-Flavor, der jede Farbfläche auflöst. Erzeugt wird sie aus dieser Datei
 mit `tools/docpage.sh`; maßgeblich bleibt diese Datei.
@@ -135,7 +135,7 @@ sie durchzuleiten, erwartet diese SHA-256:
 - `tools/skillctl-install.ps1` → `d33f5344d30a6258281b0784c461ecc0dbe25b86444175a6f95c31dfe2c27f17`
 - `tools/skillctl-install.sh` → `5992c7f5770ced2d0ce1f43979e308b087e6a97d07a689eebf43230c28d88469`
 
-Der [README-Abschnitt Install](../README.md#install) hat das Rezept dafür zum
+Der [README-Abschnitt Install](../../../README.md#install) hat das Rezept dafür zum
 Kopieren. Wer den Einzeiler durchleitet, verzichtet auf diese Probe; das ist
 eine Entscheidung und kein Versehen.
 

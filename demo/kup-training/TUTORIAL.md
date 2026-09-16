@@ -15,7 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/master/scripts/skil
 ```
 
 On Windows the same two scripts exist as `.ps1`; see
-[Quickstart: skillctl](../../docs/quickstart-skillctl.md#1b-optional-prove-it-on-your-own-machine-source-self-test).
+[Quickstart: skillctl](../../docs/old/quickstart-skillctl.md#1b-optional-prove-it-on-your-own-machine-source-self-test).
 Run those first. When they are green, the machine is fine and the remaining question is
 whether **you** can operate the thing. That is this ride.
 
@@ -44,7 +44,7 @@ PATH, so call it by path:
 ```
 
 or use the Start menu's **Git Bash** and run the commands below unchanged. Missing git or
-Go entirely: [docs/prerequisites.md](../../docs/prerequisites.md) has one `winget` line per
+Go entirely: [docs/old/prerequisites.md](../../docs/old/prerequisites.md) has one `winget` line per
 tool, plus the no-admin path.
 
 Everything this ride writes lands under `demo/kup-training/artifacts/`, which is
@@ -104,7 +104,7 @@ else is your decision about the key, and that decision is step `04`.
 
 **Exit codes are the vocabulary.** `0` accepted, `10` digest mismatch, `11` author signature
 invalid, `17` revoked, `2` a governance action refusing to be forced. The full table is in
-the [skillctl manual](../../docs/manual-skillctl.md#exit-codes).
+the [skillctl manual](../../docs/v2/referenz/manual-skillctl.md#exit-codes).
 
 ---
 
@@ -173,7 +173,7 @@ skillctl-demo --mode kata      # K1 seal, K2 tamper, K3 govern, K4 trust roots, 
 skillctl-demo --kata-list      # the board, and your progress
 ```
 
-See [Quickstart: skillctl-demo](../../docs/quickstart-skillctl-demo.md#5-training-mode-kata-shipped).
+See [Quickstart: skillctl-demo](../../docs/old/quickstart-skillctl-demo.md#5-training-mode-kata-shipped).
 
 ---
 
@@ -189,8 +189,8 @@ See [Quickstart: skillctl-demo](../../docs/quickstart-skillctl-demo.md#5-trainin
 
 ## Where the rest of it lives
 
-- Every command, flag and exit code: [skillctl manual](../../docs/manual-skillctl.md)
-- Install, author, sign, verify in five minutes: [Quickstart: skillctl](../../docs/quickstart-skillctl.md)
-- The two-person handover over a real server: [Acceptance and handover](../../docs/acceptance-skillctl-lifecycle.md)
+- Every command, flag and exit code: [skillctl manual](../../docs/v2/referenz/manual-skillctl.md)
+- Install, author, sign, verify in five minutes: [Quickstart: skillctl](../../docs/old/quickstart-skillctl.md)
+- The two-person handover over a real server: [Acceptance and handover](../../docs/v2/betrieb/acceptance-skillctl-lifecycle.md)
 - What this directory is for the maintainer, and the four release gates it asserts:
   [README.md](README.md)

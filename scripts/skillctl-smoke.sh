@@ -8,7 +8,7 @@
 #   execute    a minimal offline lifecycle (version → keygen → pack → sign → verify-sig)
 #   uninstall  remove the installed binary and confirm it is gone
 #
-# This is Phase 4 of the skillctl release chain (see docs/releasing.md and the
+# This is Phase 4 of the skillctl release chain (see docs/v2/betrieb/releasing.md and the
 # /release-skillctl skill) AND the per-leg body of the H9 Tier-1 platform smoke
 # gate (.github/workflows/skillctl-smoke-matrix.yml), which runs it on macOS
 # arm64/amd64 + Linux amd64/arm64 (Windows is covered by a parallel matrix leg).

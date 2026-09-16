@@ -3,6 +3,8 @@ layout: default
 title: Roadmap & Ideas
 ---
 
+> Ueberholt, Beleg: der Kopf dieser Datei sagt "Current state (v1.5)"; `git tag --list | sort -V | tail -1` ergab am 2026-09-16 `v2.12.0`. Archiviert nach docs/old.
+
 # Roadmap & Ideas
 
 This project is designed to grow. Below is the living roadmap: a place to track ideas, capture impulses, and plan next steps.
@@ -131,7 +133,7 @@ _Use GitHub Issues or edit this page directly to add new impulses._
 Have an idea? Capture it:
 
 1. **Quick:** [Open a GitHub Issue](https://github.com/kamir/m3c-tools/issues/new?labels=idea&title=Idea:+) with the `idea` label
-2. **Detailed:** Fork, edit `docs/roadmap.md`, and open a PR
+2. **Detailed:** Fork, edit `docs/old/roadmap.md`, and open a PR
 3. **Discuss:** Start a [GitHub Discussion](https://github.com/kamir/m3c-tools/discussions) in the Ideas category
 
 ---

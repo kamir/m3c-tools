@@ -7,7 +7,7 @@
 //
 // The drift class this kills, measured 2026-09-07 before the gate existed:
 // `pull` mapped five gates onto 12/10/11/13/6 while the manual said "0 ok, 2
-// usage" and docs/CLI-VERBS.md said "0/1/2"; `verify-sig` returned 10 for an
+// usage" and CLI-VERBS.md said "0/1/2"; `verify-sig` returned 10 for an
 // altered bundle and the manual named only 0/11/1/2; verify-hook's refusal_code
 // space was 17/22/25/28 in code, 17/22 in the manual and 25/26/28 in CLI-VERBS
 // (26 belongs to `enforce`). Every one of those is a number an operator or a
@@ -97,8 +97,8 @@ import (
 )
 
 const (
-	defaultManual = "docs/manual-skillctl.md"
-	defaultVerbs  = "docs/CLI-VERBS.md"
+	defaultManual = "docs/v2/referenz/manual-skillctl.md"
+	defaultVerbs  = "docs/v2/referenz/CLI-VERBS.md"
 
 	registerBegin = "<!-- exitaudit:register:begin -->"
 	registerEnd   = "<!-- exitaudit:register:end -->"

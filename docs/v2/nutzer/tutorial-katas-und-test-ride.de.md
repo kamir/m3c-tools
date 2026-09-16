@@ -31,7 +31,7 @@ Es gibt zwei verschiedene Fragen, und sie werden dauernd verwechselt.
 | 3b | Kann ich die **Publisher-Kette** bedienen? | `scripts/tutorial-smoke.sh --walk` | den Menschen, an der Kette aus Szenario 02 |
 | 4 | Sitzt der Griff auch nächste Woche noch? | `skillctl-demo --mode kata`, die **Katas** | den Menschen, dauerhaft |
 
-Stufen 1 und 2 stehen im [Quickstart](quickstart-skillctl.md#1b-optional-prove-it-on-your-own-machine-source-self-test).
+Stufen 1 und 2 stehen im [Quickstart](../../old/quickstart-skillctl.md#1b-optional-prove-it-on-your-own-machine-source-self-test).
 Dieses Tutorial behandelt 3 und 4. Die Reihenfolge ist keine Empfehlung, sondern eine
 Abhängigkeit: der Ride reitet auf dem, was Stufe 1 gebaut hat.
 
@@ -228,7 +228,7 @@ flottenweite Ausbreitung, weil dieser Aufbau kein Registry hochfährt.
 Ein Kohorten-Nachmittag, der etwas hinterlässt:
 
 1. **Vorher, allein, 30 Minuten.** Alle laufen Stufe 1 und 2
-   ([Quickstart §1b/§1c](quickstart-skillctl.md#1b-optional-prove-it-on-your-own-machine-source-self-test)).
+   ([Quickstart §1b/§1c](../../old/quickstart-skillctl.md#1b-optional-prove-it-on-your-own-machine-source-self-test)).
    Wer hier hängt, hängt an der Werkzeugkette, nicht am Stoff.
 2. **Gemeinsam, 30 Minuten.** Der Test Ride bis Schritt `05`. Halten Sie bei `05` an und
    lassen Sie zeigen, dass die Datei entstanden ist.
@@ -264,5 +264,5 @@ Ride ändert das nichts.
 
 - Eigene Skills auf mehreren Maschinen: [Szenario 01](tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md)
 - Der erste signierte Skill mit Prüfung durch einen Zweiten: [Szenario 02](tutorial-szenario-02-erster-signierter-skill.de.md)
-- Alle Modi, Flags und Szenarien des Demo-Werkzeugs: [Quickstart skillctl-demo](quickstart-skillctl-demo.md)
-- Jedes Kommando, jedes Flag, jeder Exit-Code: [Manual](manual-skillctl.md)
+- Alle Modi, Flags und Szenarien des Demo-Werkzeugs: [Quickstart skillctl-demo](../../old/quickstart-skillctl-demo.md)
+- Jedes Kommando, jedes Flag, jeder Exit-Code: [Manual](../referenz/manual-skillctl.md)

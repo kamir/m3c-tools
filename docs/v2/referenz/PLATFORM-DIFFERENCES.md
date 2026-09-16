@@ -26,7 +26,7 @@
 still coupled to the darwin `main.go` and are **not compiled into** the non-darwin
 build (`main_other.go`), on Windows/Linux they resolve to "Unknown command".
 Multi-platform parity is tracked under **Pending / SPEC-0251 §5** in
-[`../CHANGELOG.md`](../CHANGELOG.md). On Windows/Linux use the legacy `plaud sync`.
+[`../CHANGELOG.md`](../../../CHANGELOG.md). On Windows/Linux use the legacy `plaud sync`.
 
 ## Architecture
 
@@ -102,7 +102,7 @@ Multi-platform parity is tracked under **Pending / SPEC-0251 §5** in
 | Platform | Package | Command |
 |----------|---------|---------|
 | macOS | Homebrew (planned) | `brew install kamir/tap/m3c-tools` |
-| macOS | DMG (local build only) | `make dmg`; NOT a release asset, see [releasing.md](releasing.md#the-macos-dmg-is-not-a-release-asset) |
+| macOS | DMG (local build only) | `make dmg`; NOT a release asset, see [releasing.md](../betrieb/releasing.md#the-macos-dmg-is-not-a-release-asset) |
 | Windows | NSIS installer | `M3C-Tools-Setup.exe` |
 | Windows | Winget (planned) | `winget install kamir.m3c-tools` |
 | Linux | APT (planned) | `apt install m3c-tools` |

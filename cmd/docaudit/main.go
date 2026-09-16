@@ -14,7 +14,7 @@
 // the manual. When it was added, 33 of skillctl's 54 dispatched literals were
 // unlisted, `pack` (step 2 of the advertised lifecycle) among them. It is also
 // distinct from cmd/verbaudit, which reconciles the same dispatch against the
-// ALLOCATION TABLE docs/CLI-VERBS.md: registered is not the same as visible.
+// ALLOCATION TABLE docs/v2/referenz/CLI-VERBS.md: registered is not the same as visible.
 //
 // The "real" surface is extracted mechanism-independently by the UNION of two
 // AST strategies, because the two CLIs use different idioms:
@@ -93,8 +93,8 @@ type target struct {
 // defaultTargets is the built-in surface; override with -config for reuse on
 // other CLIs / other repos (the same gate, keyed by config: see CODESTYLE.md).
 var defaultTargets = []target{
-	{Name: "m3c-tools", PkgDir: "cmd/m3c-tools", Manual: "docs/manual-m3c-tools.md"},
-	{Name: "skillctl", PkgDir: "cmd/skillctl", Manual: "docs/manual-skillctl.md"},
+	{Name: "m3c-tools", PkgDir: "cmd/m3c-tools", Manual: "docs/v2/referenz/manual-m3c-tools.md"},
+	{Name: "skillctl", PkgDir: "cmd/skillctl", Manual: "docs/v2/referenz/manual-skillctl.md"},
 }
 
 // nameRe accepts a canonical (dashless) long-flag name: word, two-words,

@@ -3,92 +3,28 @@ layout: default
 title: Home
 ---
 
-# M3C Tools: Multi-Modal Memory Capture
+# M3C Tools: Dokumentation
 
-A native macOS toolkit for capturing multimodal observations (text + audio + image) and uploading them to an [ER1](https://er1.io) personal knowledge server. Built in Go with native Cocoa UI via cgo.
+Die Dokumentation ist nach Rollen geordnet und liegt unter `docs/v2/`.
+The documentation is organized by role and lives under `docs/v2/`.
 
-## Quickstart
+**Einstieg / start here:** [Wegweiser: die Dokumentation nach Rollen](v2/index.md),
+auch als [Doku-Seite](v2/pages/wegweiser.html).
 
-```bash
-brew install pkg-config portaudio ffmpeg
-python3 -m pip install openai-whisper
-git clone https://github.com/kamir/m3c-tools.git && cd m3c-tools
-make install
-cp .env.example ~/.m3c-tools.env   # edit with your ER1 credentials
-make menubar                        # launch the menu bar app
-```
+| Rolle / role | Seite / page |
+|---|---|
+| Nutzerin / user | [Anleitung: der Einstieg (DE)](v2/nutzer/einstieg.de.md) |
+| Entwickler / developer | [Architecture](v2/entwickler/architecture.md) · [Developer setup, build, test, gates](v2/entwickler/getting-started.md) |
+| Betrieb / operations | [Ops-Ueberblick und Runbooks (DE)](v2/betrieb/ueberblick.de.md) |
+| Sicherheit / security | [Sicherheits- und Vertrauensmodell (DE)](v2/sicherheit/ueberblick.de.md) |
 
-## What's in the box?
+**Referenz / reference:** [Manual: m3c-tools](v2/referenz/manual-m3c-tools.md) ·
+[Manual: skillctl](v2/referenz/manual-skillctl.md) ·
+[CLI-VERBS](v2/referenz/CLI-VERBS.md) ·
+[Program-Index](program-index.md) · [Service-Index](service-index.md) ·
+[Component-Index](component-index.md) · [docs/security/](security/)
 
-| Component | What it does |
-|-----------|-------------|
-| **Menu Bar App** | macOS menu bar app with 4 capture channels, Observation Window, ER1 upload |
-| **CLI** | `m3c-tools transcript`: fetch YouTube transcripts, manage imports, retry queue |
-| **Transcript Library** | Pure Go port of youtube-transcript-api (no API key needed) |
-| **Whisper Integration** | Local speech-to-text via whisper CLI subprocess |
-| **ER1 Client** | Multipart upload to ER1 knowledge server with offline retry queue |
-| **Audio Import** | Batch import from a folder with SQLite tracking and bulk re-processing |
-
-## Capture Channels
-
-All channels flow through the unified **Observation Window** pipeline:
-
-```
-Capture → Preview + Record → Whisper Transcribe → Tag Editor → Store / Cancel
-```
-
-| Channel | Trigger | Captures |
-|---------|---------|----------|
-| **A: YouTube** | Paste video URL/ID | Transcript + thumbnail + voice comment |
-| **B: Screenshot** | Menu item | Screenshot + voice note (uses clipboard if present) |
-| **C: Impulse** | Menu item | Interactive region capture + quick voice note |
-| **D: Audio Import** | Menu item | Batch audio files from preconfigured folder |
-
-Each observation becomes a multimodal ER1 document containing text, audio, and image with tags and metadata.
-
-## Configuration
-
-Copy `.env.example` to `~/.m3c-tools.env` and set at minimum:
-
-```
-ER1_API_URL=https://your-er1-server:8081/upload_2
-ER1_API_KEY=your-api-key
-ER1_CONTEXT_ID=your-context-id
-```
-
-See the [Getting Started](getting-started) guide for the full configuration reference.
-
-## Two tools, one repo
-
-This repository ships two CLIs. **`m3c-tools`** fills the memory; **`skillctl`** governs the
-agent skills that act on it (sign, admit, verify, revoke: offline-verifiable).
-
----
-
-**Documentation:**
-
-- [Program Index](program-index): every runnable binary, MCP server and entry point in the repo
-- [Service Index](service-index): the long-running services and their runtime wrappers (`deploy/*`)
-- [Component Index](component-index): the importable Go library packages under `pkg/` and `internal/`
-- [Quickstart: m3c-tools](quickstart-m3c-tools): capture your first memory in 5 minutes
-- [Quickstart: skillctl](quickstart-skillctl): sign, install and verify a skill in 5 minutes
-- [Manual: m3c-tools](manual-m3c-tools): every command, flag and config variable
-- [Manual: skillctl](manual-skillctl): the full trust lifecycle, command by command
-- [Bug & feature tracking](bug-tracking): the private analysis file, the public issue, and the guards between them
-- [Acceptance & Handover: skill lifecycle](acceptance-skillctl-lifecycle): the two-person (Bob → Alice) procedure over ER1, with success criteria
-- [Runbook: two-person ER1 exchange](runbook-two-person-er1-exchange): copy-paste prod runbook (Bob + Alice lanes) for the live exercise
-- [Tutorial, Szenario 01 (Deutsch)](tutorial-szenario-01-eigene-skills-mehrere-maschinen.de): eigene Skills auf mehreren Maschinen, plus fremde signierte Skills
-- [Tutorial, Szenario 02 (Deutsch)](tutorial-szenario-02-erster-signierter-skill.de): der erste signierte Skill, mit Prüfung durch einen Zweiten
-- [Tutorial, Katas und Test Ride (Deutsch)](tutorial-katas-und-test-ride.de): üben statt zusehen, jeder Beat ein echter Exit-Code
-- [Ops-Runbook: Mensch-Agent-Team einrichten (Deutsch)](ops-human-agent-team.de): Arbeitsraum, die vier Rubriken, und der Lebenszyklus eines Skills von einer Maschine zur nächsten
-- [dieselbe Anleitung als Doku-Seite](pages/ops-human-agent-team.html): mit Abschnittsschiene, Kopierknöpfen an den Kommandos und einem Druck-Flavor ohne Farbflächen
-- [Ops-Routine: Zugangstoken (Deutsch)](ops-registry-tokens.de): wer welchen Token besorgt, wo er liegt, und was beim Ausscheiden passiert
-- [Ops-Runbook: Incident Response (Deutsch)](ops-incident-response.de): kompromittierter Schlüssel oder Registry: erkennen, widerrufen, rotieren, neu pinnen, Flotte prüfen
-- [Ops-Runbook: Registry-Backup und Restore (Deutsch)](ops-registry-backup-restore.de): Sicherung je Backend, mit einer Wiederherstellungsprobe, die den Restore beweist
-- [Ops-Runbook: Monitoring und Alarmierung (Deutsch)](ops-monitoring.de): welche Kommandos eine Überwachung tragen, und was mit ihnen ausdrücklich nicht geht
-- [CISO onboarding deck](skillctl-ciso-deck.html): sharp, honest arguments to defend skillctl to a security expert + a CTO (infographic)
-- [CISO-Onboarding-Deck (Deutsch)](skillctl-ciso-deck.de.html): dieselben Argumente auf Deutsch
-- [Menu Bar App](menubar-app): channels, Observation Window, menu items
-- [Setup & Operations, Intel Mac & Windows](setup-target-devices), zero-to-operating runbook for fresh target devices
-- [Platform differences](PLATFORM-DIFFERENCES): what works where
-- [Roadmap](roadmap): current state, future work, ideas
+Der fruehere Prosa-Bestand dieser Ebene liegt unter [`docs/old/`](old/);
+kanonisch ist er nicht mehr.
+The former prose inventory of this level sits under `docs/old/` and is no
+longer canonical.

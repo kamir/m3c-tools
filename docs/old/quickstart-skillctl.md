@@ -12,7 +12,7 @@ no server required. Then see how the same bundle flows through admit → install
 > a verifiable identity and a full lifecycle, **author → pack → sign → admit → attest →
 > verify / install → use → audit → revoke**, so nothing an agent runs is unauthorized or
 > unprovable. The trust-chain check is **offline-verifiable**: no hosted CA sits in the
-> verification path. For every command and flag, see the [skillctl manual](manual-skillctl.md).
+> verification path. For every command and flag, see the [skillctl manual](../v2/referenz/manual-skillctl.md).
 
 ---
 
@@ -49,7 +49,7 @@ Override the target dir or the release with `INSTALL_DIR=…` / `RELEASE_BASE=�
 pin inside it). Verify the fetched bytes out-of-band before trusting them, expected SHA-256:
 `tools/skillctl-install.ps1` → `d33f5344d30a6258281b0784c461ecc0dbe25b86444175a6f95c31dfe2c27f17`;
 `tools/skillctl-install.sh` → `5992c7f5770ced2d0ce1f43979e308b087e6a97d07a689eebf43230c28d88469`.
-The [README Install section](../README.md#install) has a copy-paste verify-then-run recipe. On
+The [README Install section](../../README.md#install) has a copy-paste verify-then-run recipe. On
 each new signed release, bump the pinned commit **and** these hashes together.
 
 **Manual install (signed release, raw binary):** the **only** skillctl distribution channel is
@@ -131,7 +131,7 @@ and release gate. Lint, `govulncheck`, gosec, the coverage gate, the boundary ga
 Windows e2e smoke run in [CI](https://github.com/kamir/m3c-tools/actions) and in
 `make ci` / `make release-skillctl`; the Windows lifecycle proof is
 [`scripts/skillctl-quickstart-windows.ps1`](https://github.com/kamir/m3c-tools/blob/master/scripts/skillctl-quickstart-windows.ps1),
-described in [Windows release verification](releasing-skillctl-windows.md).
+described in [Windows release verification](../v2/betrieb/releasing-skillctl-windows.md).
 
 ---
 
@@ -385,7 +385,7 @@ intents*, and it verifies offline, no authority in the path.
 
 ## Next steps
 
-- **Every command, flag and exit code:** [skillctl manual](manual-skillctl.md)
+- **Every command, flag and exit code:** [skillctl manual](../v2/referenz/manual-skillctl.md)
 - **Build it yourself and run the suite:** the [source self-test](#1b-optional-prove-it-on-your-own-machine-source-self-test) one-liners above
 - **Run our CI on your own machine:** the [enterprise gate](#1c-stage-2-run-our-ci-on-your-own-machine-enterprise-gate) and its trust report
 - **Prove you can operate it, not just that it builds:** the [Test Ride](#1d-the-human-half-the-test-ride)

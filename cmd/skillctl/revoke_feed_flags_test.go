@@ -10,7 +10,7 @@ import (
 )
 
 // The advertised flag has to EXIST. Both `skillctl revoke feed`'s own usage text
-// and docs/manual-skillctl.md have documented `--status` since FR-0045; for as
+// and docs/v2/referenz/manual-skillctl.md have documented `--status` since FR-0045; for as
 // long, no FlagSet defined it, so the documented command died with "flag
 // provided but not defined: -status" (exit 2) before it ever reached a registry.
 // The CLI flag gate cannot see that class of defect: it compares the flag names

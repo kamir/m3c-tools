@@ -2,7 +2,7 @@
      NICHT von Hand aendern: scripts/check-docpages.sh erzeugt diese Datei
      neu und vergleicht sie mit dem Baum. Eine Handaenderung faellt dort auf.
      Quelle der Form: tools/release-templates/docpage.template.html -->
-<title>Architecture overview</title>
+<title>Die Audit-Spur, drei Traeger, drei Fragen</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
 <style>
 :root{
@@ -275,8 +275,8 @@ table.check tr.done td:not(:first-child){opacity:.5; text-decoration:line-throug
   <aside class="rail">
     <div class="brand">
       <p class="kicker">Ops-Runbook</p>
-      <h1>Architecture overview</h1>
-      <p class="meta">docs/v2/entwickler/architecture.md</p>
+      <h1>Die Audit-Spur, drei Traeger, drei Fragen</h1>
+      <p class="meta">docs/v2/sicherheit/audit-spur.de.md</p>
     </div>
     <div class="flavorbar" id="flavorbar" hidden>
       <button type="button" id="flavorbtn" aria-pressed="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4.5 6V2.6h7V6"/><rect x="2" y="6" width="12" height="5" rx="1.1"/><path d="M4.5 10h7v3.4h-7z"/></svg><span>Druckansicht</span></button>
@@ -296,111 +296,110 @@ table.check tr.done td:not(:first-child){opacity:.5; text-decoration:line-throug
   </main>
 </div>
 
-<script id="src" type="text/markdown"># Reference: architecture overview
+<script id="src" type="text/markdown"># Runbook: die Audit-Spur, drei Traeger, drei Fragen
 
-What the repository is made of and how data flows through it, on one page,
-with links into the gate-checked indexes for every detail. Where this page and
-an index disagree, the index wins: [program-index](../../program-index.md) and
-[component-index](../../component-index.md) are checked against the tree by
-`scripts/check-index.sh` on every CI run; this page is not.
+Wer die Audit-Spur von skillctl lesen will, steht vor drei Verben, die
+aehnlich klingen und drei verschiedene Fragen beantworten. Diese Seite
+konsolidiert sie. Grundlage: die drei Abschnitte im
+[Manual: skillctl](../referenz/manual-skillctl.md) (`audit`, `auditlog`,
+`translog`) und der Code (`pkg/skillctl/audit/audit.go`,
+`cmd/skillctl/auditlog_cmds.go`, SPEC-0278), gelesen am 2026-09-16.
 
-Audience: a developer new to the repository, and anyone deciding where a
-change belongs before opening the code.
+Zielgruppe: Sicherheit / CISO und Betrieb. Der Einstieg in die ganze
+Sicherheitssicht ist der [Ueberblick](ueberblick.de.md); die Zeitleiste des
+Registrys (admit, attest, revoke, install) liest das
+[Incident-Runbook, Abschnitt 1](../betrieb/ops-incident-response.de.md).
 
-Rolle: Entwickler · Sprache: EN · Stand: 2026-09-16
+Rolle: Sicherheit, Betrieb · Sprache: DE · Stand: 2026-09-16
 
-## The core rule in one sentence
+## Die Grundregel in einem Satz
 
-**Two planes, one repo: `m3c-tools` fills the memory, `skillctl` governs the
-agent skills that act on it**, and the trust plane stays pure Go while the
-capture plane is allowed cgo and macOS-only features.
+**Drei Traeger, drei getrennte Exit-Raeume, und keiner darf als der andere
+gelesen werden:** `audit` urteilt ueber den Bestand (Posture), `auditlog`
+ueber die Gesundheit des Audit-Subsystems, `translog` ueber die
+Unveraenderlichkeit der Ereignis-Historie. Die Trennung ist Absicht: ein
+Gesundheitsbefund, der als Posture-Befund gelesen wird, ist ein falscher
+Alarm oder eine falsche Entwarnung (Manual, Abschnitt `auditlog`).
 
-## The capture pipeline
+| Traeger | Frage | Exit-Raum |
+|---|---|---|
+| `skillctl audit` | Was liegt auf dieser Maschine, und ist es in Ordnung? | `0` alles OK · `2` UNVERIFIED/BELOW_MIN oder Verweigerung/Usage · `3` BROKEN · `1` interner Fehler |
+| `skillctl auditlog` | Funktioniert die Audit-Ereignisschicht selbst? | `0` gesund/angenommen/geleert · `1` ungesund/abgelehnt/Fehler · `2` Usage |
+| `skillctl translog` | Ist die Historie unveraendert und vollstaendig? | `verify`: `0`/`23` not-included · `witness`: `0`/`24` split-view · `consistency`: `0`/`25` rewrite · je `1` sonst, `2` Usage |
 
-ER1 is the personal knowledge server every capture flows into: an external
-HTTP service (aims-core), not built in this repo, that stores multimodal
-observations; `pkg/er1` is its client
-([requirements](../../old/requirements-er1-integration.md),
-[service-index](../../service-index.md#external-dependency-er1--aims-core)).
-The core flow, as `CLAUDE.md` states it and the packages implement it:
+## Traeger 1: `skillctl audit`, das Urteil je Skill
 
+Druckt je Skill ein Verdikt `OK | UNVERIFIED | BROKEN | BELOW_MIN`. Nur
+`0/2/3` sind das Posture-Verdikt (`exitCodeFor`,
+`pkg/skillctl/audit/audit.go`); `1` ist der gewoehnliche interne Fehlercode.
+
+Aufraeumen ist eine destruktive Operation und laeuft als G-23-Zweischritt,
+ohne `--force`:
+
+```bash
+skillctl audit --cleanup --dry-run-cleanup                               # Schritt 1: Plan + signiertes Token
+skillctl audit --cleanup --confirm-delete --dry-run-cleanup-token <sig>  # Schritt 2: Re-Check + Loeschen
 ```
-transcript.API.Fetch(videoID)        -> FetchedTranscript (snippets)
-impression.CompositeDoc.Build()      -> composite text
-transcript.Fetcher.FetchThumbnail()  -> JPEG bytes
-er1.Upload(config, payload)          -> ER1 server
-er1.Queue.Add(entry)                 -> JSON retry queue, on failure
+
+Schritt 1 loescht nichts und druckt ein signiertes Token (HMAC ueber
+Hostname, sortierte betroffene Pfade, Ausstellungszeit, 5 Minuten gueltig).
+Schritt 2 berechnet die betroffene Menge NEU und prueft das Token dagegen:
+bei Drift, Ablauf oder Manipulation verweigert er mit Exit `2` und loescht
+nichts. Eine destruktive Operation, die ihrem genehmigten Plan nicht mehr
+entspricht, laeuft schlicht nicht (Manual, "The G-23 two-step contract").
+
+## Traeger 2: `skillctl auditlog`, die Gesundheit der Ereignisschicht
+
+Die Observability-CLI der Audit-Ereignisschicht (SPEC-0403 §8), mit eigenem
+Verb-Stamm und eigenem Exit-Raum `0/1` (`2` Usage, `auditlogExitUsage` in
+`cmd/skillctl/auditlog_cmds.go`):
+
+| Subkommando | Zweck |
+|---|---|
+| `status` | Gesundheit: enabled, Modus, Sink-Typ und -Pfad, Outbox- und Spool-Rueckstand, letztes Ereignis |
+| `test` | EIN klar synthetisches `skillctl.audit.v1`-Ereignis durch den echten Sink, Annahme bestaetigt |
+| `flush` | Lokalen Spool in die dauerhafte Outbox ueberfuehren; nur die lokale Haelfte, kein Broker-Egress |
+
+Zwei Grenzen, beide dokumentiert und im Code verankert: **es gibt kein
+Kafka** (ein direkter Broker-Sink ist FR-0112 und EC-blockiert, `status`
+erfindet keinen Endpunkt), und Netz-Egress ist ausschliesslich
+`skillctl sync` (default-OFF). Ein Transportfehler erscheint als
+beobachtbares Ereignis auf stderr und wird nie durch den Sink gemeldet, der
+gerade versagt hat (keine rekursive Fehlerschleife, REQ-8.2).
+
+## Traeger 3: `skillctl translog`, das L1-Transparenz-Log
+
+Ein lokales RFC-6962-Merkle-Log (SPEC-0278, nur Stdlib). L1 macht
+Equivocation und Zurueckhalten **erkennbar**, nicht unmoeglich. Die
+Ereignisdaten bleiben dem Log fern; angehaengt wird nur der Digest des
+bereits signierten Ereignisses
+(`sha256:<64 hex>`, Typen `admit | attest | revoke | agentid-issue |
+agentid-revoke`). Standardpfad:
+`~/.claude/skillctl/transparency-log.jsonl`.
+
+Die Kette fuer eine Pruefung, jede Stufe offline:
+
+```bash
+skillctl translog append admit sha256:<hex> --subject mein-skill
+skillctl translog sth --key <log.priv>                        # Kopf zeigen/signieren
+skillctl translog prove sha256:<hex> --key <log.priv> --out receipt.json
+skillctl translog verify --receipt receipt.json --log-pubkey log.pub   # 0 ok · 23 not-included
+skillctl translog consistency --sth1 a.json --sth2 b.json --proof '[..]'  # 25 = Rewrite erkannt
+skillctl translog witness --sths sths.json --log-pubkey log.pub           # 24 = Split-View erkannt
 ```
 
-Three properties carry the design:
+`verify` verlangt den gepinnten Log-Public-Key ausdruecklich: ein
+ungepinnter Schluessel wuerde nichts verifizieren (Manual, Abschnitt
+`translog`).
 
-1. **Stdlib-only core.** `pkg/transcript`, `pkg/er1` and `pkg/impression` use
-   only the Go standard library; external dependencies (menuet, portaudio)
-   stay in POC and desktop layers (`CLAUDE.md`, "Zero external deps").
-2. **No YouTube API key.** `pkg/transcript` is a complete port of
-   youtube-transcript-api on YouTube's InnerTube API (the internal API the
-   YouTube clients themselves use, so no official key is needed); the port
-   surface is preserved in [go-rewrite-plan](../../old/go-rewrite-plan.md)
-   (historical).
-3. **ER1 wants all three fields.** Uploads are multipart with
-   `transcript_file_ext`, `audio_data_ext`, `image_data`; the client sends
-   placeholder audio or image when the real one is absent (`pkg/er1`).
+## Was diese Seite nicht behauptet
 
-## The trust plane
-
-`skillctl` gives every agent skill a verifiable identity and a lifecycle:
-author, pack, sign, admit, attest, verify or install, use, audit, revoke
-(admit publishes a signed bundle into a registry; attest is a reviewer's
-signed governance verdict over the same digest). The
-chain verifies offline; no hosted authority sits in the verification path
-(head of [Manual: skillctl](../referenz/manual-skillctl.md), threat model in
-[THREAT_MODEL.md](../../../THREAT_MODEL.md)). The library lives under
-`pkg/skillctl/` with the sibling packages `skillbundle` and `skillgate`;
-[component-index, section F](../../component-index.md#f-skillctl-trust-subsystem-pkgskillctl--siblings)
-carries the gated package list and count.
-
-## Entry points and services
-
-Measured on 2026-09-16 (`ls cmd/`): fourteen entry points under `cmd/`. The
-canonical, gate-checked table is the [program-index](../../program-index.md);
-the short version:
-
-| Group | Binaries |
-|---|---|
-| Product CLIs | `m3c-tools` (capture, plus the macOS menu bar app), `skillctl` (trust) |
-| Demo and simulation | `skillctl-demo` (offline CISO demo), `skillctl-sim` (scenario corpus against the real binary) |
-| Repository gates | `docaudit`, `verbaudit`, `exitaudit`, `structural`, `release-evidence` |
-| Reference POCs | `poc-menubar`, `poc-recorder`, `poc-transcript`, `poc-whisper` |
-| Cognitive runtime | `thinking-engine` (SPEC-0167), run as a service |
-
-What stays running (thinking-engine, the two MCP servers: stdio processes
-speaking the Model Context Protocol, which exposes tools to Claude Code, the
-menu bar app, the skillctl container) is the
-[service-index](../../service-index.md); the
-package-level responsibilities are the
-[component-index](../../component-index.md), including section G for the
-`internal/thinking/*` packages.
-
-## Conventions a change must respect
-
-| Convention | Source |
-|---|---|
-| Both CLIs parse `os.Args` by hand; no cobra, no flag package. Follow the `cmdTranscript()` pattern | `CLAUDE.md`, "CLI flag parsing" |
-| A new skillctl verb is REGISTERED in [CLI-VERBS](../referenz/CLI-VERBS.md) before it is implemented; `verbaudit` turns CI red otherwise | CLI-VERBS.md, decided 2026-09-04 |
-| Exit codes are contract: the register row, the manual's `Exit:` line and `pkg/skillctl/exitcode` must agree; `exitaudit` checks all three | CLI-VERBS.md, "Columns" |
-| Tests live in `e2e/`; there are no package-level unit tests | `CLAUDE.md`, "Build & Test Commands" |
-| Public plane ships code, private plane keeps reasoning; cross-references by ID only (SPEC-NNNN) | [CONTENT-TOPOLOGY.md](../../../CONTENT-TOPOLOGY.md) |
-
-## Where to go next
-
-- Build, test and the gates: [developer setup](getting-started.md)
-- Every command and flag: [Manual: m3c-tools](../referenz/manual-m3c-tools.md),
-  [Manual: skillctl](../referenz/manual-skillctl.md)
-- What works on which OS: [PLATFORM-DIFFERENCES](../referenz/PLATFORM-DIFFERENCES.md)
-- Historical design notes that still explain code:
-  [go-rewrite-plan](../../old/go-rewrite-plan.md),
-  [spec-plaud-er1-sync](../../old/spec-plaud-er1-sync.md),
-  [requirements-er1-integration](../../old/requirements-er1-integration.md)
+Die Nummern `23/24/25` sind die dokumentierten Befund-Codes der
+translog-Pruefungen; das Register dahinter prueft `cmd/exitaudit` gegen
+`pkg/skillctl/exitcode` bei jedem Lauf von `scripts/check-docs.sh`. Diese
+Seite zitiert Manual und Code, sie ersetzt weder das
+[Manual](../referenz/manual-skillctl.md) noch das Verb-Register
+[CLI-VERBS](../referenz/CLI-VERBS.md).
 </script>
 <!-- Integritaet ueber SRI: der Hash ist an den Bytes von cdnjs gerechnet
      (sha256 15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894).
@@ -668,7 +667,7 @@ package-level responsibilities are the
   apply();
 
   document.getElementById('foot').textContent =
-    'Erzeugt aus docs/v2/entwickler/architecture.md mit tools/docpage.sh. Diese Seite rendert die Datei; ' +
+    'Erzeugt aus docs/v2/sicherheit/audit-spur.de.md mit tools/docpage.sh. Diese Seite rendert die Datei; ' +
     'massgeblich ist die Datei im Repository, nicht diese Fassung.';
 })();
 </script>

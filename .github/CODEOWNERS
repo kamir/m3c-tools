@@ -15,7 +15,7 @@
 #
 # Because review is not force-blocked, the release runbook documents the
 # emergency / break-glass release path a solo maintainer uses (the local
-# scripted-release path and the rollback procedure): see docs/releasing.md.
+# scripted-release path and the rollback procedure): see docs/v2/betrieb/releasing.md.
 #
 # Syntax: gitignore-style patterns, most-specific-last wins. A leading "/"
 # anchors to the repo root; a trailing "/" matches a directory tree.
@@ -50,5 +50,5 @@
 /THREAT_MODEL.md           @kamir
 /SECURITY.md               @kamir
 /COMPATIBILITY.md          @kamir
-/docs/releasing.md         @kamir
+/docs/v2/betrieb/releasing.md         @kamir
 /.github/CODEOWNERS        @kamir
