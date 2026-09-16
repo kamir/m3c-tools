@@ -50,6 +50,10 @@ func ReadHolder(h Holder) (Secret, error) {
 		return readKeychain(h)
 	case "file":
 		return readFile(h)
+	case "cloud-scheduler":
+		return readScheduler(h)
+	case "docker":
+		return readDocker(h)
 	case "cloud-run":
 		// A Cloud Run service does not hand its env back, and asking would
 		// need deploy-level rights. What CAN be established is which secret
@@ -254,4 +258,52 @@ func isTransportFailure(err error) bool {
 	}
 	// Not an ExitError at all: the process could not even be started.
 	return true
+}
+
+// readScheduler pulls the value out of a scheduler job's request headers.
+// The job definition stores it in PLAINTEXT, which is why these places belong
+// in the inventory: five of them held the leaked value and none appeared in
+// the first pass, because nobody thought of a scheduler as a holder.
+func readScheduler(h Holder) (Secret, error) {
+	out, err := capture("", "gcloud", "scheduler", "jobs", "describe", h.Job,
+		"--project="+h.Project, "--location="+h.Region, "--format=json")
+	if err != nil {
+		return "", ErrUnreachable{Where: h.ID, Reason: "gcloud scheduler describe failed"}
+	}
+	var doc struct {
+		HTTPTarget struct {
+			Headers map[string]string `json:"headers"`
+		} `json:"httpTarget"`
+	}
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
+		return "", fmt.Errorf("scheduler %s: %w", h.Job, err)
+	}
+	for name, v := range doc.HTTPTarget.Headers {
+		if strings.EqualFold(name, h.Header) {
+			if v == "" {
+				return "", ErrAbsent{Where: h.ID}
+			}
+			return Secret(v), nil
+		}
+	}
+	return "", ErrAbsent{Where: h.ID}
+}
+
+// readDocker pulls the value out of a running container's environment.
+func readDocker(h Holder) (Secret, error) {
+	out, err := capture("", "docker", "inspect", "--format",
+		"{{range .Config.Env}}{{println .}}{{end}}", h.Container)
+	if err != nil {
+		return "", ErrUnreachable{Where: h.ID, Reason: "docker inspect failed (daemon down or container gone)"}
+	}
+	for _, line := range strings.Split(out, "\n") {
+		name, value, ok := strings.Cut(strings.TrimSpace(line), "=")
+		if ok && name == h.Env {
+			if value == "" {
+				return "", ErrAbsent{Where: h.ID}
+			}
+			return Secret(value), nil
+		}
+	}
+	return "", ErrAbsent{Where: h.ID}
 }
