@@ -80,6 +80,7 @@ agent skills that act on it (sign, admit, verify, revoke: offline-verifiable).
 - [Tutorial, Szenario 01 (Deutsch)](tutorial-szenario-01-eigene-skills-mehrere-maschinen.de): eigene Skills auf mehreren Maschinen, plus fremde signierte Skills
 - [Tutorial, Szenario 02 (Deutsch)](tutorial-szenario-02-erster-signierter-skill.de): der erste signierte Skill, mit Prüfung durch einen Zweiten
 - [Tutorial, Katas und Test Ride (Deutsch)](tutorial-katas-und-test-ride.de): üben statt zusehen, jeder Beat ein echter Exit-Code
+- [Ops-Runbook: Mensch-Agent-Team einrichten (Deutsch)](ops-human-agent-team.de): Arbeitsraum, die vier Rubriken, und der Lebenszyklus eines Skills von einer Maschine zur nächsten
 - [Ops-Routine: Zugangstoken (Deutsch)](ops-registry-tokens.de): wer welchen Token besorgt, wo er liegt, und was beim Ausscheiden passiert
 - [Ops-Runbook: Incident Response (Deutsch)](ops-incident-response.de): kompromittierter Schlüssel oder Registry: erkennen, widerrufen, rotieren, neu pinnen, Flotte prüfen
 - [Ops-Runbook: Registry-Backup und Restore (Deutsch)](ops-registry-backup-restore.de): Sicherung je Backend, mit einer Wiederherstellungsprobe, die den Restore beweist
