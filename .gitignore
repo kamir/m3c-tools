@@ -97,3 +97,6 @@ __pycache__/
 # maintenance plane; per SPEC-0358 it must not be tracked in this public repo).
 .claude/settings.json
 .claude/settings.local.json
+
+# Maschinengebundene Pfade: die .example danebenliegend ist die Vorlage.
+.claude/local-paths.env

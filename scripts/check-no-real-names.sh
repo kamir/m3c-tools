@@ -104,6 +104,22 @@ BAD_IDS='id:(kamir|mirko|eric|frank)@'
 # mirrored into a customer GitLab. Nothing here should carry a personal inbox.
 BAD_MAIL='[A-Za-z0-9._%+-]+\.(kaempf|kämpf)@|(mirko|eric|frank)[._][A-Za-z]+@'
 
+# HOME PATHS. An absolute path under /Users/<name>/ or /home/<name>/ names the
+# account AND the layout of one machine. It is also WRONG for everyone else who
+# clones the repo: it quietly points at a place that is not there, instead of
+# saying that something is missing.
+#
+# Generic names stay allowed, or the gate false-alarms on its first day and gets
+# switched off: CI runners are `runner`, examples are `alice`, `bob` or
+# `YourName`, fixtures are `test`. A gate that cries wolf on day one is worse
+# than no gate, which is the lesson from the jq comparison next door.
+BAD_HOME='(/Users/|/home/)[A-Za-z][A-Za-z0-9._-]*/'
+# Ein EINZELNER Buchstabe ist bauartbedingt ein Platzhalter, kein Konto: so
+# heisst kein Mensch, und `/home/u/...` steht genau deshalb im Pfad-Waechter-Test
+# als kuerzestmoeglicher POSIX-Pfad. Er war der einzige Fehlalarm dieses Tores
+# beim ersten Lauf, und er zeigt, wofuer die Ausnahmeliste da ist.
+OK_HOME='/(Users|home)/([A-Za-z]/|(runner|test|me|you|user|alice|bob|charlie|diana|YourName|<))'
+
 # Exempt paths: this file names every forbidden name, by construction.
 EXEMPT_PATHS='^(scripts/check-no-real-names\.sh)$'
 
@@ -136,7 +152,16 @@ IDHITS=$(printf '%s\n' "$FILES" | tr '\n' '\0' \
   | xargs -0 grep -I -n -E -H -i -e "$BAD_IDS" -- 2>/dev/null || true)
 MAILHITS=$(printf '%s\n' "$FILES" | tr '\n' '\0' \
   | xargs -0 grep -I -n -E -H -i -e "$BAD_MAIL" -- 2>/dev/null || true)
-HITS=$(printf '%s\n%s\n%s\n%s\n' "$HITS" "$CAMELHITS" "$IDHITS" "$MAILHITS" \
+
+# Die Ausnahmen laufen als ZWEITER Durchgang und nicht als negativer Lookahead:
+# den kennt ERE nicht, und `-P` gibt es auf dem BSD-grep von macOS nicht. Ein
+# Tor, das lokal stillschweigend entfaellt und nur in der CI laeuft, ist genau
+# die Ungleichheit, gegen die der Windows-Zwilling gebaut wurde.
+HOMEHITS=$(printf '%s\n' "$FILES" | tr '\n' '\0' \
+  | xargs -0 grep -I -n -E -H -e "$BAD_HOME" -- 2>/dev/null || true)
+HOMEHITS=$(printf '%s\n' "$HOMEHITS" | grep -Ev "$OK_HOME" || true)
+
+HITS=$(printf '%s\n%s\n%s\n%s\n%s\n' "$HITS" "$CAMELHITS" "$IDHITS" "$MAILHITS" "$HOMEHITS" \
   | grep -v '^$' | sort -u -t: -k1,1 -k2,2n || true)
 
 [ "$MODE" = "--all" ] || HITS=$(printf '%s\n' "$HITS" | grep -Ev "$EXEMPT_LINES" || true)

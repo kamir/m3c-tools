@@ -41,10 +41,10 @@ There are two deployments with separate certificates:
 | Target HTTPS Proxy | `my-url-map-target-proxy-2` |
 | URL Map | `my-url-map` |
 | Backend Service | `app-proxy-mvp-v1-0-2` |
-| Cert files (local) | `/Users/kamir/GITHUB.active/my-ai-X/aims-core/sec/cert_NNN.pem` / `key_NNN.pem` |
+| Cert files (local) | `$AIMS_CORE_ROOT/sec/cert_NNN.pem` / `key_NNN.pem` |
 | Cert naming pattern | `cert-YYYY-MM-NNN-o-g` (e.g., `cert-2026-03-005-o-g`) |
 | DNS management | Squarespace: `account.squarespace.com/domains/managed/onboarding.guide/dns/dns-settings` |
-| gcloud path | `/Users/kamir/bin/google-cloud-sdk/bin/gcloud` |
+| gcloud path | `$GCLOUD`, siehe "Was Sie setzen muessen" |
 
 ### Deployment 2: maindset.academy (Celloon / production)
 
@@ -53,7 +53,7 @@ There are two deployments with separate certificates:
 | Domain | `maindset.academy` + `*.maindset.academy` |
 | GCP Account | aus `$GCP_ACCOUNT`, siehe "Was Sie setzen muessen" |
 | Target HTTPS Proxy | `my-url-map-ma-lb-target-proxy` |
-| Cert files (local) | `/Users/kamir/GITLAB.Celloon/sec/cert_NNNN.pem` / `key_NNNN.pem` |
+| Cert files (local) | `$CELLOON_SEC_DIR/cert_NNNN.pem` / `key_NNNN.pem` |
 | Cert naming pattern | Numbered sequentially (e.g., `cert_0002.pem`) |
 
 ## Was Sie setzen muessen
@@ -94,12 +94,12 @@ Check both the local cert files and the live endpoint:
 
 ```bash
 # For onboarding.guide, find the highest-numbered cert:
-SEC_DIR=/Users/kamir/GITHUB.active/my-ai-X/aims-core/sec
+SEC_DIR="$AIMS_CORE_ROOT/sec"
 ls -la ${SEC_DIR}/cert_*.pem
 openssl x509 -in ${SEC_DIR}/cert_NNN.pem -noout -subject -dates
 
 # For maindset.academy:
-openssl x509 -in /Users/kamir/GITLAB.Celloon/sec/cert_NNNN.pem -noout -subject -dates
+openssl x509 -in $CELLOON_SEC_DIR/cert_NNNN.pem -noout -subject -dates
 
 # Check live endpoint
 openssl s_client -connect <DOMAIN>:443 -servername <DOMAIN> </dev/null 2>/dev/null \
@@ -158,15 +158,15 @@ sudo ls -la /etc/letsencrypt/live/ | grep ${DOMAIN}
 
 ```bash
 # For onboarding.guide:
-SEC_DIR=/Users/kamir/GITHUB.active/my-ai-X/aims-core/sec
+SEC_DIR="$AIMS_CORE_ROOT/sec"
 sudo cp /etc/letsencrypt/live/onboarding.guide-NNNN/fullchain.pem ${SEC_DIR}/cert_${NEXT_NUM}.pem
 sudo cp /etc/letsencrypt/live/onboarding.guide-NNNN/privkey.pem ${SEC_DIR}/key_${NEXT_NUM}.pem
-sudo chown kamir:staff ${SEC_DIR}/cert_${NEXT_NUM}.pem ${SEC_DIR}/key_${NEXT_NUM}.pem
+sudo chown "$(id -un):staff" ${SEC_DIR}/cert_${NEXT_NUM}.pem ${SEC_DIR}/key_${NEXT_NUM}.pem
 
 # For maindset.academy:
-sudo cp /etc/letsencrypt/live/maindset.academy-NNNN/fullchain.pem /Users/kamir/GITLAB.Celloon/sec/cert_${NEXT_NUM}.pem
-sudo cp /etc/letsencrypt/live/maindset.academy-NNNN/privkey.pem /Users/kamir/GITLAB.Celloon/sec/key_${NEXT_NUM}.pem
-sudo chown kamir:staff /Users/kamir/GITLAB.Celloon/sec/cert_${NEXT_NUM}.pem /Users/kamir/GITLAB.Celloon/sec/key_${NEXT_NUM}.pem
+sudo cp /etc/letsencrypt/live/maindset.academy-NNNN/fullchain.pem $CELLOON_SEC_DIR/cert_${NEXT_NUM}.pem
+sudo cp /etc/letsencrypt/live/maindset.academy-NNNN/privkey.pem $CELLOON_SEC_DIR/key_${NEXT_NUM}.pem
+sudo chown "$(id -un):staff" $CELLOON_SEC_DIR/cert_${NEXT_NUM}.pem $CELLOON_SEC_DIR/key_${NEXT_NUM}.pem
 ```
 
 Verify the new cert (this can run from Claude Code, no sudo needed):
@@ -241,7 +241,7 @@ Write this script to the sec/ directory and tell the user to run it with `bash <
 - **Use fullchain.pem not cert.pem**: GCP needs the full chain including intermediate certs.
 - **Let's Encrypt rate limits**. Max 5 duplicate certificates per week per domain. Don't retry excessively.
 - **Wildcard certs** require DNS-01 challenge (not HTTP-01). That's why we use `--preferred-challenges dns`.
-- **gcloud path**: On this machine, gcloud is at `/Users/kamir/bin/google-cloud-sdk/bin/gcloud`, not in the default PATH.
+- **gcloud path**: gcloud may not be in the default PATH. Set `GCLOUD` in `.claude/local-paths.env`; the script aborts by name if it is missing.
 - **Cert files contain secrets**: never log or display private key contents. Only show the cert (public) details.
 - **Old certificates** in GCP are not auto-deleted. They can be cleaned up later with `gcloud compute ssl-certificates delete <old-name>`.
 - **chown after sudo cp**: cert files copied with sudo are owned by root. Always chown to `kamir:staff` so they're readable without sudo.
