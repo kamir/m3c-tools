@@ -82,33 +82,7 @@ func cmdRetry(args []string) {
 	fmt.Println("  Press Ctrl+C to stop.")
 
 	runner := er1.NewRetryRunner(q, func(entry er1.QueueEntry) error {
-		payload := &er1.UploadPayload{
-			TranscriptFilename: entry.TranscriptPath,
-			AudioFilename:      entry.AudioPath,
-			ImageFilename:      entry.ImagePath,
-			Tags:               entry.Tags,
-			CurrentTime:        entry.CurrentTime, // keep the real capture time on retry
-		}
-		if entry.TranscriptPath != "" {
-			if data, readErr := os.ReadFile(entry.TranscriptPath); readErr == nil {
-				payload.TranscriptData = data
-			} else {
-				payload.TranscriptData = []byte(fmt.Sprintf("Retry upload for %s", entry.ID))
-			}
-		} else {
-			payload.TranscriptData = []byte(fmt.Sprintf("Retry upload for %s", entry.ID))
-		}
-		if entry.AudioPath != "" {
-			if data, readErr := os.ReadFile(entry.AudioPath); readErr == nil {
-				payload.AudioData = data
-			}
-		}
-		if entry.ImagePath != "" {
-			if data, readErr := os.ReadFile(entry.ImagePath); readErr == nil {
-				payload.ImageData = data
-			}
-		}
-		_, uploadErr := er1.Upload(cfg, payload)
+		_, uploadErr := er1.Upload(cfg, er1.PayloadFromQueueEntry(entry))
 		return uploadErr
 	}, maxRetries)
 
