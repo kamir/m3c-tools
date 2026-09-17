@@ -20,6 +20,14 @@ on:
         required: false
         default: "false"
 
+# Concurrency: one scheduled run at a time, and nothing is cancelled.
+# A cancelled run of this workflow is simply a night with no result, so the
+# group serializes rather than supersedes. The prefix is a literal for the
+# reason given in ci.yml.
+concurrency:
+  group: archive-merged-branches-${{ github.ref }}
+  cancel-in-progress: false
+
 # CD-15: least privilege by default: the whole workflow is read-only; the single
 # job that pushes archive tags + deletes merged branches elevates per-job below.
 permissions:
@@ -29,6 +37,7 @@ jobs:
   archive:
     name: Archive merged branches
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write      # push archive/<branch> tags + delete merged branches
       pull-requests: read  # gh pr list --state all

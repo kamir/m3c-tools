@@ -12,7 +12,7 @@
 # What it measures, and why that is not the Makefile's text. It reads the
 # EXPANSION of `make -n build-all`. A target can exist and still build nothing,
 # because it hangs off no dependency chain: on 2026-09-17 both build-skillctl-sim
-# and thinking-build were in exactly that state, and a grep for "cmd/skillctl-sim"
+# and the since-removed thinking-build were in that state, and a grep for "cmd/skillctl-sim"
 # over the Makefile would have reported both as fine. The expansion answers
 # "would this command be built", which is the question; the text answers "is this
 # string present", which is a neighbouring one.

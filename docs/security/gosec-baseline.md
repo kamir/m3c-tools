@@ -20,7 +20,12 @@ gosec -track-suppressions -fmt sarif -out docs/security/gosec-baseline.sarif ./.
 ```
 
 - `gosec dev` (installed via `go install github.com/securego/gosec/v2/cmd/gosec@latest`)
-- Go 1.26.x, generated 2026-09-03, against branch `fix/skillctl-gosec-real-findings`.
+- Go 1.26.x, first generated 2026-09-03 against branch
+  `fix/skillctl-gosec-real-findings`; regenerated 2026-09-17 with go1.26.6 on
+  branch `chore/thinking-engine-herausgeloest`, because the removal of
+  `internal/thinking/` and `cmd/thinking-engine/` left four entries pointing at
+  files that no longer exist (BUILD-AUDIT-0001, owner decision E-2b: regenerate
+  rather than hand-edit, so the snapshot stays measured).
 - `-track-suppressions` keeps `#nosec`-annotated sites **in** the SARIF as
   `suppressions` entries (rather than dropping them), so the gate can tell an
   intentional, justified suppression apart from an un-triaged finding.

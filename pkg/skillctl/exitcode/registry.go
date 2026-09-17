@@ -146,6 +146,14 @@ var (
 
 var (
 	SyncIngestRejected = Code{29, "egress / ingest", "sync", "ingest_rejected"}
+	// 40 rejects the audit-export backend configuration (SPEC-0455
+	// REQ-5.1a): an endpoint without a named backend (the pre-T-02
+	// configuration, refused loudly instead of mapped silently), an unknown
+	// backend name, or a named backend whose configuration is incomplete.
+	// NOT 30: the band 30–39 belongs to the skillgate live process-exit
+	// codes (SPEC-0202 §8.2, TestCodes_NoSkillgateBandIntrusion). Fresh,
+	// uniquely-themed; the Number↔Theme invariant holds trivially.
+	SyncAuditBackendConfig = Code{40, "egress / config", "sync", "audit_backend_config"}
 )
 
 // ---------------------------------------------------------------------------
@@ -265,8 +273,8 @@ func AllCodes() []Code {
 		SignInvalid,
 		// Tier 4 (revoke
 		RevokeIdentityRevoked,
-		// Tier 5) sync / ingest
-		SyncIngestRejected,
+		// Tier 5) sync / ingest + audit-export backend config (SPEC-0455)
+		SyncIngestRejected, SyncAuditBackendConfig,
 		// Tier 6 (guard-path side channel
 		GuardPathSidechannelDenied,
 		// Tier 7) offline state machine (locked + unverifiable) + audit-durability

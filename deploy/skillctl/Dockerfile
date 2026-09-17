@@ -1,5 +1,5 @@
 # deploy/skillctl/Dockerfile: container image for skillctl
-# (SPEC-0354 D1, mirrors deploy/thinking-engine/Dockerfile).
+# (SPEC-0354 D1).
 #
 # skillctl is the skill trust-plane CLI: pack / sign / verify / install /
 # pull / attest / revoke / audit. It is pure Go with CGO disabled, so it

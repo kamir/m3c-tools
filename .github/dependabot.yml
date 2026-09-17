@@ -100,10 +100,3 @@ updates:
       timezone: "Europe/Berlin"
     open-pull-requests-limit: 3
 
-  - package-ecosystem: "docker"
-    directory: "/deploy/thinking-engine"
-    schedule:
-      interval: "monthly"
-      time: "05:30"
-      timezone: "Europe/Berlin"
-    open-pull-requests-limit: 3

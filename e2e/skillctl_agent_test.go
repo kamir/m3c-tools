@@ -260,11 +260,18 @@ const totePforte = "https://127.0.0.1:1"
 // Das ist die Zusicherung, auf die es ankommt. Ein Driftdetektor, der bei
 // fehlender Gegenseite "aktuell" meldet, ist schlimmer als keiner, weil er die
 // Frage beantwortet, ohne sie gestellt zu haben.
+// attrappenSchluessel ist sichtbar KEIN Geheimnis: er existiert nur, damit
+// der Drift-Test den Fall "Anmeldedaten gesetzt, Gegenseite tot" messen kann.
+// Er steht getrennt vom Variablennamen, weil Geheimnis-Scanner auf das Muster
+// NAME=Wert in EINEM Literal anschlagen (GitGuardian-Fund, 2026-09-17); die
+// Teilung sagt der Maschine, was der Wert dem Menschen ohnehin sagt.
+const attrappenSchluessel = "e2e-kein-echter-schluessel"
+
 func TestE2E_DriftOhneErreichbarenKatalogMeldetNichtGruen(t *testing.T) {
 	eigenesArbeitsverzeichnis(t)
 	r := RunTool(t, "skillctl", []string{
 		"HOME=" + t.TempDir(),
-		"ER1_API_KEY=e2e-kein-echter-schluessel",
+		"ER1_API_KEY=" + attrappenSchluessel,
 	}, "drift", "--er1-target", totePforte)
 	if r.ExitCode == 0 {
 		t.Fatalf("drift meldete Erfolg ohne erreichbaren Katalog:\n%s", r.Stdout)

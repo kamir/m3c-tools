@@ -208,6 +208,7 @@ jobs:
   arm-auto-merge:
     name: Arm auto-merge for Dependabot
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # First of the two author checks. See "WHO IS ALLOWED THROUGH" above.
     if: github.event.pull_request.user.login == 'dependabot[bot]'
     permissions:

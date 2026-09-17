@@ -16,7 +16,7 @@ Grouped by domain:
 [D. Config/infra/util](#d-config-infra--util-pkg) ·
 [E. Desktop UI](#e-desktop-ui-pkg) ·
 [F. skillctl trust subsystem](#f-skillctl-trust-subsystem-pkgskillctl-siblings) ·
-[G. Thinking Engine internals](#g-thinking-engine-internals-internalthinking)
+[G. Other internal packages](#g-other-internal-packages-internal)
 
 ---
 
@@ -158,67 +158,13 @@ It runs in `scripts/check-docs.sh` and in the `docs-gate` job of `ci.yml`,
 |---------|----------------|
 | `skillgate` | SPEC-0202 cooperative invocation gateway. |
 | `skillbundle` | Deterministic packing of `.skb` skill bundles. |
+## G. Other internal packages (`internal/*`)
 
-## G. Thinking Engine internals (`internal/thinking/*`)
-
-The 21 internal packages that make up the [Thinking Engine service](service-index),
-grouped by role in the T→R→I→A→C pipeline. Internal packages that belong to no
-engine layer are listed under **Other internal** at the end. The count is gated
-the same way as section F's:
-
-**Substrate**
+The Thinking Engine internals that used to fill this section left the tree on
+2026-09-17: the engine was an experiment and now lives in its own repository
+(BUILD-AUDIT-0001, owner decision E-2a). What remains under `internal/` is the
+one package the rest of the tree depends on.
 
 | Package | Responsibility |
 |---------|----------------|
-| `thinking/schema` | Go types for every message on every topic. |
-| `thinking/ctx` | Compile-time-safe wrapper around the user context / ctx hash. |
-| `thinking/store` | Local SQLite engine state. |
-| `thinking/kafka` | Kafka producer/consumer (in-memory bus, or franz-go under the `thinking_kafka` tag). |
-
-**Cognitive pipeline (R/I/A/C)**
-
-| Package | Responsibility |
-|---------|----------------|
-| `thinking/orchestrator` | Accepts a ProcessSpec; publishes lifecycle events. |
-| `thinking/processors` | Dispatch and shared plumbing for the R/I/A/C cognitive-layer processors. |
-| `thinking/processors/r` | The Reflection-layer processor. |
-| `thinking/processors/i` | The Insight-layer processor. |
-| `thinking/processors/a` | The Artifact-layer processor. |
-| `thinking/processors/c` | The Compilation-layer processor. |
-| `thinking/autoreflect` | Opt-in consumer that watches and triggers reflection. |
-| `thinking/feedback` | Closes the cognitive loop from the I-processor. |
-
-**LLM**
-
-| Package | Responsibility |
-|---------|----------------|
-| `thinking/llm` | LLM adapter surface (OpenAI / Ollama). |
-| `thinking/prompts` | Resolves prompt IDs to prompt bodies. |
-
-**Persistence to ER1**
-
-| Package | Responsibility |
-|---------|----------------|
-| `thinking/er1` | Thinking Engine's ER1 REST client. |
-| `thinking/sink` | D2 async ER1 sinker. |
-
-**Cost control**
-
-| Package | Responsibility |
-|---------|----------------|
-| `thinking/budget` | D4 two-layer spend cap. |
-| `thinking/ratelimit` | Keyed hourly limiter backed by the store. |
-
-**Control, ops & recovery**
-
-| Package | Responsibility |
-|---------|----------------|
-| `thinking/api` | Engine control surface (`/v1/*`). |
-| `thinking/observability` | P0 operational surface (metrics/health). |
-| `thinking/rebuild` | SPEC-0167 §Reconciler cold-start rebuild. |
-
-**Other internal**
-
-| Package | Responsibility |
-|---------|----------------|
-| `internal/dbdriver` | Shared database-driver support. |
+| `internal/dbdriver` | Shared database-driver support. Used by `cmd/skillctl`, `pkg/skillctl/browse`, `pkg/skillctl/outbox`, `pkg/timetracking` and `pkg/tracking`, which is why it stayed when the engine went. |

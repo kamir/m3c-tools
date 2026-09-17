@@ -10,7 +10,7 @@ repository: Go binaries, Python MCP servers, and the evaluation harness.
 
 > Go module: `github.com/kamir/m3c-tools`. All Go binaries build to `./build/`.
 > The bare executables checked out at the repo root (`m3c-tools`, `skillctl`,
-> `thinking-engine`, `m3c-tools.exe`) are git-ignored build artifacts, not sources.
+> `skillctl`, `m3c-tools.exe`) are git-ignored build artifacts, not sources.
 
 See also: [Service Index](service-index) (what stays running) ·
 [Component Index](component-index) (the libraries these programs are built from).
@@ -23,7 +23,6 @@ See also: [Service Index](service-index) (what stays running) ·
 | **skillctl** | `cmd/skillctl/` | `make build-skillctl` | The skill **trust** CLI: sign, admit, verify, revoke, audit skills (offline-verifiable). |
 | **skillctl-demo** | `cmd/skillctl-demo/` | `make build-skillctl-demo` | Self-contained offline demo that shows a CISO the trust plane *containing an attack live* (scenarios S1/S2A/S5, real exit codes). |
 | **secretctl** | `cmd/secretctl/` | `make build-secretctl` | Secret-rotation CLI (SPEC-0438), the reading half: `inventory` says WHERE a value sits and WHETHER it is current, `verify` probes whether a service still accepts it; it never prints a value, comparisons run over fingerprints. |
-| **thinking-engine** | `cmd/thinking-engine/` | `make thinking-build` | Per-user cognitive runtime (SPEC-0167). Runs as a service: see [Service Index](service-index). |
 | **poc-menubar** | `cmd/poc-menubar/` | `make build-all` | Reference POC: macOS menu bar via `menuet`. |
 | **poc-recorder** | `cmd/poc-recorder/` | `make build-all` | Reference POC: PortAudio microphone recording. |
 | **poc-transcript** | `cmd/poc-transcript/` | `make build-all` | Reference POC: YouTube transcript fetch (core library port). |
@@ -84,7 +83,6 @@ Both run as long-lived services: see [Service Index](service-index).
 | Build & packaging | `scripts/build-all.sh`, `scripts/build-windows.sh`, `scripts/build-portaudio-universal.sh`, `scripts/make-dmg.sh`, `scripts/make-icns.sh` | Cross-platform builds, macOS bundle/DMG, Windows binary. |
 | Installers | `scripts/installer.nsi`, `tools/skillctl-install.sh`, `tools/skillctl-install.ps1` | NSIS installer, skillctl install one-liners. |
 | skillctl release/runbook | `tools/skillctl-release.sh`, `tools/skillctl-runbook.sh`, `tools/skillctl-runbook-publish.sh`, `scripts/publish-skb.sh` | Release + `.skb` publish + runbook automation. |
-| Thinking Engine launch | `tools/thinking-engine-start.sh` | Convenience launcher for a per-user engine stack. |
 | Capture-source login/checks | `tools/plaud-mcp-login.mjs`, `tools/plaud-e2e-check.sh`, `scripts/e2e-plaud-sync-local.sh` | Plaud OAuth login + E2E sync verification. |
 | CI / docs / review | `scripts/code-review.sh`, `scripts/check-docs.sh`, `scripts/check-index.sh`, `scripts/e2e-device-token-proof.sh` | `check-docs.sh` runs the docaudit / verbaudit / tutorial / index gates locally; `check-index.sh` is the index gate itself, and the CI `docs-gate` job calls it directly. |
 

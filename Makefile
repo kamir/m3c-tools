@@ -142,10 +142,11 @@ build-gates:
 # Build every command in cmd/. "All" is a promise, so it is checked: the gate
 # `make check-make-targets` fails when a cmd/ directory is not reachable from
 # here. Before 2026-09-17 this target reached 7 of the 15, and two of the
-# missing eight (skillctl-sim, thinking-engine) HAD targets that simply hung
-# off no chain, which is why the gate reads the expansion and not the file.
+# missing eight (skillctl-sim and the since-removed thinking-engine) HAD
+# targets that simply hung off no chain, which is why the gate reads the
+# expansion and not the file.
 .PHONY: build-all
-build-all: build build-skillctl build-secretctl build-skillctl-demo build-skillctl-sim build-gates thinking-build
+build-all: build build-skillctl build-secretctl build-skillctl-demo build-skillctl-sim build-gates
 	@echo "Building POCs..."
 	go build -o $(BUILD_DIR)/poc-transcript ./cmd/poc-transcript
 	go build -o $(BUILD_DIR)/poc-menubar ./cmd/poc-menubar
@@ -482,6 +483,23 @@ check-required-checks:
 refresh-required-checks:
 	@./scripts/check-required-checks.sh --refresh
 
+# CI hygiene: every job has a timeout, every pull-request workflow has a
+# concurrency group, every self-hosted `runs-on` carries the trusted-routing
+# guard. Deliberately NOT in `make ci`: it needs PyYAML, and `make ci` stays a
+# Go-only target for the same reason check-python is kept out of it. The job
+# "CI hygiene (timeouts, concurrency, runner trust)" in ci.yml runs it on every
+# push and pull request.
+.PHONY: check-ci-matrix
+check-ci-matrix:
+	@./scripts/ci-matrix.py --check
+
+# The table itself, one row per expanded job name. `make ci-matrix > after.tsv`
+# against the same on origin/master is the before/after evidence for a workflow
+# rebuild; the procedure is in the header of scripts/ci-matrix.py.
+.PHONY: ci-matrix
+ci-matrix:
+	@./scripts/ci-matrix.py
+
 # Release targets: code review + docs check run before release
 #
 # Alle vier Ziele TAGGEN nur. scripts/release.sh baut nichts, laedt nichts hoch
@@ -678,87 +696,6 @@ installer-windows: build-windows
 	makensis scripts/installer.nsi
 	@echo "Installer: $(BUILD_DIR)/M3C-Tools-Setup.exe"
 
-# -----------------------------------------------------------------------------
-# Thinking Engine (SPEC-0167): Phase 1 Week 1 scaffold
-# -----------------------------------------------------------------------------
-
-THINKING_BIN        = thinking-engine
-THINKING_CMD_DIR    = ./cmd/thinking-engine
-THINKING_COMPOSE    = deploy/thinking-engine/docker-compose.yml
-THINKING_DOCKERFILE = deploy/thinking-engine/Dockerfile
-THINKING_IMAGE      = m3c/thinking-engine
-ENGINE_TAG         ?= dev
-
-# Build the thinking-engine binary. Pure Go, no CGO.
-.PHONY: thinking-build
-thinking-build:
-	@echo "Building $(THINKING_BIN)..."
-	@mkdir -p $(BUILD_DIR)
-	CGO_ENABLED=0 go build -o $(BUILD_DIR)/$(THINKING_BIN) $(THINKING_CMD_DIR)
-
-# Run unit tests for the thinking packages only (no Kafka required).
-.PHONY: thinking-test
-thinking-test:
-	@echo "Running thinking-engine unit tests (offline, -short)..."
-	go test -short -count=1 ./internal/thinking/...
-
-# Run the tagged unit tests for the franz-go driver. These still do
-# NOT need a broker: they exercise the isolation guard and
-# consumer-group naming logic with no network I/O.
-.PHONY: thinking-test-tagged
-thinking-test-tagged:
-	@echo "Running thinking-engine tagged unit tests (thinking_kafka, no broker needed)..."
-	go test -tags thinking_kafka -count=1 ./internal/thinking/kafka/...
-
-# Run the real-broker integration test. Requires M3C_KAFKA_URL.
-# Automatically skipped in the test file if the env var is empty.
-.PHONY: thinking-test-integration
-thinking-test-integration:
-	@if [ -z "$$M3C_KAFKA_URL" ]; then \
-		echo "thinking-test-integration: M3C_KAFKA_URL not set: skipping."; \
-		echo "To run against a local broker:"; \
-		echo "  make thinking-up CTX_HASH=<hash>"; \
-		echo "  M3C_KAFKA_URL=localhost:9092 make thinking-test-integration"; \
-		exit 0; \
-	fi
-	go test -tags thinking_kafka -count=1 -v ./e2e/thinking/...
-
-# Build the Thinking Engine Docker image locally. Tag defaults to
-# ENGINE_TAG=dev; override for versioned builds. Compose's
-# `profiles: [engine]` slot picks up this image once it exists.
-.PHONY: thinking-image
-thinking-image:
-	@echo "Building $(THINKING_IMAGE):$(ENGINE_TAG) ..."
-	docker build \
-		-f $(THINKING_DOCKERFILE) \
-		-t $(THINKING_IMAGE):$(ENGINE_TAG) \
-		--build-arg VERSION=$(ENGINE_TAG) \
-		.
-	@echo ""
-	@echo "Image built. To run via compose:"
-	@echo "  CTX_HASH=<hash> M3C_USER_CONTEXT_ID=<id> THINKING_ENGINE_SECRET=<s> \\"
-	@echo "    docker compose -f $(THINKING_COMPOSE) --profile engine up -d"
-
-# Bring up the per-user cp-all-in-one stack. CTX_HASH must be set
-# (or sourced from deploy/thinking-engine/.env).
-.PHONY: thinking-up
-thinking-up:
-	@echo "Bringing up cp-all-in-one for CTX_HASH=$${CTX_HASH:?set CTX_HASH}..."
-	docker compose -f $(THINKING_COMPOSE) up -d zookeeper broker schema-registry control-center
-
-.PHONY: thinking-down
-thinking-down:
-	docker compose -f $(THINKING_COMPOSE) down
-
-.PHONY: thinking-logs
-thinking-logs:
-	docker compose -f $(THINKING_COMPOSE) logs -f --tail=200
-
-# Create all 8 topics for the current CTX_HASH.
-.PHONY: thinking-topics
-thinking-topics:
-	@bash deploy/thinking-engine/topic-bootstrap.sh --ctx-hash $${CTX_HASH:?set CTX_HASH}
-
 # Show help
 .PHONY: help
 help:
@@ -809,17 +746,6 @@ help:
 	@echo "  gosec-baseline-update Regenerate the gosec signature baseline from the current tree"
 	@echo "  test-gate-windows  Windows dev test gate: vet + cross-compile + tests (SPEC-0128)"
 	@echo "  test-gate-windows-quick  Same but skip test phase (compile check only)"
-	@echo ""
-	@echo "Thinking Engine (SPEC-0167):"
-	@echo "  thinking-build            Build ./build/thinking-engine"
-	@echo "  thinking-image            Build local Docker image m3c/thinking-engine:\$$ENGINE_TAG"
-	@echo "  thinking-test             Run internal/thinking unit tests (-short)"
-	@echo "  thinking-test-tagged      Run franz-go driver unit tests (-tags thinking_kafka)"
-	@echo "  thinking-test-integration Run e2e tests against real broker (needs M3C_KAFKA_URL)"
-	@echo "  thinking-up               docker compose up for cp-all-in-one stack (needs CTX_HASH)"
-	@echo "  thinking-down             docker compose down"
-	@echo "  thinking-logs             docker compose logs -f"
-	@echo "  thinking-topics           Create 8 topics for CTX_HASH"
 	@echo ""
 	@echo "Skill Trust-Plane containers (SPEC-0354):"
 	@echo "  skillctl-image        Build distroless $(SKILLCTL_IMAGE):\$$SKILLCTL_TAG image (D1)"
