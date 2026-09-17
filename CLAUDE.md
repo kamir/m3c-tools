@@ -46,7 +46,7 @@ make run ARGS="transcript dQw4w9WgXcQ --format srt"
 
 Before writing ANY text into this repository (code, comments, docs, YAML, commit
 messages, PR bodies, CLI strings), read
-[`.claude/rules/prose-style.md`](.claude/rules/prose-style.md).
+[CODESTYLE.md](CODESTYLE.md#prose-no-em-dashes).
 
 The short version: **never emit U+2014 EM DASH**, and do not substitute a spaced
 hyphen or a double hyphen for it. Choose the punctuation the sentence needs, a
@@ -54,16 +54,14 @@ colon for a label and its expansion, a period for two statements, a semicolon
 for two clauses too close to split, commas or parentheses for an aside. A lone
 dash in a table cell is `n/a`.
 
-Enforced three ways: a `PreToolUse` hook (`.claude/hooks/no-emdash-guard.sh`)
-that refuses the write, `./scripts/check-no-emdash.sh` locally and in
-`make ci`, and the blocking `prose-gate` CI job. Rationale and the two byte-level
-exemptions: [CODESTYLE.md](CODESTYLE.md#prose-no-em-dashes).
+Enforced by `./scripts/check-no-emdash.sh` locally and in `make ci`, and the
+blocking `prose-gate` CI job. Rationale and the two byte-level exemptions:
+[CODESTYLE.md](CODESTYLE.md#prose-no-em-dashes).
 
 ## Claims (binding)
 
 Before writing any sentence about behaviour (a doc line, a code comment, a
-commit message, a job name, a tool's help text), read
-[`.claude/rules/claims.md`](.claude/rules/claims.md).
+commit message, a job name, a tool's help text), apply these rules.
 
 The short version: **the word "measured" is reserved for what was measured.**
 A promise in a header covers every line under it. Turning a behaviour off means
