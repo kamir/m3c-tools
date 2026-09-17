@@ -482,6 +482,23 @@ check-required-checks:
 refresh-required-checks:
 	@./scripts/check-required-checks.sh --refresh
 
+# CI hygiene: every job has a timeout, every pull-request workflow has a
+# concurrency group, every self-hosted `runs-on` carries the trusted-routing
+# guard. Deliberately NOT in `make ci`: it needs PyYAML, and `make ci` stays a
+# Go-only target for the same reason check-python is kept out of it. The job
+# "CI hygiene (timeouts, concurrency, runner trust)" in ci.yml runs it on every
+# push and pull request.
+.PHONY: check-ci-matrix
+check-ci-matrix:
+	@./scripts/ci-matrix.py --check
+
+# The table itself, one row per expanded job name. `make ci-matrix > after.tsv`
+# against the same on origin/master is the before/after evidence for a workflow
+# rebuild; the procedure is in the header of scripts/ci-matrix.py.
+.PHONY: ci-matrix
+ci-matrix:
+	@./scripts/ci-matrix.py
+
 # Release targets: code review + docs check run before release
 #
 # Alle vier Ziele TAGGEN nur. scripts/release.sh baut nichts, laedt nichts hoch
