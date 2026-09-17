@@ -241,7 +241,7 @@ Verify-then-run instead of piping straight to `iex` / `bash`:
 # Windows
 $u = 'https://raw.githubusercontent.com/kamir/m3c-tools/afee42d36f14e6ebfc60438af6e4ba8d6a894441/tools/skillctl-install.ps1'
 $f = "$env:TEMP\skillctl-install.ps1"; irm $u -OutFile $f
-if ((Get-FileHash $f -Algorithm SHA256).Hash -ne 'D33F5344D30A6258281B0784C461ECC0DBE25B86444175A6F95C31DFE2C27F17') { throw 'SHA-256 mismatch' }
+if ((Get-FileHash $f -Algorithm SHA256).Hash -ne 'B95BD1295236A23E6B317A3C60BDDA7352A98CEEB4BB46E3F8B66D479F7C3B00') { throw 'SHA-256 mismatch' }
 & $f
 ```
 
