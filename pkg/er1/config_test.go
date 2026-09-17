@@ -14,8 +14,8 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	if cfg.APIURL == "" {
 		t.Error("APIURL should have a default")
 	}
-	if cfg.ContextID == "" {
-		t.Error("ContextID should have a default")
+	if cfg.ContextID != "" {
+		t.Errorf("ContextID = %q, want empty when unset", cfg.ContextID)
 	}
 }
 

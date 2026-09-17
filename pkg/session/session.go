@@ -593,7 +593,7 @@ func List(o ListOpts) ([]SessionRow, error) {
 	}
 	cfg := er1.LoadConfig()
 	if cfg.ContextID == "" {
-		cfg.ContextID = "107677460544181387647___mft"
+		return nil, fmt.Errorf("ER1_CONTEXT_ID is not set")
 	}
 	tags := []string{"claude-code.session"}
 	if id.Project != "" {

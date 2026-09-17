@@ -173,6 +173,14 @@ func TestEnsureDefaults(t *testing.T) {
 	if active != "dev" {
 		t.Errorf("active = %q, want %q", active, "dev")
 	}
+
+	dev, err := pm.GetProfile("dev")
+	if err != nil {
+		t.Fatalf("GetProfile(dev): %v", err)
+	}
+	if got := dev.Vars["ER1_CONTEXT_ID"]; got != "" {
+		t.Errorf("dev ER1_CONTEXT_ID = %q, want empty", got)
+	}
 }
 
 func TestSwitchProfile(t *testing.T) {
