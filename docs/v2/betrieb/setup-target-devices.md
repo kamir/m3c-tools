@@ -94,7 +94,7 @@ brew install pkg-config portaudio ffmpeg
 git clone https://github.com/kamir/m3c-tools.git && cd m3c-tools
 
 make build            # → ./build/m3c-tools   (runs `check-deps` then `go build`)
-make build-all        # optional: CLI + 4 POC binaries
+make build-all        # optional: every command in cmd/
 make vet              # go vet ./...
 ```
 

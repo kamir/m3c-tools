@@ -234,6 +234,18 @@ jobs:
       - name: Indexes match the tree (cmd/, pkg/, and the counts)
         run: ./scripts/check-index.sh
 
+      # And the same claim once more, from the build side: a cmd/ that the
+      # index lists but no Make target reaches is documented and unbuildable.
+      # It lives in THIS job for the reason the step above gives, and because
+      # 'make ci' is called by no workflow either. --selftest first: an empty
+      # result from the gate means nothing until the gate has been shown to
+      # fail (.claude/rules/claims.md, rule 4).
+      - name: The build-coverage gate can fail
+        run: ./scripts/check-makefile-targets.sh --selftest
+
+      - name: Every cmd/ is reachable from 'make build-all'
+        run: ./scripts/check-makefile-targets.sh
+
       - name: exitaudit unit tests
         run: go test -count=1 ./cmd/exitaudit/
 
