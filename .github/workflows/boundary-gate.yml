@@ -18,8 +18,34 @@ name: boundary-gate
 # a real four-digit id here would be the very violation this step rejects.)
 
 on:
+  # The push trigger is filtered to main and master, as every other required
+  # gate in this tree already is. Measured on 2026-09-17 against the branch of
+  # pull request #335: with an unfiltered `push:` this workflow produced 9
+  # pull_request runs AND 9 push runs for the same nine commits, because a
+  # branch push and the pull request on that branch are two events over one
+  # tree. The pull_request run is the one that reports to the pull request, so
+  # the push half was paid for and read by nobody.
+  #
+  # What this stops checking, said plainly: a push to a branch that has no pull
+  # request open. Such a commit cannot reach master without a pull request, and
+  # the gate runs on that pull request and on every push to master.
   push:
+    branches: [main, master]
   pull_request:
+
+# Concurrency: one run per ref, and a superseded pull-request run is cancelled.
+# The group carries a LITERAL prefix rather than ${{ github.workflow }}, because
+# inside a reusable workflow that context holds the CALLER's name: a group built
+# from it can collide with the caller's own group, and a called workflow waiting
+# on its caller never starts. A literal cannot do that, in any file.
+#
+# cancel-in-progress is conditional on purpose. A superseded pull-request run
+# measures a commit nobody will merge, so cancelling it costs nothing. A run on
+# main or master is the record for that commit, and cancelling it would leave a
+# merged commit with no evidence that this gate ever passed on it.
+concurrency:
+  group: boundary-gate-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # CD-T6: least-privilege default GITHUB_TOKEN for the whole workflow.
 permissions:
@@ -28,6 +54,7 @@ permissions:
 jobs:
   boundary-gate:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

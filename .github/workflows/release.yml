@@ -5,13 +5,22 @@ on:
     tags:
       - 'v*'
 
+# Concurrency: runs for one ref serialize, and NOTHING is cancelled.
+# A release run produces evidence (checksums, signatures, provenance,
+# attestations). Cancelling one mid-flight leaves a partial artifact set behind
+# and a draft that looks finished, so cancel-in-progress is false and stays
+# false. The group only stops two pushes of the SAME ref from racing each other
+# into the same draft. The prefix is a literal for the reason given in ci.yml.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 # CD-T6: least-privilege default: read-only for the whole workflow; the single
 # job that creates the GitHub Release elevates to contents: write per-job below.
 permissions:
   contents: read
 
 env:
-  GO_VERSION: "1.26.6"
   # CD-T4: builds must use go.sum as-is; never mutate the module graph mid-build.
   GOFLAGS: -mod=readonly
 
@@ -24,12 +33,13 @@ jobs:
   docs-gate:
     name: CLI/manual consistency (docaudit)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
 
       - name: docaudit unit tests
         run: go test -count=1 ./cmd/docaudit/
@@ -68,6 +78,7 @@ jobs:
   sbom:
     name: Generate SBOM (CycloneDX)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [docs-gate]
     permissions:
       contents: read
@@ -88,13 +99,14 @@ jobs:
   build-macos:
     name: Build macOS (arm64 + amd64)
     runs-on: macos-latest
+    timeout-minutes: 30
     needs: [docs-gate]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
 
       - name: Install PortAudio (Homebrew, for native arm64 build)
         run: brew install portaudio pkg-config
@@ -147,6 +159,19 @@ jobs:
               -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" \
               -o skillctl-darwin-amd64 ./cmd/skillctl
 
+      # secretctl is the third product binary (BUILD-AUDIT-0001, owner decision
+      # E-1 of 2026-09-17). Pure Go, so no PortAudio and no universal library.
+      - name: Build secretctl darwin/arm64 and darwin/amd64
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          COMMIT="${GITHUB_SHA:0:8}"
+          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          LDFLAGS="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}"
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 \
+            go build -ldflags="${LDFLAGS}" -o secretctl-darwin-arm64 ./cmd/secretctl
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 \
+            go build -ldflags="${LDFLAGS}" -o secretctl-darwin-amd64 ./cmd/secretctl
+
       # --- Package ---
       - name: Package macOS binaries
         run: |
@@ -154,6 +179,8 @@ jobs:
           tar czf m3c-tools-darwin-amd64.tar.gz m3c-tools-darwin-amd64
           tar czf skillctl-darwin-arm64.tar.gz skillctl-darwin-arm64
           tar czf skillctl-darwin-amd64.tar.gz skillctl-darwin-amd64
+          tar czf secretctl-darwin-arm64.tar.gz secretctl-darwin-arm64
+          tar czf secretctl-darwin-amd64.tar.gz secretctl-darwin-amd64
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -165,6 +192,8 @@ jobs:
             m3c-tools-darwin-amd64.tar.gz
             skillctl-darwin-arm64.tar.gz
             skillctl-darwin-amd64.tar.gz
+            secretctl-darwin-arm64.tar.gz
+            secretctl-darwin-amd64.tar.gz
 
   # -----------------------------------------------------------------------
   # Linux + Windows: m3c-tools (CGO_ENABLED=0) + skillctl via GoReleaser
@@ -172,6 +201,7 @@ jobs:
   build-linux-windows:
     name: Build Linux + Windows (GoReleaser)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [docs-gate]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -180,7 +210,7 @@ jobs:
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
 
       - name: Install GoReleaser
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
@@ -202,9 +232,11 @@ jobs:
             dist/m3c-tools-linux-*.tar.gz
             dist/skillctl-linux-*.tar.gz
             dist/skillctl-offline-demo-linux-*.tar.gz
+            dist/secretctl-linux-*.tar.gz
             dist/m3c-tools-windows-*.zip
             dist/skillctl-windows-*.zip
             dist/skillctl-offline-demo-windows-*.zip
+            dist/secretctl-windows-*.zip
 
   # -----------------------------------------------------------------------
   # Windows NSIS installer
@@ -212,13 +244,14 @@ jobs:
   build-windows-installer:
     name: Build Windows Installer (NSIS)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [build-linux-windows]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
 
       - name: Install NSIS
         run: sudo apt-get update && sudo apt-get install -y nsis
@@ -234,6 +267,8 @@ jobs:
             go build -ldflags="${LDFLAGS}" -o build/windows/m3c-tools.exe ./cmd/m3c-tools
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
             go build -ldflags="${LDFLAGS}" -o build/windows/skillctl.exe ./cmd/skillctl
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
+            go build -ldflags="${LDFLAGS}" -o build/windows/secretctl.exe ./cmd/secretctl
           cp design/icons/menubar-icon.png build/windows/
 
       - name: Build NSIS installer
@@ -272,6 +307,7 @@ jobs:
   checksums:
     name: Checksums + SLSA subjects
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [build-macos, build-linux-windows, build-windows-installer]
     permissions:
       contents: read
@@ -318,6 +354,7 @@ jobs:
   cosign:
     name: cosign sign-blob checksums.txt (keyless OIDC)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [checksums]
     permissions:
       contents: read
@@ -381,6 +418,7 @@ jobs:
   verify:
     name: slsa-verifier gate (builder identity)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [checksums, provenance]
     permissions:
       contents: read
@@ -422,6 +460,7 @@ jobs:
   release:
     name: Create Release (post-gate)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [checksums, cosign, provenance, verify, sbom]
     permissions:
       contents: write # create the GitHub Release + upload its assets
@@ -482,6 +521,11 @@ jobs:
             artifacts/m3c-tools-linux-amd64.tar.gz
             artifacts/m3c-tools-linux-arm64.tar.gz
             artifacts/m3c-tools-windows-amd64.zip
+            artifacts/secretctl-darwin-arm64.tar.gz
+            artifacts/secretctl-darwin-amd64.tar.gz
+            artifacts/secretctl-linux-amd64.tar.gz
+            artifacts/secretctl-linux-arm64.tar.gz
+            artifacts/secretctl-windows-amd64.zip
             artifacts/skillctl-offline-demo-linux-amd64.tar.gz
             artifacts/skillctl-offline-demo-linux-arm64.tar.gz
             artifacts/skillctl-offline-demo-windows-amd64.zip

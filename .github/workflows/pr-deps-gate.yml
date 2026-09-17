@@ -1,0 +1,146 @@
+name: PR dependencies gate
+
+# Misst die Depends-on-Zeilen im PR-BODY gegen den echten Zustand der dort
+# genannten Pull Requests, via scripts/check-pr-deps.sh. Traeger ist der Body
+# und nur der Body: ein Kommentar ist Konversation, der Body ist der Vertrag.
+# Form, Zustaende und Exit-Codes stehen im Skript.
+#
+# FRISCHE OHNE CRON, und warum hier keiner nachgeruestet werden darf, ohne
+# diese Kopplung zu kennen. Die Branch-Protection auf master erzwingt
+# up-to-date-Branches: required_status_checks.strict=true, gemessen 2026-09-17
+# mit `gh api repos/kamir/m3c-tools/branches/master/protection`. Ein PR, dessen
+# Branch hinter master liegt, kann also nicht mergen, egal wie gruen seine
+# Checks sind. Der Merge einer Abhaengigkeit bewegt master, der PR-Branch muss
+# danach angehoben werden (von Hand, per `gh pr update-branch`, oder durch
+# GitHub selbst vor einem Auto-Merge), und jedes Anheben feuert `synchronize`,
+# worauf dieses Tor neu misst. Ein Verdikt, das in master einfliesst, ist
+# darum nie aelter als die letzte Bewegung des Branches. `edited` faengt den
+# anderen Aenderungsweg: wer die Depends-on-Zeile im Body aendert, loest den
+# Lauf sofort aus. Ein Cron wuerde nur Laeufe kaufen, deren Ergebnis die
+# Protection ohnehin erzwingt, bevor es zaehlt.
+#
+# DIE BINDUNG IST DER NAME. Der Job unten heisst exakt
+# "PR dependencies (DAG gate)", und dieser String ist die kuenftige Bindung an
+# die Branch-Protection. Er steht ABSICHTLICH NOCH NICHT in
+# docs/security/required-checks.txt: diese Datei ist die Baumkopie der ECHTEN
+# Branch-Protection, und ein Eintrag fuer einen Check, den die Protection noch
+# nicht verlangt, macht die Kopie zur Behauptung; der naechste --refresh
+# wuerde ihn kommentarlos wieder entfernen. Die Owner-Aktion ist deshalb EIN
+# Zug mit zwei Haelften: den Check in der Branch-Protection auf Pflicht
+# schalten UND im selben Zug `make refresh-required-checks` laufen lassen,
+# damit die Registerzeile dazukommt. Eine Haelfte allein ist der
+# Namensbindungs-Fehler aus .claude/rules/claims.md, eine Ebene tiefer.
+#
+# ZWEI JOBS STATT EINEM, wegen CD-T8 (pin-guard.yml): ein PR-getriggerter Job
+# mit `pull-requests: write` darf keinen `uses:`-Schritt tragen, das Tor
+# braucht aber den Checkout fuer das Skript. Also prueft der erste Job mit
+# Lese-Token und Checkout, und der zweite setzt oder entfernt das Label mit
+# Schreib-Token und ohne einen einzigen `uses:`-Schritt, nach dem Muster von
+# dependabot-auto-merge.yml. Pflichtfaehig ist nur der erste.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+# Ein `edited` (Body geaendert) und ein `synchronize` (Branch bewegt) koennen
+# Sekunden auseinander liegen; zwei parallele Laeufe wuerden die Reihenfolge
+# ihres Endes entscheiden lassen, welcher Label-Zustand stehen bleibt. Das
+# juengste Ereignis gewinnt, wie in dependabot-auto-merge.yml.
+concurrency:
+  group: pr-deps-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+# CD-T6: Lese-Token als Vorgabe fuer den ganzen Workflow.
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: PR dependencies (DAG gate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      # "true" genau dann, wenn das Skript mit 1 endete (Abhaengigkeit
+      # blockiert). Exit 2 (Aufruffehler) laesst den Job rot werden, setzt
+      # aber NICHT blocked=true: ein kaputter Aufruf ist keine Aussage ueber
+      # den PR, und das Label soll dann unveraendert bleiben.
+      blocked: ${{ steps.deps.outputs.blocked }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Depends-on-Zeilen gegen den Zustand der genannten PRs
+        id: deps
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO_SLUG: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          code=0
+          ./scripts/check-pr-deps.sh "$PR_NUMBER" "$REPO_SLUG" \
+            | tee -a "$GITHUB_STEP_SUMMARY" || code=$?
+          if [ "$code" -eq 1 ]; then
+            echo "blocked=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "blocked=false" >> "$GITHUB_OUTPUT"
+          fi
+          exit "$code"
+
+  label:
+    name: Label blocked-by-dependency nachfuehren
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: gate
+    # Auch nach einem roten Tor laufen (sonst wuerde das Label nie gesetzt),
+    # aber nicht nach cancelled/skipped: dann ist nichts gemessen worden.
+    if: ${{ always() && contains(fromJSON('["success", "failure"]'), needs.gate.result) }}
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      # KEIN Checkout, kein `uses:`: dieser Job traegt ein Schreib-Token und
+      # ist PR-getriggert, also gilt CD-T8. Die Arbeit ist reines gh.
+      - name: Label setzen oder entfernen, dann den Zustand nachlesen
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BLOCKED: ${{ needs.gate.outputs.blocked }}
+          GATE_RESULT: ${{ needs.gate.result }}
+          LABEL: blocked-by-dependency
+        run: |
+          set -euo pipefail
+
+          say() { echo "$1"; echo "$1" >> "$GITHUB_STEP_SUMMARY"; }
+
+          if [ "$BLOCKED" = "true" ]; then
+            # Label idempotent anlegen: --force aktualisiert ein vorhandenes
+            # statt zu scheitern.
+            gh label create "$LABEL" --force \
+              --color "D93F0B" \
+              --description "Wartet auf einen anderen PR: Depends-on im Body ist noch nicht erfuellt"
+            gh api -X POST "repos/$GH_REPO/issues/$PR_NUMBER/labels" \
+              -f "labels[]=$LABEL" > /dev/null
+            want="mit"
+          elif [ "$GATE_RESULT" = "success" ]; then
+            # 404 heisst: war nicht gesetzt. Das ist der Normalfall bei einem
+            # PR ohne Abhaengigkeiten und kein Fehler; jede andere Antwort
+            # entscheidet unten die Nachlese, nicht der Exit-Code hier.
+            gh api -X DELETE \
+              "repos/$GH_REPO/issues/$PR_NUMBER/labels/$LABEL" \
+              > /dev/null 2>&1 || true
+            want="ohne"
+          else
+            say "Tor endete mit '$GATE_RESULT' ohne Blockade-Verdikt (Aufruffehler):"
+            say "Label bleibt unveraendert, denn es ist nichts gemessen worden."
+            exit 0
+          fi
+
+          # Der API-Aufruf und der PR-Zustand sind zwei Behauptungen, nicht
+          # eine; geglaubt wird die zweite (Muster aus dependabot-auto-merge).
+          have="$(gh api "repos/$GH_REPO/issues/$PR_NUMBER/labels" --jq '.[].name')"
+          if printf '%s\n' "$have" | grep -qx "$LABEL"; then state="mit"; else state="ohne"; fi
+          if [ "$state" != "$want" ]; then
+            echo "::error::PR #$PR_NUMBER sollte $want Label '$LABEL' dastehen, steht aber $state"
+            exit 1
+          fi
+          say "Verifiziert: PR #$PR_NUMBER steht $want Label \`$LABEL\`."

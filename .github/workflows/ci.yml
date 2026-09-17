@@ -6,6 +6,20 @@ on:
   pull_request:
     branches: [main, master]
 
+# Concurrency: one run per ref, and a superseded pull-request run is cancelled.
+# The group carries a LITERAL prefix rather than ${{ github.workflow }}, because
+# inside a reusable workflow that context holds the CALLER's name: a group built
+# from it can collide with the caller's own group, and a called workflow waiting
+# on its caller never starts. A literal cannot do that, in any file.
+#
+# cancel-in-progress is conditional on purpose. A superseded pull-request run
+# measures a commit nobody will merge, so cancelling it costs nothing. A run on
+# main or master is the record for that commit, and cancelling it would leave a
+# merged commit with no evidence that this gate ever passed on it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # CD-T6: least-privilege default GITHUB_TOKEN for the whole workflow.
 permissions:
   contents: read
@@ -14,23 +28,69 @@ jobs:
   lint:
     name: Lint & Vet
     runs-on: macos-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 2
+
+      # Does this change touch code at all, or only prose. Measured over the
+      # last 60 merged pull requests: one in ten changes nothing but prose, and
+      # the five macOS jobs it pays for anyway measured 872 seconds together,
+      # billed at the macOS rate. A file ending in .md cannot change what a Go
+      # test does. (872 is the sum of five MEDIANS from one collection on
+      # 2026-09-17, up to six completed runs per job: Lint & Vet 149, Unit Tests
+      # 294, skillctl Security Tests 144, Build macOS 177, Ratchet coverage 108.
+      # It said 894 first, which added four numbers from one run to a fifth from
+      # somewhere else. Numbers from two runs do not belong in one sum.)
+      #
+      # The JOB still runs and still reports, and that is deliberate. A job
+      # skipped by an `if:` reports the conclusion "skipped", which GitHub's
+      # branch protection counts as satisfied: gating a REQUIRED job on a path
+      # filter switches the gate off for those paths with nothing turning red.
+      # Only the expensive steps below are conditional, so a docs-only pull
+      # request still gets a real green tick from a job that really ran.
+      #
+      # Fail-closed in every direction: an undeterminable base, an empty file
+      # list, a git error or any event other than pull_request all answer
+      # code=true and everything runs. scripts/ci-classify.sh --selftest plants
+      # a code file in an otherwise prose-only list and checks the answer flips.
+      - id: classify
+        name: "Classify: prose-only change, or code"
+        run: ./scripts/ci-classify.sh --github-output
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        if: steps.classify.outputs.code == 'true'
         with:
-          go-version: "1.26.6"
+          # The Go version comes from go.mod and from nowhere else. Before
+          # 2026-09-17 it was declared in three places: this key, 28 times over
+          # nine workflow files; GO_VERSION in release.yml; and go.mod's own
+          # `go` and `toolchain` lines. Three copies of one number, joined by
+          # nothing, is the same shape as a required check bound to a job name:
+          # it breaks the moment one side moves, and it breaks quietly, because
+          # a CI that builds with a different toolchain than the module declares
+          # still builds.
+          #
+          # Measured on the master2 canary, run 35225076758: with this key
+          # actions/setup-go logged "Setup go version spec 1.26.6" and `go
+          # version` printed go1.26.6. So the `toolchain go1.26.6` line is what
+          # it resolves, not the weaker `go 1.26.0` directive above it.
+          go-version-file: go.mod
 
       - name: Install PortAudio
+        if: steps.classify.outputs.code == 'true'
         run: brew install portaudio
 
       - name: Go vet
+        if: steps.classify.outputs.code == 'true'
         run: go vet ./...
 
       - name: Install golangci-lint
+        if: steps.classify.outputs.code == 'true'
         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
 
       - name: golangci-lint
+        if: steps.classify.outputs.code == 'true'
         run: golangci-lint run --timeout=5m
 
   format-gate:
@@ -42,15 +102,57 @@ jobs:
     # acht unbeteiligte Dateien in einen fremden Commit, weil sie vorher schon
     # unformatiert waren.
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
 
       - name: gofmt over the tracked tree
         run: ./scripts/check-gofmt.sh
+
+  ci-hygiene:
+    # A timeout, a concurrency group and a trusted-runner routing expression are
+    # each invisible when absent: nothing turns red, the run simply costs more
+    # or risks more. So the absence is what gets checked.
+    #
+    # This job is NOT in the required contexts of master, and saying so is part
+    # of the record: it goes red on a pull request and it does not hold a merge.
+    # Making it required is a branch-protection change, which is a human act;
+    # docs/security/required-checks.txt is the tree's copy of that side.
+    name: CI hygiene (timeouts, concurrency, runner trust)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # PyYAML is preinstalled on the ubuntu runner image, measured by the fact
+      # that the duplicate-key guard in pin-guard.yml imports it and runs green.
+      - name: "Guard: timeouts, concurrency groups, trusted-runner routing"
+        run: ./scripts/ci-matrix.py --check
+
+      # The table itself, into the step summary, so a reviewer of a workflow
+      # change can read what the change did to the job set without checking out
+      # the branch.
+      - name: Publish the job matrix to the run summary
+        run: |
+          {
+            echo '### CI job matrix'
+            echo ''
+            echo '```'
+            ./scripts/ci-matrix.py --summary
+            echo '```'
+            echo ''
+            echo '<details><summary>one row per expanded job name</summary>'
+            echo ''
+            echo '```'
+            ./scripts/ci-matrix.py
+            echo '```'
+            echo ''
+            echo '</details>'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   prose-gate:
     # DER NAME BLEIBT, auch wenn der Job inzwischen mehr prueft als Gedankenstriche.
@@ -71,6 +173,7 @@ jobs:
     # Pure shell over the tracked tree: no Go toolchain, no cgo, cheap runner.
     # The rule and its two exemptions are in CODESTYLE.md ("Prose: no em dashes").
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -142,6 +245,7 @@ jobs:
     #
     # Reines Python, kein Go, kein cgo, kein PortAudio: der billige Runner.
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -208,13 +312,45 @@ jobs:
     name: CLI/manual consistency (docaudit)
     # Pure-stdlib AST gate: it only PARSES cmd/m3c-tools and cmd/skillctl, so it
     # needs no cgo and no PortAudio, and can run on the cheap runner.
-    runs-on: ubuntu-latest
+    # Routed: the self-hosted Linux runner when it is switched on and the head
+    # is trusted, a GitHub-hosted runner otherwise. The single blessed spelling,
+    # held verbatim by scripts/ci-matrix.py --check; what each clause is for is
+    # in that script's header under TRUSTED_LINUX.
+    #
+    # Measured on the master2 canary, run 35225881517, with a warm cache:
+    # `go mod tidy` + `git diff --exit-code` under 1s, and the same two cross
+    # builds this file runs in 26s against 69s on ubuntu-latest. The cold first
+    # run (35225260272) needed 169s for those builds, so the gain is the warm
+    # module and build cache of a machine that persists, not the machine itself.
+    runs-on: ${{ (vars.CI_SELF_HOSTED != 'on' || (github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]'))) && fromJSON('["ubuntu-latest"]') || fromJSON('["self-hosted","Linux","X64","master2"]') }}
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
+          # cache: false, only on the routed jobs. Measured on run 35226968408,
+          # per step, on master2:
+          #
+          #     docs-gate       setup-go 125s   own work  14s   total 162s
+          #     mod-tidy-check  setup-go 128s   own work   1s   total 148s
+          #     build-cross     setup-go 139s   own work  15s   total 176s
+          #
+          # Six sevenths of the time was actions/setup-go moving a module and
+          # build cache in and out of GitHub's cache service, plus a Post step
+          # to save it again. A self-hosted runner is a PERSISTENT machine: its
+          # GOMODCACHE, whose path the canary prints, is still there from the
+          # previous job. (The path is not quoted here: it is a home directory
+          # on a real machine, and this tree does not carry those.) Restoring
+          # that cache over the network
+          # pays for something the machine already has, and then pays again to
+          # upload it.
+          #
+          # The GitHub-hosted fallback loses the cache when this is false, and
+          # that is the right trade in both directions: a fork or dependabot
+          # head is rare, and correctness there does not depend on a warm cache.
+          cache: false
 
       - name: docaudit unit tests
         run: go test -count=1 ./cmd/docaudit/
@@ -267,14 +403,44 @@ jobs:
   test:
     name: Unit Tests
     runs-on: macos-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 2
+
+      # Does this change touch code at all, or only prose. Measured over the
+      # last 60 merged pull requests: one in ten changes nothing but prose, and
+      # the five macOS jobs it pays for anyway measured 872 seconds together,
+      # billed at the macOS rate. A file ending in .md cannot change what a Go
+      # test does. (872 is the sum of five MEDIANS from one collection on
+      # 2026-09-17, up to six completed runs per job: Lint & Vet 149, Unit Tests
+      # 294, skillctl Security Tests 144, Build macOS 177, Ratchet coverage 108.
+      # It said 894 first, which added four numbers from one run to a fifth from
+      # somewhere else. Numbers from two runs do not belong in one sum.)
+      #
+      # The JOB still runs and still reports, and that is deliberate. A job
+      # skipped by an `if:` reports the conclusion "skipped", which GitHub's
+      # branch protection counts as satisfied: gating a REQUIRED job on a path
+      # filter switches the gate off for those paths with nothing turning red.
+      # Only the expensive steps below are conditional, so a docs-only pull
+      # request still gets a real green tick from a job that really ran.
+      #
+      # Fail-closed in every direction: an undeterminable base, an empty file
+      # list, a git error or any event other than pull_request all answer
+      # code=true and everything runs. scripts/ci-classify.sh --selftest plants
+      # a code file in an otherwise prose-only list and checks the answer flips.
+      - id: classify
+        name: "Classify: prose-only change, or code"
+        run: ./scripts/ci-classify.sh --github-output
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        if: steps.classify.outputs.code == 'true'
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
 
       - name: Install PortAudio
+        if: steps.classify.outputs.code == 'true'
         run: brew install portaudio
 
       # SPEC-0176 §3.1: every package under ./pkg/ now gates the build.
@@ -287,6 +453,7 @@ jobs:
       # ./cmd/secretctl/... added by the PR #319 re-gate (R-CI/RG-4): its
       # package tests ran on no CI job at all before this line named them.
       - name: Run unit tests (-race, ./pkg/... + m3c-tools/skillctl-demo cmds)
+        if: steps.classify.outputs.code == 'true'
         run: go test -race -count=1 ./pkg/... ./cmd/m3c-tools/... ./cmd/skillctl-demo/... ./cmd/secretctl/...
 
       # Die Liste ist eine Positivliste, weil einige e2e-Tests Netz und
@@ -298,20 +465,61 @@ jobs:
       # mitlaeuft. Ohne diesen Eintrag waere ein neuer e2e-Test auf dem Runner
       # nie gelaufen: gruen auf der Maschine des Autors, blind in der CI.
       # Genau das galt am 2026-09-15 fuer skillctl und secretctl.
+      #
+      # TestMenubar und TestAppBundle sind am 2026-09-17 dazugekommen und sind
+      # aus demselben Grund Praefixe: sie tragen dieselbe Zusage. Die drei
+      # Dateien e2e/menubar_test.go, e2e/menubar_lifecycle_test.go und
+      # e2e/menubar_icon_fallback_test.go sind //go:build darwin, laufen also
+      # nur auf diesem Runner, und sie kommen ohne Netz aus. 25 Funktionen
+      # standen null mal in dieser Liste und liefen darum in keiner CI, auch
+      # nicht auf macOS (BUILD-AUDIT-0001, Eigentuemerentscheid E-4).
+      # Gemessen am 2026-09-17 mit scripts/require-tests-ran.sh: 25 von 25
+      # ausgewertet, go test exit 0, 17s.
       - name: Run e2e tests (allow-list)
-        run: go test -v -count=1 ./e2e/ -run "TestComposite|TestBuild|TestParseTagLine|TestER1Config|TestER1Queue|TestER1EnqueueFailure|TestUploadFailure|TestRecorderEncodeWAV|TestRecorderStats|TestExportsDB|TestFilesDB|TestHashFile|TestFormatterLoader|TestPrettyPrint|TestFormatTranscript|TestFormatSnippet|TestFormatKeyValue|TestFormatTable|TestFormatSection|TestFormatStatusLine|TestTranslateFlagParsing|TestTranslateNotTranslatable|TestTranslateTranslatable|TestRetryQueue|TestRetryBackoffTiming|TestRetryBackoffCustomBase|TestRetryProcessingOrder|TestRetryPartialFailure|TestRetryMaxRetriesDropsEntry|TestRetryDropCallback|TestRetryRespectsBackoffDelay|TestRetryProcessesAfterBackoffElapsed|TestRetryGracefulShutdownOnCancel|TestRetryRunStopsOnContextCancel|TestRetryRunProcessesMultipleCycles|TestRetryEmptyQueue|TestRetryOnRetryCallback|TestTranscriptFilter|TestProxy|TestRetryRunner|TestBackgroundRetry|TestTranscriptImport|TestTranscriptList|TestTranscriptExport|TestScheduleCommand|TestStatusCommand|TestCancelCommand|TestScheduleStatusCancelWorkflow|TestCLI|TestRepoRoot|TestWriteFixture|TestFixtureDir|TestTempDataDir|TestWithEnv|TestRunCLIWithEnv|TestImporter|TestE2E_|TestQuellwaechter_"
+        if: steps.classify.outputs.code == 'true'
+        run: go test -v -count=1 ./e2e/ -run "TestComposite|TestBuild|TestParseTagLine|TestER1Config|TestER1Queue|TestER1EnqueueFailure|TestUploadFailure|TestRecorderEncodeWAV|TestRecorderStats|TestExportsDB|TestFilesDB|TestHashFile|TestFormatterLoader|TestPrettyPrint|TestFormatTranscript|TestFormatSnippet|TestFormatKeyValue|TestFormatTable|TestFormatSection|TestFormatStatusLine|TestTranslateFlagParsing|TestTranslateNotTranslatable|TestTranslateTranslatable|TestRetryQueue|TestRetryBackoffTiming|TestRetryBackoffCustomBase|TestRetryProcessingOrder|TestRetryPartialFailure|TestRetryMaxRetriesDropsEntry|TestRetryDropCallback|TestRetryRespectsBackoffDelay|TestRetryProcessesAfterBackoffElapsed|TestRetryGracefulShutdownOnCancel|TestRetryRunStopsOnContextCancel|TestRetryRunProcessesMultipleCycles|TestRetryEmptyQueue|TestRetryOnRetryCallback|TestTranscriptFilter|TestProxy|TestRetryRunner|TestBackgroundRetry|TestTranscriptImport|TestTranscriptList|TestTranscriptExport|TestScheduleCommand|TestStatusCommand|TestCancelCommand|TestScheduleStatusCancelWorkflow|TestCLI|TestRepoRoot|TestWriteFixture|TestFixtureDir|TestTempDataDir|TestWithEnv|TestRunCLIWithEnv|TestImporter|TestE2E_|TestQuellwaechter_|TestMenubar|TestAppBundle|TestResolveMenuBarTitle"
 
   skillctl-race:
     name: skillctl Security Tests (-race)
     runs-on: macos-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 2
+
+      # Does this change touch code at all, or only prose. Measured over the
+      # last 60 merged pull requests: one in ten changes nothing but prose, and
+      # the five macOS jobs it pays for anyway measured 872 seconds together,
+      # billed at the macOS rate. A file ending in .md cannot change what a Go
+      # test does. (872 is the sum of five MEDIANS from one collection on
+      # 2026-09-17, up to six completed runs per job: Lint & Vet 149, Unit Tests
+      # 294, skillctl Security Tests 144, Build macOS 177, Ratchet coverage 108.
+      # It said 894 first, which added four numbers from one run to a fifth from
+      # somewhere else. Numbers from two runs do not belong in one sum.)
+      #
+      # The JOB still runs and still reports, and that is deliberate. A job
+      # skipped by an `if:` reports the conclusion "skipped", which GitHub's
+      # branch protection counts as satisfied: gating a REQUIRED job on a path
+      # filter switches the gate off for those paths with nothing turning red.
+      # Only the expensive steps below are conditional, so a docs-only pull
+      # request still gets a real green tick from a job that really ran.
+      #
+      # Fail-closed in every direction: an undeterminable base, an empty file
+      # list, a git error or any event other than pull_request all answer
+      # code=true and everything runs. scripts/ci-classify.sh --selftest plants
+      # a code file in an otherwise prose-only list and checks the answer flips.
+      - id: classify
+        name: "Classify: prose-only change, or code"
+        run: ./scripts/ci-classify.sh --github-output
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        if: steps.classify.outputs.code == 'true'
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
 
       - name: Install PortAudio
+        if: steps.classify.outputs.code == 'true'
         run: brew install portaudio
 
       # SPEC-0251 (P1, LOT D-ci): the skillctl trust layer is the highest-value
@@ -322,17 +530,19 @@ jobs:
       # security-critical command wiring and e2e install tests live, was never
       # exercised with the race detector. Run both explicitly, green-or-fail.
       - name: Run skillctl security tests (-race)
+        if: steps.classify.outputs.code == 'true'
         run: go test -race -count=1 ./cmd/skillctl/... ./pkg/skillctl/...
 
   sim-gate:
     name: Trust-Plane Simulation (theory vs measurement)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
 
       # WF-004: the trust plane is checked twice, in two ways that can disagree.
       #
@@ -360,12 +570,13 @@ jobs:
   freeze-manifest:
     name: Freeze manifest (plan pinned before measurement)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
 
       # VAL-0001: the plan has to be pinned BEFORE the measurement it governs, and
       # the pinning has to be recorded by somebody other than its author.
@@ -407,22 +618,26 @@ jobs:
   govulncheck:
     name: govulncheck (reachable CVEs)
     runs-on: macos-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
 
       # The cgo packages (recorder/menubar) need PortAudio to typecheck, so run
       # on macOS like the other jobs rather than a pure-Go ubuntu runner.
       - name: Install PortAudio
         run: brew install portaudio
 
-      # govulncheck fails ONLY on vulns reachable from our code. The toolchain is
-      # pinned to a patched Go (go1.26.5, via go.mod `toolchain` + setup-go) so the
-      # stdlib CVEs older toolchains carried are gone; this job keeps them from
-      # regressing. Standalone (not in any build job's `needs`) so a fresh upstream
+      # govulncheck fails ONLY on vulns reachable from our code. The toolchain
+      # comes from go.mod, which pins `toolchain go1.26.6`, so the stdlib CVEs
+      # older toolchains carried are gone; this job keeps them from regressing.
+      # (This line said go1.26.5 until 2026-09-17. It was written when that was
+      # true and went stale where nothing checks prose. Naming the version in
+      # two places is the same fault the go-version consolidation above fixes,
+      # so this one now names the FILE and the reader looks it up.) Standalone (not in any build job's `needs`) so a fresh upstream
       # CVE blocks merge but never the release builds.
       - name: govulncheck ./...
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
@@ -430,6 +645,7 @@ jobs:
   gitleaks:
     name: gitleaks (secret scan)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -459,13 +675,45 @@ jobs:
   # during a release build.
   mod-tidy-check:
     name: go mod tidy is a no-op
-    runs-on: ubuntu-latest
+    # Routed: the self-hosted Linux runner when it is switched on and the head
+    # is trusted, a GitHub-hosted runner otherwise. The single blessed spelling,
+    # held verbatim by scripts/ci-matrix.py --check; what each clause is for is
+    # in that script's header under TRUSTED_LINUX.
+    #
+    # Measured on the master2 canary, run 35225881517, with a warm cache:
+    # `go mod tidy` + `git diff --exit-code` under 1s, and the same two cross
+    # builds this file runs in 26s against 69s on ubuntu-latest. The cold first
+    # run (35225260272) needed 169s for those builds, so the gain is the warm
+    # module and build cache of a machine that persists, not the machine itself.
+    runs-on: ${{ (vars.CI_SELF_HOSTED != 'on' || (github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]'))) && fromJSON('["ubuntu-latest"]') || fromJSON('["self-hosted","Linux","X64","master2"]') }}
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
+          # cache: false, only on the routed jobs. Measured on run 35226968408,
+          # per step, on master2:
+          #
+          #     docs-gate       setup-go 125s   own work  14s   total 162s
+          #     mod-tidy-check  setup-go 128s   own work   1s   total 148s
+          #     build-cross     setup-go 139s   own work  15s   total 176s
+          #
+          # Six sevenths of the time was actions/setup-go moving a module and
+          # build cache in and out of GitHub's cache service, plus a Post step
+          # to save it again. A self-hosted runner is a PERSISTENT machine: its
+          # GOMODCACHE, whose path the canary prints, is still there from the
+          # previous job. (The path is not quoted here: it is a home directory
+          # on a real machine, and this tree does not carry those.) Restoring
+          # that cache over the network
+          # pays for something the machine already has, and then pays again to
+          # upload it.
+          #
+          # The GitHub-hosted fallback loses the cache when this is false, and
+          # that is the right trade in both directions: a fork or dependabot
+          # head is rare, and correctness there does not depend on a warm cache.
+          cache: false
 
       - name: go mod tidy && git diff --exit-code
         run: |
@@ -475,38 +723,97 @@ jobs:
   build-macos:
     name: Build macOS (arm64 + amd64)
     runs-on: macos-latest
-    needs: [lint, test]
+    timeout-minutes: 20
+    # No `needs:`, deliberately. Until 2026-09-17 this job waited for lint and
+    # test. Neither edge carried data: nothing here downloads an artifact from
+    # either, and no job downstream needs this one, so the edge was ordering
+    # alone. What it bought was not spending build minutes on a pull request
+    # whose lint or tests already failed. What it cost was the whole of lint
+    # and test added in front of every GREEN run, and green is the common case.
+    #
+    # Measured on run 29112195683 of ci.yml: lint 222s, test 174s, this job
+    # 181s. With the edge the answer arrived at 222 + 181 = 403s; without it,
+    # at 181s, and the run's critical path becomes the longest single job
+    # rather than a sum. The cost on a red pull request is this job's minutes,
+    # spent to learn one more thing about a commit that is failing anyway.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 2
+
+      # Does this change touch code at all, or only prose. Measured over the
+      # last 60 merged pull requests: one in ten changes nothing but prose, and
+      # the five macOS jobs it pays for anyway measured 872 seconds together,
+      # billed at the macOS rate. A file ending in .md cannot change what a Go
+      # test does. (872 is the sum of five MEDIANS from one collection on
+      # 2026-09-17, up to six completed runs per job: Lint & Vet 149, Unit Tests
+      # 294, skillctl Security Tests 144, Build macOS 177, Ratchet coverage 108.
+      # It said 894 first, which added four numbers from one run to a fifth from
+      # somewhere else. Numbers from two runs do not belong in one sum.)
+      #
+      # The JOB still runs and still reports, and that is deliberate. A job
+      # skipped by an `if:` reports the conclusion "skipped", which GitHub's
+      # branch protection counts as satisfied: gating a REQUIRED job on a path
+      # filter switches the gate off for those paths with nothing turning red.
+      # Only the expensive steps below are conditional, so a docs-only pull
+      # request still gets a real green tick from a job that really ran.
+      #
+      # Fail-closed in every direction: an undeterminable base, an empty file
+      # list, a git error or any event other than pull_request all answer
+      # code=true and everything runs. scripts/ci-classify.sh --selftest plants
+      # a code file in an otherwise prose-only list and checks the answer flips.
+      - id: classify
+        name: "Classify: prose-only change, or code"
+        run: ./scripts/ci-classify.sh --github-output
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        if: steps.classify.outputs.code == 'true'
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
 
       - name: Install PortAudio (Homebrew, for native arm64 build)
+        if: steps.classify.outputs.code == 'true'
         run: brew install portaudio pkg-config
 
       - name: Build universal PortAudio (for amd64 cross-compile)
+        if: steps.classify.outputs.code == 'true'
         run: bash scripts/build-portaudio-universal.sh
 
       - name: Build darwin/arm64 (native)
+        if: steps.classify.outputs.code == 'true'
         run: |
           CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 \
             go build -o build/m3c-tools-darwin-arm64 ./cmd/m3c-tools
 
       - name: Build darwin/amd64 (cross-compile with universal PortAudio)
+        if: steps.classify.outputs.code == 'true'
         run: |
           CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 \
             CGO_CFLAGS="-I$(pwd)/lib/portaudio" \
             CGO_LDFLAGS="-L$(pwd)/lib/portaudio -framework CoreAudio -framework AudioToolbox -framework AudioUnit -framework CoreFoundation -framework CoreServices" \
             go build -o build/m3c-tools-darwin-amd64 ./cmd/m3c-tools
 
+      # secretctl is the third product binary (BUILD-AUDIT-0001, owner decision
+      # E-1). Pure Go, so it needs neither PortAudio nor the universal library
+      # the m3c-tools cross-compile above depends on.
+      - name: Build secretctl (darwin, both architectures)
+        if: steps.classify.outputs.code == 'true'
+        run: |
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 \
+            go build -o build/secretctl-darwin-arm64 ./cmd/secretctl
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 \
+            go build -o build/secretctl-darwin-amd64 ./cmd/secretctl
+
       - name: Verify binaries
+        if: steps.classify.outputs.code == 'true'
         run: |
           file build/m3c-tools-darwin-arm64
           file build/m3c-tools-darwin-amd64
+          file build/secretctl-darwin-arm64
+          file build/secretctl-darwin-amd64
 
       - name: Build POCs
+        if: steps.classify.outputs.code == 'true'
         run: |
           go build -o build/poc-transcript ./cmd/poc-transcript
           go build -o build/poc-menubar ./cmd/poc-menubar
@@ -514,6 +821,18 @@ jobs:
           go build -o build/poc-recorder ./cmd/poc-recorder
 
       - name: Upload macOS artifacts
+        # Only on a push to master. Measured 2026-09-17 over the live
+        # (unexpired) artifacts of this repository: m3c-tools-cross held
+        # 5696 MB in 239 copies and m3c-tools-macos 4960 MB in 230, together
+        # 10.6 GB of the 14.1 GB in use, because both were uploaded by every
+        # run including every pull-request run. Nothing downloads either one:
+        # no job needs these two jobs, and no download-artifact step names
+        # them. A pull request needs this job to be GREEN, not its binaries.
+        #
+        # The distinction is the point. A build on master is platform evidence
+        # for a commit that is in the product. A build on a pull request is a
+        # gate result, and the result is the conclusion, not the bytes.
+        if: github.event_name == 'push'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: m3c-tools-macos
@@ -521,17 +840,62 @@ jobs:
           path: |
             build/m3c-tools-darwin-arm64
             build/m3c-tools-darwin-amd64
+            build/secretctl-darwin-arm64
+            build/secretctl-darwin-amd64
 
   build-cross:
     name: Build Cross-Platform (Linux + Windows)
-    runs-on: ubuntu-latest
-    needs: [lint, test]
+    # Routed: the self-hosted Linux runner when it is switched on and the head
+    # is trusted, a GitHub-hosted runner otherwise. The single blessed spelling,
+    # held verbatim by scripts/ci-matrix.py --check; what each clause is for is
+    # in that script's header under TRUSTED_LINUX.
+    #
+    # Measured on the master2 canary, run 35225881517, with a warm cache:
+    # `go mod tidy` + `git diff --exit-code` under 1s, and the same two cross
+    # builds this file runs in 26s against 69s on ubuntu-latest. The cold first
+    # run (35225260272) needed 169s for those builds, so the gain is the warm
+    # module and build cache of a machine that persists, not the machine itself.
+    runs-on: ${{ (vars.CI_SELF_HOSTED != 'on' || (github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]'))) && fromJSON('["ubuntu-latest"]') || fromJSON('["self-hosted","Linux","X64","master2"]') }}
+    timeout-minutes: 15
+    # No `needs:`, deliberately. Until 2026-09-17 this job waited for lint and
+    # test. Neither edge carried data: nothing here downloads an artifact from
+    # either, and no job downstream needs this one, so the edge was ordering
+    # alone. What it bought was not spending build minutes on a pull request
+    # whose lint or tests already failed. What it cost was the whole of lint
+    # and test added in front of every GREEN run, and green is the common case.
+    #
+    # Measured on run 29112195683 of ci.yml: lint 222s, test 174s, this job
+    # 181s. With the edge the answer arrived at 222 + 181 = 403s; without it,
+    # at 181s, and the run's critical path becomes the longest single job
+    # rather than a sum. The cost on a red pull request is this job's minutes,
+    # spent to learn one more thing about a commit that is failing anyway.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
+          # cache: false, only on the routed jobs. Measured on run 35226968408,
+          # per step, on master2:
+          #
+          #     docs-gate       setup-go 125s   own work  14s   total 162s
+          #     mod-tidy-check  setup-go 128s   own work   1s   total 148s
+          #     build-cross     setup-go 139s   own work  15s   total 176s
+          #
+          # Six sevenths of the time was actions/setup-go moving a module and
+          # build cache in and out of GitHub's cache service, plus a Post step
+          # to save it again. A self-hosted runner is a PERSISTENT machine: its
+          # GOMODCACHE, whose path the canary prints, is still there from the
+          # previous job. (The path is not quoted here: it is a home directory
+          # on a real machine, and this tree does not carry those.) Restoring
+          # that cache over the network
+          # pays for something the machine already has, and then pays again to
+          # upload it.
+          #
+          # The GitHub-hosted fallback loses the cache when this is false, and
+          # that is the right trade in both directions: a fork or dependabot
+          # head is rare, and correctness there does not depend on a warm cache.
+          cache: false
 
       - name: Build linux/amd64
         run: |
@@ -543,12 +907,33 @@ jobs:
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
             go build -o build/m3c-tools-windows-amd64.exe ./cmd/m3c-tools
 
-      - name: Verify Linux binary
+      - name: Build secretctl (linux + windows)
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go build -o build/secretctl-linux-amd64 ./cmd/secretctl
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
+            go build -o build/secretctl-windows-amd64.exe ./cmd/secretctl
+
+      - name: Verify Linux binaries
         run: |
           file build/m3c-tools-linux-amd64
           build/m3c-tools-linux-amd64 help
+          file build/secretctl-linux-amd64
+          build/secretctl-linux-amd64 help
 
       - name: Upload cross-platform artifacts
+        # Only on a push to master. Measured 2026-09-17 over the live
+        # (unexpired) artifacts of this repository: m3c-tools-cross held
+        # 5696 MB in 239 copies and m3c-tools-macos 4960 MB in 230, together
+        # 10.6 GB of the 14.1 GB in use, because both were uploaded by every
+        # run including every pull-request run. Nothing downloads either one:
+        # no job needs these two jobs, and no download-artifact step names
+        # them. A pull request needs this job to be GREEN, not its binaries.
+        #
+        # The distinction is the point. A build on master is platform evidence
+        # for a commit that is in the product. A build on a pull request is a
+        # gate result, and the result is the conclusion, not the bytes.
+        if: github.event_name == 'push'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: m3c-tools-cross
@@ -556,3 +941,5 @@ jobs:
           path: |
             build/m3c-tools-linux-amd64
             build/m3c-tools-windows-amd64.exe
+            build/secretctl-linux-amd64
+            build/secretctl-windows-amd64.exe
