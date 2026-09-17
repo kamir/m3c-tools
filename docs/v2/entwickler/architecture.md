@@ -69,19 +69,16 @@ the short version:
 
 | Group | Binaries |
 |---|---|
-| Product CLIs | `m3c-tools` (capture, plus the macOS menu bar app), `skillctl` (trust) |
+| Product CLIs | `m3c-tools` (capture, plus the macOS menu bar app), `skillctl` (trust), `secretctl` (the secret register, SPEC-0438) |
 | Demo and simulation | `skillctl-demo` (offline CISO demo), `skillctl-sim` (scenario corpus against the real binary) |
 | Repository gates | `docaudit`, `verbaudit`, `exitaudit`, `structural`, `release-evidence` |
 | Reference POCs | `poc-menubar`, `poc-recorder`, `poc-transcript`, `poc-whisper` |
-| Cognitive runtime | `thinking-engine` (SPEC-0167), run as a service |
 
-What stays running (thinking-engine, the two MCP servers: stdio processes
-speaking the Model Context Protocol, which exposes tools to Claude Code, the
-menu bar app, the skillctl container) is the
-[service-index](../../service-index.md); the
+What stays running (the two MCP servers: stdio processes speaking the Model
+Context Protocol, which exposes tools to Claude Code, the menu bar app, the
+skillctl container) is the [service-index](../../service-index.md); the
 package-level responsibilities are the
-[component-index](../../component-index.md), including section G for the
-`internal/thinking/*` packages.
+[component-index](../../component-index.md).
 
 ## Conventions a change must respect
 

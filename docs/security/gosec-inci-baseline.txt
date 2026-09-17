@@ -80,7 +80,6 @@ G112	pkg/skillctl/review/server.go	} httpSrv := &http.Server{Handler: s.GuardedH
 G115	cmd/poc-recorder/main.go	dataSize := uint32(len(samples) * 2) // 2 bytes per int16 fileSize := 36 + dataSize
 G115	cmd/skillctl/propose_cmds.go	byte(now >> 40), byte(now >> 32), byte(now >> 24), byte(now >> 16), byte(now >> 8), byte(now), }))
 G115	cmd/skillctl/propose_cmds.go	tsHex := strings.ToUpper(hex.EncodeToString([]byte{ byte(now >> 40), byte(now >> 32), byte(now >> 24), byte(now >> 16), byte(now >> 8), byte(now),
-G115	internal/thinking/er1/client.go	for i := 0; i < n; i++ { buf[i] = byte(ts >> (i % 8)) }
 G115	pkg/er1/audio.go	buf.WriteByte(byte(v >> 8)) buf.WriteByte(byte(v >> 16)) buf.WriteByte(byte(v >> 24))
 G115	pkg/er1/audio.go	buf.WriteByte(byte(v)) buf.WriteByte(byte(v >> 8)) buf.WriteByte(byte(v >> 16))
 G115	pkg/er1/audio.go	buf.WriteString("RIFF") writeLE32(&buf, uint32(36+dataSize)) buf.WriteString("WAVE")
@@ -306,8 +305,6 @@ G703	pkg/plaud/auth.go	} if _, err := os.Stat(p); err == nil { return p
 G703	pkg/session/session.go	} b, err := os.ReadFile(filepath.Join(dir, e.Name())) if err != nil {
 G703	pkg/skillctl/consolidate/fixer.go	if err := os.WriteFile(path, []byte(newContent), info.Mode()); err != nil { return fmt.Errorf("writing %s: %w", path, err)
 G703	pkg/skillctl/registry/install_trust_mode.go	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306". if err := os.WriteFile(filepath.Join(tmp, skbName), skb, 0o644); err != nil { cleanup()
-G705	internal/thinking/api/auth.go	w.WriteHeader(http.StatusUnauthorized) _, _ = w.Write([]byte(fmt.Sprintf(`{"error":"unauthorized","detail":%q}`, msg))) }
-G705	internal/thinking/api/server.go	} _, _ = w.Write(row) }
 G706	cmd/m3c-tools/main.go	case plaud.TranscribeModeOff: log.Printf("[plaud] %s: no transcript: transcription off, audio only", recID) }
 G706	cmd/m3c-tools/main.go	doTranscribe = true log.Printf("[plaud] %s: no transcript, requesting server transcription (queue mode)", recID) case plaud.TranscribeModeLazy:
 G706	cmd/m3c-tools/main.go	if dlErr != nil { log.Printf("[plaud] download %s FAIL: %v", recID, dlErr) summary.Failed++

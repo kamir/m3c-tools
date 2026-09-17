@@ -108,12 +108,10 @@ check_count() {
 }
 
 SUBPKGS="$(find pkg/skillctl -name '*.go' ! -name '*_test.go' -exec dirname {} \; | sort -u | wc -l | tr -d ' ')"
-THINKING="$(find internal/thinking -name '*.go' ! -name '*_test.go' -exec dirname {} \; | sort -u | wc -l | tr -d ' ')"
 check_count "pkg/skillctl subpackage" '[0-9]+ subpackages under .pkg/skillctl/.' "$SUBPKGS"
-check_count "internal Thinking Engine package" 'The [0-9]+ internal packages' "$THINKING"
 
 if [ "$FAILURES" -gt 0 ]; then
     echo "check-index: $FAILURES drift(s) between the tree and the indexes" >&2
     exit 1
 fi
-echo "  ok: $(wc -l < "$TMP/prog" | tr -d ' ') cmd/ entries and $(wc -l < "$TMP/comp" | tr -d ' ') packages indexed, both directions clean; counts $SUBPKGS + $THINKING match the tree"
+echo "  ok: $(wc -l < "$TMP/prog" | tr -d ' ') cmd/ entries and $(wc -l < "$TMP/comp" | tr -d ' ') packages indexed, both directions clean; count $SUBPKGS matches the tree"
