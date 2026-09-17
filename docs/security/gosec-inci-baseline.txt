@@ -22,7 +22,7 @@ G104	cmd/m3c-tools/plaud_cmd.go	migratePlaudDevLedger(db) db.Close() //nolint:er
 G104	cmd/m3c-tools/main.go	n, _ := io.Copy(io.Discard, f) f.Close() //nolint:errcheck // best-effort close of a read-only file opened only to warm the OS cache
 G104	cmd/m3c-tools/main.go	os.Setenv("ER1_DEVICE_TOKEN", dt.Token) //nolint:errcheck // in-process env propagation; the durable device-token store is the source of truth and the key is a constant os.Setenv("ER1_CONTEXT_ID", dt.ContextID) //nolint:errcheck // in-process env propagation; the durable device-token store is the source of truth and the key is a constant log.Printf("[auth] device token loaded for user=%s", truncateForLog(dt.UserID, 20))
 G104	cmd/m3c-tools/main.go	} else { os.Setenv("ER1_DEVICE_TOKEN", result.DeviceToken) //nolint:errcheck // in-process env propagation; auth.Save above is the checked durable write and the key is a constant fmt.Printf("Device token saved for user=%s device=%s\\n", truncateForLog(result.UserID, 20), auth.DeviceID())
-G104	cmd/m3c-tools/main.go	} json.Unmarshal(body, &listResp) //nolint:errcheck // debug endpoint explorer; an empty list on parse failure is acceptable here fmt.Printf("Total recordings in list: %d\\n", len(listResp.DataFileList))
+G104	cmd/m3c-tools/plaud_cmd.go	} json.Unmarshal(body, &listResp) //nolint:errcheck // debug endpoint explorer; an empty list on parse failure is acceptable here fmt.Printf("Total recordings in list: %d\\n", len(listResp.DataFileList))
 G104	cmd/m3c-tools/main.go	} os.Setenv("ER1_CONTEXT_ID", ctxID) //nolint:errcheck // in-process env propagation; savePersistedER1Session above is the checked durable write and the key is a constant
 G104	cmd/skillctl/gossip_revokes.go	if !ok { be.Close() //nolint:errcheck // best-effort close of a read-only artifact backend on this branch rep.Status = "no signed event log"
 G104	cmd/skillctl/gossip_revokes.go	page, err := gl.Events(ctx, artifact.ListFilter{}, artifact.Page{}) be.Close() //nolint:errcheck // best-effort close of a read-only artifact backend after reading events if err != nil {
@@ -331,3 +331,5 @@ G706	pkg/config/profile.go	// Name the variable, never the value. log.Printf("[c
 G706	pkg/menubar/app.go	// registered at runtime. The decisive signal when "no icon" is reported. log.Printf("[menubar] menu bar state: icon_applied=%v image=%q title=%q icon_path=%q", iconApplied, state.Image, state.Title, a.Config.IconPath)
 G706	pkg/menubar/fetch.go	} log.Printf("[fetch] using proxy: %s", redacted) return api
 G703	cmd/m3c-tools/plaud_cmd.go	} if err := os.MkdirAll(dir, 0700); err != nil { return fmt.Errorf("create dir: %w", err)
+G304	cmd/m3c-tools/pocket_cmd.go	} audioBytes, readErr := os.ReadFile(stagedPath) if readErr != nil {
+G304	cmd/m3c-tools/main.go	audioBytes, readErr := os.ReadFile(stagedPath) if readErr != nil {
