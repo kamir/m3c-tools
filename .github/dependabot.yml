@@ -7,7 +7,9 @@ updates:
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+      time: "05:30"
+      timezone: "Europe/Berlin"
     open-pull-requests-limit: 5
     groups:
       # Collapse routine minor+patch bumps into one PR to cut noise; majors
@@ -19,8 +21,18 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+      time: "05:30"
+      timezone: "Europe/Berlin"
     open-pull-requests-limit: 5
+    groups:
+      # Same pattern as gomod and pip: routine minor+patch action bumps land
+      # as ONE PR per wave (decision 2026-09-17, after a five-PR wave competed
+      # with feature work for the macOS runners). Majors still open
+      # individually; an action major can change inputs or behavior and gets
+      # a deliberate review (see #330, attest-build-provenance).
+      actions-minor-patch:
+        update-types: ["minor", "patch"]
 
   # Python for the RAG/MCP server. Its requirements.txt was unpinned, which made
   # it invisible here: with no version there is nothing to compare against, so
@@ -29,7 +41,9 @@ updates:
   - package-ecosystem: "pip"
     directory: "/rag-mcp-server"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+      time: "05:30"
+      timezone: "Europe/Berlin"
     open-pull-requests-limit: 5
     groups:
       python-minor-patch:
@@ -81,11 +95,15 @@ updates:
   - package-ecosystem: "docker"
     directory: "/deploy/skillctl"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+      time: "05:30"
+      timezone: "Europe/Berlin"
     open-pull-requests-limit: 3
 
   - package-ecosystem: "docker"
     directory: "/deploy/thinking-engine"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+      time: "05:30"
+      timezone: "Europe/Berlin"
     open-pull-requests-limit: 3
