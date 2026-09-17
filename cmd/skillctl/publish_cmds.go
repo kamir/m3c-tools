@@ -37,11 +37,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
-	"os/user"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"time"
 
@@ -1118,9 +1115,6 @@ func resolveER1Config(target string) (*er1.Config, error) {
 	// cfg.ContextID explicitly to the resolved registry context just before
 	// the POST.
 	cfg.ContextID = ""
-	if cfg.APIKey == "" {
-		cfg.APIKey = resolveAPIKeyFromKeychain()
-	}
 	if cfg.APIKey == "" && os.Getenv("ER1_DEVICE_TOKEN") == "" {
 		return nil, fmt.Errorf("no ER1 credential: set ER1_API_KEY or add the `aims-core-er1` Keychain item (ADR-0003)")
 	}
@@ -1137,30 +1131,6 @@ func er1Endpoint(target string) (string, bool) {
 	// damit applyTLSVerificationPolicy zurueck, deshalb traegt die Entscheidung
 	// hier genauso weit wie dort.
 	return er1.ResolveTarget(target)
-}
-
-func resolveAPIKeyFromKeychain() string {
-	if k := os.Getenv("ER1_API_KEY"); k != "" {
-		return k
-	}
-	// The Keychain (`security`) exists only on macOS. On Windows/Linux there is no
-	// such binary, so skip the lookup rather than spawn, or PATH-resolve, a
-	// non-existent `security`. Callers fall back to ER1_API_KEY / other config.
-	if runtime.GOOS != "darwin" {
-		return ""
-	}
-	u, _ := user.Current()
-	uname := "kamir"
-	if u != nil && u.Username != "" {
-		uname = u.Username
-	}
-	// Absolute /usr/bin/security (macOS ships it there), not a bare-name PATH
-	// lookup that a planted `security` could hijack.
-	out, err := exec.Command("/usr/bin/security", "find-generic-password", "-s", "aims-core-er1", "-a", uname, "-w").Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
 }
 
 func defaultSelfKeyPath() string {
