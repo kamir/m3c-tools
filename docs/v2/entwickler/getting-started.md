@@ -43,7 +43,7 @@ The two CLIs have different build prerequisites, and the lighter one first:
 ```bash
 make build-skillctl     # the trust CLI; plain `go build`, no extra tools needed
 make build              # main CLI -> ./build/m3c-tools; gated by check-deps (below)
-make build-all          # both CLIs + skillctl-demo + the four poc-* binaries
+make build-all          # every command in cmd/, a set the check-make-targets gate pins
 make vet                # go vet ./...
 ```
 
