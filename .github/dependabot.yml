@@ -64,6 +64,14 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "turbovec"
         update-types: ["version-update:semver-major"]
+      # Decision 2026-09-17, same E3 mechanics: the mcp MAJOR line stays parked.
+      # Measured on PR #250 (run 34411243488): mcp 2.x removes
+      # mcp.server.fastmcp, which mcp-skill-server imports, and the Python
+      # check names its own remedy, `pip install 'mcp<2'`. Lifting this entry
+      # means doing the 2.x migration of both Python servers first, then
+      # deleting the line; minors and patches keep flowing through the group.
+      - dependency-name: "mcp"
+        update-types: ["version-update:semver-major"]
 
   # Container base images. Both Dockerfiles are DIGEST-PINNED, which is the
   # right default and also the reason they need Dependabot: a digest is
