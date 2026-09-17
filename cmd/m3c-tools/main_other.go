@@ -143,17 +143,18 @@ func main() {
 
 // cmdSetup runs the interactive ER1 onboarding wizard.
 func cmdSetup(args []string) {
-	if len(args) > 0 && !strings.HasPrefix(args[0], "--") {
-		switch args[0] {
-		case "er1":
-			args = args[1:]
-		case "whisper":
-			fmt.Fprintln(os.Stderr, "whisper venv setup is not wired on this platform. Use: make setup-venv")
-			os.Exit(1)
-		default:
-			fmt.Fprintf(os.Stderr, "Unknown setup subcommand: %s\nUse: m3c-tools setup [er1|whisper]\n", args[0])
-			os.Exit(1)
-		}
+	verb, args, unknown := parseSetupVerb(args, "er1")
+	if unknown {
+		fmt.Fprintf(os.Stderr, "Unknown setup subcommand: %s\nUse: m3c-tools setup [er1|whisper]\n", verb)
+		os.Exit(1)
+	}
+	switch verb {
+	case "whisper":
+		fmt.Fprintln(os.Stderr, "whisper venv setup is not wired on this platform. Use: make setup-venv")
+		os.Exit(1)
+	case "pocket-key":
+		fmt.Fprintln(os.Stderr, "Error: setup pocket-key requires macOS")
+		os.Exit(1)
 	}
 
 	noBrowser := false
