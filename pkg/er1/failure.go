@@ -2,6 +2,7 @@ package er1
 
 import (
 	"fmt"
+	"path/filepath"
 	"time"
 )
 
@@ -21,18 +22,35 @@ type FailureResult struct {
 // MEMORY folders are created ONLY on upload failure (not on every upload).
 // The queuePath and memoryRoot can be empty to use defaults.
 func HandleUploadFailure(queuePath string, memoryRoot string, videoID string, payload *UploadPayload, tags string, uploadErr error) (*FailureResult, error) {
-	// Step 1: Enqueue to queue.json
-	entry := EnqueueFailure(queuePath, videoID, payload, tags, uploadErr)
-
-	// Step 2: Create MEMORY folder and save payload
 	mf, err := CreateMemoryFolder(memoryRoot, time.Now())
 	if err != nil {
+		entry := EnqueueFailure(queuePath, videoID, payload, tags, uploadErr)
 		return &FailureResult{Entry: entry}, fmt.Errorf("create memory folder: %w", err)
 	}
-
 	if err := mf.SavePayload(payload); err != nil {
+		entry := EnqueueFailure(queuePath, videoID, payload, tags, uploadErr)
 		return &FailureResult{Entry: entry, Memory: mf}, fmt.Errorf("save payload to memory: %w", err)
 	}
 
+	stored := *payload
+	stored.TranscriptFilename = memoryFile(mf.Path, payload.TranscriptFilename)
+	if payload.AudioData != nil {
+		stored.AudioFilename = memoryFile(mf.Path, payload.AudioFilename)
+	} else {
+		stored.AudioFilename = ""
+	}
+	if payload.ImageData != nil {
+		stored.ImageFilename = memoryFile(mf.Path, payload.ImageFilename)
+	} else {
+		stored.ImageFilename = ""
+	}
+	entry := EnqueueFailure(queuePath, videoID, &stored, tags, uploadErr)
 	return &FailureResult{Entry: entry, Memory: mf}, nil
+}
+
+func memoryFile(dir, name string) string {
+	if name == "" {
+		return ""
+	}
+	return filepath.Join(dir, filepath.Base(name))
 }
