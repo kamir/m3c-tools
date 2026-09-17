@@ -253,6 +253,13 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "publish: skill name required (positional arg 1)")
 		return 2
 	}
+	// A publish name becomes a path segment when locating a skill and when
+	// writing a bundle. Reject anything that is not exactly one safe segment
+	// before admit, attest, or revoke can use it.
+	if !safeBundleName.MatchString(name) {
+		fmt.Fprintf(stderr, "publish: bad artifact name %q: one path segment of [A-Za-z0-9._-], not starting with a dot; no bundle written\n", name)
+		return 2
+	}
 
 	if *attest {
 		return runPublishAttest(stdout, stderr, publishAttestArgs{
@@ -990,6 +997,14 @@ func maybeCheckpoint(stdout io.Writer, noCheckpoint bool, er1Target, er1Context,
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 func ensureBundle(a publishAdmitArgs, stderr io.Writer) (string, string, error) {
+	// Defense in depth: ensureBundle is also called directly inside the package.
+	// Keep the path-segment invariant here instead of relying only on runPublish.
+	if !safeBundleName.MatchString(a.name) {
+		return "", "", fmt.Errorf(
+			"bad artifact name %q: one path segment of [A-Za-z0-9._-], not starting with a dot; no bundle written",
+			a.name)
+	}
+
 	if a.bundlePath != "" {
 		// Reuse a pre-built .skb. The manifest inside it says what the bundle
 		// IS; the --kind flag is only a claim. Read the kind from the bundle
@@ -1030,14 +1045,9 @@ func ensureBundle(a publishAdmitArgs, stderr io.Writer) (string, string, error) 
 		// <name>.md so it runs through the same packer as every skill: one
 		// canonicalization, one digest path, no special case inside Pack.
 		//
-		// The name becomes a path segment (here and at the anchor inside Pack),
-		// so it must BE one: a name like "../x" would write above the staging
-		// dir. The install side has sanitizeBundleName; this is the publish
-		// side's mirror of the same rule.
-		if !safeBundleName.MatchString(a.name) {
-			return "", "", fmt.Errorf("bad agent name %q: one path segment of [A-Za-z0-9._-], "+
-				"not starting with a dot; no bundle written", a.name)
-		}
+		// The name becomes a path segment here and at the anchor inside Pack.
+		// ensureBundle validates the shared skill/agent path-segment invariant
+		// before either path can be constructed.
 		src := a.agentFile
 		if src == "" {
 			home, _ := os.UserHomeDir()
