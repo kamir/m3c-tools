@@ -121,7 +121,7 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 		agentFile    = fs.String("agent-file", "", "[--kind agent] Path to the agent definition. Default: ~/.claude/agents/<name>.md.")
 		bundle       = fs.String("bundle", "", "Path to a pre-built .skb. If empty, the skill dir is packed in-place to ./<name>@<version>.skb.")
 		version      = fs.String("version", "", "Skill version (overrides the SKILL.md frontmatter). Required for admit; inferred from --bundle filename for attest.")
-		identity     = fs.String("identity", "id:bob@m3c", "Author/registry identity id stamped into the event and tags.")
+		identity     = fs.String("identity", "", "Author/registry identity id stamped into the event and tags (e.g. id:you@org). Required: there is deliberately no default.")
 
 		// Key
 		keyPath = fs.String("key", defaultSelfKeyPath(), "Path to the ed25519 private key (PEM PKCS#8). Default: $SIGNING_KEY_LOCATION or ~/.config/m3c/skill-registry-self.key.")
@@ -172,12 +172,47 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
+	// Verwendungsfehler zuerst: ein blosses `skillctl publish` druckt die Usage,
+	// nicht eine Meldung ueber eine fehlende Identitaet. Der !*all-Vorbehalt ist
+	// zwingend: --all arbeitet ohne Positionsargument und kehrt unten frueh zurueck.
+	if !*all && fs.NArg() < 1 {
+		fs.Usage()
+		return 2
+	}
+
+	// Kein Vorgabewert fuer die Identitaet, und das ist Absicht.
+	//
+	// Hier stand "id:bob@m3c", der Name einer ANDEREN Person. Wer ihn stehen
+	// liess, veroeffentlichte unter fremdem Namen, und die Gegenseite lehnte
+	// spaeter mit der Begruendung ab, die Identitaet sei nicht gepinnt, obwohl
+	// sie korrekt gepinnt war. Die Meldung zeigte also auf die falsche Stelle.
+	//
+	// Das Runbook hat genau davor gewarnt, nur nannte es einen dritten Wert,
+	// weil der Vorgabewert zwischendurch umbenannt worden war. Damit war die
+	// Warnung wirkungslos, ohne dass jemand sie angefasst hatte: wer sie las
+	// und in der Hilfe etwas anderes sah, schloss folgerichtig, sie betreffe
+	// ihn nicht.
+	//
+	// Ein Vorgabewert, der plausibel aussieht, ist hier die Gefahr. Ein
+	// fehlender, der laut abbricht, ist die Loesung: eine Identitaet ist eine
+	// Behauptung ueber einen Menschen, und die kann kein Werkzeug raten.
+	if strings.TrimSpace(*identity) == "" {
+		fmt.Fprintln(stderr, "publish: --identity fehlt.")
+		fmt.Fprintln(stderr, "  Die Identitaet wird in das Ereignis und in die Tags gestempelt und sagt,")
+		fmt.Fprintln(stderr, "  WER veroeffentlicht hat. Sie wird bewusst nicht geraten.")
+		fmt.Fprintln(stderr, "  Beispiel: --identity id:you@your-org")
+		return 2
+	}
+
 	// BUG-0165: a bare ER1 context (no "___") has no owner prefix, so the maindrec
 	// write path resolves the context owner to the literal namespace (e.g. "skills")
 	//, never the authenticated principal, and returns 403 "Not authorized for this
 	// context". Prefix it with the logged-in owner id so `--er1-context skills` (the
-	// default) targets the canonical `<sub>___skills` registry.
+	// default) targets the canonical `<sub>___skills` registry. Erst NACH den
+	// Verwendungspruefungen: ownerPrefixedContext greift via auth.Load in den
+	// Schluesselbund, und das darf ein Verwendungsfehler nicht ausloesen.
 	*er1Context = ownerPrefixedContext(*er1Context)
+
 	// Seed from $SKILL_SHARE_ROOMS when no --share-room was passed.
 	rooms := []string(shareRooms)
 	if len(rooms) == 0 {
@@ -203,11 +238,6 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 			noCheckpoint: *noCheckpoint,
 			shareRooms:   rooms,
 		})
-	}
-
-	if fs.NArg() < 1 {
-		fs.Usage()
-		return 2
 	}
 
 	if !registry.IsER1Registry(*registryName) && !artifact.Registered(*registryName) {

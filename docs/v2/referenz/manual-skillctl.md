@@ -749,7 +749,7 @@ Publishes to your personal ER1 `self` registry (SPEC-0225). Three modes: admit a
 | `-registry` | Registry spec: `self` (recommended) or `er1://…`. HTTP registries route through `install`. Default `self`. |
 | `-er1-target prod\|stage\|local` | ER1 target (default `prod`). |
 | `-er1-context` | ER1 context (default `skills`). |
-| `-identity` | Author/registry identity id stamped into the event and tags. |
+| `-identity` | Author/registry identity id stamped into the event and tags. **Required.** |
 | `-key` | ed25519 private key (PEM PKCS#8). Default `$SIGNING_KEY_LOCATION` or `~/.config/m3c/skill-registry-self.key`. |
 | `-manifest` | Publish manifest (with `--all`; default `INFRA/skill-registry/self/publish-manifest.txt`). |
 | `-share-room <label>` | Map the bundle into a SPEC-0096 co-learning room. Repeatable. |
@@ -796,7 +796,7 @@ installing is a G-23 two-step (`--dry-run-install` → `--confirm-install`).
 | `-registry self` | Registry spec. Only `self` / `er1://…` here; HTTP routes through `install`. |
 | `-er1-target prod\|stage\|local` / `-er1-context` | ER1 target/context (defaults `prod` / `skills`). |
 | `-emit-installed` | After install, POST a `BundleInstalledEvent` so the other machine sees it. |
-| `-identity` / `-key` | `[--emit-installed]` identity + signing key for the install event. |
+| `-identity` / `-key` | `[--emit-installed]` identity + signing key for the install event. **Required.** (`-identity` only, and only together with `--emit-installed`.) |
 | `-no-checkpoint` | Don't append a SPEC-0213 session checkpoint after install. |
 | `-verbose` | Print one line per per-gate decision. |
 
