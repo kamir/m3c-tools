@@ -556,3 +556,73 @@ jobs:
           path: |
             build/m3c-tools-linux-amd64
             build/m3c-tools-windows-amd64.exe
+
+  # ===========================================================================
+  # A0-MESSUNG, NICHT ZUM MERGEN.
+  #
+  # Vier Spiegel der macOS-Jobs, auf Ubuntu und ohne PortAudio. Sie ERSETZEN
+  # nichts: die macOS-Jobs laufen daneben unveraendert weiter, damit die Messung
+  # nicht abschaltet, was sie gerade misst.
+  #
+  # Gemessen wird genau zweierlei: laeuft der Job auf Ubuntu gruen, und wie
+  # viele Testfunktionen laufen dort tatsaechlich. Die zweite Zahl ist die
+  # wichtigere: darwin-gebundene Dateien werden auf Linux gar nicht erst
+  # uebersetzt, ein gruener Job dort kann also weniger geprueft haben.
+  # ===========================================================================
+  a0-lint-ubuntu:
+    name: A0 lint+vet (ubuntu, ohne PortAudio)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.26.6"
+      - name: Go vet
+        run: go vet ./...
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
+      - name: golangci-lint
+        run: golangci-lint run --timeout=5m
+
+  a0-test-ubuntu:
+    name: A0 unit tests (ubuntu, ohne PortAudio)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.26.6"
+      - name: Run unit tests (-race), same package list as the macOS job
+        run: go test -race -count=1 ./pkg/... ./cmd/m3c-tools/... ./cmd/skillctl-demo/... ./cmd/secretctl/...
+      - name: How many test functions actually ran here
+        shell: bash
+        run: |
+          go test -count=1 -v ./pkg/... ./cmd/m3c-tools/... ./cmd/skillctl-demo/... ./cmd/secretctl/... 2>/dev/null \
+            | grep -c '^=== RUN' | sed 's/^/RUN-Zeilen auf ubuntu: /'
+
+  a0-skillctl-race-ubuntu:
+    name: A0 skillctl -race (ubuntu, ohne PortAudio)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.26.6"
+      - name: Run skillctl security tests (-race)
+        run: go test -race -count=1 ./cmd/skillctl/... ./pkg/skillctl/...
+      - name: How many test functions actually ran here
+        shell: bash
+        run: |
+          go test -count=1 -v ./cmd/skillctl/... ./pkg/skillctl/... 2>/dev/null \
+            | grep -c '^=== RUN' | sed 's/^/RUN-Zeilen auf ubuntu: /'
+
+  a0-govulncheck-ubuntu:
+    name: A0 govulncheck (ubuntu, ohne PortAudio)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.26.6"
+      - name: govulncheck ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
