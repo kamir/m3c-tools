@@ -326,6 +326,27 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
+          # cache: false, only on the routed jobs. Measured on run 35226968408,
+          # per step, on master2:
+          #
+          #     docs-gate       setup-go 125s   own work  14s   total 162s
+          #     mod-tidy-check  setup-go 128s   own work   1s   total 148s
+          #     build-cross     setup-go 139s   own work  15s   total 176s
+          #
+          # Six sevenths of the time was actions/setup-go moving a module and
+          # build cache in and out of GitHub's cache service, plus a Post step
+          # to save it again. A self-hosted runner is a PERSISTENT machine: its
+          # GOMODCACHE, whose path the canary prints, is still there from the
+          # previous job. (The path is not quoted here: it is a home directory
+          # on a real machine, and this tree does not carry those.) Restoring
+          # that cache over the network
+          # pays for something the machine already has, and then pays again to
+          # upload it.
+          #
+          # The GitHub-hosted fallback loses the cache when this is false, and
+          # that is the right trade in both directions: a fork or dependabot
+          # head is rare, and correctness there does not depend on a warm cache.
+          cache: false
 
       - name: docaudit unit tests
         run: go test -count=1 ./cmd/docaudit/
@@ -660,6 +681,27 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
+          # cache: false, only on the routed jobs. Measured on run 35226968408,
+          # per step, on master2:
+          #
+          #     docs-gate       setup-go 125s   own work  14s   total 162s
+          #     mod-tidy-check  setup-go 128s   own work   1s   total 148s
+          #     build-cross     setup-go 139s   own work  15s   total 176s
+          #
+          # Six sevenths of the time was actions/setup-go moving a module and
+          # build cache in and out of GitHub's cache service, plus a Post step
+          # to save it again. A self-hosted runner is a PERSISTENT machine: its
+          # GOMODCACHE, whose path the canary prints, is still there from the
+          # previous job. (The path is not quoted here: it is a home directory
+          # on a real machine, and this tree does not carry those.) Restoring
+          # that cache over the network
+          # pays for something the machine already has, and then pays again to
+          # upload it.
+          #
+          # The GitHub-hosted fallback loses the cache when this is false, and
+          # that is the right trade in both directions: a fork or dependabot
+          # head is rare, and correctness there does not depend on a warm cache.
+          cache: false
 
       - name: go mod tidy && git diff --exit-code
         run: |
@@ -817,6 +859,27 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
+          # cache: false, only on the routed jobs. Measured on run 35226968408,
+          # per step, on master2:
+          #
+          #     docs-gate       setup-go 125s   own work  14s   total 162s
+          #     mod-tidy-check  setup-go 128s   own work   1s   total 148s
+          #     build-cross     setup-go 139s   own work  15s   total 176s
+          #
+          # Six sevenths of the time was actions/setup-go moving a module and
+          # build cache in and out of GitHub's cache service, plus a Post step
+          # to save it again. A self-hosted runner is a PERSISTENT machine: its
+          # GOMODCACHE, whose path the canary prints, is still there from the
+          # previous job. (The path is not quoted here: it is a home directory
+          # on a real machine, and this tree does not carry those.) Restoring
+          # that cache over the network
+          # pays for something the machine already has, and then pays again to
+          # upload it.
+          #
+          # The GitHub-hosted fallback loses the cache when this is false, and
+          # that is the right trade in both directions: a fork or dependabot
+          # head is rare, and correctness there does not depend on a warm cache.
+          cache: false
 
       - name: Build linux/amd64
         run: |
