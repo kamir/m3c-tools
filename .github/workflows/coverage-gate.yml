@@ -45,25 +45,53 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 2
+
+      # Does this change touch code at all, or only prose. Measured over the
+      # last 60 merged pull requests: one in ten changes nothing but prose, and
+      # the five macOS jobs it pays for anyway measured 894 seconds together,
+      # billed at the macOS rate. A file ending in .md cannot change what a Go
+      # test does.
+      #
+      # The JOB still runs and still reports, and that is deliberate. A job
+      # skipped by an `if:` reports the conclusion "skipped", which GitHub's
+      # branch protection counts as satisfied: gating a REQUIRED job on a path
+      # filter switches the gate off for those paths with nothing turning red.
+      # Only the expensive steps below are conditional, so a docs-only pull
+      # request still gets a real green tick from a job that really ran.
+      #
+      # Fail-closed in every direction: an undeterminable base, an empty file
+      # list, a git error or any event other than pull_request all answer
+      # code=true and everything runs. scripts/ci-classify.sh --selftest plants
+      # a code file in an otherwise prose-only list and checks the answer flips.
+      - id: classify
+        name: "Classify: prose-only change, or code"
+        run: ./scripts/ci-classify.sh --github-output
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        if: steps.classify.outputs.code == 'true'
         with:
           go-version-file: go.mod
 
       - name: Install PortAudio (cmd/skillctl -> menubar cgo must build)
+        if: steps.classify.outputs.code == 'true'
         run: brew install portaudio
 
       # Scope = the skillctl trust surface only (see .testcoverage.yml). -covermode=atomic
       # so the profile is valid even if a future change adds -race here.
       - name: Generate coverage profile
+        if: steps.classify.outputs.code == 'true'
         run: go test ./pkg/skillctl/... ./cmd/skillctl/... -covermode=atomic -coverprofile=cover.out
 
       # Pinned go-test-coverage release (CD-T2: an exact version tag, never a
       # floating ref), installed via `go install` like the other Go tools in ci.yml.
       - name: Install go-test-coverage (pinned)
+        if: steps.classify.outputs.code == 'true'
         run: go install github.com/vladopajic/go-test-coverage/v2@v2.19.0
 
       - name: Enforce coverage ratchet (.testcoverage.yml)
+        if: steps.classify.outputs.code == 'true'
         run: go-test-coverage --config .testcoverage.yml
 
   # FOLLOW-UP (not blocking): diff/new-code coverage (>=85% on changed lines).
