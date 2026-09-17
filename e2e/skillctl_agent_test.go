@@ -116,7 +116,8 @@ func TestE2E_AgentPackenErzeugtGenauEineDatei(t *testing.T) {
 	umgebung := signierfaehigesHome(t, home)
 
 	r := RunTool(t, "skillctl", umgebung,
-		"publish", "e2e-agent", "--kind", "agent", "--version", "1.0.0", "--dry-run")
+		"publish", "e2e-agent", "--kind", "agent", "--version", "1.0.0",
+		"--identity", "id:e2e@example", "--dry-run")
 	if r.ExitCode != 0 {
 		t.Fatalf("Ausstieg %d, Ausgabe:\n%s", r.ExitCode, r.Stdout)
 	}
@@ -159,7 +160,8 @@ func TestE2E_SkillBuendelTraegtKeineArt(t *testing.T) {
 
 	umgebung := signierfaehigesHome(t, home)
 	r := RunTool(t, "skillctl", umgebung,
-		"publish", "e2e-skill", "--version", "1.0.0", "--dry-run")
+		"publish", "e2e-skill", "--version", "1.0.0",
+		"--identity", "id:e2e@example", "--dry-run")
 	if r.ExitCode != 0 {
 		t.Fatalf("Ausstieg %d:\n%s", r.ExitCode, r.Stdout)
 	}
@@ -183,7 +185,8 @@ func TestE2E_UnbekannteArtWirdAbgewiesen(t *testing.T) {
 	home := agentHome(t, "e2e-agent")
 	umgebung := signierfaehigesHome(t, home)
 	r := RunTool(t, "skillctl", umgebung,
-		"publish", "e2e-agent", "--kind", "Agent", "--version", "1.0.0", "--dry-run")
+		"publish", "e2e-agent", "--kind", "Agent", "--version", "1.0.0",
+		"--identity", "id:e2e@example", "--dry-run")
 	if r.ExitCode == 0 {
 		t.Fatalf("die Art \"Agent\" wurde angenommen:\n%s", r.Stdout)
 	}
@@ -202,7 +205,8 @@ func TestE2E_FehlendeAgentendateiNenntDenPfad(t *testing.T) {
 	eigenesArbeitsverzeichnis(t)
 	home := t.TempDir()
 	r := RunTool(t, "skillctl", []string{"HOME=" + home},
-		"publish", "gibt-es-nicht", "--kind", "agent", "--version", "1.0.0", "--dry-run")
+		"publish", "gibt-es-nicht", "--kind", "agent", "--version", "1.0.0",
+		"--identity", "id:e2e@example", "--dry-run")
 	if r.ExitCode == 0 {
 		t.Fatalf("ein fehlender Agent wurde angenommen:\n%s", r.Stdout)
 	}
