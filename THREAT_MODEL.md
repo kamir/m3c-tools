@@ -18,8 +18,11 @@ those pages already cover.
 
 **Scope note.** This model covers `skillctl` and the trust artefacts it produces and consumes. It
 does **not** cover the `m3c-tools` capture pipeline (YouTube/audio/screenshot → ER1), which is a
-data-capture tool with a different risk profile. Where the two meet, a skill acting on ER1 memory
-, the boundary is the skill's declared `data_dependencies`, addressed in R11.
+data-capture tool with a different risk profile. It also does **not** cover `cmd/thinking-engine`
+(HMAC to Flask, Kafka, local LLM) or the Python MCP servers (`mcp-skill-server`,
+`rag-mcp-server`). Those surfaces exist in this tree and are out of this model's evidence
+standard until they get their own. Where skillctl and capture meet, a skill acting on ER1 memory,
+the boundary is the skill's declared `data_dependencies`, addressed in R11.
 
 ---
 
