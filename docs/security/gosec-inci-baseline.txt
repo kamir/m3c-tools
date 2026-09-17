@@ -14,11 +14,11 @@ G104	cmd/m3c-tools/main.go	case menubar.ActionStarGitHub: safeGo("StarGitHub", f
 G104	cmd/m3c-tools/main.go	dir := filepath.Join(home, ".m3c-tools") os.MkdirAll(dir, 0700) //nolint:errcheck // best-effort dir create; a real failure surfaces when the DB at this path is opened return filepath.Join(dir, "tracking.db")
 G104	cmd/m3c-tools/main.go	if _, err := rand.Read(nonce); err != nil { ln.Close() //nolint:errcheck // best-effort close of the just-opened listener on this error path return nil, "", nil, nil, fmt.Errorf("generate callback nonce: %w", err)
 G104	cmd/m3c-tools/main.go	if dt, err := auth.Load(auth.DeviceID(), strings.SplitN(cfg.ContextID, "___", 2)[0]); err == nil && dt != nil && !dt.IsExpired() { os.Setenv("ER1_DEVICE_TOKEN", dt.Token) //nolint:errcheck // in-process env propagation; the durable device-token store is the source of truth and the key is a constant os.Setenv("ER1_CONTEXT_ID", dt.ContextID) //nolint:errcheck // in-process env propagation; the durable device-token store is the source of truth and the key is a constant
-G104	cmd/m3c-tools/main.go	if filesDB != nil { filesDB.Close() //nolint:errcheck // best-effort close of the read-only tracking DB before syncing }
+G104	cmd/m3c-tools/plaud_cmd.go	if filesDB != nil { filesDB.Close() //nolint:errcheck // best-effort close of the read-only tracking DB before syncing }
 G104	cmd/m3c-tools/main.go	if filesDB != nil { filesDB.Close() //nolint:errcheck // best-effort close of the read-only tracking DB on cleanup }
 G104	cmd/m3c-tools/main.go	if logDir := filepath.Dir(cfg.LogPath); logDir != "" && logDir != "." { os.MkdirAll(logDir, 0700) //nolint:errcheck // best-effort dir create; a real failure surfaces when the log file below is opened }
 G104	cmd/m3c-tools/main.go	if ttStore != nil { ttStore.Close() //nolint:errcheck // best-effort close of the time-tracking store on shutdown }
-G104	cmd/m3c-tools/main.go	migratePlaudDevLedger(db) db.Close() //nolint:errcheck // best-effort close after a one-time idempotent ledger migration }
+G104	cmd/m3c-tools/plaud_cmd.go	migratePlaudDevLedger(db) db.Close() //nolint:errcheck // best-effort close after a one-time idempotent ledger migration }
 G104	cmd/m3c-tools/main.go	n, _ := io.Copy(io.Discard, f) f.Close() //nolint:errcheck // best-effort close of a read-only file opened only to warm the OS cache
 G104	cmd/m3c-tools/main.go	os.Setenv("ER1_DEVICE_TOKEN", dt.Token) //nolint:errcheck // in-process env propagation; the durable device-token store is the source of truth and the key is a constant os.Setenv("ER1_CONTEXT_ID", dt.ContextID) //nolint:errcheck // in-process env propagation; the durable device-token store is the source of truth and the key is a constant log.Printf("[auth] device token loaded for user=%s", truncateForLog(dt.UserID, 20))
 G104	cmd/m3c-tools/main.go	} else { os.Setenv("ER1_DEVICE_TOKEN", result.DeviceToken) //nolint:errcheck // in-process env propagation; auth.Save above is the checked durable write and the key is a constant fmt.Printf("Device token saved for user=%s device=%s\\n", truncateForLog(result.UserID, 20), auth.DeviceID())
@@ -119,7 +119,7 @@ G304	cmd/docaudit/main.go	func loadConfig(path string) ([]target, error) { b, er
 G304	cmd/docaudit/main.go	out := map[string]bool{} b, err := os.ReadFile(path) if err != nil {
 G304	cmd/m3c-tools/doctor_cmd.go	func readEnvFile(path string) map[string]string { data, err := os.ReadFile(path) if err != nil {
 G304	cmd/m3c-tools/main.go	// Read the copied file for whisper + upload. audioData, err := os.ReadFile(destFile) if err != nil {
-G304	cmd/m3c-tools/main.go	audioBytes, readErr := os.ReadFile(stagedPath) if readErr != nil {
+G304	cmd/m3c-tools/pocket_cmd.go	audioBytes, readErr := os.ReadFile(stagedPath) if readErr != nil {
 G304	cmd/m3c-tools/main.go	destFile := filepath.Join(memoryPath, info.Name()) srcF, err := os.Open(absPath) if err != nil {
 G304	cmd/m3c-tools/main.go	f, err := os.Open(modelPath) if err != nil {
 G304	cmd/m3c-tools/main.go	if thumbnailPath != "" { if data, readErr := os.ReadFile(thumbnailPath); readErr == nil { imgData = data
@@ -261,13 +261,13 @@ G703	cmd/docaudit/main.go	func loadConfig(path string) ([]target, error) { b, er
 G703	cmd/docaudit/main.go	out := map[string]bool{} b, err := os.ReadFile(path) if err != nil {
 G703	cmd/m3c-tools/commands_shared.go	if audioPath != "" { audioData, err = os.ReadFile(audioPath) if err != nil {
 G703	cmd/m3c-tools/commands_shared.go	} if err := os.WriteFile(output, data, 0600); err != nil { fmt.Fprintf(os.Stderr, "Error: could not write %s: %v\\n", output, err)
-G703	cmd/m3c-tools/main.go	audioPath := filepath.Join(dir, fmt.Sprintf("audio.%s", audioFmt)) if err := os.WriteFile(audioPath, audioData, 0600); err != nil { return fmt.Errorf("write audio: %w", err)
+G703	cmd/m3c-tools/plaud_cmd.go	audioPath := filepath.Join(dir, fmt.Sprintf("audio.%s", audioFmt)) if err := os.WriteFile(audioPath, audioData, 0600); err != nil { return fmt.Errorf("write audio: %w", err)
 G703	cmd/m3c-tools/main.go	dir := filepath.Join(home, "plaud-sync", recID) if err := os.MkdirAll(dir, 0700); err != nil { return fmt.Errorf("create dir: %w", err)
-G703	cmd/m3c-tools/main.go	docPath := filepath.Join(dir, "fieldnote.txt") if err := os.WriteFile(docPath, []byte(compositeDoc), 0600); err != nil { return fmt.Errorf("write doc: %w", err)
+G703	cmd/m3c-tools/plaud_cmd.go	docPath := filepath.Join(dir, "fieldnote.txt") if err := os.WriteFile(docPath, []byte(compositeDoc), 0600); err != nil { return fmt.Errorf("write doc: %w", err)
 G703	cmd/m3c-tools/main.go	if logDir := filepath.Dir(cfg.LogPath); logDir != "" && logDir != "." { os.MkdirAll(logDir, 0700) //nolint:errcheck // best-effort dir create; a real failure surfaces when the log file below is opened }
 G703	cmd/m3c-tools/main.go	info, statErr := os.Stat(output) if statErr == nil {
-G703	cmd/m3c-tools/main.go	metaPath := filepath.Join(dir, "metadata.json") if err := os.WriteFile(metaPath, metaJSON, 0600); err != nil { return fmt.Errorf("write metadata: %w", err)
-G703	cmd/m3c-tools/main.go	txPath := filepath.Join(dir, "transcript.txt") if err := os.WriteFile(txPath, []byte(transcriptText), 0600); err != nil { return fmt.Errorf("write transcript: %w", err)
+G703	cmd/m3c-tools/plaud_cmd.go	metaPath := filepath.Join(dir, "metadata.json") if err := os.WriteFile(metaPath, metaJSON, 0600); err != nil { return fmt.Errorf("write metadata: %w", err)
+G703	cmd/m3c-tools/plaud_cmd.go	txPath := filepath.Join(dir, "transcript.txt") if err := os.WriteFile(txPath, []byte(transcriptText), 0600); err != nil { return fmt.Errorf("write transcript: %w", err)
 G703	cmd/m3c-tools/main.go	} logFile, err := os.OpenFile(cfg.LogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600) if err != nil {
 G703	cmd/poc-recorder/main.go	func writeWAV(path string, samples []int16) error { f, err := os.Create(path) if err != nil {
 G703	cmd/poc-recorder/main.go	info, _ := os.Stat(output) fmt.Printf(" File size: %d bytes\\n", info.Size())
@@ -305,28 +305,29 @@ G703	pkg/plaud/auth.go	} if _, err := os.Stat(p); err == nil { return p
 G703	pkg/session/session.go	} b, err := os.ReadFile(filepath.Join(dir, e.Name())) if err != nil {
 G703	pkg/skillctl/consolidate/fixer.go	if err := os.WriteFile(path, []byte(newContent), info.Mode()); err != nil { return fmt.Errorf("writing %s: %w", path, err)
 G703	pkg/skillctl/registry/install_trust_mode.go	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306". if err := os.WriteFile(filepath.Join(tmp, skbName), skb, 0o644); err != nil { cleanup()
-G706	cmd/m3c-tools/main.go	case plaud.TranscribeModeOff: log.Printf("[plaud] %s: no transcript: transcription off, audio only", recID) }
-G706	cmd/m3c-tools/main.go	doTranscribe = true log.Printf("[plaud] %s: no transcript, requesting server transcription (queue mode)", recID) case plaud.TranscribeModeLazy:
-G706	cmd/m3c-tools/main.go	if dlErr != nil { log.Printf("[plaud] download %s FAIL: %v", recID, dlErr) summary.Failed++
+G706	cmd/m3c-tools/plaud_cmd.go	case plaud.TranscribeModeOff: log.Printf("[plaud] %s: no transcript: transcription off, audio only", recID) }
+G706	cmd/m3c-tools/plaud_cmd.go	doTranscribe = true log.Printf("[plaud] %s: no transcript, requesting server transcription (queue mode)", recID) case plaud.TranscribeModeLazy:
+G706	cmd/m3c-tools/plaud_cmd.go	if dlErr != nil { log.Printf("[plaud] download %s FAIL: %v", recID, dlErr) summary.Failed++
 G706	cmd/m3c-tools/main.go	if err != nil { log.Printf("[screenshot] invalid M3C_SCREENSHOT_CLIPBOARD_TIMEOUT_SEC=%q; using default %ds", raw, int(defaultTimeout/time.Second)) return defaultTimeout
 G706	cmd/m3c-tools/main.go	if err != nil { log.Printf("[screenshot] invalid M3C_SCREENSHOT_FOCUS_DELAY_MS=%q; using default %dms", raw, defaultDelay/time.Millisecond) return defaultDelay
 G706	cmd/m3c-tools/main.go	if err != nil { log.Printf("[whisper] invalid timeout %q; using default %s", raw, defaultTimeout) return defaultTimeout
 G706	cmd/m3c-tools/main.go	if plmBase != "" && (er1Cfg.APIKey != "" || deviceToken != "") { log.Printf("[timetracking] PLM connection: base=%s context=%s ssl=%v", plmBase, truncateForLog(er1Cfg.ContextID, 32), er1Cfg.VerifySSL)
 G706	cmd/m3c-tools/main.go	if raw == "0" || raw == "false" || raw == "off" || raw == "no" { log.Printf("[whisper] preload disabled by M3C_WHISPER_PRELOAD=%q", raw) return
-G706	cmd/m3c-tools/main.go	if recErr != nil { log.Printf("[plaud] get recording %s FAIL: %v", recID, recErr) summary.Failed++
-G706	cmd/m3c-tools/main.go	if serverSynced > 0 { log.Printf("[plaud] server check: %d/%d already synced remotely", serverSynced, len(recordingIDs)) var filtered []string
-G706	cmd/m3c-tools/main.go	if txErr != nil { log.Printf("[plaud] no Plaud transcript for %s: %v: transcribe_mode=%s", recID, txErr, cfg.TranscribeMode) } else {
-G706	cmd/m3c-tools/main.go	if upErr != nil { log.Printf("[plaud] upload %s FAIL: %v: saving locally", recID, upErr) // Fallback: save to ~/plaud-sync/<recID>/ for later re-upload.
+G706	cmd/m3c-tools/plaud_cmd.go	if recErr != nil { log.Printf("[plaud] get recording %s FAIL: %v", recID, recErr) summary.Failed++
+G706	cmd/m3c-tools/plaud_cmd.go	if serverSynced > 0 { log.Printf("[plaud] server check: %d/%d already synced remotely", serverSynced, len(recordingIDs)) var filtered []string
+G706	cmd/m3c-tools/plaud_cmd.go	if txErr != nil { log.Printf("[plaud] no Plaud transcript for %s: %v: transcribe_mode=%s", recID, txErr, cfg.TranscribeMode) } else {
+G706	cmd/m3c-tools/plaud_cmd.go	if upErr != nil { log.Printf("[plaud] upload %s FAIL: %v: saving locally", recID, upErr) // Fallback: save to ~/plaud-sync/<recID>/ for later re-upload.
 G706	cmd/m3c-tools/main.go	log.Printf("Launching menu bar app (title=%q, icon=%q, log=%q)", cfg.Title, cfg.IconPath, cfg.LogPath) app.Run()
-G706	cmd/m3c-tools/main.go	tags = "todo.transcribe," + tags log.Printf("[plaud] %s: no transcript, tagged todo.transcribe (lazy mode)", recID) case plaud.TranscribeModeOff:
+G706	cmd/m3c-tools/plaud_cmd.go	tags = "todo.transcribe," + tags log.Printf("[plaud] %s: no transcript, tagged todo.transcribe (lazy mode)", recID) case plaud.TranscribeModeOff:
 G706	cmd/m3c-tools/main.go	} else { log.Printf("[timetracking] PLM sync disabled (base=%q key_set=%v device_token=%v)", plmBase, er1Cfg.APIKey != "", deviceToken != "")
-G706	cmd/m3c-tools/main.go	} log.Printf("[plaud] downloaded %d bytes (%s)", len(audioData), audioFmt)
-G706	cmd/m3c-tools/main.go	} log.Printf("[plaud] downloading audio for %s (%s)...", recID, rec.Title) audioData, audioFmt, dlErr := client.DownloadAudio(recID)
-G706	cmd/m3c-tools/main.go	} log.Printf("[plaud] got Plaud transcript for %s (%d chars, summary %d chars)", recID, len(tx.Text), len(tx.Summary)) }
-G706	cmd/m3c-tools/main.go	} log.Printf("[plaud] saved locally to ~/plaud-sync/%s/", recID[:8]) // Record in tracking DB as locally saved.
-G706	cmd/m3c-tools/main.go	} log.Printf("[plaud] upload %s DONE doc_id=%s", recID, resp.DocID)
+G706	cmd/m3c-tools/plaud_cmd.go	} log.Printf("[plaud] downloaded %d bytes (%s)", len(audioData), audioFmt)
+G706	cmd/m3c-tools/plaud_cmd.go	} log.Printf("[plaud] downloading audio for %s (%s)...", recID, rec.Title) audioData, audioFmt, dlErr := client.DownloadAudio(recID)
+G706	cmd/m3c-tools/plaud_cmd.go	} log.Printf("[plaud] got Plaud transcript for %s (%d chars, summary %d chars)", recID, len(tx.Text), len(tx.Summary)) }
+G706	cmd/m3c-tools/plaud_cmd.go	} log.Printf("[plaud] saved locally to ~/plaud-sync/%s/", recID[:8]) // Record in tracking DB as locally saved.
+G706	cmd/m3c-tools/plaud_cmd.go	} log.Printf("[plaud] upload %s DONE doc_id=%s", recID, resp.DocID)
 G706	pkg/config/healthcheck.go	healthCheckInsecureWarnOnce.Do(func() { log.Printf("[config] SECURITY: REFUSING to disable TLS verification (ER1_VERIFY_SSL=false) for NON-loopback host %q during Test Connection: testing over a verified channel instead. ER1_VERIFY_SSL=false is only honoured for 127.0.0.1/localhost.", apiURL) })
 G706	pkg/config/healthcheck.go	healthCheckInsecureWarnOnce.Do(func() { log.Printf("[config] WARNING: TLS verification is DISABLED (ER1_VERIFY_SSL=false) for loopback target %q during Test Connection. This is only safe for local development with self-signed certs.", apiURL) })
 G706	pkg/config/profile.go	// Name the variable, never the value. log.Printf("[config] %s: keeping the value from the environment: profile %q has a placeholder", k, p.Name) continue
 G706	pkg/menubar/app.go	// registered at runtime. The decisive signal when "no icon" is reported. log.Printf("[menubar] menu bar state: icon_applied=%v image=%q title=%q icon_path=%q", iconApplied, state.Image, state.Title, a.Config.IconPath)
 G706	pkg/menubar/fetch.go	} log.Printf("[fetch] using proxy: %s", redacted) return api
+G703	cmd/m3c-tools/plaud_cmd.go	} if err := os.MkdirAll(dir, 0700); err != nil { return fmt.Errorf("create dir: %w", err)

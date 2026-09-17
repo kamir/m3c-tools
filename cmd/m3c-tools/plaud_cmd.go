@@ -315,13 +315,15 @@ func promptLine(prompt string) string {
 // unavailable (e.g. stdin is not a TTY).
 func readSecret(prompt string) string {
 	fmt.Fprint(os.Stderr, prompt)
-	stty := func(arg string) error {
-		c := exec.Command("stty", arg)
-		c.Stdin = os.Stdin
-		return c.Run()
-	}
-	if err := stty("-echo"); err == nil {
-		defer func() { _ = stty("echo"); fmt.Fprintln(os.Stderr) }()
+	hide := exec.Command("stty", "-echo")
+	hide.Stdin = os.Stdin
+	if err := hide.Run(); err == nil {
+		defer func() {
+			show := exec.Command("stty", "echo")
+			show.Stdin = os.Stdin
+			_ = show.Run()
+			fmt.Fprintln(os.Stderr)
+		}()
 	}
 	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 	return strings.TrimRight(line, "\r\n")
@@ -1854,7 +1856,10 @@ func savePlaudLocally(recID string, rec *plaud.Recording, audioData []byte, audi
 	if err != nil {
 		return fmt.Errorf("get home dir: %w", err)
 	}
-	dir := filepath.Join(home, "plaud-sync", recID)
+	dir, err := plaud.LocalSyncDir(home, recID)
+	if err != nil {
+		return fmt.Errorf("local save: %w", err)
+	}
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("create dir: %w", err)
 	}

@@ -587,6 +587,12 @@ func cmdPocketSync(args []string) {
 
 		// Upload to ER1
 		stagedPath := pocket.StagedPath(*rec, cfg)
+		rel, relErr := filepath.Rel(cfg.RawDir, stagedPath)
+		if relErr != nil || strings.HasPrefix(rel, "..") {
+			fmt.Printf("READ FAILED: staged path %q is outside the archive\n", stagedPath)
+			failed++
+			continue
+		}
 		audioBytes, readErr := os.ReadFile(stagedPath)
 		if readErr != nil {
 			fmt.Printf("READ FAILED: %v\n", readErr)
