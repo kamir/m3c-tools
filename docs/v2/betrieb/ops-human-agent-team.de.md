@@ -584,11 +584,13 @@ $ skillctl publish wochenbericht@1.0.0 --registry local:///…/reg2 \
 exit=0
 ```
 
-`--identity` ist keine Formalie. Der Vorgabewert nennt jemand anderen. Wer ihn
-stehen lässt, gibt ein Bundle heraus, dessen Signaturzeile einen fremden Namen
-trägt; die Gegenseite bekommt dann eine Ablehnung, die sagt, die Identität sei
-nicht gepinnt, obwohl sie korrekt gepinnt ist. Der Fehler war, dass der Absender
-nie gesagt hat, wer er ist.
+`--identity` ist keine Formalie, und sie ist erforderlich: einen Vorgabewert
+gibt es bewusst nicht. Ohne die Flagge bricht der Befehl mit Ausstieg 2 ab, und
+die Meldung nennt die Flagge samt Beispiel. Eine Identität ist eine Behauptung
+darüber, WER veröffentlicht, und die kann kein Werkzeug raten; ein plausibler
+Vorgabewert hätte einen fremden Namen in ein signiertes Ereignis gestempelt,
+und die Gegenseite hätte eine Ablehnung bekommen, die auf die falsche Stelle
+zeigt.
 
 **Was ohne Freigabe passiert.** Aufgenommen ist nicht freigegeben, und das Tor
 sagt das auch:
@@ -915,8 +917,10 @@ ist eine Hoffnung, und die Auswertung beklagt später die Datenlage.
 | 17 | Identität widerrufen | anhalten und fragen. Kein Versuch, es zu umgehen |
 
 Ein `verify-sig`, das fehlschlägt, während der Fingerabdruck stimmt, ist fast
-immer die Identität: `--identity` beim Aufnehmen vergessen, Vorgabewert
-stehengeblieben.
+immer die Identität. Ein beim Aufnehmen vergessenes `--identity` ist dabei
+keine stille Ursache mehr: `publish` bricht ohne die Flagge mit Ausstieg 2 ab,
+bevor ein Bundle entsteht. Schlägt es trotzdem fehl, wurde eine andere
+Identität angegeben als die gepinnte; die Signaturzeile mit dem Pin abgleichen.
 
 ## 9. Was offen bleibt
 
