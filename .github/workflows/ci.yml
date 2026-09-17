@@ -266,16 +266,13 @@ jobs:
 
   test:
     name: Unit Tests
-    runs-on: macos-latest
+    runs-on: [self-hosted, Linux, X64, master2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: "1.26.6"
-
-      - name: Install PortAudio
-        run: brew install portaudio
 
       # SPEC-0176 §3.1: every package under ./pkg/ now gates the build.
       # Race detector catches concurrency bugs in the retry queue, the
@@ -286,7 +283,15 @@ jobs:
       # ./cmd/skillctl/... (skillctl-race job) were exercised under -race.
       # ./cmd/secretctl/... added by the PR #319 re-gate (R-CI/RG-4): its
       # package tests ran on no CI job at all before this line named them.
+      - name: Build skillctl for real-runner tests
+        run: |
+          mkdir -p build
+          rm -f build/skillctl build/skillctl.exe
+          go build -o build/skillctl ./cmd/skillctl
+
       - name: Run unit tests (-race, ./pkg/... + m3c-tools/skillctl-demo cmds)
+        env:
+          M3C_KATA_SKILLCTL: ${{ github.workspace }}/build/skillctl
         run: go test -race -count=1 ./pkg/... ./cmd/m3c-tools/... ./cmd/skillctl-demo/... ./cmd/secretctl/...
 
       # Die Liste ist eine Positivliste, weil einige e2e-Tests Netz und
