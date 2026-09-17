@@ -39,10 +39,9 @@ G104	pkg/config/healthcheck.go	defer resp.Body.Close() io.Copy(io.Discard, io.Li
 G104	pkg/config/profile.go	if _, err := f.WriteString(name + "\\n"); err != nil { f.Close() //nolint:errcheck // best-effort close on error path; the write error is already returned below return fmt.Errorf("write active-profile: %w", err)
 G104	pkg/config/profile.go	if err := f.Sync(); err != nil { f.Close() //nolint:errcheck // best-effort close on error path; the sync error is already returned below return fmt.Errorf("sync active-profile: %w", err)
 G104	pkg/er1/config.go	defer resp.Body.Close() io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20)) //nolint:errcheck // draining the response body for connection reuse; the data is discarded
-G104	pkg/er1/config.go	if os.Getenv(k) == "" { os.Setenv(k, v) //nolint:errcheck // best-effort .env->process env; a malformed key is simply skipped, same as an absent line }
 G104	pkg/er1/device.go	defer resp.Body.Close() io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20)) //nolint:errcheck // draining the response body for connection reuse; the data is discarded
+G104	pkg/menubar/app.go	// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner". exec.Command("open", a.Config.LogPath).Run() //nolint:errcheck // fire-and-forget UI action: open the log file in the default app a.fireAction(ActionOpenLog, a.Config.LogPath)
 G104	pkg/menubar/app.go	Clicked: func() { CopyToClipboard("Transcript for " + entry.VideoID) //nolint:errcheck // best-effort UI clipboard write a.fireAction(ActionCopyTranscript, entry.VideoID)
-G104	pkg/menubar/app.go	Clicked: func() { exec.Command("open", a.Config.LogPath).Run() //nolint:errcheck // fire-and-forget UI action: open the log file in the default app a.fireAction(ActionOpenLog, a.Config.LogPath)
 G104	pkg/menubar/app.go	if result.Button == 1 { // Trash CopyToClipboard("") //nolint:errcheck // best-effort UI clipboard clear a.notify("Cleared", "Clipboard cleared")
 G104	pkg/plaud/auth.go	if err := cmd.Start(); err != nil { os.RemoveAll(debugDir) //nolint:errcheck // best-effort cleanup of the temp Chrome profile dir on this error path return nil, fmt.Errorf("failed to launch Chrome: %w", err)
 G104	pkg/plaud/auth.go	if err == nil { resp.Body.Close() //nolint:errcheck // best-effort close of a read-only CDP readiness-probe response cdpReady = true
@@ -70,7 +69,6 @@ G104	pkg/skillctl/review/server.go	w.Header().Set("Content-Type", "application/j
 G104	pkg/skillctl/review/server.go	w.Header().Set("Content-Type", "application/json") w.Write([]byte(`{"status":"ok","service":"skillctl-review"}`)) //nolint:errcheck // best-effort write to an HTTP response (client may have disconnected) }
 G104	pkg/skillctl/review/server.go	w.Header().Set("Content-Type", "text/html; charset=utf-8") w.Write(injectToken(uiHTML, s.token)) //nolint:errcheck // best-effort write to an HTTP response (client may have disconnected) }
 G104	pkg/skillctl/review/server.go	} cmd.Start() //nolint:errcheck // fire-and-forget UI action: open the review UI in a browser }
-G104	pkg/timetracking/gantt.go	h := fnv.New32a() h.Write([]byte(projectID)) c := palette[h.Sum32()%uint32(len(palette))]
 G104	pkg/timetracking/plmclient.go	defer resp.Body.Close() io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20)) //nolint:errcheck // draining the response body for connection reuse; the data is discarded
 G104	pkg/timetracking/store.go	// Add tags column (safe to call multiple times: ignore "duplicate column" error). s.db.Exec("ALTER TABLE projects ADD COLUMN tags TEXT DEFAULT ''") //nolint:errcheck // idempotent migration; a "duplicate column" error on re-run is expected and intentionally ignored
 G104	pkg/timetracking/store.go	if err := s.migrate(); err != nil { db.Close() //nolint:errcheck // best-effort close of the just-opened DB on this error path return nil, fmt.Errorf("migrate: %w", err)
@@ -96,35 +94,14 @@ G115	pkg/recorder/wav.go	func EncodeWAV(samples []int16) []byte { dataSize := ui
 G115	pkg/skillctl/bodyscan/normalize.go	if v, good := parseHex(s[2:4]); good { return rune(v), 4, true }
 G115	pkg/skillctl/bodyscan/normalize.go	if v, good := parseHex(s[2:6]); good { return rune(v), 6, true }
 G115	pkg/timetracking/gantt.go	h.Write([]byte(projectID)) c := palette[h.Sum32()%uint32(len(palette))] return c[0], c[1], c[2]
-G117	pkg/plaud/devapi.go	func saveDevTokenFile(path string, t DevTokenFile) error { data, err := json.MarshalIndent(t, "", " ") if err != nil {
-G122	pkg/skillbundle/pack.go	data, readErr := os.ReadFile(path) if readErr != nil {
 G124	pkg/transcript/fetcher.go	jar.SetCookies(ytURL, []*http.Cookie{ {Name: "CONSENT", Value: "YES+cb", Path: "/", Domain: ".youtube.com"}, })
 G202	pkg/skillctl/browse/store.go	for _, table := range []string{"edges", "node_tags", "nodes", "graph_meta"} { if _, err := tx.Exec("DELETE FROM " + table); err != nil { return fmt.Errorf("clear %s: %w", table, err)
 G203	pkg/skillctl/report/html.go	} return template.HTML(b.String()) }
-G204	cmd/m3c-tools/main.go	case "linux": return exec.Command("xdg-open", url).Start() default: // darwin
-G204	cmd/m3c-tools/main.go	case "windows": return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start() case "linux":
-G204	cmd/m3c-tools/main.go	default: // darwin if err := exec.Command("open", "-a", "Google Chrome", url).Start(); err == nil { return nil
 G204	cmd/m3c-tools/main.go	stty := func(arg string) error { c := exec.Command("stty", arg) c.Stdin = os.Stdin
 G204	cmd/m3c-tools/main.go	} cmd := exec.Command("bash", setupArgs...) cmd.Stdout = os.Stdout
-G204	cmd/m3c-tools/main.go	} return exec.Command("open", url).Start() }
-G204	cmd/poc-whisper/main.go	// Run whisper with JSON output format cmd := exec.Command(whisperPath, audioFile, "--model", model, "--output_format", "json", "--output_dir", tmpDir, ) cmd.Stdout = os.Stdout
-G204	cmd/skillctl-demo/main.go	case "darwin": cmd = exec.Command("open", url) case "windows":
-G204	cmd/skillctl-demo/main.go	case "windows": cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url) default:
-G204	cmd/skillctl-demo/main.go	default: cmd = exec.Command("xdg-open", url) }
 G204	cmd/skillctl-demo/runner.go	cmd := exec.CommandContext(ctx, r.Skillctl, args...) cmd.Env = r.env()
-G204	pkg/config/editor.go	case "darwin": cmd = exec.Command("open", url) case "linux":
-G204	pkg/config/editor.go	case "linux": cmd = exec.Command("xdg-open", url) case "windows":
-G204	pkg/config/editor.go	case "windows": cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url) default:
 G204	pkg/er1/config.go	for _, q := range queries { out, err := exec.CommandContext(ctx, "/usr/bin/security", q...).Output() if err != nil {
 G204	pkg/er1login/login.go	} return exec.Command(name, args...).Start() }
-G204	pkg/menubar/app.go	Clicked: func() { _ = exec.Command("open", "-a", "Google Chrome", profURL).Start() },
-G204	pkg/menubar/app.go	Clicked: func() { _ = exec.Command("open", docURL).Start() },
-G204	pkg/menubar/app.go	Clicked: func() { exec.Command("open", a.Config.LogPath).Run() //nolint:errcheck // fire-and-forget UI action: open the log file in the default app a.fireAction(ActionOpenLog, a.Config.LogPath)
-G204	pkg/menubar/app.go	home, _ := os.UserHomeDir() _ = exec.Command("open", filepath.Join(home, ".m3c-tools", "profiles")).Start() }
-G204	pkg/menubar/app.go	url := baseURL + "/v2/my-personal-assistant" _ = exec.Command("open", url).Start() },
-G204	pkg/plaud/auth.go	case "darwin": return exec.Command("open", url).Start() case "windows":
-G204	pkg/plaud/auth.go	case "linux": return exec.Command("xdg-open", url).Start() default:
-G204	pkg/plaud/auth.go	case "windows": return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start() case "linux":
 G204	pkg/plaud/auth.go	cmd := exec.Command(chromePath, "--remote-debugging-port=9222", "--user-data-dir="+debugDir, "https://app.plaud.ai", ) if err := cmd.Start(); err != nil {
 G204	pkg/plaud/auth.go	defer os.RemoveAll(debugDir) // Clean up debug profile after use (contains cookies, localStorage) cmd := exec.Command(chromePath, "--remote-debugging-port=9222", "--user-data-dir="+debugDir, "https://app.plaud.ai", ) if err := cmd.Start(); err != nil {
 G204	pkg/pocket/merger.go	cmd := exec.Command(ffmpeg, "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", "-y", outputPath, ) cmd.Stderr = os.Stderr
@@ -134,52 +111,7 @@ G204	pkg/skillctl/artifactauth/creds.go	} out, err := exec.Command("/usr/bin/sec
 G204	pkg/skillctl/backend/git/git.go	} cmd := exec.Command(gitBin, args...) if dir != "" {
 G204	pkg/skillctl/backend/git/local.go	// `git init --bare` is safe to re-run on an existing bare repo (idempotent). out, err := exec.Command("git", "-c", "init.defaultBranch=main", "init", "--bare", path).CombinedOutput() if err != nil {
 G204	pkg/skillctl/backend/git/local.go	} out, err := exec.Command("git", "-C", path, "bundle", "create", outPath, "--all").CombinedOutput() if err != nil {
-G204	pkg/skillctl/browse/server.go	case "darwin": cmd = exec.Command("open", url) case "linux":
-G204	pkg/skillctl/browse/server.go	case "linux": cmd = exec.Command("xdg-open", url) case "windows":
-G204	pkg/skillctl/browse/server.go	case "windows": cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url) default:
-G204	pkg/skillctl/menubar/skillbar.go	// Open in default browser. if err := exec.Command("open", tmpFile.Name()).Start(); err != nil { log.Printf("[skillbar] open browser: %v", err)
-G204	pkg/skillctl/menubar/skillbar.go	url := fmt.Sprintf("http://%s", addr) if err := exec.Command("open", url).Start(); err != nil { log.Printf("[skillbar] open browser: %v", err)
-G204	pkg/skillctl/review/server.go	case "darwin": cmd = exec.Command("open", url) case "linux":
-G204	pkg/skillctl/review/server.go	case "linux": cmd = exec.Command("xdg-open", url) case "windows":
-G204	pkg/skillctl/review/server.go	case "windows": cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url) default:
 G204	pkg/whisper/whisper.go	cmd := exec.CommandContext(ctx, whisperPath, args...)
-G301	cmd/skillctl-demo/kata_progress.go	func (s *KataStore) saveLocked() error { if err := os.MkdirAll(filepath.Dir(s.Path), 0o755); err != nil { return err
-G301	cmd/skillctl-demo/kata_sandbox.go	dir := filepath.Join(sb.Base, "kata", "revoke", nonce) if err := os.MkdirAll(dir, 0o755); err != nil { return "", err
-G301	cmd/skillctl-demo/kata_sandbox.go	dir := filepath.Join(sb.Base, "kata", "seal", nonce) if err := os.MkdirAll(dir, 0o755); err != nil { return "", "", err
-G301	cmd/skillctl-demo/sandbox.go	_ = os.RemoveAll(filepath.Join(sb.Home, ".claude", "skillctl", "quarantine")) return os.MkdirAll(d, 0o755) }
-G301	cmd/skillctl-demo/sandbox.go	dir := filepath.Join(sb.skillsDir(), name) if err := os.MkdirAll(dir, 0o755); err != nil { return err
-G301	cmd/skillctl-demo/sandbox.go	func (sb *Sandbox) build() error { if err := os.MkdirAll(filepath.Join(sb.Home, ".claude", "skills"), 0o755); err != nil { return err
-G301	cmd/skillctl-demo/sandbox.go	if d.IsDir() { return os.MkdirAll(target, 0o755) }
-G301	cmd/skillctl-demo/sandbox.go	s1 := filepath.Join(sb.Base, "s1") if err := os.MkdirAll(filepath.Join(s1, "poisoned"), 0o755); err != nil { return err
-G301	cmd/skillctl-demo/sandbox.go	skb := filepath.Join(sb.Base, "install", name+".skb") if err := os.MkdirAll(filepath.Dir(skb), 0o755); err != nil { return err
-G301	cmd/skillctl-demo/sandbox.go	} if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil { return err
-G301	cmd/skillctl-demo/sandbox.go	} if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil { return err
-G301	cmd/skillctl/export_kit_cmds.go	// scrub failure never leaves a half-written kit. if err := os.MkdirAll(*outDir, 0o755); err != nil { fmt.Fprintf(stderr, "export-verification-kit: mkdir %s: %v\\n", *outDir, err)
-G301	cmd/skillctl/pin_cmds.go	} if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil { fmt.Fprintf(stderr, "skillctl pin install: mkdir %s: %v\\n", filepath.Dir(target), err)
-G301	cmd/skillctl/verify_all_cmds.go	qbase := filepath.Join(home, ".claude", "skillctl", "quarantine") if err := os.MkdirAll(qbase, 0o755); err != nil { return "", err
-G301	cmd/thinking-engine/main.go	dir := filepath.Join(home, ".m3c-tools", "thinking", hash.Hex()) _ = os.MkdirAll(dir, 0o755) dbPath = filepath.Join(dir, "state.db")
-G301	pkg/draft/draft.go	if err := os.MkdirAll(dir, 0o755); err != nil { return "", fmt.Errorf("draft: create dir %s: %w", dir, err)
-G301	pkg/importer/import.go	// Create the destination base directory if it doesn't exist. if err := os.MkdirAll(destDir, 0755); err != nil { return nil, fmt.Errorf("create dest dir %s: %w", destDir, err)
-G301	pkg/importer/import.go	_ = srcDir // validated above if err := os.MkdirAll(destDir, 0755); err != nil { return nil, fmt.Errorf("create dest dir %s: %w", destDir, err)
-G301	pkg/importer/import.go	if err := os.MkdirAll(memoryPath, 0755); err != nil { return nil, fmt.Errorf("create memory folder: %w", err)
-G301	pkg/importer/tracker.go	dir := filepath.Dir(t.path) if err := os.MkdirAll(dir, 0755); err != nil { return fmt.Errorf("create tracker dir: %w", err)
-G301	pkg/pocket/config.go	for _, dir := range []string{c.StagingDir, c.RawDir, c.MergedDir} { if err := os.MkdirAll(dir, 0755); err != nil { return err
-G301	pkg/pocket/merger.go	if err := os.MkdirAll(outputDir, 0755); err != nil { return "", fmt.Errorf("creating output dir: %w", err)
-G301	pkg/pocket/staging.go	destDir := filepath.Join(cfg.RawDir, rec.Date) if err := os.MkdirAll(destDir, 0755); err != nil { return fmt.Errorf("creating raw dir %s: %w", destDir, err)
-G301	pkg/screenshot/capture.go	} if err := os.MkdirAll(dir, 0o755); err != nil { return "", fmt.Errorf("create output dir: %w", err)
-G301	pkg/screenshot/clipboard.go	// Ensure parent directory exists. if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil { return "", fmt.Errorf("create output dir: %w", err)
-G301	pkg/skillbundle/unpack.go	if e.IsDir { if err := os.MkdirAll(full, 0o755); err != nil { return fmt.Errorf("skillbundle: mkdir %s: %w", full, err)
-G301	pkg/skillbundle/unpack.go	} if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil { return fmt.Errorf("skillbundle: mkdir parent %s: %w", full, err)
-G301	pkg/skillctl/backend/git/git.go	p := filepath.Join(dir, rel) if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil { return err
-G301	pkg/skillctl/install/install.go	// Make sure the parent of `target` exists. if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil { return "", fmt.Errorf("install: mkdir target parent: %w", err)
-G301	pkg/skillctl/install/install.go	archDir := filepath.Join(homeDir, installRoot, ".archive") if err := os.MkdirAll(archDir, 0o755); err != nil { return "", fmt.Errorf("install: mkdir archive dir: %w", err)
-G301	pkg/skillctl/registry/backend_pull.go	cacheRoot := defaultCacheRoot() if err := os.MkdirAll(cacheRoot, 0o755); err != nil { return nil, fmt.Errorf("pull: mkdir cache: %w", err)
-G301	pkg/skillctl/registry/backend_pull.go	dir := filepath.Join(cacheRoot, strings.TrimPrefix(digest, "sha256:")) if err := os.MkdirAll(dir, 0o755); err != nil { return nil, fmt.Errorf("pull: mkdir %s: %w", dir, err)
-G301	pkg/skillctl/registry/er1_pull.go	cacheRoot := defaultCacheRoot() if err := os.MkdirAll(cacheRoot, 0o755); err != nil { return nil, fmt.Errorf("pull: mkdir cache: %w", err)
-G301	pkg/skillctl/registry/er1_pull.go	dir := filepath.Join(cacheRoot, strings.TrimPrefix(digest, "sha256:")) if err := os.MkdirAll(dir, 0o755); err != nil { return nil, fmt.Errorf("pull: mkdir %s: %w", dir, err)
-G301	pkg/skillctl/registry/install_trust_mode.go	// Extract into a temp dir, then atomically rename onto target. if err := os.MkdirAll(skillsDir, 0o755); err != nil { return nil, fmt.Errorf("install: mkdir %s: %w", skillsDir, err)
-G301	pkg/tracking/exports.go	dir := filepath.Dir(dbPath) if err := os.MkdirAll(dir, 0755); err != nil { return nil, fmt.Errorf("create data dir: %w", err)
-G301	pkg/tracking/retryqueue.go	dir := filepath.Dir(dbPath) if err := os.MkdirAll(dir, 0755); err != nil { return nil, fmt.Errorf("create data dir: %w", err)
 G302	cmd/skillctl-demo/sandbox.go	func appendToFile(path, s string) error { f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644) if err != nil {
 G302	pkg/importer/tracker.go	f, err := os.OpenFile(t.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644) if err != nil {
 G302	pkg/session/session.go	} f, err := os.OpenFile(filepath.Join(wdir, "session-state.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644) if err != nil {
@@ -239,7 +171,6 @@ G304	cmd/skillctl/replay_cmds.go	for _, p := range candidates { data, err := os.
 G304	cmd/skillctl/replay_cmds.go	} data, err := os.ReadFile(path) if err != nil {
 G304	cmd/skillctl/revoked_cache.go	func loadInstalledSidecar(home, name string) (registry.ProvenanceSidecar, bool) { b, err := os.ReadFile(filepath.Join(home, ".claude", "skills", name, registry.ProvenanceSidecarName)) if err != nil {
 G304	cmd/skillctl/revoked_cache.go	} b, err := os.ReadFile(p) if err != nil {
-G304	cmd/skillctl/runbook_cmds.go	func loadRunbookDescriptor(metaPath, ver string) (map[string]any, error) { raw, err := os.ReadFile(metaPath) if err != nil {
 G304	cmd/skillctl/runbook_cmds.go	html, err := os.ReadFile(htmlPath) if err != nil {
 G304	cmd/skillctl/scan_body_cmds.go	func scanBodyFile(skillMD string) (bodyscan.BodyScanReport, error) { raw, err := os.ReadFile(skillMD) if err != nil {
 G304	cmd/skillctl/scanner_cmds.go	func loadInventory(path string) (*model.Inventory, error) { data, err := os.ReadFile(path) if err != nil {
@@ -279,7 +210,6 @@ G304	pkg/pocket/state.go	func loadGroupState(path string) *GroupState { data, er
 G304	pkg/session/session.go	} b, err := os.ReadFile(filepath.Join(dir, e.Name())) if err != nil {
 G304	pkg/session/session.go	} f, err := os.OpenFile(filepath.Join(wdir, "session-state.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644) if err != nil {
 G304	pkg/skillbundle/ignore.go	rules := parseIgnore(defaultIgnorePatterns) if data, err := os.ReadFile(filepath.Join(skillDir, ".skbignore")); err == nil { rules = append(rules, parseIgnore(strings.Split(string(data), "\\n"))...)
-G304	pkg/skillbundle/pack.go	data, readErr := os.ReadFile(path) if readErr != nil {
 G304	pkg/skillbundle/unpack.go	} f, err := os.OpenFile(full, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode) if err != nil {
 G304	pkg/skillctl/backend/git/format.go	func readBounded(p string) ([]byte, error) { f, err := os.Open(p) if err != nil {
 G304	pkg/skillctl/backend/git/git.go	func readCapped(p string, max int64) ([]byte, error) { f, err := os.Open(p) if err != nil {
@@ -327,54 +257,7 @@ G304	pkg/skillctl/verify/verify.go	// 3. Digest matched → the bundle.json byte
 G304	pkg/skillctl/verify/verify.go	} blob, err := os.ReadFile(bundlePath) if err != nil {
 G304	pkg/tracking/files.go	func HashFile(path string) (string, error) { file, err := os.Open(path) if err != nil {
 G304	pkg/whisper/whisper.go	data, err := os.ReadFile(jsonPath) if err != nil {
-G306	cmd/m3c-tools/main.go	imgPath = filepath.Join(os.TempDir(), fmt.Sprintf("m3c-thumb-%s.jpg", videoID)) if writeErr := os.WriteFile(imgPath, data, 0o644); writeErr != nil { log.Printf("[record] thumbnail write failed video=%s error=%v", videoID, writeErr)
-G306	cmd/release-evidence/main.go	data = append(data, '\\n') return os.WriteFile(path, data, 0o644) }
-G306	cmd/skillctl-demo/kata_sandbox.go	} if err := os.WriteFile(path, b, 0o644); err != nil { return "", err
-G306	cmd/skillctl-demo/sandbox.go	b, _ := json.MarshalIndent(side, "", " ") return os.WriteFile(filepath.Join(dst, registry.ProvenanceSidecarName), b, 0o644) }
-G306	cmd/skillctl-demo/sandbox.go	body := fmt.Sprintf("---\\nname: %s\\nversion: 0.1.0\\ndescription: hand-installed skill (no signed bundle)\\n---\\n\\n# %s\\n\\nInstalled by copying a folder, no `.skb`, no provenance, unverifiable.\\n", name, name) return os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(body), 0o644) }
-G306	cmd/skillctl-demo/sandbox.go	} if err := os.WriteFile(filepath.Join(dst, name+".skb"), blob, 0o644); err != nil { return err
-G306	cmd/skillctl-demo/sandbox.go	} return os.WriteFile(dst, b, 0o644) }
-G306	cmd/skillctl-demo/sandbox.go	} return os.WriteFile(path, b, 0o644) }
-G306	cmd/skillctl/agentid_cmds.go	} if err := os.WriteFile(*out, append(blob, '\\n'), 0o644); err != nil { fmt.Fprintf(stderr, "skillctl agentid issue: write %s: %v\\n", *out, err)
-G306	cmd/skillctl/agentid_revoke_cmds.go	} if err := os.WriteFile(*out, append(blob, '\\n'), 0o644); err != nil { fmt.Fprintf(stderr, "skillctl agentid revoke: write %s: %v\\n", *out, err)
-G306	cmd/skillctl/compliance_cmds.go	if *outPath != "" { if err := os.WriteFile(*outPath, []byte(rendered), 0o644); err != nil { fmt.Fprintf(stderr, "compliance: write %s: %v\\n", *outPath, err)
-G306	cmd/skillctl/export_kit_cmds.go	// Write everything. if err := os.WriteFile(filepath.Join(*outDir, skbName), skbBytes, 0o644); err != nil { fmt.Fprintf(stderr, "export-verification-kit: write skb: %v\\n", err)
-G306	cmd/skillctl/pin_cmds.go	if *out != "" { if err := os.WriteFile(*out, b, 0o644); err != nil { fmt.Fprintf(stderr, "skillctl pin generate: write %s: %v\\n", *out, err)
-G306	cmd/skillctl/pin_cmds.go	} if err := os.WriteFile(backup, existing, 0o644); err != nil { fmt.Fprintf(stderr, "skillctl pin install: backup %s: %v\\n", backup, err)
-G306	cmd/skillctl/pin_cmds.go	} if err := os.WriteFile(target, content, 0o644); err != nil { fmt.Fprintf(stderr, "skillctl pin install: write %s: %v\\n", target, err)
-G306	cmd/skillctl/translog_cmds.go	if *outPath != "" { if err := os.WriteFile(*outPath, append(data, '\\n'), 0o644); err != nil { //nolint:gosec // receipt is public fmt.Fprintln(stderr, err)
-G306	cmd/skillctl/verify_all_cmds.go	// sits next to the moved item as <name>.<ts>.QUARANTINE.md. _ = os.WriteFile(dest+".QUARANTINE.md", []byte(note), 0o644) return dest, nil
-G306	evaluation/cmd/results-md/main.go	if err := os.WriteFile(mdPath, []byte(b.String()), 0o644); err != nil { fmt.Fprintf(os.Stderr, "results-md: write %s: %v\\n", mdPath, err)
-G306	evaluation/internal/synth/synth.go	path := filepath.Join(dir, fmt.Sprintf("eval-skill-%06d@1.0.0.skb", i)) if err := os.WriteFile(path, skb, 0o644); err != nil { return nil, fmt.Errorf("synth: write %s: %w", path, err)
-G306	pkg/draft/draft.go	if err := os.WriteFile(path, data, 0o644); err != nil { return "", fmt.Errorf("draft: write %s: %w", path, err)
-G306	pkg/importer/import.go	} if err := os.WriteFile(tagFilePath, []byte(tagContent), 0644); err != nil { return nil, fmt.Errorf("write tags: %w", err)
-G306	pkg/menubar/fetch.go	thumbPath := filepath.Join(tmpDir, fmt.Sprintf("m3c-thumb-%s.jpg", videoID)) if err := os.WriteFile(thumbPath, data, 0644); err != nil { log.Printf("[menubar] thumbnail save failed path=%s error=%v (non-fatal)", thumbPath, err)
-G306	pkg/pocket/merger.go	} if err := os.WriteFile(listPath, []byte(strings.Join(lines, "\\n")+"\\n"), 0644); err != nil { return "", fmt.Errorf("writing file list: %w", err)
-G306	pkg/pocket/state.go	} if err := os.WriteFile(statePath, data, 0644); err != nil { log.Printf("[pocket] write group state: %v", err)
-G306	pkg/recorder/wav.go	func writeFile(path string, data []byte) error { return os.WriteFile(path, data, 0644) }
-G306	pkg/skillbundle/pack.go	if err := os.WriteFile(outFile, finalArchive, 0644); err != nil { return "", fmt.Errorf("writing %s: %w", outFile, err)
-G306	pkg/skillctl/backend/git/git.go	} return os.WriteFile(p, data, 0o644) }
-G306	pkg/skillctl/install/install.go	blobPath := filepath.Join(stagingDir, sanitizeFilename(opts.Name)+"-"+sanitizeFilename(resolvedVersion)+".skb") if err := os.WriteFile(blobPath, blob, 0o644); err != nil { return nil, fmt.Errorf("install: write staged blob: %w", err)
-G306	pkg/skillctl/install/offline_verify.go	} return os.WriteFile(filepath.Join(target, offlineMetaFile), b, 0o644) }
-G306	pkg/skillctl/registry/attestation_stash.go	} return os.WriteFile(filepath.Join(dir, AttestationStashName), b, 0o644) }
-G306	pkg/skillctl/registry/backend_pull.go	skbPath := filepath.Join(dir, "bundle.skb") if err := os.WriteFile(skbPath, skbBytes, 0o644); err != nil { return nil, fmt.Errorf("pull: write %s: %w", skbPath, err)
-G306	pkg/skillctl/registry/er1_pull.go	skbPath := filepath.Join(dir, "bundle.skb") if err := os.WriteFile(skbPath, skbBytes, 0o644); err != nil { return nil, fmt.Errorf("pull: write %s: %w", skbPath, err)
-G306	pkg/skillctl/registry/install_trust_mode.go	skbName := strings.ReplaceAll(b.Name, string(filepath.Separator), "_") + ".skb" if err := os.WriteFile(filepath.Join(tmp, skbName), skb, 0o644); err != nil { cleanup()
-G306	pkg/skillctl/registry/install_trust_mode.go	} return os.WriteFile(path, out, 0o644) }
-G402	cmd/m3c-tools/doctor_cmd.go	client.Transport = &http.Transport{ TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, }
-G402	cmd/m3c-tools/doctor_cmd.go	conn, err := tls.DialWithDialer(&net.Dialer{Timeout: 5 * time.Second}, "tcp", tlsAddr, &tls.Config{ InsecureSkipVerify: !cfg.VerifySSL, })
-G402	cmd/m3c-tools/main.go	if !er1Cfg.VerifySSL { transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} }
-G402	pkg/config/healthcheck.go	client.Transport = &http.Transport{ TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, }
-G402	pkg/er1/config.go	client.Transport = &http.Transport{ TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, }
-G402	pkg/er1/upload.go	client.Transport = &http.Transport{ TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, }
-G402	pkg/er1/upload.go	if !cfg.VerifySSL { client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} }
-G402	pkg/plaud/er1source.go	// SEC: only for loopback + self-signed dev cert. client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} }
-G402	pkg/plaud/syncapi.go	if skipTLSVerify { transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} }
-G402	pkg/pocket/syncapi.go	if skipTLSVerify { transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} }
-G402	pkg/session/session.go	if !verify { client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} }
-G402	pkg/timetracking/plmclient.go	TLSClientConfig: &tls.Config{ InsecureSkipVerify: insecure, // loopback-only, guarded above },
 G404	pkg/transcript/proxy.go	// Pick a random proxy chosen := c.Proxies[rand.Intn(len(c.Proxies))] proxyURL, err := url.Parse(chosen)
-G702	cmd/poc-whisper/main.go	// Run whisper with JSON output format cmd := exec.Command(whisperPath, audioFile,
 G703	cmd/docaudit/main.go	func loadConfig(path string) ([]target, error) { b, err := os.ReadFile(path) if err != nil {
 G703	cmd/docaudit/main.go	out := map[string]bool{} b, err := os.ReadFile(path) if err != nil {
 G703	cmd/m3c-tools/commands_shared.go	if audioPath != "" { audioData, err = os.ReadFile(audioPath) if err != nil {
@@ -391,15 +274,15 @@ G703	cmd/poc-recorder/main.go	func writeWAV(path string, samples []int16) error 
 G703	cmd/poc-recorder/main.go	info, _ := os.Stat(output) fmt.Printf(" File size: %d bytes\\n", info.Size())
 G703	cmd/poc-whisper/main.go	// Verify audio file exists if _, err := os.Stat(audioFile); os.IsNotExist(err) { fmt.Fprintf(os.Stderr, "Error: audio file not found: %s\\n", audioFile)
 G703	cmd/poc-whisper/main.go	jsonData, err := os.ReadFile(jsonPath) if err != nil {
-G703	cmd/skillctl-demo/sandbox.go	} if err := os.WriteFile(filepath.Join(dst, name+".skb"), blob, 0o644); err != nil { return err
-G703	cmd/skillctl-demo/sandbox.go	} return os.WriteFile(dst, b, 0o644) }
+G703	cmd/skillctl-demo/sandbox.go	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306". if err := os.WriteFile(filepath.Join(dst, name+".skb"), blob, 0o644); err != nil { return err
+G703	cmd/skillctl-demo/sandbox.go	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306". return os.WriteFile(dst, b, 0o644) }
 G703	cmd/skillctl/agentid_cmds.go	func loadAgentIDFile(path string) (*agentid.AgentID, error) { data, err := os.ReadFile(path) if err != nil {
 G703	cmd/skillctl/audit_security_cmds.go	sidecarPath := filepath.Join(skillDir, registry.ProvenanceSidecarName) if data, err := os.ReadFile(sidecarPath); err == nil { var sc registry.ProvenanceSidecar
 G703	cmd/skillctl/audit_security_cmds.go	skillDir := filepath.Join(skillsDir, name) if info, err := os.Stat(skillDir); err != nil || !info.IsDir() { fmt.Fprintf(stderr, "skillctl audit security: skill %q not installed at %s\\n", name, skillDir)
-G703	cmd/skillctl/export_kit_cmds.go	// Write everything. if err := os.WriteFile(filepath.Join(*outDir, skbName), skbBytes, 0o644); err != nil { fmt.Fprintf(stderr, "export-verification-kit: write skb: %v\\n", err)
-G703	cmd/skillctl/pin_cmds.go	} if err := os.WriteFile(backup, existing, 0o644); err != nil { fmt.Fprintf(stderr, "skillctl pin install: backup %s: %v\\n", backup, err)
+G703	cmd/skillctl/export_kit_cmds.go	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306". if err := os.WriteFile(filepath.Join(*outDir, skbName), skbBytes, 0o644); err != nil { fmt.Fprintf(stderr, "export-verification-kit: write skb: %v\\n", err)
+G703	cmd/skillctl/pin_cmds.go	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306". if err := os.WriteFile(backup, existing, 0o644); err != nil { fmt.Fprintf(stderr, "skillctl pin install: backup %s: %v\\n", backup, err)
+G703	cmd/skillctl/pin_cmds.go	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306". if err := os.WriteFile(target, content, 0o644); err != nil { fmt.Fprintf(stderr, "skillctl pin install: write %s: %v\\n", target, err)
 G703	cmd/skillctl/pin_cmds.go	} if err := os.WriteFile(staged, content, 0o600); err != nil { return "", err
-G703	cmd/skillctl/pin_cmds.go	} if err := os.WriteFile(target, content, 0o644); err != nil { fmt.Fprintf(stderr, "skillctl pin install: write %s: %v\\n", target, err)
 G703	cmd/skillctl/propose_cmds.go	skillMD := filepath.Join(skillDir, "SKILL.md") body, err := os.ReadFile(skillMD) if err != nil {
 G703	cmd/skillctl/scan_body_cmds.go	func resolveSkillMD(dir string) (string, error) { info, err := os.Stat(dir) if err != nil {
 G703	cmd/skillctl/scan_body_cmds.go	func scanBodyFile(skillMD string) (bodyscan.BodyScanReport, error) { raw, err := os.ReadFile(skillMD) if err != nil {
@@ -407,9 +290,9 @@ G703	cmd/skillctl/scan_body_cmds.go	p := filepath.Join(dir, c) if _, err := os.S
 G703	cmd/skillctl/scanner_cmds.go	// Read scan JSON. data, err := os.ReadFile(input) if err != nil {
 G703	cmd/skillctl/scanner_cmds.go	func loadInventory(path string) (*model.Inventory, error) { data, err := os.ReadFile(path) if err != nil {
 G703	cmd/skillctl/scanner_cmds.go	if outFile != "" { f, err := os.Create(outFile) if err != nil {
-G703	cmd/skillctl/translog_cmds.go	if *outPath != "" { if err := os.WriteFile(*outPath, append(data, '\\n'), 0o644); err != nil { //nolint:gosec // receipt is public fmt.Fprintln(stderr, err)
+G703	cmd/skillctl/translog_cmds.go	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306". if err := os.WriteFile(*outPath, append(data, '\\n'), 0o644); err != nil { //nolint:gosec // receipt is public fmt.Fprintln(stderr, err)
+G703	evaluation/cmd/results-md/main.go	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306". if err := os.WriteFile(mdPath, []byte(b.String()), 0o644); err != nil { fmt.Fprintf(os.Stderr, "results-md: write %s: %v\\n", mdPath, err)
 G703	evaluation/cmd/results-md/main.go	f, err := os.Open(csvPath) if err != nil {
-G703	evaluation/cmd/results-md/main.go	if err := os.WriteFile(mdPath, []byte(b.String()), 0o644); err != nil { fmt.Fprintf(os.Stderr, "results-md: write %s: %v\\n", mdPath, err)
 G703	pkg/config/preferences.go	annotation := []byte("\\n# (Migrated to ~/.m3c-tools/preferences.env on first launch. See SPEC-0175.)\\n# This file is still read for back-compat but the canonical location is the new one.\\n") _ = os.WriteFile(legacy, append(data, annotation...), 0o600)
 G703	pkg/config/preferences.go	} if err := os.WriteFile(canonical, data, 0o600); err != nil { return legacy, err
 G703	pkg/config/profile.go	func ParseEnvFile(path string) (*Profile, error) { data, err := os.ReadFile(path) if err != nil {
@@ -422,15 +305,7 @@ G703	pkg/importer/scanner.go	func ScanDir(root string) (*ScanResult, error) { in
 G703	pkg/plaud/auth.go	} if _, err := os.Stat(p); err == nil { return p
 G703	pkg/session/session.go	} b, err := os.ReadFile(filepath.Join(dir, e.Name())) if err != nil {
 G703	pkg/skillctl/consolidate/fixer.go	if err := os.WriteFile(path, []byte(newContent), info.Mode()); err != nil { return fmt.Errorf("writing %s: %w", path, err)
-G703	pkg/skillctl/registry/install_trust_mode.go	skbName := strings.ReplaceAll(b.Name, string(filepath.Separator), "_") + ".skb" if err := os.WriteFile(filepath.Join(tmp, skbName), skb, 0o644); err != nil { cleanup()
-G704	cmd/skillctl/revoke_cmds.go	// an attacker-controlled taint source. httpReq, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body)) if err != nil {
-G704	cmd/skillctl/revoke_cmds.go	resp, err := client.Do(httpReq) if err != nil {
-G704	cmd/skillctl/scanner_cmds.go	resp, err := httpClient.Do(req) if err != nil {
-G704	cmd/skillctl/scanner_cmds.go	url := target + "/api/v2/skills/usage" req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body)) if err != nil {
-G704	pkg/config/healthcheck.go	req, err := http.NewRequest("GET", baseURL+"/health", nil) // BUG-0086: was /api/plm/projects (requires auth) if err != nil {
-G704	pkg/config/healthcheck.go	resp, err := client.Do(req) if err != nil {
-G704	pkg/plaud/er1source.go	req, err := http.NewRequest("GET", endpoint, nil) if err != nil {
-G704	pkg/plaud/er1source.go	} resp, err := client.Do(req) if err != nil {
+G703	pkg/skillctl/registry/install_trust_mode.go	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306". if err := os.WriteFile(filepath.Join(tmp, skbName), skb, 0o644); err != nil { cleanup()
 G705	internal/thinking/api/auth.go	w.WriteHeader(http.StatusUnauthorized) _, _ = w.Write([]byte(fmt.Sprintf(`{"error":"unauthorized","detail":%q}`, msg))) }
 G705	internal/thinking/api/server.go	} _, _ = w.Write(row) }
 G706	cmd/m3c-tools/main.go	case plaud.TranscribeModeOff: log.Printf("[plaud] %s: no transcript: transcription off, audio only", recID) }

@@ -144,6 +144,10 @@ func Upload(cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
 		CheckRedirect: httpsafe.NoCredentialRedirect, // SEC F25: don't leak X-API-KEY cross-host
 	}
 	if !cfg.VerifySSL {
+		// #nosec G402 -- gegated durch pkg/er1.applyTLSVerificationPolicy (SEC-M7),
+		// die beim Laden der Config VerifySSL fuer JEDEN Nicht-Loopback-Host
+		// fail-closed auf true zwingt. Nach BUG-0445 nimmt kein Aufrufer diesen
+		// Wert mehr nachtraeglich zurueck; wer es wieder tut, muss hier neu pruefen.
 		client.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
@@ -179,6 +183,10 @@ func IsReachable(cfg *Config) bool {
 		CheckRedirect: httpsafe.NoCredentialRedirect, // SEC F25
 	}
 	if !cfg.VerifySSL {
+		// #nosec G402 -- gegated durch pkg/er1.applyTLSVerificationPolicy (SEC-M7),
+		// die beim Laden der Config VerifySSL fuer JEDEN Nicht-Loopback-Host
+		// fail-closed auf true zwingt. Nach BUG-0445 nimmt kein Aufrufer diesen
+		// Wert mehr nachtraeglich zurueck; wer es wieder tut, muss hier neu pruefen.
 		client.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
@@ -250,6 +258,10 @@ func PatchMemoryCurrentTime(cfg *Config, docID, currentTime string) error {
 
 	client := &http.Client{Timeout: 30 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect}
 	if !cfg.VerifySSL {
+		// #nosec G402 -- gegated durch pkg/er1.applyTLSVerificationPolicy (SEC-M7),
+		// die beim Laden der Config VerifySSL fuer JEDEN Nicht-Loopback-Host
+		// fail-closed auf true zwingt. Nach BUG-0445 nimmt kein Aufrufer diesen
+		// Wert mehr nachtraeglich zurueck; wer es wieder tut, muss hier neu pruefen.
 		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
 	}
 	resp, err := client.Do(req)

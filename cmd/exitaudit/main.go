@@ -7,7 +7,7 @@
 //
 // The drift class this kills, measured 2026-09-07 before the gate existed:
 // `pull` mapped five gates onto 12/10/11/13/6 while the manual said "0 ok, 2
-// usage" and docs/CLI-VERBS.md said "0/1/2"; `verify-sig` returned 10 for an
+// usage" and CLI-VERBS.md said "0/1/2"; `verify-sig` returned 10 for an
 // altered bundle and the manual named only 0/11/1/2; verify-hook's refusal_code
 // space was 17/22/25/28 in code, 17/22 in the manual and 25/26/28 in CLI-VERBS
 // (26 belongs to `enforce`). Every one of those is a number an operator or a
@@ -97,8 +97,8 @@ import (
 )
 
 const (
-	defaultManual = "docs/manual-skillctl.md"
-	defaultVerbs  = "docs/CLI-VERBS.md"
+	defaultManual = "docs/v2/referenz/manual-skillctl.md"
+	defaultVerbs  = "docs/v2/referenz/CLI-VERBS.md"
 
 	registerBegin = "<!-- exitaudit:register:begin -->"
 	registerEnd   = "<!-- exitaudit:register:end -->"
@@ -1120,7 +1120,16 @@ func pullSymbolDrift(root, verbsText string) (nums []int, drift []string, skippe
 		return sortedKeys(got), drift, ""
 	}
 
-	base := map[int]bool{0: true, 1: true, 2: true}
+	// Die Codes, die `pull` NEBEN gateExit zurueckgibt. Sie stammen nicht aus
+	// einem Tor-Fehlschlag, also kann die symbolische Lesung von gateExit sie
+	// nicht finden; ohne diese Liste meldete der Pruefer sie als "die Zelle
+	// behauptet N, aber gateExit kann es nicht erzeugen".
+	//
+	// 7 kam am 2026-09-14 dazu (BUG-0254): ein Nulltreffer ist kein
+	// Tor-Fehlschlag, sondern eine Aussage ueber die Abfrage. Er gehoert
+	// deshalb hierher und nicht in gateExit, denn gateExit bildet Tore auf
+	// Nummern ab, und ein Nulltreffer ist kein Tor.
+	base := map[int]bool{0: true, 1: true, 2: true, 7: true}
 	for _, n := range sortedKeys(got) {
 		if !want[n] {
 			drift = append(drift, fmt.Sprintf("%s can return %d, the `%s` cell in the verb register does not list it",

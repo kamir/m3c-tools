@@ -53,6 +53,20 @@ jobs:
         run: ./scripts/check-gofmt.sh
 
   prose-gate:
+    # DER NAME BLEIBT, auch wenn der Job inzwischen mehr prueft als Gedankenstriche.
+    #
+    # Ein erforderlicher Check wird ueber seinen NAMEN gebunden. Der Zweigschutz
+    # von master fordert woertlich "Prose (no em dash)". Haette dieser Job
+    # "Prose (no em dash, no real names)" geheissen, wuerde der geforderte Check
+    # nie mehr melden: die Durchsetzung waere still verschwunden, waehrend die
+    # Oberflaeche einen gruenen Haken zeigt.
+    #
+    # Es war beinahe passiert. Die Umbenennung stand schon im Zweig und die
+    # Pruefung meldete gruen, nur eben unter einem Namen, den niemand fordert.
+    #
+    # Was der Job WIRKLICH prueft, gehoert deshalb in die Schrittnamen, nicht in
+    # den Jobnamen. Der Jobname ist eine Schnittstelle zum Zweigschutz und wird
+    # wie eine behandelt.
     name: Prose (no em dash)
     # Pure shell over the tracked tree: no Go toolchain, no cgo, cheap runner.
     # The rule and its two exemptions are in CODESTYLE.md ("Prose: no em dashes").
@@ -62,6 +76,14 @@ jobs:
 
       - name: No U+2014 EM DASH in the tracked tree
         run: ./scripts/check-no-emdash.sh
+
+      # Same job on purpose: same shape of rule, same cheap runner, and one
+      # required check to satisfy instead of two. A persona that is also a real
+      # colleague or customer turns example output into a statement about that
+      # person, and this tree is public AND mirrored into a customer's GitLab.
+      # Authorship is explicitly NOT in scope; the script says why.
+      - name: No real person's name in the tracked tree
+        run: ./scripts/check-no-real-names.sh
 
       # A workflow file that does not PARSE never runs, so no guard living
       # inside .github/workflows can catch its own file being broken. This step
@@ -224,7 +246,7 @@ jobs:
       #
       # Running both halves in CI is what keeps them a PAIR. A twin script that
       # only ever runs on one platform is a claim about the other, not a check
-      # of it, and the pair exists precisely so Eric runs what CI runs.
+      # of it, and the pair exists precisely so Alice runs what CI runs.
       - name: Acceptance rehearsal (SPEC-0406, Unix half)
         run: |
           go build -o build/skillctl ./cmd/skillctl
@@ -250,11 +272,22 @@ jobs:
       # goroutines, retry runner, bulk-progress) and the skillctl-demo
       # command (SSE event bus): previously only ./pkg/... and
       # ./cmd/skillctl/... (skillctl-race job) were exercised under -race.
+      # ./cmd/secretctl/... added by the PR #319 re-gate (R-CI/RG-4): its
+      # package tests ran on no CI job at all before this line named them.
       - name: Run unit tests (-race, ./pkg/... + m3c-tools/skillctl-demo cmds)
-        run: go test -race -count=1 ./pkg/... ./cmd/m3c-tools/... ./cmd/skillctl-demo/...
+        run: go test -race -count=1 ./pkg/... ./cmd/m3c-tools/... ./cmd/skillctl-demo/... ./cmd/secretctl/...
 
+      # Die Liste ist eine Positivliste, weil einige e2e-Tests Netz und
+      # API-Schluessel brauchen und auf dem Runner nicht laufen koennen.
+      #
+      # Die beiden Praefixe TestE2E_ und TestQuellwaechter_ sind bewusst
+      # Praefixe und keine Einzelnamen: sie sind die Zusage, dass ein neuer
+      # Test unter diesen Namen OHNE Netz auskommt und damit hier von selbst
+      # mitlaeuft. Ohne diesen Eintrag waere ein neuer e2e-Test auf dem Runner
+      # nie gelaufen: gruen auf der Maschine des Autors, blind in der CI.
+      # Genau das galt am 2026-09-15 fuer skillctl und secretctl.
       - name: Run e2e tests (allow-list)
-        run: go test -v -count=1 ./e2e/ -run "TestComposite|TestBuild|TestParseTagLine|TestER1Config|TestER1Queue|TestER1EnqueueFailure|TestUploadFailure|TestRecorderEncodeWAV|TestRecorderStats|TestExportsDB|TestFilesDB|TestHashFile|TestFormatterLoader|TestPrettyPrint|TestFormatTranscript|TestFormatSnippet|TestFormatKeyValue|TestFormatTable|TestFormatSection|TestFormatStatusLine|TestTranslateFlagParsing|TestTranslateNotTranslatable|TestTranslateTranslatable|TestRetryQueue|TestRetryBackoffTiming|TestRetryBackoffCustomBase|TestRetryProcessingOrder|TestRetryPartialFailure|TestRetryMaxRetriesDropsEntry|TestRetryDropCallback|TestRetryRespectsBackoffDelay|TestRetryProcessesAfterBackoffElapsed|TestRetryGracefulShutdownOnCancel|TestRetryRunStopsOnContextCancel|TestRetryRunProcessesMultipleCycles|TestRetryEmptyQueue|TestRetryOnRetryCallback|TestTranscriptFilter|TestProxy|TestRetryRunner|TestBackgroundRetry|TestTranscriptImport|TestTranscriptList|TestTranscriptExport|TestScheduleCommand|TestStatusCommand|TestCancelCommand|TestScheduleStatusCancelWorkflow|TestCLI|TestRepoRoot|TestWriteFixture|TestFixtureDir|TestTempDataDir|TestWithEnv|TestRunCLIWithEnv|TestImporter"
+        run: go test -v -count=1 ./e2e/ -run "TestComposite|TestBuild|TestParseTagLine|TestER1Config|TestER1Queue|TestER1EnqueueFailure|TestUploadFailure|TestRecorderEncodeWAV|TestRecorderStats|TestExportsDB|TestFilesDB|TestHashFile|TestFormatterLoader|TestPrettyPrint|TestFormatTranscript|TestFormatSnippet|TestFormatKeyValue|TestFormatTable|TestFormatSection|TestFormatStatusLine|TestTranslateFlagParsing|TestTranslateNotTranslatable|TestTranslateTranslatable|TestRetryQueue|TestRetryBackoffTiming|TestRetryBackoffCustomBase|TestRetryProcessingOrder|TestRetryPartialFailure|TestRetryMaxRetriesDropsEntry|TestRetryDropCallback|TestRetryRespectsBackoffDelay|TestRetryProcessesAfterBackoffElapsed|TestRetryGracefulShutdownOnCancel|TestRetryRunStopsOnContextCancel|TestRetryRunProcessesMultipleCycles|TestRetryEmptyQueue|TestRetryOnRetryCallback|TestTranscriptFilter|TestProxy|TestRetryRunner|TestBackgroundRetry|TestTranscriptImport|TestTranscriptList|TestTranscriptExport|TestScheduleCommand|TestStatusCommand|TestCancelCommand|TestScheduleStatusCancelWorkflow|TestCLI|TestRepoRoot|TestWriteFixture|TestFixtureDir|TestTempDataDir|TestWithEnv|TestRunCLIWithEnv|TestImporter|TestE2E_|TestQuellwaechter_"
 
   skillctl-race:
     name: skillctl Security Tests (-race)

@@ -4,7 +4,7 @@
 // It answers one release-gate question: is every DISPATCHED verb registered?
 //
 //   - A `case "<verb>":` in the top-level dispatch switch with no row in
-//     docs/CLI-VERBS.md is UNREGISTERED and turns CI red (REQ-7.10). Allocation
+//     docs/v2/referenz/CLI-VERBS.md is UNREGISTERED and turns CI red (REQ-7.10). Allocation
 //     of a verb is thereby a WRITE (add the row first), not a READ of main.go.
 //   - A main-table row whose Verb appears nowhere in the dispatch is a STALE row
 //     (the code moved on): a warning, not a failure.
@@ -19,7 +19,7 @@
 // A verb the switch never names cannot be dispatched at runtime, so the set of
 // case literals IS the dispatch surface.
 //
-// The REGISTERED surface is docs/CLI-VERBS.md. Its "Verb register" table lists
+// The REGISTERED surface is docs/v2/referenz/CLI-VERBS.md. Its "Verb register" table lists
 // dispatched verbs (canonical name plus any aliases, each in a backtick span in
 // the Verb cell); its "Reserved (registered before implemented)" table lists
 // names allocated before their case lands. A dispatched literal is registered if
@@ -50,7 +50,7 @@ import (
 
 const (
 	defaultMain     = "cmd/skillctl/main.go"
-	defaultRegister = "docs/CLI-VERBS.md"
+	defaultRegister = "docs/v2/referenz/CLI-VERBS.md"
 )
 
 // backtickRe captures the content of one inline backtick span (never spanning a
@@ -262,13 +262,13 @@ func isOsArgsIndex(expr ast.Expr) bool {
 	return ok && lit.Kind == token.INT && lit.Value == "1"
 }
 
-// registerRows parses docs/CLI-VERBS.md into the main and reserved verb rows.
+// registerRows parses docs/v2/referenz/CLI-VERBS.md into the main and reserved verb rows.
 // A table row is a line whose trimmed form starts with "|". The Verb cell (first
 // data cell) contributes the canonical name (its first backtick span) and any
 // aliases (further spans). Rows after a heading matching /reserved/i are marked
 // reserved.
 func registerRows(path string) ([]row, error) {
-	b, err := os.ReadFile(path) // #nosec G304 G703 -- path is a trusted CLI argument (the register markdown, default docs/CLI-VERBS.md), not attacker input: same trust model as cmd/docaudit's manual read.
+	b, err := os.ReadFile(path) // #nosec G304 G703 -- path is a trusted CLI argument (the register markdown, default docs/v2/referenz/CLI-VERBS.md), not attacker input: same trust model as cmd/docaudit's manual read.
 	if err != nil {
 		return nil, fmt.Errorf("read register: %w", err)
 	}
@@ -383,6 +383,6 @@ func printHuman(r report) {
 	if r.ok() {
 		fmt.Printf("%sPASS%s: every dispatched verb is registered and every main row carries an exit-code space.\n", green, nc)
 	} else {
-		fmt.Printf("%sFAIL%s: the dispatch and the register disagree (release gate blocks). See docs/CLI-VERBS.md.\n", red, nc)
+		fmt.Printf("%sFAIL%s: the dispatch and the register disagree (release gate blocks). See docs/v2/referenz/CLI-VERBS.md.\n", red, nc)
 	}
 }

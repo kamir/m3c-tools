@@ -52,13 +52,25 @@ func Pack(skillDir, outFile string, opts PackOptions) (digest string, err error)
 	// descends and collectFiles returns nothing: the historical "symlink skills
 	// pack EMPTY" bug (SPEC-0188 §3). EvalSymlinks canonicalizes the root so the walk
 	// packs the target's real contents. Best-effort: a broken/absent link falls
-	// through to the original path and the SKILL.md check below reports it.
+	// through to the original path and the anchor check below reports it.
 	if resolved, rerr := filepath.EvalSymlinks(skillDir); rerr == nil {
 		skillDir = resolved
 	}
 
-	if _, err := os.Stat(filepath.Join(skillDir, "SKILL.md")); err != nil {
-		return "", fmt.Errorf("skill dir %q must contain SKILL.md: %w", skillDir, err)
+	// The anchor file the source dir must contain. A skill anchors on SKILL.md,
+	// an agent on its own definition file (SPEC-0432 §3.1: an agent bundle
+	// carries exactly one content file, <name>.md). One check, parameterized by
+	// kind, so both kinds go through the same canonicalization and digest path.
+	anchor := "SKILL.md"
+	if opts.Manifest.EffectiveKind() == KindAgent {
+		if opts.Manifest.Name == "" {
+			return "", fmt.Errorf("agent bundle needs a manifest name; "+
+				"without it the anchor would be %q and no bundle is written", ".md")
+		}
+		anchor = opts.Manifest.Name + ".md"
+	}
+	if _, err := os.Stat(filepath.Join(skillDir, anchor)); err != nil {
+		return "", fmt.Errorf("source dir %q must contain %s: %w", skillDir, anchor, err)
 	}
 
 	// LIBRARY-BOUNDARY SCOPE GATE (P2b challenge-gate fix). The author signature
@@ -81,8 +93,23 @@ func Pack(skillDir, outFile string, opts PackOptions) (digest string, err error)
 	}
 
 	manifest := opts.Manifest
+
+	// Fail closed on an unknown kind: write nothing (SPEC-0432 AC-12). Same
+	// line as the ValidateManifestDataScope gate above, and deliberately
+	// BEFORE any file is produced.
+	if !ValidKind(manifest.Kind) {
+		return "", fmt.Errorf("bad kind %q (want %q or %q); no bundle written",
+			manifest.Kind, KindSkill, KindAgent)
+	}
 	if manifest.Schema == "" {
-		manifest.Schema = Schema
+		// Only an agent bundle moves to v2. A skill keeps v1 so its canonical
+		// bytes, and therefore its digest, stay exactly as before
+		// (SPEC-0432 §3.2, AC-13).
+		if manifest.Kind == KindAgent {
+			manifest.Schema = SchemaAgent
+		} else {
+			manifest.Schema = Schema
+		}
 	}
 	switch {
 	case !opts.BuiltAt.IsZero():
@@ -126,6 +153,7 @@ func Pack(skillDir, outFile string, opts PackOptions) (digest string, err error)
 		return "", fmt.Errorf("building final archive: %w", err)
 	}
 
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.WriteFile(outFile, finalArchive, 0644); err != nil {
 		return "", fmt.Errorf("writing %s: %w", outFile, err)
 	}
@@ -180,6 +208,15 @@ func collectFiles(skillDir string) ([]fileEntry, error) {
 			return nil // symlinks/devices/sockets out of scope for v1
 		}
 
+		// #nosec G122,G304 -- die Wettlauf-Luecke ist hier ohne Gewinn. Drei Zeilen
+		// darueber weist d.Type().IsRegular() Symlinks ab; wer sie zwischen
+		// Pruefung und Lesen austauschen will, braucht Schreibrecht im
+		// Quellverzeichnis des AUTORS, und mit dem koennte er den Inhalt direkt
+		// aendern. Das Verzeichnis kommt aus --skill (cmd/skillctl/pack.go:102).
+		// Faellt das Recht auseinander, etwa wenn je ein fremdes Verzeichnis
+		// gepackt wird, ist os.Root die Antwort, nicht diese Anmerkung. G304
+		// ("Dateizugriff ueber Variable") sitzt auf derselben Zeile und traegt
+		// dieselbe Begruendung: der Pfad stammt aus dem Verzeichnis des Autors.
 		data, readErr := os.ReadFile(path)
 		if readErr != nil {
 			return fmt.Errorf("reading %s: %w", rel, readErr)

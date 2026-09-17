@@ -83,16 +83,31 @@ func healthCheckER1(apiURL, verifySSLStr string) error {
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	if skipVerify {
+		// #nosec G402 -- gegated durch healthCheckSkipVerify oben, das fuer
+		// jeden REMOTE-Host fail-closed abweist; eine eigene Wache, damit
+		// dieser dritte Pfad nicht an applyTLSVerificationPolicy vorbeikommt.
 		client.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
 	}
 
+	// #nosec G704 -- baseURL ist der Endpunkt aus dem AKTIVEN PROFIL des
+	// Bedieners, nicht aus einer Anfrage. SSRF setzt voraus, dass ein Dienst
+	// fremdbestimmt nach innen greift; hier bestimmt der Bediener das Ziel
+	// seines eigenen Werkzeugs.
+	// VORAUSSETZUNG dieser Einschaetzung: Aufrufargumente und Profil kommen vom
+	// Bediener selbst. Gemessen 2026-09-15: die einzigen Server im Baum
+	// (pkg/skillctl/browse, pkg/skillctl/review) binden ueber loopbackAddr auf
+	// 127.0.0.1 und erreichen diesen Pfad nicht; das Profil liegt unter
+	// $HOME/.m3c-tools/. Erreicht dieser Pfad je einen Dienst, faellt die
+	// Einschaetzung und die Zeile gehoert neu geprueft.
 	req, err := http.NewRequest("GET", baseURL+"/health", nil) // BUG-0086: was /api/plm/projects (requires auth)
 	if err != nil {
 		return fmt.Errorf("health check: %w", err)
 	}
 
+	// #nosec G704 -- dieselbe Stelle, zweite Haelfte: gosec markiert Bau UND
+	// Ausfuehrung der Anfrage. Begruendung am http.NewRequest oben.
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("ER1 server unreachable: %w", err)

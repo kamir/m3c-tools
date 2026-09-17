@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustcore"
 )
@@ -119,6 +120,7 @@ func PullBundlesFromBackend(ctx context.Context, be artifact.Backend, tr *SelfTr
 	}
 
 	cacheRoot := defaultCacheRoot()
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(cacheRoot, 0o755); err != nil {
 		return nil, fmt.Errorf("pull: mkdir cache: %w", err)
 	}
@@ -182,13 +184,26 @@ func PullBundlesFromBackend(ctx context.Context, be artifact.Backend, tr *SelfTr
 			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, Gate: ErrGateBundleSigs, Detail: err.Error()})
 			continue
 		}
+		// Re-gate R1/RG-1: the manifest inside the digest-verified bytes says
+		// what the bundle IS. StagedBundle.Kind feeds the G-23 plan
+		// (PlanInstall's target choice) and the installOne tag-vs-manifest
+		// guard skips itself on an empty Kind, so an empty Kind here would
+		// let an agent bundle show a skills/ plan and write agents/. Read it
+		// now, fail closed like the admit path.
+		man, err := skillbundle.ReadManifest(skbBytes)
+		if err != nil {
+			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, Gate: ErrBundleManifest, Detail: err.Error()})
+			continue
+		}
 
 		// All gates passed: stage to the SAME cache layout PullBundles uses.
 		dir := filepath.Join(cacheRoot, strings.TrimPrefix(digest, "sha256:"))
+		// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return nil, fmt.Errorf("pull: mkdir %s: %w", dir, err)
 		}
 		skbPath := filepath.Join(dir, "bundle.skb")
+		// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 		if err := os.WriteFile(skbPath, skbBytes, 0o644); err != nil {
 			return nil, fmt.Errorf("pull: write %s: %w", skbPath, err)
 		}
@@ -196,6 +211,7 @@ func PullBundlesFromBackend(ctx context.Context, be artifact.Backend, tr *SelfTr
 		packedHost, _ := event["packed_on_host"].(string)
 		admittedAt, _ := event["admitted_at"].(string)
 		res.Staged = append(res.Staged, &StagedBundle{
+			Kind:           man.EffectiveKind(),
 			Name:           name,
 			Version:        ver,
 			Digest:         digest,

@@ -12,6 +12,7 @@ import (
 // The raw file is preserved permanently. The device copy is never modified.
 func StageRecording(rec *Recording, cfg *Config) error {
 	destDir := filepath.Join(cfg.RawDir, rec.Date)
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return fmt.Errorf("creating raw dir %s: %w", destDir, err)
 	}

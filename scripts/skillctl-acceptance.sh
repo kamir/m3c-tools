@@ -152,8 +152,8 @@ one_party() {                        # one_party <name> <skill> <greeting>
 }
 
 echo "== Phase 1: both sides check their installation =="
-one_party mirko mirko-demo-skill "Hello from Mirko"
-one_party eric  eric-demo-skill  "Hello from Eric"
+one_party bob bob-demo-skill "Hello from Bob"
+one_party alice  alice-demo-skill  "Hello from Alice"
 
 # doctor is asked ONCE, about THIS machine, and deliberately not twice as if it
 # were two of them.
@@ -209,12 +209,12 @@ exchange() {                         # exchange <sender> <skill> <prefix>
 }
 
 echo ""
-echo "== Eric to Mirko =="
-exchange eric eric-demo-skill R3
+echo "== Alice to Bob =="
+exchange alice alice-demo-skill R3
 
 echo ""
-echo "== Mirko to Eric (symmetry: neither side has a privileged role) =="
-exchange mirko mirko-demo-skill R4
+echo "== Bob to Alice (symmetry: neither side has a privileged role) =="
+exchange bob bob-demo-skill R4
 
 # ---- summary -------------------------------------------------------------
 

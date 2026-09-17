@@ -116,6 +116,7 @@ func ImportAudio(cfg *ImportConfig, db *tracking.FilesDB, filterExts []string) (
 	}
 
 	// Create the destination base directory if it doesn't exist.
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return nil, fmt.Errorf("create dest dir %s: %w", destDir, err)
 	}
@@ -215,6 +216,7 @@ func ImportAudioFiltered(cfg *ImportConfig, db *tracking.FilesDB, filterExts []s
 	}
 
 	_ = srcDir // validated above
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return nil, fmt.Errorf("create dest dir %s: %w", destDir, err)
 	}
@@ -273,6 +275,7 @@ func importSingleFile(af AudioFile, destDir, contentType string, db *tracking.Fi
 		}
 	}
 
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(memoryPath, 0755); err != nil {
 		return nil, fmt.Errorf("create memory folder: %w", err)
 	}
@@ -292,6 +295,7 @@ func importSingleFile(af AudioFile, destDir, contentType string, db *tracking.Fi
 	if contentType != "" {
 		tagContent += "content-type:" + contentType + "\n"
 	}
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.WriteFile(tagFilePath, []byte(tagContent), 0644); err != nil {
 		return nil, fmt.Errorf("write tags: %w", err)
 	}

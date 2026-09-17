@@ -77,6 +77,7 @@ func Save(dir string, d *Draft) (string, error) {
 		d.CreatedAt = time.Now()
 	}
 
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("draft: create dir %s: %w", dir, err)
 	}
@@ -89,6 +90,7 @@ func Save(dir string, d *Draft) (string, error) {
 		return "", fmt.Errorf("draft: marshal: %w", err)
 	}
 
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return "", fmt.Errorf("draft: write %s: %w", path, err)
 	}

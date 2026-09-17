@@ -15,7 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/master/scripts/skil
 ```
 
 On Windows the same two scripts exist as `.ps1`; see
-[Quickstart: skillctl](../../docs/quickstart-skillctl.md#1b-optional-prove-it-on-your-own-machine-source-self-test).
+[Quickstart: skillctl](../../docs/old/quickstart-skillctl.md#1b-optional-prove-it-on-your-own-machine-source-self-test).
 Run those first. When they are green, the machine is fine and the remaining question is
 whether **you** can operate the thing. That is this ride.
 
@@ -44,12 +44,12 @@ PATH, so call it by path:
 ```
 
 or use the Start menu's **Git Bash** and run the commands below unchanged. Missing git or
-Go entirely: [docs/prerequisites.md](../../docs/prerequisites.md) has one `winget` line per
+Go entirely: [docs/old/prerequisites.md](../../docs/old/prerequisites.md) has one `winget` line per
 tool, plus the no-admin path.
 
 Everything this ride writes lands under `demo/kup-training/artifacts/`, which is
-git-ignored. Your real `~/.claude/` is never touched: the demo gives "Eric" a fake home at
-`artifacts/eric-home/`. When you are done, `rm -rf artifacts/` and nothing remains.
+git-ignored. Your real `~/.claude/` is never touched: the demo gives "Alice" a fake home at
+`artifacts/alice-home/`. When you are done, `rm -rf artifacts/` and nothing remains.
 
 ---
 
@@ -66,16 +66,16 @@ It prints one block per step. Read them as you go; this is the ride, not a build
 | Step | What happens | What it proves |
 |---|---|---|
 | `00` preflight | builds `skillctl` from this checkout into `artifacts/bin/` | you are testing the code in front of you |
-| `01` Mirko authors | `keygen`, `pack`, `sign`, `verify-sig` | a skill becomes a sealed bundle with a detached signature. Note the line **"determinism: two packs of the same input are byte-identical"**: the seal is over content, not over a moment in time |
-| `02` Mirko publishes | offline: skipped cleanly | the registry is storage, not the source of trust |
+| `01` Bob authors | `keygen`, `pack`, `sign`, `verify-sig` | a skill becomes a sealed bundle with a detached signature. Note the line **"determinism: two packs of the same input are byte-identical"**: the seal is over content, not over a moment in time |
+| `02` Bob publishes | offline: skipped cleanly | the registry is storage, not the source of trust |
 | `03` reviewer attests | writes `attestation.json`, level green | a second person's verdict is a separate artifact from the author's signature |
-| `04` Eric pins trust | `trust add` writes `artifacts/eric-home/.claude/skill-trust-roots.yaml` | trust is a decision Eric makes locally, about a key, in a file he owns |
-| `05` Eric installs and runs | verify, extract, run | `artifacts/eric-home/output/hello.txt` exists **only** if the whole chain held |
+| `04` Alice pins trust | `trust add` writes `artifacts/alice-home/.claude/skill-trust-roots.yaml` | trust is a decision Alice makes locally, about a key, in a file he owns |
+| `05` Alice installs and runs | verify, extract, run | `artifacts/alice-home/output/hello.txt` exists **only** if the whole chain held |
 
 Look at that last file. It is the point of the exercise:
 
 ```bash
-cat artifacts/eric-home/output/hello.txt
+cat artifacts/alice-home/output/hello.txt
 ```
 
 A file that could not have appeared if any link had been broken. Now break some links.
@@ -94,7 +94,7 @@ already ran them; run one by hand and read the output slowly:
 | Step | The attack | The refusal |
 |---|---|---|
 | `06` | one byte of the bundle is flipped, the original signature kept | exit **11**, signature invalid |
-| `07` | an attacker signs their own bundle and claims Mirko's identity | exit **11** against Mirko's pinned key, exit 0 against the attacker's own key. The signature is fine; the IDENTITY is not |
+| `07` | an attacker signs their own bundle and claims Bob's identity | exit **11** against Bob's pinned key, exit 0 against the attacker's own key. The signature is fine; the IDENTITY is not |
 | `08` | the bundle arrives with no signature at all | non-zero refusal, never a fail-open |
 | `09` | an installed file is edited after installation | the `CHECKSUMS` comparison catches it, and repair restores from the signed bundle |
 
@@ -104,7 +104,7 @@ else is your decision about the key, and that decision is step `04`.
 
 **Exit codes are the vocabulary.** `0` accepted, `10` digest mismatch, `11` author signature
 invalid, `17` revoked, `2` a governance action refusing to be forced. The full table is in
-the [skillctl manual](../../docs/manual-skillctl.md#exit-codes).
+the [skillctl manual](../../docs/v2/referenz/manual-skillctl.md#exit-codes).
 
 ---
 
@@ -126,7 +126,7 @@ without a server is safe, it just proves nothing.
 
 | Step | What happens | What it proves |
 |---|---|---|
-| `10-scan-and-sync.sh` | scans Eric's installed skills and imports them into his skill profile | the fleet view is derived from what is actually on disk, not from what someone claimed |
+| `10-scan-and-sync.sh` | scans Alice's installed skills and imports them into his skill profile | the fleet view is derived from what is actually on disk, not from what someone claimed |
 | `11-use-skill.sh` | posts five usage events for `kup-hello` | mastery is earned by use, and every use is a recorded event |
 | `12-decay.sh` | recalculates mastery for every profile | an unused skill decays; a capability nobody exercises is not a capability |
 
@@ -141,7 +141,7 @@ the sandbox.
 1. A skill can be sealed so that any later change is detectable (`01`, `06`).
 2. The seal names a key, not a person, and pinning that key is a local decision (`04`, `07`).
 3. A second pair of eyes is a separate, verifiable artifact (`03`).
-4. Nothing runs on Eric's machine that did not survive the whole chain (`05`).
+4. Nothing runs on Alice's machine that did not survive the whole chain (`05`).
 5. Refusal is the default; there is no path where an invalid bundle is quietly accepted
    (`06` to `09`).
 6. What a team can actually do is measured from installed reality and real usage, and it
@@ -173,7 +173,7 @@ skillctl-demo --mode kata      # K1 seal, K2 tamper, K3 govern, K4 trust roots, 
 skillctl-demo --kata-list      # the board, and your progress
 ```
 
-See [Quickstart: skillctl-demo](../../docs/quickstart-skillctl-demo.md#5-training-mode-kata-shipped).
+See [Quickstart: skillctl-demo](../../docs/old/quickstart-skillctl-demo.md#5-training-mode-kata-shipped).
 
 ---
 
@@ -189,8 +189,8 @@ See [Quickstart: skillctl-demo](../../docs/quickstart-skillctl-demo.md#5-trainin
 
 ## Where the rest of it lives
 
-- Every command, flag and exit code: [skillctl manual](../../docs/manual-skillctl.md)
-- Install, author, sign, verify in five minutes: [Quickstart: skillctl](../../docs/quickstart-skillctl.md)
-- The two-person handover over a real server: [Acceptance and handover](../../docs/acceptance-skillctl-lifecycle.md)
+- Every command, flag and exit code: [skillctl manual](../../docs/v2/referenz/manual-skillctl.md)
+- Install, author, sign, verify in five minutes: [Quickstart: skillctl](../../docs/old/quickstart-skillctl.md)
+- The two-person handover over a real server: [Acceptance and handover](../../docs/v2/betrieb/acceptance-skillctl-lifecycle.md)
 - What this directory is for the maintainer, and the four release gates it asserts:
   [README.md](README.md)

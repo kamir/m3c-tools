@@ -24,6 +24,12 @@ func makeSkbTGZ(name, skillMd string) []byte {
 	body := []byte(skillMd)
 	_ = tw.WriteHeader(&tar.Header{Name: name + "/SKILL.md", Mode: 0644, Size: int64(len(body)), Typeflag: tar.TypeReg})
 	_, _ = tw.Write(body)
+	// A real bundle always carries bundle.json (Pack synthesizes it), and since
+	// SPEC-0432 the install path READS it to decide where the bundle goes. A
+	// fixture without one was testing a bundle that cannot exist.
+	man := []byte(`{"schema":"m3c-skill-bundle/v1","name":"` + name + `","version":"1.0.0"}`)
+	_ = tw.WriteHeader(&tar.Header{Name: name + "/bundle.json", Mode: 0644, Size: int64(len(man)), Typeflag: tar.TypeReg})
+	_, _ = tw.Write(man)
 	_ = tw.Close()
 	_ = gw.Close()
 	return gz.Bytes()
@@ -180,6 +186,7 @@ func TestAuditProvenance_NoSidecar(t *testing.T) {
 	}
 }
 
+// THREAT-R04: an install that downgrades an already-installed version must be refused.
 func TestInstall_RefusesDowngrade(t *testing.T) {
 	skillsDir := t.TempDir()
 	// Install v2 first.
@@ -266,6 +273,7 @@ func makeSymlinkSkb(name string) []byte {
 
 // SEC-M1: an oversized .skb (decompresses past the byte ceiling) must abort
 // extraction rather than fill the disk.
+// THREAT-R07: an oversized decompression must abort at the byte ceiling.
 func TestExtractSkb_OversizedAborts(t *testing.T) {
 	skb := makeOversizedSkb("x", MaxExtractedBytes+(1<<20)) // 1 MiB over the cap
 	dst := t.TempDir()
@@ -279,6 +287,7 @@ func TestExtractSkb_OversizedAborts(t *testing.T) {
 }
 
 // SEC-M1: too many entries (tar bomb shape) must abort.
+// THREAT-R07: a pathological entry count must abort at the file-count ceiling.
 func TestExtractSkb_TooManyFilesAborts(t *testing.T) {
 	var gz bytes.Buffer
 	gw := gzip.NewWriter(&gz)
@@ -297,6 +306,7 @@ func TestExtractSkb_TooManyFilesAborts(t *testing.T) {
 }
 
 // SEC-M1: a symlink/hardlink entry must be refused.
+// THREAT-R02: a symlink entry must not redirect a later write outside the install root.
 func TestExtractSkb_SymlinkRefused(t *testing.T) {
 	skb := makeSymlinkSkb("x")
 	err := extractSkb(skb, filepath.Join(t.TempDir(), "out"))

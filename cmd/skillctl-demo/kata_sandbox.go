@@ -28,6 +28,7 @@ import (
 // to it so `verify --bundle` passes offline against the pinned trust-roots.
 func (sb *Sandbox) KataSealBundle(nonce string) (skb, digest string, err error) {
 	dir := filepath.Join(sb.Base, "kata", "seal", nonce)
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", "", err
 	}
@@ -56,6 +57,7 @@ func (sb *Sandbox) KataRevocations(digest, nonce string) (string, error) {
 		return "", fmt.Errorf("kata sign revocation list: %w", err)
 	}
 	dir := filepath.Join(sb.Base, "kata", "revoke", nonce)
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
@@ -64,6 +66,7 @@ func (sb *Sandbox) KataRevocations(digest, nonce string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.WriteFile(path, b, 0o644); err != nil {
 		return "", err
 	}

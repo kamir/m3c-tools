@@ -52,7 +52,7 @@
   prose is reimplemented here natively. The others need a working `bash`: Git
   for Windows ships one, and this script finds it next to git.exe even though
   the recommended install leaves it off PATH. The gosec diff gate also needs jq.
-  Missing either, the gate reports SKIP. See docs/prerequisites.md.
+  Missing either, the gate reports SKIP. See docs/old/prerequisites.md.
 
 .PARAMETER RepoDir
   Where the checkout lives. Default: $HOME\m3c-tools.
@@ -232,7 +232,7 @@ $Scope = if ($Full) { @('./...') } else { @('./cmd/skillctl/...', './pkg/skillct
 
 Write-Host "  repo   : $RepoDir"
 Write-Host "  scope  : $($Scope -join ' ')"
-Write-Host "  bash   : $(if ($Bash) { $Bash } else { 'not found (POSIX gates will be skipped; see docs/prerequisites.md)' })"
+Write-Host "  bash   : $(if ($Bash) { $Bash } else { 'not found (POSIX gates will be skipped; see docs/old/prerequisites.md)' })"
 
 # --- 1. stage 1 -------------------------------------------------------------
 if ($SkipStage1) {

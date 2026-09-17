@@ -61,6 +61,10 @@ func NewSyncAPIClient(er1APIURL, apiKey, userID string, skipTLSVerify bool) *Syn
 
 	transport := &http.Transport{}
 	if skipTLSVerify {
+		// #nosec G402 -- skipTLSVerify ist ein PARAMETER, und alle Aufrufer
+		// uebergeben !er1Cfg.VerifySSL, also den von
+		// pkg/er1.applyTLSVerificationPolicy (SEC-M7) geprueften Wert. Wer
+		// diese Funktion mit einem ungeprueften Flag ruft, umgeht die Politik.
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 

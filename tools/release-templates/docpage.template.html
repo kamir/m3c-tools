@@ -1,0 +1,569 @@
+<!-- Erzeugt von tools/docpage.sh aus einer Markdown-Datei unter docs/.
+     NICHT von Hand aendern: scripts/check-docpages.sh erzeugt diese Datei
+     neu und vergleicht sie mit dem Baum. Eine Handaenderung faellt dort auf.
+     Quelle der Form: tools/release-templates/docpage.template.html -->
+<title>__TITLE__</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+<style>
+:root{
+  --bg:#f5f7f8; --surface:#ffffff; --surface-2:#eef2f4;
+  --ink:#182029; --ink-soft:#59656f; --line:#dde3e8; --line-soft:#e9edf0;
+  --accent:#0d6e6b; --accent-soft:#e2f0ef;
+  --warn:#8d5a13; --warn-soft:#fbf1e0; 
+  --stop:#9c2f2f; --ok:#1e6a45;
+  --term-bg:#131c24; --term-fg:#c9d6e0; --term-dim:#7c8f9e; --term-line:#25333f;
+  --rail:248px;
+}
+:root:not([data-theme="light"]){}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10151a; --surface:#161e25; --surface-2:#1c262e;
+    --ink:#dfe6ec; --ink-soft:#93a1ac; --line:#26313a; --line-soft:#1e272f;
+    --accent:#49b5ae; --accent-soft:#16302f;
+    --warn:#d7a459; --warn-soft:#2a2216;
+    --stop:#e08282; --ok:#6cc294;
+    --term-bg:#0d141a; --term-line:#1f2b35;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10151a; --surface:#161e25; --surface-2:#1c262e;
+  --ink:#dfe6ec; --ink-soft:#93a1ac; --line:#26313a; --line-soft:#1e272f;
+  --accent:#49b5ae; --accent-soft:#16302f;
+  --warn:#d7a459; --warn-soft:#2a2216;
+  --stop:#e08282; --ok:#6cc294;
+  --term-bg:#0d141a; --term-line:#1f2b35;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px; line-height:1.62; -webkit-font-smoothing:antialiased;
+}
+.shell{display:grid; grid-template-columns:var(--rail) minmax(0,1fr); gap:0; min-height:100vh}
+
+/* ---------- Schiene ---------- */
+.rail{
+  border-right:1px solid var(--line); background:var(--surface);
+  position:sticky; top:0; height:100vh; overflow-y:auto; padding:28px 0 40px;
+}
+.brand{padding:0 22px 20px; border-bottom:1px solid var(--line-soft); margin-bottom:16px}
+.brand .kicker{
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:10.5px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--accent); margin:0 0 7px;
+}
+.brand h1{
+  font-family:"IBM Plex Serif",Georgia,serif; font-weight:600; font-size:18px;
+  line-height:1.3; margin:0; text-wrap:balance;
+}
+.brand .meta{font-size:11.5px; color:var(--ink-soft); margin:9px 0 0; font-family:"IBM Plex Mono",monospace}
+nav ol{list-style:none; margin:0; padding:0}
+nav a{
+  display:grid; grid-template-columns:26px 1fr; gap:8px; align-items:baseline;
+  padding:6px 22px; color:var(--ink-soft); text-decoration:none; font-size:13.5px;
+  border-left:2px solid transparent;
+}
+nav a:hover{color:var(--ink); background:var(--surface-2)}
+nav a.on{color:var(--ink); border-left-color:var(--accent); background:var(--accent-soft); font-weight:500}
+nav a .n{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--accent); font-variant-numeric:tabular-nums}
+nav a:focus-visible{outline:2px solid var(--accent); outline-offset:-2px}
+.progress{
+  margin:18px 22px 0; padding:11px 13px; border:1px solid var(--line); border-radius:7px;
+  background:var(--surface-2); font-size:12px; color:var(--ink-soft);
+}
+.progress b{color:var(--ink); font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums}
+.progress .bar{height:3px; background:var(--line); border-radius:2px; margin-top:8px; overflow:hidden}
+.progress .bar i{display:block; height:100%; width:0; background:var(--accent); transition:width .25s ease}
+
+/* ---------- Dokument ---------- */
+main{padding:0 0 100px}
+.doc{max-width:74ch; margin:0 auto; padding:52px 40px 0}
+.doc>h1:first-child{
+  font-family:"IBM Plex Serif",Georgia,serif; font-size:33px; font-weight:600;
+  line-height:1.18; margin:0 0 6px; text-wrap:balance; letter-spacing:-.01em;
+}
+.doc h2{
+  font-family:"IBM Plex Serif",Georgia,serif; font-size:23px; font-weight:600;
+  margin:52px 0 14px; padding-top:22px; border-top:1px solid var(--line);
+  line-height:1.25; text-wrap:balance; scroll-margin-top:20px;
+}
+.doc h3{
+  font-family:"IBM Plex Sans",sans-serif; font-size:16.5px; font-weight:600;
+  margin:34px 0 10px; line-height:1.35; scroll-margin-top:20px; color:var(--ink);
+}
+.doc p{margin:0 0 15px}
+.doc>p:first-of-type{font-size:17.5px; color:var(--ink-soft); line-height:1.55}
+.doc a{color:var(--accent); text-decoration:none; border-bottom:1px solid var(--accent-soft)}
+.doc a:hover{border-bottom-color:var(--accent)}
+.doc strong{font-weight:600}
+.doc ul,.doc ol{margin:0 0 15px; padding-left:22px}
+.doc li{margin:0 0 6px}
+.doc hr{border:0; border-top:1px solid var(--line); margin:40px 0}
+
+/* Code, inline und Block */
+.doc :not(pre)>code{
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.875em;
+  background:var(--surface-2); border:1px solid var(--line-soft);
+  padding:1px 5px; border-radius:4px; word-break:break-word;
+}
+.term{
+  background:var(--term-bg); border:1px solid var(--term-line); border-radius:8px;
+  margin:0 0 20px; overflow:hidden;
+}
+.term .strip{
+  display:flex; justify-content:space-between; align-items:center;
+  padding:6px 13px; border-bottom:1px solid var(--term-line);
+  font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.13em;
+  text-transform:uppercase; color:var(--term-dim);
+}
+.term pre{
+  margin:0; padding:13px 15px; overflow-x:auto;
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:12.9px; line-height:1.62;
+  color:var(--term-fg); white-space:pre;
+}
+.term pre code{background:none; border:0; padding:0; font-size:inherit; color:inherit}
+
+/* Tabellen */
+.tw{overflow-x:auto; margin:0 0 22px; border:1px solid var(--line); border-radius:8px; background:var(--surface)}
+.doc table{border-collapse:collapse; width:100%; font-size:13.8px}
+.doc th{
+  text-align:left; font-weight:600; font-size:11px; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--ink-soft); padding:10px 14px; border-bottom:1px solid var(--line); background:var(--surface-2);
+  white-space:nowrap;
+}
+.doc td{padding:10px 14px; border-bottom:1px solid var(--line-soft); vertical-align:top}
+.doc tr:last-child td{border-bottom:0}
+.doc td code{font-size:.85em}
+
+/* Achtung-Kasten */
+.doc blockquote{
+  margin:0 0 22px; padding:15px 18px; background:var(--warn-soft);
+  border-left:3px solid var(--warn); border-radius:0 7px 7px 0;
+}
+.doc blockquote p{margin:0 0 10px; font-size:14.8px}
+.doc blockquote p:last-child{margin:0}
+.doc blockquote::before{
+  content:"Achtung"; display:block; font-family:"IBM Plex Mono",monospace;
+  font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--warn); margin-bottom:7px;
+}
+
+/* Pruefliste */
+table.check td:first-child{width:34px; padding-right:0}
+table.check input{width:15px; height:15px; accent-color:var(--accent); cursor:pointer; margin:3px 0 0}
+table.check tr.done td:not(:first-child){opacity:.5; text-decoration:line-through; text-decoration-thickness:1px}
+
+/* Kopfzeile mobil */
+.mobiletop{display:none}
+@media (max-width:900px){
+  .shell{grid-template-columns:1fr}
+  .rail{position:static; height:auto; border-right:0; border-bottom:1px solid var(--line); padding:20px 0}
+  .doc{padding:32px 20px 0}
+  .doc>h1:first-child{font-size:27px}
+  .mobiletop{display:block; padding:0 22px 12px}
+  .mobiletop button{
+    font:inherit; font-size:13px; padding:7px 13px; border:1px solid var(--line);
+    background:var(--surface-2); color:var(--ink); border-radius:6px; cursor:pointer;
+  }
+}
+.footnote{
+  max-width:74ch; margin:56px auto 0; padding:22px 40px 0; border-top:1px solid var(--line);
+  font-size:12.5px; color:var(--ink-soft); font-family:"IBM Plex Mono",monospace; line-height:1.7;
+}
+@media (max-width:900px){.footnote{padding:22px 20px 0}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important; animation:none!important}}
+
+/* ══════════════════════════════════════════════════════════════════
+   DRUCK-FLAVOR
+   Ein Ausdruck kostet Toner dort, wo Flaechen gefuellt sind, nicht dort,
+   wo Linien laufen. Deshalb faellt hier jede Flaeche weg: der dunkle
+   Terminalgrund, die Tabellenkoepfe, der Achtung-Kasten, die Schiene.
+   Was bleibt, sind Haarlinien und Text. Die Tokens tragen das, deshalb
+   sind unten fast nur Farbwerte und vier bauliche Regeln.
+   ══════════════════════════════════════════════════════════════════ */
+@media print{
+  :root, :root[data-theme="dark"], :root:not([data-theme="light"]){
+    --bg:#ffffff; --surface:#ffffff; --surface-2:#ffffff;
+    --ink:#000000; --ink-soft:#333a40; --line:#98a1a8; --line-soft:#c8ced3;
+    --accent:#0b5553; --accent-soft:transparent;
+    --warn:#7a4a0a; --warn-soft:transparent;
+    --stop:#7d2020; --ok:#15543a;
+    --term-bg:#ffffff; --term-fg:#000000; --term-dim:#4a555e; --term-line:#98a1a8;
+  }
+}
+:root[data-flavor="druck"], :root[data-flavor="druck"][data-theme="dark"]{
+  --bg:#ffffff; --surface:#ffffff; --surface-2:#ffffff;
+  --ink:#000000; --ink-soft:#333a40; --line:#98a1a8; --line-soft:#c8ced3;
+  --accent:#0b5553; --accent-soft:transparent;
+  --warn:#7a4a0a; --warn-soft:transparent;
+  --stop:#7d2020; --ok:#15543a;
+  --term-bg:#ffffff; --term-fg:#000000; --term-dim:#4a555e; --term-line:#98a1a8;
+}
+
+/* Bauliches: gilt auf Papier und in der Druckansicht gleichermassen. */
+@media print{
+  .rail,.copy,.flavorbar{display:none !important}
+  .shell{grid-template-columns:1fr}
+  .doc{max-width:none; padding:0}
+  .footnote{padding:14px 0 0; margin-top:26px}
+}
+:root[data-flavor="druck"] .rail{display:none}
+:root[data-flavor="druck"] .shell{grid-template-columns:1fr}
+:root[data-flavor="druck"] .doc{max-width:82ch}
+:root[data-flavor="druck"] .copy{display:none}
+
+/* Der Achtung-Kasten traegt im Druck eine Linie statt einer Flaeche. */
+@media print{ .doc blockquote{border-left-width:2px; padding-left:14px} }
+:root[data-flavor="druck"] .doc blockquote{border-left-width:2px; padding-left:14px}
+
+/* Die Haken sind auf Papier zum Ausfuellen da, also echte Kaestchen. */
+@media print{
+  table.check input{appearance:none; -webkit-appearance:none; width:13px; height:13px;
+    border:1.2px solid #000; border-radius:2px; background:#fff}
+  table.check tr.done td:not(:first-child){opacity:1; text-decoration:none}
+  table.check input:checked::after{content:"✓"; display:block; font-size:11px; line-height:11px; text-align:center}
+}
+:root[data-flavor="druck"] table.check input{appearance:none; -webkit-appearance:none;
+  width:13px; height:13px; border:1.2px solid var(--ink); border-radius:2px; background:#fff}
+:root[data-flavor="druck"] table.check input:checked::after{content:"✓"; display:block;
+  font-size:11px; line-height:11px; text-align:center; color:var(--ink)}
+:root[data-flavor="druck"] table.check tr.done td:not(:first-child){opacity:1; text-decoration:none}
+
+/* Nur auf Papier: Satzspiegel, Schriftgrade und die Frage, wo getrennt wird. */
+@page{margin:17mm 16mm}
+@media print{
+  body{font-size:10.4pt; line-height:1.48}
+  .doc>h1:first-child{font-size:20pt}
+  .doc h2{font-size:14pt; margin-top:26px; padding-top:12px; break-after:avoid}
+  .doc h3{font-size:11.6pt; margin-top:18px; break-after:avoid}
+  .doc>p:first-of-type{font-size:11pt}
+  .doc table{font-size:9.3pt}
+  .term pre{font-size:8.9pt; line-height:1.5; white-space:pre-wrap; word-break:break-word}
+  .term,.tw,.doc blockquote,.doc table tr{break-inside:avoid}
+  .doc a{color:var(--ink); border-bottom:0; text-decoration:underline}
+  .term .strip{padding:3px 10px}
+}
+
+/* Die Umschaltleiste, nur am Schirm. */
+.flavorbar{display:flex; gap:7px; padding:14px 22px 0; flex-wrap:wrap}
+.flavorbar button{
+  font:inherit; font-size:12px; line-height:1; display:inline-flex; align-items:center; gap:6px;
+  padding:7px 11px; border:1px solid var(--line); border-radius:6px;
+  background:var(--surface-2); color:var(--ink-soft); cursor:pointer;
+}
+.flavorbar button:hover{color:var(--ink); border-color:var(--accent)}
+.flavorbar button[aria-pressed="true"]{color:var(--accent); border-color:var(--accent); background:var(--accent-soft)}
+.flavorbar button:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.flavorbar svg{width:13px; height:13px; flex:none}
+
+/* Kopier-Knopf im Streifen jedes Blocks. */
+.term .strip{gap:10px}
+.copy{
+  font:inherit; font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:10px;
+  letter-spacing:.09em; text-transform:uppercase; line-height:1;
+  display:inline-flex; align-items:center; gap:5px; padding:4px 7px;
+  border:1px solid var(--term-line); border-radius:5px;
+  background:transparent; color:var(--term-dim); cursor:pointer;
+}
+.copy:hover{color:var(--term-fg); border-color:var(--term-dim)}
+.copy:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+.copy svg{width:11px; height:11px; flex:none}
+.copy[data-state="ok"]{color:var(--ok); border-color:var(--ok)}
+.copy[data-state="fail"]{color:var(--stop); border-color:var(--stop)}
+
+</style>
+
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">
+      <p class="kicker">Ops-Runbook</p>
+      <h1>__TITLE__</h1>
+      <p class="meta">__SOURCE__</p>
+    </div>
+    <div class="flavorbar" id="flavorbar" hidden>
+      <button type="button" id="flavorbtn" aria-pressed="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4.5 6V2.6h7V6"/><rect x="2" y="6" width="12" height="5" rx="1.1"/><path d="M4.5 10h7v3.4h-7z"/></svg><span>Druckansicht</span></button>
+      <button type="button" id="printbtn">Drucken</button>
+    </div>
+    <div class="mobiletop"><button id="navtoggle" type="button" aria-expanded="false">Inhalt anzeigen</button></div>
+    <nav id="nav" aria-label="Abschnitte"><ol id="navlist"></ol></nav>
+    <div class="progress" id="progress" hidden>
+      <span><b id="pdone">0</b> von <b id="ptotal">8</b> Voraussetzungen abgehakt</span>
+      <span class="bar"><i id="pbar"></i></span>
+    </div>
+  </aside>
+
+  <main>
+    <article class="doc" id="doc"></article>
+    <p class="footnote" id="foot"></p>
+  </main>
+</div>
+
+<script id="src" type="text/markdown">__MARKDOWN__</script>
+<!-- Integritaet ueber SRI: der Hash ist an den Bytes von cdnjs gerechnet
+     (sha256 15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894).
+     Stimmt die Auslieferung nicht damit ueberein, laedt der Browser sie NICHT,
+     und die Seite faellt auf ihre Rohtext-Darstellung zurueck. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"
+        integrity="sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+(function () {
+  var raw = document.getElementById('src').textContent;
+  var doc = document.getElementById('doc');
+
+  // ── Druck-Flavor ───────────────────────────────────────────────────
+  // Zwei Wege zum selben Ergebnis: Cmd+P greift ueber @media print von
+  // allein, der Knopf zeigt dasselbe vorher am Schirm. Die Wahl bleibt in
+  // diesem Browser, und ein Speicher, der nicht da ist, aendert nichts.
+  (function(){
+    var bar = document.getElementById('flavorbar');
+    var btn = document.getElementById('flavorbtn');
+    var prt = document.getElementById('printbtn');
+    var on = false;
+    try { on = localStorage.getItem('hat-runbook-flavor') === 'druck'; } catch (e) {}
+
+    function apply(){
+      document.documentElement.setAttribute('data-flavor', on ? 'druck' : 'schirm');
+      btn.setAttribute('aria-pressed', String(on));
+      btn.querySelector('span').textContent = on ? 'Druckansicht an' : 'Druckansicht';
+    }
+    btn.addEventListener('click', function(){
+      on = !on;
+      try { localStorage.setItem('hat-runbook-flavor', on ? 'druck' : 'schirm'); } catch (e) {}
+      apply();
+    });
+    prt.addEventListener('click', function(){ window.print(); });
+    apply();
+    bar.hidden = false;
+  })();
+
+  // Faellt die Bibliothek aus, bleibt der Text lesbar. Eine leere Seite waere
+  // die schlechtere Antwort auf ein 404.
+  if (typeof marked === 'undefined') {
+    var pre = document.createElement('pre');
+    pre.style.whiteSpace = 'pre-wrap';
+    pre.style.fontFamily = '"IBM Plex Mono", monospace';
+    pre.style.fontSize = '13px';
+    pre.textContent = raw;
+    doc.appendChild(pre);
+    return;
+  }
+
+  // ── Kopier-Knopf ───────────────────────────────────────────────────
+  // Ein Block enthaelt oft Kommando UND Ausgabe. Wer auf "kopieren"
+  // drueckt, will das Kommando, nicht das Protokoll. Beginnt eine Zeile
+  // mit "$", wird nur sie genommen, samt ihrer Fortsetzungszeilen: eine
+  // Zeile, die auf "\" endet, zieht die naechste mit.
+  function commandOf(text){
+    var lines = text.replace(/\s+$/,'').split('\n');
+    var out = [], take = false;
+    for (var i=0;i<lines.length;i++){
+      var l = lines[i];
+      if (/^\s*\$\s?/.test(l)){ out.push(l.replace(/^\s*\$\s?/,'')); take = /\\\s*$/.test(l); continue; }
+      if (take){ out.push(l); take = /\\\s*$/.test(l); }
+    }
+    return out.length ? out.join('\n') : text.replace(/\s+$/,'');
+  }
+
+  var ICON_COPY = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">'
+    + '<rect x="5.5" y="5.5" width="8.5" height="8.5" rx="1.6"/>'
+    + '<path d="M10.5 3.2V2.8A0.8 0.8 0 0 0 9.7 2H2.8a0.8 0.8 0 0 0-0.8 0.8v6.9a0.8 0.8 0 0 0 0.8 0.8h0.4"/></svg>';
+  var ICON_OK = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">'
+    + '<path d="M3 8.4l3.2 3.2L13 4.8"/></svg>';
+
+  function writeClipboard(text){
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise(function(resolve, reject){
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly','');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+      ok ? resolve() : reject(new Error('execCommand refused'));
+    });
+  }
+
+  function addCopy(strip, pre, isRun){
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'copy';
+    var label = isRun ? 'Kommando' : 'kopieren';
+    b.innerHTML = ICON_COPY + '<span>' + label + '</span>';
+    b.setAttribute('aria-label', (isRun ? 'Kommando' : 'Block') + ' in die Zwischenablage kopieren');
+    b.addEventListener('click', function(){
+      var text = isRun ? commandOf(pre.textContent) : pre.textContent.replace(/\s+$/,'');
+      writeClipboard(text).then(function(){
+        b.dataset.state = 'ok';
+        b.innerHTML = ICON_OK + '<span>kopiert</span>';
+      }).catch(function(){
+        // Klappt es nicht, wird der Text markiert: dann tut es Cmd+C.
+        b.dataset.state = 'fail';
+        b.innerHTML = ICON_COPY + '<span>markiert, Cmd+C</span>';
+        var r = document.createRange();
+        r.selectNodeContents(pre);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }).then(function(){
+        setTimeout(function(){
+          delete b.dataset.state;
+          b.innerHTML = ICON_COPY + '<span>' + label + '</span>';
+        }, 1900);
+      });
+    });
+    strip.appendChild(b);
+  }
+
+
+  marked.setOptions({ gfm: true, breaks: false });
+  doc.innerHTML = marked.parse(raw);
+
+  // Anker wie auf GitHub, damit die Verweise im Dokument selbst greifen.
+  function slug(t) {
+    return t.toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, '').trim().replace(/\s+/g, '-');
+  }
+  var heads = doc.querySelectorAll('h2, h3');
+  heads.forEach(function (h) { h.id = slug(h.textContent); });
+
+  // Terminalbloecke: der Streifen sagt, was der Block ist.
+  doc.querySelectorAll('pre').forEach(function (pre) {
+    var box = document.createElement('div');
+    box.className = 'term';
+    var txt = pre.textContent;
+    var label = /^\s*\$/m.test(txt) ? 'gelaufen' : (/^(skillctl|git|curl|irm|export|tools\/)/m.test(txt) ? 'kommando' : 'ausgabe');
+    if (/^\s*\{/.test(txt)) label = 'json';
+    if (/^##\s/m.test(txt)) label = 'vorlage';
+    var strip = document.createElement('div');
+    strip.className = 'strip';
+    var tag = document.createElement('span');
+    tag.textContent = label;
+    strip.appendChild(tag);
+    pre.parentNode.insertBefore(box, pre);
+    box.appendChild(strip);
+    box.appendChild(pre);
+    addCopy(strip, pre, label === 'gelaufen');
+  });
+
+  // Tabellen duerfen seitlich scrollen, die Seite nie.
+  doc.querySelectorAll('table').forEach(function (t) {
+    var w = document.createElement('div');
+    w.className = 'tw';
+    t.parentNode.insertBefore(w, t);
+    w.appendChild(t);
+    var digits = t.querySelectorAll('td');
+    digits.forEach(function (td) { if (/^\s*(V?\d+|Exit \d+)\s*$/.test(td.textContent)) td.style.fontVariantNumeric = 'tabular-nums'; });
+  });
+
+  // Die Abhakliste V1 bis V8 wird eine echte Liste. Der Stand bleibt nur in
+  // diesem Browser, und ein Speicher, der nicht da ist, darf nichts kaputtmachen.
+  var check = null;
+  doc.querySelectorAll('table').forEach(function (t) {
+    var first = t.querySelector('tbody td');
+    if (first && /^V1$/.test(first.textContent.trim())) check = t;
+  });
+  if (check) {
+    check.classList.add('check');
+    var hr = check.querySelector('thead tr');
+    var th = document.createElement('th');
+    th.setAttribute('scope', 'col');
+    var sr = document.createElement('span');
+    sr.style.position = 'absolute';
+    sr.style.left = '-9999px';
+    sr.textContent = 'erledigt';
+    th.appendChild(sr);
+    hr.insertBefore(th, hr.firstChild);
+
+    var rows = Array.prototype.slice.call(check.querySelectorAll('tbody tr'));
+    var saved = {};
+    try { saved = JSON.parse(localStorage.getItem('hat-runbook-checks') || '{}'); } catch (e) { saved = {}; }
+
+    var prog = document.getElementById('progress');
+    var pdone = document.getElementById('pdone');
+    var ptotal = document.getElementById('ptotal');
+    var pbar = document.getElementById('pbar');
+    prog.hidden = false;
+    ptotal.textContent = rows.length;
+
+    function paint() {
+      var n = rows.filter(function (r) { return r.classList.contains('done'); }).length;
+      pdone.textContent = n;
+      pbar.style.width = (n / rows.length * 100) + '%';
+    }
+
+    rows.forEach(function (r) {
+      var key = r.querySelector('td').textContent.trim();
+      var td = document.createElement('td');
+      var box = document.createElement('input');
+      box.type = 'checkbox';
+      box.setAttribute('aria-label', key + ' erledigt');
+      box.checked = !!saved[key];
+      if (box.checked) r.classList.add('done');
+      box.addEventListener('change', function () {
+        r.classList.toggle('done', box.checked);
+        saved[key] = box.checked;
+        try { localStorage.setItem('hat-runbook-checks', JSON.stringify(saved)); } catch (e) { /* privates Fenster: dann eben nur diese Sitzung */ }
+        paint();
+      });
+      td.appendChild(box);
+      r.insertBefore(td, r.firstChild);
+    });
+    paint();
+  }
+
+  // Schiene aus den H2 bauen, Nummer getrennt vom Titel.
+  var list = document.getElementById('navlist');
+  var sections = [];
+  doc.querySelectorAll('h2').forEach(function (h) {
+    var t = h.textContent;
+    if (/^(Inhalt)$/.test(t)) return;
+    var m = t.match(/^(\d+)\.\s*(.*)$/);
+    var li = document.createElement('li');
+    var a = document.createElement('a');
+    a.href = '#' + h.id;
+    // Der Text kommt aus einer Ueberschrift und wird als TEXT gesetzt. Frueher
+    // stand hier innerHTML: eine Ueberschrift mit einem "<" haette die Schiene
+    // zerlegt, und CodeQL hat es als js/xss-through-dom gemeldet.
+    var num = document.createElement('span');
+    num.className = 'n';
+    num.textContent = m ? m[1] : '\u00b7';
+    var cap = document.createElement('span');
+    cap.textContent = m ? m[2] : t;
+    a.appendChild(num);
+    a.appendChild(cap);
+    li.appendChild(a);
+    list.appendChild(li);
+    sections.push({ h: h, a: a });
+  });
+
+  var obs = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (!e.isIntersecting) return;
+      sections.forEach(function (s) { s.a.classList.toggle('on', s.h === e.target); });
+    });
+  }, { rootMargin: '0px 0px -75% 0px', threshold: 0 });
+  sections.forEach(function (s) { obs.observe(s.h); });
+
+  // Auf schmalen Schirmen ist die Schiene zugeklappt.
+  var nav = document.getElementById('nav');
+  var toggle = document.getElementById('navtoggle');
+  function narrow() { return window.matchMedia('(max-width: 900px)').matches; }
+  function apply() { nav.hidden = narrow() && toggle.getAttribute('aria-expanded') === 'false'; }
+  toggle.addEventListener('click', function () {
+    var open = toggle.getAttribute('aria-expanded') === 'true';
+    toggle.setAttribute('aria-expanded', String(!open));
+    toggle.textContent = open ? 'Inhalt anzeigen' : 'Inhalt verbergen';
+    apply();
+  });
+  window.addEventListener('resize', apply);
+  apply();
+
+  document.getElementById('foot').textContent =
+    'Erzeugt aus __SOURCE__ mit tools/docpage.sh. Diese Seite rendert die Datei; ' +
+    'massgeblich ist die Datei im Repository, nicht diese Fassung.';
+})();
+</script>

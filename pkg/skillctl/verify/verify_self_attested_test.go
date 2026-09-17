@@ -83,7 +83,7 @@ func TestVerify_IndependentReview_FloorOff_SelfAllowed(t *testing.T) {
 	// self tenant: floor OFF (default). A self-attested bundle must verify, and
 	// the result must surface the advisory self_attested=true.
 	opts, _ := pinnedOpts(t)
-	setBindingReviewer(&opts, "id:kamir@m3c") // == pinned author id
+	setBindingReviewer(&opts, "id:bob@m3c") // == pinned author id
 	opts.TrustRoot.RequireIndependentReview = false
 
 	res, err := Verify(opts)
@@ -102,9 +102,9 @@ func TestVerify_IndependentReview_FloorOn_SelfRefused(t *testing.T) {
 	digestStr := digestStrOf(t, opts)
 	// Sign as the AUTHOR acting as their own reviewer.
 	opts.BundleMeta.Attestations = []registry.AttestationRow{
-		signedAttestation(t, digestStr, "green", "id:kamir@m3c", author.priv),
+		signedAttestation(t, digestStr, "green", "id:bob@m3c", author.priv),
 	}
-	pinReviewer(&opts, "id:kamir@m3c", author.pub)
+	pinReviewer(&opts, "id:bob@m3c", author.pub)
 	opts.TrustRoot.RequireIndependentReview = true
 
 	_, err := Verify(opts)

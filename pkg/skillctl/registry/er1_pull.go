@@ -31,7 +31,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+
 	"fmt"
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -56,6 +58,12 @@ var (
 	ErrGateGovernance  = errors.New("gate 4: no attestation at or above the trust-roots governance_minimum")
 	ErrGateRevoked     = errors.New("gate 5: bundle digest has a BundleRevokedEvent in the registry")
 	ErrBundleBytesMiss = errors.New("admitted item has no inline ```skb-base64 block and no blob_uri (claim-check not implemented yet)")
+	// ErrBundleManifest is deliberately NOT one of the five §7 gates: the
+	// bytes already proved digest and signatures. It refuses a bundle whose
+	// manifest cannot be read, because without it the KIND is unknown and the
+	// G-23 install plan could not name the target it writes to (re-gate
+	// R1/RG-1, backend carrier).
+	ErrBundleManifest = errors.New("bundle manifest unreadable; kind unknown, refusing to stage")
 )
 
 // ─── Listing / show types ──────────────────────────────────────────────────
@@ -75,6 +83,7 @@ type EventRow struct {
 
 // SkillView is the registry-view entry for one skill.
 type SkillView struct {
+	Kind             string // SPEC-0432; "skill" for everything admitted before it
 	Name             string
 	LatestVersion    string
 	LatestDigest     string
@@ -89,7 +98,72 @@ type RegistryListing struct {
 }
 
 // ListOpts bounds the query.
+// KindTagPrefix is the ER1 tag that carries the bundle kind. Absent means
+// "skill" (SPEC-0432 §3.3), which is what makes the change invisible to every
+// bundle admitted before it.
+const KindTagPrefix = "kind:"
+
+// The shelf tags. Every reader queries these as a CONJUNCTION, so an item that
+// carries the agent shelf instead of the skill shelf is not merely labelled
+// differently: a client that asks for the skill shelf cannot see it at all.
+//
+// That is the point (SPEC-0432 E-6). A client built before agents existed
+// would otherwise list an agent bundle, pull it, unpack it into
+// ~/.claude/skills/<name>/ and report success, and nobody would notice. The
+// schema guard added in T-06 only protects clients from this version onward;
+// the shelf protects every client that ever existed, because it does not rely
+// on the old one checking anything.
+const (
+	SkillShelfTag = "skill-registry:self"
+	AgentShelfTag = "agent-registry:self"
+)
+
+// shelfTagFor returns the shelf an item of this kind lives on. The empty kind
+// is a skill, like everywhere else.
+func shelfTagFor(kind string) string {
+	if kind == skillbundle.KindAgent {
+		return AgentShelfTag
+	}
+	return SkillShelfTag
+}
+
+// shelvesFor returns the shelves a query must visit for a requested kind. An
+// empty kind means "everything", and that is TWO queries, not one broader one:
+// the conjunction is what keeps old clients out, so it must not be loosened
+// for our own convenience.
+func shelvesFor(kind string) []string {
+	switch kind {
+	case skillbundle.KindAgent:
+		return []string{AgentShelfTag}
+	case skillbundle.KindSkill:
+		return []string{SkillShelfTag}
+	default:
+		return []string{SkillShelfTag, AgentShelfTag}
+	}
+}
+
+// ItemKind reads the kind off a registry item, resolving an absent tag to
+// "skill". The ONE place that decides it on the registry side.
+func ItemKind(item map[string]any) string {
+	if k := tagValueFromItem(item, KindTagPrefix); k != "" {
+		return k
+	}
+	return skillbundle.KindSkill
+}
+
+// SplitKindName parses the SPEC-0432 §4 identifier "art:name". A bare name
+// means "skill:", so every call written before SPEC-0432 keeps its meaning.
+// A "sha256:" prefix is NOT an identifier and must be handled by the caller
+// before this is reached.
+func SplitKindName(s string) (kind, name string) {
+	if k, n, ok := strings.Cut(s, ":"); ok && (k == skillbundle.KindAgent || k == skillbundle.KindSkill) {
+		return k, n
+	}
+	return skillbundle.KindSkill, s
+}
+
 type ListOpts struct {
+	OnlyKind   string // empty → every kind; "skill" also matches untagged rows
 	OnlySkill  string // empty → all skills
 	OnlyLatest bool   // collapse to newest non-revoked digest per skill
 	Since      string // RFC3339 lower bound (matched against occurred_at): optional
@@ -97,13 +171,24 @@ type ListOpts struct {
 
 // ListRegistry queries ER1 for m3c-skill-bundle items, groups by skill, dedupes
 // by digest, and returns the registry view.
+// ErrNotInRegistry marks the one outcome a caller must be able to tell apart
+// from a transport failure: the registry answered, and the thing is not there.
+// SPEC-0432 §8 (E-5) turns exactly this distinction into different behaviour,
+// abort versus warn, so it must not be read off an error string.
+var ErrNotInRegistry = errors.New("not found in registry")
+
 func ListRegistry(cfg *er1.Config, ctxID string, opts ListOpts) (*RegistryListing, error) {
-	rawItems, err := searchByTagsRaw(cfg, ctxID, []string{"m3c-skill-bundle", "skill-registry:self"})
-	if err != nil {
-		return nil, err
+	var rawItems []map[string]any
+	for _, shelf := range shelvesFor(opts.OnlyKind) {
+		items, err := searchByTagsRaw(cfg, ctxID, []string{"m3c-skill-bundle", shelf})
+		if err != nil {
+			return nil, err
+		}
+		rawItems = append(rawItems, items...)
 	}
 	rowsByDigest := map[string][]EventRow{}
 	skillOf := map[string]string{} // digest → skill name
+	kindOf := map[string]string{}  // digest → bundle kind (SPEC-0432)
 	verOf := map[string]string{}   // digest → version
 	for _, item := range rawItems {
 		row, digest, skillName, version, _ := parseRowFromItem(item)
@@ -113,6 +198,10 @@ func ListRegistry(cfg *er1.Config, ctxID string, opts ListOpts) (*RegistryListin
 		if opts.OnlySkill != "" && skillName != opts.OnlySkill {
 			continue
 		}
+		if opts.OnlyKind != "" && ItemKind(item) != opts.OnlyKind {
+			continue
+		}
+		kindOf[digest] = ItemKind(item)
 		rowsByDigest[digest] = append(rowsByDigest[digest], row)
 		if skillName != "" {
 			skillOf[digest] = skillName
@@ -134,6 +223,12 @@ func ListRegistry(cfg *er1.Config, ctxID string, opts ListOpts) (*RegistryListin
 		})
 		var view SkillView
 		view.Name = name
+		if len(digests) > 0 {
+			view.Kind = kindOf[digests[0]]
+		}
+		if view.Kind == "" {
+			view.Kind = skillbundle.KindSkill
+		}
 		for _, d := range digests {
 			rows := rowsByDigest[d]
 			isRevoked := false
@@ -193,9 +288,12 @@ func ShowSkill(cfg *er1.Config, ctxID, nameOrDigest string) (*SkillView, error) 
 				}
 			}
 		}
-		return nil, fmt.Errorf("show: digest %q not found in registry", nameOrDigest)
+		return nil, fmt.Errorf("show: digest %q: %w", nameOrDigest, ErrNotInRegistry)
 	}
-	opts.OnlySkill = nameOrDigest
+	kind, bare := SplitKindName(nameOrDigest)
+	opts.OnlyKind = kind
+	opts.OnlySkill = bare
+	nameOrDigest = bare
 	listing, err := ListRegistry(cfg, ctxID, opts)
 	if err != nil {
 		return nil, err
@@ -207,7 +305,7 @@ func ShowSkill(cfg *er1.Config, ctxID, nameOrDigest string) (*SkillView, error) 
 			return &s, nil
 		}
 	}
-	return nil, fmt.Errorf("show: skill %q not found in registry", nameOrDigest)
+	return nil, fmt.Errorf("show: skill %q: %w", nameOrDigest, ErrNotInRegistry)
 }
 
 // ─── Pull + 5-gate gauntlet ────────────────────────────────────────────────
@@ -215,6 +313,12 @@ func ShowSkill(cfg *er1.Config, ctxID, nameOrDigest string) (*SkillView, error) 
 // StagedBundle is one verified bundle, with the .skb bytes (decoded inline or
 // fetched from MinIO) cached on disk under ~/.cache/m3c/skill-bundles/<digest>/.
 type StagedBundle struct {
+	// Kind decides WHERE this bundle goes, so it must be known at PLAN time,
+	// not only at install time. The install plan is what a human reviews in
+	// the G-23 two step, and a plan that names the wrong directory turns the
+	// review into theatre (found while running T-08: the plan offered to put
+	// 19 agents into ~/.claude/skills/).
+	Kind           string
 	Name           string
 	Version        string
 	Digest         string // sha256:<hex>
@@ -233,6 +337,7 @@ type StagedBundle struct {
 
 // PullOpts bounds the pull.
 type PullOpts struct {
+	OnlyKind   string    // empty → both shelves; "agent" → only the agent shelf
 	OnlySkill  string    // empty → all skills
 	OnlyDigest string    // empty → all admit items in scope
 	Since      string    // RFC3339; pass to the search query (best-effort filter)
@@ -434,16 +539,24 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 	if tr == nil {
 		return nil, ErrTrustRootsMissing
 	}
-	tags := []string{"m3c-skill-bundle", "skill-registry:self", "skill-event:" + EventKindAdmitted}
-	if opts.OnlySkill != "" {
-		tags = append(tags, "skill:"+opts.OnlySkill)
+	var baseTags [][]string
+	for _, shelf := range shelvesFor(opts.OnlyKind) {
+		tags := []string{"m3c-skill-bundle", shelf, "skill-event:" + EventKindAdmitted}
+		if opts.OnlySkill != "" {
+			tags = append(tags, "skill:"+opts.OnlySkill)
+		}
+		if opts.OnlyDigest != "" {
+			tags = append(tags, "skill-digest:"+opts.OnlyDigest)
+		}
+		baseTags = append(baseTags, tags)
 	}
-	if opts.OnlyDigest != "" {
-		tags = append(tags, "skill-digest:"+opts.OnlyDigest)
-	}
-	admits, err := searchByTagsRaw(cfg, ctxID, tags)
-	if err != nil {
-		return nil, err
+	var admits []map[string]any
+	for _, tags := range baseTags {
+		got, err := searchByTagsRaw(cfg, ctxID, tags)
+		if err != nil {
+			return nil, err
+		}
+		admits = append(admits, got...)
 	}
 	// Pre-build a map of digest → highest attestation level + revocation flag
 	// from a single secondary query. SEC-H1: the trust-roots public key is
@@ -463,6 +576,7 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 	headDec := consultRevokeHead(tr, opts, acc.RevokedDigests(), discoveryCapHit)
 
 	cacheRoot := defaultCacheRoot()
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(cacheRoot, 0o755); err != nil {
 		return nil, fmt.Errorf("pull: mkdir cache: %w", err)
 	}
@@ -550,10 +664,12 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 		}
 		// All gates passed: stage.
 		dir := filepath.Join(cacheRoot, strings.TrimPrefix(digest, "sha256:"))
+		// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return nil, fmt.Errorf("pull: mkdir %s: %w", dir, err)
 		}
 		skbPath := filepath.Join(dir, "bundle.skb")
+		// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 		if err := os.WriteFile(skbPath, skbBytes, 0o644); err != nil {
 			return nil, fmt.Errorf("pull: write %s: %w", skbPath, err)
 		}
@@ -564,7 +680,12 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 			packedHost = tagValueFromItem(item, "host:")
 		}
 		admittedAt, _ := event["admitted_at"].(string)
+		// The item's shelf tag says the kind without unpacking anything. The
+		// manifest inside the bundle stays the binding source at install time
+		// (installOne re-reads it); this is the cheap early read so the PLAN
+		// can name the right directory.
 		res.Staged = append(res.Staged, &StagedBundle{
+			Kind:           ItemKind(item),
 			Name:           name,
 			Version:        ver,
 			Digest:         digest,
@@ -688,10 +809,16 @@ func loadAttestRevoke(cfg *er1.Config, ctxID string, pub ed25519.PublicKey) (map
 	// bundle a caller is checking. The personal registry is tens-to-hundreds of events
 	// (see searchByTagsRaw), so the comprehensive sweep is cheap. One search now
 	// replaces the two per-kind searches.
-	tags := []string{"m3c-skill-bundle", "skill-registry:self"}
-	items, err := searchByTagsRaw(cfg, ctxID, tags)
-	if err != nil {
-		return nil, nil, nil, err
+	//
+	// SPEC-0432: agents live on their own shelf, so the sweep covers BOTH
+	// shelves; the FR-0090 rule (no kind or skill prefilter) holds on each.
+	var items []map[string]any
+	for _, shelf := range shelvesFor("") {
+		got, err := searchByTagsRaw(cfg, ctxID, []string{"m3c-skill-bundle", shelf})
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		items = append(items, got...)
 	}
 	for _, item := range items {
 		body := itemBody(item)
@@ -747,11 +874,25 @@ func loadAttestAccumulator(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, no
 	// fields (IS-T3) and key every verdict on the SIGNED bundle_digest, so seeing
 	// other skills' events only adds their own digests, never mis-attributing a
 	// verdict to the digest a caller is pulling. Admit/install fall through to the
-	// default (never a governance verdict). One comprehensive search.
-	tags := []string{"m3c-skill-bundle", "skill-registry:self"}
-	items, hitCap, err := searchByTagsRawCapped(cfg, ctxID, tags)
-	if err != nil {
-		return nil, false, err
+	// default (never a governance verdict).
+	//
+	// SPEC-0432: the publisher stamps EVERY event of a bundle, attest and revoke
+	// included, onto the shelf of its kind, so the authoritative sweep covers
+	// BOTH shelves (same rule as loadAttestRevoke). A verdict that lives only on
+	// the agent shelf would otherwise be invisible to Gate 4 and Gate 5 of the
+	// pull gauntlet. hitCap is the OR over the shelves: one truncated shelf
+	// already means the discovered set is not provably complete.
+	var (
+		items  []map[string]any
+		hitCap bool
+	)
+	for _, shelf := range shelvesFor("") {
+		got, capped, err := searchByTagsRawCapped(cfg, ctxID, []string{"m3c-skill-bundle", shelf})
+		if err != nil {
+			return nil, false, err
+		}
+		items = append(items, got...)
+		hitCap = hitCap || capped
 	}
 	for _, item := range items {
 		ev, err := extractEvent(itemBody(item))

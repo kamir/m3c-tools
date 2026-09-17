@@ -88,7 +88,7 @@ func explainUnauthorized(w io.Writer, baseURL string, sent bool, err error) erro
 	if sent {
 		fmt.Fprintf(w, "registry %s: the token was REJECTED.\n", host)
 		fmt.Fprintln(w, "  why: it is wrong, expired, or lacks the scope this endpoint needs.")
-		fmt.Fprintf(w, "  fix: issue a new token and replace it, then re-run. See docs/ops-registry-tokens.de.md\n")
+		fmt.Fprintf(w, "  fix: issue a new token and replace it, then re-run. See docs/v2/betrieb/ops-registry-tokens.de.md\n")
 		return err
 	}
 	fmt.Fprintf(w, "registry %s: this instance requires authentication and NO token was sent.\n", host)
@@ -96,6 +96,6 @@ func explainUnauthorized(w io.Writer, baseURL string, sent bool, err error) erro
 	fmt.Fprintf(w, "  fix: provide one of, in this order of precedence:\n")
 	fmt.Fprintf(w, "         env   M3C_REGISTRY_TOKEN (read-only: M3C_REGISTRY_RO_TOKEN)\n")
 	fmt.Fprintf(w, "         macOS security add-generic-password -s m3c-skillctl-registry -a %s -w '<token>' -U\n", host)
-	fmt.Fprintln(w, "  The full routine, including how a KuP account issues the token: docs/ops-registry-tokens.de.md")
+	fmt.Fprintln(w, "  The full routine, including how a KuP account issues the token: docs/v2/betrieb/ops-registry-tokens.de.md")
 	return err
 }

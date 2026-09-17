@@ -66,8 +66,19 @@ so the gap is a known quantity rather than a vague aspiration:
 | `unconvert` / `godot` | 3 each |
 | `copyloopvar` | 2 findings |
 | `bodyclose` | 1 finding |
-| `gosec` | not yet measured (tool not installed in CI) |
+| `gosec` | n/a as a golangci-lint linter: gosec runs standalone in CI instead (see below) |
 | Coverage floor | not yet measured; **never** set a floor above what the suite already meets |
+
+The `gosec` row said "not yet measured (tool not installed in CI)" from
+2026-09-03 until 2026-09-15. Both halves were false almost immediately.
+`.github/workflows/gosec.yml` was added the same day and
+`gosec-diff-gate.yml` the day after; three required contexts on master carry
+gosec in their name (`gosec`, `gosec SAST (SARIF -> Code Scanning)`,
+`gosec no-new-findings (in-CI diff gate)`). And it is measured: the committed
+baseline `docs/security/gosec-inci-baseline.txt` has held 454 signatures since
+2026-09-10, and a run on 2026-09-15 reported 525 findings. Enabling gosec
+INSIDE golangci-lint would duplicate a tool that already gates, which is why
+the row now reads n/a rather than a cost.
 
 These are not enabled yet because a 186-file format sweep and ~128 lint findings
 must land as their own reviewable change. Riding along in an unrelated PR would
@@ -76,6 +87,45 @@ cheapest first (`bodyclose`, `copyloopvar`, `unconvert`, `godot`, `misspell`),
 each with its own commit.
 
 ---
+
+## Names in examples: the standard cast
+
+Examples, fixtures, tutorials, demo scripts and test identities use a fixed cast
+of invented people. Never the name of an actual colleague, customer or contact.
+
+| Persona | Role, kept stable across the whole tree |
+|---|---|
+| Bob | the author: packs, signs, publishes |
+| Alice | the recipient: pins trust, verifies, installs |
+| Charlie | a reviewer or attester |
+| Diana | a registry or governance operator |
+| Eddy, Freddy, Gustav, Hans | further parties as needed |
+
+Identity ids follow the same rule: `id:bob@example`, `id:alice@example`. Keep a
+persona in one role everywhere, because a reader who learns that Bob signs will
+carry that across documents.
+
+**Authorship is not a persona.** A commit author, a copyright line and the
+`PRODUCT_PUBLISHER` field of a signed installer name a real legal person because
+that is their job. Replacing one of those with a persona does not anonymise
+anything; it falsifies provenance, which in this repository is the worse
+failure. The gate exempts those lines individually, with the reason written next
+to each.
+
+Why mechanical: this tree is public and it is mirrored into a customer's GitLab
+every thirty minutes. A name arrives through a hundred small additions, each
+harmless alone, and a reviewer who catches the ones in prose still misses the
+ones in a test fixture, a file name or a shell variable.
+
+```bash
+./scripts/check-no-real-names.sh            # whole tree, exit 1 on any hit
+./scripts/check-no-real-names.sh --staged   # only what you are about to commit
+```
+
+The gate checks file NAMES as well as contents, and it is wired into the
+blocking `prose-gate` CI job. One caution it encodes, learned the hard way:
+`git grep -E` does not understand `\b`, so it matches nothing and reports
+success. Use `-w`.
 
 ## Prose: no em dashes
 
@@ -256,7 +306,7 @@ cannot be switched off by a rename. There are deliberately **no exemptions**:
 a verb a user can type is a verb `--help` must name.
 
 This is a different question from `cmd/verbaudit`, which reconciles the same
-dispatch against the allocation table `docs/CLI-VERBS.md`. Registered is not the
+dispatch against the allocation table `docs/v2/referenz/CLI-VERBS.md`. Registered is not the
 same as visible: every verb was registered while 33 were invisible.
 
 ### Exemptions
@@ -307,7 +357,7 @@ the failing gate is what makes the author notice that it is owed.
 `docaudit` keeps the flags honest. Its subject is `pkg/skillctl/exitcode`, and
 it exists because AUDIT-0001 measured what happens without it: `pull` mapped its
 five gates onto `12/10/11/13/6` while the manual said "0 ok, 2 usage" and
-`docs/CLI-VERBS.md` said "0/1/2"; `verify-sig` returned `10` for an altered
+`docs/v2/referenz/CLI-VERBS.md` said "0/1/2"; `verify-sig` returned `10` for an altered
 bundle that no document mentioned; verify-hook's refusal space was `17/22/25/28`
 in code, `17/22` in the manual, `25/26/28` in the verb register. Twelve of the
 fourteen verbs that state an exit space in both documents stated two different
@@ -319,7 +369,7 @@ Five ways it goes red:
   register table → **UNDOCUMENTED**
 - a row in that table that `AllCodes()` does not carry → **NOT REGISTERED**
 - a number written anywhere else in the manual (a per-command `Exit:` line) or
-  in a `docs/CLI-VERBS.md` Exit-Code cell that neither the register nor the
+  in a `docs/v2/referenz/CLI-VERBS.md` Exit-Code cell that neither the register nor the
   manual's "Codes outside the register" table accounts for → **UNACCOUNTED**
 - the manual's `Exit:` line and the verb register's cell naming different sets
   for the same verb → **PER-VERB DRIFT**

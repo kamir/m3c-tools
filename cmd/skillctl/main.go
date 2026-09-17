@@ -94,6 +94,10 @@ func main() {
 	// === SPEC-0189 §14 (S3.3 + S3.4 closure 2026-05-06): audit subcommand ===
 	case "audit":
 		os.Exit(runAudit(os.Args[2:], os.Stdout, os.Stderr))
+	// === SPEC-0428 T-06: Skill-Env-Report ===
+	case "envreport":
+		os.Exit(runEnvreport(os.Args[2:], os.Stdout, os.Stderr))
+	// === end SPEC-0428 ===
 	// === end SPEC-0189 §14 ===
 	// === SPEC-0194 (S3.1 closure 2026-05-06): propose subcommand ===
 	case "propose":
@@ -104,6 +108,9 @@ func main() {
 	// Both routed through runWithExit so the SPEC-0188 §11 numbered exit
 	// codes (10..16) surface verbatim to the parent process: see
 	// cmd/skillctl/exit.go for the single audit point.
+	case "drift":
+		// FR-0278. Was traegt diese Maschine, und stimmt es mit dem Katalog?
+		os.Exit(runDrift(os.Args[2:], os.Stdout, os.Stderr))
 	case "install":
 		runWithExit(func() int { return runInstall(os.Args[2:], os.Stdout, os.Stderr) })
 	case "verify":
@@ -346,6 +353,7 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Evidence and observability (SPEC-0189 §14, SPEC-0255, SPEC-0278, SPEC-0317, SPEC-0403)")
 	fmt.Fprintln(w, "  audit                   Antivirus-style trust verdict per installed skill. Exit space 0/2/3.")
+	fmt.Fprintln(w, "  envreport               Skill-Env-Report for one regulated environment (SPEC-0428). Dry run by default.")
 	fmt.Fprintln(w, "  gate-stats              Summarise the gate-audit.jsonl (decisions, top blocks, cache-hit rate).")
 	fmt.Fprintln(w, "                          Flags: --since <168h|YYYY-MM-DD>, --json.")
 	fmt.Fprintln(w, "  auditlog                Audit-subsystem observability (SPEC-0403 §8). OWN exit space 0/1,")
@@ -381,6 +389,7 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "  seal                    Snapshot the installed skills into a signed inventory seal.")
 	fmt.Fprintln(w, "  import                  Import a scan into a remote target (--target <url>).")
 	fmt.Fprintln(w, "  consolidate             Report duplicate / orphan / drifted skills across projects.")
+	fmt.Fprintln(w, "  drift                   Compare what this machine carries against the registry catalog (SPEC-0432).")
 	fmt.Fprintln(w, "  review                  Serve a local review UI for a delta report.")
 	fmt.Fprintln(w, "  browse                  Serve an interactive local skill-graph browser.")
 	fmt.Fprintln(w, "  menubar                 Launch the macOS menu-bar skill monitor (long-running).")
@@ -398,5 +407,5 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "  session show            Show a session-state item by session_id or doc_id.")
 	fmt.Fprintln(w, "  session resume          Print a resume hint for a prior session.")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Full reference: docs/manual-skillctl.md. Verb allocation: docs/CLI-VERBS.md.")
+	fmt.Fprintln(w, "Full reference: docs/v2/referenz/manual-skillctl.md. Verb allocation: docs/v2/referenz/CLI-VERBS.md.")
 }

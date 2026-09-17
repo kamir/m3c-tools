@@ -86,6 +86,7 @@ func main() {
 	if dbPath == "" {
 		home, _ := os.UserHomeDir()
 		dir := filepath.Join(home, ".m3c-tools", "thinking", hash.Hex())
+		// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 		_ = os.MkdirAll(dir, 0o755)
 		dbPath = filepath.Join(dir, "state.db")
 	}

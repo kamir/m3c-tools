@@ -59,9 +59,23 @@ func FetchTokenFromER1() (token string, exp int64, err error) {
 	client := &http.Client{Timeout: 15 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect}
 	if verifyDisabled(os.Getenv("ER1_VERIFY_SSL")) && isLoopbackURL(endpoint) {
 		// SEC: only for loopback + self-signed dev cert.
+		// #nosec G402 -- gegated durch die Bedingung eine Zeile hoeher:
+		// verifyDisabled(...) UND isLoopbackURL(endpoint), wobei isLoopbackURL
+		// den Host PARST (url.Parse + net.ParseIP). Genau diese Parsung fehlte
+		// in BUG-0444/0445.
 		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
 	}
 
+	// #nosec G704 -- endpoint kommt aus der ER1-Konfiguration des Bedieners.
+	// Der Client oben setzt bereits httpsafe.NoCredentialRedirect, also faellt
+	// auch der eigentlich gefaehrliche Fall weg: eine Umleitung, die das
+	// Authentisierungsmerkmal an einen anderen Host weiterreicht.
+	// VORAUSSETZUNG dieser Einschaetzung: Aufrufargumente und Profil kommen vom
+	// Bediener selbst. Gemessen 2026-09-15: die einzigen Server im Baum
+	// (pkg/skillctl/browse, pkg/skillctl/review) binden ueber loopbackAddr auf
+	// 127.0.0.1 und erreichen diesen Pfad nicht; das Profil liegt unter
+	// $HOME/.m3c-tools/. Erreicht dieser Pfad je einen Dienst, faellt die
+	// Einschaetzung und die Zeile gehoert neu geprueft.
 	req, err := http.NewRequest("GET", endpoint, nil)
 	if err != nil {
 		return "", 0, err
@@ -69,6 +83,8 @@ func FetchTokenFromER1() (token string, exp int64, err error) {
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
+	// #nosec G704 -- dieselbe Stelle, zweite Haelfte: gosec markiert Bau UND
+	// Ausfuehrung der Anfrage. Begruendung am http.NewRequest oben.
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", 0, fmt.Errorf("reach ER1 reveal endpoint %s: %w", endpoint, err)

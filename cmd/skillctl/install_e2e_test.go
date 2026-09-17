@@ -295,6 +295,7 @@ func TestInstall_TamperedBundle_Exit10(t *testing.T) {
 
 // ----- 11: author signature invalid -----
 
+// THREAT-R09: an author signature by the wrong key must be refused with exit 11.
 func TestInstall_BadAuthorSig_Exit11(t *testing.T) {
 	home := t.TempDir()
 	f := newFixture(t)
@@ -348,6 +349,7 @@ func TestInstall_BadAuthorSig_Exit11(t *testing.T) {
 
 // ----- 12: registry not in trust roots -----
 
+// THREAT-R11: an install from a registry outside the trust roots must exit 12.
 func TestInstall_UntrustedRegistry_Exit12(t *testing.T) {
 	home := t.TempDir()
 	f := newFixture(t)

@@ -213,27 +213,14 @@ func (id *Ident) transcriptPointer() string {
 // ---------------------------------------------------------------------------
 
 // ER1Endpoint resolves the ER1 base URL for a target (ADR-0003 matrix).
+//
+// Delegiert an er1.ResolveTarget. Die eigene Fassung hier war die Haelfte von
+// BUG-0444: sie entschied die TLS-Pruefung per strings.Contains statt am
+// geparsten Host. Nach der Reparatur stand dieselbe kaputte Kopie noch in
+// cmd/skillctl (BUG-0445), also liegt die Aufloesung jetzt einmal in pkg/er1
+// und hier nur noch der Name, den die Aufrufer kennen.
 func ER1Endpoint(target string) (baseURL string, verifySSL bool) {
-	switch strings.ToLower(strings.TrimSpace(target)) {
-	case "", "prod":
-		return "https://onboarding.guide", true
-	case "local":
-		return "https://127.0.0.1:8081", false
-	}
-	if strings.HasPrefix(target, "http") {
-		return strings.TrimRight(target, "/"), !strings.Contains(target, "127.0.0.1") && !strings.Contains(target, "localhost")
-	}
-	// stage / unknown: fall back to whatever ER1_API_URL says, else prod
-	if u := os.Getenv("ER1_API_URL"); u != "" {
-		base := strings.TrimRight(strings.TrimSuffix(u, "/upload_2"), "/")
-		verify := os.Getenv("ER1_VERIFY_SSL") != "false"
-		// SEC-M7: only honour insecure for loopback; force verification on for remote.
-		if !verify && !strings.Contains(base, "127.0.0.1") && !strings.Contains(base, "localhost") {
-			verify = true
-		}
-		return base, verify
-	}
-	return "https://onboarding.guide", true
+	return er1.ResolveTarget(target)
 }
 
 // resolveAPIKey: env ER1_API_KEY → macOS Keychain `aims-core-er1` (ADR-0003).
@@ -289,6 +276,11 @@ func httpGetJSON(target, path string) (any, error) {
 	apiKey := resolveAPIKey()
 	client := &http.Client{Timeout: 15 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect} // SEC F25
 	if !verify {
+		// #nosec G402 -- gegated: verify stammt aus sessionVerifyTLS, das ein
+		// Ueberspringen nur fuer einen GEPARSTEN Loopback-Host zulaesst und fuer
+		// jeden anderen fail-closed auf true zwingt (BUG-0444, SEC-M7, gleiche
+		// Regel wie pkg/er1.applyTLSVerificationPolicy). Festgehalten von
+		// TestER1Endpoint_LoopbackWacheParstDenHost.
 		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
 	}
 	req, err := http.NewRequest("GET", base+path, nil)

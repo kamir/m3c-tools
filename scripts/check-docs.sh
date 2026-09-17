@@ -3,8 +3,9 @@
 #
 # Checks that key references in docs/ match the current codebase, and runs the
 # BLOCKING gates: the CLI/manual + CLI/--help gate (cmd/docaudit, section 4),
-# the verb register (cmd/verbaudit, section 5), the tutorial chain (section 6)
-# and the index directory-diff (section 7).
+# the verb register (cmd/verbaudit, section 5), the exit-code register
+# (cmd/exitaudit, section 6), the tutorial chain (section 7), the Katas
+# tutorial (section 7b) and the index directory-diff (section 8).
 #
 # Exit: 0 = ok (warnings allowed) - 1 = a blocking issue, the release stops.
 # Usage: ./scripts/check-docs.sh
@@ -91,7 +92,7 @@ fi
 # ─── 5. skillctl verb register (BLOCKING) ───
 #
 # FR-0113 / SPEC-0404 §7-K3: verbaudit AST-reads the `switch os.Args[1]` dispatch
-# in cmd/skillctl/main.go and reconciles it against docs/CLI-VERBS.md. A
+# in cmd/skillctl/main.go and reconciles it against docs/v2/referenz/CLI-VERBS.md. A
 # dispatched verb with no register row turns this red (REQ-7.10), and a
 # main-table row must carry an exit-code space (REQ-7.9). It blocks for the same
 # reason the flag gate does: verb allocation must be a WRITE, so two collisions
@@ -100,10 +101,10 @@ echo "5. skillctl verb register (verbaudit)"
 if ! command -v go >/dev/null 2>&1; then
     fail "go toolchain not found - cannot run the verb-register gate"
 elif go run ./cmd/verbaudit; then
-    pass "every dispatched verb is registered in docs/CLI-VERBS.md"
+    pass "every dispatched verb is registered in docs/v2/referenz/CLI-VERBS.md"
 else
     fail "a dispatched verb is not registered (see the report above)"
-    echo "    Register the verb first (add a row to docs/CLI-VERBS.md), then implement its case."
+    echo "    Register the verb first (add a row to docs/v2/referenz/CLI-VERBS.md), then implement its case."
 fi
 
 # ─── 6. Exit-code register (BLOCKING) ───
@@ -111,7 +112,7 @@ fi
 # AUDIT-0001 Befund 2.1 / registry.go's own "Phase 2": exitaudit reconciles the
 # manual's exit-code tables with pkg/skillctl/exitcode.AllCodes(), fails on any
 # documented number that no table accounts for, and fails when the manual and
-# docs/CLI-VERBS.md state different exit spaces for the SAME verb. It blocks
+# docs/v2/referenz/CLI-VERBS.md state different exit spaces for the SAME verb. It blocks
 # because every number here is one a script branches on: `pull` mapped its five
 # gates onto 12/10/11/13/6 while both documents claimed a bare usage space, and
 # nothing turned red.
@@ -129,7 +130,7 @@ fi
 # ─── 7. Tutorial chain (BLOCKING) ───
 #
 # gate: scripts/tutorial-smoke.sh runs the chain the German scenario tutorials
-# describe (docs/tutorial-szenario-0*.de.md) against a bare local:// registry in
+# describe (docs/v2/nutzer/tutorial-szenario-0*.de.md) against a bare local:// registry in
 # a throwaway HOME, and asserts every documented exit code, INCLUDING the two
 # refusals. docaudit gates the flag surface of the two manuals; nothing gated the
 # tutorials, so a renamed flag or a changed message could make them wrong without
@@ -155,6 +156,38 @@ else
     rm -rf "$(dirname "$SMOKE_BIN")"
 fi
 
+# ─── 7b. Katas tutorial (BLOCKING) ───
+#
+# gate: scripts/katas-smoke.sh runs what the Katas tutorial promises
+# (docs/v2/nutzer/tutorial-katas-und-test-ride.de.md): the Kata board, one
+# non-interactive rep of each of the five Katas against the real skillctl
+# (asserting the documented target exits 0/10/2/0/17), the selftest, and both
+# Test Ride entry commands with exactly the flags the tutorial quotes. Sibling
+# of section 7; the parts a server or a human would need are name-checked only,
+# the script says which.
+echo ""
+echo "7b. Katas tutorial (katas-smoke)"
+if ! command -v go >/dev/null 2>&1; then
+    warn "go toolchain not found - skipping the Katas tutorial"
+elif [ ! -f "scripts/katas-smoke.sh" ]; then
+    warn "scripts/katas-smoke.sh not found - skipping"
+else
+    KATAS_BIN_DIR="$(mktemp -d)"
+    if ! go build -o "$KATAS_BIN_DIR/skillctl" ./cmd/skillctl >/dev/null 2>&1 \
+       || ! go build -o "$KATAS_BIN_DIR/skillctl-demo" ./cmd/skillctl-demo >/dev/null 2>&1; then
+        fail "cannot build skillctl/skillctl-demo for the Katas tutorial"
+    elif ./scripts/katas-smoke.sh --skillctl "$KATAS_BIN_DIR/skillctl" \
+           --skillctl-demo "$KATAS_BIN_DIR/skillctl-demo" >/tmp/katas-smoke.$$.log 2>&1; then
+        pass "the Katas tutorial still behaves as documented"
+    else
+        fail "the Katas tutorial drifted from the tree (see below)"
+        grep -E "DRIFT|FAIL:" /tmp/katas-smoke.$$.log | head -12 | sed 's/^/      /'
+        echo "      full run: ./scripts/katas-smoke.sh --keep"
+    fi
+    rm -f "/tmp/katas-smoke.$$.log"
+    rm -rf "$KATAS_BIN_DIR"
+fi
+
 # ─── 7. Index freshness: cmd/ and pkg/ vs the two indexes (BLOCKING) ───
 #
 # The check itself lives in scripts/check-index.sh, because it has to run in two
@@ -164,7 +197,7 @@ fi
 # straight over it. That is the same bypass release.yml already names in its own
 # docs-gate comment.
 echo ""
-echo "7. Index freshness (cmd/ and pkg/ vs the indexes)"
+echo "8. Index freshness (cmd/ and pkg/ vs the indexes)"
 if ! [ -x "scripts/check-index.sh" ]; then
     fail "scripts/check-index.sh is missing or not executable"
 elif ./scripts/check-index.sh; then

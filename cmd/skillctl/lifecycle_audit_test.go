@@ -126,7 +126,7 @@ func TestLifecycleEventIsWrittenAndParses(t *testing.T) {
 	home := t.TempDir()
 	appendLifecycleEvent(home, auditevent.LifecycleEvent{
 		Op:       auditevent.OpInstall,
-		Skill:    "eric-demo-skill",
+		Skill:    "alice-demo-skill",
 		Digest:   "sha256:deadbeef",
 		Reason:   auditevent.ReasonDigestMismatch,
 		ExitCode: verify.ExitDigestMismatch,

@@ -151,6 +151,14 @@ func transcribe(whisperPath string, audioFile string, model string) ([]WhisperSe
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Run whisper with JSON output format
+	// #nosec G702,G204 -- kein Shell-Aufruf: exec.Command uebergibt argv direkt, es
+	// gibt keine Metazeichen-Auswertung. whisperPath stammt aus der
+	// PATH-Suche, audioFile und model aus der Kommandozeile DESSEN, der das
+	// Programm startet. cmd/poc-whisper wird in CI nur kompiliert und liegt in
+	// keinem Release-Pfad (geprueft 2026-09-15 gegen release.yml,
+	// skillctl-release.yml und scripts/build-all.sh). G204 sitzt auf derselben
+	// Zeile und meint dieselbe Sache ("Subprozess mit Variable"), deshalb steht
+	// es hier mit und nicht in einer zweiten Anmerkung.
 	cmd := exec.Command(whisperPath,
 		audioFile,
 		"--model", model,

@@ -1,0 +1,1508 @@
+<!-- Erzeugt von tools/docpage.sh aus einer Markdown-Datei unter docs/.
+     NICHT von Hand aendern: scripts/check-docpages.sh erzeugt diese Datei
+     neu und vergleicht sie mit dem Baum. Eine Handaenderung faellt dort auf.
+     Quelle der Form: tools/release-templates/docpage.template.html -->
+<title>Ein Mensch-Agent-Team einrichten</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+<style>
+:root{
+  --bg:#f5f7f8; --surface:#ffffff; --surface-2:#eef2f4;
+  --ink:#182029; --ink-soft:#59656f; --line:#dde3e8; --line-soft:#e9edf0;
+  --accent:#0d6e6b; --accent-soft:#e2f0ef;
+  --warn:#8d5a13; --warn-soft:#fbf1e0; 
+  --stop:#9c2f2f; --ok:#1e6a45;
+  --term-bg:#131c24; --term-fg:#c9d6e0; --term-dim:#7c8f9e; --term-line:#25333f;
+  --rail:248px;
+}
+:root:not([data-theme="light"]){}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10151a; --surface:#161e25; --surface-2:#1c262e;
+    --ink:#dfe6ec; --ink-soft:#93a1ac; --line:#26313a; --line-soft:#1e272f;
+    --accent:#49b5ae; --accent-soft:#16302f;
+    --warn:#d7a459; --warn-soft:#2a2216;
+    --stop:#e08282; --ok:#6cc294;
+    --term-bg:#0d141a; --term-line:#1f2b35;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10151a; --surface:#161e25; --surface-2:#1c262e;
+  --ink:#dfe6ec; --ink-soft:#93a1ac; --line:#26313a; --line-soft:#1e272f;
+  --accent:#49b5ae; --accent-soft:#16302f;
+  --warn:#d7a459; --warn-soft:#2a2216;
+  --stop:#e08282; --ok:#6cc294;
+  --term-bg:#0d141a; --term-line:#1f2b35;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px; line-height:1.62; -webkit-font-smoothing:antialiased;
+}
+.shell{display:grid; grid-template-columns:var(--rail) minmax(0,1fr); gap:0; min-height:100vh}
+
+/* ---------- Schiene ---------- */
+.rail{
+  border-right:1px solid var(--line); background:var(--surface);
+  position:sticky; top:0; height:100vh; overflow-y:auto; padding:28px 0 40px;
+}
+.brand{padding:0 22px 20px; border-bottom:1px solid var(--line-soft); margin-bottom:16px}
+.brand .kicker{
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:10.5px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--accent); margin:0 0 7px;
+}
+.brand h1{
+  font-family:"IBM Plex Serif",Georgia,serif; font-weight:600; font-size:18px;
+  line-height:1.3; margin:0; text-wrap:balance;
+}
+.brand .meta{font-size:11.5px; color:var(--ink-soft); margin:9px 0 0; font-family:"IBM Plex Mono",monospace}
+nav ol{list-style:none; margin:0; padding:0}
+nav a{
+  display:grid; grid-template-columns:26px 1fr; gap:8px; align-items:baseline;
+  padding:6px 22px; color:var(--ink-soft); text-decoration:none; font-size:13.5px;
+  border-left:2px solid transparent;
+}
+nav a:hover{color:var(--ink); background:var(--surface-2)}
+nav a.on{color:var(--ink); border-left-color:var(--accent); background:var(--accent-soft); font-weight:500}
+nav a .n{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--accent); font-variant-numeric:tabular-nums}
+nav a:focus-visible{outline:2px solid var(--accent); outline-offset:-2px}
+.progress{
+  margin:18px 22px 0; padding:11px 13px; border:1px solid var(--line); border-radius:7px;
+  background:var(--surface-2); font-size:12px; color:var(--ink-soft);
+}
+.progress b{color:var(--ink); font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums}
+.progress .bar{height:3px; background:var(--line); border-radius:2px; margin-top:8px; overflow:hidden}
+.progress .bar i{display:block; height:100%; width:0; background:var(--accent); transition:width .25s ease}
+
+/* ---------- Dokument ---------- */
+main{padding:0 0 100px}
+.doc{max-width:74ch; margin:0 auto; padding:52px 40px 0}
+.doc>h1:first-child{
+  font-family:"IBM Plex Serif",Georgia,serif; font-size:33px; font-weight:600;
+  line-height:1.18; margin:0 0 6px; text-wrap:balance; letter-spacing:-.01em;
+}
+.doc h2{
+  font-family:"IBM Plex Serif",Georgia,serif; font-size:23px; font-weight:600;
+  margin:52px 0 14px; padding-top:22px; border-top:1px solid var(--line);
+  line-height:1.25; text-wrap:balance; scroll-margin-top:20px;
+}
+.doc h3{
+  font-family:"IBM Plex Sans",sans-serif; font-size:16.5px; font-weight:600;
+  margin:34px 0 10px; line-height:1.35; scroll-margin-top:20px; color:var(--ink);
+}
+.doc p{margin:0 0 15px}
+.doc>p:first-of-type{font-size:17.5px; color:var(--ink-soft); line-height:1.55}
+.doc a{color:var(--accent); text-decoration:none; border-bottom:1px solid var(--accent-soft)}
+.doc a:hover{border-bottom-color:var(--accent)}
+.doc strong{font-weight:600}
+.doc ul,.doc ol{margin:0 0 15px; padding-left:22px}
+.doc li{margin:0 0 6px}
+.doc hr{border:0; border-top:1px solid var(--line); margin:40px 0}
+
+/* Code, inline und Block */
+.doc :not(pre)>code{
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.875em;
+  background:var(--surface-2); border:1px solid var(--line-soft);
+  padding:1px 5px; border-radius:4px; word-break:break-word;
+}
+.term{
+  background:var(--term-bg); border:1px solid var(--term-line); border-radius:8px;
+  margin:0 0 20px; overflow:hidden;
+}
+.term .strip{
+  display:flex; justify-content:space-between; align-items:center;
+  padding:6px 13px; border-bottom:1px solid var(--term-line);
+  font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.13em;
+  text-transform:uppercase; color:var(--term-dim);
+}
+.term pre{
+  margin:0; padding:13px 15px; overflow-x:auto;
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:12.9px; line-height:1.62;
+  color:var(--term-fg); white-space:pre;
+}
+.term pre code{background:none; border:0; padding:0; font-size:inherit; color:inherit}
+
+/* Tabellen */
+.tw{overflow-x:auto; margin:0 0 22px; border:1px solid var(--line); border-radius:8px; background:var(--surface)}
+.doc table{border-collapse:collapse; width:100%; font-size:13.8px}
+.doc th{
+  text-align:left; font-weight:600; font-size:11px; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--ink-soft); padding:10px 14px; border-bottom:1px solid var(--line); background:var(--surface-2);
+  white-space:nowrap;
+}
+.doc td{padding:10px 14px; border-bottom:1px solid var(--line-soft); vertical-align:top}
+.doc tr:last-child td{border-bottom:0}
+.doc td code{font-size:.85em}
+
+/* Achtung-Kasten */
+.doc blockquote{
+  margin:0 0 22px; padding:15px 18px; background:var(--warn-soft);
+  border-left:3px solid var(--warn); border-radius:0 7px 7px 0;
+}
+.doc blockquote p{margin:0 0 10px; font-size:14.8px}
+.doc blockquote p:last-child{margin:0}
+.doc blockquote::before{
+  content:"Achtung"; display:block; font-family:"IBM Plex Mono",monospace;
+  font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--warn); margin-bottom:7px;
+}
+
+/* Pruefliste */
+table.check td:first-child{width:34px; padding-right:0}
+table.check input{width:15px; height:15px; accent-color:var(--accent); cursor:pointer; margin:3px 0 0}
+table.check tr.done td:not(:first-child){opacity:.5; text-decoration:line-through; text-decoration-thickness:1px}
+
+/* Kopfzeile mobil */
+.mobiletop{display:none}
+@media (max-width:900px){
+  .shell{grid-template-columns:1fr}
+  .rail{position:static; height:auto; border-right:0; border-bottom:1px solid var(--line); padding:20px 0}
+  .doc{padding:32px 20px 0}
+  .doc>h1:first-child{font-size:27px}
+  .mobiletop{display:block; padding:0 22px 12px}
+  .mobiletop button{
+    font:inherit; font-size:13px; padding:7px 13px; border:1px solid var(--line);
+    background:var(--surface-2); color:var(--ink); border-radius:6px; cursor:pointer;
+  }
+}
+.footnote{
+  max-width:74ch; margin:56px auto 0; padding:22px 40px 0; border-top:1px solid var(--line);
+  font-size:12.5px; color:var(--ink-soft); font-family:"IBM Plex Mono",monospace; line-height:1.7;
+}
+@media (max-width:900px){.footnote{padding:22px 20px 0}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important; animation:none!important}}
+
+/* ══════════════════════════════════════════════════════════════════
+   DRUCK-FLAVOR
+   Ein Ausdruck kostet Toner dort, wo Flaechen gefuellt sind, nicht dort,
+   wo Linien laufen. Deshalb faellt hier jede Flaeche weg: der dunkle
+   Terminalgrund, die Tabellenkoepfe, der Achtung-Kasten, die Schiene.
+   Was bleibt, sind Haarlinien und Text. Die Tokens tragen das, deshalb
+   sind unten fast nur Farbwerte und vier bauliche Regeln.
+   ══════════════════════════════════════════════════════════════════ */
+@media print{
+  :root, :root[data-theme="dark"], :root:not([data-theme="light"]){
+    --bg:#ffffff; --surface:#ffffff; --surface-2:#ffffff;
+    --ink:#000000; --ink-soft:#333a40; --line:#98a1a8; --line-soft:#c8ced3;
+    --accent:#0b5553; --accent-soft:transparent;
+    --warn:#7a4a0a; --warn-soft:transparent;
+    --stop:#7d2020; --ok:#15543a;
+    --term-bg:#ffffff; --term-fg:#000000; --term-dim:#4a555e; --term-line:#98a1a8;
+  }
+}
+:root[data-flavor="druck"], :root[data-flavor="druck"][data-theme="dark"]{
+  --bg:#ffffff; --surface:#ffffff; --surface-2:#ffffff;
+  --ink:#000000; --ink-soft:#333a40; --line:#98a1a8; --line-soft:#c8ced3;
+  --accent:#0b5553; --accent-soft:transparent;
+  --warn:#7a4a0a; --warn-soft:transparent;
+  --stop:#7d2020; --ok:#15543a;
+  --term-bg:#ffffff; --term-fg:#000000; --term-dim:#4a555e; --term-line:#98a1a8;
+}
+
+/* Bauliches: gilt auf Papier und in der Druckansicht gleichermassen. */
+@media print{
+  .rail,.copy,.flavorbar{display:none !important}
+  .shell{grid-template-columns:1fr}
+  .doc{max-width:none; padding:0}
+  .footnote{padding:14px 0 0; margin-top:26px}
+}
+:root[data-flavor="druck"] .rail{display:none}
+:root[data-flavor="druck"] .shell{grid-template-columns:1fr}
+:root[data-flavor="druck"] .doc{max-width:82ch}
+:root[data-flavor="druck"] .copy{display:none}
+
+/* Der Achtung-Kasten traegt im Druck eine Linie statt einer Flaeche. */
+@media print{ .doc blockquote{border-left-width:2px; padding-left:14px} }
+:root[data-flavor="druck"] .doc blockquote{border-left-width:2px; padding-left:14px}
+
+/* Die Haken sind auf Papier zum Ausfuellen da, also echte Kaestchen. */
+@media print{
+  table.check input{appearance:none; -webkit-appearance:none; width:13px; height:13px;
+    border:1.2px solid #000; border-radius:2px; background:#fff}
+  table.check tr.done td:not(:first-child){opacity:1; text-decoration:none}
+  table.check input:checked::after{content:"✓"; display:block; font-size:11px; line-height:11px; text-align:center}
+}
+:root[data-flavor="druck"] table.check input{appearance:none; -webkit-appearance:none;
+  width:13px; height:13px; border:1.2px solid var(--ink); border-radius:2px; background:#fff}
+:root[data-flavor="druck"] table.check input:checked::after{content:"✓"; display:block;
+  font-size:11px; line-height:11px; text-align:center; color:var(--ink)}
+:root[data-flavor="druck"] table.check tr.done td:not(:first-child){opacity:1; text-decoration:none}
+
+/* Nur auf Papier: Satzspiegel, Schriftgrade und die Frage, wo getrennt wird. */
+@page{margin:17mm 16mm}
+@media print{
+  body{font-size:10.4pt; line-height:1.48}
+  .doc>h1:first-child{font-size:20pt}
+  .doc h2{font-size:14pt; margin-top:26px; padding-top:12px; break-after:avoid}
+  .doc h3{font-size:11.6pt; margin-top:18px; break-after:avoid}
+  .doc>p:first-of-type{font-size:11pt}
+  .doc table{font-size:9.3pt}
+  .term pre{font-size:8.9pt; line-height:1.5; white-space:pre-wrap; word-break:break-word}
+  .term,.tw,.doc blockquote,.doc table tr{break-inside:avoid}
+  .doc a{color:var(--ink); border-bottom:0; text-decoration:underline}
+  .term .strip{padding:3px 10px}
+}
+
+/* Die Umschaltleiste, nur am Schirm. */
+.flavorbar{display:flex; gap:7px; padding:14px 22px 0; flex-wrap:wrap}
+.flavorbar button{
+  font:inherit; font-size:12px; line-height:1; display:inline-flex; align-items:center; gap:6px;
+  padding:7px 11px; border:1px solid var(--line); border-radius:6px;
+  background:var(--surface-2); color:var(--ink-soft); cursor:pointer;
+}
+.flavorbar button:hover{color:var(--ink); border-color:var(--accent)}
+.flavorbar button[aria-pressed="true"]{color:var(--accent); border-color:var(--accent); background:var(--accent-soft)}
+.flavorbar button:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.flavorbar svg{width:13px; height:13px; flex:none}
+
+/* Kopier-Knopf im Streifen jedes Blocks. */
+.term .strip{gap:10px}
+.copy{
+  font:inherit; font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:10px;
+  letter-spacing:.09em; text-transform:uppercase; line-height:1;
+  display:inline-flex; align-items:center; gap:5px; padding:4px 7px;
+  border:1px solid var(--term-line); border-radius:5px;
+  background:transparent; color:var(--term-dim); cursor:pointer;
+}
+.copy:hover{color:var(--term-fg); border-color:var(--term-dim)}
+.copy:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+.copy svg{width:11px; height:11px; flex:none}
+.copy[data-state="ok"]{color:var(--ok); border-color:var(--ok)}
+.copy[data-state="fail"]{color:var(--stop); border-color:var(--stop)}
+
+</style>
+
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">
+      <p class="kicker">Ops-Runbook</p>
+      <h1>Ein Mensch-Agent-Team einrichten</h1>
+      <p class="meta">docs/v2/betrieb/ops-human-agent-team.de.md</p>
+    </div>
+    <div class="flavorbar" id="flavorbar" hidden>
+      <button type="button" id="flavorbtn" aria-pressed="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4.5 6V2.6h7V6"/><rect x="2" y="6" width="12" height="5" rx="1.1"/><path d="M4.5 10h7v3.4h-7z"/></svg><span>Druckansicht</span></button>
+      <button type="button" id="printbtn">Drucken</button>
+    </div>
+    <div class="mobiletop"><button id="navtoggle" type="button" aria-expanded="false">Inhalt anzeigen</button></div>
+    <nav id="nav" aria-label="Abschnitte"><ol id="navlist"></ol></nav>
+    <div class="progress" id="progress" hidden>
+      <span><b id="pdone">0</b> von <b id="ptotal">8</b> Voraussetzungen abgehakt</span>
+      <span class="bar"><i id="pbar"></i></span>
+    </div>
+  </aside>
+
+  <main>
+    <article class="doc" id="doc"></article>
+    <p class="footnote" id="foot"></p>
+  </main>
+</div>
+
+<script id="src" type="text/markdown"># Ops-Runbook: ein Mensch-Agent-Team einrichten
+
+Wie eine Führungskraft und eine Mitarbeiterin in einen Arbeitsmodus kommen, in
+dem ein Agent mitarbeitet, und wie der erste selbstgebaute Skill von der einen
+Maschine auf die andere gelangt, ohne dass irgendjemand dem Transportweg
+vertrauen muss.
+
+Zielgruppe: die Person, die das Team einrichtet. Die Mitarbeiterin, die danach
+darin arbeitet, braucht dieses Dokument nicht. Das ist der Zweck.
+
+**Zum Lesen und Drucken** gibt es dieselbe Anleitung als Doku-Seite:
+[`docs/v2/pages/ops-human-agent-team.html`](../pages/ops-human-agent-team.html). Sie
+hat eine Abschnittsschiene, einen Kopierknopf an jedem Kommando und einen
+Druck-Flavor, der jede Farbfläche auflöst. Erzeugt wird sie aus dieser Datei
+mit `tools/docpage.sh`; maßgeblich bleibt diese Datei.
+
+**Wo anfangen.** Wer das zum ersten Mal macht, beginnt bei
+[Abschnitt 0, Voraussetzungen](#0-voraussetzungen), und arbeitet die Liste in
+0.6 ab, bevor er weiterliest. Jede Zeile dort hat ein Kommando und eine
+erwartete Ausgabe. Wer die Werkzeuge schon hat, springt zu Abschnitt 1.
+
+## Inhalt
+
+| Abschnitt | Für wen, wann |
+|---|---|
+| [0. Voraussetzungen](#0-voraussetzungen) | einmal je Maschine, vor allem anderen |
+| [1. Die Reihenfolge](#1-die-reihenfolge-an-der-alles-hängt) | einmal lesen, bevor jemand etwas installiert |
+| [2. Der Arbeitsraum](#2-der-arbeitsraum-auf-einer-maschine) | einmal je Person |
+| [3. Die Rubriken](#3-warum-die-rubriken-wörtlich-dastehen) | wer moderiert oder berichtet |
+| [4. Der Lebenszyklus A nach B](#4-der-skill-lebenszyklus-von-mensch-a-zu-mensch-b) | jedes Mal, wenn ein Skill übergeben wird |
+| [5. Das gemeinsame Repository](#5-das-gemeinsame-repository-vom-ordner-nach-gitlab) | sobald GitLab dazwischen liegt |
+| [6. Drei Dateien heißen Trust-Roots](#6-die-falle-drei-dateien-heißen-trust-roots) | wenn ein Pin da ist und trotzdem nichts geht |
+| [7. Der Takt](#7-der-takt-von-manuellen-schritten-zum-skill) | die Führungskraft, laufend |
+| [8. Wenn etwas fehlschlägt](#8-wenn-etwas-fehlschlägt) | im Fehlerfall, nach Exit-Code |
+| [9. Was offen bleibt](#9-was-offen-bleibt) | wer den Umfang einschätzen muss |
+
+## Das Ziel, das dieses Runbook trägt
+
+**Enablement der Führungskraft und der Mitarbeiterin für Mensch-Agent-Zusammenarbeit
+im Compliance-Kontext.**
+
+Das Ziel ist nicht, ein Werkzeug auszurollen. Es ist erreicht, wenn vier Sätze
+zutreffen, und jeder von ihnen ist an etwas prüfbar, das auf einer Platte liegt:
+
+| Kriterium | Woran es geprüft wird |
+|---|---|
+| Z1: Beide führen ein Arbeitslog, das ein Agent lesen kann | `contexts/*/wlog/` enthält datierte Dateien mit den vier Rubriken |
+| Z2: Beide halten die Reflexion über die Arbeitsweise getrennt vom Inhalt | `contexts/*/reflections/` ist nicht leer und enthält keine Fachgeheimnisse |
+| Z3: Aus drei Durchläufen ist ein Skill geworden, nicht eine Prompt-Sammlung | ein `.skb` existiert, gepackt aus dem, was in `reflections/` steht |
+| Z4: Der Skill wechselt die Maschine mit prüfbarer Herkunft | `.m3c-provenance.json` auf der Zielmaschine nennt Fingerabdruck und Freigabestufe |
+
+Z4 ist der Teil, den das Werkzeug erledigt. Z1 bis Z3 sind der Teil, an dem
+Einführungen scheitern, und sie kommen zuerst.
+
+## Was dieses Runbook ausdrücklich nicht behauptet
+
+Es behauptet nicht, dass eine installierte Werkzeugkette jemanden befähigt.
+Die Beobachtung, aus der dieses Dokument entstanden ist, war die umgekehrte:
+ein Werkzeug auf der Maschine einer Person, die den Arbeitsmodus noch nicht
+hat, ist ein zusätzlicher Schritt und damit ein Hindernis. Deshalb steht das
+Werkzeug hier in Abschnitt 4 und nicht in Abschnitt 1.
+
+Es behauptet auch nicht, eine Governance-Schicht zu beschreiben. Signieren,
+Freigeben und Prüfen sind darin enthalten; die Anbindung an ein Policy-Gerüst,
+an ein Datenschutz-Inventar und an ein SIEM ist es nicht. Abschnitt 9 sagt,
+was offen ist.
+
+## Wie weit dieses Runbook gemessen ist
+
+Jeder Block, der mit "Gemessen" beginnt, ist am 2026-09-16 gelaufen. Das Binary
+war ein lokaler Bau aus `origin/master` (`af9e1d5`), es meldet sich als
+`skillctl dev (darwin/arm64, go1.26.6)`, und es ist **nicht** eine
+veröffentlichte Fassung. Wer gegen ein Release prüft, prüft ein anderes Objekt;
+dann gilt die Zeile, nicht die Erinnerung an sie.
+
+Die Läufe fanden gegen zwei Wegwerf-`HOME`-Verzeichnisse und eine
+Wegwerf-Registry im Dateisystem statt. Kein Netz, kein Server, keine echten
+Schlüssel. Pfade sind mit `/…/` gekürzt, der Rechnername ist entfernt.
+
+Die Besetzung ist die des Hauses: **Bob** baut und gibt heraus, **Alice**
+bekommt. In einer echten Einführung ist Bob die Führungskraft, die ihre eigene
+Arbeitsweise zuerst an sich selbst erprobt, und Alice die Person, an die sie
+übergibt.
+
+## 0. Voraussetzungen
+
+Dieser Abschnitt ist für die Person geschrieben, die das noch nie gemacht hat.
+Er nennt jede Voraussetzung, wer sie herstellt, und das Kommando, mit dem man
+prüft, ob sie da ist. Wer alle Kästchen in 0.6 abhaken kann, kann bei
+Abschnitt 1 anfangen.
+
+### 0.1 Wer was tut
+
+Drei Rollen, und sie können auf zwei Personen fallen. Die dritte ist oft
+dieselbe Person wie die erste; sie ist trotzdem getrennt aufgeführt, weil sie
+eine andere Entscheidung trifft.
+
+| Rolle | Wer das typischerweise ist | Tut |
+|---|---|---|
+| **Autor** (A, im Text "Bob") | die Führungskraft, die ihre eigene Arbeitsweise zuerst selbst erprobt | Skill bauen, packen, signieren, aufnehmen |
+| **Freigeber** | im Vier-Augen-Prinzip eine zweite Person | `publish --attest`: sagt, auf welcher Stufe der Skill benutzt werden darf |
+| **Empfänger** (B, im Text "Alice") | die Mitarbeiterin | Schlüssel pinnen, ziehen, installieren, benutzen |
+
+Zusätzlich, einmalig und außerhalb dieses Runbooks: **die IT** legt das
+GitLab-Projekt an (0.3) und vergibt die Zugänge.
+
+### 0.2 Was auf jeder Maschine liegen muss
+
+| Was | Wofür | Prüfen mit | Erwartet |
+|---|---|---|---|
+| `git` | die Registry **ist** ein Git-Repository | `git --version` | eine Versionszeile |
+| `curl` und `openssl` | der Installer holt und prüft | `curl --version`, `openssl version` | je eine Versionszeile |
+| `skillctl` | alles in Abschnitt 4 | `skillctl version` | `skillctl/vX.Y.Z`, **nicht** `dev` |
+| Claude Code | der Agent, der die Skills benutzt | `claude --version` | eine Versionszeile |
+| Zugang zum GitLab-Projekt | ziehen und schieben | `git ls-remote <url>` | eine Liste von Refs, keine Passwortfrage ins Leere |
+
+**skillctl installieren.** Eine Zeile, sie holt das Binary, prüft die Signatur
+über `SHA256SUMS` und danach die Prüfsumme des Binaries selbst:
+
+```bash
+# macOS und Linux
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/1eeefc870a9be50ace33cbc537984c38801eb266/tools/skillctl-install.sh | bash
+```
+
+```powershell
+# Windows
+irm https://raw.githubusercontent.com/kamir/m3c-tools/1eeefc870a9be50ace33cbc537984c38801eb266/tools/skillctl-install.ps1 | iex
+```
+
+**Die Bytes, bevor man sie in eine Shell kippt.** Die URL ist auf den
+unveränderlichen Commit `1eeefc8` gepinnt und nicht auf `master`, denn ein
+Zweig lässt sich umschreiben. Wer die Datei erst herunterlädt und prüft, statt
+sie durchzuleiten, erwartet diese SHA-256:
+
+- `tools/skillctl-install.ps1` → `d33f5344d30a6258281b0784c461ecc0dbe25b86444175a6f95c31dfe2c27f17`
+- `tools/skillctl-install.sh` → `5992c7f5770ced2d0ce1f43979e308b087e6a97d07a689eebf43230c28d88469`
+
+Der [README-Abschnitt Install](../../../README.md#install) hat das Rezept dafür zum
+Kopieren. Wer den Einzeiler durchleitet, verzichtet auf diese Probe; das ist
+eine Entscheidung und kein Versehen.
+
+**Danach unbedingt `skillctl version` aufrufen und den Wert mit dem
+vergleichen, den das Team festgelegt hat.** Gemessen am 2026-09-16: der oben
+gepinnte Commit installiert `skillctl/v0.4.0`, während dieselbe Datei auf
+`master` auf `v0.5.1` steht. Der Pin-Prüfer des Repositories prüft, dass der
+Pin auflöst und die Bytes stimmen, nicht welche Fassung dabei herauskommt. Wer
+eine bestimmte Fassung braucht, gibt sie an:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/1eeefc870a9be50ace33cbc537984c38801eb266/tools/skillctl-install.sh \
+  | RELEASE_BASE=https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.5.1 bash
+```
+
+Der Installer warnt dann laut, dass `RELEASE_BASE` gesetzt wurde. Das ist
+Absicht und kein Fehler: die Zeile verschiebt den Vertrauensanker, und
+deswegen sagt sie es.
+
+Wenn `skillctl version` nach der Installation nicht gefunden wird, liegt das
+Binary in `~/.local/bin`, und dieses Verzeichnis fehlt im Suchpfad. Dann
+einmalig in die Shell-Konfiguration:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+### 0.3 Das Skill-Repository anlegen
+
+Die Registry ist ein Git-Repository. Für ein Team, das sie teilt, liegt sie
+auf der internen GitLab-Instanz.
+
+**Sie bekommt ein eigenes Projekt, und das Projekt ist leer.** Nicht ein
+vorhandenes mitbenutzen, nicht einen Ordner in einem Projekt, das noch etwas
+anderes tut. Der Grund steht im Kasten unten und ist nicht verhandelbar: der
+erste Push ersetzt alles, was im Zielzweig liegt.
+
+| Frage | Antwort |
+|---|---|
+| Wer legt es an | die IT oder wer im Namensraum Projekte anlegen darf |
+| Wo | die interne GitLab-Instanz, in einer Gruppe, die beide Seiten sehen |
+| Sichtbarkeit | privat |
+| Standardzweig | `main` |
+| Wer darf schreiben | nur der Autor. Alle anderen lesen |
+| Wie es heißen sollte | ein Name, der sagt, dass es eine Registry ist, zum Beispiel `skill-registry` |
+| Was es sonst enthält | **nichts.** Kein README, keine CI-Datei, keine Issues-Vorlage |
+
+> **Das Projekt muss leer sein, ohne README und ohne CI-Datei.** Das ist keine
+> Stilfrage. Der Weg vom lokalen Ordner nach GitLab ist `git push --mirror`,
+> und `--mirror` bedeutet: der Zustand des Ziels wird durch den der Quelle
+> **ersetzt**. Gemessen am 2026-09-16 gegen ein Projekt, das `README.md` und
+> `.gitlab-ci.yml` auf `main` hatte: nach dem Push meldete git
+> `+ ffbaeef...f0e85f1 main -> main (forced update)`, und beide Dateien waren
+> weg. Wer beim Anlegen "README hinzufügen" ankreuzt, hat sich diese Falle
+> gestellt.
+
+**Beim Anlegen in GitLab konkret:** im Formular *New project* bleibt
+"Initialize repository with a README" **ungekreuzt**, und die
+Sicherheits-Häkchen (SAST und Verwandte) bleiben es ebenfalls, denn sie legen
+eine `.gitlab-ci.yml` an. Sichtbarkeit privat, Standardzweig `main`. Das
+Projekt soll nach dem Anlegen die Seite "The repository for this project is
+empty" zeigen. Zeigt es stattdessen eine Dateiliste, ist es das falsche
+Projekt für diesen Zweck.
+
+Ist ein Projekt schon mit README oder CI angelegt worden, ist der saubere Weg
+**ein zweites, leeres Projekt nur für die Registry**. Die vorhandenen Dateien
+zu löschen funktioniert auch, verbraucht aber eine Entscheidung darüber, was
+mit dem alten Projekt geschieht, und die vergisst man. Was **nicht**
+funktioniert, ist zu hoffen, dass `--mirror` sie stehen lässt.
+
+**Zwei Registries, und nur eine davon darf jemand abräumen.** Wer übt, übt
+nicht auf der Ablage, aus der Maschinen installieren. Deshalb gibt es zwei
+Projekte, und der Unterschied gehört in ihre Namen:
+
+| Projekt | Rolle | Darf geleert werden |
+|---|---|---|
+| `<name>-test` | zum Üben und für automatische Läufe; wird aus Tests neu befüllt | **ja**, jederzeit, das ist ihr Zweck |
+| `<name>` | der Betrieb; hieraus installieren die Maschinen | **nein** |
+
+Die Gefahr kommt aus derselben Ecke wie oben: `push --mirror` ersetzt das Ziel.
+Wer im Übungsordner steht und die Betriebs-URL angibt, ersetzt den Betrieb durch
+seinen Übungsstand, und der Push meldet dabei Erfolg. Die Gegenmaßnahme steht in
+5.1 und ist banal: die URL steht im Ordner, nicht in der Kommandozeile.
+
+Eine Test-Registry zu leeren ist kein Unfall, sondern ein Arbeitsschritt. Sie
+darf deshalb auch dann neu angelegt werden, wenn sie schon Inhalt hat: bei ihr
+ist der `--mirror`-Ersatz genau das Gewünschte.
+
+**Zugang.** Wer über HTTPS arbeitet, braucht ein Token; wer über SSH arbeitet,
+einen hinterlegten Schlüssel. Welches Token, wer es besorgt, wo es liegt und was
+beim Ausscheiden passiert, steht vollständig in
+[Ops-Routine: Zugangstoken](ops-registry-tokens.de.md). Dieses Runbook wiederholt
+es nicht.
+
+Die Probe, dass der Zugang steht, vor allem anderen:
+
+```bash
+git ls-remote https://git.example.internal/gruppe/skill-registry.git
+```
+
+Für ein frisch angelegtes, leeres Projekt ist die erwartete Ausgabe
+**gar keine**, bei Exit 0. Das ist zugleich die Probe aus 5.1: keine Ausgabe
+heißt leer, und leer heißt, dass der erste Push nichts überschreiben kann. Eine
+Fehlermeldung über Authentifizierung heißt: zurück zur Token-Routine, und nicht
+weiter.
+
+```
+$ git ls-remote https://git.example.internal/gruppe/skill-registry.git
+$ echo $?
+0
+```
+
+### 0.4 Die Identitäten festlegen
+
+Jede Person bekommt eine Identität in der Form `id:<name>@<organisation>`. Sie
+ist kein Etikett, sondern der Wert, unter dem der Empfänger den Schlüssel pinnt
+und den die Signaturzeile eines Bundles trägt. Stimmen beide nicht überein,
+findet der Prüfer den Schlüssel nicht und lehnt ab.
+
+Deshalb gilt: **die Identitäten werden einmal aufgeschrieben, bevor jemand
+einen Schlüssel erzeugt**, und beide Seiten lesen dieselbe Zeile.
+
+| Person | Identität | Wird gebraucht bei |
+|---|---|---|
+| Autor | `id:bob@example` | `sign --identity-id`, `publish --identity` |
+| Empfänger | `id:alice@example` | nur, wenn auch sie veröffentlicht |
+
+Ein Suffix, das die Zugehörigkeit sagt, ist eine gute Angewohnheit: wer als
+externer Partner auftritt, sollte nicht aussehen wie eine interne Rolle.
+
+### 0.5 Die Schlüssel erzeugen und den öffentlichen teilen
+
+Das Einrichtungsskript aus Abschnitt 2 erzeugt das Schlüsselpaar mit; wer es
+von Hand tun will, tut es so:
+
+```bash
+skillctl keygen --out ~/.config/m3c/mein-autorenschluessel
+```
+
+Zwei Dateien entstehen, und die Unterscheidung ist die wichtigste dieses
+Abschnitts:
+
+| Datei | Rechte | Was damit geschieht |
+|---|---|---|
+| `…priv` | 0600 | **bleibt auf der Maschine.** Niemals per Mail, Chat, Ticket oder in ein Repository |
+| `…pub` | 0644 | **darf jeden Weg nehmen.** Genau dafür ist er da |
+
+Die Übergabe läuft über **zwei Kanäle**, und das ist der Kern des Verfahrens:
+
+1. **Kanal 1, bequem:** die `.pub`-Datei per Mail, Teams, geteiltem Ordner oder
+   USB-Stick. Der Weg muss nicht sicher sein.
+2. **Kanal 2, mündlich:** der Autor lässt sich den Fingerabdruck anzeigen und
+   liest ihn am Telefon vor.
+
+```bash
+skillctl trust fingerprint ~/.config/m3c/mein-autorenschluessel.pub
+sha256:8e19d51c27db47f6851d54a4d4e206c668fd95cf13b29569a6b5c57a2cc8b471
+```
+
+Der Empfänger lässt sich denselben Wert aus der Datei anzeigen, die bei ihm
+angekommen ist, und vergleicht Zeichen für Zeichen.
+
+> **Stimmt der Wert nicht überein, wird abgebrochen und nachgefragt, nicht
+> "nochmal geschickt".** Eine Abweichung heißt, dass die Datei unterwegs eine
+> andere geworden ist. Genau dagegen ist der zweite Kanal da, und deshalb nimmt
+> `--pin` den Wert zwingend: es gibt kein Vertrauen beim ersten Kontakt.
+
+Eine Zahl reicht für beide Pins. Nachgeprüft am 2026-09-16: derselbe
+Fingerabdruck ging an `trust add-author --pin` und an `peer add --pin`, und
+beide bestätigten ihn als `matched`. Am Telefon wird also eine Zeile
+vorgelesen, nicht zwei.
+
+**Was der Autor sonst noch tut:** den privaten Schlüssel sichern, an einem Ort,
+der nicht dieselbe Platte ist. Geht er verloren, ist keine der bisherigen
+Signaturen ungültig, aber es kann nichts Neues mehr unter dieser Identität
+signiert werden, und der Empfänger muss einen neuen Schlüssel pinnen. Das ist
+kein Notfall, aber es ist ein Telefonat.
+
+### 0.6 Bereit, wenn
+
+Beide Seiten haken einzeln ab. Jede Zeile hat ein Kommando, keine Meinung.
+
+| # | Auf welcher Maschine | Prüfung | Erwartet |
+|---|---|---|---|
+| V1 | beide | `git --version` | eine Versionszeile |
+| V2 | beide | `skillctl version` | die Fassung, die das Team festgelegt hat |
+| V3 | beide | `skillctl doctor` | `USABLE`, offene Schritte sind erlaubt |
+| V4 | beide | `git ls-remote <registry-url>` | Exit 0 |
+| V5 | Autor | `ls -l …priv` | Modus `-rw-------` |
+| V6 | Autor | `skillctl trust fingerprint …pub` | ein `sha256:`-Wert |
+| V7 | Empfänger | derselbe Wert, am Telefon abgeglichen | zeichenweise gleich |
+| V8 | beide | die Identitäten liegen aufgeschrieben vor | zwei Zeilen `id:…@…` |
+
+`skillctl doctor` ist dabei der Freundlichste der acht: er sagt zu jeder Zeile,
+was zu tun ist, und `todo` ist kein Fehler.
+
+Das `dev` in der ersten Zeile gehört zum Messaufbau dieses Runbooks (Abschnitt
+"Wie weit dieses Runbook gemessen ist") und ist auf einer eingerichteten
+Maschine eine echte Fassungsnummer:
+
+```
+$ skillctl doctor
+ok    version      skillctl dev (darwin/arm64, go1.26.6)
+ok    home         /Users/… ($HOME)
+todo  skills dir   /…/.claude/skills does not exist yet
+                   -> it is created by the first `skillctl install`
+ok    trust roots  /…/.claude/skill-trust-roots.yaml (1 registry/ies, 1 pinned, 0 from-registry)
+todo  peers        no pinned peers
+--------------------------------------------------------------
+USABLE, 4 step(s) not done yet. Nothing here is broken.
+```
+
+## 1. Die Reihenfolge, an der alles hängt
+
+Erst die Arbeitsweise, dann das Werkzeug. Die Begründung ist kein Geschmack:
+
+Eine Person, die Agenten noch nicht benutzt hat, bekommt eine fachlich große
+Aufgabe und dazu ein neues Werkzeug. Sie kann das Alte nicht mehr guten
+Gewissens tun und das Neue noch nicht. Was dabei herauskommt, ist langsamer als
+vorher, und die Schuld bekommt das Werkzeug.
+
+Der Ausweg ist die kleinste mögliche Übung, die nichts mit der Fachaufgabe zu
+tun hat: ein Arbeitslog führen, am Tagesende drei Fragen beantworten, und das
+Ergebnis in eine Datei schreiben. Erst wenn das Routine ist, hat die Person die
+Erfahrung, aus der später ein Skill wird.
+
+**Die drei Ebenen, die getrennt bleiben müssen.** Ohne diese Trennung ist keine
+Methodik übergebbar, weil der Inhalt es nicht ist:
+
+| Ebene | Was es ist | Übergebbar |
+|---|---|---|
+| rot | der fachliche Inhalt, oft vertraulich | nein |
+| grau | die Arbeitsweise, der Doku-Flow | **ja, das ist der Skill** |
+| blau | die Prüfung: wurde der Zweck erreicht | ja, als Kriterium |
+
+Wer die Einführung eines vertraulichen Verfahrens dokumentiert, dokumentiert
+rot. Wer aufschreibt, welche Fragen er wem gestellt hat und in welcher
+Reihenfolge, dokumentiert grau. Nur grau verlässt die Abteilung.
+
+## 2. Der Arbeitsraum auf einer Maschine
+
+Ein Skript legt ihn an, in einer von zwei Rollen. Es installiert `skillctl`
+nicht, es geht nicht ins Netz, und es entscheidet nicht, was jemand darf.
+
+```bash
+tools/team-base-setup.sh author --id id:bob@example --contexts isms,cra,grc
+tools/team-base-setup.sh member --author-id id:bob@example \
+    --author-key bob.pub --pin sha256:<am-telefon-abgeglichen> \
+    --peer-registry local:///pfad/zur/registry
+tools/team-base-setup.sh check
+```
+
+Was entsteht, ist je Kontext ein Vierklang, und die vier Ordner sind die vier
+Stationen der Schleife:
+
+```
+<arbeitsraum>/
+  CLAUDE.md                      die Hausregeln, die der Agent jede Sitzung liest
+  contexts/<kontext>/
+    inbox/                       Rohmaterial: Transkripte, Notizen, Exporte
+    wlog/                        ein Arbeitslog je Tag
+    reports/                     die Aggregate, die der Agent schreibt
+    reflections/                 was über die ARBEITSWEISE gelernt wurde
+  skills/    bundles/    keys/   nur in der Rolle author
+```
+
+`reflections/` ist der Ordner, den alle auslassen, und der einzige, aus dem
+später ein Skill wird. Ohne ihn bleibt das Arbeitslog ein Tagebuch.
+
+**Gemessen, Rolle author.** Ein Lauf, gekürzt:
+
+```
+$ tools/team-base-setup.sh author --id id:bob@example --workspace /…/ws-bob --contexts isms,cra,grc
+role: author, identity id:bob@example
+  ok      context isms (inbox, wlog, reports, reflections)
+  ok      context cra (inbox, wlog, reports, reflections)
+  ok      context grc (inbox, wlog, reports, reflections)
+  ok      CLAUDE.md (the house rules the agent reads on every session)
+  ok      .gitignore (keys and bundles never reach a remote by accident)
+  ok      skills/, bundles/, keys/ (keys/ mode 0700)
+wrote /…/ws-bob/keys/author.priv (mode 0600)
+wrote /…/ws-bob/keys/author.pub (mode 0644)
+
+Read this fingerprint aloud on a call. It is what the other side pins:
+sha256:8e19d51c27db47f6851d54a4d4e206c668fd95cf13b29569a6b5c57a2cc8b471
+```
+
+Ein zweiter Lauf erzeugt **kein** neues Schlüsselpaar. Das ist Absicht: ein
+neuer Schlüssel macht jedes bereits signierte Bundle herrenlos.
+
+**Gemessen, Rolle member.** Der Fingerabdruck oben ist der Wert, der am Telefon
+vorgelesen wird, und `--pin` nimmt genau ihn:
+
+```
+$ tools/team-base-setup.sh member --workspace /…/ws-alice --contexts isms \
+    --author-id id:bob@example --author-key /…/author.pub \
+    --pin sha256:8e19d51c… --peer-registry local:///…/reg2
+role: member
+  ok      context isms (inbox, wlog, reports, reflections)
+added registry https://author.example/api/skills to /…/.claude/skill-trust-roots.yaml
+pinned author id:bob@example under https://author.example/api/skills
+You can now verify and install bundles this author signed, offline.
+pinned peer "bob@example" → local:///…/reg2
+  fingerprint: sha256:8e19d51c… (matched)
+  ok      peer pinned: pull works against local:///…/reg2
+```
+
+Zum Schluss fragt das Skript `skillctl doctor`, weil eine Einrichtung, die sich
+selbst für gelungen erklärt, nichts belegt.
+
+## 3. Warum die Rubriken wörtlich dastehen
+
+Ein Bericht trägt vier Überschriften, und zwar diese Wörter, nicht ihre
+Synonyme:
+
+```
+## Progress
+## Plans
+## Problems
+## Proposals
+```
+
+Das ist kein Formalismus. Ein System, das die Rubrik raten muss, interpretiert;
+ein System, das sie liest, extrahiert. Wer die Wörter weglässt, zwingt die
+Maschine zur Spekulation und nennt das Ergebnis später Halluzination.
+
+Dasselbe gilt für eine Besprechung mit Transkript: die Rubriken werden im
+Gespräch **ausgesprochen**, sonst kann sie hinterher niemand trennen. Das ist
+eine Aufgabe für die Moderation, nicht für die Nachbearbeitung.
+
+Die vierte Rubrik, **Proposals**, fehlt in der geläufigen Dreierform. Sie wird
+von Anfang an mitgeführt, weil die Person mit der Beobachtung meistens auch die
+mit dem Vorschlag ist, und weil ein Vorschlag, der nirgends hingehört, nicht
+aufgeschrieben wird.
+
+## 4. Der Skill-Lebenszyklus von Mensch A zu Mensch B
+
+Sechs Schritte. Der viertletzte ist der, an dem ein Mensch entscheidet, und der
+letzte ist der, den ein Runbook gern vergisst.
+
+| # | Schritt | Wer | Kommando | Was es beweist |
+|---|---|---|---|---|
+| 1 | bauen | Autor | (kein Kommando) | der Skill entsteht aus `reflections/`, nicht am Reißbrett |
+| 2 | prüfen | Autor | `skillctl pack` zweimal | zwei Läufe, Byte für Byte gleich |
+| 3 | bündeln | Autor | `skillctl sign`, `skillctl verify-sig` | die eigene Arbeit ist geprüft, bevor sie weggeht |
+| 4 | herausgeben | Autor, dann Freigeber | `skillctl publish`, dann `publish --attest` | Aufnahme und Freigabe sind zwei Vorgänge |
+| 5 | übernehmen | Empfänger | `skillctl pull --install` | Herkunft und Freigabestufe liegen neben dem Skill |
+| 6 | benutzen | Empfänger | `/<name>` in Claude Code | der Skill läuft, statt nur auf der Platte zu liegen |
+
+Alles darunter setzt Abschnitt 0 voraus. Wer hier anfängt, ohne V1 bis V8
+abgehakt zu haben, scheitert an Schritt 3 oder an Schritt 5, und die Meldung
+sagt dann etwas über Schlüssel, nicht über die Voraussetzung, die fehlt.
+
+### 4.1 Bauen und prüfen
+
+Der erste Skill ist klein. Er fasst die Woche zusammen, die im Arbeitslog
+steht, und er tut nichts anderes.
+
+**Gemessen.**
+
+```
+$ skillctl pack --skill /…/ws-bob/skills/wochenbericht -o /…/wochenbericht@1.0.0.skb \
+    --name wochenbericht --version 1.0.0 --summary "…" \
+    --author-intent green --author-intent-rationale "Liest lokale Dateien, schreibt eine lokale Datei. Kein Netz, kein Unterprozess."
+bundle_digest: sha256:e48dc720…  (manifest digest; NOT the value attest/publish/revoke take)
+output:        /…/ws-bob/bundles/wochenbericht@1.0.0.skb
+exit=0
+zweimal gepackt: byte-gleich
+```
+
+`--author-intent` ist die Selbstauskunft des Autors, nicht die Freigabe. Wer
+hier `green` schreibt, sagt, was der Skill tut; wer in Abschnitt 4.3 `--level green`
+schreibt, sagt, dass er ihn dafür freigibt. Zwei verschiedene Aussagen, und in
+einem Audit zwei verschiedene Personen.
+
+**Achtung, zwei Prüfsummen.** `pack` druckt eine Manifest-Prüfsumme, `sign`
+druckt die Bundle-Prüfsumme. Nur die zweite geht in `--digest`. Das Werkzeug
+sagt es in beiden Ausgaben dazu, weil die Verwechslung sonst erst bei `attest`
+auffällt.
+
+### 4.2 Signieren, und die eigene Arbeit prüfen
+
+**Gemessen.**
+
+```
+$ skillctl sign --key /…/keys/author.priv --identity-id id:bob@example /…/wochenbericht@1.0.0.skb
+digest: 6e86343a606ef95d9a8d6c60cd5f366de2815e9fc317c5745b9b53bc11b9fe43
+        ^ bundle digest: use this for `attest`, `publish --digest` and `revoke --digest`
+signature: /…/wochenbericht@1.0.0.skb.6e86343a….author.sig
+exit=0
+
+$ skillctl verify-sig --pubkey /…/keys/author.pub /…/wochenbericht@1.0.0.skb
+OK: signature verified
+exit=0
+```
+
+Der zweite Aufruf prüft die eigene Arbeit gegen den eigenen Schlüssel. Er
+kostet eine Sekunde und trennt später zwei Fehlerbilder, die sonst gleich
+aussehen: ein Fehler beim Packen und ein Fehler auf dem Transportweg.
+
+### 4.3 Die Registry ist ein Ordner
+
+Für zwei Menschen braucht es keinen Server. Ein Git-Repository genügt, und das
+Werkzeug legt es an.
+
+**Gemessen.**
+
+```
+$ skillctl registry init --registry local:///…/reg2
+initialized local skill registry: /…/reg2
+  publish:  skillctl publish <skill> --registry local:///…/reg2 ...
+  pull:     skillctl pull --registry local:///…/reg2
+  push up:  git -C /…/reg2 push --mirror <gitlab-or-github-url>
+exit=0
+```
+
+Die letzte Zeile ist der Weg in den Betrieb: derselbe Ordner, auf eine interne
+GitLab-Instanz gespiegelt, ist die Skill-Ablage des Unternehmens. Damit gilt
+über Skills dieselbe Nachvollziehbarkeit wie über Quelltext, ohne dass dafür
+etwas Neues gebaut werden muss.
+
+Diese eine Zeile hat drei Fallen, und alle drei treffen den, der sie zum ersten
+Mal ausführt. [Abschnitt 5](#5-das-gemeinsame-repository-vom-ordner-nach-gitlab)
+fährt sie einzeln vor. Wer heute nur zu zweit auf einer Maschine übt, braucht
+sie noch nicht.
+
+**Aufnehmen und freigeben sind zwei Vorgänge.**
+
+```
+$ skillctl publish wochenbericht@1.0.0 --registry local:///…/reg2 \
+    --bundle /…/wochenbericht@1.0.0.skb --key /…/author.priv \
+    --identity id:bob@example --version 1.0.0 --yes
+==> publish (admit) wochenbericht@1.0.0
+    digest:    sha256:6e86343a…
+    transport: git (in-repo blob)
+    identity:  id:bob@example
+==> admitted: wochenbericht/v1.0.0  transport=git  registry=local:///…/reg2
+exit=0
+```
+
+`--identity` ist keine Formalie. Der Vorgabewert nennt jemand anderen. Wer ihn
+stehen lässt, gibt ein Bundle heraus, dessen Signaturzeile einen fremden Namen
+trägt; die Gegenseite bekommt dann eine Ablehnung, die sagt, die Identität sei
+nicht gepinnt, obwohl sie korrekt gepinnt ist. Der Fehler war, dass der Absender
+nie gesagt hat, wer er ist.
+
+**Was ohne Freigabe passiert.** Aufgenommen ist nicht freigegeben, und das Tor
+sagt das auch:
+
+```
+$ skillctl pull --registry local:///…/reg2
+==> pull (registry=local:///…/reg2, gov-min=green)
+    trust-roots: /…/.claude/skill-peers.yaml  fp=sha256:8e19d51c…
+    peer:        bob@example (pinned key)
+
+    ❌ wochenbericht@1.0.0  digest=sha256:6e86343a…  [gate 4: no attestation at or
+       above the trust-roots governance_minimum] no signed attestation found for this digest
+
+==> done. staged=0  skipped=1  (context: skills)
+exit=13
+```
+
+Exit 13 heißt "Governance unter dem Minimum". Nichts wurde gestaget, nichts
+installiert. Das ist die Stelle, an der ein Mensch entscheidet:
+
+```
+$ skillctl publish --attest wochenbericht@1.0.0 --registry local:///…/reg2 \
+    --digest sha256:6e86343a… --level green \
+    --rationale "Liest lokale wlog-Dateien, schreibt einen Bericht. Kein Netz, kein Unterprozess." \
+    --key /…/author.priv --identity id:bob@example --yes
+==> publish --attest wochenbericht@1.0.0
+    level:     green
+    rationale: Liest lokale wlog-Dateien, schreibt einen Bericht. Kein Netz, kein Unterprozess.
+==> attested: wochenbericht/v1.0.0  transport=git  registry=local:///…/reg2
+exit=0
+```
+
+`--rationale` ist der einzige Satz, den später ein Prüfer liest. Er gehört
+niemandem sonst; er beantwortet, warum diese Stufe gerechtfertigt war.
+
+In einer Abteilung, die das Vier-Augen-Prinzip führt, signiert hier ein
+**anderer** Schlüssel als in 4.2. Der Lauf oben zeigt beide Rollen auf einer
+Person, weil er auf einer Maschine lief; die Herkunftsdatei in 4.4 macht das
+sichtbar, indem sie zweimal denselben Fingerabdruck nennt.
+
+### 4.4 Übernehmen, in zwei Schritten
+
+**Gemessen.** Nach der Freigabe zieht dieselbe Anfrage grün:
+
+```
+$ skillctl pull --registry local:///…/reg2
+    ✅ wochenbericht@1.0.0  digest=sha256:6e86343a…  gov=green  →  /…/.cache/m3c/skill-bundles/6e86343a…/bundle.skb
+==> done. staged=1  skipped=0  (context: skills)
+exit=0
+```
+
+Installieren ist absichtlich zweistufig. Schritt 1 druckt den Plan und einen
+Token, Schritt 2 verbraucht ihn:
+
+```
+$ skillctl pull --registry local:///…/reg2 --install --trust-mode --dry-run-install
+==> install plan: 1 create, 0 overwrite
+    + wochenbericht@1.0.0  →  /…/.claude/skills/wochenbericht   (digest sha256:6e86343a…)
+==> dry-run-install token (5-minute TTL): 1789562258.sx3Dd3s6…
+    re-run with: --confirm-install --dry-run-install-token <above>
+
+$ skillctl pull --registry local:///…/reg2 --install --trust-mode \
+    --confirm-install --dry-run-install-token 1789562258.sx3Dd3s6…
+    +  installed at /…/.claude/skills/wochenbericht  (provenance: …/.m3c-provenance.json)
+exit=0
+```
+
+Der Token läuft nach fünf Minuten ab. Wer ihn in ein Skript schreibt, hat die
+Zustimmung wegautomatisiert, die er darstellt.
+
+Neben dem Skill liegt danach seine Herkunft, und sie ist der Beleg für Z4:
+
+```json
+{
+  "skill": "wochenbericht",
+  "version": "1.0.0",
+  "bundle_digest": "sha256:6e86343a…",
+  "registry": "local://<pfad-zur-registry>",
+  "pulled_at": "2026-09-16T12:37:47Z",
+  "trust_roots_fingerprint": "sha256:8e19d51c…",
+  "signatures": [
+    { "role": "author",   "identity_id": "id:bob@example", "pubkey_fingerprint": "sha256:8e19d51c…" },
+    { "role": "registry", "identity_id": "id:bob@example", "pubkey_fingerprint": "sha256:8e19d51c…" }
+  ],
+  "governance_level": "green"
+}
+```
+
+### 4.5 Und dann benutzen
+
+Der Schritt, den kein Kommando abnimmt und den ein Runbook trotzdem nennen
+muss, sonst endet es beim Installieren.
+
+Nach dem Install liegt der Skill unter `~/.claude/skills/<name>/`. Was dort
+liegt, ist der Skill plus seine Belege:
+
+```
+$ ls -a ~/.claude/skills/wochenbericht/
+.m3c-provenance.json     woher er kommt, wer signiert hat, welche Stufe
+.skillctl-attest.json    die Freigabe, signiert
+CHECKSUMS                die Prüfsummen der Dateien
+SKILL.md                 der Skill selbst
+bundle.json              das Manifest
+wochenbericht.skb        das Bundle, aus dem entpackt wurde
+```
+
+Benutzt wird er in Claude Code unter seinem Namen aus dem `name:`-Feld der
+`SKILL.md`, also `/wochenbericht`. Claude Code liest die installierten Skills
+beim Sitzungsstart; eine laufende Sitzung sieht einen frisch installierten
+Skill also erst nach einem Neustart.
+
+Damit schließt sich die Schleife aus Abschnitt 7: die Mitarbeiterin ruft das
+auf, was aus ihrer eigenen dreimal gelaufenen Arbeitsweise geworden ist, und
+was sie beim Aufrufen stört, ist der Inhalt der nächsten Reflexion.
+
+## 5. Das gemeinsame Repository: vom Ordner nach GitLab
+
+Abschnitt 4 lief auf einer Maschine. Sobald zwei Menschen dieselbe Registry
+benutzen, kommt GitLab dazwischen, und dabei gibt es drei Stellen, an denen es
+still schiefgeht. Alle drei sind am 2026-09-16 gemessen, gegen ein
+nachgebautes GitLab-Projekt im Dateisystem.
+
+### 5.1 Der Autor schiebt hoch
+
+Der Ordner aus 4.3 wird zum ersten Mal gespiegelt. `registry init` druckt dafür
+eine Zeile mit der URL darin. Genau die schreibt man **einmal** in den Ordner
+und danach nie wieder in eine Kommandozeile:
+
+```bash
+git -C /pfad/zur/registry remote add origin https://git.example.internal/gruppe/skill-registry.git
+git -C /pfad/zur/registry push --mirror origin
+```
+
+Warum der Umweg über `remote add`: es gibt zwei Registries (0.3), und ein
+`--mirror` an die falsche URL ersetzt die andere. Steht die URL im Ordner, kann
+man sie nicht verwechseln, und eine Zeile sagt jederzeit, welcher Ordner wohin
+zeigt:
+
+```bash
+git -C /pfad/zur/registry remote -v
+```
+
+**Vor dem allerersten Push eine Zeile Vorsicht.** Sie kostet eine Sekunde und
+verhindert den einzigen Schaden, den dieser Weg anrichten kann:
+
+```bash
+git ls-remote https://git.example.internal/gruppe/skill-registry.git
+```
+
+Keine Ausgabe heißt: das Ziel ist leer, der Push kann nichts zerstören.
+Kommt eine Liste von Refs, ist das Projekt **nicht** leer, und dann wird nicht
+gepusht, sondern 0.3 zu Ende gelesen. Für jeden weiteren Push entfällt die
+Probe: ab dann ist der eigene Registry-Inhalt genau das, was dort stehen soll.
+
+**Vor dem ersten `publish` geht der Push nicht.** Eine frisch angelegte Registry
+hat null Refs, und git sagt dann `Perhaps you should specify a branch`. Das ist
+kein Defekt, sondern die Reihenfolge: erst aufnehmen und freigeben, dann
+spiegeln.
+
+**`--mirror` ersetzt den Zustand des Ziels.** Wie das aussieht, wenn im Projekt
+schon etwas lag, steht in 0.3, samt der Zeile, die git dabei druckt. Ist das
+Projekt leer angelegt worden, ist der erste Push unauffällig, und jeder weitere
+auch:
+
+```
+   107efa7..bfc3d5f  main -> main
+ * [new tag]         wb/v1.2.0 -> wb/v1.2.0
+```
+
+Jede veröffentlichte Fassung bekommt ein eigenes Tag. Wer im GitLab-Web
+nachsehen will, was aufgenommen wurde, sieht unter `skills/` die Bundles und
+unter `events/` die signierten Ereignisse.
+
+### 5.2 Der Empfänger holt sie: `--mirror`, nicht `--bare`
+
+Der Empfänger braucht eine lokale Kopie der Registry. Es gibt zwei Arten, das
+zu tun, sie sehen gleich aus, und nur eine funktioniert dauerhaft.
+
+```bash
+# richtig
+git clone --mirror https://git.example.internal/gruppe/skill-registry.git ~/skill-registry
+```
+
+**Warum nicht `--bare`.** Gemessen: nach einem `git clone --bare` trägt der Klon
+keinen `fetch`-Refspec. Ein späteres `git fetch` in diesem Klon aktualisiert
+`refs/heads/main` deshalb **nicht**, es setzt nur `FETCH_HEAD`. Der Empfänger
+sieht dann auf Dauer den Stand vom Tag des Klonens, und zwar ohne
+Fehlermeldung: `pull` meldet fröhlich grün, nur eben die alte Fassung. Ein
+`--mirror`-Klon trägt `+refs/*:refs/*`, und damit holt ein schlichtes
+`git fetch` alles.
+
+Nachgeprüft: Autor veröffentlicht `1.2.0` und schiebt hoch, Empfänger ruft nur
+`git fetch` auf, danach zeigt `pull` drei Fassungen statt zwei.
+
+```
+$ git -C ~/skill-registry fetch
+   107efa7..bfc3d5f  main       -> main
+ * [neues Tag]       wb/v1.2.0  -> wb/v1.2.0
+
+$ skillctl pull --registry local://$HOME/skill-registry
+    ✅ wb@1.0.0  …  gov=green
+    ✅ wb@1.1.0  …  gov=green
+    ✅ wb@1.2.0  …  gov=green
+==> done. staged=3  skipped=0  (context: skills)
+```
+
+**Die zweite stille Stelle: `HEAD` des Klons.** Die Registry liegt auf `main`.
+Zeigt `HEAD` des Klons auf einen Zweig, den es nicht gibt, findet `skillctl`
+nichts und sagt es deutlich:
+
+```
+pull: NULLTREFFER im Kontext "skills".
+  Das ist kein Erfolg: ein leerer Lauf ist von einem Lauf ohne Arbeit
+  nicht zu unterscheiden […]
+```
+
+Bei einem GitLab-Projekt mit Standardzweig `main` tritt das nicht auf, der Klon
+übernimmt `HEAD` vom Server. Die Prüfung kostet trotzdem eine Zeile, und sie
+beantwortet die Frage, die sonst eine halbe Stunde kostet:
+
+```bash
+git -C ~/skill-registry symbolic-ref HEAD      # erwartet: refs/heads/main
+git -C ~/skill-registry symbolic-ref HEAD refs/heads/main   # falls nicht
+```
+
+### 5.3 Der Pin hängt am Pfad, nicht am Projekt
+
+**Die dritte Stelle, und die überraschendste.** `peer add` pinnt einen
+**Locator**, also genau die Zeichenkette `local:///pfad/zur/registry`. Ein
+anderer Pfad auf derselben Maschine, der dasselbe GitLab-Projekt enthält, ist
+für skillctl ein anderer Peer und ist **nicht** gepinnt. Gemessen: nach dem
+Umziehen der Registry in einen zweiten Ordner brach `pull` mit der Meldung ab,
+es fehle `~/.claude/trust-roots.yaml`, obwohl der Autor längst gepinnt war.
+
+Daraus folgt die Reihenfolge, und sie ist der Grund, warum 0.3 nach einem Pfad
+fragt, bevor irgendjemand pinnt:
+
+1. Pfad festlegen und klonen. Ein Pfad, einmal, für immer.
+2. **Dann** pinnen, auf genau diesen Pfad.
+
+```bash
+tools/team-base-setup.sh member --author-id id:bob@example \
+    --author-key ~/bob.pub --pin sha256:<am-telefon-abgeglichen> \
+    --peer-registry local://$HOME/skill-registry
+```
+
+Zieht die Registry doch einmal um, wird neu gepinnt. Das ist ein Kommando, kein
+Drama, aber es passiert nicht von allein.
+
+### 5.4 Die Runde, auf einen Blick
+
+| # | Wer | Kommando |
+|---|---|---|
+| 0 | IT | **eigenes, leeres**, privates GitLab-Projekt, Standardzweig `main`, ohne README und ohne CI |
+| 1 | Autor | `git ls-remote <url>` muss leer sein, bevor Schritt 4 kommt |
+| 2 | Autor | `skillctl registry init --registry local://$HOME/skill-registry` |
+| 3 | Autor | `publish`, dann `publish --attest` |
+| 4 | Autor | einmal `git -C $HOME/skill-registry remote add origin <url>`, dann `git -C $HOME/skill-registry push --mirror origin` |
+| 5 | Empfänger | `git clone --mirror <url> ~/skill-registry` |
+| 6 | Empfänger | `team-base-setup.sh member … --peer-registry local://$HOME/skill-registry` |
+| 7 | Empfänger | `skillctl pull --registry local://$HOME/skill-registry --install --trust-mode …` |
+| später | Empfänger | `git -C ~/skill-registry fetch`, dann Schritt 7 erneut |
+
+Schritt 4 und Schritt 5 sind derselbe Inhalt in zwei Richtungen. Ab Schritt 6
+ist der Transportweg gleichgültig: gepinnt ist der Schlüssel, nicht GitLab.
+
+## 6. Die Falle: drei Dateien heißen Trust-Roots
+
+Gemessen am 2026-09-16, an drei Ausgaben desselben Binaries:
+
+| Pfad | Wer schreibt | Wer liest |
+|---|---|---|
+| `~/.claude/skill-trust-roots.yaml` | `trust add`, `trust add-author` | `verify --bundle`, `install --bundle` |
+| `~/.claude/skill-peers.yaml` | `peer add` | `pull --registry` |
+| `~/.claude/trust-roots.yaml` | n/a | `pull` verlangt sie, wenn kein Peer gepinnt ist |
+
+Die praktische Folge: **ein gepinnter Autor macht `pull` nicht arbeitsfähig, und
+ein gepinnter Peer macht `install --bundle` nicht arbeitsfähig.** Wer nur einen
+der beiden Wege braucht, pinnt einmal. Wer beide will, pinnt zweimal. Das Skript
+aus Abschnitt 2 tut Letzteres, wenn `--peer-registry` gesetzt ist, und sagt es
+sonst ausdrücklich dazu.
+
+Der Fingerabdruck ist in beiden Fällen **derselbe Wert**: `skillctl trust
+fingerprint <key.pub>` liefert ihn, `trust add-author --pin` und `peer add --pin`
+nehmen ihn beide an. Nachgeprüft, indem derselbe Wert an beide Kommandos ging
+und beide ihn als `matched` bestätigten. Es wird also nur eine Zahl am Telefon
+vorgelesen, nicht zwei.
+
+Die dritte Zeile der Tabelle ist die unangenehme: `pull` fordert einen Namen an,
+den kein Kommando dieses Binaries schreibt. Wer diese Meldung sieht, hat keinen
+Peer gepinnt; der Rat lautet dann `peer add`, nicht die Datei anzulegen.
+
+## 7. Der Takt: von manuellen Schritten zum Skill
+
+Ein Skill entsteht nicht dadurch, dass jemand einen schreibt. Er entsteht, weil
+dieselbe Abfolge dreimal gelaufen ist und beim dritten Mal niemand mehr
+nachdenkt.
+
+| Durchlauf | Was getan wird | Was danach existiert |
+|---|---|---|
+| 1 | sammeln, von Hand: Transkripte und Notizen je Kontext in `inbox/` | ein gefüllter Ordner, mehr nicht |
+| 2 | Prompts zur Extraktion der Rubriken in strukturierte Form | ein Format, das sich wiederholen lässt |
+| 3 | Prompts für das Aggregat, und die Reflexion darüber nach `reflections/` | die Erkenntnis, welche Schritte tragen |
+| danach | den Skill aus `reflections/` ableiten und packen | ein Aufruf statt einer Prompt-Folge |
+
+Wer den Skill vor dem dritten Durchlauf schneidet, schneidet zu groß. Das ist der
+häufigste Fehler: eine ganze Fachaufgabe wird "ein Skill" genannt. Ein Skill ist
+kleiner als eine Aufgabe, und eine Aufgabe kombiniert mehrere davon.
+
+**Der Takt braucht eine Erinnerung.** Ein Wochenbericht, der jeden Donnerstag
+erwartet wird und für den niemand erinnert wird, kommt nicht. Der Kanal ist
+zweitrangig und darf das Einfachste sein, was vorhanden ist; eine Serien-E-Mail
+aus dem eigenen Postfach ist eine vollständige Lösung. Ein Takt ohne Erinnerung
+ist eine Hoffnung, und die Auswertung beklagt später die Datenlage.
+
+## 8. Wenn etwas fehlschlägt
+
+| Exit | Bedeutung | Was zu tun ist |
+|---|---|---|
+| 10 | Prüfsumme stimmt nicht | die Bytes haben sich nach dem Signieren geändert. Neu beziehen, nicht neu signieren |
+| 11 | Signatur ungültig | der falsche Schlüssel, oder ein fremder. Zurück zum Fingerabdruck-Abgleich |
+| 12 | Registry nicht in den Trust-Roots | der Pin fehlt oder trägt einen anderen Namen als die Signaturzeile |
+| 13 | Governance unter dem Minimum | `publish --attest` fehlt. Kein Fehler, sondern das Tor |
+| 17 | Identität widerrufen | anhalten und fragen. Kein Versuch, es zu umgehen |
+
+Ein `verify-sig`, das fehlschlägt, während der Fingerabdruck stimmt, ist fast
+immer die Identität: `--identity` beim Aufnehmen vergessen, Vorgabewert
+stehengeblieben.
+
+## 9. Was offen bleibt
+
+- **Audit.** Signieren und Freigeben erzeugen Ereignisse in der Registry. Eine
+  Weiterleitung an ein SIEM ist damit nicht eingerichtet, und dieses Runbook
+  richtet sie nicht ein.
+- **Verteilung durch die IT.** Der Weg oben ist der von Hand. Eine Verteilung
+  über die Geräteverwaltung ist eine Anforderung an die Infrastruktur, nicht an
+  dieses Werkzeug, und sie setzt eine Gerätepolicy voraus, die sagt, wo auf
+  einer Maschine Skills überhaupt liegen dürfen.
+- **Beschaffung fremder Skills.** Für einen Skill aus dem Netz braucht es
+  dasselbe Eingangsverfahren wie für eine fremde Bibliothek: beziehen, lesen,
+  Datennutzung prüfen, intern neu packen, intern signieren. Beschrieben ist es
+  hier nicht.
+- **Kosten.** Wie viele Token eine Arbeitsweise verbraucht, ist eine
+  Governance-Frage wie die Sicherheitsfragen, und sie wird von keinem Kommando
+  in diesem Runbook beantwortet.
+
+## Verwandte Dokumente
+
+- [Ops-Runbook: Monitoring und Alarmierung](ops-monitoring.de.md): was an einem
+  Betrieb beobachtbar ist, und was ausdrücklich nicht.
+- [Ops-Runbook: Incident Response](ops-incident-response.de.md): was passiert,
+  wenn ein Schlüssel kompromittiert ist.
+- [Ops-Routine: Zugangstoken](ops-registry-tokens.de.md): wer welchen Token
+  besorgt, und was beim Ausscheiden passiert.
+- [Runbook: two-person ER1 exchange](runbook-two-person-er1-exchange.md): derselbe
+  Austausch über eine ER1-Registry statt über einen Ordner.
+</script>
+<!-- Integritaet ueber SRI: der Hash ist an den Bytes von cdnjs gerechnet
+     (sha256 15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894).
+     Stimmt die Auslieferung nicht damit ueberein, laedt der Browser sie NICHT,
+     und die Seite faellt auf ihre Rohtext-Darstellung zurueck. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"
+        integrity="sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+(function () {
+  var raw = document.getElementById('src').textContent;
+  var doc = document.getElementById('doc');
+
+  // ── Druck-Flavor ───────────────────────────────────────────────────
+  // Zwei Wege zum selben Ergebnis: Cmd+P greift ueber @media print von
+  // allein, der Knopf zeigt dasselbe vorher am Schirm. Die Wahl bleibt in
+  // diesem Browser, und ein Speicher, der nicht da ist, aendert nichts.
+  (function(){
+    var bar = document.getElementById('flavorbar');
+    var btn = document.getElementById('flavorbtn');
+    var prt = document.getElementById('printbtn');
+    var on = false;
+    try { on = localStorage.getItem('hat-runbook-flavor') === 'druck'; } catch (e) {}
+
+    function apply(){
+      document.documentElement.setAttribute('data-flavor', on ? 'druck' : 'schirm');
+      btn.setAttribute('aria-pressed', String(on));
+      btn.querySelector('span').textContent = on ? 'Druckansicht an' : 'Druckansicht';
+    }
+    btn.addEventListener('click', function(){
+      on = !on;
+      try { localStorage.setItem('hat-runbook-flavor', on ? 'druck' : 'schirm'); } catch (e) {}
+      apply();
+    });
+    prt.addEventListener('click', function(){ window.print(); });
+    apply();
+    bar.hidden = false;
+  })();
+
+  // Faellt die Bibliothek aus, bleibt der Text lesbar. Eine leere Seite waere
+  // die schlechtere Antwort auf ein 404.
+  if (typeof marked === 'undefined') {
+    var pre = document.createElement('pre');
+    pre.style.whiteSpace = 'pre-wrap';
+    pre.style.fontFamily = '"IBM Plex Mono", monospace';
+    pre.style.fontSize = '13px';
+    pre.textContent = raw;
+    doc.appendChild(pre);
+    return;
+  }
+
+  // ── Kopier-Knopf ───────────────────────────────────────────────────
+  // Ein Block enthaelt oft Kommando UND Ausgabe. Wer auf "kopieren"
+  // drueckt, will das Kommando, nicht das Protokoll. Beginnt eine Zeile
+  // mit "$", wird nur sie genommen, samt ihrer Fortsetzungszeilen: eine
+  // Zeile, die auf "\" endet, zieht die naechste mit.
+  function commandOf(text){
+    var lines = text.replace(/\s+$/,'').split('\n');
+    var out = [], take = false;
+    for (var i=0;i<lines.length;i++){
+      var l = lines[i];
+      if (/^\s*\$\s?/.test(l)){ out.push(l.replace(/^\s*\$\s?/,'')); take = /\\\s*$/.test(l); continue; }
+      if (take){ out.push(l); take = /\\\s*$/.test(l); }
+    }
+    return out.length ? out.join('\n') : text.replace(/\s+$/,'');
+  }
+
+  var ICON_COPY = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">'
+    + '<rect x="5.5" y="5.5" width="8.5" height="8.5" rx="1.6"/>'
+    + '<path d="M10.5 3.2V2.8A0.8 0.8 0 0 0 9.7 2H2.8a0.8 0.8 0 0 0-0.8 0.8v6.9a0.8 0.8 0 0 0 0.8 0.8h0.4"/></svg>';
+  var ICON_OK = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">'
+    + '<path d="M3 8.4l3.2 3.2L13 4.8"/></svg>';
+
+  function writeClipboard(text){
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise(function(resolve, reject){
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly','');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+      ok ? resolve() : reject(new Error('execCommand refused'));
+    });
+  }
+
+  function addCopy(strip, pre, isRun){
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'copy';
+    var label = isRun ? 'Kommando' : 'kopieren';
+    b.innerHTML = ICON_COPY + '<span>' + label + '</span>';
+    b.setAttribute('aria-label', (isRun ? 'Kommando' : 'Block') + ' in die Zwischenablage kopieren');
+    b.addEventListener('click', function(){
+      var text = isRun ? commandOf(pre.textContent) : pre.textContent.replace(/\s+$/,'');
+      writeClipboard(text).then(function(){
+        b.dataset.state = 'ok';
+        b.innerHTML = ICON_OK + '<span>kopiert</span>';
+      }).catch(function(){
+        // Klappt es nicht, wird der Text markiert: dann tut es Cmd+C.
+        b.dataset.state = 'fail';
+        b.innerHTML = ICON_COPY + '<span>markiert, Cmd+C</span>';
+        var r = document.createRange();
+        r.selectNodeContents(pre);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }).then(function(){
+        setTimeout(function(){
+          delete b.dataset.state;
+          b.innerHTML = ICON_COPY + '<span>' + label + '</span>';
+        }, 1900);
+      });
+    });
+    strip.appendChild(b);
+  }
+
+
+  marked.setOptions({ gfm: true, breaks: false });
+  doc.innerHTML = marked.parse(raw);
+
+  // Anker wie auf GitHub, damit die Verweise im Dokument selbst greifen.
+  function slug(t) {
+    return t.toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, '').trim().replace(/\s+/g, '-');
+  }
+  var heads = doc.querySelectorAll('h2, h3');
+  heads.forEach(function (h) { h.id = slug(h.textContent); });
+
+  // Terminalbloecke: der Streifen sagt, was der Block ist.
+  doc.querySelectorAll('pre').forEach(function (pre) {
+    var box = document.createElement('div');
+    box.className = 'term';
+    var txt = pre.textContent;
+    var label = /^\s*\$/m.test(txt) ? 'gelaufen' : (/^(skillctl|git|curl|irm|export|tools\/)/m.test(txt) ? 'kommando' : 'ausgabe');
+    if (/^\s*\{/.test(txt)) label = 'json';
+    if (/^##\s/m.test(txt)) label = 'vorlage';
+    var strip = document.createElement('div');
+    strip.className = 'strip';
+    var tag = document.createElement('span');
+    tag.textContent = label;
+    strip.appendChild(tag);
+    pre.parentNode.insertBefore(box, pre);
+    box.appendChild(strip);
+    box.appendChild(pre);
+    addCopy(strip, pre, label === 'gelaufen');
+  });
+
+  // Tabellen duerfen seitlich scrollen, die Seite nie.
+  doc.querySelectorAll('table').forEach(function (t) {
+    var w = document.createElement('div');
+    w.className = 'tw';
+    t.parentNode.insertBefore(w, t);
+    w.appendChild(t);
+    var digits = t.querySelectorAll('td');
+    digits.forEach(function (td) { if (/^\s*(V?\d+|Exit \d+)\s*$/.test(td.textContent)) td.style.fontVariantNumeric = 'tabular-nums'; });
+  });
+
+  // Die Abhakliste V1 bis V8 wird eine echte Liste. Der Stand bleibt nur in
+  // diesem Browser, und ein Speicher, der nicht da ist, darf nichts kaputtmachen.
+  var check = null;
+  doc.querySelectorAll('table').forEach(function (t) {
+    var first = t.querySelector('tbody td');
+    if (first && /^V1$/.test(first.textContent.trim())) check = t;
+  });
+  if (check) {
+    check.classList.add('check');
+    var hr = check.querySelector('thead tr');
+    var th = document.createElement('th');
+    th.setAttribute('scope', 'col');
+    var sr = document.createElement('span');
+    sr.style.position = 'absolute';
+    sr.style.left = '-9999px';
+    sr.textContent = 'erledigt';
+    th.appendChild(sr);
+    hr.insertBefore(th, hr.firstChild);
+
+    var rows = Array.prototype.slice.call(check.querySelectorAll('tbody tr'));
+    var saved = {};
+    try { saved = JSON.parse(localStorage.getItem('hat-runbook-checks') || '{}'); } catch (e) { saved = {}; }
+
+    var prog = document.getElementById('progress');
+    var pdone = document.getElementById('pdone');
+    var ptotal = document.getElementById('ptotal');
+    var pbar = document.getElementById('pbar');
+    prog.hidden = false;
+    ptotal.textContent = rows.length;
+
+    function paint() {
+      var n = rows.filter(function (r) { return r.classList.contains('done'); }).length;
+      pdone.textContent = n;
+      pbar.style.width = (n / rows.length * 100) + '%';
+    }
+
+    rows.forEach(function (r) {
+      var key = r.querySelector('td').textContent.trim();
+      var td = document.createElement('td');
+      var box = document.createElement('input');
+      box.type = 'checkbox';
+      box.setAttribute('aria-label', key + ' erledigt');
+      box.checked = !!saved[key];
+      if (box.checked) r.classList.add('done');
+      box.addEventListener('change', function () {
+        r.classList.toggle('done', box.checked);
+        saved[key] = box.checked;
+        try { localStorage.setItem('hat-runbook-checks', JSON.stringify(saved)); } catch (e) { /* privates Fenster: dann eben nur diese Sitzung */ }
+        paint();
+      });
+      td.appendChild(box);
+      r.insertBefore(td, r.firstChild);
+    });
+    paint();
+  }
+
+  // Schiene aus den H2 bauen, Nummer getrennt vom Titel.
+  var list = document.getElementById('navlist');
+  var sections = [];
+  doc.querySelectorAll('h2').forEach(function (h) {
+    var t = h.textContent;
+    if (/^(Inhalt)$/.test(t)) return;
+    var m = t.match(/^(\d+)\.\s*(.*)$/);
+    var li = document.createElement('li');
+    var a = document.createElement('a');
+    a.href = '#' + h.id;
+    // Der Text kommt aus einer Ueberschrift und wird als TEXT gesetzt. Frueher
+    // stand hier innerHTML: eine Ueberschrift mit einem "<" haette die Schiene
+    // zerlegt, und CodeQL hat es als js/xss-through-dom gemeldet.
+    var num = document.createElement('span');
+    num.className = 'n';
+    num.textContent = m ? m[1] : '\u00b7';
+    var cap = document.createElement('span');
+    cap.textContent = m ? m[2] : t;
+    a.appendChild(num);
+    a.appendChild(cap);
+    li.appendChild(a);
+    list.appendChild(li);
+    sections.push({ h: h, a: a });
+  });
+
+  var obs = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (!e.isIntersecting) return;
+      sections.forEach(function (s) { s.a.classList.toggle('on', s.h === e.target); });
+    });
+  }, { rootMargin: '0px 0px -75% 0px', threshold: 0 });
+  sections.forEach(function (s) { obs.observe(s.h); });
+
+  // Auf schmalen Schirmen ist die Schiene zugeklappt.
+  var nav = document.getElementById('nav');
+  var toggle = document.getElementById('navtoggle');
+  function narrow() { return window.matchMedia('(max-width: 900px)').matches; }
+  function apply() { nav.hidden = narrow() && toggle.getAttribute('aria-expanded') === 'false'; }
+  toggle.addEventListener('click', function () {
+    var open = toggle.getAttribute('aria-expanded') === 'true';
+    toggle.setAttribute('aria-expanded', String(!open));
+    toggle.textContent = open ? 'Inhalt anzeigen' : 'Inhalt verbergen';
+    apply();
+  });
+  window.addEventListener('resize', apply);
+  apply();
+
+  document.getElementById('foot').textContent =
+    'Erzeugt aus docs/v2/betrieb/ops-human-agent-team.de.md mit tools/docpage.sh. Diese Seite rendert die Datei; ' +
+    'massgeblich ist die Datei im Repository, nicht diese Fassung.';
+})();
+</script>

@@ -15,11 +15,13 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
 	backendgit "github.com/kamir/m3c-tools/pkg/skillctl/backend/git"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
@@ -30,12 +32,35 @@ func fpOf(pub ed25519.PublicKey) string {
 	return "sha256:" + hex.EncodeToString(h[:])
 }
 
+// mkRealSkb packs a minimal REAL .skb (bundle.json + SKILL.md) whose SKILL.md
+// carries body. Raw bytes no longer pass the backend pull: since re-gate
+// R1/RG-1 it reads the manifest out of the digest-verified bytes fail-closed,
+// so the fixture has to be a bundle, not a string.
+func mkRealSkb(t *testing.T, name, ver, body string) []byte {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), name+".skb")
+	if _, err := skillbundle.Pack(dir, out, skillbundle.PackOptions{
+		Manifest: skillbundle.BundleManifest{Name: name, Version: ver},
+	}); err != nil {
+		t.Fatalf("pack: %v", err)
+	}
+	skb, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return skb
+}
+
 // publishSignedSkill admits + attests a gauntlet-passing bundle into `be`, signed
 // by priv (playing author+registry+reviewer for the test). Returns the digest.
 func publishSignedSkill(t *testing.T, be artifact.Backend, priv ed25519.PrivateKey, name, ver, body string) string {
 	t.Helper()
 	ctx := context.Background()
-	skb := []byte(body)
+	skb := mkRealSkb(t, name, ver, body)
 	db := sha256.Sum256(skb)
 	digest := "sha256:" + hex.EncodeToString(db[:])
 	sigB64 := base64.StdEncoding.EncodeToString(ed25519.Sign(priv, db[:])) // over the digest bytes → gate-3

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 07-invalid-wrong-key: A bundle signed by an attacker, presented under
-# Mirko's identity, must fail when Eric verifies against Mirko's pinned pubkey.
+# Bob's identity, must fail when Alice verifies against Bob's pinned pubkey.
 # Expected: skillctl verify-sig exits 11.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,16 +30,16 @@ ATTACKER_BUNDLE="$BUNDLES_DIR/attacker-${SKILL_NAME}-${SKILL_VERSION}.skb"
     >>"$LOG_DIR/full.log" 2>&1
 ok "attacker built a fresh bundle: $(basename "$ATTACKER_BUNDLE")"
 
-# 3) Sign it with the attacker key but claim it's Mirko's
+# 3) Sign it with the attacker key but claim it's Bob's
 log "attacker signs with attacker.priv but claims --identity-id $MIRKO_ID"
 rm -f "${ATTACKER_BUNDLE}".*.author.sig
 "$SKILLCTL" sign --key "$KEYS_DIR/attacker.priv" --identity-id "$MIRKO_ID" "$ATTACKER_BUNDLE" \
   >>"$LOG_DIR/full.log" 2>&1
 ok "attacker bundle signed (under attacker key)"
 
-# 4) Eric verifies with MIRKO's pinned pubkey, must refuse with exit 11.
-log "Eric: skillctl verify-sig (expecting exit 11, sig invalid against pinned key)"
-assert_exit 11 -- "$SKILLCTL" verify-sig --pubkey "$KEYS_DIR/mirko.pub" "$ATTACKER_BUNDLE"
+# 4) Alice verifies with BOB's pinned pubkey, must refuse with exit 11.
+log "Alice: skillctl verify-sig (expecting exit 11, sig invalid against pinned key)"
+assert_exit 11 -- "$SKILLCTL" verify-sig --pubkey "$KEYS_DIR/bob.pub" "$ATTACKER_BUNDLE"
 
 # 5) Sanity check: the attacker's own key DOES validate (proving the test
 #    rules out "the attacker bundle is structurally broken"); the failure in

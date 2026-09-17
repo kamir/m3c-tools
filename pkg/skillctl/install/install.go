@@ -232,6 +232,7 @@ func Install(opts Opts) (*Result, error) {
 		return nil, fmt.Errorf("install: fetch blob: %w", err)
 	}
 	blobPath := filepath.Join(stagingDir, sanitizeFilename(opts.Name)+"-"+sanitizeFilename(resolvedVersion)+".skb")
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.WriteFile(blobPath, blob, 0o644); err != nil {
 		return nil, fmt.Errorf("install: write staged blob: %w", err)
 	}
@@ -779,6 +780,7 @@ func atomicInstall(extractDir, target, homeDir, name, digest string) (string, er
 		return "", err
 	}
 	// Make sure the parent of `target` exists.
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return "", fmt.Errorf("install: mkdir target parent: %w", err)
 	}
@@ -790,6 +792,7 @@ func atomicInstall(extractDir, target, homeDir, name, digest string) (string, er
 		}
 		// Archive prior install.
 		archDir := filepath.Join(homeDir, installRoot, ".archive")
+		// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 		if err := os.MkdirAll(archDir, 0o755); err != nil {
 			return "", fmt.Errorf("install: mkdir archive dir: %w", err)
 		}

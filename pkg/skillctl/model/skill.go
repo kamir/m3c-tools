@@ -27,8 +27,13 @@ type Frontmatter struct {
 	Model        string   `json:"model,omitempty" yaml:"model"`
 	// GovernanceLevel is the SPEC-0130 Ampel verdict (green | yellow | red).
 	// Promoted from Metadata to a typed field per SPEC-0189 §10 D2.
-	GovernanceLevel string                 `json:"governance_level,omitempty" yaml:"governance_level"`
-	Metadata        map[string]interface{} `json:"metadata,omitempty" yaml:"metadata"`
+	GovernanceLevel string `json:"governance_level,omitempty" yaml:"governance_level"`
+	// DependsOn lists what this artifact needs, each entry "art:name"
+	// (SPEC-0432 §4, e.g. "skill:didactic-session"). Carried at the AGENT only:
+	// the reverse direction (a skill naming its agents) would be the same edge
+	// written twice, and two lists that claim the same thing drift apart.
+	DependsOn []string               `json:"depends_on,omitempty" yaml:"depends_on"`
+	Metadata  map[string]interface{} `json:"metadata,omitempty" yaml:"metadata"`
 }
 
 // SkillDescriptor represents a single discovered skill source.
@@ -64,6 +69,14 @@ type BundleAttestation struct {
 	TrustChain             string `json:"trust_chain"`
 	VerifierExitCode       int    `json:"verifier_exit_code,omitempty"`
 	VerifierError          string `json:"verifier_error,omitempty"`
+	// ProvenancePath nennt den Abzug, auf den sich das Urteil stuetzt, wenn
+	// keine detached Signatur vorliegt (BUG-0253 B3, Entscheidung E-B).
+	//
+	// Er steht hier, damit ein Leser die SCHWAECHERE Grundlage erkennen kann:
+	// eine Signatur deckt die Bytes des Buendels, ein Abzug bezeugt einen
+	// gelaufenen Installationspfad. Beides fuehrt zu trust_chain "verified";
+	// wer den Unterschied braucht, liest dieses Feld.
+	ProvenancePath string `json:"provenance_path,omitempty"`
 }
 
 // Inventory holds the complete results of a skill scan.

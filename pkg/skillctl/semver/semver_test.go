@@ -68,6 +68,7 @@ func TestMax_MixedVPrefix(t *testing.T) {
 
 // TestMonotonicity mirrors the propose-gate use (proposed must be > lastAdmitted):
 // a pre-release of the SAME core is not a valid increment, but a higher core is.
+// THREAT-R04: version ordering must be monotonic so a downgrade is detectable.
 func TestMonotonicity(t *testing.T) {
 	if Compare("1.0.0-rc", "1.0.0") > 0 {
 		t.Error("1.0.0-rc must NOT count as > 1.0.0 (pre-release is not an increment)")

@@ -2,14 +2,30 @@
 # tutorial-smoke.sh: run the chain the German scenario tutorials describe, and
 # assert every step, so a tutorial cannot go stale without CI noticing.
 #
-#   docs/tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md
-#   docs/tutorial-szenario-02-erster-signierter-skill.de.md
+#   docs/v2/nutzer/tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md
+#   docs/v2/nutzer/tutorial-szenario-02-erster-signierter-skill.de.md
 #
 # FR-0118, SPEC-0407 AC-11. Two modes, one script:
 #
-#   (default)  hermetic, non-interactive, assert-only. This is the CI gate.
+#   (default)  hermetic, non-interactive, assert-only. This is the RELEASE
+#              gate, and the distinction is not pedantry, see below.
 #   --walk     the same chain, one step at a time, with the WHY printed and a
 #              pause between steps. This is the tutorial, run by a human.
+#
+# WHERE THIS ACTUALLY BLOCKS. This line used to read "This is the CI gate". It
+# is not. No workflow runs this script and no Makefile target runs it directly.
+# The only path to it is scripts/check-docs.sh, which `make release` calls
+# (Makefile: `release: code-review check-docs release-auto`). ci.yml records
+# the same fact from the other side, in the step that re-implements a different
+# check-docs duty: "It runs HERE and not only in scripts/check-docs.sh, because
+# no workflow calls that script."
+#
+# So a renamed CLI flag does NOT turn a pull request red. It turns `make
+# release` red, which is later and rarer. SPEC-0407 AC-11 states this
+# correctly ("laeuft in check-docs.sh und blockiert bei Abweichung"); FR-0118
+# wants the CI half and is still open. The script was the only place claiming
+# the reach it does not have, and a claim about where enforcement lives is
+# exactly the kind that nobody re-checks.
 #
 # Everything happens in a throwaway workspace with a throwaway HOME, against a
 # bare local:// git registry. No network, no server, no admin rights, and your
@@ -37,7 +53,9 @@ Usage: scripts/tutorial-smoke.sh [--walk] [--keep] [--skillctl <path>] [--worksp
   --walk              step through the chain with explanations and a pause
                       between steps (the tutorial, for a human).
   --keep              do not delete the workspace at the end; print its path.
-  --skillctl <path>   binary to drive. Default: ./build/skillctl, then $PATH.
+  --skillctl <path>   binary to drive. A relative path is resolved against the
+                      current directory BEFORE the sandbox is entered.
+                      Default: ./build/skillctl, then $PATH (with a warning).
   --workspace <dir>   where to build the sandbox. Default: a mktemp dir.
   -h, --help          this text.
 USAGE
@@ -57,16 +75,57 @@ done
 # ------------------------------------------------------------------ setup ----
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-if [ -z "$SKILLCTL" ]; then
-  if [ -x "$REPO_ROOT/build/skillctl" ]; then
-    SKILLCTL="$REPO_ROOT/build/skillctl"
-  elif command -v skillctl >/dev/null 2>&1; then
-    SKILLCTL="$(command -v skillctl)"
-  else
-    echo "tutorial-smoke: no skillctl found. Build one with 'make build-skillctl'," >&2
-    echo "                or pass --skillctl <path>." >&2
-    exit 1
-  fi
+# WHICH BINARY, and where it came from. Both halves of that sentence matter,
+# and both were wrong once on 2026-09-15 in a way that produced a confident,
+# completely false measurement.
+#
+#  (1) A RELATIVE --skillctl silently stops resolving. Every step below runs
+#      with the throwaway workspace as $PWD, so `--skillctl ./build/skillctl`
+#      points at nothing once the first step starts. Same tree, same binary,
+#      two invocations: 29 deviations with the relative path, 0 with the
+#      absolute one. Nothing in the old output said the path was the problem.
+#
+#  (2) The $PATH fallback tested a STRANGER. With no build/skillctl present the
+#      script picked up an installed skillctl from $PATH and asserted this
+#      tree's tutorials against someone else's build, reporting 19 deviations
+#      that said nothing about this tree. It was a fallback with no voice.
+#
+# So: make the path absolute, prove it is executable, and SAY which of the
+# three sources won. A smoke test whose subject is ambiguous measures nothing.
+SKILLCTL_ORIGIN=""
+if [ -n "$SKILLCTL" ]; then
+  case "$SKILLCTL" in
+    /*) ;;
+    *)
+      _dir="$(cd "$(dirname "$SKILLCTL")" 2>/dev/null && pwd)" || _dir=""
+      if [ -z "$_dir" ]; then
+        echo "tutorial-smoke: --skillctl '$SKILLCTL' does not resolve to a directory." >&2
+        exit 1
+      fi
+      SKILLCTL="$_dir/$(basename "$SKILLCTL")"
+      ;;
+  esac
+  SKILLCTL_ORIGIN="--skillctl"
+elif [ -x "$REPO_ROOT/build/skillctl" ]; then
+  SKILLCTL="$REPO_ROOT/build/skillctl"
+  SKILLCTL_ORIGIN="built from this tree"
+elif command -v skillctl >/dev/null 2>&1; then
+  SKILLCTL="$(command -v skillctl)"
+  SKILLCTL_ORIGIN="\$PATH, NOT built from this tree"
+  echo "tutorial-smoke: WARNING, no $REPO_ROOT/build/skillctl, falling back to" >&2
+  echo "                $SKILLCTL from \$PATH. That binary was built from some" >&2
+  echo "                other tree, so a deviation reported below may belong to" >&2
+  echo "                it and not to this checkout. Build one with" >&2
+  echo "                'make build-skillctl' before trusting a red result." >&2
+else
+  echo "tutorial-smoke: no skillctl found. Build one with 'make build-skillctl'," >&2
+  echo "                or pass --skillctl <path>." >&2
+  exit 1
+fi
+
+if [ ! -x "$SKILLCTL" ]; then
+  echo "tutorial-smoke: '$SKILLCTL' is not an executable file." >&2
+  exit 1
 fi
 
 if [ -z "$WS" ]; then
@@ -160,9 +219,10 @@ expect_in() {
 echo ""
 printf "${B}skillctl tutorial smoke${N}\n"
 note "binary:    $SKILLCTL"
+note "source:    $SKILLCTL_ORIGIN"
 note "version:   $("$SKILLCTL" version 2>&1 | head -1)"
 note "workspace: $WS"
-note "the chain from docs/tutorial-szenario-02-erster-signierter-skill.de.md"
+note "the chain from docs/v2/nutzer/tutorial-szenario-02-erster-signierter-skill.de.md"
 
 # ------------------------------------------------------- 1. the skill source --
 step "Ein winziger Skill"
@@ -200,8 +260,8 @@ why "Der Autor versiegelt, der Herausgeber nimmt auf, der Reviewer urteilt.
    selbst gepinnt hat."
 
 run "keygen (Autor)"       0 "$SKILLCTL" keygen --out "$WS/keys/mitarbeiter"
-run "keygen (Herausgeber)" 0 "$SKILLCTL" keygen --out "$WS/keys/eric-herausgeber"
-run "keygen (Reviewer)"    0 "$SKILLCTL" keygen --out "$WS/keys/eric-reviewer"
+run "keygen (Herausgeber)" 0 "$SKILLCTL" keygen --out "$WS/keys/alice-herausgeber"
+run "keygen (Reviewer)"    0 "$SKILLCTL" keygen --out "$WS/keys/alice-reviewer"
 
 if [ "$(stat -f '%Lp' "$WS/keys/mitarbeiter.priv" 2>/dev/null || stat -c '%a' "$WS/keys/mitarbeiter.priv" 2>/dev/null)" = "600" ]; then
   ok "der private Schluessel hat Modus 0600"
@@ -285,13 +345,13 @@ why "Der Herausgeber nimmt auf, der Reviewer urteilt. Ohne die Attestierung
 run "publish (Admit)" 0 "$SKILLCTL" publish "hello-kup@0.1.0" \
   --bundle "$WS/hello-kup@0.1.0.skb" --version 0.1.0 \
   --registry "local://$WS/registry.git" \
-  --key "$WS/keys/eric-herausgeber.priv" --identity id:eric@kup --yes
+  --key "$WS/keys/alice-herausgeber.priv" --identity id:alice@kup --yes
 expect_in "der Admit meldet den git-Transport" "transport=git"
 
 run "publish --attest (Reviewer)" 0 "$SKILLCTL" publish --attest "hello-kup@0.1.0" \
   --digest "$DIGEST" --level green --rationale "geprueft im tutorial-smoke" \
   --registry "local://$WS/registry.git" \
-  --identity id:eric-reviewer@kup --key "$WS/keys/eric-reviewer.priv" --yes
+  --identity id:alice-reviewer@kup --key "$WS/keys/alice-reviewer.priv" --yes
 
 run "registry ls" 0 "$SKILLCTL" registry ls --registry "local://$WS/registry.git"
 expect_in "das Registry zeigt den Skill als green/ok" "green"
@@ -304,9 +364,9 @@ why "In der trust-roots.yaml steht der Herausgeberschluessel als Registry-Pin UN
    die Gewaltenteilung hier kryptografisch ist und nicht bloss organisatorisch."
 
 b64_raw() { if base64 --help 2>&1 | grep -q -- "-w"; then base64 -w0; else base64; fi; }
-PUB_B64="$(openssl pkey -pubin -in "$WS/keys/eric-herausgeber.pub" -outform DER | tail -c 32 | b64_raw)"
-PUB_FP="$(openssl pkey -pubin -in "$WS/keys/eric-herausgeber.pub" -outform DER | tail -c 32 > "$WS/.fp.bin" && sha256_of "$WS/.fp.bin")"
-REV_B64="$(openssl pkey -pubin -in "$WS/keys/eric-reviewer.pub" -outform DER | tail -c 32 | b64_raw)"
+PUB_B64="$(openssl pkey -pubin -in "$WS/keys/alice-herausgeber.pub" -outform DER | tail -c 32 | b64_raw)"
+PUB_FP="$(openssl pkey -pubin -in "$WS/keys/alice-herausgeber.pub" -outform DER | tail -c 32 > "$WS/.fp.bin" && sha256_of "$WS/.fp.bin")"
+REV_B64="$(openssl pkey -pubin -in "$WS/keys/alice-reviewer.pub" -outform DER | tail -c 32 | b64_raw)"
 
 write_trust_roots() {  # $1 = with-signers | without-signers
   {
@@ -317,7 +377,7 @@ write_trust_roots() {  # $1 = with-signers | without-signers
     if [ "$1" = "with-signers" ]; then
       echo "governance_quorum: 1"
       echo "signers:"
-      echo "  - reviewer_id: id:eric-reviewer@kup"
+      echo "  - reviewer_id: id:alice-reviewer@kup"
       echo "    pubkey_b64: $REV_B64"
     fi
   } > "$CONSUMER_HOME/.claude/trust-roots.yaml"

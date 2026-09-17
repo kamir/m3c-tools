@@ -105,6 +105,7 @@ func TestVerifyHook_UnmanagedNamespaced_DefaultAllow(t *testing.T) {
 	assertAllow(t, code, out)
 }
 
+// THREAT-R11: an unmanaged skill under a deny policy must be blocked by the gate.
 func TestVerifyHook_UnmanagedPolicyDeny_Blocks(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("SKILLCTL_GATE_UNMANAGED", "deny")
@@ -155,6 +156,7 @@ func TestVerifyHook_AllowlistBypassesGate(t *testing.T) {
 	assertAllow(t, code, out)
 }
 
+// THREAT-R12: with no network, the gate must still deny a bad signature.
 func TestVerifyHook_OfflineFirst_DeniesBadSig(t *testing.T) {
 	// When offline verify is "available" and returns a trust failure, the hook
 	// must deny WITHOUT consulting the online path.
@@ -278,6 +280,7 @@ func TestVerifyHook_OnlinePath_EditedBody_Denies(t *testing.T) {
 // never a process crash. A crash would exit non-2 and the harness could read a
 // non-block exit as "allow", silently opening the hole the gate exists to close.
 // We inject the panic through the hookPreflight seam.
+// THREAT-R11: a panic inside the gate must fail closed to deny, never open.
 func TestVerifyHook_PanicInGate_FailsClosedDeny(t *testing.T) {
 	orig := hookPreflight
 	hookPreflight = func() { panic("boom: simulated internal gate failure") }

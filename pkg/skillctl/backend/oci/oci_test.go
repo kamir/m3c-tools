@@ -253,6 +253,7 @@ func TestOCIKindFromSignedEnvelope(t *testing.T) {
 // REDIRECT it onto an innocent skill). Events() must ignore BOTH annotations and
 // classify from the signed envelope: kind=revoked, digest=X. If this regresses, a
 // revoked/key-compromised skill would install.
+// THREAT-R05: an unsigned OCI annotation relabel must not suppress a signed revoke.
 func TestOCIAnnotationRelabelDefeated(t *testing.T) {
 	ctx := context.Background()
 	b := newOCIBackend(ociStore(t), "oci://test.local/skills")

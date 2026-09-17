@@ -101,6 +101,7 @@ func ExtractClipboardImageWith(cmd Commander, outPath string) (string, error) {
 	}
 
 	// Ensure parent directory exists.
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
 		return "", fmt.Errorf("create output dir: %w", err)
 	}

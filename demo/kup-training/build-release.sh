@@ -20,7 +20,9 @@ header "G2: Cross-platform release of skillctl"
 
 # Locate source
 SOURCE_DIR=""
-for cand in /Users/kamir/wt/spec-0189/s2-integration /Users/kamir/GITHUB.kamir/m3c-tools; do
+# Die Quelle ist das Repo, in dem dieses Skript liegt. Frueher standen hier
+# zwei feste Heimatpfade: die stimmten auf genau einer Maschine.
+for cand in "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"; do
   if [[ -d "$cand/cmd/skillctl" ]]; then SOURCE_DIR="$cand"; break; fi
 done
 test -n "$SOURCE_DIR" || { fail "skillctl source not found"; exit 2; }

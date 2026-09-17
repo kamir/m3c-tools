@@ -57,6 +57,109 @@ finds nothing.
 - **Numbers describe a population.** "28 of 48 jobs are required" says
   something; "28 required" says nothing. Name the population in the same line.
 
+## The tools that answer a different question
+
+Every entry below was collected in one week of work in this repository, each one
+caught by measurement rather than by reading. They share a shape: **the tool
+answers a question next to the one you asked**, and the wrong answer is the
+reassuring one.
+
+They split into two kinds, and the second is worse.
+
+**Silent: the tool finds nothing and says nothing.** Silence eventually gets
+noticed, because sooner or later somebody expects a hit.
+
+| What was run | The question it really answered | Instead |
+|---|---|---|
+| `git grep -E '\bname\b'` | none: POSIX ERE has no `\b`, so it matched nothing and exited quietly | `git grep -w name` |
+| a YAML loader that tolerates duplicate keys | "can I parse this somehow" | a loader that refuses duplicates; GitHub does |
+| a checker resolving a fixed path | "what is checked out in that directory" | name the path, branch and dirty count in the same output |
+
+**False positive: the tool reports success.** A green tick ends the question, so
+these run longer before anyone looks.
+
+| What was run | The question it really answered | Instead |
+|---|---|---|
+| `cmd \| tail -20` in a CI step | "did `tail` succeed" | `shell: bash` (turns on `pipefail`), or drop the pipe |
+| `go test -run TestFoo ./pkg/` | "did anything fail": a pattern matching nothing exits 0 | `scripts/require-tests-ran.sh ./pkg/ TestFoo` |
+| `gh ... --jq '.field'` compared to `"null"` | nothing: jq prints EMPTY for a null field, never the word | `--jq '(.field != null)'`, then compare to `true` |
+| an unquoted `$var` in a `for` loop under zsh | "one iteration for the whole string" | quote it, or run the loop under `bash` |
+
+Every row was measured on this repository rather than recalled. Three of them,
+verbatim:
+
+    git grep -E '\bkamir\b' -- '*.md'   ->   0 files
+    git grep -w  'kamir'      -- '*.md'   ->  49 files
+
+    zsh  -c 'v="a b c"; for x in $v; ...'  ->  1 iteration
+    bash -c 'v="a b c"; for x in $v; ...'  ->  3 iterations
+
+    go test -count=1 -run TestDoesNotExist ./pkg/er1/
+    ok  github.com/kamir/m3c-tools/pkg/er1  0.209s [no tests to run]   exit=0
+
+The third one deserves a second look, because Go is not hiding anything: it
+prints `[no tests to run]`. The information is in the text and never in the exit
+code, and CI reads the exit code. A tool can be honest in prose and still make a
+gate lie, which is why the wrapper checks for run events instead of reading the
+summary line.
+
+**A third kind, and it belongs to neither half: the binding is a name.** Here
+nothing is silent and nothing reports a false success. Both sides work
+perfectly; they simply talk past each other, because the channel between them is
+a string.
+
+A required status check is bound to a job by its NAME. A session renamed one,
+honestly, because the job had grown:
+
+    "Prose (no em dash)"  ->  "Prose (no em dash, no real names)"
+
+    branch protection requires   "Prose (no em dash)"
+    the pull request reports     "Prose (no em dash, no real names)"
+
+Two names, no match. The required context would never have reported again,
+enforcement would have vanished without a sound, and the surface showed
+thirty-two green ticks while it happened. A change whose entire purpose was a
+new gate would have unhooked an existing one.
+
+The rule: **a binding through a name breaks silently the moment either side
+changes the name.** It is a relative of `go test -run TestFoo` against a renamed
+test, except that there the pattern is what moves and here it is the target.
+
+Where this appears in this repository: workflow job names (branch protection),
+check names in `docs/security/required-checks.txt`, test-name patterns in CI
+steps, `#nosec` rule ids, exit-code identifiers quoted in documentation. Treat
+each of those strings as an interface: a rename is an API change, and it needs
+the other side changed in the same commit.
+
+The `jq` entry is the worst of the set and it is worth saying why. It sat inside
+the automation written to catch exactly this class, and it failed in both
+directions at once: it raised an alarm in the correct state and printed
+"Verified" in the wrong one. A checker that answers wrongly is worse than none,
+because it manufactures confidence the state does not support. That is the
+mirror of "a gate that does not run rots in both directions": a gate that runs
+and answers wrongly does more damage than one that is missing.
+
+**How to use this table.** Not as a list to memorise. Before trusting any green
+result, ask the one question that generated every row: *which question did this
+command actually answer?* Then, if the answer could be "none" or "something
+adjacent", prove it against a planted hit, which is rule 4.
+
+## An insight prevents nothing; write the rule instead
+
+One entry in this table was recorded as a lesson, agreed with, and then repeated
+an hour later by the same reader. The lesson had been phrased as an insight: "an
+author name is not a source of authorship". True, and useless in the moment,
+because there is nothing to follow or break.
+
+What replaced it is a rule with an observable action: **never name a pull
+request, branch or commit with an owner.** Write "PR #263", not "your #263". Who
+is working on what is known only when a session says so itself.
+
+The difference generalises. An insight describes a shape; a rule names a thing
+you do or do not do, and its violation is visible in the text you just wrote.
+Everything in this file is phrased that way on purpose, and anything added later
+should be too. If a new lesson cannot be written as an action, it is not ready.
+
 ## Prefer the evidence that needs no counter-check
 
 Two ways to show that a gate had drifted while the document it guards stayed

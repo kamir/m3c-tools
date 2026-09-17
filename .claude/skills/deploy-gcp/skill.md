@@ -59,7 +59,11 @@ gcloud auth list --filter=status:ACTIVE --format="value(account)" 2>/dev/null
 docker info --format '{{.ServerVersion}}' 2>/dev/null
 
 # 3. Check aims-core checkout exists
-AIMS_CORE_ROOT=$(grep AIMS_CORE_ROOT .deploy/gcp-defaults.env | cut -d= -f2)
+# Die maschinengebundenen Pfade stehen in .claude/local-paths.env
+# (gitignoriert, Vorlage daneben als .example). .deploy/gcp-defaults.env
+# traegt keinen Heimatpfad mehr.
+. .claude/local-paths.env
+AIMS_CORE_ROOT="${AIMS_CORE_ROOT:?setze AIMS_CORE_ROOT in .claude/local-paths.env}"
 test -d "${AIMS_CORE_ROOT}/flask"
 
 # 4. Check buildx builder exists
@@ -290,7 +294,7 @@ Use the Edit tool to update the JSON file.
 
 ## Important notes
 
-- The `aims-core` source is at `/Users/kamir/GITHUB.active/my-ai-X/aims-core` (configurable in `.deploy/gcp-defaults.env`).
+- The `aims-core` source is at `$AIMS_CORE_ROOT`, read from `.claude/local-paths.env` (template: `.claude/local-paths.env.example`). `.deploy/gcp-defaults.env` no longer carries a machine path.
 - The build uses `gcr.io/${GCP_PROJECT}/baseimage3:latest` as base. If missing, the first build will be slow.
 - `stage-legacy` (semanpix) uses a service account key file for GCR auth. Other environments use `gcloud auth`.
 - Production deployments require explicit YES confirmation.

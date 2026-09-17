@@ -711,10 +711,13 @@ func OpenPlaudLogin() error {
 func OpenBrowser(url string) error {
 	switch runtime.GOOS {
 	case "darwin":
+		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
 		return exec.Command("open", url).Start()
 	case "windows":
+		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
 		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
 	case "linux":
+		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
 		return exec.Command("xdg-open", url).Start()
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)

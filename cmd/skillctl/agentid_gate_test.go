@@ -285,7 +285,7 @@ func TestGate_InvocationEventCarriesAgentIdentity(t *testing.T) {
 	if !strings.Contains(string(data), `"agent_identity":"agent:stamped"`) {
 		t.Fatalf("agent_identity not stamped onto the signed event:\n%s", data)
 	}
-	if !strings.Contains(string(data), `"owner_identity":"id:kamir@m3c"`) {
+	if !strings.Contains(string(data), `"owner_identity":"id:bob@m3c"`) {
 		t.Fatalf("owner_identity not stamped onto the signed event:\n%s", data)
 	}
 	if tv.Verified == 0 {

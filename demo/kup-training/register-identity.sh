@@ -2,7 +2,7 @@
 # register-identity.sh: one-shot, idempotent registration of a SPEC-0188
 # author/reviewer identity in the local skill registry.
 #
-# Generalized from register-mirko-identity.sh (2026-05-08 KuP fix). Used
+# Generalized from register-bob-identity.sh (2026-05-08 KuP fix). Used
 # directly to register the reviewer before step 03 if you want a fully
 # green online run.
 #
@@ -10,7 +10,7 @@
 #   ./register-identity.sh <identity-id> <path-to-pubkey-pem> [display-name]
 #
 # Examples
-#   ./register-identity.sh id:mirko@m3c    artifacts/keys/mirko.pub    "Mirko (KuP demo author)"
+#   ./register-identity.sh id:bob@m3c    artifacts/keys/bob.pub    "Bob (KuP demo author)"
 #   ./register-identity.sh id:reviewer@m3c artifacts/keys/reviewer.pub "Reviewer (KuP demo)"
 #
 # Inputs (resolved automatically)
@@ -75,7 +75,7 @@ c_dim "✓ X-User-ID = $USER_ID"
 # ---- 3. Extract raw 32-byte ed25519 pubkey from PEM ------------------------
 if [[ ! -f "$PUB_PEM" ]]; then
   c_red "Public key file missing: $PUB_PEM"
-  c_red "Run the corresponding step (01 for mirko, 03 for reviewer) first to generate the keypair."
+  c_red "Run the corresponding step (01 for bob, 03 for reviewer) first to generate the keypair."
   exit 2
 fi
 PUBKEY_B64=$(openssl pkey -in "$PUB_PEM" -pubin -outform DER 2>/dev/null | tail -c 32 | base64 | tr -d '\n')

@@ -43,10 +43,16 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		skillName    = fs.String("skill", "", "Filter: only this skill name.")
 		digestArg    = fs.String("digest", "", "Filter: only this exact bundle digest (sha256:<hex>).")
 		er1Target    = fs.String("er1-target", envOr("ER1_TARGET", "prod"), "ER1 target: prod | stage | local.")
-		er1Context   = fs.String("er1-context", envOr("ER1_CONTEXT", "skills"), "ER1 context to query.")
-		trustPath    = fs.String("trust-roots", envOr("M3C_TRUST_ROOTS", ""), "Path to the SPEC-0225 trust-roots YAML. Default: ~/.claude/trust-roots.yaml.")
-		since        = fs.String("since", "", "Best-effort lower bound on occurred_at (RFC3339).")
-		verbose      = fs.Bool("verbose", false, "Print one line per per-gate decision.")
+		// BUG-0254: der Vorgabewert war die NACKTE Zeichenkette "skills",
+		// waehrend die Kontexte "<sub>___skills" heissen. Der dokumentierte
+		// Aufruf traf damit NICHTS, meldete "done" und endete mit 0.
+		// Aufgeloest wird unten durch ownerPrefixedContext, wie publish und
+		// room es laengst tun.
+		er1Context = fs.String("er1-context", envOr("ER1_CONTEXT", "skills"), "ER1 context to query. A bare name is prefixed with the owner id.")
+		kindFlag   = fs.String("kind", "", "Restrict to one bundle kind: skill | agent. Empty pulls both (SPEC-0432).")
+		trustPath  = fs.String("trust-roots", envOr("M3C_TRUST_ROOTS", ""), "Path to the SPEC-0225 trust-roots YAML. Default: ~/.claude/trust-roots.yaml.")
+		since      = fs.String("since", "", "Best-effort lower bound on occurred_at (RFC3339).")
+		verbose    = fs.Bool("verbose", false, "Print one line per per-gate decision.")
 
 		// P3: install (G-23 two-step + provenance + --emit-installed)
 		install          = fs.Bool("install", false, "Install verified bundles into ~/.claude/skills/<name>/ with a provenance sidecar.")
@@ -58,7 +64,7 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		emitInstalled    = fs.Bool("emit-installed", false, "After install, POST a BundleInstalledEvent so the other machine sees the install.")
 		installSkillsDir = fs.String("skills-dir", "", "Where to install skills. Default: ~/.claude/skills.")
 		keyPath          = fs.String("key", defaultSelfKeyPath(), "[--emit-installed] Signing key for the BundleInstalledEvent envelope.")
-		identity         = fs.String("identity", "id:kamir@m3c", "[--emit-installed] Author/registry identity stamped into the install event.")
+		identity         = fs.String("identity", "id:bob@m3c", "[--emit-installed] Author/registry identity stamped into the install event.")
 		noCheckpoint     = fs.Bool("no-checkpoint", false, "Do not append a SPEC-0213 session checkpoint after install.")
 	)
 	fs.Usage = func() {
@@ -70,6 +76,13 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 	}
 	if !registry.IsER1Registry(*registryName) && !artifact.Registered(*registryName) {
 		fmt.Fprintf(stderr, "pull: unsupported registry %q: use \"self\"/\"er1://…\" or \"gitlab://host/group/proj\"; HTTP admission registries route through `skillctl install`\n", *registryName)
+		return 2
+	}
+	// SPEC-0432 (challenge-gate F5): an unknown --kind must refuse, not widen.
+	// shelvesFor treats every unknown value as "both shelves", so a typo like
+	// "agnet" would silently pull everything the help text promised to filter.
+	if *kindFlag != "" && !skillbundle.ValidKind(*kindFlag) {
+		fmt.Fprintf(stderr, "pull: bad --kind %q (want %q or %q)\n", *kindFlag, skillbundle.KindSkill, skillbundle.KindAgent)
 		return 2
 	}
 
@@ -87,6 +100,13 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 	// governance_minimum per digest, exactly like the ER1 self tenant.
 	var res *registry.PullResult
 	if artifact.SchemeOf(*registryName) != "er1" {
+		// SPEC-0432: the kind shelves exist only on the ER1 self tenant. Refuse
+		// the flag here instead of ignoring it, so --kind never claims a filter
+		// this carrier does not apply.
+		if *kindFlag != "" {
+			fmt.Fprintf(stderr, "pull: --kind is only supported on the er1 self registry (got registry=%s)\n", *registryName)
+			return 2
+		}
 		be, oerr := artifact.Open(*registryName, artifact.OpenOptions{Creds: artifactauth.New()})
 		if oerr != nil {
 			fmt.Fprintf(stderr, "pull: open %s: %v\n", *registryName, oerr)
@@ -111,7 +131,14 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		// the resolved epoch floor + max_staleness, rejects a replayed OLD or STALE
 		// signed HEAD (SPEC-0279 R1 rollback + R3 freshness: mirror IS-T5).
 		headURL, headTenant, headRequired, headFloor, headStaleness := resolveRevokeHeadSource()
+		// Ein nackter Name wird mit der Besitzerkennung praefixiert. Ohne das
+		// fragt der Aufruf einen Kontext ab, den es nicht gibt, und bekommt
+		// vollkommen regulaer null Treffer.
+		*er1Context = ownerPrefixedContext(*er1Context)
 		res, err = registry.PullBundles(cfg, *er1Context, tr, registry.PullOpts{
+			// Empty means both shelves. Pulling everything when only the agents
+			// are wanted would overwrite 78 skills for no reason (SPEC-0432).
+			OnlyKind:  *kindFlag,
 			OnlySkill: *skillName, OnlyDigest: *digestArg, Since: *since,
 			RevocationHeadURL:          headURL,
 			RevocationHeadTenant:       headTenant,
@@ -145,9 +172,31 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 	for _, w := range res.Warnings {
 		fmt.Fprintf(stderr, "    ⚠️  %s\n", w)
 	}
-	fmt.Fprintf(stdout, "\n==> done. staged=%d  skipped=%d\n", len(res.Staged), len(res.Skipped))
+	fmt.Fprintf(stdout, "\n==> done. staged=%d  skipped=%d  (context: %s)\n",
+		len(res.Staged), len(res.Skipped), *er1Context)
 
 	_ = verbose
+
+	// BUG-0254: ein Nulltreffer ist KEIN Erfolg.
+	//
+	// Vorher war ein leerer Lauf von einem Lauf ohne Arbeit nicht zu
+	// unterscheiden: beide sagten "done" und endeten mit 0. Wer das Tor in
+	// eine Automatik haengt, bekommt fuer immer gruen, und zwar genau dann,
+	// wenn nichts geprueft wird. Das ist die teuerste Richtung, in die ein
+	// Tor versagen kann.
+	//
+	// Entschieden am 2026-09-14: eigener Exit-Code, und zwar ohne Ausnahme
+	// fuer den ausdruecklich gesetzten Kontext. Ein Tor mit einer Ausnahme
+	// ist schwerer zu pruefen als eines ohne, und der Preis (wer bewusst leer
+	// laeuft, sieht einen Fehler) ist benannt und angenommen.
+	if len(res.Staged) == 0 && len(res.Skipped) == 0 {
+		fmt.Fprintf(stderr, "\npull: NULLTREFFER im Kontext %q.\n", *er1Context)
+		fmt.Fprintln(stderr, "  Das ist kein Erfolg: ein leerer Lauf ist von einem Lauf ohne Arbeit")
+		fmt.Fprintln(stderr, "  nicht zu unterscheiden, und ein Tor, das bei Nichtstun gruen meldet,")
+		fmt.Fprintln(stderr, "  erzeugt Vertrauen, dem nichts entspricht.")
+		fmt.Fprintln(stderr, "  Pruefe: heisst der Kontext wirklich so, und liegt dort etwas?")
+		return exitcode.PullNoMatches.Number
+	}
 	if len(res.Skipped) > 0 {
 		// Even one skip is a hard fail. If the operator asked to install, say
 		// plainly WHY nothing was installed and HOW to proceed.
@@ -494,3 +543,7 @@ func gateExit(gate error) int {
 		return 1
 	}
 }
+
+// pullNoMatchesCode macht den Nulltreffer-Code fuer den Test sichtbar, ohne
+// den Register-Import dort zu wiederholen.
+func pullNoMatchesCode() int { return exitcode.PullNoMatches.Number }

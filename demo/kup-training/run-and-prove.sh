@@ -236,20 +236,20 @@ if [ "$SKIP_ONLINE" -eq 0 ]; then
   c_bold " P0: register identities (one-time)"
   c_bold "═══════════════════════════════════════"
   # Only register if keys already exist (otherwise this fails: let 01/03 generate first)
-  if [ -f "$KEYS_DIR/mirko.pub" ]; then
-    if "$SCRIPT_DIR/register-identity.sh" id:mirko@m3c "$KEYS_DIR/mirko.pub" \
-       "Mirko (KuP demo author)" >> "$LOG" 2>&1; then
-      record P0 green "Mirko identity registered or already exists"
+  if [ -f "$KEYS_DIR/bob.pub" ]; then
+    if "$SCRIPT_DIR/register-identity.sh" id:bob@m3c "$KEYS_DIR/bob.pub" \
+       "Bob (KuP demo author)" >> "$LOG" 2>&1; then
+      record P0 green "Bob identity registered or already exists"
     else
       rc=$?
       if [ $rc -eq 0 ] || grep -q "already_exists\|HTTP 201\|HTTP 409" "$LOG" 2>/dev/null; then
-        record P0 green "Mirko identity ok (idempotent)"
+        record P0 green "Bob identity ok (idempotent)"
       else
-        record P0 yellow "Mirko identity registration returned $rc, will retry post-01"
+        record P0 yellow "Bob identity registration returned $rc, will retry post-01"
       fi
     fi
   else
-    record P0 yellow "skipping Mirko registration (keys not yet generated, will run after step 01)"
+    record P0 yellow "skipping Bob registration (keys not yet generated, will run after step 01)"
   fi
 fi
 
@@ -262,11 +262,11 @@ assert_exit        00 0 "skillctl --help runs"  "$SKILLCTL" --help
 finished
 
 # ============================================================================
-# Step 01: Mirko authors and signs
+# Step 01: Bob authors and signs
 # ============================================================================
-run_step 01 "Mirko authors and signs" bash 01-mirko-author.sh
-assert_file 01 "$KEYS_DIR/mirko.priv"             "mirko.priv keypair"
-assert_file 01 "$KEYS_DIR/mirko.pub"              "mirko.pub keypair"
+run_step 01 "Bob authors and signs" bash 01-bob-author.sh
+assert_file 01 "$KEYS_DIR/bob.priv"             "bob.priv keypair"
+assert_file 01 "$KEYS_DIR/bob.pub"              "bob.pub keypair"
 BUNDLE="$BUNDLES_DIR/${SKILL_NAME}-${SKILL_VERSION}.skb"
 assert_file_min 01 "$BUNDLE" 256                  "bundle .skb"
 assert_file 01 "$ARTIFACTS_DIR/digest.txt"        "digest.txt"
@@ -274,26 +274,26 @@ DIGEST=$(cat "$ARTIFACTS_DIR/digest.txt" 2>/dev/null || echo "")
 SIG="${BUNDLE}.${DIGEST#sha256:}.author.sig"
 assert_file_min 01 "$SIG" 64                      "author signature (64 bytes)"
 assert_exit 01 0 "verify-sig accepts genuine bundle" \
-  "$SKILLCTL" verify-sig --pubkey "$KEYS_DIR/mirko.pub" "$BUNDLE"
+  "$SKILLCTL" verify-sig --pubkey "$KEYS_DIR/bob.pub" "$BUNDLE"
 finished
 
 # ============================================================================
-# (Re-)register Mirko now that keys exist
+# (Re-)register Bob now that keys exist
 # ============================================================================
 if [ "$SKIP_ONLINE" -eq 0 ]; then
-  if "$SCRIPT_DIR/register-identity.sh" id:mirko@m3c "$KEYS_DIR/mirko.pub" \
-     "Mirko (KuP demo author)" >> "$LOG" 2>&1; then
-    record P0 green "Mirko identity active in registry"
+  if "$SCRIPT_DIR/register-identity.sh" id:bob@m3c "$KEYS_DIR/bob.pub" \
+     "Bob (KuP demo author)" >> "$LOG" 2>&1; then
+    record P0 green "Bob identity active in registry"
   else
-    record P0 yellow "Mirko identity registration not OK, 02 will likely return signature_invalid"
+    record P0 yellow "Bob identity registration not OK, 02 will likely return signature_invalid"
   fi
 fi
 
 # ============================================================================
-# Step 02: Mirko publishes (online stretch)
+# Step 02: Bob publishes (online stretch)
 # ============================================================================
 if [ "$SKIP_ONLINE" -eq 0 ]; then
-  run_step 02 "Mirko publishes to aims" bash 02-mirko-publish.sh
+  run_step 02 "Bob publishes to aims" bash 02-bob-publish.sh
   assert_file 02 "$LOG_DIR/admit.json"           "admit.json written"
   if [ -f "$LOG_DIR/admit.json" ]; then
     # Each known response is reported with its semantic verdict.
@@ -306,11 +306,11 @@ if [ "$SKIP_ONLINE" -eq 0 ]; then
     elif grep -qE '"code"\s*:\s*"already_exists"' "$LOG_DIR/admit.json"; then
       record 02 green "registry returned 'already_exists' (HTTP 409, idempotent)"
     elif grep -qE '"code"\s*:\s*"signature_invalid"' "$LOG_DIR/admit.json"; then
-      record 02 red "signature_invalid: registered Mirko pubkey doesn't match local key (ran P0 with the right keypair?)"
+      record 02 red "signature_invalid: registered Bob pubkey doesn't match local key (ran P0 with the right keypair?)"
     elif grep -qE '"code"\s*:\s*"storage_failed"' "$LOG_DIR/admit.json"; then
       record 02 yellow "storage_failed: server-side SKILL_REGISTRY_KEY not configured (chain proof in 05 doesn't depend on this)"
     elif grep -qE '"code"\s*:\s*"identity_not_found"' "$LOG_DIR/admit.json"; then
-      record 02 red "identity_not_found, register Mirko first via P0 (./register-identity.sh id:mirko@m3c …)"
+      record 02 red "identity_not_found, register Bob first via P0 (./register-identity.sh id:bob@m3c …)"
     elif grep -qE '"code"\s*:\s*"VALIDATION_ERROR"' "$LOG_DIR/admit.json"; then
       record 02 red "VALIDATION_ERROR, script may have wrong multipart field names (expected: bundle/signature/identity_id)"
     else
@@ -338,24 +338,24 @@ if [ "$SKIP_ONLINE" -eq 0 ] && [ -f "$KEYS_DIR/reviewer.pub" ]; then
 fi
 
 # ============================================================================
-# Step 04: Eric pins trust root
+# Step 04: Alice pins trust root
 # ============================================================================
-run_step 04 "Eric pins trust root" bash 04-eric-trust-root.sh
+run_step 04 "Alice pins trust root" bash 04-alice-trust-root.sh
 TRUST_FILE="$INSTALL_HOME/.claude/skill-trust-roots.yaml"
 assert_file 04 "$TRUST_FILE"                       "trust-roots.yaml"
-# Verify Mirko's pubkey is actually in there
-MIRKO_PUB_B64=$(openssl pkey -in "$KEYS_DIR/mirko.pub" -pubin -outform DER 2>/dev/null \
+# Verify Bob's pubkey is actually in there
+MIRKO_PUB_B64=$(openssl pkey -in "$KEYS_DIR/bob.pub" -pubin -outform DER 2>/dev/null \
   | tail -c 32 | base64 | tr -d '\n')
 if [ -f "$TRUST_FILE" ] && [ -n "$MIRKO_PUB_B64" ]; then
   # base64 contains + and / which are regex metachars; use fixed-string match.
-  assert_contains 04 "$TRUST_FILE" "$MIRKO_PUB_B64" 'Mirko pubkey pinned in trust roots'
+  assert_contains 04 "$TRUST_FILE" "$MIRKO_PUB_B64" 'Bob pubkey pinned in trust roots'
 fi
 finished
 
 # ============================================================================
-# Step 05. Eric installs and runs (LOAD-BEARING)
+# Step 05. Alice installs and runs (LOAD-BEARING)
 # ============================================================================
-run_step 05 "Eric installs and runs (VALID)" bash 05-eric-install-and-run.sh
+run_step 05 "Alice installs and runs (VALID)" bash 05-alice-install-and-run.sh
 HELLO_OUT="$INSTALL_HOME/output/hello.txt"
 assert_file 05 "$HELLO_OUT"                        "★ hello.txt: load-bearing valid-path proof"
 if [ -f "$HELLO_OUT" ]; then
@@ -370,7 +370,7 @@ run_step 06 "INVALID, tampered bytes" bash 06-invalid-tampered.sh
 TAMPERED="$BUNDLES_DIR/tampered.skb"
 if [ -f "$TAMPERED" ]; then
   assert_exit 06 11 "verify-sig REFUSES tampered bundle (signature_invalid)" \
-    "$SKILLCTL" verify-sig --pubkey "$KEYS_DIR/mirko.pub" "$TAMPERED"
+    "$SKILLCTL" verify-sig --pubkey "$KEYS_DIR/bob.pub" "$TAMPERED"
 else
   record 06 red "tampered bundle not produced"
 fi
@@ -378,8 +378,8 @@ fi
 run_step 07 "INVALID: wrong key (impersonation)" bash 07-invalid-wrong-key.sh
 ATTACKER_BUNDLE="$BUNDLES_DIR/attacker-${SKILL_NAME}-${SKILL_VERSION}.skb"
 if [ -f "$ATTACKER_BUNDLE" ]; then
-  assert_exit 07 11 "verify-sig REFUSES attacker bundle against pinned mirko.pub" \
-    "$SKILLCTL" verify-sig --pubkey "$KEYS_DIR/mirko.pub" "$ATTACKER_BUNDLE"
+  assert_exit 07 11 "verify-sig REFUSES attacker bundle against pinned bob.pub" \
+    "$SKILLCTL" verify-sig --pubkey "$KEYS_DIR/bob.pub" "$ATTACKER_BUNDLE"
   if [ -f "$KEYS_DIR/attacker.pub" ]; then
     assert_exit 07 0  "control: attacker bundle verifies against attacker.pub (proves bundle is structurally valid)" \
       "$SKILLCTL" verify-sig --pubkey "$KEYS_DIR/attacker.pub" "$ATTACKER_BUNDLE"
@@ -390,7 +390,7 @@ run_step 08 "INVALID: no signature delivered" bash 08-invalid-no-signature.sh
 NOSIG_BUNDLE="$BUNDLES_DIR/no-sig/${SKILL_NAME}-${SKILL_VERSION}.skb"
 if [ -f "$NOSIG_BUNDLE" ]; then
   set +e
-  "$SKILLCTL" verify-sig --pubkey "$KEYS_DIR/mirko.pub" "$NOSIG_BUNDLE" >> "$LOG" 2>&1
+  "$SKILLCTL" verify-sig --pubkey "$KEYS_DIR/bob.pub" "$NOSIG_BUNDLE" >> "$LOG" 2>&1
   rc=$?
   set -e
   if [ "$rc" -ne 0 ]; then
@@ -464,7 +464,7 @@ fi
 fi   # end of the --chain-only guard around G1 + G2
 
 # ============================================================================
-# G3, synthesis: skill transfer Mirko → Eric (steps 01–05 all green AND hello.txt)
+# G3, synthesis: skill transfer Bob → Alice (steps 01–05 all green AND hello.txt)
 # ============================================================================
 G3_FAILS=$(printf '%s\n' "${RESULTS[@]}" | awk -F'|' '$1 ~ /^0[1-5]$/ && $2=="red"' | wc -l | tr -d ' ')
 if [ "$G3_FAILS" -eq 0 ] && [ -f "$HELLO_OUT" ]; then

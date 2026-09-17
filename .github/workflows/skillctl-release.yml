@@ -139,7 +139,15 @@ jobs:
       # than at whatever happens to be on PATH.
       - name: Build skillctl
         shell: bash
-        run: go build -o build/skillctl ./cmd/skillctl
+        # Windows braucht die .exe-Endung: `go build -o build/skillctl` erzeugt
+        # sie NICHT von selbst, und der Rehearsal-Schritt zeigt auf
+        # .\build\skillctl.exe. Beim ersten Release-Lauf dieses Tors
+        # (skillctl/v0.5.0, Run 34475469820) fand der Windows-Zwilling deshalb
+        # einen leeren Pfad vor: das Tor hat seine eigene Verdrahtung gefunden.
+        run: |
+          EXT=""
+          if [ "$RUNNER_OS" = "Windows" ]; then EXT=".exe"; fi
+          go build -o "build/skillctl$EXT" ./cmd/skillctl
 
       # NOT a bare `go test -run`: that exits 0 when the pattern matches
       # nothing, so a renamed or deleted test turns this gate green while it
@@ -229,7 +237,7 @@ jobs:
       # fails the build job and the whole release. anchore/sbom-action uploads it as
       # the workflow artifact `skillctl.sbom.cdx.json` for the release job to consume.
       - name: Generate SBOM (CycloneDX)
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           path: .
           format: cyclonedx-json
@@ -675,8 +683,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          # Dieser Job hat KEIN checkout; gh wuerde das Repo sonst aus dem
+          # nicht vorhandenen git-Kontext raten ("not a git repository",
+          # Run 34494178085). Das Repo steht deshalb explizit am Aufruf.
           gh release upload "${GITHUB_REF_NAME}" \
             dist/release-evidence.json \
             dist/release-evidence.json.cosign.bundle \
             dist/release-evidence.intoto.json \
-            --clobber
+            --clobber --repo "${GITHUB_REPOSITORY}"

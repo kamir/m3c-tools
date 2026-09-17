@@ -139,6 +139,11 @@ func refreshDevToken(base, refreshToken string) (DevTokenFile, error) {
 // ATOMICALLY (temp + rename) so a concurrent reader never sees a truncated file
 // and a crash mid-write can't lose the durable refresh token.
 func saveDevTokenFile(path string, t DevTokenFile) error {
+	// #nosec G117 -- das Feld AccessToken SOLL hier serialisiert werden: diese
+	// Funktion schreibt genau die Token-Datei, nach 0600 und atomar ueber
+	// temp+rename. Die Regel sucht versehentlich mitserialisierte Geheimnisse,
+	// etwa in ein Protokoll oder eine Antwort; geprueft 2026-09-15: DevTokenFile
+	// wird nirgends sonst serialisiert.
 	data, err := json.MarshalIndent(t, "", "  ")
 	if err != nil {
 		return err

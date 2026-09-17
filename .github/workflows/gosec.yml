@@ -71,24 +71,96 @@ jobs:
       # -track-suppressions: keep #nosec-annotated sites in the SARIF as
       # `suppressions` so a justified suppression is distinguishable from an
       # un-triaged finding (same flag used to build the committed baseline).
+      # -exclude=G104 gilt NUR fuer diese Flaeche, und das ist der ganze Trick.
+      #
+      # G104 "Errors unhandled" lieferte 72 der 502 Alerts, und 71 davon sitzen
+      # an Zeilen, die BEREITS `//nolint:errcheck` mit einer ausgeschriebenen
+      # Begruendung tragen. errcheck besitzt diese Frage, und .golangci.yml
+      # traegt dazu eine sorgfaeltig hergeleitete Politik, inklusive der Regel
+      # "Ausnahme am Aufrufort, nicht per Operationsklasse". Dieselben
+      # Ausnahmen ein zweites Mal zu pflegen erzeugt keine Sicherheit, es
+      # erzeugt zwei Orte, an denen dieselbe Entscheidung altern kann.
+      #
+      # Warum das KEIN Loch reisst: `scripts/gosec-diff-gate.sh` ruft gosec
+      # eigenstaendig und OHNE diesen Schalter (`run_gosec()`), und die
+      # Baseline fuehrt die 70 G104-Signaturen weiter. Ein NEUER unbehandelter
+      # Fehler faellt dort also nach wie vor auf. Ausgeschlossen ist die Klasse
+      # nur dort, wo sie Bestandsrauschen war: im Alert-Bestand von Code
+      # Scanning. Wer das aendert, muss beide Stellen zusammen ansehen.
+      #
+      # -track-suppressions ist WEG, und ohne das waere der Ausschluss oben
+      # wirkungslos gewesen. Der Schalter hielt ausgeschlossene und per #nosec
+      # begruendete Funde IM Dokument, nur mit einem `suppressions`-Block
+      # daran. Seine Absicht war, eine begruendete Unterdrueckung von einem
+      # unbeurteilten Fund unterscheidbar zu halten.
+      #
+      # Auf DIESER Flaeche bewirkt er das Gegenteil, gemessen am 2026-09-15:
+      # Code Scanning ignoriert den Block und listet solche Funde als OFFEN.
+      # Die drei Stichproben waren `pkg/skillctl/registry/er1_room.go:193`
+      # (Alert #35), `cmd/skillctl/sync_cmds.go:178` (#46) und
+      # `pkg/skillctl/install/install_bundle.go:219` (#63), alle drei mit
+      # #nosec im Code und alle drei offen. 502 hochgeladene Funde ergaben 502
+      # offene Alerts, obwohl 101 davon als suppressed markiert waren.
+      #
+      #   mit -track-suppressions              502 hochgeladen -> 502 offen
+      #   -exclude=G104 mit -track-suppressions 502 hochgeladen -> 502 offen
+      #   -exclude=G104 ohne -track-suppressions 401 hochgeladen -> 401 offen
+      #
+      # Die Unterscheidung geht dabei nicht verloren, sie zieht nur dorthin,
+      # wo sie gelesen wird: an das #nosec im Quelltext und in die Baseline des
+      # Diff-Gates. Das Dashboard war nie ihr Ort.
+      #
+      # Herleitung und Zahlen: docs/security/gosec-backlog.md.
       - name: Run gosec -> SARIF
-        run: gosec -no-fail -track-suppressions -fmt sarif -out gosec.sarif ./...
+        run: gosec -no-fail -exclude=G104 -fmt sarif -out gosec.sarif ./...
 
-      # gosec emits ABSOLUTE artifactLocation URIs; Code Scanning requires paths
-      # relative to the repo root, else it rejects the upload with
-      # "locationFromSarifResult: expected artifact location". Strip the file://
-      # scheme + the $GITHUB_WORKSPACE prefix so every location is repo-relative.
-      - name: Relativize SARIF paths
-        run: |
-          sed "s#file://##g; s#${GITHUB_WORKSPACE}/##g" gosec.sarif > gosec.rel.sarif
-          mv gosec.rel.sarif gosec.sarif
+      # WHAT STOOD HERE, and why it never worked.
+      #
+      # A sed step lived here, on the premise that "gosec emits ABSOLUTE
+      # artifactLocation URIs". Measured against gosec v2.29.0, the version
+      # pinned above, on the tree at 19be7dc: 502 of 525 findings are ALREADY
+      # repo-relative and NONE is absolute. The sed was a no-op defending
+      # against a shape this tool does not produce.
+      #
+      # The real rejection came from the other 23. They are cgo-generated Go
+      # (snippets like `_Cfunc_CString /*line :801:19*/`), written to a build
+      # directory that is not in the repository, so gosec emits
+      # `"artifactLocation": {}` with no uri at all. Code Scanning refuses the
+      # whole document over it, and 502 good findings went down with them.
+      #
+      # Code Scanning recorded 344 gosec analyses between 2026-09-03 and
+      # 2026-09-15, and 343 of them carry results_count 0: the runs arrived,
+      # every finding in them was thrown away, and this job reported success
+      # every single time. A tool missing from the dashboard is visibly
+      # missing; a tool present with zero findings reads as a clean bill of
+      # health. Query it with
+      #
+      #   gh api 'repos/kamir/m3c-tools/code-scanning/analyses\
+      #           ?tool_name=Golang%20security%20checks%20by%20gosec'
+      #
+      # and NOT with tool_name=gosec, which matches nothing and answers with an
+      # empty list that looks exactly like "never ingested".
+      - name: Prepare SARIF for Code Scanning
+        run: ./scripts/sarif-for-code-scanning.py gosec.sarif gosec.rel.sarif
+      - name: Use the prepared SARIF
+        run: mv gosec.rel.sarif gosec.sarif
 
-      # best-effort: the gosec RUN above is the substance; Code Scanning ingestion
-      # is a bonus over CodeQL (the primary Go SAST here). A residual SARIF quirk
-      # must not red-block the whole build: verify ingestion in the dashboard.
+      # NO continue-on-error, deliberately, and this is the load-bearing change.
+      #
+      # It stood here with the argument that ingestion is "a bonus over CodeQL"
+      # and a SARIF quirk must not red-block the build, closing with "verify
+      # ingestion in the dashboard". Nobody did, for as long as this job has
+      # existed, and the dashboard showed zero gosec findings the whole time.
+      #
+      # It was the outermost of three layers that each swallowed the failure:
+      # this flag kept Actions green, results_count 0 made the dashboard look
+      # clean rather than broken, and the `gosec` check run is NEUTRAL, which
+      # does not block a merge (PR #294 merged with it; PR #265 read CLEAN with
+      # it). Nothing forced anyone to look. Removing this flag turns the
+      # outermost layer into a red job with the reason in its log, which is the
+      # cheapest place a failure can live.
       - name: Upload SARIF to Code Scanning
-        continue-on-error: true
-        uses: github/codeql-action/upload-sarif@6f5948dfacef28e207b48d0905cf90c03365536d # v3.37.9
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: gosec.sarif
           category: gosec

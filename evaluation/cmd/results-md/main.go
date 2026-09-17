@@ -80,6 +80,7 @@ func main() {
 	b.WriteString("\nE6 is recorded as `N/A, deferred (gated P3-P2)`: the OIDC/JWKS binding ")
 	b.WriteString("(SPEC-0277 P2) is not built, so there is no path to measure, no number is fabricated.\n")
 
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.WriteFile(mdPath, []byte(b.String()), 0o644); err != nil {
 		fmt.Fprintf(os.Stderr, "results-md: write %s: %v\n", mdPath, err)
 		os.Exit(1)

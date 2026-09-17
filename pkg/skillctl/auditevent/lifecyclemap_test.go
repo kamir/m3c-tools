@@ -35,7 +35,7 @@ func TestEveryReasonIsClassifiedAndKnown(t *testing.T) {
 func TestRefusalIsNotASuccessAndKeepsItsExitCode(t *testing.T) {
 	e, err := FromLifecycleEvent(LifecycleEvent{
 		Op:       OpInstall,
-		Skill:    "eric-demo-skill",
+		Skill:    "alice-demo-skill",
 		Digest:   "sha256:abc",
 		Reason:   ReasonDigestMismatch,
 		ExitCode: 10,

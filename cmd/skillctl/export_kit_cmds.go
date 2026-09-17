@@ -130,6 +130,7 @@ func runExportKit(args []string, stdout, stderr io.Writer) int {
 
 	// Build the kit in a temp staging dir, scrub, then move into place, so a
 	// scrub failure never leaves a half-written kit.
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.MkdirAll(*outDir, 0o755); err != nil {
 		fmt.Fprintf(stderr, "export-verification-kit: mkdir %s: %v\n", *outDir, err)
 		return exitGeneric
@@ -187,6 +188,7 @@ func runExportKit(args []string, stdout, stderr io.Writer) int {
 	}
 
 	// Write everything.
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
 	if err := os.WriteFile(filepath.Join(*outDir, skbName), skbBytes, 0o644); err != nil {
 		fmt.Fprintf(stderr, "export-verification-kit: write skb: %v\n", err)
 		return exitGeneric
