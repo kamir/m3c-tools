@@ -24,6 +24,14 @@ on:
     - cron: "27 3 * * *" # nightly at 03:27 UTC
   workflow_dispatch: {}
 
+# Concurrency: one scheduled run at a time, and nothing is cancelled.
+# A cancelled run of this workflow is simply a night with no result, so the
+# group serializes rather than supersedes. The prefix is a literal for the
+# reason given in ci.yml.
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: false
+
 # Least privilege: the fuzz job only reads the repo.
 permissions:
   contents: read
@@ -32,6 +40,7 @@ jobs:
   fuzz:
     name: ${{ matrix.target }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false # one target's crasher must not cancel the others
       matrix:
@@ -57,7 +66,7 @@ jobs:
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
 
       # -run=^$ skips the ordinary unit tests; -fuzz=^<target>$ selects exactly
       # one fuzz function; a new crasher makes `go test` exit non-zero → job fails.

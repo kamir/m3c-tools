@@ -23,6 +23,20 @@ on:
       - "tools/skillctl-install.ps1"
       - ".github/workflows/skillctl-windows-smoke.yml"
 
+# Concurrency: one run per ref, and a superseded pull-request run is cancelled.
+# The group carries a LITERAL prefix rather than ${{ github.workflow }}, because
+# inside a reusable workflow that context holds the CALLER's name: a group built
+# from it can collide with the caller's own group, and a called workflow waiting
+# on its caller never starts. A literal cannot do that, in any file.
+#
+# cancel-in-progress is conditional on purpose. A superseded pull-request run
+# measures a commit nobody will merge, so cancelling it costs nothing. A run on
+# main or master is the record for that commit, and cancelling it would leave a
+# merged commit with no evidence that this gate ever passed on it.
+concurrency:
+  group: skillctl-windows-smoke-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # CD-T6: least-privilege default GITHUB_TOKEN for the whole workflow.
 permissions:
   contents: read
@@ -31,12 +45,13 @@ jobs:
   quickstart-smoke:
     name: Quickstart Smoke (windows-latest)
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
           cache: true
 
       # Build the CLI from source (native GOOS=windows on this runner).
@@ -82,6 +97,7 @@ jobs:
   installer-winps51:
     name: Installer under Windows PowerShell 5.1 (BUG-0193)
     runs-on: windows-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
