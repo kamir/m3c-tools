@@ -20,8 +20,15 @@ type xmlText struct {
 	Content  string `xml:",chardata"`
 }
 
-// ParseCaptionXML parses YouTube's caption XML format into Snippets.
+// ParseCaptionXML parses YouTube's caption XML format into Snippets,
+// stripping HTML tags from each snippet.
 func ParseCaptionXML(xmlData string) ([]Snippet, error) {
+	return ParseCaptionXMLFormatting(xmlData, false)
+}
+
+// ParseCaptionXMLFormatting parses caption XML. When preserveFormatting is
+// true, HTML tags in the snippet text are kept.
+func ParseCaptionXMLFormatting(xmlData string, preserveFormatting bool) ([]Snippet, error) {
 	var transcript xmlTranscript
 	if err := xml.Unmarshal([]byte(xmlData), &transcript); err != nil {
 		return nil, fmt.Errorf("parse caption XML: %w", err)
@@ -39,8 +46,9 @@ func ParseCaptionXML(xmlData string) ([]Snippet, error) {
 		}
 		// Unescape HTML entities (YouTube encodes &amp; &#39; etc.)
 		text := html.UnescapeString(t.Content)
-		// Strip any remaining HTML tags
-		text = stripTags(text)
+		if !preserveFormatting {
+			text = stripTags(text)
+		}
 		text = strings.TrimSpace(text)
 
 		snippets = append(snippets, Snippet{
@@ -129,10 +137,7 @@ func ParseCaptionsFromJSON(captionsJSON map[string]any, videoID string) ([]Trans
 			}
 		}
 
-		isTranslatable := false
-		if _, ok := trackMap["isTranslatable"]; ok {
-			isTranslatable = true
-		}
+		isTranslatable := getBoolField(trackMap, "isTranslatable")
 
 		// Strip &fmt=srv3 to get classic XML format (matching Python library)
 		baseURL := strings.Replace(getStringField(trackMap, "baseUrl"), "&fmt=srv3", "", 1)
@@ -161,4 +166,13 @@ func getStringField(m map[string]any, key string) string {
 		}
 	}
 	return ""
+}
+
+func getBoolField(m map[string]any, key string) bool {
+	v, ok := m[key]
+	if !ok {
+		return false
+	}
+	b, ok := v.(bool)
+	return ok && b
 }
