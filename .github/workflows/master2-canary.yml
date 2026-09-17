@@ -1,0 +1,38 @@
+name: Master2 Runner Canary
+
+on:
+  workflow_dispatch:
+
+jobs:
+  canary:
+    runs-on: [self-hosted, Linux, X64, master2]
+
+    steps:
+      - name: Runner identity
+        run: |
+          echo "=== HOST ==="
+          hostname
+          uname -a
+          echo "=== USER ==="
+          whoami
+          echo "=== CPU ==="
+          nproc
+          echo "=== MEMORY ==="
+          free -h
+          echo "=== DISK ==="
+          df -h /
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Repository
+        run: |
+          git rev-parse HEAD
+          git status --short
+          ls -la
+
+      - name: Toolchain
+        run: |
+          git --version
+          go version || true
+          docker --version || true
