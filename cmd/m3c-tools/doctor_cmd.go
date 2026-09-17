@@ -229,7 +229,7 @@ func doctorConfigConsistency() diag.Section {
 		}
 		vars := readEnvFile(src.path)
 		if vars != nil {
-			loaded = append(loaded, envSource{name: src.name, vars: vars})
+			loaded = append(loaded, envSource{name: src.name, path: src.path, vars: vars})
 		}
 	}
 
@@ -288,11 +288,11 @@ func doctorConfigConsistency() diag.Section {
 
 	// Check file permissions on sensitive files.
 	for _, sv := range loaded {
-		if info, err := os.Stat(sv.name); err == nil {
+		if info, err := os.Stat(sv.path); err == nil {
 			if info.Mode().Perm()&0077 != 0 {
 				s.Checks = append(s.Checks, diag.Check{
 					Name: "File perms", Status: diag.Warn,
-					Detail: fmt.Sprintf("%s is world-readable (%04o): run 'chmod 600 %s'", sv.name, info.Mode().Perm(), sv.name),
+					Detail: fmt.Sprintf("%s is world-readable (%04o): run 'chmod 600 %s'", sv.path, info.Mode().Perm(), sv.path),
 				})
 			}
 		}
@@ -493,6 +493,7 @@ func readEnvFile(path string) map[string]string {
 // envSource holds parsed env vars from a single config file.
 type envSource struct {
 	name string
+	path string
 	vars map[string]string
 }
 

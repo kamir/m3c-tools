@@ -7188,11 +7188,16 @@ func pocketGroupAndSync(selected []pocket.Recording, tags []string, cfg *pocket.
 
 func cmdPocket(args []string) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: m3c-tools pocket <list|sync> [args]")
+		fmt.Fprintln(os.Stderr, "Usage: m3c-tools pocket <list|sync|usb-sync|api|cloud-sync|backfill|mappings> [args]")
 		os.Exit(1)
 	}
 
-	switch args[0] {
+	cmd, ok := pocket.CanonicalCLI(args[0])
+	if !ok {
+		fmt.Fprintf(os.Stderr, "Unknown pocket subcommand: %s\nUsage: m3c-tools pocket <list|sync|usb-sync|api|cloud-sync|backfill|mappings> [args]\n", args[0])
+		os.Exit(1)
+	}
+	switch cmd {
 	case "list":
 		cmdPocketList(args[1:])
 	case "sync":
@@ -7205,9 +7210,6 @@ func cmdPocket(args []string) {
 		cmdPocketBackfill(args[1:])
 	case "mappings":
 		cmdPocketMappings(args[1:])
-	default:
-		fmt.Fprintf(os.Stderr, "Unknown pocket subcommand: %s\nUsage: m3c-tools pocket <list|sync|api|cloud-sync|backfill|mappings> [args]\n", args[0])
-		os.Exit(1)
 	}
 }
 
