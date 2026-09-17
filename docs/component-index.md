@@ -72,7 +72,7 @@ Grouped by domain:
 ## F. skillctl trust subsystem (`pkg/skillctl/*` + siblings)
 
 The offline-verifiable skill **trust plane**: the library behind the
-[`skillctl`](program-index) CLI. 41 subpackages under `pkg/skillctl/`, plus the
+[`skillctl`](program-index) CLI. 42 subpackages under `pkg/skillctl/`, plus the
 sibling top-level packages at the end of this section, grouped by role. The list
 and the number are both gated by `scripts/check-index.sh`: it diffs `pkg/**` and
 `internal/**` against this file in both directions AND re-counts the directories,
@@ -135,6 +135,7 @@ It runs in `scripts/check-docs.sh` and in the `docs-gate` job of `ci.yml`,
 | `skillctl/bodyscan` | SPEC-0246 §4 semantic danger-prose detector. |
 | `skillctl/exitcode` | Canonical registry of `skillctl` process exit codes. |
 | `skillctl/auditevent` | SPEC-0403 audit-event foundation: the shared envelope, the sinks, and the dispatcher that decides what a failed write means (silent loss is not the default). |
+| `skillctl/auditexport` | SPEC-0455 seam between the audit drain and a selectable sink: contract types plus the backend conformance suite (T-00; implementations arrive with T-01). |
 | `skillctl/secfile` | Hardens the on-disk permissions of security-sensitive files. A no-op on Unix (0600 is enforced by the kernel); real DACL work on Windows, which does not honour the Unix perm bits. |
 
 **Analysis, reporting & UI**
