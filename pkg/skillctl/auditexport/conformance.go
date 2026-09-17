@@ -107,7 +107,7 @@ func RunConformance(t *testing.T, h Harness) {
 // has one carrier.
 var ambientEnv = []string{
 	"ER1_API_URL", "ER1_API_KEY", "ER1_DEVICE_TOKEN", "ER1_CONTEXT_ID",
-	"M3C_INGEST_ENDPOINT",
+	"M3C_INGEST_ENDPOINT", "SKILLCTL_AUDIT_BACKEND",
 }
 
 // unsetAmbientEnv removes the ambient ER1/M3C environment for the duration

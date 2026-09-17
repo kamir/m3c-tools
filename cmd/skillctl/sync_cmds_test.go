@@ -192,7 +192,7 @@ func TestSync_AC4_DurableSeqMarksSynced(t *testing.T) {
 	srv := contractDouble(t, ingest, logID, ackDurable, &posts)
 
 	var out, errb bytes.Buffer
-	code := runSync([]string{"--once", "--endpoint", srv.URL, "--ingest-pubkey", pemPath, "--log-id", logID, "--insecure"}, &out, &errb)
+	code := runSync([]string{"--once", "--backend", "er1", "--endpoint", srv.URL, "--ingest-pubkey", pemPath, "--log-id", logID, "--insecure"}, &out, &errb)
 	if code != syncExitOK {
 		t.Fatalf("exit = %d, want 0; stderr=%s", code, errb.String())
 	}
@@ -222,7 +222,7 @@ func TestSync_AC4_BareTwoXXDoesNotMarkSynced(t *testing.T) {
 	srv := contractDouble(t, ingest, logID, ackBare, &posts)
 
 	var out, errb bytes.Buffer
-	code := runSync([]string{"--once", "--endpoint", srv.URL, "--ingest-pubkey", pemPath, "--log-id", logID, "--insecure"}, &out, &errb)
+	code := runSync([]string{"--once", "--backend", "er1", "--endpoint", srv.URL, "--ingest-pubkey", pemPath, "--log-id", logID, "--insecure"}, &out, &errb)
 	if code != syncExitOK {
 		t.Fatalf("exit = %d, want 0; stderr=%s", code, errb.String())
 	}
@@ -258,7 +258,7 @@ func TestSync_AC4_ReplayIsNoOp(t *testing.T) {
 	var posts int32
 	srv := contractDouble(t, ingest, logID, ackDurable, &posts)
 
-	args := []string{"--once", "--endpoint", srv.URL, "--ingest-pubkey", pemPath, "--log-id", logID, "--insecure"}
+	args := []string{"--once", "--backend", "er1", "--endpoint", srv.URL, "--ingest-pubkey", pemPath, "--log-id", logID, "--insecure"}
 	var out, errb bytes.Buffer
 	if code := runSync(args, &out, &errb); code != syncExitOK {
 		t.Fatalf("first sync exit=%d; stderr=%s", code, errb.String())
@@ -288,7 +288,7 @@ func TestSync_AC4_FiveXXBacksOff(t *testing.T) {
 	srv := contractDouble(t, ingest, logID, ack5xx, &posts)
 
 	var out, errb bytes.Buffer
-	code := runSync([]string{"--once", "--endpoint", srv.URL, "--ingest-pubkey", pemPath, "--log-id", logID, "--insecure"}, &out, &errb)
+	code := runSync([]string{"--once", "--backend", "er1", "--endpoint", srv.URL, "--ingest-pubkey", pemPath, "--log-id", logID, "--insecure"}, &out, &errb)
 	if code != syncExitOK {
 		t.Fatalf("exit = %d, want 0 (transient is not fatal); stderr=%s", code, errb.String())
 	}
@@ -320,7 +320,7 @@ func TestSync_FourXXExitsIngestRejected(t *testing.T) {
 	srv := contractDouble(t, ingest, logID, ack4xx, &posts)
 
 	var out, errb bytes.Buffer
-	code := runSync([]string{"--once", "--endpoint", srv.URL, "--ingest-pubkey", pemPath, "--log-id", logID, "--insecure"}, &out, &errb)
+	code := runSync([]string{"--once", "--backend", "er1", "--endpoint", srv.URL, "--ingest-pubkey", pemPath, "--log-id", logID, "--insecure"}, &out, &errb)
 	if code != syncExitIngestRejected {
 		t.Fatalf("exit = %d, want %d (ingest_rejected); stderr=%s", code, syncExitIngestRejected, errb.String())
 	}
@@ -399,7 +399,7 @@ func TestSync_TamperedRowNotShipped(t *testing.T) {
 	srv := contractDouble(t, ingest, logID, ackDurable, &posts)
 
 	var out, errb bytes.Buffer
-	code := runSync([]string{"--once", "--endpoint", srv.URL, "--ingest-pubkey", pemPath, "--log-id", logID, "--insecure"}, &out, &errb)
+	code := runSync([]string{"--once", "--backend", "er1", "--endpoint", srv.URL, "--ingest-pubkey", pemPath, "--log-id", logID, "--insecure"}, &out, &errb)
 	if code != syncExitOK {
 		t.Fatalf("exit = %d, want 0", code)
 	}
