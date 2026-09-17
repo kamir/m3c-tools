@@ -355,8 +355,12 @@ def main():
         no_timeout = {(r["file"], r["job"]) for r in data
                       if r["timeout"] == "none" and r["reusable"] == "no"}
         print("without timeout-minutes     %d" % len(no_timeout))
-        print("without concurrency group   %d"
-              % sum(1 for r in data if r["concurrency"] == "none"))
+        # Files, not rows: `concurrency` is a WORKFLOW key, so counting rows
+        # would report jobs and call them workflows. Same unit as the gate's
+        # finding, so the two numbers can be held against each other.
+        no_group = {r["file"] for r in data
+                    if r["pr"] == "yes" and r["concurrency"] == "none"}
+        print("pr workflows without a group %d" % len(no_group))
         print("self-hosted runners         %d"
               % sum(1 for r in data if "self-hosted" in r["runs_on"]))
         print("macos runners               %d"
