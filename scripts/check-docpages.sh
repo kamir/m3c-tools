@@ -33,6 +33,7 @@ docs/v2/sicherheit/ueberblick.de.md|docs/v2/pages/sicherheit-ueberblick.html
 docs/v2/entwickler/thinking-engine.md|docs/v2/pages/entwickler-thinking-engine.html
 docs/v2/entwickler/skillctl-sim.md|docs/v2/pages/entwickler-skillctl-sim.html
 docs/v2/sicherheit/audit-spur.de.md|docs/v2/pages/sicherheit-audit-spur.html
+docs/v2/entwickler/secretctl.md|docs/v2/pages/entwickler-secretctl.html
 '
 
 command -v python3 >/dev/null || { echo "check-docpages: python3 fehlt" >&2; exit 2; }
