@@ -76,8 +76,8 @@ fi
 # 5) Sign the bundle with Bob's key (clear any prior .author.sig leftovers)
 #    NOTE: skillctl sign requires flags BEFORE the bundle positional arg
 rm -f "${BUNDLE}".*.author.sig
-log "Bob: skillctl sign --key bob.priv --identity-id $MIRKO_ID $BUNDLE"
-SIGN_OUT=$("$SKILLCTL" sign --key "$KEYS_DIR/bob.priv" --identity-id "$MIRKO_ID" "$BUNDLE" 2>>"$LOG_DIR/full.log")
+log "Bob: skillctl sign --key bob.priv --identity-id $AUTHOR_ID $BUNDLE"
+SIGN_OUT=$("$SKILLCTL" sign --key "$KEYS_DIR/bob.priv" --identity-id "$AUTHOR_ID" "$BUNDLE" 2>>"$LOG_DIR/full.log")
 echo "$SIGN_OUT" | tee -a "$LOG_DIR/full.log" | head -5 | sed 's/^/      /'
 DIGEST=$(echo "$SIGN_OUT" | awk '/^digest:/ {print $2}')
 [[ -n "$DIGEST" ]] || { fail "could not parse digest from sign output"; exit 1; }
