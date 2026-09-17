@@ -34,7 +34,20 @@ jobs:
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          # The Go version comes from go.mod and from nowhere else. Before
+          # 2026-09-17 it was declared in three places: this key, 28 times over
+          # nine workflow files; GO_VERSION in release.yml; and go.mod's own
+          # `go` and `toolchain` lines. Three copies of one number, joined by
+          # nothing, is the same shape as a required check bound to a job name:
+          # it breaks the moment one side moves, and it breaks quietly, because
+          # a CI that builds with a different toolchain than the module declares
+          # still builds.
+          #
+          # Measured on the master2 canary, run 35225076758: with this key
+          # actions/setup-go logged "Setup go version spec 1.26.6" and `go
+          # version` printed go1.26.6. So the `toolchain go1.26.6` line is what
+          # it resolves, not the weaker `go 1.26.0` directive above it.
+          go-version-file: go.mod
 
       - name: Install PortAudio
         run: brew install portaudio
@@ -63,7 +76,7 @@ jobs:
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
 
       - name: gofmt over the tracked tree
         run: ./scripts/check-gofmt.sh
@@ -274,7 +287,7 @@ jobs:
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
 
       - name: docaudit unit tests
         run: go test -count=1 ./cmd/docaudit/
@@ -333,7 +346,7 @@ jobs:
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
 
       - name: Install PortAudio
         run: brew install portaudio
@@ -381,7 +394,7 @@ jobs:
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
 
       - name: Install PortAudio
         run: brew install portaudio
@@ -405,7 +418,7 @@ jobs:
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
 
       # WF-004: the trust plane is checked twice, in two ways that can disagree.
       #
@@ -439,7 +452,7 @@ jobs:
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
 
       # VAL-0001: the plan has to be pinned BEFORE the measurement it governs, and
       # the pinning has to be recorded by somebody other than its author.
@@ -487,7 +500,7 @@ jobs:
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
 
       # The cgo packages (recorder/menubar) need PortAudio to typecheck, so run
       # on macOS like the other jobs rather than a pure-Go ubuntu runner.
@@ -542,7 +555,7 @@ jobs:
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
 
       - name: go mod tidy && git diff --exit-code
         run: |
@@ -553,13 +566,24 @@ jobs:
     name: Build macOS (arm64 + amd64)
     runs-on: macos-latest
     timeout-minutes: 20
-    needs: [lint, test]
+    # No `needs:`, deliberately. Until 2026-09-17 this job waited for lint and
+    # test. Neither edge carried data: nothing here downloads an artifact from
+    # either, and no job downstream needs this one, so the edge was ordering
+    # alone. What it bought was not spending build minutes on a pull request
+    # whose lint or tests already failed. What it cost was the whole of lint
+    # and test added in front of every GREEN run, and green is the common case.
+    #
+    # Measured on run 29112195683 of ci.yml: lint 222s, test 174s, this job
+    # 181s. With the edge the answer arrived at 222 + 181 = 403s; without it,
+    # at 181s, and the run's critical path becomes the longest single job
+    # rather than a sum. The cost on a red pull request is this job's minutes,
+    # spent to learn one more thing about a commit that is failing anyway.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
 
       - name: Install PortAudio (Homebrew, for native arm64 build)
         run: brew install portaudio pkg-config
@@ -604,6 +628,18 @@ jobs:
           go build -o build/poc-recorder ./cmd/poc-recorder
 
       - name: Upload macOS artifacts
+        # Only on a push to master. Measured 2026-09-17 over the live
+        # (unexpired) artifacts of this repository: m3c-tools-cross held
+        # 5696 MB in 239 copies and m3c-tools-macos 4960 MB in 230, together
+        # 10.6 GB of the 14.1 GB in use, because both were uploaded by every
+        # run including every pull-request run. Nothing downloads either one:
+        # no job needs these two jobs, and no download-artifact step names
+        # them. A pull request needs this job to be GREEN, not its binaries.
+        #
+        # The distinction is the point. A build on master is platform evidence
+        # for a commit that is in the product. A build on a pull request is a
+        # gate result, and the result is the conclusion, not the bytes.
+        if: github.event_name == 'push'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: m3c-tools-macos
@@ -618,13 +654,24 @@ jobs:
     name: Build Cross-Platform (Linux + Windows)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [lint, test]
+    # No `needs:`, deliberately. Until 2026-09-17 this job waited for lint and
+    # test. Neither edge carried data: nothing here downloads an artifact from
+    # either, and no job downstream needs this one, so the edge was ordering
+    # alone. What it bought was not spending build minutes on a pull request
+    # whose lint or tests already failed. What it cost was the whole of lint
+    # and test added in front of every GREEN run, and green is the common case.
+    #
+    # Measured on run 29112195683 of ci.yml: lint 222s, test 174s, this job
+    # 181s. With the edge the answer arrived at 222 + 181 = 403s; without it,
+    # at 181s, and the run's critical path becomes the longest single job
+    # rather than a sum. The cost on a red pull request is this job's minutes,
+    # spent to learn one more thing about a commit that is failing anyway.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
 
       - name: Build linux/amd64
         run: |
@@ -651,6 +698,18 @@ jobs:
           build/secretctl-linux-amd64 help
 
       - name: Upload cross-platform artifacts
+        # Only on a push to master. Measured 2026-09-17 over the live
+        # (unexpired) artifacts of this repository: m3c-tools-cross held
+        # 5696 MB in 239 copies and m3c-tools-macos 4960 MB in 230, together
+        # 10.6 GB of the 14.1 GB in use, because both were uploaded by every
+        # run including every pull-request run. Nothing downloads either one:
+        # no job needs these two jobs, and no download-artifact step names
+        # them. A pull request needs this job to be GREEN, not its binaries.
+        #
+        # The distinction is the point. A build on master is platform evidence
+        # for a commit that is in the product. A build on a pull request is a
+        # gate result, and the result is the conclusion, not the bytes.
+        if: github.event_name == 'push'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: m3c-tools-cross

@@ -87,7 +87,7 @@ jobs:
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
 
       - name: Every real skillctl flag documented, every documented flag real
         run: go run ./cmd/docaudit -cli skillctl
@@ -144,7 +144,7 @@ jobs:
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
 
       # The matrix rows must exercise the same code, so the binary is built the
       # same way on both and the scripts are pointed at it explicitly rather
@@ -202,7 +202,7 @@ jobs:
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6" # patched toolchain (SPEC-0251 §5): CVE-free binaries (GO-2026-5856)
+          go-version-file: go.mod
 
       # 5-arch matrix, pure Go (skillctl needs no CGO), version-stamped with the
       # full skillctl/vX.Y.Z tag. Exactly tools/skillctl-release.sh's set.
@@ -535,7 +535,7 @@ jobs:
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
 
       - name: Download binaries + SHA256SUMS
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4

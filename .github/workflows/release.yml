@@ -21,7 +21,6 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: "1.26.6"
   # CD-T4: builds must use go.sum as-is; never mutate the module graph mid-build.
   GOFLAGS: -mod=readonly
 
@@ -40,7 +39,7 @@ jobs:
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
 
       - name: docaudit unit tests
         run: go test -count=1 ./cmd/docaudit/
@@ -107,7 +106,7 @@ jobs:
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
 
       - name: Install PortAudio (Homebrew, for native arm64 build)
         run: brew install portaudio pkg-config
@@ -211,7 +210,7 @@ jobs:
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
 
       - name: Install GoReleaser
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
@@ -252,7 +251,7 @@ jobs:
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
 
       - name: Install NSIS
         run: sudo apt-get update && sudo apt-get install -y nsis
