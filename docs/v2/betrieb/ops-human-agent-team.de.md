@@ -119,21 +119,21 @@ GitLab-Projekt an (0.3) und vergibt die Zugänge.
 
 ```bash
 # macOS und Linux
-curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/1eeefc870a9be50ace33cbc537984c38801eb266/tools/skillctl-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/afee42d36f14e6ebfc60438af6e4ba8d6a894441/tools/skillctl-install.sh | bash
 ```
 
 ```powershell
 # Windows
-irm https://raw.githubusercontent.com/kamir/m3c-tools/1eeefc870a9be50ace33cbc537984c38801eb266/tools/skillctl-install.ps1 | iex
+irm https://raw.githubusercontent.com/kamir/m3c-tools/afee42d36f14e6ebfc60438af6e4ba8d6a894441/tools/skillctl-install.ps1 | iex
 ```
 
 **Die Bytes, bevor man sie in eine Shell kippt.** Die URL ist auf den
-unveränderlichen Commit `1eeefc8` gepinnt und nicht auf `master`, denn ein
+unveränderlichen Commit `afee42d` gepinnt und nicht auf `master`, denn ein
 Zweig lässt sich umschreiben. Wer die Datei erst herunterlädt und prüft, statt
 sie durchzuleiten, erwartet diese SHA-256:
 
-- `tools/skillctl-install.ps1` → `d33f5344d30a6258281b0784c461ecc0dbe25b86444175a6f95c31dfe2c27f17`
-- `tools/skillctl-install.sh` → `5992c7f5770ced2d0ce1f43979e308b087e6a97d07a689eebf43230c28d88469`
+- `tools/skillctl-install.ps1` → `b95bd1295236a23e6b317a3c60bdda7352a98ceeb4bb46e3f8b66d479f7c3b00`
+- `tools/skillctl-install.sh` → `dea4b86b78d20eeff28524240034efcb0c96c35016238434a8e7c97c7278dabc`
 
 Der [README-Abschnitt Install](../../../README.md#install) hat das Rezept dafür zum
 Kopieren. Wer den Einzeiler durchleitet, verzichtet auf diese Probe; das ist
@@ -155,7 +155,7 @@ Bytes stimmen, nicht welche Fassung dabei herauskommt. Wer eine bestimmte
 Fassung braucht, gibt sie an:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/1eeefc870a9be50ace33cbc537984c38801eb266/tools/skillctl-install.sh \
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/afee42d36f14e6ebfc60438af6e4ba8d6a894441/tools/skillctl-install.sh \
   | RELEASE_BASE=https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.5.1 bash
 ```
 
