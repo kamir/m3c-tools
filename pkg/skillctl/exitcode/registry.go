@@ -146,12 +146,14 @@ var (
 
 var (
 	SyncIngestRejected = Code{29, "egress / ingest", "sync", "ingest_rejected"}
-	// 30 rejects the audit-export backend configuration (SPEC-0455
+	// 40 rejects the audit-export backend configuration (SPEC-0455
 	// REQ-5.1a): an endpoint without a named backend (the pre-T-02
 	// configuration, refused loudly instead of mapped silently), an unknown
 	// backend name, or a named backend whose configuration is incomplete.
-	// Fresh, uniquely-themed; the Number↔Theme invariant holds trivially.
-	SyncAuditBackendConfig = Code{30, "egress / config", "sync", "audit_backend_config"}
+	// NOT 30: the band 30–39 belongs to the skillgate live process-exit
+	// codes (SPEC-0202 §8.2, TestCodes_NoSkillgateBandIntrusion). Fresh,
+	// uniquely-themed; the Number↔Theme invariant holds trivially.
+	SyncAuditBackendConfig = Code{40, "egress / config", "sync", "audit_backend_config"}
 )
 
 // ---------------------------------------------------------------------------

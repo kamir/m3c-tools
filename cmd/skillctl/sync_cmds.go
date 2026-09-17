@@ -66,7 +66,7 @@ const (
 	syncExitError          = 1
 	syncExitUsage          = 2
 	syncExitIngestRejected = 29 // exitcode.SyncIngestRejected: auth/validation reject (4xx)
-	syncExitBackendConfig  = 30 // exitcode.SyncAuditBackendConfig: audit-backend selection rejected (SPEC-0455 REQ-5.1a)
+	syncExitBackendConfig  = 40 // exitcode.SyncAuditBackendConfig: audit-backend selection rejected (SPEC-0455 REQ-5.1a; 30–39 is the skillgate band)
 )
 
 // syncDefaultBatch is the default drain batch size (R-5.1).

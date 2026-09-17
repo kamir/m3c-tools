@@ -152,7 +152,7 @@ generated columns by hand turns `check-docs.sh` red.
 | `27` | `sidechannel_denied` | `guard-path` | side-channel / path-guard | A `refusal_code`. The opt-in `guard-path` deny of a skill-directory side-channel access (SPEC-0317 R-6). |
 | `28` | `offline_locked` | `state-machine` | offline / no-policy-basis | A `refusal_code`. The host is managed-enterprise with NO trust basis at all, so `offline_policy` denies every non-allowlisted managed skill. Restore a trust root or a signed offline checkpoint. |
 | `29` | `ingest_rejected` | `sync` | egress / ingest | The ingest endpoint rejected the batch (auth or validation, a 4xx). Not retryable unchanged. |
-| `30` | `audit_backend_config` | `sync` | egress / config | The audit-export backend selection was rejected (SPEC-0455): an endpoint is configured but no backend is named (set `SKILLCTL_AUDIT_BACKEND=er1`), the named backend is unknown, or its configuration is incomplete. |
+| `40` | `audit_backend_config` | `sync` | egress / config | The audit-export backend selection was rejected (SPEC-0455): an endpoint is configured but no backend is named (set `SKILLCTL_AUDIT_BACKEND=er1`), the named backend is unknown, or its configuration is incomplete. |
 
 <!-- exitaudit:register:end -->
 
@@ -1104,7 +1104,7 @@ lying or replaying endpoint cannot make evidence disappear locally.
 | `--insecure` | Skip TLS verification. Loopback endpoints only. |
 
 Egress needs BOTH a named backend and its endpoint. An endpoint without a named
-backend is refused loudly with exit `30` (`audit_backend_config`); the pre-SPEC-0455
+backend is refused loudly with exit `40` (`audit_backend_config`); the pre-SPEC-0455
 endpoint-only configuration is never mapped silently onto a backend (REQ-5.1a).
 With neither set, `sync` stays local-only and exits `0` as before.
 
