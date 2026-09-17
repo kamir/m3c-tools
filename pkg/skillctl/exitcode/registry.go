@@ -271,8 +271,8 @@ func AllCodes() []Code {
 		SignInvalid,
 		// Tier 4 (revoke
 		RevokeIdentityRevoked,
-		// Tier 5) sync / ingest
-		SyncIngestRejected,
+		// Tier 5) sync / ingest + audit-export backend config (SPEC-0455)
+		SyncIngestRejected, SyncAuditBackendConfig,
 		// Tier 6 (guard-path side channel
 		GuardPathSidechannelDenied,
 		// Tier 7) offline state machine (locked + unverifiable) + audit-durability
