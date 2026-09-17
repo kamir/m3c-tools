@@ -39,6 +39,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -51,6 +52,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/skillctl/auditexport"
 	"github.com/kamir/m3c-tools/pkg/skillctl/device"
 	"github.com/kamir/m3c-tools/pkg/skillctl/exitcode"
 	"github.com/kamir/m3c-tools/pkg/skillctl/outbox"
@@ -142,6 +144,15 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		return syncExitError
 	}
 
+	// SPEC-0455 REQ-4.1: the drain reaches its sink only through the seam.
+	// T-01 resolves the one registered backend; the selector surface
+	// (SKILLCTL_AUDIT_BACKEND) is unit T-02.
+	backend, err := auditexport.New("er1", client)
+	if err != nil {
+		fmt.Fprintf(stderr, "skillctl sync: %v\n", err)
+		return syncExitError
+	}
+
 	store, err := outbox.Open(home)
 	if err != nil {
 		fmt.Fprintf(stderr, "skillctl sync: open outbox: %v\n", err)
@@ -150,9 +161,9 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 	defer store.Close()
 
 	if *daemon {
-		return runSyncDaemon(store, client, home, *batch, *interval, stdout, stderr)
+		return runSyncDaemon(store, backend, home, *batch, *interval, stdout, stderr)
 	}
-	code, res := drainAll(context.Background(), store, client, home, *batch, stderr)
+	code, res := drainAll(context.Background(), store, backend, home, *batch, stderr)
 	reportDrain(stdout, res)
 	return code
 }
@@ -211,7 +222,7 @@ func isLoopbackHost(host string) bool {
 
 // --- daemon -------------------------------------------------------------------
 
-func runSyncDaemon(store *outbox.Store, client *outbox.IngestClient, home string, batch int, interval time.Duration, stdout, stderr io.Writer) int {
+func runSyncDaemon(store *outbox.Store, backend auditexport.Backend, home string, batch int, interval time.Duration, stdout, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -221,7 +232,7 @@ func runSyncDaemon(store *outbox.Store, client *outbox.IngestClient, home string
 
 	// Drain immediately on start, then on each tick.
 	for {
-		code, res := drainAll(ctx, store, client, home, batch, stderr)
+		code, res := drainAll(ctx, store, backend, home, batch, stderr)
 		reportDrain(stdout, res)
 		if code == syncExitIngestRejected {
 			fmt.Fprintln(stderr, "skillctl sync: ingest rejected the batch (auth/validation); stopping daemon")
@@ -258,7 +269,7 @@ func reportDrain(stdout io.Writer, r drainResult) {
 // forward progress is made (an empty pending set, or a batch where nothing could
 // be marked synced. The bare-2xx stub case, which must not loop forever). It
 // returns an exit code and the accumulated counters.
-func drainAll(ctx context.Context, store *outbox.Store, client *outbox.IngestClient, home string, batch int, stderr io.Writer) (int, drainResult) {
+func drainAll(ctx context.Context, store *outbox.Store, backend auditexport.Backend, home string, batch int, stderr io.Writer) (int, drainResult) {
 	var res drainResult
 
 	// Rows backed off during THIS drain: never re-posted within the same cycle.
@@ -316,41 +327,65 @@ func drainAll(ctx context.Context, store *outbox.Store, client *outbox.IngestCli
 			return syncExitOK, res
 		}
 
-		resp, status, err := client.PostBatch(ctx, records)
-		res.Posted += len(records)
-		switch {
-		case err != nil || status == 0 || status/100 == 5:
-			// Transient: record a backoff attempt for every posted row and stop
-			// this drain cycle (the daemon retries on the next tick; --once
-			// exits, leaving the rows for a later run).
-			if err != nil {
-				fmt.Fprintf(stderr, "skillctl sync: post batch: %v\n", err)
-			} else {
-				fmt.Fprintf(stderr, "skillctl sync: ingest transient status %d; backing off\n", status)
+		recs := make([]auditexport.Record, 0, len(rows))
+		for i, ev := range rows {
+			recs = append(recs, auditexport.Record{EventID: ev.EventID, Payload: records[i]})
+		}
+		result, derr := backend.Deliver(ctx, recs)
+		res.Posted += len(recs)
+		if derr != nil {
+			var rej *auditexport.RejectedError
+			var trans *auditexport.TransientError
+			switch {
+			case errors.As(derr, &rej):
+				// Auth / validation reject: not transient. Surface the numbered
+				// code so an operator (non-hot-path) sees it.
+				fmt.Fprintf(stderr, "skillctl sync: ingest rejected batch with status %d (%s)\n",
+					rej.Status, exitcode.SyncIngestRejected.Label)
+				return syncExitIngestRejected, res
+			case errors.As(derr, &trans):
+				// Transient: record a backoff attempt for every posted row and stop
+				// this drain cycle (the daemon retries on the next tick; --once
+				// exits, leaving the rows for a later run).
+				if trans.Cause != nil {
+					fmt.Fprintf(stderr, "skillctl sync: post batch: %v\n", trans.Cause)
+				} else {
+					fmt.Fprintf(stderr, "skillctl sync: ingest transient status %d; backing off\n", trans.Status)
+				}
+				for _, ev := range rows {
+					recordBackoff(store, ev.EventID, trans.Status, transientMsg(trans.Cause, trans.Status))
+					deferred[ev.EventID] = struct{}{}
+					res.Deferred++
+				}
+				return syncExitOK, res
+			default:
+				// A backend error outside the seam's vocabulary: fail toward
+				// retry, never toward synced.
+				fmt.Fprintf(stderr, "skillctl sync: post batch: %v\n", derr)
+				for _, ev := range rows {
+					recordBackoff(store, ev.EventID, 0, derr.Error())
+					deferred[ev.EventID] = struct{}{}
+					res.Deferred++
+				}
+				return syncExitOK, res
 			}
-			for _, ev := range rows {
-				recordBackoff(store, ev.EventID, status, transientMsg(err, status))
-				deferred[ev.EventID] = struct{}{}
-				res.Deferred++
-			}
-			return syncExitOK, res
-		case status/100 == 4:
-			// Auth / validation reject: not transient. Surface the numbered
-			// code so an operator (non-hot-path) sees it.
-			fmt.Fprintf(stderr, "skillctl sync: ingest rejected batch with status %d (%s)\n",
-				status, exitcode.SyncIngestRejected.Label)
-			return syncExitIngestRejected, res
 		}
 
-		// 2xx: mark synced ONLY those rows with a VALID signed durable-seq ack.
-		acks := map[string]outbox.DurableAck{}
-		for _, a := range resp.Acks {
-			acks[a.EventID] = a
+		// Mark synced ONLY rows the backend reports as verified-durable, and
+		// only when its declared ack class is durable: the caller half of the
+		// SPEC-0455 double lock (REQ-4.3, D6). The backend half is that er1
+		// reports Synced solely for acks VerifyAck accepted. Every other row
+		// gets a backoff attempt so it is retried later (R-5.3 / AC-4);
+		// received-class forward bookkeeping is unit T-04.
+		syncedSet := map[string]struct{}{}
+		if backend.AckClass() == auditexport.AckDurable {
+			for _, id := range result.Synced {
+				syncedSet[id] = struct{}{}
+			}
 		}
 		markedThisBatch := 0
 		for _, ev := range rows {
-			ack, ok := acks[ev.EventID]
-			if ok && client.VerifyAck(ack) {
+			if _, ok := syncedSet[ev.EventID]; ok {
 				if err := store.MarkSynced(ev.EventID, syncNow().UTC().Format(time.RFC3339)); err != nil {
 					fmt.Fprintf(stderr, "skillctl sync: mark synced %s: %v\n", ev.EventID, err)
 					continue
@@ -358,9 +393,17 @@ func drainAll(ctx context.Context, store *outbox.Store, client *outbox.IngestCli
 				res.Synced++
 				markedThisBatch++
 			} else {
-				// Bare-2xx (no/invalid durable-seq): DO NOT mark synced. Record a
-				// backoff attempt so the row is retried later (R-5.3 / AC-4).
-				recordBackoff(store, ev.EventID, status, "bare-2xx: no valid durable-seq ack")
+				// Bare-2xx (no/invalid durable-seq) or a non-durable backend:
+				// DO NOT mark synced (R-5.3 / AC-4).
+				status, reason := 0, "no verified durable ack"
+				if e, ok := result.Deferred[ev.EventID]; ok && e != nil {
+					reason = e.Error()
+					var st *auditexport.StatusError
+					if errors.As(e, &st) {
+						status = st.Status
+					}
+				}
+				recordBackoff(store, ev.EventID, status, reason)
 				deferred[ev.EventID] = struct{}{}
 				res.Deferred++
 			}
