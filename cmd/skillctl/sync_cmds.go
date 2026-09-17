@@ -66,6 +66,7 @@ const (
 	syncExitError          = 1
 	syncExitUsage          = 2
 	syncExitIngestRejected = 29 // exitcode.SyncIngestRejected: auth/validation reject (4xx)
+	syncExitBackendConfig  = 40 // exitcode.SyncAuditBackendConfig: audit-backend selection rejected (SPEC-0455 REQ-5.1a; 30–39 is the skillgate band)
 )
 
 // syncDefaultBatch is the default drain batch size (R-5.1).
@@ -105,6 +106,7 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		daemon   = fs.Bool("daemon", false, "Loop the drain on --interval with a signal-handled shutdown.")
 		batch    = fs.Int("batch", syncDefaultBatch, "Max rows per drain batch.")
 		endpoint = fs.String("endpoint", "", "Ingest endpoint base URL (https). Default OFF (local-only evidence).")
+		backendN = fs.String("backend", "", "Audit export backend by name (known: er1). No default: enabling egress means naming a backend. Env: SKILLCTL_AUDIT_BACKEND (the flag wins).")
 		pubkey   = fs.String("ingest-pubkey", "", "PEM (SPKI) ed25519 public key that signs durable-seq acks. Required to mark rows synced.")
 		logID    = fs.String("log-id", "skillctl-local", "Log id the durable-seq signature is bound to.")
 		interval = fs.Duration("interval", syncDefaultInterval, "Daemon loop interval.")
@@ -133,9 +135,31 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 	if ep == "" {
 		ep = strings.TrimSpace(os.Getenv("M3C_INGEST_ENDPOINT"))
 	}
-	if ep == "" {
+
+	// SPEC-0455 REQ-5.1 (decisions D1/D8): the backend selector. The flag
+	// wins over the environment, the same two-rung pattern as --endpoint.
+	// There is NO default backend: enabling egress means naming one.
+	be := strings.TrimSpace(*backendN)
+	if be == "" {
+		be = strings.TrimSpace(os.Getenv("SKILLCTL_AUDIT_BACKEND"))
+	}
+
+	if be == "" && ep == "" {
 		fmt.Fprintln(stdout, "skillctl sync: egress disabled (local-only evidence); set --endpoint or M3C_INGEST_ENDPOINT to enable")
 		return syncExitOK
+	}
+	if be == "" {
+		// REQ-5.1a, loud instead of silent: the pre-T-02 endpoint-only
+		// configuration no longer enables egress and is never mapped
+		// silently onto a backend.
+		fmt.Fprintf(stderr, "skillctl sync: an ingest endpoint is configured but no audit backend is named; set SKILLCTL_AUDIT_BACKEND=er1 (or --backend er1). Endpoint-only configuration no longer enables egress (%s)\n",
+			exitcode.SyncAuditBackendConfig.Label)
+		return syncExitBackendConfig
+	}
+	if ep == "" {
+		fmt.Fprintf(stderr, "skillctl sync: backend %q is named but no ingest endpoint is configured; set --endpoint or M3C_INGEST_ENDPOINT (%s)\n",
+			be, exitcode.SyncAuditBackendConfig.Label)
+		return syncExitBackendConfig
 	}
 
 	client, err := buildIngestClient(ep, *pubkey, *logID, *insecure, stderr)
@@ -144,13 +168,12 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		return syncExitError
 	}
 
-	// SPEC-0455 REQ-4.1: the drain reaches its sink only through the seam.
-	// T-01 resolves the one registered backend; the selector surface
-	// (SKILLCTL_AUDIT_BACKEND) is unit T-02.
-	backend, err := auditexport.New("er1", client)
+	// SPEC-0455 REQ-4.1: the drain reaches its sink only through the seam;
+	// an unknown name is refused with the register's known-name list (A4).
+	backend, err := auditexport.New(be, client)
 	if err != nil {
-		fmt.Fprintf(stderr, "skillctl sync: %v\n", err)
-		return syncExitError
+		fmt.Fprintf(stderr, "skillctl sync: %v (%s)\n", err, exitcode.SyncAuditBackendConfig.Label)
+		return syncExitBackendConfig
 	}
 
 	store, err := outbox.Open(home)
