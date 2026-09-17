@@ -21,7 +21,7 @@
 #   tools/docpage.sh <markdown> [ausgabe.html]
 #   tools/docpage.sh docs/v2/betrieb/ops-human-agent-team.de.md docs/v2/pages/ops-human-agent-team.html
 #
-# Vorgabe fuer die Ausgabe: docs/pages/<basisname-ohne-sprachsuffix>.html
+# Vorgabe fuer die Ausgabe: docs/v2/pages/<basisname-ohne-sprachsuffix>.html
 # Der eigene Ordner ist Absicht: Jekyll uebersetzt docs/x.md nach x.html, eine
 # erzeugte docs/x.html wuerde also mit der Uebersetzung kollidieren.
 #
@@ -53,7 +53,7 @@ TPL="${ROOT}/tools/release-templates/docpage.template.html"
 
 BASE="$(basename "$SRC" .md)"
 BASE="${BASE%.de}"
-OUT="${ARGS[1]:-${ROOT}/docs/pages/${BASE}.html}"
+OUT="${ARGS[1]:-${ROOT}/docs/v2/pages/${BASE}.html}"
 
 # Titel aus der ersten H1, die Gattungsangabe vor dem Doppelpunkt faellt weg.
 if [ -z "$TITLE" ]; then
