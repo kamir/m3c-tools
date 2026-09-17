@@ -684,21 +684,19 @@ func cmdSetup(args []string) {
 	// SPEC-0175 §3.1+§3.3: subcommand routing for the onboarding flow.
 	// `setup pocket-key <key>` validates a Pocket API key live and writes
 	// it to the active profile on success.
-	if len(args) > 0 && !strings.HasPrefix(args[0], "--") {
-		switch args[0] {
-		case "pocket-key":
-			cmdSetupPocketKey(args[1:])
-			return
-		case "whisper":
-			args = args[1:]
-		case "er1":
-			fmt.Println("On macOS, ER1 onboarding is m3c-tools login, then m3c-tools config.")
-			cmdLogin()
-			return
-		default:
-			fmt.Fprintf(os.Stderr, "Unknown setup subcommand: %s\nUse: m3c-tools setup [whisper|er1|pocket-key]\n", args[0])
-			os.Exit(1)
-		}
+	verb, args, unknown := parseSetupVerb(args, "whisper")
+	if unknown {
+		fmt.Fprintf(os.Stderr, "Unknown setup subcommand: %s\nUse: m3c-tools setup [whisper|er1|pocket-key]\n", verb)
+		os.Exit(1)
+	}
+	switch verb {
+	case "pocket-key":
+		cmdSetupPocketKey(args)
+		return
+	case "er1":
+		fmt.Println("On macOS, ER1 onboarding is m3c-tools login, then m3c-tools config.")
+		cmdLogin()
+		return
 	}
 
 	force := false
