@@ -172,12 +172,14 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	// BUG-0165: a bare ER1 context (no "___") has no owner prefix, so the maindrec
-	// write path resolves the context owner to the literal namespace (e.g. "skills")
-	//, never the authenticated principal, and returns 403 "Not authorized for this
-	// context". Prefix it with the logged-in owner id so `--er1-context skills` (the
-	// default) targets the canonical `<sub>___skills` registry.
-	*er1Context = ownerPrefixedContext(*er1Context)
+	// Verwendungsfehler zuerst: ein blosses `skillctl publish` druckt die Usage,
+	// nicht eine Meldung ueber eine fehlende Identitaet. Der !*all-Vorbehalt ist
+	// zwingend: --all arbeitet ohne Positionsargument und kehrt unten frueh zurueck.
+	if !*all && fs.NArg() < 1 {
+		fs.Usage()
+		return 2
+	}
+
 	// Kein Vorgabewert fuer die Identitaet, und das ist Absicht.
 	//
 	// Hier stand "id:bob@m3c", der Name einer ANDEREN Person. Wer ihn stehen
@@ -201,6 +203,15 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "  Beispiel: --identity id:you@your-org")
 		return 2
 	}
+
+	// BUG-0165: a bare ER1 context (no "___") has no owner prefix, so the maindrec
+	// write path resolves the context owner to the literal namespace (e.g. "skills")
+	//, never the authenticated principal, and returns 403 "Not authorized for this
+	// context". Prefix it with the logged-in owner id so `--er1-context skills` (the
+	// default) targets the canonical `<sub>___skills` registry. Erst NACH den
+	// Verwendungspruefungen: ownerPrefixedContext greift via auth.Load in den
+	// Schluesselbund, und das darf ein Verwendungsfehler nicht ausloesen.
+	*er1Context = ownerPrefixedContext(*er1Context)
 
 	// Seed from $SKILL_SHARE_ROOMS when no --share-room was passed.
 	rooms := []string(shareRooms)
@@ -227,11 +238,6 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 			noCheckpoint: *noCheckpoint,
 			shareRooms:   rooms,
 		})
-	}
-
-	if fs.NArg() < 1 {
-		fs.Usage()
-		return 2
 	}
 
 	if !registry.IsER1Registry(*registryName) && !artifact.Registered(*registryName) {
