@@ -31,9 +31,9 @@ ATTACKER_BUNDLE="$BUNDLES_DIR/attacker-${SKILL_NAME}-${SKILL_VERSION}.skb"
 ok "attacker built a fresh bundle: $(basename "$ATTACKER_BUNDLE")"
 
 # 3) Sign it with the attacker key but claim it's Bob's
-log "attacker signs with attacker.priv but claims --identity-id $MIRKO_ID"
+log "attacker signs with attacker.priv but claims --identity-id $AUTHOR_ID"
 rm -f "${ATTACKER_BUNDLE}".*.author.sig
-"$SKILLCTL" sign --key "$KEYS_DIR/attacker.priv" --identity-id "$MIRKO_ID" "$ATTACKER_BUNDLE" \
+"$SKILLCTL" sign --key "$KEYS_DIR/attacker.priv" --identity-id "$AUTHOR_ID" "$ATTACKER_BUNDLE" \
   >>"$LOG_DIR/full.log" 2>&1
 ok "attacker bundle signed (under attacker key)"
 

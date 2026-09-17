@@ -34,7 +34,7 @@ set +e
 HOME="$INSTALL_HOME" "$SKILLCTL" publish "$SKILL_NAME@$SKILL_VERSION" \
     --bundle "$BUNDLE" --registry self \
     --er1-target "$ER1_TARGET" --er1-context skills \
-    --key "$KEYS_DIR/bob.priv" --identity "$MIRKO_ID" --yes \
+    --key "$KEYS_DIR/bob.priv" --identity "$AUTHOR_ID" --yes \
     >>"$LOG_DIR/full.log" 2>&1
 rc=$?
 set -e
