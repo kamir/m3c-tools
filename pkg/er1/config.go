@@ -116,7 +116,7 @@ func LoadConfig() *Config {
 	cfg := &Config{
 		APIURL:        envOr("ER1_API_URL", "https://127.0.0.1:8081/upload_2"),
 		APIKey:        os.Getenv("ER1_API_KEY"),
-		ContextID:     envOr("ER1_CONTEXT_ID", "107677460544181387647___mft"),
+		ContextID:     os.Getenv("ER1_CONTEXT_ID"),
 		ContentType:   envOr("ER1_CONTENT_TYPE", "YouTube-Video-Impression"),
 		UploadTimeout: envInt("ER1_UPLOAD_TIMEOUT", 600),
 		VerifySSL:     envBool("ER1_VERIFY_SSL", true),

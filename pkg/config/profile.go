@@ -127,7 +127,7 @@ func (pm *ProfileManager) EnsureDefaults() error {
 	devVars := map[string]string{
 		"ER1_API_URL":        "https://127.0.0.1:8081/upload_2",
 		"ER1_API_KEY":        "democredential-er1-api-key",
-		"ER1_CONTEXT_ID":     "107677460544181387647___mft",
+		"ER1_CONTEXT_ID":     "",
 		"ER1_CONTENT_TYPE":   "YouTube-Video-Impression",
 		"ER1_UPLOAD_TIMEOUT": "600",
 		"ER1_VERIFY_SSL":     "false",
