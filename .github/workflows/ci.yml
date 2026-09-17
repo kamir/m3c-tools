@@ -298,8 +298,18 @@ jobs:
       # mitlaeuft. Ohne diesen Eintrag waere ein neuer e2e-Test auf dem Runner
       # nie gelaufen: gruen auf der Maschine des Autors, blind in der CI.
       # Genau das galt am 2026-09-15 fuer skillctl und secretctl.
+      #
+      # TestMenubar und TestAppBundle sind am 2026-09-17 dazugekommen und sind
+      # aus demselben Grund Praefixe: sie tragen dieselbe Zusage. Die drei
+      # Dateien e2e/menubar_test.go, e2e/menubar_lifecycle_test.go und
+      # e2e/menubar_icon_fallback_test.go sind //go:build darwin, laufen also
+      # nur auf diesem Runner, und sie kommen ohne Netz aus. 25 Funktionen
+      # standen null mal in dieser Liste und liefen darum in keiner CI, auch
+      # nicht auf macOS (BUILD-AUDIT-0001, Eigentuemerentscheid E-4).
+      # Gemessen am 2026-09-17 mit scripts/require-tests-ran.sh: 25 von 25
+      # ausgewertet, go test exit 0, 17s.
       - name: Run e2e tests (allow-list)
-        run: go test -v -count=1 ./e2e/ -run "TestComposite|TestBuild|TestParseTagLine|TestER1Config|TestER1Queue|TestER1EnqueueFailure|TestUploadFailure|TestRecorderEncodeWAV|TestRecorderStats|TestExportsDB|TestFilesDB|TestHashFile|TestFormatterLoader|TestPrettyPrint|TestFormatTranscript|TestFormatSnippet|TestFormatKeyValue|TestFormatTable|TestFormatSection|TestFormatStatusLine|TestTranslateFlagParsing|TestTranslateNotTranslatable|TestTranslateTranslatable|TestRetryQueue|TestRetryBackoffTiming|TestRetryBackoffCustomBase|TestRetryProcessingOrder|TestRetryPartialFailure|TestRetryMaxRetriesDropsEntry|TestRetryDropCallback|TestRetryRespectsBackoffDelay|TestRetryProcessesAfterBackoffElapsed|TestRetryGracefulShutdownOnCancel|TestRetryRunStopsOnContextCancel|TestRetryRunProcessesMultipleCycles|TestRetryEmptyQueue|TestRetryOnRetryCallback|TestTranscriptFilter|TestProxy|TestRetryRunner|TestBackgroundRetry|TestTranscriptImport|TestTranscriptList|TestTranscriptExport|TestScheduleCommand|TestStatusCommand|TestCancelCommand|TestScheduleStatusCancelWorkflow|TestCLI|TestRepoRoot|TestWriteFixture|TestFixtureDir|TestTempDataDir|TestWithEnv|TestRunCLIWithEnv|TestImporter|TestE2E_|TestQuellwaechter_"
+        run: go test -v -count=1 ./e2e/ -run "TestComposite|TestBuild|TestParseTagLine|TestER1Config|TestER1Queue|TestER1EnqueueFailure|TestUploadFailure|TestRecorderEncodeWAV|TestRecorderStats|TestExportsDB|TestFilesDB|TestHashFile|TestFormatterLoader|TestPrettyPrint|TestFormatTranscript|TestFormatSnippet|TestFormatKeyValue|TestFormatTable|TestFormatSection|TestFormatStatusLine|TestTranslateFlagParsing|TestTranslateNotTranslatable|TestTranslateTranslatable|TestRetryQueue|TestRetryBackoffTiming|TestRetryBackoffCustomBase|TestRetryProcessingOrder|TestRetryPartialFailure|TestRetryMaxRetriesDropsEntry|TestRetryDropCallback|TestRetryRespectsBackoffDelay|TestRetryProcessesAfterBackoffElapsed|TestRetryGracefulShutdownOnCancel|TestRetryRunStopsOnContextCancel|TestRetryRunProcessesMultipleCycles|TestRetryEmptyQueue|TestRetryOnRetryCallback|TestTranscriptFilter|TestProxy|TestRetryRunner|TestBackgroundRetry|TestTranscriptImport|TestTranscriptList|TestTranscriptExport|TestScheduleCommand|TestStatusCommand|TestCancelCommand|TestScheduleStatusCancelWorkflow|TestCLI|TestRepoRoot|TestWriteFixture|TestFixtureDir|TestTempDataDir|TestWithEnv|TestRunCLIWithEnv|TestImporter|TestE2E_|TestQuellwaechter_|TestMenubar|TestAppBundle|TestResolveMenuBarTitle"
 
   skillctl-race:
     name: skillctl Security Tests (-race)
@@ -501,10 +511,22 @@ jobs:
             CGO_LDFLAGS="-L$(pwd)/lib/portaudio -framework CoreAudio -framework AudioToolbox -framework AudioUnit -framework CoreFoundation -framework CoreServices" \
             go build -o build/m3c-tools-darwin-amd64 ./cmd/m3c-tools
 
+      # secretctl is the third product binary (BUILD-AUDIT-0001, owner decision
+      # E-1). Pure Go, so it needs neither PortAudio nor the universal library
+      # the m3c-tools cross-compile above depends on.
+      - name: Build secretctl (darwin, both architectures)
+        run: |
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 \
+            go build -o build/secretctl-darwin-arm64 ./cmd/secretctl
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 \
+            go build -o build/secretctl-darwin-amd64 ./cmd/secretctl
+
       - name: Verify binaries
         run: |
           file build/m3c-tools-darwin-arm64
           file build/m3c-tools-darwin-amd64
+          file build/secretctl-darwin-arm64
+          file build/secretctl-darwin-amd64
 
       - name: Build POCs
         run: |
@@ -521,6 +543,8 @@ jobs:
           path: |
             build/m3c-tools-darwin-arm64
             build/m3c-tools-darwin-amd64
+            build/secretctl-darwin-arm64
+            build/secretctl-darwin-amd64
 
   build-cross:
     name: Build Cross-Platform (Linux + Windows)
@@ -543,10 +567,19 @@ jobs:
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
             go build -o build/m3c-tools-windows-amd64.exe ./cmd/m3c-tools
 
-      - name: Verify Linux binary
+      - name: Build secretctl (linux + windows)
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go build -o build/secretctl-linux-amd64 ./cmd/secretctl
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
+            go build -o build/secretctl-windows-amd64.exe ./cmd/secretctl
+
+      - name: Verify Linux binaries
         run: |
           file build/m3c-tools-linux-amd64
           build/m3c-tools-linux-amd64 help
+          file build/secretctl-linux-amd64
+          build/secretctl-linux-amd64 help
 
       - name: Upload cross-platform artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -556,3 +589,5 @@ jobs:
           path: |
             build/m3c-tools-linux-amd64
             build/m3c-tools-windows-amd64.exe
+            build/secretctl-linux-amd64
+            build/secretctl-windows-amd64.exe

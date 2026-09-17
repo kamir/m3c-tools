@@ -3,7 +3,6 @@ package screenshot
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -174,7 +173,7 @@ end try`, tiffPath)
 	}
 
 	// Convert TIFF → PNG using sips (built-in macOS image tool).
-	if _, err := exec.LookPath("sips"); err != nil {
+	if err := requireBinary(cmd, "sips"); err != nil {
 		return fmt.Errorf("sips not found: %w (macOS only)", err)
 	}
 

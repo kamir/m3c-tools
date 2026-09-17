@@ -25,6 +25,34 @@ func (e *execCommander) Run(name string, args ...string) ([]byte, error) {
 	return cmd.CombinedOutput()
 }
 
+// pathLooker is the availability half of the Commander seam: it answers "is
+// this binary there" for whoever is going to run it.
+//
+// It is a separate, optional interface rather than a second method on
+// Commander so that adding it breaks no implementation. A Commander that does
+// not implement it is one that stands in for the binary, and asking $PATH
+// behind its back is then the wrong question: that is exactly what used to
+// happen here, and it made every injected test require a macOS host.
+type pathLooker interface {
+	LookPath(name string) error
+}
+
+// LookPath reports whether name is executable on $PATH.
+func (e *execCommander) LookPath(name string) error {
+	_, err := exec.LookPath(name)
+	return err
+}
+
+// requireBinary asks the Commander whether name is available, and says nothing
+// if the Commander is a stand-in that cannot be asked.
+func requireBinary(cmd Commander, name string) error {
+	lp, ok := cmd.(pathLooker)
+	if !ok {
+		return nil
+	}
+	return lp.LookPath(name)
+}
+
 // defaultCmd is the package-level commander used by the free functions.
 var defaultCmd Commander = &execCommander{}
 
@@ -66,8 +94,8 @@ func Capture(opts Options) (string, error) {
 // CaptureWith invokes screencapture using the provided Commander.
 // This variant enables dependency injection for testing.
 func CaptureWith(cmd Commander, opts Options) (string, error) {
-	// Verify screencapture is available.
-	if _, err := exec.LookPath("screencapture"); err != nil {
+	// Verify screencapture is available, through the seam.
+	if err := requireBinary(cmd, "screencapture"); err != nil {
 		return "", fmt.Errorf("screencapture not found: %w (macOS only)", err)
 	}
 

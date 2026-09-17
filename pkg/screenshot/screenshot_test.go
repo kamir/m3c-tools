@@ -3,6 +3,7 @@ package screenshot
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -427,6 +428,16 @@ func TestModeValues(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCaptureOutputDir(t *testing.T) {
+	// This is the one test in this file that deliberately drives the REAL
+	// screencapture path instead of the Commander seam; the seam variant of
+	// the same contract is TestCaptureWithCreatesOutputDir. Where the binary
+	// is absent there is no real path to exercise, and a failure here would
+	// report "not macOS", not "contract broken". That conflation is what made
+	// this test, and nine others, fail on a Linux runner.
+	if _, err := exec.LookPath("screencapture"); err != nil {
+		t.Skip("screencapture not on $PATH: the real-binary contract is macOS only")
+	}
+
 	tmpDir := filepath.Join(os.TempDir(), "m3c-screenshot-test-dir")
 	_ = os.RemoveAll(tmpDir)
 	defer func() { _ = os.RemoveAll(tmpDir) }()
@@ -511,4 +522,56 @@ func assertHas(t *testing.T, slice []string, val string) {
 		}
 	}
 	t.Fatalf("expected args to contain %q, got %v", val, slice)
+}
+
+// ---------------------------------------------------------------------------
+// The availability branch, which had no test at all.
+//
+// Before the lookup went through the Commander seam, the only way to reach
+// "screencapture not found" was to run on a host without screencapture: which
+// is exactly the host on which none of the other tests in this file could run.
+// The branch was therefore untestable and untested at the same time.
+// ---------------------------------------------------------------------------
+
+type denyingLookPathMock struct {
+	captureMock
+	err error
+}
+
+func (m *denyingLookPathMock) LookPath(string) error { return m.err }
+
+func TestCaptureWithReportsMissingBinary(t *testing.T) {
+	mock := &denyingLookPathMock{err: fmt.Errorf("executable file not found in $PATH")}
+
+	_, err := CaptureWith(mock, Options{
+		Mode:      Region,
+		OutputDir: t.TempDir(),
+		Silent:    true,
+	})
+	if err == nil {
+		t.Fatal("expected an error when the Commander reports the binary is missing")
+	}
+	if !strings.Contains(err.Error(), "screencapture not found") {
+		t.Errorf("expected 'screencapture not found', got: %v", err)
+	}
+	if len(mock.calls) != 0 {
+		t.Errorf("expected no command to run after the availability check failed, got %d", len(mock.calls))
+	}
+}
+
+func TestCaptureWithRunsWhenLookPathAllows(t *testing.T) {
+	mock := &denyingLookPathMock{err: nil}
+	mock.createFiles = true
+
+	if _, err := CaptureWith(mock, Options{
+		Mode:      Region,
+		OutputDir: t.TempDir(),
+		Filename:  "ok.png",
+		Silent:    true,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(mock.calls) == 0 {
+		t.Error("expected screencapture to be invoked once the check passed")
+	}
 }

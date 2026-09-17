@@ -86,6 +86,35 @@ builds:
       - goos: windows
         goarch: arm64
 
+  # --- secretctl: the third product binary (SPEC-0438). It manages the life of a
+  #     shared service secret: who holds it, whether they hold the current one,
+  #     and whether it is still accepted. It sat in build-all and in the unit
+  #     test job but in no release, so it was a product nobody could download
+  #     (BUILD-AUDIT-0001, owner decision E-1 of 2026-09-17). Pure Go, like
+  #     skillctl: measured green for linux/amd64, linux/arm64, windows/amd64,
+  #     darwin/arm64 and darwin/amd64 with CGO_ENABLED=0. ---
+  - id: secretctl
+    binary: secretctl
+    main: ./cmd/secretctl
+    env:
+      - CGO_ENABLED=0
+      - GOFLAGS=-mod=readonly
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    goos:
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      # No Windows arm64 build
+      - goos: windows
+        goarch: arm64
+
 archives:
   # goreleaser v2: `ids` replaces the deprecated `builds`, and `formats` (a list)
   # replaces the deprecated scalar `format`. Names are unchanged on purpose:
@@ -103,6 +132,14 @@ archives:
     ids:
       - skillctl
     name_template: "skillctl-{{ .Os }}-{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+  - id: secretctl-archive
+    ids:
+      - secretctl
+    name_template: "secretctl-{{ .Os }}-{{ .Arch }}"
     format_overrides:
       - goos: windows
         formats: [zip]

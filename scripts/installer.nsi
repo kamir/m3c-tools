@@ -51,6 +51,7 @@ Section "Core Files (required)" SecCore
     SetOutPath $INSTDIR
     File "..\build\windows\m3c-tools.exe"
     File "..\build\windows\skillctl.exe"
+    File "..\build\windows\secretctl.exe"
     File "..\build\windows\menubar-icon.png"
 
     ; Write init config (SPEC-0127: no API key, login issues device token)
@@ -161,6 +162,7 @@ Section "Uninstall"
     ; Remove files
     Delete "$INSTDIR\m3c-tools.exe"
     Delete "$INSTDIR\skillctl.exe"
+    Delete "$INSTDIR\secretctl.exe"
     Delete "$INSTDIR\menubar-icon.png"
     Delete "$INSTDIR\uninstall.exe"
     RMDir "$INSTDIR"

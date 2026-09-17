@@ -57,9 +57,9 @@ running agents you can actually trust in production.
 
 ## 60-second start
 
-Pick the tool you came for. `m3c-tools` and `skillctl` ship as single static binaries in
-every [release](https://github.com/kamir/m3c-tools/releases/latest); `secretctl` is built
-from source, see [Build from source](#build-from-source).
+Pick the tool you came for. All three ship as single static binaries in
+every [release](https://github.com/kamir/m3c-tools/releases/latest), and you can
+[build from source](#build-from-source) instead.
 
 ### `m3c-tools`: capture your first memory
 
@@ -174,7 +174,8 @@ that cannot say what it breaks is not a plan.
 
 **Command surface:** `inventory`, `verify`. The writing half (`new`, `stage`,
 `distribute`, `retire`) is deliberately not built yet; those verbs exit 2 and say so.
-`secretctl` is not among the release binaries: build it with `make build-secretctl`.
+`secretctl` ships in every release alongside the other two; `make build-secretctl`
+builds it from source.
 See the [secretctl reference](docs/v2/entwickler/secretctl.md).
 
 ---
@@ -325,7 +326,7 @@ git clone https://github.com/kamir/m3c-tools.git && cd m3c-tools
 
 make build           # build the m3c-tools CLI → ./build/m3c-tools
 make build-skillctl  # build skillctl
-make build-secretctl # build secretctl (not among the release binaries)
+make build-secretctl # build secretctl
 make build-all       # build every command in cmd/
 
 make install        # macOS: CLI + M3C-Tools.app + data dir + permission setup
