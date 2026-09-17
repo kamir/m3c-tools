@@ -44,6 +44,14 @@ type Harness struct {
 	// on subsequent deliveries (the partial-failure property). Nil skips
 	// the property.
 	FailEvent func(t *testing.T, eventID string)
+
+	// Encode, when non-nil, renders the payload bytes for one suite event
+	// id. A harness whose sink derives the event id from the payload
+	// itself (the er1 ingest contract parses the signed envelope) needs
+	// this; the default is opaque bytes. Added with T-01; the calibration
+	// violators run on the default, so the planted-hit proofs are
+	// unchanged.
+	Encode func(eventID string) []byte
 }
 
 // RunConformance runs every applicable property against the harness.
@@ -118,10 +126,15 @@ func unsetAmbientEnv(t *testing.T) {
 	}
 }
 
-func batchOf(ids ...string) []Record {
+// batch builds the suite's records, through Harness.Encode when set.
+func (h Harness) batch(ids ...string) []Record {
 	b := make([]Record, 0, len(ids))
 	for _, id := range ids {
-		b = append(b, Record{EventID: id, Payload: []byte("payload-of-" + id)})
+		payload := []byte("payload-of-" + id)
+		if h.Encode != nil {
+			payload = h.Encode(id)
+		}
+		b = append(b, Record{EventID: id, Payload: payload})
 	}
 	return b
 }
@@ -130,7 +143,7 @@ func batchOf(ids ...string) []Record {
 // and every reported id was part of the batch.
 func CheckResultCoherent(t *testing.T, h Harness) error {
 	b := h.New(t)
-	batch := batchOf("ev-1", "ev-2", "ev-3")
+	batch := h.batch("ev-1", "ev-2", "ev-3")
 	res, err := b.Deliver(context.Background(), batch)
 	if err != nil {
 		return fmt.Errorf("Deliver failed on a healthy sink: %w", err)
@@ -173,7 +186,7 @@ func CheckResultCoherent(t *testing.T, h Harness) error {
 // drain enforces the second lock.
 func CheckAckHonesty(t *testing.T, h Harness) error {
 	b := h.New(t)
-	res, err := b.Deliver(context.Background(), batchOf("ev-honesty"))
+	res, err := b.Deliver(context.Background(), h.batch("ev-honesty"))
 	if err != nil {
 		return fmt.Errorf("Deliver failed on a healthy sink: %w", err)
 	}
@@ -190,7 +203,7 @@ func CheckAckHonesty(t *testing.T, h Harness) error {
 // over (REQ-4.5: redaction ran before the seam, a backend never mutates).
 func CheckPayloadVerbatim(t *testing.T, h Harness) error {
 	b := h.New(t)
-	batch := batchOf("ev-verbatim")
+	batch := h.batch("ev-verbatim")
 	if _, err := b.Deliver(context.Background(), batch); err != nil {
 		return fmt.Errorf("Deliver failed on a healthy sink: %w", err)
 	}
@@ -208,7 +221,7 @@ func CheckPayloadVerbatim(t *testing.T, h Harness) error {
 // an interrupted drain can always retry).
 func CheckRedeliveryIsNoOp(t *testing.T, h Harness) error {
 	b := h.New(t)
-	batch := batchOf("ev-replay")
+	batch := h.batch("ev-replay")
 	if _, err := b.Deliver(context.Background(), batch); err != nil {
 		return fmt.Errorf("first Deliver failed: %w", err)
 	}
@@ -233,7 +246,7 @@ func CheckRedeliveryIsNoOp(t *testing.T, h Harness) error {
 func CheckTamperedAckNeverSyncs(t *testing.T, h Harness) error {
 	b := h.New(t)
 	h.Tamper(t)
-	res, err := b.Deliver(context.Background(), batchOf("ev-tamper"))
+	res, err := b.Deliver(context.Background(), h.batch("ev-tamper"))
 	if err != nil {
 		// A batch-level error is acceptable fail-closed behavior;
 		// Synced must still be empty.
@@ -257,7 +270,7 @@ func CheckTamperedAckNeverSyncs(t *testing.T, h Harness) error {
 func CheckPartialFailureIsPerEvent(t *testing.T, h Harness) error {
 	b := h.New(t)
 	h.FailEvent(t, "ev-bad")
-	res, err := b.Deliver(context.Background(), batchOf("ev-good", "ev-bad"))
+	res, err := b.Deliver(context.Background(), h.batch("ev-good", "ev-bad"))
 	if err != nil {
 		return fmt.Errorf("batch-level error for a single failing event: %w", err)
 	}
