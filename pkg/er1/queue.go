@@ -162,6 +162,39 @@ func EnqueueFailure(queuePath string, videoID string, payload *UploadPayload, ta
 	return &entry
 }
 
+// PayloadFromQueueEntry reconstructs an upload from the files named in a queue
+// entry. Missing files stay nil so Upload can insert its placeholders; a missing
+// transcript becomes a short marker so the retry is still a valid multipart POST.
+func PayloadFromQueueEntry(entry QueueEntry) *UploadPayload {
+	payload := &UploadPayload{
+		TranscriptFilename: entry.TranscriptPath,
+		AudioFilename:      entry.AudioPath,
+		ImageFilename:      entry.ImagePath,
+		Tags:               entry.Tags,
+		CurrentTime:        entry.CurrentTime,
+	}
+	if entry.TranscriptPath != "" {
+		if data, err := os.ReadFile(entry.TranscriptPath); err == nil {
+			payload.TranscriptData = data
+		} else {
+			payload.TranscriptData = []byte(fmt.Sprintf("Retry upload for %s", entry.ID))
+		}
+	} else {
+		payload.TranscriptData = []byte(fmt.Sprintf("Retry upload for %s", entry.ID))
+	}
+	if entry.AudioPath != "" {
+		if data, err := os.ReadFile(entry.AudioPath); err == nil {
+			payload.AudioData = data
+		}
+	}
+	if entry.ImagePath != "" {
+		if data, err := os.ReadFile(entry.ImagePath); err == nil {
+			payload.ImageData = data
+		}
+	}
+	return payload
+}
+
 func (q *Queue) load() {
 	data, err := os.ReadFile(q.path)
 	if err != nil {
