@@ -114,7 +114,7 @@ func (a *API) Fetch(videoID string, languages []string, preserveFormatting bool)
 		return nil, err
 	}
 
-	result, err := a.fetchFromInfo(videoID, info)
+	result, err := a.fetchFromInfo(videoID, info, preserveFormatting)
 	if err != nil {
 		log.Printf("[transcript] FAIL video=%s language=%s error=%v elapsed=%s",
 			videoID, info.LanguageCode, err, time.Since(start))
@@ -194,7 +194,7 @@ func (a *API) FetchThumbnail(videoID string) ([]byte, error) {
 }
 
 // fetchFromInfo fetches the actual caption content from a TranscriptInfo.
-func (a *API) fetchFromInfo(videoID string, info *TranscriptInfo) (*FetchedTranscript, error) {
+func (a *API) fetchFromInfo(videoID string, info *TranscriptInfo, preserveFormatting bool) (*FetchedTranscript, error) {
 	// Check for PoToken requirement (YouTube anti-bot measure)
 	if strings.Contains(info.BaseURL, "&exp=xpe") {
 		return nil, fmt.Errorf("[%s] PoToken required: YouTube requires proof-of-origin for this video", videoID)
@@ -205,7 +205,7 @@ func (a *API) fetchFromInfo(videoID string, info *TranscriptInfo) (*FetchedTrans
 		return nil, err
 	}
 
-	snippets, err := ParseCaptionXML(xmlData)
+	snippets, err := ParseCaptionXMLFormatting(xmlData, preserveFormatting)
 	if err != nil {
 		return nil, err
 	}
