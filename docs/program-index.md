@@ -22,18 +22,18 @@ See also: [Service Index](service-index) (what stays running) ·
 | **m3c-tools** | `cmd/m3c-tools/` | `make build` | The main Multi-Modal-Memory CLI. Also launches the macOS menu bar app with `--menubar`. |
 | **skillctl** | `cmd/skillctl/` | `make build-skillctl` | The skill **trust** CLI: sign, admit, verify, revoke, audit skills (offline-verifiable). |
 | **skillctl-demo** | `cmd/skillctl-demo/` | `make build-skillctl-demo` | Self-contained offline demo that shows a CISO the trust plane *containing an attack live* (scenarios S1/S2A/S5, real exit codes). |
-| **secretctl** | `cmd/secretctl/` | `go build ./cmd/secretctl` | Secret-rotation CLI (SPEC-0438), the reading half: `inventory` says WHERE a value sits and WHETHER it is current, `verify` probes whether a service still accepts it; it never prints a value, comparisons run over fingerprints. |
+| **secretctl** | `cmd/secretctl/` | `make build-secretctl` | Secret-rotation CLI (SPEC-0438), the reading half: `inventory` says WHERE a value sits and WHETHER it is current, `verify` probes whether a service still accepts it; it never prints a value, comparisons run over fingerprints. |
 | **thinking-engine** | `cmd/thinking-engine/` | `make thinking-build` | Per-user cognitive runtime (SPEC-0167). Runs as a service: see [Service Index](service-index). |
 | **poc-menubar** | `cmd/poc-menubar/` | `make build-all` | Reference POC: macOS menu bar via `menuet`. |
 | **poc-recorder** | `cmd/poc-recorder/` | `make build-all` | Reference POC: PortAudio microphone recording. |
 | **poc-transcript** | `cmd/poc-transcript/` | `make build-all` | Reference POC: YouTube transcript fetch (core library port). |
 | **poc-whisper** | `cmd/poc-whisper/` | `make build-all` | Reference POC: Whisper transcription via CLI subprocess. |
 | **skillctl-sim** | `cmd/skillctl-sim/` | `make build-skillctl-sim` | Trust-plane simulation: a generated corpus of multi-principal scenarios, each with a SPEC-derived prediction, run against the real `skillctl` binary and a real git registry. `make sim`. |
-| **docaudit** | `cmd/docaudit/` | `go run ./cmd/docaudit` | Blocking gate: the CLI flag surface (AST-extracted) against its manual, in both directions, plus every dispatched verb against the binary's own `--help`. |
-| **exitaudit** | `cmd/exitaudit/` | `go run ./cmd/exitaudit` | Blocking gate: every exit code cited in the manual and in [CLI-VERBS](v2/referenz/CLI-VERBS) against `pkg/skillctl/exitcode`, plus the `pull` gate read as code. Reports how many verb rows it could NOT compare. |
-| **verbaudit** | `cmd/verbaudit/` | `go run ./cmd/verbaudit` | Blocking gate: the dispatched `skillctl` verbs against the allocation table [CLI-VERBS](v2/referenz/CLI-VERBS) (FR-0113). |
-| **structural** | `cmd/structural/` | `go run ./cmd/structural` | Inventories the decisions in the trust path and states the MC/DC obligation each one carries. Produces the obligation, not a coverage measurement. |
-| **release-evidence** | `cmd/release-evidence/` | `go run ./cmd/release-evidence` | Assembles the Release Evidence Bundle (the "Trust Binder"): an index that ties a set of release artifacts to a commit and a mandatory gate-set. |
+| **docaudit** | `cmd/docaudit/` | `make build-gates` | Blocking gate: the CLI flag surface (AST-extracted) against its manual, in both directions, plus every dispatched verb against the binary's own `--help`. |
+| **exitaudit** | `cmd/exitaudit/` | `make build-gates` | Blocking gate: every exit code cited in the manual and in [CLI-VERBS](v2/referenz/CLI-VERBS) against `pkg/skillctl/exitcode`, plus the `pull` gate read as code. Reports how many verb rows it could NOT compare. |
+| **verbaudit** | `cmd/verbaudit/` | `make build-gates` | Blocking gate: the dispatched `skillctl` verbs against the allocation table [CLI-VERBS](v2/referenz/CLI-VERBS) (FR-0113). |
+| **structural** | `cmd/structural/` | `make build-gates` | Inventories the decisions in the trust path and states the MC/DC obligation each one carries. Produces the obligation, not a coverage measurement. |
+| **release-evidence** | `cmd/release-evidence/` | `make build-gates` | Assembles the Release Evidence Bundle (the "Trust Binder"): an index that ties a set of release artifacts to a commit and a mandatory gate-set. |
 
 > The four `poc-*` binaries are **validated reference implementations**, not
 > production code (see `CLAUDE.md`). The last four rows are the repository's own

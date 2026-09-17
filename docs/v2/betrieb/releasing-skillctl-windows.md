@@ -5,6 +5,16 @@ title: Releasing skillctl (Windows rollout runbook)
 
 # Releasing skillctl: Windows rollout runbook
 
+> **What this page is, as of 2026-09-16.** It is the record of ONE cut, the
+> Windows rollout of `skillctl/v0.3.1` (released 2026-08-27). Every version
+> number in its prose names that release and is left standing on purpose: a
+> runbook rewritten to a version it was never run against is a worse document
+> than a dated one. The procedure in force for the current line is
+> [releasing.md](releasing.md), and `skillctl version` answers what your build
+> is. The pinned one-liners in Step 4 are the exception: they are kept current
+> by [`pin-bump.yml`](../../../.github/workflows/pin-bump.yml) after every published
+> release, so they point at the newest reviewed commit, not at the v0.3.1 one.
+
 Operational runbook for the KuP **skillctl Windows-Rollout**. M1 (green windows-gate +
 signed release path) and M2 (PowerShell one-click installer + docs + smoke) landed via
 **PR #87** (merged to `master`). This page captures the remaining **human-gated** steps to

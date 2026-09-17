@@ -20,8 +20,11 @@ its **own** workflow. Never assume they move together.
 | **Product** (`m3c-tools` + bundled binaries) | `vX.Y.Z` | [`.github/workflows/release.yml`](../../../.github/workflows/release.yml) | macOS universal (arm64+amd64), Linux amd64/arm64, Windows amd64, the NSIS `M3C-Tools-Setup.exe`, `checksums.txt` + **cosign bundle** + **SLSA provenance** |
 | **skillctl** (the signed trust CLI) | `skillctl/vX.Y.Z` | [`.github/workflows/skillctl-release.yml`](../../../.github/workflows/skillctl-release.yml) | the 4 platform `skillctl` binaries + `.exe`, `install.sh`/`install.ps1`, `SHA256SUMS` + **cosign bundle** + **ed25519 fallback sig**, **CycloneDX SBOM**, SLSA provenance: published as a **draft** |
 
-Example from the last cut: product `v2.11.0` and `skillctl/v0.4.0` were released
-from the **same** commit but as two separate tags.
+Two worked examples, both dated so they stay readable once they are no longer the
+most recent cut. On 2026-09-03 the product tag `v2.11.0` and `skillctl/v0.4.0` sat
+on the **same** commit (`f43eb49`), as two separate tags. On 2026-09-10 they did
+**not**: `skillctl/v0.5.0` went on `1eeefc8` and `v2.12.0` two commits later on
+`6f939d3`. Same tree, one release each, different heads.
 
 ---
 

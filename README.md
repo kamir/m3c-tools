@@ -174,7 +174,7 @@ that cannot say what it breaks is not a plan.
 
 **Command surface:** `inventory`, `verify`. The writing half (`new`, `stage`,
 `distribute`, `retire`) is deliberately not built yet; those verbs exit 2 and say so.
-`secretctl` is not among the release binaries: build it from the source tree.
+`secretctl` is not among the release binaries: build it with `make build-secretctl`.
 See the [secretctl reference](docs/v2/entwickler/secretctl.md).
 
 ---
@@ -323,10 +323,10 @@ Requires **Go 1.25+**. The macOS menu-bar GUI additionally needs `portaudio` + `
 ```bash
 git clone https://github.com/kamir/m3c-tools.git && cd m3c-tools
 
-make build          # build the m3c-tools CLI → ./build/m3c-tools
-make build-all      # build the CLI + POC binaries
-go build -o build/skillctl ./cmd/skillctl   # build skillctl
-go build -o build/secretctl ./cmd/secretctl # build secretctl (not in the release)
+make build           # build the m3c-tools CLI → ./build/m3c-tools
+make build-skillctl  # build skillctl
+make build-secretctl # build secretctl (not among the release binaries)
+make build-all       # build every command in cmd/
 
 make install        # macOS: CLI + M3C-Tools.app + data dir + permission setup
 make menubar        # macOS: build + launch the menu bar app (dev mode)
