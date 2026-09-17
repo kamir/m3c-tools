@@ -85,16 +85,17 @@ if [ -z "$REFS" ]; then
 fi
 
 BLOCKERS=""
+block() { BLOCKERS="${BLOCKERS:+$BLOCKERS, }$1"; }
 while IFS= read -r ref; do
   if [ "$ref" = "$PR_NUM" ]; then
     echo "  #$ref SELBSTBEZUG"
-    BLOCKERS="$BLOCKERS #$ref (verweist auf sich selbst)"
+    block "#$ref (verweist auf sich selbst)"
     continue
   fi
   if ! STATE="$(gh pr view "$ref" --repo "$REPO" --json state --jq '.state' 2>&1)"; then
     echo "  #$ref NICHT AUFLOESBAR"
     printf '%s\n' "$STATE" | sed 's/^/    gh: /'
-    BLOCKERS="$BLOCKERS #$ref (kein Pull Request dieser Nummer in $REPO, oder nicht lesbar)"
+    block "#$ref (kein Pull Request dieser Nummer in $REPO, oder nicht lesbar)"
     continue
   fi
   case "$STATE" in
@@ -103,19 +104,19 @@ while IFS= read -r ref; do
       ;;
     OPEN)
       echo "  #$ref OPEN"
-      BLOCKERS="$BLOCKERS #$ref (noch OPEN)"
+      block "#$ref (noch OPEN)"
       ;;
     *)
       # Ein Zustand, den dieses Skript nicht kennt, ist kein erfuellter
       # Zustand: fail-closed statt raten.
       echo "  #$ref UNBEKANNTER ZUSTAND '$STATE'"
-      BLOCKERS="$BLOCKERS #$ref (unbekannter Zustand '$STATE')"
+      block "#$ref (unbekannter Zustand '$STATE')"
       ;;
   esac
 done <<< "$REFS"
 
 if [ -n "$BLOCKERS" ]; then
-  echo "check-pr-deps: PR #$PR_NUM ist blockiert durch$BLOCKERS"
+  echo "check-pr-deps: PR #$PR_NUM ist blockiert durch $BLOCKERS"
   echo "Erst mergen (oder die Depends-on-Zeile im Body korrigieren), dann"
   echo "laeuft das Tor beim naechsten Body- oder Branch-Ereignis neu."
   exit 1
