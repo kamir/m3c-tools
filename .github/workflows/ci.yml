@@ -266,7 +266,7 @@ jobs:
 
   test:
     name: Unit Tests
-    runs-on: [self-hosted, Linux, X64, master2]
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -283,15 +283,10 @@ jobs:
       # ./cmd/skillctl/... (skillctl-race job) were exercised under -race.
       # ./cmd/secretctl/... added by the PR #319 re-gate (R-CI/RG-4): its
       # package tests ran on no CI job at all before this line named them.
-      - name: Build skillctl for real-runner tests
-        run: |
-          mkdir -p build
-          rm -f build/skillctl build/skillctl.exe
-          go build -o build/skillctl ./cmd/skillctl
+      - name: Install PortAudio
+        run: brew install portaudio
 
       - name: Run unit tests (-race, ./pkg/... + m3c-tools/skillctl-demo cmds)
-        env:
-          M3C_KATA_SKILLCTL: ${{ github.workspace }}/build/skillctl
         run: go test -race -count=1 ./pkg/... ./cmd/m3c-tools/... ./cmd/skillctl-demo/... ./cmd/secretctl/...
 
       # Die Liste ist eine Positivliste, weil einige e2e-Tests Netz und
@@ -315,6 +310,28 @@ jobs:
       # ausgewertet, go test exit 0, 17s.
       - name: Run e2e tests (allow-list)
         run: go test -v -count=1 ./e2e/ -run "TestComposite|TestBuild|TestParseTagLine|TestER1Config|TestER1Queue|TestER1EnqueueFailure|TestUploadFailure|TestRecorderEncodeWAV|TestRecorderStats|TestExportsDB|TestFilesDB|TestHashFile|TestFormatterLoader|TestPrettyPrint|TestFormatTranscript|TestFormatSnippet|TestFormatKeyValue|TestFormatTable|TestFormatSection|TestFormatStatusLine|TestTranslateFlagParsing|TestTranslateNotTranslatable|TestTranslateTranslatable|TestRetryQueue|TestRetryBackoffTiming|TestRetryBackoffCustomBase|TestRetryProcessingOrder|TestRetryPartialFailure|TestRetryMaxRetriesDropsEntry|TestRetryDropCallback|TestRetryRespectsBackoffDelay|TestRetryProcessesAfterBackoffElapsed|TestRetryGracefulShutdownOnCancel|TestRetryRunStopsOnContextCancel|TestRetryRunProcessesMultipleCycles|TestRetryEmptyQueue|TestRetryOnRetryCallback|TestTranscriptFilter|TestProxy|TestRetryRunner|TestBackgroundRetry|TestTranscriptImport|TestTranscriptList|TestTranscriptExport|TestScheduleCommand|TestStatusCommand|TestCancelCommand|TestScheduleStatusCancelWorkflow|TestCLI|TestRepoRoot|TestWriteFixture|TestFixtureDir|TestTempDataDir|TestWithEnv|TestRunCLIWithEnv|TestImporter|TestE2E_|TestQuellwaechter_|TestMenubar|TestAppBundle|TestResolveMenuBarTitle"
+
+  linux-unit-master2:
+    name: Linux Unit Tests (master2)
+    runs-on: [self-hosted, Linux, X64, master2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.26.6"
+
+      - name: Build skillctl for real-runner tests
+        run: |
+          mkdir -p build
+          rm -f build/skillctl build/skillctl.exe
+          go build -o build/skillctl ./cmd/skillctl
+
+      - name: Run Linux unit tests (-race)
+        env:
+          M3C_KATA_SKILLCTL: ${{ github.workspace }}/build/skillctl
+        run: go test -race -count=1 ./pkg/... ./cmd/m3c-tools/... ./cmd/skillctl-demo/... ./cmd/secretctl/...
+
 
   skillctl-race:
     name: skillctl Security Tests (-race)
