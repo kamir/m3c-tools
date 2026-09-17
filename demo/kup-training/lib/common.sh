@@ -23,9 +23,22 @@ LOG_DIR="$ARTIFACTS_DIR/logs"
 
 mkdir -p "$KEYS_DIR" "$BUNDLES_DIR" "$TRUST_DIR" "$INSTALL_HOME/.claude" "$LOG_DIR"
 
-# Identities for the demo
-MIRKO_ID="${MIRKO_ID:-id:bob@m3c}"
-ERIC_ID="${ERIC_ID:-id:alice@kup}"
+# Identitaeten der Uebung, benannt nach der ROLLE statt nach der Person.
+#
+# Vorher trugen die Variablen Personennamen, waehrend ihre WERTE die
+# Beispielnamen enthielten: der Name sagte das eine, der Wert das andere, und
+# wer den Namen las, wusste nicht, wen er vor sich hatte.
+#
+# Eine Rolle ueberlebt jede Umbenennung des Beispielnamens, denn sie beschreibt,
+# WAS jemand in dieser Kette tut, und das aendert sich nicht. Das raeumt auch die
+# Doppeldeutigkeit aus: "Alice" ist in dieser Uebung die Empfaengerin, in
+# tutorial-szenario-02 die Freigeberin. AUTHOR und CONSUMER sind es nie beide.
+#
+# Kein Rueckfall auf die alten Variablennamen: der haette genau die
+# Mehrdeutigkeit konserviert, die hier weggeraeumt wird, und Personennamen sind
+# im oeffentlichen Baum ohnehin nicht zulaessig (scripts/check-no-real-names.sh).
+AUTHOR_ID="${AUTHOR_ID:-id:bob@m3c}"
+CONSUMER_ID="${CONSUMER_ID:-id:alice@kup}"
 REVIEWER_ID="${REVIEWER_ID:-id:reviewer@m3c}"
 
 # Skill under test

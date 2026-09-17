@@ -64,7 +64,7 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		emitInstalled    = fs.Bool("emit-installed", false, "After install, POST a BundleInstalledEvent so the other machine sees the install.")
 		installSkillsDir = fs.String("skills-dir", "", "Where to install skills. Default: ~/.claude/skills.")
 		keyPath          = fs.String("key", defaultSelfKeyPath(), "[--emit-installed] Signing key for the BundleInstalledEvent envelope.")
-		identity         = fs.String("identity", "id:bob@m3c", "[--emit-installed] Author/registry identity stamped into the install event.")
+		identity         = fs.String("identity", "", "[--emit-installed] Identity stamped into the install event (e.g. id:you@org). Required with --emit-installed; deliberately no default.")
 		noCheckpoint     = fs.Bool("no-checkpoint", false, "Do not append a SPEC-0213 session checkpoint after install.")
 	)
 	fs.Usage = func() {
@@ -83,6 +83,18 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 	// "agnet" would silently pull everything the help text promised to filter.
 	if *kindFlag != "" && !skillbundle.ValidKind(*kindFlag) {
 		fmt.Fprintf(stderr, "pull: bad --kind %q (want %q or %q)\n", *kindFlag, skillbundle.KindSkill, skillbundle.KindAgent)
+		return 2
+	}
+	// Wie bei publish: die Identitaet wird nicht geraten. Ein plausibler
+	// Vorgabewert stempelt sonst den Namen einer anderen Person in ein
+	// signiertes Ereignis, und der faellt erst der Gegenseite auf.
+	// Frueh geprueft, vor jedem Schreibzugriff: sonst installiert
+	// `pull --install --emit-installed` erst und scheitert dann mit einem
+	// Verwendungsfehler, ohne Checkpoint.
+	if *emitInstalled && strings.TrimSpace(*identity) == "" {
+		fmt.Fprintln(stderr, "pull: --emit-installed braucht --identity.")
+		fmt.Fprintln(stderr, "  Das Installationsereignis sagt, WER installiert hat, und wird signiert.")
+		fmt.Fprintln(stderr, "  Beispiel: --identity id:you@your-org")
 		return 2
 	}
 
@@ -302,6 +314,8 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if *emitInstalled {
+		// Die Identitaetspruefung steht im Fruehpruefungsblock hinter fs.Parse,
+		// vor jedem Schreibzugriff.
 		if artifact.SchemeOf(*registryName) != "er1" {
 			// Route the BundleInstalledEvent to the ACTIVE backend (git/GitLab),
 			// not silently into ER1: cross-machine install visibility on the same
