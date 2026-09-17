@@ -175,6 +175,7 @@ that cannot say what it breaks is not a plan.
 **Command surface:** `inventory`, `verify`. The writing half (`new`, `stage`,
 `distribute`, `retire`) is deliberately not built yet; those verbs exit 2 and say so.
 `secretctl` is not among the release binaries: build it from the source tree.
+See the [secretctl reference](docs/v2/entwickler/secretctl.md).
 
 ---
 
