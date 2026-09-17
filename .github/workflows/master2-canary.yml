@@ -25,11 +25,25 @@ name: Master2 Runner Canary
 # only offers that trigger from the default branch, so the canary could not
 # have run on the pull request that added it.
 
+# TRIGGER: workflow_dispatch ONLY, since the migration went green.
+#
+# While it was needed it also ran on `pull_request`, because workflow_dispatch
+# is offered from the default branch alone and the canary could not otherwise
+# have run on the pull request that introduced it. That is over: the three jobs
+# it was measuring for now run on master2 themselves.
+#
+# Leaving it on `pull_request` would make it a regression rather than a tool.
+# There is ONE self-hosted runner, so the canary does not run beside the three
+# routed jobs, it runs INSTEAD of them and they queue behind it. Measured on run
+# 35229000337: "go mod tidy is a no-op", "CLI/manual consistency (docaudit)" and
+# "Build Cross-Platform (Linux + Windows)" all sat queued while this workflow
+# held master2, and all three are required contexts on master.
+#
+# It stays in the tree because the question it answers ("does that machine still
+# have the toolchain, and is it still faster than a hosted runner") comes back
+# every time somebody proposes moving another job. Whether it is deleted outright
+# belongs to the workflow consolidation that follows this pull request.
 on:
-  pull_request:
-    paths:
-      - ".github/workflows/**"
-      - "scripts/ci-matrix.py"
   workflow_dispatch:
 
 concurrency:
