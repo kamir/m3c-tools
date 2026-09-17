@@ -65,8 +65,14 @@ build-skillctl:
 	@echo "Building skillctl..."
 	go build -ldflags="$(GO_LDFLAGS)" -o $(BUILD_DIR)/skillctl ./cmd/skillctl
 
-# Build the skillctl-demo tool. It shells out to skillctl (auto-resolved from
-# ./build/skillctl first), so build that too.
+# Build secretctl (SPEC-0438). No $(GO_LDFLAGS) here, deliberately: the command
+# declares no main.version, so stamping one would be a line that looks like it
+# does something. Give it a version.go first, then add the flags.
+.PHONY: build-secretctl
+build-secretctl:
+	@echo "Building secretctl..."
+	go build -o $(BUILD_DIR)/secretctl ./cmd/secretctl
+
 # Build the trust-plane simulation. It drives the real skillctl, so it needs one.
 .PHONY: build-skillctl-sim
 build-skillctl-sim: build-skillctl
@@ -111,15 +117,35 @@ sim-deep: build-skillctl-sim
 sim-theory: build-skillctl-sim
 	$(BUILD_DIR)/skillctl-sim theory -t 2
 
+# Build the skillctl-demo tool. It shells out to skillctl (auto-resolved from
+# ./build/skillctl first), so build that too.
 .PHONY: build-skillctl-demo
 build-skillctl-demo: build-skillctl
 	@echo "Building skillctl-demo..."
 	go build -ldflags="$(GO_LDFLAGS)" -o $(BUILD_DIR)/skillctl-demo ./cmd/skillctl-demo
 	@echo "Built $(BUILD_DIR)/skillctl-demo, run: $(BUILD_DIR)/skillctl-demo (or --selftest)"
 
-# Build all commands (including POCs)
+# The gate binaries. In CI and in scripts/check-docs.sh they run as
+# `go run ./cmd/<name>`, so nothing needs them on disk; the target exists so
+# that build-all can mean all, and so that a gate under development can be
+# compiled once and run many times. No $(GO_LDFLAGS): none of them carries a
+# main.version.
+.PHONY: build-gates
+build-gates:
+	@echo "Building the gate binaries..."
+	go build -o $(BUILD_DIR)/docaudit ./cmd/docaudit
+	go build -o $(BUILD_DIR)/exitaudit ./cmd/exitaudit
+	go build -o $(BUILD_DIR)/verbaudit ./cmd/verbaudit
+	go build -o $(BUILD_DIR)/structural ./cmd/structural
+	go build -o $(BUILD_DIR)/release-evidence ./cmd/release-evidence
+
+# Build every command in cmd/. "All" is a promise, so it is checked: the gate
+# `make check-make-targets` fails when a cmd/ directory is not reachable from
+# here. Before 2026-09-17 this target reached 7 of the 15, and two of the
+# missing eight (skillctl-sim, thinking-engine) HAD targets that simply hung
+# off no chain, which is why the gate reads the expansion and not the file.
 .PHONY: build-all
-build-all: build build-skillctl build-skillctl-demo
+build-all: build build-skillctl build-secretctl build-skillctl-demo build-skillctl-sim build-gates thinking-build
 	@echo "Building POCs..."
 	go build -o $(BUILD_DIR)/poc-transcript ./cmd/poc-transcript
 	go build -o $(BUILD_DIR)/poc-menubar ./cmd/poc-menubar
@@ -544,9 +570,9 @@ checksums:
 # gate here gives it a second, independent place to be run from, so the local
 # one-liner still exercises it if the CI step ever goes missing.
 .PHONY: ci
-ci: vet lint check-emdash check-gofmt check-redirect-guard check-required-checks check-docpages test-unit build
+ci: vet lint check-emdash check-gofmt check-redirect-guard check-required-checks check-docpages check-make-targets test-unit build
 	@echo ""
-	@echo "CI passed: vet ✓  lint ✓  prose ✓  gofmt ✓  redirect-guard ✓  required-checks ✓  docpages ✓  test ✓  build ✓"
+	@echo "CI passed: vet ✓  lint ✓  prose ✓  gofmt ✓  redirect-guard ✓  required-checks ✓  docpages ✓  make-targets ✓  test ✓  build ✓"
 
 # Doku-Seiten-Tor: jede erzeugte Seite unter docs/pages/ und docs/v2/pages/
 # traegt eine Kopie ihrer Markdown-Quelle. Dieses Ziel erzeugt jede neu und
@@ -560,6 +586,11 @@ check-docpages:
 .PHONY: check-emdash
 check-emdash:
 	@./scripts/check-no-emdash.sh
+
+# Build-coverage gate: every cmd/ directory is reachable from `make build-all`.
+.PHONY: check-make-targets
+check-make-targets:
+	@./scripts/check-makefile-targets.sh
 
 # Format gate: refuse a tree that gofmt would change (AUDIT-0001 Befund 1.11).
 # Fix with: ./scripts/check-gofmt.sh --fix
@@ -738,8 +769,10 @@ help:
 	@echo "  check-deps     Verify required dependencies are installed"
 	@echo "  build          Build the main CLI binary"
 	@echo "  build-skillctl Build skillctl skill inventory scanner"
+	@echo "  build-secretctl Build secretctl, the secret-registry CLI (SPEC-0438)"
 	@echo "  build-skillctl-demo Build the offline skillctl-demo (+ skillctl)"
-	@echo "  build-all      Build all binaries (CLI + POCs + skillctl + demo)"
+	@echo "  build-gates    Build the gate binaries (docaudit, exitaudit, verbaudit, structural, release-evidence)"
+	@echo "  build-all      Build EVERY command in cmd/ (checked by check-make-targets)"
 	@echo "  build-app      Build macOS .app bundle"
 	@echo "  dmg            Build macOS DMG installer LOCALLY (dev only, never a release asset)"
 	@echo "  setup-venv     Create Python venv and install whisper"
@@ -757,6 +790,7 @@ help:
 	@echo "  clean          Remove build artifacts"
 	@echo "  code-review    Run pre-release code review checks"
 	@echo "  check-docs     Check documentation consistency with implementation"
+	@echo "  check-make-targets  Verify every cmd/ is reachable from build-all"
 	@echo "  release        Tag origin/master; bump level DERIVED from commits (code-review + check-docs first)"
 	@echo "  release-auto   Same derivation without the pre-checks"
 	@echo "  release-patch  Tag origin/master with a patch version bump"

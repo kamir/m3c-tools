@@ -15,6 +15,94 @@ version is ldflags-stamped (`skillctl version`). Release tags: `skillctl/vX.Y.Z`
   a verbatim move ships half-extracted shared state, so it needs a dedicated
   refactor pass, not a release-eve edit.
 
+## [skillctl/v0.5.1], 2026-09-16, the skill-env report, and gates that stop reporting green on nothing
+56 commits after `skillctl/v0.5.0`.
+
+### Added
+- **`skillctl envreport`** (SPEC-0428) collects what `audit` sees into a
+  **skill-env report**: one dated statement of what a single environment held at
+  one moment. The body is the SPEC-0351 §5.1 `posture.snapshot` payload,
+  verbatim. Four computations ride on it (coverage, conformance, comparison,
+  development), and development names four classes instead of one "changed":
+  added, gone, version changed, trust state changed.
+  - **A dry run is the default.** Without `--schreiben` nothing is stored, and
+    the boundaries run in the dry run too: a dry run that knows different rules
+    than the real thing proves nothing about the real thing.
+  - Consent kind, consent evidence and a retention deadline are **required on
+    the command line**, with no defaults.
+  - The environment address carries the **host hashed**, salted with the tenant,
+    and there is deliberately no function that resolves it back.
+  - The report is a **signed statement**: the device key signs it over the same
+    canonicalization and envelope field the registry already uses, and the read
+    path verifies rather than believes.
+  - The ER1 store is **append-only** (an already used `(env, seq)` is refused,
+    never overwritten), and the verb **reads the report back** after writing.
+  - A cross-**person** comparison sits behind its own authorization, which has to
+    name the people, a purpose, an issuer and an end. Without a covering one the
+    call returns an error and zero data.
+  - Exit codes `0` / `1` / `2`, registered in `docs/CLI-VERBS.md`.
+
+### Changed
+- **`pull`: a zero match is no longer a success (BUG-0254).** It now exits `7`
+  (`no_matches`) instead of printing "done" and exiting `0`. Wired into
+  automation, the old behaviour went green forever exactly when it checked
+  nothing. The same fix gives `--er1-context` the owner prefix that `publish` and
+  `room` had used all along, so the documented invocation matches something;
+  `docs/acceptance-skillctl-lifecycle.md` had described that prefix since
+  BUG-0165 while the pull path never did it.
+- **`audit` finds the bundles that are actually on disk (BUG-0253).** The trust
+  scanner read one bundle spelling (`<name>-<version>.skb`) while
+  `publish --pack`, `export-bundle` and `export-kit` write another
+  (`<name>@<version>.skb`), and it looked beside the skill folder while `install`
+  stashes the bundle inside it. Both spellings and both places are read now; the
+  separator must be followed by a version or a digest, so `review` cannot claim
+  the bundle belonging to `review-plan`; and the provenance record that
+  `pull --trust-mode` writes counts as evidence, so the `verified` state finally
+  has a producer. Measured on one machine's stock and quoted from the fix:
+  `audit --source all` called 101 of 101 capabilities UNVERIFIED before, and
+  90 UNVERIFIED plus 11 BROKEN after the first half.
+- Examples, fixtures, tutorials and test identities no longer carry the names of
+  real people. They use a fixed cast: Bob packs, signs and publishes; Alice
+  anchors trust, verifies and installs; Diana grants. Authorship lines, the
+  Windows installer's `PRODUCT_PUBLISHER` and the `github.com/kamir/` import path
+  stay as they are on purpose, because replacing those falsifies provenance
+  instead of anonymizing anything.
+
+### Fixed
+- `envreport` defaulted its ER1 context to `<tenant>___skillenv`, but
+  `_owner(ctx_id)` in aims-core is everything before `___` and is checked against
+  the authenticated principal, so the first real write was refused. The context
+  now belongs to the signed-in user; the tenant stays in the env address, where
+  it says which organization the environment belongs to.
+
+### Security
+- **BUG-0444**: `pkg/session.ER1Endpoint` decided TLS verification with
+  `strings.Contains(target, "127.0.0.1")`. Four spellings switched verification
+  off on a connection that carries `X-API-KEY` **and** `Authorization: Bearer`,
+  among them `https://localhost.attacker.example/`, which needs nothing more than
+  a subdomain of a domain the attacker owns. The guard parses the host now.
+  Measured side effect: real IPv6 loopback (`https://[::1]:8081`) could not skip
+  verification before, and can now.
+- **BUG-0445**: the same function stood a second time in `cmd/skillctl`, with the
+  same defect in both of its branches. Target resolution lives once in
+  `pkg/er1.ResolveTarget` from here on. The twin had the wider reach:
+  `resolveER1Config` feeds ten callers and the old guard covered two (`publish`,
+  `room`), which left `pull`, `registry`, `revoked_cache` and `envreport`
+  unguarded.
+- **gosec findings reach Code Scanning again, and a failure is visible.** Code
+  Scanning recorded 344 gosec analyses between 2026-09-03 and 2026-09-15, 343 of
+  them carrying `results_count: 0`, while the job reported success every time. A
+  tool missing from the dashboard is visibly missing; a tool present with zero
+  findings reads as a clean bill of health.
+- Triage of the surface that fix exposed: **502 open alerts down to 277.** G104
+  went back to `errcheck`, which owns the question, on the Code Scanning surface
+  only (the diff gate still carries its 70 signatures); the eleven sharp singles
+  were judged one at a time, each carrying the condition that would overturn the
+  verdict; G402 went from 13 to 0, with every annotation naming **its own** guard
+  instead of one collective excuse; G301 and G306 got a class decision apiece.
+  What is still open, and what each class needs next, is written down in
+  `docs/security/gosec-backlog.md`.
+
 ## [skillctl/v0.5.0], 2026-09-10, executable runbooks + gates that name what they checked
 First train of the delivery channel's skillctl line (SPEC-0426).
 
