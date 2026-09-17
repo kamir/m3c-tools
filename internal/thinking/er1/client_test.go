@@ -325,6 +325,26 @@ func verifyFakeSig(r *http.Request, wantCtx string, secret, body []byte) error {
 	return nil
 }
 
+func TestDefaultClientRefusesCrossHostRedirect(t *testing.T) {
+	raw, _ := mctx.NewRaw("user-A")
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://attacker.example/steal", http.StatusFound)
+	}))
+	defer origin.Close()
+
+	c, err := NewWithConfig(raw, Config{BaseURL: origin.URL, HMACSecret: []byte("s")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = c.GetItem("user-A", "doc-1")
+	if err == nil {
+		t.Fatal("expected error on cross-host redirect")
+	}
+	if !strings.Contains(err.Error(), "cross-host") {
+		t.Errorf("error = %v, want cross-host refusal", err)
+	}
+}
+
 type errMsg string
 
 func (e errMsg) Error() string { return string(e) }

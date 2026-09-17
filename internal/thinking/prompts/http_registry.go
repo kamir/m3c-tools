@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/kamir/m3c-tools/internal/thinking/store"
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 )
 
 // DefaultTTL is D1's 5-minute cache TTL.
@@ -104,7 +105,7 @@ func NewHTTPRegistry(cfg HTTPConfig) (Registry, error) {
 		cfg.TTL = DefaultTTL
 	}
 	if cfg.HTTPClient == nil {
-		cfg.HTTPClient = &http.Client{Timeout: 5 * time.Second}
+		cfg.HTTPClient = &http.Client{Timeout: 5 * time.Second, CheckRedirect: httpsafe.NoCrossHostRedirect}
 	}
 	if cfg.Logger == nil {
 		cfg.Logger = log.Default()

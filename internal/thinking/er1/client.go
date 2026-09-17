@@ -49,6 +49,7 @@ import (
 
 	mctx "github.com/kamir/m3c-tools/internal/thinking/ctx"
 	"github.com/kamir/m3c-tools/internal/thinking/schema"
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 )
 
 // DefaultBaseURL is the fallback ER1 base when ER1_BASE_URL is not set.
@@ -156,7 +157,7 @@ func NewWithConfig(owner mctx.Raw, cfg Config) (Client, error) {
 		if to <= 0 {
 			to = DefaultTimeout
 		}
-		h = &http.Client{Timeout: to}
+		h = &http.Client{Timeout: to, CheckRedirect: httpsafe.NoCrossHostRedirect}
 	}
 
 	return &httpClient{

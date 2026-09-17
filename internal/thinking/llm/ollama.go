@@ -29,6 +29,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 )
 
 const (
@@ -67,7 +69,7 @@ func NewOllama() (Adapter, error) {
 	return &ollamaAdapter{
 		baseURL:      base,
 		defaultModel: model,
-		http:         &http.Client{Timeout: ollamaDefaultTimeout},
+		http:         &http.Client{Timeout: ollamaDefaultTimeout, CheckRedirect: httpsafe.NoCrossHostRedirect},
 	}, nil
 }
 

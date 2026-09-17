@@ -35,9 +35,8 @@ curl http://localhost:7140/v1/health
 Two footnotes, both from `main.go`:
 
 - **The HMAC secret is read from the env var named by `--secret-env`**
-  (default `THINKING_ENGINE_SECRET`). If it is empty, main derives a dev
-  fallback from the ctx hash, with a comment that marks it NOT suitable for
-  production.
+  (default `THINKING_ENGINE_SECRET`). If it is empty, the process exits 2
+  unless `--dev` is set, in which case main derives a ctx-hash fallback.
 - **The LLM wiring of this binary is OpenAI-only.** `main` calls
   `llm.NewOpenAI()` and, when `OPENAI_API_KEY` is unset, logs
   `llm: not configured (...): R/I handlers will fail until configured` and
@@ -54,6 +53,7 @@ Read from the `flag` definitions in `cmd/thinking-engine/main.go`:
 | `--user-context-id` | REQUIRED; the user context the engine is bound to. Missing: exit `2`. |
 | `--listen` | Listen address, default `:7140`. |
 | `--secret-env` | Name of the env var holding the HMAC secret, default `THINKING_ENGINE_SECRET`. |
+| `--dev` | Allow a ctx-hash HMAC secret when the env var is empty. |
 | `--state-path` | SQLite path, default `~/.m3c-tools/thinking/<hash>/state.db`. |
 | `--kafka` | Kafka bootstrap address; empty = in-memory bus. Connecting for real needs the `thinking_kafka` build tag. |
 | `--er1-credentials` | Path to an ER1 service-account key; the flag's own help text marks it unused in Phase 1. |

@@ -50,6 +50,7 @@ func main() {
 		userCtxID   = flag.String("user-context-id", "", "REQUIRED: user_context_id the engine is bound to (SPEC-0167)")
 		listen      = flag.String("listen", ":7140", "address to listen on")
 		secretEnv   = flag.String("secret-env", "THINKING_ENGINE_SECRET", "env var holding the HMAC secret")
+		allowDev    = flag.Bool("dev", false, "allow a ctx-hash HMAC secret when the env var is empty")
 		statePath   = flag.String("state-path", "", "SQLite path (default: ~/.m3c-tools/thinking/<hash>/state.db)")
 		kafkaAddr   = flag.String("kafka", "", "Kafka bootstrap address (comma-separated). Empty = in-memory bus. Requires -tags thinking_kafka build to actually connect.")
 		er1CredPath = flag.String("er1-credentials", "", "path to ER1 service-account key (Phase 1: unused: HMAC to Flask bridge)")
@@ -72,13 +73,13 @@ func main() {
 	logger.Printf("starting version=%s listen=%s", version, *listen)
 	logger.Printf("unused-in-week1 kafka=%q er1=%q", *kafkaAddr, *er1CredPath)
 
-	// HMAC secret: required. In dev, export THINKING_ENGINE_SECRET=anything.
-	secret := []byte(os.Getenv(*secretEnv))
-	if len(secret) == 0 {
-		// Dev fallback: derive from ctx hash so local curl-with-no-env still works.
-		// This is NOT suitable for production; Phase 2 will require a real secret.
-		secret = []byte("dev-" + hash.Hex())
-		logger.Printf("WARNING: %s not set, using dev fallback secret", *secretEnv)
+	secret, err := hmacSecretFromEnv(*secretEnv, *allowDev, hash.Hex())
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "ERROR:", err)
+		os.Exit(2)
+	}
+	if *allowDev && os.Getenv(*secretEnv) == "" {
+		logger.Printf("WARNING: %s not set, using --dev fallback secret", *secretEnv)
 	}
 
 	// State DB.
