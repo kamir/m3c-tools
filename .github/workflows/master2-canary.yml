@@ -49,7 +49,7 @@ jobs:
     # so does a dependabot head, whose whole content is a change to the set of
     # third-party code `go test` is about to execute and which this repository
     # arms auto-merge on.
-    runs-on: ${{ (github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]')) && fromJSON('["ubuntu-latest"]') || fromJSON('["self-hosted","Linux","X64","master2"]') }}
+    runs-on: ${{ (vars.CI_SELF_HOSTED != 'on' || (github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]'))) && fromJSON('["ubuntu-latest"]') || fromJSON('["self-hosted","Linux","X64","master2"]') }}
     timeout-minutes: 25
     steps:
       - name: Which machine is this, and is it the self-hosted one
@@ -88,11 +88,15 @@ jobs:
           mv go.mod.bak go.mod; mv go.sum.bak go.sum
           echo "SECONDS mod-tidy-check $((SECONDS-s))"
 
-      - name: "Candidate: CLI/manual consistency (docaudit)"
+      # NOT the docs-gate job: that job also runs three test packages, three
+      # audit binaries, check-index.sh, check-makefile-targets.sh twice and the
+      # SPEC-0406 acceptance rehearsal. This step times ONE of its eleven steps,
+      # and a number from it is not a number about the job.
+      - name: "Partial: docaudit alone, one step of the docs-gate job"
         run: |
           s=$SECONDS
           go run ./cmd/docaudit || true
-          echo "SECONDS docs-gate $((SECONDS-s))"
+          echo "SECONDS docaudit-only $((SECONDS-s))"
 
       - name: "Candidate: Build Cross-Platform (Linux + Windows)"
         run: |

@@ -280,7 +280,17 @@ jobs:
     name: CLI/manual consistency (docaudit)
     # Pure-stdlib AST gate: it only PARSES cmd/m3c-tools and cmd/skillctl, so it
     # needs no cgo and no PortAudio, and can run on the cheap runner.
-    runs-on: ubuntu-latest
+    # Routed: the self-hosted Linux runner when it is switched on and the head
+    # is trusted, a GitHub-hosted runner otherwise. The single blessed spelling,
+    # held verbatim by scripts/ci-matrix.py --check; what each clause is for is
+    # in that script's header under TRUSTED_LINUX.
+    #
+    # Measured on the master2 canary, run 35225881517, with a warm cache:
+    # `go mod tidy` + `git diff --exit-code` under 1s, and the same two cross
+    # builds this file runs in 26s against 69s on ubuntu-latest. The cold first
+    # run (35225260272) needed 169s for those builds, so the gain is the warm
+    # module and build cache of a machine that persists, not the machine itself.
+    runs-on: ${{ (vars.CI_SELF_HOSTED != 'on' || (github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]'))) && fromJSON('["ubuntu-latest"]') || fromJSON('["self-hosted","Linux","X64","master2"]') }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -548,7 +558,17 @@ jobs:
   # during a release build.
   mod-tidy-check:
     name: go mod tidy is a no-op
-    runs-on: ubuntu-latest
+    # Routed: the self-hosted Linux runner when it is switched on and the head
+    # is trusted, a GitHub-hosted runner otherwise. The single blessed spelling,
+    # held verbatim by scripts/ci-matrix.py --check; what each clause is for is
+    # in that script's header under TRUSTED_LINUX.
+    #
+    # Measured on the master2 canary, run 35225881517, with a warm cache:
+    # `go mod tidy` + `git diff --exit-code` under 1s, and the same two cross
+    # builds this file runs in 26s against 69s on ubuntu-latest. The cold first
+    # run (35225260272) needed 169s for those builds, so the gain is the warm
+    # module and build cache of a machine that persists, not the machine itself.
+    runs-on: ${{ (vars.CI_SELF_HOSTED != 'on' || (github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]'))) && fromJSON('["ubuntu-latest"]') || fromJSON('["self-hosted","Linux","X64","master2"]') }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -652,7 +672,17 @@ jobs:
 
   build-cross:
     name: Build Cross-Platform (Linux + Windows)
-    runs-on: ubuntu-latest
+    # Routed: the self-hosted Linux runner when it is switched on and the head
+    # is trusted, a GitHub-hosted runner otherwise. The single blessed spelling,
+    # held verbatim by scripts/ci-matrix.py --check; what each clause is for is
+    # in that script's header under TRUSTED_LINUX.
+    #
+    # Measured on the master2 canary, run 35225881517, with a warm cache:
+    # `go mod tidy` + `git diff --exit-code` under 1s, and the same two cross
+    # builds this file runs in 26s against 69s on ubuntu-latest. The cold first
+    # run (35225260272) needed 169s for those builds, so the gain is the warm
+    # module and build cache of a machine that persists, not the machine itself.
+    runs-on: ${{ (vars.CI_SELF_HOSTED != 'on' || (github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]'))) && fromJSON('["ubuntu-latest"]') || fromJSON('["self-hosted","Linux","X64","master2"]') }}
     timeout-minutes: 15
     # No `needs:`, deliberately. Until 2026-09-17 this job waited for lint and
     # test. Neither edge carried data: nothing here downloads an artifact from

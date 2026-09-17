@@ -80,6 +80,15 @@ WHAT --check ENFORCES, and why each one
      third-party code that `go test` will then execute, and this repository arms
      auto-merge on those pull requests (owner decision E2). Both route away.
 
+     The leading `vars.CI_SELF_HOSTED != 'on'` is the kill switch, and its
+     default direction is the point. The repository has ONE self-hosted runner,
+     and three of the jobs routed to it are required contexts on master: if that
+     machine is off, those checks never report and nothing can merge. Unsetting
+     the variable, or setting it to anything but `on`, sends every routed job
+     back to a GitHub-hosted runner within one API call and with no commit. It
+     is opt-IN, so a lost or forgotten variable degrades to slower and costlier
+     rather than to stuck.
+
   4. no job name is declared twice within one workflow file under two job ids.
      Two jobs reporting the same context in one run make the required check a
      race between them.
@@ -100,9 +109,9 @@ import yaml
 # The ONE spelling a self-hosted `runs-on` may carry. Compared whole, never by
 # substring: a rule matched loosely is a rule that drifts.
 TRUSTED_LINUX = (
-    "${{ (github.event_name == 'pull_request' && "
+    "${{ (vars.CI_SELF_HOSTED != 'on' || (github.event_name == 'pull_request' && "
     "(github.event.pull_request.head.repo.full_name != github.repository || "
-    "github.event.pull_request.user.login == 'dependabot[bot]')) "
+    "github.event.pull_request.user.login == 'dependabot[bot]'))) "
     "&& fromJSON('[\"ubuntu-latest\"]') "
     "|| fromJSON('[\"self-hosted\",\"Linux\",\"X64\",\"master2\"]') }}"
 )
