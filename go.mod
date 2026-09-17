@@ -1,6 +1,6 @@
 module github.com/kamir/m3c-tools
 
-go 1.25.0
+go 1.26.0
 
 toolchain go1.26.6
 
@@ -14,10 +14,10 @@ require (
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/prometheus/client_golang v1.24.1
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
-	github.com/sashabaranov/go-openai v1.42.0
+	github.com/sashabaranov/go-openai v1.42.1
 	github.com/twmb/franz-go v1.21.6
 	github.com/zalando/go-keyring v0.2.8
-	golang.org/x/sys v0.47.0
+	golang.org/x/sys v0.48.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.58.0
 	oras.land/oras-go/v2 v2.6.2
