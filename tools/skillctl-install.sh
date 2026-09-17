@@ -13,7 +13,46 @@ set -euo pipefail
 # SEC: an env-supplied release base relaxes the trust anchor. Honor it (legitimate
 # for testing) but warn loudly so a poisoned environment can't silently repoint us.
 [ -n "${RELEASE_BASE:-}" ] && echo "WARNING: RELEASE_BASE overrides the default release origin (${RELEASE_BASE})" >&2
-RELEASE_BASE="${RELEASE_BASE:-https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.5.1}"
+
+# Die Vorgabe ist KEINE feste Marke mehr, sondern die neueste veroeffentlichte.
+#
+# Warum: hier stand eine Marke, die bei jedem Release jemand von Hand heben
+# musste. Am 2026-09-16 stand sie auf v0.4.0, waehrend v0.5.0 seit sechs Tagen
+# veroeffentlicht war. Die Folge war messbar: v0.3.1 hatte 61 Windows-Bezuege,
+# v0.4.0 noch 27, v0.5.0 null. Wer die dokumentierte Zeile benutzte, bekam die
+# vorletzte Fassung, ohne dass irgendetwas davon berichtete.
+#
+# Was das NICHT schwaecht: die Vertrauenskette haengt an EXPECTED_FP weiter
+# unten, dem gepinnten Schluessel-Fingerabdruck, und an der Pruefung von
+# SHA256SUMS. Beide bleiben unveraendert. Offen bleibt allein, WELCHE Fassung
+# kommt, und das ist der bewusst getauschte Preis (Entscheidung 2026-09-16).
+#
+# Aufgeloest wird ueber den Atom-Feed der Releases: er braucht keinen Schluessel,
+# unterliegt keiner Ratenbegrenzung und kommt ohne jq aus, das dieses Skript
+# sonst voraussetzen muesste. Die GitHub-Abkuerzung /releases/latest taugt hier
+# NICHT: sie liefert das neueste Release des ganzen Repos, und das ist oft ein
+# Produkt-Release wie v2.12.0 und kein skillctl.
+neueste_skillctl_marke() {
+  curl -fsSL --max-time 20 "https://github.com/kamir/m3c-tools/releases.atom" 2>/dev/null \
+    | grep -oE 'releases/tag/skillctl%2Fv[0-9][^"<]*' \
+    | head -1 \
+    | sed 's|releases/tag/||; s|%2F|/|'
+}
+
+if [ -z "${RELEASE_BASE:-}" ]; then
+  marke="$(neueste_skillctl_marke || true)"
+  if [ -z "$marke" ]; then
+    # Fail closed, und zwar mit Absicht: still auf eine alte Marke
+    # zurueckzufallen waere genau der Fehler, den diese Aenderung abstellt.
+    echo "skillctl-install: konnte die neueste Fassung nicht ermitteln." >&2
+    echo "  Kein Netz, oder github.com ist von hier nicht erreichbar." >&2
+    echo "  Gib die gewuenschte Fassung ausdruecklich an, zum Beispiel:" >&2
+    echo "    RELEASE_BASE=https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.5.1 bash" >&2
+    exit 1
+  fi
+  RELEASE_BASE="https://github.com/kamir/m3c-tools/releases/download/${marke}"
+  echo "skillctl-install: neueste Fassung ist ${marke}" >&2
+fi
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 
 # SEC-M2: pin the release-key fingerprint. The signature alone proves only that
