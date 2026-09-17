@@ -17,6 +17,13 @@ var fixedTime = time.Date(2026, 5, 5, 19, 30, 0, 0, time.UTC)
 // goldenDigest pins the expected digest for the fixture skill + fixtureManifest +
 // fixedTime + BuiltBy="skillctl/test". Recompute by running with
 // SKILLBUNDLE_EXPECTED_DIGEST=any once and pasting the actual digest back.
+//
+// SPEC-0432 WARNING: this constant also carries the promise that a skill's bytes
+// never move when the bundle format grows. If a change to the manifest STRUCT
+// (a new field, a reordered field, a changed default) turns this test red, do
+// NOT repaste the digest: that would silently give all 78 admitted skill bundles
+// a new digest on their next re-pack, with no content change behind it. Make the
+// new field `omitempty` and leave it unwritten for skills instead.
 const goldenDigest = "sha256:15fd20c2141d63d218cebe10e768a236f725756b1bc0c56f08eafeecf07882c1"
 
 func fixtureManifest() BundleManifest {

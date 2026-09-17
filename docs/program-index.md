@@ -22,6 +22,7 @@ See also: [Service Index](service-index) (what stays running) ·
 | **m3c-tools** | `cmd/m3c-tools/` | `make build` | The main Multi-Modal-Memory CLI. Also launches the macOS menu bar app with `--menubar`. |
 | **skillctl** | `cmd/skillctl/` | `make build-skillctl` | The skill **trust** CLI: sign, admit, verify, revoke, audit skills (offline-verifiable). |
 | **skillctl-demo** | `cmd/skillctl-demo/` | `make build-skillctl-demo` | Self-contained offline demo that shows a CISO the trust plane *containing an attack live* (scenarios S1/S2A/S5, real exit codes). |
+| **secretctl** | `cmd/secretctl/` | `go build ./cmd/secretctl` | Secret-rotation CLI (SPEC-0438), the reading half: `inventory` says WHERE a value sits and WHETHER it is current, `verify` probes whether a service still accepts it; it never prints a value, comparisons run over fingerprints. |
 | **thinking-engine** | `cmd/thinking-engine/` | `make thinking-build` | Per-user cognitive runtime (SPEC-0167). Runs as a service: see [Service Index](service-index). |
 | **poc-menubar** | `cmd/poc-menubar/` | `make build-all` | Reference POC: macOS menu bar via `menuet`. |
 | **poc-recorder** | `cmd/poc-recorder/` | `make build-all` | Reference POC: PortAudio microphone recording. |

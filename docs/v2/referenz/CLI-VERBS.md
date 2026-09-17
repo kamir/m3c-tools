@@ -103,6 +103,7 @@ gates the CONTENT of the Exit-Code column against the register and the manual.
 | `review` | SPEC-0189 (S0a) (?) | 0/1 |
 | `browse` | SPEC-0189 (S0a) (?) | 0/1 |
 | `consolidate` | SPEC-0189 (S0a) (?) | 0/1 |
+| `drift` | SPEC-0432 (FR-0278) | 0/1/2 |
 | `sync-usage` | SPEC-0189 (S0a) | 0/1 |
 | `sync` | SPEC-0317 R-5 | 0/1/2, 29 |
 | `awareness` | SPEC-0195 (S2 M1) | 0/1/2, 19 |
