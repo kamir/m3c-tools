@@ -58,6 +58,7 @@ jobs:
   gate:
     name: PR dependencies (DAG gate)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       # "true" genau dann, wenn das Skript mit 1 endete (Abhaengigkeit
       # blockiert). Exit 2 (Aufruffehler) laesst den Job rot werden, setzt
@@ -87,6 +88,7 @@ jobs:
   label:
     name: Label blocked-by-dependency nachfuehren
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: gate
     # Auch nach einem roten Tor laufen (sonst wuerde das Label nie gesetzt),
     # aber nicht nach cancelled/skipped: dann ist nichts gemessen worden.

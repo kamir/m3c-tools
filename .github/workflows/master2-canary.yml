@@ -1,0 +1,146 @@
+name: Master2 Runner Canary
+
+# WHAT THIS IS FOR, AND WHEN IT GOES AWAY
+#
+# The repository has exactly ONE self-hosted runner. That single fact decides
+# the whole migration: jobs moved onto it do not fan out, they QUEUE. Migrating
+# the wrong set turns a parallel gate into a serial one and makes the pull
+# request slower while the bill gets smaller.
+#
+# So before anything is moved, this canary measures three things that cannot be
+# read off the configuration: whether the machine has the toolchain at all, how
+# long the candidate jobs actually take on it, and whether a warm module cache
+# on a persistent machine beats a cold GitHub-hosted runner.
+#
+# It is TEMPORARY. It is removed in the follow-up that consolidates the
+# workflows, once the migration has run green on master. A canary left behind
+# after the migration is a job nobody reads and a runner nobody needed.
+#
+# Grown out of pull request #343, which introduced the idea and the identity
+# probe. Two things are different here. Its `runs-on` named a label `master2`
+# that did not exist (measured 2026-09-17: the runner carried only the three
+# automatic labels self-hosted, Linux, X64, so the job could never have been
+# scheduled and would have queued until it expired); the label has since been
+# created. And `workflow_dispatch` alone cannot reach a branch, because GitHub
+# only offers that trigger from the default branch, so the canary could not
+# have run on the pull request that added it.
+
+# TRIGGER: workflow_dispatch ONLY, since the migration went green.
+#
+# While it was needed it also ran on `pull_request`, because workflow_dispatch
+# is offered from the default branch alone and the canary could not otherwise
+# have run on the pull request that introduced it. That is over: the three jobs
+# it was measuring for now run on master2 themselves.
+#
+# Leaving it on `pull_request` would make it a regression rather than a tool.
+# There is ONE self-hosted runner, so the canary does not run beside the three
+# routed jobs, it runs INSTEAD of them and they queue behind it. Measured on run
+# 35229000337: "go mod tidy is a no-op", "CLI/manual consistency (docaudit)" and
+# "Build Cross-Platform (Linux + Windows)" all sat queued while this workflow
+# held master2, and all three are required contexts on master.
+#
+# It stays in the tree because the question it answers ("does that machine still
+# have the toolchain, and is it still faster than a hosted runner") comes back
+# every time somebody proposes moving another job. Whether it is deleted outright
+# belongs to the workflow consolidation that follows this pull request.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: master2-canary-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    name: Master2 canary (identity + candidate job timings)
+    # The single blessed spelling for a self-hosted `runs-on`, held verbatim by
+    # scripts/ci-matrix.py --check. A self-hosted runner is a persistent
+    # machine: a pull request head that executes on it can read the runner
+    # token and whatever else that machine holds. A fork head routes away, and
+    # so does a dependabot head, whose whole content is a change to the set of
+    # third-party code `go test` is about to execute and which this repository
+    # arms auto-merge on.
+    runs-on: ${{ (vars.CI_SELF_HOSTED != 'on' || (github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]'))) && fromJSON('["ubuntu-latest"]') || fromJSON('["self-hosted","Linux","X64","master2"]') }}
+    timeout-minutes: 25
+    steps:
+      - name: Which machine is this, and is it the self-hosted one
+        run: |
+          echo "runner.name         ${{ runner.name }}"
+          echo "runner.os           ${{ runner.os }}"
+          echo "runner.environment  ${{ runner.environment }}"
+          echo "hostname            $(hostname)"
+          echo "nproc               $(nproc)"
+          free -h || true
+          df -h . || true
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+
+      - name: Toolchain present
+        run: |
+          go version
+          go env GOOS GOARCH CGO_ENABLED GOMODCACHE
+          python3 --version
+          python3 -c 'import yaml; print("PyYAML", yaml.__version__)'
+
+      # Each candidate is timed SEPARATELY and the seconds are printed, because
+      # the number that decides the migration is not "did it pass" but "how long
+      # does this machine need", summed over everything moved onto it. One
+      # runner means the sum, not the maximum.
+      - name: "Candidate: go mod tidy is a no-op"
+        run: |
+          s=$SECONDS
+          cp go.mod go.mod.bak; cp go.sum go.sum.bak
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+          mv go.mod.bak go.mod; mv go.sum.bak go.sum
+          echo "SECONDS mod-tidy-check $((SECONDS-s))"
+
+      # NOT the docs-gate job: that job also runs three test packages, three
+      # audit binaries, check-index.sh, check-makefile-targets.sh twice and the
+      # SPEC-0406 acceptance rehearsal. This step times ONE of its eleven steps,
+      # and a number from it is not a number about the job.
+      - name: "Partial: docaudit alone, one step of the docs-gate job"
+        run: |
+          s=$SECONDS
+          go run ./cmd/docaudit || true
+          echo "SECONDS docaudit-only $((SECONDS-s))"
+
+      - name: "Candidate: Build Cross-Platform (Linux + Windows)"
+        run: |
+          s=$SECONDS
+          GOOS=linux   GOARCH=amd64 go build ./cmd/...
+          GOOS=windows GOARCH=amd64 go build ./cmd/...
+          echo "SECONDS build-cross $((SECONDS-s))"
+
+      # NOT a migration candidate, and this step is what says so with a number
+      # rather than an opinion. The skillctl surface is not the same set of
+      # files on the two platforms, so a Linux run of the -race job would be a
+      # DIFFERENT measurement, not a cheaper one.
+      - name: "Not a candidate: what a Linux skillctl -race run would stop seeing"
+        run: |
+          echo "files reachable only on darwin, under ./pkg/skillctl and ./cmd/skillctl:"
+          GOOS=darwin go list -e -f '{{.ImportPath}}{{range .GoFiles}} {{.}}{{end}}{{range .TestGoFiles}} {{.}}{{end}}' ./cmd/skillctl/... ./pkg/skillctl/... > /tmp/d.txt
+          GOOS=linux  go list -e -f '{{.ImportPath}}{{range .GoFiles}} {{.}}{{end}}{{range .TestGoFiles}} {{.}}{{end}}' ./cmd/skillctl/... ./pkg/skillctl/... > /tmp/l.txt
+          tr ' ' '\n' < /tmp/d.txt | grep '\.go$' | sort -u > /tmp/dd.txt
+          tr ' ' '\n' < /tmp/l.txt | grep '\.go$' | sort -u > /tmp/ll.txt
+          echo "--- only darwin ---"; comm -23 /tmp/dd.txt /tmp/ll.txt
+          echo "--- only linux ---";  comm -13 /tmp/dd.txt /tmp/ll.txt
+
+      - name: "Candidate: skillctl trust surface under -race, on Linux"
+        run: |
+          s=$SECONDS
+          go test -race -count=1 ./pkg/skillctl/... || true
+          echo "SECONDS skillctl-race-linux $((SECONDS-s))"
+
+      - name: Sum, against the budget
+        run: |
+          echo "One runner means the MOVED jobs run one after another."
+          echo "The budget is the critical path of everything left on the"
+          echo "GitHub-hosted runners; above it, master2 becomes the bottleneck."

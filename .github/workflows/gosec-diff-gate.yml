@@ -22,6 +22,20 @@ on:
   pull_request:
     branches: [main, master]
 
+# Concurrency: one run per ref, and a superseded pull-request run is cancelled.
+# The group carries a LITERAL prefix rather than ${{ github.workflow }}, because
+# inside a reusable workflow that context holds the CALLER's name: a group built
+# from it can collide with the caller's own group, and a called workflow waiting
+# on its caller never starts. A literal cannot do that, in any file.
+#
+# cancel-in-progress is conditional on purpose. A superseded pull-request run
+# measures a commit nobody will merge, so cancelling it costs nothing. A run on
+# main or master is the record for that commit, and cancelling it would leave a
+# merged commit with no evidence that this gate ever passed on it.
+concurrency:
+  group: gosec-diff-gate-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # CD-T6: least-privilege default token: read-only, no writes needed (this gate
 # uploads nothing; the Code Scanning dashboard is gosec.yml's job).
 permissions:
@@ -34,12 +48,13 @@ jobs:
     # menubar) need PortAudio to typecheck, so run on macOS exactly like
     # gosec.yml and match how the committed baseline was generated (./...).
     runs-on: macos-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.26.6"
+          go-version-file: go.mod
 
       - name: Install PortAudio (cgo packages must typecheck)
         run: brew install portaudio
