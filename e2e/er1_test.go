@@ -12,12 +12,16 @@ import (
 )
 
 func TestER1Config(t *testing.T) {
+	t.Setenv("ER1_CONTEXT_ID", "")
+	t.Setenv("ER1_API_KEY", "")
+	t.Setenv("ER1_DEVICE_TOKEN", "")
+	t.Setenv("M3C_ER1_KEYCHAIN", "off")
 	cfg := er1.LoadConfig()
 	if cfg.APIURL == "" {
 		t.Error("API URL is empty")
 	}
-	if cfg.ContextID == "" {
-		t.Error("Context ID is empty")
+	if cfg.ContextID != "" {
+		t.Errorf("ContextID = %q, want empty when ER1_CONTEXT_ID is unset", cfg.ContextID)
 	}
 	t.Logf("Config: %s", cfg.Summary())
 }
