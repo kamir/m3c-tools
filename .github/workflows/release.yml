@@ -147,6 +147,19 @@ jobs:
               -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" \
               -o skillctl-darwin-amd64 ./cmd/skillctl
 
+      # secretctl is the third product binary (BUILD-AUDIT-0001, owner decision
+      # E-1 of 2026-09-17). Pure Go, so no PortAudio and no universal library.
+      - name: Build secretctl darwin/arm64 and darwin/amd64
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          COMMIT="${GITHUB_SHA:0:8}"
+          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          LDFLAGS="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}"
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 \
+            go build -ldflags="${LDFLAGS}" -o secretctl-darwin-arm64 ./cmd/secretctl
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 \
+            go build -ldflags="${LDFLAGS}" -o secretctl-darwin-amd64 ./cmd/secretctl
+
       # --- Package ---
       - name: Package macOS binaries
         run: |
@@ -154,6 +167,8 @@ jobs:
           tar czf m3c-tools-darwin-amd64.tar.gz m3c-tools-darwin-amd64
           tar czf skillctl-darwin-arm64.tar.gz skillctl-darwin-arm64
           tar czf skillctl-darwin-amd64.tar.gz skillctl-darwin-amd64
+          tar czf secretctl-darwin-arm64.tar.gz secretctl-darwin-arm64
+          tar czf secretctl-darwin-amd64.tar.gz secretctl-darwin-amd64
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -165,6 +180,8 @@ jobs:
             m3c-tools-darwin-amd64.tar.gz
             skillctl-darwin-arm64.tar.gz
             skillctl-darwin-amd64.tar.gz
+            secretctl-darwin-arm64.tar.gz
+            secretctl-darwin-amd64.tar.gz
 
   # -----------------------------------------------------------------------
   # Linux + Windows: m3c-tools (CGO_ENABLED=0) + skillctl via GoReleaser
@@ -202,9 +219,11 @@ jobs:
             dist/m3c-tools-linux-*.tar.gz
             dist/skillctl-linux-*.tar.gz
             dist/skillctl-offline-demo-linux-*.tar.gz
+            dist/secretctl-linux-*.tar.gz
             dist/m3c-tools-windows-*.zip
             dist/skillctl-windows-*.zip
             dist/skillctl-offline-demo-windows-*.zip
+            dist/secretctl-windows-*.zip
 
   # -----------------------------------------------------------------------
   # Windows NSIS installer
@@ -234,6 +253,8 @@ jobs:
             go build -ldflags="${LDFLAGS}" -o build/windows/m3c-tools.exe ./cmd/m3c-tools
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
             go build -ldflags="${LDFLAGS}" -o build/windows/skillctl.exe ./cmd/skillctl
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
+            go build -ldflags="${LDFLAGS}" -o build/windows/secretctl.exe ./cmd/secretctl
           cp design/icons/menubar-icon.png build/windows/
 
       - name: Build NSIS installer
@@ -482,6 +503,11 @@ jobs:
             artifacts/m3c-tools-linux-amd64.tar.gz
             artifacts/m3c-tools-linux-arm64.tar.gz
             artifacts/m3c-tools-windows-amd64.zip
+            artifacts/secretctl-darwin-arm64.tar.gz
+            artifacts/secretctl-darwin-amd64.tar.gz
+            artifacts/secretctl-linux-amd64.tar.gz
+            artifacts/secretctl-linux-arm64.tar.gz
+            artifacts/secretctl-windows-amd64.zip
             artifacts/skillctl-offline-demo-linux-amd64.tar.gz
             artifacts/skillctl-offline-demo-linux-arm64.tar.gz
             artifacts/skillctl-offline-demo-windows-amd64.zip
