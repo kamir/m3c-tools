@@ -598,10 +598,13 @@ jobs:
       - name: Install PortAudio
         run: brew install portaudio
 
-      # govulncheck fails ONLY on vulns reachable from our code. The toolchain is
-      # pinned to a patched Go (go1.26.5, via go.mod `toolchain` + setup-go) so the
-      # stdlib CVEs older toolchains carried are gone; this job keeps them from
-      # regressing. Standalone (not in any build job's `needs`) so a fresh upstream
+      # govulncheck fails ONLY on vulns reachable from our code. The toolchain
+      # comes from go.mod, which pins `toolchain go1.26.6`, so the stdlib CVEs
+      # older toolchains carried are gone; this job keeps them from regressing.
+      # (This line said go1.26.5 until 2026-09-17. It was written when that was
+      # true and went stale where nothing checks prose. Naming the version in
+      # two places is the same fault the go-version consolidation above fixes,
+      # so this one now names the FILE and the reader looks it up.) Standalone (not in any build job's `needs`) so a fresh upstream
       # CVE blocks merge but never the release builds.
       - name: govulncheck ./...
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
