@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # check-redirect-guard.sh: refuse credential-bearing files whose http.Client
-# constructions lack a CheckRedirect policy (AUDIT-0001 Befund 1.1).
+# constructions lack a CheckRedirect policy (AUDIT-0001 finding 1.1).
 #
 # Background: Go's stdlib redirect policy strips Authorization/Cookie when a
 # redirect crosses to a different host, but NOT custom credential headers such
@@ -9,14 +9,15 @@
 # (NoCredentialRedirect / NoCrossHostRedirect); this guard keeps the fixed
 # state from regrowing.
 #
-# Scope and mechanism: every non-test .go file under cmd/ and pkg/ that names
-# the X-API-KEY header or calls auth.ApplyAuth is scanned; in each such file
-# the number of "http.Client{" composite literals must be matched by at least
-# as many "CheckRedirect" occurrences. This is a byte-level heuristic, not a
-# type check. Known limits: a client assembled field by field (c := new(http.Client))
-# escapes it, as does a credential attached in a different file than the client
-# construction; both are absent from this tree today. The common regression, a
-# quick &http.Client{Timeout: ...} next to a credential header, is caught.
+# Scope and mechanism: every non-test .go file under cmd/, pkg/, and
+# internal/ that names the X-API-KEY header, ApplyAuth, or X-M3C-Signature
+# is scanned; in each such file the number of "http.Client{" composite
+# literals must be matched by at least as many "CheckRedirect" occurrences.
+# This is a byte-level heuristic, not a type check. Known limits: a client
+# assembled field by field (c := new(http.Client)) escapes it, as does a
+# credential attached in a different file than the client construction.
+# The common regression, a quick &http.Client{Timeout: ...} next to a
+# credential header, is caught.
 #
 # Usage: ./scripts/check-redirect-guard.sh   (exit 1 on any hit; runs in make ci)
 set -euo pipefail
@@ -33,7 +34,7 @@ while IFS= read -r f; do
     echo "       e.g. CheckRedirect: httpsafe.NoCredentialRedirect (see pkg/httpsafe)."
     fail=1
   fi
-done < <(grep -rl --include='*.go' -e 'X-API-KEY' -e 'ApplyAuth(' cmd pkg | grep -v _test.go | sort)
+done < <(grep -rl --include='*.go' -e 'X-API-KEY' -e 'ApplyAuth(' -e 'X-M3C-Signature' cmd pkg internal | grep -v _test.go | sort)
 
 if [ "$fail" -ne 0 ]; then
   exit 1
