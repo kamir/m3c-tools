@@ -40,6 +40,9 @@
 #   from both the baseline and every run, so the gate stays sound.
 #############################################################################
 set -euo pipefail
+# comm(1) compares in the process locale; sort uses LC_ALL=C. The two must
+# match or a C-sorted baseline can look like new findings (macOS UTF-8 comm).
+export LC_ALL=C
 
 # --- locations -------------------------------------------------------------
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"

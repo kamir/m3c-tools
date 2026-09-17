@@ -7,8 +7,10 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/kamir/m3c-tools/pkg/config"
 	"github.com/kamir/m3c-tools/pkg/diag"
 )
 
@@ -123,6 +125,40 @@ func TestDoctorAuth_APIKeyOnly(t *testing.T) {
 				t.Errorf("auth method status = %v, want Warn (legacy API key)", c.Status)
 			}
 		}
+	}
+}
+
+func TestDoctorConfigConsistency_WorldReadableProfile(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("ER1_API_URL", "https://test.example.com/upload_2")
+	t.Setenv("ER1_CONTEXT_ID", "user123___mft")
+
+	pm := config.NewProfileManager()
+	if err := pm.EnsureDefaults(); err != nil {
+		t.Fatal(err)
+	}
+	p, err := pm.ActiveProfile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(p.Path, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := doctorConfigConsistency()
+	var warn *diag.Check
+	for i := range s.Checks {
+		if s.Checks[i].Name == "File perms" && s.Checks[i].Status == diag.Warn {
+			warn = &s.Checks[i]
+			break
+		}
+	}
+	if warn == nil {
+		t.Fatal("expected File perms warning for a world-readable profile")
+	}
+	if !strings.Contains(warn.Detail, p.Path) {
+		t.Errorf("detail %q does not name the profile path %s", warn.Detail, p.Path)
 	}
 }
 

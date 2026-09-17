@@ -18,7 +18,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"os/user"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -223,32 +222,12 @@ func ER1Endpoint(target string) (baseURL string, verifySSL bool) {
 	return er1.ResolveTarget(target)
 }
 
-// resolveAPIKey: env ER1_API_KEY → macOS Keychain `aims-core-er1` (ADR-0003).
-func resolveAPIKey() string {
-	if k := os.Getenv("ER1_API_KEY"); k != "" {
-		return k
-	}
-	u, _ := user.Current()
-	uname := "kamir"
-	if u != nil && u.Username != "" {
-		uname = u.Username
-	}
-	out, err := exec.Command("security", "find-generic-password", "-s", "aims-core-er1", "-a", uname, "-w").Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
-}
-
 // er1Config builds a pkg/er1.Config pointed at the session's ER1 target.
 func (id *Ident) er1Config() (*er1.Config, error) {
 	base, verify := ER1Endpoint(id.ER1Target)
 	cfg := er1.LoadConfig()
 	cfg.APIURL = base + "/upload_2"
 	cfg.VerifySSL = verify
-	if cfg.APIKey == "" {
-		cfg.APIKey = resolveAPIKey()
-	}
 	if cfg.APIKey == "" && os.Getenv("ER1_DEVICE_TOKEN") == "" {
 		return nil, fmt.Errorf("no ER1 credential: set ER1_API_KEY or add the `aims-core-er1` Keychain item (ADR-0003)")
 	}
@@ -273,7 +252,7 @@ func uploadItem(cfg *er1.Config, body, filename, tags, contentType string) (stri
 // the decoded JSON (as a generic value) or an error.
 func httpGetJSON(target, path string) (any, error) {
 	base, verify := ER1Endpoint(target)
-	apiKey := resolveAPIKey()
+	apiKey := er1.LoadConfig().APIKey
 	client := &http.Client{Timeout: 15 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect} // SEC F25
 	if !verify {
 		// #nosec G402 -- gegated: verify stammt aus sessionVerifyTLS, das ein
@@ -593,7 +572,7 @@ func List(o ListOpts) ([]SessionRow, error) {
 	}
 	cfg := er1.LoadConfig()
 	if cfg.ContextID == "" {
-		cfg.ContextID = "107677460544181387647___mft"
+		return nil, fmt.Errorf("ER1_CONTEXT_ID is not set")
 	}
 	tags := []string{"claude-code.session"}
 	if id.Project != "" {

@@ -1,15 +1,5 @@
-// skillctl: m3c-tools command-line front-end.
-//
-// Stream S1 (SPEC-0188 Phase 2) ships ONLY the three signing
-// subcommands: keygen, sign, verify-sig. The full skillctl CLI
-// (scan, report, pack, browse, ...) lives on
-// feature/thinking-engine-phase1 and will be merged onto the
-// integration branch separately. The integration branch's main.go
-// is a one-liner-per-case dispatcher; merging this stream's
-// signing case branches into that file is a trivial conflict.
-//
-// All non-trivial logic lives in signing_cmds.go so that file can
-// be cherry-picked without dragging this skeleton main along.
+// skillctl is the trust-plane CLI: pack, sign, publish, install, verify,
+// audit, revoke. printUsage lists the verbs this dispatcher actually routes.
 package main
 
 import (

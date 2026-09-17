@@ -107,6 +107,9 @@ func main() {
 	case "screenshot":
 		fmt.Fprintln(os.Stderr, "Error: screenshot capture requires macOS")
 		os.Exit(1)
+	case "pocket":
+		fmt.Fprintln(os.Stderr, "Error: pocket sync requires macOS")
+		os.Exit(1)
 	// SPEC-0251 §5 multi-platform parity: portable commands promoted out of the
 	// darwin-only main.go into commands_shared.go now route here too.
 	case "upload":
@@ -125,6 +128,8 @@ func main() {
 		cmdStatus(os.Args[2:])
 	case "cancel":
 		cmdCancel(os.Args[2:])
+	case "token":
+		cmdToken(os.Args[2:])
 	case "version", "--version", "-v":
 		printVersion()
 	case "help", "--help", "-h":
@@ -138,6 +143,20 @@ func main() {
 
 // cmdSetup runs the interactive ER1 onboarding wizard.
 func cmdSetup(args []string) {
+	verb, args, unknown := parseSetupVerb(args, "er1")
+	if unknown {
+		fmt.Fprintf(os.Stderr, "Unknown setup subcommand: %s\nUse: m3c-tools setup [er1|whisper]\n", verb)
+		os.Exit(1)
+	}
+	switch verb {
+	case "whisper":
+		fmt.Fprintln(os.Stderr, "whisper venv setup is not wired on this platform. Use: make setup-venv")
+		os.Exit(1)
+	case "pocket-key":
+		fmt.Fprintln(os.Stderr, "Error: setup pocket-key requires macOS")
+		os.Exit(1)
+	}
+
 	noBrowser := false
 	er1URL := ""
 	tags := ""
@@ -1157,35 +1176,31 @@ func printUsage() {
 	fmt.Println(`m3c-tools: Multi-Modal-Memory Tools (CLI mode)
 
 Commands:
-  setup                  Interactive ER1 onboarding wizard
+  setup [er1|whisper]    Default here: interactive ER1 onboarding wizard
+    er1                   ER1 onboarding wizard
+    whisper               Not wired on this platform; use make setup-venv
     --er1-url <url>       ER1 upload endpoint (default: onboarding.guide)
     --tags <tags>         Default tags for plaud sync
     --no-browser          Skip browser login, enter User ID manually
   config list|show|switch|create|test|import
                          Configuration profile management
   transcript <video_id>  Fetch YouTube transcript
-    --lang <code>         Language code (default: en)
-    --format <fmt>        Output format: text, json, srt, webvtt (default: text)
-    --list                List available transcripts
+  upload <video_id>      Fetch transcript + thumbnail, upload to ER1
+  whisper <audio_file>   Transcribe audio via whisper
+  thumbnail <video_id>   Download video thumbnail
   plaud list|sync|auth   Plaud recording sync
-    auth login            Extract token from Chrome (CDP)
-    auth <token>          Set token directly
-    list                  List all recordings
-    sync <id>             Download + upload to ER1
-    sync all              Sync all unsynced recordings
   login                  Sign in to ER1 via browser (device token auth)
   doctor                 Run connectivity & config diagnostics
+  token [--print]        Device-token status (--print emits the Bearer token)
   check-er1              Check ER1 server connectivity (use 'doctor' for full check)
+  retry                  Run ER1 retry loop for queued uploads
+  schedule|status|cancel SQLite retry-queue helpers
+  settings               Open profile settings editor in browser
+  menubar                Launch system tray app
   help                   Show this help
 
-Cross-platform commands:
-  menubar                Launch system tray app
-
-macOS-only commands (not available on this platform):
-  record                 Record audio
-  devices                List audio devices
-  screenshot             Capture screenshot
-  upload                 Upload to ER1 with media`)
+macOS-only (error on this platform):
+  record, devices, screenshot, pocket`)
 }
 
 func openURL(url string) error {

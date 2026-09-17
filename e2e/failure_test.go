@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kamir/m3c-tools/pkg/er1"
@@ -58,11 +59,11 @@ func TestUploadFailureCreatesQueue(t *testing.T) {
 	if len(entries) != 1 {
 		t.Fatalf("Expected 1 queue entry, got %d", len(entries))
 	}
-	if entries[0].TranscriptPath != "vid123_transcript.txt" {
-		t.Errorf("TranscriptPath = %q, want vid123_transcript.txt", entries[0].TranscriptPath)
+	if !strings.HasPrefix(entries[0].TranscriptPath, result.Memory.Path) {
+		t.Errorf("TranscriptPath = %q, want under %s", entries[0].TranscriptPath, result.Memory.Path)
 	}
-	if entries[0].AudioPath != "vid123_audio.wav" {
-		t.Errorf("AudioPath = %q, want vid123_audio.wav", entries[0].AudioPath)
+	if !strings.HasPrefix(entries[0].AudioPath, result.Memory.Path) {
+		t.Errorf("AudioPath = %q, want under %s", entries[0].AudioPath, result.Memory.Path)
 	}
 
 	t.Logf("queue.json written with %d entry, ID=%s", len(entries), entries[0].ID)
