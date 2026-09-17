@@ -96,9 +96,50 @@ $ASSET = 'skillctl-windows-amd64.exe'
 # ============================================================================
 # Resolve params from args -> env -> default
 # ============================================================================
+# Die Vorgabe ist KEINE feste Marke mehr, sondern die neueste veroeffentlichte.
+#
+# Warum: hier stand eine Marke, die bei jedem Release jemand von Hand heben
+# musste. Am 2026-09-16 stand sie auf v0.4.0, waehrend v0.5.0 seit sechs Tagen
+# veroeffentlicht war. Die Folge war messbar: v0.3.1 hatte 61 Windows-Bezuege,
+# v0.4.0 noch 27, v0.5.0 null. Wer die dokumentierte Zeile benutzte, bekam die
+# vorletzte Fassung, und nichts berichtete davon.
+#
+# Was das NICHT schwaecht: die Vertrauenskette haengt am gepinnten
+# Schluessel-Fingerabdruck und an der Pruefung von SHA256SUMS. Beide bleiben.
+# Offen bleibt allein, WELCHE Fassung kommt (Entscheidung 2026-09-16).
+#
+# Der Atom-Feed statt der API: kein Schluessel, keine Ratenbegrenzung. Die
+# Abkuerzung /releases/latest taugt NICHT, sie liefert das neueste Release des
+# ganzen Repos, und das ist oft ein Produkt-Release und kein skillctl.
+function Get-NeuesteSkillctlMarke {
+    try {
+        $feed = Invoke-WebRequest -UseBasicParsing -TimeoutSec 20 `
+            -Uri 'https://github.com/kamir/m3c-tools/releases.atom'
+        $treffer = [regex]::Match($feed.Content, 'releases/tag/skillctl%2F(v[0-9][^"<]*)')
+        if ($treffer.Success) { return 'skillctl/' + $treffer.Groups[1].Value }
+    } catch { }
+    return $null
+}
+
 if (-not $ReleaseBase) {
-    $ReleaseBase = if ($env:RELEASE_BASE) { $env:RELEASE_BASE }
-                   else { 'https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.5.1' }
+    if ($env:RELEASE_BASE) {
+        $ReleaseBase = $env:RELEASE_BASE
+    } else {
+        $marke = Get-NeuesteSkillctlMarke
+        if (-not $marke) {
+            # Fail closed, mit Absicht: still auf eine alte Marke
+            # zurueckzufallen waere genau der Fehler, den das hier abstellt.
+            Write-Error @'
+skillctl-install: konnte die neueste Fassung nicht ermitteln.
+  Kein Netz, oder github.com ist von hier nicht erreichbar.
+  Gib die gewuenschte Fassung ausdruecklich an, zum Beispiel:
+    -ReleaseBase https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.5.1
+'@
+            exit 1
+        }
+        $ReleaseBase = "https://github.com/kamir/m3c-tools/releases/download/$marke"
+        Write-Host "skillctl-install: neueste Fassung ist $marke"
+    }
 }
 if (-not $InstallDir) {
     $InstallDir = if ($env:INSTALL_DIR) { $env:INSTALL_DIR }
