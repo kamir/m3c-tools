@@ -5,6 +5,16 @@ on:
     tags:
       - 'v*'
 
+# Concurrency: runs for one ref serialize, and NOTHING is cancelled.
+# A release run produces evidence (checksums, signatures, provenance,
+# attestations). Cancelling one mid-flight leaves a partial artifact set behind
+# and a draft that looks finished, so cancel-in-progress is false and stays
+# false. The group only stops two pushes of the SAME ref from racing each other
+# into the same draft. The prefix is a literal for the reason given in ci.yml.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 # CD-T6: least-privilege default: read-only for the whole workflow; the single
 # job that creates the GitHub Release elevates to contents: write per-job below.
 permissions:

@@ -44,6 +44,15 @@ on:
         required: true
         type: string
 
+# Concurrency: runs for one ref serialize, and nothing is cancelled.
+# This workflow is CALLED by skillctl-release.yml, so the prefix must be a
+# literal and must differ from the caller's group: inside a called workflow
+# ${{ github.workflow }} holds the caller's name, and a called workflow that
+# waits on its caller's group never starts at all.
+concurrency:
+  group: skillctl-smoke-matrix-${{ github.ref }}
+  cancel-in-progress: false
+
 # CD-T6: least-privilege default. contents: read is all a leg needs. It stages
 # same-run artifacts, and (standalone) reads a published release; nothing writes.
 permissions:

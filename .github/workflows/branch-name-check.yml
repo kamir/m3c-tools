@@ -12,6 +12,20 @@ on:
   pull_request:
     types: [opened, reopened, edited, synchronize]
 
+# Concurrency: one run per ref, and a superseded pull-request run is cancelled.
+# The group carries a LITERAL prefix rather than ${{ github.workflow }}, because
+# inside a reusable workflow that context holds the CALLER's name: a group built
+# from it can collide with the caller's own group, and a called workflow waiting
+# on its caller never starts. A literal cannot do that, in any file.
+#
+# cancel-in-progress is conditional on purpose. A superseded pull-request run
+# measures a commit nobody will merge, so cancelling it costs nothing. A run on
+# main or master is the record for that commit, and cancelling it would leave a
+# merged commit with no evidence that this gate ever passed on it.
+concurrency:
+  group: branch-name-check-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # CD-T6: least-privilege default GITHUB_TOKEN for the whole workflow.
 permissions:
   contents: read

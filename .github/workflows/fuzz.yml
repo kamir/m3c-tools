@@ -24,6 +24,14 @@ on:
     - cron: "27 3 * * *" # nightly at 03:27 UTC
   workflow_dispatch: {}
 
+# Concurrency: one scheduled run at a time, and nothing is cancelled.
+# A cancelled run of this workflow is simply a night with no result, so the
+# group serializes rather than supersedes. The prefix is a literal for the
+# reason given in ci.yml.
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: false
+
 # Least privilege: the fuzz job only reads the repo.
 permissions:
   contents: read

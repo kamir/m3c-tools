@@ -343,8 +343,9 @@ def main():
         print("jobs (expanded names)       %d" % len(data))
         print("required (workflow records) %d"
               % sum(1 for r in data if r["required"] == "yes"))
-        print("without timeout-minutes     %d"
-              % sum(1 for r in data if r["timeout"] == "none" and r["reusable"] == "no"))
+        no_timeout = {(r["file"], r["job"]) for r in data
+                      if r["timeout"] == "none" and r["reusable"] == "no"}
+        print("without timeout-minutes     %d" % len(no_timeout))
         print("without concurrency group   %d"
               % sum(1 for r in data if r["concurrency"] == "none"))
         print("self-hosted runners         %d"
