@@ -29,6 +29,9 @@ import (
 // Umbenennen wieder still falsch geworden.
 
 func TestPublishVerweigertOhneIdentitaet(t *testing.T) {
+	// Isoliertes HOME: der Befehl darf weder den echten Schluesselbund noch
+	// echte Skill-Verzeichnisse sehen.
+	t.Setenv("HOME", t.TempDir())
 	var out, errBuf bytes.Buffer
 	code := runPublish([]string{"irgendein-skill", "--version", "1.0.0", "--dry-run"}, &out, &errBuf)
 
@@ -46,16 +49,22 @@ func TestPublishVerweigertOhneIdentitaet(t *testing.T) {
 	}
 }
 
-// Die Gegenprobe: mit Identitaet darf der Befehl NICHT an dieser Pruefung
-// haengenbleiben. Ohne sie wuerde ein Test, der alles mit Ausstieg 2 abweist,
-// ebenfalls bestehen und waere wertlos.
+// Die Gegenprobe: mit Identitaet darf die Identitaetspruefung nicht anschlagen.
+// Gemessen wird an der Meldung, nicht am Ausstiegscode: der Befehl darf danach
+// aus sachfremden Gruenden scheitern (im leeren HOME existiert der Skill nicht),
+// und ein Test auf code != 2 wuerde diesen Fehlschlag mit der
+// Identitaetspruefung verwechseln.
 func TestPublishLaeuftMitIdentitaetWeiter(t *testing.T) {
+	// Isoliertes HOME: sonst haengt das Ergebnis daran, was auf der Maschine
+	// zufaellig unter ~/.claude/skills liegt.
+	t.Setenv("HOME", t.TempDir())
 	var out, errBuf bytes.Buffer
 	code := runPublish([]string{"gibt-es-sicher-nicht", "--version", "1.0.0",
 		"--identity", "id:pruefer@test", "--dry-run"}, &out, &errBuf)
 
-	if code == 2 {
-		t.Fatalf("mit --identity wurde trotzdem ein Verwendungsfehler gemeldet:\n%s%s",
-			out.String(), errBuf.String())
+	ganze := out.String() + errBuf.String()
+	if strings.Contains(ganze, "--identity fehlt") {
+		t.Fatalf("mit --identity meldet der Befehl trotzdem eine fehlende Identitaet (Ausstieg %d):\n%s",
+			code, ganze)
 	}
 }
