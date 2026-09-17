@@ -362,6 +362,40 @@ make vet           # go vet ./...
 Formatting is **`gofumpt` + `gci`** on top of golangci-lint (formatting is not negotiable in Go.
 It is built into the toolchain), and `.golangci.yml` is the enforced linter config.
 
+The CI job set itself is checked, not just the code it runs:
+
+```bash
+make ci-matrix        # one row per CI job: runner, timeout, triggers, required?
+make check-ci-matrix  # every job has a timeout, every PR workflow a concurrency
+                      # group, every self-hosted runs-on the trusted-routing guard
+```
+
+`make ci-matrix` run against the same target on `origin/master` is the before/after
+evidence for any change to the workflows; the procedure is in the header of
+[`scripts/ci-matrix.py`](scripts/ci-matrix.py).
+
+### The self-hosted Linux runner, and how to switch it off
+
+Three required checks run on a self-hosted Linux runner named `master2` when the
+repository variable `CI_SELF_HOSTED` is set to `on`: *CLI/manual consistency
+(docaudit)*, *go mod tidy is a no-op* and *Build Cross-Platform (Linux + Windows)*.
+There is exactly **one** such runner, so those three queue behind each other
+rather than running side by side.
+
+If that machine is off or unreachable, the three checks never report and nothing
+can merge. The way back needs no commit and no review:
+
+```bash
+gh variable delete CI_SELF_HOSTED     # everything returns to GitHub-hosted runners
+gh variable set CI_SELF_HOSTED --body on   # and back again
+```
+
+The routing is opt-in, so a variable that is lost or never set degrades to slower
+and costlier, never to stuck. A pull request from a fork, and a pull request from
+`dependabot[bot]`, always route to a GitHub-hosted runner: a self-hosted runner is
+a persistent machine, and a dependabot head is precisely a change to the set of
+third-party code that `go test` is about to execute.
+
 ### Branch & worktree workflow
 
 Every branch that carries a pull request must be named
