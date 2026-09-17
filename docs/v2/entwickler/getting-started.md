@@ -9,7 +9,7 @@ Audience: a developer making their first change. The architecture itself is on
 the [architecture overview](architecture.md); this page is about the workflow
 around a change.
 
-Rolle: Entwickler · Sprache: EN · Stand: 2026-09-16
+Rolle: Entwickler · Sprache: EN · Stand: 2026-09-17
 
 ## The core rule in one sentence
 
@@ -35,6 +35,18 @@ Two footnotes to that rule, both bitten in review:
   ```bash
   git worktree add ../wt/my-change -b fix/my-change origin/master
   ```
+
+- **A dependency on another PR is a body line, not a comment.** If your PR
+  must land after another one, write `Depends-on: #316` into the PR BODY
+  (several such lines are fine, so is `Depends-on: #316, #317`; case does not
+  matter). The workflow `.github/workflows/pr-deps-gate.yml` runs
+  `scripts/check-pr-deps.sh` on every body edit and every branch move: the
+  check "PR dependencies (DAG gate)" is red while a named PR is still OPEN,
+  red for a reference it cannot resolve (a typo never counts as satisfied),
+  and green once every named PR is MERGED or CLOSED. While blocked, the PR
+  carries the label `blocked-by-dependency`, so the PR list shows the merge
+  order without opening a single PR. A comment saying "merge #316 first" does
+  none of this; the body is the contract, a comment is conversation.
 
 ## Part A: build
 
