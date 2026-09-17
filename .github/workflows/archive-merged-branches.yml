@@ -37,6 +37,7 @@ jobs:
   archive:
     name: Archive merged branches
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write      # push archive/<branch> tags + delete merged branches
       pull-requests: read  # gh pr list --state all

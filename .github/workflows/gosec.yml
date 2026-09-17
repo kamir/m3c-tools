@@ -60,6 +60,7 @@ jobs:
     # cgo-aware jobs (test / skillctl-race / govulncheck) and match how the
     # committed baseline was generated (whole module, `./...`).
     runs-on: macos-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       security-events: write # upload SARIF to GitHub Code Scanning

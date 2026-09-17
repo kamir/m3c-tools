@@ -28,6 +28,7 @@ jobs:
   lint:
     name: Lint & Vet
     runs-on: macos-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -56,6 +57,7 @@ jobs:
     # acht unbeteiligte Dateien in einen fremden Commit, weil sie vorher schon
     # unformatiert waren.
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -65,6 +67,47 @@ jobs:
 
       - name: gofmt over the tracked tree
         run: ./scripts/check-gofmt.sh
+
+  ci-hygiene:
+    # A timeout, a concurrency group and a trusted-runner routing expression are
+    # each invisible when absent: nothing turns red, the run simply costs more
+    # or risks more. So the absence is what gets checked.
+    #
+    # This job is NOT in the required contexts of master, and saying so is part
+    # of the record: it goes red on a pull request and it does not hold a merge.
+    # Making it required is a branch-protection change, which is a human act;
+    # docs/security/required-checks.txt is the tree's copy of that side.
+    name: CI hygiene (timeouts, concurrency, runner trust)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # PyYAML is preinstalled on the ubuntu runner image, measured by the fact
+      # that the duplicate-key guard in pin-guard.yml imports it and runs green.
+      - name: "Guard: timeouts, concurrency groups, trusted-runner routing"
+        run: ./scripts/ci-matrix.py --check
+
+      # The table itself, into the step summary, so a reviewer of a workflow
+      # change can read what the change did to the job set without checking out
+      # the branch.
+      - name: Publish the job matrix to the run summary
+        run: |
+          {
+            echo '### CI job matrix'
+            echo ''
+            echo '```'
+            ./scripts/ci-matrix.py --summary
+            echo '```'
+            echo ''
+            echo '<details><summary>one row per expanded job name</summary>'
+            echo ''
+            echo '```'
+            ./scripts/ci-matrix.py
+            echo '```'
+            echo ''
+            echo '</details>'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   prose-gate:
     # DER NAME BLEIBT, auch wenn der Job inzwischen mehr prueft als Gedankenstriche.
@@ -85,6 +128,7 @@ jobs:
     # Pure shell over the tracked tree: no Go toolchain, no cgo, cheap runner.
     # The rule and its two exemptions are in CODESTYLE.md ("Prose: no em dashes").
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -156,6 +200,7 @@ jobs:
     #
     # Reines Python, kein Go, kein cgo, kein PortAudio: der billige Runner.
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -223,6 +268,7 @@ jobs:
     # Pure-stdlib AST gate: it only PARSES cmd/m3c-tools and cmd/skillctl, so it
     # needs no cgo and no PortAudio, and can run on the cheap runner.
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -281,6 +327,7 @@ jobs:
   test:
     name: Unit Tests
     runs-on: macos-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -328,6 +375,7 @@ jobs:
   skillctl-race:
     name: skillctl Security Tests (-race)
     runs-on: macos-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -351,6 +399,7 @@ jobs:
   sim-gate:
     name: Trust-Plane Simulation (theory vs measurement)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -384,6 +433,7 @@ jobs:
   freeze-manifest:
     name: Freeze manifest (plan pinned before measurement)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -431,6 +481,7 @@ jobs:
   govulncheck:
     name: govulncheck (reachable CVEs)
     runs-on: macos-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -454,6 +505,7 @@ jobs:
   gitleaks:
     name: gitleaks (secret scan)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -484,6 +536,7 @@ jobs:
   mod-tidy-check:
     name: go mod tidy is a no-op
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -499,6 +552,7 @@ jobs:
   build-macos:
     name: Build macOS (arm64 + amd64)
     runs-on: macos-latest
+    timeout-minutes: 20
     needs: [lint, test]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -563,6 +617,7 @@ jobs:
   build-cross:
     name: Build Cross-Platform (Linux + Windows)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [lint, test]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

@@ -34,6 +34,7 @@ jobs:
   docs-gate:
     name: CLI/manual consistency (docaudit)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -78,6 +79,7 @@ jobs:
   sbom:
     name: Generate SBOM (CycloneDX)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [docs-gate]
     permissions:
       contents: read
@@ -98,6 +100,7 @@ jobs:
   build-macos:
     name: Build macOS (arm64 + amd64)
     runs-on: macos-latest
+    timeout-minutes: 30
     needs: [docs-gate]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -199,6 +202,7 @@ jobs:
   build-linux-windows:
     name: Build Linux + Windows (GoReleaser)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [docs-gate]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -241,6 +245,7 @@ jobs:
   build-windows-installer:
     name: Build Windows Installer (NSIS)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [build-linux-windows]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -303,6 +308,7 @@ jobs:
   checksums:
     name: Checksums + SLSA subjects
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [build-macos, build-linux-windows, build-windows-installer]
     permissions:
       contents: read
@@ -349,6 +355,7 @@ jobs:
   cosign:
     name: cosign sign-blob checksums.txt (keyless OIDC)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [checksums]
     permissions:
       contents: read
@@ -412,6 +419,7 @@ jobs:
   verify:
     name: slsa-verifier gate (builder identity)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [checksums, provenance]
     permissions:
       contents: read
@@ -453,6 +461,7 @@ jobs:
   release:
     name: Create Release (post-gate)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [checksums, cosign, provenance, verify, sbom]
     permissions:
       contents: write # create the GitHub Release + upload its assets

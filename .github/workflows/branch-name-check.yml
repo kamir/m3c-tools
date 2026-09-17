@@ -34,6 +34,7 @@ jobs:
   check-branch-name:
     name: Validate branch name
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Check head ref matches convention
         env:

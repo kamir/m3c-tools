@@ -79,6 +79,7 @@ jobs:
   docs-gate:
     name: skillctl CLI/manual consistency (docaudit)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -131,6 +132,7 @@ jobs:
   acceptance-gate:
     name: "SPEC-0406 acceptance gate (${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
     strategy:
       fail-fast: false # report BOTH platforms: which one failed is the finding
       matrix:
@@ -189,6 +191,7 @@ jobs:
   build:
     name: Build 5 arches + digests
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     needs: [docs-gate, acceptance-gate]
     permissions:
       contents: read
@@ -304,6 +307,7 @@ jobs:
     name: cosign sign-blob SHA256SUMS (defense-in-depth)
     needs: [build]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       id-token: write # keyless cosign OIDC: isolated to this job
@@ -348,6 +352,7 @@ jobs:
     name: slsa-verifier gate (L3 builder identity)
     needs: [build, provenance]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -391,6 +396,7 @@ jobs:
     name: Draft release (post-gate)
     needs: [build, provenance, cosign, verify]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write # create the (draft) release
     steps:
@@ -520,6 +526,7 @@ jobs:
     # enterprise_ready:false, not suppress the evidence entirely.
     if: ${{ !cancelled() && needs.release.result == 'success' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       checks: read   # read the release commit's CI check-run conclusions
@@ -628,6 +635,7 @@ jobs:
     name: Sign release-evidence (cosign keyless)
     needs: [evidence]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       id-token: write # keyless cosign OIDC: isolated to this job
@@ -673,6 +681,7 @@ jobs:
     name: Attach release-evidence to the draft
     needs: [evidence, evidence-sign]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write # add assets to the existing draft release
     steps:

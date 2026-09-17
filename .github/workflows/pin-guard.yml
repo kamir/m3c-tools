@@ -79,6 +79,7 @@ jobs:
     # gate by renaming the job would be precisely the failure it guards.
     name: Enforce pinning + least-privilege + retention
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 

@@ -62,6 +62,7 @@ jobs:
   smoke:
     name: smoke (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     permissions:
       contents: read
     strategy:
