@@ -30,7 +30,6 @@ docs/v2/entwickler/getting-started.md|docs/v2/pages/entwickler-getting-started.h
 docs/v2/betrieb/ueberblick.de.md|docs/v2/pages/betrieb-ueberblick.html
 docs/v2/betrieb/runbook-m3c-tools-capture.de.md|docs/v2/pages/betrieb-runbook-m3c-tools-capture.html
 docs/v2/sicherheit/ueberblick.de.md|docs/v2/pages/sicherheit-ueberblick.html
-docs/v2/entwickler/thinking-engine.md|docs/v2/pages/entwickler-thinking-engine.html
 docs/v2/entwickler/skillctl-sim.md|docs/v2/pages/entwickler-skillctl-sim.html
 docs/v2/sicherheit/audit-spur.de.md|docs/v2/pages/sicherheit-audit-spur.html
 docs/v2/entwickler/secretctl.md|docs/v2/pages/entwickler-secretctl.html
