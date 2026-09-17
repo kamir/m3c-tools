@@ -36,9 +36,13 @@ jobs:
 
       # Does this change touch code at all, or only prose. Measured over the
       # last 60 merged pull requests: one in ten changes nothing but prose, and
-      # the five macOS jobs it pays for anyway measured 894 seconds together,
+      # the five macOS jobs it pays for anyway measured 872 seconds together,
       # billed at the macOS rate. A file ending in .md cannot change what a Go
-      # test does.
+      # test does. (872 is the sum of five MEDIANS from one collection on
+      # 2026-09-17, up to six completed runs per job: Lint & Vet 149, Unit Tests
+      # 294, skillctl Security Tests 144, Build macOS 177, Ratchet coverage 108.
+      # It said 894 first, which added four numbers from one run to a fifth from
+      # somewhere else. Numbers from two runs do not belong in one sum.)
       #
       # The JOB still runs and still reports, and that is deliberate. A job
       # skipped by an `if:` reports the conclusion "skipped", which GitHub's
@@ -407,9 +411,13 @@ jobs:
 
       # Does this change touch code at all, or only prose. Measured over the
       # last 60 merged pull requests: one in ten changes nothing but prose, and
-      # the five macOS jobs it pays for anyway measured 894 seconds together,
+      # the five macOS jobs it pays for anyway measured 872 seconds together,
       # billed at the macOS rate. A file ending in .md cannot change what a Go
-      # test does.
+      # test does. (872 is the sum of five MEDIANS from one collection on
+      # 2026-09-17, up to six completed runs per job: Lint & Vet 149, Unit Tests
+      # 294, skillctl Security Tests 144, Build macOS 177, Ratchet coverage 108.
+      # It said 894 first, which added four numbers from one run to a fifth from
+      # somewhere else. Numbers from two runs do not belong in one sum.)
       #
       # The JOB still runs and still reports, and that is deliberate. A job
       # skipped by an `if:` reports the conclusion "skipped", which GitHub's
@@ -482,9 +490,13 @@ jobs:
 
       # Does this change touch code at all, or only prose. Measured over the
       # last 60 merged pull requests: one in ten changes nothing but prose, and
-      # the five macOS jobs it pays for anyway measured 894 seconds together,
+      # the five macOS jobs it pays for anyway measured 872 seconds together,
       # billed at the macOS rate. A file ending in .md cannot change what a Go
-      # test does.
+      # test does. (872 is the sum of five MEDIANS from one collection on
+      # 2026-09-17, up to six completed runs per job: Lint & Vet 149, Unit Tests
+      # 294, skillctl Security Tests 144, Build macOS 177, Ratchet coverage 108.
+      # It said 894 first, which added four numbers from one run to a fifth from
+      # somewhere else. Numbers from two runs do not belong in one sum.)
       #
       # The JOB still runs and still reports, and that is deliberate. A job
       # skipped by an `if:` reports the conclusion "skipped", which GitHub's
@@ -731,9 +743,13 @@ jobs:
 
       # Does this change touch code at all, or only prose. Measured over the
       # last 60 merged pull requests: one in ten changes nothing but prose, and
-      # the five macOS jobs it pays for anyway measured 894 seconds together,
+      # the five macOS jobs it pays for anyway measured 872 seconds together,
       # billed at the macOS rate. A file ending in .md cannot change what a Go
-      # test does.
+      # test does. (872 is the sum of five MEDIANS from one collection on
+      # 2026-09-17, up to six completed runs per job: Lint & Vet 149, Unit Tests
+      # 294, skillctl Security Tests 144, Build macOS 177, Ratchet coverage 108.
+      # It said 894 first, which added four numbers from one run to a fifth from
+      # somewhere else. Numbers from two runs do not belong in one sum.)
       #
       # The JOB still runs and still reports, and that is deliberate. A job
       # skipped by an `if:` reports the conclusion "skipped", which GitHub's

@@ -14,8 +14,14 @@
 #
 # One pull request in ten changes nothing but prose, and pays for the macOS
 # jobs anyway: Lint & Vet, Unit Tests, skillctl Security Tests, Build macOS and
-# Ratchet coverage together measured 894 seconds, billed at the macOS rate.
-# A file ending in .md cannot change what a Go test does.
+# Ratchet coverage together measured 872 seconds, billed at the macOS rate:
+#
+#     Lint & Vet                       149      Unit Tests               294
+#     skillctl Security Tests (-race)  144      Build macOS              177
+#     Ratchet coverage                 108      ---------------------    872
+#
+# Five MEDIANS from ONE collection on 2026-09-17, up to six completed runs per
+# job. A file ending in .md cannot change what a Go test does.
 #
 # WHAT IT REFUSES TO DO, and this is the whole design
 #
