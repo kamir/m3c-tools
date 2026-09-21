@@ -1152,22 +1152,39 @@ func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentTyp
 		}).Build()
 		payload.TranscriptData = []byte(strings.TrimSpace(doc) + "\n")
 	}
-	resp, upErr := er1.Upload(er1Cfg, payload)
-	if upErr != nil {
-		return "", "", fmt.Errorf("upload: %w", upErr)
-	}
-	// SHARED local ledger (plaud://<id>, importType "plaud") + SPEC-0117 server
-	// mapping: identical to the menubar/consumer sync, so both share one truth.
+	// Der Zeilenschluessel wird VOR dem Upload gebildet, damit ihn beide Zweige
+	// benutzen koennen. Vorher kehrte der Fehlerzweig zurueck, ohne irgendetwas
+	// zu schreiben: ein fehlgeschlagener Upload hinterliess in der lokalen
+	// Ablage KEINE Spur. Deshalb stand upload_error dort in 612 Zeilen kein
+	// einziges Mal, und die Datenbank kannte nur Erfolg.
+	var audioHash, plaudPath string
 	if filesDB != nil {
 		h := sha256.Sum256(audio)
 		if len(audio) == 0 {
 			h = sha256.Sum256([]byte(r.ID)) // unique row key when audio is absent
 		}
-		audioHash := fmt.Sprintf("%x", h)
-		plaudPath := "plaud://" + r.ID
+		audioHash = fmt.Sprintf("%x", h)
+		plaudPath = "plaud://" + r.ID
+	}
+
+	resp, upErr := er1.Upload(er1Cfg, payload)
+	if upErr != nil {
+		if filesDB != nil {
+			_, _ = filesDB.RecordFile(plaudPath, audioHash, int64(len(audio)), "plaud", "")
+			_ = filesDB.RecordUploadError(audioHash, "plaud", upErr.Error())
+		}
+		return "", "", fmt.Errorf("upload: %w", upErr)
+	}
+	// SHARED local ledger (plaud://<id>, importType "plaud") + SPEC-0117 server
+	// mapping: identical to the menubar/consumer sync, so both share one truth.
+	if filesDB != nil {
 		_, _ = filesDB.RecordFile(plaudPath, audioHash, int64(len(audio)), "plaud", "")
 		_ = filesDB.RecordTranscript(audioHash, "plaud", transcript, "")
-		_ = filesDB.RecordUploadSuccess(audioHash, "plaud", resp.DocID)
+		if sErr := filesDB.RecordUploadSuccess(audioHash, "plaud", resp.DocID); sErr != nil {
+			// Die Ablehnung einer leeren DocID darf nicht verschluckt werden:
+			// sonst stuende die Zeile auf 'imported' und niemand wuesste warum.
+			_ = filesDB.RecordUploadError(audioHash, "plaud", sErr.Error())
+		}
 	}
 	if syncAPI != nil {
 		if mapErr := syncAPI.RegisterMapping(plaud.SyncMapping{
