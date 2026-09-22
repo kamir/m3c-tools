@@ -32,6 +32,11 @@ var exactMarker = regexp.MustCompile(`^\[REDACTED:[a-z0-9_]+\]$`)
 func isMarker(s []byte) bool { return exactMarker.Match(s) }
 
 // Default pattern classes.
+//
+// #nosec G101 -- das sind die NAMEN der Fundklassen, die der Redactor in seinen
+// Bericht schreibt, keine Zugangsdaten. Ausgerechnet das Paket, das Secrets von
+// der Platte fernhaelt, wird hier gemeldet, weil zwei Namen "jwt" und
+// "url_credential" lauten.
 const (
 	ClassPrivateKey    = "private_key"
 	ClassCookie        = "cookie"
@@ -40,9 +45,6 @@ const (
 	ClassAWSAccessKey  = "aws_access_key_id"
 	ClassGitHubToken   = "github_token"
 	ClassSlackToken    = "slack_token"
-	// #nosec G101 -- das sind die NAMEN der Fundklassen, die der Redactor in
-	// seinen Bericht schreibt, keine Zugangsdaten. Genau dieses Paket sorgt
-	// dafuer, dass echte Werte nie auf die Platte kommen.
 	ClassJWT           = "jwt"
 	ClassURLCredential = "url_credential"
 )
