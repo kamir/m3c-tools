@@ -135,7 +135,7 @@ func validateChange(c Change) error {
 			return err
 		}
 		na, cp := trustfreeze.StatusNotApplicable, trustfreeze.StatusCaptured
-		if !(c.BeforeStatus == cp && c.AfterStatus == na) && !(c.BeforeStatus == na && c.AfterStatus == cp) {
+		if (c.BeforeStatus != cp || c.AfterStatus != na) && (c.BeforeStatus != na || c.AfterStatus != cp) {
 			return fmt.Errorf("applicability_changed %s is not a move between captured and not_applicable", c.ProbeID)
 		}
 		return nil

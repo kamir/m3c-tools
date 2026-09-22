@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,7 +28,16 @@ func secretNeedles(t *testing.T, seed []byte) (text []string, binary [][]byte) {
 	}
 	derB64 := base64.StdEncoding.EncodeToString(der)
 	text = []string{
-		"PRIVATE KEY",
+		// Der Suchbegriff ist der PEM-BLOCK, nicht die Wortfolge "PRIVATE
+		// KEY". Eine Fehlermeldung darf sagen, welchen PEM-Typ sie erwartet
+		// hat, und genau das tut signing.LoadPrivateKey, wenn ihm eine
+		// oeffentliche Schluesseldatei untergeschoben wird. Unter POSIX faellt
+		// derselbe Aufruf schon vorher ueber die Rechtepruefung (0600), unter
+		// Windows ist diese Pruefung bewusst abgeschaltet, weil Modus-Bits
+		// dort nichts ueber ACLs aussagen. Die Wortfolge als Nadel liess den
+		// Test deshalb nur auf windows-latest rot werden, ohne dass je ein
+		// Schluessel ausgetreten waere.
+		"PRIVATE KEY-----",
 		hex.EncodeToString(seed), strings.ToUpper(hex.EncodeToString(seed)),
 		base64.StdEncoding.EncodeToString(seed), base64.RawStdEncoding.EncodeToString(seed),
 		base64.URLEncoding.EncodeToString(seed), base64.RawURLEncoding.EncodeToString(seed),
@@ -50,6 +60,46 @@ func scanForSecrets(t *testing.T, where string, b []byte, text []string, binary 
 	for _, n := range binary {
 		if bytes.Contains(b, n) {
 			t.Fatalf("%s contains raw private key bytes", where)
+		}
+	}
+}
+
+// TF05-R8, Gegenprobe zu TestNoKeyMaterialInOutputs: die Nadeln finden einen
+// echten PEM-Block und den rohen Schluessel, und sie schlagen NICHT auf eine
+// Fehlermeldung an, die nur den erwarteten PEM-Typ benennt.
+func TestSecretNeedlesCatchAKeyButNotAnErrorMessage(t *testing.T) {
+	text, binary := secretNeedles(t, seedTrusted)
+	hits := func(b []byte) bool {
+		for _, n := range text {
+			if bytes.Contains(b, []byte(n)) {
+				return true
+			}
+		}
+		for _, n := range binary {
+			if bytes.Contains(b, n) {
+				return true
+			}
+		}
+		return false
+	}
+	priv := ed25519.NewKeyFromSeed(seedTrusted)
+	der, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pemBlock := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
+	if !hits(pemBlock) {
+		t.Fatal("ein echter PEM-Privatschluessel wurde nicht gefunden")
+	}
+	if !hits(priv) {
+		t.Fatal("der rohe Schluessel wurde nicht gefunden")
+	}
+	for _, msg := range []string{
+		`private key key.pub: wrong PEM type "PUBLIC KEY", want "PRIVATE KEY"`,
+		"private key /tmp/k.priv has insecure mode 0644; expected 0600",
+	} {
+		if hits([]byte(msg)) {
+			t.Fatalf("Fehlalarm auf einer harmlosen Meldung: %q", msg)
 		}
 	}
 }

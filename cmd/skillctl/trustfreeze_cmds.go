@@ -725,6 +725,9 @@ func tfReasonText(v string) (string, error) {
 	if path == "" {
 		return "", errors.New("--reason @<file>: empty file name")
 	}
+	// #nosec G304 -- `--reason @<datei>` bedeutet genau das: der Bediener
+	// nennt die Datei, deren Text in die Freigabe gehoert. Der Inhalt wird
+	// begrenzt gelesen und vor dem Signieren auf Secrets geprueft.
 	f, err := os.Open(path)
 	if err != nil {
 		return "", fmt.Errorf("--reason: %w", err)
@@ -1280,13 +1283,17 @@ func tfReportTarget(input, output string) (string, error) {
 // tfWriteNewFile creates path exclusively with mode 0600 (a report can carry
 // the host name) and removes it again when the write fails.
 func tfWriteNewFile(path string, b []byte) error {
+	// #nosec G304 -- der Pfad IST die Eingabe des Bedieners (--output). Das
+	// Kommando schreibt genau dorthin und nirgends sonst; O_EXCL verhindert,
+	// dass es eine vorhandene Datei ueberschreibt.
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return err
 	}
 	if _, err := f.Write(b); err != nil {
-		f.Close()
-		return errors.Join(err, os.Remove(path))
+		// Close-Fehler mitnehmen, statt ihn zu verschlucken: die halbe Datei
+		// wird ohnehin entfernt, aber die Ursache gehoert in die Meldung.
+		return errors.Join(err, f.Close(), os.Remove(path))
 	}
 	if err := f.Close(); err != nil {
 		return errors.Join(err, os.Remove(path))

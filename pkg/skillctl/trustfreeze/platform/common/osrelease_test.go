@@ -206,7 +206,7 @@ func TestParseOSReleaseValues(t *testing.T) {
 		{name: "terminal escape", line: "K=\"\x1b[31mred\"", reason: OSReleaseIssueNonPrintable},
 		{name: "NUL", line: "K=\"a\x00b\"", reason: OSReleaseIssueNonPrintable},
 		{name: "C1 control", line: "K=\"a\u0085b\"", reason: OSReleaseIssueNonPrintable},
-		{name: "bidi override", line: "K=\"a‮b\"", reason: OSReleaseIssueNonPrintable},
+		{name: "bidi override", line: "K=\"a\u202eb\"", reason: OSReleaseIssueNonPrintable},
 		{name: "line separator", line: "K=\"a b\"", reason: OSReleaseIssueNonPrintable},
 		{name: "stray carriage return", line: "K=x\r\r", reason: OSReleaseIssueNonPrintable},
 		{name: "invalid utf-8", line: "K=\"\xff\"", reason: OSReleaseIssueInvalidUTF8},
