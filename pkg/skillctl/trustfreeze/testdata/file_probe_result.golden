@@ -1,0 +1,80 @@
+{
+  "probe_id": "common.identity",
+  "probe_version": "1",
+  "status": "captured",
+  "support": {
+    "available": true
+  },
+  "started_at": "2026-01-02T03:04:05Z",
+  "duration_ms": 12,
+  "privilege": "user",
+  "tools": [
+    {
+      "name": "uname",
+      "path": "/usr/bin/uname",
+      "args": [
+        "-r"
+      ],
+      "exit_code": 0,
+      "duration_ms": 3,
+      "stdout_bytes": 14,
+      "stderr_bytes": 0
+    }
+  ],
+  "raw_evidence": [
+    {
+      "path": "evidence/common.identity/stdout",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source": "stdout:uname"
+    }
+  ],
+  "normalized_state": [
+    {
+      "id": "device/host",
+      "type": "host",
+      "scope": "device",
+      "source": "common.identity",
+      "state": "observed",
+      "digest": "sha256:9afecead2f8c340d6ec4e01560d94b93030cb23a6cc6b728717aab364b1960bf",
+      "attributes": {
+        "hostname": "host-a.example"
+      },
+      "provenance": {
+        "method": "runtime",
+        "confidence": "proven",
+        "sources": [
+          "runtime:os.Hostname"
+        ],
+        "observed_at": "2026-01-02T03:04:05Z"
+      },
+      "sensitivity": "internal"
+    },
+    {
+      "id": "device/os",
+      "type": "os",
+      "scope": "device",
+      "source": "common.identity",
+      "state": "observed",
+      "digest": "sha256:c0c7ab6533485eec206fc7516c46a69fffa7b71561695997105323e0f00ba845",
+      "attributes": {
+        "arch": "amd64",
+        "kernel_release": "6.8.0-generic",
+        "os_build": "",
+        "os_family": "linux",
+        "os_name": "Ubuntu",
+        "os_version": "24.04"
+      },
+      "provenance": {
+        "method": "file",
+        "confidence": "proven",
+        "sources": [
+          "file:/etc/os-release",
+          "command:uname -r"
+        ],
+        "observed_at": "2026-01-02T03:04:05Z"
+      },
+      "sensitivity": "public"
+    }
+  ]
+}
