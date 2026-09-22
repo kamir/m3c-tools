@@ -17,10 +17,10 @@
       "target": "linux/amd64",
       "evidence_level": "real-platform-tested",
       "executed_on": "Ubuntu 24.04.1 LTS, kernel 6.17.0-35-generic, x86_64, unprivileged user",
-      "toolchain": "test binaries and skillctl cross-compiled from this commit with go1.27.1 darwin/amd64, CGO_ENABLED=0, executed on the Linux host without a Go toolchain or module cache",
+      "toolchain": "test binaries and skillctl cross-compiled from this commit with go1.27.1 darwin/amd64, CGO_ENABLED=0. The unit-test binaries are self-contained and ran without invoking Go. The acceptance script calls go version once for its own evidence header; that host has go1.26.4 installed and Go therefore fetched the go1.26.6 toolchain named by go.mod into the throwaway HOME, which needed network access.",
       "unit_tests": { "packages": 10, "pass": 892, "fail": 0, "skip": 3 },
       "acceptance_script": { "steps": 48, "unexpected": 0, "result": "pass" },
-      "notes": "Read-only towards the host: every run used a throwaway HOME and wrote only inside a temporary directory."
+      "notes": "Read-only towards the host: every run used a throwaway HOME and wrote only inside a temporary directory. The one exception to offline operation is the go version call described under toolchain."
     },
     {
       "target": "windows/amd64",
