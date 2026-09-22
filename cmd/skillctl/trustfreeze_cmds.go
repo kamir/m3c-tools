@@ -1,0 +1,1295 @@
+// skillctl trust-freeze: capture, approve, verify and compare a signed record
+// of what a host looks like (SPEC-0466, with SPEC-0467 to SPEC-0471).
+//
+//	doctor            what a capture with a profile could collect here
+//	capture           write a capture bundle (never a baseline)
+//	baseline approve  turn a verified capture into a signed baseline
+//	verify            check a bundle offline
+//	diff              verify two bundles, compare them, judge the diff
+//	report            project a bundle onto the JSON report document
+//
+// Exit space 0/1/2 (docs/v2/referenz/CLI-VERBS.md): 0 ok, 1 a run that failed
+// or a threshold that was exceeded, 2 a usage error. Every JSON output carries
+// result_class, so a script can tell the causes of exit 1 apart.
+//
+// capture never approves: only `baseline approve` reaches the seal package
+// (SPEC-0470 TF05-R2, TF05-R6; guarded by a test in this package).
+package main
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"runtime"
+	"sort"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze"
+	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/capture"
+	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/compare"
+	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/policy"
+	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/probe"
+	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/report"
+	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/seal"
+)
+
+// Result classes of the trust-freeze JSON outputs (SPEC-0466 section 5.9).
+const (
+	tfResultOK           = "ok"
+	tfResultUsage        = "usage_error"
+	tfResultExecution    = "execution_error"
+	tfResultVerification = "verification_failure"
+	tfResultDrift        = "drift_threshold_exceeded"
+	tfResultIncomplete   = "incomplete_capture"
+)
+
+// tfNotImplemented is the one answer for an option this version lacks.
+const tfNotImplemented = "not implemented in this version"
+
+// tfPlatformSupport is what doctor states about platform support: full
+// support needs real-platform evidence tied to a commit (SPEC-0471 TF06-R7),
+// which no build can claim about itself.
+const tfPlatformSupport = "not_established"
+
+// tfEvaluatedPolicyFile is where a diff bundle keeps the policy it was judged
+// with (SPEC-0469 R5).
+const tfEvaluatedPolicyFile = "policy/evaluated-policy.json"
+
+// tfDefaultReportFile is the report file name when --output names a directory.
+const tfDefaultReportFile = "report.json"
+
+// tfMaxReasonFile caps a --reason @file read. The approval itself caps the
+// reason far lower; this only bounds the read.
+const tfMaxReasonFile = 1 << 20
+
+// tfDeps are the dependencies of the trust-freeze commands. Production uses
+// defaultTFDeps; tests inject a fixed clock, a fake host and a temp home.
+type tfDeps struct {
+	// Clock is the only time source: capture times, approved_at, expiry.
+	Clock trustfreeze.Clock
+	// Host returns the observed host. Its Clock is replaced by Clock. The
+	// same host also names the approving device for `baseline approve`, so
+	// both subject ids come from one derivation (HostContext.Subject).
+	Host func() probe.HostContext
+	// Registry returns the probe registry.
+	Registry func() (*probe.Registry, error)
+	// HomeRoot resolves the per-user root (homeroot: %USERPROFILE% on
+	// Windows, never $HOME there).
+	HomeRoot func() (string, error)
+	// Version is the skillctl version recorded in capture.json.
+	Version string
+}
+
+func defaultTFDeps() tfDeps {
+	return tfDeps{
+		Clock:    trustfreeze.SystemClock{},
+		Host:     capture.DefaultHostContext,
+		Registry: capture.DefaultRegistry,
+		HomeRoot: userHome,
+		Version:  version,
+	}
+}
+
+func (d tfDeps) host() probe.HostContext {
+	h := d.Host()
+	h.Clock = d.Clock
+	return h
+}
+
+// runTrustFreeze implements `skillctl trust-freeze`. Ctrl-C and SIGTERM cancel
+// the context, which reaches the command runner and its process-group kill,
+// so an interrupted capture leaves no tool running.
+func runTrustFreeze(args []string, stdout, stderr io.Writer) int {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return runTrustFreezeWith(ctx, defaultTFDeps(), args, stdout, stderr)
+}
+
+// runTrustFreezeWith is the dispatcher with explicit dependencies.
+func runTrustFreezeWith(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		tfUsage(stderr)
+		return exitUsage
+	}
+	switch args[0] {
+	case "doctor":
+		return tfDoctor(ctx, d, args[1:], stdout, stderr)
+	case "capture":
+		return tfCapture(ctx, d, args[1:], stdout, stderr)
+	case "baseline":
+		if len(args) < 2 || args[1] != "approve" {
+			fmt.Fprintln(stderr, "skillctl trust-freeze baseline: the only subcommand is approve")
+			tfUsage(stderr)
+			return exitUsage
+		}
+		return tfApprove(ctx, d, args[2:], stdout, stderr)
+	case "verify":
+		return tfVerify(ctx, d, args[1:], stdout, stderr)
+	case "diff":
+		return tfDiff(ctx, d, args[1:], stdout, stderr)
+	case "report":
+		return tfReport(ctx, d, args[1:], stdout, stderr)
+	case "help", "-h", "--help":
+		tfUsage(stdout)
+		return exitOK
+	default:
+		fmt.Fprintf(stderr, "skillctl trust-freeze: unknown subcommand %q\n\n", args[0])
+		tfUsage(stderr)
+		return exitUsage
+	}
+}
+
+func tfUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: skillctl trust-freeze <subcommand> [flags]")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Record what a host looks like, approve that record as a signed baseline, and")
+	fmt.Fprintln(w, "compare later captures against it. Read-only toward the host; offline.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "  doctor            Show what a capture with a profile could collect here, and the")
+	fmt.Fprintln(w, "                    per-platform evidence level of every probe. Writes nothing.")
+	fmt.Fprintln(w, "  capture           Write a capture bundle (never a baseline).")
+	fmt.Fprintln(w, "  baseline approve  Turn a verified capture into a new, signed baseline bundle.")
+	fmt.Fprintln(w, "  verify            Check a bundle offline: manifest, digests, approval, signature, trust.")
+	fmt.Fprintln(w, "  diff              Verify a baseline and a current bundle, compare them, judge the diff.")
+	fmt.Fprintln(w, "  report            Project a capture, baseline or diff bundle onto the JSON report.")
+	fmt.Fprintln(w, "  help              Print this text.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Run a subcommand with --help for its flags.")
+	fmt.Fprintln(w, "Exit: 0 ok, 1 run failed or threshold exceeded, 2 usage error. JSON output carries")
+	fmt.Fprintln(w, "result_class: ok, usage_error, execution_error, verification_failure,")
+	fmt.Fprintln(w, "drift_threshold_exceeded, incomplete_capture.")
+	fmt.Fprintln(w, "Full platform support is not established; see `skillctl trust-freeze doctor`.")
+}
+
+// --- output helpers ----------------------------------------------------------
+
+// tfOut writes the output of one subcommand in text or JSON form.
+type tfOut struct {
+	name   string
+	stdout io.Writer
+	stderr io.Writer
+	json   bool
+}
+
+// tfErrorDoc is the JSON output of a run that produced no result document.
+type tfErrorDoc struct {
+	ResultClass string `json:"result_class"`
+	Command     string `json:"command"`
+	Error       string `json:"error"`
+}
+
+// emit writes v as canonical, indented JSON.
+func (o tfOut) emit(v any) error {
+	b, err := trustfreeze.MarshalFile(v)
+	if err != nil {
+		return err
+	}
+	_, err = o.stdout.Write(b)
+	return err
+}
+
+// fail reports an error with its result class and returns code.
+func (o tfOut) fail(class string, code int, err error) int {
+	if o.json {
+		if eerr := o.emit(tfErrorDoc{ResultClass: class, Command: o.name, Error: err.Error()}); eerr != nil {
+			fmt.Fprintf(o.stderr, "skillctl trust-freeze %s: cannot encode output: %v\n", o.name, eerr)
+		}
+	}
+	fmt.Fprintf(o.stderr, "skillctl trust-freeze %s: %v\n", o.name, err)
+	return code
+}
+
+func (o tfOut) usage(err error) int { return o.fail(tfResultUsage, exitUsage, err) }
+func (o tfOut) exec(err error) int  { return o.fail(tfResultExecution, exitGeneric, err) }
+
+// result writes a result document (JSON) or runs text, and returns code.
+func (o tfOut) result(code int, doc any, text func(io.Writer)) int {
+	if o.json {
+		if err := o.emit(doc); err != nil {
+			fmt.Fprintf(o.stderr, "skillctl trust-freeze %s: cannot encode output: %v\n", o.name, err)
+			return exitGeneric
+		}
+		return code
+	}
+	text(o.stdout)
+	return code
+}
+
+// tfFlagSet returns a FlagSet whose errors and usage go to stderr.
+func tfFlagSet(name, synopsis string, stderr io.Writer) *flag.FlagSet {
+	fs := flag.NewFlagSet("trust-freeze "+name, flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fs.Usage = func() {
+		fmt.Fprintf(stderr, "Usage: skillctl trust-freeze %s\n\n", synopsis)
+		fs.PrintDefaults()
+	}
+	return fs
+}
+
+// tfParse parses args. done reports that the caller must return code: 0 for
+// --help, 2 for a flag error or a stray positional argument.
+func tfParse(fs *flag.FlagSet, args []string) (code int, done bool) {
+	code, done, _ = tfParseCause(fs, args)
+	return code, done
+}
+
+// tfParseCause is tfParse that also returns the cause of a usage error. The
+// flag package has already written it, with the usage, to stderr.
+func tfParseCause(fs *flag.FlagSet, args []string) (int, bool, error) {
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return exitOK, true, nil
+		}
+		return exitUsage, true, err
+	}
+	if fs.NArg() > 0 {
+		err := fmt.Errorf("unexpected argument %q", fs.Arg(0))
+		fmt.Fprintln(fs.Output(), err)
+		fs.Usage()
+		return exitUsage, true, err
+	}
+	return 0, false, nil
+}
+
+// tfParseArgs is tfParse for a subcommand. When the command line asks for
+// --format json, a usage error found by the flag package (unknown flag,
+// malformed value, stray argument) also writes the usage_error document to
+// stdout (SPEC-0466 section 5.9): parsing can stop before --format itself is
+// read, so the arguments are scanned for it.
+func tfParseArgs(fs *flag.FlagSet, name string, args []string, stdout, stderr io.Writer) (int, bool) {
+	code, done, err := tfParseCause(fs, args)
+	if done && err != nil && tfWantsJSON(args) {
+		out := tfOut{name: name, stdout: stdout, stderr: stderr, json: true}
+		if eerr := out.emit(tfErrorDoc{ResultClass: tfResultUsage, Command: name, Error: err.Error()}); eerr != nil {
+			fmt.Fprintf(stderr, "skillctl trust-freeze %s: cannot encode output: %v\n", name, eerr)
+		}
+	}
+	return code, done
+}
+
+// tfWantsJSON reports whether the last --format on the command line (any
+// spelling the flag package accepts: -format, --format, with "=" or as two
+// arguments) says json. Scanning stops at "--".
+func tfWantsJSON(args []string) bool {
+	want := false
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			break
+		}
+		name, value, hasValue := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		if !strings.HasPrefix(a, "-") || name != "format" {
+			continue
+		}
+		if !hasValue {
+			if i+1 >= len(args) {
+				break
+			}
+			i++
+			value = args[i]
+		}
+		want = value == "json"
+	}
+	return want
+}
+
+// tfFormat checks a --format value: allowed formats are accepted, the
+// planned ones answer "not implemented in this version".
+func tfFormat(value string, allowed, planned []string) error {
+	for _, a := range allowed {
+		if value == a {
+			return nil
+		}
+	}
+	for _, p := range planned {
+		if value == p {
+			return fmt.Errorf("--format %s: %s", value, tfNotImplemented)
+		}
+	}
+	return fmt.Errorf("--format %q: want %s", value, strings.Join(append(append([]string{}, allowed...), planned...), ", "))
+}
+
+// tfSetFlags returns the names of the flags set on the command line.
+func tfSetFlags(fs *flag.FlagSet) map[string]bool {
+	set := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	return set
+}
+
+// --- doctor ------------------------------------------------------------------
+
+type tfPlatform struct {
+	GOOS      string                `json:"goos"`
+	GOARCH    string                `json:"goarch"`
+	Privilege trustfreeze.Privilege `json:"privilege"`
+}
+
+type tfPlannedProbe struct {
+	ProbeID    string                  `json:"probe_id"`
+	Required   bool                    `json:"required"`
+	Registered bool                    `json:"registered"`
+	Available  bool                    `json:"available"`
+	Status     trustfreeze.ProbeStatus `json:"status,omitempty"`
+	Reason     string                  `json:"reason,omitempty"`
+}
+
+type tfNotChecked struct {
+	Item   string `json:"item"`
+	Reason string `json:"reason"`
+}
+
+type tfDoctorDoc struct {
+	ResultClass string                 `json:"result_class"`
+	Command     string                 `json:"command"`
+	Platform    tfPlatform             `json:"platform"`
+	Profile     trustfreeze.ProfileRef `json:"profile"`
+	// ExpectedComplete: every required probe passed its support check. A
+	// probe that is available can still end partial at capture time.
+	ExpectedComplete bool                 `json:"expected_complete"`
+	Probes           []tfPlannedProbe     `json:"probes"`
+	ExpectedGaps     []string             `json:"expected_gaps"`
+	SupportMatrix    []probe.SupportEntry `json:"support_matrix"`
+	// PlatformSupport is always "not_established" in this version.
+	PlatformSupport string         `json:"platform_support"`
+	NotChecked      []tfNotChecked `json:"not_checked"`
+}
+
+func tfDoctor(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Writer) int {
+	fs := tfFlagSet("doctor", "doctor [--profile <name>] [--format text|json]", stderr)
+	profileName := fs.String("profile", "walking-skeleton", "Built-in profile to plan: "+strings.Join(capture.BuiltinProfileIDs(), ", ")+".")
+	format := fs.String("format", "text", "Output format: text or json.")
+	if code, done := tfParseArgs(fs, "doctor", args, stdout, stderr); done {
+		return code
+	}
+	out := tfOut{name: "doctor", stdout: stdout, stderr: stderr, json: *format == "json"}
+	if err := tfFormat(*format, []string{"text", "json"}, nil); err != nil {
+		return out.usage(err)
+	}
+	prof, err := capture.BuiltinProfile(*profileName)
+	if err != nil {
+		return out.usage(err)
+	}
+	reg, err := d.Registry()
+	if err != nil {
+		return out.exec(err)
+	}
+	host := d.host()
+	doc := tfDoctorDoc{
+		ResultClass:      tfResultOK,
+		Command:          "doctor",
+		Platform:         tfPlatform{GOOS: host.GOOS, GOARCH: host.GOARCH, Privilege: host.Privilege},
+		Profile:          prof.Ref(),
+		ExpectedComplete: true,
+		Probes:           []tfPlannedProbe{},
+		ExpectedGaps:     []string{},
+		SupportMatrix:    probe.SupportMatrix(reg, prof.ProbeIDs()),
+		PlatformSupport:  tfPlatformSupport,
+		NotChecked: []tfNotChecked{
+			{Item: "claude_roots", Reason: tfNotImplemented},
+			{Item: "output_location", Reason: "doctor has no output target; capture checks it when it writes"},
+			{Item: "tools", Reason: "tools are resolved per probe at capture time and recorded in probes/<probe-id>.json"},
+		},
+	}
+	if doc.SupportMatrix == nil {
+		doc.SupportMatrix = []probe.SupportEntry{}
+	}
+	for _, pp := range capture.Plan(ctx, prof, reg, host) {
+		row := tfPlannedProbe{
+			ProbeID:    pp.ProbeID,
+			Required:   pp.Required,
+			Registered: pp.Registered,
+			Available:  pp.Support.Available,
+			Status:     pp.Support.Status,
+			Reason:     pp.Support.Reason,
+		}
+		if !row.Status.Valid() {
+			row.Status = ""
+		}
+		doc.Probes = append(doc.Probes, row)
+		if pp.Required && !pp.Support.Available {
+			doc.ExpectedComplete = false
+			doc.ExpectedGaps = append(doc.ExpectedGaps, pp.ProbeID)
+		}
+	}
+	return out.result(exitOK, doc, func(w io.Writer) {
+		fmt.Fprintf(w, "platform: %s/%s, privilege %s\n", doc.Platform.GOOS, doc.Platform.GOARCH, doc.Platform.Privilege)
+		fmt.Fprintf(w, "profile: %s v%s (%s)\n", doc.Profile.ID, doc.Profile.Version, doc.Profile.Digest)
+		for _, p := range doc.Probes {
+			req := "optional"
+			if p.Required {
+				req = "required"
+			}
+			state := "available"
+			if !p.Available {
+				state = string(p.Status)
+				if p.Reason != "" {
+					state += " (" + p.Reason + ")"
+				}
+			}
+			fmt.Fprintf(w, "  %-32s %-8s %s\n", p.ProbeID, req, state)
+		}
+		if doc.ExpectedComplete {
+			fmt.Fprintln(w, "expected: complete (every required probe is available; a probe can still end partial)")
+		} else {
+			fmt.Fprintf(w, "expected: incomplete, gaps in %s\n", strings.Join(doc.ExpectedGaps, ", "))
+		}
+		fmt.Fprintln(w, "evidence level per probe and platform (this build):")
+		for _, e := range doc.SupportMatrix {
+			ev := "none"
+			if len(e.Evidence) > 0 {
+				parts := make([]string, 0, len(e.Evidence))
+				for _, l := range e.Evidence {
+					parts = append(parts, string(l))
+				}
+				ev = strings.Join(parts, ", ")
+			}
+			fmt.Fprintf(w, "  %-32s %-8s %-16s %s\n", e.ProbeID, e.Platform, e.State, ev)
+		}
+		fmt.Fprintln(w, "full platform support is not established: real-platform evidence is recorded")
+		fmt.Fprintln(w, "per commit outside the build, never claimed by it.")
+		for _, n := range doc.NotChecked {
+			fmt.Fprintf(w, "not checked: %s (%s)\n", n.Item, n.Reason)
+		}
+	})
+}
+
+// --- capture -----------------------------------------------------------------
+
+type tfCaptureDoc struct {
+	ResultClass   string                     `json:"result_class"`
+	Command       string                     `json:"command"`
+	Kind          trustfreeze.Kind           `json:"kind"`
+	BundleID      string                     `json:"bundle_id"`
+	ContentDigest string                     `json:"content_digest"`
+	Subject       trustfreeze.Subject        `json:"subject"`
+	Profile       trustfreeze.ProfileRef     `json:"profile"`
+	Completeness  trustfreeze.Completeness   `json:"completeness"`
+	Probes        []trustfreeze.ProbeSummary `json:"probes"`
+}
+
+// tfCapture writes a capture bundle. It never approves and never signs: this
+// function must not reach the seal package (TestTrustFreezeCaptureNeverApproves).
+func tfCapture(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Writer) int {
+	fs := tfFlagSet("capture", "capture --profile <name> --output <dir> [--force] [--probe <id>]... [--exclude-probe <id>]... [--timeout <d>] [--format text|json]", stderr)
+	profileName := fs.String("profile", "", "Built-in profile to capture with (required): "+strings.Join(capture.BuiltinProfileIDs(), ", ")+".")
+	output := fs.String("output", "", "New bundle directory (required). Must not exist or be empty.")
+	force := fs.Bool("force", false, "Replace an existing capture bundle at --output (only a capture bundle that verifies, so no other file is ever removed; never a baseline, the home root or a volume root).")
+	var projects, probes, excludes multiFlag
+	fs.Var(&projects, "project", "Project root to inventory (repeatable). "+tfNotImplemented+".")
+	policyFile := fs.String("policy", "", "Policy file to record with the capture. "+tfNotImplemented+".")
+	fs.Var(&probes, "probe", "Run only this probe of the profile (repeatable).")
+	fs.Var(&excludes, "exclude-probe", "Skip this probe of the profile (repeatable). It is recorded as unsupported (excluded_by_operator): a skipped required probe makes the capture incomplete, and diff reports every skipped probe as a collection gap.")
+	timeout := fs.Duration("timeout", 0, "Timeout per probe run, e.g. 30s (default: the probe's own).")
+	format := fs.String("format", "text", "Output format: text or json.")
+	if code, done := tfParseArgs(fs, "capture", args, stdout, stderr); done {
+		return code
+	}
+	out := tfOut{name: "capture", stdout: stdout, stderr: stderr, json: *format == "json"}
+	if err := tfFormat(*format, []string{"text", "json"}, nil); err != nil {
+		return out.usage(err)
+	}
+	set := tfSetFlags(fs)
+	switch {
+	case set["project"]:
+		return out.usage(fmt.Errorf("--project: %s", tfNotImplemented))
+	case set["policy"] || *policyFile != "":
+		return out.usage(fmt.Errorf("--policy: %s", tfNotImplemented))
+	case *profileName == "":
+		return out.usage(errors.New("--profile is required"))
+	case *output == "":
+		return out.usage(errors.New("--output is required"))
+	case *timeout < 0:
+		return out.usage(errors.New("--timeout must not be negative"))
+	}
+	prof, err := capture.BuiltinProfile(*profileName)
+	if err != nil {
+		return out.usage(err)
+	}
+	home, err := d.HomeRoot()
+	if err != nil {
+		return out.exec(fmt.Errorf("cannot resolve the home root: %w", err))
+	}
+	red, err := capture.DefaultRedactor(home)
+	if err != nil {
+		return out.exec(err)
+	}
+	reg, err := d.Registry()
+	if err != nil {
+		return out.exec(err)
+	}
+	res, err := capture.Run(ctx, capture.Options{
+		Profile:       prof,
+		Registry:      reg,
+		Host:          d.host(),
+		Redactor:      red,
+		Output:        *output,
+		Force:         *force,
+		HomeRoot:      home,
+		ToolVersion:   d.Version,
+		Probes:        probes,
+		ExcludeProbes: excludes,
+		ProbeTimeout:  *timeout,
+	})
+	if err != nil {
+		if errors.Is(err, capture.ErrUnknownProbe) || errors.Is(err, capture.ErrUnknownProfile) ||
+			errors.Is(err, capture.ErrInvalidProfile) || errors.Is(err, capture.ErrInvalidOptions) {
+			return out.usage(err)
+		}
+		return out.exec(err)
+	}
+	doc := tfCaptureDoc{
+		ResultClass:   tfResultOK,
+		Command:       "capture",
+		Kind:          res.Manifest.Kind,
+		BundleID:      res.Manifest.BundleID,
+		ContentDigest: res.Manifest.ContentDigest,
+		Subject:       res.Manifest.Subject,
+		Profile:       res.Capture.Capture.Profile,
+		Completeness:  res.Capture.Completeness,
+		Probes:        res.Capture.Probes,
+	}
+	code := exitOK
+	if !res.Complete() {
+		doc.ResultClass, code = tfResultIncomplete, exitGeneric
+	}
+	return out.result(code, doc, func(w io.Writer) {
+		fmt.Fprintf(w, "capture bundle written: %s\n", res.Dir)
+		fmt.Fprintf(w, "bundle_id: %s\n", doc.BundleID)
+		fmt.Fprintf(w, "content_digest: %s\n", doc.ContentDigest)
+		fmt.Fprintf(w, "profile: %s v%s (%s)\n", doc.Profile.ID, doc.Profile.Version, doc.Profile.Digest)
+		for _, p := range doc.Probes {
+			line := fmt.Sprintf("  %-32s %s", p.ProbeID, p.Status)
+			if p.Reason != "" {
+				line += " (" + p.Reason + ")"
+			}
+			fmt.Fprintln(w, line)
+		}
+		if code == exitOK {
+			fmt.Fprintln(w, "completeness: complete")
+		} else {
+			fmt.Fprintf(w, "completeness: incomplete, %d gap(s)\n", len(doc.Completeness.Gaps))
+			for _, g := range doc.Completeness.Gaps {
+				fmt.Fprintf(w, "  gap %s: %s\n", g.ProbeID, g.Reason)
+			}
+		}
+		fmt.Fprintln(w, "this is a capture, not a baseline: approve it with `skillctl trust-freeze baseline approve`")
+	})
+}
+
+// --- baseline approve --------------------------------------------------------
+
+type tfApproveDoc struct {
+	ResultClass string           `json:"result_class"`
+	Command     string           `json:"command"`
+	Kind        trustfreeze.Kind `json:"kind"`
+	*seal.SealResult
+}
+
+func tfApprove(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Writer) int {
+	fs := tfFlagSet("baseline approve", "baseline approve --capture <dir> --output <dir> --reviewer <id> --change-id <id> --reason <text|@file> --key <file> [--expires-at <rfc3339>] [--self-approval allow|warn|block] [--format text|json]", stderr)
+	captureDir := fs.String("capture", "", "Capture bundle to approve (required). It is only read.")
+	output := fs.String("output", "", "New baseline directory (required). Must not exist or be empty; a baseline is never overwritten.")
+	reviewer := fs.String("reviewer", "", "Reviewer identity (required).")
+	changeID := fs.String("change-id", "", "Change or ticket id this approval belongs to (required).")
+	reason := fs.String("reason", "", "Why this state is accepted (required). @<file> reads the text from a file; CRLF becomes LF.")
+	keyFile := fs.String("key", "", "ed25519 private key file, PEM PKCS#8, mode 0600 (required), e.g. from `skillctl keygen`.")
+	expiresAt := fs.String("expires-at", "", "Optional expiry, RFC 3339 (any offset, stored in UTC). The baseline is valid through this instant.")
+	selfApproval := fs.String("self-approval", string(seal.SelfApprovalWarn), "What a self-approval (same device or same person) does: allow, warn or block.")
+	format := fs.String("format", "text", "Output format: text or json.")
+	if code, done := tfParseArgs(fs, "baseline approve", args, stdout, stderr); done {
+		return code
+	}
+	out := tfOut{name: "baseline approve", stdout: stdout, stderr: stderr, json: *format == "json"}
+	if err := tfFormat(*format, []string{"text", "json"}, nil); err != nil {
+		return out.usage(err)
+	}
+	switch {
+	case *captureDir == "":
+		return out.usage(errors.New("--capture is required"))
+	case *output == "":
+		return out.usage(errors.New("--output is required"))
+	case *keyFile == "":
+		return out.usage(errors.New("--key is required"))
+	}
+	mode, err := seal.ParseSelfApprovalMode(*selfApproval)
+	if err != nil {
+		return out.usage(fmt.Errorf("--self-approval: %w", err))
+	}
+	// The signing key never becomes approval text (TF05-R8): a --reason file
+	// that is the --key file is refused before it is read. Any other text
+	// that looks like secret material is refused by the approval check.
+	if path, isFile := strings.CutPrefix(*reason, "@"); isFile && path != "" {
+		if tfSameFile(path, *keyFile) {
+			return out.usage(errors.New("--reason @<file> names the --key file; the private key must never become approval text"))
+		}
+	}
+	reasonText, err := tfReasonText(*reason)
+	if err != nil {
+		return out.usage(err)
+	}
+	in := seal.ApprovalInput{Reviewer: *reviewer, ChangeID: *changeID, Reason: reasonText}
+	if *expiresAt != "" {
+		t, err := time.Parse(time.RFC3339Nano, *expiresAt)
+		if err != nil {
+			return out.usage(fmt.Errorf("--expires-at: want RFC 3339, e.g. 2026-12-31T23:59:59Z: %w", err))
+		}
+		in.ExpiresAt = t.UTC()
+	}
+	// The mandatory approval fields fail here, before the capture or the key
+	// is read and long before anything is signed (SPEC-0470 TF05-AC5).
+	if err := in.Check(); err != nil {
+		return out.usage(err)
+	}
+	// The approving device, derived exactly as the captured subject is.
+	if subj, _, err := d.host().Subject(); err == nil {
+		in.ApproverSubjectID = subj.ID
+	} else if mode == seal.SelfApprovalBlock {
+		return out.exec(fmt.Errorf("self-approval mode block needs the approving device, which is unknown: %w", err))
+	} else {
+		fmt.Fprintf(stderr, "skillctl trust-freeze baseline approve: warning: approving device unknown, same-device check skipped: %v\n", err)
+	}
+	home, err := d.HomeRoot()
+	if err != nil {
+		return out.exec(fmt.Errorf("cannot resolve the home root: %w", err))
+	}
+	// A flag-named input file that fails to load is a usage error (SPEC-0466
+	// section 5.9), like --trusted-key, --trust-policy, --policy and --reason.
+	signer, err := seal.NewFileSigner(*keyFile)
+	if err != nil {
+		return out.usage(fmt.Errorf("--key: %w", err))
+	}
+	defer signer.Close()
+	res, err := seal.Seal(ctx, seal.SealRequest{
+		CaptureDir:   *captureDir,
+		OutputDir:    *output,
+		Approval:     in,
+		Signer:       signer,
+		Clock:        d.Clock,
+		SelfApproval: mode,
+		HomeRoot:     home,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, seal.ErrApprovalInvalid):
+			return out.usage(err)
+		// A capture that fails any of its checks (integrity, wrong kind,
+		// invalid or inconsistent documents) is a verification_failure, as
+		// verify calls it (SPEC-0470 section 4.1 step 1).
+		case errors.Is(err, trustfreeze.ErrIntegrity), errors.Is(err, seal.ErrNotCapture), errors.Is(err, seal.ErrSelfApprovalBlocked):
+			return out.fail(tfResultVerification, exitGeneric, err)
+		}
+		return out.exec(err)
+	}
+	doc := tfApproveDoc{ResultClass: tfResultOK, Command: "baseline approve", Kind: res.Manifest.Kind, SealResult: res}
+	return out.result(exitOK, doc, func(w io.Writer) {
+		fmt.Fprintf(w, "baseline bundle written: %s\n", res.OutputDir)
+		fmt.Fprintf(w, "bundle_id: %s\n", res.BundleID)
+		fmt.Fprintf(w, "content_digest: %s\n", res.ContentDigest)
+		fmt.Fprintf(w, "capture_digest: %s\n", res.CaptureDigest)
+		fmt.Fprintf(w, "key_id: %s\n", res.KeyID)
+		fmt.Fprintf(w, "approved_at: %s by %s (change %s)\n", res.Approval.ApprovedAt, res.Approval.Reviewer, res.Approval.ChangeID)
+		if res.Approval.ExpiresAt != "" {
+			fmt.Fprintf(w, "expires_at: %s\n", res.Approval.ExpiresAt)
+		}
+		for _, wn := range res.Warnings {
+			fmt.Fprintf(w, "warning: %s: %s\n", wn.Code, wn.Message)
+		}
+	})
+}
+
+// tfSameFile reports whether a and b name the same existing file, however
+// each is spelled (symlink, relative path, hard link).
+func tfSameFile(a, b string) bool {
+	ai, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	bi, err := os.Stat(b)
+	return err == nil && os.SameFile(ai, bi)
+}
+
+// tfReasonText returns the --reason text, reading @file references. The text
+// is passed on verbatim; the approval normalizes line endings.
+func tfReasonText(v string) (string, error) {
+	path, isFile := strings.CutPrefix(v, "@")
+	if !isFile {
+		return v, nil
+	}
+	if path == "" {
+		return "", errors.New("--reason @<file>: empty file name")
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("--reason: %w", err)
+	}
+	defer f.Close()
+	b, err := io.ReadAll(io.LimitReader(f, tfMaxReasonFile+1))
+	if err != nil {
+		return "", fmt.Errorf("--reason: %w", err)
+	}
+	if len(b) > tfMaxReasonFile {
+		return "", fmt.Errorf("--reason: %s is larger than %d bytes", path, tfMaxReasonFile)
+	}
+	return string(b), nil
+}
+
+// --- verify ------------------------------------------------------------------
+
+// Verification scopes: a baseline is checked completely; captures and diffs
+// carry no signature, so their check is integrity plus document validity.
+const (
+	tfScopeBaseline  = "baseline"
+	tfScopeIntegrity = "integrity"
+)
+
+// tfReasonDiffInvalid is the CLI-level failure reason of a diff bundle whose
+// diff.json or verdict.json does not parse or does not match.
+const tfReasonDiffInvalid seal.Reason = "diff_invalid"
+
+type tfVerifyDoc struct {
+	ResultClass string `json:"result_class"`
+	Command     string `json:"command"`
+	// Input names the checked input of diff ("baseline" or "current"); empty
+	// for verify.
+	Input string `json:"input,omitempty"`
+	Scope string `json:"scope"`
+	seal.VerificationResult
+}
+
+// tfTrustPolicy builds the trust policy from --trust-policy and the
+// --trusted-key files, with the injected clock for expiry.
+func tfTrustPolicy(d tfDeps, policyFile string, keyFiles []string) (seal.TrustPolicy, error) {
+	p := seal.DefaultTrustPolicy()
+	if policyFile != "" {
+		var err error
+		if p, err = seal.LoadTrustPolicy(policyFile); err != nil {
+			return seal.TrustPolicy{}, fmt.Errorf("--trust-policy: %w", err)
+		}
+	}
+	for _, kf := range keyFiles {
+		k, err := seal.LoadTrustedKeyPEM(kf)
+		if err != nil {
+			return seal.TrustPolicy{}, fmt.Errorf("--trusted-key %s: %w", kf, err)
+		}
+		if !p.Trusts(k.PublicKey) {
+			p.TrustedKeys = append(p.TrustedKeys, k)
+		}
+	}
+	p.Now = d.Clock
+	return p, nil
+}
+
+// tfVerifyBundle checks one bundle offline. A baseline (or a bundle whose
+// manifest cannot be read, so its kind is unknown) goes through seal.Verify;
+// a capture or diff through the core integrity check plus a strict parse of
+// its documents. allowed limits the kinds; another kind fails as wrong_kind.
+func tfVerifyBundle(ctx context.Context, dir string, tp seal.TrustPolicy, allowed ...trustfreeze.Kind) tfVerifyDoc {
+	doc := tfVerifyDoc{Command: "verify"}
+	ir := trustfreeze.VerifyDir(dir)
+	var kind trustfreeze.Kind
+	if ir.Manifest != nil {
+		kind = ir.Manifest.Kind
+	}
+	if kind == "" || kind == trustfreeze.KindBaseline {
+		doc.Scope = tfScopeBaseline
+		doc.VerificationResult = seal.Verify(ctx, dir, tp)
+	} else {
+		doc.Scope = tfScopeIntegrity
+		doc.VerificationResult = tfVerifyUnsigned(ctx, dir, ir)
+	}
+	if kind != "" && len(allowed) > 0 {
+		ok := false
+		for _, k := range allowed {
+			ok = ok || k == kind
+		}
+		if !ok {
+			doc.Failures = append(doc.Failures, seal.Failure{Reason: seal.ReasonWrongKind, Path: trustfreeze.ManifestFile, Detail: fmt.Sprintf("bundle kind is %q", kind)})
+			doc.OK = false
+		}
+	}
+	doc.ResultClass = tfResultOK
+	if !doc.OK {
+		doc.ResultClass = tfResultVerification
+	}
+	return doc
+}
+
+// tfVerifyUnsigned checks a capture or diff bundle: integrity, then the
+// documents the kind requires.
+func tfVerifyUnsigned(ctx context.Context, dir string, ir trustfreeze.IntegrityResult) seal.VerificationResult {
+	r := seal.VerificationResult{Integrity: ir, Failures: []seal.Failure{}, Warnings: []seal.Warning{}}
+	if m := ir.Manifest; m != nil {
+		r.Kind, r.BundleID, r.ContentDigest = m.Kind, m.BundleID, m.ContentDigest
+	}
+	for _, f := range ir.Failures {
+		r.Failures = append(r.Failures, seal.Failure{Reason: seal.ReasonIntegrity, IntegrityReason: f.Reason, Path: f.Path, Detail: f.Detail})
+	}
+	if err := ctx.Err(); err != nil {
+		r.Failures = append(r.Failures, seal.Failure{Reason: seal.ReasonCanceled, Detail: err.Error()})
+	}
+	if len(r.Failures) == 0 {
+		b, err := trustfreeze.ReadBundle(dir)
+		switch {
+		case err != nil:
+			r.Failures = append(r.Failures, seal.Failure{Reason: seal.ReasonCaptureInvalid, Detail: err.Error()})
+		case b.Manifest.ContentDigest != r.ContentDigest:
+			r.Failures = append(r.Failures, seal.Failure{Reason: seal.ReasonIntegrity, Path: trustfreeze.ManifestFile, Detail: "the bundle changed during verification"})
+		case b.Manifest.Kind == trustfreeze.KindDiff:
+			if _, err := report.FromBundle(b); err != nil {
+				r.Failures = append(r.Failures, seal.Failure{Reason: tfReasonDiffInvalid, Path: compare.DiffFile, Detail: err.Error()})
+			}
+		}
+	}
+	r.OK = len(r.Failures) == 0
+	return r
+}
+
+func tfVerify(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Writer) int {
+	fs := tfFlagSet("verify", "verify --bundle <dir> [--trust-policy <file>] [--trusted-key <public.pem>]... [--format text|json]", stderr)
+	bundle := fs.String("bundle", "", "Bundle directory to verify (required): a baseline, capture or diff.")
+	trustPolicy := fs.String("trust-policy", "", "Trust policy file (JSON or YAML, schema trust-freeze/trust-policy/v1).")
+	var trustedKeys multiFlag
+	fs.Var(&trustedKeys, "trusted-key", "ed25519 public key file (PEM SPKI, e.g. a `skillctl keygen` .pub) to trust (repeatable).")
+	format := fs.String("format", "text", "Output format: text or json.")
+	if code, done := tfParseArgs(fs, "verify", args, stdout, stderr); done {
+		return code
+	}
+	out := tfOut{name: "verify", stdout: stdout, stderr: stderr, json: *format == "json"}
+	if err := tfFormat(*format, []string{"text", "json"}, nil); err != nil {
+		return out.usage(err)
+	}
+	if *bundle == "" {
+		return out.usage(errors.New("--bundle is required"))
+	}
+	tp, err := tfTrustPolicy(d, *trustPolicy, trustedKeys)
+	if err != nil {
+		return out.usage(err)
+	}
+	doc := tfVerifyBundle(ctx, *bundle, tp)
+	code := exitOK
+	if !doc.OK {
+		code = exitGeneric
+	}
+	return out.result(code, doc, func(w io.Writer) { tfPrintVerify(w, doc) })
+}
+
+func tfPrintVerify(w io.Writer, doc tfVerifyDoc) {
+	verdict := "PASS"
+	if !doc.OK {
+		verdict = "FAIL"
+	}
+	kind := string(doc.Kind)
+	if kind == "" {
+		kind = "bundle"
+	}
+	label := ""
+	if doc.Input != "" {
+		label = "diff input " + doc.Input + ": "
+	}
+	fmt.Fprintf(w, "%s %s%s %s (scope %s)\n", verdict, label, kind, doc.BundleID, doc.Scope)
+	if doc.ContentDigest != "" {
+		fmt.Fprintf(w, "  content_digest: %s\n", doc.ContentDigest)
+	}
+	if doc.Scope == tfScopeBaseline && doc.SignatureChecked {
+		sig := "valid"
+		if !doc.SignatureValid {
+			sig = "INVALID"
+		}
+		trust := "trusted"
+		if !doc.KeyTrusted {
+			trust = "NOT trusted"
+		}
+		fmt.Fprintf(w, "  capture_digest: %s\n", doc.CaptureDigest)
+		fmt.Fprintf(w, "  signature: %s, key %s %s\n", sig, doc.KeyID, trust)
+	}
+	if doc.Scope == tfScopeIntegrity {
+		fmt.Fprintln(w, "  captures and diffs carry no signature: integrity and document validity only")
+	}
+	for _, f := range doc.Failures {
+		line := "  failure: " + string(f.Reason)
+		if f.IntegrityReason != "" {
+			line += " " + string(f.IntegrityReason)
+		}
+		if f.Path != "" {
+			line += " " + f.Path
+		}
+		if f.Detail != "" {
+			line += ": " + f.Detail
+		}
+		fmt.Fprintln(w, line)
+	}
+	for _, wn := range doc.Warnings {
+		fmt.Fprintf(w, "  warning: %s: %s\n", wn.Code, wn.Message)
+	}
+}
+
+// --- diff --------------------------------------------------------------------
+
+type tfBundleRef struct {
+	Kind          trustfreeze.Kind `json:"kind"`
+	BundleID      string           `json:"bundle_id"`
+	ContentDigest string           `json:"content_digest"`
+}
+
+type tfDiffDoc struct {
+	ResultClass string         `json:"result_class"`
+	Command     string         `json:"command"`
+	DiffDigest  string         `json:"diff_digest"`
+	Diff        compare.Diff   `json:"diff"`
+	Verdict     policy.Verdict `json:"verdict"`
+	// Output is the diff bundle written with --output.
+	Output *tfBundleRef `json:"output,omitempty"`
+}
+
+func tfDiff(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Writer) int {
+	fs := tfFlagSet("diff", "diff --baseline <dir> --current <dir> [--trust-policy <file>] [--trusted-key <public.pem>]... [--policy <file>] [--fail-on none|low|medium|high|critical] [--allow-subject-mismatch] [--output <dir>] [--format text|json]", stderr)
+	baselineDir := fs.String("baseline", "", "Baseline bundle (required). Verified with the trust policy before anything is compared.")
+	currentDir := fs.String("current", "", "Current bundle (required): a capture or a baseline. Verified first as well.")
+	trustPolicy := fs.String("trust-policy", "", "Trust policy file (JSON or YAML, schema trust-freeze/trust-policy/v1).")
+	var trustedKeys multiFlag
+	fs.Var(&trustedKeys, "trusted-key", "ed25519 public key file (PEM SPKI) to trust (repeatable).")
+	policyFile := fs.String("policy", "", "Policy file (JSON or YAML, schema trust-freeze/policy/v1). Default: "+policy.DefaultPolicyID+".")
+	failOn := fs.String("fail-on", "", "Exit 1 when the highest finding severity is at or above this: none, low, medium, high, critical (default: the policy's fail_on).")
+	allowSubject := fs.Bool("allow-subject-mismatch", false, "Compare two different devices on purpose (a golden image or fleet baseline): the subject_changed finding stays, rated by the policy as allowed (info under "+policy.DefaultPolicyID+"), and the diff records the opt-in.")
+	output := fs.String("output", "", "Also write a diff bundle (diff.json, verdict.json, the evaluated policy) to this new directory.")
+	format := fs.String("format", "text", "Output format: text or json (markdown and sarif: "+tfNotImplemented+").")
+	if code, done := tfParseArgs(fs, "diff", args, stdout, stderr); done {
+		return code
+	}
+	out := tfOut{name: "diff", stdout: stdout, stderr: stderr, json: *format == "json"}
+	if err := tfFormat(*format, []string{"text", "json"}, []string{"markdown", "sarif"}); err != nil {
+		return out.usage(err)
+	}
+	switch {
+	case *baselineDir == "":
+		return out.usage(errors.New("--baseline is required"))
+	case *currentDir == "":
+		return out.usage(errors.New("--current is required"))
+	}
+	tp, err := tfTrustPolicy(d, *trustPolicy, trustedKeys)
+	if err != nil {
+		return out.usage(err)
+	}
+	pol, err := tfLoadPolicy(*policyFile)
+	if err != nil {
+		return out.usage(err)
+	}
+	if *failOn != "" {
+		t, err := policy.ParseThreshold(*failOn)
+		if err != nil {
+			return out.usage(fmt.Errorf("--fail-on: %w", err))
+		}
+		pol.FailOn = t
+	}
+
+	// SPEC-0469 R1: both inputs are verified before anything is compared, and
+	// a failure stops the diff. No partial or "best effort" comparison.
+	vb := tfVerifyBundle(ctx, *baselineDir, tp, trustfreeze.KindBaseline)
+	vb.Command, vb.Input = "diff", "baseline"
+	if !vb.OK {
+		return tfRefuse(out, vb)
+	}
+	vc := tfVerifyBundle(ctx, *currentDir, tp, trustfreeze.KindCapture, trustfreeze.KindBaseline)
+	vc.Command, vc.Input = "diff", "current"
+	if !vc.OK {
+		return tfRefuse(out, vc)
+	}
+	bl, err := tfReadVerified(*baselineDir, vb)
+	if err != nil {
+		return out.fail(tfResultVerification, exitGeneric, err)
+	}
+	cur, err := tfReadVerified(*currentDir, vc)
+	if err != nil {
+		return out.fail(tfResultVerification, exitGeneric, err)
+	}
+	df, err := compare.Compare(ctx, bl, cur, compare.CompareOptions{AllowSubjectMismatch: *allowSubject})
+	if err != nil {
+		return out.exec(err)
+	}
+	v, err := policy.Evaluate(ctx, df, pol)
+	if err != nil {
+		return out.exec(err)
+	}
+	doc := tfDiffDoc{ResultClass: tfResultOK, Command: "diff", DiffDigest: v.DiffDigest, Diff: df, Verdict: v}
+	if *output != "" {
+		home, err := d.HomeRoot()
+		if err != nil {
+			return out.exec(fmt.Errorf("cannot resolve the home root: %w", err))
+		}
+		ref, err := tfWriteDiffBundle(*output, home, d.Clock.Now(), cur.Manifest.Subject, df, v, pol)
+		if err != nil {
+			return out.exec(err)
+		}
+		doc.Output = ref
+	}
+	code := exitOK
+	if v.ThresholdExceeded {
+		doc.ResultClass, code = tfResultDrift, exitGeneric
+	}
+	return out.result(code, doc, func(w io.Writer) { tfPrintDiff(w, doc) })
+}
+
+// tfRefuse reports a failed input verification of diff.
+func tfRefuse(out tfOut, doc tfVerifyDoc) int {
+	msg := fmt.Sprintf("the %s bundle failed verification; nothing was compared", doc.Input)
+	if out.json {
+		if err := out.emit(doc); err != nil {
+			fmt.Fprintf(out.stderr, "skillctl trust-freeze diff: cannot encode output: %v\n", err)
+		}
+	} else {
+		tfPrintVerify(out.stdout, doc)
+	}
+	fmt.Fprintf(out.stderr, "skillctl trust-freeze diff: %s\n", msg)
+	return exitGeneric
+}
+
+// tfReadVerified loads a bundle that was just verified and refuses it when
+// its manifest is no longer the verified one.
+func tfReadVerified(dir string, v tfVerifyDoc) (*trustfreeze.Bundle, error) {
+	b, err := trustfreeze.ReadBundle(dir)
+	if err != nil {
+		return nil, fmt.Errorf("%s bundle: %w", v.Input, err)
+	}
+	if b.Manifest.ContentDigest != v.ContentDigest {
+		return nil, fmt.Errorf("%s bundle changed after verification", v.Input)
+	}
+	return b, nil
+}
+
+func tfLoadPolicy(path string) (policy.Policy, error) {
+	if path == "" {
+		return policy.DefaultPolicy()
+	}
+	p, err := policy.LoadPolicyFile(path)
+	if err != nil {
+		return policy.Policy{}, fmt.Errorf("--policy: %w", err)
+	}
+	return p, nil
+}
+
+// tfWriteDiffBundle writes a diff bundle: diff.json, verdict.json and the
+// evaluated policy, under the subject of the current bundle.
+func tfWriteDiffBundle(dir, home string, now time.Time, subject trustfreeze.Subject, df compare.Diff, v policy.Verdict, pol policy.Policy) (*tfBundleRef, error) {
+	w, err := trustfreeze.NewWriter(dir, trustfreeze.WriterOptions{Kind: trustfreeze.KindDiff, HomeRoot: home})
+	if err != nil {
+		return nil, err
+	}
+	m, err := func() (trustfreeze.Manifest, error) {
+		if err := w.WriteJSON(compare.DiffFile, df); err != nil {
+			return trustfreeze.Manifest{}, err
+		}
+		if err := w.WriteJSON(policy.VerdictFile, v); err != nil {
+			return trustfreeze.Manifest{}, err
+		}
+		if err := w.WriteJSON(tfEvaluatedPolicyFile, pol); err != nil {
+			return trustfreeze.Manifest{}, err
+		}
+		return w.Finalize(trustfreeze.ManifestHeader{
+			Kind:      trustfreeze.KindDiff,
+			BundleID:  trustfreeze.BundleID(trustfreeze.KindDiff, now, subject.ID),
+			CreatedAt: now,
+			Subject:   subject,
+		})
+	}()
+	if err != nil {
+		return nil, errors.Join(err, w.Abort())
+	}
+	return &tfBundleRef{Kind: m.Kind, BundleID: m.BundleID, ContentDigest: m.ContentDigest}, nil
+}
+
+func tfPrintDiff(w io.Writer, doc tfDiffDoc) {
+	df, v := doc.Diff, doc.Verdict
+	fmt.Fprintf(w, "diff %s %s -> %s %s\n", df.Baseline.Kind, df.Baseline.BundleID, df.Current.Kind, df.Current.BundleID)
+	fmt.Fprintf(w, "normalization: %s, policy: %s\n", df.Normalization.ID, v.Policy.ID)
+	if df.AllowSubjectMismatch {
+		fmt.Fprintln(w, "subject mismatch allowed (--allow-subject-mismatch)")
+	}
+	kinds := make([]string, 0, len(df.Counts))
+	for k, n := range df.Counts {
+		if n > 0 {
+			kinds = append(kinds, fmt.Sprintf("%s %d", k, n))
+		}
+	}
+	sort.Strings(kinds)
+	summary := "none"
+	if len(kinds) > 0 {
+		summary = strings.Join(kinds, ", ")
+	}
+	fmt.Fprintf(w, "changes: %d (%s)\n", len(df.Changes), summary)
+	for i, c := range df.Changes {
+		subject := c.ArtifactID
+		if subject == "" {
+			subject = c.ProbeID
+		}
+		detail := ""
+		if len(c.ChangedAttributes) > 0 {
+			detail = " attributes " + strings.Join(c.ChangedAttributes, ",")
+		}
+		if len(c.ChangedFields) > 0 {
+			detail += " fields " + strings.Join(c.ChangedFields, ",")
+		}
+		switch c.Kind {
+		case compare.ChangeSubjectChanged:
+			subject = c.BeforeSubjectID + " -> " + c.AfterSubjectID
+		case compare.ChangeNotObserved:
+			detail = " probe " + c.ProbeID
+			if c.AfterDigest != "" {
+				detail += " attributes " + strings.Join(c.UnobservedAttributes, ",")
+			}
+		case compare.ChangeApplicabilityChanged:
+			detail = " " + string(c.BeforeStatus) + " -> " + string(c.AfterStatus)
+		}
+		if c.Gap != nil {
+			detail = " " + c.Gap.Cause
+			if c.Gap.Required {
+				detail += " (required)"
+			}
+		}
+		sev := ""
+		if i < len(v.Findings) {
+			sev = fmt.Sprintf("  [%s, %s]", v.Findings[i].Severity, v.Findings[i].RuleID)
+		}
+		fmt.Fprintf(w, "  %s %s%s%s\n", c.Kind, subject, detail, sev)
+	}
+	highest := string(v.HighestSeverity)
+	if highest == "" {
+		highest = "none"
+	}
+	state := "not exceeded"
+	if v.ThresholdExceeded {
+		state = "EXCEEDED"
+	}
+	fmt.Fprintf(w, "verdict: highest %s, fail_on %s: threshold %s\n", highest, v.FailOn, state)
+	fmt.Fprintf(w, "diff_digest: %s\n", doc.DiffDigest)
+	if doc.Output != nil {
+		fmt.Fprintf(w, "diff bundle written: %s (%s)\n", doc.Output.BundleID, doc.Output.ContentDigest)
+	}
+}
+
+// --- report ------------------------------------------------------------------
+
+type tfReportDoc struct {
+	ResultClass string       `json:"result_class"`
+	Command     string       `json:"command"`
+	Input       report.Input `json:"input"`
+	// Signature is set for a baseline: always not_evaluated, with a pointer
+	// to verify (SPEC-0469 section 4.7).
+	Signature *report.SignatureStatus `json:"signature,omitempty"`
+	// ReportSHA256 is the lowercase hex SHA-256 of the written report file.
+	ReportSHA256 string `json:"report_sha256"`
+}
+
+func tfReport(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Writer) int {
+	fs := tfFlagSet("report", "report --input <dir> --output <file|dir> [--format json]", stderr)
+	input := fs.String("input", "", "Capture, baseline or diff bundle to project (required).")
+	output := fs.String("output", "", "Report file to create (required). An existing directory gets "+tfDefaultReportFile+". Never overwritten, never inside the input bundle.")
+	format := fs.String("format", "json", "Report format: json (markdown and sarif: "+tfNotImplemented+").")
+	if code, done := tfParseArgs(fs, "report", args, stdout, stderr); done {
+		return code
+	}
+	out := tfOut{name: "report", stdout: stdout, stderr: stderr, json: *format == "json"}
+	if err := tfFormat(*format, []string{"json"}, []string{"markdown", "sarif"}); err != nil {
+		return out.usage(err)
+	}
+	switch {
+	case *input == "":
+		return out.usage(errors.New("--input is required"))
+	case *output == "":
+		return out.usage(errors.New("--output is required"))
+	}
+	target, err := tfReportTarget(*input, *output)
+	if err != nil {
+		return out.exec(err)
+	}
+	// report is a pure projection (SPEC-0469 section 4.7): it reads the
+	// bundle through the core integrity check and evaluates no signature,
+	// key trust or expiry, so its bytes never depend on trust material or
+	// the clock. A baseline report says so and names verify.
+	b, err := trustfreeze.ReadBundle(*input)
+	if err != nil {
+		return out.fail(tfResultVerification, exitGeneric, fmt.Errorf("input bundle: %w", err))
+	}
+	rep, err := report.FromBundle(b)
+	if err != nil {
+		return out.fail(tfResultVerification, exitGeneric, err)
+	}
+	raw, err := report.Marshal(rep)
+	if err != nil {
+		return out.exec(err)
+	}
+	if err := tfWriteNewFile(target, raw); err != nil {
+		return out.exec(err)
+	}
+	doc := tfReportDoc{ResultClass: tfResultOK, Command: "report", Input: rep.Input, Signature: rep.Signature, ReportSHA256: trustfreeze.SHA256Hex(raw)}
+	return out.result(exitOK, doc, func(w io.Writer) {
+		fmt.Fprintf(w, "report written: %s (sha256 %s)\n", target, doc.ReportSHA256)
+		if doc.Signature != nil {
+			fmt.Fprintf(w, "signature: %s; evaluate it with `%s`\n", doc.Signature.Result, doc.Signature.VerifyWith)
+		}
+	})
+}
+
+// tfReportTarget resolves --output: an existing directory gets the default
+// file name, anything else is the file itself. The file must not exist and
+// must not lie inside the input bundle, which would then carry an extra file
+// and fail its own verification.
+func tfReportTarget(input, output string) (string, error) {
+	target := output
+	if fi, err := os.Stat(output); err == nil && fi.IsDir() {
+		target = filepath.Join(output, tfDefaultReportFile)
+	}
+	abs, err := filepath.Abs(target)
+	if err != nil {
+		return "", err
+	}
+	parent, err := filepath.EvalSymlinks(filepath.Dir(abs))
+	if err != nil {
+		return "", fmt.Errorf("--output: %w", err)
+	}
+	in, err := filepath.Abs(input)
+	if err != nil {
+		return "", err
+	}
+	if r, err := filepath.EvalSymlinks(in); err == nil {
+		in = r
+	}
+	p, i := parent, filepath.Clean(in)
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		p, i = strings.ToLower(p), strings.ToLower(i)
+	}
+	if rel, err := filepath.Rel(i, p); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel) {
+		return "", errors.New("--output: the report must not be written inside the input bundle")
+	}
+	final := filepath.Join(parent, filepath.Base(abs))
+	// Nor inside any other bundle (TF05-R2: report never updates a baseline).
+	if dir, err := trustfreeze.EnclosingBundle(final); err != nil {
+		return "", fmt.Errorf("--output: %w", err)
+	} else if dir != "" {
+		return "", fmt.Errorf("--output: the report must not be written inside the trust-freeze bundle %s", dir)
+	}
+	return final, nil
+}
+
+// tfWriteNewFile creates path exclusively with mode 0600 (a report can carry
+// the host name) and removes it again when the write fails.
+func tfWriteNewFile(path string, b []byte) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(b); err != nil {
+		f.Close()
+		return errors.Join(err, os.Remove(path))
+	}
+	if err := f.Close(); err != nil {
+		return errors.Join(err, os.Remove(path))
+	}
+	return nil
+}

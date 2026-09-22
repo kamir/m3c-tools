@@ -88,6 +88,10 @@ func main() {
 	case "envreport":
 		os.Exit(runEnvreport(os.Args[2:], os.Stdout, os.Stderr))
 	// === end SPEC-0428 ===
+	// === SPEC-0466 (with SPEC-0467 to SPEC-0471): Trust Freeze ===
+	case "trust-freeze":
+		os.Exit(runTrustFreeze(os.Args[2:], os.Stdout, os.Stderr))
+	// === end SPEC-0466 ===
 	// === end SPEC-0189 §14 ===
 	// === SPEC-0194 (S3.1 closure 2026-05-06): propose subcommand ===
 	case "propose":
@@ -344,6 +348,7 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "Evidence and observability (SPEC-0189 §14, SPEC-0255, SPEC-0278, SPEC-0317, SPEC-0403)")
 	fmt.Fprintln(w, "  audit                   Antivirus-style trust verdict per installed skill. Exit space 0/2/3.")
 	fmt.Fprintln(w, "  envreport               Skill-Env-Report for one regulated environment (SPEC-0428). Dry run by default.")
+	fmt.Fprintln(w, "  trust-freeze            Capture, approve, verify and diff a signed host state (SPEC-0466), offline.")
 	fmt.Fprintln(w, "  gate-stats              Summarise the gate-audit.jsonl (decisions, top blocks, cache-hit rate).")
 	fmt.Fprintln(w, "                          Flags: --since <168h|YYYY-MM-DD>, --json.")
 	fmt.Fprintln(w, "  auditlog                Audit-subsystem observability (SPEC-0403 §8). OWN exit space 0/1,")
