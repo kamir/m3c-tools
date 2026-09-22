@@ -1,0 +1,22 @@
+{
+  "id": "trust-freeze/normalize/v1",
+  "description": "Volatile values that never count as drift: timestamps, durations, process ids and uptime. Nothing else is removed before comparison.",
+  "volatile_fields": [
+    "provenance.observed_at"
+  ],
+  "volatile_attributes": [
+    "boot_time",
+    "captured_at",
+    "collected_at",
+    "duration_ms",
+    "elapsed_ms",
+    "finished_at",
+    "observed_at",
+    "pid",
+    "ppid",
+    "started_at",
+    "uptime",
+    "uptime_ms",
+    "uptime_seconds"
+  ]
+}

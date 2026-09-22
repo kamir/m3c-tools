@@ -1,0 +1,114 @@
+{
+  "schema_version": "trust-freeze/report/v1",
+  "input": {
+    "kind": "diff",
+    "diff_digest": "sha256:a50da264d796057d7988bf61abaf2108fba4bb4b333fa0c36ec25025d4ddf62b"
+  },
+  "diff": {
+    "schema_version": "trust-freeze/diff/v1",
+    "kind": "diff",
+    "normalization": {
+      "id": "trust-freeze/normalize/v1",
+      "digest": "sha256:9813f9b495979bf3b5103a1816d07aab19a2bd95fb05491197b614bf28e575d9"
+    },
+    "baseline": {
+      "kind": "baseline",
+      "bundle_id": "tf-baseline-20260102T030405.000000000Z-device-eb9aa81eeaaf3ce7",
+      "content_digest": "sha256:eff75bfbd982ed01db0e78c43f0ceeb945751f5687a2a6136137c155e1f39675",
+      "subject": {
+        "id": "device/eb9aa81eeaaf3ce7",
+        "os_family": "linux"
+      },
+      "profile": {
+        "id": "walking-skeleton",
+        "version": "1",
+        "digest": "sha256:1900eab6c028483d7126599ee6f50de0d27907b5c65fa90524580b4b0f9852b0"
+      }
+    },
+    "current": {
+      "kind": "capture",
+      "bundle_id": "tf-capture-20260102T050405.000000000Z-device-eb9aa81eeaaf3ce7",
+      "content_digest": "sha256:b5a8ac475aabbddd613e32a6941d672efc7ab4e489fd9c0e12513a14d48b5f60",
+      "subject": {
+        "id": "device/eb9aa81eeaaf3ce7",
+        "os_family": "linux"
+      },
+      "profile": {
+        "id": "walking-skeleton",
+        "version": "1",
+        "digest": "sha256:1900eab6c028483d7126599ee6f50de0d27907b5c65fa90524580b4b0f9852b0"
+      }
+    },
+    "allow_subject_mismatch": false,
+    "counts": {
+      "added": 0,
+      "applicability_changed": 0,
+      "became_effective": 0,
+      "became_ineffective": 0,
+      "changed": 1,
+      "collection_gap": 1,
+      "confidence_changed": 0,
+      "not_observed": 0,
+      "removed": 0,
+      "subject_changed": 0
+    },
+    "changes": [
+      {
+        "kind": "changed",
+        "artifact_id": "device/os",
+        "artifact_type": "os",
+        "changed_attributes": [
+          "os_version"
+        ],
+        "before_digest": "sha256:9367831ca427a3a726deacc9789673187d8c373086fc5ecd7a0b336044909539",
+        "after_digest": "sha256:80f9057da2ccfb8b55fb0095e2eb47db41d8efeaa794d64259d0939c5f288d17"
+      },
+      {
+        "kind": "collection_gap",
+        "probe_id": "linux.packages",
+        "gap": {
+          "required": false,
+          "status": "unsupported",
+          "cause": "not_captured",
+          "reason": "not_implemented"
+        }
+      }
+    ]
+  },
+  "verdict": {
+    "schema_version": "trust-freeze/verdict/v1",
+    "policy": {
+      "id": "trust-freeze/policy/default-v0",
+      "rules_digest": "sha256:ee9fcbc71aa53e1fd63ec40975c843475c9b5b0cd06043cef0a37f994b46d319"
+    },
+    "diff_digest": "sha256:a50da264d796057d7988bf61abaf2108fba4bb4b333fa0c36ec25025d4ddf62b",
+    "highest_severity": "medium",
+    "fail_on": "high",
+    "threshold_exceeded": false,
+    "counts": {
+      "critical": 0,
+      "high": 0,
+      "info": 0,
+      "low": 0,
+      "medium": 2
+    },
+    "findings": [
+      {
+        "id": "changed:device/os",
+        "kind": "changed",
+        "severity": "medium",
+        "artifact_id": "device/os",
+        "rule_id": "TF-POL-DEVICE-IDENTITY",
+        "message": "artifact device/os (os) changed: attributes os_version"
+      },
+      {
+        "id": "collection_gap:linux.packages",
+        "kind": "collection_gap",
+        "severity": "medium",
+        "probe_id": "linux.packages",
+        "rule_id": "TF-POL-GAP-OPTIONAL",
+        "message": "optional probe linux.packages was not collected (not_captured, status unsupported, reason not_implemented)"
+      }
+    ]
+  }
+}
