@@ -1,0 +1,11 @@
+# Trust Freeze built-in profile (SPEC-0467, SPEC-0471). The walking skeleton
+# needs only the common identity probe and can therefore complete.
+schema_version: trust-freeze/profile/v1
+id: walking-skeleton
+version: "1"
+description: OS identity and host name only; the one built-in profile this build can complete.
+required:
+  - common.identity
+optional: []
+fail_if_required_missing: true
+redaction_policy: default-v1

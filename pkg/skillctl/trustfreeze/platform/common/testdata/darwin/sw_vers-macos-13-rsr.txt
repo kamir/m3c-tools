@@ -1,0 +1,4 @@
+ProductName:		macOS
+ProductVersion:		13.4.1
+ProductVersionExtra:	(c)
+BuildVersion:		22F770820d

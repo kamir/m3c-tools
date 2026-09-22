@@ -1,0 +1,26 @@
+# Trust Freeze built-in profile. SPEC-0467 section 5.6 marks the probe list
+# of this profile as provisional; the list follows SPEC-0471 TF06-R5. Only
+# common.identity exists in this build; every other probe is recorded as
+# unsupported (not_implemented), so a capture with this profile is honestly
+# incomplete.
+schema_version: trust-freeze/profile/v1
+id: macos-workstation
+version: "1"
+description: macOS workstation (packages, users, launchd, listeners, firewall, Claude runtime).
+required:
+  - common.identity
+  - darwin.packages
+  - darwin.users
+  - darwin.launchd
+  - darwin.network.listeners
+  - darwin.firewall
+  - common.claude.binary
+  - common.claude.configuration
+optional:
+  - darwin.homebrew
+  - common.development.git
+  - common.vscode
+fail_if_required_missing: true
+# No redaction policy is specified for this profile (SPEC-0467 section 5.6
+# lists it as provisional), so the default policy default-v1 applies.
+redaction_policy: default-v1

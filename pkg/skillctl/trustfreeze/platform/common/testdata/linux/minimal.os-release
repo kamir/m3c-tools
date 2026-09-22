@@ -1,0 +1,3 @@
+# Synthetic: only ID is set. os-release(5) lets a reader assume NAME=Linux
+# here; the parser must not.
+ID=linux

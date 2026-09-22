@@ -1,0 +1,24 @@
+# Trust Freeze built-in profile. Probe list from SPEC-0467 section 5.6
+# (SPEC-0471 TF06-R3). Only common.identity exists in this build; every other
+# probe is recorded as unsupported (not_implemented), so a capture with this
+# profile is honestly incomplete.
+schema_version: trust-freeze/profile/v1
+id: ubuntu-bastion
+version: "1"
+description: Ubuntu bastion host (packages, users, sudo, ssh, systemd, listeners, firewall, mounts).
+required:
+  - common.identity
+  - linux.packages
+  - linux.users
+  - linux.sudo
+  - linux.ssh.effective
+  - linux.systemd
+  - linux.network.listeners
+  - linux.firewall
+  - linux.mounts
+optional:
+  - common.git
+  - common.containers
+  - common.claude
+fail_if_required_missing: true
+redaction_policy: default-v1

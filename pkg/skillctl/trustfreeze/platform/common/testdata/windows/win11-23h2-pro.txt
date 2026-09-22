@@ -1,0 +1,21 @@
+HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion
+    SystemRoot    REG_SZ    C:\WINDOWS
+    BaseBuildRevisionNumber    REG_DWORD    0x1
+    BuildBranch    REG_SZ    ni_release
+    BuildLab    REG_SZ    22621.ni_release.220506-1250
+    BuildLabEx    REG_SZ    22621.1.amd64fre.ni_release.220506-1250
+    CompositionEditionID    REG_SZ    Enterprise
+    CurrentBuild    REG_SZ    22631
+    CurrentBuildNumber    REG_SZ    22631
+    CurrentMajorVersionNumber    REG_DWORD    0xa
+    CurrentMinorVersionNumber    REG_DWORD    0x0
+    CurrentType    REG_SZ    Multiprocessor Free
+    CurrentVersion    REG_SZ    6.3
+    DisplayVersion    REG_SZ    23H2
+    EditionID    REG_SZ    Professional
+    InstallationType    REG_SZ    Client
+    PathName    REG_SZ    C:\Windows
+    ProductName    REG_SZ    Windows 10 Pro
+    ReleaseId    REG_SZ    2009
+    SoftwareType    REG_SZ    System
+    UBR    REG_DWORD    0x1049
