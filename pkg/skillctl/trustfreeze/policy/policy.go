@@ -128,6 +128,9 @@ func LoadPolicyFile(path string) (Policy, error) {
 	if !before.Mode().IsRegular() {
 		return Policy{}, fmt.Errorf("%w: %s is not a regular file", ErrInvalidPolicy, path)
 	}
+	// #nosec G304 -- path ist die vom Bediener genannte Policy-Datei
+	// (--policy). Sie wurde unmittelbar davor als regulaere Datei geprueft und
+	// wird begrenzt gelesen.
 	f, err := os.Open(path)
 	if err != nil {
 		return Policy{}, fmt.Errorf("%w: %w", ErrInvalidPolicy, err)

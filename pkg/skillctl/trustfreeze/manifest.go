@@ -270,6 +270,9 @@ func walkBundle(root string) (walkResult, error) {
 // regular file the walk saw, which closes the window for swapping in a symlink
 // between walk and open.
 func openRegular(dir string, df diskFile) (*os.File, error) {
+	// #nosec G304 -- df.rel stammt aus dem eigenen Lauf ueber das Bundle und
+	// ist kanonisiert. Direkt nach dem Oeffnen prueft openRegular, dass die
+	// geoeffnete Datei dieselbe regulaere Datei ist, die der Lauf gesehen hat.
 	f, err := os.Open(filepath.Join(dir, filepath.FromSlash(df.rel)))
 	if err != nil {
 		return nil, err

@@ -301,6 +301,9 @@ func checkJSONKeys(b []byte, known map[string]bool) error {
 
 // LoadTrustPolicy reads and parses a trust policy file (at most 1 MiB).
 func LoadTrustPolicy(path string) (TrustPolicy, error) {
+	// #nosec G304 -- path ist die vom Bediener genannte Trust-Policy
+	// (--trust-policy). Sie wird begrenzt gelesen (hoechstens 1 MiB) und
+	// streng geparst; ohne sie gibt es kein Schluesselvertrauen.
 	f, err := os.Open(path)
 	if err != nil {
 		return TrustPolicy{}, fmt.Errorf("%w: %w", ErrTrustPolicyInvalid, err)

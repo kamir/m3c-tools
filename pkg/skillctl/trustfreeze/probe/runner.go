@@ -512,6 +512,11 @@ func (r *ExecRunner) Run(ctx context.Context, req CommandRequest) CommandResult 
 
 	raw.stdout = newCappedBuffer(req.MaxStdoutBytes, DefaultMaxStdoutBytes)
 	raw.stderr = newCappedBuffer(req.MaxStderrBytes, DefaultMaxStderrBytes)
+	// #nosec G204 -- ein Prozess mit variablem Programm IST die Aufgabe
+	// dieses Runners: er ruft die autoritativen Systemwerkzeuge auf. Der Pfad
+	// stammt aus LookPath ueber eine feste Suchliste, Argumente gehen als
+	// Vektor und nie durch eine Shell, die Umgebung ist eine Positivliste,
+	// und Laufzeit sowie Ausgabemenge sind begrenzt (SPEC-0467 Abschnitt 5.1).
 	cmd := exec.CommandContext(runCtx, path, req.Args...)
 	cmd.Env = r.env(req.EnvAllowlist)
 	cmd.Dir = req.WorkingDir

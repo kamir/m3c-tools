@@ -40,6 +40,9 @@ const (
 	ClassAWSAccessKey  = "aws_access_key_id"
 	ClassGitHubToken   = "github_token"
 	ClassSlackToken    = "slack_token"
+	// #nosec G101 -- das sind die NAMEN der Fundklassen, die der Redactor in
+	// seinen Bericht schreibt, keine Zugangsdaten. Genau dieses Paket sorgt
+	// dafuer, dass echte Werte nie auf die Platte kommen.
 	ClassJWT           = "jwt"
 	ClassURLCredential = "url_credential"
 )

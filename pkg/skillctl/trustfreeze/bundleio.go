@@ -357,6 +357,10 @@ func writeFileExcl(dir, rel string, b []byte) error {
 	if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
 		return err
 	}
+	// #nosec G304 -- rel ist bereits kanonisiert (CanonicalPath: relativ, kein
+	// .., keine absoluten Pfade, kein Laufwerk), und O_EXCL verhindert, dass
+	// eine vorhandene Datei ueberschrieben wird. Der Baum darunter gehoert dem
+	// gerade entstehenden Bundle.
 	f, err := os.OpenFile(full, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return err
@@ -552,6 +556,8 @@ func inspectTarget(abs string, opts WriterOptions) (targetState, error) {
 }
 
 func dirIsEmpty(dir string) (bool, error) {
+	// #nosec G304 -- dir ist das vom Bediener genannte Ausgabeziel. Es wird
+	// hier nur geoeffnet, um festzustellen, ob es leer ist.
 	f, err := os.Open(dir)
 	if err != nil {
 		return false, err
