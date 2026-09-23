@@ -268,14 +268,17 @@ func (c *invCollector) aptMarkManual() (map[string]bool, bool) {
 	return manual, true
 }
 
-// snapArtifacts reads the snap inventory when snapd is installed. A host
-// without snap is not a host with a broken probe: the snap part is
-// not_applicable with a reason and the probe stays captured (playbook L1).
+// snapArtifacts reads the snap inventory when snap resolves. A snap that
+// does not resolve leaves the dpkg inventory intact, so the probe stays
+// captured, but the diagnostic says the snap inventory is unavailable and
+// names where snap was looked for: "this host has no snaps" is a claim a
+// failed lookup cannot carry (playbook L1).
 func (c *invCollector) snapArtifacts(observed string) []trustfreeze.Artifact {
 	if _, err := c.cc.Runner.LookPath(snapTool); err != nil {
 		if probe.ErrorClass(err) == probe.ClassToolMissing {
-			c.warn(probe.DiagFieldNotApplicable, snapTool,
-				"snap is not installed on this host, so there is no snap inventory: not applicable, not empty")
+			c.warn(probe.DiagFieldUnavailable, snapTool,
+				"snap was not found "+netSearchedDirsPhrase(c.cc.Runner)+
+					", so the snap inventory of this host is unavailable, not empty")
 			return nil
 		}
 		c.warnPartial(invDiagClassCode(probe.ErrorClass(err)), snapTool, "snap could not be resolved: "+err.Error())

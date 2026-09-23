@@ -11,12 +11,193 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/probe"
 )
 
-// The container fixtures come from the trial host (20 running containers,
-// one docker info line, the empty listing and the unreachable daemon). Two
-// shapes are constructed and say so here: the inspect answer, because the
-// fixture set has no inspect call, and the refused socket, because the
-// capturing account is in the docker group and could not produce that
-// refusal read-only (testdata/README.md, "What this host could not show").
+// The container fixtures come from two real hosts. The trial host gave the
+// 20 running containers, the docker info line, the empty listing and the
+// unreachable daemon; an Ubuntu 22.04 bastion gave the snap client version
+// and the two socket refusals, which the trial host could not produce
+// because its account is in the docker group (testdata/README.md). One shape
+// is still constructed and says so here: the inspect answer, because neither
+// host recorded an inspect call.
+
+// netBastionSearchDirs is the Linux search path of the runner, the list a
+// probe has to name when it did not find a tool. /snap/bin is the directory
+// the measured bastion kept its docker in.
+var netBastionSearchDirs = []string{"/usr/bin", "/bin", "/usr/sbin", "/sbin", "/snap/bin"}
+
+// netSnapDockerRunner scripts a docker that is installed as a snap: the
+// binary resolves at /snap/bin/docker and answers the version call with the
+// bastion fixture. The caller scripts info and ps.
+func netSnapDockerRunner(t *testing.T) *probe.FakeRunner {
+	t.Helper()
+	return probe.NewFakeRunner().WithSearchDirs(netBastionSearchDirs...).
+		AddTool(ContainerRuntimeDocker, "/snap/bin/docker").
+		Script(ContainerRuntimeDocker, containerRuntimeSpecs()[0].versionArgs,
+			probe.FakeResponse{Stdout: netFixture(t, "containers/docker-version-snap.txt")})
+}
+
+// TF06-R2, playbook L1. The three cases a host can be in once the runtime
+// question is asked honestly, each with the bytes a real host printed:
+// nothing found where we looked is unavailable and never not_applicable, a
+// refused socket is permission_denied and carries the refusal verbatim, and
+// a runtime that answers with an empty list is captured with zero
+// containers. The defect this table was written for: a bastion with docker
+// 29.8.0 at /snap/bin/docker was reported as "no container runtime on this
+// host", a claim about the host that the probe could not support.
+func TestContainersProbeHonestStatusesFromTheBastion(t *testing.T) {
+	psArgs, infoArgs := containerRuntimeSpecs()[0].psArgs, containerRuntimeSpecs()[0].infoArgs
+	refusal := "permission denied while trying to connect to the docker API at unix:///var/run/docker.sock"
+
+	for _, tc := range []struct {
+		name       string
+		runner     func(*testing.T) *probe.FakeRunner
+		wantStatus trustfreeze.ProbeStatus
+		wantClass  string
+		wantIn     []string
+		wantNotIn  []string
+		wantCount  string
+	}{
+		{
+			name: "no runtime binary in the searched directories",
+			runner: func(*testing.T) *probe.FakeRunner {
+				return probe.NewFakeRunner().WithSearchDirs(netBastionSearchDirs...)
+			},
+			wantStatus: trustfreeze.StatusUnavailable,
+			wantClass:  probe.ClassToolMissing,
+			wantIn:     append([]string{"docker", "podman"}, netBastionSearchDirs...),
+			wantNotIn:  []string{"no container runtime on this host"},
+		},
+		{
+			name: "runtime present, socket refuses the caller",
+			runner: func(t *testing.T) *probe.FakeRunner {
+				return netSnapDockerRunner(t).
+					Script(ContainerRuntimeDocker, infoArgs, probe.FakeResponse{
+						Stderr: netFixture(t, "containers/docker-info-socket-denied.stderr.txt"), ExitCode: 1}).
+					Script(ContainerRuntimeDocker, psArgs, probe.FakeResponse{
+						Stderr: netFixture(t, "containers/docker-ps-socket-denied.stderr.txt"), ExitCode: 1})
+			},
+			wantStatus: trustfreeze.StatusPermissionDenied,
+			wantClass:  probe.ClassPermissionDenied,
+			// The info refusal leads with an empty line on this host, so both
+			// calls have to survive a stream whose first line is empty.
+			wantIn:    []string{refusal, "docker info", "docker ps"},
+			wantCount: "",
+		},
+		{
+			name: "runtime present and answering with an empty list",
+			runner: func(t *testing.T) *probe.FakeRunner {
+				// The info line is the trial host's: the bastion never got an
+				// answer to that call, so this one case mixes the two hosts
+				// and is a constructed combination, not a measured one.
+				return netSnapDockerRunner(t).
+					Script(ContainerRuntimeDocker, infoArgs, probe.FakeResponse{Stdout: netFixture(t, "containers/docker-info.txt")}).
+					Script(ContainerRuntimeDocker, psArgs, probe.FakeResponse{Stdout: netFixture(t, "containers/docker-ps-empty.txt")})
+			},
+			wantStatus: trustfreeze.StatusCaptured,
+			wantCount:  "0",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := tc.runner(t)
+			p := NewContainersProbe()
+			if sup := p.Support(context.Background(), netTestHost(runner)); sup.Status != tc.wantStatus && sup.Status != "" {
+				t.Fatalf("support status %q, want %q or supported", sup.Status, tc.wantStatus)
+			}
+			cc, _ := netTestCollect(ContainersProbeID, runner)
+			res := p.Collect(context.Background(), cc)
+			if res.Status != tc.wantStatus {
+				t.Fatalf("status %q, want %q (reason %q)", res.Status, tc.wantStatus, res.Reason)
+			}
+			if tc.wantClass != "" && (res.Error == nil || res.Error.Class != tc.wantClass) {
+				t.Errorf("error %+v, want class %q", res.Error, tc.wantClass)
+			}
+			for _, want := range tc.wantIn {
+				if !strings.Contains(res.Reason, want) {
+					t.Errorf("reason %q does not carry %q", res.Reason, want)
+				}
+			}
+			for _, bad := range tc.wantNotIn {
+				if strings.Contains(res.Reason, bad) {
+					t.Errorf("reason %q still claims %q", res.Reason, bad)
+				}
+			}
+			if tc.wantStatus == trustfreeze.StatusUnavailable {
+				if len(res.NormalizedState) != 0 {
+					t.Errorf("artifacts although no runtime was found: %v", netArtifactIDs(res))
+				}
+				return
+			}
+			rt := netArtifact(t, res, "container/runtime/docker")
+			if got := rt.Attributes["container_count"]; got != tc.wantCount {
+				t.Errorf("container_count %q, want %q", got, tc.wantCount)
+			}
+		})
+	}
+}
+
+// The unavailable diagnostic has to name where the probe looked, because
+// "not found" is only half a fact without it. Support and Collect say the
+// same thing, and the probe status carries the diagnostic as well.
+func TestContainersProbeUnavailableNamesTheSearchedDirectories(t *testing.T) {
+	runner := probe.NewFakeRunner().WithSearchDirs(netBastionSearchDirs...)
+	p := NewContainersProbe()
+	sup := p.Support(context.Background(), netTestHost(runner))
+	if sup.Available || sup.Status != trustfreeze.StatusUnavailable {
+		t.Fatalf("support %+v, want unavailable", sup)
+	}
+	cc, _ := netTestCollect(ContainersProbeID, runner)
+	res := p.Collect(context.Background(), cc)
+	if !netHasWarning(res, probe.DiagFieldUnavailable, "runtime") {
+		t.Fatalf("no field_unavailable diagnostic: %+v", res.Warnings)
+	}
+	for _, text := range []string{sup.Reason, res.Reason, res.Warnings[0].Message} {
+		for _, dir := range netBastionSearchDirs {
+			if !strings.Contains(text, dir) {
+				t.Errorf("%q does not name the searched directory %s", text, dir)
+			}
+		}
+	}
+}
+
+// A runner that does not report its directories must not be given a list:
+// the probe says it cannot name them rather than naming four it did not
+// necessarily search.
+func TestContainersProbeUnavailableWithoutReportedDirectories(t *testing.T) {
+	cc, _ := netTestCollect(ContainersProbeID, probe.NewFakeRunner())
+	res := NewContainersProbe().Collect(context.Background(), cc)
+	if res.Status != trustfreeze.StatusUnavailable {
+		t.Fatalf("status %q, want unavailable", res.Status)
+	}
+	if !strings.Contains(res.Reason, "the runner does not report them") {
+		t.Errorf("reason %q invents a directory list", res.Reason)
+	}
+}
+
+// TF06-R3. A runtime installed as a snap is used like any other, and the
+// bundle says which installation answered: the resolved path and the client
+// version of that path are attributes of the runtime artifact, so a move
+// from the distribution package to a snap is a change a diff can see.
+func TestContainersProbeUsesASnapPathBinary(t *testing.T) {
+	spec := containerRuntimeSpecs()[0]
+	runner := netSnapDockerRunner(t).
+		Script(ContainerRuntimeDocker, spec.infoArgs, probe.FakeResponse{Stdout: netFixture(t, "containers/docker-info.txt")}).
+		Script(ContainerRuntimeDocker, spec.psArgs, probe.FakeResponse{Stdout: netFixture(t, "containers/docker-ps-empty.txt")})
+	cc, _ := netTestCollect(ContainersProbeID, runner)
+	res := NewContainersProbe().Collect(context.Background(), cc)
+
+	if res.Status != trustfreeze.StatusCaptured {
+		t.Fatalf("status %q, want captured (reason %q)", res.Status, res.Reason)
+	}
+	rt := netArtifact(t, res, "container/runtime/docker")
+	if got := rt.Attributes[containerAttrExecutablePath]; got != "/snap/bin/docker" {
+		t.Errorf("%s %q, want /snap/bin/docker", containerAttrExecutablePath, got)
+	}
+	if got := rt.Attributes["client_version"]; got != "Docker version 29.8.0, build 88096ef" {
+		t.Errorf("client_version %q, want the version of the snap binary", got)
+	}
+	if rt.Provenance.ToolVersion != rt.Attributes["client_version"] {
+		t.Errorf("provenance tool version %q does not match the recorded client version", rt.Provenance.ToolVersion)
+	}
+}
 
 // netDockerPSIDs returns the container ids of the ps fixture, sorted, which
 // is the order the probe passes them to the inspect call.
@@ -403,18 +584,20 @@ func TestContainersProbeWithoutInspectIsPartial(t *testing.T) {
 	}
 }
 
-// No runtime binary at all: not_applicable with a reason, in Support and in
-// Collect, and no artifact.
+// No runtime binary where the runner looks: unavailable with a reason, in
+// Support and in Collect, and no artifact. Until 2026-09-23 both said
+// not_applicable, which counted the capture as complete while the host in
+// fact had docker in a directory the runner did not search.
 func TestContainersProbeWithoutRuntime(t *testing.T) {
 	runner := probe.NewFakeRunner()
 	p := NewContainersProbe()
 	sup := p.Support(context.Background(), netTestHost(runner))
-	if sup.Available || sup.Status != trustfreeze.StatusNotApplicable || sup.Reason == "" {
-		t.Fatalf("support %+v, want not_applicable with a reason", sup)
+	if sup.Available || sup.Status != trustfreeze.StatusUnavailable || sup.Reason == "" {
+		t.Fatalf("support %+v, want unavailable with a reason", sup)
 	}
 	cc, _ := netTestCollect(ContainersProbeID, runner)
 	res := p.Collect(context.Background(), cc)
-	if res.Status != trustfreeze.StatusNotApplicable || res.Reason == "" {
+	if res.Status != trustfreeze.StatusUnavailable || res.Reason == "" {
 		t.Fatalf("status %q reason %q", res.Status, res.Reason)
 	}
 	if len(res.NormalizedState) != 0 {

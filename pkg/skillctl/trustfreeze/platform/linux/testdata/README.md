@@ -2,23 +2,34 @@
 
 ## Source class
 
-Every file under this directory is **transcribed from a real Ubuntu 24.04.1 host and sanitized**.
-Nothing here was invented, and nothing here is a live capture: the bytes came off one trial host on
-2026-09-23 through read-only commands, and then went through the substitutions listed below.
+Every file under this directory is **transcribed from a real host and sanitized**. Nothing here was
+invented, and nothing here is a live capture.
 
-The host was read as an ordinary, unprivileged user. No command elevated, wrote, installed, started
-or stopped anything (playbook L2). That is why several fixtures are refusals rather than data, and
-that is the point: the refusals are the shapes the probes have to survive.
+Most of it came off one trial host on 2026-09-23 through read-only commands, and then went through
+the substitutions listed below. Three files came off a **second real host on the same day**, an
+Ubuntu 22.04 bastion where `docker` is installed as a **snap** (it answers only at
+`/snap/bin/docker`) and where the daemon **socket refuses an unprivileged caller** because the
+account is not in the group `docker`. Those three are
+`containers/docker-version-snap.txt`, `containers/docker-ps-socket-denied.stderr.txt` and
+`containers/docker-info-socket-denied.stderr.txt`; they carry `"host": "ubuntu-22.04-bastion"` in
+`commands.json` and are byte for byte what the host printed, with nothing to substitute (no account
+name, no host name and no address occurs in them). They are the two shapes the trial host could not
+produce, and the first of them is why the runner search path now includes `/snap/bin`.
+
+Both hosts were read as an ordinary, unprivileged user. No command elevated, wrote, installed,
+started or stopped anything (playbook L2). That is why several fixtures are refusals rather than
+data, and that is the point: the refusals are the shapes the probes have to survive.
 
 Host class, so a parser author knows what the fixtures are valid for:
 
-| Property | Value |
-|---|---|
-| Distribution | Ubuntu 24.04.1 LTS |
-| Kernel release | 6.17.0-35-generic |
-| Architecture | amd64 |
-| Privilege of the capture | unprivileged account, member of the groups `sudo` and `docker` |
-| Scale | 1879 dpkg packages, 516 unit files, 51 listeners, 113 mount points, 20 running containers |
+| Property | Trial host (all fixtures but three) | Bastion (the three named above) |
+|---|---|---|
+| Distribution | Ubuntu 24.04.1 LTS | Ubuntu 22.04 LTS |
+| Kernel release | 6.17.0-35-generic | not recorded |
+| Architecture | amd64 | amd64 |
+| Privilege of the capture | unprivileged account, member of the groups `sudo` and `docker` | unprivileged account, NOT in the group `docker` |
+| Container runtime | docker from the distribution package | docker from a snap, at `/snap/bin/docker` |
+| Scale | 1879 dpkg packages, 516 unit files, 51 listeners, 113 mount points, 20 running containers | not measured: the socket refused every listing |
 
 ## Tool versions
 
@@ -38,7 +49,8 @@ versions that produced the fixtures:
 | `ufw` | 0.36.2 | `firewall/ufw-version.txt` |
 | `nft` | nftables v1.0.9 | `firewall/nft-version.txt` |
 | `findmnt` | util-linux 2.39.3 | `mounts/findmnt-version.txt` |
-| `docker` | 27.5.1, build 9f9e405 | `containers/docker-version.txt` |
+| `docker` (trial host, deb) | 27.5.1, build 9f9e405 | `containers/docker-version.txt` |
+| `docker` (bastion, snap) | 29.8.0, build 88096ef | `containers/docker-version-snap.txt` |
 | `podman` | not installed | `honest-status/tool-missing-command-v-podman.txt` |
 | `flatpak` | not installed | not fixtured, `command -v` behaves like podman |
 
@@ -254,7 +266,10 @@ element `lowerdir` chain.
 | `containers/docker-info.txt` | one line, ten tab separated fields, daemon version, storage driver, counts and root directory |
 | `containers/docker-ps-empty.txt` | runtime present, no matching container: empty, exit 0 |
 | `containers/docker-daemon-unreachable.stderr.txt` | client present, daemon unreachable, exit 1 |
-| `containers/docker-version.txt` | client version |
+| `containers/docker-version.txt` | client version of the deb package on the trial host |
+| `containers/docker-version-snap.txt` | client version of a docker installed as a snap: the binary lives at `/snap/bin/docker`, which the four classic system directories do not contain |
+| `containers/docker-ps-socket-denied.stderr.txt` | binary present, socket refused: `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`, exit 1, stdout empty |
+| `containers/docker-info-socket-denied.stderr.txt` | the same refusal from the info call, with an empty line in front of it, so a first-line reader sees nothing and the classification has to read the whole stream |
 
 A format string trap that cost a round of collection: `docker ps --format` expands a literal
 backslash-t into a tab, and `docker info --format` does not. The info fixture was therefore taken
@@ -271,6 +286,7 @@ Each class the parsers must be tested against, and the fixture that carries it:
 | permission refusal, config file | `sudo/cat-etc-sudoers.stderr.txt` | one stderr line, exit 1 |
 | permission refusal, effective state | `ssh/sshd-T-unprivileged.stderr.txt` | one stderr line, exit 1 |
 | permission refusal, firewall | `firewall/ufw-status.stderr.txt`, `firewall/nft-list-ruleset.stderr.txt` | one and two stderr lines, exit 1 |
+| permission refusal, container socket | `containers/docker-ps-socket-denied.stderr.txt`, `containers/docker-info-socket-denied.stderr.txt` | one stderr line, exit 1; the info variant leads with an empty line |
 | partial, privilege dependent column | `network.listeners/ss-H-lntup.txt` | 1 of 51 rows carries the owner column |
 | empty result, exit 0 | `containers/docker-ps-empty.txt`, `honest-status/empty-result-ss-no-match.txt` | zero bytes |
 | empty result, exit 1 | `honest-status/empty-result-systemctl-no-match.txt` | zero bytes |
@@ -286,11 +302,12 @@ exit 127. A real 127 from a child process means something else and must not be r
 
 Honest gaps in the fixture set, so nobody builds a test on a shape that was never measured:
 
-- **A docker socket the caller may not open.** The capturing account is in the `docker` group, so the
-  `permission_denied` variant of `linux.containers` is not reproducible here read-only. The
-  unreachable-daemon shape in `containers/docker-daemon-unreachable.stderr.txt` was forced with
-  `DOCKER_HOST` pointing at a path that does not exist, and it is a different message from the
-  permission one. A host with a user outside the `docker` group is needed for that fixture.
+- **A docker socket the caller may not open.** No longer a gap, and kept here to say where it was
+  closed. The trial host cannot produce it (its account is in the group `docker`); the bastion can,
+  and `containers/docker-ps-socket-denied.stderr.txt` plus
+  `containers/docker-info-socket-denied.stderr.txt` are that host's two refusals. The
+  unreachable-daemon shape in `containers/docker-daemon-unreachable.stderr.txt` stays a different
+  message, forced with `DOCKER_HOST` pointing at a path that does not exist.
 - **podman.** Not installed, so only its absence is fixtured, never its output.
 - **An active firewall ruleset.** Both backends refuse unprivileged; no `nft --json` document and no
   `ufw status` table exist in this set.
@@ -301,6 +318,11 @@ Honest gaps in the fixture set, so nobody builds a test on a shape that was neve
   `containers_test.go` builds the answer by hand from the ids of `containers/docker-ps.txt` and says
   so in the test. Until a run on a Linux host records it, the parser of that call is fixture-tested
   against a constructed input, not against a measured one.
-- **A snap-less or docker-less host.** Everything here comes from one machine that has both, so the
-  `not_applicable` paths of `linux.packages` and `linux.containers` are covered by the absence of
-  podman and flatpak only.
+- **A snap-less or docker-less host.** Neither measured machine is one, so the "tool not found
+  anywhere we looked" path of `linux.packages` and `linux.containers` is covered by the absence of
+  podman and flatpak only. That path reports `unavailable` and names the searched directories; it
+  never reports `not_applicable`, because a failed lookup cannot tell a host without a runtime from
+  a runtime this build did not look in the right place for.
+- **A container runtime that is neither docker nor podman.** `containerd` and `crio` are not read at
+  all by this build. A host that runs only one of them gets the same `unavailable` with the
+  directories named, which is the honest answer and not the complete one.

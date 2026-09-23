@@ -363,7 +363,10 @@ func TestParseSudoDefaultsKeepsQuotedCommas(t *testing.T) {
 	}
 }
 
-// F12 LOW. The diagnostic counts accounts, not the attempts per account.
+// F12 LOW. The diagnostic counts accounts, not the attempts per account, and
+// it is a field_unavailable: the capture did not open those files, which is
+// not the same statement as "these accounts have no key file". It said
+// field_not_applicable until 2026-09-23.
 func TestSSHOutsideRootCountsAccounts(t *testing.T) {
 	r := sshFixtureRunner(t)
 	r.Script(getentExe, []string{"passwd"}, probe.FakeResponse{Stdout: []byte(
@@ -380,12 +383,17 @@ func TestSSHOutsideRootCountsAccounts(t *testing.T) {
 	}
 	res, _ := privRunProbe(t, NewSSHProbe(), r, files)
 	for _, w := range res.Warnings {
-		if w.Code == probe.DiagFieldNotApplicable && strings.Contains(w.Message, "home outside") {
-			if !strings.Contains(w.Message, "2 accounts") {
-				t.Fatalf("the diagnostic counts attempts, not accounts: %q", w.Message)
-			}
-			return
+		if !strings.Contains(w.Message, "home outside") {
+			continue
 		}
+		if w.Code != probe.DiagFieldUnavailable {
+			t.Fatalf("code %q, want %q: a home that was not read is not a field the OS lacks",
+				w.Code, probe.DiagFieldUnavailable)
+		}
+		if !strings.Contains(w.Message, "2 accounts") {
+			t.Fatalf("the diagnostic counts attempts, not accounts: %q", w.Message)
+		}
+		return
 	}
 	t.Fatalf("no diagnostic about the homes outside the roots: %+v", res.Warnings)
 }

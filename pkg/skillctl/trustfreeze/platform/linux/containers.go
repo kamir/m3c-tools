@@ -18,13 +18,23 @@ import (
 // format, never the human table, so the parser does not depend on column
 // widths or on the words of a locale.
 //
-// Honest states (SPEC-0471 TF06-R2). No runtime binary on the host: there is
-// nothing to describe, not_applicable with a reason. Binary present but the
-// daemon socket refuses the caller: permission_denied. Binary present and
+// Honest states (SPEC-0471 TF06-R2). No runtime binary in the directories
+// the runner searches: unavailable, with a reason that names those
+// directories, because not finding a binary is a statement about this
+// capture and not about the host (playbook L1). An earlier version answered
+// not_applicable with the words "no container runtime on this host", and a
+// bastion measured on 2026-09-23 showed what that costs: docker 29.8.0
+// answered at /snap/bin/docker, the probe did not look there, and the bundle
+// said the host had no container runtime.
+// Binary present but the daemon socket refuses the caller:
+// permission_denied, carrying what the client printed. Binary present and
 // the daemon is not reachable at all: failed, which is a different fact from
 // a refusal and must not be reported as one. Runtime present and no
 // container running: captured with an empty list, stated explicitly in the
 // runtime artifact.
+//
+// not_applicable is not reachable in this probe. A Linux host can always run
+// a container runtime, so its absence is never a property of the platform.
 //
 // Published ports are exposure, and they are recorded so that they can be
 // read together with the listener artifacts: every published host port
@@ -69,7 +79,12 @@ const (
 	// rather than as literals in two files.
 	containerAttrDeclaredPrivileged    = "declared_privileged"
 	containerAttrDeclaredRestartPolicy = "declared_restart_policy"
-	artifactTypeContainerRuntime       = "container-runtime"
+	// containerAttrExecutablePath holds the absolute path the runtime client
+	// resolved to, so a bundle says which installation answered: a snap at
+	// /snap/bin/docker is a different one from the distribution package at
+	// /usr/bin/docker.
+	containerAttrExecutablePath  = "executable_path"
+	artifactTypeContainerRuntime = "container-runtime"
 )
 
 // Format templates. "docker ps" expands a literal backslash t into a tab and
@@ -490,8 +505,9 @@ func (p *ContainersProbe) EvidenceClaims() map[probe.Platform][]probe.EvidenceLe
 	}
 }
 
-// Support implements probe.Probe. A host without any runtime binary has no
-// containers to describe.
+// Support implements probe.Probe. Neither runtime binary in the searched
+// directories is unavailable, never not_applicable: the probe knows where it
+// looked, not what the host has.
 func (p *ContainersProbe) Support(_ context.Context, host probe.HostContext) probe.SupportResult {
 	if !p.Descriptor().SupportsPlatform(host.GOOS) {
 		return probe.Unsupported("this build reads Linux container runtimes only, not " + host.GOOS)
@@ -500,9 +516,18 @@ func (p *ContainersProbe) Support(_ context.Context, host probe.HostContext) pro
 		return probe.Unavailable("no command runner")
 	}
 	if len(netPresentTools(host, ContainerRuntimeDocker, ContainerRuntimePodman)) == 0 {
-		return probe.NotApplicable("no container runtime on this host: neither docker nor podman is installed")
+		return probe.Unavailable(containerRuntimeMissingReason(host.Runner))
 	}
 	return probe.Supported()
+}
+
+// containerRuntimeMissingReason says what was looked for and where it was
+// looked for. Whether a runtime is installed somewhere else is not settled
+// by this capture, and the sentence must not settle it either.
+func containerRuntimeMissingReason(runner probe.CommandRunner) string {
+	return "neither " + ContainerRuntimeDocker + " nor " + ContainerRuntimePodman + " was found " +
+		netSearchedDirsPhrase(runner) +
+		": whether a container runtime is installed elsewhere on this host is not established by this capture"
 }
 
 // runtimeOutcome is what one runtime contributed to the result.
@@ -524,8 +549,10 @@ func (p *ContainersProbe) Collect(ctx context.Context, cc probe.CollectContext) 
 		present[n] = true
 	}
 	if len(present) == 0 {
-		res.Status = trustfreeze.StatusNotApplicable
-		res.Reason = "no container runtime on this host: neither docker nor podman is installed"
+		res.Status = trustfreeze.StatusUnavailable
+		res.Reason = containerRuntimeMissingReason(cc.Runner)
+		res.Error = &trustfreeze.ProbeError{Class: probe.ClassToolMissing, Message: res.Reason}
+		s.warn(probe.DiagFieldUnavailable, "runtime", res.Reason)
 		return s.finish(res, nil, start)
 	}
 
@@ -598,6 +625,16 @@ func (p *ContainersProbe) collectRuntime(s *netProbeState, spec containerRuntime
 	runtimeAttrs := map[string]string{
 		"runtime":        spec.name,
 		"client_version": version,
+	}
+	// Which binary answered is part of the answer: /snap/bin/docker and
+	// /usr/bin/docker are two installations with separate versions and
+	// separate upgrade paths, and a capture that moved from one to the other
+	// has to show it as a change rather than as the same runtime.
+	if path, err := s.cc.Runner.LookPath(spec.name); err == nil {
+		runtimeAttrs[containerAttrExecutablePath] = path
+	} else {
+		s.warn(netDiagCode(netCommandStatus(err)), containerAttrExecutablePath,
+			spec.name+" answered, but its path could not be resolved: "+err.Error())
 	}
 	fail := func(field string, cmd netCmd, what string) {
 		out.statuses = append(out.statuses, cmd.Status)

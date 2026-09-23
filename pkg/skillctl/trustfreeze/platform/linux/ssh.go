@@ -273,8 +273,15 @@ func (p *SSHProbe) Collect(ctx context.Context, cc probe.CollectContext) trustfr
 	states = append(states, c.extraStates()...)
 	res.Status, res.Reason, res.Error = privStatus(states, "the ssh server state")
 	if !found && effectiveState == privUnavailable {
+		// Two independent misses, not one: the declared configuration does
+		// not exist on disk AND sshd is in none of the searched directories.
+		// The reason names both, and it names where it looked, so nobody
+		// reads it as "sshd was not where we expected it" (playbook L1). An
+		// sshd that runs from a path this build does not search would leave
+		// its configuration behind, which is the half that makes this
+		// not_applicable and not unavailable.
 		res.Status = trustfreeze.StatusNotApplicable
-		res.Reason = "no " + SSHDConfigPath + " and no sshd on this host"
+		res.Reason = "no " + SSHDConfigPath + " on this host and no sshd " + netSearchedDirsPhrase(c.cc.Runner)
 		res.Error = nil
 	}
 	return c.finish(res, arts, start)
@@ -361,7 +368,8 @@ func (c *privCollector) collectSSHEffective() ([]trustfreeze.Artifact, privState
 		c.warn(privStateCode(r.State), "sshd -T", "sshd -T: "+r.Detail)
 		if r.State == privUnavailable {
 			c.warn(sshDiagEffectiveNotObservable, ArtifactSSHEffective,
-				"sshd is not installed, so the effective server state cannot be observed; the declared state stays declared")
+				"sshd was not found "+netSearchedDirsPhrase(c.cc.Runner)+
+					", so the effective server state was not observed; the declared state stays declared")
 		}
 		return nil, r.State
 	case r.ExitCode != 0:
@@ -562,7 +570,9 @@ func (c *privCollector) collectAuthorizedKeys() ([]trustfreeze.Artifact, privSta
 		}
 	}
 	if outside > 0 {
-		c.warn(probe.DiagFieldNotApplicable, ArtifactSSHAuthorizedKeysPrefix,
+		// Not applicable would say those accounts have no key file. The
+		// capture did not look, which is unavailable (playbook L1).
+		c.warn(probe.DiagFieldUnavailable, ArtifactSSHAuthorizedKeysPrefix,
 			fmt.Sprintf("%d accounts have a home outside the roots this capture may read; their key files were not opened", outside))
 	}
 	if unreadable > 0 {

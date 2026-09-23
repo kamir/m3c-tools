@@ -458,20 +458,33 @@ func TestPackagesProbeCollectsFixtures(t *testing.T) {
 	}
 }
 
-func TestPackagesProbeWithoutSnapIsNotApplicableForSnaps(t *testing.T) {
-	r := probe.NewFakeRunner()
+// A snap that does not resolve leaves the dpkg inventory complete, so the
+// probe stays captured; the diagnostic says the snap inventory is
+// unavailable and names where snap was looked for. Until 2026-09-23 it said
+// "snap is not installed on this host", which a failed lookup cannot
+// establish: the same defect that reported a snap-installed docker as no
+// container runtime.
+func TestPackagesProbeWithoutSnapIsUnavailableForSnaps(t *testing.T) {
+	r := probe.NewFakeRunner().WithSearchDirs(netBastionSearchDirs...)
 	invScript(t, r, "packages/dpkg-query-w.txt")
 	invScript(t, r, "packages/apt-mark-showmanual.txt")
 	invScript(t, r, "packages/dpkg-query-version.txt")
 	invScript(t, r, "packages/apt-mark-version.txt")
 	res, _ := invRun(t, NewPackagesProbe(), r)
-	// A host without snapd is a complete answer, not a broken probe.
+	// A host whose snap inventory could not be read still has a complete
+	// dpkg inventory, which is what keeps the probe captured.
 	if res.Status != trustfreeze.StatusCaptured {
 		t.Fatalf("status %s, reason %q", res.Status, res.Reason)
 	}
-	w := invWantWarning(t, res, probe.DiagFieldNotApplicable)
-	if w.Field != "snap" || !strings.Contains(w.Message, "not applicable") {
+	w := invWantWarning(t, res, probe.DiagFieldUnavailable)
+	if w.Field != "snap" || !strings.Contains(w.Message, "unavailable, not empty") {
 		t.Fatalf("diagnostic %+v", w)
+	}
+	if strings.Contains(w.Message, "snap is not installed on this host") {
+		t.Fatalf("the diagnostic still claims the host has no snaps: %q", w.Message)
+	}
+	if !strings.Contains(w.Message, "/snap/bin") {
+		t.Fatalf("the diagnostic does not name where snap was looked for: %q", w.Message)
 	}
 	if len(res.NormalizedState) != 51 {
 		t.Fatalf("%d artifacts, want 51", len(res.NormalizedState))

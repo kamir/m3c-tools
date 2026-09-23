@@ -595,3 +595,42 @@ func TestSSHEvidenceClaims(t *testing.T) {
 		t.Fatalf("a linux probe must claim nothing for windows: %+v", claims)
 	}
 }
+
+// A missing sshd is a missing binary, and the two sentences the probe writes
+// about it now name the directories that were searched. The status stays
+// not_applicable only because a second, independent observation carries it:
+// the declared configuration does not exist on disk either. Same sweep as
+// the container runtime found at a snap path.
+func TestSSHWithoutSSHDNamesTheSearchedDirectories(t *testing.T) {
+	r := probe.NewFakeRunner().WithSearchDirs(netBastionSearchDirs...)
+	r.Script("ls", []string{"--version"}, probe.FakeResponse{Stdout: []byte("ls (GNU coreutils) 9.4\n")})
+	r.Script(getentExe, []string{"--version"}, probe.FakeResponse{Stdout: privFixture(t, "users/getent-version.txt")})
+	r.Script(getentExe, []string{"passwd"}, probe.FakeResponse{Stdout: privFixture(t, "users/getent-passwd.txt")})
+	r.Script("ls", []string{"-la", SSHDir}, probe.FakeResponse{Stderr: []byte("ls: cannot access '/etc/ssh': No such file or directory\n"), ExitCode: 2})
+	r.Script("ls", []string{"-la", SSHDConfigDir}, probe.FakeResponse{Stderr: []byte("ls: cannot access '/etc/ssh/sshd_config.d': No such file or directory\n"), ExitCode: 2})
+
+	res, _ := privRunProbe(t, NewSSHProbe(), r, probe.FakeFiles{})
+	if res.Status != trustfreeze.StatusNotApplicable {
+		t.Fatalf("status %q (%s)", res.Status, res.Reason)
+	}
+	for _, dir := range netBastionSearchDirs {
+		if !strings.Contains(res.Reason, dir) {
+			t.Errorf("reason %q does not name the searched directory %s", res.Reason, dir)
+		}
+	}
+	if !strings.Contains(res.Reason, SSHDConfigPath) {
+		t.Errorf("reason %q drops the second observation that carries it", res.Reason)
+	}
+	var msg string
+	for _, w := range res.Warnings {
+		if w.Code == sshDiagEffectiveNotObservable {
+			msg = w.Message
+		}
+	}
+	if strings.Contains(msg, "sshd is not installed") {
+		t.Errorf("the diagnostic still turns a lookup miss into a claim about the host: %q", msg)
+	}
+	if !strings.Contains(msg, "/snap/bin") {
+		t.Errorf("the diagnostic does not say where sshd was looked for: %q", msg)
+	}
+}

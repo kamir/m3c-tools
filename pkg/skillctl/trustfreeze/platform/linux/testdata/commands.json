@@ -659,6 +659,73 @@
    "expected_probe_status": "captured"
   },
   {
+   "path": "containers/docker-version-snap.txt",
+   "probe": "linux.containers",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "/snap/bin/docker",
+    "--version"
+   ],
+   "probe_command": [
+    "docker",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 1,
+   "source_lines": 1,
+   "note": "The client version of a docker installed as a snap. The probe issues the bare name and the runner resolves it, which is why probe_command carries no directory: /snap/bin is part of the Linux search path since this host was measured."
+  },
+  {
+   "path": "containers/docker-ps-socket-denied.stderr.txt",
+   "probe": "linux.containers",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "/snap/bin/docker",
+    "ps",
+    "--no-trunc",
+    "--format",
+    "{{.ID}}\\t{{.Image}}\\t{{.Names}}\\t{{.State}}\\t{{.Status}}\\t{{.Ports}}"
+   ],
+   "probe_command": [
+    "docker",
+    "ps",
+    "--no-trunc",
+    "--format",
+    "{{.ID}}\\t{{.Image}}\\t{{.Names}}\\t{{.State}}\\t{{.Status}}\\t{{.Ports}}"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "permission_denied",
+   "transcribed_lines": 1,
+   "source_lines": 1,
+   "note": "The refusal of the daemon socket for a caller outside the group docker. stdout is empty. This is the fixture the trial host could not produce, and it is a different message from the unreachable daemon one."
+  },
+  {
+   "path": "containers/docker-info-socket-denied.stderr.txt",
+   "probe": "linux.containers",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "/snap/bin/docker",
+    "info",
+    "--format",
+    "{{.ServerVersion}}{{\"\\t\"}}{{.Driver}}{{\"\\t\"}}{{.OperatingSystem}}{{\"\\t\"}}{{.KernelVersion}}{{\"\\t\"}}{{.Architecture}}{{\"\\t\"}}{{.Containers}}{{\"\\t\"}}{{.ContainersRunning}}{{\"\\t\"}}{{.Images}}{{\"\\t\"}}{{.DockerRootDir}}{{\"\\t\"}}{{.Name}}"
+   ],
+   "probe_command": [
+    "docker",
+    "info",
+    "--format",
+    "{{.ServerVersion}}{{\"\\t\"}}{{.Driver}}{{\"\\t\"}}{{.OperatingSystem}}{{\"\\t\"}}{{.KernelVersion}}{{\"\\t\"}}{{.Architecture}}{{\"\\t\"}}{{.Containers}}{{\"\\t\"}}{{.ContainersRunning}}{{\"\\t\"}}{{.Images}}{{\"\\t\"}}{{.DockerRootDir}}{{\"\\t\"}}{{.Name}}"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "permission_denied",
+   "transcribed_lines": 2,
+   "source_lines": 2,
+   "note": "The same refusal from the info call, preceded by an empty line: docker info prints the empty client section before the error. A first-line reader sees nothing, so the classification has to read the whole stream."
+  },
+  {
    "path": "honest-status/tool-missing-command-v-podman.txt",
    "probe": "linux.containers",
    "command": [
@@ -668,8 +735,8 @@
    ],
    "stream": "stdout",
    "exit_code": 1,
-   "expected_probe_status": "not_applicable",
-   "note": "podman is not installed. This is the host side evidence of absence. In Go the probe sees exec.LookPath return exec.ErrNotFound, which the runner classes as tool_missing; it never runs a shell and never sees exit 127."
+   "expected_probe_status": "unavailable",
+   "note": "podman is not installed. This is the host side evidence that it is absent from the places that were looked at. In Go the probe sees exec.LookPath return exec.ErrNotFound, which the runner classes as tool_missing; it never runs a shell and never sees exit 127."
   },
   {
    "path": "honest-status/tool-missing-shell-127.stderr.txt",
@@ -683,6 +750,16 @@
    "exit_code": 127,
    "expected_probe_status": "unavailable",
    "note": "What a SHELL reports for a missing executable. Recorded so that nobody mistakes it for the probe's own shape: the ExecRunner resolves the executable itself and returns tool_missing before any process starts. Exit 127 from a real child process means something else entirely."
+  }
+ ],
+ "other_host_classes": [
+  {
+   "id": "ubuntu-22.04-bastion",
+   "source_class": "transcribed from a real Ubuntu 22.04 bastion host, unchanged bytes, nothing to substitute",
+   "captured_at": "2026-09-23",
+   "distribution": "Ubuntu 22.04 LTS",
+   "privilege": "unprivileged account, NOT a member of the group docker, no elevation used",
+   "note": "docker is installed as a snap and answers only at /snap/bin/docker, and the daemon socket refuses this account. The three fixtures marked with this host id are the shapes the trial host could not produce."
   }
  ]
 }

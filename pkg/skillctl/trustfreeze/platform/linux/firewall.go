@@ -25,8 +25,11 @@ import (
 // honest result of an unprivileged capture on such a host is therefore
 // permission_denied with the installed backends recorded, never unavailable
 // (the tools are there) and never an empty ruleset (an empty ruleset means
-// everything passes, which is the opposite claim). A host with neither
-// backend has no firewall to describe: not_applicable with a reason.
+// everything passes, which is the opposite claim). Neither tool found where
+// the runner looks is unavailable with a reason that names those
+// directories: nft and ufw are two front ends among several, so their
+// absence from a search path says nothing about whether this host filters
+// packets, and not_applicable would say exactly that.
 //
 // What is persisted from a ruleset that could be read: the tables, the
 // chains with their type, hook, priority and policy, and the number of rules
@@ -63,7 +66,10 @@ const (
 	observationObserved         = "observed"
 	observationPermissionDenied = "permission_denied"
 	observationFailed           = "failed"
-	observationNotApplicable    = "not_applicable"
+	// observationUnavailable: no backend this build reads was found where it
+	// looked. It replaces the not_applicable this attribute carried until
+	// 2026-09-23, which claimed the host had no firewall.
+	observationUnavailable = "unavailable"
 )
 
 // nftRulesetEvidenceMaxBytes bounds the ruleset output that may be kept as
@@ -336,8 +342,10 @@ func (p *FirewallProbe) EvidenceClaims() map[probe.Platform][]probe.EvidenceLeve
 	}
 }
 
-// Support implements probe.Probe. A host with neither backend has no
-// firewall this probe can describe.
+// Support implements probe.Probe. Neither backend in the searched
+// directories is unavailable, never not_applicable: nft and ufw are two of
+// several front ends of one kernel subsystem, and a host whose front end
+// this build does not look for still filters packets.
 func (p *FirewallProbe) Support(_ context.Context, host probe.HostContext) probe.SupportResult {
 	if !p.Descriptor().SupportsPlatform(host.GOOS) {
 		return probe.Unsupported("nft and ufw are Linux tools; no firewall source for " + host.GOOS)
@@ -346,9 +354,19 @@ func (p *FirewallProbe) Support(_ context.Context, host probe.HostContext) probe
 		return probe.Unavailable("no command runner")
 	}
 	if len(netPresentTools(host, FirewallToolNft, FirewallToolUfw)) == 0 {
-		return probe.NotApplicable("no firewall backend on this host: neither nft nor ufw is installed")
+		return probe.Unavailable(firewallBackendMissingReason(host.Runner))
 	}
 	return probe.Supported()
+}
+
+// firewallBackendMissingReason names the two tools and the directories they
+// were looked for in. What it must not say is that the host has no firewall:
+// iptables-legacy, firewalld and a ruleset loaded by a unit at boot all
+// filter without either binary being present.
+func firewallBackendMissingReason(runner probe.CommandRunner) string {
+	return "neither " + FirewallToolNft + " nor " + FirewallToolUfw + " was found " +
+		netSearchedDirsPhrase(runner) +
+		": the packet filter state of this host is not established by this capture"
 }
 
 // netPresentTools returns the executables of names that resolve, in the
@@ -371,6 +389,19 @@ func netPresentTools(host probe.HostContext, names ...string) []string {
 	return out
 }
 
+// netSearchedDirsPhrase renders where bare executable names were looked for,
+// for a diagnostic that has to distinguish "not installed" from "not found".
+// A runner that does not report its directories yields a phrase saying
+// exactly that: naming a directory that was not searched would be the same
+// unfounded claim this wording exists to avoid.
+func netSearchedDirsPhrase(runner probe.CommandRunner) string {
+	dirs := probe.SearchDirs(runner)
+	if len(dirs) == 0 {
+		return "in the directories this capture searches (the runner does not report them)"
+	}
+	return "in " + strings.Join(dirs, ", ")
+}
+
 // Collect implements probe.Probe.
 func (p *FirewallProbe) Collect(ctx context.Context, cc probe.CollectContext) trustfreeze.ProbeResult {
 	start := cc.Now()
@@ -380,15 +411,17 @@ func (p *FirewallProbe) Collect(ctx context.Context, cc probe.CollectContext) tr
 	observed := trustfreeze.FormatTime(start)
 
 	if len(present) == 0 {
-		res.Status = trustfreeze.StatusNotApplicable
-		res.Reason = "no firewall backend on this host: neither nft nor ufw is installed"
+		res.Status = trustfreeze.StatusUnavailable
+		res.Reason = firewallBackendMissingReason(cc.Runner)
+		res.Error = &trustfreeze.ProbeError{Class: probe.ClassToolMissing, Message: res.Reason}
+		s.warn(probe.DiagFieldUnavailable, "backend", res.Reason)
 		return s.finish(res, []trustfreeze.Artifact{{
 			ID: ArtifactFirewall, Type: artifactTypeFirewall, Scope: "device", Source: FirewallProbeID,
 			State: trustfreeze.StateUnknown,
 			Attributes: map[string]string{
 				"backends_present": "",
 				"backend_observed": "",
-				"observation":      observationNotApplicable,
+				"observation":      observationUnavailable,
 			},
 			Provenance: trustfreeze.Provenance{
 				Method: "command", Confidence: trustfreeze.ConfidenceProven,

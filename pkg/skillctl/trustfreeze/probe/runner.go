@@ -425,7 +425,42 @@ func DefaultSearchPath(goos string) []string {
 		}
 		return []string{filepath.Join(root, "System32")}
 	}
+	if goos == "linux" {
+		// /snap/bin is where snapd puts the entry point of an installed snap,
+		// and on Ubuntu docker is commonly a snap: a bastion measured on
+		// 2026-09-23 answered "Docker version 29.8.0" at /snap/bin/docker and
+		// had no docker in the four directories above, so the probe that
+		// searched only those reported no runtime on a host that has one. The directory is owned by root and written by
+		// snapd alone, which makes it a fixed system directory like the other
+		// four and not the caller's PATH. It comes last, so a distribution
+		// package still wins over a snap of the same name.
+		return []string{"/usr/bin", "/bin", "/usr/sbin", "/sbin", "/snap/bin"}
+	}
 	return []string{"/usr/bin", "/bin", "/usr/sbin", "/sbin"}
+}
+
+// SearchPathReporter is implemented by a CommandRunner that resolves bare
+// executable names in a fixed list of directories.
+type SearchPathReporter interface {
+	// SearchDirs returns those directories, in lookup order.
+	SearchDirs() []string
+}
+
+// SearchDirs returns the directories r resolves bare executable names in, or
+// nil for a runner that does not report them. A probe that has to say where
+// it looked asks here instead of naming a directory it cannot know was
+// searched.
+func SearchDirs(r CommandRunner) []string {
+	rep, ok := r.(SearchPathReporter)
+	if !ok {
+		return nil
+	}
+	return rep.SearchDirs()
+}
+
+// SearchDirs implements SearchPathReporter.
+func (r *ExecRunner) SearchDirs() []string {
+	return append([]string(nil), r.SearchPath...)
 }
 
 // LookPath resolves file in the search path. An absolute path is checked

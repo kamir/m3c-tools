@@ -758,15 +758,15 @@ capture never hides them:
 
 | Probe | Reads | Honest outcomes besides `captured` |
 |-------|-------|------------------------------------|
-| `linux.packages` | `dpkg-query -W -f`, `apt-mark showmanual`, `snap list` | `unavailable` without `dpkg-query`; the snap part is `not_applicable` on a host without snapd |
+| `linux.packages` | `dpkg-query -W -f`, `apt-mark showmanual`, `snap list` | `unavailable` without `dpkg-query`; the snap inventory is `unavailable` with the searched directories named when `snap` does not resolve, never an empty snap list |
 | `linux.users` | `getent passwd`, `getent group`, `id` | `unavailable` without `getent`. Never a password hash: `getent` prints none and nothing else is read |
 | `linux.sudo` | `/etc/sudoers`, `/etc/sudoers.d` (file names, modes, owners, sizes, parsed rules) | `permission_denied` for every file an ordinary user cannot read, with the observed structure still recorded |
 | `linux.ssh` | `/etc/ssh/sshd_config` and `sshd_config.d/*.conf` (declared), `sshd -T` (effective), `getent passwd` plus `authorized_keys` per account | `permission_denied` for the effective state without root; `partial` where one source is missing and the rest was read (a host without `sshd` keeps its declared state and is partial, not `unavailable`); the declared state stays `declared` and is never presented as observed |
 | `linux.systemd` | `systemctl list-unit-files`, `systemctl show` | `unavailable` without `systemctl`. Enabled state and active state are two different facts and are recorded as two artifacts |
 | `linux.mounts` | `findmnt --json` | `unavailable` without `findmnt` |
 | `linux.network.listeners` | `ss -H -lntup` | `partial` unprivileged: the owning process of a foreign socket is not visible, and the diagnostic says so |
-| `linux.firewall` | `nft --json list ruleset`, else `ufw status` | `permission_denied` when a backend is installed and refuses without root, `not_applicable` when no backend exists |
-| `linux.containers` | `docker ps`, `docker info`, the same for podman | `not_applicable` without a runtime, `permission_denied` when the socket refuses |
+| `linux.firewall` | `nft --json list ruleset`, else `ufw status` | `permission_denied` when a backend is installed and refuses without root; `unavailable` when neither tool is found, with the searched directories named. Not `not_applicable`: a host filters packets with backends this build does not read |
+| `linux.containers` | `docker ps`, `docker info`, the same for podman | `unavailable` when neither client is found, with the searched directories named; `permission_denied` when the daemon socket refuses, carrying what the client printed; `failed` when the daemon is unreachable. The runtime artifact records the resolved path (`/snap/bin/docker` for a snap) and the client version of that path |
 
 The profile `ubuntu-bastion` requires `common.identity` and the eight Linux probes above
 except `linux.containers`, which is optional. It still lists `common.git` and
@@ -775,7 +775,9 @@ except `linux.containers`, which is optional. It still lists `common.git` and
 `incomplete` (exit `1`) even on a Linux host. On an unprivileged host `linux.firewall`
 is `permission_denied` as well, which is the correct answer and keeps the capture
 incomplete; a complete `ubuntu-bastion` capture needs a run with the privileges those
-probes name. The profiles `agentic-workstation`, `windows-wsl-workstation` and
+probes name. A host with neither `nft` nor `ufw` keeps the capture incomplete too,
+because `linux.firewall` is then `unavailable` and not a statement that the host has no
+firewall. The profiles `agentic-workstation`, `windows-wsl-workstation` and
 `macos-workstation` list probes that are not implemented at all, so those captures are
 `incomplete` as well.
 
@@ -1305,8 +1307,11 @@ file could not be written (`execution_error`) · `2` usage.
 #### `trust-freeze`: how probes run, and known limits
 
 - **Commands** run as executable plus argument vector, never through a shell, resolved
-  only in `/usr/bin`, `/bin`, `/usr/sbin`, `/sbin` (Windows: the system directory the OS
-  reports). The environment is only the probe's allowlist plus `LC_ALL=C` and `TZ=UTC0`;
+  only in `/usr/bin`, `/bin`, `/usr/sbin`, `/sbin`, on Linux followed by `/snap/bin`
+  (Windows: the system directory the OS reports). `/snap/bin` is where snapd puts the
+  entry point of an installed snap, and on Ubuntu `docker` is commonly one; it comes
+  last, so a distribution package wins over a snap of the same name. The caller's `PATH`
+  is never read. The environment is only the probe's allowlist plus `LC_ALL=C` and `TZ=UTC0`;
   the working directory is `/` (Windows: the Windows directory). `sudo`, `su`, `doas`,
   `pkexec`, `run0`, `runuser` and `runas` are refused by name, path or symlink target.
   On Unix every tool runs in a session and process group of its own without a

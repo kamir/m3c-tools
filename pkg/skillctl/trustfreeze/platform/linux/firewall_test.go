@@ -102,22 +102,41 @@ func TestFirewallProbeRefusedByBothBackends(t *testing.T) {
 	}
 }
 
-// A host with neither backend has no firewall to describe: not_applicable
-// with a reason, and the artifact says so.
+// Neither backend in the searched directories is unavailable with a reason
+// that names those directories, and the artifact says so. Until 2026-09-23
+// this was not_applicable with the words "no firewall backend on this host",
+// which is a claim about the host: nft and ufw are two front ends among
+// several, and a ruleset loaded at boot filters without either of them being
+// installed. Same defect class as the container runtime found at a snap
+// path, and the same fix.
 func TestFirewallProbeWithoutAnyBackend(t *testing.T) {
-	runner := probe.NewFakeRunner()
+	runner := probe.NewFakeRunner().WithSearchDirs(netBastionSearchDirs...)
 	p := NewFirewallProbe()
 	sup := p.Support(context.Background(), netTestHost(runner))
-	if sup.Available || sup.Status != trustfreeze.StatusNotApplicable || sup.Reason == "" {
-		t.Fatalf("support %+v, want not_applicable with a reason", sup)
+	if sup.Available || sup.Status != trustfreeze.StatusUnavailable || sup.Reason == "" {
+		t.Fatalf("support %+v, want unavailable with a reason", sup)
 	}
 	cc, _ := netTestCollect(FirewallProbeID, runner)
 	res := p.Collect(context.Background(), cc)
-	if res.Status != trustfreeze.StatusNotApplicable || res.Reason == "" {
-		t.Fatalf("status %q reason %q, want not_applicable with a reason", res.Status, res.Reason)
+	if res.Status != trustfreeze.StatusUnavailable || res.Reason == "" {
+		t.Fatalf("status %q reason %q, want unavailable with a reason", res.Status, res.Reason)
+	}
+	if res.Error == nil || res.Error.Class != probe.ClassToolMissing {
+		t.Errorf("error %+v, want class %q", res.Error, probe.ClassToolMissing)
+	}
+	if strings.Contains(res.Reason, "no firewall backend on this host") {
+		t.Errorf("reason %q still claims the host has no firewall", res.Reason)
+	}
+	for _, dir := range netBastionSearchDirs {
+		if !strings.Contains(res.Reason, dir) {
+			t.Errorf("reason %q does not name the searched directory %s", res.Reason, dir)
+		}
+	}
+	if !netHasWarning(res, probe.DiagFieldUnavailable, "backend") {
+		t.Errorf("no field_unavailable diagnostic: %+v", res.Warnings)
 	}
 	fw := netArtifact(t, res, ArtifactFirewall)
-	if fw.Attributes["observation"] != observationNotApplicable || fw.Attributes["backends_present"] != "" {
+	if fw.Attributes["observation"] != observationUnavailable || fw.Attributes["backends_present"] != "" {
 		t.Errorf("attributes %v", fw.Attributes)
 	}
 }
