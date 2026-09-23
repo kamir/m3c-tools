@@ -1,0 +1,5 @@
+total 24
+drwxr-xr-x   2 root root    42 Sep 23 06:15 .
+drwxr-xr-x 148 root root 12288 Sep 23 08:58 ..
+-r--r-----   1 root root  1068 Jan 29  2024 README
+-r--r-----   1 root root    29 Jun  1 14:21 alice-nopasswd

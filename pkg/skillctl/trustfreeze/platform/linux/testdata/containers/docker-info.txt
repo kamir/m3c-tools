@@ -1,0 +1,1 @@
+27.5.1	overlay2	Ubuntu 24.04.1 LTS	6.17.0-35-generic	x86_64	32	20	66	/var/lib/docker	host-a

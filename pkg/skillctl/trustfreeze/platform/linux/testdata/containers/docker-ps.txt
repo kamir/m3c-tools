@@ -1,0 +1,20 @@
+c0de0001c0de0001c0de0001c0de0001c0de0001c0de0001c0de0001c0de0001	203.0.113.10:5100/example/edge-supervisor:0.1.1	app-edge-supervisor	running	Up 2 weeks (healthy)	0.0.0.0:9113->9113/tcp, :::9113->9113/tcp
+c0de0002c0de0002c0de0002c0de0002c0de0002c0de0002c0de0002c0de0002	203.0.113.10:5100/example/ingest-exporter:0.1.1	app-ingest-exporter	running	Up 2 weeks (healthy)	0.0.0.0:9112->9112/tcp, :::9112->9112/tcp
+c0de0003c0de0003c0de0003c0de0003c0de0003c0de0003c0de0003c0de0003	grafana/grafana:13.2.1	app-grafana	running	Up 2 weeks (healthy)	0.0.0.0:3000->3000/tcp, :::3000->3000/tcp
+c0de0004c0de0004c0de0004c0de0004c0de0004c0de0004c0de0004c0de0004	203.0.113.10:5100/example/prometheus:v3.14.0	app-prometheus	running	Up 2 weeks (healthy)	0.0.0.0:9090->9090/tcp, :::9090->9090/tcp
+c0de0005c0de0005c0de0005c0de0005c0de0005c0de0005c0de0005c0de0005	203.0.113.10:5100/example/stream-iceberg-processor:2026.09-rc1	app-iceberg-sink	running	Up 2 weeks	0.0.0.0:9193->9193/tcp, :::9193->9193/tcp
+c0de0006c0de0006c0de0006c0de0006c0de0006c0de0006c0de0006c0de0006	203.0.113.10:5100/example/stream-broker:2026.05-rc8	app-stream-broker	running	Up 2 weeks (healthy)	9092-9094/tcp, 19092-19094/tcp
+c0de0007c0de0007c0de0007c0de0007c0de0007c0de0007c0de0007c0de0007	203.0.113.10:5100/example/opcua-source:0.1.2	app-opcua-source	running	Up 2 weeks (healthy)	0.0.0.0:9110->9110/tcp, :::9110->9110/tcp
+c0de0008c0de0008c0de0008c0de0008c0de0008c0de0008c0de0008c0de0008	203.0.113.10:5100/example/iceberg-rest:1.6.0	app-iceberg-rest	running	Up 2 weeks	0.0.0.0:8181->8181/tcp, :::8181->8181/tcp
+c0de0009c0de0009c0de0009c0de0009c0de0009c0de0009c0de0009c0de0009	203.0.113.10:5100/example/sim-writer:0.1.0	app-sim-writer	running	Up 2 weeks (healthy)	
+c0de0010c0de0010c0de0010c0de0010c0de0010c0de0010c0de0010c0de0010	203.0.113.10:5100/example/opc-plc:2.15.1	app-opc-plc	running	Up 2 weeks	8080/tcp, 0.0.0.0:50000->50000/tcp, :::50000->50000/tcp
+c0de0011c0de0011c0de0011c0de0011c0de0011c0de0011c0de0011c0de0011	203.0.113.10:5100/example/stream-proxy:2026.05-rc8	app-stream-proxy	running	Up 2 weeks (healthy)	8090/tcp, 0.0.0.0:19092->9092/tcp, [::]:19092->9092/tcp
+c0de0012c0de0012c0de0012c0de0012c0de0012c0de0012c0de0012c0de0012	203.0.113.10:5100/example/etcd:v3.5.12	app-etcd	running	Up 2 weeks (healthy)	2379-2380/tcp
+c0de0013c0de0013c0de0013c0de0013c0de0013c0de0013c0de0013c0de0013	moby/buildkit:buildx-stable-1	buildx_buildkit_example-mirror0	running	Up 2 weeks	
+c0de0014c0de0014c0de0014c0de0014c0de0014c0de0014c0de0014c0de0014	kindest/node:v1.30.0@sha256:d16e5700d16e5700d16e5700d16e5700d16e5700d16e5700d16e5700d16e5700	example-control-plane	running	Up 2 weeks	127.0.0.1:39153->6443/tcp, 0.0.0.0:3080->30080/tcp, 0.0.0.0:8081->30081/tcp, 0.0.0.0:9092->30092/tcp, 0.0.0.0:7474->30474/tcp, 0.0.0.0:7687->30687/tcp, 0.0.0.0:18790->30790/tcp, 0.0.0.0:18791->30791/tcp, 0.0.0.0:9001->30901/tcp
+c0de0015c0de0015c0de0015c0de0015c0de0015c0de0015c0de0015c0de0015	gitlab/gitlab-ce:19.3.1-ce.0	gitlab	running	Up 3 weeks (healthy)	80/tcp, 443/tcp, 0.0.0.0:8929->8929/tcp, :::8929->8929/tcp, 0.0.0.0:2224->22/tcp, [::]:2224->22/tcp
+c0de0016c0de0016c0de0016c0de0016c0de0016c0de0016c0de0016c0de0016	203.0.113.10:5100/example/app-terminal:app-release-rc1	svc-app-terminal	running	Up 3 weeks	
+c0de0017c0de0017c0de0017c0de0017c0de0017c0de0017c0de0017c0de0017	203.0.113.10:5100/example/app-bridge:app-release-rc1	svc-app-bridge	running	Up 3 weeks	
+c0de0018c0de0018c0de0018c0de0018c0de0018c0de0018c0de0018c0de0018	confluentinc/cp-schema-registry:7.6.0	svc-app-schema-registry	running	Up 3 weeks	0.0.0.0:18081->8081/tcp, [::]:18081->8081/tcp
+c0de0019c0de0019c0de0019c0de0019c0de0019c0de0019c0de0019c0de0019	confluentinc/cp-kafka:7.6.0	svc-app-kafka	running	Up 3 weeks	9092/tcp
+c0de0020c0de0020c0de0020c0de0020c0de0020c0de0020c0de0020c0de0020	kindest/node:v1.30.0@sha256:d16e5700d16e5700d16e5700d16e5700d16e5700d16e5700d16e5700d16e5700	svc-app-control-plane	running	Up 3 weeks	127.0.0.1:34625->6443/tcp, 0.0.0.0:9192->30092/tcp

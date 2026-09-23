@@ -1,0 +1,16 @@
+Type=notify
+Restart=on-failure
+ExecStart={ path=/usr/sbin/sshd ; argv[]=/usr/sbin/sshd -D $SSHD_OPTS ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0 }
+User=
+Group=
+Id=ssh.service
+Description=OpenBSD Secure Shell server
+LoadState=loaded
+ActiveState=active
+SubState=running
+FragmentPath=/usr/lib/systemd/system/ssh.service
+DropInPaths=
+UnitFileState=enabled
+UnitFilePreset=enabled
+NeedDaemonReload=no
+ConditionResult=yes

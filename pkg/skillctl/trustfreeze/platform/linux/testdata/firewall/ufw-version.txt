@@ -1,0 +1,2 @@
+ufw 0.36.2
+Copyright 2008-2023 Canonical Ltd.

@@ -1,0 +1,16 @@
+Type=simple
+Restart=always
+ExecStart={ path=/usr/bin/bash ; argv[]=/usr/bin/bash ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0 }
+User=
+Group=
+Id=debug-shell.service
+Description=Early root shell on /dev/tty9 FOR DEBUGGING ONLY
+LoadState=loaded
+ActiveState=inactive
+SubState=dead
+FragmentPath=/usr/lib/systemd/system/debug-shell.service
+DropInPaths=
+UnitFileState=disabled
+UnitFilePreset=disabled
+NeedDaemonReload=no
+ConditionResult=no

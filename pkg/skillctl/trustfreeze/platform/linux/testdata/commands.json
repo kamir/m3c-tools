@@ -1,0 +1,688 @@
+{
+ "schema": "trust-freeze/linux-fixtures/v1",
+ "source_class": "transcribed from a real Ubuntu 24.04.1 host and sanitized",
+ "captured_at": "2026-09-23",
+ "host_class": {
+  "distribution": "Ubuntu 24.04.1 LTS",
+  "kernel_release": "6.17.0-35-generic",
+  "architecture": "amd64",
+  "privilege": "unprivileged user, member of the groups sudo and docker, no elevation used",
+  "scale": {
+   "dpkg_packages": 1879,
+   "unit_files": 516,
+   "listeners": 51,
+   "mount_points": 113,
+   "running_containers": 20
+  }
+ },
+ "environment": {
+  "LC_ALL": "C",
+  "LANG": "unset",
+  "LANGUAGE": "unset",
+  "note": "Every command was run with the locale forced to C and LANG and LANGUAGE removed, which is the environment probe.ExecRunner builds (allowlist plus LC_ALL=C and TZ=UTC0). One fixture deliberately breaks that rule and says so."
+ },
+ "fixtures": [
+  {
+   "path": "packages/dpkg-query-w.txt",
+   "probe": "linux.packages",
+   "command": [
+    "dpkg-query",
+    "-W",
+    "-f=${binary:Package}\\t${Version}\\t${Architecture}\\t${db:Status-Abbrev}\\n"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 51,
+   "source_lines": 1879,
+   "note": "Representative subset of the host output, original order kept. Covers architectures all and amd64 and the status abbreviations 'ii ' and 'rc '. The -f value reaches dpkg-query as the literal characters backslash t and backslash n; dpkg-query itself turns them into tab and newline."
+  },
+  {
+   "path": "packages/dpkg-query-w-unknown.stderr.txt",
+   "probe": "linux.packages",
+   "command": [
+    "dpkg-query",
+    "-W",
+    "-f=${binary:Package}\\t${Version}\\t${Architecture}\\t${db:Status-Abbrev}\\n",
+    "nosuchpkg-trustfreeze"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "captured",
+   "note": "Named package does not exist: stdout empty, one diagnostic on stderr, exit 1. Not a permission or tool problem."
+  },
+  {
+   "path": "packages/apt-mark-showmanual.txt",
+   "probe": "linux.packages",
+   "command": [
+    "apt-mark",
+    "showmanual"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 82,
+   "source_lines": 82
+  },
+  {
+   "path": "packages/snap-list.txt",
+   "probe": "linux.packages",
+   "command": [
+    "snap",
+    "list"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 24,
+   "source_lines": 24,
+   "note": "Captured with LC_ALL=C and no LANG or LANGUAGE in the environment, which is what the ExecRunner gives a probe."
+  },
+  {
+   "path": "packages/snap-list-localized.txt",
+   "probe": "linux.packages",
+   "command": [
+    "snap",
+    "list"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 24,
+   "source_lines": 24,
+   "note": "Same host, same moment, with LANG=de_DE.UTF-8 inherited. Header words and column widths differ. Parser hazard fixture: never key on the header text or on fixed column offsets."
+  },
+  {
+   "path": "packages/dpkg-query-version.txt",
+   "probe": "linux.packages",
+   "command": [
+    "dpkg-query",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "packages/apt-mark-version.txt",
+   "probe": "linux.packages",
+   "command": [
+    "apt-mark",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "packages/snap-version.txt",
+   "probe": "linux.packages",
+   "command": [
+    "snap",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "users/getent-passwd.txt",
+   "probe": "linux.users",
+   "command": [
+    "getent",
+    "passwd"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 53,
+   "source_lines": 53
+  },
+  {
+   "path": "users/getent-group.txt",
+   "probe": "linux.users",
+   "command": [
+    "getent",
+    "group"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 81,
+   "source_lines": 81
+  },
+  {
+   "path": "users/getent-group-sudo-docker.txt",
+   "probe": "linux.users",
+   "command": [
+    "getent",
+    "group",
+    "sudo",
+    "docker"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "users/id.txt",
+   "probe": "linux.users",
+   "command": [
+    "id"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The capturing account: member of sudo and of docker, so two privilege capabilities are derivable from this line alone."
+  },
+  {
+   "path": "users/id-service-account.txt",
+   "probe": "linux.users",
+   "command": [
+    "id",
+    "deploy"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "honest-status/empty-result-getent-unknown-user.txt",
+   "probe": "linux.users",
+   "command": [
+    "getent",
+    "passwd",
+    "nosuchuser-trustfreeze"
+   ],
+   "stream": "stdout",
+   "exit_code": 2,
+   "expected_probe_status": "captured",
+   "note": "Empty stdout with exit 2. Empty output alone does not mean failure, and a non-zero exit alone does not mean permission_denied."
+  },
+  {
+   "path": "users/getent-version.txt",
+   "probe": "linux.users",
+   "command": [
+    "getent",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "First line only. The license and author lines of the real output were dropped, see the README."
+  },
+  {
+   "path": "users/id-version.txt",
+   "probe": "linux.users",
+   "command": [
+    "id",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "First line only, same reason as getent-version.txt."
+  },
+  {
+   "path": "sudo/ls-la-etc-sudoers-d.txt",
+   "probe": "linux.sudo",
+   "command": [
+    "ls",
+    "-la",
+    "/etc/sudoers.d"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The directory is world readable (0755), so names, modes, owners and sizes are observable without privileges. The file contents are not."
+  },
+  {
+   "path": "sudo/stat-sudoers.txt",
+   "probe": "linux.sudo",
+   "command": [
+    "stat",
+    "-c",
+    "%n %a %U %G %s",
+    "/etc/sudoers",
+    "/etc/sudoers.d",
+    "/etc/sudoers.d/README",
+    "/etc/sudoers.d/alice-nopasswd"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "sudo/cat-etc-sudoers.stderr.txt",
+   "probe": "linux.sudo",
+   "command": [
+    "cat",
+    "/etc/sudoers"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "permission_denied",
+   "note": "Mode 0440 root:root. The probe reads the file itself rather than through cat; the Go error is fs.ErrPermission, which the runner classes as permission_denied."
+  },
+  {
+   "path": "sudo/cat-etc-sudoers-d-entry.stderr.txt",
+   "probe": "linux.sudo",
+   "command": [
+    "cat",
+    "/etc/sudoers.d/alice-nopasswd"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "permission_denied",
+   "note": "A 29 byte drop-in whose name announces a NOPASSWD rule that cannot be read unprivileged. Structure observable, rule text not."
+  },
+  {
+   "path": "ssh/sshd_config.txt",
+   "probe": "linux.ssh",
+   "command": [
+    "cat",
+    "/etc/ssh/sshd_config"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "Declared state (SPEC-0471 TF06-R3, playbook L3). World readable, 3257 bytes, transcribed byte for byte including the leading empty line and the three trailing empty lines. Carries PasswordAuthentication yes and PermitEmptyPasswords yes."
+  },
+  {
+   "path": "ssh/ls-la-etc-ssh.txt",
+   "probe": "linux.ssh",
+   "command": [
+    "ls",
+    "-la",
+    "/etc/ssh"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "Nine sshd_config.backup-* files and one sshd_config.ucf-dist sit next to the active file: a glob wider than sshd_config.d/*.conf reads the wrong files."
+  },
+  {
+   "path": "ssh/ls-la-sshd-config-d.txt",
+   "probe": "linux.ssh",
+   "command": [
+    "ls",
+    "-la",
+    "/etc/ssh/sshd_config.d"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "Genuinely empty include directory. The declared state is therefore the main file alone, and the correct status is captured with an empty list, not unavailable."
+  },
+  {
+   "path": "ssh/sshd-T-unprivileged.stderr.txt",
+   "probe": "linux.ssh",
+   "command": [
+    "/usr/sbin/sshd",
+    "-T"
+   ],
+   "probe_command": [
+    "sshd",
+    "-T"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "permission_denied",
+   "note": "The effective state is not observable without root: sshd cannot read the host private keys. stdout is empty. Keep the declared state declared, never promote it to observed. Taken with the absolute path the shell resolved. The probe runs the bare name and probe.ExecRunner resolves it through its fixed search list, which lands on the same binary."
+  },
+  {
+   "path": "ssh/sshd-version.stderr.txt",
+   "probe": "linux.ssh",
+   "command": [
+    "/usr/sbin/sshd",
+    "-V"
+   ],
+   "probe_command": [
+    "sshd",
+    "-V"
+   ],
+   "stream": "stderr",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "sshd writes its version banner to STDERR and exits 0. A probe that reads only stdout records no version at all. Taken with the absolute path the shell resolved. The probe runs the bare name; see the entry for sshd -T."
+  },
+  {
+   "path": "systemd/systemctl-list-unit-files.txt",
+   "probe": "linux.systemd",
+   "command": [
+    "systemctl",
+    "list-unit-files",
+    "--no-legend",
+    "--no-pager"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 55,
+   "source_lines": 516,
+   "note": "Subset in original order, covering all nine UnitFileState values seen on the host (alias, disabled, enabled, enabled-runtime, generated, indirect, masked, static, transient) and every unit type. Column two starts at byte 79 in the host output; the padding of the sanitized unit name was adjusted so that this holds in the fixture too."
+  },
+  {
+   "path": "systemd/systemctl-show-enabled-running.txt",
+   "probe": "linux.systemd",
+   "command": [
+    "systemctl",
+    "show",
+    "--no-pager",
+    "-p",
+    "Id,Description,LoadState,ActiveState,SubState,UnitFileState,UnitFilePreset,FragmentPath,DropInPaths,Type,ExecStart,User,Group,Restart,ConditionResult,NeedDaemonReload",
+    "ssh.service"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "Enabled and running. Note that systemd returns the properties in ITS order, not in the order asked for."
+  },
+  {
+   "path": "systemd/systemctl-show-disabled.txt",
+   "probe": "linux.systemd",
+   "command": [
+    "systemctl",
+    "show",
+    "--no-pager",
+    "-p",
+    "Id,Description,LoadState,ActiveState,SubState,UnitFileState,UnitFilePreset,FragmentPath,DropInPaths,Type,ExecStart,User,Group,Restart,ConditionResult,NeedDaemonReload",
+    "debug-shell.service"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "Disabled and dead. Enabled state and active state are two different facts."
+  },
+  {
+   "path": "systemd/systemctl-show-local-unit.txt",
+   "probe": "linux.systemd",
+   "command": [
+    "systemctl",
+    "show",
+    "--no-pager",
+    "-p",
+    "Id,Description,LoadState,ActiveState,SubState,UnitFileState,UnitFilePreset,FragmentPath,DropInPaths,Type,ExecStart,User,Group,Restart,ConditionResult,NeedDaemonReload",
+    "connect-pm2.service"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "Locally added unit under /etc/systemd/system with User= set to a human account: a service running as an interactive user, which the capability model should be able to state."
+  },
+  {
+   "path": "systemd/systemctl-show-unknown-unit.txt",
+   "probe": "linux.systemd",
+   "command": [
+    "systemctl",
+    "show",
+    "--no-pager",
+    "-p",
+    "Id,Description,LoadState,ActiveState,SubState,UnitFileState,UnitFilePreset,FragmentPath,DropInPaths,Type,ExecStart,User,Group,Restart,ConditionResult,NeedDaemonReload",
+    "nosuchunit-trustfreeze.service"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "Unit does not exist, yet the exit code is 0 and every property is present but empty. LoadState=not-found is the only truthful signal."
+  },
+  {
+   "path": "honest-status/empty-result-systemctl-no-match.txt",
+   "probe": "linux.systemd",
+   "command": [
+    "systemctl",
+    "list-unit-files",
+    "--no-legend",
+    "--no-pager",
+    "nosuchunit-trustfreeze*"
+   ],
+   "stream": "stdout",
+   "exit_code": 1,
+   "expected_probe_status": "captured",
+   "note": "Pattern matches nothing: empty stdout, exit 1. Exit 1 here is an empty result, not a failure."
+  },
+  {
+   "path": "systemd/systemctl-version.txt",
+   "probe": "linux.systemd",
+   "command": [
+    "systemctl",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "network.listeners/ss-H-lntup.txt",
+   "probe": "linux.network.listeners",
+   "command": [
+    "ss",
+    "-H",
+    "-lntup"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "partial",
+   "transcribed_lines": 51,
+   "source_lines": 51,
+   "note": "Unprivileged run: the users:((...)) column is present ONLY for the capturing user's own process (last line). For the other 50 listeners the owning process is unknown, so the row count is six fields and the honest status is partial with one diagnostic, never captured. Loopback and wildcard addresses are kept verbatim because the exposure judgement depends on them."
+  },
+  {
+   "path": "network.listeners/ss-version.txt",
+   "probe": "linux.network.listeners",
+   "command": [
+    "ss",
+    "-V"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "honest-status/empty-result-ss-no-match.txt",
+   "probe": "linux.network.listeners",
+   "command": [
+    "ss",
+    "-H",
+    "-lntu",
+    "sport",
+    "=",
+    ":65000"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "No listener matches: empty stdout, exit 0."
+  },
+  {
+   "path": "firewall/ufw-status.stderr.txt",
+   "probe": "linux.firewall",
+   "command": [
+    "ufw",
+    "status"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "permission_denied",
+   "note": "ufw is installed (/usr/sbin/ufw) and refuses without root. unavailable would be a lie."
+  },
+  {
+   "path": "firewall/nft-list-ruleset.stderr.txt",
+   "probe": "linux.firewall",
+   "command": [
+    "nft",
+    "list",
+    "ruleset"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "permission_denied",
+   "note": "Two stderr lines, stdout empty. The first line carries the cause, the second is the netlink follow-up error."
+  },
+  {
+   "path": "firewall/nft-json-list-ruleset.stderr.txt",
+   "probe": "linux.firewall",
+   "command": [
+    "nft",
+    "--json",
+    "list",
+    "ruleset"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "permission_denied",
+   "note": "The --json form fails the same way and produces no JSON at all, so a parser must check the exit code before it tries to decode."
+  },
+  {
+   "path": "firewall/ufw-version.txt",
+   "probe": "linux.firewall",
+   "command": [
+    "ufw",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "firewall/nft-version.txt",
+   "probe": "linux.firewall",
+   "command": [
+    "nft",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "mounts/findmnt-json.json",
+   "probe": "linux.mounts",
+   "command": [
+    "findmnt",
+    "--json"
+   ],
+   "probe_command": [
+    "findmnt",
+    "--json",
+    "-o",
+    "TARGET,SOURCE,FSTYPE,OPTIONS"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 154,
+   "source_lines": 594,
+   "note": "Pruned to a representative subtree set; the emitter that produced it reproduces the untouched host file byte for byte, so indentation, the '},{' sibling form and key order are the tool's own. 113 mount points on the host, 25 kept. Taken with the bare --json call, which prints every column findmnt knows. The probe asks for the four columns it records, so its answer is a subset of this document with the same shape and the same key order; the parser reads keys, never positions."
+  },
+  {
+   "path": "mounts/findmnt-version.txt",
+   "probe": "linux.mounts",
+   "command": [
+    "findmnt",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "containers/docker-ps.txt",
+   "probe": "linux.containers",
+   "command": [
+    "docker",
+    "ps",
+    "--no-trunc",
+    "--format",
+    "{{.ID}}\\t{{.Image}}\\t{{.Names}}\\t{{.State}}\\t{{.Status}}\\t{{.Ports}}"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 20,
+   "source_lines": 20,
+   "note": "docker ps DOES turn the literal backslash t of the format string into a tab. The Status column ('Up 2 weeks (healthy)') is volatile and belongs in the normalization rule set."
+  },
+  {
+   "path": "containers/docker-info.txt",
+   "probe": "linux.containers",
+   "command": [
+    "docker",
+    "info",
+    "--format",
+    "{{.ServerVersion}}{{\"\\t\"}}{{.Driver}}{{\"\\t\"}}{{.OperatingSystem}}{{\"\\t\"}}{{.KernelVersion}}{{\"\\t\"}}{{.Architecture}}{{\"\\t\"}}{{.Containers}}{{\"\\t\"}}{{.ContainersRunning}}{{\"\\t\"}}{{.Images}}{{\"\\t\"}}{{.DockerRootDir}}{{\"\\t\"}}{{.Name}}"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "docker info does NOT expand the literal backslash t: with '\\t' in the format string the output carries the two characters backslash and t. The separator therefore has to be written as a Go template string literal, as in this command."
+  },
+  {
+   "path": "containers/docker-ps-empty.txt",
+   "probe": "linux.containers",
+   "command": [
+    "docker",
+    "ps",
+    "--format",
+    "{{.ID}}\\t{{.Image}}",
+    "--filter",
+    "name=nosuchcontainer-trustfreeze"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "Runtime present, no matching container: empty stdout, exit 0. The honest status is captured with an empty list."
+  },
+  {
+   "path": "containers/docker-daemon-unreachable.stderr.txt",
+   "probe": "linux.containers",
+   "command": [
+    "docker",
+    "ps",
+    "--format",
+    "{{.ID}}\\t{{.Names}}"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "failed",
+   "note": "Provoked with DOCKER_HOST=unix:///nonexistent/docker.sock because the daemon does run on the trial host. Client present, daemon unreachable. A socket the caller may not open produces a different message that this host cannot show, see the README."
+  },
+  {
+   "path": "containers/docker-version.txt",
+   "probe": "linux.containers",
+   "command": [
+    "docker",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "honest-status/tool-missing-command-v-podman.txt",
+   "probe": "linux.containers",
+   "command": [
+    "command",
+    "-v",
+    "podman"
+   ],
+   "stream": "stdout",
+   "exit_code": 1,
+   "expected_probe_status": "not_applicable",
+   "note": "podman is not installed. This is the host side evidence of absence. In Go the probe sees exec.LookPath return exec.ErrNotFound, which the runner classes as tool_missing; it never runs a shell and never sees exit 127."
+  },
+  {
+   "path": "honest-status/tool-missing-shell-127.stderr.txt",
+   "probe": null,
+   "command": [
+    "bash",
+    "-c",
+    "nosuchtool-trustfreeze --version"
+   ],
+   "stream": "stderr",
+   "exit_code": 127,
+   "expected_probe_status": "unavailable",
+   "note": "What a SHELL reports for a missing executable. Recorded so that nobody mistakes it for the probe's own shape: the ExecRunner resolves the executable itself and returns tool_missing before any process starts. Exit 127 from a real child process means something else entirely."
+  }
+ ]
+}

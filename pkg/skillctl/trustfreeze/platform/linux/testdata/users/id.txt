@@ -1,0 +1,1 @@
+uid=1000(alice) gid=1000(alice) groups=1000(alice),4(adm),24(cdrom),27(sudo),30(dip),46(plugdev),100(users),114(lpadmin),984(docker)

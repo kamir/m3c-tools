@@ -1,0 +1,6 @@
+snap          2.76.3
+snapd         2.76.3
+series        16
+ubuntu        24.04
+kernel        6.17.0-35-generic
+architecture  amd64
