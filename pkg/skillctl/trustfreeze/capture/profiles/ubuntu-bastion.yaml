@@ -1,24 +1,30 @@
 # Trust Freeze built-in profile. Probe list from SPEC-0467 section 5.6
-# (SPEC-0471 TF06-R3). Only common.identity exists in this build; every other
-# probe is recorded as unsupported (not_implemented), so a capture with this
-# profile is honestly incomplete.
+# (SPEC-0471 TF06-R3). The linux probes are implemented; the probe id of the
+# SSH probe is linux.ssh, because it collects the declared configuration and
+# the effective state of sshd in one result. The common.* probes below do not
+# exist in this build and are recorded as unsupported (not_implemented), so a
+# capture with this profile is honestly incomplete until they arrive.
+#
+# On an unprivileged host linux.firewall is permission_denied (nft and ufw
+# both refuse without root) and linux.ssh records the declared state only, so
+# a capture there is incomplete. That is the correct answer, not a defect.
 schema_version: trust-freeze/profile/v1
 id: ubuntu-bastion
-version: "1"
-description: Ubuntu bastion host (packages, users, sudo, ssh, systemd, listeners, firewall, mounts).
+version: "2"
+description: Ubuntu bastion host (packages, users, sudo, ssh, systemd, listeners, firewall, mounts, containers).
 required:
   - common.identity
   - linux.packages
   - linux.users
   - linux.sudo
-  - linux.ssh.effective
+  - linux.ssh
   - linux.systemd
   - linux.network.listeners
   - linux.firewall
   - linux.mounts
 optional:
   - common.git
-  - common.containers
   - common.claude
+  - linux.containers
 fail_if_required_missing: true
 redaction_policy: default-v1

@@ -13,12 +13,14 @@ import (
 	"fmt"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze"
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/platform/common"
+	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/platform/linux"
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/probe"
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/redact"
 )
@@ -66,6 +68,19 @@ type Options struct {
 	ExcludeProbes []string
 	// ProbeTimeout overrides the timeout of every probe run.
 	ProbeTimeout time.Duration
+	// Capabilities resolves the capabilities of the collected artifacts. Nil
+	// means DefaultCapabilityResolver(Host.GOOS); a resolver with an empty ID
+	// or without a Resolve function resolves nothing and writes no document.
+	Capabilities *CapabilityResolver
+}
+
+// resolver returns the capability resolver of this run: the configured one,
+// else the default of the observed platform, else nil.
+func (o Options) resolver() *CapabilityResolver {
+	if o.Capabilities != nil {
+		return o.Capabilities
+	}
+	return DefaultCapabilityResolver(o.Host.GOOS)
 }
 
 // Result is a written capture bundle.
@@ -74,6 +89,9 @@ type Result struct {
 	Manifest trustfreeze.Manifest
 	Capture  trustfreeze.CaptureDoc
 	Results  []trustfreeze.ProbeResult
+	// Capabilities is the written state/capabilities.json; nil when no
+	// resolver ran on this platform.
+	Capabilities *trustfreeze.CapabilitiesDoc
 }
 
 // Complete reports whether the capture is complete.
@@ -81,10 +99,17 @@ func (r *Result) Complete() bool {
 	return r.Capture.Completeness.Status == trustfreeze.CompletenessComplete
 }
 
-// DefaultRegistry returns a registry with every probe of this build.
+// DefaultRegistry returns a registry with every probe of this build. The
+// platform probes are registered on every operating system: their descriptors
+// name the platforms they are implemented for, so a probe that cannot run
+// here is recorded as unsupported with the platform as the reason, instead of
+// being left out and read as not implemented at all (SPEC-0467 R3).
 func DefaultRegistry() (*probe.Registry, error) {
 	reg := probe.NewRegistry()
 	if err := common.Register(reg); err != nil {
+		return nil, err
+	}
+	if err := linux.Register(reg); err != nil {
 		return nil, err
 	}
 	return reg, nil
@@ -93,7 +118,45 @@ func DefaultRegistry() (*probe.Registry, error) {
 // DefaultHostContext returns the production host context with the file
 // roots the registered probes read.
 func DefaultHostContext() probe.HostContext {
-	return probe.NewHostContext(common.AllowedRoots(runtime.GOOS))
+	return probe.NewHostContext(DefaultAllowedRoots(runtime.GOOS))
+}
+
+// DefaultAllowedRoots returns the file roots of every registered probe on
+// goos, sorted and without duplicates. A path outside them is refused by the
+// restricted file reader, so a probe whose roots are missing here reports
+// not_applicable instead of the real state.
+func DefaultAllowedRoots(goos string) []string {
+	roots := append(common.AllowedRoots(goos), linux.AllowedRoots(goos)...)
+	sort.Strings(roots)
+	return slices.Compact(roots)
+}
+
+// LinuxCapabilityResolverID names the capability resolver of the linux
+// platform package in state/capabilities.json. The version is part of the id
+// because the rules decide what the document says.
+const LinuxCapabilityResolverID = "linux.privilege/v1"
+
+// CapabilityResolver derives capabilities from the artifacts of one capture
+// (SPEC-0466 section 4.6). Resolve is pure: artifacts in, capabilities and
+// diagnostics out, no file system, no command, no clock. An error aborts the
+// capture, so a resolver that cannot decide reports a diagnostic instead.
+type CapabilityResolver struct {
+	// ID names the resolver in state/capabilities.json.
+	ID string
+	// Resolve turns the sorted artifacts of the capture into capabilities.
+	Resolve func(context.Context, []trustfreeze.Artifact) ([]trustfreeze.Capability, []trustfreeze.Diagnostic, error)
+}
+
+// DefaultCapabilityResolver returns the capability resolver of goos, or nil
+// where this build has none. A capture without a resolver writes no
+// state/capabilities.json at all, so the absence of the file says "nobody
+// looked", never "this host grants nothing" (SPEC-0466 section 5.7).
+func DefaultCapabilityResolver(goos string) *CapabilityResolver {
+	if goos != string(probe.PlatformLinux) {
+		return nil
+	}
+	r := linux.CapabilityResolver{}
+	return &CapabilityResolver{ID: LinuxCapabilityResolverID, Resolve: r.Resolve}
 }
 
 // DefaultRedactor returns the redactor of RedactionPolicyDefault: the default
@@ -288,6 +351,15 @@ func run(ctx context.Context, opts Options, ids []string, skip map[string]bool, 
 	if err := w.WriteJSON(trustfreeze.StateDeviceFile, trustfreeze.StateDoc{Artifacts: artifacts}); err != nil {
 		return nil, err
 	}
+	caps, err := resolveCapabilities(ctx, opts, artifacts)
+	if err != nil {
+		return nil, err
+	}
+	if caps != nil {
+		if err := w.WriteJSON(trustfreeze.StateCapabilitiesFile, *caps); err != nil {
+			return nil, err
+		}
+	}
 	finished := opts.Host.Clock.Now()
 	doc := trustfreeze.CaptureDoc{
 		SchemaVersion: trustfreeze.SchemaCapture,
@@ -316,8 +388,52 @@ func run(ctx context.Context, opts Options, ids []string, skip map[string]bool, 
 	if err != nil {
 		return nil, err
 	}
-	return &Result{Dir: w.Target(), Manifest: m, Capture: doc, Results: results}, nil
+	return &Result{Dir: w.Target(), Manifest: m, Capture: doc, Results: results, Capabilities: caps}, nil
 }
+
+// resolveCapabilities runs the capability resolver of this capture over the
+// artifacts every probe produced (SPEC-0466 section 4.6). It returns nil when
+// no resolver is configured for the platform: the bundle then has no
+// state/capabilities.json, which says that nobody resolved capabilities here,
+// not that the host grants none.
+//
+// The resolver sees only what the probes recorded, so its statements are
+// exactly as complete as the capture: a probe that was permission_denied
+// leaves its privileges unresolved, and the collection gap in capture.json is
+// what says so.
+func resolveCapabilities(ctx context.Context, opts Options, artifacts []trustfreeze.Artifact) (*trustfreeze.CapabilitiesDoc, error) {
+	r := opts.resolver()
+	if r == nil || r.Resolve == nil || strings.TrimSpace(r.ID) == "" {
+		return nil, nil
+	}
+	caps, diags, err := r.Resolve(ctx, artifacts)
+	if err != nil {
+		return nil, fmt.Errorf("capability resolver %s: %w", r.ID, err)
+	}
+	doc := trustfreeze.CapabilitiesDoc{Resolver: r.ID, Capabilities: []trustfreeze.Capability{}, Diagnostics: diags}
+	seen := map[string]bool{}
+	for _, c := range caps {
+		switch {
+		case strings.TrimSpace(c.ID) == "":
+			doc.Diagnostics = append(doc.Diagnostics, trustfreeze.Diagnostic{
+				Code: DiagCapabilityDropped, Message: "a capability without an id was dropped",
+			})
+		case seen[c.ID]:
+			doc.Diagnostics = append(doc.Diagnostics, trustfreeze.Diagnostic{
+				Code: DiagCapabilityDropped, Field: c.ID, Message: "a second capability with this id was dropped",
+			})
+		default:
+			seen[c.ID] = true
+			doc.Capabilities = append(doc.Capabilities, c)
+		}
+	}
+	trustfreeze.SortCapabilities(doc.Capabilities)
+	return &doc, nil
+}
+
+// DiagCapabilityDropped: the engine dropped a capability the resolver
+// returned, because its id was empty or already used.
+const DiagCapabilityDropped = "capability_dropped"
 
 // excludedProbe records a profile probe the operator chose not to run, so
 // the bundle still names every probe of its profile.
@@ -712,16 +828,57 @@ func redactResult(ctx context.Context, red *redact.Redactor, r trustfreeze.Probe
 	return out, log, nil
 }
 
+// ToolUser is the optional interface a probe implements to name the
+// executables it runs on the host. `trust-freeze doctor` resolves them
+// through the runner's LookPath and never runs one, so an operator learns
+// before a capture which tool is missing on this host (SPEC-0471 section
+// 11.2). The interface is structural: a probe implements it by declaring the
+// method and imports nothing for it.
+//
+//	func (p myProbe) RequiredTools() []string { return []string{"ss"} }
+//
+// A probe that does not implement it is not a probe without tools: Plan then
+// reports ToolsDeclared false and doctor keeps that probe's tool check
+// honest instead of claiming an empty list.
+type ToolUser interface {
+	RequiredTools() []string
+}
+
+// ToolCheck is one executable of a probe, resolved but never run.
+type ToolCheck struct {
+	// Name is the executable as the probe names it.
+	Name string
+	// Path is the resolved absolute path; empty when it did not resolve.
+	Path string
+	// Class is empty when the tool resolved, else the runner's error class
+	// (probe.ClassToolMissing, probe.ClassPermissionDenied, ...).
+	Class string
+	// Detail is the runner's message for a tool that did not resolve.
+	Detail string
+}
+
+// OK reports a tool that resolved to a path.
+func (t ToolCheck) OK() bool { return t.Class == "" }
+
 // PlannedProbe is one row of Plan.
 type PlannedProbe struct {
 	ProbeID    string
 	Required   bool
 	Registered bool
 	Support    probe.SupportResult
+	// ToolsDeclared reports whether the probe names its executables
+	// (ToolUser) and this host could resolve them at all: false for an
+	// unregistered probe, for one this build does not implement for the
+	// platform, and for one that declares no tools.
+	ToolsDeclared bool
+	// Tools is one entry per declared executable, sorted by name and
+	// deduplicated. Empty unless ToolsDeclared.
+	Tools []ToolCheck
 }
 
-// Plan runs only the Support check of every probe of the profile, for
-// doctor (no capture, nothing written). Unregistered probes are reported
+// Plan runs only the Support check of every probe of the profile, and
+// resolves the executables a probe declares (ToolUser), for doctor (no
+// capture, nothing written, no command run). Unregistered probes are reported
 // unsupported with reason not_implemented.
 func Plan(ctx context.Context, p Profile, reg *probe.Registry, host probe.HostContext) []PlannedProbe {
 	var out []PlannedProbe
@@ -737,10 +894,43 @@ func Plan(ctx context.Context, p Profile, reg *probe.Registry, host probe.HostCo
 		default:
 			pp.Registered = true
 			pp.Support = safeSupport(ctx, pr, host)
+			pp.ToolsDeclared, pp.Tools = resolveTools(pr, host.Runner)
 		}
 		out = append(out, pp)
 	}
 	return out
+}
+
+// resolveTools asks the probe for the executables it uses and resolves each
+// one with the runner's LookPath. LookPath only searches the runner's fixed
+// directories; it starts no process, so doctor learns what is installed
+// without running anything (SPEC-0467 R6, SPEC-0471 section 11.2). A probe
+// that declares no tool, or none the host could be asked about, reports
+// declared false.
+func resolveTools(p probe.Probe, runner probe.CommandRunner) (bool, []ToolCheck) {
+	u, ok := p.(ToolUser)
+	if !ok || runner == nil {
+		return false, nil
+	}
+	names := append([]string(nil), u.RequiredTools()...)
+	sort.Strings(names)
+	var out []ToolCheck
+	var last string
+	for i, name := range names {
+		if strings.TrimSpace(name) == "" || (i > 0 && name == last) {
+			continue
+		}
+		last = name
+		c := ToolCheck{Name: name}
+		path, err := runner.LookPath(name)
+		if err != nil {
+			c.Class, c.Detail = probe.ErrorClass(err), err.Error()
+		} else {
+			c.Path = path
+		}
+		out = append(out, c)
+	}
+	return len(out) > 0, out
 }
 
 func safeSupport(ctx context.Context, p probe.Probe, host probe.HostContext) (s probe.SupportResult) {

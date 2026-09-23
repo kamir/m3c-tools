@@ -30,6 +30,7 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze"
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/capture"
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/probe"
+	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/seal"
 )
 
 // tfTestSeed is a synthetic ed25519 seed. It is not and never was a real key.
@@ -564,10 +565,18 @@ func TestTrustFreezeAcceptanceRefusals(t *testing.T) {
 		defer func() { e.deps.Clock = saved }()
 		e.deps.Clock = trustfreeze.FixedClock{T: tfTestTime.Add(time.Hour)}
 		e.runJSON(exitOK, tfResultOK, "verify", "--bundle", out, "--trusted-key", e.pub)
+		// Past expires_at the baseline is expired: the default expiry
+		// tolerance is zero (seal.DefaultMaxExpirySkew), and the approval
+		// tolerance does not reach this check (R-T2).
 		e.deps.Clock = trustfreeze.FixedClock{T: tfTestTime.Add(time.Hour + time.Nanosecond)}
 		doc := e.runJSON(exitGeneric, tfResultVerification, "verify", "--bundle", out, "--trusted-key", e.pub)
 		if !tfHas(tfFailureReasons(doc), "expired") {
 			t.Fatalf("failures %v, want expired", tfFailureReasons(doc))
+		}
+		e.deps.Clock = trustfreeze.FixedClock{T: tfTestTime.Add(time.Hour + seal.DefaultMaxClockSkew)}
+		doc = e.runJSON(exitGeneric, tfResultVerification, "verify", "--bundle", out, "--trusted-key", e.pub)
+		if !tfHas(tfFailureReasons(doc), "expired") {
+			t.Fatalf("the approval tolerance extended the expiry: failures %v", tfFailureReasons(doc))
 		}
 	})
 	t.Run("an incomplete capture exits 1 and is still written", func(t *testing.T) {

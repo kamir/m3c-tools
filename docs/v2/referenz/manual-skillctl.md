@@ -724,8 +724,8 @@ class.
 ### `trust-freeze`: record, approve and compare a host's state (SPEC-0466)
 
 ```bash
-skillctl trust-freeze doctor [--profile <name>] [--format text|json]
-skillctl trust-freeze capture --profile <name> --output <dir> [flags]
+skillctl trust-freeze doctor [--profile <name>] [--output <dir>] [--format text|json]
+skillctl trust-freeze capture --profile <name> --output <dir> [--actor <id>] [flags]
 skillctl trust-freeze baseline approve --capture <dir> --output <dir> --reviewer <id> \
                                        --change-id <id> --reason <text|@file> --key <file> [flags]
 skillctl trust-freeze verify --bundle <dir> [--trust-policy <file>] [--trusted-key <public.pem>]...
@@ -745,24 +745,49 @@ name. A capture is never a baseline, and no command turns one into the other exc
 `baseline approve`: there is no automatic baseline update, a changed state always needs a
 new explicit approval, and `capture` never calls the approval code.
 
-**What this version collects.** One probe exists, `common.identity`: the artifact
+**What this version collects.** `common.identity` runs on every platform: the artifact
 `device/os` (`os_family`, `arch`, `os_name`, `os_version`, `os_build`, `kernel_release`)
 and `device/host` (`hostname`, sensitivity `internal`). `arch` is the machine as the OS
 reports it, spelled like Go's `GOARCH` (`amd64`, `arm64`, ...), never the architecture
 skillctl was built for: an `amd64` build under Rosetta 2 or under Windows x64 emulation
-records `arm64`. The profile `walking-skeleton`
-requires only that probe and is the one profile a capture can complete. The profiles
-`agentic-workstation`, `ubuntu-bastion`, `windows-wsl-workstation` and `macos-workstation`
-list probes that are not yet implemented; each is recorded as `unsupported` with reason
-`not_implemented`, so those captures are honestly `incomplete` (exit `1`).
+records `arm64`. The profile `walking-skeleton` requires only that probe.
 
-**Evidence level per platform** (this change, for `common.identity`):
+Nine more probes collect a Linux host. They are registered on every platform and
+recorded as `unsupported` with the platform as the reason where they cannot run, so a
+capture never hides them:
 
-| Platform | Source | Evidence level |
-|----------|--------|----------------|
-| linux | `/etc/os-release` (else `/usr/lib/os-release`), `uname -r`, `uname -m` | implemented, fixture-tested, cross-compiled |
-| darwin | `sw_vers`, `uname -r`, `uname -m`, and `sysctl -n sysctl.proc_translated` when `uname -m` says `x86_64` | implemented, fixture-tested, cross-compiled |
-| windows | registry `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion`; the native machine from `IsWow64Process2` | implemented, fixture-tested, cross-compiled |
+| Probe | Reads | Honest outcomes besides `captured` |
+|-------|-------|------------------------------------|
+| `linux.packages` | `dpkg-query -W -f`, `apt-mark showmanual`, `snap list` | `unavailable` without `dpkg-query`; the snap part is `not_applicable` on a host without snapd |
+| `linux.users` | `getent passwd`, `getent group`, `id` | `unavailable` without `getent`. Never a password hash: `getent` prints none and nothing else is read |
+| `linux.sudo` | `/etc/sudoers`, `/etc/sudoers.d` (file names, modes, owners, sizes, parsed rules) | `permission_denied` for every file an ordinary user cannot read, with the observed structure still recorded |
+| `linux.ssh` | `/etc/ssh/sshd_config` and `sshd_config.d/*.conf` (declared), `sshd -T` (effective), `getent passwd` plus `authorized_keys` per account | `permission_denied` for the effective state without root; `partial` where one source is missing and the rest was read (a host without `sshd` keeps its declared state and is partial, not `unavailable`); the declared state stays `declared` and is never presented as observed |
+| `linux.systemd` | `systemctl list-unit-files`, `systemctl show` | `unavailable` without `systemctl`. Enabled state and active state are two different facts and are recorded as two artifacts |
+| `linux.mounts` | `findmnt --json` | `unavailable` without `findmnt` |
+| `linux.network.listeners` | `ss -H -lntup` | `partial` unprivileged: the owning process of a foreign socket is not visible, and the diagnostic says so |
+| `linux.firewall` | `nft --json list ruleset`, else `ufw status` | `permission_denied` when a backend is installed and refuses without root, `not_applicable` when no backend exists |
+| `linux.containers` | `docker ps`, `docker info`, the same for podman | `not_applicable` without a runtime, `permission_denied` when the socket refuses |
+
+The profile `ubuntu-bastion` requires `common.identity` and the eight Linux probes above
+except `linux.containers`, which is optional. It still lists `common.git` and
+`common.claude`, which this version does not implement: they are recorded as
+`unsupported` with reason `not_implemented`, so an `ubuntu-bastion` capture is
+`incomplete` (exit `1`) even on a Linux host. On an unprivileged host `linux.firewall`
+is `permission_denied` as well, which is the correct answer and keeps the capture
+incomplete; a complete `ubuntu-bastion` capture needs a run with the privileges those
+probes name. The profiles `agentic-workstation`, `windows-wsl-workstation` and
+`macos-workstation` list probes that are not implemented at all, so those captures are
+`incomplete` as well.
+
+**Evidence level per platform** (this change):
+
+| Probe | Platform | Source | Evidence level |
+|-------|----------|--------|----------------|
+| `common.identity` | linux | `/etc/os-release` (else `/usr/lib/os-release`), `uname -r`, `uname -m` | implemented, fixture-tested, cross-compiled |
+| `common.identity` | darwin | `sw_vers`, `uname -r`, `uname -m`, and `sysctl -n sysctl.proc_translated` when `uname -m` says `x86_64` | implemented, fixture-tested, cross-compiled |
+| `common.identity` | windows | registry `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion`; the native machine from `IsWow64Process2` | implemented, fixture-tested, cross-compiled |
+| the nine `linux.*` probes | linux | the tools named in the table above | implemented, fixture-tested, cross-compiled |
+| the nine `linux.*` probes | darwin, windows | n/a | not implemented; recorded as `unsupported` with the platform as the reason |
 
 No platform is real-platform-tested in this change. That level is recorded per commit in
 evidence records, never claimed by the build, and full platform support is not
@@ -788,8 +813,26 @@ temporary directory with a throwaway key.
 
 **Privacy: bundles, diffs and reports are internal host data.** A capture or baseline,
 and the report of one, carries the host name in clear text (`device/host`, sensitivity
-`internal`) and the OS details. A diff, and the report of a diff, carries no attribute
-values, but it is not anonymous either:
+`internal`) and the OS details. A Linux capture carries considerably more, all of it in
+clear text and all of it inside the content digest:
+
+- every local account with its name, uid, gid, login shell and home path (`device/user/*`),
+  and every group with its gid and its member list (`device/group/*`);
+- `capture.actor`, which is whatever the operator passed to `--actor` and may be a mail
+  address;
+- for every `authorized_keys` file this capture could read: the account it belongs to and,
+  per key, the key type, the SHA-256 fingerprint and the names of its options
+  (`ssh/authorized-key/*`). Never the key body and never its comment;
+- the principals of every sudo rule (`sudo/rule/*.users`), the rule's commands and tags,
+  and the mode, owner and size of every rule file;
+- every listening address and port with the owning process name where it was visible
+  (`network/listener/*`), every mount point and source, every container name, image and
+  published port, and the installed package and unit inventory;
+- the resolved capabilities, which name accounts and groups by name
+  (`state/capabilities.json`).
+
+A diff, and the report of a diff, carries no attribute values, but it is not anonymous
+either:
 
 - `before_digest` and `after_digest` are plain SHA-256 over the canonical JSON of the
   normalized attribute map, without a key or salt. A short value such as a host name
@@ -823,21 +866,34 @@ option that answers "not implemented in this version". Measured against
 #### `trust-freeze doctor`: what a capture could collect here
 
 Runs only the support check of every probe of a profile and prints the platform, the
-privilege, the expected gaps and the per-platform evidence matrix. Writes nothing and
-captures nothing.
+privilege, the expected gaps, the per-platform evidence matrix and the environment
+checks. Writes no bundle and captures nothing.
 
 | Flag | Purpose |
 |------|---------|
 | `--profile <name>` | Built-in profile to plan (default `walking-skeleton`). |
+| `--output <dir>` | Bundle directory a later capture would use (optional). doctor only tests whether it could write there; it writes no bundle and creates no directory. It touches one directory: the target itself when that already exists, otherwise its immediate parent. |
 | `--format text\|json` | Output format (default `text`). |
 
-The JSON carries `platform_support: "not_established"`, the matrix with `implemented` or
-`not_implemented` per probe and platform, and `not_checked` for what doctor does not look
-at in this version (Claude roots, the output location, per-probe tools).
+The JSON carries `platform_support: "not_established"` and the matrix with `implemented`
+or `not_implemented` per probe and platform.
 
-Exit: `0` plan printed, also when gaps are expected (see `expected_complete` and
-`expected_gaps`; doctor plans, it does not judge) · `1` the probe registry could not be
-built (`execution_error`) · `2` usage, including an unknown profile.
+**Environment checks** (`checks` in the JSON, one entry per item, `status` one of `ok`,
+`problem`, `not_checked`):
+
+| Item | What doctor does |
+|------|------------------|
+| `claude_roots` | Resolves the home root the way every other skillctl path does, then `lstat`s `.claude`, `.claude/agents`, `.claude/commands`, `.claude/skills`, `.claude/skillctl` and `.claude/trust-roots.yaml` below it. It opens no file, follows no link and creates nothing. `detail` names the root and lists which paths are present and which are absent. A path that exists as a symlink, or that cannot be read, is a `problem`. |
+| `output_location` | Only with `--output`. Picks the directory a capture would work in, creates ONE temporary file there, closes it and removes it again, and touches nothing else. That directory is the target itself when it already exists as a directory, otherwise its IMMEDIATE parent, because capture creates the target inside its parent and creates no directory above it. doctor never walks further up: `--output /srv/freeze/2026-09-23` touches `/srv/freeze` when that exists, and when it does not the item is a `problem` naming it, never a probe file in `/`. Permission bits are not read instead: a read-only mount, an ACL, a container user mapping or Windows can each make them disagree with what a write would do. Without `--output` the item stays `not_checked`. |
+| `tools` | Resolves every executable a probe names for itself, through the same fixed search path the command runner uses, and runs none of them. `detail` names each resolved tool as `<probe-id>:<tool>` and each one that did not resolve with its class (`tool_missing`, `permission_denied`). A probe that names no executable cannot be checked this way; when no probe of the profile names one, the item stays `not_checked` with that reason. Per-probe rows carry the same result under `tools`. |
+
+`not_checked` repeats every item doctor could not determine, each with its reason, so a
+reader sees the gaps without filtering `checks`.
+
+Exit: `0` plan printed, also when gaps are expected and also when a check reports
+`problem` (see `expected_complete` and `expected_gaps`; doctor reports, it does not
+judge) · `1` the probe registry could not be built (`execution_error`) · `2` usage,
+including an unknown profile.
 
 #### `trust-freeze capture`: write a capture bundle
 
@@ -845,6 +901,7 @@ built (`execution_error`) · `2` usage, including an unknown profile.
 |------|---------|
 | `--profile <name>` | Built-in profile (required). |
 | `--output <dir>` | New bundle directory (required). Must not exist, or be empty, and must not lie inside an existing trust-freeze bundle. |
+| `--actor <id>` | Stable id of the person or automation running this capture (optional). Recorded as `capture.actor` and carried into the signed approval as `identities.capture_actor`, where it is the reviewer's counterpart in the same-person half of the self-approval check. Same character set as `--reviewer` (see Identifiers below); surrounding white space is trimmed, anything else is refused with exit `2` before anything is written. Without it the capture names no actor and the same-person check has nothing to compare, exactly as before. |
 | `--force` | Replace an existing **capture** bundle at `--output`, and only one that verifies (every file manifested and intact), so no file of yours is ever removed. Never a baseline, never the home root or one of its ancestors, a filesystem or volume root, or a mount point. |
 | `--probe <id>` | Run only this probe of the profile (repeatable). Every other probe of the profile is recorded as skipped (see below). |
 | `--exclude-probe <id>` | Skip this probe (repeatable). A skipped probe is recorded, not left out (see below). |
@@ -864,7 +921,47 @@ profile: a skipped required probe makes the capture incomplete, and `diff` repor
 skipped probe as a `collection_gap` that the policy judges like any other gap.
 
 Layout: `manifest.json`, `capture.json`, `state/device.json`, `probes/<probe-id>.json`,
-`evidence/<probe-id>/<name>` (raw evidence, redacted before it is written).
+`evidence/<probe-id>/<name>` (raw evidence, redacted before it is written), and on a
+platform with a capability resolver `state/capabilities.json`.
+
+**Capabilities.** After the probes have run, the capability resolver of the platform
+turns their artifacts into statements about who may do what: a sudo rule that grants
+every command as root, membership in a group that grants sudo (`sudo`, `admin`, `wheel`),
+membership in a group that reaches a container runtime socket (`docker`, `lxd`), an
+authorized key for an account, and a container the runtime reports as privileged. The
+subject of that last one is the CONTAINER, not a principal: a privileged container keeps
+the host device nodes and may mount and write the host filesystem, so what runs in it
+acts as root with nobody logged in. Its state is `declared` (the runtime reports the
+flag, nobody watched the container reach the host), its privilege is
+`root-via-privileged-container`, and its source is the container artifact. A container
+whose privileged flag was never read, because the `inspect` call did not answer, yields
+no capability in either direction. Each capability names the artifacts it rests on, its
+privilege, and, where the privilege needs an explanation, attributes that give it: a
+`docker` group capability carries `grant_path: container-runtime-socket` and a
+`rationale` saying that a container started through that socket can mount the host
+filesystem and write as root, which is why its privilege is `root-via-container-runtime`
+and not a sudo value. A statement the artifacts do not carry is a diagnostic, never
+silence: an unreadable sudo file or `authorized_keys` file yields
+`privilege_source_unreadable`, a group whose membership nobody collected yields
+`group_membership_unknown`, a runtime group membership yields
+`capability_from_runtime_group` with the runtime this capture did or did not observe (one
+diagnostic per capability, also when the same account is visible both in the group
+artifact and in its own group list), and a privileged container yields
+`capability_from_privileged_container`, which also says that who may start or enter that
+container is not answered by the artifacts of this capture. The
+document names the resolver that produced it. Linux has one (`linux.privilege/v1`); darwin and windows have
+none in this version, and a bundle without `state/capabilities.json` therefore says that
+nobody resolved capabilities, never that the host grants nothing. The resolver sees only
+what the probes recorded: where `linux.sudo` was `permission_denied`, the privileges in
+that file are not in the document, and the collection gap in `capture.json` is what says
+so. The text output prints the count, the resolver and the number of capabilities that grant
+root, and then one line per such capability with its id and its privilege, so the reader
+of a capture sees who holds the host without opening `state/capabilities.json`. The JSON
+output carries `capabilities` with `resolver`, `resolved`, `diagnostics` and `critical`,
+the sorted ids of the same capabilities. A capability counts as granting root when its
+privilege is `root`, `root-via-container-runtime`, `root-via-privileged-container`,
+`root-via-sudo` or `root-via-sudo-nopasswd`. That is a projection of what the resolver
+wrote, not a judgement: severities belong to a policy, and a policy judges a diff.
 
 Exit: `0` complete · `1` written but incomplete (`incomplete_capture`), or not written
 (`execution_error`) · `2` usage.
@@ -910,8 +1007,9 @@ or `self_approval_same_person` (reviewer equals capture actor); `block` refuses 
 approval. When the approving device is unknown (its host name could not be read), the
 same-device check cannot run: `warn` reports `self_approval_device_unknown`, and `block`
 refuses, at approval and at verification, instead of passing a check it could not
-evaluate. This version records no capture actor, so the same-person check has nothing to
-compare yet.
+evaluate. The same-person check compares `identities.capture_actor` with the reviewer
+after trimming and without regard to letter case; a capture taken without
+`capture --actor` records no actor, and then that half has nothing to compare.
 
 **Signature.** The signed message is the domain line `m3c-tools/trust-freeze/baseline/v1`,
 a newline, and the canonical JSON of the statement `{domain, schema_version:
@@ -961,10 +1059,25 @@ writes exactly this manifest, so a baseline approved from an untouched capture m
 rule (one that `capture` did not write) is approved, and its baseline then fails verify
 with `capture_digest_mismatch`.
 
-**Time.** Expiry and approval time are checked against the verifier's clock: an
-`expires_at` before now fails as `expired` (the baseline is valid through that instant),
-and an `approved_at` after now fails as `approved_in_future`, because an approval cannot
-have happened later than the moment it is checked.
+**Time.** Expiry and approval time are checked against the verifier's clock, and each
+has a tolerance of its own, because the two are different statements.
+
+`max_clock_skew` (default `5m`, `0s` disables it) is the approval tolerance: an
+`approved_at` more than that after now fails as `approved_in_future`, because an approval
+cannot have happened later than the moment it is checked. The tolerance exists because
+two machines whose clocks differ by seconds are the normal case, and a signer whose clock
+runs ahead is an accident that should not turn a sound baseline into a verification
+failure; five minutes is far below any sensible baseline lifetime.
+
+`max_expiry_skew` (default `0s`) is the expiry tolerance: an `expires_at` more than that
+before now fails as `expired`, so with the default an expired baseline is expired to the
+nanosecond. It is a separate setting, and its default is zero, because an expiry is not an
+accident: it is a promise the approver made to the verifier, and stretching it would
+extend a validity somebody decided on. An operator who wants the expiry to absorb clock
+drift as well sets `max_expiry_skew` explicitly, and the trust policy then says so.
+
+A policy that names neither field gets both defaults. A negative value in either is
+refused.
 
 Failure reasons: `integrity` (with `integrity_reason`: `missing`, `extra`,
 `size_mismatch`, `digest_mismatch`, `duplicate_path`, `bad_path`, `symlink`,
@@ -982,6 +1095,8 @@ Trust policy file (schema `trust-freeze/trust-policy/v1`):
 schema_version: trust-freeze/trust-policy/v1
 self_approval: warn                  # allow | warn | block
 reject_additions: true               # false is not implemented in this version
+max_clock_skew: 5m                   # approved_at; Go duration, default 5m, 0s disables
+max_expiry_skew: 0s                  # expires_at; Go duration, default 0s
 trusted_keys:
   - key_id: ed25519:0123456789abcdef # optional; checked against the key when present
     public_key: <base64 of the raw 32-byte ed25519 public key>
@@ -1001,9 +1116,9 @@ policy or key file that does not load.
 | `--current <dir>` | Current bundle (required): a capture or a baseline. |
 | `--trust-policy <file>` | Trust policy for verifying the inputs. |
 | `--trusted-key <public.pem>` | Trusted key for verifying the inputs (repeatable). |
-| `--policy <file>` | Policy file (JSON or YAML, schema `trust-freeze/policy/v1`). Default `trust-freeze/policy/default-v0`. |
-| `--fail-on none\|low\|medium\|high\|critical` | Threshold for exit `1` (default: the policy's `fail_on`, `high` for default-v0). It changes only the exit code and `threshold_exceeded`. |
-| `--allow-subject-mismatch` | Compare two different devices on purpose, for a golden-image or fleet baseline. The `subject_changed` finding stays in the diff and is rated as allowed (`info` under default-v0), and the diff records the opt-in (`allow_subject_mismatch: true`). |
+| `--policy <file\|id>` | Policy file (JSON or YAML, schema `trust-freeze/policy/v1`), or the id of a built-in policy: `trust-freeze/policy/default-v0`, `trust-freeze/policy/default-v1`. Default `trust-freeze/policy/default-v1`. |
+| `--fail-on none\|low\|medium\|high\|critical` | Threshold for exit `1` (default: the policy's `fail_on`, `high` for default-v1). It changes only the exit code and `threshold_exceeded`. |
+| `--allow-subject-mismatch` | Compare two different devices on purpose, for a golden-image or fleet baseline. The `subject_changed` finding stays in the diff and is rated as allowed (`info` under default-v1), and the diff records the opt-in (`allow_subject_mismatch: true`). |
 | `--output <dir>` | Also write a diff bundle: `diff.json`, `verdict.json`, `policy/evaluated-policy.json`. Never inside an existing trust-freeze bundle, the two inputs included. |
 | `--format text\|json` | Output format (default `text`). `markdown` and `sarif` are not implemented in this version (exit `2`). |
 
@@ -1023,7 +1138,25 @@ can be `removed` or `changed`: an artifact or attribute that the current bundle 
 observe is `not_observed`, never `removed` or `changed`, and its probe is reported as a
 `collection_gap` as well.
 
-**Change kinds**, in the sort order of the diff (then by artifact id, then by probe id):
+**Capabilities** are compared separately from artifacts, by capability id, and only as
+far as both bundles resolved them. A baseline without `state/capabilities.json` yields no
+capability entry at all: nobody resolved capabilities when it was taken, so nothing in
+the current bundle can be called new. A baseline with one and a current bundle without
+yields `capability_not_observed` for every baseline capability. The added direction is
+guarded the same way: a capability whose source probes were ALL blind in the baseline is
+`coverage_increased`, not `capability_added`, because what changed is the collection
+depth and not the host. Blind means the probe produced no usable observation there: it
+left no single result, or its status was `unsupported`, `unavailable`,
+`permission_denied`, `timeout`, `failed` or `not_applicable`. A baseline probe with
+status `partial` did look and did report, and so did a baseline that covered one of
+several sources; the capability then stays `capability_added` at its normal severity and
+names the thin probes in `coverage_caveat_probes`, so the uncertainty is visible without
+the finding dropping to `info`. A capability whose sources name no artifact of the
+current bundle cannot be tied to a probe; it stays `capability_added`, since the guard
+never invents a gap it did not measure.
+
+**Change kinds**, in the sort order of the diff (then by artifact id, then by capability
+id, then by probe id):
 
 | Kind | Reported when |
 |------|---------------|
@@ -1035,6 +1168,11 @@ observe is `not_observed`, never `removed` or `changed`, and its probe is report
 | `confidence_changed` | `provenance.confidence` differs. |
 | `became_effective` | The state moves to `observed`. |
 | `became_ineffective` | The state moves away from `observed`. |
+| `capability_added` | The capability id exists only in the current bundle, AND at least one probe behind the sources it rests on was not blind in the baseline, so the baseline covered ground this capability stands on. Carries `capability_id` and `after_privilege`, and `coverage_caveat_probes` where a source probe was only `partial` there, or blind there beside a covered one. |
+| `capability_removed` | The capability id exists only in the baseline, and every artifact it rests on was observed in the current bundle, so its absence was observed. |
+| `capability_changed` | A field of the capability differs. Names the changed fields (`privilege`, `sources`, `state`, `attributes`, ...), with before and after digests. |
+| `capability_not_observed` | A baseline capability could not be observed: an artifact it rests on is missing from the current bundle, or that bundle has no capability document. Never reported as removed. |
+| `coverage_increased` | The capability id exists only in the current bundle, and EVERY probe behind its sources was blind in the baseline, so the baseline covered none of the ground it stands on. The capability is not called new; `baseline_gap_probes` names those probes. The mirror of `capability_not_observed`, so a diff between bundles of different collection depth does not become a wall of critical findings. |
 | `applicability_changed` | A probe moves between `captured` and `not_applicable` with a reason, in either direction (`before_status`, `after_status`): the host changed, not the collection. |
 | `collection_gap` | A probe of the current bundle is not `captured`, or a required probe has no result. |
 
@@ -1052,13 +1190,21 @@ probe's `reason` (when it gave one) and exactly one `cause`:
 
 The diff document records `allow_subject_mismatch` (also when it is `false`) and `counts`
 with the number of entries of every kind, zero included. Each finding of the verdict has
-a stable id: the kind and the artifact id (`changed:device/os`), the probe id for
-`collection_gap` and `applicability_changed`, the current subject id for
-`subject_changed`.
+a stable id: the kind and the artifact id (`changed:device/os`), the capability id for a
+capability entry, the probe id for `collection_gap` and `applicability_changed`, the
+current subject id for `subject_changed`.
 
-**Policy `trust-freeze/policy/default-v0`** (`fail_on: high`). Every change gets exactly
+**Policy `trust-freeze/policy/default-v1`** (`fail_on: high`). Every change gets exactly
 one finding with the highest severity of all rules that match it; a change no rule
 matches gets `default_severity`, `info`.
+
+What a policy judges changes with a new id, never with an edit of a published one, so the
+one older policy is frozen and still selectable by id with `--policy`:
+`trust-freeze/policy/default-v0` rates no capability entry at all, so under v0 even a new
+root capability comes out with the default severity `info`. Use it only to reproduce a
+verdict that was computed with it. The verdict of every diff records the id and the rules
+digest of the policy that judged it, in `verdict.json`, and a diff bundle carries the
+evaluated policy itself under `policy/evaluated-policy.json`.
 
 | Change | Severity | Rule |
 |--------|----------|------|
@@ -1070,10 +1216,15 @@ matches gets `default_severity`, `info`.
 | `device/os` or `device/host` `changed` | `medium` | `TF-POL-DEVICE-IDENTITY` |
 | any other `added`, `removed` or `changed` | `low` | `TF-POL-ARTIFACT-DRIFT` |
 | `not_observed` | `low` | `TF-POL-NOT-OBSERVED` |
+| `capability_added` or `capability_changed` whose privilege is `root`, `root-via-container-runtime`, `root-via-privileged-container`, `root-via-sudo` or `root-via-sudo-nopasswd` | `critical` | `TF-POL-CAPABILITY-ROOT` |
+| any other `capability_added` | `high` | `TF-POL-CAPABILITY-ADDED` |
+| any other `capability_changed` | `medium` | `TF-POL-CAPABILITY-CHANGED` |
+| `capability_removed` or `capability_not_observed` | `low` | `TF-POL-CAPABILITY-GONE` |
+| `coverage_increased` | `info` | `TF-POL-COVERAGE-INCREASED` |
 | `applicability_changed` | `low` | `TF-POL-APPLICABILITY` |
 | `confidence_changed`, `became_effective`, `became_ineffective` | `info` | `default_severity` |
 
-So under default-v0 a diff of two different devices blocks by itself; with
+So under default-v1 a diff of two different devices blocks by itself; with
 `--allow-subject-mismatch` that finding no longer does, while every other finding keeps its
 severity. A missing required probe blocks; a probe that is not applicable on this host and
 says why does not.
@@ -1098,10 +1249,18 @@ rules:
     match:
       change_kinds: [subject_changed]
       subject_mismatch_allowed: true  # with change_kinds [subject_changed] only
+  - id: EX-ROOT-CAPABILITY
+    severity: critical
+    match:
+      change_kinds: [capability_added]
+      privileges: [root, root-via-sudo, root-via-sudo-nopasswd]  # capability kinds only
 ```
 
 `change_kinds` is required and must not be empty. `artifact_ids` restricts a rule to exact
-artifact ids and cannot be combined with `collection_gap`. A `gap_causes` or
+artifact ids and cannot be combined with `collection_gap` or a capability kind, neither
+of which has an artifact id. `privileges` is allowed only when every change kind of the
+rule is a capability kind; it matches the privilege the current bundle observed, and the
+baseline privilege where the current bundle has no capability. A `gap_causes` or
 `gap_statuses` list must not be empty and may name only known causes and probe statuses;
 a gap without a status (`no_result`, `duplicate_result`, `invalid_status`) never matches
 `gap_statuses`.
@@ -1130,6 +1289,16 @@ report is never evidence that a baseline is valid. Standard output carries a JSO
 with `result_class`, the input, the same `signature` section for a baseline, and the
 report's SHA-256. What a report carries is internal host data (see Privacy above).
 
+**Capabilities.** The report of a capture or baseline projects `state/capabilities.json`
+under `capture.capabilities`: the resolver that ran, one entry per capability with `id`,
+`subject_id`, `action`, `resource`, `effect`, `privilege`, `exposure`, `scope`, `state`,
+`confidence`, its `attributes` and its `sources`, and the resolver's own `diagnostics`
+beside them, so an empty list is never read as "this host grants nothing". The entries are
+ordered by how far the privilege reaches (`root`, then `root-via-sudo-nopasswd`, then the
+two container paths, then `root-via-sudo`, then anything unknown, then `user`), and by id
+within a rank. That order is presentation, not judgement: the report still evaluates
+nothing, and a bundle without `state/capabilities.json` has no `capabilities` key at all.
+
 Exit: `0` report written · `1` input failed its check (`verification_failure`) or the
 file could not be written (`execution_error`) · `2` usage.
 
@@ -1146,8 +1315,21 @@ file could not be written (`execution_error`) · `2` usage.
   parent pid are killed; a descendant started by a service or broker, or one that runs
   elevated, is not.
   Ctrl-C and SIGTERM cancel a running capture the same way.
-- **Output** is capped per stream; a truncated output is recorded and makes the probe
-  `partial`. Everything written is redacted first: private key blocks, bearer and
+- **Output** is capped per stream (1 MiB stdout, 64 KiB stderr by default). A truncated
+  output is recorded and makes the probe `partial`, on two levels: the capture engine
+  lowers any probe whose run hit the cap, and each Linux probe additionally reads the
+  flag itself and adds an `output_truncated` diagnostic that names the stream, the cap and
+  what the bundle therefore does not know. A list that was cut also says so in its own
+  artifact (`network/listeners.listener_list_truncated`,
+  `container/runtime/<name>.container_list_truncated`), so no reader takes the count
+  beside it for the whole host.
+- **Volume** is capped per probe, so a large host yields a bounded bundle: 5000 packages,
+  4096 listeners, 4096 mount points, 2048 containers, 2000 accounts and 2000 groups, 512
+  units in the `systemctl show` selection, 64 accounts and 64 keys per account for
+  `authorized_keys`. Every cap that bites is a `volume_capped` (or family specific)
+  diagnostic and makes the probe `partial`; the count the tool reported stays in the set
+  artifact. `docker inspect` is asked in batches of 40 containers, the way `systemctl
+  show` is, so no argument vector grows with the host. Everything written is redacted first: private key blocks, bearer and
   authorization values, cloud and chat tokens, JWT-shaped strings, values under keys such
   as `password` or `token`, and the home directory in any letter case or separator
   spelling (for a Windows home also its WSL form `/mnt/<drive>/...`). A value that
@@ -1197,11 +1379,13 @@ file could not be written (`execution_error`) · `2` usage.
   checkout that converts line endings changes bytes. Removing an added `._<name>` or
   `.DS_Store` file after checking what it is restores the bundle, because verify then
   checks every manifested byte again; verify itself never skips such a file.
-- **Known gaps of this version.** `doctor` does not check the Claude roots, the output
-  location or the tools of each probe; its JSON lists them under `not_checked` with a
-  reason. `diff` emits one change list with per-kind `counts`, not separate system,
-  artifact, capability and collection-gap sections; capabilities are not collected yet,
-  so there is no capability diff. `report --format markdown|sarif` and
+- **Known gaps of this version.** `doctor` checks the Claude roots, the output location
+  and per-probe tools (see its own section); what it cannot determine stays
+  `not_checked` with a reason, and a probe that does not name the executables it uses is
+  one such reason. `diff` emits one change list with per-kind `counts`, not separate system,
+  artifact, capability and collection-gap sections. Capabilities are resolved on linux
+  only, and only from sudo rules, group membership and authorized keys, so a privilege
+  that rests on anything else is not in the document. `report --format markdown|sarif` and
   `diff --format markdown|sarif` are not implemented (exit `2`).
 
 ### `publish`: admit / attest / revoke via ER1 (`self` registry)

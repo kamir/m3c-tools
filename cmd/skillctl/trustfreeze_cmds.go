@@ -22,6 +22,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -338,11 +339,46 @@ type tfPlannedProbe struct {
 	Available  bool                    `json:"available"`
 	Status     trustfreeze.ProbeStatus `json:"status,omitempty"`
 	Reason     string                  `json:"reason,omitempty"`
+	// Tools are the executables the probe named, resolved but never run.
+	// Absent when the probe names none (capture.ToolUser).
+	Tools []tfToolRow `json:"tools,omitempty"`
 }
+
+// tfToolRow is one executable of a probe, resolved with LookPath.
+type tfToolRow struct {
+	Name string `json:"name"`
+	// Status is tfCheckOK or tfToolNotResolved.
+	Status string `json:"status"`
+	Path   string `json:"path,omitempty"`
+	// Class is the runner's error class when the tool did not resolve.
+	Class string `json:"class,omitempty"`
+}
+
+// tfToolNotResolved is the status of an executable LookPath did not find.
+const tfToolNotResolved = "not_resolved"
 
 type tfNotChecked struct {
 	Item   string `json:"item"`
 	Reason string `json:"reason"`
+}
+
+// Statuses of a doctor environment check. A check whose answer doctor could
+// not determine stays tfCheckNotChecked and names the reason, instead of
+// reporting a result it did not measure.
+const (
+	tfCheckOK         = "ok"
+	tfCheckProblem    = "problem"
+	tfCheckNotChecked = "not_checked"
+)
+
+// tfDoctorCheck is one environment check of doctor (SPEC-0471 section 11.2).
+type tfDoctorCheck struct {
+	Item   string `json:"item"`
+	Status string `json:"status"`
+	// Detail says what was found; set for ok and problem.
+	Detail string `json:"detail,omitempty"`
+	// Reason is set exactly when Status is not_checked.
+	Reason string `json:"reason,omitempty"`
 }
 
 type tfDoctorDoc struct {
@@ -357,13 +393,19 @@ type tfDoctorDoc struct {
 	ExpectedGaps     []string             `json:"expected_gaps"`
 	SupportMatrix    []probe.SupportEntry `json:"support_matrix"`
 	// PlatformSupport is always "not_established" in this version.
-	PlatformSupport string         `json:"platform_support"`
-	NotChecked      []tfNotChecked `json:"not_checked"`
+	PlatformSupport string `json:"platform_support"`
+	// Checks are the environment checks: the Claude configuration roots, the
+	// output location and per-probe tool availability.
+	Checks []tfDoctorCheck `json:"checks"`
+	// NotChecked repeats every check that could not be determined, so a
+	// reader sees the gaps without filtering the checks.
+	NotChecked []tfNotChecked `json:"not_checked"`
 }
 
 func tfDoctor(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Writer) int {
-	fs := tfFlagSet("doctor", "doctor [--profile <name>] [--format text|json]", stderr)
+	fs := tfFlagSet("doctor", "doctor [--profile <name>] [--output <dir>] [--format text|json]", stderr)
 	profileName := fs.String("profile", "walking-skeleton", "Built-in profile to plan: "+strings.Join(capture.BuiltinProfileIDs(), ", ")+".")
+	output := fs.String("output", "", "Bundle directory a later capture would use (optional). doctor only tests whether it could write there, with one temporary file it removes again; it writes no bundle and creates no directory.")
 	format := fs.String("format", "text", "Output format: text or json.")
 	if code, done := tfParseArgs(fs, "doctor", args, stdout, stderr); done {
 		return code
@@ -391,16 +433,13 @@ func tfDoctor(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Wr
 		ExpectedGaps:     []string{},
 		SupportMatrix:    probe.SupportMatrix(reg, prof.ProbeIDs()),
 		PlatformSupport:  tfPlatformSupport,
-		NotChecked: []tfNotChecked{
-			{Item: "claude_roots", Reason: tfNotImplemented},
-			{Item: "output_location", Reason: "doctor has no output target; capture checks it when it writes"},
-			{Item: "tools", Reason: "tools are resolved per probe at capture time and recorded in probes/<probe-id>.json"},
-		},
+		NotChecked:       []tfNotChecked{},
 	}
 	if doc.SupportMatrix == nil {
 		doc.SupportMatrix = []probe.SupportEntry{}
 	}
-	for _, pp := range capture.Plan(ctx, prof, reg, host) {
+	planned := capture.Plan(ctx, prof, reg, host)
+	for _, pp := range planned {
 		row := tfPlannedProbe{
 			ProbeID:    pp.ProbeID,
 			Required:   pp.Required,
@@ -412,10 +451,31 @@ func tfDoctor(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Wr
 		if !row.Status.Valid() {
 			row.Status = ""
 		}
+		for _, t := range pp.Tools {
+			tr := tfToolRow{Name: t.Name, Status: tfCheckOK, Path: t.Path}
+			if !t.OK() {
+				tr.Status, tr.Class = tfToolNotResolved, t.Class
+			}
+			row.Tools = append(row.Tools, tr)
+		}
 		doc.Probes = append(doc.Probes, row)
 		if pp.Required && !pp.Support.Available {
 			doc.ExpectedComplete = false
 			doc.ExpectedGaps = append(doc.ExpectedGaps, pp.ProbeID)
+		}
+	}
+	// The environment checks. doctor reports them, it does not judge: a
+	// problem is machine-readable in `checks` and does not change the exit
+	// code, exactly as an expected gap does not.
+	home, homeErr := d.HomeRoot()
+	doc.Checks = []tfDoctorCheck{
+		tfCheckClaudeRoots(home, homeErr),
+		tfCheckOutputLocation(*output),
+		tfCheckProbeTools(planned),
+	}
+	for _, c := range doc.Checks {
+		if c.Status == tfCheckNotChecked {
+			doc.NotChecked = append(doc.NotChecked, tfNotChecked{Item: c.Item, Reason: c.Reason})
 		}
 	}
 	return out.result(exitOK, doc, func(w io.Writer) {
@@ -454,32 +514,267 @@ func tfDoctor(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Wr
 		}
 		fmt.Fprintln(w, "full platform support is not established: real-platform evidence is recorded")
 		fmt.Fprintln(w, "per commit outside the build, never claimed by it.")
-		for _, n := range doc.NotChecked {
-			fmt.Fprintf(w, "not checked: %s (%s)\n", n.Item, n.Reason)
+		for _, c := range doc.Checks {
+			if c.Status == tfCheckNotChecked {
+				fmt.Fprintf(w, "not checked: %s (%s)\n", c.Item, c.Reason)
+				continue
+			}
+			fmt.Fprintf(w, "check %s: %s (%s)\n", c.Item, c.Status, c.Detail)
 		}
 	})
+}
+
+// --- doctor checks -----------------------------------------------------------
+
+// tfClaudeRoots are the per-user Claude configuration paths skillctl uses,
+// relative to the home root.
+var tfClaudeRoots = []string{
+	".claude",
+	".claude/agents",
+	".claude/commands",
+	".claude/skills",
+	".claude/skillctl",
+	".claude/trust-roots.yaml",
+}
+
+// tfCheckClaudeRoots resolves the Claude configuration roots below home. The
+// home root is the CLI's HomeRoot dependency, which is pkg/skillctl/homeroot
+// in production, so doctor names the same root every other skillctl path
+// resolves to. Each entry is only Lstat'ed: no file is opened, no link is
+// followed and nothing is created. An entry that exists as a symlink, or that
+// cannot be read, is a problem, because a per-user trust path that points
+// somewhere else is worth seeing before a capture, not after it.
+func tfCheckClaudeRoots(home string, homeErr error) tfDoctorCheck {
+	c := tfDoctorCheck{Item: "claude_roots"}
+	if homeErr != nil {
+		c.Status = tfCheckNotChecked
+		c.Reason = "the home root did not resolve: " + homeErr.Error()
+		return c
+	}
+	var present, absent, problems []string
+	for _, rel := range tfClaudeRoots {
+		fi, err := os.Lstat(filepath.Join(home, filepath.FromSlash(rel)))
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			absent = append(absent, rel)
+		case errors.Is(err, fs.ErrPermission):
+			problems = append(problems, rel+" (permission_denied)")
+		case err != nil:
+			problems = append(problems, rel+" (unreadable)")
+		case fi.Mode()&os.ModeSymlink != 0:
+			problems = append(problems, rel+" (symlink)")
+		case fi.IsDir() || fi.Mode().IsRegular():
+			present = append(present, rel)
+		default:
+			problems = append(problems, rel+" ("+fi.Mode().Type().String()+")")
+		}
+	}
+	c.Status = tfCheckOK
+	c.Detail = "root " + home + "; present: " + tfJoinOrNone(present) + "; absent: " + tfJoinOrNone(absent)
+	if len(problems) > 0 {
+		c.Status = tfCheckProblem
+		c.Detail += "; problem: " + strings.Join(problems, ", ")
+	}
+	return c
+}
+
+// tfDoctorProbePattern names the temporary file the output check creates.
+const tfDoctorProbePattern = ".skillctl-trust-freeze-doctor-*"
+
+// tfCheckOutputLocation reports whether a capture could write at target,
+// without writing a bundle and without creating the target.
+//
+// What it does, exactly: it picks the directory a capture would work in (the
+// target itself when that already is a directory, otherwise its immediate
+// parent, because capture creates the target inside it), creates ONE
+// temporary file there with os.CreateTemp, closes it and removes it again.
+// It never walks further up: a target whose parent does not exist is a
+// problem, not a licence to write two levels above what the operator named
+// (O-T1). capture requires the parent to exist as well, so the answer is the
+// same one a capture would give.
+// Access bits are not read instead: they answer for a user's identity, not
+// for this process, and a read-only mount, an ACL, a container user mapping
+// or Windows each make them disagree with what a write would do. The attempt
+// is the only honest answer, and it leaves the directory as it found it.
+func tfCheckOutputLocation(target string) tfDoctorCheck {
+	c := tfDoctorCheck{Item: "output_location"}
+	if strings.TrimSpace(target) == "" {
+		c.Status = tfCheckNotChecked
+		c.Reason = "no --output given: doctor tests a location only when one is named"
+		return c
+	}
+	abs, err := filepath.Abs(target)
+	if err != nil {
+		c.Status, c.Detail = tfCheckProblem, "cannot resolve "+target+": "+err.Error()
+		return c
+	}
+	dir, state, err := tfWritableDir(abs)
+	if err != nil {
+		c.Status, c.Detail = tfCheckProblem, err.Error()
+		return c
+	}
+	if err := tfProbeWritable(dir); err != nil {
+		c.Status, c.Detail = tfCheckProblem, state+"; not writable: "+err.Error()
+		return c
+	}
+	c.Status = tfCheckOK
+	c.Detail = state + "; that directory is writable (one temporary file created and removed, no bundle written)"
+	return c
+}
+
+// tfWritableDir returns the directory to test for abs and a description of
+// what abs is today.
+func tfWritableDir(abs string) (dir, state string, err error) {
+	fi, statErr := os.Lstat(abs)
+	switch {
+	case statErr == nil && fi.IsDir():
+		entries, rdErr := os.ReadDir(abs)
+		if rdErr != nil {
+			return "", "", fmt.Errorf("%s exists but cannot be read: %w", abs, rdErr)
+		}
+		if len(entries) == 0 {
+			return abs, abs + " exists and is empty", nil
+		}
+		return abs, fmt.Sprintf("%s exists and holds %d entries, so capture needs --force and takes it only for a capture bundle", abs, len(entries)), nil
+	case statErr == nil && fi.Mode().IsRegular():
+		return "", "", fmt.Errorf("%s exists and is a file, not a directory", abs)
+	case statErr == nil && fi.Mode()&os.ModeSymlink != 0:
+		// A bundle is verified without following links, so a symlinked target
+		// could never verify afterwards.
+		return "", "", fmt.Errorf("%s exists and is a symlink; a bundle directory must be a real directory", abs)
+	case statErr == nil:
+		return "", "", fmt.Errorf("%s exists and is not a directory (%s)", abs, fi.Mode().Type())
+	case !errors.Is(statErr, fs.ErrNotExist):
+		return "", "", fmt.Errorf("%s cannot be read: %w", abs, statErr)
+	}
+	// The target does not exist. capture creates it inside its parent, and
+	// creates no ancestor, so the parent is the only directory this check may
+	// touch.
+	parent := filepath.Dir(abs)
+	pfi, err := os.Lstat(parent)
+	switch {
+	case err == nil && pfi.IsDir():
+		return parent, abs + " does not exist yet; capture would create it in its parent " + parent, nil
+	case err == nil:
+		return "", "", fmt.Errorf("%s is not a directory", parent)
+	case errors.Is(err, fs.ErrNotExist):
+		return "", "", fmt.Errorf("%s does not exist, and neither does its parent %s; capture creates the target but no directory above it, so nothing was touched", abs, parent)
+	}
+	return "", "", fmt.Errorf("%s cannot be read: %w", parent, err)
+}
+
+// tfProbeWritable creates one temporary file in dir and removes it again.
+func tfProbeWritable(dir string) error {
+	f, err := os.CreateTemp(dir, tfDoctorProbePattern)
+	if err != nil {
+		return err
+	}
+	return errors.Join(f.Close(), os.Remove(f.Name()))
+}
+
+// tfCheckProbeTools reports per-probe tool availability. capture.Plan
+// resolved every executable a probe named through the runner's LookPath and
+// ran none of them. A probe that names no executable cannot be checked this
+// way; when no probe of the profile names one, the whole check stays
+// not_checked with that reason.
+func tfCheckProbeTools(planned []capture.PlannedProbe) tfDoctorCheck {
+	c := tfDoctorCheck{Item: "tools"}
+	var resolved, missing []string
+	declaring, silent := 0, 0
+	for _, pp := range planned {
+		if !pp.ToolsDeclared {
+			silent++
+			continue
+		}
+		declaring++
+		for _, t := range pp.Tools {
+			if t.OK() {
+				resolved = append(resolved, pp.ProbeID+":"+t.Name)
+				continue
+			}
+			missing = append(missing, pp.ProbeID+":"+t.Name+" ("+t.Class+")")
+		}
+	}
+	if declaring == 0 {
+		c.Status = tfCheckNotChecked
+		c.Reason = fmt.Sprintf("none of the %d probe(s) of this profile names the executables it uses; the tools of a run are recorded per probe in probes/<probe-id>.json", silent)
+		return c
+	}
+	c.Status = tfCheckOK
+	c.Detail = fmt.Sprintf("%d of %d probe(s) name their executables; resolved: %s", declaring, declaring+silent, tfJoinOrNone(resolved))
+	if len(missing) > 0 {
+		c.Status = tfCheckProblem
+		c.Detail += "; not resolved: " + strings.Join(missing, ", ")
+	}
+	if silent > 0 {
+		c.Detail += fmt.Sprintf("; %d probe(s) name none, so their tools were not checked", silent)
+	}
+	return c
+}
+
+// tfJoinOrNone joins a list, or says "none" for an empty one.
+func tfJoinOrNone(list []string) string {
+	if len(list) == 0 {
+		return "none"
+	}
+	return strings.Join(list, ", ")
 }
 
 // --- capture -----------------------------------------------------------------
 
 type tfCaptureDoc struct {
-	ResultClass   string                     `json:"result_class"`
-	Command       string                     `json:"command"`
-	Kind          trustfreeze.Kind           `json:"kind"`
-	BundleID      string                     `json:"bundle_id"`
-	ContentDigest string                     `json:"content_digest"`
-	Subject       trustfreeze.Subject        `json:"subject"`
-	Profile       trustfreeze.ProfileRef     `json:"profile"`
-	Completeness  trustfreeze.Completeness   `json:"completeness"`
-	Probes        []trustfreeze.ProbeSummary `json:"probes"`
+	ResultClass   string                 `json:"result_class"`
+	Command       string                 `json:"command"`
+	Kind          trustfreeze.Kind       `json:"kind"`
+	BundleID      string                 `json:"bundle_id"`
+	ContentDigest string                 `json:"content_digest"`
+	Subject       trustfreeze.Subject    `json:"subject"`
+	Profile       trustfreeze.ProfileRef `json:"profile"`
+	// Actor is the --actor id, absent when the capture named none.
+	Actor        string                     `json:"actor,omitempty"`
+	Completeness trustfreeze.Completeness   `json:"completeness"`
+	Probes       []trustfreeze.ProbeSummary `json:"probes"`
+	// Capabilities reports the capability resolution of this capture; absent
+	// when this build has no resolver for the platform, so a missing field
+	// says that nobody looked (SPEC-0466 section 5.7).
+	Capabilities *tfCapabilities `json:"capabilities,omitempty"`
+}
+
+// tfCapabilities is the capability resolution summary of a capture. Critical
+// names the capabilities whose privilege is root on this host
+// (trustfreeze.RootPrivileges), sorted, so a reader of the capture learns who
+// holds the host without opening state/capabilities.json (R-T3). It is a
+// projection of the resolved list, not a judgement: severities belong to a
+// policy, and a policy judges a diff, not a capture.
+type tfCapabilities struct {
+	Resolver    string   `json:"resolver"`
+	Resolved    int      `json:"resolved"`
+	Diagnostics int      `json:"diagnostics"`
+	Critical    []string `json:"critical"`
+}
+
+// tfCriticalCapabilities returns the ids of the capabilities that grant root,
+// sorted, and the privilege of each.
+func tfCriticalCapabilities(doc *trustfreeze.CapabilitiesDoc) ([]string, map[string]string) {
+	ids := []string{}
+	priv := map[string]string{}
+	for _, c := range doc.Capabilities {
+		if trustfreeze.IsRootPrivilege(c.Privilege) {
+			ids = append(ids, c.ID)
+			priv[c.ID] = c.Privilege
+		}
+	}
+	sort.Strings(ids)
+	return ids, priv
 }
 
 // tfCapture writes a capture bundle. It never approves and never signs: this
 // function must not reach the seal package (TestTrustFreezeCaptureNeverApproves).
 func tfCapture(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Writer) int {
-	fs := tfFlagSet("capture", "capture --profile <name> --output <dir> [--force] [--probe <id>]... [--exclude-probe <id>]... [--timeout <d>] [--format text|json]", stderr)
+	fs := tfFlagSet("capture", "capture --profile <name> --output <dir> [--actor <id>] [--force] [--probe <id>]... [--exclude-probe <id>]... [--timeout <d>] [--format text|json]", stderr)
 	profileName := fs.String("profile", "", "Built-in profile to capture with (required): "+strings.Join(capture.BuiltinProfileIDs(), ", ")+".")
 	output := fs.String("output", "", "New bundle directory (required). Must not exist or be empty.")
+	actor := fs.String("actor", "", "Stable id of the person or automation running this capture (optional). It is recorded as capture.actor and carried into the signed approval, where it is the reviewer's counterpart in the self-approval check. Same character set as --reviewer.")
 	force := fs.Bool("force", false, "Replace an existing capture bundle at --output (only a capture bundle that verifies, so no other file is ever removed; never a baseline, the home root or a volume root).")
 	var projects, probes, excludes multiFlag
 	fs.Var(&projects, "project", "Project root to inventory (repeatable). "+tfNotImplemented+".")
@@ -508,6 +803,16 @@ func tfCapture(ctx context.Context, d tfDeps, args []string, stdout, stderr io.W
 	case *timeout < 0:
 		return out.usage(errors.New("--timeout must not be negative"))
 	}
+	// The actor enters the signed approval (identities.capture_actor), which
+	// accepts only this character set, so it is refused here, before anything
+	// is written (SPEC-0470 section 4.2). Empty stays allowed: a capture
+	// without a named actor keeps no actor at all.
+	actorID := strings.TrimSpace(*actor)
+	if actorID != "" {
+		if err := trustfreeze.ValidateIdentifier(actorID); err != nil {
+			return out.usage(fmt.Errorf("--actor: %w", err))
+		}
+	}
 	prof, err := capture.BuiltinProfile(*profileName)
 	if err != nil {
 		return out.usage(err)
@@ -533,6 +838,7 @@ func tfCapture(ctx context.Context, d tfDeps, args []string, stdout, stderr io.W
 		Force:         *force,
 		HomeRoot:      home,
 		ToolVersion:   d.Version,
+		Actor:         actorID,
 		Probes:        probes,
 		ExcludeProbes: excludes,
 		ProbeTimeout:  *timeout,
@@ -552,8 +858,18 @@ func tfCapture(ctx context.Context, d tfDeps, args []string, stdout, stderr io.W
 		ContentDigest: res.Manifest.ContentDigest,
 		Subject:       res.Manifest.Subject,
 		Profile:       res.Capture.Capture.Profile,
+		Actor:         res.Capture.Capture.Actor,
 		Completeness:  res.Capture.Completeness,
 		Probes:        res.Capture.Probes,
+	}
+	criticalPrivilege := map[string]string{}
+	if c := res.Capabilities; c != nil {
+		var critical []string
+		critical, criticalPrivilege = tfCriticalCapabilities(c)
+		doc.Capabilities = &tfCapabilities{
+			Resolver: c.Resolver, Resolved: len(c.Capabilities),
+			Diagnostics: len(c.Diagnostics), Critical: critical,
+		}
 	}
 	code := exitOK
 	if !res.Complete() {
@@ -564,6 +880,18 @@ func tfCapture(ctx context.Context, d tfDeps, args []string, stdout, stderr io.W
 		fmt.Fprintf(w, "bundle_id: %s\n", doc.BundleID)
 		fmt.Fprintf(w, "content_digest: %s\n", doc.ContentDigest)
 		fmt.Fprintf(w, "profile: %s v%s (%s)\n", doc.Profile.ID, doc.Profile.Version, doc.Profile.Digest)
+		if doc.Actor != "" {
+			fmt.Fprintf(w, "actor: %s\n", doc.Actor)
+		}
+		if c := doc.Capabilities; c != nil {
+			fmt.Fprintf(w, "capabilities: %d resolved by %s, %d diagnostic(s), %d that grant root\n",
+				c.Resolved, c.Resolver, c.Diagnostics, len(c.Critical))
+			for _, id := range c.Critical {
+				fmt.Fprintf(w, "  root %-48s %s\n", id, criticalPrivilege[id])
+			}
+		} else {
+			fmt.Fprintln(w, "capabilities: not resolved (this build has no resolver for this platform)")
+		}
 		for _, p := range doc.Probes {
 			line := fmt.Sprintf("  %-32s %s", p.ProbeID, p.Status)
 			if p.Reason != "" {
@@ -958,7 +1286,7 @@ func tfDiff(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Writ
 	trustPolicy := fs.String("trust-policy", "", "Trust policy file (JSON or YAML, schema trust-freeze/trust-policy/v1).")
 	var trustedKeys multiFlag
 	fs.Var(&trustedKeys, "trusted-key", "ed25519 public key file (PEM SPKI) to trust (repeatable).")
-	policyFile := fs.String("policy", "", "Policy file (JSON or YAML, schema trust-freeze/policy/v1). Default: "+policy.DefaultPolicyID+".")
+	policyFile := fs.String("policy", "", "Policy file (JSON or YAML, schema trust-freeze/policy/v1), or the id of a built-in policy ("+strings.Join(policy.BuiltinPolicyIDs(), ", ")+"). Default: "+policy.DefaultPolicyID+".")
 	failOn := fs.String("fail-on", "", "Exit 1 when the highest finding severity is at or above this: none, low, medium, high, critical (default: the policy's fail_on).")
 	allowSubject := fs.Bool("allow-subject-mismatch", false, "Compare two different devices on purpose (a golden image or fleet baseline): the subject_changed finding stays, rated by the policy as allowed (info under "+policy.DefaultPolicyID+"), and the diff records the opt-in.")
 	output := fs.String("output", "", "Also write a diff bundle (diff.json, verdict.json, the evaluated policy) to this new directory.")
@@ -1066,9 +1394,18 @@ func tfReadVerified(dir string, v tfVerifyDoc) (*trustfreeze.Bundle, error) {
 	return b, nil
 }
 
+// tfLoadPolicy resolves --policy: empty is the built-in default, a built-in
+// policy id is that frozen policy (so an older verdict can be reproduced
+// without carrying its file around), anything else is a file path.
 func tfLoadPolicy(path string) (policy.Policy, error) {
 	if path == "" {
 		return policy.DefaultPolicy()
+	}
+	if p, ok, err := policy.BuiltinPolicy(path); ok {
+		if err != nil {
+			return policy.Policy{}, fmt.Errorf("--policy: %w", err)
+		}
+		return p, nil
 	}
 	p, err := policy.LoadPolicyFile(path)
 	if err != nil {
@@ -1129,6 +1466,11 @@ func tfPrintDiff(w io.Writer, doc tfDiffDoc) {
 	for i, c := range df.Changes {
 		subject := c.ArtifactID
 		if subject == "" {
+			// A capability entry carries no artifact id: it names its
+			// capability, and a text reader must see which one.
+			subject = c.CapabilityID
+		}
+		if subject == "" {
 			subject = c.ProbeID
 		}
 		detail := ""
@@ -1148,6 +1490,12 @@ func tfPrintDiff(w io.Writer, doc tfDiffDoc) {
 			}
 		case compare.ChangeApplicabilityChanged:
 			detail = " " + string(c.BeforeStatus) + " -> " + string(c.AfterStatus)
+		case compare.ChangeCoverageIncreased:
+			detail = " privilege " + c.AfterPrivilege + ", not captured in the baseline: " + strings.Join(c.BaselineGapProbes, ",")
+		case compare.ChangeCapabilityAdded, compare.ChangeCapabilityRemoved, compare.ChangeCapabilityNotObserved:
+			if p := c.AfterPrivilege + c.BeforePrivilege; p != "" {
+				detail += " privilege " + p
+			}
 		}
 		if c.Gap != nil {
 			detail = " " + c.Gap.Cause

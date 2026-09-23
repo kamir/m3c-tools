@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -141,6 +142,23 @@ func (p *IdentityProbe) EvidenceClaims() map[probe.Platform][]probe.EvidenceLeve
 		probe.PlatformLinux:   levels,
 		probe.PlatformWindows: levels,
 	}
+}
+
+// RequiredTools names the executables this probe runs on goos, for the doctor
+// check that resolves them before a capture (capture.ToolUser). On windows the
+// probe reads the registry and runs nothing, so the list is empty. The method
+// takes no host: a build runs only on the platform it was built for, so
+// runtime.GOOS is the platform of the answer.
+func (p *IdentityProbe) RequiredTools() []string {
+	switch runtime.GOOS {
+	case "linux":
+		return []string{"uname"}
+	case "darwin":
+		// sysctl is only asked when uname -m reports an Intel machine, so it
+		// is not required for a result and is left out here.
+		return []string{"sw_vers", "uname"}
+	}
+	return nil
 }
 
 // Support implements probe.Probe. Every source is optional per field, so the

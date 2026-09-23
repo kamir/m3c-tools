@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -76,8 +78,62 @@ type TrustPolicy struct {
 	// policy file that asks for false is refused as not implemented. The Go
 	// zero value therefore cannot relax anything.
 	RejectAdditions bool
-	// Now is the clock for expiry checks. nil means trustfreeze.SystemClock.
+	// MaxClockSkew is the tolerance for approved_at (SPEC-0470 section 4.6):
+	// an approval may lie up to this far after the verifier's now. Two
+	// machines whose clocks differ by seconds are the normal case, and a
+	// signer whose clock runs ahead is an accident that must not turn a sound
+	// baseline into a verification failure.
+	//
+	// nil means DefaultMaxClockSkew, so the Go zero value of a TrustPolicy
+	// carries the documented default instead of silently switching the
+	// tolerance off; ClockSkew(0) disables it. A negative value is invalid.
+	MaxClockSkew *time.Duration
+	// MaxExpirySkew is the tolerance for expires_at: a baseline stays valid
+	// up to this far past its stated expiry. It is a separate setting from
+	// MaxClockSkew, and its default is zero, because the two ends are
+	// different statements: a clock that runs ahead is an accident, an expiry
+	// is a promise the approver made to the verifier, and stretching it would
+	// extend a validity somebody decided on (R-T2).
+	//
+	// nil means DefaultMaxExpirySkew. A negative value is invalid.
+	MaxExpirySkew *time.Duration
+	// Now is the clock for the time checks. nil means trustfreeze.SystemClock.
 	Now trustfreeze.Clock
+}
+
+// DefaultMaxClockSkew is the tolerance a trust policy that names none uses.
+// Five minutes is the Kerberos convention and far below any sensible
+// baseline lifetime, so it absorbs a drifting signer without extending a
+// baseline's life in any way an operator would notice.
+const DefaultMaxClockSkew = 5 * time.Minute
+
+// DefaultMaxExpirySkew is the expiry tolerance a trust policy that names none
+// uses. It is zero: an expired baseline is expired. An operator who wants the
+// expiry to absorb clock drift as well sets max_expiry_skew explicitly, and
+// the bundle then says so.
+const DefaultMaxExpirySkew time.Duration = 0
+
+// ClockSkew returns d as a TrustPolicy.MaxClockSkew or MaxExpirySkew value.
+// ClockSkew(0) disables the tolerance; leaving the field nil keeps the
+// documented default of that field.
+func ClockSkew(d time.Duration) *time.Duration { return &d }
+
+// EffectiveMaxClockSkew returns the tolerance this policy applies: its own
+// value, or DefaultMaxClockSkew when it names none.
+func (p TrustPolicy) EffectiveMaxClockSkew() time.Duration {
+	if p.MaxClockSkew == nil {
+		return DefaultMaxClockSkew
+	}
+	return *p.MaxClockSkew
+}
+
+// EffectiveMaxExpirySkew returns the expiry tolerance this policy applies: its
+// own value, or DefaultMaxExpirySkew when it names none.
+func (p TrustPolicy) EffectiveMaxExpirySkew() time.Duration {
+	if p.MaxExpirySkew == nil {
+		return DefaultMaxExpirySkew
+	}
+	return *p.MaxExpirySkew
 }
 
 // ErrTrustPolicyInvalid is wrapped by trust policy loading and validation
@@ -85,9 +141,15 @@ type TrustPolicy struct {
 var ErrTrustPolicyInvalid = errors.New("seal: trust policy is invalid")
 
 // DefaultTrustPolicy returns the default policy: no trusted keys, warn on
-// self-approval, reject additions, system clock.
+// self-approval, reject additions, DefaultMaxClockSkew, system clock.
 func DefaultTrustPolicy() TrustPolicy {
-	return TrustPolicy{SelfApproval: SelfApprovalWarn, RejectAdditions: true, Now: trustfreeze.SystemClock{}}
+	return TrustPolicy{
+		SelfApproval:    SelfApprovalWarn,
+		RejectAdditions: true,
+		MaxClockSkew:    ClockSkew(DefaultMaxClockSkew),
+		MaxExpirySkew:   ClockSkew(DefaultMaxExpirySkew),
+		Now:             trustfreeze.SystemClock{},
+	}
 }
 
 // NewTrustedKey returns the trusted key entry for pub.
@@ -116,6 +178,12 @@ func LoadTrustedKeyPEM(path string) (TrustedKey, error) {
 func (p TrustPolicy) Validate() error {
 	if p.SelfApproval != "" && !p.SelfApproval.Valid() {
 		return fmt.Errorf("%w: self_approval %q", ErrTrustPolicyInvalid, p.SelfApproval)
+	}
+	if p.MaxClockSkew != nil && *p.MaxClockSkew < 0 {
+		return fmt.Errorf("%w: max_clock_skew %s is negative", ErrTrustPolicyInvalid, *p.MaxClockSkew)
+	}
+	if p.MaxExpirySkew != nil && *p.MaxExpirySkew < 0 {
+		return fmt.Errorf("%w: max_expiry_skew %s is negative", ErrTrustPolicyInvalid, *p.MaxExpirySkew)
 	}
 	seen := map[string]bool{}
 	for i, k := range p.TrustedKeys {
@@ -160,6 +228,8 @@ func (p TrustPolicy) clock() trustfreeze.Clock {
 //	schema_version: trust-freeze/trust-policy/v1
 //	self_approval: warn            # allow | warn | block, default warn
 //	reject_additions: true         # optional; false is not implemented
+//	max_clock_skew: 5m             # optional; approved_at, default 5m, 0s disables
+//	max_expiry_skew: 0s            # optional; expires_at, default 0s
 //	trusted_keys:
 //	  - key_id: ed25519:0123456789abcdef   # optional, checked when present
 //	    public_key: <base64 of the raw 32-byte ed25519 public key>
@@ -167,6 +237,8 @@ type trustPolicyFile struct {
 	SchemaVersion   string           `json:"schema_version" yaml:"schema_version"`
 	SelfApproval    string           `json:"self_approval,omitempty" yaml:"self_approval,omitempty"`
 	RejectAdditions *bool            `json:"reject_additions,omitempty" yaml:"reject_additions,omitempty"`
+	MaxClockSkew    *string          `json:"max_clock_skew,omitempty" yaml:"max_clock_skew,omitempty"`
+	MaxExpirySkew   *string          `json:"max_expiry_skew,omitempty" yaml:"max_expiry_skew,omitempty"`
 	TrustedKeys     []trustedKeyFile `json:"trusted_keys" yaml:"trusted_keys"`
 }
 
@@ -224,6 +296,20 @@ func ParseTrustPolicy(b []byte) (TrustPolicy, error) {
 	if f.RejectAdditions != nil && !*f.RejectAdditions {
 		return TrustPolicy{}, fmt.Errorf("%w: reject_additions false is not implemented in this version", ErrTrustPolicyInvalid)
 	}
+	if f.MaxClockSkew != nil {
+		d, err := time.ParseDuration(strings.TrimSpace(*f.MaxClockSkew))
+		if err != nil {
+			return TrustPolicy{}, fmt.Errorf("%w: max_clock_skew: want a Go duration such as 5m or 0s: %w", ErrTrustPolicyInvalid, err)
+		}
+		p.MaxClockSkew = ClockSkew(d)
+	}
+	if f.MaxExpirySkew != nil {
+		d, err := time.ParseDuration(strings.TrimSpace(*f.MaxExpirySkew))
+		if err != nil {
+			return TrustPolicy{}, fmt.Errorf("%w: max_expiry_skew: want a Go duration such as 0s or 30s: %w", ErrTrustPolicyInvalid, err)
+		}
+		p.MaxExpirySkew = ClockSkew(d)
+	}
 	for i, k := range f.TrustedKeys {
 		pub, err := decodeB64(k.PublicKey, ed25519.PublicKeySize)
 		if err != nil {
@@ -242,6 +328,7 @@ func ParseTrustPolicy(b []byte) (TrustPolicy, error) {
 // sure that every key is spelled exactly and appears once per object.
 var trustPolicyKeys = map[string]bool{
 	"schema_version": true, "self_approval": true, "reject_additions": true,
+	"max_clock_skew": true, "max_expiry_skew": true,
 	"trusted_keys": true, "key_id": true, "public_key": true,
 }
 
@@ -328,6 +415,10 @@ func MarshalTrustPolicy(p TrustPolicy) ([]byte, error) {
 	f := trustPolicyFile{SchemaVersion: trustfreeze.SchemaTrustPolicy, SelfApproval: string(p.SelfApproval.effective()), TrustedKeys: []trustedKeyFile{}}
 	t := true
 	f.RejectAdditions = &t
+	skew := p.EffectiveMaxClockSkew().String()
+	f.MaxClockSkew = &skew
+	expirySkew := p.EffectiveMaxExpirySkew().String()
+	f.MaxExpirySkew = &expirySkew
 	for _, k := range p.TrustedKeys {
 		f.TrustedKeys = append(f.TrustedKeys, trustedKeyFile{KeyID: KeyIDFor(k.PublicKey), PublicKey: base64.StdEncoding.EncodeToString(k.PublicKey)})
 	}

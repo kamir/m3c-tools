@@ -62,7 +62,10 @@ func TestVerifyRecomputesCaptureDigest(t *testing.T) {
 }
 
 // O-2: an approval dated after the policy clock's now is refused
-// (approved_in_future); at and after approved_at it verifies.
+// (approved_in_future); at and after approved_at it verifies. The cases sit
+// one nanosecond apart, so the policy here disables the clock-skew tolerance
+// (ClockSkew(0)); the boundaries of the tolerance itself, including the
+// default one, are TestVerifyClockSkewDefaultApprovedAt.
 func TestVerifyRejectsApprovalFromTheFuture(t *testing.T) {
 	b := newBaseline(t, nil)
 	cases := []struct {
@@ -79,6 +82,7 @@ func TestVerifyRejectsApprovalFromTheFuture(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			p := testPolicy(b.signer)
 			p.Now = trustfreeze.FixedClock{T: tc.now}
+			p.MaxClockSkew = ClockSkew(0)
 			res := Verify(t.Context(), b.dir, p)
 			if tc.want == "" {
 				requireOK(t, res)

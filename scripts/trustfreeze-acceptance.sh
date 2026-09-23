@@ -5,7 +5,9 @@
 #   capture, explicit approval, baseline, offline verify PASS, one flipped
 #   byte, verify FAIL, restore, the baseline diffed against itself, a changed
 #   capture, a deterministic diff with a stable finding, --fail-on exit codes,
-#   deterministic reports that evaluate no signature, refusals.
+#   deterministic reports that evaluate no signature, refusals, the doctor
+#   output check that writes nothing, a capture actor that blocks its own
+#   approval, and the ubuntu-bastion profile with its real probe ids.
 #
 # The same path runs hermetically in cmd/skillctl/trustfreeze_acceptance_test.go
 # with a fake host. This script is the real-host counterpart: it reads the
@@ -42,7 +44,7 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --skillctl) SKILLCTL="${2:-}"; shift 2 ;;
         --keep) KEEP=1; shift ;;
-        -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,34p' "$0"; exit 0 ;;
         *) echo "trustfreeze-acceptance: unknown argument $1" >&2; exit 2 ;;
     esac
 done
@@ -206,6 +208,28 @@ step 2 - "report --format sarif: not implemented" tf report --input tf/diff-1 --
 step 2 - "capture without --output" tf capture --profile walking-skeleton
 step 2 - "diff --format markdown: not implemented" tf diff --baseline tf/baseline-1 --current tf/capture-2 --format markdown
 check "no private key material in any bundle or report" sh -c '! grep -rq "PRIVATE KEY" tf'
+
+# 7. The flags of the follow-up round, and the wired linux profile.
+step 0 ok "doctor --output on a path that does not exist" tf doctor --output tf/probe-target --format json
+check "  ... output_location reported" contains '"item": "output_location"'
+check "  ... and doctor created nothing" absent tf/probe-target
+step 0 ok "capture --actor" tf capture --profile walking-skeleton --actor acceptance-bot --output tf/capture-actor --format json
+check "  ... the actor is recorded" contains '"actor": "acceptance-bot"'
+step 1 verification_failure "approve --self-approval block: reviewer is the actor" tf baseline approve --capture tf/capture-actor \
+    --output tf/baseline-self --reviewer acceptance-bot --change-id CHG-0002 --reason @reason.txt \
+    --key keys/reviewer.priv --self-approval block --format json
+check "  ... the same-person finding is named" contains 'self_approval_same_person'
+check "  ... and writes no baseline" absent tf/baseline-self
+# The same capture approves in the default mode: on one host the signing
+# device is the captured device, so "block" refuses whoever the reviewer is.
+step 0 ok "approve the same capture in the default mode" tf baseline approve --capture tf/capture-actor \
+    --output tf/baseline-actor --reviewer alice --change-id CHG-0002 --reason @reason.txt \
+    --key keys/reviewer.priv --format json
+check "  ... the approval carries the capture actor" contains '"capture_actor": "acceptance-bot"' 
+step 1 incomplete_capture "capture (ubuntu-bastion)" tf capture --profile ubuntu-bastion --output tf/capture-bastion --format json
+check "  ... the ssh probe is linux.ssh" contains '"probe_id": "linux.ssh"'
+check "  ... and no probe id from the order's draft list" lacks 'linux.ssh.effective'
+check "capability document matches the platform" sh -c 'if [ "$(uname -s)" = Linux ]; then [ -f tf/capture-1/state/capabilities.json ]; else [ ! -e tf/capture-1/state/capabilities.json ]; fi'
 
 # Evidence record, part 2: what the run observed (no host name).
 echo ""

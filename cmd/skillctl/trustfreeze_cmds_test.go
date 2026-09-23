@@ -19,8 +19,8 @@ import (
 // contract (SPEC-0466 section 5.9, SPEC-0469 section 3.6, SPEC-0470 section
 // 4.9).
 var tfSubcommandFlags = map[string][]string{
-	"doctor":           {"profile", "format"},
-	"capture":          {"profile", "output", "force", "project", "policy", "probe", "exclude-probe", "timeout", "format"},
+	"doctor":           {"profile", "output", "format"},
+	"capture":          {"profile", "output", "actor", "force", "project", "policy", "probe", "exclude-probe", "timeout", "format"},
 	"diff":             {"baseline", "current", "trust-policy", "trusted-key", "policy", "fail-on", "allow-subject-mismatch", "output", "format"},
 	"baseline approve": {"capture", "output", "reviewer", "change-id", "reason", "key", "expires-at", "self-approval", "format"},
 	"verify":           {"bundle", "trust-policy", "trusted-key", "format"},
@@ -200,16 +200,29 @@ func TestTrustFreezeDoctor(t *testing.T) {
 		t.Fatalf("doctor: %v", doc)
 	}
 	matrix, _ := doc["support_matrix"].([]any)
-	if len(matrix) != 3 {
-		t.Fatalf("support matrix %v, want one row per platform", matrix)
-	}
+	perPlatform := map[string]int{}
+	identity := map[string]bool{}
 	for _, row := range matrix {
 		m, _ := row.(map[string]any)
+		platform, _ := m["platform"].(string)
+		perPlatform[platform]++
+		if m["probe_id"] == "common.identity" {
+			identity[platform] = true
+		}
 		ev, _ := m["evidence"].([]any)
 		for _, l := range ev {
 			if l != "fixture-tested" && l != "cross-compiled" {
 				t.Fatalf("support matrix claims %v", l)
 			}
+		}
+	}
+	// One row per probe and platform, and the identity probe on all three.
+	if len(perPlatform) != 3 || len(identity) != 3 {
+		t.Fatalf("support matrix covers %v, identity rows %v", perPlatform, identity)
+	}
+	for _, p := range []string{"darwin", "linux", "windows"} {
+		if perPlatform[p]*3 != len(matrix) {
+			t.Fatalf("support matrix has %d rows for %s of %d", perPlatform[p], p, len(matrix))
 		}
 	}
 	code, out, _ := e.run("doctor")
