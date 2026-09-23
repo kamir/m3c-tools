@@ -144,6 +144,21 @@ var sshMultiValueKeywords = map[string]bool{
 	"port": true, "setenv": true, "subsystem": true,
 }
 
+// sshDirectiveNames is the whole directive set the declared and the effective
+// artifact record, the single valued keywords and the multi valued ones. The
+// artifacts declare it as configuration, so that the redactor does not take
+// PasswordAuthentication or PermitEmptyPasswords for a credential because of
+// their names (SPEC-0467 section 5.2).
+func sshDirectiveNames() []string {
+	out := make([]string, 0, len(sshDeclaredKeywords)+len(sshMultiValueKeywords))
+	out = append(out, sshDeclaredKeywords...)
+	for k := range sshMultiValueKeywords {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // sshMaxAccounts bounds the authorized_keys lookup, and sshMaxKeysPerAccount
 // the keys recorded per account. Reaching a bound is reported, never silent.
 const (
@@ -400,9 +415,9 @@ func (c *privCollector) collectSSHEffective() ([]trustfreeze.Artifact, privState
 		c.warn(trustfreeze.DiagFieldMissing, ArtifactSSHEffective, "sshd -T printed no keyword this probe records")
 		return nil, privPartial
 	}
-	return []trustfreeze.Artifact{c.artifact(ArtifactSSHEffective, SSHEffectiveType, "host",
+	return []trustfreeze.Artifact{c.declareConfigAttrs(c.artifact(ArtifactSSHEffective, SSHEffectiveType, "host",
 		trustfreeze.StateObserved, attrs, "command", trustfreeze.ConfidenceProven,
-		[]string{"command:sshd -T"}, c.versions[sshdExe], trustfreeze.SensitivityInternal)}, privOK
+		[]string{"command:sshd -T"}, c.versions[sshdExe], trustfreeze.SensitivityInternal), sshDirectiveNames())}, privOK
 }
 
 // sshDirectoryArtifact records what sits next to the active configuration.
@@ -454,8 +469,8 @@ func (c *privCollector) sshDeclaredArtifact(d SSHDDeclared, root SSHDConfigFile,
 	attrs[sshAttrSourceFiles] = privJoin(files)
 	attrs[sshAttrIncludeFiles] = strconv.Itoa(len(avail))
 	attrs[sshAttrMatchBlocks] = strconv.Itoa(len(d.Matches))
-	return c.artifact(ArtifactSSHDeclared, SSHDeclaredType, "host", trustfreeze.StateDeclared,
-		attrs, "file", trustfreeze.ConfidenceProven, sources, "", trustfreeze.SensitivityInternal)
+	return c.declareConfigAttrs(c.artifact(ArtifactSSHDeclared, SSHDeclaredType, "host", trustfreeze.StateDeclared,
+		attrs, "file", trustfreeze.ConfidenceProven, sources, "", trustfreeze.SensitivityInternal), sshDirectiveNames())
 }
 
 func (c *privCollector) sshMatchArtifact(i int, m SSHDMatch) trustfreeze.Artifact {

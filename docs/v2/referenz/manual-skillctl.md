@@ -1363,6 +1363,33 @@ file could not be written (`execution_error`) · `2` usage.
   carried one of them would turn one field into two and the parser would refuse the
   record, so the class of the finding is spelled with an underscore and the record
   keeps its shape.
+- **A value that cannot be a secret is not replaced.** The rule that replaces a value
+  because its KEY sounds like a credential has a second half, the value itself. A short
+  token from a closed set of configuration answers (`yes`, `no`, `true`, `false`, `none`,
+  `any`, `all`, `default`, `prohibit-password`, `without-password`,
+  `forced-commands-only`, an answer of the `yes-with-...` family, a plain integer of at
+  most ten digits, and a duration such as `90s` or `1h30m`) is what a setting answers,
+  not a credential, and it stays. Everything else keeps being replaced, so a key named
+  `password_hash` with a 60 character value is still removed. Measured on an elevated
+  Ubuntu bastion capture: `passwordauthentication`, `permitemptypasswords` and the
+  `nopasswd` flag of a sudo rule came out as `[REDACTED_password]`, so the bundle could
+  not say whether password login was allowed, and the capability resolver, which reads
+  that flag, rated an unrestricted passwordless root grant as `root-via-sudo`.
+- **A probe says what its own fields are.** Where a probe knows the semantics of a field,
+  it records the class in the artifact (`attribute_classes`): `policy` for the sshd
+  directive set of `ssh/sshd/declared` and `ssh/sshd/effective` and for the attributes of
+  a `sudo/rule/...` artifact, `sensitive` for a field that must be replaced whatever its
+  name and its shape. A `policy` field is exempt from the key name rule only: every value
+  pattern still runs over it, so a private key block under a policy field is still
+  removed. The class is recorded only where the key name rule would otherwise fire, so
+  most artifacts carry none. It is written into the bundle, so a reader can see why a
+  value stands there in clear, and the manifest covers it like every other byte; the
+  per-artifact digest keeps covering identity and attributes only.
+- **A path segment is not a key.** A name glued to a forward slash is the last segment of
+  a path, and what follows the colon after it is a message, not its value. Measured on the
+  recorded refusal of the trial host, where `cat: /etc/sudoers.d/alice-nopasswd:
+  Permission denied` became `... [REDACTED_password] denied` and hid why the file was not
+  read. A backslash separated name keeps being read as a key.
 - **Architecture.** `arch` comes from `uname -m` (linux, darwin) and from
   `IsWow64Process2` (windows). On macOS an `x86_64` answer is checked with
   `sysctl.proc_translated`: `1` means Rosetta 2 translates skillctl, so `arch` is `arm64`

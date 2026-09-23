@@ -734,6 +734,8 @@ func validateArtifacts(r *trustfreeze.ProbeResult) {
 			problem = "invalid confidence"
 		case !a.Sensitivity.Valid():
 			problem = "invalid sensitivity"
+		case a.ValidateAttributeClasses() != nil:
+			problem = "invalid attribute class: " + a.ValidateAttributeClasses().Error()
 		}
 		if problem != "" {
 			r.Warnings = append(r.Warnings, trustfreeze.Diagnostic{Code: probe.DiagArtifactDropped, Message: problem})
@@ -803,6 +805,21 @@ func sortWarnings(ws []trustfreeze.Diagnostic) {
 // that put a secret into an attribute, a message or an error therefore
 // cannot persist it. Any failure is returned; the caller drops the result.
 func redactResult(ctx context.Context, red *redact.Redactor, r trustfreeze.ProbeResult) (trustfreeze.ProbeResult, redact.RedactionLog, error) {
+	// The attribute classes are the probe's statement about its fields, not
+	// data the probe collected, and they are a map KEYED by attribute names.
+	// They are taken out of the document before the pass and put back after
+	// it: a declaration must not be redacted because of the name it carries.
+	// validateArtifacts has already checked every class.
+	policy, sensitive := declaredAttributeKeys(r)
+	classes := make([]map[string]trustfreeze.AttributeClass, len(r.NormalizedState))
+	stripped := r
+	stripped.NormalizedState = make([]trustfreeze.Artifact, len(r.NormalizedState))
+	copy(stripped.NormalizedState, r.NormalizedState)
+	for i := range stripped.NormalizedState {
+		classes[i] = stripped.NormalizedState[i].AttributeClasses
+		stripped.NormalizedState[i].AttributeClasses = nil
+	}
+	r = stripped
 	b, err := json.Marshal(r)
 	if err != nil {
 		return trustfreeze.ProbeResult{}, nil, err
@@ -813,7 +830,12 @@ func redactResult(ctx context.Context, red *redact.Redactor, r trustfreeze.Probe
 	if err := dec.Decode(&generic); err != nil {
 		return trustfreeze.ProbeResult{}, nil, err
 	}
-	clean, log, err := red.RedactValue(context.WithoutCancel(ctx), redact.ValueContext{ProbeID: r.ProbeID, Path: "$"}, generic)
+	clean, log, err := red.RedactValue(context.WithoutCancel(ctx), redact.ValueContext{
+		ProbeID:       r.ProbeID,
+		Path:          "$",
+		PolicyKeys:    policy,
+		SensitiveKeys: sensitive,
+	}, generic)
 	if err != nil {
 		return trustfreeze.ProbeResult{}, nil, err
 	}
@@ -825,7 +847,44 @@ func redactResult(ctx context.Context, red *redact.Redactor, r trustfreeze.Probe
 	if err := trustfreeze.UnmarshalStrict(b, &out); err != nil {
 		return trustfreeze.ProbeResult{}, nil, err
 	}
+	if len(out.NormalizedState) != len(classes) {
+		return trustfreeze.ProbeResult{}, nil, fmt.Errorf("%s: %d artifacts before redaction, %d after", r.ProbeID, len(classes), len(out.NormalizedState))
+	}
+	for i := range out.NormalizedState {
+		out.NormalizedState[i].AttributeClasses = classes[i]
+	}
 	return out, log, nil
+}
+
+// declaredAttributeKeys collects what the probes of this result said about
+// their own attributes (trustfreeze.AttributeClass) and returns the two key
+// lists the redactor takes. A declaration holds for the whole probe result,
+// not for the artifact it stands on: the redaction pass walks a decoded JSON
+// document, and every map in it was built by the same probe, so a name it
+// calls configuration is configuration wherever that probe wrote it. A name
+// declared sensitive by one artifact and policy by another is sensitive,
+// which is the fail-closed answer.
+func declaredAttributeKeys(r trustfreeze.ProbeResult) (policy, sensitive []string) {
+	seenPolicy, seenSensitive := map[string]bool{}, map[string]bool{}
+	for _, a := range r.NormalizedState {
+		for _, k := range a.AttributeKeysByClass(trustfreeze.AttributeClassPolicy) {
+			seenPolicy[k] = true
+		}
+		for _, k := range a.AttributeKeysByClass(trustfreeze.AttributeClassSensitive) {
+			seenSensitive[k] = true
+		}
+	}
+	for k := range seenPolicy {
+		if !seenSensitive[k] {
+			policy = append(policy, k)
+		}
+	}
+	for k := range seenSensitive {
+		sensitive = append(sensitive, k)
+	}
+	sort.Strings(policy)
+	sort.Strings(sensitive)
+	return policy, sensitive
 }
 
 // ToolUser is the optional interface a probe implements to name the

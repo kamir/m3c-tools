@@ -66,6 +66,17 @@ func enumCases() []enumCase {
 			encode: func(s string) error { _, err := Sensitivity(s).MarshalText(); return err },
 		},
 		{
+			name:   "AttributeClass",
+			values: []string{"policy", "sensitive"},
+			decode: func(b []byte) (string, error) {
+				var v AttributeClass
+				err := json.Unmarshal(b, &v)
+				return string(v), err
+			},
+			text:   func(b []byte) error { var v AttributeClass; return v.UnmarshalText(b) },
+			encode: func(s string) error { _, err := AttributeClass(s).MarshalText(); return err },
+		},
+		{
 			name:   "Privilege",
 			values: []string{"user", "elevated"},
 			decode: func(b []byte) (string, error) { var v Privilege; err := json.Unmarshal(b, &v); return string(v), err },
@@ -313,5 +324,45 @@ func TestArtifactDigestCoversIdentityAndAttributes(t *testing.T) {
 	c.Provenance.ObservedAt = "2027-01-01T00:00:00Z"
 	if d, _ := ComputeArtifactDigest(c); d != base {
 		t.Error("state and provenance must not change the content digest")
+	}
+}
+
+// TestAttributeClassesAreValidated: a class for an attribute that does not
+// exist would exempt that name wherever the redaction pass meets it, so the
+// artifact is refused. An unknown class is refused too.
+func TestAttributeClassesAreValidated(t *testing.T) {
+	a := sampleArtifacts()[0]
+	a.Attributes = map[string]string{"os_name": "Ubuntu"}
+	a.AttributeClasses = map[string]AttributeClass{"os_name": AttributeClassPolicy}
+	if err := a.ValidateAttributeClasses(); err != nil {
+		t.Fatalf("a declared attribute was refused: %v", err)
+	}
+	if got := a.AttributeKeysByClass(AttributeClassPolicy); len(got) != 1 || got[0] != "os_name" {
+		t.Fatalf("policy keys %v", got)
+	}
+	if got := a.AttributeKeysByClass(AttributeClassSensitive); len(got) != 0 {
+		t.Fatalf("sensitive keys %v", got)
+	}
+	b := a
+	b.AttributeClasses = map[string]AttributeClass{"os_build": AttributeClassPolicy}
+	if err := b.ValidateAttributeClasses(); err == nil {
+		t.Fatal("a class for an attribute that does not exist was accepted")
+	}
+	c := a
+	c.AttributeClasses = map[string]AttributeClass{"os_name": AttributeClass("public")}
+	if err := c.ValidateAttributeClasses(); err == nil {
+		t.Fatal("an unknown class was accepted")
+	}
+	// The class is not part of the content digest, which covers identity and
+	// attributes: a probe that starts declaring a field does not look like a
+	// changed host.
+	base, err := ComputeArtifactDigest(sampleArtifacts()[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := sampleArtifacts()[0]
+	d.AttributeClasses = map[string]AttributeClass{"os_name": AttributeClassPolicy}
+	if got, _ := ComputeArtifactDigest(d); got != base {
+		t.Fatal("the attribute classes changed the content digest")
 	}
 }

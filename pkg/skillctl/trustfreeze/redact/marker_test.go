@@ -33,11 +33,12 @@ var separatorRunes = []struct {
 
 // defaultClasses are the redaction classes this package can produce on its
 // own: the pattern classes, the classes SensitiveKeyClass derives from a key,
-// the argument secret class, and the two classes its callers register through
-// WithLiteral and WithPattern (home_path in the capture engine,
-// redaction_failed in the command runner).
+// the argument secret class, the class of a key the caller declared
+// sensitive, and the two classes its callers register through WithLiteral and
+// WithPattern (home_path in the capture engine, redaction_failed in the
+// command runner).
 func defaultClasses() []string {
-	out := []string{ClassArgSecret, "home_path", "redaction_failed"}
+	out := []string{ClassArgSecret, ClassDeclaredSensitive, "home_path", "redaction_failed"}
 	for _, r := range defaultRules() {
 		if r.class != "" {
 			out = append(out, r.class)

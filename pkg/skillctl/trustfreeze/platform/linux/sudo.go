@@ -101,6 +101,18 @@ const (
 	sudoAttrUnresolvedAliases = "unresolved_aliases"
 )
 
+// sudoRuleAttrNames is the attribute set of a rule artifact. The rule
+// artifact declares it as configuration: every one of these fields says what
+// a rule grants, and nopasswd in particular is the answer a review needs,
+// not a password (SPEC-0471 TF06-R3).
+var sudoRuleAttrNames = []string{
+	privAttrFile, privAttrLine,
+	sudoAttrUsers, sudoAttrHosts, sudoAttrRunAsUsers, sudoAttrRunAsGroups,
+	sudoAttrTags, sudoAttrCommands, sudoAttrCommandCount, sudoAttrCommandsCut,
+	sudoAttrNoPasswd, sudoAttrAllCommands, sudoAttrRunAsRoot,
+	sudoAttrResolvedAliases, sudoAttrUnresolvedAliases,
+}
+
 // privDiagAliasUnresolved marks a sudoers alias that no rule file this capture
 // read defines. It is the code the capability resolver uses for the same gap
 // seen from the other end (capability.go).
@@ -464,9 +476,9 @@ func (c *privCollector) sudoRuleArtifact(doc SudoersDoc, fileID, fp string, r Su
 		c.warn(probe.DiagFieldFailed, fp, fmt.Sprintf("the command list of the rule in line %d is longer than %d bytes and was cut; command_count keeps the full number", r.Line, sudoMaxCommandsBytes))
 	}
 	id := strings.TrimPrefix(fileID, SudoFilePrefix)
-	return c.artifact(SudoRulePrefix+id+"/"+strconv.Itoa(r.Line), SudoRuleType, "host",
+	return c.declareConfigAttrs(c.artifact(SudoRulePrefix+id+"/"+strconv.Itoa(r.Line), SudoRuleType, "host",
 		trustfreeze.StateDeclared, attrs, "file", trustfreeze.ConfidenceProven,
-		[]string{"file:" + fp}, "", trustfreeze.SensitivityInternal)
+		[]string{"file:" + fp}, "", trustfreeze.SensitivityInternal), sudoRuleAttrNames)
 }
 
 // sudoDefaultsArtifact records the Defaults settings that change how a rule is
@@ -1663,6 +1675,33 @@ func (c *privCollector) artifact(id, typ, scope string, state trustfreeze.Eviden
 	} else {
 		c.warn(probe.DiagArtifactDropped, id, "digest could not be computed: "+err.Error())
 	}
+	return a
+}
+
+// declareConfigAttrs records what this probe knows about its own fields: the
+// named attributes hold configuration, never a credential (SPEC-0467 section
+// 5.2), so the generic key name rule of the redactor does not apply to them.
+// Only the names that rule would take for a credential are recorded, because
+// only there does the class change what redaction does; the artifact stays
+// small and the declaration stays a statement about a real risk. Every value
+// pattern still applies, so a key body under one of these names is still
+// removed. The artifact digest covers identity and attributes, not the
+// classes, so it does not change here.
+func (c *privCollector) declareConfigAttrs(a trustfreeze.Artifact, names []string) trustfreeze.Artifact {
+	var classes map[string]trustfreeze.AttributeClass
+	for _, n := range names {
+		if _, ok := a.Attributes[n]; !ok {
+			continue
+		}
+		if _, sensitive := redact.SensitiveKeyClass(n); !sensitive {
+			continue
+		}
+		if classes == nil {
+			classes = map[string]trustfreeze.AttributeClass{}
+		}
+		classes[n] = trustfreeze.AttributeClassPolicy
+	}
+	a.AttributeClasses = classes
 	return a
 }
 

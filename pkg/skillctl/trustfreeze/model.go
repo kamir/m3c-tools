@@ -39,15 +39,60 @@ type Provenance struct {
 // ValidateArtifactID). Attributes are strings only, so the canonical form has
 // no floating-point values and sorts deterministically.
 type Artifact struct {
-	ID          string            `json:"id"`
-	Type        string            `json:"type"`
-	Scope       string            `json:"scope"`
-	Source      string            `json:"source"`
-	State       EvidenceState     `json:"state"`
-	Digest      string            `json:"digest"`
-	Attributes  map[string]string `json:"attributes,omitempty"`
-	Provenance  Provenance        `json:"provenance"`
-	Sensitivity Sensitivity       `json:"sensitivity"`
+	ID         string            `json:"id"`
+	Type       string            `json:"type"`
+	Scope      string            `json:"scope"`
+	Source     string            `json:"source"`
+	State      EvidenceState     `json:"state"`
+	Digest     string            `json:"digest"`
+	Attributes map[string]string `json:"attributes,omitempty"`
+	// AttributeClasses carries what the probe knows about its own
+	// attributes, for the redaction pass (see AttributeClass). It names only
+	// the attributes where the class changes what redaction does, so most
+	// artifacts have none. Every name must be an attribute of this artifact.
+	AttributeClasses map[string]AttributeClass `json:"attribute_classes,omitempty"`
+	Provenance       Provenance                `json:"provenance"`
+	Sensitivity      Sensitivity               `json:"sensitivity"`
+}
+
+// AttributeKeysByClass returns the attribute names a declares for class,
+// sorted. It is how the capture engine turns the probe's statement into the
+// key declarations of the redactor.
+func (a Artifact) AttributeKeysByClass(class AttributeClass) []string {
+	var out []string
+	for k, c := range a.AttributeClasses {
+		if c == class {
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// ValidateAttributeClasses reports the first attribute class of a that
+// cannot be persisted honestly: an unknown class, or a name that is not an
+// attribute of this artifact (a declaration about a field that does not
+// exist would exempt a key somewhere else).
+func (a Artifact) ValidateAttributeClasses() error {
+	for _, k := range sortedAttributeClassKeys(a.AttributeClasses) {
+		c := a.AttributeClasses[k]
+		if !c.Valid() {
+			return fmt.Errorf("attribute %q has the unknown class %q", k, string(c))
+		}
+		if _, ok := a.Attributes[k]; !ok {
+			return fmt.Errorf("attribute %q has a class but no value", k)
+		}
+	}
+	return nil
+}
+
+func sortedAttributeClassKeys(m map[string]AttributeClass) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Capability is a resolved "who can do what to which resource" statement
