@@ -207,3 +207,34 @@ func TestDefaultPolicyRatesCoverageIncreasedInfo(t *testing.T) {
 		t.Error("a capture that looked where the baseline was blind must not exceed the threshold")
 	}
 }
+
+// R-T5: a coverage_increased entry that came from a capability_changed says
+// what it is. The capability was in the baseline, so a message that calls it
+// new would be false; the honest sentence names the fields that differ and
+// the probe the baseline did not capture.
+func TestCoverageIncreasedMessageOfADowngradedChange(t *testing.T) {
+	c := compare.Change{
+		Kind: compare.ChangeCoverageIncreased, CapabilityID: "capability/execute/host/user/alice",
+		ChangedFields:     []string{"privilege", "sources"},
+		BaselineGapProbes: []string{"linux.sudo"},
+		BeforePrivilege:   "root-via-group", AfterPrivilege: "root-via-sudo-nopasswd",
+		BeforeDigest: "sha256:aa", AfterDigest: "sha256:bb",
+	}
+	msg := message(c)
+	switch {
+	case strings.Contains(msg, "could not have been in the baseline"):
+		t.Errorf("the message calls a capability the baseline carried new: %q", msg)
+	case !strings.Contains(msg, "privilege, sources"):
+		t.Errorf("the message does not name the fields that differ: %q", msg)
+	case !strings.Contains(msg, "linux.sudo"):
+		t.Errorf("the message does not name the probe the baseline was missing: %q", msg)
+	}
+	// The added direction keeps its own sentence.
+	added := compare.Change{
+		Kind: compare.ChangeCoverageIncreased, CapabilityID: c.CapabilityID,
+		BaselineGapProbes: []string{"linux.ssh"}, AfterPrivilege: "user", AfterDigest: "sha256:bb",
+	}
+	if got := message(added); !strings.Contains(got, "could not have been in the baseline") {
+		t.Errorf("the added direction lost its sentence: %q", got)
+	}
+}

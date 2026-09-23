@@ -1491,7 +1491,10 @@ func tfPrintDiff(w io.Writer, doc tfDiffDoc) {
 		case compare.ChangeApplicabilityChanged:
 			detail = " " + string(c.BeforeStatus) + " -> " + string(c.AfterStatus)
 		case compare.ChangeCoverageIncreased:
-			detail = " privilege " + c.AfterPrivilege + ", not captured in the baseline: " + strings.Join(c.BaselineGapProbes, ",")
+			// A downgraded capability_changed carries the fields that differ,
+			// and they stay: the privilege and the blind probe alone would
+			// not say what moved (R-T5).
+			detail += " privilege " + c.AfterPrivilege + ", not captured in the baseline: " + strings.Join(c.BaselineGapProbes, ",")
 		case compare.ChangeCapabilityAdded, compare.ChangeCapabilityRemoved, compare.ChangeCapabilityNotObserved:
 			if p := c.AfterPrivilege + c.BeforePrivilege; p != "" {
 				detail += " privilege " + p

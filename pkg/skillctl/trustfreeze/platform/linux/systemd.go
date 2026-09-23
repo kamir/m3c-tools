@@ -110,6 +110,24 @@ const (
 	systemdAttrUnitFileCount   = "unit_file_count"
 	systemdAttrObservedCount   = "observed_unit_count"
 	systemdAttrSelectionRule   = "observed_selection"
+	// systemdAttrTemplate marks a unit file that is a template, and
+	// systemdAttrRuntimeState plus systemdAttrRuntimeReason say what that
+	// means for its runtime state.
+	systemdAttrTemplate      = "template"
+	systemdAttrRuntimeState  = "runtime_state"
+	systemdAttrRuntimeReason = "runtime_state_reason"
+	// systemdAttrTemplateCount is the number of template unit files on the
+	// manager artifact.
+	systemdAttrTemplateCount = "template_unit_count"
+)
+
+// systemdRuntimeNotApplicable is the runtime_state of a template unit, and
+// systemdTemplateReason is the reason that goes with it. This is the one
+// legitimate not_applicable (playbook L1): the thing cannot exist, so there
+// is nothing to observe and nothing to be blind about.
+const (
+	systemdRuntimeNotApplicable = "not_applicable"
+	systemdTemplateReason       = "a template unit is a pattern from which systemd builds instances and has no instance of its own, so the manager holds no runtime state for it"
 )
 
 // Diagnostic codes this probe adds to the shared ones.
@@ -134,6 +152,16 @@ const (
 	DiagSystemdStateMismatch = "unit_file_state_mismatch"
 	// DiagSystemdSelectionTruncated: the show selection hit its cap.
 	DiagSystemdSelectionTruncated = "selection_truncated"
+	// DiagSystemdTemplateUnit: unit files that are templates were not asked
+	// about, because a template has no runtime state to ask for.
+	DiagSystemdTemplateUnit = "template_unit_not_queried"
+	// DiagSystemdBatchSplit: a "systemctl show" call for several units ended
+	// without answering for all of them, and the names it left out were
+	// asked for one at a time.
+	DiagSystemdBatchSplit = "show_batch_split"
+	// DiagSystemdUnitStateNotRead: the manager returned no properties for
+	// one unit, so its runtime state stays unknown.
+	DiagSystemdUnitStateNotRead = "unit_state_not_read"
 )
 
 // systemdUserScopeNotCollected is the value of the user_scope attribute and
@@ -142,7 +170,7 @@ const systemdUserScopeNotCollected = "not_collected"
 
 // systemdSelectionRule names the rule SelectUnitsForShow applies, so a reader
 // of the bundle knows which units were never asked about.
-const systemdSelectionRule = "timers and sockets, plus enabled service, mount, path and automount units; never alias, masked or transient units"
+const systemdSelectionRule = "timers and sockets, plus enabled service, mount, path and automount units; never alias, masked, transient or template units"
 
 // SystemdProbe implements probe.Probe for linux.systemd.
 type SystemdProbe struct{}
@@ -395,6 +423,15 @@ func (c *systemdCollector) reportIssues(field, source string, issues []SystemdLi
 
 // collectShow asks the manager about the selected units and returns them in
 // the order they were asked about.
+//
+// A call that names several units can stop before it has answered for all of
+// them: measured on an Ubuntu 22.04 bastion, one name the manager refuses
+// ends the whole call, so the units before the refused name are answered for
+// and the units after it are not
+// (testdata/systemd/systemctl-show-batch-aborted.txt). The blocks that did
+// arrive are kept, and the names that went unanswered are asked for again,
+// one at a time, so one bad name costs one unit instead of a batch. The work
+// is bounded by systemdMaxShowUnits, which caps the selection itself.
 func (c *systemdCollector) collectShow(files []UnitFile) []string {
 	selected, cut := SelectUnitsForShow(files, systemdMaxShowUnits)
 	if cut {
@@ -411,46 +448,83 @@ func (c *systemdCollector) collectShow(files []UnitFile) []string {
 			end = len(selected)
 		}
 		batch := selected[i:end]
-		args := append([]string{"show", "--no-pager", "-p", systemdShowProperties}, batch...)
-		res := c.exec(args)
 		name := fmt.Sprintf("systemctl-show-%02d.txt", i/systemdShowBatch+1)
-		switch {
-		case res.Err != nil:
-			c.warn(systemdDiagForError(res.Err), "runtime_state", fmt.Sprintf("systemctl show for %d unit(s) starting at %s: %s", len(batch), batch[0], res.Err.Error()))
+		if !c.showCall(batch, name) {
+			// The call did not run at all (tool missing, refused, killed at
+			// the deadline). Asking again one name at a time would repeat the
+			// same failure, so the whole batch stays unanswered and
+			// buildArtifacts reports it.
 			c.degrade("runtime state of " + strconv.Itoa(len(batch)) + " unit(s) not read")
 			continue
-		case res.RedactionFailed:
-			c.warn(trustfreeze.DiagRedactionFailed, "runtime_state", "systemctl show output dropped (fail-closed)")
-			c.degrade("runtime state of " + strconv.Itoa(len(batch)) + " unit(s) dropped")
-			continue
-		}
-		c.evidence(name, "stdout:systemctl", res, false)
-		c.evidence(strings.TrimSuffix(name, ".txt")+".stderr.txt", "stderr:systemctl", res, true)
-		if res.ExitCode != 0 {
-			c.warn(DiagSystemdExitCode, "runtime_state", fmt.Sprintf("systemctl show exited %d for %d unit(s) starting at %s", res.ExitCode, len(batch), batch[0]))
-		}
-		if res.StdoutTruncated {
-			stdoutCap, _ := outputCap(c.cc)
-			c.warn(trustfreeze.DiagOutputTruncated, "runtime_state",
-				truncationNote("systemctl show", "stdout", len(res.Stdout.Bytes()), res.StdoutBytes, stdoutCap,
-					"the runtime state of the units beyond the cut was not read"))
-			c.degrade("runtime state truncated")
-		}
-		blocks, issues := ParseShowBlocks(res.Stdout.Bytes())
-		c.reportIssues("runtime_state", "systemctl show", issues)
-		for _, b := range blocks {
-			id := b.First(ShowPropID)
-			if id == "" {
-				continue
-			}
-			c.blocks[id] = b
 		}
 		asked = true
+		missing := c.missingUnits(batch)
+		if len(missing) == 0 || len(batch) == 1 {
+			continue
+		}
+		c.warn(DiagSystemdBatchSplit, "runtime_state", fmt.Sprintf(
+			"systemctl show answered for %d of %d unit(s) starting at %s and stopped there; the remaining %d unit(s) were asked for one at a time",
+			len(batch)-len(missing), len(batch), batch[0], len(missing)))
+		base := strings.TrimSuffix(name, ".txt")
+		for j, u := range missing {
+			c.showCall([]string{u}, fmt.Sprintf("%s-retry-%02d.txt", base, j+1))
+		}
 	}
 	if asked {
 		c.addSource("command:systemctl show")
 	}
 	return selected
+}
+
+// showCall issues one "systemctl show" call, stores every property block it
+// could read and reports whether the call ran and was parsed at all. A call
+// that never produced output is a diagnostic and no blocks; the status is
+// lowered by the caller, which knows how many units that cost.
+func (c *systemdCollector) showCall(units []string, evidenceName string) bool {
+	args := append([]string{"show", "--no-pager", "-p", systemdShowProperties}, units...)
+	res := c.exec(args)
+	switch {
+	case res.Err != nil:
+		c.warn(systemdDiagForError(res.Err), "runtime_state", fmt.Sprintf("systemctl show for %d unit(s) starting at %s: %s", len(units), units[0], res.Err.Error()))
+		return false
+	case res.RedactionFailed:
+		c.warn(trustfreeze.DiagRedactionFailed, "runtime_state", "systemctl show output dropped (fail-closed)")
+		return false
+	}
+	c.evidence(evidenceName, "stdout:systemctl", res, false)
+	c.evidence(strings.TrimSuffix(evidenceName, ".txt")+".stderr.txt", "stderr:systemctl", res, true)
+	if res.ExitCode != 0 {
+		c.warn(DiagSystemdExitCode, "runtime_state", fmt.Sprintf("systemctl show exited %d for %d unit(s) starting at %s", res.ExitCode, len(units), units[0]))
+	}
+	if res.StdoutTruncated {
+		stdoutCap, _ := outputCap(c.cc)
+		c.warn(trustfreeze.DiagOutputTruncated, "runtime_state",
+			truncationNote("systemctl show", "stdout", len(res.Stdout.Bytes()), res.StdoutBytes, stdoutCap,
+				"the runtime state of the units beyond the cut was not read"))
+		c.degrade("runtime state truncated")
+	}
+	blocks, issues := ParseShowBlocks(res.Stdout.Bytes())
+	c.reportIssues("runtime_state", "systemctl show", issues)
+	for _, b := range blocks {
+		id := b.First(ShowPropID)
+		if id == "" {
+			continue
+		}
+		c.blocks[id] = b
+	}
+	return true
+}
+
+// missingUnits lists the units of a call the manager returned no property
+// block for, in the order they were asked about.
+func (c *systemdCollector) missingUnits(units []string) []string {
+	var out []string
+	for _, u := range units {
+		if _, ok := c.blocks[u]; !ok {
+			out = append(out, u)
+		}
+	}
+	return out
 }
 
 // buildArtifacts turns the two layers into artifacts.
@@ -463,7 +537,7 @@ func (c *systemdCollector) buildArtifacts(files []UnitFile, selected []string) {
 		ToolVersion: c.toolVersion,
 	}
 
-	observedCount := 0
+	observedCount, templateCount := 0, 0
 	for _, f := range files {
 		// Both artifacts of a unit share the sanitized suffix, so one check
 		// covers both ids.
@@ -484,6 +558,17 @@ func (c *systemdCollector) buildArtifacts(files []UnitFile, selected []string) {
 		if f.Preset != "" {
 			attrs[systemdAttrPreset] = f.Preset
 		}
+		// A template unit cannot run: only an instance of it can. Its runtime
+		// state is not_applicable WITH the reason, which is the one case where
+		// not_applicable is a statement about the thing and not about the
+		// capture (playbook L1).
+		template := IsTemplateUnit(f.Name)
+		if template {
+			templateCount++
+			attrs[systemdAttrTemplate] = "true"
+			attrs[systemdAttrRuntimeState] = systemdRuntimeNotApplicable
+			attrs[systemdAttrRuntimeReason] = systemdTemplateReason
+		}
 		block, shown := c.blocks[f.Name]
 		if shown {
 			c.addDeclaredFromShow(attrs, f, block)
@@ -497,7 +582,7 @@ func (c *systemdCollector) buildArtifacts(files []UnitFile, selected []string) {
 			Provenance:  prov,
 			Sensitivity: trustfreeze.SensitivityInternal,
 		})
-		if !shown {
+		if !shown || template {
 			continue
 		}
 		if load := block.First(ShowPropLoadState); load == ShowLoadStateNotFound {
@@ -525,6 +610,7 @@ func (c *systemdCollector) buildArtifacts(files []UnitFile, selected []string) {
 			systemdAttrUserScope:     systemdUserScopeNotCollected,
 			systemdAttrUnitFileCount: strconv.Itoa(len(files)),
 			systemdAttrObservedCount: strconv.Itoa(observedCount),
+			systemdAttrTemplateCount: strconv.Itoa(templateCount),
 			systemdAttrSelectionRule: systemdSelectionRule,
 		},
 		Provenance:  prov,
@@ -534,19 +620,34 @@ func (c *systemdCollector) buildArtifacts(files []UnitFile, selected []string) {
 	// their own and this probe never asks for them (playbook L1).
 	c.warn(DiagSystemdScopeNotCollected, systemdAttrUserScope,
 		"systemd user managers are not collected: this probe asks the system manager only")
+	if templateCount > 0 {
+		// Coverage, stated instead of implied: these units exist, they were
+		// deliberately not asked about, and that is not a gap.
+		c.warn(DiagSystemdTemplateUnit, systemdAttrTemplate,
+			fmt.Sprintf("%d unit file(s) are templates and were not asked about: %s", templateCount, systemdTemplateReason))
+	}
 	// A unit the probe asked about and got no answer for has no observed
-	// state, and the run is partial: the question was asked and is open.
-	missing := 0
-	for _, u := range selected {
-		if _, ok := c.blocks[u]; !ok {
-			missing++
-		}
+	// state, and the run is partial: the question was asked and is open. Each
+	// such unit is named, so a reader sees which ones, and only those.
+	missing := c.missingUnits(selected)
+	if len(missing) == 0 {
+		return
 	}
-	if missing > 0 {
-		c.warn(trustfreeze.DiagFieldMissing, "runtime_state",
-			fmt.Sprintf("%d of %d selected unit(s) have no observed state", missing, len(selected)))
-		c.degrade(fmt.Sprintf("runtime state of %d selected unit(s) is unknown", missing))
+	shown := missing
+	if len(shown) > systemdMaxIssueDiagnostics {
+		shown = shown[:systemdMaxIssueDiagnostics]
 	}
+	for _, u := range shown {
+		c.warn(DiagSystemdUnitStateNotRead, "runtime_state",
+			u+": the manager returned no properties for this unit, so its runtime state is unknown")
+	}
+	if rest := len(missing) - len(shown); rest > 0 {
+		c.warn(DiagSystemdUnitStateNotRead, "runtime_state",
+			fmt.Sprintf("%d further unit(s) have no observed state", rest))
+	}
+	c.warn(trustfreeze.DiagFieldMissing, "runtime_state",
+		fmt.Sprintf("%d of %d selected unit(s) have no observed state", len(missing), len(selected)))
+	c.degrade(fmt.Sprintf("runtime state of %d selected unit(s) is unknown", len(missing)))
 }
 
 // addDeclaredFromShow copies the unit file facts of a show answer into the
@@ -760,6 +861,30 @@ func ParseUnitFiles(b []byte) ([]UnitFile, []SystemdLineIssue) {
 	return out, issues
 }
 
+// IsTemplateUnit reports whether name is a systemd TEMPLATE unit.
+//
+// A unit name is "<prefix>@<instance>.<type>". A template is the form with an
+// EMPTY instance part, written as an "@" immediately before the type suffix:
+// "getty@.service", "autovt@.service", "apport-forward@.service". systemd
+// builds instances from it ("getty@tty1.service"), and only an instance has a
+// runtime state.
+//
+// The detector is the name grammar and nothing else, because asking the
+// manager is exactly what fails: measured on an Ubuntu 22.04 bastion, a
+// "systemctl show" call that names a template exits 1 with
+// "Failed to get properties: Unit name getty@.service is neither a valid
+// invocation ID nor unit name." and stops there, so every name after it in
+// the same call goes unanswered
+// (testdata/systemd/systemctl-show-template.stderr.txt).
+//
+// A name with no prefix before the "@", or with no type suffix, is not a
+// template; it is a name this parser cannot read as one, and the caller then
+// treats it like any other unit.
+func IsTemplateUnit(name string) bool {
+	d := strings.LastIndexByte(name, '.')
+	return d > 1 && d < len(name)-1 && name[d-1] == '@'
+}
+
 // Property names of the "systemctl show" call.
 const (
 	ShowPropID               = "Id"
@@ -953,6 +1078,11 @@ func SelectUnitsForShow(files []UnitFile, max int) ([]string, bool) {
 	for _, f := range files {
 		switch {
 		case f.Name == "", seen[f.Name]:
+			continue
+		case IsTemplateUnit(f.Name):
+			// A template has no instance and therefore no runtime state, and
+			// a call that names one is refused and takes the rest of its
+			// batch with it. It is recorded as a template instead.
 			continue
 		case systemdSkipStates[f.State], f.State == "transient":
 			continue

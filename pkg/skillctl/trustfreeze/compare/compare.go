@@ -274,7 +274,17 @@ func Compare(ctx context.Context, baseline, current *trustfreeze.Bundle, opts Co
 			changes = append(changes, compareArtifact(rs, b, a, beforeProbes.observes(b.Source), afterProbes.observes(a.Source))...)
 		}
 	}
-	capChanges, err := capabilityChanges(baseline, current, after, beforeProbes)
+	// Which artifacts this comparison itself found new or changed. The
+	// capability guard reads it to tell a capability that is new on ground
+	// the baseline covered from one that is new only because somebody could
+	// finally look (R-T5).
+	touched := map[string]bool{}
+	for _, ch := range changes {
+		if ch.ArtifactID != "" {
+			touched[ch.ArtifactID] = true
+		}
+	}
+	capChanges, err := capabilityChanges(baseline, current, before, after, touched, beforeProbes)
 	if err != nil {
 		return Diff{}, err
 	}

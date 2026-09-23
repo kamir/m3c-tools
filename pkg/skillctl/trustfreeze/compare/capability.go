@@ -21,23 +21,33 @@ import (
 //     capability is capability_not_observed. The absence of the document is
 //     not an observation that the capability is gone.
 //   - Both have one: a capability the current bundle resolved and the
-//     baseline did not is coverage_increased when EVERY probe behind its
-//     sources was blind in the baseline (the baseline covered none of the
-//     ground this capability stands on, so the capability is not new:
-//     somebody looked where nobody had looked before), and capability_added
-//     otherwise; a baseline capability the current bundle did not resolve is
-//     capability_removed when every artifact it rests on was observed there,
-//     and capability_not_observed otherwise (the privilege probe was blocked,
-//     so nobody could see it); a capability both sides resolved with
-//     differing fields is capability_changed.
+//     baseline did not is capability_added, a baseline capability the current
+//     bundle did not resolve is capability_removed when every artifact it
+//     rests on was observed there and capability_not_observed otherwise (the
+//     privilege probe was blocked, so nobody could see it), and a capability
+//     both sides resolved with differing fields is capability_changed.
 //
 // The added and the removed direction are guarded alike: neither side is
 // called new or gone over a probe the other side never ran (R-T1).
 //
+// The coverage guard (R-T5) turns capability_added and capability_changed
+// into coverage_increased, and it reads the DECISIVE sources: the sources
+// whose artifact this comparison itself found new or changed. When every one
+// of those comes from a probe the baseline did not capture, the difference is
+// a statement about the collection and not about the host, and the entry
+// becomes coverage_increased with baseline_gap_probes naming those probes. It
+// also becomes coverage_increased when EVERY probe behind its sources was
+// blind, decisive or not: the baseline then covered none of the ground the
+// capability stands on.
+//
+// One decisive source on ground both runs could see is enough to keep the
+// entry at full severity. The measured shape this rule was written for: a
+// public key capability whose account artifact was captured in the baseline
+// and whose key artifact was not, because that run could not read
+// authorized_keys. The account is not new; the reading is.
+//
 // Blind is narrower than "not captured". A baseline probe that reported
-// partially did look and did report, and so did a baseline that covered one
-// of several sources; a capability that is new on ground the baseline covered
-// stays capability_added at its normal severity. Such an entry carries
+// partially did look and did report; an entry that keeps its kind carries
 // coverage_caveat_probes instead, naming the partial and the blind probes
 // behind its sources, so a reader sees the uncertainty without the finding
 // dropping to info.
@@ -58,10 +68,13 @@ func CapabilityFields() []string { return slices.Clone(capabilityFieldValues) }
 
 // capabilityChanges compares the capability documents of the two bundles.
 // afterArtifacts is the artifact index of the current bundle: it decides
-// whether the absence of a baseline capability was observed. beforeProbes is
-// the probe index of the baseline: it decides whether a capability only the
-// current bundle carries could have been seen there at all.
-func capabilityChanges(baseline, current *trustfreeze.Bundle, afterArtifacts map[string]trustfreeze.Artifact, beforeProbes probeIndex) ([]Change, error) {
+// whether the absence of a baseline capability was observed. beforeArtifacts
+// is the baseline's, and it ties a source only the baseline carried to a
+// probe. touched holds every artifact id this comparison reported an entry
+// for, which is how a source is called new or changed. beforeProbes is the
+// probe index of the baseline: it decides what could have been seen there at
+// all.
+func capabilityChanges(baseline, current *trustfreeze.Bundle, beforeArtifacts, afterArtifacts map[string]trustfreeze.Artifact, touched map[string]bool, beforeProbes probeIndex) ([]Change, error) {
 	if baseline.Capabilities == nil {
 		return nil, nil
 	}
@@ -98,15 +111,15 @@ func capabilityChanges(baseline, current *trustfreeze.Bundle, afterArtifacts map
 			if err != nil {
 				return nil, err
 			}
-			cov := capabilityBaselineCoverage(a, afterArtifacts, beforeProbes)
+			cov := capabilityBaselineCoverage(a.Sources, afterArtifacts, beforeArtifacts, touched, beforeProbes)
 			ch := Change{
 				Kind: ChangeCapabilityAdded, CapabilityID: id,
 				CoverageCaveatProbes: cov.caveat(),
 				AfterPrivilege:       a.Privilege, AfterDigest: d,
 				AfterState: a.State, AfterConfidence: a.Confidence,
 			}
-			if cov.allBlind() {
-				ch.Kind, ch.BaselineGapProbes, ch.CoverageCaveatProbes = ChangeCoverageIncreased, cov.blind, nil
+			if cov.increased() {
+				ch.Kind, ch.BaselineGapProbes, ch.CoverageCaveatProbes = ChangeCoverageIncreased, cov.gapProbes(), nil
 			}
 			out = append(out, ch)
 		case !inAfter:
@@ -128,9 +141,22 @@ func capabilityChanges(baseline, current *trustfreeze.Bundle, afterArtifacts map
 			if err != nil {
 				return nil, err
 			}
-			if c != nil {
-				out = append(out, *c)
+			if c == nil {
+				continue
 			}
+			// A capability both sides resolved is judged by the same rule:
+			// when every source this comparison found new or changed comes
+			// from a probe the baseline did not capture, what changed is the
+			// collection, not the host (R-T5). The entry keeps both digests
+			// and the fields that differ; only its kind moves.
+			cov := capabilityBaselineCoverage(append(slices.Clone(b.Sources), a.Sources...),
+				afterArtifacts, beforeArtifacts, touched, beforeProbes)
+			if cov.increased() {
+				c.Kind, c.BaselineGapProbes = ChangeCoverageIncreased, cov.gapProbes()
+			} else {
+				c.CoverageCaveatProbes = cov.caveat()
+			}
+			out = append(out, *c)
 		}
 	}
 	return out, nil
@@ -214,21 +240,48 @@ func capabilityField(c trustfreeze.Capability, name string) string {
 // sources of one capability: blind holds the probes that produced no usable
 // observation there, partial the probes that reported partially, and tied the
 // number of source probes that could be tied to a probe at all.
+//
+// decisiveTied and decisiveBlind are the same two numbers restricted to the
+// DECISIVE sources: those whose artifact this comparison reported an entry
+// for. They are what the coverage guard judges by (R-T5).
 type baselineCoverage struct {
-	blind   []string
-	partial []string
-	tied    int
+	blind         []string
+	partial       []string
+	tied          int
+	decisiveBlind []string
+	decisiveTied  int
 }
 
 // allBlind reports whether the baseline covered none of the ground the
 // capability stands on: every source probe that could be tied to a probe was
-// blind, and there was at least one. Only then is the capability not called
-// new (R-T1 (b)): one covered source is enough to make the current bundle's
-// finding a statement about the host.
+// blind, and there was at least one.
 func (c baselineCoverage) allBlind() bool { return c.tied > 0 && len(c.blind) == c.tied }
 
-// caveat is the sorted list of probes a capability_added entry names as thin
-// baseline coverage: every blind probe plus every partial one.
+// decisiveAllBlind reports whether every source this comparison found new or
+// changed comes from a probe the baseline did not capture, and that there was
+// at least one such source. A comparison that moved nothing under the
+// capability decides nothing here, which is why the count has to be positive.
+func (c baselineCoverage) decisiveAllBlind() bool {
+	return c.decisiveTied > 0 && len(c.decisiveBlind) == c.decisiveTied
+}
+
+// increased reports whether the difference is coverage rather than drift:
+// either nothing this comparison moved sits on ground the baseline could see
+// (R-T5), or the baseline saw none of the capability's ground at all (R-T1).
+func (c baselineCoverage) increased() bool { return c.decisiveAllBlind() || c.allBlind() }
+
+// gapProbes names the probes a coverage_increased entry rests on: every blind
+// probe when the baseline saw none of the ground, else the blind probes
+// behind the sources this comparison found new or changed.
+func (c baselineCoverage) gapProbes() []string {
+	if c.allBlind() {
+		return c.blind
+	}
+	return c.decisiveBlind
+}
+
+// caveat is the sorted list of probes an entry that kept its kind names as
+// thin baseline coverage: every blind probe plus every partial one.
 func (c baselineCoverage) caveat() []string {
 	if len(c.blind) == 0 && len(c.partial) == 0 {
 		return nil
@@ -239,20 +292,32 @@ func (c baselineCoverage) caveat() []string {
 }
 
 // capabilityBaselineCoverage measures what the baseline saw of the probes
-// behind the sources of c. A source is tied to a probe through the artifact it
-// names in the current bundle, which is where that artifact exists; a source
-// that names no artifact of this bundle (a file, a tool, or an artifact this
-// capture did not persist) ties to no probe and is counted nowhere, so the
-// guard never invents a gap it did not measure.
-func capabilityBaselineCoverage(c trustfreeze.Capability, artifacts map[string]trustfreeze.Artifact, beforeProbes probeIndex) baselineCoverage {
+// behind sources, and which of those probes this comparison found movement
+// under. A source is tied to a probe through the artifact it names, looked up
+// in the current bundle first and in the baseline second (a source only the
+// baseline carried is tied there); a source that names no artifact of either
+// bundle (a file, a tool, or an artifact neither capture persisted) ties to no
+// probe and is counted nowhere, so the guard never invents a gap it did not
+// measure.
+func capabilityBaselineCoverage(sources []string, after, before map[string]trustfreeze.Artifact, touched map[string]bool, beforeProbes probeIndex) baselineCoverage {
 	var out baselineCoverage
 	seen := map[string]bool{}
-	for _, s := range c.Sources {
+	decisive := map[string]bool{}
+	for _, s := range sources {
 		if trustfreeze.ValidateArtifactID(s) != nil {
 			continue
 		}
-		a, ok := artifacts[s]
-		if !ok || trustfreeze.ValidateProbeID(a.Source) != nil || seen[a.Source] {
+		a, ok := after[s]
+		if !ok {
+			a, ok = before[s]
+		}
+		if !ok || trustfreeze.ValidateProbeID(a.Source) != nil {
+			continue
+		}
+		if touched[s] {
+			decisive[a.Source] = true
+		}
+		if seen[a.Source] {
 			continue
 		}
 		seen[a.Source] = true
@@ -264,8 +329,15 @@ func capabilityBaselineCoverage(c trustfreeze.Capability, artifacts map[string]t
 			out.partial = append(out.partial, a.Source)
 		}
 	}
+	out.decisiveTied = len(decisive)
+	for p := range decisive {
+		if beforeProbes.blind(p) {
+			out.decisiveBlind = append(out.decisiveBlind, p)
+		}
+	}
 	slices.Sort(out.blind)
 	slices.Sort(out.partial)
+	slices.Sort(out.decisiveBlind)
 	return out
 }
 
@@ -305,33 +377,33 @@ func validateCapabilityChange(c Change) error {
 	case len(c.ChangedAttributes) > 0:
 		return fmt.Errorf("%s %s must not carry attribute names", c.Kind, c.CapabilityID)
 	}
+	if err := validateProbeList(c.Kind, c.CapabilityID, "coverage caveat", c.CoverageCaveatProbes); err != nil {
+		return err
+	}
 	switch c.Kind {
 	case ChangeCapabilityAdded:
 		if c.AfterDigest == "" || c.BeforeDigest != "" {
 			return fmt.Errorf("capability_added %s needs an after digest and no before digest", c.CapabilityID)
 		}
-		if !slices.IsSorted(c.CoverageCaveatProbes) {
-			return fmt.Errorf("capability_added %s coverage caveat probes are not sorted", c.CapabilityID)
-		}
-		for _, p := range c.CoverageCaveatProbes {
-			if err := trustfreeze.ValidateProbeID(p); err != nil {
-				return fmt.Errorf("capability_added %s: %w", c.CapabilityID, err)
-			}
-		}
 	case ChangeCoverageIncreased:
-		if c.AfterDigest == "" || c.BeforeDigest != "" {
-			return fmt.Errorf("coverage_increased %s needs an after digest and no before digest", c.CapabilityID)
+		// A coverage_increased entry is a downgraded capability_added (an
+		// after side only) or a downgraded capability_changed (both sides and
+		// the fields that differ). Both shapes are checked here, and each is
+		// refused the other's fields (R-T5).
+		if c.AfterDigest == "" {
+			return fmt.Errorf("coverage_increased %s needs an after digest", c.CapabilityID)
+		}
+		if (c.BeforeDigest == "") != (len(c.ChangedFields) == 0) {
+			return fmt.Errorf("coverage_increased %s carries a before digest and changed fields only together", c.CapabilityID)
+		}
+		if err := validateChangedFields(c); err != nil {
+			return err
 		}
 		if len(c.BaselineGapProbes) == 0 {
 			return fmt.Errorf("coverage_increased %s names no probe the baseline was blind to", c.CapabilityID)
 		}
-		if !slices.IsSorted(c.BaselineGapProbes) {
-			return fmt.Errorf("coverage_increased %s probes are not sorted", c.CapabilityID)
-		}
-		for _, p := range c.BaselineGapProbes {
-			if err := trustfreeze.ValidateProbeID(p); err != nil {
-				return fmt.Errorf("coverage_increased %s: %w", c.CapabilityID, err)
-			}
+		if err := validateProbeList(c.Kind, c.CapabilityID, "baseline gap", c.BaselineGapProbes); err != nil {
+			return err
 		}
 	case ChangeCapabilityRemoved, ChangeCapabilityNotObserved:
 		if c.BeforeDigest == "" || c.AfterDigest != "" {
@@ -344,13 +416,36 @@ func validateCapabilityChange(c Change) error {
 		if len(c.ChangedFields) == 0 {
 			return fmt.Errorf("capability_changed %s names no changed field", c.CapabilityID)
 		}
-		if !slices.IsSorted(c.ChangedFields) {
-			return fmt.Errorf("capability_changed %s fields are not sorted", c.CapabilityID)
+		if err := validateChangedFields(c); err != nil {
+			return err
 		}
-		for _, f := range c.ChangedFields {
-			if !slices.Contains(capabilityFieldValues, f) {
-				return fmt.Errorf("capability_changed %s names unknown field %q", c.CapabilityID, f)
-			}
+	}
+	return nil
+}
+
+// validateChangedFields checks the capability field names of an entry that
+// carries them: sorted and drawn from CapabilityFields.
+func validateChangedFields(c Change) error {
+	if !slices.IsSorted(c.ChangedFields) {
+		return fmt.Errorf("%s %s fields are not sorted", c.Kind, c.CapabilityID)
+	}
+	for _, f := range c.ChangedFields {
+		if !slices.Contains(capabilityFieldValues, f) {
+			return fmt.Errorf("%s %s names unknown field %q", c.Kind, c.CapabilityID, f)
+		}
+	}
+	return nil
+}
+
+// validateProbeList checks one of the probe lists a capability entry can
+// carry: sorted, and every element a probe id.
+func validateProbeList(kind ChangeKind, id, what string, probes []string) error {
+	if !slices.IsSorted(probes) {
+		return fmt.Errorf("%s %s %s probes are not sorted", kind, id, what)
+	}
+	for _, p := range probes {
+		if err := trustfreeze.ValidateProbeID(p); err != nil {
+			return fmt.Errorf("%s %s %s probes: %w", kind, id, what, err)
 		}
 	}
 	return nil

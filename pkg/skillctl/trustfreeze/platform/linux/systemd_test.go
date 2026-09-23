@@ -507,6 +507,14 @@ func TestSystemdCollectFromMeasuredList(t *testing.T) {
 		probe.FakeResponse{Stdout: systemdFixture(t, "systemd/systemctl-list-unit-files.txt")})
 	showArgs := append([]string{"show", "--no-pager", "-p", systemdShowProperties}, systemdSelectedUnits...)
 	runner.Script(systemctlExe, showArgs, probe.FakeResponse{ExitCode: 1, Stderr: []byte("")})
+	// The batch answered for nobody, so the probe asks for every name again,
+	// one at a time. The fake refuses those the same way, so the honest
+	// result stays "the present is unknown" and the retry path is scripted
+	// instead of running into unscripted calls.
+	for _, u := range systemdSelectedUnits {
+		runner.Script(systemctlExe, []string{"show", "--no-pager", "-p", systemdShowProperties, u},
+			probe.FakeResponse{ExitCode: 1, Stderr: []byte("")})
+	}
 
 	cc, ev := systemdContext(runner)
 	res := NewSystemdProbe().Collect(context.Background(), cc)
@@ -798,5 +806,233 @@ func TestSystemdCollectIsDeterministic(t *testing.T) {
 	a, b := run(), run()
 	if string(a) != string(b) {
 		t.Fatal("two runs over the same input produced different artifacts")
+	}
+}
+
+// TestIsTemplateUnit pins the unit name grammar the probe reads a template
+// from: the instance part between "@" and the type suffix is empty. The
+// grammar is the only detector; the manager is never asked whether a name is
+// a template, because asking is exactly what fails.
+func TestIsTemplateUnit(t *testing.T) {
+	for name, want := range map[string]bool{
+		// Templates, measured on an Ubuntu 22.04 bastion.
+		"getty@.service":          true,
+		"autovt@.service":         true,
+		"apport-forward@.service": true,
+		// Measured on the trial host, in systemd/systemctl-list-unit-files.txt.
+		"saned@.service":   true,
+		"blockdev@.target": true,
+		// An instance of a template is a unit with a runtime state.
+		"getty@tty1.service": false,
+		// Ordinary units.
+		"ssh.service":                          false,
+		"anacron.timer":                        false,
+		`system-systemd\x2dcryptsetup.slice`:   false,
+		"actions.runner.alice-m3c-tools.x.svc": false,
+		// Degenerate names: no prefix, no type suffix, no name at all.
+		"@.service": false,
+		"getty@":    false,
+		"":          false,
+	} {
+		if got := IsTemplateUnit(name); got != want {
+			t.Errorf("IsTemplateUnit(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
+
+// TestSelectUnitsForShowSkipsTemplateUnits: a template unit is never asked
+// about. It has no instance and therefore no runtime state, and a
+// "systemctl show" call that names one is refused and takes the rest of the
+// batch with it (systemd/systemctl-show-template.stderr.txt).
+func TestSelectUnitsForShowSkipsTemplateUnits(t *testing.T) {
+	// The three template names are measured on an Ubuntu 22.04 bastion; the
+	// column shape is the one of systemd/systemctl-list-unit-files.txt.
+	const list = "" +
+		"apport-forward@.service enabled enabled\n" +
+		"autovt@.service enabled enabled\n" +
+		"getty@.service enabled enabled\n" +
+		"ssh.service enabled enabled\n"
+	files, issues := ParseUnitFiles([]byte(list))
+	if len(issues) != 0 {
+		t.Fatalf("the list did not parse: %v", issues)
+	}
+	got, cut := SelectUnitsForShow(files, systemdMaxShowUnits)
+	if cut {
+		t.Fatal("four units hit the cap")
+	}
+	if len(got) != 1 || got[0] != "ssh.service" {
+		t.Fatalf("selected %v, want only ssh.service", got)
+	}
+}
+
+// systemdTemplateList names one template unit and one ordinary unit. The
+// template name is measured on an Ubuntu 22.04 bastion; the two rows are
+// constructed in the column shape of systemd/systemctl-list-unit-files.txt.
+const systemdTemplateList = "" +
+	"getty@.service enabled enabled\n" +
+	"ssh.service enabled enabled\n"
+
+// TestSystemdCollectRecordsTemplateUnit: the probe never asks the manager
+// about a template unit, and records it as one instead of leaving a gap. Its
+// runtime state is not_applicable WITH a reason, which is the one legitimate
+// not_applicable: the thing cannot exist (playbook L1).
+func TestSystemdCollectRecordsTemplateUnit(t *testing.T) {
+	runner := systemdRunnerWithVersion(t)
+	runner.Script(systemctlExe, []string{"list-unit-files", "--no-legend", "--no-pager"},
+		probe.FakeResponse{Stdout: []byte(systemdTemplateList)})
+	// The only show call the probe may make. A call that also names the
+	// template is scripted with the measured refusal, so a probe that asks
+	// anyway gets the measured answer and loses ssh.service with it.
+	runner.Script(systemctlExe, []string{"show", "--no-pager", "-p", systemdShowProperties, "ssh.service"},
+		probe.FakeResponse{Stdout: systemdFixture(t, "systemd/systemctl-show-enabled-running.txt")})
+	runner.Script(systemctlExe, []string{"show", "--no-pager", "-p", systemdShowProperties, "getty@.service", "ssh.service"},
+		probe.FakeResponse{ExitCode: 1, Stderr: systemdFixture(t, "systemd/systemctl-show-template.stderr.txt")})
+
+	cc, _ := systemdContext(runner)
+	res := NewSystemdProbe().Collect(context.Background(), cc)
+
+	for _, call := range runner.Calls() {
+		for _, a := range call.Args {
+			if IsTemplateUnit(a) {
+				t.Fatalf("the probe asked the manager about a template unit: %v", call.Args)
+			}
+		}
+	}
+	if res.Status != trustfreeze.StatusCaptured {
+		t.Fatalf("status = %q reason %q, want captured: a template is not a gap", res.Status, res.Reason)
+	}
+	tmpl := systemdArtifact(t, res, ArtifactSystemdUnitPrefix+"getty@.service")
+	if tmpl.State != trustfreeze.StateDeclared {
+		t.Errorf("template artifact state = %q, want declared", tmpl.State)
+	}
+	for k, want := range map[string]string{
+		systemdAttrUnit:         "getty@.service",
+		systemdAttrTemplate:     "true",
+		systemdAttrRuntimeState: systemdRuntimeNotApplicable,
+	} {
+		if got := tmpl.Attributes[k]; got != want {
+			t.Errorf("template %s = %q, want %q", k, got, want)
+		}
+	}
+	if tmpl.Attributes[systemdAttrRuntimeReason] == "" {
+		t.Error("the template artifact carries no reason for its not_applicable runtime state")
+	}
+	if systemdHasArtifact(res, ArtifactSystemdRuntimePrefix+"getty@.service") {
+		t.Error("a template unit got an observed runtime artifact")
+	}
+	// The ordinary unit in the same list is unaffected.
+	if !systemdHasArtifact(res, ArtifactSystemdRuntimePrefix+"ssh.service") {
+		t.Error("ssh.service has no runtime artifact although its own call answered")
+	}
+	if got := systemdArtifact(t, res, ArtifactSystemdUnitPrefix+"ssh.service").Attributes[systemdAttrTemplate]; got != "" {
+		t.Errorf("ssh.service carries template = %q", got)
+	}
+	mgr := systemdArtifact(t, res, ArtifactSystemdManager)
+	if mgr.Attributes[systemdAttrTemplateCount] != "1" || mgr.Attributes[systemdAttrObservedCount] != "1" {
+		t.Errorf("manager counts = %v", mgr.Attributes)
+	}
+	if !systemdWarned(res, DiagSystemdTemplateUnit) {
+		t.Error("no diagnostic names the template units that were not asked about")
+	}
+	if systemdWarned(res, trustfreeze.DiagFieldMissing) {
+		t.Error("a template counts as a unit with an unknown runtime state")
+	}
+}
+
+// systemdBatchList is the input of the retry test. Every row is constructed,
+// in the column shape of systemd/systemctl-list-unit-files.txt; two of the
+// three unit names are the ones the measured "systemctl show" fixtures answer
+// for. Nothing here claims to be host output.
+const systemdBatchList = "" +
+	"connect-pm2.service enabled enabled\n" +
+	"debug-shell.service enabled enabled\n" +
+	"refused-trustfreeze.service enabled enabled\n" +
+	"ssh.service enabled enabled\n"
+
+// TestSystemdCollectRetriesAfterAbortedBatch: one unit name the manager
+// refuses must cost one unit, not the batch.
+//
+// The measured shape (Ubuntu 22.04 bastion, transcribed in
+// systemd/systemctl-show-batch-aborted.txt and
+// systemd/systemctl-show-template.stderr.txt): "systemctl show" for several
+// units stops at the name it refuses. The units before it are answered for,
+// the units after it are not, and the call exits 1. The refused name there
+// was a template, which this build no longer asks about; the name below
+// stands for any other name the manager refuses, and the refusal message is
+// the measured one with that name in it.
+func TestSystemdCollectRetriesAfterAbortedBatch(t *testing.T) {
+	const refused = "refused-trustfreeze.service"
+	refusal := []byte(strings.Replace(string(systemdFixture(t, "systemd/systemctl-show-template.stderr.txt")),
+		"getty@.service", refused, 1))
+
+	runner := systemdRunnerWithVersion(t)
+	runner.Script(systemctlExe, []string{"list-unit-files", "--no-legend", "--no-pager"},
+		probe.FakeResponse{Stdout: []byte(systemdBatchList)})
+	batch := []string{"connect-pm2.service", "debug-shell.service", refused, "ssh.service"}
+	runner.Script(systemctlExe, append([]string{"show", "--no-pager", "-p", systemdShowProperties}, batch...),
+		probe.FakeResponse{
+			ExitCode: 1,
+			Stdout:   systemdFixture(t, "systemd/systemctl-show-batch-aborted.txt"),
+			Stderr:   refusal,
+		})
+	// The two names the aborted call left unanswered, asked for one at a time.
+	runner.Script(systemctlExe, []string{"show", "--no-pager", "-p", systemdShowProperties, refused},
+		probe.FakeResponse{ExitCode: 1, Stderr: refusal})
+	runner.Script(systemctlExe, []string{"show", "--no-pager", "-p", systemdShowProperties, "ssh.service"},
+		probe.FakeResponse{Stdout: systemdFixture(t, "systemd/systemctl-show-enabled-running.txt")})
+
+	cc, _ := systemdContext(runner)
+	res := NewSystemdProbe().Collect(context.Background(), cc)
+
+	// The units before the failure keep the answer the batch did give.
+	for _, u := range []string{"connect-pm2.service", "debug-shell.service"} {
+		if !systemdHasArtifact(res, ArtifactSystemdRuntimePrefix+u) {
+			t.Errorf("%s has no runtime artifact although the batch answered for it before it stopped", u)
+		}
+	}
+	// The unit after the failure comes back through the retry.
+	if !systemdHasArtifact(res, ArtifactSystemdRuntimePrefix+"ssh.service") {
+		t.Error("ssh.service has no runtime artifact: the name after the failure was not re-queried")
+	}
+	if got := systemdArtifact(t, res, ArtifactSystemdRuntimePrefix+"ssh.service").Attributes[systemdAttrActiveState]; got != "active" {
+		t.Errorf("ssh.service active state = %q, want active", got)
+	}
+	// The name that truly could not be read stays unknown, and says so.
+	if systemdHasArtifact(res, ArtifactSystemdRuntimePrefix+refused) {
+		t.Error("the refused unit got a runtime artifact")
+	}
+	if res.Status != trustfreeze.StatusPartial {
+		t.Fatalf("status = %q reason %q, want partial: one unit state is unknown", res.Status, res.Reason)
+	}
+
+	var split, notRead string
+	for _, w := range res.Warnings {
+		switch w.Code {
+		case DiagSystemdBatchSplit:
+			split = w.Message
+		case DiagSystemdUnitStateNotRead:
+			notRead = w.Message
+		}
+	}
+	switch {
+	case split == "":
+		t.Fatalf("no %s diagnostic: %v", DiagSystemdBatchSplit, res.Warnings)
+	case !strings.Contains(split, "2 of 4"):
+		t.Errorf("the diagnostic does not say how much of the batch was answered: %q", split)
+	case !strings.Contains(split, "2 unit(s)"):
+		t.Errorf("the diagnostic does not say how many units were re-queried: %q", split)
+	}
+	if !strings.Contains(notRead, refused) {
+		t.Errorf("the unreadable unit has no diagnostic of its own: %q", notRead)
+	}
+	// One bad name costs one unit: three of the four are known.
+	runtime := 0
+	for _, a := range res.NormalizedState {
+		if strings.HasPrefix(a.ID, ArtifactSystemdRuntimePrefix) {
+			runtime++
+		}
+	}
+	if runtime != 3 {
+		t.Fatalf("%d runtime artifacts, want 3", runtime)
 	}
 }

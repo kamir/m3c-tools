@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze"
+	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/compare"
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/platform/linux"
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/probe"
 )
@@ -243,5 +244,29 @@ func TestTrustFreezeDiffTextNamesCapabilities(t *testing.T) {
 	}
 	if strings.Contains(out, "capability_added") {
 		t.Fatalf("the baseline never read the sudo rules, so nothing is capability_added:\n%s", out)
+	}
+}
+
+// R-T5: a coverage_increased entry that came from a capability_changed keeps
+// the fields that differ in the text output. Without it a reader sees the
+// privilege and the blind probe and no word about what moved.
+func TestTrustFreezeDiffTextKeepsFieldsOfADowngradedChange(t *testing.T) {
+	doc := tfDiffDoc{
+		ResultClass: tfResultOK, Command: "diff",
+		Diff: compare.Diff{Changes: []compare.Change{{
+			Kind: compare.ChangeCoverageIncreased, CapabilityID: "capability/execute/host/user/alice",
+			ChangedFields:     []string{"privilege", "sources"},
+			BaselineGapProbes: []string{"linux.sudo"},
+			BeforePrivilege:   "root-via-group", AfterPrivilege: "root-via-sudo-nopasswd",
+			BeforeDigest: "sha256:aa", AfterDigest: "sha256:bb",
+		}}},
+	}
+	var b strings.Builder
+	tfPrintDiff(&b, doc)
+	out := b.String()
+	for _, want := range []string{"coverage_increased", "capability/execute/host/user/alice", "fields privilege,sources", "linux.sudo"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("the diff text does not carry %q:\n%s", want, out)
+		}
 	}
 }

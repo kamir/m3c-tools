@@ -237,6 +237,13 @@ func message(c compare.Change) string {
 	case compare.ChangeCapabilityChanged:
 		return fmt.Sprintf("capability %s changed: fields %s", c.CapabilityID, strings.Join(c.ChangedFields, ", "))
 	case compare.ChangeCoverageIncreased:
+		// Two shapes: a capability only the current bundle carries, and one
+		// both carry whose difference sits on ground only the current bundle
+		// could read (R-T5). Calling the second one new would be false.
+		if len(c.ChangedFields) > 0 {
+			return fmt.Sprintf("capability %s%s differs in fields %s, and every source this comparison found new or changed comes from probe %s, which was not captured in the baseline",
+				c.CapabilityID, privilegeSuffix(c.AfterPrivilege), strings.Join(c.ChangedFields, ", "), strings.Join(c.BaselineGapProbes, ", "))
+		}
 		return fmt.Sprintf("capability %s%s is in the current bundle and could not have been in the baseline: probe %s was not captured there",
 			c.CapabilityID, privilegeSuffix(c.AfterPrivilege), strings.Join(c.BaselineGapProbes, ", "))
 	case compare.ChangeCollectionGap:

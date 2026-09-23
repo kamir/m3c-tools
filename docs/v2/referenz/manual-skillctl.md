@@ -762,7 +762,7 @@ capture never hides them:
 | `linux.users` | `getent passwd`, `getent group`, `id` | `unavailable` without `getent`. Never a password hash: `getent` prints none and nothing else is read. When `getent passwd` printed accounts and no artifact of the inventory is uid 0, an `account_root_missing` diagnostic names the gap and the probe is `partial`: a missing root account is stated, never left to be found by counting the rest |
 | `linux.sudo` | `/etc/sudoers`, `/etc/sudoers.d` (file names, modes, owners, sizes, parsed rules) | `permission_denied` for every file an ordinary user cannot read, with the observed structure still recorded |
 | `linux.ssh` | `/etc/ssh/sshd_config` and `sshd_config.d/*.conf` (declared), `sshd -T` (effective), `getent passwd` plus `authorized_keys` per account | `permission_denied` for the effective state without root; `partial` where one source is missing and the rest was read (a host without `sshd` keeps its declared state and is partial, not `unavailable`); the declared state stays `declared` and is never presented as observed |
-| `linux.systemd` | `systemctl list-unit-files`, `systemctl show` | `unavailable` without `systemctl`. Enabled state and active state are two different facts and are recorded as two artifacts |
+| `linux.systemd` | `systemctl list-unit-files`, `systemctl show` | `unavailable` without `systemctl`. Enabled state and active state are two different facts and are recorded as two artifacts. A TEMPLATE unit (`getty@.service`, an empty instance part) is never asked about: it has no instance and therefore no runtime state, so its unit artifact carries `template=true` and `runtime_state=not_applicable` with the reason, and the manager artifact counts them in `template_unit_count`. When a `systemctl show` call for several units stops before answering for all of them, the blocks that arrived are kept and the remaining names are asked for one at a time, so one name the manager refuses costs one unit and not a batch; a `show_batch_split` diagnostic says how many were re-queried and a `unit_state_not_read` diagnostic names each unit that stayed unknown |
 | `linux.mounts` | `findmnt --json` | `unavailable` without `findmnt` |
 | `linux.network.listeners` | `ss -H -lntup` | `partial` unprivileged: the owning process of a foreign socket is not visible, and the diagnostic says so |
 | `linux.firewall` | `nft --json list ruleset`, else `ufw status` | `permission_denied` when a backend is installed and refuses without root; `unavailable` when neither tool is found, with the searched directories named. Not `not_applicable`: a host filters packets with backends this build does not read |
@@ -1144,18 +1144,29 @@ observe is `not_observed`, never `removed` or `changed`, and its probe is report
 far as both bundles resolved them. A baseline without `state/capabilities.json` yields no
 capability entry at all: nobody resolved capabilities when it was taken, so nothing in
 the current bundle can be called new. A baseline with one and a current bundle without
-yields `capability_not_observed` for every baseline capability. The added direction is
-guarded the same way: a capability whose source probes were ALL blind in the baseline is
-`coverage_increased`, not `capability_added`, because what changed is the collection
-depth and not the host. Blind means the probe produced no usable observation there: it
-left no single result, or its status was `unsupported`, `unavailable`,
-`permission_denied`, `timeout`, `failed` or `not_applicable`. A baseline probe with
-status `partial` did look and did report, and so did a baseline that covered one of
-several sources; the capability then stays `capability_added` at its normal severity and
-names the thin probes in `coverage_caveat_probes`, so the uncertainty is visible without
-the finding dropping to `info`. A capability whose sources name no artifact of the
-current bundle cannot be tied to a probe; it stays `capability_added`, since the guard
-never invents a gap it did not measure.
+yields `capability_not_observed` for every baseline capability.
+
+The other direction has the **coverage guard**, and it reads the DECISIVE sources: the
+sources whose artifact THIS comparison reported an entry for, because those are the ones
+the difference rests on. A `capability_added` or a `capability_changed` becomes
+`coverage_increased` when every decisive source comes from a probe the baseline did not
+capture. What changed is then the collection depth and not the host, so
+`baseline_gap_probes` names those probes and the built-in policy rates the entry `info`.
+One decisive source on ground both runs could see keeps the entry at `capability_added`
+or `capability_changed` at full severity, with `coverage_caveat_probes` naming the thin
+probes beside it. The shape this is for: a public key capability whose account artifact
+was in the baseline and whose key artifact was not, because that run could not read
+`authorized_keys`. The account is not new; the reading is.
+
+A capability whose source probes were ALL blind in the baseline is `coverage_increased`
+too, decisive or not: the baseline covered none of the ground it stands on. Blind means
+the probe produced no usable observation there: it left no single result, or its status
+was `unsupported`, `unavailable`, `permission_denied`, `timeout`, `failed` or
+`not_applicable`. A baseline probe with status `partial` did look and did report, so it
+is not blind and a capability that rests on it keeps its kind. A capability whose sources
+name no artifact of either bundle cannot be tied to a probe and is counted nowhere, since
+the guard never invents a gap it did not measure; an entry with no decisive source at all
+keeps its kind too.
 
 **Change kinds**, in the sort order of the diff (then by artifact id, then by capability
 id, then by probe id):
@@ -1170,11 +1181,11 @@ id, then by probe id):
 | `confidence_changed` | `provenance.confidence` differs. |
 | `became_effective` | The state moves to `observed`. |
 | `became_ineffective` | The state moves away from `observed`. |
-| `capability_added` | The capability id exists only in the current bundle, AND at least one probe behind the sources it rests on was not blind in the baseline, so the baseline covered ground this capability stands on. Carries `capability_id` and `after_privilege`, and `coverage_caveat_probes` where a source probe was only `partial` there, or blind there beside a covered one. |
+| `capability_added` | The capability id exists only in the current bundle, AND at least one source this comparison found new or changed comes from a probe the baseline did capture (or the baseline covered some of the capability's ground while nothing decisive moved). Carries `capability_id` and `after_privilege`, and `coverage_caveat_probes` where a source probe was only `partial` in the baseline, or blind there beside a covered one. |
 | `capability_removed` | The capability id exists only in the baseline, and every artifact it rests on was observed in the current bundle, so its absence was observed. |
-| `capability_changed` | A field of the capability differs. Names the changed fields (`privilege`, `sources`, `state`, `attributes`, ...), with before and after digests. |
+| `capability_changed` | A field of the capability differs, and not every source this comparison found new or changed comes from a probe the baseline was blind to. Names the changed fields (`privilege`, `sources`, `state`, `attributes`, ...), with before and after digests, and `coverage_caveat_probes` where the baseline coverage was thinner than the current one. |
 | `capability_not_observed` | A baseline capability could not be observed: an artifact it rests on is missing from the current bundle, or that bundle has no capability document. Never reported as removed. |
-| `coverage_increased` | The capability id exists only in the current bundle, and EVERY probe behind its sources was blind in the baseline, so the baseline covered none of the ground it stands on. The capability is not called new; `baseline_gap_probes` names those probes. The mirror of `capability_not_observed`, so a diff between bundles of different collection depth does not become a wall of critical findings. |
+| `coverage_increased` | A `capability_added` or a `capability_changed` whose every DECISIVE source (a source whose artifact this comparison found new or changed) comes from a probe the baseline did not capture, or whose every source probe was blind there. The difference is not called drift; `baseline_gap_probes` names those probes. From the added direction the entry has an `after_digest` only; from the changed direction it keeps both digests and `changed_fields`. The mirror of `capability_not_observed`, so a diff between bundles of different collection depth does not become a wall of critical findings. |
 | `applicability_changed` | A probe moves between `captured` and `not_applicable` with a reason, in either direction (`before_status`, `after_status`): the host changed, not the collection. |
 | `collection_gap` | A probe of the current bundle is not `captured`, or a required probe has no result. |
 

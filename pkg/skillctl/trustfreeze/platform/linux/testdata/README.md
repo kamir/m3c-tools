@@ -2,8 +2,8 @@
 
 ## Source class
 
-Every file under this directory is **transcribed from a real host and sanitized**. Nothing here was
-invented, and nothing here is a live capture.
+Every file under this directory is **transcribed from a real host and sanitized**, with one named
+exception below. Nothing here was invented, and nothing here is a live capture.
 
 Most of it came off one trial host on 2026-09-23 through read-only commands, and then went through
 the substitutions listed below. Three files came off a **second real host on the same day**, an
@@ -16,7 +16,21 @@ account is not in the group `docker`. Those three are
 name, no host name and no address occurs in them). They are the two shapes the trial host could not
 produce, and the first of them is why the runner search path now includes `/snap/bin`.
 
-Both hosts were read as an ordinary, unprivileged user. No command elevated, wrote, installed,
+Two further files came off a **third real host**, an Ubuntu 22.04 bastion read during an **elevated**
+run on the same day: `systemd/systemctl-show-template.stderr.txt` and
+`systemd/systemctl-show-batch-aborted.txt`. They carry `"host": "ubuntu-22.04-bastion-elevated"` in
+`commands.json`. The first is that host's stderr line, byte for byte. The second is the **one
+composed file in this tree**: its SHAPE was measured on that host (a `systemctl show` call for
+several units answers for the units before a name the manager refuses, prints nothing for the names
+after it, and exits 1), its BYTES are two measured property blocks of the trial host, because the
+bastion's property values were never transcribed and the probe asks for a different property set
+than the reproduction did. Its `commands.json` entry says which half is which, and it is the only
+file here whose bytes are not a host's.
+
+That host carries 180 unit files, 33 of them templates, and it is where the batch abort cost one
+capture the runtime state of 47 units.
+
+The two hosts of the first two paragraphs were read as an ordinary, unprivileged user. No command elevated, wrote, installed,
 started or stopped anything (playbook L2). That is why several fixtures are refusals rather than
 data, and that is the point: the refusals are the shapes the probes have to survive.
 
@@ -213,10 +227,18 @@ Declared stays declared (playbook L3). This host cannot produce an `observed` SS
 | `systemd/systemctl-show-local-unit.txt` | a locally added unit under `/etc/systemd/system` running as a human account |
 | `systemd/systemctl-show-unknown-unit.txt` | a unit that does not exist: exit 0, all properties present and empty, `LoadState=not-found` |
 | `honest-status/empty-result-systemctl-no-match.txt` | pattern matches nothing: empty stdout, exit 1 |
+| `systemd/systemctl-show-template.stderr.txt` | a TEMPLATE unit name refused, from the elevated Ubuntu 22.04 bastion: one stderr line, exit 1 |
+| `systemd/systemctl-show-batch-aborted.txt` | the stdout half of that abort: the blocks that arrived before the refused name, nothing after it. Composed, see above |
 | `systemd/systemctl-version.txt` | version plus the feature flag line |
 
-Two traps live here. `systemctl show` returns the properties in systemd's order, not in the order
-asked for, and it answers a question about a nonexistent unit with exit 0.
+Four traps live here. `systemctl show` returns the properties in systemd's order, not in the order
+asked for, and it answers a question about a nonexistent unit with exit 0. A TEMPLATE unit
+(`getty@.service`, an empty instance part) is not a nonexistent unit and not an unknown one: the
+call is refused outright. And that refusal is not local to the bad name; the call STOPS there, so
+every name after it in the same argument vector goes unanswered. Batching a hundred units into
+calls of forty therefore loses a whole batch per template. `linux.systemd` reads the template from
+the name grammar and never asks about one, and asks again, one name at a time, for whatever an
+aborted call left unanswered.
 
 ### linux.network.listeners
 

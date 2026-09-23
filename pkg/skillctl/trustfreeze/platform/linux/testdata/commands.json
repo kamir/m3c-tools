@@ -442,6 +442,53 @@
    "note": "Pattern matches nothing: empty stdout, exit 1. Exit 1 here is an empty result, not a failure."
   },
   {
+   "path": "systemd/systemctl-show-template.stderr.txt",
+   "probe": "linux.systemd",
+   "host": "ubuntu-22.04-bastion-elevated",
+   "command": [
+    "systemctl",
+    "show",
+    "-p",
+    "LoadState",
+    "-p",
+    "ActiveState",
+    "-p",
+    "SubState",
+    "-p",
+    "UnitFileState",
+    "ModemManager.service",
+    "getty@.service",
+    "cron.service"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 1,
+   "source_lines": 1,
+   "note": "A TEMPLATE unit name is refused, and the call stops there: the unit before the template is answered for, the unit after it is not. The line is the host's, byte for byte. getty@.service is a distribution unit name and names no person, so nothing was substituted. This is why linux.systemd detects a template from the name grammar (IsTemplateUnit) and never asks the manager about one; expected_probe_status is captured because the probe no longer issues this call."
+  },
+  {
+   "path": "systemd/systemctl-show-batch-aborted.txt",
+   "probe": "linux.systemd",
+   "host": "ubuntu-22.04-bastion-elevated",
+   "source_class": "composed from measured parts",
+   "command": [
+    "systemctl",
+    "show",
+    "--no-pager",
+    "-p",
+    "Id,Description,LoadState,ActiveState,SubState,UnitFileState,UnitFilePreset,FragmentPath,DropInPaths,Type,ExecStart,User,Group,Restart,ConditionResult,NeedDaemonReload",
+    "connect-pm2.service",
+    "debug-shell.service",
+    "<a name the manager refuses>",
+    "ssh.service"
+   ],
+   "stream": "stdout",
+   "exit_code": 1,
+   "expected_probe_status": "partial",
+   "note": "The stdout half of an aborted multi unit call. MEASURED on the bastion: the shape. A call that names a unit the manager refuses answers for the units BEFORE that name, prints nothing for the names after it, and exits 1 with the line in systemd/systemctl-show-template.stderr.txt; the reproduction there asked for four properties and printed exactly one property block. NOT measured: these bytes. The two property blocks are the trial host's measured answers for connect-pm2.service (systemd/systemctl-show-local-unit.txt) and debug-shell.service (systemd/systemctl-show-disabled.txt), concatenated with the blank line systemd puts between blocks, because the bastion's property values were never transcribed and the probe asks for a different property set than the reproduction did. The file exists so a test can drive the probe with the measured abort shape."
+  },
+  {
    "path": "systemd/systemctl-version.txt",
    "probe": "linux.systemd",
    "command": [
@@ -760,6 +807,14 @@
    "distribution": "Ubuntu 22.04 LTS",
    "privilege": "unprivileged account, NOT a member of the group docker, no elevation used",
    "note": "docker is installed as a snap and answers only at /snap/bin/docker, and the daemon socket refuses this account. The three fixtures marked with this host id are the shapes the trial host could not produce."
+  },
+  {
+   "id": "ubuntu-22.04-bastion-elevated",
+   "source_class": "transcribed from a real Ubuntu 22.04 bastion host during an elevated run",
+   "captured_at": "2026-09-23",
+   "distribution": "Ubuntu 22.04 LTS",
+   "privilege": "elevated run",
+   "note": "180 unit files, 33 of them templates. This host is where the systemctl show batch abort was measured: the capture lost the runtime state of 47 units before linux.systemd stopped asking about templates and started re-querying the names an aborted batch left unanswered."
   }
  ]
 }
