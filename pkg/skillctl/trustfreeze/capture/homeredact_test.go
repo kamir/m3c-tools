@@ -36,7 +36,7 @@ func TestDefaultRedactorHomeSpellings(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if strings.Contains(strings.ToLower(got), "alice") || !strings.Contains(got, "[REDACTED:home_path]") {
+			if strings.Contains(strings.ToLower(got), "alice") || !strings.Contains(got, "[REDACTED_home_path]") {
 				t.Errorf("home %s: %q became %q", home, s, got)
 			}
 		}

@@ -759,7 +759,7 @@ capture never hides them:
 | Probe | Reads | Honest outcomes besides `captured` |
 |-------|-------|------------------------------------|
 | `linux.packages` | `dpkg-query -W -f`, `apt-mark showmanual`, `snap list` | `unavailable` without `dpkg-query`; the snap inventory is `unavailable` with the searched directories named when `snap` does not resolve, never an empty snap list |
-| `linux.users` | `getent passwd`, `getent group`, `id` | `unavailable` without `getent`. Never a password hash: `getent` prints none and nothing else is read |
+| `linux.users` | `getent passwd`, `getent group`, `id` | `unavailable` without `getent`. Never a password hash: `getent` prints none and nothing else is read. When `getent passwd` printed accounts and no artifact of the inventory is uid 0, an `account_root_missing` diagnostic names the gap and the probe is `partial`: a missing root account is stated, never left to be found by counting the rest |
 | `linux.sudo` | `/etc/sudoers`, `/etc/sudoers.d` (file names, modes, owners, sizes, parsed rules) | `permission_denied` for every file an ordinary user cannot read, with the observed structure still recorded |
 | `linux.ssh` | `/etc/ssh/sshd_config` and `sshd_config.d/*.conf` (declared), `sshd -T` (effective), `getent passwd` plus `authorized_keys` per account | `permission_denied` for the effective state without root; `partial` where one source is missing and the rest was read (a host without `sshd` keeps its declared state and is partial, not `unavailable`); the declared state stays `declared` and is never presented as observed |
 | `linux.systemd` | `systemctl list-unit-files`, `systemctl show` | `unavailable` without `systemctl`. Enabled state and active state are two different facts and are recorded as two artifacts |
@@ -1343,6 +1343,15 @@ file could not be written (`execution_error`) · `2` usage.
   secret taken from the arguments of that probe's commands, so a secret one command
   receives and another prints is removed as well. An evidence file refused by the file
   size or file count limit makes the probe `partial`.
+- **The replacement marker** is `[REDACTED_<class>]`, one token of letters, digits,
+  underscores and the two brackets. It deliberately carries no colon, tab, comma,
+  semicolon, equals sign, space or line terminator, because the probes parse the same
+  output by field position afterwards: colon separates the fields of `getent passwd` and
+  `getent group`, tab those of `dpkg-query` and `ss`, comma a group member list, the
+  equals sign an `id` token, space every whitespace separated table. A marker that
+  carried one of them would turn one field into two and the parser would refuse the
+  record, so the class of the finding is spelled with an underscore and the record
+  keeps its shape.
 - **Architecture.** `arch` comes from `uname -m` (linux, darwin) and from
   `IsWow64Process2` (windows). On macOS an `x86_64` answer is checked with
   `sysctl.proc_translated`: `1` means Rosetta 2 translates skillctl, so `arch` is `arm64`

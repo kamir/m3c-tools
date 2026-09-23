@@ -150,15 +150,15 @@ func TestExecRunnerNoShellEnvAndRedaction(t *testing.T) {
 	if strings.Contains(all, testSecret) {
 		t.Fatalf("secret survived redaction:\nstdout %q\nstderr %q\nargs %q", out, res.Stderr.Bytes(), res.Args)
 	}
-	if res.Args[3] != "--token" || res.Args[4] != "[REDACTED:token]" {
+	if res.Args[3] != "--token" || res.Args[4] != "[REDACTED_token]" {
 		t.Fatalf("args %q", res.Args)
 	}
-	if !strings.Contains(string(res.Stderr.Bytes()), "password=[REDACTED:") {
+	if !strings.Contains(string(res.Stderr.Bytes()), "password=[REDACTED_") {
 		t.Fatalf("stderr %q", res.Stderr.Bytes())
 	}
 	// The tool echoed the bare secret argument on a line of its own; only the
 	// argument context identifies it, so the runner removes it from stdout.
-	if !strings.Contains(out, "ARG [REDACTED:arg_secret]\n") {
+	if !strings.Contains(out, "ARG [REDACTED_arg_secret]\n") {
 		t.Fatalf("echoed argument secret not removed from stdout:\n%s", out)
 	}
 }

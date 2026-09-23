@@ -519,7 +519,7 @@ func TestCaptureNoSecretPersisted(t *testing.T) {
 		t.Fatalf("warnings %+v evidence %d", r.Warnings, len(r.RawEvidence))
 	}
 	a := r.NormalizedState[0]
-	if a.Attributes["plain"] != "kept" || !strings.Contains(a.Attributes["note"], "[REDACTED:") {
+	if a.Attributes["plain"] != "kept" || !strings.Contains(a.Attributes["note"], "[REDACTED_") {
 		t.Fatalf("attributes %v", a.Attributes)
 	}
 	if d, _ := trustfreeze.ComputeArtifactDigest(a); a.Digest != d {
@@ -527,7 +527,7 @@ func TestCaptureNoSecretPersisted(t *testing.T) {
 	}
 	for _, f := range []string{"evidence/test.leaky/leaky.stdout", "evidence/test.leaky/leaky.stderr", "evidence/test.leaky/leaky-json.stdout"} {
 		raw, err := b.ReadFile(f)
-		if err != nil || !bytes.Contains(raw, []byte("[REDACTED:")) {
+		if err != nil || !bytes.Contains(raw, []byte("[REDACTED_")) {
 			t.Fatalf("%s: %q %v", f, raw, err)
 		}
 	}
@@ -580,7 +580,7 @@ func TestCaptureEvidenceReRedacted(t *testing.T) {
 			t.Fatalf("%s: status %s warnings %+v evidence %+v", id, r.Status, r.Warnings, r.RawEvidence)
 		}
 		raw, err := b.ReadFile(file)
-		if err != nil || !bytes.Contains(raw, []byte("[REDACTED:")) {
+		if err != nil || !bytes.Contains(raw, []byte("[REDACTED_")) {
 			t.Fatalf("%s: %q %v", file, raw, err)
 		}
 		if ref := r.RawEvidence[0]; ref.Path != file || ref.Size != int64(len(raw)) || ref.SHA256 != trustfreeze.SHA256Hex(raw) {

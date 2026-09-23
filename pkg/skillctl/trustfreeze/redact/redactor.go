@@ -21,12 +21,25 @@ var ErrRedactionFailed = errors.New("redact: redaction failed")
 const DefaultMaxInputBytes = 16 << 20
 
 // markerPrefix starts every replacement.
-const markerPrefix = "[REDACTED:"
+//
+// The separator between the word and the class is an underscore, and that is
+// a contract, not a spelling. A marker is substituted into output that other
+// code then parses by field position, so it must carry no character that
+// structures such output: colon separates the fields of getent passwd and
+// getent group, tab those of dpkg-query and ss, comma a GECOS field and a
+// group member list, semicolon a sudoers rule, the equals sign an id(1)
+// token, space every whitespace separated table, and the two line
+// terminators every line oriented format. An earlier marker used a colon,
+// and an elevated capture on Ubuntu 22.04 therefore turned line 1 of getent
+// passwd into eight fields instead of seven: the parser refused the record
+// and the bundle held every account except root. A marker is one token of
+// the character class [A-Za-z0-9_[\]] and nothing else.
+const markerPrefix = "[REDACTED_"
 
-// Marker returns the replacement text for class, "[REDACTED:<class>]".
+// Marker returns the replacement text for class, "[REDACTED_<class>]".
 func Marker(class string) string { return markerPrefix + class + "]" }
 
-var exactMarker = regexp.MustCompile(`^\[REDACTED:[a-z0-9_]+\]$`)
+var exactMarker = regexp.MustCompile(`^\[REDACTED_[a-z0-9_]+\]$`)
 
 // isMarker reports whether s is exactly one replacement marker.
 func isMarker(s []byte) bool { return exactMarker.Match(s) }
@@ -91,7 +104,7 @@ type literal struct {
 	class string
 }
 
-// Redactor replaces secrets with "[REDACTED:<class>]" markers. It is safe for
+// Redactor replaces secrets with "[REDACTED_<class>]" markers. It is safe for
 // concurrent use. A nil *Redactor behaves like Default(): there is no way to
 // call it and get unredacted output back.
 type Redactor struct {
@@ -103,7 +116,7 @@ type Redactor struct {
 // Option configures New.
 type Option func(*Redactor) error
 
-// WithLiteral replaces every occurrence of value with "[REDACTED:<class>]"
+// WithLiteral replaces every occurrence of value with "[REDACTED_<class>]"
 // before the patterns run. Use it for values that must never appear in a
 // bundle, such as the user home directory. Values shorter than 3 bytes or
 // consisting only of path separators are refused, because replacing them
@@ -134,7 +147,7 @@ func WithMaxInputBytes(n int) Option {
 }
 
 // WithPattern adds a pattern whose submatch group is replaced with
-// "[REDACTED:<class>]". Group 0 replaces the whole match.
+// "[REDACTED_<class>]". Group 0 replaces the whole match.
 func WithPattern(class, pattern string, group int) Option {
 	return func(r *Redactor) error {
 		if err := checkClass(class); err != nil {
@@ -336,7 +349,7 @@ const ClassArgSecret = "arg_secret"
 const minSecretLiteral = 3
 
 // WithSecrets returns a redactor that, before its patterns, also replaces
-// every given value of at least 3 bytes with "[REDACTED:arg_secret]". r
+// every given value of at least 3 bytes with "[REDACTED_arg_secret]". r
 // is not changed. Values that are markers are ignored.
 func (r *Redactor) WithSecrets(values []string) *Redactor {
 	r = r.self()

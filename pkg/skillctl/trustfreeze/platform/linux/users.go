@@ -77,7 +77,17 @@ const (
 	// usrDiagUnresolvedPrimaryGroup: an account names a primary group id that
 	// the group database does not list.
 	usrDiagUnresolvedPrimaryGroup = "unresolved_primary_group"
+	// usrDiagRootAccountMissing: getent passwd printed accounts, and none of
+	// the artifacts this probe kept is uid 0. Every general purpose Linux
+	// system has that account, so its absence from the inventory is either a
+	// refused record or a dropped artifact, and in both cases the inventory
+	// is not what a reader would take it for. Counting the artifacts does not
+	// show it; this diagnostic does.
+	usrDiagRootAccountMissing = "account_root_missing"
 )
+
+// usrRootUID is the uid the kernel grants everything to.
+const usrRootUID int64 = 0
 
 // UsersProbe is linux.users.
 type UsersProbe struct{}
@@ -179,6 +189,10 @@ func (p *UsersProbe) Collect(ctx context.Context, cc probe.CollectContext) trust
 	groupProv.Sources = []string{"command:getent group"}
 
 	arts := c.capArtifacts(c.keepValid(c.userArtifacts(users, groups, groupsKnown, userProv)), maxUserArtifacts, "account")
+	// Checked on the artifacts that survived every filter, not on the parsed
+	// records: a record the parser refused and an artifact a cap dropped both
+	// end with the same missing account.
+	c.checkRootAccount(arts, len(out.stdout))
 	arts = append(arts, c.capArtifacts(c.keepValid(c.groupArtifacts(groups, groupProv)), maxGroupArtifacts, "group")...)
 
 	// id describes the session the capture runs in, not the host, so it
@@ -303,6 +317,31 @@ func (c *invCollector) groupArtifacts(groups []GroupEntry, prov trustfreeze.Prov
 	}
 	c.reportDuplicates(usrGroupIDs(groups), "group")
 	return arts
+}
+
+// checkRootAccount states by name that the inventory holds no uid 0, which a
+// reader would otherwise have to notice by counting. outputBytes is the size
+// of what getent passwd printed: a database that answered with nothing is
+// already reported as empty_result, and a second diagnostic over the same
+// silence would say nothing new.
+//
+// The absence is not repaired here. A record the redactor or the tool broke
+// stays broken, and record_unparsed still names it; this diagnostic names the
+// consequence, so a bundle that lost the most privileged account of the host
+// says so where the accounts are.
+func (c *invCollector) checkRootAccount(accounts []trustfreeze.Artifact, outputBytes int) {
+	if outputBytes == 0 {
+		return
+	}
+	rootID := ArtifactUserPrefix + strconv.FormatInt(usrRootUID, 10)
+	for _, a := range accounts {
+		if a.ID == rootID {
+			return
+		}
+	}
+	c.warnPartial(usrDiagRootAccountMissing, "passwd",
+		fmt.Sprintf("getent passwd printed %d byte(s) and the inventory holds %d account(s), none of them uid 0; the account %s is absent from this capture and the account list is therefore not complete",
+			outputBytes, len(accounts), rootID))
 }
 
 // checkSession compares the effective group set of the running session with
