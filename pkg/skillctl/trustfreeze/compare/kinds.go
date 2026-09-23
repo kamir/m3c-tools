@@ -37,6 +37,27 @@ const (
 	ChangeBecameEffective ChangeKind = "became_effective"
 	// ChangeBecameIneffective: the state moved away from observed.
 	ChangeBecameIneffective ChangeKind = "became_ineffective"
+	// ChangeCapabilityAdded: the capability exists only in the current
+	// bundle. Capabilities are compared separately from artifacts
+	// (SPEC-0469 R2) and only when the baseline carries a capabilities
+	// document.
+	ChangeCapabilityAdded ChangeKind = "capability_added"
+	// ChangeCapabilityRemoved: the capability exists only in the baseline,
+	// and every artifact it rests on was observed in the current bundle, so
+	// its absence was observed too.
+	ChangeCapabilityRemoved ChangeKind = "capability_removed"
+	// ChangeCapabilityChanged: a field of the capability differs.
+	ChangeCapabilityChanged ChangeKind = "capability_changed"
+	// ChangeCapabilityNotObserved: a baseline capability could not be
+	// observed in the current bundle, because an artifact it rests on is
+	// missing there or no resolver ran. Never reported as removed.
+	ChangeCapabilityNotObserved ChangeKind = "capability_not_observed"
+	// ChangeCoverageIncreased: the capability exists only in the current
+	// bundle, and the probe that produced a source it rests on was not
+	// captured in the baseline. The baseline was blind there, so the
+	// capability is not new; what is new is that somebody looked. The mirror
+	// of ChangeCapabilityNotObserved (SPEC-0469 R2).
+	ChangeCoverageIncreased ChangeKind = "coverage_increased"
 	// ChangeApplicabilityChanged: a probe moved between captured and
 	// not_applicable (with a reason), in either direction: a real change of
 	// the host, not a collection problem.
@@ -49,8 +70,20 @@ const (
 var changeKindValues = []ChangeKind{
 	ChangeSubjectChanged, ChangeAdded, ChangeRemoved, ChangeChanged, ChangeNotObserved,
 	ChangeConfidenceChanged, ChangeBecameEffective, ChangeBecameIneffective,
-	ChangeApplicabilityChanged, ChangeCollectionGap,
+	ChangeCapabilityAdded, ChangeCapabilityRemoved, ChangeCapabilityChanged, ChangeCapabilityNotObserved,
+	ChangeCoverageIncreased, ChangeApplicabilityChanged, ChangeCollectionGap,
 }
+
+// capabilityKinds are the change kinds that carry a capability id instead of
+// an artifact id.
+var capabilityKinds = []ChangeKind{
+	ChangeCapabilityAdded, ChangeCapabilityRemoved, ChangeCapabilityChanged, ChangeCapabilityNotObserved,
+	ChangeCoverageIncreased,
+}
+
+// IsCapability reports whether k describes a capability instead of an
+// artifact or a probe.
+func (k ChangeKind) IsCapability() bool { return slices.Contains(capabilityKinds, k) }
 
 // ChangeKinds returns every change kind in sort order.
 func ChangeKinds() []ChangeKind { return slices.Clone(changeKindValues) }

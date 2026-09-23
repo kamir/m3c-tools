@@ -27,6 +27,13 @@ var testSubject = trustfreeze.Subject{ID: trustfreeze.SubjectID("linux", "host-a
 // parent/name through the core writer and reads it back.
 func writeCapture(t testing.TB, parent, name string, kind trustfreeze.Kind, at time.Time, osVersion string, noise int) *trustfreeze.Bundle {
 	t.Helper()
+	return writeCaptureWith(t, parent, name, kind, at, osVersion, noise, nil)
+}
+
+// writeCaptureWith is writeCapture with a capabilities document, which a
+// capture on a platform with a resolver carries (state/capabilities.json).
+func writeCaptureWith(t testing.TB, parent, name string, kind trustfreeze.Kind, at time.Time, osVersion string, noise int, caps *trustfreeze.CapabilitiesDoc) *trustfreeze.Bundle {
+	t.Helper()
 	obs := trustfreeze.FormatTime(at)
 	arts := []trustfreeze.Artifact{
 		{
@@ -102,6 +109,11 @@ func writeCapture(t testing.TB, parent, name string, kind trustfreeze.Kind, at t
 	}
 	if err := w.WriteJSON(trustfreeze.StateDeviceFile, trustfreeze.StateDoc{Artifacts: arts}); err != nil {
 		t.Fatal(err)
+	}
+	if caps != nil {
+		if err := w.WriteJSON(trustfreeze.StateCapabilitiesFile, *caps); err != nil {
+			t.Fatal(err)
+		}
 	}
 	h := trustfreeze.ManifestHeader{Kind: kind, BundleID: trustfreeze.BundleID(kind, at, testSubject.ID), CreatedAt: at, Subject: testSubject}
 	if kind == trustfreeze.KindBaseline {

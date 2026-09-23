@@ -1,0 +1,130 @@
+{
+  "schema_version": "trust-freeze/policy/v1",
+  "id": "trust-freeze/policy/default-v1",
+  "description": "Default policy. Comparing two different devices is high, info when the mismatch was allowed explicitly. A collection gap of a required probe is critical, of an optional probe medium; a probe that is not applicable with a reason is info. A changed device/os or device/host is medium. A capability that grants root, through sudo or through a container runtime, is critical when it is new or when its privilege moved to root, any other new capability high, any other changed capability medium, and a baseline capability that is gone or was not observed low. A capability the baseline could not have seen at all, because every probe behind its sources was blind there, is info: the capture looked where nobody had looked before, which is not drift. Every other added, removed or changed artifact, a baseline artifact that was not observed and a probe that moved between captured and not_applicable are low. Changes no rule matches get the default severity info.",
+  "fail_on": "high",
+  "default_severity": "info",
+  "rules": [
+    {
+      "id": "TF-POL-SUBJECT-CHANGED",
+      "description": "The baseline and the current bundle describe different devices.",
+      "severity": "high",
+      "match": {
+        "change_kinds": ["subject_changed"],
+        "subject_mismatch_allowed": false
+      }
+    },
+    {
+      "id": "TF-POL-SUBJECT-CHANGED-ALLOWED",
+      "description": "Different devices, compared on purpose (allow_subject_mismatch).",
+      "severity": "info",
+      "match": {
+        "change_kinds": ["subject_changed"],
+        "subject_mismatch_allowed": true
+      }
+    },
+    {
+      "id": "TF-POL-GAP-REQUIRED",
+      "description": "A required probe was not captured.",
+      "severity": "critical",
+      "match": {
+        "change_kinds": ["collection_gap"],
+        "required": true,
+        "gap_causes": ["duplicate_result", "invalid_status", "no_result", "not_applicable_without_reason", "not_captured"]
+      }
+    },
+    {
+      "id": "TF-POL-GAP-OPTIONAL",
+      "description": "An optional probe was not captured.",
+      "severity": "medium",
+      "match": {
+        "change_kinds": ["collection_gap"],
+        "required": false,
+        "gap_causes": ["duplicate_result", "invalid_status", "no_result", "not_applicable_without_reason", "not_captured"]
+      }
+    },
+    {
+      "id": "TF-POL-GAP-NOT-APPLICABLE",
+      "description": "A probe is not applicable on this host and says why. It stays visible and does not block.",
+      "severity": "info",
+      "match": {
+        "change_kinds": ["collection_gap"],
+        "gap_causes": ["not_applicable"]
+      }
+    },
+    {
+      "id": "TF-POL-DEVICE-IDENTITY",
+      "description": "The operating system or host identity changed.",
+      "severity": "medium",
+      "match": {
+        "change_kinds": ["changed"],
+        "artifact_ids": ["device/host", "device/os"]
+      }
+    },
+    {
+      "id": "TF-POL-ARTIFACT-DRIFT",
+      "description": "Any other artifact was added, removed or changed.",
+      "severity": "low",
+      "match": {
+        "change_kinds": ["added", "changed", "removed"]
+      }
+    },
+    {
+      "id": "TF-POL-NOT-OBSERVED",
+      "description": "A baseline artifact, or some of its attributes, was not observed because its source probe was not captured.",
+      "severity": "low",
+      "match": {
+        "change_kinds": ["not_observed"]
+      }
+    },
+    {
+      "id": "TF-POL-CAPABILITY-ROOT",
+      "description": "Somebody, or something, may act as root on this host, and the baseline did not say so: a new capability with a root privilege, or one whose privilege is root now. A container runtime socket and a privileged container are root paths like sudo is.",
+      "severity": "critical",
+      "match": {
+        "change_kinds": ["capability_added", "capability_changed"],
+        "privileges": ["root", "root-via-container-runtime", "root-via-privileged-container", "root-via-sudo", "root-via-sudo-nopasswd"]
+      }
+    },
+    {
+      "id": "TF-POL-CAPABILITY-ADDED",
+      "description": "Somebody may do something on this host that the baseline did not grant.",
+      "severity": "high",
+      "match": {
+        "change_kinds": ["capability_added"]
+      }
+    },
+    {
+      "id": "TF-POL-CAPABILITY-CHANGED",
+      "description": "A capability of the baseline reads differently now.",
+      "severity": "medium",
+      "match": {
+        "change_kinds": ["capability_changed"]
+      }
+    },
+    {
+      "id": "TF-POL-CAPABILITY-GONE",
+      "description": "A baseline capability was not resolved again, because it is gone or because an artifact it rests on was not captured.",
+      "severity": "low",
+      "match": {
+        "change_kinds": ["capability_removed", "capability_not_observed"]
+      }
+    },
+    {
+      "id": "TF-POL-COVERAGE-INCREASED",
+      "description": "The current bundle resolved a capability the baseline could not have seen: every probe behind the sources it rests on was blind there, so the baseline covered none of the ground this capability stands on. What changed is the collection depth, not the host.",
+      "severity": "info",
+      "match": {
+        "change_kinds": ["coverage_increased"]
+      }
+    },
+    {
+      "id": "TF-POL-APPLICABILITY",
+      "description": "A probe moved between captured and not_applicable.",
+      "severity": "low",
+      "match": {
+        "change_kinds": ["applicability_changed"]
+      }
+    }
+  ]
+}

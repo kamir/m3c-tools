@@ -115,6 +115,29 @@ func TestPathFoldKey(t *testing.T) {
 	}
 }
 
+// An artifact id is text, and ranging over a string turns every invalid byte
+// into U+FFFD, so the rune tests of ValidateArtifactID cannot see raw non-UTF-8
+// bytes. The id below is the one a mutation battery produced out of dpkg
+// output; it must be refused, not carried into a bundle.
+func TestValidateArtifactIDRejectsInvalidUTF8(t *testing.T) {
+	for _, id := range []string{
+		"os/package/ac\xff\xfecountsservice",
+		"os/package/\xff",
+		"device/\xc3(",
+	} {
+		if err := ValidateArtifactID(id); !errors.Is(err, ErrInvalidID) {
+			t.Errorf("ValidateArtifactID(%q) = %v, want ErrInvalidID", id, err)
+		}
+	}
+	// The valid UTF-8 spelling of the same package name stays acceptable, so
+	// the check refuses broken bytes and not non-ASCII text.
+	for _, id := range []string{"os/package/accountsservice", "os/package/k\u00e4mpfer"} {
+		if err := ValidateArtifactID(id); err != nil {
+			t.Errorf("ValidateArtifactID(%q) = %v", id, err)
+		}
+	}
+}
+
 func TestValidateIDs(t *testing.T) {
 	for _, id := range []string{"device/os", "device/host", "network/listener/tcp/203.0.113.10/4040", "claude/skill/user/code-reviewer", "device/user/S-1-5-21-1"} {
 		if err := ValidateArtifactID(id); err != nil {

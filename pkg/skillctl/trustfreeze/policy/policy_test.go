@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -18,9 +19,31 @@ import (
 // edit of v0.
 const defaultV0RulesDigest = "sha256:ee9fcbc71aa53e1fd63ec40975c843475c9b5b0cd06043cef0a37f994b46d319"
 
+// defaultV0FileSHA256 pins the BYTES of builtin/default-v0.json. The rules
+// digest above covers what v0 judges; this covers the file itself, so an edit
+// of a published policy cannot pass as a reformatting either (R-T4).
+//
+// The byte pin sits on v0 and on no other built-in on purpose: v0 is the only
+// built-in policy with a committed reference to compare against, so the value
+// below is checkable outside this test as the sha256 of
+// "git show HEAD:pkg/skillctl/trustfreeze/policy/builtin/default-v0.json".
+// default-v1 is created by this branch and has no such predecessor, so a byte
+// pin on it would only restate the file this branch just wrote; what v1 judges
+// is pinned by its rules digest instead.
+const defaultV0FileSHA256 = "sha256:7927277caa205ee216a50e1944b1af32984846450d5f57f1e6ad78ac39e0dd15"
+
+// defaultV1RulesDigest pins what trust-freeze/policy/default-v1 judges: v0
+// plus the capability rules, with every root privilege of the core vocabulary
+// in the root rule and coverage_increased rated info (R-T1, R-T4). Changing
+// any of that needs a new policy id, never an edit of v1 once it is published.
+const defaultV1RulesDigest = "sha256:a74f9eb62318cc8bee01ced0a0b829df720d49336cafae3a08447554084e4ddd"
+
 func TestDefaultPolicyV0(t *testing.T) {
-	p := defaultPolicy(t)
-	if p.ID != DefaultPolicyID || p.SchemaVersion != trustfreeze.SchemaPolicy {
+	p, err := PolicyV0()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.ID != PolicyV0ID || p.SchemaVersion != trustfreeze.SchemaPolicy {
 		t.Fatalf("id %q schema %q", p.ID, p.SchemaVersion)
 	}
 	if p.FailOn != ThresholdHigh || p.DefaultSeverity != trustfreeze.SeverityInfo {
@@ -42,20 +65,96 @@ func TestDefaultPolicyV0(t *testing.T) {
 	if d != defaultV0RulesDigest {
 		t.Fatalf("default-v0 rules digest = %s, pinned %s: add a new policy id instead of editing v0", d, defaultV0RulesDigest)
 	}
+	if got := trustfreeze.Digest(defaultV0JSON); got != defaultV0FileSHA256 {
+		t.Fatalf("builtin/default-v0.json = %s, pinned %s: a published policy is superseded, never edited", got, defaultV0FileSHA256)
+	}
+	// v0 judges no capability entry: that is why v1 exists.
+	for _, r := range p.Rules {
+		for _, k := range r.Match.ChangeKinds {
+			if k.IsCapability() {
+				t.Fatalf("rule %s of the frozen v0 rates capability kind %s", r.ID, k)
+			}
+		}
+	}
+}
+
+// TF06-R3, R-T1, R-T4 (SPEC-0469 AC3): default-v1 is the built-in default and
+// the only new built-in T-03 ships. It is v0 plus the capability rules, with
+// both container paths to root in the root rule and coverage_increased rated
+// info, and it is reached without naming a file.
+func TestDefaultPolicyV1(t *testing.T) {
+	p := defaultPolicy(t)
+	if p.ID != DefaultPolicyID || DefaultPolicyID != "trust-freeze/policy/default-v1" {
+		t.Fatalf("the default policy is %q", p.ID)
+	}
+	if p.SchemaVersion != trustfreeze.SchemaPolicy {
+		t.Fatalf("schema %q", p.SchemaVersion)
+	}
+	if p.FailOn != ThresholdHigh || p.DefaultSeverity != trustfreeze.SeverityInfo {
+		t.Fatalf("fail_on %q default %q", p.FailOn, p.DefaultSeverity)
+	}
+	var ids []string
+	for _, r := range p.Rules {
+		ids = append(ids, r.ID+"="+string(r.Severity))
+	}
+	want := "TF-POL-SUBJECT-CHANGED=high,TF-POL-SUBJECT-CHANGED-ALLOWED=info,TF-POL-GAP-REQUIRED=critical,TF-POL-GAP-OPTIONAL=medium," +
+		"TF-POL-GAP-NOT-APPLICABLE=info,TF-POL-DEVICE-IDENTITY=medium,TF-POL-ARTIFACT-DRIFT=low,TF-POL-NOT-OBSERVED=low," +
+		"TF-POL-CAPABILITY-ROOT=critical,TF-POL-CAPABILITY-ADDED=high,TF-POL-CAPABILITY-CHANGED=medium,TF-POL-CAPABILITY-GONE=low," +
+		"TF-POL-COVERAGE-INCREASED=info,TF-POL-APPLICABILITY=low"
+	if got := strings.Join(ids, ","); got != want {
+		t.Fatalf("rules %s", got)
+	}
+	// The root rule names every privilege the core calls root, so a resolver
+	// that adds one cannot silently fall through to the weaker rule.
+	for _, r := range p.Rules {
+		if r.ID != "TF-POL-CAPABILITY-ROOT" {
+			continue
+		}
+		if !slices.Equal(r.Match.Privileges, trustfreeze.RootPrivileges()) {
+			t.Fatalf("TF-POL-CAPABILITY-ROOT privileges %v, the core vocabulary is %v", r.Match.Privileges, trustfreeze.RootPrivileges())
+		}
+	}
+	d, err := p.RulesDigest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d != defaultV1RulesDigest {
+		t.Fatalf("default-v1 rules digest = %s, pinned %s: add a new policy id instead of editing v1", d, defaultV1RulesDigest)
+	}
 	// Each call returns an independent copy.
 	orig := p.Rules[0].Severity
 	if orig == trustfreeze.SeverityLow {
 		t.Fatal("fixture error: the first rule must not already be low")
 	}
 	p.Rules[0].Severity = trustfreeze.SeverityLow
-	if defaultPolicy(t).Rules[0].Severity != orig {
+	again, err := DefaultPolicy()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Rules[0].Severity != orig {
 		t.Fatal("DefaultPolicy shares state between calls")
 	}
 	// fail_on is not part of the rules digest.
-	p = defaultPolicy(t)
+	p = again
 	p.FailOn = ThresholdNone
 	if d2, _ := p.RulesDigest(); d2 != d {
 		t.Fatal("fail_on changed the rules digest")
+	}
+	// T-03 ships exactly one new built-in beyond v0: every built-in id
+	// resolves, an unknown one is not invented, and no third id exists.
+	if got := BuiltinPolicyIDs(); !slices.Equal(got, []string{PolicyV0ID, DefaultPolicyID}) {
+		t.Fatalf("built-in policy ids %v", got)
+	}
+	for _, id := range BuiltinPolicyIDs() {
+		got, ok, err := BuiltinPolicy(id)
+		if err != nil || !ok || got.ID != id {
+			t.Fatalf("BuiltinPolicy(%q) = %q, %v, %v", id, got.ID, ok, err)
+		}
+	}
+	for _, id := range []string{"trust-freeze/policy/default-v2", "trust-freeze/policy/default-v9"} {
+		if _, ok, err := BuiltinPolicy(id); ok || err != nil {
+			t.Fatalf("BuiltinPolicy(%q) resolved: %v, %v", id, ok, err)
+		}
 	}
 }
 

@@ -445,7 +445,7 @@ func TestParseDiffRoundTripAndTamper(t *testing.T) {
 }
 
 func TestChangeKindStrict(t *testing.T) {
-	if got := ChangeKinds(); len(got) != 10 || got[0] != ChangeSubjectChanged || got[9] != ChangeCollectionGap {
+	if got := ChangeKinds(); len(got) != 15 || got[0] != ChangeSubjectChanged || got[14] != ChangeCollectionGap {
 		t.Fatalf("ChangeKinds = %q", got)
 	}
 	for _, s := range []string{"", "Added", "added ", "drift"} {

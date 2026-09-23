@@ -171,13 +171,24 @@ func countSeverities(fs []trustfreeze.Finding) map[string]int {
 // "collection_gap:common.identity".
 func findingID(c compare.Change) string {
 	key := c.ArtifactID
-	switch c.Kind {
-	case compare.ChangeCollectionGap, compare.ChangeApplicabilityChanged:
+	switch {
+	case c.Kind == compare.ChangeCollectionGap, c.Kind == compare.ChangeApplicabilityChanged:
 		key = c.ProbeID
-	case compare.ChangeSubjectChanged:
+	case c.Kind == compare.ChangeSubjectChanged:
 		key = c.AfterSubjectID
+	case c.Kind.IsCapability():
+		key = c.CapabilityID
 	}
 	return string(c.Kind) + ":" + key
+}
+
+// privilegeSuffix names the privilege of a capability, or nothing when the
+// capability carries none.
+func privilegeSuffix(p string) string {
+	if p == "" {
+		return ""
+	}
+	return " (privilege " + p + ")"
 }
 
 // message is a deterministic English sentence. It names ids, attribute keys,
@@ -217,6 +228,17 @@ func message(c compare.Change) string {
 		return fmt.Sprintf("artifact %s became effective (state %s to %s)", c.ArtifactID, c.BeforeState, c.AfterState)
 	case compare.ChangeBecameIneffective:
 		return fmt.Sprintf("artifact %s became ineffective (state %s to %s)", c.ArtifactID, c.BeforeState, c.AfterState)
+	case compare.ChangeCapabilityAdded:
+		return fmt.Sprintf("capability %s was added%s", c.CapabilityID, privilegeSuffix(c.AfterPrivilege))
+	case compare.ChangeCapabilityRemoved:
+		return fmt.Sprintf("capability %s was removed%s", c.CapabilityID, privilegeSuffix(c.BeforePrivilege))
+	case compare.ChangeCapabilityNotObserved:
+		return fmt.Sprintf("capability %s%s was not observed: an artifact it rests on was not captured", c.CapabilityID, privilegeSuffix(c.BeforePrivilege))
+	case compare.ChangeCapabilityChanged:
+		return fmt.Sprintf("capability %s changed: fields %s", c.CapabilityID, strings.Join(c.ChangedFields, ", "))
+	case compare.ChangeCoverageIncreased:
+		return fmt.Sprintf("capability %s%s is in the current bundle and could not have been in the baseline: probe %s was not captured there",
+			c.CapabilityID, privilegeSuffix(c.AfterPrivilege), strings.Join(c.BaselineGapProbes, ", "))
 	case compare.ChangeCollectionGap:
 		kind := "optional"
 		if c.Gap.Required {

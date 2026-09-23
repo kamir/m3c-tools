@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 // The model contains no floating-point field anywhere (SPEC-0466 R5): counts
@@ -52,17 +53,22 @@ type Artifact struct {
 // Capability is a resolved "who can do what to which resource" statement
 // (SPEC-0468 R7). Every capability references its sources.
 type Capability struct {
-	ID         string        `json:"id"`
-	SubjectID  string        `json:"subject_id"`
-	Action     string        `json:"action"`
-	Resource   string        `json:"resource"`
-	Effect     string        `json:"effect"`
-	State      EvidenceState `json:"state"`
-	Scope      string        `json:"scope"`
-	Exposure   string        `json:"exposure,omitempty"`
-	Privilege  string        `json:"privilege,omitempty"`
-	Sources    []string      `json:"sources"`
-	Confidence Confidence    `json:"confidence"`
+	ID        string        `json:"id"`
+	SubjectID string        `json:"subject_id"`
+	Action    string        `json:"action"`
+	Resource  string        `json:"resource"`
+	Effect    string        `json:"effect"`
+	State     EvidenceState `json:"state"`
+	Scope     string        `json:"scope"`
+	Exposure  string        `json:"exposure,omitempty"`
+	Privilege string        `json:"privilege,omitempty"`
+	// Attributes carry what a reader needs to judge the statement where the
+	// fixed fields cannot say it: which path grants the privilege, and why
+	// that path is a privilege at all. They are part of the document and of
+	// the capability digest, so a changed reason is drift like any other.
+	Attributes map[string]string `json:"attributes,omitempty"`
+	Sources    []string          `json:"sources"`
+	Confidence Confidence        `json:"confidence"`
 }
 
 // Finding is one judged observation. Compare produces changes; policy assigns
@@ -259,6 +265,24 @@ type StateDoc struct {
 	Artifacts []Artifact `json:"artifacts"`
 }
 
+// CapabilitiesDoc is state/capabilities.json: the capabilities a platform
+// resolver derived from the artifacts of this capture, sorted by ID, plus the
+// diagnostics of that resolution (SPEC-0466 section 5.7). The resolver is a
+// pure function of the artifacts, and it is platform specific, so a reader on
+// another operating system cannot recompute the list: the manifest digest is
+// what binds the file to the bundle. Resolver names the resolver that ran, so
+// a document with an empty list still says who looked.
+type CapabilitiesDoc struct {
+	Resolver     string       `json:"resolver"`
+	Capabilities []Capability `json:"capabilities"`
+	Diagnostics  []Diagnostic `json:"diagnostics,omitempty"`
+}
+
+// SortCapabilities sorts capabilities by ID in byte order.
+func SortCapabilities(c []Capability) {
+	sort.SliceStable(c, func(i, j int) bool { return c[i].ID < c[j].ID })
+}
+
 // SortArtifacts sorts artifacts by ID in byte order.
 func SortArtifacts(a []Artifact) {
 	sort.SliceStable(a, func(i, j int) bool { return a[i].ID < a[j].ID })
@@ -267,13 +291,22 @@ func SortArtifacts(a []Artifact) {
 // ErrInvalidID is wrapped by ValidateArtifactID and ValidateProbeID.
 var ErrInvalidID = errors.New("trustfreeze: invalid id")
 
-// ValidateArtifactID rejects ids that are empty, contain whitespace, control
-// characters, a backslash or "~", start with "/", contain an empty, "." or ".."
-// segment, or have a drive-letter segment such as "C:". Artifact ids must never
-// carry absolute or user-specific paths (SPEC-0466 R4).
+// ValidateArtifactID rejects ids that are empty, are not valid UTF-8, contain
+// whitespace, control characters, a backslash or "~", start with "/", contain
+// an empty, "." or ".." segment, or have a drive-letter segment such as "C:".
+// Artifact ids must never carry absolute or user-specific paths (SPEC-0466 R4).
+//
+// The UTF-8 check comes first and is its own check, because ranging over a
+// string silently turns every invalid byte into U+FFFD: a name like
+// "ac\xff\xfecountsservice" read out of tool output would otherwise pass every
+// rune test below and reach the bundle as a raw non-UTF-8 id, which no JSON
+// encoder can write back unchanged.
 func ValidateArtifactID(id string) error {
 	if id == "" {
 		return fmt.Errorf("%w: empty artifact id", ErrInvalidID)
+	}
+	if !utf8.ValidString(id) {
+		return fmt.Errorf("%w: artifact id %q is not valid UTF-8", ErrInvalidID, id)
 	}
 	for _, r := range id {
 		if r <= 0x20 || r == 0x7f {
@@ -368,4 +401,72 @@ func ComputeArtifactDigest(a Artifact) (string, error) {
 		return "", err
 	}
 	return Digest(b), nil
+}
+
+// The privilege vocabulary of a capability. Capability.Privilege is written by
+// a platform resolver, and several readers have to agree on what a value
+// means: the default policy rates it, capture names the capabilities a reader
+// must see, and report orders them. The list below is that shared vocabulary.
+// It judges nothing: a policy decides severities, this only says which strings
+// mean "root on this host" and how far a value reaches.
+const (
+	// PrivilegeValueRoot: the subject is root itself.
+	PrivilegeValueRoot = "root"
+	// PrivilegeValueRootViaSudoNoPassword: root through sudo, no password.
+	PrivilegeValueRootViaSudoNoPassword = "root-via-sudo-nopasswd"
+	// PrivilegeValueRootViaSudo: root through sudo after authenticating.
+	PrivilegeValueRootViaSudo = "root-via-sudo"
+	// PrivilegeValueRootViaContainerRuntime: root through a container runtime
+	// socket the subject may use.
+	PrivilegeValueRootViaContainerRuntime = "root-via-container-runtime"
+	// PrivilegeValueRootViaPrivilegedContainer: root through a container that
+	// runs privileged, so it reaches the host devices and the host filesystem.
+	PrivilegeValueRootViaPrivilegedContainer = "root-via-privileged-container"
+	// PrivilegeValueUser: an ordinary account, no escalation known from the
+	// artifacts of the capture.
+	PrivilegeValueUser = "user"
+)
+
+// rootPrivileges are the privilege values that say the subject can act as root
+// on the observed host, in byte order.
+var rootPrivileges = []string{
+	PrivilegeValueRoot,
+	PrivilegeValueRootViaContainerRuntime,
+	PrivilegeValueRootViaPrivilegedContainer,
+	PrivilegeValueRootViaSudo,
+	PrivilegeValueRootViaSudoNoPassword,
+}
+
+// RootPrivileges returns the privilege values that mean root on the host, in
+// byte order.
+func RootPrivileges() []string { return append([]string(nil), rootPrivileges...) }
+
+// IsRootPrivilege reports whether p is one of RootPrivileges.
+func IsRootPrivilege(p string) bool {
+	for _, r := range rootPrivileges {
+		if r == p {
+			return true
+		}
+	}
+	return false
+}
+
+// PrivilegeRank orders privilege values from the most to the least
+// far-reaching, so a reader can list the statements that matter first. It is a
+// presentation order, not a severity: an unknown value ranks above "user",
+// because a privilege nobody in this build knows is not the same as none.
+func PrivilegeRank(p string) int {
+	switch p {
+	case PrivilegeValueRoot:
+		return 5
+	case PrivilegeValueRootViaSudoNoPassword:
+		return 4
+	case PrivilegeValueRootViaContainerRuntime, PrivilegeValueRootViaPrivilegedContainer:
+		return 3
+	case PrivilegeValueRootViaSudo:
+		return 2
+	case PrivilegeValueUser, "":
+		return 0
+	}
+	return 1
 }

@@ -2,7 +2,7 @@
   "schema_version": "trust-freeze/report/v1",
   "input": {
     "kind": "diff",
-    "diff_digest": "sha256:a50da264d796057d7988bf61abaf2108fba4bb4b333fa0c36ec25025d4ddf62b"
+    "diff_digest": "sha256:7c3f9d4df05edad69632195b8ded5d311552aaef1abaa16d63a86db954a091af"
   },
   "diff": {
     "schema_version": "trust-freeze/diff/v1",
@@ -45,9 +45,14 @@
       "applicability_changed": 0,
       "became_effective": 0,
       "became_ineffective": 0,
+      "capability_added": 0,
+      "capability_changed": 0,
+      "capability_not_observed": 0,
+      "capability_removed": 0,
       "changed": 1,
       "collection_gap": 1,
       "confidence_changed": 0,
+      "coverage_increased": 0,
       "not_observed": 0,
       "removed": 0,
       "subject_changed": 0
@@ -78,10 +83,10 @@
   "verdict": {
     "schema_version": "trust-freeze/verdict/v1",
     "policy": {
-      "id": "trust-freeze/policy/default-v0",
-      "rules_digest": "sha256:ee9fcbc71aa53e1fd63ec40975c843475c9b5b0cd06043cef0a37f994b46d319"
+      "id": "trust-freeze/policy/default-v1",
+      "rules_digest": "sha256:a74f9eb62318cc8bee01ced0a0b829df720d49336cafae3a08447554084e4ddd"
     },
-    "diff_digest": "sha256:a50da264d796057d7988bf61abaf2108fba4bb4b333fa0c36ec25025d4ddf62b",
+    "diff_digest": "sha256:7c3f9d4df05edad69632195b8ded5d311552aaef1abaa16d63a86db954a091af",
     "highest_severity": "medium",
     "fail_on": "high",
     "threshold_exceeded": false,
