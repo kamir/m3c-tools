@@ -1,0 +1,33 @@
+Type=forking
+Restart=on-failure
+ExecStart={ path=/usr/lib/node_modules/pm2/bin/pm2 ; argv[]=/usr/lib/node_modules/pm2/bin/pm2 resurrect ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0 }
+User=alice
+Group=
+Id=connect-pm2.service
+Description=PM2 process manager
+LoadState=loaded
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/connect-pm2.service
+DropInPaths=
+UnitFileState=enabled
+UnitFilePreset=enabled
+NeedDaemonReload=no
+ConditionResult=yes
+
+Type=simple
+Restart=always
+ExecStart={ path=/usr/bin/bash ; argv[]=/usr/bin/bash ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0 }
+User=
+Group=
+Id=debug-shell.service
+Description=Early root shell on /dev/tty9 FOR DEBUGGING ONLY
+LoadState=loaded
+ActiveState=inactive
+SubState=dead
+FragmentPath=/usr/lib/systemd/system/debug-shell.service
+DropInPaths=
+UnitFileState=disabled
+UnitFilePreset=disabled
+NeedDaemonReload=no
+ConditionResult=no

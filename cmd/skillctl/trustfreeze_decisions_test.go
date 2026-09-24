@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze"
-	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/capture"
+	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/platform/common"
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/probe"
 )
 
@@ -202,12 +202,15 @@ func tfScriptedEnv(t *testing.T) (*tfTestEnv, *tfScript) {
 	e := newTFEnv(t)
 	s := &tfScript{by: map[string]tfScripted{}}
 	e.deps.Registry = func() (*probe.Registry, error) {
-		reg, err := capture.DefaultRegistry()
-		if err != nil {
+		// Only the identity probe is the real one; every other probe of the
+		// profile is scripted here, so this test decides the statuses.
+		reg := probe.NewRegistry()
+		if err := common.Register(reg); err != nil {
 			return nil, err
 		}
-		for _, id := range []string{"linux.packages", "linux.users", "linux.sudo", "linux.ssh.effective", "linux.systemd",
-			"linux.network.listeners", "linux.firewall", "linux.mounts", "common.git", "common.containers", "common.claude"} {
+		for _, id := range []string{"linux.packages", "linux.users", "linux.sudo", "linux.ssh", "linux.systemd",
+			"linux.executables", "linux.network.listeners", "linux.network.routes", "linux.dns", "linux.firewall",
+			"linux.mounts", "linux.containers", "common.git", "common.claude"} {
 			if err := reg.Register(tfScriptedProbe{id: id, script: s}); err != nil {
 				return nil, err
 			}

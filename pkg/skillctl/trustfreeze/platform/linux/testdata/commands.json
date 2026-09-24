@@ -1,0 +1,1440 @@
+{
+ "schema": "trust-freeze/linux-fixtures/v1",
+ "source_class": "transcribed from a real Ubuntu 24.04.1 host and sanitized",
+ "captured_at": "2026-09-23, extended 2026-09-24 with the routes, DNS and executable fixtures of T-03b",
+ "host_class": {
+  "distribution": "Ubuntu 24.04.1 LTS",
+  "kernel_release": "6.17.0-35-generic",
+  "architecture": "amd64",
+  "privilege": "unprivileged user, member of the groups sudo and docker, no elevation used",
+  "scale": {
+   "dpkg_packages": 1879,
+   "unit_files": 516,
+   "listeners": 51,
+   "mount_points": 113,
+   "running_containers": 20
+  }
+ },
+ "environment": {
+  "LC_ALL": "C",
+  "LANG": "unset",
+  "LANGUAGE": "unset",
+  "note": "Every command was run with the locale forced to C and LANG and LANGUAGE removed, which is the environment probe.ExecRunner builds (allowlist plus LC_ALL=C and TZ=UTC0). One fixture deliberately breaks that rule and says so."
+ },
+ "fixtures": [
+  {
+   "path": "packages/dpkg-query-w.txt",
+   "probe": "linux.packages",
+   "command": [
+    "dpkg-query",
+    "-W",
+    "-f=${binary:Package}\\t${Version}\\t${Architecture}\\t${db:Status-Abbrev}\\n"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 51,
+   "source_lines": 1879,
+   "note": "Representative subset of the host output, original order kept. Covers architectures all and amd64 and the status abbreviations 'ii ' and 'rc '. The -f value reaches dpkg-query as the literal characters backslash t and backslash n; dpkg-query itself turns them into tab and newline."
+  },
+  {
+   "path": "packages/dpkg-query-w-unknown.stderr.txt",
+   "probe": "linux.packages",
+   "command": [
+    "dpkg-query",
+    "-W",
+    "-f=${binary:Package}\\t${Version}\\t${Architecture}\\t${db:Status-Abbrev}\\n",
+    "nosuchpkg-trustfreeze"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "captured",
+   "note": "Named package does not exist: stdout empty, one diagnostic on stderr, exit 1. Not a permission or tool problem."
+  },
+  {
+   "path": "packages/apt-mark-showmanual.txt",
+   "probe": "linux.packages",
+   "command": [
+    "apt-mark",
+    "showmanual"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 82,
+   "source_lines": 82
+  },
+  {
+   "path": "packages/snap-list.txt",
+   "probe": "linux.packages",
+   "command": [
+    "snap",
+    "list"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 24,
+   "source_lines": 24,
+   "note": "Captured with LC_ALL=C and no LANG or LANGUAGE in the environment, which is what the ExecRunner gives a probe."
+  },
+  {
+   "path": "packages/snap-list-localized.txt",
+   "probe": "linux.packages",
+   "command": [
+    "snap",
+    "list"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 24,
+   "source_lines": 24,
+   "note": "Same host, same moment, with LANG=de_DE.UTF-8 inherited. Header words and column widths differ. Parser hazard fixture: never key on the header text or on fixed column offsets."
+  },
+  {
+   "path": "packages/dpkg-query-version.txt",
+   "probe": "linux.packages",
+   "command": [
+    "dpkg-query",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "packages/apt-mark-version.txt",
+   "probe": "linux.packages",
+   "command": [
+    "apt-mark",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "packages/snap-version.txt",
+   "probe": "linux.packages",
+   "command": [
+    "snap",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "users/getent-passwd.txt",
+   "probe": "linux.users",
+   "command": [
+    "getent",
+    "passwd"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 53,
+   "source_lines": 53
+  },
+  {
+   "path": "users/getent-group.txt",
+   "probe": "linux.users",
+   "command": [
+    "getent",
+    "group"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 81,
+   "source_lines": 81
+  },
+  {
+   "path": "users/getent-group-sudo-docker.txt",
+   "probe": "linux.users",
+   "command": [
+    "getent",
+    "group",
+    "sudo",
+    "docker"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "users/id.txt",
+   "probe": "linux.users",
+   "command": [
+    "id"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The capturing account: member of sudo and of docker, so two privilege capabilities are derivable from this line alone."
+  },
+  {
+   "path": "users/id-service-account.txt",
+   "probe": "linux.users",
+   "command": [
+    "id",
+    "deploy"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "honest-status/empty-result-getent-unknown-user.txt",
+   "probe": "linux.users",
+   "command": [
+    "getent",
+    "passwd",
+    "nosuchuser-trustfreeze"
+   ],
+   "stream": "stdout",
+   "exit_code": 2,
+   "expected_probe_status": "captured",
+   "note": "Empty stdout with exit 2. Empty output alone does not mean failure, and a non-zero exit alone does not mean permission_denied."
+  },
+  {
+   "path": "users/getent-version.txt",
+   "probe": "linux.users",
+   "command": [
+    "getent",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "First line only. The license and author lines of the real output were dropped, see the README."
+  },
+  {
+   "path": "users/id-version.txt",
+   "probe": "linux.users",
+   "command": [
+    "id",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "First line only, same reason as getent-version.txt."
+  },
+  {
+   "path": "sudo/ls-la-etc-sudoers-d.txt",
+   "probe": "linux.sudo",
+   "command": [
+    "ls",
+    "-la",
+    "/etc/sudoers.d"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The directory is world readable (0755), so names, modes, owners and sizes are observable without privileges. The file contents are not."
+  },
+  {
+   "path": "sudo/stat-sudoers.txt",
+   "probe": "linux.sudo",
+   "command": [
+    "stat",
+    "-c",
+    "%n %a %U %G %s",
+    "/etc/sudoers",
+    "/etc/sudoers.d",
+    "/etc/sudoers.d/README",
+    "/etc/sudoers.d/alice-nopasswd"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "sudo/cat-etc-sudoers.stderr.txt",
+   "probe": "linux.sudo",
+   "command": [
+    "cat",
+    "/etc/sudoers"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "permission_denied",
+   "note": "Mode 0440 root:root. The probe reads the file itself rather than through cat; the Go error is fs.ErrPermission, which the runner classes as permission_denied."
+  },
+  {
+   "path": "sudo/cat-etc-sudoers-d-entry.stderr.txt",
+   "probe": "linux.sudo",
+   "command": [
+    "cat",
+    "/etc/sudoers.d/alice-nopasswd"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "permission_denied",
+   "note": "A 29 byte drop-in whose name announces a NOPASSWD rule that cannot be read unprivileged. Structure observable, rule text not."
+  },
+  {
+   "path": "ssh/sshd_config.txt",
+   "probe": "linux.ssh",
+   "command": [
+    "cat",
+    "/etc/ssh/sshd_config"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "Declared state (SPEC-0471 TF06-R3, playbook L3). World readable, 3257 bytes, transcribed byte for byte including the leading empty line and the three trailing empty lines. Carries PasswordAuthentication yes and PermitEmptyPasswords yes."
+  },
+  {
+   "path": "ssh/ls-la-etc-ssh.txt",
+   "probe": "linux.ssh",
+   "command": [
+    "ls",
+    "-la",
+    "/etc/ssh"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "Nine sshd_config.backup-* files and one sshd_config.ucf-dist sit next to the active file: a glob wider than sshd_config.d/*.conf reads the wrong files."
+  },
+  {
+   "path": "ssh/ls-la-sshd-config-d.txt",
+   "probe": "linux.ssh",
+   "command": [
+    "ls",
+    "-la",
+    "/etc/ssh/sshd_config.d"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "Genuinely empty include directory. The declared state is therefore the main file alone, and the correct status is captured with an empty list, not unavailable."
+  },
+  {
+   "path": "ssh/sshd-T-unprivileged.stderr.txt",
+   "probe": "linux.ssh",
+   "command": [
+    "/usr/sbin/sshd",
+    "-T"
+   ],
+   "probe_command": [
+    "sshd",
+    "-T"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "permission_denied",
+   "note": "The effective state is not observable without root: sshd cannot read the host private keys. stdout is empty. Keep the declared state declared, never promote it to observed. Taken with the absolute path the shell resolved. The probe runs the bare name and probe.ExecRunner resolves it through its fixed search list, which lands on the same binary."
+  },
+  {
+   "path": "ssh/sshd-version.stderr.txt",
+   "probe": "linux.ssh",
+   "command": [
+    "/usr/sbin/sshd",
+    "-V"
+   ],
+   "probe_command": [
+    "sshd",
+    "-V"
+   ],
+   "stream": "stderr",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "sshd writes its version banner to STDERR and exits 0. A probe that reads only stdout records no version at all. Taken with the absolute path the shell resolved. The probe runs the bare name; see the entry for sshd -T."
+  },
+  {
+   "path": "systemd/systemctl-list-unit-files.txt",
+   "probe": "linux.systemd",
+   "command": [
+    "systemctl",
+    "list-unit-files",
+    "--no-legend",
+    "--no-pager"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 55,
+   "source_lines": 516,
+   "note": "Subset in original order, covering all nine UnitFileState values seen on the host (alias, disabled, enabled, enabled-runtime, generated, indirect, masked, static, transient) and every unit type. Column two starts at byte 79 in the host output; the padding of the sanitized unit name was adjusted so that this holds in the fixture too."
+  },
+  {
+   "path": "systemd/systemctl-show-enabled-running.txt",
+   "probe": "linux.systemd",
+   "command": [
+    "systemctl",
+    "show",
+    "--no-pager",
+    "-p",
+    "Id,Description,LoadState,ActiveState,SubState,UnitFileState,UnitFilePreset,FragmentPath,DropInPaths,Type,ExecStart,User,Group,Restart,ConditionResult,NeedDaemonReload",
+    "ssh.service"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "Enabled and running. Note that systemd returns the properties in ITS order, not in the order asked for."
+  },
+  {
+   "path": "systemd/systemctl-show-disabled.txt",
+   "probe": "linux.systemd",
+   "command": [
+    "systemctl",
+    "show",
+    "--no-pager",
+    "-p",
+    "Id,Description,LoadState,ActiveState,SubState,UnitFileState,UnitFilePreset,FragmentPath,DropInPaths,Type,ExecStart,User,Group,Restart,ConditionResult,NeedDaemonReload",
+    "debug-shell.service"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "Disabled and dead. Enabled state and active state are two different facts."
+  },
+  {
+   "path": "systemd/systemctl-show-local-unit.txt",
+   "probe": "linux.systemd",
+   "command": [
+    "systemctl",
+    "show",
+    "--no-pager",
+    "-p",
+    "Id,Description,LoadState,ActiveState,SubState,UnitFileState,UnitFilePreset,FragmentPath,DropInPaths,Type,ExecStart,User,Group,Restart,ConditionResult,NeedDaemonReload",
+    "connect-pm2.service"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "Locally added unit under /etc/systemd/system with User= set to a human account: a service running as an interactive user, which the capability model should be able to state."
+  },
+  {
+   "path": "systemd/systemctl-show-unknown-unit.txt",
+   "probe": "linux.systemd",
+   "command": [
+    "systemctl",
+    "show",
+    "--no-pager",
+    "-p",
+    "Id,Description,LoadState,ActiveState,SubState,UnitFileState,UnitFilePreset,FragmentPath,DropInPaths,Type,ExecStart,User,Group,Restart,ConditionResult,NeedDaemonReload",
+    "nosuchunit-trustfreeze.service"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "Unit does not exist, yet the exit code is 0 and every property is present but empty. LoadState=not-found is the only truthful signal."
+  },
+  {
+   "path": "honest-status/empty-result-systemctl-no-match.txt",
+   "probe": "linux.systemd",
+   "command": [
+    "systemctl",
+    "list-unit-files",
+    "--no-legend",
+    "--no-pager",
+    "nosuchunit-trustfreeze*"
+   ],
+   "stream": "stdout",
+   "exit_code": 1,
+   "expected_probe_status": "captured",
+   "note": "Pattern matches nothing: empty stdout, exit 1. Exit 1 here is an empty result, not a failure."
+  },
+  {
+   "path": "systemd/systemctl-show-template.stderr.txt",
+   "probe": "linux.systemd",
+   "host": "ubuntu-22.04-bastion-elevated",
+   "command": [
+    "systemctl",
+    "show",
+    "-p",
+    "LoadState",
+    "-p",
+    "ActiveState",
+    "-p",
+    "SubState",
+    "-p",
+    "UnitFileState",
+    "ModemManager.service",
+    "getty@.service",
+    "cron.service"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 1,
+   "source_lines": 1,
+   "note": "A TEMPLATE unit name is refused, and the call stops there: the unit before the template is answered for, the unit after it is not. The line is the host's, byte for byte. getty@.service is a distribution unit name and names no person, so nothing was substituted. This is why linux.systemd detects a template from the name grammar (IsTemplateUnit) and never asks the manager about one; expected_probe_status is captured because the probe no longer issues this call."
+  },
+  {
+   "path": "systemd/systemctl-show-batch-aborted.txt",
+   "probe": "linux.systemd",
+   "host": "ubuntu-22.04-bastion-elevated",
+   "source_class": "composed from measured parts",
+   "command": [
+    "systemctl",
+    "show",
+    "--no-pager",
+    "-p",
+    "Id,Description,LoadState,ActiveState,SubState,UnitFileState,UnitFilePreset,FragmentPath,DropInPaths,Type,ExecStart,User,Group,Restart,ConditionResult,NeedDaemonReload",
+    "connect-pm2.service",
+    "debug-shell.service",
+    "<a name the manager refuses>",
+    "ssh.service"
+   ],
+   "stream": "stdout",
+   "exit_code": 1,
+   "expected_probe_status": "partial",
+   "note": "The stdout half of an aborted multi unit call. MEASURED on the bastion: the shape. A call that names a unit the manager refuses answers for the units BEFORE that name, prints nothing for the names after it, and exits 1 with the line in systemd/systemctl-show-template.stderr.txt; the reproduction there asked for four properties and printed exactly one property block. NOT measured: these bytes. The two property blocks are the trial host's measured answers for connect-pm2.service (systemd/systemctl-show-local-unit.txt) and debug-shell.service (systemd/systemctl-show-disabled.txt), concatenated with the blank line systemd puts between blocks, because the bastion's property values were never transcribed and the probe asks for a different property set than the reproduction did. The file exists so a test can drive the probe with the measured abort shape."
+  },
+  {
+   "path": "systemd/systemctl-version.txt",
+   "probe": "linux.systemd",
+   "command": [
+    "systemctl",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "network.listeners/ss-H-lntup.txt",
+   "probe": "linux.network.listeners",
+   "command": [
+    "ss",
+    "-H",
+    "-lntup"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "partial",
+   "transcribed_lines": 51,
+   "source_lines": 51,
+   "note": "Unprivileged run: the users:((...)) column is present ONLY for the capturing user's own process (last line). For the other 50 listeners the owning process is unknown, so the row count is six fields and the honest status is partial with one diagnostic, never captured. Loopback and wildcard addresses are kept verbatim because the exposure judgement depends on them."
+  },
+  {
+   "path": "network.listeners/ss-version.txt",
+   "probe": "linux.network.listeners",
+   "command": [
+    "ss",
+    "-V"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "honest-status/empty-result-ss-no-match.txt",
+   "probe": "linux.network.listeners",
+   "command": [
+    "ss",
+    "-H",
+    "-lntu",
+    "sport",
+    "=",
+    ":65000"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "No listener matches: empty stdout, exit 0."
+  },
+  {
+   "path": "firewall/ufw-status.stderr.txt",
+   "probe": "linux.firewall",
+   "command": [
+    "ufw",
+    "status"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "permission_denied",
+   "note": "ufw is installed (/usr/sbin/ufw) and refuses without root. unavailable would be a lie."
+  },
+  {
+   "path": "firewall/nft-list-ruleset.stderr.txt",
+   "probe": "linux.firewall",
+   "command": [
+    "nft",
+    "list",
+    "ruleset"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "permission_denied",
+   "note": "Two stderr lines, stdout empty. The first line carries the cause, the second is the netlink follow-up error."
+  },
+  {
+   "path": "firewall/nft-json-list-ruleset.stderr.txt",
+   "probe": "linux.firewall",
+   "command": [
+    "nft",
+    "--json",
+    "list",
+    "ruleset"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "permission_denied",
+   "note": "The --json form fails the same way and produces no JSON at all, so a parser must check the exit code before it tries to decode."
+  },
+  {
+   "path": "firewall/ufw-version.txt",
+   "probe": "linux.firewall",
+   "command": [
+    "ufw",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "firewall/nft-version.txt",
+   "probe": "linux.firewall",
+   "command": [
+    "nft",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "mounts/findmnt-json.json",
+   "probe": "linux.mounts",
+   "command": [
+    "findmnt",
+    "--json"
+   ],
+   "probe_command": [
+    "findmnt",
+    "--json",
+    "-o",
+    "TARGET,SOURCE,FSTYPE,OPTIONS"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 154,
+   "source_lines": 594,
+   "note": "Pruned to a representative subtree set; the emitter that produced it reproduces the untouched host file byte for byte, so indentation, the '},{' sibling form and key order are the tool's own. 113 mount points on the host, 25 kept. Taken with the bare --json call, which prints every column findmnt knows. The probe asks for the four columns it records, so its answer is a subset of this document with the same shape and the same key order; the parser reads keys, never positions."
+  },
+  {
+   "path": "mounts/findmnt-version.txt",
+   "probe": "linux.mounts",
+   "command": [
+    "findmnt",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "containers/docker-ps.txt",
+   "probe": "linux.containers",
+   "command": [
+    "docker",
+    "ps",
+    "--no-trunc",
+    "--format",
+    "{{.ID}}\\t{{.Image}}\\t{{.Names}}\\t{{.State}}\\t{{.Status}}\\t{{.Ports}}"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 20,
+   "source_lines": 20,
+   "note": "docker ps DOES turn the literal backslash t of the format string into a tab. The Status column ('Up 2 weeks (healthy)') is volatile and belongs in the normalization rule set."
+  },
+  {
+   "path": "containers/docker-info.txt",
+   "probe": "linux.containers",
+   "command": [
+    "docker",
+    "info",
+    "--format",
+    "{{.ServerVersion}}{{\"\\t\"}}{{.Driver}}{{\"\\t\"}}{{.OperatingSystem}}{{\"\\t\"}}{{.KernelVersion}}{{\"\\t\"}}{{.Architecture}}{{\"\\t\"}}{{.Containers}}{{\"\\t\"}}{{.ContainersRunning}}{{\"\\t\"}}{{.Images}}{{\"\\t\"}}{{.DockerRootDir}}{{\"\\t\"}}{{.Name}}"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "docker info does NOT expand the literal backslash t: with '\\t' in the format string the output carries the two characters backslash and t. The separator therefore has to be written as a Go template string literal, as in this command."
+  },
+  {
+   "path": "containers/docker-ps-empty.txt",
+   "probe": "linux.containers",
+   "command": [
+    "docker",
+    "ps",
+    "--format",
+    "{{.ID}}\\t{{.Image}}",
+    "--filter",
+    "name=nosuchcontainer-trustfreeze"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "Runtime present, no matching container: empty stdout, exit 0. The honest status is captured with an empty list."
+  },
+  {
+   "path": "containers/docker-daemon-unreachable.stderr.txt",
+   "probe": "linux.containers",
+   "command": [
+    "docker",
+    "ps",
+    "--format",
+    "{{.ID}}\\t{{.Names}}"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "failed",
+   "note": "Provoked with DOCKER_HOST=unix:///nonexistent/docker.sock because the daemon does run on the trial host. Client present, daemon unreachable. A socket the caller may not open produces a different message that this host cannot show, see the README."
+  },
+  {
+   "path": "containers/docker-version.txt",
+   "probe": "linux.containers",
+   "command": [
+    "docker",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured"
+  },
+  {
+   "path": "containers/docker-version-snap.txt",
+   "probe": "linux.containers",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "/snap/bin/docker",
+    "--version"
+   ],
+   "probe_command": [
+    "docker",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 1,
+   "source_lines": 1,
+   "note": "The client version of a docker installed as a snap. The probe issues the bare name and the runner resolves it, which is why probe_command carries no directory: /snap/bin is part of the Linux search path since this host was measured."
+  },
+  {
+   "path": "containers/docker-ps-socket-denied.stderr.txt",
+   "probe": "linux.containers",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "/snap/bin/docker",
+    "ps",
+    "--no-trunc",
+    "--format",
+    "{{.ID}}\\t{{.Image}}\\t{{.Names}}\\t{{.State}}\\t{{.Status}}\\t{{.Ports}}"
+   ],
+   "probe_command": [
+    "docker",
+    "ps",
+    "--no-trunc",
+    "--format",
+    "{{.ID}}\\t{{.Image}}\\t{{.Names}}\\t{{.State}}\\t{{.Status}}\\t{{.Ports}}"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "permission_denied",
+   "transcribed_lines": 1,
+   "source_lines": 1,
+   "note": "The refusal of the daemon socket for a caller outside the group docker. stdout is empty. This is the fixture the trial host could not produce, and it is a different message from the unreachable daemon one."
+  },
+  {
+   "path": "containers/docker-info-socket-denied.stderr.txt",
+   "probe": "linux.containers",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "/snap/bin/docker",
+    "info",
+    "--format",
+    "{{.ServerVersion}}{{\"\\t\"}}{{.Driver}}{{\"\\t\"}}{{.OperatingSystem}}{{\"\\t\"}}{{.KernelVersion}}{{\"\\t\"}}{{.Architecture}}{{\"\\t\"}}{{.Containers}}{{\"\\t\"}}{{.ContainersRunning}}{{\"\\t\"}}{{.Images}}{{\"\\t\"}}{{.DockerRootDir}}{{\"\\t\"}}{{.Name}}"
+   ],
+   "probe_command": [
+    "docker",
+    "info",
+    "--format",
+    "{{.ServerVersion}}{{\"\\t\"}}{{.Driver}}{{\"\\t\"}}{{.OperatingSystem}}{{\"\\t\"}}{{.KernelVersion}}{{\"\\t\"}}{{.Architecture}}{{\"\\t\"}}{{.Containers}}{{\"\\t\"}}{{.ContainersRunning}}{{\"\\t\"}}{{.Images}}{{\"\\t\"}}{{.DockerRootDir}}{{\"\\t\"}}{{.Name}}"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "permission_denied",
+   "transcribed_lines": 2,
+   "source_lines": 2,
+   "note": "The same refusal from the info call, preceded by an empty line: docker info prints the empty client section before the error. A first-line reader sees nothing, so the classification has to read the whole stream."
+  },
+  {
+   "path": "honest-status/tool-missing-command-v-podman.txt",
+   "probe": "linux.containers",
+   "command": [
+    "command",
+    "-v",
+    "podman"
+   ],
+   "stream": "stdout",
+   "exit_code": 1,
+   "expected_probe_status": "unavailable",
+   "note": "podman is not installed. This is the host side evidence that it is absent from the places that were looked at. In Go the probe sees exec.LookPath return exec.ErrNotFound, which the runner classes as tool_missing; it never runs a shell and never sees exit 127."
+  },
+  {
+   "path": "honest-status/tool-missing-shell-127.stderr.txt",
+   "probe": null,
+   "command": [
+    "bash",
+    "-c",
+    "nosuchtool-trustfreeze --version"
+   ],
+   "stream": "stderr",
+   "exit_code": 127,
+   "expected_probe_status": "unavailable",
+   "note": "What a SHELL reports for a missing executable. Recorded so that nobody mistakes it for the probe's own shape: the ExecRunner resolves the executable itself and returns tool_missing before any process starts. Exit 127 from a real child process means something else entirely."
+  },
+  {
+   "path": "routes/ip-version.txt",
+   "probe": "linux.network.routes",
+   "command": [
+    "ip",
+    "-V"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The version the parsers of routes.go were measured against on the trial host (playbook L7). One line, whole output."
+  },
+  {
+   "path": "routes/ip-version-2204.txt",
+   "probe": "linux.network.routes",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "ip",
+    "-V"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The same call on the bastion. The two releases print different iproute2 and libbpf versions, which is why both fixtures exist."
+  },
+  {
+   "path": "routes/ip-j-route-show.json",
+   "probe": "linux.network.routes",
+   "command": [
+    "ip",
+    "-j",
+    "route",
+    "show"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The IPv4 table of the trial host, one compact JSON line in the key order iproute2 printed. Nine routes, one of them the default route. One IPv4 route was left OUT rather than rewritten, see the README: its /24 was chosen by a compose file on that host and no documentation range of that size was free."
+  },
+  {
+   "path": "routes/ip-6-j-route-show.json",
+   "probe": "linux.network.routes",
+   "command": [
+    "ip",
+    "-6",
+    "-j",
+    "route",
+    "show"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 1,
+   "source_lines": 1,
+   "note": "A subset: 5 of the 24 IPv6 routes, original order kept. The ULA route plus four link-local routes that share the destination and differ only in the device, which is exactly the case the artifact id has to survive."
+  },
+  {
+   "path": "routes/ip-j-addr-show.json",
+   "probe": "linux.network.routes",
+   "command": [
+    "ip",
+    "-j",
+    "addr",
+    "show"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 1,
+   "source_lines": 1,
+   "note": "A subset: 6 of the 27 interfaces, original order kept. The addresses give the routes their meaning, and the operational state and flags of the device come from the same document."
+  },
+  {
+   "path": "routes/ip-j-route-show-2204.json",
+   "probe": "linux.network.routes",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "ip",
+    "-j",
+    "route",
+    "show"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The same call on the bastion: 4 IPv4 routes over 5 interfaces, printed by iproute2 5.15.0."
+  },
+  {
+   "path": "routes/ip-6-j-route-show-2204.json",
+   "probe": "linux.network.routes",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "ip",
+    "-6",
+    "-j",
+    "route",
+    "show"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The same call on the bastion: 2 IPv6 routes. A host with few IPv6 routes is still a captured host, not an empty answer."
+  },
+  {
+   "path": "routes/ip-j-addr-show-2204.json",
+   "probe": "linux.network.routes",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "ip",
+    "-j",
+    "addr",
+    "show"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The same call on the bastion: 5 interfaces."
+  },
+  {
+   "path": "routes/ip-j-route-show-empty.json",
+   "probe": "linux.network.routes",
+   "command": [
+    "ip",
+    "-j",
+    "route",
+    "show",
+    "203.0.113.0/24"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "A query that matches nothing: iproute2 prints an empty JSON array and exits 0. Both hosts answered identically. This is the fixture behind the rule that a host with no route of a family is captured with zero routes and never not_applicable."
+  },
+  {
+   "path": "routes/ip-6-j-route-show-aborted.json",
+   "probe": "linux.network.routes",
+   "command": [
+    "ip",
+    "-6",
+    "-j",
+    "route",
+    "show",
+    "table",
+    "999"
+   ],
+   "stream": "stdout",
+   "exit_code": 2,
+   "expected_probe_status": "partial",
+   "note": "A dump the tool aborted: it prints an opening bracket on stdout, the reason on stderr, and exits 2. Both hosts answered identically. The probe must not read this as an empty table: the family stays unread, carries no count at all, and the run is partial with a reason (playbook L1)."
+  },
+  {
+   "path": "routes/ip-6-j-route-show-aborted.stderr.txt",
+   "probe": "linux.network.routes",
+   "command": [
+    "ip",
+    "-6",
+    "-j",
+    "route",
+    "show",
+    "table",
+    "999"
+   ],
+   "stream": "stderr",
+   "exit_code": 2,
+   "expected_probe_status": "partial",
+   "note": "The stderr half of the aborted dump, from the same call."
+  },
+  {
+   "path": "routes/ip-route-show-nosuchdev.stderr.txt",
+   "probe": "linux.network.routes",
+   "command": [
+    "ip",
+    "-j",
+    "route",
+    "show",
+    "dev",
+    "nosuchdev"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "partial",
+   "note": "A call that fails with a message instead of a document: exit 1, nothing on stdout. The probe records the family or the address list as unread and stays partial; it never turns a failed call into an empty result."
+  },
+  {
+   "path": "dns/resolvectl-version.txt",
+   "probe": "linux.dns",
+   "command": [
+    "resolvectl",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The systemd version the resolver parser was measured against on the trial host (playbook L7). Two lines: the version and the build option line."
+  },
+  {
+   "path": "dns/resolvectl-version-2204.txt",
+   "probe": "linux.dns",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "resolvectl",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The same call on the bastion. systemd 249 and systemd 255 print the status block differently, which is why both fixtures exist."
+  },
+  {
+   "path": "dns/resolvectl-status.txt",
+   "probe": "linux.dns",
+   "command": [
+    "resolvectl",
+    "status",
+    "--no-pager"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 1,
+   "source_lines": 1,
+   "note": "A subset: the global block plus 4 of the 27 link blocks, original order and indentation kept byte for byte. The observed resolver state (playbook L3), never the declared one."
+  },
+  {
+   "path": "dns/resolvectl-status-2204.txt",
+   "probe": "linux.dns",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "resolvectl",
+    "status",
+    "--no-pager"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The same call on the bastion: 4 link blocks, 1 of them resolving. systemd 249 prints labels and alignment the 255 fixture does not, which is the difference the parser had to be measured against."
+  },
+  {
+   "path": "dns/resolvectl-json-unsupported.stderr.txt",
+   "probe": "linux.dns",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "resolvectl",
+    "--json=short",
+    "status"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": null,
+   "note": "Why the probe has no JSON path. Measured on both hosts: systemd 249 refuses the flag with this line and exits 1, and systemd 255 ACCEPTS it, exits 0, and prints the same human text it prints without it. So a JSON form of resolvectl status does not exist, the probe never sends the flag, and dns_test.go guards that. expected_probe_status is null because the probe issues no such call: this fixture is evidence about the tool, not an input the probe parses."
+  },
+  {
+   "path": "dns/resolv-conf-stub.txt",
+   "probe": "linux.dns",
+   "command": [
+    "cat",
+    "/etc/resolv.conf"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The declared resolver configuration (playbook L3). Byte identical on both hosts. It names the systemd-resolved stub at 127.0.0.53, which is the finding: the file delegates the real decision, so the file alone is never the whole answer. The probe reads this path through the restricted file reader (linux.AllowedRoots), not by running cat; the argv is how it was transcribed."
+  },
+  {
+   "path": "dns/resolv-conf-uplink.txt",
+   "probe": "linux.dns",
+   "command": [
+    "cat",
+    "/run/systemd/resolve/resolv.conf"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The uplink file systemd-resolved writes beside the stub file: the real nameservers rather than the stub. Recorded so a parser test has the non-stub shape of the same format. The probe does not read this path; /etc/resolv.conf is the one declared source it names."
+  },
+  {
+   "path": "dns/resolvectl-status-multilink.txt",
+   "probe": "linux.dns",
+   "source_class": "composed from measured labels and alignment; the values are synthetic",
+   "command": null,
+   "stream": "n/a",
+   "exit_code": null,
+   "expected_probe_status": "captured",
+   "note": "COMPOSED, not measured, and it says so. Neither host has a link with several DNS servers, a search domain, a routing-only domain, DNSSEC on or DNSOverTLS on, so those shapes could not be read anywhere. What IS measured about it is its form: the labels are the labels the two hosts printed plus DNS Domain, and the alignment follows the rule the measured output of systemd 255 exhibits (every label right-aligned to one document-wide width). Values are documentation addresses and .example names throughout."
+  },
+  {
+   "path": "dns/resolv-conf-static.txt",
+   "probe": "linux.dns",
+   "source_class": "composed from the measured directive grammar; the values are synthetic",
+   "command": null,
+   "stream": "n/a",
+   "exit_code": null,
+   "expected_probe_status": "captured",
+   "note": "COMPOSED, not measured. Neither host is without systemd-resolved, so a hand-written resolv.conf that names real nameservers instead of the stub could not be read anywhere. The directive grammar is the grammar of the measured file; the addresses are documentation addresses."
+  },
+  {
+   "path": "executables/dpkg-version.txt",
+   "probe": "linux.executables",
+   "command": [
+    "dpkg",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "First line kept. The dpkg version the ownership parser was measured against on the trial host (playbook L7)."
+  },
+  {
+   "path": "executables/dpkg-version-2204.txt",
+   "probe": "linux.executables",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "dpkg",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "First line kept, the same call on the bastion."
+  },
+  {
+   "path": "executables/stat-version.txt",
+   "probe": "linux.executables",
+   "command": [
+    "stat",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "First line kept. The coreutils version the stat parser was measured against on the trial host."
+  },
+  {
+   "path": "executables/stat-version-2204.txt",
+   "probe": "linux.executables",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "stat",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "First line kept, the same call on the bastion. 8.32 against 9.4 on the trial host."
+  },
+  {
+   "path": "executables/dpkg-search.txt",
+   "probe": "linux.executables",
+   "command": [
+    "dpkg",
+    "-S",
+    "/usr/sbin/sshd",
+    "/usr/bin/ls",
+    "/usr/local/bin/mcli",
+    "/usr/bin/snap"
+   ],
+   "stream": "stdout",
+   "exit_code": 1,
+   "expected_probe_status": "captured",
+   "note": "The ordinary answer shape \"package: path\", and the one trap of this tool: /bin/ls answers NO PATH FOUND, because the dpkg database holds /usr/bin/ls and /bin is a symlink to /usr/bin on a merged-/usr Ubuntu. A probe that asks dpkg before it resolves symlinks reports half its programs as unowned. The call asks for the resolved form."
+  },
+  {
+   "path": "executables/dpkg-search.stderr.txt",
+   "probe": "linux.executables",
+   "command": [
+    "dpkg",
+    "-S",
+    "/usr/sbin/sshd",
+    "/usr/bin/ls",
+    "/usr/local/bin/mcli",
+    "/usr/bin/snap"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "captured",
+   "note": "A path no package owns goes to stderr and the call exits 1 while the other lines are still printed on stdout. The wording was identical on both releases, so the parser keys on the ABSENCE of a stdout answer and not on this message."
+  },
+  {
+   "path": "executables/dpkg-search-2204.txt",
+   "probe": "linux.executables",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "dpkg",
+    "-S",
+    "/usr/local/bin/ngrok",
+    "/usr/local/bin/mcli",
+    "/snap/core22/1122/usr/bin/env",
+    "/usr/lib/snapd/snapd"
+   ],
+   "stream": "stdout",
+   "exit_code": 1,
+   "expected_probe_status": "captured",
+   "note": "The bastion, and the reason this probe exists: mcli under /usr/local/bin IS owned by a package of the same name, ngrok beside it is owned by nobody, and the file of a mounted snap is not in the database at all. Three different answers for three paths in one call. Neither case was staged."
+  },
+  {
+   "path": "executables/dpkg-search-2204.stderr.txt",
+   "probe": "linux.executables",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "dpkg",
+    "-S",
+    "/usr/local/bin/ngrok",
+    "/usr/local/bin/mcli",
+    "/snap/core22/1122/usr/bin/env",
+    "/usr/lib/snapd/snapd"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "captured",
+   "note": "The stderr half of the same bastion call: the two paths no package owns."
+  },
+  {
+   "path": "executables/dpkg-search-multi-owner.txt",
+   "probe": "linux.executables",
+   "command": [
+    "dpkg",
+    "-S",
+    "/etc/init.d"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "One path, 31 package names in one comma separated line, several with an architecture qualifier after a colon (libc6-dev:amd64). It is a directory path, because no executable file on either host had more than one owner; the parser cannot tell the difference, it reads \"packages: path\". On the same host dpkg -S /usr/lib/x86_64-linux-gnu answered with 757 names in a single line of about 25 kB, which is why the probe caps the recorded package list."
+  },
+  {
+   "path": "executables/dpkg-search-diversion.txt",
+   "probe": "linux.executables",
+   "command": [
+    "dpkg",
+    "-S",
+    "/usr/share/dict/words"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "Two diversion records and an ownership answer for the same path. A parser that splits every line at \": \" reads the package name as \"diversion by dictionaries-common from\". This is the fixture that fails such a parser."
+  },
+  {
+   "path": "executables/stat-executables.txt",
+   "probe": "linux.executables",
+   "command": [
+    "stat",
+    "-L",
+    "-c",
+    "%n %a %U %G %s",
+    "/usr/sbin/sshd",
+    "/usr/bin/ls",
+    "/usr/local/bin/mcli",
+    "/usr/bin/snap"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "Mode, owner, group and size of real programs, including a 31 MB and a 32 MB one. The sizes are real, so a test that sets a small size cap has real numbers to refuse."
+  },
+  {
+   "path": "executables/stat-executables-2204.txt",
+   "probe": "linux.executables",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "stat",
+    "-L",
+    "-c",
+    "%n %a %U %G %s",
+    "<the four paths of the bastion call>"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The same call on the bastion over its four paths. The argv column of testdata/executables/README.md records it as \"the same call on the bastion, over its four paths\" and does not spell the paths out; they are the four paths of dpkg-search-2204 and are visible in the fixture itself."
+  },
+  {
+   "path": "executables/stat-missing.stderr.txt",
+   "probe": "linux.executables",
+   "command": [
+    "stat",
+    "-L",
+    "-c",
+    "%n %a %U %G %s",
+    "/usr/bin/ls",
+    "/usr/local/bin/nosuch-trustfreeze"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "partial",
+   "note": "A path that does not exist: stat prints the other lines on stdout, this line on stderr, and exits 1. The probe parses stdout whatever the exit code says, and the missing path becomes a diagnostic rather than a lost run."
+  },
+  {
+   "path": "executables/systemctl-show-execstart.txt",
+   "probe": "linux.executables",
+   "command": [
+    "systemctl",
+    "show",
+    "--no-pager",
+    "-p",
+    "Id,ExecStart",
+    "ssh.service",
+    "snap.cups.cupsd.service",
+    "cron.service",
+    "man-db.timer"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The two-property call the probe makes. Four units, and the last one is the case a reader forgets: a timer answers with Id only, because it starts no program. It also shows that the manager answers in ITS property order (ExecStart before Id) and separates units with a blank line."
+  },
+  {
+   "path": "executables/systemctl-show-execstart-2204.txt",
+   "probe": "linux.executables",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "systemctl",
+    "show",
+    "--no-pager",
+    "-p",
+    "Id,ExecStart",
+    "ngrok-host-a.service",
+    "ssh.socket"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The same call on the bastion: the ngrok unit names a program under /usr/local/bin, and the socket unit names none. The unit name in this argv is SANITIZED, with the same substitution the fixture bytes carry (executables/README.md names it): the real unit name is a configuration detail of that host, and publishing it in the argv while the bytes hide it would make the substitution pointless. An argv is the record of a measurement, and this record says which call produced these bytes up to that one substitution, which is the most a public fixture can record. Whoever repeats the call substitutes the name back once, from the host."
+  },
+  {
+   "path": "executables/systemctl-list-unit-files-subset.txt",
+   "probe": "linux.executables",
+   "command": [
+    "systemctl",
+    "list-unit-files",
+    "--no-legend",
+    "--no-pager"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "A subset of the unit file list of the trial host: the four units whose ExecStart the show fixture answers for. The argv above is the call the PROBE issues, as executables_test.go scripts it. testdata/executables/README.md does not record the host call this file was transcribed from, so this entry names the probe call and is not a record of a measured argv. The bytes are the host output."
+  },
+  {
+   "path": "executables/systemctl-list-unit-files-subset-2204.txt",
+   "probe": "linux.executables",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "systemctl",
+    "list-unit-files",
+    "--no-legend",
+    "--no-pager"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "A subset of the unit file list of the bastion: the ngrok unit and ssh.socket. The argv above is the call the PROBE issues, as executables_test.go scripts it. testdata/executables/README.md does not record the host call this file was transcribed from, so this entry names the probe call and is not a record of a measured argv. The bytes are the host output."
+  },
+  {
+   "path": "executables/stat-unit-programs.txt",
+   "probe": "linux.executables",
+   "command": [
+    "stat",
+    "-L",
+    "-c",
+    "%n %a %U %G %s",
+    "/usr/sbin/cron",
+    "/usr/bin/snap",
+    "/usr/sbin/sshd"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "Mode, owner, group and size of the three programs the trial host units name. The argv above is the call the PROBE issues, as executables_test.go scripts it. testdata/executables/README.md does not record the host call this file was transcribed from, so this entry names the probe call and is not a record of a measured argv. The bytes are the host output."
+  },
+  {
+   "path": "executables/dpkg-search-unit-programs.txt",
+   "probe": "linux.executables",
+   "command": [
+    "dpkg",
+    "-S",
+    "/usr/sbin/cron",
+    "/usr/bin/snap",
+    "/usr/sbin/sshd"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The owning package of the same three programs: all three are owned, which is the ordinary case beside the unowned one. The argv above is the call the PROBE issues, as executables_test.go scripts it. testdata/executables/README.md does not record the host call this file was transcribed from, so this entry names the probe call and is not a record of a measured argv. The bytes are the host output."
+  },
+  {
+   "path": "systemd/systemctl-show-dependencies.txt",
+   "probe": "linux.systemd",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "systemctl",
+    "show",
+    "--no-pager",
+    "-p",
+    "<the full property list of systemdShowProperties>",
+    "ngrok-host-a.service",
+    "ssh.socket"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The full property list, with the five dependency properties. Requires of the ngrok unit names system.slice, -.mount and sysinit.target, none of which is in any unit file: the manager adds them. That is why the dependency edges are recorded on the OBSERVED artifact of the unit and not on the declared one (playbook L3). It also shows the empty form \"BindsTo=\", which is how the manager says there is no such edge, and the root mount unit -.mount, whose name starts with a hyphen. The unit name in this argv is sanitized with the same substitution as the fixture bytes, for the reason the entry of executables/systemctl-show-execstart-2204.txt states."
+  },
+  {
+   "path": "systemd/systemctl-show-required-by.txt",
+   "probe": "linux.systemd",
+   "command": [
+    "systemctl",
+    "show",
+    "--no-pager",
+    "-p",
+    "Id,BindsTo,RequiredBy",
+    "dbus.socket",
+    "docker.socket"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "A non-empty RequiredBy: 17 units in one line of 343 bytes, the longest dependency line of all 372 units the selection rule picked on that host. RequiredBy is in no unit file at all; the manager computes it from every other loaded unit. BindsTo was empty on every unit measured on both hosts, so no file here carries a non-empty BindsTo: the property is asked for and recorded through the same code path as its four siblings, and the non-empty case is covered by the parser test with the shape the siblings measured."
+  }
+ ],
+ "other_host_classes": [
+  {
+   "id": "ubuntu-22.04-bastion",
+   "source_class": "transcribed from a real Ubuntu 22.04 bastion host, unchanged bytes, nothing to substitute",
+   "captured_at": "2026-09-23",
+   "distribution": "Ubuntu 22.04 LTS",
+   "privilege": "unprivileged account, NOT a member of the group docker, no elevation used",
+   "note": "docker is installed as a snap and answers only at /snap/bin/docker, and the daemon socket refuses this account. The three fixtures marked with this host id are the shapes the trial host could not produce."
+  },
+  {
+   "id": "ubuntu-22.04-bastion-elevated",
+   "source_class": "transcribed from a real Ubuntu 22.04 bastion host during an elevated run",
+   "captured_at": "2026-09-23",
+   "distribution": "Ubuntu 22.04 LTS",
+   "privilege": "elevated run",
+   "note": "180 unit files, 33 of them templates. This host is where the systemctl show batch abort was measured: the capture lost the runtime state of 47 units before linux.systemd stopped asking about templates and started re-querying the names an aborted batch left unanswered."
+  }
+ ]
+}

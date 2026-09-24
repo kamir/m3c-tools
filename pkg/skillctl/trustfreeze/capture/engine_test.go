@@ -285,8 +285,9 @@ func TestCaptureDeterministic(t *testing.T) {
 }
 
 // TestCaptureUnimplementedProbesHonest: every probe of a built-in profile
-// that this build lacks is unsupported with reason not_implemented, and the
-// capture is incomplete (SPEC-0467 section 5.6).
+// that this build lacks is unsupported with reason not_implemented, a probe
+// this build does have never claims that, and a profile whose required
+// probes cannot all succeed here is incomplete (SPEC-0467 section 5.6).
 func TestCaptureUnimplementedProbesHonest(t *testing.T) {
 	for _, id := range BuiltinProfileIDs() {
 		if id == "walking-skeleton" {
@@ -297,15 +298,27 @@ func TestCaptureUnimplementedProbesHonest(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			res := mustRun(t, baseOptions(t, p, registry(t), identityRunner()))
+			reg := registry(t)
+			res := mustRun(t, baseOptions(t, p, reg, identityRunner()))
 			if res.Complete() {
 				t.Fatal("a profile with unimplemented required probes reported complete")
 			}
 			verifyBundle(t, res)
+			implemented := 0
 			for _, r := range res.Results {
 				if r.ProbeID == common.IdentityProbeID {
 					if r.Status != trustfreeze.StatusCaptured {
 						t.Fatalf("identity %s", r.Status)
+					}
+					continue
+				}
+				if _, ok := reg.Get(r.ProbeID); ok {
+					// A registered probe reports what it observed on the
+					// fixture host (no tool resolves there), never that it
+					// does not exist in this build.
+					implemented++
+					if r.Status == trustfreeze.StatusUnsupported && r.Reason == trustfreeze.ReasonNotImplemented {
+						t.Fatalf("%s is registered but reported %s", r.ProbeID, trustfreeze.ReasonNotImplemented)
 					}
 					continue
 				}
@@ -316,8 +329,18 @@ func TestCaptureUnimplementedProbesHonest(t *testing.T) {
 			if len(res.Results) != len(p.ProbeIDs()) {
 				t.Fatalf("%d results for %d probes", len(res.Results), len(p.ProbeIDs()))
 			}
-			if n := len(res.Capture.Completeness.Gaps); n != len(p.Required)-1 {
-				t.Fatalf("%d gaps, want %d", n, len(p.Required)-1)
+			if id == "ubuntu-bastion" && implemented != len(p.ProbeIDs())-3 {
+				// ubuntu-bastion: every probe but common.identity (counted
+				// separately), common.git and common.claude is implemented.
+				t.Fatalf("%d implemented probes of %d", implemented, len(p.ProbeIDs()))
+			}
+			if len(res.Capture.Completeness.Gaps) == 0 {
+				t.Fatal("an incomplete capture without a gap")
+			}
+			for _, g := range res.Capture.Completeness.Gaps {
+				if !p.IsRequired(g.ProbeID) {
+					t.Fatalf("gap for the optional probe %s", g.ProbeID)
+				}
 			}
 		})
 	}
@@ -496,7 +519,7 @@ func TestCaptureNoSecretPersisted(t *testing.T) {
 		t.Fatalf("warnings %+v evidence %d", r.Warnings, len(r.RawEvidence))
 	}
 	a := r.NormalizedState[0]
-	if a.Attributes["plain"] != "kept" || !strings.Contains(a.Attributes["note"], "[REDACTED:") {
+	if a.Attributes["plain"] != "kept" || !strings.Contains(a.Attributes["note"], "[REDACTED_") {
 		t.Fatalf("attributes %v", a.Attributes)
 	}
 	if d, _ := trustfreeze.ComputeArtifactDigest(a); a.Digest != d {
@@ -504,7 +527,7 @@ func TestCaptureNoSecretPersisted(t *testing.T) {
 	}
 	for _, f := range []string{"evidence/test.leaky/leaky.stdout", "evidence/test.leaky/leaky.stderr", "evidence/test.leaky/leaky-json.stdout"} {
 		raw, err := b.ReadFile(f)
-		if err != nil || !bytes.Contains(raw, []byte("[REDACTED:")) {
+		if err != nil || !bytes.Contains(raw, []byte("[REDACTED_")) {
 			t.Fatalf("%s: %q %v", f, raw, err)
 		}
 	}
@@ -557,7 +580,7 @@ func TestCaptureEvidenceReRedacted(t *testing.T) {
 			t.Fatalf("%s: status %s warnings %+v evidence %+v", id, r.Status, r.Warnings, r.RawEvidence)
 		}
 		raw, err := b.ReadFile(file)
-		if err != nil || !bytes.Contains(raw, []byte("[REDACTED:")) {
+		if err != nil || !bytes.Contains(raw, []byte("[REDACTED_")) {
 			t.Fatalf("%s: %q %v", file, raw, err)
 		}
 		if ref := r.RawEvidence[0]; ref.Path != file || ref.Size != int64(len(raw)) || ref.SHA256 != trustfreeze.SHA256Hex(raw) {
@@ -945,8 +968,15 @@ func TestPlan(t *testing.T) {
 	if r := byID[common.IdentityProbeID]; !r.Registered || !r.Required || !r.Support.Available {
 		t.Fatalf("identity %+v", r)
 	}
-	if r := byID["linux.firewall"]; r.Registered || r.Support.Status != trustfreeze.StatusUnsupported || r.Support.Reason != trustfreeze.ReasonNotImplemented {
+	// A probe this build implements is registered, and doctor resolves the
+	// executables it names without running one: on the fixture host neither
+	// nft nor ufw is in the runner search path.
+	if r := byID["linux.firewall"]; !r.Registered || !r.ToolsDeclared || len(r.Tools) != 2 || r.Tools[0].OK() || r.Tools[1].OK() {
 		t.Fatalf("firewall %+v", r)
+	}
+	// A probe of the profile that this build does not have stays honest.
+	if r := byID["common.claude"]; r.Registered || r.Support.Status != trustfreeze.StatusUnsupported || r.Support.Reason != trustfreeze.ReasonNotImplemented {
+		t.Fatalf("common.claude %+v", r)
 	}
 	if r := byID["common.git"]; r.Required || r.Support.Available || r.Support.Status != trustfreeze.StatusFailed {
 		t.Fatalf("panicking support %+v", r)

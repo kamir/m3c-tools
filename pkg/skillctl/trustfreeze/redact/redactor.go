@@ -21,12 +21,25 @@ var ErrRedactionFailed = errors.New("redact: redaction failed")
 const DefaultMaxInputBytes = 16 << 20
 
 // markerPrefix starts every replacement.
-const markerPrefix = "[REDACTED:"
+//
+// The separator between the word and the class is an underscore, and that is
+// a contract, not a spelling. A marker is substituted into output that other
+// code then parses by field position, so it must carry no character that
+// structures such output: colon separates the fields of getent passwd and
+// getent group, tab those of dpkg-query and ss, comma a GECOS field and a
+// group member list, semicolon a sudoers rule, the equals sign an id(1)
+// token, space every whitespace separated table, and the two line
+// terminators every line oriented format. An earlier marker used a colon,
+// and an elevated capture on Ubuntu 22.04 therefore turned line 1 of getent
+// passwd into eight fields instead of seven: the parser refused the record
+// and the bundle held every account except root. A marker is one token of
+// the character class [A-Za-z0-9_[\]] and nothing else.
+const markerPrefix = "[REDACTED_"
 
-// Marker returns the replacement text for class, "[REDACTED:<class>]".
+// Marker returns the replacement text for class, "[REDACTED_<class>]".
 func Marker(class string) string { return markerPrefix + class + "]" }
 
-var exactMarker = regexp.MustCompile(`^\[REDACTED:[a-z0-9_]+\]$`)
+var exactMarker = regexp.MustCompile(`^\[REDACTED_[a-z0-9_]+\]$`)
 
 // isMarker reports whether s is exactly one replacement marker.
 func isMarker(s []byte) bool { return exactMarker.Match(s) }
@@ -91,7 +104,7 @@ type literal struct {
 	class string
 }
 
-// Redactor replaces secrets with "[REDACTED:<class>]" markers. It is safe for
+// Redactor replaces secrets with "[REDACTED_<class>]" markers. It is safe for
 // concurrent use. A nil *Redactor behaves like Default(): there is no way to
 // call it and get unredacted output back.
 type Redactor struct {
@@ -103,7 +116,7 @@ type Redactor struct {
 // Option configures New.
 type Option func(*Redactor) error
 
-// WithLiteral replaces every occurrence of value with "[REDACTED:<class>]"
+// WithLiteral replaces every occurrence of value with "[REDACTED_<class>]"
 // before the patterns run. Use it for values that must never appear in a
 // bundle, such as the user home directory. Values shorter than 3 bytes or
 // consisting only of path separators are refused, because replacing them
@@ -134,7 +147,7 @@ func WithMaxInputBytes(n int) Option {
 }
 
 // WithPattern adds a pattern whose submatch group is replaced with
-// "[REDACTED:<class>]". Group 0 replaces the whole match.
+// "[REDACTED_<class>]". Group 0 replaces the whole match.
 func WithPattern(class, pattern string, group int) Option {
 	return func(r *Redactor) error {
 		if err := checkClass(class); err != nil {
@@ -336,7 +349,7 @@ const ClassArgSecret = "arg_secret"
 const minSecretLiteral = 3
 
 // WithSecrets returns a redactor that, before its patterns, also replaces
-// every given value of at least 3 bytes with "[REDACTED:arg_secret]". r
+// every given value of at least 3 bytes with "[REDACTED_arg_secret]". r
 // is not changed. Values that are markers are ignored.
 func (r *Redactor) WithSecrets(values []string) *Redactor {
 	r = r.self()
@@ -363,16 +376,29 @@ func flagClass(arg string) (string, bool) {
 // ErrUnsupportedValue is wrapped when RedactValue meets a type it cannot walk.
 var ErrUnsupportedValue = errors.New("redact: unsupported value type")
 
-// ValueContext names the value being redacted, for error messages.
+// ValueContext names the value being redacted, for error messages, and
+// carries what the caller knows about its own keys.
 type ValueContext struct {
 	ProbeID string
 	Path    string
+	// PolicyKeys names map keys whose value the caller has classified as
+	// configuration, so the key name rule does not apply to them. The names
+	// hold for the whole value passed to RedactValue, not for one map: the
+	// caller that declares them owns every map in it (the capture engine
+	// passes the declarations of one probe result). Case, "_", "-", "." and
+	// blanks are ignored, as in SensitiveKeyClass.
+	PolicyKeys []string
+	// SensitiveKeys names map keys whose value is replaced whatever the key
+	// name and the value look like. A name in both lists is sensitive.
+	SensitiveKeys []string
 }
 
 // RedactValue redacts a decoded JSON-like value: strings are redacted with
 // the patterns; the value of every map key that is a sensitive key
-// (SensitiveKeyClass) is replaced by the marker whatever its type; map keys
-// are redacted too. Numbers, booleans and nil pass unchanged. Supported types:
+// (SensitiveKeyClass) is replaced by the marker whatever its type, unless the
+// caller declared the key policy or the value itself is a policy answer
+// (IsPolicyAnswer); map keys are redacted too. Numbers, booleans and nil pass
+// unchanged. Supported types:
 // string, bool, nil, all integer and float kinds, json.Number (any type with a
 // numeric String method passes unchanged), []any, []string,
 // map[string]any and map[string]string. Any other type fails with
@@ -381,7 +407,7 @@ type ValueContext struct {
 func (r *Redactor) RedactValue(ctx context.Context, vc ValueContext, v any) (any, RedactionLog, error) {
 	r = r.self()
 	var log RedactionLog
-	out, err := r.redactValue(ctx, v, vc.Path, 0, &log)
+	out, err := r.redactValue(ctx, newKeyPolicy(vc), v, vc.Path, 0, &log)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -390,7 +416,7 @@ func (r *Redactor) RedactValue(ctx context.Context, vc ValueContext, v any) (any
 
 const maxValueDepth = 256
 
-func (r *Redactor) redactValue(ctx context.Context, v any, at string, depth int, log *RedactionLog) (any, error) {
+func (r *Redactor) redactValue(ctx context.Context, kp keyPolicy, v any, at string, depth int, log *RedactionLog) (any, error) {
 	if depth > maxValueDepth {
 		return nil, fmt.Errorf("%w: %w: nesting deeper than %d at %s", ErrRedactionFailed, ErrUnsupportedValue, maxValueDepth, at)
 	}
@@ -425,7 +451,7 @@ func (r *Redactor) redactValue(ctx context.Context, v any, at string, depth int,
 	case []any:
 		out := make([]any, len(x))
 		for i, e := range x {
-			red, err := r.redactValue(ctx, e, fmt.Sprintf("%s[%d]", at, i), depth+1, log)
+			red, err := r.redactValue(ctx, kp, e, fmt.Sprintf("%s[%d]", at, i), depth+1, log)
 			if err != nil {
 				return nil, err
 			}
@@ -439,7 +465,7 @@ func (r *Redactor) redactValue(ctx context.Context, v any, at string, depth int,
 			if err != nil {
 				return nil, err
 			}
-			if class, ok := SensitiveKeyClass(k); ok {
+			if class, ok := kp.markerClass(k, x[k]); ok {
 				out[nk] = r.keyedMarker(x[k], class, log)
 				continue
 			}
@@ -458,12 +484,12 @@ func (r *Redactor) redactValue(ctx context.Context, v any, at string, depth int,
 			if err != nil {
 				return nil, err
 			}
-			if class, ok := SensitiveKeyClass(k); ok {
+			if class, ok := kp.markerClass(k, x[k]); ok {
 				s, _ := x[k].(string)
 				out[nk] = r.keyedMarker(s, class, log)
 				continue
 			}
-			red, err := r.redactValue(ctx, x[k], at+"."+k, depth+1, log)
+			red, err := r.redactValue(ctx, kp, x[k], at+"."+k, depth+1, log)
 			if err != nil {
 				return nil, err
 			}
@@ -526,6 +552,18 @@ func sortedKeys[V any](m map[string]V) []string {
 // refresh token, cookie, session; case, "_", "-", "." and spaces ignored) and
 // returns the redaction class for it.
 func SensitiveKeyClass(key string) (string, bool) {
+	k := normalizeKey(key)
+	for _, w := range keyClasses {
+		if strings.Contains(k, w.word) {
+			return w.class, true
+		}
+	}
+	return "", false
+}
+
+// normalizeKey folds a key to lower case letters and digits, so that case,
+// "_", "-", "." and blanks do not change what a key is called.
+func normalizeKey(key string) string {
 	var b strings.Builder
 	for i := 0; i < len(key); i++ {
 		c := key[i]
@@ -536,13 +574,7 @@ func SensitiveKeyClass(key string) (string, bool) {
 			b.WriteByte(c)
 		}
 	}
-	k := b.String()
-	for _, w := range keyClasses {
-		if strings.Contains(k, w.word) {
-			return w.class, true
-		}
-	}
-	return "", false
+	return b.String()
 }
 
 // keyClasses is ordered: the more specific word wins.
@@ -603,6 +635,24 @@ func (ru rule) replace(b []byte, log *RedactionLog, secrets *[]string) []byte {
 			ks, ke := m[2*ru.keyGroup], m[2*ru.keyGroup+1]
 			c, ok := SensitiveKeyClass(string(b[ks:ke]))
 			if !ok {
+				continue
+			}
+			// A key glued to a slash is the last segment of a path, not a
+			// key, and what follows the colon is not its value. Measured on
+			// the recorded refusal of the trial host: "cat:
+			// /etc/sudoers.d/alice-nopasswd: Permission denied" became
+			// "... [REDACTED_password] denied", which hides why the file
+			// was not read. Only the forward slash counts, so a backslash
+			// separated name, as a Windows registry export writes it, keeps
+			// being read as a key.
+			if ks > 0 && b[ks-1] == '/' {
+				continue
+			}
+			// The same guard the structured path applies: a value from the
+			// closed set of configuration answers is the answer, not a
+			// credential. Without it "NOPASSWD: ALL" in a sudoers file
+			// becomes "NOPASSWD: [REDACTED_password]" in the evidence.
+			if IsPolicyAnswer(string(unquote(val))) {
 				continue
 			}
 			class = c

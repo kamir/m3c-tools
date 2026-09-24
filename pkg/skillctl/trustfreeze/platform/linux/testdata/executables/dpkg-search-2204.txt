@@ -1,0 +1,2 @@
+mcli: /usr/local/bin/mcli
+snapd: /usr/lib/snapd/snapd

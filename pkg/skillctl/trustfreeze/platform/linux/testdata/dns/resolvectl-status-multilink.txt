@@ -1,0 +1,23 @@
+Global
+         Protocols: +LLMNR +mDNS +DNSOverTLS DNSSEC=yes/supported
+  resolv.conf mode: foreign
+       DNS Servers: 203.0.113.53
+        DNS Domain: example.
+
+Link 2 (eth0)
+    Current Scopes: DNS LLMNR/IPv4 LLMNR/IPv6
+         Protocols: +DefaultRoute +LLMNR +mDNS +DNSOverTLS DNSSEC=yes/supported
+Current DNS Server: 203.0.113.53
+       DNS Servers: 203.0.113.53 203.0.113.54 2001:db8::53
+        DNS Domain: example. internal.example. ~.
+
+Link 3 (eth1)
+    Current Scopes: DNS
+         Protocols: -DefaultRoute -LLMNR -mDNS -DNSOverTLS DNSSEC=allow-downgrade/supported
+Current DNS Server: 198.51.100.53
+       DNS Servers: 198.51.100.53
+        DNS Domain: lab.example.
+
+Link 4 (docker0)
+    Current Scopes: none
+         Protocols: -DefaultRoute -LLMNR -mDNS -DNSOverTLS DNSSEC=no/unsupported

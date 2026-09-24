@@ -300,3 +300,81 @@ func moduleRoot(t *testing.T) string {
 		dir = parent
 	}
 }
+
+// R-T3: report projects state/capabilities.json. The order is the presentation
+// order the section documents (far-reaching privilege first, then id), the
+// resolver gaps travel with the list, and the bytes are pinned: the projection
+// reads no clock and evaluates nothing.
+func TestCaptureReportCapabilitiesGolden(t *testing.T) {
+	caps := &trustfreeze.CapabilitiesDoc{
+		Resolver: "linux.privilege/v1",
+		Capabilities: []trustfreeze.Capability{
+			{
+				ID: "capability/remote.shell.public-key/alice/ab12", SubjectID: "user/alice",
+				Action: "access", Resource: "remote.shell", Effect: "allowed",
+				State: trustfreeze.StateDeclared, Scope: "host", Exposure: "network",
+				Privilege: "user", Sources: []string{"ssh/authorized-key/alice/ab12"},
+				Confidence: trustfreeze.ConfidenceProven,
+			},
+			{
+				ID: "capability/execute/host/user/remote-maint", SubjectID: "user/remote-maint",
+				Action: "execute", Resource: "host", Effect: "allowed",
+				State: trustfreeze.StateDeclared, Scope: "host", Exposure: "local",
+				Privilege: "root-via-sudo-nopasswd", Sources: []string{"sudo/rule/sudoers/12"},
+				Confidence: trustfreeze.ConfidenceProven,
+			},
+			{
+				ID: "capability/execute/host/via/docker/user/alice", SubjectID: "user/alice",
+				Action: "execute", Resource: "host", Effect: "allowed",
+				State: trustfreeze.StateInferred, Scope: "host", Exposure: "local",
+				Privilege:  "root-via-container-runtime",
+				Attributes: map[string]string{"grant_path": "container-runtime-socket", "group": "docker"},
+				Sources:    []string{"device/group/984"},
+				Confidence: trustfreeze.ConfidenceReported,
+			},
+		},
+		Diagnostics: []trustfreeze.Diagnostic{{
+			Code: "privilege_source_unreadable", Field: "sudo/file/sudoers.d/ops",
+			Message: "1 sudo rule file(s) exist and could not be read by this capture",
+		}},
+	}
+	b := writeCaptureWith(t, t.TempDir(), "capture", trustfreeze.KindCapture, testTime, "24.04", 0, caps)
+	r, err := FromBundle(b)
+	got := mustReport(t, r, err)
+	section := r.Capture.Capabilities
+	if section == nil || section.Resolver != "linux.privilege/v1" {
+		t.Fatalf("capabilities section %+v", section)
+	}
+	var ids []string
+	for _, c := range section.Capabilities {
+		ids = append(ids, c.ID)
+	}
+	want := []string{
+		"capability/execute/host/user/remote-maint",
+		"capability/execute/host/via/docker/user/alice",
+		"capability/remote.shell.public-key/alice/ab12",
+	}
+	if !slices.Equal(ids, want) {
+		t.Fatalf("order %q, want %q", ids, want)
+	}
+	if len(section.Diagnostics) != 1 {
+		t.Fatalf("the resolver gaps were dropped: %+v", section.Diagnostics)
+	}
+	checkGolden(t, "report_capture_capabilities.golden", got)
+}
+
+// R-T3: a bundle without a capabilities document keeps the section absent, so
+// a reader can tell "nobody resolved capabilities" from "nobody holds any".
+func TestCaptureReportWithoutCapabilities(t *testing.T) {
+	b := writeCapture(t, t.TempDir(), "capture", trustfreeze.KindCapture, testTime, "24.04", 0)
+	r, err := FromBundle(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Capture.Capabilities != nil {
+		t.Fatalf("capabilities section invented: %+v", r.Capture.Capabilities)
+	}
+	if bytes.Contains(mustReport(t, r, err), []byte("capabilities")) {
+		t.Fatal("the report names a capabilities key although the bundle has none")
+	}
+}

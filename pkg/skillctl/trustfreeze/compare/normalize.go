@@ -15,7 +15,14 @@ import (
 // (SPEC-0469 R4).
 const (
 	RuleSetNormalizeV1 = "trust-freeze/normalize/v1"
-	DefaultRuleSetID   = RuleSetNormalizeV1
+	// RuleSetNormalizeV2 adds the two volatile values the Linux network
+	// probes brought (SPEC-0471 TF06-R3): the metric of a route, which the
+	// network stack rewrites without the route changing, and the resolver
+	// systemd-resolved happens to be querying, which it picks out of the
+	// configured list at runtime. v1 is shipped unchanged so that a diff
+	// recorded with it stays readable.
+	RuleSetNormalizeV2 = "trust-freeze/normalize/v2"
+	DefaultRuleSetID   = RuleSetNormalizeV2
 )
 
 // ErrUnknownRuleSet is returned for a rule set id this build does not ship.
@@ -24,8 +31,24 @@ var ErrUnknownRuleSet = errors.New("compare: unknown normalization rule set")
 //go:embed rules/normalize-v1.json
 var normalizeV1JSON []byte
 
+//go:embed rules/normalize-v2.json
+var normalizeV2JSON []byte
+
 var ruleSetFiles = map[string][]byte{
 	RuleSetNormalizeV1: normalizeV1JSON,
+	RuleSetNormalizeV2: normalizeV2JSON,
+}
+
+// RuleSetIDs returns the ids of the rule sets this build ships, sorted. A diff
+// names the one it was computed with, so an older id has to stay loadable for
+// that diff to remain readable.
+func RuleSetIDs() []string {
+	out := make([]string, 0, len(ruleSetFiles))
+	for id := range ruleSetFiles {
+		out = append(out, id)
+	}
+	slices.Sort(out)
+	return out
 }
 
 // RuleSet names the volatile values that are removed before two artifacts are

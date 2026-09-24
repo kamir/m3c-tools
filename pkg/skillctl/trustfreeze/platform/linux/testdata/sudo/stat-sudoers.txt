@@ -1,0 +1,4 @@
+/etc/sudoers 440 root root 1800
+/etc/sudoers.d 755 root root 42
+/etc/sudoers.d/README 440 root root 1068
+/etc/sudoers.d/alice-nopasswd 440 root root 29

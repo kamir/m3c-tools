@@ -148,7 +148,7 @@ func TestRedactValue(t *testing.T) {
 	if strings.Contains(s, opaque) || strings.Contains(s, ghToken) {
 		t.Fatalf("secret survived: %s", s)
 	}
-	for _, want := range []string{`"count":12`, `"ratio":1.5`, `"password":"[REDACTED:password]"`, `"client_secret":"[REDACTED:client_secret]"`, `"name":"svc"`} {
+	for _, want := range []string{`"count":12`, `"ratio":1.5`, `"password":"[REDACTED_password]"`, `"client_secret":"[REDACTED_client_secret]"`, `"name":"svc"`} {
 		if !strings.Contains(s, want) {
 			t.Errorf("want %s in %s", want, s)
 		}
@@ -170,7 +170,7 @@ func TestRedactValueFailClosed(t *testing.T) {
 	for name, v := range map[string]any{
 		"struct":     custom{Secret: opaque},
 		"pointer":    &custom{Secret: opaque},
-		"collision":  map[string]any{ghToken: "a", "[REDACTED:github_token]": "b"},
+		"collision":  map[string]any{ghToken: "a", "[REDACTED_github_token]": "b"},
 		"stringer":   stringerValue(opaque),
 		"deep_slice": []any{map[string]any{"x": custom{}}},
 	} {
@@ -224,7 +224,7 @@ func TestWithLiteral(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, _ := redactString(t, r, "/home/alice/.claude/settings.json and /usr/bin/uname")
-	if out != "[REDACTED:home_path]/.claude/settings.json and /usr/bin/uname" {
+	if out != "[REDACTED_home_path]/.claude/settings.json and /usr/bin/uname" {
 		t.Fatalf("got %q", out)
 	}
 	for _, bad := range []string{"/", "//", "ab", `C:\`[:2]} {

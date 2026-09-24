@@ -654,6 +654,10 @@ type Bundle struct {
 	Capture *CaptureDoc
 	// State is state/device.json; nil when the bundle does not contain it.
 	State *StateDoc
+	// Capabilities is state/capabilities.json; nil when the bundle does not
+	// contain it, which means no resolver ran, not that the host grants
+	// nothing (SPEC-0466 section 5.7).
+	Capabilities *CapabilitiesDoc
 }
 
 // ReadBundle verifies dir with VerifyDir and refuses a bundle that fails
@@ -686,6 +690,13 @@ func ReadBundle(dir string) (*Bundle, error) {
 			return b, err
 		}
 		b.State = &st
+	}
+	if b.Has(StateCapabilitiesFile) {
+		var caps CapabilitiesDoc
+		if err := b.ReadJSON(StateCapabilitiesFile, &caps); err != nil {
+			return b, err
+		}
+		b.Capabilities = &caps
 	}
 	if b.Capture != nil {
 		if err := b.CheckCaptureConsistency(); err != nil {

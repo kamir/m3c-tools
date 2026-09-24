@@ -1,0 +1,1 @@
+stat: cannot statx '/usr/local/bin/nosuch-trustfreeze': No such file or directory

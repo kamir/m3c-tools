@@ -1,0 +1,2 @@
+Operation not permitted (you must be root)
+netlink: Error: cache initialization failed: Operation not permitted

@@ -1,0 +1,15 @@
+Type=
+Restart=no
+User=
+Group=
+Id=nosuchunit-trustfreeze.service
+Description=nosuchunit-trustfreeze.service
+LoadState=not-found
+ActiveState=inactive
+SubState=dead
+FragmentPath=
+DropInPaths=
+UnitFileState=
+UnitFilePreset=
+NeedDaemonReload=no
+ConditionResult=no

@@ -320,6 +320,60 @@ func (s *Sensitivity) UnmarshalJSON(b []byte) error {
 	return s.UnmarshalText([]byte(str))
 }
 
+// AttributeClass is a probe's own statement about one of its attributes,
+// for the redaction pass that runs over everything a probe result carries
+// (SPEC-0467 section 5.2). The generic rule can only guess from the key
+// name; a probe knows what its own field holds. sshd directives and sudo
+// rule flags are configuration, and their values must survive, because they
+// carry the finding a security review is after: whether password login is
+// allowed, and whether a rule needs no password.
+type AttributeClass string
+
+// Attribute classes.
+const (
+	// AttributeClassPolicy is a configuration answer, never a credential.
+	// The key name rule does not apply to it; every value pattern still
+	// does, so a key body under a policy field is still removed.
+	AttributeClassPolicy AttributeClass = "policy"
+	// AttributeClassSensitive is a value that must be replaced whatever its
+	// key is called and whatever it looks like: a key body, a hash, a token.
+	AttributeClassSensitive AttributeClass = "sensitive"
+)
+
+var attributeClassValues = []AttributeClass{AttributeClassPolicy, AttributeClassSensitive}
+
+// Valid reports whether c is a known attribute class.
+func (c AttributeClass) Valid() bool { return member(c, attributeClassValues) }
+
+// ParseAttributeClass parses an attribute class strictly.
+func ParseAttributeClass(s string) (AttributeClass, error) {
+	return parseEnum("attribute class", s, attributeClassValues)
+}
+
+// MarshalText rejects an unknown attribute class.
+func (c AttributeClass) MarshalText() ([]byte, error) {
+	return marshalEnum("attribute class", c, attributeClassValues)
+}
+
+// UnmarshalText parses an attribute class strictly.
+func (c *AttributeClass) UnmarshalText(b []byte) error {
+	v, err := ParseAttributeClass(string(b))
+	if err != nil {
+		return err
+	}
+	*c = v
+	return nil
+}
+
+// UnmarshalJSON accepts only a JSON string holding a known attribute class.
+func (c *AttributeClass) UnmarshalJSON(b []byte) error {
+	str, err := jsonEnumString("attribute class", b)
+	if err != nil {
+		return err
+	}
+	return c.UnmarshalText([]byte(str))
+}
+
 // Privilege is the privilege a probe ran with. Trust Freeze never elevates
 // (SPEC-0467 R6); the value records what the process had.
 type Privilege string

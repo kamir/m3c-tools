@@ -121,6 +121,11 @@ const (
 	SignatureFile   = "signatures/manifest.ed25519.json"
 	SignaturesDir   = "signatures"
 	StateDeviceFile = "state/device.json"
-	ProbesDir       = "probes"
-	EvidenceDir     = "evidence"
+	// StateCapabilitiesFile holds the capabilities resolved from the
+	// artifacts of this capture (SPEC-0466 section 5.7). It is written only
+	// by a capture whose platform has a capability resolver, so a bundle
+	// without it says "not resolved here", never "no capability".
+	StateCapabilitiesFile = "state/capabilities.json"
+	ProbesDir             = "probes"
+	EvidenceDir           = "evidence"
 )

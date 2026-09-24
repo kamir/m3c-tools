@@ -1,68 +1,233 @@
 {
   "schema_version": "trust-freeze/evidence/v1",
-  "commit": "a4271d9cc9a4164b9c8f32f93009e96e4932f916",
-  "recorded_at": "2026-09-22",
-  "scope": "PR-1 walking skeleton: the common.identity probe and the bundle lifecycle (capture, baseline approve, verify, diff, report). The platform profiles of SPEC-0471 are not implemented, so TF06-AC1 to TF06-AC4 are not claimed.",
-  "platforms": [
+  "recorded_at": "2026-09-24",
+  "rounds": [
     {
-      "target": "darwin/amd64",
-      "evidence_level": "real-platform-tested",
-      "executed_on": "macOS 15.7.9, build 24G830, kernel 24.6.0, x86_64",
-      "toolchain": "go1.27.1 darwin/amd64, built and run from the source tree",
-      "unit_tests": { "packages": 10, "pass": 1479, "fail": 0, "skip": 3 },
-      "acceptance_script": { "steps": 48, "unexpected": 0, "result": "pass" },
-      "notes": "The 3 skips are the Windows-only and Linux-only cases, skipped with an explicit reason."
+      "name": "T-01 walking skeleton",
+      "commit": "a4271d9cc9a4164b9c8f32f93009e96e4932f916",
+      "scope": "PR-1 walking skeleton: the common.identity probe and the bundle lifecycle (capture, baseline approve, verify, diff, report). The platform profiles of SPEC-0471 are not implemented, so TF06-AC1 to TF06-AC4 are not claimed.",
+      "platforms": [
+        {
+          "target": "darwin/amd64",
+          "evidence_level": "real-platform-tested",
+          "executed_on": "macOS 15.7.9, build 24G830, kernel 24.6.0, x86_64",
+          "toolchain": "go1.27.1 darwin/amd64, built and run from the source tree",
+          "unit_tests": {
+            "packages": 10,
+            "pass": 1479,
+            "fail": 0,
+            "skip": 3
+          },
+          "acceptance_script": {
+            "steps": 48,
+            "unexpected": 0,
+            "result": "pass"
+          },
+          "notes": "The 3 skips are the Windows-only and Linux-only cases, skipped with an explicit reason."
+        },
+        {
+          "target": "linux/amd64",
+          "evidence_level": "real-platform-tested",
+          "executed_on": "Ubuntu 24.04.1 LTS, kernel 6.17.0-35-generic, x86_64, unprivileged user",
+          "toolchain": "test binaries and skillctl cross-compiled from this commit with go1.27.1 darwin/amd64, CGO_ENABLED=0. The unit-test binaries are self-contained and ran without invoking Go. The acceptance script calls go version once for its own evidence header; that host has go1.26.4 installed and Go therefore fetched the go1.26.6 toolchain named by go.mod into the throwaway HOME, which needed network access.",
+          "unit_tests": {
+            "packages": 10,
+            "pass": 892,
+            "fail": 0,
+            "skip": 3
+          },
+          "acceptance_script": {
+            "steps": 48,
+            "unexpected": 0,
+            "result": "pass"
+          },
+          "notes": "Read-only towards the host: every run used a throwaway HOME and wrote only inside a temporary directory. The one exception to offline operation is the go version call described under toolchain."
+        },
+        {
+          "target": "windows/amd64",
+          "evidence_level": "cross-compiled",
+          "executed_on": null,
+          "toolchain": "go1.27.1, GOOS=windows",
+          "checks": {
+            "vet": "clean",
+            "test_binaries_linked": 10,
+            "skillctl_exe": "builds"
+          },
+          "notes": "Nothing was executed on Windows. The first real execution is the windows-latest CI job after the push, on a Windows Server image, not a Windows 11 workstation."
+        },
+        {
+          "target": "windows/arm64",
+          "evidence_level": "cross-compiled",
+          "executed_on": null,
+          "toolchain": "go1.27.1, GOOS=windows GOARCH=arm64",
+          "checks": {
+            "vet": "clean"
+          },
+          "notes": "Vet only."
+        },
+        {
+          "target": "linux/arm64",
+          "evidence_level": "cross-compiled",
+          "executed_on": null,
+          "toolchain": "go1.27.1, GOOS=linux GOARCH=arm64",
+          "checks": {
+            "vet": "clean"
+          },
+          "notes": "Vet only."
+        }
+      ],
+      "cross_machine_verification": [
+        {
+          "case": "baseline approved on linux/amd64, verified on darwin/amd64 with the public key",
+          "expected": "pass",
+          "observed": "exit 0, result_class ok"
+        },
+        {
+          "case": "the same baseline verified on darwin/amd64 without trust material",
+          "expected": "fail",
+          "observed": "exit 1, verification_failure, key_not_trusted"
+        },
+        {
+          "case": "baseline approved on darwin/amd64, verified on linux/amd64 with the public key",
+          "expected": "pass",
+          "observed": "exit 0, result_class ok"
+        },
+        {
+          "case": "the same baseline verified on linux/amd64 after one manifested byte was flipped",
+          "expected": "fail",
+          "observed": "exit 1, verification_failure, digest_mismatch"
+        }
+      ]
     },
     {
-      "target": "linux/amd64",
-      "evidence_level": "real-platform-tested",
-      "executed_on": "Ubuntu 24.04.1 LTS, kernel 6.17.0-35-generic, x86_64, unprivileged user",
-      "toolchain": "test binaries and skillctl cross-compiled from this commit with go1.27.1 darwin/amd64, CGO_ENABLED=0. The unit-test binaries are self-contained and ran without invoking Go. The acceptance script calls go version once for its own evidence header; that host has go1.26.4 installed and Go therefore fetched the go1.26.6 toolchain named by go.mod into the throwaway HOME, which needed network access.",
-      "unit_tests": { "packages": 10, "pass": 892, "fail": 0, "skip": 3 },
-      "acceptance_script": { "steps": 48, "unexpected": 0, "result": "pass" },
-      "notes": "Read-only towards the host: every run used a throwaway HOME and wrote only inside a temporary directory. The one exception to offline operation is the go version call described under toolchain."
-    },
-    {
-      "target": "windows/amd64",
-      "evidence_level": "cross-compiled",
-      "executed_on": null,
-      "toolchain": "go1.27.1, GOOS=windows",
-      "checks": { "vet": "clean", "test_binaries_linked": 10, "skillctl_exe": "builds" },
-      "notes": "Nothing was executed on Windows. The first real execution is the windows-latest CI job after the push, on a Windows Server image, not a Windows 11 workstation."
-    },
-    {
-      "target": "windows/arm64",
-      "evidence_level": "cross-compiled",
-      "executed_on": null,
-      "toolchain": "go1.27.1, GOOS=windows GOARCH=arm64",
-      "checks": { "vet": "clean" },
-      "notes": "Vet only."
-    },
-    {
-      "target": "linux/arm64",
-      "evidence_level": "cross-compiled",
-      "executed_on": null,
-      "toolchain": "go1.27.1, GOOS=linux GOARCH=arm64",
-      "checks": { "vet": "clean" },
-      "notes": "Vet only."
+      "name": "T-03 Linux and Ubuntu bastion",
+      "commit": "744d015",
+      "scope": "The nine Linux probes (identity, packages, users, sudo, ssh, systemd, mounts, listeners, firewall, containers), privilege capability resolution, the ubuntu-bastion profile, and the contract gaps (capture --actor, split clock skew, doctor checks). Routes, DNS and executable hashes are NOT implemented, so the profile is not yet complete against SPEC-0471 TF06-R3; that is a separate work package.",
+      "platforms": [
+        {
+          "target": "linux/amd64",
+          "evidence_level": "real-platform-tested",
+          "executed_on": "two hosts: Ubuntu 24.04.1 LTS kernel 6.17 (trial class) and Ubuntu 22.04.5 LTS kernel 6.8 (bastion class, ngrok and MinIO present)",
+          "toolchain": "skillctl cross-compiled from this commit with go1.27.1 darwin/amd64, CGO_ENABLED=0, executed on both hosts",
+          "runs": [
+            {
+              "privilege": "unprivileged",
+              "profile": "ubuntu-bastion",
+              "result": "exit 1, incomplete_capture",
+              "probes": {
+                "captured": 5,
+                "permission_denied": 4,
+                "partial": 1,
+                "unsupported": 2
+              },
+              "note": "firewall, effective sshd state, the sudoers files and the container socket are refused without root, and the bundle names each refusal instead of showing an empty list"
+            },
+            {
+              "privilege": "elevated (operator ran it explicitly, the tool never elevates itself)",
+              "profile": "ubuntu-bastion",
+              "result": "exit 0, complete",
+              "probes": {
+                "captured": 10,
+                "unsupported": 2
+              },
+              "artifacts": 2936,
+              "note": "the two unsupported probes are common.git and common.claude, which are not built yet (T-02)"
+            }
+          ],
+          "capability_resolution": "10 privilege capabilities on the bastion class host, each with its sources: sudo rules, group membership, container runtime socket access, authorized keys. On the trial class host additionally three privileged containers."
+        },
+        {
+          "target": "darwin/amd64",
+          "evidence_level": "real-platform-tested",
+          "executed_on": "macOS 15.7.9, build 24G830",
+          "toolchain": "go1.27.1 darwin/amd64",
+          "note": "the Linux probes report unsupported with platform_not_supported here, which is the point of the platform guard; the bundle lifecycle, seal, verify, diff and report are exercised by the 62 step acceptance script"
+        },
+        {
+          "target": "windows/amd64",
+          "evidence_level": "cross-compiled",
+          "executed_on": null,
+          "note": "vet clean and the test binaries link; nothing executed. The windows-latest CI job of the pull request is the first execution."
+        }
+      ],
+      "cross_machine_verification": [
+        {
+          "case": "complete elevated baseline signed on linux/amd64, verified on darwin/amd64 with the public key",
+          "expected": "pass",
+          "observed": "exit 0, result_class ok"
+        },
+        {
+          "case": "the same baseline verified on darwin/amd64 without trust material",
+          "expected": "fail",
+          "observed": "exit 1, verification_failure"
+        },
+        {
+          "case": "the same baseline verified on darwin/amd64 after one manifested byte was flipped",
+          "expected": "fail",
+          "observed": "exit 1, verification_failure, digest_mismatch"
+        }
+      ],
+      "diff_over_really_collected_bundles": {
+        "case": "unprivileged baseline against the elevated capture of the same host",
+        "result": "exit 0, no critical and no high finding",
+        "findings": {
+          "low": 92,
+          "info": 11,
+          "medium": 2
+        },
+        "note": "the ten capabilities that only the elevated run could see are rated info as coverage_increased, not as drift; the two medium findings are the two probes that are not built yet"
+      },
+      "defects_found_by_these_runs": [
+        "the redaction marker contained a colon and broke colon separated records, which dropped the root account from the bundle",
+        "the same break in getent group",
+        "a container runtime installed as a snap was reported as not present instead of not found",
+        "template units aborted whole systemctl batches, leaving 47 units without runtime state",
+        "the redactor hid PasswordAuthentication and the sudo NOPASSWD flag, the very statements the scan exists for",
+        "five findings rated critical that were a visibility difference, not drift"
+      ]
     }
   ],
-  "cross_machine_verification": [
-    { "case": "baseline approved on linux/amd64, verified on darwin/amd64 with the public key", "expected": "pass", "observed": "exit 0, result_class ok" },
-    { "case": "the same baseline verified on darwin/amd64 without trust material", "expected": "fail", "observed": "exit 1, verification_failure, key_not_trusted" },
-    { "case": "baseline approved on darwin/amd64, verified on linux/amd64 with the public key", "expected": "pass", "observed": "exit 0, result_class ok" },
-    { "case": "the same baseline verified on linux/amd64 after one manifested byte was flipped", "expected": "fail", "observed": "exit 1, verification_failure, digest_mismatch" }
-  ],
   "gates": [
-    { "command": "gofmt -l ./cmd/skillctl ./pkg/skillctl/trustfreeze", "exit_code": 0 },
-    { "command": "go vet ./...", "exit_code": 0 },
-    { "command": "go test -count=1 ./pkg/skillctl/trustfreeze/... ./cmd/skillctl/...", "exit_code": 0 },
-    { "command": "go test -race -count=1 ./pkg/skillctl/trustfreeze/...", "exit_code": 0 },
-    { "command": "go run ./cmd/verbaudit", "exit_code": 0 },
-    { "command": "go run ./cmd/exitaudit", "exit_code": 0 },
-    { "command": "./scripts/check-docs.sh", "exit_code": 0 },
-    { "command": "./scripts/check-no-emdash.sh", "exit_code": 0 },
-    { "command": "tools/boundary-gate.sh", "exit_code": 0 },
-    { "command": "tools/id-xref-lint.sh", "exit_code": 1, "note": "pre-existing: the same dangling references exist on the base commit 26194006e353, in the drift and agent-bundle code and docs plus one placeholder id in a verbaudit test. This branch adds none. The ids are not repeated here, because naming them in a public-plane file would itself be a new violation." }
+    {
+      "command": "gofmt -l ./cmd/skillctl ./pkg/skillctl/trustfreeze",
+      "exit_code": 0
+    },
+    {
+      "command": "go vet ./...",
+      "exit_code": 0
+    },
+    {
+      "command": "go test -count=1 ./pkg/skillctl/trustfreeze/... ./cmd/skillctl/...",
+      "exit_code": 0
+    },
+    {
+      "command": "go test -race -count=1 ./pkg/skillctl/trustfreeze/...",
+      "exit_code": 0
+    },
+    {
+      "command": "go run ./cmd/verbaudit",
+      "exit_code": 0
+    },
+    {
+      "command": "go run ./cmd/exitaudit",
+      "exit_code": 0
+    },
+    {
+      "command": "./scripts/check-docs.sh",
+      "exit_code": 0
+    },
+    {
+      "command": "./scripts/check-no-emdash.sh",
+      "exit_code": 0
+    },
+    {
+      "command": "tools/boundary-gate.sh",
+      "exit_code": 0
+    },
+    {
+      "command": "tools/id-xref-lint.sh",
+      "exit_code": 1,
+      "note": "pre-existing: the same dangling references exist on the base commit 26194006e353, in the drift and agent-bundle code and docs plus one placeholder id in a verbaudit test. This branch adds none. The ids are not repeated here, because naming them in a public-plane file would itself be a new violation."
+    }
   ]
 }

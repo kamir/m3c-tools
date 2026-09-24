@@ -1,0 +1,2 @@
+dpkg-query: no path found matching pattern /usr/local/bin/ngrok
+dpkg-query: no path found matching pattern /snap/core22/1122/usr/bin/env

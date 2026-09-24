@@ -1,10 +1,10 @@
 {
   "schema_version": "trust-freeze/verdict/v1",
   "policy": {
-    "id": "trust-freeze/policy/default-v0",
-    "rules_digest": "sha256:ee9fcbc71aa53e1fd63ec40975c843475c9b5b0cd06043cef0a37f994b46d319"
+    "id": "trust-freeze/policy/default-v1",
+    "rules_digest": "sha256:a74f9eb62318cc8bee01ced0a0b829df720d49336cafae3a08447554084e4ddd"
   },
-  "diff_digest": "sha256:6f1cec7d66fc6a20de13669f0284c7e31d64f132ecc46bb0bc1dbe019476f438",
+  "diff_digest": "sha256:4207be52ff26fb1b6f3da7a8a300612a15cd3e37740ac4e471b77c8da245ba5a",
   "highest_severity": "medium",
   "fail_on": "high",
   "threshold_exceeded": false,

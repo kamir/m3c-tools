@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze"
-	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/capture"
+	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/platform/common"
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/probe"
 )
 
@@ -304,12 +304,15 @@ func (p tfStubProbe) Collect(context.Context, probe.CollectContext) trustfreeze.
 func TestTrustFreezeExcludedOptionalProbeIsAGap(t *testing.T) {
 	e := newTFEnv(t)
 	e.deps.Registry = func() (*probe.Registry, error) {
-		reg, err := capture.DefaultRegistry()
-		if err != nil {
+		// Only the identity probe is the real one; every other probe of the
+		// profile is a stub here (see the decisions test).
+		reg := probe.NewRegistry()
+		if err := common.Register(reg); err != nil {
 			return nil, err
 		}
-		for _, id := range []string{"linux.packages", "linux.users", "linux.sudo", "linux.ssh.effective", "linux.systemd",
-			"linux.network.listeners", "linux.firewall", "linux.mounts", "common.containers", "common.claude"} {
+		for _, id := range []string{"linux.packages", "linux.users", "linux.sudo", "linux.ssh", "linux.systemd",
+			"linux.executables", "linux.network.listeners", "linux.network.routes", "linux.dns", "linux.firewall",
+			"linux.mounts", "linux.containers", "common.claude"} {
 			if err := reg.Register(tfStubProbe{id: id}); err != nil {
 				return nil, err
 			}

@@ -36,6 +36,14 @@ func NewRecordingRunner(inner CommandRunner, limits Limits, red *redact.Redactor
 // LookPath delegates to the wrapped runner.
 func (r *RecordingRunner) LookPath(file string) (string, error) { return r.inner.LookPath(file) }
 
+// SearchDirs implements SearchPathReporter by forwarding to the wrapped
+// runner, and returns nil for a runner that does not report its search path.
+// Without this the engine's own wrapper would hide the directories from every
+// probe: the engine hands each Collect a RecordingRunner, so a probe asking
+// probe.SearchDirs would be told that nobody knows where the tool was looked
+// for, while the ExecRunner underneath knows exactly.
+func (r *RecordingRunner) SearchDirs() []string { return SearchDirs(r.inner) }
+
 // Run clamps req, runs it and records the invocation.
 func (r *RecordingRunner) Run(ctx context.Context, req CommandRequest) CommandResult {
 	req = r.limits.clampRequest(req)

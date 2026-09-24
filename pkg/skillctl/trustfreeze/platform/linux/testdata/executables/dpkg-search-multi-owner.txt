@@ -1,0 +1,1 @@
+spice-vdagent, grub-common, docker-ce, speech-dispatcher, sane-utils, procps, kerneloops, gdm3, dbus, bluez, apparmor, anacron, alsa-utils, nginx-common, rsync, kmod, cups-daemon, openssh-server, apport-core-dump-handler, openvpn, uuid-runtime, systemd, sssd-common, ufw, x11-common, whoopsie, unattended-upgrades, sysstat, plymouth, cron, console-setup-linux: /etc/init.d

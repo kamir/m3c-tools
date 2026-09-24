@@ -88,6 +88,7 @@ type InputRef struct {
 
 // Change is one diff entry. Artifact entries carry ArtifactID (a
 // not_observed entry also the ProbeID of the artifact's source probe); a
+// capability entry carries CapabilityID and the privilege of each side; a
 // collection_gap entry carries ProbeID and Gap, an applicability_changed
 // entry ProbeID and the two probe statuses, a subject_changed entry the two
 // subject ids. Attribute values never appear in a diff: a changed entry names
@@ -98,8 +99,17 @@ type Change struct {
 	ArtifactID   string     `json:"artifact_id,omitempty"`
 	ArtifactType string     `json:"artifact_type,omitempty"`
 	ProbeID      string     `json:"probe_id,omitempty"`
+	// CapabilityID names the capability of a capability entry; those entries
+	// carry no artifact id.
+	CapabilityID string `json:"capability_id,omitempty"`
+	// BeforePrivilege and AfterPrivilege are the privilege of a capability
+	// entry on each side, empty where that side has no capability. A policy
+	// rates a root capability by them (SPEC-0469 AC3).
+	BeforePrivilege string `json:"before_privilege,omitempty"`
+	AfterPrivilege  string `json:"after_privilege,omitempty"`
 	// ChangedFields names compared artifact fields that differ (see
-	// ComparedFields), sorted. Only for changed.
+	// ComparedFields), sorted. Only for changed, and for capability_changed,
+	// where it names capability fields (see CapabilityFields).
 	ChangedFields []string `json:"changed_fields,omitempty"`
 	// ChangedAttributes names attribute keys that differ, after
 	// normalization, sorted. A key counts only when it was observed on both
@@ -109,6 +119,18 @@ type Change struct {
 	// UnobservedAttributes names the baseline attribute keys the current
 	// bundle did not observe, sorted. Only for not_observed.
 	UnobservedAttributes []string `json:"unobserved_attributes,omitempty"`
+	// BaselineGapProbes names the probes that produced the sources of a
+	// capability and were blind in the baseline, sorted. Only for
+	// coverage_increased, where it says why the capability is not called new.
+	BaselineGapProbes []string `json:"baseline_gap_probes,omitempty"`
+	// CoverageCaveatProbes names the probes behind the sources of a
+	// capability_added entry whose baseline coverage was thinner than the
+	// current one, sorted: a probe that only reported partially there, and a
+	// probe that was blind there while another source was covered. The entry
+	// stays capability_added at its normal severity, because the baseline did
+	// look at ground this capability stands on; the list says where the
+	// comparison rests on less than a full baseline (R-T1).
+	CoverageCaveatProbes []string `json:"coverage_caveat_probes,omitempty"`
 	// BeforeDigest and AfterDigest are "sha256:<hex>" over the canonical JSON
 	// of the normalized attribute map on each side. A not_observed entry has
 	// an AfterDigest only when the artifact itself is in the current bundle.
@@ -169,7 +191,9 @@ type Gap struct {
 //     observed.
 //
 // One artifact can yield several entries (for example changed and
-// became_effective). A probe that moves between captured and not_applicable
+// became_effective). Capabilities are compared separately, by capability id,
+// and only as far as both bundles resolved them (see capability.go). A probe
+// that moves between captured and not_applicable
 // (with a reason) yields applicability_changed. Every probe of the current
 // bundle that is not captured, and every required probe without a result,
 // yields a collection_gap; a probe that is not_applicable with a reason is a
@@ -250,6 +274,21 @@ func Compare(ctx context.Context, baseline, current *trustfreeze.Bundle, opts Co
 			changes = append(changes, compareArtifact(rs, b, a, beforeProbes.observes(b.Source), afterProbes.observes(a.Source))...)
 		}
 	}
+	// Which artifacts this comparison itself found new or changed. The
+	// capability guard reads it to tell a capability that is new on ground
+	// the baseline covered from one that is new only because somebody could
+	// finally look (R-T5).
+	touched := map[string]bool{}
+	for _, ch := range changes {
+		if ch.ArtifactID != "" {
+			touched[ch.ArtifactID] = true
+		}
+	}
+	capChanges, err := capabilityChanges(baseline, current, before, after, touched, beforeProbes)
+	if err != nil {
+		return Diff{}, err
+	}
+	changes = append(changes, capChanges...)
 	gaps, err := collectionGaps(current.Capture)
 	if err != nil {
 		return Diff{}, err
@@ -456,6 +495,37 @@ func notApplicableWithReason(p trustfreeze.ProbeSummary) bool {
 	return p.Status == trustfreeze.StatusNotApplicable && strings.TrimSpace(p.Reason) != ""
 }
 
+// blindStatuses are the probe statuses under which a probe produced no usable
+// observation: whatever it was asked about, it saw nothing a capability could
+// rest on. captured and partial are absent on purpose, because a probe that
+// reported partially did look and did report (R-T1 (a)). The list is closed,
+// so a new status has to be classified here deliberately.
+var blindStatuses = []trustfreeze.ProbeStatus{
+	trustfreeze.StatusUnsupported, trustfreeze.StatusUnavailable,
+	trustfreeze.StatusPermissionDenied, trustfreeze.StatusTimeout,
+	trustfreeze.StatusFailed, trustfreeze.StatusNotApplicable,
+}
+
+// blind reports whether probe id produced no usable observation in this
+// bundle: it left no single result with a known status (absent, duplicated or
+// invalid), or that status is one of blindStatuses. A source that is not a
+// probe id cannot be tied to a result and is never called blind, so the
+// coverage guard never invents a gap it did not measure.
+func (x probeIndex) blind(id string) bool {
+	if trustfreeze.ValidateProbeID(id) != nil {
+		return false
+	}
+	p, ok := x.single(id)
+	return !ok || slices.Contains(blindStatuses, p.Status)
+}
+
+// reportedPartially reports whether probe id has exactly one result and it is
+// partial: the probe did look and did report, but not completely.
+func (x probeIndex) reportedPartially(id string) bool {
+	p, ok := x.single(id)
+	return ok && p.Status == trustfreeze.StatusPartial
+}
+
 // applicabilityChanges lists every probe whose single result moves between
 // captured and not_applicable with a reason, in either direction.
 func applicabilityChanges(before, after probeIndex) []Change {
@@ -542,12 +612,15 @@ func sortChanges(cs []Change) {
 	slices.SortStableFunc(cs, compareChanges)
 }
 
-// compareChanges orders by (kind rank, artifact id, probe id).
+// compareChanges orders by (kind rank, artifact id, capability id, probe id).
 func compareChanges(x, y Change) int {
 	if d := x.Kind.rank() - y.Kind.rank(); d != 0 {
 		return d
 	}
 	if c := strings.Compare(x.ArtifactID, y.ArtifactID); c != 0 {
+		return c
+	}
+	if c := strings.Compare(x.CapabilityID, y.CapabilityID); c != 0 {
 		return c
 	}
 	return strings.Compare(x.ProbeID, y.ProbeID)

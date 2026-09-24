@@ -1,0 +1,2 @@
+ngrok-host-a.service  enabled  enabled
+ssh.socket            disabled enabled

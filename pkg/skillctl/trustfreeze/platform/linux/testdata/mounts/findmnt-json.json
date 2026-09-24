@@ -1,0 +1,154 @@
+{
+   "filesystems": [
+      {
+         "target": "/",
+         "source": "/dev/sdb1",
+         "fstype": "xfs",
+         "options": "rw,relatime,attr2,inode64,logbufs=8,logbsize=32k,noquota",
+         "children": [
+            {
+               "target": "/sys",
+               "source": "sysfs",
+               "fstype": "sysfs",
+               "options": "rw,nosuid,nodev,noexec,relatime",
+               "children": [
+                  {
+                     "target": "/sys/kernel/security",
+                     "source": "securityfs",
+                     "fstype": "securityfs",
+                     "options": "rw,nosuid,nodev,noexec,relatime"
+                  },{
+                     "target": "/sys/fs/cgroup",
+                     "source": "cgroup2",
+                     "fstype": "cgroup2",
+                     "options": "rw,nosuid,nodev,noexec,relatime,nsdelegate,memory_recursiveprot"
+                  },{
+                     "target": "/sys/kernel/debug",
+                     "source": "debugfs",
+                     "fstype": "debugfs",
+                     "options": "rw,nosuid,nodev,noexec,relatime"
+                  }
+               ]
+            },{
+               "target": "/proc",
+               "source": "proc",
+               "fstype": "proc",
+               "options": "rw,nosuid,nodev,noexec,relatime",
+               "children": [
+                  {
+                     "target": "/proc/sys/fs/binfmt_misc",
+                     "source": "systemd-1",
+                     "fstype": "autofs",
+                     "options": "rw,relatime,fd=32,pgrp=1,timeout=0,minproto=5,maxproto=5,direct,pipe_ino=449",
+                     "children": [
+                        {
+                           "target": "/proc/sys/fs/binfmt_misc",
+                           "source": "binfmt_misc",
+                           "fstype": "binfmt_misc",
+                           "options": "rw,nosuid,nodev,noexec,relatime"
+                        }
+                     ]
+                  }
+               ]
+            },{
+               "target": "/dev",
+               "source": "udev",
+               "fstype": "devtmpfs",
+               "options": "rw,nosuid,relatime,size=12218760k,nr_inodes=3054690,mode=755,inode64",
+               "children": [
+                  {
+                     "target": "/dev/pts",
+                     "source": "devpts",
+                     "fstype": "devpts",
+                     "options": "rw,nosuid,noexec,relatime,gid=5,mode=620,ptmxmode=000"
+                  },{
+                     "target": "/dev/shm",
+                     "source": "tmpfs",
+                     "fstype": "tmpfs",
+                     "options": "rw,nosuid,nodev,inode64"
+                  }
+               ]
+            },{
+               "target": "/run",
+               "source": "tmpfs",
+               "fstype": "tmpfs",
+               "options": "rw,nosuid,nodev,noexec,relatime,size=2452148k,mode=755,inode64",
+               "children": [
+                  {
+                     "target": "/run/lock",
+                     "source": "tmpfs",
+                     "fstype": "tmpfs",
+                     "options": "rw,nosuid,nodev,noexec,relatime,size=5120k,inode64"
+                  },{
+                     "target": "/run/snapd/ns",
+                     "source": "tmpfs[/snapd/ns]",
+                     "fstype": "tmpfs",
+                     "options": "rw,nosuid,nodev,noexec,relatime,size=2452148k,mode=755,inode64",
+                     "children": [
+                        {
+                           "target": "/run/snapd/ns/ollama.mnt",
+                           "source": "nsfs[mnt:[4026535078]]",
+                           "fstype": "nsfs",
+                           "options": "rw"
+                        }
+                     ]
+                  },{
+                     "target": "/run/docker/netns/default",
+                     "source": "nsfs[net:[4026531833]]",
+                     "fstype": "nsfs",
+                     "options": "rw"
+                  },{
+                     "target": "/run/docker/netns/a00000000001",
+                     "source": "nsfs[net:[4026532543]]",
+                     "fstype": "nsfs",
+                     "options": "rw"
+                  },{
+                     "target": "/run/user/1000",
+                     "source": "tmpfs",
+                     "fstype": "tmpfs",
+                     "options": "rw,nosuid,nodev,relatime,size=2452144k,nr_inodes=613036,mode=700,uid=1000,gid=1000,inode64",
+                     "children": [
+                        {
+                           "target": "/run/user/1000/doc",
+                           "source": "portal",
+                           "fstype": "fuse.portal",
+                           "options": "rw,nosuid,nodev,relatime,user_id=1000,group_id=1000"
+                        },{
+                           "target": "/run/user/1000/gvfs",
+                           "source": "gvfsd-fuse",
+                           "fstype": "fuse.gvfsd-fuse",
+                           "options": "rw,nosuid,nodev,relatime,user_id=1000,group_id=1000"
+                        }
+                     ]
+                  }
+               ]
+            },{
+               "target": "/snap/bare/5",
+               "source": "/dev/loop0",
+               "fstype": "squashfs",
+               "options": "ro,nodev,relatime,errors=continue,threads=single"
+            },{
+               "target": "/home",
+               "source": "/dev/sda1",
+               "fstype": "ext4",
+               "options": "rw,relatime"
+            },{
+               "target": "/snap/ollama/137",
+               "source": "/dev/loop34",
+               "fstype": "squashfs",
+               "options": "ro,nodev,relatime,errors=continue,threads=single"
+            },{
+               "target": "/var/lib/docker/overlay2/0101010101010101010101010101010101010101010101010101010101010101/merged",
+               "source": "overlay",
+               "fstype": "overlay",
+               "options": "rw,relatime,lowerdir=/var/lib/docker/overlay2/l/LAYER01XXXXXXXXXXXXXXXXXXX:/var/lib/docker/overlay2/l/LAYER02XXXXXXXXXXXXXXXXXXX:/var/lib/docker/overlay2/l/LAYER03XXXXXXXXXXXXXXXXXXX:/var/lib/docker/overlay2/l/LAYER04XXXXXXXXXXXXXXXXXXX:/var/lib/docker/overlay2/l/LAYER05XXXXXXXXXXXXXXXXXXX:/var/lib/docker/overlay2/l/LAYER06XXXXXXXXXXXXXXXXXXX:/var/lib/docker/overlay2/l/LAYER07XXXXXXXXXXXXXXXXXXX:/var/lib/docker/overlay2/l/LAYER08XXXXXXXXXXXXXXXXXXX:/var/lib/docker/overlay2/l/LAYER09XXXXXXXXXXXXXXXXXXX:/var/lib/docker/overlay2/l/LAYER10XXXXXXXXXXXXXXXXXXX:/var/lib/docker/overlay2/l/LAYER11XXXXXXXXXXXXXXXXXXX:/var/lib/docker/overlay2/l/LAYER12XXXXXXXXXXXXXXXXXXX,upperdir=/var/lib/docker/overlay2/0101010101010101010101010101010101010101010101010101010101010101/diff,workdir=/var/lib/docker/overlay2/0101010101010101010101010101010101010101010101010101010101010101/work,nouserxattr"
+            },{
+               "target": "/var/lib/docker/overlay2/0202020202020202020202020202020202020202020202020202020202020202/merged",
+               "source": "overlay",
+               "fstype": "overlay",
+               "options": "rw,relatime,lowerdir=/var/lib/docker/overlay2/l/LAYER13XXXXXXXXXXXXXXXXXXX:/var/lib/docker/overlay2/l/LAYER14XXXXXXXXXXXXXXXXXXX:/var/lib/docker/overlay2/l/LAYER15XXXXXXXXXXXXXXXXXXX:/var/lib/docker/overlay2/l/LAYER16XXXXXXXXXXXXXXXXXXX,upperdir=/var/lib/docker/overlay2/0202020202020202020202020202020202020202020202020202020202020202/diff,workdir=/var/lib/docker/overlay2/0202020202020202020202020202020202020202020202020202020202020202/work,nouserxattr"
+            }
+         ]
+      }
+   ]
+}

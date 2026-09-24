@@ -737,7 +737,10 @@ func TestVerifyCaptureKindStatementDoesNotVerifyAsBaseline(t *testing.T) {
 }
 
 // TF05-AC7: expiry is decided by the injected clock; no wall clock, no
-// sleep. A baseline is valid up to and including expires_at.
+// sleep. A baseline is valid up to and including expires_at. The cases sit
+// one nanosecond apart, so the policy here disables the clock-skew tolerance
+// (ClockSkew(0)); the boundaries of the tolerance itself, including the
+// default one, are TestVerifyClockSkewDefaultExpiresAt.
 func TestVerifyExpiryWithInjectedClock(t *testing.T) {
 	expires := approveTime.Add(24 * time.Hour).Add(123 * time.Nanosecond)
 	b := newBaseline(t, func(r *SealRequest) { r.Approval.ExpiresAt = expires })
@@ -759,6 +762,7 @@ func TestVerifyExpiryWithInjectedClock(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			p := testPolicy(b.signer)
 			p.Now = trustfreeze.FixedClock{T: tc.now}
+			p.MaxClockSkew = ClockSkew(0)
 			res := Verify(t.Context(), b.dir, p)
 			if !tc.expired {
 				requireOK(t, res)

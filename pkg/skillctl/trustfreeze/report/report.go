@@ -1,6 +1,8 @@
 // Package report projects Trust Freeze results onto one deterministic JSON
 // document (SPEC-0469 section 4.7, SPEC-0470): a capture, a baseline, or a
-// diff with its verdict. It is a pure projection and decides nothing of its
+// diff with its verdict. A capture or baseline report also renders
+// state/capabilities.json, so the statement "remote-maint may execute any
+// command as root" is readable without opening the bundle by hand (R-T3). It is a pure projection and decides nothing of its
 // own: severities and the threshold come from the verdict, integrity from the
 // core reader. It never evaluates a baseline signature, key trust or expiry
 // (this package never imports seal, and reads no clock), so the report of an
@@ -17,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze"
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/compare"
@@ -82,6 +85,71 @@ type CaptureSection struct {
 	ProbeResults []trustfreeze.ProbeResult `json:"probe_results"`
 	// Artifacts are state/device.json, sorted by id.
 	Artifacts []trustfreeze.Artifact `json:"artifacts"`
+	// Capabilities is state/capabilities.json, projected; absent when the
+	// bundle carries no such document, which says that nobody resolved
+	// capabilities for that capture.
+	Capabilities *CapabilitiesSection `json:"capabilities,omitempty"`
+}
+
+// CapabilitiesSection projects state/capabilities.json (R-T3). It renders
+// what the resolver wrote and adds nothing: the order is a presentation
+// order (the far-reaching privileges first, then the id), and the resolver's
+// own diagnostics travel with the list, so a reader sees the gaps beside the
+// statements instead of reading an empty list as "this host grants nothing".
+type CapabilitiesSection struct {
+	// Resolver names the resolver that ran, also when it resolved nothing.
+	Resolver string `json:"resolver"`
+	// Capabilities are sorted by trustfreeze.PrivilegeRank, descending, then
+	// by id.
+	Capabilities []CapabilityLine `json:"capabilities"`
+	// Diagnostics are the resolver gaps, in the order the resolver wrote
+	// them.
+	Diagnostics []trustfreeze.Diagnostic `json:"diagnostics"`
+}
+
+// CapabilityLine is one capability of the projection: who may do what, where,
+// how far it reaches, how well it is established and what it rests on.
+type CapabilityLine struct {
+	ID         string                    `json:"id"`
+	SubjectID  string                    `json:"subject_id"`
+	Action     string                    `json:"action"`
+	Resource   string                    `json:"resource"`
+	Effect     string                    `json:"effect"`
+	Privilege  string                    `json:"privilege"`
+	Exposure   string                    `json:"exposure"`
+	Scope      string                    `json:"scope"`
+	State      trustfreeze.EvidenceState `json:"state"`
+	Confidence trustfreeze.Confidence    `json:"confidence"`
+	Attributes map[string]string         `json:"attributes,omitempty"`
+	Sources    []string                  `json:"sources"`
+}
+
+// capabilitiesSection projects the capabilities document of a bundle, or nil
+// when it has none.
+func capabilitiesSection(doc *trustfreeze.CapabilitiesDoc) *CapabilitiesSection {
+	if doc == nil {
+		return nil
+	}
+	out := &CapabilitiesSection{
+		Resolver:     doc.Resolver,
+		Capabilities: make([]CapabilityLine, 0, len(doc.Capabilities)),
+		Diagnostics:  []trustfreeze.Diagnostic{},
+	}
+	out.Diagnostics = append(out.Diagnostics, doc.Diagnostics...)
+	for _, c := range doc.Capabilities {
+		out.Capabilities = append(out.Capabilities, CapabilityLine{
+			ID: c.ID, SubjectID: c.SubjectID, Action: c.Action, Resource: c.Resource,
+			Effect: c.Effect, Privilege: c.Privilege, Exposure: c.Exposure, Scope: c.Scope,
+			State: c.State, Confidence: c.Confidence, Attributes: c.Attributes, Sources: c.Sources,
+		})
+	}
+	slices.SortStableFunc(out.Capabilities, func(x, y CapabilityLine) int {
+		if d := trustfreeze.PrivilegeRank(y.Privilege) - trustfreeze.PrivilegeRank(x.Privilege); d != 0 {
+			return d
+		}
+		return strings.Compare(x.ID, y.ID)
+	})
+	return out
 }
 
 // SignatureStatus is the signature section of a baseline report. Result is
@@ -217,6 +285,7 @@ func captureSection(b *trustfreeze.Bundle) (*CaptureSection, error) {
 		Probes:       probes,
 		ProbeResults: results,
 		Artifacts:    arts,
+		Capabilities: capabilitiesSection(b.Capabilities),
 	}, nil
 }
 

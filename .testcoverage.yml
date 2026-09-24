@@ -105,13 +105,37 @@ override:
   # have timing- and host-dependent branches (process kill at the deadline,
   # build-tagged per-OS files), and a floor a few statements below the
   # measurement would flake between machines.
+  #
+  # WHICH TOOLCHAIN MEASURED IT IS PART OF THE NUMBER. The statement counts of
+  # a package differ between Go minor releases, so a floor seeded with a newer
+  # local go than the one this workflow installs (go-version-file: go.mod) can
+  # be red in CI while it is green on the machine that wrote it. Two comments
+  # below carried a number measured that way and now name the toolchain instead;
+  # the floors are unchanged. Seed a floor with the go.mod toolchain, and say in
+  # the comment which toolchain produced the number.
   - { path: '^pkg/skillctl/trustfreeze/platform/common$', threshold: 95 } # measured 96.2
   - { path: '^pkg/skillctl/trustfreeze/capture$',         threshold: 92 } # measured 92.9
   - { path: '^pkg/skillctl/trustfreeze/seal$',            threshold: 90 } # measured 91.1
   - { path: '^pkg/skillctl/trustfreeze/compare$',         threshold: 88 } # measured 88.8
-  - { path: '^pkg/skillctl/trustfreeze$',                 threshold: 87 } # measured 87.7
+  # 86.7 (1035/1194) when the T-03b work first met this gate, which is what a
+  # floor of 87 rejected; 88.3 (1054/1194) once the privilege vocabulary of
+  # model.go had tests. Both measured with go1.26.6 and -covermode=atomic.
+  - { path: '^pkg/skillctl/trustfreeze$',                 threshold: 87 } # measured 88.3
   - { path: '^pkg/skillctl/trustfreeze/probe$',           threshold: 87 } # measured 88.2
   - { path: '^pkg/skillctl/trustfreeze/redact$',          threshold: 87 } # measured 88.3
+  # The Linux probe family: no override existed when the package arrived (T-03),
+  # which is the one gap this file's own rule ("every new package gets its
+  # override in the change that adds it") had. Added with T-03b, which brought
+  # routes.go, dns.go and executables.go into the same package.
+  # The 87.7 once recorded here came from a local go1.27.1; the same tree
+  # measured 86.6 (3877/4479) under the go1.26.6 of go.mod, which is the
+  # number this gate saw and rejected. With the parsers and helpers of
+  # routes.go, dns.go and executables.go under test it is 87.7 (3930/4479),
+  # measured with go1.26.6 and -covermode=atomic. The package has no
+  # build-tagged file; its tests skip as root and, for the /proc scenarios
+  # of linux.executables, on windows, so the linux measurement is expected to
+  # match the macOS one.
+  - { path: '^pkg/skillctl/trustfreeze/platform/linux$',  threshold: 87 } # measured 87.7
   - { path: '^pkg/skillctl/trustfreeze/policy$',          threshold: 86 } # measured 86.9
   - { path: '^pkg/skillctl/trustfreeze/report$',          threshold: 82 } # measured 83.2
   # CLI-glue blob: one big package, files span 0%..95% (main.go, session_cmds.go,

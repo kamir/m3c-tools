@@ -1,0 +1,3 @@
+Debian dpkg-query package management program query tool version 1.22.6 (amd64).
+This is free software; see the GNU General Public License version 2 or
+later for copying conditions. There is NO warranty.

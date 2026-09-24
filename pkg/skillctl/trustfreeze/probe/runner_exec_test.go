@@ -3,7 +3,9 @@ package probe
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -148,15 +150,15 @@ func TestExecRunnerNoShellEnvAndRedaction(t *testing.T) {
 	if strings.Contains(all, testSecret) {
 		t.Fatalf("secret survived redaction:\nstdout %q\nstderr %q\nargs %q", out, res.Stderr.Bytes(), res.Args)
 	}
-	if res.Args[3] != "--token" || res.Args[4] != "[REDACTED:token]" {
+	if res.Args[3] != "--token" || res.Args[4] != "[REDACTED_token]" {
 		t.Fatalf("args %q", res.Args)
 	}
-	if !strings.Contains(string(res.Stderr.Bytes()), "password=[REDACTED:") {
+	if !strings.Contains(string(res.Stderr.Bytes()), "password=[REDACTED_") {
 		t.Fatalf("stderr %q", res.Stderr.Bytes())
 	}
 	// The tool echoed the bare secret argument on a line of its own; only the
 	// argument context identifies it, so the runner removes it from stdout.
-	if !strings.Contains(out, "ARG [REDACTED:arg_secret]\n") {
+	if !strings.Contains(out, "ARG [REDACTED_arg_secret]\n") {
 		t.Fatalf("echoed argument secret not removed from stdout:\n%s", out)
 	}
 }
@@ -211,17 +213,112 @@ func TestExecRunnerCanceledContext(t *testing.T) {
 	}
 }
 
-// TestDefaultSearchPath pins the fixed system directories.
+// TestDefaultSearchPath pins the fixed system directories. Linux carries
+// /snap/bin as well, and last: Ubuntu installs the entry point of a snap
+// there, and a bastion measured on 2026-09-23 had its only docker at
+// /snap/bin/docker, which the four classic directories do not cover. macOS
+// has no snapd, so its list is unchanged.
 func TestDefaultSearchPath(t *testing.T) {
-	for _, goos := range []string{"linux", "darwin"} {
-		if got := strings.Join(DefaultSearchPath(goos), ":"); got != "/usr/bin:/bin:/usr/sbin:/sbin" {
-			t.Fatalf("%s search path %q", goos, got)
+	if got := strings.Join(DefaultSearchPath("linux"), ":"); got != "/usr/bin:/bin:/usr/sbin:/sbin:/snap/bin" {
+		t.Fatalf("linux search path %q", got)
+	}
+	if got := strings.Join(DefaultSearchPath("darwin"), ":"); got != "/usr/bin:/bin:/usr/sbin:/sbin" {
+		t.Fatalf("darwin search path %q", got)
+	}
+	// Every entry stays an absolute system directory: nothing user writable
+	// and nothing from the caller's environment enters the list.
+	for _, dir := range DefaultSearchPath("linux") {
+		if !strings.HasPrefix(dir, "/") {
+			t.Fatalf("relative directory %q in the linux search path", dir)
 		}
 	}
 	// On Windows the OS reports the directory (often ending in system32),
 	// elsewhere %SystemRoot% or C:\Windows names it.
 	if got := DefaultSearchPath("windows"); len(got) != 1 || !strings.HasSuffix(strings.ToLower(got[0]), "system32") {
 		t.Fatalf("windows search path %q", got)
+	}
+}
+
+// TestRunnersReportTheirSearchDirs: a probe that has to say where it looked
+// asks the runner, so the sentence it writes is about the directories that
+// were really searched. A runner that does not report them yields nothing,
+// never a default list.
+func TestRunnersReportTheirSearchDirs(t *testing.T) {
+	exec := NewExecRunner()
+	if got := strings.Join(SearchDirs(exec), ":"); got != strings.Join(DefaultSearchPath(runtime.GOOS), ":") {
+		t.Errorf("exec runner reports %q", got)
+	}
+	dirs := exec.SearchDirs()
+	if len(dirs) == 0 {
+		t.Fatal("the exec runner reports no search directory at all")
+	}
+	dirs[0] = "/tampered"
+	if SearchDirs(exec)[0] == "/tampered" {
+		t.Error("the reported list aliases the runner's own search path")
+	}
+	if got := SearchDirs(NewFakeRunner()); len(got) != 0 {
+		t.Errorf("a fake without declared directories reports %v", got)
+	}
+	if got := strings.Join(SearchDirs(NewFakeRunner().WithSearchDirs("/usr/bin", "/snap/bin")), ":"); got != "/usr/bin:/snap/bin" {
+		t.Errorf("declared directories come back as %q", got)
+	}
+	if got := SearchDirs(notReportingRunner{}); got != nil {
+		t.Errorf("a runner that does not implement the interface reports %v", got)
+	}
+	// The engine hands every Collect a RecordingRunner, so the wrapper has to
+	// forward the report. Without this a probe's diagnostic falls back to "the
+	// runner does not report them" in every real capture while naming the
+	// directories in a test that passes a bare fake.
+	rec := NewRecordingRunner(NewFakeRunner().WithSearchDirs("/usr/bin", "/snap/bin"), Limits{}, nil)
+	if got := strings.Join(SearchDirs(rec), ":"); got != "/usr/bin:/snap/bin" {
+		t.Errorf("the recording runner reports %q", got)
+	}
+	if got := SearchDirs(NewRecordingRunner(notReportingRunner{}, Limits{}, nil)); got != nil {
+		t.Errorf("the recording runner invented %v over a runner that reports nothing", got)
+	}
+}
+
+// notReportingRunner is a CommandRunner without a search path to report.
+type notReportingRunner struct{}
+
+func (notReportingRunner) LookPath(string) (string, error) { return "", ErrToolMissing }
+func (notReportingRunner) Run(context.Context, CommandRequest) CommandResult {
+	return CommandResult{}
+}
+
+// TestExecRunnerFindsABinaryInALaterSearchDir: LookPath walks the list in
+// order, so a directory appended to it (as /snap/bin was) really is
+// searched, and an earlier directory still wins.
+func TestExecRunnerFindsABinaryInALaterSearchDir(t *testing.T) {
+	first, last := t.TempDir(), t.TempDir()
+	// What counts as executable is decided by the operating system, and
+	// LookPath asks it: a file without one of the PATHEXT extensions is not a
+	// program on windows, no matter what its mode bits say. The fixture
+	// therefore carries the extension of the host it runs on, so the test
+	// measures the search ORDER and not that rule.
+	name := "trustfreeze-fake-tool"
+	body := "#!/bin/sh\nexit 0\n"
+	if runtime.GOOS == "windows" {
+		name += ".bat"
+		body = "@exit /b 0\r\n"
+	}
+	tool := filepath.Join(last, name)
+	// #nosec G306 -- a test fixture in t.TempDir() that has to be executable.
+	if err := os.WriteFile(tool, []byte(body), 0o700); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	r := &ExecRunner{SearchPath: []string{first, last}}
+	got, err := r.LookPath(name)
+	if err != nil || got != tool {
+		t.Fatalf("LookPath = %q, %v; want %q", got, err, tool)
+	}
+	shadow := filepath.Join(first, name)
+	// #nosec G306 -- same fixture, in the earlier directory.
+	if err := os.WriteFile(shadow, []byte(body), 0o700); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if got, err := r.LookPath(name); err != nil || got != shadow {
+		t.Fatalf("LookPath = %q, %v; want the earlier directory %q", got, err, shadow)
 	}
 }
 

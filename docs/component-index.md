@@ -72,7 +72,7 @@ Grouped by domain:
 ## F. skillctl trust subsystem (`pkg/skillctl/*` + siblings)
 
 The offline-verifiable skill **trust plane**: the library behind the
-[`skillctl`](program-index) CLI. 51 subpackages under `pkg/skillctl/`, plus the
+[`skillctl`](program-index) CLI. 52 subpackages under `pkg/skillctl/`, plus the
 sibling top-level packages at the end of this section, grouped by role. The list
 and the number are both gated by `scripts/check-index.sh`: it diffs `pkg/**` and
 `internal/**` against this file in both directions AND re-counts the directories,
@@ -156,27 +156,31 @@ It runs in `scripts/check-docs.sh` and in the `docs-gate` job of `ci.yml`,
 
 The library behind `skillctl trust-freeze`: capture a host's observable state,
 approve it as a signed baseline, verify offline, compare. Import direction:
-`redact` is a leaf, the core imports only `redact`; `probe`, `platform/common`
-and `capture` build on the core; `seal`, `compare`, `policy` and `report` read
-bundles through the core. Only `seal` creates a baseline, and `capture`,
+`redact` is a leaf, the core imports only `redact`; `probe`, `platform/common`,
+`platform/linux` and `capture` build on the core; `seal`, `compare`, `policy`
+and `report` read bundles through the core. Only `seal` creates a baseline, and `capture`,
 `compare`, `policy`, `report`, `probe`, `redact` and the platform packages never
 import it (guard test in `seal`).
 
-Evidence level per platform in this change, for the one probe that exists
-(`common.identity`): linux, darwin and windows are implemented, fixture-tested
-and cross-compiled. None is real-platform-tested yet; that level is recorded
-per commit in evidence records, never claimed by the build, and full platform
-support is not established.
+Evidence level per platform in this change. `common.identity` is implemented,
+fixture-tested and cross-compiled for linux, darwin and windows. The twelve
+probes of `platform/linux` are implemented, fixture-tested and cross-compiled
+for linux, and not implemented for darwin and windows, where they are recorded
+as unsupported with the platform as the reason. None of them is
+real-platform-tested; that level is recorded per commit in evidence records,
+never claimed by the build, and full platform support is not established.
 
 | Package | Responsibility |
 |---------|----------------|
 | `skillctl/trustfreeze` | The core model: schema ids, closed enums, canonical JSON, manifest and content digest, bundle reader and writer, integrity check, completeness, subject id, clock. No probe execution, no signing. |
-| `skillctl/trustfreeze/redact` | The redactor and the `Redacted` byte type only this package can fill: the bundle writer accepts evidence in no other form, so raw tool output cannot reach a bundle unredacted. |
+| `skillctl/trustfreeze/redact` | The redactor and the `Redacted` byte type only this package can fill: the bundle writer accepts evidence in no other form, so raw tool output cannot reach a bundle unredacted. The key name rule has a value shape guard (`IsPolicyAnswer`, a closed set of configuration answers) and takes the key classes a probe declares for its own fields. |
 | `skillctl/trustfreeze/probe` | The probe interface and registry, the shell-free command runner with output caps and a kill of the tool and its children at the deadline (a process group on Unix, a parent-pid tree walk with documented gaps on Windows), the deterministic fake runner, file roots, limits, and the per-platform support matrix. |
 | `skillctl/trustfreeze/platform/common` | The `common.identity` probe (`device/os`, `device/host`) with its per-OS sources: os-release plus `uname -r` and `uname -m` on linux, `sw_vers` plus `uname -r` and `uname -m` (with the Rosetta 2 check) on darwin, the CurrentVersion registry key and `IsWow64Process2` on windows. The architecture always comes from the OS, never from the build. |
+| `skillctl/trustfreeze/platform/linux` | The Linux probe family and the privilege capability resolver: `linux.packages`, `linux.users`, `linux.sudo`, `linux.ssh`, `linux.systemd`, `linux.mounts`, `linux.network.listeners`, `linux.network.routes`, `linux.dns`, `linux.firewall`, `linux.containers`, `linux.executables`, each a thin reader over pure parsers of recorded tool output. Nothing elevates: an answer that needs root is `permission_denied`, never an empty list. The resolver turns sudo rules, group membership in a sudo group and in a container runtime group, and authorized keys into capabilities with their sources, their privilege and the reason that privilege holds. |
+| `skillctl/trustfreeze/platform/linux`, the three probes of T-03b | `linux.network.routes` reads `ip -j route show`, `ip -6 -j route show` and `ip -j addr show` into one artifact per route (`network/route/...`), one per address (`network/address/...`) and a summary (`network/routes`). `linux.dns` reads `resolvectl status --no-pager` as the observed resolver state (`dns/resolver`, `dns/link/<iface>`) and `/etc/resolv.conf` as the declared one (`dns/resolv-conf`); the two are never merged. `linux.executables` hashes the programs the other probes named, from the `ExecStart` of a unit and from the process behind a listener, into `executable/<path>` plus a summary `system/executables`: sha256, size, mode, owner, group, and the owning package from `dpkg -S` or a snap path, or none of them, which is the finding rather than an error. It is bounded by 1024 candidate paths per capture (before any path is resolved), 256 files per capture, 128 MiB per file and the roots `/bin`, `/opt`, `/sbin`, `/snap`, `/usr` and `/usr/local`, and it never reads a path under a home directory. A capture that runs out of time is a `timeout` whose unread programs carry `hash_state: not_read`, never `unreadable`. |
 | `skillctl/trustfreeze/capture` | The capture engine and the embedded profiles: runs the probes of a profile, records every gap (a probe the operator skipped included), re-redacts every evidence file before it is written, writes a capture bundle. It never approves or signs. |
 | `skillctl/trustfreeze/seal` | Approval, the domain-separated ed25519 baseline statement, `baseline approve`, offline verification, trust policy and the self-approval check. The only package that creates a baseline. |
-| `skillctl/trustfreeze/compare` | The structural diff between a verified baseline and a current bundle, with the versioned normalization rule set. It compares; it does not judge. |
+| `skillctl/trustfreeze/compare` | The structural diff between a verified baseline and a current bundle, with the versioned normalization rule set (`trust-freeze/normalize/v1` and the default `trust-freeze/normalize/v2`, which adds the route metric and the resolver systemd-resolved is currently querying). It compares; it does not judge. |
 | `skillctl/trustfreeze/policy` | The pure policy evaluator: one finding per change, highest severity wins, `fail_on` drives only the exit code. Ships the default policy. |
 | `skillctl/trustfreeze/report` | The deterministic JSON report of a capture, baseline or diff bundle. A projection that decides nothing; markdown and SARIF are not implemented. |
 

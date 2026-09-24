@@ -1,0 +1,3 @@
+/usr/sbin/cron 755 root root 60080
+/usr/bin/snap 755 root root 22693016
+/usr/sbin/sshd 755 root root 921416

@@ -27,8 +27,18 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/compare"
 )
 
-// DefaultPolicyID is the id of the built-in policy.
-const DefaultPolicyID = "trust-freeze/policy/default-v0"
+// DefaultPolicyID is the id of the built-in policy a diff uses when the
+// operator names none. It is trust-freeze/policy/default-v1, the successor of
+// the frozen v0: it adds the capability rules, rates every root privilege the
+// core knows (sudo and the two container paths alike) as critical and rates a
+// coverage_increased entry as info.
+const DefaultPolicyID = "trust-freeze/policy/default-v1"
+
+// PolicyV0ID is the id of the first built-in policy. It is frozen: what a
+// policy judges changes with a new id, never with an edit of a published one.
+// v0 rates no capability entry, so under v0 a new root capability would get
+// the default severity info: use it only to reproduce an older verdict.
+const PolicyV0ID = "trust-freeze/policy/default-v0"
 
 // DefaultSeverityRuleID is the RuleID of a finding that no rule matched; it
 // got the policy's default severity. No rule may use this id.
@@ -42,6 +52,9 @@ var ErrInvalidPolicy = errors.New("policy: invalid policy")
 
 //go:embed builtin/default-v0.json
 var defaultV0JSON []byte
+
+//go:embed builtin/default-v1.json
+var defaultV1JSON []byte
 
 // Policy is a policy document (schema trust-freeze/policy/v1).
 type Policy struct {
@@ -88,6 +101,35 @@ type Match struct {
 	// diffs made with (true) or without (false) the explicit opt-in. Only
 	// allowed when ChangeKinds is exactly [subject_changed].
 	SubjectMismatchAllowed *bool `json:"subject_mismatch_allowed,omitempty"`
+	// Privileges, when set, restricts a capability rule to these privilege
+	// values. It is matched against the privilege the current bundle
+	// observed, and against the baseline privilege where the current bundle
+	// has no capability (removed, not observed), so a rule always rates the
+	// stronger statement the diff carries (SPEC-0469 AC3). Only allowed when
+	// every change kind of the rule is a capability kind.
+	Privileges []string `json:"privileges,omitempty"`
+}
+
+// capabilityOnly reports whether every change kind of m is a capability kind.
+func (m Match) capabilityOnly() bool {
+	if len(m.ChangeKinds) == 0 {
+		return false
+	}
+	for _, k := range m.ChangeKinds {
+		if !k.IsCapability() {
+			return false
+		}
+	}
+	return true
+}
+
+// changePrivilege is the privilege a capability rule judges: what the current
+// bundle observed, else what the baseline recorded.
+func changePrivilege(c compare.Change) string {
+	if c.AfterPrivilege != "" {
+		return c.AfterPrivilege
+	}
+	return c.BeforePrivilege
 }
 
 // only reports whether m matches exactly one change kind, k.
@@ -101,14 +143,39 @@ type PolicyRef struct {
 	RulesDigest string `json:"rules_digest"`
 }
 
-// DefaultPolicy returns the built-in policy trust-freeze/policy/default-v0.
+// DefaultPolicy returns the built-in policy trust-freeze/policy/default-v1.
 // Each call parses the embedded file again, so callers may modify the result.
-func DefaultPolicy() (Policy, error) {
-	p, err := ParsePolicy(defaultV0JSON)
-	if err != nil {
-		return Policy{}, fmt.Errorf("built-in %s: %w", DefaultPolicyID, err)
+func DefaultPolicy() (Policy, error) { return builtinPolicy(defaultV1JSON, DefaultPolicyID) }
+
+// PolicyV0 returns the frozen built-in policy trust-freeze/policy/default-v0,
+// for reproducing a verdict that was computed with it (see PolicyV0ID).
+func PolicyV0() (Policy, error) { return builtinPolicy(defaultV0JSON, PolicyV0ID) }
+
+// BuiltinPolicyIDs returns the ids of the built-in policies, oldest first.
+func BuiltinPolicyIDs() []string { return []string{PolicyV0ID, DefaultPolicyID} }
+
+// BuiltinPolicy returns the built-in policy with this id, and false when no
+// built-in carries it.
+func BuiltinPolicy(id string) (Policy, bool, error) {
+	var raw []byte
+	switch id {
+	case PolicyV0ID:
+		raw = defaultV0JSON
+	case DefaultPolicyID:
+		raw = defaultV1JSON
+	default:
+		return Policy{}, false, nil
 	}
-	if p.ID != DefaultPolicyID {
+	p, err := builtinPolicy(raw, id)
+	return p, true, err
+}
+
+func builtinPolicy(raw []byte, id string) (Policy, error) {
+	p, err := ParsePolicy(raw)
+	if err != nil {
+		return Policy{}, fmt.Errorf("built-in %s: %w", id, err)
+	}
+	if p.ID != id {
 		return Policy{}, fmt.Errorf("%w: built-in policy declares id %q", ErrInvalidPolicy, p.ID)
 	}
 	return p, nil
@@ -267,6 +334,20 @@ func (p Policy) Validate() error {
 		if len(r.Match.ArtifactIDs) > 0 && slices.Contains(r.Match.ChangeKinds, compare.ChangeCollectionGap) {
 			return bad("rule %s: a collection_gap has no artifact id, so match.artifact_ids cannot apply", r.ID)
 		}
+		if r.Match.Privileges != nil && !r.Match.capabilityOnly() {
+			return bad("rule %s: match.privileges needs change_kinds that are all capability kinds", r.ID)
+		}
+		if r.Match.Privileges != nil && len(r.Match.Privileges) == 0 {
+			return bad("rule %s: an empty match.privileges matches nothing", r.ID)
+		}
+		for _, p := range r.Match.Privileges {
+			if strings.TrimSpace(p) == "" {
+				return bad("rule %s: an empty privilege matches nothing", r.ID)
+			}
+		}
+		if len(r.Match.ArtifactIDs) > 0 && r.Match.capabilityOnly() {
+			return bad("rule %s: a capability entry has no artifact id, so match.artifact_ids cannot apply", r.ID)
+		}
 	}
 	return nil
 }
@@ -311,6 +392,9 @@ func (r Rule) matches(c compare.Change) bool {
 		return false
 	}
 	if r.Match.SubjectMismatchAllowed != nil && c.SubjectMismatchAllowed != *r.Match.SubjectMismatchAllowed {
+		return false
+	}
+	if len(r.Match.Privileges) > 0 && !slices.Contains(r.Match.Privileges, changePrivilege(c)) {
 		return false
 	}
 	return true

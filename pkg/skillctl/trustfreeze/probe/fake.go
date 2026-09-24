@@ -54,6 +54,7 @@ type FakeRunner struct {
 	denied  map[string]bool
 	scripts map[string]FakeResponse
 	calls   []FakeCall
+	dirs    []string
 }
 
 // NewFakeRunner returns an empty fake runner.
@@ -93,6 +94,25 @@ func (f *FakeRunner) Script(executable string, args []string, resp FakeResponse)
 	}
 	f.scripts[FakeKey(executable, args...)] = resp
 	return f
+}
+
+// WithSearchDirs makes the fake report dirs as the directories it resolves
+// bare names in. It is a statement of the test, not a search: LookPath keeps
+// answering from the AddTool table. A fake without it reports none, so a
+// probe that names the searched directories says it cannot name them rather
+// than inventing a list.
+func (f *FakeRunner) WithSearchDirs(dirs ...string) *FakeRunner {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.dirs = append([]string(nil), dirs...)
+	return f
+}
+
+// SearchDirs implements SearchPathReporter.
+func (f *FakeRunner) SearchDirs() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.dirs...)
 }
 
 // Calls returns the recorded calls in call order.

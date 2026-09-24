@@ -1,0 +1,1 @@
+resolvectl: unrecognized option '--json=short'

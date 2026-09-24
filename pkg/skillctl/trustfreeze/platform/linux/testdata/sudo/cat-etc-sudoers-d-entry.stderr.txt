@@ -1,0 +1,1 @@
+cat: /etc/sudoers.d/alice-nopasswd: Permission denied

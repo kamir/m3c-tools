@@ -39,8 +39,11 @@ func TestBuiltinProfiles(t *testing.T) {
 		t.Fatalf("walking-skeleton %+v", ws)
 	}
 	ub, _ := BuiltinProfile("ubuntu-bastion")
-	if strings.Join(ub.Required, ",") != "common.identity,linux.packages,linux.users,linux.sudo,linux.ssh.effective,linux.systemd,linux.network.listeners,linux.firewall,linux.mounts" {
+	if strings.Join(ub.Required, ",") != "common.identity,linux.packages,linux.users,linux.sudo,linux.ssh,linux.systemd,linux.executables,linux.network.listeners,linux.network.routes,linux.dns,linux.firewall,linux.mounts" {
 		t.Fatalf("ubuntu-bastion required %v", ub.Required)
+	}
+	if strings.Join(ub.Optional, ",") != "common.git,common.claude,linux.containers" {
+		t.Fatalf("ubuntu-bastion optional %v", ub.Optional)
 	}
 	aw, _ := BuiltinProfile("agentic-workstation")
 	if len(aw.Required) != 9 || len(aw.Optional) != 5 {

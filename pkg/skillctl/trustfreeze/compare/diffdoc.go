@@ -104,8 +104,17 @@ func validateChange(c Change) error {
 		return fmt.Errorf("%s entry must not carry probe statuses", c.Kind)
 	case c.Kind != ChangeNotObserved && len(c.UnobservedAttributes) > 0:
 		return fmt.Errorf("%s entry must not carry unobserved attributes", c.Kind)
+	case c.Kind != ChangeCoverageIncreased && len(c.BaselineGapProbes) > 0:
+		return fmt.Errorf("%s entry must not carry baseline gap probes", c.Kind)
+	case c.Kind != ChangeCapabilityAdded && c.Kind != ChangeCapabilityChanged && len(c.CoverageCaveatProbes) > 0:
+		return fmt.Errorf("%s entry must not carry coverage caveat probes", c.Kind)
 	case c.Kind != ChangeCollectionGap && c.Gap != nil:
 		return fmt.Errorf("%s entry must not carry a gap", c.Kind)
+	case !c.Kind.IsCapability() && (c.CapabilityID != "" || c.BeforePrivilege != "" || c.AfterPrivilege != ""):
+		return fmt.Errorf("%s entry must not carry capability fields", c.Kind)
+	}
+	if c.Kind.IsCapability() {
+		return validateCapabilityChange(c)
 	}
 	switch c.Kind {
 	case ChangeSubjectChanged:

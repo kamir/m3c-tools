@@ -162,9 +162,11 @@ func (r VerificationResult) Err() error {
 //  6. the statement is rebuilt from the manifest on disk and approval.json
 //     (statement_sha256 is compared for diagnosis only) and the ed25519
 //     signature is checked over it;
-//  7. the key is trusted, the approval is neither expired (expires_at before
-//     the policy clock's now) nor dated in the future (approved_at after
-//     it), and the self-approval mode does not block.
+//  7. the key is trusted, the approval is neither expired (expires_at more
+//     than the policy's expiry-skew tolerance, default zero, before the policy
+//     clock's now) nor dated further than the policy's clock-skew tolerance in
+//     the future (approved_at after it), and the self-approval mode does not
+//     block.
 //
 // Verify reads only the bundle directory. It has no network code path.
 // Verify is for baselines; a capture or diff is reported as wrong_kind (use
@@ -315,21 +317,29 @@ func Verify(ctx context.Context, dir string, policy TrustPolicy) (res Verificati
 		fail(ReasonKeyNotTrusted, trustfreeze.SignatureFile, "key "+ds.doc.KeyID+" is not in the trust policy")
 	}
 
-	// Expiry: valid up to and including expires_at. An approval dated after
-	// now claims a time the verifier has not reached yet: refused, so a
-	// wrong clock at approval time cannot extend a baseline's life.
+	// Two time checks with two tolerances (SPEC-0470 section 4.6, R-T2).
+	// Expiry: valid up to and including expires_at, plus
+	// EffectiveMaxExpirySkew, whose default is zero, so an expired baseline is
+	// expired. An approval dated after now claims a time the verifier has not
+	// reached yet: refused beyond EffectiveMaxClockSkew, whose default absorbs
+	// a signer clock that runs a few minutes ahead. The two are separate
+	// settings because a clock is an accident and an expiry is a promise.
 	now := policy.clock().Now()
+	skew := policy.EffectiveMaxClockSkew()
+	expirySkew := policy.EffectiveMaxExpirySkew()
 	if a.ExpiresAt != "" {
 		exp, err := trustfreeze.ParseTime(a.ExpiresAt)
 		if err != nil {
 			fail(ReasonApprovalInvalid, trustfreeze.ApprovalFile, err.Error())
-		} else if exp.Before(now) {
-			fail(ReasonExpired, trustfreeze.ApprovalFile, "expired at "+a.ExpiresAt+", now "+trustfreeze.FormatTime(now))
+		} else if exp.Before(now.Add(-expirySkew)) {
+			fail(ReasonExpired, trustfreeze.ApprovalFile,
+				"expired at "+a.ExpiresAt+", now "+trustfreeze.FormatTime(now)+", expiry skew tolerance "+expirySkew.String())
 		}
 	}
 	// ValidateApproval has already parsed approved_at.
-	if at, err := trustfreeze.ParseTime(a.ApprovedAt); err == nil && at.After(now) {
-		fail(ReasonApprovedInFuture, trustfreeze.ApprovalFile, "approved at "+a.ApprovedAt+", now "+trustfreeze.FormatTime(now))
+	if at, err := trustfreeze.ParseTime(a.ApprovedAt); err == nil && at.After(now.Add(skew)) {
+		fail(ReasonApprovedInFuture, trustfreeze.ApprovalFile,
+			"approved at "+a.ApprovedAt+", now "+trustfreeze.FormatTime(now)+", clock skew tolerance "+skew.String())
 	}
 
 	// Self-approval.
