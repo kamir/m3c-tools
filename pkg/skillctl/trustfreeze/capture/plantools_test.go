@@ -84,7 +84,7 @@ func TestPlanResolvesDeclaredTools(t *testing.T) {
 func TestPlanToolsNeedAPlatformAndARegistration(t *testing.T) {
 	p := profile(t, []string{"common.identity"}, []string{"test.other-platform", "test.unregistered"})
 	other := newToolFake("test.other-platform", "ss")
-	other.fakeProbe.d.Platforms = []probe.Platform{probe.PlatformWindows}
+	other.d.Platforms = []probe.Platform{probe.PlatformWindows}
 	rows := Plan(context.Background(), p, registry(t, other), fixtureHost(identityRunner()))
 	for _, r := range rows {
 		switch r.ProbeID {

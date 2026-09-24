@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -364,5 +365,119 @@ func TestAttributeClassesAreValidated(t *testing.T) {
 	d.AttributeClasses = map[string]AttributeClass{"os_name": AttributeClassPolicy}
 	if got, _ := ComputeArtifactDigest(d); got != base {
 		t.Fatal("the attribute classes changed the content digest")
+	}
+}
+
+// TestPrivilegeVocabularyIsOneSharedContract: Capability.Privilege is written by
+// a platform resolver and read elsewhere through these three functions. The
+// capture summary of the CLI calls IsRootPrivilege to name the capabilities that
+// hold the host, report sorts by PrivilegeRank, and RootPrivileges is the list
+// both are documented against. The three have to agree about the same value, so
+// what each of them says about it is pinned here.
+func TestPrivilegeVocabularyIsOneSharedContract(t *testing.T) {
+	root := RootPrivileges()
+	if len(root) != 5 {
+		t.Fatalf("the root vocabulary has %d value(s): %v", len(root), root)
+	}
+	if !sort.StringsAreSorted(root) {
+		t.Errorf("RootPrivileges is not in byte order: %v", root)
+	}
+	// The list is handed out as a copy: a caller that sorts or truncates it
+	// must not be able to shrink what "root on this host" means.
+	root[0] = "not-a-privilege"
+	if again := RootPrivileges(); again[0] == "not-a-privilege" {
+		t.Error("RootPrivileges hands out the package's own slice")
+	}
+	for _, p := range RootPrivileges() {
+		if !IsRootPrivilege(p) {
+			t.Errorf("%q is in RootPrivileges and IsRootPrivilege denies it", p)
+		}
+		if PrivilegeRank(p) <= PrivilegeRank(PrivilegeValueUser) {
+			t.Errorf("%q means root on the host and does not rank above an ordinary account", p)
+		}
+	}
+	for _, p := range []string{PrivilegeValueUser, "", "root-via-nothing", "ROOT"} {
+		if IsRootPrivilege(p) {
+			t.Errorf("%q was read as root on the host", p)
+		}
+	}
+	// The documented order, from the most to the least far-reaching. An
+	// unknown value sits above "user" on purpose: a privilege nobody in this
+	// build knows is not the same statement as none.
+	for _, tc := range []struct {
+		privilege string
+		want      int
+	}{
+		{PrivilegeValueRoot, 5},
+		{PrivilegeValueRootViaSudoNoPassword, 4},
+		{PrivilegeValueRootViaContainerRuntime, 3},
+		{PrivilegeValueRootViaPrivilegedContainer, 3},
+		{PrivilegeValueRootViaSudo, 2},
+		{"root-via-something-this-build-does-not-know", 1},
+		{PrivilegeValueUser, 0},
+		{"", 0},
+	} {
+		if got := PrivilegeRank(tc.privilege); got != tc.want {
+			t.Errorf("PrivilegeRank(%q) = %d, want %d", tc.privilege, got, tc.want)
+		}
+	}
+}
+
+// TestSortCapabilitiesOrdersByID: the capabilities document is sorted by id in
+// byte order, so two captures of an unchanged host produce the same bytes
+// (playbook L8). The sort is stable, which is what lets a resolver decide the
+// order of two capabilities that share an id.
+func TestSortCapabilitiesOrdersByID(t *testing.T) {
+	caps := []Capability{
+		{ID: "privilege/execute-host/user/bob", SubjectID: "user/bob"},
+		{ID: "access/remote-shell/key/alice-1", SubjectID: "user/alice"},
+		{ID: "privilege/execute-host/user/alice", SubjectID: "user/alice"},
+		{ID: "access/remote-shell/key/alice-1", SubjectID: "user/second-with-the-same-id"},
+	}
+	SortCapabilities(caps)
+	var ids []string
+	for _, c := range caps {
+		ids = append(ids, c.ID)
+	}
+	want := []string{
+		"access/remote-shell/key/alice-1", "access/remote-shell/key/alice-1",
+		"privilege/execute-host/user/alice", "privilege/execute-host/user/bob",
+	}
+	if !reflect.DeepEqual(ids, want) {
+		t.Fatalf("ids %v, want %v", ids, want)
+	}
+	if caps[0].SubjectID != "user/alice" || caps[1].SubjectID != "user/second-with-the-same-id" {
+		t.Errorf("the sort is not stable: %q before %q", caps[0].SubjectID, caps[1].SubjectID)
+	}
+}
+
+// TestProbeErrorMessageKeepsTheClass: the class is the machine readable half
+// and it is never dropped, with or without a message beside it.
+func TestProbeErrorMessageKeepsTheClass(t *testing.T) {
+	var err error = &ProbeError{Class: "timeout", Message: "ss did not answer in 5s"}
+	if got := err.Error(); got != "timeout: ss did not answer in 5s" {
+		t.Errorf("Error() = %q", got)
+	}
+	if got := (&ProbeError{Class: "tool_missing"}).Error(); got != "tool_missing" {
+		t.Errorf("a class without a message reads %q", got)
+	}
+}
+
+// TestBundlePathsRefuseABadProbeID: a probe id decides a file name inside the
+// bundle, so both path builders validate it instead of writing the name they
+// were handed.
+func TestBundlePathsRefuseABadProbeID(t *testing.T) {
+	if _, err := ProbeResultPath("../escape"); err == nil {
+		t.Error("ProbeResultPath accepted a probe id with a path segment")
+	}
+	if _, err := EvidencePath("../escape", "raw.txt"); err == nil {
+		t.Error("EvidencePath accepted a probe id with a path segment")
+	}
+	if _, err := EvidencePath("linux.systemd", "sub/dir.txt"); err == nil {
+		t.Error("EvidencePath accepted an evidence name with a separator")
+	}
+	p, err := EvidencePath("linux.systemd", "show.txt")
+	if err != nil || p != EvidenceDir+"/linux.systemd/show.txt" {
+		t.Fatalf("EvidencePath = %q, %v", p, err)
 	}
 }

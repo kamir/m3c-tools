@@ -86,6 +86,12 @@ const (
 const CapEffectAllowed = "allowed"
 
 // Privilege values of a capability.
+//
+// #nosec G101 -- these are the NAMES of the privilege values this resolver
+// writes into a capability, and their values are those same names. Nothing
+// here is a credential: "root-via-sudo-nopasswd" is the statement that a sudo
+// rule needs no password, which is the finding the report exists to make. The
+// rule fires on the word "Password" in the identifier.
 const (
 	// CapPrivilegeRoot: the account is root itself.
 	CapPrivilegeRoot = "root"
@@ -600,8 +606,8 @@ func (r CapabilityResolver) fromAuthorizedKeys(idx *capIndex, acc *capAccumulato
 		subject := CapSubjectUserPrefix + account
 		sources := []string{a.ID}
 		privilege := CapPrivilegeUser
-		switch {
-		case account == "root":
+		switch account {
+		case "root":
 			privilege = CapPrivilegeRoot
 		default:
 			if c, ok := acc.get(CapExecuteHostPrefix + subject); ok {

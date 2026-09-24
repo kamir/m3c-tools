@@ -2,6 +2,7 @@ package linux
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -631,5 +632,138 @@ func TestDNSProbeOutsideRootsDegradesAndNamesTheGap(t *testing.T) {
 	}
 	if got := netArtifact(t, res, ArtifactDNSResolver).State; got != trustfreeze.StateObserved {
 		t.Errorf("the observed resolver artifact is %q, want observed", got)
+	}
+}
+
+// Playbook L1: a line the parser cannot split into a label and a value, and a
+// link header that is not the shape resolvectl prints, are named records, not
+// silent drops. Both inputs are written here: no measured output carries them.
+func TestParseResolvectlStatusNamesEveryLineItCouldNotRead(t *testing.T) {
+	st, diags := ParseResolvectlStatus([]byte(
+		"Global\nthis line carries no colon\n   : a value without a label\nLink 2 enp5s0\n"))
+	if len(diags) != 3 {
+		t.Fatalf("%d diagnostic(s) for two unreadable lines and one link header: %v", len(diags), diags)
+	}
+	for _, d := range diags {
+		if d.Code != netDiagRecordUnparsed {
+			t.Errorf("diagnostic code %q", d.Code)
+		}
+	}
+	if len(st.Links) != 0 {
+		t.Errorf("a link header without the printed shape became a scope: %+v", st.Links)
+	}
+	// The line number is how a reader finds the line again, so it is recorded.
+	if !strings.Contains(diags[0].Message, "line 2") || !strings.Contains(diags[1].Message, "line 3") {
+		t.Errorf("the diagnostics do not place the lines: %q and %q", diags[0].Message, diags[1].Message)
+	}
+}
+
+// Output that carries fields but neither a Global nor a Link block is reported
+// as such: the parser read no scope, and a bundle that said nothing about it
+// would look like a host without a resolver.
+func TestParseResolvectlStatusWithoutABlockSaysSo(t *testing.T) {
+	_, diags := ParseResolvectlStatus([]byte("  resolv.conf mode: stub\n"))
+	var sawMissingBlock bool
+	for _, d := range diags {
+		if d.Field == "resolver" && strings.Contains(d.Message, "neither a Global nor a Link block") {
+			sawMissingBlock = true
+		}
+	}
+	if !sawMissingBlock {
+		t.Fatalf("diagnostics %v do not say that no block was found", diags)
+	}
+	// An empty document is a different case: nothing was printed, so there is
+	// no record to report as unread.
+	if _, diags := ParseResolvectlStatus(nil); len(diags) != 0 {
+		t.Fatalf("an empty document produced %v", diags)
+	}
+}
+
+// The protocol line of resolvectl, with the two DNSSEC shapes and a token this
+// build does not know. What the recorded "yes" of DNSOverTLS means is
+// documented at dnsApplyProtocols and is not widened here.
+func TestParseResolvectlStatusReadsTheProtocolLine(t *testing.T) {
+	st, diags := ParseResolvectlStatus([]byte(
+		"Global\n         Protocols: -LLMNR +mDNS +DNSOverTLS DNSSEC=allow-downgrade/supported\n"))
+	if len(diags) != 0 {
+		t.Fatalf("diagnostics %v", diags)
+	}
+	if st.Global.LLMNR != dnsNo || st.Global.MDNS != dnsYes || st.Global.DNSOverTLS != dnsYes {
+		t.Errorf("protocol states %+v", st.Global)
+	}
+	if st.Global.DNSSECMode != "allow-downgrade" || st.Global.DNSSECSupport != "supported" {
+		t.Errorf("DNSSEC mode %q, support %q", st.Global.DNSSECMode, st.Global.DNSSECSupport)
+	}
+	// The shape without a slash carries the mode alone, and a token that names
+	// no protocol this build knows changes nothing.
+	st, diags = ParseResolvectlStatus([]byte(
+		"Global\n         Protocols: +DefaultRoute DNSSEC=no NotAProtocolToken\n"))
+	if len(diags) != 0 {
+		t.Fatalf("diagnostics %v", diags)
+	}
+	if st.Global.DNSSECMode != "no" || st.Global.DNSSECSupport != "" {
+		t.Errorf("DNSSEC mode %q, support %q", st.Global.DNSSECMode, st.Global.DNSSECSupport)
+	}
+	if st.Global.DefaultRoute != dnsYes || st.Global.LLMNR != "" || st.Global.MDNS != "" {
+		t.Errorf("an unknown token moved a protocol state: %+v", st.Global)
+	}
+}
+
+// Playbook L6: a server list longer than the cap is recorded cut, and the cut
+// is stated beside it. The list of this scenario is longer than any measured
+// host prints, so it is built here.
+func TestDNSListsStateTheirTruncation(t *testing.T) {
+	attrs := map[string]string{}
+	dnsPutList(attrs, "dns_servers", nil)
+	if len(attrs) != 0 {
+		t.Fatalf("an empty list produced %v", attrs)
+	}
+	var many []string
+	for i := 0; i < 60; i++ {
+		many = append(many, fmt.Sprintf("203.0.113.%d", i))
+	}
+	dnsPutList(attrs, "dns_servers", many)
+	if attrs["dns_servers_truncated"] != "true" {
+		t.Errorf("a cut server list does not say so: %v", attrs)
+	}
+	if len(attrs["dns_servers"]) > dnsMaxValueBytes {
+		t.Errorf("the recorded list is %d bytes, the cap is %d", len(attrs["dns_servers"]), dnsMaxValueBytes)
+	}
+	short := map[string]string{}
+	dnsPutList(short, "dns_servers", []string{"203.0.113.53"})
+	if short["dns_servers"] != "203.0.113.53" || short["dns_servers_truncated"] != "" {
+		t.Errorf("a short list was reported as cut: %v", short)
+	}
+}
+
+// The probe needs a runner for the observed half and a file reader for the
+// declared one. Missing either is unavailable and says which, because a
+// resolver probe without a file reader would report a host with no
+// /etc/resolv.conf.
+func TestDNSProbeSupportNeedsBothSeams(t *testing.T) {
+	host := netTestHost(probe.NewFakeRunner())
+	host.Runner = nil
+	if res := NewDNSProbe().Support(context.Background(), host); res.Available ||
+		!strings.Contains(res.Reason, "command runner") {
+		t.Errorf("without a runner: %+v", res)
+	}
+	host = netTestHost(probe.NewFakeRunner())
+	host.Files = nil
+	if res := NewDNSProbe().Support(context.Background(), host); res.Available ||
+		!strings.Contains(res.Reason, "file reader") {
+		t.Errorf("without a file reader: %+v", res)
+	}
+}
+
+// TF06-R7: what this build may claim about its own evidence for linux, and
+// that it claims nothing for any other platform.
+func TestDNSProbeEvidenceClaims(t *testing.T) {
+	claims := NewDNSProbe().EvidenceClaims()
+	levels := claims[probe.PlatformLinux]
+	if len(levels) != 2 || levels[0] != probe.FixtureTested || levels[1] != probe.CrossCompiled {
+		t.Fatalf("claims %+v", claims)
+	}
+	if _, ok := claims[probe.PlatformWindows]; ok {
+		t.Fatalf("a linux probe must claim nothing for windows: %+v", claims)
 	}
 }

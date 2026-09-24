@@ -63,6 +63,33 @@ func TestRegisterAllProbes(t *testing.T) {
 	}
 }
 
+// SPEC-0471 TF06-R7: every probe of this package claims the same two evidence
+// levels for linux, and nothing for any other platform. The two levels are the
+// only ones a BUILD can prove about itself: the parsers are covered by fixture
+// tests that run on any host, and the package compiles for linux. Whether a
+// probe ran on a real Linux host is not decided in code, so no probe may claim
+// it, and this test is where a new probe that invented a level would be caught.
+func TestEveryProbeClaimsTheSameEvidenceLevels(t *testing.T) {
+	for _, p := range Probes() {
+		id := p.Descriptor().ID
+		claimer, ok := p.(probe.EvidenceClaimer)
+		if !ok {
+			t.Errorf("%s claims no evidence level at all", id)
+			continue
+		}
+		claims := claimer.EvidenceClaims()
+		if got := claims[probe.PlatformLinux]; len(got) != 2 ||
+			got[0] != probe.FixtureTested || got[1] != probe.CrossCompiled {
+			t.Errorf("%s claims %v for linux, want fixture-tested and cross-compiled", id, got)
+		}
+		for plat, levels := range claims {
+			if plat != probe.PlatformLinux {
+				t.Errorf("%s claims %v for %s, and it runs on linux only", id, levels, plat)
+			}
+		}
+	}
+}
+
 // The file roots of this package are only for linux, sorted and free of
 // duplicates; the engine hands them to the restricted file reader.
 func TestAllowedRoots(t *testing.T) {

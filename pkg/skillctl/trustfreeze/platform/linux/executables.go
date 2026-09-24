@@ -748,9 +748,14 @@ func (p *ExecutablesProbe) RequiredTools() []string {
 }
 
 // EvidenceClaims implements probe.EvidenceClaimer. The parsers and the file
-// seam are covered by fixture tests that run on any host, and the package
-// compiles for Linux. Whether the probe ran on a real Linux host is not decided
-// in code (SPEC-0471 TF06-R7).
+// seam are covered by fixture tests, and the package compiles for Linux.
+// Whether the probe ran on a real Linux host is not decided in code
+// (SPEC-0471 TF06-R7).
+//
+// Where those tests run: all of them on a POSIX host, which is where this
+// module's test jobs run, and all but the /proc/<pid>/exe scenarios on windows,
+// where such a link can only carry a target this test tree cannot build
+// (executables_test.go, execSkipWithoutProcExe).
 func (p *ExecutablesProbe) EvidenceClaims() map[probe.Platform][]probe.EvidenceLevel {
 	return map[probe.Platform][]probe.EvidenceLevel{
 		probe.PlatformLinux: {probe.FixtureTested, probe.CrossCompiled},

@@ -20,6 +20,11 @@ package linux
 // directory through RootedProgramReader, which resolves, refuses and hashes
 // with the production code. Nothing outside the test directory is touched, and
 // no test needs a Linux host (playbook section 1 rules 5 and 10).
+//
+// One group of scenarios needs a POSIX file system all the same, and says so
+// where it skips: the ones that read /proc/<pid>/exe (see
+// execSkipWithoutProcExe). Everything else runs on every platform this module
+// builds for, which is what the Windows job measures.
 
 import (
 	"context"
@@ -37,6 +42,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze"
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/probe"
@@ -133,6 +139,30 @@ func execTestTree(t *testing.T, files map[string]execTestFile) (*RootedProgramRe
 	return NewRootedProgramReader(ExecutableRoots(), ExecutableHomePrefixes(), dir), dir
 }
 
+// execSkipWithoutProcExe skips a test whose scenario needs /proc/<pid>/exe, the
+// link the Linux kernel keeps for the program behind a running process.
+//
+// Why this is a skip and not a portability fix. The reader takes the target of
+// that link as a POSIX absolute path (/usr/local/bin/ngrok), which is what the
+// kernel writes there, and maps it back through the test prefix. A symlink a
+// test can create on windows points at a drive letter path instead, and the
+// reader refuses it as not absolute: correctly, because /proc is a Linux
+// interface and linux.executables is a linux only probe. Making the reader
+// accept a drive letter target would widen production code for the sake of a
+// platform the probe does not run on.
+//
+// What keeps running on windows is everything that does not need the link: the
+// parsers of "dpkg -S" and "stat" against the measured fixtures, the artifact
+// shaping, the limits and every refusal, and the discovery of unit programs
+// through ExecStart, which needs no /proc.
+func execSkipWithoutProcExe(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the scenario reads /proc/<pid>/exe, whose target is a POSIX absolute path; " +
+			"a symlink created here carries a drive letter, and this linux only probe refuses it")
+	}
+}
+
 func sortedLogicalPaths(files map[string]execTestFile) []string {
 	out := make([]string, 0, len(files))
 	for k := range files {
@@ -163,12 +193,22 @@ func execFileDigest(t *testing.T, dir, logical string) (string, int64) {
 // TF06-R3: the reader resolves inside its roots and refuses everything else,
 // and every refusal has its own reason.
 func TestRootedProgramReaderResolve(t *testing.T) {
+	// The escape target is a real file in a SECOND temporary directory, not a
+	// path of this host: the case under test is a link whose target exists and
+	// lies outside the tree, and a target that merely does not exist would be
+	// a missing file instead. Earlier this was /etc/hosts, which made the test
+	// depend on a file of the machine it runs on (rule 5) and could not exist
+	// on windows at all.
+	outside := filepath.Join(t.TempDir(), "hosts")
+	if err := os.WriteFile(outside, []byte("127.0.0.1 localhost\n"), 0o600); err != nil {
+		t.Fatalf("write the escape target: %v", err)
+	}
 	reader, _ := execTestTree(t, map[string]execTestFile{
 		"/usr/bin/prog":              {Content: "program bytes"},
 		"/usr/local/bin/wrapper":     {Link: "/usr/bin/prog"},
 		"/usr/local/bin/to-home":     {Link: "/home/alice/bin/agent"},
 		"/home/alice/bin/agent":      {Content: "agent bytes"},
-		"/usr/local/bin/out-of-tree": {RawLink: string(filepath.Separator) + "etc" + string(filepath.Separator) + "hosts"},
+		"/usr/local/bin/out-of-tree": {RawLink: outside},
 		"/usr/lib/plugins/keep":      {Content: "x"},
 		"/etc/passwd":                {Content: "root:x:0:0"},
 	})
@@ -282,25 +322,34 @@ func TestRootedProgramReaderProcessExecutable(t *testing.T) {
 		"/proc/2700/exe":      {Link: "/home/alice/bin/agent"},
 		"/home/alice/bin/age": {Content: "x"},
 	})
-	got, err := reader.ProcessExecutable("2698")
-	if err != nil {
-		t.Fatalf("ProcessExecutable: %v", err)
-	}
-	if got != "/usr/bin/prog" {
-		t.Fatalf("ProcessExecutable = %q", got)
-	}
-	if _, err := reader.ProcessExecutable("2699"); !errors.Is(err, ErrExecutableDeletedTarget) {
-		t.Fatalf("a deleted target returned %v", err)
-	}
-	if _, err := reader.ProcessExecutable("2700"); !errors.Is(err, ErrExecutableHomePath) {
-		t.Fatalf("a link into a home directory returned %v", err)
-	}
+	// These two need no link at all, so they run on every platform: the pid is
+	// checked before anything is read, and an unknown pid is a missing file.
 	if _, err := reader.ProcessExecutable("self"); !errors.Is(err, ErrExecutableBadPID) {
-		t.Fatalf("a non numeric pid returned %v", err)
+		t.Errorf("a non numeric pid returned %v", err)
 	}
 	if _, err := reader.ProcessExecutable("4711"); !errors.Is(err, fs.ErrNotExist) {
-		t.Fatalf("an unknown pid returned %v", err)
+		t.Errorf("an unknown pid returned %v", err)
 	}
+	// The three that read the link need its target: a POSIX absolute path for
+	// the two that resolve, and the exact string the kernel writes for the
+	// third. A test can build neither where a symlink target carries a drive
+	// letter.
+	t.Run("the link target decides", func(t *testing.T) {
+		execSkipWithoutProcExe(t)
+		got, err := reader.ProcessExecutable("2698")
+		if err != nil {
+			t.Fatalf("ProcessExecutable: %v", err)
+		}
+		if got != "/usr/bin/prog" {
+			t.Fatalf("ProcessExecutable = %q", got)
+		}
+		if _, err := reader.ProcessExecutable("2699"); !errors.Is(err, ErrExecutableDeletedTarget) {
+			t.Fatalf("a deleted target returned %v", err)
+		}
+		if _, err := reader.ProcessExecutable("2700"); !errors.Is(err, ErrExecutableHomePath) {
+			t.Fatalf("a link into a home directory returned %v", err)
+		}
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -621,6 +670,7 @@ func TestExecutablesSupport(t *testing.T) {
 // starts a program under /usr/local/bin, the same program holds a listening
 // socket, and no package owns it (T-03b B4).
 func TestExecutablesCollectUnownedProgram(t *testing.T) {
+	execSkipWithoutProcExe(t)
 	const ngrok = "/usr/local/bin/ngrok"
 	reader, dir := execTestTree(t, map[string]execTestFile{
 		ngrok:            {Size: 32911522}, // the size the bastion measured
@@ -816,6 +866,7 @@ func TestExecutablesCollectOwnedPrograms(t *testing.T) {
 // A program inside a mounted snap is owned by that snap, and dpkg is not asked
 // about it: the database does not hold it (measured on the bastion).
 func TestExecutablesCollectSnapProgram(t *testing.T) {
+	execSkipWithoutProcExe(t)
 	const env = "/snap/core22/1122/usr/bin/env"
 	reader, _ := execTestTree(t, map[string]execTestFile{
 		env:              {Size: 43968},
@@ -1206,6 +1257,7 @@ func TestExecutablesCollectFileChangedBetweenReads(t *testing.T) {
 // A process that listens and runs a program outside the roots is a finding of
 // its own, and it is not the same statement as a link that could not be read.
 func TestExecutablesCollectListenerProgramRefused(t *testing.T) {
+	execSkipWithoutProcExe(t)
 	reader, _ := execTestTree(t, map[string]execTestFile{
 		"/home/alice/bin/agent": {Content: "agent bytes"},
 		"/proc/2698/exe":        {Link: "/home/alice/bin/agent"},
@@ -1699,6 +1751,7 @@ func TestExecutableAttributesSayObservedOrClaimed(t *testing.T) {
 // (review of T-03b, finding 4); without this test the docstring would be the
 // only place either half is stated.
 func TestExecutablesOpensNothingOutsideTheRootsAndReadsProcAsALink(t *testing.T) {
+	execSkipWithoutProcExe(t)
 	const ngrok = "/usr/local/bin/ngrok"
 	reader, _ := execTestTree(t, map[string]execTestFile{
 		ngrok:            {Content: "program bytes"},
@@ -1743,5 +1796,82 @@ func TestExecutablesOpensNothingOutsideTheRootsAndReadsProcAsALink(t *testing.T)
 	// hashed: the link target goes through the same rules as every candidate.
 	if !slices.Contains(counting.hashedPaths, ngrok) {
 		t.Errorf("hashed paths %v do not carry the program behind the listening socket", counting.hashedPaths)
+	}
+}
+
+// The reader is built from LOGICAL absolute paths, and a caller cannot widen
+// the scope by handing it anything else: a relative root is ignored, a
+// duplicate collapses, and the result is sorted (playbook L8).
+func TestNewRootedProgramReaderKeepsOnlyAbsoluteRoots(t *testing.T) {
+	r := NewRootedProgramReader([]string{"/usr", "usr/local", "/usr", "", "/opt/", "/bin"}, nil, "")
+	if got := r.Roots(); !slices.Equal(got, []string{"/bin", "/opt", "/usr"}) {
+		t.Fatalf("roots %v", got)
+	}
+	// Production has no prefix: a logical path and its path on disk are the
+	// same path, and the mapping back is the identity. Both directions are
+	// asserted here because every root check runs through them.
+	if got := r.disk("/usr/bin/prog"); got != filepath.FromSlash("/usr/bin/prog") {
+		t.Errorf("disk(%q) = %q", "/usr/bin/prog", got)
+	}
+	logical, err := r.logical(filepath.FromSlash("/usr/bin/prog"))
+	if err != nil || logical != "/usr/bin/prog" {
+		t.Errorf("logical = %q, %v", logical, err)
+	}
+}
+
+// Every refusal has its own sentence, and each one says what the bundle
+// therefore does not know. The message is what a reader of the diagnostics
+// sees, so it is pinned here instead of only in the paths that produce it.
+func TestExecutablesRefusalMessageNamesTheCause(t *testing.T) {
+	const p = "/usr/local/bin/agent"
+	for _, tc := range []struct {
+		err  error
+		want string
+	}{
+		{ErrExecutableSymlinkEscape, "resolves outside the roots"},
+		{ErrExecutableHomePath, "under a home directory"},
+		{ErrExecutableOutsideRoots, "outside the roots"},
+		{ErrExecutableNotRegular, "not a regular file"},
+		{ErrExecutableDeletedTarget, "nothing left to hash"},
+		{fs.ErrNotExist, "does not exist"},
+		{fs.ErrPermission, "may not resolve the path"},
+		{&fs.PathError{Op: "open", Path: p, Err: errors.New("input/output error")}, "open: input/output error"},
+		{errors.New("something else entirely"), "something else entirely"},
+	} {
+		got := executablesRefusalMessage(p, tc.err)
+		if !strings.HasPrefix(got, p+" was not read: ") {
+			t.Errorf("%v: the message does not name the file first: %q", tc.err, got)
+		}
+		if !strings.Contains(got, tc.want) {
+			t.Errorf("%v: message %q does not say %q", tc.err, got, tc.want)
+		}
+	}
+	// A path error is reduced to its operation and its cause, so the path is
+	// named once and the message carries no file content.
+	got := executablesRefusalMessage(p, &fs.PathError{Op: "open", Path: p, Err: fs.ErrInvalid})
+	if strings.Count(got, p) != 1 {
+		t.Errorf("the message repeats the path: %q", got)
+	}
+}
+
+// Playbook L6: one recorded value is capped, and the cut keeps the value valid
+// UTF-8 rather than ending in half a rune.
+func TestExecutablesCapValueBoundsOneRecordedValue(t *testing.T) {
+	short := strings.Repeat("a", 10)
+	if got := executablesCapValue(short); got != short {
+		t.Errorf("a short value was changed: %q", got)
+	}
+	long := strings.Repeat("b", executablesMaxValueBytes+50)
+	if got := executablesCapValue(long); len(got) != executablesMaxValueBytes {
+		t.Errorf("a long value was cut to %d bytes, the cap is %d", len(got), executablesMaxValueBytes)
+	}
+	// A multi byte rune that straddles the cap is dropped, never halved.
+	straddling := strings.Repeat("c", executablesMaxValueBytes-1) + "ät"
+	got := executablesCapValue(straddling)
+	if !utf8.ValidString(got) {
+		t.Errorf("the cut value is not valid UTF-8: %q", got)
+	}
+	if len(got) >= executablesMaxValueBytes {
+		t.Errorf("the cut value is %d bytes, the cap is %d", len(got), executablesMaxValueBytes)
 	}
 }

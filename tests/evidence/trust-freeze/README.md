@@ -12,6 +12,12 @@ and never collapse into one word such as "supported" (SPEC-0471, TF06-R6 and TF0
 
 Cross-compilation is not a platform test. A run against an earlier commit does not prove a later one.
 
+One exception to "runnable on any host", named in the code where it fires: the scenarios of
+`linux.executables` that read `/proc/<pid>/exe` skip on Windows, because the target of that kernel link is a
+POSIX absolute path and a symlink a test can create there carries a drive letter instead
+(`executables_test.go`, `execSkipWithoutProcExe`). The parsers, the artifact shaping, the limits and every
+refusal of that probe do run on Windows, like every other fixture test of the Linux family.
+
 `release-matrix.json` records, per ROUND and per platform, what actually ran for a given commit: the unit-test
 totals, the acceptance script result, the cross-machine verifications, and for a round with real captures the
 probe outcomes and what the runs found. It carries no host names, addresses or user names: a bundle does record

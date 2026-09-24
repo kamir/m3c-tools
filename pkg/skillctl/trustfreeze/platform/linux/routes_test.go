@@ -679,3 +679,198 @@ func TestRoutesProbeIsDeterministic(t *testing.T) {
 		t.Fatalf("the artifacts are not sorted by id: %v", digests[0])
 	}
 }
+
+// TF06-R3 with playbook L1: a document that is not the JSON array iproute2
+// prints, a row without an interface name, and an address row without the three
+// fields an address needs are each a named diagnostic, never a silent drop.
+// The inputs are written here and not taken from a fixture, because no host of
+// this laboratory prints them: a fixture claiming it did would be a false
+// record.
+func TestParseIPAddressesNamesEveryRecordItDropped(t *testing.T) {
+	if addrs, diags := ParseIPAddresses([]byte("not json")); addrs != nil || len(diags) != 1 ||
+		diags[0].Code != routeDiagJSONUnreadable {
+		t.Fatalf("a document that is not JSON gave %d address(es) and %v", len(addrs), diags)
+	}
+	addrs, diags := ParseIPAddresses([]byte(`[
+	  {"addr_info":[{"family":"inet","local":"203.0.113.10","prefixlen":24}]},
+	  {"ifname":"eth0","addr_info":[
+	    {"family":"inet","local":"198.51.100.7","prefixlen":24},
+	    {"family":"mpls","local":"198.51.100.8","prefixlen":24},
+	    {"family":"inet","prefixlen":24},
+	    {"family":"inet","local":"198.51.100.9"}]}]`))
+	if len(addrs) != 1 || addrs[0].Local != "198.51.100.7" {
+		t.Fatalf("addresses %+v, want only the one complete record", addrs)
+	}
+	if len(diags) != 4 {
+		t.Fatalf("%d diagnostic(s) for one unnamed interface and three unreadable addresses: %v", len(diags), diags)
+	}
+	for _, d := range diags {
+		if d.Code != netDiagRecordUnparsed {
+			t.Errorf("diagnostic code %q", d.Code)
+		}
+	}
+	// The unnamed interface is reported by its position, because it has no
+	// name to report it by.
+	if !strings.Contains(diags[0].Message, "interface 1") {
+		t.Errorf("the first diagnostic does not place the unnamed interface: %q", diags[0].Message)
+	}
+	// An unknown address family is dropped rather than recorded under a family
+	// this package invented for it.
+	if got := routeAddressFamily("mpls"); got != "" {
+		t.Errorf("routeAddressFamily(\"mpls\") = %q, want the empty family", got)
+	}
+}
+
+// routeLess is the tie-breaker of the artifact order. Two routes that agree on
+// everything it compares must not order one before the other, or the order of
+// two captures of an unchanged host could differ (playbook L8).
+func TestRouteLessIsATotalOrderWithoutAPreferenceForEqualRoutes(t *testing.T) {
+	a := Route{Family: routeFamilyIPv4, Destination: "default", Device: "eth0", Table: routeTableMain, Metric: "100", Gateway: "203.0.113.254"}
+	b := a
+	if routeLess(a, b) || routeLess(b, a) {
+		t.Error("two equal routes order each other")
+	}
+	b.Metric = "200"
+	if !routeLess(a, b) || routeLess(b, a) {
+		t.Error("the metric does not break the tie")
+	}
+	c := a
+	c.Gateway = "203.0.113.2"
+	if !routeLess(c, a) || routeLess(a, c) {
+		t.Error("the gateway does not break the tie of two routes with the same metric")
+	}
+}
+
+// The metric is read as a number where the preferred default route is decided.
+// A route without a metric is metric 0, which is what the kernel means when it
+// prints none, and a value this parser cannot read is 0 as well: the artifact
+// still carries the metric as the tool printed it, so the unreadable value is
+// in the bundle and only the ORDERING falls back.
+func TestRouteMetricValueReadsTheKernelDefault(t *testing.T) {
+	for _, tc := range []struct {
+		metric string
+		want   int64
+	}{{"", 0}, {"0", 0}, {"100", 100}, {"1024", 1024}, {"low", 0}, {"-1", -1}} {
+		if got := routeMetricValue(Route{Metric: tc.metric}); got != tc.want {
+			t.Errorf("routeMetricValue(%q) = %d, want %d", tc.metric, got, tc.want)
+		}
+	}
+}
+
+// routeDefaults answers two questions per family: which default route the
+// kernel prefers (the lowest metric) and how many there are. A tie in the
+// metric is broken by the base id, so the answer is deterministic.
+func TestRouteDefaultsPrefersTheLowestMetricAndCountsThemAll(t *testing.T) {
+	high := Route{Family: routeFamilyIPv4, Destination: "default", Device: "eth0", Table: routeTableMain, Metric: "200", Gateway: "203.0.113.254"}
+	low := Route{Family: routeFamilyIPv4, Destination: "default", Device: "eth1", Table: routeTableMain, Metric: "100", Gateway: "203.0.113.2"}
+	plain := Route{Family: routeFamilyIPv4, Destination: "192.0.2.0/24", Device: "eth0", Table: routeTableMain}
+	got := routeDefaults([]Route{high, low, plain})
+	if len(got) != 1 {
+		t.Fatalf("families %v, want ipv4 only", got)
+	}
+	if d := got[routeFamilyIPv4]; d.count != 2 || d.route.Device != "eth1" {
+		t.Errorf("default route %+v, want two counted and the metric 100 route preferred", d)
+	}
+	// The reverse input order must not change the answer, and the branch that
+	// keeps the route it already has has to run too.
+	if d := routeDefaults([]Route{low, high, plain})[routeFamilyIPv4]; d.count != 2 || d.route.Device != "eth1" {
+		t.Errorf("the order of the rows changed the preferred route: %+v", d)
+	}
+	// A tie in the metric is broken by the base id, never by the input order.
+	tieA := Route{Family: routeFamilyIPv6, Destination: "default", Device: "eth0", Table: routeTableMain, Gateway: "2001:db8::1"}
+	tieB := Route{Family: routeFamilyIPv6, Destination: "default", Device: "eth1", Table: routeTableMain, Gateway: "2001:db8::2"}
+	first := routeDefaults([]Route{tieA, tieB})[routeFamilyIPv6]
+	second := routeDefaults([]Route{tieB, tieA})[routeFamilyIPv6]
+	if first.route.BaseArtifactID() != second.route.BaseArtifactID() || first.count != 2 {
+		t.Errorf("a tie is decided by the input order: %+v and %+v", first, second)
+	}
+}
+
+// The address class is the exposure vocabulary of the listener probe, applied
+// to an address. An address this build cannot parse is "unknown", which is a
+// recorded statement and not an absent attribute.
+func TestRouteAddressClassUsesTheExposureVocabulary(t *testing.T) {
+	for _, tc := range []struct{ local, want string }{
+		{"127.0.0.1", ExposureLoopback},
+		{"::1", ExposureLoopback},
+		{"169.254.1.1", ExposureLinkLocal},
+		{"fe80::1", ExposureLinkLocal},
+		{"0.0.0.0", ExposureAnyAddress},
+		{"::", ExposureAnyAddress},
+		{"203.0.113.10", ExposureSpecificAddress},
+		{"2001:db8::10", ExposureSpecificAddress},
+		{"", ExposureUnknown},
+		{"203.0.113.10/24", ExposureUnknown},
+	} {
+		if got := routeAddressClass(tc.local); got != tc.want {
+			t.Errorf("routeAddressClass(%q) = %q, want %q", tc.local, got, tc.want)
+		}
+	}
+	if got := addressAttributes(Address{Family: routeFamilyIPv4, Device: "lo", Local: "127.0.0.1", PrefixLength: "8"})["address_class"]; got != ExposureLoopback {
+		t.Errorf("the address artifact does not carry the class: %q", got)
+	}
+}
+
+// Playbook L6: a flag list longer than the cap is recorded cut, and the cut is
+// stated beside it, so a reader never takes a cut list for the whole one. The
+// flag counts of this scenario exceed what any interface of this laboratory
+// carries, so the input is built here.
+func TestRouteAndAddressFlagsStateTheirTruncation(t *testing.T) {
+	long := make([]string, 0, 40)
+	for i := 0; i < 40; i++ {
+		long = append(long, fmt.Sprintf("FLAG-%02d", i))
+	}
+	attrs := routeAttributes(Route{Family: routeFamilyIPv4, Destination: "default", Device: "eth0", Table: routeTableMain, Flags: long})
+	if attrs["route_flags_truncated"] != "true" {
+		t.Errorf("a cut flag list does not say so: %v", attrs)
+	}
+	if len(attrs["route_flags"]) > routesMaxValueBytes {
+		t.Errorf("the recorded flags are %d bytes, the cap is %d", len(attrs["route_flags"]), routesMaxValueBytes)
+	}
+	addr := addressAttributes(Address{Family: routeFamilyIPv4, Device: "eth0", Local: "203.0.113.10", PrefixLength: "24", DeviceFlags: long})
+	if addr["device_flags_truncated"] != "true" {
+		t.Errorf("a cut device flag list does not say so: %v", addr)
+	}
+	// A short list is recorded whole and says nothing about a cut.
+	short := routeAttributes(Route{Family: routeFamilyIPv4, Destination: "default", Device: "eth0", Table: routeTableMain, Flags: []string{"onlink"}})
+	if short["route_flags"] != "onlink" || short["route_flags_truncated"] != "" {
+		t.Errorf("a short flag list was reported as cut: %v", short)
+	}
+}
+
+// TF06-R7: what this build may claim about its own evidence, and what it may
+// not. The parsers are fixture tested and the package cross compiles; whether
+// the probe ran on a real Linux host is not decided in code.
+func TestRoutesProbeEvidenceClaims(t *testing.T) {
+	claims := NewRoutesProbe().EvidenceClaims()
+	levels := claims[probe.PlatformLinux]
+	if len(levels) != 2 || levels[0] != probe.FixtureTested || levels[1] != probe.CrossCompiled {
+		t.Fatalf("claims %+v", claims)
+	}
+	if _, ok := claims[probe.PlatformWindows]; ok {
+		t.Fatalf("a linux probe must claim nothing for windows: %+v", claims)
+	}
+}
+
+// A volume cap that dropped records makes the run partial even when every call
+// answered, and the reason says so instead of leaving the gap unstated.
+func TestRoutesStatusReportsTheVolumeCapAsPartial(t *testing.T) {
+	read := []routeSource{{what: "ipv4 routes", read: true}, {what: "ipv6 routes", read: true}}
+	if st, reason := routesStatus(read, nil); st != trustfreeze.StatusCaptured || reason != "" {
+		t.Fatalf("two clean calls gave %q with %q", st, reason)
+	}
+	capped := []trustfreeze.Diagnostic{{Code: netDiagVolumeCapped, Field: "route_count"}}
+	st, reason := routesStatus(read, capped)
+	if st != trustfreeze.StatusPartial {
+		t.Fatalf("a capped run is %q, want partial", st)
+	}
+	if !strings.Contains(reason, "volume cap") {
+		t.Errorf("the reason does not name the cap: %q", reason)
+	}
+	if routeHasVolumeWarning(nil) || !routeHasVolumeWarning(capped) {
+		t.Error("the volume warning is not recognized by its code")
+	}
+	if routeHasVolumeWarning([]trustfreeze.Diagnostic{{Code: netDiagRecordUnparsed}}) {
+		t.Error("an unparsed record was read as a volume cap")
+	}
+}

@@ -454,6 +454,12 @@ func ComputeArtifactDigest(a Artifact) (string, error) {
 // must see, and report orders them. The list below is that shared vocabulary.
 // It judges nothing: a policy decides severities, this only says which strings
 // mean "root on this host" and how far a value reaches.
+//
+// #nosec G101 -- these are the NAMES of the privilege values, and their values
+// are those same names. Nothing here is a credential:
+// "root-via-sudo-nopasswd" says that a rule needs no password, which is the
+// finding a reader of the bundle must see. The rule fires on the word
+// "Password" in the identifier.
 const (
 	// PrivilegeValueRoot: the subject is root itself.
 	PrivilegeValueRoot = "root"

@@ -291,22 +291,33 @@ func (notReportingRunner) Run(context.Context, CommandRequest) CommandResult {
 // searched, and an earlier directory still wins.
 func TestExecRunnerFindsABinaryInALaterSearchDir(t *testing.T) {
 	first, last := t.TempDir(), t.TempDir()
-	tool := filepath.Join(last, "trustfreeze-fake-tool")
+	// What counts as executable is decided by the operating system, and
+	// LookPath asks it: a file without one of the PATHEXT extensions is not a
+	// program on windows, no matter what its mode bits say. The fixture
+	// therefore carries the extension of the host it runs on, so the test
+	// measures the search ORDER and not that rule.
+	name := "trustfreeze-fake-tool"
+	body := "#!/bin/sh\nexit 0\n"
+	if runtime.GOOS == "windows" {
+		name += ".bat"
+		body = "@exit /b 0\r\n"
+	}
+	tool := filepath.Join(last, name)
 	// #nosec G306 -- a test fixture in t.TempDir() that has to be executable.
-	if err := os.WriteFile(tool, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+	if err := os.WriteFile(tool, []byte(body), 0o700); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	r := &ExecRunner{SearchPath: []string{first, last}}
-	got, err := r.LookPath("trustfreeze-fake-tool")
+	got, err := r.LookPath(name)
 	if err != nil || got != tool {
 		t.Fatalf("LookPath = %q, %v; want %q", got, err, tool)
 	}
-	shadow := filepath.Join(first, "trustfreeze-fake-tool")
+	shadow := filepath.Join(first, name)
 	// #nosec G306 -- same fixture, in the earlier directory.
-	if err := os.WriteFile(shadow, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+	if err := os.WriteFile(shadow, []byte(body), 0o700); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	if got, err := r.LookPath("trustfreeze-fake-tool"); err != nil || got != shadow {
+	if got, err := r.LookPath(name); err != nil || got != shadow {
 		t.Fatalf("LookPath = %q, %v; want the earlier directory %q", got, err, shadow)
 	}
 }
