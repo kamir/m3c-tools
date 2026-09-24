@@ -279,6 +279,16 @@ func (f *FilesDB) RecordTranscript(fileHash, importType, text, lang string) erro
 
 // RecordUploadSuccess stores the ER1 doc ID and marks the file as uploaded.
 func (f *FilesDB) RecordUploadSuccess(fileHash, importType, docID string) error {
+	// EINE LEERE DocID IST KEIN ERFOLG (gemessen 2026-09-21). Ohne diese
+	// Pruefung schrieb jeder Aufrufer, der versehentlich "" uebergab, eine
+	// Zeile mit status='uploaded', ohne upload_doc_id und ohne uploaded_at.
+	// In der Datenbank auf dem M4 standen so 154 von 612 Zeilen: sie behaupten
+	// einen Upload, benennen aber nichts, was man nachpruefen koennte. Eine
+	// Erfolgsmeldung ohne Beleg ist schlimmer als keine, weil sie die Suche
+	// nach dem Fehler an der falschen Stelle beendet.
+	if docID == "" {
+		return fmt.Errorf("RecordUploadSuccess: leere docID fuer %s/%s, das ist kein Erfolg", importType, fileHash)
+	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := f.db.Exec(`
 		UPDATE processed_files
