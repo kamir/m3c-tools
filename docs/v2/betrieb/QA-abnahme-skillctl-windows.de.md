@@ -112,6 +112,19 @@ $LASTEXITCODE
 - **FAIL des Tors:** Ausgang `0`. Ein Lauf, in dem das durchgeht, ist der einzige Befund, auf den es
   hier ankommt.
 
+> **Der schnelle Weg statt B1 und B2.** Dieselbe Kette gibt es als Skript:
+> `scripts/skillctl-quickstart-windows.ps1`, mit gepinnter URL und Pruefsumme in
+> [Acceptance und Handover](acceptance-skillctl-lifecycle.md). Es faehrt keygen, pack, sign,
+> verify-sig, trust add und den Manipulationsfall in einem Wegwerfordner unter `%TEMP%` und druckt
+> je Schritt eine Zeile. Es ist dasselbe Skript, das die CI auf `windows-latest` faehrt.
+>
+> Ein Unterschied bei der Gegenprobe, damit die Zahl niemanden ueberrascht: das Skript haengt die
+> Sidecar-Signatur auf den manipulierten Digest um, die Ablehnung kommt also aus der Kryptografie
+> (**Ausgang 11**, Signatur ungueltig). B2 oben laesst die Signatur stehen, dann faellt schon der
+> Digest auf (**Ausgang 10**, Bytes nach dem Signieren geaendert). Beide schliessen zu, 11 ist der
+> staerkere Nachweis. Wer das Skript nimmt, kreuzt B1 und B2 nach dessen Zeilen an und notiert
+> `11` statt `10`.
+
 ---
 
 ## Stufe C: Trust Freeze, der erste echte Lauf auf Windows
