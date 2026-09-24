@@ -1,0 +1,5 @@
+# Written by the operator of this host; systemd-resolved is not installed.
+nameserver 203.0.113.53
+nameserver 198.51.100.53
+search lab.example internal.lab.example
+options timeout:2 attempts:3 rotate
