@@ -70,7 +70,8 @@ version is ldflags-stamped (`skillctl version`). Release tags: `skillctl/vX.Y.Z`
   `new`, `inventory` and `verify`. It answers which named secrets exist and whether
   they are still reachable, and it never prints a secret value. A secret has roles,
   not only storage locations, and unreachable is reported as unreachable instead of
-  as absent. Reference page: `docs/v2/entwickler/secretctl.md`.
+  as absent. Reference page: `docs/v2/entwickler/secretctl.md`. It rides the product line
+  (`vX.Y.Z` tags, goreleaser), not the `skillctl/v*` assets, which ship `skillctl` alone.
 - **`skillctl drift`** (SPEC-0432) compares what this machine carries against the
   registry catalog, in both directions: what is installed here and unknown there,
   and what the catalog knows and this machine does not have.

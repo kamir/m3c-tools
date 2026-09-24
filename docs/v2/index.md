@@ -49,5 +49,6 @@ Prosa-Bestand liegt unkanonisch unter `docs/old/`.
 | [Ops-Runbook: Mensch-Agent-Team](betrieb/ops-human-agent-team.de.md) | das Einrichtungs-Runbook, auch als [Doku-Seite](pages/ops-human-agent-team.html) | DE |
 | [Runbook: skillctl-sim](entwickler/skillctl-sim.md) | die Trust-Plane-Simulation lesen | EN |
 | [Reference: secretctl](entwickler/secretctl.md) | wer ein Geheimnis haelt und ob es noch gilt; liest und vergleicht, druckt nie einen Wert; check-docpages-getort | EN |
+| [QA-Abnahme: skillctl auf Windows](betrieb/QA-abnahme-skillctl-windows.de.md) | das Protokoll zum Ausdrucken, Ankreuzen und Unterschreiben, auch als [Doku-Seite](pages/betrieb-qa-abnahme-skillctl-windows.html); check-docpages-getort | DE |
 | [Runbook: die Audit-Spur](sicherheit/audit-spur.de.md) | die drei Traeger audit, auditlog, translog konsolidiert | DE |
 | [docs/security/](../security/required-checks.txt) | Backlogs, Baselines und die Namensbindung der Pflicht-Checks | EN |
