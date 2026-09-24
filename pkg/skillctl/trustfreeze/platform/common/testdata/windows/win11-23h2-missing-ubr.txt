@@ -1,0 +1,10 @@
+HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion
+    SystemRoot    REG_SZ    C:\WINDOWS
+    CurrentBuild    REG_SZ    22631
+    CurrentBuildNumber    REG_SZ    22631
+    CurrentVersion    REG_SZ    6.3
+    DisplayVersion    REG_SZ    23H2
+    EditionID    REG_SZ    Professional
+    InstallationType    REG_SZ    Client
+    ProductName    REG_SZ    Windows 10 Pro
+    ReleaseId    REG_SZ    2009

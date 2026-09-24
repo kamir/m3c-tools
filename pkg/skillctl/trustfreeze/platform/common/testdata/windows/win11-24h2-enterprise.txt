@@ -1,0 +1,18 @@
+HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion
+    SystemRoot    REG_SZ    C:\WINDOWS
+    BuildBranch    REG_SZ    ge_release
+    BuildLab    REG_SZ    26100.ge_release.240331-1435
+    BuildLabEx    REG_SZ    26100.1.amd64fre.ge_release.240331-1435
+    CompositionEditionID    REG_SZ    Enterprise
+    CurrentBuild    REG_SZ    26100
+    CurrentBuildNumber    REG_SZ    26100
+    CurrentMajorVersionNumber    REG_DWORD    0xa
+    CurrentMinorVersionNumber    REG_DWORD    0x0
+    CurrentType    REG_SZ    Multiprocessor Free
+    CurrentVersion    REG_SZ    6.3
+    DisplayVersion    REG_SZ    24H2
+    EditionID    REG_SZ    Enterprise
+    InstallationType    REG_SZ    Client
+    ProductName    REG_SZ    Windows 10 Enterprise
+    ReleaseId    REG_SZ    2009
+    UBR    REG_DWORD    0x7f1

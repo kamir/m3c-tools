@@ -1,0 +1,28 @@
+{
+  "schema_version": "trust-freeze/verdict/v1",
+  "policy": {
+    "id": "trust-freeze/policy/default-v0",
+    "rules_digest": "sha256:ee9fcbc71aa53e1fd63ec40975c843475c9b5b0cd06043cef0a37f994b46d319"
+  },
+  "diff_digest": "sha256:6f1cec7d66fc6a20de13669f0284c7e31d64f132ecc46bb0bc1dbe019476f438",
+  "highest_severity": "medium",
+  "fail_on": "high",
+  "threshold_exceeded": false,
+  "counts": {
+    "critical": 0,
+    "high": 0,
+    "info": 0,
+    "low": 0,
+    "medium": 1
+  },
+  "findings": [
+    {
+      "id": "changed:device/os",
+      "kind": "changed",
+      "severity": "medium",
+      "artifact_id": "device/os",
+      "rule_id": "TF-POL-DEVICE-IDENTITY",
+      "message": "artifact device/os (os) changed: attributes os_version"
+    }
+  ]
+}

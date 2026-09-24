@@ -1,0 +1,19 @@
+# Synthetic malformed os-release. Line numbers are pinned by osrelease_test.go.
+NAME="Example Linux
+VERSION_ID="1.0"
+this line is not an assignment
+BUILD_ID = 2026
+export VARIANT=server
+PRETTY_NAME="Example" "Linux"
+ID=example linux
+HOME_URL="https://$HOST/"
+SUPPORT_URL=https://host-a.example/;reboot
+VERSION=1.0\
+ID_LIKE="unterminated\
+  # an indented comment is still a comment
+
+1BAD=1
+IMAGE_ID='single quoted'
+LOGO="logo[31m"
+VARIANT_ID="ÿþ"
+ANSI_COLOR="0;31"

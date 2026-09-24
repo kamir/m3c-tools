@@ -80,6 +80,7 @@ gates the CONTENT of the Exit-Code column against the register and the manual.
 | `revoke` | SPEC-0188 §4.5 | 0/1/2, 15, 22 |
 | `audit` | SPEC-0189 §14 | 0/1/2/3 |
 | `envreport` | SPEC-0428 | 0/1/2 |
+| `trust-freeze` | SPEC-0466 (with SPEC-0467..SPEC-0471) | 0/1/2 |
 | `propose` | SPEC-0194 | 0/1/2 |
 | `install` | SPEC-0188 §11 (S8) | 0/1/2, 10..17, 20, 22 |
 | `verify` | SPEC-0188 §11 (S8) | 0/1/2, 10..17, 20, 22 |
@@ -169,6 +170,16 @@ Notes on sourcing:
   (intent and awareness raise those, not the chain) nor `22`/`23` (the freshness
   and log-inclusion checks that `install` and `verify` run around the chain, and
   these two verbs do not).
+- `trust-freeze` groups six subcommands under one verb: `doctor`, `capture`,
+  `baseline approve`, `verify`, `diff` and `report`. They are subcommands, not
+  aliases, so the Verb cell names only the canonical verb: listing them as
+  alias spans would register the unrelated top-level `diff`, `report`, `verify`
+  and `doctor` a second time. The exit space stays the shared base `0/1/2` and
+  allocates no new number. What exit `1` means (`execution_error`,
+  `verification_failure`, `drift_threshold_exceeded` or `incomplete_capture`)
+  rides the `result_class` field of the JSON output instead
+  (`cmd/skillctl/trustfreeze_cmds.go`). It is distinct from `drift`,
+  `envreport` and `audit`, which keep their meaning.
 - `import` here is the SPEC-0189 S0a scanner import, exit `0/1`. It is distinct
   from the `import-public` surface (exit `4/5/17/18/19`), which is not a
   top-level verb in the current dispatch.

@@ -39,7 +39,10 @@ threshold:
 # compare against, which means a second CI step that fetches/persists the base
 # breakdown (via its git or CDN storer). That plumbing is a clean follow-up, not
 # a blocker. See coverage-gate.yml's trailing comment for the exact wiring. The
-# per-package ratchet above already prevents regressions on every changed package.
+# per-package ratchet below prevents regressions on every package that has an
+# override; a package without one (the gap list at the end, or a new package
+# nobody listed) is not gated, so every new package gets its override in the
+# change that adds it.
 # diff:
 #   threshold: 85
 #   base-breakdown-file-name: testcoverage-base-breakdown.json
@@ -95,6 +98,22 @@ override:
   # flake on any rounding difference between machines.
   - { path: '^pkg/skillctl/sim$',          threshold: 42 } # measured 43.0
   - { path: '^pkg/skillctl/browse$',       threshold: 17 } # measured 17.1
+  # Trust Freeze (SPEC-0466 to SPEC-0471), added with the walking skeleton.
+  # Measured package by package with -covermode=atomic on macOS, like the
+  # coverage workflow. Floored at floor(measured - 0.5) instead of
+  # floor(measured), for the reason given at sim: several of these packages
+  # have timing- and host-dependent branches (process kill at the deadline,
+  # build-tagged per-OS files), and a floor a few statements below the
+  # measurement would flake between machines.
+  - { path: '^pkg/skillctl/trustfreeze/platform/common$', threshold: 95 } # measured 96.2
+  - { path: '^pkg/skillctl/trustfreeze/capture$',         threshold: 92 } # measured 92.9
+  - { path: '^pkg/skillctl/trustfreeze/seal$',            threshold: 90 } # measured 91.1
+  - { path: '^pkg/skillctl/trustfreeze/compare$',         threshold: 88 } # measured 88.8
+  - { path: '^pkg/skillctl/trustfreeze$',                 threshold: 87 } # measured 87.7
+  - { path: '^pkg/skillctl/trustfreeze/probe$',           threshold: 87 } # measured 88.2
+  - { path: '^pkg/skillctl/trustfreeze/redact$',          threshold: 87 } # measured 88.3
+  - { path: '^pkg/skillctl/trustfreeze/policy$',          threshold: 86 } # measured 86.9
+  - { path: '^pkg/skillctl/trustfreeze/report$',          threshold: 82 } # measured 83.2
   # CLI-glue blob: one big package, files span 0%..95% (main.go, session_cmds.go,
   # peer_cmds.go etc. are 0%). Per H3d it gets NO aspirational target: floored at
   # its current 48.4% only to stop it sliding as new subcommands are added. Cover

@@ -1,0 +1,45 @@
+{
+  "schema_version": "trust-freeze/capture/v1",
+  "kind": "capture",
+  "capture": {
+    "started_at": "2026-01-02T03:04:05Z",
+    "finished_at": "2026-01-02T03:04:06.5Z",
+    "tool": "skillctl",
+    "tool_version": "0.0.0-test",
+    "profile": {
+      "id": "walking-skeleton",
+      "version": "1",
+      "digest": "sha256:1900eab6c028483d7126599ee6f50de0d27907b5c65fa90524580b4b0f9852b0"
+    },
+    "actor": "id:alice@example"
+  },
+  "subject": {
+    "id": "device/eb9aa81eeaaf3ce7",
+    "os_family": "linux"
+  },
+  "completeness": {
+    "status": "incomplete",
+    "required": [
+      "common.identity",
+      "linux.firewall"
+    ],
+    "gaps": [
+      {
+        "probe_id": "linux.firewall",
+        "status": "permission_denied",
+        "reason": "not_captured"
+      }
+    ]
+  },
+  "probes": [
+    {
+      "probe_id": "common.identity",
+      "status": "captured"
+    },
+    {
+      "probe_id": "linux.firewall",
+      "status": "permission_denied",
+      "reason": "fixture"
+    }
+  ]
+}

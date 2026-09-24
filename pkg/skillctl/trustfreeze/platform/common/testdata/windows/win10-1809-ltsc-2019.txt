@@ -1,0 +1,16 @@
+HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion
+    SystemRoot    REG_SZ    C:\WINDOWS
+    BuildBranch    REG_SZ    rs5_release
+    BuildLab    REG_SZ    17763.rs5_release.180914-1434
+    BuildLabEx    REG_SZ    17763.1.amd64fre.rs5_release.180914-1434
+    CurrentBuild    REG_SZ    17763
+    CurrentBuildNumber    REG_SZ    17763
+    CurrentMajorVersionNumber    REG_DWORD    0xa
+    CurrentMinorVersionNumber    REG_DWORD    0x0
+    CurrentType    REG_SZ    Multiprocessor Free
+    CurrentVersion    REG_SZ    6.3
+    EditionID    REG_SZ    EnterpriseS
+    InstallationType    REG_SZ    Client
+    ProductName    REG_SZ    Windows 10 Enterprise LTSC 2019
+    ReleaseId    REG_SZ    1809
+    UBR    REG_DWORD    0x1895

@@ -1,0 +1,89 @@
+{
+  "schema_version": "trust-freeze/policy/v1",
+  "id": "trust-freeze/policy/default-v0",
+  "description": "Default policy. Comparing two different devices is high, info when the mismatch was allowed explicitly. A collection gap of a required probe is critical, of an optional probe medium; a probe that is not applicable with a reason is info. A changed device/os or device/host is medium. Every other added, removed or changed artifact, a baseline artifact that was not observed and a probe that moved between captured and not_applicable are low. Changes no rule matches get the default severity info.",
+  "fail_on": "high",
+  "default_severity": "info",
+  "rules": [
+    {
+      "id": "TF-POL-SUBJECT-CHANGED",
+      "description": "The baseline and the current bundle describe different devices.",
+      "severity": "high",
+      "match": {
+        "change_kinds": ["subject_changed"],
+        "subject_mismatch_allowed": false
+      }
+    },
+    {
+      "id": "TF-POL-SUBJECT-CHANGED-ALLOWED",
+      "description": "Different devices, compared on purpose (allow_subject_mismatch).",
+      "severity": "info",
+      "match": {
+        "change_kinds": ["subject_changed"],
+        "subject_mismatch_allowed": true
+      }
+    },
+    {
+      "id": "TF-POL-GAP-REQUIRED",
+      "description": "A required probe was not captured.",
+      "severity": "critical",
+      "match": {
+        "change_kinds": ["collection_gap"],
+        "required": true,
+        "gap_causes": ["duplicate_result", "invalid_status", "no_result", "not_applicable_without_reason", "not_captured"]
+      }
+    },
+    {
+      "id": "TF-POL-GAP-OPTIONAL",
+      "description": "An optional probe was not captured.",
+      "severity": "medium",
+      "match": {
+        "change_kinds": ["collection_gap"],
+        "required": false,
+        "gap_causes": ["duplicate_result", "invalid_status", "no_result", "not_applicable_without_reason", "not_captured"]
+      }
+    },
+    {
+      "id": "TF-POL-GAP-NOT-APPLICABLE",
+      "description": "A probe is not applicable on this host and says why. It stays visible and does not block.",
+      "severity": "info",
+      "match": {
+        "change_kinds": ["collection_gap"],
+        "gap_causes": ["not_applicable"]
+      }
+    },
+    {
+      "id": "TF-POL-DEVICE-IDENTITY",
+      "description": "The operating system or host identity changed.",
+      "severity": "medium",
+      "match": {
+        "change_kinds": ["changed"],
+        "artifact_ids": ["device/host", "device/os"]
+      }
+    },
+    {
+      "id": "TF-POL-ARTIFACT-DRIFT",
+      "description": "Any other artifact was added, removed or changed.",
+      "severity": "low",
+      "match": {
+        "change_kinds": ["added", "changed", "removed"]
+      }
+    },
+    {
+      "id": "TF-POL-NOT-OBSERVED",
+      "description": "A baseline artifact, or some of its attributes, was not observed because its source probe was not captured.",
+      "severity": "low",
+      "match": {
+        "change_kinds": ["not_observed"]
+      }
+    },
+    {
+      "id": "TF-POL-APPLICABILITY",
+      "description": "A probe moved between captured and not_applicable.",
+      "severity": "low",
+      "match": {
+        "change_kinds": ["applicability_changed"]
+      }
+    }
+  ]
+}

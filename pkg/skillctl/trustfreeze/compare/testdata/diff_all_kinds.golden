@@ -1,0 +1,125 @@
+{
+  "schema_version": "trust-freeze/diff/v1",
+  "kind": "diff",
+  "normalization": {
+    "id": "trust-freeze/normalize/v1",
+    "digest": "sha256:9813f9b495979bf3b5103a1816d07aab19a2bd95fb05491197b614bf28e575d9"
+  },
+  "baseline": {
+    "kind": "baseline",
+    "bundle_id": "tf-baseline-20260102T030405.000000000Z-device-eb9aa81eeaaf3ce7",
+    "content_digest": "sha256:fbed8ed75b40cd3acf36b03482a2e947cd94f41d78b0de7c31065ef8550ab2e9",
+    "subject": {
+      "id": "device/eb9aa81eeaaf3ce7",
+      "os_family": "linux"
+    },
+    "profile": {
+      "id": "walking-skeleton",
+      "version": "1",
+      "digest": "sha256:1900eab6c028483d7126599ee6f50de0d27907b5c65fa90524580b4b0f9852b0"
+    }
+  },
+  "current": {
+    "kind": "capture",
+    "bundle_id": "tf-capture-20260102T060405.000000000Z-device-eb9aa81eeaaf3ce7",
+    "content_digest": "sha256:e24eb29a54863213ca720b22a1e36ddd86816a679af990903329453824e7168f",
+    "subject": {
+      "id": "device/eb9aa81eeaaf3ce7",
+      "os_family": "linux"
+    },
+    "profile": {
+      "id": "walking-skeleton",
+      "version": "1",
+      "digest": "sha256:1900eab6c028483d7126599ee6f50de0d27907b5c65fa90524580b4b0f9852b0"
+    }
+  },
+  "allow_subject_mismatch": false,
+  "counts": {
+    "added": 1,
+    "applicability_changed": 0,
+    "became_effective": 1,
+    "became_ineffective": 1,
+    "changed": 3,
+    "collection_gap": 1,
+    "confidence_changed": 1,
+    "not_observed": 0,
+    "removed": 1,
+    "subject_changed": 0
+  },
+  "changes": [
+    {
+      "kind": "added",
+      "artifact_id": "runtime/node",
+      "artifact_type": "runtime",
+      "after_digest": "sha256:f7089d538cf8bee6efea092515a4534a355d0f6b335ba159cdcb0edc884ea76d"
+    },
+    {
+      "kind": "removed",
+      "artifact_id": "runtime/java",
+      "artifact_type": "runtime",
+      "before_digest": "sha256:8e623e0f03c5fef6e0809ba4ebac44d41d1ccd78c67e4296a80a353c47a39dc8"
+    },
+    {
+      "kind": "changed",
+      "artifact_id": "device/os",
+      "artifact_type": "os",
+      "changed_attributes": [
+        "kernel_release",
+        "os_version"
+      ],
+      "before_digest": "sha256:861c4bcca5ad6ad7f3c701fde771cd18913bc2de521791a8804a9fa52fe2076d",
+      "after_digest": "sha256:43ab7d68cc5eaddd4a3d837b55e75da5f7bf1a1377bc4bb92c2b44893d8a4aeb"
+    },
+    {
+      "kind": "changed",
+      "artifact_id": "runtime/go",
+      "artifact_type": "runtime",
+      "changed_fields": [
+        "state"
+      ],
+      "before_digest": "sha256:5069fcdf764341cd73fa362f124a264786ecbc5417924c3c07342dbc9ab6003b",
+      "after_digest": "sha256:5069fcdf764341cd73fa362f124a264786ecbc5417924c3c07342dbc9ab6003b"
+    },
+    {
+      "kind": "changed",
+      "artifact_id": "runtime/python",
+      "artifact_type": "interpreter",
+      "changed_fields": [
+        "type"
+      ],
+      "before_digest": "sha256:118e13bc5c90752347fd170db45666542b4be45a67d6592346a6aefbf438a672",
+      "after_digest": "sha256:118e13bc5c90752347fd170db45666542b4be45a67d6592346a6aefbf438a672"
+    },
+    {
+      "kind": "confidence_changed",
+      "artifact_id": "device/host",
+      "artifact_type": "host",
+      "before_confidence": "proven",
+      "after_confidence": "corroborated"
+    },
+    {
+      "kind": "became_effective",
+      "artifact_id": "runtime/python",
+      "artifact_type": "interpreter",
+      "before_state": "declared",
+      "after_state": "observed"
+    },
+    {
+      "kind": "became_ineffective",
+      "artifact_id": "runtime/skillctl",
+      "artifact_type": "runtime",
+      "before_state": "observed",
+      "after_state": "resolved"
+    },
+    {
+      "kind": "collection_gap",
+      "probe_id": "common.git",
+      "gap": {
+        "required": false,
+        "status": "timeout",
+        "cause": "not_captured",
+        "reason": "deadline exceeded"
+      }
+    }
+  ]
+}

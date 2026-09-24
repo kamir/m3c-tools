@@ -72,7 +72,7 @@ Grouped by domain:
 ## F. skillctl trust subsystem (`pkg/skillctl/*` + siblings)
 
 The offline-verifiable skill **trust plane**: the library behind the
-[`skillctl`](program-index) CLI. 42 subpackages under `pkg/skillctl/`, plus the
+[`skillctl`](program-index) CLI. 51 subpackages under `pkg/skillctl/`, plus the
 sibling top-level packages at the end of this section, grouped by role. The list
 and the number are both gated by `scripts/check-index.sh`: it diffs `pkg/**` and
 `internal/**` against this file in both directions AND re-counts the directories,
@@ -151,6 +151,34 @@ It runs in `scripts/check-docs.sh` and in the `docs-gate` job of `ci.yml`,
 | `skillctl/browse` | Interactive D3.js skill-graph browser. |
 | `skillctl/menubar` | macOS menu bar app for monitoring skillctl state. |
 | `skillctl/sim` | The trust-plane simulation library behind [`skillctl-sim`](program-index): the transition system, the generated scenario corpus, and the oracle that compares each SPEC-derived prediction with the observed run. |
+
+**Trust Freeze (SPEC-0466 to SPEC-0471)**
+
+The library behind `skillctl trust-freeze`: capture a host's observable state,
+approve it as a signed baseline, verify offline, compare. Import direction:
+`redact` is a leaf, the core imports only `redact`; `probe`, `platform/common`
+and `capture` build on the core; `seal`, `compare`, `policy` and `report` read
+bundles through the core. Only `seal` creates a baseline, and `capture`,
+`compare`, `policy`, `report`, `probe`, `redact` and the platform packages never
+import it (guard test in `seal`).
+
+Evidence level per platform in this change, for the one probe that exists
+(`common.identity`): linux, darwin and windows are implemented, fixture-tested
+and cross-compiled. None is real-platform-tested yet; that level is recorded
+per commit in evidence records, never claimed by the build, and full platform
+support is not established.
+
+| Package | Responsibility |
+|---------|----------------|
+| `skillctl/trustfreeze` | The core model: schema ids, closed enums, canonical JSON, manifest and content digest, bundle reader and writer, integrity check, completeness, subject id, clock. No probe execution, no signing. |
+| `skillctl/trustfreeze/redact` | The redactor and the `Redacted` byte type only this package can fill: the bundle writer accepts evidence in no other form, so raw tool output cannot reach a bundle unredacted. |
+| `skillctl/trustfreeze/probe` | The probe interface and registry, the shell-free command runner with output caps and a kill of the tool and its children at the deadline (a process group on Unix, a parent-pid tree walk with documented gaps on Windows), the deterministic fake runner, file roots, limits, and the per-platform support matrix. |
+| `skillctl/trustfreeze/platform/common` | The `common.identity` probe (`device/os`, `device/host`) with its per-OS sources: os-release plus `uname -r` and `uname -m` on linux, `sw_vers` plus `uname -r` and `uname -m` (with the Rosetta 2 check) on darwin, the CurrentVersion registry key and `IsWow64Process2` on windows. The architecture always comes from the OS, never from the build. |
+| `skillctl/trustfreeze/capture` | The capture engine and the embedded profiles: runs the probes of a profile, records every gap (a probe the operator skipped included), re-redacts every evidence file before it is written, writes a capture bundle. It never approves or signs. |
+| `skillctl/trustfreeze/seal` | Approval, the domain-separated ed25519 baseline statement, `baseline approve`, offline verification, trust policy and the self-approval check. The only package that creates a baseline. |
+| `skillctl/trustfreeze/compare` | The structural diff between a verified baseline and a current bundle, with the versioned normalization rule set. It compares; it does not judge. |
+| `skillctl/trustfreeze/policy` | The pure policy evaluator: one finding per change, highest severity wins, `fail_on` drives only the exit code. Ships the default policy. |
+| `skillctl/trustfreeze/report` | The deterministic JSON report of a capture, baseline or diff bundle. A projection that decides nothing; markdown and SARIF are not implemented. |
 
 **Sibling top-level packages**
 

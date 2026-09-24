@@ -1,0 +1,68 @@
+{
+  "schema_version": "trust-freeze/evidence/v1",
+  "commit": "a4271d9cc9a4164b9c8f32f93009e96e4932f916",
+  "recorded_at": "2026-09-22",
+  "scope": "PR-1 walking skeleton: the common.identity probe and the bundle lifecycle (capture, baseline approve, verify, diff, report). The platform profiles of SPEC-0471 are not implemented, so TF06-AC1 to TF06-AC4 are not claimed.",
+  "platforms": [
+    {
+      "target": "darwin/amd64",
+      "evidence_level": "real-platform-tested",
+      "executed_on": "macOS 15.7.9, build 24G830, kernel 24.6.0, x86_64",
+      "toolchain": "go1.27.1 darwin/amd64, built and run from the source tree",
+      "unit_tests": { "packages": 10, "pass": 1479, "fail": 0, "skip": 3 },
+      "acceptance_script": { "steps": 48, "unexpected": 0, "result": "pass" },
+      "notes": "The 3 skips are the Windows-only and Linux-only cases, skipped with an explicit reason."
+    },
+    {
+      "target": "linux/amd64",
+      "evidence_level": "real-platform-tested",
+      "executed_on": "Ubuntu 24.04.1 LTS, kernel 6.17.0-35-generic, x86_64, unprivileged user",
+      "toolchain": "test binaries and skillctl cross-compiled from this commit with go1.27.1 darwin/amd64, CGO_ENABLED=0. The unit-test binaries are self-contained and ran without invoking Go. The acceptance script calls go version once for its own evidence header; that host has go1.26.4 installed and Go therefore fetched the go1.26.6 toolchain named by go.mod into the throwaway HOME, which needed network access.",
+      "unit_tests": { "packages": 10, "pass": 892, "fail": 0, "skip": 3 },
+      "acceptance_script": { "steps": 48, "unexpected": 0, "result": "pass" },
+      "notes": "Read-only towards the host: every run used a throwaway HOME and wrote only inside a temporary directory. The one exception to offline operation is the go version call described under toolchain."
+    },
+    {
+      "target": "windows/amd64",
+      "evidence_level": "cross-compiled",
+      "executed_on": null,
+      "toolchain": "go1.27.1, GOOS=windows",
+      "checks": { "vet": "clean", "test_binaries_linked": 10, "skillctl_exe": "builds" },
+      "notes": "Nothing was executed on Windows. The first real execution is the windows-latest CI job after the push, on a Windows Server image, not a Windows 11 workstation."
+    },
+    {
+      "target": "windows/arm64",
+      "evidence_level": "cross-compiled",
+      "executed_on": null,
+      "toolchain": "go1.27.1, GOOS=windows GOARCH=arm64",
+      "checks": { "vet": "clean" },
+      "notes": "Vet only."
+    },
+    {
+      "target": "linux/arm64",
+      "evidence_level": "cross-compiled",
+      "executed_on": null,
+      "toolchain": "go1.27.1, GOOS=linux GOARCH=arm64",
+      "checks": { "vet": "clean" },
+      "notes": "Vet only."
+    }
+  ],
+  "cross_machine_verification": [
+    { "case": "baseline approved on linux/amd64, verified on darwin/amd64 with the public key", "expected": "pass", "observed": "exit 0, result_class ok" },
+    { "case": "the same baseline verified on darwin/amd64 without trust material", "expected": "fail", "observed": "exit 1, verification_failure, key_not_trusted" },
+    { "case": "baseline approved on darwin/amd64, verified on linux/amd64 with the public key", "expected": "pass", "observed": "exit 0, result_class ok" },
+    { "case": "the same baseline verified on linux/amd64 after one manifested byte was flipped", "expected": "fail", "observed": "exit 1, verification_failure, digest_mismatch" }
+  ],
+  "gates": [
+    { "command": "gofmt -l ./cmd/skillctl ./pkg/skillctl/trustfreeze", "exit_code": 0 },
+    { "command": "go vet ./...", "exit_code": 0 },
+    { "command": "go test -count=1 ./pkg/skillctl/trustfreeze/... ./cmd/skillctl/...", "exit_code": 0 },
+    { "command": "go test -race -count=1 ./pkg/skillctl/trustfreeze/...", "exit_code": 0 },
+    { "command": "go run ./cmd/verbaudit", "exit_code": 0 },
+    { "command": "go run ./cmd/exitaudit", "exit_code": 0 },
+    { "command": "./scripts/check-docs.sh", "exit_code": 0 },
+    { "command": "./scripts/check-no-emdash.sh", "exit_code": 0 },
+    { "command": "tools/boundary-gate.sh", "exit_code": 0 },
+    { "command": "tools/id-xref-lint.sh", "exit_code": 1, "note": "pre-existing: the same dangling references exist on the base commit 26194006e353, in the drift and agent-bundle code and docs plus one placeholder id in a verbaudit test. This branch adds none. The ids are not repeated here, because naming them in a public-plane file would itself be a new violation." }
+  ]
+}

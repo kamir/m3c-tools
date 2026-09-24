@@ -14,3 +14,13 @@
 # TP/FP numbers, while the scanner guarantees a real malicious skill can't evade
 # detection by its EOL style either way.)
 pkg/skillctl/bodyscan/testdata/** -text eol=lf
+
+# Trust Freeze: golden files and fixtures are compared byte for byte, and the
+# embedded profiles are digested as raw bytes, so a CRLF checkout on
+# windows-latest would change them and, for a profile, the digest every
+# capture records. The policy and normalization rule files are pinned the
+# same way so that the embedded defaults are identical on every platform.
+pkg/skillctl/trustfreeze/**/testdata/** -text eol=lf
+pkg/skillctl/trustfreeze/capture/profiles/*.yaml -text eol=lf
+pkg/skillctl/trustfreeze/policy/builtin/*.json -text eol=lf
+pkg/skillctl/trustfreeze/compare/rules/*.json -text eol=lf

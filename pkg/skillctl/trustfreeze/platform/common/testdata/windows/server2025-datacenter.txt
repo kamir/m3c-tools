@@ -1,0 +1,14 @@
+HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion
+    SystemRoot    REG_SZ    C:\Windows
+    BuildBranch    REG_SZ    ge_release
+    CurrentBuild    REG_SZ    26100
+    CurrentBuildNumber    REG_SZ    26100
+    CurrentMajorVersionNumber    REG_DWORD    0xa
+    CurrentMinorVersionNumber    REG_DWORD    0x0
+    CurrentVersion    REG_SZ    6.3
+    DisplayVersion    REG_SZ    24H2
+    EditionID    REG_SZ    ServerDatacenter
+    InstallationType    REG_SZ    Server
+    ProductName    REG_SZ    Windows Server 2025 Datacenter
+    ReleaseId    REG_SZ    2009
+    UBR    REG_DWORD    0x7f1

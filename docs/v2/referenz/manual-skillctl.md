@@ -721,6 +721,489 @@ After the write the verb **reads the report back** and fails if it cannot find i
 because a write that only claims to have written is the expensive failure in this
 class.
 
+### `trust-freeze`: record, approve and compare a host's state (SPEC-0466)
+
+```bash
+skillctl trust-freeze doctor [--profile <name>] [--format text|json]
+skillctl trust-freeze capture --profile <name> --output <dir> [flags]
+skillctl trust-freeze baseline approve --capture <dir> --output <dir> --reviewer <id> \
+                                       --change-id <id> --reason <text|@file> --key <file> [flags]
+skillctl trust-freeze verify --bundle <dir> [--trust-policy <file>] [--trusted-key <public.pem>]...
+skillctl trust-freeze diff --baseline <dir> --current <dir> [flags]
+skillctl trust-freeze report --input <dir> --output <file|dir> [--format json]
+```
+
+Trust Freeze records what a host looks like as a **capture** bundle, lets a person
+approve one capture as a signed **baseline**, verifies bundles offline, and compares a
+later capture against the baseline as a **diff**. The owning specifications are
+SPEC-0466 to SPEC-0471. It is distinct from `drift`, `envreport` and `audit`, which
+keep their meaning.
+
+It is read-only toward the host: no sudo, no elevation prompt, no install, no service
+start, no configuration change, no network. Its only write is the output directory you
+name. A capture is never a baseline, and no command turns one into the other except
+`baseline approve`: there is no automatic baseline update, a changed state always needs a
+new explicit approval, and `capture` never calls the approval code.
+
+**What this version collects.** One probe exists, `common.identity`: the artifact
+`device/os` (`os_family`, `arch`, `os_name`, `os_version`, `os_build`, `kernel_release`)
+and `device/host` (`hostname`, sensitivity `internal`). `arch` is the machine as the OS
+reports it, spelled like Go's `GOARCH` (`amd64`, `arm64`, ...), never the architecture
+skillctl was built for: an `amd64` build under Rosetta 2 or under Windows x64 emulation
+records `arm64`. The profile `walking-skeleton`
+requires only that probe and is the one profile a capture can complete. The profiles
+`agentic-workstation`, `ubuntu-bastion`, `windows-wsl-workstation` and `macos-workstation`
+list probes that are not yet implemented; each is recorded as `unsupported` with reason
+`not_implemented`, so those captures are honestly `incomplete` (exit `1`).
+
+**Evidence level per platform** (this change, for `common.identity`):
+
+| Platform | Source | Evidence level |
+|----------|--------|----------------|
+| linux | `/etc/os-release` (else `/usr/lib/os-release`), `uname -r`, `uname -m` | implemented, fixture-tested, cross-compiled |
+| darwin | `sw_vers`, `uname -r`, `uname -m`, and `sysctl -n sysctl.proc_translated` when `uname -m` says `x86_64` | implemented, fixture-tested, cross-compiled |
+| windows | registry `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion`; the native machine from `IsWow64Process2` | implemented, fixture-tested, cross-compiled |
+
+No platform is real-platform-tested in this change. That level is recorded per commit in
+evidence records, never claimed by the build, and full platform support is not
+established. `doctor` prints the same matrix from the code.
+
+**The lifecycle, end to end:**
+
+```bash
+mkdir -p ./keys ./tf
+skillctl keygen --out ./keys/reviewer                    # reviewer.priv (0600), reviewer.pub
+skillctl trust-freeze capture --profile walking-skeleton --output ./tf/capture-1
+skillctl trust-freeze baseline approve --capture ./tf/capture-1 --output ./tf/baseline-1 \
+    --reviewer alice --change-id CHG-0001 --reason @./reason.txt --key ./keys/reviewer.priv
+skillctl trust-freeze verify --bundle ./tf/baseline-1 --trusted-key ./keys/reviewer.pub
+skillctl trust-freeze capture --profile walking-skeleton --output ./tf/capture-2
+skillctl trust-freeze diff --baseline ./tf/baseline-1 --current ./tf/capture-2 \
+    --trusted-key ./keys/reviewer.pub --output ./tf/diff-1
+skillctl trust-freeze report --input ./tf/diff-1 --output ./tf/report-1.json
+```
+
+`scripts/trustfreeze-acceptance.sh` runs this path against a freshly built binary in a
+temporary directory with a throwaway key.
+
+**Privacy: bundles, diffs and reports are internal host data.** A capture or baseline,
+and the report of one, carries the host name in clear text (`device/host`, sensitivity
+`internal`) and the OS details. A diff, and the report of a diff, carries no attribute
+values, but it is not anonymous either:
+
+- `before_digest` and `after_digest` are plain SHA-256 over the canonical JSON of the
+  normalized attribute map, without a key or salt. A short value such as a host name
+  or an OS version can be recovered by hashing a dictionary of candidates.
+- The subject id (`device/` plus 16 hex characters of a SHA-256 over the OS family and
+  the lower-cased host name) is a pseudonym, not an anonymization: whoever knows or
+  guesses the host name recomputes it. Bundle ids contain it as well.
+
+Keep bundles, diffs and reports inside the trust boundary they were made in and do not
+share them outside it. A keyed digest (HMAC) that would keep these values unlinkable
+outside that boundary is future work; this version does not have one.
+
+**Result classes.** The exit space is the shared base space and allocates no new number.
+Exit `1` has several causes; the JSON output of every subcommand names the cause in
+`result_class`:
+
+| `result_class` | Exit | Meaning |
+|----------------|------|---------|
+| `ok` | `0` | The command did what it was asked. For `diff`: the threshold was not reached. |
+| `usage_error` | `2` | A flag is missing, malformed or names an option this version does not implement. One rule covers every input file a flag names (`--key`, `--trusted-key`, `--trust-policy`, `--policy`, `--reason @file`): a file that fails to load (missing, unreadable, malformed, a key file with a mode more open than `0600`) is a `usage_error`, never an `execution_error`. |
+| `execution_error` | `1` | The run failed: unusable output target, a home root that cannot be resolved, write error. |
+| `verification_failure` | `1` | A bundle failed its check, or a blocked self-approval refused the approval. |
+| `drift_threshold_exceeded` | `1` | `diff`: the highest finding severity is at or above `fail_on`. |
+| `incomplete_capture` | `1` | `capture`: the bundle was written, but a required probe has a gap. |
+
+Exit: `0` ok · `1` a run that failed (`execution_error`, `verification_failure`,
+`drift_threshold_exceeded`, `incomplete_capture`) · `2` usage or flag error, including an
+option that answers "not implemented in this version". Measured against
+`runTrustFreeze` in `cmd/skillctl/trustfreeze_cmds.go` by its tests.
+
+#### `trust-freeze doctor`: what a capture could collect here
+
+Runs only the support check of every probe of a profile and prints the platform, the
+privilege, the expected gaps and the per-platform evidence matrix. Writes nothing and
+captures nothing.
+
+| Flag | Purpose |
+|------|---------|
+| `--profile <name>` | Built-in profile to plan (default `walking-skeleton`). |
+| `--format text\|json` | Output format (default `text`). |
+
+The JSON carries `platform_support: "not_established"`, the matrix with `implemented` or
+`not_implemented` per probe and platform, and `not_checked` for what doctor does not look
+at in this version (Claude roots, the output location, per-probe tools).
+
+Exit: `0` plan printed, also when gaps are expected (see `expected_complete` and
+`expected_gaps`; doctor plans, it does not judge) · `1` the probe registry could not be
+built (`execution_error`) · `2` usage, including an unknown profile.
+
+#### `trust-freeze capture`: write a capture bundle
+
+| Flag | Purpose |
+|------|---------|
+| `--profile <name>` | Built-in profile (required). |
+| `--output <dir>` | New bundle directory (required). Must not exist, or be empty, and must not lie inside an existing trust-freeze bundle. |
+| `--force` | Replace an existing **capture** bundle at `--output`, and only one that verifies (every file manifested and intact), so no file of yours is ever removed. Never a baseline, never the home root or one of its ancestors, a filesystem or volume root, or a mount point. |
+| `--probe <id>` | Run only this probe of the profile (repeatable). Every other probe of the profile is recorded as skipped (see below). |
+| `--exclude-probe <id>` | Skip this probe (repeatable). A skipped probe is recorded, not left out (see below). |
+| `--timeout <d>` | Timeout per probe run, e.g. `30s` (default: the probe's own). |
+| `--project <path>` | Not implemented in this version (exit `2`). |
+| `--policy <file>` | Not implemented in this version (exit `2`). |
+| `--format text\|json` | Output format (default `text`). Prints the manifest `content_digest`. |
+
+The bundle is written to a staging directory next to the target, verified, and renamed
+into place. A probe failure never aborts the capture; it is recorded with one of the
+statuses `captured`, `partial`, `unsupported`, `unavailable`, `permission_denied`,
+`timeout`, `failed` or `not_applicable`, and completeness is computed from them.
+
+A probe that `--probe` or `--exclude-probe` leaves out is still recorded, as
+`unsupported` with reason `excluded_by_operator`, so the bundle names every probe of its
+profile: a skipped required probe makes the capture incomplete, and `diff` reports every
+skipped probe as a `collection_gap` that the policy judges like any other gap.
+
+Layout: `manifest.json`, `capture.json`, `state/device.json`, `probes/<probe-id>.json`,
+`evidence/<probe-id>/<name>` (raw evidence, redacted before it is written).
+
+Exit: `0` complete · `1` written but incomplete (`incomplete_capture`), or not written
+(`execution_error`) · `2` usage.
+
+#### `trust-freeze baseline approve`: approve a capture as a signed baseline
+
+| Flag | Purpose |
+|------|---------|
+| `--capture <dir>` | Capture bundle to approve (required). Only read; it must verify. |
+| `--output <dir>` | New baseline directory (required). Must not exist or be empty, and must lie outside the capture and any other trust-freeze bundle; a baseline is never overwritten. |
+| `--reviewer <id>` | Reviewer id (required): an identifier, see below. |
+| `--change-id <id>` | Change or ticket id (required): an identifier, see below. |
+| `--reason <text\|@file>` | Why this state is accepted (required). `@file` reads the text from a file; CRLF becomes LF, so the signed bytes do not depend on the editor. A file that is the `--key` file is refused before it is read. |
+| `--key <file>` | ed25519 private key, PEM PKCS#8, mode `0600` (required), e.g. from `skillctl keygen`. A key file that does not load (missing, not such a key, mode more open than `0600`) is a usage error. |
+| `--expires-at <rfc3339>` | Optional expiry in any offset, stored in UTC. The baseline is valid through this instant, inclusive. |
+| `--self-approval allow\|warn\|block` | What a self-approval does (default `warn`). |
+| `--format text\|json` | Output format (default `text`). |
+
+The mandatory fields are checked before the capture or the key is read, and long before
+anything is signed.
+
+**Identifiers.** The reviewer id and the change id are 1 to 128 characters of ASCII
+letters, digits and `.` `_` `-` `@` `+` `:`, after surrounding white space is trimmed
+(`alice@example.com`, `CHG-0001`). White space inside, a slash, a non-ASCII look-alike
+or anything longer is refused with exit `2` before anything is read or signed, so an id
+enters the signed approval the same way on every platform. verify applies the same rule
+to `reviewer`, `change_id`, `identities.reviewer_id` and `identities.capture_actor` and
+fails an approval that breaks it as `approval_invalid`.
+
+Approval text is signed, so it can never be redacted afterwards: a
+reviewer, change id, reason or policy reference that the redaction patterns flag as secret
+material (a private key block, a bearer or authorization value, a token, a key and value
+pair such as `password=...` or `?token=...`) is refused with exit `2`, naming the field and
+the pattern class but never the text. The capture is copied byte for byte into the new directory and never
+modified; `approval.json` is added, a new `manifest.json` (kind `baseline`) is written, and
+then `signatures/manifest.ed25519.json`.
+
+**Self-approval.** The approval records the captured subject, the capture actor (when the
+capture has one), the reviewer, the signing key id and the approving device. The approving
+device's subject id is derived from its OS family and host name exactly as the captured
+subject is. `warn` reports `self_approval_same_device` (approving on the captured machine)
+or `self_approval_same_person` (reviewer equals capture actor); `block` refuses the
+approval. When the approving device is unknown (its host name could not be read), the
+same-device check cannot run: `warn` reports `self_approval_device_unknown`, and `block`
+refuses, at approval and at verification, instead of passing a check it could not
+evaluate. This version records no capture actor, so the same-person check has nothing to
+compare yet.
+
+**Signature.** The signed message is the domain line `m3c-tools/trust-freeze/baseline/v1`,
+a newline, and the canonical JSON of the statement `{domain, schema_version:
+"trust-freeze/baseline/v1", kind: "baseline", capture_content_digest,
+baseline_content_digest, approval}`. `key_id` is `ed25519:` plus the first 16 hex characters
+of the SHA-256 of the raw public key. `statement_sha256` is the SHA-256 of the signed
+message; verify rebuilds the statement from the files on disk and never trusts that value
+alone. No private key material is written anywhere.
+
+Exit: `0` baseline written · `1` the capture failed its checks (also a baseline or diff
+given as `--capture`, or a capture whose documents contradict each other) or the
+self-approval was blocked (`verification_failure`), or not written (`execution_error`) ·
+`2` usage, including a missing or malformed reviewer or change id, a missing reason,
+approval text that looks like secret material, or a `--key` or `--reason @file` that
+does not load.
+
+#### `trust-freeze verify`: check a bundle offline
+
+| Flag | Purpose |
+|------|---------|
+| `--bundle <dir>` | Bundle to verify (required): a baseline, a capture or a diff. |
+| `--trust-policy <file>` | Trust policy file (JSON or YAML). |
+| `--trusted-key <public.pem>` | ed25519 public key (PEM SPKI, e.g. a `keygen` `.pub`) to trust (repeatable). |
+| `--format text\|json` | Output format (default `text`). |
+
+A **baseline** is checked completely (`scope: "baseline"`): manifest, every size and
+digest, unexpected files, the kind layout (nothing under `signatures/` but the one,
+unlisted signature file), `capture.json`, `approval.json` and its mandatory fields, the
+capture digest, the signature over the rebuilt statement, key trust, expiry, the approval
+time and the self-approval mode. For a
+capture and for the capture inside a baseline, `capture.json`, every
+`probes/<probe-id>.json` and `state/device.json` must agree (the probe list, each status
+and reason, completeness recomputed from the probe results, the device state, every
+evidence reference); a contradiction fails as `capture_invalid`. A valid signature by a key that is not trusted fails as
+`key_not_trusted` and still reports `signature_valid: true`. Without trust material every
+baseline fails that way. A **capture** or **diff** carries no signature; its check
+(`scope: "integrity"`) is the manifest plus a strict parse of its documents.
+
+**Capture digest.** `approval.json` names the approved capture by `capture_digest`. verify
+does not take that value on trust: it rebuilds the capture manifest from the baseline
+itself (kind `capture`, `created_at` = `finished_at` of `capture.json`, the bundle id
+derived from that time and the subject, the baseline's subject, `reject_additions: true`,
+and the baseline's files without `approval.json`) and fails with
+`capture_digest_mismatch` when the content digest of that manifest differs. `capture`
+writes exactly this manifest, so a baseline approved from an untouched capture matches.
+`baseline approve` does not check the rule yet: a capture whose manifest follows another
+rule (one that `capture` did not write) is approved, and its baseline then fails verify
+with `capture_digest_mismatch`.
+
+**Time.** Expiry and approval time are checked against the verifier's clock: an
+`expires_at` before now fails as `expired` (the baseline is valid through that instant),
+and an `approved_at` after now fails as `approved_in_future`, because an approval cannot
+have happened later than the moment it is checked.
+
+Failure reasons: `integrity` (with `integrity_reason`: `missing`, `extra`,
+`size_mismatch`, `digest_mismatch`, `duplicate_path`, `bad_path`, `symlink`,
+`content_digest_mismatch`, `unknown_kind`, `unknown_schema`, `kind_layout_violation`,
+`manifest_invalid`, `not_regular`, `unreadable`), `wrong_kind`, `missing_approval`,
+`missing_signature`, `capture_invalid`, `approval_invalid`, `signature_malformed`,
+`domain_mismatch`, `signing_key_mismatch`, `statement_mismatch`, `bad_signature`,
+`key_not_trusted`, `capture_digest_mismatch`, `expired`, `approved_in_future`,
+`self_approval_blocked`, `trust_policy_invalid`, `canceled`, and for a diff bundle
+`diff_invalid`.
+
+Trust policy file (schema `trust-freeze/trust-policy/v1`):
+
+```yaml
+schema_version: trust-freeze/trust-policy/v1
+self_approval: warn                  # allow | warn | block
+reject_additions: true               # false is not implemented in this version
+trusted_keys:
+  - key_id: ed25519:0123456789abcdef # optional; checked against the key when present
+    public_key: <base64 of the raw 32-byte ed25519 public key>
+```
+
+A JSON trust policy is read as strictly as a YAML one: a duplicate key, or a key that
+differs from a field name only in letter case, is refused.
+
+Exit: `0` PASS · `1` FAIL (`verification_failure`) · `2` usage, including a trust
+policy or key file that does not load.
+
+#### `trust-freeze diff`: compare a verified baseline with a current bundle
+
+| Flag | Purpose |
+|------|---------|
+| `--baseline <dir>` | Baseline bundle (required). |
+| `--current <dir>` | Current bundle (required): a capture or a baseline. |
+| `--trust-policy <file>` | Trust policy for verifying the inputs. |
+| `--trusted-key <public.pem>` | Trusted key for verifying the inputs (repeatable). |
+| `--policy <file>` | Policy file (JSON or YAML, schema `trust-freeze/policy/v1`). Default `trust-freeze/policy/default-v0`. |
+| `--fail-on none\|low\|medium\|high\|critical` | Threshold for exit `1` (default: the policy's `fail_on`, `high` for default-v0). It changes only the exit code and `threshold_exceeded`. |
+| `--allow-subject-mismatch` | Compare two different devices on purpose, for a golden-image or fleet baseline. The `subject_changed` finding stays in the diff and is rated as allowed (`info` under default-v0), and the diff records the opt-in (`allow_subject_mismatch: true`). |
+| `--output <dir>` | Also write a diff bundle: `diff.json`, `verdict.json`, `policy/evaluated-policy.json`. Never inside an existing trust-freeze bundle, the two inputs included. |
+| `--format text\|json` | Output format (default `text`). `markdown` and `sarif` are not implemented in this version (exit `2`). |
+
+Both inputs are verified first; if either fails, nothing is compared and the verification
+result is printed instead. Artifacts are compared by id after the versioned normalization
+rule set `trust-freeze/normalize/v1` has removed volatile values (timestamps, durations,
+process ids, uptime). The same inputs, opt-in and policy give byte-identical output. A
+baseline whose probes were all `captured`, or `not_applicable` with a reason, compared
+with itself has no finding above `info` and exits `0`; the gaps of an approved incomplete
+capture stay gaps in every diff.
+
+**Source probe.** Every artifact names the probe that produced it in its `source` field.
+That probe counts as *observed* in a bundle when it has exactly one result that is
+`captured`, or `not_applicable` with a reason (the probe observed that nothing applies);
+a source that is not a probe id counts as observed. Only what was observed on both sides
+can be `removed` or `changed`: an artifact or attribute that the current bundle could not
+observe is `not_observed`, never `removed` or `changed`, and its probe is reported as a
+`collection_gap` as well.
+
+**Change kinds**, in the sort order of the diff (then by artifact id, then by probe id):
+
+| Kind | Reported when |
+|------|---------------|
+| `subject_changed` | The baseline and the current bundle describe different devices (their subject ids differ). Exactly one entry, with `before_subject_id`, `after_subject_id` and `subject_mismatch_allowed`. |
+| `added` | The artifact id exists only in the current bundle. |
+| `removed` | The artifact id exists only in the baseline, and its source probe is observed in the current bundle. |
+| `changed` | A compared field differs, or an attribute observed on both sides (present there, or absent under an observed probe) has different values. Names the changed attributes and fields, with before and after digests, never the values. |
+| `not_observed` | The artifact id exists only in the baseline, or baseline attributes are missing from it, and its source probe is not observed in the current bundle. Names `probe_id` and `unobserved_attributes`. |
+| `confidence_changed` | `provenance.confidence` differs. |
+| `became_effective` | The state moves to `observed`. |
+| `became_ineffective` | The state moves away from `observed`. |
+| `applicability_changed` | A probe moves between `captured` and `not_applicable` with a reason, in either direction (`before_status`, `after_status`): the host changed, not the collection. |
+| `collection_gap` | A probe of the current bundle is not `captured`, or a required probe has no result. |
+
+Every `collection_gap` carries `required`, the recorded `status` (when there is one), the
+probe's `reason` (when it gave one) and exactly one `cause`:
+
+| `cause` | Meaning |
+|---------|---------|
+| `not_captured` | One result with another status: `partial`, `unsupported` (also a probe skipped with `--probe` or `--exclude-probe`), `unavailable`, `permission_denied`, `timeout` or `failed`. |
+| `not_applicable` | `not_applicable` with a reason: complete for the capture, and still visible here. |
+| `not_applicable_without_reason` | `not_applicable` without a reason. |
+| `no_result` | A required probe has no result. |
+| `duplicate_result` | More than one result for the probe. |
+| `invalid_status` | A status that is not a known probe status. |
+
+The diff document records `allow_subject_mismatch` (also when it is `false`) and `counts`
+with the number of entries of every kind, zero included. Each finding of the verdict has
+a stable id: the kind and the artifact id (`changed:device/os`), the probe id for
+`collection_gap` and `applicability_changed`, the current subject id for
+`subject_changed`.
+
+**Policy `trust-freeze/policy/default-v0`** (`fail_on: high`). Every change gets exactly
+one finding with the highest severity of all rules that match it; a change no rule
+matches gets `default_severity`, `info`.
+
+| Change | Severity | Rule |
+|--------|----------|------|
+| `subject_changed` without the opt-in | `high` | `TF-POL-SUBJECT-CHANGED` |
+| `subject_changed` with `--allow-subject-mismatch` | `info` | `TF-POL-SUBJECT-CHANGED-ALLOWED` |
+| `collection_gap` of a required probe, every cause except `not_applicable` | `critical` | `TF-POL-GAP-REQUIRED` |
+| `collection_gap` of an optional probe, every cause except `not_applicable` | `medium` | `TF-POL-GAP-OPTIONAL` |
+| `collection_gap` with cause `not_applicable`, required or optional | `info` | `TF-POL-GAP-NOT-APPLICABLE` |
+| `device/os` or `device/host` `changed` | `medium` | `TF-POL-DEVICE-IDENTITY` |
+| any other `added`, `removed` or `changed` | `low` | `TF-POL-ARTIFACT-DRIFT` |
+| `not_observed` | `low` | `TF-POL-NOT-OBSERVED` |
+| `applicability_changed` | `low` | `TF-POL-APPLICABILITY` |
+| `confidence_changed`, `became_effective`, `became_ineffective` | `info` | `default_severity` |
+
+So under default-v0 a diff of two different devices blocks by itself; with
+`--allow-subject-mismatch` that finding no longer does, while every other finding keeps its
+severity. A missing required probe blocks; a probe that is not applicable on this host and
+says why does not.
+
+**Own policy** (`--policy`, JSON or YAML; unknown fields are refused):
+
+```yaml
+schema_version: trust-freeze/policy/v1
+id: example/policy-v1
+fail_on: high                       # none | low | medium | high | critical
+default_severity: info              # for a change no rule matches
+rules:
+  - id: EX-GAP-TIMEOUT
+    severity: high
+    match:                          # every condition that is set must hold
+      change_kinds: [collection_gap]
+      required: false               # with change_kinds [collection_gap] only
+      gap_causes: [not_captured]    # with change_kinds [collection_gap] only
+      gap_statuses: [timeout]       # with change_kinds [collection_gap] only
+  - id: EX-FLEET-BASELINE
+    severity: low
+    match:
+      change_kinds: [subject_changed]
+      subject_mismatch_allowed: true  # with change_kinds [subject_changed] only
+```
+
+`change_kinds` is required and must not be empty. `artifact_ids` restricts a rule to exact
+artifact ids and cannot be combined with `collection_gap`. A `gap_causes` or
+`gap_statuses` list must not be empty and may name only known causes and probe statuses;
+a gap without a status (`no_result`, `duplicate_result`, `invalid_status`) never matches
+`gap_statuses`.
+Between rules of the same severity the earlier one names the finding. The rule id
+`default_severity` is reserved.
+
+Exit: `0` threshold not reached · `1` threshold reached (`drift_threshold_exceeded`), an
+input failed verification (`verification_failure`), or the run failed (`execution_error`)
+· `2` usage.
+
+#### `trust-freeze report`: project a bundle onto the JSON report
+
+| Flag | Purpose |
+|------|---------|
+| `--input <dir>` | Capture, baseline or diff bundle (required). It must pass its integrity check. |
+| `--output <file\|dir>` | Report file to create (required); an existing directory gets `report.json`. Never overwritten, never inside the input bundle or any other trust-freeze bundle. Mode `0600`, because a report can carry the host name. |
+| `--format json` | Report format (default `json`). `markdown` and `sarif` are not implemented in this version (exit `2`). |
+
+The report (schema `trust-freeze/report/v1`) is a pure projection of the bundle and
+decides nothing. It checks the input's integrity (manifest, sizes, digests, layout) and
+evaluates nothing else: no signature, no key trust, no expiry, and it reads no clock, so
+the report of an unchanged bundle has the same bytes whenever it is made. For a baseline
+the `signature` section always reads `{"result": "not_evaluated", "verify_with":
+"skillctl trust-freeze verify"}`; the trust decision is `verify --trusted-key`, and a
+report is never evidence that a baseline is valid. Standard output carries a JSON status
+with `result_class`, the input, the same `signature` section for a baseline, and the
+report's SHA-256. What a report carries is internal host data (see Privacy above).
+
+Exit: `0` report written · `1` input failed its check (`verification_failure`) or the
+file could not be written (`execution_error`) · `2` usage.
+
+#### `trust-freeze`: how probes run, and known limits
+
+- **Commands** run as executable plus argument vector, never through a shell, resolved
+  only in `/usr/bin`, `/bin`, `/usr/sbin`, `/sbin` (Windows: the system directory the OS
+  reports). The environment is only the probe's allowlist plus `LC_ALL=C` and `TZ=UTC0`;
+  the working directory is `/` (Windows: the Windows directory). `sudo`, `su`, `doas`,
+  `pkexec`, `run0`, `runuser` and `runas` are refused by name, path or symlink target.
+  On Unix every tool runs in a session and process group of its own without a
+  controlling terminal, so a password prompt fails at once, and at the timeout the whole
+  group is killed. On Windows the started process and every descendant traceable by
+  parent pid are killed; a descendant started by a service or broker, or one that runs
+  elevated, is not.
+  Ctrl-C and SIGTERM cancel a running capture the same way.
+- **Output** is capped per stream; a truncated output is recorded and makes the probe
+  `partial`. Everything written is redacted first: private key blocks, bearer and
+  authorization values, cloud and chat tokens, JWT-shaped strings, values under keys such
+  as `password` or `token`, and the home directory in any letter case or separator
+  spelling (for a Windows home also its WSL form `/mnt/<drive>/...`). A value that
+  cannot be redacted is dropped and the probe is at least `partial`. Every evidence file
+  passes the capture's redactor once more before it is written, together with every
+  secret taken from the arguments of that probe's commands, so a secret one command
+  receives and another prints is removed as well. An evidence file refused by the file
+  size or file count limit makes the probe `partial`.
+- **Architecture.** `arch` comes from `uname -m` (linux, darwin) and from
+  `IsWow64Process2` (windows). On macOS an `x86_64` answer is checked with
+  `sysctl.proc_translated`: `1` means Rosetta 2 translates skillctl, so `arch` is `arm64`
+  and a `value_derived` diagnostic says so; an Intel Mac answers "unknown oid". A Linux
+  process under user-mode emulation (for example qemu-user) sees the emulated machine in
+  `uname -m`.
+- **Identity caveats.** On macOS `os_version` includes the Rapid Security Response tag
+  when one is installed (`13.4.1 (c)`), so installing or removing one changes `device/os`.
+  The macOS host name can follow the network when no HostName is configured, which changes
+  `device/host` and the subject id between captures. On a Linux rolling release (Arch:
+  `BUILD_ID=rolling`, no `VERSION_ID`) `os_version` is `not_applicable`. In a container or
+  under WSL, os-release describes the image while `uname -r` reports the host or VM
+  kernel. On Windows 11 the registry `ProductName` still says Windows 10; `os_name` is
+  derived from the build number, the evidence keeps the registry's own values, and a
+  `value_derived` diagnostic states the rule.
+- **Windows file permissions.** Bundle files are created with mode `0600` and directories
+  `0700`, which Windows ignores: on Windows a bundle inherits the ACL of the directory it is
+  written into. Write bundles below a directory only you can read. Go reports cloud-sync
+  placeholders and similar reparse points as irregular files, so a bundle inside a
+  cloud-synced folder can fail verification with `not_regular`; copy it to a local
+  folder first.
+- **Moving a bundle to another machine.** A bundle verifies only as it was written: it
+  rejects additions, so verify reports every file that is not in its manifest as `extra`
+  and fails, whatever the file's name, and a changed byte as `digest_mismatch`. That
+  strictness is intended. Move bundles with a method that adds no file and changes no
+  byte, and run `verify` on the target afterwards:
+  - `tar`. On macOS create the archive with `COPYFILE_DISABLE=1 tar -cf bundle.tar <dir>`.
+    Without it the macOS `tar` stores an AppleDouble `._<name>` entry next to every file
+    and directory that carries extended attributes (on macOS 15 even ordinary files and
+    directories can carry `com.apple.provenance`), and `tar` on Linux or Windows unpacks
+    those entries as files.
+  - `rsync -a` without the option that copies extended attributes (`-X` in rsync 3,
+    `-E` in the rsync that ships with macOS).
+  - `cp -R -X` on macOS (`-X`: do not copy extended attributes or resource forks).
+
+  Two macOS habits add files that make verify fail with `extra`: copying to a volume
+  without extended-attribute support (FAT, exFAT, many network shares) writes `._<name>`
+  files, and Finder can write a `.DS_Store` into a bundle folder it has shown. A git
+  checkout that converts line endings changes bytes. Removing an added `._<name>` or
+  `.DS_Store` file after checking what it is restores the bundle, because verify then
+  checks every manifested byte again; verify itself never skips such a file.
+- **Known gaps of this version.** `doctor` does not check the Claude roots, the output
+  location or the tools of each probe; its JSON lists them under `not_checked` with a
+  reason. `diff` emits one change list with per-kind `counts`, not separate system,
+  artifact, capability and collection-gap sections; capabilities are not collected yet,
+  so there is no capability diff. `report --format markdown|sarif` and
+  `diff --format markdown|sarif` are not implemented (exit `2`).
+
 ### `publish`: admit / attest / revoke via ER1 (`self` registry)
 
 ```bash

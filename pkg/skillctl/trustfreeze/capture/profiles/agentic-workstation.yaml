@@ -1,0 +1,29 @@
+# Trust Freeze built-in profile. Probe list from SPEC-0467 section 5.6. Only
+# common.identity exists in this build; every other probe is recorded as
+# unsupported (not_implemented), so a capture with this profile is honestly
+# incomplete.
+schema_version: trust-freeze/profile/v1
+id: agentic-workstation
+version: "1"
+description: Developer workstation with agentic tooling (Claude, MCP, hooks, projects).
+required:
+  - common.identity
+  - common.development.git
+  - common.claude.binary
+  - common.claude.configuration
+  - common.claude.skills
+  - common.claude.agents
+  - common.claude.hooks
+  - common.claude.mcp
+  - common.projects
+optional:
+  - common.vscode
+  - common.containers
+  - platform.software
+  - platform.users
+  - platform.network.listeners
+fail_if_required_missing: true
+# SPEC-0467 section 5.6 names the redaction policy employee-workstation-v1
+# for this profile. That policy is not implemented in this build, so the
+# default policy applies and is recorded as such.
+redaction_policy: default-v1
