@@ -106,7 +106,7 @@ gates the CONTENT of the Exit-Code column against the register and the manual.
 | `consolidate` | SPEC-0189 (S0a) (?) | 0/1 |
 | `drift` | SPEC-0432 (FR-0278) | 0/1/2 |
 | `sync-usage` | SPEC-0189 (S0a) | 0/1 |
-| `sync` | SPEC-0317 R-5 | 0/1/2, 29 |
+| `sync` | SPEC-0317 R-5, SPEC-0455 REQ-5.1a | 0/1/2, 29, 40 |
 | `awareness` | SPEC-0195 (S2 M1) | 0/1/2, 19 |
 | `intent` | SPEC-0195 (S2 M2) | 0/1/2, 18 |
 | `translog` | SPEC-0278 P5 | 0/1/2, 23/24/25 |

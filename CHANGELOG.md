@@ -15,6 +15,137 @@ version is ldflags-stamped (`skillctl version`). Release tags: `skillctl/vX.Y.Z`
   a verbatim move ships half-extracted shared state, so it needs a dedicated
   refactor pass, not a release-eve edit.
 
+## [skillctl/v0.6.0], 2026-09-24, a freeze that can be verified, a third CLI, and two verbs that did not exist
+183 commits after `skillctl/v0.5.1`.
+
+### Added
+- **`skillctl trust-freeze`** (SPEC-0466, with SPEC-0467 to SPEC-0471) records what a
+  machine is, has that state approved once, and afterwards says what changed. Six
+  subcommands under one verb: `doctor`, `capture`, `baseline approve`, `verify`,
+  `diff` and `report`. What is worth knowing before using it:
+  - **A capture does not touch the host.** It reads, it writes nothing outside its
+    own output directory, and it never elevates itself. What the operator's rights
+    did not reach is named rather than omitted: the status vocabulary is `captured`,
+    `partial`, `unsupported`, `unavailable`, `permission_denied`, `timeout`,
+    `failed`, `not_applicable`, so an unreadable file produces a refusal entry and
+    not an empty list that reads like an answer.
+  - **A baseline is an approval, not an observation.** `capture` produces evidence;
+    only `baseline approve` turns it into a baseline, and it requires a reviewer, a
+    change id and a reason. The signature is ed25519 over a canonical
+    serialization under its own domain string, so a baseline signature cannot be
+    replayed as a skill bundle, an attestation, a revocation or an env report
+    signature.
+  - **`verify` works offline** against the bundle and a trusted public key, and
+    `diff` refuses to compare against a baseline that failed verification.
+    A diff is deterministic: the same two bundles produce the same bytes and the
+    same `diff_digest`.
+  - **Every statement carries where it came from.** Evidence state is `declared`,
+    `resolved`, `observed`, `inferred` or `unknown`; confidence is `proven`,
+    `corroborated`, `reported` or `unknown`; a privilege capability lists its
+    sources instead of asserting a conclusion.
+  - **A wider question is not drift.** Where a capture could see more than the
+    baseline (an elevated run against an unprivileged baseline, for one), entries
+    whose decisive sources all come from probes the baseline never ran are reported
+    as `coverage_increased` at `info`, not as new privilege. On a real pair of
+    bundles from one bastion host that diff ends at exit 0 with no critical and no
+    high finding, recorded in `tests/evidence/trust-freeze/release-matrix.json`.
+  - **Secrets do not enter the bundle.** A removed value becomes
+    `[REDACTED_<class>]`, while a configuration answer such as
+    `PasswordAuthentication yes` or `NOPASSWD: ALL` survives, because a marker in
+    that place removes the one line a reviewer opened the file for.
+  - **What exists today**: twelve Linux probes and a portable identity probe, the
+    `ubuntu-bastion` profile (version `3`, the full SPEC-0471 TF06-R3 list) and
+    `walking-skeleton`. Windows, WSL and macOS probe families do **not** exist yet,
+    and no profile claims otherwise: on those platforms the Linux probes report
+    `unsupported` with a reason. The exit space stays the shared `0/1/2`; which of
+    `execution_error`, `verification_failure`, `drift_threshold_exceeded` or
+    `incomplete_capture` produced an exit `1` rides the `result_class` field of the
+    JSON output.
+  - Evidence lives in `tests/evidence/trust-freeze/`, one round entry per real run,
+    each round listing the defects those runs found. Two rounds are recorded. The
+    three newest probes (`linux.network.routes`, `linux.dns`, `linux.executables`)
+    have no round entry yet and are therefore claimed as implemented and
+    fixture-tested, nothing beyond that.
+- **`secretctl`**, the third program in this tree (SPEC-0438), in its reading half:
+  `new`, `inventory` and `verify`. It answers which named secrets exist and whether
+  they are still reachable, and it never prints a secret value. A secret has roles,
+  not only storage locations, and unreachable is reported as unreachable instead of
+  as absent. Reference page: `docs/v2/entwickler/secretctl.md`.
+- **`skillctl drift`** (SPEC-0432) compares what this machine carries against the
+  registry catalog, in both directions: what is installed here and unknown there,
+  and what the catalog knows and this machine does not have.
+- **Agent bundles** (SPEC-0432). A bundle now declares its `kind` in the manifest,
+  backwards compatibly (no `kind` means skill), `publish --kind agent` packs a
+  single agent file, the registry namespaces entries as `art:name` so an agent and
+  a skill of the same name are two entries, `pull --kind` stops an agent run from
+  overwriting the skills beside it, `pack` resolves declared dependencies with
+  three distinct outcomes, and `attest` refuses to rate an agent bundle green
+  without `--kind`, with yellow as its minimum. Attestation and revocation address
+  agents on the same shelf as the bundle they judge.
+- **An audit-export seam** (SPEC-0455): `pkg/skillctl/auditexport` with a backend
+  register and the er1 adapter, so the drain has one seam instead of a hard-wired
+  destination, plus a conformance suite the seam has to satisfy.
+- **A pull-request dependency gate**: a `Depends-on` line in the body is read by a
+  required check, which blocks the merge while a named dependency is open and
+  labels the pull request.
+- Make targets for every `cmd/` binary, held that way by a gate, and `secretctl`
+  is part of the release build.
+
+### Changed
+- **`sync` no longer starts egress because an endpoint is configured.** The audit
+  backend has to be named, by `--backend er1` or `SKILLCTL_AUDIT_BACKEND=er1`, and
+  the flag wins over the environment. An endpoint without a named backend exits
+  `40` and says what to set. The migration is loud on purpose: a silent default
+  would have kept sending after the seam changed underneath it.
+- **The documentation is organized by role** (`docs/v2/`), with three role reviews
+  behind that move and six corrections found while doing it. Older prose moved to
+  `docs/old/`, every internal link followed, and the doc pages are generated into
+  the canonical `docs/v2/pages/` folder.
+- **CI got faster without dropping a gate**: change classification that fails
+  closed, concurrency groups, one Go version in `go.mod` as the single source,
+  `timeout-minutes` on every job plus a gate against forgetting it, and three jobs
+  on a persistent self-hosted machine with an emergency switch and a fork
+  redirection. The measuring canary runs before the migration it measures, not
+  beside it.
+- The prose gate reads the diff instead of the tree (BUG-0436), and the linters are
+  pinned.
+- Dependabot runs monthly, in one wave, with the Actions updates grouped.
+
+### Fixed
+- **The installer resolves the version at run time** instead of carrying a baked-in
+  one, the documented one-liner points at the resolver, and the gate behind it
+  checks the ABSENCE of a pinned version rather than equality with one, which is
+  what the previous outage needed.
+- **`publish` checks its usage before the identity and the identity before the
+  keychain**, so a typo no longer produces a keychain prompt, and `pull` checks
+  `--identity` before it installs anything.
+- **The identity is no longer guessed.** A missing `--identity` is an error with a
+  message naming what to pass, not a silent fallback to a name that happens to be
+  around.
+- **The local tracking store can report a failure** instead of returning success it
+  did not achieve.
+- `compareDrift` uses a tagged switch, the audit-export error from `os.Unsetenv` is
+  handled, and the CI summary no longer counts lines and calls them files.
+- `trust-freeze` fixes that only the CI and two real hosts could produce: four
+  findings on the first CI run, the coverage floors that were seeded with a newer
+  Go toolchain than the gate measures with, and six defects that 49 fixtures and
+  three review passes had not found, among them a redaction marker that swallowed
+  the root account out of `getent passwd`.
+
+### Security
+- **`publish` rejects unsafe names.** A name carrying a path separator or `..` no
+  longer decides where a file is written.
+- The seven `gosec` findings in the trust-freeze code carry a justification each,
+  and the annotation sits on the block it excuses rather than one line above it
+  where it does nothing.
+- No home paths and no real person names in the public tree, not even as a
+  fallback. Authorship, the Windows installer's publisher and the import path stay
+  as they are, because replacing those falsifies provenance instead of anonymizing
+  anything.
+
+### Removed
+- The thinking engine left this tree, 90 files with it.
+
 ## [skillctl/v0.5.1], 2026-09-16, the skill-env report, and gates that stop reporting green on nothing
 56 commits after `skillctl/v0.5.0`.
 

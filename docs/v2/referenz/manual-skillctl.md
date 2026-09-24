@@ -1914,6 +1914,8 @@ With neither set, `sync` stays local-only and exits `0` as before.
 skillctl sync --once --backend er1 --endpoint https://ingest.example.com --ingest-pubkey ingest.pub
 ```
 
+Exit: `0` ok · `1` drain or transport error · `2` usage · `29` the ingest rejected the batch (auth or validation, a 4xx) · `40` audit-backend selection refused (SPEC-0455 REQ-5.1a).
+
 ---
 
 ### `agentid`: offline-verifiable agent identity
