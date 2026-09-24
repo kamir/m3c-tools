@@ -433,13 +433,17 @@ jobs:
         run: |
           set -euo pipefail
           cp tools/skillctl-install.sh dist/install.sh
-          # Stamp the installer's default RELEASE_BASE to THIS tag so
-          # `curl .../${GITHUB_REF_NAME}/install.sh | bash` (no override) installs
-          # THIS release. The committed default is a stale fixed tag otherwise.
-          sed -i "s#download/skillctl/[^\"}]*#download/${GITHUB_REF_NAME}#" dist/install.sh
-          grep 'RELEASE_BASE:-' dist/install.sh | head -1
-          # Same for the PowerShell installer. Its default RELEASE_BASE is a
-          # single-quoted PS string literal, so match up to the closing quote.
+          # Point the skillctl release URLs in the shipped installer at THIS tag.
+          # The installer resolves the newest release at run time, so what is left
+          # to rewrite are the examples it prints when it cannot reach the feed,
+          # and there an example naming this release is the useful one. The class
+          # excludes the space as well: without that, the rewrite swallowed the
+          # `bash` at the end of the example and shipped a line that does nothing
+          # when pasted.
+          sed -i "s#download/skillctl/[^\"} ]*#download/${GITHUB_REF_NAME}#" dist/install.sh
+          grep 'RELEASE_BASE' dist/install.sh | head -1
+          # Same for the PowerShell installer, whose URLs sit in single-quoted PS
+          # string literals, so match up to the closing quote.
           cp tools/skillctl-install.ps1 dist/install.ps1
           sed -i "s#download/skillctl/[^']*#download/${GITHUB_REF_NAME}#" dist/install.ps1
           grep 'download/skillctl' dist/install.ps1 | head -1

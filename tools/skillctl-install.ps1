@@ -21,16 +21,19 @@
       if NEITHER track can verify, we REFUSE.
 
 .PARAMETER ReleaseBase
-  Base URL of the release assets. Env fallback: $env:RELEASE_BASE. Default:
-  https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.5.1
+  Base URL of the release assets. Env fallback: $env:RELEASE_BASE. With neither
+  given, the newest published skillctl release is resolved at run time from the
+  releases feed. There is no fixed default: if the feed cannot be reached the
+  script refuses rather than fall back to an older tag.
 
 .PARAMETER InstallDir
   Install directory. Env fallback: $env:INSTALL_DIR. Default:
   %LOCALAPPDATA%\Programs\skillctl
 
 .NOTES
-  Usage (one-liner) -- a published release ships this file as install.ps1 with its
-  RELEASE_BASE already baked in to that release, so the ... is pre-filled there:
+  Usage (one-liner): a published release ships this file as install.ps1. It needs
+  no release base baked in, because without -ReleaseBase it resolves the newest
+  published skillctl release itself:
     irm .../install.ps1 | iex
 
   Env overrides:

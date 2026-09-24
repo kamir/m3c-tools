@@ -122,6 +122,35 @@ else
   fail "offline lifecycle failed on the shipped binary"
 fi
 
+# ── 4b. Execute: the trust-freeze chain on the shipped binary, offline ─────
+# capture → approve → verify → diff against the walking-skeleton profile, which
+# requires only the portable common.identity probe and therefore completes on
+# every platform this smoke runs on. HOME is a throwaway directory on purpose: a
+# capture reads the host and must write nothing outside its own output directory,
+# and a smoke that let it scribble in the runner's home would hide exactly that.
+# The Windows leg of the release workflow runs `skillctl version` inline and does
+# not reach this script, so Windows coverage of these verbs is the unit suite and
+# the Windows Gate, not this step.
+echo "4b. Execute (trust-freeze capture → approve → verify → diff, offline)"
+TFHOME="${WORK}/tf-home"
+mkdir -p "$TFHOME"
+if HOME="$TFHOME" "$BIN" trust-freeze doctor --output "${WORK}/tf-cap" >/dev/null 2>&1 \
+   && HOME="$TFHOME" "$BIN" trust-freeze capture --profile walking-skeleton \
+        --output "${WORK}/tf-cap" --actor release-smoke >/dev/null 2>&1 \
+   && HOME="$TFHOME" "$BIN" keygen --out "${WORK}/tfkey" >/dev/null 2>&1 \
+   && HOME="$TFHOME" "$BIN" trust-freeze baseline approve --capture "${WORK}/tf-cap" \
+        --output "${WORK}/tf-base" --reviewer release-smoke --change-id SMOKE \
+        --reason "release smoke test" --key "${WORK}/tfkey.priv" \
+        --self-approval allow >/dev/null 2>&1 \
+   && HOME="$TFHOME" "$BIN" trust-freeze verify --bundle "${WORK}/tf-base" \
+        --trusted-key "${WORK}/tfkey.pub" >/dev/null 2>&1 \
+   && HOME="$TFHOME" "$BIN" trust-freeze diff --baseline "${WORK}/tf-base" \
+        --current "${WORK}/tf-cap" --trusted-key "${WORK}/tfkey.pub" >/dev/null 2>&1; then
+  pass "trust-freeze capture → approve → verify → diff (offline) succeeded"
+else
+  fail "the trust-freeze chain failed on the shipped binary"
+fi
+
 # ── 5. Uninstall: remove the installed binary and confirm it is gone ─────────
 echo "5. Uninstall (remove the binary, verify it is gone)"
 rm -f "${BIN}"
