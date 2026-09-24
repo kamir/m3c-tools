@@ -15,7 +15,7 @@ import (
 // SPEC-0468 R7). The resolver is pure: artifacts in, capabilities out, no file
 // system, no command, no clock, so every rule is table-tested on any OS.
 //
-// Three rules live here, in the order the report needs them:
+// Four rules live here, in the order the report needs them:
 //
 //  1. A sudo rule that grants every command as root becomes an execute
 //     capability on the host. NOPASSWD makes it root-via-sudo without a

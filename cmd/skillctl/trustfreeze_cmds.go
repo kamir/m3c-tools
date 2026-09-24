@@ -470,6 +470,7 @@ func tfDoctor(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Wr
 	home, homeErr := d.HomeRoot()
 	doc.Checks = []tfDoctorCheck{
 		tfCheckClaudeRoots(home, homeErr),
+		tfCheckFileRoots(host.GOOS),
 		tfCheckOutputLocation(*output),
 		tfCheckProbeTools(planned),
 	}
@@ -709,6 +710,30 @@ func tfCheckProbeTools(planned []capture.PlannedProbe) tfDoctorCheck {
 	if silent > 0 {
 		c.Detail += fmt.Sprintf("; %d probe(s) name none, so their tools were not checked", silent)
 	}
+	return c
+}
+
+// tfCheckFileRoots reports every file root a capture on this platform may open,
+// in one place, and it reads nothing at all.
+//
+// Two lists, because the code has two (review of T-03b, finding 3). The engine's
+// restricted reader refuses any path outside DefaultAllowedRoots, and
+// linux.executables hashes program files through its own reader with its own
+// roots, which that list does not contain. An operator who has to answer "what
+// can this thing open" was previously left to find the second list in the
+// manual; doctor now prints both, and says which reader each belongs to.
+func tfCheckFileRoots(goos string) tfDoctorCheck {
+	c := tfDoctorCheck{Item: "file_roots"}
+	reader := capture.DefaultAllowedRoots(goos)
+	own := capture.ProbeOwnedRoots(goos)
+	if len(reader) == 0 && len(own) == 0 {
+		c.Status = tfCheckNotChecked
+		c.Reason = "no registered probe reads a file on " + goos
+		return c
+	}
+	c.Status = tfCheckOK
+	c.Detail = fmt.Sprintf("restricted reader: %s; hashed through the probe's own reader (linux.executables): %s",
+		tfJoinOrNone(reader), tfJoinOrNone(own))
 	return c
 }
 

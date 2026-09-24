@@ -22,8 +22,9 @@ func TestRegisterAllProbes(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{
-		ContainersProbeID, FirewallProbeID, MountsProbeID, ListenersProbeID,
-		PackagesProbeID, SSHProbeID, SudoProbeID, SystemdProbeID, UsersProbeID,
+		ContainersProbeID, DNSProbeID, ExecutablesProbeID, FirewallProbeID,
+		MountsProbeID, ListenersProbeID, RoutesProbeID, PackagesProbeID,
+		SSHProbeID, SudoProbeID, SystemdProbeID, UsersProbeID,
 	}
 	slices.Sort(want)
 	if got := reg.IDs(); !slices.Equal(got, want) {
@@ -74,7 +75,9 @@ func TestAllowedRoots(t *testing.T) {
 	if !slices.IsSorted(roots) || len(roots) != len(slices.Compact(slices.Clone(roots))) {
 		t.Fatalf("roots %v are not sorted or hold a duplicate", roots)
 	}
-	for _, want := range append(SudoAllowedRoots(), SSHAllowedRoots()...) {
+	declared := append(SudoAllowedRoots(), SSHAllowedRoots()...)
+	declared = append(declared, DNSAllowedRoots()...)
+	for _, want := range declared {
 		if !slices.Contains(roots, want) {
 			t.Fatalf("root %q of a probe is missing from %v", want, roots)
 		}

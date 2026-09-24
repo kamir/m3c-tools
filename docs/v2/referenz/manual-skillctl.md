@@ -752,7 +752,7 @@ reports it, spelled like Go's `GOARCH` (`amd64`, `arm64`, ...), never the archit
 skillctl was built for: an `amd64` build under Rosetta 2 or under Windows x64 emulation
 records `arm64`. The profile `walking-skeleton` requires only that probe.
 
-Nine more probes collect a Linux host. They are registered on every platform and
+Twelve more probes collect a Linux host. They are registered on every platform and
 recorded as `unsupported` with the platform as the reason where they cannot run, so a
 capture never hides them:
 
@@ -765,11 +765,21 @@ capture never hides them:
 | `linux.systemd` | `systemctl list-unit-files`, `systemctl show` | `unavailable` without `systemctl`. Enabled state and active state are two different facts and are recorded as two artifacts. A TEMPLATE unit (`getty@.service`, an empty instance part) is never asked about: it has no instance and therefore no runtime state, so its unit artifact carries `template=true` and `runtime_state=not_applicable` with the reason, and the manager artifact counts them in `template_unit_count`. When a `systemctl show` call for several units stops before answering for all of them, the blocks that arrived are kept and the remaining names are asked for one at a time, so one name the manager refuses costs one unit and not a batch; a `show_batch_split` diagnostic says how many were re-queried and a `unit_state_not_read` diagnostic names each unit that stayed unknown |
 | `linux.mounts` | `findmnt --json` | `unavailable` without `findmnt` |
 | `linux.network.listeners` | `ss -H -lntup` | `partial` unprivileged: the owning process of a foreign socket is not visible, and the diagnostic says so |
+| `linux.network.routes` | `ip -j route show`, `ip -6 -j route show`, `ip -j addr show` | `unavailable` when `ip` is not found, with the searched directories named; `permission_denied` when it is found and this account may not execute it; `partial` when one of the three calls answered and another did not, or when a record could not be parsed, one diagnostic per record. A host with no IPv6 route is `captured` with zero IPv6 routes, never `not_applicable`: the absence of a route is an answer about the host, and a family that was not read carries no count at all so it can never be mistaken for an empty table |
+| `linux.dns` | `resolvectl status --no-pager` (observed), `/etc/resolv.conf` (declared) | The probe is available on Linux whatever `resolvectl` does, because the declared state is a file: reporting itself `unavailable` over a missing binary would drop `/etc/resolv.conf` out of the bundle. A missing `resolvectl` is recorded inside the result, with the directories it was looked for named, and the run is `partial` with the file as the whole answer, which is also what a host without systemd-resolved looks like. `unavailable` only when neither source can be reached at all. The observed per-link state and the declared file are two artifacts and are never merged into one |
 | `linux.firewall` | `nft --json list ruleset`, else `ufw status` | `permission_denied` when a backend is installed and refuses without root; `unavailable` when neither tool is found, with the searched directories named. Not `not_applicable`: a host filters packets with backends this build does not read |
 | `linux.containers` | `docker ps`, `docker info`, the same for podman | `unavailable` when neither client is found, with the searched directories named; `permission_denied` when the daemon socket refuses, carrying what the client printed; `failed` when the daemon is unreachable. The runtime artifact records the resolved path (`/snap/bin/docker` for a snap) and the client version of that path |
+| `linux.executables` | `systemctl show -p Id,ExecStart` and `ss -H -lntup` for the candidate paths, then `stat -L` and `dpkg -S` per path | `unavailable` when neither `systemctl` nor `ss` is found, because then no program of this host can be named at all; `permission_denied` when they are found and this account may not execute them; `partial` when a path was refused, was unreadable, was over the size limit or when one of the two caps cut the list, one diagnostic per case naming the path and the bound; `timeout` when the capture ran out of time while the programs were being read, and then the programs it did not reach carry `hash_state: not_read` and never `unreadable`, because nothing was learned about their bytes either way. A program no package owns is `captured` with `package_owner: none` and how that was determined: the trust judgement belongs to the policy, not to the probe |
 
-The profile `ubuntu-bastion` requires `common.identity` and the eight Linux probes above
-except `linux.containers`, which is optional. It still lists `common.git` and
+The profile `ubuntu-bastion` is at version `3` and requires `common.identity` and the
+eleven Linux probes above except `linux.containers`, which is optional. Version `3`
+added `linux.executables`, `linux.network.routes` and `linux.dns`, which completes the
+required list against SPEC-0471 TF06-R3. A host whose last capture was `complete`
+against version `2` is `incomplete` against version `3` until those three probes have
+run: a wider question cannot make an older answer more complete, so this is arithmetic
+and not a regression. Re-capture the host and approve a new baseline.
+
+The profile still lists `common.git` and
 `common.claude`, which this version does not implement: they are recorded as
 `unsupported` with reason `not_implemented`, so an `ubuntu-bastion` capture is
 `incomplete` (exit `1`) even on a Linux host. On an unprivileged host `linux.firewall`
@@ -781,6 +791,63 @@ firewall. The profiles `agentic-workstation`, `windows-wsl-workstation` and
 `macos-workstation` list probes that are not implemented at all, so those captures are
 `incomplete` as well.
 
+**The programs behind the services (`linux.executables`).** The probe hashes no path of
+its own choosing. Its two sources are the `ExecStart` of the units `linux.systemd`
+selected and the executable behind a listening socket that `ss` named, and the artifact
+records which of the two found it in `discovered_by`. One artifact `executable/<path>`
+per distinct resolved program, with `path`, `requested_path` (when a symlink was
+followed), `size`, `mode`, `owner`, `group`, `sha256`, `hash_state`, `package_owner`,
+`package_owner_source`, `diverted_by`, `discovered_by`, `units` and `unit_count`; plus
+one summary `system/executables` with the counts (`program_count`, `hashed_count`,
+`candidate_path_count`, `refused_count`, `unreadable_count`, `over_size_limit_count`,
+`package_owner_none_count`, `package_owner_unknown_count`, `from_systemd_count`,
+`from_listener_count`, `candidate_paths_dropped`, `program_list_truncated`) and the bounds it ran under (`roots`,
+`max_file_bytes`, `max_files`, `max_candidate_paths`, `hash_algorithm`, `stat_version`,
+`dpkg_version`) plus `package_contents_verified`, which is `false` in this version and
+says so in the bundle: no program is verified against its package, so `package_owner` is
+the database's claim about the path and `sha256` is the only statement about the bytes.
+
+The bounds are part of the contract, not a tuning detail: at most 1024 candidate paths
+per capture, at most 256 files per capture, at most 128 MiB per file, and only paths under
+`/bin`, `/opt`, `/sbin`, `/snap`, `/usr` or `/usr/local`. A path under `/home` or `/root`
+is never read, whatever names it, and a symlink that leaves the roots is refused. The
+candidate cap and the file cap count different work and both are needed: every candidate
+costs a path resolution (and for a listening process a `readlink` of `/proc/<pid>/exe`)
+whether or not its file is ever hashed, so a cap that applied only to the surviving files
+would leave the number of resolutions to be decided by how many units and sockets a host
+happens to have. The candidate cap therefore bites BEFORE anything is resolved, names the
+paths it dropped, and is recorded in `candidate_paths_dropped`. Every bound that stopped a
+hash is a diagnostic naming the path and the bound, and the artifact keeps `hash_state`
+`over_size_limit`, `permission_denied`, `unreadable` or `not_read` instead of a hash.
+`sha256` is present only where a hash was really computed, and `hash_state` says which case
+a reader is looking at, so a missing hash is never mistaken for an unchanged file.
+
+`hash_state` distinguishes statements about the FILE from statements about the CAPTURE:
+`over_size_limit`, `permission_denied` and `unreadable` are properties of the file this
+capture found, and `not_read` says the capture ran out of time before the file was reached,
+so this bundle says nothing about those bytes at all. A capture that ran out of time is
+`timeout` with a timeout error, never a `partial` result listing unreadable programs.
+
+**What of an `executable/<path>` artifact is observed, and what is a database's claim.**
+The artifact `State` is `observed`, and `path`, `size`, `mode`, `owner`, `group` and
+`sha256` are exactly that: read off this host during this capture. `package_owner` and
+`diverted_by` are NOT observations of the file. They are what the package database answers
+about the path, recorded beside the digest because a program nobody owns is the finding a
+bastion is captured for, and `package_owner_source` says which answer it is (`dpkg`,
+`dpkg_no_match`, `snap_path`, `dpkg_unavailable`). This version never verifies a file
+against its package: no `dpkg --verify`, no package digest is fetched or compared. An owned
+path is therefore not a statement that the bytes on disk are the package's bytes, and the
+`sha256` beside it is the only statement this bundle makes about those bytes.
+
+**Dependency edges on a unit (`linux.systemd`).** The runtime artifact
+`service/systemd/runtime/<unit>` now also carries `requires`, `wants`, `after`,
+`binds_to` and `required_by`, each a comma separated list of unit names, and
+`<name>_count` beside it only when the list had to be cut. They sit on the runtime
+artifact and not on the declared one on purpose: the manager adds edges no unit file
+contains (`system.slice`, `-.mount`, `sysinit.target`), and `required_by` exists in no
+unit file at all because the manager computes it from every other loaded unit. Recording
+them as declared state would claim a file says something it does not (playbook L3).
+
 **Evidence level per platform** (this change):
 
 | Probe | Platform | Source | Evidence level |
@@ -788,8 +855,8 @@ firewall. The profiles `agentic-workstation`, `windows-wsl-workstation` and
 | `common.identity` | linux | `/etc/os-release` (else `/usr/lib/os-release`), `uname -r`, `uname -m` | implemented, fixture-tested, cross-compiled |
 | `common.identity` | darwin | `sw_vers`, `uname -r`, `uname -m`, and `sysctl -n sysctl.proc_translated` when `uname -m` says `x86_64` | implemented, fixture-tested, cross-compiled |
 | `common.identity` | windows | registry `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion`; the native machine from `IsWow64Process2` | implemented, fixture-tested, cross-compiled |
-| the nine `linux.*` probes | linux | the tools named in the table above | implemented, fixture-tested, cross-compiled |
-| the nine `linux.*` probes | darwin, windows | n/a | not implemented; recorded as `unsupported` with the platform as the reason |
+| the twelve `linux.*` probes | linux | the tools named in the table above | implemented, fixture-tested, cross-compiled |
+| the twelve `linux.*` probes | darwin, windows | n/a | not implemented; recorded as `unsupported` with the platform as the reason |
 
 No platform is real-platform-tested in this change. That level is recorded per commit in
 evidence records, never claimed by the build, and full platform support is not
@@ -886,6 +953,7 @@ or `not_implemented` per probe and platform.
 | Item | What doctor does |
 |------|------------------|
 | `claude_roots` | Resolves the home root the way every other skillctl path does, then `lstat`s `.claude`, `.claude/agents`, `.claude/commands`, `.claude/skills`, `.claude/skillctl` and `.claude/trust-roots.yaml` below it. It opens no file, follows no link and creates nothing. `detail` names the root and lists which paths are present and which are absent. A path that exists as a symlink, or that cannot be read, is a `problem`. |
+| `file_roots` | Names every file root a capture on this platform may open, and reads nothing. Two lists, because the code has two: the roots of the engine's restricted file reader (`capture.DefaultAllowedRoots`, which refuses every path outside them), and the roots `linux.executables` hashes through its own reader (`linux.ExecutableRoots`), which the first list does not contain because a hash streams a file instead of reading it into memory. `detail` names both and says which reader each belongs to. On a platform where no registered probe reads a file the item stays `not_checked`. |
 | `output_location` | Only with `--output`. Picks the directory a capture would work in, creates ONE temporary file there, closes it and removes it again, and touches nothing else. That directory is the target itself when it already exists as a directory, otherwise its IMMEDIATE parent, because capture creates the target inside its parent and creates no directory above it. doctor never walks further up: `--output /srv/freeze/2026-09-23` touches `/srv/freeze` when that exists, and when it does not the item is a `problem` naming it, never a probe file in `/`. Permission bits are not read instead: a read-only mount, an ACL, a container user mapping or Windows can each make them disagree with what a write would do. Without `--output` the item stays `not_checked`. |
 | `tools` | Resolves every executable a probe names for itself, through the same fixed search path the command runner uses, and runs none of them. `detail` names each resolved tool as `<probe-id>:<tool>` and each one that did not resolve with its class (`tool_missing`, `permission_denied`). A probe that names no executable cannot be checked this way; when no probe of the profile names one, the item stays `not_checked` with that reason. Per-probe rows carry the same result under `tools`. |
 
@@ -1126,8 +1194,23 @@ policy or key file that does not load.
 
 Both inputs are verified first; if either fails, nothing is compared and the verification
 result is printed instead. Artifacts are compared by id after the versioned normalization
-rule set `trust-freeze/normalize/v1` has removed volatile values (timestamps, durations,
-process ids, uptime). The same inputs, opt-in and policy give byte-identical output. A
+rule set has removed volatile values. The default is `trust-freeze/normalize/v2`
+(timestamps, durations, process ids, uptime, `route_metric`, `current_dns_server`); the
+earlier `trust-freeze/normalize/v1` (timestamps, durations, process ids, uptime) is still
+shipped, so a diff recorded with it stays readable. A published rule set is never edited,
+only superseded: `route_metric` changes when the network stack reorders a route without
+the route changing, and `current_dns_server` is the server systemd-resolved happens to be
+querying out of the configured list, so both are volatile while the gateway, the resolver
+list and the hash of a program are not, and no rule set removes those. A rule set removes
+values, never artifacts: a route that appeared or vanished between two captures is still
+`added` or `removed`. It also cannot reach a value inside an artifact ID, because artifacts
+are paired BY id before any rule runs. `linux.network.routes` therefore builds the id of
+two routes that share family, table, device and destination from the GATEWAY, which changes
+only with the topology, and appends the metric only where the metric is the one thing the
+kernel itself keeps those routes apart by; that group is reported with a
+`route_id_carries_metric` diagnostic, because for it, and only for it, a metric change
+really does read as one route removed and one added. Every diff records the rule set id and its digest. The same inputs,
+opt-in and policy give byte-identical output. A
 baseline whose probes were all `captured`, or `not_applicable` with a reason, compared
 with itself has no finding above `info` and exits `0`; the gaps of an approved incomplete
 capture stay gaps in every diff.

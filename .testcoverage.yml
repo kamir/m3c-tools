@@ -112,6 +112,11 @@ override:
   - { path: '^pkg/skillctl/trustfreeze$',                 threshold: 87 } # measured 87.7
   - { path: '^pkg/skillctl/trustfreeze/probe$',           threshold: 87 } # measured 88.2
   - { path: '^pkg/skillctl/trustfreeze/redact$',          threshold: 87 } # measured 88.3
+  # The Linux probe family: no override existed when the package arrived (T-03),
+  # which is the one gap this file's own rule ("every new package gets its
+  # override in the change that adds it") had. Added with T-03b, which brought
+  # routes.go, dns.go and executables.go into the same package.
+  - { path: '^pkg/skillctl/trustfreeze/platform/linux$',  threshold: 87 } # measured 87.7 on darwin; the package has no build-tagged file and its tests skip only on windows and as root, so the linux measurement is expected to match
   - { path: '^pkg/skillctl/trustfreeze/policy$',          threshold: 86 } # measured 86.9
   - { path: '^pkg/skillctl/trustfreeze/report$',          threshold: 82 } # measured 83.2
   # CLI-glue blob: one big package, files span 0%..95% (main.go, session_cmds.go,

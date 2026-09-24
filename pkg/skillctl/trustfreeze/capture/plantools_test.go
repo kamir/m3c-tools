@@ -2,6 +2,7 @@ package capture
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze"
@@ -95,6 +96,45 @@ func TestPlanToolsNeedAPlatformAndARegistration(t *testing.T) {
 			if r.Registered || r.ToolsDeclared || r.Support.Reason != trustfreeze.ReasonNotImplemented {
 				t.Fatalf("unregistered probe: %+v", r)
 			}
+		}
+	}
+}
+
+// TestFileRootsOfACaptureAreTwoLists: a capture has two file seams, and the two
+// accessors say which is which (review of T-03b, finding 3).
+//
+// The engine's restricted reader refuses every path outside DefaultAllowedRoots.
+// linux.executables hashes program files through its own reader, whose roots are
+// NOT in that list, because a hash streams a file while the restricted reader
+// returns whole files under a 1 MiB limit. A caller that reports only the first
+// list understates what a capture may open.
+func TestFileRootsOfACaptureAreTwoLists(t *testing.T) {
+	reader := DefaultAllowedRoots("linux")
+	own := ProbeOwnedRoots("linux")
+	if len(reader) == 0 {
+		t.Fatal("no restricted reader root on linux")
+	}
+	if len(own) == 0 {
+		t.Fatal("no probe-owned root on linux, although linux.executables hashes under its own roots")
+	}
+	if !slices.IsSorted(own) {
+		t.Errorf("the probe-owned roots are not sorted: %v", own)
+	}
+	if !slices.Equal(own, slices.Compact(append([]string(nil), own...))) {
+		t.Errorf("the probe-owned roots carry a duplicate: %v", own)
+	}
+	// The two lists are disjoint in this build, which is the whole reason the
+	// second one has to be reported: a reader of the first learns nothing about
+	// it.
+	for _, r := range own {
+		if slices.Contains(reader, r) {
+			t.Errorf("%s is in both lists; then one of the two accessors is wrong about which reader opens it", r)
+		}
+	}
+	// Another platform has neither.
+	for _, goos := range []string{"darwin", "windows"} {
+		if got := ProbeOwnedRoots(goos); len(got) != 0 {
+			t.Errorf("ProbeOwnedRoots(%q) = %v, want none: no probe of this build hashes a file there", goos, got)
 		}
 	}
 }

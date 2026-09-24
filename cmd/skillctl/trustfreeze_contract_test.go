@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze"
+	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/capture"
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/probe"
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/seal"
 )
@@ -315,6 +316,40 @@ func TestTrustFreezeDoctorChecksTools(t *testing.T) {
 	}
 	if n := len(e.runner.Calls()); n != 0 {
 		t.Fatalf("doctor ran %d command(s); it must only resolve them", n)
+	}
+}
+
+// TestTrustFreezeDoctorChecksFileRoots: doctor names everything a capture may
+// open in ONE place, and says which reader each root belongs to.
+//
+// The capture has two file seams (review of T-03b, finding 3): the engine's
+// restricted reader with capture.DefaultAllowedRoots, and the own reader of
+// linux.executables with linux.ExecutableRoots, which the first list does not
+// contain. An operator asking "what can this thing open" had to read the manual
+// to learn about the second one.
+func TestTrustFreezeDoctorChecksFileRoots(t *testing.T) {
+	e := newTFEnv(t)
+	doc := e.runJSON(exitOK, tfResultOK, "doctor")
+	row := tfRequireCheck(t, doc, "file_roots", "ok")
+	detail, _ := row["detail"].(string)
+	reader := capture.DefaultAllowedRoots("linux")
+	own := capture.ProbeOwnedRoots("linux")
+	if len(reader) == 0 || len(own) == 0 {
+		t.Fatalf("this test needs both root lists; reader %v, own %v", reader, own)
+	}
+	for _, want := range append(append([]string{}, reader...), own...) {
+		if !strings.Contains(detail, want) {
+			t.Errorf("file_roots detail %q does not name the root %s", detail, want)
+		}
+	}
+	// The detail says WHICH reader the second list belongs to, or naming it
+	// would be worse than not naming it: a reader would take it for a root of
+	// the restricted reader.
+	if !strings.Contains(detail, "linux.executables") {
+		t.Errorf("file_roots detail %q does not say which probe opens the second list", detail)
+	}
+	if n := len(e.runner.Calls()); n != 0 {
+		t.Fatalf("doctor ran %d command(s) for this check; it reads nothing", n)
 	}
 }
 

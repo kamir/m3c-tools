@@ -69,6 +69,28 @@ func sweepRuns(t *testing.T) []sweepRun {
 	mountsRunner.Script(findmntExe, mountsTableArgs,
 		probe.FakeResponse{Stdout: systemdFixture(t, "mounts/findmnt-json.json")})
 
+	// linux.executables hashes files, so its sweep needs a tree on disk. The
+	// tree is the bastion case of executables_test.go: one program a unit
+	// starts, which also holds a listening socket, and no package owns it.
+	const sweepNgrok = "/usr/local/bin/ngrok"
+	execReader, _ := execTestTree(t, map[string]execTestFile{
+		sweepNgrok:       {Size: 32911522},
+		"/proc/2698/exe": {Link: sweepNgrok},
+	})
+	execSweepRunner := execRunner(t).
+		Script(systemctlExe, []string{"list-unit-files", "--no-legend", "--no-pager"},
+			probe.FakeResponse{Stdout: execFixture(t, "systemctl-list-unit-files-subset-2204.txt")}).
+		Script(systemctlExe, execShowArgs("ngrok-host-a.service", "ssh.socket"),
+			probe.FakeResponse{Stdout: execFixture(t, "systemctl-show-execstart-2204.txt")}).
+		Script(ListenersTool, []string{"-H", "-lntup"},
+			probe.FakeResponse{Stdout: netFixture(t, "network.listeners/ss-H-lntup.txt")}).
+		Script(ExecutablesToolStat, execStatArgs(sweepNgrok),
+			probe.FakeResponse{Stdout: []byte("/usr/local/bin/ngrok 755 root root 32911522\n")}).
+		Script(ExecutablesToolDpkg, execDpkgArgs(sweepNgrok), probe.FakeResponse{
+			ExitCode: 1,
+			Stderr:   execFixture(t, "dpkg-search-2204.stderr.txt"),
+		})
+
 	return []sweepRun{
 		{PackagesProbeID, NewPackagesProbe(), invPackagesRunner(t), probe.FakeFiles{}},
 		{UsersProbeID, NewUsersProbe(), invUsersRunner(t), probe.FakeFiles{}},
@@ -77,8 +99,26 @@ func sweepRuns(t *testing.T) []sweepRun {
 		{SystemdProbeID, NewSystemdProbe(), systemdRunner, probe.FakeFiles{}},
 		{MountsProbeID, NewMountsProbe(), mountsRunner, probe.FakeFiles{}},
 		{ListenersProbeID, NewListenersProbe(), netListenersRunner(t), probe.FakeFiles{}},
+		{RoutesProbeID, NewRoutesProbe(), routesRunner(t, ""), probe.FakeFiles{}},
+		{DNSProbeID, NewDNSProbe(), dnsRunner(t, ""), dnsFiles(t)},
 		{FirewallProbeID, NewFirewallProbe(), netFirewallRunner(t), probe.FakeFiles{}},
 		{ContainersProbeID, NewContainersProbe(), netDockerRunner(t), probe.FakeFiles{}},
+		{ExecutablesProbeID, NewExecutablesProbeWithReader(execReader), execSweepRunner, probe.FakeFiles{}},
+	}
+}
+
+// TestSweepCoversEveryProbeOfThisPackage: the sweep is only a guard while it
+// runs over every probe. A probe added to the registry without a sweep entry
+// fails here instead of quietly losing an attribute in the next capture.
+func TestSweepCoversEveryProbeOfThisPackage(t *testing.T) {
+	swept := map[string]bool{}
+	for _, run := range sweepRuns(t) {
+		swept[run.name] = true
+	}
+	for _, p := range Probes() {
+		if id := p.Descriptor().ID; !swept[id] {
+			t.Errorf("probe %s is registered but not in the redaction sweep", id)
+		}
 	}
 }
 

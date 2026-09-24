@@ -85,15 +85,23 @@ wrong, and this pair is how a test proves it.
 ```
 path                   fixture path relative to this directory
 probe                  probe id the fixture belongs to (null for the cross cutting ones)
-command                argv exactly as it was run, executable first, no shell
+host                   id of the host class in other_host_classes; absent means the host_class at the top
+source_class           present only where a fixture is not plain transcribed host output, and says what it is
+command                argv exactly as it was run, executable first, no shell; null for a composed fixture
 probe_command          argv the probe issues, where it differs from the one above; absent when they are the same
-stream                 stdout or stderr: which stream the file holds
-exit_code              the exit code of that run
-expected_probe_status  the honest status the probe should report for this input
+stream                 stdout or stderr: which stream the file holds; "n/a" for a composed fixture
+exit_code              the exit code of that run; null for a composed fixture
+expected_probe_status  the honest status the probe should report for this input; null where the probe never
+                       issues this call, so the fixture is evidence about the tool and not an input
 transcribed_lines      lines in the fixture
 source_lines           lines in the untouched host output (differs where a subset was kept)
 note                   what the fixture is for, and the trap it carries
 ```
+
+Every fixture in this tree has an entry, and every entry names a file that exists.
+`TestCommandsIndexCoversEveryFixture` in the package checks both directions, and it was shown to
+fail on a planted file before it was believed: provenance that drifts from the tree is worse than
+no provenance, because a fixture with no entry has no recorded argv.
 
 `command` stays what was run on the host: it is a record of a measurement and is never edited to
 match the code. Three fixtures were taken with an argv the probes do not issue (`findmnt --json`
@@ -128,8 +136,51 @@ record order, padding widths, exit codes, streams and message wording are untouc
 | container names built from product names | `app-*` and `svc-app-*` |
 | a self-hosted runner unit name | `actions.runner.alice-m3c-tools.host-a.service`, padded back to the original column width |
 
-IPv6: the rule is `2001:db8::`, but no routable IPv6 address appears anywhere in this material, so
-no IPv6 substitution was needed.
+IPv6: the rule is `2001:db8::`. No routable IPv6 address appears in the material of the sets above,
+so none of them needed an IPv6 substitution; the routes fixtures of T-03b did need one and their own
+section records it.
+
+### The address rule (binding, machine-checked)
+
+No fixture of this tree carries any part of a real address: not a prefix, not a host octet, and not a
+vendor default pool that a real host happens to use today. The rule is mechanical on purpose,
+because "a docker default pool names no site" is a judgement, and a judgement does not survive the
+next author.
+
+Every address literal in the tree therefore lies in one of these spaces:
+
+| Space | Why it is allowed |
+|---|---|
+| `192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24` | RFC 5737, reserved for documentation |
+| `100.64.0.0/10` | RFC 6598 shared address space: the synthetic container networks of the routes fixtures. A bridge route is a `/16` on both hosts and no documentation range holds one, so the shape needs space RFC 5737 does not have |
+| `2001:db8::/32` | RFC 3849, the IPv6 documentation prefix |
+| `127.0.0.0/8`, `0.0.0.0`, `::`, `::1` | loopback and the unspecified address: a resolver at `127.0.0.53` and a listener on `0.0.0.0` are the substance of the fixture, not an identity |
+| `169.254.0.0/16`, `fe80::/10` | link-local: the kernel derives them, no site chooses them |
+| `224.0.0.0/4`, `ff00::/8` | IANA multicast |
+
+`TestFixturesCarryNoRealAddress` in `testdataindex_test.go` walks the whole tree, this file included,
+and fails on any other address. It is an allowlist and not a list of the real values, for two
+reasons. Writing the addresses of the two hosts into a test would publish exactly what the
+sanitization removes (playbook section 1 rule 8). And an allowlist is the stronger check: an address
+pasted from ANY host fails it, not only one out of `10/8`, `172.16/12`, `192.168/16` or the
+unique-local IPv6 range. The test measures itself first: it asserts that the check REJECTS planted
+private-range addresses (none of them on any host of this project) and ACCEPTS the documented ones,
+so "no hit" is a measurement and not an empty grep.
+
+One literal is exempt, by exact string in one named file, because it only looks like an address: the
+four-number version of one package in `packages/dpkg-query-w.txt`. A real address in that same file
+still fails. This file names the banned ranges in their short form (`10/8`, `172.16/12`,
+`192.168/16`) and the unique-local IPv6 range by name, so that the prose the rule lives in does not
+have to be exempt from it.
+
+What the check cannot do: it cannot tell a documentation address that was chosen freely from one that
+kept a real host octet, because both lie in the allowed space. That half is a rule for the author and
+it is this. When a real address is replaced, the HOST part is renumbered together with the prefix.
+The octets a prefix or an allocator forces are not identity and stay: the zero host part of a network
+address, the all-ones broadcast, and the first address of a network that an allocator gives itself
+(each of the seven container networks of host A, six `br-*` bridges and `docker0`, carries its bridge
+on the first address of that network, which is what the allocator does and not something the site
+chose).
 
 Never collected, and therefore absent by construction: private key material, public key bodies and
 fingerprints, `authorized_keys` content, password hashes, tokens, and the contents of any file the
@@ -348,3 +399,214 @@ Honest gaps in the fixture set, so nobody builds a test on a shape that was neve
 - **A container runtime that is neither docker nor podman.** `containerd` and `crio` are not read at
   all by this build. A host that runs only one of them gets the same `unavailable` with the
   directories named, which is the honest answer and not the complete one.
+
+## Fixtures of `linux.network.routes` and `linux.dns` (T-03b)
+
+Added with the two probes of T-03b. They live under `routes/` and `dns/`. Unlike the sets above,
+where a second host supplied the shapes the first one could not produce, here **the same commands
+were run on both hosts on purpose**: the two Ubuntu releases ship different versions of `ip` and of
+`resolvectl`, the two versions print differently, and that difference is what the parsers had to be
+measured against. Everything here was read on **2026-09-24** through read-only commands, as an
+ordinary unprivileged account. Nothing was written, started, stopped or elevated on either host.
+
+These fixtures **are listed in `commands.json`**, folded in from the table below. Host B carries
+`"host": "ubuntu-22.04-bastion"`, the host class the container fixtures of T-03 already used: the
+same machine, confirmed read-only on 2026-09-24 by `command -v docker` answering `/snap/bin/docker`
+and `id -nG` not naming the group `docker`, which is exactly what that host class records. Host A
+carries no `host` key, because it is the `host_class` at the top of the file.
+
+### Host classes
+
+| Property | Host A (fixtures without a suffix) | Host B (fixtures with `-2204`) |
+|---|---|---|
+| Distribution | Ubuntu 24.04.1 LTS | Ubuntu 22.04.5 LTS |
+| Role | the trial host of the T-03 fixtures above | the bastion, ngrok and MinIO present |
+| Kernel release | 6.17.0-35-generic | not recorded |
+| Architecture | amd64 | amd64 |
+| Privilege of the capture | unprivileged account, no elevation | unprivileged account, no elevation |
+| Scale, routes | 9 IPv4 and 24 IPv6 routes over 27 interfaces | 4 IPv4 and 2 IPv6 routes over 5 interfaces |
+| Scale, resolver | 26 link blocks, 1 of them resolving | 4 link blocks, 1 of them resolving |
+
+The four scale rows are counts, so they carry a date: they were re-measured on **2026-09-24** with
+`ip -o link show | wc -l`, `ip -j route show`, `ip -6 -j route show` and
+`resolvectl status --no-pager | grep -c '^Link '` on both hosts, and the table above is that
+measurement. Host A's resolver row said 27 when the fixture was cut and answers 26 on the
+re-measurement of the same day: container veths come and go, so a later count that differs from this
+table is volatility of that host and not drift of these fixtures. A count in this file is never a
+claim about a host on any other day.
+
+### Tool versions
+
+| Tool | Host A | Host B | Fixture |
+|---|---|---|---|
+| `ip` (iproute2) | `iproute2-6.1.0, libbpf 1.3.0` | `iproute2-5.15.0, libbpf 0.5.0` | `routes/ip-version.txt`, `routes/ip-version-2204.txt` |
+| `resolvectl` (systemd) | `systemd 255 (255.4-1ubuntu8.17)` | `systemd 249 (249.11-0ubuntu3.22)` | `dns/resolvectl-version.txt`, `dns/resolvectl-version-2204.txt` |
+
+### The fixtures
+
+| Fixture | Command | Stream | Exit | Host |
+|---|---|---|---|---|
+| `routes/ip-j-route-show.json` | `ip -j route show` | stdout | 0 | A |
+| `routes/ip-6-j-route-show.json` | `ip -6 -j route show` | stdout | 0 | A |
+| `routes/ip-j-addr-show.json` | `ip -j addr show` | stdout | 0 | A |
+| `routes/ip-j-route-show-2204.json` | `ip -j route show` | stdout | 0 | B |
+| `routes/ip-6-j-route-show-2204.json` | `ip -6 -j route show` | stdout | 0 | B |
+| `routes/ip-j-addr-show-2204.json` | `ip -j addr show` | stdout | 0 | B |
+| `routes/ip-j-route-show-empty.json` | `ip -j route show 203.0.113.0/24` | stdout | 0 | A and B, identical |
+| `routes/ip-6-j-route-show-aborted.json` | `ip -6 -j route show table 999` | stdout | 2 | A and B, identical |
+| `routes/ip-6-j-route-show-aborted.stderr.txt` | the same call | stderr | 2 | A and B, identical |
+| `routes/ip-route-show-nosuchdev.stderr.txt` | `ip -j route show dev nosuchdev` | stderr | 1 | A |
+| `dns/resolvectl-status.txt` | `resolvectl status --no-pager` | stdout | 0 | A |
+| `dns/resolvectl-status-2204.txt` | `resolvectl status --no-pager` | stdout | 0 | B |
+| `dns/resolvectl-json-unsupported.stderr.txt` | `resolvectl --json=short status` | stderr | 1 | B |
+| `dns/resolv-conf-stub.txt` | `cat /etc/resolv.conf` | stdout | 0 | A and B, byte identical |
+| `dns/resolv-conf-uplink.txt` | `cat /run/systemd/resolve/resolv.conf` | stdout | 0 | A |
+| `dns/resolvectl-status-multilink.txt` | composed, see below | n/a | n/a | n/a |
+| `dns/resolv-conf-static.txt` | composed, see below | n/a | n/a | n/a |
+
+Three of them are subsets rather than whole outputs, with the original order kept:
+`routes/ip-6-j-route-show.json` holds 5 of the 24 IPv6 routes (the one global-scope route plus four
+link-local routes that share the destination and differ only in the device, which is the case the
+artifact id has to survive), `routes/ip-j-addr-show.json` holds 6 of the interfaces, and
+`dns/resolvectl-status.txt` holds the global block plus 4 of the link blocks. **No route was left
+out**: host A's IPv4 fixture holds all 9 routes the host printed, in the printed order (the default
+route, seven container bridge routes, the LAN route). An earlier version of this file said one route
+had been dropped because no documentation range of its size was free; the fixture carried it all
+along, unsanitized, and now carries it renumbered.
+
+### The two composed fixtures
+
+`dns/resolvectl-status-multilink.txt` and `dns/resolv-conf-static.txt` are **composed, not
+measured**, and they are the only files under `routes/` and `dns/` whose bytes are not a host's. The
+reason is named rather than hidden: neither host has a link with several DNS servers, a search
+domain, a routing-only domain, DNSSEC on or DNSOverTLS on, and neither host is without
+systemd-resolved, so those shapes could not be read anywhere. What IS measured about them is their
+form: the labels are the labels the two hosts printed plus `DNS Domain`, and the alignment follows
+the rule the measured output of systemd 255 exhibits (every label right-aligned to one
+document-wide width). Values are documentation addresses and `.example` names throughout.
+
+### What the two hosts could not show
+
+- **A JSON form of `resolvectl status`.** There is none. Measured on both: systemd 249 refuses
+  `--json=short` with `resolvectl: unrecognized option '--json=short'` and exit 1, and systemd 255
+  ACCEPTS the flag, exits 0, and prints the same human text it prints without it. The probe
+  therefore never sends the flag, and `dns_test.go` guards that.
+- **A refusal of `ip route show`.** Reading the routing table needs no privileges, so neither host
+  could produce one read-only. The `permission_denied` path of `linux.network.routes` is covered
+  with a refused start at the runner, which is where the operating system reports it.
+- **An unreadable `/etc/resolv.conf`.** The file is 0644 on both hosts. The refusal shape is real
+  even so: `/run/systemd/resolve/netif` is `drwx------` and owned by `systemd-resolve` on host A, and
+  an unprivileged read of a file under it answers `Permission denied` with exit 1. The probe's
+  `permission_denied` path is covered with that error at the file reader.
+- **A host without systemd-resolved.** Both hosts run it, so the file-only path is covered with a
+  missing `resolvectl` at the runner, and the fixture for it is the absence of the tool.
+- **A second routing table.** Only the main table was read, which is what `ip route show` answers
+  for. A host with policy routing keeps rules and tables that no fixture here carries.
+
+### Sanitization of these fixtures
+
+Same rule as above: change identity, keep shape. The JSON stayed one compact line with the key
+order iproute2 printed, and the resolvectl text kept its indentation byte for byte.
+
+| Real value | Replacement |
+|---|---|
+| the LAN prefix, the gateway and the address of host A | `203.0.113.0/24`, gateway `203.0.113.254`, address `203.0.113.10` (the same address the container fixtures above already use for this host) |
+| the LAN prefix, the gateway and the address of host B | `198.51.100.0/24`, gateway `198.51.100.254`, address `198.51.100.20` |
+| the resolver of each host, which on both is its gateway | the gateway replacement of that host |
+| the seven container bridge networks of host A (five `/16` and two `/24`, out of the default pools of docker, docker compose and kind) | `100.64.0.0/16`, `100.65.0.0/16`, `100.66.0.0/16`, `100.67.0.0/16`, `100.68.0.0/16`, `100.69.0.0/24`, `100.70.0.0/24`, each with the bridge on the first address of its network |
+| the docker bridge network of host B | `100.64.0.0/16`, the same replacement host A's docker bridge got, because the two hosts really do carry the same network there and a fixture that hid that would be a different fact |
+| the IPv6 network of one bridge (a unique-local prefix the runtime generated) | `2001:db8:1a2b:3c4d::/64` |
+| the MAC address of a physical interface | `00:00:5e:00:53:xx`, the documentation range of RFC 7042 |
+| a MAC address a container runtime generated | a synthetic address of the same class: docker's fixed `02:42` prefix where docker used one (the bridges of host A), a locally administered address where the runtime used one outside that prefix (`docker0` of host B) |
+| an IPv6 link-local address | a synthetic address of the same form: where the real one is derived from a MAC (host A), the derivation over the replacement MAC; where it is a stable-privacy address (host B, RFC 7217, not MAC-derived), a synthetic address of the same length |
+| docker bridge names (`br-` plus 12 hex of a network id) | synthetic 12 hex, same length |
+| veth names (`veth` plus 7 hex) | synthetic 7 hex, same length |
+
+Kept, deliberately, and why: `127.0.0.1`, `127.0.0.53`, `::1`, `fe80::/64`, `169.254.0.0/16` and the
+port numbers. They are IANA-assigned or kernel-derived and they are the substance of the fixture (a
+resolver at `127.0.0.53` is the stub, and that is the finding).
+
+Nothing else is kept. An earlier version of this file kept the container bridge prefixes with the
+argument that docker, docker compose and kind assign them out of documented default pools, so they
+name a container network and not a site. The argument is true and the exception was still wrong: the
+values stood in the fixtures exactly as both hosts carry them today, and a rule with a judgement in
+it is not a rule (see "The address rule" above). The renumbering is visible in the bytes: the bridge
+networks now come out of `100.64.0.0/10`, which no vendor assigns, so nobody reads them as a default
+pool. The prefix LENGTHS, the device names, the record order, the key order, the flags and every
+other column are the host's.
+
+Interface names of physical devices (`enp5s0`, `enp2s0`, `eno2`, `wlo1`, `lo`, `docker0`) are the real
+ones. They are bus positions and kernel defaults, they name no person, no site and no host, and the
+`-2204` fixtures would stop being one host's output if they were renamed.
+
+### Verification of these fixtures
+
+Two checks, and what each one proves:
+
+- `TestFixturesCarryNoRealAddress` (see "The address rule" above) walks the whole tree and refuses
+  every address outside the documented spaces. Measured against the fixture bytes the T-03b reviewer
+  read, it names 30 literals in 5 files; against the current bytes it names none. That measurement,
+  and not a sentence, is what says the addresses are clean, and it repeats on every `go test`.
+- The values a repository check cannot carry, because carrying them would publish them, were searched
+  for by hand on **2026-09-24**: every interface name, every MAC address and every address of both
+  hosts that the site or a runtime chose (the IANA-assigned loopback, unspecified and multicast values
+  are excluded, they are the ones the fixtures keep on purpose). 88 values, **0 hits** in this tree.
+  The search was shown to work: with two of those values appended to one file of a throwaway copy, the
+  same search returns 1 hit. The procedure, to repeat it:
+
+  ```bash
+  # on each host, read-only:
+  LC_ALL=C ip -o link show; LC_ALL=C ip -o addr show
+  # keep the interface names, the MAC addresses and the addresses, drop loopback,
+  # ::, 0.0.0.0 and multicast, write one value per line into /tmp/real-values.txt
+  grep -rFf /tmp/real-values.txt pkg/skillctl/trustfreeze/platform/linux/testdata/
+  # then append one of the values to a COPY of the tree and run the same grep,
+  # so that "no hit" is a measurement and not an empty pattern file.
+  ```
+
+What the earlier version of this paragraph claimed without having it: "the tree was searched for
+every real address of both hosts. No hit." Nothing in the repository could repeat that search, and
+seven of the prefixes it should have found were in the fixtures. The test above is what replaces the
+sentence.
+
+## Fixtures of `linux.executables` and of the systemd dependency edges (T-03b)
+
+They live under `executables/`, plus two files under `systemd/` that belong to `linux.systemd`
+because its show property list now carries the five dependency properties. Their own prose, with
+what each fixture is for and the trap it carries, is `executables/README.md`; that file is the
+measurement record and is not repeated here. What belongs here is the part this file owns.
+
+All of it was read on **2026-09-24** through read-only commands, as an ordinary unprivileged
+account. Nothing was written, started, stopped or elevated on either host. Fixtures without a suffix
+came off the trial host (the `host_class` at the top of `commands.json`); fixtures with `-2204` came
+off the bastion, `"host": "ubuntu-22.04-bastion"`, the same machine the container fixtures of T-03
+used.
+
+| Tool | Trial host | Bastion | Fixture |
+|---|---|---|---|
+| `dpkg` | 1.22.6 (amd64) | 1.21.1 (amd64) | `executables/dpkg-version.txt`, `executables/dpkg-version-2204.txt` |
+| `stat` (GNU coreutils) | 9.4 | 8.32 | `executables/stat-version.txt`, `executables/stat-version-2204.txt` |
+| `systemctl` | systemd 255 (255.4-1ubuntu8.17) | systemd 249 (249.11-0ubuntu3.22) | `systemd/systemctl-version.txt` (trial host); no fixture for the bastion, the version was read there and written down here |
+| `ss` | iproute2-6.1.0 | iproute2-5.15.0 | `network.listeners/ss-version.txt` (trial host); no fixture for the bastion, same |
+
+The two bastion versions without a fixture were read on that host on 2026-09-24 with
+`LC_ALL=C systemctl --version` and `LC_ALL=C ss -V`, which answered `systemd 249
+(249.11-0ubuntu3.22)` and `ss utility, iproute2-5.15.0`. They are written down rather than fixtured
+because no parser of this package was measured against the bastion output of those two tools; the
+`-2204` fixtures that DO exist are the ones a parser reads.
+
+The bastion is the host this probe exists for, and it is the only one that carries both cases in one
+call: a program under `/usr/local/bin` that **is** owned by a package (`mcli`, installed from a
+`.deb`) and one that **no package owns** (`ngrok`). Both were measured, neither was staged.
+
+### Four entries whose host argv is not recorded
+
+`executables/systemctl-list-unit-files-subset.txt`, `executables/systemctl-list-unit-files-subset-2204.txt`,
+`executables/stat-unit-programs.txt` and `executables/dpkg-search-unit-programs.txt` are in
+`commands.json`, but their `command` is the argv the **probe** issues, taken from how
+`executables_test.go` scripts the fake runner, and not from a record of the call that produced the
+bytes. `executables/README.md` does not list these four in its argv table. Their notes say so in the
+file itself rather than leaving a reader to assume a measurement. Closing that gap needs the fixture
+author, not an edit here: an argv is the record of a measurement and is never derived from the code
+it feeds.
+

@@ -265,6 +265,17 @@ func TestRunnersReportTheirSearchDirs(t *testing.T) {
 	if got := SearchDirs(notReportingRunner{}); got != nil {
 		t.Errorf("a runner that does not implement the interface reports %v", got)
 	}
+	// The engine hands every Collect a RecordingRunner, so the wrapper has to
+	// forward the report. Without this a probe's diagnostic falls back to "the
+	// runner does not report them" in every real capture while naming the
+	// directories in a test that passes a bare fake.
+	rec := NewRecordingRunner(NewFakeRunner().WithSearchDirs("/usr/bin", "/snap/bin"), Limits{}, nil)
+	if got := strings.Join(SearchDirs(rec), ":"); got != "/usr/bin:/snap/bin" {
+		t.Errorf("the recording runner reports %q", got)
+	}
+	if got := SearchDirs(NewRecordingRunner(notReportingRunner{}, Limits{}, nil)); got != nil {
+		t.Errorf("the recording runner invented %v over a runner that reports nothing", got)
+	}
 }
 
 // notReportingRunner is a CommandRunner without a search path to report.

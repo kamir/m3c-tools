@@ -465,9 +465,10 @@ func (p *ListenersProbe) Collect(ctx context.Context, cc probe.CollectContext) t
 	return s.finish(res, arts, start)
 }
 
-// Shared helpers of the three probes this file, firewall.go and
-// containers.go implement. They live here because these three probes are
-// written and reviewed together; nothing outside the package uses them.
+// Shared helpers of the network and runtime probes this file, firewall.go,
+// containers.go, routes.go and executables.go implement. They live here
+// because those probes are written and reviewed together; nothing outside the
+// package uses them.
 
 // netDiagRecordUnparsed marks one record of tool output that a parser could
 // not read. The record is lost, the rest of the result is not, and the probe

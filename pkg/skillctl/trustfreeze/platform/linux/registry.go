@@ -4,8 +4,10 @@
 //
 // The probes, by id: linux.packages and linux.users (inventory),
 // linux.sudo and linux.ssh (privilege), linux.systemd and linux.mounts
-// (services and file systems), linux.network.listeners, linux.firewall and
-// linux.containers (network and runtimes).
+// (services and file systems), linux.network.listeners,
+// linux.network.routes, linux.dns, linux.firewall and linux.containers
+// (network and runtimes), and linux.executables (the programs the services
+// and listeners name, with a hash).
 //
 // Platform guard: every descriptor of this package names linux as its only
 // platform, so a build for another operating system still registers the
@@ -43,9 +45,12 @@ func Register(reg *probe.Registry) error {
 func Probes() []probe.Probe {
 	return []probe.Probe{
 		NewContainersProbe(),
+		NewDNSProbe(),
+		NewExecutablesProbe(),
 		NewFirewallProbe(),
 		NewMountsProbe(),
 		NewListenersProbe(),
+		NewRoutesProbe(),
 		NewPackagesProbe(),
 		NewSSHProbe(),
 		NewSudoProbe(),
@@ -56,13 +61,18 @@ func Probes() []probe.Probe {
 
 // AllowedRoots returns the file roots the probes of this package read on
 // goos, sorted and without duplicates. The capture engine passes them to the
-// restricted file reader, so a probe that is not in this list reads nothing
-// (linux.sudo and linux.ssh are the only ones that open files at all).
+// restricted file reader, so a probe whose path is not under one of these
+// roots reads nothing: linux.sudo, linux.ssh and linux.dns are the probes
+// that open files through that reader. linux.executables is not among them.
+// It hashes program files through its own ProgramReader, which carries its
+// own root list (ExecutableRoots) and its own refusals, because a hash needs
+// the resolved path and the size of the file rather than a text read.
 func AllowedRoots(goos string) []string {
 	if goos != string(probe.PlatformLinux) {
 		return nil
 	}
 	roots := append(SudoAllowedRoots(), SSHAllowedRoots()...)
+	roots = append(roots, DNSAllowedRoots()...)
 	sort.Strings(roots)
 	return slices.Compact(roots)
 }

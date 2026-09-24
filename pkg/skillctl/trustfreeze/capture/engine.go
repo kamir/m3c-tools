@@ -121,12 +121,38 @@ func DefaultHostContext() probe.HostContext {
 	return probe.NewHostContext(DefaultAllowedRoots(runtime.GOOS))
 }
 
-// DefaultAllowedRoots returns the file roots of every registered probe on
-// goos, sorted and without duplicates. A path outside them is refused by the
-// restricted file reader, so a probe whose roots are missing here reports
-// not_applicable instead of the real state.
+// DefaultAllowedRoots returns the file roots the registered probes read THROUGH
+// THE RESTRICTED FILE READER on goos, sorted and without duplicates. A path
+// outside them is refused by that reader, so a probe whose roots are missing
+// here reports a partial result with the refused path named (privStatus and
+// privDiagOutsideRoots in platform/linux) instead of the real state.
+//
+// It is not the whole list of what a capture may open. linux.executables hashes
+// program files through its own reader with its own roots
+// (linux.ExecutableRoots), because a hash streams a file rather than reading it
+// into memory, and its set artifact records the roots it ran under. An operator
+// who wants everything a capture may open in one place reads both lists;
+// `doctor` prints them together (the file_roots check).
 func DefaultAllowedRoots(goos string) []string {
 	roots := append(common.AllowedRoots(goos), linux.AllowedRoots(goos)...)
+	sort.Strings(roots)
+	return slices.Compact(roots)
+}
+
+// ProbeOwnedRoots returns the file roots a probe opens through ITS OWN reader
+// on goos, sorted and without duplicates, so that everything a capture may open
+// can be stated in one place beside DefaultAllowedRoots.
+//
+// linux.executables is the only one today, and it has a reason: hashing a
+// program streams the file and keeps nothing, while the restricted reader of
+// the engine returns whole files and refuses anything over its 1 MiB limit.
+// The probe records these roots in its set artifact, so a bundle also says what
+// it was allowed to look at.
+func ProbeOwnedRoots(goos string) []string {
+	if goos != string(probe.PlatformLinux) {
+		return nil
+	}
+	roots := linux.ExecutableRoots()
 	sort.Strings(roots)
 	return slices.Compact(roots)
 }

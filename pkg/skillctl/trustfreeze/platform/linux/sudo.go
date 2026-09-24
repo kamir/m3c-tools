@@ -1443,6 +1443,12 @@ const (
 	privTimeout
 	privFailed
 	privNotApplicable
+	// privOutsideRoots is a path the root list of this capture refused. It is
+	// deliberately NOT privNotApplicable: not_applicable says the question does
+	// not exist on this host, and this says the capture was not allowed to ask
+	// it. The first is a fact about the host, the second is a gap in the
+	// capture, and privStatus degrades for it (review of T-03b, finding 1).
+	privOutsideRoots
 )
 
 var privStateCodes = map[privState]string{
@@ -1452,7 +1458,13 @@ var privStateCodes = map[privState]string{
 	privTimeout:          probe.DiagFieldTimeout,
 	privFailed:           probe.DiagFieldFailed,
 	privNotApplicable:    probe.DiagFieldNotApplicable,
+	privOutsideRoots:     privDiagOutsideRoots,
 }
+
+// privDiagOutsideRoots marks a path the allowed roots of this capture refused.
+// The capture, not the host, is what the code is about: whoever reads it has to
+// widen the root list (capture.DefaultAllowedRoots) or accept the gap.
+const privDiagOutsideRoots = "path_outside_roots"
 
 func privStateCode(st privState) string {
 	if c, ok := privStateCodes[st]; ok {
@@ -1478,6 +1490,12 @@ func privStatus(states []privState, what string) (trustfreeze.ProbeStatus, strin
 	case count[privTimeout] > 0:
 		reason := "timed out reading " + what
 		return trustfreeze.StatusTimeout, reason, &trustfreeze.ProbeError{Class: probe.ClassTimeout, Message: reason}
+	case count[privOutsideRoots] > 0:
+		// A root list refusal always degrades, whatever else was read. It
+		// outranks a missing source on purpose: unavailable would say the
+		// sources of this probe are missing, and here one of them was there and
+		// was not opened.
+		return trustfreeze.StatusPartial, "not fully read: " + what + " (a path lies outside the roots this capture may read)", nil
 	case count[privUnavailable] > 0 && read == 0:
 		// Nothing was read at all: the sources of this probe are missing, and
 		// that is what unavailable means (playbook L1).
@@ -1515,9 +1533,10 @@ type privRun struct {
 	Detail          string
 }
 
-// privCollector is the shared bookkeeping of the two privilege probes
-// (linux.sudo and linux.ssh): tool invocations, diagnostics, sources and
-// recorded tool versions of one Collect call.
+// privCollector is the shared bookkeeping of the probes that grew out of the
+// privilege pair (linux.sudo and linux.ssh, and since T-03b linux.dns as
+// well): tool invocations, diagnostics, sources and recorded tool versions of
+// one Collect call.
 type privCollector struct {
 	ctx      context.Context
 	cc       probe.CollectContext
@@ -1759,7 +1778,7 @@ func privFileState(err error) (privState, string) {
 	case errors.Is(err, fs.ErrPermission):
 		return privPermissionDenied, "permission denied"
 	case errors.Is(err, probe.ErrOutsideRoots):
-		return privNotApplicable, "path is outside the roots this capture may read"
+		return privOutsideRoots, "path is outside the roots this capture may read"
 	case errors.Is(err, probe.ErrLimitExceeded):
 		return privFailed, "file is larger than the probe limit"
 	case errors.Is(err, context.DeadlineExceeded):

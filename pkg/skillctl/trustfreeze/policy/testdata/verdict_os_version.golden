@@ -4,7 +4,7 @@
     "id": "trust-freeze/policy/default-v1",
     "rules_digest": "sha256:a74f9eb62318cc8bee01ced0a0b829df720d49336cafae3a08447554084e4ddd"
   },
-  "diff_digest": "sha256:5e3a142c7d43c8122f34a609619462ccc53e0bba720f97e99c0ff7af7a3db4a6",
+  "diff_digest": "sha256:4207be52ff26fb1b6f3da7a8a300612a15cd3e37740ac4e471b77c8da245ba5a",
   "highest_severity": "medium",
   "fail_on": "high",
   "threshold_exceeded": false,

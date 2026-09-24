@@ -1,7 +1,7 @@
 {
  "schema": "trust-freeze/linux-fixtures/v1",
  "source_class": "transcribed from a real Ubuntu 24.04.1 host and sanitized",
- "captured_at": "2026-09-23",
+ "captured_at": "2026-09-23, extended 2026-09-24 with the routes, DNS and executable fixtures of T-03b",
  "host_class": {
   "distribution": "Ubuntu 24.04.1 LTS",
   "kernel_release": "6.17.0-35-generic",
@@ -797,6 +797,626 @@
    "exit_code": 127,
    "expected_probe_status": "unavailable",
    "note": "What a SHELL reports for a missing executable. Recorded so that nobody mistakes it for the probe's own shape: the ExecRunner resolves the executable itself and returns tool_missing before any process starts. Exit 127 from a real child process means something else entirely."
+  },
+  {
+   "path": "routes/ip-version.txt",
+   "probe": "linux.network.routes",
+   "command": [
+    "ip",
+    "-V"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The version the parsers of routes.go were measured against on the trial host (playbook L7). One line, whole output."
+  },
+  {
+   "path": "routes/ip-version-2204.txt",
+   "probe": "linux.network.routes",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "ip",
+    "-V"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The same call on the bastion. The two releases print different iproute2 and libbpf versions, which is why both fixtures exist."
+  },
+  {
+   "path": "routes/ip-j-route-show.json",
+   "probe": "linux.network.routes",
+   "command": [
+    "ip",
+    "-j",
+    "route",
+    "show"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The IPv4 table of the trial host, one compact JSON line in the key order iproute2 printed. Nine routes, one of them the default route. One IPv4 route was left OUT rather than rewritten, see the README: its /24 was chosen by a compose file on that host and no documentation range of that size was free."
+  },
+  {
+   "path": "routes/ip-6-j-route-show.json",
+   "probe": "linux.network.routes",
+   "command": [
+    "ip",
+    "-6",
+    "-j",
+    "route",
+    "show"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 1,
+   "source_lines": 1,
+   "note": "A subset: 5 of the 24 IPv6 routes, original order kept. The ULA route plus four link-local routes that share the destination and differ only in the device, which is exactly the case the artifact id has to survive."
+  },
+  {
+   "path": "routes/ip-j-addr-show.json",
+   "probe": "linux.network.routes",
+   "command": [
+    "ip",
+    "-j",
+    "addr",
+    "show"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 1,
+   "source_lines": 1,
+   "note": "A subset: 6 of the 27 interfaces, original order kept. The addresses give the routes their meaning, and the operational state and flags of the device come from the same document."
+  },
+  {
+   "path": "routes/ip-j-route-show-2204.json",
+   "probe": "linux.network.routes",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "ip",
+    "-j",
+    "route",
+    "show"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The same call on the bastion: 4 IPv4 routes over 5 interfaces, printed by iproute2 5.15.0."
+  },
+  {
+   "path": "routes/ip-6-j-route-show-2204.json",
+   "probe": "linux.network.routes",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "ip",
+    "-6",
+    "-j",
+    "route",
+    "show"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The same call on the bastion: 2 IPv6 routes. A host with few IPv6 routes is still a captured host, not an empty answer."
+  },
+  {
+   "path": "routes/ip-j-addr-show-2204.json",
+   "probe": "linux.network.routes",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "ip",
+    "-j",
+    "addr",
+    "show"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The same call on the bastion: 5 interfaces."
+  },
+  {
+   "path": "routes/ip-j-route-show-empty.json",
+   "probe": "linux.network.routes",
+   "command": [
+    "ip",
+    "-j",
+    "route",
+    "show",
+    "203.0.113.0/24"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "A query that matches nothing: iproute2 prints an empty JSON array and exits 0. Both hosts answered identically. This is the fixture behind the rule that a host with no route of a family is captured with zero routes and never not_applicable."
+  },
+  {
+   "path": "routes/ip-6-j-route-show-aborted.json",
+   "probe": "linux.network.routes",
+   "command": [
+    "ip",
+    "-6",
+    "-j",
+    "route",
+    "show",
+    "table",
+    "999"
+   ],
+   "stream": "stdout",
+   "exit_code": 2,
+   "expected_probe_status": "partial",
+   "note": "A dump the tool aborted: it prints an opening bracket on stdout, the reason on stderr, and exits 2. Both hosts answered identically. The probe must not read this as an empty table: the family stays unread, carries no count at all, and the run is partial with a reason (playbook L1)."
+  },
+  {
+   "path": "routes/ip-6-j-route-show-aborted.stderr.txt",
+   "probe": "linux.network.routes",
+   "command": [
+    "ip",
+    "-6",
+    "-j",
+    "route",
+    "show",
+    "table",
+    "999"
+   ],
+   "stream": "stderr",
+   "exit_code": 2,
+   "expected_probe_status": "partial",
+   "note": "The stderr half of the aborted dump, from the same call."
+  },
+  {
+   "path": "routes/ip-route-show-nosuchdev.stderr.txt",
+   "probe": "linux.network.routes",
+   "command": [
+    "ip",
+    "-j",
+    "route",
+    "show",
+    "dev",
+    "nosuchdev"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "partial",
+   "note": "A call that fails with a message instead of a document: exit 1, nothing on stdout. The probe records the family or the address list as unread and stays partial; it never turns a failed call into an empty result."
+  },
+  {
+   "path": "dns/resolvectl-version.txt",
+   "probe": "linux.dns",
+   "command": [
+    "resolvectl",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The systemd version the resolver parser was measured against on the trial host (playbook L7). Two lines: the version and the build option line."
+  },
+  {
+   "path": "dns/resolvectl-version-2204.txt",
+   "probe": "linux.dns",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "resolvectl",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The same call on the bastion. systemd 249 and systemd 255 print the status block differently, which is why both fixtures exist."
+  },
+  {
+   "path": "dns/resolvectl-status.txt",
+   "probe": "linux.dns",
+   "command": [
+    "resolvectl",
+    "status",
+    "--no-pager"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "transcribed_lines": 1,
+   "source_lines": 1,
+   "note": "A subset: the global block plus 4 of the 27 link blocks, original order and indentation kept byte for byte. The observed resolver state (playbook L3), never the declared one."
+  },
+  {
+   "path": "dns/resolvectl-status-2204.txt",
+   "probe": "linux.dns",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "resolvectl",
+    "status",
+    "--no-pager"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The same call on the bastion: 4 link blocks, 1 of them resolving. systemd 249 prints labels and alignment the 255 fixture does not, which is the difference the parser had to be measured against."
+  },
+  {
+   "path": "dns/resolvectl-json-unsupported.stderr.txt",
+   "probe": "linux.dns",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "resolvectl",
+    "--json=short",
+    "status"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": null,
+   "note": "Why the probe has no JSON path. Measured on both hosts: systemd 249 refuses the flag with this line and exits 1, and systemd 255 ACCEPTS it, exits 0, and prints the same human text it prints without it. So a JSON form of resolvectl status does not exist, the probe never sends the flag, and dns_test.go guards that. expected_probe_status is null because the probe issues no such call: this fixture is evidence about the tool, not an input the probe parses."
+  },
+  {
+   "path": "dns/resolv-conf-stub.txt",
+   "probe": "linux.dns",
+   "command": [
+    "cat",
+    "/etc/resolv.conf"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The declared resolver configuration (playbook L3). Byte identical on both hosts. It names the systemd-resolved stub at 127.0.0.53, which is the finding: the file delegates the real decision, so the file alone is never the whole answer. The probe reads this path through the restricted file reader (linux.AllowedRoots), not by running cat; the argv is how it was transcribed."
+  },
+  {
+   "path": "dns/resolv-conf-uplink.txt",
+   "probe": "linux.dns",
+   "command": [
+    "cat",
+    "/run/systemd/resolve/resolv.conf"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The uplink file systemd-resolved writes beside the stub file: the real nameservers rather than the stub. Recorded so a parser test has the non-stub shape of the same format. The probe does not read this path; /etc/resolv.conf is the one declared source it names."
+  },
+  {
+   "path": "dns/resolvectl-status-multilink.txt",
+   "probe": "linux.dns",
+   "source_class": "composed from measured labels and alignment; the values are synthetic",
+   "command": null,
+   "stream": "n/a",
+   "exit_code": null,
+   "expected_probe_status": "captured",
+   "note": "COMPOSED, not measured, and it says so. Neither host has a link with several DNS servers, a search domain, a routing-only domain, DNSSEC on or DNSOverTLS on, so those shapes could not be read anywhere. What IS measured about it is its form: the labels are the labels the two hosts printed plus DNS Domain, and the alignment follows the rule the measured output of systemd 255 exhibits (every label right-aligned to one document-wide width). Values are documentation addresses and .example names throughout."
+  },
+  {
+   "path": "dns/resolv-conf-static.txt",
+   "probe": "linux.dns",
+   "source_class": "composed from the measured directive grammar; the values are synthetic",
+   "command": null,
+   "stream": "n/a",
+   "exit_code": null,
+   "expected_probe_status": "captured",
+   "note": "COMPOSED, not measured. Neither host is without systemd-resolved, so a hand-written resolv.conf that names real nameservers instead of the stub could not be read anywhere. The directive grammar is the grammar of the measured file; the addresses are documentation addresses."
+  },
+  {
+   "path": "executables/dpkg-version.txt",
+   "probe": "linux.executables",
+   "command": [
+    "dpkg",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "First line kept. The dpkg version the ownership parser was measured against on the trial host (playbook L7)."
+  },
+  {
+   "path": "executables/dpkg-version-2204.txt",
+   "probe": "linux.executables",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "dpkg",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "First line kept, the same call on the bastion."
+  },
+  {
+   "path": "executables/stat-version.txt",
+   "probe": "linux.executables",
+   "command": [
+    "stat",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "First line kept. The coreutils version the stat parser was measured against on the trial host."
+  },
+  {
+   "path": "executables/stat-version-2204.txt",
+   "probe": "linux.executables",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "stat",
+    "--version"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "First line kept, the same call on the bastion. 8.32 against 9.4 on the trial host."
+  },
+  {
+   "path": "executables/dpkg-search.txt",
+   "probe": "linux.executables",
+   "command": [
+    "dpkg",
+    "-S",
+    "/usr/sbin/sshd",
+    "/usr/bin/ls",
+    "/usr/local/bin/mcli",
+    "/usr/bin/snap"
+   ],
+   "stream": "stdout",
+   "exit_code": 1,
+   "expected_probe_status": "captured",
+   "note": "The ordinary answer shape \"package: path\", and the one trap of this tool: /bin/ls answers NO PATH FOUND, because the dpkg database holds /usr/bin/ls and /bin is a symlink to /usr/bin on a merged-/usr Ubuntu. A probe that asks dpkg before it resolves symlinks reports half its programs as unowned. The call asks for the resolved form."
+  },
+  {
+   "path": "executables/dpkg-search.stderr.txt",
+   "probe": "linux.executables",
+   "command": [
+    "dpkg",
+    "-S",
+    "/usr/sbin/sshd",
+    "/usr/bin/ls",
+    "/usr/local/bin/mcli",
+    "/usr/bin/snap"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "captured",
+   "note": "A path no package owns goes to stderr and the call exits 1 while the other lines are still printed on stdout. The wording was identical on both releases, so the parser keys on the ABSENCE of a stdout answer and not on this message."
+  },
+  {
+   "path": "executables/dpkg-search-2204.txt",
+   "probe": "linux.executables",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "dpkg",
+    "-S",
+    "/usr/local/bin/ngrok",
+    "/usr/local/bin/mcli",
+    "/snap/core22/1122/usr/bin/env",
+    "/usr/lib/snapd/snapd"
+   ],
+   "stream": "stdout",
+   "exit_code": 1,
+   "expected_probe_status": "captured",
+   "note": "The bastion, and the reason this probe exists: mcli under /usr/local/bin IS owned by a package of the same name, ngrok beside it is owned by nobody, and the file of a mounted snap is not in the database at all. Three different answers for three paths in one call. Neither case was staged."
+  },
+  {
+   "path": "executables/dpkg-search-2204.stderr.txt",
+   "probe": "linux.executables",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "dpkg",
+    "-S",
+    "/usr/local/bin/ngrok",
+    "/usr/local/bin/mcli",
+    "/snap/core22/1122/usr/bin/env",
+    "/usr/lib/snapd/snapd"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "captured",
+   "note": "The stderr half of the same bastion call: the two paths no package owns."
+  },
+  {
+   "path": "executables/dpkg-search-multi-owner.txt",
+   "probe": "linux.executables",
+   "command": [
+    "dpkg",
+    "-S",
+    "/etc/init.d"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "One path, 31 package names in one comma separated line, several with an architecture qualifier after a colon (libc6-dev:amd64). It is a directory path, because no executable file on either host had more than one owner; the parser cannot tell the difference, it reads \"packages: path\". On the same host dpkg -S /usr/lib/x86_64-linux-gnu answered with 757 names in a single line of about 25 kB, which is why the probe caps the recorded package list."
+  },
+  {
+   "path": "executables/dpkg-search-diversion.txt",
+   "probe": "linux.executables",
+   "command": [
+    "dpkg",
+    "-S",
+    "/usr/share/dict/words"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "Two diversion records and an ownership answer for the same path. A parser that splits every line at \": \" reads the package name as \"diversion by dictionaries-common from\". This is the fixture that fails such a parser."
+  },
+  {
+   "path": "executables/stat-executables.txt",
+   "probe": "linux.executables",
+   "command": [
+    "stat",
+    "-L",
+    "-c",
+    "%n %a %U %G %s",
+    "/usr/sbin/sshd",
+    "/usr/bin/ls",
+    "/usr/local/bin/mcli",
+    "/usr/bin/snap"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "Mode, owner, group and size of real programs, including a 31 MB and a 32 MB one. The sizes are real, so a test that sets a small size cap has real numbers to refuse."
+  },
+  {
+   "path": "executables/stat-executables-2204.txt",
+   "probe": "linux.executables",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "stat",
+    "-L",
+    "-c",
+    "%n %a %U %G %s",
+    "<the four paths of the bastion call>"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The same call on the bastion over its four paths. The argv column of testdata/executables/README.md records it as \"the same call on the bastion, over its four paths\" and does not spell the paths out; they are the four paths of dpkg-search-2204 and are visible in the fixture itself."
+  },
+  {
+   "path": "executables/stat-missing.stderr.txt",
+   "probe": "linux.executables",
+   "command": [
+    "stat",
+    "-L",
+    "-c",
+    "%n %a %U %G %s",
+    "/usr/bin/ls",
+    "/usr/local/bin/nosuch-trustfreeze"
+   ],
+   "stream": "stderr",
+   "exit_code": 1,
+   "expected_probe_status": "partial",
+   "note": "A path that does not exist: stat prints the other lines on stdout, this line on stderr, and exits 1. The probe parses stdout whatever the exit code says, and the missing path becomes a diagnostic rather than a lost run."
+  },
+  {
+   "path": "executables/systemctl-show-execstart.txt",
+   "probe": "linux.executables",
+   "command": [
+    "systemctl",
+    "show",
+    "--no-pager",
+    "-p",
+    "Id,ExecStart",
+    "ssh.service",
+    "snap.cups.cupsd.service",
+    "cron.service",
+    "man-db.timer"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The two-property call the probe makes. Four units, and the last one is the case a reader forgets: a timer answers with Id only, because it starts no program. It also shows that the manager answers in ITS property order (ExecStart before Id) and separates units with a blank line."
+  },
+  {
+   "path": "executables/systemctl-show-execstart-2204.txt",
+   "probe": "linux.executables",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "systemctl",
+    "show",
+    "--no-pager",
+    "-p",
+    "Id,ExecStart",
+    "ngrok-host-a.service",
+    "ssh.socket"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The same call on the bastion: the ngrok unit names a program under /usr/local/bin, and the socket unit names none. The unit name in this argv is SANITIZED, with the same substitution the fixture bytes carry (executables/README.md names it): the real unit name is a configuration detail of that host, and publishing it in the argv while the bytes hide it would make the substitution pointless. An argv is the record of a measurement, and this record says which call produced these bytes up to that one substitution, which is the most a public fixture can record. Whoever repeats the call substitutes the name back once, from the host."
+  },
+  {
+   "path": "executables/systemctl-list-unit-files-subset.txt",
+   "probe": "linux.executables",
+   "command": [
+    "systemctl",
+    "list-unit-files",
+    "--no-legend",
+    "--no-pager"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "A subset of the unit file list of the trial host: the four units whose ExecStart the show fixture answers for. The argv above is the call the PROBE issues, as executables_test.go scripts it. testdata/executables/README.md does not record the host call this file was transcribed from, so this entry names the probe call and is not a record of a measured argv. The bytes are the host output."
+  },
+  {
+   "path": "executables/systemctl-list-unit-files-subset-2204.txt",
+   "probe": "linux.executables",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "systemctl",
+    "list-unit-files",
+    "--no-legend",
+    "--no-pager"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "A subset of the unit file list of the bastion: the ngrok unit and ssh.socket. The argv above is the call the PROBE issues, as executables_test.go scripts it. testdata/executables/README.md does not record the host call this file was transcribed from, so this entry names the probe call and is not a record of a measured argv. The bytes are the host output."
+  },
+  {
+   "path": "executables/stat-unit-programs.txt",
+   "probe": "linux.executables",
+   "command": [
+    "stat",
+    "-L",
+    "-c",
+    "%n %a %U %G %s",
+    "/usr/sbin/cron",
+    "/usr/bin/snap",
+    "/usr/sbin/sshd"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "Mode, owner, group and size of the three programs the trial host units name. The argv above is the call the PROBE issues, as executables_test.go scripts it. testdata/executables/README.md does not record the host call this file was transcribed from, so this entry names the probe call and is not a record of a measured argv. The bytes are the host output."
+  },
+  {
+   "path": "executables/dpkg-search-unit-programs.txt",
+   "probe": "linux.executables",
+   "command": [
+    "dpkg",
+    "-S",
+    "/usr/sbin/cron",
+    "/usr/bin/snap",
+    "/usr/sbin/sshd"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The owning package of the same three programs: all three are owned, which is the ordinary case beside the unowned one. The argv above is the call the PROBE issues, as executables_test.go scripts it. testdata/executables/README.md does not record the host call this file was transcribed from, so this entry names the probe call and is not a record of a measured argv. The bytes are the host output."
+  },
+  {
+   "path": "systemd/systemctl-show-dependencies.txt",
+   "probe": "linux.systemd",
+   "host": "ubuntu-22.04-bastion",
+   "command": [
+    "systemctl",
+    "show",
+    "--no-pager",
+    "-p",
+    "<the full property list of systemdShowProperties>",
+    "ngrok-host-a.service",
+    "ssh.socket"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "The full property list, with the five dependency properties. Requires of the ngrok unit names system.slice, -.mount and sysinit.target, none of which is in any unit file: the manager adds them. That is why the dependency edges are recorded on the OBSERVED artifact of the unit and not on the declared one (playbook L3). It also shows the empty form \"BindsTo=\", which is how the manager says there is no such edge, and the root mount unit -.mount, whose name starts with a hyphen. The unit name in this argv is sanitized with the same substitution as the fixture bytes, for the reason the entry of executables/systemctl-show-execstart-2204.txt states."
+  },
+  {
+   "path": "systemd/systemctl-show-required-by.txt",
+   "probe": "linux.systemd",
+   "command": [
+    "systemctl",
+    "show",
+    "--no-pager",
+    "-p",
+    "Id,BindsTo,RequiredBy",
+    "dbus.socket",
+    "docker.socket"
+   ],
+   "stream": "stdout",
+   "exit_code": 0,
+   "expected_probe_status": "captured",
+   "note": "A non-empty RequiredBy: 17 units in one line of 343 bytes, the longest dependency line of all 372 units the selection rule picked on that host. RequiredBy is in no unit file at all; the manager computes it from every other loaded unit. BindsTo was empty on every unit measured on both hosts, so no file here carries a non-empty BindsTo: the property is asked for and recorded through the same code path as its four siblings, and the non-empty case is covered by the parser test with the shape the siblings measured."
   }
  ],
  "other_host_classes": [

@@ -2,14 +2,14 @@
   "schema_version": "trust-freeze/report/v1",
   "input": {
     "kind": "diff",
-    "diff_digest": "sha256:7c3f9d4df05edad69632195b8ded5d311552aaef1abaa16d63a86db954a091af"
+    "diff_digest": "sha256:4d70d0794e75f0a2921b810d6df171ea5971dca7031a98a9ce089e254c33e106"
   },
   "diff": {
     "schema_version": "trust-freeze/diff/v1",
     "kind": "diff",
     "normalization": {
-      "id": "trust-freeze/normalize/v1",
-      "digest": "sha256:9813f9b495979bf3b5103a1816d07aab19a2bd95fb05491197b614bf28e575d9"
+      "id": "trust-freeze/normalize/v2",
+      "digest": "sha256:48b02614a4e2139449d49603519d74d0d1c3d68b0677f70444eeb2a2dacfb4bb"
     },
     "baseline": {
       "kind": "baseline",
@@ -86,7 +86,7 @@
       "id": "trust-freeze/policy/default-v1",
       "rules_digest": "sha256:a74f9eb62318cc8bee01ced0a0b829df720d49336cafae3a08447554084e4ddd"
     },
-    "diff_digest": "sha256:7c3f9d4df05edad69632195b8ded5d311552aaef1abaa16d63a86db954a091af",
+    "diff_digest": "sha256:4d70d0794e75f0a2921b810d6df171ea5971dca7031a98a9ce089e254c33e106",
     "highest_severity": "medium",
     "fail_on": "high",
     "threshold_exceeded": false,

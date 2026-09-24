@@ -209,7 +209,8 @@ func tfScriptedEnv(t *testing.T) (*tfTestEnv, *tfScript) {
 			return nil, err
 		}
 		for _, id := range []string{"linux.packages", "linux.users", "linux.sudo", "linux.ssh", "linux.systemd",
-			"linux.network.listeners", "linux.firewall", "linux.mounts", "linux.containers", "common.git", "common.claude"} {
+			"linux.executables", "linux.network.listeners", "linux.network.routes", "linux.dns", "linux.firewall",
+			"linux.mounts", "linux.containers", "common.git", "common.claude"} {
 			if err := reg.Register(tfScriptedProbe{id: id, script: s}); err != nil {
 				return nil, err
 			}

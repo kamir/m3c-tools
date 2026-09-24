@@ -550,7 +550,7 @@ func (c *privCollector) collectAuthorizedKeys() ([]trustfreeze.Artifact, privSta
 				// No such file: this account has no key file, which is a fact,
 				// not a gap.
 				continue
-			case privNotApplicable:
+			case privOutsideRoots:
 				accOutside = true
 				continue
 			default:

@@ -311,7 +311,8 @@ func TestTrustFreezeExcludedOptionalProbeIsAGap(t *testing.T) {
 			return nil, err
 		}
 		for _, id := range []string{"linux.packages", "linux.users", "linux.sudo", "linux.ssh", "linux.systemd",
-			"linux.network.listeners", "linux.firewall", "linux.mounts", "linux.containers", "common.claude"} {
+			"linux.executables", "linux.network.listeners", "linux.network.routes", "linux.dns", "linux.firewall",
+			"linux.mounts", "linux.containers", "common.claude"} {
 			if err := reg.Register(tfStubProbe{id: id}); err != nil {
 				return nil, err
 			}
