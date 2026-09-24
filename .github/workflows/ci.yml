@@ -370,6 +370,14 @@ jobs:
       - name: Indexes match the tree (cmd/, pkg/, and the counts)
         run: ./scripts/check-index.sh
 
+      # Die erzeugten Doku-Seiten tragen eine Kopie ihrer Markdown in sich. Das
+      # Tor dafuer gab es, aber es lief in keinem Workflow, nur von Hand: eine
+      # Seite konnte also veraltet in master liegen, ohne dass etwas rot wurde.
+      # Gemessen, dass es faellt: eine angehaengte Zeile in einer Seite macht
+      # den Lauf rot (Ausgang 1).
+      - name: Every generated doc page matches its markdown
+        run: ./scripts/check-docpages.sh
+
       # And the same claim once more, from the build side: a cmd/ that the
       # index lists but no Make target reaches is documented and unbuildable.
       # It lives in THIS job for the reason the step above gives, and because

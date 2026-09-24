@@ -13,9 +13,22 @@
 # ohne Registerzeile wird von diesem Tor nie geprueft, und dann ist das Tor
 # gruen, ohne etwas gemessen zu haben.
 #
-# Aufruf: ./scripts/check-docpages.sh
+# Aufruf: ./scripts/check-docpages.sh [--fix]
+#         --fix erzeugt eine veraltete oder fehlende Seite neu, statt sie zu
+#         melden. Gedacht fuer Automaten, die eine registrierte Markdown
+#         anfassen: pin-bump.yml schreibt die Installer-Pins in jede .md um und
+#         liesse die Seite daneben sonst mit dem alten Pin stehen, ohne dass
+#         jemand es merkt. Eine Seite OHNE Registerzeile bleibt auch mit --fix
+#         ein Fehler: welche Seite es geben soll, entscheidet ein Mensch.
 # Exit:   0 alle Seiten passen · 1 mindestens eine ist veraltet · 2 Aufbaufehler
 set -euo pipefail
+
+FIX=0
+case "${1:-}" in
+  --fix) FIX=1 ;;
+  "") ;;
+  *) echo "check-docpages: unbekanntes Argument: $1" >&2; exit 2 ;;
+esac
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -34,6 +47,7 @@ docs/v2/entwickler/skillctl-sim.md|docs/v2/pages/entwickler-skillctl-sim.html
 docs/v2/sicherheit/audit-spur.de.md|docs/v2/pages/sicherheit-audit-spur.html
 docs/v2/entwickler/secretctl.md|docs/v2/pages/entwickler-secretctl.html
 docs/v2/betrieb/QA-abnahme-skillctl-windows.de.md|docs/v2/pages/betrieb-qa-abnahme-skillctl-windows.html
+docs/v2/betrieb/acceptance-skillctl-lifecycle.md|docs/v2/pages/betrieb-acceptance-skillctl-lifecycle.html
 '
 
 command -v python3 >/dev/null || { echo "check-docpages: python3 fehlt" >&2; exit 2; }
@@ -53,6 +67,11 @@ while IFS='|' read -r src out; do
     continue
   fi
   if [ ! -f "$out" ]; then
+    if [ "$FIX" -eq 1 ]; then
+      ./tools/docpage.sh "$src" "$out" >/dev/null
+      echo "  erzeugt $out"
+      continue
+    fi
     echo "  FEHLT   Seite $out; erzeuge sie mit: tools/docpage.sh $src $out"
     fail=1
     continue
@@ -60,6 +79,9 @@ while IFS='|' read -r src out; do
   ./tools/docpage.sh "$src" "$TMP/neu.html" >/dev/null
   if cmp -s "$TMP/neu.html" "$out"; then
     echo "  ok      $out"
+  elif [ "$FIX" -eq 1 ]; then
+    cp "$TMP/neu.html" "$out"
+    echo "  erneuert $out"
   else
     echo "  VERALTET $out"
     echo "          Die Seite und $src sagen Verschiedenes."
@@ -81,7 +103,9 @@ for dir in docs/pages docs/v2/pages; do
 done
 
 echo ""
-if [ "$fail" -eq 0 ]; then
+if [ "$fail" -eq 0 ] && [ "$FIX" -eq 1 ]; then
+  echo "check-docpages: $seen Seite(n) geprueft, veraltete neu erzeugt"
+elif [ "$fail" -eq 0 ]; then
   echo "check-docpages: $seen Seite(n) stimmen mit ihrer Quelle ueberein"
 else
   echo "check-docpages: mindestens eine Seite ist veraltet oder ungeprueft" >&2
