@@ -1,0 +1,4 @@
+/usr/sbin/sshd 755 root root 921416
+/usr/bin/ls 755 root root 142312
+/usr/local/bin/mcli 755 root root 30535864
+/usr/bin/snap 755 root root 22693016

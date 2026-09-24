@@ -1,0 +1,1 @@
+dpkg-query: no path found matching pattern /usr/local/bin/mcli

@@ -1,0 +1,3 @@
+diversion by dictionaries-common from: /usr/share/dict/words
+diversion by dictionaries-common to: /usr/share/dict/words.pre-dictionaries-common
+wamerican: /usr/share/dict/words

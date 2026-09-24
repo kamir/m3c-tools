@@ -1,0 +1,7 @@
+Id=dbus.socket
+BindsTo=
+RequiredBy=rtkit-daemon.service wpa_supplicant.service thermald.service accounts-daemon.service avahi-daemon.service dbus.service switcheroo-control.service NetworkManager.service gnome-remote-desktop.service gdm.service upower.service fwupd.service ModemManager.service udisks2.service power-profiles-daemon.service polkit.service colord.service
+
+Id=docker.socket
+BindsTo=
+RequiredBy=docker.service

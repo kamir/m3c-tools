@@ -1,0 +1,4 @@
+/usr/local/bin/ngrok 755 root root 32911522
+/usr/local/bin/mcli 755 root root 31068320
+/snap/core22/1122/usr/bin/env 755 root root 43968
+/usr/lib/snapd/snapd 755 root root 29950624

@@ -11,7 +11,9 @@ package linux
 //     (FragmentPath, DropInPaths, Type, ExecStart, User, Group, Restart).
 //   - OBSERVED: one artifact per unit the probe asked systemd about, from the
 //     runtime properties of the same "systemctl show" call (LoadState,
-//     ActiveState, SubState, ConditionResult, NeedDaemonReload).
+//     ActiveState, SubState, ConditionResult, NeedDaemonReload) plus the
+//     dependency edges the manager holds for it (Requires, Wants, After,
+//     BindsTo, RequiredBy).
 //
 // Enabled and active are two different facts, so they are two attributes on
 // two artifacts with two evidence states (playbook L3). A unit can be enabled
@@ -70,7 +72,17 @@ const systemctlExe = "systemctl"
 // Description is asked for because the measured argv asks for it, and is
 // deliberately not persisted: it is free text from the unit file and can name
 // a person (playbook L4).
-const systemdShowProperties = "Id,Description,LoadState,ActiveState,SubState,UnitFileState,UnitFilePreset,FragmentPath,DropInPaths,Type,ExecStart,User,Group,Restart,ConditionResult,NeedDaemonReload"
+//
+// The five dependency properties at the end make the answer bigger, and how
+// much bigger was measured on the trial host on 2026-09-24: the same 40 units
+// cost 19714 bytes with the sixteen properties before them and 27675 bytes
+// with all twenty-one, so one batch of systemdShowBatch units stays two
+// orders of magnitude below the 1 MiB stdout cap of a single call
+// (probe.DefaultMaxStdoutBytes), and the batch size needs no change. Over all
+// 372 units the selection rule picked on that host, the longest single
+// dependency line was 346 bytes (a RequiredBy), which is what
+// systemdMaxDependencyBytes is set against.
+const systemdShowProperties = "Id,Description,LoadState,ActiveState,SubState,UnitFileState,UnitFilePreset,FragmentPath,DropInPaths,Type,ExecStart,User,Group,Restart,ConditionResult,NeedDaemonReload,Requires,Wants,After,BindsTo,RequiredBy"
 
 // Bounds of the "systemctl show" calls.
 const (
@@ -84,6 +96,12 @@ const (
 	// systemdMaxIssueDiagnostics caps the per-record diagnostics; the rest is
 	// summarized in one diagnostic.
 	systemdMaxIssueDiagnostics = 20
+	// systemdMaxDependencyBytes caps one recorded dependency list. The longest
+	// one measured on the trial host was 346 bytes (see
+	// systemdShowProperties), so this bound is headroom and not a routine cut;
+	// a cut is reported and lowers the run to partial, because a cut list is
+	// an incomplete list (playbook L1).
+	systemdMaxDependencyBytes = 1024
 )
 
 // Attribute names of the systemd artifacts.
@@ -119,6 +137,22 @@ const (
 	// systemdAttrTemplateCount is the number of template unit files on the
 	// manager artifact.
 	systemdAttrTemplateCount = "template_unit_count"
+)
+
+// Attribute names of the dependency edges, one per "systemctl show" property
+// of systemdDependencyProperties. A value is the sorted, deduplicated list of
+// unit names, comma separated. The matching "<name>_count" attribute appears
+// only when the list did not fit into systemdMaxDependencyBytes, because a
+// count that repeats what the list already shows is not a second fact, while a
+// count beside a cut list is the only way a reader (and a diff) sees that
+// something is missing.
+const (
+	systemdAttrRequires    = "requires"
+	systemdAttrWants       = "wants"
+	systemdAttrAfter       = "after"
+	systemdAttrBindsTo     = "binds_to"
+	systemdAttrRequiredBy  = "required_by"
+	systemdAttrCountSuffix = "_count"
 )
 
 // systemdRuntimeNotApplicable is the runtime_state of a template unit, and
@@ -162,6 +196,10 @@ const (
 	// DiagSystemdUnitStateNotRead: the manager returned no properties for
 	// one unit, so its runtime state stays unknown.
 	DiagSystemdUnitStateNotRead = "unit_state_not_read"
+	// DiagSystemdDependencyTruncated: one dependency list was longer than
+	// systemdMaxDependencyBytes and is recorded up to the last unit name that
+	// fitted. The count attribute beside it names how many there were.
+	DiagSystemdDependencyTruncated = "dependency_list_truncated"
 )
 
 // systemdUserScopeNotCollected is the value of the user_scope attribute and
@@ -591,11 +629,13 @@ func (c *systemdCollector) buildArtifacts(files []UnitFile, selected []string) {
 			c.warn(DiagSystemdUnitNotFound, systemdAttrUnit, f.Name+" is listed as a unit file and the manager reports LoadState=not-found")
 			continue
 		}
+		runtimeAttrs := systemdRuntimeAttributes(f.Name, block)
+		c.addDependencyEdges(runtimeAttrs, f.Name, block)
 		c.artifacts = append(c.artifacts, trustfreeze.Artifact{
 			ID: ArtifactSystemdRuntimePrefix + suffix, Type: "systemd-unit-runtime", Scope: "system", Source: SystemdProbeID,
 			// What the manager says right now.
 			State:       trustfreeze.StateObserved,
-			Attributes:  systemdRuntimeAttributes(f.Name, block),
+			Attributes:  runtimeAttrs,
 			Provenance:  prov,
 			Sensitivity: trustfreeze.SensitivityInternal,
 		})
@@ -682,6 +722,46 @@ func (c *systemdCollector) addDeclaredFromShow(attrs map[string]string, f UnitFi
 	if s := b.First(ShowPropUnitFileState); s != "" && s != f.State {
 		c.warn(DiagSystemdStateMismatch, systemdAttrEnabledState,
 			fmt.Sprintf("%s: list-unit-files says %q, show says %q", f.Name, f.State, s))
+	}
+}
+
+// addDependencyEdges records the dependency edges the manager holds for one
+// unit: Requires, Wants, After, BindsTo and RequiredBy, each as a sorted,
+// deduplicated list of unit names.
+//
+// The edges sit on the OBSERVED artifact of the unit and not on the declared
+// one, and that is not a detail. The manager answers with the dependency set it
+// RESOLVED, which includes the edges systemd adds by itself: measured on the
+// trial host, the unit file of snap.cups.cupsd.service cannot name
+// "system.slice", "sysinit.target" or "-.mount", and the show answer lists all
+// three under Requires. RequiredBy is not in any unit file at all; it is the
+// reverse edge the manager computes from every other loaded unit. A declared
+// artifact that carried these would claim the unit file says something it does
+// not (playbook L3).
+//
+// An empty property is recorded as nothing: systemd prints "BindsTo=" for a
+// unit with no such edge (measured on both hosts), and an attribute with an
+// empty value would make an absent edge look like a recorded one.
+func (c *systemdCollector) addDependencyEdges(attrs map[string]string, unit string, b ShowBlock) {
+	// netSortedKeys (listeners.go) is the one sorted map walk of this package.
+	for _, prop := range netSortedKeys(systemdDependencyProperties) {
+		attr := systemdDependencyProperties[prop]
+		// A property systemd printed more than once keeps all of its values,
+		// so every value of the property is read, not only the first.
+		units := ParseUnitList(b.Values[prop]...)
+		if len(units) == 0 {
+			continue
+		}
+		value, cut := privCapList(units, systemdMaxDependencyBytes)
+		attrs[attr] = value
+		if !cut {
+			continue
+		}
+		attrs[attr+systemdAttrCountSuffix] = strconv.Itoa(len(units))
+		c.warn(DiagSystemdDependencyTruncated, attr, fmt.Sprintf(
+			"%s: the %s list of %d unit(s) is longer than %d bytes and is recorded up to the last name that fitted; the recorded count says how many there were",
+			unit, prop, len(units), systemdMaxDependencyBytes))
+		c.degrade("a dependency list of " + unit + " was cut")
 	}
 }
 
@@ -902,7 +982,25 @@ const (
 	ShowPropRestart          = "Restart"
 	ShowPropConditionResult  = "ConditionResult"
 	ShowPropNeedDaemonReload = "NeedDaemonReload"
+	ShowPropRequires         = "Requires"
+	ShowPropWants            = "Wants"
+	ShowPropAfter            = "After"
+	ShowPropBindsTo          = "BindsTo"
+	ShowPropRequiredBy       = "RequiredBy"
 )
+
+// systemdDependencyProperties maps each dependency property of the show call
+// to the attribute that records it. The property list of the call
+// (systemdShowProperties) and this map are the two places a dependency kind is
+// named, and the test TestSystemdDependencyPropertiesAreAsked holds them
+// together, so a property can never be recorded without being asked for.
+var systemdDependencyProperties = map[string]string{
+	ShowPropRequires:   systemdAttrRequires,
+	ShowPropWants:      systemdAttrWants,
+	ShowPropAfter:      systemdAttrAfter,
+	ShowPropBindsTo:    systemdAttrBindsTo,
+	ShowPropRequiredBy: systemdAttrRequiredBy,
+}
 
 // ShowLoadStateNotFound is the only truthful signal that a unit does not
 // exist: "systemctl show" answers a question about an unknown unit with exit
@@ -1038,6 +1136,41 @@ func ParseExecStartPath(s string) string {
 		}
 	}
 	return ""
+}
+
+// ParseUnitList reads one or more systemd dependency property values, for
+// example
+//
+//	Requires=system.slice sysinit.target snap-cups-1238.mount -.mount
+//
+// and returns the unit names sorted and deduplicated, so two captures of an
+// unchanged host produce the same bytes whatever order the manager answered in
+// (playbook L8).
+//
+// The separator is white space, and a unit name never contains any: the manager
+// escapes what a name would otherwise carry (a path becomes
+// "snap-cups-1238.mount"). An empty value is a unit with no such edge and
+// yields no names, which is why systemd prints "BindsTo=" rather than omitting
+// the line.
+//
+// Every value is capped at systemdMaxValueBytes like any other recorded value,
+// so one unexpectedly long name cannot inflate an artifact; the caller caps the
+// list as a whole.
+func ParseUnitList(values ...string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, v := range values {
+		for _, name := range strings.Fields(v) {
+			name = systemdCapValue(name)
+			if name == "" || seen[name] {
+				continue
+			}
+			seen[name] = true
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Unit types SelectUnitsForShow asks the manager about.

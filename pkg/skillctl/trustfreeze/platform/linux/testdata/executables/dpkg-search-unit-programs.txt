@@ -1,0 +1,3 @@
+cron: /usr/sbin/cron
+snapd: /usr/bin/snap
+openssh-server: /usr/sbin/sshd

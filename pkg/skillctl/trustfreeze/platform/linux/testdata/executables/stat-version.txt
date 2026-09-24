@@ -1,0 +1,1 @@
+stat (GNU coreutils) 9.4
