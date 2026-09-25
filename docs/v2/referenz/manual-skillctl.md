@@ -809,7 +809,11 @@ the database's claim about the path and `sha256` is the only statement about the
 
 The bounds are part of the contract, not a tuning detail: at most 1024 candidate paths
 per capture, at most 256 files per capture, at most 128 MiB per file, and only paths under
-`/bin`, `/opt`, `/sbin`, `/snap`, `/usr` or `/usr/local`. A path under `/home` or `/root`
+`/bin`, `/lib`, `/lib32`, `/lib64`, `/libx32`, `/opt`, `/sbin`, `/snap`, `/usr` or
+`/usr/local`. The four library roots are in the list because on every usrmerge distribution
+they are symlinks into `/usr`, so a unit naming `/lib/apparmor/apparmor.systemd` names a
+file inside a root; without them the check refused such a path as outside the roots although
+it lies in one, and said so in the bundle. A path under `/home` or `/root`
 is never read, whatever names it, and a symlink that leaves the roots is refused. The
 candidate cap and the file cap count different work and both are needed: every candidate
 costs a path resolution (and for a listening process a `readlink` of `/proc/<pid>/exe`)

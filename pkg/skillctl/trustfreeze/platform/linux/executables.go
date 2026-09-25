@@ -172,8 +172,21 @@ const (
 // because the requirement names it, and because a reader of the bundle should
 // see the scope the way the requirement states it. The set artifact records
 // this list, so a capture says what it was allowed to look at.
+//
+// /lib, /lib32, /lib64 and /libx32 are listed for a reason a fixture cannot
+// show. On every usrmerge distribution they are symlinks into /usr (measured
+// 2026-09-25 on Ubuntu 24.04.1: /bin, /lib and /sbin point at usr/bin, usr/lib
+// and usr/sbin), so a unit naming /lib/apparmor/apparmor.systemd names a file
+// inside /usr. Without them the logical check refused such a path as outside
+// the roots although it lies in one, which cost three things at once: the
+// profile never reached complete, those programs were never hashed, so a change
+// in them would not show up, and the bundle carried a sentence that is false.
+// On a system where they are real directories they hold system programs, which
+// is what this probe is for. The escape rule still applies to each of them: a
+// path under /lib that resolves into a home directory is refused with the home
+// reason, not read.
 func ExecutableRoots() []string {
-	return []string{"/bin", "/opt", "/sbin", "/snap", "/usr", "/usr/local"}
+	return []string{"/bin", "/lib", "/lib32", "/lib64", "/libx32", "/opt", "/sbin", "/snap", "/usr", "/usr/local"}
 }
 
 // ExecutableHomePrefixes returns the path prefixes this probe never reads,
@@ -1866,6 +1879,12 @@ func executablesRefusalMessage(p string, err error) string {
 		return p + " was not read: it resolves outside the roots this probe may read (" + strings.Join(ExecutableRoots(), ", ") + ")"
 	case errors.Is(err, ErrExecutableHomePath):
 		return p + " was not read: it lies under a home directory, which this probe never reads"
+	case errors.Is(err, ErrExecutableOutsideRoots) && !path.IsAbs(p):
+		// A bare name lies in no root at all, so naming the roots here states
+		// something false about it: grub-editenv is /usr/bin/grub-editenv on
+		// the host that named it, which is inside a root. The refusal is right,
+		// the reason has to say which rule refused.
+		return p + " was not read: it is not an absolute path, so this probe cannot tell which file is meant"
 	case errors.Is(err, ErrExecutableOutsideRoots):
 		return p + " was not read: it lies outside the roots this probe may read (" + strings.Join(ExecutableRoots(), ", ") + ")"
 	case errors.Is(err, ErrExecutableNotRegular):

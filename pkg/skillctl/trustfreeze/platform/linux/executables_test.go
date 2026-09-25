@@ -1875,3 +1875,66 @@ func TestExecutablesCapValueBoundsOneRecordedValue(t *testing.T) {
 		t.Errorf("the cut value is %d bytes, the cap is %d", len(got), executablesMaxValueBytes)
 	}
 }
+
+// Ein Pfad unter /lib ist auf jeder usrmerge-Distribution ein Pfad unter /usr,
+// weil /lib dort ein Symlink auf usr/lib ist. Gemessen am 2026-09-25 auf einem
+// Ubuntu 24.04.1 Host: /bin, /lib und /sbin sind Symlinks auf usr/bin, usr/lib
+// und usr/sbin, und ein privilegierter Lauf des Profils ubuntu-bastion verweigerte
+// dort drei Dateien unter /lib mit der Begruendung, sie laegen ausserhalb der
+// Wurzeln. Die Dateien lagen in einer Wurzel. Die Folge war dreifach: das Profil
+// wurde nie complete, die Programme wurden nicht gehasht, und in der Evidenz stand
+// ein Satz, der nicht stimmt.
+func TestUsrmergeLibraryPathIsInsideTheRoots(t *testing.T) {
+	reader, _ := execTestTree(t, map[string]execTestFile{
+		"/usr/lib/apparmor/apparmor.systemd": {Content: "apparmor bytes"},
+		"/lib":                               {Link: "/usr/lib"},
+	})
+	got, err := reader.Resolve("/lib/apparmor/apparmor.systemd")
+	if err != nil {
+		t.Fatalf("Resolve(/lib/apparmor/apparmor.systemd) failed: %v", err)
+	}
+	if got != "/usr/lib/apparmor/apparmor.systemd" {
+		t.Fatalf("Resolve = %q, want the resolved path under /usr", got)
+	}
+}
+
+// Die Gegenprobe zum Test darueber: die Aufnahme von /lib in die Wurzeln macht
+// die Home-Regel nicht loecherig. Ein Pfad, der ueber /lib in ein
+// Home-Verzeichnis fuehrt, bleibt verweigert, und zwar mit der Home-Begruendung.
+func TestUsrmergeRootDoesNotOpenAPathIntoAHome(t *testing.T) {
+	reader, _ := execTestTree(t, map[string]execTestFile{
+		"/home/alice/bin/agent": {Content: "agent bytes"},
+		"/usr/lib/sneaky":       {Link: "/home/alice/bin/agent"},
+		"/lib":                  {Link: "/usr/lib"},
+	})
+	if _, err := reader.Resolve("/lib/sneaky"); !errors.Is(err, ErrExecutableHomePath) {
+		t.Fatalf("Resolve(/lib/sneaky) error %v, want ErrExecutableHomePath", err)
+	}
+}
+
+// Ein nackter Name hat keine Wurzel, in der er liegen koennte, also darf die
+// Begruendung nicht behaupten, er liege ausserhalb der Wurzeln. Gemessen am
+// selben Lauf: "grub-editenv was not read: it lies outside the roots this probe
+// may read (...)", waehrend grub-editenv als /usr/bin/grub-editenv sehr wohl in
+// einer Wurzel liegt. Die Verweigerung ist richtig, die Begruendung war falsch.
+func TestRefusalMessageForARelativePathDoesNotBlameTheRoots(t *testing.T) {
+	_, err := execProgramReaderForRoots(t).Resolve("grub-editenv")
+	if !errors.Is(err, ErrExecutableOutsideRoots) {
+		t.Fatalf("Resolve(grub-editenv) error %v, want ErrExecutableOutsideRoots", err)
+	}
+	msg := executablesRefusalMessage("grub-editenv", err)
+	if strings.Contains(msg, "outside the roots") {
+		t.Errorf("the message blames the roots for a path that has none: %q", msg)
+	}
+	if !strings.Contains(msg, "absolute") {
+		t.Errorf("the message does not say what is wrong with the path: %q", msg)
+	}
+}
+
+// execProgramReaderForRoots: ein Leser ueber einem leeren Baum, fuer Faelle, in
+// denen erst der Pfad geprueft wird und keine Datei gebraucht wird.
+func execProgramReaderForRoots(t *testing.T) *RootedProgramReader {
+	t.Helper()
+	reader, _ := execTestTree(t, map[string]execTestFile{})
+	return reader
+}
