@@ -47,6 +47,7 @@ docs/v2/entwickler/skillctl-sim.md|docs/v2/pages/entwickler-skillctl-sim.html
 docs/v2/sicherheit/audit-spur.de.md|docs/v2/pages/sicherheit-audit-spur.html
 docs/v2/entwickler/secretctl.md|docs/v2/pages/entwickler-secretctl.html
 docs/v2/betrieb/QA-abnahme-skillctl-windows.de.md|docs/v2/pages/betrieb-qa-abnahme-skillctl-windows.html
+docs/v2/betrieb/QA-abnahme-skillctl-linux.de.md|docs/v2/pages/betrieb-qa-abnahme-skillctl-linux.html
 docs/v2/betrieb/acceptance-skillctl-lifecycle.md|docs/v2/pages/betrieb-acceptance-skillctl-lifecycle.html
 '
 

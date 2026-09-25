@@ -17,10 +17,19 @@
 | **Config profiles** | Full | Full | Full |
 | **Settings editor** | Web UI (localhost) | Web UI (localhost) | Web UI (localhost) |
 | **skillctl** | Full | Full | Full |
+| **skillctl trust-freeze** | The bundle lifecycle plus the portable `common.identity` probe. No macOS probe family exists, so a capture with a Linux profile is honestly `incomplete` | The bundle lifecycle, unit-tested on `windows-latest` by the Windows Gate. No Windows or WSL probe family exists, and no end-to-end run of the verbs on a real Windows host is recorded yet² | Twelve Linux probes plus `common.identity`, profile `ubuntu-bastion` version 3, executed on real hosts |
 | **Auto-start on login** | LaunchAgent plist | Registry Run key | Systemd user service |
 | **.app bundle** | Yes | No | No |
 | **Keyboard shortcuts** | Global hotkeys (planned) | Not yet | Not yet |
 | **Notifications** | Native (menuet) | Not yet | Not yet |
+
+² Where a real run is claimed is decided by a round entry in
+[`tests/evidence/trust-freeze/release-matrix.json`](../../../tests/evidence/trust-freeze/release-matrix.json),
+never by this table and never by prose beside it. The evidence vocabulary keeps
+`implemented`, `fixture-tested`, `cross-compiled` and `real-platform-tested`
+apart on purpose: cross-compiling is not a platform test. A capture on a
+platform without its own probe family is not broken, it is `incomplete` and says
+which probes did not run.
 
 ¹ These command clusters (`plaud dev`, `pocket`, `import-audio`, `token`) are
 still coupled to the darwin `main.go` and are **not compiled into** the non-darwin

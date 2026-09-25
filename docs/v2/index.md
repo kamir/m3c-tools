@@ -50,6 +50,7 @@ Prosa-Bestand liegt unkanonisch unter `docs/old/`.
 | [Runbook: skillctl-sim](entwickler/skillctl-sim.md) | die Trust-Plane-Simulation lesen | EN |
 | [Reference: secretctl](entwickler/secretctl.md) | wer ein Geheimnis haelt und ob es noch gilt; liest und vergleicht, druckt nie einen Wert; check-docpages-getort | EN |
 | [Acceptance und Handover: der skillctl-Lebenszyklus](betrieb/acceptance-skillctl-lifecycle.md) | der Leitfaden hinter dem Protokoll, mit dem Windows-Schnelltest und den zwei Bahnen fuer zwei Personen, auch als [Doku-Seite](pages/betrieb-acceptance-skillctl-lifecycle.html); check-docpages-getort | EN |
+| [QA-Abnahme: skillctl auf Linux](betrieb/QA-abnahme-skillctl-linux.de.md) | dasselbe fuer einen Host, auf dem die Linux-Proben wirklich existieren, mit zwei Stufen mehr, auch als [Doku-Seite](pages/betrieb-qa-abnahme-skillctl-linux.html); check-docpages-getort | DE |
 | [QA-Abnahme: skillctl auf Windows](betrieb/QA-abnahme-skillctl-windows.de.md) | das Protokoll zum Ausdrucken, Ankreuzen und Unterschreiben, auch als [Doku-Seite](pages/betrieb-qa-abnahme-skillctl-windows.html); check-docpages-getort | DE |
 | [Runbook: die Audit-Spur](sicherheit/audit-spur.de.md) | die drei Traeger audit, auditlog, translog konsolidiert | DE |
 | [docs/security/](../security/required-checks.txt) | Backlogs, Baselines und die Namensbindung der Pflicht-Checks | EN |
