@@ -11,6 +11,7 @@ import (
 	"go/parser"
 	"go/token"
 	"html"
+	"html/template"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -681,5 +682,41 @@ func TestReportPackageReadsNoClock(t *testing.T) {
 	// The walk must have seen the files, otherwise it proves nothing.
 	if files < 3 {
 		t.Fatalf("the walk saw %d non-test file(s) of the package", files)
+	}
+}
+
+// TestReportHTMLUsesLFOnly: the page of a bundle has the same bytes on every
+// platform, so its markup carries no carriage return whatever the checkout did
+// to the embedded template. Measured over the rendered bytes, per bundle kind.
+// The counter-probe is in the check itself: a template text with CRLF, parsed
+// the way MarshalHTML parses it, must come out with LF only, and the same text
+// parsed without the normalization must not.
+func TestReportHTMLUsesLFOnly(t *testing.T) {
+	for _, r := range everyKindOfReport(t) {
+		page, err := MarshalHTML(r, HTMLOptions{Generator: htmlTestGenerator})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i := bytes.IndexByte(page, '\r'); i >= 0 {
+			t.Fatalf("%s: the page carries a carriage return at byte %d", r.Input.Kind, i)
+		}
+	}
+	// The normalization is what does it, measured against the same text
+	// without it.
+	const crlf = "<p>a</p>\r\n<p>b</p>\r\n"
+	withRule := template.Must(template.New("x").Parse(strings.ReplaceAll(crlf, "\r\n", "\n")))
+	withoutRule := template.Must(template.New("y").Parse(crlf))
+	var a, b bytes.Buffer
+	if err := withRule.Execute(&a, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := withoutRule.Execute(&b, nil); err != nil {
+		t.Fatal(err)
+	}
+	if bytes.ContainsRune(a.Bytes(), '\r') {
+		t.Fatal("the normalized template still carries a carriage return")
+	}
+	if !bytes.ContainsRune(b.Bytes(), '\r') {
+		t.Fatal("a CRLF template without the normalization came out with LF: the check proves nothing")
 	}
 }

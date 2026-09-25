@@ -27,8 +27,14 @@ import (
 var htmlTemplateSource string
 
 // htmlTemplate is parsed once and only executed afterwards, which is safe for
-// concurrent use.
-var htmlTemplate = template.Must(template.New("report").Parse(htmlTemplateSource))
+// concurrent use. The template text is normalized to LF first: go:embed takes
+// the file as it lies on disk, so a CRLF checkout (core.autocrlf=true on
+// Windows) would otherwise put carriage returns into every page and give the
+// same bundle two different report_sha256 values depending on how the
+// repository was checked out. A carriage return inside a VALUE is left alone:
+// that is what the host wrote, and the page shows what the bundle says.
+var htmlTemplate = template.Must(template.New("report").Parse(
+	strings.ReplaceAll(htmlTemplateSource, "\r\n", "\n")))
 
 // notRecorded is what a field says that the projection does not carry. A page
 // never invents a value and never leaves a row out silently.
