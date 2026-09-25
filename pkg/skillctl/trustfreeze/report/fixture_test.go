@@ -149,6 +149,44 @@ func writeCaptureWith(t testing.TB, parent, name string, kind trustfreeze.Kind, 
 	return b
 }
 
+// capabilitiesFixture is the synthetic state/capabilities.json of the
+// capability tests: three capabilities in file order (id) so the projection's
+// presentation order is visible, and one resolver gap.
+func capabilitiesFixture() *trustfreeze.CapabilitiesDoc {
+	return &trustfreeze.CapabilitiesDoc{
+		Resolver: "linux.privilege/v1",
+		Capabilities: []trustfreeze.Capability{
+			{
+				ID: "capability/remote.shell.public-key/alice/ab12", SubjectID: "user/alice",
+				Action: "access", Resource: "remote.shell", Effect: "allowed",
+				State: trustfreeze.StateDeclared, Scope: "host", Exposure: "network",
+				Privilege: "user", Sources: []string{"ssh/authorized-key/alice/ab12"},
+				Confidence: trustfreeze.ConfidenceProven,
+			},
+			{
+				ID: "capability/execute/host/user/remote-maint", SubjectID: "user/remote-maint",
+				Action: "execute", Resource: "host", Effect: "allowed",
+				State: trustfreeze.StateDeclared, Scope: "host", Exposure: "local",
+				Privilege: "root-via-sudo-nopasswd", Sources: []string{"sudo/rule/sudoers/12"},
+				Confidence: trustfreeze.ConfidenceProven,
+			},
+			{
+				ID: "capability/execute/host/via/docker/user/alice", SubjectID: "user/alice",
+				Action: "execute", Resource: "host", Effect: "allowed",
+				State: trustfreeze.StateInferred, Scope: "host", Exposure: "local",
+				Privilege:  "root-via-container-runtime",
+				Attributes: map[string]string{"grant_path": "container-runtime-socket", "group": "docker"},
+				Sources:    []string{"device/group/984"},
+				Confidence: trustfreeze.ConfidenceReported,
+			},
+		},
+		Diagnostics: []trustfreeze.Diagnostic{{
+			Code: "privilege_source_unreadable", Field: "sudo/file/sudoers.d/ops",
+			Message: "1 sudo rule file(s) exist and could not be read by this capture",
+		}},
+	}
+}
+
 // scenario writes a baseline and a changed capture below dir and returns the
 // diff and the default-policy verdict.
 func scenario(t testing.TB, dir string) (*trustfreeze.Bundle, *trustfreeze.Bundle, compare.Diff, policy.Verdict) {

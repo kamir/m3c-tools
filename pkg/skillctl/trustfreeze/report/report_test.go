@@ -306,38 +306,7 @@ func moduleRoot(t *testing.T) string {
 // resolver gaps travel with the list, and the bytes are pinned: the projection
 // reads no clock and evaluates nothing.
 func TestCaptureReportCapabilitiesGolden(t *testing.T) {
-	caps := &trustfreeze.CapabilitiesDoc{
-		Resolver: "linux.privilege/v1",
-		Capabilities: []trustfreeze.Capability{
-			{
-				ID: "capability/remote.shell.public-key/alice/ab12", SubjectID: "user/alice",
-				Action: "access", Resource: "remote.shell", Effect: "allowed",
-				State: trustfreeze.StateDeclared, Scope: "host", Exposure: "network",
-				Privilege: "user", Sources: []string{"ssh/authorized-key/alice/ab12"},
-				Confidence: trustfreeze.ConfidenceProven,
-			},
-			{
-				ID: "capability/execute/host/user/remote-maint", SubjectID: "user/remote-maint",
-				Action: "execute", Resource: "host", Effect: "allowed",
-				State: trustfreeze.StateDeclared, Scope: "host", Exposure: "local",
-				Privilege: "root-via-sudo-nopasswd", Sources: []string{"sudo/rule/sudoers/12"},
-				Confidence: trustfreeze.ConfidenceProven,
-			},
-			{
-				ID: "capability/execute/host/via/docker/user/alice", SubjectID: "user/alice",
-				Action: "execute", Resource: "host", Effect: "allowed",
-				State: trustfreeze.StateInferred, Scope: "host", Exposure: "local",
-				Privilege:  "root-via-container-runtime",
-				Attributes: map[string]string{"grant_path": "container-runtime-socket", "group": "docker"},
-				Sources:    []string{"device/group/984"},
-				Confidence: trustfreeze.ConfidenceReported,
-			},
-		},
-		Diagnostics: []trustfreeze.Diagnostic{{
-			Code: "privilege_source_unreadable", Field: "sudo/file/sudoers.d/ops",
-			Message: "1 sudo rule file(s) exist and could not be read by this capture",
-		}},
-	}
+	caps := capabilitiesFixture()
 	b := writeCaptureWith(t, t.TempDir(), "capture", trustfreeze.KindCapture, testTime, "24.04", 0, caps)
 	r, err := FromBundle(b)
 	got := mustReport(t, r, err)

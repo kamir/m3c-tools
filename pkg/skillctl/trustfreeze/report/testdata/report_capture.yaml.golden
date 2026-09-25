@@ -1,0 +1,131 @@
+schema_version: trust-freeze/report/v1
+input:
+  kind: capture
+  bundle_id: tf-capture-20260102T030405.000000000Z-device-eb9aa81eeaaf3ce7
+  content_digest: sha256:08c22263b110f47311c542a28a8da916630d5b940087ee72fba7250ead41874c
+  created_at: "2026-01-02T03:04:05Z"
+  subject:
+    id: device/eb9aa81eeaaf3ce7
+    os_family: linux
+capture:
+  meta:
+    started_at: "2026-01-02T03:04:05Z"
+    finished_at: "2026-01-02T03:04:06Z"
+    tool: skillctl
+    tool_version: 0.0.0-test
+    profile:
+      id: walking-skeleton
+      version: "1"
+      digest: sha256:1900eab6c028483d7126599ee6f50de0d27907b5c65fa90524580b4b0f9852b0
+    actor: id:alice@example
+  completeness:
+    status: complete
+    required:
+      - common.identity
+    gaps: []
+  probes:
+    - probe_id: common.identity
+      status: captured
+    - probe_id: linux.packages
+      status: unsupported
+      reason: not_implemented
+  probe_results:
+    - probe_id: common.identity
+      probe_version: "1"
+      status: captured
+      support:
+        available: true
+      started_at: "2026-01-02T03:04:05Z"
+      duration_ms: 20
+      privilege: user
+      tools:
+        - name: uname
+          path: /usr/bin/uname
+          args:
+            - -r
+          exit_code: 0
+          duration_ms: 3
+          stdout_bytes: 17
+          stderr_bytes: 0
+      normalized_state:
+        - id: device/host
+          type: host
+          scope: device
+          source: common.identity
+          state: observed
+          digest: sha256:9afecead2f8c340d6ec4e01560d94b93030cb23a6cc6b728717aab364b1960bf
+          attributes:
+            hostname: host-a.example
+          provenance:
+            method: runtime
+            confidence: proven
+            sources:
+              - runtime:os.Hostname
+            observed_at: "2026-01-02T03:04:05Z"
+          sensitivity: internal
+        - id: device/os
+          type: os
+          scope: device
+          source: common.identity
+          state: observed
+          digest: sha256:44ab1c48b2a807c7f76301d717289875e0731c915601068ab4cf21f61f5ed233
+          attributes:
+            arch: amd64
+            kernel_release: 6.8.0-40-generic
+            os_family: linux
+            os_name: Ubuntu
+            os_version: "24.04"
+            uptime_seconds: "100"
+          provenance:
+            method: file
+            confidence: proven
+            sources:
+              - file:/etc/os-release
+            observed_at: "2026-01-02T03:04:05Z"
+          sensitivity: public
+    - probe_id: linux.packages
+      probe_version: "0"
+      status: unsupported
+      reason: not_implemented
+      support:
+        available: false
+        reason: not_implemented
+      started_at: "2026-01-02T03:04:05Z"
+      duration_ms: 0
+      privilege: user
+  artifacts:
+    - id: device/host
+      type: host
+      scope: device
+      source: common.identity
+      state: observed
+      digest: sha256:9afecead2f8c340d6ec4e01560d94b93030cb23a6cc6b728717aab364b1960bf
+      attributes:
+        hostname: host-a.example
+      provenance:
+        method: runtime
+        confidence: proven
+        sources:
+          - runtime:os.Hostname
+        observed_at: "2026-01-02T03:04:05Z"
+      sensitivity: internal
+    - id: device/os
+      type: os
+      scope: device
+      source: common.identity
+      state: observed
+      digest: sha256:44ab1c48b2a807c7f76301d717289875e0731c915601068ab4cf21f61f5ed233
+      attributes:
+        arch: amd64
+        kernel_release: 6.8.0-40-generic
+        os_family: linux
+        os_name: Ubuntu
+        os_version: "24.04"
+        uptime_seconds: "100"
+      provenance:
+        method: file
+        confidence: proven
+        sources:
+          - file:/etc/os-release
+        observed_at: "2026-01-02T03:04:05Z"
+      sensitivity: public

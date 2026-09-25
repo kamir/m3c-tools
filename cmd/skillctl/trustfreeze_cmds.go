@@ -63,8 +63,29 @@ const tfPlatformSupport = "not_established"
 // with (SPEC-0469 R5).
 const tfEvaluatedPolicyFile = "policy/evaluated-policy.json"
 
-// tfDefaultReportFile is the report file name when --output names a directory.
+// tfDefaultReportFile is the report file name when --output names a directory
+// and --format is json.
 const tfDefaultReportFile = "report.json"
+
+// tfReportFormats are the report file formats of `trust-freeze report` and,
+// per format, the file name an --output directory gets. One run writes exactly
+// one file in exactly one format: a switch that wrote all of them would ask
+// the "never overwrite" question three times in one call (FR-0472).
+var tfReportFormats = map[string]string{
+	"json": tfDefaultReportFile,
+	"yaml": "report.yaml",
+}
+
+// tfReportFormatNames returns the accepted --format values of report, sorted,
+// for the flag help and the rejection message.
+func tfReportFormatNames() []string {
+	names := make([]string, 0, len(tfReportFormats))
+	for name := range tfReportFormats {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
 
 // tfMaxReasonFile caps a --reason @file read. The approval itself caps the
 // reason far lower; this only bounds the read.
@@ -1582,10 +1603,10 @@ type tfReportDoc struct {
 }
 
 func tfReport(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Writer) int {
-	fs := tfFlagSet("report", "report --input <dir> --output <file|dir> [--format json]", stderr)
+	fs := tfFlagSet("report", "report --input <dir> --output <file|dir> [--format json|yaml|html]", stderr)
 	input := fs.String("input", "", "Capture, baseline or diff bundle to project (required).")
-	output := fs.String("output", "", "Report file to create (required). An existing directory gets "+tfDefaultReportFile+". Never overwritten, never inside the input bundle.")
-	format := fs.String("format", "json", "Report format: json (markdown and sarif: "+tfNotImplemented+").")
+	output := fs.String("output", "", "Report file to create (required). An existing directory gets report.json, report.yaml or report.html. Never overwritten, never inside the input bundle.")
+	format := fs.String("format", "json", "Report file format: "+strings.Join(tfReportFormatNames(), ", ")+" (markdown and sarif: "+tfNotImplemented+"). Standard output is always JSON.")
 	if code, done := tfParseArgsJSON(fs, "report", args, stdout, stderr); done {
 		return code
 	}
@@ -1594,7 +1615,7 @@ func tfReport(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Wr
 	// that was valid before this change already had JSON on stdout, because
 	// json was the only accepted value.
 	out := tfOut{name: "report", stdout: stdout, stderr: stderr, json: true}
-	if err := tfFormat(*format, []string{"json"}, []string{"markdown", "sarif"}); err != nil {
+	if err := tfFormat(*format, tfReportFormatNames(), []string{"markdown", "sarif"}); err != nil {
 		return out.usage(err)
 	}
 	switch {
@@ -1603,7 +1624,7 @@ func tfReport(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Wr
 	case *output == "":
 		return out.usage(errors.New("--output is required"))
 	}
-	target, err := tfReportTarget(*input, *output)
+	target, err := tfReportTarget(*input, *output, *format)
 	if err != nil {
 		return out.exec(err)
 	}
@@ -1619,7 +1640,7 @@ func tfReport(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Wr
 	if err != nil {
 		return out.fail(tfResultVerification, exitGeneric, err)
 	}
-	raw, err := report.Marshal(rep)
+	raw, err := tfRenderReport(rep, *format)
 	if err != nil {
 		return out.exec(err)
 	}
@@ -1635,14 +1656,31 @@ func tfReport(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Wr
 	})
 }
 
-// tfReportTarget resolves --output: an existing directory gets the default
-// file name, anything else is the file itself. The file must not exist and
+// tfRenderReport renders a report in one of the file formats of
+// tfReportFormats. Every format renders the same projection: JSON is the
+// canonical form, YAML is converted from those bytes, and the page is built
+// from the projection as well (FR-0472).
+func tfRenderReport(rep report.Report, format string) ([]byte, error) {
+	switch format {
+	case "yaml":
+		return report.MarshalYAML(rep)
+	default:
+		return report.Marshal(rep)
+	}
+}
+
+// tfReportTarget resolves --output: an existing directory gets the file name of
+// the format, anything else is the file itself. The file must not exist and
 // must not lie inside the input bundle, which would then carry an extra file
 // and fail its own verification.
-func tfReportTarget(input, output string) (string, error) {
+func tfReportTarget(input, output, format string) (string, error) {
 	target := output
 	if fi, err := os.Stat(output); err == nil && fi.IsDir() {
-		target = filepath.Join(output, tfDefaultReportFile)
+		name, ok := tfReportFormats[format]
+		if !ok {
+			name = tfDefaultReportFile
+		}
+		target = filepath.Join(output, name)
 	}
 	abs, err := filepath.Abs(target)
 	if err != nil {

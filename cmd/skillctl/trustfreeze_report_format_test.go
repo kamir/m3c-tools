@@ -6,11 +6,16 @@ package main
 // FR-0472 the same flag carried both meanings, which these tests hold down.
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // tfReportStdoutJSON runs report with args and requires one JSON document with
@@ -77,4 +82,64 @@ func TestTrustFreezeReportStdoutStaysJSON(t *testing.T) {
 	t.Run("missing input beside a non-json format", func(t *testing.T) {
 		tfReportStdoutJSON(t, e, exitUsage, tfResultUsage, "report", "--output", outDir, "--format", "markdown")
 	})
+}
+
+// TestTrustFreezeReportWritesYAML: --format yaml writes the same projection as
+// YAML, an existing directory gets report.yaml, and report_sha256 is the
+// SHA-256 of the file that was written.
+func TestTrustFreezeReportWritesYAML(t *testing.T) {
+	e := newTFEnv(t)
+	capDir := e.path("cap")
+	e.runJSON(exitOK, tfResultOK, "capture", "--profile", "walking-skeleton", "--output", capDir)
+	dir := e.path("yaml-out")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// Not e.runJSON: that appends --format json, which would win as the last
+	// value on the command line.
+	doc := tfReportStdoutJSON(t, e, exitOK, tfResultOK, "report", "--input", capDir, "--output", dir, "--format", "yaml")
+	target := filepath.Join(dir, "report.yaml")
+	raw, err := os.ReadFile(target) // #nosec G304 -- written by this test under t.TempDir()
+	if err != nil {
+		t.Fatalf("--format yaml did not write %s: %v", target, err)
+	}
+	sum := sha256.Sum256(raw)
+	if got, _ := doc["report_sha256"].(string); got != hex.EncodeToString(sum[:]) {
+		t.Fatalf("report_sha256 %q is not the digest of the written file", got)
+	}
+	// The same fields as the JSON of the same bundle.
+	jsonFile := e.path("report.json")
+	e.runJSON(exitOK, tfResultOK, "report", "--input", capDir, "--output", jsonFile)
+	jraw, err := os.ReadFile(jsonFile) // #nosec G304 -- written by this test under t.TempDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fromYAML, fromJSON map[string]any
+	if err := yaml.Unmarshal(raw, &fromYAML); err != nil {
+		t.Fatalf("the report is not YAML: %v", err)
+	}
+	if err := json.Unmarshal(jraw, &fromJSON); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"schema_version", "capture"} {
+		if _, ok := fromYAML[key]; !ok {
+			t.Fatalf("the YAML report has no %s: %v", key, fromYAML)
+		}
+	}
+	if fromYAML["schema_version"] != fromJSON["schema_version"] {
+		t.Fatalf("schema_version %v, want %v", fromYAML["schema_version"], fromJSON["schema_version"])
+	}
+	// Two runs of the same bundle give the same bytes.
+	second := filepath.Join(dir, "again.yaml")
+	tfReportStdoutJSON(t, e, exitOK, tfResultOK, "report", "--input", capDir, "--output", second, "--format", "yaml")
+	again, err := os.ReadFile(second) // #nosec G304 -- written by this test under t.TempDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(raw, again) {
+		t.Fatal("two YAML reports of the same bundle differ")
+	}
+	// And the status document on stdout stays JSON.
+	tfReportStdoutJSON(t, e, exitOK, tfResultOK,
+		"report", "--input", capDir, "--output", filepath.Join(dir, "third.yaml"), "--format", "yaml")
 }
