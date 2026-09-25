@@ -238,6 +238,62 @@ $LASTEXITCODE
 
 ---
 
+## Stufe E: der Bericht, drei Formate
+
+Neu in `skillctl/v0.6.1`. Der Bericht ist eine Projektion: er rechnet nichts nach, prueft keine
+Signatur und liest keine Uhr. Er zeigt, was im Buendel steht, und nennt daneben das Kommando, mit dem
+man es selbst nachprueft.
+
+```powershell
+New-Item -ItemType Directory -Force -Path .\ber | Out-Null
+foreach ($f in 'json','yaml','html') {
+    skillctl trust-freeze report --input .\base --output .\ber --format $f
+    Write-Host "$f Ausgang $LASTEXITCODE"
+}
+Get-ChildItem .\ber | Select-Object Name, Length
+```
+
+- **E1 PASS:** drei Dateien, `report.json`, `report.yaml`, `report.html`, je Ausgang `0`.
+- Merke fuer den Ausgabepfad: ein **vorhandener Ordner** ergibt `report.<endung>` darin. Ein Pfad, den
+  es noch nicht gibt, wird als **Dateiname** genommen.
+
+```powershell
+(Select-String -Path .\ber\report.html -Pattern 'https?://').Count      # erwartet: 0
+(Select-String -Path .\ber\report.html -Pattern 'src=|href=').Count     # erwartet: 0
+```
+
+- **E2 PASS:** beide Zaehlungen sind `0`. Die Seite laedt nichts von aussen, kein CDN, keine Schrift,
+  kein Skript, und ist auf einem Rechner ohne Netz vollstaendig lesbar. Das Aussehen steckt als CSS in
+  der Datei.
+
+Die Seite im Browser oeffnen und drei Dinge pruefen:
+
+- **E3 PASS:** ein Kennblatt mit den Hashes, je Hash die Herkunft und das Pruefkommando daneben.
+- **E4 PASS:** ein Abschnitt "Anleitung fuer den Benutzer" (englisch), der zur Buendelart passt und
+  sagt, was das Dokument **nicht** beantwortet. Bei einer Baseline muss dort stehen, dass die Seite
+  **nicht** sagt, ob die Signatur gueltig ist. Steht dort "signed and valid" oder etwas in dieser
+  Richtung, ist das der schwerste Befund dieses Blattes.
+- **E5 PASS:** jede Probe mit ihrem Statuswort und dem Grund, ausgeschrieben. Kein gruener oder roter
+  Punkt, der einen Grund verschluckt. Auf Windows heisst das insbesondere: die `linux.*`-Proben stehen
+  mit `unsupported` und dem Grund da, nicht als Fehler.
+
+```powershell
+New-Item -ItemType Directory -Force -Path .\w1,.\w2 | Out-Null
+skillctl trust-freeze report --input .\cap --output .\w1\report.html --format html
+Start-Sleep -Seconds 3
+skillctl trust-freeze report --input .\cap --output .\w2\report.html --format html
+(Get-FileHash .\w1\report.html).Hash -eq (Get-FileHash .\w2\report.html).Hash
+skillctl trust-freeze report --input .\cap --output .\w1\report.html --format html
+Write-Host "zweiter Schreibversuch: Ausgang $LASTEXITCODE"
+```
+
+- **E6 PASS:** der Vergleich ergibt `True`, auch mit Abstand dazwischen. Zwei Laeufe ueber dasselbe
+  Buendel ergeben dieselben Bytes; die Uhr geht nicht in den Bericht ein.
+- **E7 PASS, Gegenprobe:** der zweite Schreibversuch auf dieselbe Datei endet auf `1` und schreibt
+  nicht. Ein Bericht wird nie ueberschrieben.
+
+---
+
 ## Was festzuhalten ist
 
 | Feld | Woher | Eintrag |
@@ -270,6 +326,13 @@ PASS, wenn sie **abgelehnt** hat.
 | C7 | unvertrauter Schluessel, Ausgang 1 | ☐ | ☐ | ja | |
 | C8 | gekipptes Byte, `verify` Ausgang 1 | ☐ | ☐ | ja | |
 | D | fremdes Profil bleibt unvollstaendig und sagt es | ☐ | ☐ | ja | |
+| E1 | drei Formate entstehen, je Ausgang 0 | ☐ | ☐ | ja | |
+| E2 | keine externe Referenz in der Seite, beide Zaehlungen 0 | ☐ | ☐ | ja | |
+| E3 | Kennblatt mit Hashes, Herkunft und Pruefkommando | ☐ | ☐ | ja | |
+| E4 | Anleitung passt zur Art und nennt, was sie nicht beantwortet | ☐ | ☐ | ja | |
+| E5 | jede Probe mit Statuswort und Grund, keine Farbe statt Grund | ☐ | ☐ | ja | |
+| E6 | zwei Laeufe byteweise gleich | ☐ | ☐ | ja | |
+| E7 | zweiter Schreibversuch abgelehnt, Ausgang 1 | ☐ | ☐ | ja | |
 
 **Abgenommen von:** ______________________  **Unterschrift:** ______________________
 

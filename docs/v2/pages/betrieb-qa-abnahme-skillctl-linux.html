@@ -306,8 +306,9 @@ einen Host, auf dem die Linux-Proben wirklich existieren. Jede Erwartung in dies
 
 Auf Windows sagt eine Linux-Probe `unsupported`, weil es sie nicht gibt. Hier existiert sie, also
 sagt sie etwas ueber **den Benutzer und den Host**: `captured`, `partial` oder `permission_denied`,
-je mit Grund. Darum hat dieses Blatt zwei Stufen mehr: A0 vor der Installation und E nach dem
-Freeze.
+je mit Grund. Darum hat dieses Blatt zwei Stufen mehr als das Windows-Blatt: A0 vor der Installation
+und E nach dem Freeze. Die Buchstaben verschieben sich dadurch: die Berichtsstufe heisst hier F und
+dort E.
 
 ## Kopf, vor dem ersten Befehl auszufuellen
 
@@ -504,6 +505,60 @@ skillctl trust-freeze diff --baseline ./base-unpriv --current ./cap-root --trust
 
 ---
 
+## Stufe F: der Bericht, drei Formate
+
+Neu in `skillctl/v0.6.1`. Der Bericht ist eine Projektion: er rechnet nichts nach, prueft keine
+Signatur und liest keine Uhr. Er zeigt, was im Buendel steht, und sagt daneben, mit welchem Kommando
+man es selbst nachprueft.
+
+```bash
+mkdir -p ./ber
+for f in json yaml html; do
+  skillctl trust-freeze report --input ./base-unpriv --output ./ber --format $f; echo "$f Ausgang $?"
+done
+ls -l ./ber
+```
+
+- **F1 PASS:** drei Dateien, `report.json`, `report.yaml`, `report.html`, je Ausgang `0`.
+- Merke fuer den Ausgabepfad: ein **vorhandener Ordner** ergibt `report.<endung>` darin. Ein Pfad, den
+  es noch nicht gibt, wird als **Dateiname** genommen. In beiden Faellen entsteht die Datei mit Modus
+  `0600`, gemessen.
+
+```bash
+grep -c 'https\?://' ./ber/report.html      # erwartet: 0
+grep -cE 'src=|href=' ./ber/report.html     # erwartet: 0
+```
+
+- **F2 PASS:** beide Zaehlungen sind `0`. Die Seite laedt nichts von aussen, kein CDN, keine Schrift,
+  kein Skript, und ist damit auf einem Rechner ohne Netz vollstaendig lesbar. Gemessen an einer
+  erzeugten Seite: null Treffer, das Aussehen steckt als CSS in der Datei.
+
+Die Seite im Browser oeffnen und drei Dinge pruefen:
+
+- **F3 PASS:** ein Kennblatt mit den Hashes und je Hash die Herkunft und das Pruefkommando daneben.
+- **F4 PASS:** ein Abschnitt "Anleitung fuer den Benutzer" (englisch), der zur Buendelart passt und
+  sagt, was das Dokument **nicht** beantwortet. Bei einer Baseline muss dort stehen, dass die Seite
+  **nicht** sagt, ob die Signatur gueltig ist. Steht dort "signed and valid" oder etwas in dieser
+  Richtung, ist das der schwerste Befund dieses Blattes.
+- **F5 PASS:** jede Probe mit ihrem Statuswort und dem Grund, ausgeschrieben. Kein gruener oder roter
+  Punkt, der einen Grund verschluckt.
+
+```bash
+mkdir -p ./w1 ./w2
+skillctl trust-freeze report --input ./cap --output ./w1/report.html --format html
+sleep 3
+skillctl trust-freeze report --input ./cap --output ./w2/report.html --format html
+cmp ./w1/report.html ./w2/report.html && echo "byteweise gleich"
+skillctl trust-freeze report --input ./cap --output ./w1/report.html --format html; echo "zweiter Schreibversuch: Ausgang $?"
+```
+
+- **F6 PASS:** `cmp` meldet Gleichheit, auch mit Abstand dazwischen. Zwei Laeufe ueber dasselbe Buendel
+  ergeben dieselben Bytes; die Uhr geht nicht in den Bericht ein. Gemessen mit drei Sekunden Abstand.
+- **F7 PASS, Gegenprobe:** der zweite Schreibversuch auf dieselbe Datei endet auf `1` und schreibt
+  nicht. Ein Bericht wird nie ueberschrieben.
+
+---
+
 ## Was festzuhalten ist
 
 | Feld | Woher | Eintrag |
@@ -536,6 +591,13 @@ Pflichtzeilen muessen **PASS** sein. Eine Gegenprobe gilt als PASS, wenn sie **a
 | D | unprivilegiert: `incomplete`, jede Probe mit Grund | ☐ | ☐ | ja | |
 | E1 | mit Rechten: mehr erhoben, Verweigerungen benannt | ☐ | ☐ | nein | |
 | E2 | Sichtbarkeitsdifferenz als `info`, keine falsche Kritische | ☐ | ☐ | nein | |
+| F1 | drei Formate entstehen, je Ausgang 0 | ☐ | ☐ | ja | |
+| F2 | keine externe Referenz in der Seite, beide Zaehlungen 0 | ☐ | ☐ | ja | |
+| F3 | Kennblatt mit Hashes, Herkunft und Pruefkommando | ☐ | ☐ | ja | |
+| F4 | Anleitung passt zur Art und nennt, was sie nicht beantwortet | ☐ | ☐ | ja | |
+| F5 | jede Probe mit Statuswort und Grund, keine Farbe statt Grund | ☐ | ☐ | ja | |
+| F6 | zwei Laeufe byteweise gleich | ☐ | ☐ | ja | |
+| F7 | zweiter Schreibversuch abgelehnt, Ausgang 1 | ☐ | ☐ | ja | |
 
 **Abgenommen von:** ______________________  **Unterschrift:** ______________________
 

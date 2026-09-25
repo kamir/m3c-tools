@@ -61,7 +61,7 @@ var guidanceDiff = htmlGuidance{
 	What: "The difference between an approved baseline and a later capture of the same " +
 		"subject, as one deterministic document. The same two bundles always produce the same bytes and the " +
 		"same diff_digest.",
-	Answers: "What changed, and at which severity the policy named in the header rated each " +
+	Answers: "What changed, and at which severity the policy named in this document rated each " +
 		"change. Entries marked coverage_increased are the opposite of drift: there the later capture could " +
 		"see more than the baseline could, so the difference is in the question, not in the host.",
 	DoesNotAnswer: "Why something changed, and whether the change was authorised. It also " +

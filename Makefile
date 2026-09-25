@@ -596,6 +596,17 @@ ci: vet lint check-emdash check-gofmt check-redirect-guard check-required-checks
 # traegt eine Kopie ihrer Markdown-Quelle. Dieses Ziel erzeugt jede neu und
 # vergleicht, damit die Kopie nicht still zu einer zweiten Aussage wird.
 # Neu erzeugen mit: tools/docpage.sh docs/<pfad>.md
+# qa-all: ein Lauf ueber jede lokale Pruefung, mit einer Zeile Urteil am Ende.
+# Anders als `ci` haelt er beim ersten Fehler NICHT an, und eine Pruefung, die
+# nicht laufen konnte, gilt nicht als bestanden. `make qa-schnell` laesst die
+# beiden langen Abnahmeskripte aus und sagt das im Urteil.
+.PHONY: qa-all qa-schnell
+qa-all:
+	@./scripts/qa-all.sh
+
+qa-schnell:
+	@./scripts/qa-all.sh --schnell
+
 .PHONY: check-docpages
 check-docpages:
 	@./scripts/check-docpages.sh
