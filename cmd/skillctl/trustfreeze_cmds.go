@@ -275,6 +275,22 @@ func tfParseArgs(fs *flag.FlagSet, name string, args []string, stdout, stderr io
 	return code, done
 }
 
+// tfParseArgsJSON is tfParseArgs for a subcommand whose status document on
+// stdout is always JSON, so a usage error found by the flag package writes the
+// usage_error document whatever --format says. report is such a subcommand
+// (FR-0472): there --format names the format of the report FILE and says
+// nothing about stdout.
+func tfParseArgsJSON(fs *flag.FlagSet, name string, args []string, stdout, stderr io.Writer) (int, bool) {
+	code, done, err := tfParseCause(fs, args)
+	if done && err != nil {
+		out := tfOut{name: name, stdout: stdout, stderr: stderr, json: true}
+		if eerr := out.emit(tfErrorDoc{ResultClass: tfResultUsage, Command: name, Error: err.Error()}); eerr != nil {
+			fmt.Fprintf(stderr, "skillctl trust-freeze %s: cannot encode output: %v\n", name, eerr)
+		}
+	}
+	return code, done
+}
+
 // tfWantsJSON reports whether the last --format on the command line (any
 // spelling the flag package accepts: -format, --format, with "=" or as two
 // arguments) says json. Scanning stops at "--".
@@ -1570,10 +1586,14 @@ func tfReport(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Wr
 	input := fs.String("input", "", "Capture, baseline or diff bundle to project (required).")
 	output := fs.String("output", "", "Report file to create (required). An existing directory gets "+tfDefaultReportFile+". Never overwritten, never inside the input bundle.")
 	format := fs.String("format", "json", "Report format: json (markdown and sarif: "+tfNotImplemented+").")
-	if code, done := tfParseArgs(fs, "report", args, stdout, stderr); done {
+	if code, done := tfParseArgsJSON(fs, "report", args, stdout, stderr); done {
 		return code
 	}
-	out := tfOut{name: "report", stdout: stdout, stderr: stderr, json: *format == "json"}
+	// --format names the format of the report file, not the format of this
+	// status document: stdout of report is always JSON (FR-0472). Every call
+	// that was valid before this change already had JSON on stdout, because
+	// json was the only accepted value.
+	out := tfOut{name: "report", stdout: stdout, stderr: stderr, json: true}
 	if err := tfFormat(*format, []string{"json"}, []string{"markdown", "sarif"}); err != nil {
 		return out.usage(err)
 	}
