@@ -79,6 +79,14 @@ jobs:
       - name: Bump the pins and digests
         run: ./scripts/bump-install-pins.sh "${{ steps.ref.outputs.commit }}"
 
+      # Der Bumper schreibt JEDE getrackte .md um, und eine davon hat eine
+      # erzeugte Doku-Seite (docs/v2/betrieb/ops-human-agent-team.de.md traegt
+      # drei Installer-Pins). Ohne diesen Schritt bliebe die Seite mit dem alten
+      # Pin stehen: eine druckbare Anleitung, die auf eine ueberholte Fassung
+      # zeigt, waehrend die Markdown daneben schon die neue nennt.
+      - name: Die erzeugten Doku-Seiten mitziehen
+        run: ./scripts/check-docpages.sh --fix
+
       # A bad bump must fail here, not become a pull request. The bumper only
       # rewrites; this is what judges the result.
       - name: Verify the result
