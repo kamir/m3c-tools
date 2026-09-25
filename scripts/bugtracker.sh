@@ -182,7 +182,15 @@ claims() {
   git -C "$dir" rev-parse --git-dir >/dev/null 2>&1 || return 0
 
   for ref in $(git -C "$dir" for-each-ref --format='%(refname:short)' refs/heads refs/remotes 2>/dev/null); do
-    git -C "$dir" ls-tree --name-only "$ref" bug-reports/ 2>/dev/null \
+    # BUG-0227: zwei Fehler in einer Zeile, und jeder allein macht diese
+    # Quelle still tot. $dir IST bereits bug-reports/, der Pfad loeste sich
+    # also zu bug-reports/bug-reports/ auf; und `ls-tree` gibt aus einem
+    # Unterverzeichnis RELATIVE Namen aus, denen der Schraegstrich fehlt, den
+    # das Muster unten verlangt. Gemessen am 2026-09-25 auf origin/master:
+    # heute 0 Nummern, mit --full-name und Pfad "." 274; ueber alle 115 Refs
+    # 28995 statt 0. Damit war Quelle 2 tot, also genau der refuebergreifende
+    # Abgleich, den der Kopfkommentar als Schutz gegen Nummern-Rennen fuehrt.
+    git -C "$dir" ls-tree --full-name --name-only "$ref" . 2>/dev/null \
       | sed -E -n "s#.*/$kind-0*([0-9]+)-.*#\\1\\t$ref#p"
     printf '%s\n' "$ref" \
       | sed -E -n "s#.*[^a-z]$lower-?0*([0-9]+).*#\\1\\tbranch $ref#p"
