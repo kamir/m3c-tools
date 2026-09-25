@@ -11,7 +11,7 @@ import (
 	"go/parser"
 	"go/token"
 	"html"
-	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -657,21 +657,24 @@ func reportWithEveryStatus() Report {
 // same bytes today and next year. The package therefore imports no clock.
 // Measured over the import lists of its own non-test files.
 func TestReportPackageReadsNoClock(t *testing.T) {
-	set := token.NewFileSet()
-	pkgs, err := parser.ParseDir(set, ".", func(fi os.FileInfo) bool {
-		return !strings.HasSuffix(fi.Name(), "_test.go")
-	}, parser.ImportsOnly)
+	names, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)
 	}
+	set := token.NewFileSet()
 	files := 0
-	for _, pkg := range pkgs {
-		for name, f := range pkg.Files {
-			files++
-			for _, imp := range f.Imports {
-				if imp.Path.Value == `"time"` {
-					t.Fatalf("%s imports time: a projection that reads a clock is not reproducible", name)
-				}
+	for _, name := range names {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(set, name, nil, parser.ImportsOnly)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files++
+		for _, imp := range f.Imports {
+			if imp.Path.Value == `"time"` {
+				t.Fatalf("%s imports time: a projection that reads a clock is not reproducible", name)
 			}
 		}
 	}

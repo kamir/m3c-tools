@@ -730,7 +730,7 @@ skillctl trust-freeze baseline approve --capture <dir> --output <dir> --reviewer
                                        --change-id <id> --reason <text|@file> --key <file> [flags]
 skillctl trust-freeze verify --bundle <dir> [--trust-policy <file>] [--trusted-key <public.pem>]...
 skillctl trust-freeze diff --baseline <dir> --current <dir> [flags]
-skillctl trust-freeze report --input <dir> --output <file|dir> [--format json]
+skillctl trust-freeze report --input <dir> --output <file|dir> [--format json|yaml|html]
 ```
 
 Trust Freeze records what a host looks like as a **capture** bundle, lets a person
@@ -1371,13 +1371,17 @@ Exit: `0` threshold not reached · `1` threshold reached (`drift_threshold_excee
 input failed verification (`verification_failure`), or the run failed (`execution_error`)
 · `2` usage.
 
-#### `trust-freeze report`: project a bundle onto the JSON report
+#### `trust-freeze report`: project a bundle onto a report document or a page
 
 | Flag | Purpose |
 |------|---------|
 | `--input <dir>` | Capture, baseline or diff bundle (required). It must pass its integrity check. |
-| `--output <file\|dir>` | Report file to create (required); an existing directory gets `report.json`. Never overwritten, never inside the input bundle or any other trust-freeze bundle. Mode `0600`, because a report can carry the host name. |
-| `--format json` | Report format (default `json`). `markdown` and `sarif` are not implemented in this version (exit `2`). |
+| `--output <file\|dir>` | Report file to create (required); an existing directory gets `report.json`, `report.yaml` or `report.html`, after the format. Never overwritten, never inside the input bundle or any other trust-freeze bundle. Mode `0600`, because a report can carry the host name. |
+| `--format json\|yaml\|html` | Format of the report **file** (default `json`). It says nothing about standard output, which is always a JSON status document. `markdown` and `sarif` are not implemented in this version (exit `2`). |
+
+One run writes exactly one file in exactly one format. There is no switch that writes
+all three: that would ask the "never over an existing file" question three times in one
+call.
 
 The report (schema `trust-freeze/report/v1`) is a pure projection of the bundle and
 decides nothing. It checks the input's integrity (manifest, sizes, digests, layout) and
@@ -1387,7 +1391,27 @@ the `signature` section always reads `{"result": "not_evaluated", "verify_with":
 "skillctl trust-freeze verify"}`; the trust decision is `verify --trusted-key`, and a
 report is never evidence that a baseline is valid. Standard output carries a JSON status
 with `result_class`, the input, the same `signature` section for a baseline, and the
-report's SHA-256. What a report carries is internal host data (see Privacy above).
+report's SHA-256 of the file that was written, whatever `--format` says. What a report
+carries is internal host data (see Privacy above).
+
+**YAML** (`--format yaml`) is the same projection with the same fields, the same values
+and the same order. It is converted from the canonical JSON bytes, not written from a
+second set of tags, so the two renderings cannot drift apart. A string that a reader of
+YAML 1.1 would resolve as a boolean or as a base-60 number (`no`, `yes`, `on`, `off`,
+`y`, `n`, `N`, `Y`, `1:30`) is quoted, so `PasswordAuthentication no` stays the text it
+was.
+
+**The page** (`--format html`) is one self-contained file for reading and printing: no
+script, no stylesheet, no font, no image and no data URI, so it opens on a host that has
+no network. It carries the digests of its bundle kind in full, each with the file and
+field it comes from and the command that checks it; a guidance section for a reader who
+does not know `skillctl`, which differs per bundle kind; the completeness, the probes with
+their status **word** and the reason in full, the capabilities with the resolver's own
+diagnostics, the approval of a baseline, and the entries and the verdict of a diff. It
+shows the signature section of a baseline as a quotation (`not_evaluated`) with the
+command that evaluates it; the page evaluates nothing itself. What it deliberately leaves
+out, the artifact list and the raw probe results, is named on the page with its count and
+the command that shows it.
 
 **Capabilities.** The report of a capture or baseline projects `state/capabilities.json`
 under `capture.capabilities`: the resolver that ran, one entry per capability with `id`,
