@@ -6,6 +6,18 @@ version is ldflags-stamped (`skillctl version`). Release tags: `skillctl/vX.Y.Z`
 (the `m3c-tools` product line uses separate `vX.Y.Z` tags).
 
 ## [Unreleased]
+### Pending
+- Multi-platform parity (SPEC-0251 §5 / project ST-002): promote the remaining
+  darwin-coupled `m3c-tools` subcommands, `import-audio` (decouple the
+  `reverseTracker` package var init'd in darwin `main()` + the `*menubar.App` /
+  `menubarWhisper*` web) and the `pocket` cloud-sync cluster, off the darwin-only
+  `main.go`, plus the `cmdTranscript`/`cmdCheckER1` dedup. Deliberately deferred:
+  a verbatim move ships half-extracted shared state, so it needs a dedicated
+  refactor pass, not a release-eve edit.
+
+## [skillctl/v0.6.1], 2026-09-25, a report you can hand to a person, and a path that was inside /usr all along
+7 commits after `skillctl/v0.6.0`, plus this entry.
+
 ### Added
 - **`skillctl trust-freeze report` gives the report as YAML and as a page** (FR-0472).
   `--format yaml` renders the same projection with the same fields, the same values and
@@ -24,6 +36,16 @@ version is ldflags-stamped (`skillctl version`). Release tags: `skillctl/vX.Y.Z`
   `report.html`; the four guarantees of `--output` are unchanged and are now measured
   per format.
 
+- **A single local run that checks everything and says whether it behaved as expected.**
+  `scripts/qa-all.sh`, also `make qa-all` and `make qa-schnell`, runs 23 checks, does not
+  stop at the first failure, and ends in one verdict line. Three properties separate it
+  from calling the gates in a loop. A check that could **not** run does not count as
+  passed: it is reported as skipped with its reason, and the verdict names how many,
+  because a gate that reports green on nothing is worse than no gate. The test steps
+  count how many tests actually ran and fail at zero, because a test invocation whose
+  pattern matches nothing exits 0 and says nothing. And `--selbsttest` plants a failure
+  and a missing tool and passes only if the run reports both.
+
 ### Changed
 - **`--format` of `trust-freeze report` names the format of the report file only**
   (FR-0472). It used to decide the format of the status document on standard output as
@@ -31,14 +53,42 @@ version is ldflags-stamped (`skillctl version`). Release tags: `skillctl/vX.Y.Z`
   valid before changes behaviour, because `json` was the only accepted value and every
   successful call therefore already had JSON on standard output.
 
-### Pending
-- Multi-platform parity (SPEC-0251 §5 / project ST-002): promote the remaining
-  darwin-coupled `m3c-tools` subcommands, `import-audio` (decouple the
-  `reverseTracker` package var init'd in darwin `main()` + the `*menubar.App` /
-  `menubarWhisper*` web) and the `pocket` cloud-sync cluster, off the darwin-only
-  `main.go`, plus the `cmdTranscript`/`cmdCheckER1` dedup. Deliberately deferred:
-  a verbatim move ships half-extracted shared state, so it needs a dedicated
-  refactor pass, not a release-eve edit.
+### Fixed
+- **`linux.executables` refused paths that lie inside a root it may read.** On every
+  usrmerge distribution `/lib` is a symlink into `/usr`, so a unit naming
+  `/lib/apparmor/apparmor.systemd` names a file inside `/usr`. The check read the literal
+  path prefix, refused it as outside the roots, and wrote that sentence into the bundle,
+  where it was false. Three things followed: the profile never reached `complete` on such
+  a host, those programs were never hashed so a change in them would not show up, and the
+  evidence carried a claim that does not hold. The roots now include `/lib`, `/lib32`,
+  `/lib64` and `/libx32`; the two-stage design is unchanged, so a path that leads through
+  `/lib` into a home directory is still refused, with the home reason. Found by a QA run
+  on a real Ubuntu 24.04.1 host, not by a fixture: the same elevated capture refuses 2
+  paths instead of 5 afterwards.
+- **A refusal message no longer blames the roots for a path that has none.** A bare name
+  such as `grub-editenv` lies in no root, so "it lies outside the roots this probe may
+  read" said something false about it; the message now says the path is not absolute.
+  Why the probe sees it that way is not a defect of ours: `grub-common.service` writes
+  `ExecStart=grub-editenv`, and `systemctl show` answers `path=grub-editenv`, unresolved.
+
+### Documentation
+- **The published site had not moved since 2026-03-11.** It built from the `gh-pages`
+  branch, where 8 files sat while `master/docs` carried 75, and no workflow ever published
+  there, so half a year of documentation never reached a reader. The source is now
+  `master` `/docs`, so every push publishes, and a merge was measured to trigger a build.
+- `trust-freeze`, `drift`, the agent bundles and `envreport` are named in the README,
+  which had not tracked the last two releases. `PLATFORM-DIFFERENCES.md` gained a row per
+  platform for `trust-freeze`, because `skillctl | Full | Full | Full` had become
+  misleading: the Linux probes exist, the Windows, WSL and macOS families do not.
+- **Two QA acceptance sheets to print, tick and sign**, one per platform
+  (`docs/v2/betrieb/QA-abnahme-skillctl-{windows,linux}.de.md`). Every expectation in them
+  was run against the shipped binary, and each sheet carries counter-checks that pass by
+  refusing: a tampered bundle, an untrusted key, a flipped byte, a foreign profile that
+  must stay incomplete, and a report that must not be overwritten.
+- `check-docpages` runs in CI now. It existed, it was in `make ci`, and no workflow calls
+  `make ci`, so a generated page could sit outdated in `master` with nothing turning red.
+  `pin-bump` regenerates the pages it affects, which it had to: the pin bump for v0.6.0
+  left the page of `ops-human-agent-team.de.md` pointing at the pin of v0.3.1.
 
 ## [skillctl/v0.6.0], 2026-09-24, a freeze that can be verified, a third CLI, and two verbs that did not exist
 183 commits after `skillctl/v0.5.1`.
