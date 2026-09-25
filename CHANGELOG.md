@@ -6,6 +6,31 @@ version is ldflags-stamped (`skillctl version`). Release tags: `skillctl/vX.Y.Z`
 (the `m3c-tools` product line uses separate `vX.Y.Z` tags).
 
 ## [Unreleased]
+### Added
+- **`skillctl trust-freeze report` gives the report as YAML and as a page** (FR-0472).
+  `--format yaml` renders the same projection with the same fields, the same values and
+  the same order, converted from the canonical JSON bytes rather than from a second set
+  of tags, so the two renderings cannot drift apart; a string that a YAML 1.1 reader
+  would resolve as a boolean or a base-60 number (`no`, `yes`, `on`, `off`, `y`, `n`,
+  `N`, `Y`, `1:30`) is quoted. `--format html` writes one self-contained page for
+  reading and printing: no script, no stylesheet, no font, no image, no data URI, so it
+  opens on a host without a network. The page carries the digests of its bundle kind in
+  full, each with the file and field it comes from and the command that checks it, and a
+  guidance section per bundle kind for a reader who does not know `skillctl`. It keeps
+  the eight status words as words with their reason in full, quotes the signature
+  section of a baseline as `not_evaluated` with the command that evaluates it, and names
+  what it leaves out (the artifact list, the raw probe results) with the count and the
+  command that shows it. An `--output` directory gets `report.json`, `report.yaml` or
+  `report.html`; the four guarantees of `--output` are unchanged and are now measured
+  per format.
+
+### Changed
+- **`--format` of `trust-freeze report` names the format of the report file only**
+  (FR-0472). It used to decide the format of the status document on standard output as
+  well; that output is now always JSON, on the usage-error path too. No call that was
+  valid before changes behaviour, because `json` was the only accepted value and every
+  successful call therefore already had JSON on standard output.
+
 ### Pending
 - Multi-platform parity (SPEC-0251 §5 / project ST-002): promote the remaining
   darwin-coupled `m3c-tools` subcommands, `import-audio` (decouple the

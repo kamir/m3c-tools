@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+<style>
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    color: #111111;
+    background: #ffffff;
+    line-height: 1.5;
+    margin: 0 auto;
+    max-width: 62rem;
+    padding: 1.5rem;
+  }
+  h1 { font-size: 1.5rem; margin: 0 0 0.25rem; }
+  h2 { font-size: 1.15rem; margin: 2rem 0 0.5rem; border-bottom: 1px solid #cccccc; padding-bottom: 0.2rem; }
+  h3 { font-size: 1rem; margin: 1.2rem 0 0.2rem; }
+  p { margin: 0.4rem 0; }
+  .kind { font-size: 0.9rem; letter-spacing: 0.08em; text-transform: uppercase; color: #444444; }
+  .lead { color: #222222; }
+  .note { color: #444444; font-size: 0.93rem; }
+  table { border-collapse: collapse; width: 100%; margin: 0.6rem 0 1rem; font-size: 0.93rem; }
+  caption { text-align: left; font-weight: 600; padding: 0.3rem 0; }
+  th, td { border: 1px solid #cccccc; padding: 0.3rem 0.45rem; text-align: left; vertical-align: top; }
+  th { background: #f2f2f2; font-weight: 600; }
+  td.name, th.name { width: 16rem; }
+  .mono, pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .digest { font-size: 0.9rem; word-break: break-all; }
+  pre {
+    background: #f6f6f6; border: 1px solid #dddddd; padding: 0.5rem 0.6rem;
+    overflow-x: auto; white-space: pre-wrap; word-break: break-word; font-size: 0.88rem; margin: 0.4rem 0;
+  }
+  footer { margin-top: 2.5rem; border-top: 1px solid #cccccc; padding-top: 0.6rem; font-size: 0.88rem; color: #444444; }
+  @media print {
+    body { max-width: none; padding: 0; font-size: 10.5pt; color: #000000; }
+    h2 { page-break-after: avoid; }
+    table, pre { page-break-inside: auto; }
+    tr, th, td { page-break-inside: avoid; }
+    th { background: #eeeeee; }
+    footer { page-break-before: avoid; }
+  }
+</style>
+</head>
+<body>
+<p class="kind">Trust Freeze report</p>
+<h1>{{.Title}}</h1>
+<p class="lead">{{.Lead}}</p>
+<table>
+<caption>What this page is about</caption>
+<tr><th class="name">Field</th><th>Value</th></tr>
+{{range .Header}}<tr><td class="name">{{.Name}}</td><td class="mono">{{.Value}}</td></tr>
+{{end}}</table>
+
+<h2>Identity of this bundle</h2>
+<p class="note">Two printouts of the same bundle carry the same values here, so they can be compared without
+starting a tool. Every row names where the value comes from and the command that checks it.</p>
+<table>
+<caption>Digests and key ids, in full</caption>
+<tr><th class="name">What</th><th>Value</th><th>Where it comes from</th><th>How to check it</th></tr>
+{{range .Digests}}<tr><td class="name">{{.Name}}</td><td class="mono digest">{{.Value}}</td><td>{{.Origin}}</td><td class="mono">{{.Command}}</td></tr>
+{{end}}</table>
+
+<h2>Guidance for the reader</h2>
+<h3>What this is</h3>
+<p>{{.Guidance.What}}</p>
+<h3>What it answers</h3>
+<p>{{.Guidance.Answers}}</p>
+<h3>What it does not answer</h3>
+<p>{{.Guidance.DoesNotAnswer}}</p>
+<h3>What to do next</h3>
+<p>{{.Guidance.Next}}</p>
+<pre>{{.Guidance.NextCommand}}</pre>
+<h3>{{.Guidance.CheckLabel}}</h3>
+<pre>{{.Guidance.CheckCommand}}</pre>
+{{if .Guidance.Note}}<p class="note">{{.Guidance.Note}}</p>
+{{end}}
+{{with .Approval}}<h2>The approval</h2>
+<p class="note">Read key by key from approval.json of this bundle.</p>
+<table>
+<caption>approval.json</caption>
+<tr><th class="name">Field</th><th>Value</th></tr>
+{{range .Fields}}<tr><td class="name mono">{{.Name}}</td><td class="mono">{{.Value}}</td></tr>
+{{end}}</table>
+<table>
+<caption>The signature section, as the report records it</caption>
+<tr><th class="name">Field</th><th>Value</th></tr>
+<tr><td class="name">result</td><td class="mono">{{.SignatureResult}}</td></tr>
+<tr><td class="name">verify_with</td><td class="mono">{{.SignatureVerifyWith}}</td></tr>
+</table>
+<p class="note">{{.SignatureOrigin}}</p>
+{{end}}
+{{with .Capture}}<h2>The state this bundle records</h2>
+<table>
+<caption>The capture run</caption>
+<tr><th class="name">Field</th><th>Value</th></tr>
+{{range .Meta}}<tr><td class="name">{{.Name}}</td><td class="mono">{{.Value}}</td></tr>
+{{end}}<tr><td class="name">artifacts recorded</td><td class="mono">{{.ArtifactCount}}</td></tr>
+</table>
+
+<h3>Completeness</h3>
+<p>Status: <span class="mono">{{.Completeness}}</span>. Required probes:
+{{if .Required}}{{range $i, $id := .Required}}{{if $i}}, {{end}}<span class="mono">{{$id}}</span>{{end}}{{else}}none named{{end}}.</p>
+{{if .Gaps}}<table>
+<caption>The gaps that keep this capture from being complete</caption>
+<tr><th class="name">Probe</th><th>Status</th><th>Reason</th></tr>
+{{range .Gaps}}<tr><td class="name mono">{{.ProbeID}}</td><td class="mono">{{.Status}}</td><td>{{.Reason}}</td></tr>
+{{end}}</table>
+{{else}}<p>No gap is recorded.</p>
+{{end}}
+<h3>The probes</h3>
+<p class="note">The status is the word the bundle carries, written out. Only captured means "collected in full".
+partial, unsupported, unavailable, permission_denied, timeout, failed and not_applicable each mean something
+else, and the reason beside the word is what the probe itself reported. A host whose report says
+permission_denied three times is not clean there; it is unchecked there.</p>
+<table>
+<caption>Every probe of this capture</caption>
+<tr><th class="name">Probe</th><th>Status</th><th>Reason</th></tr>
+{{range .Probes}}<tr><td class="name mono">{{.ProbeID}}</td><td class="mono">{{.Status}}</td><td>{{.Reason}}</td></tr>
+{{end}}</table>
+{{with .Capabilities}}<h3>Who may do what on this host</h3>
+<p>Resolver: <span class="mono">{{.Resolver}}</span>.</p>
+<p class="note">{{.OrderNote}}</p>
+{{if .Lines}}<table>
+<caption>The capabilities of this bundle</caption>
+<tr><th>Capability</th><th>Subject</th><th>Action</th><th>Resource</th><th>Effect</th><th>Privilege</th><th>Exposure</th><th>Scope</th><th>State</th><th>Confidence</th><th>Sources</th><th>Attributes</th></tr>
+{{range .Lines}}<tr><td class="mono">{{.ID}}</td><td class="mono">{{.SubjectID}}</td><td>{{.Action}}</td><td>{{.Resource}}</td><td>{{.Effect}}</td><td class="mono">{{.Privilege}}</td><td>{{.Exposure}}</td><td>{{.Scope}}</td><td>{{.State}}</td><td>{{.Confidence}}</td><td class="mono">{{.Sources}}</td><td class="mono">{{.Attributes}}</td></tr>
+{{end}}</table>
+{{else}}<p>The resolver recorded no capability. Read that together with the diagnostics below, not as "this host grants nothing".</p>
+{{end}}
+{{if .Diagnostics}}<table>
+<caption>What the resolver could not read</caption>
+<tr><th class="name">Diagnostic</th><th>Message</th></tr>
+{{range .Diagnostics}}<tr><td class="name mono">{{.Name}}</td><td>{{.Value}}</td></tr>
+{{end}}</table>
+{{else}}<p>The resolver recorded no diagnostic.</p>
+{{end}}{{else}}<h3>Who may do what on this host</h3>
+<p>This bundle carries no capabilities document, so nobody resolved capabilities for this capture. That is
+not the same as a host that grants nothing: the question was not asked here. The command below shows which
+documents the bundle does carry.</p>
+<pre>skillctl trust-freeze verify --bundle &lt;bundle&gt;</pre>
+{{end}}{{end}}
+{{with .Diff}}<h2>What was compared</h2>
+<table>
+<caption>The baseline side</caption>
+<tr><th class="name">Field</th><th>Value</th></tr>
+{{range .Baseline}}<tr><td class="name">{{.Name}}</td><td class="mono">{{.Value}}</td></tr>
+{{end}}</table>
+<table>
+<caption>The current side</caption>
+<tr><th class="name">Field</th><th>Value</th></tr>
+{{range .Current}}<tr><td class="name">{{.Name}}</td><td class="mono">{{.Value}}</td></tr>
+{{end}}</table>
+<table>
+<caption>How it was compared</caption>
+<tr><th class="name">Field</th><th>Value</th></tr>
+{{range .Normalization}}<tr><td class="name">{{.Name}}</td><td class="mono">{{.Value}}</td></tr>
+{{end}}</table>
+
+<h3>How many entries of each kind</h3>
+<p class="note">Every change kind is listed, the ones with no entry included: a kind that is missing from a
+table cannot be told apart from a kind that was never looked for.</p>
+<table>
+<caption>diff.counts</caption>
+<tr><th class="name">Change kind</th><th>Entries</th></tr>
+{{range .Counts}}<tr><td class="name mono">{{.Name}}</td><td class="mono">{{.Value}}</td></tr>
+{{end}}</table>
+
+<h3>The verdict</h3>
+{{if .Verdict}}<table>
+<caption>verdict.json</caption>
+<tr><th class="name">Field</th><th>Value</th></tr>
+{{range .Verdict}}<tr><td class="name">{{.Name}}</td><td class="mono">{{.Value}}</td></tr>
+{{end}}</table>
+{{end}}<p class="note">{{.VerdictNote}}</p>
+
+<h3>The entries</h3>
+<table>
+<caption>Every entry of this diff, in the order of the document</caption>
+<tr><th class="name">Change kind</th><th>Subject of the entry</th><th>What the entry records</th><th>Severity</th><th>Rule</th><th>Message</th></tr>
+{{range .Rows}}<tr><td class="name mono">{{.Kind}}</td><td class="mono">{{.ID}}</td><td>{{.Detail}}</td><td class="mono">{{.Severity}}</td><td class="mono">{{.RuleID}}</td><td>{{.Message}}</td></tr>
+{{end}}</table>
+{{end}}
+<h2>Not on this page</h2>
+<p class="note">What this page leaves out is named here, with the command that shows it. Nothing is left out
+silently.</p>
+{{range .NotShown}}<h3>{{.What}}</h3>
+<p>{{.Why}}</p>
+<pre>{{.Command}}</pre>
+{{end}}
+<footer>
+<p>Generated from the report projection (schema <span class="mono">{{.Schema}}</span>) by
+<span class="mono">skillctl trust-freeze report</span>, version <span class="mono">{{.Generator}}</span>.
+The page carries no script, no stylesheet, no font and no image from anywhere: it opens on a host without a
+network.</p>
+</footer>
+</body>
+</html>

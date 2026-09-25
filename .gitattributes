@@ -24,3 +24,11 @@ pkg/skillctl/trustfreeze/**/testdata/** -text eol=lf
 pkg/skillctl/trustfreeze/capture/profiles/*.yaml -text eol=lf
 pkg/skillctl/trustfreeze/policy/builtin/*.json -text eol=lf
 pkg/skillctl/trustfreeze/compare/rules/*.json -text eol=lf
+
+# The embedded HTML template of the Trust Freeze report is rendered into an
+# artifact whose SHA-256 the command reports, so its bytes must not depend on
+# how the repository was checked out. The renderer normalizes the template to
+# LF as well (see pkg/skillctl/trustfreeze/report/html.go), the same defence in
+# depth as for the bodyscan corpus above; this keeps the checked-out file
+# stable on top of it.
+pkg/skillctl/trustfreeze/report/*.tmpl -text eol=lf

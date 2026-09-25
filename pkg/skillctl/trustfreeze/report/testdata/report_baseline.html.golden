@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trust Freeze report: baseline</title>
+<style>
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    color: #111111;
+    background: #ffffff;
+    line-height: 1.5;
+    margin: 0 auto;
+    max-width: 62rem;
+    padding: 1.5rem;
+  }
+  h1 { font-size: 1.5rem; margin: 0 0 0.25rem; }
+  h2 { font-size: 1.15rem; margin: 2rem 0 0.5rem; border-bottom: 1px solid #cccccc; padding-bottom: 0.2rem; }
+  h3 { font-size: 1rem; margin: 1.2rem 0 0.2rem; }
+  p { margin: 0.4rem 0; }
+  .kind { font-size: 0.9rem; letter-spacing: 0.08em; text-transform: uppercase; color: #444444; }
+  .lead { color: #222222; }
+  .note { color: #444444; font-size: 0.93rem; }
+  table { border-collapse: collapse; width: 100%; margin: 0.6rem 0 1rem; font-size: 0.93rem; }
+  caption { text-align: left; font-weight: 600; padding: 0.3rem 0; }
+  th, td { border: 1px solid #cccccc; padding: 0.3rem 0.45rem; text-align: left; vertical-align: top; }
+  th { background: #f2f2f2; font-weight: 600; }
+  td.name, th.name { width: 16rem; }
+  .mono, pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .digest { font-size: 0.9rem; word-break: break-all; }
+  pre {
+    background: #f6f6f6; border: 1px solid #dddddd; padding: 0.5rem 0.6rem;
+    overflow-x: auto; white-space: pre-wrap; word-break: break-word; font-size: 0.88rem; margin: 0.4rem 0;
+  }
+  footer { margin-top: 2.5rem; border-top: 1px solid #cccccc; padding-top: 0.6rem; font-size: 0.88rem; color: #444444; }
+  @media print {
+    body { max-width: none; padding: 0; font-size: 10.5pt; color: #000000; }
+    h2 { page-break-after: avoid; }
+    table, pre { page-break-inside: auto; }
+    tr, th, td { page-break-inside: avoid; }
+    th { background: #eeeeee; }
+    footer { page-break-before: avoid; }
+  }
+</style>
+</head>
+<body>
+<p class="kind">Trust Freeze report</p>
+<h1>Trust Freeze report: baseline</h1>
+<p class="lead">This page is a projection of the bundle named above: it shows what the bundle records, in the order the report document has it. It computes no new statement, it evaluates no signature, no key trust and no expiry, and it reads no clock. Where it shows such a state, it shows it as a quotation from the bundle, with the command that does evaluate it beside it.</p>
+<table>
+<caption>What this page is about</caption>
+<tr><th class="name">Field</th><th>Value</th></tr>
+<tr><td class="name">bundle kind</td><td class="mono">baseline</td></tr>
+<tr><td class="name">bundle id</td><td class="mono">tf-baseline-20260102T030405.000000000Z-device-eb9aa81eeaaf3ce7</td></tr>
+<tr><td class="name">created at</td><td class="mono">2026-01-02T03:04:05Z</td></tr>
+<tr><td class="name">subject id</td><td class="mono">device/eb9aa81eeaaf3ce7</td></tr>
+<tr><td class="name">subject os family</td><td class="mono">linux</td></tr>
+</table>
+
+<h2>Identity of this bundle</h2>
+<p class="note">Two printouts of the same bundle carry the same values here, so they can be compared without
+starting a tool. Every row names where the value comes from and the command that checks it.</p>
+<table>
+<caption>Digests and key ids, in full</caption>
+<tr><th class="name">What</th><th>Value</th><th>Where it comes from</th><th>How to check it</th></tr>
+<tr><td class="name">content digest of this bundle</td><td class="mono digest">sha256:eff75bfb d982ed01 db0e78c4 3f0ceeb9 45751f56 87a2a613 6137c155 e1f39675</td><td>manifest.json, field content_digest</td><td class="mono">skillctl trust-freeze verify --bundle &lt;bundle&gt; --trusted-key &lt;public key&gt;</td></tr>
+<tr><td class="name">profile digest of the capture</td><td class="mono digest">sha256:1900eab6 c028483d 7126599e e6f50de0 d27907b5 c65fa905 24580b4b 0f9852b0</td><td>capture.json, field capture.profile.digest</td><td class="mono">skillctl trust-freeze verify --bundle &lt;bundle&gt; --trusted-key &lt;public key&gt;</td></tr>
+<tr><td class="name">content digest of the approved capture</td><td class="mono digest">sha256:f341403f 306ed7a4 4433aafd bba018f0 fff5a19f 722de2da 8ed25e73 c97620ca</td><td>approval.json, field capture_digest</td><td class="mono">skillctl trust-freeze verify --bundle &lt;bundle&gt; --trusted-key &lt;public key&gt;</td></tr>
+<tr><td class="name">signing key named in the approval</td><td class="mono digest">ed25519:01234567 89abcdef</td><td>approval.json, field identities.signing_key_id. It is the key the approver named when sealing, not a statement about that key.</td><td class="mono">skillctl trust-freeze verify --bundle &lt;bundle&gt; --trusted-key &lt;public key&gt;</td></tr>
+</table>
+
+<h2>Guidance for the reader</h2>
+<h3>What this is</h3>
+<p>An approved state. Somebody named in the header accepted the capture this baseline was made from, gave a reason and a change id, and signed the result.</p>
+<h3>What it answers</h3>
+<p>What was accepted, by whom, when, and for which capture. The capture_digest below ties this approval to exactly one capture; no other capture can be substituted for it.</p>
+<h3>What it does not answer</h3>
+<p>Whether the signature is valid, and whether the approver was entitled to approve. This page shows the signature block as the bundle records it. Validity is a question for the verifier, with a key you trust, and this page is not that verifier. Whether the approver was entitled is a question for your process.</p>
+<h3>What to do next</h3>
+<p>Keep it, and compare later captures of the same host against it:</p>
+<pre>skillctl trust-freeze diff --baseline &lt;baseline&gt; --current &lt;capture&gt; --trusted-key &lt;public key&gt;</pre>
+<h3>To check the bundle behind this page (integrity, signature and trust, offline):</h3>
+<pre>skillctl trust-freeze verify --bundle &lt;bundle&gt; --trusted-key &lt;public key&gt;</pre>
+<p class="note">The key must be one you obtained out of band. A signature verifies against the key you hand it; it cannot tell you that the key belongs to the right person.</p>
+
+<h2>The approval</h2>
+<p class="note">Read key by key from approval.json of this bundle.</p>
+<table>
+<caption>approval.json</caption>
+<tr><th class="name">Field</th><th>Value</th></tr>
+<tr><td class="name mono">approved_at</td><td class="mono">2026-01-02T04:04:05Z</td></tr>
+<tr><td class="name mono">capture_digest</td><td class="mono">sha256:f341403f306ed7a44433aafdbba018f0fff5a19f722de2da8ed25e73c97620ca</td></tr>
+<tr><td class="name mono">change_id</td><td class="mono">CHG-0001</td></tr>
+<tr><td class="name mono">identities.captured_subject_id</td><td class="mono">device/eb9aa81eeaaf3ce7</td></tr>
+<tr><td class="name mono">identities.reviewer_id</td><td class="mono">id:charlie@example</td></tr>
+<tr><td class="name mono">identities.signing_key_id</td><td class="mono">ed25519:0123456789abcdef</td></tr>
+<tr><td class="name mono">reason</td><td class="mono">synthetic fixture</td></tr>
+<tr><td class="name mono">reviewer</td><td class="mono">id:charlie@example</td></tr>
+<tr><td class="name mono">schema_version</td><td class="mono">trust-freeze/approval/v1</td></tr>
+</table>
+<table>
+<caption>The signature section, as the report records it</caption>
+<tr><th class="name">Field</th><th>Value</th></tr>
+<tr><td class="name">result</td><td class="mono">not_evaluated</td></tr>
+<tr><td class="name">verify_with</td><td class="mono">skillctl trust-freeze verify</td></tr>
+</table>
+<p class="note">Quoted from the report projection, which evaluates no signature, no key trust and no expiry. Whether the signature holds, whether the key is one you trust and whether the approval has expired are decided by the command named beside this row, with a key you bring yourself.</p>
+
+<h2>The state this bundle records</h2>
+<table>
+<caption>The capture run</caption>
+<tr><th class="name">Field</th><th>Value</th></tr>
+<tr><td class="name">started at</td><td class="mono">2026-01-02T03:04:05Z</td></tr>
+<tr><td class="name">finished at</td><td class="mono">2026-01-02T03:04:06Z</td></tr>
+<tr><td class="name">tool</td><td class="mono">skillctl</td></tr>
+<tr><td class="name">tool version</td><td class="mono">0.0.0-test</td></tr>
+<tr><td class="name">profile</td><td class="mono">walking-skeleton</td></tr>
+<tr><td class="name">profile version</td><td class="mono">1</td></tr>
+<tr><td class="name">actor</td><td class="mono">id:alice@example</td></tr>
+<tr><td class="name">artifacts recorded</td><td class="mono">2</td></tr>
+</table>
+
+<h3>Completeness</h3>
+<p>Status: <span class="mono">complete</span>. Required probes:
+<span class="mono">common.identity</span>.</p>
+<p>No gap is recorded.</p>
+
+<h3>The probes</h3>
+<p class="note">The status is the word the bundle carries, written out. Only captured means "collected in full".
+partial, unsupported, unavailable, permission_denied, timeout, failed and not_applicable each mean something
+else, and the reason beside the word is what the probe itself reported. A host whose report says
+permission_denied three times is not clean there; it is unchecked there.</p>
+<table>
+<caption>Every probe of this capture</caption>
+<tr><th class="name">Probe</th><th>Status</th><th>Reason</th></tr>
+<tr><td class="name mono">common.identity</td><td class="mono">captured</td><td>n/a</td></tr>
+<tr><td class="name mono">linux.packages</td><td class="mono">unsupported</td><td>not_implemented</td></tr>
+</table>
+<h3>Who may do what on this host</h3>
+<p>This bundle carries no capabilities document, so nobody resolved capabilities for this capture. That is
+not the same as a host that grants nothing: the question was not asked here. The command below shows which
+documents the bundle does carry.</p>
+<pre>skillctl trust-freeze verify --bundle &lt;bundle&gt;</pre>
+
+
+<h2>Not on this page</h2>
+<p class="note">What this page leaves out is named here, with the command that shows it. Nothing is left out
+silently.</p>
+<h3>The artifacts of this capture: 2 entries.</h3>
+<p>One row per artifact is a stack of paper and not a printout, and the list carries the host name, every local account, every listening address and the fingerprint of every authorized key. The count is on this page so that nothing is hidden, and the report document has every entry.</p>
+<pre>skillctl trust-freeze report --input &lt;bundle&gt; --output &lt;file.json&gt;</pre>
+<h3>The full result of each probe: 2 documents, with every command a probe ran and the state it normalized.</h3>
+<p>The table above names every probe with its status and its reason in full; the raw results repeat the artifacts and add the invocation records.</p>
+<pre>skillctl trust-freeze report --input &lt;bundle&gt; --output &lt;file.json&gt;</pre>
+
+<footer>
+<p>Generated from the report projection (schema <span class="mono">trust-freeze/report/v1</span>) by
+<span class="mono">skillctl trust-freeze report</span>, version <span class="mono">0.0.0-test</span>.
+The page carries no script, no stylesheet, no font and no image from anywhere: it opens on a host without a
+network.</p>
+</footer>
+</body>
+</html>

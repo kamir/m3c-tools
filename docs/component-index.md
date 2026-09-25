@@ -182,7 +182,7 @@ never claimed by the build, and full platform support is not established.
 | `skillctl/trustfreeze/seal` | Approval, the domain-separated ed25519 baseline statement, `baseline approve`, offline verification, trust policy and the self-approval check. The only package that creates a baseline. |
 | `skillctl/trustfreeze/compare` | The structural diff between a verified baseline and a current bundle, with the versioned normalization rule set (`trust-freeze/normalize/v1` and the default `trust-freeze/normalize/v2`, which adds the route metric and the resolver systemd-resolved is currently querying). It compares; it does not judge. |
 | `skillctl/trustfreeze/policy` | The pure policy evaluator: one finding per change, highest severity wins, `fail_on` drives only the exit code. Ships the default policy. |
-| `skillctl/trustfreeze/report` | The deterministic JSON report of a capture, baseline or diff bundle. A projection that decides nothing; markdown and SARIF are not implemented. |
+| `skillctl/trustfreeze/report` | The deterministic report of a capture, baseline or diff bundle, as canonical JSON, as YAML converted from those bytes, or as one self-contained page with the digests and a guidance section. A projection that decides nothing; markdown and SARIF are not implemented. |
 
 **Sibling top-level packages**
 

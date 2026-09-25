@@ -63,8 +63,30 @@ const tfPlatformSupport = "not_established"
 // with (SPEC-0469 R5).
 const tfEvaluatedPolicyFile = "policy/evaluated-policy.json"
 
-// tfDefaultReportFile is the report file name when --output names a directory.
+// tfDefaultReportFile is the report file name when --output names a directory
+// and --format is json.
 const tfDefaultReportFile = "report.json"
+
+// tfReportFormats are the report file formats of `trust-freeze report` and,
+// per format, the file name an --output directory gets. One run writes exactly
+// one file in exactly one format: a switch that wrote all of them would ask
+// the "never overwrite" question three times in one call (FR-0472).
+var tfReportFormats = map[string]string{
+	"json": tfDefaultReportFile,
+	"yaml": "report.yaml",
+	"html": "report.html",
+}
+
+// tfReportFormatNames returns the accepted --format values of report, sorted,
+// for the flag help and the rejection message.
+func tfReportFormatNames() []string {
+	names := make([]string, 0, len(tfReportFormats))
+	for name := range tfReportFormats {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
 
 // tfMaxReasonFile caps a --reason @file read. The approval itself caps the
 // reason far lower; this only bounds the read.
@@ -267,6 +289,22 @@ func tfParseCause(fs *flag.FlagSet, args []string) (int, bool, error) {
 func tfParseArgs(fs *flag.FlagSet, name string, args []string, stdout, stderr io.Writer) (int, bool) {
 	code, done, err := tfParseCause(fs, args)
 	if done && err != nil && tfWantsJSON(args) {
+		out := tfOut{name: name, stdout: stdout, stderr: stderr, json: true}
+		if eerr := out.emit(tfErrorDoc{ResultClass: tfResultUsage, Command: name, Error: err.Error()}); eerr != nil {
+			fmt.Fprintf(stderr, "skillctl trust-freeze %s: cannot encode output: %v\n", name, eerr)
+		}
+	}
+	return code, done
+}
+
+// tfParseArgsJSON is tfParseArgs for a subcommand whose status document on
+// stdout is always JSON, so a usage error found by the flag package writes the
+// usage_error document whatever --format says. report is such a subcommand
+// (FR-0472): there --format names the format of the report FILE and says
+// nothing about stdout.
+func tfParseArgsJSON(fs *flag.FlagSet, name string, args []string, stdout, stderr io.Writer) (int, bool) {
+	code, done, err := tfParseCause(fs, args)
+	if done && err != nil {
 		out := tfOut{name: name, stdout: stdout, stderr: stderr, json: true}
 		if eerr := out.emit(tfErrorDoc{ResultClass: tfResultUsage, Command: name, Error: err.Error()}); eerr != nil {
 			fmt.Fprintf(stderr, "skillctl trust-freeze %s: cannot encode output: %v\n", name, eerr)
@@ -1566,15 +1604,19 @@ type tfReportDoc struct {
 }
 
 func tfReport(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Writer) int {
-	fs := tfFlagSet("report", "report --input <dir> --output <file|dir> [--format json]", stderr)
+	fs := tfFlagSet("report", "report --input <dir> --output <file|dir> [--format json|yaml|html]", stderr)
 	input := fs.String("input", "", "Capture, baseline or diff bundle to project (required).")
-	output := fs.String("output", "", "Report file to create (required). An existing directory gets "+tfDefaultReportFile+". Never overwritten, never inside the input bundle.")
-	format := fs.String("format", "json", "Report format: json (markdown and sarif: "+tfNotImplemented+").")
-	if code, done := tfParseArgs(fs, "report", args, stdout, stderr); done {
+	output := fs.String("output", "", "Report file to create (required). An existing directory gets report.json, report.yaml or report.html. Never overwritten, never inside the input bundle.")
+	format := fs.String("format", "json", "Report file format: "+strings.Join(tfReportFormatNames(), ", ")+" (markdown and sarif: "+tfNotImplemented+"). Standard output is always JSON.")
+	if code, done := tfParseArgsJSON(fs, "report", args, stdout, stderr); done {
 		return code
 	}
-	out := tfOut{name: "report", stdout: stdout, stderr: stderr, json: *format == "json"}
-	if err := tfFormat(*format, []string{"json"}, []string{"markdown", "sarif"}); err != nil {
+	// --format names the format of the report file, not the format of this
+	// status document: stdout of report is always JSON (FR-0472). Every call
+	// that was valid before this change already had JSON on stdout, because
+	// json was the only accepted value.
+	out := tfOut{name: "report", stdout: stdout, stderr: stderr, json: true}
+	if err := tfFormat(*format, tfReportFormatNames(), []string{"markdown", "sarif"}); err != nil {
 		return out.usage(err)
 	}
 	switch {
@@ -1583,7 +1625,7 @@ func tfReport(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Wr
 	case *output == "":
 		return out.usage(errors.New("--output is required"))
 	}
-	target, err := tfReportTarget(*input, *output)
+	target, err := tfReportTarget(*input, *output, *format)
 	if err != nil {
 		return out.exec(err)
 	}
@@ -1599,7 +1641,7 @@ func tfReport(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Wr
 	if err != nil {
 		return out.fail(tfResultVerification, exitGeneric, err)
 	}
-	raw, err := report.Marshal(rep)
+	raw, err := tfRenderReport(rep, *format, d.Version)
 	if err != nil {
 		return out.exec(err)
 	}
@@ -1615,14 +1657,35 @@ func tfReport(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Wr
 	})
 }
 
-// tfReportTarget resolves --output: an existing directory gets the default
-// file name, anything else is the file itself. The file must not exist and
+// tfRenderReport renders a report in one of the file formats of
+// tfReportFormats. Every format renders the same projection: JSON is the
+// canonical form, YAML is converted from those bytes, and the page is built
+// from the projection as well (FR-0472).
+func tfRenderReport(rep report.Report, format, version string) ([]byte, error) {
+	switch format {
+	case "yaml":
+		return report.MarshalYAML(rep)
+	case "html":
+		// The page names the version that renders it; the projection carries
+		// the version that made the capture, which is another statement.
+		return report.MarshalHTML(rep, report.HTMLOptions{Generator: version})
+	default:
+		return report.Marshal(rep)
+	}
+}
+
+// tfReportTarget resolves --output: an existing directory gets the file name of
+// the format, anything else is the file itself. The file must not exist and
 // must not lie inside the input bundle, which would then carry an extra file
 // and fail its own verification.
-func tfReportTarget(input, output string) (string, error) {
+func tfReportTarget(input, output, format string) (string, error) {
 	target := output
 	if fi, err := os.Stat(output); err == nil && fi.IsDir() {
-		target = filepath.Join(output, tfDefaultReportFile)
+		name, ok := tfReportFormats[format]
+		if !ok {
+			name = tfDefaultReportFile
+		}
+		target = filepath.Join(output, name)
 	}
 	abs, err := filepath.Abs(target)
 	if err != nil {
