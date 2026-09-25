@@ -79,7 +79,7 @@ starting a tool. Every row names where the value comes from and the command that
 <h3>What this is</h3>
 <p>The difference between an approved baseline and a later capture of the same subject, as one deterministic document. The same two bundles always produce the same bytes and the same diff_digest.</p>
 <h3>What it answers</h3>
-<p>What changed, and at which severity the policy named in the header rated each change. Entries marked coverage_increased are the opposite of drift: there the later capture could see more than the baseline could, so the difference is in the question, not in the host.</p>
+<p>What changed, and at which severity the policy named in this document rated each change. Entries marked coverage_increased are the opposite of drift: there the later capture could see more than the baseline could, so the difference is in the question, not in the host.</p>
 <h3>What it does not answer</h3>
 <p>Why something changed, and whether the change was authorised. It also does not re-verify the two bundles: both were verified when this diff was produced, and a diff is never produced over a baseline that failed verification.</p>
 <h3>What to do next</h3>

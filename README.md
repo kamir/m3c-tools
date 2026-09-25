@@ -229,7 +229,7 @@ See the [secretctl reference](docs/v2/entwickler/secretctl.md).
 | [**Manual: skillctl**](docs/v2/referenz/manual-skillctl.md) | The full trust lifecycle, command by command |
 | [Menu Bar App](docs/old/menubar-app.md) | Channels, Observation Window, menu items (macOS) |
 | [Setup & Operations: Intel Mac & Windows](docs/v2/betrieb/setup-target-devices.md) | Zero-to-operating runbook for fresh Intel Mac / Windows target devices |
-| [**QA acceptance: skillctl on Windows**](docs/v2/betrieb/QA-abnahme-skillctl-windows.de.md) | The sheet to print, tick and sign: install, offline lifecycle, `trust-freeze`, and three counter-checks that pass by refusing (DE) |
+| [**QA acceptance: skillctl on Windows**](docs/v2/betrieb/QA-abnahme-skillctl-windows.de.md) | The sheet to print, tick and sign: install, offline lifecycle, `trust-freeze`, the report in three formats, and the counter-checks that pass by refusing (DE) |
 | [**QA acceptance: skillctl on Linux**](docs/v2/betrieb/QA-abnahme-skillctl-linux.de.md) | The same for a host where the Linux probes exist, with two stages more: the installer refusing without cosign, and the diff between an unprivileged and an elevated capture (DE) |
 | [Acceptance & handover: the skill lifecycle](docs/v2/betrieb/acceptance-skillctl-lifecycle.md) | The two-person exchange behind that sheet, plus a Windows quick validate |
 | [Platform differences](docs/v2/referenz/PLATFORM-DIFFERENCES.md) | What works where, including what `trust-freeze` does not claim per platform |
@@ -393,11 +393,21 @@ New contributors: start with **[CONTRIBUTING.md](CONTRIBUTING.md)**. Run the sam
 locally:
 
 ```bash
+make qa-all        # every local check in one run, one verdict line at the end
+make qa-schnell    # the same without the two long acceptance scripts
 make ci            # vet · golangci-lint · unit tests · build: the gate CI enforces
 make code-review   # pre-release review: build, vet, tests, secret scan, dead code, deps
 make check-docs    # documentation ↔ implementation consistency
 make vet           # go vet ./...
 ```
+
+**`make qa-all` is the one to run before opening a pull request.** It differs from `make ci` in
+three ways that matter. It does not stop at the first failure, so one run tells the whole story. A
+check that could **not** run does not count as passed: it is reported as skipped with the reason, and
+the verdict names how many, because a gate that reports green on nothing is worse than no gate. And
+it fixes the Go toolchain to the one `go.mod` names, because `toolchain go1.26.6` is a floor and not
+a pin: with a newer local Go you measure something else than CI does, and `pkg/skillbundle`'s digest
+test then fails on an untouched tree. `scripts/qa-all.sh --selbsttest` proves the runner can go red.
 
 Formatting is **`gofumpt` + `gci`** on top of golangci-lint (formatting is not negotiable in Go.
 It is built into the toolchain), and `.golangci.yml` is the enforced linter config.
