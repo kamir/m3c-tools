@@ -12,6 +12,7 @@ import (
 	"go/token"
 	"html"
 	"html/template"
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -19,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze"
+	"github.com/kamir/m3c-tools/pkg/skillctl/trustfreeze/compare"
 )
 
 // htmlTestGenerator is the rendering version the goldens are pinned to.
@@ -718,5 +720,73 @@ func TestReportHTMLUsesLFOnly(t *testing.T) {
 	}
 	if !bytes.ContainsRune(b.Bytes(), '\r') {
 		t.Fatal("a CRLF template without the normalization came out with LF: the check proves nothing")
+	}
+}
+
+// TestReportDigestsComeFromTheirSource: the digests the page and the YAML show
+// are the digests of the bundle, recomputed here instead of compared with the
+// field they were read from. The FR asks for this measured and not asserted.
+//
+// Two ties are not measurable against these fixtures and are stated as such:
+// the approval of the baseline fixture carries a synthetic capture_digest (no
+// capture was sealed to build it), and its signature file is a stand-in without
+// a key_id. Both ties were measured against a real bundle on a Linux host and
+// are recorded in the pull request of FR-0472.
+func TestReportDigestsComeFromTheirSource(t *testing.T) {
+	dir := t.TempDir()
+	for _, kind := range []trustfreeze.Kind{trustfreeze.KindCapture, trustfreeze.KindBaseline} {
+		b := writeCapture(t, dir, "bundle-"+string(kind), kind, testTime, "24.04", 0)
+		r, err := FromBundle(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		recomputed, err := trustfreeze.ComputeContentDigest(b.Manifest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.Input.ContentDigest != recomputed {
+			t.Fatalf("%s: input.content_digest %q, recomputed from the manifest %q", kind, r.Input.ContentDigest, recomputed)
+		}
+		if r.Capture.Meta.Profile.Digest != b.Capture.Capture.Profile.Digest {
+			t.Fatalf("%s: the profile digest is not the one capture.json records", kind)
+		}
+		if kind != trustfreeze.KindBaseline {
+			continue
+		}
+		// The approval is read again from the file on disk, not from the
+		// projection, so the comparison has two sources.
+		raw, err := os.ReadFile(filepath.Join(b.Dir, trustfreeze.ApprovalFile)) // #nosec G304 -- written by this test under t.TempDir()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var onDisk map[string]any
+		if err := json.Unmarshal(raw, &onDisk); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := approvalString(r.Approval, "capture_digest"), onDisk["capture_digest"]; got != want {
+			t.Fatalf("approval.capture_digest %q, on disk %v", got, want)
+		}
+		ids, _ := onDisk["identities"].(map[string]any)
+		if got, want := approvalString(r.Approval, "identities", "signing_key_id"), ids["signing_key_id"]; got != want {
+			t.Fatalf("approval.identities.signing_key_id %q, on disk %v", got, want)
+		}
+	}
+	// The diff digest is computed, not read: recompute it from the diff
+	// document of the bundle.
+	_, _, d, v := scenario(t, dir)
+	db := writeDiffBundle(t, dir, d, &v)
+	r, err := FromBundle(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := compare.DiffDigest(*r.Diff)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Input.DiffDigest != want {
+		t.Fatalf("input.diff_digest %q, recomputed %q", r.Input.DiffDigest, want)
+	}
+	if r.Verdict.DiffDigest != want {
+		t.Fatalf("verdict.diff_digest %q, recomputed %q", r.Verdict.DiffDigest, want)
 	}
 }

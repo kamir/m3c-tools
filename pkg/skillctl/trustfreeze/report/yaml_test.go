@@ -499,3 +499,16 @@ func attributesOfFirstArtifact(t *testing.T, tree any) map[string]any {
 	}
 	return attrs
 }
+
+func TestCaptureCapabilitiesYAMLGolden(t *testing.T) {
+	b := writeCaptureWith(t, t.TempDir(), "capture", trustfreeze.KindCapture, testTime, "24.04", 0, capabilitiesFixture())
+	r, err := FromBundle(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := MarshalYAML(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "report_capture_capabilities.yaml.golden", got)
+}
