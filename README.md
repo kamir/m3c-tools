@@ -141,12 +141,49 @@ author → pack → sign → admit → attest → verify / install → use → a
 - **Provable identity for agents.** `agentid` issues owner-signed mandates that verify offline.
 - **Auditable.** A local transparency log (`translog`) and a Claude Code trust gate
   (`verify-hook`) that fails closed.
+- **Agents are bundles too.** A bundle declares its `kind` in the manifest, so
+  `publish --kind agent` ships an agent, the registry namespaces entries as `art:name`, and
+  `pull --kind` stops an agent run from overwriting the skills beside it. Omitting `kind`
+  still means a skill, so older bundles keep working.
+
+### The machine under the agent: `skillctl trust-freeze`
+
+A signed skill says what an agent may do. It says nothing about the machine it runs on. That
+is what `trust-freeze` is for: record what a host is, have that state approved once, and
+afterwards say what changed.
+
+```bash
+skillctl trust-freeze doctor                              # what could be collected here
+skillctl trust-freeze capture --profile ubuntu-bastion --output ./cap
+skillctl trust-freeze baseline approve --capture ./cap --output ./base \
+  --reviewer you --change-id TICKET-1 --reason "accepted" --key ./key.priv
+skillctl trust-freeze verify --bundle ./base --trusted-key ./key.pub   # offline
+skillctl trust-freeze diff --baseline ./base --current ./cap2 --trusted-key ./key.pub
+```
+
+Four properties are worth knowing before you use it:
+
+- **A capture does not touch the host.** It reads, writes nothing outside its own output
+  directory, and never elevates itself. What your rights did not reach is named, not omitted:
+  a refused file produces an entry with a reason, never an empty list that reads like an answer.
+- **A baseline is an approval, not an observation.** `capture` produces evidence; only
+  `baseline approve` turns it into a baseline, and it requires a reviewer, a change id and a
+  reason. The ed25519 signature carries its own domain string, so a baseline signature cannot
+  be replayed as a skill-bundle or attestation signature.
+- **A wider question is not drift.** Where a later capture could see more than the baseline
+  could, the entries whose decisive sources come from probes the baseline never ran are
+  reported as `coverage_increased` at `info`, not as new privilege.
+- **It only claims what it has.** Twelve Linux probes exist plus a portable identity probe.
+  Windows, WSL and macOS probe families do **not**, and there a capture with a Linux profile
+  is honestly `incomplete` and says which probes did not run. What has actually been executed
+  on a real host is recorded in
+  [`tests/evidence/trust-freeze/`](tests/evidence/trust-freeze/), never in prose beside it.
 
 **Command surface**: *authoring:* `keygen`, `pack`, `sign`, `verify-sig`; *trust & install:*
 `trust`, `install`, `verify`, `verify-hook`; *governance:* `attest`, `revoke`, `agentid`,
 `publish`, `pull`, `registry`; *audit & transparency:* `audit`, `seal`, `scan`, `review`,
-`propose`, `translog`, `gate-stats`; plus `project`, `session`.
-See the [skillctl manual](docs/v2/referenz/manual-skillctl.md).
+`propose`, `translog`, `gate-stats`, `envreport`; *machines:* `trust-freeze`, `drift`; plus
+`project`, `session`. See the [skillctl manual](docs/v2/referenz/manual-skillctl.md).
 
 ## What `secretctl` accounts for
 
@@ -192,7 +229,10 @@ See the [secretctl reference](docs/v2/entwickler/secretctl.md).
 | [**Manual: skillctl**](docs/v2/referenz/manual-skillctl.md) | The full trust lifecycle, command by command |
 | [Menu Bar App](docs/old/menubar-app.md) | Channels, Observation Window, menu items (macOS) |
 | [Setup & Operations: Intel Mac & Windows](docs/v2/betrieb/setup-target-devices.md) | Zero-to-operating runbook for fresh Intel Mac / Windows target devices |
-| [Platform differences](docs/v2/referenz/PLATFORM-DIFFERENCES.md) | What works where |
+| [**QA acceptance: skillctl on Windows**](docs/v2/betrieb/QA-abnahme-skillctl-windows.de.md) | The sheet to print, tick and sign: install, offline lifecycle, `trust-freeze`, and three counter-checks that pass by refusing (DE) |
+| [**QA acceptance: skillctl on Linux**](docs/v2/betrieb/QA-abnahme-skillctl-linux.de.md) | The same for a host where the Linux probes exist, with two stages more: the installer refusing without cosign, and the diff between an unprivileged and an elevated capture (DE) |
+| [Acceptance & handover: the skill lifecycle](docs/v2/betrieb/acceptance-skillctl-lifecycle.md) | The two-person exchange behind that sheet, plus a Windows quick validate |
+| [Platform differences](docs/v2/referenz/PLATFORM-DIFFERENCES.md) | What works where, including what `trust-freeze` does not claim per platform |
 | [Website](https://kamir.github.io/m3c-tools) | The rendered docs site |
 
 ---
