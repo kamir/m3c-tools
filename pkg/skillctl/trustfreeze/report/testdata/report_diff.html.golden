@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trust Freeze report: diff</title>
+<style>
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    color: #111111;
+    background: #ffffff;
+    line-height: 1.5;
+    margin: 0 auto;
+    max-width: 62rem;
+    padding: 1.5rem;
+  }
+  h1 { font-size: 1.5rem; margin: 0 0 0.25rem; }
+  h2 { font-size: 1.15rem; margin: 2rem 0 0.5rem; border-bottom: 1px solid #cccccc; padding-bottom: 0.2rem; }
+  h3 { font-size: 1rem; margin: 1.2rem 0 0.2rem; }
+  p { margin: 0.4rem 0; }
+  .kind { font-size: 0.9rem; letter-spacing: 0.08em; text-transform: uppercase; color: #444444; }
+  .lead { color: #222222; }
+  .note { color: #444444; font-size: 0.93rem; }
+  table { border-collapse: collapse; width: 100%; margin: 0.6rem 0 1rem; font-size: 0.93rem; }
+  caption { text-align: left; font-weight: 600; padding: 0.3rem 0; }
+  th, td { border: 1px solid #cccccc; padding: 0.3rem 0.45rem; text-align: left; vertical-align: top; }
+  th { background: #f2f2f2; font-weight: 600; }
+  td.name, th.name { width: 16rem; }
+  .mono, pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .digest { font-size: 0.9rem; word-break: break-all; }
+  pre {
+    background: #f6f6f6; border: 1px solid #dddddd; padding: 0.5rem 0.6rem;
+    overflow-x: auto; white-space: pre-wrap; word-break: break-word; font-size: 0.88rem; margin: 0.4rem 0;
+  }
+  footer { margin-top: 2.5rem; border-top: 1px solid #cccccc; padding-top: 0.6rem; font-size: 0.88rem; color: #444444; }
+  @media print {
+    body { max-width: none; padding: 0; font-size: 10.5pt; color: #000000; }
+    h2 { page-break-after: avoid; }
+    table, pre { page-break-inside: auto; }
+    tr, th, td { page-break-inside: avoid; }
+    th { background: #eeeeee; }
+    footer { page-break-before: avoid; }
+  }
+</style>
+</head>
+<body>
+<p class="kind">Trust Freeze report</p>
+<h1>Trust Freeze report: diff</h1>
+<p class="lead">This page is a projection of the bundle named above: it shows what the bundle records, in the order the report document has it. It computes no new statement, it evaluates no signature, no key trust and no expiry, and it reads no clock. Where it shows such a state, it shows it as a quotation from the bundle, with the command that does evaluate it beside it.</p>
+<table>
+<caption>What this page is about</caption>
+<tr><th class="name">Field</th><th>Value</th></tr>
+<tr><td class="name">bundle kind</td><td class="mono">diff</td></tr>
+<tr><td class="name">bundle id</td><td class="mono">tf-diff-20260102T060405.000000000Z-device-eb9aa81eeaaf3ce7</td></tr>
+<tr><td class="name">created at</td><td class="mono">2026-01-02T06:04:05Z</td></tr>
+<tr><td class="name">subject id</td><td class="mono">device/eb9aa81eeaaf3ce7</td></tr>
+<tr><td class="name">subject os family</td><td class="mono">linux</td></tr>
+</table>
+
+<h2>Identity of this bundle</h2>
+<p class="note">Two printouts of the same bundle carry the same values here, so they can be compared without
+starting a tool. Every row names where the value comes from and the command that checks it.</p>
+<table>
+<caption>Digests and key ids, in full</caption>
+<tr><th class="name">What</th><th>Value</th><th>Where it comes from</th><th>How to check it</th></tr>
+<tr><td class="name">content digest of this bundle</td><td class="mono digest">sha256:a4948cc1 353cc6a3 61e1604b 7c1e1337 aff2abce c8994b3c 9e60cf3d 7f282520</td><td>manifest.json, field content_digest</td><td class="mono">skillctl trust-freeze verify --bundle &lt;bundle&gt;</td></tr>
+<tr><td class="name">diff digest</td><td class="mono digest">sha256:4d70d079 4e75f0a2 921b810d 6df171ea 5971dca7 031a98a9 ce089e25 4c33e106</td><td>computed over diff.json by the report (compare.DiffDigest)</td><td class="mono">skillctl trust-freeze diff --baseline &lt;baseline&gt; --current &lt;capture&gt; --trusted-key &lt;public key&gt;</td></tr>
+<tr><td class="name">content digest of the baseline side</td><td class="mono digest">sha256:eff75bfb d982ed01 db0e78c4 3f0ceeb9 45751f56 87a2a613 6137c155 e1f39675</td><td>diff.json, field baseline.content_digest</td><td class="mono">skillctl trust-freeze verify --bundle &lt;bundle&gt;</td></tr>
+<tr><td class="name">profile digest of the baseline side</td><td class="mono digest">sha256:1900eab6 c028483d 7126599e e6f50de0 d27907b5 c65fa905 24580b4b 0f9852b0</td><td>diff.json, field baseline.profile.digest</td><td class="mono">skillctl trust-freeze verify --bundle &lt;bundle&gt;</td></tr>
+<tr><td class="name">content digest of the current side</td><td class="mono digest">sha256:b5a8ac47 5aabbddd 613e32a6 941d672e fc7ab4e4 89fd9c0e 12513a14 d48b5f60</td><td>diff.json, field current.content_digest</td><td class="mono">skillctl trust-freeze verify --bundle &lt;bundle&gt;</td></tr>
+<tr><td class="name">profile digest of the current side</td><td class="mono digest">sha256:1900eab6 c028483d 7126599e e6f50de0 d27907b5 c65fa905 24580b4b 0f9852b0</td><td>diff.json, field current.profile.digest</td><td class="mono">skillctl trust-freeze verify --bundle &lt;bundle&gt;</td></tr>
+<tr><td class="name">normalization digest</td><td class="mono digest">sha256:48b02614 a4e21394 49d49603 519d74d0 d1c3d68b 0677f704 44eeb2a2 dacfb4bb</td><td>diff.json, field normalization.digest</td><td class="mono">skillctl trust-freeze diff --baseline &lt;baseline&gt; --current &lt;capture&gt; --trusted-key &lt;public key&gt;</td></tr>
+<tr><td class="name">rules digest of the policy</td><td class="mono digest">sha256:a74f9eb6 2318cc8b ee01ced0 a0b829df 720d4933 6cafae3a 08447554 084e4ddd</td><td>verdict.json, field policy.rules_digest</td><td class="mono">skillctl trust-freeze diff --baseline &lt;baseline&gt; --current &lt;capture&gt; --trusted-key &lt;public key&gt;</td></tr>
+<tr><td class="name">diff digest the verdict judged</td><td class="mono digest">sha256:4d70d079 4e75f0a2 921b810d 6df171ea 5971dca7 031a98a9 ce089e25 4c33e106</td><td>verdict.json, field diff_digest. The report refuses a verdict that judged another diff.</td><td class="mono">skillctl trust-freeze diff --baseline &lt;baseline&gt; --current &lt;capture&gt; --trusted-key &lt;public key&gt;</td></tr>
+</table>
+
+<h2>Guidance for the reader</h2>
+<h3>What this is</h3>
+<p>The difference between an approved baseline and a later capture of the same subject, as one deterministic document. The same two bundles always produce the same bytes and the same diff_digest.</p>
+<h3>What it answers</h3>
+<p>What changed, and at which severity the policy named in the header rated each change. Entries marked coverage_increased are the opposite of drift: there the later capture could see more than the baseline could, so the difference is in the question, not in the host.</p>
+<h3>What it does not answer</h3>
+<p>Why something changed, and whether the change was authorised. It also does not re-verify the two bundles: both were verified when this diff was produced, and a diff is never produced over a baseline that failed verification.</p>
+<h3>What to do next</h3>
+<p>Read the entries at and above the severity your process cares about, decide whether the change was intended, and then either act on the host or approve the new state as the new baseline. Approving is a deliberate step: there is no automatic baseline update.</p>
+<pre>skillctl trust-freeze diff --baseline &lt;baseline&gt; --current &lt;capture&gt; --trusted-key &lt;public key&gt;</pre>
+<h3>To reproduce this document from the two bundles it names:</h3>
+<pre>skillctl trust-freeze diff --baseline &lt;baseline&gt; --current &lt;capture&gt; --trusted-key &lt;public key&gt;</pre>
+<p class="note">Two runs of that command over unchanged bundles give the same diff_digest as this page. A different digest means a different input, not a different mood.</p>
+
+
+
+<h2>What was compared</h2>
+<table>
+<caption>The baseline side</caption>
+<tr><th class="name">Field</th><th>Value</th></tr>
+<tr><td class="name">kind</td><td class="mono">baseline</td></tr>
+<tr><td class="name">bundle id</td><td class="mono">tf-baseline-20260102T030405.000000000Z-device-eb9aa81eeaaf3ce7</td></tr>
+<tr><td class="name">subject id</td><td class="mono">device/eb9aa81eeaaf3ce7</td></tr>
+<tr><td class="name">profile</td><td class="mono">walking-skeleton</td></tr>
+<tr><td class="name">profile version</td><td class="mono">1</td></tr>
+</table>
+<table>
+<caption>The current side</caption>
+<tr><th class="name">Field</th><th>Value</th></tr>
+<tr><td class="name">kind</td><td class="mono">capture</td></tr>
+<tr><td class="name">bundle id</td><td class="mono">tf-capture-20260102T050405.000000000Z-device-eb9aa81eeaaf3ce7</td></tr>
+<tr><td class="name">subject id</td><td class="mono">device/eb9aa81eeaaf3ce7</td></tr>
+<tr><td class="name">profile</td><td class="mono">walking-skeleton</td></tr>
+<tr><td class="name">profile version</td><td class="mono">1</td></tr>
+</table>
+<table>
+<caption>How it was compared</caption>
+<tr><th class="name">Field</th><th>Value</th></tr>
+<tr><td class="name">normalization rule set</td><td class="mono">trust-freeze/normalize/v2</td></tr>
+<tr><td class="name">subject mismatch allowed</td><td class="mono">false</td></tr>
+</table>
+
+<h3>How many entries of each kind</h3>
+<p class="note">Every change kind is listed, the ones with no entry included: a kind that is missing from a
+table cannot be told apart from a kind that was never looked for.</p>
+<table>
+<caption>diff.counts</caption>
+<tr><th class="name">Change kind</th><th>Entries</th></tr>
+<tr><td class="name mono">added</td><td class="mono">0</td></tr>
+<tr><td class="name mono">applicability_changed</td><td class="mono">0</td></tr>
+<tr><td class="name mono">became_effective</td><td class="mono">0</td></tr>
+<tr><td class="name mono">became_ineffective</td><td class="mono">0</td></tr>
+<tr><td class="name mono">capability_added</td><td class="mono">0</td></tr>
+<tr><td class="name mono">capability_changed</td><td class="mono">0</td></tr>
+<tr><td class="name mono">capability_not_observed</td><td class="mono">0</td></tr>
+<tr><td class="name mono">capability_removed</td><td class="mono">0</td></tr>
+<tr><td class="name mono">changed</td><td class="mono">1</td></tr>
+<tr><td class="name mono">collection_gap</td><td class="mono">1</td></tr>
+<tr><td class="name mono">confidence_changed</td><td class="mono">0</td></tr>
+<tr><td class="name mono">coverage_increased</td><td class="mono">0</td></tr>
+<tr><td class="name mono">not_observed</td><td class="mono">0</td></tr>
+<tr><td class="name mono">removed</td><td class="mono">0</td></tr>
+<tr><td class="name mono">subject_changed</td><td class="mono">0</td></tr>
+</table>
+
+<h3>The verdict</h3>
+<table>
+<caption>verdict.json</caption>
+<tr><th class="name">Field</th><th>Value</th></tr>
+<tr><td class="name">policy</td><td class="mono">trust-freeze/policy/default-v1</td></tr>
+<tr><td class="name">highest severity</td><td class="mono">medium</td></tr>
+<tr><td class="name">fail on</td><td class="mono">high</td></tr>
+<tr><td class="name">threshold exceeded</td><td class="mono">false</td></tr>
+<tr><td class="name">findings at severity critical</td><td class="mono">0</td></tr>
+<tr><td class="name">findings at severity high</td><td class="mono">0</td></tr>
+<tr><td class="name">findings at severity info</td><td class="mono">0</td></tr>
+<tr><td class="name">findings at severity low</td><td class="mono">0</td></tr>
+<tr><td class="name">findings at severity medium</td><td class="mono">2</td></tr>
+</table>
+<p class="note">The severity of an entry comes from the policy named above and from nowhere else. A threshold that was exceeded says that the highest severity reached the configured level; it says nothing about who changed what, or whether the change was allowed.</p>
+
+<h3>The entries</h3>
+<table>
+<caption>Every entry of this diff, in the order of the document</caption>
+<tr><th class="name">Change kind</th><th>Subject of the entry</th><th>What the entry records</th><th>Severity</th><th>Rule</th><th>Message</th></tr>
+<tr><td class="name mono">changed</td><td class="mono">device/os</td><td>changed attributes: os_version; artifact type: os</td><td class="mono">medium</td><td class="mono">TF-POL-DEVICE-IDENTITY</td><td>artifact device/os (os) changed: attributes os_version</td></tr>
+<tr><td class="name mono">collection_gap</td><td class="mono">linux.packages</td><td>gap cause: not_captured, probe status: unsupported, reason: not_implemented, required: false</td><td class="mono">medium</td><td class="mono">TF-POL-GAP-OPTIONAL</td><td>optional probe linux.packages was not collected (not_captured, status unsupported, reason not_implemented)</td></tr>
+</table>
+
+<h2>Not on this page</h2>
+<p class="note">What this page leaves out is named here, with the command that shows it. Nothing is left out
+silently.</p>
+<h3>The attribute digests of both sides of each of the 2 entries (before_digest, after_digest).</h3>
+<p>An attribute value never appears in a diff; the digests stand for the normalized attribute maps. They are machine material, and they are in the report document.</p>
+<pre>skillctl trust-freeze report --input &lt;bundle&gt; --output &lt;file.json&gt;</pre>
+
+<footer>
+<p>Generated from the report projection (schema <span class="mono">trust-freeze/report/v1</span>) by
+<span class="mono">skillctl trust-freeze report</span>, version <span class="mono">0.0.0-test</span>.
+The page carries no script, no stylesheet, no font and no image from anywhere: it opens on a host without a
+network.</p>
+</footer>
+</body>
+</html>

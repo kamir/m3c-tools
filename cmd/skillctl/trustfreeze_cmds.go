@@ -74,6 +74,7 @@ const tfDefaultReportFile = "report.json"
 var tfReportFormats = map[string]string{
 	"json": tfDefaultReportFile,
 	"yaml": "report.yaml",
+	"html": "report.html",
 }
 
 // tfReportFormatNames returns the accepted --format values of report, sorted,
@@ -1640,7 +1641,7 @@ func tfReport(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Wr
 	if err != nil {
 		return out.fail(tfResultVerification, exitGeneric, err)
 	}
-	raw, err := tfRenderReport(rep, *format)
+	raw, err := tfRenderReport(rep, *format, d.Version)
 	if err != nil {
 		return out.exec(err)
 	}
@@ -1660,10 +1661,14 @@ func tfReport(ctx context.Context, d tfDeps, args []string, stdout, stderr io.Wr
 // tfReportFormats. Every format renders the same projection: JSON is the
 // canonical form, YAML is converted from those bytes, and the page is built
 // from the projection as well (FR-0472).
-func tfRenderReport(rep report.Report, format string) ([]byte, error) {
+func tfRenderReport(rep report.Report, format, version string) ([]byte, error) {
 	switch format {
 	case "yaml":
 		return report.MarshalYAML(rep)
+	case "html":
+		// The page names the version that renders it; the projection carries
+		// the version that made the capture, which is another statement.
+		return report.MarshalHTML(rep, report.HTMLOptions{Generator: version})
 	default:
 		return report.Marshal(rep)
 	}

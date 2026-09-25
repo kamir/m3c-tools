@@ -10,8 +10,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"html"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -142,4 +144,77 @@ func TestTrustFreezeReportWritesYAML(t *testing.T) {
 	// And the status document on stdout stays JSON.
 	tfReportStdoutJSON(t, e, exitOK, tfResultOK,
 		"report", "--input", capDir, "--output", filepath.Join(dir, "third.yaml"), "--format", "yaml")
+}
+
+// TestTrustFreezeReportWritesHTML: --format html writes one self-contained
+// page, an existing directory gets report.html, the page carries the guidance
+// and the digests of the projection, and it references nothing from outside.
+func TestTrustFreezeReportWritesHTML(t *testing.T) {
+	e := newTFEnv(t)
+	capDir := e.path("cap")
+	e.runJSON(exitOK, tfResultOK, "capture", "--profile", "walking-skeleton", "--output", capDir)
+	dir := e.path("html-out")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	doc := tfReportStdoutJSON(t, e, exitOK, tfResultOK, "report", "--input", capDir, "--output", dir, "--format", "html")
+	target := filepath.Join(dir, "report.html")
+	raw, err := os.ReadFile(target) // #nosec G304 -- written by this test under t.TempDir()
+	if err != nil {
+		t.Fatalf("--format html did not write %s: %v", target, err)
+	}
+	sum := sha256.Sum256(raw)
+	if got, _ := doc["report_sha256"].(string); got != hex.EncodeToString(sum[:]) {
+		t.Fatalf("report_sha256 %q is not the digest of the written file", got)
+	}
+	page := string(raw)
+	for _, want := range []string{
+		"<!DOCTYPE html>", "A record of what one machine looked like at one moment.",
+		"skillctl trust-freeze verify --bundle", "Not on this page",
+	} {
+		if !strings.Contains(html.UnescapeString(page), want) {
+			t.Fatalf("the page does not carry %q", want)
+		}
+	}
+	// The content digest of the capture is on the page, in groups of eight.
+	digest, _ := doc["input"].(map[string]any)
+	cd, _ := digest["content_digest"].(string)
+	if cd == "" {
+		t.Fatal("the status document names no content digest")
+	}
+	if !strings.Contains(page, tfGroupEight(cd)) {
+		t.Fatalf("the page does not carry the content digest %q in groups of eight", cd)
+	}
+	// Nothing is loaded from outside: no scheme, no script, no link, no font.
+	for _, forbidden := range []string{"https://", "http://", "<script", "<link", "@import", "@font-face", "url("} {
+		if strings.Contains(page, forbidden) {
+			t.Fatalf("the page carries %q", forbidden)
+		}
+	}
+	// The mode of the file is 0600, as for every other report format.
+	fi, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
+		t.Fatalf("mode %v, want 0600", fi.Mode().Perm())
+	}
+}
+
+// tfGroupEight is the grouping the page uses for a digest: the prefix, then the
+// value in groups of eight characters.
+func tfGroupEight(v string) string {
+	prefix, rest := "", v
+	if i := strings.Index(v, ":"); i >= 0 {
+		prefix, rest = v[:i+1], v[i+1:]
+	}
+	var groups []string
+	for len(rest) > 8 {
+		groups = append(groups, rest[:8])
+		rest = rest[8:]
+	}
+	if rest != "" {
+		groups = append(groups, rest)
+	}
+	return prefix + strings.Join(groups, " ")
 }
