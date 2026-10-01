@@ -50,4 +50,4 @@ mcp==1.30.0
 
 PyYAML==6.0.3
 numpy==2.5.3
-networkx==3.6.1
+networkx==3.7
