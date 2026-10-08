@@ -415,6 +415,13 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 		return nil, fmt.Errorf("install: %w", err)
 	}
 	if !skillbundle.KnownSchema(man.Schema) {
+		// Two very different situations, and "upgrade skillctl" is the right
+		// advice for only one of them. A RETIRED schema means the bundle is
+		// older than the ADR-0047 digest change, and no upgrade will make it
+		// verify; it has to be re-packed.
+		if skillbundle.LegacyDigestSchema(man.Schema) {
+			return nil, fmt.Errorf("install: %s carries the retired schema %q: it was packed before the digest moved in front of the compression (ADR-0047) and cannot verify under this build. Re-pack it (nothing was installed)", b.Name, man.Schema)
+		}
 		return nil, fmt.Errorf("install: %s carries schema %q, which this build does not know; "+
 			"upgrade skillctl (nothing was installed)", b.Name, man.Schema)
 	}

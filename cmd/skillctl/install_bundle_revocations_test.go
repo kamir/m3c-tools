@@ -16,7 +16,6 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -28,6 +27,8 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/install"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
+
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 )
 
 // installableFixture is a real, extractable .skb (tar.gz with a signed
@@ -61,7 +62,12 @@ func buildInstallableFixture(t *testing.T) installableFixture {
 	}
 
 	blob := twoPartyBundle(t, "revo-demo", "a bundle for the revocation gate")
-	sum := sha256.Sum256(blob)
+	// ADR-0047: the digest covers the canonical tar, so the fixture asks the
+	// format package instead of hashing the archive's own bytes.
+	sum, derr := skillbundle.DigestBundleBytes(blob)
+	if derr != nil {
+		t.Fatalf("bundle digest: %v", derr)
+	}
 	digest := "sha256:" + hex.EncodeToString(sum[:])
 
 	skbPath := filepath.Join(dir, "revo-demo@1.0.0.skb")

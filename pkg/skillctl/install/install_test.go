@@ -21,7 +21,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -37,6 +36,8 @@ import (
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
+
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 )
 
 // ----- bundle factory -----
@@ -57,7 +58,7 @@ func buildBundleTGZ(t *testing.T, spec bundleSpec) []byte {
 		spec.files = map[string]string{}
 	}
 	if _, ok := spec.files["bundle.json"]; !ok {
-		spec.files["bundle.json"] = `{"name":"` + spec.name + `","version":"` + spec.version + `","schema":"m3c-skill-bundle/v1"}` + "\n"
+		spec.files["bundle.json"] = `{"name":"` + spec.name + `","version":"` + spec.version + `","schema":"m3c-skill-bundle/v3"}` + "\n"
 	}
 	if _, ok := spec.files["SKILL.md"]; !ok {
 		spec.files["SKILL.md"] = "# " + spec.name + "\n"
@@ -225,7 +226,12 @@ func mkBundleFixture(t *testing.T) *bundleFixture {
 		name:    "fetch-contract",
 		version: "1.0.0",
 	})
-	digest := sha256.Sum256(blob)
+	// ADR-0047: the digest covers the canonical tar, so a fixture cannot
+	// hash the archive's own bytes any more and still agree with the code.
+	digest, derr := skillbundle.DigestBundleBytes(blob)
+	if derr != nil {
+		t.Fatalf("bundle digest: %v", derr)
+	}
 	return &bundleFixture{
 		authorPub:  authorPub,
 		authorPriv: authorPriv,
@@ -620,7 +626,12 @@ func TestInstall_TarPathTraversal_Refused(t *testing.T) {
 
 	authorPub, authorPriv, _ := ed25519.GenerateKey(rand.Reader)
 	regPub, regPriv, _ := ed25519.GenerateKey(rand.Reader)
-	digest := sha256.Sum256(blob)
+	// ADR-0047: the digest covers the canonical tar, so a fixture cannot
+	// hash the archive's own bytes any more and still agree with the code.
+	digest, derr := skillbundle.DigestBundleBytes(blob)
+	if derr != nil {
+		t.Fatalf("bundle digest: %v", derr)
+	}
 	digestStr := "sha256:" + hex.EncodeToString(digest[:])
 
 	fr.versions = []registry.BundleVersion{{Version: "1.0.0", Digest: digestStr, Status: "admitted"}}
@@ -673,7 +684,12 @@ func TestInstall_GzipBomb_Refused(t *testing.T) {
 
 	authorPub, authorPriv, _ := ed25519.GenerateKey(rand.Reader)
 	regPub, regPriv, _ := ed25519.GenerateKey(rand.Reader)
-	digest := sha256.Sum256(blob)
+	// ADR-0047: the digest covers the canonical tar, so a fixture cannot
+	// hash the archive's own bytes any more and still agree with the code.
+	digest, derr := skillbundle.DigestBundleBytes(blob)
+	if derr != nil {
+		t.Fatalf("bundle digest: %v", derr)
+	}
 	digestStr := "sha256:" + hex.EncodeToString(digest[:])
 
 	fr.versions = []registry.BundleVersion{{Version: "1.0.0", Digest: digestStr, Status: "admitted"}}

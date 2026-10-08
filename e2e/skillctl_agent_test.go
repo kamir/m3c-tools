@@ -140,13 +140,22 @@ func TestE2E_AgentPackenErzeugtGenauEineDatei(t *testing.T) {
 	if manifest["kind"] != "agent" {
 		t.Errorf("kind = %v, erwartet agent", manifest["kind"])
 	}
-	if manifest["schema"] != "m3c-skill-bundle/v2" {
-		t.Errorf("schema = %v, erwartet m3c-skill-bundle/v2", manifest["schema"])
+	// Seit der Eigentuemer-Entscheidung vom 2026-10-08 traegt das Schema nur
+	// noch die FASSUNG, die Art steckt allein in kind (oben geprueft). Beide
+	// Arten tragen deshalb denselben Marker.
+	if manifest["schema"] != "m3c-skill-bundle/v3" {
+		t.Errorf("schema = %v, erwartet m3c-skill-bundle/v3", manifest["schema"])
 	}
 }
 
-// TestE2E_SkillBuendelTraegtKeineArt ist die Gegenprobe und die eigentliche
-// Zusicherung von SPEC-0432: fuer Skills aendert sich kein Byte.
+// TestE2E_SkillBuendelTraegtKeineArt ist die Gegenprobe zu SPEC-0432: ein
+// Skillbuendel traegt kein kind-Feld, die Art wird also nicht stillschweigend
+// mitgeschrieben.
+//
+// Die zweite Zusicherung, die hier stand, gilt nicht mehr: "fuer Skills aendert
+// sich kein Byte" war der Grund, das Schema bei v1 zu lassen, und ADR-0047
+// aendert ohnehin jedes Byte des kanonischen Manifests. Der Marker ist jetzt
+// fuer beide Arten derselbe.
 func TestE2E_SkillBuendelTraegtKeineArt(t *testing.T) {
 	eigenesArbeitsverzeichnis(t)
 	home := t.TempDir()
@@ -173,8 +182,8 @@ func TestE2E_SkillBuendelTraegtKeineArt(t *testing.T) {
 	if _, da := manifest["kind"]; da {
 		t.Errorf("ein Skillbuendel traegt ein kind-Feld: %v", manifest["kind"])
 	}
-	if manifest["schema"] != "m3c-skill-bundle/v1" {
-		t.Errorf("schema = %v, erwartet v1", manifest["schema"])
+	if manifest["schema"] != "m3c-skill-bundle/v3" {
+		t.Errorf("schema = %v, erwartet v3", manifest["schema"])
 	}
 }
 

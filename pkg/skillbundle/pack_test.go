@@ -18,15 +18,20 @@ var fixedTime = time.Date(2026, 5, 5, 19, 30, 0, 0, time.UTC)
 // fixedTime + BuiltBy="skillctl/test". Recompute by running the test and pasting
 // the "got" value from its failure message, but read the next paragraph first.
 //
-// WHAT THIS CONSTANT DOES NOT PROMISE: stability across Go versions. Pack hashes
-// the GZIPPED archive, and gzip's output changes between Go releases, so this
-// digest is reproducible per toolchain and not beyond it. Measured 2026-10-08 on
-// an unchanged tree: red with go1.27.1, green with go1.26.6, which is the version
-// go.mod names and the CI installs. `toolchain` in go.mod is a floor and not a
-// pin, so anyone with a newer Go saw this test fail on master through no fault of
-// their own. The Makefile now fixes the toolchain for every go invocation, and
-// ADR-0047 moves the digest in front of the compression in v0.7.0, which removes
-// the dependency instead of papering over it.
+// THE VALUE MOVED IN v0.7.0, ON PURPOSE, and twice within that one change: once
+// because ADR-0047 formed the digest over the canonical tar instead of the gzip
+// stream, and once because the schema marker in the manifest became a pure
+// FORMAT version (`m3c-skill-bundle/v1` to `/v3`, skipping the number that used
+// to mean "agent"). Both move the canonical bytes, so both move this constant.
+// It went `15fd20c2...` to `624b7980...` to `f257b2c9...`, each step with the
+// owner's decision behind it and none by repasting a red test's output.
+//
+// WHAT IT PROMISES SINCE THEN: stability across Go versions, which the old value
+// could not. gzip's output changes between Go releases and the digest no longer
+// covers it. Measured 2026-10-08 in the worktree that made the change: this test
+// passes under BOTH `GOTOOLCHAIN=go1.26.6` and `GOTOOLCHAIN=go1.27.1`, with the
+// same value, where the old constant was green under the first and red under the
+// second.
 //
 // SPEC-0432 WARNING: this constant also carries the promise that a skill's bytes
 // never move when the bundle format grows. If a change to the manifest STRUCT
@@ -34,7 +39,7 @@ var fixedTime = time.Date(2026, 5, 5, 19, 30, 0, 0, time.UTC)
 // NOT repaste the digest: that would silently give all 78 admitted skill bundles
 // a new digest on their next re-pack, with no content change behind it. Make the
 // new field `omitempty` and leave it unwritten for skills instead.
-const goldenDigest = "sha256:15fd20c2141d63d218cebe10e768a236f725756b1bc0c56f08eafeecf07882c1"
+const goldenDigest = "sha256:f257b2c990354df4ddb73c5d4a69f1fb2c908b35e7cf37d87db36a11a782888c"
 
 func fixtureManifest() BundleManifest {
 	return BundleManifest{
@@ -197,9 +202,28 @@ func TestDigestStability(t *testing.T) {
 	if digest != expected {
 		t.Fatalf("digest drift:\n  got  %s\n  want %s", digest, expected)
 	}
+	// The opposite of the old assertion, and deliberately so. bundle.json used
+	// to carry the digest "for humans"; since ADR-0047 it must NOT, because a
+	// value inside the bytes it covers can only be defined by blanking it first,
+	// and that forces every verifier to rebuild the canonical tar before it can
+	// check anything. This assertion is what stops the self-reference coming
+	// back as a convenience.
 	manifestBytes := readTarFile(t, out, "bundle.json")
-	if !bytes.Contains(manifestBytes, []byte(digest)) {
-		t.Fatalf("bundle.json does not embed digest %s", digest)
+	if bytes.Contains(manifestBytes, []byte(digest)) {
+		t.Fatalf("bundle.json embeds its own digest %s again; the self-reference is back", digest)
+	}
+	if bytes.Contains(manifestBytes, []byte("bundle_digest")) {
+		t.Fatalf("bundle.json still carries a bundle_digest field: %s", manifestBytes)
+	}
+
+	// The point of the whole change: the same bytes must hash to the same value
+	// from the finished file, without a compressor in the loop.
+	sum, err := DigestBundleFile(out)
+	if err != nil {
+		t.Fatalf("recompute from file: %v", err)
+	}
+	if got := FormatDigest(sum); got != digest {
+		t.Fatalf("a verifier recomputes a different value:\n  pack %s\n  file %s", digest, got)
 	}
 }
 

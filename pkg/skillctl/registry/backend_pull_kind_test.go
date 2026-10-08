@@ -8,11 +8,12 @@ package registry
 // bytes (fail-closed) and stamps StagedBundle.Kind from it.
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/ed25519"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -56,8 +57,13 @@ func (f *fakeEventBackend) Events(context.Context, artifact.ListFilter, artifact
 // seedSignedBundle admits + attests skb into the fake backend, signed by priv.
 func seedSignedBundle(t *testing.T, f *fakeEventBackend, priv ed25519.PrivateKey, name, ver string, skb []byte) string {
 	t.Helper()
-	d := sha256.Sum256(skb)
-	digest := "sha256:" + hex.EncodeToString(d[:])
+	// ADR-0047: the digest covers the canonical tar, so the fixture asks the
+	// format package instead of hashing the archive's own bytes.
+	d, derr := skillbundle.DigestBundleBytes(skb)
+	if derr != nil {
+		t.Fatalf("bundle digest: %v", derr)
+	}
+	digest := skillbundle.FormatDigest(d)
 	sigB64 := base64.StdEncoding.EncodeToString(ed25519.Sign(priv, d[:]))
 	fp := selfFingerprint(priv.Public().(ed25519.PublicKey))
 
@@ -166,7 +172,12 @@ func TestBackendPullRefusesManifestlessBundle(t *testing.T) {
 	t.Setenv("M3C_SKILL_CACHE_DIR", t.TempDir())
 
 	f := &fakeEventBackend{}
-	seedSignedBundle(t, f, priv, "raw-bytes", "1.0.0", []byte("NOT-A-BUNDLE"))
+	// Used to be []byte("NOT-A-BUNDLE"). Since ADR-0047 the digest is formed
+	// over the canonical tar, so bytes that are not an archive cannot clear the
+	// digest gate at all, and this test could never reach the manifest gate it
+	// is about. What it asserts is unchanged: a REAL archive carrying no
+	// bundle.json is refused for the missing manifest, not for anything else.
+	seedSignedBundle(t, f, priv, "raw-bytes", "1.0.0", tarGzWithoutManifest(t))
 
 	res, err := PullBundlesFromBackend(context.Background(), f, tr, PullOpts{})
 	if err != nil {
@@ -181,4 +192,28 @@ func TestBackendPullRefusesManifestlessBundle(t *testing.T) {
 	if !strings.Contains(res.Skipped[0].Gate.Error(), "kind unknown") {
 		t.Errorf("refusal %q does not say why the kind matters", res.Skipped[0].Gate.Error())
 	}
+}
+
+// tarGzWithoutManifest builds a real gzipped tar that carries a SKILL.md and no
+// bundle.json, so it clears the digest and signature gates and has to be
+// refused at the manifest gate.
+func tarGzWithoutManifest(t *testing.T) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	body := []byte("# a skill that forgot its manifest\n")
+	if err := tw.WriteHeader(&tar.Header{Name: "SKILL.md", Mode: 0o644, Size: int64(len(body))}); err != nil {
+		t.Fatalf("tar header: %v", err)
+	}
+	if _, err := tw.Write(body); err != nil {
+		t.Fatalf("tar body: %v", err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("close tar: %v", err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatalf("close gzip: %v", err)
+	}
+	return buf.Bytes()
 }

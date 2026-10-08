@@ -5,7 +5,9 @@ package verify
 // the full chain end-to-end with on-disk crypto material.
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -18,6 +20,8 @@ import (
 	"testing"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
+
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 )
 
 // ----- shared fixture builders -----
@@ -59,17 +63,46 @@ func mustKeypair(t *testing.T) keyMaterial {
 	}
 }
 
-// writeBundle produces a fake "blob" file with random bytes and returns
-// (path, raw_digest, "sha256:<hex>"). The bytes don't have to be a real
-// gzipped tar: the verifier only sees them via SHA-256.
+// writeBundle produces a REAL gzipped tar carrying content as its single
+// entry, and returns (path, raw_digest, "sha256:<hex>").
+//
+// It used to write the bytes verbatim and hash them, under the comment "the
+// bytes don't have to be a real gzipped tar: the verifier only sees them via
+// SHA-256". ADR-0047 ended that: the digest covers the canonical tar, so a fake
+// bundle cannot be hashed at all. What these tests actually need from the
+// fixture is unchanged, namely that distinct content yields a distinct digest.
 func writeBundle(t *testing.T, content []byte) (string, [32]byte, string) {
 	t.Helper()
 	dir := t.TempDir()
 	p := filepath.Join(dir, "bundle.skb")
-	if err := os.WriteFile(p, content, 0o644); err != nil {
+
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	if err := tw.WriteHeader(&tar.Header{
+		Name: "SKILL.md",
+		Mode: 0o644,
+		Size: int64(len(content)),
+	}); err != nil {
+		t.Fatalf("tar header: %v", err)
+	}
+	if _, err := tw.Write(content); err != nil {
+		t.Fatalf("tar body: %v", err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("close tar: %v", err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatalf("close gzip: %v", err)
+	}
+
+	if err := os.WriteFile(p, buf.Bytes(), 0o644); err != nil {
 		t.Fatalf("write bundle: %v", err)
 	}
-	d := sha256.Sum256(content)
+	d, err := skillbundle.DigestBundleBytes(buf.Bytes())
+	if err != nil {
+		t.Fatalf("bundle digest: %v", err)
+	}
 	return p, d, "sha256:" + hexLower(d[:])
 }
 

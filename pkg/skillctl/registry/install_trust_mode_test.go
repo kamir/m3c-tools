@@ -27,7 +27,7 @@ func makeSkbTGZ(name, skillMd string) []byte {
 	// A real bundle always carries bundle.json (Pack synthesizes it), and since
 	// SPEC-0432 the install path READS it to decide where the bundle goes. A
 	// fixture without one was testing a bundle that cannot exist.
-	man := []byte(`{"schema":"m3c-skill-bundle/v1","name":"` + name + `","version":"1.0.0"}`)
+	man := []byte(`{"schema":"m3c-skill-bundle/v3","name":"` + name + `","version":"1.0.0"}`)
 	_ = tw.WriteHeader(&tar.Header{Name: name + "/bundle.json", Mode: 0644, Size: int64(len(man)), Typeflag: tar.TypeReg})
 	_, _ = tw.Write(man)
 	_ = tw.Close()

@@ -14,7 +14,6 @@ package registry
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -174,9 +173,23 @@ func PullBundlesFromBackend(ctx context.Context, be artifact.Backend, tr *SelfTr
 			continue
 		}
 		// Gate 2: digest match (recompute: never trust the backend).
-		gotDigest := "sha256:" + hex.EncodeToString(sha256Sum(skbBytes))
+		// ADR-0047: the digest covers the canonical tar, not the archive's
+		// bytes, so the format package computes it. A bundle that does not
+		// decompress fails the SAME gate it used to fail by mismatching.
+		gotRaw, derr := skillbundle.DigestBundleBytes(skbBytes)
+		if derr != nil {
+			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, Gate: ErrGateDigest, Detail: fmt.Sprintf("not readable as a bundle: %v", derr)})
+			continue
+		}
+		gotDigest := skillbundle.FormatDigest(gotRaw)
 		if gotDigest != digest {
-			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, Gate: ErrGateDigest, Detail: fmt.Sprintf("computed %s, event declared %s", gotDigest, digest)})
+			detail := fmt.Sprintf("computed %s, %s declared %s", gotDigest, "event", digest)
+			// Name the retired format instead of leaving a digest mismatch, which
+			// reads like tampering when it is only an old bundle (ADR-0047).
+			if leg := skillbundle.LegacySchemaOf(skbBytes); leg != "" {
+				detail += fmt.Sprintf("; the bundle declares the retired schema %s, so it predates the digest change and must be re-packed", leg)
+			}
+			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, Gate: ErrGateDigest, Detail: detail})
 			continue
 		}
 		// Gate 3: bundle author + registry signatures over the recomputed digest.

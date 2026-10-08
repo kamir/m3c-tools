@@ -21,6 +21,8 @@ import (
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
+
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 )
 
 // bundleFixture is a fully-wired, self-consistent --bundle scenario on disk.
@@ -53,11 +55,17 @@ func buildBundleFixture(t *testing.T) bundleFixture {
 
 	// The .skb blob: arbitrary bytes; the verifier only sees them via sha256.
 	skbPath := filepath.Join(dir, "demo@1.0.0.skb")
-	content := []byte("a perfectly ordinary signed skill bundle blob")
+	// Used to be plain bytes: the verifier only looked at their SHA-256, so a
+	// fixture did not have to be an archive. Since ADR-0047 the digest covers
+	// the canonical tar, so it does.
+	content := twoPartyBundle(t, "demo", "a perfectly ordinary signed skill bundle")
 	if err := os.WriteFile(skbPath, content, 0o644); err != nil {
 		t.Fatalf("write skb: %v", err)
 	}
-	dRaw := sha256.Sum256(content)
+	dRaw, derr := skillbundle.DigestBundleBytes(content)
+	if derr != nil {
+		t.Fatalf("bundle digest: %v", derr)
+	}
 	digestStr := "sha256:" + hex.EncodeToString(dRaw[:])
 
 	authorID := "id:bob@m3c"

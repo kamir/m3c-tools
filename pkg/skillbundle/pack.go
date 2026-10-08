@@ -39,10 +39,15 @@ type fileEntry struct {
 }
 
 // Pack produces a deterministic `.skb` (gzipped tar) at outFile from skillDir
-// per SPEC-0188 §3 (canonicalization rules + digest computation). Returns the
-// bundle digest "sha256:<hex>". Two-pass: hash an archive whose manifest has
-// an empty bundle_digest, then re-emit with the digest filled in for humans.
-// Verifiers always recompute and ignore the embedded value.
+// per SPEC-0188 §3 (canonicalization rules), and returns the bundle digest
+// "sha256:<hex>".
+//
+// ONE pass since v0.7.0 (ADR-0047): the digest is formed over the canonical
+// TAR, before the compression, so it names the content and not the gzip
+// implementation that happened to be linked in. `bundle.json` carries no
+// `bundle_digest` any more, because a digest inside the bytes it covers forces
+// every verifier to rebuild the archive first; see digest.go. A verifier
+// recomputes the same value from the finished file with DigestBundleFile.
 func Pack(skillDir, outFile string, opts PackOptions) (digest string, err error) {
 	skillDir = filepath.Clean(skillDir)
 
@@ -102,14 +107,10 @@ func Pack(skillDir, outFile string, opts PackOptions) (digest string, err error)
 			manifest.Kind, KindSkill, KindAgent)
 	}
 	if manifest.Schema == "" {
-		// Only an agent bundle moves to v2. A skill keeps v1 so its canonical
-		// bytes, and therefore its digest, stay exactly as before
-		// (SPEC-0432 §3.2, AC-13).
-		if manifest.Kind == KindAgent {
-			manifest.Schema = SchemaAgent
-		} else {
-			manifest.Schema = Schema
-		}
+		// One format marker for both arts. The art is Kind, and the branch that
+		// used to put it in the schema is gone with the owner's decision of
+		// 2026-10-08 (see Schema in manifest.go).
+		manifest.Schema = Schema
 	}
 	switch {
 	case !opts.BuiltAt.IsZero():
@@ -130,27 +131,22 @@ func Pack(skillDir, outFile string, opts PackOptions) (digest string, err error)
 
 	checksumsBytes := buildChecksums(contentFiles)
 
-	// Pass 1: archive with empty bundle_digest → its SHA-256 IS the digest.
-	manifestBytesEmpty, err := marshalManifest(manifest.withEmptyDigest())
+	// The manifest never carries its own digest (ADR-0047), so there is one
+	// canonical tar and one hash over it.
+	manifest.BundleDigest = ""
+	manifestBytes, err := marshalManifest(manifest)
 	if err != nil {
 		return "", fmt.Errorf("marshaling canonical manifest: %w", err)
 	}
-	canonicalArchive, err := buildArchive(contentFiles, manifestBytesEmpty, checksumsBytes)
+	canonicalTar, err := buildTar(contentFiles, manifestBytes, checksumsBytes)
 	if err != nil {
-		return "", fmt.Errorf("building canonical archive: %w", err)
+		return "", fmt.Errorf("building canonical tar: %w", err)
 	}
-	sum := sha256.Sum256(canonicalArchive)
-	digest = "sha256:" + hex.EncodeToString(sum[:])
+	digest = FormatDigest(CanonicalDigest(canonicalTar))
 
-	// Pass 2: archive with bundle_digest filled in (for humans).
-	manifest.BundleDigest = digest
-	manifestBytesFinal, err := marshalManifest(manifest)
+	finalArchive, err := gzipTar(canonicalTar)
 	if err != nil {
-		return "", fmt.Errorf("marshaling final manifest: %w", err)
-	}
-	finalArchive, err := buildArchive(contentFiles, manifestBytesFinal, checksumsBytes)
-	if err != nil {
-		return "", fmt.Errorf("building final archive: %w", err)
+		return "", fmt.Errorf("compressing canonical tar: %w", err)
 	}
 
 	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
@@ -262,10 +258,14 @@ func marshalManifest(m BundleManifest) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// buildArchive emits the gzipped tar. Synthesized CHECKSUMS and bundle.json
-// are merged into the entry list and re-sorted with the content files so the
-// final tar is always lex-sorted regardless of source.
-func buildArchive(contentFiles []fileEntry, manifestBytes, checksumsBytes []byte) ([]byte, error) {
+// buildTar emits the canonical tar, uncompressed. Synthesized CHECKSUMS and
+// bundle.json are merged into the entry list and re-sorted with the content
+// files so the tar is always lex-sorted regardless of source.
+//
+// These bytes, and not the compressed ones, are what the bundle digest covers
+// (ADR-0047). The split from gzipTar is the whole point: the identity has to be
+// formable without a compressor in the loop.
+func buildTar(contentFiles []fileEntry, manifestBytes, checksumsBytes []byte) ([]byte, error) {
 	all := make([]fileEntry, 0, len(contentFiles)+2)
 	all = append(all, fileEntry{relPath: "CHECKSUMS", mode: 0644, data: checksumsBytes})
 	all = append(all, fileEntry{relPath: "bundle.json", mode: 0644, data: manifestBytes})
@@ -273,14 +273,7 @@ func buildArchive(contentFiles []fileEntry, manifestBytes, checksumsBytes []byte
 	sort.Slice(all, func(i, j int) bool { return all[i].relPath < all[j].relPath })
 
 	var buf bytes.Buffer
-	gz, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
-	if err != nil {
-		return nil, fmt.Errorf("gzip writer: %w", err)
-	}
-	// Strip host metadata from gzip header (= `gzip --no-name`).
-	gz.Header = gzip.Header{}
-
-	tw := tar.NewWriter(gz)
+	tw := tar.NewWriter(&buf)
 	zeroTime := time.Unix(0, 0).UTC()
 
 	for _, e := range all {
@@ -309,6 +302,23 @@ func buildArchive(contentFiles []fileEntry, manifestBytes, checksumsBytes []byte
 
 	if err := tw.Close(); err != nil {
 		return nil, fmt.Errorf("closing tar: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+// gzipTar compresses the canonical tar into the shipped `.skb` body. The gzip
+// header is stripped of host metadata (= `gzip --no-name`) so the file stays
+// byte-identical per toolchain; the file bytes carry no identity any more, so a
+// gzip change across Go versions no longer moves the digest.
+func gzipTar(canonicalTar []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	gz, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+	if err != nil {
+		return nil, fmt.Errorf("gzip writer: %w", err)
+	}
+	gz.Header = gzip.Header{}
+	if _, err := gz.Write(canonicalTar); err != nil {
+		return nil, fmt.Errorf("gzip write: %w", err)
 	}
 	if err := gz.Close(); err != nil {
 		return nil, fmt.Errorf("closing gzip: %w", err)

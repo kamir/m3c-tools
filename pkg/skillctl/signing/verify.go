@@ -63,6 +63,19 @@ func VerifyDetached(bundlePath, pubkeyPath string) error {
 
 	digest, err := ComputeBundleDigest(bundlePath)
 	if err != nil {
+		// Since v0.7.0 the digest is formed over the TAR (ADR-0047), so a file
+		// whose bytes were altered in transit usually fails HERE, in the
+		// decompression, instead of later as a digest mismatch. Returning the
+		// raw gzip error would drop both sentinels and the CLI could no longer
+		// map the refusal to exit 10, so the altered-after-signing case keeps
+		// its diagnosis: signatures sitting next to the file prove it was once
+		// a readable bundle.
+		if others := siblingSignatureDigests(bundlePath); len(others) > 0 {
+			return fmt.Errorf(
+				"verify-sig: %w: this file no longer reads as a bundle (%v), but the signature next to it covers %s. "+
+					"The signature was not re-made, so the bytes were altered after signing: %w",
+				ErrDigestChanged, err, strings.Join(others, ", "), ErrSignatureInvalid)
+		}
 		return err
 	}
 	digestHex := hex.EncodeToString(digest[:])

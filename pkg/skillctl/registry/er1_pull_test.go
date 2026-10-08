@@ -1,10 +1,11 @@
 package registry
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"crypto/ed25519"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,6 +20,8 @@ import (
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/er1"
+
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 )
 
 // pullFake records nothing on POST (we don't use it) but answers
@@ -81,10 +84,36 @@ func (f *pullFake) addItem(item map[string]any) {
 
 // ─── Test helpers ──────────────────────────────────────────────────────────
 
+// mintBundleBytes builds a REAL gzipped tar carrying content as its single
+// entry, and returns it with its bundle digest.
+//
+// It used to return []byte(content) and sha256 over those bytes, which was
+// enough while the digest WAS the file hash. Since ADR-0047 the digest is
+// formed over the canonical tar, so a fixture has to be an archive. Distinct
+// content still yields a distinct digest, which is what these tests ask of it.
 func mintBundleBytes(content string) (skb []byte, digest string, digestBytes []byte) {
-	skb = []byte(content)
-	d := sha256.Sum256(skb)
-	return skb, "sha256:" + hex.EncodeToString(d[:]), d[:]
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	body := []byte(content)
+	if err := tw.WriteHeader(&tar.Header{Name: "SKILL.md", Mode: 0o644, Size: int64(len(body))}); err != nil {
+		panic("mintBundleBytes: tar header: " + err.Error())
+	}
+	if _, err := tw.Write(body); err != nil {
+		panic("mintBundleBytes: tar body: " + err.Error())
+	}
+	if err := tw.Close(); err != nil {
+		panic("mintBundleBytes: close tar: " + err.Error())
+	}
+	if err := gz.Close(); err != nil {
+		panic("mintBundleBytes: close gzip: " + err.Error())
+	}
+	skb = buf.Bytes()
+	d, err := skillbundle.DigestBundleBytes(skb)
+	if err != nil {
+		panic("mintBundleBytes: digest: " + err.Error())
+	}
+	return skb, skillbundle.FormatDigest(d), d[:]
 }
 
 // mintAdmitItem builds a real admit ER1 item (signed envelope, with the .skb

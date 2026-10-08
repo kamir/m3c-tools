@@ -18,6 +18,8 @@ import (
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
+
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 )
 
 // This file exists because of a comment.
@@ -48,7 +50,7 @@ import (
 func bundleWithBadChecksums(t *testing.T, name string) []byte {
 	t.Helper()
 	files := map[string]string{
-		"bundle.json": `{"schema":"m3c-skill-bundle/v1","name":"` + name + `","version":"1.0.0"}` + "\n",
+		"bundle.json": `{"schema":"m3c-skill-bundle/v3","name":"` + name + `","version":"1.0.0"}` + "\n",
 		"SKILL.md":    "# " + name + "\n\nreal content\n",
 		// A digest of something else entirely. Two spaces, sha256sum convention.
 		"CHECKSUMS": strings.Repeat("00", sha256.Size) + "  SKILL.md\n",
@@ -94,7 +96,12 @@ func TestBothInstallPathsRefuseTheSameBadChecksums(t *testing.T) {
 		t.Fatalf("registry key: %v", err)
 	}
 	blob := bundleWithBadChecksums(t, name)
-	sum := sha256.Sum256(blob)
+	// ADR-0047: the digest covers the canonical tar, so a fixture cannot
+	// hash the archive's own bytes any more and still agree with the code.
+	sum, derr := skillbundle.DigestBundleBytes(blob)
+	if derr != nil {
+		t.Fatalf("bundle digest: %v", derr)
+	}
 	digest := "sha256:" + hex.EncodeToString(sum[:])
 
 	metaRaw := map[string]any{

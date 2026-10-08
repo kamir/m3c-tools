@@ -5,10 +5,13 @@
 # Kosmetik: `toolchain` in go.mod ist fuer Go eine UNTERGRENZE und kein Pin. Wer
 # ein neueres Go installiert hat, benutzt sein eigenes, waehrend die CI ueber
 # `go-version-file: go.mod` genau die genannte Fassung installiert. Gemessen am
-# 2026-10-08 auf unveraendertem master: TestDigestStability in pkg/skillbundle
-# faellt mit go1.27.1 und besteht mit go1.26.6, weil der Buendel-Digest ueber den
-# gzip-Strom entsteht und dessen Ausgabe sich zwischen Go-Fassungen aendert
-# (ADR-0047 stellt das in v0.7.0 um). Auch die Coverage-Boeden haengen daran.
+# 2026-10-08 auf damaligem master: TestDigestStability in pkg/skillbundle fiel
+# mit go1.27.1 und bestand mit go1.26.6, weil der Buendel-Digest ueber den
+# gzip-Strom entstand. DIESER Anlass ist seit ADR-0047 weg: der Digest entsteht
+# vor der Kompression, und derselbe Goldwert besteht gemessen unter go1.26.6 wie
+# unter go1.27.1. Die Festlegung bleibt trotzdem, aus dem Grund, der sie ohnehin
+# traegt: die Coverage-Boeden haengen an der Fassung, und lokal soll gemessen
+# werden was die CI misst.
 # Ueberschreiben geht weiter: `make GOTOOLCHAIN=auto test-unit`.
 GOTOOLCHAIN ?= $(shell sed -n 's/^toolchain \(go[0-9.]*\)$$/\1/p' go.mod | head -1)
 ifeq ($(strip $(GOTOOLCHAIN)),)

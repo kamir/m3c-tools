@@ -43,6 +43,8 @@ import (
 	"testing"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
+
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 )
 
 // ----- binary build (one per `go test` invocation) -----
@@ -148,7 +150,12 @@ func newFixture(t *testing.T) *e2eFixture {
 		t.Fatalf("regKey: %v", err)
 	}
 	blob := buildSkillBundleTGZ(t)
-	digest := sha256.Sum256(blob)
+	// ADR-0047: the digest covers the canonical tar, so a fixture cannot
+	// hash the archive's own bytes any more and still agree with the code.
+	digest, derr := skillbundle.DigestBundleBytes(blob)
+	if derr != nil {
+		t.Fatalf("bundle digest: %v", derr)
+	}
 	digestStr := "sha256:" + hex.EncodeToString(digest[:])
 	return &e2eFixture{
 		authorPub:  authorPub,
@@ -249,8 +256,15 @@ func TestInstall_GoodBundle_Exit0(t *testing.T) {
 func TestInstall_TamperedBundle_Exit10(t *testing.T) {
 	home := t.TempDir()
 	f := newFixture(t)
-	tampered := append([]byte(nil), f.blob...)
-	tampered[5] ^= 0x80
+	// The tamper used to be `tampered[5] ^= 0x80`, a bit flip in the gzip
+	// header's MTIME. That changed the FILE and so changed the old digest.
+	// Since ADR-0047 the digest covers the canonical tar, and gzip header
+	// metadata is not content: flipping it is no longer a tamper, and
+	// accepting it is the decided behaviour, not a hole. To keep testing what
+	// this test is about, the served archive now carries DIFFERENT content
+	// under the advertised digest, which is what "the bytes you got are not
+	// the bytes that were signed" means from here on.
+	tampered := twoPartyBundle(t, "fetch-contract", "content that was never signed")
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/skills/by-name/", func(w http.ResponseWriter, r *http.Request) {

@@ -15,7 +15,6 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -249,7 +248,12 @@ func packIntentBundle(t *testing.T, deps []skillbundle.DataDependency) (string, 
 	if err != nil {
 		t.Fatalf("read packed: %v", err)
 	}
-	d := sha256.Sum256(blob)
+	// ADR-0047: the digest covers the canonical tar, so a fixture cannot
+	// hash the archive's own bytes any more and still agree with the code.
+	d, derr := skillbundle.DigestBundleBytes(blob)
+	if derr != nil {
+		t.Fatalf("bundle digest: %v", derr)
+	}
 	return out, "sha256:" + hex.EncodeToString(d[:])
 }
 

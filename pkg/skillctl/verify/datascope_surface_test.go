@@ -8,7 +8,6 @@ package verify
 // masquerade as signed-manifest.
 
 import (
-	"crypto/sha256"
 	"os"
 	"path/filepath"
 	"testing"
@@ -40,7 +39,12 @@ func packBundleWithScope(t *testing.T, deps []skillbundle.DataDependency, intent
 	if err != nil {
 		t.Fatalf("read packed: %v", err)
 	}
-	d := sha256.Sum256(blob)
+	// ADR-0047: the digest covers the canonical tar, so a fixture cannot
+	// hash the archive's own bytes any more and still agree with the code.
+	d, derr := skillbundle.DigestBundleBytes(blob)
+	if derr != nil {
+		t.Fatalf("bundle digest: %v", derr)
+	}
 	return out, d, "sha256:" + hexLower(d[:])
 }
 

@@ -61,7 +61,12 @@ func publishSignedSkill(t *testing.T, be artifact.Backend, priv ed25519.PrivateK
 	t.Helper()
 	ctx := context.Background()
 	skb := mkRealSkb(t, name, ver, body)
-	db := sha256.Sum256(skb)
+	// ADR-0047: the digest covers the canonical tar, so the fixture asks the
+	// format package instead of hashing the archive's own bytes.
+	db, derr := skillbundle.DigestBundleBytes(skb)
+	if derr != nil {
+		t.Fatalf("bundle digest: %v", derr)
+	}
 	digest := "sha256:" + hex.EncodeToString(db[:])
 	sigB64 := base64.StdEncoding.EncodeToString(ed25519.Sign(priv, db[:])) // over the digest bytes → gate-3
 	fp := fpOf(priv.Public().(ed25519.PublicKey))
