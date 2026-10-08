@@ -662,7 +662,13 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 		}
 		gotDigest := skillbundle.FormatDigest(gotRaw)
 		if gotDigest != digest {
-			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, DocID: docID, Gate: ErrGateDigest, Detail: fmt.Sprintf("computed %s, item declared %s", gotDigest, digest)})
+			detail := fmt.Sprintf("computed %s, %s declared %s", gotDigest, "item", digest)
+			// Name the retired format instead of leaving a digest mismatch, which
+			// reads like tampering when it is only an old bundle (ADR-0047).
+			if leg := skillbundle.LegacySchemaOf(skbBytes); leg != "" {
+				detail += fmt.Sprintf("; the bundle declares the retired schema %s, so it predates the digest change and must be re-packed", leg)
+			}
+			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, DocID: docID, Gate: ErrGateDigest, Detail: detail})
 			continue
 		}
 		// Gate 3: bundle author + registry signatures from the event verify against trust-roots.

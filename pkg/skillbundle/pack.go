@@ -107,14 +107,10 @@ func Pack(skillDir, outFile string, opts PackOptions) (digest string, err error)
 			manifest.Kind, KindSkill, KindAgent)
 	}
 	if manifest.Schema == "" {
-		// Only an agent bundle moves to v2. A skill keeps v1 so its canonical
-		// bytes, and therefore its digest, stay exactly as before
-		// (SPEC-0432 §3.2, AC-13).
-		if manifest.Kind == KindAgent {
-			manifest.Schema = SchemaAgent
-		} else {
-			manifest.Schema = Schema
-		}
+		// One format marker for both arts. The art is Kind, and the branch that
+		// used to put it in the schema is gone with the owner's decision of
+		// 2026-10-08 (see Schema in manifest.go).
+		manifest.Schema = Schema
 	}
 	switch {
 	case !opts.BuiltAt.IsZero():

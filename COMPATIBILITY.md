@@ -48,15 +48,29 @@ The bundle format is the load-bearing compatibility surface. A `.skb` archive ca
 `bundle.json` manifest whose `schema` field is the **format version**: currently
 `m3c-skill-bundle/v1` (the `skillbundle.Schema` constant in
 [`pkg/skillbundle/manifest.go`](pkg/skillbundle/manifest.go)). The manifest also carries
-the skill's own semver `version`, and a content-address `bundle_digest` (the SHA-256 of
-the canonical archive) that *is* the bundle's identity.
+the skill's own semver `version`, and a content-address that *is* the bundle's identity:
+the SHA-256 of the canonical **tar**, formed before the compression, with the domain
+separator `m3c-skill-bundle/digest/v2` (ADR-0047, since `v0.7.0`). The manifest does not
+carry the digest; a value inside the bytes it covers would force every verifier to rebuild
+the archive before it could check anything.
 
 - A reader accepts bundles produced by the **current and the previous MINOR (N−1)** of
   its line. Upgrading one MINOR never orphans the bundles you already trust.
+- **The one named exception, `v0.7.0`.** Every bundle packed before it is refused,
+  because its digest was a hash over gzip output and no reader can recompute it. Owner
+  decision of 2026-10-08 (ADR-0047), taken with the reason that only `v1.0.x` goes to
+  customers and nobody outside holds a bundle that needed sparing. There is no migration
+  path; a bundle is re-packed, and it gets a new digest and a new signature. The refusal
+  names the retired `schema` instead of reporting a digest mismatch, so it does not read
+  like tampering.
 - A **format break**: anything that changes how existing bytes are interpreted:
-  **requires a MAJOR bump** and bumps the `schema` version field
-  (`m3c-skill-bundle/v1` → `.../v2`). Readers gate on that field, so an
-  incompatible bundle is refused explicitly rather than silently mis-parsed. The
+  **requires a MAJOR bump** and bumps the `schema` version field, currently
+  `m3c-skill-bundle/v3`. That field is the FORMAT and nothing else. It skipped `/v2`
+  on the way there, and the reason is worth knowing before anyone bumps it again: `/v2`
+  was once the marker for an AGENT bundle, so the field used to carry the art and the
+  version in one string. The art is now the `kind` field alone, and a reader that sees
+  anything below `/v3` knows it predates the digest change. Readers gate on the field, so
+  an incompatible bundle is refused explicitly rather than silently mis-parsed. The
   registry carrier formats gate the same way and **fail closed**: a store whose
   wire-format version is newer than the running build is rejected with "upgrade
   skillctl", never best-effort parsed.

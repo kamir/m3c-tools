@@ -58,7 +58,7 @@ func buildBundleTGZ(t *testing.T, spec bundleSpec) []byte {
 		spec.files = map[string]string{}
 	}
 	if _, ok := spec.files["bundle.json"]; !ok {
-		spec.files["bundle.json"] = `{"name":"` + spec.name + `","version":"` + spec.version + `","schema":"m3c-skill-bundle/v1"}` + "\n"
+		spec.files["bundle.json"] = `{"name":"` + spec.name + `","version":"` + spec.version + `","schema":"m3c-skill-bundle/v3"}` + "\n"
 	}
 	if _, ok := spec.files["SKILL.md"]; !ok {
 		spec.files["SKILL.md"] = "# " + spec.name + "\n"

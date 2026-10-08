@@ -27,6 +27,7 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -124,4 +125,38 @@ func digestFromArchiveReader(r io.Reader) ([sha256.Size]byte, error) {
 	var out [sha256.Size]byte
 	copy(out[:], h.Sum(nil))
 	return out, nil
+}
+
+// LegacySchemaOf reads the schema marker out of a packed `.skb` so a refusal can
+// name WHY it refuses. It returns "" when the archive cannot be read or carries
+// no manifest.
+//
+// UNAUTHENTICATED, and only ever for a message. The bytes it reads have not
+// been checked against any signature, which is exactly why the caller must
+// already have decided to refuse before asking: the answer may not change a
+// verdict, only the sentence that reports it.
+func LegacySchemaOf(archive []byte) string {
+	entries, err := Unpack(archive, UnpackOptions{})
+	if err != nil {
+		return ""
+	}
+	for _, e := range entries {
+		if e.Rel != "bundle.json" {
+			continue
+		}
+		var m struct {
+			Schema string `json:"schema"`
+		}
+		if json.Unmarshal(e.Content, &m) != nil {
+			return ""
+		}
+		if LegacyDigestSchema(m.Schema) {
+			if m.Schema == "" {
+				return "(no schema field)"
+			}
+			return m.Schema
+		}
+		return ""
+	}
+	return ""
 }

@@ -50,7 +50,7 @@ import (
 func bundleWithBadChecksums(t *testing.T, name string) []byte {
 	t.Helper()
 	files := map[string]string{
-		"bundle.json": `{"schema":"m3c-skill-bundle/v1","name":"` + name + `","version":"1.0.0"}` + "\n",
+		"bundle.json": `{"schema":"m3c-skill-bundle/v3","name":"` + name + `","version":"1.0.0"}` + "\n",
 		"SKILL.md":    "# " + name + "\n\nreal content\n",
 		// A digest of something else entirely. Two spaces, sha256sum convention.
 		"CHECKSUMS": strings.Repeat("00", sha256.Size) + "  SKILL.md\n",

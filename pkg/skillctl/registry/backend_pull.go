@@ -183,7 +183,13 @@ func PullBundlesFromBackend(ctx context.Context, be artifact.Backend, tr *SelfTr
 		}
 		gotDigest := skillbundle.FormatDigest(gotRaw)
 		if gotDigest != digest {
-			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, Gate: ErrGateDigest, Detail: fmt.Sprintf("computed %s, event declared %s", gotDigest, digest)})
+			detail := fmt.Sprintf("computed %s, %s declared %s", gotDigest, "event", digest)
+			// Name the retired format instead of leaving a digest mismatch, which
+			// reads like tampering when it is only an old bundle (ADR-0047).
+			if leg := skillbundle.LegacySchemaOf(skbBytes); leg != "" {
+				detail += fmt.Sprintf("; the bundle declares the retired schema %s, so it predates the digest change and must be re-packed", leg)
+			}
+			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, Gate: ErrGateDigest, Detail: detail})
 			continue
 		}
 		// Gate 3: bundle author + registry signatures over the recomputed digest.

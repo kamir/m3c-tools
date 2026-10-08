@@ -18,10 +18,13 @@ var fixedTime = time.Date(2026, 5, 5, 19, 30, 0, 0, time.UTC)
 // fixedTime + BuiltBy="skillctl/test". Recompute by running the test and pasting
 // the "got" value from its failure message, but read the next paragraph first.
 //
-// THE VALUE MOVED ONCE, ON PURPOSE, in v0.7.0: ADR-0047 formed the digest over
-// the canonical tar instead of the gzip stream, so every bundle's digest changed
-// and this constant was re-set from `15fd20c2...` with the owner's decision
-// behind it, not by repasting a red test's output.
+// THE VALUE MOVED IN v0.7.0, ON PURPOSE, and twice within that one change: once
+// because ADR-0047 formed the digest over the canonical tar instead of the gzip
+// stream, and once because the schema marker in the manifest became a pure
+// FORMAT version (`m3c-skill-bundle/v1` to `/v3`, skipping the number that used
+// to mean "agent"). Both move the canonical bytes, so both move this constant.
+// It went `15fd20c2...` to `624b7980...` to `f257b2c9...`, each step with the
+// owner's decision behind it and none by repasting a red test's output.
 //
 // WHAT IT PROMISES SINCE THEN: stability across Go versions, which the old value
 // could not. gzip's output changes between Go releases and the digest no longer
@@ -36,7 +39,7 @@ var fixedTime = time.Date(2026, 5, 5, 19, 30, 0, 0, time.UTC)
 // NOT repaste the digest: that would silently give all 78 admitted skill bundles
 // a new digest on their next re-pack, with no content change behind it. Make the
 // new field `omitempty` and leave it unwritten for skills instead.
-const goldenDigest = "sha256:624b798065f41823cde978ae1cc9fec3234e36f8ff4d11da7985b85b8e0d1ac7"
+const goldenDigest = "sha256:f257b2c990354df4ddb73c5d4a69f1fb2c908b35e7cf37d87db36a11a782888c"
 
 func fixtureManifest() BundleManifest {
 	return BundleManifest{

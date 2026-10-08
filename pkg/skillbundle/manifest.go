@@ -12,17 +12,34 @@ import (
 	"time"
 )
 
-// Schema is the canonical schema identifier embedded in every SKILL bundle
-// manifest. It stays at v1 forever: bumping it for all bundles would change the
-// re-serialized manifest bytes of every unchanged skill, and pack.go hashes
-// those bytes, so each skill would report a new digest without a content change
-// (SPEC-0432 §3.2).
-const Schema = "m3c-skill-bundle/v1"
+// Schema is the FORMAT version of a bundle manifest, and nothing else. The
+// bundle's ART lives in Kind. Owner decision of 2026-10-08, taken with
+// ADR-0047: the two axes used to share this one string, and that is why the
+// numbers below look the way they do.
+//
+// It was "m3c-skill-bundle/v1" and carried the note that it would stay there
+// FOREVER, because bumping it would change the re-serialized manifest bytes of
+// every unchanged skill and so move every digest without a content change
+// (SPEC-0432 §3.2). ADR-0047 moves every digest anyway, by decision, so that
+// reason is spent.
+//
+// The new value skips a number on purpose. "m3c-skill-bundle/v2" is NOT free:
+// it was the marker an AGENT bundle carried, so a reader that saw /v2 could not
+// tell a pre-ADR-0047 agent bundle from a post-ADR-0047 skill bundle. /v3 is
+// unambiguous: anything below it predates the digest change and cannot verify.
+const Schema = "m3c-skill-bundle/v3"
 
-// SchemaAgent is the schema identifier for bundles carrying Kind == KindAgent.
-// A v1-only reader must REJECT such a bundle rather than install it at the skill
-// location (SPEC-0432 §3.2).
-const SchemaAgent = "m3c-skill-bundle/v2"
+// The retired markers. They are named so a reader can say WHY it refuses a
+// bundle instead of reporting a digest mismatch, which reads like tampering.
+const (
+	LegacySchemaSkillV1 = "m3c-skill-bundle/v1"
+	LegacySchemaAgentV2 = "m3c-skill-bundle/v2"
+)
+
+// SchemaAgent is retained only so existing callers keep compiling and keep
+// meaning what they meant: an agent bundle's schema. Since the art moved to
+// Kind it is the same value as Schema. Deprecated: use Schema and set Kind.
+const SchemaAgent = Schema
 
 // The bundle kinds. KindSkill is the implied default for a manifest that carries
 // no Kind at all: all 78 bundles admitted before SPEC-0432 are skills, so the
@@ -173,5 +190,16 @@ func ReadManifest(archive []byte) (BundleManifest, error) {
 // know about; installing it anyway would put the artifact in the wrong place
 // while reporting success (SPEC-0432 §3.2).
 func KnownSchema(s string) bool {
-	return s == "" || s == Schema || s == SchemaAgent
+	return s == Schema
+}
+
+// LegacyDigestSchema reports whether s is one of the retired markers, i.e. a
+// bundle written before ADR-0047 moved the digest in front of the compression.
+// Such a bundle cannot verify under this build and must be re-packed; saying so
+// is the whole reason this function exists.
+//
+// The empty string counts: the field was optional before SPEC-0432, and every
+// bundle that old is older still than the digest change.
+func LegacyDigestSchema(s string) bool {
+	return s == "" || s == LegacySchemaSkillV1 || s == LegacySchemaAgentV2
 }

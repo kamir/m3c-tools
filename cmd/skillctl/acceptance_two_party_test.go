@@ -547,7 +547,7 @@ func equalSnapshots(a, b map[string]string) bool {
 func twoPartyBundle(t *testing.T, name, greeting string) []byte {
 	t.Helper()
 	files := map[string]string{
-		"bundle.json": fmt.Sprintf(`{"schema":"m3c-skill-bundle/v1","name":%q,"version":"1.0.0"}`+"\n", name),
+		"bundle.json": fmt.Sprintf(`{"schema":"m3c-skill-bundle/v3","name":%q,"version":"1.0.0"}`+"\n", name),
 		"SKILL.md":    "# " + name + "\n\n" + greeting + "\n",
 	}
 	var gzBuf bytes.Buffer

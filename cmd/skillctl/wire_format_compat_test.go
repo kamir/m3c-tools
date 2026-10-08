@@ -61,12 +61,7 @@ package main
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -74,7 +69,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kamir/m3c-tools/pkg/skillbundle"
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
 	_ "github.com/kamir/m3c-tools/pkg/skillctl/backend/git" // registers the local:// scheme
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
@@ -172,7 +166,25 @@ func describeSkips(skips []*registry.PullSkip) string {
 // .skb archive layout, its manifest schema or its CHECKSUMS format. Each of those
 // is a wire-format break and each is invisible to a writer-plus-reader test on
 // one build.
-func TestWireFormatOlderReleaseStillReadable(t *testing.T) {
+// TestWireFormatOlderReleaseReachesTheDigestGate replaces what this file used
+// to assert, and the replacement is the point rather than a concession.
+//
+// Until v0.6.x the test required the v0.4.0 fixture to STAGE, which pinned the
+// COMPATIBILITY.md promise that a reader accepts bundles from the current and
+// the previous MINOR. ADR-0047 ends that promise for bundles: the digest now
+// covers the canonical tar, every pre-v0.7.0 digest is a hash over gzip output,
+// and no reader can recompute it. The owner decided that on 2026-10-08, with no
+// migration path, because only v1.0.x goes to customers.
+//
+// What a frozen byte fixture can still prove is therefore narrower, and it is
+// worth keeping: the OLD CARRIER still parses. Reaching the digest gate at all
+// means the registry store opened, the admit event was found, its envelope was
+// read and its declared digest extracted. A break anywhere in that chain shows
+// up here as a different gate or an error, not as a staged bundle.
+//
+// It also pins the REFUSAL ITSELF: an old bundle must be refused by name, not
+// with a bare digest mismatch that reads like tampering.
+func TestWireFormatOlderReleaseReachesTheDigestGate(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
 	}
@@ -186,143 +198,32 @@ func TestWireFormatOlderReleaseStillReadable(t *testing.T) {
 	}
 	defer be.Close()
 
-	// Gate 1 to gate 5 against the pinned key. Passing gate 4 proves the OLD
-	// attestation event was found, parsed and signature-verified too: the floor is
-	// never satisfied by the admit event's author_intent.
 	res, err := registry.PullBundlesFromBackend(ctx, be, fixturePeer(t, spec, fixturePubKeyB64, fixtureFingerprint), registry.PullOpts{})
 	if err != nil {
 		t.Fatalf("verifying pull over the %s fixture: %v", fixtureProducer, err)
 	}
-	if len(res.Staged) != 1 {
-		t.Fatalf("the %s fixture must stage exactly 1 bundle; staged=%d warnings=%v; rejections:\n%s",
-			fixtureProducer, len(res.Staged), res.Warnings, describeSkips(res.Skipped))
+	if len(res.Staged) != 0 {
+		t.Fatalf("a pre-ADR-0047 bundle staged; its digest cannot be recomputed by this build: %+v", res.Staged)
 	}
-	sb := res.Staged[0]
-	if sb.Name != fixtureSkillName || sb.Version != fixtureSkillVersion || sb.Digest != fixtureBundleDigest {
-		t.Errorf("staged identity drifted: got %s@%s %s, want %s@%s %s",
-			sb.Name, sb.Version, sb.Digest, fixtureSkillName, fixtureSkillVersion, fixtureBundleDigest)
+	if len(res.Skipped) != 1 {
+		t.Fatalf("the %s fixture must be refused exactly once; skipped=%d:\n%s",
+			fixtureProducer, len(res.Skipped), describeSkips(res.Skipped))
 	}
-	if sb.Governance != "green" {
-		t.Errorf("attested governance level = %q, want green (the old attestation event no longer reads)", sb.Governance)
+	skip := res.Skipped[0]
+	if !errors.Is(skip.Gate, registry.ErrGateDigest) {
+		t.Errorf("refused at %v, want the digest gate: reaching a LATER gate would mean the digest was recomputed, an EARLIER one that the old carrier no longer parses", skip.Gate)
 	}
-
-	t.Run("wrong pinned key stages nothing", func(t *testing.T) {
-		// The negative control. Without it a permissive reader would look exactly
-		// like a compatible one: every assertion above would pass while the pull
-		// verified nothing. A freshly generated key is correctly pinned (its own
-		// fingerprint), so AsTrustRoots is satisfied and only the signature check
-		// can reject the bundle.
-		pub, _, err := ed25519.GenerateKey(rand.Reader)
-		if err != nil {
-			t.Fatal(err)
-		}
-		sum := sha256.Sum256(pub)
-		impostor := registry.Peer{
-			Name:              "impostor",
-			Locator:           spec,
-			PubKeyB64:         base64.StdEncoding.EncodeToString(pub),
-			Fingerprint:       "sha256:" + hex.EncodeToString(sum[:]),
-			GovernanceMinimum: "green",
-		}
-		roots, err := impostor.AsTrustRoots()
-		if err != nil {
-			t.Fatalf("pin the control key: %v", err)
-		}
-		out, err := registry.PullBundlesFromBackend(ctx, be, roots, registry.PullOpts{})
-		if err != nil {
-			t.Fatalf("a pull with the wrong key must reject, not error: %v", err)
-		}
-		if len(out.Staged) != 0 {
-			t.Fatalf("a wrong pinned key staged %d bundle(s): the pull is not verifying anything", len(out.Staged))
-		}
-	})
-
-	t.Run("skb bytes are the frozen bytes", func(t *testing.T) {
-		skb, err := os.ReadFile(sb.StagedSkbPath)
-		if err != nil {
-			t.Fatalf("read staged .skb: %v", err)
-		}
-		if len(skb) != fixtureSkbBytes {
-			t.Errorf("staged .skb is %d bytes, want the frozen %d", len(skb), fixtureSkbBytes)
-		}
-		sum := sha256.Sum256(skb)
-		if got := "sha256:" + hex.EncodeToString(sum[:]); got != fixtureBundleDigest {
-			t.Errorf("staged .skb hashes to %s, want %s", got, fixtureBundleDigest)
-		}
-	})
-
-	t.Run("skb manifest is still parseable", func(t *testing.T) {
-		// The .skb archive is the load-bearing compatibility surface named in
-		// COMPATIBILITY.md. Reading it here is what turns "schema is the gate
-		// point" from a claim into a check.
-		skb, err := os.ReadFile(sb.StagedSkbPath)
-		if err != nil {
-			t.Fatalf("read staged .skb: %v", err)
-		}
-		entries, err := skillbundle.Unpack(skb, skillbundle.UnpackOptions{})
-		if err != nil {
-			t.Fatalf("the current unpacker cannot read a %s .skb: %v", fixtureProducer, err)
-		}
-		var manifest, skillmd, checksums bool
-		var m skillbundle.BundleManifest
-		for _, e := range entries {
-			switch e.Rel {
-			case "bundle.json":
-				manifest = true
-				if err := json.Unmarshal(e.Content, &m); err != nil {
-					t.Fatalf("bundle.json from %s no longer unmarshals: %v", fixtureProducer, err)
-				}
-			case "SKILL.md":
-				skillmd = true
-			case "CHECKSUMS":
-				checksums = true
-			}
-		}
-		if !manifest || !skillmd || !checksums {
-			t.Fatalf("frozen archive members missing: bundle.json=%v SKILL.md=%v CHECKSUMS=%v", manifest, skillmd, checksums)
-		}
-		if m.Schema != skillbundle.Schema {
-			t.Errorf("fixture schema %q is no longer the current %q: a schema bump needs a MAJOR release and a reader that still accepts v1",
-				m.Schema, skillbundle.Schema)
-		}
-		if m.Name != fixtureSkillName || m.Version != fixtureSkillVersion || m.BundleDigest != fixtureManifestDigest {
-			t.Errorf("manifest drifted: got %s@%s %s, want %s@%s %s",
-				m.Name, m.Version, m.BundleDigest, fixtureSkillName, fixtureSkillVersion, fixtureManifestDigest)
-		}
-	})
-
-	t.Run("installs offline from the old fixture", func(t *testing.T) {
-		// The end of the chain, and the only step that proves the CHECKSUMS format
-		// still reads: installOne runs skillbundle.ValidateChecksums over the
-		// extracted tree before anything is written into place.
-		skillsDir := filepath.Join(t.TempDir(), "skills")
-		results, err := registry.ConfirmInstall([]*registry.StagedBundle{sb}, "", registry.InstallOpts{
-			StagedSkbPath:         sb.StagedSkbPath,
-			Bundle:                sb,
-			SkillsDir:             skillsDir,
-			TrustRootsFingerprint: fixtureFingerprint,
-			RegistrySpec:          spec,
-		})
-		if err != nil {
-			t.Fatalf("install a %s bundle with the current build: %v", fixtureProducer, err)
-		}
-		if len(results) != 1 || !results[0].CreatedFresh {
-			t.Fatalf("install result = %+v, want one freshly created skill", results)
-		}
-		if _, err := os.Stat(filepath.Join(skillsDir, fixtureSkillName, "SKILL.md")); err != nil {
-			t.Errorf("installed skill has no SKILL.md: %v", err)
-		}
-		sidecar := filepath.Join(skillsDir, fixtureSkillName, registry.ProvenanceSidecarName)
-		raw, err := os.ReadFile(sidecar)
-		if err != nil {
-			t.Fatalf("read provenance sidecar: %v", err)
-		}
-		var side registry.ProvenanceSidecar
-		if err := json.Unmarshal(raw, &side); err != nil {
-			t.Fatalf("provenance sidecar not valid JSON: %v", err)
-		}
-		if side.BundleDigest != fixtureBundleDigest {
-			t.Errorf("sidecar bundle_digest = %q, want %q", side.BundleDigest, fixtureBundleDigest)
-		}
-	})
+	if skip.Name != fixtureSkillName || skip.Version != fixtureSkillVersion {
+		t.Errorf("refused identity = %s@%s, want %s@%s: the old event still has to parse",
+			skip.Name, skip.Version, fixtureSkillName, fixtureSkillVersion)
+	}
+	if skip.Digest != fixtureBundleDigest {
+		t.Errorf("the declared digest read back as %s, want the frozen %s", skip.Digest, fixtureBundleDigest)
+	}
+	// The sentence a human gets. Without this the refusal is indistinguishable
+	// from a tampered download, which is the confusion COMPATIBILITY.md names as
+	// the reason for a schema marker in the first place.
+	if !strings.Contains(skip.Detail, "retired schema") || !strings.Contains(skip.Detail, "re-packed") {
+		t.Errorf("the refusal does not say WHY in words a reader can act on: %q", skip.Detail)
+	}
 }
