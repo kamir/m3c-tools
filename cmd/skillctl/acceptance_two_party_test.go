@@ -46,6 +46,8 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/install"
 	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
+
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 )
 
 // party is one side of the exchange: their own home, keys and trust roots.
@@ -140,7 +142,12 @@ type sealed struct {
 func (p *party) seal(t *testing.T, transport string) sealed {
 	t.Helper()
 	blob := twoPartyBundle(t, p.skill, p.greeting)
-	sum := sha256.Sum256(blob)
+	// ADR-0047: the digest covers the canonical tar, so a fixture cannot
+	// hash the archive's own bytes any more and still agree with the code.
+	sum, derr := skillbundle.DigestBundleBytes(blob)
+	if derr != nil {
+		t.Fatalf("bundle digest: %v", derr)
+	}
 	digest := "sha256:" + hex.EncodeToString(sum[:])
 
 	base := filepath.Join(transport, p.skill+"@1.0.0.skb")

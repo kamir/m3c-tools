@@ -17,13 +17,14 @@ package registry
 
 import (
 	"crypto/ed25519"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 )
 
 // AttestationStashName is the per-skill signed-context stash filename.
@@ -156,8 +157,15 @@ func (c *AttestationContext) reverifyAt(pub ed25519.PublicKey, signers []Signer,
 	if signedDigest == "" {
 		return "", fmt.Errorf("%w: admit event has no bundle_digest", ErrAttestationReanchor)
 	}
-	// G2: the stashed .skb must hash to the signed digest.
-	got := "sha256:" + hex.EncodeToString(sha256Sum(stashedSkb))
+	// G2: the stashed .skb must hash to the signed digest. Since ADR-0047 that
+	// hash is formed over the canonical tar, not over the archive's bytes, so a
+	// bundle re-compressed with another gzip is NOT a "repacked bundle" any
+	// more; only different content is.
+	gotRaw, err := skillbundle.DigestBundleBytes(stashedSkb)
+	if err != nil {
+		return "", fmt.Errorf("%w: stashed .skb is not readable as a bundle: %v", ErrAttestationReanchor, err)
+	}
+	got := skillbundle.FormatDigest(gotRaw)
 	if got != signedDigest {
 		return "", fmt.Errorf("%w: stashed .skb digest %s != signed %s (repacked bundle)", ErrAttestationReanchor, got, signedDigest)
 	}

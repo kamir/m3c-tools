@@ -652,7 +652,15 @@ func PullBundles(cfg *er1.Config, ctxID string, tr *SelfTrustRoots, opts PullOpt
 			continue
 		}
 		// Gate 2: digest match.
-		gotDigest := "sha256:" + hex.EncodeToString(sha256Sum(skbBytes))
+		// ADR-0047: the digest covers the canonical tar, not the archive's
+		// bytes, so the format package computes it. A bundle that does not
+		// decompress fails the SAME gate it used to fail by mismatching.
+		gotRaw, derr := skillbundle.DigestBundleBytes(skbBytes)
+		if derr != nil {
+			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, DocID: docID, Gate: ErrGateDigest, Detail: fmt.Sprintf("not readable as a bundle: %v", derr)})
+			continue
+		}
+		gotDigest := skillbundle.FormatDigest(gotRaw)
 		if gotDigest != digest {
 			res.Skipped = append(res.Skipped, &PullSkip{Name: name, Version: ver, Digest: digest, DocID: docID, Gate: ErrGateDigest, Detail: fmt.Sprintf("computed %s, item declared %s", gotDigest, digest)})
 			continue

@@ -22,7 +22,6 @@ package install
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -832,23 +831,21 @@ func resolveBundleTopLevel(extractDir string) (string, error) {
 	return extractDir, nil
 }
 
-// computeDigestForVerify is a small wrapper around signing.ComputeBundleDigest
-// kept here so install.go doesn't pull in the signing package directly
-// (avoids a fan-out import that becomes painful when signing's API
-// stabilizes further). Returns (raw, "sha256:<hex>").
+// computeDigestForVerify returns the bundle digest of the `.skb` at path, as
+// (raw, "sha256:<hex>").
+//
+// Its doc used to call it "a small wrapper around signing.ComputeBundleDigest",
+// and it was not one: it hashed the file's bytes itself, which agreed with that
+// function only as long as the digest WAS the file hash. Since ADR-0047 the
+// digest covers the canonical tar, so this now delegates to the format package
+// for real. Still no import of `signing` from here, which is what the original
+// note was actually protecting.
 func computeDigestForVerify(path string) ([sha256.Size]byte, string, error) {
-	f, err := os.Open(path)
+	raw, err := skillbundle.DigestBundleFile(path)
 	if err != nil {
 		return [sha256.Size]byte{}, "", err
 	}
-	defer f.Close()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return [sha256.Size]byte{}, "", err
-	}
-	var out [sha256.Size]byte
-	copy(out[:], h.Sum(nil))
-	return out, "sha256:" + hex.EncodeToString(out[:]), nil
+	return raw, skillbundle.FormatDigest(raw), nil
 }
 
 // httpClientOf is a tiny helper so callers building an Opts.Client for

@@ -18,7 +18,6 @@ import (
 	"compress/gzip"
 	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -30,6 +29,8 @@ import (
 	"testing"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
+
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 )
 
 // ----- parseNameAtVersion -----
@@ -201,7 +202,12 @@ func TestRunInstall_HappyPath_Exit0(t *testing.T) {
 	authorPub, authorPriv, _ := ed25519.GenerateKey(rand.Reader)
 	regPub, regPriv, _ := ed25519.GenerateKey(rand.Reader)
 	blob := buildSkillBundleTGZ(t)
-	digest := sha256.Sum256(blob)
+	// ADR-0047: the digest covers the canonical tar, so the fixture asks the
+	// format package instead of hashing the archive's own bytes.
+	digest, derr := skillbundle.DigestBundleBytes(blob)
+	if derr != nil {
+		t.Fatalf("bundle digest: %v", derr)
+	}
 	digestStr := "sha256:" + hex.EncodeToString(digest[:])
 
 	authorSig := ed25519.Sign(authorPriv, digest[:])
@@ -290,13 +296,23 @@ func TestRunInstall_TamperedBundle_Exit10(t *testing.T) {
 	regPub, regPriv, _ := ed25519.GenerateKey(rand.Reader)
 
 	blob := buildSkillBundleTGZ(t)
-	origDigest := sha256.Sum256(blob)
+	// ADR-0047: the digest covers the canonical tar, so the fixture asks the
+	// format package instead of hashing the archive's own bytes.
+	origDigest, derr := skillbundle.DigestBundleBytes(blob)
+	if derr != nil {
+		t.Fatalf("bundle digest: %v", derr)
+	}
 	origDigestStr := "sha256:" + hex.EncodeToString(origDigest[:])
 
-	// Tamper the served blob; metadata still references origDigestStr.
-	tampered := make([]byte, len(blob))
-	copy(tampered, blob)
-	tampered[5] ^= 0x80
+	// The tamper used to be `tampered[5] ^= 0x80`, a bit flip in the gzip
+	// header's MTIME. That changed the FILE and so changed the old digest.
+	// Since ADR-0047 the digest covers the canonical tar, and gzip header
+	// metadata is not content: flipping it is no longer a tamper, and
+	// accepting it is the decided behaviour, not a hole. To keep testing what
+	// this test is about, the served archive now carries DIFFERENT content
+	// under the advertised digest, which is what "the bytes you got are not
+	// the bytes that were signed" means from here on.
+	tampered := twoPartyBundle(t, "fetch-contract", "content that was never signed")
 
 	authorSig := ed25519.Sign(authorPriv, origDigest[:])
 	regSig := ed25519.Sign(regPriv, origDigest[:])

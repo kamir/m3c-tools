@@ -3,7 +3,6 @@ package install
 import (
 	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -42,7 +41,12 @@ func reanchorFixture(t *testing.T, governance string) (home, name, skbPath, trPa
 	if err != nil {
 		t.Fatal(err)
 	}
-	sum := sha256.Sum256(skb)
+	// ADR-0047: the digest covers the canonical tar, so a fixture cannot
+	// hash the archive's own bytes any more and still agree with the code.
+	sum, derr := skillbundle.DigestBundleBytes(skb)
+	if derr != nil {
+		t.Fatalf("bundle digest: %v", derr)
+	}
 	digest := "sha256:" + hex.EncodeToString(sum[:])
 
 	// 2. Extract into the install target + stash the .skb.

@@ -23,6 +23,7 @@
 package skillbundle
 
 import (
+	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
@@ -79,9 +80,32 @@ func DigestBundleFile(path string) ([sha256.Size]byte, error) {
 		return zero, fmt.Errorf("digest: refusing to hash empty bundle %s", path)
 	}
 
-	gz, err := gzip.NewReader(f)
+	sum, err := digestFromArchiveReader(f)
 	if err != nil {
-		return zero, fmt.Errorf("digest: gzip reader %s: %w", path, err)
+		return zero, fmt.Errorf("digest: %s: %w", path, err)
+	}
+	return sum, nil
+}
+
+// DigestBundleBytes computes the same digest from an in-memory `.skb` image.
+// Callers that already hold the archive bytes use this; nobody computes the
+// digest a second way (that is how two of them appeared in the first place).
+func DigestBundleBytes(archive []byte) ([sha256.Size]byte, error) {
+	var zero [sha256.Size]byte
+	if len(archive) == 0 {
+		return zero, fmt.Errorf("digest: refusing to hash an empty bundle image")
+	}
+	return digestFromArchiveReader(bytes.NewReader(archive))
+}
+
+// digestFromArchiveReader is the ONE hashing path: gunzip bounded, hash the
+// canonical tar behind the domain separator.
+func digestFromArchiveReader(r io.Reader) ([sha256.Size]byte, error) {
+	var zero [sha256.Size]byte
+
+	gz, err := gzip.NewReader(r)
+	if err != nil {
+		return zero, fmt.Errorf("gzip reader: %w", err)
 	}
 	defer gz.Close()
 
@@ -91,10 +115,10 @@ func DigestBundleFile(path string) ([sha256.Size]byte, error) {
 	// learn the stream was over the limit instead of silently truncating.
 	n, err := io.Copy(h, io.LimitReader(gz, DefaultMaxExtractedBytes+1))
 	if err != nil {
-		return zero, fmt.Errorf("digest: decompress %s: %w", path, err)
+		return zero, fmt.Errorf("decompress: %w", err)
 	}
 	if n > DefaultMaxExtractedBytes {
-		return zero, fmt.Errorf("digest: %s decompresses past the %d-byte ceiling; refusing", path, DefaultMaxExtractedBytes)
+		return zero, fmt.Errorf("decompresses past the %d-byte ceiling; refusing", DefaultMaxExtractedBytes)
 	}
 
 	var out [sha256.Size]byte
