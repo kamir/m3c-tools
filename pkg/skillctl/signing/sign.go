@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
@@ -24,45 +23,22 @@ const signatureSize = ed25519.SignatureSize // 64
 // "<bundle>.<digest_hex>.author.sig".
 const authorSigSuffix = ".author.sig"
 
-// digestReadBufferSize is the chunk size used when streaming a bundle
-// through the SHA-256 hasher. 1 MiB is large enough to amortize syscall
-// cost on big bundles and small enough to keep memory bounded.
-const digestReadBufferSize = 1 << 20
-
-// ComputeBundleDigest streams the bundle file at bundlePath through
-// SHA-256 and returns the raw 32-byte digest.
+// ComputeBundleDigest returns the raw 32-byte bundle digest of the `.skb` at
+// bundlePath. It is the canonical message that author/registry/governance
+// signatures all sign over, and since v0.7.0 (ADR-0047) it is formed over the
+// canonical TAR, not over the file's bytes.
 //
-// This is the canonical 32-byte message that author/registry/governance
-// signatures all sign over. The brief is explicit: "32-byte SHA-256 of the
-// gzipped tarball: recompute, do NOT trust manifest field."
+// The computation lives in `pkg/skillbundle`, which owns the format, so `Pack`
+// and every verifier cannot drift apart: until v0.6.x this function hashed the
+// finished file while `Pack` hashed its own pass-1 archive, and the two values
+// were different for the same bundle. Measured on 2026-10-08 against `77b101a`:
+// `pack` reported `sha256:c490dd9e...` while the file hashed to `8479ec88...`,
+// and the signature carried the second one.
 //
-// Empty files are refused: an empty bundle has no useful identity and is
-// almost certainly a caller bug.
+// Empty files are refused, and the decompression needed to reach the tar is
+// capped; both live in skillbundle.DigestBundleFile.
 func ComputeBundleDigest(bundlePath string) ([sha256.Size]byte, error) {
-	var zero [sha256.Size]byte
-
-	f, err := os.Open(bundlePath)
-	if err != nil {
-		return zero, fmt.Errorf("digest: open %s: %w", bundlePath, err)
-	}
-	defer f.Close()
-
-	st, err := f.Stat()
-	if err != nil {
-		return zero, fmt.Errorf("digest: stat %s: %w", bundlePath, err)
-	}
-	if st.Size() == 0 {
-		return zero, fmt.Errorf("digest: refusing to hash empty bundle %s", bundlePath)
-	}
-
-	h := sha256.New()
-	buf := make([]byte, digestReadBufferSize)
-	if _, err := io.CopyBuffer(h, f, buf); err != nil {
-		return zero, fmt.Errorf("digest: read %s: %w", bundlePath, err)
-	}
-	var out [sha256.Size]byte
-	copy(out[:], h.Sum(nil))
-	return out, nil
+	return skillbundle.DigestBundleFile(bundlePath)
 }
 
 // SignBundle signs the bundle at bundlePath with the ed25519 private key

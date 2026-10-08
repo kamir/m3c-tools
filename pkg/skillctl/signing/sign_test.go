@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,7 +51,14 @@ func makeFakeBundle(t *testing.T, dir, name string) string {
 	return path
 }
 
-func TestComputeBundleDigest_MatchesStdlibSHA256(t *testing.T) {
+// Until v0.6.x this test asserted the digest equalled the stdlib SHA-256 of the
+// FILE. That property is gone by decision (ADR-0047): the digest is formed over
+// the canonical tar, before the compression, so it no longer moves when gzip's
+// output moves between Go versions. The test now pins the replacement property,
+// and it recomputes the expected value from the domain literal and the
+// decompressed bytes rather than calling into skillbundle, so a silent change to
+// the domain separator fires here too.
+func TestComputeBundleDigest_HashesTheTarNotTheFileBytes(t *testing.T) {
 	dir := t.TempDir()
 	bundle := makeFakeBundle(t, dir, "tiny.skb")
 
@@ -58,13 +66,33 @@ func TestComputeBundleDigest_MatchesStdlibSHA256(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	raw, err := os.ReadFile(bundle)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := sha256.Sum256(raw)
+	gz, err := gzip.NewReader(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tarBytes, err := io.ReadAll(gz)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h := sha256.New()
+	h.Write([]byte("m3c-tools/skillbundle/digest/v2\x00"))
+	h.Write(tarBytes)
+	var want [sha256.Size]byte
+	copy(want[:], h.Sum(nil))
+
 	if got != want {
-		t.Fatalf("ComputeBundleDigest = %x, want %x", got, want)
+		t.Fatalf("ComputeBundleDigest = %x, want %x (domain + tar)", got, want)
+	}
+	// The property that was removed must stay removed, or the two digests are
+	// back and nothing was gained.
+	if fileSum := sha256.Sum256(raw); got == fileSum {
+		t.Fatal("the digest still equals the hash of the file bytes; the compression is back inside the identity")
 	}
 }
 

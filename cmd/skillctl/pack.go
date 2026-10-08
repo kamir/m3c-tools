@@ -113,7 +113,11 @@ func runPack(args []string, stdout, stderr io.Writer) int {
 	// `revoke --digest` is the one SIGN prints. Say so at both ends. The field
 	// names and their positions are unchanged, so anything parsing
 	// `^bundle_digest:` keeps working; only a trailing note is added.
-	fmt.Fprintf(stdout, "bundle_digest: %s  (manifest digest; NOT the value attest/publish/revoke take)\n", digest)
+	// The parenthetical used to warn that this was NOT the value attest,
+	// publish and revoke take, because there were two digests and this was the
+	// other one. Since ADR-0047 there is one, so the warning would now be the
+	// false statement.
+	fmt.Fprintf(stdout, "bundle_digest: %s  (use this for attest, publish --digest and revoke --digest)\n", digest)
 	fmt.Fprintf(stdout, "output:        %s\n", in.outFile)
 	if len(in.manifest.DataDependencies) > 0 {
 		fmt.Fprintf(stdout, "data_scopes:   %d declared (author-signed, in bundle.json)\n", len(in.manifest.DataDependencies))

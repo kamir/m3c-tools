@@ -116,9 +116,14 @@ type BundleManifest struct {
 	Supersedes       *string          `json:"supersedes"`
 	DerivedFrom      *string          `json:"derived_from"`
 	Compatibility    string           `json:"compatibility"`
-	BundleDigest     string           `json:"bundle_digest"`
-	BuiltAt          time.Time        `json:"built_at"`
-	BuiltBy          string           `json:"built_by"`
+	// BundleDigest is NOT written since v0.7.0 (ADR-0047): the digest is
+	// formed over the canonical tar, and a value inside the bytes it covers
+	// would force every verifier to rebuild the archive before checking it.
+	// The field is retained so an older bundle still unmarshals, and
+	// `omitempty` keeps it out of the canonical JSON that Pack hashes.
+	BundleDigest string    `json:"bundle_digest,omitempty"`
+	BuiltAt      time.Time `json:"built_at"`
+	BuiltBy      string    `json:"built_by"`
 }
 
 // EffectiveKind returns the manifest's kind, resolving an absent Kind to
@@ -129,13 +134,6 @@ func (m BundleManifest) EffectiveKind() string {
 		return KindSkill
 	}
 	return m.Kind
-}
-
-// withEmptyDigest returns a shallow copy of m with BundleDigest cleared.
-// Used to compute the canonical archive whose hash *is* the bundle digest.
-func (m BundleManifest) withEmptyDigest() BundleManifest {
-	m.BundleDigest = ""
-	return m
 }
 
 // ReadManifest returns the bundle.json of a packed .skb archive.

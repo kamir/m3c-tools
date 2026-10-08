@@ -233,14 +233,18 @@ Packs a skill directory (which must contain `SKILL.md`) into a sealed `.skb` bun
 manifest. Data-scopes are validated **fail-closed at pack time**, before the digest is
 computed, so the author signature covers them.
 
-> **The bundle digest is reproducible per Go toolchain, not beyond it.** `pack` hashes the
-> gzipped archive, and gzip's output changes between Go releases, so re-packing identical
-> content with a different toolchain yields a different digest. Two runs on one machine agree;
-> two machines agree only if they build with the same Go version. Nothing is wrong with a
-> bundle whose digest differs that way, but a signature covers the digest, so a re-pack is not
-> a way to reproduce a signed artifact. ADR-0047 moves the digest in front of the compression
-> in `v0.7.0`, which removes the dependency; until then the `Makefile` fixes the toolchain to
-> the one `go.mod` names for every build and test here.
+> **The bundle digest covers the canonical tar, not the compressed file** (ADR-0047, since
+> `v0.7.0`). Identical content therefore yields the identical digest on any machine and under
+> any Go toolchain, and a re-pack of the same content reproduces a signed artifact: the
+> detached signature still verifies, because it covers the digest and the digest no longer
+> depends on gzip. Measured on 2026-10-08: the golden digest in `pack_test.go` is the same
+> under `go1.26.6` and `go1.27.1`, where before the change it differed between the two.
+>
+> Two things follow and are worth knowing. `bundle.json` no longer carries a `bundle_digest`
+> field: a digest inside the bytes it covers would force every verifier to rebuild the archive
+> before it could check anything. And a verifier has to decompress before it can authenticate,
+> which is bounded rather than trusted: anything that decompresses past 100 MiB is refused
+> instead of hashed, the same ceiling the bundle reader enforces.
 
 > `pack` does not implement `--help`; it prints `Unknown flag: --help` and then its usage.
 
