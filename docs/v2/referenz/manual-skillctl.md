@@ -233,6 +233,15 @@ Packs a skill directory (which must contain `SKILL.md`) into a sealed `.skb` bun
 manifest. Data-scopes are validated **fail-closed at pack time**, before the digest is
 computed, so the author signature covers them.
 
+> **The bundle digest is reproducible per Go toolchain, not beyond it.** `pack` hashes the
+> gzipped archive, and gzip's output changes between Go releases, so re-packing identical
+> content with a different toolchain yields a different digest. Two runs on one machine agree;
+> two machines agree only if they build with the same Go version. Nothing is wrong with a
+> bundle whose digest differs that way, but a signature covers the digest, so a re-pack is not
+> a way to reproduce a signed artifact. ADR-0047 moves the digest in front of the compression
+> in `v0.7.0`, which removes the dependency; until then the `Makefile` fixes the toolchain to
+> the one `go.mod` names for every build and test here.
+
 > `pack` does not implement `--help`; it prints `Unknown flag: --help` and then its usage.
 
 | Flag | Purpose |
