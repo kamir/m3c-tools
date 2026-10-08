@@ -1,6 +1,21 @@
 # m3c-tools: Multi-Modal-Memory Tools
 # Makefile for building, testing, and running e2e tests
 
+# Die Toolchain, gegen die hier gebaut und getestet wird. Das ist keine
+# Kosmetik: `toolchain` in go.mod ist fuer Go eine UNTERGRENZE und kein Pin. Wer
+# ein neueres Go installiert hat, benutzt sein eigenes, waehrend die CI ueber
+# `go-version-file: go.mod` genau die genannte Fassung installiert. Gemessen am
+# 2026-10-08 auf unveraendertem master: TestDigestStability in pkg/skillbundle
+# faellt mit go1.27.1 und besteht mit go1.26.6, weil der Buendel-Digest ueber den
+# gzip-Strom entsteht und dessen Ausgabe sich zwischen Go-Fassungen aendert
+# (ADR-0047 stellt das in v0.7.0 um). Auch die Coverage-Boeden haengen daran.
+# Ueberschreiben geht weiter: `make GOTOOLCHAIN=auto test-unit`.
+GOTOOLCHAIN ?= $(shell sed -n 's/^toolchain \(go[0-9.]*\)$$/\1/p' go.mod | head -1)
+ifeq ($(strip $(GOTOOLCHAIN)),)
+GOTOOLCHAIN := auto
+endif
+export GOTOOLCHAIN
+
 BINARY   = m3c-tools
 CMD_DIR  = ./cmd/m3c-tools
 BUILD_DIR = ./build

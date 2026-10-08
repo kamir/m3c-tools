@@ -11,12 +11,22 @@ import (
 	"time"
 )
 
-// fixedTime keeps the digest reproducible across machines.
+// fixedTime removes the clock from the digest, so two runs on one machine agree.
 var fixedTime = time.Date(2026, 5, 5, 19, 30, 0, 0, time.UTC)
 
 // goldenDigest pins the expected digest for the fixture skill + fixtureManifest +
-// fixedTime + BuiltBy="skillctl/test". Recompute by running with
-// SKILLBUNDLE_EXPECTED_DIGEST=any once and pasting the actual digest back.
+// fixedTime + BuiltBy="skillctl/test". Recompute by running the test and pasting
+// the "got" value from its failure message, but read the next paragraph first.
+//
+// WHAT THIS CONSTANT DOES NOT PROMISE: stability across Go versions. Pack hashes
+// the GZIPPED archive, and gzip's output changes between Go releases, so this
+// digest is reproducible per toolchain and not beyond it. Measured 2026-10-08 on
+// an unchanged tree: red with go1.27.1, green with go1.26.6, which is the version
+// go.mod names and the CI installs. `toolchain` in go.mod is a floor and not a
+// pin, so anyone with a newer Go saw this test fail on master through no fault of
+// their own. The Makefile now fixes the toolchain for every go invocation, and
+// ADR-0047 moves the digest in front of the compression in v0.7.0, which removes
+// the dependency instead of papering over it.
 //
 // SPEC-0432 WARNING: this constant also carries the promise that a skill's bytes
 // never move when the bundle format grows. If a change to the manifest STRUCT
@@ -180,10 +190,10 @@ func TestDigestStability(t *testing.T) {
 	if err != nil {
 		t.Fatalf("pack: %v", err)
 	}
-	expected := os.Getenv("SKILLBUNDLE_EXPECTED_DIGEST")
-	if expected == "" {
-		expected = goldenDigest
-	}
+	// No environment override here on purpose. There used to be one
+	// (SKILLBUNDLE_EXPECTED_DIGEST), and a test whose expectation the caller can
+	// set measures nothing: any run could be made green by naming its own answer.
+	expected := goldenDigest
 	if digest != expected {
 		t.Fatalf("digest drift:\n  got  %s\n  want %s", digest, expected)
 	}
