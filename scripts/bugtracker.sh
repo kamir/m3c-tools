@@ -65,14 +65,19 @@
 # started, nothing was allocated. If `claim` is cut off while the push is under
 # way, the row may be on the branch all the same: run the same `claim` again,
 # it reads the branch and either finds its own row (exit 0, nothing to do) or
-# names who holds the number.
+# names who holds the number, provided the row can be read by slot_rows, which
+# `claim` checks for every row it writes.
 #
 #   M3C_SLOT_TABLE   the slot table, a tracked file in a checkout of its repo
 #   M3C_SLOT_REF     optional, <remote>/<branch> that is canonical for it;
 #                    default: the upstream of that checkout
-# The remote must push where it fetches from, and the table must have exactly
-# one ANKER row and end with a newline; otherwise `claim` refuses and writes
-# nothing.
+# `claim` refuses, before it writes anything, when the remote is not plainly one
+# repository (a pushurl, several urls, a url rewrite rule that applies, a url
+# that is a remote's name), when the table does not have exactly one ANKER row
+# or does not end with a newline, and when the report's filename is not a plain
+# identifier. It also refuses to push a commit that is not the one row on top
+# of what it read; that check is against accidents of the table repository's
+# hooks, not against a hook written to defeat it.
 #
 # Why `claim` is a separate verb and not part of `next-id`: a slot row carries the
 # FILENAME, which does not exist until the report is written. Claiming at next-id
@@ -464,7 +469,7 @@ slot_table() {
 LEDGER_REPO=""; LEDGER_REL=""; LEDGER_REF=""; LEDGER_BRANCH=""; LEDGER_URL=""
 
 slot_ledger() {
-  local table=$1 dir remote pushes
+  local table=$1 dir remote pushes fetches raw r cands
   dir=$(cd "$(dirname "$table")" && pwd -P)
   LEDGER_REPO=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) \
     || die "the slot table is not inside a git repository: $table
@@ -479,22 +484,47 @@ slot_ledger() {
       || die "cannot tell which branch holds the slot table: the checkout at
   $LEDGER_REPO has no upstream. Name it: M3C_SLOT_REF=<remote>/<branch>" 1
   fi
-  remote=${LEDGER_REF%%/*}; LEDGER_BRANCH=${LEDGER_REF#*/}
-  [ -n "$remote" ] && [ "$remote" != "$LEDGER_REF" ] && [ -n "$LEDGER_BRANCH" ] \
-    || die "M3C_SLOT_REF must be <remote>/<branch>, got: $LEDGER_REF" 1
-  LEDGER_URL=$(git -C "$LEDGER_REPO" remote get-url "$remote" 2>/dev/null) \
-    || die "no such remote in $LEDGER_REPO: $remote" 1
+  # Which remote the ref names is read from the list of remotes, not guessed
+  # from the first slash: exactly one remote name may be a prefix of it.
+  remote=""; cands=0
+  while IFS= read -r r; do
+    case $LEDGER_REF in "$r"/?*) remote=$r; cands=$((cands + 1)) ;; esac
+  done <<EOF
+$(git -C "$LEDGER_REPO" remote)
+EOF
+  [ "$cands" = 1 ] || die "cannot tell which remote '$LEDGER_REF' names: $cands remotes of
+  $LEDGER_REPO match it. M3C_SLOT_REF must be <remote>/<branch>. Nothing was claimed." 1
+  LEDGER_BRANCH=${LEDGER_REF#"$remote"/}
 
-  # One repository is read and written. A remote that pushes somewhere else than
-  # it fetches from would have the claim land in one place and be looked up in
-  # another, so it is refused here, before anything is written. The comparison
-  # is of the configured URLs as text: two spellings of one repository are
-  # refused as well, because nothing here can tell them from two repositories.
+  # One repository is read and written, and it has to be plain which one. The
+  # URL below is handed to git as a URL, so everything that could make git read
+  # it as something else is refused here, before anything is written:
+  #   - more than one url, or any pushurl, on the remote;
+  #   - a url.*.insteadOf or url.*.pushInsteadOf rule that changes where the
+  #     remote fetches from or pushes to;
+  #   - a URL that is also the name of a remote (git would take the remote).
+  # This is not a model of git's URL handling. A configuration it cannot show
+  # to be plain is refused, also when it would have been harmless.
+  raw=$(git -C "$LEDGER_REPO" config --get-all "remote.$remote.url" 2>/dev/null || true)
+  [ -n "$raw" ] && [ "$(printf '%s\n' "$raw" | wc -l | tr -d ' ')" = 1 ] \
+    || die "remote '$remote' has no url, or more than one. Nothing was claimed." 1
+  [ -z "$(git -C "$LEDGER_REPO" config --get-all "remote.$remote.pushurl" 2>/dev/null || true)" ] \
+    || die "remote '$remote' has a pushurl. A claim reads and writes ONE repository,
+  named by the remote's url alone. Nothing was claimed." 1
+  fetches=$(git -C "$LEDGER_REPO" remote get-url --all "$remote")
   pushes=$(git -C "$LEDGER_REPO" remote get-url --push --all "$remote")
-  [ "$pushes" = "$LEDGER_URL" ] || die "remote '$remote' does not push where it fetches from:
-  fetch: $LEDGER_URL
-  push:  $(printf '%s' "$pushes" | tr '\n' ' ')
-  A claim reads and writes ONE repository. Nothing was claimed." 1
+  [ "$fetches" = "$raw" ] && [ "$pushes" = "$raw" ] \
+    || die "a url.*.insteadOf or url.*.pushInsteadOf rule rewrites remote '$remote':
+  configured: $raw
+  fetches:    $fetches
+  pushes:     $pushes
+  A claim reads and writes ONE repository and does not follow rewrites.
+  Nothing was claimed." 1
+  if git -C "$LEDGER_REPO" remote | grep -q -x -F -- "$raw"; then
+    die "the url of remote '$remote' is '$raw', which is also the name of a
+  remote; git would read it as that remote. Nothing was claimed." 1
+  fi
+  LEDGER_URL=$raw
 }
 
 # Everything a claim writes outside git's own storage sits in one directory
@@ -516,9 +546,22 @@ claim_cleanup() {
 CLAIM_ROUNDS=5
 
 cmd_claim() {
-  local id file table num kind base row want holders other name tip new out out_push="" round last="" moved=0
+  local id file table num kind base row want holders other name tip new out out_push="" round last=""
+  local mode blob want_blob expect got back re
   id=$(item_id "$1"); file=$(report_path "$1"); table=$(slot_table)
   kind=$(kind_of "$id"); num=${id#*-}; base=$(basename "$file"); want=$((10#$num))
+
+  # The filename goes into a table cell between backticks and is read back by
+  # slot_rows. It is an identifier, not free text: letters, digits, dot,
+  # underscore and dash after the id, ending in .md. That leaves out everything
+  # that could end the cell or the line early (backtick, pipe, backslash, CR,
+  # LF) along with the rest that no existing row uses.
+  # Matched as one string, in the C locale so that A-Z means the 26 letters.
+  re="^$kind-[0-9]+-[A-Za-z0-9._-]+[.]md\$"
+  ( LC_ALL=C; [[ $base =~ $re ]] ) \
+    || die "the report filename cannot be a slot row: $base
+  Allowed after '$kind-<number>-' are letters, digits, dot, underscore and
+  dash, ending in .md. Rename the report. Nothing was claimed." 1
 
   # Called from a git hook, GIT_DIR and GIT_INDEX_FILE point at the CALLER's
   # repository and would turn every git call below towards it.
@@ -548,7 +591,7 @@ $out" 1
     # holds the ref, and a fetch in that moment sees the old tip. So this is
     # tried again like any other round, after a pause, and only a remote that
     # refuses every round ends the claim.
-    if [ "$tip" = "$last" ]; then sleep 1; else [ -z "$last" ] || moved=1; fi
+    [ "$tip" != "$last" ] || sleep 1
     last=$tip
 
     git -C "$LEDGER_REPO" show "$tip:$LEDGER_REL" > "$CLAIM_DIR/table" 2>/dev/null \
@@ -582,8 +625,25 @@ $out" 1
 
     # The row goes directly under the ANKER row. This is what the claim is
     # allowed to commit; the commit is compared against it below.
-    awk -v row="$row" '{ print } /^\| ANKER \|/ { print row }' \
+    ROW="$row" awk '{ print } /^\| ANKER \|/ { print ENVIRON["ROW"] }' \
         "$CLAIM_DIR/table" > "$CLAIM_DIR/want"
+
+    # What was just written must read back, through the one reader, as exactly
+    # one entry for this number and exactly this file. If it does not, the row
+    # would be invisible to the next claim, and that is how one number gets two
+    # files.
+    back=$(slot_rows "$kind" "$CLAIM_DIR/want" | awk -F'\t' -v n="$want" '$1 == n { print $2 }')
+    [ "$back" = "$base" ] \
+      && [ "$(wc -l < "$CLAIM_DIR/want" | tr -d ' ')" = "$(( $(wc -l < "$CLAIM_DIR/table" | tr -d ' ') + 1 ))" ] \
+      || die "the row for $id does not read back as one entry for '$base'.
+  Nothing was claimed." 1
+
+    # The commit is checked against these three values further down. They are
+    # taken now, from git objects, and kept in this process: nothing that runs
+    # during the commit can rewrite them.
+    mode=$(git -C "$LEDGER_REPO" ls-tree "$tip" -- "$LEDGER_REL" | cut -d' ' -f1)
+    blob=$(git -C "$LEDGER_REPO" rev-parse "$tip:$LEDGER_REL")
+    want_blob=$(git -C "$LEDGER_REPO" hash-object -w -- "$CLAIM_DIR/want")
 
     # A worktree of our own at the remote tip: the repository's own hooks run,
     # and the checkout that holds $M3C_SLOT_TABLE is not written to, whatever
@@ -599,16 +659,23 @@ $out" 1
 $out" 1
     new=$(git -C "$CLAIM_WT" rev-parse HEAD)
 
-    # A hook may stage or rewrite files while the commit is made. Whatever the
-    # hooks did, only this is pushed: one commit on top of what was read, that
-    # touches the table and nothing else, and leaves the table exactly as
-    # written above.
-    [ "$(git -C "$CLAIM_WT" rev-list --count "$tip..$new")" = "1" ] \
-      && [ "$(git -C "$CLAIM_WT" -c core.quotepath=false diff --name-only "$tip" "$new")" = "$LEDGER_REL" ] \
-      && git -C "$CLAIM_WT" show "$new:$LEDGER_REL" | cmp -s - "$CLAIM_DIR/want" \
-      || die "the commit of the claim is not the one row that was written: a hook
-  of the table's repository added to it or changed it. Nothing was pushed, so
-  nothing was claimed." 1
+    # Hooks of the table's repository ran during that commit. They are trusted
+    # not to work against claim on purpose, but a hook that stages a file,
+    # reformats the table or commits again would otherwise ride along. So the
+    # commit is read back from git and compared with what was authorised:
+    # its only parent is the commit that was read, and against that parent it
+    # changes one path, the table, from the blob that was read to the blob
+    # computed above, with the file mode unchanged. That blob is the table as
+    # read plus the one row, so no other row can have been dropped or altered.
+    expect=":$mode $mode $blob $want_blob M	$LEDGER_REL"
+    got=$(git -C "$LEDGER_REPO" -c core.quotepath=false diff-tree -r --no-renames --raw --no-abbrev "$tip" "$new")
+    [ "$(git -C "$LEDGER_REPO" rev-list --parents -n 1 "$new")" = "$new $tip" ] \
+      && [ "$got" = "$expect" ] \
+      || die "the commit of the claim is not the one row on top of what was read:
+  a hook or a content filter of the table's repository added to it or changed
+  it. Nothing was pushed, so nothing was claimed.
+  expected: $expect
+  found:    $got" 1
 
     # The allocation. A plain push moves the branch from $tip to $new or not at
     # all: if anyone pushed in between, the remote refuses, and we start over
@@ -622,10 +689,18 @@ $out" 1
     fi
     git -C "$LEDGER_REPO" worktree remove --force "$CLAIM_WT" >/dev/null 2>&1 || true
   done
-  [ "$moved" = 1 ] || die "$LEDGER_REF refused the push in each of $CLAIM_ROUNDS rounds and did not move.
-  Nothing was claimed:
+  # Why the last round failed decides the message, not what happened earlier:
+  # look once more whether the branch moved under the last push.
+  out=$(git -C "$LEDGER_REPO" fetch -q --no-tags "$LEDGER_URL" \
+          "+refs/heads/$LEDGER_BRANCH:$CLAIM_PRIV" 2>&1) || true
+  if [ "$(git -C "$LEDGER_REPO" rev-parse "$CLAIM_PRIV" 2>/dev/null)" != "$last" ]; then
+    die "$id was not claimed in $CLAIM_ROUNDS rounds: $LEDGER_REF moved again under the last push.
+  Nothing was claimed; try again. The last push said:
 $out_push" 1
-  die "$id was not claimed in $CLAIM_ROUNDS rounds: $LEDGER_REF kept moving. Nothing was claimed; try again." 1
+  fi
+  die "$id was not claimed in $CLAIM_ROUNDS rounds: the last push was refused and
+  $LEDGER_REF did not move. Nothing was claimed. The push said:
+$out_push" 1
 }
 
 # ----------------------------------------------------------------- close ----

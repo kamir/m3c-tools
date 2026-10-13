@@ -385,7 +385,7 @@ LREL="DENK/slots.md"
 CLAIMTMP="$TMP/claim-tmp"; mkdir -p "$CLAIMTMP"
 
 # ledger NAME [ART]: ein blankes Remote mit Zweig `ledger` und der Tabelle.
-# ART: anker (Vorgabe) | ohne | kein-zeilenende | zwei-anker | varianten
+# ART: anker (Vorgabe) | ohne | kein-zeilenende | zwei-anker | varianten | inhaber
 ledger() {
   local name=$1 art=${2:-anker} seed="$TMP/$1-seed" anker
   anker='| ANKER | **NEUE ANSPRUECHE DIREKT UNTER DIESE ZEILE** | n/a | Regel |'
@@ -402,6 +402,9 @@ ledger() {
       varianten)       printf '%s\n| 300 | `BUG-0300-nimmt-eine-nummer.md` | x | y |\n' "$anker"
                        printf '| 0600 | BUG-0600-ohne-backticks.md | x | y |\n'
                        printf '| 0601 | `bug-reports/BUG-0601-mit-pfad.md` | x | y |\n' ;;
+      inhaber)         printf '%s\n' "$anker" '| 0500 | `BUG-0500-aXb.md` | x | y |' '| 0501 | `BUG-0501-a.md.alt.md` | x | y |' \
+                         '| 0502 | `BUG-0502-eigen.md` | x | y |' '| 0502 | `BUG-0502-fremd.md` | x | y |' \
+                         '| 0777 | `BUG-0503-unter-anderer-nummer.md` | x | y |' ;;
       *)               printf '%s\n| 0299 | `BUG-0299-alt.md` | x | y |\n' "$anker" ;;
     esac
   } > "$seed/$LREL"
@@ -532,7 +535,9 @@ git -C "$KB" pull -q
 for fall in "pre-commit 0302 im-fenster" "pre-push 0305 beim-push"; do
   set -- $fall; art=$1; nr=$2; slug=$3
   fenster "$art" "$KB" "$MA" "$KA" "${nr#0}"
-  refuses "$art: wer im Fenster ueberholt wird, bekommt die Nummer nicht" claim_in "$MB" "$KB" "${nr#0}"
+  OUT=$(claim_in "$MB" "$KB" "${nr#0}" 2>&1) && bad "$art: wer im Fenster ueberholt wird, bekam die Nummer" \
+    || ok "$art: wer im Fenster ueberholt wird, bekommt die Nummer nicht"
+  grep -q "BUG-$nr-$slug-gewonnen.md" <<<"$OUT" && ok "$art: und erfaehrt, wer sie hat" || bad "$art: erfaehrt nicht, wer die Nummer hat"
   is "$art: der Gegner hat im Fenster wirklich gewonnen" "$(cat "$TMP/fenster-${nr#0}.rc" 2>/dev/null)" "0"
   is "$art: genau eine Zeile fuer die Nummer" "$(remote_zeilen L1 "$nr")" "1"
   is "$art: und es ist die des Gewinners" "$(remote_tabelle L1 | grep -c "^| $nr | \`BUG-$nr-$slug-gewonnen.md\`")" "1"
@@ -680,43 +685,172 @@ printf '# FR-0300\n\n- **Status:** open\n' > "$MA/bug-reports/FR-0300-gleiche-za
 accepts "dieselbe Zahl einer anderen Art ist frei" claim_in "$MA" "$KA" FR-300
 is "und steht neben der BUG-Zeile" "$(remote_zeilen L1 0300)" "2"
 
-# --- ein Repositorium wird gelesen und geschrieben ------------------------------
-ledger LP; ledger LQ; KP=$(klon LP p)
-meld "$MA" 0340 getrennte-pushurl
-git -C "$KP" remote set-url --push origin "$TMP/LQ.git"
-VORP=$(remote_kopf LP); VORQ=$(remote_kopf LQ)
-refuses "eine pushurl auf ein anderes Repositorium wird verweigert" claim_in "$MA" "$KP" 340
-is "das gelesene Repositorium blieb, wie es war" "$(remote_kopf LP)" "$VORP"
-is "das andere auch" "$(remote_kopf LQ)" "$VORQ"
-is "und es wurde nichts angelegt, bevor verweigert wurde" "$(find "$CLAIMTMP" -mindepth 1 | wc -l | tr -d ' ')" "0"
-git -C "$KP" remote set-url --push origin "$TMP/LP.git"
-accepts "eine pushurl, die gleich der Fetch-URL ist, geht" claim_in "$MA" "$KP" 340
-is "und die Zeile steht im gelesenen Repositorium" "$(remote_zeilen LP 0340)" "1"
+# --- eine Authority, und sie muss eindeutig sein --------------------------------
+#
+# Gemessen an der Fassung davor: claim verglich die aufgeloesten URLs und gab
+# sie dann als URL an git, das sie ein zweites Mal umschrieb. Mit insteadOf plus
+# pushInsteadOf, oder wenn die URL eines Remotes dem Namen eines anderen glich,
+# landete der Push in einem anderen Repositorium, Exit 0. Jetzt wird jede
+# Konfiguration verweigert, die nicht erkennbar schlicht ist.
+ledger LA; ledger LB; KW=$(klon LA w)
+meld "$MA" 0343 authority
+authority_bleibt() {  # authority_bleibt DESC: keines der beiden Repositorien bewegt, nichts angelegt
+  is "$1: das gelesene Repositorium blieb, wie es war" "$(remote_kopf LA)" "$VORA"
+  is "$1: das andere auch" "$(remote_kopf LB)" "$VORB"
+  is "$1: nichts angelegt, bevor verweigert wurde" "$(find "$CLAIMTMP" -mindepth 1 | wc -l | tr -d ' ')" "0"
+}
+VORA=$(remote_kopf LA); VORB=$(remote_kopf LB)
+
+git -C "$KW" config "url.$TMP/LB.git.pushInsteadOf" "$TMP/LA.git"
+refuses "pushInsteadOf auf ein anderes Repositorium wird verweigert" claim_in "$MA" "$KW" 343
+authority_bleibt "pushInsteadOf"
+git -C "$KW" config --unset "url.$TMP/LB.git.pushInsteadOf"
+
+git -C "$KW" config "url.$TMP/LB.git.insteadOf" "$TMP/LA.git"
+refuses "insteadOf auf ein anderes Repositorium wird verweigert" claim_in "$MA" "$KW" 343
+authority_bleibt "insteadOf"
+git -C "$KW" config --unset "url.$TMP/LB.git.insteadOf"
+
+# Nur die Lese-Seite umgeschrieben: insteadOf lenkt auf das andere Repositorium,
+# eine pushInsteadOf-Regel haelt die Schreib-Seite auf dem konfigurierten.
+git -C "$KW" config "url.$TMP/LB.git.insteadOf" "$TMP/LA.git"
+git -C "$KW" config "url.$TMP/LA.git.pushInsteadOf" "$TMP/LA.git"
+is "die Probe steht: gelesen wird woanders, geschrieben nicht" \
+   "$(git -C "$KW" remote get-url origin) $(git -C "$KW" remote get-url --push origin)" "$TMP/LB.git $TMP/LA.git"
+refuses "eine Umschreibung nur der Lese-Seite wird verweigert" claim_in "$MA" "$KW" 343
+authority_bleibt "nur Lese-Seite"
+git -C "$KW" config --unset "url.$TMP/LB.git.insteadOf"; git -C "$KW" config --unset "url.$TMP/LA.git.pushInsteadOf"
+
+# Der Fall des Lesers: ein Alias loest auf das gelesene Repositorium auf, und
+# erst die aufgeloeste URL trifft eine pushInsteadOf-Regel.
+git -C "$KW" remote set-url origin "alias:la"
+git -C "$KW" config "url.$TMP/LA.git.insteadOf" "alias:la"
+git -C "$KW" config "url.$TMP/LB.git.pushInsteadOf" "$TMP/LA.git"
+refuses "Alias plus pushInsteadOf wird verweigert" claim_in "$MA" "$KW" 343
+authority_bleibt "Alias plus pushInsteadOf"
+git -C "$KW" config --unset "url.$TMP/LB.git.pushInsteadOf"
+refuses "ein Alias allein wird auch verweigert: claim folgt keiner Umschreibung" claim_in "$MA" "$KW" 343
+authority_bleibt "Alias allein"
+git -C "$KW" config --unset "url.$TMP/LA.git.insteadOf"
+git -C "$KW" remote set-url origin "$TMP/LA.git"
+
+# Die URL eines Remotes ist zugleich der Name eines anderen: git naehme den.
+git -C "$KW" remote add spiegel "$TMP/LB.git"
+git -C "$KW" remote set-url origin spiegel
+refuses "eine URL, die ein Remote-Name ist, wird verweigert" claim_in "$MA" "$KW" 343
+authority_bleibt "URL gleich Remote-Name"
+git -C "$KW" remote set-url origin "$TMP/LA.git"
+git -C "$KW" remote remove spiegel
+
+# Jede pushurl, auch eine gleichlautende: die Authority ist die url allein.
+git -C "$KW" remote set-url --push origin "$TMP/LB.git"
+refuses "eine pushurl auf ein anderes Repositorium wird verweigert" claim_in "$MA" "$KW" 343
+authority_bleibt "pushurl"
+git -C "$KW" remote set-url --push origin "$TMP/LA.git"
+refuses "auch eine gleichlautende pushurl wird verweigert" claim_in "$MA" "$KW" 343
+authority_bleibt "gleichlautende pushurl"
+git -C "$KW" config --unset remote.origin.pushurl
+git -C "$KW" config --add remote.origin.url "$TMP/LB.git"
+refuses "zwei urls auf einem Remote werden verweigert" claim_in "$MA" "$KW" 343
+authority_bleibt "zwei urls"
+git -C "$KW" config --unset remote.origin.url "$TMP/LB.git"
+
+# Ein Remote-Name mit Schraegstrich: der Zweig wird nicht am ersten Schraegstrich
+# geraten. Passen zwei Remotes auf den Ref, ist er nicht eindeutig.
+git -C "$KW" remote add origin/zwei "$TMP/LB.git"
+refuses "ein Ref, auf den zwei Remote-Namen passen, wird verweigert" \
+  env TMPDIR="$CLAIMTMP" M3C_MAINTENANCE_DIR="$MA" M3C_SLOT_TABLE="$KW/$LREL" M3C_SLOT_REF=origin/zwei/ledger "$BT" claim 343
+authority_bleibt "zwei passende Remotes"
+git -C "$KW" remote remove origin/zwei
+
+accepts "die schlichte Konfiguration geht" claim_in "$MA" "$KW" 343
+is "und die Zeile steht im gelesenen Repositorium" "$(remote_zeilen LA 0343)" "1"
+is "und nicht im anderen" "$(remote_zeilen LB 0343)" "0"
 
 # Eine relative Remote-URL wird vom Repositorium aus aufgeloest, nicht vom
 # temporaeren Worktree aus.
 meld "$MA" 0341 relative-url
-git -C "$KP" remote set-url --push origin ../LP.git; git -C "$KP" remote set-url origin ../LP.git
-accepts "eine relative Remote-URL geht" claim_in "$MA" "$KP" 341
-is "und die Zeile steht" "$(remote_zeilen LP 0341)" "1"
+git -C "$KW" remote set-url origin ../LA.git
+accepts "eine relative Remote-URL geht" claim_in "$MA" "$KW" 341
+is "und die Zeile steht" "$(remote_zeilen LA 0341)" "1"
 
 # M3C_SLOT_REF benennt den Zweig, wenn die Arbeitskopie woanders steht.
-git -C "$KP" checkout -q --detach
+git -C "$KW" checkout -q --detach
 meld "$MA" 0812 benannter-zweig
 accepts "M3C_SLOT_REF benennt den kanonischen Zweig" \
-  env TMPDIR="$CLAIMTMP" M3C_MAINTENANCE_DIR="$MA" M3C_SLOT_TABLE="$KP/$LREL" M3C_SLOT_REF=origin/ledger "$BT" claim 812
-is "und dort steht die Zeile" "$(remote_zeilen LP 0812)" "1"
-git -C "$KP" checkout -q ledger
+  env TMPDIR="$CLAIMTMP" M3C_MAINTENANCE_DIR="$MA" M3C_SLOT_TABLE="$KW/$LREL" M3C_SLOT_REF=origin/ledger "$BT" claim 812
+is "und dort steht die Zeile" "$(remote_zeilen LA 0812)" "1"
+git -C "$KW" checkout -q ledger
 
 # Aus einem Hook gerufen, zeigen GIT_INDEX_FILE und Verwandte auf das rufende
 # Repositorium. claim legt sie ab, sonst schriebe es in den Index der Kopie.
 meld "$MA" 0342 geerbte-umgebung
-printf 'fremd, gestagt\n' > "$KP/fremd.txt"; git -C "$KP" add -- fremd.txt
-VORHER=$(git -C "$KP" status --porcelain)
+printf 'fremd, gestagt\n' > "$KW/fremd.txt"; git -C "$KW" add -- fremd.txt
+VORHER=$(git -C "$KW" status --porcelain)
 accepts "claim mit geerbtem GIT_INDEX_FILE gelingt" \
-  env GIT_INDEX_FILE="$KP/.git/index" TMPDIR="$CLAIMTMP" M3C_MAINTENANCE_DIR="$MA" M3C_SLOT_TABLE="$KP/$LREL" "$BT" claim 342
-is "und der Index der Arbeitskopie ist unveraendert" "$(git -C "$KP" status --porcelain)" "$VORHER"
-is "und die Zeile steht" "$(remote_zeilen LP 0342)" "1"
+  env GIT_INDEX_FILE="$KW/.git/index" TMPDIR="$CLAIMTMP" M3C_MAINTENANCE_DIR="$MA" M3C_SLOT_TABLE="$KW/$LREL" "$BT" claim 342
+is "und der Index der Arbeitskopie ist unveraendert" "$(git -C "$KW" status --porcelain)" "$VORHER"
+is "und die Zeile steht" "$(remote_zeilen LA 0342)" "1"
+
+# --- ein Dateiname ist ein Bezeichner ------------------------------------------------
+#
+# Gemessen an der Fassung davor: ein Dateiname mit `\n` wurde von awk als
+# Zeilenumbruch geschrieben, slot_rows las die Zeile nicht mehr, und ein Zweiter
+# bekam dieselbe Nummer mit Exit 0. Jetzt wird der Name geprueft, bevor
+# irgendetwas geschieht, und die geschriebene Zeile wird zurueckgelesen.
+ledger LN; KN=$(klon LN n); MX="$TMP/maint-x"; mkdir -p "$MX/bug-reports"
+VOR=$(remote_kopf LN)
+nr=400
+for name in 'a\nb' 'a`b' 'a|b' 'gut.md|rest' 'a b' 'a>b' 'a,b' 'a+b' "a'b" 'a$b' 'a*b' 'ae-ä'; do
+  nr=$((nr + 1))
+  printf '# x\n' > "$MX/bug-reports/BUG-0$nr-$name.md"
+  refuses "Dateiname mit [$name] wird verweigert" claim_in "$MX" "$KN" "$nr"
+done
+nr=$((nr + 1)); printf '# x\n' > "$MX/bug-reports/BUG-0$nr-a"$'\r'"b.md"
+refuses "Dateiname mit Wagenruecklauf wird verweigert" claim_in "$MX" "$KN" "$nr"
+nr=$((nr + 1)); printf '# x\n' > "$MX/bug-reports/BUG-0$nr-a"$'\n'"b.md"
+refuses "Dateiname mit Zeilenumbruch wird verweigert" claim_in "$MX" "$KN" "$nr"
+is "nach allen verweigerten Namen blieb der Zweig, wie er war" "$(remote_kopf LN)" "$VOR"
+is "und es wurde nichts angelegt" "$(find "$CLAIMTMP" -mindepth 1 | wc -l | tr -d ' ')" "0"
+OUT=$(claim_in "$MX" "$KN" 401 2>&1 || true)
+grep -q 'cannot be a slot row' <<<"$OUT" && ok "und claim nennt den Grund" || bad "nennt den Grund nicht"
+
+# Hin und zurueck: die Zeile, die claim schreibt, liest slot_rows als genau einen
+# Eintrag derselben Nummer und derselben Datei, wortgleich.
+meld "$MA" 0420 Hin_und.zurueck-1.2
+accepts "ein Name aus dem erlaubten Vorrat geht" claim_in "$MA" "$KN" 420
+remote_tabelle LN > "$TMP/hin-zurueck.md"
+is "und liest sich als genau ein Eintrag derselben Zuordnung zurueck" \
+   "$(bash -c 'source <(sed -n "/^slot_rows()/,/^}/p" "$1"); slot_rows BUG "$2"' _ "$BT" "$TMP/hin-zurueck.md" | awk -F'\t' '$1 == 420')" \
+   "420	BUG-0420-Hin_und.zurueck-1.2.md"
+
+# --- wer als Inhaber gilt ------------------------------------------------------------
+#
+# Die eigene Datei ist Inhaber nur bei wortgleichem Namen unter DIESER Nummer.
+# Vier Faelle, in denen eine nachlaessigere Lesart Exit 0 gaebe, ohne dass die
+# Zuordnung steht.
+ledger LI inhaber; KI=$(klon LI i); MI="$TMP/maint-i"
+VOR=$(remote_kopf LI)
+meld "$MI" 0500 a.b
+refuses "ein Name, der nur als Muster passt (a.b gegen aXb), ist nicht derselbe" claim_in "$MI" "$KI" 500
+meld "$MI" 0501 a
+refuses "ein Name, der nur als Anfang passt, ist nicht derselbe" claim_in "$MI" "$KI" 501
+meld "$MI" 0502 eigen
+refuses "die eigene Zeile neben einem fremden Inhaber genuegt nicht" claim_in "$MI" "$KI" 502
+is "in allen drei Faellen blieb der Zweig, wie er war" "$(remote_kopf LI)" "$VOR"
+OUT=$(claim_in "$MI" "$KI" 502 2>&1 || true)
+grep -q "BUG-0502-fremd.md" <<<"$OUT" && ok "und claim nennt den fremden Inhaber" || bad "nennt den fremden Inhaber nicht"
+meld "$MI" 0503 unter-anderer-nummer
+accepts "der eigene Name unter einer ANDEREN Nummer belegt diese nicht" claim_in "$MI" "$KI" 503
+is "und die Zeile fuer die eigene Nummer steht danach" "$(remote_zeilen LI 0503)" "1"
+
+# Eine Zeile, die nur in der eigenen Arbeitskopie steht, ist keine Vergabe.
+meld "$MI" 0504 nur-lokal-notiert
+git -C "$KI" pull -q
+printf '| 0504 | `BUG-0504-nur-lokal-notiert.md` | von Hand | nicht geschoben |\n' >> "$KI/$LREL"
+accepts "eine nur lokal notierte Zeile ersetzt den Anspruch nicht" claim_in "$MI" "$KI" 504
+is "die Zeile steht jetzt auf dem Zweig" "$(remote_zeilen LI 0504)" "1"
+git -C "$KI" checkout -q -- "$LREL"
 
 # --- was ein Hook des Tabellen-Repositoriums nicht kann -------------------------
 #
@@ -735,8 +869,28 @@ grep -q 'Nothing was pushed' <<<"$OUT" && ok "und claim sagt, dass nichts gescho
 printf '#!/bin/sh\nprintf "%%s\\n" "| 0999 | \\`BUG-0999-vom-hook.md\\` | x | y |" >> %s\ngit add -- %s\n' "$LREL" "$LREL" > "$KH/.git/hooks/pre-commit"
 refuses "ein Hook, der die Tabelle umschreibt, bekommt keinen Anspruch durch" claim_in "$MA" "$KH" 350
 is "und nichts erreicht den Zweig" "$(remote_kopf LH)" "$VOR"
-sauber "nach den Hook-Versuchen" "$KH"
+# Der Hook aendert das Dateirecht der Tabelle im selben Commit.
+printf '#!/bin/sh\ngit update-index --chmod=+x -- %s\n' "$LREL" > "$KH/.git/hooks/pre-commit"
+refuses "ein Hook, der das Dateirecht der Tabelle aendert, bekommt keinen Anspruch durch" claim_in "$MA" "$KH" 350
+is "und nichts erreicht den Zweig" "$(remote_kopf LH)" "$VOR"
+# Der Hook entfernt eine fremde Slot-Zeile und laesst die neue stehen.
+printf '#!/bin/sh\ngrep -v "BUG-0299-alt.md" %s > %s.neu && mv %s.neu %s\ngit add -- %s\n' "$LREL" "$LREL" "$LREL" "$LREL" "$LREL" > "$KH/.git/hooks/pre-commit"
+refuses "ein Hook, der eine fremde Zeile entfernt, bekommt keinen Anspruch durch" claim_in "$MA" "$KH" 350
+is "und die fremde Zeile steht noch" "$(remote_zeilen LH 0299)" "1"
+is "und nichts erreicht den Zweig" "$(remote_kopf LH)" "$VOR"
+# Der Hook schreibt auch die Arbeitsdateien des Anspruchs um, die neben dem
+# Worktree liegen. Die Vergleichswerte stehen nicht in einer Datei.
+printf '#!/bin/sh\nfor f in ../want ../table; do grep -v "BUG-0299-alt.md" "$f" > "$f.neu" && mv "$f.neu" "$f"; done\ngrep -v "BUG-0299-alt.md" %s > %s.neu && mv %s.neu %s\ngit add -- %s\n' "$LREL" "$LREL" "$LREL" "$LREL" "$LREL" > "$KH/.git/hooks/pre-commit"
+refuses "auch wenn der Hook die Arbeitsdateien des Anspruchs mit umschreibt" claim_in "$MA" "$KH" 350
+is "steht die fremde Zeile noch" "$(remote_zeilen LH 0299)" "1"
+is "und nichts erreicht den Zweig" "$(remote_kopf LH)" "$VOR"
 rm -f "$KH/.git/hooks/pre-commit"
+# Ein post-commit-Hook, der einen zweiten Commit daraufsetzt.
+printf '#!/bin/sh\n[ -e "%s" ] && exit 0\n: > "%s"\ngit commit -q --allow-empty --no-verify -m zweiter\n' "$TMP/zweiter" "$TMP/zweiter" > "$KH/.git/hooks/post-commit"; chmod +x "$KH/.git/hooks/post-commit"
+refuses "ein Hook, der einen zweiten Commit daraufsetzt, bekommt keinen Anspruch durch" claim_in "$MA" "$KH" 350
+is "und nichts erreicht den Zweig" "$(remote_kopf LH)" "$VOR"
+rm -f "$KH/.git/hooks/post-commit"
+sauber "nach den Hook-Versuchen" "$KH"
 
 # --- zwei Ansprueche zur selben Zeit im selben Repositorium ---------------------
 #
@@ -787,11 +941,36 @@ HOOK
 chmod +x "$KH/.git/hooks/pre-commit"
 OUT=$(claim_in "$MA" "$KH" 370 2>&1) && bad "claim gab nicht auf, obwohl der Zweig sich jede Runde bewegte" \
   || ok "claim gibt auf, wenn der Zweig sich jede Runde bewegt"
-grep -q 'in 5 rounds' <<<"$OUT" && grep -q 'kept moving' <<<"$OUT" && ok "und nennt die Zahl der Runden und den Grund" || bad "nennt Rundenzahl oder Grund nicht"
+grep -q 'in 5 rounds' <<<"$OUT" && grep -q 'moved again under the last push' <<<"$OUT" && ok "und nennt die Zahl der Runden und den Grund" || bad "nennt Rundenzahl oder Grund nicht"
 is "es waren genau fuenf Runden" "$(cat "$TMP/runden")" "5"
 is "und die eigene Nummer steht nicht" "$(remote_zeilen LH 0370)" "0"
 sauber "nach der Rundengrenze" "$KH"
 rm -f "$KH/.git/hooks/pre-commit"
+
+# Der letzte entscheidende Grund steht in der Meldung. Runde 1 verliert gegen
+# einen Gegner (der Zweig bewegt sich), danach lehnt ein pre-push-Hook jede
+# Runde ab und der Zweig steht. Gemessen an der Fassung davor: die Meldung
+# lautete "kept moving" und der Text der Ablehnung fehlte.
+meld "$MA" 0371 erst-bewegt-dann-abgelehnt; meld "$MB" 0372 gegner-einmal
+cat > "$KH/.git/hooks/pre-push" <<HOOK
+#!/usr/bin/env bash
+unset \$(git rev-parse --local-env-vars)
+if [ ! -e "$TMP/grund-einmal" ]; then
+  : > "$TMP/grund-einmal"
+  TMPDIR="$CLAIMTMP" M3C_MAINTENANCE_DIR="$MB" M3C_SLOT_TABLE="$KG/$LREL" "$BT" claim 372 >/dev/null 2>&1
+  exit 0
+fi
+echo "richtlinie: freitags wird nicht geschoben" >&2
+exit 1
+HOOK
+chmod +x "$KH/.git/hooks/pre-push"
+OUT=$(claim_in "$MA" "$KH" 371 2>&1) && bad "claim gelang trotz ablehnendem Hook" || ok "claim scheitert am ablehnenden Hook"
+is "der Gegner hat in Runde 1 wirklich gewonnen" "$(remote_zeilen LH 0372)" "1"
+grep -q 'freitags wird nicht geschoben' <<<"$OUT" && ok "die Meldung traegt den Text der letzten Ablehnung" || bad "der Text der Ablehnung fehlt"
+grep -q 'did not move' <<<"$OUT" && ok "und sagt, dass der Zweig zuletzt stand" || bad "sagt nicht, dass der Zweig zuletzt stand"
+grep -q 'moved again' <<<"$OUT" && bad "und behauptet faelschlich Bewegung" || ok "und behauptet keine Bewegung"
+sauber "nach erst bewegt, dann abgelehnt" "$KH"
+rm -f "$KH/.git/hooks/pre-push"
 
 # --- abgebrochen, waehrend der Push lief --------------------------------------------
 #

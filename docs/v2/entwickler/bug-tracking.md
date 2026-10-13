@@ -129,23 +129,40 @@ already carried the same number for the same file.
 - the table has no `ANKER` row, more than one, or does not end with a newline.
   New rows go directly under the `ANKER` row, and `claim` does not repair a
   table, not even a missing final newline;
-- the remote pushes somewhere else than it fetches from. The two URLs are
-  compared as text, so two spellings of one repository are refused as well;
-- a hook of the table's repository refuses the commit, or adds to it or changes
-  it: the finished commit must be the one row and nothing else, or it is not
-  pushed;
-- the remote refuses the push in each of five rounds.
+- the report's filename is not a plain identifier. After `BUG-<number>-` or
+  `FR-<number>-` it may hold letters, digits, dot, underscore and dash, and it
+  ends in `.md`. Backtick, pipe, backslash, spaces and line breaks would end
+  the table cell early, and the row `claim` writes must read back as exactly
+  one entry for that number and that file;
+- it is not plain which repository the remote names: the remote has more than
+  one `url`, or any `pushurl`, or a `url.*.insteadOf` or `url.*.pushInsteadOf`
+  rule rewrites where it fetches from or pushes to, or its url is also the
+  name of a remote. `claim` does not model git's URL handling; a configuration
+  it cannot show to be plain is refused, also when it would have been harmless;
+- a hook of the table's repository refuses the commit, or the commit that comes
+  out is not the authorised change. Before pushing, `claim` reads the commit
+  back from git: its only parent is the commit that was read, and it changes
+  one path, the table, to the table as read plus the one row, with the file
+  mode unchanged. A hook that stages another file, reformats the table, drops
+  a row or commits again therefore stops the claim. This is a check against
+  accidents, not a defence: a hook written to work against `claim` runs with
+  your rights in your repository and is outside what `claim` can guard;
+- the push is refused in each of five rounds.
 
 A refused push starts a new round: `claim` reads the branch again from scratch
 and decides anew, whether someone else pushed in the meantime or the remote
-turned the push away for a moment. After five rounds it gives up and says
-whether the branch kept moving or never moved. It never forces and never merges.
+turned the push away for a moment. After five rounds it gives up. The message
+then goes by the last round: it says whether the branch moved again under the
+last push or stood still, and it carries what that push said. It never forces
+and never merges.
 
 **A non-zero exit is not always "nothing happened".** Before the push started,
 nothing was allocated. If `claim` is cut off while the push is under way (a
 signal, a lost connection), the row may be on the branch all the same. Run the
 same `claim` again: it reads the branch and either finds its own row and exits
-0 with nothing to do, or names who holds the number.
+0 with nothing to do, or names who holds the number. The file holds the number
+only when a row for this number names exactly this file and no row for it names
+another.
 
 What counts as a row is the same for `next-id` and `claim`, because both read
 the table through one function: the first cell is a number, the second a
@@ -157,6 +174,7 @@ the name, is not seen by either of them.
 `$M3C_SLOT_TABLE` names the table as a tracked file in a checkout of its
 repository. The branch is the upstream of that checkout, or
 `$M3C_SLOT_REF=<remote>/<branch>` when the checkout stands somewhere else.
+Exactly one remote name may be a prefix of that ref.
 `claim` commits in a temporary worktree and does not write to that checkout,
 so the row reaches your copy of the table with your next pull.
 
