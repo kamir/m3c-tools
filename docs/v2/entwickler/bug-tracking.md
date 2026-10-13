@@ -113,19 +113,38 @@ id was handed out twice. The write is a separate step:
 ```bash
 scripts/bugtracker.sh next-id FR          # FR-0105  (a ceiling, not a claim)
 # … write the report file …
-scripts/bugtracker.sh claim FR-0105       # now it is allocated
+scripts/bugtracker.sh claim FR-0105       # exit 0: now it is allocated
 ```
 
-`claim` appends the id and its **filename** to the shared slot table named by
-`$M3C_SLOT_TABLE`, and refuses when the number already belongs to a different
-file, naming who holds it and that the later one yields.
+`claim` establishes the pair of id and **filename** on the branch that holds the
+shared slot table: it reads that branch from the remote, adds one row in a commit
+of its own, and pushes it. **Exit 0 means the branch carries the row.** Anything
+else is non-zero and nothing was allocated:
 
-Two honest limits:
+- the number already belongs to a different file on the remote: `claim` names
+  who holds it and that the later one yields, also when your own clone has not
+  heard of it yet;
+- someone pushed while `claim` was working: it reads the branch again from
+  scratch and decides anew, and it never forces and never merges;
+- the remote or one of the table repository's hooks refuses.
+
+Claiming the same id for the same file again exits 0 and changes nothing.
+
+`$M3C_SLOT_TABLE` names the table as a tracked file in a checkout of its
+repository. The branch is the upstream of that checkout, or
+`$M3C_SLOT_REF=<remote>/<branch>` when the checkout stands somewhere else.
+`claim` works in a temporary worktree and leaves the checkout alone, including
+whatever lies uncommitted in it, so the row reaches your copy of the table with
+your next pull.
+
+Three honest limits:
 
 - It is a separate verb because a slot row carries the **filename**, which does
   not exist at `next-id` time. Claiming earlier could only reserve a placeholder.
-- The claim is durable only once the slot table is **committed**. Until then it
-  lives in one working copy, the narrower carrier the rule warns about.
+- It guards the rows it writes. A row somebody adds by hand and pushes after
+  your claim is not checked by `claim`; that is what the slot checker is for.
+- It needs push rights on the table's branch and a git identity in that
+  repository. Without them nothing is allocated, and it says so.
 
 ---
 
