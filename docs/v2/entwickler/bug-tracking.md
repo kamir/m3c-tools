@@ -118,31 +118,55 @@ scripts/bugtracker.sh claim FR-0105       # exit 0: now it is allocated
 
 `claim` establishes the pair of id and **filename** on the branch that holds the
 shared slot table: it reads that branch from the remote, adds one row in a commit
-of its own, and pushes it. **Exit 0 means the branch carries the row.** Anything
-else is non-zero and nothing was allocated:
+of its own, and pushes it. **Exit 0 means the push was accepted**, or the branch
+already carried the same number for the same file.
 
-- the number already belongs to a different file on the remote: `claim` names
-  who holds it and that the later one yields, also when your own clone has not
+`claim` refuses, and writes nothing, when:
+
+- the number already belongs to a different file on the remote: it names who
+  holds it and that the later one yields, also when your own clone has not
   heard of it yet;
-- someone pushed while `claim` was working: it reads the branch again from
-  scratch and decides anew, and it never forces and never merges;
-- the remote or one of the table repository's hooks refuses.
+- the table has no `ANKER` row, more than one, or does not end with a newline.
+  New rows go directly under the `ANKER` row, and `claim` does not repair a
+  table, not even a missing final newline;
+- the remote pushes somewhere else than it fetches from. The two URLs are
+  compared as text, so two spellings of one repository are refused as well;
+- a hook of the table's repository refuses the commit, or adds to it or changes
+  it: the finished commit must be the one row and nothing else, or it is not
+  pushed;
+- the remote refuses the push in each of five rounds.
 
-Claiming the same id for the same file again exits 0 and changes nothing.
+A refused push starts a new round: `claim` reads the branch again from scratch
+and decides anew, whether someone else pushed in the meantime or the remote
+turned the push away for a moment. After five rounds it gives up and says
+whether the branch kept moving or never moved. It never forces and never merges.
+
+**A non-zero exit is not always "nothing happened".** Before the push started,
+nothing was allocated. If `claim` is cut off while the push is under way (a
+signal, a lost connection), the row may be on the branch all the same. Run the
+same `claim` again: it reads the branch and either finds its own row and exits
+0 with nothing to do, or names who holds the number.
+
+What counts as a row is the same for `next-id` and `claim`, because both read
+the table through one function: the first cell is a number, the second a
+backticked filename that starts with the kind, a number and a dash. Leading
+zeros do not matter, so `300` and `0300` are one slot; `BUG-0300` and `FR-0300`
+are two. A row written any other way, without backticks or with a path before
+the name, is not seen by either of them.
 
 `$M3C_SLOT_TABLE` names the table as a tracked file in a checkout of its
 repository. The branch is the upstream of that checkout, or
 `$M3C_SLOT_REF=<remote>/<branch>` when the checkout stands somewhere else.
-`claim` works in a temporary worktree and leaves the checkout alone, including
-whatever lies uncommitted in it, so the row reaches your copy of the table with
-your next pull.
+`claim` commits in a temporary worktree and does not write to that checkout,
+so the row reaches your copy of the table with your next pull.
 
 Three honest limits:
 
 - It is a separate verb because a slot row carries the **filename**, which does
   not exist at `next-id` time. Claiming earlier could only reserve a placeholder.
-- It guards the rows it writes. A row somebody adds by hand and pushes after
-  your claim is not checked by `claim`; that is what the slot checker is for.
+- It checks the branch at the moment it claims. A row somebody adds by hand
+  afterwards, or one written in a form the reader above does not see, is not
+  caught by `claim`; that is what the slot checker is for.
 - It needs push rights on the table's branch and a git identity in that
   repository. Without them nothing is allocated, and it says so.
 

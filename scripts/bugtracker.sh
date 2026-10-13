@@ -59,13 +59,20 @@
 #
 # What serialises two claims is the push: it moves the branch from the commit
 # this claim read to the commit it wrote, or it is refused. After a refusal
-# `claim` reads the branch again from scratch; it never forces and never merges,
-# so it never adds a row for a number the branch already carries. Two claims in
-# the same repository share no file: each has its own ref, temp file and worktree.
+# `claim` reads the branch again from scratch; it never forces and never merges.
+#
+# What a non-zero exit means depends on when it happened. Before the push
+# started, nothing was allocated. If `claim` is cut off while the push is under
+# way, the row may be on the branch all the same: run the same `claim` again,
+# it reads the branch and either finds its own row (exit 0, nothing to do) or
+# names who holds the number.
 #
 #   M3C_SLOT_TABLE   the slot table, a tracked file in a checkout of its repo
 #   M3C_SLOT_REF     optional, <remote>/<branch> that is canonical for it;
 #                    default: the upstream of that checkout
+# The remote must push where it fetches from, and the table must have exactly
+# one ANKER row and end with a newline; otherwise `claim` refuses and writes
+# nothing.
 #
 # Why `claim` is a separate verb and not part of `next-id`: a slot row carries the
 # FILENAME, which does not exist until the report is written. Claiming at next-id
@@ -217,10 +224,21 @@ claims() {
 #
 # Kept separate from claims() so a missing table cannot be mistaken for "no
 # claims": next-id says out loud that it read an incomplete set.
+#
+# slot_rows is the ONE reading of a slot row; next-id and claim both go through
+# it, so they cannot disagree about what a row says. A row counts when its
+# first cell is a number and its second cell is a backticked name that starts
+# with the kind, a number and a dash. The number is printed without leading
+# zeros: 300 and 0300 are one slot. A row written any other way, without
+# backticks or with a path before the name, is not a slot row for either of them.
+slot_rows() {  # slot_rows KIND FILE -> "<number>\t<filename>" per row
+  sed -E -n "s/^\\|[[:space:]]*0*([0-9]+)[[:space:]]*\\|[[:space:]]*\`($1-[0-9]+-[^\`]*)\`.*/\\1\\t\\2/p" "$2"
+}
+
 slot_claims() {
   local kind=$1 t=${M3C_SLOT_TABLE:-}
   [ -n "$t" ] && [ -f "$t" ] || return 1
-  sed -E -n "s/^\\|[[:space:]]*0*([0-9]+)[[:space:]]*\\|[[:space:]]*\`$kind-[0-9]+-[^\`]*\`.*/\\1\\tslot table/p" "$t"
+  slot_rows "$kind" "$t" | sed -E 's/\t.*/\tslot table/'
   return 0
 }
 
@@ -443,11 +461,10 @@ slot_table() {
 # file $M3C_SLOT_TABLE only tells us which repository and which path. The branch
 # is $M3C_SLOT_REF (remote/branch) or, without it, the upstream of the checkout
 # that holds the table. No remote means there is nowhere to establish a claim.
-LEDGER_REPO=""; LEDGER_REL=""; LEDGER_REF=""; LEDGER_BRANCH=""
-LEDGER_FETCH=""; LEDGER_PUSH=""
+LEDGER_REPO=""; LEDGER_REL=""; LEDGER_REF=""; LEDGER_BRANCH=""; LEDGER_URL=""
 
 slot_ledger() {
-  local table=$1 dir remote
+  local table=$1 dir remote pushes
   dir=$(cd "$(dirname "$table")" && pwd -P)
   LEDGER_REPO=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) \
     || die "the slot table is not inside a git repository: $table
@@ -465,24 +482,31 @@ slot_ledger() {
   remote=${LEDGER_REF%%/*}; LEDGER_BRANCH=${LEDGER_REF#*/}
   [ -n "$remote" ] && [ "$remote" != "$LEDGER_REF" ] && [ -n "$LEDGER_BRANCH" ] \
     || die "M3C_SLOT_REF must be <remote>/<branch>, got: $LEDGER_REF" 1
-  LEDGER_FETCH=$(git -C "$LEDGER_REPO" remote get-url "$remote" 2>/dev/null) \
+  LEDGER_URL=$(git -C "$LEDGER_REPO" remote get-url "$remote" 2>/dev/null) \
     || die "no such remote in $LEDGER_REPO: $remote" 1
-  LEDGER_PUSH=$(git -C "$LEDGER_REPO" remote get-url --push "$remote")
+
+  # One repository is read and written. A remote that pushes somewhere else than
+  # it fetches from would have the claim land in one place and be looked up in
+  # another, so it is refused here, before anything is written. The comparison
+  # is of the configured URLs as text: two spellings of one repository are
+  # refused as well, because nothing here can tell them from two repositories.
+  pushes=$(git -C "$LEDGER_REPO" remote get-url --push --all "$remote")
+  [ "$pushes" = "$LEDGER_URL" ] || die "remote '$remote' does not push where it fetches from:
+  fetch: $LEDGER_URL
+  push:  $(printf '%s' "$pushes" | tr '\n' ' ')
+  A claim reads and writes ONE repository. Nothing was claimed." 1
 }
 
-# Everything a claim creates locally is private to this process: its own ref,
-# its own temp file, its own worktree. Nothing here has a fixed name that a
-# second claim could share.
-CLAIM_WT=""; CLAIM_TMP=""; CLAIM_PRIV=""
+# Everything a claim writes outside git's own storage sits in one directory
+# that mktemp made for this process, and its ref carries that directory's name.
+# No path here is fixed, so a second claim cannot be handed the same one.
+CLAIM_DIR=""; CLAIM_WT=""; CLAIM_PRIV=""
 
 claim_cleanup() {
   if [ -n "$CLAIM_WT" ] && [ -d "$CLAIM_WT" ]; then
-    git -C "$LEDGER_REPO" worktree remove --force "$CLAIM_WT" >/dev/null 2>&1 \
-      || rm -rf "$CLAIM_WT"
+    git -C "$LEDGER_REPO" worktree remove --force "$CLAIM_WT" >/dev/null 2>&1 || true
   fi
-  CLAIM_WT=""
-  [ -z "$CLAIM_TMP" ] || rm -f "$CLAIM_TMP"
-  CLAIM_TMP=""
+  [ -z "$CLAIM_DIR" ] || rm -rf "$CLAIM_DIR"
   [ -z "$CLAIM_PRIV" ] || git -C "$LEDGER_REPO" update-ref -d "$CLAIM_PRIV" >/dev/null 2>&1 || true
   return 0
 }
@@ -492,12 +516,19 @@ claim_cleanup() {
 CLAIM_ROUNDS=5
 
 cmd_claim() {
-  local id file table num kind base row existing tip new out out_push="" round last=""
+  local id file table num kind base row want holders other name tip new out out_push="" round last="" moved=0
   id=$(item_id "$1"); file=$(report_path "$1"); table=$(slot_table)
-  kind=$(kind_of "$id"); num=${id#*-}; base=$(basename "$file")
+  kind=$(kind_of "$id"); num=${id#*-}; base=$(basename "$file"); want=$((10#$num))
+
+  # Called from a git hook, GIT_DIR and GIT_INDEX_FILE point at the CALLER's
+  # repository and would turn every git call below towards it.
+  # shellcheck disable=SC2046
+  unset $(git rev-parse --local-env-vars)
   slot_ledger "$table"
 
-  CLAIM_PRIV="refs/bugtracker/claim-$$"
+  CLAIM_DIR=$(mktemp -d "${TMPDIR:-/tmp}/bugtracker-claim.XXXXXX")
+  name=$(basename "$CLAIM_DIR")
+  CLAIM_PRIV="refs/bugtracker/$name"; CLAIM_WT="$CLAIM_DIR/$name"
   trap claim_cleanup EXIT
   row="| $num | \`$base\` | angelegt $(date +%Y-%m-%d) | belegt via bugtracker.sh claim |"
 
@@ -505,83 +536,96 @@ cmd_claim() {
   while [ "$round" -lt "$CLAIM_ROUNDS" ]; do
     round=$((round + 1))
 
-    # The remote decides, not this checkout. Fetched by URL into a ref of our
-    # own, so two claims in one repository do not fight over a tracking ref.
-    out=$(git -C "$LEDGER_REPO" fetch -q --no-tags "$LEDGER_FETCH" \
+    # The remote decides, not this checkout. Fetched by URL into this claim's
+    # own ref, so the checkout's tracking refs are neither trusted nor moved.
+    out=$(git -C "$LEDGER_REPO" fetch -q --no-tags "$LEDGER_URL" \
             "+refs/heads/$LEDGER_BRANCH:$CLAIM_PRIV" 2>&1) \
       || die "cannot read $LEDGER_REF, so nothing was claimed:
 $out" 1
     tip=$(git -C "$LEDGER_REPO" rev-parse "$CLAIM_PRIV")
-    if [ "$tip" = "$last" ]; then
-      die "$LEDGER_REF refused the claim and did not move. Nothing was claimed:
-$out_push" 1
-    fi
+    # A refused push with the branch where it was is not yet a verdict: two
+    # pushes arriving together can have one turned away while the other still
+    # holds the ref, and a fetch in that moment sees the old tip. So this is
+    # tried again like any other round, after a pause, and only a remote that
+    # refuses every round ends the claim.
+    if [ "$tip" = "$last" ]; then sleep 1; else [ -z "$last" ] || moved=1; fi
     last=$tip
 
-    CLAIM_TMP=$(mktemp)
-    git -C "$LEDGER_REPO" show "$tip:$LEDGER_REL" > "$CLAIM_TMP" 2>/dev/null \
+    git -C "$LEDGER_REPO" show "$tip:$LEDGER_REL" > "$CLAIM_DIR/table" 2>/dev/null \
       || die "$LEDGER_REF does not carry the slot table at $LEDGER_REL" 1
 
-    # Already taken? The same file means nothing to do; a different one is the
-    # collision this whole mechanism exists to surface.
-    existing=$(sed -n -E "s/^\|[[:space:]]*$num[[:space:]]*\|[[:space:]]*\`($kind-[^\`]+)\`.*/\1/p" \
-               "$CLAIM_TMP" | head -1)
-    if [ -n "$existing" ]; then
-      if [ "$existing" = "$base" ]; then
+    # A table claim can write to has exactly one ANKER row and ends with a
+    # newline. Anything else is refused as it stands: claim adds one row and
+    # repairs nothing, not even a missing final newline.
+    [ "$(grep -c '^| ANKER |' "$CLAIM_DIR/table" || true)" = "1" ] \
+      || die "the slot table on $LEDGER_REF has no ANKER row, or more than one.
+  New claims go directly under that row; without it this is not a table claim
+  can write to. Nothing was claimed, and nothing was repaired." 1
+    [ "$(tail -c 1 "$CLAIM_DIR/table" | wc -l | tr -d ' ')" = "1" ] \
+      || die "the slot table on $LEDGER_REF does not end with a newline.
+  Nothing was claimed, and nothing was repaired." 1
+
+    # Already taken? Read with slot_rows, the reading next-id uses: the number
+    # counts as a number, so 300 and 0300 are the same slot. The same file means
+    # nothing to do; a different one is the collision this exists to surface.
+    holders=$(slot_rows "$kind" "$CLAIM_DIR/table" | awk -F'\t' -v n="$want" '$1 == n { print $2 }')
+    if [ -n "$holders" ]; then
+      other=$(printf '%s\n' "$holders" | grep -v -x -F -- "$base" | head -1 || true)
+      if [ -z "$other" ]; then
         echo "$id already claimed by this file on $LEDGER_REF, nothing to do"
         return 0
       fi
-      die "$id is already claimed by '$existing' on $LEDGER_REF.
+      die "$id is already claimed by '$other' on $LEDGER_REF.
   Yours is '$base'. One of them has to move, and the later one yields.
   Get a fresh number with: $(basename "$0") next-id $kind" 1
     fi
 
-    # A worktree of our own at the remote tip: the commit carries one row and
-    # nothing else, the repository's own hooks run, and the checkout that holds
-    # $M3C_SLOT_TABLE is never touched, whatever else lies uncommitted in it.
-    CLAIM_WT=$(mktemp -d "${TMPDIR:-/tmp}/bugtracker-claim.XXXXXX")
+    # The row goes directly under the ANKER row. This is what the claim is
+    # allowed to commit; the commit is compared against it below.
+    awk -v row="$row" '{ print } /^\| ANKER \|/ { print row }' \
+        "$CLAIM_DIR/table" > "$CLAIM_DIR/want"
+
+    # A worktree of our own at the remote tip: the repository's own hooks run,
+    # and the checkout that holds $M3C_SLOT_TABLE is not written to, whatever
+    # else lies uncommitted in it.
     out=$(git -C "$LEDGER_REPO" worktree add --detach "$CLAIM_WT" "$tip" 2>&1) \
       || die "cannot check out $LEDGER_REF to write the claim:
 $out" 1
-
-    # Under the ANKER row if the table has one, appended otherwise (older
-    # tables). The position is for people who add a row by hand: git reports two
-    # hand insertions only when they touch the same place. A claim made here
-    # does not rely on it; the push below is what serialises.
-    if grep -q '^| ANKER |' "$CLAIM_TMP"; then
-      awk -v row="$row" '{ print } /^\| ANKER \|/ && !done { print row; done=1 }' \
-          "$CLAIM_TMP" > "$CLAIM_WT/$LEDGER_REL"
-    else
-      { cat "$CLAIM_TMP"; printf '%s\n' "$row"; } > "$CLAIM_WT/$LEDGER_REL"
-      note "claim: this table has no ANKER row, so the claim is appended at the end.
-  A row added by hand elsewhere merges without a conflict; add an ANKER row at
-  the top of the table so that git serialises hand edits too."
-    fi
-
+    cat "$CLAIM_DIR/want" > "$CLAIM_WT/$LEDGER_REL"
     git -C "$CLAIM_WT" add -- "$LEDGER_REL"
-    [ "$(git -C "$CLAIM_WT" diff --cached --name-only | wc -l | tr -d ' ')" = "1" ] \
-      || die "the claim would commit something other than the one table row. Nothing was claimed." 1
     out=$(git -C "$CLAIM_WT" commit -q -m "slot: $id is $base (bugtracker.sh claim)" 2>&1) \
       || die "the commit of the claim was refused (a hook, or no git identity).
   Nothing was claimed:
 $out" 1
     new=$(git -C "$CLAIM_WT" rev-parse HEAD)
+
+    # A hook may stage or rewrite files while the commit is made. Whatever the
+    # hooks did, only this is pushed: one commit on top of what was read, that
+    # touches the table and nothing else, and leaves the table exactly as
+    # written above.
     [ "$(git -C "$CLAIM_WT" rev-list --count "$tip..$new")" = "1" ] \
-      || die "the claim did not produce exactly one commit. Nothing was claimed." 1
+      && [ "$(git -C "$CLAIM_WT" -c core.quotepath=false diff --name-only "$tip" "$new")" = "$LEDGER_REL" ] \
+      && git -C "$CLAIM_WT" show "$new:$LEDGER_REL" | cmp -s - "$CLAIM_DIR/want" \
+      || die "the commit of the claim is not the one row that was written: a hook
+  of the table's repository added to it or changed it. Nothing was pushed, so
+  nothing was claimed." 1
 
     # The allocation. A plain push moves the branch from $tip to $new or not at
     # all: if anyone pushed in between, the remote refuses, and we start over
     # from what it holds now. Never forced, never merged.
-    if out_push=$(git -C "$CLAIM_WT" push -q "$LEDGER_PUSH" "HEAD:refs/heads/$LEDGER_BRANCH" 2>&1); then
+    if out_push=$(git -C "$LEDGER_REPO" push -q "$LEDGER_URL" "$new:refs/heads/$LEDGER_BRANCH" 2>&1); then
       claim_cleanup
       echo "$id claimed for $base on $LEDGER_REF (${new:0:8})"
       note "claim: the row is on $LEDGER_REF. Your checkout of the table does not
   have it until you pull."
       return 0
     fi
-    claim_cleanup
+    git -C "$LEDGER_REPO" worktree remove --force "$CLAIM_WT" >/dev/null 2>&1 || true
   done
-  die "$LEDGER_REF moved $CLAIM_ROUNDS times while claiming $id. Nothing was claimed; try again." 1
+  [ "$moved" = 1 ] || die "$LEDGER_REF refused the push in each of $CLAIM_ROUNDS rounds and did not move.
+  Nothing was claimed:
+$out_push" 1
+  die "$id was not claimed in $CLAIM_ROUNDS rounds: $LEDGER_REF kept moving. Nothing was claimed; try again." 1
 }
 
 # ----------------------------------------------------------------- close ----

@@ -384,17 +384,26 @@ unset M3C_SLOT_TABLE M3C_SLOT_REF
 LREL="DENK/slots.md"
 CLAIMTMP="$TMP/claim-tmp"; mkdir -p "$CLAIMTMP"
 
-# ledger NAME [anker|ohne]: ein blankes Remote mit Zweig `ledger` und der Tabelle.
+# ledger NAME [ART]: ein blankes Remote mit Zweig `ledger` und der Tabelle.
+# ART: anker (Vorgabe) | ohne | kein-zeilenende | zwei-anker | varianten
 ledger() {
-  local name=$1 art=${2:-anker} seed="$TMP/$1-seed"
+  local name=$1 art=${2:-anker} seed="$TMP/$1-seed" anker
+  anker='| ANKER | **NEUE ANSPRUECHE DIREKT UNTER DIESE ZEILE** | n/a | Regel |'
   git init -q --bare -b ledger "$TMP/$name.git"
   mkdir -p "$seed"; ( cd "$seed" && in_throwaway "$seed" )
   git init -q -b ledger "$seed"
   mkdir -p "$seed/DENK"
   {
     printf '| id | filename | proposal | allocate |\n|----|----------|----------|----------|\n'
-    [ "$art" = ohne ] || printf '| ANKER | **NEUE ANSPRUECHE DIREKT UNTER DIESE ZEILE** | n/a | Regel |\n'
-    printf '| 0299 | `BUG-0299-alt.md` | x | y |\n'
+    case $art in
+      ohne)            printf '| 0299 | `BUG-0299-alt.md` | x | y |\n' ;;
+      kein-zeilenende) printf '%s\n| 0299 | `BUG-0299-alt.md` | x | y |' "$anker" ;;
+      zwei-anker)      printf '%s\n| 0299 | `BUG-0299-alt.md` | x | y |\n%s\n' "$anker" "$anker" ;;
+      varianten)       printf '%s\n| 300 | `BUG-0300-nimmt-eine-nummer.md` | x | y |\n' "$anker"
+                       printf '| 0600 | BUG-0600-ohne-backticks.md | x | y |\n'
+                       printf '| 0601 | `bug-reports/BUG-0601-mit-pfad.md` | x | y |\n' ;;
+      *)               printf '%s\n| 0299 | `BUG-0299-alt.md` | x | y |\n' "$anker" ;;
+    esac
   } > "$seed/$LREL"
   git -C "$seed" add -- "$LREL"
   git -C "$seed" -c user.name=seed -c user.email=seed@example.invalid commit -q -m seed
@@ -585,7 +594,22 @@ refuses "lehnt das Remote ab, ist nichts vergeben" claim_in "$MA" "$KC" 320
 is "und der Zweig blieb, wie er war" "$(remote_kopf L3)" "$VOR"
 OUT=$(claim_in "$MA" "$KC" 320 2>&1 || true)
 grep -q 'Nothing was claimed' <<<"$OUT" && ok "und claim sagt, dass nichts vergeben ist" || bad "verschweigt, dass nichts vergeben ist"
+grep -q 'did not move' <<<"$OUT" && ok "und dass der Zweig sich nicht bewegt hat" || bad "nennt nicht, dass der Zweig sich nicht bewegt hat"
 sauber "nach dem abgelehnten Push" "$KC"
+
+# Eine Ablehnung, nach der der Zweig steht, wo er stand, ist noch kein Urteil.
+# Gemessen am 2026-10-13: in 1 von 500 gleichzeitigen Paaren mit verschiedenen
+# Nummern scheiterte ein Anspruch, weil zwei Pushes zusammen ankamen, das Remote
+# einen abwies, und der Blick danach noch den alten Stand sah. Hier lehnt das
+# Remote genau den ersten Push ab und bewegt sich nicht; der Anspruch muss in
+# der naechsten Runde gelingen.
+meld "$MA" 0321 einmal-abgewiesen
+printf '#!/bin/sh\n[ -e "%s" ] && exit 0\n: > "%s"\nexit 1\n' "$TMP/einmal" "$TMP/einmal" > "$TMP/L3.git/hooks/pre-receive"; chmod +x "$TMP/L3.git/hooks/pre-receive"
+accepts "eine einzelne Ablehnung ohne Bewegung beendet den Anspruch nicht" claim_in "$MA" "$KC" 321
+is "das Remote hat wirklich einmal abgewiesen" "$([ -e "$TMP/einmal" ] && echo ja)" "ja"
+is "und die Zeile steht" "$(remote_zeilen L3 0321)" "1"
+printf '#!/bin/sh\nexit 1\n' > "$TMP/L3.git/hooks/pre-receive"
+VOR=$(remote_kopf L3)
 rm -f "$TMP/L3.git/hooks/pre-receive"
 
 # Die Hooks des Tabellen-Repositoriums laufen, sie werden nicht umgangen.
@@ -606,22 +630,192 @@ is "der Commit beruehrt nur die Tabelle" \
 is "die fremde Handzeile ist nicht mitgegangen" "$(remote_zeilen L3 0998)" "0"
 is "die fremden Aenderungen liegen unveraendert da" "$(git -C "$KC" status --porcelain)" "$VORHER"
 
-# Eine Tabelle ohne ANKER muss weiter funktionieren, aber es sagen.
-ledger L4 ohne; KD=$(klon L4 d)
-meld "$MA" 0811 alte-tabelle
-OUT=$(claim_in "$MA" "$KD" 811 2>&1)
-is "eine Tabelle ohne ANKER nimmt den Anspruch weiter an" "$(remote_zeilen L4 0811)" "1"
-is "am Ende der Tabelle" "$(remote_tabelle L4 | tail -1 | grep -c '^| 0811 |')" "1"
-grep -q 'no ANKER row' <<<"$OUT" \
-  && ok "und sagt, dass der ANKER fehlt" \
-  || bad "verschweigt den fehlenden ANKER"
+# --- was eine Tabelle sein muss, damit claim in sie schreibt -------------------
+#
+# Der ANKER ist Voraussetzung, nicht Empfehlung. Und claim repariert nichts: eine
+# Tabelle ohne Zeilenende am Dateiende wird abgelehnt, wie sie ist. Gemessen an
+# der Fassung davor: ohne ANKER und ohne Zeilenende klebte die neue Zeile an der
+# letzten, wurde danach nicht mehr erkannt, und zwei Dateien bekamen dieselbe
+# Nummer, beide mit Exit 0.
+meld "$MA" 0811 erster; meld "$MB" 0811 zweiter
+for art in ohne kein-zeilenende zwei-anker; do
+  ledger "T-$art" "$art"; KT=$(klon "T-$art" t); KU=$(klon "T-$art" u)
+  VOR=$(remote_kopf "T-$art")
+  refuses "$art: claim verweigert" claim_in "$MA" "$KT" 811
+  refuses "$art: auch der zweite bekommt die Nummer nicht" claim_in "$MB" "$KU" 811
+  is "$art: der Zweig blieb, wie er war" "$(remote_kopf "T-$art")" "$VOR"
+  OUT=$(claim_in "$MA" "$KT" 811 2>&1 || true)
+  grep -q 'nothing was repaired' <<<"$OUT" && ok "$art: und claim sagt, dass es nichts repariert" \
+    || bad "$art: verschweigt, dass nichts repariert wurde"
+  sauber "$art" "$KT"
+done
+
+# --- eine Nummer ist eine Zahl, fuer next-id und fuer claim ---------------------
+#
+# Beide lesen ueber slot_rows. Eine ungepolsterte Zeile `| 300 |` belegt 0300.
+# Eine Zeile ohne Backticks oder mit Pfad vor dem Namen ist fuer KEINEN der
+# beiden eine Slot-Zeile; geprueft wird, dass sie sich darin einig sind, nicht,
+# dass solche Zeilen erkannt wuerden.
+ledger LV varianten; KV=$(klon LV v)
+MN="$TMP/maint-leer"; mkdir -p "$MN/bug-reports"
+meld "$MB" 0300 mein-zweitanspruch
+VOR=$(remote_kopf LV)
+refuses "eine ungepolstert belegte Nummer ist belegt" claim_in "$MB" "$KV" 300
+OUT=$(claim_in "$MB" "$KV" 300 2>&1 || true)
+grep -q 'BUG-0300-nimmt-eine-nummer.md' <<<"$OUT" && ok "und claim nennt den Inhaber der ungepolsterten Zeile" \
+  || bad "nennt den Inhaber der ungepolsterten Zeile nicht"
+accepts "dieselbe Datei auf der ungepolsterten Zeile: nichts zu tun" claim_in "$MA" "$KV" 300
+is "und der Zweig blieb, wie er war" "$(remote_kopf LV)" "$VOR"
+is "next-id liest dieselbe Zeile als 300" \
+   "$(M3C_MAINTENANCE_DIR="$MN" M3C_SLOT_TABLE="$KV/$LREL" "$BT" next-id BUG --no-fetch 2>/dev/null)" "BUG-0301"
+meld "$MA" 0600 neben-zeile-ohne-backticks; meld "$MA" 0601 neben-zeile-mit-pfad
+accepts "eine Zeile ohne Backticks ist fuer claim keine Slot-Zeile" claim_in "$MA" "$KV" 600
+accepts "eine Zeile mit Pfad vor dem Namen ist fuer claim keine Slot-Zeile" claim_in "$MA" "$KV" 601
+git -C "$KV" pull -q
+is "und next-id zaehlt danach genau die kanonischen Zeilen" \
+   "$(M3C_MAINTENANCE_DIR="$MN" M3C_SLOT_TABLE="$KV/$LREL" "$BT" next-id BUG --no-fetch 2>/dev/null)" "BUG-0602"
+
+# Die Art gehoert zur Nummer: BUG-0300 und FR-0300 sind zwei Slots.
+printf '# FR-0300\n\n- **Status:** open\n' > "$MA/bug-reports/FR-0300-gleiche-zahl-andere-art.md"
+accepts "dieselbe Zahl einer anderen Art ist frei" claim_in "$MA" "$KA" FR-300
+is "und steht neben der BUG-Zeile" "$(remote_zeilen L1 0300)" "2"
+
+# --- ein Repositorium wird gelesen und geschrieben ------------------------------
+ledger LP; ledger LQ; KP=$(klon LP p)
+meld "$MA" 0340 getrennte-pushurl
+git -C "$KP" remote set-url --push origin "$TMP/LQ.git"
+VORP=$(remote_kopf LP); VORQ=$(remote_kopf LQ)
+refuses "eine pushurl auf ein anderes Repositorium wird verweigert" claim_in "$MA" "$KP" 340
+is "das gelesene Repositorium blieb, wie es war" "$(remote_kopf LP)" "$VORP"
+is "das andere auch" "$(remote_kopf LQ)" "$VORQ"
+is "und es wurde nichts angelegt, bevor verweigert wurde" "$(find "$CLAIMTMP" -mindepth 1 | wc -l | tr -d ' ')" "0"
+git -C "$KP" remote set-url --push origin "$TMP/LP.git"
+accepts "eine pushurl, die gleich der Fetch-URL ist, geht" claim_in "$MA" "$KP" 340
+is "und die Zeile steht im gelesenen Repositorium" "$(remote_zeilen LP 0340)" "1"
+
+# Eine relative Remote-URL wird vom Repositorium aus aufgeloest, nicht vom
+# temporaeren Worktree aus.
+meld "$MA" 0341 relative-url
+git -C "$KP" remote set-url --push origin ../LP.git; git -C "$KP" remote set-url origin ../LP.git
+accepts "eine relative Remote-URL geht" claim_in "$MA" "$KP" 341
+is "und die Zeile steht" "$(remote_zeilen LP 0341)" "1"
 
 # M3C_SLOT_REF benennt den Zweig, wenn die Arbeitskopie woanders steht.
-git -C "$KD" checkout -q --detach
+git -C "$KP" checkout -q --detach
 meld "$MA" 0812 benannter-zweig
 accepts "M3C_SLOT_REF benennt den kanonischen Zweig" \
-  env TMPDIR="$CLAIMTMP" M3C_MAINTENANCE_DIR="$MA" M3C_SLOT_TABLE="$KD/$LREL" M3C_SLOT_REF=origin/ledger "$BT" claim 812
-is "und dort steht die Zeile" "$(remote_zeilen L4 0812)" "1"
+  env TMPDIR="$CLAIMTMP" M3C_MAINTENANCE_DIR="$MA" M3C_SLOT_TABLE="$KP/$LREL" M3C_SLOT_REF=origin/ledger "$BT" claim 812
+is "und dort steht die Zeile" "$(remote_zeilen LP 0812)" "1"
+git -C "$KP" checkout -q ledger
+
+# Aus einem Hook gerufen, zeigen GIT_INDEX_FILE und Verwandte auf das rufende
+# Repositorium. claim legt sie ab, sonst schriebe es in den Index der Kopie.
+meld "$MA" 0342 geerbte-umgebung
+printf 'fremd, gestagt\n' > "$KP/fremd.txt"; git -C "$KP" add -- fremd.txt
+VORHER=$(git -C "$KP" status --porcelain)
+accepts "claim mit geerbtem GIT_INDEX_FILE gelingt" \
+  env GIT_INDEX_FILE="$KP/.git/index" TMPDIR="$CLAIMTMP" M3C_MAINTENANCE_DIR="$MA" M3C_SLOT_TABLE="$KP/$LREL" "$BT" claim 342
+is "und der Index der Arbeitskopie ist unveraendert" "$(git -C "$KP" status --porcelain)" "$VORHER"
+is "und die Zeile steht" "$(remote_zeilen LP 0342)" "1"
+
+# --- was ein Hook des Tabellen-Repositoriums nicht kann -------------------------
+#
+# Gemessen an der Fassung davor: ein pre-commit-Hook, der selbst eine Datei
+# stagt, bekam sie in den Commit des Anspruchs, und der wurde mit Exit 0
+# geschoben. Jetzt wird der fertige Commit gegen die eine geschriebene Zeile
+# verglichen, bevor irgendetwas das Repositorium verlaesst.
+ledger LH; KH=$(klon LH h)
+meld "$MA" 0350 hook-stagt-datei
+VOR=$(remote_kopf LH)
+printf '#!/bin/sh\necho eingeschleust > extra.txt\ngit add -- extra.txt\n' > "$KH/.git/hooks/pre-commit"; chmod +x "$KH/.git/hooks/pre-commit"
+refuses "ein Hook, der eine Datei dazustagt, bekommt keinen Anspruch durch" claim_in "$MA" "$KH" 350
+is "und nichts erreicht den Zweig" "$(remote_kopf LH)" "$VOR"
+OUT=$(claim_in "$MA" "$KH" 350 2>&1 || true)
+grep -q 'Nothing was pushed' <<<"$OUT" && ok "und claim sagt, dass nichts geschoben wurde" || bad "verschweigt, dass nichts geschoben wurde"
+printf '#!/bin/sh\nprintf "%%s\\n" "| 0999 | \\`BUG-0999-vom-hook.md\\` | x | y |" >> %s\ngit add -- %s\n' "$LREL" "$LREL" > "$KH/.git/hooks/pre-commit"
+refuses "ein Hook, der die Tabelle umschreibt, bekommt keinen Anspruch durch" claim_in "$MA" "$KH" 350
+is "und nichts erreicht den Zweig" "$(remote_kopf LH)" "$VOR"
+sauber "nach den Hook-Versuchen" "$KH"
+rm -f "$KH/.git/hooks/pre-commit"
+
+# --- zwei Ansprueche zur selben Zeit im selben Repositorium ---------------------
+#
+# Kein Zufallslauf: ein pre-commit-Hook startet mitten im ersten Anspruch einen
+# zweiten in DERSELBEN Arbeitskopie. Waehrend der zweite committet, laufen beide,
+# und der Hook zaehlt, was nebeneinander liegt. Zwei Verzeichnisse, zwei Refs,
+# zwei Worktrees: geteilt ist kein Pfad.
+meld "$MA" 0360 aussen; meld "$MB" 0361 innen
+cat > "$KH/.git/hooks/pre-commit" <<HOOK
+#!/usr/bin/env bash
+unset \$(git rev-parse --local-env-vars)
+if [ -e "$TMP/zugleich-aussen" ]; then
+  [ -e "$TMP/zugleich-refs" ] && exit 0   # nur der innere Commit zaehlt, nicht die zweite Runde des aeusseren
+  find "$CLAIMTMP" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ' > "$TMP/zugleich-verzeichnisse"
+  find "$CLAIMTMP" -mindepth 2 -maxdepth 2 -type f \\( -name table -o -name want \\) | wc -l | tr -d ' ' > "$TMP/zugleich-dateien"
+  git -C "$KH" for-each-ref refs/bugtracker | wc -l | tr -d ' ' > "$TMP/zugleich-refs"
+  git -C "$KH" worktree list | wc -l | tr -d ' ' > "$TMP/zugleich-worktrees"
+  exit 0
+fi
+: > "$TMP/zugleich-aussen"
+TMPDIR="$CLAIMTMP" M3C_MAINTENANCE_DIR="$MB" M3C_SLOT_TABLE="$KH/$LREL" "$BT" claim 361 > "$TMP/zugleich-innen.out" 2>&1
+echo \$? > "$TMP/zugleich-innen.rc"
+HOOK
+chmod +x "$KH/.git/hooks/pre-commit"
+accepts "der aeussere Anspruch gelingt, obwohl mittendrin ein zweiter lief" claim_in "$MA" "$KH" 360
+is "der innere gelang auch" "$(cat "$TMP/zugleich-innen.rc" 2>/dev/null)" "0"
+is "zugleich: zwei eigene Verzeichnisse" "$(cat "$TMP/zugleich-verzeichnisse" 2>/dev/null)" "2"
+is "zugleich: jedes haelt seinen eigenen Tabellenstand und seine eigene Soll-Fassung" "$(cat "$TMP/zugleich-dateien" 2>/dev/null)" "4"
+is "zugleich: zwei eigene Refs" "$(cat "$TMP/zugleich-refs" 2>/dev/null)" "2"
+is "zugleich: zwei eigene Worktrees neben der Arbeitskopie" "$(cat "$TMP/zugleich-worktrees" 2>/dev/null)" "3"
+is "beide Zeilen stehen" "$(remote_zeilen LH 0360)$(remote_zeilen LH 0361)" "11"
+sauber "nach zwei Anspruechen zugleich" "$KH"
+rm -f "$KH/.git/hooks/pre-commit"
+
+# --- die Rundengrenze ---------------------------------------------------------------
+# Bewegt sich der Zweig in JEDER Runde, gibt claim nach fuenf Runden auf, ohne
+# etwas hinterlassen zu haben. Der Gegner zieht je Runde eine neue Nummer.
+meld "$MA" 0370 kommt-nie-dran
+for i in 1 2 3 4 5 6 7; do meld "$MB" "038$i" gegner; done
+KG=$(klon LH g)
+cat > "$KH/.git/hooks/pre-commit" <<HOOK
+#!/usr/bin/env bash
+unset \$(git rev-parse --local-env-vars)
+n=\$(( \$(cat "$TMP/runden" 2>/dev/null || echo 0) + 1 )); echo \$n > "$TMP/runden"
+TMPDIR="$CLAIMTMP" M3C_MAINTENANCE_DIR="$MB" M3C_SLOT_TABLE="$KG/$LREL" "$BT" claim "38\$n" >/dev/null 2>&1
+exit 0
+HOOK
+chmod +x "$KH/.git/hooks/pre-commit"
+OUT=$(claim_in "$MA" "$KH" 370 2>&1) && bad "claim gab nicht auf, obwohl der Zweig sich jede Runde bewegte" \
+  || ok "claim gibt auf, wenn der Zweig sich jede Runde bewegt"
+grep -q 'in 5 rounds' <<<"$OUT" && grep -q 'kept moving' <<<"$OUT" && ok "und nennt die Zahl der Runden und den Grund" || bad "nennt Rundenzahl oder Grund nicht"
+is "es waren genau fuenf Runden" "$(cat "$TMP/runden")" "5"
+is "und die eigene Nummer steht nicht" "$(remote_zeilen LH 0370)" "0"
+sauber "nach der Rundengrenze" "$KH"
+rm -f "$KH/.git/hooks/pre-commit"
+
+# --- abgebrochen, waehrend der Push lief --------------------------------------------
+#
+# Ein Exit ungleich 0 nach Beginn des Push sagt nicht, dass nichts vergeben ist.
+# Hier beendet das Remote den Anspruch per Signal, NACHDEM es den Zweig bewegt
+# hat. Der Anspruch endet mit einem Fehler, die Zeile steht. Derselbe Anspruch
+# noch einmal liest den Zweig, findet die eigene Zeile und hat nichts zu tun.
+ledger LS; KS2=$(klon LS s)
+meld "$MA" 0390 mitten-im-push-beendet
+printf '#!/bin/sh\nkill -TERM "$(cat "%s")" 2>/dev/null\nsleep 1\n' "$TMP/claim.pid" > "$TMP/LS.git/hooks/post-receive"
+chmod +x "$TMP/LS.git/hooks/post-receive"
+rc=0
+TMPDIR="$CLAIMTMP" M3C_MAINTENANCE_DIR="$MA" M3C_SLOT_TABLE="$KS2/$LREL" \
+  bash -c 'echo $$ > "$1"; exec "$2" claim 390' _ "$TMP/claim.pid" "$BT" >/dev/null 2>&1 || rc=$?
+[ "$rc" -ne 0 ] && ok "der abgebrochene Anspruch endet mit einem Fehler (Exit $rc)" \
+  || bad "der Anspruch wurde nicht abgebrochen; der Fall ist nicht gestellt"
+is "und die Zeile steht trotzdem auf dem Zweig" "$(remote_zeilen LS 0390)" "1"
+rm -f "$TMP/LS.git/hooks/post-receive"
+VOR=$(remote_kopf LS)
+OUT=$(claim_in "$MA" "$KS2" 390 2>&1) && ok "derselbe Anspruch noch einmal: Exit 0" || bad "der zweite Anlauf scheitert"
+grep -q 'already claimed by this file' <<<"$OUT" && ok "und er erkennt die eigene Zeile" || bad "erkennt die eigene Zeile nicht"
+is "ohne zweiten Commit" "$(remote_kopf LS)" "$VOR"
+is "und ohne zweite Zeile" "$(remote_zeilen LS 0390)" "1"
+sauber "nach dem abgebrochenen Anspruch" "$KS2"
 
 # --- sync ---------------------------------------------------------------------
 "$BT" status 213 fixed >/dev/null
