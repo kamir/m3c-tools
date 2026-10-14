@@ -134,11 +134,18 @@ already carried the same number for the same file.
   ends in `.md`. Backtick, pipe, backslash, spaces and line breaks would end
   the table cell early, and the row `claim` writes must read back as exactly
   one entry for that number and that file;
+- git configuration is set in the environment (`GIT_CONFIG_PARAMETERS`,
+  `GIT_CONFIG_COUNT`, `GIT_CONFIG`), for instance by `git -c ...` around the
+  call. `claim` cannot check it and does not run with it;
 - it is not plain which repository the remote names: the remote has more than
-  one `url`, or any `pushurl`, or a `url.*.insteadOf` or `url.*.pushInsteadOf`
-  rule rewrites where it fetches from or pushes to, or its url is also the
-  name of a remote. `claim` does not model git's URL handling; a configuration
-  it cannot show to be plain is refused, also when it would have been harmless;
+  one `url`, or any `pushurl`; a `url.*.insteadOf` or `url.*.pushInsteadOf`
+  rule from git's config files rewrites where it fetches from or pushes to;
+  the url has no `/` and no `:`, so git could take it for a remote's name
+  (write `./name` instead); there is an old-style remote file for it under
+  `.git/remotes` or `.git/branches`; or it is the name of a configured remote.
+  These are the cases `claim` knows. It does not model git's URL handling,
+  and within these cases it refuses also where the configuration would have
+  been harmless;
 - a hook of the table's repository refuses the commit, or the commit that comes
   out is not the authorised change. Before pushing, `claim` reads the commit
   back from git: its only parent is the commit that was read, and it changes
@@ -147,22 +154,33 @@ already carried the same number for the same file.
   a row or commits again therefore stops the claim. This is a check against
   accidents, not a defence: a hook written to work against `claim` runs with
   your rights in your repository and is outside what `claim` can guard;
-- the push is refused in each of five rounds.
+- no push succeeds in five rounds.
 
-A refused push starts a new round: `claim` reads the branch again from scratch
-and decides anew, whether someone else pushed in the meantime or the remote
-turned the push away for a moment. After five rounds it gives up. The message
-then goes by the last round: it says whether the branch moved again under the
-last push or stood still, and it carries what that push said. It never forces
-and never merges.
+A push that does not succeed starts a new round: `claim` reads the branch
+again from scratch and decides anew. It never forces and never merges. After
+five rounds it gives up, and the message carries the status the last push
+reported for the branch (for example `[rejected] (fetch first)` or
+`[remote rejected] (pre-receive hook declined)`) and what the push printed. It
+does not name a cause beyond that.
 
-**A non-zero exit is not always "nothing happened".** Before the push started,
-nothing was allocated. If `claim` is cut off while the push is under way (a
-signal, a lost connection), the row may be on the branch all the same. Run the
-same `claim` again: it reads the branch and either finds its own row and exits
-0 with nothing to do, or names who holds the number. The file holds the number
-only when a row for this number names exactly this file and no row for it names
-another.
+**After a push, `claim` says only what it can see.** Before its first push
+nothing can have reached the remote, and a refusal says "Nothing was claimed".
+Once it has pushed, a claim that does not succeed ends in one of three states:
+
+| State | Exit | When |
+|---|---|---|
+| `ESTABLISHED` | 0 | the branch carries this number for this file and no other, because an earlier push landed after all |
+| `NOT_ESTABLISHED` | 1 | the branch can be read and does not carry it, and every push of this claim was answered by the remote with a refusal |
+| `OUTCOME_UNKNOWN` | 3 | anything else: a push got no answer for the branch, or the branch cannot be read now |
+
+A push gets no answer when the connection breaks before the remote reports,
+and also when a `pre-push` hook of your own refuses it; from the outside the
+two look the same. On `OUTCOME_UNKNOWN` the number is neither free nor yours
+yet: run the same `claim` again. It reads the branch and either finds its own
+row (exit 0, nothing to do), tries again, or names who holds the number. If
+`claim` itself is killed, its exit status says nothing, and the same rerun
+applies. The file holds the number only when a row for this number names
+exactly this file and no row for it names another.
 
 What counts as a row is the same for `next-id` and `claim`, because both read
 the table through one function: the first cell is a number, the second a

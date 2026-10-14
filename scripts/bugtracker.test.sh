@@ -599,7 +599,8 @@ refuses "lehnt das Remote ab, ist nichts vergeben" claim_in "$MA" "$KC" 320
 is "und der Zweig blieb, wie er war" "$(remote_kopf L3)" "$VOR"
 OUT=$(claim_in "$MA" "$KC" 320 2>&1 || true)
 grep -q 'Nothing was claimed' <<<"$OUT" && ok "und claim sagt, dass nichts vergeben ist" || bad "verschweigt, dass nichts vergeben ist"
-grep -q 'did not move' <<<"$OUT" && ok "und dass der Zweig sich nicht bewegt hat" || bad "nennt nicht, dass der Zweig sich nicht bewegt hat"
+grep -q 'pre-receive hook declined' <<<"$OUT" && ok "und nennt den Status des letzten Push" || bad "nennt den Status des letzten Push nicht"
+grep -q 'NOT_ESTABLISHED' <<<"$OUT" && ok "und den Zustand NOT_ESTABLISHED" || bad "nennt den Zustand nicht"
 sauber "nach dem abgelehnten Push" "$KC"
 
 # Eine Ablehnung, nach der der Zweig steht, wo er stand, ist noch kein Urteil.
@@ -741,6 +742,14 @@ refuses "eine URL, die ein Remote-Name ist, wird verweigert" claim_in "$MA" "$KW
 authority_bleibt "URL gleich Remote-Name"
 git -C "$KW" remote set-url origin "$TMP/LA.git"
 git -C "$KW" remote remove spiegel
+# Dasselbe mit einem Namen, der einen Schraegstrich traegt und darum an der
+# Regel fuer nackte Namen vorbeigeht.
+git -C "$KW" config remote.spiegel/b.url "$TMP/LB.git"
+git -C "$KW" remote set-url origin spiegel/b
+refuses "eine URL, die ein Remote-Name mit Schraegstrich ist, wird verweigert" claim_in "$MA" "$KW" 343
+authority_bleibt "URL gleich Remote-Name mit Schraegstrich"
+git -C "$KW" remote set-url origin "$TMP/LA.git"
+git -C "$KW" config --remove-section remote.spiegel/b
 
 # Jede pushurl, auch eine gleichlautende: die Authority ist die url allein.
 git -C "$KW" remote set-url --push origin "$TMP/LB.git"
@@ -757,11 +766,11 @@ git -C "$KW" config --unset remote.origin.url "$TMP/LB.git"
 
 # Ein Remote-Name mit Schraegstrich: der Zweig wird nicht am ersten Schraegstrich
 # geraten. Passen zwei Remotes auf den Ref, ist er nicht eindeutig.
-git -C "$KW" remote add origin/zwei "$TMP/LB.git"
+git -C "$KW" config remote.origin/zwei.url "$TMP/LB.git"   # nicht `remote add`: neueres git lehnt diesen Namen dort ab
 refuses "ein Ref, auf den zwei Remote-Namen passen, wird verweigert" \
   env TMPDIR="$CLAIMTMP" M3C_MAINTENANCE_DIR="$MA" M3C_SLOT_TABLE="$KW/$LREL" M3C_SLOT_REF=origin/zwei/ledger "$BT" claim 343
 authority_bleibt "zwei passende Remotes"
-git -C "$KW" remote remove origin/zwei
+git -C "$KW" config --remove-section remote.origin/zwei
 
 accepts "die schlichte Konfiguration geht" claim_in "$MA" "$KW" 343
 is "und die Zeile steht im gelesenen Repositorium" "$(remote_zeilen LA 0343)" "1"
@@ -865,7 +874,7 @@ printf '#!/bin/sh\necho eingeschleust > extra.txt\ngit add -- extra.txt\n' > "$K
 refuses "ein Hook, der eine Datei dazustagt, bekommt keinen Anspruch durch" claim_in "$MA" "$KH" 350
 is "und nichts erreicht den Zweig" "$(remote_kopf LH)" "$VOR"
 OUT=$(claim_in "$MA" "$KH" 350 2>&1 || true)
-grep -q 'Nothing was pushed' <<<"$OUT" && ok "und claim sagt, dass nichts geschoben wurde" || bad "verschweigt, dass nichts geschoben wurde"
+grep -q 'This commit was not pushed' <<<"$OUT" && ok "und claim sagt, dass dieser Commit nicht geschoben wurde" || bad "verschweigt, dass nichts geschoben wurde"
 printf '#!/bin/sh\nprintf "%%s\\n" "| 0999 | \\`BUG-0999-vom-hook.md\\` | x | y |" >> %s\ngit add -- %s\n' "$LREL" "$LREL" > "$KH/.git/hooks/pre-commit"
 refuses "ein Hook, der die Tabelle umschreibt, bekommt keinen Anspruch durch" claim_in "$MA" "$KH" 350
 is "und nichts erreicht den Zweig" "$(remote_kopf LH)" "$VOR"
@@ -941,7 +950,7 @@ HOOK
 chmod +x "$KH/.git/hooks/pre-commit"
 OUT=$(claim_in "$MA" "$KH" 370 2>&1) && bad "claim gab nicht auf, obwohl der Zweig sich jede Runde bewegte" \
   || ok "claim gibt auf, wenn der Zweig sich jede Runde bewegt"
-grep -q 'in 5 rounds' <<<"$OUT" && grep -q 'moved again under the last push' <<<"$OUT" && ok "und nennt die Zahl der Runden und den Grund" || bad "nennt Rundenzahl oder Grund nicht"
+grep -q 'in 5 rounds' <<<"$OUT" && grep -q 'rejected' <<<"$OUT" && ok "und nennt die Zahl der Runden und den Status des letzten Push" || bad "nennt Rundenzahl oder Status nicht"
 is "es waren genau fuenf Runden" "$(cat "$TMP/runden")" "5"
 is "und die eigene Nummer steht nicht" "$(remote_zeilen LH 0370)" "0"
 sauber "nach der Rundengrenze" "$KH"
@@ -967,10 +976,163 @@ chmod +x "$KH/.git/hooks/pre-push"
 OUT=$(claim_in "$MA" "$KH" 371 2>&1) && bad "claim gelang trotz ablehnendem Hook" || ok "claim scheitert am ablehnenden Hook"
 is "der Gegner hat in Runde 1 wirklich gewonnen" "$(remote_zeilen LH 0372)" "1"
 grep -q 'freitags wird nicht geschoben' <<<"$OUT" && ok "die Meldung traegt den Text der letzten Ablehnung" || bad "der Text der Ablehnung fehlt"
-grep -q 'did not move' <<<"$OUT" && ok "und sagt, dass der Zweig zuletzt stand" || bad "sagt nicht, dass der Zweig zuletzt stand"
+grep -q 'OUTCOME_UNKNOWN' <<<"$OUT" && ok "und sagt, dass ein lokal abgelehnter Push von aussen offen bleibt" || bad "nennt den Zustand nicht"
 grep -q 'moved again' <<<"$OUT" && bad "und behauptet faelschlich Bewegung" || ok "und behauptet keine Bewegung"
 sauber "nach erst bewegt, dann abgelehnt" "$KH"
 rm -f "$KH/.git/hooks/pre-push"
+
+# --- nach Beginn eines Push nur sagen, was zu sehen ist ---------------------------
+#
+# Gemessen an der Fassung davor: brach die Verbindung nach der Ref-Aktualisierung
+# ab, meldete die naechste Runde "nothing was claimed", waehrend die Zeile stand.
+# Jetzt endet ein Anspruch nach einem Push in einem von drei Zustaenden:
+# ESTABLISHED (Exit 0), NOT_ESTABLISHED (Exit 1, jeder Push wurde mit einer
+# Ablehnung beantwortet) oder OUTCOME_UNKNOWN (Exit 3).
+ledger LU; KU2=$(klon LU u2)
+# Das Remote aktualisiert den Zweig und reisst danach die Verbindung ab.
+meld "$MA" 0450 verbindung-nach-dem-update-weg
+printf '#!/bin/sh\nkill -9 $PPID\n' > "$TMP/LU.git/hooks/post-receive"; chmod +x "$TMP/LU.git/hooks/post-receive"
+OUT=$(claim_in "$MA" "$KU2" 450 2>&1) && ok "Abbruch nach der Ref-Aktualisierung: Exit 0" || bad "Abbruch nach der Ref-Aktualisierung: kein Exit 0"
+grep -q 'BUG-0450 claimed for BUG-0450-verbindung-nach-dem-update-weg.md' <<<"$OUT" \
+  && ok "schon in dieser Runde aus der Statuszeile erkannt" || bad "die ok-Statuszeile wurde nicht als Erfolg gelesen"
+is "und die Zeile steht" "$(remote_zeilen LU 0450)" "1"
+grep -q 'nothing was claimed\|Nothing was claimed' <<<"$OUT" && bad "und behauptet, nichts sei vergeben" || ok "und behauptet nicht, nichts sei vergeben"
+rm -f "$TMP/LU.git/hooks/post-receive"
+# Das Remote bricht ab, bevor es den Zweig anfasst: kein Statusbericht. Ob der
+# Push ankam, ist von aussen nicht zu sehen; claim sagt das und nicht mehr.
+meld "$MA" 0451 keine-antwort
+VOR=$(remote_kopf LU)
+printf '#!/bin/sh\nkill -9 $PPID\n' > "$TMP/LU.git/hooks/pre-receive"; chmod +x "$TMP/LU.git/hooks/pre-receive"
+rc=0; OUT=$(claim_in "$MA" "$KU2" 451 2>&1) || rc=$?
+is "ohne Antwort des Remotes: Exit 3" "$rc" "3"
+grep -q 'OUTCOME_UNKNOWN' <<<"$OUT" && ok "und der Zustand heisst OUTCOME_UNKNOWN" || bad "der Zustand fehlt"
+grep -q 'nothing was claimed\|Nothing was claimed' <<<"$OUT" && bad "und behauptet, nichts sei vergeben" || ok "und behauptet nicht, nichts sei vergeben"
+is "der Zweig blieb, wie er war" "$(remote_kopf LU)" "$VOR"
+sauber "nach dem offenen Ausgang" "$KU2"
+rm -f "$TMP/LU.git/hooks/pre-receive"
+accepts "derselbe Anspruch noch einmal gleicht ab und gelingt" claim_in "$MA" "$KU2" 451
+is "und die Zeile steht genau einmal" "$(remote_zeilen LU 0451)" "1"
+# Der Fall des Lesers: nach einem Push ohne Antwort ist der Zweig nicht mehr
+# lesbar. Auch das ist OUTCOME_UNKNOWN, nicht "nothing was claimed".
+meld "$MA" 0452 danach-unlesbar
+cat > "$TMP/LU.git/hooks/pre-receive" <<HOOK
+#!/bin/sh
+mv "$TMP/LU.git" "$TMP/LU.weg"
+kill -9 \$PPID
+HOOK
+chmod +x "$TMP/LU.git/hooks/pre-receive"
+rc=0; OUT=$(claim_in "$MA" "$KU2" 452 2>&1) || rc=$?
+is "Push ohne Antwort, danach unlesbar: Exit 3" "$rc" "3"
+grep -q 'OUTCOME_UNKNOWN' <<<"$OUT" && ok "und OUTCOME_UNKNOWN" || bad "der Zustand fehlt"
+grep -q 'nothing was claimed\|Nothing was claimed' <<<"$OUT" && bad "und behauptet, nichts sei vergeben" || ok "und behauptet nicht, nichts sei vergeben"
+mv "$TMP/LU.weg" "$TMP/LU.git"; rm -f "$TMP/LU.git/hooks/pre-receive"
+accepts "wieder lesbar: derselbe Anspruch gelingt" claim_in "$MA" "$KU2" 452
+is "und die Zeile steht genau einmal" "$(remote_zeilen LU 0452)" "1"
+
+# Die Schlussmeldung traegt den Status des letzten Push und behauptet keine
+# Ursache. Der Fall des Lesers: das Remote lehnt jeden Anspruch aus Richtlinie
+# ab, und in der letzten Runde landet zugleich ein fremder Push. Davor hiess das
+# "moved again ... try again".
+meld "$MA" 0453 richtlinie-und-fremder-push
+KF=$(klon LU f)
+cat > "$TMP/LU.git/hooks/pre-receive" <<'HOOK'
+#!/bin/sh
+while read -r alt neu ref; do
+  case $(git log -1 --format=%s "$neu") in slot:*) echo "RICHTLINIE: slot-Commits nur montags" >&2; exit 1 ;; esac
+done
+exit 0
+HOOK
+chmod +x "$TMP/LU.git/hooks/pre-receive"
+cat > "$KU2/.git/hooks/pre-push" <<HOOK
+#!/usr/bin/env bash
+unset \$(git rev-parse --local-env-vars)
+n=\$(( \$(cat "$TMP/richtlinie-runde" 2>/dev/null || echo 0) + 1 )); echo \$n > "$TMP/richtlinie-runde"
+[ "\$n" = 5 ] || exit 0
+git -C "$KF" pull -q
+echo fremd >> "$KF/fremd.txt"; git -C "$KF" add -- fremd.txt; git -C "$KF" commit -q -m fremd; git -C "$KF" push -q origin ledger
+HOOK
+chmod +x "$KU2/.git/hooks/pre-push"
+VOR=$(remote_kopf LU)
+rc=0; OUT=$(claim_in "$MA" "$KU2" 453 2>&1) || rc=$?
+is "es waren fuenf Runden" "$(cat "$TMP/richtlinie-runde")" "5"
+is "der fremde Push ist gelandet" "$([ "$(remote_kopf LU)" != "$VOR" ] && echo ja)" "ja"
+is "Exit 1: jeder Push wurde abgelehnt, die Zeile steht nicht" "$rc" "1"
+grep -q 'pre-receive hook declined' <<<"$OUT" && ok "die Meldung traegt den Status des letzten Push" || bad "der Status des letzten Push fehlt"
+grep -q 'RICHTLINIE' <<<"$OUT" && ok "und den Text der Ablehnung" || bad "der Text der Ablehnung fehlt"
+grep -q 'moved' <<<"$OUT" && bad "und behauptet eine Bewegung als Grund" || ok "und behauptet keine Ursache"
+grep -q 'NOT_ESTABLISHED' <<<"$OUT" && ok "der Zustand heisst NOT_ESTABLISHED" || bad "der Zustand fehlt"
+rm -f "$KU2/.git/hooks/pre-push" "$TMP/LU.git/hooks/pre-receive"
+
+# In der letzten Runde landet der eigene Push, aber die Antwort geht verloren:
+# der reference-transaction-Hook des Remotes beendet den Empfaenger, nachdem
+# der Zweig umgesetzt ist und bevor ein Status zurueckgeht. Die Runden davor
+# verliert der Anspruch gegen einen Gegner. Nach der fuenften Runde sieht
+# claim nach und findet die eigene Zeile: ESTABLISHED, Exit 0.
+ledger LE; KE=$(klon LE e); KE2=$(klon LE e2)
+meld "$MA" 0480 landet-in-runde-fuenf
+for i in 1 2 3 4; do meld "$MB" "048$((i + 4))" gegner-runde-$i; done
+cat > "$KE/.git/hooks/pre-commit" <<HOOK
+#!/usr/bin/env bash
+unset \$(git rev-parse --local-env-vars)
+n=\$(( \$(cat "$TMP/runde-fuenf" 2>/dev/null || echo 0) + 1 )); echo \$n > "$TMP/runde-fuenf"
+[ "\$n" -le 4 ] || exit 0
+TMPDIR="$CLAIMTMP" M3C_MAINTENANCE_DIR="$MB" M3C_SLOT_TABLE="$KE2/$LREL" "$BT" claim "048\$((n + 4))" >/dev/null 2>&1
+exit 0
+HOOK
+chmod +x "$KE/.git/hooks/pre-commit"
+cat > "$TMP/LE.git/hooks/reference-transaction" <<'HOOK'
+#!/bin/sh
+[ "$1" = committed ] || exit 0
+while read -r alt neu ref; do
+  case $(git log -1 --format=%s "$neu" 2>/dev/null) in "slot: BUG-0480 "*) kill -9 $PPID ;; esac
+done
+exit 0
+HOOK
+chmod +x "$TMP/LE.git/hooks/reference-transaction"
+rc=0; OUT=$(claim_in "$MA" "$KE" 480 2>&1) || rc=$?
+is "fuenf Runden, die ersten vier verloren" "$(cat "$TMP/runde-fuenf")" "5"
+is "der eigene Push der letzten Runde landete ohne Antwort: Exit 0" "$rc" "0"
+grep -q 'ESTABLISHED' <<<"$OUT" && ok "und claim meldet ESTABLISHED nach dem Nachsehen" || bad "meldet ESTABLISHED nicht"
+is "die Zeile steht genau einmal" "$(remote_zeilen LE 0480)" "1"
+sauber "nach ESTABLISHED in der letzten Runde" "$KE"
+rm -f "$KE/.git/hooks/pre-commit" "$TMP/LE.git/hooks/reference-transaction"
+
+# --- keine nackten Namen, keine Konfiguration aus der Umgebung --------------------
+#
+# Gemessen an der Fassung davor: mit einer url ohne "/" und ":" und einer
+# gleichnamigen Datei unter .git/remotes las git die url als altes Remote, und
+# der Anspruch landete woanders, Exit 0. Und eine insteadOf-Regel aus
+# GIT_CONFIG_COUNT wurde mit den anderen GIT_*-Variablen abgelegt, statt
+# verweigert zu werden.
+ledger LR; ledger LS2; KR=$(klon LR r)
+meld "$MA" 0460 nackter-name
+VORA=$(remote_kopf LR); VORB=$(remote_kopf LS2)
+ln -s "$TMP/LR.git" "$KR/tbl"
+git -C "$KR" remote set-url origin tbl
+refuses "eine url ohne / und : wird verweigert" claim_in "$MA" "$KR" 460
+mkdir -p "$KR/.git/remotes"; printf 'URL: %s\n' "$TMP/LS2.git" > "$KR/.git/remotes/tbl"
+refuses "auch mit gleichnamiger Datei unter .git/remotes" claim_in "$MA" "$KR" 460
+rm -f "$KR/.git/remotes/tbl"
+git -C "$KR" remote set-url origin "zz:la"
+printf 'URL: %s\n' "$TMP/LS2.git" > "$KR/.git/remotes/zz:la"
+refuses "eine alte Remote-Datei fuer die url wird verweigert, auch mit Doppelpunkt" claim_in "$MA" "$KR" 460
+rm -f "$KR/.git/remotes/zz:la"
+mkdir -p "$KR/.git/branches"; printf '%s#ledger\n' "$TMP/LS2.git" > "$KR/.git/branches/zz:la"
+refuses "ebenso unter .git/branches" claim_in "$MA" "$KR" 460
+rm -f "$KR/.git/branches/zz:la"
+git -C "$KR" remote set-url origin "$TMP/LR.git"
+is "das gelesene Repositorium blieb, wie es war" "$(remote_kopf LR)" "$VORA"
+is "das andere auch" "$(remote_kopf LS2)" "$VORB"
+refuses "eine insteadOf-Regel aus GIT_CONFIG_COUNT wird verweigert" \
+  env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="url.$TMP/LS2.git.insteadOf" GIT_CONFIG_VALUE_0="$TMP/LR.git" \
+      TMPDIR="$CLAIMTMP" M3C_MAINTENANCE_DIR="$MA" M3C_SLOT_TABLE="$KR/$LREL" "$BT" claim 460
+refuses "eine Regel aus GIT_CONFIG_PARAMETERS wird verweigert" \
+  env GIT_CONFIG_PARAMETERS="'url.$TMP/LS2.git.pushinsteadof'='$TMP/LR.git'" \
+      TMPDIR="$CLAIMTMP" M3C_MAINTENANCE_DIR="$MA" M3C_SLOT_TABLE="$KR/$LREL" "$BT" claim 460
+is "und keines der beiden Repositorien wurde beruehrt" "$(remote_kopf LR) $(remote_kopf LS2)" "$VORA $VORB"
+is "und nichts wurde angelegt" "$(find "$CLAIMTMP" -mindepth 1 | wc -l | tr -d ' ')" "0"
+accepts "ohne all das geht derselbe Anspruch" claim_in "$MA" "$KR" 460
+is "und die Zeile steht im gelesenen Repositorium" "$(remote_zeilen LR 0460)" "1"
 
 # --- abgebrochen, waehrend der Push lief --------------------------------------------
 #
