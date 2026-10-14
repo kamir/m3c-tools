@@ -121,7 +121,8 @@ shared slot table: it reads that branch from the remote, adds one row in a commi
 of its own, and pushes it. **Exit 0 means the push was accepted**, or the branch
 already carried the same number for the same file.
 
-`claim` refuses, and writes nothing, when:
+`claim` refuses before it commits or pushes anything, and so writes nothing,
+when:
 
 - the number already belongs to a different file on the remote: it names who
   holds it and that the later one yields, also when your own clone has not
@@ -154,14 +155,16 @@ already carried the same number for the same file.
   a row or commits again therefore stops the claim. This is a check against
   accidents, not a defence: a hook written to work against `claim` runs with
   your rights in your repository and is outside what `claim` can guard;
-- no push succeeds in five rounds.
 
-A push that does not succeed starts a new round: `claim` reads the branch
-again from scratch and decides anew. It never forces and never merges. After
-five rounds it gives up, and the message carries the status the last push
-reported for the branch (for example `[rejected] (fetch first)` or
-`[remote rejected] (pre-receive hook declined)`) and what the push printed. It
-does not name a cause beyond that.
+Once it pushes, the end can be different. A push that is not confirmed starts
+a new round: `claim` reads the branch again from scratch and decides anew. It
+never forces and never merges. If no push of this claim is confirmed in five
+rounds, it stops and reports one of the three states below. The message
+carries the status the last push printed for the branch, if any (for example
+`[rejected] (fetch first)` or `[remote rejected] (pre-receive hook declined)`),
+and the push's output, stdout and stderr apart. It does not name a cause beyond
+that. A stop after five rounds is not a promise that nothing was written: with
+`OUTCOME_UNKNOWN` the row may already be on the branch, or land later.
 
 **After a push, `claim` says only what it can see.** Before its first push
 nothing can have reached the remote, and a refusal says "Nothing was claimed".
@@ -169,14 +172,18 @@ Once it has pushed, a claim that does not succeed ends in one of three states:
 
 | State | Exit | When |
 |---|---|---|
-| `ESTABLISHED` | 0 | the branch carries this number for this file and no other, because an earlier push landed after all |
-| `NOT_ESTABLISHED` | 1 | the branch can be read and does not carry it, and every push of this claim was answered by the remote with a refusal |
-| `OUTCOME_UNKNOWN` | 3 | anything else: a push got no answer for the branch, or the branch cannot be read now |
+| `ESTABLISHED` | 0 | the branch carries this number for this file and no other. Which push wrote the row, this run's or another run's, is not said |
+| `NOT_ESTABLISHED` | 1 | the branch can be read and does not carry it, and every push of this claim ended with a refusal status for the branch |
+| `OUTCOME_UNKNOWN` | 3 | anything else: for some push the output held no status for the branch, or the branch cannot be read now. Neither of the two states above is shown, and the row may be on the branch already or land later |
 
-A push gets no answer when the connection breaks before the remote reports,
-and also when a `pre-push` hook of your own refuses it; from the outside the
-two look the same. On `OUTCOME_UNKNOWN` the number is neither free nor yours
-yet: run the same `claim` again. It reads the branch and either finds its own
+A push's output holds no status for the branch when the connection breaks
+before git reports, and also when a `pre-push` hook of your own refuses the
+push; from the outside the two look the same. Success is only ever `git push`'s
+own exit status 0. A status line is used only to tell a refusal from an open
+outcome, and only one in a porcelain report block for the url `claim` pushed
+to counts; what a hook writes to stderr, or prints for another url, does not.
+A hook that prints such a block for the same url itself is not told apart.
+On `OUTCOME_UNKNOWN` the number is neither free nor yours yet: run the same `claim` again. It reads the branch and either finds its own
 row (exit 0, nothing to do), tries again, or names who holds the number. If
 `claim` itself is killed, its exit status says nothing, and the same rerun
 applies. The file holds the number only when a row for this number names

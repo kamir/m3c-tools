@@ -64,14 +64,15 @@
 # What a failed `claim` says depends on whether it had pushed. Before its first
 # push nothing can have reached the remote, and it says "Nothing was claimed".
 # After a push it says only what it can see, as one of three states (see
-# claim_stop): ESTABLISHED, exit 0; NOT_ESTABLISHED, exit 1, when the branch can
-# be read, does not carry the row, and every push was answered with a refusal;
-# OUTCOME_UNKNOWN, exit 3, otherwise. A push that got no answer, a lost
-# connection, or a pre-push hook of your own that refused leaves the outcome
-# unknown from here. Then run the same `claim` again: it reads the branch and
-# either finds its own row (exit 0) or tries again or names who holds the
-# number. If `claim` itself is killed, its exit status says nothing; the same
-# rerun applies.
+# claim_stop): ESTABLISHED, exit 0, when the branch carries the row (which push
+# wrote it is not said); NOT_ESTABLISHED, exit 1, when the branch can be read,
+# does not carry the row, and every push of this claim ended with a refusal
+# status for the branch; OUTCOME_UNKNOWN, exit 3, otherwise. OUTCOME_UNKNOWN
+# says that neither of the other two could be shown; the row may already be
+# on the branch or land later. Then run the same `claim` again: it reads the
+# branch and either finds its own row (exit 0) or tries again or names who
+# holds the number. If `claim` itself is killed, its exit status says nothing;
+# the same rerun applies.
 #
 #   M3C_SLOT_TABLE   the slot table, a tracked file in a checkout of its repo
 #   M3C_SLOT_REF     optional, <remote>/<branch> that is canonical for it;
@@ -576,12 +577,15 @@ claim_cleanup() {
 #
 # Before any push nothing can have reached the remote, and that is said. After
 # a push only what can be observed is said, as one of three states:
-#   ESTABLISHED       the branch carries this number for this file and no other
-#                     (an earlier push landed after all): exit 0;
+#   ESTABLISHED       the branch carries this number for this file and no other.
+#                     Which push wrote the row is not known and not said: exit 0;
 #   NOT_ESTABLISHED   the branch can be read and does not carry it, and every
-#                     push of this claim was answered with a refusal: exit 1;
-#   OUTCOME_UNKNOWN   anything else: a push got no answer, or the branch cannot
-#                     be read now. Exit 3, and the claim must be run again.
+#                     push of this claim ended with a refusal status for the
+#                     branch: exit 1;
+#   OUTCOME_UNKNOWN   anything else: for some push the output held no status for
+#                     the branch, or the branch cannot be read now. Neither of the
+#                     two above is shown; the row may be on the branch already or
+#                     land later. Exit 3, and the claim must be run again.
 claim_stop() {
   local msg=$1 seen
   [ "$pushes" != 0 ] || die "$msg
@@ -592,18 +596,19 @@ claim_stop() {
     seen=$(slot_rows "$kind" "$CLAIM_DIR/seen" | awk -F'\t' -v n="$want" '$1 == n { print $2 }')
     if [ "$seen" = "$base" ]; then
       claim_cleanup
-      echo "$id claimed for $base on $LEDGER_REF (ESTABLISHED: an earlier push of this claim landed)"
+      echo "$id claimed for $base on $LEDGER_REF (ESTABLISHED: the branch carries this row)"
       exit 0
     fi
     [ "$unknown" != 0 ] || die "$msg
   NOT_ESTABLISHED: $LEDGER_REF does not carry $id for $base, and every push of
-  this claim was refused by an answer from the remote. Nothing was claimed." 1
+  this claim ended with a refusal status for the branch. Nothing was claimed." 1
   fi
   die "$msg
-  OUTCOME_UNKNOWN: a push of this claim got no answer, or $LEDGER_REF cannot be
-  read now. Whether it carries $id for $base cannot be told from here, so the
-  number is neither free nor yours yet. Run the same claim again: it reads the
-  branch and either finishes or names who holds the number." 3
+  OUTCOME_UNKNOWN: for a push of this claim the output held no status for the
+  branch, or $LEDGER_REF cannot be read now. It is not established whether the
+  branch carries $id for $base, now or later; the number is neither free nor
+  yours yet. Run the same claim again: it reads the branch and either finishes
+  or names who holds the number." 3
 }
 
 # How often a claim starts over because the branch moved under it. Every round
@@ -612,8 +617,7 @@ CLAIM_ROUNDS=5
 
 cmd_claim() {
   local id file table num kind base row want holders other name tip new out out_push="" round last=""
-  local mode blob want_blob expect got back re pushes=0 unknown=0 status="" rc tab
-  tab=$(printf '\t')
+  local mode blob want_blob expect got back re pushes=0 unknown=0 status="" rc
   id=$(item_id "$1"); file=$(report_path "$1"); table=$(slot_table)
   kind=$(kind_of "$id"); num=${id#*-}; base=$(basename "$file"); want=$((10#$num))
 
@@ -754,20 +758,39 @@ $out"
     # all: if anyone pushed in between, the remote refuses, and we start over
     # from what it holds now. Never forced, never merged.
     #
-    # What happened is read from the push's status line for the branch, not
-    # from its exit code alone: "ok" means the remote updated the branch, also
-    # if the connection broke afterwards; "!" means the remote answered with a
-    # refusal. No status line means no answer: the push may or may not have
-    # landed, and that is remembered, because from then on "nothing was
-    # claimed" cannot be said.
+    # Success is git push's own exit status 0, nothing else. When it is not 0,
+    # the status line git push printed for this branch tells a refusal ("!")
+    # from an outcome that is not shown: no status line, or one that says "ok"
+    # although git push failed (its report may be lost, or not its own). The
+    # second kind is remembered, because from then on "nothing was claimed"
+    # cannot be said; the next round reads the branch and finds out.
+    #
+    # Where that line is taken from is the observation boundary. A pre-push
+    # hook runs inside this push, and its output is not ours: what it writes to
+    # stderr lands in stderr, and what it writes to stdout, a push of its own
+    # included, lands in this push's stdout ahead of our report (measured with
+    # git 2.47.1). So stderr is never read for the status, and in stdout only a
+    # porcelain block whose header is "To <the url this claim pushed to>"
+    # counts; lines before any block, or in a block for another url, do not.
+    # stderr is kept and shown, as diagnostics only. A hook that prints a
+    # porcelain block for this very url and ref (a dry run of the same push,
+    # say) still looks like git's report; since only "!" is taken from it, the
+    # worst it can do is have a lost report read as a refusal.
     pushes=$((pushes + 1))
-    rc=0; out_push=$(git -C "$LEDGER_REPO" push --porcelain "$LEDGER_URL" "$new:refs/heads/$LEDGER_BRANCH" 2>&1) || rc=$?
-    status=$(printf '%s\n' "$out_push" | grep -F -- ":refs/heads/$LEDGER_BRANCH$tab" | head -1 || true)
-    case $status in
-      ' '* | '+'* | '*'* | '='*) rc=0 ;;
-      '!'*) [ "$rc" != 0 ] || rc=1 ;;
-      *) [ "$rc" = 0 ] || unknown=$((unknown + 1)) ;;
-    esac
+    rc=0; push_out=$(git -C "$LEDGER_REPO" push --porcelain "$LEDGER_URL" \
+                       "$new:refs/heads/$LEDGER_BRANCH" 2>"$CLAIM_DIR/push.err") || rc=$?
+    status=$(printf '%s\n' "$push_out" | TO="To $LEDGER_URL" REF="$new:refs/heads/$LEDGER_BRANCH" \
+      awk -F'\t' '/^To / { ours = ($0 == ENVIRON["TO"]); next }
+                  /^Done$/ { ours = 0; next }
+                  ours && $2 == ENVIRON["REF"] { s = $0 }
+                  END { if (s != "") print s }')
+    out_push="stdout of git push:
+$push_out
+stderr of git push (diagnostics only, includes hook output):
+$(cat "$CLAIM_DIR/push.err")"
+    if [ "$rc" != 0 ]; then
+      case $status in '!'*) ;; *) unknown=$((unknown + 1)) ;; esac
+    fi
     if [ "$rc" = 0 ]; then
       claim_cleanup
       echo "$id claimed for $base on $LEDGER_REF (${new:0:8})"
@@ -777,8 +800,8 @@ $out"
     fi
     git -C "$LEDGER_REPO" worktree remove --force "$CLAIM_WT" >/dev/null 2>&1 || true
   done
-  claim_stop "$id was not claimed in $CLAIM_ROUNDS rounds. The status of the last push:
-  ${status:-no status line for the branch, the remote gave no answer}
+  claim_stop "$id: no push of this claim was confirmed in $CLAIM_ROUNDS rounds.
+  Status the last push printed for the branch: ${status:-none in its output}
 $out_push"
 }
 

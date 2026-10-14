@@ -993,8 +993,8 @@ ledger LU; KU2=$(klon LU u2)
 meld "$MA" 0450 verbindung-nach-dem-update-weg
 printf '#!/bin/sh\nkill -9 $PPID\n' > "$TMP/LU.git/hooks/post-receive"; chmod +x "$TMP/LU.git/hooks/post-receive"
 OUT=$(claim_in "$MA" "$KU2" 450 2>&1) && ok "Abbruch nach der Ref-Aktualisierung: Exit 0" || bad "Abbruch nach der Ref-Aktualisierung: kein Exit 0"
-grep -q 'BUG-0450 claimed for BUG-0450-verbindung-nach-dem-update-weg.md' <<<"$OUT" \
-  && ok "schon in dieser Runde aus der Statuszeile erkannt" || bad "die ok-Statuszeile wurde nicht als Erfolg gelesen"
+grep -q 'ESTABLISHED\|already claimed by this file' <<<"$OUT" \
+  && ok "erkannt durch Nachsehen auf dem Zweig, nicht aus einer Statuszeile" || bad "der Erfolg wurde nicht durch Nachsehen erkannt"
 is "und die Zeile steht" "$(remote_zeilen LU 0450)" "1"
 grep -q 'nothing was claimed\|Nothing was claimed' <<<"$OUT" && bad "und behauptet, nichts sei vergeben" || ok "und behauptet nicht, nichts sei vergeben"
 rm -f "$TMP/LU.git/hooks/post-receive"
@@ -1096,6 +1096,141 @@ grep -q 'ESTABLISHED' <<<"$OUT" && ok "und claim meldet ESTABLISHED nach dem Nac
 is "die Zeile steht genau einmal" "$(remote_zeilen LE 0480)" "1"
 sauber "nach ESTABLISHED in der letzten Runde" "$KE"
 rm -f "$KE/.git/hooks/pre-commit" "$TMP/LE.git/hooks/reference-transaction"
+
+# --- die Beobachtungsgrenze des Push und Saetze nur ueber Beobachtetes -----------
+#
+# Gemessen an 9516b27d: claim las die Statuszeile aus Standard- und
+# Fehlerausgabe zusammen und nahm die erste passende. Ein pre-push-Hook, der
+# den Push zusaetzlich auf einen Spiegel schiebt, lieferte so eine fremde
+# Erfolgszeile, und claim meldete Exit 0, waehrend die Tabelle die Zeile nicht
+# trug. Gemessen mit git 2.47.1: was ein Hook auf stdout schreibt, landet in
+# der stdout von git push, vor dessen eigenem Bericht. Jetzt zaehlt nur eine
+# Statuszeile im Block "To <url>" fuer die url, auf die claim schob.
+ledger LO; git init -q --bare "$TMP/spiegel.git"; KO=$(klon LO o)
+printf '#!/bin/sh\necho RICHTLINIE-NEIN >&2\nexit 1\n' > "$TMP/LO.git/hooks/pre-receive"; chmod +x "$TMP/LO.git/hooks/pre-receive"
+fremd_hook() {  # fremd_hook ZIEL: Hilfs-Push auf den Spiegel, Ausgabe auf ZIEL (stderr|stdout|zeile)
+  case $1 in
+    stderr) printf '#!/bin/sh\nwhile read l s r o; do git push --no-verify --porcelain --force "%s" "$s:$r" >&2; done\nexit 0\n' "$TMP/spiegel.git" ;;
+    stdout) printf '#!/bin/sh\nwhile read l s r o; do git push --no-verify --porcelain --force "%s" "$s:$r"; done\nexit 0\n' "$TMP/spiegel.git" ;;
+    zeile)  printf '#!/bin/sh\nwhile read l s r o; do printf "*\\t%%s:%%s\\t[new branch]\\nTo %%s\\n*\\t%%s:%%s\\t[new branch]\\nDone\\n" "$s" "$r" "%s" "$s" "$r"; done\nexit 0\n' "$TMP/spiegel.git" ;;
+  esac > "$KO/.git/hooks/pre-push"
+  chmod +x "$KO/.git/hooks/pre-push"
+}
+nr=455
+for art in stderr stdout zeile; do
+  nr=$((nr + 1)); meld "$MA" "0$nr" fremde-statuszeile-$art
+  fremd_hook "$art"
+  rc=0; OUT=$(claim_in "$MA" "$KO" "$nr" 2>&1) || rc=$?
+  [ "$rc" != 0 ] && ok "fremde Erfolgszeile ueber $art: kein Exit 0 (Exit $rc)" || bad "fremde Erfolgszeile ueber $art fuehrte zu Exit 0"
+  is "fremde Erfolgszeile ueber $art: die Tabelle traegt die Zeile nicht" "$(remote_zeilen LO "0$nr")" "0"
+  grep -q 'claimed for' <<<"$OUT" && bad "fremde Erfolgszeile ueber $art: claim meldet Erfolg" || ok "fremde Erfolgszeile ueber $art: claim meldet keinen Erfolg"
+done
+is "die Probe stand: der Spiegel bekam die Pushes des Hooks" "$(git --git-dir="$TMP/spiegel.git" for-each-ref refs/heads | wc -l | tr -d ' ')" "1"
+grep -q 'RICHTLINIE-NEIN' <<<"$OUT" && ok "die Fehlerausgabe wird als Diagnose gezeigt" || bad "die Fehlerausgabe fehlt in der Meldung"
+rm -f "$KO/.git/hooks/pre-push" "$TMP/LO.git/hooks/pre-receive"
+# Gegenprobe: derselbe Hook, das Remote nimmt an. Der eigene Bericht zaehlt.
+meld "$MA" 0459 eigene-erfolgszeile
+fremd_hook stdout
+rc=0; OUT=$(claim_in "$MA" "$KO" 459 2>&1) || rc=$?
+is "mit fremdem Hook und echtem Erfolg: Exit 0" "$rc" "0"
+grep -q 'BUG-0459 claimed for BUG-0459-eigene-erfolgszeile.md' <<<"$OUT" && ok "und schon aus dem eigenen Bericht erkannt" || bad "der eigene Erfolgsbericht wurde nicht gelesen"
+is "und die Zeile steht" "$(remote_zeilen LO 0459)" "1"
+rm -f "$KO/.git/hooks/pre-push"
+
+# Auch eine Ablehnung zaehlt nur aus dem eigenen Bericht. Der Hook laesst einen
+# fremden Commit landen, prueft unseren Push als Trockenlauf gegen dieselbe url
+# (Ausgabe auf stderr: ein Block mit "!" fuer genau unseren Ref) und lehnt dann
+# selbst ab. Es gibt keinen eigenen Bericht, der Ausgang ist offen: Exit 3, nicht
+# NOT_ESTABLISHED.
+meld "$MA" 0466 fremde-ablehnung-auf-stderr
+KO4=$(klon LO o4)
+cat > "$KO/.git/hooks/pre-push" <<HOOK
+#!/usr/bin/env bash
+unset \$(git rev-parse --local-env-vars)
+git -C "$KO4" pull -q; date +%s%N >> "$KO4/fremd.txt"; git -C "$KO4" add -- fremd.txt; git -C "$KO4" commit -q -m fremd; git -C "$KO4" push -q --no-verify origin ledger
+while read l s r o; do git push --no-verify --dry-run --porcelain "$TMP/LO.git" "\$s:\$r" >&2; done
+exit 1
+HOOK
+chmod +x "$KO/.git/hooks/pre-push"
+rc=0; OUT=$(claim_in "$MA" "$KO" 466 2>&1) || rc=$?
+grep -q '^!.*refs/heads/ledger' <<<"$OUT" && ok "die Probe steht: auf stderr liegt ein Ablehnungsblock fuer unseren Ref" || bad "die Probe steht nicht: kein Ablehnungsblock auf stderr"
+is "fremde Ablehnung auf stderr: Exit 3, nicht 1" "$rc" "3"
+grep -q 'OUTCOME_UNKNOWN' <<<"$OUT" && ok "und der Zustand heisst OUTCOME_UNKNOWN" || bad "der Zustand fehlt"
+rm -f "$KO/.git/hooks/pre-push"
+
+# Ein lokaler pre-push-Hook lehnt ab; das Remote wird nie gefragt. claim sagt
+# dann nichts ueber das Remote.
+meld "$MA" 0461 lokal-abgelehnt
+printf '#!/bin/sh\necho LOKAL-NEIN >&2\nexit 1\n' > "$KO/.git/hooks/pre-push"; chmod +x "$KO/.git/hooks/pre-push"
+printf '#!/bin/sh\n: > "%s"\nexit 0\n' "$TMP/LO-gefragt" > "$TMP/LO.git/hooks/pre-receive"; chmod +x "$TMP/LO.git/hooks/pre-receive"
+rc=0; OUT=$(claim_in "$MA" "$KO" 461 2>&1) || rc=$?
+is "lokal abgelehnt: Exit 3" "$rc" "3"
+is "das Remote wurde wirklich nie gefragt" "$([ -e "$TMP/LO-gefragt" ] && echo ja || echo nein)" "nein"
+grep -q -i 'no answer\|gave no\|remote rejected\|refused by' <<<"$(grep -v -i 'LOKAL-NEIN\|^stderr\|^stdout' <<<"$OUT" | sed -n '1,8p')" \
+  && bad "lokal abgelehnt: claim nennt eine Ursache beim Remote" || ok "lokal abgelehnt: claim nennt keine Ursache beim Remote"
+grep -q 'was not claimed\|Nothing was claimed' <<<"$OUT" && bad "lokal abgelehnt: claim behauptet, nichts sei vergeben" || ok "lokal abgelehnt: claim behauptet nicht, nichts sei vergeben"
+rm -f "$KO/.git/hooks/pre-push" "$TMP/LO.git/hooks/pre-receive"
+
+# Ein anderer Lauf desselben Anspruchs schreibt die Zeile in Runde 5. Dieser
+# Lauf meldet ESTABLISHED und schreibt die Zeile nicht sich zu.
+meld "$MA" 0462 anderer-lauf-schreibt
+KO2=$(klon LO o2); KO3=$(klon LO o3)
+cat > "$KO/.git/hooks/pre-push" <<HOOK
+#!/usr/bin/env bash
+unset \$(git rev-parse --local-env-vars)
+n=\$(( \$(cat "$TMP/beobachter-runde" 2>/dev/null || echo 0) + 1 )); echo \$n > "$TMP/beobachter-runde"
+if [ \$n -le 4 ]; then
+  git -C "$KO3" pull -q; echo \$n >> "$KO3/fremd.txt"; git -C "$KO3" add -- fremd.txt; git -C "$KO3" commit -q -m fremd; git -C "$KO3" push -q --no-verify origin ledger
+else
+  TMPDIR="$CLAIMTMP" M3C_MAINTENANCE_DIR="$MA" M3C_SLOT_TABLE="$KO2/$LREL" "$BT" claim 462 > "$TMP/beobachter-anderer.out" 2>&1
+fi
+exit 0
+HOOK
+chmod +x "$KO/.git/hooks/pre-push"
+rc=0; OUT=$(claim_in "$MA" "$KO" 462 2>&1) || rc=$?
+is "Beobachter: fuenf Runden" "$(cat "$TMP/beobachter-runde")" "5"
+grep -q 'BUG-0462 claimed for' "$TMP/beobachter-anderer.out" && ok "der andere Lauf hat die Zeile wirklich geschrieben" || bad "der andere Lauf schrieb nicht"
+is "Beobachter: Exit 0" "$rc" "0"
+grep -q 'ESTABLISHED' <<<"$OUT" && ok "Beobachter: meldet ESTABLISHED" || bad "Beobachter: meldet ESTABLISHED nicht"
+grep -q -i 'earlier push\|push of this claim landed' <<<"$OUT" && bad "Beobachter: schreibt die Zeile einem eigenen Push zu" || ok "Beobachter: schreibt die Zeile keinem Push zu"
+is "die Zeile steht genau einmal" "$(remote_zeilen LO 0462)" "1"
+rm -f "$KO/.git/hooks/pre-push"
+
+# Fuenf Runden ohne bestaetigten Push, und der letzte landet doch: das Remote
+# setzt den Zweig um und ist danach nicht mehr lesbar. Exit 3, die Zeile steht.
+# Gemessen an 9516b27d hiess das "was not claimed", und die Doku versprach,
+# claim schreibe dann nichts.
+ledger LD; KD5=$(klon LD d5); KD6=$(klon LD d6)
+meld "$MA" 0463 landet-unbestaetigt
+cat > "$KD5/.git/hooks/pre-push" <<HOOK
+#!/usr/bin/env bash
+unset \$(git rev-parse --local-env-vars)
+n=\$(( \$(cat "$TMP/unbestaetigt-runde" 2>/dev/null || echo 0) + 1 )); echo \$n > "$TMP/unbestaetigt-runde"
+[ \$n -le 4 ] || exit 0
+git -C "$KD6" pull -q; echo \$n >> "$KD6/fremd.txt"; git -C "$KD6" add -- fremd.txt; git -C "$KD6" commit -q -m fremd; git -C "$KD6" push -q --no-verify origin ledger
+exit 0
+HOOK
+chmod +x "$KD5/.git/hooks/pre-push"
+cat > "$TMP/LD.git/hooks/reference-transaction" <<HOOK
+#!/bin/sh
+[ "\$1" = committed ] || exit 0
+while read alt neu ref; do
+  case \$(git log -1 --format=%s "\$neu" 2>/dev/null) in "slot: BUG-0463 "*) mv "$TMP/LD.git" "$TMP/LD.weg"; kill -9 \$PPID ;; esac
+done
+exit 0
+HOOK
+chmod +x "$TMP/LD.git/hooks/reference-transaction"
+rc=0; OUT=$(claim_in "$MA" "$KD5" 463 2>&1) || rc=$?
+mv "$TMP/LD.weg" "$TMP/LD.git"; rm -f "$TMP/LD.git/hooks/reference-transaction"
+is "unbestaetigt gelandet: fuenf Runden" "$(cat "$TMP/unbestaetigt-runde")" "5"
+is "unbestaetigt gelandet: Exit 3" "$rc" "3"
+is "und die Zeile steht doch" "$(remote_zeilen LD 0463)" "1"
+grep -q 'OUTCOME_UNKNOWN' <<<"$OUT" && ok "und der Zustand heisst OUTCOME_UNKNOWN" || bad "der Zustand fehlt"
+grep -q -i 'was not claimed\|nothing was claimed\|nothing was written' <<<"$OUT" && bad "und behauptet, nichts sei vergeben" || ok "und behauptet nicht, nichts sei vergeben"
+grep -q 'now or later' <<<"$OUT" && ok "und sagt, dass es auch spaeter offen ist" || bad "sagt nicht, dass es auch spaeter offen ist"
+rm -f "$KD5/.git/hooks/pre-push"
+accepts "derselbe Anspruch noch einmal erkennt die Zeile" claim_in "$MA" "$KD5" 463
+is "ohne zweite Zeile" "$(remote_zeilen LD 0463)" "1"
 
 # --- keine nackten Namen, keine Konfiguration aus der Umgebung --------------------
 #
