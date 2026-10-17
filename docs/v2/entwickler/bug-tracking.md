@@ -113,19 +113,107 @@ id was handed out twice. The write is a separate step:
 ```bash
 scripts/bugtracker.sh next-id FR          # FR-0105  (a ceiling, not a claim)
 # … write the report file …
-scripts/bugtracker.sh claim FR-0105       # now it is allocated
+scripts/bugtracker.sh claim FR-0105       # exit 0: now it is allocated
 ```
 
-`claim` appends the id and its **filename** to the shared slot table named by
-`$M3C_SLOT_TABLE`, and refuses when the number already belongs to a different
-file, naming who holds it and that the later one yields.
+`claim` establishes the pair of id and **filename** on the branch that holds the
+shared slot table: it reads that branch from the remote, adds one row in a commit
+of its own, and pushes it. **Exit 0 means the push was accepted**, or the branch
+already carried the same number for the same file.
 
-Two honest limits:
+`claim` refuses before it commits or pushes anything, and so writes nothing,
+when:
+
+- the number already belongs to a different file on the remote: it names who
+  holds it and that the later one yields, also when your own clone has not
+  heard of it yet;
+- the table has no `ANKER` row, more than one, or does not end with a newline.
+  New rows go directly under the `ANKER` row, and `claim` does not repair a
+  table, not even a missing final newline;
+- the report's filename is not a plain identifier. After `BUG-<number>-` or
+  `FR-<number>-` it may hold letters, digits, dot, underscore and dash, and it
+  ends in `.md`. Backtick, pipe, backslash, spaces and line breaks would end
+  the table cell early, and the row `claim` writes must read back as exactly
+  one entry for that number and that file;
+- git configuration is set in the environment (`GIT_CONFIG_PARAMETERS`,
+  `GIT_CONFIG_COUNT`, `GIT_CONFIG`), for instance by `git -c ...` around the
+  call. `claim` cannot check it and does not run with it;
+- it is not plain which repository the remote names: the remote has more than
+  one `url`, or any `pushurl`; a `url.*.insteadOf` or `url.*.pushInsteadOf`
+  rule from git's config files rewrites where it fetches from or pushes to;
+  the url has no `/` and no `:`, so git could take it for a remote's name
+  (write `./name` instead); there is an old-style remote file for it under
+  `.git/remotes` or `.git/branches`; or it is the name of a configured remote.
+  These are the cases `claim` knows. It does not model git's URL handling,
+  and within these cases it refuses also where the configuration would have
+  been harmless;
+- a hook of the table's repository refuses the commit, or the commit that comes
+  out is not the authorised change. Before pushing, `claim` reads the commit
+  back from git: its only parent is the commit that was read, and it changes
+  one path, the table, to the table as read plus the one row, with the file
+  mode unchanged. A hook that stages another file, reformats the table, drops
+  a row or commits again therefore stops the claim. This is a check against
+  accidents, not a defence: a hook written to work against `claim` runs with
+  your rights in your repository and is outside what `claim` can guard;
+
+Once it pushes, the end can be different. A push that is not confirmed starts
+a new round: `claim` reads the branch again from scratch and decides anew. It
+never forces and never merges. If no push of this claim is confirmed in five
+rounds, it stops and reports one of the three states below. The message
+carries the status the last push printed for the branch, if any (for example
+`[rejected] (fetch first)` or `[remote rejected] (pre-receive hook declined)`),
+and the push's output, stdout and stderr apart. It does not name a cause beyond
+that. A stop after five rounds is not a promise that nothing was written: with
+`OUTCOME_UNKNOWN` the row may already be on the branch, or land later.
+
+**After a push, `claim` says only what it can see.** Before its first push
+nothing can have reached the remote, and a refusal says "Nothing was claimed".
+Once it has pushed, a claim that does not succeed ends in one of three states:
+
+| State | Exit | When |
+|---|---|---|
+| `ESTABLISHED` | 0 | the branch carries this number for this file and no other. Which push wrote the row, this run's or another run's, is not said |
+| `NOT_ESTABLISHED` | 1 | the branch can be read and does not carry it, and every push of this claim ended with `[rejected]` or `[remote rejected]` for the branch |
+| `OUTCOME_UNKNOWN` | 3 | anything else: for some push the output did not prove a refusal, or the branch cannot be read now. Neither of the two states above is shown, and the row may be on the branch already or land later |
+
+A push's output holds no status for the branch when the connection breaks
+before git reports, and also when a `pre-push` hook of your own refuses the
+push; from the outside the two look the same. Success is only ever `git push`'s
+own exit status 0. Only a `!` status line with `[rejected]` or `[remote rejected]`
+proves a refusal. `[remote failure]` means the remote did not report the update;
+it may have happened. Other summaries and missing reports also leave the outcome
+open, even if a later push is refused. Only a status line in a porcelain report block for the url `claim` pushed
+to counts; what a hook writes to stderr, or prints for another url, does not.
+A hook that prints such a block for the same url itself is not told apart.
+On `OUTCOME_UNKNOWN` the number is neither free nor yours yet: run the same `claim` again. It reads the branch and either finds its own
+row (exit 0, nothing to do), tries again, or names who holds the number. If
+`claim` itself is killed, its exit status says nothing, and the same rerun
+applies. The file holds the number only when a row for this number names
+exactly this file and no row for it names another.
+
+What counts as a row is the same for `next-id` and `claim`, because both read
+the table through one function: the first cell is a number, the second a
+backticked filename that starts with the kind, a number and a dash. Leading
+zeros do not matter, so `300` and `0300` are one slot; `BUG-0300` and `FR-0300`
+are two. A row written any other way, without backticks or with a path before
+the name, is not seen by either of them.
+
+`$M3C_SLOT_TABLE` names the table as a tracked file in a checkout of its
+repository. The branch is the upstream of that checkout, or
+`$M3C_SLOT_REF=<remote>/<branch>` when the checkout stands somewhere else.
+Exactly one remote name may be a prefix of that ref.
+`claim` commits in a temporary worktree and does not write to that checkout,
+so the row reaches your copy of the table with your next pull.
+
+Three honest limits:
 
 - It is a separate verb because a slot row carries the **filename**, which does
   not exist at `next-id` time. Claiming earlier could only reserve a placeholder.
-- The claim is durable only once the slot table is **committed**. Until then it
-  lives in one working copy, the narrower carrier the rule warns about.
+- It checks the branch at the moment it claims. A row somebody adds by hand
+  afterwards, or one written in a form the reader above does not see, is not
+  caught by `claim`; that is what the slot checker is for.
+- It needs push rights on the table's branch and a git identity in that
+  repository. Without them nothing is allocated, and it says so.
 
 ---
 
