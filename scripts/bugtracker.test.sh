@@ -7,7 +7,7 @@
 # the REFUSALS: a public issue cannot be un-published, so every guard that keeps
 # private-plane content off the public plane is tested from the failing side.
 #
-# No deps beyond bash + coreutils. Exit 0 = all assertions passed.
+# Requires bash, coreutils, git and python3. Exit 0 = all assertions passed.
 #
 set -euo pipefail
 
@@ -567,18 +567,24 @@ beide=0; keiner=0; doppelt=0; verschieden_rot=0
 for i in $(seq 1 "$N"); do
   n=$(printf '%04d' $((1000 + i))); p=$(printf '%04d' $((3000 + i))); q=$(printf '%04d' $((5000 + i)))
   meld "$MA" "$n" links; meld "$MB" "$n" rechts; meld "$MA" "$p" links; meld "$MB" "$q" rechts
-  ( rc=0; claim_in "$MA" "$KS" "$n" >/dev/null 2>&1 || rc=$?; echo "$rc" > "$TMP/r1" ) &
-  ( rc=0; claim_in "$MB" "$KS" "$n" >/dev/null 2>&1 || rc=$?; echo "$rc" > "$TMP/r2" ) &
+  ( rc=0; claim_in "$MA" "$KS" "$n" >"$TMP/race-left.log" 2>&1 || rc=$?; echo "$rc" > "$TMP/r1" ) &
+  ( rc=0; claim_in "$MB" "$KS" "$n" >"$TMP/race-right.log" 2>&1 || rc=$?; echo "$rc" > "$TMP/r2" ) &
   wait
   a=$(cat "$TMP/r1"); b=$(cat "$TMP/r2")
   [ "$a" = 0 ] && [ "$b" = 0 ] && beide=$((beide + 1))
   [ "$a" != 0 ] && [ "$b" != 0 ] && keiner=$((keiner + 1))
   [ "$(remote_zeilen L2 "$n")" = 1 ] || doppelt=$((doppelt + 1))
-  ( rc=0; claim_in "$MA" "$KS" "$p" >/dev/null 2>&1 || rc=$?; echo "$rc" > "$TMP/r1" ) &
-  ( rc=0; claim_in "$MB" "$KS" "$q" >/dev/null 2>&1 || rc=$?; echo "$rc" > "$TMP/r2" ) &
+  if [ "$a$b" = 00 ] || { [ "$a" != 0 ] && [ "$b" != 0 ]; } || [ "$(remote_zeilen L2 "$n")" != 1 ]; then
+    printf 'shared race %s, exits %s/%s:\n' "$i" "$a" "$b"
+    cat "$TMP/race-left.log" "$TMP/race-right.log"
+  fi
+  ( rc=0; claim_in "$MA" "$KS" "$p" >"$TMP/race-left.log" 2>&1 || rc=$?; echo "$rc" > "$TMP/r1" ) &
+  ( rc=0; claim_in "$MB" "$KS" "$q" >"$TMP/race-right.log" 2>&1 || rc=$?; echo "$rc" > "$TMP/r2" ) &
   wait
   [ "$(cat "$TMP/r1")$(cat "$TMP/r2")" = 00 ] && [ "$(remote_zeilen L2 "$p")$(remote_zeilen L2 "$q")" = 11 ] \
-    || verschieden_rot=$((verschieden_rot + 1))
+    || { verschieden_rot=$((verschieden_rot + 1));
+         printf 'different race %s, exits %s/%s:\n' "$i" "$(cat "$TMP/r1")" "$(cat "$TMP/r2")";
+         cat "$TMP/race-left.log" "$TMP/race-right.log"; }
 done
 is "gleichzeitig, gleiche Nummer, $N Durchgaenge: nie zwei Erfolge" "$beide" "0"
 is "gleichzeitig, gleiche Nummer: immer genau ein Gewinner" "$keiner" "0"
@@ -719,6 +725,10 @@ git -C "$KW" config "url.$TMP/LA.git.pushInsteadOf" "$TMP/LA.git"
 is "die Probe steht: gelesen wird woanders, geschrieben nicht" \
    "$(git -C "$KW" remote get-url origin) $(git -C "$KW" remote get-url --push origin)" "$TMP/LB.git $TMP/LA.git"
 refuses "eine Umschreibung nur der Lese-Seite wird verweigert" claim_in "$MA" "$KW" 343
+OUT=$(claim_in "$MA" "$KW" 343 2>&1 || true)
+grep -q 'does not follow rewrites' <<<"$OUT" \
+  && ok "Lese-Umschreibung wird an der Authority-Pruefung verweigert" \
+  || bad "Lese-Umschreibung scheitert erst spaeter oder wird uebergangen"
 authority_bleibt "nur Lese-Seite"
 git -C "$KW" config --unset "url.$TMP/LB.git.insteadOf"; git -C "$KW" config --unset "url.$TMP/LA.git.pushInsteadOf"
 
@@ -1215,6 +1225,9 @@ cat > "$TMP/LD.git/hooks/reference-transaction" <<HOOK
 #!/bin/sh
 [ "\$1" = committed ] || exit 0
 while read alt neu ref; do
+  # A committed notification can accompany a rejected ref transaction in
+  # git 2.55. Trigger the lost-report fixture only after the ref really moved.
+  [ "\$(git rev-parse -q --verify "\$ref" 2>/dev/null)" = "\$neu" ] || continue
   case \$(git log -1 --format=%s "\$neu" 2>/dev/null) in "slot: BUG-0463 "*) mv "$TMP/LD.git" "$TMP/LD.weg"; kill -9 \$PPID ;; esac
 done
 exit 0
@@ -1231,6 +1244,166 @@ grep -q 'now or later' <<<"$OUT" && ok "und sagt, dass es auch spaeter offen ist
 rm -f "$KD5/.git/hooks/pre-push"
 accepts "derselbe Anspruch noch einmal erkennt die Zeile" claim_in "$MA" "$KD5" 463
 is "ohne zweite Zeile" "$(remote_zeilen LD 0463)" "1"
+
+# A receive-pack response can omit the ref status after receiving the update.
+# Exercise git's actual [remote failure] report, rather than printing a forged
+# porcelain line. Fetches pass through; pushes lose only their ok/ng ref lines.
+cat > "$TMP/status-transport.py" <<'PY'
+import os
+import subprocess
+import sys
+import threading
+import time
+
+service, repo, control = sys.argv[1:]
+if service.endswith("upload-pack"):
+    os.execvp("git-upload-pack", ["git-upload-pack", repo])
+if os.path.exists(control + "/pass"):
+    os.execvp("git-receive-pack", ["git-receive-pack", repo])
+
+def read_packet(stream):
+    header = stream.read(4)
+    if not header:
+        return None
+    size = int(header, 16)
+    return stream.read(size - 4) if size else b""
+
+def send(data):
+    sys.stdout.buffer.write((b"%04x" % (len(data) + 4) + data) if data else b"0000")
+    sys.stdout.buffer.flush()
+
+server = subprocess.Popen(["git-receive-pack", repo], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+while True:
+    data = read_packet(server.stdout)
+    if data is None:
+        raise RuntimeError("receive-pack ended before advertisement")
+    if b"\0" in data:
+        ref, caps = data.split(b"\0", 1)
+        caps = [c for c in caps.split() if c not in (b"side-band", b"side-band-64k", b"report-status-v2")]
+        data = ref + b"\0" + b" ".join(caps) + b"\n"
+    send(data)
+    if not data:
+        break
+
+def forward_input():
+    try:
+        while True:
+            data = os.read(0, 65536)
+            if not data:
+                break
+            server.stdin.write(data)
+            server.stdin.flush()
+    except BrokenPipeError:
+        pass
+    finally:
+        server.stdin.close()
+
+threading.Thread(target=forward_input, daemon=True).start()
+if os.path.exists(control + "/delay"):
+    deadline = time.monotonic() + 30
+    while not os.path.exists(control + "/received"):
+        if server.poll() is not None or time.monotonic() >= deadline:
+            raise RuntimeError("pre-receive gate was not reached")
+        time.sleep(0.01)
+    send(b"unpack ok\n")
+    send(b"")
+    # Let receive-pack finish after claim returns and the test opens its gate.
+    # The detached child owns its stdout pipe, without holding claim's pipes.
+    if os.fork() == 0:
+        os.setsid()
+        for fd in (0, 1, 2):
+            os.close(fd)
+        server.stdout.read()
+        server.wait()
+        os._exit(0)
+    os._exit(0)
+
+while True:
+    data = read_packet(server.stdout)
+    if data is None:
+        break
+    if not data.startswith((b"ok ", b"ng ")):
+        send(data)
+    if not data:
+        break
+server.wait()
+if os.path.exists(control + "/once"):
+    open(control + "/pass", "w").close()
+PY
+
+for outcome in landed refused mixed delayed; do
+  ledger "RF-$outcome"; KR=$(klon "RF-$outcome" status)
+  ctl="$TMP/RF-$outcome-control"; mkdir -p "$ctl"
+  git -C "$KR" config protocol.ext.allow always
+  git -C "$KR" remote set-url origin "ext::python3 $TMP/status-transport.py %S $TMP/RF-$outcome.git $ctl"
+  meld "$MA" 0471 status-unknown
+  case $outcome in
+    refused|mixed)
+      printf '#!/bin/sh\nexit 1\n' > "$TMP/RF-$outcome.git/hooks/pre-receive"
+      [ "$outcome" != mixed ] || : > "$ctl/once"
+      ;;
+    delayed)
+      : > "$ctl/delay"
+      cat > "$TMP/RF-$outcome.git/hooks/pre-receive" <<HOOK
+#!/bin/sh
+: > "$ctl/received"
+i=0
+while [ ! -e "$ctl/release" ] && [ \$i -lt 600 ]; do sleep 0.1; i=\$((i+1)); done
+[ -e "$ctl/release" ]
+HOOK
+      ;;
+  esac
+  [ ! -f "$TMP/RF-$outcome.git/hooks/pre-receive" ] || chmod +x "$TMP/RF-$outcome.git/hooks/pre-receive"
+  rc=0; OUT=$(claim_in "$MA" "$KR" 471 2>&1) || rc=$?
+  if [ "$outcome" = landed ]; then
+    is "missing ref report, landed: reconciles to Exit 0" "$rc" "0"
+    is "missing ref report, landed: canonical row exists" "$(remote_zeilen RF-landed 0471)" "1"
+  else
+    if [ "$outcome" = mixed ]; then
+      is "mixed: transport omitted the first report" "$(test -f "$ctl/pass" && echo yes)" "yes"
+      grep -q '\[remote rejected\]' <<<"$OUT" && ok "mixed: last push was explicitly refused" || bad "mixed: last refusal missing"
+    else
+      grep -q '\[remote failure\]' <<<"$OUT" && ok "$outcome: actual git remote failure" || bad "$outcome: missing git remote failure"
+    fi
+    is "$outcome: missing report leaves Exit 3" "$rc" "3"
+    grep -q 'OUTCOME_UNKNOWN' <<<"$OUT" && ok "$outcome: state is unknown" || bad "$outcome: state is not unknown"
+    grep -q 'NOT_ESTABLISHED\|Nothing was claimed' <<<"$OUT" && bad "$outcome: claims certain refusal" || ok "$outcome: no certain refusal claimed"
+    is "$outcome: canonical row absent when claim returns" "$(remote_zeilen "RF-$outcome" 0471)" "0"
+  fi
+  if [ "$outcome" = delayed ]; then
+    : > "$ctl/release"
+    i=0; while [ "$(remote_zeilen RF-delayed 0471)" = 0 ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i+1)); done
+    is "delayed: canonical row lands after claim returned" "$(remote_zeilen RF-delayed 0471)" "1"
+  fi
+  : > "$ctl/pass"
+  rm -f "$TMP/RF-$outcome.git/hooks/pre-receive"
+  accepts "$outcome: retry establishes or reconciles the same claim" claim_in "$MA" "$KR" 471
+  is "$outcome: retry leaves exactly one canonical row" "$(remote_zeilen "RF-$outcome" 0471)" "1"
+  sauber "missing ref report, $outcome" "$KR"
+done
+
+# A refusal for a mirror is not proof about the canonical branch. The hook's
+# real helper push prints a porcelain block for another URL, then stops ours.
+ledger RM; KM=$(klon RM mirror)
+git init -q --bare "$TMP/refusing-mirror.git"
+printf '#!/bin/sh\nexit 1\n' > "$TMP/refusing-mirror.git/hooks/pre-receive"
+chmod +x "$TMP/refusing-mirror.git/hooks/pre-receive"
+cat > "$KM/.git/hooks/pre-push" <<HOOK
+#!/bin/sh
+while read localref new remoteref old; do
+  git push --no-verify --porcelain "$TMP/refusing-mirror.git" "\$new:\$remoteref"
+done
+exit 1
+HOOK
+chmod +x "$KM/.git/hooks/pre-push"
+meld "$MA" 0474 mirror-refusal
+rc=0; OUT=$(claim_in "$MA" "$KM" 474 2>&1) || rc=$?
+grep -q "To $TMP/refusing-mirror.git" <<<"$OUT" && grep -q '\[remote rejected\]' <<<"$OUT" \
+  && ok "mirror refusal: real report for another URL" || bad "mirror refusal: fixture report missing"
+is "mirror refusal: canonical outcome remains unknown" "$rc" "3"
+grep -q 'NOT_ESTABLISHED\|Nothing was claimed' <<<"$OUT" \
+  && bad "mirror refusal counted as canonical" || ok "mirror refusal not counted as canonical"
+is "mirror refusal: canonical row remains absent" "$(remote_zeilen RM 0474)" "0"
 
 # --- keine nackten Namen, keine Konfiguration aus der Umgebung --------------------
 #

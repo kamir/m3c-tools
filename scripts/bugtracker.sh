@@ -581,9 +581,9 @@ claim_cleanup() {
 #                     Which push wrote the row is not known and not said: exit 0;
 #   NOT_ESTABLISHED   the branch can be read and does not carry it, and every
 #                     push of this claim ended with a refusal status for the
-#                     branch: exit 1;
-#   OUTCOME_UNKNOWN   anything else: for some push the output held no status for
-#                     the branch, or the branch cannot be read now. Neither of the
+#                     branch ([rejected] or [remote rejected]): exit 1;
+#   OUTCOME_UNKNOWN   anything else: for some push the output did not prove a
+#                     refusal, or the branch cannot be read now. Neither of the
 #                     two above is shown; the row may be on the branch already or
 #                     land later. Exit 3, and the claim must be run again.
 claim_stop() {
@@ -604,8 +604,8 @@ claim_stop() {
   this claim ended with a refusal status for the branch. Nothing was claimed." 1
   fi
   die "$msg
-  OUTCOME_UNKNOWN: for a push of this claim the output held no status for the
-  branch, or $LEDGER_REF cannot be read now. It is not established whether the
+  OUTCOME_UNKNOWN: for a push of this claim the output did not prove a refusal
+  for the branch, or $LEDGER_REF cannot be read now. It is not established whether the
   branch carries $id for $base, now or later; the number is neither free nor
   yours yet. Run the same claim again: it reads the branch and either finishes
   or names who holds the number." 3
@@ -759,11 +759,12 @@ $out"
     # from what it holds now. Never forced, never merged.
     #
     # Success is git push's own exit status 0, nothing else. When it is not 0,
-    # the status line git push printed for this branch tells a refusal ("!")
-    # from an outcome that is not shown: no status line, or one that says "ok"
-    # although git push failed (its report may be lost, or not its own). The
-    # second kind is remembered, because from then on "nothing was claimed"
-    # cannot be said; the next round reads the branch and finds out.
+    # only [rejected] and [remote rejected] on a "!" status line prove that
+    # this update was refused. [remote failure] means the remote did not report
+    # the update; it may have happened. A missing line, any other summary, or
+    # an "ok" line alongside a failed push also leaves the outcome open. That
+    # uncertainty is remembered across retries: a later refusal cannot prove
+    # that an earlier update did not land. The next round reads the branch.
     #
     # Where that line is taken from is the observation boundary. A pre-push
     # hook runs inside this push, and its output is not ours: what it writes to
@@ -774,7 +775,7 @@ $out"
     # counts; lines before any block, or in a block for another url, do not.
     # stderr is kept and shown, as diagnostics only. A hook that prints a
     # porcelain block for this very url and ref (a dry run of the same push,
-    # say) still looks like git's report; since only "!" is taken from it, the
+    # say) still looks like git's report; since only a refusal is taken from it, the
     # worst it can do is have a lost report read as a refusal.
     pushes=$((pushes + 1))
     rc=0; push_out=$(git -C "$LEDGER_REPO" push --porcelain "$LEDGER_URL" \
@@ -789,7 +790,9 @@ $push_out
 stderr of git push (diagnostics only, includes hook output):
 $(cat "$CLAIM_DIR/push.err")"
     if [ "$rc" != 0 ]; then
-      case $status in '!'*) ;; *) unknown=$((unknown + 1)) ;; esac
+      printf '%s\n' "$status" | awk -F'\t' \
+        '$1 == "!" && $3 ~ /^\[(remote )?rejected\]( |$)/ { refused = 1 }
+         END { exit !refused }' || unknown=$((unknown + 1))
     fi
     if [ "$rc" = 0 ]; then
       claim_cleanup

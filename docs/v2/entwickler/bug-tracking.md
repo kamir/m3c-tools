@@ -173,14 +173,16 @@ Once it has pushed, a claim that does not succeed ends in one of three states:
 | State | Exit | When |
 |---|---|---|
 | `ESTABLISHED` | 0 | the branch carries this number for this file and no other. Which push wrote the row, this run's or another run's, is not said |
-| `NOT_ESTABLISHED` | 1 | the branch can be read and does not carry it, and every push of this claim ended with a refusal status for the branch |
-| `OUTCOME_UNKNOWN` | 3 | anything else: for some push the output held no status for the branch, or the branch cannot be read now. Neither of the two states above is shown, and the row may be on the branch already or land later |
+| `NOT_ESTABLISHED` | 1 | the branch can be read and does not carry it, and every push of this claim ended with `[rejected]` or `[remote rejected]` for the branch |
+| `OUTCOME_UNKNOWN` | 3 | anything else: for some push the output did not prove a refusal, or the branch cannot be read now. Neither of the two states above is shown, and the row may be on the branch already or land later |
 
 A push's output holds no status for the branch when the connection breaks
 before git reports, and also when a `pre-push` hook of your own refuses the
 push; from the outside the two look the same. Success is only ever `git push`'s
-own exit status 0. A status line is used only to tell a refusal from an open
-outcome, and only one in a porcelain report block for the url `claim` pushed
+own exit status 0. Only a `!` status line with `[rejected]` or `[remote rejected]`
+proves a refusal. `[remote failure]` means the remote did not report the update;
+it may have happened. Other summaries and missing reports also leave the outcome
+open, even if a later push is refused. Only a status line in a porcelain report block for the url `claim` pushed
 to counts; what a hook writes to stderr, or prints for another url, does not.
 A hook that prints such a block for the same url itself is not told apart.
 On `OUTCOME_UNKNOWN` the number is neither free nor yours yet: run the same `claim` again. It reads the branch and either finds its own
