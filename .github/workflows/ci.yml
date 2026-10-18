@@ -640,8 +640,10 @@ jobs:
         run: brew install portaudio
 
       # govulncheck fails ONLY on vulns reachable from our code. The toolchain
-      # comes from go.mod, which pins `toolchain go1.26.6`, so the stdlib CVEs
-      # older toolchains carried are gone; this job keeps them from regressing.
+      # comes from the `toolchain` line of go.mod, so a stdlib CVE fixed in a
+      # newer patch release is gone once that line names it; this job keeps such
+      # CVEs from regressing, and it turns red when a new one is published
+      # against the pinned release.
       # (This line said go1.26.5 until 2026-09-17. It was written when that was
       # true and went stale where nothing checks prose. Naming the version in
       # two places is the same fault the go-version consolidation above fixes,
