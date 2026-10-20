@@ -82,6 +82,8 @@ func TestStartBackgroundRetry_ReadsQueuedFiles(t *testing.T) {
 	q := NewQueue(queuePath)
 	if err := q.Add(QueueEntry{
 		ID:             "vid-1",
+		APIURL:         srv.URL,
+		ContextID:      "user-123___mft",
 		TranscriptPath: transcriptPath,
 		AudioPath:      audioPath,
 		ImagePath:      imagePath,

@@ -21,14 +21,14 @@ type FailureResult struct {
 //
 // MEMORY folders are created ONLY on upload failure (not on every upload).
 // The queuePath and memoryRoot can be empty to use defaults.
-func HandleUploadFailure(queuePath string, memoryRoot string, videoID string, payload *UploadPayload, tags string, uploadErr error) (*FailureResult, error) {
+func HandleUploadFailure(queuePath string, memoryRoot string, videoID string, payload *UploadPayload, tags string, uploadErr error, configs ...*Config) (*FailureResult, error) {
 	mf, err := CreateMemoryFolder(memoryRoot, time.Now())
 	if err != nil {
-		entry := EnqueueFailure(queuePath, videoID, payload, tags, uploadErr)
+		entry := EnqueueFailure(queuePath, videoID, payload, tags, uploadErr, configs...)
 		return &FailureResult{Entry: entry}, fmt.Errorf("create memory folder: %w", err)
 	}
 	if err := mf.SavePayload(payload); err != nil {
-		entry := EnqueueFailure(queuePath, videoID, payload, tags, uploadErr)
+		entry := EnqueueFailure(queuePath, videoID, payload, tags, uploadErr, configs...)
 		return &FailureResult{Entry: entry, Memory: mf}, fmt.Errorf("save payload to memory: %w", err)
 	}
 
@@ -44,7 +44,10 @@ func HandleUploadFailure(queuePath string, memoryRoot string, videoID string, pa
 	} else {
 		stored.ImageFilename = ""
 	}
-	entry := EnqueueFailure(queuePath, videoID, &stored, tags, uploadErr)
+	entry := EnqueueFailure(queuePath, videoID, &stored, tags, uploadErr, configs...)
+	if entry == nil {
+		return &FailureResult{Memory: mf}, fmt.Errorf("persist failed upload to retry queue")
+	}
 	return &FailureResult{Entry: entry, Memory: mf}, nil
 }
 

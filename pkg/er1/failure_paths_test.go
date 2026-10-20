@@ -31,7 +31,10 @@ func TestHandleUploadFailure_QueuePointsAtMemoryFiles(t *testing.T) {
 	if !strings.HasPrefix(result.Entry.TranscriptPath, result.Memory.Path) {
 		t.Errorf("TranscriptPath = %q, want under %s", result.Entry.TranscriptPath, result.Memory.Path)
 	}
-	got := PayloadFromQueueEntry(*result.Entry)
+	got, err := PayloadFromQueueEntry(*result.Entry)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if string(got.TranscriptData) != string(wantText) {
 		t.Errorf("retry transcript = %q, want original MEMORY bytes", got.TranscriptData)
 	}

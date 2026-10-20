@@ -2,6 +2,7 @@ package er1
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -67,10 +68,25 @@ func contextSleep(ctx context.Context, d time.Duration) error {
 // Entries are processed in FIFO order (oldest first).
 // Successful uploads are removed from the queue.
 // Failed uploads have their retry count incremented.
-// Entries exceeding MaxRetries are removed (dropped).
+// Entries exceeding MaxRetries are retained for manual recovery and counted
+// as dropped from automatic retries. Original data is never deleted on exhaustion.
 // Returns the number of successful uploads and errors encountered.
 func (r *RetryRunner) ProcessOnce(ctx context.Context) (successes int, failures int, dropped int) {
-	entries := r.Queue.Entries() // FIFO order: oldest first
+	// Separate retry ownership serializes uploaders without blocking enqueues.
+	lock, err := lockQueueFile(r.Queue.path+".retry.lock", true)
+	if errors.Is(err, errQueueBusy) {
+		return 0, 0, 0
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "retry: acquire ownership: %v\n", err)
+		return 0, 1, 0
+	}
+	defer lock.Close()
+	entries, err := r.Queue.ReadEntries()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "retry: read queue: %v\n", err)
+		return 0, 1, 0
+	}
 
 	for _, entry := range entries {
 		// Check context before processing
@@ -89,12 +105,9 @@ func (r *RetryRunner) ProcessOnce(ctx context.Context) (successes int, failures 
 
 		// Check if entry exceeded max retries
 		if r.MaxRetries > 0 && entry.RetryCount >= r.MaxRetries {
-			if err := r.Queue.Remove(entry.ID); err != nil {
-				fmt.Fprintf(os.Stderr, "retry: could not persist removal of %s: %v\n", entry.ID, err)
-			}
 			dropped++
 			if r.OnRetry != nil {
-				r.OnRetry(entry, fmt.Errorf("max retries (%d) exceeded", r.MaxRetries), true)
+				r.OnRetry(entry, fmt.Errorf("max retries (%d) exceeded; entry retained for recovery", r.MaxRetries), false)
 			}
 			continue
 		}
@@ -105,7 +118,13 @@ func (r *RetryRunner) ProcessOnce(ctx context.Context) (successes int, failures 
 			// Success: remove from queue
 			if rerr := r.Queue.Remove(entry.ID); rerr != nil {
 				fmt.Fprintf(os.Stderr, "retry: could not persist removal of %s: %v\n", entry.ID, rerr)
+				failures++
+				if r.OnRetry != nil {
+					r.OnRetry(entry, rerr, false)
+				}
+				continue
 			}
+			cleanupQueuePayload(r.Queue.path, entry)
 			successes++
 			if r.OnRetry != nil {
 				r.OnRetry(entry, nil, true)
