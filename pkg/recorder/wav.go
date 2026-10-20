@@ -4,6 +4,7 @@ package recorder
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math"
 	"os"
 )
@@ -42,10 +43,29 @@ type AudioStats struct {
 	Duration         float64 // seconds
 }
 
-// EncodeWAV encodes samples to WAV format bytes.
+// EncodeWAV encodes samples to WAV format bytes, or returns nil if the samples
+// exceed the RIFF size limit. File and recording APIs report that error.
 func EncodeWAV(samples []int16) []byte {
-	dataSize := uint32(len(samples) * 2)
-	fileSize := 36 + dataSize
+	data, err := encodeWAV(samples)
+	if err != nil {
+		return nil
+	}
+	return data
+}
+
+func wavSizes(sampleCount int) (uint32, uint32, error) {
+	if sampleCount < 0 || uint64(sampleCount) > (math.MaxUint32-36)/2 || uint64(sampleCount) > (uint64(^uint(0)>>1)-44)/2 {
+		return 0, 0, fmt.Errorf("audio exceeds WAV size limit")
+	}
+	dataSize := uint32(sampleCount) * 2
+	return dataSize, 36 + dataSize, nil
+}
+
+func encodeWAV(samples []int16) ([]byte, error) {
+	dataSize, fileSize, err := wavSizes(len(samples))
+	if err != nil {
+		return nil, err
+	}
 
 	buf := make([]byte, 0, int(fileSize)+8)
 
@@ -71,12 +91,16 @@ func EncodeWAV(samples []int16) []byte {
 		buf = appendLE16(buf, uint16(s))
 	}
 
-	return buf
+	return buf, nil
 }
 
 // WriteWAV writes 16-bit PCM mono audio data as a WAV file.
 func WriteWAV(path string, samples []int16) error {
-	return writeFile(path, EncodeWAV(samples))
+	data, err := encodeWAV(samples)
+	if err != nil {
+		return err
+	}
+	return writeFile(path, data)
 }
 
 // CalcRMS computes the root-mean-square of int16 samples, normalized to 0.0–1.0.

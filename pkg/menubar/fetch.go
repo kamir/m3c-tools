@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -89,7 +90,7 @@ func buildAPI() *transcript.API {
 			u.User = nil
 			redacted = u.String()
 		}
-		log.Printf("[fetch] using proxy: %s", redacted)
+		log.Printf("[fetch] using proxy: %s", strconv.Quote(redacted))
 		return api
 	}
 	return transcript.New()

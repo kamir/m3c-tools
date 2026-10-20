@@ -77,7 +77,7 @@ func TestProvisionedReportsEnvFirstAndNeverTheSecret(t *testing.T) {
 	}
 
 	t.Setenv("M3C_REGISTRY_TOKEN", "")
-	if got := Provisioned("registry", TierWrite, "no-such-host.invalid"); got != "" {
+	if got := Provisioned("registry", TierWrite, ""); got != "" {
 		t.Errorf("nothing provisioned must be empty, got %q", got)
 	}
 }

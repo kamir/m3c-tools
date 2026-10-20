@@ -181,7 +181,10 @@ func (s *EditorServer) Start() error {
 	if err != nil {
 		return err
 	}
-	srv := &http.Server{Handler: s.GuardedHandler()}
+	srv := &http.Server{
+		Handler:           s.GuardedHandler(),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
 	return srv.Serve(ln)
 }
 

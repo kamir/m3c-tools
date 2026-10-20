@@ -30,13 +30,13 @@ func TestResolverUnknownSchemeAnonymous(t *testing.T) {
 
 func TestResolverAnonymousWhenNothingSet(t *testing.T) {
 	t.Setenv("M3C_GITLAB_TOKEN", "")
-	// A host with (almost certainly) no Keychain entry → anonymous, no error.
-	c, err := New().Credential(context.Background(), "gitlab", "no-such-host.invalid:9999", artifact.ModeWrite)
+	// An empty account cannot consult the native Keychain.
+	c, err := New().Credential(context.Background(), "gitlab", "", artifact.ModeWrite)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if c.Token != "" {
-		t.Skip("a Keychain entry exists for the probe host on this machine; skipping")
+		t.Fatal("an empty account must resolve anonymously")
 	}
 }
 
@@ -63,7 +63,7 @@ func TestResolverReadWriteSplit(t *testing.T) {
 func TestResolverReadFallsBackToWrite(t *testing.T) {
 	t.Setenv("M3C_GITLAB_TOKEN", "only-write-pat")
 	t.Setenv("M3C_GITLAB_RO_TOKEN", "")
-	ro, err := New().Credential(context.Background(), "gitlab", "gitlab.example.com", artifact.ModeRead)
+	ro, err := New().Credential(context.Background(), "gitlab", "", artifact.ModeRead)
 	if err != nil || ro.Token != "only-write-pat" {
 		t.Fatalf("ModeRead fallback = %+v, %v; want only-write-pat", ro, err)
 	}

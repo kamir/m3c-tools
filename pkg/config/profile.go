@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -287,7 +288,7 @@ func (pm *ProfileManager) ApplyProfile(p *Profile) error {
 	for k, v := range p.Vars {
 		if cur, set := os.LookupEnv(k); set && IsPlaceholderKey(v) && !IsPlaceholderKey(cur) {
 			// Name the variable, never the value.
-			log.Printf("[config] %s: keeping the value from the environment: profile %q has a placeholder", k, p.Name)
+			log.Printf("[config] %s: keeping the value from the environment: profile %s has a placeholder", strconv.Quote(k), strconv.Quote(p.Name))
 			continue
 		}
 		if err := os.Setenv(k, v); err != nil {

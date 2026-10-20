@@ -93,7 +93,10 @@ func (s *Server) Start() error {
 	if err != nil {
 		return err
 	}
-	httpSrv := &http.Server{Handler: s.GuardedHandler()}
+	httpSrv := &http.Server{
+		Handler:           s.GuardedHandler(),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
 	return httpSrv.Serve(ln)
 }
 

@@ -476,7 +476,10 @@ func (sb *SkillBar) openReviewUI() {
 		mux := http.NewServeMux()
 		mux.HandleFunc("/", sb.handleReviewPage)
 
-		srv = &http.Server{Handler: mux}
+		srv = &http.Server{
+			Handler:           mux,
+			ReadHeaderTimeout: 5 * time.Second,
+		}
 
 		sb.mu.Lock()
 		sb.reviewServer = srv
