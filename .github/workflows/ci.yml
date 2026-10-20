@@ -3,8 +3,8 @@ name: CI
 on:
   push:
     branches: [main, master]
+  # Stacked review branches need the same native checks before reaching master.
   pull_request:
-    branches: [main, master]
 
 # Concurrency: one run per ref, and a superseded pull-request run is cancelled.
 # The group carries a LITERAL prefix rather than ${{ github.workflow }}, because
