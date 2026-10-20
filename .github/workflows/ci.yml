@@ -200,6 +200,9 @@ jobs:
       - name: No real person's name in the tracked tree
         run: ./scripts/check-no-real-names.sh
 
+      - name: Historical scanner fingerprint exception stays narrow
+        run: bash scripts/check-no-real-names.test.sh
+
       # A workflow file that does not PARSE never runs, so no guard living
       # inside .github/workflows can catch its own file being broken. This step
       # lives in ci.yml and parses its siblings, which is the only arrangement
