@@ -5,8 +5,10 @@ title: Component Index
 
 # Component Index
 
+Sprachen / Languages: [Deutsch](component-index.de.md) | [English](component-index.md)
+
 **The building blocks.** Importable Go library packages (no `main`) that the
-[programs](program-index) and [services](service-index) are assembled from.
+[programs](program-index.md) and [services](service-index.md) are assembled from.
 Public packages live under `pkg/`; internal-only packages under `internal/`.
 
 Grouped by domain:
@@ -15,7 +17,7 @@ Grouped by domain:
 [C. Capture sources](#c-capture-sources-pkg) ·
 [D. Config/infra/util](#d-config-infra--util-pkg) ·
 [E. Desktop UI](#e-desktop-ui-pkg) ·
-[F. skillctl trust subsystem](#f-skillctl-trust-subsystem-pkgskillctl-siblings) ·
+[F. skillctl trust subsystem](#f-skillctl-trust-subsystem-pkgskillctl--siblings) ·
 [G. Other internal packages](#g-other-internal-packages-internal)
 
 ---
@@ -72,7 +74,7 @@ Grouped by domain:
 ## F. skillctl trust subsystem (`pkg/skillctl/*` + siblings)
 
 The offline-verifiable skill **trust plane**: the library behind the
-[`skillctl`](program-index) CLI. 52 subpackages under `pkg/skillctl/`, plus the
+[`skillctl`](program-index.md) CLI. 52 subpackages under `pkg/skillctl/`, plus the
 sibling top-level packages at the end of this section, grouped by role. The list
 and the number are both gated by `scripts/check-index.sh`: it diffs `pkg/**` and
 `internal/**` against this file in both directions AND re-counts the directories,
@@ -150,7 +152,7 @@ It runs in `scripts/check-docs.sh` and in the `docs-gate` job of `ci.yml`,
 | `skillctl/review` | Local HTTP server for reviewing delta reports. |
 | `skillctl/browse` | Interactive D3.js skill-graph browser. |
 | `skillctl/menubar` | macOS menu bar app for monitoring skillctl state. |
-| `skillctl/sim` | The trust-plane simulation library behind [`skillctl-sim`](program-index): the transition system, the generated scenario corpus, and the oracle that compares each SPEC-derived prediction with the observed run. |
+| `skillctl/sim` | The trust-plane simulation library behind [`skillctl-sim`](program-index.md): the transition system, the generated scenario corpus, and the oracle that compares each SPEC-derived prediction with the observed run. |
 
 **Trust Freeze (SPEC-0466 to SPEC-0471)**
 

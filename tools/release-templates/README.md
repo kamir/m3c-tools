@@ -1,5 +1,7 @@
 # skillctl release templates
 
+[Deutsch](README.de.md) | [English](README.md)
+
 ## Onboarding runbook generator (release-prep standard)
 
 Every skillctl release ships a **version-matched onboarding runbook**: a

@@ -8,6 +8,7 @@ import (
 )
 
 func TestCheckAndApplyInitCfg_NoFile(t *testing.T) {
+	initCfgTestHome(t)
 	// With no init file, should return Found=false
 	result := CheckAndApplyInitCfg()
 	if result.Found {
@@ -16,7 +17,7 @@ func TestCheckAndApplyInitCfg_NoFile(t *testing.T) {
 }
 
 func TestCheckAndApplyInitCfg_ValidFile(t *testing.T) {
-	home, _ := os.UserHomeDir()
+	home := initCfgTestHome(t)
 	initPath := filepath.Join(home, InitCfgFilename)
 	consumedPath := initPath + InitCfgConsumedSuffix
 
@@ -75,7 +76,7 @@ ER1_API_KEY=test-key-abc123
 }
 
 func TestCheckAndApplyInitCfg_DefaultsApplied(t *testing.T) {
-	home, _ := os.UserHomeDir()
+	home := initCfgTestHome(t)
 	initPath := filepath.Join(home, InitCfgFilename)
 	consumedPath := initPath + InitCfgConsumedSuffix
 	os.Remove(initPath)
@@ -124,7 +125,7 @@ func TestGenerateInitCfg(t *testing.T) {
 }
 
 func TestCheckAndApplyInitCfg_NotReprocessed(t *testing.T) {
-	home, _ := os.UserHomeDir()
+	home := initCfgTestHome(t)
 	initPath := filepath.Join(home, InitCfgFilename)
 	consumedPath := initPath + InitCfgConsumedSuffix
 	os.Remove(initPath)
@@ -148,4 +149,15 @@ func TestCheckAndApplyInitCfg_NotReprocessed(t *testing.T) {
 	}
 
 	NewProfileManager().DeleteProfile("once-test")
+}
+
+func initCfgTestHome(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	for _, key := range []string{"ER1_API_URL", "ER1_API_KEY", "ER1_CONTENT_TYPE", "ER1_UPLOAD_TIMEOUT", "ER1_VERIFY_SSL", "ER1_RETRY_INTERVAL", "ER1_MAX_RETRIES"} {
+		t.Setenv(key, "")
+	}
+	return home
 }

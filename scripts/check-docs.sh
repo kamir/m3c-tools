@@ -26,6 +26,13 @@ echo "=== Documentation Consistency Check ==="
 echo ""
 
 # ─── 1. Check docs directory exists ───
+echo "0. German and English publication pairs"
+if python3 scripts/check-doc-languages.test.py && python3 scripts/check-doc-languages.py; then
+    pass "DE/EN documents and reviewed examples agree"
+else
+    fail "DE/EN documentation missing or changed since bilingual review"
+fi
+
 echo "1. Docs presence"
 if [ -d "docs" ]; then
     DOC_COUNT=$(find docs -name '*.md' | wc -l | tr -d ' ')

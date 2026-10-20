@@ -5,6 +5,8 @@ title: Program Index
 
 # Program Index
 
+Sprachen / Languages: [Deutsch](program-index.de.md) | [English](program-index.md)
+
 **What you run.** Every buildable/runnable entry point in the `m3c-tools`
 repository: Go binaries, Python MCP servers, and the evaluation harness.
 
@@ -12,8 +14,8 @@ repository: Go binaries, Python MCP servers, and the evaluation harness.
 > The bare executables checked out at the repo root (`m3c-tools`, `skillctl`,
 > `skillctl`, `m3c-tools.exe`) are git-ignored build artifacts, not sources.
 
-See also: [Service Index](service-index) (what stays running) ·
-[Component Index](component-index) (the libraries these programs are built from).
+See also: [Service Index](service-index.md) (what stays running) ·
+[Component Index](component-index.md) (the libraries these programs are built from).
 
 ## Go binaries (`cmd/`)
 
@@ -29,8 +31,8 @@ See also: [Service Index](service-index) (what stays running) ·
 | **poc-whisper** | `cmd/poc-whisper/` | `make build-all` | Reference POC: Whisper transcription via CLI subprocess. |
 | **skillctl-sim** | `cmd/skillctl-sim/` | `make build-skillctl-sim` | Trust-plane simulation: a generated corpus of multi-principal scenarios, each with a SPEC-derived prediction, run against the real `skillctl` binary and a real git registry. `make sim`. |
 | **docaudit** | `cmd/docaudit/` | `make build-gates` | Blocking gate: the CLI flag surface (AST-extracted) against its manual, in both directions, plus every dispatched verb against the binary's own `--help`. |
-| **exitaudit** | `cmd/exitaudit/` | `make build-gates` | Blocking gate: every exit code cited in the manual and in [CLI-VERBS](v2/referenz/CLI-VERBS) against `pkg/skillctl/exitcode`, plus the `pull` gate read as code. Reports how many verb rows it could NOT compare. |
-| **verbaudit** | `cmd/verbaudit/` | `make build-gates` | Blocking gate: the dispatched `skillctl` verbs against the allocation table [CLI-VERBS](v2/referenz/CLI-VERBS) (FR-0113). |
+| **exitaudit** | `cmd/exitaudit/` | `make build-gates` | Blocking gate: every exit code cited in the manual and in [CLI-VERBS](v2/referenz/CLI-VERBS.md) against `pkg/skillctl/exitcode`, plus the `pull` gate read as code. Reports how many verb rows it could NOT compare. |
+| **verbaudit** | `cmd/verbaudit/` | `make build-gates` | Blocking gate: the dispatched `skillctl` verbs against the allocation table [CLI-VERBS](v2/referenz/CLI-VERBS.md) (FR-0113). |
 | **structural** | `cmd/structural/` | `make build-gates` | Inventories the decisions in the trust path and states the MC/DC obligation each one carries. Produces the obligation, not a coverage measurement. |
 | **release-evidence** | `cmd/release-evidence/` | `make build-gates` | Assembles the Release Evidence Bundle (the "Trust Binder"): an index that ties a set of release artifacts to a commit and a mandatory gate-set. |
 
@@ -46,16 +48,17 @@ See also: [Service Index](service-index) (what stays running) ·
 
 ### Subcommand surfaces
 
-Both CLIs parse `os.Args` by hand (no cobra/flag). Neither verb list is
+Both CLIs dispatch through `os.Args` without Cobra. `m3c-tools` parses arguments
+by hand; individual `skillctl` commands also use the standard-library `flag` package. Neither verb list is
 duplicated here: a copy in this file was how five subcommands that do not exist
 came to be documented while ten real ones were not. Each binary is its own
 source of truth, and both are gated:
 
 - **m3c-tools**: run `m3c-tools help`. Full reference:
-  [Manual: m3c-tools](v2/referenz/manual-m3c-tools).
+  [Manual: m3c-tools](v2/referenz/manual-m3c-tools.md).
 - **skillctl**: run `skillctl help`. Full reference:
-  [Manual: skillctl](v2/referenz/manual-skillctl); the allocation table for the verb names
-  is [CLI-VERBS](v2/referenz/CLI-VERBS).
+  [Manual: skillctl](v2/referenz/manual-skillctl.md); the allocation table for the verb names
+  is [CLI-VERBS](v2/referenz/CLI-VERBS.md).
 
 `cmd/docaudit` blocks a release when a dispatched verb is missing from the
 binary's own `--help`, or when a flag and its manual disagree; `cmd/verbaudit`
@@ -68,7 +71,7 @@ blocks when a dispatched verb has no row in the allocation table.
 | **mcp-skill-server** | `mcp-skill-server/server.py` | MCP (stdio) server exposing the skill lifecycle as Claude Code tools: wraps the `skillctl` Go CLI + aims-core REST. |
 | **rag-mcp-server** | `rag-mcp-server/rag_mcp_server.py` | MCP (stdio) server for local, air-gapped workspace RAG (SPEC-0268). Also ships a CLI (`rag.py`) and pipeline scripts (`indexer.py`, `embedder.py`, `chunker.py`, `distill_backfill.py`). |
 
-Both run as long-lived services: see [Service Index](service-index).
+Both run as long-lived services: see [Service Index](service-index.md).
 
 ## Evaluation harness
 

@@ -582,7 +582,7 @@ func cdpEvaluate(wsURL, expression string) (string, error) {
 
 	// Send Runtime.evaluate command.
 	reqJSON := fmt.Sprintf(`{"id":1,"method":"Runtime.evaluate","params":{"expression":%q,"returnByValue":true}}`, expression)
-	if _, err := conn.Write([]byte(cdpFrame(reqJSON))); err != nil {
+	if _, err := conn.Write(cdpFrame(reqJSON)); err != nil {
 		return "", fmt.Errorf("send CDP command: %w", err)
 	}
 
@@ -711,13 +711,13 @@ func OpenPlaudLogin() error {
 func OpenBrowser(url string) error {
 	switch runtime.GOOS {
 	case "darwin":
-		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
+		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL.
 		return exec.Command("open", url).Start()
 	case "windows":
-		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
+		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL.
 		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
 	case "linux":
-		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
+		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL.
 		return exec.Command("xdg-open", url).Start()
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)

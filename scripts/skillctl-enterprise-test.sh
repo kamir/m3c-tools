@@ -261,7 +261,7 @@ run_gate "govulncheck" go run "golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VE
 
 # --- 11. gosec, judged against the committed baseline -----------------------
 # The diff gate is the honest form: this tree has ~500 triaged pre-existing
-# findings (docs/security/gosec-baseline.md), so an absolute count says nothing.
+# findings recorded by docs/security/gosec-inci-baseline.txt, so an absolute count says nothing.
 # What must never happen is a NEW finding.
 if [ "$CGO_FULL_OK" -eq 0 ]; then
   skip_gate "gosec" "gosec type-checks ./..., and the cgo packages do not build here"

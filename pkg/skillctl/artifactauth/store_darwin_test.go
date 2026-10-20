@@ -3,6 +3,8 @@
 package artifactauth
 
 import (
+	"crypto/rand"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -12,16 +14,18 @@ import (
 // the write side works. Everything else in this package's tests checks the logic
 // AROUND the store; this checks the store.
 //
-// It uses a service name no backend maps to, so it cannot touch an operator's
-// real credential, and it removes what it wrote. It skips rather than fails when
-// the Keychain is unavailable (a locked or absent login keychain on a build
-// machine is not a defect in this code).
+// This integration test requires explicit permission to use the real macOS
+// Keychain. HOME and the file-token-store setting do not isolate this backend.
+// A random account avoids replacing any pre-existing self-test entry.
 func TestKeychainRoundTrip(t *testing.T) {
+	if os.Getenv("M3C_TEST_KEYCHAIN") != "1" {
+		t.Skip("requires the real macOS Keychain; set M3C_TEST_KEYCHAIN=1 to opt in")
+	}
 	if _, err := exec.LookPath("/usr/bin/security"); err != nil {
 		t.Skip("no /usr/bin/security on this machine")
 	}
 	const service = "m3c-skillctl-selftest"
-	const account = "roundtrip.invalid"
+	account := "roundtrip-" + rand.Text() + ".invalid"
 	const secret = `glpat-round trip "quoted" \backslash`
 
 	if err := platformStore(service, account, secret); err != nil {

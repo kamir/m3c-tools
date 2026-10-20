@@ -1,5 +1,7 @@
 # skillctl container image + `.skb` OCI publish (SPEC-0354 D1 + D2)
 
+[Deutsch](README.de.md) · [English](README.md)
+
 The **P0** slice of **SPEC-0354** (Containerized Skill Trust-Plane): see the private
 maintenance plane for the spec and its companion containerization research.
 

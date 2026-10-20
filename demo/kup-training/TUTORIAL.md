@@ -1,5 +1,7 @@
 # The Test Ride: prove the skill trust chain with your own hands
 
+[Deutsch](TUTORIAL.de.md) · [English](TUTORIAL.md)
+
 **Who this is for:** anyone who will publish, review, install or run agent skills with
 `skillctl`. No prior knowledge of the tool. You will not read about trust; you will break
 a bundle and watch the tool refuse it.
@@ -15,7 +17,7 @@ curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/master/scripts/skil
 ```
 
 On Windows the same two scripts exist as `.ps1`; see
-[Quickstart: skillctl](../../docs/old/quickstart-skillctl.md#1b-optional-prove-it-on-your-own-machine-source-self-test).
+[Quickstart: skillctl](../../docs/v2/nutzer/quickstart-skillctl.md#1b-optional-prove-it-on-your-own-machine-source-self-test).
 Run those first. When they are green, the machine is fine and the remaining question is
 whether **you** can operate the thing. That is this ride.
 
@@ -44,7 +46,7 @@ PATH, so call it by path:
 ```
 
 or use the Start menu's **Git Bash** and run the commands below unchanged. Missing git or
-Go entirely: [docs/old/prerequisites.md](../../docs/old/prerequisites.md) has one `winget` line per
+Go entirely: [docs/v2/nutzer/prerequisites.md](../../docs/v2/nutzer/prerequisites.md) has one `winget` line per
 tool, plus the no-admin path.
 
 Everything this ride writes lands under `demo/kup-training/artifacts/`, which is
@@ -173,7 +175,7 @@ skillctl-demo --mode kata      # K1 seal, K2 tamper, K3 govern, K4 trust roots, 
 skillctl-demo --kata-list      # the board, and your progress
 ```
 
-See [Quickstart: skillctl-demo](../../docs/old/quickstart-skillctl-demo.md#5-training-mode-kata-shipped).
+See [Quickstart: skillctl-demo](../../docs/v2/nutzer/quickstart-skillctl-demo.md#5-training-mode-kata-shipped).
 
 ---
 
@@ -190,7 +192,7 @@ See [Quickstart: skillctl-demo](../../docs/old/quickstart-skillctl-demo.md#5-tra
 ## Where the rest of it lives
 
 - Every command, flag and exit code: [skillctl manual](../../docs/v2/referenz/manual-skillctl.md)
-- Install, author, sign, verify in five minutes: [Quickstart: skillctl](../../docs/old/quickstart-skillctl.md)
-- The two-person handover over a real server: [Acceptance and handover](../../docs/v2/betrieb/acceptance-skillctl-lifecycle.md)
+- Install, author, sign, verify in five minutes: [Quickstart: skillctl](../../docs/v2/nutzer/quickstart-skillctl.md)
+- Publish and install a signed skill: [Signed skill tutorial](../../docs/v2/nutzer/tutorial-szenario-02-erster-signierter-skill.en.md)
 - What this directory is for the maintainer, and the four release gates it asserts:
   [README.md](README.md)

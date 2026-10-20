@@ -9,7 +9,7 @@
   --bg:#f5f7f8; --surface:#ffffff; --surface-2:#eef2f4;
   --ink:#182029; --ink-soft:#59656f; --line:#dde3e8; --line-soft:#e9edf0;
   --accent:#0d6e6b; --accent-soft:#e2f0ef;
-  --warn:#8d5a13; --warn-soft:#fbf1e0; 
+  --warn:#8d5a13; --warn-soft:#fbf1e0;
   --stop:#9c2f2f; --ok:#1e6a45;
   --term-bg:#131c24; --term-fg:#c9d6e0; --term-dim:#7c8f9e; --term-line:#25333f;
   --rail:248px;
@@ -198,7 +198,7 @@ table.check tr.done td:not(:first-child){opacity:.5; text-decoration:line-throug
   --term-bg:#ffffff; --term-fg:#000000; --term-dim:#4a555e; --term-line:#98a1a8;
 }
 
-/* Bauliches: gilt auf Papier und in der Druckansicht gleichermassen. */
+/* Bauliches: gilt auf Papier und in der Druckansicht / Print view gleichermassen. */
 @media print{
   .rail,.copy,.flavorbar{display:none !important}
   .shell{grid-template-columns:1fr}
@@ -271,21 +271,21 @@ table.check tr.done td:not(:first-child){opacity:.5; text-decoration:line-throug
 
 </style>
 
-<div class="shell">
+<div class="shell" lang="de">
   <aside class="rail">
     <div class="brand">
-      <p class="kicker">Ops-Runbook</p>
+      <p class="kicker">Dokumentation / Documentation</p>
       <h1>Der Betrieb und seine Runbooks</h1>
       <p class="meta">docs/v2/betrieb/ueberblick.de.md</p>
     </div>
     <div class="flavorbar" id="flavorbar" hidden>
-      <button type="button" id="flavorbtn" aria-pressed="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4.5 6V2.6h7V6"/><rect x="2" y="6" width="12" height="5" rx="1.1"/><path d="M4.5 10h7v3.4h-7z"/></svg><span>Druckansicht</span></button>
-      <button type="button" id="printbtn">Drucken</button>
+      <button type="button" id="flavorbtn" aria-pressed="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4.5 6V2.6h7V6"/><rect x="2" y="6" width="12" height="5" rx="1.1"/><path d="M4.5 10h7v3.4h-7z"/></svg><span>Druckansicht / Print view</span></button>
+      <button type="button" id="printbtn">Drucken / Print</button>
     </div>
-    <div class="mobiletop"><button id="navtoggle" type="button" aria-expanded="false">Inhalt anzeigen</button></div>
-    <nav id="nav" aria-label="Abschnitte"><ol id="navlist"></ol></nav>
+    <div class="mobiletop"><button id="navtoggle" type="button" aria-expanded="false">Inhalt anzeigen / Show contents</button></div>
+    <nav id="nav" aria-label="Abschnitte / Sections"><ol id="navlist"></ol></nav>
     <div class="progress" id="progress" hidden>
-      <span><b id="pdone">0</b> von <b id="ptotal">8</b> Voraussetzungen abgehakt</span>
+      <span><b id="pdone">0</b> von <b id="ptotal">8</b> Voraussetzungen abgehakt / prerequisites checked</span>
       <span class="bar"><i id="pbar"></i></span>
     </div>
   </aside>
@@ -298,78 +298,41 @@ table.check tr.done td:not(:first-child){opacity:.5; text-decoration:line-throug
 
 <script id="src" type="text/markdown"># Ops-Ueberblick: der Betrieb und seine Runbooks
 
-Welches Runbook in welcher Lage gilt, was die Runbooks gemeinsam voraussetzen,
-und wo ihre Grenzen ausdruecklich benannt sind. Diese Seite fuehrt; die
-Handgriffe selbst stehen in den verlinkten Runbooks und bleiben dort kanonisch.
+Sprachen / Languages: [Deutsch](ueberblick.de.md) | [English](ueberblick.en.md)
 
-Zielgruppe: die Person, die ein Registry oder eine Flotte betreibt, und die
-Person, die ein Release schneidet. Wer ein Mensch-Agent-Team erst einrichtet,
-beginnt nicht hier, sondern im
-[Einrichtungs-Runbook](ops-human-agent-team.de.md).
+Anleitungen fuer die Person, die ein Registry, eine Skill-Installation oder
+die Capture-Pipeline betreibt. Die einzelnen Runbooks beschreiben die
+Handgriffe und ihre Grenzen.
 
-Rolle: Betrieb · Sprache: DE · Stand: 2026-09-16
-
-## Die Grundregel in einem Satz
-
-**Ein "Gemessen"-Block gilt fuer das Binary, das Datum und die Umgebung, die
-er nennt, und fuer nichts sonst:** die Ops-Runbooks dieses Repos kennzeichnen
-jede gelaufene Messung als solche, und wer gegen ein anderes Release prueft,
-prueft ein anderes Objekt.
+Rolle: Betrieb · Sprache: DE
 
 ## Wann welches Runbook
 
-| Lage | Runbook | Sprache |
-|---|---|---|
-| Ein Team wird eingerichtet, der erste Skill wechselt die Maschine | [Ops-Runbook: Mensch-Agent-Team](ops-human-agent-team.de.md), auch als [Doku-Seite](../pages/ops-human-agent-team.html) | DE |
-| Wer besorgt welchen Token, wo liegt er, was passiert beim Ausscheiden | [Ops-Routine: Zugangstoken](ops-registry-tokens.de.md) | DE |
-| Ein Schluessel oder das Registry ist kompromittiert | [Ops-Runbook: Incident Response](ops-incident-response.de.md) | DE |
-| Sicherung und Wiederherstellung des Registrys, je Backend | [Ops-Runbook: Registry-Backup und Restore](ops-registry-backup-restore.de.md) | DE |
-| Was ist heute beobachtbar, woran dockt eine Ueberwachung an | [Ops-Runbook: Monitoring und Alarmierung](ops-monitoring.de.md) | DE |
-| Eine Maschine verhaelt sich falsch (Diagnose) | [Monitoring, Abschnitt 1](ops-monitoring.de.md#1-die-vier-kommandos-die-eine-überwachung-tragen): `skillctl doctor`, `auditlog status`, `pin status`; das `--home`-Kaveat steht unten | DE |
-| Die Capture-Seite haengt: Upload fehlgeschlagen, Queue voll | [Ops-Runbook: m3c-tools-Capture](runbook-m3c-tools-capture.de.md) | DE |
-| Ein Release wird geschnitten (beide Linien, tag-getrieben) | [Release flow](releasing.md) | EN |
-| Zwei Personen weisen den Skill-Austausch ueber ER1 nach | [Runbook: two-person ER1 exchange](runbook-two-person-er1-exchange.md) | EN |
-| Die volle Abnahme des Skill-Lebenszyklus (Bob und Alice) | [Acceptance & Handover](acceptance-skillctl-lifecycle.md) | EN |
-| Ein frisches Zielgeraet wird aufgesetzt (Intel Mac, Windows) | [Setup & Operations](setup-target-devices.md) | EN |
-| Ein frischer Install wird auf dem Zielgeraet validiert | [QA Acceptance Track](QA-target-device-setup.md) | EN |
-
-Hinweis zu den letzten beiden Zeilen: beide Seiten sind auf **v2.10.0**
-festgeschrieben, waehrend `git tag` in diesem Baum am 2026-09-16 bis
-`v2.12.0` reicht. Die Vorgehensweise dort ist der kanonische Stand; die
-Versionsnummer im Titel ist es nicht mehr.
-
-## Datierte Entscheidungen, die den Betrieb binden
-
-| Entscheidung | Quelle |
+| Lage | Runbook |
 |---|---|
-| Entschieden am 2026-09-06: produktiv ist die GitLab-Instanz `git.kieback-peter.de`, mit dem dort genannten Registry-Locator | [Ops-Routine: Zugangstoken](ops-registry-tokens.de.md), Kopfabschnitt |
-| Schreibtoken gehoeren der Rolle Herausgeber, nicht einer Person; Personalwechsel rotiert das Token | [Ops-Routine: Zugangstoken](ops-registry-tokens.de.md) |
-| Der Install-Einzeiler ist auf einen unveraenderlichen Commit gepinnt, nicht auf `master` | [Ops-Runbook: Mensch-Agent-Team, Abschnitt 0.2](ops-human-agent-team.de.md) |
-| Releases sind tag-getrieben; es gibt keine VERSION-Datei, und die Produkt- und die skillctl-Linie werden getrennt geschnitten | [Release flow](releasing.md) |
+| Zugangstoken einrichten oder nach einem Personalwechsel erneuern | [Zugangstoken fuer Registry und Skill-Repository](ops-registry-tokens.de.md) |
+| Ein Schluessel oder das Registry ist kompromittiert | [Incident Response](ops-incident-response.de.md) |
+| Registry sichern und wiederherstellen | [Registry-Backup und Restore](ops-registry-backup-restore.de.md) |
+| Zustand pruefen und Ueberwachung anbinden | [Monitoring und Alarmierung](ops-monitoring.de.md) |
+| Uploads schlagen fehl oder warten in der Queue | [Capture-Betrieb und Wiederanlauf](runbook-m3c-tools-capture.de.md) |
+| Eine neue Maschine einrichten | [Voraussetzungen](../nutzer/prerequisites.de.md), [Quickstart: m3c-tools](../nutzer/quickstart-m3c-tools.de.md), [Quickstart: skillctl](../nutzer/quickstart-skillctl.de.md) |
+| Signierte Skills zwischen Maschinen austauschen | [Szenario 01](../nutzer/tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md) |
+| Autor, Reviewer und Konsument arbeiten getrennt | [Szenario 02](../nutzer/tutorial-szenario-02-erster-signierter-skill.de.md) |
 
-## Was der Betrieb wissen muss, bevor etwas brennt
+## Vor der Diagnose
 
-1. **Die drei Dateien, die Trust-Roots heissen.** Ein Pin traegt nur einen der
-   Wege; die Falle und ihre Aufloesung stehen in
-   [Ops-Runbook: Mensch-Agent-Team, Abschnitt 6](ops-human-agent-team.de.md).
-2. **Exit-Codes sind das Alarm-Vokabular.** Die Runbooks verweisen auf die
-   Fehlerbehandlung nach Exit-Code; das Register ist
-   [CLI-VERBS](../referenz/CLI-VERBS.md), die Tabelle je Kommando steht im
-   [Manual: skillctl](../referenz/manual-skillctl.md#exit-codes).
-3. **`skillctl doctor --home` misst ein gemischtes Objekt.** Mit gesetztem
-   `--home` prueft doctor skills-dir und audit-logs im Override, trust-roots
-   und signing-key aber weiter im echten Home: im Code nimmt
-   `checkTrustRoots()` keinen Override an, und `checkSigningKey` loest den
-   Pfad ueber `defaultSelfKeyPath()` aus dem echten Home auf
-   (`cmd/skillctl/doctor_cmds.go`, nachgelesen am 2026-09-16; so auch vom
-   Operator-Review am selben Tag gemessen). Wer hermetisch messen will, darf
-   sich auf `--home` allein nicht verlassen.
-4. **Die Grenzen sind benannt.** Jedes der fuenf DE-Runbooks traegt einen
-   eigenen Abschnitt darueber, was es ausdruecklich nicht loest
-   (nachgesehen am 2026-09-16: "Was offen bleibt", "Was diese Routine nicht
-   loest", "Was dieses Runbook nicht loest" zweimal, "Was damit ausdruecklich
-   nicht geht"); wer den Umfang einschaetzen muss, liest zuerst diese
-   Abschnitte.
+- **Trust Roots dem Registry-Typ zuordnen.** HTTP-Registry, ER1-`self` und
+  Git-Registry verwenden unterschiedliche Konfigurationen. Die Zuordnung steht
+  im [Manual: skillctl](../referenz/manual-skillctl.md#trust-roots--registries-which-file-when).
+- **Exit-Codes auswerten.** Das [Manual: skillctl](../referenz/manual-skillctl.md#exit-codes)
+  erklaert Verweigerungen und die jeweils naechsten Schritte.
+- **`skillctl doctor --home` isoliert nicht alle Pruefungen.** Skills und
+  Audit-Logs folgen dem Override; Trust Roots und Signing-Key werden weiterhin
+  aus dem tatsaechlichen Home gelesen. `--home` allein genuegt deshalb nicht
+  fuer eine isolierte Diagnoseumgebung.
+- **Backend und Grenzen pruefen.** Die Betriebsanleitungen unterscheiden
+  Git-, HTTP- und ER1-Registrys. Ihre Sicherungs- und Wiederherstellungsschritte
+  sind nicht austauschbar.
 </script>
 <!-- Integritaet ueber SRI: der Hash ist an den Bytes von cdnjs gerechnet
      (sha256 15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894).
@@ -397,7 +360,7 @@ Versionsnummer im Titel ist es nicht mehr.
     function apply(){
       document.documentElement.setAttribute('data-flavor', on ? 'druck' : 'schirm');
       btn.setAttribute('aria-pressed', String(on));
-      btn.querySelector('span').textContent = on ? 'Druckansicht an' : 'Druckansicht';
+      btn.querySelector('span').textContent = on ? 'Druckansicht an / Print view on' : 'Druckansicht / Print view';
     }
     btn.addEventListener('click', function(){
       on = !on;
@@ -466,18 +429,18 @@ Versionsnummer im Titel ist es nicht mehr.
     var b = document.createElement('button');
     b.type = 'button';
     b.className = 'copy';
-    var label = isRun ? 'Kommando' : 'kopieren';
+    var label = isRun ? 'Kommando / Command' : 'kopieren / Copy';
     b.innerHTML = ICON_COPY + '<span>' + label + '</span>';
-    b.setAttribute('aria-label', (isRun ? 'Kommando' : 'Block') + ' in die Zwischenablage kopieren');
+    b.setAttribute('aria-label', (isRun ? 'Kommando' : 'Block') + ' in die Zwischenablage kopieren / Copy to clipboard');
     b.addEventListener('click', function(){
       var text = isRun ? commandOf(pre.textContent) : pre.textContent.replace(/\s+$/,'');
       writeClipboard(text).then(function(){
         b.dataset.state = 'ok';
-        b.innerHTML = ICON_OK + '<span>kopiert</span>';
+        b.innerHTML = ICON_OK + '<span>kopiert / Copied</span>';
       }).catch(function(){
         // Klappt es nicht, wird der Text markiert: dann tut es Cmd+C.
         b.dataset.state = 'fail';
-        b.innerHTML = ICON_COPY + '<span>markiert, Cmd+C</span>';
+        b.innerHTML = ICON_COPY + '<span>markiert / Selected, Cmd+C</span>';
         var r = document.createRange();
         r.selectNodeContents(pre);
         var sel = window.getSelection();
@@ -497,6 +460,29 @@ Versionsnummer im Titel ist es nicht mehr.
   marked.setOptions({ gfm: true, breaks: false });
   doc.innerHTML = marked.parse(raw);
 
+  // Markdown links are relative to their source, not this generated page.
+  var sourceUrl = new URL("../betrieb/ueberblick.de.md", window.location.href);
+  var documentPages = {"../betrieb/runbook-m3c-tools-capture.de.md": "betrieb-runbook-m3c-tools-capture.html", "../betrieb/runbook-m3c-tools-capture.en.md": "betrieb-runbook-m3c-tools-capture.en.html", "../betrieb/ueberblick.de.md": "betrieb-ueberblick.html", "../betrieb/ueberblick.en.md": "betrieb-ueberblick.en.html", "../entwickler/architecture.de.md": "entwickler-architecture.de.html", "../entwickler/architecture.md": "entwickler-architecture.html", "../entwickler/getting-started.de.md": "entwickler-getting-started.de.html", "../entwickler/getting-started.md": "entwickler-getting-started.html", "../entwickler/secretctl.de.md": "entwickler-secretctl.de.html", "../entwickler/secretctl.md": "entwickler-secretctl.html", "../entwickler/skillctl-sim.de.md": "entwickler-skillctl-sim.de.html", "../entwickler/skillctl-sim.md": "entwickler-skillctl-sim.html", "../index.en.md": "wegweiser.en.html", "../index.md": "wegweiser.html", "../nutzer/einstieg.de.md": "nutzer-einstieg.html", "../nutzer/einstieg.en.md": "nutzer-einstieg.en.html", "../sicherheit/audit-spur.de.md": "sicherheit-audit-spur.html", "../sicherheit/audit-spur.en.md": "sicherheit-audit-spur.en.html", "../sicherheit/ueberblick.de.md": "sicherheit-ueberblick.html", "../sicherheit/ueberblick.en.md": "sicherheit-ueberblick.en.html"};
+  doc.querySelectorAll('a[href], img[src]').forEach(function (element) {
+    var attribute = element.tagName === 'IMG' ? 'src' : 'href';
+    var value = element.getAttribute(attribute);
+    if (!value || /^(?:#|[a-z][a-z0-9+.-]*:|\/\/)/i.test(value)) return;
+    var target = new URL(value, sourceUrl);
+    Object.keys(documentPages).some(function (source) {
+      var original = new URL(source, window.location.href);
+      if (original.pathname !== target.pathname) return false;
+      var rendered = new URL(documentPages[source], window.location.href);
+      rendered.hash = target.hash;
+      rendered.search = target.search;
+      target = rendered;
+      return true;
+    });
+    if (target.protocol !== 'file:' && /[.]md$/.test(target.pathname)) {
+      target.pathname = target.pathname.replace(/[.]md$/, '.html');
+    }
+    element.setAttribute(attribute, target.href);
+  });
+
   // Anker wie auf GitHub, damit die Verweise im Dokument selbst greifen.
   function slug(t) {
     return t.toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, '').trim().replace(/\s+/g, '-');
@@ -509,9 +495,9 @@ Versionsnummer im Titel ist es nicht mehr.
     var box = document.createElement('div');
     box.className = 'term';
     var txt = pre.textContent;
-    var label = /^\s*\$/m.test(txt) ? 'gelaufen' : (/^(skillctl|git|curl|irm|export|tools\/)/m.test(txt) ? 'kommando' : 'ausgabe');
+    var label = /^\s*\$/m.test(txt) ? 'gelaufen / Executed' : (/^(skillctl|git|curl|irm|export|tools\/)/m.test(txt) ? 'kommando / Command' : 'ausgabe / Output');
     if (/^\s*\{/.test(txt)) label = 'json';
-    if (/^##\s/m.test(txt)) label = 'vorlage';
+    if (/^##\s/m.test(txt)) label = 'vorlage / Template';
     var strip = document.createElement('div');
     strip.className = 'strip';
     var tag = document.createElement('span');
@@ -520,7 +506,7 @@ Versionsnummer im Titel ist es nicht mehr.
     pre.parentNode.insertBefore(box, pre);
     box.appendChild(strip);
     box.appendChild(pre);
-    addCopy(strip, pre, label === 'gelaufen');
+    addCopy(strip, pre, label === 'gelaufen / Executed');
   });
 
   // Tabellen duerfen seitlich scrollen, die Seite nie.
@@ -630,7 +616,7 @@ Versionsnummer im Titel ist es nicht mehr.
   toggle.addEventListener('click', function () {
     var open = toggle.getAttribute('aria-expanded') === 'true';
     toggle.setAttribute('aria-expanded', String(!open));
-    toggle.textContent = open ? 'Inhalt anzeigen' : 'Inhalt verbergen';
+    toggle.textContent = open ? 'Inhalt anzeigen / Show contents' : 'Inhalt verbergen / Hide contents';
     apply();
   });
   window.addEventListener('resize', apply);
@@ -638,6 +624,7 @@ Versionsnummer im Titel ist es nicht mehr.
 
   document.getElementById('foot').textContent =
     'Erzeugt aus docs/v2/betrieb/ueberblick.de.md mit tools/docpage.sh. Diese Seite rendert die Datei; ' +
-    'massgeblich ist die Datei im Repository, nicht diese Fassung.';
+    'massgeblich ist die Datei im Repository, nicht diese Fassung. ' +
+    'Generated from docs/v2/betrieb/ueberblick.de.md with tools/docpage.sh. The repository file is authoritative.';
 })();
 </script>

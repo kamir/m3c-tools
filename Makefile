@@ -2,7 +2,7 @@
 # Makefile for building, testing, and running e2e tests
 
 # Die Toolchain, gegen die hier gebaut und getestet wird. Das ist keine
-# Kosmetik: `toolchain` in go.mod ist fuer Go eine UNTERGRENZE und kein Pin. Wer
+# Kosmetik: die Go-Version in go.mod ist eine UNTERGRENZE und kein Pin. Wer
 # ein neueres Go installiert hat, benutzt sein eigenes, waehrend die CI ueber
 # `go-version-file: go.mod` genau die genannte Fassung installiert. Gemessen am
 # 2026-10-08 auf unveraendertem master: TestDigestStability in pkg/skillbundle
@@ -10,7 +10,7 @@
 # gzip-Strom entsteht und dessen Ausgabe sich zwischen Go-Fassungen aendert
 # (ADR-0047 stellt das in v0.7.0 um). Auch die Coverage-Boeden haengen daran.
 # Ueberschreiben geht weiter: `make GOTOOLCHAIN=auto test-unit`.
-GOTOOLCHAIN ?= $(shell sed -n 's/^toolchain \(go[0-9.]*\)$$/\1/p' go.mod | head -1)
+GOTOOLCHAIN ?= $(shell awk '$$1 == "go" { version = "go" $$2 } $$1 == "toolchain" { version = $$2 } END { print version }' go.mod)
 ifeq ($(strip $(GOTOOLCHAIN)),)
 GOTOOLCHAIN := auto
 endif
@@ -468,8 +468,12 @@ vet:
 
 # Pre-release code review (build, vet, tests, secrets, dead code, deps)
 .PHONY: code-review
-code-review:
+code-review: check-review-contracts
 	@./scripts/code-review.sh
+
+.PHONY: check-review-contracts
+check-review-contracts:
+	@bash scripts/code-review.test.sh
 
 # Check documentation consistency with implementation
 .PHONY: check-docs
@@ -558,7 +562,7 @@ release-minor: code-review check-docs
 release-major: code-review check-docs
 	@./scripts/release.sh major
 
-# ── skillctl release chain (docs/v2/betrieb/releasing.md · skill: /release-skillctl) ──────
+# ── skillctl release chain (.github/workflows/skillctl-release.yml) ──────
 # skillctl is a SEPARATE, tag-driven line (skillctl/vX.Y.Z → skillctl-release.yml);
 # `release-skillctl` runs every PRE-TAG gate for it, then prints the derived
 # version context + the next step. It deliberately does NOT tag. Tagging
@@ -574,7 +578,7 @@ release-skillctl: build-skillctl build-skillctl-demo vet lint check-docs
 	 echo "  commits since     : $$(git rev-list --count $$last..origin/master 2>/dev/null) on origin/master"; \
 	 echo ""; \
 	 echo "  ✓ pre-tag gates green. Next: sync CHANGELOG, then tag origin/master BY HASH"; \
-	 echo "    (skillctl/vX.Y.Z) + push: see docs/v2/betrieb/releasing.md / the /release-skillctl skill."
+	 echo "    (skillctl/vX.Y.Z) + push: review .github/workflows/skillctl-release.yml before publishing."
 
 # Smoke-test a PUBLISHED skillctl release build (Phase 4). VERSION defaults to latest tag.
 #   make skillctl-smoke                     # smoke the latest published skillctl/v*
@@ -603,9 +607,9 @@ checksums:
 # gate here gives it a second, independent place to be run from, so the local
 # one-liner still exercises it if the CI step ever goes missing.
 .PHONY: ci
-ci: vet lint check-emdash check-gofmt check-redirect-guard check-required-checks check-docpages check-make-targets test-unit build
+ci: vet lint check-review-contracts check-emdash check-gofmt check-redirect-guard check-required-checks check-docpages check-make-targets test-unit build
 	@echo ""
-	@echo "CI passed: vet ✓  lint ✓  prose ✓  gofmt ✓  redirect-guard ✓  required-checks ✓  docpages ✓  make-targets ✓  test ✓  build ✓"
+	@echo "CI passed: vet ✓  lint ✓  review-contracts ✓  prose ✓  gofmt ✓  redirect-guard ✓  required-checks ✓  docpages ✓  make-targets ✓  test ✓  build ✓"
 
 # Doku-Seiten-Tor: jede erzeugte Seite unter docs/pages/ und docs/v2/pages/
 # traegt eine Kopie ihrer Markdown-Quelle. Dieses Ziel erzeugt jede neu und

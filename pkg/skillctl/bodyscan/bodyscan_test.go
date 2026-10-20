@@ -385,7 +385,6 @@ func TestScanIsLineEndingAgnostic(t *testing.T) {
 		"benign": "This skill reads a file and prints a summary.\nIt makes no network calls.\n",
 	}
 	for name, lf := range cases {
-		lf := lf
 		t.Run(name, func(t *testing.T) {
 			// Build the CRLF twin: every LF becomes CRLF.
 			crlf := strings.ReplaceAll(lf, "\n", "\r\n")

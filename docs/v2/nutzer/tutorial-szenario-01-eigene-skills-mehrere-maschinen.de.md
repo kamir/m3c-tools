@@ -5,6 +5,8 @@ title: "Tutorial, Szenario 01: eigene Skills auf mehreren Maschinen"
 
 # Tutorial, Szenario 01: eigene Skills auf mehreren Maschinen
 
+[Deutsch](tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md) · [English](tutorial-szenario-01-eigene-skills-mehrere-maschinen.en.md)
+
 **Für wen:** Sie nutzen Ihre eigenen Skills auf mehr als einem Rechner (Laptop, Desktop,
 Windows-Maschine) und wollen zusätzlich fremde, bereits signierte Skills einsetzen.
 Sie sind der einzige Autor Ihrer eigenen Skills.
@@ -16,8 +18,8 @@ Skill blockiert, bevor der Agent ihn lädt.
 
 **Dauer:** etwa 45 Minuten für den ersten Durchlauf, danach Minuten pro Skill.
 
-**Verwandte Dokumente:** [Quickstart skillctl](../../old/quickstart-skillctl.md) (Installation und
-Grundbegriffe), [Manual](../referenz/manual-skillctl.md) (jedes Kommando, jedes Flag),
+**Verwandte Dokumente:** [Quickstart skillctl](quickstart-skillctl.de.md) (Installation und
+Grundbegriffe), [Manual](../referenz/manual-skillctl.de.md) (jedes Kommando, jedes Flag),
 [Szenario 02](tutorial-szenario-02-erster-signierter-skill.de.md) (zwei Personen, eine
 Freigabe).
 
@@ -51,7 +53,7 @@ skillctl version        # muss skillctl/vX.Y.Z zeigen, nicht "dev"
 ```
 
 Zeigt das `dev`, haben Sie einen Build aus dem Quellbaum vor sich und keinen signierten
-Release. Installation: siehe [Quickstart §1](../../old/quickstart-skillctl.md#1-install).
+Release. Installation: siehe [Quickstart §1](quickstart-skillctl.md#1-install).
 
 ---
 
@@ -391,18 +393,17 @@ skillctl pull --registry self --er1-target prod --er1-context <bob-sub>___skills
 Wichtig: **kein** `--key` und **kein** `--emit-installed`. Sie sind hier reiner Konsument,
 und nichts von Ihnen soll in Bobs Registry zurückgeschrieben werden.
 
-Der ausführliche Zwei-Personen-Ablauf mit allen Feldern steht im
-[Runbook Zwei-Personen-Austausch](../betrieb/runbook-two-person-er1-exchange.md).
+Der Ablauf mit getrennten Autor-, Reviewer- und Konsumentenrollen steht in
+[Szenario 02](tutorial-szenario-02-erster-signierter-skill.de.md).
 
 ### C3. Weg 3: über ein HTTP-Registry (heute nur gegen eine Instanz ohne Client-Auth)
 
 > **Vorher lesen.** `/api/skills` ist das aims-core-Modul `skill_registry`, dieselbe Maschine
-> wie ER1, andere API. Es läuft in Produktion (`GET /api/skills/health` antwortet `healthy`),
-> aber `skillctl` sendet an diese API **keinen Auth-Header**, und die Produktivinstanz
-> verlangt einen: `/api/skills/bundles` antwortet mit `401 AUTH_REQUIRED`. Dieser Weg
-> funktioniert deshalb heute gegen eine Instanz, die die Endpunkte ohne Client-Auth bedient
-> (etwa die lokale Docker-Instanz aus `demo/kup-training/`), nicht gegen prod. Für den
-> Produktivbetrieb nehmen Sie Weg 2.
+> wie ER1, andere API. Der HTTP-Registry-Client sendet an diese API **keinen
+> Auth-Header**. Verlangt Ihre Instanz Client-Authentisierung, kann sie deshalb
+> mit `401 AUTH_REQUIRED` antworten. Dieser Ablauf setzt Endpunkte ohne
+> Client-Authentisierung voraus, etwa eine isolierte lokale Demo-Instanz.
+> Für produktive Registry-Zugriffe mit Authentisierung nutzen Sie den Git-Registry-Pfad.
 
 ```bash
 skillctl trust add \
@@ -557,7 +558,7 @@ Alles oben gilt, mit drei Unterschieden:
 - Ein ausgelieferter Windows-Build ignoriert `$HOME` für alle sicherheitsrelevanten Pfade
   absichtlich, weil eine Umgebungsvariable von einem Angreifer setzbar ist. Er liest
   `%USERPROFILE%`. Sandkasten-Tricks über `$HOME` funktionieren dort also nicht.
-- Installation über die PowerShell-Einzeile aus [Quickstart §1](../../old/quickstart-skillctl.md#1-install),
+- Installation über die PowerShell-Einzeile aus [Quickstart §1](quickstart-skillctl.md#1-install),
   und entweder diese **oder** den maschinenweiten Installer, nicht beide.
 
 ---
@@ -580,4 +581,4 @@ Alles oben gilt, mit drei Unterschieden:
 
 - Zwei Personen, eine Freigabe: [Szenario 02](tutorial-szenario-02-erster-signierter-skill.de.md)
 - Üben, bis es sitzt: [Katas und Test Ride](tutorial-katas-und-test-ride.de.md)
-- Jedes Kommando, jedes Flag: [Manual](../referenz/manual-skillctl.md)
+- Jedes Kommando, jedes Flag: [Manual](../referenz/manual-skillctl.de.md)

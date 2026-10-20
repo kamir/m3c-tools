@@ -1,8 +1,6 @@
 module github.com/kamir/m3c-tools
 
-go 1.26.0
-
-toolchain go1.26.9
+go 1.26.10
 
 require (
 	fyne.io/systray v1.12.2

@@ -97,10 +97,7 @@ func ProjectColor(projectID string) (r, g, b float32) {
 	h := fnv.New32a()
 	// #nosec G104 -- hash.Hash.Write gibt laut dokumentiertem Vertrag NIE einen
 	// Fehler zurueck ("It never returns an error"); das Rueckgabewert-Paar
-	// existiert nur, weil hash.Hash ein io.Writer ist. Dies war der einzige der
-	// 72 G104-Funde ohne Begruendung am Aufrufort, siehe
-	// docs/security/gosec-backlog.md. Die Anmerkung bleibt auch dann richtig,
-	// wenn G104 in gosec.yml wieder eingeschaltet wird.
+	// existiert nur, weil hash.Hash ein io.Writer ist.
 	h.Write([]byte(projectID))
 	c := palette[h.Sum32()%uint32(len(palette))]
 	return c[0], c[1], c[2]

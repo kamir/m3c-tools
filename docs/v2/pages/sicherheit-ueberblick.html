@@ -9,7 +9,7 @@
   --bg:#f5f7f8; --surface:#ffffff; --surface-2:#eef2f4;
   --ink:#182029; --ink-soft:#59656f; --line:#dde3e8; --line-soft:#e9edf0;
   --accent:#0d6e6b; --accent-soft:#e2f0ef;
-  --warn:#8d5a13; --warn-soft:#fbf1e0; 
+  --warn:#8d5a13; --warn-soft:#fbf1e0;
   --stop:#9c2f2f; --ok:#1e6a45;
   --term-bg:#131c24; --term-fg:#c9d6e0; --term-dim:#7c8f9e; --term-line:#25333f;
   --rail:248px;
@@ -198,7 +198,7 @@ table.check tr.done td:not(:first-child){opacity:.5; text-decoration:line-throug
   --term-bg:#ffffff; --term-fg:#000000; --term-dim:#4a555e; --term-line:#98a1a8;
 }
 
-/* Bauliches: gilt auf Papier und in der Druckansicht gleichermassen. */
+/* Bauliches: gilt auf Papier und in der Druckansicht / Print view gleichermassen. */
 @media print{
   .rail,.copy,.flavorbar{display:none !important}
   .shell{grid-template-columns:1fr}
@@ -271,21 +271,21 @@ table.check tr.done td:not(:first-child){opacity:.5; text-decoration:line-throug
 
 </style>
 
-<div class="shell">
+<div class="shell" lang="de">
   <aside class="rail">
     <div class="brand">
-      <p class="kicker">Ops-Runbook</p>
+      <p class="kicker">Dokumentation / Documentation</p>
       <h1>Das Sicherheits- und Vertrauensmodell</h1>
       <p class="meta">docs/v2/sicherheit/ueberblick.de.md</p>
     </div>
     <div class="flavorbar" id="flavorbar" hidden>
-      <button type="button" id="flavorbtn" aria-pressed="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4.5 6V2.6h7V6"/><rect x="2" y="6" width="12" height="5" rx="1.1"/><path d="M4.5 10h7v3.4h-7z"/></svg><span>Druckansicht</span></button>
-      <button type="button" id="printbtn">Drucken</button>
+      <button type="button" id="flavorbtn" aria-pressed="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4.5 6V2.6h7V6"/><rect x="2" y="6" width="12" height="5" rx="1.1"/><path d="M4.5 10h7v3.4h-7z"/></svg><span>Druckansicht / Print view</span></button>
+      <button type="button" id="printbtn">Drucken / Print</button>
     </div>
-    <div class="mobiletop"><button id="navtoggle" type="button" aria-expanded="false">Inhalt anzeigen</button></div>
-    <nav id="nav" aria-label="Abschnitte"><ol id="navlist"></ol></nav>
+    <div class="mobiletop"><button id="navtoggle" type="button" aria-expanded="false">Inhalt anzeigen / Show contents</button></div>
+    <nav id="nav" aria-label="Abschnitte / Sections"><ol id="navlist"></ol></nav>
     <div class="progress" id="progress" hidden>
-      <span><b id="pdone">0</b> von <b id="ptotal">8</b> Voraussetzungen abgehakt</span>
+      <span><b id="pdone">0</b> von <b id="ptotal">8</b> Voraussetzungen abgehakt / prerequisites checked</span>
       <span class="bar"><i id="pbar"></i></span>
     </div>
   </aside>
@@ -297,6 +297,8 @@ table.check tr.done td:not(:first-child){opacity:.5; text-decoration:line-throug
 </div>
 
 <script id="src" type="text/markdown"># Ueberblick: das Sicherheits- und Vertrauensmodell
+
+Sprachen / Languages: [Deutsch](ueberblick.de.md) | [English](ueberblick.en.md)
 
 Was die Vertrauensschicht behauptet, wo jede Behauptung belegt ist, und in
 welcher Reihenfolge eine Sicherheitspruefung dieses Repository liest. Diese
@@ -312,44 +314,42 @@ Rolle: Sicherheit · Sprache: DE · Stand: 2026-09-16
 
 **Jede Vertrauensaussage zeigt auf eine Mitigation und die Tests, die sie
 ausueben, oder sie ist als GAP markiert:** das ist der Massstab, den
-[THREAT_MODEL.md](../../../THREAT_MODEL.md) an sich selbst anlegt, und der
+[THREAT_MODEL.md](../../../THREAT_MODEL.de.md) an sich selbst anlegt, und der
 Massstab, an dem dieses Repository gemessen werden will.
 
 ## Das Modell in drei Saetzen
 
 1. `skillctl` gibt jedem Agent-Skill eine pruefbare Identitaet und einen
    Lebenszyklus: author, pack, sign, admit, attest, verify/install, use,
-   audit, revoke ([Manual: skillctl](../referenz/manual-skillctl.md)).
+   audit, revoke ([Manual: skillctl](../referenz/manual-skillctl.de.md)).
 2. Die Kette verifiziert offline; ein gehostetes Registry, ein Ledger oder
    ein Transparenz-Log ist komplementaer, nie Voraussetzung des Pruefpfads
    (Kopfabsatz des Manuals).
 3. Der Bedrohungskatalog traegt zitierbare IDs (R01 bis R12). Testkommentare
    zitieren alle zwoelf; gemessen am 2026-09-16 trifft
    `grep -rn 'THREAT-R' pkg/ cmd/` jede der zwoelf IDs R01 bis R12. Die
-   Konvention steht in [THREAT_MODEL.md](../../../THREAT_MODEL.md), §6.
+   Konvention steht in [THREAT_MODEL.md](../../../THREAT_MODEL.de.md), §6.
 
 ## Leseweg fuer eine Pruefung
 
 | Schritt | Dokument | Was dort steht |
 |---|---|---|
-| 1 | [THREAT_MODEL.md](../../../THREAT_MODEL.md) | Laufzeit-Trust-Kette: Bedrohungen R01 bis R12 mit Mitigationen, Tests und den dokumentiert geschlossenen frueheren GAPs |
-| 2 | [SECURITY.md](../../../SECURITY.md) | Meldeweg (privat, GitHub Security Advisories), unterstuetzte Versionen, Supply-Chain-Zusagen |
-| 3 | [docs/security/required-checks.txt](../../security/required-checks.txt) | die Pflicht-Checks auf `master` und warum die Namensbindung im Baum liegt |
-| 4 | [gosec-backlog](../../security/gosec-backlog.md) und [codeql-backlog](../../security/codeql-backlog.md) | der offene Static-Analysis-Bestand, klassifiziert, mit Datum |
-| 5 | [gosec-diff-gate.yml](../../../.github/workflows/gosec-diff-gate.yml) | das blockierende no-new-findings-Tor: Pflicht-Check auf `master` (required-checks.txt), prueft gegen die Signatur-Baseline `gosec-inci-baseline.txt`; die aeltere SARIF-Punktaufnahme [gosec-baseline](../../security/gosec-baseline.md) ist ein anderes, unverdrahtetes Artefakt |
-| 6 | [Release flow, "What CI signs"](../betrieb/releasing.md) | was ein Release signiert und woran ein Installierender es prueft |
-| 7 | [Ops-Runbook: Incident Response](../betrieb/ops-incident-response.de.md) | kompromittierter Schluessel oder Registry: erkennen, widerrufen, rotieren, neu pinnen |
-| 8 | [Ops-Routine: Zugangstoken](../betrieb/ops-registry-tokens.de.md) | Token-Lebenszyklus inkl. Ausscheiden: Lese-Token endet mit dem Konto der Person, das Schreibtoken gehoert der Rolle und wird beim Personalwechsel rotiert |
-| 9 | [Runbook: die Audit-Spur](audit-spur.de.md) | die drei Traeger konsolidiert: `audit` urteilt je Skill, `auditlog` zeigt das Audit-Subsystem (SPEC-0403 §8), `translog` ist das L1-Transparenz-Log; die Manual-Abschnitte sind dort verlinkt, die Registry-Zeitleiste (admit, attest, revoke, install) liest das [Incident-Runbook, Abschnitt 1](../betrieb/ops-incident-response.de.md) |
+| 1 | [THREAT_MODEL.md](../../../THREAT_MODEL.de.md) | Laufzeit-Trust-Kette: Bedrohungen R01 bis R12 mit Mitigationen, Tests und den dokumentiert geschlossenen frueheren GAPs |
+| 2 | [SECURITY.md](../../../SECURITY.de.md) | Meldeweg (privat, GitHub Security Advisories), unterstuetzte Versionen, Supply-Chain-Zusagen |
+| 3 | [required-checks.txt](../../security/required-checks.txt) | das Manifest der vorgesehenen Pflicht-Checks |
+| 4 | [gosec-diff-gate.yml](../../../.github/workflows/gosec-diff-gate.yml) | das no-new-findings-Tor gegen die [Signatur-Baseline](../../security/gosec-inci-baseline.txt) |
+| 5 | [Supply-chain security](../../../SECURITY.md#verifying-a-release) | Signaturen und Provenance eines Downloads pruefen |
+| 6 | [Ops-Runbook: Incident Response](../betrieb/ops-incident-response.de.md) | kompromittierter Schluessel oder Registry: erkennen, widerrufen, rotieren, neu pinnen |
+| 7 | [Ops-Routine: Zugangstoken](../betrieb/ops-registry-tokens.de.md) | Token-Lebenszyklus inkl. Ausscheiden: Lese-Token endet mit dem Konto der Person, das Schreibtoken gehoert der Rolle und wird beim Personalwechsel rotiert |
+| 8 | [Runbook: die Audit-Spur](audit-spur.de.md) | die drei Traeger konsolidiert: `audit` urteilt je Skill, `auditlog` zeigt das Audit-Subsystem (SPEC-0403 §8), `translog` ist das L1-Transparenz-Log; die Manual-Abschnitte sind dort verlinkt, die Registry-Zeitleiste (admit, attest, revoke, install) liest das [Incident-Runbook, Abschnitt 1](../betrieb/ops-incident-response.de.md) |
 
 ## Vorfuehren statt behaupten
 
 | Format | Traeger | Sprache |
 |---|---|---|
-| Offline-Demo mit echten Exit-Codes: laut Quickstart wird ein vergiftetes Bundle mit Exit 10 abgewiesen und eine erzwungene Governance-Aktion mit Exit 2 verweigert | [Quickstart: skillctl-demo](../../old/quickstart-skillctl-demo.md) | EN |
-| Selbst nachvollziehen, offline, ohne Server | [Quickstart: skillctl](../../old/quickstart-skillctl.md) | EN |
-| Argumentation fuer Security-Expertin und CTO als Infografik | [CISO-Deck (EN)](../../old/skillctl-ciso-deck.html) · [CISO-Deck (DE)](../../old/skillctl-ciso-deck.de.html) | EN/DE |
-| Zwei-Personen-Nachweis ueber ER1, mit Pass-Kriterien | [Runbook: two-person ER1 exchange](../betrieb/runbook-two-person-er1-exchange.md) | EN |
+| Offline-Demo mit echten Exit-Codes: laut Quickstart wird ein vergiftetes Bundle mit Exit 10 abgewiesen und eine erzwungene Governance-Aktion mit Exit 2 verweigert | [Quickstart: skillctl-demo](../nutzer/quickstart-skillctl-demo.de.md) | EN |
+| Selbst nachvollziehen, offline, ohne Server | [Quickstart: skillctl](../nutzer/quickstart-skillctl.de.md) | EN |
+| Autor, Reviewer und Konsument getrennt einrichten | [Tutorial: erster signierter Skill](../nutzer/tutorial-szenario-02-erster-signierter-skill.de.md) | DE |
 
 ## Grenzen, die diese Seite nicht verschweigt
 
@@ -358,14 +358,14 @@ Massstab, an dem dieses Repository gemessen werden will.
 2. Es gibt zwei gosec-Baselines, und nur eine traegt ein Tor: das blockierende
    no-new-findings-Tor
    ([gosec-diff-gate.yml](../../../.github/workflows/gosec-diff-gate.yml),
-   Pflicht-Check auf `master`) prueft gegen die Signatur-Baseline
+   im CI-Workflow) prueft gegen die Signatur-Baseline
    `gosec-inci-baseline.txt`; die SARIF-Punktaufnahme
-   [gosec-baseline](../../security/gosec-baseline.md) (2026-09-03) ist
+   [gosec-baseline.sarif](../../security/gosec-baseline.sarif) ist
    unverdrahtet und dient nur der Triage.
 3. Ein Pflicht-Check ist an einen Job-NAMEN gebunden; eine Umbenennung
    entkoppelt die Durchsetzung lautlos. Die Begruendung steht in
    [required-checks.txt](../../security/required-checks.txt) selbst.
-4. Reaktionszeiten: [SECURITY.md](../../../SECURITY.md) nennt als Ziel eine
+4. Reaktionszeiten: [SECURITY.md](../../../SECURITY.de.md) nennt als Ziel eine
    Bestaetigung "within a few working days" und sagt keine feste Frist fuer
    Fix oder Disclosure zu. Entschieden am 2026-09-16: es bleibt bewusst bei
    dem weichen Ziel, eine harte SLA wird nicht zugesagt; SECURITY.md traegt
@@ -397,7 +397,7 @@ Massstab, an dem dieses Repository gemessen werden will.
     function apply(){
       document.documentElement.setAttribute('data-flavor', on ? 'druck' : 'schirm');
       btn.setAttribute('aria-pressed', String(on));
-      btn.querySelector('span').textContent = on ? 'Druckansicht an' : 'Druckansicht';
+      btn.querySelector('span').textContent = on ? 'Druckansicht an / Print view on' : 'Druckansicht / Print view';
     }
     btn.addEventListener('click', function(){
       on = !on;
@@ -466,18 +466,18 @@ Massstab, an dem dieses Repository gemessen werden will.
     var b = document.createElement('button');
     b.type = 'button';
     b.className = 'copy';
-    var label = isRun ? 'Kommando' : 'kopieren';
+    var label = isRun ? 'Kommando / Command' : 'kopieren / Copy';
     b.innerHTML = ICON_COPY + '<span>' + label + '</span>';
-    b.setAttribute('aria-label', (isRun ? 'Kommando' : 'Block') + ' in die Zwischenablage kopieren');
+    b.setAttribute('aria-label', (isRun ? 'Kommando' : 'Block') + ' in die Zwischenablage kopieren / Copy to clipboard');
     b.addEventListener('click', function(){
       var text = isRun ? commandOf(pre.textContent) : pre.textContent.replace(/\s+$/,'');
       writeClipboard(text).then(function(){
         b.dataset.state = 'ok';
-        b.innerHTML = ICON_OK + '<span>kopiert</span>';
+        b.innerHTML = ICON_OK + '<span>kopiert / Copied</span>';
       }).catch(function(){
         // Klappt es nicht, wird der Text markiert: dann tut es Cmd+C.
         b.dataset.state = 'fail';
-        b.innerHTML = ICON_COPY + '<span>markiert, Cmd+C</span>';
+        b.innerHTML = ICON_COPY + '<span>markiert / Selected, Cmd+C</span>';
         var r = document.createRange();
         r.selectNodeContents(pre);
         var sel = window.getSelection();
@@ -497,6 +497,29 @@ Massstab, an dem dieses Repository gemessen werden will.
   marked.setOptions({ gfm: true, breaks: false });
   doc.innerHTML = marked.parse(raw);
 
+  // Markdown links are relative to their source, not this generated page.
+  var sourceUrl = new URL("../sicherheit/ueberblick.de.md", window.location.href);
+  var documentPages = {"../betrieb/runbook-m3c-tools-capture.de.md": "betrieb-runbook-m3c-tools-capture.html", "../betrieb/runbook-m3c-tools-capture.en.md": "betrieb-runbook-m3c-tools-capture.en.html", "../betrieb/ueberblick.de.md": "betrieb-ueberblick.html", "../betrieb/ueberblick.en.md": "betrieb-ueberblick.en.html", "../entwickler/architecture.de.md": "entwickler-architecture.de.html", "../entwickler/architecture.md": "entwickler-architecture.html", "../entwickler/getting-started.de.md": "entwickler-getting-started.de.html", "../entwickler/getting-started.md": "entwickler-getting-started.html", "../entwickler/secretctl.de.md": "entwickler-secretctl.de.html", "../entwickler/secretctl.md": "entwickler-secretctl.html", "../entwickler/skillctl-sim.de.md": "entwickler-skillctl-sim.de.html", "../entwickler/skillctl-sim.md": "entwickler-skillctl-sim.html", "../index.en.md": "wegweiser.en.html", "../index.md": "wegweiser.html", "../nutzer/einstieg.de.md": "nutzer-einstieg.html", "../nutzer/einstieg.en.md": "nutzer-einstieg.en.html", "../sicherheit/audit-spur.de.md": "sicherheit-audit-spur.html", "../sicherheit/audit-spur.en.md": "sicherheit-audit-spur.en.html", "../sicherheit/ueberblick.de.md": "sicherheit-ueberblick.html", "../sicherheit/ueberblick.en.md": "sicherheit-ueberblick.en.html"};
+  doc.querySelectorAll('a[href], img[src]').forEach(function (element) {
+    var attribute = element.tagName === 'IMG' ? 'src' : 'href';
+    var value = element.getAttribute(attribute);
+    if (!value || /^(?:#|[a-z][a-z0-9+.-]*:|\/\/)/i.test(value)) return;
+    var target = new URL(value, sourceUrl);
+    Object.keys(documentPages).some(function (source) {
+      var original = new URL(source, window.location.href);
+      if (original.pathname !== target.pathname) return false;
+      var rendered = new URL(documentPages[source], window.location.href);
+      rendered.hash = target.hash;
+      rendered.search = target.search;
+      target = rendered;
+      return true;
+    });
+    if (target.protocol !== 'file:' && /[.]md$/.test(target.pathname)) {
+      target.pathname = target.pathname.replace(/[.]md$/, '.html');
+    }
+    element.setAttribute(attribute, target.href);
+  });
+
   // Anker wie auf GitHub, damit die Verweise im Dokument selbst greifen.
   function slug(t) {
     return t.toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, '').trim().replace(/\s+/g, '-');
@@ -509,9 +532,9 @@ Massstab, an dem dieses Repository gemessen werden will.
     var box = document.createElement('div');
     box.className = 'term';
     var txt = pre.textContent;
-    var label = /^\s*\$/m.test(txt) ? 'gelaufen' : (/^(skillctl|git|curl|irm|export|tools\/)/m.test(txt) ? 'kommando' : 'ausgabe');
+    var label = /^\s*\$/m.test(txt) ? 'gelaufen / Executed' : (/^(skillctl|git|curl|irm|export|tools\/)/m.test(txt) ? 'kommando / Command' : 'ausgabe / Output');
     if (/^\s*\{/.test(txt)) label = 'json';
-    if (/^##\s/m.test(txt)) label = 'vorlage';
+    if (/^##\s/m.test(txt)) label = 'vorlage / Template';
     var strip = document.createElement('div');
     strip.className = 'strip';
     var tag = document.createElement('span');
@@ -520,7 +543,7 @@ Massstab, an dem dieses Repository gemessen werden will.
     pre.parentNode.insertBefore(box, pre);
     box.appendChild(strip);
     box.appendChild(pre);
-    addCopy(strip, pre, label === 'gelaufen');
+    addCopy(strip, pre, label === 'gelaufen / Executed');
   });
 
   // Tabellen duerfen seitlich scrollen, die Seite nie.
@@ -630,7 +653,7 @@ Massstab, an dem dieses Repository gemessen werden will.
   toggle.addEventListener('click', function () {
     var open = toggle.getAttribute('aria-expanded') === 'true';
     toggle.setAttribute('aria-expanded', String(!open));
-    toggle.textContent = open ? 'Inhalt anzeigen' : 'Inhalt verbergen';
+    toggle.textContent = open ? 'Inhalt anzeigen / Show contents' : 'Inhalt verbergen / Hide contents';
     apply();
   });
   window.addEventListener('resize', apply);
@@ -638,6 +661,7 @@ Massstab, an dem dieses Repository gemessen werden will.
 
   document.getElementById('foot').textContent =
     'Erzeugt aus docs/v2/sicherheit/ueberblick.de.md mit tools/docpage.sh. Diese Seite rendert die Datei; ' +
-    'massgeblich ist die Datei im Repository, nicht diese Fassung.';
+    'massgeblich ist die Datei im Repository, nicht diese Fassung. ' +
+    'Generated from docs/v2/sicherheit/ueberblick.de.md with tools/docpage.sh. The repository file is authoritative.';
 })();
 </script>

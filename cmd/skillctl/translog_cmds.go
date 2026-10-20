@@ -35,7 +35,6 @@ package main
 // DEFERRED: these verbs operate on locally-held STHs/proofs.
 
 import (
-	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -382,8 +381,8 @@ func runTranslogProve(args []string, stdout, stderr io.Writer) int {
 		return exitGeneric
 	}
 	if *outPath != "" {
-		// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
-		if err := os.WriteFile(*outPath, append(data, '\n'), 0o644); err != nil { //nolint:gosec // receipt is public
+		// #nosec G306 G703 -- Public receipt; --out is an unrestricted local path explicitly selected by the operator, never taken from log entries or receipt content. Like shell redirection, it follows the operator's destination symlink.
+		if err := os.WriteFile(*outPath, append(data, '\n'), 0o644); err != nil {
 			fmt.Fprintln(stderr, err)
 			return exitGeneric
 		}
@@ -426,7 +425,7 @@ func runTranslogVerify(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return exitGeneric
 	}
-	if err := receipt.VerifyOffline(ed25519.PublicKey(pub)); err != nil {
+	if err := receipt.VerifyOffline(pub); err != nil {
 		fmt.Fprintf(stderr, "NOT INCLUDED: %v\n", err)
 		return exitTranslogNotIncluded
 	}
@@ -474,11 +473,11 @@ func runTranslogConsistency(args []string, stdout, stderr io.Writer) int {
 	}
 	// Both heads must be authentic (signed by the pinned key) before we
 	// trust their roots.
-	if err := translog.VerifySTH(ed25519.PublicKey(pub), s1); err != nil {
+	if err := translog.VerifySTH(pub, s1); err != nil {
 		fmt.Fprintf(stderr, "sth1 invalid: %v\n", err)
 		return exitGeneric
 	}
-	if err := translog.VerifySTH(ed25519.PublicKey(pub), s2); err != nil {
+	if err := translog.VerifySTH(pub, s2); err != nil {
 		fmt.Fprintf(stderr, "sth2 invalid: %v\n", err)
 		return exitGeneric
 	}
@@ -541,7 +540,7 @@ func runTranslogWitness(args []string, stdout, stderr io.Writer) int {
 	// Verify each STH against the pinned key: an unsigned/unpinned head is
 	// not admissible evidence and could otherwise hide or fabricate a split.
 	for i, s := range sths {
-		if err := translog.VerifySTH(ed25519.PublicKey(pub), s); err != nil {
+		if err := translog.VerifySTH(pub, s); err != nil {
 			fmt.Fprintf(stderr, "witness[%d] STH invalid under pinned key: %v\n", i, err)
 			return exitGeneric
 		}

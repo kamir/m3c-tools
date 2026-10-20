@@ -112,7 +112,7 @@ func runTokenSetFrom(args []string, in io.Reader, stdout, stderr io.Writer) int 
 		return exitUsage
 	}
 
-	if err := artifactauth.Store(*backend, tokenTier(*readOnly), *host, secret); err != nil {
+	if err := artifactauth.Store(*backend, tokenTier(*readOnly), *host, secret); err != nil { //nolint:staticcheck // SA4023: Linux always returns an error, but the earlier HasProtectedStore guard excludes that path; macOS and Windows can succeed
 		fmt.Fprintf(stderr, "skillctl token set: %v\n", err)
 		return exitGeneric
 	}

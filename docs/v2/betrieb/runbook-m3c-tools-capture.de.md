@@ -1,5 +1,7 @@
 # Ops-Runbook: die Capture-Seite von m3c-tools
 
+Sprachen / Languages: [Deutsch](runbook-m3c-tools-capture.de.md) | [English](runbook-m3c-tools-capture.en.md)
+
 Was mit einem Upload passiert, der ER1 nicht erreicht: wo die Wartenden
 liegen, in welchem Format, und wie der Wiederanlauf funktioniert. Diese Seite
 deckt den Upload-Pfad und die Retry-Queue ab; die englische Kurzfassung fuer
@@ -142,6 +144,6 @@ auf `cancelled` und verweigert bei bereits abgeschlossenen Eintraegen
    erreichbaren ER1-Server gemessen; Abschnitt 3 ist Code-Lektuere.
 2. Whisper-Transkription und der Batch-Import samt seiner eigenen
    Tracking-Tabellen sind nicht abgedeckt; dafuer
-   [Audio Import & Tracking](../nutzer/audio-import-tracking.md) (EN).
+   [Audio Import & Tracking](../nutzer/audio-import-tracking.de.md) (EN).
 3. Die skillctl-Seite (Registry, Trust, Widerruf) hat ihre eigenen Runbooks;
    der Einstieg ist die [Betriebs-Uebersicht](ueberblick.de.md).

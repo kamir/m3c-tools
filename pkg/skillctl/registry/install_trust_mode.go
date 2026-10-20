@@ -367,14 +367,15 @@ var ErrUnsafeBundleName = errors.New("install: bundle name is unsafe (path separ
 
 // sanitizeBundleName fail-closed-rejects a bundle name that could escape the
 // skills directory when passed to filepath.Join. Mirrors the gate's name guard
-// (registry.validateNameSafe): no '/', '\\', NUL, '..' segments, no absolute
-// path, no leading dot-dot. The name must be a single safe path component.
+// (registry.validateNameSafe), plus portable Windows restrictions. The name
+// must be one component without traversal, separators, controls, ADS syntax,
+// trailing dots/spaces or reserved device names.
 func sanitizeBundleName(name string) error {
 	if name == "" {
 		return fmt.Errorf("%w: empty name", ErrUnsafeBundleName)
 	}
-	if strings.ContainsAny(name, "/\\\x00") {
-		return fmt.Errorf("%w: %q contains a path separator or NUL", ErrUnsafeBundleName, name)
+	if strings.ContainsAny(name, "/\\:\x00") {
+		return fmt.Errorf("%w: %q contains a path separator, colon or NUL", ErrUnsafeBundleName, name)
 	}
 	for _, r := range name {
 		if r < 0x20 || r == 0x7f {
@@ -383,6 +384,16 @@ func sanitizeBundleName(name string) error {
 	}
 	if name == ".." || name == "." || strings.HasPrefix(name, "..") {
 		return fmt.Errorf("%w: %q is a traversal segment", ErrUnsafeBundleName, name)
+	}
+	if strings.HasSuffix(name, ".") || strings.HasSuffix(name, " ") {
+		return fmt.Errorf("%w: %q has a nonportable trailing dot or space", ErrUnsafeBundleName, name)
+	}
+	stem, _, _ := strings.Cut(strings.ToUpper(name), ".")
+	stem = strings.TrimRight(stem, " ")
+	device := []rune(stem)
+	if stem == "CON" || stem == "PRN" || stem == "AUX" || stem == "NUL" ||
+		(len(device) == 4 && (strings.HasPrefix(stem, "COM") || strings.HasPrefix(stem, "LPT")) && strings.ContainsRune("0123456789¹²³", device[3])) {
+		return fmt.Errorf("%w: %q is a reserved Windows device name", ErrUnsafeBundleName, name)
 	}
 	if filepath.IsAbs(name) {
 		return fmt.Errorf("%w: %q is an absolute path", ErrUnsafeBundleName, name)
@@ -452,7 +463,7 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 	}
 
 	// Extract into a temp dir, then atomically rename onto target.
-	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
 	if err := os.MkdirAll(skillsDir, 0o755); err != nil {
 		return nil, fmt.Errorf("install: mkdir %s: %w", skillsDir, err)
 	}
@@ -497,9 +508,9 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 	// gate recognises this pull-installed skill as managed and can byte-bind the
 	// on-disk body to the signed bundle (catches post-install tampering). The
 	// gate finds any top-level *.skb; the name is cosmetic.
-	skbName := strings.ReplaceAll(b.Name, string(filepath.Separator), "_") + ".skb"
-	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
-	if err := os.WriteFile(filepath.Join(tmp, skbName), skb, 0o644); err != nil {
+	skbName := b.Name + ".skb"
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
+	if err := stashInstalledBundle(tmp, skbName, skb); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("install: stash .skb: %w", err)
 	}
@@ -542,6 +553,25 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 		return nil, fmt.Errorf("install: rename tmp → target: %w", err)
 	}
 	return res, nil
+}
+
+// stashInstalledBundle anchors the write to the extraction directory and refuses
+// a collision with extracted content, including symlinks and existing files.
+func stashInstalledBundle(dir, name string, data []byte) (err error) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, root.Close()) }()
+	f, err := root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return err
+	}
+	n, writeErr := f.Write(data)
+	if writeErr == nil && n != len(data) {
+		writeErr = io.ErrShortWrite
+	}
+	return errors.Join(writeErr, f.Close())
 }
 
 // extractSkb extracts a SPEC-0188 §3.1-shaped bundle (gzip + tar) into `target`.
@@ -612,7 +642,7 @@ func writeProvenance(path string, side ProvenanceSidecar) error {
 	if err != nil {
 		return err
 	}
-	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
 	return os.WriteFile(path, out, 0o644)
 }
 
@@ -738,7 +768,7 @@ func installAgent(b *StagedBundle, man skillbundle.BundleManifest, skb []byte, o
 	}
 
 	agentsDir := agentsDirFor(opts.SkillsDir)
-	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
 		return nil, fmt.Errorf("install: mkdir %s: %w", agentsDir, err)
 	}
@@ -773,7 +803,7 @@ func installAgent(b *StagedBundle, man skillbundle.BundleManifest, skb []byte, o
 		_ = os.Remove(tmpName)
 		return nil, fmt.Errorf("install: close %s: %w", target, err)
 	}
-	// #nosec G302 -- Klassenentscheidung: nicht geheimes lokales Artefakt; die Agentendatei muss fuer den Loader lesbar sein. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
+	// #nosec G302 -- Klassenentscheidung: nicht geheimes lokales Artefakt; die Agentendatei muss fuer den Loader lesbar sein.
 	if err := os.Chmod(tmpName, 0o644); err != nil {
 		_ = os.Remove(tmpName)
 		return nil, fmt.Errorf("install: chmod %s: %w", target, err)
@@ -792,7 +822,7 @@ func installAgent(b *StagedBundle, man skillbundle.BundleManifest, skb []byte, o
 	// machine whose digest cannot be checked after the fact, and SPEC-0432 §5
 	// asks for more care with agents than with skills, not less.
 	provDir := filepath.Join(agentsDir, ".provenance")
-	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
 	if err := os.MkdirAll(provDir, 0o755); err != nil {
 		return nil, fmt.Errorf("install: mkdir %s: %w", provDir, err)
 	}

@@ -5,6 +5,8 @@ title: "Tutorial, Szenario 02: der erste signierte Skill, mit Prüfung durch ein
 
 # Tutorial, Szenario 02: der erste signierte Skill
 
+[Deutsch](tutorial-szenario-02-erster-signierter-skill.de.md) · [English](tutorial-szenario-02-erster-signierter-skill.en.md)
+
 **Für wen:** Sie haben mit Claude Code lokal einen Skill gebaut und wollen ihn erstmals
 signieren und veröffentlichen. Ihr Vorgesetzter oder eine Kollegin prüft ihn vorher.
 In diesem Text heißen die drei Rollen **Mitarbeiter** (Autor), **Alice** (Reviewer und
@@ -18,8 +20,7 @@ Prüfung stattgefunden hat, nicht weil ihm jemand gesagt hat, sie habe stattgefu
 Vorgang) etwa eine Stunde beim ersten Mal, danach Minuten.
 
 **Verwandte Dokumente:** [Szenario 01](tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md)
-(eine Person, mehrere Maschinen), [Runbook Zwei-Personen-Austausch](../betrieb/runbook-two-person-er1-exchange.md)
-(derselbe Vorgang als Abnahmeprozedur), [Manual](../referenz/manual-skillctl.md).
+(eine Person, mehrere Maschinen), [Manual](../referenz/manual-skillctl.de.md).
 
 ---
 
@@ -726,27 +727,22 @@ Schlüssel benutzen.
 Drei Eigenheiten dieses Pfades, die auf Git nicht existieren: `publish` schreibt **immer** in
 den eigenen Kontext (ein Publish in einen fremden endet mit `403`), die Raum-Mitgliedschaft
 wird serverseitig in der Konsole eingerichtet (es gibt kein `skillctl`-Verb dafür), und der
-Kontextname des Herausgebers muss dem Konsumenten exakt bekannt sein. Der ausführliche
-Zwei-Personen-Ablauf steht im
-[Runbook Zwei-Personen-Austausch](../betrieb/runbook-two-person-er1-exchange.md).
+Kontextname des Herausgebers muss dem Konsumenten exakt bekannt sein.
 
 ## Anhang B: das HTTP-Registry `/api/skills`, und warum es hier nicht der Hauptweg ist
 
 Neben dem ER1-`self`-Registry (Memory-Layer, `publish` / `pull`) hat aims-core ein zweites
-Registry-Gesicht: das Modul `skill_registry` unter `<base>/api/skills`. Das ist **kein
-zweiter Server**, es ist eine zweite API auf demselben Dienst, und sie läuft in Produktion:
-`GET https://onboarding.guide/api/skills/health` antwortet mit
-`{"module":"skill_registry","status":"healthy"}`. Für dieses Gesicht gelten die Kommandos
-`skillctl trust add`, `install`, `attest` und die Datei `~/.claude/skill-trust-roots.yaml`.
+Registry-Gesicht: das Modul `skill_registry` unter `<base>/api/skills`. Fuer diese API
+gelten die Kommandos `skillctl trust add`, `install`, `attest` und die Datei
+`~/.claude/skill-trust-roots.yaml`.
 
-Trotzdem steht in Teil 2 der ER1-Weg, und zwar aus einem messbaren Grund: **`skillctl` kann
-sich an `/api/skills` heute nicht anmelden.** Die Produktivinstanz antwortet auf
-`/api/skills/bundles`, `/identities` und `/attestations` mit `401 AUTH_REQUIRED`, während der
-Registry-Client (`pkg/skillctl/registry/client.go`) und `skillctl attest`
-(`cmd/skillctl/attest_cmds.go`) ausschließlich `Content-Type`, `Accept` und `User-Agent`
-senden. Es gibt keinen Header und keine Umgebungsvariable für ein Token. Der Weg funktioniert
-deshalb heute nur gegen eine Instanz, die diese Endpunkte ohne Client-Auth bedient, etwa die
-lokale Docker-Instanz aus `demo/kup-training/`.
+Der Registry-Client (`pkg/skillctl/registry/client.go`) und `skillctl attest`
+(`cmd/skillctl/attest_cmds.go`) senden keinen Auth-Header. Verlangt eine Instanz
+Client-Authentisierung, koennen ihre Endpunkte mit `401 AUTH_REQUIRED` antworten.
+Der folgende Ablauf setzt deshalb Endpunkte ohne Client-Authentisierung voraus,
+etwa eine isolierte lokale Docker-Instanz aus `demo/kup-training/`.
+Fuer einen produktiven Betrieb mit authentisiertem Registry-Zugriff verwenden Sie
+den Git-Registry-Pfad aus Teil 2.
 
 Wo dieser Weg läuft, ist er die sauberere Form von Teil 2, weil der Reviewer dort **selbst**
 postet und der Umweg über Alice als Herausgeber entfällt:
@@ -777,7 +773,7 @@ nicht registriert (`POST /api/skills/identities`, Vorlage
   absichtlich und liest `%USERPROFILE%`. Der Sandkasten aus Teil 1 muss dort über
   `$env:USERPROFILE` gebaut werden.
 - Statt `shasum -a 256` nehmen Sie `Get-FileHash -Algorithm SHA256`.
-- Installation über die PowerShell-Einzeile aus [Quickstart §1](../../old/quickstart-skillctl.md#1-install).
+- Installation über die PowerShell-Einzeile aus [Quickstart §1](quickstart-skillctl.md#1-install).
 
 ---
 
@@ -785,4 +781,4 @@ nicht registriert (`POST /api/skills/identities`, Vorlage
 
 - Eigene Skills auf mehreren Maschinen: [Szenario 01](tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md)
 - Üben, bis es sitzt: [Katas und Test Ride](tutorial-katas-und-test-ride.de.md)
-- Jedes Kommando, jedes Flag, jeder Exit-Code: [Manual](../referenz/manual-skillctl.md)
+- Jedes Kommando, jedes Flag, jeder Exit-Code: [Manual](../referenz/manual-skillctl.de.md)

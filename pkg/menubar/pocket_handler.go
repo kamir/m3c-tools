@@ -47,7 +47,7 @@ func FormatPocketSize(bytes int64) string {
 // Set via SetPocketLabelFunc from main.go.
 var (
 	pocketLabelMu   sync.Mutex
-	pocketLabelFunc func() string
+	pocketLabelFunc func() string //nolint:unused // read by the darwin-only menu renderer; the public setter remains portable
 )
 
 // SetPocketLabelFunc registers a function that returns the dynamic Pocket Sync
@@ -56,18 +56,6 @@ func SetPocketLabelFunc(fn func() string) {
 	pocketLabelMu.Lock()
 	defer pocketLabelMu.Unlock()
 	pocketLabelFunc = fn
-}
-
-// pocketMenuLabel returns the dynamic label for the Pocket Sync menu item.
-// Falls back to "Pocket Sync" if no label function is registered.
-func pocketMenuLabel() string {
-	pocketLabelMu.Lock()
-	fn := pocketLabelFunc
-	pocketLabelMu.Unlock()
-	if fn != nil {
-		return fn()
-	}
-	return "Pocket Sync"
 }
 
 // BuildGroupedRecords creates the display list with collapsed groups.

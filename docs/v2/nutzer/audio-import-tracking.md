@@ -5,6 +5,8 @@ title: Audio Import & Tracking
 
 # Audio Import & Upload Tracking
 
+[Deutsch](audio-import-tracking.de.md) · [English](audio-import-tracking.md)
+
 This document describes the audio import pipeline, the tracking database, and the
 seed procedure for initializing the tracking state.
 

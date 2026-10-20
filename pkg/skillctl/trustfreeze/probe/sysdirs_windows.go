@@ -3,6 +3,7 @@
 package probe
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -38,12 +39,10 @@ func openRegularFile(path string) (*os.File, error) {
 	}
 	fi, err := f.Stat()
 	if err != nil {
-		f.Close()
-		return nil, err
+		return nil, errors.Join(err, f.Close())
 	}
 	if !fi.Mode().IsRegular() {
-		f.Close()
-		return nil, fmt.Errorf("%w: %q", ErrNotRegularFile, path)
+		return nil, errors.Join(fmt.Errorf("%w: %q", ErrNotRegularFile, path), f.Close())
 	}
 	return f, nil
 }

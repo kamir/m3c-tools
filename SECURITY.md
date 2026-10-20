@@ -1,5 +1,7 @@
 # Security policy
 
+Sprachen / Languages: [Deutsch](SECURITY.de.md) | [English](SECURITY.md)
+
 `skillctl` is a trust tool, so we hold its own supply chain to the standard it asks of others.
 This document says how to report a vulnerability and how to verify what you install.
 
@@ -69,4 +71,6 @@ offline and fail-closed:
 skillctl verify-sig my-skill.skb --pubkey trusted.pub   # no network
 ```
 
-See [docs/v2/betrieb/releasing.md](docs/v2/betrieb/releasing.md) for the full signing and provenance flow.
+The [product release workflow](.github/workflows/release.yml) and
+[skillctl release workflow](.github/workflows/skillctl-release.yml) define the
+signing and provenance steps for each release line.
